@@ -119,7 +119,9 @@ type
     function BatchAdd(Value: TOrm; SendData: boolean; ForceID: boolean = false;
       const CustomFields: TFieldBits = []): integer;
     function BatchUpdate(Value: TOrm; const CustomFields: TFieldBits = [];
-      DoNotAutoComputeFields: boolean = false): integer;
+      DoNotAutoComputeFields: boolean = false): integer; overload;
+    function BatchUpdate(Value: TOrm; const CustomFieldsCSV: RawUTF8;
+      DoNotAutoComputeFields: boolean = false): integer; overload;
     function BatchDelete(ID: TID): integer; overload;
     function BatchDelete(Table: TOrmClass; ID: TID): integer; overload;
     function BatchCount: integer;
@@ -445,6 +447,20 @@ begin
     result := -1
   else
     result := fBatchCurrent.Update(Value, CustomFields, DoNotAutoComputeFields);
+end;
+
+function TRestOrmClient.BatchUpdate(Value: TOrm; const CustomFieldsCSV: RawUTF8;
+  DoNotAutoComputeFields: boolean): integer;
+begin
+  if (self = nil) or
+     (Value = nil) or
+     (fBatchCurrent = nil) or
+     (Value.IDValue <= 0) or
+     not BeforeUpdateEvent(Value) then
+    result := -1
+  else
+    result := fBatchCurrent.Update(Value,
+      Value.Orm.FieldBitsFromCSV(CustomFieldsCSV), DoNotAutoComputeFields);
 end;
 
 function TRestOrmClient.BatchDelete(ID: TID): integer;
@@ -924,7 +940,7 @@ function TRestOrmClientURI.ExecuteList(const Tables: array of TOrmClass;
   const SQL: RawUTF8): TOrmTable;
 var
   JSON: RawUTF8;
-  res, state: integer;
+  res, state: cardinal;
 begin
   if self = nil then
     result := nil
@@ -948,7 +964,7 @@ function TRestOrmClientURI.List(const Tables: array of TOrmClass;
 var
   JSON, SQL: RawUTF8;
   U: RawUTF8;
-  state: integer;
+  state: cardinal;
 begin
   result := nil;
   if high(Tables) < 0 then

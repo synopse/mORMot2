@@ -739,6 +739,7 @@ type
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket for plain http URI,
 // or TWinHTTP/TCurlHTTP for any https URI, or if forceNotSocket is set to true
+// - see also OpenHttpGet() for direct THttpClientSock call
 function HttpGet(const aURI: RawUTF8; outHeaders: PRawUTF8 = nil;
   forceNotSocket: boolean = false; outStatus: PInteger = nil): RawByteString; overload;
 

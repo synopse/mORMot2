@@ -2899,7 +2899,13 @@ type
     // implementation class instance - be aware that this won't be thread-safe
     // - this method will call BeforeUpdateEvent before TRestBatch.Update
     function BatchUpdate(Value: TOrm; const CustomFields: TFieldBits = [];
-      DoNotAutoComputeFields: boolean = false): integer;
+      DoNotAutoComputeFields: boolean = false): integer; overload;
+    /// update a member in current BATCH sequence
+    // - is a wrapper around TRestBatch.Update() which will be stored in the
+    // implementation class instance - be aware that this won't be thread-safe
+    // - this method will call BeforeUpdateEvent before TRestBatch.Update
+    function BatchUpdate(Value: TOrm; const CustomFieldsCSV: RawUTF8;
+      DoNotAutoComputeFields: boolean = false): integer; overload;
     /// delete a member in current BATCH sequence
     // - is a wrapper around TRestBatch.Delete() which will be stored in the
     // implementation class instance - be aware that this won't be thread-safe
