@@ -11056,21 +11056,21 @@ begin
   aValue.VText := Pointer(temp);
 end;
 
+function CompareUTF8WithLocalTempCopy(prop: PRttiProp;
+  Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt;
+var
+  tmp1, tmp2: RawByteString;
+begin
+  prop.GetLongStrProp(Item1, tmp1);
+  prop.GetLongStrProp(Item2, tmp2);
+  if CaseInsensitive then
+    result := UTF8IComp(pointer(tmp1), pointer(tmp2))
+  else
+    result := StrComp(pointer(tmp1), pointer(tmp2));
+end;
+
 function TOrmPropInfoRTTIRawUTF8.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
-
-  function CompareWithLocalTempCopy: PtrInt;
-  var
-    tmp1, tmp2: RawByteString;
-  begin
-    fPropInfo.GetLongStrProp(Item1, tmp1);
-    fPropInfo.GetLongStrProp(Item2, tmp2);
-    if CaseInsensitive then
-      result := UTF8IComp(pointer(tmp1), pointer(tmp2))
-    else
-      result := StrComp(pointer(tmp1), pointer(tmp2));
-  end;
-
 var
   offs: PtrUInt;
   p1, p2: pointer;
@@ -11094,7 +11094,8 @@ begin
         result := StrComp(p1, p2);
     end
     else
-      result := CompareWithLocalTempCopy;
+      result := CompareUTF8WithLocalTempCopy(
+        fPropInfo, Item1, Item2, CaseInsensitive);
   end;
 end;
 

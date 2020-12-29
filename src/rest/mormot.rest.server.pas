@@ -6405,8 +6405,9 @@ begin
   if self = nil then
     result := false
   else
-    result := (fServices as TServiceContainerServer).RecordVersionSynchronizeSubscribeMaster(
-      Model.GetTableIndexExisting(Table), RecordVersion, SlaveCallback);
+    result := (ServiceContainer as TServiceContainerServer).
+      RecordVersionSynchronizeSubscribeMaster(
+        Model.GetTableIndexExisting(Table), RecordVersion, SlaveCallback);
 end;
 
 function TRestServer.RecordVersionSynchronizeMasterStart(
