@@ -106,8 +106,6 @@ type
     // - RegisteredClassCreateFrom() will expect Definition.DatabaseName to store
     // the DBFileName, and optionally encrypt the file using Definition.Password
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
-    /// overriden method which will also set the DB.LogClass
-    procedure SetLogClass(aClass: TSynLogClass); override;
 
   published
     /// associated database
@@ -200,7 +198,10 @@ constructor TRestServerDB.Create(aModel: TOrmModel; aDB: TSQLDataBase;
   aHandleUserAuthentication: boolean; aOwnDB: boolean);
 begin
   inherited Create(aModel, aHandleUserAuthentication);
-  TRestOrmServerDB.Create(self, aDB, aOwnDB); // assign the SQlite3 engine
+  with TRestOrmServerDB.Create(self, aDB, aOwnDB) do // assign the SQlite3 engine
+    if DB <> nil then
+      // ensure the low-level SQLite3 engine will share the same log
+      DB.Log := fLogClass;
 end;
 
 constructor TRestServerDB.Create(aModel: TOrmModel;
@@ -255,15 +256,6 @@ begin
       Definition.ServerName := StringToUTF8(DB.FileName);
       Definition.PasswordPlain := DB.Password;
     end;
-end;
-
-procedure TRestServerDB.SetLogClass(aClass: TSynLogClass);
-begin
-  inherited SetLogClass(aClass);
-  with fOrmInstance as TRestOrmServerDB do
-    if DB <> nil then
-      // ensure the low-level SQLite3 engine will share the same log
-      DB.Log := aClass;
 end;
 
 function TRestServerDB.GetDB: TSQLDatabase;
