@@ -1601,21 +1601,21 @@ function EscapeToShort(source: PAnsiChar; sourcelen: integer): shortstring; over
 function EscapeToShort(const source: RawByteString): shortstring; overload;
 
 
-/// get text File contents (even Unicode or UTF8) and convert it into a
+/// get text File contents (even UTF-16 or UTF-8) and convert it into a
 // Charset-compatible AnsiString (for Delphi 7) or an UnicodeString (for Delphi
 // 2009 and up) according to any BOM marker at the beginning of the file
 // - before Delphi 2009, the current string code page is used (i.e. CurrentAnsiConvert)
 function AnyTextFileToString(const FileName: TFileName;
   ForceUTF8: boolean = false): string;
 
-/// get text file contents (even Unicode or UTF8) and convert it into an
+/// get text file contents (even UTF-16 or UTF-8) and convert it into an
 // Unicode string according to any BOM marker at the beginning of the file
 // - any file without any BOM marker will be interpreted as plain ASCII: in this
 // case, the current string code page is used (i.e. CurrentAnsiConvert class)
 function AnyTextFileToSynUnicode(const FileName: TFileName;
   ForceUTF8: boolean = false): SynUnicode;
 
-/// get text file contents (even Unicode or UTF8) and convert it into an
+/// get text file contents (even UTF-16 or UTF-8) and convert it into an
 // UTF-8 string according to any BOM marker at the beginning of the file
 // - if AssumeUTF8IfNoBOM is FALSE, the current string code page is used (i.e.
 // CurrentAnsiConvert class) for conversion from ANSI into UTF-8

@@ -752,7 +752,7 @@ const
   HTTP_LOGGING_FLAG_LOCAL_TIME_ROLLOVER = 1;
 
   // HTTP_LOGGING_FLAG_USE_UTF8_CONVERSION - When set the unicode fields
-  //      will be converted to UTF8 multibytes when writting to the log
+  //      will be converted to UTF-8 multibytes when writting to the log
   //      files. When this flag is not present, the local code page
   //      conversion happens.
   HTTP_LOGGING_FLAG_USE_UTF8_CONVERSION = 2;
@@ -1617,9 +1617,9 @@ const
   /// context ID of WebSocket URI group
   WEB_SOCKET_URL_CONTEXT = 1;
 
-  /// the buffer contains the last, and possibly only, part of a UTF8 message
+  /// the buffer contains the last, and possibly only, part of a UTF-8 message
   WEB_SOCKET_UTF8_MESSAGE_BUFFER_TYPE: WEB_SOCKET_BUFFER_TYPE = $80000000;
-  /// the buffer contains part of a UTF8 message
+  /// the buffer contains part of a UTF-8 message
   WEB_SOCKET_UTF8_FRAGMENT_BUFFER_TYPE: WEB_SOCKET_BUFFER_TYPE = $80000001;
   /// the buffer contains the last, and possibly only, part of a binary message
   WEB_SOCKET_BINARY_MESSAGE_BUFFER_TYPE: WEB_SOCKET_BUFFER_TYPE = $80000002;

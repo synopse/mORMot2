@@ -578,7 +578,7 @@ function NullableUTF8TextToValue(const V: TNullableUTF8Text; out Value: RawUTF8)
   overload; {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableUTF8Text is null, or return its value
-// - returns '' if V is null or empty, or the stored UTF8-encoded text value
+// - returns '' if V is null or empty, or the stored UTF-8 encoded text value
 function NullableUTF8TextToValue(const V: TNullableUTF8Text): RawUTF8;
   overload; {$ifdef HASINLINE}inline;{$endif}
 

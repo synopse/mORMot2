@@ -2299,7 +2299,7 @@ var
   SSErrorInfo: PSSERRORINFO;
   SSErrorMsg: PWideChar;
   msg, tmp: string;
-  utf8: RawUTF8;
+  u: RawUTF8;
 begin
   result := False;
   if (self = nil) or
@@ -2317,11 +2317,11 @@ begin
         if bClass <= 10 then
         begin
           Connection.fOleDBInfoMessage := Connection.fOleDBInfoMessage + msg;
-          RawUnicodeToUtf8(pwszMessage, StrLenW(pwszMessage), utf8);
-          SynDBLog.Add.Log(sllDB, utf8, self);
+          RawUnicodeToUtf8(pwszMessage, StrLenW(pwszMessage), u);
+          SynDBLog.Add.Log(sllDB, u, self);
           with Connection.Properties do
             if Assigned(OnStatementInfo) then
-              OnStatementInfo(nil, utf8);
+              OnStatementInfo(nil, u);
         end
         else
         begin

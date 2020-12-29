@@ -1234,7 +1234,7 @@ type
       CallbackPtr: TSQLBusyHandler; user: Pointer): integer;  cdecl;
 
     /// Compile a SQL query into byte-code
-    // - SQL must contains an UTF8-encoded null-terminated string query
+    // - SQL must contains an UTF-8 encoded null-terminated string query
     // - SQL_bytes contains -1 (to stop at the null char) or the number of bytes in
     // the input string, including the null terminator
     // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
@@ -1519,7 +1519,7 @@ type
     // - S is a statement prepared by a previous call to sqlite3.prepare_v2()
     // - Param is the index of the SQL parameter to be set. The leftmost SQL parameter
     // has an index of 1.
-    // - Text must contains an UTF8-encoded null-terminated string query
+    // - Text must contains an UTF-8 encoded null-terminated string query
     // - Text_bytes contains -1 (to stop at the null char) or the number of chars
     // in the input string, excluding the null terminator
     // - set DestroyPtr as SQLITE_STATIC (nil) for static binding
@@ -4991,7 +4991,7 @@ end;
 
 function TSQLDataBase.DBOpen: integer;
 var
-  utf8: RawUTF8;
+  u: RawUTF8;
   i: integer;
   log: ISynLog;
 begin
@@ -5002,28 +5002,28 @@ begin
   if (sqlite3 = nil) or
      not Assigned(sqlite3.open) then
     raise ESQLite3Exception.Create('DBOpen called with no sqlite3 global');
-  utf8 := StringToUTF8(fFileName);
+  StringToUTF8(fFileName, u);
   {$ifdef LINUX}
   // for WAL to work under Linux - see http://www.sqlite.org/vfs.html
   if assigned(sqlite3.open_v2) and
      (fPassword = '') then
   begin
-    result := sqlite3.open_v2(pointer(utf8), fDB, fOpenV2Flags, 'unix-excl');
+    result := sqlite3.open_v2(pointer(u), fDB, fOpenV2Flags, 'unix-excl');
     if result <> SQLITE_OK then // may be 'unix-excl' is not supported by the library
-      result := sqlite3.open_v2(pointer(utf8), fDB, fOpenV2Flags, nil);
+      result := sqlite3.open_v2(pointer(u), fDB, fOpenV2Flags, nil);
   end
   else
   {$else}
   if fOpenV2Flags <> (SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE) then
-    result := sqlite3.open_v2(pointer(utf8), fDB, fOpenV2Flags, nil)
+    result := sqlite3.open_v2(pointer(u), fDB, fOpenV2Flags, nil)
   else
   {$endif LINUX}
-    result := sqlite3.open(pointer(utf8), fDB);
+    result := sqlite3.open(pointer(u), fDB);
   if result <> SQLITE_OK then
   begin
     if log <> nil then
-      log.Log(sllError, 'sqlite3_open ("%") failed with error % (%): %',
-        [utf8, sqlite3_resultToErrorText(result), result, sqlite3.errmsg(fDB)]);
+      log.Log(sllError, 'sqlite3_open(%) failed with error % (%): %',
+        [u, sqlite3_resultToErrorText(result), result, sqlite3.errmsg(fDB)]);
     sqlite3.close(fDB); // should always be closed, even on failure
     fDB := 0;
     exit;

@@ -657,11 +657,11 @@ function FastNewString(len, codepage: PtrInt): PAnsiChar;
 procedure GetMemAligned(var holder: RawByteString; p: pointer; len: PtrUInt;
   out aligned: pointer; alignment: PtrUInt = 16);
 
-/// equivalence to @UTF8[1] expression to ensure a RawUTF8 variable is unique
+/// equivalence to @u[1] expression to ensure a RawUTF8 variable is unique
 // - will ensure that the string refcount is 1, and return a pointer to the text
-// - under FPC, @UTF8[1] does not call UniqueString() as it does with Delphi
-// - if UTF8 is a constant (refcount=-1), will create a temporary copy in heap
-function UniqueRawUTF8(var UTF8: RawUTF8): pointer;
+// - under FPC, @u[1] does not call UniqueString() as it does with Delphi
+// - if u is a constant (refcount=-1), will allocate a temporary copy in heap
+function UniqueRawUTF8(var u: RawUTF8): pointer;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// direct conversion of an ANSI-7 shortstring into an AnsiString
@@ -3993,12 +3993,12 @@ begin
     MoveFast(p^, aligned^, len);
 end;
 
-function UniqueRawUTF8(var UTF8: RawUTF8): pointer;
+function UniqueRawUTF8(var u: RawUTF8): pointer;
 begin
   {$ifdef FPC}
-  UniqueString(UTF8); // @UTF8[1] won't call UniqueString() under FPC :(
+  UniqueString(u); // @u[1] won't call UniqueString() under FPC :(
   {$endif FPC}
-  result := @UTF8[1];
+  result := @u[1];
 end;
 
 function ShortStringToAnsi7String(const source: shortstring): RawByteString;

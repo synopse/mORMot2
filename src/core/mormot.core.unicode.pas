@@ -302,7 +302,7 @@ type
       SourceChars: cardinal; var result: RawByteString); overload; virtual;
     /// convert any UTF-8 encoded String into Ansi Text
     // - internaly calls UTF8BufferToAnsi virtual method
-    function UTF8ToAnsi(const UTF8: RawUTF8): RawByteString; virtual;
+    function UTF8ToAnsi(const u: RawUTF8): RawByteString; virtual;
     /// direct conversion of a UTF-8 encoded string into a WinAnsi buffer
     // - will truncate the destination string to DestSize bytes (including the
     // trailing #0), with a maximum handled size of 2048 bytes
@@ -442,7 +442,7 @@ type
       var result: RawByteString); override;
     /// convert any UTF-8 encoded String into Ansi Text
     // - directly assign the input as result, since no conversion is needed
-    function UTF8ToAnsi(const UTF8: RawUTF8): RawByteString; override;
+    function UTF8ToAnsi(const u: RawUTF8): RawByteString; override;
     /// convert any Ansi Text into an UTF-8 encoded String
     // - directly assign the input as result, since no conversion is needed
     function AnsiToUTF8(const AnsiText: RawByteString): RawUTF8; override;
@@ -514,9 +514,9 @@ var
 // - could be used after UniqueRawUTF8() on a in-placed modified JSON buffer,
 // in which all values have been ended with #0
 // - you can optionally specify a maximum size, in bytes (this won't reallocate
-// the string, but just add a #0 at some point in the UTF8 buffer)
+// the string, but just add a #0 at some point in the UTF-8 buffer)
 // - could allow logging of parsed input e.g. after an exception
-procedure UniqueRawUTF8ZeroToTilde(var UTF8: RawUTF8; MaxSize: integer = maxInt);
+procedure UniqueRawUTF8ZeroToTilde(var u: RawUTF8; MaxSize: integer = maxInt);
 
 /// conversion of a wide char into a WinAnsi (CodePage 1252) char
 // - return '?' for an unknown WideChar in code page 1252
@@ -741,12 +741,12 @@ procedure StringToUTF8(const Text: string; var result: RawUTF8); overload;
 function ToUTF8(const Text: string): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert any generic VCL Text into an UTF-8 encoded String
-// - returns the number of UTF-8 bytes available in result.buf
+/// convert any generic VCL Text into an UTF-8 encoded TSynTempBuffer
+// - returns the number of UTF-8 bytes available in u.buf
 // - this overloaded function use a TSynTempBuffer for the result to avoid any
 // memory allocation for the shorter content
-// - caller should call UTF8.Done to release any heap-allocated memory
-function StringToUTF8(const Text: string; var UTF8: TSynTempBuffer): integer; overload;
+// - caller should call u.Done to release any heap-allocated memory
+function StringToUTF8(const Text: string; var u: TSynTempBuffer): integer; overload;
 
 /// convert any UTF-8 encoded shortstring Text into an UTF-8 encoded String
 // - expects the supplied content to be already ASCII-7 or UTF-8 encoded, e.g.
@@ -2527,9 +2527,9 @@ begin
   end;
 end;
 
-function TSynAnsiConvert.UTF8ToAnsi(const UTF8: RawUTF8): RawByteString;
+function TSynAnsiConvert.UTF8ToAnsi(const u: RawUTF8): RawByteString;
 begin
-  UTF8BufferToAnsi(pointer(UTF8), length(UTF8), result);
+  UTF8BufferToAnsi(pointer(u), length(u), result);
 end;
 
 function TSynAnsiConvert.Utf8ToAnsiBuffer(const S: RawUTF8;
@@ -3125,9 +3125,9 @@ begin
   FastSetString(RawUTF8(result), Source, SourceChars);
 end;
 
-function TSynAnsiUTF8.UTF8ToAnsi(const UTF8: RawUTF8): RawByteString;
+function TSynAnsiUTF8.UTF8ToAnsi(const u: RawUTF8): RawByteString;
 begin
-  result := UTF8;
+  result := u;
   {$ifdef HASCODEPAGE}
   SetCodePage(result, CP_UTF8, false);
   {$endif HASCODEPAGE}
@@ -3499,13 +3499,13 @@ begin
   RawUnicodeToUtf8(pointer(Text), Length(Text), result);
 end;
 
-function StringToUTF8(const Text: string; var UTF8: TSynTempBuffer): integer;
+function StringToUTF8(const Text: string; var u: TSynTempBuffer): integer;
 var
   len: integer;
 begin
   len := length(Text);
-  UTF8.Init(len * 3);
-  result := RawUnicodeToUTF8(UTF8.buf, UTF8.len + 1, pointer(Text), len, []);
+  u.Init(len * 3);
+  result := RawUnicodeToUTF8(u.buf, u.len + 1, pointer(Text), len, []);
 end;
 
 function ToUTF8(const Text: string): RawUTF8;
@@ -3620,14 +3620,14 @@ begin
   result := CurrentAnsiConvert.AnsiToUTF8(Text);
 end;
 
-function StringToUTF8(const Text: string; var UTF8: TSynTempBuffer): integer;
+function StringToUTF8(const Text: string; var u: TSynTempBuffer): integer;
 var
   len: integer;
 begin
   len := length(Text);
-  UTF8.Init(len * 3);
-  result := CurrentAnsiConvert.AnsiBufferToUTF8(UTF8.buf, pointer(Text), len)
-     - PUTF8Char(UTF8.buf);
+  u.Init(len * 3);
+  result := CurrentAnsiConvert.AnsiBufferToUTF8(u.buf, pointer(Text), len)
+     - PUTF8Char(u.buf);
 end;
 
 function ToUTF8(const Text: string): RawUTF8;
@@ -3747,18 +3747,18 @@ end;
 
 {$endif HASVARUSTRING}
 
-procedure UniqueRawUTF8ZeroToTilde(var UTF8: RawUTF8; MaxSize: integer);
+procedure UniqueRawUTF8ZeroToTilde(var u: RawUTF8; MaxSize: integer);
 var
   i: integer;
 begin
-  i := length(UTF8);
+  i := length(u);
   if i > MaxSize then
-    PByteArray(UTF8)[MaxSize] := 0
+    PByteArray(u)[MaxSize] := 0
   else
     MaxSize := i;
   for i := 0 to MaxSize - 1 do
-    if PByteArray(UTF8)[i] = 0 then
-      PByteArray(UTF8)[i] := ord('~');
+    if PByteArray(u)[i] = 0 then
+      PByteArray(u)[i] := ord('~');
 end;
 
 procedure UTF8ToWideString(const Text: RawUTF8; var result: WideString);

@@ -971,13 +971,13 @@ type
     procedure AddShort(const Text: ShortString);
     /// append a TShort8 - Text should be not '', and up to 8 chars long
     // - this method is aggressively inlined, so may be preferred to AddShort()
-    // for appending simple constant UTF-8 text
+    // for appending simple UTF-8 constant text
     procedure AddShorter(const Text: TShort8);
       {$ifdef HASINLINE}inline;{$endif}
     /// append 'null' as text
     procedure AddNull;
       {$ifdef HASINLINE}inline;{$endif}
-    /// append a sub-part of an UTF-8  String
+    /// append a sub-part of an UTF-8 String
     // - emulates AddString(copy(Text,start,len))
     procedure AddStringCopy(const Text: RawUTF8; start,len: PtrInt);
     /// append after trim first lowercase chars ('otDone' will add 'Done' e.g.)

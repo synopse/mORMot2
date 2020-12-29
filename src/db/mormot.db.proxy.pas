@@ -334,7 +334,7 @@ type
     /// return all columns values into JSON content
     procedure ColumnsToJSON(WR: TJSONWriter); override;
     /// direct access to the data buffer of the current row
-    // - points to Double/Currency value, or variable-length Int64/UTF8/Blob
+    // - points to Double/Currency value, or variable-length Int64/UTF-8/Blob
     // - points to nil if the column value is NULL
     function ColumnData(Col: integer): pointer;
     /// append current row content as binary stream

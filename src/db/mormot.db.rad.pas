@@ -152,7 +152,7 @@ type
     // procedure InternalInitFieldDefs; override;
     // - to return row count:
     // function GetRecordCount: integer; override;
-    // - result should point to Int64,Double,Blob,UTF8 data (if ResultLen<>nil)
+    // - result should point to Int64,Double,Blob,UTF-8 data (if ResultLen<>nil)
     function GetRowFieldData(Field: TField; RowIndex: integer; out ResultLen: integer;
       OnlyCheckNull: boolean): Pointer; virtual; abstract;
     // - to search for a field, returning RecNo (0 = not found by default)
@@ -629,7 +629,7 @@ begin
      not result then
     exit;
   Dest := pointer(Buffer); // works also if Buffer is [var] TValueBuffer
-  case Field.DataType of // Data^ points to Int64,Double,Blob,UTF8
+  case Field.DataType of // Data^ points to Int64,Double,Blob,UTF-8
     ftBoolean:
       PWORDBOOL(Dest)^ := PBoolean(Data)^;
     ftInteger:
@@ -698,7 +698,7 @@ var
   DataLen: integer;
 begin
   Data := GetRowFieldData(Field, RowIndex, DataLen, false);
-  if Data = nil then // should point to Blob or UTF8 data
+  if Data = nil then // should point to Blob or UTF-8 data
     result := nil
   else
     case Field.DataType of

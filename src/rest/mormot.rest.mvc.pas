@@ -997,7 +997,7 @@ var
   timelog: TTimeLogBits;
   caption: string;
   sets: TStringList;
-  utf8: RawUTF8;
+  u: RawUTF8;
   W: TTextWriter;
   tmp: TTextWriterStackBuffer;
 const
@@ -1027,16 +1027,16 @@ begin
         GetCaptionFromPCharLen(TrimLeftLowerCase(Field.Name), caption);
         W.AddHtmlEscapeString(caption);
         HtmlTableStyle.BeforeValue(W);
-        VariantToUTF8(Rec^.Values[i], utf8);
+        VariantToUTF8(Rec^.Values[i], u);
         case Field.OrmFieldType of
           oftAnsiText, oftUTF8Text, oftInteger, oftFloat, oftCurrency:
-            W.AddHtmlEscape(pointer(utf8));
+            W.AddHtmlEscape(pointer(u));
           oftTimeLog, oftModTime, oftCreateTime:
             if VariantToInt64(Rec^.Values[i], timelog.Value) then
               W.AddHtmlEscapeString(timelog.i18nText);
           oftDateTime, oftDateTimeMS:
             begin
-              timelog.From(utf8);
+              timelog.From(u);
               W.AddHtmlEscapeString(timelog.i18nText);
             end;
           oftUnixTime, oftUnixMSTime:
@@ -1051,7 +1051,7 @@ begin
           oftBoolean, oftEnumerate:
             if Field.InheritsFrom(TOrmPropInfoRTTIEnum) then
             begin
-              caption := TOrmPropInfoRTTIEnum(Field).GetCaption(utf8, int);
+              caption := TOrmPropInfoRTTIEnum(Field).GetCaption(u, int);
               HtmlTableStyle.AddLabel(W, caption,
                 ENUM[Field.OrmFieldType = oftBoolean, int <> 0]);
             end;
