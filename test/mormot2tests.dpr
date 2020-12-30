@@ -108,7 +108,8 @@ uses
   test.core.crypto         in '.\test.core.crypto.pas',
   test.core.ecc            in '.\test.core.ecc.pas',
   test.net.proto           in '.\test.net.proto.pas',
-  test.orm.core            in '.\test.orm.core.pas';
+  test.orm.core            in '.\test.orm.core.pas',
+  test.orm.sqlite3         in '.\test.orm.sqlite3.pas';
 
 
 { TIntegrationTests }
@@ -122,23 +123,24 @@ type
 
 procedure TIntegrationTests.CoreUnits;
 begin
-  AddCase([//
-  //
-    TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreEcc, TTestCoreCompress, TNetworkProtocols
+  AddCase([
+  // TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreEcc, TTestCoreCompress, TNetworkProtocols
   ]);
 end;
 
 procedure TIntegrationTests.ORM;
 begin
-  AddCase([//
-    TTestOrmCore
+  AddCase([
+    //
+    //
+    TTestOrmCore, TTestFileBased, TTestFileBasedWAL, TTestMemoryBased
   ]);
 end;
 
 
 
 begin
-  TIntegrationTests.RunAsConsole('mORMot2 Regression Tests', LOG_VERBOSE);
+  TIntegrationTests.RunAsConsole('mORMot2 Regression Tests'{, LOG_VERBOSE});
   {$ifdef FPC_X64MM}
   WriteHeapStatus(' ', 16, 8, {compileflags=}true);
   {$endif FPC_X64MM}

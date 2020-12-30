@@ -47,9 +47,6 @@
             </Checks>
             <TargetCPU Value="i386"/>
             <TargetOS Value="win32"/>
-            <Optimizations>
-              <OptimizationLevel Value="3"/>
-            </Optimizations>
           </CodeGeneration>
           <Linking>
             <Debugging>
@@ -555,7 +552,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="85">
+    <Units Count="86">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -896,6 +893,10 @@
         <Filename Value="test.orm.core.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit84>
+      <Unit85>
+        <Filename Value="test.orm.sqlite3.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit85>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
