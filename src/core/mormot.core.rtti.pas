@@ -810,7 +810,7 @@ type
     /// raw retrieval of the property read access definition
     // - note: 'var Call' generated incorrect code on Delphi XE4 -> use PMethod
     function Getter(Instance: TObject; Call: PMethod): TRttiPropCall;
-      {$ifdef HASINLINE2} inline; {$endif}
+      {$ifdef HASINLINE}inline;{$endif}
     /// raw retrieval of the property access definition
     function Setter(Instance: TObject; Call: PMethod): TRttiPropCall;
       {$ifdef HASINLINE}inline;{$endif}
@@ -3268,7 +3268,9 @@ begin
     call.Code := nil; // call.Code is used to store the raw value
   end;
   with TypeInfo^ do
-    if Kind in [rkClass, rkDynArray, rkInterface] then
+    if (Kind = rkClass) or
+       (Kind = rkDynArray) or
+       (Kind = rkInterface) then
       result := PtrInt(call.Code)
     else
       result := FromRttiOrd(RttiOrd, @call.Code);
@@ -3285,7 +3287,9 @@ begin
   case Setter(Instance, @call) of
     rpcField:
       with TypeInfo^ do
-        if Kind in [rkClass, rkDynArray, rkInterface] then
+        if (Kind = rkClass) or
+           (Kind = rkDynArray) or
+           (Kind = rkInterface) then
           PPtrInt({%H-}call.Data)^ := Value
         else
           ToRttiOrd(RttiOrd, call.Data, Value);
@@ -5273,12 +5277,13 @@ end;
 function TypeNameToStandardParserType(Name: PUTF8Char; NameLen: integer;
   Complex: PRTTIParserComplexType): TRttiParserType;
 const
-  SORTEDMAX = 42;
+  SORTEDMAX = 43;
   // fast branchless O(log(N)) binary search on x86_64
   SORTEDNAMES: array[0..SORTEDMAX] of PUTF8Char = (
     'ARRAY', 'BOOLEAN', 'BYTE', 'CARDINAL', 'CURRENCY', 'DOUBLE', 'EXTENDED',
     'INT64', 'INTEGER', 'INTERFACE', 'LONGINT', 'LONGWORD', 'PTRINT', 'PTRUINT', 'QWORD',
-    'RAWBLOB', 'RAWBYTESTRING', 'RAWJSON', 'RAWUTF8', 'RECORD', 'SINGLE', 'STRING', 'SYNUNICODE',
+    'RAWBLOB', 'RAWBYTESTRING', 'RAWJSON', 'RAWUTF8', 'RECORD', 'SINGLE',
+    'SPIUTF8', 'STRING', 'SYNUNICODE',
     'TCREATETIME', 'TDATETIME', 'TDATETIMEMS', 'TGUID', 'THASH128', 'THASH256',
     'THASH512', 'TID', 'TMODTIME', 'TRECORDREFERENCE', 'TRECORDREFERENCETOBEDELETED',
     'TRECORDVERSION', 'TTIMELOG', 'TUNIXMSTIME', 'TUNIXTIME',
@@ -5287,14 +5292,14 @@ const
   SORTEDTYPES: array[0..SORTEDMAX] of TRttiParserType = (
     ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble, ptExtended,
     ptInt64, ptInteger, ptInterface, ptInteger, ptCardinal, ptPtrInt, ptPtrUInt, ptQWord,
-    ptRawByteString, ptRawByteString, ptRawJSON, ptRawUTF8,
-    ptRecord, ptSingle, ptString, ptSynUnicode,
+    ptRawByteString, ptRawByteString, ptRawJSON, ptRawUTF8, ptRecord, ptSingle,
+    ptRawUTF8, ptString, ptSynUnicode,
     ptTimeLog, ptDateTime, ptDateTimeMS, ptGUID, ptHash128, ptHash256, ptHash512,
     ptORM, ptTimeLog, ptORM, ptORM, ptORM, ptUnixMSTime,
     ptUnixTime, ptTimeLog, ptUnicodeString,
     ptRawUTF8, ptVariant, ptWideString, ptWord);
   SORTEDCOMPLEX: array[0..SORTEDMAX] of TRttiParserComplexType = (
-    pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone,
+    pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone,
     pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone,
     pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone, pctNone,
     pctCreateTime, pctNone, pctNone, pctNone, pctNone, pctNone,
@@ -7512,9 +7517,10 @@ begin
     PtrUInt(@_dynarray_decr_ref_free));
   RedirectCode(@fpc_dynarray_decr_ref, @fpc_dynarray_clear);
   {$ifdef FPC_HAS_CPSTRING}
-  {$ifdef LINUX}
+  {$ifdef LINUX} // Windows is never natively UTF-8
   if DefaultSystemCodePage = CP_UTF8 then
   begin
+    // dedicated UTF-8 concatenation RTL function replacements
     RedirectRtl(@_fpc_ansistr_concat, @_ansistr_concat_utf8);
     RedirectRtl(@_fpc_ansistr_concat_multi, @_ansistr_concat_multi_utf8);
   end;

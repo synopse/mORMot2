@@ -9845,8 +9845,8 @@ end;
 procedure TOrmPropInfoRTTIInt32.CopySameClassProp(Source: TObject;
   DestInfo: TOrmPropInfo; Dest: TObject);
 begin
-  TOrmPropInfoRTTIInt32(DestInfo).fPropInfo.SetOrdProp(Dest, fPropInfo.GetOrdProp
-    (Source));
+  TOrmPropInfoRTTIInt32(DestInfo).fPropInfo.SetOrdProp(
+    Dest, fPropInfo.GetOrdProp(Source));
 end;
 
 procedure TOrmPropInfoRTTIInt32.GetBinary(Instance: TObject; W: TBufferWriter);
@@ -17495,9 +17495,8 @@ begin
     exit;
   with Orm do
     for i := 0 to length(SimpleFields) - 1 do      // compare not RawBlob/TOrmMany fields
-      with SimpleFields[i] do
-        if CompareValue(self, Reference, false) <> 0 then
-          exit; // properties don't have the same value
+      if SimpleFields[i].CompareValue(self, Reference, false) <> 0 then
+        exit; // properties don't have the same value
   result := true;
 end;
 
