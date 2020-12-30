@@ -2004,6 +2004,7 @@ type
     /// main access to the class implementing IRestOrm methods for this instance
     // - used internally to avoid ORM: IRestOrm reference counting and
     // enable inlining of most simple methods, if possible
+    // - is a TRestOrmServer instance
     function OrmInstance: TRestOrm;
       {$ifdef HASINLINE}inline;{$endif}
     /// access TRestOrmServer.RecordVersionMax property
@@ -2631,8 +2632,9 @@ type
 implementation
 
 uses
+  // defined here to avoid any circular reference
   mormot.soa.server,
-  mormot.orm.server,
+  mormot.orm.server, // defines e.g. TRestOrmServer
   mormot.orm.storage;
 
 
@@ -4996,13 +4998,11 @@ begin
       with aCtxt.Server do
       begin
         if fSessionCounter >= cardinal(maxInt) then
-          fSessionCounter := 10
-        else if fSessionCounter = 75 then
-          // avoid IDCardinal=0 (77) or 1 (76)
-          fSessionCounter := 78
+          // avoid CONST_AUTHENTICATION_* i.e. IDCardinal=0 (77) or 1 (76)
+          fSessionCounter := 100
         else
           inc(fSessionCounter);
-        fIDCardinal := fSessionCounter xor 77;
+        fIDCardinal := fSessionCounter xor 77; // simple obfuscation
         UInt32ToUtf8(fIDCardinal, fID);
       end;
       // set session parameters
@@ -6110,7 +6110,8 @@ begin
   fAfterCreation := true;
   fStats := TRestServerMonitor.Create(self);
   URIPagingParameters := PAGINGPARAMETERS_YAHOO;
-  fSessionCounter := Random32(maxInt); // positive 31-bit integer
+  // + 100 to avoid CONST_AUTHENTICATION_* i.e. IDCardinal=0 (77) or 1 (76)
+  fSessionCounter := Random32(maxInt - 200) + 100; // positive 31-bit integer
   // retrieve published methods
   fPublishedMethods.InitSpecific(
     TypeInfo(TRestServerMethods), fPublishedMethod, ptRawUTF8, nil, true);
@@ -6823,18 +6824,17 @@ var
 begin // caller made fSessions.Safe.Lock
   result := GetTickCount64 shr 10;
   if (self <> nil) and
-     (fSessions<>nil) then
+     (fSessions<>nil) and
+     (result <> fSessionsDeprecatedTix) then
   begin
-    if result <> fSessionsDeprecatedTix then
-    begin
-      fSessionsDeprecatedTix := result; // check sessions every second
-      for i := fSessions.Count - 1 downto 0 do
-        if result > TAuthSession(fSessions.List[i]).TimeOutTix then
-        begin
-          SessionDelete(i, nil);
-          inc(result);
-        end;
-    end;
+    // it is enough to check for outdated sessions every second
+    fSessionsDeprecatedTix := result;
+    for i := fSessions.Count - 1 downto 0 do
+      if result > TAuthSession(fSessions.List[i]).TimeOutTix then
+      begin
+        SessionDelete(i, nil);
+        inc(result);
+      end;
   end;
 end;
 
@@ -6852,25 +6852,27 @@ begin // caller of RetrieveSession() made fSessions.Safe.Lock
     // retrieve session from its ID
     sessions := pointer(fSessions.List);
     session := Ctxt.Session;
-    for i := 1 to fSessions.Count do
-      if sessions^.IDCardinal = session then
-      begin
-        result := sessions^;
-        result.fTimeOutTix := tix + result.TimeoutShr10;
-        Ctxt.fAuthSession := result; // for TRestServer internal use
-        // make local copy of TAuthSession information
-        Ctxt.SessionUser := result.User.IDValue;
-        Ctxt.SessionGroup := result.User.GroupRights.IDValue;
-        Ctxt.SessionUserName := result.User.LogonName;
-        if (result.RemoteIP <> '') and
-           (Ctxt.fRemoteIP = '') then
-          Ctxt.fRemoteIP := result.RemoteIP;
-        Ctxt.fSessionAccessRights := result.fAccessRights;
-        Ctxt.Call^.RestAccessRights := @Ctxt.fSessionAccessRights;
-        exit;
-      end
-      else
-        inc(sessions);
+    if session > CONST_AUTHENTICATION_NOT_USED then
+      for i := 1 to fSessions.Count do
+        if sessions^.IDCardinal = session then
+        begin
+          // found the session
+          result := sessions^;
+          result.fTimeOutTix := tix + result.TimeoutShr10;
+          Ctxt.fAuthSession := result; // for TRestServer internal use
+          // make local copy of TAuthSession information
+          Ctxt.SessionUser := result.User.IDValue;
+          Ctxt.SessionGroup := result.User.GroupRights.IDValue;
+          Ctxt.SessionUserName := result.User.LogonName;
+          if (result.RemoteIP <> '') and
+             (Ctxt.fRemoteIP = '') then
+            Ctxt.fRemoteIP := result.RemoteIP;
+          Ctxt.fSessionAccessRights := result.fAccessRights;
+          Ctxt.Call^.RestAccessRights := @Ctxt.fSessionAccessRights;
+          exit;
+        end
+        else
+          inc(sessions);
   end;
   result := nil;
 end;

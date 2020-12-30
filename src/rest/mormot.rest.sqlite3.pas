@@ -163,9 +163,6 @@ type
     constructor Create(aRunningServer: TRestServerDB); reintroduce; overload;
     /// release the server
     destructor Destroy; override;
-    /// low-level access to the associated TRestOrmClientURI instance
-    function OrmInstance: TRestOrmClientURI;
-      {$ifdef HASINLINE}inline;{$endif}
 
     /// associated Server
     property Server: TRestServerDB
@@ -404,10 +401,6 @@ begin
   end;
 end;
 
-function TRestClientDB.OrmInstance: TRestOrmClientURI;
-begin
-  result := fOrmInstance as TRestOrmClientURI;
-end;
 
 
 initialization

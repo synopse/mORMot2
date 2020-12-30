@@ -850,6 +850,11 @@ type
     /// main access to the IRestOrmClient methods of this instance
     property Client: IRestOrmClient
       read fClient;
+    /// main access to the class implementing IRestOrm methods for this instance
+    // - used internally to avoid ORM: IRestOrm reference counting and
+    // enable inlining of most simple methods, if possible
+    function OrmInstance: TRestOrm;
+      {$ifdef HASINLINE}inline;{$endif}
 
     {$ifdef MSWINDOWS}
 
@@ -1882,6 +1887,11 @@ begin
   InternalLog('SessionRenewEvent(%) received status=% count=% from % % (timeout=% min)',
     [fModel.Root, status, JSONDecode(resp, 'count'), fSession.Server,
      fSession.Version, fSession.ServerTimeout], sllUserAuth);
+end;
+
+function TRestClientURI.OrmInstance: TRestOrm;
+begin
+  result := TRestOrm(fOrmInstance);
 end;
 
 constructor TRestClientURI.Create(aModel: TOrmModel);

@@ -425,7 +425,7 @@ type
   TRest = class(TInterfaceResolver)
   protected
     fOrm: IRestOrm;
-    fOrmInstance: TInterfacedObject; // is a TRestOrm
+    fOrmInstance: TInterfacedObject; // is a TRestOrm from mormot.orm.rest.pas
     fModel: TOrmModel;
     fServices: TServiceContainer;
     fRun: TRestRunThreads;
@@ -1475,7 +1475,7 @@ type
 implementation
 
 uses
-  mormot.orm.rest;
+  mormot.orm.rest; // avoid circular references
 
 
 { ************ Customize REST Execution }
