@@ -2290,9 +2290,11 @@ type
       const SlaveCallback: IServiceRecordVersionCallback): boolean; overload;
     /// grant access to this database content from a dll using the global
     // LibraryRequest() function
-    // - returns true if the LibraryRequest() function is set to this TRestServer
+    // - returns true if the LibraryRequest() function is implemented by this
+    // TRestServer, and TRestClientLibraryRequest can access it
     // - returns false if a TRestServer was already exported
-    function ExportServerGlobalLibraryRequest: boolean;
+    // - call with Disable=true to remove the LibraryRequest() function binding
+    function ExportServerGlobalLibraryRequest(Disable: boolean = false): boolean;
 
     {$ifndef PUREMORMOT2}
     /// redirect to Server: IRestOrmServer methods
@@ -6125,6 +6127,9 @@ begin
     raise EOrmException.CreateUTF8('%.Create: missing method!', [self]);
 end;
 
+var
+  GlobalLibraryRequestServer: TRestServer = nil;
+
 destructor TRestServer.Destroy;
 var
   i: PtrInt;
@@ -6140,6 +6145,8 @@ begin
   FreeAndNil(fStats);
   fSessions.Free;
   fAssociatedServices.Free;
+  if GlobalLibraryRequestServer = self then
+    GlobalLibraryRequestServer := nil; // unregister
 end;
 
 constructor TRestServer.CreateWithOwnModel(
@@ -7572,27 +7579,24 @@ begin
   Ctxt.Call.OutBody := '["OK"]';  // to save bandwith if no adding
 end;
 
-var
-  GlobalLibraryRequestServer: TRestServer = nil;
-
-function TRestServer.ExportServerGlobalLibraryRequest: boolean;
+function TRestServer.ExportServerGlobalLibraryRequest(Disable: boolean): boolean;
 begin
-  {$ifdef MSWINDOWS2}
-  if (fServerWindow <> 0) or
-     (fExportServerNamedPipeThread <> nil) then
-    // another named pipe server was running
-    result := false
-  else
-  {$endif MSWINDOWS}
-    if (GlobalLibraryRequestServer = nil) or
-       (GlobalLibraryRequestServer = self) then
+  result := false;
+  if self <> nil then
+    if Disable then
+    begin
+      if GlobalLibraryRequestServer = self then
+      begin
+        GlobalLibraryRequestServer := nil;
+        result := true;
+      end;
+    end
+    else if (GlobalLibraryRequestServer = nil) or
+            (GlobalLibraryRequestServer = self) then
     begin
       GlobalLibraryRequestServer := self;
       result := true;
-    end
-    else
-      // another server was running
-      result := false;
+    end;
 end;
 
 procedure LibraryRequestFree(Data: pointer); cdecl; // match TLibraryRequestFree
