@@ -514,6 +514,7 @@ end;
 destructor TRestOrmServer.Destroy;
 var
   i: PtrInt;
+  orm: TRestOrm;
 begin
   // free all virtual TRestStorage instances
   for i := 0 to high(fStaticVirtualTable) do
@@ -529,12 +530,16 @@ begin
     end;
   // free lasting TRestStorage instances and update file if necessary
   for i := 0 to high(fStaticData) do
-    if fStaticData[i] <> nil then
-      if fStaticData[i].RefCount <> 1 then
+  begin
+    orm := fStaticData[i];
+    if orm <> nil then
+    begin
+      if orm.RefCount <> 1 then
         raise ERestStorage.CreateUTF8('%.Destroy: static % refcnt=%',
-          [self, fStaticData[i], fStaticData[i].RefCount])
-      else
-        TRestOrmServer(fStaticData[i])._Release;
+          [self, orm, orm.RefCount]);
+      TRestOrmServer(orm)._Release;
+    end;
+  end;
   inherited Destroy; // fCache.Free
 end;
 
@@ -732,7 +737,8 @@ begin
       Batch.Add(deleted, True, True)
     else
       Add(deleted, True, True);
-    if fOwner.Services <> nil then
+    if (fOwner <>nil) and
+       (fOwner.Services <> nil) then
       (fOwner.Services as TServiceContainerServer).
         RecordVersionNotifyDelete(TableIndex, ID, revision);
   finally
@@ -1368,7 +1374,8 @@ begin
                       '%.EngineBatchSend: %.TransactionBegin timeout',
                       [self, RunningRest]);
                   SleepHiRes(1); // retry in 1 ms
-                until fOwner.ShutdownRequested;
+                until (fOwner <> nil) and
+                      (fOwner.ShutdownRequested);
               end;
           end;
           // handle batch pending request sending (if table or method changed)
@@ -2070,8 +2077,11 @@ end;
 
 function TRestOrmServer.HandleAuthentication: boolean;
 begin
-  // the main TRestServer is responsible of sessions and authentication
-  result := fOwner.HandleAuthentication;
+  if fOwner = nil then
+    result := false
+  else
+    // the main TRestServer is responsible of sessions and authentication
+    result := fOwner.HandleAuthentication;
 end;
 
 procedure TRestOrmServer.SetStaticVirtualTableDirect(direct: boolean);

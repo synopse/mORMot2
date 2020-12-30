@@ -346,7 +346,7 @@ type
       aDB: TSQLDataBase; aOwnDB: boolean); reintroduce; overload; virtual;
     /// initialize a stand-alone REST ORM server with a given SQLite3 database
     // - you can specify an associated TOrmModel but no TRest
-    constructor CreateWithoutRest(aModel: TOrmModel;
+    constructor CreateStandalone(aModel: TOrmModel; aRest: TRest;
       aDB: TSQLDataBase; aOwnDB: boolean); reintroduce;
     /// close any owned database and free used memory
     destructor Destroy; override;
@@ -991,6 +991,9 @@ begin
   fCacheSizePrevious := aCacheSizePrevious;
   fCacheSizeLast := aCacheSizeLast;
   orm := aServer.OrmInstance as TRestOrmServer;
+  if orm = nil then
+    raise ERestStorage.CreateUTF8(
+      '%.Create: % has no OrmInstance - use TRestServerDB', [self, aServer]);
   inherited Create(aClass, orm, aShardRange, aOptions, aMaxShardCount);
   orm.StaticTableSetup(fStoredClassProps.TableIndex, self, sStaticDataTable);
 end;
@@ -1018,8 +1021,8 @@ begin
   sql := TSQLDatabase.Create(DBFileName(fShardLast), '', 0, cachesize);
   sql.LockingMode := lmExclusive;
   sql.Synchronous := fSynchronous;
-  db := TRestOrmServerDB.CreateWithoutRest(model, sql, {owndb=}true);
-  model.Owner := db; // TRestOrmServerDB.Destroy will free its TOrmModel
+  db := TRestOrmServerDB.CreateStandalone(model, fRest, sql, {owndb=}true);
+  db._AddRef;
   db.CreateMissingTables;
   result := db;
   SetLength(fShards, fShardLast + 1);
@@ -1106,7 +1109,8 @@ begin
     fStatementMonitor := nil;
     exit;
   end;
-  if mlSQLite3 in fOwner.StatLevels then
+  if (fOwner <> nil) and
+     (mlSQLite3 in fOwner.StatLevels) then
     timer := @fStatementTimer
   else
     timer := nil;
@@ -1300,7 +1304,8 @@ begin
   begin
     JSONGetID(pointer(SentData), result);
     Decoder.Decode(SentData, nil, pInlined, result, false);
-    if Props.RecordVersionField <> nil then
+    if (fOwner <> nil) and
+       (Props.RecordVersionField <> nil) then
       fOwner.RecordVersionHandle(ooInsert, TableModelIndex, Decoder,
         Props.RecordVersionField);
     SQL := SQL + Decoder.EncodeAsSQL(false) + ';';
@@ -1371,8 +1376,8 @@ begin
   fDB.GetTableNames(TableNamesAtCreation);
   nt := length(TableNamesAtCreation);
   QuickSortRawUTF8(TableNamesAtCreation, nt, nil, @StrIComp);
-  fOwner.LogFamily.SynLog.Log(sllDB, 'CreateMissingTables on %', [fDB], self);
-  fOwner.LogFamily.SynLog.Log(sllDB, 'GetTables', TypeInfo(TRawUTF8DynArray),
+  fDB.Log.Add.Log(sllDB, 'CreateMissingTables on %', [fDB], self);
+  fDB.Log.Add.Log(sllDB, 'GetTables', TypeInfo(TRawUTF8DynArray),
     TableNamesAtCreation, self);
   FillcharFast(TableJustCreated, sizeof(TOrmFieldTables), 0);
   try
@@ -1511,16 +1516,19 @@ begin
   Create(aRest);
 end;
 
-constructor TRestOrmServerDB.CreateWithoutRest(aModel: TOrmModel;
+constructor TRestOrmServerDB.CreateStandalone(aModel: TOrmModel; aRest: TRest;
   aDB: TSQLDataBase; aOwnDB: boolean);
 begin
   fModel := aModel;
+  fModel.Owner := self; // TRestOrmServerDB.Destroy will free its TOrmModel
+  fRest := aRest;
+  fOwner := aRest as TRestServer;
   Create(nil, aDB, aOwnDB);
 end;
 
 destructor TRestOrmServerDB.Destroy;
 begin
-  with fOwner.LogClass.Enter('Destroy %', [fModel.SafeRoot], self) do
+  with fDB.Log.Enter('Destroy %', [fModel.SafeRoot], self) do
   try
     if (fDB <> nil) and
        (fDB.InternalState = @InternalState) then
@@ -1644,7 +1652,7 @@ begin
      (aSQL <> '') and
      Assigned(StoredProc) then
   try
-    fOwner.LogFamily.SynLog.Enter('StoredProcExecute(%)', [aSQL], self);
+    fDB.Log.Enter('StoredProcExecute(%)', [aSQL], self);
     DB.LockAndFlushCache; // even if aSQL is SELECT, StoredProc may update data
     try
       try
@@ -1665,7 +1673,7 @@ begin
   except
     on E: ESQLite3Exception do
     begin
-      fOwner.LogFamily.SynLog.Log(sllError, '% for %', [E, aSQL], self);
+      fDB.Log.Add.Log(sllError, '% for %', [E, aSQL], self);
       result := false;
     end;
   end;

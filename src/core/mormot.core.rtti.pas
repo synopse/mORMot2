@@ -1722,7 +1722,7 @@ function TypeNameToStandardParserType(const Name: RawUTF8;
   Complex: PRTTIParserComplexType = nil): TRttiParserType; overload;
 
 /// recognize a simple value type from a supplied type information
-// - if FirstSearchByName=true, will first call TypeNameToStandardParserType(Info^.Name^)
+// - if FirstSearchByName=true, call TypeNameToStandardParserType(Info^.Name^)
 // - will return ptNone for any unknown type
 function TypeInfoToStandardParserType(Info: PRttiInfo;
   FirstSearchByName: boolean = true;

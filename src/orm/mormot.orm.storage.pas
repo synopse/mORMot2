@@ -4291,7 +4291,10 @@ begin
       rest := fShards[i];
       if rest = nil then
         continue;
-      rest.Free;
+      if rest.RefCount <> 1 then
+        raise ERestStorage.CreateUTF8('%.Destroy: %.RefCount=%',
+          [self, rest.RefCount]);
+      TRestStorageShard(rest)._Release;
       for j := i + 1 to high(fShards) do
         if fShards[j] = rest then
           fShards[j] := nil; // same instance re-used in fShards[]
@@ -4304,13 +4307,24 @@ begin // do nothing by default
 end;
 
 procedure TRestStorageShard.RemoveShard(aShardIndex: integer);
+var
+  rest: TRestOrm;
 begin
   StorageLock(true, 'RemoveShard');
   try
     if (fShards <> nil) and
        (cardinal(aShardIndex) <= cardinal(fShardLast)) then
     begin
-      FreeAndNil(fShards[aShardIndex]);
+      rest := fShards[aShardIndex];
+      if (rest = nil) or
+         (rest.RefCount <> 1) then
+        raise ERestStorage.CreateUTF8('%.RemoveShard(%): %?',
+          [self, aShardIndex, fShards[aShardIndex]]);
+      if rest <> nil then
+      begin
+        TRestStorageShard(rest)._Release;
+        fShards[aShardIndex] := nil;
+      end;
       fShardTableIndex[aShardIndex] := -1;
     end;
   finally

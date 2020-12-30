@@ -230,8 +230,12 @@ end;
 
 constructor TRestServerDB.CreateWithOwnModel(const aTables: array of TOrmClass;
   aHandleUserAuthentication: boolean; const aRoot: RawUTF8);
+var
+  model: TOrmModel;
 begin
-  Create(TOrmModel.Create(aTables, aRoot), aHandleUserAuthentication);
+  model := TOrmModel.Create(aTables, aRoot);
+  Create(model, aHandleUserAuthentication);
+  model.Owner := self;
 end;
 
 constructor TRestServerDB.RegisteredClassCreateFrom(aModel: TOrmModel;
