@@ -1468,7 +1468,7 @@ procedure Int32ToUTF8(Value: PtrInt; var result: RawUTF8); overload;
 
 /// fast RawUTF8 version of 64-bit IntToStr()
 function Int64ToUtf8(Value: Int64): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASSAFEINLINE}inline;{$endif} // Delphi 2007 has trouble inlining this
 
 /// fast RawUTF8 version of 64-bit IntToStr()
 // - result as var parameter saves a local assignment and a try..finally

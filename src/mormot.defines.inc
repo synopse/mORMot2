@@ -97,6 +97,7 @@
   {$CODEPAGE UTF8} // otherwise unexpected behavior occurs in most cases
 
   {$define HASINLINE}
+  {$define HASSAFEINLINE} // Delphi 2007 has sometimes troubles inlining :(
   {$define NODELPHIASM} // avoid e.g. low-level System.@LStrFromPCharLen calls
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
@@ -388,6 +389,7 @@
       {$define ISDELPHI20092010} //specific compilation issues
     {$ifend}
     {$if CompilerVersion >= 21.0}
+      {$define HASSAFEINLINE} // Delphi 2007 has sometimes troubles inlining :(
       {$define ISDELPHI2010}
       {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
       {$define ISDELPHI2010_OR_FPC_NEWRTTI}
