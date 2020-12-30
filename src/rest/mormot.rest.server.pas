@@ -1862,6 +1862,13 @@ type
     // - will perform any needed clean-up, and log the event
     // - this method is not thread-safe: caller should use Sessions.Lock/Unlock
     procedure SessionDelete(aSessionIndex: integer; Ctxt: TRestServerURIContext);
+    /// SessionAccess will detect and delete outdated sessions, but you can call
+    // this method to force checking for deprecated session now
+    // - may be used e.g. from OnSessionCreate to limit the number of active sessions
+    // - this method is not thread-safe: caller should use Sessions.Lock/Unlock
+    // - you can call it often: it will seek for outdated sessions once per second
+    // - returns the current system Ticks number (at second resolution)
+    function SessionDeleteDeprecated: cardinal;
   public
     /// a method can be specified to be notified when a session is created
     // - for OnSessionCreate, returning TRUE will abort the session creation -
@@ -6810,6 +6817,27 @@ begin
   end;
 end;
 
+function TRestServer.SessionDeleteDeprecated: cardinal;
+var
+  i: PtrInt;
+begin // caller made fSessions.Safe.Lock
+  result := GetTickCount64 shr 10;
+  if (self <> nil) and
+     (fSessions<>nil) then
+  begin
+    if result <> fSessionsDeprecatedTix then
+    begin
+      fSessionsDeprecatedTix := result; // check sessions every second
+      for i := fSessions.Count - 1 downto 0 do
+        if result > TAuthSession(fSessions.List[i]).TimeOutTix then
+        begin
+          SessionDelete(i, nil);
+          inc(result);
+        end;
+    end;
+  end;
+end;
+
 function TRestServer.SessionAccess(Ctxt: TRestServerURIContext): TAuthSession;
 var
   i: integer;
@@ -6819,14 +6847,8 @@ begin // caller of RetrieveSession() made fSessions.Safe.Lock
   if (self <> nil) and
      (fSessions <> nil) then
   begin
-    tix := GetTickCount64 shr 10;
-    if tix <> fSessionsDeprecatedTix then
-    begin
-      fSessionsDeprecatedTix := tix; // check deprecated sessions every second
-      for i := fSessions.Count - 1 downto 0 do
-        if tix > TAuthSession(fSessions.List[i]).TimeOutTix then
-          SessionDelete(i, nil);
-    end;
+    // check deprecated sessions every second
+    tix := SessionDeleteDeprecated;
     // retrieve session from its ID
     sessions := pointer(fSessions.List);
     session := Ctxt.Session;
