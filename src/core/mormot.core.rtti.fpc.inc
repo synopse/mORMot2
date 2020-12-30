@@ -50,7 +50,6 @@ end;
 type
   PRecordInfo = PTypeData; // oldest Delphi PTypeData doesn't have RecordSize
 
-
 function TRttiInfo.RttiClass: PRttiClass; // for proper inlining below
 begin
   if @self <> nil then
@@ -133,6 +132,9 @@ begin
   if base <> nil then
     result := pointer(GetTypeData(base));
 end;
+
+const
+  NULCHAR: AnsiChar = #0; // local to use RIP and not REL
 
 function TRttiEnumType.GetEnumNameOrd(Value: cardinal): PShortString;
 var
@@ -250,7 +252,8 @@ begin
   begin
     if GetProc = nil then
       // no 'read' was defined -> try from 'write' field
-      if (SetProc <> nil) and ((integer(PropProcs) shr 2) and 3 = ptField) then
+      if (SetProc <> nil) and
+         ((integer(PropProcs) shr 2) and 3 = ptField) then
       begin // bits 2..3 = SetProc
         Call.Data := pointer(PtrUInt(Instance) + PtrUInt(SetProc));
         exit(rpcField);

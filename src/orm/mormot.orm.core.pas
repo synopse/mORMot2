@@ -3111,7 +3111,7 @@ type
     // - i.e. if the associated TOrmModel contains TAuthUser and
     // TAuthGroup tables (set by constructor)
     function HandleAuthentication: boolean;
-    /// set to false to force using SQlite3 virtual tables for
+    /// used by tests to set as false and force using SQlite3 virtual tables for
     // TOrmVirtualTableJSON static tables (module JSON or BINARY)
     procedure SetStaticVirtualTableDirect(direct: boolean);
   end;
@@ -9816,7 +9816,7 @@ begin
     Include(attrib, aIsUnique); // property MyProperty: RawUTF8 stored AS_UNIQUE;
   if (pilAuxiliaryFields in aOptions) and (aPropInfo^.Name^[1] = '_') then
     Include(attrib, aAuxiliaryRTreeField);
-  inherited Create(ToUTF8(aPropInfo^.Name^), aOrmFieldType, attrib, aPropInfo^.Index,
+  inherited Create(aPropInfo^.NameUTF8, aOrmFieldType, attrib, aPropInfo^.Index,
     aPropIndex); // property MyProperty: RawUTF8 index 10; -> FieldWidth=10
   fPropInfo := aPropInfo;
   fPropType := aPropInfo^.TypeInfo;
@@ -12303,8 +12303,8 @@ begin
   byte(attrib) := 0;
   if aPropInfo^.IsStored(nil) = AS_UNIQUE then
     Include(attrib, aIsUnique); // property MyProperty: RawUTF8 stored AS_UNIQUE;ieldWidth=10
-  Create(aPropInfo^.typeInfo, ToUTF8(aPropInfo^.Name^), aPropIndex, aPropInfo^.GetFieldAddr
-    (nil), attrib, aPropInfo^.Index);
+  Create(aPropInfo^.TypeInfo, aPropInfo^.NameUTF8, aPropIndex,
+    aPropInfo^.GetFieldAddr(nil), attrib, aPropInfo^.Index);
 end;
 
 constructor TOrmPropInfoCustomJSON.Create(aTypeInfo: PRttiInfo;
@@ -12463,11 +12463,11 @@ begin
   // append this level of class hierarchy
   for i := 1 to GetRttiProp(aClassType, p) do
   begin
-    if (p^.typeInfo^.Kind = rkClass) and
-       (ClassOrmFieldType(p^.typeInfo) in [oftObject, oftUnknown]) then
+    if (p^.TypeInfo^.Kind = rkClass) and
+       (ClassOrmFieldType(p^.TypeInfo) in [oftObject, oftUnknown]) then
     begin
       prev := PtrArrayAdd(aFlattenedProps, p);
-      InternalAddParentsFirst(p^.typeInfo^.RttiClass^.RttiClass, aFlattenedProps);
+      InternalAddParentsFirst(p^.TypeInfo^.RttiClass^.RttiClass, aFlattenedProps);
       SetLength(aFlattenedProps, prev);
     end
     else if not (pilIgnoreIfGetter in fOptions) or p^.GetterIsField then
@@ -20372,7 +20372,7 @@ function TOrmModel.GetURIID(aTable: TOrmClass; aID: TID): RawUTF8;
 begin
   result := GetURI(aTable);
   if aID > 0 then
-    result := result + '/' + Int64ToUtf8(aID);
+    result := FormatUTF8('%/%', [result, aID]);
 end;
 
 function TOrmModel.GetURICallBack(const aMethodName: RawUTF8;
