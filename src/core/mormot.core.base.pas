@@ -736,7 +736,7 @@ function DateTimeToIsoString(dt: TDateTime): string;
 
 // backward compatibility types redirections
 type
-  TSQLRawBlob = RawBlob;
+  TSqlRawBlob = RawBlob;
 
 {$endif PUREMORMOT2}
 

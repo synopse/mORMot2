@@ -75,7 +75,7 @@ type
     // cached value: our JSON parsing is a lot faster than SQLite3 engine
     // itself, and uses less memory
     // - will raise an ESQLException on any error
-    constructor Create(aDB: TSQLDatabase; const Tables: array of TOrmClass;
+    constructor Create(aDB: TSqlDatabase; const Tables: array of TOrmClass;
       const aSQL: RawUTF8; Expand: boolean); reintroduce;
   end;
 
@@ -88,9 +88,9 @@ type
   // engine together with the DB connection
   TOrmVirtualTableModuleSQLite3 = class(TOrmVirtualTableModule)
   protected
-    fDB: TSQLDataBase;
+    fDB: TSqlDataBase;
     /// used internaly to register the module to the SQLite3 engine
-    fModule: TSQLite3Module;
+    fModule: TSqlite3Module;
   public
     /// initialize the module for a given DB connection
     // - internally set fModule and call sqlite3_create_module_v2(fModule)
@@ -101,7 +101,7 @@ type
     // module by itself; but in case of error (an exception is raised), it is
     // up to the caller to intercept it via a try..except and free the
     // TOrmVirtualTableModuleSQLite3 instance
-    procedure Attach(aDB: TSQLDataBase);
+    procedure Attach(aDB: TSqlDataBase);
     /// retrieve the file name to be used for a specific Virtual Table
     // - overridden method returning a file located in the DB file folder, and
     // '' if the main DB was created as SQLITE_MEMORY_DATABASE_NAME (i.e.
@@ -110,7 +110,7 @@ type
     // used, even if the DB is created as SQLITE_MEMORY_DATABASE_NAME
     function FileName(const aTableName: RawUTF8): TFileName; override;
     /// the associated SQLite3 database connection
-    property DB: TSQLDataBase
+    property DB: TSqlDataBase
       read fDB;
   end;
 
@@ -124,14 +124,14 @@ type
 
 /// initialize a Virtual Table Module for a specified database
 // - to be used for low-level access to a virtual module, e.g. with
-// TSQLVirtualTableLog
-// - when using our ORM, you should call TSQLModel.VirtualTableRegister()
-// instead to associate a TSQLRecordVirtual class to a module
-// - returns the created TSQLVirtualTableModule instance (which will be a
-// TSQLVirtualTableModuleSQLite3 instance in fact)
+// TSqlVirtualTableLog
+// - when using our ORM, you should call TSqlModel.VirtualTableRegister()
+// instead to associate a TSqlRecordVirtual class to a module
+// - returns the created TSqlVirtualTableModule instance (which will be a
+// TSqlVirtualTableModuleSQLite3 instance in fact)
 // - will raise an exception of failure
 function RegisterVirtualTableModule(aModule: TOrmVirtualTableClass;
-  aDatabase: TSQLDataBase): TOrmVirtualTableModule;
+  aDatabase: TSqlDataBase): TOrmVirtualTableModule;
 
 
 
@@ -149,7 +149,7 @@ type
   TRestStorageShardDB = class(TRestStorageShard)
   protected
     fShardRootFileName: TFileName;
-    fSynchronous: TSQLSynchronousMode;
+    fSynchronous: TSqlSynchronousMode;
     fInitShardsIsLast: boolean;
     fCacheSizePrevious, fCacheSizeLast: integer;
     procedure InitShards; override;
@@ -168,7 +168,7 @@ type
       aOptions: TRestStorageShardOptions = [];
       const aShardRootFileName: TFileName = '';
       aMaxShardCount: integer = 100;
-      aSynchronous: TSQLSynchronousMode = smOff;
+      aSynchronous: TSqlSynchronousMode = smOff;
       aCacheSizePrevious: integer = 250;
       aCacheSizeLast: integer = 500); reintroduce; virtual;
   published
@@ -186,13 +186,13 @@ type
   TRestOrmServerDB = class(TRestOrmServer)
   protected
     /// access to the associated SQLite3 database engine
-    fDB: TSQLDataBase;
+    fDB: TSqlDataBase;
     /// initialized by Create(aModel,aDBFileName)
-    fOwnedDB: TSQLDataBase;
-    fStatementCache: TSQLStatementCached;
+    fOwnedDB: TSqlDataBase;
+    fStatementCache: TSqlStatementCached;
     /// used during GetAndPrepareStatement() execution (run in global lock)
-    fStatement: PSQLRequest;
-    fStaticStatement: TSQLRequest;
+    fStatement: PSqlRequest;
+    fStaticStatement: TSqlRequest;
     fStatementTimer: PPrecisionTimer;
     fStatementMonitor: TSynMonitor;
     fStaticStatementTimer: TPrecisionTimer;
@@ -219,11 +219,11 @@ type
     fBatchIDMax: TID;
     fBatchValues: TRawUTF8DynArray;
     fBatchValuesCount: integer;
-    /// retrieve a TSQLRequest instance in fStatement
+    /// retrieve a TSqlRequest instance in fStatement
     // - will set @fStaticStatement if no :(%): internal parameters appear:
-    // in this case, the TSQLRequest.Close method must be called
+    // in this case, the TSqlRequest.Close method must be called
     // - will set a @fStatementCache[].Statement, after having bounded the
-    // :(%): parameter values; in this case, TSQLRequest.Close must not be called
+    // :(%): parameter values; in this case, TSqlRequest.Close must not be called
     // - expect sftBlob, sftBlobDynArray and sftBlobRecord properties
     // to be encoded as ':("\uFFF0base64encodedbinary"):'
     procedure GetAndPrepareStatement(const SQL: RawUTF8;
@@ -234,7 +234,7 @@ type
     procedure GetAndPrepareStatementRelease(E: Exception;
       const Format: RawUTF8; const Args: array of const;
       ForceBindReset: boolean = false); overload;
-    /// create or retrieve from the cache a TSQLRequest instance in fStatement
+    /// create or retrieve from the cache a TSqlRequest instance in fStatement
     // - called e.g. by GetAndPrepareStatement()
     procedure PrepareStatement(Cached: boolean);
   public
@@ -319,7 +319,7 @@ type
     // cache used at SQLite3 database level; but some virtual tables (e.g.
     // TRestStorageExternal classes defined in SQLite3DB) could flush
     // the database content without proper notification
-    // - this overridden implementation will call TSQLDataBase.CacheFlush method
+    // - this overridden implementation will call TSqlDataBase.CacheFlush method
     procedure FlushInternalDBCache; override;
     /// call this method to flush the internal SQL prepared statements cache
     // - you should not have to flush the cache, only e.g. before a DROP TABLE
@@ -329,7 +329,7 @@ type
     // - lock the database during the run
     // - call a fast "stored procedure"-like method for each row of the request;
     // this method must use low-level DB access in any attempt to modify the
-    // database (e.g. a prepared TSQLRequest with Reset+Bind+Step), and not
+    // database (e.g. a prepared TSqlRequest with Reset+Bind+Step), and not
     // the TRestOrmServerDB.Engine*() methods which include a Lock(): this Lock()
     // is performed by the main loop in EngineExecute() and any attempt to
     // such high-level call will fail into an endless loop
@@ -341,13 +341,13 @@ type
     /// initialize a TRest-owned ORM server with an in-memory SQLite3 database
     constructor Create(aRest: TRest); overload; override;
     /// initialize a TRest-owned ORM server with a given SQLite3 database
-    // - you should specify a TSQLDataBase and a TRest associated instance
+    // - you should specify a TSqlDataBase and a TRest associated instance
     constructor Create(aRest: TRest;
-      aDB: TSQLDataBase; aOwnDB: boolean); reintroduce; overload; virtual;
+      aDB: TSqlDataBase; aOwnDB: boolean); reintroduce; overload; virtual;
     /// initialize a stand-alone REST ORM server with a given SQLite3 database
     // - you can specify an associated TOrmModel but no TRest
     constructor CreateStandalone(aModel: TOrmModel; aRest: TRest;
-      aDB: TSQLDataBase; aOwnDB: boolean); reintroduce;
+      aDB: TSqlDataBase; aOwnDB: boolean); reintroduce;
     /// close any owned database and free used memory
     destructor Destroy; override;
     /// Missing tables are created if they don't exist yet for every TOrm
@@ -366,7 +366,7 @@ type
     function TableMaxID(Table: TOrmClass): TID; override;
     /// prepared statements with parameters for faster SQLite3 execution
     // - used for SQL code with :(%): internal parameters
-    property StatementCache: TSQLStatementCached
+    property StatementCache: TSqlStatementCached
       read fStatementCache;
     /// after how many bytes a sllSQL statement log entry should be truncated
     // - default is 0, meaning no truncation
@@ -379,7 +379,7 @@ type
       write fStatementPreparedSelectQueryPlan;
   published
     /// associated database
-    property DB: TSQLDataBase
+    property DB: TSqlDataBase
       read fDB;
     /// contains some textual information about the latest Exception raised
     // during SQL statement execution
@@ -397,7 +397,7 @@ type
   private
     // use internaly a TRestServerDB to access data in the proper JSON format
     fServer: TRestOrmServerDB;
-    function GetDB: TSQLDataBase;
+    function GetDB: TSqlDataBase;
   public
     /// initialize the ORM storage, with the associated ORM Server
     constructor Create(aRest: TRest; aServer: TRestOrmServerDB); reintroduce;
@@ -413,7 +413,7 @@ type
     property Server: TRestOrmServerDB
       read fServer;
     /// associated database
-    property DB: TSQLDataBase
+    property DB: TSqlDataBase
       read GetDB;
   end;
 
@@ -426,11 +426,11 @@ implementation
 
 { TOrmTableDB }
 
-constructor TOrmTableDB.Create(aDB: TSQLDatabase;
+constructor TOrmTableDB.Create(aDB: TSqlDatabase;
   const Tables: array of TOrmClass; const aSQL: RawUTF8; Expand: boolean);
 var
   JSONCached: RawUTF8;
-  R: TSQLRequest;
+  R: TSqlRequest;
   n: PtrInt;
 begin
   if aDB = nil then
@@ -465,8 +465,8 @@ begin
   TSynLog.DebuggerNotify(sllWarning, Format, Args);
 end;
 
-function vt_Create(DB: TSQLite3DB; pAux: Pointer; argc: integer;
-  const argv: PPUTF8CharArray; var ppVTab: PSQLite3VTab;
+function vt_Create(DB: TSqlite3DB; pAux: Pointer; argc: integer;
+  const argv: PPUTF8CharArray; var ppVTab: PSqlite3VTab;
   var pzErr: PUTF8Char): integer; cdecl;
 var
   Module: TOrmVirtualTableModuleSQLite3 absolute pAux;
@@ -484,7 +484,7 @@ begin
     result := SQLITE_ERROR;
     exit;
   end;
-  ppVTab := sqlite3.malloc(sizeof(TSQLite3VTab));
+  ppVTab := sqlite3.malloc(sizeof(TSqlite3VTab));
   if ppVTab = nil then
   begin
     result := SQLITE_NOMEM;
@@ -516,14 +516,14 @@ begin
     ppVTab^.pInstance := Table;
 end;
 
-function vt_Disconnect(pVTab: PSQLite3VTab): integer; cdecl;
+function vt_Disconnect(pVTab: PSqlite3VTab): integer; cdecl;
 begin
   TOrmVirtualTable(pVTab^.pInstance).Free;
   sqlite3.free_(pVTab);
   result := SQLITE_OK;
 end;
 
-function vt_Destroy(pVTab: PSQLite3VTab): integer; cdecl;
+function vt_Destroy(pVTab: PSqlite3VTab): integer; cdecl;
 begin
   if TOrmVirtualTable(pVTab^.pInstance).Drop then
     result := SQLITE_OK
@@ -535,8 +535,8 @@ begin
   vt_Disconnect(pVTab); // release memory
 end;
 
-function vt_BestIndex(var pVTab: TSQLite3VTab;
-  var pInfo: TSQLite3IndexInfo): integer; cdecl;
+function vt_BestIndex(var pVTab: TSqlite3VTab;
+  var pInfo: TSqlite3IndexInfo): integer; cdecl;
 const
   COST: array[TOrmVirtualTablePreparedCost] of double = (
          1E10, 1E8, 10, 1);
@@ -591,7 +591,7 @@ begin
     Prepared^.OmitOrderBy := false;
     if pInfo.nOrderBy > 0 then
     begin
-      assert(sizeof(TOrmVirtualTablePreparedOrderBy) = sizeof(TSQLite3IndexOrderBy));
+      assert(sizeof(TOrmVirtualTablePreparedOrderBy) = sizeof(TSqlite3IndexOrderBy));
       Prepared^.OrderByCount := pInfo.nOrderBy;
       MoveFast(pInfo.aOrderBy^[0], Prepared^.OrderBy[0],
         pInfo.nOrderBy * sizeof(Prepared^.OrderBy[0]));
@@ -652,9 +652,9 @@ begin
   end;
 end;
 
-function vt_Filter(var pVtabCursor: TSQLite3VTabCursor; idxNum: integer;
+function vt_Filter(var pVtabCursor: TSqlite3VTabCursor; idxNum: integer;
   const idxStr: PAnsiChar; argc: integer;
-  var argv: TSQLite3ValueArray): integer; cdecl;
+  var argv: TSqlite3ValueArray): integer; cdecl;
 var
   Prepared: POrmVirtualTablePrepared absolute idxStr; // idxNum is not used
   i: PtrInt;
@@ -674,12 +674,12 @@ begin
     Notify('vt_Filter Search()', []);
 end;
 
-function vt_Open(var pVTab: TSQLite3VTab;
-  var ppCursor: PSQLite3VTabCursor): integer; cdecl;
+function vt_Open(var pVTab: TSqlite3VTab;
+  var ppCursor: PSqlite3VTabCursor): integer; cdecl;
 var
   Table: TOrmVirtualTable;
 begin
-  ppCursor := sqlite3.malloc(sizeof(TSQLite3VTabCursor));
+  ppCursor := sqlite3.malloc(sizeof(TSqlite3VTabCursor));
   if ppCursor = nil then
   begin
     result := SQLITE_NOMEM;
@@ -699,14 +699,14 @@ begin
   result := SQLITE_OK;
 end;
 
-function vt_Close(pVtabCursor: PSQLite3VTabCursor): integer; cdecl;
+function vt_Close(pVtabCursor: PSqlite3VTabCursor): integer; cdecl;
 begin
   TOrmVirtualTableCursor(pVtabCursor^.pInstance).Free;
   sqlite3.free_(pVtabCursor);
   result := SQLITE_OK;
 end;
 
-function vt_next(var pVtabCursor: TSQLite3VTabCursor): integer; cdecl;
+function vt_next(var pVtabCursor: TSqlite3VTabCursor): integer; cdecl;
 begin
   if TOrmVirtualTableCursor(pVtabCursor.pInstance).Next then
     result := SQLITE_OK
@@ -714,7 +714,7 @@ begin
     result := SQLITE_ERROR;
 end;
 
-function vt_Eof(var pVtabCursor: TSQLite3VTabCursor): integer; cdecl;
+function vt_Eof(var pVtabCursor: TSqlite3VTabCursor): integer; cdecl;
 begin
   if TOrmVirtualTableCursor(pVtabCursor.pInstance).HasData then
     result := 0
@@ -722,10 +722,10 @@ begin
     result := 1; // reached actual EOF
 end;
 
-function vt_Column(var pVtabCursor: TSQLite3VTabCursor;
-  sContext: TSQLite3FunctionContext; N: integer): integer; cdecl;
+function vt_Column(var pVtabCursor: TSqlite3VTabCursor;
+  sContext: TSqlite3FunctionContext; N: integer): integer; cdecl;
 var
-  Res: TSQLVar;
+  Res: TSqlVar;
 begin
   Res.VType := ftUnknown;
   if (N >= 0) and
@@ -739,10 +739,10 @@ begin
   end;
 end;
 
-function vt_Rowid(var pVtabCursor: TSQLite3VTabCursor;
+function vt_Rowid(var pVtabCursor: TSqlite3VTabCursor;
   var pRowid: Int64): integer; cdecl;
 var
-  Res: TSQLVar;
+  Res: TSqlVar;
 begin
   result := SQLITE_ERROR;
   with TOrmVirtualTableCursor(pVtabCursor.pInstance) do
@@ -769,10 +769,10 @@ begin
       Notify('vt_Rowid Column', []);
 end;
 
-function vt_Update(var pVTab: TSQLite3VTab; nArg: integer;
-  var ppArg: TSQLite3ValueArray; var pRowid: Int64): integer; cdecl;
+function vt_Update(var pVTab: TSqlite3VTab; nArg: integer;
+  var ppArg: TSqlite3ValueArray; var pRowid: Int64): integer; cdecl;
 var
-  Values: TSQLVarDynArray;
+  Values: TSqlVarDynArray;
   Table: TOrmVirtualTable;
   RowID0, RowID1: Int64;
   i: PtrInt;
@@ -818,7 +818,7 @@ begin
     Notify('vt_Update(%)', [pRowid]);
 end;
 
-function InternalTrans(pVTab: TSQLite3VTab; aState: TOrmVirtualTableTransaction;
+function InternalTrans(pVTab: TSqlite3VTab; aState: TOrmVirtualTableTransaction;
   aSavePoint: integer): integer;
 begin
   if TOrmVirtualTable(pVTab.pInstance).Transaction(aState, aSavePoint) then
@@ -830,42 +830,42 @@ begin
   end;
 end;
 
-function vt_Begin(var pVTab: TSQLite3VTab): integer; cdecl;
+function vt_Begin(var pVTab: TSqlite3VTab): integer; cdecl;
 begin
   result := InternalTrans(pVTab, vttBegin, 0);
 end;
 
-function vt_Commit(var pVTab: TSQLite3VTab): integer; cdecl;
+function vt_Commit(var pVTab: TSqlite3VTab): integer; cdecl;
 begin
   result := InternalTrans(pVTab, vttCommit, 0);
 end;
 
-function vt_RollBack(var pVTab: TSQLite3VTab): integer; cdecl;
+function vt_RollBack(var pVTab: TSqlite3VTab): integer; cdecl;
 begin
   result := InternalTrans(pVTab, vttRollBack, 0);
 end;
 
-function vt_Sync(var pVTab: TSQLite3VTab): integer; cdecl;
+function vt_Sync(var pVTab: TSqlite3VTab): integer; cdecl;
 begin
   result := InternalTrans(pVTab, vttSync, 0);
 end;
 
-function vt_SavePoint(var pVTab: TSQLite3VTab; iSavepoint: integer): integer; cdecl;
+function vt_SavePoint(var pVTab: TSqlite3VTab; iSavepoint: integer): integer; cdecl;
 begin
   result := InternalTrans(pVTab, vttSavePoint, iSavepoint);
 end;
 
-function vt_Release(var pVTab: TSQLite3VTab; iSavepoint: integer): integer; cdecl;
+function vt_Release(var pVTab: TSqlite3VTab; iSavepoint: integer): integer; cdecl;
 begin
   result := InternalTrans(pVTab, vttRelease, iSavepoint);
 end;
 
-function vt_RollBackTo(var pVTab: TSQLite3VTab; iSavepoint: integer): integer; cdecl;
+function vt_RollBackTo(var pVTab: TSqlite3VTab; iSavepoint: integer): integer; cdecl;
 begin
   result := InternalTrans(pVTab, vttRollBackTo, iSavepoint);
 end;
 
-function vt_Rename(var pVTab: TSQLite3VTab; const zNew: PAnsiChar): integer; cdecl;
+function vt_Rename(var pVTab: TSqlite3VTab; const zNew: PAnsiChar): integer; cdecl;
 begin
   if TOrmVirtualTable(pVTab.pInstance).Rename(RawUTF8(zNew)) then
     result := SQLITE_OK
@@ -901,7 +901,7 @@ begin
               ExtractFileName(inherited FileName(aTableName));
 end;
 
-procedure TOrmVirtualTableModuleSQLite3.Attach(aDB: TSQLDataBase);
+procedure TOrmVirtualTableModuleSQLite3.Attach(aDB: TSqlDataBase);
 begin
   if aDB = nil then
     raise ERestStorage.CreateUTF8('aDB=nil at %.SetDB()', [self]);
@@ -960,7 +960,7 @@ end;
 
 
 function RegisterVirtualTableModule(aModule: TOrmVirtualTableClass;
-  aDatabase: TSQLDataBase): TOrmVirtualTableModule;
+  aDatabase: TSqlDataBase): TOrmVirtualTableModule;
 begin
   result := TOrmVirtualTableModuleSQLite3.Create(aModule, nil);
   try
@@ -981,7 +981,7 @@ end;
 constructor TRestStorageShardDB.Create(aClass: TOrmClass;
   aServer: TRestServer; aShardRange: TID;
   aOptions: TRestStorageShardOptions; const aShardRootFileName: TFileName;
-  aMaxShardCount: integer; aSynchronous: TSQLSynchronousMode;
+  aMaxShardCount: integer; aSynchronous: TSqlSynchronousMode;
   aCacheSizePrevious, aCacheSizeLast: integer);
 var
   orm: TRestOrmServer;
@@ -1008,7 +1008,7 @@ function TRestStorageShardDB.InitNewShard: TRestOrm;
 var
   db: TRestOrmServerDB;
   cachesize: integer;
-  sql: TSQLDataBase;
+  sql: TSqlDataBase;
   model: TOrmModel;
 begin
   inc(fShardLast);
@@ -1018,7 +1018,7 @@ begin
     cachesize := fCacheSizeLast
   else
     cachesize := fCacheSizePrevious;
-  sql := TSQLDatabase.Create(DBFileName(fShardLast), '', 0, cachesize);
+  sql := TSqlDatabase.Create(DBFileName(fShardLast), '', 0, cachesize);
   sql.LockingMode := lmExclusive;
   sql.Synchronous := fSynchronous;
   db := TRestOrmServerDB.CreateStandalone(model, fRest, sql, {owndb=}true);
@@ -1136,7 +1136,7 @@ procedure TRestOrmServerDB.GetAndPrepareStatement(const SQL: RawUTF8;
   ForceCacheStatement: boolean);
 var
   i, sqlite3param: PtrInt;
-  Types: TSQLParamTypeDynArray;
+  Types: TSqlParamTypeDynArray;
   Nulls: TFieldBits;
   Values: TRawUTF8DynArray;
 begin
@@ -1314,8 +1314,8 @@ begin
     InternalUpdateEvent(oeAdd, TableModelIndex, result, SentData, nil);
 end;
 
-procedure InternalRTreeIn(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); cdecl;
+procedure InternalRTreeIn(Context: TSqlite3FunctionContext;
+  argc: integer; var argv: TSqlite3ValueArray); cdecl;
 var
   aRTree: TOrmRTreeClass;
   BlobA, BlobB: pointer;
@@ -1396,7 +1396,7 @@ begin
                 // make initialization faster by using transaction
                 DB.TransactionBegin;
               // note: don't catch Execute() exception in constructor
-              DB.Execute(model.GetSQLCreate(t));
+              DB.Execute(model.GetSqlCreate(t));
               include(TableJustCreated, t); // mark to be initialized below
             end
             else if not (itoNoCreateMissingField in Options) then
@@ -1494,7 +1494,7 @@ constructor TRestOrmServerDB.Create(aRest: TRest);
 begin
   if fDB = nil then
     // if not set by overloaded TRestOrmServerDB.Create(aRest, aModel, aDB)
-    fDB := TSQLDataBase.Create(SQLITE_MEMORY_DATABASE_NAME);
+    fDB := TSqlDataBase.Create(SQLITE_MEMORY_DATABASE_NAME);
   fStatementCache.Init(fDB.DB);
   fDB.UseCache := true; // we better use caching in this JSON oriented use
   if fDB.InternalState = nil then
@@ -1508,7 +1508,7 @@ begin
 end;
 
 constructor TRestOrmServerDB.Create(aRest: TRest;
-  aDB: TSQLDataBase; aOwnDB: boolean);
+  aDB: TSqlDataBase; aOwnDB: boolean);
 begin
   fDB := aDB; // should be done before CreateWithoutRest/Create
   if aOwnDB then
@@ -1517,7 +1517,7 @@ begin
 end;
 
 constructor TRestOrmServerDB.CreateStandalone(aModel: TOrmModel; aRest: TRest;
-  aDB: TSQLDataBase; aOwnDB: boolean);
+  aDB: TSqlDataBase; aOwnDB: boolean);
 begin
   fModel := aModel;
   fModel.Owner := self; // TRestOrmServerDB.Destroy will free its TOrmModel
@@ -1643,7 +1643,7 @@ end;
 function TRestOrmServerDB.StoredProcExecute(const aSQL: RawUTF8;
   const StoredProc: TOnSQLStoredProc): boolean;
 var
-  R: TSQLRequest; // we don't use fStatementCache[] here
+  R: TSqlRequest; // we don't use fStatementCache[] here
   Res: integer;
 begin
   result := false;
@@ -1819,7 +1819,7 @@ var
   SQL: RawUTF8;
   f: PtrInt;
   size: Int64;
-  data: TSQLVar;
+  data: TSqlVar;
 begin
   result := false;
   if Value = nil then
@@ -2052,7 +2052,7 @@ var
   s: TRestOrm;
   SQL: RawUTF8;
   TableModelIndex, f: PtrInt;
-  data: TSQLVar;
+  data: TSqlVar;
   size: Int64;
   temp: RawByteString;
 begin
@@ -2191,7 +2191,7 @@ var
   DecodeSaved, UpdateEventNeeded: boolean;
   Fields, Values: TRawUTF8DynArray;
   ValuesNull: TByteDynArray;
-  Types: TSQLDBFieldTypeDynArray;
+  Types: TSqlDBFieldTypeDynArray;
   SQL: RawUTF8;
   Props: TOrmProperties;
   Decode: TJSONObjectDecoder;
@@ -2371,7 +2371,7 @@ end;
 
 { TRestOrmClientDB }
 
-function TRestOrmClientDB.GetDB: TSQLDataBase;
+function TRestOrmClientDB.GetDB: TSqlDataBase;
 begin
   if (self = nil) or
      (fServer = nil) then

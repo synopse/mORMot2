@@ -346,12 +346,12 @@ type
     {$endif UNICODE}
     /// call this method to add the content of an object to the log at a
     // specified level
-    // - TSynLog will write the class and hexa address - TSQLLog will write the
+    // - TSynLog will write the class and hexa address - TSqlLog will write the
     // object JSON content
     procedure Log(Level: TSynLogInfo; Instance: TObject); overload;
     /// call this method to add the content of most low-level types to the log
     // at a specified level
-    // - TSynLog will handle enumerations and dynamic array; TSQLLog will be
+    // - TSynLog will handle enumerations and dynamic array; TSqlLog will be
     // able to write TObject/TOrm and sets content as JSON
     procedure Log(Level: TSynLogInfo; const aName: RawUTF8; aTypeInfo: PRttiInfo;
       const aValue; Instance: TObject); overload;
@@ -550,7 +550,7 @@ type
 
     /// you can add some exceptions to be ignored to this list
     // - for instance, EConvertError may be added to the list, as such:
-    // ! TSQLLog.Family.ExceptionIgnore.Add(EConvertError);
+    // ! TSqlLog.Family.ExceptionIgnore.Add(EConvertError);
     // - you may also trigger ESynLogSilent exceptions for silent process
     // - see also ExceptionIgnoreCurrentThread property, if you want a per-thread
     // filtering of all exceptions
@@ -1033,7 +1033,7 @@ type
     // - if Instance is set and Text is not '', it will log the corresponding
     // class name and address (to be used e.g. if you didn't call TSynLog.Enter()
     // method first) - for instance
-    // ! TSQLLog.Add.Log(sllDebug,'GarbageCollector',GarbageCollector);
+    // ! TSqlLog.Add.Log(sllDebug,'GarbageCollector',GarbageCollector);
     // will append this line to the log:
     // $ 0000000000002DB9 debug TObjectList(00425E68) GarbageCollector
     // - if Instance is set and Text is '', will behave the same as
@@ -1055,14 +1055,14 @@ type
     // $ 20110330 10010005 debug {"TObjectList(00B1AD60)":["TObjectList(00B1AE20)","TObjectList(00B1AE80)"]}
     // - if aInstance is an Exception, it will handle its class name and Message:
     // $ 20110330 10010005 debug "EClassName(00C2129A)":"Exception message"
-    // - use TSQLLog from mORMot.pas unit to add the record content, written
+    // - use TSqlLog from mORMot.pas unit to add the record content, written
     // as human readable JSON
     procedure Log(Level: TSynLogInfo; aInstance: TObject); overload;
     /// call this method to add the content of most low-level types to the log
     // at a specified level
     // - this overridden implementation will write the value content,
     // written as human readable JSON: handle dynamic arrays and enumerations
-    // - TSQLLog from mORMot.pas unit will be able to write
+    // - TSqlLog from mORMot.pas unit will be able to write
     // TObject/TOrm and sets content as JSON
     procedure Log(Level: TSynLogInfo; const aName: RawUTF8; aTypeInfo: PRttiInfo;
       const aValue; Instance: TObject); overload;
@@ -1501,7 +1501,7 @@ type
     property DetailedOS: RawUTF8
       read fOSDetailed;
     /// the associated framework information
-    // - returns e.g. 'TSQLLog 1.18.2765 ERTL FTS3'
+    // - returns e.g. 'TSynLog 2.0.1 x64MMs'
     property Framework: RawUTF8
       read fFramework;
     /// the date and time at which the log file was started
@@ -4807,8 +4807,10 @@ begin
     if name[i] < ' ' then
       name[i] := ' '; // ensure on same line
   name := StringReplaceAll(name, [
-    'TSQLRest', '',
+    'TSqlRest', '',
     'TRest', '',
+    'TSql', '',
+    'TSQLRest', '',
     'TSQL', '',
     'TOrmRest', '',
     'TOrm', '',
@@ -5275,7 +5277,7 @@ begin
     fOS := TWindowsVersion(GetNextItemCardinal(P, '.'));
     if fOS <> wUnknown then
       fOSServicePack := GetNextItemCardinal(P);
-    P := fLines[fHeaderLinesCount - 2]; // TSQLLog 1.18.2765 ERTL FTS3 2016-07-17T22:38:03
+    P := fLines[fHeaderLinesCount - 2]; // TSqlLog 1.18.2765 ERTL FTS3 2016-07-17T22:38:03
     i := LineSize(fHeaderLinesCount - 2) - 19; // length('2016-07-17T22:38:03')=19
     if i > 0 then
     begin

@@ -69,7 +69,7 @@ type
   protected
     /// values retrieved from fStoredClassProps.ExternalDB settings
     fTableName: RawUTF8;
-    fProperties: TSQLDBConnectionProperties;
+    fProperties: TSqlDBConnectionProperties;
     fSelectOneDirectSQL, fSelectAllDirectSQL, fSelectTableHasRowsSQL: RawUTF8;
     fRetrieveBlobFieldsSQL, fUpdateBlobfieldsSQL: RawUTF8;
     // ID handling during Add/Insert
@@ -81,7 +81,7 @@ type
     // - used internaly to guess e.g. if the column is indexed
     // - fFieldsExternal[] contains the external table info, and the internal
     // column name is available via fFieldsExternalToInternal[]
-    fFieldsExternal: TSQLDBColumnDefineDynArray;
+    fFieldsExternal: TSqlDBColumnDefineDynArray;
     /// gives the index of each fFieldsExternal[] item in Props.Fields[]
     // - is >=0 for index in Props.Fields[], -1 for RowID/ID, -2 if unknown
     // - use InternalFieldNameToFieldExternalIndex() to convert from column name
@@ -121,7 +121,7 @@ type
       ExpectResults: boolean): ISQLDBRows;
     /// overloaded method using FormatUTF8() and binding mormot.db.sql parameters
     function ExecuteDirectSQLVar(SQLFormat: PUTF8Char; const Args: array of const;
-       var Params: TSQLVarDynArray; const LastIntegerParam: Int64;
+       var Params: TSqlVarDynArray; const LastIntegerParam: Int64;
        ParamsMatchCopiableFields: boolean): boolean;
     /// run INSERT of UPDATE from the corresponding JSON object
     // - Occasion parameter shall be only either soInsert or soUpate
@@ -132,10 +132,10 @@ type
       UpdatedID: TID): TID;
     /// compute the INSERT or UPDATE statement as decoded from a JSON object
     function JSONDecodedPrepareToSQL(var Decoder: TJSONObjectDecoder;
-      out ExternalFields: TRawUTF8DynArray; out Types: TSQLDBFieldTypeArray;
+      out ExternalFields: TRawUTF8DynArray; out Types: TSqlDBFieldTypeArray;
       Occasion: TOrmOccasion; BatchOptions: TRestBatchOptions;
       BoundArray: boolean): RawUTF8;
-    function GetConnectionProperties: TSQLDBConnectionProperties;
+    function GetConnectionProperties: TSqlDBConnectionProperties;
     /// check rpmClearPoolOnConnectionIssue in fStoredClassMapping.Options
     function HandleClearPoolOnConnectionIssue: boolean;
   public
@@ -180,7 +180,7 @@ type
   public
     /// initialize the remote database connection
     // - you should not use this, but rather call VirtualTableExternalRegister()
-    // - OrmProps.ExternalDatabase will map the associated TSQLDBConnectionProperties
+    // - OrmProps.ExternalDatabase will map the associated TSqlDBConnectionProperties
     // - OrmProps.ExternalTableName will retrieve the real full table name,
     // e.g. including any databas<e schema prefix
     constructor Create(aClass: TOrmClass; aServer: TRestOrmServer); override;
@@ -237,7 +237,7 @@ type
     // before a thread is finished to ensure that the associated external DB
     // connection will be released for this thread
     // - this overridden implementation will clean thread-specific connections,
-    // i.e. call TSQLDBConnectionPropertiesThreadSafe.EndCurrentThread method
+    // i.e. call TSqlDBConnectionPropertiesThreadSafe.EndCurrentThread method
     // - this method shall be called directly, nor from the main thread
     procedure EndCurrentThread(Sender: TThread); override;
     /// reset the internal cache of external table maximum ID
@@ -260,7 +260,7 @@ type
     // - just map aServer.StaticVirtualTable[] and will return nil if not
     // a TRestStorageExternal
     class function ConnectionProperties(aClass: TOrmClass;
-      aServer: TRestORMServer): TSQLDBConnectionProperties; overload;
+      aServer: TRestORMServer): TSqlDBConnectionProperties; overload;
     /// disable internal ID generation for INSERT
     // - by default, a new ID will be set (either with 'select max(ID)' or via
     // the OnEngineLockedNextID event)
@@ -282,7 +282,7 @@ type
       fOnEngineAddComputeID write fOnEngineAddComputeID;
   published
     /// the associated external mormot.db.sql database connection properties
-    property Properties: TSQLDBConnectionProperties
+    property Properties: TSqlDBConnectionProperties
       read GetConnectionProperties;
     /// by default, any INSERT will compute the new ID from an internal variable
     // - it is very fast and reliable, unless external IDs can be created
@@ -301,7 +301,7 @@ type
 { *********** TOrmVirtualTableExternal for External SQL Virtual Tables }
 
 type
-    /// A Virtual Table cursor for reading a TSQLDBStatement content
+    /// A Virtual Table cursor for reading a TSqlDBStatement content
   // - this is the cursor class associated to TOrmVirtualTableExternal
   TOrmVirtualTableCursorExternal = class(TOrmVirtualTableCursor)
   protected
@@ -316,7 +316,7 @@ type
     /// called to begin a search in the virtual table, creating a SQL query
     // - the TOrmVirtualTablePrepared parameters were set by
     // TOrmVirtualTable.Prepare and will contain both WHERE and ORDER BY statements
-    // (retrieved by x_BestIndex from a TSQLite3IndexInfo structure)
+    // (retrieved by x_BestIndex from a TSqlite3IndexInfo structure)
     // - Prepared will contain all prepared constraints and the corresponding
     // expressions in the Where[].Value field
     // - will move cursor to first row of matching data
@@ -331,7 +331,7 @@ type
     // - if aColumn=VIRTUAL_TABLE_ROWID_COLUMN(-1), will return the row ID
     // as varInt64 into aResult
     // - will return false in case of an error, true on success
-    function Column(aColumn: integer; var aResult: TSQLVar): boolean; override;
+    function Column(aColumn: integer; var aResult: TSqlVar): boolean; override;
     /// called after Search() to check if there is data to be retrieved
     // - should return false if reached the end of matching data
     function HasData: boolean; override;
@@ -379,13 +379,13 @@ type
     // - column order follows the Structure method, i.e. StoredClassProps.Fields[] order
     // - returns true on success, false otherwise
     // - returns the just created row ID in insertedRowID on success
-    function Insert(aRowID: Int64; var Values: TSQLVarDynArray;
+    function Insert(aRowID: Int64; var Values: TSqlVarDynArray;
       out insertedRowID: Int64): boolean; override;
     /// called to update a virtual table row content
     // - column order follows the Structure method, i.e. StoredClassProps.Fields[] order
     // - returns true on success, false otherwise
     function Update(oldRowID, newRowID: Int64;
-      var Values: TSQLVarDynArray): boolean; override;
+      var Values: TSqlVarDynArray): boolean; override;
   end;
 
 
@@ -402,7 +402,7 @@ type
 // - this function shall be called BEFORE TRestServer.Create (the server-side
 // ORM must know if the database is to be managed as internal or external)
 // - this function (and the whole unit) is NOT to be used on the client-side
-// - the TSQLDBConnectionProperties instance should be shared by all classes,
+// - the TSqlDBConnectionProperties instance should be shared by all classes,
 // and released globaly when the ORM is no longer needed
 // - the full table name, as expected by the external database, could be
 // provided here (SQLTableName will be used internaly as table name when
@@ -423,20 +423,20 @@ type
 // - after registration, you can tune the field-name mapping by calling
 // ! aModel.Props[aClass].ExternalDB.MapField(..)
 function VirtualTableExternalRegister(aModel: TOrmModel; aClass: TOrmClass;
-  aExternalDB: TSQLDBConnectionProperties; const aExternalTableName: RawUTF8 = '';
+  aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUTF8 = '';
   aMappingOptions: TOrmPropertiesMappingOptions = []): boolean; overload;
 
 /// register several tables of the model to be external
 // - just a wrapper over the overloaded VirtualTableExternalRegister() method
 function VirtualTableExternalRegister(aModel: TOrmModel;
-  const aClass: array of TOrmClass; aExternalDB: TSQLDBConnectionProperties;
+  const aClass: array of TOrmClass; aExternalDB: TSqlDBConnectionProperties;
   aMappingOptions: TOrmPropertiesMappingOptions = []): boolean; overload;
 
 /// register one table of the model to be external, with optional mapping
 // - this method would allow to chain MapField() or MapAutoKeywordFields
 // definitions, in a fluent interface:
 function VirtualTableExternalMap(aModel: TOrmModel;
-  aClass: TOrmClass; aExternalDB: TSQLDBConnectionProperties;
+  aClass: TOrmClass; aExternalDB: TSqlDBConnectionProperties;
   const aExternalTableName: RawUTF8 = '';
   aMapping: TOrmPropertiesMappingOptions = []): POrmPropertiesMapping;
 
@@ -465,7 +465,7 @@ type
 // - this function shall be called BEFORE TRestServer.Create (the server-side
 // ORM must know if the database is to be managed as internal or external)
 // - this function (and the whole unit) is NOT to be used on the client-side
-// - the TSQLDBConnectionProperties instance should be shared by all classes,
+// - the TSqlDBConnectionProperties instance should be shared by all classes,
 // and released globaly when the ORM is no longer needed
 // - by default, TAuthUser and TAuthGroup tables will be handled via the
 // external DB, but you can avoid it for speed when handling session and security
@@ -475,7 +475,7 @@ type
 // - after registration, you can tune the field-name mapping by calling
 // ! aModel.Props[aClass].ExternalDB.MapField(..)
 function VirtualTableExternalRegisterAll(aModel: TOrmModel;
-  aExternalDB: TSQLDBConnectionProperties;
+  aExternalDB: TSqlDBConnectionProperties;
   aExternalOptions: TVirtualTableExternalRegisterOptions): boolean; overload;
 
 /// register all tables of the model to be external
@@ -483,7 +483,7 @@ function VirtualTableExternalRegisterAll(aModel: TOrmModel;
 // - just a wrapper around the VirtualTableExternalRegisterAll() overloaded
 // function with some boolean flags instead of TVirtualTableExternalRegisterOptions
 function VirtualTableExternalRegisterAll(aModel: TOrmModel;
-  aExternalDB: TSQLDBConnectionProperties;
+  aExternalDB: TSqlDBConnectionProperties;
   DoNotRegisterUserGroupTables: boolean = false;
   ClearPoolOnConnectionIssue: boolean = false): boolean; overload;
 
@@ -492,11 +492,11 @@ function VirtualTableExternalRegisterAll(aModel: TOrmModel;
 // Model and stored values
 // - if aDefinition.Kind matches a TRest registered class, one new instance
 // of this kind will be created and returned
-// - if aDefinition.Kind is a registered TSQLDBConnectionProperties class name,
+// - if aDefinition.Kind is a registered TSqlDBConnectionProperties class name,
 // it will instantiate an in-memory TRestServerDB or a TRestServerFullMemory
 // instance, then call VirtualTableExternalRegisterAll() on this connection
 // - will return nil if the supplied aDefinition does not match any registered
-// TRest or TSQLDBConnectionProperties types
+// TRest or TSqlDBConnectionProperties types
 function TRestExternalDBCreate(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition; aHandleAuthentication: boolean;
   aExternalOptions: TVirtualTableExternalRegisterOptions): TRest; overload;
@@ -510,7 +510,7 @@ implementation
 { TRestStorageExternal }
 
 const
-  ORM_TO_SQLDB: array[TOrmFieldType] of TSQLDBFieldType =
+  ORM_TO_SQLDB: array[TOrmFieldType] of TSqlDBFieldType =
     // ftUnknown is used for Int32 values, ftInt64 for Int64 values
     (ftUnknown,   // oftUnknown
      ftUTF8,      // oftAnsiText
@@ -568,7 +568,7 @@ constructor TRestStorageExternal.Create(aClass: TOrmClass; aServer: TRestOrmServ
   end;
 
   function PropInfoToExternalField(Prop: TOrmPropInfo;
-    var Column: TSQLDBColumnCreate): boolean;
+    var Column: TSqlDBColumnCreate): boolean;
   begin
     if Prop.ORMFieldType in [oftUnknown, oftMany] then
     begin
@@ -591,16 +591,16 @@ var
   SQL: RawUTF8;
   i, f: PtrInt;
   nfo: TOrmPropInfo;
-  Field: TSQLDBColumnCreate;
+  Field: TSqlDBColumnCreate;
   TableCreated, FieldAdded: boolean;
-  CreateColumns: TSQLDBColumnCreateDynArray;
+  CreateColumns: TSqlDBColumnCreateDynArray;
   options: TOrmPropertiesMappingOptions;
   log: TSynLog;
 
   procedure GetFields;
   begin
     fProperties.GetFields(UnQuotedSQLSymbolName(fTableName), fFieldsExternal);
-    log.Log(sllDebug, 'GetFields', TypeInfo(TSQLDBColumnDefineDynArray),
+    log.Log(sllDebug, 'GetFields', TypeInfo(TSqlDBColumnDefineDynArray),
       fFieldsExternal, self);
   end;
 
@@ -627,7 +627,7 @@ begin
   options := fStoredClassMapping^.options;
   fTableName := fStoredClassMapping^.TableName;
   fProperties :=
-    fStoredClassMapping^.ConnectionProperties as TSQLDBConnectionProperties;
+    fStoredClassMapping^.ConnectionProperties as TSqlDBConnectionProperties;
   log.Log(sllInfo, '% as % % Server=%',
     [StoredClass, fTableName, fProperties, Owner], self);
   if fProperties = nil then
@@ -748,7 +748,7 @@ function TRestStorageExternal.AdaptSQLForEngineList(var SQL: RawUTF8): boolean;
 var
   Stmt: TSelectStatement;
   W: TTextWriter;
-  limit: TSQLDBDefinitionLimitClause;
+  limit: TSqlDBDefinitionLimitClause;
   limitSQL, name: RawUTF8;
   f, n: PtrInt;
   tmp: TTextWriterStackBuffer;
@@ -970,7 +970,7 @@ end;
 function TRestStorageExternal.InternalBatchStart(Method: TURIMethod;
   BatchOptions: TRestBatchOptions): boolean;
 const
-  BATCH: array[mPOST..mDELETE] of TSQLDBStatementCRUD = (
+  BATCH: array[mPOST..mDELETE] of TSqlDBStatementCRUD = (
     cCreate, cUpdate, cDelete);
 begin
   result := false; // means BATCH mode not supported
@@ -1002,7 +1002,7 @@ var
   SQL: RawUTF8;
   P: PUTF8Char;
   Fields, ExternalFields: TRawUTF8DynArray;
-  Types: TSQLDBFieldTypeArray;
+  Types: TSqlDBFieldTypeArray;
   Values: TRawUTF8DynArrayDynArray;
   Occasion: TOrmOccasion;
   Decode: TJSONObjectDecoder;
@@ -1441,7 +1441,7 @@ function TRestStorageExternal.RetrieveBlobFields(Value: TOrm): boolean;
 var
   rows: ISQLDBRows;
   f: PtrInt;
-  data: TSQLVar;
+  data: TSqlVar;
   temp: RawByteString;
 begin
   result := false;
@@ -1589,7 +1589,7 @@ var
   f: PtrInt;
   aID: TID;
   temp: array of RawByteString;
-  Params: TSQLVarDynArray;
+  Params: TSqlVarDynArray;
 begin
   result := false;
   if (Value <> nil) and
@@ -1728,7 +1728,7 @@ begin
 end;
 
 function TRestStorageExternal.ExecuteDirectSQLVar(SQLFormat: PUTF8Char;
-  const Args: array of const; var Params: TSQLVarDynArray;
+  const Args: array of const; var Params: TSqlVarDynArray;
   const LastIntegerParam: Int64; ParamsMatchCopiableFields: boolean): boolean;
 var
   stmt: ISQLDBStatement;
@@ -1816,7 +1816,7 @@ end;
 procedure TRestStorageExternal.Commit(SessionID: cardinal;
   RaiseException: boolean);
 const
-  ACTION: array[boolean] of TSQLDBSharedTransactionAction = (
+  ACTION: array[boolean] of TSqlDBSharedTransactionAction = (
     transCommitWithoutException, transCommitWithException);
 begin
   inherited Commit(SessionID, RaiseException);
@@ -1919,12 +1919,12 @@ begin
 end;
 
 class function TRestStorageExternal.ConnectionProperties(aClass: TOrmClass;
-  aServer: TRestORMServer): TSQLDBConnectionProperties;
+  aServer: TRestORMServer): TSqlDBConnectionProperties;
 begin
   result := Instance(aClass, aServer).GetConnectionProperties;
 end;
 
-function TRestStorageExternal.GetConnectionProperties: TSQLDBConnectionProperties;
+function TRestStorageExternal.GetConnectionProperties: TSqlDBConnectionProperties;
 begin
   if self = nil then
     result := nil
@@ -1934,7 +1934,7 @@ end;
 
 function TRestStorageExternal.HandleClearPoolOnConnectionIssue: boolean;
 var
-  conn: TSQLDBConnection;
+  conn: TSqlDBConnection;
 begin
   result := false;
   if (self <> nil) and
@@ -1958,7 +1958,7 @@ function TRestStorageExternal.ExecuteFromJSON(const SentData: RawUTF8;
 var
   Decoder: TJSONObjectDecoder;
   SQL: RawUTF8;
-  Types: TSQLDBFieldTypeArray;
+  Types: TSqlDBFieldTypeArray;
   ExternalFields: TRawUTF8DynArray;
   InsertedID: TID;
   F: PtrInt;
@@ -2034,8 +2034,8 @@ end;
 
 procedure TRestStorageExternal.EndCurrentThread(Sender: TThread);
 begin
-  if fProperties.InheritsFrom(TSQLDBConnectionPropertiesThreadSafe) then
-    TSQLDBConnectionPropertiesThreadSafe(fProperties).EndCurrentThread;
+  if fProperties.InheritsFrom(TSqlDBConnectionPropertiesThreadSafe) then
+    TSqlDBConnectionPropertiesThreadSafe(fProperties).EndCurrentThread;
 end;
 
 function TRestStorageExternal.InternalFieldNameToFieldExternalIndex(
@@ -2047,7 +2047,7 @@ end;
 
 function TRestStorageExternal.JSONDecodedPrepareToSQL(
   var Decoder: TJSONObjectDecoder; out ExternalFields: TRawUTF8DynArray;
-  out Types: TSQLDBFieldTypeArray; Occasion: TOrmOccasion;
+  out Types: TSqlDBFieldTypeArray; Occasion: TOrmOccasion;
   BatchOptions: TRestBatchOptions; BoundArray: boolean): RawUTF8;
 var
   f, k: PtrInt;
@@ -2169,7 +2169,7 @@ begin
 end;
 
 function TOrmVirtualTableCursorExternal.Column(aColumn: integer;
-  var aResult: TSQLVar): boolean;
+  var aResult: TSqlVar): boolean;
 var
   n: cardinal;
 begin
@@ -2340,7 +2340,7 @@ begin
 end;
 
 function TOrmVirtualTableExternal.Insert(aRowID: Int64;
-  var Values: TSQLVarDynArray; out insertedRowID: Int64): boolean;
+  var Values: TSqlVarDynArray; out insertedRowID: Int64): boolean;
 begin // aRowID is just ignored here since IDs are always auto calculated
   result := false;
   if (self <> nil) and
@@ -2362,7 +2362,7 @@ begin // aRowID is just ignored here since IDs are always auto calculated
 end;
 
 function TOrmVirtualTableExternal.Update(oldRowID, newRowID: Int64;
-  var Values: TSQLVarDynArray): boolean;
+  var Values: TSqlVarDynArray): boolean;
 begin
   if (self <> nil) and
      (Static <> nil) and
@@ -2380,7 +2380,7 @@ end;
 { *********** External SQL Database Engines Registration }
 
 function VirtualTableExternalRegister(aModel: TOrmModel; aClass: TOrmClass;
-  aExternalDB: TSQLDBConnectionProperties; const aExternalTableName: RawUTF8;
+  aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUTF8;
   aMappingOptions: TOrmPropertiesMappingOptions): boolean;
 var
   ExternalTableName: RawUTF8;
@@ -2406,7 +2406,7 @@ begin
 end;
 
 function VirtualTableExternalRegister(aModel: TOrmModel;
-  const aClass: array of TOrmClass; aExternalDB: TSQLDBConnectionProperties;
+  const aClass: array of TOrmClass; aExternalDB: TSqlDBConnectionProperties;
   aMappingOptions: TOrmPropertiesMappingOptions): boolean;
 var
   i: PtrInt;
@@ -2419,7 +2419,7 @@ begin
 end;
 
 function VirtualTableExternalRegisterAll(aModel: TOrmModel;
-  aExternalDB: TSQLDBConnectionProperties;
+  aExternalDB: TSqlDBConnectionProperties;
   DoNotRegisterUserGroupTables, ClearPoolOnConnectionIssue: boolean): boolean;
 var
   opt: TVirtualTableExternalRegisterOptions;
@@ -2433,7 +2433,7 @@ begin
 end;
 
 function VirtualTableExternalRegisterAll(aModel: TOrmModel;
-  aExternalDB: TSQLDBConnectionProperties;
+  aExternalDB: TSqlDBConnectionProperties;
   aExternalOptions: TVirtualTableExternalRegisterOptions): boolean;
 var
   i: PtrInt;
@@ -2462,7 +2462,7 @@ begin
 end;
 
 function VirtualTableExternalMap(aModel: TOrmModel; aClass: TOrmClass;
-  aExternalDB: TSQLDBConnectionProperties; const aExternalTableName: RawUTF8;
+  aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUTF8;
   aMapping: TOrmPropertiesMappingOptions): POrmPropertiesMapping;
 begin
   if VirtualTableExternalRegister(aModel, aClass, aExternalDB,
@@ -2476,18 +2476,18 @@ function TRestExternalDBCreate(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition; aHandleAuthentication: boolean;
   aExternalOptions: TVirtualTableExternalRegisterOptions): TRest;
 var
-  propsClass: TSQLDBConnectionPropertiesClass;
-  props: TSQLDBConnectionProperties;
+  propsClass: TSqlDBConnectionPropertiesClass;
+  props: TSqlDBConnectionProperties;
 begin
   result := nil;
   if aDefinition = nil then
     exit;
-  propsClass := TSQLDBConnectionProperties.ClassFrom(aDefinition);
+  propsClass := TSqlDBConnectionProperties.ClassFrom(aDefinition);
   if propsClass <> nil then
   begin
     props := nil;
     try
-      // aDefinition.Kind was a TSQLDBConnectionProperties -> all external DB
+      // aDefinition.Kind was a TSqlDBConnectionProperties -> all external DB
       props := propsClass.Create(aDefinition.ServerName,
         aDefinition.DatabaseName, aDefinition.User, aDefinition.PassWordPlain);
       VirtualTableExternalRegisterAll(aModel, props, aExternalOptions);

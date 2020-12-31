@@ -37,6 +37,18 @@ By convention:
 - Unit names are dot-separated, and start with the `mormot.` prefix;
 - Unit names follow their location in the `src` sub folder, e.g. `mormot.core.json.pas` is located in the `src/core` folder.
 
+## Types Naming
+
+In respect to *mORMot 1.18*, some confusing/deprecated naming like `TSQLRecord` or `TSQLRest` prefix have been renamed as `TOrm` and `TRest`, since our ORM is not SQL-only, but works e.g. with NoSQL engines like MongoDB.
+
+Generally speaking, we followed the [Kotlin good naming rules](https://kotlinlang.org/docs/reference/coding-conventions.html#choosing-good-names):
+>  When using an acronym as part of a declaration name, capitalize it if it consists of two letters (IOStream); capitalize only the first letter if it is longer (XmlFormatter, HttpInputStream).
+
+Some types have been changed or enhanced:
+- `TSQLRawBlob` renamed as `RawBlob`;
+- `RawUTF8` is an alias to `System.UTF8String` type so you can use either of them in your code.
+
+Note that the `PUREMORMOT2` conditional can be defined for your project, to disable the type names backward compatible redirection enabled by default.
 
 ## Include Files
 

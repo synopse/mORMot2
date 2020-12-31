@@ -137,7 +137,7 @@ const
 
 type
   /// exception type associated to the native libpg Interface
-  ESQLDBPostgres = class(ESQLDBException);
+  ESqlDBPostgres = class(ESqlDBException);
 
   PPGconn = type pointer;
   PPGresult = type pointer;
@@ -147,7 +147,7 @@ type
 
   /// direct access to the libpq native Postgres protocol 3 library
   // - only the endpoints needed by this unit are imported
-  TSQLDBPostgresLib = class(TSynLibrary)
+  TSqlDBPostgresLib = class(TSynLibrary)
   protected
   public
     LibVersion: function: integer; cdecl;
@@ -182,7 +182,7 @@ type
     GetIsNull: function(res: PPGresult; tup_num, field_num: integer): integer; cdecl;
   public
     /// try to dynamically load the libpq library
-    // - raise ESQLDBPostgres if the expected library is not found
+    // - raise ESqlDBPostgres if the expected library is not found
     constructor Create;
     /// just a wrapper around FastSetString + GetValue/GetLength
     procedure GetRawUTF8(res: PPGresult; tup_num, field_num: integer;
@@ -197,13 +197,13 @@ type
 var
   /// raw access to the low-level libpq API functions, once loaded
   // - is set by calling PostgresLibraryInitialize
-  PQ: TSQLDBPostgresLib = nil;
+  PQ: TSqlDBPostgresLib = nil;
 
   /// allow to specify a libpq library file name to use
   SynDBPostgresLibrary: TFileName;
 
 /// try to load the libpq library
-// - raise a ESQLDBPostgres exception if loading failed
+// - raise a ESqlDBPostgres exception if loading failed
 procedure PostgresLibraryInitialize;
 
 
@@ -219,7 +219,7 @@ const
     'PQnfields', 'PQntuples', 'PQcmdTuples', 'PQfname', 'PQftype', 'PQgetvalue',
     'PQgetlength', 'PQgetisnull');
 
-{ TSQLDBPostgresLib }
+{ TSqlDBPostgresLib }
 
 const
   {$ifdef MSWINDOWS}
@@ -235,7 +235,7 @@ const
     {$endif DARWIN}
   {$endif MSWINDOWS}
 
-constructor TSQLDBPostgresLib.Create;
+constructor TSqlDBPostgresLib.Create;
 var
   P: PPointerArray;
   i: PtrInt;
@@ -245,20 +245,20 @@ begin
     {%H-}l2 := ExeVersion.ProgramFilePath + LIBNAME2;
   TryLoadLibrary([
     SynDBPostgresLibrary, ExeVersion.ProgramFilePath + LIBNAME,
-    {%H-}l2, LIBNAME, LIBNAME2], ESQLDBPostgres);
+    {%H-}l2, LIBNAME, LIBNAME2], ESqlDBPostgres);
   P := @@LibVersion;
   for i := 0 to High(PQ_ENTRIES) do
-    Resolve(PQ_ENTRIES[i], @P[I], ESQLDBPostgres);
+    Resolve(PQ_ENTRIES[i], @P[I], ESqlDBPostgres);
 end;
 
-procedure TSQLDBPostgresLib.GetRawUTF8(res: PPGresult;
+procedure TSqlDBPostgresLib.GetRawUTF8(res: PPGresult;
   tup_num, field_num: integer; var result: RawUTF8);
 begin
   FastSetString(result, GetValue(res, tup_num, field_num),
     GetLength(res, tup_num, field_num));
 end;
 
-procedure TSQLDBPostgresLib.Check(conn: PPGconn; res: PPGresult;
+procedure TSqlDBPostgresLib.Check(conn: PPGconn; res: PPGresult;
   pRes: PPPGresult; andClear: boolean);
 var
   errMsg, errCode: PUTF8Char;
@@ -275,7 +275,7 @@ begin
     Clear(res);
     if pRes <> nil then
       pRes^ := nil;
-    raise ESQLDBPostgres.CreateUTF8(
+    raise ESqlDBPostgres.CreateUTF8(
             '% PGERRCODE: %, %', [self, errCode, errMsg]);
   end
   else if andClear then
@@ -289,7 +289,7 @@ begin
   GlobalLock;
   try
     if PQ = nil then
-      PQ := TSQLDBPostgresLib.Create;
+      PQ := TSqlDBPostgresLib.Create;
   finally
     GlobalUnLock;
   end;

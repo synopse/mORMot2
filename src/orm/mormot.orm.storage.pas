@@ -107,12 +107,12 @@ type
     // (e.g. to svtNull), if an expression is expected at vt_BestIndex() call
     // - TOrmVirtualTableCursor.Search() will receive an expression value,
     // to be retrieved e.g. via sqlite3_value_*() functions
-    Value: TSQLVar;
+    Value: TSqlVar;
     /// Constraint operator to be transmitted at SQL level
     // - MATCH keyword is parsed into soBeginWith, and should be handled as
     // soBeginWith, soContains or soSoundsLike* according to the effective
     // expression text value ('text*', '%text'...)
-    Operation: TSQLCompareOperator;
+    Operation: TSqlCompareOperator;
     /// If true, the constraint is assumed to be fully handled
     // by the virtual table and is not checked again by SQLite
     // - By default (OmitCheck=false), the SQLite core double checks all
@@ -124,7 +124,7 @@ type
   POrmVirtualTablePreparedConstraint = ^TOrmVirtualTablePreparedConstraint;
 
   /// an ORDER BY clause as set by the TOrmVirtualTable.Prepare() method
-  // - warning: this structure should match exactly TSQLite3IndexOrderBy as
+  // - warning: this structure should match exactly TSqlite3IndexOrderBy as
   // defined in mormot.db.raw.sqlite3
   TOrmVirtualTablePreparedOrderBy = record
     /// Column number
@@ -324,7 +324,7 @@ type
     /// release the associated memory, especially the Static instance
     destructor Destroy; override;
     /// retrieve the corresponding module name
-    // - will use the class name, triming any T/TSQL/TSQLVirtual/TOrmVirtualTable*
+    // - will use the class name, triming any T/TSql/TSqlVirtual/TOrmVirtualTable*
     // - when the class is instanciated, it will be faster to retrieve the same
     // value via Module.ModuleName
     class function ModuleName: RawUTF8;
@@ -368,17 +368,17 @@ type
     // - should return true on success, false otherwise
     // - does nothing by default, and returns false, i.e. always fails
     function Delete(aRowID: Int64): boolean; virtual;
-    /// called to insert a virtual table row content from an array of TSQLVar
+    /// called to insert a virtual table row content from an array of TSqlVar
     // - should return true on success, false otherwise
     // - should return the just created row ID in insertedRowID on success
     // - does nothing by default, and returns false, i.e. always fails
-    function Insert(aRowID: Int64; var Values: TSQLVarDynArray;
+    function Insert(aRowID: Int64; var Values: TSqlVarDynArray;
       out insertedRowID: Int64): boolean; virtual;
-    /// called to update a virtual table row content from an array of TSQLVar
+    /// called to update a virtual table row content from an array of TSqlVar
     // - should return true on success, false otherwise
     // - does nothing by default, and returns false, i.e. always fails
     function Update(oldRowID, newRowID: Int64;
-      var Values: TSQLVarDynArray): boolean; virtual;
+      var Values: TSqlVarDynArray): boolean; virtual;
     /// called to begin a transaction to the virtual table row
     // - do nothing by default, and returns false in case of RollBack/RollBackto
     // - aSavePoint is used for vttSavePoint, vttRelease and vttRollBackTo only
@@ -416,20 +416,20 @@ type
     fTable: TOrmVirtualTable;
     /// used internaly between two Column() method calls for GetFieldSQLVar()
     fColumnTemp: RawByteString;
-    /// easy set a TSQLVar content for the Column() method
-    procedure SetColumn(var aResult: TSQLVar; aValue: Int64); overload;
+    /// easy set a TSqlVar content for the Column() method
+    procedure SetColumn(var aResult: TSqlVar; aValue: Int64); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure SetColumn(var aResult: TSQLVar; const aValue: double); overload;
+    procedure SetColumn(var aResult: TSqlVar; const aValue: double); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure SetColumn(var aResult: TSQLVar; const aValue: RawUTF8); overload;
+    procedure SetColumn(var aResult: TSqlVar; const aValue: RawUTF8); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure SetColumn(var aResult: TSQLVar; aValue: PUTF8Char; aValueLength: integer); overload;
+    procedure SetColumn(var aResult: TSqlVar; aValue: PUTF8Char; aValueLength: integer); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure SetColumnBlob(var aResult: TSQLVar; aValue: pointer; aValueLength: integer);
+    procedure SetColumnBlob(var aResult: TSqlVar; aValue: pointer; aValueLength: integer);
       {$ifdef HASINLINE}inline;{$endif}
-    procedure SetColumnDate(var aResult: TSQLVar; const aValue: TDateTime;
+    procedure SetColumnDate(var aResult: TSqlVar; const aValue: TDateTime;
       aWithMS: boolean); {$ifdef HASINLINE}inline;{$endif}
-    procedure SetColumnCurr64(var aResult: TSQLVar; aValue64: PInt64);
+    procedure SetColumnCurr64(var aResult: TSqlVar; aValue64: PInt64);
       {$ifdef HASINLINE}inline;{$endif}
   public
     /// create the cursor instance
@@ -442,7 +442,7 @@ type
     /// called to begin a search in the virtual table
     // - the TOrmVirtualTablePrepared parameters were set by
     // TOrmVirtualTable.Prepare and will contain both WHERE and ORDER BY statements
-    // (retrieved e.g. by x_BestIndex() from a TSQLite3IndexInfo structure)
+    // (retrieved e.g. by x_BestIndex() from a TSqlite3IndexInfo structure)
     // - Prepared will contain all prepared constraints and the corresponding
     // expressions in the Where[].Value field
     // - should move cursor to first row of matching data
@@ -452,10 +452,10 @@ type
     /// called after Search() to check if there is data to be retrieved
     // - should return false if reached the end of matching data
     function HasData: boolean; virtual; abstract;
-    /// called to retrieve a column value of the current data row into a TSQLVar
+    /// called to retrieve a column value of the current data row into a TSqlVar
     // - if aColumn=-1, should return the row ID as varInt64 into aResult
     // - should return false in case of an error, true on success
-    function Column(aColumn: integer; var aResult: TSQLVar): boolean; virtual; abstract;
+    function Column(aColumn: integer; var aResult: TSqlVar): boolean; virtual; abstract;
     /// called to go to the next row of matching data
     // - should return false on low-level database error (but true in case of a
     // valid call, even if HasData will return false, i.e. no data match)
@@ -654,7 +654,7 @@ type
     // stand-alone, i.e. without any associated Model/TRestOrmServer
     function UpdateOne(Rec: TOrm;
       const SentData: RawUTF8): boolean; overload; virtual; abstract;
-    /// manual Update of a TOrm field values from an array of TSQLVar
+    /// manual Update of a TOrm field values from an array of TSqlVar
     // - will update all properties, including BLOB fields and such
     // - returns TRUE on success, FALSE on any error (e.g. invalid Rec.ID)
     // - method available since a TRestStorage instance may be created
@@ -662,7 +662,7 @@ type
     // - this default implementation will create a temporary TOrm instance
     // with the supplied Values[], and will call overloaded UpdateOne() method
     function UpdateOne(ID: TID;
-      const Values: TSQLVarDynArray): boolean; overload; virtual;
+      const Values: TSqlVarDynArray): boolean; overload; virtual;
   end;
 
   /// class able to handle a O(1) hashed-based search of a property
@@ -861,13 +861,13 @@ type
     // stand-alone, i.e. without any associated Model/TRestOrmServer
     function UpdateOne(Rec: TOrm;
       const SentData: RawUTF8): boolean; override;
-    /// manual Update of a TOrm field values from a TSQLVar array
+    /// manual Update of a TOrm field values from a TSqlVar array
     // - will update all properties, including BLOB fields and such
     // - returns TRUE on success, FALSE on any error (e.g. invalid Rec.ID)
     // - method available since a TRestStorage instance may be created
     // stand-alone, i.e. without any associated Model/TRestOrmServer
     function UpdateOne(ID: TID;
-      const Values: TSQLVarDynArray): boolean; override;
+      const Values: TSqlVarDynArray): boolean; override;
     /// direct deletion of a TOrm, from its index in Values[]
     // - warning: this method should be protected via StorageLock/StorageUnlock
     function DeleteOne(aIndex: integer): boolean; virtual;
@@ -1058,7 +1058,7 @@ type
     /// called to begin a search in the virtual table
     // - the TOrmVirtualTablePrepared parameters were set by
     // TOrmVirtualTable.Prepare and will contain both WHERE and ORDER BY statements
-    // (retrieved by x_BestIndex from a TSQLite3IndexInfo structure)
+    // (retrieved by x_BestIndex from a TSqlite3IndexInfo structure)
     // - Prepared will contain all prepared constraints and the corresponding
     // expressions in the Where[].Value field
     // - will move cursor to first row of matching data
@@ -1067,10 +1067,10 @@ type
     // - only handled WHERE clause is for "ID = value" - other request will
     // return all records in ID order, and let the database engine handle it
     function Search(const Prepared: TOrmVirtualTablePrepared): boolean; override;
-    /// called to retrieve a column value of the current data row into a TSQLVar
+    /// called to retrieve a column value of the current data row into a TSqlVar
     // - if aColumn=-1, will return the row ID as varInt64 into aResult
     // - will return false in case of an error, true on success
-    function Column(aColumn: integer; var aResult: TSQLVar): boolean; override;
+    function Column(aColumn: integer; var aResult: TSqlVar): boolean; override;
   end;
 
   /// A TRestStorageInMemory-based virtual table using JSON storage
@@ -1114,21 +1114,21 @@ type
     /// called to delete a virtual table row
     // - returns true on success, false otherwise
     function Delete(aRowID: Int64): boolean; override;
-    /// called to insert a virtual table row content from a TSQLVar array
+    /// called to insert a virtual table row content from a TSqlVar array
     // - column order follows the Structure method, i.e.
     // StoredClassRecordProps.Fields[] order
     // - returns true on success, false otherwise
     // - returns the just created row ID in insertedRowID on success
     // - does nothing by default, and returns false, i.e. always fails
-    function Insert(aRowID: Int64; var Values: TSQLVarDynArray;
+    function Insert(aRowID: Int64; var Values: TSqlVarDynArray;
       out insertedRowID: Int64): boolean; override;
-    /// called to update a virtual table row content from a TSQLVar array
+    /// called to update a virtual table row content from a TSqlVar array
     // - column order follows the Structure method, i.e.
     // StoredClassRecordProps.Fields[] order
     // - returns true on success, false otherwise
     // - does nothing by default, and returns false, i.e. always fails
     function Update(oldRowID, newRowID: Int64;
-      var Values: TSQLVarDynArray): boolean; override;
+      var Values: TSqlVarDynArray): boolean; override;
   end;
 
   /// A TRestStorageInMemory-based virtual table using Binary storage
@@ -1177,8 +1177,8 @@ type
   public
     /// called to begin a search in the virtual table
     function Search(const Prepared: TOrmVirtualTablePrepared): boolean; override;
-    /// called to retrieve a column value of the current data row as TSQLVar
-    function Column(aColumn: integer; var aResult: TSQLVar): boolean; override;
+    /// called to retrieve a column value of the current data row as TSqlVar
+    function Column(aColumn: integer; var aResult: TSqlVar): boolean; override;
   end;
 
 
@@ -1256,7 +1256,7 @@ type
   // - inherited class should override InitShards/InitNewShard to customize the
   // kind of TRestOrm instances to be used for each shard (which may be local
   // or remote, a SQLite3 engine or an external SQL/NoSQL database)
-  // - see inherited TRestStorageShardDB as defined in mORMotSQLite3.pas
+  // - see inherited TRestStorageShardDB as defined in mormot.orm.sqlite3.pas
   TRestStorageShard = class(TRestStorage)
   protected
     fShardRange: TID;
@@ -1498,14 +1498,14 @@ begin
   result := false;  // no DELETE to be implemented here
 end;
 
-function TOrmVirtualTable.Insert(aRowID: Int64; var Values: TSQLVarDynArray;
+function TOrmVirtualTable.Insert(aRowID: Int64; var Values: TSqlVarDynArray;
   out insertedRowID: Int64): boolean;
 begin
   result := false;  // no INSERT to be implemented here
 end;
 
 function TOrmVirtualTable.Update(oldRowID, newRowID: Int64;
-  var Values: TSQLVarDynArray): boolean;
+  var Values: TSqlVarDynArray): boolean;
 begin
   result := false;  // no UPDATE to be implemented here
 end;
@@ -1567,14 +1567,14 @@ begin
   fTable := aTable;
 end;
 
-procedure TOrmVirtualTableCursor.SetColumn(var aResult: TSQLVar; aValue: Int64);
+procedure TOrmVirtualTableCursor.SetColumn(var aResult: TSqlVar; aValue: Int64);
 begin
   aResult.Options := [];
   aResult.VType := ftInt64;
   aResult.VInt64 := aValue;
 end;
 
-procedure TOrmVirtualTableCursor.SetColumn(var aResult: TSQLVar;
+procedure TOrmVirtualTableCursor.SetColumn(var aResult: TSqlVar;
   const aValue: double);
 begin
   aResult.Options := [];
@@ -1582,7 +1582,7 @@ begin
   aResult.VDouble := aValue;
 end;
 
-procedure TOrmVirtualTableCursor.SetColumn(var aResult: TSQLVar;
+procedure TOrmVirtualTableCursor.SetColumn(var aResult: TSqlVar;
   const aValue: RawUTF8);
 begin
   aResult.Options := [];
@@ -1591,7 +1591,7 @@ begin
   aResult.VText := pointer(fColumnTemp);
 end;
 
-procedure TOrmVirtualTableCursor.SetColumn(var aResult: TSQLVar;
+procedure TOrmVirtualTableCursor.SetColumn(var aResult: TSqlVar;
   aValue: PUTF8Char; aValueLength: integer);
 begin
   aResult.Options := [];
@@ -1600,7 +1600,7 @@ begin
   aResult.VText := pointer(fColumnTemp);
 end;
 
-procedure TOrmVirtualTableCursor.SetColumnBlob(var aResult: TSQLVar;
+procedure TOrmVirtualTableCursor.SetColumnBlob(var aResult: TSqlVar;
   aValue: pointer; aValueLength: integer);
 begin
   aResult.Options := [];
@@ -1610,7 +1610,7 @@ begin
   aResult.VBlobLen := aValueLength;
 end;
 
-procedure TOrmVirtualTableCursor.SetColumnDate(var aResult: TSQLVar;
+procedure TOrmVirtualTableCursor.SetColumnDate(var aResult: TSqlVar;
   const aValue: TDateTime; aWithMS: boolean);
 begin
   if aWithMS then
@@ -1621,7 +1621,7 @@ begin
   aResult.VDateTime := aValue;
 end;
 
-procedure TOrmVirtualTableCursor.SetColumnCurr64(var aResult: TSQLVar;
+procedure TOrmVirtualTableCursor.SetColumnCurr64(var aResult: TSqlVar;
   aValue64: PInt64);
 begin
   aResult.Options := [];
@@ -1886,7 +1886,7 @@ begin
 end;
 
 function TRestStorageTOrm.UpdateOne(ID: TID;
-  const Values: TSQLVarDynArray): boolean;
+  const Values: TSqlVarDynArray): boolean;
 var
   rec: TOrm;
 begin
@@ -3031,7 +3031,7 @@ begin
     R.Init(MS.Memory, MS.Size);
     R.VarUTF8(s);
     if (s <> '') and // 0='' in recent mORMot 1.18 format
-       not IdemPropNameU(s, 'TSQLRecordProperties') then // old buggy format
+       not IdemPropNameU(s, 'TSqlRecordProperties') then // old buggy format
       exit;
     if not fStoredClassRecordProps.CheckBinaryHeader(R) then
       exit;
@@ -3134,7 +3134,7 @@ begin
     StorageLock(false, 'SaveToBinary');
     try
       // primitive magic and fields signature for file type identification
-      W.Write1(0); // ClassName='TSQLRecordProperties' in old buggy format
+      W.Write1(0); // ClassName='TSqlRecordProperties' in old buggy format
       fStoredClassRecordProps.SaveBinaryHeader(W);
       // write IDs - in increasing order
       if fUnSortedID then
@@ -3454,7 +3454,7 @@ begin
 end;
 
 function TRestStorageInMemory.UpdateOne(ID: TID;
-  const Values: TSQLVarDynArray): boolean;
+  const Values: TSqlVarDynArray): boolean;
 var
   i: PtrInt;
   rec: TOrm;
@@ -3847,7 +3847,7 @@ end;
 { TOrmVirtualTableCursorJSON }
 
 function TOrmVirtualTableCursorJSON.Column(aColumn: integer;
-  var aResult: TSQLVar): boolean;
+  var aResult: TSqlVar): boolean;
 var
   store: TRestStorageInMemory;
 begin
@@ -3963,7 +3963,7 @@ begin
 end;
 
 function TOrmVirtualTableJSON.Insert(aRowID: Int64;
-  var Values: TSQLVarDynArray; out insertedRowID: Int64): boolean;
+  var Values: TSqlVarDynArray; out insertedRowID: Int64): boolean;
 var
   rec: TOrm;
 begin
@@ -4015,7 +4015,7 @@ begin
 end;
 
 function TOrmVirtualTableJSON.Update(oldRowID, newRowID: Int64;
-  var Values: TSQLVarDynArray): boolean;
+  var Values: TSqlVarDynArray): boolean;
 var
   i: PtrInt;
 begin
@@ -4095,7 +4095,7 @@ end;
 { TOrmVirtualTableCursorLog }
 
 function TOrmVirtualTableCursorLog.Column(aColumn: integer;
-  var aResult: TSQLVar): boolean;
+  var aResult: TSqlVar): boolean;
 var
   LogFile: TSynLogFile;
 begin

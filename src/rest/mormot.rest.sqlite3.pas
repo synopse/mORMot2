@@ -58,20 +58,20 @@ uses
 type
   TRestServerDB = class(TRestServer)
   protected
-    function GetDB: TSQLDatabase;
+    function GetDB: TSqlDatabase;
     function GetStatementLastException: RawUTF8;
     // include addition SQLite3 specific information to the returned content
     procedure InternalStat(Ctxt: TRestServerURIContext; W: TTextWriter); override;
     procedure InternalInfo(var info: TDocVariantData); override;
   public
     /// initialize a REST server with a SQLite3 database
-    // - any needed TSQLVirtualTable class should have been already registered
+    // - any needed TSqlVirtualTable class should have been already registered
     // via the RegisterVirtualTableModule() method
-    constructor Create(aModel: TOrmModel; aDB: TSQLDataBase;
+    constructor Create(aModel: TOrmModel; aDB: TSqlDataBase;
       aHandleUserAuthentication: boolean = false;
       aOwnDB: boolean = false); reintroduce; overload; virtual;
     /// initialize a REST server with a database, by specifying its filename
-    // - TRestServerDB will initialize a owned TSQLDataBase, and free it on Destroy
+    // - TRestServerDB will initialize a owned TSqlDataBase, and free it on Destroy
     // - if specified, the password will be used to cypher this file on disk
     // (the main SQLite3 database file is encrypted, not the wal file during run)
     // - it will then call the other overloaded constructor to initialize the server
@@ -109,7 +109,7 @@ type
 
   published
     /// associated database
-    property DB: TSQLDataBase read GetDB;
+    property DB: TSqlDataBase read GetDB;
     /// contains some textual information about the latest Exception raised
     // during SQL statement execution
     property StatementLastException: RawUTF8
@@ -130,9 +130,9 @@ type
   protected
     fServer: TRestServerDB;
     fOwnedServer: TRestServerDB;
-    fOwnedDB: TSQLDataBase;
+    fOwnedDB: TSqlDataBase;
     fInternalHeader: RawUTF8;
-    function GetDB: TSQLDataBase;
+    function GetDB: TSqlDataBase;
       {$ifdef HASINLINE}inline;{$endif}
     /// method calling the RESTful server fServer
     procedure InternalURI(var Call: TRestURIParams); override;
@@ -144,11 +144,11 @@ type
     /// initializes the class, and creates an internal TRestServerDB to
     // internaly answer to the REST queries
     // - aServerClass could be TRestServerDB by default
-    constructor Create(aClientModel, aServerModel: TOrmModel; aDB: TSQLDataBase;
+    constructor Create(aClientModel, aServerModel: TOrmModel; aDB: TSqlDataBase;
       aServerClass: TRestServerDBClass;
       aHandleUserAuthentication: boolean = false); reintroduce; overload;
     /// same as above, from a SQLite3 filename specified
-    // - an internal TSQLDataBase will be created internaly and freed on Destroy
+    // - an internal TSqlDataBase will be created internaly and freed on Destroy
     // - aServerClass could be TRestServerDB by default
     // - if specified, the password will be used to cypher this file on disk
     // (the main SQLite3 database file is encrypted, not the wal file during run)
@@ -158,7 +158,7 @@ type
       aDefaultCacheSize: integer = 10000); reintroduce; overload;
     /// initialize the class, for an existing TRestServerDB
     // - the client TOrmModel will be cloned from the server's one
-    // - the TRestServerDB and TSQLDatabase instances won't be managed by the
+    // - the TRestServerDB and TSqlDatabase instances won't be managed by the
     // client, but will access directly to the server
     constructor Create(aRunningServer: TRestServerDB); reintroduce; overload;
     /// release the server
@@ -168,7 +168,7 @@ type
     property Server: TRestServerDB
       read fServer;
     /// associated database
-    property DB: TSQLDataBase
+    property DB: TSqlDataBase
       read GetDB;
   end;
 
@@ -177,9 +177,9 @@ type
 // backward compatibility types redirections
 
 type
-  TSQLRestClientDB = TRestClientDB;
+  TSqlRestClientDB = TRestClientDB;
   // should be a proper type for RegisterClassNameForDefinition
-  TSQLRestServerDB = type TRestServerDB;
+  TSqlRestServerDB = type TRestServerDB;
 
 {$endif PUREMORMOT2}
 
@@ -191,7 +191,7 @@ implementation
 
 { TRestServerDB }
 
-constructor TRestServerDB.Create(aModel: TOrmModel; aDB: TSQLDataBase;
+constructor TRestServerDB.Create(aModel: TOrmModel; aDB: TSqlDataBase;
   aHandleUserAuthentication: boolean; aOwnDB: boolean);
 begin
   inherited Create(aModel, aHandleUserAuthentication);
@@ -205,9 +205,9 @@ constructor TRestServerDB.Create(aModel: TOrmModel;
   const aDBFileName: TFileName; aHandleUserAuthentication: boolean;
   const aPassword: RawUTF8; aDefaultCacheSize, aDefaultPageSize: integer);
 var
-  db: TSQLDatabase;
+  db: TSqlDatabase;
 begin
-  db := TSQLDatabase.Create(aDBFileName, aPassword, 0,
+  db := TSqlDatabase.Create(aDBFileName, aPassword, 0,
     aDefaultCacheSize, aDefaultPageSize);
   Create(aModel, db, aHandleUserAuthentication, {owndb=}true);
 end;
@@ -261,7 +261,7 @@ begin
     end;
 end;
 
-function TRestServerDB.GetDB: TSQLDatabase;
+function TRestServerDB.GetDB: TSqlDatabase;
 begin
   result := (fOrmInstance as TRestOrmServerDB).DB;
 end;
@@ -313,7 +313,7 @@ end;
 
 { TRestClientDB }
 
-function TRestClientDB.GetDB: TSQLDataBase;
+function TRestClientDB.GetDB: TSqlDataBase;
 begin
   result := fServer.DB;
 end;
@@ -342,7 +342,7 @@ begin
 end;
 
 constructor TRestClientDB.Create(aClientModel, aServerModel: TOrmModel;
-  aDB: TSQLDataBase; aServerClass: TRestServerDBClass;
+  aDB: TSqlDataBase; aServerClass: TRestServerDBClass;
   aHandleUserAuthentication: boolean);
 begin
   aDB.UseCache := true;      // we better use caching in this JSON oriented use
@@ -361,7 +361,7 @@ constructor TRestClientDB.Create(aClientModel, aServerModel: TOrmModel;
   aHandleUserAuthentication: boolean; const aPassword: RawUTF8;
   aDefaultCacheSize: integer);
 begin
-  fOwnedDB := TSQLDataBase.Create(
+  fOwnedDB := TSqlDataBase.Create(
     aDBFileName, aPassword, 0, aDefaultCacheSize);
   Create(aClientModel, aServerModel,
     fOwnedDB, aServerClass, aHandleUserAuthentication);
@@ -374,7 +374,7 @@ begin
   if aRunningServer = nil then
     raise ERestException.CreateUTF8('%.Create(nil)', [self]);
   m := TOrmModel.Create(aRunningServer.Model);
-  m.Owner := Self; // auto-free m in TSQLRest.Destroy
+  m.Owner := Self; // auto-free m in TSqlRest.Destroy
   inherited Create(m);
   fServer := aRunningServer; // leave fOwnedServer=nil
 end;
@@ -412,7 +412,7 @@ end;
 initialization
   TRestServerDB.RegisterClassNameForDefinition;
   {$ifndef PUREMORMOT2}
-  TSQLRestServerDB.RegisterClassNameForDefinition;
+  TSqlRestServerDB.RegisterClassNameForDefinition;
   {$endif PUREMORMOT2}
 
 end.

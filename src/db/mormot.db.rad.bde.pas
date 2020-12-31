@@ -47,17 +47,17 @@ uses
 
 type
   /// Exception type associated to the direct BDE connection
-  ESQLDBBDE = class(ESQLDBDataset);
+  ESqlDBBDE = class(ESqlDBDataset);
 
 
   /// implement properties shared by BDE connections
-  TSQLDBBDEConnectionProperties = class(TSQLDBDatasetConnectionProperties)
+  TSqlDBBDEConnectionProperties = class(TSqlDBDatasetConnectionProperties)
   protected
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - do nothing by now (BDE metadata may be used in the future)
     procedure GetForeignKeys; override;
     /// this overridden method will retrieve the kind of DBMS from the main connection
-    function GetDBMS: TSQLDBDefinition; override;
+    function GetDBMS: TSqlDBDefinition; override;
   public
     /// initialize the properties to connect to the BDE engine
     // - aServerName shall contain the BDE Alias name
@@ -65,33 +65,33 @@ type
     constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
     /// create a new connection
     // - caller is responsible of freeing this instance
-    // - this overridden method will create an TSQLDBBDEConnection instance
-    function NewConnection: TSQLDBConnection; override;
+    // - this overridden method will create an TSqlDBBDEConnection instance
+    function NewConnection: TSqlDBConnection; override;
   end;
 
 
   /// implements a direct connection via the BDE access layer
-  TSQLDBBDEConnection = class(TSQLDBConnectionThreadSafe)
+  TSqlDBBDEConnection = class(TSqlDBConnectionThreadSafe)
   protected
     fDatabase: TDatabase;
     fSession: TSession;
-    fDBMS: TSQLDBDefinition;
+    fDBMS: TSqlDBDefinition;
     fDBMSName: RawUTF8;
   public
     /// prepare a connection to a specified BDE database server
-    constructor Create(aProperties: TSQLDBConnectionProperties); override;
+    constructor Create(aProperties: TSqlDBConnectionProperties); override;
     /// release memory and connection
     destructor Destroy; override;
     /// connect to the specified BDE server
-    // - should raise an ESQLDBBDE on error
+    // - should raise an ESqlDBBDE on error
     procedure Connect; override;
     /// stop connection to the specified BDE database server
-    // - should raise an ESQLDBBDE on error
+    // - should raise an ESqlDBBDE on error
     procedure Disconnect; override;
     /// return TRUE if Connect has been already successfully called
     function IsConnected: boolean; override;
     /// create a new statement instance
-    function NewStatement: TSQLDBStatement; override;
+    function NewStatement: TSqlDBStatement; override;
     /// begin a Transaction for this connection
     procedure StartTransaction; override;
     /// commit changes of a Transaction for this connection
@@ -108,12 +108,12 @@ type
     property DBMSName: RawUTF8
       read fDBMSName;
     /// the remote DBMS type, as retrieved at BDE connection creation
-    property DBMS: TSQLDBDefinition
+    property DBMS: TSqlDBDefinition
       read fDBMS;
   end;
 
   /// implements a statement via a BDE connection
-  TSQLDBBDEStatement = class(TSQLDBDatasetStatement)
+  TSqlDBBDEStatement = class(TSqlDBDatasetStatement)
   protected
     /// initialize and set fQuery internal field as expected
     procedure DatasetCreate; override;
@@ -130,9 +130,9 @@ implementation
 { ************ BDE Database Engine Connection }
 
 
-{ TSQLDBBDEConnectionProperties }
+{ TSqlDBBDEConnectionProperties }
 
-constructor TSQLDBBDEConnectionProperties.Create(const aServerName,
+constructor TSqlDBBDEConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUTF8);
 begin
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
@@ -141,28 +141,28 @@ begin
   {$endif UNICODE}
 end;
 
-procedure TSQLDBBDEConnectionProperties.GetForeignKeys;
+procedure TSqlDBBDEConnectionProperties.GetForeignKeys;
 begin
   { TODO : get FOREIGN KEYS from BDE metadata ? }
 end;
 
-function TSQLDBBDEConnectionProperties.NewConnection: TSQLDBConnection;
+function TSqlDBBDEConnectionProperties.NewConnection: TSqlDBConnection;
 begin
-  result := TSQLDBBDEConnection.Create(self);
+  result := TSqlDBBDEConnection.Create(self);
 end;
 
-function TSQLDBBDEConnectionProperties.GetDBMS: TSQLDBDefinition;
+function TSqlDBBDEConnectionProperties.GetDBMS: TSqlDBDefinition;
 begin
   if fDBMS = dUnknown then
     // retrieve DBMS type from alias driver name
-    fDBMS := (MainConnection as TSQLDBBDEConnection).DBMS;
+    fDBMS := (MainConnection as TSqlDBBDEConnection).DBMS;
   result := fDBMS;
 end;
 
 
-{ TSQLDBBDEConnection }
+{ TSqlDBBDEConnection }
 
-procedure TSQLDBBDEConnection.Commit;
+procedure TSqlDBBDEConnection.Commit;
 begin
   inherited Commit;
   try
@@ -176,11 +176,11 @@ end;
 var
   BDEConnectionCount: integer = 0;
 
-constructor TSQLDBBDEConnection.Create(aProperties: TSQLDBConnectionProperties);
+constructor TSqlDBBDEConnection.Create(aProperties: TSqlDBConnectionProperties);
 const
   PCHARS: array[0 .. 2] of PAnsiChar = (
     'ORACLE','MSSQL','MSACCESS');
-  TYPES: array[-1 .. high(PCHARS)] of TSQLDBDefinition = (
+  TYPES: array[-1 .. high(PCHARS)] of TSqlDBDefinition = (
     dDefault,dOracle,dMSSQL,dJet);
 var alias: string;
 begin
@@ -200,12 +200,12 @@ begin
   fDBMS := TYPES[IdemPCharArray(pointer(fDBMSName), PCHARS)];
 end;
 
-procedure TSQLDBBDEConnection.Connect;
+procedure TSqlDBBDEConnection.Connect;
 var Log: ISynLog;
 begin
   if (fSession = nil) or
      (fDatabase = nil) then
-    raise ESQLDBBDE.CreateUTF8('%.Connect() on % failed: Database=nil',
+    raise ESqlDBBDE.CreateUTF8('%.Connect() on % failed: Database=nil',
       [self, fProperties.ServerName]);
   Log := SynDBLog.Enter('Connect to Alias=%', [fDatabase.AliasName], self);
   try
@@ -222,7 +222,7 @@ begin
   end;
 end;
 
-destructor TSQLDBBDEConnection.Destroy;
+destructor TSqlDBBDEConnection.Destroy;
 begin
   try
    Disconnect;
@@ -234,7 +234,7 @@ begin
   FreeAndNil(fSession);
 end;
 
-procedure TSQLDBBDEConnection.Disconnect;
+procedure TSqlDBBDEConnection.Disconnect;
 begin
   try
     inherited Disconnect; // flush any cached statements
@@ -246,57 +246,57 @@ begin
   end;
 end;
 
-function TSQLDBBDEConnection.IsConnected: boolean;
+function TSqlDBBDEConnection.IsConnected: boolean;
 begin
   result := Assigned(fDatabase) and
             fDatabase.Connected;
 end;
 
-function TSQLDBBDEConnection.NewStatement: TSQLDBStatement;
+function TSqlDBBDEConnection.NewStatement: TSqlDBStatement;
 begin
-  result := TSQLDBBDEStatement.Create(self);
+  result := TSqlDBBDEStatement.Create(self);
 end;
 
-procedure TSQLDBBDEConnection.Rollback;
+procedure TSqlDBBDEConnection.Rollback;
 begin
   inherited Rollback;
   fDatabase.Rollback;
 end;
 
-procedure TSQLDBBDEConnection.StartTransaction;
+procedure TSqlDBBDEConnection.StartTransaction;
 begin
   inherited StartTransaction;
   fDatabase.StartTransaction;
 end;
 
 
-{ TSQLDBBDEStatement }
+{ TSqlDBBDEStatement }
 
-procedure TSQLDBBDEStatement.DatasetCreate;
+procedure TSqlDBBDEStatement.DatasetCreate;
 begin
   fQuery := DBTables.TQuery.Create(nil);
   with DBTables.TQuery(fQuery) do
   begin
-    DatabaseName := (fConnection as TSQLDBBDEConnection).Database.DatabaseName;
-    SessionName := TSQLDBBDEConnection(fConnection).Database.Session.SessionName;
+    DatabaseName := (fConnection as TSqlDBBDEConnection).Database.DatabaseName;
+    SessionName := TSqlDBBDEConnection(fConnection).Database.Session.SessionName;
   end;
 end;
 
-function TSQLDBBDEStatement.DatasetPrepare(const aSQL: string): boolean;
+function TSqlDBBDEStatement.DatasetPrepare(const aSQL: string): boolean;
 begin
   (fQuery as DBTables.TQuery).SQL.Text := aSQL;
   fQueryParams := DBTables.TQuery(fQuery).Params;
   result := fQueryParams <> nil;
 end;
 
-procedure TSQLDBBDEStatement.DatasetExecSQL;
+procedure TSqlDBBDEStatement.DatasetExecSQL;
 begin
   (fQuery as DBTables.TQuery).ExecSQL;
 end;
 
 
 initialization
-  TSQLDBBDEConnectionProperties.RegisterClassNameForDefinition;
+  TSqlDBBDEConnectionProperties.RegisterClassNameForDefinition;
   
 {$endif FPC} // the old and deprecated BDE is a Delphi-specific "feature"
 

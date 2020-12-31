@@ -71,7 +71,7 @@ uses
 
 type
   /// Exception type associated to the direct NexusDB connection
-  ESQLDBNexusDB = class(ESQLDBDataset);
+  ESqlDBNexusDB = class(ESqlDBDataset);
 
   // available communication protocols used by NexusDB between client and server
   // - nxpFOLDER: default protocol, accessing NexusDB database in a Windows Folder
@@ -90,7 +90,7 @@ type
 
   // implement properties shared by native NexusDB connections
   // - note that only the embedded engine is implemented by now - feedback needed!
-  TSQLDBNexusDBConnectionProperties = class(TSQLDBDatasetConnectionProperties)
+  TSqlDBNexusDBConnectionProperties = class(TSqlDBDatasetConnectionProperties)
   private
     fProtocol: TNXProtocol;
   protected
@@ -113,7 +113,7 @@ type
     constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
     /// convert a textual column data type, as retrieved e.g. from SQLGetField,
     // into our internal primitive types
-    function ColumnTypeNativeToDB(const aNativeType: RawUTF8; aScale: integer): TSQLDBFieldType; override;
+    function ColumnTypeNativeToDB(const aNativeType: RawUTF8; aScale: integer): TSqlDBFieldType; override;
     /// Determine if database exists
     // - just test if the corresponding folder exists
     function DatabaseExists: boolean; virtual;
@@ -124,8 +124,8 @@ type
     function DeleteDatabase: boolean; virtual;
     /// create a new connection
     // - caller is responsible of freeing this instance
-    // - this overridden method will create an TSQLDBNexusDBConnection instance
-    function NewConnection: TSQLDBConnection; override;
+    // - this overridden method will create an TSqlDBNexusDBConnection instance
+    function NewConnection: TSqlDBConnection; override;
   published
     /// the transport protocol used to connect to the NexusDB engine
     property Protocol: TNXProtocol
@@ -134,7 +134,7 @@ type
 
 
   // implements a direct connection to the native NexusDB database
-  TSQLDBNexusDBConnection = class(TSQLDBConnectionThreadSafe)
+  TSqlDBNexusDBConnection = class(TSqlDBConnectionThreadSafe)
   protected
     fDatabase: TnxDatabase;
     fSession: TnxSession;
@@ -142,19 +142,19 @@ type
     procedure SetServerEngine(aServerEngine: TnxBaseServerEngine);
   public
     /// prepare a connection to a specified NexusDB database server
-    constructor Create(aProperties: TSQLDBConnectionProperties); override;
+    constructor Create(aProperties: TSqlDBConnectionProperties); override;
     /// release memory and connection
     destructor Destroy; override;
     /// connect to the specified NexusDB server
-    // - should raise an ESQLDBNexusDB on error
+    // - should raise an ESqlDBNexusDB on error
     procedure Connect; override;
     /// stop connection to the specified NexusDB database server
-    // - should raise an ESQLDBNexusDB on error
+    // - should raise an ESqlDBNexusDB on error
     procedure Disconnect; override;
     /// return TRUE if Connect has been already successfully called
     function IsConnected: boolean; override;
     /// create a new statement instance
-    function NewStatement: TSQLDBStatement; override;
+    function NewStatement: TSqlDBStatement; override;
     /// begin a Transaction for this connection
     procedure StartTransaction; override;
     /// commit changes of a Transaction for this connection
@@ -172,7 +172,7 @@ type
   end;
 
   // implements a statement via the native NexusDB connection
-  TSQLDBNexusDBStatement = class(TSQLDBDatasetStatement)
+  TSqlDBNexusDBStatement = class(TSqlDBDatasetStatement)
   protected
     /// initialize and set fQuery internal field as expected
     procedure DatasetCreate; override;
@@ -224,12 +224,12 @@ uses
   nxsdTypes;
 
 
-{ TSQLDBNexusDBConnectionProperties }
+{ TSqlDBNexusDBConnectionProperties }
 
-function TSQLDBNexusDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType: RawUTF8;
-  aScale: integer): TSQLDBFieldType;
+function TSqlDBNexusDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType: RawUTF8;
+  aScale: integer): TSqlDBFieldType;
 const
-  CONV_TABLE: array[TnxFieldType] of TSQLDBFieldType  = (
+  CONV_TABLE: array[TnxFieldType] of TSqlDBFieldType  = (
     mormot.db.core.ftInt64, mormot.db.core.ftUTF8,  mormot.db.core.ftUTF8,
     mormot.db.core.ftInt64, mormot.db.core.ftInt64, mormot.db.core.ftInt64,
     mormot.db.core.ftInt64, mormot.db.core.ftInt64, mormot.db.core.ftInt64,
@@ -245,7 +245,7 @@ begin
   result := CONV_TABLE[FieldDataTypesMapSQL(UTF8ToString(aNativeType))];
 end;
 
-constructor TSQLDBNexusDBConnectionProperties.Create(const aServerName,
+constructor TSqlDBNexusDBConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUTF8);
 var
   lServerURL, lAlias: RawUTF8;
@@ -263,7 +263,7 @@ begin
     fDatabaseName := '';
 end;
 
-procedure TSQLDBNexusDBConnectionProperties.GetForeignKeys;
+procedure TSqlDBNexusDBConnectionProperties.GetForeignKeys;
 begin
   with Execute(
     'select F.FK_CONSTRAINT_TABLE_NAME||''.''||C.FK_CONSTRAINT_REFERENCING_COLUMNS_NAME col, ' +
@@ -279,12 +279,12 @@ begin
       fForeignKeys.Add(ColumnUTF8(0), ColumnUTF8(1));
 end;
 
-function TSQLDBNexusDBConnectionProperties.NewConnection: TSQLDBConnection;
+function TSqlDBNexusDBConnectionProperties.NewConnection: TSqlDBConnection;
 begin
-  result := TSQLDBNexusDBConnection.Create(self);
+  result := TSqlDBNexusDBConnection.Create(self);
 end;
 
-function TSQLDBNexusDBConnectionProperties.DatabaseExists: boolean;
+function TSqlDBNexusDBConnectionProperties.DatabaseExists: boolean;
 begin
   if (fProtocol = nxpFOLDER) and
      (fDatabaseName <> NEXUSDB_INMEMORY) then
@@ -293,7 +293,7 @@ begin
     result := True; // if we cannot determine directly, assume it exists
 end;
 
-function TSQLDBNexusDBConnectionProperties.CreateDatabase: boolean;
+function TSqlDBNexusDBConnectionProperties.CreateDatabase: boolean;
 begin
   if fProtocol = nxpFOLDER then
     if fDatabaseName = NEXUSDB_INMEMORY then
@@ -304,7 +304,7 @@ begin
     result := false;
 end;
 
-function TSQLDBNexusDBConnectionProperties.DeleteDatabase: boolean;
+function TSqlDBNexusDBConnectionProperties.DeleteDatabase: boolean;
 begin
   if fProtocol = nxpFOLDER then
     if fDatabaseName = NEXUSDB_INMEMORY then
@@ -316,9 +316,9 @@ begin
 end;
 
 
-{ TSQLDBNexusDBConnection }
+{ TSqlDBNexusDBConnection }
 
-procedure TSQLDBNexusDBConnection.Commit;
+procedure TSqlDBNexusDBConnection.Commit;
 begin
   inherited Commit;
   try
@@ -329,7 +329,7 @@ begin
   end;
 end;
 
-procedure TSQLDBNexusDBConnection.Connect;
+procedure TSqlDBNexusDBConnection.Connect;
 var
   Log: ISynLog;
 begin
@@ -350,17 +350,17 @@ begin
   end;
 end;
 
-constructor TSQLDBNexusDBConnection.Create(aProperties: TSQLDBConnectionProperties);
+constructor TSqlDBNexusDBConnection.Create(aProperties: TSqlDBConnectionProperties);
 var
-  lProp: TSQLDBNexusDBConnectionProperties;
+  lProp: TSqlDBNexusDBConnectionProperties;
 var
   Log: ISynLog;
 begin
   Log := SynDBLog.Enter;
   inherited Create(aProperties);
-  lProp := aProperties as TSQLDBNexusDBConnectionProperties; // type check to make sure
+  lProp := aProperties as TSqlDBNexusDBConnectionProperties; // type check to make sure
   if lProp.Protocol = nxpUnknown then
-    raise ESQLDBNexusDB.CreateUTF8('%.Create: Unknown NexusDB protocol in Servername=[%]',
+    raise ESqlDBNexusDB.CreateUTF8('%.Create: Unknown NexusDB protocol in Servername=[%]',
       [self, lProp.ServerName]);
   fDatabase := TnxDatabase.Create(nil);
   fSession := TnxSession.Create(nil);
@@ -381,7 +381,7 @@ begin
   end
   else
   begin
-    raise ESQLDBNexusDB.Create('Remote NexusDB engine not supported (yet)');
+    raise ESqlDBNexusDB.Create('Remote NexusDB engine not supported (yet)');
 {    SetServerEngine(TnxRemoteServerEngine.Create(nil));
     Database.AliasName := lProp.DatabaseName;
     case lProp.Protocol of
@@ -403,7 +403,7 @@ begin
   end;
 end;
 
-destructor TSQLDBNexusDBConnection.Destroy;
+destructor TSqlDBNexusDBConnection.Destroy;
 begin
   Disconnect;
   inherited;
@@ -411,7 +411,7 @@ begin
   FreeAndNil(fSession);
 end;
 
-procedure TSQLDBNexusDBConnection.Disconnect;
+procedure TSqlDBNexusDBConnection.Disconnect;
 begin
   try
     inherited Disconnect; // flush any cached statements
@@ -427,24 +427,24 @@ begin
   end;
 end;
 
-function TSQLDBNexusDBConnection.IsConnected: boolean;
+function TSqlDBNexusDBConnection.IsConnected: boolean;
 begin
   result := Assigned(fDatabase) and
             fDatabase.Connected;
 end;
 
-function TSQLDBNexusDBConnection.NewStatement: TSQLDBStatement;
+function TSqlDBNexusDBConnection.NewStatement: TSqlDBStatement;
 begin
-  result := TSQLDBNexusDBStatement.Create(self);
+  result := TSqlDBNexusDBStatement.Create(self);
 end;
 
-procedure TSQLDBNexusDBConnection.Rollback;
+procedure TSqlDBNexusDBConnection.Rollback;
 begin
   inherited Rollback;
   fDatabase.Rollback;
 end;
 
-procedure TSQLDBNexusDBConnection.SetServerEngine(aServerEngine: TnxBaseServerEngine);
+procedure TSqlDBNexusDBConnection.SetServerEngine(aServerEngine: TnxBaseServerEngine);
 begin
   if FServerEngine <> aServerEngine then
   begin
@@ -453,35 +453,35 @@ begin
   end;
 end;
 
-procedure TSQLDBNexusDBConnection.StartTransaction;
+procedure TSqlDBNexusDBConnection.StartTransaction;
 begin
   inherited StartTransaction;
   if not fDatabase.TryStartTransaction then
-    raise ESQLDBNexusDB.Create('Error occcured trying to start a transaction');
+    raise ESqlDBNexusDB.Create('Error occcured trying to start a transaction');
 end;
 
 
-{ TSQLDBNexusDBStatement }
+{ TSqlDBNexusDBStatement }
 
-function TSQLDBNexusDBStatement.DatasetPrepare(const aSQL: string): boolean;
+function TSqlDBNexusDBStatement.DatasetPrepare(const aSQL: string): boolean;
 begin
   (fQuery as TnxQuery).SQL.Text := aSQL;
   fQueryParams := TnxQuery(fQuery).Params;
   result := fQueryParams <> nil;
 end;
 
-procedure TSQLDBNexusDBStatement.DatasetExecSQL;
+procedure TSqlDBNexusDBStatement.DatasetExecSQL;
 begin
   (fQuery as TnxQuery).ExecSQL;
 end;
 
-procedure TSQLDBNexusDBStatement.DatasetCreate;
+procedure TSqlDBNexusDBStatement.DatasetCreate;
 begin
   fQuery := TnxQuery.Create(nil);
   with TnxQuery(fQuery) do
   begin
-    Database := (fConnection as TSQLDBNexusDBConnection).Database;
-    Session := TSQLDBNexusDBConnection(fConnection).Database.Session;
+    Database := (fConnection as TSqlDBNexusDBConnection).Database;
+    Session := TSqlDBNexusDBConnection(fConnection).Database.Session;
   end;
 end;
 
@@ -590,7 +590,7 @@ var
 {$endif SYNDB_FULLNEXUSDB}
 begin
   if PtrInt(vNexusEmbeddedEngine) = -1 then
-    raise ESQLDBNexusDB.Create('Nexus Embedded engine was already finalized!')
+    raise ESqlDBNexusDB.Create('Nexus Embedded engine was already finalized!')
   else if vNexusEmbeddedEngine = nil then
   begin
     vNexusEmbeddedEngine := TnxServerEngine.Create(nil);
@@ -619,7 +619,7 @@ end;
 
 
 initialization
-  TSQLDBNexusDBConnectionProperties.RegisterClassNameForDefinition;
+  TSqlDBNexusDBConnectionProperties.RegisterClassNameForDefinition;
 
 finalization
   FinalizeNXEmbeddedEngine;

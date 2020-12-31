@@ -62,7 +62,7 @@ type
 
   // a record mapping used in the test classes of the framework
   // - this class can be used for debugging purposes, with the database
-  // created by TTestFileBased in mORMotSQLite3.pas
+  // created by TTestFileBased from test.orm.sqlite3
   // - this class will use 'People' as a table name
   TOrmPeople = class(TOrm)
   private

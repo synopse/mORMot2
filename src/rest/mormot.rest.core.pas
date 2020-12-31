@@ -264,10 +264,10 @@ type
 {$ifndef PUREMORMOT2}
 // backward compatibility types redirections
 
-  TSQLRestServerURIContextCommand = TRestServerURIContextCommand;
-  TSQLRestServerAcquireMode = TRestServerAcquireMode;
-  TSQLRestAcquireExecution = TRestAcquireExecution;
-  TSQLRestBackgroundTimer = TRestBackgroundTimer;
+  TSqlRestServerURIContextCommand = TRestServerURIContextCommand;
+  TSqlRestServerAcquireMode = TRestServerAcquireMode;
+  TSqlRestAcquireExecution = TRestAcquireExecution;
+  TSqlRestBackgroundTimer = TRestBackgroundTimer;
 
 {$endif PUREMORMOT2}
 
@@ -496,7 +496,7 @@ type
     // please refer to each overriden DefinitionTo() method documentation
     // - use TRestMongoDBCreate() and/or TRestExternalDBCreate() instead
     // to create a TRest instance will all tables defined as external when
-    // aDefinition.Kind is 'MongoDB' or a TSQLDBConnectionProperties class
+    // aDefinition.Kind is 'MongoDB' or a TSqlDBConnectionProperties class
     // - will raise an exception if the supplied definition are not valid
     class function CreateFrom(aModel: TOrmModel;
       aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean): TRest;
@@ -859,9 +859,9 @@ type
 // backward compatibility types redirections
 
 type
-  TSQLRest = TRest;
-  TSQLRestClass = TRestClass;
-  TSQLRestDynArray = TRestDynArray;
+  TSqlRest = TRest;
+  TSqlRestClass = TRestClass;
+  TSqlRestDynArray = TRestDynArray;
 
 {$endif PUREMORMOT2}
 
@@ -1186,14 +1186,14 @@ type
 // backward compatibility types redirections
 
 type
-  TSQLAuthUser = TAuthUser;
-  TSQLAuthGroup = TAuthGroup;
-  TSQLAuthUserClass = TAuthUserClass;
-  TSQLAuthGroupClass = TAuthGroupClass;
-  TSQLRestURIParamsLowLevelFlag = TRestURIParamsLowLevelFlag;
-  TSQLRestURIParamsLowLevelFlags = TRestURIParamsLowLevelFlags;
-  TSQLRestURIParams = TRestURIParams;
-  PSQLRestURIParams = PRestURIParams;
+  TSqlAuthUser = TAuthUser;
+  TSqlAuthGroup = TAuthGroup;
+  TSqlAuthUserClass = TAuthUserClass;
+  TSqlAuthGroupClass = TAuthGroupClass;
+  TSqlRestURIParamsLowLevelFlag = TRestURIParamsLowLevelFlag;
+  TSqlRestURIParamsLowLevelFlags = TRestURIParamsLowLevelFlags;
+  TSqlRestURIParams = TRestURIParams;
+  PSqlRestURIParams = PRestURIParams;
 
 {$endif PUREMORMOT2}
 
@@ -1467,7 +1467,7 @@ type
 // backward compatibility types redirections
 
 type
-  TSQLRestThread = TRestThread;
+  TSqlRestThread = TRestThread;
 
 {$endif PUREMORMOT2}
 

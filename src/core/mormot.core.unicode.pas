@@ -1255,7 +1255,7 @@ function UTF8UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PUTF8Char;
 /// fast UTF-8 comparison using the NormToUpper[] array for all 8 bits values
 // - this version expects u1 and u2 not to be necessary zero-terminated, but
 // uses L1 and L2 as length for u1 and u2 respectively
-// - use this function for SQLite3 collation (TSQLCollateFunc)
+// - use this function for SQLite3 collation (TSqlCollateFunc)
 // - this version will decode the UTF-8 content before using NormToUpper[]
 // - current implementation handles UTF-16 surrogates
 function UTF8ILComp(u1, u2: PUTF8Char; L1, L2: cardinal): PtrInt;

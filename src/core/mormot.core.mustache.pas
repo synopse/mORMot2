@@ -393,7 +393,7 @@ type
     // - you can also retrieve the context from an ORM query of mORMot.pas:
     // ! dummy := TSynMustache.Parse(
     // !   '{{#items}}'#13#10'{{Int}}={{Test}}'#13#10'{{/items}}').Render(
-    // !   aClient.RetrieveDocVariantArray(TSQLRecordTest,'items','Int,Test'));
+    // !   aClient.RetrieveDocVariantArray(TOrmTest,'items','Int,Test'));
     // - set EscapeInvert = true to force {{value}} NOT to escape HTML chars
     // and {{{value}} escaping chars (may be useful e.g. for code generation)
     function Render(const Context: variant;

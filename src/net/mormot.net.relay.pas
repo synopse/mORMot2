@@ -334,7 +334,7 @@ type
     // aServerWebSocketsCompression parameters as any regular client in the
     // local network - from the server point of view, those clients will
     // appear like local clients unless ServerRemoteIPHeader is set according
-    // to the TSQLHttpServerDefinition.ServerRemoteIPHeader value (e.g. as
+    // to the TSqlHttpServerDefinition.ServerRemoteIPHeader value (e.g. as
     // 'X-Real-IP') and the remote client IP will be used instead
     // - Connected/TryConnect should be called on a regular basis to connect to
     // the Public Relay using aRelayHost/aRelayPort/aRelayKey/aRelayBearer

@@ -7,7 +7,7 @@ unit mormot.db.sql.odbc;
   *****************************************************************************
 
    Efficient SQL Database Connection via ODBC 
-    -  TSQLDBODBCConnection* and TSQLDBODBCStatement Classes
+    -  TSqlDBODBCConnection* and TSqlDBODBCStatement Classes
 
   *****************************************************************************
 }
@@ -32,18 +32,18 @@ uses
   mormot.db.sql;
 
 
-{ ************  TSQLDBODBCConnection* and TSQLDBODBCStatement Classes }
+{ ************  TSqlDBODBCConnection* and TSqlDBODBCStatement Classes }
 
 type
   /// will implement properties shared by the ODBC library
-  TSQLDBODBCConnectionProperties = class(TSQLDBConnectionPropertiesThreadSafe)
+  TSqlDBODBCConnectionProperties = class(TSqlDBConnectionPropertiesThreadSafe)
   protected
     fDriverDoesNotHandleUnicode: boolean;
     fSQLDriverConnectPrompt: boolean;
     /// this overridden method will hide de DATABASE/PWD fields in ODBC connection string
     function GetDatabaseNameSafe: RawUTF8; override;
     /// this overridden method will retrieve the kind of DBMS from the main connection
-    function GetDBMS: TSQLDBDefinition; override;
+    function GetDBMS: TSqlDBDefinition; override;
   public
     /// initialize the connection properties
     // - will raise an exception if the ODBC library is not available
@@ -83,8 +83,8 @@ type
     // - call this method if the shared MainConnection is not enough (e.g. for
     // multi-thread access)
     // - the caller is responsible of freeing this instance
-    // - this overridden method will create an TSQLDBODBCConnection instance
-    function NewConnection: TSQLDBConnection; override;
+    // - this overridden method will create an TSqlDBODBCConnection instance
+    function NewConnection: TSqlDBConnection; override;
     /// get all table names
     // - will retrieve the corresponding metadata from ODBC library if SQL
     // direct access was not defined
@@ -98,7 +98,7 @@ type
     // - will retrieve the corresponding metadata from ODBC library if SQL
     // direct access was not defined (e.g. for dDB2)
     procedure GetFields(const aTableName: RawUTF8;
-      out Fields: TSQLDBColumnDefineDynArray); override;
+      out Fields: TSqlDBColumnDefineDynArray); override;
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - used by GetForeignKey method
     procedure GetForeignKeys; override;
@@ -108,7 +108,7 @@ type
     // - aProcName: stored procedure name to retrieve parameter infomation.
     // - Parameters: parameter list info (name, datatype, direction, default)
     procedure GetProcedureParameters(const aProcName: RawUTF8;
-      out Parameters: TSQLDBProcColumnDefineDynArray); override;
+      out Parameters: TSqlDBProcColumnDefineDynArray); override;
     /// if full connection string may prompt the user for additional information
     // - property used only with SQLDriverConnect() API (i.e. when aServerName
     // is '' and aDatabaseName contains a full connection string)
@@ -118,16 +118,16 @@ type
   end;
 
   /// implements a direct connection to the ODBC library
-  TSQLDBODBCConnection = class(TSQLDBConnectionThreadSafe)
+  TSqlDBODBCConnection = class(TSqlDBConnectionThreadSafe)
   protected
-    fODBCProperties: TSQLDBODBCConnectionProperties;
+    fODBCProperties: TSqlDBODBCConnectionProperties;
     fEnv: pointer;
     fDbc: pointer;
-    fDBMS: TSQLDBDefinition;
+    fDBMS: TSqlDBDefinition;
     fDBMSName, fDriverName, fDBMSVersion, fSQLDriverFullString: RawUTF8;
   public
     /// connect to a specified ODBC database
-    constructor Create(aProperties: TSQLDBConnectionProperties); override;
+    constructor Create(aProperties: TSqlDBConnectionProperties); override;
     /// release memory and connection
     destructor Destroy; override;
     /// connect to the ODBC library, i.e. create the DB instance
@@ -141,7 +141,7 @@ type
 
     /// initialize a new SQL query statement for the given connection
     // - the caller should free the instance after use
-    function NewStatement: TSQLDBStatement; override;
+    function NewStatement: TSqlDBStatement; override;
     /// begin a Transaction for this connection
     // - current implementation do not support nested transaction with those
     // methods: exception will be raised in such case
@@ -154,7 +154,7 @@ type
     procedure Rollback; override;
 
     /// the remote DBMS type, as retrieved at ODBC connection opening
-    property DBMS: TSQLDBDefinition
+    property DBMS: TSqlDBDefinition
       read fDBMS;
     /// the full connection string (expanded from ServerName)
     property SQLDriverFullString: RawUTF8
@@ -172,7 +172,7 @@ type
   end;
 
   /// implements a statement using a ODBC connection
-  TSQLDBODBCStatement = class(TSQLDBStatementWithParamsAndColumns)
+  TSqlDBODBCStatement = class(TSqlDBStatementWithParamsAndColumns)
   protected
     fStatement: pointer;
     fColData: TRawByteStringDynArray;
@@ -180,16 +180,16 @@ type
     procedure AllocStatement;
     procedure DeallocStatement;
     procedure BindColumns;
-    procedure GetData(var Col: TSQLDBColumnProperty; ColIndex: integer);
-    function GetCol(Col: integer; ExpectedType: TSQLDBFieldType): TSQLDBStatementGetCol;
+    procedure GetData(var Col: TSqlDBColumnProperty; ColIndex: integer);
+    function GetCol(Col: integer; ExpectedType: TSqlDBFieldType): TSqlDBStatementGetCol;
     function MoreResults: boolean;
   public
     /// create a ODBC statement instance, from an existing ODBC connection
-    // - the Execute method can be called once per TSQLDBODBCStatement instance,
+    // - the Execute method can be called once per TSqlDBODBCStatement instance,
     //   but you can use the Prepare once followed by several ExecutePrepared methods
     // - if the supplied connection is not of TOleDBConnection type, will raise
     //   an exception
-    constructor Create(aConnection: TSQLDBConnection); override;
+    constructor Create(aConnection: TSqlDBConnection); override;
     // release all associated memory and ODBC handles
     destructor Destroy; override;
 
@@ -197,14 +197,14 @@ type
     // - parameters marked as ? will be bound later, before ExecutePrepared call
     // - if ExpectResults is TRUE, then Step() and Column*() methods are available
     //   to retrieve the data rows
-    // - raise an EODBCException or ESQLDBException on any error
+    // - raise an EODBCException or ESqlDBException on any error
     procedure Prepare(const aSQL: RawUTF8; ExpectResults: boolean = false);
       overload; override;
     /// Execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
     // - this overridden method will log the SQL statement if sllSQL has been
     //   enabled in SynDBLog.Family.Level
-    // - raise an EODBCException or ESQLDBException on any error
+    // - raise an EODBCException or ESqlDBException on any error
     procedure ExecutePrepared; override;
     /// Reset the previous prepared statement
     // - this overridden implementation will reset all bindings and the cursor state
@@ -220,7 +220,7 @@ type
     // - access the first or next row of data from the SQL Statement result:
     //   if SeekFirst is TRUE, will put the cursor on the first row of results,
     //   otherwise, it will fetch one row of data, to be called within a loop
-    // - raise an EODBCException or ESQLDBException exception on any error
+    // - raise an EODBCException or ESqlDBException exception on any error
     function Step(SeekFirst: boolean = false): boolean; override;
     /// close the ODBC statement cursor resources
     procedure ReleaseRows; override;
@@ -258,9 +258,9 @@ type
 // backward compatibility types redirections
 
 type
-  TODBCConnectionProperties = TSQLDBODBCConnectionProperties;
-  TODBCConnection = TSQLDBODBCConnection;
-  TODBCStatement = TSQLDBODBCStatement;
+  TODBCConnectionProperties = TSqlDBODBCConnectionProperties;
+  TODBCConnection = TSqlDBODBCConnection;
+  TODBCStatement = TSqlDBODBCStatement;
 
 {$endif PUREMORMOT2}
 
@@ -271,23 +271,23 @@ uses
   mormot.db.raw.odbc; // define raw ODBC library API
 
 
-{ ************  TSQLDBODBCConnection* and TSQLDBODBCStatement Classes }
+{ ************  TSqlDBODBCConnection* and TSqlDBODBCStatement Classes }
 
-{ TSQLDBODBCConnection }
+{ TSqlDBODBCConnection }
 
-procedure TSQLDBODBCConnection.Connect;
+procedure TSqlDBODBCConnection.Connect;
 const
   DBMS_NAMES: array[0..8] of PAnsiChar = (
     'ORACLE', 'MICROSOFT SQL', 'ACCESS', 'MYSQL', 'SQLITE',
     'FIREBIRD', 'INTERBASE', 'POSTGRE', 'INFORMIX');
-  DBMS_TYPES: array[-1..high(DBMS_NAMES)] of TSQLDBDefinition = (
+  DBMS_TYPES: array[-1..high(DBMS_NAMES)] of TSqlDBDefinition = (
     dDefault, dOracle, dMSSQL, dJet, dMySQL, dSQLite,
     dFirebird, dFirebird, dPostgreSql, dInformix);
   DRIVER_NAMES: array[0..21] of PAnsiChar = (
     'SQLSRV', 'LIBTDSODBC', 'IVSS', 'IVMSSS', 'PBSS', 'DB2CLI', 'LIBDB2',
     'IVDB2', 'PBDB2', 'MSDB2', 'CWBODBC', 'MYODBC', 'SQORA', 'MSORCL', 'PBOR',
     'IVOR', 'ODBCFB', 'IB', 'SQLITE', 'PSQLODBC', 'NXODBCDRIVER', 'ICLIT09B');
-  DRIVER_TYPES: array[-1..high(DRIVER_NAMES)] of TSQLDBDefinition = (
+  DRIVER_TYPES: array[-1..high(DRIVER_NAMES)] of TSqlDBDefinition = (
     dDefault, dMSSQL, dMSSQL, dMSSQL, dMSSQL, dMSSQL, dDB2, dDB2, dDB2, dDB2,
     dDB2, dDB2, dMySQL, dOracle, dOracle, dOracle, dOracle, dFirebird,
     dFirebird, dSQLite, dPostgreSQL, dNexusDB, dInformix);
@@ -359,18 +359,18 @@ begin
   end;
 end;
 
-constructor TSQLDBODBCConnection.Create(aProperties: TSQLDBConnectionProperties);
+constructor TSqlDBODBCConnection.Create(aProperties: TSqlDBConnectionProperties);
 var
   Log: ISynLog;
 begin
   Log := SynDBLog.Enter(self, 'Create');
-  if not aProperties.InheritsFrom(TSQLDBODBCConnectionProperties) then
+  if not aProperties.InheritsFrom(TSqlDBODBCConnectionProperties) then
     raise EODBCException.CreateUTF8('Invalid %.Create(%)', [self, aProperties]);
-  fODBCProperties := TSQLDBODBCConnectionProperties(aProperties);
+  fODBCProperties := TSqlDBODBCConnectionProperties(aProperties);
   inherited Create(aProperties);
 end;
 
-destructor TSQLDBODBCConnection.Destroy;
+destructor TSqlDBODBCConnection.Destroy;
 begin
   inherited Destroy;
   if (ODBC <> nil) and
@@ -378,7 +378,7 @@ begin
     ODBC.FreeHandle(SQL_HANDLE_ENV, fEnv);
 end;
 
-procedure TSQLDBODBCConnection.Disconnect;
+procedure TSqlDBODBCConnection.Disconnect;
 var
   log: ISynLog;
 begin
@@ -397,17 +397,17 @@ begin
   end;
 end;
 
-function TSQLDBODBCConnection.IsConnected: boolean;
+function TSqlDBODBCConnection.IsConnected: boolean;
 begin
   result := fDbc <> nil;
 end;
 
-function TSQLDBODBCConnection.NewStatement: TSQLDBStatement;
+function TSqlDBODBCConnection.NewStatement: TSqlDBStatement;
 begin
-  result := TSQLDBODBCStatement.Create(self);
+  result := TSqlDBODBCStatement.Create(self);
 end;
 
-procedure TSQLDBODBCConnection.Commit;
+procedure TSqlDBODBCConnection.Commit;
 begin
   inherited Commit; // dec(fTransactionCount)
   with ODBC do
@@ -424,7 +424,7 @@ begin
   end;
 end;
 
-procedure TSQLDBODBCConnection.Rollback;
+procedure TSqlDBODBCConnection.Rollback;
 begin
   inherited RollBack;
   with ODBC do
@@ -438,7 +438,7 @@ begin
   end;
 end;
 
-procedure TSQLDBODBCConnection.StartTransaction;
+procedure TSqlDBODBCConnection.StartTransaction;
 var
   log: ISynLog;
 begin
@@ -452,9 +452,9 @@ begin
 end;
 
 
-{ TSQLDBODBCStatement }
+{ TSqlDBODBCStatement }
 
-procedure TSQLDBODBCStatement.AllocStatement;
+procedure TSqlDBODBCStatement.AllocStatement;
 var
   hDbc: SqlHDbc;
 begin
@@ -464,14 +464,14 @@ begin
   fTotalRowsRetrieved := 0;
   if not fConnection.Connected then
     fConnection.Connect;
-  hDbc := (fConnection as TSQLDBODBCConnection).fDbc;
+  hDbc := (fConnection as TSqlDBODBCConnection).fDbc;
   with ODBC do
     Check(nil, self,
       AllocHandle(SQL_HANDLE_STMT, hDbc, fStatement),
       SQL_HANDLE_DBC, hDbc);
 end;
 
-procedure TSQLDBODBCStatement.DeallocStatement;
+procedure TSqlDBODBCStatement.DeallocStatement;
 begin
   if fStatement <> nil then
     // avoid Informix exception and log exception race condition
@@ -479,7 +479,7 @@ begin
     try
       ODBC.Check(nil, self,
         ODBC.FreeHandle(SQL_HANDLE_STMT, fStatement),
-        SQL_HANDLE_DBC, (fConnection as TSQLDBODBCConnection).fDbc);
+        SQL_HANDLE_DBC, (fConnection as TSqlDBODBCConnection).fDbc);
     except
     end;
   finally
@@ -488,7 +488,7 @@ begin
 end;
 
 function ODBCColumnToFieldType(DataType, ColumnPrecision, ColumnScale: integer):
-  TSQLDBFieldType;
+  TSqlDBFieldType;
 begin // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
   case DataType of
     SQL_DECIMAL, SQL_NUMERIC, SQL_FLOAT:
@@ -521,12 +521,12 @@ const
   // - date/time to SQL_C_TYPE_TIMESTAMP object
   // - text columns to SQL_C_WCHAR (for proper UTF-8 data retrieval)
   // - BLOB columns to SQL_C_BINARY
-  ODBC_TYPE_TOC: array[TSQLDBFieldType] of ShortInt = (
+  ODBC_TYPE_TOC: array[TSqlDBFieldType] of ShortInt = (
     SQL_C_CHAR, SQL_C_CHAR, SQL_C_CHAR, SQL_C_CHAR, SQL_C_CHAR,
     SQL_C_TYPE_TIMESTAMP, SQL_C_WCHAR, SQL_C_BINARY);
    // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
 
-procedure TSQLDBODBCStatement.BindColumns;
+procedure TSqlDBODBCStatement.BindColumns;
 var
   nCols, NameLength, DataType, DecimalDigits, Nullable: SqlSmallint;
   ColumnSize: SqlULen;
@@ -547,7 +547,7 @@ begin
         DescribeColW(fStatement, c, Name{%H-}, 256, NameLength, DataType,
           ColumnSize, DecimalDigits, Nullable),
         SQL_HANDLE_STMT, fStatement);
-      with PSQLDBColumnProperty(
+      with PSqlDBColumnProperty(
         fColumn.AddAndMakeUniqueName(RawUnicodeToUtf8(Name, NameLength)))^ do
       begin
         ColumnValueInlined := true;
@@ -574,7 +574,7 @@ begin
   end;
 end;
 
-procedure TSQLDBODBCStatement.GetData(var Col: TSQLDBColumnProperty; ColIndex: integer);
+procedure TSqlDBODBCStatement.GetData(var Col: TSqlDBColumnProperty; ColIndex: integer);
 var
   ExpectedDataType: ShortInt;
   ExpectedDataLen: integer;
@@ -654,8 +654,8 @@ begin
     end;
 end;
 
-function TSQLDBODBCStatement.GetCol(Col: integer;
-  ExpectedType: TSQLDBFieldType): TSQLDBStatementGetCol;
+function TSqlDBODBCStatement.GetCol(Col: integer;
+  ExpectedType: TSqlDBFieldType): TSqlDBStatementGetCol;
 var
   c: integer;
 begin // colNull, colWrongType, colTmpUsed, colTmpUsedTruncated
@@ -676,7 +676,7 @@ begin // colNull, colWrongType, colTmpUsed, colTmpUsedTruncated
     result := colWrongType;
 end;
 
-function TSQLDBODBCStatement.MoreResults: boolean;
+function TSqlDBODBCStatement.MoreResults: boolean;
 var
   R: SqlReturn;
 begin
@@ -694,9 +694,9 @@ begin
   end;
 end;
 
-function TSQLDBODBCStatement.ColumnBlob(Col: integer): RawByteString;
+function TSqlDBODBCStatement.ColumnBlob(Col: integer): RawByteString;
 var
-  res: TSQLDBStatementGetCol;
+  res: TSqlDBStatementGetCol;
 begin
   res := GetCol(Col, ftBlob);
   case res of
@@ -709,9 +709,9 @@ begin
   end;
 end;
 
-function TSQLDBODBCStatement.ColumnUTF8(Col: integer): RawUTF8;
+function TSqlDBODBCStatement.ColumnUTF8(Col: integer): RawUTF8;
 var
-  res: TSQLDBStatementGetCol;
+  res: TSqlDBStatementGetCol;
 begin
   res := GetCol(Col, ftUTF8);
   case res of
@@ -724,7 +724,7 @@ begin
   end;
 end;
 
-function TSQLDBODBCStatement.ColumnCurrency(Col: integer): currency;
+function TSqlDBODBCStatement.ColumnCurrency(Col: integer): currency;
 begin
   case GetCol(Col, ftCurrency) of
     colNull:
@@ -736,7 +736,7 @@ begin
   end;
 end;
 
-function TSQLDBODBCStatement.ColumnDateTime(Col: integer): TDateTime;
+function TSqlDBODBCStatement.ColumnDateTime(Col: integer): TDateTime;
 begin
   case GetCol(Col, ftDate) of
     colNull:
@@ -744,12 +744,12 @@ begin
     colWrongType:
       ColumnToTypedValue(Col, ftDate, result);
   else
-    result := PSQL_TIMESTAMP_STRUCT(Pointer(fColData[Col]))^.ToDateTime(fColumns
+    result := PSql_TIMESTAMP_STRUCT(Pointer(fColData[Col]))^.ToDateTime(fColumns
       [Col].ColumnValueDBType);
   end;
 end;
 
-function TSQLDBODBCStatement.ColumnDouble(Col: integer): double;
+function TSqlDBODBCStatement.ColumnDouble(Col: integer): double;
 begin
   case GetCol(Col, ftDouble) of
     colNull:
@@ -761,7 +761,7 @@ begin
   end;
 end;
 
-function TSQLDBODBCStatement.ColumnInt(Col: integer): Int64;
+function TSqlDBODBCStatement.ColumnInt(Col: integer): Int64;
 begin
   case GetCol(Col, ftInt64) of
     colNull:
@@ -773,14 +773,14 @@ begin
   end;
 end;
 
-function TSQLDBODBCStatement.ColumnNull(Col: integer): boolean;
+function TSqlDBODBCStatement.ColumnNull(Col: integer): boolean;
 begin // will check for NULL but never returns colWrongType
   result := GetCol(Col, ftNull) = colNull;
 end;
 
-procedure TSQLDBODBCStatement.ColumnsToJSON(WR: TJSONWriter);
+procedure TSqlDBODBCStatement.ColumnsToJSON(WR: TJSONWriter);
 var
-  res: TSQLDBStatementGetCol;
+  res: TSqlDBStatementGetCol;
   col: integer;
   tmp: array[0..31] of AnsiChar;
 begin
@@ -805,7 +805,7 @@ begin
             WR.AddFloatStr(Pointer(fColData[col]));      // already as SQL_C_CHAR
           ftDate:
             WR.AddNoJSONEscape(@tmp,
-              PSQL_TIMESTAMP_STRUCT(Pointer(fColData[col]))^.ToIso8601(
+              PSql_TIMESTAMP_STRUCT(Pointer(fColData[col]))^.ToIso8601(
                 tmp{%H-}, ColumnValueDBType, fForceDateWithMS));
           ftUTF8:
             begin
@@ -829,14 +829,14 @@ begin
     WR.Add('}');
 end;
 
-constructor TSQLDBODBCStatement.Create(aConnection: TSQLDBConnection);
+constructor TSqlDBODBCStatement.Create(aConnection: TSqlDBConnection);
 begin
-  if not aConnection.InheritsFrom(TSQLDBODBCConnection) then
+  if not aConnection.InheritsFrom(TSqlDBODBCConnection) then
     raise EODBCException.CreateUTF8('%.Create(%)', [self, aConnection]);
   inherited Create(aConnection);
 end;
 
-destructor TSQLDBODBCStatement.Destroy;
+destructor TSqlDBODBCStatement.Destroy;
 begin
   try
     DeallocStatement;
@@ -848,9 +848,9 @@ end;
 const
   NULWCHAR: WideChar = #0;
 
-procedure TSQLDBODBCStatement.ExecutePrepared;
+procedure TSqlDBODBCStatement.ExecutePrepared;
 const
-  ODBC_IOTYPE_TO_PARAM: array[TSQLDBParamInOutType] of ShortInt = (
+  ODBC_IOTYPE_TO_PARAM: array[TSqlDBParamInOutType] of ShortInt = (
     SQL_PARAM_INPUT, SQL_PARAM_OUTPUT, SQL_PARAM_INPUT_OUTPUT);
   IDList_type: WideString = 'IDList';
   StrList_type: WideString = 'StrList';
@@ -911,7 +911,7 @@ begin
     raise EODBCException.CreateUTF8('%.ExecutePrepared called without previous Prepare',
       [self]);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
-  ansitext := TSQLDBODBCConnection(fConnection).fODBCProperties.
+  ansitext := TSqlDBODBCConnection(fConnection).fODBCProperties.
     fDriverDoesNotHandleUnicode;
   try
     // 1. bind parameters
@@ -1047,7 +1047,7 @@ retry:            VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
              not ansitext and
              (ODBC.GetDiagField(fStatement) = 'HY004') then
           begin
-            TSQLDBODBCConnection(fConnection).fODBCProperties.
+            TSqlDBODBCConnection(fConnection).fODBCProperties.
               fDriverDoesNotHandleUnicode := true;
             ansitext := true;
             VData := RawUnicodeToUtf8(pointer(VData), StrLenW(pointer(VData)));
@@ -1119,7 +1119,7 @@ retry:            VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
               PCurrency(@VInt64)^ := unaligned(PDouble(@VInt64)^);
           ftDate:
             if VInOut <> paramIn then
-              PDateTime(@VInt64)^ := PSQL_TIMESTAMP_STRUCT(VData)^.ToDateTime;
+              PDateTime(@VInt64)^ := PSql_TIMESTAMP_STRUCT(VData)^.ToDateTime;
           ftUTF8:
             if ansitext then
               VData := CurrentAnsiConvert.AnsiBufferToRawUTF8(pointer(VData),
@@ -1131,7 +1131,7 @@ retry:            VData := CurrentAnsiConvert.UTF8ToAnsi(VData);
   SQLLogEnd;
 end;
 
-procedure TSQLDBODBCStatement.Reset;
+procedure TSqlDBODBCStatement.Reset;
 begin
   if fStatement <> nil then
   begin
@@ -1144,7 +1144,7 @@ begin
   inherited Reset;
 end;
 
-procedure TSQLDBODBCStatement.ReleaseRows;
+procedure TSqlDBODBCStatement.ReleaseRows;
 begin
   fColData := nil;
   if fColumnCount > 0 then
@@ -1157,7 +1157,7 @@ begin
   inherited ReleaseRows;
 end;
 
-function TSQLDBODBCStatement.UpdateCount: integer;
+function TSqlDBODBCStatement.UpdateCount: integer;
 var
   RowCount: SqlLen;
 begin
@@ -1171,7 +1171,7 @@ begin
   result := RowCount;
 end;
 
-procedure TSQLDBODBCStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
+procedure TSqlDBODBCStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
 begin
   SQLLogBegin(sllDB);
   if (fStatement <> nil) or
@@ -1198,7 +1198,7 @@ begin
   end;
 end;
 
-function TSQLDBODBCStatement.Step(SeekFirst: boolean): boolean;
+function TSqlDBODBCStatement.Step(SeekFirst: boolean): boolean;
 const
   CMD: array[boolean] of smallint = (
     SQL_FETCH_NEXT, SQL_FETCH_FIRST);
@@ -1233,9 +1233,9 @@ begin
 end;
 
 
-{ TSQLDBODBCConnectionProperties }
+{ TSqlDBODBCConnectionProperties }
 
-constructor TSQLDBODBCConnectionProperties.Create(const aServerName,
+constructor TSqlDBODBCConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUTF8);
 begin
   if ODBC = nil then
@@ -1247,16 +1247,16 @@ begin
       aDatabaseName, ';', sLineBreak))), 'UID=');
 end;
 
-function TSQLDBODBCConnectionProperties.NewConnection: TSQLDBConnection;
+function TSqlDBODBCConnectionProperties.NewConnection: TSqlDBConnection;
 begin
-  result := TSQLDBODBCConnection.Create(self);
+  result := TSqlDBODBCConnection.Create(self);
 end;
 
-procedure TSQLDBODBCConnectionProperties.GetFields(const aTableName: RawUTF8;
-  out Fields: TSQLDBColumnDefineDynArray);
+procedure TSqlDBODBCConnectionProperties.GetFields(const aTableName: RawUTF8;
+  out Fields: TSqlDBColumnDefineDynArray);
 var
   Schema, Table: RawUTF8;
-  F: TSQLDBColumnDefine;
+  F: TSqlDBColumnDefine;
   i, n, DataType: integer;
   status: SqlReturn;
   FA: TDynArray;
@@ -1274,7 +1274,7 @@ begin
   Schema := UpperCase(Schema);
   try
     // get column definitions
-    with TSQLDBODBCStatement.Create(MainConnection) do
+    with TSqlDBODBCStatement.Create(MainConnection) do
     try
       AllocStatement;
       status := ODBC.ColumnsA(fStatement, nil, 0, pointer(Schema), SQL_NTS,
@@ -1295,7 +1295,7 @@ begin
         BindColumns;
         Step;
       end;
-      FA.Init(TypeInfo(TSQLDBColumnDefineDynArray), Fields, @n);
+      FA.Init(TypeInfo(TSqlDBColumnDefineDynArray), Fields, @n);
       FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
       FillcharFast(F, SizeOf(F), 0);
       if fCurrentRow > 0 then // Step done above
@@ -1313,11 +1313,11 @@ begin
         until not Step;
       SetLength(Fields, n);
     finally
-      Free; // TSQLDBODBCStatement release
+      Free; // TSqlDBODBCStatement release
     end;
     // get indexes
     if n > 0 then
-      with TSQLDBODBCStatement.Create(MainConnection) do
+      with TSqlDBODBCStatement.Create(MainConnection) do
       try
         AllocStatement;
         status := ODBC.StatisticsA(fStatement, nil, 0, pointer(Schema), SQL_NTS,
@@ -1335,7 +1335,7 @@ begin
             Fields[i].ColumnIndexed := true;
         end;
       finally
-        Free; // TSQLDBODBCStatement release
+        Free; // TSqlDBODBCStatement release
       end;
   except
     on Exception do
@@ -1343,7 +1343,7 @@ begin
   end;
 end;
 
-procedure TSQLDBODBCConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
+procedure TSqlDBODBCConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
 var
   n: integer;
   schema, tablename: RawUTF8;
@@ -1352,7 +1352,7 @@ begin
   if Tables <> nil then
     exit; // already retrieved directly from engine
   try
-    with TSQLDBODBCStatement.Create(MainConnection) do
+    with TSqlDBODBCStatement.Create(MainConnection) do
     try
       AllocStatement;
       ODBC.Check(Connection, nil,
@@ -1370,7 +1370,7 @@ begin
       end;
       SetLength(Tables, n);
     finally
-      Free; // TSQLDBODBCStatement release
+      Free; // TSqlDBODBCStatement release
     end;
   except
     on Exception do
@@ -1378,7 +1378,7 @@ begin
   end;
 end;
 
-procedure TSQLDBODBCConnectionProperties.GetViewNames(out Views: TRawUTF8DynArray);
+procedure TSqlDBODBCConnectionProperties.GetViewNames(out Views: TRawUTF8DynArray);
 var
   n: integer;
   schema, tablename: RawUTF8;
@@ -1387,7 +1387,7 @@ begin
   if Views <> nil then
     exit; // already retrieved directly from engine
   try
-    with TSQLDBODBCStatement.Create(MainConnection) do
+    with TSqlDBODBCStatement.Create(MainConnection) do
     try
       AllocStatement;
       ODBC.Check(Connection, nil,
@@ -1405,7 +1405,7 @@ begin
       end;
       SetLength(Views, n);
     finally
-      Free; // TSQLDBODBCStatement release
+      Free; // TSqlDBODBCStatement release
     end;
   except
     on Exception do
@@ -1413,10 +1413,10 @@ begin
   end;
 end;
 
-procedure TSQLDBODBCConnectionProperties.GetForeignKeys;
+procedure TSqlDBODBCConnectionProperties.GetForeignKeys;
 begin
   try
-    with TSQLDBODBCStatement.Create(MainConnection) do
+    with TSqlDBODBCStatement.Create(MainConnection) do
     try
       AllocStatement;
       ODBC.Check(Connection, nil,
@@ -1431,7 +1431,7 @@ begin
                          TrimU(ColumnUTF8(2)) + '.' +
                          TrimU(ColumnUTF8(3)));
     finally
-      Free; // TSQLDBODBCStatement release
+      Free; // TSqlDBODBCStatement release
     end;
   except
     on Exception do
@@ -1439,13 +1439,13 @@ begin
   end;
 end;
 
-procedure TSQLDBODBCConnectionProperties.GetProcedureNames(
+procedure TSqlDBODBCConnectionProperties.GetProcedureNames(
   out Procedures: TRawUTF8DynArray);
 var
   Schema: RawUTF8;
   n: integer;
   status: SqlReturn;
-  Stmt: TSQLDBODBCStatement;
+  Stmt: TSqlDBODBCStatement;
 begin
   inherited; // first try from SQL, if any (faster)
   if Procedures <> nil then
@@ -1454,7 +1454,7 @@ begin
   Schema := UpperCase(Schema);
   try
     // get procedure list
-    Stmt := TSQLDBODBCStatement.Create(MainConnection);
+    Stmt := TSqlDBODBCStatement.Create(MainConnection);
     try
       Stmt.AllocStatement;
       status := ODBC.SQLProcedures(Stmt.fStatement, nil, 0, pointer(Schema),
@@ -1467,7 +1467,7 @@ begin
           TrimU(Stmt.ColumnUTF8(2))); // PROCEDURE_NAME column
       SetLength(Procedures, n);
     finally
-      Stmt.Free; // TSQLDBODBCStatement release
+      Stmt.Free; // TSqlDBODBCStatement release
     end;
   except
     on Exception do
@@ -1475,15 +1475,15 @@ begin
   end;
 end;
 
-procedure TSQLDBODBCConnectionProperties.GetProcedureParameters(
-  const aProcName: RawUTF8; out Parameters: TSQLDBProcColumnDefineDynArray);
+procedure TSqlDBODBCConnectionProperties.GetProcedureParameters(
+  const aProcName: RawUTF8; out Parameters: TSqlDBProcColumnDefineDynArray);
 var
   schem, pack, proc: RawUTF8;
-  P: TSQLDBProcColumnDefine;
+  P: TSqlDBProcColumnDefine;
   PA: TDynArray;
   n, DataType: integer;
   status: SqlReturn;
-  Stmt: TSQLDBODBCStatement;
+  Stmt: TSqlDBODBCStatement;
 begin
   inherited; // first try from SQL, if any (faster)
   if Parameters <> nil then
@@ -1496,7 +1496,7 @@ begin
     proc := pack + '.' + proc;
   try
     // get column definitions
-    Stmt := TSQLDBODBCStatement.Create(MainConnection);
+    Stmt := TSqlDBODBCStatement.Create(MainConnection);
     try
       Stmt.AllocStatement;
       status := ODBC.SQLProcedureColumnsA(Stmt.fStatement, nil, 0,
@@ -1517,7 +1517,7 @@ begin
         Stmt.BindColumns;
         Stmt.Step;
       end;
-      PA.Init(TypeInfo(TSQLDBColumnDefineDynArray), Parameters, @n);
+      PA.Init(TypeInfo(TSqlDBColumnDefineDynArray), Parameters, @n);
       FillcharFast(P, SizeOf(P), 0);
       if Stmt.fCurrentRow > 0 then // Step done above
         repeat
@@ -1541,7 +1541,7 @@ begin
         until not Stmt.Step;
       SetLength(Parameters, n);
     finally
-      Stmt.Free; // TSQLDBODBCStatement release
+      Stmt.Free; // TSqlDBODBCStatement release
     end;
   except
     on Exception do
@@ -1549,7 +1549,7 @@ begin
   end;
 end;
 
-function TSQLDBODBCConnectionProperties.GetDatabaseNameSafe: RawUTF8;
+function TSqlDBODBCConnectionProperties.GetDatabaseNameSafe: RawUTF8;
 var
   pwd: RawUTF8;
 begin
@@ -1558,10 +1558,10 @@ begin
   result := StringReplaceAll(fDatabaseName, pwd, '***');
 end;
 
-function TSQLDBODBCConnectionProperties.GetDBMS: TSQLDBDefinition;
+function TSqlDBODBCConnectionProperties.GetDBMS: TSqlDBDefinition;
 begin
   if fDBMS = dUnknown then
-    with MainConnection as TSQLDBODBCConnection do
+    with MainConnection as TSqlDBODBCConnection do
     begin
       if not IsConnected then
         Connect; // retrieve DBMS property
@@ -1571,7 +1571,7 @@ begin
 end;
 
 initialization
-  TSQLDBODBCConnectionProperties.RegisterClassNameForDefinition;
+  TSqlDBODBCConnectionProperties.RegisterClassNameForDefinition;
   {$ifndef PUREMORMOT2}
   // backward compatibility class registration
   TODBCConnectionProperties.RegisterClassNameForDefinition;

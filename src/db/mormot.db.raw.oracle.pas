@@ -783,20 +783,20 @@ type
 
 type
   /// direct access to the native Oracle Client Interface (OCI)
-  TSQLDBOracleLib = class(TSynLibrary)
+  TSqlDBOracleLib = class(TSynLibrary)
   protected
-    procedure HandleError(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
+    procedure HandleError(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
       Status: integer; ErrorHandle: POCIError; InfoRaiseException: boolean = false;
       LogLevelNoRaise: TSynLogInfo = sllNone);
-    function BlobOpen(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+    function BlobOpen(Stmt: TSqlDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor): ub4;
-    function BlobRead(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+    function BlobRead(Stmt: TSqlDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; Blob: PByte; BlobLen: ub4;
       csid: ub2 = 0; csfrm: ub1 = SQLCS_IMPLICIT): ub4;
-    function BlobReadToStream(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+    function BlobReadToStream(Stmt: TSqlDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; stream: TStream; BlobLen: ub4;
       csid: ub2 = 0; csfrm: ub1 = SQLCS_IMPLICIT): ub4;
-    function BlobWriteFromStream(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+    function BlobWriteFromStream(Stmt: TSqlDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; stream: TStream; BlobLen: ub4;
       csid: ub2 = 0; csfrm: ub1 = SQLCS_IMPLICIT): ub4;
   public
@@ -913,27 +913,27 @@ type
     // - will use 'WE8MSWIN1252' (CODEPAGE_US) if the Code Page is unknown
     function CodePageToCharSetID(env: pointer; aCodePage: cardinal): cardinal;
     /// raise an exception on error
-    procedure Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
+    procedure Check(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
       Status: integer; ErrorHandle: POCIError;
       InfoRaiseException: boolean = false; LogLevelNoRaise: TSynLogInfo = sllNone);
       {$ifdef HASINLINE}inline;{$endif}
-    procedure CheckSession(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
+    procedure CheckSession(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
       Status: integer; ErrorHandle: POCIError;
       InfoRaiseException: boolean = false; LogLevelNoRaise: TSynLogInfo = sllNone);
     /// retrieve some BLOB content
-    procedure BlobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+    procedure BlobFromDescriptor(Stmt: TSqlDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; out result: RawByteString); overload;
     /// retrieve some BLOB content
-    procedure BlobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+    procedure BlobFromDescriptor(Stmt: TSqlDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; out result: TBytes); overload;
     /// retrieve some BLOB content, save it to the stream
-    procedure BlobFromDescriptorToStream(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+    procedure BlobFromDescriptorToStream(Stmt: TSqlDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; stream: TStream);
     /// write some BLOB content, read it from the stream
-    procedure BlobToDescriptorFromStream(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+    procedure BlobToDescriptorFromStream(Stmt: TSqlDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; stream: TStream);
     /// retrieve some CLOB/NCLOB content as UTF-8 text
-    function ClobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+    function ClobFromDescriptor(Stmt: TSqlDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; ColumnDBForm: integer;
       out Text: RawUTF8; TextResize: boolean = true): ub4;
   end;
@@ -943,21 +943,21 @@ type
 
 type
   /// exception type associated to the native Oracle Client Interface (OCI)
-  ESQLDBOracle = class(ESQLDBException);
+  ESqlDBOracle = class(ESqlDBException);
 
   /// Oracle VARNUM memory structure
-  TSQLT_VNU = array[0..21] of byte;
+  TSqlT_VNU = array[0..21] of byte;
   /// points to a Oracle VARNUM memory structure
-  PSQLT_VNU = ^TSQLT_VNU;
+  PSqlT_VNU = ^TSQLT_VNU;
 
   
 /// conversion from a 64-bit integer to a raw VARNUM memory structure
-procedure Int64ToSQLT_VNU(Value: Int64; OutData: PSQLT_VNU);
+procedure Int64ToSQLT_VNU(Value: Int64; OutData: PSqlT_VNU);
 
 
 var
   /// global variable used to access the Oracle Client Library once loaded
-  OCI: TSQLDBOracleLib = nil;
+  OCI: TSqlDBOracleLib = nil;
 
   /// optional folder where the Oracle Client Library is to be searched
   // - by default, the oci.dll library is searched in the system PATH, then
@@ -1284,9 +1284,9 @@ const
     'OCIPasswordChange');
 
 
-{ TSQLDBOracleLib }
+{ TSqlDBOracleLib }
 
-function TSQLDBOracleLib.BlobOpen(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+function TSqlDBOracleLib.BlobOpen(Stmt: TSqlDBStatement; svchp: POCISvcCtx;
   errhp: POCIError; locp: POCIDescriptor): ub4;
 begin
   result := 0;
@@ -1299,7 +1299,7 @@ begin
   end;
 end;
 
-function TSQLDBOracleLib.BlobRead(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+function TSqlDBOracleLib.BlobRead(Stmt: TSqlDBStatement; svchp: POCISvcCtx;
   errhp: POCIError; locp: POCIDescriptor; Blob: PByte; BlobLen: ub4; csid: ub2;
   csfrm: ub1): ub4;
 var
@@ -1327,7 +1327,7 @@ begin
       nil, csid, csfrm), errhp);
 end;
 
-function TSQLDBOracleLib.BlobReadToStream(Stmt: TSQLDBStatement;
+function TSqlDBOracleLib.BlobReadToStream(Stmt: TSqlDBStatement;
   svchp: POCISvcCtx; errhp: POCIError; locp: POCIDescriptor; stream: TStream;
   BlobLen: ub4; csid: ub2; csfrm: ub1): ub4;
 var
@@ -1361,7 +1361,7 @@ begin
   end;
 end;
 
-procedure TSQLDBOracleLib.BlobFromDescriptor(Stmt: TSQLDBStatement;
+procedure TSqlDBOracleLib.BlobFromDescriptor(Stmt: TSqlDBStatement;
   svchp: POCISvcCtx; errhp: POCIError; locp: POCIDescriptor;
   out result: RawByteString);
 var
@@ -1378,7 +1378,7 @@ begin
   end;
 end;
 
-procedure TSQLDBOracleLib.BlobFromDescriptor(Stmt: TSQLDBStatement;
+procedure TSqlDBOracleLib.BlobFromDescriptor(Stmt: TSqlDBStatement;
   svchp: POCISvcCtx; errhp: POCIError; locp: POCIDescriptor; out result: TBytes);
 var
   Len, Read: ub4;
@@ -1394,7 +1394,7 @@ begin
   end;
 end;
 
-procedure TSQLDBOracleLib.BlobFromDescriptorToStream(Stmt: TSQLDBStatement;
+procedure TSqlDBOracleLib.BlobFromDescriptorToStream(Stmt: TSqlDBStatement;
   svchp: POCISvcCtx; errhp: POCIError; locp: POCIDescriptor; stream: TStream);
 var
   Len: ub4;
@@ -1407,13 +1407,13 @@ begin
   end;
 end;
 
-procedure TSQLDBOracleLib.BlobToDescriptorFromStream(Stmt: TSQLDBStatement;
+procedure TSqlDBOracleLib.BlobToDescriptorFromStream(Stmt: TSqlDBStatement;
   svchp: POCISvcCtx; errhp: POCIError; locp: POCIDescriptor; stream: TStream);
 begin
   BlobWriteFromStream(Stmt, svchp, errhp, locp, stream, stream.Size);
 end;
 
-function TSQLDBOracleLib.BlobWriteFromStream(Stmt: TSQLDBStatement;
+function TSqlDBOracleLib.BlobWriteFromStream(Stmt: TSqlDBStatement;
   svchp: POCISvcCtx; errhp: POCIError; locp: POCIDescriptor; stream: TStream;
   BlobLen: ub4; csid: ub2; csfrm: ub1): ub4;
 var
@@ -1434,7 +1434,7 @@ begin
   result := l_Offset;
 end;
 
-function TSQLDBOracleLib.ClobFromDescriptor(Stmt: TSQLDBStatement;
+function TSqlDBOracleLib.ClobFromDescriptor(Stmt: TSqlDBStatement;
   svchp: POCISvcCtx; errhp: POCIError; locp: POCIDescriptor; ColumnDBForm: integer;
   out Text: RawUTF8; TextResize: boolean): ub4;
 var
@@ -1460,8 +1460,8 @@ begin
   end;
 end;
 
-procedure TSQLDBOracleLib.HandleError(Conn: TSQLDBConnection;
-  Stmt: TSQLDBStatement; Status: integer; ErrorHandle: POCIError;
+procedure TSqlDBOracleLib.HandleError(Conn: TSqlDBConnection;
+  Stmt: TSqlDBStatement; Status: integer; ErrorHandle: POCIError;
   InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 var
   msg: RawUTF8;
@@ -1509,12 +1509,12 @@ begin
   if LogLevelNoRaise <> sllNone then
     SynDBLog.Add.Log(LogLevelNoRaise, msg{%H-}, self)
   else if Stmt = nil then
-    raise ESQLDBOracle.CreateUTF8('% error: %', [self, msg])
+    raise ESqlDBOracle.CreateUTF8('% error: %', [self, msg])
   else
-    raise ESQLDBOracle.CreateUTF8('% error: %', [Stmt, msg]);
+    raise ESqlDBOracle.CreateUTF8('% error: %', [Stmt, msg]);
 end;
 
-procedure TSQLDBOracleLib.Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
+procedure TSqlDBOracleLib.Check(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
   Status: integer; ErrorHandle: POCIError; InfoRaiseException: boolean;
   LogLevelNoRaise: TSynLogInfo);
 begin
@@ -1522,8 +1522,8 @@ begin
     HandleError(Conn, Stmt, Status, ErrorHandle, InfoRaiseException, LogLevelNoRaise);
 end;
 
-procedure TSQLDBOracleLib.CheckSession(Conn: TSQLDBConnection;
-  Stmt: TSQLDBStatement; Status: integer; ErrorHandle: POCIError;
+procedure TSqlDBOracleLib.CheckSession(Conn: TSqlDBConnection;
+  Stmt: TSqlDBStatement; Status: integer; ErrorHandle: POCIError;
   InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 var
   msg: RawUTF8;
@@ -1551,13 +1551,13 @@ begin
     if LogLevelNoRaise <> sllNone then
       SynDBLog.Add.Log(LogLevelNoRaise, msg, self)
     else if Stmt = nil then
-      raise ESQLDBOracle.CreateUTF8('% error: %', [self, msg])
+      raise ESqlDBOracle.CreateUTF8('% error: %', [self, msg])
     else
-      raise ESQLDBOracle.CreateUTF8('% error: %', [Stmt, msg]);
+      raise ESqlDBOracle.CreateUTF8('% error: %', [Stmt, msg]);
   end;
 end;
 
-function TSQLDBOracleLib.ClientRevision: RawUTF8;
+function TSqlDBOracleLib.ClientRevision: RawUTF8;
 begin
   if self = nil then
     result := ''
@@ -1566,7 +1566,7 @@ begin
       [fLibraryPath, major_version, minor_version, update_num, patch_num]);
 end;
 
-function TSQLDBOracleLib.CodePageToCharSetID(env: pointer; aCodePage: cardinal): cardinal;
+function TSqlDBOracleLib.CodePageToCharSetID(env: pointer; aCodePage: cardinal): cardinal;
 var
   ocp: PUTF8Char;
   i: integer;
@@ -1608,7 +1608,7 @@ const
   LIBNAME = 'libclntsh.so';
 {$endif MSWINDOWS}
 
-constructor TSQLDBOracleLib.Create;
+constructor TSqlDBOracleLib.Create;
 var
   P: PPointerArray;
   i: PtrInt;
@@ -1632,10 +1632,10 @@ begin
   l3 := GetEnvironmentVariable('ORACLE_HOME');
   if l3 <> '' then
     l3 := IncludeTrailingPathDelimiter(l3) + 'bin' + PathDelim + LIBNAME;
-  TryLoadLibrary([{%H-}l1, l2, l3, LIBNAME], ESQLDBOracle);
+  TryLoadLibrary([{%H-}l1, l2, l3, LIBNAME], ESqlDBOracle);
   P := @@ClientVersion;
   for i := 0 to High(OCI_ENTRIES) do
-    Resolve(OCI_ENTRIES[i], @P[i], ESQLDBOracle); // raise an ESQLDBOracle on error
+    Resolve(OCI_ENTRIES[i], @P[i], ESqlDBOracle); // raise an ESqlDBOracle on error
   ClientVersion(major_version, minor_version, update_num, patch_num, port_update_num);
   SupportsInt64Params := (major_version > 11) or
                          ((major_version = 11) and
@@ -1646,7 +1646,7 @@ end;
 
 { *************** Some Global Types and Variables }
 
-procedure Int64ToSQLT_VNU(Value: Int64; OutData: PSQLT_VNU);
+procedure Int64ToSQLT_VNU(Value: Int64; OutData: PSqlT_VNU);
 var
   V, Exp: byte;
   minus: boolean; // True, if the sign is positive

@@ -465,7 +465,7 @@ type
     function From(DateTime: TDateTime; var ColumnSize: SqlLen): SqlSmallint;
   end;
 
-  PSQL_TIMESTAMP_STRUCT = ^SQL_TIMESTAMP_STRUCT;
+  PSql_TIMESTAMP_STRUCT = ^SQL_TIMESTAMP_STRUCT;
 
   SQL_TIME_STRUCT = record
     Hour:     SqlUSmallint;
@@ -486,7 +486,7 @@ type
 
 type
   /// generic Exception type, generated for ODBC connection
-  EODBCException = class(ESQLDBException);
+  EODBCException = class(ESqlDBException);
 
   /// direct access to the ODBC library
   // - this wrapper will initialize both Ansi and Wide versions of the ODBC
@@ -754,12 +754,12 @@ type
     // - and retrieve all SQL*() addresses for ODBC_ENTRIES[] items
     constructor Create;
     /// raise an exception on error
-    procedure Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement; Status: SqlReturn;
+    procedure Check(Conn: TSqlDBConnection; Stmt: TSqlDBStatement; Status: SqlReturn;
       HandleType: SqlSmallint; Handle: SqlHandle; InfoRaiseException: boolean = false;
       LogLevelNoRaise: TSynLogInfo = sllNone);
       {$ifdef HASINLINE}inline;{$endif}
     /// generic process of error handle
-    procedure HandleError(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
+    procedure HandleError(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
       Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
       InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
     /// wrapper around SQLGetDiagField() API call
@@ -956,7 +956,7 @@ end;
 
 { TODBCLib }
 
-procedure TODBCLib.Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement; Status:
+procedure TODBCLib.Check(Conn: TSqlDBConnection; Stmt: TSqlDBStatement; Status:
   SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
   InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 begin
@@ -1001,7 +1001,7 @@ begin
   Dest := RawUnicodeToUtf8(Info, Len shr 1);
 end;
 
-procedure TODBCLib.HandleError(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
+procedure TODBCLib.HandleError(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
   Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
   InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 const

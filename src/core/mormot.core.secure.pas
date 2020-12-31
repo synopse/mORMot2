@@ -106,20 +106,20 @@ type
   end;
 
   /// handle safe storage of any connection properties
-  // - would be used by mormot.db to serialize TSQLDBConnectionProperties, or
+  // - would be used by mormot.db to serialize TSqlDBConnectionProperties, or
   // by mormot.rest.core.pas to serialize TRest instances
   // - the password will be stored as Base64, after a simple encryption as
   // defined by TSynPersistentWithPassword
   // - typical content could be:
   // $ {
-  // $	"Kind": "TSQLDBSQLite3ConnectionProperties",
+  // $	"Kind": "TSqlDBSQLite3ConnectionProperties",
   // $	"ServerName": "server",
   // $	"DatabaseName": "",
   // $	"User": "",
   // $	"Password": "PtvlPA=="
   // $ }
   // - the "Kind" value will be used to let the corresponding TRest or
-  // TSQLDBConnectionProperties NewInstance*() class methods create the
+  // TSqlDBConnectionProperties NewInstance*() class methods create the
   // actual instance, from its class name
   TSynConnectionDefinition = class(TSynPersistentWithPassword)
   protected
@@ -231,8 +231,8 @@ type
   /// simple authentication class, implementing safe token/challenge security
   // - maintain a list of user / name credential pairs, and a list of sessions
   // - is not meant to handle authorization, just plain user access validation
-  // - used e.g. by TSQLDBConnection.RemoteProcessMessage (on server side) and
-  // TSQLDBProxyConnectionPropertiesAbstract (on client side) in mormot.db.proxy
+  // - used e.g. by TSqlDBConnection.RemoteProcessMessage (on server side) and
+  // TSqlDBProxyConnectionPropertiesAbstract (on client side) in mormot.db.proxy
   TSynAuthentication = class(TSynAuthenticationAbstract)
   protected
     fCredentials: TSynNameValue; // store user/password pairs

@@ -241,7 +241,7 @@ function CreateInMemoryServerForAllVirtualTables(aModel: TOrmModel;
 
 type
   // should be a proper type for RegisterClassNameForDefinition
-  TSQLRestServerFullMemory = TRestServerFullMemory;
+  TSqlRestServerFullMemory = TRestServerFullMemory;
 
 {$endif PUREMORMOT2}
 
@@ -291,7 +291,7 @@ begin
   for t := 0 to fStaticDataCount - 1 do
     with TRestStorageInMemory(fStaticData[t]) do
       if Count = 0 then
-        // emulates TSQLRestServerDB.CreateMissingTables
+        // emulates TSqlRestServerDB.CreateMissingTables
         StoredClass.InitializeTable(self, '', Options);
 end;
 
@@ -635,7 +635,7 @@ begin
     if (c = nil) or
        not c.InheritsFrom(TRestServer) then
     begin
-      fake.Kind := 'TSQLRestServerDB';
+      fake.Kind := 'TSqlRestServerDB';
       c := TRest.ClassFrom(fake);
     end;
     if (c = nil) or
@@ -700,7 +700,7 @@ end;
 initialization
   TRestServerFullMemory.RegisterClassNameForDefinition;
   {$ifndef PUREMORMOT2}
-  TSQLRestServerFullMemory.RegisterClassNameForDefinition;
+  TSqlRestServerFullMemory.RegisterClassNameForDefinition;
   {$endif PUREMORMOT2}
 
 end.

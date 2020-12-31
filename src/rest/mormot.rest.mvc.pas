@@ -184,20 +184,20 @@ type
     function RegisterExpressionHelpers(const aNames: array of RawUTF8;
       const aEvents: array of TSynMustacheHelperEvent): TMVCViewsMustache;
     /// define Expression Helpers for some ORM tables
-    // - e.g. to read a TSQLMyRecord from its ID value and put its fields
+    // - e.g. to read a TMyOrm from its ID value and put its fields
     // in the current rendering data context, you can write:
-    // ! aView.RegisterExpressionHelpersForTables(aServer,[TSQLMyRecord]);
+    // ! aView.RegisterExpressionHelpersForTables(aServer,[TMyOrm]);
     // then use the following Mustache tag
-    // ! {{#TSQLMyRecord MyRecordID}} ... {{/TSQLMyRecord MyRecordID}}
+    // ! {{#TMyOrm MyRecordID}} ... {{/TMyOrm MyRecordID}}
     // - returns self so that may be called in a fluent interface
     function RegisterExpressionHelpersForTables(aRest: TRest;
       const aTables: array of TOrmClass): TMVCViewsMustache; overload;
     /// define Expression Helpers for all ORM tables of the supplied model
-    // - e.g. to read a TSQLMyRecord from its ID value and put its fields
+    // - e.g. to read a TMyOrm from its ID value and put its fields
     // in the current rendering data context, you can write:
     // ! aView.RegisterExpressionHelpersForTables(aServer);
     // then use the following Mustache tag
-    // ! {{#TSQLMyRecord MyRecordID}} ... {{/TSQLMyRecord MyRecordID}}
+    // ! {{#TMyOrm MyRecordID}} ... {{/TMyOrm MyRecordID}}
     // - returns self so that may be called in a fluent interface
     function RegisterExpressionHelpersForTables(
       aRest: TRest): TMVCViewsMustache; overload;

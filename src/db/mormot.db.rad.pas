@@ -224,7 +224,7 @@ type
     fValues: TVariantDynArray;
     fColumns: array of record
       Name: RawUTF8;
-      FieldType: TSQLDBFieldType;
+      FieldType: TSqlDBFieldType;
     end;
     fTemp64: Int64;
     fTempUTF8: RawUTF8;
@@ -243,7 +243,7 @@ type
     constructor Create(Owner: TComponent;
       const Data: TVariantDynArray;
       const ColumnNames: array of RawUTF8;
-      const ColumnTypes: array of TSQLDBFieldType); reintroduce;
+      const ColumnTypes: array of TSqlDBFieldType); reintroduce;
   end;
 
 /// export all rows of a TDataSet into JSON
@@ -254,17 +254,17 @@ function DataSetToJSON(Data: TDataSet): RawUTF8;
 // - this function is just a wrapper around TDocVariantArrayDataSet.Create()
 // - the TDataSet will be opened once created
 function ToDataSet(aOwner: TComponent; const Data: TVariantDynArray;
-  const ColumnNames: array of RawUTF8; const ColumnTypes: array of TSQLDBFieldType): TDocVariantArrayDataSet; overload;
+  const ColumnNames: array of RawUTF8; const ColumnTypes: array of TSqlDBFieldType): TDocVariantArrayDataSet; overload;
 
 
 { ************ mormot.db.sql Abstract Connection for DB.pas TDataSet }
 
 type
   /// Exception type associated to generic TDataSet / DB.pas unit Dataset connection
-  ESQLDBDataset = class(ESQLDBException);
+  ESqlDBDataset = class(ESqlDBException);
 
   ///	implement properties shared by via the DB.pas TQuery-like connections
-  TSQLDBDatasetConnectionProperties = class(TSQLDBConnectionPropertiesThreadSafe)
+  TSqlDBDatasetConnectionProperties = class(TSqlDBConnectionPropertiesThreadSafe)
   protected
     {$ifndef UNICODE}
     fForceInt64AsFloat: boolean;
@@ -273,7 +273,7 @@ type
   public
     /// initialize the properties to connect via TDataSet database access
     // - this overridden method will enable the BATCH process (emulated in
-    // TSQLDBDatasetStatement.ExecutePrepared, native e.g. for FireDAC)
+    // TSqlDBDatasetStatement.ExecutePrepared, native e.g. for FireDAC)
     constructor Create(const aServerName, aDatabaseName,
       aUserID, aPassWord: RawUTF8); override;
     {$ifndef UNICODE}
@@ -308,7 +308,7 @@ type
   // connection
   // - dedicated abstract class, able to use any TDataSet with any kind of
   // parameter linking (e.g. FireDAC/AnyDAC do have its own parameters type)
-  TSQLDBDatasetStatementAbstract = class(TSQLDBStatementWithParamsAndColumns)
+  TSqlDBDatasetStatementAbstract = class(TSqlDBStatementWithParamsAndColumns)
   protected
     fQuery: TDataSet;
     fPrepared: boolean;
@@ -317,9 +317,9 @@ type
     fForceUseWideString: boolean;
   protected
     /// convert SQLDBParamType to a standard DB.TParamType to be used in TQuery.Param
-    function SQLParamTypeToDBParamType(IO: TSQLDBParamInOutType): TParamType; virtual;
+    function SQLParamTypeToDBParamType(IO: TSqlDBParamInOutType): TParamType; virtual;
     /// convert DB.TFieldType into mORMot fieldtype
-    function ColumnTypeNativeToDB(aNativeType: TFieldType): TSQLDBFieldType; virtual;
+    function ColumnTypeNativeToDB(aNativeType: TFieldType): TSqlDBFieldType; virtual;
     /// retrieve a given column
     function DatasetField(col: integer): TField; virtual;
   protected // inherited classes shall override those abstract virtual methods
@@ -335,13 +335,13 @@ type
     // - if fDatasetSupportBatchBinding=true, should use array DML binding
     // - SQL Parameter to bind is aParam
     procedure DataSetBindSQLParam(const aArrayIndex, aParamIndex: integer;
-      const aParam: TSQLDBParam); virtual; abstract;
+      const aParam: TSqlDBParam); virtual; abstract;
     /// set the returned parameter after a stored proc execution
     procedure DataSetOutSQLParam(const aParamIndex: integer;
-      var aParam: TSQLDBParam); virtual; abstract;
+      var aParam: TSqlDBParam); virtual; abstract;
   public
     /// create a statement instance
-    constructor Create(aConnection: TSQLDBConnection); override;
+    constructor Create(aConnection: TSqlDBConnection); override;
     /// release the prepared statement
     destructor Destroy; override;
 
@@ -349,7 +349,7 @@ type
     // - parameters marked as ? will be bound later, before ExecutePrepared call
     // - if ExpectResults is true, then Step() and Column*() methods are available
     // to retrieve the data rows
-    // - raise an ESQLDBDataset on any error
+    // - raise an ESqlDBDataset on any error
     procedure Prepare(const aSQL: RawUTF8;
       ExpectResults: boolean = false); overload; override;
     /// Execute a prepared SQL statement
@@ -359,11 +359,11 @@ type
     // does not support array binding (only mormot.db.rad.firedac does support it yet)
     // - this overridden method will log the SQL statement if sllSQL has been
     // enabled in SynDBLog.Family.Level
-    // - raise an ESQLDBDataset on any error
+    // - raise an ESqlDBDataset on any error
     procedure ExecutePrepared; override;
     /// Reset the previous prepared statement
     // - this overridden implementation will reset all bindings and the cursor state
-    // - raise an ESQLDBDataset on any error
+    // - raise an ESqlDBDataset on any error
     procedure Reset; override;
 
     /// access the next or first row of data from the SQL Statement result
@@ -371,7 +371,7 @@ type
     // - return false if no more row is available (e.g. if the SQL statement
     // is not a SELECT but an UPDATE or INSERT command)
     // - if SeekFirst is true, will put the cursor on the first row of results
-    // - raise an ESQLDBDataset on any error
+    // - raise an ESqlDBDataset on any error
     function Step(SeekFirst: boolean = false): boolean; override;
     /// close the associated TQuery when ISQLDBStatement is back in cache
     procedure ReleaseRows; override;
@@ -400,21 +400,21 @@ type
   // - you should not use this abstract class directly, but one inherited
   // implementation with overridden Dataset*() protected methods to handle the
   // internal fQuery: TDataSet property
-  TSQLDBDatasetStatement = class(TSQLDBDatasetStatementAbstract)
+  TSqlDBDatasetStatement = class(TSqlDBDatasetStatementAbstract)
   protected
     fQueryParams: TParams;
     /// bind SQLDBParam to TQuery-like param using fQueryParams: DB.TParams
     procedure DataSetBindSQLParam(const aArrayIndex, aParamIndex: integer;
-      const aParam: TSQLDBParam); override;
+      const aParam: TSqlDBParam); override;
     /// set the returned parameter after a stored proc execution
     procedure DataSetOutSQLParam(const aParamIndex: integer;
-      var aParam: TSQLDBParam); override;
+      var aParam: TSqlDBParam); override;
   public
     /// Prepare an UTF-8 encoded SQL statement
     // - parameters marked as ? will be bound later, before ExecutePrepared call
     // - if ExpectResults is true, then Step() and Column*() methods are available
     // to retrieve the data rows
-    // - raise an ESQLDBDataset on any error
+    // - raise an ESqlDBDataset on any error
     procedure Prepare(const aSQL: RawUTF8;
       ExpectResults: boolean = false); overload; override;
   end;
@@ -1072,7 +1072,7 @@ end;
 
 constructor TDocVariantArrayDataSet.Create(Owner: TComponent;
   const Data: TVariantDynArray; const ColumnNames: array of RawUTF8;
-  const ColumnTypes: array of TSQLDBFieldType);
+  const ColumnTypes: array of TSqlDBFieldType);
 var
   n, ndx, j: PtrInt;
   first: PDocVariantData;
@@ -1187,7 +1187,7 @@ end;
 
 procedure TDocVariantArrayDataSet.InternalInitFieldDefs;
 const
-  TYPES: array[TSQLDBFieldType] of TFieldType = (
+  TYPES: array[TSqlDBFieldType] of TFieldType = (
   // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
     ftWideString, ftWideString, ftLargeint, ftFloat, ftFloat, ftDate,
     ftWideString, ftBlob);
@@ -1230,7 +1230,7 @@ end;
 
 function ToDataSet(aOwner: TComponent; const Data: TVariantDynArray;
   const ColumnNames: array of RawUTF8;
-  const ColumnTypes: array of TSQLDBFieldType): TDocVariantArrayDataSet; 
+  const ColumnTypes: array of TSqlDBFieldType): TDocVariantArrayDataSet; 
 begin
   result := TDocVariantArrayDataSet.Create(
     aOwner, Data, ColumnNames, ColumnTypes);
@@ -1246,18 +1246,18 @@ const
   IsTWideStringField = 2;
 
 
-{ TSQLDBDatasetConnectionProperties }
+{ TSqlDBDatasetConnectionProperties }
 
-constructor TSQLDBDatasetConnectionProperties.Create(
+constructor TSqlDBDatasetConnectionProperties.Create(
   const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8);
 begin
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
   fBatchSendingAbilities := [cCreate, cUpdate, cDelete]; // always emulated
 end;
 
-{ TSQLDBDatasetStatementAbstract }
+{ TSqlDBDatasetStatementAbstract }
 
-function TSQLDBDatasetStatementAbstract.ColumnBlob(Col: integer): RawByteString;
+function TSqlDBDatasetStatementAbstract.ColumnBlob(Col: integer): RawByteString;
 var
   Str: TStream;
 begin
@@ -1287,7 +1287,7 @@ begin
     end;
 end;
 
-function TSQLDBDatasetStatementAbstract.ColumnCurrency(Col: integer): currency;
+function TSqlDBDatasetStatementAbstract.ColumnCurrency(Col: integer): currency;
 begin
   CheckCol(Col);
   with fColumns[Col] do
@@ -1299,7 +1299,7 @@ begin
       result := TField(ColumnAttr).AsCurrency;
 end;
 
-function TSQLDBDatasetStatementAbstract.ColumnDateTime(Col: integer): TDateTime;
+function TSqlDBDatasetStatementAbstract.ColumnDateTime(Col: integer): TDateTime;
 begin
   CheckCol(Col);
   with fColumns[Col] do
@@ -1309,7 +1309,7 @@ begin
       result := TField(ColumnAttr).AsDateTime;
 end;
 
-function TSQLDBDatasetStatementAbstract.ColumnDouble(Col: integer): double;
+function TSqlDBDatasetStatementAbstract.ColumnDouble(Col: integer): double;
 begin
   CheckCol(Col);
   with fColumns[Col] do
@@ -1319,7 +1319,7 @@ begin
       result := TField(ColumnAttr).AsFloat;
 end;
 
-function TSQLDBDatasetStatementAbstract.ColumnInt(Col: integer): Int64;
+function TSqlDBDatasetStatementAbstract.ColumnInt(Col: integer): Int64;
 begin
   CheckCol(Col);
   with fColumns[Col] do
@@ -1338,13 +1338,13 @@ begin
   {$endif UNICODE}
 end;
 
-function TSQLDBDatasetStatementAbstract.ColumnNull(Col: integer): boolean;
+function TSqlDBDatasetStatementAbstract.ColumnNull(Col: integer): boolean;
 begin
   CheckCol(Col);
   result := TField(fColumns[Col].ColumnAttr).IsNull;
 end;
 
-function TSQLDBDatasetStatementAbstract.ColumnUTF8(Col: integer): RawUTF8;
+function TSqlDBDatasetStatementAbstract.ColumnUTF8(Col: integer): RawUTF8;
 begin
   CheckCol(Col);
   with fColumns[Col] do
@@ -1359,10 +1359,10 @@ begin
         result := StringToUTF8(TField(ColumnAttr).AsString);
 end;
 
-constructor TSQLDBDatasetStatementAbstract.Create(aConnection: TSQLDBConnection);
+constructor TSqlDBDatasetStatementAbstract.Create(aConnection: TSqlDBConnection);
 begin
   fForceUseWideString :=
-    (aConnection.Properties as TSQLDBDatasetConnectionProperties).ForceUseWideString;
+    (aConnection.Properties as TSqlDBDatasetConnectionProperties).ForceUseWideString;
   inherited Create(aConnection);
   try
     DatasetCreate;
@@ -1372,29 +1372,29 @@ begin
   end;
 end;
 
-destructor TSQLDBDatasetStatementAbstract.Destroy;
+destructor TSqlDBDatasetStatementAbstract.Destroy;
 begin
   FreeAndNil(fQuery);
   inherited;
 end;
 
-procedure TSQLDBDatasetStatementAbstract.Prepare(const aSQL: RawUTF8;
+procedure TSqlDBDatasetStatementAbstract.Prepare(const aSQL: RawUTF8;
   ExpectResults: boolean);
 var
   oSQL: RawUTF8;
 begin
   SQLLogBegin(sllDB);
   if fPrepared then
-    raise ESQLDBDataset.CreateUTF8('%.Prepare() shall be called once', [self]);
+    raise ESqlDBDataset.CreateUTF8('%.Prepare() shall be called once', [self]);
   inherited Prepare(aSQL, ExpectResults); // connect if necessary
   fPreparedParamsCount := ReplaceParamsByNames(aSQL, oSQL);
   fPrepared := DatasetPrepare(UTF8ToString(oSQL));
   SQLLogEnd;
   if not fPrepared then
-    raise ESQLDBDataset.CreateUTF8('%.DatasetPrepare not prepared', [self]);
+    raise ESqlDBDataset.CreateUTF8('%.DatasetPrepare not prepared', [self]);
 end;
 
-procedure TSQLDBDatasetStatementAbstract.ExecutePrepared;
+procedure TSqlDBDatasetStatementAbstract.ExecutePrepared;
 var
   i, p: integer;
   lArrayIndex: integer;
@@ -1404,7 +1404,7 @@ begin
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   // 1. bind parameters in fParams[] to fQuery.Params
   if fPreparedParamsCount <> fParamCount then
-    raise ESQLDBDataset.CreateUTF8(
+    raise ESqlDBDataset.CreateUTF8(
       '%.ExecutePrepared expected % bound parameters, got %',
       [self, fPreparedParamsCount, fParamCount]);
   lArrayIndex := -1; // either Bind() or BindArray() with no Array DML support
@@ -1425,7 +1425,7 @@ begin
       for i := 0 to fQuery.FieldCount - 1 do
       begin
         Field := DatasetField(i);
-        with PSQLDBColumnProperty(fColumn.AddAndMakeUniqueName(
+        with PSqlDBColumnProperty(fColumn.AddAndMakeUniqueName(
               StringToUTF8(Field.FieldName)))^ do
         begin
           ColumnAttr := PtrUInt(Field);
@@ -1456,7 +1456,7 @@ begin
   SQLLogEnd;
 end;
 
-function TSQLDBDatasetStatementAbstract.Step(SeekFirst: boolean): boolean;
+function TSqlDBDatasetStatementAbstract.Step(SeekFirst: boolean): boolean;
 begin
   if SeekFirst then
   begin
@@ -1473,21 +1473,21 @@ begin
   result := not fQuery.Eof;
 end;
 
-procedure TSQLDBDatasetStatementAbstract.Reset;
+procedure TSqlDBDatasetStatementAbstract.Reset;
 begin
   ReleaseRows;
   inherited Reset;
 end;
 
-procedure TSQLDBDatasetStatementAbstract.ReleaseRows;
+procedure TSqlDBDatasetStatementAbstract.ReleaseRows;
 begin
   if (fQuery <> nil) and fQuery.Active then
     fQuery.Close;
   inherited ReleaseRows;
 end;
 
-function TSQLDBDatasetStatementAbstract.SQLParamTypeToDBParamType(IO:
-  TSQLDBParamInOutType): TParamType;
+function TSqlDBDatasetStatementAbstract.SQLParamTypeToDBParamType(IO:
+  TSqlDBParamInOutType): TParamType;
 begin
   case IO of
     paramIn:
@@ -1501,8 +1501,8 @@ begin
   end;
 end;
 
-function TSQLDBDatasetStatementAbstract.ColumnTypeNativeToDB(aNativeType:
-  TFieldType): TSQLDBFieldType;
+function TSqlDBDatasetStatementAbstract.ColumnTypeNativeToDB(aNativeType:
+  TFieldType): TSqlDBFieldType;
 begin
   case aNativeType of
   {$ifdef UNICODE}
@@ -1536,12 +1536,12 @@ begin
   end;
 end;
 
-function TSQLDBDatasetStatementAbstract.DatasetField(col: integer): TField;
+function TSqlDBDatasetStatementAbstract.DatasetField(col: integer): TField;
 begin
   result := fQuery.Fields[col];
 end;
 
-procedure TSQLDBDatasetStatementAbstract.ColumnsToJSON(WR: TJSONWriter);
+procedure TSqlDBDatasetStatementAbstract.ColumnsToJSON(WR: TJSONWriter);
 var
   col: integer;
   blob: RawByteString;
@@ -1604,7 +1604,7 @@ begin
               WR.WrBase64(pointer(blob), length(blob), true); // withMagic=true
             end;
         else
-          raise ESQLDBException.CreateUTF8('%: Invalid ColumnType()=%',
+          raise ESqlDBException.CreateUTF8('%: Invalid ColumnType()=%',
             [self, ord(ColumnType)]);
         end;
       WR.Add(',');
@@ -1615,10 +1615,10 @@ begin
 end;
 
 
-{ TSQLDBDatasetStatement }
+{ TSqlDBDatasetStatement }
 
-procedure TSQLDBDatasetStatement.DataSetBindSQLParam(
-  const aArrayIndex, aParamIndex: integer; const aParam: TSQLDBParam);
+procedure TSqlDBDatasetStatement.DataSetBindSQLParam(
+  const aArrayIndex, aParamIndex: integer; const aParam: TSqlDBParam);
 var
   P: TParam;
   I64: Int64;
@@ -1651,7 +1651,7 @@ begin
             if (PInt64Rec(@I64)^.Hi = 0) or
                (PInt64Rec(@I64)^.Hi = cardinal(-1)) then
               P.AsInteger := I64
-            else if TSQLDBDatasetConnectionProperties(Connection.Properties).
+            else if TSqlDBDatasetConnectionProperties(Connection.Properties).
                       ForceInt64AsFloat then
               P.AsFloat := I64
             else
@@ -1709,15 +1709,15 @@ begin
             P.AsString := VData;
           {$endif UNICODE}
       else
-        raise ESQLDBDataset.CreateUTF8(
+        raise ESqlDBDataset.CreateUTF8(
           '%.DataSetBindSQLParam: Invalid type % on bound parameter #%',
           [self, ord(VType), aParamIndex + 1]);
       end;
   end;
 end;
 
-procedure TSQLDBDatasetStatement.DataSetOutSQLParam(const aParamIndex: integer;
-  var aParam: TSQLDBParam);
+procedure TSqlDBDatasetStatement.DataSetOutSQLParam(const aParamIndex: integer;
+  var aParam: TSqlDBParam);
 var
   Par: TParam;
   {$ifdef UNICODE}
@@ -1752,11 +1752,11 @@ begin
   end;
 end;
 
-procedure TSQLDBDatasetStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
+procedure TSqlDBDatasetStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
 begin
   inherited;
   if fPreparedParamsCount <> fQueryParams.Count then
-    raise ESQLDBDataset.CreateUTF8(
+    raise ESqlDBDataset.CreateUTF8(
       '%.Prepare expected % parameters in request, found % - [%]',
       [self, fPreparedParamsCount, fQueryParams.Count, aSQL]);
 end;

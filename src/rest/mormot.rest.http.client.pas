@@ -473,16 +473,16 @@ var
 // backward compatibility types redirections
 
 type
-  TSQLRestHttpClientWinSock = TRestHttpClientWinSock;
+  TSqlRestHttpClientWinSock = TRestHttpClientWinSock;
   {$ifndef NOHTTPCLIENTWEBSOCKETS}
-  TSQLRestHttpClientWebsockets = TRestHttpClientWebsockets;
+  TSqlRestHttpClientWebsockets = TRestHttpClientWebsockets;
   {$endif NOHTTPCLIENTWEBSOCKETS}
   {$ifdef USEWININET}
-  TSQLRestHttpClientWinINet = TRestHttpClientWinINet;
-  TSQLRestHttpClientWinHTTP = TRestHttpClientWinHTTP;
+  TSqlRestHttpClientWinINet = TRestHttpClientWinINet;
+  TSqlRestHttpClientWinHTTP = TRestHttpClientWinHTTP;
   {$endif USEWININET}
   {$ifdef USELIBCURL}
-  TSQLRestHttpClientCurl = TRestHttpClientCurl;
+  TSqlRestHttpClientCurl = TRestHttpClientCurl;
   {$endif USELIBCURL}
 
 {$endif PUREMORMOT2}

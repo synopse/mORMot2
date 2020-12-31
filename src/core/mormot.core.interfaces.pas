@@ -1840,7 +1840,7 @@ type
   // a RunningThread.Synchronize() call - it can be used e.g. if your
   // implementation rely heavily on COM servers - by default, service methods
   // are called within the thread which received them, on multi-thread server
-  // instances (e.g. TSQLite3HttpServer or TRestServerNamedPipeResponse),
+  // instances (e.g. TSqlite3HttpServer or TRestServerNamedPipeResponse),
   // for better response time and CPU use (this is the technical reason why
   // service implementation methods have to handle multi-threading safety
   // carefully, e.g. by using TRTLCriticalSection mutex on purpose)

@@ -7,7 +7,7 @@ unit mormot.db.sql.oracle;
   *****************************************************************************
 
    Oracle Database Access via the OCI High-Performance Library
-    -  TSQLDBOracleConnection* and TSQLDBOracleStatement Classes
+    -  TSqlDBOracleConnection* and TSqlDBOracleStatement Classes
 
   *****************************************************************************
 }
@@ -33,11 +33,11 @@ uses
   mormot.db.sql;
 
 
-{ ************ TSQLDBOracleConnection* and TSQLDBOracleStatement Classes }
+{ ************ TSqlDBOracleConnection* and TSqlDBOracleStatement Classes }
 
 type
   /// will implement properties shared by native Oracle Client Interface connections
-  TSQLDBOracleConnectionProperties = class(TSQLDBConnectionPropertiesThreadSafe)
+  TSqlDBOracleConnectionProperties = class(TSqlDBConnectionPropertiesThreadSafe)
   protected
     fRowsPrefetchSize: integer;
     fBlobPrefetchSize: integer;
@@ -67,15 +67,15 @@ type
     // - call this method if the shared MainConnection is not enough (e.g. for
     // multi-thread access)
     // - the caller is responsible of freeing this instance
-    // - this overridden method will create an TSQLDBOracleConnection instance
-    function NewConnection: TSQLDBConnection; override;
+    // - this overridden method will create an TSqlDBOracleConnection instance
+    function NewConnection: TSqlDBConnection; override;
     /// extract the TNS listener name from a Oracle full connection string
     // - e.g. ExtractTnsName('1.2.3.4:1521/dbname') returns 'dbname'
     class function ExtractTnsName(const aServerName: RawUTF8): RawUTF8;
     /// determine if the SQL statement can be cached
     // - always returns false, to force server-side caching only on this driver
     function IsCachable(P: PUTF8Char): boolean; override;
-    function SQLLimitClause(AStmt: TSelectStatement): TSQLDBDefinitionLimitClause; override;
+    function SQLLimitClause(AStmt: TSelectStatement): TSqlDBDefinitionLimitClause; override;
   published
     /// returns the Client version e.g. 'oci.dll rev. 11.2.0.1'
     property ClientVersion: RawUTF8
@@ -83,7 +83,7 @@ type
     /// the OCI initialization mode used for the connection
     // - equals OCI_EVENTS or OCI_THREADED by default, since will likely be
     // used in a multi-threaded context (even if this class is inheriting from
-    // TSQLDBConnectionPropertiesThreadSafe), and  OCI_EVENTS is needed to support
+    // TSqlDBConnectionPropertiesThreadSafe), and  OCI_EVENTS is needed to support
     // Oracle RAC Connection Load Balancing
     // - can be tuned depending on the configuration or the Oracle version
     property EnvironmentInitializationMode: integer
@@ -119,7 +119,7 @@ type
     /// When we execute a SELECT statement across a database link, a transaction lock is placed
     // on the undo segments (transaction is implicity started).
     // Setting this options to true allow to ignore ORA-01453 during
-    // TSQLDBOracleConnection.StartTransaction call.
+    // TSqlDBOracleConnection.StartTransaction call.
     // - see Oracle documentation
     // http://docs.oracle.com/cd/B28359_01/server.111/b28310/ds_appdev002.htm
     property IgnoreORA01453OnStartTransaction: boolean
@@ -127,7 +127,7 @@ type
   end;
 
   /// implements a direct connection to the native Oracle Client Interface (OCI)
-  TSQLDBOracleConnection = class(TSQLDBConnectionThreadSafe)
+  TSqlDBOracleConnection = class(TSqlDBConnectionThreadSafe)
   protected
     fEnv: pointer;
     fError: pointer;
@@ -148,7 +148,7 @@ type
     {$endif}
   public
     /// prepare a connection to a specified Oracle database server
-    constructor Create(aProperties: TSQLDBConnectionProperties); override;
+    constructor Create(aProperties: TSqlDBConnectionProperties); override;
     /// release memory and connection
     destructor Destroy; override;
     /// connect to the specified Oracle database server
@@ -170,11 +170,11 @@ type
     // how many statements are to be cached - not that IsCachable() has been
     // overriden to return false, so statement cache on client side is disabled
     // - the caller should free the instance after use
-    function NewStatement: TSQLDBStatement; override;
+    function NewStatement: TSqlDBStatement; override;
     /// begin a Transaction for this connection
     // - current implementation do not support nested transaction with those
     // methods: exception will be raised in such case
-    // - by default, TSQLDBOracleStatement works in AutoCommit mode, unless
+    // - by default, TSqlDBOracleStatement works in AutoCommit mode, unless
     // StartTransaction is called
     procedure StartTransaction; override;
     /// commit changes of a Transaction for this connection
@@ -197,13 +197,13 @@ type
   // - you can also bind an TInt64DynArray or TRawUTF8DynArray as parameter to
   // be assigned later as an OCI_OBJECT so that you may write such statements:
   // ! var arr: TInt64DynArray = [1, 2, 3];
-  // ! Query := TSQLDBOracleConnectionProperties.NewThreadSafeStatementPrepared(
+  // ! Query := TSqlDBOracleConnectionProperties.NewThreadSafeStatementPrepared(
   // !   'select * from table where table.id in '+
   // !     '(select column_value from table(cast(? as SYS.ODCINUMBERLIST)))');
   // ! Query.BindArray(1,arr);
   // ! Query.ExecutePrepared;
   // (use SYS.ODCIVARCHAR2LIST type cast for TRawUTF8DynArray values)
-  TSQLDBOracleStatement = class(TSQLDBStatementWithParamsAndColumns)
+  TSqlDBOracleStatement = class(TSqlDBStatementWithParamsAndColumns)
   protected
     fStatement: pointer;
     fError: pointer;
@@ -223,21 +223,21 @@ type
     procedure FreeHandles(AfterError: boolean);
     procedure FetchTest(Status: integer);
     /// Col=0...fColumnCount-1
-    function GetCol(Col: integer; out Column: PSQLDBColumnProperty): pointer;
+    function GetCol(Col: integer; out Column: PSqlDBColumnProperty): pointer;
     // called by Prepare and CreateFromExistingStatement
     procedure SetColumnsForPreparedStatement;
     // called by Step and CreateFromExistingStatement
     procedure FetchRows;
   public
     /// create an OCI statement instance, from an existing OCI connection
-    // - the Execute method can be called once per TSQLDBOracleStatement instance,
+    // - the Execute method can be called once per TSqlDBOracleStatement instance,
     // but you can use the Prepare once followed by several  ExecutePrepared methods
     // - if the supplied connection is not of TOleDBConnection type, will raise
     //   an exception
-    constructor Create(aConnection: TSQLDBConnection); override;
+    constructor Create(aConnection: TSqlDBConnection); override;
     /// initialize the class from an existing OCI statement (and connection)
     // - to be called e.g. by ColumnCursor() for SQLT_RSET kind of column
-    constructor CreateFromExistingStatement(aConnection: TSQLDBConnection; aStatement: pointer);
+    constructor CreateFromExistingStatement(aConnection: TSqlDBConnection; aStatement: pointer);
     /// release all associated memory and OCI handles
     destructor Destroy; override;
 
@@ -245,7 +245,7 @@ type
     // - parameters marked as ? will be bound later, before ExecutePrepared call
     // - if ExpectResults is TRUE, then Step() and Column*() methods are available
     // to retrieve the data rows
-    // - raise an ESQLDBOracle on any error
+    // - raise an ESqlDBOracle on any error
     // - if aSQL requires a trailing ';', you should end it with ';;' e.g. for
     // $ DB.ExecuteNoResult(
     // $  'CREATE OR REPLACE FUNCTION ORA_POC(MAIN_TABLE IN VARCHAR2, REC_COUNT IN NUMBER, BATCH_SIZE IN NUMBER) RETURN VARCHAR2' +
@@ -254,7 +254,7 @@ type
     procedure Prepare(const aSQL: RawUTF8; ExpectResults: boolean = false); overload; override;
     /// Execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
-    // - raise an ESQLDBOracle on any error
+    // - raise an ESqlDBOracle on any error
     procedure ExecutePrepared; override;
 
     /// After a statement has been prepared via Prepare() + ExecutePrepared() or
@@ -266,7 +266,7 @@ type
     // - access the first or next row of data from the SQL Statement result:
     // if SeekFirst is TRUE, will put the cursor on the first row of results,
     // otherwise, it will fetch one row of data, to be called within a loop
-    // - raise an ESQLDBOracle on any error
+    // - raise an ESqlDBOracle on any error
     function Step(SeekFirst: boolean = false): boolean; override;
     /// finalize the OCI cursor resources - not implemented yet
     procedure ReleaseRows; override;
@@ -305,8 +305,8 @@ type
     // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
     // since Delphi 2009: you may not loose any data during charset conversion
     // - a ftBlob content will be mapped into a TBlobData AnsiString variant
-    function ColumnToVariant(Col: integer; var Value: Variant): TSQLDBFieldType; override;
-    /// return a Column as a TSQLVar value, first Col is 0
+    function ColumnToVariant(Col: integer; var Value: Variant): TSqlDBFieldType; override;
+    /// return a Column as a TSqlVar value, first Col is 0
     // - the specified Temp variable will be used for temporary storage of
     // svtUTF8/svtBlob values
     // - this implementation will retrieve the data with no temporary variable,
@@ -314,7 +314,7 @@ type
     // the memory buffers returned by OCI: it will ensure best performance
     // possible when called from TOrmVirtualTableCursorExternal.Column method
     // as defined in mormot.orm.sql unit (i.e. mORMot external DB access)
-    procedure ColumnToSQLVar(Col: integer; var Value: TSQLVar;
+    procedure ColumnToSQLVar(Col: integer; var Value: TSqlVar;
       var Temp: RawByteString); override;
     /// append all columns values of the current Row to a JSON stream
     // - will use WR.Expand to guess the expected output format
@@ -359,11 +359,11 @@ uses
   mormot.db.raw.oracle; // defines raw OCI library API
 
 
-{ ************ TSQLDBOracleConnection* and TSQLDBOracleStatement Classes }
+{ ************ TSqlDBOracleConnection* and TSqlDBOracleStatement Classes }
 
-{ TSQLDBOracleConnectionProperties }
+{ TSqlDBOracleConnectionProperties }
 
-class function TSQLDBOracleConnectionProperties.ExtractTnsName(const aServerName: RawUTF8): RawUTF8;
+class function TSqlDBOracleConnectionProperties.ExtractTnsName(const aServerName: RawUTF8): RawUTF8;
 var
   i: integer;
 begin
@@ -374,12 +374,12 @@ begin
     result := copy(aServerName, i + 1, 100);
 end;
 
-function TSQLDBOracleConnectionProperties.IsCachable(P: PUTF8Char): boolean;
+function TSqlDBOracleConnectionProperties.IsCachable(P: PUTF8Char): boolean;
 begin
   result := false; // no client-side cache, only server-side
 end;
 
-constructor TSQLDBOracleConnectionProperties.Create(const aServerName,
+constructor TSqlDBOracleConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUTF8);
 begin
   fDBMS := dOracle;
@@ -391,7 +391,7 @@ begin
     GlobalLock;
     try
       if OCI = nil then
-        OCI := TSQLDBOracleLib.Create;
+        OCI := TSqlDBOracleLib.Create;
     finally
       GlobalUnLock;
     end;
@@ -403,12 +403,12 @@ begin
   fEnvironmentInitializationMode := OCI_EVENTS or OCI_THREADED or OCI_OBJECT;
 end;
 
-function TSQLDBOracleConnectionProperties.GetClientVersion: RawUTF8;
+function TSqlDBOracleConnectionProperties.GetClientVersion: RawUTF8;
 begin
   result := OCI.ClientRevision;
 end;
 
-procedure TSQLDBOracleConnectionProperties.GetForeignKeys;
+procedure TSqlDBOracleConnectionProperties.GetForeignKeys;
 begin
   with Execute('select b.owner||''.''||b.table_name||''.''||b.column_name col,' +
     '  c.owner||''.''||c.table_name||''.''||c.column_name ref' +
@@ -420,12 +420,12 @@ begin
       fForeignKeys.Add(ColumnUTF8(0), ColumnUTF8(1));
 end;
 
-function TSQLDBOracleConnectionProperties.NewConnection: TSQLDBConnection;
+function TSqlDBOracleConnectionProperties.NewConnection: TSqlDBConnection;
 begin
-  result := TSQLDBOracleConnection.Create(self);
+  result := TSqlDBOracleConnection.Create(self);
 end;
 
-procedure TSQLDBOracleConnectionProperties.PasswordChanged(
+procedure TSqlDBOracleConnectionProperties.PasswordChanged(
   const ANewPassword: RawUTF8);
 begin
   SynDBLog.Add.Log(sllDB, 'PasswordChanged method called', self);
@@ -434,8 +434,8 @@ begin
     FOnPasswordChanged(Self);
 end;
 
-function TSQLDBOracleConnectionProperties.SQLLimitClause(
-  AStmt: TSelectStatement): TSQLDBDefinitionLimitClause;
+function TSqlDBOracleConnectionProperties.SQLLimitClause(
+  AStmt: TSelectStatement): TSqlDBDefinitionLimitClause;
 begin
   if AStmt.OrderByField <> nil then
   begin
@@ -447,13 +447,13 @@ begin
 end;
 
 
-{ TSQLDBOracleConnection }
+{ TSqlDBOracleConnection }
 
-procedure TSQLDBOracleConnection.Commit;
+procedure TSqlDBOracleConnection.Commit;
 begin
   inherited Commit;
   if fTrans = nil then
-    raise ESQLDBOracle.CreateUTF8('Invalid %.Commit call', [self]);
+    raise ESqlDBOracle.CreateUTF8('Invalid %.Commit call', [self]);
   try
     OCI.Check(self, nil, OCI.TransCommit(fContext, fError, OCI_DEFAULT), fError);
   except
@@ -462,10 +462,10 @@ begin
   end;
 end;
 
-procedure TSQLDBOracleConnection.Connect;
+procedure TSqlDBOracleConnection.Connect;
 var
   log: ISynLog;
-  Props: TSQLDBOracleConnectionProperties;
+  Props: TSqlDBOracleConnectionProperties;
   mode: ub4;
   msg: RawUTF8;
   r: sword;
@@ -478,7 +478,7 @@ const
 begin
   log := SynDBLog.Enter(self, 'Connect');
   Disconnect; // force fTrans=fError=fServer=fContext=nil
-  Props := Properties as TSQLDBOracleConnectionProperties;
+  Props := Properties as TSqlDBOracleConnectionProperties;
   with OCI do
   try
     if fEnv = nil then
@@ -488,7 +488,7 @@ begin
       r := EnvNlsCreate(fEnv, Props.EnvironmentInitializationMode, nil, nil, nil,
         nil, 0, nil, OCI_CHARSET_UTF8, OCI_CHARSET_UTF8);
       if r <> OCI_SUCCESS then
-        raise ESQLDBOracle.CreateUTF8('OCIEnvNlsCreate fails with code %', [r]);
+        raise ESqlDBOracle.CreateUTF8('OCIEnvNlsCreate fails with code %', [r]);
     end;
     HandleAlloc(fEnv, fError, OCI_HTYPE_ERROR);
     HandleAlloc(fEnv, fServer, OCI_HTYPE_SERVER);
@@ -580,17 +580,17 @@ begin
   end;
 end;
 
-constructor TSQLDBOracleConnection.Create(aProperties: TSQLDBConnectionProperties);
+constructor TSqlDBOracleConnection.Create(aProperties: TSqlDBConnectionProperties);
 var
   log: ISynLog;
 begin
   log := SynDBLog.Enter(self, 'Create');
-  if not aProperties.InheritsFrom(TSQLDBOracleConnectionProperties) then
-    raise ESQLDBOracle.CreateUTF8('Invalid %.Create(%)', [self, aProperties]);
+  if not aProperties.InheritsFrom(TSqlDBOracleConnectionProperties) then
+    raise ESqlDBOracle.CreateUTF8('Invalid %.Create(%)', [self, aProperties]);
   inherited Create(aProperties);
 end;
 
-destructor TSQLDBOracleConnection.Destroy;
+destructor TSqlDBOracleConnection.Destroy;
 begin
   inherited Destroy;
   if (OCI <> nil) and
@@ -598,7 +598,7 @@ begin
     OCI.HandleFree(fEnv, OCI_HTYPE_ENV);
 end;
 
-procedure TSQLDBOracleConnection.Disconnect;
+procedure TSqlDBOracleConnection.Disconnect;
 begin
   try
     inherited Disconnect; // flush any cached statement
@@ -629,64 +629,64 @@ begin
   end;
 end;
 
-function TSQLDBOracleConnection.IsConnected: boolean;
+function TSqlDBOracleConnection.IsConnected: boolean;
 begin
   result := fTrans <> nil;
 end;
 
-function TSQLDBOracleConnection.NewStatement: TSQLDBStatement;
+function TSqlDBOracleConnection.NewStatement: TSqlDBStatement;
 begin
-  result := TSQLDBOracleStatement.Create(self);
+  result := TSqlDBOracleStatement.Create(self);
   if fProperties.UseCache then // client-side cache is disabled in this unit
-    TSQLDBOracleStatement(result).fUseServerSideStatementCache := true;
+    TSqlDBOracleStatement(result).fUseServerSideStatementCache := true;
 end;
 
-function TSQLDBOracleConnection.PasswordChange: boolean;
+function TSqlDBOracleConnection.PasswordChange: boolean;
 var
   password: RawUTF8;
 begin
   result := False;
-  if Properties is TSQLDBOracleConnectionProperties then
-    if Assigned(TSQLDBOracleConnectionProperties(Properties).OnPasswordExpired) then
+  if Properties is TSqlDBOracleConnectionProperties then
+    if Assigned(TSqlDBOracleConnectionProperties(Properties).OnPasswordExpired) then
     begin
       password := Properties.PassWord;
-      if TSQLDBOracleConnectionProperties(Properties).OnPasswordExpired(Self,
+      if TSqlDBOracleConnectionProperties(Properties).OnPasswordExpired(Self,
         password) then
         OCI.Check(Self, nil, OCI.PasswordChange(fContext, fError, pointer(Properties.UserID),
           Length(Properties.UserID), Pointer(Properties.PassWord), Length(Properties.PassWord),
           Pointer(password), Length(password), OCI_DEFAULT or OCI_AUTH), fError);
-      TSQLDBOracleConnectionProperties(Properties).PasswordChanged(password);
+      TSqlDBOracleConnectionProperties(Properties).PasswordChanged(password);
       result := True;
     end;
 end;
 
-procedure TSQLDBOracleConnection.Rollback;
+procedure TSqlDBOracleConnection.Rollback;
 begin
   inherited;
   if fTrans = nil then
-    raise ESQLDBOracle.CreateUTF8('Invalid %.RollBack call', [self]);
+    raise ESqlDBOracle.CreateUTF8('Invalid %.RollBack call', [self]);
   OCI.Check(self, nil, OCI.TransRollback(fContext, fError, OCI_DEFAULT), fError);
 end;
 
-procedure TSQLDBOracleConnection.StartTransaction;
+procedure TSqlDBOracleConnection.StartTransaction;
 var
   log: ISynLog;
 begin
   log := SynDBLog.Enter(self, 'StartTransaction');
   if TransactionCount > 0 then
-    raise ESQLDBOracle.CreateUTF8('Invalid %.StartTransaction: nested ' +
+    raise ESqlDBOracle.CreateUTF8('Invalid %.StartTransaction: nested ' +
       'transactions are not supported by the Oracle driver', [self]);
   try
     inherited StartTransaction;
     if fTrans = nil then
-      raise ESQLDBOracle.CreateUTF8('Invalid %.StartTransaction call', [self]);
+      raise ESqlDBOracle.CreateUTF8('Invalid %.StartTransaction call', [self]);
     // Oracle creates implicit transactions, and we'll handle AutoCommit in
-    // TSQLDBOracleStatement.ExecutePrepared if TransactionCount=0
+    // TSqlDBOracleStatement.ExecutePrepared if TransactionCount=0
     OCI.Check(self, nil, OCI.TransStart(fContext, fError, 0, OCI_DEFAULT), fError);
   except
     on E: Exception do
     begin
-      if (Properties as TSQLDBOracleConnectionProperties).
+      if (Properties as TSqlDBOracleConnectionProperties).
           IgnoreORA01453OnStartTransaction and
          (Pos('ORA-01453', E.Message) > 0) then
       begin
@@ -704,7 +704,7 @@ begin
   end;
 end;
 
-procedure TSQLDBOracleConnection.STRToUTF8(P: PAnsiChar; var result: RawUTF8;
+procedure TSqlDBOracleConnection.STRToUTF8(P: PAnsiChar; var result: RawUTF8;
   ColumnDBCharSet, ColumnDBForm: cardinal);
 var
   L: integer;
@@ -720,7 +720,7 @@ begin
 end;
 
 {$ifndef UNICODE}
-procedure TSQLDBOracleConnection.STRToAnsiString(P: PAnsiChar;
+procedure TSqlDBOracleConnection.STRToAnsiString(P: PAnsiChar;
   var result: AnsiString; ColumnDBCharSet, ColumnDBForm: cardinal);
 var
   L: integer;
@@ -738,11 +738,11 @@ end;
 {$endif UNICODE}
 
 
-{ TSQLDBOracleStatement }
+{ TSqlDBOracleStatement }
 
-function TSQLDBOracleStatement.ColumnBlob(Col: integer): RawByteString;
+function TSqlDBOracleStatement.ColumnBlob(Col: integer): RawByteString;
 var
-  C: PSQLDBColumnProperty;
+  C: PSqlDBColumnProperty;
   V: PPOCIDescriptor;
 begin
   V := GetCol(Col, C);
@@ -752,15 +752,15 @@ begin
     if C^.ColumnValueInlined then
       SetString(result, PAnsiChar(V), C^.ColumnValueDBSize)
     else        // conversion from POCILobLocator
-      with TSQLDBOracleConnection(Connection) do
+      with TSqlDBOracleConnection(Connection) do
         OCI.BlobFromDescriptor(self, fContext, fError, V^, result)
   else      // need conversion to destination type
     ColumnToTypedValue(Col, ftBlob, result);
 end;
 
-function TSQLDBOracleStatement.ColumnBlobBytes(Col: integer): TBytes;
+function TSqlDBOracleStatement.ColumnBlobBytes(Col: integer): TBytes;
 var
-  C: PSQLDBColumnProperty;
+  C: PSqlDBColumnProperty;
   V: PPOCIDescriptor;
 begin
   V := GetCol(Col, C);
@@ -773,15 +773,15 @@ begin
       MoveFast(V^, pointer(result)^, C^.ColumnValueDBSize);
     end
     else        // conversion from POCILobLocator
-      with TSQLDBOracleConnection(Connection) do
+      with TSqlDBOracleConnection(Connection) do
         OCI.BlobFromDescriptor(self, fContext, fError, V^, result)
   else      // need conversion to destination type
     result := inherited ColumnBlobBytes(Col);
 end;
 
-procedure TSQLDBOracleStatement.ColumnBlobToStream(Col: integer; Stream: TStream);
+procedure TSqlDBOracleStatement.ColumnBlobToStream(Col: integer; Stream: TStream);
 var
-  C: PSQLDBColumnProperty;
+  C: PSqlDBColumnProperty;
   V: PPOCIDescriptor;
 begin
   V := GetCol(Col, C);
@@ -790,13 +790,13 @@ begin
       if C^.ColumnValueInlined then
         Stream.WriteBuffer(V^, C^.ColumnValueDBSize)
       else        // conversion from POCILobLocator
-        with TSQLDBOracleConnection(Connection) do
+        with TSqlDBOracleConnection(Connection) do
           OCI.BlobFromDescriptorToStream(self, fContext, fError, V^, Stream);
 end;
 
-procedure TSQLDBOracleStatement.ColumnBlobFromStream(Col: integer; Stream: TStream);
+procedure TSqlDBOracleStatement.ColumnBlobFromStream(Col: integer; Stream: TStream);
 var
-  C: PSQLDBColumnProperty;
+  C: PSqlDBColumnProperty;
   V: PPOCIDescriptor;
 begin
   V := GetCol(Col, C);
@@ -804,20 +804,20 @@ begin
   begin // V=nil means column is NULL
     if C^.ColumnType = ftBlob then
       if C^.ColumnValueInlined then
-        raise ESQLDBOracle.CreateUTF8('%.ColumnBlobFromStream(ColumnValueInlined) '
+        raise ESqlDBOracle.CreateUTF8('%.ColumnBlobFromStream(ColumnValueInlined) '
           + 'not supported', [self])
       else        // conversion from POCILobLocator
-        with TSQLDBOracleConnection(Connection) do
+        with TSqlDBOracleConnection(Connection) do
           OCI.BlobToDescriptorFromStream(self, fContext, fError, V^, Stream);
   end
   else
-    raise ESQLDBOracle.CreateUTF8('Unexpected %.ColumnBlobFromStream(null): ' +
+    raise ESqlDBOracle.CreateUTF8('Unexpected %.ColumnBlobFromStream(null): ' +
       'use EMPTY_BLOB() to initialize it', [self]);
 end;
 
-function TSQLDBOracleStatement.ColumnCurrency(Col: integer): currency;
+function TSqlDBOracleStatement.ColumnCurrency(Col: integer): currency;
 var
-  C: PSQLDBColumnProperty;
+  C: PSqlDBColumnProperty;
   V: PUTF8Char;
 begin
   V := GetCol(Col, C);
@@ -829,9 +829,9 @@ begin
     ColumnToTypedValue(Col, ftCurrency, result);
 end;
 
-function TSQLDBOracleStatement.ColumnDateTime(Col: integer): TDateTime;
+function TSqlDBOracleStatement.ColumnDateTime(Col: integer): TDateTime;
 var
-  C: PSQLDBColumnProperty;
+  C: PSqlDBColumnProperty;
   V: POracleDate;
 begin
   V := GetCol(Col, C);
@@ -849,9 +849,9 @@ begin
     ColumnToTypedValue(Col, ftDate, result);
 end;
 
-function TSQLDBOracleStatement.ColumnDouble(Col: integer): double;
+function TSqlDBOracleStatement.ColumnDouble(Col: integer): double;
 var
-  C: PSQLDBColumnProperty;
+  C: PSqlDBColumnProperty;
   V: pointer;
   Curr: currency;
 begin
@@ -875,9 +875,9 @@ begin
     end;
 end;
 
-function TSQLDBOracleStatement.ColumnInt(Col: integer): Int64;
+function TSqlDBOracleStatement.ColumnInt(Col: integer): Int64;
 var
-  C: PSQLDBColumnProperty;
+  C: PSqlDBColumnProperty;
   V: pointer;
 begin
   V := GetCol(Col, C);
@@ -897,14 +897,14 @@ begin
     end;
 end;
 
-function TSQLDBOracleStatement.ColumnNull(Col: integer): boolean;
+function TSqlDBOracleStatement.ColumnNull(Col: integer): boolean;
 var
-  C: PSQLDBColumnProperty;
+  C: PSqlDBColumnProperty;
 begin
   result := GetCol(Col, C) = nil;
 end;
 
-procedure TSQLDBOracleStatement.ColumnsToJSON(WR: TJSONWriter);
+procedure TSqlDBOracleStatement.ColumnsToJSON(WR: TJSONWriter);
 var
   V: pointer;
   col, indicator: integer;
@@ -914,7 +914,7 @@ begin
   // dedicated version to avoid as much memory allocation than possible
   if not Assigned(fStatement) or
       (CurrentRow <= 0) then
-    raise ESQLDBOracle.CreateUTF8('%.ColumnsToJSON() with no prior Step', [self]);
+    raise ESqlDBOracle.CreateUTF8('%.ColumnsToJSON() with no prior Step', [self]);
   if WR.Expand then
     WR.Add('{');
   for col := 0 to fColumnCount - 1 do // fast direct conversion from OleDB buffer
@@ -954,7 +954,7 @@ begin
           ftUTF8:
             begin
               WR.Add('"');
-              with TSQLDBOracleConnection(Connection) do
+              with TSqlDBOracleConnection(Connection) do
                 if ColumnValueInlined then
                   STRToUTF8(V, U, ColumnValueDBCharSet, ColumnValueDBForm)
                 else
@@ -970,7 +970,7 @@ begin
               SetString(U, PAnsiChar(V), ColumnValueDBSize)
             else
             begin
-              with TSQLDBOracleConnection(Connection) do
+              with TSqlDBOracleConnection(Connection) do
                 OCI.BlobFromDescriptor(self, fContext, fError, PPOCIDescriptor(V)
                   ^, RawByteString(U));
               WR.WrBase64(Pointer(U), length(U), true);
@@ -986,10 +986,10 @@ begin
     WR.Add('}');
 end;
 
-procedure TSQLDBOracleStatement.ColumnToSQLVar(Col: integer; var Value: TSQLVar;
+procedure TSqlDBOracleStatement.ColumnToSQLVar(Col: integer; var Value: TSqlVar;
   var Temp: RawByteString);
 var
-  C: PSQLDBColumnProperty;
+  C: PSqlDBColumnProperty;
   V: pointer;
   NoDecimal: boolean;
 begin
@@ -1023,7 +1023,7 @@ begin
         Value.VDateTime := IntervalTextToDateTime(V);
     ftUTF8:
       begin
-        with TSQLDBOracleConnection(Connection) do
+        with TSqlDBOracleConnection(Connection) do
           if C^.ColumnValueInlined then
             STRToUTF8(V, RawUTF8(Temp), C^.ColumnValueDBCharSet, C^.ColumnValueDBForm)
           else
@@ -1043,21 +1043,21 @@ begin
         if C^.ColumnValueInlined then
           SetString(Temp, PAnsiChar(V), C^.ColumnValueDBSize)
         else
-          with TSQLDBOracleConnection(Connection) do
+          with TSqlDBOracleConnection(Connection) do
             OCI.BlobFromDescriptor(self, fContext, fError, PPOCIDescriptor(V)^, Temp);
         Value.VBlob := pointer(Temp);
         Value.VBlobLen := length(Temp);
       end;
   else
-    raise ESQLDBOracle.CreateUTF8('%.ColumnToSQLVar: unexpected VType=%', [self,
+    raise ESqlDBOracle.CreateUTF8('%.ColumnToSQLVar: unexpected VType=%', [self,
       ord(Value.VType)]);
   end;
 end;
 
-function TSQLDBOracleStatement.ColumnToVariant(Col: integer; var Value: Variant):
-  TSQLDBFieldType;
+function TSqlDBOracleStatement.ColumnToVariant(Col: integer; var Value: Variant):
+  TSqlDBFieldType;
 var
-  C: PSQLDBColumnProperty;
+  C: PSqlDBColumnProperty;
   V: pointer;
   tmp: RawUTF8;
   NoDecimal: boolean;
@@ -1097,9 +1097,9 @@ begin
         else // direct retrieval
           IntervalTextToDateTimeVar(V, VDate); // from SQLT_INTERVAL_* text
       ftUTF8:
-        begin // see TSQLDBStatement.ColumnToVariant() for reference
+        begin // see TSqlDBStatement.ColumnToVariant() for reference
           VAny := nil;
-          with TSQLDBOracleConnection(Connection) do
+          with TSqlDBOracleConnection(Connection) do
             if C^.ColumnValueInlined then
           {$ifndef UNICODE}
               if not Connection.Properties.VariantStringAsWideString then
@@ -1130,27 +1130,27 @@ begin
           if C^.ColumnValueInlined then
             SetString(RawByteString(VAny), PAnsiChar(V), C^.ColumnValueDBSize)
           else
-            with TSQLDBOracleConnection(Connection) do
+            with TSqlDBOracleConnection(Connection) do
               OCI.BlobFromDescriptor(self, fContext, fError, PPOCIDescriptor(V)^,
                 RawByteString(VAny));
         end;
     else
-      raise ESQLDBOracle.CreateUTF8('%.ColumnToVariant: unexpected % type', [self,
+      raise ESqlDBOracle.CreateUTF8('%.ColumnToVariant: unexpected % type', [self,
         ord(result)]);
     end;
   end;
 end;
 
-function TSQLDBOracleStatement.ColumnUTF8(Col: integer): RawUTF8;
+function TSqlDBOracleStatement.ColumnUTF8(Col: integer): RawUTF8;
 var
-  C: PSQLDBColumnProperty;
+  C: PSqlDBColumnProperty;
   V: PAnsiChar;
 begin
   V := GetCol(Col, C);
   if V = nil then // column is NULL
     result := ''
   else if C^.ColumnType = ftUTF8 then
-    with TSQLDBOracleConnection(Connection) do
+    with TSqlDBOracleConnection(Connection) do
       if C^.ColumnValueInlined then
         // conversion from SQLT_STR (null-terminated string)
         STRToUTF8(V, result, C^.ColumnValueDBCharSet, C^.ColumnValueDBForm)
@@ -1162,9 +1162,9 @@ begin
     ColumnToTypedValue(Col, ftUTF8, result);
 end;
 
-function TSQLDBOracleStatement.ColumnCursor(Col: integer): ISQLDBRows;
+function TSqlDBOracleStatement.ColumnCursor(Col: integer): ISQLDBRows;
 var
-  C: PSQLDBColumnProperty;
+  C: PSqlDBColumnProperty;
   V: PAnsiChar;
 begin
   result := nil;
@@ -1172,7 +1172,7 @@ begin
   if V <> nil then // column is NULL
     if C^.ColumnValueDBType = SQLT_RSET then
     begin
-      result := TSQLDBOracleStatement.CreateFromExistingStatement(Connection,
+      result := TSqlDBOracleStatement.CreateFromExistingStatement(Connection,
         PPointer(V)^);
       PPointer(V)^ := nil; // caller will release the POCIStmt instance with its ISQLDBRows
     end
@@ -1180,34 +1180,34 @@ begin
       result := inherited ColumnCursor(Col); // will raise an exception
 end;
 
-procedure TSQLDBOracleStatement.BindCursor(Param: integer);
+procedure TSqlDBOracleStatement.BindCursor(Param: integer);
 begin
   CheckParam(Param, ftUnknown, paramOut); // ftUnknown+paramOut indicate SQLT_RSET
 end;
 
-function TSQLDBOracleStatement.BoundCursor(Param: integer): ISQLDBRows;
+function TSqlDBOracleStatement.BoundCursor(Param: integer): ISQLDBRows;
 begin
   dec(Param);
   if (cardinal(Param) >= cardinal(length(fBoundCursor))) or
      (fBoundCursor[Param] = nil) then
-    raise ESQLDBOracle.CreateUTF8('%.BoundCursor: no BindCursor() on Param #%',
+    raise ESqlDBOracle.CreateUTF8('%.BoundCursor: no BindCursor() on Param #%',
       [self, Param + 1]);
-  result := TSQLDBOracleStatement.CreateFromExistingStatement(
+  result := TSqlDBOracleStatement.CreateFromExistingStatement(
     Connection, fBoundCursor[Param]);
   fBoundCursor[Param] := nil;
 end;
 
-constructor TSQLDBOracleStatement.Create(aConnection: TSQLDBConnection);
+constructor TSqlDBOracleStatement.Create(aConnection: TSqlDBConnection);
 begin
-  if not aConnection.InheritsFrom(TSQLDBOracleConnection) then
-    raise ESQLDBOracle.CreateUTF8('Invalid %.Create(%) call', [self, aConnection]);
+  if not aConnection.InheritsFrom(TSqlDBOracleConnection) then
+    raise ESqlDBOracle.CreateUTF8('Invalid %.Create(%) call', [self, aConnection]);
   inherited Create(aConnection);
-  fInternalBufferSize := TSQLDBOracleConnectionProperties(aConnection.Properties).InternalBufferSize;
+  fInternalBufferSize := TSqlDBOracleConnectionProperties(aConnection.Properties).InternalBufferSize;
   if fInternalBufferSize < 16384 then // default is 128 KB
     fInternalBufferSize := 16384; // minimal value
 end;
 
-destructor TSQLDBOracleStatement.Destroy;
+destructor TSqlDBOracleStatement.Destroy;
 begin
   try
     fTimeElapsed.Resume;
@@ -1221,8 +1221,8 @@ begin
   end;
 end;
 
-constructor TSQLDBOracleStatement.CreateFromExistingStatement(aConnection:
-  TSQLDBConnection; aStatement: pointer);
+constructor TSqlDBOracleStatement.CreateFromExistingStatement(aConnection:
+  TSqlDBConnection; aStatement: pointer);
 begin
   Create(aConnection);
   fTimeElapsed.Resume;
@@ -1249,7 +1249,7 @@ begin
   end;
 end;
 
-procedure TSQLDBOracleStatement.FetchRows;
+procedure TSqlDBOracleStatement.FetchRows;
 var
   status: integer;
 begin
@@ -1297,12 +1297,12 @@ const
   /// 32 MB of data sent at once sounds enough
   MAX_INLINED_PARAM_SIZE = 32 * 1024 * 1024;
 
-procedure TSQLDBOracleStatement.ExecutePrepared;
+procedure TSqlDBOracleStatement.ExecutePrepared;
 var
   i, j: PtrInt;
   Env: POCIEnv;
   Context: POCISvcCtx;
-  param: PSQLDBParam;
+  param: PSqlDBParam;
   Type_List: POCIType;
   oData: pointer;
   oDataDAT: ^TOracleDateArray absolute oData;
@@ -1328,19 +1328,19 @@ label
   txt;
 begin
   if fStatement = nil then
-    raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared without previous Prepare', [self]);
+    raise ESqlDBOracle.CreateUTF8('%.ExecutePrepared without previous Prepare', [self]);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   SQLLogBegin(sllSQL);
   try
     ociArraysCount := 0;
-    Env := (Connection as TSQLDBOracleConnection).fEnv;
-    Context := TSQLDBOracleConnection(Connection).fContext;
+    Env := (Connection as TSqlDBOracleConnection).fEnv;
+    Context := TSqlDBOracleConnection(Connection).fContext;
     Status := OCI_ERROR;
     try
       fRowFetchedEnded := false;
       // 1. bind parameters
       if fPreparedParamsCount <> fParamCount then
-        raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared expected % bound parameters, got %',
+        raise ESqlDBOracle.CreateUTF8('%.ExecutePrepared expected % bound parameters, got %',
           [self, fPreparedParamsCount, fParamCount]);
       if not fExpectResults then
         fRowCount := 1; // to avoid ORA-24333 error
@@ -1354,10 +1354,10 @@ begin
             with fParams[i] do
             begin
               if VArray = nil then
-                raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared: Parameter #% should be an array',
+                raise ESqlDBOracle.CreateUTF8('%.ExecutePrepared: Parameter #% should be an array',
                   [self, i]);
               if VInt64 <> fParamsArrayCount then
-                raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared: Parameter #% expected array count %, got %',
+                raise ESqlDBOracle.CreateUTF8('%.ExecutePrepared: Parameter #% expected array count %, got %',
                   [self, i, fParamsArrayCount, VInt64]);
               SetLength(aIndicator[i], fParamsArrayCount);
               VDBType := SQLT_STR;
@@ -1407,7 +1407,7 @@ begin
                               oDataDAT^[j].From(PUTF8Char(pointer(VArray[j])) + 1, L)
                           else if L > oLength then
                             if L * fParamsArrayCount > MAX_INLINED_PARAM_SIZE then
-                              raise ESQLDBOracle.CreateUTF8(
+                              raise ESqlDBOracle.CreateUTF8(
                                 '%.ExecutePrepared: Array parameter #% STR too big',
                                 [self, i + 1])
                             else
@@ -1417,7 +1417,7 @@ begin
                         begin
                           L := length(VArray[j]) + sizeof(integer);
                           if L * fParamsArrayCount > MAX_INLINED_PARAM_SIZE then
-                            raise ESQLDBOracle.CreateUTF8(
+                            raise ESqlDBOracle.CreateUTF8(
                               '%.ExecutePrepared: Array parameter #% BLOB too big',
                               [self, i + 1])
                           else if L > oLength then
@@ -1476,14 +1476,14 @@ begin
               param := @fParams[i];
               case param.VType of
                 ftInt64:
-                  Type_List := TSQLDBOracleConnection(Connection).fType_numList;
+                  Type_List := TSqlDBOracleConnection(Connection).fType_numList;
                 ftUTF8:
-                  Type_List := TSQLDBOracleConnection(Connection).fType_strList;
+                  Type_List := TSqlDBOracleConnection(Connection).fType_strList;
               else
                 Type_List := nil;
               end;
               if Type_List = nil then
-                raise ESQLDBOracle.CreateUTF8(
+                raise ESqlDBOracle.CreateUTF8(
                   '%.ExecutePrepared: Unsupported array parameter type #%',
                   [self, i + 1]);
               ociArrays[ociArraysCount] := nil;
@@ -1537,7 +1537,7 @@ begin
                     ftUnknown:
                       begin
                         if VInOut = paramIn then
-                          raise ESQLDBOracle.CreateUTF8(
+                          raise ESqlDBOracle.CreateUTF8(
                             '%.ExecutePrepared: Unexpected IN cursor parameter #%',
                             [self, i + 1]);
                         VDBType := SQLT_RSET;
@@ -1610,7 +1610,7 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
                       end;
                     ftBlob:
                       if VInOut <> paramIn then
-                        raise ESQLDBOracle.CreateUTF8(
+                        raise ESqlDBOracle.CreateUTF8(
                           '%.ExecutePrepared: Unexpected OUT blob parameter #%',
                           [self, i + 1])
                       else
@@ -1625,11 +1625,11 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
                         begin
                           VDBTYPE := SQLT_LVB; // layout: raw data prepended by int32 len
                           {$ifdef FPC_64}
-                          // in case of FPC+CPU64 TSQLDBParam.VData is a RawByteString and
+                          // in case of FPC+CPU64 TSqlDBParam.VData is a RawByteString and
                           // length is stored as SizeInt = Int64 (not int32) -> patch
                           // (no patch needed for Delphi, in which len is always longint)
                           if Length(VData) > MaxInt then
-                            raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared: % ' +
+                            raise ESqlDBOracle.CreateUTF8('%.ExecutePrepared: % ' +
                               'blob length exceeds max size for parameter #%',
                               [self, KB(oLength), i + 1]);
                           UniqueString(VData); // for thread-safety
@@ -1643,7 +1643,7 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
                         end;
                       end;
                   else
-                    raise ESQLDBOracle.CreateUTF8('%.ExecutePrepared: Invalid parameter #% type=%',
+                    raise ESqlDBOracle.CreateUTF8('%.ExecutePrepared: Invalid parameter #% type=%',
                       [self, i + 1, ord(VType)]);
                   end;
                 end;
@@ -1668,7 +1668,7 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
         mode := OCI_COMMIT_ON_SUCCESS
       else        // for SELECT or inside a transaction: wait for an explicit COMMIT
         mode := OCI_DEFAULT;
-      Status := OCI.StmtExecute(TSQLDBOracleConnection(Connection).fContext,
+      Status := OCI.StmtExecute(TSqlDBOracleConnection(Connection).fContext,
         fStatement, fError, fRowCount, 0, nil, nil, mode);
       // 4. check execution error, and retrieve data result range
       FetchTest(Status); // error + set fRowCount+fCurrentRow+fRowFetchedCurrent
@@ -1733,7 +1733,7 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
   end;
 end;
 
-procedure TSQLDBOracleStatement.FetchTest(Status: integer);
+procedure TSqlDBOracleStatement.FetchTest(Status: integer);
 begin
   fRowFetched := 0;
   case Status of
@@ -1766,12 +1766,12 @@ begin
   end;
 end;
 
-function TSQLDBOracleStatement.DateTimeToDescriptor(aDateTime: TDateTime): pointer;
+function TSqlDBOracleStatement.DateTimeToDescriptor(aDateTime: TDateTime): pointer;
 var
   HH, MM, SS, MS, Y, M, D: word;
   env: pointer;
 begin
-  env := (Connection as TSQLDBOracleConnection).fEnv;
+  env := (Connection as TSqlDBOracleConnection).fEnv;
   OCI.Check(nil, self, OCI.DescriptorAlloc(env, result, OCI_DTYPE_TIMESTAMP, 0,
     nil), fError);
   DecodeDate(aDateTime, Y, M, D);
@@ -1787,12 +1787,12 @@ begin
     Y, M, D, HH, MM, SS, 0, nil, 0), fError);
 end;
 
-procedure TSQLDBOracleStatement.ReleaseRows;
+procedure TSqlDBOracleStatement.ReleaseRows;
 begin // not implemented yet
   inherited ReleaseRows;
 end;
 
-procedure TSQLDBOracleStatement.FreeHandles(AfterError: boolean);
+procedure TSqlDBOracleStatement.FreeHandles(AfterError: boolean);
 const // see http://gcov.php.net/PHP_5_3/lcov_html/ext/oci8/oci8_statement.c.gcov.php
   RELEASE_MODE: array[boolean] of integer = (
     OCI_DEFAULT, OCI_STMTCACHE_DELETE);
@@ -1821,7 +1821,7 @@ begin
                   if OCI.HandleFree(P^, OCI_HTYPE_STMT) <> OCI_SUCCESS then
                     SynDBLog.Add.Log(sllError, 'FreeHandles: Invalid SQLT_RSET', self);
               else
-                raise ESQLDBOracle.CreateUTF8(
+                raise ESqlDBOracle.CreateUTF8(
                   '%.FreeHandles: Wrong % type for inlined column %',
                   [self, ColumnValueDBType, ColumnName]);
               end;
@@ -1857,17 +1857,17 @@ begin
     fColumn.Clear;
 end;
 
-function TSQLDBOracleStatement.GetCol(Col: integer; out Column:
-  PSQLDBColumnProperty): pointer;
+function TSqlDBOracleStatement.GetCol(Col: integer; out Column:
+  PSqlDBColumnProperty): pointer;
 begin
   CheckCol(Col); // check Col value  against fColumnCount
   if not Assigned(fStatement) or
      (fColumnCount = 0) or
      (fRowCount = 0) or
      (fRowBuffer = nil) then
-    raise ESQLDBOracle.CreateUTF8('%.Column*() with no prior Execute', [self]);
+    raise ESqlDBOracle.CreateUTF8('%.Column*() with no prior Execute', [self]);
   if CurrentRow <= 0 then
-    raise ESQLDBOracle.CreateUTF8('%.Column*() with no prior Step', [self]);
+    raise ESqlDBOracle.CreateUTF8('%.Column*() with no prior Step', [self]);
   Column := @fColumns[Col];
   result := @fRowBuffer[Column^.ColumnAttr + fRowFetchedCurrent * Column^.ColumnValueDBSize];
   case PSmallIntArray(fRowBuffer)[cardinal(Col) * fRowCount + fRowFetchedCurrent] of
@@ -1881,14 +1881,14 @@ begin
   end;
 end;
 
-function TSQLDBOracleStatement.UpdateCount: integer;
+function TSqlDBOracleStatement.UpdateCount: integer;
 begin
   result := 0;
   if fStatement <> nil then
     OCI.AttrGet(fStatement, OCI_HTYPE_STMT, @result, nil, OCI_ATTR_ROW_COUNT, fError);
 end;
 
-procedure TSQLDBOracleStatement.SetColumnsForPreparedStatement;
+procedure TSqlDBOracleStatement.SetColumnsForPreparedStatement;
 var
   aName: RawUTF8;
   Env: POCIEnv;
@@ -1904,7 +1904,7 @@ var
   PP: PPointer;
   Indicators: PAnsiChar;
 begin
-  Env := (Connection as TSQLDBOracleConnection).fEnv;
+  Env := (Connection as TSqlDBOracleConnection).fEnv;
   with OCI do
   begin
     // 1. ensure fStatement is SELECT
@@ -1912,7 +1912,7 @@ begin
       HandleAlloc(Env, fError, OCI_HTYPE_ERROR);
     AttrGet(fStatement, OCI_HTYPE_STMT, @StatementType, nil, OCI_ATTR_STMT_TYPE, fError);
     if fExpectResults <> (StatementType = OCI_STMT_SELECT) then
-      raise ESQLDBOracle.CreateUTF8(
+      raise ESqlDBOracle.CreateUTF8(
         '%.SetColumnsForPreparedStatement called with ' +
         'ExpectResults=%, whereas StatementType=%',
          [self, ord(fExpectResults), StatementType]);
@@ -1922,7 +1922,7 @@ begin
       exit; // no row data expected -> leave fColumnCount=0
     end;
     // 2. retrieve rows column types
-    Check(nil, self, StmtExecute(TSQLDBOracleConnection(Connection).fContext,
+    Check(nil, self, StmtExecute(TSqlDBOracleConnection(Connection).fContext,
       fStatement, fError, 1, 0, nil, nil, OCI_DESCRIBE_ONLY), fError);
     ColCount := 0;
     AttrGet(fStatement, OCI_HTYPE_STMT, @ColCount, nil, OCI_ATTR_PARAM_COUNT, fError);
@@ -1940,7 +1940,7 @@ begin
         SetString(aName, oName, oNameLen);
       AttrGet(oHandle, OCI_DTYPE_PARAM, @oType, nil, OCI_ATTR_DATA_TYPE, fError);
       AttrGet(oHandle, OCI_DTYPE_PARAM, @oSize, nil, OCI_ATTR_DATA_SIZE, fError);
-      with PSQLDBColumnProperty(fColumn.AddAndMakeUniqueName(aName))^ do
+      with PSqlDBColumnProperty(fColumn.AddAndMakeUniqueName(aName))^ do
       begin
         ColumnValueDBSize := oSize;
         ColumnValueInlined := true;
@@ -2062,7 +2062,7 @@ begin
               include(ColumnLongTypes, hasCURS);
             end;
         else
-          raise ESQLDBOracle.CreateUTF8('% - Column [%]: unknown type %', [self,
+          raise ESqlDBOracle.CreateUTF8('% - Column [%]: unknown type %', [self,
             ColumnName, oType]);
         end;
         inc(RowSize, ColumnValueDBSize);
@@ -2075,7 +2075,7 @@ begin
           case ColumnValueDBForm of
             SQLCS_IMPLICIT:
               begin
-                oCharSet := TSQLDBOracleConnection(Connection).fOCICharSet;
+                oCharSet := TSqlDBOracleConnection(Connection).fOCICharSet;
                 if ColumnValueDBCharSet = SQLCS_IMPLICIT then
                   ColumnValueDBCharSet := oCharSet
                 else if (ColumnValueDBCharSet <> oCharSet) and
@@ -2109,7 +2109,7 @@ begin
       fInternalBufferSize := RowSize + ColCount shl 4;
       fRowCount := 1;
     end
-    else if (TSQLDBOracleConnectionProperties(Connection.Properties).
+    else if (TSqlDBOracleConnectionProperties(Connection.Properties).
                RowsPrefetchSize > 1024) and
             (ColumnLongTypes = []) then
     begin
@@ -2117,7 +2117,7 @@ begin
       Prefetch := 0; // set prefetch by Memory, not by row count
       Check(nil, self, AttrSet(fStatement, OCI_HTYPE_STMT, @Prefetch, 0,
         OCI_ATTR_PREFETCH_ROWS, fError), fError);
-      Prefetch := TSQLDBOracleConnectionProperties(Connection.Properties).RowsPrefetchSize;
+      Prefetch := TSqlDBOracleConnectionProperties(Connection.Properties).RowsPrefetchSize;
       Check(nil, self, AttrSet(fStatement, OCI_HTYPE_STMT, @Prefetch, 0,
         OCI_ATTR_PREFETCH_MEMORY, fError), fError);
     end;
@@ -2147,7 +2147,7 @@ begin
               SQLT_RSET:
                 Check(nil, self, HandleAlloc(Env, PP^, OCI_HTYPE_STMT, 0, nil), fError);
             else
-              raise ESQLDBOracle.CreateUTF8('%: Wrong % type for %', [self,
+              raise ESqlDBOracle.CreateUTF8('%: Wrong % type for %', [self,
                 ColumnValueDBType, ColumnName]);
             end;
             inc(PP);
@@ -2181,7 +2181,7 @@ begin
   end;
 end;
 
-procedure TSQLDBOracleStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
+procedure TSqlDBOracleStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
 var
   env: POCIEnv;
   L: PtrInt;
@@ -2191,7 +2191,7 @@ begin
     try
       if (fStatement <> nil) or
          (fColumnCount > 0) then
-        raise ESQLDBOracle.CreateUTF8(
+        raise ESqlDBOracle.CreateUTF8(
           '%.Prepare should be called only once', [self]);
       // 1. process SQL
       inherited Prepare(aSQL, ExpectResults); // set fSQL + Connect if necessary
@@ -2209,18 +2209,18 @@ begin
       if L <> Length(fSQLPrepared) then
         SetLength(fSQLPrepared, L); // trim trailing spaces or ';' if needed
       // 2. prepare statement
-      env := (Connection as TSQLDBOracleConnection).fEnv;
+      env := (Connection as TSqlDBOracleConnection).fEnv;
       with OCI do
       begin
         HandleAlloc(env, fError, OCI_HTYPE_ERROR);
         if fUseServerSideStatementCache then
         begin
-          if StmtPrepare2(TSQLDBOracleConnection(Connection).fContext,
+          if StmtPrepare2(TSqlDBOracleConnection(Connection).fContext,
              fStatement, fError, pointer(fSQLPrepared), length(fSQLPrepared), nil,
              0, OCI_NTV_SYNTAX, OCI_PREP2_CACHE_SEARCHONLY) = OCI_SUCCESS then
             fCacheIndex := 1
           else
-            Check(nil, self, StmtPrepare2(TSQLDBOracleConnection(Connection).fContext,
+            Check(nil, self, StmtPrepare2(TSqlDBOracleConnection(Connection).fContext,
               fStatement, fError, pointer(fSQLPrepared), length(fSQLPrepared),
               nil, 0, OCI_NTV_SYNTAX, OCI_DEFAULT), fError);
         end
@@ -2245,12 +2245,12 @@ begin
   end;
 end;
 
-function TSQLDBOracleStatement.Step(SeekFirst: boolean): boolean;
+function TSqlDBOracleStatement.Step(SeekFirst: boolean): boolean;
 var
   sav, status: integer;
 begin
   if not Assigned(fStatement) then
-    raise ESQLDBOracle.CreateUTF8('%.Execute should be called before Step', [self]);
+    raise ESqlDBOracle.CreateUTF8('%.Execute should be called before Step', [self]);
   result := false;
   if (fCurrentRow < 0) or
      (fRowCount = 0) then
@@ -2266,13 +2266,13 @@ begin
       fTimeElapsed.Resume;
       try
        { if OCI.major_version < 9 then
-          raise ESQLDBOracle.CreateUTF8('OCI % does not support OCI_FETCH_FIRST',
+          raise ESqlDBOracle.CreateUTF8('OCI % does not support OCI_FETCH_FIRST',
             [OCI.ClientRevision]); }
         status := OCI.StmtFetch(fStatement, fError, fRowCount, OCI_FETCH_FIRST,
           OCI_DEFAULT);
         FetchTest(status); // error + set fRowCount+fRowFetchedCurrent
         if fCurrentRow < 0 then // should not happen
-          raise ESQLDBOracle.Create('OCI_FETCH_FIRST did not reset cursor');
+          raise ESqlDBOracle.Create('OCI_FETCH_FIRST did not reset cursor');
       finally
         fTimeElapsed.Pause;
       end;
@@ -2303,7 +2303,7 @@ end;
 
 
 initialization
-  TSQLDBOracleConnectionProperties.RegisterClassNameForDefinition;
+  TSqlDBOracleConnectionProperties.RegisterClassNameForDefinition;
 
 end.
 

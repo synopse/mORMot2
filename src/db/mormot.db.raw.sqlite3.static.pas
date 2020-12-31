@@ -7,7 +7,7 @@ unit mormot.db.raw.sqlite3.static;
   *****************************************************************************
 
     Statically linked SQLite3 3.34.0 engine with optional AES encryption
-    - TSQLite3LibraryStatic Implementation
+    - TSqlite3LibraryStatic Implementation
     - Encryption-Related Functions
 
       Just include this unit in your uses clause, and the mormot.db.raw.sqlite3
@@ -38,7 +38,7 @@ procedure DoInitialization;
 begin
   FreeAndNil(sqlite3);
   try
-    sqlite3 := TSQLite3LibraryDynamic.Create(SQLITE_LIBRARY_DEFAULT_NAME);
+    sqlite3 := TSqlite3LibraryDynamic.Create(SQLITE_LIBRARY_DEFAULT_NAME);
     sqlite3.ForceToUseSharedMemoryManager; // faster process
   except
     on E: Exception do
@@ -67,15 +67,15 @@ uses
   mormot.db.raw.sqlite3;
 
 
-{ ************ TSQLite3LibraryStatic Implementation }
+{ ************ TSqlite3LibraryStatic Implementation }
 
 type
   /// access class to the static .obj/.o SQLite3 engine
   // - the intialization section of this unit calls:
-  // ! sqlite3 := TSQLite3LibraryStatic.Create;
+  // ! sqlite3 := TSqlite3LibraryStatic.Create;
   // therefore, adding mormot.db.raw.sqlite3.static to your uses clause is enough
   // to use the statically linked SQLite3 engine with mormot.db.raw.sqlite3
-  TSQLite3LibraryStatic = class(TSQLite3Library)
+  TSqlite3LibraryStatic = class(TSqlite3Library)
   public
     /// fill the internal API reference s with the static .obj engine
     constructor Create; override;
@@ -140,7 +140,7 @@ uses
 {$endif WINDOWS}
 
 
-{ ************ TSQLite3LibraryStatic Implementation }
+{ ************ TSqlite3LibraryStatic Implementation }
 
 // ---------------- link raw .o .obj files
 
@@ -1015,123 +1015,123 @@ end;
 
 function sqlite3_initialize: integer; cdecl; external;
 function sqlite3_shutdown: integer; cdecl; external;
-function sqlite3_open(filename: PUTF8Char; var DB: TSQLite3DB): integer; cdecl; external;
-function sqlite3_open_v2(filename: PUTF8Char; var DB: TSQLite3DB; flags: integer; vfs: PUTF8Char): integer; cdecl; external;
-function sqlite3_close(DB: TSQLite3DB): integer; cdecl; external;
-function sqlite3_key(DB: TSQLite3DB; key: pointer; keyLen: integer): integer; cdecl; external;
-function sqlite3_rekey(DB: TSQLite3DB; key: pointer; keyLen: integer): integer; cdecl; external;
-function sqlite3_create_function(DB: TSQLite3DB; FunctionName: PUTF8Char;
-  nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
-  xFinal: TSQLFunctionFinal): integer; cdecl; external;
-function sqlite3_create_function_v2(DB: TSQLite3DB; FunctionName: PUTF8Char;
-  nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSQLFunctionFunc;
-  xFinal: TSQLFunctionFinal; xDestroy: TSQLDestroyPtr): integer; cdecl; external;
-function sqlite3_create_window_function(DB: TSQLite3DB; FunctionName: PUTF8Char;
-  nArg, eTextRep: integer; pApp: pointer; xStep: TSQLFunctionFunc;
-  xFinal, xValue: TSQLFunctionFinal; xInverse: TSQLFunctionFunc; xDestroy: TSQLDestroyPtr): integer;   cdecl; external;
-function sqlite3_create_collation(DB: TSQLite3DB; CollationName: PUTF8Char;
-  StringEncoding: integer; CollateParam: pointer; cmp: TSQLCollateFunc): integer; cdecl; external;
+function sqlite3_open(filename: PUTF8Char; var DB: TSqlite3DB): integer; cdecl; external;
+function sqlite3_open_v2(filename: PUTF8Char; var DB: TSqlite3DB; flags: integer; vfs: PUTF8Char): integer; cdecl; external;
+function sqlite3_close(DB: TSqlite3DB): integer; cdecl; external;
+function sqlite3_key(DB: TSqlite3DB; key: pointer; keyLen: integer): integer; cdecl; external;
+function sqlite3_rekey(DB: TSqlite3DB; key: pointer; keyLen: integer): integer; cdecl; external;
+function sqlite3_create_function(DB: TSqlite3DB; FunctionName: PUTF8Char;
+  nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSqlFunctionFunc;
+  xFinal: TSqlFunctionFinal): integer; cdecl; external;
+function sqlite3_create_function_v2(DB: TSqlite3DB; FunctionName: PUTF8Char;
+  nArg, eTextRep: integer; pApp: pointer; xFunc, xStep: TSqlFunctionFunc;
+  xFinal: TSqlFunctionFinal; xDestroy: TSqlDestroyPtr): integer; cdecl; external;
+function sqlite3_create_window_function(DB: TSqlite3DB; FunctionName: PUTF8Char;
+  nArg, eTextRep: integer; pApp: pointer; xStep: TSqlFunctionFunc;
+  xFinal, xValue: TSqlFunctionFinal; xInverse: TSqlFunctionFunc; xDestroy: TSqlDestroyPtr): integer;   cdecl; external;
+function sqlite3_create_collation(DB: TSqlite3DB; CollationName: PUTF8Char;
+  StringEncoding: integer; CollateParam: pointer; cmp: TSqlCollateFunc): integer; cdecl; external;
 function sqlite3_libversion: PUTF8Char; cdecl; external;
-function sqlite3_errmsg(DB: TSQLite3DB): PAnsiChar; cdecl; external;
-function sqlite3_extended_errcode(DB: TSQLite3DB): integer; cdecl; external;
-function sqlite3_last_insert_rowid(DB: TSQLite3DB): Int64; cdecl; external;
-function sqlite3_busy_timeout(DB: TSQLite3DB; Milliseconds: integer): integer; cdecl; external;
-function sqlite3_busy_handler(DB: TSQLite3DB;
-  CallbackPtr: TSQLBusyHandler; user: Pointer): integer;  cdecl; external;
-function sqlite3_prepare_v2(DB: TSQLite3DB; SQL: PUTF8Char; SQL_bytes: integer;
-  var S: TSQLite3Statement; var SQLtail: PUTF8Char): integer; cdecl; external;
-function sqlite3_finalize(S: TSQLite3Statement): integer; cdecl; external;
-function sqlite3_next_stmt(DB: TSQLite3DB; S: TSQLite3Statement): TSQLite3Statement; cdecl; external;
-function sqlite3_reset(S: TSQLite3Statement): integer; cdecl; external;
-function sqlite3_stmt_readonly(S: TSQLite3Statement): integer; cdecl; external;
-function sqlite3_step(S: TSQLite3Statement): integer; cdecl; external;
-function sqlite3_column_count(S: TSQLite3Statement): integer; cdecl; external;
-function sqlite3_column_type(S: TSQLite3Statement; Col: integer): integer; cdecl; external;
-function sqlite3_column_decltype(S: TSQLite3Statement; Col: integer): PAnsiChar; cdecl; external;
-function sqlite3_column_name(S: TSQLite3Statement; Col: integer): PUTF8Char; cdecl; external;
-function sqlite3_column_bytes(S: TSQLite3Statement; Col: integer): integer; cdecl; external;
-function sqlite3_column_value(S: TSQLite3Statement; Col: integer): TSQLite3Value; cdecl; external;
-function sqlite3_column_double(S: TSQLite3Statement; Col: integer): double; cdecl; external;
-function sqlite3_column_int(S: TSQLite3Statement; Col: integer): integer; cdecl; external;
-function sqlite3_column_int64(S: TSQLite3Statement; Col: integer): int64; cdecl; external;
-function sqlite3_column_text(S: TSQLite3Statement; Col: integer): PUTF8Char; cdecl; external;
-function sqlite3_column_text16(S: TSQLite3Statement; Col: integer): PWideChar; cdecl; external;
-function sqlite3_column_blob(S: TSQLite3Statement; Col: integer): PAnsiChar; cdecl; external;
-function sqlite3_value_type(Value: TSQLite3Value): integer; cdecl; external;
-function sqlite3_value_numeric_type(Value: TSQLite3Value): integer; cdecl; external;
-function sqlite3_value_bytes(Value: TSQLite3Value): integer; cdecl; external;
-function sqlite3_value_double(Value: TSQLite3Value): double; cdecl; external;
-function sqlite3_value_int64(Value: TSQLite3Value): Int64; cdecl; external;
-function sqlite3_value_text(Value: TSQLite3Value): PUTF8Char; cdecl; external;
-function sqlite3_value_blob(Value: TSQLite3Value): pointer; cdecl; external;
-procedure sqlite3_result_null(Context: TSQLite3FunctionContext); cdecl; external;
-procedure sqlite3_result_int64(Context: TSQLite3FunctionContext; Value: Int64); cdecl; external;
-procedure sqlite3_result_double(Context: TSQLite3FunctionContext; Value: double); cdecl; external;
-procedure sqlite3_result_blob(Context: TSQLite3FunctionContext; Value: Pointer;
-  Value_bytes: integer=0; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); cdecl; external;
-procedure sqlite3_result_text(Context: TSQLite3FunctionContext; Value: PUTF8Char;
-  Value_bytes: integer=-1; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT); cdecl; external;
-procedure sqlite3_result_value(Context: TSQLite3FunctionContext; Value: TSQLite3Value); cdecl; external;
-procedure sqlite3_result_error(Context: TSQLite3FunctionContext; Msg: PUTF8Char; MsgLen: integer=-1); cdecl; external;
-function sqlite3_user_data(Context: TSQLite3FunctionContext): pointer; cdecl; external;
-function sqlite3_context_db_handle(Context: TSQLite3FunctionContext): TSQLite3DB; cdecl; external;
-function sqlite3_aggregate_context(Context: TSQLite3FunctionContext;
+function sqlite3_errmsg(DB: TSqlite3DB): PAnsiChar; cdecl; external;
+function sqlite3_extended_errcode(DB: TSqlite3DB): integer; cdecl; external;
+function sqlite3_last_insert_rowid(DB: TSqlite3DB): Int64; cdecl; external;
+function sqlite3_busy_timeout(DB: TSqlite3DB; Milliseconds: integer): integer; cdecl; external;
+function sqlite3_busy_handler(DB: TSqlite3DB;
+  CallbackPtr: TSqlBusyHandler; user: Pointer): integer;  cdecl; external;
+function sqlite3_prepare_v2(DB: TSqlite3DB; SQL: PUTF8Char; SQL_bytes: integer;
+  var S: TSqlite3Statement; var SQLtail: PUTF8Char): integer; cdecl; external;
+function sqlite3_finalize(S: TSqlite3Statement): integer; cdecl; external;
+function sqlite3_next_stmt(DB: TSqlite3DB; S: TSqlite3Statement): TSqlite3Statement; cdecl; external;
+function sqlite3_reset(S: TSqlite3Statement): integer; cdecl; external;
+function sqlite3_stmt_readonly(S: TSqlite3Statement): integer; cdecl; external;
+function sqlite3_step(S: TSqlite3Statement): integer; cdecl; external;
+function sqlite3_column_count(S: TSqlite3Statement): integer; cdecl; external;
+function sqlite3_column_type(S: TSqlite3Statement; Col: integer): integer; cdecl; external;
+function sqlite3_column_decltype(S: TSqlite3Statement; Col: integer): PAnsiChar; cdecl; external;
+function sqlite3_column_name(S: TSqlite3Statement; Col: integer): PUTF8Char; cdecl; external;
+function sqlite3_column_bytes(S: TSqlite3Statement; Col: integer): integer; cdecl; external;
+function sqlite3_column_value(S: TSqlite3Statement; Col: integer): TSqlite3Value; cdecl; external;
+function sqlite3_column_double(S: TSqlite3Statement; Col: integer): double; cdecl; external;
+function sqlite3_column_int(S: TSqlite3Statement; Col: integer): integer; cdecl; external;
+function sqlite3_column_int64(S: TSqlite3Statement; Col: integer): int64; cdecl; external;
+function sqlite3_column_text(S: TSqlite3Statement; Col: integer): PUTF8Char; cdecl; external;
+function sqlite3_column_text16(S: TSqlite3Statement; Col: integer): PWideChar; cdecl; external;
+function sqlite3_column_blob(S: TSqlite3Statement; Col: integer): PAnsiChar; cdecl; external;
+function sqlite3_value_type(Value: TSqlite3Value): integer; cdecl; external;
+function sqlite3_value_numeric_type(Value: TSqlite3Value): integer; cdecl; external;
+function sqlite3_value_bytes(Value: TSqlite3Value): integer; cdecl; external;
+function sqlite3_value_double(Value: TSqlite3Value): double; cdecl; external;
+function sqlite3_value_int64(Value: TSqlite3Value): Int64; cdecl; external;
+function sqlite3_value_text(Value: TSqlite3Value): PUTF8Char; cdecl; external;
+function sqlite3_value_blob(Value: TSqlite3Value): pointer; cdecl; external;
+procedure sqlite3_result_null(Context: TSqlite3FunctionContext); cdecl; external;
+procedure sqlite3_result_int64(Context: TSqlite3FunctionContext; Value: Int64); cdecl; external;
+procedure sqlite3_result_double(Context: TSqlite3FunctionContext; Value: double); cdecl; external;
+procedure sqlite3_result_blob(Context: TSqlite3FunctionContext; Value: Pointer;
+  Value_bytes: integer=0; DestroyPtr: TSqlDestroyPtr=SQLITE_TRANSIENT); cdecl; external;
+procedure sqlite3_result_text(Context: TSqlite3FunctionContext; Value: PUTF8Char;
+  Value_bytes: integer=-1; DestroyPtr: TSqlDestroyPtr=SQLITE_TRANSIENT); cdecl; external;
+procedure sqlite3_result_value(Context: TSqlite3FunctionContext; Value: TSqlite3Value); cdecl; external;
+procedure sqlite3_result_error(Context: TSqlite3FunctionContext; Msg: PUTF8Char; MsgLen: integer=-1); cdecl; external;
+function sqlite3_user_data(Context: TSqlite3FunctionContext): pointer; cdecl; external;
+function sqlite3_context_db_handle(Context: TSqlite3FunctionContext): TSqlite3DB; cdecl; external;
+function sqlite3_aggregate_context(Context: TSqlite3FunctionContext;
    nBytes: integer): pointer; cdecl; external;
-function sqlite3_bind_text(S: TSQLite3Statement; Param: integer;
-  Text: PUTF8Char; Text_bytes: integer=-1; DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT): integer;
+function sqlite3_bind_text(S: TSqlite3Statement; Param: integer;
+  Text: PUTF8Char; Text_bytes: integer=-1; DestroyPtr: TSqlDestroyPtr=SQLITE_TRANSIENT): integer;
   cdecl; external;
-function sqlite3_bind_blob(S: TSQLite3Statement; Param: integer; Buf: pointer; Buf_bytes: integer;
-  DestroyPtr: TSQLDestroyPtr=SQLITE_TRANSIENT): integer; cdecl; external;
-function sqlite3_bind_zeroblob(S: TSQLite3Statement; Param: integer; Size: integer): integer; cdecl; external;
-function sqlite3_bind_double(S: TSQLite3Statement; Param: integer; Value: double): integer; cdecl; external;
-function sqlite3_bind_int(S: TSQLite3Statement; Param: integer; Value: integer): integer; cdecl; external;
-function sqlite3_bind_int64(S: TSQLite3Statement; Param: integer; Value: Int64): integer; cdecl; external;
-function sqlite3_bind_null(S: TSQLite3Statement; Param: integer): integer; cdecl; external;
-function sqlite3_clear_bindings(S: TSQLite3Statement): integer; cdecl; external;
-function sqlite3_bind_parameter_count(S: TSQLite3Statement): integer; cdecl; external;
-function sqlite3_blob_open(DB: TSQLite3DB; DBName, TableName, ColumnName: PUTF8Char;
-  RowID: Int64; Flags: integer; var Blob: TSQLite3Blob): integer; cdecl; external;
-function sqlite3_blob_reopen(DB: TSQLite3DB; RowID: Int64): integer; cdecl; external;
-function sqlite3_blob_close(Blob: TSQLite3Blob): integer; cdecl; external;
-function sqlite3_blob_read(Blob: TSQLite3Blob; const Data; Count, Offset: integer): integer; cdecl; external;
-function sqlite3_blob_write(Blob: TSQLite3Blob; const Data; Count, Offset: integer): integer; cdecl; external;
-function sqlite3_blob_bytes(Blob: TSQLite3Blob): integer; cdecl; external;
-function sqlite3_create_module_v2(DB: TSQLite3DB; const zName: PAnsiChar;
-  var p: TSQLite3Module; pClientData: Pointer; xDestroy: TSQLDestroyPtr): integer; cdecl; external;
-function sqlite3_declare_vtab(DB: TSQLite3DB; const zSQL: PAnsiChar): integer; cdecl; external;
-function sqlite3_set_authorizer(DB: TSQLite3DB; xAuth: TSQLAuthorizerCallback;
+function sqlite3_bind_blob(S: TSqlite3Statement; Param: integer; Buf: pointer; Buf_bytes: integer;
+  DestroyPtr: TSqlDestroyPtr=SQLITE_TRANSIENT): integer; cdecl; external;
+function sqlite3_bind_zeroblob(S: TSqlite3Statement; Param: integer; Size: integer): integer; cdecl; external;
+function sqlite3_bind_double(S: TSqlite3Statement; Param: integer; Value: double): integer; cdecl; external;
+function sqlite3_bind_int(S: TSqlite3Statement; Param: integer; Value: integer): integer; cdecl; external;
+function sqlite3_bind_int64(S: TSqlite3Statement; Param: integer; Value: Int64): integer; cdecl; external;
+function sqlite3_bind_null(S: TSqlite3Statement; Param: integer): integer; cdecl; external;
+function sqlite3_clear_bindings(S: TSqlite3Statement): integer; cdecl; external;
+function sqlite3_bind_parameter_count(S: TSqlite3Statement): integer; cdecl; external;
+function sqlite3_blob_open(DB: TSqlite3DB; DBName, TableName, ColumnName: PUTF8Char;
+  RowID: Int64; Flags: integer; var Blob: TSqlite3Blob): integer; cdecl; external;
+function sqlite3_blob_reopen(DB: TSqlite3DB; RowID: Int64): integer; cdecl; external;
+function sqlite3_blob_close(Blob: TSqlite3Blob): integer; cdecl; external;
+function sqlite3_blob_read(Blob: TSqlite3Blob; const Data; Count, Offset: integer): integer; cdecl; external;
+function sqlite3_blob_write(Blob: TSqlite3Blob; const Data; Count, Offset: integer): integer; cdecl; external;
+function sqlite3_blob_bytes(Blob: TSqlite3Blob): integer; cdecl; external;
+function sqlite3_create_module_v2(DB: TSqlite3DB; const zName: PAnsiChar;
+  var p: TSqlite3Module; pClientData: Pointer; xDestroy: TSqlDestroyPtr): integer; cdecl; external;
+function sqlite3_declare_vtab(DB: TSqlite3DB; const zSQL: PAnsiChar): integer; cdecl; external;
+function sqlite3_set_authorizer(DB: TSqlite3DB; xAuth: TSqlAuthorizerCallback;
   pUserData: Pointer): integer;   cdecl; external;
-function sqlite3_update_hook(DB: TSQLite3DB; xCallback: TSQLUpdateCallback;
+function sqlite3_update_hook(DB: TSqlite3DB; xCallback: TSqlUpdateCallback;
   pArg: pointer): pointer; cdecl; external;
-function sqlite3_commit_hook(DB: TSQLite3DB; xCallback: TSQLCommitCallback;
+function sqlite3_commit_hook(DB: TSqlite3DB; xCallback: TSqlCommitCallback;
   pArg: Pointer): Pointer; cdecl; external;
-function sqlite3_rollback_hook(DB: TSQLite3DB;  xCallback: TSQLCommitCallback;
+function sqlite3_rollback_hook(DB: TSqlite3DB;  xCallback: TSqlCommitCallback;
   pArg: Pointer): Pointer; cdecl; external;
-function sqlite3_changes(DB: TSQLite3DB): integer; cdecl; external;
-function sqlite3_total_changes(DB: TSQLite3DB): integer; cdecl; external;
+function sqlite3_changes(DB: TSqlite3DB): integer; cdecl; external;
+function sqlite3_total_changes(DB: TSqlite3DB): integer; cdecl; external;
 function sqlite3_malloc(n: integer): Pointer; cdecl; external;
 function sqlite3_realloc(pOld: Pointer; n: integer): Pointer; cdecl; external;
 procedure sqlite3_free(p: Pointer); cdecl; external;
 function sqlite3_memory_used: Int64; cdecl; external;
 function sqlite3_memory_highwater(resetFlag: integer): Int64; cdecl; external;
-function sqlite3_limit(DB: TSQLite3DB; id,newValue: integer): integer; cdecl; external;
-function sqlite3_backup_init(DestDB: TSQLite3DB; DestDatabaseName: PUTF8Char;
-  SourceDB: TSQLite3DB; SourceDatabaseName: PUTF8Char): TSQLite3Backup; cdecl; external;
-function sqlite3_backup_step(Backup: TSQLite3Backup; nPages: integer): integer; cdecl; external;
-function sqlite3_backup_finish(Backup: TSQLite3Backup): integer; cdecl; external;
-function sqlite3_backup_remaining(Backup: TSQLite3Backup): integer; cdecl; external;
-function sqlite3_backup_pagecount(Backup: TSQLite3Backup): integer; cdecl; external;
-function sqlite3_serialize(DB: TSQLite3DB; Schema: PUTF8Char; Size: PInt64;
+function sqlite3_limit(DB: TSqlite3DB; id,newValue: integer): integer; cdecl; external;
+function sqlite3_backup_init(DestDB: TSqlite3DB; DestDatabaseName: PUTF8Char;
+  SourceDB: TSqlite3DB; SourceDatabaseName: PUTF8Char): TSqlite3Backup; cdecl; external;
+function sqlite3_backup_step(Backup: TSqlite3Backup; nPages: integer): integer; cdecl; external;
+function sqlite3_backup_finish(Backup: TSqlite3Backup): integer; cdecl; external;
+function sqlite3_backup_remaining(Backup: TSqlite3Backup): integer; cdecl; external;
+function sqlite3_backup_pagecount(Backup: TSqlite3Backup): integer; cdecl; external;
+function sqlite3_serialize(DB: TSqlite3DB; Schema: PUTF8Char; Size: PInt64;
   Flags: integer): pointer; cdecl; external;
-function sqlite3_deserialize(DB: TSQLite3DB; Schema: PUTF8Char; Data: pointer;
+function sqlite3_deserialize(DB: TSqlite3DB; Schema: PUTF8Char; Data: pointer;
   DBSize, BufSize: Int64; Flags: integer): pointer; cdecl; external;
 function sqlite3_config(operation: integer): integer; cdecl varargs; external;
-function sqlite3_db_config(DB: TSQLite3DB; operation: integer): integer; cdecl varargs; external;
-function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCallback;
+function sqlite3_db_config(DB: TSqlite3DB; operation: integer): integer; cdecl varargs; external;
+function sqlite3_trace_v2(DB: TSqlite3DB; Mask: integer; Callback: TSqlTraceCallback;
   UserData: Pointer): Pointer; cdecl; external;
 
 
-{ TSQLite3LibraryStatic }
+{ TSqlite3LibraryStatic }
 
 const
   // error message if statically linked sqlite3.o(bj) does not match this
@@ -1141,7 +1141,7 @@ const
   EXPECTED_STATIC_DOWNLOAD = 'https://github.com/synopse/mORMot2/releases/' +
      'download/pre1/mormot2static.7z';
 
-constructor TSQLite3LibraryStatic.Create;
+constructor TSqlite3LibraryStatic.Create;
 var
   error: RawUTF8;
 begin
@@ -1262,7 +1262,7 @@ begin
   end;
 end;
 
-destructor TSQLite3LibraryStatic.Destroy;
+destructor TSqlite3LibraryStatic.Destroy;
 begin
   if Assigned(shutdown) then
     shutdown;
@@ -1272,7 +1272,7 @@ end;
 
 initialization
   FreeAndNil(sqlite3);
-  sqlite3 := TSQLite3LibraryStatic.Create;
+  sqlite3 := TSqlite3LibraryStatic.Create;
 
 {$endif NOSQLITE3STATIC} // conditional defined -> auto-load local .dll/.so
 

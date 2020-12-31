@@ -92,8 +92,8 @@ function ToText(m: TURIMethod): PShortString; overload;
 {$ifdef PUREMORMOT2}
 
 type
-  TSQLURIMethod = TURIMethod;
-  TSQLURIMethods = TURIMethods;
+  TSqlURIMethod = TURIMethod;
+  TSqlURIMethods = TURIMethods;
 
 {$endif PUREMORMOT2}
 

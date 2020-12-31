@@ -169,7 +169,7 @@ type
   // is to be used as the value of the column or parameter
   // - see http://msdn.microsoft.com/en-us/library/ms722617
   // and http://msdn.microsoft.com/en-us/library/windows/desktop/ms716934
-  TSQLDBOleDBStatus = (
+  TSqlDBOleDBStatus = (
     stOK,
     stBadAccessor,
     stCanNotConvertValue,
@@ -202,7 +202,7 @@ type
   /// binding status of a given column
   // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ms720969
   // and http://msdn.microsoft.com/en-us/library/windows/desktop/ms716934
-  TSQLDBOleDBBindStatus = (
+  TSqlDBOleDBBindStatus = (
     bsOK, bsBadOrdinal,
     bsUnsupportedConversion,
     bsBadBindInfo,
@@ -713,9 +713,9 @@ type
   TIDListRowset = class(TBaseAggregatingRowset)
   private
     farr: TRawUTF8DynArray;
-    fType: TSQLDBFieldType;
+    fType: TSqlDBFieldType;
   public
-    constructor Create(arr: TRawUTF8DynArray; aType: TSQLDBFieldType);
+    constructor Create(arr: TRawUTF8DynArray; aType: TSqlDBFieldType);
 
     function Initialize(pIOpenRowset: IOpenRowset): HRESULT;
     function GetData(HROW: HROW; HACCESSOR: HACCESSOR; pData: Pointer): HRESULT; override; stdcall;
@@ -737,7 +737,7 @@ type
 function IsJetFile(const FileName: TFileName): boolean;
 
 /// low-level guess of our SQL Field Type from the OleDB numerical type value
-function OleDBColumnToFieldType(wType: DBTYPE; bScale: byte): TSQLDBFieldType;
+function OleDBColumnToFieldType(wType: DBTYPE; bScale: byte): TSqlDBFieldType;
 
 {$endif MSWINDOWS}
 
@@ -866,7 +866,7 @@ end;
 
 { TIDListRowset }
 
-constructor TIDListRowset.Create(arr: TRawUTF8DynArray; aType: TSQLDBFieldType);
+constructor TIDListRowset.Create(arr: TRawUTF8DynArray; aType: TSqlDBFieldType);
 begin
   farr := arr;
   fType := aType;
@@ -1001,7 +1001,7 @@ begin
   end;
 end;
 
-function OleDBColumnToFieldType(wType: DBTYPE; bScale: byte): TSQLDBFieldType;
+function OleDBColumnToFieldType(wType: DBTYPE; bScale: byte): TSqlDBFieldType;
 begin
   case wType of
     DBTYPE_EMPTY:

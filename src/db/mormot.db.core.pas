@@ -79,7 +79,7 @@ type
   // see @http://www.sqlite.org/datatype3.html
   // - the only string type handled here uses UTF-8 encoding (implemented
   // using our RawUTF8 type), for cross-Delphi true Unicode process
-  TSQLDBFieldType = (
+  TSqlDBFieldType = (
     ftUnknown,
     ftNull,
     ftInt64,
@@ -90,28 +90,28 @@ type
     ftBlob);
 
   /// set of field/parameter/column types for abstract database access
-  TSQLDBFieldTypes = set of TSQLDBFieldType;
+  TSqlDBFieldTypes = set of TSqlDBFieldType;
 
   /// array of field/parameter/column types for abstract database access
-  TSQLDBFieldTypeDynArray = array of TSQLDBFieldType;
+  TSqlDBFieldTypeDynArray = array of TSqlDBFieldType;
 
   /// array of field/parameter/column types for abstract database access
   // - this array as a fixed size, ready to handle up to MAX_SQLFIELDS items
-  TSQLDBFieldTypeArray = array[0..MAX_SQLFIELDS - 1] of TSQLDBFieldType;
+  TSqlDBFieldTypeArray = array[0..MAX_SQLFIELDS - 1] of TSqlDBFieldType;
 
-  PSQLDBFieldTypeArray = ^TSQLDBFieldTypeArray;
+  PSqlDBFieldTypeArray = ^TSqlDBFieldTypeArray;
 
-  /// how TSQLVar may be processed
+  /// how TSqlVar may be processed
   // - by default, ftDate will use seconds resolution unless svoDateWithMS is set
-  TSQLVarOption = (
+  TSqlVarOption = (
     svoDateWithMS);
 
-  /// defines how TSQLVar may be processed
-  TSQLVarOptions = set of TSQLVarOption;
+  /// defines how TSqlVar may be processed
+  TSqlVarOptions = set of TSqlVarOption;
 
   /// memory structure used for database values by reference storage
-  // - used mainly by mormot.db.sql, mORMot, mormot.orm.sql and mORMotSQLite3 units
-  // - defines only TSQLDBFieldType data types (similar to those handled by
+  // - used mainly by mormot.db.sql, mormot.orm.sql and mormot.orm.sqlite3 units
+  // - defines only TSqlDBFieldType data types (similar to those handled by
   // SQLite3, with the addition of ftCurrency and ftDate)
   // - cleaner/lighter dedicated type than TValue or variant/TVarData, strong
   // enough to be marshalled as JSON content
@@ -121,11 +121,11 @@ type
   // - date/time is stored as ISO-8601 text (with milliseconds if svoDateWithMS
   // option is set and the database supports it), and currency as double or BCD
   // in most databases
-  TSQLVar = record
+  TSqlVar = record
     /// how this value should be processed
-    Options: TSQLVarOptions;
+    Options: TSqlVarOptions;
     /// the type of the value stored
-    case VType: TSQLDBFieldType of
+    case VType: TSqlDBFieldType of
       ftInt64: (
         VInt64: Int64);
       ftDouble: (
@@ -142,7 +142,7 @@ type
   end;
 
   /// dynamic array of database values by reference storage
-  TSQLVarDynArray = array of TSQLVar;
+  TSqlVarDynArray = array of TSqlVar;
 
   /// used to store bit set for all available fields in a Table
   // - with current MAX_SQLFIELDS value, 64 bits uses 8 bytes of memory
@@ -166,7 +166,7 @@ type
 
   /// generic parameter types, as recognized by SQLParamContent() and
   // ExtractInlineParameters() functions
-  TSQLParamType = (
+  TSqlParamType = (
     sptUnknown,
     sptInteger,
     sptFloat,
@@ -176,28 +176,28 @@ type
 
   /// array of parameter types, as recognized by SQLParamContent() and
   // ExtractInlineParameters() functions
-  TSQLParamTypeDynArray = array of TSQLParamType;
+  TSqlParamTypeDynArray = array of TSqlParamType;
 
 
 const
-  /// TSQLDBFieldType kind of columns which have a fixed width
+  /// TSqlDBFieldType kind of columns which have a fixed width
   FIXEDLENGTH_SQLDBFIELDTYPE =
     [ftInt64, ftDouble, ftCurrency, ftDate];
 
-  /// conversion matrix from TSQLDBFieldType into variant type
-  MAP_FIELDTYPE2VARTYPE: array[TSQLDBFieldType] of Word = (
+  /// conversion matrix from TSqlDBFieldType into variant type
+  MAP_FIELDTYPE2VARTYPE: array[TSqlDBFieldType] of Word = (
     varEmpty, varNull, varInt64, varDouble, varCurrency, varDate,
     varSynUnicode, varString);
 // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
 
 
 /// retrieve the text of a given Database field type enumeration
-// - see also TSQLDBFieldTypeToString() function
-function ToText(Field: TSQLDBFieldType): PShortString; overload;
+// - see also TSqlDBFieldTypeToString() function
+function ToText(Field: TSqlDBFieldType): PShortString; overload;
 
 /// retrieve the ready-to-be displayed text of a given Database field
 // type enumeration
-function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): TShort16;
+function TSqlDBFieldTypeToString(aType: TSqlDBFieldType): TShort16;
 
 
 /// returns TRUE if no bit inside this TFieldBits is set
@@ -257,36 +257,35 @@ function IsRowID(FieldName: PUTF8Char; FieldLen: integer): boolean;
 function IsRowIDShort(const FieldName: shortstring): boolean;
   {$ifdef HASINLINE}inline;{$endif} overload;
 
-/// returns the stored size of a TSQLVar database value
+/// returns the stored size of a TSqlVar database value
 // - only returns VBlobLen / StrLen(VText) size, 0 otherwise
-function SQLVarLength(const Value: TSQLVar): integer;
+function SQLVarLength(const Value: TSqlVar): integer;
 
 /// convert any Variant into a database value
 // - ftBlob kind won't be handled by this function
 // - complex variant types would be converted into ftUTF8 JSON object/array
 procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
-  var Output: TSQLVar);
+  var Output: TSqlVar);
 
 /// convert any Variant into a value encoded as with :(..:) inlined parameters
 // in FormatUTF8(Format,Args,Params)
 // - will transform into a UTF-8, between double quotes for string values
 procedure VariantToInlineValue(const V: Variant; var result: RawUTF8);
 
-/// guess the correct TSQLDBFieldType from a variant type
-function VariantVTypeToSQLDBFieldType(VType: cardinal): TSQLDBFieldType;
+/// guess the correct TSqlDBFieldType from a variant type
+function VariantVTypeToSQLDBFieldType(VType: cardinal): TSqlDBFieldType;
 
-/// guess the correct TSQLDBFieldType from a variant value
-function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
+/// guess the correct TSqlDBFieldType from a variant value
+function VariantTypeToSQLDBFieldType(const V: Variant): TSqlDBFieldType;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// guess the correct TSQLDBFieldType from the UTF-8 representation of a value
-function TextToSQLDBFieldType(json: PUTF8Char): TSQLDBFieldType;
+/// guess the correct TSqlDBFieldType from the UTF-8 representation of a value
+function TextToSQLDBFieldType(json: PUTF8Char): TSqlDBFieldType;
 
 type
   /// SQL Query comparison operators
-  // - used e.g. by CompareOperator() functions in SynTable.pas or vt_BestIndex()
-  // in mORMotSQLite3.pas
-  TSQLCompareOperator = (
+  // - used e.g. by CompareOperator() functions in mormot.orm.storage.pas
+  TSqlCompareOperator = (
      soEqualTo,
      soNotEqualTo,
      soLessThan,
@@ -305,7 +304,7 @@ const
 
   /// convert identified field types into high-level ORM types
   // - as will be implemented in TOrm classes
-  SQLDBFIELDTYPE_TO_DELPHITYPE: array[TSQLDBFieldType] of RawUTF8 = (
+  SQLDBFIELDTYPE_TO_DELPHITYPE: array[TSqlDBFieldType] of RawUTF8 = (
     '???','???',
     'Int64', 'Double', 'Currency', 'TDateTime', 'RawUTF8', 'RawBlob');
 
@@ -314,10 +313,10 @@ const
 // backward compatibility types redirections
 
 type
-  TSQLFieldBits = TFieldBits;
-  PSQLFieldBits = PFieldBits;
-  TSQLFieldIndex = TFieldIndex;
-  TSQLFieldIndexDynArray = TFieldIndexDynArray;
+  TSqlFieldBits = TFieldBits;
+  PSqlFieldBits = PFieldBits;
+  TSqlFieldIndex = TFieldIndex;
+  TSqlFieldIndexDynArray = TFieldIndexDynArray;
 
 {$endif PUREMORMOT2}
 
@@ -661,7 +660,7 @@ function Iso8601ToSQL(const S: RawByteString): RawUTF8;
 // - if ParamValue is not nil, the pointing RawUTF8 string is set with the
 // value inside :(...): without double quoting in case of oftUTF8Text
 // - wasNull is set to TRUE if P was ':(null):' and ParamType is oftUnknwown
-function SQLParamContent(P: PUTF8Char; out ParamType: TSQLParamType;
+function SQLParamContent(P: PUTF8Char; out ParamType: TSqlParamType;
   out ParamValue: RawUTF8; out wasNull: boolean): PUTF8Char;
 
 /// this function will extract inlined :(1234): parameters into Types[]/Values[]
@@ -672,7 +671,7 @@ function SQLParamContent(P: PUTF8Char; out ParamType: TSQLParamType;
 // sptUTF8Text and sptBlob ('\uFFF0...')
 // - sptUnknown is returned on invalid content
 function ExtractInlineParameters(const SQL: RawUTF8;
-  var Types: TSQLParamTypeDynArray; var Values: TRawUTF8DynArray;
+  var Types: TSqlParamTypeDynArray; var Values: TRawUTF8DynArray;
   var maxParam: integer; var Nulls: TFieldBits): RawUTF8;
 
 /// returns a 64-bit value as inlined ':(1234):' text
@@ -1009,12 +1008,12 @@ implementation
 
 { ************ Shared Database Fields and Values Definitions }
 
-function ToText(Field: TSQLDBFieldType): PShortString;
+function ToText(Field: TSqlDBFieldType): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TSQLDBFieldType), ord(Field));
+  result := GetEnumName(TypeInfo(TSqlDBFieldType), ord(Field));
 end;
 
-function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): TShort16;
+function TSqlDBFieldTypeToString(aType: TSqlDBFieldType): TShort16;
 begin
   if aType <= high(aType) then
     result := TrimLeftLowerCaseToShort(ToText(aType))
@@ -1215,7 +1214,7 @@ begin
   FieldIndexToBits(Index, result);
 end;
 
-function SQLVarLength(const Value: TSQLVar): integer;
+function SQLVarLength(const Value: TSqlVar): integer;
 begin
   case Value.VType of
     ftBlob:
@@ -1279,7 +1278,7 @@ begin
 end;
 
 procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
-  var Output: TSQLVar);
+  var Output: TSqlVar);
 var
   wasString: boolean;
 begin
@@ -1361,7 +1360,7 @@ begin
     result := tmp;
 end;
 
-function VariantVTypeToSQLDBFieldType(VType: cardinal): TSQLDBFieldType;
+function VariantVTypeToSQLDBFieldType(VType: cardinal): TSqlDBFieldType;
 begin
   case VType of
     varNull:
@@ -1382,7 +1381,7 @@ begin
   end;
 end;
 
-function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
+function VariantTypeToSQLDBFieldType(const V: Variant): TSqlDBFieldType;
 var
   VD: TVarData absolute V;
   tmp: TVarData;
@@ -1403,7 +1402,7 @@ begin
   end;
 end;
 
-function TextToSQLDBFieldType(json: PUTF8Char): TSQLDBFieldType;
+function TextToSQLDBFieldType(json: PUTF8Char): TSqlDBFieldType;
 begin
   if json = nil then
     result := ftNull
@@ -1651,7 +1650,7 @@ end;
 
 { ************ SQL Parameters Inlining and Processing }
 
-function SQLParamContent(P: PUTF8Char; out ParamType: TSQLParamType;
+function SQLParamContent(P: PUTF8Char; out ParamType: TSqlParamType;
   out ParamValue: RawUTF8; out wasNull: boolean): PUTF8Char;
 var
   PBeg: PAnsiChar;
@@ -1753,7 +1752,7 @@ begin
 end;
 
 function ExtractInlineParameters(const SQL: RawUTF8;
-  var Types: TSQLParamTypeDynArray; var Values: TRawUTF8DynArray;
+  var Types: TSqlParamTypeDynArray; var Values: TRawUTF8DynArray;
   var maxParam: integer; var Nulls: TFieldBits): RawUTF8;
 var
   ppBeg: integer;

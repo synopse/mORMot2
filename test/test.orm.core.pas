@@ -503,7 +503,7 @@ begin
   Check(TOrmTest.OrmProps.Fields.IndexByName('nex') < 0);
   Check(TOrmTest.OrmProps.Fields.IndexByName('next') >= 0);
   Check(TOrmTest.OrmProps.Fields.IndexByName('nexte') < 0);
-  s := TOrmTest.GetSQLCreate(M);
+  s := TOrmTest.GetSqlCreate(M);
   CheckEqual(s,
     'CREATE TABLE Test(ID INTEGER PRIMARY KEY AUTOINCREMENT, Int INTEGER, ' +
     'Test TEXT COLLATE SYSTEMNOCASE, Unicode TEXT COLLATE SYSTEMNOCASE, ' +

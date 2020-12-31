@@ -1240,7 +1240,7 @@ type
 
 type
   /// implement a cache of some key/value pairs, e.g. to improve reading speed
-  // - used e.g. by TSQLDataBase for caching the SELECT statements results in an
+  // - used e.g. by TSqlDataBase for caching the SELECT statements results in an
   // internal JSON format (which is faster than a query to the SQLite3 engine)
   // - internally make use of an efficient hashing algorithm for fast response
   // (i.e. TSynNameValue will use the TDynArrayHashed wrapper mechanism)

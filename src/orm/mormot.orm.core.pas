@@ -253,7 +253,7 @@ type
   // published property can be typecasted to the TTimeLogBits memory structure;
   // the value of this field is automatically updated with the current
   // date and time each time a record is updated (with external DB, it will
-  // use the Server time, as retrieved by TSQLDBConnection.ServerTimestamp
+  // use the Server time, as retrieved by TSqlDBConnection.ServerTimestamp
   // from mormot.db.sql.pas) - see ComputeFieldsBeforeWrite
   // virtual method of TOrm; note also that only RESTful PUT/POST access
   // will change this field value: manual SQL statements (like
@@ -265,7 +265,7 @@ type
   // published property can be typecasted to the TTimeLogBits memory structure;
   // the value of this field is automatically updated with the current
   // date and time when the record is created (with external DB, it will
-  // use the Server time, as retrieved by TSQLDBConnection.ServerTimestamp
+  // use the Server time, as retrieved by TSqlDBConnection.ServerTimestamp
   // from mormot.db.sql.pas) - see ComputeFieldsBeforeWrite
   // virtual method of TOrm; note also that only RESTful PUT/POST access
   // will set this field value: manual SQL statements (like
@@ -368,7 +368,7 @@ const
     [low(TOrmFieldType)..high(TOrmFieldType)] - [oftUnknown, oftMany];
 
   /// kind of DB fields which will contain TEXT content when converted to JSON
-  TEXT_DBFIELDS: TSQLDBFieldTypes =
+  TEXT_DBFIELDS: TSqlDBFieldTypes =
     [ftUTF8, ftDate];
 
   /// kind of fields which will contain pure TEXT values
@@ -522,9 +522,9 @@ function UTF8CompareISO8601(P1, P2: PUTF8Char): PtrInt;
 type
   /// the available options for TRest.BatchStart() process
   // - boInsertOrIgnore will create 'INSERT OR IGNORE' statements instead of
-  // plain 'INSERT' - by now, only the direct mORMotSQLite3 engine supports it
+  // plain 'INSERT' - by now, only the direct SQLite3 engine supports it
   // - boInsertOrUpdate will create 'INSERT OR REPLACE' statements instead of
-  // plain 'INSERT' - by now, only the direct mORMotSQLite3 engine supports it
+  // plain 'INSERT' - by now, only the direct SQLite3 engine supports it
   // - boExtendedJSON will force the JSON to unquote the column names,
   // e.g. writing col1:...,col2:... instead of "col1":...,"col2"...
   // - boPostNoSimpleFields will avoid to send a TRestBach.Add() with simple
@@ -592,7 +592,7 @@ type
     // PostgreSQL database
     // - as set by TRestStorageExternal.JSONDecodedPrepareToSQL when
     // cPostgreBulkArray flag is detected - for mormot.db.sql.postgres.pas
-    DecodedFieldTypesToUnnest: PSQLDBFieldTypeArray;
+    DecodedFieldTypesToUnnest: PSqlDBFieldTypeArray;
     /// decode the JSON object fields into FieldNames[] and FieldValues[]
     // - if Fields=nil, P should be a true JSON object, i.e. defined
     // as "COL1"="VAL1" pairs, stopping at '}' or ']'; otherwise, Fields[]
@@ -790,7 +790,7 @@ type
     fNameUnflattened: RawUTF8;
     fOrmFieldType: TOrmFieldType;
     fOrmFieldTypeStored: TOrmFieldType;
-    fSQLDBFieldType: TSQLDBFieldType;
+    fSQLDBFieldType: TSqlDBFieldType;
     fAttributes: TOrmPropInfoAttributes;
     fFieldWidth: integer;
     fPropertyIndex: integer;
@@ -842,7 +842,7 @@ type
     /// the corresponding column type, as managed for abstract database access
     // - TNullable* fields will report here the corresponding simple DB type,
     // e.g. ftInt64 for TNullableInteger (following OrmFieldTypeStored value)
-    property SQLDBFieldType: TSQLDBFieldType read fSQLDBFieldType;
+    property SQLDBFieldType: TSqlDBFieldType read fSQLDBFieldType;
     /// the corresponding column type name, as managed for abstract database access
     function SQLDBFieldTypeName: PShortString;
     /// the ORM attributes of this property
@@ -894,13 +894,13 @@ type
     /// normalize the content of Value, so that GetValue(Object,true) should return the
     // same content (true for ToSQL format)
     procedure NormalizeValue(var Value: RawUTF8); virtual; abstract;
-    /// retrieve a field value into a TSQLVar value
+    /// retrieve a field value into a TSqlVar value
     // - the temp RawByteString is used as a temporary storage for TEXT or BLOB
-    // and should be available during all access to the TSQLVar fields
-    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
+    // and should be available during all access to the TSqlVar fields
+    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSqlVar;
       var temp: RawByteString); virtual;
-    /// set a field value from a TSQLVar value
-    function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; virtual;
+    /// set a field value from a TSqlVar value
+    function SetFieldSQLVar(Instance: TObject; const aValue: TSqlVar): boolean; virtual;
     /// returns TRUE if value is 0 or ''
     function IsValueVoid(Instance: TObject): boolean;
     /// append the property value into a binary buffer
@@ -1037,9 +1037,9 @@ type
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
       wasSQLString: PBoolean); override;
-    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
+    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSqlVar;
       var temp: RawByteString); override;
-    function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
+    function SetFieldSQLVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     function SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar; override;
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
@@ -1096,9 +1096,9 @@ type
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
       wasSQLString: PBoolean); override;
-    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
+    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSqlVar;
       var temp: RawByteString); override;
-    function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
+    function SetFieldSQLVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     function SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar; override;
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
@@ -1136,9 +1136,9 @@ type
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
       wasSQLString: PBoolean); override;
-    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
+    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSqlVar;
       var temp: RawByteString); override;
-    function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
+    function SetFieldSQLVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     function SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
@@ -1156,9 +1156,9 @@ type
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
       wasSQLString: PBoolean); override;
-    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
+    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSqlVar;
       var temp: RawByteString); override;
-    function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
+    function SetFieldSQLVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     function SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
@@ -1173,7 +1173,7 @@ type
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
       wasSQLString: PBoolean); override;
-    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar; var temp:
+    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSqlVar; var temp:
       RawByteString); override;
     procedure NormalizeValue(var Value: RawUTF8); override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
@@ -1198,9 +1198,9 @@ type
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     function SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar; override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
-    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar; var temp:
+    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSqlVar; var temp:
       RawByteString); override;
-    function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
+    function SetFieldSQLVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUTF8); override;
@@ -1218,9 +1218,9 @@ type
       wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
       wasSQLString: PBoolean); override;
-    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
+    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSqlVar;
       var temp: RawByteString); override;
-    function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
+    function SetFieldSQLVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     function SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar; override;
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
@@ -1253,9 +1253,9 @@ type
       wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
       wasSQLString: PBoolean); override;
-    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar; var temp:
+    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSqlVar; var temp:
       RawByteString); override;
-    function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
+    function SetFieldSQLVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
@@ -1297,9 +1297,9 @@ type
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     function SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar; override;
     procedure GetJSONValues(Instance: TObject; W: TJSONSerializer); override;
-    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
+    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSqlVar;
       var temp: RawByteString); override;
-    function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
+    function SetFieldSQLVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
   end;
@@ -1327,9 +1327,9 @@ type
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
       wasSQLString: PBoolean); override;
-    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
+    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSqlVar;
       var temp: RawByteString); override;
-    function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
+    function SetFieldSQLVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     function SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar; override;
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
@@ -1479,9 +1479,9 @@ type
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
       wasSQLString: PBoolean); override;
-    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
+    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSqlVar;
       var temp: RawByteString); override;
-    function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
+    function SetFieldSQLVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     function SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar; override;
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
@@ -1518,9 +1518,9 @@ type
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean; var result: RawUTF8;
       wasSQLString: PBoolean); override;
-    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
+    procedure GetFieldSQLVar(Instance: TObject; var aValue: TSqlVar;
       var temp: RawByteString); override;
-    function SetFieldSQLVar(Instance: TObject; const aValue: TSQLVar): boolean; override;
+    function SetFieldSQLVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     function SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar; override;
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
@@ -1997,7 +1997,7 @@ type
     // - this method works for TOrmFts3, TOrmFts4 and TOrmFts5
     // - this method expects the column/field names to be supplied in the MATCH
     // statement clause
-    // - example of use:  FTSMatch(TSQLMessage,'Body MATCH :("linu*"):',IntResult)
+    // - example of use:  FTSMatch(TOrmMessage,'Body MATCH :("linu*"):',IntResult)
     // (using inlined parameters via :(...): is always a good idea)
     function FTSMatch(Table: TOrmFts3Class; const WhereClause: RawUTF8;
       var DocID: TIDDynArray): boolean; overload;
@@ -2007,10 +2007,10 @@ type
     // - this method will search in all FTS3 columns, and except some floating-point
     // constants for weigthing each column (there must be the same number of
     // PerFieldWeight parameters as there are columns in the TOrmFts3 table)
-    // - example of use:  FTSMatch(TSQLDocuments,'"linu*"',IntResult,[1,0.5])
+    // - example of use:  FTSMatch(TOrmDocuments,'"linu*"',IntResult,[1,0.5])
     // which will sort the results by the rank obtained with the 1st column/field
     // beeing given twice the weighting of those in the 2nd (and last) column
-    // - FTSMatch(TSQLDocuments,'linu*',IntResult,[1,0.5]) will perform a
+    // - FTSMatch(TOrmDocuments,'linu*',IntResult,[1,0.5]) will perform a
     // SQL query as such, which is the fastest way of ranking according to
     // http://www.sqlite.org/fts3.html#appendix_a
     // $ SELECT RowID FROM Documents WHERE Documents MATCH 'linu*'
@@ -3294,8 +3294,8 @@ type
     function Orm: TOrmProperties;
       {$ifdef HASINLINE}inline;{$endif}
     /// the Table name in the database, associated with this TOrm class
-    // - 'TSQL' or 'TOrm' chars are trimmed at the beginning of the ClassName
-    // - or the ClassName is returned as is, if no 'TSQL' or 'TOrm' at first
+    // - 'TSql' or 'TOrm' chars are trimmed at the beginning of the ClassName
+    // - or the ClassName is returned as is, if no 'TSql' or 'TOrm' at first
     // - is just a wrapper around OrmProps.SQLTableName field value
     class function SQLTableName: RawUTF8;
       {$ifdef HASINLINE}inline;{$endif}
@@ -3754,10 +3754,10 @@ type
     // classes as corresponding Delphi designed virtual tables
     // - is not part of TOrmProperties because has been declared as virtual
     // so that you could specify a custom SQL statement, per TOrm type
-    // - anyway, don't call this method directly, but use TOrmModel.GetSQLCreate()
+    // - anyway, don't call this method directly, but use TOrmModel.GetSqlCreate()
     // - the aModel parameter is used to retrieve the Virtual Table module name,
     // and can be ignored for regular (not virtual) tables
-    class function GetSQLCreate(aModel: TOrmModel): RawUTF8; virtual;
+    class function GetSqlCreate(aModel: TOrmModel): RawUTF8; virtual;
     /// return the Class Type of the current TOrm
     function RecordClass: TOrmClass;
       {$ifdef HASINLINE}inline;{$endif}
@@ -3874,10 +3874,10 @@ type
     /// set the record fields from a binary buffer saved by GetBinary()
     // - same as SetBinaryValues(), but also reading the ID field first
     function SetBinary(const binary: RawByteString): boolean; overload;
-    /// set all field values from a supplied array of TSQLVar values
+    /// set all field values from a supplied array of TSqlVar values
     // - Values[] array must match the OrmProps.Field[] order: will return
     // false if the Values[].VType does not match OrmProps.FieldType[]
-    function SetFieldSQLVars(const Values: TSQLVarDynArray): boolean;
+    function SetFieldSQLVars(const Values: TSqlVarDynArray): boolean;
     /// retrieve a field value from a given property name, as encoded UTF-8 text
     // - you should use strong typing and direct property access, following
     // the ORM approach of the framework; but in some cases (a custom Grid
@@ -4453,7 +4453,7 @@ type
     ContentType: TOrmFieldType;
     /// how this field could be stored in a database
     // - equals ftUnknown if InitFields guessed the field type, or for oftVariant
-    ContentDB: TSQLDBFieldType;
+    ContentDB: TSqlDBFieldType;
     /// the field size in bytes; -1 means not computed yet
     ContentSize: integer;
     /// the field low-level RTTI information
@@ -4933,7 +4933,7 @@ type
     procedure SetFieldType(const FieldName: RawUTF8; FieldType: TOrmFieldType;
       FieldTypeInfo: PRttiInfo = nil; FieldSize: integer = -1); overload;
     /// set the exact type of all fields, from the DB-like information
-    procedure SetFieldTypes(const DBTypes: TSQLDBFieldTypeDynArray);
+    procedure SetFieldTypes(const DBTypes: TSqlDBFieldTypeDynArray);
     /// increase a particular Field Length Mean value
     // - to be used to customize the field appareance (e.g. for adding of left
     // checkbox for Marked[] fields)
@@ -5254,7 +5254,7 @@ type
     // - returns TRUE on parsing success
     // - returns FALSE if no valid JSON data was found
     // - update all content fields (Results[], RowCount, FieldCount, etc...)
-    // - expect the UTF-8 Buffer in either TSQLRequest.EngineExecute(DB,SQL,JSON)
+    // - expect the UTF-8 Buffer in either TSqlRequest.EngineExecute(DB,SQL,JSON)
     // format (i.e. expanded) or either in a not expanded format (as an
     // AJAX-ready array of objects)
     // - the conversion into PPUTF8CharArray is made inplace and is very fast
@@ -6247,8 +6247,8 @@ type
     /// the TOrm class
     property Table: TOrmClass read fTable;
     /// the Table name in the database, associated with this TOrm class
-    // - 'TSQL' or 'TORM' chars are trimmed at the beginning of the ClassName
-    // - or the ClassName is returned as is, if no 'TSQL' or 'TORM' at first
+    // - 'TSql' or 'TOrm' chars are trimmed at the beginning of the ClassName
+    // - or the ClassName is returned as is, if no 'TSql' or 'TOrm' at first
     property SQLTableName: RawUTF8 read fSQLTableName;
     /// returns 'COL1,COL2' with all COL* set to all field names, including
     // RowID, TRecordVersion and BLOBs
@@ -6462,7 +6462,7 @@ type
     // - will define such a generic TObject, to avoid any unecessary type
     // dependency to other units, e.g. mormot.db.* or mormot.rest.*
     // - in practice, will be assigned by VirtualTableExternalRegister() to
-    // a TSQLDBConnectionProperties instance in mormot.orm.sql.pas, or by
+    // a TSqlDBConnectionProperties instance in mormot.orm.sql.pas, or by
     // StaticMongoDBRegister() to a TMongoCollection instance, or by
     // TDDDRepositoryRestObjectMapping.Create to its associated TRest
     // - in ORM context, equals nil if the table is internal to SQLite3:
@@ -6644,7 +6644,7 @@ type
   // as TOrm classes
   // - share this Model between TRest Client and Server
   // - use this class to access the table properties: do not rely on the
-  // low-level database methods (e.g. TSQLDataBase.GetTableNames), since the
+  // low-level database methods (e.g. TSqlDataBase.GetTableNames), since the
   // tables may not exist in the main SQLite3 database, but in-memory or external
   // - don't modify the order of Tables inside this Model, if you publish
   // some TRecordReference property in any of your tables
@@ -6732,7 +6732,7 @@ type
     // - expects SQLTableName to be SQL-like formatted (i.e. without TOrm[Record])
     function GetTableIndexPtr(SQLTableName: PUTF8Char): PtrInt;
     /// return the UTF-8 encoded SQL source to create the table
-    function GetSQLCreate(aTableIndex: integer): RawUTF8;
+    function GetSqlCreate(aTableIndex: integer): RawUTF8;
     /// return the UTF-8 encoded SQL source to add the corresponding field
     // via a "ALTER TABLE" statement
     function GetSQLAddField(aTableIndex, aFieldIndex: integer): RawUTF8;
@@ -7586,42 +7586,42 @@ procedure RecordRefToID(var aArray: TInt64DynArray);
 // backward compatibility types redirections
 
 type
-  TSQLRecord = TOrm;
-  PSQLRecord = POrm;
-  TSQLRecordArray = TOrmArray;
-  PSQLRecordArray = POrmArray;
-  TSQLRecordObjArray = TOrmObjArray;
-  TSQLRecordClass = TOrmClass;
-  TSQLRecordClassDynArray = TOrmClassDynArray;
-  PSQLClass = POrmClass;
-  TSQLTable = TOrmTable;
-  TSQLTableJSON = TOrmTableJSON;
-  TSQLInitializeTableOption = TOrmInitializeTableOption;
-  TSQLInitializeTableOptions = TOrmInitializeTableOptions;
-  TSQLAccessRights = TOrmAccessRights;
-  PSQLAccessRights = POrmAccessRights;
-  TSQLFieldType = TOrmFieldType;
-  TSQLFieldTables = TOrmFieldTables;
-  TSQLModel = TOrmModel;
-  TSQLModelProperties = TOrmModelProperties;
-  TSQLModelPropertiesObjArray = TOrmModelPropertiesObjArray;
-  TSQLProperties = TOrmProperties;
-  TSQLPropInfo = TOrmPropInfo;
-  TSQLPropInfoObjArray = TOrmPropInfoObjArray;
-  TSQLPropInfoClass = TOrmPropInfoClass;
-  TSQLPropInfoListOptions = TOrmPropInfoListOptions;
-  TSQLPropInfoAttribute = TOrmPropInfoAttribute;
-  TSQLPropInfoAttributes = TOrmPropInfoAttributes;
-  TSQLRestCache = TRestCache;
-  TSQLRestBatch = TRestBatch;
-  TSQLRestBatchLocked = TRestBatchLocked;
-  TSQLEvent = TOrmEvent;
-  TSQLHistoryEvent = TOrmHistoryEvent;
-  TSQLOccasion = TOrmOccasion;
-  TSQLOccasions = TOrmOccasions;
+  TSqlRecord = TOrm;
+  PSqlRecord = POrm;
+  TSqlRecordArray = TOrmArray;
+  PSqlRecordArray = POrmArray;
+  TSqlRecordObjArray = TOrmObjArray;
+  TSqlRecordClass = TOrmClass;
+  TSqlRecordClassDynArray = TOrmClassDynArray;
+  PSqlClass = POrmClass;
+  TSqlTable = TOrmTable;
+  TSqlTableJSON = TOrmTableJSON;
+  TSqlInitializeTableOption = TOrmInitializeTableOption;
+  TSqlInitializeTableOptions = TOrmInitializeTableOptions;
+  TSqlAccessRights = TOrmAccessRights;
+  PSqlAccessRights = POrmAccessRights;
+  TSqlFieldType = TOrmFieldType;
+  TSqlFieldTables = TOrmFieldTables;
+  TSqlModel = TOrmModel;
+  TSqlModelProperties = TOrmModelProperties;
+  TSqlModelPropertiesObjArray = TOrmModelPropertiesObjArray;
+  TSqlProperties = TOrmProperties;
+  TSqlPropInfo = TOrmPropInfo;
+  TSqlPropInfoObjArray = TOrmPropInfoObjArray;
+  TSqlPropInfoClass = TOrmPropInfoClass;
+  TSqlPropInfoListOptions = TOrmPropInfoListOptions;
+  TSqlPropInfoAttribute = TOrmPropInfoAttribute;
+  TSqlPropInfoAttributes = TOrmPropInfoAttributes;
+  TSqlRestCache = TRestCache;
+  TSqlRestBatch = TRestBatch;
+  TSqlRestBatchLocked = TRestBatchLocked;
+  TSqlEvent = TOrmEvent;
+  TSqlHistoryEvent = TOrmHistoryEvent;
+  TSqlOccasion = TOrmOccasion;
+  TSqlOccasions = TOrmOccasions;
 
 const
-  // TOrmFieldType into TSQLFieldType
+  // TOrmFieldType into TSqlFieldType
   sftUnknown       = oftUnknown;
   sftAnsiText      = oftAnsiText;
   sftUTF8Text      = oftUTF8Text;
@@ -7651,7 +7651,7 @@ const
   sftDateTimeMS    = oftDateTimeMS;
   sftUnixTime      = oftUnixTime;
   sftUnixMSTime    = oftUnixMSTime;
-  // TOrmEvent/TOrmOccasion into TSQLEvent/TSQLOccasion
+  // TOrmEvent/TOrmOccasion into TSqlEvent/TSqlOccasion
   seAdd        =  oeAdd;
   seUpdate     =  oeUpdate;
   seDelete     =  oeDelete;
@@ -8674,7 +8674,7 @@ end;
 {$endif ISDELPHI20062007}
 
 const
-  PG_FT: array[TSQLDBFieldType] of string[9] = (
+  PG_FT: array[TSqlDBFieldType] of string[9] = (
     'int4', 'text', 'int8', 'float8', 'numeric', 'timestamp', 'text', 'bytea');
 
 function TJSONObjectDecoder.EncodeAsSQLPrepared(const TableName: RawUTF8;
@@ -9280,7 +9280,7 @@ begin
 end;
 
 const
-  SQLFIELDTYPETODBFIELDTYPE: array[TOrmFieldType] of TSQLDBFieldType = (
+  SQLFIELDTYPETODBFIELDTYPE: array[TOrmFieldType] of TSqlDBFieldType = (
     ftUnknown,   // oftUnknown
     ftUTF8,      // oftAnsiText
     ftUTF8,      // oftUTF8Text
@@ -9312,7 +9312,7 @@ const
     ftInt64);    // oftUnixMSTime = TUnixMSTime
 
 function OrmFieldTypeToDBField(aOrmFieldType: TOrmFieldType;
-  aTypeInfo: PRttiInfo): TSQLDBFieldType;
+  aTypeInfo: PRttiInfo): TSqlDBFieldType;
   {$ifdef HASINLINE}inline;{$endif}
 begin
   if aOrmFieldType = oftNullable then
@@ -9382,7 +9382,7 @@ begin
   result := ToText(fSQLDBFieldType);
 end;
 
-procedure TOrmPropInfo.GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
+procedure TOrmPropInfo.GetFieldSQLVar(Instance: TObject; var aValue: TSqlVar;
   var temp: RawByteString);
 begin
   GetValueVar(Instance, true, RawUTF8(temp), nil);
@@ -9426,7 +9426,7 @@ begin
 end;
 
 function TOrmPropInfo.SetFieldSQLVar(Instance: TObject;
-  const aValue: TSQLVar): boolean;
+  const aValue: TSqlVar): boolean;
 begin
   case aValue.VType of
     ftInt64:
@@ -9940,7 +9940,7 @@ begin
 end;
 
 function TOrmPropInfoRTTIInt32.SetFieldSQLVar(Instance: TObject;
-  const aValue: TSQLVar): boolean;
+  const aValue: TSqlVar): boolean;
 begin
   if aValue.VType = ftInt64 then
   begin
@@ -9952,7 +9952,7 @@ begin
 end;
 
 procedure TOrmPropInfoRTTIInt32.GetFieldSQLVar(Instance: TObject;
-  var aValue: TSQLVar; var temp: RawByteString);
+  var aValue: TSqlVar; var temp: RawByteString);
 var
   v: integer;
 begin
@@ -10258,7 +10258,7 @@ begin
 end;
 
 function TOrmPropInfoRTTIInt64.SetFieldSQLVar(Instance: TObject;
-  const aValue: TSQLVar): boolean;
+  const aValue: TSqlVar): boolean;
 begin
   if aValue.VType = ftInt64 then
   begin
@@ -10270,7 +10270,7 @@ begin
 end;
 
 procedure TOrmPropInfoRTTIInt64.GetFieldSQLVar(Instance: TObject;
-  var aValue: TSQLVar; var temp: RawByteString);
+  var aValue: TSqlVar; var temp: RawByteString);
 begin
   aValue.Options := [];
   aValue.VType := ftInt64;
@@ -10382,7 +10382,7 @@ begin
 end;
 
 function TOrmPropInfoRTTIDouble.SetFieldSQLVar(Instance: TObject;
-  const aValue: TSQLVar): boolean;
+  const aValue: TSqlVar): boolean;
 var
   V: double;
 begin
@@ -10404,7 +10404,7 @@ begin
 end;
 
 procedure TOrmPropInfoRTTIDouble.GetFieldSQLVar(Instance: TObject;
-  var aValue: TSQLVar; var temp: RawByteString);
+  var aValue: TSqlVar; var temp: RawByteString);
 begin
   aValue.Options := [];
   aValue.VType := ftDouble;
@@ -10485,7 +10485,7 @@ begin
 end;
 
 procedure TOrmPropInfoRTTICurrency.GetFieldSQLVar(Instance: TObject;
-  var aValue: TSQLVar; var temp: RawByteString);
+  var aValue: TSqlVar; var temp: RawByteString);
 begin
   aValue.Options := [];
   aValue.VType := ftCurrency;
@@ -10493,7 +10493,7 @@ begin
 end;
 
 function TOrmPropInfoRTTICurrency.SetFieldSQLVar(Instance: TObject;
-  const aValue: TSQLVar): boolean;
+  const aValue: TSqlVar): boolean;
 var
   V: currency;
 begin
@@ -10598,7 +10598,7 @@ begin
 end;
 
 procedure TOrmPropInfoRTTIDateTime.GetFieldSQLVar(Instance: TObject;
-  var aValue: TSQLVar; var temp: RawByteString);
+  var aValue: TSqlVar; var temp: RawByteString);
 begin
   if fOrmFieldType = oftDateTimeMS then
     aValue.Options := [svoDateWithMS]
@@ -10933,7 +10933,7 @@ begin
 end;
 
 function TOrmPropInfoRTTIAnsi.SetFieldSQLVar(Instance: TObject;
-  const aValue: TSQLVar): boolean;
+  const aValue: TSqlVar): boolean;
 var
   tmp: RawByteString;
 begin
@@ -10953,7 +10953,7 @@ begin
 end;
 
 procedure TOrmPropInfoRTTIAnsi.GetFieldSQLVar(Instance: TObject;
-  var aValue: TSQLVar; var temp: RawByteString);
+  var aValue: TSqlVar; var temp: RawByteString);
 begin
   fPropInfo.GetLongStrProp(Instance, temp);
   temp := fEngine.AnsiToUTF8(temp);
@@ -11028,7 +11028,7 @@ begin
 end;
 
 function TOrmPropInfoRTTIRawUTF8.SetFieldSQLVar(Instance: TObject;
-  const aValue: TSQLVar): boolean;
+  const aValue: TSqlVar): boolean;
 var
   tmp: RawByteString;
 begin
@@ -11048,7 +11048,7 @@ begin
 end;
 
 procedure TOrmPropInfoRTTIRawUTF8.GetFieldSQLVar(Instance: TObject;
-  var aValue: TSQLVar; var temp: RawByteString);
+  var aValue: TSqlVar; var temp: RawByteString);
 begin
   fPropInfo.GetLongStrProp(Instance, temp);
   aValue.Options := [];
@@ -11277,7 +11277,7 @@ begin
 end;
 
 function TOrmPropInfoRTTIRawBlob.SetFieldSQLVar(Instance: TObject;
-  const aValue: TSQLVar): boolean;
+  const aValue: TSqlVar): boolean;
 var
   tmp: RawByteString;
 begin
@@ -11299,7 +11299,7 @@ begin
 end;
 
 procedure TOrmPropInfoRTTIRawBlob.GetFieldSQLVar(Instance: TObject;
-  var aValue: TSQLVar; var temp: RawByteString);
+  var aValue: TSqlVar; var temp: RawByteString);
 begin
   fPropInfo.GetLongStrProp(Instance, temp);
   aValue.Options := [];
@@ -11531,7 +11531,7 @@ begin
 end;
 
 function TOrmPropInfoRTTIUnicode.SetFieldSQLVar(Instance: TObject;
-  const aValue: TSQLVar): boolean;
+  const aValue: TSqlVar): boolean;
 var
   tmp: UnicodeString;
 begin
@@ -11551,7 +11551,7 @@ begin
 end;
 
 procedure TOrmPropInfoRTTIUnicode.GetFieldSQLVar(Instance: TObject;
-  var aValue: TSQLVar; var temp: RawByteString);
+  var aValue: TSqlVar; var temp: RawByteString);
 var
   tmp: UnicodeString;
 begin
@@ -11764,7 +11764,7 @@ begin
 end;
 
 function TOrmPropInfoRTTIDynArray.SetFieldSQLVar(Instance: TObject;
-  const aValue: TSQLVar): boolean;
+  const aValue: TSqlVar): boolean;
 var
   da: TDynArray;
 begin
@@ -11793,7 +11793,7 @@ begin
 end;
 
 procedure TOrmPropInfoRTTIDynArray.GetFieldSQLVar(Instance: TObject;
-  var aValue: TSQLVar; var temp: RawByteString);
+  var aValue: TSqlVar; var temp: RawByteString);
 begin
   Serialize(Instance, temp, false);
   aValue.Options := [];
@@ -12130,7 +12130,7 @@ begin
 end;
 
 function TOrmPropInfoRecordRTTI.SetFieldSQLVar(Instance: TObject;
-  const aValue: TSQLVar): boolean;
+  const aValue: TSqlVar): boolean;
 begin
   if aValue.VType = ftBlob then
     result := RecordLoad(GetFieldAddr(Instance)^, aValue.VBlob, fTypeInfo) <> nil
@@ -12139,7 +12139,7 @@ begin
 end;
 
 procedure TOrmPropInfoRecordRTTI.GetFieldSQLVar(Instance: TObject;
-  var aValue: TSQLVar; var temp: RawByteString);
+  var aValue: TSqlVar; var temp: RawByteString);
 begin
   temp := RecordSave(GetFieldAddr(Instance)^, fTypeInfo);
   aValue.Options := [];
@@ -12271,7 +12271,7 @@ begin
 end;
 
 function TOrmPropInfoRecordFixedSize.SetFieldSQLVar(Instance: TObject;
-  const aValue: TSQLVar): boolean;
+  const aValue: TSqlVar): boolean;
 begin
   if aValue.VType = ftBlob then
   begin
@@ -12284,7 +12284,7 @@ begin
 end;
 
 procedure TOrmPropInfoRecordFixedSize.GetFieldSQLVar(Instance: TObject;
-  var aValue: TSQLVar; var temp: RawByteString);
+  var aValue: TSqlVar; var temp: RawByteString);
 begin
   SetString(temp, PAnsiChar(GetFieldAddr(Instance)), fRecordSize);
   aValue.Options := [];
@@ -13633,11 +13633,11 @@ begin
 end;
 
 const
-  DBTOFIELDTYPE: array[TSQLDBFieldType] of TOrmFieldType = (
+  DBTOFIELDTYPE: array[TSqlDBFieldType] of TOrmFieldType = (
     oftUnknown, oftUnknown,
     oftInteger, oftFloat, oftCurrency, oftDateTime, oftUTF8Text, oftBlob);
 
-procedure TOrmTable.SetFieldTypes(const DBTypes: TSQLDBFieldTypeDynArray);
+procedure TOrmTable.SetFieldTypes(const DBTypes: TSqlDBFieldTypeDynArray);
 var
   f: PtrInt;
 begin
@@ -14223,7 +14223,7 @@ end;
 
 procedure TOrmTable.GetMSRowSetValues(Dest: TStream; RowFirst, RowLast: integer);
 const
-  FIELDTYPE_TOXML: array[TSQLDBFieldType] of RawUTF8 = (
+  FIELDTYPE_TOXML: array[TSqlDBFieldType] of RawUTF8 = (
   // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency,
     '', '', ' dt:type="i8"', ' dt:type="float"',
     ' dt:type="number" rs:dbtype="currency"',
@@ -17001,7 +17001,7 @@ begin
     end;
 end;
 
-function TOrm.SetFieldSQLVars(const Values: TSQLVarDynArray): boolean;
+function TOrm.SetFieldSQLVars(const Values: TSqlVarDynArray): boolean;
 var
   max, field: PtrInt;
 begin
@@ -17308,7 +17308,7 @@ end;
   {$warnings off}
 {$endif ISDELPHI20062007}
 
-class function TOrm.GetSQLCreate(aModel: TOrmModel): RawUTF8;
+class function TOrm.GetSqlCreate(aModel: TOrmModel): RawUTF8;
 // not implemented in TOrmProperties since has been made virtual
 var
   i: PtrInt;
@@ -17319,7 +17319,7 @@ var
   fields: TOrmPropInfoList;
 begin
   if aModel = nil then
-    raise EModelException.CreateUTF8('Invalid %.GetSQLCreate(nil) call', [self]);
+    raise EModelException.CreateUTF8('Invalid %.GetSqlCreate(nil) call', [self]);
   Props := aModel.Props[self];
   if Props.Kind <>  ovkSQLite3 then
   begin
@@ -17349,7 +17349,7 @@ begin
           result := result + mname + '(';
         end;
     else
-      raise EModelException.CreateUTF8('%.GetSQLCreate(%)?', [self, ToText(Props.Kind)^]);
+      raise EModelException.CreateUTF8('%.GetSqlCreate(%)?', [self, ToText(Props.Kind)^]);
     end;
     fields := Props.Props.Fields;
     case Props.Kind of
@@ -17382,7 +17382,7 @@ begin
             {$ifndef PUREMORMOT2}
             if IdemPChar(pointer(cname), 'TSQLRECORDFTS') and
                (cname[14] in ['3', '4', '5']) then
-            begin // e.g. TSQLRecordFTS3Porter -> 'tokenize=porter'
+            begin // e.g. TSqlRecordFTS3Porter -> 'tokenize=porter'
               if length(cname) > 14 then
                 tokenizer := LowerCase(copy(cname, 15, 100));
               break;
@@ -20515,12 +20515,12 @@ begin
     result := aClass.Create;
 end;
 
-function TOrmModel.GetSQLCreate(aTableIndex: integer): RawUTF8;
+function TOrmModel.GetSqlCreate(aTableIndex: integer): RawUTF8;
 begin
   if (self = nil) or (cardinal(aTableIndex) > cardinal(fTablesMax)) then
     result := ''
   else
-    result := Tables[aTableIndex].GetSQLCreate(self);
+    result := Tables[aTableIndex].GetSqlCreate(self);
 end;
 
 function TOrmModel.GetSQLAddField(aTableIndex: integer; aFieldIndex: integer): RawUTF8;

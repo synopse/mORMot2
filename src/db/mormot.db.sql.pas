@@ -56,26 +56,26 @@ type
   // and will use the ftInt64 type definition for this
   // and send it with the INSERT statement (some databases, like Oracle, do not
   // support standard's IDENTITY attribute) - see http://troels.arvin.dk/db/rdbms
-  TSQLDBFieldTypeDefinition = array[TSQLDBFieldType] of RawUTF8;
+  TSqlDBFieldTypeDefinition = array[TSqlDBFieldType] of RawUTF8;
 
   /// the diverse type of bound parameters during a statement execution
   // - will be paramIn by default, which is the case 90% of time
   // - could be set to paramOut or paramInOut if must be refereshed after
   // execution (for calling a stored procedure expecting such parameters)
-  TSQLDBParamInOutType = (
+  TSqlDBParamInOutType = (
     paramIn,
     paramOut,
     paramInOut);
 
   /// used to define a field/column layout in a table schema
-  // - for TSQLDBConnectionProperties.SQLCreate to describe the new table
-  // - for TSQLDBConnectionProperties.GetFields to retrieve the table layout
-  TSQLDBColumnDefine = packed record
+  // - for TSqlDBConnectionProperties.SQLCreate to describe the new table
+  // - for TSqlDBConnectionProperties.GetFields to retrieve the table layout
+  TSqlDBColumnDefine = packed record
     /// the Column name
     ColumnName: RawUTF8;
     /// the Column type, as retrieved from the database provider
     // - returned as plain text by GetFields method, to be used e.g. by
-    // TSQLDBConnectionProperties.GetFieldDefinitions method
+    // TSqlDBConnectionProperties.GetFieldDefinitions method
     // - SQLCreate will check for this value to override the default type
     ColumnTypeNative: RawUTF8;
     /// the Column default width (in chars or bytes) of ftUTF8 or ftBlob
@@ -91,17 +91,17 @@ type
     ColumnScale: PtrInt;
     /// the Column type, as recognized by our mormot.db.sql classes
     // - should not be ftUnknown nor ftNull
-    ColumnType: TSQLDBFieldType;
+    ColumnType: TSqlDBFieldType;
     /// specify if column is indexed
     ColumnIndexed: boolean;
   end;
 
   /// used to define the column layout of a table schema
-  // - e.g. for TSQLDBConnectionProperties.GetFields
-  TSQLDBColumnDefineDynArray = array of TSQLDBColumnDefine;
+  // - e.g. for TSqlDBConnectionProperties.GetFields
+  TSqlDBColumnDefineDynArray = array of TSqlDBColumnDefine;
 
   /// used to describe extended Index definition of a table schema
-  TSQLDBIndexDefine = packed record
+  TSqlDBIndexDefine = packed record
     /// name of the index
     IndexName: RawUTF8;
     /// description of the index type
@@ -130,17 +130,17 @@ type
   end;
 
   /// used to describe extended Index definition of a table schema
-  // - e.g. for TSQLDBConnectionProperties.GetIndexes
-  TSQLDBIndexDefineDynArray = array of TSQLDBIndexDefine;
+  // - e.g. for TSqlDBConnectionProperties.GetIndexes
+  TSqlDBIndexDefineDynArray = array of TSqlDBIndexDefine;
 
   /// used to define a parameter/column layout in a stored procedure schema
-  // - for TSQLDBConnectionProperties.GetProcedureParameters to retrieve the stored procedure parameters
+  // - for TSqlDBConnectionProperties.GetProcedureParameters to retrieve the stored procedure parameters
   // - can be extended according to https://msdn.microsoft.com/en-us/library/ms711701(v=vs.85).aspx
-  TSQLDBProcColumnDefine = packed record
+  TSqlDBProcColumnDefine = packed record
     /// the Column name
     ColumnName: RawUTF8;
     /// the Column type, as retrieved from the database provider
-    // - used e.g. by TSQLDBConnectionProperties.GetProcedureParameters method
+    // - used e.g. by TSqlDBConnectionProperties.GetProcedureParameters method
     ColumnTypeNative: RawUTF8;
     /// the Column default width (in chars or bytes) of ftUTF8 or ftBlob
     // - can be set to value <0 for CLOB or BLOB column type, i.e. for
@@ -155,18 +155,18 @@ type
     ColumnScale: PtrInt;
     /// the Column type, as recognized by our mormot.db.sql classes
     // - should not be ftUnknown nor ftNull
-    ColumnType: TSQLDBFieldType;
+    ColumnType: TSqlDBFieldType;
     /// defines the procedure column as a parameter or a result set column
-    ColumnParamType: TSQLDBParamInOutType;
+    ColumnParamType: TSqlDBParamInOutType;
   end;
 
   /// used to define the parameter/column layout of a stored procedure schema
-  // - e.g. for TSQLDBConnectionProperties.GetProcedureParameters
-  TSQLDBProcColumnDefineDynArray = array of TSQLDBProcColumnDefine;
+  // - e.g. for TSqlDBConnectionProperties.GetProcedureParameters
+  TSqlDBProcColumnDefineDynArray = array of TSqlDBProcColumnDefine;
 
   /// possible column retrieval patterns
-  // - used by TSQLDBColumnProperty.ColumnValueState
-  TSQLDBStatementGetCol = (
+  // - used by TSqlDBColumnProperty.ColumnValueState
+  TSqlDBStatementGetCol = (
     colNone,
     colNull,
     colWrongType,
@@ -174,9 +174,9 @@ type
     colDataTruncated);
 
   /// used to define a field/column layout
-  // - for TSQLDBConnectionProperties.SQLCreate to describe the table
+  // - for TSqlDBConnectionProperties.SQLCreate to describe the table
   // - for T*Statement.Execute/Column*() methods to map the IRowSet content
-  TSQLDBColumnProperty = packed record
+  TSqlDBColumnProperty = packed record
     /// the Column name
     ColumnName: RawUTF8;
     /// a general purpose integer value
@@ -187,16 +187,16 @@ type
     // - for TOleDBStatement: the offset of this column in the IRowSet data,
     // starting with a DBSTATUSENUM, the data, then its length (for inlined
     // oftUTF8 and oftBlob only)
-    // - for TSQLDBOracleStatement: contains an offset to this column values
+    // - for TSqlDBOracleStatement: contains an offset to this column values
     // inside fRowBuffer[] internal buffer
-    // - for TSQLDBDatasetStatement: maps TField pointer value
-    // - for TSQLDBPostgresStatement: contains the column type OID
+    // - for TSqlDBDatasetStatement: maps TField pointer value
+    // - for TSqlDBPostgresStatement: contains the column type OID
     ColumnAttr: PtrUInt;
     /// the Column type, used for storage
     // - for SQLCreate: should not be ftUnknown nor ftNull
     // - for TOleDBStatement: should not be ftUnknown
     // - for mormot.db.sql.oracle: never ftUnknown, may be ftNull (for SQLT_RSET)
-    ColumnType: TSQLDBFieldType;
+    ColumnType: TSqlDBFieldType;
     /// set if the Column must exists (i.e. should not be null)
     ColumnNonNullable: boolean;
     /// set if the Column shall have unique value (add the corresponding constraint)
@@ -204,27 +204,27 @@ type
     /// set if the Column data is inlined within the main rows buffer
     // - for TOleDBStatement: set if column was NOT defined as DBTYPE_BYREF
     // which is the most common case, when column data < 4 KB
-    // - for TSQLDBOracleStatement: FALSE if column is an array of
+    // - for TSqlDBOracleStatement: FALSE if column is an array of
     // POCILobLocator (SQLT_CLOB/SQLT_BLOB) or POCIStmt (SQLT_RSET)
-    // - for TSQLDBODBCStatement: FALSE if bigger than 255 WideChar (ftUTF8) or
+    // - for TSqlDBODBCStatement: FALSE if bigger than 255 WideChar (ftUTF8) or
     // 255 bytes (ftBlob)
     ColumnValueInlined: boolean;
     /// expected column data size
-    // - for TSQLDBOracleStatement/TOleDBStatement/TODBCStatement: used to store
+    // - for TSqlDBOracleStatement/TOleDBStatement/TODBCStatement: used to store
     // one column size (in bytes)
     ColumnValueDBSize: cardinal;
     /// optional character set encoding for ftUTF8 columns
     // - for SQLT_STR/SQLT_CLOB (mormot.db.sql.oracle): equals to the OCI char set
     ColumnValueDBCharSet: integer;
     /// internal DB column data type
-    // - for TSQLDBOracleStatement: used to store the DefineByPos() TypeCode,
+    // - for TSqlDBOracleStatement: used to store the DefineByPos() TypeCode,
     // can be SQLT_STR/SQLT_CLOB, SQLT_FLT, SQLT_INT, SQLT_DAT, SQLT_BLOB,
     // SQLT_BIN and SQLT_RSET
-    // - for TSQLDBODBCStatement: used to store the DataType as returned
+    // - for TSqlDBODBCStatement: used to store the DataType as returned
     // by ODBC.DescribeColW() - use private ODBC_TYPE_TO[ColumnType] to
     // retrieve the marshalled type used during column retrieval
-    // - for TSQLDBFirebirdStatement: used to store XSQLVAR.sqltype
-    // - for TSQLDBDatasetStatement: indicates the TField class type, i.e.
+    // - for TSqlDBFirebirdStatement: used to store XSQLVAR.sqltype
+    // - for TSqlDBDatasetStatement: indicates the TField class type, i.e.
     // 0=TField, 1=TLargeIntField, 2=TWideStringField
     ColumnValueDBType: smallint;
     /// driver-specific encoding information
@@ -233,24 +233,24 @@ type
     ColumnValueDBForm: byte;
     /// may contain the current status of the column value
     // - for mormot.db.sql.odbc: state of the latest SQLGetData() call
-    ColumnDataState: TSQLDBStatementGetCol;
+    ColumnDataState: TSqlDBStatementGetCol;
     /// may contain the current column size for not FIXEDLENGTH_SQLDBFIELDTYPE
     // - for mormot.db.sql.odbc: size (in bytes) in corresponding fColData[]
-    // - TSQLDBProxyStatement: the actual maximum column size
+    // - TSqlDBProxyStatement: the actual maximum column size
     ColumnDataSize: integer;
   end;
 
-  PSQLDBColumnProperty = ^TSQLDBColumnProperty;
+  PSqlDBColumnProperty = ^TSqlDBColumnProperty;
 
   /// used to define a table/field column layout
-  TSQLDBColumnPropertyDynArray = array of TSQLDBColumnProperty;
+  TSqlDBColumnPropertyDynArray = array of TSqlDBColumnProperty;
 
   /// used to define how a column to be created
-  TSQLDBColumnCreate = record
+  TSqlDBColumnCreate = record
     /// the data type
     // - here, ftUnknown is used for Int32 values, ftInt64 for Int64 values,
-    // as expected by TSQLDBFieldTypeDefinition
-    DBType: TSQLDBFieldType;
+    // as expected by TSqlDBFieldTypeDefinition
+    DBType: TSqlDBFieldType;
     /// the column name
     Name: RawUTF8;
     /// the width, e.g. for VARCHAR() types
@@ -264,13 +264,13 @@ type
   end;
 
   /// used to define how a table is to be created
-  TSQLDBColumnCreateDynArray = array of TSQLDBColumnCreate;
+  TSqlDBColumnCreateDynArray = array of TSqlDBColumnCreate;
 
   /// identify a CRUD mode of a statement
   // - in addition to CRUD states, cPostgreBulkArray would identify if the ORM
   // should generate unnested/any bound array statements - currently only
   // supported by mormot.db.sql.postgres for bulk insert/update/delete
-  TSQLDBStatementCRUD = (
+  TSqlDBStatementCRUD = (
     cCreate,
     cRead,
     cUpdate,
@@ -279,11 +279,11 @@ type
 
   /// identify the CRUD modes of a statement
   // - used e.g. for batch send abilities of a DB engine
-  TSQLDBStatementCRUDs = set of TSQLDBStatementCRUD;
+  TSqlDBStatementCRUDs = set of TSqlDBStatementCRUD;
 
 
 const
-  /// a magic constant used e.g. by TSQLDBStatement.FetchAllToBinary
+  /// a magic constant used e.g. by TSqlDBStatement.FetchAllToBinary
   FETCHALLTOBINARY_MAGIC = 1;
 
 
@@ -291,9 +291,9 @@ const
 
 type
   /// the known database definitions
-  // - will be used e.g. for TSQLDBConnectionProperties.SQLFieldCreate(), or
+  // - will be used e.g. for TSqlDBConnectionProperties.SQLFieldCreate(), or
   // for OleDB/ODBC/ZDBC tuning according to the connected database engine
-  TSQLDBDefinition = (
+  TSqlDBDefinition = (
     dUnknown,
     dDefault,
     dOracle,
@@ -308,11 +308,11 @@ type
     dInformix);
 
   /// set of the available database definitions
-  TSQLDBDefinitions = set of TSQLDBDefinition;
+  TSqlDBDefinitions = set of TSqlDBDefinition;
 
   /// where the LIMIT clause should be inserted for a given SQL syntax
-  // - used by TSQLDBDefinitionLimitClause and SQLLimitClause() method
-  TSQLDBDefinitionLimitPosition = (
+  // - used by TSqlDBDefinitionLimitClause and SQLLimitClause() method
+  TSqlDBDefinitionLimitPosition = (
     posNone,
     posWhere,
     posSelect,
@@ -320,17 +320,17 @@ type
     posOuter);
 
   /// defines the LIMIT clause to be inserted for a given SQL syntax
-  // - used by TSQLDBDefinitionLimitClause and SQLLimitClause() method
-  TSQLDBDefinitionLimitClause = record
-    Position: TSQLDBDefinitionLimitPosition;
+  // - used by TSqlDBDefinitionLimitClause and SQLLimitClause() method
+  TSqlDBDefinitionLimitClause = record
+    Position: TSqlDBDefinitionLimitPosition;
     InsertFmt: PUTF8Char;
   end;
 
 const
-  /// the known column data types corresponding to our TSQLDBFieldType types
-  // - will be used e.g. for TSQLDBConnectionProperties.SQLFieldCreate()
-  // - see TSQLDBFieldTypeDefinition documentation to find out the mapping
-  DB_FIELDS: array[TSQLDBDefinition] of TSQLDBFieldTypeDefinition = (
+  /// the known column data types corresponding to our TSqlDBFieldType types
+  // - will be used e.g. for TSqlDBConnectionProperties.SQLFieldCreate()
+  // - see TSqlDBFieldTypeDefinition documentation to find out the mapping
+  DB_FIELDS: array[TSqlDBDefinition] of TSqlDBFieldTypeDefinition = (
   // ftUnknown=int32, ftNull=UTF8, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
   // dUnknown
     (' INT', ' NVARCHAR(%)', ' BIGINT', ' DOUBLE', ' NUMERIC(19,4)',
@@ -389,15 +389,15 @@ const
     (' int', ' lvarchar(%)', ' bigint', ' smallfloat', ' decimal(19,4)',
     ' datetime year to fraction(3)', ' clob', ' blob'));
 
-  /// the known column data types corresponding to our TSQLDBFieldType types
-  // - will be used e.g. for TSQLDBConnectionProperties.SQLFieldCreate()
+  /// the known column data types corresponding to our TSqlDBFieldType types
+  // - will be used e.g. for TSqlDBConnectionProperties.SQLFieldCreate()
   // - SQLite3 doesn't expect any field length, neither PostgreSQL, so set to 0
-  DB_FIELDSMAX: array[TSQLDBDefinition] of cardinal = (
+  DB_FIELDSMAX: array[TSqlDBDefinition] of cardinal = (
     1000, 1000, 1333, { =4000/3 since WideChar is up to 3 bytes in UTF-8 }
     4000, 255, 4000, 0, 32760, 32767, 0, 32700, 32700);
 
   /// the known SQL statement to retrieve the server date and time
-  DB_SERVERTIME: array[TSQLDBDefinition] of RawUTF8 = (
+  DB_SERVERTIME: array[TSqlDBDefinition] of RawUTF8 = (
     '', '', // return local server time by default
     'select sysdate from dual', 'select GETDATE()', '', // Jet is local -> return local time
     'SELECT NOW()', '', // SQlite is local -> return local time
@@ -410,8 +410,8 @@ const
   // - Positon indicates if should be included within the WHERE clause,
   // at the beginning of the SQL statement, or at the end of the SQL statement
   // - InsertFmt will replace '%' with the maximum number of lines to be retrieved
-  // - used by TSQLDBConnectionProperties.AdaptSQLLimitForEngineList()
-  DB_SQLLIMITCLAUSE: array[TSQLDBDefinition] of TSQLDBDefinitionLimitClause = (
+  // - used by TSqlDBConnectionProperties.AdaptSQLLimitForEngineList()
+  DB_SQLLIMITCLAUSE: array[TSqlDBDefinition] of TSqlDBDefinitionLimitClause = (
     ( // dUnknown
     Position: posNone;
     InsertFmt: nil
@@ -471,7 +471,7 @@ const
 
   /// where the DESC clause shall be used for a CREATE INDEX statement
   // - only identified syntax exception is for FireBird
-  DB_SQLDESENDINGINDEXPOS: array[TSQLDBDefinition] of (posWithColumn, posGlobalBefore) =
+  DB_SQLDESENDINGINDEXPOS: array[TSqlDBDefinition] of (posWithColumn, posGlobalBefore) =
     (posWithColumn, posWithColumn, posWithColumn, posWithColumn, posWithColumn,
      posWithColumn, posWithColumn, posGlobalBefore, posWithColumn,
      posWithColumn, posWithColumn, posWithColumn);
@@ -483,14 +483,14 @@ const
 
 
 /// retrieve the text of a given Database SQL dialect enumeration
-// - see also TSQLDBConnectionProperties.GetDBMSName() method
-function ToText(DBMS: TSQLDBDefinition): PShortString; overload;
+// - see also TSqlDBConnectionProperties.GetDBMSName() method
+function ToText(DBMS: TSqlDBDefinition): PShortString; overload;
 
 
 { ************ General SQL Processing Functions }
 
 /// function helper logging some column truncation information text
-procedure LogTruncatedColumn(const Col: TSQLDBColumnProperty);
+procedure LogTruncatedColumn(const Col: TSqlDBColumnProperty);
 
 /// retrieve a table name without any left schema
 // - e.g. TrimLeftSchema('SCHEMA.TABLENAME')='TABLENAME'
@@ -524,7 +524,7 @@ function BoundArrayToJSONArray(const Values: TRawUTF8DynArray): RawUTF8;
 
 var
   /// the TSynLog class used for logging for all our mormot.db.sql related units
-  // - you may override it with TSQLLog, if available from mORMot.pas
+  // - you may override it with TSqlLog, if available from mORMot.pas
   // - since not all exceptions are handled specificaly by this unit, you
   // may better use a common TSynLog class for the whole application or module
   SynDBLog: TSynLogClass = TSynLog;
@@ -532,34 +532,34 @@ var
 type
   /// a custom variant type used to have direct access to a result row content
   // - use ISQLDBRows.RowData method to retrieve such a Variant
-  TSQLDBRowVariantType = class(TSynInvokeableVariantType)
+  TSqlDBRowVariantType = class(TSynInvokeableVariantType)
   protected
     function IntGet(var Dest: TVarData; const Instance: TVarData;
       Name: PAnsiChar; NameLen: PtrInt): boolean; override;
   end;
 
   {$M+}
-  TSQLDBStatement = class;
-  TSQLDBConnection = class;
-  TSQLDBConnectionProperties = class;
+  TSqlDBStatement = class;
+  TSqlDBConnection = class;
+  TSqlDBConnectionProperties = class;
   {$M-}
 
   /// generic Exception type, as used by mormot.db.sql and mormot.db.sql.* units
-  ESQLDBException = class(ESynException)
+  ESqlDBException = class(ESynException)
   protected
-    fStatement: TSQLDBStatement;
+    fStatement: TSqlDBStatement;
   public
     /// constructor which will use FormatUTF8() instead of Format()
-    // - if the first Args[0] is a TSQLDBStatement class instance, the current
+    // - if the first Args[0] is a TSqlDBStatement class instance, the current
     // SQL statement will be part of the exception message
     constructor CreateUTF8(const Format: RawUTF8; const Args: array of const);
   published
-    /// associated TSQLDBStatement instance, if supplied as first parameter
-    property Statement: TSQLDBStatement read fStatement;
+    /// associated TSqlDBStatement instance, if supplied as first parameter
+    property Statement: TSqlDBStatement read fStatement;
   end;
 
   /// generic interface to access a SQL query result rows
-  // - not all TSQLDBStatement methods are available, but only those to retrieve
+  // - not all TSqlDBStatement methods are available, but only those to retrieve
   // data from a statement result: the purpose of this interface is to make
   // easy access to result rows, not provide all available features - therefore
   // you only have access to the Step() and Column*() methods
@@ -608,7 +608,7 @@ type
     /// the Column type of the current Row
     // - FieldSize can be set to store the size in chars of a ftUTF8 column
     // (0 means BLOB kind of TEXT column)
-    function ColumnType(Col: integer; FieldSize: PInteger = nil): TSQLDBFieldType;
+    function ColumnType(Col: integer; FieldSize: PInteger = nil): TSqlDBFieldType;
     /// returns TRUE if the column contains NULL
     function ColumnNull(Col: integer): boolean;
     /// return a Column integer value of the current Row, first Col is 0
@@ -634,10 +634,10 @@ type
     /// write a blob Column into the Stream parameter
     // - expected to be used with 'SELECT .. FOR UPDATE' locking statements
     procedure ColumnBlobFromStream(Col: integer; Stream: TStream); overload;
-    /// return a Column as a TSQLVar value, first Col is 0
+    /// return a Column as a TSqlVar value, first Col is 0
     // - the specified Temp variable will be used for temporary storage of
     // svtUTF8/svtBlob values
-    procedure ColumnToSQLVar(Col: integer; var Value: TSQLVar; var Temp: RawByteString);
+    procedure ColumnToSQLVar(Col: integer; var Value: TSqlVar; var Temp: RawByteString);
     /// return a Column as a variant
     // - a ftUTF8 TEXT content will be mapped into a generic WideString variant
     // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
@@ -650,7 +650,7 @@ type
     // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
     // since Delphi 2009: you may not loose any data during charset conversion
     // - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant
-    function ColumnToVariant(Col: integer; var Value: Variant): TSQLDBFieldType; overload;
+    function ColumnToVariant(Col: integer; var Value: Variant): TSqlDBFieldType; overload;
     /// return a special CURSOR Column content as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from stored procedures
@@ -708,9 +708,9 @@ type
     // is fast in practice
     property Column[const ColName: RawUTF8]: Variant
       read GetColumnVariant; default;
-    /// create a TSQLDBRowVariantType able to access any field content via late binding
+    /// create a TSqlDBRowVariantType able to access any field content via late binding
     // - i.e. you can use Data.Name to access the 'Name' column of the current row
-    // - this Variant will point to the corresponding TSQLDBStatement instance,
+    // - this Variant will point to the corresponding TSqlDBStatement instance,
     // so it's not necessary to retrieve its value for each row; but once the
     // associated ISQLDBRows instance is released, you won't be able to access
     // its data - use RowDocVariant instead
@@ -730,7 +730,7 @@ type
     procedure RowDocVariant(out aDocument: variant;
       aOptions: TDocVariantOptions = JSON_OPTIONS_FAST);
     /// return the associated statement instance
-    function Instance: TSQLDBStatement;
+    function Instance: TSqlDBStatement;
     // return all rows content as a JSON string
     // - JSON data is retrieved with UTF-8 encoding
     // - if Expanded is true, JSON data is an array of objects, for direct use
@@ -742,7 +742,7 @@ type
     // format and contains true BLOB data
     // - if ReturnedRowCount points to an integer variable, it will be filled with
     // the number of row data returned (excluding field names)
-    // - similar to corresponding TSQLRequest.Execute method in the
+    // - similar to corresponding TSqlRequest.Execute method in the
     // mormot.db.raw.sqlite3 unit
     function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt = nil): RawUTF8;
     // append all rows content as a JSON stream
@@ -754,7 +754,7 @@ type
     // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
-    // - similar to corresponding TSQLRequest.Execute method in the
+    // - similar to corresponding TSqlRequest.Execute method in the
     // mormot.db.raw.sqlite3 unit
     // - returns the number of row data returned (excluding field names)
     function FetchAllToJSON(JSON: TStream; Expanded: boolean): PtrInt;
@@ -762,14 +762,14 @@ type
     // - will save the column types and name, then every data row in optimized
     // binary format (faster and smaller than JSON)
     // - you can specify a LIMIT for the data extent (default 0 meaning all data)
-    // - generates the format expected by TSQLDBProxyStatement
+    // - generates the format expected by TSqlDBProxyStatement
     function FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal = 0;
       DataRowPosition: PCardinalDynArray = nil): cardinal;
   end;
 
   /// generic interface to bind to prepared SQL query
   // - inherits from ISQLDBRows, so gives access to the result columns data
-  // - not all TSQLDBStatement methods are available, but only those to bind
+  // - not all TSqlDBStatement methods are available, but only those to bind
   // parameters and retrieve data after execution
   // - reference counting mechanism of this interface will feature statement
   // cache (if available) for NewThreadSafeStatementPrepared() or PrepareInlined()
@@ -779,65 +779,65 @@ type
     // - the leftmost SQL parameter has an index of 1
     // - some providers (e.g. OleDB during MULTI INSERT statements) expect the
     // proper column type to be set in BoundType, even for NULL values
-    procedure BindNull(Param: integer; IO: TSQLDBParamInOutType = paramIn;
-      BoundType: TSQLDBFieldType = ftNull);
+    procedure BindNull(Param: integer; IO: TSqlDBParamInOutType = paramIn;
+      BoundType: TSqlDBFieldType = ftNull);
     /// bind an integer value to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure Bind(Param: integer; Value: Int64;
-      IO: TSQLDBParamInOutType = paramIn); overload;
+      IO: TSqlDBParamInOutType = paramIn); overload;
     /// bind a double value to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure Bind(Param: integer; Value: double;
-      IO: TSQLDBParamInOutType = paramIn); overload;
+      IO: TSqlDBParamInOutType = paramIn); overload;
     /// bind a TDateTime value to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure BindDateTime(Param: integer; Value: TDateTime;
-      IO: TSQLDBParamInOutType = paramIn); overload;
+      IO: TSqlDBParamInOutType = paramIn); overload;
     /// bind a currency value to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure BindCurrency(Param: integer; Value: currency;
-      IO: TSQLDBParamInOutType = paramIn); overload;
+      IO: TSqlDBParamInOutType = paramIn); overload;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure BindTextU(Param: integer; const Value: RawUTF8;
-      IO: TSQLDBParamInOutType = paramIn); overload;
+      IO: TSqlDBParamInOutType = paramIn); overload;
     /// bind a UTF-8 encoded buffer text (#0 ended) to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure BindTextP(Param: integer; Value: PUTF8Char;
-      IO: TSQLDBParamInOutType = paramIn); overload;
+      IO: TSqlDBParamInOutType = paramIn); overload;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure BindTextS(Param: integer; const Value: string;
-      IO: TSQLDBParamInOutType = paramIn); overload;
+      IO: TSqlDBParamInOutType = paramIn); overload;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure BindTextW(Param: integer; const Value: WideString;
-      IO: TSQLDBParamInOutType = paramIn); overload;
+      IO: TSqlDBParamInOutType = paramIn); overload;
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure BindBlob(Param: integer; Data: pointer; Size: integer;
-      IO: TSQLDBParamInOutType = paramIn); overload;
+      IO: TSqlDBParamInOutType = paramIn); overload;
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure BindBlob(Param: integer; const Data: RawByteString;
-      IO: TSQLDBParamInOutType = paramIn); overload;
+      IO: TSqlDBParamInOutType = paramIn); overload;
     /// bind a Variant value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - will call all virtual Bind*() methods from the Data type
     // - if DataIsBlob is TRUE, will call BindBlob(RawByteString(Data)) instead
     // of BindTextW(WideString(Variant)) - used e.g. by TQuery.AsBlob/AsBytes
     procedure BindVariant(Param: integer; const Data: Variant;
-      DataIsBlob: boolean; IO: TSQLDBParamInOutType = paramIn);
-    /// bind one TSQLVar value
+      DataIsBlob: boolean; IO: TSqlDBParamInOutType = paramIn);
+    /// bind one TSqlVar value
     // - the leftmost SQL parameter has an index of 1
-    procedure Bind(Param: integer; const Data: TSQLVar;
-      IO: TSQLDBParamInOutType = paramIn); overload;
+    procedure Bind(Param: integer; const Data: TSqlVar;
+      IO: TSqlDBParamInOutType = paramIn); overload;
     /// bind one RawUTF8 encoded value
     // - the leftmost SQL parameter has an index of 1
     // - the value should match the BindArray() format, i.e. be stored as in SQL
     // (i.e. number, 'quoted string', 'YYYY-MM-DD hh:mm:ss', null)
-    procedure Bind(Param: integer; ParamType: TSQLDBFieldType; const Value: RawUTF8;
-      ValueAlreadyUnquoted: boolean; IO: TSQLDBParamInOutType = paramIn); overload;
+    procedure Bind(Param: integer; ParamType: TSqlDBFieldType; const Value: RawUTF8;
+      ValueAlreadyUnquoted: boolean; IO: TSqlDBParamInOutType = paramIn); overload;
     /// bind an array of const values
     // - parameters marked as ? should be specified as method parameter in Params[]
     // - BLOB parameters can be bound with this method, when set after encoding
@@ -845,11 +845,11 @@ type
     // - TDateTime parameters can be bound with this method, when encoded via
     // a DateToSQL() or DateTimeToSQL() call
     procedure Bind(const Params: array of const;
-      IO: TSQLDBParamInOutType = paramIn); overload;
+      IO: TSqlDBParamInOutType = paramIn); overload;
     /// bind an array of fields from an existing SQL statement
     // - can be used e.g. after ColumnsToSQLInsert() method call for fast data
     // conversion between tables
-    procedure BindFromRows(const Fields: TSQLDBFieldTypeDynArray; Rows: TSQLDBStatement);
+    procedure BindFromRows(const Fields: TSqlDBFieldTypeDynArray; Rows: TSqlDBStatement);
     /// bind a special CURSOR parameter to be returned as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from strored procedures
@@ -871,7 +871,7 @@ type
     // 'YYYY-MM-DD hh:mm:ss', null)
     // - this default implementation will raise an exception if the engine
     // does not support array binding
-    procedure BindArray(Param: integer; ParamType: TSQLDBFieldType;
+    procedure BindArray(Param: integer; ParamType: TSqlDBFieldType;
       const Values: TRawUTF8DynArray; ValuesCount: integer); overload;
     /// bind an array of integer values to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -917,7 +917,7 @@ type
     // - the parameter should have been bound with IO=paramOut or IO=paramInOut
     // if CheckIsOutParameter is TRUE
     function ParamToVariant(Param: integer; var Value: Variant;
-      CheckIsOutParameter: boolean = true): TSQLDBFieldType;
+      CheckIsOutParameter: boolean = true): TSqlDBFieldType;
 
     /// execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
@@ -954,22 +954,22 @@ type
   end;
 
   /// possible events notified to TOnSQLDBProcess callback method
-  // - event handler is specified by TSQLDBConnectionProperties.OnProcess or
-  // TSQLDBConnection.OnProcess properties
-  // - speConnected / speDisconnected will notify TSQLDBConnection.Connect
-  // and TSQLDBConnection.Disconnect calls
+  // - event handler is specified by TSqlDBConnectionProperties.OnProcess or
+  // TSqlDBConnection.OnProcess properties
+  // - speConnected / speDisconnected will notify TSqlDBConnection.Connect
+  // and TSqlDBConnection.Disconnect calls
   // - speNonActive / speActive will be used to notify external DB blocking
   // access, so can be used e.g. to change the mouse cursor shape (this trigger
   // is re-entrant, i.e. it will be executed only once in case of nested calls)
-  // - speReconnected will be called if TSQLDBConnection did successfully
+  // - speReconnected will be called if TSqlDBConnection did successfully
   // recover its database connection (on error, TQuery will call
-  // speConnectionLost): this event will be called by TSQLDBConnection.Connect
+  // speConnectionLost): this event will be called by TSqlDBConnection.Connect
   // after a regular speConnected notification
   // - speConnectionLost will be called by TQuery in case of broken connection,
   // and if Disconnect/Reconnect did not restore it as expected (i.e. speReconnected)
   // - speStartTransaction / speCommit / speRollback will notify the
-  // corresponding TSQLDBConnection.StartTransaction, TSQLDBConnection.Commit
-  // and TSQLDBConnection.Rollback methods
+  // corresponding TSqlDBConnection.StartTransaction, TSqlDBConnection.Commit
+  // and TSqlDBConnection.Rollback methods
   TOnSQLDBProcessEvent = (
     speConnected,
     speDisconnected,
@@ -982,27 +982,27 @@ type
     speRollback);
 
   /// event handler called during all external DB process
-  // - event handler is specified by TSQLDBConnectionProperties.OnProcess or
-  // TSQLDBConnection.OnProperties properties
-  TOnSQLDBProcess = procedure(Sender: TSQLDBConnection; Event:
+  // - event handler is specified by TSqlDBConnectionProperties.OnProcess or
+  // TSqlDBConnection.OnProperties properties
+  TOnSQLDBProcess = procedure(Sender: TSqlDBConnection; Event:
     TOnSQLDBProcessEvent) of object;
 
   /// event triggered when an expired password is detected
   // - will allow to provide a new password
-  TOnPasswordExpired = function (Sender: TSQLDBConnection;
+  TOnPasswordExpired = function (Sender: TSqlDBConnection;
     var APassword: RawUTF8): boolean of object;
 
   /// event handler called when the low-level driver send some warning information
   // - errors will trigger Exceptions, but sometimes the database driver returns
   // some non critical information, which is logged and may be intercepted using
-  // the TSQLDBConnectionProperties.OnStatementInfo property
+  // the TSqlDBConnectionProperties.OnStatementInfo property
   // - may be used e.g. to track ORA-28001 or ORA-28002 about account expire
   // - is currently implemented by mormot.db.sql.oracle, mormot.db.sql.odbc
   // and mormot.db.sql.oledb units
-  TOnSQLDBInfo = procedure(Sender: TSQLDBStatement; const Msg: RawUTF8) of object;
+  TOnSQLDBInfo = procedure(Sender: TSqlDBStatement; const Msg: RawUTF8) of object;
 
-  /// actions implemented by TSQLDBConnectionProperties.SharedTransaction()
-  TSQLDBSharedTransactionAction = (
+  /// actions implemented by TSqlDBConnectionProperties.SharedTransaction()
+  TSqlDBSharedTransactionAction = (
     transBegin,
     transCommitWithoutException,
     transCommitWithException,
@@ -1012,7 +1012,7 @@ type
   // - may execute e.g. for 2 fields and 3 data rows on a database engine
   // implementing INSERT with multiple VALUES (like MySQL, PostgreSQL, NexusDB,
   // MSSQL or SQlite3), as implemented by
-  // TSQLDBConnectionProperties.MultipleValuesInsert() :
+  // TSqlDBConnectionProperties.MultipleValuesInsert() :
   // $ INSERT INTO TableName(FieldNames[0],FieldNames[1]) VALUES
   // $   (FieldValues[0][0],FieldValues[1][0]),
   // $   (FieldValues[0][1],FieldValues[1][1]),
@@ -1020,15 +1020,15 @@ type
   // - for other kind of DB which do not support multi values INSERT, may
   // execute a dedicated driver command, like MSSQL "bulk insert" or Firebird
   // "execute block"
-  TOnBatchInsert = procedure(Props: TSQLDBConnectionProperties;
+  TOnBatchInsert = procedure(Props: TSqlDBConnectionProperties;
     const TableName: RawUTF8; const FieldNames: TRawUTF8DynArray;
-    const FieldTypes: TSQLDBFieldTypeArray; RowCount: integer;
+    const FieldTypes: TSqlDBFieldTypeArray; RowCount: integer;
     const FieldValues: TRawUTF8DynArrayDynArray) of object;
 
-  /// specify the class of TSQLDBConnectionProperties
+  /// specify the class of TSqlDBConnectionProperties
   // - sometimes used to create connection properties instances, from a set
   // of available classes (see e.g. SynDBExplorer or sample 16)
-  TSQLDBConnectionPropertiesClass = class of TSQLDBConnectionProperties;
+  TSqlDBConnectionPropertiesClass = class of TSqlDBConnectionProperties;
 
   /// abstract class used to set Database-related properties
   // - handle e.g. the Database server location and connection parameters (like
@@ -1036,20 +1036,20 @@ type
   // - should also provide some Database-specific generic SQL statement creation
   // (e.g. how to create a Table), to be used e.g. by the mORMot layer
   // - this class level will handle a single "main connection" - you may inherit
-  // from TSQLDBConnectionThreadSafe to maintain one connection per thread
-  TSQLDBConnectionProperties = class
+  // from TSqlDBConnectionThreadSafe to maintain one connection per thread
+  TSqlDBConnectionProperties = class
   protected
     fServerName: RawUTF8;
     fDatabaseName: RawUTF8;
     fPassWord: RawUTF8;
     fUserID: RawUTF8;
     fForcedSchemaName: RawUTF8;
-    fMainConnection: TSQLDBConnection;
-    fBatchSendingAbilities: TSQLDBStatementCRUDs;
+    fMainConnection: TSqlDBConnection;
+    fBatchSendingAbilities: TSqlDBStatementCRUDs;
     fBatchMaxSentAtOnce: integer;
     fLoggedSQLMaxSize: integer;
     fOnBatchInsert: TOnBatchInsert;
-    fDBMS: TSQLDBDefinition;
+    fDBMS: TSqlDBDefinition;
     fUseCache, fStoreVoidStringAsNull, fLogSQLStatementOnException,
       fRollbackOnDisconnect, fReconnectAfterConnectionError,
       fFilterTableViewSchemaName: boolean;
@@ -1058,7 +1058,7 @@ type
     fVariantWideString: boolean;
     {$endif UNICODE}
     fForeignKeys: TSynNameValue;
-    fSQLCreateField: TSQLDBFieldTypeDefinition;
+    fSQLCreateField: TSqlDBFieldTypeDefinition;
     fSQLCreateFieldMax: cardinal;
     fSQLGetServerTimestamp: RawUTF8;
     fEngineName: RawUTF8;
@@ -1069,22 +1069,22 @@ type
     fSharedTransactions: array of record
       SessionID: cardinal;
       RefCount: integer;
-      Connection: TSQLDBConnection;
+      Connection: TSqlDBConnection;
     end;
     fExecuteWhenConnected: TRawUTF8DynArray;
     procedure SetConnectionTimeOutMinutes(minutes: cardinal);
     function GetConnectionTimeOutMinutes: cardinal;
     // this default implementation just returns the fDBMS value or dDefault
     // (never returns dUnknwown)
-    function GetDBMS: TSQLDBDefinition; virtual;
+    function GetDBMS: TSqlDBDefinition; virtual;
     function GetDBMSName: RawUTF8; virtual;
     function GetForeignKeysData: RawByteString;
     procedure SetForeignKeysData(const Value: RawByteString);
-    function FieldsFromList(const aFields: TSQLDBColumnDefineDynArray;
-      aExcludeTypes: TSQLDBFieldTypes): RawUTF8;
-    function GetMainConnection: TSQLDBConnection; virtual;
+    function FieldsFromList(const aFields: TSqlDBColumnDefineDynArray;
+      aExcludeTypes: TSqlDBFieldTypes): RawUTF8;
+    function GetMainConnection: TSqlDBConnection; virtual;
     function GetDatabaseNameSafe: RawUTF8; virtual;
-    /// any overriden TSQLDBConnectionProperties class should call it in the
+    /// any overriden TSqlDBConnectionProperties class should call it in the
     // initialization section of its implementation unit to be recognized
     class procedure RegisterClassNameForDefinition;
     /// will be called at the end of constructor
@@ -1101,7 +1101,7 @@ type
     // - this default implementation just returns nothing
     // - if this method is overridden, the ColumnTypeNativeToDB() method should
     // also be overridden in order to allow conversion from native column
-    // type into the corresponding TSQLDBFieldType
+    // type into the corresponding TSqlDBFieldType
     function SQLGetField(const aTableName: RawUTF8): RawUTF8; virtual;
     /// SQL statement to get advanced information about all indexes for a Table
     // - should return a SQL "SELECT" statement with the index names as first
@@ -1114,7 +1114,7 @@ type
     // - this default implementation just returns nothing
     // - if this method is overridden, the ColumnTypeNativeToDB() method should
     // also be overridden in order to allow conversion from native column
-    // type into the corresponding TSQLDBFieldType
+    // type into the corresponding TSqlDBFieldType
     function SQLGetParameter(const aProcName: RawUTF8): RawUTF8; virtual;
     /// SQL statement to get all stored procedure names for current connection
     // - used by GetProcedureNames public method
@@ -1122,7 +1122,7 @@ type
     // - this default implementation just returns nothing
     // - if this method is overridden, the ColumnTypeNativeToDB() method should
     // also be overridden in order to allow conversion from native column
-    // type into the corresponding TSQLDBFieldType
+    // type into the corresponding TSqlDBFieldType
     function SQLGetProcedure: RawUTF8; virtual;
     /// SQL statement to get all table names
     // - used by GetTableNames public method
@@ -1142,17 +1142,17 @@ type
     procedure GetForeignKeys; virtual; abstract;
     /// will use fSQLCreateField[Max] to create the SQL column definition
     // - this default virtual implementation will handle properly all supported
-    // database engines, assuming aField.ColumnType as in TSQLDBFieldTypeDefinition
+    // database engines, assuming aField.ColumnType as in TSqlDBFieldTypeDefinition
     // - if the field is a primary key, aAddPrimaryKey may be modified to contain
     // some text to be appended at the end of the ALTER/CREATE TABLE statement
-    function SQLFieldCreate(const aField: TSQLDBColumnCreate;
+    function SQLFieldCreate(const aField: TSqlDBColumnCreate;
       var aAddPrimaryKey: RawUTF8): RawUTF8; virtual;
     /// wrapper around GetIndexes() + set Fields[].ColumnIndexed in consequence
     // - used by some overridden versions of GetFields() method
     procedure GetIndexesAndSetFieldsColumnIndexed(const aTableName: RawUTF8;
-      var Fields: TSQLDBColumnDefineDynArray);
+      var Fields: TSqlDBColumnDefineDynArray);
     /// check if the exception or its error message is about DB connection error
-    // - will be used by TSQLDBConnection.LastErrorWasAboutConnection method
+    // - will be used by TSqlDBConnection.LastErrorWasAboutConnection method
     // - default method will check for the 'conne' sub-string in the message text
     // - should be overridden depending on the error message returned by the DB
     function ExceptionIsAboutConnection(aClass: ExceptClass;
@@ -1173,16 +1173,16 @@ type
     // $  INTO TableName(FieldNames[0],FieldNames[1]) VALUES (?,?)
     // $  INTO TableName(FieldNames[0],FieldNames[1]) VALUES (?,?)
     // $ SELECT 1 FROM DUAL;
-    procedure MultipleValuesInsert(Props: TSQLDBConnectionProperties;
+    procedure MultipleValuesInsert(Props: TSqlDBConnectionProperties;
       const TableName: RawUTF8; const FieldNames: TRawUTF8DynArray;
-      const FieldTypes: TSQLDBFieldTypeArray; RowCount: integer;
+      const FieldTypes: TSqlDBFieldTypeArray; RowCount: integer;
       const FieldValues: TRawUTF8DynArrayDynArray);
     /// Firebird-dedicated method able to implement OnBatchInsert()
     // - will run an EXECUTE BLOCK statement without any parameters, but
     // including inlined values - sounds to be faster on ZEOS/ZDBC!
-    procedure MultipleValuesInsertFirebird(Props: TSQLDBConnectionProperties;
+    procedure MultipleValuesInsertFirebird(Props: TSqlDBConnectionProperties;
       const TableName: RawUTF8; const FieldNames: TRawUTF8DynArray;
-      const FieldTypes: TSQLDBFieldTypeArray; RowCount: integer;
+      const FieldTypes: TSqlDBFieldTypeArray; RowCount: integer;
       const FieldValues: TRawUTF8DynArrayDynArray);
   public
     /// initialize the properties
@@ -1192,47 +1192,47 @@ type
     /// release related memory, and close MainConnection
     destructor Destroy; override;
     /// save the properties into a persistent storage object
-    // - you can use TSQLDBConnectionPropertiesDescription.CreateFrom()
-    // later on to instantiate the proper TSQLDBConnectionProperties class
+    // - you can use TSqlDBConnectionPropertiesDescription.CreateFrom()
+    // later on to instantiate the proper TSqlDBConnectionProperties class
     // - current Definition.Key value will be used for the password encryption
     procedure DefinitionTo(Definition: TSynConnectionDefinition); virtual;
     /// save the properties into a JSON file
-    // - you could use TSQLDBConnectionPropertiesDescription.CreateFromJSON()
-    // later on to instantiate the proper TSQLDBConnectionProperties class
+    // - you could use TSqlDBConnectionPropertiesDescription.CreateFromJSON()
+    // later on to instantiate the proper TSqlDBConnectionProperties class
     // - you can specify a custom Key, if the default is not enough for you
     function DefinitionToJSON(Key: cardinal = 0): RawUTF8; virtual;
     /// save the properties into a JSON file
-    // - you could use TSQLDBConnectionPropertiesDescription.CreateFromFile()
-    // later on to instantiate the proper TSQLDBConnectionProperties class
+    // - you could use TSqlDBConnectionPropertiesDescription.CreateFromFile()
+    // later on to instantiate the proper TSqlDBConnectionProperties class
     // - you can specify a custom Key, if the default is not enough for you
     procedure DefinitionToFile(const aJSONFile: TFileName; Key: cardinal = 0);
-    /// create a new TSQLDBConnectionProperties instance from the stored values
-    class function CreateFrom(aDefinition: TSynConnectionDefinition): TSQLDBConnectionProperties; virtual;
-    /// create a new TSQLDBConnectionProperties instance from a JSON content
-    // - as previously serialized with TSQLDBConnectionProperties.DefinitionToJSON
+    /// create a new TSqlDBConnectionProperties instance from the stored values
+    class function CreateFrom(aDefinition: TSynConnectionDefinition): TSqlDBConnectionProperties; virtual;
+    /// create a new TSqlDBConnectionProperties instance from a JSON content
+    // - as previously serialized with TSqlDBConnectionProperties.DefinitionToJSON
     // - you can specify a custom Key, if the default is not safe enough for you
-    class function CreateFromJSON(const aJSONDefinition: RawUTF8; aKey: cardinal = 0): TSQLDBConnectionProperties; virtual;
-    /// create a new TSQLDBConnectionProperties instance from a JSON file
-    // - as previously serialized with TSQLDBConnectionProperties.DefinitionToFile
+    class function CreateFromJSON(const aJSONDefinition: RawUTF8; aKey: cardinal = 0): TSqlDBConnectionProperties; virtual;
+    /// create a new TSqlDBConnectionProperties instance from a JSON file
+    // - as previously serialized with TSqlDBConnectionProperties.DefinitionToFile
     // - you can specify a custom Key, if the default is not safe enough for you
     class function CreateFromFile(const aJSONFile: TFileName; aKey: cardinal = 0):
-      TSQLDBConnectionProperties;
+      TSqlDBConnectionProperties;
     /// retrieve the registered class from the aDefinition.Kind string
-    class function ClassFrom(aDefinition: TSynConnectionDefinition): TSQLDBConnectionPropertiesClass;
+    class function ClassFrom(aDefinition: TSynConnectionDefinition): TSqlDBConnectionPropertiesClass;
 
     /// create a new connection
     // - call this method if the shared MainConnection is not enough (e.g. for
     // multi-thread access)
     // - the caller is responsible of freeing this instance
-    function NewConnection: TSQLDBConnection; virtual;
+    function NewConnection: TSqlDBConnection; virtual;
     /// get a thread-safe connection
     // - this default implementation will return the MainConnection shared
     // instance, so the provider should be thread-safe by itself
-    // - TSQLDBConnectionPropertiesThreadSafe will implement a per-thread
-    // connection pool, via an internal TSQLDBConnection pool, per thread
+    // - TSqlDBConnectionPropertiesThreadSafe will implement a per-thread
+    // connection pool, via an internal TSqlDBConnection pool, per thread
     // if necessary (e.g. for OleDB, which expect one TOleDBConnection instance
     // per thread)
-    function ThreadSafeConnection: TSQLDBConnection; virtual;
+    function ThreadSafeConnection: TSqlDBConnection; virtual;
     /// release all existing connections
     // - can be called e.g. after a DB connection problem, to purge the
     // connection pool, and allow automatic reconnection
@@ -1246,7 +1246,7 @@ type
     // won't slow done the process - on the contrary, it may help reducing the
     // consumpted resources, and stabilize long running n-Tier servers
     // - ThreadSafeConnection method will check for the last activity on this
-    // TSQLDBConnectionProperties instance, then call ClearConnectionPool
+    // TSqlDBConnectionProperties instance, then call ClearConnectionPool
     // to release all active connections if the idle time elapsed was too long
     // - warning: no connection shall still be used on the background (e.g. in
     // multi-threaded applications), or some unexpected issues may occur - for
@@ -1259,8 +1259,8 @@ type
     property ConnectionTimeOutMinutes: cardinal
       read GetConnectionTimeOutMinutes write SetConnectionTimeOutMinutes;
     /// intercept connection errors at statement preparation and try to reconnect
-    // - i.e. detect TSQLDBConnection.LastErrorWasAboutConnection in
-    // TSQLDBConnection.NewStatementPrepared
+    // - i.e. detect TSqlDBConnection.LastErrorWasAboutConnection in
+    // TSqlDBConnection.NewStatementPrepared
     // - warning: no connection shall still be used on the background (e.g. in
     // multi-threaded applications), or some unexpected issues may occur - see
     // AcquireExecutionMode[] recommendations in ConnectionTimeOutMinutes
@@ -1268,7 +1268,7 @@ type
       read fReconnectAfterConnectionError write fReconnectAfterConnectionError;
     /// create a new thread-safe statement
     // - this method will call ThreadSafeConnection.NewStatement
-    function NewThreadSafeStatement: TSQLDBStatement;
+    function NewThreadSafeStatement: TSqlDBStatement;
     /// create a new thread-safe statement from an internal cache (if any)
     // - will call ThreadSafeConnection.NewStatementPrepared
     // - this method should return a prepared statement instance on success
@@ -1283,7 +1283,7 @@ type
     // - here Args[] array does not refer to bound parameters, but to values
     // to be changed within SQLFormat in place of '%' characters (this method
     // will call FormatUTF8() internaly); parameters will be bound directly
-    // on the returned TSQLDBStatement instance
+    // on the returned TSqlDBStatement instance
     // - this method should return a prepared statement instance on success
     // - on error, returns nil and you can check Connnection.LastErrorMessage /
     // Connection.LastErrorException to retrieve correspnding error information
@@ -1360,13 +1360,13 @@ type
     // which would induce a potentially incorrect behavior
     // - returns the connection corresponding to the session, nil on error
     function SharedTransaction(SessionID: cardinal; action:
-      TSQLDBSharedTransactionAction): TSQLDBConnection; virtual;
+      TSqlDBSharedTransactionAction): TSqlDBConnection; virtual;
 
     /// convert a textual column data type, as retrieved e.g. from SQLGetField,
     // into our internal primitive types
     // - default implementation will always return ftUTF8
     function ColumnTypeNativeToDB(const aNativeType: RawUTF8; aScale: integer):
-      TSQLDBFieldType; virtual;
+      TSqlDBFieldType; virtual;
     /// returns the SQL statement used to create a Table
     // - should return the SQL "CREATE" statement needed to create a table with
     // the specified field/column names and types
@@ -1379,7 +1379,7 @@ type
     // ANSI SQL Data Types and maximum 1000 inlined WideChars: inherited classes
     // may change the default fSQLCreateField* content or override this method
     function SQLCreate(const aTableName: RawUTF8; const aFields:
-      TSQLDBColumnCreateDynArray; aAddID: boolean): RawUTF8; virtual;
+      TSqlDBColumnCreateDynArray; aAddID: boolean): RawUTF8; virtual;
     /// returns the SQL statement used to add a column to a Table
     // - should return the SQL "ALTER TABLE" statement needed to add a column to
     // an existing table
@@ -1388,7 +1388,7 @@ type
     // ANSI SQL Data Types and maximum 1000 inlined WideChars: inherited classes
     // may change the default fSQLCreateField* content or override this method
     function SQLAddColumn(const aTableName: RawUTF8; const aField:
-      TSQLDBColumnCreate): RawUTF8; virtual;
+      TSqlDBColumnCreate): RawUTF8; virtual;
     /// returns the SQL statement used to add an index to a Table
     // - should return the SQL "CREATE INDEX" statement needed to add an index
     // to the specified column names of an existing table
@@ -1408,7 +1408,7 @@ type
     // matching column names to ignore those kind of content (e.g. [stBlob] to
     // save time and space)
     function SQLSelectAll(const aTableName: RawUTF8; const aFields:
-      TSQLDBColumnDefineDynArray; aExcludeTypes: TSQLDBFieldTypes): RawUTF8; virtual;
+      TSqlDBColumnDefineDynArray; aExcludeTypes: TSqlDBFieldTypes): RawUTF8; virtual;
     /// SQL statement to create the corresponding database
     // - this default implementation will only handle dFirebird by now
     function SQLCreateDatabase(const aDatabaseName: RawUTF8; aDefaultPageSize:
@@ -1447,15 +1447,15 @@ type
     // method to retrieve the field names and properties
     // - used e.g. by GetFieldDefinitions
     // - will call ColumnTypeNativeToDB protected virtual method to guess the
-    // each mORMot TSQLDBFieldType
+    // each mORMot TSqlDBFieldType
     procedure GetFields(const aTableName: RawUTF8; out Fields:
-      TSQLDBColumnDefineDynArray); virtual;
+      TSqlDBColumnDefineDynArray); virtual;
     /// retrieve the advanced indexed information of a specified Table
     //  - this default implementation will use protected SQLGetIndex virtual
     // method to retrieve the index names and properties
     // - currently only MS SQL and Oracle are supported
     procedure GetIndexes(const aTableName: RawUTF8; out Indexes:
-      TSQLDBIndexDefineDynArray); virtual;
+      TSqlDBIndexDefineDynArray); virtual;
     /// get all field/column definition for a specified Table as text
     // - call the GetFields method and retrieve the column field name and
     // type as 'Name [Type Length Precision Scale]'
@@ -1464,14 +1464,14 @@ type
       TRawUTF8DynArray; WithForeignKeys: boolean);
     /// get one field/column definition as text
     // - return column type as 'Name [Type Length Precision Scale]'
-    class function GetFieldDefinition(const Column: TSQLDBColumnDefine): RawUTF8;
+    class function GetFieldDefinition(const Column: TSqlDBColumnDefine): RawUTF8;
     /// get one field/column definition as text, targeting a TOrm
     // published property
     // - return e.g. property type information as:
     // ! 'Name: RawUTF8 read fName write fName index 20;';
-    class function GetFieldORMDefinition(const Column: TSQLDBColumnDefine): RawUTF8;
+    class function GetFieldORMDefinition(const Column: TSqlDBColumnDefine): RawUTF8;
     /// check if the supplied text word is not a keyword for a given database engine
-    class function IsSQLKeyword(aDB: TSQLDBDefinition; aWord: RawUTF8): boolean;
+    class function IsSQLKeyword(aDB: TSqlDBDefinition; aWord: RawUTF8): boolean;
       overload; virtual;
     /// check if the supplied text word is not a keyword for the current database engine
     // - just a wrapper around the overloaded class function
@@ -1482,7 +1482,7 @@ type
     // - aProcName: stored procedure name to retrieve parameter infomation.
     // - Parameters: parameter list info (name, datatype, direction, default)
     procedure GetProcedureParameters(const aProcName: RawUTF8; out Parameters:
-      TSQLDBProcColumnDefineDynArray); virtual;
+      TSqlDBProcColumnDefineDynArray); virtual;
     /// get all table names
     // - this default implementation will use protected SQLGetTableNames virtual
     // method to retrieve the table names
@@ -1506,18 +1506,18 @@ type
     // - e.g. TRestStorageExternal.AdaptSQLForEngineList() calls this
     // to let TRestServer.URI by-pass virtual table mechanism
     function SQLLimitClause(AStmt: TSelectStatement):
-      TSQLDBDefinitionLimitClause; virtual;
+      TSqlDBDefinitionLimitClause; virtual;
     /// determine if the SQL statement can be cached
-    // - used by TSQLDBConnection.NewStatementPrepared() for handling cache
+    // - used by TSqlDBConnection.NewStatementPrepared() for handling cache
     function IsCachable(P: PUTF8Char): boolean; virtual;
     /// return the database engine name, as computed from the class name
-    // - 'TSQLDBConnectionProperties' will be trimmed left side of the class name
+    // - 'TSqlDBConnectionProperties' will be trimmed left side of the class name
     class function EngineName: RawUTF8;
 
     /// return a shared connection, corresponding to the given database
     // - call the ThreadSafeConnection method instead e.g. for multi-thread
     // access, or NewThreadSafeStatement for direct retrieval of a new statement
-    property MainConnection: TSQLDBConnection
+    property MainConnection: TSqlDBConnection
       read GetMainConnection;
     /// the associated User Password, as specified at creation
     // - not published, for security reasons (may be serialized otherwise)
@@ -1536,7 +1536,7 @@ type
     /// this event handler will be called during all process
     // - can be used e.g. to change the desktop cursor, or be notified
     // on connection/disconnection/reconnection
-    // - you can override this property directly in the TSQLDBConnection
+    // - you can override this property directly in the TSqlDBConnection
     property OnProcess: TOnSQLDBProcess
       read fOnProcess write fOnProcess;
     /// this event handler will be called when statements trigger some low-level
@@ -1550,7 +1550,7 @@ type
       read fOnBatchInsert write fOnBatchInsert;
   published { to be logged as JSON - no UserID nor Password for security :) }
     /// return the database engine name, as computed from the class name
-    // - 'TSQLDBConnectionProperties' will be trimmed left side of the class name
+    // - 'TSqlDBConnectionProperties' will be trimmed left side of the class name
     property Engine: RawUTF8
       read fEngineName;
     /// the associated server name, as specified at creation
@@ -1566,14 +1566,14 @@ type
       read fUserID;
     /// the remote DBMS type, as stated by the inheriting class itself, or
     //  retrieved at connecton time (e.g. for ODBC)
-    property DBMS: TSQLDBDefinition
+    property DBMS: TSqlDBDefinition
       read GetDBMS;
     /// the remote DBMS type name, retrieved as text from the DBMS property
     property DBMSEngineName: RawUTF8
       read GetDBMSName;
     /// the abilities of the database for batch sending
     // - e.g. Oracle will handle array DML binds, or MS SQL bulk insert
-    property BatchSendingAbilities: TSQLDBStatementCRUDs
+    property BatchSendingAbilities: TSqlDBStatementCRUDs
       read fBatchSendingAbilities;
     /// the maximum number of rows to be transmitted at once for batch sending
     // - e.g. Oracle handles array DML operation with iters <= 32767 at best
@@ -1588,7 +1588,7 @@ type
     // number of bytes (default set to 2048 to log up to 2KB per statement)
     property LoggedSQLMaxSize: integer
       read fLoggedSQLMaxSize write fLoggedSQLMaxSize;
-    /// allow to log the SQL statement when any low-level ESQLDBException is raised
+    /// allow to log the SQL statement when any low-level ESqlDBException is raised
     property LogSQLStatementOnException: boolean read
       fLogSQLStatementOnException write fLogSQLStatementOnException;
     /// an optional Schema name to be used for SQLGetField() instead of UserID
@@ -1623,7 +1623,7 @@ type
     // or you can set -1 if you don't want the warning log to appear
     property StatementCacheReplicates: integer
       read fStatementCacheReplicates write fStatementCacheReplicates;
-    /// defines if TSQLDBConnection.Disconnect shall Rollback any pending
+    /// defines if TSqlDBConnection.Disconnect shall Rollback any pending
     // transaction
     // - some engines executes a COMMIT when the client is disconnected, others
     // do raise an exception: this parameter ensures that any pending transaction
@@ -1674,12 +1674,12 @@ type
       read fExecuteWhenConnected write fExecuteWhenConnected;
   end;
 
-  /// abstract connection created from TSQLDBConnectionProperties
-  // - more than one TSQLDBConnection instance can be run for the same
-  // TSQLDBConnectionProperties
-  TSQLDBConnection = class
+  /// abstract connection created from TSqlDBConnectionProperties
+  // - more than one TSqlDBConnection instance can be run for the same
+  // TSqlDBConnectionProperties
+  TSqlDBConnection = class
   protected
-    fProperties: TSQLDBConnectionProperties;
+    fProperties: TSqlDBConnectionProperties;
     fErrorException: ExceptClass;
     fErrorMessage: RawUTF8;
     fTransactionCount: integer;
@@ -1702,7 +1702,7 @@ type
     procedure InternalProcess(Event: TOnSQLDBProcessEvent);
   public
     /// connect to a specified database engine
-    constructor Create(aProperties: TSQLDBConnectionProperties); virtual;
+    constructor Create(aProperties: TSqlDBConnectionProperties); virtual;
     /// release memory and connection
     destructor Destroy; override;
 
@@ -1721,18 +1721,18 @@ type
     function IsConnected: boolean; virtual; abstract;
     /// initialize a new SQL query statement for the given connection
     // - the caller should free the instance after use
-    function NewStatement: TSQLDBStatement; virtual; abstract;
+    function NewStatement: TSqlDBStatement; virtual; abstract;
     /// initialize a new SQL query statement for the given connection
     // - this default implementation will call the NewStatement method, and
     // implement handle statement caching is UseCache=true - in this case,
-    // the TSQLDBStatement.Reset method shall have been overridden to allow
+    // the TSqlDBStatement.Reset method shall have been overridden to allow
     // binding and execution of the very same prepared statement
-    // - the same aSQL can cache up to 9 statements in this TSQLDBConnection
+    // - the same aSQL can cache up to 9 statements in this TSqlDBConnection
     // - this method should return a prepared statement instance on success
     // - on error, if RaiseExceptionOnError=false (by default), it returns nil
     // and you can check LastErrorMessage and LastErrorException properties to
     // retrieve corresponding error information
-    // - if TSQLDBConnectionProperties.ReconnectAfterConnectionError is set,
+    // - if TSqlDBConnectionProperties.ReconnectAfterConnectionError is set,
     // any connection error will be trapped, unless AllowReconnect is false
     // - on error, if RaiseExceptionOnError=true, an exception is raised
     function NewStatementPrepared(const aSQL: RawUTF8; ExpectResults: boolean;
@@ -1751,7 +1751,7 @@ type
     procedure Rollback; virtual;
     /// allows to change the password of the current connected user
     // - do nothing method by default, returning false
-    // - properly overriden e.g. by TSQLDBOracleConnection
+    // - properly overriden e.g. by TSqlDBOracleConnection
     function PasswordChange: boolean; virtual;
 
     /// direct export of a DB statement rows into a new table of this database
@@ -1761,8 +1761,8 @@ type
     // first row of data
     // - INSERTs will be nested within a transaction if WithinTransaction is TRUE
     // - will raise an Exception in case of error
-    function NewTableFromRows(const TableName: RawUTF8; Rows: TSQLDBStatement;
-      WithinTransaction: boolean; ColumnForcedTypes: TSQLDBFieldTypeDynArray = nil): integer;
+    function NewTableFromRows(const TableName: RawUTF8; Rows: TSqlDBStatement;
+      WithinTransaction: boolean; ColumnForcedTypes: TSqlDBFieldTypeDynArray = nil): integer;
 
     /// the current Date and Time, as retrieved from the server
     // - note that this value is the DB_SERVERTIME[] constant SQL value, so
@@ -1779,7 +1779,7 @@ type
       read GetServerDateTime;
     /// this event handler will be called during all process
     // - can be used e.g. to change the desktop cursor
-    // - by default, will follow TSQLDBConnectionProperties.OnProcess property
+    // - by default, will follow TSqlDBConnectionProperties.OnProcess property
     property OnProcess: TOnSQLDBProcess
       read fOnProcess write fOnProcess;
   published { to be logged as JSON }
@@ -1817,11 +1817,11 @@ type
     /// TRUE if last error is a broken connection, e.g. during execution of
     // NewStatementPrepared
     // - i.e. LastErrorException/LastErrorMessage concerns the database connection
-    // - will use TSQLDBConnectionProperties.ExceptionIsAboutConnection virtual method
+    // - will use TSqlDBConnectionProperties.ExceptionIsAboutConnection virtual method
     property LastErrorWasAboutConnection: boolean
       read GetLastErrorWasAboutConnection;
     /// the associated database properties
-    property Properties: TSQLDBConnectionProperties
+    property Properties: TSqlDBConnectionProperties
       read fProperties;
   end;
 
@@ -1829,10 +1829,10 @@ type
   // - inherited classes should implement the DB-specific connection in its
   // overridden methods, especially Bind*(), Prepare(), ExecutePrepared, Step()
   // and Column*() methods
-  TSQLDBStatement = class(TInterfacedObject, ISQLDBRows, ISQLDBStatement)
+  TSqlDBStatement = class(TInterfacedObject, ISQLDBRows, ISQLDBStatement)
   protected
     fStripSemicolon: boolean;
-    fConnection: TSQLDBConnection;
+    fConnection: TSqlDBConnection;
     fSQL: RawUTF8;
     fExpectResults: boolean;
     fParamCount: integer;
@@ -1841,7 +1841,7 @@ type
     fCurrentRow: integer;
     fForceBlobAsNull: boolean;
     fForceDateWithMS: boolean;
-    fDBMS: TSQLDBDefinition;
+    fDBMS: TSqlDBDefinition;
     {$ifndef SYNDB_SILENCE}
     fSQLLogLog: TSynLog;
     fSQLLogLevel: TSynLogInfo;
@@ -1864,8 +1864,8 @@ type
     // from a given column value
     // - internal conversion will use a temporary Variant and ColumnToVariant method
     // - expects Dest to be of the exact type (e.g. Int64, not integer)
-    function ColumnToTypedValue(Col: integer; DestType: TSQLDBFieldType;
-      var Dest): TSQLDBFieldType;
+    function ColumnToTypedValue(Col: integer; DestType: TSqlDBFieldType;
+      var Dest): TSqlDBFieldType;
     /// append the inlined value of a given parameter, mainly for GetSQLWithInlinedParams
     // - optional MaxCharCount will truncate the text to a given number of chars
     procedure AddParamValueAsText(Param: integer; Dest: TTextWriter;
@@ -1873,81 +1873,81 @@ type
     /// return a Column as a variant
     function GetColumnVariant(const ColName: RawUTF8): Variant;
     /// return the associated statement instance for a ISQLDBRows interface
-    function Instance: TSQLDBStatement;
+    function Instance: TSqlDBStatement;
     /// wrappers to compute sllSQL/sllDB SQL context with a local timer
     function SQLLogBegin(level: TSynLogInfo): TSynLog;
     function SQLLogEnd(const Fmt: RawUTF8; const Args: array of const): Int64; overload;
     function SQLLogEnd(msg: PShortString = nil): Int64; overload;
   public
     /// create a statement instance
-    constructor Create(aConnection: TSQLDBConnection); virtual;
+    constructor Create(aConnection: TSqlDBConnection); virtual;
 
     /// bind a NULL value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - some providers (e.g. OleDB during MULTI INSERT statements) expect the
     // proper column type to be set in BoundType, even for NULL values
-    procedure BindNull(Param: integer; IO: TSQLDBParamInOutType = paramIn;
-      BoundType: TSQLDBFieldType = ftNull); virtual; abstract;
+    procedure BindNull(Param: integer; IO: TSqlDBParamInOutType = paramIn;
+      BoundType: TSqlDBFieldType = ftNull); virtual; abstract;
     /// bind an integer value to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure Bind(Param: integer; Value: Int64;
-      IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
+      IO: TSqlDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a double value to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure Bind(Param: integer; Value: double;
-      IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
+      IO: TSqlDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a TDateTime value to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure BindDateTime(Param: integer; Value: TDateTime;
-      IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
+      IO: TSqlDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a currency value to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure BindCurrency(Param: integer; Value: currency;
-      IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
+      IO: TSqlDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure BindTextU(Param: integer; const Value: RawUTF8;
-      IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
+      IO: TSqlDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a UTF-8 encoded buffer text (#0 ended) to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure BindTextP(Param: integer; Value: PUTF8Char;
-      IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
+      IO: TSqlDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure BindTextS(Param: integer; const Value: string;
-      IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
+      IO: TSqlDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure BindTextW(Param: integer; const Value: WideString;
-      IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
+      IO: TSqlDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure BindBlob(Param: integer; Data: pointer; Size: integer;
-      IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
+      IO: TSqlDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure BindBlob(Param: integer; const Data: RawByteString;
-      IO: TSQLDBParamInOutType = paramIn); overload; virtual; abstract;
+      IO: TSqlDBParamInOutType = paramIn); overload; virtual; abstract;
     /// bind a Variant value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - will call all virtual Bind*() methods from the Data type
     // - if DataIsBlob is TRUE, will call BindBlob(RawByteString(Data)) instead
     // of BindTextW(WideString(Variant)) - used e.g. by TQuery.AsBlob/AsBytes
     procedure BindVariant(Param: integer; const Data: Variant;
-      DataIsBlob: boolean; IO: TSQLDBParamInOutType = paramIn); virtual;
-    /// bind one TSQLVar value
+      DataIsBlob: boolean; IO: TSqlDBParamInOutType = paramIn); virtual;
+    /// bind one TSqlVar value
     // - the leftmost SQL parameter has an index of 1
     // - this default implementation will call corresponding Bind*() method
-    procedure Bind(Param: integer; const Data: TSQLVar;
-      IO: TSQLDBParamInOutType = paramIn); overload; virtual;
+    procedure Bind(Param: integer; const Data: TSqlVar;
+      IO: TSqlDBParamInOutType = paramIn); overload; virtual;
     /// bind one RawUTF8 encoded value
     // - the leftmost SQL parameter has an index of 1
     // - the value should match the BindArray() format, i.e. be stored as in SQL
     // (i.e. number, 'quoted string', 'YYYY-MM-DD hh:mm:ss', null) - e.g. as
     // computed by TJSONObjectDecoder.Decode()
-    procedure Bind(Param: integer; ParamType: TSQLDBFieldType;
+    procedure Bind(Param: integer; ParamType: TSqlDBFieldType;
       const Value: RawUTF8; ValueAlreadyUnquoted: boolean;
-      IO: TSQLDBParamInOutType = paramIn); overload; virtual;
+      IO: TSqlDBParamInOutType = paramIn); overload; virtual;
     /// bind an array of const values
     // - parameters marked as ? should be specified as method parameter in Params[]
     // - BLOB parameters can be bound with this method, when set after encoding
@@ -1958,11 +1958,11 @@ type
     // i.e. with DataIsBlob=true
     // - this default implementation will call corresponding Bind*() method
     procedure Bind(const Params: array of const;
-      IO: TSQLDBParamInOutType = paramIn); overload; virtual;
+      IO: TSqlDBParamInOutType = paramIn); overload; virtual;
     /// bind an array of fields from an existing SQL statement
     // - can be used e.g. after ColumnsToSQLInsert() method call for fast data
     // conversion between tables
-    procedure BindFromRows(const Fields: TSQLDBFieldTypeDynArray; Rows: TSQLDBStatement);
+    procedure BindFromRows(const Fields: TSqlDBFieldTypeDynArray; Rows: TSqlDBStatement);
     /// bind a special CURSOR parameter to be returned as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
     // Oracle) usually use such structures to get data from strored procedures
@@ -1986,7 +1986,7 @@ type
     // 'YYYY-MM-DD hh:mm:ss', null)
     // - this default implementation will raise an exception if the engine
     // does not support array binding
-    procedure BindArray(Param: integer; ParamType: TSQLDBFieldType;
+    procedure BindArray(Param: integer; ParamType: TSqlDBFieldType;
       const Values: TRawUTF8DynArray; ValuesCount: integer); overload; virtual;
     /// bind an array of integer values to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -2110,7 +2110,7 @@ type
     // - this implementation just check that Param is correct: overridden method
     // should fill Value content
     function ParamToVariant(Param: integer; var Value: Variant;
-      CheckIsOutParameter: boolean = true): TSQLDBFieldType; virtual;
+      CheckIsOutParameter: boolean = true): TSqlDBFieldType; virtual;
 
     /// After a statement has been prepared via Prepare() + ExecutePrepared() or
     // Execute(), this method must be called one or more times to evaluate it
@@ -2151,7 +2151,7 @@ type
     // - FieldSize can be set to store the size in chars of a ftUTF8 column
     // (0 means BLOB kind of TEXT column)
     function ColumnType(Col: integer;
-      FieldSize: PInteger = nil): TSQLDBFieldType; virtual; abstract;
+      FieldSize: PInteger = nil): TSqlDBFieldType; virtual; abstract;
     /// returns TRUE if the column contains NULL
     function ColumnNull(Col: integer): boolean; virtual; abstract;
     /// return a Column integer value of the current Row, first Col is 0
@@ -2199,11 +2199,11 @@ type
     // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
     // since Delphi 2009: you may not loose any data during charset conversion
     // - a ftBlob BLOB content will be mapped into a TBlobData AnsiString variant
-    function ColumnToVariant(Col: integer; var Value: Variant): TSQLDBFieldType; virtual;
-    /// return a Column as a TSQLVar value, first Col is 0
+    function ColumnToVariant(Col: integer; var Value: Variant): TSqlDBFieldType; virtual;
+    /// return a Column as a TSqlVar value, first Col is 0
     // - the specified Temp variable will be used for temporary storage of
     // svtUTF8/svtBlob values
-    procedure ColumnToSQLVar(Col: integer; var Value: TSQLVar; var Temp:
+    procedure ColumnToSQLVar(Col: integer; var Value: TSqlVar; var Temp:
       RawByteString); virtual;
     /// return a special CURSOR Column content as a mormot.db.sql result set
     // - Cursors are not handled internally by mORMot, but some databases (e.g.
@@ -2239,9 +2239,9 @@ type
     procedure ColumnBlobFromStream(const ColName: RawUTF8; Stream: TStream); overload;
     /// return a Column as a variant, from a supplied column name
     function ColumnVariant(const ColName: RawUTF8): Variant; overload;
-    /// create a TSQLDBRowVariantType able to access any field content via late binding
+    /// create a TSqlDBRowVariantType able to access any field content via late binding
     // - i.e. you can use Data.Name to access the 'Name' column of the current row
-    // - this Variant will point to the corresponding TSQLDBStatement instance,
+    // - this Variant will point to the corresponding TSqlDBStatement instance,
     // so it's not necessary to retrieve its value for each row
     // - typical use is:
     // ! var Row: Variant;
@@ -2279,9 +2279,9 @@ type
     // - the SQL statement is prepared with bound parameters, e.g.
     // $ insert into TableName (Col1,Col2) values (?,N)
     // - used e.g. to convert some data on the fly from one database to another,
-    // via the TSQLDBConnection.NewTableFromRows method
+    // via the TSqlDBConnection.NewTableFromRows method
     function ColumnsToSQLInsert(const TableName: RawUTF8;
-      var Fields: TSQLDBColumnCreateDynArray): RawUTF8; virtual;
+      var Fields: TSqlDBColumnCreateDynArray): RawUTF8; virtual;
     // append all rows content as a JSON stream
     // - JSON data is added to the supplied TStream, with UTF-8 encoding
     // - if Expanded is true, JSON data is an array of objects, for direct use
@@ -2291,7 +2291,7 @@ type
     // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
-    // - similar to corresponding TSQLRequest.Execute method in the
+    // - similar to corresponding TSqlRequest.Execute method in the
     // mormot.db.raw.sqlite3 unit
     // - returns the number of row data returned (excluding field names)
     // - warning: TRestStorageExternal.EngineRetrieve in mormot.orm.sql unit
@@ -2319,22 +2319,22 @@ type
     // format and contains true BLOB data
     // - if ReturnedRowCount points to an integer variable, it will be filled with
     // the number of row data returned (excluding field names)
-    // - similar to corresponding TSQLRequest.Execute method in the
+    // - similar to corresponding TSqlRequest.Execute method in the
     // mormot.db.raw.sqlite3 unit
     function FetchAllAsJSON(Expanded: boolean; ReturnedRowCount: PPtrInt = nil): RawUTF8;
     /// append all rows content as binary stream
     // - will save the column types and name, then every data row in optimized
     // binary format (faster and smaller than JSON)
     // - you can specify a LIMIT for the data extent (default 0 meaning all data)
-    // - generates the format expected by TSQLDBProxyStatement
+    // - generates the format expected by TSqlDBProxyStatement
     function FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal = 0;
       DataRowPosition: PCardinalDynArray = nil): cardinal; virtual;
     /// append current row content as binary stream
     // - will save one data row in optimized binary format (if not in Null)
     // - virtual method called by FetchAllToBinary()
-    // - follows the format expected by TSQLDBProxyStatement
+    // - follows the format expected by TSqlDBProxyStatement
     procedure ColumnsToBinary(W: TBufferWriter; Null: pointer;
-      const ColTypes: TSQLDBFieldTypeDynArray); virtual;
+      const ColTypes: TSqlDBFieldTypeDynArray); virtual;
     /// low-level access to the Timer used for last DB operation
     property SQLLogTimer: TPrecisionTimer
       read fSQLLogTimer;
@@ -2375,7 +2375,7 @@ type
     property TotalRowsRetrieved: integer
       read fTotalRowsRetrieved;
     /// the associated database connection
-    property Connection: TSQLDBConnection
+    property Connection: TSqlDBConnection
       read fConnection;
     /// strip last semicolon in query
     // - expectation may vary, depending on the SQL statement and the engine
@@ -2388,38 +2388,38 @@ type
 { ************ Parent Classes for Thread-Safe and Parametrized Connections }
 
 type
-  /// abstract connection created from TSQLDBConnectionProperties
+  /// abstract connection created from TSqlDBConnectionProperties
   // - this overridden class will defined an hidden thread ID, to ensure
   // that one connection will be create per thread
   // - e.g. OleDB, ODBC and Oracle connections will inherit from this class
-  TSQLDBConnectionThreadSafe = class(TSQLDBConnection)
+  TSqlDBConnectionThreadSafe = class(TSqlDBConnection)
   protected
     fThreadID: TThreadID;
   end;
 
-  /// threading modes set to TSQLDBConnectionPropertiesThreadSafe.ThreadingMode
+  /// threading modes set to TSqlDBConnectionPropertiesThreadSafe.ThreadingMode
   // - default mode is to use a Thread Pool, i.e. one connection per thread
   // - or you can force to use the main connection
   // - or you can use a shared background thread process (not implemented yet)
   // - last two modes could be used for embedded databases (SQLite3/FireBird),
   // when multiple connections may break stability, consume too much resources
   // and/or decrease performance
-  TSQLDBConnectionPropertiesThreadSafeThreadingMode = (
+  TSqlDBConnectionPropertiesThreadSafeThreadingMode = (
     tmThreadPool,
     tmMainConnection,
     tmBackgroundThread);
 
   /// connection properties which will implement an internal Thread-Safe
   // connection pool
-  TSQLDBConnectionPropertiesThreadSafe = class(TSQLDBConnectionProperties)
+  TSqlDBConnectionPropertiesThreadSafe = class(TSqlDBConnectionProperties)
   protected
     fConnectionPool: TSynObjectListLocked;
     fLatestConnectionRetrievedInPool: integer;
-    fThreadingMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode;
+    fThreadingMode: TSqlDBConnectionPropertiesThreadSafeThreadingMode;
     /// returns -1 if none was defined yet
     function CurrentThreadConnectionIndex: integer;
     /// overridden method to properly handle multi-thread
-    function GetMainConnection: TSQLDBConnection; override;
+    function GetMainConnection: TSqlDBConnection; override;
   public
     /// initialize the properties
     // - this overridden method will initialize the internal per-thread connection pool
@@ -2427,12 +2427,12 @@ type
     /// release related memory, and all per-thread connections
     destructor Destroy; override;
     /// get a thread-safe connection
-    // - this overridden implementation will define a per-thread TSQLDBConnection
+    // - this overridden implementation will define a per-thread TSqlDBConnection
     // connection pool, via an internal  pool
-    function ThreadSafeConnection: TSQLDBConnection; override;
+    function ThreadSafeConnection: TSqlDBConnection; override;
     /// release all existing connections
     // - this overridden implementation will release all per-thread
-    // TSQLDBConnection internal connection pool
+    // TSqlDBConnection internal connection pool
     // - warning: no connection shall still be used on the background (e.g. in
     // multi-threaded applications), or some unexpected border effects may occur
     procedure ClearConnectionPool; override;
@@ -2455,9 +2455,9 @@ type
     /// set this property if you want to disable the per-thread connection pool
     // - to be used e.g. in database embedded mode (SQLite3/FireBird), when
     // multiple connections may break stability and decrease performance
-    // - see TSQLDBConnectionPropertiesThreadSafeThreadingMode for the
+    // - see TSqlDBConnectionPropertiesThreadSafeThreadingMode for the
     // possible values
-    property ThreadingMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode
+    property ThreadingMode: TSqlDBConnectionPropertiesThreadSafeThreadingMode
       read fThreadingMode write fThreadingMode;
   end;
 
@@ -2465,11 +2465,11 @@ type
   // - you can use your own internal representation of parameters
   // (TOleDBStatement use its own TOleDBStatementParam type), but
   // this type can be used to implement a generic parameter
-  // - used e.g. by TSQLDBStatementWithParams as a dynamic array
-  // (and its inherited TSQLDBOracleStatement)
+  // - used e.g. by TSqlDBStatementWithParams as a dynamic array
+  // (and its inherited TSqlDBOracleStatement)
   // - don't change this structure, since it will be serialized as binary
-  // for TSQLDBProxyConnectionCommandExecute
-  TSQLDBParam = packed record
+  // for TSqlDBProxyConnectionCommandExecute
+  TSqlDBParam = packed record
     /// storage used for TEXT (ftUTF8) and BLOB (ftBlob) values
     // - ftBlob are stored as RawByteString
     // - ftUTF8 are stored as RawUTF8
@@ -2482,34 +2482,34 @@ type
     // 'YYYY-MM-DD hh:mm:ss', null)
     VArray: TRawUTF8DynArray;
     /// the column/parameter Value type
-    VType: TSQLDBFieldType;
+    VType: TSqlDBFieldType;
     /// define if parameter can be retrieved after a stored procedure execution
-    VInOut: TSQLDBParamInOutType;
-    /// used e.g. by TSQLDBOracleStatement
+    VInOut: TSqlDBParamInOutType;
+    /// used e.g. by TSqlDBOracleStatement
     VDBType: word;
     /// storage used for ftInt64, ftDouble, ftDate and ftCurrency value
     VInt64: Int64;
   end;
 
-  PSQLDBParam = ^TSQLDBParam;
+  PSqlDBParam = ^TSqlDBParam;
 
   /// dynamic array used to store standard binding parameters
-  // - used e.g. by TSQLDBStatementWithParams (and its
-  // inherited TSQLDBOracleStatement)
-  TSQLDBParamDynArray = array of TSQLDBParam;
+  // - used e.g. by TSqlDBStatementWithParams (and its
+  // inherited TSqlDBOracleStatement)
+  TSqlDBParamDynArray = array of TSqlDBParam;
 
   /// generic abstract class handling prepared statements with binding
   // - will provide protected fields and methods for handling standard
-  // TSQLDBParam parameters
-  TSQLDBStatementWithParams = class(TSQLDBStatement)
+  // TSqlDBParam parameters
+  TSqlDBStatementWithParams = class(TSqlDBStatement)
   protected
-    fParams: TSQLDBParamDynArray;
+    fParams: TSqlDBParamDynArray;
     fParam: TDynArray;
     fParamsArrayCount: integer;
-    function CheckParam(Param: integer; NewType: TSQLDBFieldType;
-      IO: TSQLDBParamInOutType): PSQLDBParam; overload;
-    function CheckParam(Param: integer; NewType: TSQLDBFieldType;
-      IO: TSQLDBParamInOutType; ArrayCount: integer): PSQLDBParam; overload;
+    function CheckParam(Param: integer; NewType: TSqlDBFieldType;
+      IO: TSqlDBParamInOutType): PSqlDBParam; overload;
+    function CheckParam(Param: integer; NewType: TSqlDBFieldType;
+      IO: TSqlDBParamInOutType; ArrayCount: integer): PSqlDBParam; overload;
     /// append the inlined value of a given parameter
     // - faster overridden method
     procedure AddParamValueAsText(Param: integer; Dest: TTextWriter;
@@ -2517,75 +2517,75 @@ type
   public
     /// create a statement instance
     // - this overridden version will initialize the internal fParam* fields
-    constructor Create(aConnection: TSQLDBConnection); override;
+    constructor Create(aConnection: TSqlDBConnection); override;
     /// bind a NULL value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error
     // - some providers (only OleDB during MULTI INSERT statements, so never used
     // in this class) expect the  proper column type to be set in BoundType
-    procedure BindNull(Param: integer; IO: TSQLDBParamInOutType = paramIn;
-      BoundType: TSQLDBFieldType = ftNull); override;
+    procedure BindNull(Param: integer; IO: TSqlDBParamInOutType = paramIn;
+      BoundType: TSqlDBFieldType = ftNull); override;
     /// bind an integer value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error
     procedure Bind(Param: integer; Value: Int64;
-      IO: TSQLDBParamInOutType = paramIn); overload; override;
+      IO: TSqlDBParamInOutType = paramIn); overload; override;
     /// bind a double value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error
     procedure Bind(Param: integer; Value: double;
-      IO: TSQLDBParamInOutType = paramIn); overload; override;
+      IO: TSqlDBParamInOutType = paramIn); overload; override;
     /// bind a TDateTime value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error
     procedure BindDateTime(Param: integer; Value: TDateTime;
-      IO: TSQLDBParamInOutType = paramIn); overload; override;
+      IO: TSqlDBParamInOutType = paramIn); overload; override;
     /// bind a currency value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error
     procedure BindCurrency(Param: integer; Value: currency;
-      IO: TSQLDBParamInOutType = paramIn); overload; override;
+      IO: TSqlDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error
     procedure BindTextU(Param: integer; const Value: RawUTF8;
-      IO: TSQLDBParamInOutType = paramIn); overload; override;
+      IO: TSqlDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded buffer text (#0 ended) to a parameter
     // - the leftmost SQL parameter has an index of 1
     procedure BindTextP(Param: integer; Value: PUTF8Char;
-      IO: TSQLDBParamInOutType = paramIn); overload; override;
+      IO: TSqlDBParamInOutType = paramIn); overload; override;
     /// bind a VCL string to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error
     procedure BindTextS(Param: integer; const Value: string;
-      IO: TSQLDBParamInOutType = paramIn); overload; override;
+      IO: TSqlDBParamInOutType = paramIn); overload; override;
     /// bind an OLE WideString to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error }
     procedure BindTextW(Param: integer; const Value: WideString;
-      IO: TSQLDBParamInOutType = paramIn); overload; override;
+      IO: TSqlDBParamInOutType = paramIn); overload; override;
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error
     procedure BindBlob(Param: integer; Data: pointer; Size: integer;
-      IO: TSQLDBParamInOutType = paramIn); overload; override;
+      IO: TSqlDBParamInOutType = paramIn); overload; override;
     /// bind a Blob buffer to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an Exception on any error M
     procedure BindBlob(Param: integer; const Data: RawByteString;
-      IO: TSQLDBParamInOutType = paramIn); overload; override;
+      IO: TSqlDBParamInOutType = paramIn); overload; override;
 
     /// bind an array of values to a parameter using OCI bind array feature
     // - the leftmost SQL parameter has an index of 1
     // - values are stored as in SQL (i.e. number, 'quoted string',
     // 'YYYY-MM-DD hh:mm:ss', null)
     // - values are stored as in SQL (i.e. 'YYYY-MM-DD hh:mm:ss')
-    procedure BindArray(Param: integer; ParamType: TSQLDBFieldType;
+    procedure BindArray(Param: integer; ParamType: TSqlDBFieldType;
       const Values: TRawUTF8DynArray; ValuesCount: integer); overload; override;
     /// bind an array of integer values to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - this default implementation will call BindArray() after conversion into
-    // RawUTF8 items, stored in TSQLDBParam.VArray
+    // RawUTF8 items, stored in TSqlDBParam.VArray
     procedure BindArray(Param: integer;
       const Values: array of Int64); overload; override;
     /// bind an array of double values to a parameter
@@ -2593,7 +2593,7 @@ type
     // - this default implementation will raise an exception if the engine
     // does not support array binding
     // - this default implementation will call BindArray() after conversion into
-    // RawUTF8 items, stored in TSQLDBParam.VArray
+    // RawUTF8 items, stored in TSqlDBParam.VArray
     procedure BindArray(Param: integer;
       const Values: array of double); overload; override;
     /// bind an array of TDateTime values to a parameter
@@ -2602,7 +2602,7 @@ type
     // - this default implementation will raise an exception if the engine
     // does not support array binding
     // - this default implementation will call BindArray() after conversion into
-    // RawUTF8 items, stored in TSQLDBParam.VArray
+    // RawUTF8 items, stored in TSqlDBParam.VArray
     procedure BindArrayDateTime(Param: integer;
       const Values: array of TDateTime); override;
     /// bind an array of currency values to a parameter
@@ -2610,7 +2610,7 @@ type
     // - this default implementation will raise an exception if the engine
     // does not support array binding
     // - this default implementation will call BindArray() after conversion into
-    // RawUTF8 items, stored in TSQLDBParam.VArray
+    // RawUTF8 items, stored in TSqlDBParam.VArray
     procedure BindArrayCurrency(Param: integer;
       const Values: array of currency); override;
     /// bind an array of RawUTF8 values to a parameter
@@ -2626,7 +2626,7 @@ type
     // method allow-per row binding
     // - call this method, then BindArrayRow() with the corresponding values for
     // one statement row, then Execute to send the query
-    procedure BindArrayRowPrepare(const aParamTypes: array of TSQLDBFieldType;
+    procedure BindArrayRowPrepare(const aParamTypes: array of TSqlDBFieldType;
       aExpectedMinimalRowCount: integer = 0);
     /// bind a set of parameters for further array binding
     // - supplied parameters shall follow the BindArrayRowPrepare() supplied
@@ -2639,7 +2639,7 @@ type
     // types (i.e. RawUTF8, integer/Int64, double, date)
     // - can be used e.g. after ColumnsToSQLInsert() method call for fast data
     // conversion between tables
-    procedure BindFromRows(Rows: TSQLDBStatement); virtual;
+    procedure BindFromRows(Rows: TSqlDBStatement); virtual;
 
     /// retrieve the parameter content, after SQL execution
     // - the leftmost SQL parameter has an index of 1
@@ -2648,7 +2648,7 @@ type
     // fParams[] array: the ExecutePrepared method should have updated its
     // content as exepcted
     function ParamToVariant(Param: integer; var Value: Variant;
-      CheckIsOutParameter: boolean = true): TSQLDBFieldType; override;
+      CheckIsOutParameter: boolean = true): TSqlDBFieldType; override;
 
     /// Reset the previous prepared statement
     // - this overridden implementation will just do reset the internal fParams[]
@@ -2661,16 +2661,16 @@ type
 
   /// generic abstract class handling prepared statements with binding
   // and column description
-  // - will provide protected fields and methods for handling both TSQLDBParam
-  // parameters and standard TSQLDBColumnProperty column description
-  TSQLDBStatementWithParamsAndColumns = class(TSQLDBStatementWithParams)
+  // - will provide protected fields and methods for handling both TSqlDBParam
+  // parameters and standard TSqlDBColumnProperty column description
+  TSqlDBStatementWithParamsAndColumns = class(TSqlDBStatementWithParams)
   protected
-    fColumns: TSQLDBColumnPropertyDynArray;
+    fColumns: TSqlDBColumnPropertyDynArray;
     fColumn: TDynArrayHashed;
   public
     /// create a statement instance
     // - this overridden version will initialize the internal fColumn* fields
-    constructor Create(aConnection: TSQLDBConnection); override;
+    constructor Create(aConnection: TSqlDBConnection); override;
     /// retrieve a column name of the current Row
     // - Columns numeration (i.e. Col value) starts with 0
     // - it's up to the implementation to ensure than all column names are unique
@@ -2686,10 +2686,10 @@ type
     // (0 means BLOB kind of TEXT column) - this implementation will store
     // fColumns[Col].ColumnValueDBSize if ColumnValueInlined=true
     function ColumnType(Col: integer;
-      FieldSize: PInteger = nil): TSQLDBFieldType; override;
+      FieldSize: PInteger = nil): TSqlDBFieldType; override;
     /// direct access to the columns description
     // - gives more details than the default ColumnType() function
-    property Columns: TSQLDBColumnPropertyDynArray
+    property Columns: TSqlDBColumnPropertyDynArray
       read fColumns;
   end;
 
@@ -2700,7 +2700,7 @@ implementation
 
 { ************ General SQL Processing Functions }
 
-procedure LogTruncatedColumn(const Col: TSQLDBColumnProperty);
+procedure LogTruncatedColumn(const Col: TSqlDBColumnProperty);
 begin
   SynDBLog.Add.Log(sllDB, 'Truncated column %', Col.ColumnName);
 end;
@@ -2780,7 +2780,7 @@ begin
           if c[1] = 'Z' then
           begin
             if c[2] = 'Z' then
-              raise ESQLDBException.Create('Parameters :AA to :ZZ');
+              raise ESqlDBException.Create('Parameters :AA to :ZZ');
             c[1] := 'A';
             inc(c[2]);
           end
@@ -2997,17 +2997,17 @@ end;
 
 { ************ Define Database Engine Specific Behavior }
 
-function ToText(DBMS: TSQLDBDefinition): PShortString;
+function ToText(DBMS: TSqlDBDefinition): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TSQLDBDefinition), ord(DBMS));
+  result := GetEnumName(TypeInfo(TSqlDBDefinition), ord(DBMS));
 end;
 
 
 { ************ Abstract SQL DB Classes and Interfaces }
 
-{ ESQLDBException }
+{ ESqlDBException }
 
-constructor ESQLDBException.CreateUTF8(const Format: RawUTF8; const Args: array of const);
+constructor ESqlDBException.CreateUTF8(const Format: RawUTF8; const Args: array of const);
 var
   msg {$ifndef SYNDB_SILENCE}, sql{$endif}: RawUTF8;
 begin
@@ -3016,9 +3016,9 @@ begin
   if (length(Args) > 0) and
      (Args[0].VType = vtObject) and
      (Args[0].VObject <> nil) then
-    if Args[0].VObject.InheritsFrom(TSQLDBStatement) then
+    if Args[0].VObject.InheritsFrom(TSqlDBStatement) then
     begin
-      fStatement := TSQLDBStatement(Args[0].VObject);
+      fStatement := TSqlDBStatement(Args[0].VObject);
       if fStatement.Connection.Properties.LogSQLStatementOnException then
       begin
         try
@@ -3034,18 +3034,18 @@ begin
 end;
 
 
-{ TSQLDBRowVariantType }
+{ TSqlDBRowVariantType }
 
-function TSQLDBRowVariantType.IntGet(var Dest: TVarData; const Instance:
+function TSqlDBRowVariantType.IntGet(var Dest: TVarData; const Instance:
   TVarData; Name: PAnsiChar; NameLen: PtrInt): boolean;
 var
-  Rows: TSQLDBStatement;
+  Rows: TSqlDBStatement;
   col: RawUTF8;
   ndx: integer;
 begin
-  Rows := TSQLDBStatement(Instance.VPointer);
+  Rows := TSqlDBStatement(Instance.VPointer);
   if Rows = nil then
-    raise ESQLDBException.CreateUTF8('Invalid % call', [self]);
+    raise ESqlDBException.CreateUTF8('Invalid % call', [self]);
   FastSetString(col, Name, NameLen);
   ndx := Rows.ColumnIndex(col);
   result := ndx >= 0;
@@ -3054,12 +3054,12 @@ begin
 end;
 
 
-{ TSQLDBConnectionProperties }
+{ TSqlDBConnectionProperties }
 
-constructor TSQLDBConnectionProperties.Create(const aServerName, aDatabaseName,
+constructor TSqlDBConnectionProperties.Create(const aServerName, aDatabaseName,
   aUserID, aPassWord: RawUTF8);
 var
-  aDBMS: TSQLDBDefinition;
+  aDBMS: TSqlDBDefinition;
 begin
   fServerName := aServerName;
   fDatabaseName := aDatabaseName;
@@ -3111,13 +3111,13 @@ begin
     end;
 end;
 
-destructor TSQLDBConnectionProperties.Destroy;
+destructor TSqlDBConnectionProperties.Destroy;
 begin
   fMainConnection.Free;
   inherited;
 end;
 
-function TSQLDBConnectionProperties.Execute(const aSQL: RawUTF8;
+function TSqlDBConnectionProperties.Execute(const aSQL: RawUTF8;
   const Params: array of const; RowsVariant: PVariant; ForceBlobAsNull: boolean): ISQLDBRows;
 var
   Stmt: ISQLDBStatement;
@@ -3134,7 +3134,7 @@ begin
       RowsVariant^ := result.RowData;
 end;
 
-function TSQLDBConnectionProperties.ExecuteNoResult(const aSQL: RawUTF8;
+function TSqlDBConnectionProperties.ExecuteNoResult(const aSQL: RawUTF8;
   const Params: array of const): integer;
 var
   Stmt: ISQLDBStatement;
@@ -3149,12 +3149,12 @@ begin
   end;
 end;
 
-function TSQLDBConnectionProperties.PrepareInlined(const aSQL: RawUTF8;
+function TSqlDBConnectionProperties.PrepareInlined(const aSQL: RawUTF8;
   ExpectResults: boolean): ISQLDBStatement;
 var
   Query: ISQLDBStatement;
   i, maxParam: integer;
-  Types: TSQLParamTypeDynArray;
+  Types: TSqlParamTypeDynArray;
   Nulls: TFieldBits;
   Values: TRawUTF8DynArray;
   GenericSQL: RawUTF8;
@@ -3186,19 +3186,19 @@ begin
         sptDateTime:
           Query.BindDateTime(i + 1, Iso8601ToDateTime(Values[i]));
       else
-        raise ESQLDBException.CreateUTF8('%.PrepareInlined: Unrecognized parameter Type[%] = % in [%]',
+        raise ESqlDBException.CreateUTF8('%.PrepareInlined: Unrecognized parameter Type[%] = % in [%]',
           [self, i + 1, ord(Types[i]), aSQL]);
       end;
   result := Query;
 end;
 
-function TSQLDBConnectionProperties.PrepareInlined(const SQLFormat: RawUTF8;
+function TSqlDBConnectionProperties.PrepareInlined(const SQLFormat: RawUTF8;
   const Args: array of const; ExpectResults: boolean): ISQLDBStatement;
 begin
   result := PrepareInlined(FormatUTF8(SQLFormat, Args), ExpectResults);
 end;
 
-function TSQLDBConnectionProperties.ExecuteInlined(const aSQL: RawUTF8;
+function TSqlDBConnectionProperties.ExecuteInlined(const aSQL: RawUTF8;
   ExpectResults: boolean): ISQLDBRows;
 var
   Query: ISQLDBStatement;
@@ -3213,23 +3213,23 @@ begin
   result := Query;
 end;
 
-function TSQLDBConnectionProperties.ExecuteInlined(const SQLFormat: RawUTF8;
+function TSqlDBConnectionProperties.ExecuteInlined(const SQLFormat: RawUTF8;
   const Args: array of const; ExpectResults: boolean): ISQLDBRows;
 begin
   result := ExecuteInlined(FormatUTF8(SQLFormat, Args), ExpectResults);
 end;
 
-procedure TSQLDBConnectionProperties.SetConnectionTimeOutMinutes(minutes: cardinal);
+procedure TSqlDBConnectionProperties.SetConnectionTimeOutMinutes(minutes: cardinal);
 begin
   fConnectionTimeOutTicks := minutes * 60000; // minutes to ms conversion
 end;
 
-function TSQLDBConnectionProperties.GetConnectionTimeOutMinutes: cardinal;
+function TSqlDBConnectionProperties.GetConnectionTimeOutMinutes: cardinal;
 begin
   result := fConnectionTimeOutTicks div 60000;
 end;
 
-function TSQLDBConnectionProperties.GetMainConnection: TSQLDBConnection;
+function TSqlDBConnectionProperties.GetMainConnection: TSqlDBConnection;
 begin
   if fMainConnection.IsOutdated(GetTickCount64) then
     FreeAndNil(fMainConnection);
@@ -3238,34 +3238,34 @@ begin
   result := fMainConnection;
 end;
 
-function TSQLDBConnectionProperties.{%H-}NewConnection: TSQLDBConnection;
+function TSqlDBConnectionProperties.{%H-}NewConnection: TSqlDBConnection;
 begin
-  raise ESQLDBException.CreateUTF8('%.NewConnection', [self]);
+  raise ESqlDBException.CreateUTF8('%.NewConnection', [self]);
 end;
 
-function TSQLDBConnectionProperties.ThreadSafeConnection: TSQLDBConnection;
+function TSqlDBConnectionProperties.ThreadSafeConnection: TSqlDBConnection;
 begin
   result := MainConnection; // provider should be thread-safe
 end;
 
-procedure TSQLDBConnectionProperties.ClearConnectionPool;
+procedure TSqlDBConnectionProperties.ClearConnectionPool;
 begin
   FreeAndNil(fMainConnection);
 end;
 
-function TSQLDBConnectionProperties.NewThreadSafeStatement: TSQLDBStatement;
+function TSqlDBConnectionProperties.NewThreadSafeStatement: TSqlDBStatement;
 begin
   result := ThreadSafeConnection.NewStatement;
 end;
 
-function TSQLDBConnectionProperties.NewThreadSafeStatementPrepared(const aSQL:
+function TSqlDBConnectionProperties.NewThreadSafeStatementPrepared(const aSQL:
   RawUTF8; ExpectResults, RaiseExceptionOnError: boolean): ISQLDBStatement;
 begin
   result := ThreadSafeConnection.NewStatementPrepared(aSQL, ExpectResults,
     RaiseExceptionOnError);
 end;
 
-function TSQLDBConnectionProperties.NewThreadSafeStatementPrepared(const
+function TSqlDBConnectionProperties.NewThreadSafeStatementPrepared(const
   SQLFormat: RawUTF8; const Args: array of const; ExpectResults,
   RaiseExceptionOnError: boolean): ISQLDBStatement;
 begin
@@ -3273,14 +3273,14 @@ begin
     ExpectResults, RaiseExceptionOnError);
 end;
 
-function TSQLDBConnectionProperties.SharedTransaction(SessionID: cardinal;
-  action: TSQLDBSharedTransactionAction): TSQLDBConnection;
+function TSqlDBConnectionProperties.SharedTransaction(SessionID: cardinal;
+  action: TSqlDBSharedTransactionAction): TSqlDBConnection;
 
   procedure SetResultToSameConnection(index: integer);
   begin
     result := ThreadSafeConnection;
     if result <> fSharedTransactions[index].Connection then
-      raise ESQLDBException.CreateUTF8('%.SharedTransaction(sessionID=%) with mixed thread connections: % and %',
+      raise ESqlDBException.CreateUTF8('%.SharedTransaction(sessionID=%) with mixed thread connections: % and %',
         [self, SessionID, result, fSharedTransactions[index].Connection]);
   end;
 
@@ -3321,7 +3321,7 @@ begin
           result := ThreadSafeConnection;
           for i := 0 to n - 1 do
             if fSharedTransactions[i].Connection = result then
-              raise ESQLDBException.CreateUTF8(
+              raise ESqlDBException.CreateUTF8(
                 '%.SharedTransaction(sessionID=%) already started for sessionID=%',
                 [self, SessionID, fSharedTransactions[i].SessionID]);
           if not result.Connected then
@@ -3333,7 +3333,7 @@ begin
           fSharedTransactions[n].Connection := result;
         end
     else
-      raise ESQLDBException.CreateUTF8('Unexpected %.SharedTransaction(%,%)',
+      raise ESqlDBException.CreateUTF8('Unexpected %.SharedTransaction(%,%)',
         [self, SessionID, ord(action)]);
     end;
   except
@@ -3346,12 +3346,12 @@ begin
   end;
 end;
 
-procedure TSQLDBConnectionProperties.SetInternalProperties;
+procedure TSqlDBConnectionProperties.SetInternalProperties;
 begin
   // nothing to do yet
 end;
 
-procedure TSQLDBConnectionProperties.SetSchemaNameToOwner(out Owner: RawUTF8);
+procedure TSqlDBConnectionProperties.SetSchemaNameToOwner(out Owner: RawUTF8);
 begin
   if fForcedSchemaName = '' then
     case fDBMS of
@@ -3366,7 +3366,7 @@ begin
     Owner := fForcedSchemaName;
 end;
 
-function TSQLDBConnectionProperties.IsCachable(P: PUTF8Char): boolean;
+function TSqlDBConnectionProperties.IsCachable(P: PUTF8Char): boolean;
 var
   NoWhere: boolean;
 begin // cachable if with ? parameter or SELECT without WHERE clause
@@ -3405,8 +3405,8 @@ begin // cachable if with ? parameter or SELECT without WHERE clause
     result := false;
 end;
 
-class function TSQLDBConnectionProperties.GetFieldDefinition(
-  const Column: TSQLDBColumnDefine): RawUTF8;
+class function TSqlDBConnectionProperties.GetFieldDefinition(
+  const Column: TSqlDBColumnDefine): RawUTF8;
 begin
   with Column do
   begin
@@ -3423,8 +3423,8 @@ begin
   end;
 end;
 
-class function TSQLDBConnectionProperties.GetFieldORMDefinition(const Column:
-  TSQLDBColumnDefine): RawUTF8;
+class function TSqlDBConnectionProperties.GetFieldORMDefinition(const Column:
+  TSqlDBColumnDefine): RawUTF8;
 begin // 'Name: RawUTF8 index 20 read fName write fName;';
   with Column do
   begin
@@ -3438,13 +3438,13 @@ begin // 'Name: RawUTF8 index 20 read fName write fName;';
 end;
 
 var
-  DB_KEYWORDS: array[TSQLDBDefinition] of TRawUTF8DynArray;
+  DB_KEYWORDS: array[TSqlDBDefinition] of TRawUTF8DynArray;
 
-class function TSQLDBConnectionProperties.IsSQLKeyword(aDB: TSQLDBDefinition;
+class function TSqlDBConnectionProperties.IsSQLKeyword(aDB: TSqlDBDefinition;
   aWord: RawUTF8): boolean;
 const
   /// CSV of the known reserved keywords per database engine, in alphabetic order
-  DB_KEYWORDS_CSV: array[TSQLDBDefinition] of PUTF8Char = (
+  DB_KEYWORDS_CSV: array[TSqlDBDefinition] of PUTF8Char = (
     '',  // dUnknown
     // dDefault = ODBC / SQL-92 keywords (always checked first)
     'absolute,action,ada,add,all,allocate,alter,and,any,are,as,asc,assertion,at,authorization,' +
@@ -3600,7 +3600,7 @@ const
   // dInformix specific keywords (in addition to dDefault)
     '');
 var
-  db: TSQLDBDefinition;
+  db: TSqlDBDefinition;
 begin
   // search using fast binary lookup in the alphabetic ordered arrays
   if DB_KEYWORDS[dDefault] = nil then
@@ -3619,15 +3619,15 @@ begin
     result := true;
 end;
 
-function TSQLDBConnectionProperties.IsSQLKeyword(aWord: RawUTF8): boolean;
+function TSqlDBConnectionProperties.IsSQLKeyword(aWord: RawUTF8): boolean;
 begin
   result := IsSQLKeyword(DBMS, aWord);
 end;
 
-procedure TSQLDBConnectionProperties.GetFieldDefinitions(
+procedure TSqlDBConnectionProperties.GetFieldDefinitions(
   const aTableName: RawUTF8; out Fields: TRawUTF8DynArray; WithForeignKeys: boolean);
 var
-  F: TSQLDBColumnDefineDynArray;
+  F: TSqlDBColumnDefineDynArray;
   Ref: RawUTF8;
   i: integer;
 begin
@@ -3645,15 +3645,15 @@ begin
   end;
 end;
 
-procedure TSQLDBConnectionProperties.GetFields(const aTableName: RawUTF8;
-  out Fields: TSQLDBColumnDefineDynArray);
+procedure TSqlDBConnectionProperties.GetFields(const aTableName: RawUTF8;
+  out Fields: TSqlDBColumnDefineDynArray);
 var
   SQL: RawUTF8;
   n, i: integer;
-  F: TSQLDBColumnDefine;
+  F: TSqlDBColumnDefine;
   FA: TDynArray;
 begin
-  FA.Init(TypeInfo(TSQLDBColumnDefineDynArray), Fields, @n);
+  FA.Init(TypeInfo(TSqlDBColumnDefineDynArray), Fields, @n);
   FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
   FillCharFast(F, sizeof(F), 0);
   if fDBMS = dSQLite then
@@ -3714,18 +3714,18 @@ begin
   SetLength(Fields, n);
 end;
 
-procedure TSQLDBConnectionProperties.GetIndexes(const aTableName: RawUTF8;
-  out Indexes: TSQLDBIndexDefineDynArray);
+procedure TSqlDBConnectionProperties.GetIndexes(const aTableName: RawUTF8;
+  out Indexes: TSqlDBIndexDefineDynArray);
 var
   SQL: RawUTF8;
   n: integer;
-  F: TSQLDBIndexDefine;
+  F: TSqlDBIndexDefine;
   FA: TDynArray;
 begin
   SQL := SQLGetIndex(aTableName);
   if SQL = '' then
     exit;
-  FA.Init(TypeInfo(TSQLDBIndexDefineDynArray), Indexes, @n);
+  FA.Init(TypeInfo(TSqlDBIndexDefineDynArray), Indexes, @n);
   with Execute(SQL, []) do
     while Step do
     begin
@@ -3742,7 +3742,7 @@ begin
   SetLength(Indexes, n);
 end;
 
-procedure TSQLDBConnectionProperties.GetProcedureNames(out Procedures: TRawUTF8DynArray);
+procedure TSqlDBConnectionProperties.GetProcedureNames(out Procedures: TRawUTF8DynArray);
 var
   SQL: RawUTF8;
   count: integer;
@@ -3763,15 +3763,15 @@ begin
   end;
 end;
 
-procedure TSQLDBConnectionProperties.GetProcedureParameters(
-  const aProcName: RawUTF8; out Parameters: TSQLDBProcColumnDefineDynArray);
+procedure TSqlDBConnectionProperties.GetProcedureParameters(
+  const aProcName: RawUTF8; out Parameters: TSqlDBProcColumnDefineDynArray);
 var
   SQL: RawUTF8;
   n: integer;
-  F: TSQLDBProcColumnDefine;
+  F: TSqlDBProcColumnDefine;
   FA: TDynArray;
 begin
-  FA.Init(TypeInfo(TSQLDBColumnDefineDynArray), Parameters, @n);
+  FA.Init(TypeInfo(TSqlDBColumnDefineDynArray), Parameters, @n);
   FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
   FillcharFast(F, sizeof(F), 0);
   SQL := SQLGetParameter(aProcName);
@@ -3802,7 +3802,7 @@ begin
   SetLength(Parameters, n);
 end;
 
-procedure TSQLDBConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
+procedure TSqlDBConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
 var
   SQL, table, checkschema: RawUTF8;
   count: integer;
@@ -3831,7 +3831,7 @@ begin
   end;
 end;
 
-procedure TSQLDBConnectionProperties.GetViewNames(out Views: TRawUTF8DynArray);
+procedure TSqlDBConnectionProperties.GetViewNames(out Views: TRawUTF8DynArray);
 var
   SQL, table, checkschema: RawUTF8;
   count: integer;
@@ -3860,7 +3860,7 @@ begin
   end;
 end;
 
-procedure TSQLDBConnectionProperties.SQLSplitTableName(const aTableName: RawUTF8;
+procedure TSqlDBConnectionProperties.SQLSplitTableName(const aTableName: RawUTF8;
   out Owner, Table: RawUTF8);
 begin
   case fDBMS of
@@ -3886,7 +3886,7 @@ begin
   end;
 end;
 
-procedure TSQLDBConnectionProperties.SQLSplitProcedureName(
+procedure TSqlDBConnectionProperties.SQLSplitProcedureName(
   const aProcName: RawUTF8; out Owner, package, ProcName: RawUTF8);
 var
   lOccur, i: integer;
@@ -3932,7 +3932,7 @@ begin
   end;
 end;
 
-function TSQLDBConnectionProperties.SQLFullTableName(const aTableName: RawUTF8): RawUTF8;
+function TSqlDBConnectionProperties.SQLFullTableName(const aTableName: RawUTF8): RawUTF8;
 begin
   if (aTableName <> '') and
      (fForcedSchemaName <> '') and
@@ -3942,7 +3942,7 @@ begin
     result := aTableName;
 end;
 
-function TSQLDBConnectionProperties.SQLGetField(const aTableName: RawUTF8): RawUTF8;
+function TSqlDBConnectionProperties.SQLGetField(const aTableName: RawUTF8): RawUTF8;
 var
   Owner, Table: RawUTF8;
   FMT: RawUTF8;
@@ -3992,7 +3992,7 @@ begin
   FormatUTF8(FMT, [UpperCase(Owner), UpperCase(Table)], result);
 end;
 
-function TSQLDBConnectionProperties.SQLGetIndex(const aTableName: RawUTF8): RawUTF8;
+function TSqlDBConnectionProperties.SQLGetIndex(const aTableName: RawUTF8): RawUTF8;
 var
   Owner, Table: RawUTF8;
   FMT: RawUTF8;
@@ -4054,7 +4054,7 @@ begin
   FormatUTF8(FMT, [UpperCase(Table)], result);
 end;
 
-function TSQLDBConnectionProperties.SQLGetParameter(const aProcName: RawUTF8): RawUTF8;
+function TSqlDBConnectionProperties.SQLGetParameter(const aProcName: RawUTF8): RawUTF8;
 var
   Owner, package, Proc: RawUTF8;
   FMT: RawUTF8;
@@ -4110,7 +4110,7 @@ begin
   FormatUTF8(FMT, [UpperCase(Owner), UpperCase(Proc)], result);
 end;
 
-function TSQLDBConnectionProperties.SQLGetProcedure: RawUTF8;
+function TSqlDBConnectionProperties.SQLGetProcedure: RawUTF8;
 var
   FMT, Owner: RawUTF8;
 begin
@@ -4142,7 +4142,7 @@ begin
   FormatUTF8(FMT, [UpperCase(Owner)], result);
 end;
 
-function TSQLDBConnectionProperties.SQLGetTableNames: RawUTF8;
+function TSqlDBConnectionProperties.SQLGetTableNames: RawUTF8;
 begin
   case DBMS of
     dOracle:
@@ -4170,7 +4170,7 @@ begin
   end;
 end;
 
-function TSQLDBConnectionProperties.SQLGetViewNames: RawUTF8;
+function TSqlDBConnectionProperties.SQLGetViewNames: RawUTF8;
 begin
   case DBMS of
     dOracle:
@@ -4198,7 +4198,7 @@ begin
   end;
 end;
 
-function TSQLDBConnectionProperties.SQLCreateDatabase(const aDatabaseName:
+function TSqlDBConnectionProperties.SQLCreateDatabase(const aDatabaseName:
   RawUTF8; aDefaultPageSize: integer): RawUTF8;
 begin
   case DBMS of
@@ -4216,10 +4216,10 @@ begin
   end;
 end;
 
-function TSQLDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType:
-  RawUTF8; aScale: integer): TSQLDBFieldType;
+function TSqlDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType:
+  RawUTF8; aScale: integer): TSqlDBFieldType;
 
-  function ColumnTypeNativeDefault: TSQLDBFieldType;
+  function ColumnTypeNativeDefault: TSqlDBFieldType;
   const
     DECIMAL = 18; // change it if you update PCHARS[] below before 'DECIMAL'
     NUMERIC = DECIMAL + 1;
@@ -4233,7 +4233,7 @@ function TSQLDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType:
       'UNIQUEIDENTIFIER', 'MONEY', 'SMALLMONEY', 'NUM', 'VARRAW', 'RAW',
       'LONG RAW', 'LONG VARRAW', 'TINYBLOB', 'MEDIUMBLOB', 'BYTEA', 'VARBIN',
       'IMAGE', 'LONGBLOB', 'BINARY', 'VARBINARY', 'GRAPHIC', 'VARGRAPHIC', 'NULL');
-    Types: array[-1..high(PCHARS)] of TSQLDBFieldType = (
+    Types: array[-1..high(PCHARS)] of TSqlDBFieldType = (
       ftUnknown, ftDate,
       ftUTF8, ftUTF8, ftUTF8, ftUTF8, ftUTF8, ftUTF8, ftUTF8, ftUTF8, ftInt64,
       ftInt64, ftInt64, ftDouble, ftDouble, ftDouble, ftDouble, ftDouble,
@@ -4254,7 +4254,7 @@ function TSQLDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType:
       result := Types[ndx];
   end;
 
-  function ColumnTypeNativeToDBOracle: TSQLDBFieldType;
+  function ColumnTypeNativeToDBOracle: TSqlDBFieldType;
   begin
     if PosEx('CHAR', aNativeType) > 0 then
       result := ftUTF8
@@ -4281,7 +4281,7 @@ function TSQLDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType:
       result := ftUTF8;
   end;
 
-  function ColumnTypeNativeToDBFirebird: TSQLDBFieldType;
+  function ColumnTypeNativeToDBFirebird: TSqlDBFieldType;
   var
     i, err: integer;
   begin
@@ -4323,7 +4323,7 @@ begin
   end;
 end;
 
-function TSQLDBConnectionProperties.GetForeignKey(
+function TSqlDBConnectionProperties.GetForeignKey(
   const aTableName, aColumnName: RawUTF8): RawUTF8;
 begin
   if not fForeignKeys.Initialized then
@@ -4334,7 +4334,7 @@ begin
   result := fForeignKeys.Value(aTableName + '.' + aColumnName);
 end;
 
-function TSQLDBConnectionProperties.GetForeignKeysData: RawByteString;
+function TSqlDBConnectionProperties.GetForeignKeysData: RawByteString;
 begin
   if not fForeignKeys.Initialized then
   begin
@@ -4344,14 +4344,14 @@ begin
   result := fForeignKeys.BlobData;
 end;
 
-procedure TSQLDBConnectionProperties.SetForeignKeysData(const Value: RawByteString);
+procedure TSqlDBConnectionProperties.SetForeignKeysData(const Value: RawByteString);
 begin
   if not fForeignKeys.Initialized then
     fForeignKeys.Init(false);
   fForeignKeys.BlobData := Value;
 end;
 
-function TSQLDBConnectionProperties.SQLIso8601ToDate(const Iso8601: RawUTF8): RawUTF8;
+function TSqlDBConnectionProperties.SQLIso8601ToDate(const Iso8601: RawUTF8): RawUTF8;
 
   function TrimTInIso: RawUTF8;
   begin
@@ -4378,17 +4378,17 @@ begin
   end;
 end;
 
-function TSQLDBConnectionProperties.SQLDateToIso8601Quoted(DateTime: TDateTime): RawUTF8;
+function TSqlDBConnectionProperties.SQLDateToIso8601Quoted(DateTime: TDateTime): RawUTF8;
 begin
   result := DateTimeToIso8601(DateTime, true, DateTimeFirstChar, false, '''');
 end;
 
-function TSQLDBConnectionProperties.SQLCreate(const aTableName: RawUTF8;
-  const aFields: TSQLDBColumnCreateDynArray; aAddID: boolean): RawUTF8;
+function TSqlDBConnectionProperties.SQLCreate(const aTableName: RawUTF8;
+  const aFields: TSqlDBColumnCreateDynArray; aAddID: boolean): RawUTF8;
 var
   i: integer;
   F: RawUTF8;
-  FieldID: TSQLDBColumnCreate;
+  FieldID: TSqlDBColumnCreate;
   AddPrimaryKey: RawUTF8;
 begin // use 'ID' instead of 'RowID' here since some DB (e.g. Oracle) use it
   result := '';
@@ -4419,8 +4419,8 @@ begin // use 'ID' instead of 'RowID' here since some DB (e.g. Oracle) use it
   end;
 end;
 
-function TSQLDBConnectionProperties.SQLFieldCreate(const aField:
-  TSQLDBColumnCreate; var aAddPrimaryKey: RawUTF8): RawUTF8;
+function TSqlDBConnectionProperties.SQLFieldCreate(const aField:
+  TSqlDBColumnCreate; var aAddPrimaryKey: RawUTF8): RawUTF8;
 begin
   if (aField.DBType = ftUTF8) and
      (cardinal(aField.Width - 1) < fSQLCreateFieldMax) then
@@ -4442,8 +4442,8 @@ begin
   result := aField.Name + result;
 end;
 
-function TSQLDBConnectionProperties.SQLAddColumn(const aTableName: RawUTF8;
-  const aField: TSQLDBColumnCreate): RawUTF8;
+function TSqlDBConnectionProperties.SQLAddColumn(const aTableName: RawUTF8;
+  const aField: TSqlDBColumnCreate): RawUTF8;
 var
   AddPrimaryKey: RawUTF8;
 begin
@@ -4451,7 +4451,7 @@ begin
     SQLFieldCreate(aField, AddPrimaryKey)], result);
 end;
 
-function TSQLDBConnectionProperties.SQLAddIndex(const aTableName: RawUTF8;
+function TSqlDBConnectionProperties.SQLAddIndex(const aTableName: RawUTF8;
   const aFieldNames: array of RawUTF8; aUnique, aDescending: boolean;
   const aIndexName: RawUTF8): RawUTF8;
 const
@@ -4498,7 +4498,7 @@ begin
     IndexName, aTableName, ColsDesc]);
 end;
 
-function TSQLDBConnectionProperties.SQLTableName(const aTableName: RawUTF8): RawUTF8;
+function TSqlDBConnectionProperties.SQLTableName(const aTableName: RawUTF8): RawUTF8;
 var
   BeginQuoteChar, EndQuoteChar: RawUTF8;
   UseQuote: boolean;
@@ -4535,12 +4535,12 @@ begin
     result := aTableName;
 end;
 
-procedure TSQLDBConnectionProperties.GetIndexesAndSetFieldsColumnIndexed(
-  const aTableName: RawUTF8; var Fields: TSQLDBColumnDefineDynArray);
+procedure TSqlDBConnectionProperties.GetIndexesAndSetFieldsColumnIndexed(
+  const aTableName: RawUTF8; var Fields: TSqlDBColumnDefineDynArray);
 var
   i, j: integer;
   ColName: RawUTF8;
-  Indexes: TSQLDBIndexDefineDynArray;
+  Indexes: TSqlDBIndexDefineDynArray;
 begin
   if Fields = nil then
     exit;
@@ -4558,7 +4558,7 @@ begin
   end;
 end;
 
-function TSQLDBConnectionProperties.ExceptionIsAboutConnection(
+function TSqlDBConnectionProperties.ExceptionIsAboutConnection(
   aClass: ExceptClass; const aMessage: RawUTF8): boolean;
 
   function PosErrorNumber(const aMessage: RawUTF8; aSepChar: AnsiChar): PUTF8Char;
@@ -4597,9 +4597,9 @@ begin // see more complete list in feature request [f024266c0839]
   end;
 end;
 
-procedure TSQLDBConnectionProperties.MultipleValuesInsert(
-  Props: TSQLDBConnectionProperties; const TableName: RawUTF8;
-  const FieldNames: TRawUTF8DynArray; const FieldTypes: TSQLDBFieldTypeArray;
+procedure TSqlDBConnectionProperties.MultipleValuesInsert(
+  Props: TSqlDBConnectionProperties; const TableName: RawUTF8;
+  const FieldNames: TRawUTF8DynArray; const FieldTypes: TSqlDBFieldTypeArray;
   RowCount: integer; const FieldValues: TRawUTF8DynArrayDynArray);
 var
   SQL: RawUTF8;
@@ -4680,7 +4680,7 @@ var
             end;
             AddShorter('end');
             if TextLength > 32700 then
-              raise ESQLDBException.CreateUTF8('%.MultipleValuesInsert: Firebird Execute Block length=%',
+              raise ESqlDBException.CreateUTF8('%.MultipleValuesInsert: Firebird Execute Block length=%',
                 [self, TextLength]);
             SQLCached := false; // ftUTF8 values will have varying field length
           end;
@@ -4740,7 +4740,7 @@ var
 var
   batchRowCount, paramCountLimit: integer;
   currentRow, f, p, i, sqllen: integer;
-  Stmt: TSQLDBStatement;
+  Stmt: TSqlDBStatement;
   Query: ISQLDBStatement;
 begin
   maxf := length(FieldNames);     // e.g. 2 fields
@@ -4748,7 +4748,7 @@ begin
      (FieldNames = nil) or
      (TableName = '') or
      (length(FieldValues) <> maxf) then
-    raise ESQLDBException.CreateUTF8('Invalid %.MultipleValuesInsert(%) call',
+    raise ESqlDBException.CreateUTF8('Invalid %.MultipleValuesInsert(%) call',
       [self, TableName]);
   batchRowCount := 0;
   paramCountLimit := 0;
@@ -4785,7 +4785,7 @@ begin
     else
       batchRowCount := RowCount;
   if batchRowCount = 0 then
-    raise ESQLDBException.CreateUTF8('%.MultipleValuesInsert(%) with # params = %>%',
+    raise ESqlDBException.CreateUTF8('%.MultipleValuesInsert(%) with # params = %>%',
       [self, TableName, RowCount * maxf, paramCountLimit]);
   dec(maxf);
   prevrowcount := 0;
@@ -4813,7 +4813,7 @@ begin
       end; // exception leaves Query=nil to raise exception
     end;
     if Query = nil then
-      raise ESQLDBException.CreateUTF8(
+      raise ESqlDBException.CreateUTF8(
         '%.MultipleValuesInsert: Query=nil for [%]', [self, SQL]);
     try
       p := 1;
@@ -4833,9 +4833,9 @@ begin
   until currentRow = RowCount;
 end;
 
-procedure TSQLDBConnectionProperties.MultipleValuesInsertFirebird(
-  Props: TSQLDBConnectionProperties; const TableName: RawUTF8;
-  const FieldNames: TRawUTF8DynArray; const FieldTypes: TSQLDBFieldTypeArray;
+procedure TSqlDBConnectionProperties.MultipleValuesInsertFirebird(
+  Props: TSqlDBConnectionProperties; const TableName: RawUTF8;
+  const FieldNames: TRawUTF8DynArray; const FieldTypes: TSqlDBFieldTypeArray;
   RowCount: integer; const FieldValues: TRawUTF8DynArrayDynArray);
 var
   W: TTextWriter;
@@ -4848,7 +4848,7 @@ begin
      (TableName = '') or
      (length(FieldValues) <> maxf) or
      (Props.fDBMS <> dFirebird) then
-    raise ESQLDBException.CreateUTF8(
+    raise ESqlDBException.CreateUTF8(
       'Invalid %.MultipleValuesInsertFirebird(%,%)', [self, Props, TableName]);
   sqllenwitoutvalues := 3 * maxf + 24;
   dec(maxf);
@@ -4935,8 +4935,8 @@ begin
   end;
 end;
 
-function TSQLDBConnectionProperties.FieldsFromList(
-  const aFields: TSQLDBColumnDefineDynArray; aExcludeTypes: TSQLDBFieldTypes): RawUTF8;
+function TSqlDBConnectionProperties.FieldsFromList(
+  const aFields: TSqlDBColumnDefineDynArray; aExcludeTypes: TSqlDBFieldTypes): RawUTF8;
 var
   i, n: integer;
 begin
@@ -4961,8 +4961,8 @@ begin
     result := '*';
 end;
 
-function TSQLDBConnectionProperties.SQLSelectAll(const aTableName: RawUTF8;
-  const aFields: TSQLDBColumnDefineDynArray; aExcludeTypes: TSQLDBFieldTypes): RawUTF8;
+function TSqlDBConnectionProperties.SQLSelectAll(const aTableName: RawUTF8;
+  const aFields: TSqlDBColumnDefineDynArray; aExcludeTypes: TSqlDBFieldTypes): RawUTF8;
 begin
   if (self = nil) or
      (aTableName = '') then
@@ -4972,7 +4972,7 @@ begin
       SQLTableName(aTableName);
 end;
 
-class function TSQLDBConnectionProperties.EngineName: RawUTF8;
+class function TSqlDBConnectionProperties.EngineName: RawUTF8;
 var
   L: integer;
 begin
@@ -4991,11 +4991,14 @@ begin
       SetLength(result, L - 20);
     if (L > 5) and
        IdemPropName('OleDB', pointer(result), 5) then
-      Delete(result, 1, 5);
+      Delete(result, 1, 5)
+    else if (L > 4) and
+         IdemPropName('ODBC', pointer(result), 4) then
+        Delete(result, 1, 4);
   end;
 end;
 
-function TSQLDBConnectionProperties.GetDBMS: TSQLDBDefinition;
+function TSqlDBConnectionProperties.GetDBMS: TSqlDBDefinition;
 begin
   if fDBMS = dUnknown then
     result := dDefault
@@ -5003,7 +5006,7 @@ begin
     result := fDBMS;
 end;
 
-function TSQLDBConnectionProperties.GetDBMSName: RawUTF8;
+function TSqlDBConnectionProperties.GetDBMSName: RawUTF8;
 var
   PS: PShortString;
 begin
@@ -5011,26 +5014,26 @@ begin
   FastSetString(result, @PS^[2], ord(PS^[0]) - 1);
 end;
 
-function TSQLDBConnectionProperties.GetDatabaseNameSafe: RawUTF8;
+function TSqlDBConnectionProperties.GetDatabaseNameSafe: RawUTF8;
 begin
   result := StringReplaceAll(fDatabaseName, PassWord, '***');
 end;
 
-function TSQLDBConnectionProperties.SQLLimitClause(AStmt: TSelectStatement):
-  TSQLDBDefinitionLimitClause;
+function TSqlDBConnectionProperties.SQLLimitClause(AStmt: TSelectStatement):
+  TSqlDBDefinitionLimitClause;
 begin
   result := DB_SQLLIMITCLAUSE[DBMS];
 end;
 
 var
-  GlobalDefinitions: array of TSQLDBConnectionPropertiesClass;
+  GlobalDefinitions: array of TSqlDBConnectionPropertiesClass;
 
-class procedure TSQLDBConnectionProperties.RegisterClassNameForDefinition;
+class procedure TSqlDBConnectionProperties.RegisterClassNameForDefinition;
 begin
   ObjArrayAddOnce(GlobalDefinitions, TObject(self)); // TClass stored as TObject
 end;
 
-procedure TSQLDBConnectionProperties.DefinitionTo(Definition: TSynConnectionDefinition);
+procedure TSqlDBConnectionProperties.DefinitionTo(Definition: TSynConnectionDefinition);
 begin
   if Definition = nil then
     exit;
@@ -5041,7 +5044,7 @@ begin
   Definition.PassWordPlain := PassWord;
 end;
 
-function TSQLDBConnectionProperties.DefinitionToJSON(Key: cardinal): RawUTF8;
+function TSqlDBConnectionProperties.DefinitionToJSON(Key: cardinal): RawUTF8;
 var
   Definition: TSynConnectionDefinition;
 begin
@@ -5055,14 +5058,14 @@ begin
   end;
 end;
 
-procedure TSQLDBConnectionProperties.DefinitionToFile(
+procedure TSqlDBConnectionProperties.DefinitionToFile(
   const aJSONFile: TFileName; Key: cardinal);
 begin
   FileFromString(JSONReformat(DefinitionToJSON(Key)), aJSONFile);
 end;
 
-class function TSQLDBConnectionProperties.ClassFrom(
-  aDefinition: TSynConnectionDefinition): TSQLDBConnectionPropertiesClass;
+class function TSqlDBConnectionProperties.ClassFrom(
+  aDefinition: TSynConnectionDefinition): TSqlDBConnectionPropertiesClass;
 var
   ndx: integer;
 begin
@@ -5075,21 +5078,21 @@ begin
   result := nil;
 end;
 
-class function TSQLDBConnectionProperties.CreateFrom(
-  aDefinition: TSynConnectionDefinition): TSQLDBConnectionProperties;
+class function TSqlDBConnectionProperties.CreateFrom(
+  aDefinition: TSynConnectionDefinition): TSqlDBConnectionProperties;
 var
-  C: TSQLDBConnectionPropertiesClass;
+  C: TSqlDBConnectionPropertiesClass;
 begin
   C := ClassFrom(aDefinition);
   if C = nil then
-    raise ESQLDBException.CreateUTF8('%.CreateFrom: unknown % class - please ' +
+    raise ESqlDBException.CreateUTF8('%.CreateFrom: unknown % class - please ' +
       'add a reference to its implementation unit', [self, aDefinition.Kind]);
   result := C.Create(aDefinition.ServerName, aDefinition.DatabaseName,
     aDefinition.User, aDefinition.PassWordPlain);
 end;
 
-class function TSQLDBConnectionProperties.CreateFromJSON(
-  const aJSONDefinition: RawUTF8; aKey: cardinal): TSQLDBConnectionProperties;
+class function TSqlDBConnectionProperties.CreateFromJSON(
+  const aJSONDefinition: RawUTF8; aKey: cardinal): TSqlDBConnectionProperties;
 var
   Definition: TSynConnectionDefinition;
 begin
@@ -5101,17 +5104,17 @@ begin
   end;
 end;
 
-class function TSQLDBConnectionProperties.CreateFromFile(
-  const aJSONFile: TFileName; aKey: cardinal): TSQLDBConnectionProperties;
+class function TSqlDBConnectionProperties.CreateFromFile(
+  const aJSONFile: TFileName; aKey: cardinal): TSqlDBConnectionProperties;
 begin
   result := CreateFromJSON(AnyTextFileToRawUTF8(aJSONFile, true), aKey);
 end;
 
 
-{ TSQLDBStatement }
+{ TSqlDBStatement }
 
-procedure TSQLDBStatement.Bind(Param: integer; const Data: TSQLVar;
-  IO: TSQLDBParamInOutType);
+procedure TSqlDBStatement.Bind(Param: integer; const Data: TSqlVar;
+  IO: TSqlDBParamInOutType);
 begin
   with Data do
     case VType of
@@ -5130,13 +5133,13 @@ begin
       ftBlob:
         BindBlob(Param, VBlob, VBlobLen, IO);
     else
-      raise ESQLDBException.CreateUTF8('%.Bind(Param=%,VType=%)', [self, Param,
+      raise ESqlDBException.CreateUTF8('%.Bind(Param=%,VType=%)', [self, Param,
         ord(VType)]);
     end;
 end;
 
-procedure TSQLDBStatement.Bind(Param: integer; ParamType: TSQLDBFieldType;
-  const Value: RawUTF8; ValueAlreadyUnquoted: boolean; IO: TSQLDBParamInOutType);
+procedure TSqlDBStatement.Bind(Param: integer; ParamType: TSqlDBFieldType;
+  const Value: RawUTF8; ValueAlreadyUnquoted: boolean; IO: TSqlDBParamInOutType);
 var
   tmp: RawUTF8;
 begin
@@ -5180,7 +5183,7 @@ begin
           BindTextU(Param, tmp, IO);
         end;
     else
-      raise ESQLDBException.CreateUTF8('Invalid %.Bind(%,TSQLDBFieldType(%),%)',
+      raise ESqlDBException.CreateUTF8('Invalid %.Bind(%,TSqlDBFieldType(%),%)',
         [self, Param, ord(ParamType), Value]);
     end;
 end;
@@ -5194,7 +5197,7 @@ begin
                (PCardinal(VString)^ and $ffffff = JSON_BASE64_MAGIC_C));
 end;
 
-procedure TSQLDBStatement.Bind(const Params: array of const; IO: TSQLDBParamInOutType);
+procedure TSqlDBStatement.Bind(const Params: array of const; IO: TSqlDBParamInOutType);
 var
   i, c: integer;
 begin
@@ -5259,18 +5262,18 @@ begin
           if VPointer = nil then
             BindNull(i, IO)
           else
-            raise ESQLDBException.CreateUTF8('Unexpected %.Bind() pointer',
+            raise ESqlDBException.CreateUTF8('Unexpected %.Bind() pointer',
               [self]);
         vtVariant:
           BindVariant(i, VVariant^, VariantIsBlob(VVariant^), IO);
       else
-        raise ESQLDBException.CreateUTF8('%.BindArrayOfConst(Param=%,Type=%)',
+        raise ESqlDBException.CreateUTF8('%.BindArrayOfConst(Param=%,Type=%)',
           [self, i, VType]);
       end;
 end;
 
-procedure TSQLDBStatement.BindVariant(Param: integer; const Data: Variant;
-  DataIsBlob: boolean; IO: TSQLDBParamInOutType);
+procedure TSqlDBStatement.BindVariant(Param: integer; const Data: Variant;
+  DataIsBlob: boolean; IO: TSqlDBParamInOutType);
 var
   I64: Int64Rec;
 begin
@@ -5315,7 +5318,7 @@ begin
       {$ifdef HASVARUSTRING}
       varUString:
         if DataIsBlob then
-          raise ESQLDBException.CreateUTF8(
+          raise ESqlDBException.CreateUTF8(
             '%.BindVariant: BLOB should not be UnicodeString', [self])
         else
           BindTextU(Param, UnicodeStringToUtf8(UnicodeString(VAny)), IO);
@@ -5348,7 +5351,7 @@ begin
     end;
 end;
 
-procedure TSQLDBStatement.BindArray(Param: integer; ParamType: TSQLDBFieldType;
+procedure TSqlDBStatement.BindArray(Param: integer; ParamType: TSqlDBFieldType;
   const Values: TRawUTF8DynArray; ValuesCount: integer);
 begin
   if (Param <= 0) or
@@ -5358,67 +5361,67 @@ begin
      (fConnection = nil) or
      (fConnection.fProperties.BatchSendingAbilities *
       [cCreate, cUpdate, cDelete] = []) then
-    raise ESQLDBException.CreateUTF8(
+    raise ESqlDBException.CreateUTF8(
       'Invalid call to %.BindArray(Param=%,Type=%)',
       [self, Param, ToText(ParamType)^]);
 end;
 
-procedure TSQLDBStatement.BindArray(Param: integer; const Values: array of Int64);
+procedure TSqlDBStatement.BindArray(Param: integer; const Values: array of Int64);
 begin
   BindArray(Param, ftInt64, nil, 0); // will raise an exception (Values=nil)
 end;
 
-procedure TSQLDBStatement.BindArray(Param: integer; const Values: array of RawUTF8);
+procedure TSqlDBStatement.BindArray(Param: integer; const Values: array of RawUTF8);
 begin
   BindArray(Param, ftUTF8, nil, 0); // will raise an exception (Values=nil)
 end;
 
-procedure TSQLDBStatement.BindArray(Param: integer; const Values: array of double);
+procedure TSqlDBStatement.BindArray(Param: integer; const Values: array of double);
 begin
   BindArray(Param, ftDouble, nil, 0); // will raise an exception (Values=nil)
 end;
 
-procedure TSQLDBStatement.BindArrayCurrency(Param: integer;
+procedure TSqlDBStatement.BindArrayCurrency(Param: integer;
   const Values: array of currency);
 begin
   BindArray(Param, ftCurrency, nil, 0); // will raise an exception (Values=nil)
 end;
 
-procedure TSQLDBStatement.BindArrayDateTime(Param: integer;
+procedure TSqlDBStatement.BindArrayDateTime(Param: integer;
   const Values: array of TDateTime);
 begin
   BindArray(Param, ftDate, nil, 0); // will raise an exception (Values=nil)
 end;
 
-procedure TSQLDBStatement.CheckCol(Col: integer);
+procedure TSqlDBStatement.CheckCol(Col: integer);
 begin
   if (self = nil) or
      (cardinal(Col) >= cardinal(fColumnCount)) then
-    raise ESQLDBException.CreateUTF8(
+    raise ESqlDBException.CreateUTF8(
       'Invalid call to %.Column*(Col=%)', [self, Col]);
 end;
 
-function TSQLDBStatement.GetForceBlobAsNull: boolean;
+function TSqlDBStatement.GetForceBlobAsNull: boolean;
 begin
   result := fForceBlobAsNull;
 end;
 
-procedure TSQLDBStatement.SetForceBlobAsNull(value: boolean);
+procedure TSqlDBStatement.SetForceBlobAsNull(value: boolean);
 begin
   fForceBlobAsNull := value;
 end;
 
-function TSQLDBStatement.GetForceDateWithMS: boolean;
+function TSqlDBStatement.GetForceDateWithMS: boolean;
 begin
   result := fForceDateWithMS;
 end;
 
-procedure TSQLDBStatement.SetForceDateWithMS(value: boolean);
+procedure TSqlDBStatement.SetForceDateWithMS(value: boolean);
 begin
   fForceDateWithMS := value;
 end;
 
-constructor TSQLDBStatement.Create(aConnection: TSQLDBConnection);
+constructor TSqlDBStatement.Create(aConnection: TSqlDBConnection);
 begin
   inherited Create;
   fConnection := aConnection;
@@ -5428,7 +5431,7 @@ begin
     fDBMS := aConnection.fProperties.DBMS;
 end;
 
-function TSQLDBStatement.ColumnCount: integer;
+function TSqlDBStatement.ColumnCount: integer;
 begin
   if self = nil then
     result := 0
@@ -5436,12 +5439,12 @@ begin
     result := fColumnCount;
 end;
 
-function TSQLDBStatement.ColumnBlobBytes(Col: integer): TBytes;
+function TSqlDBStatement.ColumnBlobBytes(Col: integer): TBytes;
 begin
   RawByteStringToBytes(ColumnBlob(Col), result);
 end;
 
-procedure TSQLDBStatement.ColumnBlobToStream(Col: integer; Stream: TStream);
+procedure TSqlDBStatement.ColumnBlobToStream(Col: integer; Stream: TStream);
 var
   tmp: RawByteString;
 begin
@@ -5449,21 +5452,21 @@ begin
   Stream.WriteBuffer(pointer(tmp)^, Length(tmp));
 end;
 
-procedure TSQLDBStatement.ColumnBlobFromStream(Col: integer; Stream: TStream);
+procedure TSqlDBStatement.ColumnBlobFromStream(Col: integer; Stream: TStream);
 begin
-  raise ESQLDBException.CreateUTF8('%.ColumnBlobFromStream not implemented', [self]);
+  raise ESqlDBException.CreateUTF8('%.ColumnBlobFromStream not implemented', [self]);
 end;
 
-function TSQLDBStatement.ColumnVariant(Col: integer): Variant;
+function TSqlDBStatement.ColumnVariant(Col: integer): Variant;
 begin
   ColumnToVariant(Col, result);
 end;
 
-function TSQLDBStatement.ColumnToVariant(Col: integer; var Value: Variant):
-  TSQLDBFieldType;
+function TSqlDBStatement.ColumnToVariant(Col: integer; var Value: Variant):
+  TSqlDBFieldType;
 var
   tmp: RawByteString;
-  V: TSQLVar;
+  V: TSqlVar;
 begin
   ColumnToSQLVar(Col, V, tmp);
   result := V.VType;
@@ -5520,13 +5523,13 @@ begin
             VType := varString; // avoid obscure "Invalid variant type" in FPC
         end;
     else
-      raise ESQLDBException.CreateUTF8('%.ColumnToVariant: Invalid ColumnType(%)=%',
+      raise ESqlDBException.CreateUTF8('%.ColumnToVariant: Invalid ColumnType(%)=%',
         [self, Col, ord(result)]);
     end;
   end;
 end;
 
-function TSQLDBStatement.ColumnTimestamp(Col: integer): TTimeLog;
+function TSqlDBStatement.ColumnTimestamp(Col: integer): TTimeLog;
 begin
   case ColumnType(Col) of // will call GetCol() to check Col
     ftNull:
@@ -5540,12 +5543,12 @@ begin
   end;
 end;
 
-function TSQLDBStatement.ColumnTimestamp(const ColName: RawUTF8): TTimeLog;
+function TSqlDBStatement.ColumnTimestamp(const ColName: RawUTF8): TTimeLog;
 begin
   result := ColumnTimestamp(ColumnIndex(ColName));
 end;
 
-procedure TSQLDBStatement.ColumnsToJSON(WR: TJSONWriter);
+procedure TSqlDBStatement.ColumnsToJSON(WR: TJSONWriter);
 var
   col: integer;
   blob: RawByteString;
@@ -5589,7 +5592,7 @@ begin
             WR.WrBase64(pointer(blob), length(blob), {withMagic=}true);
           end;
       else
-        raise ESQLDBException.CreateUTF8(
+        raise ESqlDBException.CreateUTF8(
           '%.ColumnsToJSON: invalid ColumnType(%)=%',
           [self, col, ord(ColumnType(col))]);
       end;
@@ -5600,7 +5603,7 @@ begin
     WR.Add('}');
 end;
 
-procedure TSQLDBStatement.ColumnToSQLVar(Col: integer; var Value: TSQLVar;
+procedure TSqlDBStatement.ColumnToSQLVar(Col: integer; var Value: TSqlVar;
   var Temp: RawByteString);
 begin
   Value.Options := [];
@@ -5638,8 +5641,8 @@ begin
   end;
 end;
 
-function TSQLDBStatement.ColumnToTypedValue(Col: integer;
-  DestType: TSQLDBFieldType; var Dest): TSQLDBFieldType;
+function TSqlDBStatement.ColumnToTypedValue(Col: integer;
+  DestType: TSqlDBFieldType; var Dest): TSqlDBFieldType;
 var
   Temp: Variant; // rely on a temporary variant value for the conversion
 begin
@@ -5658,23 +5661,23 @@ begin
     ftBlob:
       VariantToRawByteString(Temp, RawByteString(Dest));
   else
-    raise ESQLDBException.CreateUTF8('%.ColumnToTypedValue: Invalid Type [%]',
+    raise ESqlDBException.CreateUTF8('%.ColumnToTypedValue: Invalid Type [%]',
       [self, ToText(result)^]);
   end;
 end;
 
-function TSQLDBStatement.ParamToVariant(Param: integer; var Value: Variant;
-  CheckIsOutParameter: boolean): TSQLDBFieldType;
+function TSqlDBStatement.ParamToVariant(Param: integer; var Value: Variant;
+  CheckIsOutParameter: boolean): TSqlDBFieldType;
 begin
   dec(Param); // start at #1
   if (self = nil) or
      (cardinal(Param) >= cardinal(fParamCount)) then
-    raise ESQLDBException.CreateUTF8('%.ParamToVariant(%)', [self, Param]);
+    raise ESqlDBException.CreateUTF8('%.ParamToVariant(%)', [self, Param]);
   // overridden method should fill Value with proper data
   result := ftUnknown;
 end;
 
-procedure TSQLDBStatement.Execute(const aSQL: RawUTF8; ExpectResults: boolean);
+procedure TSqlDBStatement.Execute(const aSQL: RawUTF8; ExpectResults: boolean);
 begin
   Connection.InternalProcess(speActive);
   try
@@ -5686,7 +5689,7 @@ begin
   end;
 end;
 
-function TSQLDBStatement.FetchAllToJSON(JSON: TStream; Expanded: boolean): PtrInt;
+function TSqlDBStatement.FetchAllToJSON(JSON: TStream; Expanded: boolean): PtrInt;
 var
   W: TJSONWriter;
   col: integer;
@@ -5734,7 +5737,7 @@ begin
   end;
 end;
 
-function TSQLDBStatement.FetchAllToCSVValues(Dest: TStream; Tab: boolean;
+function TSqlDBStatement.FetchAllToCSVValues(Dest: TStream; Tab: boolean;
   CommaSep: AnsiChar; AddBOM: boolean): PtrInt;
 const
   NULL: array[boolean] of string[7] = (
@@ -5745,7 +5748,7 @@ var
   F, FMax: integer;
   W: TTextWriter;
   tmp: RawByteString;
-  V: TSQLVar;
+  V: TSqlVar;
 begin
   result := 0;
   if (Dest = nil) or
@@ -5813,7 +5816,7 @@ begin
           ftBlob:
             W.AddShorter(blob[Tab]);  // ForceBlobAsNull should be true
         else
-          raise ESQLDBException.CreateUTF8('%.FetchAllToCSVValues: Invalid ColumnType(%) %',
+          raise ESqlDBException.CreateUTF8('%.FetchAllToCSVValues: Invalid ColumnType(%) %',
             [self, F, ToText(ColumnType(F))^]);
         end;
         if F = FMax then
@@ -5833,7 +5836,7 @@ begin
   end;
 end;
 
-function TSQLDBStatement.FetchAllAsJSON(Expanded: boolean; ReturnedRowCount:
+function TSqlDBStatement.FetchAllAsJSON(Expanded: boolean; ReturnedRowCount:
   PPtrInt): RawUTF8;
 var
   Stream: TRawByteStringStream;
@@ -5850,14 +5853,14 @@ begin
   end;
 end;
 
-procedure TSQLDBStatement.ColumnsToBinary(W: TBufferWriter; Null: pointer;
-  const ColTypes: TSQLDBFieldTypeDynArray);
+procedure TSqlDBStatement.ColumnsToBinary(W: TBufferWriter; Null: pointer;
+  const ColTypes: TSqlDBFieldTypeDynArray);
 var
   F: integer;
   VDouble: double;
   VCurrency: currency absolute VDouble;
   VDateTime: TDateTime absolute VDouble;
-  ft: TSQLDBFieldType;
+  ft: TSqlDBFieldType;
 begin
   for F := 0 to length(ColTypes) - 1 do
     if not GetBitPtr(Null, F) then
@@ -5891,20 +5894,20 @@ begin
         ftBlob:
           W.Write(ColumnBlob(F));
       else
-        raise ESQLDBException.CreateUTF8('%.ColumnsToBinary: Invalid ColumnType(%)=%',
+        raise ESqlDBException.CreateUTF8('%.ColumnsToBinary: Invalid ColumnType(%)=%',
           [self, ColumnName(F), ord(ft)]);
       end;
     end;
 end;
 
-function TSQLDBStatement.FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal;
+function TSqlDBStatement.FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal;
   DataRowPosition: PCardinalDynArray): cardinal;
 var
   F, FMax, FieldSize, NullRowSize: integer;
   StartPos: Int64;
   W: TBufferWriter;
-  ft: TSQLDBFieldType;
-  ColTypes: TSQLDBFieldTypeDynArray;
+  ft: TSqlDBFieldType;
+  ColTypes: TSqlDBFieldTypeDynArray;
   Null: TByteDynArray;
 begin
   result := 0;
@@ -5980,7 +5983,7 @@ begin
   end;
 end;
 
-procedure TSQLDBStatement.Execute(const aSQL: RawUTF8; ExpectResults: boolean;
+procedure TSqlDBStatement.Execute(const aSQL: RawUTF8; ExpectResults: boolean;
   const Params: array of const);
 begin
   Connection.InternalProcess(speActive);
@@ -5993,105 +5996,105 @@ begin
   end;
 end;
 
-procedure TSQLDBStatement.Execute(const SQLFormat: RawUTF8;
+procedure TSqlDBStatement.Execute(const SQLFormat: RawUTF8;
   ExpectResults: boolean; const Args, Params: array of const);
 begin
   Execute(FormatUTF8(SQLFormat, Args), ExpectResults, Params);
 end;
 
-function TSQLDBStatement.UpdateCount: integer;
+function TSqlDBStatement.UpdateCount: integer;
 begin
   result := 0;
 end;
 
-procedure TSQLDBStatement.ExecutePreparedAndFetchAllAsJSON(Expanded: boolean;
+procedure TSqlDBStatement.ExecutePreparedAndFetchAllAsJSON(Expanded: boolean;
   out JSON: RawUTF8);
 begin
   ExecutePrepared;
   JSON := FetchAllAsJSON(Expanded);
 end;
 
-function TSQLDBStatement.ColumnString(Col: integer): string;
+function TSqlDBStatement.ColumnString(Col: integer): string;
 begin
   result := UTF8ToString(ColumnUTF8(Col));
 end;
 
-function TSQLDBStatement.ColumnString(const ColName: RawUTF8): string;
+function TSqlDBStatement.ColumnString(const ColName: RawUTF8): string;
 begin
   result := ColumnString(ColumnIndex(ColName));
 end;
 
-function TSQLDBStatement.ColumnBlob(const ColName: RawUTF8): RawByteString;
+function TSqlDBStatement.ColumnBlob(const ColName: RawUTF8): RawByteString;
 begin
   result := ColumnBlob(ColumnIndex(ColName));
 end;
 
-function TSQLDBStatement.ColumnBlobBytes(const ColName: RawUTF8): TBytes;
+function TSqlDBStatement.ColumnBlobBytes(const ColName: RawUTF8): TBytes;
 begin
   result := ColumnBlobBytes(ColumnIndex(ColName));
 end;
 
-procedure TSQLDBStatement.ColumnBlobToStream(const ColName: RawUTF8; Stream: TStream);
+procedure TSqlDBStatement.ColumnBlobToStream(const ColName: RawUTF8; Stream: TStream);
 begin
   ColumnBlobToStream(ColumnIndex(ColName), Stream);
 end;
 
-procedure TSQLDBStatement.ColumnBlobFromStream(const ColName: RawUTF8; Stream: TStream);
+procedure TSqlDBStatement.ColumnBlobFromStream(const ColName: RawUTF8; Stream: TStream);
 begin
   ColumnBlobFromStream(ColumnIndex(ColName), Stream);
 end;
 
-function TSQLDBStatement.ColumnCurrency(const ColName: RawUTF8): currency;
+function TSqlDBStatement.ColumnCurrency(const ColName: RawUTF8): currency;
 begin
   result := ColumnCurrency(ColumnIndex(ColName));
 end;
 
-function TSQLDBStatement.ColumnDateTime(const ColName: RawUTF8): TDateTime;
+function TSqlDBStatement.ColumnDateTime(const ColName: RawUTF8): TDateTime;
 begin
   result := ColumnDateTime(ColumnIndex(ColName));
 end;
 
-function TSQLDBStatement.ColumnDouble(const ColName: RawUTF8): double;
+function TSqlDBStatement.ColumnDouble(const ColName: RawUTF8): double;
 begin
   result := ColumnDouble(ColumnIndex(ColName));
 end;
 
-function TSQLDBStatement.ColumnInt(const ColName: RawUTF8): Int64;
+function TSqlDBStatement.ColumnInt(const ColName: RawUTF8): Int64;
 begin
   result := ColumnInt(ColumnIndex(ColName));
 end;
 
-function TSQLDBStatement.ColumnUTF8(const ColName: RawUTF8): RawUTF8;
+function TSqlDBStatement.ColumnUTF8(const ColName: RawUTF8): RawUTF8;
 begin
   result := ColumnUTF8(ColumnIndex(ColName));
 end;
 
-function TSQLDBStatement.ColumnVariant(const ColName: RawUTF8): Variant;
+function TSqlDBStatement.ColumnVariant(const ColName: RawUTF8): Variant;
 begin
   ColumnToVariant(ColumnIndex(ColName), result);
 end;
 
-function TSQLDBStatement.GetColumnVariant(const ColName: RawUTF8): Variant;
+function TSqlDBStatement.GetColumnVariant(const ColName: RawUTF8): Variant;
 begin
   ColumnToVariant(ColumnIndex(ColName), result);
 end;
 
-function TSQLDBStatement.ColumnCursor(const ColName: RawUTF8): ISQLDBRows;
+function TSqlDBStatement.ColumnCursor(const ColName: RawUTF8): ISQLDBRows;
 begin
   result := ColumnCursor(ColumnIndex(ColName));
 end;
 
-function TSQLDBStatement.{%H-}ColumnCursor(Col: integer): ISQLDBRows;
+function TSqlDBStatement.{%H-}ColumnCursor(Col: integer): ISQLDBRows;
 begin
-  raise ESQLDBException.CreateUTF8('% does not support CURSOR columns', [self]);
+  raise ESqlDBException.CreateUTF8('% does not support CURSOR columns', [self]);
 end;
 
-function TSQLDBStatement.Instance: TSQLDBStatement;
+function TSqlDBStatement.Instance: TSqlDBStatement;
 begin
   result := Self;
 end;
 
-function TSQLDBStatement.SQLLogBegin(level: TSynLogInfo): TSynLog;
+function TSqlDBStatement.SQLLogBegin(level: TSynLogInfo): TSynLog;
 begin
   if level = sllDB then // prepare
     fSQLLogTimer.Start
@@ -6114,7 +6117,7 @@ begin
   {$endif SYNDB_SILENCE}
 end;
 
-function TSQLDBStatement.SQLLogEnd(msg: PShortString): Int64;
+function TSqlDBStatement.SQLLogEnd(msg: PShortString): Int64;
 {$ifndef SYNDB_SILENCE}
 var
   tmp: TShort16;
@@ -6150,7 +6153,7 @@ begin
   {$endif}
 end;
 
-function TSQLDBStatement.SQLLogEnd(const Fmt: RawUTF8; const Args: array of const): Int64;
+function TSqlDBStatement.SQLLogEnd(const Fmt: RawUTF8; const Args: array of const): Int64;
 var
   tmp: shortstring;
 begin
@@ -6165,7 +6168,7 @@ begin
   result := SQLLogEnd(@tmp);
 end;
 
-function TSQLDBStatement.GetSQLCurrent: RawUTF8;
+function TSqlDBStatement.GetSQLCurrent: RawUTF8;
 begin
   if fSQLPrepared <> '' then
     result := fSQLPrepared
@@ -6173,7 +6176,7 @@ begin
     result := fSQL;
 end;
 
-function TSQLDBStatement.GetSQLWithInlinedParams: RawUTF8;
+function TSqlDBStatement.GetSQLWithInlinedParams: RawUTF8;
 begin
   if fSQL = '' then
     result := ''
@@ -6212,7 +6215,7 @@ begin
   result := P;
 end;
 
-procedure TSQLDBStatement.ComputeSQLWithInlinedParams;
+procedure TSqlDBStatement.ComputeSQLWithInlinedParams;
 var
   P, B: PUTF8Char;
   num: integer;
@@ -6260,7 +6263,7 @@ begin
   end;
 end;
 
-procedure TSQLDBStatement.AddParamValueAsText(Param: integer; Dest: TTextWriter;
+procedure TSqlDBStatement.AddParamValueAsText(Param: integer; Dest: TTextWriter;
   MaxCharCount: integer);
 
   procedure AppendUnicode(W: PWideChar; WLen: integer);
@@ -6280,7 +6283,7 @@ procedure TSQLDBStatement.AddParamValueAsText(Param: integer; Dest: TTextWriter;
 
 var
   v: variant;
-  ft: TSQLDBFieldType;
+  ft: TSqlDBFieldType;
 begin
   ft := ParamToVariant(Param, v, false);
   with TVarData(v) do
@@ -6308,10 +6311,10 @@ end;
 var
   SQLDBRowVariantType: TCustomVariantType = nil;
 
-function TSQLDBStatement.RowData: Variant;
+function TSqlDBStatement.RowData: Variant;
 begin
   if SQLDBRowVariantType = nil then
-    SQLDBRowVariantType := SynRegisterCustomVariantType(TSQLDBRowVariantType);
+    SQLDBRowVariantType := SynRegisterCustomVariantType(TSqlDBRowVariantType);
   VarClear(result);
   with TVarData(result) do
   begin
@@ -6320,7 +6323,7 @@ begin
   end;
 end;
 
-procedure TSQLDBStatement.RowDocVariant(out aDocument: variant;
+procedure TSqlDBStatement.RowDocVariant(out aDocument: variant;
   aOptions: TDocVariantOptions);
 var
   n, F: integer;
@@ -6338,7 +6341,7 @@ begin
   TDocVariantData(aDocument).InitObjectFromVariants(names, values, aOptions);
 end;
 
-procedure TSQLDBStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
+procedure TSqlDBStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
 var
   L: integer;
 begin
@@ -6363,26 +6366,26 @@ begin
   end;
 end;
 
-procedure TSQLDBStatement.ExecutePrepared;
+procedure TSqlDBStatement.ExecutePrepared;
 begin
   if fConnection <> nil then
     fConnection.fLastAccessTicks := GetTickCount64;
   // a do-nothing default method
 end;
 
-procedure TSQLDBStatement.Reset;
+procedure TSqlDBStatement.Reset;
 begin
   fSQLWithInlinedParams := '';
   fSQLLogTimer.Init; // reset timer (for cached statement for example)
 end;
 
-procedure TSQLDBStatement.ReleaseRows;
+procedure TSqlDBStatement.ReleaseRows;
 begin
   fSQLWithInlinedParams := '';
 end;
 
-function TSQLDBStatement.ColumnsToSQLInsert(const TableName: RawUTF8;
-  var Fields: TSQLDBColumnCreateDynArray): RawUTF8;
+function TSqlDBStatement.ColumnsToSQLInsert(const TableName: RawUTF8;
+  var Fields: TSqlDBColumnCreateDynArray): RawUTF8;
 var
   F, size: integer;
 begin
@@ -6403,7 +6406,7 @@ begin
       ftNull:
         Fields[F].DBType := ftBlob; // if not identified, assume it is a BLOB
       ftUnknown:
-        raise ESQLDBException.CreateUTF8('%.ColumnsToSQLInsert: Invalid column %',
+        raise ESqlDBException.CreateUTF8('%.ColumnsToSQLInsert: Invalid column %',
           [self, Fields[F].Name]);
     end;
     result := result + Fields[F].Name + ',';
@@ -6415,8 +6418,8 @@ begin
   result[length(result)] := ')';
 end;
 
-procedure TSQLDBStatement.BindFromRows(const Fields: TSQLDBFieldTypeDynArray;
-  Rows: TSQLDBStatement);
+procedure TSqlDBStatement.BindFromRows(const Fields: TSqlDBFieldTypeDynArray;
+  Rows: TSqlDBStatement);
 var
   F: integer;
 begin
@@ -6445,29 +6448,29 @@ begin
         end;
 end;
 
-procedure TSQLDBStatement.BindCursor(Param: integer);
+procedure TSqlDBStatement.BindCursor(Param: integer);
 begin
-  raise ESQLDBException.CreateUTF8('% does not support CURSOR parameter', [self]);
+  raise ESqlDBException.CreateUTF8('% does not support CURSOR parameter', [self]);
 end;
 
-function TSQLDBStatement.{%H-}BoundCursor(Param: integer): ISQLDBRows;
+function TSqlDBStatement.{%H-}BoundCursor(Param: integer): ISQLDBRows;
 begin
-  raise ESQLDBException.CreateUTF8('% does not support CURSOR parameter', [self]);
+  raise ESqlDBException.CreateUTF8('% does not support CURSOR parameter', [self]);
 end;
 
 
-{ TSQLDBConnection }
+{ TSqlDBConnection }
 
-procedure TSQLDBConnection.CheckConnection;
+procedure TSqlDBConnection.CheckConnection;
 begin
   if self = nil then
-    raise ESQLDBException.Create('TSQLDBConnection not created');
+    raise ESqlDBException.Create('CheckConnection: TSqlDBConnection=nil');
   if not Connected then
-    raise ESQLDBException.CreateUTF8('% on %/% should be connected',
+    raise ESqlDBException.CreateUTF8('% on %/% should be connected',
       [self, Properties.ServerName, Properties.DataBaseName]);
 end;
 
-procedure TSQLDBConnection.InternalProcess(Event: TOnSQLDBProcessEvent);
+procedure TSqlDBConnection.InternalProcess(Event: TOnSQLDBProcessEvent);
 begin
   if (self = nil) or
      not Assigned(OnProcess) then
@@ -6484,16 +6487,16 @@ begin
   end;
 end;
 
-procedure TSQLDBConnection.Commit;
+procedure TSqlDBConnection.Commit;
 begin
   CheckConnection;
   if TransactionCount <= 0 then
-    raise ESQLDBException.CreateUTF8('Invalid %.Commit call', [self]);
+    raise ESqlDBException.CreateUTF8('Invalid %.Commit call', [self]);
   dec(fTransactionCount);
   InternalProcess(speCommit);
 end;
 
-constructor TSQLDBConnection.Create(aProperties: TSQLDBConnectionProperties);
+constructor TSqlDBConnection.Create(aProperties: TSqlDBConnectionProperties);
 begin
   fProperties := aProperties;
   if aProperties <> nil then
@@ -6503,7 +6506,7 @@ begin
   end;
 end;
 
-procedure TSQLDBConnection.Connect;
+procedure TSqlDBConnection.Connect;
 var
   i: integer;
 begin
@@ -6526,7 +6529,7 @@ begin
     end;
 end;
 
-procedure TSQLDBConnection.Disconnect;
+procedure TSqlDBConnection.Disconnect;
 var
   i: PtrInt;
   Obj: PPointerArray;
@@ -6539,7 +6542,7 @@ begin
       Obj := fCache.ObjectPtr;
       if Obj <> nil then
         for i := 0 to fCache.Count - 1 do
-          TSQLDBStatement(Obj[i]).FRefCount := 0; // force clean release
+          TSqlDBStatement(Obj[i]).FRefCount := 0; // force clean release
       FreeAndNil(fCache); // release all cached statements
     finally
       InternalProcess(speNonActive);
@@ -6557,7 +6560,7 @@ begin
   end;
 end;
 
-destructor TSQLDBConnection.Destroy;
+destructor TSqlDBConnection.Destroy;
 begin
   try
     Disconnect;
@@ -6568,7 +6571,7 @@ begin
   inherited;
 end;
 
-function TSQLDBConnection.IsOutdated(tix: Int64): boolean;
+function TSqlDBConnection.IsOutdated(tix: Int64): boolean;
 begin
   result := false;
   if (self = nil) or
@@ -6587,17 +6590,17 @@ begin
     result := true;
 end;
 
-function TSQLDBConnection.GetInTransaction: boolean;
+function TSqlDBConnection.GetInTransaction: boolean;
 begin
   result := TransactionCount > 0;
 end;
 
-function TSQLDBConnection.GetServerTimestamp: TTimeLog;
+function TSqlDBConnection.GetServerTimestamp: TTimeLog;
 begin
   PTimeLogBits(@result)^.From(GetServerDateTime);
 end;
 
-function TSQLDBConnection.GetServerDateTime: TDateTime;
+function TSqlDBConnection.GetServerDateTime: TDateTime;
 var
   Current: TDateTime;
 begin
@@ -6615,7 +6618,7 @@ begin
   result := Current + fServerTimestampOffset;
 end;
 
-function TSQLDBConnection.GetLastErrorWasAboutConnection: boolean;
+function TSqlDBConnection.GetLastErrorWasAboutConnection: boolean;
 begin
   result := (self <> nil) and
             (Properties <> nil) and
@@ -6623,18 +6626,18 @@ begin
     Properties.ExceptionIsAboutConnection(fErrorException, fErrorMessage);
 end;
 
-function TSQLDBConnection.NewStatementPrepared(const aSQL: RawUTF8;
+function TSqlDBConnection.NewStatementPrepared(const aSQL: RawUTF8;
   ExpectResults: boolean; RaiseExceptionOnError: boolean;
   AllowReconnect: boolean): ISQLDBStatement;
 var
-  Stmt: TSQLDBStatement;
+  Stmt: TSqlDBStatement;
   ToCache: boolean;
   ndx, altern: integer;
   cachedSQL: RawUTF8;
 
   procedure TryPrepare(doraise: boolean);
   var
-    Stmt: TSQLDBStatement;
+    Stmt: TSqlDBStatement;
   begin
     Stmt := nil;
     try
@@ -6761,35 +6764,35 @@ begin
     TryPrepare(RaiseExceptionOnError);
 end;
 
-procedure TSQLDBConnection.Rollback;
+procedure TSqlDBConnection.Rollback;
 begin
   CheckConnection;
   if TransactionCount <= 0 then
-    raise ESQLDBException.CreateUTF8('Invalid %.Rollback call', [self]);
+    raise ESqlDBException.CreateUTF8('Invalid %.Rollback call', [self]);
   dec(fTransactionCount);
   InternalProcess(speRollback);
 end;
 
-function TSQLDBConnection.PasswordChange: boolean;
+function TSqlDBConnection.PasswordChange: boolean;
 begin
   result := false;
 end;
 
-procedure TSQLDBConnection.StartTransaction;
+procedure TSqlDBConnection.StartTransaction;
 begin
   CheckConnection;
   inc(fTransactionCount);
   InternalProcess(speStartTransaction);
 end;
 
-function TSQLDBConnection.NewTableFromRows(const TableName: RawUTF8;
-  Rows: TSQLDBStatement; WithinTransaction: boolean;
-  ColumnForcedTypes: TSQLDBFieldTypeDynArray): integer;
+function TSqlDBConnection.NewTableFromRows(const TableName: RawUTF8;
+  Rows: TSqlDBStatement; WithinTransaction: boolean;
+  ColumnForcedTypes: TSqlDBFieldTypeDynArray): integer;
 var
-  Fields: TSQLDBColumnCreateDynArray;
+  Fields: TSqlDBColumnCreateDynArray;
   aTableName, SQL: RawUTF8;
   Tables: TRawUTF8DynArray;
-  Ins: TSQLDBStatement;
+  Ins: TSqlDBStatement;
   i, n: integer;
 begin
   result := 0;
@@ -6858,9 +6861,9 @@ end;
 
 { ************ Parent Classes for Thread-Safe and Parametrized Connections }
 
-{ TSQLDBConnectionPropertiesThreadSafe }
+{ TSqlDBConnectionPropertiesThreadSafe }
 
-procedure TSQLDBConnectionPropertiesThreadSafe.ClearConnectionPool;
+procedure TSqlDBConnectionPropertiesThreadSafe.ClearConnectionPool;
 var
   i: PtrInt;
 begin
@@ -6869,14 +6872,14 @@ begin
     if fMainConnection <> nil then
       fMainConnection.fLastAccessTicks := -1; // force IsOutdated to return true
     for i := 0 to fConnectionPool.Count - 1 do
-      TSQLDBConnectionThreadSafe(fConnectionPool.List[i]).fLastAccessTicks := -1;
+      TSqlDBConnectionThreadSafe(fConnectionPool.List[i]).fLastAccessTicks := -1;
     fLatestConnectionRetrievedInPool := -1;
   finally
     fConnectionPool.Safe.UnLock;
   end;
 end;
 
-constructor TSQLDBConnectionPropertiesThreadSafe.Create(const aServerName,
+constructor TSqlDBConnectionPropertiesThreadSafe.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUTF8);
 begin
   fConnectionPool := TSynObjectListLocked.Create;
@@ -6884,11 +6887,11 @@ begin
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
 end;
 
-function TSQLDBConnectionPropertiesThreadSafe.CurrentThreadConnectionIndex: integer;
+function TSqlDBConnectionPropertiesThreadSafe.CurrentThreadConnectionIndex: integer;
 var
   id: TThreadID;
   tix: Int64;
-  conn: TSQLDBConnectionThreadSafe;
+  conn: TSqlDBConnectionThreadSafe;
 begin // caller made fConnectionPool.Safe.Lock
   if self <> nil then
   begin
@@ -6922,13 +6925,13 @@ begin // caller made fConnectionPool.Safe.Lock
   result := -1;
 end;
 
-destructor TSQLDBConnectionPropertiesThreadSafe.Destroy;
+destructor TSqlDBConnectionPropertiesThreadSafe.Destroy;
 begin
   inherited Destroy; // do MainConnection.Free
   fConnectionPool.Free;
 end;
 
-procedure TSQLDBConnectionPropertiesThreadSafe.EndCurrentThread;
+procedure TSqlDBConnectionPropertiesThreadSafe.EndCurrentThread;
 var
   i: integer;
 begin
@@ -6937,7 +6940,7 @@ begin
     i := CurrentThreadConnectionIndex;
     if i >= 0 then
     begin // do nothing if this thread has no active connection
-      fConnectionPool.Delete(i); // release thread's TSQLDBConnection instance
+      fConnectionPool.Delete(i); // release thread's TSqlDBConnection instance
       if i = fLatestConnectionRetrievedInPool then
         fLatestConnectionRetrievedInPool := -1;
     end;
@@ -6946,12 +6949,12 @@ begin
   end;
 end;
 
-function TSQLDBConnectionPropertiesThreadSafe.GetMainConnection: TSQLDBConnection;
+function TSqlDBConnectionPropertiesThreadSafe.GetMainConnection: TSqlDBConnection;
 begin
   result := ThreadSafeConnection;
 end;
 
-function TSQLDBConnectionPropertiesThreadSafe.ThreadSafeConnection: TSQLDBConnection;
+function TSqlDBConnectionPropertiesThreadSafe.ThreadSafeConnection: TSqlDBConnection;
 var
   i: integer;
 begin
@@ -6967,7 +6970,7 @@ begin
             exit;
           end;
           result := NewConnection; // no need to release the lock (fast method)
-          (result as TSQLDBConnectionThreadSafe).fThreadID := GetCurrentThreadId;
+          (result as TSqlDBConnectionThreadSafe).fThreadID := GetCurrentThreadId;
           fLatestConnectionRetrievedInPool := fConnectionPool.Add(result)
         finally
           fConnectionPool.Safe.UnLock;
@@ -6981,13 +6984,13 @@ begin
 end;
 
 
-{ TSQLDBStatementWithParams }
+{ TSqlDBStatementWithParams }
 
-function TSQLDBStatementWithParams.CheckParam(Param: integer;
-  NewType: TSQLDBFieldType; IO: TSQLDBParamInOutType): PSQLDBParam;
+function TSqlDBStatementWithParams.CheckParam(Param: integer;
+  NewType: TSqlDBFieldType; IO: TSqlDBParamInOutType): PSqlDBParam;
 begin
   if self = nil then
-    raise ESQLDBException.Create('self=nil for TSQLDBStatement.Bind*()');
+    raise ESqlDBException.Create('self=nil for TSqlDBStatement.Bind*()');
   if Param > fParamCount then
     fParam.Count := Param; // resize fParams[] dynamic array if necessary
   result := @fParams[Param - 1];
@@ -6995,15 +6998,15 @@ begin
   result^.VInOut := IO;
 end;
 
-function TSQLDBStatementWithParams.CheckParam(Param: integer; NewType:
-  TSQLDBFieldType; IO: TSQLDBParamInOutType; ArrayCount: integer): PSQLDBParam;
+function TSqlDBStatementWithParams.CheckParam(Param: integer; NewType:
+  TSqlDBFieldType; IO: TSqlDBParamInOutType; ArrayCount: integer): PSqlDBParam;
 begin
   result := CheckParam(Param, NewType, IO);
   if (NewType in [ftUnknown, ftNull]) or
      (fConnection = nil) or
      (fConnection.fProperties.BatchSendingAbilities *
        [cCreate, cUpdate, cDelete] = []) then
-    raise ESQLDBException.CreateUTF8(
+    raise ESqlDBException.CreateUTF8(
       'Invalid call to %.BindArray(Param=%,Type=%)',
       [self, Param, ToText(NewType)^]);
   SetLength(result^.VArray, ArrayCount);
@@ -7011,56 +7014,56 @@ begin
   fParamsArrayCount := ArrayCount;
 end;
 
-constructor TSQLDBStatementWithParams.Create(aConnection: TSQLDBConnection);
+constructor TSqlDBStatementWithParams.Create(aConnection: TSqlDBConnection);
 begin
   inherited Create(aConnection);
-  fParam.Init(TypeInfo(TSQLDBParamDynArray), fParams, @fParamCount);
+  fParam.Init(TypeInfo(TSqlDBParamDynArray), fParams, @fParamCount);
 end;
 
-procedure TSQLDBStatementWithParams.Bind(Param: integer; Value: double;
-  IO: TSQLDBParamInOutType);
+procedure TSqlDBStatementWithParams.Bind(Param: integer; Value: double;
+  IO: TSqlDBParamInOutType);
 begin
   CheckParam(Param, ftDouble, IO)^.VInt64 := PInt64(@Value)^;
 end;
 
-procedure TSQLDBStatementWithParams.Bind(Param: integer; Value: Int64;
-  IO: TSQLDBParamInOutType);
+procedure TSqlDBStatementWithParams.Bind(Param: integer; Value: Int64;
+  IO: TSqlDBParamInOutType);
 begin
   CheckParam(Param, ftInt64, IO)^.VInt64 := Value;
 end;
 
-procedure TSQLDBStatementWithParams.BindBlob(Param: integer;
-  const Data: RawByteString; IO: TSQLDBParamInOutType);
+procedure TSqlDBStatementWithParams.BindBlob(Param: integer;
+  const Data: RawByteString; IO: TSqlDBParamInOutType);
 begin
   CheckParam(Param, ftBlob, IO)^.VData := Data;
 end;
 
-procedure TSQLDBStatementWithParams.BindBlob(Param: integer; Data: pointer;
-  Size: integer; IO: TSQLDBParamInOutType);
+procedure TSqlDBStatementWithParams.BindBlob(Param: integer; Data: pointer;
+  Size: integer; IO: TSqlDBParamInOutType);
 begin
   SetString(CheckParam(Param, ftBlob, IO)^.VData, PAnsiChar(Data), Size);
 end;
 
-procedure TSQLDBStatementWithParams.BindCurrency(Param: integer;
-  Value: currency; IO: TSQLDBParamInOutType);
+procedure TSqlDBStatementWithParams.BindCurrency(Param: integer;
+  Value: currency; IO: TSqlDBParamInOutType);
 begin
   CheckParam(Param, ftCurrency, IO)^.VInt64 := PInt64(@Value)^;
 end;
 
-procedure TSQLDBStatementWithParams.BindDateTime(Param: integer;
-  Value: TDateTime; IO: TSQLDBParamInOutType);
+procedure TSqlDBStatementWithParams.BindDateTime(Param: integer;
+  Value: TDateTime; IO: TSqlDBParamInOutType);
 begin
   CheckParam(Param, ftDate, IO)^.VInt64 := PInt64(@Value)^;
 end;
 
-procedure TSQLDBStatementWithParams.BindNull(Param: integer;
-  IO: TSQLDBParamInOutType; BoundType: TSQLDBFieldType);
+procedure TSqlDBStatementWithParams.BindNull(Param: integer;
+  IO: TSqlDBParamInOutType; BoundType: TSqlDBFieldType);
 begin
   CheckParam(Param, ftNull, IO);
 end;
 
-procedure TSQLDBStatementWithParams.BindTextS(Param: integer;
-  const Value: string; IO: TSQLDBParamInOutType);
+procedure TSqlDBStatementWithParams.BindTextS(Param: integer;
+  const Value: string; IO: TSqlDBParamInOutType);
 begin
   if (Value = '') and
      (fConnection <> nil) and
@@ -7070,8 +7073,8 @@ begin
     CheckParam(Param, ftUTF8, IO)^.VData := StringToUTF8(Value);
 end;
 
-procedure TSQLDBStatementWithParams.BindTextU(Param: integer;
-  const Value: RawUTF8; IO: TSQLDBParamInOutType);
+procedure TSqlDBStatementWithParams.BindTextU(Param: integer;
+  const Value: RawUTF8; IO: TSqlDBParamInOutType);
 begin
   if (Value = '') and
      (fConnection <> nil) and
@@ -7081,8 +7084,8 @@ begin
     CheckParam(Param, ftUTF8, IO)^.VData := Value;
 end;
 
-procedure TSQLDBStatementWithParams.BindTextP(Param: integer; Value: PUTF8Char;
-  IO: TSQLDBParamInOutType);
+procedure TSqlDBStatementWithParams.BindTextP(Param: integer; Value: PUTF8Char;
+  IO: TSqlDBParamInOutType);
 begin
   if (Value = nil) and
      (fConnection <> nil) and
@@ -7092,8 +7095,8 @@ begin
     FastSetString(RawUTF8(CheckParam(Param, ftUTF8, IO)^.VData), Value, StrLen(Value));
 end;
 
-procedure TSQLDBStatementWithParams.BindTextW(Param: integer; const Value:
-  WideString; IO: TSQLDBParamInOutType);
+procedure TSqlDBStatementWithParams.BindTextW(Param: integer; const Value:
+  WideString; IO: TSqlDBParamInOutType);
 begin
   if (Value = '') and
      (fConnection <> nil) and
@@ -7104,14 +7107,14 @@ begin
       length(Value));
 end;
 
-function TSQLDBStatementWithParams.ParamToVariant(Param: integer;
-  var Value: Variant; CheckIsOutParameter: boolean): TSQLDBFieldType;
+function TSqlDBStatementWithParams.ParamToVariant(Param: integer;
+  var Value: Variant; CheckIsOutParameter: boolean): TSqlDBFieldType;
 begin
   inherited ParamToVariant(Param, Value); // raise exception if Param incorrect
   dec(Param); // start at #1
   if CheckIsOutParameter and
      (fParams[Param].VInOut = paramIn) then
-    raise ESQLDBException.CreateUTF8(
+    raise ESqlDBException.CreateUTF8(
       '%.ParamToVariant expects an [In]Out parameter', [self]);
   // OleDB provider should have already modified the parameter in-place, i.e.
   // in our fParams[] buffer, especialy for TEXT parameters (OleStr/WideString)
@@ -7141,7 +7144,7 @@ begin
   end;
 end;
 
-procedure TSQLDBStatementWithParams.AddParamValueAsText(Param: integer;
+procedure TSqlDBStatementWithParams.AddParamValueAsText(Param: integer;
   Dest: TTextWriter; MaxCharCount: integer);
 begin
   dec(Param);
@@ -7170,7 +7173,7 @@ begin
         Dest.AddString(VArray[0]); // first item is enough in the logs
 end;
 
-procedure TSQLDBStatementWithParams.BindArray(Param: integer;
+procedure TSqlDBStatementWithParams.BindArray(Param: integer;
   const Values: array of double);
 var
   i: PtrInt;
@@ -7180,7 +7183,7 @@ begin
       VArray[i] := DoubleToStr(Values[i]);
 end;
 
-procedure TSQLDBStatementWithParams.BindArray(Param: integer;
+procedure TSqlDBStatementWithParams.BindArray(Param: integer;
   const Values: array of Int64);
 var
   i: PtrInt;
@@ -7190,12 +7193,12 @@ begin
       VArray[i] := Int64ToUtf8(Values[i]);
 end;
 
-procedure TSQLDBStatementWithParams.BindArray(Param: integer;
-  ParamType: TSQLDBFieldType; const Values: TRawUTF8DynArray; ValuesCount: integer);
+procedure TSqlDBStatementWithParams.BindArray(Param: integer;
+  ParamType: TSqlDBFieldType; const Values: TRawUTF8DynArray; ValuesCount: integer);
 var
   i: PtrInt;
   ChangeFirstChar: AnsiChar;
-  p: PSQLDBParam;
+  p: PSqlDBParam;
   v: TTimeLogBits; // faster than TDateTime
 begin
   inherited; // raise an exception in case of invalid parameter
@@ -7218,7 +7221,7 @@ begin
   fParamsArrayCount := ValuesCount;
 end;
 
-procedure TSQLDBStatementWithParams.BindArray(Param: integer;
+procedure TSqlDBStatementWithParams.BindArray(Param: integer;
   const Values: array of RawUTF8);
 var
   i: PtrInt;
@@ -7235,7 +7238,7 @@ begin
         QuotedStr(Values[i], '''', VArray[i]);
 end;
 
-procedure TSQLDBStatementWithParams.BindArrayCurrency(Param: integer;
+procedure TSqlDBStatementWithParams.BindArrayCurrency(Param: integer;
   const Values: array of currency);
 var
   i: PtrInt;
@@ -7245,7 +7248,7 @@ begin
       VArray[i] := Curr64ToStr(PInt64(@Values[i])^);
 end;
 
-procedure TSQLDBStatementWithParams.BindArrayDateTime(Param: integer;
+procedure TSqlDBStatementWithParams.BindArrayDateTime(Param: integer;
   const Values: array of TDateTime);
 var
   i: PtrInt;
@@ -7255,8 +7258,8 @@ begin
       VArray[i] := Connection.Properties.SQLDateToIso8601Quoted(Values[i]);
 end;
 
-procedure TSQLDBStatementWithParams.BindArrayRowPrepare(
-  const aParamTypes: array of TSQLDBFieldType; aExpectedMinimalRowCount: integer);
+procedure TSqlDBStatementWithParams.BindArrayRowPrepare(
+  const aParamTypes: array of TSqlDBFieldType; aExpectedMinimalRowCount: integer);
 var
   i: PtrInt;
 begin
@@ -7266,12 +7269,12 @@ begin
   fParamsArrayCount := 0;
 end;
 
-procedure TSQLDBStatementWithParams.BindArrayRow(const aValues: array of const);
+procedure TSqlDBStatementWithParams.BindArrayRow(const aValues: array of const);
 var
   i: PtrInt;
 begin
   if length(aValues) <> fParamCount then
-    raise ESQLDBException.CreateFmt('Invalid %.BindArrayRow call', [self]);
+    raise ESqlDBException.CreateFmt('Invalid %.BindArrayRow call', [self]);
   for i := 0 to high(aValues) do
     with fParams[i] do
     begin
@@ -7301,14 +7304,14 @@ begin
   inc(fParamsArrayCount);
 end;
 
-procedure TSQLDBStatementWithParams.BindFromRows(Rows: TSQLDBStatement);
+procedure TSqlDBStatementWithParams.BindFromRows(Rows: TSqlDBStatement);
 var
   F: PtrInt;
   U: RawUTF8;
 begin
   if Rows <> nil then
     if Rows.ColumnCount <> fParamCount then
-      raise ESQLDBException.CreateUTF8('Invalid %.BindFromRows call', [self])
+      raise ESqlDBException.CreateUTF8('Invalid %.BindFromRows call', [self])
     else
       for F := 0 to fParamCount - 1 do
         with fParams[F] do
@@ -7347,17 +7350,17 @@ begin
   inc(fParamsArrayCount);
 end;
 
-procedure TSQLDBStatementWithParams.Reset;
+procedure TSqlDBStatementWithParams.Reset;
 begin
   fParam.Clear;
   fParamsArrayCount := 0;
   inherited Reset;
 end;
 
-procedure TSQLDBStatementWithParams.ReleaseRows;
+procedure TSqlDBStatementWithParams.ReleaseRows;
 var
   i: PtrInt;
-  p: PSQLDBParam;
+  p: PSqlDBParam;
 begin
   p := pointer(fParams);
   if p <> nil then
@@ -7373,29 +7376,29 @@ begin
 end;
 
 
-{ TSQLDBStatementWithParamsAndColumns }
+{ TSqlDBStatementWithParamsAndColumns }
 
-constructor TSQLDBStatementWithParamsAndColumns.Create(aConnection: TSQLDBConnection);
+constructor TSqlDBStatementWithParamsAndColumns.Create(aConnection: TSqlDBConnection);
 begin
   inherited Create(aConnection);
-  fColumn.InitSpecific(TypeInfo(TSQLDBColumnPropertyDynArray),
+  fColumn.InitSpecific(TypeInfo(TSqlDBColumnPropertyDynArray),
     fColumns, ptRawUTF8, @fColumnCount, True);
 end;
 
-function TSQLDBStatementWithParamsAndColumns.ColumnIndex(
+function TSqlDBStatementWithParamsAndColumns.ColumnIndex(
   const aColumnName: RawUTF8): integer;
 begin
   result := fColumn.FindHashed(aColumnName);
 end;
 
-function TSQLDBStatementWithParamsAndColumns.ColumnName(Col: integer): RawUTF8;
+function TSqlDBStatementWithParamsAndColumns.ColumnName(Col: integer): RawUTF8;
 begin
   CheckCol(Col);
   result := fColumns[Col].ColumnName;
 end;
 
-function TSQLDBStatementWithParamsAndColumns.ColumnType(
-  Col: integer; FieldSize: PInteger): TSQLDBFieldType;
+function TSqlDBStatementWithParamsAndColumns.ColumnType(
+  Col: integer; FieldSize: PInteger): TSqlDBFieldType;
 begin
   with fColumns[Col] do
   begin
@@ -7410,14 +7413,14 @@ end;
 
 
 const
-  __TSQLDBColumnDefine = 'ColumnName,ColumnTypeNative RawUTF8 ' +
+  __TSqlDBColumnDefine = 'ColumnName,ColumnTypeNative RawUTF8 ' +
     'ColumnLength,ColumnPrecision,ColumnScale PtrInt ' +
-    'ColumnType TSQLDBFieldType ColumnIndexed boolean';
+    'ColumnType TSqlDBFieldType ColumnIndexed boolean';
 
 initialization
-  assert(SizeOf(TSQLDBColumnProperty) = sizeof(PtrUInt) * 2 + 20);
-  Rtti.RegisterType(TypeInfo(TSQLDBFieldType));
-  Rtti.RegisterFromText(TypeInfo(TSQLDBColumnDefine), __TSQLDBColumnDefine);
+  assert(SizeOf(TSqlDBColumnProperty) = sizeof(PtrUInt) * 2 + 20);
+  Rtti.RegisterType(TypeInfo(TSqlDBFieldType));
+  Rtti.RegisterFromText(TypeInfo(TSqlDBColumnDefine), __TSqlDBColumnDefine);
   
 end.
 

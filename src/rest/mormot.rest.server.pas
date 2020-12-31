@@ -115,7 +115,7 @@ type
     Request: TRestServerURIContext;
     /// the thread which launched the request
     // - is set by TRestServer.BeginCurrentThread from multi-thread server
-    // handlers - e.g. TSQLite3HttpServer or TRestServerNamedPipeResponse
+    // handlers - e.g. TSqlite3HttpServer or TRestServerNamedPipeResponse
     RunningThread: TThread;
   end;
 
@@ -1966,7 +1966,7 @@ type
     destructor Destroy; override;
     /// Server initialization with a temporary Database Model
     // - a Model will be created with supplied tables, and owned by the server
-    // - if you instantiate a TRestServerFullMemory or TSQLRestServerDB
+    // - if you instantiate a TRestServerFullMemory or TSqlRestServerDB
     // with this constructor, an in-memory engine will be created, with
     // enough abilities to run regression tests, for instance
     constructor CreateWithOwnModel(const Tables: array of TOrmClass;
@@ -2060,13 +2060,13 @@ type
       read GetAuthenticationSchemesCount;
     /// define if unsecure connections (i.e. not in-process or encrypted
     // WebSockets) with no session can be authenticated via JWT
-    // - once set, this instance will be owned by the TSQLRestServer
+    // - once set, this instance will be owned by the TSqlRestServer
     // - by definition, such JWT authentication won't identify any mORMot user
     // nor session (it just has to be valid), so only sicSingle, sicShared or
     // sicPerThread interface-based services execution are possible
     // - typical usage is for a public API, in conjunction with
     // ServiceDefine(...).ResultAsJSONObjectWithoutResult := true on the server
-    // side and TSQLRestClientURI.ServiceDefineSharedAPI() method for the client
+    // side and TSqlRestClientURI.ServiceDefineSharedAPI() method for the client
     // - see also JWTForUnauthenticatedRequestWhiteIP() for additional security
     property JWTForUnauthenticatedRequest: TJWTAbstract
       read fJWTForUnauthenticatedRequest write fJWTForUnauthenticatedRequest;
@@ -2315,7 +2315,7 @@ type
       read fServer;
     /// set this property to true to transmit the JSON data in a "not expanded" format
     // - not directly compatible with Javascript object list decode: not to be
-    // used in AJAX environnement (like in TSQLite3HttpServer)
+    // used in AJAX environnement (like in TSqlite3HttpServer)
     // - but transmitted JSON data is much smaller if set it's set to FALSE, and
     // if you use a Delphi Client, parsing will be also faster and memory usage
     // will be lower
@@ -2554,7 +2554,7 @@ type
     adWeak,
     adSSPI);
 
-  /// parameters supplied to publish a TSQLRestServer via HTTP
+  /// parameters supplied to publish a TSqlRestServer via HTTP
   // - used by the overloaded TRestHttpServer.Create(TRestHttpServerDefinition)
   // constructor in mORMotHttpServer.pas, and also in dddInfraSettings.pas
   TRestHttpServerDefinition = class(TSynPersistentWithPassword)
@@ -2619,14 +2619,14 @@ type
 // backward compatibility types redirections
 
 type
-  TSQLRestServer = TRestServer;
-  TSQLRestServerClass = TRestServerClass;
-  TSQLRestServerURIContext = TRestServerURIContext;
-  TSQLRestServerURIContextClass = TRestServerURIContextClass;
-  TSQLRestServerAuthenticationClass = TRestServerAuthenticationClass;
-  TSQLRestServerAuthenticationNone  = TRestServerAuthenticationNone;
-  TSQLRestServerAuthenticationDefault = TRestServerAuthenticationDefault;
-  TSQLRestServerAuthenticationHttpBasic = TRestServerAuthenticationHttpBasic;
+  TSqlRestServer = TRestServer;
+  TSqlRestServerClass = TRestServerClass;
+  TSqlRestServerURIContext = TRestServerURIContext;
+  TSqlRestServerURIContextClass = TRestServerURIContextClass;
+  TSqlRestServerAuthenticationClass = TRestServerAuthenticationClass;
+  TSqlRestServerAuthenticationNone  = TRestServerAuthenticationNone;
+  TSqlRestServerAuthenticationDefault = TRestServerAuthenticationDefault;
+  TSqlRestServerAuthenticationHttpBasic = TRestServerAuthenticationHttpBasic;
 
 {$endif PUREMORMOT2}
 
@@ -7527,7 +7527,7 @@ begin
     mPOST:
       if Ctxt.URIBlobFieldName = '_callback_' then
         // POST root/cacheflush/_callback_
-        // as called from TSQLHttpClientWebsockets.FakeCallbackUnregister
+        // as called from TSqlHttpClientWebsockets.FakeCallbackUnregister
         (Services as TServiceContainerServer).FakeCallbackRelease(Ctxt)
       else if Ctxt.URIBlobFieldName = '_ping_' then
       begin

@@ -239,8 +239,8 @@ type
     // cache used at SQLite3 database level; but some virtual tables (e.g.
     // TRestStorageExternal classes defined in mormot.orm.sql) could flush
     // the database content without proper notification
-    // - this default implementation will just do nothing, but mORMotSQlite3
-    // unit will call TSQLDataBase.CacheFlush method
+    // - this default implementation will just do nothing, but mormot.orm.sqlite3.pas
+    // unit will call TSqlDataBase.CacheFlush method
     procedure FlushInternalDBCache; virtual;
     /// called from STATE remote HTTP method
     procedure RefreshInternalStateFromStatic;

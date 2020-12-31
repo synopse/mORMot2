@@ -52,11 +52,11 @@ const
 
 type
   /// Exception type associated to UniDAC database access
-  ESQLDBUniDAC = class(ESQLDBDataset);
+  ESqlDBUniDAC = class(ESqlDBDataset);
 
 
   ///	connection properties definition using UniDAC database access
-  TSQLDBUniDACConnectionProperties = class(TSQLDBDatasetConnectionProperties)
+  TSqlDBUniDACConnectionProperties = class(TSqlDBDatasetConnectionProperties)
   protected
     fSpecificOptions: TStringList;
     /// initialize fForeignKeys content with all foreign keys of this DB
@@ -65,8 +65,8 @@ type
   public
     /// initialize the properties to connect via UniDAC database access
     // - aServerName shall contain the UniDAC provider name, e.g. 'Oracle' - you
-    // can use the TSQLDBUniDACConnectionProperties.URI() to retrieve the
-    // provider name from its mormot.db.sql.TSQLDBDefinition enumeration,
+    // can use the TSqlDBUniDACConnectionProperties.URI() to retrieve the
+    // provider name from its mormot.db.sql.TSqlDBDefinition enumeration,
     // and optionally set some options, which will be added to the internal
     // SpecificOptions[]:
     // ! 'Oracle?ClientLibrary=oci64\oci.dll'
@@ -77,36 +77,36 @@ type
     destructor Destroy; override;
     /// create a new connection
     // - caller is responsible of freeing this instance
-    // - this overridden method will create an TSQLDBUniDACConnection instance
-    function NewConnection: TSQLDBConnection; override;
+    // - this overridden method will create an TSqlDBUniDACConnection instance
+    function NewConnection: TSqlDBConnection; override;
 
     /// compute the UniDAC URI from a given database engine and server name
     // - the optional server name can contain a port number, specified after ':'
     // - you can set an optional full path to the client library name,
     // to be completed on the left side with the executable path
     // - possible use may be:
-    // ! PropsOracle := TSQLDBUniDACConnectionProperties.Create(
-    // !   TSQLDBUniDACConnectionProperties.URI(dOracle,'','oci64\oci.dll'),
+    // ! PropsOracle := TSqlDBUniDACConnectionProperties.Create(
+    // !   TSqlDBUniDACConnectionProperties.URI(dOracle,'','oci64\oci.dll'),
     // !   'tnsname','user',pass');
-    // ! PropsFirebird := TSQLDBUniDACConnectionProperties.Create(
-    // !   TSQLDBUniDACConnectionProperties.URI(dFirebird,'',
+    // ! PropsFirebird := TSqlDBUniDACConnectionProperties.Create(
+    // !   TSqlDBUniDACConnectionProperties.URI(dFirebird,'',
     // !   'Firebird\fbembed.dll'),'databasefilename','','');
-    // ! PropsMySQL := TSQLDBUniDACConnectionProperties.Create(
-    // !   TSQLDBUniDACConnectionProperties.URI(dMySQL,'192.168.2.60:3306'),
+    // ! PropsMySQL := TSqlDBUniDACConnectionProperties.Create(
+    // !   TSqlDBUniDACConnectionProperties.URI(dMySQL,'192.168.2.60:3306'),
     // !   'world', 'root', 'dev');
-    class function URI(aServer: TSQLDBDefinition; const aServerName: RawUTF8;
+    class function URI(aServer: TSqlDBDefinition; const aServerName: RawUTF8;
       const aLibraryLocation: TFileName='';
       aLibraryLocationAppendExePath: boolean=true): RawUTF8;
 
     /// retrieve the column/field layout of a specified table
     // - this overridden method will use UniDAC metadata to retrieve the information
-    procedure GetFields(const aTableName: RawUTF8; out Fields: TSQLDBColumnDefineDynArray); override;
+    procedure GetFields(const aTableName: RawUTF8; out Fields: TSqlDBColumnDefineDynArray); override;
     /// get all table names
     // - this overridden method will use UniDAC metadata to retrieve the information
     procedure GetTableNames(out Tables: TRawUTF8DynArray); override;
     /// retrieve the advanced indexed information of a specified Table
     // - this overridden method will use UniDAC metadata to retrieve the information
-    procedure GetIndexes(const aTableName: RawUTF8; out Indexes: TSQLDBIndexDefineDynArray); override;
+    procedure GetIndexes(const aTableName: RawUTF8; out Indexes: TSqlDBIndexDefineDynArray); override;
     /// allow to set the options specific to a UniDAC driver
     // - for instance, you can set for both SQLite3 and Firebird/Interbase:
     // ! Props.SpecificOptions.Values['ClientLibrary'] := ClientDllName;
@@ -116,24 +116,24 @@ type
 
 
   ///	implements a direct connection via UniDAC database access
-  TSQLDBUniDACConnection = class(TSQLDBConnectionThreadSafe)
+  TSqlDBUniDACConnection = class(TSqlDBConnectionThreadSafe)
   protected
     fDatabase: TUniConnection;
   public
     /// prepare a connection for a specified UniDAC database access
-    constructor Create(aProperties: TSQLDBConnectionProperties); override;
+    constructor Create(aProperties: TSqlDBConnectionProperties); override;
     /// release memory and connection
     destructor Destroy; override;
     /// connect to the specified database server using UniDAC
-    // - should raise an ESQLDBUniDAC on error
+    // - should raise an ESqlDBUniDAC on error
     procedure Connect; override;
     /// stop connection to the specified database server using UniDAC
-    // - should raise an ESQLDBUniDAC on error
+    // - should raise an ESqlDBUniDAC on error
     procedure Disconnect; override;
     /// return TRUE if Connect has been already successfully called
     function IsConnected: boolean; override;
     /// create a new statement instance
-    function NewStatement: TSQLDBStatement; override;
+    function NewStatement: TSqlDBStatement; override;
     /// begin a Transaction for this connection
     procedure StartTransaction; override;
     /// commit changes of a Transaction for this connection
@@ -148,7 +148,7 @@ type
   end;
 
   ///	implements a statement via a UniDAC connection
-  TSQLDBUniDACStatement = class(TSQLDBDatasetStatement)
+  TSqlDBUniDACStatement = class(TSqlDBDatasetStatement)
   protected
     /// initialize and set fQuery: TUniQuery internal field as expected
     procedure DatasetCreate; override;
@@ -158,14 +158,14 @@ type
     procedure DatasetExecSQL; override;
     /// overriden by itSDS to properly handle UniDAC parameters
     procedure DataSetBindSQLParam(const aArrayIndex, aParamIndex: integer;
-      const aParam: TSQLDBParam); override;
+      const aParam: TSqlDBParam); override;
   public
   end;
 
 
 const
   /// UniDAC provider names corresponding to mormot.db.sql recognized SQL engines
-  UNIDAC_PROVIDER: array[dOracle..high(TSQLDBDefinition)] of RawUTF8 = (
+  UNIDAC_PROVIDER: array[dOracle..high(TSqlDBDefinition)] of RawUTF8 = (
     'Oracle', 'SQL Server', 'Access', 'MySQL', 'SQLite', 'InterBase', 
     'NexusDB', 'PostgreSQL', 'DB2', '');
 
@@ -178,12 +178,12 @@ uses
   DBAccess;
 
 
-{ TSQLDBUniDACConnectionProperties }
+{ TSqlDBUniDACConnectionProperties }
 
-constructor TSQLDBUniDACConnectionProperties.Create(const aServerName,
+constructor TSqlDBUniDACConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUTF8);
 var
-  p: TSQLDBDefinition;
+  p: TSqlDBDefinition;
   provider, options, namevalue: RawUTF8;
   opt: PUTF8Char;
 begin
@@ -248,25 +248,25 @@ begin
   end;
 end;
 
-destructor TSQLDBUniDACConnectionProperties.Destroy;
+destructor TSqlDBUniDACConnectionProperties.Destroy;
 begin
   fSpecificOptions.Free;
   inherited;
 end;
 
-procedure TSQLDBUniDACConnectionProperties.GetFields(const aTableName: RawUTF8;
-  out Fields: TSQLDBColumnDefineDynArray);
+procedure TSqlDBUniDACConnectionProperties.GetFields(const aTableName: RawUTF8;
+  out Fields: TSqlDBColumnDefineDynArray);
 var
   meta: TDAMetaData;
   n: integer;
-  F: TSQLDBColumnDefine;
+  F: TSqlDBColumnDefine;
   FA: TDynArray;
   hasSubType: boolean;
   Owner, Table: RawUTF8;
 begin
-  meta := (MainConnection as TSQLDBUniDACConnection).fDatabase.CreateMetaData;
+  meta := (MainConnection as TSqlDBUniDACConnection).fDatabase.CreateMetaData;
   try
-    FA.Init(TypeInfo(TSQLDBColumnDefineDynArray), Fields, @n);
+    FA.Init(TypeInfo(TSqlDBColumnDefineDynArray), Fields, @n);
     FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
     FillCharFast(F, sizeof(F), 0);
     meta.MetaDataKind := 'Columns';
@@ -311,21 +311,21 @@ begin
   end;
 end;
 
-procedure TSQLDBUniDACConnectionProperties.GetIndexes(const aTableName: RawUTF8;
-  out Indexes: TSQLDBIndexDefineDynArray);
+procedure TSqlDBUniDACConnectionProperties.GetIndexes(const aTableName: RawUTF8;
+  out Indexes: TSqlDBIndexDefineDynArray);
 var
   meta, indexs: TDAMetaData;
-  F: TSQLDBIndexDefine;
+  F: TSqlDBIndexDefine;
   FA: TDynArray;
   n: integer;
   ColName: RawUTF8;
   ndxName: string;
 begin
   SetLength(Indexes, 0);
-  FA.Init(TypeInfo(TSQLDBIndexDefineDynArray), Indexes, @n);
+  FA.Init(TypeInfo(TSqlDBIndexDefineDynArray), Indexes, @n);
   FillCharFast(F, sizeof(F), 0);
-  meta := (MainConnection as TSQLDBUniDACConnection).fDatabase.CreateMetaData;
-  indexs := (MainConnection as TSQLDBUniDACConnection).fDatabase.CreateMetaData;
+  meta := (MainConnection as TSqlDBUniDACConnection).fDatabase.CreateMetaData;
+  indexs := (MainConnection as TSqlDBUniDACConnection).fDatabase.CreateMetaData;
   try
     meta.MetaDataKind := 'Indexes';
     meta.Restrictions.Values['TABLE_NAME'] := UTF8ToString(UpperCase(aTableName));
@@ -359,23 +359,23 @@ begin
   end;
 end;
 
-procedure TSQLDBUniDACConnectionProperties.GetForeignKeys;
+procedure TSqlDBUniDACConnectionProperties.GetForeignKeys;
 var
   conn: TUniConnection;
 begin
-  conn := (MainConnection as TSQLDBUniDACConnection).Database;
+  conn := (MainConnection as TSqlDBUniDACConnection).Database;
   if conn = nil then
     exit;
   { TODO : get FOREIGN KEYS from UniDAC metadata ? }
 end;
 
-procedure TSQLDBUniDACConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
+procedure TSqlDBUniDACConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
 var
   List: TStringList;
 begin
   List := TStringList.Create;
   try
-    (MainConnection as TSQLDBUniDACConnection).fDatabase.GetTableNames(List);
+    (MainConnection as TSqlDBUniDACConnection).fDatabase.GetTableNames(List);
     StringListToRawUTF8DynArray(List, Tables);
     exit;
   finally
@@ -384,12 +384,12 @@ begin
   inherited;
 end;
 
-function TSQLDBUniDACConnectionProperties.NewConnection: TSQLDBConnection;
+function TSqlDBUniDACConnectionProperties.NewConnection: TSqlDBConnection;
 begin
-  result := TSQLDBUniDACConnection.Create(self);
+  result := TSqlDBUniDACConnection.Create(self);
 end;
 
-class function TSQLDBUniDACConnectionProperties.URI(aServer: TSQLDBDefinition;
+class function TSqlDBUniDACConnectionProperties.URI(aServer: TSqlDBDefinition;
   const aServerName: RawUTF8; const aLibraryLocation: TFileName;
   aLibraryLocationAppendExePath: boolean): RawUTF8;
 var
@@ -422,9 +422,9 @@ begin
 end;
 
 
-{ TSQLDBUniDACConnection }
+{ TSqlDBUniDACConnection }
 
-procedure TSQLDBUniDACConnection.Commit;
+procedure TSqlDBUniDACConnection.Commit;
 begin
   inherited Commit;
   try
@@ -435,7 +435,7 @@ begin
   end;
 end;
 
-constructor TSQLDBUniDACConnection.Create(aProperties: TSQLDBConnectionProperties);
+constructor TSqlDBUniDACConnection.Create(aProperties: TSqlDBConnectionProperties);
 var
   options: TStrings;
   PortNumber, i: integer;
@@ -464,8 +464,8 @@ begin
     // s.d. 30.11.19 Damit der Connect im Direct Mode so Schnell ist wie mit prAuto/OleDB
     fDatabase.SpecificOptions.Add('SQL Server.ConnectionTimeout=0');
   end;
-  // handle the options set by TSQLDBUniDACConnectionProperties.URI()
-  options := (fProperties as TSQLDBUniDACConnectionProperties).fSpecificOptions;
+  // handle the options set by TSqlDBUniDACConnectionProperties.URI()
+  options := (fProperties as TSqlDBUniDACConnectionProperties).fSpecificOptions;
   if fDatabase.Server = '' then
     fDatabase.Server := options.Values['Server'];
   if fDatabase.Database = '' then
@@ -478,12 +478,12 @@ begin
       fDatabase.SpecificOptions.Add(options[i]);
 end;
 
-procedure TSQLDBUniDACConnection.Connect;
+procedure TSqlDBUniDACConnection.Connect;
 var
   Log: ISynLog;
 begin
   if fDatabase = nil then
-    raise ESQLDBUniDAC.CreateUTF8('%.Connect(%): Database=nil', [self,
+    raise ESqlDBUniDAC.CreateUTF8('%.Connect(%): Database=nil', [self,
       fProperties.ServerName]);
   Log := SynDBLog.Enter('Connect to ProviderName=% Database=% on Server=%',
     [fDatabase.ProviderName, fDatabase.Database, fDatabase.Server], self);
@@ -515,7 +515,7 @@ begin
   end;
 end;
 
-procedure TSQLDBUniDACConnection.Disconnect;
+procedure TSqlDBUniDACConnection.Disconnect;
 begin
   try
     inherited Disconnect; // flush any cached statement
@@ -525,7 +525,7 @@ begin
   end;
 end;
 
-destructor TSQLDBUniDACConnection.Destroy;
+destructor TSqlDBUniDACConnection.Destroy;
 begin
   try
     Disconnect;
@@ -540,24 +540,24 @@ begin
   FreeAndNil(fDatabase);
 end;
 
-function TSQLDBUniDACConnection.IsConnected: boolean;
+function TSqlDBUniDACConnection.IsConnected: boolean;
 begin
   result := Assigned(fDatabase) and
             fDatabase.Connected;
 end;
 
-function TSQLDBUniDACConnection.NewStatement: TSQLDBStatement;
+function TSqlDBUniDACConnection.NewStatement: TSqlDBStatement;
 begin
-  result := TSQLDBUniDACStatement.Create(self);
+  result := TSqlDBUniDACStatement.Create(self);
 end;
 
-procedure TSQLDBUniDACConnection.Rollback;
+procedure TSqlDBUniDACConnection.Rollback;
 begin
   inherited Rollback;
   fDatabase.Rollback;
 end;
 
-procedure TSQLDBUniDACConnection.StartTransaction;
+procedure TSqlDBUniDACConnection.StartTransaction;
 begin
   inherited StartTransaction;
   fDatabase.StartTransaction;
@@ -565,10 +565,10 @@ end;
 
 
 
-{ TSQLDBUniDACStatement }
+{ TSqlDBUniDACStatement }
 
-procedure TSQLDBUniDACStatement.DataSetBindSQLParam(const aArrayIndex,
-  aParamIndex: integer; const aParam: TSQLDBParam);
+procedure TSqlDBUniDACStatement.DataSetBindSQLParam(const aArrayIndex,
+  aParamIndex: integer; const aParam: TSqlDBParam);
 var
   P: TDAParam;
 begin
@@ -595,20 +595,20 @@ begin
   inherited DataSetBindSQLParam(aArrayIndex, aParamIndex, aParam);
 end;
 
-procedure TSQLDBUniDACStatement.DatasetCreate;
+procedure TSqlDBUniDACStatement.DatasetCreate;
 begin
   fQuery := TUniQuery.Create(nil);
-  TUniQuery(fQuery).Connection := (fConnection as TSQLDBUniDACConnection).Database;
+  TUniQuery(fQuery).Connection := (fConnection as TSqlDBUniDACConnection).Database;
 end;
 
-function TSQLDBUniDACStatement.DatasetPrepare(const aSQL: string): boolean;
+function TSqlDBUniDACStatement.DatasetPrepare(const aSQL: string): boolean;
 begin
   (fQuery as TUniQuery).SQL.Text := aSQL;
   fQueryParams := TUniQuery(fQuery).Params;
   result := fQueryParams <> nil;
 end;
 
-procedure TSQLDBUniDACStatement.DatasetExecSQL;
+procedure TSqlDBUniDACStatement.DatasetExecSQL;
 begin
   (fQuery as TUniQuery).Execute;
 end;
@@ -617,7 +617,7 @@ end;
 { ************ UniDac Database Engine Connection }
 
 initialization
-  TSQLDBUniDACConnectionProperties.RegisterClassNameForDefinition;
+  TSqlDBUniDACConnectionProperties.RegisterClassNameForDefinition;
 
 {$endif FPC} // UniDac is a Delphi-specific
 

@@ -2065,7 +2065,7 @@ var
   // - default implementation does nothing, unless mormot.core.log is included
   // - you can force this function to do nothing by setting the NOSETTHREADNAME
   // conditional, if you have issues with this feature when debugging your app
-  // - most meaningless patterns (like 'TSQL') are trimmed to reduce the
+  // - most meaningless patterns (like 'TSql') are trimmed to reduce the
   // resulting length - which is convenient e.g. with POSIX truncation to 16 chars
   // - you can retrieve the name later on using CurrentThreadName
   // - this method will register TSynLog.LogThreadName(), so threads calling it
@@ -2252,7 +2252,7 @@ function StartServiceCtrlDispatcher(
 { *** high level classes to define and manage Windows Services }
 
 var
-  /// you can set this global variable to TSynLog or TSQLLog to enable logging
+  /// you can set this global variable to TSynLog or TSqlLog to enable logging
   // - default is nil, i.e. disabling logging, since it may interfere with the
   // logging process of the service itself
   // - can be assigned from TSynLog.DoLog class method for proper logging

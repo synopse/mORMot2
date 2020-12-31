@@ -362,9 +362,9 @@ type
 {$ifndef PUREMORMOT2}
 // backward compatibility types redirections
 
-  TSQLRestServerAuthenticationClientSetUserPassword = TRestClientSetUserPassword;
-  TSQLRestServerAuthenticationSignedURIAlgo = TRestAuthenticationSignedURIAlgo;
-  TSQLRestServerAuthenticationSignedURIComputeSignature  =
+  TSqlRestServerAuthenticationClientSetUserPassword = TRestClientSetUserPassword;
+  TSqlRestServerAuthenticationSignedURIAlgo = TRestAuthenticationSignedURIAlgo;
+  TSqlRestServerAuthenticationSignedURIComputeSignature  =
     TOnRestAuthenticationSignedURIComputeSignature;
   // TRestServerAuthentication* classes have client-side only corresponding
   // types named as TRestClientAuthentication*
@@ -435,7 +435,7 @@ type
 {$ifndef PUREMORMOT2}
 // backward compatibility types redirections
 
-  TSQLRestServerURIContextClientInvoke = TRestClientSideInvoke;
+  TSqlRestServerURIContextClientInvoke = TRestClientSideInvoke;
 
 {$endif PUREMORMOT2}
 
@@ -607,7 +607,7 @@ type
     destructor Destroy; override;
     /// called by TRestOrm.Create overriden constructor to set fOrm from IRestOrm
     procedure SetOrmInstance(aORM: TInterfacedObject); override;
-    /// save the TSQLRestClientURI properties into a persistent storage object
+    /// save the TSqlRestClientURI properties into a persistent storage object
     // - CreateFrom() will expect Definition.UserName/Password to store the
     // credentials which will be used by SetUser()
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
@@ -771,7 +771,7 @@ type
     // blocking the main program execution, gathering log rows in chunks in case
     // of high activity
     // - map TOnTextWriterEcho signature, so that you will be able to set e.g.:
-    // ! TSQLLog.Family.EchoCustom := aClient.ServerRemoteLog;
+    // ! TSqlLog.Family.EchoCustom := aClient.ServerRemoteLog;
     function ServerRemoteLog(Sender: TBaseWriter; Level: TSynLogInfo;
       const Text: RawUTF8): boolean; overload; virtual;
     /// internal method able to emulate a call to TSynLog.Add.Log()
@@ -1020,8 +1020,8 @@ type
 // backward compatibility types redirections
 
 type
-  TSQLRestClientURI = TRestClientURI;
-  TSQLRestClientURIDll = TRestClientLibraryRequest;
+  TSqlRestClientURI = TRestClientURI;
+  TSqlRestClientURIDll = TRestClientLibraryRequest;
 
 {$endif PUREMORMOT2}
 

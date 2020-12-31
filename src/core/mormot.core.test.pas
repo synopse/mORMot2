@@ -365,7 +365,7 @@ type
     // - a typical use will first assign the same log class for the whole
     // framework - in such case, before calling RunAsConsole(), the caller
     // should execute:
-    // ! TSynLogTestLog := TSQLLog;
+    // ! TSynLogTestLog := TSqlLog;
     // ! TMyTestsClass.RunAsConsole('My Automated Tests',LOG_VERBOSE);
     class procedure RunAsConsole(const CustomIdent: string = '';
       withLogs: TSynLogInfos = [sllLastError, sllError, sllException, sllExceptionOS, sllFail];

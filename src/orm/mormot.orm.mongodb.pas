@@ -214,7 +214,7 @@ type
 // - the TOrm.ID (RowID) field is always mapped to MongoDB's _id field
 // - will call create needed indexes
 // - you can later call aServer.InitializeTables to create any missing index and
-// initialize the void tables (e.g. default TSQLAuthGroup and TSQLAuthUser records)
+// initialize the void tables (e.g. default TSqlAuthGroup and TSqlAuthUser records)
 // - after registration, you can tune the field-name mapping by calling
 // ! aModel.Props[aClass].ExternalDB.MapField(..)
 // (just a regular external DB as defined in mormot.orm.sql.pas unit) - it may be
@@ -222,7 +222,7 @@ type
 // used for storage (since they will be embedded within the document data)
 // - it will return the corresponding TRestStorageMongoDB instance -
 // you can access later to it and its associated collection e.g. via:
-// ! (aServer.StaticDataServer[TSQLMyTable] as TRestStorageMongoDB)
+// ! (aServer.StaticDataServer[TMyOrm] as TRestStorageMongoDB)
 // - you can set aMapAutoFieldsIntoSmallerLength to compute a field name
 // mapping with minimal length, so that the stored BSON would be smaller:
 // by definition, ID/RowID will be mapped as 'id', but other fields will
@@ -235,7 +235,7 @@ function StaticMongoDBRegister(aClass: TOrmClass; aServer: TRestOrmServer;
 
 type
   /// all possible options for StaticMongoDBRegisterAll/TRestMongoDBCreate functions
-  // - by default, TSQLAuthUser and TSQLAuthGroup tables will be handled via the
+  // - by default, TSqlAuthUser and TSqlAuthGroup tables will be handled via the
   // external DB, but you can avoid it for speed when handling session and security
   // by setting mrDoNotRegisterUserGroupTables
   // - you can set mrMapAutoFieldsIntoSmallerLength to compute a field name

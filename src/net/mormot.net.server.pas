@@ -231,7 +231,7 @@ type
     // - to be used e.g. to call CoUnInitialize from thread in which CoInitialize
     // was made, for instance via a method defined as such:
     // ! procedure TMyServer.OnHttpThreadTerminate(Sender: TObject);
-    // ! begin // TSQLDBConnectionPropertiesThreadSafe
+    // ! begin // TSqlDBConnectionPropertiesThreadSafe
     // !   fMyConnectionProps.EndCurrentThread;
     // ! end;
     // - is used e.g. by TRest.EndCurrentThread for proper multi-threading

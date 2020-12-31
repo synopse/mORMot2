@@ -240,7 +240,7 @@ type
 // - the registration process is thread-safe
 // - this will implement an internal mechanism used to bypass the default
 // _DispInvoke() implementation in Variant.pas, to use a faster version
-// - is called in case of TDocVariant, TBSONVariant or TSQLDBRowVariant
+// - is called in case of TDocVariant, TBSONVariant or TSqlDBRowVariant
 function SynRegisterCustomVariantType(
   aClass: TSynInvokeableVariantTypeClass): TSynInvokeableVariantType;
 

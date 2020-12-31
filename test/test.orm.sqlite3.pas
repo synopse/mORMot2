@@ -75,7 +75,7 @@ uses
 
 type
   /// a parent test case which will test most functions, classes and types defined
-  // and implemented in the mORMotSQLite3 unit, i.e. the SQLite3 engine itself
+  // and implemented in the mormot.db.raw.sqlite3 unit, i.e. the SQLite3 engine
   // - it should not be called directly, but through TTestFileBased,
   // TTestMemoryBased and TTestMemoryBased children
   TTestSQLite3Engine = class(TSynTestCase)
@@ -84,14 +84,14 @@ type
     BackupProgressStep: TOnSQLDatabaseBackupStep; // should be the first
     TempFileName: TFileName;
     EncryptedFile: boolean;
-    Demo: TSQLDataBase;
+    Demo: TSqlDataBase;
     Req: RawUTF8;
     JS: RawUTF8;
     BackupTimer: TPrecisionTimer;
-    function OnBackupProgress(Sender: TSQLDatabaseBackupThread): boolean;
+    function OnBackupProgress(Sender: TSqlDatabaseBackupThread): boolean;
   published
     /// test direct access to the SQLite3 engine
-    // - i.e. via TSQLDataBase and TSQLRequest classes
+    // - i.e. via TSqlDataBase and TSqlRequest classes
     procedure DatabaseDirectAccess;
     /// test direct access to the Virtual Table features of SQLite3
     procedure VirtualTableDirectAccess;
@@ -120,24 +120,24 @@ type
   end;
 
   /// this test case will test most functions, classes and types defined and
-  // implemented in the mORMotSQLite3 unit, i.e. the SQLite3 engine itself,
+  // and implemented in the mormot.db.raw.sqlite3 unit, i.e. the SQLite3 engine
   // with a file-based approach
   TTestFileBased = class(TTestSQLite3Engine);
 
   /// this test case will test most functions, classes and types defined and
-  // implemented in the mORMotSQLite3 unit, i.e. the SQLite3 engine itself,
+  // and implemented in the mormot.db.raw.sqlite3 unit, i.e. the SQLite3 engine
   // with a file-based approach
   // - purpose of this class is to test Write-Ahead Logging for the database
   TTestFileBasedWAL = class(TTestFileBased);
 
   /// this test case will test most functions, classes and types defined and
-  // implemented in the mORMotSQLite3 unit, i.e. the SQLite3 engine itself,
+  // and implemented in the mormot.db.raw.sqlite3 unit, i.e. the SQLite3 engine
   // with a file-based approach
   // - purpose of this class is to test Memory-Mapped I/O for the database
   TTestFileBasedMemoryMap = class(TTestFileBased);
 
   /// this test case will test most functions, classes and types defined and
-  // implemented in the mORMotSQLite3 unit, i.e. the SQLite3 engine itself,
+  // and implemented in the mormot.db.raw.sqlite3 unit, i.e. the SQLite3 engine
   // with a memory-based approach
   // - this class will also test the TRestStorage class, and its
   // 100% Delphi simple database engine
@@ -279,14 +279,14 @@ implementation
 
 { TTestSQLite3Engine }
 
-function TTestSQLite3Engine.OnBackupProgress(Sender: TSQLDatabaseBackupThread): boolean;
+function TTestSQLite3Engine.OnBackupProgress(Sender: TSqlDatabaseBackupThread): boolean;
 begin
   BackupProgressStep := Sender.Step;
   result := true;
 end;
 
-procedure InternalSQLFunctionCharIndex(Context: TSQLite3FunctionContext;
-  argc: integer; var argv: TSQLite3ValueArray); cdecl;
+procedure InternalSQLFunctionCharIndex(Context: TSqlite3FunctionContext;
+  argc: integer; var argv: TSqlite3ValueArray); cdecl;
 var
   StartPos: integer;
 begin
@@ -333,7 +333,7 @@ procedure TTestSQLite3Engine.DatabaseDirectAccess;
   var
     i: integer;
     s, ins: RawUTF8;
-    R: TSQLRequest;
+    R: TSqlRequest;
   begin
     // this is a lot faster than sqlite3 itself, even if it use Utf-8 encoding:
     // -> we test the engine speed, not the test routines speed :)
@@ -386,7 +386,7 @@ var
   Res: Int64;
   id: TID;
   password, s: RawUTF8;
-  R: TSQLRequest;
+  R: TSqlRequest;
 begin
   check(JSONGetID('{"id":123}', id) and
         (id = 123));
@@ -425,7 +425,7 @@ begin
     {$endif NOSQLITE3ENCRYPT}
   end;
   EncryptedFile := (password <> '');
-  Demo := TSQLDataBase.Create(TempFileName, password);
+  Demo := TSqlDataBase.Create(TempFileName, password);
   Demo.Synchronous := smOff;
   Demo.LockingMode := lmExclusive;
   if ClassType = TTestFileBasedMemoryMap then
@@ -517,7 +517,7 @@ begin
     check(IsSQLite3File(TempFileName));
     check(IsSQLite3FileEncrypted(TempFileName));
     check(not IsOldSQLEncryptTable(TempFileName));
-    Demo := TSQLDataBase.Create(TempFileName, 'NewPass'); // reuse the temporary file
+    Demo := TSqlDataBase.Create(TempFileName, 'NewPass'); // reuse the temporary file
     Demo.Synchronous := smOff;
     Demo.LockingMode := lmExclusive;
     Demo.UseCache := true; // use the cache for the JSON requests
@@ -532,7 +532,7 @@ begin
   if ClassType = TTestFileBasedMemoryMap then
   begin // force re-open to test reading
     FreeAndNil(Demo);
-    Demo := TSQLDataBase.Create(TempFileName, password);
+    Demo := TSqlDataBase.Create(TempFileName, password);
     Demo.Synchronous := smOff;
     Demo.LockingMode := lmExclusive;
     Demo.MemoryMappedMB := 256;
@@ -1740,7 +1740,7 @@ begin
         TestDynArray(Client);
         TestObject(Client);
         InternalTestMany(self, Client.OrmInstance as TRestOrmClientURI);
-        // RegisterVirtualTableModule(TSQLVirtualTableJSON) done above
+        // RegisterVirtualTableModule(TOrmVirtualTableJSON) done above
         TestVirtual(Client, false, 'Virtual Table access via SQLite 1', TOrmDali1);
         TestVirtual(Client, false, 'Virtual Table access via SQLite 1', TOrmDali2);
         TestVirtual(Client, true, 'Direct Virtual Table access 1', TOrmDali1);
