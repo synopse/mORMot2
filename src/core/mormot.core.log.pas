@@ -3170,6 +3170,7 @@ begin
      (fThreadContext^.ThreadName = '') and
      (sllInfo in fFamily.fLevel) and
      (CurrentThreadName <> '') then
+    // log the global thread name, if was not done yet 
     LogThreadName('');
 end;
 
@@ -4798,7 +4799,7 @@ procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
   const Args: array of const);
 var
   name: RawUTF8;
-  i, L: PtrInt;
+  i: PtrInt;
   n: TShort31;
 begin
   FormatUTF8(Format, Args, name);
@@ -4822,30 +4823,36 @@ begin
     'Parallel', 'Par',
     'Timer', 'Tmr',
     'Thread', 'Thd',
-    {$ifdef MSWINDOWS}
+    'Database', 'DB',
+    'Backup', 'Bak',
+    'memory', 'mem',
     '  ', ' '
-    {$else}
-    ' ', '' // on POSIX, pthread 16 chars limitation -> the shorter, the better
-    {$endif MSWINDOWS}
     ]);
-  L := length(name);
-  if L > 31 then
-    L := 31;
-  SetString(n, PAnsiChar(pointer(name)), L);
+  n[0] := #0;
+  for i := 1 to length(name) do
+    if name[i] in ['a'..'z', 'A'..'Z', '0'..'9', '.'
+      {$ifdef MSWINDOWS}, ' ', '-'{$endif}] then
+    begin
+      inc(n[0]);
+      n[ord(n[0])] := name[i];
+      if n[0] = #31 then
+        break; // TShort31
+    end;
   if CurrentThreadName = n then
     exit; // already set as such
-  CurrentThreadName := n;
-  RawSetThreadName(ThreadID, name);
+  RawSetThreadName(ThreadID, {$ifdef MSWINDOWS} name {$else} n {$endif});
   EnterCriticalSection(GlobalThreadLock);
   try
+    CurrentThreadName := ''; // for LogThreadName(name) to appear once
     for i := 0 to high(SynLogFamily) do
       with SynLogFamily[i] do
         if (sllInfo in Level) and
            (PerThreadLog = ptIdentifiedInOnFile) and
            (fGlobalLog <> nil) then
-          fGlobalLog.LogThreadName(name);
+          fGlobalLog.LogThreadName(name); // try to put the full name in log
   finally
     LeaveCriticalSection(GlobalThreadLock);
+    CurrentThreadName := n; // low-level short name
   end;
 end;
 
