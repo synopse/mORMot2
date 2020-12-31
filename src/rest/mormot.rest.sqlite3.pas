@@ -203,8 +203,7 @@ end;
 
 constructor TRestServerDB.Create(aModel: TOrmModel;
   const aDBFileName: TFileName; aHandleUserAuthentication: boolean;
-  const aPassword: RawUTF8; aDefaultCacheSize: integer;
-  aDefaultPageSize: integer);
+  const aPassword: RawUTF8; aDefaultCacheSize, aDefaultPageSize: integer);
 var
   db: TSQLDatabase;
 begin
@@ -215,11 +214,14 @@ end;
 
 constructor TRestServerDB.CreateWithOwnModel(const aTables: array of TOrmClass;
   const aDBFileName: TFileName; aHandleUserAuthentication: boolean;
-  const aRoot: RawUTF8; const aPassword: RawUTF8; aDefaultCacheSize: integer;
-  aDefaultPageSize: integer);
+  const aRoot, aPassword: RawUTF8; aDefaultCacheSize, aDefaultPageSize: integer);
+var
+  model: TOrmModel;
 begin
-  Create(TOrmModel.Create(aTables, aRoot), aDBFileName,
-    aHandleUserAuthentication, aPassword, aDefaultCacheSize, aDefaultPageSize);
+  model := TOrmModel.Create(aTables, aRoot);
+  Create(model, aDBFileName, aHandleUserAuthentication, aPassword,
+    aDefaultCacheSize, aDefaultPageSize);
+  model.Owner := self;
 end;
 
 constructor TRestServerDB.Create(aModel: TOrmModel;
