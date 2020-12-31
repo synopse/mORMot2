@@ -760,16 +760,16 @@ type
     function ToDateTime: TDateTime;
     /// convert an Oracle date and time into its textual expanded ISO-8601
     // - will fill up to 21 characters, including double quotes
-    function ToIso8601(Dest: PUTF8Char): integer; overload;
+    function ToIso8601(Dest: PUtf8Char): integer; overload;
     /// convert an Oracle date and time into its textual expanded ISO-8601
     // - return the ISO-8601 text, without double quotes
     procedure ToIso8601(var aIso8601: RawByteString); overload;
     /// convert Delphi TDateTime into native Oracle date and time format
     procedure From(const aValue: TDateTime); overload;
     /// convert textual ISO-8601 into native Oracle date and time format
-    procedure From(const aIso8601: RawUTF8); overload;
+    procedure From(const aIso8601: RawUtf8); overload;
     /// convert textual ISO-8601 into native Oracle date and time format
-    procedure From(aIso8601: PUTF8Char; Length: integer); overload;
+    procedure From(aIso8601: PUtf8Char; Length: integer); overload;
   end;
   {$A+}
   POracleDate = ^TOracleDate;
@@ -871,7 +871,7 @@ type
       locp: POCILobLocator; var amtp: ub4; offset: ub4; bufp: Pointer; buflen: ub4;
       piece: ub1; ctxp: Pointer = nil; cbfp: Pointer = nil; csid: ub2 = 0;
       csfrm: ub1 = SQLCS_IMPLICIT): sword; cdecl;
-    NlsCharSetNameToID: function(env: POCIEnv; name: PUTF8Char): sword; cdecl;
+    NlsCharSetNameToID: function(env: POCIEnv; name: PUtf8Char): sword; cdecl;
     StmtPrepare2: function(svchp: POCISvcCtx; var stmtp: POCIStmt; errhp: POCIError;
       stmt: text; stmt_len: ub4; key: text; key_len: ub4;
       language:ub4; mode: ub4): sword; cdecl;
@@ -906,7 +906,7 @@ type
     // - and retrieve all Oci*() addresses for OCI_ENTRIES[] items
     constructor Create;
     /// retrieve the client version as 'oci.dll rev. 11.2.0.1'
-    function ClientRevision: RawUTF8;
+    function ClientRevision: RawUtf8;
     /// retrieve the OCI charset ID from a Windows Code Page
     // - will only handle most known Windows Code Page
     // - if aCodePage=0, will use the NLS_LANG environment variable
@@ -935,7 +935,7 @@ type
     /// retrieve some CLOB/NCLOB content as UTF-8 text
     function ClobFromDescriptor(Stmt: TSqlDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; ColumnDBForm: integer;
-      out Text: RawUTF8; TextResize: boolean = true): ub4;
+      out Text: RawUtf8; TextResize: boolean = true): ub4;
   end;
 
 
@@ -952,7 +952,7 @@ type
 
   
 /// conversion from a 64-bit integer to a raw VARNUM memory structure
-procedure Int64ToSQLT_VNU(Value: Int64; OutData: PSqlT_VNU);
+procedure Int64ToSqlT_VNU(Value: Int64; OutData: PSqlT_VNU);
 
 
 var
@@ -988,7 +988,7 @@ var
 function SimilarCharSet(aCharset1, aCharset2: cardinal): boolean;
 
 /// return the text name from an Oracle Charset code
-function OracleCharSetName(aCharsetID: cardinal): PUTF8Char;
+function OracleCharSetName(aCharsetID: cardinal): PUtf8Char;
 
 /// return the system code page corresponding to an Oracle Charset code
 function CharSetIDToCodePage(aCharSetID: cardinal): cardinal;
@@ -1046,7 +1046,7 @@ begin
   end;
 end;
 
-function TOracleDate.ToIso8601(Dest: PUTF8Char): integer;
+function TOracleDate.ToIso8601(Dest: PUtf8Char): integer;
 var
   Y: cardinal;
 begin
@@ -1109,19 +1109,19 @@ begin
   end;
 end;
 
-procedure TOracleDate.From(const aIso8601: RawUTF8);
+procedure TOracleDate.From(const aIso8601: RawUtf8);
 begin
   From(pointer(aIso8601), length(aIso8601));
 end;
 
-procedure TOracleDate.From(aIso8601: PUTF8Char; Length: integer);
+procedure TOracleDate.From(aIso8601: PUtf8Char; Length: integer);
 var
   Value: QWord;
   Value32: cardinal absolute Value;
   Y: cardinal;
   NoTime: boolean;
 begin
-  Value := Iso8601ToTimeLogPUTF8Char(aIso8601, Length, @NoTime);
+  Value := Iso8601ToTimeLogPUtf8Char(aIso8601, Length, @NoTime);
   if Value = 0 then
   begin
     PInteger(@self)^ := 0;
@@ -1154,7 +1154,7 @@ const
   CODEPAGES: array[0..26] of record
     Num: cardinal;
     Charset: cardinal;
-    Text: PUTF8Char
+    Text: PUtf8Char
   end = ((
     Num: 1252;
     Charset: OCI_WE8MSWIN1252;
@@ -1436,7 +1436,7 @@ end;
 
 function TSqlDBOracleLib.ClobFromDescriptor(Stmt: TSqlDBStatement;
   svchp: POCISvcCtx; errhp: POCIError; locp: POCIDescriptor; ColumnDBForm: integer;
-  out Text: RawUTF8; TextResize: boolean): ub4;
+  out Text: RawUtf8; TextResize: boolean): ub4;
 var
   Len: ub4;
 begin
@@ -1464,7 +1464,7 @@ procedure TSqlDBOracleLib.HandleError(Conn: TSqlDBConnection;
   Stmt: TSqlDBStatement; Status: integer; ErrorHandle: POCIError;
   InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 var
-  msg: RawUTF8;
+  msg: RawUtf8;
   tmp: array[0..3071] of AnsiChar;
   L, ErrNum: integer;
 begin
@@ -1480,7 +1480,7 @@ begin
           tmp[L - 1] := #0; // trim right #10
           dec(L);
         end;
-        msg := CurrentAnsiConvert.AnsiBufferToRawUTF8(tmp, L);
+        msg := CurrentAnsiConvert.AnsiBufferToRawUtf8(tmp, L);
         if (Status = OCI_SUCCESS_WITH_INFO) and
            not InfoRaiseException then
         begin
@@ -1509,9 +1509,9 @@ begin
   if LogLevelNoRaise <> sllNone then
     SynDBLog.Add.Log(LogLevelNoRaise, msg{%H-}, self)
   else if Stmt = nil then
-    raise ESqlDBOracle.CreateUTF8('% error: %', [self, msg])
+    raise ESqlDBOracle.CreateUtf8('% error: %', [self, msg])
   else
-    raise ESqlDBOracle.CreateUTF8('% error: %', [Stmt, msg]);
+    raise ESqlDBOracle.CreateUtf8('% error: %', [Stmt, msg]);
 end;
 
 procedure TSqlDBOracleLib.Check(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
@@ -1526,7 +1526,7 @@ procedure TSqlDBOracleLib.CheckSession(Conn: TSqlDBConnection;
   Stmt: TSqlDBStatement; Status: integer; ErrorHandle: POCIError;
   InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 var
-  msg: RawUTF8;
+  msg: RawUtf8;
   tmp: array[0..3071] of AnsiChar;
   L, ErrNum: integer;
 begin
@@ -1543,7 +1543,7 @@ begin
       tmp[L - 1] := #0; // trim right #10
       dec(L);
     end;
-    msg := CurrentAnsiConvert.AnsiBufferToRawUTF8(tmp, L);
+    msg := CurrentAnsiConvert.AnsiBufferToRawUtf8(tmp, L);
     if ErrNum = 28001 then
       if Conn <> nil then
         if Conn.PasswordChange then
@@ -1551,24 +1551,24 @@ begin
     if LogLevelNoRaise <> sllNone then
       SynDBLog.Add.Log(LogLevelNoRaise, msg, self)
     else if Stmt = nil then
-      raise ESqlDBOracle.CreateUTF8('% error: %', [self, msg])
+      raise ESqlDBOracle.CreateUtf8('% error: %', [self, msg])
     else
-      raise ESqlDBOracle.CreateUTF8('% error: %', [Stmt, msg]);
+      raise ESqlDBOracle.CreateUtf8('% error: %', [Stmt, msg]);
   end;
 end;
 
-function TSqlDBOracleLib.ClientRevision: RawUTF8;
+function TSqlDBOracleLib.ClientRevision: RawUtf8;
 begin
   if self = nil then
     result := ''
   else
-    result := FormatUTF8('% rev. %.%.%.%',
+    result := FormatUtf8('% rev. %.%.%.%',
       [fLibraryPath, major_version, minor_version, update_num, patch_num]);
 end;
 
 function TSqlDBOracleLib.CodePageToCharSetID(env: pointer; aCodePage: cardinal): cardinal;
 var
-  ocp: PUTF8Char;
+  ocp: PUtf8Char;
   i: integer;
   nlslang: AnsiString;
 begin
@@ -1646,7 +1646,7 @@ end;
 
 { *************** Some Global Types and Variables }
 
-procedure Int64ToSQLT_VNU(Value: Int64; OutData: PSqlT_VNU);
+procedure Int64ToSqlT_VNU(Value: Int64; OutData: PSqlT_VNU);
 var
   V, Exp: byte;
   minus: boolean; // True, if the sign is positive
@@ -1714,7 +1714,7 @@ begin
   result := false;
 end;
 
-function OracleCharSetName(aCharsetID: cardinal): PUTF8Char;
+function OracleCharSetName(aCharsetID: cardinal): PUtf8Char;
 var
   i: integer;
 begin

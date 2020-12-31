@@ -52,12 +52,12 @@ type
   /// will implement properties shared by OleDB connections
   TSqlDBOleDBConnectionProperties = class(TSqlDBConnectionPropertiesThreadSafe)
   protected
-    fProviderName: RawUTF8;
+    fProviderName: RawUtf8;
     fConnectionString: SynUnicode;
     fOnCustomError: TSqlDBOleDBOnCustomError;
     fSchemaRec: array of TDBSchemaRec;
     fSupportsOnlyIRowset: boolean;
-    function GetSchema(const aUID: TGUID; const Fields: array of RawUTF8;
+    function GetSchema(const aUID: TGUID; const Fields: array of RawUtf8;
       var aResult: IRowSet): boolean;
     /// will create the generic fConnectionString from supplied parameters
     procedure SetInternalProperties; override;
@@ -83,14 +83,14 @@ type
     /// get all table names
     // - will retrieve the corresponding metadata from OleDB interfaces if SQL
     // direct access was not defined
-    procedure GetTableNames(out Tables: TRawUTF8DynArray); override;
+    procedure GetTableNames(out Tables: TRawUtf8DynArray); override;
     /// retrieve the column/field layout of a specified table
     // - will retrieve the corresponding metadata from OleDB interfaces if SQL
     // direct access was not defined
-    procedure GetFields(const aTableName: RawUTF8; out Fields: TSqlDBColumnDefineDynArray); override;
-    /// convert a textual column data type, as retrieved e.g. from SQLGetField,
+    procedure GetFields(const aTableName: RawUtf8; out Fields: TSqlDBColumnDefineDynArray); override;
+    /// convert a textual column data type, as retrieved e.g. from SqlGetField,
     // into our internal primitive types
-    function ColumnTypeNativeToDB(const aNativeType: RawUTF8; aScale: integer): TSqlDBFieldType; override;
+    function ColumnTypeNativeToDB(const aNativeType: RawUtf8; aScale: integer): TSqlDBFieldType; override;
     /// the associated OleDB connection string
     // - is set by the Create() constructor most of the time from the supplied
     // server name, user id and password, according to the database provider
@@ -107,7 +107,7 @@ type
       read fOnCustomError write fOnCustomError;
   published { to be loggged as JSON }
     /// the associated OleDB provider name, as set for each class
-    property ProviderName: RawUTF8
+    property ProviderName: RawUtf8
       read fProviderName;
   end;
 
@@ -180,8 +180,8 @@ type
     // - will be refered as DBTYPE_BYREF when sent as OleDB parameters, to
     // avoid unnecessary memory copy
     VBlob: RawByteString;
-    /// storage used for TEXT (ftUTF8) values
-    // - we store TEXT here as WideString, and not RawUTF8, since OleDB
+    /// storage used for TEXT (ftUtf8) values
+    // - we store TEXT here as WideString, and not RawUtf8, since OleDB
     // expects the text to be provided with Unicode encoding
     // - for some providers (like Microsoft SQL Server 2008 R2, AFAIK), using
     // DBTYPE_WSTR value (i.e. what the doc. says) will raise an OLEDB Error
@@ -196,7 +196,7 @@ type
     /// storage used for table variables
     VIUnknown: IUnknown;
     /// storage used for table variables
-    VArray: TRawUTF8DynArray;
+    VArray: TRawUtf8DynArray;
     /// storage used for the OleDB status field
     // - if VStatus=ord(stIsNull), then it will bind a NULL with the type
     // as set by VType (to avoid conversion error like in [e8c211062e])
@@ -298,12 +298,12 @@ type
     // $ SELECT usr.ID   FROM user usr WHERE usr.ID IN  (select id from @a)
     procedure BindArray(Param: integer;
       const Values: array of Int64); overload; override;
-    /// bind a array of RawUTF8 (255 length max) values to a parameter
+    /// bind a array of RawUtf8 (255 length max) values to a parameter
     // - using TABLE variable (MSSQl 2008 & UP). Must be created in the database as:
     // $ CREATE TYPE dbo.StrList AS TABLE(id nvarchar(255) NULL)
     // - must be declareded in the database
     procedure BindArray(Param: integer;
-      const Values: array of RawUTF8); overload; override;
+      const Values: array of RawUtf8); overload; override;
     /// bind an integer value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an EOleDBException on any error
@@ -327,12 +327,12 @@ type
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an EOleDBException on any error
-    procedure BindTextU(Param: integer; const Value: RawUTF8;
+    procedure BindTextU(Param: integer; const Value: RawUtf8;
       IO: TSqlDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded buffer text (#0 ended) to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - raise an EOleDBException on any error
-    procedure BindTextP(Param: integer; Value: PUTF8Char;
+    procedure BindTextP(Param: integer; Value: PUtf8Char;
       IO: TSqlDBParamInOutType = paramIn); overload; override;
     /// bind a VCL string to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -360,7 +360,7 @@ type
     // - if ExpectResults is TRUE, then Step() and Column*() methods are available
     // to retrieve the data rows
     // - raise an EOleDBException on any error
-    procedure Prepare(const aSQL: RawUTF8; ExpectResults: boolean = false); overload; override;
+    procedure Prepare(const aSQL: RawUtf8; ExpectResults: boolean = false); overload; override;
     /// Execute an UTF-8 encoded SQL statement
     // - parameters marked as ? should have been already bound with Bind*()
     // functions above
@@ -390,22 +390,22 @@ type
     // - access the first or next row of data from the SQL Statement result:
     // if SeekFirst is TRUE, will put the cursor on the first row of results,
     // otherwise, it will fetch one row of data, to be called within a loop
-    // - raise an ESQLEOleDBException on any error
+    // - raise an EOleDBException on any error
     function Step(SeekFirst: boolean = false): boolean; override;
-    /// clear result rowset when ISQLDBStatement is back in cache
+    /// clear result rowset when ISqlDBStatement is back in cache
     procedure ReleaseRows; override;
     /// retrieve a column name of the current Row
     // - Columns numeration (i.e. Col value) starts with 0
     // - it's up to the implementation to ensure than all column names are unique
-    function ColumnName(Col: integer): RawUTF8; override;
+    function ColumnName(Col: integer): RawUtf8; override;
     /// returns the Column index of a given Column name
     // - Columns numeration (i.e. Col value) starts with 0
     // - returns -1 if the Column name is not found (via case insensitive search)
-    function ColumnIndex(const aColumnName: RawUTF8): integer; override;
+    function ColumnIndex(const aColumnName: RawUtf8): integer; override;
     /// the Column type of the current Row
     // - ftCurrency type should be handled specificaly, for faster process and
     // avoid any rounding issue, since currency is a standard OleDB type
-    // - FieldSize can be set to store the size in chars of a ftUTF8 column
+    // - FieldSize can be set to store the size in chars of a ftUtf8 column
     // (0 means BLOB kind of TEXT column)
     function ColumnType(Col: integer;
       FieldSize: PInteger = nil): TSqlDBFieldType; override;
@@ -422,7 +422,7 @@ type
     // any rounding/conversion error from floating-point types
     function ColumnCurrency(Col: integer): currency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
-    function ColumnUTF8(Col: integer): RawUTF8; override;
+    function ColumnUtf8(Col: integer): RawUtf8; override;
     /// return a Column text generic VCL string value of the current Row, first Col is 0
     function ColumnString(Col: integer): string; override;
     /// return a Column as a blob value of the current Row, first Col is 0
@@ -435,11 +435,11 @@ type
     // - fast overridden implementation with no temporary variable
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
     // format and contains true BLOB data
-    procedure ColumnsToJSON(WR: TJSONWriter); override;
+    procedure ColumnsToJson(WR: TJsonWriter); override;
     /// return a Column as a variant
     // - this implementation will retrieve the data with no temporary variable
     // (since TQuery calls this method a lot, we tried to optimize it)
-    // - a ftUTF8 content will be mapped into a generic WideString variant
+    // - a ftUtf8 content will be mapped into a generic WideString variant
     // for pre-Unicode version of Delphi, and a generic UnicodeString (=string)
     // since Delphi 2009: you may not loose any data during charset conversion
     // - a ftBlob content will be mapped into a TBlobData AnsiString variant
@@ -523,7 +523,7 @@ type
     // optimization as defined in TSqlDBConnectionProperties.Create(),
     // since INSERT with multiple VALUES (..),(..),(..) is available only
     // since SQL Server 2008
-    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
+    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8); override;
   end;
 
   /// OleDB connection properties to Microsoft SQL Server 2008, via
@@ -599,7 +599,7 @@ type
   // as defined in mormot.db.sql.odbc.pas
   TSqlDBOleDBODBCSQLConnectionProperties = class(TSqlDBOleDBConnectionProperties)
   protected
-    fDriver: RawUTF8;
+    fDriver: RawUtf8;
     /// will set the appropriate provider name, i.e. 'MSDASQL'
     procedure SetInternalProperties; override;
   public
@@ -608,10 +608,10 @@ type
     // - you may also set aDriver='' and modify the connection string directly,
     // e.g. adding '{ DSN=name | FileDSN=filename };'
     constructor Create(const aDriver, aServerName, aDatabaseName,
-      aUserID, aPassWord: RawUTF8); reintroduce;
+      aUserID, aPassWord: RawUtf8); reintroduce;
   published { to be logged as JSON }
     /// the associated ODBC Driver name, as specified at creation
-    property Driver: RawUTF8
+    property Driver: RawUtf8
       read fDriver;
   end;
 
@@ -644,24 +644,24 @@ implementation
 
 { TSqlDBOleDBStatement }
 
-procedure TSqlDBOleDBStatement.BindTextU(Param: integer; const Value: RawUTF8;
+procedure TSqlDBOleDBStatement.BindTextU(Param: integer; const Value: RawUtf8;
   IO: TSqlDBParamInOutType);
 begin
   if (Value = '') and
      fConnection.Properties.StoreVoidStringAsNull then
     CheckParam(Param, ftNull, IO)
   else
-    UTF8ToWideString(Value, CheckParam(Param, ftUTF8, IO)^.VText);
+    Utf8ToWideString(Value, CheckParam(Param, ftUtf8, IO)^.VText);
 end;
 
-procedure TSqlDBOleDBStatement.BindTextP(Param: integer; Value: PUTF8Char;
+procedure TSqlDBOleDBStatement.BindTextP(Param: integer; Value: PUtf8Char;
   IO: TSqlDBParamInOutType);
 begin
   if (Value = '') and
      fConnection.Properties.StoreVoidStringAsNull then
     CheckParam(Param, ftNull, IO)
   else
-    UTF8ToWideString(Value, StrLen(Value), CheckParam(Param, ftUTF8, IO)^.VText);
+    Utf8ToWideString(Value, StrLen(Value), CheckParam(Param, ftUtf8, IO)^.VText);
 end;
 
 procedure TSqlDBOleDBStatement.BindTextS(Param: integer; const Value: string;
@@ -671,7 +671,7 @@ begin
      fConnection.Properties.StoreVoidStringAsNull then
     CheckParam(Param, ftNull, IO)
   else
-    CheckParam(Param, ftUTF8, IO)^.VText := StringToSynUnicode(Value);
+    CheckParam(Param, ftUtf8, IO)^.VText := StringToSynUnicode(Value);
 end;
 
 procedure TSqlDBOleDBStatement.BindTextW(Param: integer; const Value: WideString;
@@ -681,7 +681,7 @@ begin
      fConnection.Properties.StoreVoidStringAsNull then
     CheckParam(Param, ftNull, IO)
   else
-    CheckParam(Param, ftUTF8, IO)^.VText := Value;
+    CheckParam(Param, ftUtf8, IO)^.VText := Value;
 end;
 
 procedure TSqlDBOleDBStatement.BindBlob(Param: integer;
@@ -711,13 +711,13 @@ begin
       VArray[i] := Int64ToUtf8(Values[i]);
 end;
 
-procedure TSqlDBOleDBStatement.BindArray(Param: integer; const Values: array of RawUTF8);
+procedure TSqlDBOleDBStatement.BindArray(Param: integer; const Values: array of RawUtf8);
 var
   i: integer;
   StoreVoidStringAsNull: boolean;
 begin
   StoreVoidStringAsNull := fConnection.Properties.StoreVoidStringAsNull;
-  with CheckParam(Param, ftUTF8, paramIn, length(Values))^ do
+  with CheckParam(Param, ftUtf8, paramIn, length(Values))^ do
     for i := 0 to high(Values) do
       if StoreVoidStringAsNull and
          (Values[i] = '') then
@@ -754,7 +754,7 @@ function TSqlDBOleDBStatement.CheckParam(Param: integer;
   NewType: TSqlDBFieldType; IO: TSqlDBParamInOutType): POleDBStatementParam;
 begin
   if Param <= 0 then
-    raise EOleDBException.CreateUTF8('%.Bind*() called with Param=% should be >= 1',
+    raise EOleDBException.CreateUtf8('%.Bind*() called with Param=% should be >= 1',
       [self, Param]);
   if Param > fParamCount then
     fParam.Count := Param; // resize fParams[] dynamic array if necessary
@@ -771,7 +771,7 @@ begin
   if (NewType in [ftUnknown, ftNull]) or
      (fConnection.Properties.BatchSendingAbilities *
        [cCreate, cUpdate, cDelete] = []) then
-    raise ESqlDBException.CreateUTF8(
+    raise ESqlDBException.CreateUtf8(
       'Invalid call to %s.BindArray(Param=%d,Type=%s)',
       [self, Param, TSqlDBFieldTypeToString(NewType)]);
   SetLength(result^.VArray, ArrayCount);
@@ -781,13 +781,13 @@ end;
 constructor TSqlDBOleDBStatement.Create(aConnection: TSqlDBConnection);
 begin
   if not aConnection.InheritsFrom(TSqlDBOleDBConnection) then
-    raise EOleDBException.CreateUTF8('%.Create(%) expects a TSqlDBOleDBConnection',
+    raise EOleDBException.CreateUtf8('%.Create(%) expects a TSqlDBOleDBConnection',
       [self, aConnection]);
   inherited Create(aConnection);
   fOleDBConnection := TSqlDBOleDBConnection(aConnection);
   fParam.Init(TypeInfo(TSqlDBOleDBStatementParamDynArray), fParams, @fParamCount);
   fColumn.InitSpecific(TypeInfo(TSqlDBColumnPropertyDynArray), fColumns,
-    ptRawUTF8, @fColumnCount, True);
+    ptRawUtf8, @fColumnCount, True);
   fRowBufferSize := 16384;
   fAlignBuffer := true;
 end;
@@ -817,7 +817,7 @@ type
 procedure TSqlDBOleDBStatement.LogStatusError(Status: integer;
   Column: PSqlDBColumnProperty);
 var
-  msg: RawUTF8;
+  msg: RawUtf8;
 begin
   {$ifndef PUREPASCAL}
   if cardinal(Status) <= cardinal(ord(high(TSqlDBOleDBStatus))) then
@@ -837,9 +837,9 @@ begin
   CheckCol(Col); // check Col value
   if not Assigned(fRowSet) or
      (fColumnCount = 0) then
-    raise EOleDBException.CreateUTF8('%.Column*() with no prior Execute', [self]);
+    raise EOleDBException.CreateUtf8('%.Column*() with no prior Execute', [self]);
   if CurrentRow <= 0 then
-    raise EOleDBException.CreateUTF8('%.Column*() with no prior Step', [self]);
+    raise EOleDBException.CreateUtf8('%.Column*() with no prior Step', [self]);
   Column := @fColumns[Col];
   result := @fRowSetData[Column^.ColumnAttr];
   case TSqlDBOleDBStatus(PColumnValue(result)^.Status) of
@@ -892,7 +892,7 @@ begin
             P := V^.VAnsiChar;
           SetString(result, P, V^.Length);
         end;
-      ftUTF8:
+      ftUtf8:
         if V^.Length = 0 then
           result := ''
         else
@@ -924,7 +924,7 @@ begin
   GetCol64(Col, ftDouble, result);
 end;
 
-function TSqlDBOleDBStatement.ColumnIndex(const aColumnName: RawUTF8): integer;
+function TSqlDBOleDBStatement.ColumnIndex(const aColumnName: RawUtf8): integer;
 begin
   result := fColumn.FindHashed(aColumnName);
 end;
@@ -941,7 +941,7 @@ begin
   GetCol64(Col, ftInt64, result);
 end;
 
-function TSqlDBOleDBStatement.ColumnName(Col: integer): RawUTF8;
+function TSqlDBOleDBStatement.ColumnName(Col: integer): RawUtf8;
 begin
   CheckCol(Col);
   result := fColumns[Col].ColumnName;
@@ -962,7 +962,7 @@ begin
   end;
 end;
 
-function TSqlDBOleDBStatement.ColumnUTF8(Col: integer): RawUTF8;
+function TSqlDBOleDBStatement.ColumnUtf8(Col: integer): RawUtf8;
 var
   C: PSqlDBColumnProperty;
   V: PColumnValue;
@@ -977,7 +977,7 @@ begin
         Int64ToUtf8(V^.Int64, result);
       ftDate:
         result := DateTimeToIso8601Text(V^.Double);
-      ftUTF8:
+      ftUtf8:
         begin
           if C^.ColumnValueInlined then
             P := @V^.VData
@@ -997,7 +997,7 @@ begin
         Curr64ToStr(V^.Int64, result);
       ftDouble:
         if V^.Int64 = 0 then
-          result := SmallUInt32UTF8[0]
+          result := SmallUInt32Utf8[0]
         else
           DoubleToStr(V^.Double, result);
     end;
@@ -1025,7 +1025,7 @@ begin
         result := Curr64ToString(V^.Int64);
       ftDate:
         result := Ansi7ToString(DateTimeToIso8601Text(V^.Double));
-      ftUTF8:
+      ftUtf8:
         begin
           if C^.ColumnValueInlined then
             P := @V^.VData
@@ -1063,7 +1063,7 @@ begin // dedicated version to avoid as much memory allocation than possible
     case result of
       ftInt64, ftDouble, ftCurrency, ftDate:
         VInt64 := V^.Int64; // copy 64 bit content
-      ftUTF8:
+      ftUtf8:
         begin
           VAny := nil;
           if C^.ColumnValueInlined then
@@ -1096,7 +1096,7 @@ begin // dedicated version to avoid as much memory allocation than possible
   end;
 end;
 
-procedure TSqlDBOleDBStatement.ColumnsToJSON(WR: TJSONWriter);
+procedure TSqlDBOleDBStatement.ColumnsToJson(WR: TJsonWriter);
 var
   col: integer;
   V: PColumnValue;
@@ -1105,7 +1105,7 @@ label
   Write;
 begin // dedicated version to avoid as much memory allocation than possible
   if CurrentRow <= 0 then
-    raise EOleDBException.CreateUTF8('%.ColumnsToJSON() with no prior Step', [self]);
+    raise EOleDBException.CreateUtf8('%.ColumnsToJson() with no prior Step', [self]);
   if WR.Expand then
     WR.Add('{');
   for col := 0 to fColumnCount - 1 do // fast direct conversion from OleDB buffer
@@ -1129,14 +1129,14 @@ Write:    case ColumnType of
                 WR.AddDateTime(@V^.Double, 'T', #0, fForceDateWithMS);
                 WR.Add('"');
               end;
-            ftUTF8:
+            ftUtf8:
               begin
                 WR.Add('"');
                 if ColumnValueInlined then
                   P := @V^.VData
                 else
                   P := V^.VWideChar;
-                WR.AddJSONEscapeW(P, V^.Length shr 1);
+                WR.AddJsonEscapeW(P, V^.Length shr 1);
                 WR.Add('"');
               end;
             ftBlob:
@@ -1180,7 +1180,7 @@ begin
   dec(Param); // start at #1
   if CheckIsOutParameter and
      (fParams[Param].VInOut = paramIn) then
-    raise EOleDBException.CreateUTF8('%.ParamToVariant expects an [In]Out parameter',
+    raise EOleDBException.CreateUtf8('%.ParamToVariant expects an [In]Out parameter',
       [self]);
   // OleDB provider should have already modified the parameter in-place, i.e.
   // in our fParams[] buffer, especialy for TEXT parameters (OleStr/WideString)
@@ -1197,7 +1197,7 @@ begin
         Value := PCurrency(@VInt64)^;
       ftDate:
         Value := PDateTime(@VInt64)^;
-      ftUTF8:
+      ftUtf8:
         Value := VText; // returned as WideString/OleStr variant
       ftBlob:
         RawByteStringToVariant(VBlob, Value);
@@ -1218,11 +1218,11 @@ const
   FIELDTYPE2OLEDBTYPE_NAME: array[TSqlDBFieldType] of WideString = (
      '', 'DBTYPE_I4', 'DBTYPE_I8', 'DBTYPE_R8', 'DBTYPE_CY', 'DBTYPE_DATE',
     'DBTYPE_WVARCHAR', 'DBTYPE_BINARY');
-// ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUTF8, ftBlob
+// ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUtf8, ftBlob
 
   TABLE_PARAM_DATASOURCE: WideString = 'table';
 
-procedure TSqlDBOleDBStatement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
+procedure TSqlDBOleDBStatement.Prepare(const aSQL: RawUtf8; ExpectResults: boolean);
 var
   L: integer;
   SQLW: RawUnicode;
@@ -1233,7 +1233,7 @@ begin
      (fColumnCount > 0) or
      (fColumnBindings <> nil) or
      (fParamBindings <> nil) then
-    raise EOleDBException.CreateUTF8('%.Prepare should be called once', [self]);
+    raise EOleDBException.CreateUtf8('%.Prepare should be called once', [self]);
   inherited;
   with OleDBConnection do
   begin
@@ -1248,7 +1248,7 @@ begin
           (fSQL[L] in [#1..' ', ';']) do
       dec(L); // trim ' ' or ';' right (last ';' could be found incorrect)
   SetLength(SQLW, L * 2 + 1);
-  UTF8ToWideChar(pointer(SQLW), pointer(fSQL), L);
+  Utf8ToWideChar(pointer(SQLW), pointer(fSQL), L);
   fCommand.SetCommandText(DBGUID_DEFAULT, pointer(SQLW));
   SQLLogEnd;
 end;
@@ -1278,12 +1278,12 @@ begin
   SQLLogBegin(sllSQL);
   // 1. check execution context
   if not Assigned(fCommand) then
-    raise EOleDBException.CreateUTF8('%s.Prepare should have been called', [self]);
+    raise EOleDBException.CreateUtf8('%s.Prepare should have been called', [self]);
   if Assigned(fRowSet) or
      (fColumnCount > 0) or
      (fColumnBindings <> nil) or
      (fParamBindings <> nil) then
-    raise EOleDBException.CreateUTF8('Missing call to %.Reset', [self]);
+    raise EOleDBException.CreateUtf8('Missing call to %.Reset', [self]);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   // 2. bind parameters
   SetLength(IDLists, fParamCount);
@@ -1297,7 +1297,7 @@ begin
       for i := 0 to fParamCount - 1 do
         case fParams[i].VType of
           ftUnknown:
-            raise EOleDBException.CreateUTF8('%.Execute: missing #% bound parameter for [%]',
+            raise EOleDBException.CreateUtf8('%.Execute: missing #% bound parameter for [%]',
               [self, i + 1, fSQL]);
         end;
       P := pointer(fParams);
@@ -1347,7 +1347,7 @@ begin
           case P^.VType of
             ftInt64:
               ssParamProps[ssParamPropsCount].rgPropertySets := @ssPropsetParamIDList;
-            ftUTF8:
+            ftUtf8:
               ssParamProps[ssParamPropsCount].rgPropertySets := @ssPropsetParamStrList;
           else
             raise EOleDBException.Create('Unsupported array parameter type');
@@ -1380,7 +1380,7 @@ begin
                 P^.VInt64 := length(P^.VBlob); // store length in unused VInt64 property
                 B^.obLength := PAnsiChar(@P^.VInt64) - pointer(fParams);
               end;
-            ftUTF8:
+            ftUtf8:
               begin
                 B^.obValue := PAnsiChar(@P^.VText) - pointer(fParams);
                 if P^.VText = '' then
@@ -1468,7 +1468,7 @@ end;
 procedure TSqlDBOleDBStatement.FromRowSet(RowSet: IRowSet);
 begin
   if fRowSet <> nil then
-    EOleDBException.CreateUTF8('%.FromRowSet twice', [self]);
+    EOleDBException.CreateUtf8('%.FromRowSet twice', [self]);
   if not Assigned(RowSet) then
     exit; // no row returned
   fRowSet := RowSet;
@@ -1499,7 +1499,7 @@ var
   sav: integer;
 begin
 {  if not Assigned(fCommand) then
-    raise EOleDBException.CreateUTF8('%.Execute should be called before Step',[self]); }
+    raise EOleDBException.CreateUtf8('%.Execute should be called before Step',[self]); }
   result := false;
   sav := fCurrentRow;
   fCurrentRow := 0;
@@ -1633,7 +1633,7 @@ var
   Col: PSqlDBColumnProperty;
   nCols: PtrUInt;
   ColsNames: PWideChar;
-  aName: RawUTF8;
+  aName: RawUtf8;
 begin
   nCols := 0;
   Cols := nil;
@@ -1649,7 +1649,7 @@ begin
     begin
       if (nfo^.pwszName = nil) or
          (nfo^.pwszName^ = #0) then
-        aName := 'col_' + Int32ToUTF8(i)
+        aName := 'col_' + Int32ToUtf8(i)
       else
         aName := RawUnicodeToUtf8(nfo^.pwszName, StrLenW(nfo^.pwszName));
       Col := fColumn.AddAndMakeUniqueName(aName); // set ColumnName := aName
@@ -1671,7 +1671,7 @@ begin
             B^.cbMaxLen := sizeof(Int64);
             inc(result, sizeof(Int64));
           end;
-        ftUTF8, ftBlob:
+        ftUtf8, ftBlob:
           begin
             B^.dwPart := DBPART_STATUS or DBPART_VALUE or DBPART_LENGTH;
             B^.obLength := result; // need length field in fRowSetData[]
@@ -1682,7 +1682,7 @@ begin
               B^.wType := B^.wType and not DBTYPE_BYREF;
               len := nfo^.ulColumnSize;
               Col^.ColumnValueDBSize := len;
-              if Col^.ColumnType = ftUTF8 then
+              if Col^.ColumnType = ftUtf8 then
               begin
                 case nfo^.wType of
                   DBTYPE_STR, DBTYPE_BSTR, DBTYPE_WSTR:
@@ -1711,7 +1711,7 @@ begin
             end;
           end;
       else
-        raise EOleDBException.CreateUTF8(
+        raise EOleDBException.CreateUtf8(
           '%.Execute: wrong column [%] (%) for [%]', [self, aName,
            GetEnumName(TypeInfo(TSqlDBFieldType), ord(Col^.ColumnType))^, fSQL]);
       end;
@@ -1742,7 +1742,7 @@ begin
   if Connected then
     Disconnect;
   if OleDBProperties.ConnectionString = '' then
-    raise EOleDBException.CreateUTF8('%.Connect excepts a ConnectionString', [self]);
+    raise EOleDBException.CreateUtf8('%.Connect excepts a ConnectionString', [self]);
   try
     // retrieve initialization parameters from connection string
     OleCheck(CoCreateInstance(CLSID_MSDAINITIALIZE, nil, CLSCTX_INPROC_SERVER,
@@ -1778,7 +1778,7 @@ var
 begin
   Log := SynDBLog.Enter(self, 'Create');
   if not aProperties.InheritsFrom(TSqlDBOleDBConnectionProperties) then
-    raise EOleDBException.CreateUTF8('Invalid %.Create(%)', [self, aProperties]);
+    raise EOleDBException.CreateUtf8('Invalid %.Create(%)', [self, aProperties]);
   fOleDBProperties := TSqlDBOleDBConnectionProperties(aProperties);
   inherited;
   CoInit;
@@ -1887,12 +1887,12 @@ procedure TSqlDBOleDBConnection.OleDBCheck(aStmt: TSqlDBStatement; aResult:
       end;
     if s <> '' then
       fOleDBErrorMessage := fOleDBErrorMessage + s;
-    StringToUTF8(fOleDBErrorMessage, fErrorMessage);
+    StringToUtf8(fOleDBErrorMessage, fErrorMessage);
     // raise exception
     if aStmt = nil then
       E := EOleDBException.Create(fOleDBErrorMessage)
     else
-      E := EOleDBException.CreateUTF8('%: %', [self, StringToUTF8(fOleDBErrorMessage)]);
+      E := EOleDBException.CreateUtf8('%: %', [self, StringToUtf8(fOleDBErrorMessage)]);
     SynDBLog.Add.Log(sllError, E);
     raise E;
   end;
@@ -2031,11 +2031,11 @@ begin
   end;
 end;
 
-procedure TSqlDBOleDBConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
+procedure TSqlDBOleDBConnectionProperties.GetTableNames(out Tables: TRawUtf8DynArray);
 var
   Rows: IRowset;
   count, schemaCol, nameCol: integer;
-  schema, tablename: RawUTF8;
+  schema, tablename: RawUtf8;
 begin
   inherited; // first try from SQL, if any (faster)
   if Tables <> nil then
@@ -2054,11 +2054,11 @@ begin
            (nameCol >= 0) then
           while Step do
           begin
-            schema := TrimU(ColumnUTF8(schemaCol));
-            tablename := TrimU(ColumnUTF8(nameCol));
+            schema := TrimU(ColumnUtf8(schemaCol));
+            tablename := TrimU(ColumnUtf8(nameCol));
             if schema <> '' then
               tablename := schema + '.' + tablename;
-            AddSortedRawUTF8(Tables, count, tablename);
+            AddSortedRawUtf8(Tables, count, tablename);
           end;
         SetLength(Tables, count);
       finally
@@ -2070,16 +2070,16 @@ begin
   end;
 end;
 
-procedure TSqlDBOleDBConnectionProperties.GetFields(const aTableName: RawUTF8;
+procedure TSqlDBOleDBConnectionProperties.GetFields(const aTableName: RawUtf8;
   out Fields: TSqlDBColumnDefineDynArray);
 var
-  Owner, Table, Column: RawUTF8;
+  Owner, Table, Column: RawUtf8;
   Rows: IRowset;
   n, i: integer;
   F: TSqlDBColumnDefine;
   FA: TDynArray;
 const
-  DBTYPE_DISPLAY: array[TSqlDBFieldType] of RawUTF8 = ('???', 'null', 'int',
+  DBTYPE_DISPLAY: array[TSqlDBFieldType] of RawUtf8 = ('???', 'null', 'int',
     'double', 'currency', 'date', 'nvarchar', 'blob');
 begin
   inherited; // first try from SQL, if any (faster)
@@ -2101,7 +2101,7 @@ begin
         FA.Init(TypeInfo(TSqlDBColumnDefineDynArray), Fields, @n);
         while Step do
         begin
-          F.ColumnName := TrimU(ColumnUTF8('COLUMN_NAME'));
+          F.ColumnName := TrimU(ColumnUtf8('COLUMN_NAME'));
           F.ColumnLength := ColumnInt('CHARACTER_MAXIMUM_LENGTH');
           F.ColumnPrecision := ColumnInt('NUMERIC_PRECISION');
           F.ColumnScale := ColumnInt('NUMERIC_SCALE');
@@ -2121,7 +2121,7 @@ begin
         FromRowSet(Rows);
         while Step do
         begin
-          Column := TrimU(ColumnUTF8('COLUMN_NAME'));
+          Column := TrimU(ColumnUtf8('COLUMN_NAME'));
           for i := 0 to high(Fields) do
             with Fields[i] do
               if IdemPropNameU(ColumnName, Column) then
@@ -2151,12 +2151,12 @@ begin
       try
         FromRowSet(Rows);
         while Step do
-          fForeignKeys.Add(TrimU(ColumnUTF8('FK_TABLE_SCHEMA')) + '.' +
-            TrimU(ColumnUTF8('FK_TABLE_NAME')) + '.' +
-              TrimU(ColumnUTF8('FK_COLUMN_NAME')),
-            TrimU(ColumnUTF8('PK_TABLE_SCHEMA')) + '.' +
-              TrimU(ColumnUTF8('PK_TABLE_NAME')) + '.' +
-              TrimU(ColumnUTF8('PK_COLUMN_NAME')));
+          fForeignKeys.Add(TrimU(ColumnUtf8('FK_TABLE_SCHEMA')) + '.' +
+            TrimU(ColumnUtf8('FK_TABLE_NAME')) + '.' +
+              TrimU(ColumnUtf8('FK_COLUMN_NAME')),
+            TrimU(ColumnUtf8('PK_TABLE_SCHEMA')) + '.' +
+              TrimU(ColumnUtf8('PK_TABLE_NAME')) + '.' +
+              TrimU(ColumnUtf8('PK_COLUMN_NAME')));
       finally
         Free;
       end;
@@ -2167,7 +2167,7 @@ begin
 end;
 
 function TSqlDBOleDBConnectionProperties.GetSchema(const aUID: TGUID;
-  const Fields: array of RawUTF8; var aResult: IRowset): boolean;
+  const Fields: array of RawUtf8; var aResult: IRowset): boolean;
 var
   i, res, n: integer;
   C: TSqlDBOleDBConnection;
@@ -2221,7 +2221,7 @@ begin
     if ((res and (1 shl i)) <> 0) and
        (Fields[i] <> '') then
         // '' will leave VT_EMPTY parameter = no restriction
-        Args[i] := UTF8ToWideString(Fields[i]); // expect parameter as BSTR
+        Args[i] := Utf8ToWideString(Fields[i]); // expect parameter as BSTR
   aResult := nil;
   try
     C.OleDBCheck(nil,
@@ -2239,7 +2239,7 @@ end;
 
 procedure TSqlDBOleDBConnectionProperties.SetInternalProperties;
 var
-  tmp: RawUTF8;
+  tmp: RawUtf8;
 begin
   if fProviderName <> '' then
     tmp := 'Provider=' + fProviderName + ';';
@@ -2247,12 +2247,12 @@ begin
     tmp := {%H-}tmp + 'Data Source=' + fServerName + ';';
   if fDatabaseName <> '' then
     tmp := tmp + 'Initial Catalog=' + fDatabaseName + ';';
-  fConnectionString := UTF8ToSynUnicode(tmp + 'User Id=' + fUserID +
+  fConnectionString := Utf8ToSynUnicode(tmp + 'User Id=' + fUserID +
     ';Password=' + fPassWord + ';');
 end;
 
 function TSqlDBOleDBConnectionProperties.ColumnTypeNativeToDB(
-  const aNativeType: RawUTF8; aScale: integer): TSqlDBFieldType;
+  const aNativeType: RawUtf8; aScale: integer): TSqlDBFieldType;
 var
   native, err: integer;
 begin
@@ -2299,7 +2299,7 @@ var
   SSErrorInfo: PSSERRORINFO;
   SSErrorMsg: PWideChar;
   msg, tmp: string;
-  u: RawUTF8;
+  u: RawUtf8;
 begin
   result := False;
   if (self = nil) or
@@ -2364,7 +2364,7 @@ begin
 end;
 
 constructor TSqlDBOleDBMSSQL2005ConnectionProperties.Create(const aServerName,
-  aDatabaseName, aUserID, aPassWord: RawUTF8);
+  aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
   inherited;
   fBatchSendingAbilities := [];
@@ -2385,7 +2385,7 @@ end;
 { TSqlDBOleDBODBCSQLConnectionProperties }
 
 constructor TSqlDBOleDBODBCSQLConnectionProperties.Create(const aDriver,
-  aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8);
+  aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
   fDriver := aDriver;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
@@ -2396,7 +2396,7 @@ begin
   fProviderName := 'MSDASQL'; // we could have left it void - never mind
   inherited SetInternalProperties;
   if fDriver <> '' then
-    fConnectionString := UTF8ToSynUnicode('Driver=' + fDriver + ';') + fConnectionString;
+    fConnectionString := Utf8ToSynUnicode('Driver=' + fDriver + ';') + fConnectionString;
 end;
 
 
@@ -2437,7 +2437,7 @@ begin
   fProviderName := 'Microsoft.Jet.OLEDB.4.0';
   fDBMS := dJet;
   inherited SetInternalProperties;
-  if not FileExists(UTF8ToString(ServerName)) then
+  if not FileExists(Utf8ToString(ServerName)) then
     CreateDatabase;
 end;
 
@@ -2451,7 +2451,7 @@ begin
   fProviderName := 'Microsoft.ACE.OLEDB.12.0';
   fDBMS := dJet;
   inherited SetInternalProperties;
-  if not FileExists(UTF8ToString(ServerName)) then
+  if not FileExists(Utf8ToString(ServerName)) then
     CreateDatabase;
 end;
 

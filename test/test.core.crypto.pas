@@ -273,7 +273,7 @@ end;
 
 procedure TTestCoreCrypto._SHA512;
 
-  procedure Test(const password, secret, expected: RawUTF8; rounds: integer = 0);
+  procedure Test(const password, secret, expected: RawUtf8; rounds: integer = 0);
   var
     dig: THash512Rec;
     sign: TSynSigner;
@@ -565,11 +565,11 @@ begin
   Check(clo + chi = 2000);
   Check(dlo + dhi = 4000);
   Check(elo + ehi = 4000);
-  CheckUTF8((clo >= 900) and
+  CheckUtf8((clo >= 900) and
             (clo <= 1100), 'Random32 distribution clo=%', [clo]);
-  CheckUTF8((dlo >= 1800) and
+  CheckUtf8((dlo >= 1800) and
             (dlo <= 2100), 'RandomDouble distribution dlo=%', [dlo]);
-  CheckUTF8((elo >= 1800) and
+  CheckUtf8((elo >= 1800) and
             (elo <= 2100), 'RandomExt distribution elo=%', [elo]);
   s1 := p.FillRandom(100);
   for i := 1 to length(s1) do
@@ -598,7 +598,7 @@ procedure TTestCoreCrypto.CryptData(dpapi: boolean);
 var
   i, size: integer;
   plain, enc, test: RawByteString;
-  appsec: RawUTF8;
+  appsec: RawUtf8;
   func: function(const Data, AppSecret: RawByteString; Encrypt: boolean): RawByteString;
   tim: TPrecisionTimer;
 const
@@ -652,7 +652,7 @@ procedure TTestCoreCrypto._JWT;
 
   procedure test(one: TJWTAbstract);
   var
-    t: RawUTF8;
+    t: RawUtf8;
     jwt: TJWTContent;
     i: integer;
     exp: TUnixTime;
@@ -700,7 +700,7 @@ procedure TTestCoreCrypto._JWT;
   procedure Benchmark(algo: TSignAlgo);
   var
     i: integer;
-    tok: RawUTF8;
+    tok: RawUtf8;
     j: TJWTAbstract;
     jwt: TJWTContent;
     tim: TPrecisionTimer;
@@ -727,7 +727,7 @@ var
   j: TJWTAbstract;
   jwt: TJWTContent;
   secret: TECCCertificateSecret;
-  tok: RawUTF8;
+  tok: RawUtf8;
   tim: TPrecisionTimer;
   a: TSignAlgo;
 begin
@@ -830,7 +830,7 @@ var
   timer: TPrecisionTimer;
   time: array[TBenchmark] of Int64;
   AES: array[bAES128CFB..bAES256GCM] of TAESAbstract;
-  TXT: array[TBenchmark] of RawUTF8;
+  TXT: array[TBenchmark] of RawUtf8;
 begin
   GetEnumTrimmedNames(TypeInfo(TBenchmark), @TXT);
   for b := low(b) to high(b) do
@@ -921,10 +921,10 @@ end;
 
 procedure TTestCoreCrypto._Base64;
 const
-  Value64: RawUTF8 = 'SGVsbG8gL2Mn6XRhaXQg5+Ar';
+  Value64: RawUtf8 = 'SGVsbG8gL2Mn6XRhaXQg5+Ar';
 var
   tmp: RawByteString;
-  b64: RawUTF8;
+  b64: RawUtf8;
   Value: WinAnsiString;
   i, L: Integer;
 begin
@@ -1016,7 +1016,7 @@ begin
   SetLength(orig, MAX);
   SetLength(crypted, MAX + 256);
   st := '1234essai';
-  PInteger(UniqueRawUTF8(RawUTF8(st)))^ := Random(MaxInt);
+  PInteger(UniqueRawUtf8(RawUtf8(st)))^ := Random(MaxInt);
   for noaesni := false to true do
   begin
     {%H-}Timer[noaesni].Init;
@@ -1025,7 +1025,7 @@ begin
       ks := 128 + k * 64; // test keysize of 128, 192 and 256 bits
       for m := 0 to high(MODES) do
       begin
-        st := RawUTF8(StringOfChar('x', 50));
+        st := RawUtf8(StringOfChar('x', 50));
         with MODES[m].Create(pointer(st)^, ks) do
         try
           s2 := EncryptPKCS7(st, false);
@@ -1035,7 +1035,7 @@ begin
             dec(i, 7)
           else if i >= 5 then
             dec(i, 3);  // e.g. TAESCFBCRC -> TAESCFB
-          CheckUTF8(TEST_AES_REF[k, i] = s3, 'test vector %-%', [MODES[m], ks]);
+          CheckUtf8(TEST_AES_REF[k, i] = s3, 'test vector %-%', [MODES[m], ks]);
           check(DecryptPKCS7(s2, false) = st);
         finally
           Free;
@@ -1305,14 +1305,14 @@ const
     pt, ct: array[0..511] of byte;
   begin
     FillCharFast(pt, SizeOf(pt), 0);
-    CheckUTF8(ctxt.FullDecryptAndVerify(key, kbits, pIV, IV_Len, pAAD, aLen, ctp,
+    CheckUtf8(ctxt.FullDecryptAndVerify(key, kbits, pIV, IV_Len, pAAD, aLen, ctp,
       @pt, cLen, ptag, tlen), 'FullDecryptAndVerify #%', [tn]);
-    CheckUTF8(CompareMem(@pt, ptp, cLen), 'Plain #%', [tn]);
+    CheckUtf8(CompareMem(@pt, ptp, cLen), 'Plain #%', [tn]);
     FillCharFast(ct, SizeOf(ct), 0);
-    CheckUTF8(ctxt.FullEncryptAndAuthenticate(key, kbits, pIV, IV_Len, pAAD,
+    CheckUtf8(ctxt.FullEncryptAndAuthenticate(key, kbits, pIV, IV_Len, pAAD,
       aLen, ptp, @ct, cLen, tag), 'FullEncryptAndAuthenticate #%', [tn]);
-    CheckUTF8(CompareMem(@tag, ptag, tlen), 'Tag #%', [tn]);
-    CheckUTF8(CompareMem(@ct, ctp, cLen), 'Encoded #%', [tn]);
+    CheckUtf8(CompareMem(@tag, ptag, tlen), 'Tag #%', [tn]);
+    CheckUtf8(CompareMem(@ct, ctp, cLen), 'Encoded #%', [tn]);
   end;
 
 var

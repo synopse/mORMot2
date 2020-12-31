@@ -13,7 +13,7 @@ unit mormot.core.data;
     - INI Files and In-memory Access
     - Efficient RTTI Values Binary Serialization and Comparison
     - TDynArray, TDynArrayHashed and TSynQueue Wrappers
-    - RawUTF8 String Values Interning and TRawUTF8List
+    - RawUtf8 String Values Interning and TRawUtf8List
 
   *****************************************************************************
 }
@@ -599,7 +599,7 @@ type
   // with proper binary persistence implementation
   TSynPersistentStore = class(TSynLocked)
   protected
-    fName: RawUTF8;
+    fName: RawUtf8;
     fReader: TFastReader;
     fReaderTemp: PRawByteString;
     fLoadFromLastUncompressed, fSaveToLastUncompressed: integer;
@@ -609,7 +609,7 @@ type
     procedure SaveToWriter(aWriter: TBufferWriter); virtual;
   public
     /// initialize a void storage with the supplied name
-    constructor Create(const aName: RawUTF8); reintroduce; overload; virtual;
+    constructor Create(const aName: RawUtf8); reintroduce; overload; virtual;
     /// initialize a storage from a SaveTo persisted buffer
     // - raise a EFastReader exception on decoding error
     constructor CreateFrom(const aBuffer: RawByteString;
@@ -659,7 +659,7 @@ type
       BufLen: integer = 65536; ForcedAlgo: TAlgoCompress = nil): PtrUInt;
     /// one optional text associated with this storage
     // - you can define this field as published to serialize its value in log/JSON
-    property Name: RawUTF8
+    property Name: RawUtf8
       read fName;
     /// after a LoadFrom(), contains the uncompressed data size read
     property LoadFromLastUncompressed: integer
@@ -695,13 +695,13 @@ type
     // some values in place (since VValue/VName and VCount won't match) - as such,
     // if you set this option, ensure that you use the content as read-only
     // - any registered custom types may have an extended JSON syntax (e.g.
-    // TBSONVariant does for MongoDB types), and will be searched during JSON
+    // TBsonVariant does for MongoDB types), and will be searched during JSON
     // parsing, unless dvoJSONParseDoNotTryCustomVariants is set (slightly faster)
     // - by default, it will only handle direct JSON [array] of {object}: but if
-    // you define dvoJSONObjectParseWithinString, it will also try to un-escape
+    // you define dvoJsonObjectParseWithinString, it will also try to un-escape
     // a JSON string first, i.e. handle "[array]" or "{object}" content (may be
     // used e.g. when JSON has been retrieved from a database TEXT column) - is
-    // used for instance by VariantLoadJSON()
+    // used for instance by VariantLoadJson()
     // - JSON serialization will follow the standard layout, unless
     // dvoSerializeAsExtendedJson is set so that the property names would not
     // be escaped with double quotes, writing '{name:"John",age:123}' instead of
@@ -712,8 +712,8 @@ type
     // - by default, only integer/Int64/currency number values are allowed, unless
     // dvoAllowDoubleValue is set and 32-bit floating-point conversion is tried,
     // with potential loss of precision during the conversion
-    // - dvoInternNames and dvoInternValues will use shared TRawUTF8Interning
-    // instances to maintain a list of RawUTF8 names/values for all TDocVariant,
+    // - dvoInternNames and dvoInternValues will use shared TRawUtf8Interning
+    // instances to maintain a list of RawUtf8 names/values for all TDocVariant,
     // so that redundant text content will be allocated only once on heap
     TDocVariantOption = (
        dvoIsArray,
@@ -723,7 +723,7 @@ type
        dvoReturnNullForUnknownProperty,
        dvoValueCopiedByReference,
        dvoJSONParseDoNotTryCustomVariants,
-       dvoJSONObjectParseWithinString,
+       dvoJsonObjectParseWithinString,
        dvoSerializeAsExtendedJson,
        dvoAllowDoubleValue,
        dvoInternNames,
@@ -741,7 +741,7 @@ type
     /// pointer to a set of options for a TDocVariant storage
     // - defined in this unit to avoid circular reference with mormot.core.variants
     // - you may use e.g. @JSON_OPTIONS[true], @JSON_OPTIONS[false],
-    // @JSON_OPTIONS_FAST_STRICTJSON or @JSON_OPTIONS_FAST_EXTENDED
+    // @JSON_OPTIONS_FAST_STRICTJson or @JSON_OPTIONS_FAST_EXTENDED
     PDocVariantOptions = ^TDocVariantOptions;
 
 
@@ -894,7 +894,7 @@ procedure BinarySave(Data: pointer; var Dest: TSynTempBuffer;
 // - contains a trailing crc32c hash before the actual data - so is not
 // the WrBase64() regular format - unless NoCrc32Trailer is set to true
 function BinarySaveBase64(Data: pointer; Info: PRttiInfo; UriCompatible: boolean;
-  Kinds: TRttiKinds; NoCrc32Trailer: boolean = false): RawUTF8;
+  Kinds: TRttiKinds; NoCrc32Trailer: boolean = false): RawUtf8;
 
 /// unserialize any value from BinarySave() memory buffer, using RTTI
 function BinaryLoad(Data: pointer; Source: PAnsiChar; Info: PRttiInfo;
@@ -933,7 +933,7 @@ function RecordEquals(const RecA, RecB; TypeInfo: PRttiInfo;
 // - warning: will encode generic string fields as AnsiString (one byte per char)
 // prior to Delphi 2009, and as UnicodeString (two bytes per char) since Delphi
 // 2009: if you want to use this function between UNICODE and NOT UNICODE
-// versions of Delphi, you should use some explicit types like RawUTF8,
+// versions of Delphi, you should use some explicit types like RawUtf8,
 // WinAnsiString, SynUnicode or even RawUnicode/WideString
 // - is a wrapper around BinarySave(rkRecordTypes)
 function RecordSave(const Rec; TypeInfo: PRttiInfo): RawByteString; overload;
@@ -979,7 +979,7 @@ procedure RecordSave(const Rec; var Dest: TSynTempBuffer; TypeInfo: PRttiInfo); 
 // - will use RecordSave() format, with a left-sided binary CRC
 // - is a wrapper around BinarySaveBase64(rkRecordTypes)
 function RecordSaveBase64(const Rec; TypeInfo: PRttiInfo;
-  UriCompatible: boolean = false): RawUTF8;
+  UriCompatible: boolean = false): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a record content from a memory buffer as saved by RecordSave()
@@ -1028,12 +1028,12 @@ function VariantHash(const value: variant; CaseInsensitive: boolean;
 var
   /// low-level JSON unserialization function
   // - defined in this unit to avoid circular reference with mormot.core.json,
-  // and be called by TDynArray.LoadFromJSON method
+  // and be called by TDynArray.LoadFromJson method
   // - this unit will just set a wrapper raising an ERttiException
   // - link mormot.core.json.pas to have a working implementation
   // - rather call LoadJson() from mormot.core.json than this low-level function
-  GetDataFromJSON: procedure(Data: pointer; var JSON: PUTF8Char;
-    EndOfObject: PUTF8Char; TypeInfo: PRttiInfo;
+  GetDataFromJson: procedure(Data: pointer; var JSON: PUtf8Char;
+    EndOfObject: PUtf8Char; TypeInfo: PRttiInfo;
     CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
 
 type
@@ -1077,8 +1077,8 @@ const
   djTimeLog = ptTimeLog;
   djDateTime = ptDateTime;
   djDateTimeMS = ptDateTimeMS;
-  djRawUTF8 = ptRawUTF8;
-  djRawJSON = ptRawJSON;
+  djRawUtf8 = ptRawUtf8;
+  djRawJson = ptRawJson;
   djWinAnsi = ptWinAnsi;
   djString = ptString;
   djRawByteString = ptRawByteString;
@@ -1099,7 +1099,7 @@ const
 var
   /// helper array to get the comparison function corresponding to a given
   // standard array type
-  // - e.g. as PT_SORT[CaseInSensitive,ptRawUTF8]
+  // - e.g. as PT_SORT[CaseInSensitive,ptRawUtf8]
   // - not to be used as such, but e.g. when inlining TDynArray methods
   PT_SORT: array[boolean, TRttiParserType] of TDynArraySortCompare = (
     (nil, nil, SortDynArrayboolean, SortDynArrayByte, SortDynArrayCardinal,
@@ -1499,28 +1499,28 @@ type
     // stored checksum which is not needed any more
     function LoadFromBinary(const Buffer: RawByteString): boolean;
     /// serialize the dynamic array content as JSON
-    // - is just a wrapper around TTextWriter.AddTypedJSON()
+    // - is just a wrapper around TTextWriter.AddTypedJson()
     // - this method will therefore recognize T*ObjArray types
-    function SaveToJSON(EnumSetsAsText: boolean = false;
-      reformat: TTextWriterJSONFormat = jsonCompact): RawUTF8; overload;
+    function SaveToJson(EnumSetsAsText: boolean = false;
+      reformat: TTextWriterJSONFormat = jsonCompact): RawUtf8; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// serialize the dynamic array content as JSON
-    // - is just a wrapper around TTextWriter.AddTypedJSON()
+    // - is just a wrapper around TTextWriter.AddTypedJson()
     // - this method will therefore recognize T*ObjArray types
-    procedure SaveToJSON(out result: RawUTF8; EnumSetsAsText: boolean = false;
+    procedure SaveToJson(out result: RawUtf8; EnumSetsAsText: boolean = false;
       reformat: TTextWriterJSONFormat = jsonCompact); overload;
     /// serialize the dynamic array content as JSON
-    // - is just a wrapper around TTextWriter.AddTypedJSON()
+    // - is just a wrapper around TTextWriter.AddTypedJson()
     // - this method will therefore recognize T*ObjArray types
-    procedure SaveToJSON(W: TBaseWriter); overload;
+    procedure SaveToJson(W: TBaseWriter); overload;
     /// load the dynamic array content from an UTF-8 encoded JSON buffer
-    // - expect the format as saved by TTextWriter.AddDynArrayJSON method, i.e.
+    // - expect the format as saved by TTextWriter.AddDynArrayJson method, i.e.
     // handling TbooleanDynArray, TIntegerDynArray, TInt64DynArray, TCardinalDynArray,
     // TDoubleDynArray, TCurrencyDynArray, TWordDynArray, TByteDynArray,
-    // TRawUTF8DynArray, TWinAnsiDynArray, TRawByteStringDynArray,
+    // TRawUtf8DynArray, TWinAnsiDynArray, TRawByteStringDynArray,
     // TStringDynArray, TWideStringDynArray, TSynUnicodeDynArray,
     // TTimeLogDynArray and TDateTimeDynArray as JSON array - or any customized
-    // valid JSON serialization as set by TTextWriter.RegisterCustomJSONSerializer
+    // valid JSON serialization as set by TTextWriter.RegisterCustomJsonSerializer
     // - or any other kind of array as Base64 encoded binary stream precessed
     // via JSON_BASE64_MAGIC_C (UTF-8 encoded \uFFF0 special code)
     // - typical handled content could be
@@ -1531,9 +1531,9 @@ type
     // any existing instance before unserializing, to avoid memory leak
     // - warning: the content of P^ will be modified during parsing: please
     // make a local copy if it will be needed later (using e.g. TSynTempBufer)
-    function LoadFromJSON(P: PUTF8Char; EndOfObject: PUTF8Char = nil;
+    function LoadFromJson(P: PUtf8Char; EndOfObject: PUtf8Char = nil;
       CustomVariantOptions: PDocVariantOptions = nil;
-      Tolerant: boolean = false): PUTF8Char;
+      Tolerant: boolean = false): PUtf8Char;
     ///  select a sub-section (slice) of a dynamic array content
     procedure Slice(var Dest; aCount: cardinal; aFirstIndex: cardinal = 0);
     /// add items from a given dynamic array variable
@@ -1732,7 +1732,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     procedure HashAdd(aHashCode: cardinal; var result: integer);
     procedure HashDelete(aArrayIndex, aHashTableIndex: integer; aHashCode: cardinal);
-    procedure RaiseFatalCollision(const caller: RawUTF8; aHashCode: cardinal);
+    procedure RaiseFatalCollision(const caller: RawUtf8; aHashCode: cardinal);
   public
     /// associated item comparison - may differ from DynArray^.Compare
     Compare: TDynArraySortCompare;
@@ -1827,13 +1827,13 @@ type
     function SaveTo: RawByteString; overload; inline;
     procedure SaveTo(W: TBufferWriter); overload; inline;
     procedure Sort(aCompare: TDynArraySortCompare = nil); inline;
-    function SaveToJSON(EnumSetsAsText: boolean = false;
-      reformat: TTextWriterJSONFormat = jsonCompact): RawUTF8; overload; inline;
-    procedure SaveToJSON(out result: RawUTF8; EnumSetsAsText: boolean = false;
+    function SaveToJson(EnumSetsAsText: boolean = false;
+      reformat: TTextWriterJSONFormat = jsonCompact): RawUtf8; overload; inline;
+    procedure SaveToJson(out result: RawUtf8; EnumSetsAsText: boolean = false;
       reformat: TTextWriterJSONFormat = jsonCompact); overload; inline;
-    procedure SaveToJSON(W: TBaseWriter); overload; inline;
-    function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char = nil;
-      CustomVariantOptions: PDocVariantOptions = nil): PUTF8Char; inline;
+    procedure SaveToJson(W: TBaseWriter); overload; inline;
+    function LoadFromJson(P: PUtf8Char; aEndOfObject: PUtf8Char = nil;
+      CustomVariantOptions: PDocVariantOptions = nil): PUtf8Char; inline;
     function LoadFrom(Source: PAnsiChar; SourceMax: PAnsiChar = nil): PAnsiChar; inline;
     function LoadFromBinary(const Buffer: RawByteString): boolean; inline;
     procedure CreateOrderedIndex(var aIndex: TIntegerDynArray;
@@ -1871,7 +1871,7 @@ type
     // - djNone and djCustom are too vague, and will raise an exception
     // - no RTTI check is made over the corresponding array layout: you shall
     // ensure that aKind matches the dynamic array element definition
-    // - aCaseInsensitive will be used for djRawUTF8..djHash512 text comparison
+    // - aCaseInsensitive will be used for djRawUtf8..djHash512 text comparison
     procedure InitSpecific(aTypeInfo: PRttiInfo; var aValue; aKind: TRttiParserType;
       aCountPointer: PInteger = nil; aCaseInsensitive: boolean = false;
       aHasher: THasher = nil);
@@ -1928,27 +1928,27 @@ type
     function FindHashedForAdding(const Item; out wasAdded: boolean;
       aHashCode: cardinal; noAddEntry: boolean = false): integer; overload;
     /// ensure a given element name is unique, then add it to the array
-    // - expected element layout is to have a RawUTF8 field at first position
+    // - expected element layout is to have a RawUtf8 field at first position
     // - the aName is searched (using hashing) to be unique, and if not the case,
-    // an ESynException.CreateUTF8() is raised with the supplied arguments
+    // an ESynException.CreateUtf8() is raised with the supplied arguments
     // - use internaly FindHashedForAdding method
     // - this version will set the field content with the unique value
     // - returns a pointer to the newly added element (to set other fields)
-    function AddUniqueName(const aName: RawUTF8; const ExceptionMsg: RawUTF8;
+    function AddUniqueName(const aName: RawUtf8; const ExceptionMsg: RawUtf8;
       const ExceptionArgs: array of const;
       aNewIndex: PInteger = nil): pointer; overload;
     /// ensure a given element name is unique, then add it to the array
     // - just a wrapper to AddUniqueName(aName,'',[],aNewIndex)
-    function AddUniqueName(const aName: RawUTF8;
+    function AddUniqueName(const aName: RawUtf8;
       aNewIndex: PInteger = nil): pointer; overload;
     /// search for a given element name, make it unique, and add it to the array
-    // - expected element layout is to have a RawUTF8 field at first position
+    // - expected element layout is to have a RawUtf8 field at first position
     // - the aName is searched (using hashing) to be unique, and if not the case,
     // some suffix is added to make it unique
     // - use internaly FindHashedForAdding method
     // - this version will set the field content with the unique value
     // - returns a pointer to the newly added element (to set other fields)
-    function AddAndMakeUniqueName(aName: RawUTF8): pointer;
+    function AddAndMakeUniqueName(aName: RawUtf8): pointer;
     /// search for an element value inside the dynamic array using hashing, then
     // update any matching item, or add the item if none matched
     // - by design, hashed field shouldn't have been modified by this update,
@@ -2051,7 +2051,7 @@ procedure DynArraySortIndexed(Values: pointer; ItemSize, Count: integer;
 var
   /// helper array to get the hash function corresponding to a given
   // standard array type
-  // - e.g. as PT_HASH[CaseInSensitive,ptRawUTF8]
+  // - e.g. as PT_HASH[CaseInSensitive,ptRawUtf8]
   // - not to be used as such, but e.g. when inlining TDynArray methods
   PT_HASH: array[{caseinsensitive=}boolean, TRttiParserType] of TDynArrayHashOne;
 
@@ -2092,7 +2092,7 @@ type
     // would store the values within this TSynQueue instance
     // - a name can optionally be assigned to this instance
     constructor Create(aTypeInfo: PRttiInfo;
-      const aName: RawUTF8 = ''); reintroduce; virtual;
+      const aName: RawUtf8 = ''); reintroduce; virtual;
     /// finalize the storage
     // - would release all internal stored values, and call WaitPopFinalize
     destructor Destroy; override;
@@ -2166,63 +2166,63 @@ type
 
 { ************ INI Files and In-memory Access }
 
-/// find a Name= Value in a [Section] of a INI RawUTF8 Content
+/// find a Name= Value in a [Section] of a INI RawUtf8 Content
 // - this function scans the Content memory buffer, and is
 // therefore very fast (no temporary TMemIniFile is created)
 // - if Section equals '', find the Name= value before any [Section]
-function FindIniEntry(const Content, Section, Name: RawUTF8): RawUTF8;
+function FindIniEntry(const Content, Section, Name: RawUtf8): RawUtf8;
 
 /// find a Name= Value in a [Section] of a INI WinAnsi Content
 // - same as FindIniEntry(), but the value is converted from WinAnsi into UTF-8
-function FindWinAnsiIniEntry(const Content, Section, Name: RawUTF8): RawUTF8;
+function FindWinAnsiIniEntry(const Content, Section, Name: RawUtf8): RawUtf8;
 
-/// find a Name= numeric Value in a [Section] of a INI RawUTF8 Content and
+/// find a Name= numeric Value in a [Section] of a INI RawUtf8 Content and
 // return it as an integer, or 0 if not found
 // - this function scans the Content memory buffer, and is
 // therefore very fast (no temporary TMemIniFile is created)
 // - if Section equals '', find the Name= value before any [Section]
-function FindIniEntryInteger(const Content, Section, Name: RawUTF8): integer;
+function FindIniEntryInteger(const Content, Section, Name: RawUtf8): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// find a Name= Value in a [Section] of a .INI file
 // - if Section equals '', find the Name= value before any [Section]
 // - use internaly fast FindIniEntry() function above
-function FindIniEntryFile(const FileName: TFileName; const Section, Name: RawUTF8): RawUTF8;
+function FindIniEntryFile(const FileName: TFileName; const Section, Name: RawUtf8): RawUtf8;
 
-/// update a Name= Value in a [Section] of a INI RawUTF8 Content
+/// update a Name= Value in a [Section] of a INI RawUtf8 Content
 // - this function scans and update the Content memory buffer, and is
 // therefore very fast (no temporary TMemIniFile is created)
 // - if Section equals '', update the Name= value before any [Section]
-procedure UpdateIniEntry(var Content: RawUTF8; const Section,Name,Value: RawUTF8);
+procedure UpdateIniEntry(var Content: RawUtf8; const Section,Name,Value: RawUtf8);
 
 /// update a Name= Value in a [Section] of a .INI file
 // - if Section equals '', update the Name= value before any [Section]
 // - use internaly fast UpdateIniEntry() function above
-procedure UpdateIniEntryFile(const FileName: TFileName; const Section,Name,Value: RawUTF8);
+procedure UpdateIniEntryFile(const FileName: TFileName; const Section,Name,Value: RawUtf8);
 
 /// find the position of the [SEARCH] section in source
 // - return true if [SEARCH] was found, and store pointer to the line after it in source
-function FindSectionFirstLine(var source: PUTF8Char; search: PAnsiChar): boolean;
+function FindSectionFirstLine(var source: PUtf8Char; search: PAnsiChar): boolean;
 
 /// find the position of the [SEARCH] section in source
 // - return true if [SEARCH] was found, and store pointer to the line after it in source
 // - this version expects source^ to point to an Unicode char array
-function FindSectionFirstLineW(var source: PWideChar; search: PUTF8Char): boolean;
+function FindSectionFirstLineW(var source: PWideChar; search: PUtf8Char): boolean;
 
 /// retrieve the whole content of a section as a string
 // - SectionFirstLine may have been obtained by FindSectionFirstLine() function above
-function GetSectionContent(SectionFirstLine: PUTF8Char): RawUTF8; overload;
+function GetSectionContent(SectionFirstLine: PUtf8Char): RawUtf8; overload;
 
 /// retrieve the whole content of a section as a string
 // - use SectionFirstLine() then previous GetSectionContent()
-function GetSectionContent(const Content, SectionName: RawUTF8): RawUTF8; overload;
+function GetSectionContent(const Content, SectionName: RawUtf8): RawUtf8; overload;
 
 /// delete a whole [Section]
 // - if EraseSectionHeader is TRUE (default), then the [Section] line is also
 // deleted together with its content lines
 // - return TRUE if something was changed in Content
 // - return FALSE if [Section] doesn't exist or is already void
-function DeleteSection(var Content: RawUTF8; const SectionName: RawUTF8;
+function DeleteSection(var Content: RawUtf8; const SectionName: RawUtf8;
   EraseSectionHeader: boolean=true): boolean; overload;
 
 /// delete a whole [Section]
@@ -2231,27 +2231,27 @@ function DeleteSection(var Content: RawUTF8; const SectionName: RawUTF8;
 // - return TRUE if something was changed in Content
 // - return FALSE if [Section] doesn't exist or is already void
 // - SectionFirstLine may have been obtained by FindSectionFirstLine() function above
-function DeleteSection(SectionFirstLine: PUTF8Char; var Content: RawUTF8;
+function DeleteSection(SectionFirstLine: PUtf8Char; var Content: RawUtf8;
   EraseSectionHeader: boolean=true): boolean; overload;
 
 /// replace a whole [Section] content by a new content
 // - create a new [Section] if none was existing
-procedure ReplaceSection(var Content: RawUTF8; const SectionName,
-  NewSectionContent: RawUTF8); overload;
+procedure ReplaceSection(var Content: RawUtf8; const SectionName,
+  NewSectionContent: RawUtf8); overload;
 
 /// replace a whole [Section] content by a new content
 // - create a new [Section] if none was existing
 // - SectionFirstLine may have been obtained by FindSectionFirstLine() function above
-procedure ReplaceSection(SectionFirstLine: PUTF8Char;
-  var Content: RawUTF8; const NewSectionContent: RawUTF8); overload;
+procedure ReplaceSection(SectionFirstLine: PUtf8Char;
+  var Content: RawUtf8; const NewSectionContent: RawUtf8); overload;
 
 /// return TRUE if Value of UpperName does exist in P, till end of current section
 // - expect UpperName as 'NAME='
-function ExistsIniName(P: PUTF8Char; UpperName: PAnsiChar): boolean;
+function ExistsIniName(P: PUtf8Char; UpperName: PAnsiChar): boolean;
 
 /// find the Value of UpperName in P, till end of current section
 // - expect UpperName as 'NAME='
-function FindIniNameValue(P: PUTF8Char; UpperName: PAnsiChar): RawUTF8;
+function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar): RawUtf8;
 
 /// return TRUE if one of the Value of UpperName exists in P, till end of
 // current section
@@ -2262,69 +2262,69 @@ function FindIniNameValue(P: PUTF8Char; UpperName: PAnsiChar): RawUTF8;
 // !  ['TEXT/','APPLICATION/JSON','APPLICATION/XML']);
 // - warning: this function calls IdemPCharArray(), so expects UpperValues[]
 /// items to have AT LEAST TWO CHARS (it will use fast initial 2 bytes compare)
-function ExistsIniNameValue(P: PUTF8Char; const UpperName: RawUTF8;
+function ExistsIniNameValue(P: PUtf8Char; const UpperName: RawUtf8;
   const UpperValues: array of PAnsiChar): boolean;
 
 /// find the integer Value of UpperName in P, till end of current section
 // - expect UpperName as 'NAME='
 // - return 0 if no NAME= entry was found
-function FindIniNameValueInteger(P: PUTF8Char; const UpperName: RawUTF8): PtrInt;
+function FindIniNameValueInteger(P: PUtf8Char; const UpperName: RawUtf8): PtrInt;
 
 /// replace a value from a given set of name=value lines
 // - expect UpperName as 'UPPERNAME=', otherwise returns false
 // - if no UPPERNAME= entry was found, then Name+NewValue is added to Content
 // - a typical use may be:
 // ! UpdateIniNameValue(headers,HEADER_CONTENT_TYPE,HEADER_CONTENT_TYPE_UPPER,contenttype);
-function UpdateIniNameValue(var Content: RawUTF8;
-  const Name, UpperName, NewValue: RawUTF8): boolean;
+function UpdateIniNameValue(var Content: RawUtf8;
+  const Name, UpperName, NewValue: RawUtf8): boolean;
 
 /// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...',
 // 'Content-Type: application/json' or 'Content-Type: application/xml'
-function IsHTMLContentTypeTextual(Headers: PUTF8Char): boolean;
+function IsHTMLContentTypeTextual(Headers: PUtf8Char): boolean;
 
 
 
-{ ************ RawUTF8 String Values Interning and TRawUTF8List }
+{ ************ RawUtf8 String Values Interning and TRawUtf8List }
 
 type
-  /// used to store one list of hashed RawUTF8 in TRawUTF8Interning pool
+  /// used to store one list of hashed RawUtf8 in TRawUtf8Interning pool
   // - Delphi "object" is buggy on stack -> also defined as record with methods
   {$ifdef USERECORDWITHMETHODS}
-  TRawUTF8InterningSlot = record
+  TRawUtf8InterningSlot = record
   {$else}
-  TRawUTF8InterningSlot = object
+  TRawUtf8InterningSlot = object
   {$endif USERECORDWITHMETHODS}
   public
-    /// actual RawUTF8 storage
-    Value: TRawUTF8DynArray;
+    /// actual RawUtf8 storage
+    Value: TRawUtf8DynArray;
     /// hashed access to the Value[] list
     Values: TDynArrayHashed;
     /// associated mutex for thread-safe process
     Safe: TSynLocker;
-    /// initialize the RawUTF8 slot (and its Safe mutex)
+    /// initialize the RawUtf8 slot (and its Safe mutex)
     procedure Init;
-    /// finalize the RawUTF8 slot - mainly its associated Safe mutex
+    /// finalize the RawUtf8 slot - mainly its associated Safe mutex
     procedure Done;
-    /// returns the interned RawUTF8 value
-    procedure Unique(var aResult: RawUTF8; const aText: RawUTF8; aTextHash: cardinal);
-    /// ensure the supplied RawUTF8 value is interned
-    procedure UniqueText(var aText: RawUTF8; aTextHash: cardinal);
-    /// delete all stored RawUTF8 values
+    /// returns the interned RawUtf8 value
+    procedure Unique(var aResult: RawUtf8; const aText: RawUtf8; aTextHash: cardinal);
+    /// ensure the supplied RawUtf8 value is interned
+    procedure UniqueText(var aText: RawUtf8; aTextHash: cardinal);
+    /// delete all stored RawUtf8 values
     procedure Clear;
-    /// reclaim any unique RawUTF8 values
+    /// reclaim any unique RawUtf8 values
     // - any string with an usage count <= aMaxRefCount will be removed
     function Clean(aMaxRefCount: TRefCnt): integer;
     /// how many items are currently stored in Value[]
     function Count: integer;
   end;
 
-  /// allow to store only one copy of distinct RawUTF8 values
+  /// allow to store only one copy of distinct RawUtf8 values
   // - thanks to the Copy-On-Write feature of string variables, this may
   // reduce a lot the memory overhead of duplicated text content
   // - this class is thread-safe and optimized for performance
-  TRawUTF8Interning = class(TSynPersistent)
+  TRawUtf8Interning = class(TSynPersistent)
   protected
-    fPool: array of TRawUTF8InterningSlot;
+    fPool: array of TRawUtf8InterningSlot;
     fPoolLast: integer;
   public
     /// initialize the storage and its internal hash pools
@@ -2333,55 +2333,55 @@ type
     constructor Create(aHashTables: integer = 4); reintroduce;
     /// finalize the storage
     destructor Destroy; override;
-    /// return a RawUTF8 variable stored within this class
+    /// return a RawUtf8 variable stored within this class
     // - if aText occurs for the first time, add it to the internal string pool
     // - if aText does exist in the internal string pool, return the shared
     // instance (with its reference counter increased), to reduce memory usage
-    function Unique(const aText: RawUTF8): RawUTF8; overload;
-    /// return a RawUTF8 variable stored within this class from a text buffer
+    function Unique(const aText: RawUtf8): RawUtf8; overload;
+    /// return a RawUtf8 variable stored within this class from a text buffer
     // - if aText occurs for the first time, add it to the internal string pool
     // - if aText does exist in the internal string pool, return the shared
     // instance (with its reference counter increased), to reduce memory usage
-    function Unique(aText: PUTF8Char; aTextLen: PtrInt): RawUTF8; overload;
-    /// return a RawUTF8 variable stored within this class
+    function Unique(aText: PUtf8Char; aTextLen: PtrInt): RawUtf8; overload;
+    /// return a RawUtf8 variable stored within this class
     // - if aText occurs for the first time, add it to the internal string pool
     // - if aText does exist in the internal string pool, return the shared
     // instance (with its reference counter increased), to reduce memory usage
-    procedure Unique(var aResult: RawUTF8; const aText: RawUTF8); overload;
-    /// return a RawUTF8 variable stored within this class from a text buffer
+    procedure Unique(var aResult: RawUtf8; const aText: RawUtf8); overload;
+    /// return a RawUtf8 variable stored within this class from a text buffer
     // - if aText occurs for the first time, add it to the internal string pool
     // - if aText does exist in the internal string pool, return the shared
     // instance (with its reference counter increased), to reduce memory usage
-    procedure Unique(var aResult: RawUTF8; aText: PUTF8Char; aTextLen: PtrInt); overload;
+    procedure Unique(var aResult: RawUtf8; aText: PUtf8Char; aTextLen: PtrInt); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// ensure a RawUTF8 variable is stored within this class
+    /// ensure a RawUtf8 variable is stored within this class
     // - if aText occurs for the first time, add it to the internal string pool
     // - if aText does exist in the internal string pool, set the shared
     // instance (with its reference counter increased), to reduce memory usage
-    procedure UniqueText(var aText: RawUTF8);
-    /// return a variant containing a RawUTF8 stored within this class
-    // - similar to RawUTF8ToVariant(), but with string interning
+    procedure UniqueText(var aText: RawUtf8);
+    /// return a variant containing a RawUtf8 stored within this class
+    // - similar to RawUtf8ToVariant(), but with string interning
     // - see also UniqueVariant() from mormot.core.variants if you want to
     // intern only non-numerical values
-    procedure UniqueVariant(var aResult: variant; const aText: RawUTF8); overload;
+    procedure UniqueVariant(var aResult: variant; const aText: RawUtf8); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// return a variant containing a RawUTF8 stored within this class
-    // - similar to RawUTF8ToVariant(StringToUTF8()), but with string interning
+    /// return a variant containing a RawUtf8 stored within this class
+    // - similar to RawUtf8ToVariant(StringToUtf8()), but with string interning
     // - this method expects the text to be supplied as a VCL string, which will
-    // be converted into a variant containing a RawUTF8 varString instance
+    // be converted into a variant containing a RawUtf8 varString instance
     procedure UniqueVariantString(var aResult: variant; const aText: string);
-    /// ensure a variant contains only RawUTF8 stored within this class
-    // - supplied variant should be a varString containing a RawUTF8 value
+    /// ensure a variant contains only RawUtf8 stored within this class
+    // - supplied variant should be a varString containing a RawUtf8 value
     procedure UniqueVariant(var aResult: variant); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// delete any previous storage pool
     procedure Clear;
-    /// reclaim any unique RawUTF8 values
+    /// reclaim any unique RawUtf8 values
     // - i.e. run a garbage collection process of all values with RefCount=1
     // by default, i.e. all string which are not used any more; you may set
     // aMaxRefCount to a higher value, depending on your expecations, i.e. 2 to
     // delete all string which are referenced only once outside of the pool
-    // - returns the number of unique RawUTF8 cleaned from the internal pool
+    // - returns the number of unique RawUtf8 cleaned from the internal pool
     // - to be executed on a regular basis - but not too often, since the
     // process can be time consumming, and void the benefit of interning
     function Clean(aMaxRefCount: TRefCnt = 1): integer;
@@ -2389,8 +2389,8 @@ type
     function Count: integer;
   end;
 
-  /// possible values used by TRawUTF8List.Flags
-  TRawUTF8ListFlags = set of (
+  /// possible values used by TRawUtf8List.Flags
+  TRawUtf8ListFlags = set of (
     fObjectsOwned,
     fCaseSensitive,
     fNoDuplicate,
@@ -2401,13 +2401,13 @@ type
   // - high-level methods of this class are thread-safe
   // - if fNoDuplicate flag is defined, an internal hash table will be
   // maintained to perform IndexOf() lookups in O(1) linear way
-  TRawUTF8List = class(TSynLocked)
+  TRawUtf8List = class(TSynLocked)
   protected
     fCount: PtrInt;
-    fValue: TRawUTF8DynArray;
+    fValue: TRawUtf8DynArray;
     fValues: TDynArrayHashed;
     fObjects: TObjectDynArray;
-    fFlags: TRawUTF8ListFlags;
+    fFlags: TRawUtf8ListFlags;
     fNameValueSep: AnsiChar;
     fOnChange, fOnChangeBackupForBeginUpdate: TNotifyEvent;
     fOnChangeLevel: integer;
@@ -2415,18 +2415,18 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetCapacity(const capa: PtrInt);
     function GetCapacity: PtrInt;
-    function Get(Index: PtrInt): RawUTF8;
+    function Get(Index: PtrInt): RawUtf8;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure Put(Index: PtrInt; const Value: RawUTF8);
+    procedure Put(Index: PtrInt; const Value: RawUtf8);
     function GetObject(Index: PtrInt): pointer;
       {$ifdef HASINLINE}inline;{$endif}
     procedure PutObject(Index: PtrInt; Value: pointer);
-    function GetName(Index: PtrInt): RawUTF8;
-    function GetValue(const Name: RawUTF8): RawUTF8;
-    procedure SetValue(const Name, Value: RawUTF8);
-    function GetTextCRLF: RawUTF8;
-    procedure SetTextCRLF(const Value: RawUTF8);
-    procedure SetTextPtr(P,PEnd: PUTF8Char; const Delimiter: RawUTF8);
+    function GetName(Index: PtrInt): RawUtf8;
+    function GetValue(const Name: RawUtf8): RawUtf8;
+    procedure SetValue(const Name, Value: RawUtf8);
+    function GetTextCRLF: RawUtf8;
+    procedure SetTextCRLF(const Value: RawUtf8);
+    procedure SetTextPtr(P,PEnd: PUtf8Char; const Delimiter: RawUtf8);
     function GetTextPtr: PPUtf8CharArray;
       {$ifdef HASINLINE}inline;{$endif}
     function GetNoDuplicate: boolean;
@@ -2440,18 +2440,18 @@ type
     procedure InternalDelete(Index: PtrInt);
     procedure OnChangeHidden(Sender: TObject);
   public
-    /// initialize the RawUTF8/Objects storage with [fCaseSensitive] flags
+    /// initialize the RawUtf8/Objects storage with [fCaseSensitive] flags
     constructor Create; overload; override;
-    /// initialize the RawUTF8/Objects storage
+    /// initialize the RawUtf8/Objects storage
     // - by default, any associated Objects[] are just weak references;
     // you may supply fOwnObjects flag to force object instance management
     // - if you want the stored text items to be unique, set fNoDuplicate
     // and then an internal hash table will be maintained for fast IndexOf()
     // - you can unset fCaseSensitive to let the UTF-8 lookup be case-insensitive
-    constructor Create(aFlags: TRawUTF8ListFlags); reintroduce; overload;
+    constructor Create(aFlags: TRawUtf8ListFlags); reintroduce; overload;
     {$ifndef PUREMORMOT2}
     /// backward compatiliby overloaded constructor
-    // - please rather use the overloaded Create(TRawUTF8ListFlags)
+    // - please rather use the overloaded Create(TRawUtf8ListFlags)
     constructor Create(aOwnObjects: boolean; aNoDuplicate: boolean = false;
       aCaseSensitive: boolean = true); reintroduce; overload;
     {$endif PUREMORMOT2}
@@ -2461,16 +2461,16 @@ type
     /// get a stored Object item by its associated UTF-8 text
     // - returns nil and raise no exception if aText doesn't exist
     // - thread-safe method, unless returned TObject is deleted in the background
-    function GetObjectFrom(const aText: RawUTF8): pointer;
-    /// store a new RawUTF8 item
+    function GetObjectFrom(const aText: RawUtf8): pointer;
+    /// store a new RawUtf8 item
     // - without the fNoDuplicate flag, it will always add the supplied value
     // - if fNoDuplicate was set and aText already exists (using the internal
     // hash table), it will return -1 unless aRaiseExceptionIfExisting is forced
     // - thread-safe method
-    function Add(const aText: RawUTF8;
+    function Add(const aText: RawUtf8;
       aRaiseExceptionIfExisting: boolean = false): PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
-    /// store a new RawUTF8 item, and its associated TObject
+    /// store a new RawUtf8 item, and its associated TObject
     // - without the fNoDuplicate flag, it will always add the supplied value
     // - if fNoDuplicate was set and aText already exists (using the internal hash
     // table), it will return -1 unless aRaiseExceptionIfExisting is forced;
@@ -2478,10 +2478,10 @@ type
     // is true, in which pointer the existing Objects[] is copied (see
     // AddObjectUnique as a convenient wrapper around this behavior)
     // - thread-safe method
-    function AddObject(const aText: RawUTF8; aObject: TObject;
+    function AddObject(const aText: RawUtf8; aObject: TObject;
       aRaiseExceptionIfExisting: boolean = false;
       aFreeAndReturnExistingObject: PPointer = nil): PtrInt;
-    /// try to store a new RawUTF8 item and its associated TObject
+    /// try to store a new RawUtf8 item and its associated TObject
     // - fNoDuplicate should have been specified in the list flags
     // - if aText doesn't exist, will add the values
     // - if aText exist, will call aObjectToAddOrFree.Free and set the value
@@ -2491,76 +2491,76 @@ type
     // - thread-safe method, using an internal Hash Table to speedup IndexOf()
     // - in fact, this method is just a wrapper around
     // ! AddObject(aText,aObjectToAddOrFree^,false,@aObjectToAddOrFree);
-    procedure AddObjectUnique(const aText: RawUTF8; aObjectToAddOrFree: PPointer);
+    procedure AddObjectUnique(const aText: RawUtf8; aObjectToAddOrFree: PPointer);
       {$ifdef HASINLINE}inline;{$endif}
     /// append a specified list to the current content
     // - thread-safe method
-    procedure AddRawUTF8List(List: TRawUTF8List);
-    /// delete a stored RawUTF8 item, and its associated TObject
+    procedure AddRawUtf8List(List: TRawUtf8List);
+    /// delete a stored RawUtf8 item, and its associated TObject
     // - raise no exception in case of out of range supplied index
     // - this method is not thread-safe: use Safe.Lock/UnLock if needed
     procedure Delete(Index: PtrInt); overload;
-    /// delete a stored RawUTF8 item, and its associated TObject
+    /// delete a stored RawUtf8 item, and its associated TObject
     // - will search for the value using IndexOf(aText), and returns its index
     // - returns -1 if no entry was found and deleted
     // - thread-safe method, using the internal Hash Table if fNoDuplicate is set
-    function Delete(const aText: RawUTF8): PtrInt; overload;
-    /// delete a stored RawUTF8 item, and its associated TObject, from
+    function Delete(const aText: RawUtf8): PtrInt; overload;
+    /// delete a stored RawUtf8 item, and its associated TObject, from
     // a given Name when stored as 'Name=Value' pairs
     // - raise no exception in case of out of range supplied index
     // - thread-safe method, but not using the internal Hash Table
     // - consider using TSynNameValue if you expect efficient name/value process
-    function DeleteFromName(const Name: RawUTF8): PtrInt; virtual;
+    function DeleteFromName(const Name: RawUtf8): PtrInt; virtual;
     /// find the index of a given Name when stored as 'Name=Value' pairs
     // - search on Name is case-insensitive with 'Name=Value' pairs
     // - this method is not thread-safe, and won't use the internal Hash Table
     // - consider using TSynNameValue if you expect efficient name/value process
-    function IndexOfName(const Name: RawUTF8): PtrInt;
+    function IndexOfName(const Name: RawUtf8): PtrInt;
     /// access to the Value of a given 'Name=Value' pair at a given position
     // - this method is not thread-safe
     // - consider using TSynNameValue if you expect efficient name/value process
-    function GetValueAt(Index: PtrInt): RawUTF8;
+    function GetValueAt(Index: PtrInt): RawUtf8;
     /// retrieve Value from an existing Name=Value, then optinally delete the entry
     // - if Name is found, will fill Value with the stored content and return true
     // - if Name is not found, Value is not modified, and false is returned
     // - thread-safe method, but not using the internal Hash Table
     // - consider using TSynNameValue if you expect efficient name/value process
-    function UpdateValue(const Name: RawUTF8; var Value: RawUTF8;
+    function UpdateValue(const Name: RawUtf8; var Value: RawUtf8;
       ThenDelete: boolean): boolean;
-    /// retrieve and delete the first RawUTF8 item in the list
+    /// retrieve and delete the first RawUtf8 item in the list
     // - could be used as a FIFO, calling Add() as a "push" method
     // - thread-safe method
-    function PopFirst(out aText: RawUTF8; aObject: PObject = nil): boolean;
-    /// retrieve and delete the last RawUTF8 item in the list
+    function PopFirst(out aText: RawUtf8; aObject: PObject = nil): boolean;
+    /// retrieve and delete the last RawUtf8 item in the list
     // - could be used as a FILO, calling Add() as a "push" method
     // - thread-safe method
-    function PopLast(out aText: RawUTF8; aObject: PObject = nil): boolean;
-    /// erase all stored RawUTF8 items
+    function PopLast(out aText: RawUtf8; aObject: PObject = nil): boolean;
+    /// erase all stored RawUtf8 items
     // - and corresponding objects (if aOwnObjects was true at constructor)
     // - thread-safe method, also clearing the internal Hash Table
     procedure Clear; virtual;
-    /// find a RawUTF8 item in the stored Strings[] list
+    /// find a RawUtf8 item in the stored Strings[] list
     // - this search is case sensitive if fCaseSensitive flag was set (which
     // is the default)
     // - this method is not thread-safe since the internal list may change
     // and the returned index may not be accurate any more
     // - see also GetObjectFrom()
     // - uses the internal Hash Table if fNoDuplicate was set
-    function IndexOf(const aText: RawUTF8): PtrInt;
+    function IndexOf(const aText: RawUtf8): PtrInt;
     /// find a TObject item index in the stored Objects[] list
     // - this method is not thread-safe since the internal list may change
     // and the returned index may not be accurate any more
     // - aObject lookup won't use the internal Hash Table
     function IndexOfObject(aObject: TObject): PtrInt;
-    /// search for any RawUTF8 item containing some text
+    /// search for any RawUtf8 item containing some text
     // - uses PosEx() on the stored lines
     // - this method is not thread-safe since the internal list may change
     // and the returned index may not be accurate any more
     // - by design, aText lookup can't use the internal Hash Table
-    function Contains(const aText: RawUTF8; aFirstIndex: integer = 0): PtrInt;
+    function Contains(const aText: RawUtf8; aFirstIndex: integer = 0): PtrInt;
     /// retrieve the all lines, separated by the supplied delimiter
     // - this method is thread-safe
-    function GetText(const Delimiter: RawUTF8 = #13#10): RawUTF8;
+    function GetText(const Delimiter: RawUtf8 = #13#10): RawUtf8;
     /// the OnChange event will be raised only when EndUpdate will be called
     // - this method will also call Safe.Lock for thread-safety
     procedure BeginUpdate;
@@ -2568,10 +2568,10 @@ type
     // - this method will also call Safe.UnLock for thread-safety
     procedure EndUpdate;
     /// set low-level text and objects from existing arrays
-    procedure SetFrom(const aText: TRawUTF8DynArray; const aObject: TObjectDynArray);
+    procedure SetFrom(const aText: TRawUtf8DynArray; const aObject: TObjectDynArray);
     /// set all lines, separated by the supplied delimiter
     // - this method is thread-safe
-    procedure SetText(const aText: RawUTF8; const Delimiter: RawUTF8 = #13#10);
+    procedure SetText(const aText: RawUtf8; const Delimiter: RawUtf8 = #13#10);
     /// set all lines from an UTF-8 text file
     // - expect the file is explicitly an UTF-8 file
     // - will ignore any trailing UTF-8 BOM in the file content, but will not
@@ -2580,15 +2580,15 @@ type
     procedure LoadFromFile(const FileName: TFileName);
     /// write all lines into the supplied stream
     // - this method is thread-safe
-    procedure SaveToStream(Dest: TStream; const Delimiter: RawUTF8 = #13#10);
+    procedure SaveToStream(Dest: TStream; const Delimiter: RawUtf8 = #13#10);
     /// write all lines into a new file
     // - this method is thread-safe
-    procedure SaveToFile(const FileName: TFileName; const Delimiter: RawUTF8 = #13#10);
-    /// return the count of stored RawUTF8
+    procedure SaveToFile(const FileName: TFileName; const Delimiter: RawUtf8 = #13#10);
+    /// return the count of stored RawUtf8
     // - reading this property is not thread-safe, since size may change
     property Count: PtrInt
       read GetCount;
-    /// set or retrieve the current memory capacity of the RawUTF8 list
+    /// set or retrieve the current memory capacity of the RawUtf8 list
     // - reading this property is not thread-safe, since size may change
     property Capacity: PtrInt
       read GetCapacity write SetCapacity;
@@ -2603,13 +2603,13 @@ type
     property NoDuplicate: boolean
       read GetNoDuplicate;
     /// access to the low-level flags of this list
-    property Flags: TRawUTF8ListFlags
+    property Flags: TRawUtf8ListFlags
       read fFlags write fFlags;
-    /// get or set a RawUTF8 item
+    /// get or set a RawUtf8 item
     // - returns '' and raise no exception in case of out of range supplied index
-    // - if you want to use it with the VCL, use UTF8ToString() function
+    // - if you want to use it with the VCL, use Utf8ToString() function
     // - reading this property is not thread-safe, since content may change
-    property Strings[Index: PtrInt]: RawUTF8
+    property Strings[Index: PtrInt]: RawUtf8
       read Get write Put; default;
     /// get or set a Object item
     // - returns nil and raise no exception in case of out of range supplied index
@@ -2619,13 +2619,13 @@ type
     /// retrieve the corresponding Name when stored as 'Name=Value' pairs
     // - reading this property is not thread-safe, since content may change
     // - consider TSynNameValue if you expect more efficient name/value process
-    property Names[Index: PtrInt]: RawUTF8
+    property Names[Index: PtrInt]: RawUtf8
       read GetName;
     /// access to the corresponding 'Name=Value' pairs
     // - search on Name is case-insensitive with 'Name=Value' pairs
     // - reading this property is thread-safe, but won't use the hash table
     // - consider TSynNameValue if you expect more efficient name/value process
-    property Values[const Name: RawUTF8]: RawUTF8
+    property Values[const Name: RawUtf8]: RawUtf8
       read GetValue write SetValue;
     /// the char separator between 'Name=Value' pairs
     // - equals '=' by default
@@ -2636,12 +2636,12 @@ type
     // - lines are separated by #13#10 (CRLF) by default; use GetText and
     // SetText methods if you want to use another line delimiter (even a comma)
     // - this property is thread-safe
-    property Text: RawUTF8
+    property Text: RawUtf8
       read GetTextCRLF write SetTextCRLF;
     /// Event triggered when an entry is modified
     property OnChange: TNotifyEvent
       read fOnChange write fOnChange;
-    /// direct access to the memory of the TRawUTF8DynArray items
+    /// direct access to the memory of the TRawUtf8DynArray items
     // - reading this property is not thread-safe, since content may change
     property TextPtr: PPUtf8CharArray
       read GetTextPtr;
@@ -2649,28 +2649,28 @@ type
     // - reading this property is not thread-safe, since content may change
     property ObjectPtr: PPointerArray
       read GetObjectPtr;
-    /// direct access to the TRawUTF8DynArray items dynamic array wrapper
+    /// direct access to the TRawUtf8DynArray items dynamic array wrapper
     // - using this property is not thread-safe, since content may change
     property ValuesArray: TDynArrayHashed
       read fValues;
   end;
 
-  PRawUTF8List = ^TRawUTF8List;
+  PRawUtf8List = ^TRawUtf8List;
 
 {$ifndef PUREMORMOT2}
 
   // some declarations used for backward compatibility only
-  TRawUTF8ListLocked = type TRawUTF8List;
-  TRawUTF8ListHashed = type TRawUTF8List;
-  TRawUTF8ListHashedLocked = type TRawUTF8ListHashed;
+  TRawUtf8ListLocked = type TRawUtf8List;
+  TRawUtf8ListHashed = type TRawUtf8List;
+  TRawUtf8ListHashedLocked = type TRawUtf8ListHashed;
 
-  // deprecated TRawUTF8MethodList should be replaced by a TSynDictionary
+  // deprecated TRawUtf8MethodList should be replaced by a TSynDictionary
 
 {$endif PUREMORMOT2}
 
-/// sort a dynamic array of PUTF8Char items, via an external array of indexes
-// - you can use FastFindIndexedPUTF8Char() for fast O(log(n)) binary search
-procedure QuickSortIndexedPUTF8Char(Values: PPUtf8CharArray; Count: integer;
+/// sort a dynamic array of PUtf8Char items, via an external array of indexes
+// - you can use FastFindIndexedPUtf8Char() for fast O(log(n)) binary search
+procedure QuickSortIndexedPUtf8Char(Values: PPUtf8CharArray; Count: integer;
   var SortedIndexes: TCardinalDynArray; CaseSensitive: boolean = false);
 
 
@@ -3169,7 +3169,7 @@ end;
 
 { TSynPersistentStore }
 
-constructor TSynPersistentStore.Create(const aName: RawUTF8);
+constructor TSynPersistentStore.Create(const aName: RawUtf8);
 begin
   Create;
   fName := aName;
@@ -3197,7 +3197,7 @@ end;
 
 procedure TSynPersistentStore.LoadFromReader;
 begin
-  fReader.VarUTF8(fName);
+  fReader.VarUtf8(fName);
 end;
 
 procedure TSynPersistentStore.SaveToWriter(aWriter: TBufferWriter);
@@ -3292,7 +3292,7 @@ end;
 
 { ************ INI Files and In-memory Access }
 
-function IdemPChar2(table: PNormTable; p: PUTF8Char; up: PAnsiChar): boolean;
+function IdemPChar2(table: PNormTable; p: PUtf8Char; up: PAnsiChar): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 var
   u: AnsiChar;
@@ -3310,7 +3310,7 @@ begin // here p and up are expected to be <> nil
   result := true;
 end;
 
-function FindSectionFirstLine(var source: PUTF8Char; search: PAnsiChar): boolean;
+function FindSectionFirstLine(var source: PUtf8Char; search: PAnsiChar): boolean;
 var
   table: PNormTable;
   charset: PTextCharSet;
@@ -3337,7 +3337,7 @@ begin
   source := nil;
 end;
 
-function FindSectionFirstLineW(var source: PWideChar; search: PUTF8Char): boolean;
+function FindSectionFirstLineW(var source: PWideChar; search: PUtf8Char): boolean;
 begin
   result := false;
   if source = nil then
@@ -3358,9 +3358,9 @@ begin
   source := nil;
 end;
 
-function FindIniNameValue(P: PUTF8Char; UpperName: PAnsiChar): RawUTF8;
+function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar): RawUtf8;
 var
-  u, PBeg: PUTF8Char;
+  u, PBeg: PUtf8Char;
   by4: cardinal;
   {$ifdef CPUX86NOTPIC}
   table: TNormTable absolute NormToUpperAnsi7;
@@ -3436,7 +3436,7 @@ begin // expect UpperName as 'NAME='
   result := '';
 end;
 
-function ExistsIniName(P: PUTF8Char; UpperName: PAnsiChar): boolean;
+function ExistsIniName(P: PUtf8Char; UpperName: PAnsiChar): boolean;
 var
   table: PNormTable;
 begin
@@ -3498,10 +3498,10 @@ begin
   end;
 end;
 
-function ExistsIniNameValue(P: PUTF8Char; const UpperName: RawUTF8;
+function ExistsIniNameValue(P: PUtf8Char; const UpperName: RawUtf8;
   const UpperValues: array of PAnsiChar): boolean;
 var
-  PBeg: PUTF8Char;
+  PBeg: PUtf8Char;
   table: PNormTable;
 begin
   result := true;
@@ -3530,9 +3530,9 @@ begin
   result := false;
 end;
 
-function GetSectionContent(SectionFirstLine: PUTF8Char): RawUTF8;
+function GetSectionContent(SectionFirstLine: PUtf8Char): RawUtf8;
 var
-  PBeg: PUTF8Char;
+  PBeg: PUtf8Char;
 begin
   PBeg := SectionFirstLine;
   while (SectionFirstLine <> nil) and
@@ -3544,9 +3544,9 @@ begin
     FastSetString(result, PBeg, SectionFirstLine - PBeg);
 end;
 
-function GetSectionContent(const Content, SectionName: RawUTF8): RawUTF8;
+function GetSectionContent(const Content, SectionName: RawUtf8): RawUtf8;
 var
-  P: PUTF8Char;
+  P: PUtf8Char;
   UpperSection: array[byte] of AnsiChar;
 begin
   P := pointer(Content);
@@ -3557,10 +3557,10 @@ begin
     result := '';
 end;
 
-function DeleteSection(var Content: RawUTF8; const SectionName: RawUTF8;
+function DeleteSection(var Content: RawUtf8; const SectionName: RawUtf8;
   EraseSectionHeader: boolean): boolean;
 var
-  P: PUTF8Char;
+  P: PUtf8Char;
   UpperSection: array[byte] of AnsiChar;
 begin
   result := false; // no modification
@@ -3570,10 +3570,10 @@ begin
     result := DeleteSection(P, Content, EraseSectionHeader);
 end;
 
-function DeleteSection(SectionFirstLine: PUTF8Char; var Content: RawUTF8;
+function DeleteSection(SectionFirstLine: PUtf8Char; var Content: RawUtf8;
   EraseSectionHeader: boolean): boolean;
 var
-  PEnd: PUTF8Char;
+  PEnd: PUtf8Char;
   IndexBegin: PtrInt;
 begin
   result := false;
@@ -3595,10 +3595,10 @@ begin
   result := true; // Content was modified
 end;
 
-procedure ReplaceSection(SectionFirstLine: PUTF8Char; var Content: RawUTF8;
-  const NewSectionContent: RawUTF8);
+procedure ReplaceSection(SectionFirstLine: PUtf8Char; var Content: RawUtf8;
+  const NewSectionContent: RawUtf8);
 var
-  PEnd: PUTF8Char;
+  PEnd: PUtf8Char;
   IndexBegin: PtrInt;
 begin
   if SectionFirstLine = nil then
@@ -3617,10 +3617,10 @@ begin
   insert(NewSectionContent, Content, IndexBegin + 1);
 end;
 
-procedure ReplaceSection(var Content: RawUTF8; const SectionName, NewSectionContent: RawUTF8);
+procedure ReplaceSection(var Content: RawUtf8; const SectionName, NewSectionContent: RawUtf8);
 var
   UpperSection: array[byte] of AnsiChar;
-  P: PUTF8Char;
+  P: PUtf8Char;
 begin
   P := pointer(Content);
   PWord(UpperCopy255(UpperSection{%H-}, SectionName))^ := ord(']');
@@ -3630,7 +3630,7 @@ begin
     Content := Content + '[' + SectionName + ']'#13#10 + NewSectionContent;
 end;
 
-function FindIniNameValueInteger(P: PUTF8Char; const UpperName: RawUTF8): PtrInt;
+function FindIniNameValueInteger(P: PUtf8Char; const UpperName: RawUtf8): PtrInt;
 var
   table: PNormTable;
 begin
@@ -3649,9 +3649,9 @@ begin
   result := GetInteger(P + length(UpperName));
 end;
 
-function FindIniEntry(const Content, Section, Name: RawUTF8): RawUTF8;
+function FindIniEntry(const Content, Section, Name: RawUtf8): RawUtf8;
 var
-  P: PUTF8Char;
+  P: PUtf8Char;
   UpperSection, UpperName: array[byte] of AnsiChar;
 begin
   result := '';
@@ -3672,19 +3672,19 @@ begin
   end;
 end;
 
-function FindWinAnsiIniEntry(const Content, Section, Name: RawUTF8): RawUTF8;
+function FindWinAnsiIniEntry(const Content, Section, Name: RawUtf8): RawUtf8;
 begin
   result := WinAnsiToUtf8(WinAnsiString(FindIniEntry(Content, Section, Name)));
 end;
 
-function FindIniEntryInteger(const Content, Section, Name: RawUTF8): integer;
+function FindIniEntryInteger(const Content, Section, Name: RawUtf8): integer;
 begin
   result := GetInteger(pointer(FindIniEntry(Content, Section, Name)));
 end;
 
-function FindIniEntryFile(const FileName: TFileName; const Section, Name: RawUTF8): RawUTF8;
+function FindIniEntryFile(const FileName: TFileName; const Section, Name: RawUtf8): RawUtf8;
 var
-  Content: RawUTF8;
+  Content: RawUtf8;
 begin
   Content := StringFromFile(FileName);
   if Content = '' then
@@ -3693,10 +3693,10 @@ begin
     result := FindIniEntry(Content, Section, Name);
 end;
 
-function UpdateIniNameValueInternal(var Content: RawUTF8; const NewValue, NewValueCRLF: RawUTF8;
-  var P: PUTF8Char; UpperName: PAnsiChar; UpperNameLength: integer): boolean;
+function UpdateIniNameValueInternal(var Content: RawUtf8; const NewValue, NewValueCRLF: RawUtf8;
+  var P: PUtf8Char; UpperName: PAnsiChar; UpperNameLength: integer): boolean;
 var
-  PBeg: PUTF8Char;
+  PBeg: PUtf8Char;
   i: integer;
 begin
   if UpperName <> nil then
@@ -3727,9 +3727,9 @@ begin
   result := false;
 end;
 
-function UpdateIniNameValue(var Content: RawUTF8; const Name, UpperName, NewValue: RawUTF8): boolean;
+function UpdateIniNameValue(var Content: RawUtf8; const Name, UpperName, NewValue: RawUtf8): boolean;
 var
-  P: PUTF8Char;
+  P: PUtf8Char;
 begin
   if UpperName = '' then
     result := false
@@ -3748,14 +3748,14 @@ begin
   end;
 end;
 
-procedure UpdateIniEntry(var Content: RawUTF8; const Section, Name, Value: RawUTF8);
+procedure UpdateIniEntry(var Content: RawUtf8; const Section, Name, Value: RawUtf8);
 const
   CRLF = #13#10;
 var
-  P: PUTF8Char;
+  P: PUtf8Char;
   SectionFound: boolean;
   i, UpperNameLength: PtrInt;
-  V: RawUTF8;
+  V: RawUtf8;
   UpperSection, UpperName: array[byte] of AnsiChar;
 begin
   UpperNameLength := length(Name);
@@ -3791,16 +3791,16 @@ begin
   end;
 end;
 
-procedure UpdateIniEntryFile(const FileName: TFileName; const Section, Name, Value: RawUTF8);
+procedure UpdateIniEntryFile(const FileName: TFileName; const Section, Name, Value: RawUtf8);
 var
-  Content: RawUTF8;
+  Content: RawUtf8;
 begin
   Content := StringFromFile(FileName);
   UpdateIniEntry(Content, Section, Name, Value);
   FileFromString(Content, FileName);
 end;
 
-function IsHTMLContentTypeTextual(Headers: PUTF8Char): boolean;
+function IsHTMLContentTypeTextual(Headers: PUtf8Char): boolean;
 begin
   result := ExistsIniNameValue(Headers, HEADER_CONTENT_TYPE_UPPER,
     [JSON_CONTENT_TYPE_UPPER, 'TEXT/', 'APPLICATION/XML',
@@ -3808,31 +3808,31 @@ begin
 end;
 
 
-{ ************ RawUTF8 String Values Interning and TRawUTF8List }
+{ ************ RawUtf8 String Values Interning and TRawUtf8List }
 
 
-{ TRawUTF8InterningSlot }
+{ TRawUtf8InterningSlot }
 
-procedure TRawUTF8InterningSlot.Init;
+procedure TRawUtf8InterningSlot.Init;
 begin
   Safe.Init;
   Safe.LockedInt64[0] := 0;
-  Values.InitSpecific(TypeInfo(TRawUTF8DynArray), Value, ptRawUTF8,
+  Values.InitSpecific(TypeInfo(TRawUtf8DynArray), Value, ptRawUtf8,
     @Safe.Padding[0].VInteger, false, InterningHasher);
 end;
 
-procedure TRawUTF8InterningSlot.Done;
+procedure TRawUtf8InterningSlot.Done;
 begin
   Safe.Done;
 end;
 
-function TRawUTF8InterningSlot.Count: integer;
+function TRawUtf8InterningSlot.Count: integer;
 begin
   result := Safe.LockedInt64[0];
 end;
 
-procedure TRawUTF8InterningSlot.Unique(var aResult: RawUTF8;
-  const aText: RawUTF8; aTextHash: cardinal);
+procedure TRawUtf8InterningSlot.Unique(var aResult: RawUtf8;
+  const aText: RawUtf8; aTextHash: cardinal);
 var
   i: PtrInt;
   added: boolean;
@@ -3852,7 +3852,7 @@ begin
   end;
 end;
 
-procedure TRawUTF8InterningSlot.UniqueText(var aText: RawUTF8; aTextHash: cardinal);
+procedure TRawUtf8InterningSlot.UniqueText(var aText: RawUtf8; aTextHash: cardinal);
 var
   i: PtrInt;
   added: boolean;
@@ -3869,7 +3869,7 @@ begin
   end;
 end;
 
-procedure TRawUTF8InterningSlot.Clear;
+procedure TRawUtf8InterningSlot.Clear;
 begin
   Safe.Lock;
   try
@@ -3880,10 +3880,10 @@ begin
   end;
 end;
 
-function TRawUTF8InterningSlot.Clean(aMaxRefCount: TRefCnt): integer;
+function TRawUtf8InterningSlot.Clean(aMaxRefCount: TRefCnt): integer;
 var
   i: integer;
-  s, d: PPtrUInt; // points to RawUTF8 values
+  s, d: PPtrUInt; // points to RawUtf8 values
 begin
   result := 0;
   Safe.Lock;
@@ -3897,9 +3897,9 @@ begin
       if PRefCnt(PAnsiChar(s^) - _STRREFCNT)^ <= aMaxRefCount then
       begin
         {$ifdef FPC}
-        Finalize(PRawUTF8(s)^);
+        Finalize(PRawUtf8(s)^);
         {$else}
-        PRawUTF8(s)^ := '';
+        PRawUtf8(s)^ := '';
         {$endif FPC}
         inc(result);
       end
@@ -3925,9 +3925,9 @@ begin
 end;
 
 
-{ TRawUTF8Interning }
+{ TRawUtf8Interning }
 
-constructor TRawUTF8Interning.Create(aHashTables: integer);
+constructor TRawUtf8Interning.Create(aHashTables: integer);
 var
   p: integer;
   i: PtrInt;
@@ -3941,11 +3941,11 @@ begin
         fPool[i].Init;
       exit;
     end;
-  raise ESynException.CreateUTF8(
+  raise ESynException.CreateUtf8(
     '%.Create(%) not allowed: should be a power of 2 <= 512', [self, aHashTables]);
 end;
 
-destructor TRawUTF8Interning.Destroy;
+destructor TRawUtf8Interning.Destroy;
 var
   i: PtrInt;
 begin
@@ -3954,7 +3954,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TRawUTF8Interning.Clear;
+procedure TRawUtf8Interning.Clear;
 var
   i: PtrInt;
 begin
@@ -3963,7 +3963,7 @@ begin
       fPool[i].Clear;
 end;
 
-function TRawUTF8Interning.Clean(aMaxRefCount: TRefCnt): integer;
+function TRawUtf8Interning.Clean(aMaxRefCount: TRefCnt): integer;
 var
   i: PtrInt;
 begin
@@ -3973,7 +3973,7 @@ begin
       inc(result, fPool[i].Clean(aMaxRefCount));
 end;
 
-function TRawUTF8Interning.Count: integer;
+function TRawUtf8Interning.Count: integer;
 var
   i: PtrInt;
 begin
@@ -3983,7 +3983,7 @@ begin
       inc(result, fPool[i].Count);
 end;
 
-procedure TRawUTF8Interning.Unique(var aResult: RawUTF8; const aText: RawUTF8);
+procedure TRawUtf8Interning.Unique(var aResult: RawUtf8; const aText: RawUtf8);
 var
   hash: cardinal;
 begin
@@ -3998,7 +3998,7 @@ begin
   end;
 end;
 
-procedure TRawUTF8Interning.UniqueText(var aText: RawUTF8);
+procedure TRawUtf8Interning.UniqueText(var aText: RawUtf8);
 var
   hash: cardinal;
 begin
@@ -4010,7 +4010,7 @@ begin
   end;
 end;
 
-function TRawUTF8Interning.Unique(const aText: RawUTF8): RawUTF8;
+function TRawUtf8Interning.Unique(const aText: RawUtf8): RawUtf8;
 var
   hash: cardinal;
 begin
@@ -4025,58 +4025,58 @@ begin
   end;
 end;
 
-function TRawUTF8Interning.Unique(aText: PUTF8Char; aTextLen: PtrInt): RawUTF8;
+function TRawUtf8Interning.Unique(aText: PUtf8Char; aTextLen: PtrInt): RawUtf8;
 begin
   FastSetString(result, aText, aTextLen);
   UniqueText(result);
 end;
 
-procedure TRawUTF8Interning.Unique(var aResult: RawUTF8;
-  aText: PUTF8Char; aTextLen: PtrInt);
+procedure TRawUtf8Interning.Unique(var aResult: RawUtf8;
+  aText: PUtf8Char; aTextLen: PtrInt);
 begin
   FastSetString(aResult, aText, aTextLen);
   UniqueText(aResult);
 end;
 
-procedure TRawUTF8Interning.UniqueVariant(var aResult: variant; const aText: RawUTF8);
+procedure TRawUtf8Interning.UniqueVariant(var aResult: variant; const aText: RawUtf8);
 begin
   ClearVariantForString(aResult);
-  Unique(RawUTF8(TVarData(aResult).VAny), aText);
+  Unique(RawUtf8(TVarData(aResult).VAny), aText);
 end;
 
-procedure TRawUTF8Interning.UniqueVariantString(var aResult: variant;
+procedure TRawUtf8Interning.UniqueVariantString(var aResult: variant;
   const aText: string);
 var
-  tmp: RawUTF8;
+  tmp: RawUtf8;
 begin
-  StringToUTF8(aText, tmp);
+  StringToUtf8(aText, tmp);
   UniqueVariant(aResult, tmp);
 end;
 
-procedure TRawUTF8Interning.UniqueVariant(var aResult: variant);
+procedure TRawUtf8Interning.UniqueVariant(var aResult: variant);
 var
   vd: TVarData absolute aResult;
   vt: cardinal;
 begin
   vt := vd.VType;
   if vt = varString then
-    UniqueText(RawUTF8(vd.VString))
+    UniqueText(RawUtf8(vd.VString))
   else if vt = varVariant or varByRef then
     UniqueVariant(PVariant(vd.VPointer)^)
   else if vt = varString or varByRef then
-    UniqueText(PRawUTF8(vd.VPointer)^);
+    UniqueText(PRawUtf8(vd.VPointer)^);
 end;
 
 
-{ TRawUTF8List }
+{ TRawUtf8List }
 
-constructor TRawUTF8List.Create;
+constructor TRawUtf8List.Create;
 begin
   Create([fCaseSensitive]);
 end;
 
 {$ifndef PUREMORMOT2}
-constructor TRawUTF8List.Create(aOwnObjects, aNoDuplicate, aCaseSensitive: boolean);
+constructor TRawUtf8List.Create(aOwnObjects, aNoDuplicate, aCaseSensitive: boolean);
 begin
   if aOwnObjects then
     include(fFlags, fObjectsOwned);
@@ -4088,22 +4088,22 @@ begin
 end;
 {$endif PUREMORMOT2}
 
-constructor TRawUTF8List.Create(aFlags: TRawUTF8ListFlags);
+constructor TRawUtf8List.Create(aFlags: TRawUtf8ListFlags);
 begin
   inherited Create;
   fNameValueSep := '=';
   fFlags := aFlags;
-  fValues.InitSpecific(TypeInfo(TRawUTF8DynArray), fValue, ptRawUTF8, @fCount,
+  fValues.InitSpecific(TypeInfo(TRawUtf8DynArray), fValue, ptRawUtf8, @fCount,
     not (fCaseSensitive in aFlags));
 end;
 
-destructor TRawUTF8List.Destroy;
+destructor TRawUtf8List.Destroy;
 begin
   SetCapacity(0);
   inherited Destroy;
 end;
 
-procedure TRawUTF8List.SetCaseSensitive(Value: boolean);
+procedure TRawUtf8List.SetCaseSensitive(Value: boolean);
 begin
   if (self = nil) or
      (fCaseSensitive in fFlags = Value) then
@@ -4114,14 +4114,14 @@ begin
       include(fFlags, fCaseSensitive)
     else
       exclude(fFlags, fCaseSensitive);
-    fValues.Hasher.InitSpecific(@fValues, ptRawUTF8, not Value, nil);
+    fValues.Hasher.InitSpecific(@fValues, ptRawUtf8, not Value, nil);
     Changed;
   finally
     fSafe.UnLock;
   end;
 end;
 
-procedure TRawUTF8List.SetCapacity(const capa: PtrInt);
+procedure TRawUtf8List.SetCapacity(const capa: PtrInt);
 begin
   if self <> nil then
   begin
@@ -4172,12 +4172,12 @@ begin
   end;
 end;
 
-function TRawUTF8List.Add(const aText: RawUTF8; aRaiseExceptionIfExisting: boolean): PtrInt;
+function TRawUtf8List.Add(const aText: RawUtf8; aRaiseExceptionIfExisting: boolean): PtrInt;
 begin
   result := AddObject(aText, nil, aRaiseExceptionIfExisting);
 end;
 
-function TRawUTF8List.AddObject(const aText: RawUTF8; aObject: TObject;
+function TRawUtf8List.AddObject(const aText: RawUtf8; aObject: TObject;
   aRaiseExceptionIfExisting: boolean; aFreeAndReturnExistingObject: PPointer): PtrInt;
 var
   added: boolean;
@@ -4203,7 +4203,7 @@ begin
           aFreeAndReturnExistingObject^ := obj;
         end;
         if aRaiseExceptionIfExisting then
-          raise ESynException.CreateUTF8('%.Add duplicate [%]', [self, aText]);
+          raise ESynException.CreateUtf8('%.Add duplicate [%]', [self, aText]);
         result := -1;
         exit;
       end;
@@ -4224,7 +4224,7 @@ begin
   end;
 end;
 
-procedure TRawUTF8List.AddObjectUnique(const aText: RawUTF8;
+procedure TRawUtf8List.AddObjectUnique(const aText: RawUtf8;
   aObjectToAddOrFree: PPointer);
 begin
   if fNoDuplicate in fFlags then
@@ -4232,7 +4232,7 @@ begin
       {freeandreturnexisting=}aObjectToAddOrFree);
 end;
 
-procedure TRawUTF8List.AddRawUTF8List(List: TRawUTF8List);
+procedure TRawUtf8List.AddRawUtf8List(List: TRawUtf8List);
 var
   i: PtrInt;
 begin
@@ -4248,7 +4248,7 @@ begin
   end;
 end;
 
-procedure TRawUTF8List.BeginUpdate;
+procedure TRawUtf8List.BeginUpdate;
 begin
   if InterLockedIncrement(fOnChangeLevel) > 1 then
     exit;
@@ -4258,7 +4258,7 @@ begin
   exclude(fFlags, fOnChangeTrigerred);
 end;
 
-procedure TRawUTF8List.EndUpdate;
+procedure TRawUtf8List.EndUpdate;
 begin
   if (fOnChangeLevel <= 0) or
      (InterLockedDecrement(fOnChangeLevel) > 0) then
@@ -4271,7 +4271,7 @@ begin
   fSafe.UnLock;
 end;
 
-procedure TRawUTF8List.Changed;
+procedure TRawUtf8List.Changed;
 begin
   if Assigned(fOnChange) then
   try
@@ -4280,12 +4280,12 @@ begin
   end;
 end;
 
-procedure TRawUTF8List.Clear;
+procedure TRawUtf8List.Clear;
 begin
   SetCapacity(0); // will also call Changed
 end;
 
-procedure TRawUTF8List.InternalDelete(Index: PtrInt);
+procedure TRawUtf8List.InternalDelete(Index: PtrInt);
 begin // caller ensured Index is correct
   fValues.Delete(Index); // includes dec(fCount)
   if PtrUInt(Index) < PtrUInt(length(fObjects)) then
@@ -4301,7 +4301,7 @@ begin // caller ensured Index is correct
     Changed;
 end;
 
-procedure TRawUTF8List.Delete(Index: PtrInt);
+procedure TRawUtf8List.Delete(Index: PtrInt);
 begin
   if (self <> nil) and
      (PtrUInt(Index) < PtrUInt(fCount)) then
@@ -4311,14 +4311,14 @@ begin
       InternalDelete(Index);
 end;
 
-function TRawUTF8List.Delete(const aText: RawUTF8): PtrInt;
+function TRawUtf8List.Delete(const aText: RawUtf8): PtrInt;
 begin
   fSafe.Lock;
   try
     if fNoDuplicate in fFlags then
       result := fValues.FindHashedAndDelete(aText, nil, {nodelete=}true)
     else
-      result := FindRawUTF8(pointer(fValue), aText, fCount, fCaseSensitive in fFlags);
+      result := FindRawUtf8(pointer(fValue), aText, fCount, fCaseSensitive in fFlags);
     if result >= 0 then
       InternalDelete(result);
   finally
@@ -4326,7 +4326,7 @@ begin
   end;
 end;
 
-function TRawUTF8List.DeleteFromName(const Name: RawUTF8): PtrInt;
+function TRawUtf8List.DeleteFromName(const Name: RawUtf8): PtrInt;
 begin
   fSafe.Lock;
   try
@@ -4337,7 +4337,7 @@ begin
   end;
 end;
 
-function TRawUTF8List.IndexOf(const aText: RawUTF8): PtrInt;
+function TRawUtf8List.IndexOf(const aText: RawUtf8): PtrInt;
 begin
   if self <> nil then
   begin
@@ -4346,7 +4346,7 @@ begin
       if fNoDuplicate in fFlags then
         result := fValues.FindHashed(aText)
       else
-        result := FindRawUTF8(pointer(fValue), aText, fCount, fCaseSensitive in fFlags);
+        result := FindRawUtf8(pointer(fValue), aText, fCount, fCaseSensitive in fFlags);
     finally
       fSafe.UnLock;
     end;
@@ -4355,7 +4355,7 @@ begin
     result := -1;
 end;
 
-function TRawUTF8List.Get(Index: PtrInt): RawUTF8;
+function TRawUtf8List.Get(Index: PtrInt): RawUtf8;
 begin
   if (self = nil) or
      (PtrUInt(Index) >= PtrUInt(fCount)) then
@@ -4364,7 +4364,7 @@ begin
     result := fValue[Index];
 end;
 
-function TRawUTF8List.GetCapacity: PtrInt;
+function TRawUtf8List.GetCapacity: PtrInt;
 begin
   if self = nil then
     result := 0
@@ -4372,7 +4372,7 @@ begin
     result := length(fValue);
 end;
 
-function TRawUTF8List.GetCount: PtrInt;
+function TRawUtf8List.GetCount: PtrInt;
 begin
   if self = nil then
     result := 0
@@ -4380,7 +4380,7 @@ begin
     result := fCount;
 end;
 
-function TRawUTF8List.GetTextPtr: PPUtf8CharArray;
+function TRawUtf8List.GetTextPtr: PPUtf8CharArray;
 begin
   if self = nil then
     result := nil
@@ -4388,7 +4388,7 @@ begin
     result := pointer(fValue);
 end;
 
-function TRawUTF8List.GetObjectPtr: PPointerArray;
+function TRawUtf8List.GetObjectPtr: PPointerArray;
 begin
   if self = nil then
     result := nil
@@ -4396,7 +4396,7 @@ begin
     result := pointer(fObjects);
 end;
 
-function TRawUTF8List.GetName(Index: PtrInt): RawUTF8;
+function TRawUtf8List.GetName(Index: PtrInt): RawUtf8;
 begin
   result := Get(Index);
   if result = '' then
@@ -4408,7 +4408,7 @@ begin
     SetLength(result, Index - 1);
 end;
 
-function TRawUTF8List.GetObject(Index: PtrInt): pointer;
+function TRawUtf8List.GetObject(Index: PtrInt): pointer;
 begin
   if (self <> nil) and
      (fObjects <> nil) and
@@ -4418,7 +4418,7 @@ begin
     result := nil;
 end;
 
-function TRawUTF8List.GetObjectFrom(const aText: RawUTF8): pointer;
+function TRawUtf8List.GetObjectFrom(const aText: RawUtf8): pointer;
 var
   ndx: PtrUInt;
 begin
@@ -4437,10 +4437,10 @@ begin
   end;
 end;
 
-function TRawUTF8List.GetText(const Delimiter: RawUTF8): RawUTF8;
+function TRawUtf8List.GetText(const Delimiter: RawUtf8): RawUtf8;
 var
   DelimLen, i, Len: PtrInt;
-  P: PUTF8Char;
+  P: PUtf8Char;
 begin
   result := '';
   if (self = nil) or
@@ -4476,7 +4476,7 @@ begin
   end;
 end;
 
-procedure TRawUTF8List.SaveToStream(Dest: TStream; const Delimiter: RawUTF8);
+procedure TRawUtf8List.SaveToStream(Dest: TStream; const Delimiter: RawUtf8);
 var
   W: TBaseWriter;
   i: PtrInt;
@@ -4506,7 +4506,7 @@ begin
   end;
 end;
 
-procedure TRawUTF8List.SaveToFile(const FileName: TFileName; const Delimiter: RawUTF8);
+procedure TRawUtf8List.SaveToFile(const FileName: TFileName; const Delimiter: RawUtf8);
 var
   FS: TFileStream;
 begin
@@ -4518,12 +4518,12 @@ begin
   end;
 end;
 
-function TRawUTF8List.GetTextCRLF: RawUTF8;
+function TRawUtf8List.GetTextCRLF: RawUtf8;
 begin
   result := GetText;
 end;
 
-function TRawUTF8List.GetValue(const Name: RawUTF8): RawUTF8;
+function TRawUtf8List.GetValue(const Name: RawUtf8): RawUtf8;
 begin
   fSafe.Lock;
   try
@@ -4533,7 +4533,7 @@ begin
   end;
 end;
 
-function TRawUTF8List.GetValueAt(Index: PtrInt): RawUTF8;
+function TRawUtf8List.GetValueAt(Index: PtrInt): RawUtf8;
 begin
   result := Get(Index);
   if result = '' then
@@ -4545,7 +4545,7 @@ begin
     result := copy(result, Index + 1, maxInt);
 end;
 
-function TRawUTF8List.IndexOfName(const Name: RawUTF8): PtrInt;
+function TRawUtf8List.IndexOfName(const Name: RawUtf8): PtrInt;
 var
   UpperName: array[byte] of AnsiChar;
   table: PNormTable;
@@ -4561,7 +4561,7 @@ begin
   result := -1;
 end;
 
-function TRawUTF8List.IndexOfObject(aObject: TObject): PtrInt;
+function TRawUtf8List.IndexOfObject(aObject: TObject): PtrInt;
 begin
   if (self <> nil) and
      (fObjects <> nil) then
@@ -4577,7 +4577,7 @@ begin
     result := -1;
 end;
 
-function TRawUTF8List.Contains(const aText: RawUTF8; aFirstIndex: integer): PtrInt;
+function TRawUtf8List.Contains(const aText: RawUtf8; aFirstIndex: integer): PtrInt;
 var
   i: PtrInt; // use a temp variable to make oldest Delphi happy :(
 begin
@@ -4598,13 +4598,13 @@ begin
   end;
 end;
 
-procedure TRawUTF8List.OnChangeHidden(Sender: TObject);
+procedure TRawUtf8List.OnChangeHidden(Sender: TObject);
 begin
   if self <> nil then
     include(fFlags, fOnChangeTrigerred);
 end;
 
-procedure TRawUTF8List.Put(Index: PtrInt; const Value: RawUTF8);
+procedure TRawUtf8List.Put(Index: PtrInt; const Value: RawUtf8);
 begin
   if (self <> nil) and
      (PtrUInt(Index) < PtrUInt(fCount)) then
@@ -4615,7 +4615,7 @@ begin
   end;
 end;
 
-procedure TRawUTF8List.PutObject(Index: PtrInt; Value: pointer);
+procedure TRawUtf8List.PutObject(Index: PtrInt; Value: pointer);
 begin
   if (self <> nil) and
      (PtrUInt(Index) < PtrUInt(fCount)) then
@@ -4628,16 +4628,16 @@ begin
   end;
 end;
 
-procedure TRawUTF8List.SetText(const aText: RawUTF8; const Delimiter: RawUTF8);
+procedure TRawUtf8List.SetText(const aText: RawUtf8; const Delimiter: RawUtf8);
 begin
-  SetTextPtr(pointer(aText), PUTF8Char(pointer(aText)) + length(aText), Delimiter);
+  SetTextPtr(pointer(aText), PUtf8Char(pointer(aText)) + length(aText), Delimiter);
 end;
 
-procedure TRawUTF8List.LoadFromFile(const FileName: TFileName);
+procedure TRawUtf8List.LoadFromFile(const FileName: TFileName);
 var
   Map: TMemoryMap;
-  P: PUTF8Char;
-  tmp: RawUTF8;
+  P: PUtf8Char;
+  tmp: RawUtf8;
 begin
   if Map.Map(FileName) then
   try
@@ -4662,12 +4662,12 @@ begin
   end;
 end;
 
-procedure TRawUTF8List.SetTextPtr(P, PEnd: PUTF8Char; const Delimiter: RawUTF8);
+procedure TRawUtf8List.SetTextPtr(P, PEnd: PUtf8Char; const Delimiter: RawUtf8);
 var
   DelimLen: PtrInt;
   DelimFirst: AnsiChar;
-  PBeg, DelimNext: PUTF8Char;
-  Line: RawUTF8;
+  PBeg, DelimNext: PUtf8Char;
+  Line: RawUtf8;
 begin
   DelimLen := length(Delimiter);
   BeginUpdate; // also makes fSafe.Lock
@@ -4678,7 +4678,7 @@ begin
        (P < PEnd) then
     begin
       DelimFirst := Delimiter[1];
-      DelimNext := PUTF8Char(pointer(Delimiter)) + 1;
+      DelimNext := PUtf8Char(pointer(Delimiter)) + 1;
       repeat
         PBeg := P;
         while P < PEnd do
@@ -4700,12 +4700,12 @@ begin
   end;
 end;
 
-procedure TRawUTF8List.SetTextCRLF(const Value: RawUTF8);
+procedure TRawUtf8List.SetTextCRLF(const Value: RawUtf8);
 begin
   SetText(Value, #13#10);
 end;
 
-procedure TRawUTF8List.SetFrom(const aText: TRawUTF8DynArray;
+procedure TRawUtf8List.SetFrom(const aText: TRawUtf8DynArray;
   const aObject: TObjectDynArray);
 var
   n: integer;
@@ -4727,12 +4727,12 @@ begin
   end;
 end;
 
-procedure TRawUTF8List.SetValue(const Name, Value: RawUTF8);
+procedure TRawUtf8List.SetValue(const Name, Value: RawUtf8);
 var
   i: PtrInt;
-  txt: RawUTF8;
+  txt: RawUtf8;
 begin
-  txt := Name + RawUTF8(NameValueSep) + Value;
+  txt := Name + RawUtf8(NameValueSep) + Value;
   fSafe.Lock;
   try
     i := IndexOfName(Name);
@@ -4750,19 +4750,19 @@ begin
   end;
 end;
 
-function TRawUTF8List.GetCaseSensitive: boolean;
+function TRawUtf8List.GetCaseSensitive: boolean;
 begin
   result := (self <> nil) and
             (fCaseSensitive in fFlags);
 end;
 
-function TRawUTF8List.GetNoDuplicate: boolean;
+function TRawUtf8List.GetNoDuplicate: boolean;
 begin
   result := (self <> nil) and
             (fNoDuplicate in fFlags);
 end;
 
-function TRawUTF8List.UpdateValue(const Name: RawUTF8; var Value: RawUTF8;
+function TRawUtf8List.UpdateValue(const Name: RawUtf8; var Value: RawUtf8;
   ThenDelete: boolean): boolean;
 var
   i: PtrInt;
@@ -4783,7 +4783,7 @@ begin
   end;
 end;
 
-function TRawUTF8List.PopFirst(out aText: RawUTF8; aObject: PObject): boolean;
+function TRawUtf8List.PopFirst(out aText: RawUtf8; aObject: PObject): boolean;
 begin
   result := false;
   if fCount = 0 then
@@ -4806,7 +4806,7 @@ begin
   end;
 end;
 
-function TRawUTF8List.PopLast(out aText: RawUTF8; aObject: PObject): boolean;
+function TRawUtf8List.PopLast(out aText: RawUtf8; aObject: PObject): boolean;
 var
   last: PtrInt;
 begin
@@ -4977,7 +4977,7 @@ begin
   result := SizeOf(pointer);
 end;
 
-function _BC_LString(A, B: PPUTF8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BC_LString(A, B: PPUtf8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
   compared := StrComp(A^, B^);
   result := SizeOf(pointer);
@@ -4989,7 +4989,7 @@ begin
   result := SizeOf(pointer);
 end;
 
-function _BCI_LString(A, B: PPUTF8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
+function _BCI_LString(A, B: PPUtf8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
   compared := StrIComp(A^, B^);
   result := SizeOf(pointer);
@@ -5285,7 +5285,7 @@ begin
   result := fields.Size;
 end;
 
-function _RecordCompare(A, B: PUTF8Char; Info: PRttiInfo;
+function _RecordCompare(A, B: PUtf8Char; Info: PRttiInfo;
  CaseInSensitive: boolean): integer;
 var
   fields: TRttiRecordManagedFields; // Size/Count/Fields
@@ -5377,7 +5377,7 @@ begin
   end;
 end;
 
-function _ArrayCompare(A, B: PUTF8Char; Info: PRttiInfo; CaseInSensitive: boolean;
+function _ArrayCompare(A, B: PUtf8Char; Info: PRttiInfo; CaseInSensitive: boolean;
   out ArraySize: PtrInt): integer;
 var
   n, itemsize: PtrInt;
@@ -5416,11 +5416,11 @@ end;
 procedure _BS_VariantComplex(Data: PVariant; Dest: TBufferWriter);
 var
   temp: TTextWriterStackBuffer;
-  tempstr: RawUTF8;
-begin // not very fast, but creates valid JSON - see also VariantSaveJSON()
+  tempstr: RawUtf8;
+begin // not very fast, but creates valid JSON - see also VariantSaveJson()
   with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
   try
-    AddVariant(Data^, twJSONEscape);
+    AddVariant(Data^, twJsonEscape);
     if WrittenBytes = 0 then
       Dest.WriteVar(@temp, PendingBytes) // no tempstr allocation needed
     else
@@ -5439,7 +5439,7 @@ var
 begin
   Source.VarBlob(temp); // load into a private copy for in-place JSON parsing
   try
-    BinaryVariantLoadAsJSON(Data^, temp.buf, Source.CustomVariants);
+    BinaryVariantLoadAsJson(Data^, temp.buf, Source.CustomVariants);
   finally
     temp.Done;
   end;
@@ -5466,7 +5466,7 @@ begin
       else
         Dest.Write(@Data^.VInt64, vt); // simple types are stored as binary
   end
-  else if (vt = varString) and  // expect only RawUTF8
+  else if (vt = varString) and  // expect only RawUtf8
           (Data^.vAny <> nil) then
     Dest.WriteVar(Data^.vAny, PStrLen(PAnsiChar(Data^.VAny) - _STRLEN)^)
   {$ifdef HASVARUSTRING}
@@ -5498,13 +5498,13 @@ begin
   end
   else if vt = varString then
     with Source.VarBlob do
-      FastSetString(RawUTF8(Data^.vAny), Ptr, Len) // expect only RawUTF8
+      FastSetString(RawUtf8(Data^.vAny), Ptr, Len) // expect only RawUtf8
   {$ifdef HASVARUSTRING}
   else if vt = varUString then
     with Source.VarBlob do
       SetString(UnicodeString(Data^.vAny), PWideChar(Ptr), Len shr 1)
   {$endif HASVARUSTRING}
-  else if Assigned(BinaryVariantLoadAsJSON) then
+  else if Assigned(BinaryVariantLoadAsJson) then
     _BL_VariantComplex(pointer(Data), Source)
   else
     Source.ErrorData('RTTI_BINARYLOAD[tkVariant] missing mormot.core.json.pas', []);
@@ -5766,7 +5766,7 @@ begin
 end;
 
 function BinarySaveBase64(Data: pointer; Info: PRttiInfo; UriCompatible: boolean;
-  Kinds: TRttiKinds; NoCrc32Trailer: boolean): RawUTF8;
+  Kinds: TRttiKinds; NoCrc32Trailer: boolean): RawUtf8;
 var
   W: TBufferWriter;
   temp: TTextWriterStackBuffer; // 8KB
@@ -5923,7 +5923,7 @@ begin
   BinarySave(@Rec, Dest, TypeInfo, rkRecordTypes);
 end;
 
-function RecordSaveBase64(const Rec; TypeInfo: PRttiInfo; UriCompatible: boolean): RawUTF8;
+function RecordSaveBase64(const Rec; TypeInfo: PRttiInfo; UriCompatible: boolean): RawUtf8;
 begin
   result := BinarySaveBase64(@Rec, TypeInfo, UriCompatible, rkRecordTYpes);
 end;
@@ -5984,7 +5984,7 @@ procedure TDynArray.Init(aTypeInfo: PRttiInfo; var aValue;
   aCountPointer: PInteger);
 begin
   if aTypeInfo^.Kind <> rkDynArray then
-    raise EDynArray.CreateUTF8('TDynArray.Init: % is %, expected rkDynArray',
+    raise EDynArray.CreateUtf8('TDynArray.Init: % is %, expected rkDynArray',
       [aTypeInfo.RawName, ToText(aTypeInfo.Kind)^]);
   InitRtti(Rtti.RegisterType(aTypeInfo), aValue, aCountPointer);
 end;
@@ -5993,16 +5993,16 @@ procedure TDynArray.InitSpecific(aTypeInfo: PRttiInfo; var aValue;
   aKind: TRttiParserType; aCountPointer: PInteger; aCaseInsensitive: boolean);
 begin
   if aTypeInfo^.Kind <> rkDynArray then
-    raise EDynArray.CreateUTF8('TDynArray.InitSpecific: % is %, expected rkDynArray',
+    raise EDynArray.CreateUtf8('TDynArray.InitSpecific: % is %, expected rkDynArray',
       [aTypeInfo.RawName, ToText(aTypeInfo.Kind)^]);
   InitRtti(Rtti.RegisterType(aTypeInfo), aValue, aCountPointer);
   fCompare := PT_SORT[aCaseInsensitive, aKind];
   if not Assigned(fCompare) then
     if aKind = ptVariant then
-      raise EDynArray.CreateUTF8('TDynArray.InitSpecific(%): missing mormot.core.json',
+      raise EDynArray.CreateUtf8('TDynArray.InitSpecific(%): missing mormot.core.json',
         [Info.Name, ToText(aKind)^])
     else
-      raise EDynArray.CreateUTF8('TDynArray.InitSpecific(%) unsupported %',
+      raise EDynArray.CreateUtf8('TDynArray.InitSpecific(%) unsupported %',
         [Info.Name, ToText(aKind)^]);
 end;
 
@@ -6449,12 +6449,12 @@ begin
     fCountP^ := PDALen(PAnsiChar(fValue^) - _DALEN)^ + _DAOFF;
 end;
 
-function TDynArray.SaveToJSON(EnumSetsAsText: boolean; reformat: TTextWriterJSONFormat): RawUTF8;
+function TDynArray.SaveToJson(EnumSetsAsText: boolean; reformat: TTextWriterJSONFormat): RawUtf8;
 begin
-  SaveToJSON(result, EnumSetsAsText, reformat);
+  SaveToJson(result, EnumSetsAsText, reformat);
 end;
 
-procedure TDynArray.SaveToJSON(out result: RawUTF8; EnumSetsAsText: boolean;
+procedure TDynArray.SaveToJson(out result: RawUtf8; EnumSetsAsText: boolean;
   reformat: TTextWriterJSONFormat);
 var
   W: TBaseWriter;
@@ -6468,7 +6468,7 @@ begin
     try
       if EnumSetsAsText then
         W.CustomOptions := W.CustomOptions + [twoEnumSetsAsTextInRecord];
-      SaveToJSON(W);
+      SaveToJson(W);
       W.SetText(result, reformat);
     finally
       W.Free;
@@ -6476,7 +6476,7 @@ begin
   end;
 end;
 
-procedure TDynArray.SaveToJSON(W: TBaseWriter);
+procedure TDynArray.SaveToJson(W: TBaseWriter);
 var
   len, backup: PtrInt;
   hacklen: PDALen;
@@ -6490,30 +6490,30 @@ begin
     backup := hacklen^;
     try
       hacklen^ := len - _DAOFF; // may use ExternalCount
-      W.AddTypedJSON(fValue, Info.Info); // serialization from mormot.core.json
+      W.AddTypedJson(fValue, Info.Info); // serialization from mormot.core.json
     finally
       hacklen^ := backup;
     end;
   end;
 end;
 
-procedure _GetDataFromJSON(Data: pointer; var JSON: PUTF8Char;
-  EndOfObject: PUTF8Char; TypeInfo: PRttiInfo;
+procedure _GetDataFromJson(Data: pointer; var JSON: PUtf8Char;
+  EndOfObject: PUtf8Char; TypeInfo: PRttiInfo;
   CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
 begin
-  raise ERttiException.Create('GetDataFromJSON() not implemented - ' +
+  raise ERttiException.Create('GetDataFromJson() not implemented - ' +
     'please include mormot.core.json in your uses clause');
 end;
 
-function TDynArray.LoadFromJSON(P: PUTF8Char; EndOfObject: PUTF8Char;
-  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean): PUTF8Char;
+function TDynArray.LoadFromJson(P: PUtf8Char; EndOfObject: PUtf8Char;
+  CustomVariantOptions: PDocVariantOptions; Tolerant: boolean): PUtf8Char;
 begin
   SetCount(0); // faster to use our own routine now
-  GetDataFromJSON(fValue,
+  GetDataFromJson(fValue,
     P, EndOfObject, Info.Info, CustomVariantOptions, Tolerant);
   if (fCountP <> nil) and
      (fValue^ <> nil) then
-    // GetDataFromJSON() set the array length, not the external count
+    // GetDataFromJson() set the array length, not the external count
     fCountP^ := PDALen(PAnsiChar(fValue^) - _DALEN)^ + _DAOFF;
   result := P;
 end;
@@ -6780,17 +6780,17 @@ type
     procedure QuickSortEventReverse(L, R: PtrInt);
   end;
 
-procedure QuickSortIndexedPUTF8Char(Values: PPUtf8CharArray; Count: integer;
+procedure QuickSortIndexedPUtf8Char(Values: PPUtf8CharArray; Count: integer;
   var SortedIndexes: TCardinalDynArray; CaseSensitive: boolean);
 var
   QS: TDynArrayQuickSort;
 begin
   if CaseSensitive then
-    QS.Compare := SortDynArrayPUTF8Char
+    QS.Compare := SortDynArrayPUtf8Char
   else
-    QS.Compare := SortDynArrayPUTF8CharI;
+    QS.Compare := SortDynArrayPUtf8CharI;
   QS.Value := pointer(Values);
-  QS.ElemSize := SizeOf(PUTF8Char);
+  QS.ElemSize := SizeOf(PUtf8Char);
   SetLength(SortedIndexes, Count);
   FillIncreasing(pointer(SortedIndexes), 0, Count);
   QS.Index := pointer(SortedIndexes);
@@ -7247,7 +7247,7 @@ begin
     exit;
   if not ObjArrayByRef and
      (rcfObjArray in fInfo.Flags) then
-    LoadFromJSON(pointer(Source.SaveToJSON))
+    LoadFromJson(pointer(Source.SaveToJson))
   else
   begin
     DynArrayCopy(fValue^, Source.fValue^, fInfo.Info, Source.fCountP);
@@ -7632,7 +7632,7 @@ begin
     result := Hasher(0, Item, PStrLen(Item - _STRLEN)^);
 end;
 
-function HashAnsiStringI(Item: PUTF8Char; Hasher: THasher): cardinal;
+function HashAnsiStringI(Item: PUtf8Char; Hasher: THasher): cardinal;
 var
   tmp: array[byte] of AnsiChar; // avoid slow heap allocation
 begin
@@ -7760,7 +7760,7 @@ begin
         len := 8;
       varString:
         begin
-          len := length(RawUTF8(VAny));
+          len := length(RawUtf8(VAny));
           P := VAny;
         end;
       varOleStr:
@@ -7780,7 +7780,7 @@ begin
         S := TFakeWriterStream.Create;
         W := DefaultTextWriterSerializer.Create(S, @tmp, SizeOf(tmp));
         try
-          W.AddVariant(value, twJSONEscape);
+          W.AddVariant(value, twJsonEscape);
           len := W.WrittenBytes;
           if len > 255 then
             len := 255;
@@ -7864,7 +7864,7 @@ begin
   hsh := _PT_HASH[aCaseInsensitive, aKind];
   if (@hsh = nil) or
      (@cmp = nil) then
-    raise EDynArray.CreateUTF8(
+    raise EDynArray.CreateUtf8(
       'TDynArrayHasher.InitSpecific: %?', [ToText(aKind)^]);
   Init(aDynArray, hsh, nil, aHasher, cmp, nil, aCaseInsensitive)
 end;
@@ -8157,10 +8157,10 @@ begin
     result := Scan(Item);
 end;
 
-procedure TDynArrayHasher.RaiseFatalCollision(const caller: RawUTF8;
+procedure TDynArrayHasher.RaiseFatalCollision(const caller: RawUtf8;
   aHashCode: cardinal);
 begin // a dedicated sub-procedure reduces code size
-  raise EDynArray.CreateUTF8('TDynArrayHasher.% fatal collision: ' +
+  raise EDynArray.CreateUtf8('TDynArrayHasher.% fatal collision: ' +
     'aHashCode=% HashTableSize=% Count=% Capacity=% Array=% Parser=%',
     [caller, CardinalToHexShort(aHashCode), HashTableSize, DynArray^.Count,
      DynArray^.Capacity, DynArray^.Info.Name, ToText(DynArray^.Info.Parser)^]);
@@ -8402,27 +8402,27 @@ begin
   InternalDynArray.CreateOrderedIndex(aIndex, aCompare);
 end;
 
-function TDynArrayHashed.SaveToJSON(EnumSetsAsText: boolean;
-  reformat: TTextWriterJSONFormat): RawUTF8;
+function TDynArrayHashed.SaveToJson(EnumSetsAsText: boolean;
+  reformat: TTextWriterJSONFormat): RawUtf8;
 begin
-  result := InternalDynArray.SaveToJSON(EnumSetsAsText, reformat);
+  result := InternalDynArray.SaveToJson(EnumSetsAsText, reformat);
 end;
 
-procedure TDynArrayHashed.SaveToJSON(out result: RawUTF8; EnumSetsAsText: boolean;
+procedure TDynArrayHashed.SaveToJson(out result: RawUtf8; EnumSetsAsText: boolean;
   reformat: TTextWriterJSONFormat);
 begin
-  InternalDynArray.SaveToJSON(result, EnumSetsAsText, reformat);
+  InternalDynArray.SaveToJson(result, EnumSetsAsText, reformat);
 end;
 
-procedure TDynArrayHashed.SaveToJSON(W: TBaseWriter);
+procedure TDynArrayHashed.SaveToJson(W: TBaseWriter);
 begin
-  InternalDynArray.SaveToJSON(W);
+  InternalDynArray.SaveToJson(W);
 end;
 
-function TDynArrayHashed.LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char;
-  CustomVariantOptions: PDocVariantOptions): PUTF8Char;
+function TDynArrayHashed.LoadFromJson(P: PUtf8Char; aEndOfObject: PUtf8Char;
+  CustomVariantOptions: PDocVariantOptions): PUtf8Char;
 begin
-  result := InternalDynArray.LoadFromJSON(P, aEndOfObject, CustomVariantOptions);
+  result := InternalDynArray.LoadFromJson(P, aEndOfObject, CustomVariantOptions);
 end;
 
 {$endif UNDIRECTDYNARRAY}
@@ -8481,11 +8481,11 @@ begin
     SetCount(result + 1); // reserve space for a void element in array
 end;
 
-function TDynArrayHashed.AddAndMakeUniqueName(aName: RawUTF8): pointer;
+function TDynArrayHashed.AddAndMakeUniqueName(aName: RawUtf8): pointer;
 var
   ndx, j: integer;
   added: boolean;
-  aName_: RawUTF8;
+  aName_: RawUtf8;
 begin
   if aName = '' then
     aName := '_';
@@ -8495,22 +8495,22 @@ begin
     aName_ := aName + '_';
     j := 1;
         repeat
-      aName := aName_ + UInt32ToUTF8(j);
+      aName := aName_ + UInt32ToUtf8(j);
       ndx := FindHashedForAdding(aName, added);
       inc(j);
     until added;
   end;
   result := PAnsiChar(Value^) + ndx * Info.Cache.ItemSize;
-  PRawUTF8(result)^ := aName; // store unique name at 1st elem position
+  PRawUtf8(result)^ := aName; // store unique name at 1st elem position
 end;
 
-function TDynArrayHashed.AddUniqueName(const aName: RawUTF8;
+function TDynArrayHashed.AddUniqueName(const aName: RawUtf8;
   aNewIndex: PInteger): pointer;
 begin
   result := AddUniqueName(aName, '', [], aNewIndex);
 end;
 
-function TDynArrayHashed.AddUniqueName(const aName: RawUTF8; const ExceptionMsg: RawUTF8;
+function TDynArrayHashed.AddUniqueName(const aName: RawUtf8; const ExceptionMsg: RawUtf8;
   const ExceptionArgs: array of const; aNewIndex: PInteger): pointer;
 var
   ndx: integer;
@@ -8522,12 +8522,12 @@ begin
     if aNewIndex <> nil then
       aNewIndex^ := ndx;
     result := PAnsiChar(Value^) + ndx * Info.Cache.ItemSize;
-    PRawUTF8(result)^ := aName; // store unique name at 1st elem position
+    PRawUtf8(result)^ := aName; // store unique name at 1st elem position
   end
   else if ExceptionMsg = '' then
-    raise EDynArray.CreateUTF8('TDynArrayHashed: Duplicated [%] name', [aName])
+    raise EDynArray.CreateUtf8('TDynArrayHashed: Duplicated [%] name', [aName])
   else
-    raise EDynArray.CreateUTF8(ExceptionMsg, ExceptionArgs);
+    raise EDynArray.CreateUtf8(ExceptionMsg, ExceptionArgs);
 end;
 
 function TDynArrayHashed.FindHashedAndFill(var ItemToFill): integer;
@@ -8615,7 +8615,7 @@ end;
 
 { TSynQueue }
 
-constructor TSynQueue.Create(aTypeInfo: PRttiInfo; const aName: RawUTF8);
+constructor TSynQueue.Create(aTypeInfo: PRttiInfo; const aName: RawUtf8);
 begin
   inherited Create(aName);
   fFirst := -1;
@@ -9071,7 +9071,7 @@ begin
         // unsupported types will contain nil
     end;
   // setup internal function wrappers
-  GetDataFromJSON := _GetDataFromJSON;
+  GetDataFromJson := _GetDataFromJson;
 end;
 
 

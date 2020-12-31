@@ -712,10 +712,10 @@ type
 
   TIDListRowset = class(TBaseAggregatingRowset)
   private
-    farr: TRawUTF8DynArray;
+    farr: TRawUtf8DynArray;
     fType: TSqlDBFieldType;
   public
-    constructor Create(arr: TRawUTF8DynArray; aType: TSqlDBFieldType);
+    constructor Create(arr: TRawUtf8DynArray; aType: TSqlDBFieldType);
 
     function Initialize(pIOpenRowset: IOpenRowset): HRESULT;
     function GetData(HROW: HROW; HACCESSOR: HACCESSOR; pData: Pointer): HRESULT; override; stdcall;
@@ -730,7 +730,7 @@ type
 
 type
   /// generic Exception type, generated for OleDB connection
-  EOleDBException = class(ESQLDBException);
+  EOleDBException = class(ESqlDBException);
 
 
 /// check from the file beginning if sounds like a valid Jet / MSAccess file
@@ -866,7 +866,7 @@ end;
 
 { TIDListRowset }
 
-constructor TIDListRowset.Create(arr: TRawUTF8DynArray; aType: TSqlDBFieldType);
+constructor TIDListRowset.Create(arr: TRawUtf8DynArray; aType: TSqlDBFieldType);
 begin
   farr := arr;
   fType := aType;
@@ -894,7 +894,7 @@ begin
         pBindingsList[0].obValue := PAnsiChar(@rec.IDVal) - pointer(@rec);
         pBindingsList[0].wType := DBTYPE_I8;
       end;
-    ftUTF8:
+    ftUtf8:
       begin
         pBindingsList[0].cbMaxLen := sizeof(PWideChar); //Check bind ''
         for i := 0 to Length(farr) - 1 do
@@ -911,7 +911,7 @@ end;
 procedure TIDListRowset.FillRowData(pCurrentRec: PIDListRec);
 var
   curInd: integer;
-  tmp: RawUTF8;
+  tmp: RawUtf8;
 begin
   curInd := fidxRow - 2;
   if farr[curInd] = 'null' then
@@ -927,11 +927,11 @@ begin
           SetInt64(pointer(farr[curInd]), pCurrentRec.IDVal);
           pCurrentRec.IDLen := SizeOf(Int64);
         end;
-      ftUTF8:
+      ftUtf8:
         begin
-          tmp := UnQuoteSQLString(farr[curInd]);
+          tmp := UnQuoteSqlString(farr[curInd]);
           pCurrentRec.IDLen := (Length(tmp) + 1) * SizeOf(WideChar);
-          pCurrentRec.StrVal := Pointer(UTF8ToWideString(tmp));
+          pCurrentRec.StrVal := Pointer(Utf8ToWideString(tmp));
         end
     else
       raise EOleDBException.Create('Unsupported array parameter type');
@@ -959,7 +959,7 @@ begin
   case fType of
     ftInt64:
       dbidID.uName.pwszName := pointer(IDList_type);
-    ftUTF8:
+    ftUtf8:
       dbidID.uName.pwszName := pointer(StrList_type);
   end;
   OleCheck(pIOpenRowset.OpenRowset(self, @dbidID, nil, IID_IUnknown,

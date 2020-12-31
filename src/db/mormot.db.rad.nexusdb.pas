@@ -110,10 +110,10 @@ type
     // $ <protocol>://<servername>/<alias>  (aDatabaseName will be overwritten by this alias)
     // $ <protocol>://servername            (aDatabaseName will contain alias)
     // $ ''                                 (aDatabaseName contains path to nxpFOLDER database)
-    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
-    /// convert a textual column data type, as retrieved e.g. from SQLGetField,
+    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8); override;
+    /// convert a textual column data type, as retrieved e.g. from SqlGetField,
     // into our internal primitive types
-    function ColumnTypeNativeToDB(const aNativeType: RawUTF8; aScale: integer): TSqlDBFieldType; override;
+    function ColumnTypeNativeToDB(const aNativeType: RawUtf8; aScale: integer): TSqlDBFieldType; override;
     /// Determine if database exists
     // - just test if the corresponding folder exists
     function DatabaseExists: boolean; virtual;
@@ -196,8 +196,8 @@ const
 // is assumed.
 // - aServerName will contain the URL to the Server if the protocol
 // is not nxpFOLDER
-function GetNXProtocol(const aConnectionString: RawUTF8; out aServerName: RawUTF8;
-  out aAlias: RawUTF8): TNXProtocol;
+function GetNXProtocol(const aConnectionString: RawUtf8; out aServerName: RawUtf8;
+  out aAlias: RawUtf8): TNXProtocol;
 
 /// return the internal NexusDB embedded engine
 // - initialize it, if was not already the case
@@ -226,29 +226,29 @@ uses
 
 { TSqlDBNexusDBConnectionProperties }
 
-function TSqlDBNexusDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType: RawUTF8;
+function TSqlDBNexusDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType: RawUtf8;
   aScale: integer): TSqlDBFieldType;
 const
   CONV_TABLE: array[TnxFieldType] of TSqlDBFieldType  = (
-    mormot.db.core.ftInt64, mormot.db.core.ftUTF8,  mormot.db.core.ftUTF8,
+    mormot.db.core.ftInt64, mormot.db.core.ftUtf8,  mormot.db.core.ftUtf8,
     mormot.db.core.ftInt64, mormot.db.core.ftInt64, mormot.db.core.ftInt64,
     mormot.db.core.ftInt64, mormot.db.core.ftInt64, mormot.db.core.ftInt64,
     mormot.db.core.ftInt64, mormot.db.core.ftInt64, mormot.db.core.ftDouble,
     mormot.db.core.ftDouble, mormot.db.core.ftDouble, mormot.db.core.ftCurrency,
     mormot.db.core.ftDate,  mormot.db.core.ftDate, mormot.db.core.ftDate,
-    mormot.db.core.ftInt64, mormot.db.core.ftBlob, mormot.db.core.ftUTF8,
-    mormot.db.core.ftBlob, mormot.db.core.ftBlob, mormot.db.core.ftUTF8,
-    mormot.db.core.ftUTF8, mormot.db.core.ftUTF8, mormot.db.core.ftInt64,
-    mormot.db.core.ftUTF8, mormot.db.core.ftCurrency, mormot.db.core.ftUTF8,
+    mormot.db.core.ftInt64, mormot.db.core.ftBlob, mormot.db.core.ftUtf8,
+    mormot.db.core.ftBlob, mormot.db.core.ftBlob, mormot.db.core.ftUtf8,
+    mormot.db.core.ftUtf8, mormot.db.core.ftUtf8, mormot.db.core.ftInt64,
+    mormot.db.core.ftUtf8, mormot.db.core.ftCurrency, mormot.db.core.ftUtf8,
     mormot.db.core.ftDouble );
 begin
-  result := CONV_TABLE[FieldDataTypesMapSQL(UTF8ToString(aNativeType))];
+  result := CONV_TABLE[FieldDataTypesMapSQL(Utf8ToString(aNativeType))];
 end;
 
 constructor TSqlDBNexusDBConnectionProperties.Create(const aServerName,
-  aDatabaseName, aUserID, aPassWord: RawUTF8);
+  aDatabaseName, aUserID, aPassWord: RawUtf8);
 var
-  lServerURL, lAlias: RawUTF8;
+  lServerURL, lAlias: RawUtf8;
 begin
   fDBMS := dNexusDB;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
@@ -276,7 +276,7 @@ begin
     '       F.FK_CONSTRAINT_TABLE_NAME = R.FK_CONSTRAINT_TABLE_NAME' +
     '   and F.FK_CONSTRAINT_NAME = R.FK_CONSTRAINT_NAME', []) do
     while Step do
-      fForeignKeys.Add(ColumnUTF8(0), ColumnUTF8(1));
+      fForeignKeys.Add(ColumnUtf8(0), ColumnUtf8(1));
 end;
 
 function TSqlDBNexusDBConnectionProperties.NewConnection: TSqlDBConnection;
@@ -288,7 +288,7 @@ function TSqlDBNexusDBConnectionProperties.DatabaseExists: boolean;
 begin
   if (fProtocol = nxpFOLDER) and
      (fDatabaseName <> NEXUSDB_INMEMORY) then
-    result := DirectoryExists(UTF8ToString(fDatabaseName))
+    result := DirectoryExists(Utf8ToString(fDatabaseName))
   else
     result := True; // if we cannot determine directly, assume it exists
 end;
@@ -299,7 +299,7 @@ begin
     if fDatabaseName = NEXUSDB_INMEMORY then
       result := true
     else
-      result := ForceDirectories(UTF8ToString(fDatabaseName))
+      result := ForceDirectories(Utf8ToString(fDatabaseName))
   else
     result := false;
 end;
@@ -310,7 +310,7 @@ begin
     if fDatabaseName = NEXUSDB_INMEMORY then
       result := true
     else
-      result := DirectoryDelete(UTF8ToString(fDatabaseName))
+      result := DirectoryDelete(Utf8ToString(fDatabaseName))
   else
     result := false;
 end;
@@ -360,12 +360,12 @@ begin
   inherited Create(aProperties);
   lProp := aProperties as TSqlDBNexusDBConnectionProperties; // type check to make sure
   if lProp.Protocol = nxpUnknown then
-    raise ESqlDBNexusDB.CreateUTF8('%.Create: Unknown NexusDB protocol in Servername=[%]',
+    raise ESqlDBNexusDB.CreateUtf8('%.Create: Unknown NexusDB protocol in Servername=[%]',
       [self, lProp.ServerName]);
   fDatabase := TnxDatabase.Create(nil);
   fSession := TnxSession.Create(nil);
-  fSession.UserName := UTF8ToString(lProp.UserID);
-  fSession.Password := UTF8ToString(lProp.PassWord);
+  fSession.UserName := Utf8ToString(lProp.UserID);
+  fSession.Password := Utf8ToString(lProp.PassWord);
   fDatabase.Session := fSession;
   if lProp.Protocol = nxpFOLDER then
   begin
@@ -491,13 +491,13 @@ end;
 var
   vNexusEmbeddedEngine: TnxServerEngine;
 
-function GetNXProtocol(const aConnectionString: RawUTF8;
-  out aServerName: RawUTF8; out aAlias: RawUTF8): TNXProtocol;
+function GetNXProtocol(const aConnectionString: RawUtf8;
+  out aServerName: RawUtf8; out aAlias: RawUtf8): TNXProtocol;
 const
-  NXPROTNAMES: array[nxpFOLDER..high(TNXProtocol)] of RawUTF8 = (
+  NXPROTNAMES: array[nxpFOLDER..high(TNXProtocol)] of RawUtf8 = (
     'nxemb', 'nxtcp', 'nxpipe', 'nxcom', 'nxmem', 'nxbfish');
 var
-  Prot, Alias, l, r: RawUTF8;
+  Prot, Alias, l, r: RawUtf8;
   IsPath: boolean;
   pr: TNXProtocol;
 begin

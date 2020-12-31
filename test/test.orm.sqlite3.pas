@@ -76,17 +76,17 @@ uses
 type
   /// a parent test case which will test most functions, classes and types defined
   // and implemented in the mormot.db.raw.sqlite3 unit, i.e. the SQLite3 engine
-  // - it should not be called directly, but through TTestFileBased,
-  // TTestMemoryBased and TTestMemoryBased children
+  // - it should not be called directly, but through TTestSqliteFile,
+  // TTestSqliteMemory and TTestSqliteMemory children
   TTestSQLite3Engine = class(TSynTestCase)
   protected
     { these values are used internaly by the published methods below }
-    BackupProgressStep: TOnSQLDatabaseBackupStep; // should be the first
+    BackupProgressStep: TOnSqlDatabaseBackupStep; // should be the first
     TempFileName: TFileName;
     EncryptedFile: boolean;
     Demo: TSqlDataBase;
-    Req: RawUTF8;
-    JS: RawUTF8;
+    Req: RawUtf8;
+    JS: RawUtf8;
     BackupTimer: TPrecisionTimer;
     function OnBackupProgress(Sender: TSqlDatabaseBackupThread): boolean;
   published
@@ -95,12 +95,12 @@ type
     procedure DatabaseDirectAccess;
     /// test direct access to the Virtual Table features of SQLite3
     procedure VirtualTableDirectAccess;
-    /// test the TOrmTableJSON table
+    /// test the TOrmTableJson table
     // - the JSON content generated must match the original data
     // - a VACCUM is performed, for testing some low-level SQLite3 engine
     // implementation
     // - the SortField feature is also tested
-    procedure _TOrmTableJSON;
+    procedure _TOrmTableJson;
     /// test the TRestClientDB, i.e. a local Client/Server driven usage
     // of the framework
     // - validates TOrmModel, TRestServer and TRestStorage by checking
@@ -122,26 +122,26 @@ type
   /// this test case will test most functions, classes and types defined and
   // and implemented in the mormot.db.raw.sqlite3 unit, i.e. the SQLite3 engine
   // with a file-based approach
-  TTestFileBased = class(TTestSQLite3Engine);
+  TTestSqliteFile = class(TTestSQLite3Engine);
 
   /// this test case will test most functions, classes and types defined and
   // and implemented in the mormot.db.raw.sqlite3 unit, i.e. the SQLite3 engine
   // with a file-based approach
   // - purpose of this class is to test Write-Ahead Logging for the database
-  TTestFileBasedWAL = class(TTestFileBased);
+  TTestSqliteFileWAL = class(TTestSqliteFile);
 
   /// this test case will test most functions, classes and types defined and
   // and implemented in the mormot.db.raw.sqlite3 unit, i.e. the SQLite3 engine
   // with a file-based approach
   // - purpose of this class is to test Memory-Mapped I/O for the database
-  TTestFileBasedMemoryMap = class(TTestFileBased);
+  TTestSqliteFileMemoryMap = class(TTestSqliteFile);
 
   /// this test case will test most functions, classes and types defined and
   // and implemented in the mormot.db.raw.sqlite3 unit, i.e. the SQLite3 engine
   // with a memory-based approach
   // - this class will also test the TRestStorage class, and its
   // 100% Delphi simple database engine
-  TTestMemoryBased = class(TTestSQLite3Engine)
+  TTestSqliteMemory = class(TTestSQLite3Engine)
   protected
     function CreateShardDB(maxshard: Integer): TRestServer;
   published
@@ -170,7 +170,7 @@ type
   /// SOA service definition as expected by TTestBidirectionalRemoteConnection
   IBidirService = interface(IInvokable)
     ['{0984A2DA-FD1F-49D6-ACFE-4D45CF08CA1B}']
-    function TestRest(a, b: integer; out c: RawUTF8): variant;
+    function TestRest(a, b: integer; out c: RawUtf8): variant;
     function TestRestCustom(a: integer): TServiceCustomAnswer;
     function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
     procedure LaunchAsynchCallback(a: integer);
@@ -181,7 +181,7 @@ type
   protected
     fCallback: IBidirCallback;
     // IBidirService implementation methods
-    function TestRest(a, b: integer; out c: RawUTF8): variant;
+    function TestRest(a, b: integer; out c: RawUtf8): variant;
     function TestRestCustom(a: integer): TServiceCustomAnswer;
     function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
     procedure LaunchAsynchCallback(a: integer);
@@ -196,11 +196,11 @@ type
     fHttpServer: TRestHttpServer;
     fServer: TRestServerFullMemory;
     fBidirServer: TBidirServer;
-    fPublicRelayClientsPort, fPublicRelayPort: RawUTF8;
+    fPublicRelayClientsPort, fPublicRelayPort: RawUtf8;
     fPublicRelay: TPublicRelay;
     fPrivateRelay: TPrivateRelay;
     procedure CleanUp; override;
-    function NewClient(const port: RawUTF8): TRestHttpClientWebsockets;
+    function NewClient(const port: RawUtf8): TRestHttpClientWebsockets;
     procedure WebsocketsLowLevel(protocol: TWebSocketProtocol;
       opcode: TWebSocketFrameOpCode);
     procedure TestRest(Rest: TRest);
@@ -219,13 +219,13 @@ type
     /// test the callback mechanism via interface-based services on server side
     procedure SOACallbackOnServerSide;
     /// test callbacks via interface-based services over JSON WebSockets
-    procedure SOACallbackViaJSONWebsockets;
+    procedure SOACallbackViaJsonWebsockets;
     /// test callbacks via interface-based services over binary WebSockets
     procedure SOACallbackViaBinaryWebsockets;
     /// initialize SynProtoRelay tunnelling
     procedure RelayStart;
     /// test SynProtoRelay tunnelling over JSON WebSockets
-    procedure RelaySOACallbackViaJSONWebsockets;
+    procedure RelaySOACallbackViaJsonWebsockets;
     /// verify ability to reconect from Private Relay to Public Relay
     procedure RelayConnectionRecreate;
     /// test SynProtoRelay tunnelling over binary WebSockets
@@ -325,14 +325,14 @@ const
     $E0, $E7, $E8, $E9, $EA, $F4);
 
 var
-  _uE0, _uE7, _uE8, _uE9, _uEA, _uF4: RawUTF8;
+  _uE0, _uE7, _uE8, _uE9, _uEA, _uF4: RawUtf8;
 
 procedure TTestSQLite3Engine.DatabaseDirectAccess;
 
   procedure InsertData(n: integer);
   var
     i: integer;
-    s, ins: RawUTF8;
+    s, ins: RawUtf8;
     R: TSqlRequest;
   begin
     // this is a lot faster than sqlite3 itself, even if it use Utf-8 encoding:
@@ -380,46 +380,46 @@ procedure TTestSQLite3Engine.DatabaseDirectAccess;
   end;
 
 var
-  SoundexValues: array[0..5] of RawUTF8;
-  Names: TRawUTF8DynArray;
+  SoundexValues: array[0..5] of RawUtf8;
+  Names: TRawUtf8DynArray;
   i, i1, i2: integer;
   Res: Int64;
   id: TID;
-  password, s: RawUTF8;
+  password, s: RawUtf8;
   R: TSqlRequest;
 begin
-  check(JSONGetID('{"id":123}', id) and
+  check(JsonGetID('{"id":123}', id) and
         (id = 123));
-  check(JSONGetID('{"rowid":1234}', id) and
+  check(JsonGetID('{"rowid":1234}', id) and
         (id = 1234));
-  check(JSONGetID(' { "id": 123}', id) and
+  check(JsonGetID(' { "id": 123}', id) and
         (id = 123));
-  check(JSONGetID(' { "ROWID": 1234}', id) and
+  check(JsonGetID(' { "ROWID": 1234}', id) and
         (id = 1234));
-  check(JSONGetID('{id:123}', id) and
+  check(JsonGetID('{id:123}', id) and
         (id = 123));
-  check(JSONGetID('{rowid:1234}', id) and
+  check(JsonGetID('{rowid:1234}', id) and
         (id = 1234));
-  check(not JSONGetID('{"id":0}', id));
-  check(not JSONGetID('{"id":-10}', id));
-  check(not JSONGetID('{"id":null}', id));
-  check(not JSONGetID('{"ROWID":null}', id));
-  check(not JSONGetID('{id:0}', id));
-  check(not JSONGetID('{id:-10}', id));
-  check(not JSONGetID('{"ide":123}', id));
-  check(not JSONGetID('{"rowide":1234}', id));
-  check(not JSONGetID('{"as":123}', id));
-  check(not JSONGetID('{"s":1234}', id));
-  check(not JSONGetID('"ide":123}', id));
-  check(not JSONGetID('{ "rowide":1234}', id));
-  if ClassType = TTestMemoryBased then
+  check(not JsonGetID('{"id":0}', id));
+  check(not JsonGetID('{"id":-10}', id));
+  check(not JsonGetID('{"id":null}', id));
+  check(not JsonGetID('{"ROWID":null}', id));
+  check(not JsonGetID('{id:0}', id));
+  check(not JsonGetID('{id:-10}', id));
+  check(not JsonGetID('{"ide":123}', id));
+  check(not JsonGetID('{"rowide":1234}', id));
+  check(not JsonGetID('{"as":123}', id));
+  check(not JsonGetID('{"s":1234}', id));
+  check(not JsonGetID('"ide":123}', id));
+  check(not JsonGetID('{ "rowide":1234}', id));
+  if ClassType = TTestSqliteMemory then
     TempFileName := SQLITE_MEMORY_DATABASE_NAME
   else
   begin
     TempFileName := 'test.db3';
     DeleteFile(TempFileName); // use a temporary file
     {$ifndef NOSQLITE3ENCRYPT}
-    if ClassType <> TTestFileBasedMemoryMap then
+    if ClassType <> TTestSqliteFileMemoryMap then
       // memory map is not compatible with our encryption
       password := 'password1';
     {$endif NOSQLITE3ENCRYPT}
@@ -428,7 +428,7 @@ begin
   Demo := TSqlDataBase.Create(TempFileName, password);
   Demo.Synchronous := smOff;
   Demo.LockingMode := lmExclusive;
-  if ClassType = TTestFileBasedMemoryMap then
+  if ClassType = TTestSqliteFileMemoryMap then
     Demo.MemoryMappedMB := 256; // will do nothing for SQLite3 < 3.7.17
   R.Prepare(Demo.DB, 'select mod(?,?)');
   for i1 := 0 to 100 do
@@ -449,36 +449,36 @@ begin
   SoundexValues[5] := 'bonjourtr' + _uE8 + 'slongmotquid' + _uE9 + 'passe';
   for i1 := 0 to high(SoundexValues) do
   begin
-    s := FormatUTF8('SELECT SoundEx("%");', [SoundexValues[i1]]);
+    s := FormatUtf8('SELECT SoundEx("%");', [SoundexValues[i1]]);
     Demo.Execute(s, Res);
-    CheckUTF8(Res = SoundExUTF8(pointer(SoundexValues[i1])), s);
+    CheckUtf8(Res = SoundExUtf8(pointer(SoundexValues[i1])), s);
   end;
   for i1 := 0 to high(SoundexValues) do
   begin
-    s := FormatUTF8('SELECT SoundExFr("%");', [SoundexValues[i1]]);
+    s := FormatUtf8('SELECT SoundExFr("%");', [SoundexValues[i1]]);
     Demo.Execute(s, Res);
-    CheckUTF8(Res = SoundExUTF8(pointer(SoundexValues[i1]), nil, sndxFrench), s);
+    CheckUtf8(Res = SoundExUtf8(pointer(SoundexValues[i1]), nil, sndxFrench), s);
   end;
   for i1 := 0 to high(SoundexValues) do
   begin
-    s := FormatUTF8('SELECT SoundExEs("%");', [SoundexValues[i1]]);
+    s := FormatUtf8('SELECT SoundExEs("%");', [SoundexValues[i1]]);
     Demo.Execute(s, Res);
-    CheckUTF8(Res = SoundExUTF8(pointer(SoundexValues[i1]), nil, sndxSpanish), s);
+    CheckUtf8(Res = SoundExUtf8(pointer(SoundexValues[i1]), nil, sndxSpanish), s);
   end;
   Demo.RegisterSQLFunction(InternalSQLFunctionCharIndex, 2, 'CharIndex');
   Demo.RegisterSQLFunction(InternalSQLFunctionCharIndex, 3, 'CharIndex');
   for i1 := 0 to high(SoundexValues) do
   begin
-    s := FormatUTF8('SELECT CharIndex("o","%");', [SoundexValues[i1]]);
+    s := FormatUtf8('SELECT CharIndex("o","%");', [SoundexValues[i1]]);
     Demo.Execute(s, Res);
-    CheckUTF8(Res = PosEx('o', SoundexValues[i1]), s);
-    s := FormatUTF8('SELECT CharIndex("o","%",5);', [SoundexValues[i1]]);
+    CheckUtf8(Res = PosEx('o', SoundexValues[i1]), s);
+    s := FormatUtf8('SELECT CharIndex("o","%",5);', [SoundexValues[i1]]);
     Demo.Execute(s, Res);
-    CheckUTF8(Res = PosEx('o', SoundexValues[i1], 5), s);
+    CheckUtf8(Res = PosEx('o', SoundexValues[i1], 5), s);
   end;
   Demo.UseCache := true; // use the cache for the JSON requests
-  Demo.WALMode := InheritsFrom(TTestFileBasedWAL); // test Write-Ahead Logging
-  check(Demo.WALMode = InheritsFrom(TTestFileBasedWAL));
+  Demo.WALMode := InheritsFrom(TTestSqliteFileWAL); // test Write-Ahead Logging
+  check(Demo.WALMode = InheritsFrom(TTestSqliteFileWAL));
   Demo.Execute(' CREATE TABLE IF NOT EXISTS People (' +
     ' ID INTEGER PRIMARY KEY,' + ' FirstName TEXT COLLATE SYSTEMNOCASE,' +
     ' LastName TEXT,' + ' Data BLOB,' + ' YearOfBirth INTEGER,' +
@@ -494,9 +494,9 @@ begin
   Demo.Commit;
   Req := 'SELECT * FROM People WHERE LastName=''M' + _uF4 + 'net'' ORDER BY FirstName;';
   check(WinAnsiToUtf8(Utf8ToWinAnsi(Req)) = Req, 'WinAnsiToUtf8/Utf8ToWinAnsi');
-  JS := Demo.ExecuteJSON(Req); // get result in JSON format
+  JS := Demo.ExecuteJson(Req); // get result in JSON format
   FileFromString(JS, 'Test1.json');
-  check(Hash32(JS) = $40C1649A, 'Expected ExecuteJSON result not retrieved');
+  check(Hash32(JS) = $40C1649A, 'Expected ExecuteJson result not retrieved');
   {$ifndef NOSQLITE3ENCRYPT}
   if password <> '' then
   begin // check file encryption password change
@@ -521,15 +521,15 @@ begin
     Demo.Synchronous := smOff;
     Demo.LockingMode := lmExclusive;
     Demo.UseCache := true; // use the cache for the JSON requests
-    Demo.WALMode := InheritsFrom(TTestFileBasedWAL); // test Write-Ahead Logging
-    check(Demo.WALMode = InheritsFrom(TTestFileBasedWAL));
+    Demo.WALMode := InheritsFrom(TTestSqliteFileWAL); // test Write-Ahead Logging
+    check(Demo.WALMode = InheritsFrom(TTestSqliteFileWAL));
     check(Demo.MemoryMappedMB = 0, 'mmap pragma disallowed');
-    check(Hash32(Demo.ExecuteJSON(Req)) = $40C1649A, 'ExecuteJSON crypted');
+    check(Hash32(Demo.ExecuteJson(Req)) = $40C1649A, 'ExecuteJson crypted');
     check(Demo.MemoryMappedMB = 0, 'mmap pragma disallowed');
   end
   else
   {$endif NOSQLITE3ENCRYPT}
-  if ClassType = TTestFileBasedMemoryMap then
+  if ClassType = TTestSqliteFileMemoryMap then
   begin // force re-open to test reading
     FreeAndNil(Demo);
     Demo := TSqlDataBase.Create(TempFileName, password);
@@ -554,7 +554,7 @@ end;
 
 procedure TTestSQLite3Engine.VirtualTableDirectAccess;
 const
-  LOG1: RawUTF8 =
+  LOG1: RawUtf8 =
     'D:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.4 (2011-04-07)'#13#10 +
     'Host=MyPC User=MySelf CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545'#13#10 +
     'TSynLog 1.13 LVCL 2011-04-07 12:04:09'#13#10#13#10 +
@@ -562,7 +562,7 @@ const
     '"TObjectList(00AF8D60)","TFileVersion(00ADC0B0)","TSynMapFile(00ACC990)"]}';
 var
   Res: Int64;
-  s, s2, s3: RawUTF8;
+  s, s2, s3: RawUtf8;
   n: PtrInt;
 begin
   // register the Log virtual table module to this connection
@@ -573,25 +573,25 @@ begin
   Demo.Execute('select count(*) from test', Res);
   check(Res = 1);
   n := 0;
-  s := Demo.ExecuteJSON('select * from test', False, @n);
+  s := Demo.ExecuteJson('select * from test', False, @n);
   check(s <> '');
   check(n = Res);
-  s2 := Demo.ExecuteJSON('select * from test where rowid=2', False, @n);
+  s2 := Demo.ExecuteJson('select * from test where rowid=2', False, @n);
   check(s2 = '{"fieldCount":3,"values":["DateTime","Level","Content"],"rowCount":0}'#$A);
   check(n = 0);
-  s2 := Demo.ExecuteJSON('select * from test where rowid=1', False, @n);
+  s2 := Demo.ExecuteJson('select * from test where rowid=1', False, @n);
   check(s2 <> '');
   check(s = s2);
   check(n = 1);
   n := 0;
-  s3 := Demo.ExecuteJSON('select * from test where level=2', False, @n);
+  s3 := Demo.ExecuteJson('select * from test where level=2', False, @n);
   check(n = 1);
   check(s3 =
     '{"fieldCount":3,"values":["DateTime","Level","Content","2011-04-07T12:04:09.064",' +
     '2,"20110407 12040904 debug {\"TObjectList(00AF8D00)\":[\"TObjectList(00AF8D20)\",' +
     '\"TObjectList(00AF8D60)\",\"TFileVersion(00ADC0B0)\",\"TSynMapFile(00ACC990)\"]}"],' +
     '"rowCount":1}'#$A);
-  s3 := Demo.ExecuteJSON('select * from test where level=3', False, @n);
+  s3 := Demo.ExecuteJson('select * from test where level=3', False, @n);
   CheckEqual(s3,
     '{"fieldCount":3,"values":["DateTime","Level","Content"],"rowCount":0}'#$A);
   CheckEqual(n, 0);
@@ -600,7 +600,7 @@ end;
 {$ifdef TEST_REGEXP}
 procedure TTestSQLite3Engine.RegexpFunction;
 const
-  EXPRESSIONS: array[0..2] of RawUTF8 = (
+  EXPRESSIONS: array[0..2] of RawUtf8 = (
     '\bFinley\b', '^Samuel F', '\bFinley\b');
 var
   Model: TOrmModel;
@@ -841,13 +841,13 @@ type
     fRec: TFTSMatchInfo;
   {$endif PUBLISHRECORD}
     fFileVersion: TFVs;
-    fUTF8: RawUTF8;
+    fUTF8: RawUtf8;
   published
   {$ifdef PUBLISHRECORD}
     property Rec: TFTSMatchInfo
       read fRec write fRec;
   {$endif PUBLISHRECORD}
-    property U: RawUTF8
+    property U: RawUtf8
       read fUTF8 write fUTF8;
     property Ints: TIntegerDynArray
       index 1 read fInts write fInts;
@@ -860,14 +860,14 @@ type
   TOrmPeopleObject = class(TOrmPeople)
   private
     fPersistent: TCollTst;
-    fUTF8: TRawUTF8List;
+    fUTF8: TRawUtf8List;
   public
     /// will create internal U/Persistent instances
     constructor Create; override;
     /// will release internal U/Persistent
     destructor Destroy; override;
   published
-    property U: TRawUTF8List
+    property U: TRawUtf8List
       read fUTF8;
     property Persistent: TCollTst
       read fPersistent;
@@ -939,22 +939,22 @@ type
 
   TOrmFtsTest = class(TOrmFTS3)
   private
-    fSubject: RawUTF8;
-    fBody: RawUTF8;
+    fSubject: RawUtf8;
+    fBody: RawUtf8;
   published
-    property Subject: RawUTF8
+    property Subject: RawUtf8
       read fSubject write fSubject;
-    property Body: RawUTF8
+    property Body: RawUtf8
       read fBody write fBody;
   end;
 
   TOrmDali1 = class(TOrmVirtualTableAutoID)
   private
     fYearOfBirth: integer;
-    fFirstName: RawUTF8;
+    fFirstName: RawUtf8;
     fYearOfDeath: word;
   published
-    property FirstName: RawUTF8
+    property FirstName: RawUtf8
       read fFirstName write fFirstName;
     property YearOfBirth: integer
       read fYearOfBirth write fYearOfBirth;
@@ -971,7 +971,7 @@ constructor TOrmPeopleObject.Create;
 begin
   inherited;
   fPersistent := TCollTst.Create;
-  fUTF8 := TRawUTF8List.Create;
+  fUTF8 := TRawUtf8List.Create;
 end;
 
 destructor TOrmPeopleObject.Destroy;
@@ -1025,13 +1025,13 @@ begin
     check(aClient.TransactionBegin(TOrmASource)); // faster process
     for i := 1 to high(dID) do
     begin
-      MD.fSignature := FormatUTF8('% %', [aClient.ClassName, i]);
+      MD.fSignature := FormatUtf8('% %', [aClient.ClassName, i]);
       dID[i] := aClient.Add(MD, true);
       check(dID[i] > 0);
     end;
     for i := 1 to high(sID) do
     begin
-      MS.fSignature := FormatUTF8('% %', [aClient.ClassName, i]);
+      MS.fSignature := FormatUtf8('% %', [aClient.ClassName, i]);
       sID[i] := aClient.Add(MS, True);
       check(sID[i] > 0);
       MS.DestList.AssociationTime := i;
@@ -1065,20 +1065,20 @@ begin
       check(MS.DestList.DestGetJoined(aClient, 'ADest.SignatureTime=:(0):', sID[i], res));
       check(length(res) = 0);
       check(MS.DestList.DestGetJoined(aClient,
-        FormatUTF8('ADest.SignatureTime=?', [], [MD.SignatureTime]), sID[i], res));
-// 'ADest.SignatureTime=:('+Int64ToUTF8(MD.SignatureTime)+'):',sID[i],res));
+        FormatUtf8('ADest.SignatureTime=?', [], [MD.SignatureTime]), sID[i], res));
+// 'ADest.SignatureTime=:('+Int64ToUtf8(MD.SignatureTime)+'):',sID[i],res));
       if CheckFailed(length(res) = 1) then
         continue; // avoid GPF
       check(res[0] = dID[i]);
       MD2 := MS.DestList.DestGetJoined(aClient,
-        FormatUTF8('ADest.SignatureTime=?', [], [MD.SignatureTime]), sID[i]) as TOrmADest;
-// 'ADest.SignatureTime=:('+Int64ToUTF8(MD.SignatureTime)+'):',sID[i]) as TOrmADest;
+        FormatUtf8('ADest.SignatureTime=?', [], [MD.SignatureTime]), sID[i]) as TOrmADest;
+// 'ADest.SignatureTime=:('+Int64ToUtf8(MD.SignatureTime)+'):',sID[i]) as TOrmADest;
       if CheckFailed(MD2 <> nil) then
         continue;
       try
         check(MD2.FillOne);
         check(MD2.ID = dID[i]);
-        check(MD2.Signature = FormatUTF8('% %', [aClient.ClassName, i]));
+        check(MD2.Signature = FormatUtf8('% %', [aClient.ClassName, i]));
       finally
         MD2.Free;
       end;
@@ -1105,7 +1105,7 @@ begin
       check(MS.DestList.AssociationTime = i);
       check(MS.DestList.Dest.fID = dID[i]);
       check(MS.DestList.Dest.SignatureTime = MD.fSignatureTime);
-      check(MS.DestList.Dest.Signature = FormatUTF8('% %', [aClient.ClassName, i]));
+      check(MS.DestList.Dest.Signature = FormatUtf8('% %', [aClient.ClassName, i]));
     end;
     MS.FillClose;
     check(aClient.TransactionBegin(TOrmADests)); // faster process
@@ -1138,7 +1138,7 @@ var
   Server: TRestServer;
   aStatic: TRestStorageInMemory;
   Curr: Currency;
-  DaVinci, s: RawUTF8;
+  DaVinci, s: RawUtf8;
   Refreshed: boolean;
   J: TOrmTable;
   i, n, nupd, ndx: integer;
@@ -1222,18 +1222,18 @@ var
     begin
       k := i shl 5;
       aClient.Orm.OneFieldValues(TOrmPeopleArray, 'ID',
-        FormatUTF8('IntegerDynArrayContains(Ints,?)', [], [k]), IDs);
+        FormatUtf8('IntegerDynArrayContains(Ints,?)', [], [k]), IDs);
       l := n + 1 - 32 * i;
       check(length(IDs) = l);
       for j := 0 to high(IDs) do
         check(IDs[j] = k + j);
       aClient.Orm.OneFieldValues(TOrmPeopleArray, 'ID',
-       FormatUTF8('CardinalDynArrayContains(Ints,?)', [], [k]), IDs);
+       FormatUtf8('CardinalDynArrayContains(Ints,?)', [], [k]), IDs);
       check(length(IDs) = l);
       for j := 0 to high(IDs) do
         check(IDs[j] = k + j);
       aClient.Orm.OneFieldValues(TOrmPeopleArray, 'ID',
-        FormatUTF8('MyIntegerDynArrayContains(Ints,:("%"):)',
+        FormatUtf8('MyIntegerDynArrayContains(Ints,:("%"):)',
           [BinToBase64WithMagic(@k, sizeof(k))]), IDs);
       check(length(IDs) = l);
       for j := 0 to high(IDs) do
@@ -1274,7 +1274,7 @@ var
     FTS: TOrmFtsTest;
     StartID, i, c: integer;
     IntResult: TIDDynArray;
-    cu: RawUTF8;
+    cu: RawUtf8;
   const
     COUNT = 400;
   begin
@@ -1323,7 +1323,7 @@ var
         TOrmFtsTest, 'body*', IntResult, [1]), 'invalid count');
       for c := 1 to 9 do
       begin
-        cu := SmallUInt32UTF8[c];
+        cu := SmallUInt32Utf8[c];
         IntResult := nil;
         check(aClient.Orm.FTSMatch(
           TOrmFtsTest, 'Body MATCH "body' + cu + '*"', IntResult));
@@ -1353,7 +1353,7 @@ var
     fn: TFileName;
   begin
     Client.Server.Server.SetStaticVirtualTableDirect(DirectSQL);
-    check(Client.Server.Server.ExecuteFmt('DROP TABLE %', [aClass.SQLTableName]));
+    check(Client.Server.Server.ExecuteFmt('DROP TABLE %', [aClass.SqlTableName]));
     Client.Server.Server.CreateMissingTables;
     VD := aClass.Create as TOrmDali1;
     try
@@ -1369,7 +1369,7 @@ var
           VD.YearOfDeath := V2.YearOfDeath;
           inc(n);
           added := aClient.Client.Add(VD, true);
-          CheckUTF8(added = n, '% Add %<>%', [Msg, added, n]);
+          CheckUtf8(added = n, '% Add %<>%', [Msg, added, n]);
         end;
         // update some items in the file
         check(aClient.Client.TableRowCount(aClass) = 1001, 'check SQL Count(*)');
@@ -1397,12 +1397,12 @@ var
           check(VD.FirstName = '');
           check(VD.YearOfBirth = 0);
           check(VD.YearOfDeath = 0);
-          CheckUTF8(aClient.Orm.Retrieve(i, VD), '% Retrieve', [Msg]);
+          CheckUtf8(aClient.Orm.Retrieve(i, VD), '% Retrieve', [Msg]);
           check(IdemPChar(pointer(VD.FirstName), 'SALVADOR'));
           check(VD.YearOfBirth = 1904 + i);
           check(VD.YearOfDeath = 1989 + i);
         end;
-        CheckUTF8(aClient.Orm.TableRowCount(aClass) = 1001, '% RowCount', [Msg]);
+        CheckUtf8(aClient.Orm.TableRowCount(aClass) = 1001, '% RowCount', [Msg]);
         Orm := Client.Server.OrmInstance as TRestOrmServer;
         Rest := Orm.StaticVirtualTable[aClass];
         check((Rest as TRestStorageInMemoryExternal).Modified);
@@ -1545,7 +1545,7 @@ var
     end;
   end;
 
-  procedure Direct(const URI: RawUTF8; Hash: cardinal; const head: RawUTF8 = '');
+  procedure Direct(const URI: RawUtf8; Hash: cardinal; const head: RawUtf8 = '');
   var
     call: TRestURIParams;
   begin
@@ -1561,7 +1561,7 @@ var
 
 var
   ClientDist: TRestClientURI;
-  json: RawUTF8;
+  json: RawUtf8;
 begin
   V := TOrmPeople.Create;
   VA := TOrmPeopleArray.Create;
@@ -1569,7 +1569,7 @@ begin
   VP := TOrmCustomProps.Create;
   V2 := nil;
   try
-    if ClassType <> TTestMemoryBased then
+    if ClassType <> TTestSqliteMemory then
     begin
       DeleteFile('dali1.json');
       DeleteFile('dali2.data');
@@ -1579,7 +1579,7 @@ begin
     ModelC := TOrmModel.Create([TOrmPeople, TOrmFtsTest, TOrmASource, TOrmADest,
       TOrmADests, TOrmPeopleArray, TOrmPeopleObject, TOrmDali1, TOrmDali2,
       TOrmCustomProps], 'root');
-    ModelC.VirtualTableRegister(TOrmDali1, TOrmVirtualTableJSON);
+    ModelC.VirtualTableRegister(TOrmDali1, TOrmVirtualTableJson);
     ModelC.VirtualTableRegister(TOrmDali2, TOrmVirtualTableBinary);
     try
       Client := TRestClientDB.Create(ModelC, nil, Demo, TRestServerTest, true);
@@ -1589,7 +1589,7 @@ begin
         with Client.Server.Model do
           for i := 0 to high(Tables) do
             if not CheckFailed(GetTableIndex(Tables[i]) = i) then
-              check(GetTableIndex(Tables[i].SQLTableName) = i);
+              check(GetTableIndex(Tables[i].SqlTableName) = i);
         // direct client access test
         Client.Server.Server.CreateMissingTables; // NEED Dest,Source,Dests,...
         check(Client.SetUser('User', 'synopse')); // use default user
@@ -1634,7 +1634,7 @@ begin
         J := Client.Client.List([TOrmPeople], '*', s);
         check(Client.Client.UpdateFromServer([J], Refreshed));
         check(not Refreshed);
-        check(TestTable(J), 'incorrect TOrmTableJSON');
+        check(TestTable(J), 'incorrect TOrmTableJson');
         check(Client.Orm.OneFieldValues(TOrmPeople, 'ID', 'LastName=:("Dali"):',
           IntArray));
         check(length(IntArray) = 1001);
@@ -1700,7 +1700,7 @@ begin
             VA.DynArray('FileVersion').Add(FV);
           end
           else
-            VA.U := UInt32ToUTF8(n);
+            VA.U := UInt32ToUtf8(n);
           {$ifdef PUBLISHRECORD}
           VA.fRec.nPhrase := n;
           VA.fRec.nCol := n * 2;
@@ -1740,7 +1740,7 @@ begin
         TestDynArray(Client);
         TestObject(Client);
         InternalTestMany(self, Client.OrmInstance as TRestOrmClientURI);
-        // RegisterVirtualTableModule(TOrmVirtualTableJSON) done above
+        // RegisterVirtualTableModule(TOrmVirtualTableJson) done above
         TestVirtual(Client, false, 'Virtual Table access via SQLite 1', TOrmDali1);
         TestVirtual(Client, false, 'Virtual Table access via SQLite 1', TOrmDali2);
         TestVirtual(Client, true, 'Direct Virtual Table access 1', TOrmDali1);
@@ -1786,20 +1786,20 @@ begin
         BackupTimer.Start;
         check(Client.DB.BackupBackground(BackupFN, 1024, 0, OnBackupProgress, true));
         // test per-one and batch requests
-        if ClassType = TTestMemoryBased then
+        if ClassType = TTestSqliteMemory then
         begin // time consuming, so do it once
           Server := TRestServerTest.Create(TOrmModel.Create([TOrmPeople]), false);
           try
             Server.Model.Owner := Server; // we just use TOrmPeople here
-            Server.NoAJAXJSON := true;
+            Server.NoAjaxJson := true;
             DeleteFile('People.json');
             DeleteFile('People.data');
             StaticDataCreate(Server.OrmInstance, TOrmPeople, 'People.data', true);
-            json := Demo.ExecuteJSON('SELECT * From People');
+            json := Demo.ExecuteJson('SELECT * From People');
             aStatic := (Server.OrmInstance as TRestOrmServer).
               StaticDataServer[TOrmPeople] as TRestStorageInMemory;
             check(aStatic <> nil);
-            aStatic.LoadFromJSON(json); // test Add() and JSON fast loading
+            aStatic.LoadFromJson(json); // test Add() and JSON fast loading
             for i := 0 to aStatic.Count - 1 do
             begin
               check(Client.Orm.Retrieve(aStatic.ID[i], V), 'test statement+bind speed');
@@ -1816,10 +1816,10 @@ begin
             Server.URIPagingParameters.SendTotalRowsCountFmt := ',"Total":%';
             Direct('/root/People?select=%2A&where=YearOfBirth%3D1873&startindex=10&results=2',
               $79AFDD53);
-            Server.NoAJAXJSON := false;
+            Server.NoAjaxJson := false;
             Direct('/root/People?select=%2A&where=YearOfBirth%3D1873&startindex=10&results=2',
               $69FDAF5D, 'User-Agent: Ajax');
-            Server.NoAJAXJSON := true;
+            Server.NoAjaxJson := true;
             Server.URIPagingParameters.SendTotalRowsCountFmt := '';
             // test Retrieve() and Delete()
             Check(Server.ExportServerGlobalLibraryRequest);
@@ -1886,7 +1886,7 @@ begin
                 V.LastName := 'New';
                 for i := 0 to 1000 do
                 begin
-                  V.FirstName := RandomUTF8(10);
+                  V.FirstName := RandomUtf8(10);
                   V.YearOfBirth := i + 1000;
                   check(ClientDist.Client.BatchAdd(V, true) = n + nupd + i);
                 end;
@@ -2019,20 +2019,20 @@ begin
   {$endif NOSQLITE3ENCRYPT}
 end;
 
-procedure TTestSQLite3Engine._TOrmTableJSON;
+procedure TTestSQLite3Engine._TOrmTableJson;
 var
-  J: TOrmTableJSON;
+  J: TOrmTableJson;
   i1, i2, aR, aF, F1, F2, n: integer;
-  Comp, Comp1, Comp2: TUTF8Compare;
+  Comp, Comp1, Comp2: TUtf8Compare;
   DoTestODS: boolean;
   {$ifdef ISDELPHI2010}
   Peoples: TObjectList<TOrmPeople>;
   {$endif ISDELPHI2010}
   row: variant;
   lContactDataQueueDynArray: TDynArray;
-  lContactDataQueueArray: TRawUTF8DynArray;
+  lContactDataQueueArray: TRawUtf8DynArray;
   lContactDataQueueJSON: TDocVariantData;
-  lData, s: RawUTF8;
+  lData, s: RawUtf8;
   lDocData: TDocVariantData;
 const
   TEST_DATA = '[' +
@@ -2058,7 +2058,7 @@ const
     '"COMM_RESULT_CODE":null,"V01_TM":"Storm","V02_TM":"Jenton",' +
     '"V03_TM":"sjentonpg@senate.gov"}]';
 begin
-  J := TOrmTableJSON.Create('', JS);
+  J := TOrmTableJson.Create('', JS);
   try
     J.SetFieldType('YearOfBirth', oftModTime);
     if JS <> '' then // avoid memory leak
@@ -2074,7 +2074,7 @@ begin
               check(GetBlob(aR, aF) = J.GetBlob(aR, aF))
             else
             begin
-              CheckUTF8((GetW(aR, aF) = J.GetW(aR, aF)) and
+              CheckUtf8((GetW(aR, aF) = J.GetW(aR, aF)) and
                     (GetA(aR, aF) = J.GetA(aR, aF)) and
                     (length(GetW(aR, aF)) shr 1 = LengthW(aR, aF)),
                 'Get() in Row=% Field=%', [aR, aF]);
@@ -2224,32 +2224,32 @@ begin
       Free;
     end;
   // some tests to avoid regression about bugs reported by users on forum
-  J := TOrmTableJSON.Create('', TEST_DATA);
+  J := TOrmTableJson.Create('', TEST_DATA);
   try
     check(J.fieldCount = 24);
     check(J.rowCount = 3);
-    lData := J.GetJSONValues(true);
+    lData := J.GetJsonValues(true);
     check(lData[1] = '[');
-    check(JSONArrayCount(@lData[2]) = J.rowCount);
+    check(JsonArrayCount(@lData[2]) = J.rowCount);
     check(Hash32(lData) = $B1C13092);
-    lData := J.GetJSONValues(false);
+    lData := J.GetJsonValues(false);
     check(Hash32(lData) = $6AB30A2);
   finally
     J.Free;
   end;
-  lContactDataQueueJSON.InitJSON(TEST_DATA);
-  lContactDataQueueDynArray.Init(TypeInfo(TRawUTF8DynArray), lContactDataQueueArray);
-  lContactDataQueueJSON.ToRawUTF8DynArray(lContactDataQueueArray);
-  lData := lContactDataQueueDynArray.SaveToJSON;
-  lDocData.InitJSON(lData, [dvoJSONObjectParseWithinString]);
+  lContactDataQueueJSON.InitJson(TEST_DATA);
+  lContactDataQueueDynArray.Init(TypeInfo(TRawUtf8DynArray), lContactDataQueueArray);
+  lContactDataQueueJSON.ToRawUtf8DynArray(lContactDataQueueArray);
+  lData := lContactDataQueueDynArray.SaveToJson;
+  lDocData.InitJson(lData, [dvoJsonObjectParseWithinString]);
   check(lDocData.Count = 3);
-  check(Hash32(lDocData.ToJSON) = $FCF948A5);
+  check(Hash32(lDocData.ToJson) = $FCF948A5);
   check(lDocData.Value[0].QUEUE_CALL = 2);
   s := TEST_DATA;
   i1 := PosEx(',"CHANNEL":132', s);
   i2 := PosEx('}', s, i1);
   delete(s, i1, i2 - i1); // truncate the 2nd object
-  J := TOrmTableJSON.Create('', s);
+  J := TOrmTableJson.Create('', s);
   try
     check(J.fieldCount = 24);
     if not checkfailed(J.rowCount = 3) then
@@ -2260,16 +2260,16 @@ begin
   end;
 end;
 
-procedure TTestMemoryBased._TOrmTableWritable;
+procedure TTestSqliteMemory._TOrmTableWritable;
 
-  procedure Test(intern: TRawUTF8Interning);
+  procedure Test(intern: TRawUtf8Interning);
   var
-    s1, s2: TOrmTableJSON;
+    s1, s2: TOrmTableJson;
     w: TOrmTableWritable;
     f, r: integer;
   begin
-    s1 := TOrmTableJSON.CreateFromTables([TOrmPeople], '', JS);
-    s2 := TOrmTableJSON.CreateFromTables([TOrmPeople], '', JS);
+    s1 := TOrmTableJson.CreateFromTables([TOrmPeople], '', JS);
+    s2 := TOrmTableJson.CreateFromTables([TOrmPeople], '', JS);
     w := TOrmTableWritable.CreateFromTables([TOrmPeople], '', JS);
     try // merge the same data twice, and validate duplicated columns
       w.NewValuesInterning := intern;
@@ -2296,7 +2296,7 @@ procedure TTestMemoryBased._TOrmTableWritable;
       if intern <> nil then
         check(intern.Count = 0);
       for r := 0 to w.RowCount do
-        w.Update(r, 1, UInt32ToUTF8(r and 127));
+        w.Update(r, 1, UInt32ToUtf8(r and 127));
       for r := 1 to w.RowCount do
         check(w.GetAsInteger(r, 1) = r and 127);
       if intern <> nil then
@@ -2311,7 +2311,7 @@ procedure TTestMemoryBased._TOrmTableWritable;
 
 begin
   Test(nil);
-  Test(TRawUTF8Interning.Create);
+  Test(TRawUtf8Interning.Create);
 end;
 
 type
@@ -2357,7 +2357,7 @@ type
       read fMaxY write fMaxY;
   end;
 
-procedure TTestMemoryBased._RTree;
+procedure TTestSqliteMemory._RTree;
 var
   Model: TOrmModel;
   Client: TRestClientDB;
@@ -2416,10 +2416,10 @@ begin
       Client.Commit;
       writeln('added in ',timer.Stop); timer.Start;
       with Client.Server as TRestServer do begin
-        CreateSQLIndex(TOrmMapBoxPlain,'MinX',false);
-        CreateSQLIndex(TOrmMapBoxPlain,'MaxX',false);
-        CreateSQLIndex(TOrmMapBoxPlain,'MinY',false);
-        CreateSQLIndex(TOrmMapBoxPlain,'MaxY',false);
+        CreateSqlIndex(TOrmMapBoxPlain,'MinX',false);
+        CreateSqlIndex(TOrmMapBoxPlain,'MaxX',false);
+        CreateSqlIndex(TOrmMapBoxPlain,'MinY',false);
+        CreateSqlIndex(TOrmMapBoxPlain,'MaxY',false);
       end;
       writeln('indexes created in ',timer.Stop); timer.Start;
       for i := 1 to COUNT do begin
@@ -2559,14 +2559,14 @@ const
   SHARD_MAX = 10000;
   SHARD_RANGE = 1000;
 
-function TTestMemoryBased.CreateShardDB(maxshard: Integer): TRestServer;
+function TTestSqliteMemory.CreateShardDB(maxshard: Integer): TRestServer;
 begin
   result := TRestServerDB.CreateWithOwnModel([TOrmTest], false, 'shardroot');
   check(TRestStorageShardDB.Create(
     TOrmTest, result, SHARD_RANGE, [], '', maxshard) <> nil);
 end;
 
-procedure TTestMemoryBased.ShardWrite;
+procedure TTestSqliteMemory.ShardWrite;
 var
   R: TOrmTest;
   i: integer;
@@ -2584,7 +2584,7 @@ begin
         check(db.Orm.AddWithBlobs(R) = i);
         R.CheckWith(self, i);
       end;
-      b := TRestBatch.Create(db.Orm, TOrmTest, SHARD_RANGE div 3, [boExtendedJSON]);
+      b := TRestBatch.Create(db.Orm, TOrmTest, SHARD_RANGE div 3, [boExtendedJson]);
       try
         for i := 51 to SHARD_MAX do
         begin
@@ -2603,7 +2603,7 @@ begin
   end;
 end;
 
-procedure TTestMemoryBased.ShardRead;
+procedure TTestSqliteMemory.ShardRead;
 var
   R: TOrmTest;
   i: integer;
@@ -2627,7 +2627,7 @@ begin
   end;
 end;
 
-procedure TTestMemoryBased.ShardReadAfterPurge;
+procedure TTestSqliteMemory.ShardReadAfterPurge;
 var
   R: TOrmTest;
   i: integer;
@@ -2655,7 +2655,7 @@ begin
   end;
 end;
 
-procedure TTestMemoryBased._MaxShardCount;
+procedure TTestSqliteMemory._MaxShardCount;
 var
   R: TOrmTest;
   i, last: integer;
@@ -2675,7 +2675,7 @@ begin
         check(db.Orm.RetrieveBlobFields(R));
         R.CheckWith(self, i, 0);
       end;
-      b := TRestBatch.Create(db.Orm, TOrmTest, SHARD_RANGE div 3, [boExtendedJSON]);
+      b := TRestBatch.Create(db.Orm, TOrmTest, SHARD_RANGE div 3, [boExtendedJson]);
       try
         for i := SHARD_MAX + 1 to SHARD_MAX + 2000 do
         begin
@@ -2764,7 +2764,7 @@ type
 
 { TBidirServer }
 
-function TBidirServer.TestRest(a, b: integer; out c: RawUTF8): variant;
+function TBidirServer.TestRest(a, b: integer; out c: RawUtf8): variant;
 begin
   c := Int32ToUtf8(a + b);
   result := _ObjFast(['a', a, 'b', b, 'c', c]);
@@ -2838,7 +2838,7 @@ const
 procedure TTestBidirectionalRemoteConnection.WebsocketsJSONProtocol;
 begin
   WebsocketsLowLevel(
-    TWebSocketProtocolJSON.Create(''), focText);
+    TWebSocketProtocolJson.Create(''), focText);
 end;
 
 procedure TTestBidirectionalRemoteConnection.WebsocketsBinaryProtocol;
@@ -2877,7 +2877,7 @@ procedure TTestBidirectionalRemoteConnection.WebsocketsLowLevel(
     C1, C2: THttpServerRequest;
     P2: TWebSocketProtocol;
     frame: TWebSocketFrame;
-    head: RawUTF8;
+    head: RawUtf8;
     noAnswer1, noAnswer2: boolean;
   begin
     C1 := THttpServerRequest.Create(nil, 0, nil);
@@ -2940,16 +2940,16 @@ begin
   check(fHttpServer.AddServer(fServer));
   fHttpServer.WebSocketsEnable(fServer, WEBSOCKETS_KEY, true).Settings.SetFullLog;
   //(fHttpServer.HttpServer as TWebSocketServer).HeartbeatDelay := 5000;
-  port := UTF8ToInteger(HTTP_DEFAULTPORT);
-  fPublicRelayClientsPort := ToUTF8(port + 1);
-  fPublicRelayPort := ToUTF8(port + 2);
+  port := Utf8ToInteger(HTTP_DEFAULTPORT);
+  fPublicRelayClientsPort := ToUtf8(port + 1);
+  fPublicRelayPort := ToUtf8(port + 2);
 end;
 
 procedure TTestBidirectionalRemoteConnection.TestRest(Rest: TRest);
 var
   I: IBidirService;
   a, b: integer;
-  c: RawUTF8;
+  c: RawUtf8;
   v: variant;
   res: TServiceCustomAnswer;
 begin
@@ -3031,7 +3031,7 @@ begin
   TestRest(fServer);
 end;
 
-function TTestBidirectionalRemoteConnection.NewClient(const port: RawUTF8):
+function TTestBidirectionalRemoteConnection.NewClient(const port: RawUtf8):
   TRestHttpClientWebsockets;
 begin
   result := TRestHttpClientWebsockets.Create('127.0.0.1', port, TOrmModel.Create
@@ -3051,8 +3051,8 @@ procedure TTestBidirectionalRemoteConnection.SOACallbackViaWebsockets(
 
 var
   c1, c2: TRestHttpClientWebsockets;
-  port: RawUTF8;
-  stats: RawUTF8;
+  port: RawUtf8;
+  stats: RawUtf8;
 begin
   if Relay then
     port := fPublicRelayClientsPort
@@ -3089,7 +3089,7 @@ begin
   end;
 end;
 
-procedure TTestBidirectionalRemoteConnection.SOACallbackViaJSONWebsockets;
+procedure TTestBidirectionalRemoteConnection.SOACallbackViaJsonWebsockets;
 begin
   SOACallbackViaWebsockets({ajax=}true, {relay=}false);
 end;
@@ -3103,7 +3103,7 @@ procedure TTestBidirectionalRemoteConnection.RelayStart;
 const
   RELAYKEY = 'aes256secret';
 var
-  stats: RawUTF8;
+  stats: RawUtf8;
 begin
   fPublicRelay := TPublicRelay.Create(nil, fPublicRelayClientsPort,
     fPublicRelayPort, RELAYKEY, TJWTHS256.Create('jwtsecret', 100, [], []));
@@ -3117,7 +3117,7 @@ begin
   check(PosEx('version', stats) > 0, 'stats');
 end;
 
-procedure TTestBidirectionalRemoteConnection.RelaySOACallbackViaJSONWebsockets;
+procedure TTestBidirectionalRemoteConnection.RelaySOACallbackViaJsonWebsockets;
 begin
   SOACallbackViaWebsockets({ajax=}true, {relay=}true);
 end;

@@ -59,7 +59,7 @@ type
   TRestServerDB = class(TRestServer)
   protected
     function GetDB: TSqlDatabase;
-    function GetStatementLastException: RawUTF8;
+    function GetStatementLastException: RawUtf8;
     // include addition SQLite3 specific information to the returned content
     procedure InternalStat(Ctxt: TRestServerURIContext; W: TTextWriter); override;
     procedure InternalInfo(var info: TDocVariantData); override;
@@ -76,7 +76,7 @@ type
     // (the main SQLite3 database file is encrypted, not the wal file during run)
     // - it will then call the other overloaded constructor to initialize the server
     constructor Create(aModel: TOrmModel; const aDBFileName: TFileName;
-      aHandleUserAuthentication: boolean = false; const aPassword: RawUTF8 = '';
+      aHandleUserAuthentication: boolean = false; const aPassword: RawUtf8 = '';
       aDefaultCacheSize: integer = 10000;
       aDefaultPageSize: integer = 4096); reintroduce; overload;
     /// initialize a REST server with a database, and a temporary Database Model
@@ -86,7 +86,7 @@ type
     // enough abilities to run regression tests, for instance
     constructor CreateWithOwnModel(const aTables: array of TOrmClass;
       const aDBFileName: TFileName; aHandleUserAuthentication: boolean = false;
-      const aRoot: RawUTF8 = 'root'; const aPassword: RawUTF8 = '';
+      const aRoot: RawUtf8 = 'root'; const aPassword: RawUtf8 = '';
       aDefaultCacheSize: integer = 10000;
       aDefaultPageSize: integer = 4096); overload;
     /// create a REST server with an in-memory SQLite3 engine
@@ -97,7 +97,7 @@ type
     // - could be used for test purposes
     constructor CreateWithOwnModel(const aTables: array of TOrmClass;
       aHandleUserAuthentication: boolean = false;
-      const aRoot: RawUTF8 = 'root'); overload;
+      const aRoot: RawUtf8 = 'root'); overload;
     /// initialize a SQLite3 REST server from a TSynConnectionDefinition
     constructor RegisteredClassCreateFrom(aModel: TOrmModel;
       aDefinition: TSynConnectionDefinition;
@@ -112,7 +112,7 @@ type
     property DB: TSqlDataBase read GetDB;
     /// contains some textual information about the latest Exception raised
     // during SQL statement execution
-    property StatementLastException: RawUTF8
+    property StatementLastException: RawUtf8
       read GetStatementLastException;
   end;
 
@@ -131,7 +131,7 @@ type
     fServer: TRestServerDB;
     fOwnedServer: TRestServerDB;
     fOwnedDB: TSqlDataBase;
-    fInternalHeader: RawUTF8;
+    fInternalHeader: RawUtf8;
     function GetDB: TSqlDataBase;
       {$ifdef HASINLINE}inline;{$endif}
     /// method calling the RESTful server fServer
@@ -154,7 +154,7 @@ type
     // (the main SQLite3 database file is encrypted, not the wal file during run)
     constructor Create(aClientModel, aServerModel: TOrmModel;
       const aDBFileName: TFileName; aServerClass: TRestServerDBClass;
-      aHandleUserAuthentication: boolean = false; const aPassword: RawUTF8 = '';
+      aHandleUserAuthentication: boolean = false; const aPassword: RawUtf8 = '';
       aDefaultCacheSize: integer = 10000); reintroduce; overload;
     /// initialize the class, for an existing TRestServerDB
     // - the client TOrmModel will be cloned from the server's one
@@ -203,7 +203,7 @@ end;
 
 constructor TRestServerDB.Create(aModel: TOrmModel;
   const aDBFileName: TFileName; aHandleUserAuthentication: boolean;
-  const aPassword: RawUTF8; aDefaultCacheSize, aDefaultPageSize: integer);
+  const aPassword: RawUtf8; aDefaultCacheSize, aDefaultPageSize: integer);
 var
   db: TSqlDatabase;
 begin
@@ -214,7 +214,7 @@ end;
 
 constructor TRestServerDB.CreateWithOwnModel(const aTables: array of TOrmClass;
   const aDBFileName: TFileName; aHandleUserAuthentication: boolean;
-  const aRoot, aPassword: RawUTF8; aDefaultCacheSize, aDefaultPageSize: integer);
+  const aRoot, aPassword: RawUtf8; aDefaultCacheSize, aDefaultPageSize: integer);
 var
   model: TOrmModel;
 begin
@@ -231,7 +231,7 @@ begin
 end;
 
 constructor TRestServerDB.CreateWithOwnModel(const aTables: array of TOrmClass;
-  aHandleUserAuthentication: boolean; const aRoot: RawUTF8);
+  aHandleUserAuthentication: boolean; const aRoot: RawUtf8);
 var
   model: TOrmModel;
 begin
@@ -244,7 +244,7 @@ constructor TRestServerDB.RegisteredClassCreateFrom(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition;
   aServerHandleAuthentication: boolean);
 begin
-  Create(aModel, UTF8ToString(aDefinition.ServerName),
+  Create(aModel, Utf8ToString(aDefinition.ServerName),
     aServerHandleAuthentication, aDefinition.PasswordPlain);
 end;
 
@@ -256,7 +256,7 @@ begin
   with fOrmInstance as TRestOrmServerDB do
     if DB <> nil then
     begin
-      Definition.ServerName := StringToUTF8(DB.FileName);
+      Definition.ServerName := StringToUtf8(DB.FileName);
       Definition.PasswordPlain := DB.Password;
     end;
 end;
@@ -266,7 +266,7 @@ begin
   result := (fOrmInstance as TRestOrmServerDB).DB;
 end;
 
-function TRestServerDB.GetStatementLastException: RawUTF8;
+function TRestServerDB.GetStatementLastException: RawUtf8;
 begin
   result := (fOrmInstance as TRestOrmServerDB).StatementLastException;
 end;
@@ -290,7 +290,7 @@ begin
         for i := 0 to Count - 1 do
           with Cache[ndx[i]] do
           begin
-            W.AddJSONEscape([StatementSQL, Timer]);
+            W.AddJsonEscape([StatementSQL, Timer]);
             W.Add(',');
           end;
       finally
@@ -323,7 +323,7 @@ begin
   if fInternalHeader = '' then
     fInternalHeader := 'RemoteIP: 127.0.0.1'#13#10'ConnectionID: ' +
       PointerToHex(self);
-  AddToCSV(fInternalHeader, call.InHead, #13#10);
+  AddToCsv(fInternalHeader, call.InHead, #13#10);
   call.RestAccessRights := @FULL_ACCESS_RIGHTS;
   fServer.URI(call);
   if (call.OutInternalState = 0) and
@@ -353,12 +353,12 @@ begin
   // next line will create aModel tables if necessary
   fOwnedServer := aServerClass.Create(aServerModel, aDB, aHandleUserAuthentication);
   fServer := fOwnedServer;
-  fServer.NoAJAXJSON := true; // use smaller JSON size in this local use
+  fServer.NoAjaxJson := true; // use smaller JSON size in this local use
 end;
 
 constructor TRestClientDB.Create(aClientModel, aServerModel: TOrmModel;
   const aDBFileName: TFileName; aServerClass: TRestServerDBClass;
-  aHandleUserAuthentication: boolean; const aPassword: RawUTF8;
+  aHandleUserAuthentication: boolean; const aPassword: RawUtf8;
   aDefaultCacheSize: integer);
 begin
   fOwnedDB := TSqlDataBase.Create(
@@ -372,7 +372,7 @@ var
   m: TOrmModel;
 begin
   if aRunningServer = nil then
-    raise ERestException.CreateUTF8('%.Create(nil)', [self]);
+    raise ERestException.CreateUtf8('%.Create(nil)', [self]);
   m := TOrmModel.Create(aRunningServer.Model);
   m.Owner := Self; // auto-free m in TSqlRest.Destroy
   inherited Create(m);

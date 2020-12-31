@@ -722,7 +722,7 @@ asm
         mov     [eax], dl
 end;
 
-procedure YearToPChar(Y: PtrUInt; P: PUTF8Char);
+procedure YearToPChar(Y: PtrUInt; P: PUtf8Char);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // eax=Y, edx=P
@@ -1065,7 +1065,7 @@ asm
 @0:     sub     eax, edx
 end;
 
-function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt): integer;
+function PosEx(const SubStr, S: RawUtf8; Offset: PtrUInt): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // eax=SubStr, edx=S, ecx=Offset
@@ -1250,7 +1250,7 @@ end;
 function SortDynArrayAnsiString(const A,B): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
-        // x86 version optimized for AnsiString/RawUTF8/RawByteString types
+        // x86 version optimized for AnsiString/RawUtf8/RawByteString types
         mov     eax, [eax]
         mov     edx, [edx]
         cmp     eax, edx
@@ -1893,7 +1893,7 @@ end;
 {$ifdef CPU32DELPHI}
 
 // inspired by ValExt_JOH_PAS_8_a by John O'Harrow - calls Delphi System.@Pow10
-function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
+function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
 const
   Ten: double = 10.0;
 asm

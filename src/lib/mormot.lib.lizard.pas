@@ -407,7 +407,7 @@ begin
       if aRaiseNoException then
         exit
       else
-        raise EAlgoCompress.CreateUTF8('% has unexpected versionNumber=%',
+        raise EAlgoCompress.CreateUtf8('% has unexpected versionNumber=%',
           [fLibrary.LibraryPath, versionNumber]);
     // register TAlgoLizard/TAlgoLizardFast/TAlgoLizardHuffman
     inherited Create;
@@ -415,7 +415,7 @@ begin
     fLoaded := true;
   end
   else if not aRaiseNoException then
-    raise EAlgoCompress.CreateUTF8('Unable to load % - %/'#13#10 +
+    raise EAlgoCompress.CreateUtf8('Unable to load % - %/'#13#10 +
       'Please download from https://synopse.info/files/SynLizardLibs.7z',
       [aLibraryFile, SysErrorMessage(GetLastError)]);
 end;

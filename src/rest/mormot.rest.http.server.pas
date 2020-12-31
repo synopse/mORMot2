@@ -150,14 +150,14 @@ type
   // mode, to allow immediate callbacks from the server to the client
   // - just create it and it will serve SQL statements as UTF-8 JSON
   // - for a true AJAX server, expanded data is prefered - your code may contain:
-  // ! DBServer.NoAJAXJSON := false;
+  // ! DBServer.NoAjaxJson := false;
   TRestHttpServer = class(TSynPersistentLock)
   protected
-    fOnlyJSONRequests: boolean;
+    fOnlyJsonRequests: boolean;
     fShutdownInProgress: boolean;
     fHttpServer: THttpServerGeneric;
-    fPort, fDomainName: RawUTF8;
-    fPublicAddress, fPublicPort: RawUTF8;
+    fPort, fDomainName: RawUtf8;
+    fPublicAddress, fPublicPort: RawUtf8;
     /// internal servers to compute responses (protected by inherited fSafe)
     fDBServers: array of record
       Server: TRestServer;
@@ -165,14 +165,14 @@ type
       Security: TRestHttpServerSecurity;
     end;
     fHosts: TSynNameValue;
-    fAccessControlAllowOrigin: RawUTF8;
+    fAccessControlAllowOrigin: RawUtf8;
     fAccessControlAllowOriginsMatch: TMatchs;
     fAccessControlAllowCredential: boolean;
-    fRootRedirectToURI: array[boolean] of RawUTF8;
+    fRootRedirectToURI: array[boolean] of RawUtf8;
     fRedirectServerRootUriForExactCase: boolean;
     fHttpServerKind: TRestHttpServerOptions;
     fLog: TSynLogClass;
-    procedure SetAccessControlAllowOrigin(const Value: RawUTF8);
+    procedure SetAccessControlAllowOrigin(const Value: RawUtf8);
     procedure ComputeAccessControlHeader(Ctxt: THttpServerRequestAbstract);
     // assigned to fHttpServer.OnHttpThreadStart/Terminate e.g. to handle connections
     procedure HttpThreadStart(Sender: TThread); virtual;
@@ -186,21 +186,21 @@ type
     procedure SetDBServerAccessRight(Index: integer; Value: PORMAccessRights);
     procedure SetDBServer(aIndex: integer; aServer: TRestServer;
       aSecurity: TRestHttpServerSecurity; aRestAccessRights: PORMAccessRights);
-    function GetDBServerNames: RawUTF8;
+    function GetDBServerNames: RawUtf8;
     function HttpApiAddUri(const aRoot, aDomainName: RawByteString;
       aSecurity: TRestHttpServerSecurity;
-      aRegisterURI, aRaiseExceptionOnError: boolean): RawUTF8;
+      aRegisterURI, aRaiseExceptionOnError: boolean): RawUtf8;
     function NotifyCallback(aSender: TRestServer;
-      const aInterfaceDotMethodName, aParams: RawUTF8;
+      const aInterfaceDotMethodName, aParams: RawUtf8;
       aConnectionID: THttpServerConnectionID;
-      aFakeCallID: integer; aResult, aErrorMsg: PRawUTF8): boolean;
+      aFakeCallID: integer; aResult, aErrorMsg: PRawUtf8): boolean;
   public
     /// create a Server instance, binded and listening on a TCP port to HTTP requests
     // - raise a ERestHttpServer exception if binding failed
     // - specify one or more TRestServer server class to be used: each
     // class must have an unique Model.Root value, to identify which TRestServer
     // instance must handle a particular request from its URI
-    // - port is an RawUTF8/AnsiString, as expected by the WinSock API - in case
+    // - port is an RawUtf8/AnsiString, as expected by the WinSock API - in case
     // of useHttpSocket or useBidirSocket kind of server, you should specify the
     // public server address to bind to: e.g. '1.2.3.4:1234' - even for http.sys,
     // the public address could be used e.g. for TRestServer.SetPublicURI()
@@ -228,18 +228,18 @@ type
     // to server static file content, by overriding TRestHttpServer.Request
     // - for THttpApiServer, you can specify an optional name for the HTTP queue
     // - for THttpServer, you can force aHeadersUnFiltered flag
-    constructor Create(const aPort: RawUTF8;
-      const aServers: array of TRestServer; const aDomainName: RawUTF8 = '+';
+    constructor Create(const aPort: RawUtf8;
+      const aServers: array of TRestServer; const aDomainName: RawUtf8 = '+';
       aHttpServerKind: TRestHttpServerOptions = HTTP_DEFAULT_MODE;
       ServerThreadPoolCount: Integer = 32;
       aHttpServerSecurity: TRestHttpServerSecurity = secNone;
-      const aAdditionalURL: RawUTF8 = '';
+      const aAdditionalURL: RawUtf8 = '';
       const aQueueName: SynUnicode = '';
       aHeadersUnFiltered: boolean = false); reintroduce; overload;
     /// create a Server instance, binded and listening on a TCP port to HTTP requests
     // - raise a ERestHttpServer exception if binding failed
     // - specify one TRestServer server class to be used
-    // - port is an RawUTF8, as expected by the WinSock API - in case of
+    // - port is an RawUtf8, as expected by the WinSock API - in case of
     // useHttpSocket or useBidirSocket kind of server, you can specify the
     // public server address to bind to: e.g. '1.2.3.4:1234' - even for http.sys,
     // the public address could be used e.g. for TRestServer.SetPublicURI()
@@ -251,13 +251,13 @@ type
     // - optional aAdditionalURL parameter can be used e.g. to registry an URI
     // to server static file content, by overriding TRestHttpServer.Request
     // - for THttpApiServer, you can specify an optional name for the HTTP queue
-    constructor Create(const aPort: RawUTF8; aServer: TRestServer;
-      const aDomainName: RawUTF8 = '+';
+    constructor Create(const aPort: RawUtf8; aServer: TRestServer;
+      const aDomainName: RawUtf8 = '+';
       aHttpServerKind: TRestHttpServerOptions = HTTP_DEFAULT_MODE;
       aRestAccessRights: PORMAccessRights = nil;
       ServerThreadPoolCount: Integer = 32;
       aHttpServerSecurity: TRestHttpServerSecurity = secNone;
-      const aAdditionalURL: RawUTF8 = '';
+      const aAdditionalURL: RawUtf8 = '';
       const aQueueName: SynUnicode = ''); reintroduce; overload;
     /// create a Server instance, binded and listening on a TCP port to HTTP requests
     // - raise a ERestHttpServer exception if binding failed
@@ -318,7 +318,7 @@ type
     // - if aURI='' is given, the corresponding host redirection will be disabled
     // - note: by design, 'something.localhost' is likely to be not recognized
     // as aDomain, since 'localhost' can not be part of proper DNS resolution
-    procedure DomainHostRedirect(const aDomain, aURI: RawUTF8);
+    procedure DomainHostRedirect(const aDomain, aURI: RawUtf8);
     /// allow to temporarly redirect ip:port root URI to a given sub-URI
     // - by default, only sub-URI, as defined by TRestServer.Model.Root, are
     // registered - you can define here a sub-URI to reach when the main server
@@ -327,7 +327,7 @@ type
     // - for http.sys server, would try to register '/' if aRegisterURI is TRUE
     // - by default, will redirect http://localhost:port unless you set
     // aHttpServerSecurity=secSSL so that it would redirect https://localhost:port
-    procedure RootRedirectToURI(const aRedirectedURI: RawUTF8;
+    procedure RootRedirectToURI(const aRedirectedURI: RawUtf8;
       aRegisterURI: boolean = true; aHttps: boolean = false);
     /// defines the WebSockets protocols to be used for useBidirSocket
     // - i.e. 'synopsebinary' and optionally 'synopsejson' protocols
@@ -336,20 +336,20 @@ type
     // - TWebSocketProtocolBinary will always be registered by this method
     // - if the encryption key text is not '', TWebSocketProtocolBinary will
     // use AES-CFB 256 bits encryption
-    // - if aWebSocketsAJAX is TRUE, it will also register TWebSocketProtocolJSON
+    // - if aWebSocketsAjax is TRUE, it will also register TWebSocketProtocolJson
     // so that AJAX applications would be able to connect to this server
     // - this method does nothing if the associated HttpServer class is not a
     // TWebSocketServerRest (i.e. this instance was not created as useBidirSocket)
     function WebSocketsEnable(
-      const aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8;
-      aWebSocketsAJAX: boolean = false;
+      const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
+      aWebSocketsAjax: boolean = false;
       aWebSocketsCompressed: boolean = true): TWebSocketServerRest; overload;
     /// defines the useBidirSocket WebSockets protocol to be used for a REST server
     // - same as the overloaded WebSocketsEnable() method, but the URI will be
     // forced to match the aServer.Model.Root value, as expected on the client
     // side by TRestHttpClientWebsockets.WebSocketsUpgrade()
     function WebSocketsEnable(aServer: TRestServer;
-      const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean = false;
+      const aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean = false;
       aWebSocketsCompressed: boolean = true): TWebSocketServerRest; overload;
     /// the associated running HTTP server instance
     // - either THttpApiServer (available only under Windows), THttpServer or
@@ -360,20 +360,20 @@ type
     // - may contain the public server address to bind to: e.g. '1.2.3.4:1234'
     // - see PublicAddress and PublicPort properties if you want to get the
     // true IP port or address
-    property Port: RawUTF8
+    property Port: RawUtf8
       read fPort;
     /// the TCP/IP public address on which this server is listening to
     // - equals e.g. '1.2.3.4' if Port = '1.2.3.4:1234'
     // - if Port does not contain an explicit address (e.g. '1234'), the current
     // computer host name would be assigned as PublicAddress
-    property PublicAddress: RawUTF8
+    property PublicAddress: RawUtf8
       read fPublicAddress;
     /// the TCP/IP public port on which this server is listening to
     // - equals e.g. '1234' if Port = '1.2.3.4:1234'
-    property PublicPort: RawUTF8
+    property PublicPort: RawUtf8
       read fPublicPort;
     /// the URLprefix used for internal HttpAddUrl API call
-    property DomainName: RawUTF8
+    property DomainName: RawUtf8
       read fDomainName;
     /// read-only access to the number of registered internal servers
     property DBServerCount: integer
@@ -393,16 +393,16 @@ type
     // request of MIME type APPLICATION/JSON
     // - the default is false, in order to allow direct view of JSON from
     // any browser
-    property OnlyJSONRequests: boolean
-      read fOnlyJSONRequests write fOnlyJSONRequests;
+    property OnlyJsonRequests: boolean
+      read fOnlyJsonRequests write fOnlyJsonRequests;
     /// enable cross-origin resource sharing (CORS) for proper AJAX process
     // - see @https://developer.mozilla.org/en-US/docs/HTTP/Access_control_CORS
     // - can be set e.g. to '*' to allow requests from any site/domain; or
-    // specify an CSV white-list of URI to be allowed as origin e.g. as
+    // specify an Csv white-list of URI to be allowed as origin e.g. as
     // 'https://foo.example1,https://foo.example2' or 'https://*.foo.example' or
     // (faster) '*.foo.example1,*.foo.example2' following the TMatch syntax
     // - see also AccessControlAllowCredential property
-    property AccessControlAllowOrigin: RawUTF8
+    property AccessControlAllowOrigin: RawUtf8
       read fAccessControlAllowOrigin write SetAccessControlAllowOrigin;
     /// enable cookies, authorization headers or TLS client certificates CORS exposition
     // - this option works with the AJAX XMLHttpRequest.withCredentials property
@@ -440,7 +440,7 @@ function ToText(sec: TRestHttpServerSecurity): PShortString; overload;
 
 type
   /// callback expected by TRestHttpRemoteLogServer to notify about a received log
-  TRemoteLogReceivedOne = procedure(const Text: RawUTF8) of object;
+  TRemoteLogReceivedOne = procedure(const Text: RawUtf8) of object;
 
   {$M+}
   /// limited HTTP server which is will receive remote log notifications
@@ -456,7 +456,7 @@ type
     /// initialize the HTTP server and an internal mORMot server
     // - you can share several HTTP log servers on the same port, if you use
     // a dedicated root URI and use the http.sys server (which is the default)
-    constructor Create(const aRoot: RawUTF8; aPort: integer;
+    constructor Create(const aRoot: RawUtf8; aPort: integer;
       const aEvent: TRemoteLogReceivedOne); reintroduce;
     /// release the HTTP server and its internal mORMot server
     destructor Destroy; override;
@@ -592,7 +592,7 @@ begin
   end;
 end;
 
-procedure TRestHttpServer.DomainHostRedirect(const aDomain, aURI: RawUTF8);
+procedure TRestHttpServer.DomainHostRedirect(const aDomain, aURI: RawUtf8);
 var
   uri: TURI;
 begin
@@ -608,15 +608,15 @@ begin
     fHosts.Add(aDomain, aURI);
 end;
 
-constructor TRestHttpServer.Create(const aPort: RawUTF8;
-  const aServers: array of TRestServer; const aDomainName: RawUTF8;
+constructor TRestHttpServer.Create(const aPort: RawUtf8;
+  const aServers: array of TRestServer; const aDomainName: RawUtf8;
   aHttpServerKind: TRestHttpServerOptions; ServerThreadPoolCount: Integer;
-  aHttpServerSecurity: TRestHttpServerSecurity; const aAdditionalURL: RawUTF8;
+  aHttpServerSecurity: TRestHttpServerSecurity; const aAdditionalURL: RawUtf8;
   const aQueueName: SynUnicode; aHeadersUnFiltered: boolean);
 var
   i, j: PtrInt;
-  ServersRoot: RawUTF8;
-  ErrMsg: RawUTF8;
+  ServersRoot: RawUtf8;
+  ErrMsg: RawUtf8;
   log: ISynLog;
 begin
   if high(aServers) < 0 then
@@ -630,7 +630,7 @@ begin
   fHosts.Init(false);
   fDomainName := aDomainName;
   fPort := aPort;
-  Split(RawUTF8(fPort), ':', fPublicAddress, fPublicPort);
+  Split(RawUtf8(fPort), ':', fPublicAddress, fPublicPort);
   if fPublicPort = '' then
   begin
     // you should better set aPort='publicip:port'
@@ -651,11 +651,11 @@ begin
           ServersRoot := {%H-}ServersRoot + ' ' + Root;
           for j := i + 1 to high(aServers) do
             if aServers[j].Model.URIMatch(Root) <> rmNoMatch then
-              FormatUTF8('Duplicated Root URI: % and %',
+              FormatUtf8('Duplicated Root URI: % and %',
                 [Root, aServers[j].Model.Root], ErrMsg);
         end;
     if ErrMsg <> '' then
-      raise ERestHttpServer.CreateUTF8('%.Create(% ): %', [self, ServersRoot, ErrMsg]);
+      raise ERestHttpServer.CreateUtf8('%.Create(% ): %', [self, ServersRoot, ErrMsg]);
     // associate before HTTP server is started, for TRestServer.BeginCurrentThread
     SetLength(fDBServers, length(aServers));
     for i := 0 to high(aServers) do
@@ -722,10 +722,10 @@ begin
   log.Log(sllHttp, '% initialized for%', [fHttpServer, ServersRoot], self);
 end;
 
-constructor TRestHttpServer.Create(const aPort: RawUTF8; aServer: TRestServer;
-  const aDomainName: RawUTF8; aHttpServerKind: TRestHttpServerOptions;
+constructor TRestHttpServer.Create(const aPort: RawUtf8; aServer: TRestServer;
+  const aDomainName: RawUtf8; aHttpServerKind: TRestHttpServerOptions;
   aRestAccessRights: PORMAccessRights; ServerThreadPoolCount: Integer;
-  aHttpServerSecurity: TRestHttpServerSecurity; const aAdditionalURL: RawUTF8;
+  aHttpServerSecurity: TRestHttpServerSecurity; const aAdditionalURL: RawUtf8;
   const aQueueName: SynUnicode);
 begin
   Create(aPort, [aServer], aDomainName, aHttpServerKind, ServerThreadPoolCount,
@@ -794,7 +794,7 @@ begin
   result := length(fDBServers);
 end;
 
-function TRestHttpServer.GetDBServerNames: RawUTF8;
+function TRestHttpServer.GetDBServerNames: RawUtf8;
 var
   i: PtrInt;
 begin
@@ -853,7 +853,7 @@ const
   HTTPS_SECURITY: array[boolean] of TRestHttpServerSecurity = (
     secNone, secSSL);
 
-procedure TRestHttpServer.RootRedirectToURI(const aRedirectedURI: RawUTF8;
+procedure TRestHttpServer.RootRedirectToURI(const aRedirectedURI: RawUtf8;
   aRegisterURI: boolean; aHttps: boolean);
 begin
   if fRootRedirectToURI[aHttps] = aRedirectedURI then
@@ -868,7 +868,7 @@ end;
 
 function TRestHttpServer.HttpApiAddUri(const aRoot, aDomainName: RawByteString;
   aSecurity: TRestHttpServerSecurity; aRegisterURI,
-  aRaiseExceptionOnError: boolean): RawUTF8;
+  aRaiseExceptionOnError: boolean): RawUtf8;
 {$ifndef ONLYUSEHTTPSOCKET}
 var
   err: integer;
@@ -887,7 +887,7 @@ begin
     aDomainName, aRegisterURI);
   if err = NO_ERROR then
     exit;
-  FormatUTF8('http.sys URI registration error #% for http%://%:%/%',
+  FormatUtf8('http.sys URI registration error #% for http%://%:%/%',
     [err, HTTPS_TEXT[https], aDomainName, fPublicPort, aRoot], result);
   if err = ERROR_ACCESS_DENIED then
     if aRegisterURI then
@@ -898,7 +898,7 @@ begin
         ' (you need to register the URI - try to use useHttpApiRegisteringURI)';
   fLog.Add.Log(sllLastError, result, self);
   if aRaiseExceptionOnError then
-    raise ERestHttpServer.CreateUTF8('%: %', [self, result]);
+    raise ERestHttpServer.CreateUtf8('%: %', [self, result]);
   {$endif ONLYUSEHTTPSOCKET}
 end;
 
@@ -906,8 +906,8 @@ function TRestHttpServer.Request(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   call: TRestUriParams;
   i, hostlen: PtrInt;
-  P: PUTF8Char;
-  headers, hostroot, redirect: RawUTF8;
+  P: PUtf8Char;
+  headers, hostroot, redirect: RawUtf8;
   match: TRestModelMatch;
   serv: TRestServer;
   c: THttpServerRequest absolute Ctxt;
@@ -926,7 +926,7 @@ begin
     else
       result := HTTP_BADREQUEST
   else if (Ctxt.Method = '') or
-          (OnlyJSONRequests and
+          (OnlyJsonRequests and
            not IdemPChar(pointer(Ctxt.InContentType), JSON_CONTENT_TYPE_UPPER)) then
     // wrong Input parameters or not JSON request: 400 BAD REQUEST
     result := HTTP_BADREQUEST
@@ -1053,7 +1053,7 @@ begin
     end;
     Ctxt.OutCustomHeaders := TrimU(call.OutHead);
     if call.OutInternalState <> 0 then
-      Ctxt.OutCustomHeaders := FormatUTF8('%'#13#10'Server-InternalState: %',
+      Ctxt.OutCustomHeaders := FormatUtf8('%'#13#10'Server-InternalState: %',
         [Ctxt.OutCustomHeaders, call.OutInternalState]);
     // handle optional CORS origin
     if fAccessControlAllowOrigin <> '' then
@@ -1093,16 +1093,16 @@ begin
   end;
 end;
 
-procedure TRestHttpServer.SetAccessControlAllowOrigin(const Value: RawUTF8);
+procedure TRestHttpServer.SetAccessControlAllowOrigin(const Value: RawUtf8);
 var
-  patterns: TRawUTF8DynArray;
+  patterns: TRawUtf8DynArray;
 begin
   fAccessControlAllowOrigin := Value;
   FreeAndNil(fAccessControlAllowOriginsMatch);
   if (Value = '') or
      (Value = '*') then
     exit;
-  CSVToRawUTF8DynArray(pointer(Value), patterns);
+  CsvToRawUtf8DynArray(pointer(Value), patterns);
   if patterns = nil then
     exit;
   fAccessControlAllowOriginsMatch :=
@@ -1112,7 +1112,7 @@ end;
 procedure TRestHttpServer.ComputeAccessControlHeader(
   Ctxt: THttpServerRequestAbstract);
 var
-  origin: RawUTF8;
+  origin: RawUtf8;
 begin
   // note: caller did ensure that fAccessControlAllowOrigin<>''
   FindNameValue(Ctxt.InHeaders, 'ORIGIN: ', origin);
@@ -1134,37 +1134,37 @@ begin
 end;
 
 function TRestHttpServer.WebSocketsEnable(
-  const aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8;
-  aWebSocketsAJAX, aWebSocketsCompressed: boolean): TWebSocketServerRest;
+  const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
+  aWebSocketsAjax, aWebSocketsCompressed: boolean): TWebSocketServerRest;
 begin
   if fHttpServer.InheritsFrom(TWebSocketServerRest) then
   begin
     result := TWebSocketServerRest(fHttpServer);
     result.WebSocketsEnable(aWebSocketsURI, aWebSocketsEncryptionKey,
-      aWebSocketsAJAX, aWebSocketsCompressed);
+      aWebSocketsAjax, aWebSocketsCompressed);
   end
   else
-    raise EWebSockets.CreateUTF8(
+    raise EWebSockets.CreateUtf8(
       '%.WebSocketEnable(%): expected useBidirSocket',
       [self, GetEnumName(TypeInfo(TRestHttpServerOptions),
        ord(fHttpServerKind))^]);
 end;
 
 function TRestHttpServer.WebSocketsEnable(aServer: TRestServer;
-  const aWebSocketsEncryptionKey: RawUTF8;
-  aWebSocketsAJAX, aWebSocketsCompressed: boolean): TWebSocketServerRest;
+  const aWebSocketsEncryptionKey: RawUtf8;
+  aWebSocketsAjax, aWebSocketsCompressed: boolean): TWebSocketServerRest;
 begin
   if (aServer = nil) or
      (DBServerFind(aServer) < 0) then
-    raise EWebSockets.CreateUTF8('%.WebSocketEnable(aServer=%?)', [self, aServer]);
+    raise EWebSockets.CreateUtf8('%.WebSocketEnable(aServer=%?)', [self, aServer]);
   result := WebSocketsEnable(aServer.Model.Root, aWebSocketsEncryptionKey,
-    aWebSocketsAJAX, aWebSocketsCompressed);
+    aWebSocketsAjax, aWebSocketsCompressed);
 end;
 
 function TRestHttpServer.NotifyCallback(aSender: TRestServer;
-  const aInterfaceDotMethodName, aParams: RawUTF8; aConnectionID:
+  const aInterfaceDotMethodName, aParams: RawUtf8; aConnectionID:
   THttpServerConnectionID; aFakeCallID: integer;
-  aResult, aErrorMsg: PRawUTF8): boolean;
+  aResult, aErrorMsg: PRawUtf8): boolean;
 var
   ctxt: THttpServerRequest;
   status: cardinal;
@@ -1179,7 +1179,7 @@ begin
       // -> checked in WebSocketsCallback/IsActiveWebSocket
       ctxt := THttpServerRequest.Create(nil, aConnectionID, nil);
       try
-        ctxt.Prepare(FormatUTF8('%/%/%', [aSender.Model.Root,
+        ctxt.Prepare(FormatUtf8('%/%/%', [aSender.Model.Root,
           aInterfaceDotMethodName, aFakeCallID]), 'POST', '',
             '[' + aParams + ']', '', '', {ssl=}false);
         status := fHttpServer.Callback(ctxt, aResult = nil);
@@ -1193,18 +1193,18 @@ begin
           result := true;
         end
         else if aErrorMsg <> nil then
-          FormatUTF8('%.Callback(%) received status=% from %',
+          FormatUtf8('%.Callback(%) received status=% from %',
             [fHttpServer, aConnectionID, status, ctxt.URL], aErrorMsg^);
       finally
         ctxt.Free;
       end;
     end
     else if aErrorMsg <> nil then
-      FormatUTF8('%.NotifyCallback with fHttpServer=nil', [self], aErrorMsg^);
+      FormatUtf8('%.NotifyCallback with fHttpServer=nil', [self], aErrorMsg^);
   except
     on E: Exception do
       if aErrorMsg <> nil then
-        aErrorMsg^ := ObjectToJSONDebug(E);
+        aErrorMsg^ := ObjectToJsonDebug(E);
   end;
 end;
 
@@ -1229,7 +1229,7 @@ var
   websock: TWebSocketServerRest;
 begin
   if aDefinition = nil then
-    raise ERestHttpServer.CreateUTF8('%.Create(aDefinition=nil)', [self]);
+    raise ERestHttpServer.CreateUtf8('%.Create(aDefinition=nil)', [self]);
   if aDefinition.WebSocketPassword <> '' then
     aForcedKind := useBidirSocket;
   if aDefinition.ThreadCount = 0 then
@@ -1270,7 +1270,7 @@ end;
 
 { TRestHttpRemoteLogServer }
 
-constructor TRestHttpRemoteLogServer.Create(const aRoot: RawUTF8;
+constructor TRestHttpRemoteLogServer.Create(const aRoot: RawUtf8;
   aPort: integer; const aEvent: TRemoteLogReceivedOne);
 var
   aModel: TOrmModel;

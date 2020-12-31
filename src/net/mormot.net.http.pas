@@ -54,14 +54,14 @@ var
 
 const
   /// standard text used to identify the WebSockets protocol
-  HTTP_WEBSOCKET_PROTOCOL: RawUTF8 = 'SEC-WEBSOCKET-PROTOCOL';
+  HTTP_WEBSOCKET_PROTOCOL: RawUtf8 = 'SEC-WEBSOCKET-PROTOCOL';
 
 
 /// compute the 'Authorization: Bearer ####' HTTP header of a given token value
-function AuthorizationBearer(const AuthToken: RawUTF8): RawUTF8;
+function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
 
 /// will remove most usual HTTP headers which are to be recomputed on sending
-function PurgeHeaders(P: PUTF8Char): RawUTF8;
+function PurgeHeaders(P: PUtf8Char): RawUtf8;
 
 
 {$ifndef NOXPOWEREDNAME}
@@ -88,12 +88,12 @@ type
   // - the data is compressed (if Compress=TRUE) or uncompressed (if
   // Compress=FALSE) in the Data variable (i.e. it is modified in-place)
   // - to be used with THttpSocket.RegisterCompress method
-  THttpSocketCompress = function(var Data: RawByteString; Compress: boolean): RawUTF8;
+  THttpSocketCompress = function(var Data: RawByteString; Compress: boolean): RawUtf8;
 
   /// used to maintain a list of known compression algorithms
   THttpSocketCompressRec = record
     /// the compression name, as in ACCEPT-ENCODING: header (gzip,deflate,synlz)
-    Name: RawUTF8;
+    Name: RawUtf8;
     /// the function handling compression and decompression
     Func: THttpSocketCompress;
     /// the size in bytes after which compress will take place
@@ -127,7 +127,7 @@ type
     /// used by RegisterCompress method
     fCompress: THttpSocketCompressRecDynArray;
     /// set by RegisterCompress method
-    fCompressAcceptEncoding: RawUTF8;
+    fCompressAcceptEncoding: RawUtf8;
     /// GetHeader set index of protocol in fCompress[], from ACCEPT-ENCODING:
     fCompressAcceptHeader: THttpSocketCompressSet;
     /// same as HeaderGetValue('CONTENT-ENCODING'), but retrieved during Request
@@ -139,7 +139,7 @@ type
     // - always add a 'Content-Length: ' header entry (even if length=0)
     // - e.g. 'Content-Encoding: synlz' header if compressed using synlz
     // - and if Data is not '', will add 'Content-Type: ' header
-    procedure CompressDataAndWriteHeaders(const OutContentType: RawUTF8;
+    procedure CompressDataAndWriteHeaders(const OutContentType: RawUtf8;
       var OutContent: RawByteString);
   public
     /// TCP/IP prefix to mask HTTP protocol
@@ -149,14 +149,14 @@ type
     // the TCP/IP stream won't be recognized as HTTP, and will be ignored by
     // most AntiVirus programs, and increase security - but you won't be able
     // to use an Internet Browser nor AJAX application for remote access any more
-    TCPPrefix: RawUTF8;
+    TCPPrefix: RawUtf8;
     /// will contain the first header line:
     // - 'GET /path HTTP/1.1' for a GET request with THttpServer, e.g.
     // - 'HTTP/1.0 200 OK' for a GET response after Get() e.g.
-    Command: RawUTF8;
+    Command: RawUtf8;
     /// will contain all header lines after a Request
     // - use HeaderGetValue() to get one HTTP header item value by name
-    Headers: RawUTF8;
+    Headers: RawUtf8;
     /// will contain the data retrieved from the server, after the Request
     Content: RawByteString;
     /// same as HeaderGetValue('CONTENT-LENGTH'), but retrieved during Request
@@ -166,11 +166,11 @@ type
     // - proprietary header, used with our RESTful ORM access
     ServerInternalState: integer;
     /// same as HeaderGetValue('CONTENT-TYPE'), but retrieved during Request
-    ContentType: RawUTF8;
+    ContentType: RawUtf8;
     /// same as HeaderGetValue('UPGRADE'), but retrieved during Request
-    Upgrade: RawUTF8;
+    Upgrade: RawUtf8;
     /// same as HeaderGetValue('X-POWERED-BY'), but retrieved during Request
-    XPoweredBy: RawUTF8;
+    XPoweredBy: RawUtf8;
     /// map the presence of some HTTP headers, but retrieved during Request
     HeaderFlags: THttpSocketHeaderFlags;
     /// retrieve the HTTP headers into Headers[] and fill most properties below
@@ -179,15 +179,15 @@ type
     /// retrieve the HTTP body (after uncompression if necessary) into Content
     procedure GetBody;
     /// add an header 'name: value' entry
-    procedure HeaderAdd(const aValue: RawUTF8);
+    procedure HeaderAdd(const aValue: RawUtf8);
     /// set all Header values at once, from CRLF delimited text
-    procedure HeaderSetText(const aText: RawUTF8; const aForcedContentType: RawUTF8 = '');
+    procedure HeaderSetText(const aText: RawUtf8; const aForcedContentType: RawUtf8 = '');
     /// get all Header values at once, as CRLF delimited text
     // - you can optionally specify a value to be added as 'RemoteIP: ' header
-    function HeaderGetText(const aRemoteIP: RawUTF8 = ''): RawUTF8;
+    function HeaderGetText(const aRemoteIP: RawUtf8 = ''): RawUtf8;
     /// HeaderGetValue('CONTENT-TYPE')='text/html', e.g.
     // - supplied aUpperName should be already uppercased
-    function HeaderGetValue(const aUpperName: RawUTF8): RawUTF8;
+    function HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
     // or custom (synlzo/synlz) protocols
@@ -203,17 +203,17 @@ type
 
 /// adjust HTTP body compression according to the supplied 'CONTENT-TYPE'
 function CompressDataAndGetHeaders(Accepted: THttpSocketCompressSet;
-  const Handled: THttpSocketCompressRecDynArray; const OutContentType: RawUTF8;
-  var OutContent: RawByteString): RawUTF8;
+  const Handled: THttpSocketCompressRecDynArray; const OutContentType: RawUtf8;
+  var OutContent: RawByteString): RawUtf8;
 
 /// enable a give compression function for a HTTP link
 function RegisterCompressFunc(var Compress: THttpSocketCompressRecDynArray;
-  aFunction: THttpSocketCompress; var aAcceptEncoding: RawUTF8;
-  aCompressMinSize: integer): RawUTF8;
+  aFunction: THttpSocketCompress; var aAcceptEncoding: RawUtf8;
+  aCompressMinSize: integer): RawUtf8;
 
 /// decode 'CONTENT-ENCODING: ' parameter from registered compression list
 function ComputeContentEncoding(const Compress: THttpSocketCompressRecDynArray;
-  P: PUTF8Char): THttpSocketCompressSet;
+  P: PUtf8Char): THttpSocketCompressSet;
 
 
 { ******************** Abstract Server-Side Types used e.g. for Client-Server Protocol }
@@ -253,7 +253,7 @@ type
   // error code (e.g. HTTP_FORBIDDEN or HTTP_PAYLOADTOOLARGE) to reject
   // the request
   TOnHttpServerBeforeBody = function(const aURL, aMethod, aInHeaders,
-    aInContentType, aRemoteIP: RawUTF8; aContentLength: integer;
+    aInContentType, aRemoteIP: RawUtf8; aContentLength: integer;
     aUseSSL: boolean): cardinal of object;
 
   /// the server-side available authentication schemes
@@ -283,7 +283,7 @@ type
     fInContentType,
     fAuthenticatedUser,
     fOutContentType,
-    fOutCustomHeaders: RawUTF8;
+    fOutCustomHeaders: RawUtf8;
     fInContent, fOutContent: RawByteString;
     fRequestID: integer;
     fConnectionID: THttpServerConnectionID;
@@ -295,26 +295,26 @@ type
     /// prepare an incoming request
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
-    procedure Prepare(const aURL, aMethod, aInHeaders: RawUTF8;
-      const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUTF8;
+    procedure Prepare(const aURL, aMethod, aInHeaders: RawUtf8;
+      const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8;
       aUseSSL: boolean = false); virtual; abstract;
     /// append some lines to the InHeaders input parameter
-    procedure AddInHeader(additionalHeader: RawUTF8);
+    procedure AddInHeader(additionalHeader: RawUtf8);
     /// input parameter containing the caller URI
-    property URL: RawUTF8
+    property URL: RawUtf8
       read fURL;
     /// input parameter containing the caller method (GET/POST...)
-    property Method: RawUTF8
+    property Method: RawUtf8
       read fMethod;
     /// input parameter containing the caller message headers
-    property InHeaders: RawUTF8
+    property InHeaders: RawUtf8
       read fInHeaders;
     /// input parameter containing the caller message body
     // - e.g. some GET/POST/PUT JSON data can be specified here
     property InContent: RawByteString
       read fInContent;
     // input parameter defining the caller message body content type
-    property InContentType: RawUTF8
+    property InContentType: RawUtf8
       read fInContentType;
     /// output parameter to be set to the response message body
     property OutContent: RawByteString
@@ -327,14 +327,14 @@ type
     // - if OutContentType is NORESPONSE_CONTENT_TYPE (i.e. '!NORESPONSE'), then
     // the actual transmission protocol may not wait for any answer - used
     // e.g. for WebSockets
-    property OutContentType: RawUTF8
+    property OutContentType: RawUtf8
       read fOutContentType write fOutContentType;
     /// output parameter to be sent back as the response message header
     // - e.g. to set Content-Type/Location
-    property OutCustomHeaders: RawUTF8
+    property OutCustomHeaders: RawUtf8
       read fOutCustomHeaders write fOutCustomHeaders;
     /// the client remote IP, as specified to Prepare()
-    property RemoteIP: RawUTF8
+    property RemoteIP: RawUtf8
       read fRemoteIP write fRemoteIP;
     /// a 31-bit sequential number identifying this instance on the server
     property RequestID: integer
@@ -359,7 +359,7 @@ type
     // domain user name is retrieved from the supplied AccessToken
     // - could also be set by the THttpServerGeneric.Request() method, after
     // proper authentication, so that it would be logged as expected
-    property AuthenticatedUser: RawUTF8
+    property AuthenticatedUser: RawUtf8
       read fAuthenticatedUser;
   end;
 
@@ -370,7 +370,7 @@ implementation
 
 { ******************** Shared HTTP Constants and Functions }
 
-function AuthorizationBearer(const AuthToken: RawUTF8): RawUTF8;
+function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
 begin
   if AuthToken = '' then
     result := ''
@@ -378,10 +378,10 @@ begin
     result := 'Authorization: Bearer ' + AuthToken;
 end;
 
-function PurgeHeaders(P: PUTF8Char): RawUTF8;
+function PurgeHeaders(P: PUtf8Char): RawUtf8;
 var
   tmp: TTextWriterStackBuffer;
-  next: PUTF8Char;
+  next: PUtf8Char;
   W: TBaseWriter;
 begin
   result := '';
@@ -396,9 +396,9 @@ begin
         if W = nil then
           W := TBaseWriter.CreateOwnedStream(tmp);
         if next = nil then
-          W.AddNoJSONEscape(P)
+          W.AddNoJsonEscape(P)
         else
-          W.AddNoJSONEscape(P, next - P);
+          W.AddNoJsonEscape(P, next - P);
       end;
       P := next;
     end;
@@ -410,12 +410,12 @@ begin
 end;
 
 function RegisterCompressFunc(var Compress: THttpSocketCompressRecDynArray;
-  aFunction: THttpSocketCompress; var aAcceptEncoding: RawUTF8;
-  aCompressMinSize: integer): RawUTF8;
+  aFunction: THttpSocketCompress; var aAcceptEncoding: RawUtf8;
+  aCompressMinSize: integer): RawUtf8;
 var
   i, n: PtrInt;
   dummy: RawByteString;
-  aName: RawUTF8;
+  aName: RawUtf8;
 begin
   result := '';
   if @aFunction = nil then
@@ -447,12 +447,12 @@ begin
 end;
 
 function CompressDataAndGetHeaders(Accepted: THttpSocketCompressSet;
-  const Handled: THttpSocketCompressRecDynArray; const OutContentType: RawUTF8;
-  var OutContent: RawByteString): RawUTF8;
+  const Handled: THttpSocketCompressRecDynArray; const OutContentType: RawUtf8;
+  var OutContent: RawByteString): RawUtf8;
 var
   i, OutContentLen: integer;
   compressible: boolean;
-  OutContentTypeP: PUTF8Char absolute OutContentType;
+  OutContentTypeP: PUtf8Char absolute OutContentType;
 begin
   if (integer(Accepted) <> 0) and
      (OutContentType <> '') and
@@ -487,11 +487,11 @@ begin
 end;
 
 function ComputeContentEncoding(const Compress: THttpSocketCompressRecDynArray;
-  P: PUTF8Char): THttpSocketCompressSet;
+  P: PUtf8Char): THttpSocketCompressSet;
 var
   i: PtrInt;
-  aName: RawUTF8;
-  Beg: PUTF8Char;
+  aName: RawUtf8;
+  Beg: PUtf8Char;
 begin
   integer(result) := 0;
   if P <> nil then
@@ -510,9 +510,9 @@ begin
     until P^ = #0;
 end;
 
-procedure GetTrimmed(P: PUTF8Char; out result: RawUTF8);
+procedure GetTrimmed(P: PUtf8Char; out result: RawUtf8);
 var
-  B: PUTF8Char;
+  B: PUtf8Char;
 begin
   while (P^ > #0) and
         (P^ <= ' ') do
@@ -558,10 +558,10 @@ end;
 
 { THttpSocket }
 
-procedure THttpSocket.CompressDataAndWriteHeaders(const OutContentType: RawUTF8;
+procedure THttpSocket.CompressDataAndWriteHeaders(const OutContentType: RawUtf8;
   var OutContent: RawByteString);
 var
-  OutContentEncoding: RawUTF8;
+  OutContentEncoding: RawUtf8;
 begin
   if integer(fCompressAcceptHeader) <> 0 then
   begin
@@ -578,10 +578,10 @@ end;
 
 procedure THttpSocket.GetHeader(HeadersUnFiltered: boolean);
 var
-  s, c: RawUTF8;
+  s, c: RawUtf8;
   i, len: PtrInt;
   err: integer;
-  P: PUTF8Char;
+  P: PUtf8Char;
   line: array[0..4095] of AnsiChar; // avoid most memory allocation
 begin
   HeaderFlags := [];
@@ -725,7 +725,7 @@ end;
 
 procedure THttpSocket.GetBody;
 var
-  Line: RawUTF8; // 32 bits chunk length in hexa
+  Line: RawUtf8; // 32 bits chunk length in hexa
   LinePChar: array[0..31] of AnsiChar;
   Len, LContent, Error: integer;
 begin
@@ -801,13 +801,13 @@ begin
   {$I+}
 end;
 
-procedure THttpSocket.HeaderAdd(const aValue: RawUTF8);
+procedure THttpSocket.HeaderAdd(const aValue: RawUtf8);
 begin
   if aValue <> '' then
     Headers := Headers + aValue + #13#10;
 end;
 
-procedure THttpSocket.HeaderSetText(const aText, aForcedContentType: RawUTF8);
+procedure THttpSocket.HeaderSetText(const aText, aForcedContentType: RawUtf8);
 begin
   if aText = '' then
     Headers := ''
@@ -820,7 +820,7 @@ begin
     Headers := Headers + 'Content-Type: ' + aForcedContentType + #13#10;
 end;
 
-function THttpSocket.HeaderGetText(const aRemoteIP: RawUTF8): RawUTF8;
+function THttpSocket.HeaderGetText(const aRemoteIP: RawUtf8): RawUtf8;
 begin
   if (aRemoteIP <> '') and
      not (hfHasRemoteIP in HeaderFlags) then
@@ -831,7 +831,7 @@ begin
   result := Headers;
 end;
 
-function THttpSocket.HeaderGetValue(const aUpperName: RawUTF8): RawUTF8;
+function THttpSocket.HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
 begin
   FindNameValue(Headers, pointer(aUpperName), result);
 end;
@@ -848,7 +848,7 @@ end;
 
 { THttpServerRequestAbstract }
 
-procedure THttpServerRequestAbstract.AddInHeader(additionalHeader: RawUTF8);
+procedure THttpServerRequestAbstract.AddInHeader(additionalHeader: RawUtf8);
 begin
   additionalHeader := TrimU(additionalHeader);
   if additionalHeader <> '' then

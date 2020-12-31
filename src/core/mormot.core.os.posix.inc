@@ -29,7 +29,7 @@ uses
   dl;
 
 {$ifdef UNICODE}
-  'mORMot assumes no UNICODE on POSIX, i.e. as TFileName = PChar = PUTF8Char'
+  'mORMot assumes no UNICODE on POSIX, i.e. as TFileName = PChar = PUtf8Char'
 {$endif UNICODE}
 
 
@@ -334,7 +334,7 @@ var
   err: SizeInt;
 begin
   if CodePage = CP_UTF8 then
-    exit(UnicodeToUTF8(A, W, LW));
+    exit(UnicodeToUtf8(A, W, LW));
   cnv := icu.ucnv(CodePage);
   if cnv = nil then
     exit(WideToAnsiRTL(CodePage, W, A, LW));
@@ -656,7 +656,7 @@ begin
   {$endif LINUXNOTBSD}
 end;
 
-procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUTF8);
+procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUtf8);
 begin
   if ThreadID <> MainThreadID then // don't change the main process name
     SetUnixThreadName(ThreadID, Name); // call pthread_setname_np()
@@ -665,7 +665,7 @@ end;
 {$ifndef NOEXCEPTIONINTERCEPT}
 
 function TSynLogExceptionContext.AdditionalInfo(
-  out ExceptionNames: TPUTF8CharDynArray): cardinal;
+  out ExceptionNames: TPUtf8CharDynArray): cardinal;
 begin
   result := 0; // Windows/CLR specific by now
 end;
@@ -829,7 +829,7 @@ const
     190, 182, 167, 247, 184, 176, 168, 183, 185, 179, 178, 9632, 160);
 var
   len, i, c: PtrInt;
-  d: PUTF8Char;
+  d: PUtf8Char;
 begin
   len := length(oem);
   SetLength(result, len);
@@ -845,11 +845,11 @@ end;
 function OemToFileName(const oem: RawByteString): TFileName;
 begin
   // let's assume UTF-8 under Linux/POSIX
-  result := UTF8Encode(OemToUnicode(oem));
+  result := Utf8Encode(OemToUnicode(oem));
 end;
 
 {$I-}
-procedure DisplayFatalError(const title, msg: RawUTF8);
+procedure DisplayFatalError(const title, msg: RawUtf8);
 begin
   writeln(StdErr, title);
   writeln(StdErr, msg);
@@ -883,7 +883,7 @@ begin
   fpseterrno(error);
 end;
 
-function GetErrorText(error: integer): RawUTF8;
+function GetErrorText(error: integer): RawUtf8;
 begin
   result := StrError(error);
 end;
@@ -1101,7 +1101,7 @@ end;
 
 // define some raw text functions, to avoid linking mormot.core.text
 
-function IdemPChar(p, up: PUTF8Char): boolean; inline;
+function IdemPChar(p, up: PUtf8Char): boolean; inline;
 var
   c, u: AnsiChar;
 begin
@@ -1125,7 +1125,7 @@ begin
   result := true;
 end;
 
-function IdemPChars(const s: RawUTF8; const up: array of PUTF8Char): boolean;
+function IdemPChars(const s: RawUtf8; const up: array of PUtf8Char): boolean;
 var
   i: PtrInt;
 begin
@@ -1136,9 +1136,9 @@ begin
   result := false;
 end;
 
-procedure FindNameValue(const s, up: RawUTF8; var res: RawUTF8);
+procedure FindNameValue(const s, up: RawUtf8; var res: RawUtf8);
 var
-  p: PUTF8Char;
+  p: PUtf8Char;
   L: PtrInt;
 begin
   p := pointer(s);
@@ -1182,7 +1182,7 @@ begin
   until false;
 end;
 
-function GetNextItem(var P: PAnsiChar): RawUTF8;
+function GetNextItem(var P: PAnsiChar): RawUtf8;
 var
   c: cardinal;
   S: PAnsiChar;
@@ -1200,7 +1200,7 @@ begin
   FastSetString(result, S, P - S);
 end;
 
-function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char; inline;
+function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char; inline;
 begin
   result := nil;
   repeat
@@ -1283,7 +1283,7 @@ begin
     result := 0;
 end;
 
-function Utf8ToConsole(const S: RawUTF8): RawByteString;
+function Utf8ToConsole(const S: RawUtf8): RawByteString;
 begin
   result := S; // expect a UTF-8 console under Linux/BSD
 end;
@@ -1363,14 +1363,14 @@ begin
     DecodeDate(fBuildDateTime, BuildYear, M, D);
 end;
 
-procedure GetUserHost(out User, Host: RawUTF8);
+procedure GetUserHost(out User, Host: RawUtf8);
 begin
-  Host := RawUTF8(GetHostName);
+  Host := RawUtf8(GetHostName);
   if Host = '' then
-    Host := RawUTF8(GetEnvironmentVariable('HOSTNAME'));
-  User := RawUTF8(GetEnvironmentVariable('LOGNAME')); // POSIX
+    Host := RawUtf8(GetEnvironmentVariable('HOSTNAME'));
+  User := RawUtf8(GetEnvironmentVariable('LOGNAME')); // POSIX
   if User = '' then
-    User := RawUTF8(GetEnvironmentVariable('USER'));
+    User := RawUtf8(GetEnvironmentVariable('USER'));
 end;
 
 var
@@ -1441,7 +1441,7 @@ begin
   result := nil;
 end;
 
-function EnumProcessName(PID: cardinal): RawUTF8;
+function EnumProcessName(PID: cardinal): RawUtf8;
 begin
   result := '';
 end;
@@ -1467,7 +1467,7 @@ var
   e: pDirent;
   n: integer;
   pid: cardinal;
-  fn, status, tgid: RawUTF8;
+  fn, status, tgid: RawUtf8;
 begin
   result := nil;
   d := FpOpendir('/proc'); // alternative to FindFirst()
@@ -1501,10 +1501,10 @@ end;
 var
   tryprocexe: boolean = true;
 
-function EnumProcessName(PID: cardinal): RawUTF8;
+function EnumProcessName(PID: cardinal): RawUtf8;
 var
   proc: TFileName;
-  cmdline: RawUTF8;
+  cmdline: RawUtf8;
 begin
   proc := '/proc/' + IntToStr(PID);
   if tryprocexe then
@@ -1552,7 +1552,7 @@ end;
 
 function TProcessInfo.PerSystem(out Idle, Kernel, User: single): boolean;
 var
-  P: PUTF8Char;
+  P: PUtf8Char;
   U, K, I, S: cardinal;
 begin
   // see http://www.linuxhowtos.org/System/procstat.htm
@@ -1591,7 +1591,7 @@ end;
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 var
   si: TSysInfo; // Linuxism
-  P: PUTF8Char;
+  P: PUtf8Char;
   mu: PtrUInt;
 begin
   FillCharFast(info, SizeOf(info), 0);
@@ -1636,8 +1636,8 @@ const
 
 function GetDiskPartitions: TDiskPartitions;
 var
-  mounts, fs, mnt, typ: RawUTF8;
-  p: PUTF8Char;
+  mounts, fs, mnt, typ: RawUtf8;
+  p: PUtf8Char;
   fn: TFileName;
   n: integer;
   av, fr, tot: QWord;
@@ -2071,7 +2071,7 @@ function RunCommand(const cmd: TFileName; waitfor: boolean;
   const env: TFileName; envaddexisting: boolean;
   parsed: PParseCommands): integer;
 var
-  temp: RawUTF8;
+  temp: RawUtf8;
   err: TParseCommands;
   a: TParseCommandsArgs;
 begin
@@ -2102,10 +2102,10 @@ function getpagesize: integer; cdecl; external 'c';
 
 {$ifndef BSD}
 
-procedure SetLinuxDistrib(const release: RawUTF8);
+procedure SetLinuxDistrib(const release: RawUtf8);
 var
   distrib: TOperatingSystem;
-  rel, dist: RawUTF8;
+  rel, dist: RawUtf8;
 begin
   rel := UpperCase(release);
   for distrib := osArch to high(distrib) do
@@ -2127,13 +2127,13 @@ var
   tp: timespec;
   P: PAnsiChar;
 var
-  modname, beg: PUTF8Char;
+  modname, beg: PUtf8Char;
   uts: UtsName;
   {$ifdef BSD}
   temp: shortstring;
   {$else}
-  cpuinfo: PUTF8Char;
-  proccpuinfo, prod, prodver, release, dist: RawUTF8;
+  cpuinfo: PUtf8Char;
+  proccpuinfo, prod, prodver, release, dist: RawUtf8;
   SR: TSearchRec;
   {$endif BSD}
   c: cardinal;

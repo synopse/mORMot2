@@ -346,7 +346,7 @@ function ECCToDateTime(ECCDate: TECCDate): TDateTime;
 
 /// convert a supplied a TECCDate integer value into a ISO-8601 text value
 // - i.e. 16-bit number of days since 1 August 2016
-function ECCText(ECCDate: TECCDate; Expanded: boolean = true): RawUTF8; overload;
+function ECCText(ECCDate: TECCDate; Expanded: boolean = true): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two TECCCertificateIssuer binary buffer values
@@ -369,20 +369,20 @@ function IsZero(const id: TECCCertificateID): boolean; overload;
 /// convert a supplied TECCCertificateIssuer binary buffer into proper text
 // - returns Ascii-7 text if was stored using Baudot encoding
 // - or returns hexadecimal values, if it was 16 bytes of random binary
-function ECCText(const Issuer: TECCCertificateIssuer): RawUTF8; overload;
+function ECCText(const Issuer: TECCCertificateIssuer): RawUtf8; overload;
 
 /// convert some Ascii-7 text into a TECCCertificateIssuer binary buffer
 // - using Emile Baudot encoding
 // - returns TRUE on Text truncation to fit into the 16 bytes
-function ECCIssuer(const Text: RawUTF8; out Issuer: TECCCertificateIssuer): boolean;
+function ECCIssuer(const Text: RawUtf8; out Issuer: TECCCertificateIssuer): boolean;
 
 /// convert a supplied TECCCertificateID binary buffer into proper text
 // - returns hexadecimal values, or '' if the ID is filled with zeros
-function ECCText(const ID: TECCCertificateID): RawUTF8; overload;
+function ECCText(const ID: TECCCertificateID): RawUtf8; overload;
 
 /// convert a supplied hexadecimal buffer into a TECCCertificateID binary buffer
 // - returns TRUE if the supplied Text was a valid hexadecimal buffer
-function ECCID(const Text: RawUTF8; out ID: TECCCertificateID): boolean;
+function ECCID(const Text: RawUtf8; out ID: TECCCertificateID): boolean;
 
 /// fast check of the binary buffer storage of a certificate
 // - ensure content.CRC has the expected value, using FNV-1a checksum
@@ -404,16 +404,16 @@ function ECCSelfSigned(const content: TECCCertificateContent): boolean;
 function ECCCheck(const content: TECCSignatureCertifiedContent): boolean; overload;
 
 /// convert a supplied base-64 text into a TECCSignatureCertifiedContent binary buffer
-function ECCSign(const base64: RawUTF8;
+function ECCSign(const base64: RawUtf8;
   out content: TECCSignatureCertifiedContent): boolean;
 
 /// convert a supplied TECCSignatureCertifiedContent binary buffer into proper text
 // - returns base-64 encoded text, or '' if the signature was filled with zeros
-function ECCText(const sign: TECCSignatureCertifiedContent): RawUTF8; overload;
+function ECCText(const sign: TECCSignatureCertifiedContent): RawUtf8; overload;
 
 /// convert a supplied TECCSignature binary buffer into proper text
 // - returns base-64 encoded text, or '' if the signature was filled with zeros
-function ECCText(const sign: TECCSignature): RawUTF8; overload;
+function ECCText(const sign: TECCSignature): RawUtf8; overload;
 
 /// low-level verification of a TECCSignatureCertifiedContent binary buffer
 // - will verify all internal signature fields according to a supplied authority,
@@ -1902,7 +1902,7 @@ begin
     result := ECCDate + ECC_DELTA;
 end;
 
-function ECCText(ECCDate: TECCDate; Expanded: boolean): RawUTF8;
+function ECCText(ECCDate: TECCDate; Expanded: boolean): RawUtf8;
 begin
   if ECCDate = 0 then
     result := ''
@@ -1910,7 +1910,7 @@ begin
     result := DateToIso8601(ECCDate + ECC_DELTA, Expanded);
 end;
 
-function ECCText(const Issuer: TECCCertificateIssuer): RawUTF8;
+function ECCText(const Issuer: TECCCertificateIssuer): RawUtf8;
 var
   tmp: array[0..1] of TECCCertificateIssuer;
 begin
@@ -1926,7 +1926,7 @@ begin
   end;
 end;
 
-function ECCIssuer(const Text: RawUTF8; out Issuer: TECCCertificateIssuer): boolean;
+function ECCIssuer(const Text: RawUtf8; out Issuer: TECCCertificateIssuer): boolean;
 var
   baudot: RawByteString;
   len: integer;
@@ -1940,7 +1940,7 @@ begin
   MoveFast(pointer(baudot)^, Issuer, len);
 end;
 
-function ECCText(const ID: TECCCertificateID): RawUTF8;
+function ECCText(const ID: TECCCertificateID): RawUtf8;
 begin
   if IsZero(ID) then
     result := ''
@@ -1948,7 +1948,7 @@ begin
     result := AESBlockToString(TAESBlock(ID));
 end;
 
-function ECCID(const Text: RawUTF8; out ID: TECCCertificateID): boolean;
+function ECCID(const Text: RawUtf8; out ID: TECCCertificateID): boolean;
 begin
   if length(Text) <> sizeof(ID) * 2 then
     result := false
@@ -2003,14 +2003,14 @@ begin
             not IsZero(@content.Signature, sizeof(content.Signature));
 end;
 
-function ECCSign(const base64: RawUTF8; out content:
+function ECCSign(const base64: RawUtf8; out content:
   TECCSignatureCertifiedContent): boolean;
 begin
   result := Base64ToBin(pointer(base64), @content,
     length(base64), sizeof(content), false);
 end;
 
-function ECCText(const sign: TECCSignatureCertifiedContent): RawUTF8;
+function ECCText(const sign: TECCSignatureCertifiedContent): RawUtf8;
 begin
   if ECCCheck(sign) then
     result := BinToBase64(@sign, sizeof(sign))
@@ -2018,7 +2018,7 @@ begin
     result := '';
 end;
 
-function ECCText(const sign: TECCSignature): RawUTF8;
+function ECCText(const sign: TECCSignature): RawUtf8;
 begin
   if IsZero(@sign, sizeof(sign)) then
     result := ''

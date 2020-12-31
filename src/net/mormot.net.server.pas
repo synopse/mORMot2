@@ -65,8 +65,8 @@ type
     /// prepare an incoming request
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
-    procedure Prepare(const aURL, aMethod, aInHeaders: RawUTF8;
-      const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUTF8;
+    procedure Prepare(const aURL, aMethod, aInHeaders: RawUtf8;
+      const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8;
       aUseSSL: boolean = false); override;
     {$ifdef MSWINDOWS}
     /// input parameter containing the caller Full URL
@@ -94,7 +94,7 @@ type
   // or TWebSocketServer (as defined in mormot.net.websock)
   TServerGeneric = class(TSynThread)
   protected
-    fProcessName: RawUTF8;
+    fProcessName: RawUtf8;
     fOnHttpThreadStart: TOnNotifyThread;
     procedure SetOnTerminate(const Event: TOnNotifyThread); virtual;
     procedure NotifyThreadStart(Sender: TSynThread);
@@ -102,7 +102,7 @@ type
     /// initialize the server instance, in non suspended state
     constructor Create(CreateSuspended: boolean;
       const OnStart, OnStop: TOnNotifyThread;
-      const ProcessName: RawUTF8); reintroduce; virtual;
+      const ProcessName: RawUtf8); reintroduce; virtual;
   end;
 
   /// abstract class to implement a HTTP server
@@ -120,23 +120,23 @@ type
     /// list of all registered compression algorithms
     fCompress: THttpSocketCompressRecDynArray;
     /// set by RegisterCompress method
-    fCompressAcceptEncoding: RawUTF8;
-    fServerName: RawUTF8;
+    fCompressAcceptEncoding: RawUtf8;
+    fServerName: RawUtf8;
     fCurrentConnectionID: integer; // 31-bit NextConnectionID sequence
     fCurrentRequestID: integer;
     fCanNotifyCallback: boolean;
-    fRemoteIPHeader, fRemoteIPHeaderUpper: RawUTF8;
-    fRemoteConnIDHeader, fRemoteConnIDHeaderUpper: RawUTF8;
-    function GetAPIVersion: RawUTF8; virtual; abstract;
-    procedure SetServerName(const aName: RawUTF8); virtual;
+    fRemoteIPHeader, fRemoteIPHeaderUpper: RawUtf8;
+    fRemoteConnIDHeader, fRemoteConnIDHeaderUpper: RawUtf8;
+    function GetAPIVersion: RawUtf8; virtual; abstract;
+    procedure SetServerName(const aName: RawUtf8); virtual;
     procedure SetOnRequest(const aRequest: TOnHttpServerRequest); virtual;
     procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); virtual;
     procedure SetOnBeforeRequest(const aEvent: TOnHttpServerRequest); virtual;
     procedure SetOnAfterRequest(const aEvent: TOnHttpServerRequest); virtual;
     procedure SetOnAfterResponse(const aEvent: TOnHttpServerAfterResponse); virtual;
     procedure SetMaximumAllowedContentLength(aMax: cardinal); virtual;
-    procedure SetRemoteIPHeader(const aHeader: RawUTF8); virtual;
-    procedure SetRemoteConnIDHeader(const aHeader: RawUTF8); virtual;
+    procedure SetRemoteIPHeader(const aHeader: RawUtf8); virtual;
+    procedure SetRemoteConnIDHeader(const aHeader: RawUtf8); virtual;
     function GetHTTPQueueLength: cardinal; virtual; abstract;
     procedure SetHTTPQueueLength(aValue: cardinal); virtual; abstract;
     function DoBeforeRequest(Ctxt: THttpServerRequest): cardinal;
@@ -147,7 +147,7 @@ type
     /// initialize the server instance, in non suspended state
     constructor Create(CreateSuspended: boolean; 
       const OnStart, OnStop: TOnNotifyThread;
-      const ProcessName: RawUTF8); reintroduce; virtual;
+      const ProcessName: RawUtf8); reintroduce; virtual;
     /// override this function to customize your http server
     // - InURL/InMethod/InContent properties are input parameters
     // - OutContent/OutContentType/OutCustomHeader are output parameters
@@ -279,7 +279,7 @@ type
     // layer - but if the server runs behind some proxy service, you should
     // define here the HTTP header name which indicates the true remote client
     // IP value, mostly as 'X-Real-IP' or 'X-Forwarded-For'
-    property RemoteIPHeader: RawUTF8
+    property RemoteIPHeader: RawUtf8
       read fRemoteIPHeader write SetRemoteIPHeader;
     /// the value of a custom HTTP header containing the real client connection ID
     // - by default, Ctxt.ConnectionID information will be retrieved from our
@@ -287,20 +287,20 @@ type
     // define here the HTTP header name which indicates the real remote connection,
     // for example as 'X-Conn-ID', setting in nginx config:
     //  $ proxy_set_header      X-Conn-ID       $connection
-    property RemoteConnIDHeader: RawUTF8
+    property RemoteConnIDHeader: RawUtf8
       read fRemoteConnIDHeader write SetRemoteConnIDHeader;
   published
     /// returns the API version used by the inherited implementation
-    property APIVersion: RawUTF8
+    property APIVersion: RawUtf8
       read GetAPIVersion;
     /// the Server name, UTF-8 encoded, e.g. 'mORMot/1.18 (Linux)'
     // - will be served as "Server: ..." HTTP header
     // - for THttpApiServer, when called from the main instance, will propagate
     // the change to all cloned instances, and included in any HTTP API 2.0 log
-    property ServerName: RawUTF8
+    property ServerName: RawUtf8
       read fServerName write SetServerName;
     /// the associated process name
-    property ProcessName: RawUTF8
+    property ProcessName: RawUtf8
       read fProcessName write fProcessName;
   end;
 
@@ -337,8 +337,8 @@ type
 
   THttpServerSocket = class(THttpSocket)
   protected
-    fMethod: RawUTF8;
-    fURL: RawUTF8;
+    fMethod: RawUtf8;
+    fURL: RawUtf8;
     fKeepAliveClient: boolean;
     fRemoteConnectionID: THttpServerConnectionID;
     fServer: THttpServer;
@@ -354,10 +354,10 @@ type
     function GetRequest(withBody: boolean;
       headerMaxTix: Int64): THttpServerSocketGetRequestResult; virtual;
     /// contains the method ('GET','POST'.. e.g.) after GetRequest()
-    property Method: RawUTF8
+    property Method: RawUtf8
       read fMethod;
     /// contains the URL ('/' e.g.) after GetRequest()
-    property URL: RawUTF8
+    property URL: RawUtf8
       read fURL;
     /// true if the client is HTTP/1.1 and 'Connection: Close' is not set
     // - default HTTP/1.1 behavior is "keep alive", unless 'Connection: Close'
@@ -486,7 +486,7 @@ type
     fServerConnectionCount: integer;
     fServerConnectionActive: integer;
     fServerKeepAliveTimeOut: cardinal;
-    fSockPort, fTCPPrefix: RawUTF8;
+    fSockPort, fTCPPrefix: RawUtf8;
     fSock: TCrtSocket;
     fThreadRespClass: THttpServerRespClass;
     fOnSendFile: TOnHttpServerSendFile;
@@ -505,7 +505,7 @@ type
     function OnNginxAllowSend(Context: THttpServerRequest;
       const LocalFileName: TFileName): boolean;
     // this overridden version will return e.g. 'Winsock 2.514'
-    function GetAPIVersion: RawUTF8; override;
+    function GetAPIVersion: RawUtf8; override;
     /// server main loop - don't change directly
     procedure Execute; override;
     /// this method is called on every new client connection, i.e. every time
@@ -535,9 +535,9 @@ type
     // - this constructor won't actually do the port binding, which occurs in
     // the background thread: caller should therefore call WaitStarted after
     // THttpServer.Create()
-    constructor Create(const aPort: RawUTF8;
+    constructor Create(const aPort: RawUtf8;
       const OnStart, OnStop: TOnNotifyThread;
-      const ProcessName: RawUTF8; ServerThreadPoolCount: integer = 32;
+      const ProcessName: RawUtf8; ServerThreadPoolCount: integer = 32;
       KeepAliveTimeOut: integer = 30000; HeadersUnFiltered: boolean = false;
       CreateSuspended: boolean = false); reintroduce; virtual;
     /// ensure the HTTP server thread is actually bound to the specified port
@@ -600,7 +600,7 @@ type
       read fServerKeepAliveTimeOut write fServerKeepAliveTimeOut;
     /// the bound TCP port, as specified to Create() constructor
     // - TCrtSocket.Bind() occurs in the Execute method
-    property SockPort: RawUTF8
+    property SockPort: RawUtf8
       read fSockPort;
     /// TCP/IP prefix to mask HTTP protocol
     // - if not set, will create full HTTP/1.0 or HTTP/1.1 compliant content
@@ -609,7 +609,7 @@ type
     // the TCP/IP stream won't be recognized as HTTP, and will be ignored by
     // most AntiVirus programs, and increase security - but you won't be able
     // to use an Internet Browser nor AJAX application for remote access any more
-    property TCPPrefix: RawUTF8
+    property TCPPrefix: RawUtf8
       read fTCPPrefix write fTCPPrefix;
     /// the associated thread pool
     // - may be nil if ServerThreadPoolCount was 0 on constructor
@@ -693,7 +693,7 @@ type
     fUrlGroupID: HTTP_URL_GROUP_ID;
     fLogData: pointer;
     fLogDataStorage: array of byte;
-    fLoggingServiceName: RawUTF8;
+    fLoggingServiceName: RawUtf8;
     fAuthenticationSchemes: THttpApiRequestAuthentications;
     fReceiveBufferSize: cardinal;
     procedure SetReceiveBufferSize(Value: cardinal);
@@ -706,18 +706,18 @@ type
     function GetMaxConnections: cardinal;
     procedure SetMaxConnections(aValue: cardinal);
     procedure SetOnTerminate(const Event: TOnNotifyThread); override;
-    function GetAPIVersion: RawUTF8; override;
+    function GetAPIVersion: RawUtf8; override;
     function GetLogging: boolean;
-    procedure SetServerName(const aName: RawUTF8); override;
+    procedure SetServerName(const aName: RawUtf8); override;
     procedure SetOnRequest(const aRequest: TOnHttpServerRequest); override;
     procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); override;
     procedure SetOnBeforeRequest(const aEvent: TOnHttpServerRequest); override;
     procedure SetOnAfterRequest(const aEvent: TOnHttpServerRequest); override;
     procedure SetOnAfterResponse(const aEvent: TOnHttpServerAfterResponse); override;
     procedure SetMaximumAllowedContentLength(aMax: cardinal); override;
-    procedure SetRemoteIPHeader(const aHeader: RawUTF8); override;
-    procedure SetRemoteConnIDHeader(const aHeader: RawUTF8); override;
-    procedure SetLoggingServiceName(const aName: RawUTF8);
+    procedure SetRemoteIPHeader(const aHeader: RawUtf8); override;
+    procedure SetRemoteConnIDHeader(const aHeader: RawUtf8); override;
+    procedure SetLoggingServiceName(const aName: RawUtf8);
     /// server main loop - don't change directly
     // - will call the Request public virtual method with the appropriate
     // parameters to retrive the content
@@ -738,7 +738,7 @@ type
     // order to start the server
     constructor Create(CreateSuspended: boolean; QueueName: SynUnicode = '';
       const OnStart: TOnNotifyThread = nil; const OnStop: TOnNotifyThread = nil;
-      const ProcessName: RawUTF8 = ''); reintroduce;
+      const ProcessName: RawUtf8 = ''); reintroduce;
     /// create a HTTP/1.1 processing clone from the main thread
     // - do not use directly - is called during thread pool creation
     constructor CreateClone(From: THttpApiServer); virtual;
@@ -766,15 +766,15 @@ type
     // Resume method after all Url have been added
     // - if aRegisterURI is TRUE, the URI will be registered (need adminitrator
     // rights) - default is FALSE, as defined by Windows security policy
-    function AddUrl(const aRoot, aPort: RawUTF8; Https: boolean = false;
-      const aDomainName: RawUTF8 = '*'; aRegisterURI: boolean = false;
+    function AddUrl(const aRoot, aPort: RawUtf8; Https: boolean = false;
+      const aDomainName: RawUtf8 = '*'; aRegisterURI: boolean = false;
       aContext: Int64 = 0): integer;
     /// un-register the URLs to Listen On
     // - this method expect the same parameters as specified to AddUrl()
     // - return 0 (NO_ERROR) on success, an error code if failed (e.g.
     // -1 if the corresponding parameters do not match any previous AddUrl)
-    function RemoveUrl(const aRoot, aPort: RawUTF8; Https: boolean = false;
-      const aDomainName: RawUTF8 = '*'): integer;
+    function RemoveUrl(const aRoot, aPort: RawUtf8; Https: boolean = false;
+      const aDomainName: RawUtf8 = '*'): integer;
     /// will authorize a specified URL prefix
     // - will allow to call AddUrl() later for any user on the computer
     // - if aRoot is left '', it will authorize any root for this port
@@ -786,8 +786,8 @@ type
     // - will first delete any matching rule for this URL prefix
     // - if OnlyDelete is true, will delete but won't add the new authorization;
     // in this case, any error message at deletion will be returned
-    class function AddUrlAuthorize(const aRoot, aPort: RawUTF8; Https: boolean = false;
-      const aDomainName: RawUTF8 = '*'; OnlyDelete: boolean = false): string;
+    class function AddUrlAuthorize(const aRoot, aPort: RawUtf8; Https: boolean = false;
+      const aDomainName: RawUtf8 = '*'; OnlyDelete: boolean = false): string;
     /// will register a compression algorithm
     // - overridden method which will handle any cloned instances
     procedure RegisterCompress(aFunction: THttpSocketCompress;
@@ -839,7 +839,7 @@ type
       aRolloverType: THttpApiLoggingRollOver = hlrDaily;
       aRolloverSize: cardinal = 0;
       aLogFields: THttpApiLogFields = [hlfDate..hlfSubStatus];
-      aFlags: THttpApiLoggingFlags = [hlfUseUTF8Conversion]);
+      aFlags: THttpApiLoggingFlags = [hlfUseUtf8Conversion]);
     /// disable HTTP API 2.0 logging
     // - this method won't do anything on the cloned instances, but the main
     // instance logging state will be replicated to all cloned instances
@@ -870,10 +870,10 @@ type
     property Logging: boolean
       read GetLogging;
     /// the current HTTP API 2.0 logging Service name
-    // - should be UTF-8 encoded, if LogStart(aFlags=[hlfUseUTF8Conversion])
+    // - should be UTF-8 encoded, if LogStart(aFlags=[hlfUseUtf8Conversion])
     // - this value is dedicated to one instance, so the main instance won't
     // propagate the change to all cloned instances
-    property LoggingServiceName: RawUTF8
+    property LoggingServiceName: RawUtf8
       read fLoggingServiceName write SetLoggingServiceName;
     /// read-only access to the low-level HTTP API 2.0 Session ID
     property ServerSessionID: HTTP_SERVER_SESSION_ID
@@ -1006,7 +1006,7 @@ type
   // - maintains a list of all WebSockets clients for a given protocol
   THttpApiWebSocketServerProtocol = class
   private
-    fName: RawUTF8;
+    fName: RawUtf8;
     fManualFragmentManagement: boolean;
     fOnAccept: TOnHttpApiWebSocketServerAcceptEvent;
     fOnMessage: TOnHttpApiWebSocketServerMessageEvent;
@@ -1030,7 +1030,7 @@ type
     // - if aManualFragmentManagement is true, onMessage will appear only for whole
     // received messages, otherwise OnFragment handler must be passed (for video
     // broadcast, for example)
-    constructor Create(const aName: RawUTF8; aManualFragmentManagement: boolean;
+    constructor Create(const aName: RawUtf8; aManualFragmentManagement: boolean;
       aServer: THttpApiWebSocketServer;
       const aOnAccept: TOnHttpApiWebSocketServerAcceptEvent;
       const aOnMessage: TOnHttpApiWebSocketServerMessageEvent;
@@ -1040,7 +1040,7 @@ type
     /// finalize the process
     destructor Destroy; override;
     /// text identifier
-    property Name: RawUTF8
+    property Name: RawUtf8
       read fName;
     /// identify the endpoint instance
     property Index: integer
@@ -1120,7 +1120,7 @@ type
     // - do not use directly - is called during thread pool creation
     constructor CreateClone(From: THttpApiServer); override;
     /// prepare the process for a given THttpApiWebSocketServerProtocol
-    procedure RegisterProtocol(const aName: RawUTF8; aManualFragmentManagement: boolean;
+    procedure RegisterProtocol(const aName: RawUtf8; aManualFragmentManagement: boolean;
       const aOnAccept: TOnHttpApiWebSocketServerAcceptEvent;
       const aOnMessage: TOnHttpApiWebSocketServerMessageEvent;
       const aOnConnect: TOnHttpApiWebSocketServerConnectEvent;
@@ -1129,8 +1129,8 @@ type
     /// register the URLs to Listen on using WebSocket
     // - aProtocols is an array of a recond with callbacks, server call during
     // WebSocket activity
-    function AddUrlWebSocket(const aRoot, aPort: RawUTF8; Https: boolean = false;
-      const aDomainName: RawUTF8 = '*'; aRegisterURI: boolean = false): integer;
+    function AddUrlWebSocket(const aRoot, aPort: RawUtf8; Https: boolean = false;
+      const aDomainName: RawUtf8 = '*'; aRegisterURI: boolean = false): integer;
     /// handle the HTTP request
     function Request(Ctxt: THttpServerRequestAbstract): cardinal; override;
     /// Ping timeout in seconds. 0 mean no ping.
@@ -1212,8 +1212,8 @@ end;
 var
   GlobalRequestID: integer;
 
-procedure THttpServerRequest.Prepare(const aURL, aMethod, aInHeaders: RawUTF8;
-  const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUTF8;
+procedure THttpServerRequest.Prepare(const aURL, aMethod, aInHeaders: RawUtf8;
+  const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8;
   aUseSSL: boolean);
 var
   id: PInteger;
@@ -1248,7 +1248,7 @@ end;
 { TServerGeneric }
 
 constructor TServerGeneric.Create(CreateSuspended: boolean;
-  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUTF8);
+  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8);
 begin
   fProcessName := ProcessName;
   fOnHttpThreadStart := OnStart;
@@ -1259,7 +1259,7 @@ end;
 procedure TServerGeneric.NotifyThreadStart(Sender: TSynThread);
 begin
   if Sender = nil then
-    raise EHttpServer.CreateUTF8('%.NotifyThreadStart(nil)', [self]);
+    raise EHttpServer.CreateUtf8('%.NotifyThreadStart(nil)', [self]);
   if Assigned(fOnHttpThreadStart) and
      not Assigned(Sender.StartNotified) then
   begin
@@ -1277,7 +1277,7 @@ end;
 { THttpServerGeneric }
 
 constructor THttpServerGeneric.Create(CreateSuspended: boolean;
-  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUTF8);
+  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8);
 begin
   SetServerName('mORMot (' + OS_TEXT + ')');
   inherited Create(CreateSuspended, OnStart, OnStop, ProcessName);
@@ -1313,11 +1313,11 @@ end;
 function THttpServerGeneric.{%H-}Callback(Ctxt: THttpServerRequest;
   aNonBlocking: boolean): cardinal;
 begin
-  raise EHttpServer.CreateUTF8('%.Callback is not implemented: try to use ' +
+  raise EHttpServer.CreateUtf8('%.Callback is not implemented: try to use ' +
     'another communication protocol, e.g. WebSockets', [self]);
 end;
 
-procedure THttpServerGeneric.SetServerName(const aName: RawUTF8);
+procedure THttpServerGeneric.SetServerName(const aName: RawUtf8);
 begin
   fServerName := aName;
 end;
@@ -1380,13 +1380,13 @@ begin
   fMaximumAllowedContentLength := aMax;
 end;
 
-procedure THttpServerGeneric.SetRemoteIPHeader(const aHeader: RawUTF8);
+procedure THttpServerGeneric.SetRemoteIPHeader(const aHeader: RawUtf8);
 begin
   fRemoteIPHeader := aHeader;
   fRemoteIPHeaderUpper := UpperCase(aHeader);
 end;
 
-procedure THttpServerGeneric.SetRemoteConnIDHeader(const aHeader: RawUTF8);
+procedure THttpServerGeneric.SetRemoteConnIDHeader(const aHeader: RawUtf8);
 begin
   fRemoteConnIDHeader := aHeader;
   fRemoteConnIDHeaderUpper := UpperCase(aHeader);
@@ -1404,8 +1404,8 @@ end;
 
 { THttpServer }
 
-constructor THttpServer.Create(const aPort: RawUTF8;
-  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUTF8;
+constructor THttpServer.Create(const aPort: RawUtf8;
+  const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ServerThreadPoolCount, KeepAliveTimeOut: integer;
   HeadersUnFiltered, CreateSuspended: boolean);
 begin
@@ -1431,7 +1431,7 @@ begin
   inherited Create(CreateSuspended, OnStart, OnStop, ProcessName);
 end;
 
-function THttpServer.GetAPIVersion: RawUTF8;
+function THttpServer.GetAPIVersion: RawUtf8;
 begin
   result := SocketAPIVersion;
 end;
@@ -1585,7 +1585,7 @@ begin
       exit;
     Sleep(1); // warning: waits typically 1-15 ms on Windows
     if mormot.core.os.GetTickCount64 > tix then
-      raise EHttpServer.CreateUTF8('%.WaitStarted failed after % seconds [%]',
+      raise EHttpServer.CreateUtf8('%.WaitStarted failed after % seconds [%]',
         [self, Seconds, fExecuteMessage]);
   until false;
 end;
@@ -1618,7 +1618,7 @@ begin
     {$endif LINUXNOTBSD}
     fExecuteState := esRunning;
     if not fSock.SockIsDefined then // paranoid (Bind would have raise an exception)
-      raise EHttpServer.CreateUTF8('%.Execute: %.Bind failed', [self, fSock]);
+      raise EHttpServer.CreateUtf8('%.Execute: %.Bind failed', [self, fSock]);
     while not Terminated do
     begin
       res := Sock.Sock.Accept(ClientSock, ClientSin);
@@ -1710,7 +1710,7 @@ begin
   result := true;
 end;
 
-procedure ExtractNameValue(var headers: RawUTF8; const upname: RawUTF8; out res: RawUTF8);
+procedure ExtractNameValue(var headers: RawUtf8; const upname: RawUtf8; out res: RawUtf8);
 var
   i, j, k: PtrInt;
 begin
@@ -1753,10 +1753,10 @@ procedure THttpServer.Process(ClientSock: THttpServerSocket;
   ConnectionID: THttpServerConnectionID; ConnectionThread: TSynThread);
 var
   ctxt: THttpServerRequest;
-  P: PUTF8Char;
+  P: PUtf8Char;
   respsent: boolean;
   Code, afterCode: cardinal;
-  s, reason: RawUTF8;
+  s, reason: RawUtf8;
   ErrorMsg: string;
 
   function SendResponse: boolean;
@@ -1777,7 +1777,7 @@ var
        (ctxt.OutContentType = STATICFILE_CONTENT_TYPE) then
     try
       ExtractNameValue(ctxt.fOutCustomHeaders, 'CONTENT-TYPE:', ctxt.fOutContentType);
-      fn := UTF8ToString(ctxt.OutContent);
+      fn := Utf8ToString(ctxt.OutContent);
       if not Assigned(fOnSendFile) or
          not fOnSendFile(ctxt, fn) then
       begin
@@ -1809,7 +1809,7 @@ var
     begin
       ctxt.OutCustomHeaders := '';
       ctxt.OutContentType := 'text/html; charset=utf-8'; // create message to display
-      ctxt.OutContent := FormatUTF8('<body style="font-family:verdana">'#10 +
+      ctxt.OutContent := FormatUtf8('<body style="font-family:verdana">'#10 +
         '<h1>% Server Error %</h1><hr><p>HTTP % %<p>%<p><small>%',
         [self, Code, Code, reason, HtmlEscapeString(ErrorMsg), fServerName]);
     end;
@@ -1932,10 +1932,10 @@ end;
 function THttpServerSocket.GetRequest(withBody: boolean; headerMaxTix: Int64):
   THttpServerSocketGetRequestResult;
 var
-  P: PUTF8Char;
+  P: PUtf8Char;
   status: cardinal;
   pending: integer;
-  reason, allheaders: RawUTF8;
+  reason, allheaders: RawUtf8;
   noheaderfilter: boolean;
 begin
   result := grError;
@@ -2320,8 +2320,8 @@ end;
 
 { THttpApiServer }
 
-function THttpApiServer.AddUrl(const aRoot, aPort: RawUTF8; Https: boolean;
-  const aDomainName: RawUTF8; aRegisterURI: boolean; aContext: Int64): integer;
+function THttpApiServer.AddUrl(const aRoot, aPort: RawUtf8; Https: boolean;
+  const aDomainName: RawUtf8; aRegisterURI: boolean; aContext: Int64): integer;
 var
   uri: SynUnicode;
   n: integer;
@@ -2348,8 +2348,8 @@ begin
   end;
 end;
 
-function THttpApiServer.RemoveUrl(const aRoot, aPort: RawUTF8; Https: boolean;
-  const aDomainName: RawUTF8): integer;
+function THttpApiServer.RemoveUrl(const aRoot, aPort: RawUtf8; Https: boolean;
+  const aDomainName: RawUtf8): integer;
 var
   uri: SynUnicode;
   i, j, n: PtrInt;
@@ -2379,8 +2379,8 @@ begin
     end;
 end;
 
-class function THttpApiServer.AddUrlAuthorize(const aRoot, aPort: RawUTF8;
-  Https: boolean; const aDomainName: RawUTF8; OnlyDelete: boolean): string;
+class function THttpApiServer.AddUrlAuthorize(const aRoot, aPort: RawUtf8;
+  Https: boolean; const aDomainName: RawUtf8; OnlyDelete: boolean): string;
 const
   /// will allow AddUrl() registration to everyone
   // - 'GA' (GENERIC_ALL) to grant all access
@@ -2447,15 +2447,15 @@ begin
     fClones[i] := THttpApiServerClass(Self.ClassType).CreateClone(self);
 end;
 
-function THttpApiServer.GetAPIVersion: RawUTF8;
+function THttpApiServer.GetAPIVersion: RawUtf8;
 begin
-  FormatUTF8('HTTP API %.%',
+  FormatUtf8('HTTP API %.%',
     [Http.Version.MajorVersion, Http.Version.MinorVersion], result);
 end;
 
 constructor THttpApiServer.Create(CreateSuspended: boolean;
   QueueName: SynUnicode; const OnStart, OnStop: TOnNotifyThread;
-  const ProcessName: RawUTF8);
+  const ProcessName: RawUtf8);
 var
   bindInfo: HTTP_BINDING_INFO;
 begin
@@ -2471,7 +2471,7 @@ begin
     EHttpApiServer.RaiseOnError(hCreateUrlGroup,
       Http.CreateUrlGroup(fServerSessionID, fUrlGroupID));
     if QueueName = '' then
-      QueueName := UTF8ToSynUnicode(Int64ToUtf8(fServerSessionID));
+      QueueName := Utf8ToSynUnicode(Int64ToUtf8(fServerSessionID));
     EHttpApiServer.RaiseOnError(hCreateRequestQueue,
       Http.CreateRequestQueue(Http.Version, pointer(QueueName), nil, 0, fReqQueue));
     bindInfo.Flags := 1;
@@ -2572,7 +2572,7 @@ begin
 end;
 
 // returned P^ points to the first non digit char - not as GetNextItemQWord()
-function GetNextNumber(var P: PUTF8Char): Qword;
+function GetNextNumber(var P: PUtf8Char): Qword;
 var
   c: PtrUInt;
 begin
@@ -2590,7 +2590,7 @@ end;
 
 procedure THttpApiServer.Execute;
 type
-  TVerbText = array[hvOPTIONS..pred(hvMaximum)] of RawUTF8;
+  TVerbText = array[hvOPTIONS..pred(hvMaximum)] of RawUtf8;
 const
   VERB_TEXT: TVerbText = (
     'OPTIONS', 'GET', 'HEAD', 'POST', 'PUT', 'DELETE',
@@ -2600,21 +2600,21 @@ var
   Req: PHTTP_REQUEST;
   ReqID: HTTP_REQUEST_ID;
   ReqBuf, RespBuf: RawByteString;
-  RemoteIP, RemoteConn: RawUTF8;
+  RemoteIP, RemoteConn: RawUtf8;
   i, L: PtrInt;
   P: PHTTP_UNKNOWN_HEADER;
   flags, bytesRead, bytesSent: cardinal;
   Err: HRESULT;
   InCompressAccept: THttpSocketCompressSet;
   InContentLength, InContentLengthChunk, InContentLengthRead: cardinal;
-  InContentEncoding, InAcceptEncoding, Range: RawUTF8;
-  OutContentEncoding, OutStatus: RawUTF8;
+  InContentEncoding, InAcceptEncoding, Range: RawUtf8;
+  OutContentEncoding, OutStatus: RawUtf8;
   OutStatusCode, AfterStatusCode: cardinal;
   RespSent: boolean;
   Context: THttpServerRequest;
   FileHandle: THandle;
   Resp: PHTTP_RESPONSE;
-  BufRead, R: PUTF8Char;
+  BufRead, R: PUtf8Char;
   Heads: HTTP_UNKNOWN_HEADERs;
   RangeStart, RangeLength: ULONGLONG;
   OutContentLength: ULARGE_INTEGER;
@@ -2626,15 +2626,15 @@ var
 
   procedure SendError(StatusCode: cardinal; const ErrorMsg: string; E: Exception = nil);
   var
-    Msg: RawUTF8;
+    Msg: RawUtf8;
   begin
     try
       Resp^.SetStatus(StatusCode, OutStatus);
       CurrentLog^.ProtocolStatus := StatusCode;
-      FormatUTF8('<html><body style="font-family:verdana;"><h1>Server Error %: %</h1><p>',
+      FormatUtf8('<html><body style="font-family:verdana;"><h1>Server Error %: %</h1><p>',
         [StatusCode, OutStatus], Msg);
       if E <> nil then
-        Msg := FormatUTF8('%% Exception raised:<br>', [Msg, E]);
+        Msg := FormatUtf8('%% Exception raised:<br>', [Msg, E]);
       Resp^.SetContent(DataChunkInMemory, Msg + HtmlEscapeString(ErrorMsg)
         {$ifndef NOXPOWEREDNAME} + '</p><p><small>' + XPOWEREDVALUE {$endif},
         'text/html; charset=utf-8');
@@ -2698,7 +2698,7 @@ var
     if Context.OutContentType = STATICFILE_CONTENT_TYPE then
     begin
       // response is file -> OutContent is UTF-8 file name to be served
-      FileHandle := FileOpen(UTF8ToString(Context.OutContent),
+      FileHandle := FileOpen(Utf8ToString(Context.OutContent),
         fmOpenRead or fmShareDenyNone);
       if PtrInt(FileHandle) < 0 then
       begin
@@ -3245,7 +3245,7 @@ begin
     fClones[i].fReceiveBufferSize := Value;
 end;
 
-procedure THttpApiServer.SetServerName(const aName: RawUTF8);
+procedure THttpApiServer.SetServerName(const aName: RawUtf8);
 var
   i: PtrInt;
 begin
@@ -3313,7 +3313,7 @@ begin
     fClones[i].SetMaximumAllowedContentLength(aMax);
 end;
 
-procedure THttpApiServer.SetRemoteIPHeader(const aHeader: RawUTF8);
+procedure THttpApiServer.SetRemoteIPHeader(const aHeader: RawUtf8);
 var
   i: PtrInt;
 begin
@@ -3322,7 +3322,7 @@ begin
     fClones[i].SetRemoteIPHeader(aHeader);
 end;
 
-procedure THttpApiServer.SetRemoteConnIDHeader(const aHeader: RawUTF8);
+procedure THttpApiServer.SetRemoteConnIDHeader(const aHeader: RawUtf8);
 var
   i: PtrInt;
 begin
@@ -3331,7 +3331,7 @@ begin
     fClones[i].SetRemoteConnIDHeader(aHeader);
 end;
 
-procedure THttpApiServer.SetLoggingServiceName(const aName: RawUTF8);
+procedure THttpApiServer.SetLoggingServiceName(const aName: RawUtf8);
 begin
   if self = nil then
     exit;
@@ -3467,7 +3467,7 @@ begin
   end;
 end;
 
-constructor THttpApiWebSocketServerProtocol.Create(const aName: RawUTF8;
+constructor THttpApiWebSocketServerProtocol.Create(const aName: RawUtf8;
   aManualFragmentManagement: boolean; aServer: THttpApiWebSocketServer;
   const aOnAccept: TOnHttpApiWebSocketServerAcceptEvent;
   const aOnMessage: TOnHttpApiWebSocketServerMessageEvent;
@@ -4042,8 +4042,8 @@ var
   i, j: PtrInt;
   req: PHTTP_REQUEST;
   p: PHTTP_UNKNOWN_HEADER;
-  ch, chB: PUTF8Char;
-  aName: RawUTF8;
+  ch, chB: PUtf8Char;
+  aName: RawUtf8;
   ProtocolHeaderFound: boolean;
 label
   protocolFound;
@@ -4110,14 +4110,14 @@ protocolFound:
   end;
 end;
 
-function THttpApiWebSocketServer.AddUrlWebSocket(const aRoot, aPort: RawUTF8;
-  Https: boolean; const aDomainName: RawUTF8; aRegisterURI: boolean): integer;
+function THttpApiWebSocketServer.AddUrlWebSocket(const aRoot, aPort: RawUtf8;
+  Https: boolean; const aDomainName: RawUtf8; aRegisterURI: boolean): integer;
 begin
   result := AddUrl(
     aRoot, aPort, Https, aDomainName, aRegisterURI, WEB_SOCKET_URL_CONTEXT);
 end;
 
-procedure THttpApiWebSocketServer.RegisterProtocol(const aName: RawUTF8;
+procedure THttpApiWebSocketServer.RegisterProtocol(const aName: RawUtf8;
   aManualFragmentManagement: boolean;
   const aOnAccept: TOnHttpApiWebSocketServerAcceptEvent;
   const aOnMessage: TOnHttpApiWebSocketServerMessageEvent;

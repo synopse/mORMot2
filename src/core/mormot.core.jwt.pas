@@ -110,7 +110,7 @@ type
     /// known/registered claims UTF-8 values, as stored in the JWT payload
     // - e.g. reg[jrcSubject]='1234567890' and reg[jrcIssuer]='' for
     // $ {"sub": "1234567890","name": "John Doe","admin": true}
-    reg: array[TJWTClaim] of RawUTF8;
+    reg: array[TJWTClaim] of RawUtf8;
     /// custom/unregistered claim values, as stored in the JWT payload
     // - registered claims will be available from reg[], not in this field
     // - e.g. data.U['name']='John Doe' and data.B['admin']=true for
@@ -152,29 +152,29 @@ type
   // and @http://tools.ietf.org/html/rfc7518#section-8.5
   TJWTAbstract = class(TSynPersistent)
   protected
-    fAlgorithm: RawUTF8;
-    fHeader: RawUTF8;
-    fHeaderB64: RawUTF8;
+    fAlgorithm: RawUtf8;
+    fHeader: RawUtf8;
+    fHeaderB64: RawUtf8;
     fClaims: TJWTClaims;
     fOptions: TJWTOptions;
-    fAudience: TRawUTF8DynArray;
+    fAudience: TRawUtf8DynArray;
     fExpirationSeconds: integer;
     fIDGen: TSynUniqueIdentifierGenerator;
     fCacheTimeoutSeconds: integer;
     fCacheResults: TJWTResults;
     fCache: TSynDictionary;
     procedure SetCacheTimeoutSeconds(value: integer); virtual;
-    function PayloadToJSON(const DataNameValue: array of const;
-      const Issuer, Subject, Audience: RawUTF8; NotBefore: TDateTime;
-      ExpirationMinutes: cardinal): RawUTF8; virtual;
-    procedure Parse(const Token: RawUTF8; var JWT: TJWTContent;
-      out headpayload: RawUTF8; out signature: RawByteString;
+    function PayloadToJson(const DataNameValue: array of const;
+      const Issuer, Subject, Audience: RawUtf8; NotBefore: TDateTime;
+      ExpirationMinutes: cardinal): RawUtf8; virtual;
+    procedure Parse(const Token: RawUtf8; var JWT: TJWTContent;
+      out headpayload: RawUtf8; out signature: RawByteString;
       excluded: TJWTClaims); virtual;
     function CheckAgainstActualTimestamp(var JWT: TJWTContent): boolean;
     // abstract methods which should be overriden by inherited classes
-    function ComputeSignature(const headpayload: RawUTF8): RawUTF8;
+    function ComputeSignature(const headpayload: RawUtf8): RawUtf8;
      virtual; abstract;
-    procedure CheckSignature(const headpayload: RawUTF8;
+    procedure CheckSignature(const headpayload: RawUtf8;
       const signature: RawByteString; var JWT: TJWTContent); virtual; abstract;
   public
     /// initialize the JWT processing instance
@@ -183,9 +183,9 @@ type
     // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
     // - aIDIdentifier and aIDObfuscationKey are passed to a
     // TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
-    constructor Create(const aAlgorithm: RawUTF8; aClaims: TJWTClaims;
-      const aAudience: array of RawUTF8; aExpirationMinutes: integer;
-      aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUTF8); reintroduce;
+    constructor Create(const aAlgorithm: RawUtf8; aClaims: TJWTClaims;
+      const aAudience: array of RawUtf8; aExpirationMinutes: integer;
+      aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8); reintroduce;
     /// finalize the instance
     destructor Destroy; override;
     /// compute a new JWT for a given payload
@@ -201,9 +201,9 @@ type
     // of text values, already serialized as a JSON array of strings
     // - this method is thread-safe
     function Compute(const DataNameValue: array of const;
-      const Issuer: RawUTF8 = ''; const Subject: RawUTF8 = '';
-      const Audience: RawUTF8 = ''; NotBefore: TDateTime = 0;
-      ExpirationMinutes: integer = 0; Signature: PRawUTF8 = nil): RawUTF8;
+      const Issuer: RawUtf8 = ''; const Subject: RawUtf8 = '';
+      const Audience: RawUtf8 = ''; NotBefore: TDateTime = 0;
+      ExpirationMinutes: integer = 0; Signature: PRawUtf8 = nil): RawUtf8;
     /// compute a HTTP Authorization header containing a JWT for a given payload
     // - just a wrapper around Compute(), returned the HTTP header value:
     // $ Authorization: <HttpAuthorizationHeader>
@@ -211,9 +211,9 @@ type
     // $ Authorization: Bearer <Token>
     // - this method is thread-safe
     function ComputeAuthorizationHeader(const DataNameValue: array of const;
-      const Issuer: RawUTF8 = ''; const Subject: RawUTF8 = '';
-      const Audience: RawUTF8 = ''; NotBefore: TDateTime = 0;
-      ExpirationMinutes: integer = 0): RawUTF8;
+      const Issuer: RawUtf8 = ''; const Subject: RawUtf8 = '';
+      const Audience: RawUtf8 = ''; NotBefore: TDateTime = 0;
+      ExpirationMinutes: integer = 0): RawUtf8;
     /// check a JWT value, and its signature
     // - will validate all expected Claims (minus ExcludedClaims optional
     // parameter), and the associated signature
@@ -222,7 +222,7 @@ type
     // - supplied JWT is transmitted e.g. in HTTP header:
     // $ Authorization: Bearer <Token>
     // - this method is thread-safe
-    procedure Verify(const Token: RawUTF8; out JWT: TJWTContent;
+    procedure Verify(const Token: RawUtf8; out JWT: TJWTContent;
       ExcludedClaims: TJWTClaims = []); overload;
     /// check a JWT value, and its signature
     // - will validate all expected Claims, and the associated signature
@@ -230,7 +230,7 @@ type
     // - supplied JWT is transmitted e.g. in HTTP header:
     // $ Authorization: Bearer <Token>
     // - this method is thread-safe
-    function Verify(const Token: RawUTF8): TJWTResult; overload;
+    function Verify(const Token: RawUtf8): TJWTResult; overload;
     /// check a HTTP Authorization header value as JWT, and its signature
     // - will validate all expected Claims, and the associated signature
     // - verification state is returned in JWT.result (jwtValid for a valid JWT),
@@ -238,7 +238,7 @@ type
     // - expect supplied HttpAuthorizationHeader as transmitted in HTTP header:
     // $ Authorization: <HttpAuthorizationHeader>
     // - this method is thread-safe
-    function VerifyAuthorizationHeader(const HttpAuthorizationHeader: RawUTF8;
+    function VerifyAuthorizationHeader(const HttpAuthorizationHeader: RawUtf8;
       out JWT: TJWTContent): boolean; overload;
     /// in-place decoding and quick check of the JWT paylod
     // - it won't check the signature, but the header's algorithm against the
@@ -250,12 +250,12 @@ type
     // - may be used on client side to quickly validate a JWT received from
     // server, without knowing the exact algorithm or secret keys
     class function VerifyPayload(const Token, ExpectedSubject, ExpectedIssuer,
-      ExpectedAudience: RawUTF8; Expiration: PUnixTime = nil;
-      Signature: PRawUTF8 = nil; Payload: PVariant = nil;
+      ExpectedAudience: RawUtf8; Expiration: PUnixTime = nil;
+      Signature: PRawUtf8 = nil; Payload: PVariant = nil;
       IgnoreTime: boolean = false; NotBeforeDelta: TUnixTime = 15): TJWTResult;
   published
     /// the name of the algorithm used by this instance (e.g. 'HS256')
-    property Algorithm: RawUTF8
+    property Algorithm: RawUtf8
       read fAlgorithm;
     /// allow to tune the Verify and Compute method process
     property Options: TJWTOptions
@@ -270,7 +270,7 @@ type
       read fExpirationSeconds;
     /// the audience string values associated with this instance
     // - will be checked by Verify() method, and set in TJWTContent.audience
-    property Audience: TRawUTF8DynArray
+    property Audience: TRawUtf8DynArray
       read fAudience;
     /// delay of optional in-memory cache of Verify() TJWTContent
     // - equals 0 by default, i.e. cache is disabled
@@ -296,8 +296,8 @@ type
   // communication is already secured by other means, and use JWT as cookies
   TJWTNone = class(TJWTAbstract)
   protected
-    function ComputeSignature(const headpayload: RawUTF8): RawUTF8; override;
-    procedure CheckSignature(const headpayload: RawUTF8;
+    function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
+    procedure CheckSignature(const headpayload: RawUtf8;
       const signature: RawByteString; var JWT: TJWTContent); override;
   public
     /// initialize the JWT processing using the 'none' algorithm
@@ -306,9 +306,9 @@ type
     // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
     // - aIDIdentifier and aIDObfuscationKey are passed to a
     // TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
-    constructor Create(aClaims: TJWTClaims; const aAudience: array of RawUTF8;
+    constructor Create(aClaims: TJWTClaims; const aAudience: array of RawUtf8;
       aExpirationMinutes: integer = 0; aIDIdentifier: TSynUniqueIdentifierProcess = 0;
-      aIDObfuscationKey: RawUTF8 = ''); reintroduce;
+      aIDObfuscationKey: RawUtf8 = ''); reintroduce;
   end;
 
 
@@ -316,7 +316,7 @@ const
   /// the text field names of the registerd claims, as defined by RFC 7519
   // - see TJWTClaim enumeration and TJWTClaims set
   // - RFC standard expects those to be case-sensitive
-  JWT_CLAIMS_TEXT: array[TJWTClaim] of RawUTF8 = (
+  JWT_CLAIMS_TEXT: array[TJWTClaim] of RawUtf8 = (
     'iss', 'sub', 'aud', 'exp', 'nbf', 'iat', 'jti');
 
 function ToText(res: TJWTResult): PShortString; overload;
@@ -338,8 +338,8 @@ type
   protected
     fSignPrepared: TSynSigner;
     function GetAlgo: TSignAlgo; virtual; abstract;
-    function ComputeSignature(const headpayload: RawUTF8): RawUTF8; override;
-    procedure CheckSignature(const headpayload: RawUTF8;
+    function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
+    procedure CheckSignature(const headpayload: RawUtf8;
       const signature: RawByteString; var JWT: TJWTContent); override;
   public
     /// initialize the JWT processing using SHA3 algorithm
@@ -352,10 +352,10 @@ type
     // - aIDIdentifier and aIDObfuscationKey are passed to a
     // TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
     // - optionally return the PBKDF2 derivated key for aSecretPBKDF2Rounds>0
-    constructor Create(const aSecret: RawUTF8; aSecretPBKDF2Rounds: integer;
-      aClaims: TJWTClaims; const aAudience: array of RawUTF8;
+    constructor Create(const aSecret: RawUtf8; aSecretPBKDF2Rounds: integer;
+      aClaims: TJWTClaims; const aAudience: array of RawUtf8;
       aExpirationMinutes: integer = 0; aIDIdentifier: TSynUniqueIdentifierProcess = 0;
-      aIDObfuscationKey: RawUTF8 = ''; aPBKDF2Secret: PHash512Rec = nil); reintroduce;
+      aIDObfuscationKey: RawUtf8 = ''; aPBKDF2Secret: PHash512Rec = nil); reintroduce;
     /// finalize the instance
     destructor Destroy; override;
     /// the digital signature size, in byte
@@ -463,7 +463,7 @@ const
   /// how TJWTSynSignerAbstract algorithms are identified in the JWT
   // - SHA-1 will fallback to HS256 (since there will never be SHA-1 support)
   // - SHA-3 is not yet officially defined in @http://tools.ietf.org/html/rfc7518
-  JWT_TEXT: array[TSignAlgo] of RawUTF8 = (
+  JWT_TEXT: array[TSignAlgo] of RawUtf8 = (
     'HS256', 'HS256', 'HS384', 'HS512',
     'S3224', 'S3256', 'S3384', 'S3512', 'S3S128', 'S3S256');
 
@@ -489,8 +489,8 @@ type
   protected
     fCertificate: TECCCertificate;
     fOwnCertificate: boolean;
-    function ComputeSignature(const headpayload: RawUTF8): RawUTF8; override;
-    procedure CheckSignature(const headpayload: RawUTF8; const signature: RawByteString;
+    function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
+    procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
       var JWT: TJWTContent); override;
   public
     /// initialize the JWT processing instance using ECDSA P-256 algorithm
@@ -504,9 +504,9 @@ type
     // - aIDIdentifier and aIDObfuscationKey are passed to a
     // TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
     constructor Create(aCertificate: TECCCertificate; aClaims: TJWTClaims;
-      const aAudience: array of RawUTF8; aExpirationMinutes: integer = 0;
+      const aAudience: array of RawUtf8; aExpirationMinutes: integer = 0;
       aIDIdentifier: TSynUniqueIdentifierProcess = 0;
-      aIDObfuscationKey: RawUTF8 = ''); reintroduce;
+      aIDObfuscationKey: RawUtf8 = ''); reintroduce;
     /// finalize the instance
     destructor Destroy; override;
     /// access to the associated TECCCertificate instance
@@ -527,16 +527,16 @@ implementation
 
 { TJWTAbstract }
 
-constructor TJWTAbstract.Create(const aAlgorithm: RawUTF8; aClaims: TJWTClaims;
-  const aAudience: array of RawUTF8; aExpirationMinutes: integer;
-  aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUTF8);
+constructor TJWTAbstract.Create(const aAlgorithm: RawUtf8; aClaims: TJWTClaims;
+  const aAudience: array of RawUtf8; aExpirationMinutes: integer;
+  aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8);
 begin
   if aAlgorithm = '' then
-    raise EJWTException.CreateUTF8('%.Create(algo?)', [self]);
+    raise EJWTException.CreateUtf8('%.Create(algo?)', [self]);
   inherited Create;
   if high(aAudience) >= 0 then
   begin
-    fAudience := TRawUTF8DynArrayFrom(aAudience);
+    fAudience := TRawUtf8DynArrayFrom(aAudience);
     include(aClaims, jrcAudience);
   end;
   if aExpirationMinutes > 0 then
@@ -551,7 +551,7 @@ begin
   if jrcJwtID in aClaims then
     fIDGen := TSynUniqueIdentifierGenerator.Create(aIDIdentifier, aIDObfuscationKey);
   if fHeader = '' then
-    FormatUTF8('{"alg":"%","typ":"JWT"}', [aAlgorithm], fHeader);
+    FormatUtf8('{"alg":"%","typ":"JWT"}', [aAlgorithm], fHeader);
   fHeaderB64 := BinToBase64URI(fHeader) + '.';
   fCacheResults := [jwtValid];
 end;
@@ -567,29 +567,29 @@ const
   JWT_MAXSIZE = 4096; // coherent with HTTP headers limitations
 
 function TJWTAbstract.Compute(const DataNameValue: array of const;
-  const Issuer, Subject, Audience: RawUTF8; NotBefore: TDateTime;
-  ExpirationMinutes: integer; Signature: PRawUTF8): RawUTF8;
+  const Issuer, Subject, Audience: RawUtf8; NotBefore: TDateTime;
+  ExpirationMinutes: integer; Signature: PRawUtf8): RawUtf8;
 var
-  payload, headpayload, signat: RawUTF8;
+  payload, headpayload, signat: RawUtf8;
 begin
   result := '';
   if self = nil then
     exit;
-  payload := PayloadToJSON(DataNameValue, Issuer, Subject, Audience,
+  payload := PayloadToJson(DataNameValue, Issuer, Subject, Audience,
     NotBefore, ExpirationMinutes);
   headpayload := fHeaderB64 + BinToBase64URI(payload);
   signat := ComputeSignature(headpayload);
   result := headpayload + '.' + signat;
   if length(result) > JWT_MAXSIZE then
-    raise EJWTException.CreateUTF8('%.Compute oversize: len=%',
+    raise EJWTException.CreateUtf8('%.Compute oversize: len=%',
       [self, length(result)]);
   if Signature <> nil then
     Signature^ := signat;
 end;
 
 function TJWTAbstract.ComputeAuthorizationHeader(
-  const DataNameValue: array of const; const Issuer, Subject, Audience: RawUTF8;
-  NotBefore: TDateTime; ExpirationMinutes: integer): RawUTF8;
+  const DataNameValue: array of const; const Issuer, Subject, Audience: RawUtf8;
+  NotBefore: TDateTime; ExpirationMinutes: integer): RawUtf8;
 begin
   if self = nil then
     result := ''
@@ -598,13 +598,13 @@ begin
       NotBefore, ExpirationMinutes);
 end;
 
-function TJWTAbstract.PayloadToJSON(const DataNameValue: array of const;
-  const Issuer, Subject, Audience: RawUTF8; NotBefore: TDateTime;
-  ExpirationMinutes: cardinal): RawUTF8;
+function TJWTAbstract.PayloadToJson(const DataNameValue: array of const;
+  const Issuer, Subject, Audience: RawUtf8; NotBefore: TDateTime;
+  ExpirationMinutes: cardinal): RawUtf8;
 
   procedure RaiseMissing(c: TJWTClaim);
   begin
-    raise EJWTException.CreateUTF8('%.PayloadJSON: missing %', [self, ToText(c)^]);
+    raise EJWTException.CreateUtf8('%.PayloadJSON: missing %', [self, ToText(c)^]);
   end;
 
 var
@@ -654,7 +654,7 @@ begin
     else
       payload.AddValueFromText(JWT_CLAIMS_TEXT[jrcJwtID],
         fIDGen.ToObfuscated(fIDGen.ComputeNew));
-  result := payload.ToJSON;
+  result := payload.ToJson;
 end;
 
 procedure TJWTAbstract.SetCacheTimeoutSeconds(value: integer);
@@ -664,13 +664,13 @@ begin
   if (value > 0) and
      (fCacheResults <> []) then
     fCache := TSynDictionary.Create(
-      TypeInfo(TRawUTF8DynArray), TypeInfo(TJWTContentDynArray), false, value);
+      TypeInfo(TRawUtf8DynArray), TypeInfo(TJWTContentDynArray), false, value);
 end;
 
-procedure TJWTAbstract.Verify(const Token: RawUTF8; out JWT: TJWTContent;
+procedure TJWTAbstract.Verify(const Token: RawUtf8; out JWT: TJWTContent;
   ExcludedClaims: TJWTClaims);
 var
-  headpayload: RawUTF8;
+  headpayload: RawUtf8;
   signature: RawByteString;
   fromcache: boolean;
 begin
@@ -697,7 +697,7 @@ begin
     fCache.Add(Token, JWT);
 end;
 
-function TJWTAbstract.Verify(const Token: RawUTF8): TJWTResult;
+function TJWTAbstract.Verify(const Token: RawUtf8): TJWTResult;
 var
   jwt: TJWTContent;
 begin
@@ -740,20 +740,20 @@ begin
   JWT.result := jwtValid;
 end;
 
-procedure TJWTAbstract.Parse(const Token: RawUTF8; var JWT: TJWTContent;
-  out headpayload: RawUTF8; out signature: RawByteString; excluded: TJWTClaims);
+procedure TJWTAbstract.Parse(const Token: RawUtf8; var JWT: TJWTContent;
+  out headpayload: RawUtf8; out signature: RawByteString; excluded: TJWTClaims);
 var
   payloadend, j, toklen, c, cap, headerlen, len, a: integer;
-  P: PUTF8Char;
-  N, V: PUTF8Char;
+  P: PUtf8Char;
+  N, V: PUtf8Char;
   wasString: boolean;
   EndOfObject: AnsiChar;
   claim: TJWTClaim;
   requiredclaims: TJWTClaims;
   id: TSynUniqueIdentifierBits;
   value: variant;
-  payload: RawUTF8;
-  head: array[0..1] of TValuePUTF8Char;
+  payload: RawUtf8;
+  head: array[0..1] of TValuePUtf8Char;
   aud: TDocVariantData;
   tok: PAnsiChar absolute Token;
 begin
@@ -778,7 +778,7 @@ begin
        (headerlen > 512) then
       exit;
     Base64URIToBin(tok, headerlen - 1, signature);
-    JSONDecode(pointer(signature), ['alg', 'typ'], @head);
+    JsonDecode(pointer(signature), ['alg', 'typ'], @head);
     if not head[0].Idem(fAlgorithm) or
        ((head[1].value <> nil) and
         not head[1].Idem('JWT')) then
@@ -812,16 +812,16 @@ begin
   if P^ <> '{' then
     exit;
   P := GotoNextNotSpace(P + 1);
-  cap := JSONObjectPropCount(P);
+  cap := JsonObjectPropCount(P);
   if cap < 0 then
     exit;
   requiredclaims := fClaims - excluded;
   if cap > 0 then
     repeat
-      N := GetJSONPropName(P);
+      N := GetJsonPropName(P);
       if N = nil then
         exit;
-      V := GetJSONFieldOrObjectOrArray(P, @wasString, @EndOfObject, true);
+      V := GetJsonFieldOrObjectOrArray(P, @wasString, @EndOfObject, true);
       if V = nil then
         exit;
       len := StrLen(N);
@@ -854,12 +854,12 @@ begin
                 jrcAudience:
                   if JWT.reg[jrcAudience][1] = '[' then
                   begin
-                    aud.InitJSON(JWT.reg[jrcAudience], JSON_OPTIONS_FAST);
+                    aud.InitJson(JWT.reg[jrcAudience], JSON_OPTIONS_FAST);
                     if aud.Count = 0 then
                       exit;
                     for j := 0 to aud.Count - 1 do
                     begin
-                      a := FindRawUTF8(fAudience, VariantToUTF8(aud.Values[j]));
+                      a := FindRawUtf8(fAudience, VariantToUtf8(aud.Values[j]));
                       if a < 0 then
                       begin
                         JWT.result := jwtUnknownAudience;
@@ -873,7 +873,7 @@ begin
                   end
                   else
                   begin
-                    a := FindRawUTF8(fAudience, JWT.reg[jrcAudience]);
+                    a := FindRawUtf8(fAudience, JWT.reg[jrcAudience]);
                     if a < 0 then
                     begin
                       JWT.result := jwtUnknownAudience;
@@ -891,7 +891,7 @@ begin
         if len = 0 then
           continue;
       end;
-      GetVariantFromJSON(V, wasString, value, @JSON_OPTIONS[true],
+      GetVariantFromJson(V, wasString, value, @JSON_OPTIONS[true],
         joDoubleInData in fOptions);
       if JWT.data.Count = 0 then
         JWT.data.Capacity := cap;
@@ -909,7 +909,7 @@ begin
 end;
 
 function TJWTAbstract.VerifyAuthorizationHeader(
-  const HttpAuthorizationHeader: RawUTF8; out JWT: TJWTContent): boolean;
+  const HttpAuthorizationHeader: RawUtf8; out JWT: TJWTContent): boolean;
 begin
   if (cardinal(length(HttpAuthorizationHeader) - 10) > 4096) or
      not IdemPChar(pointer(HttpAuthorizationHeader), 'BEARER ') then
@@ -920,14 +920,14 @@ begin
 end;
 
 class function TJWTAbstract.VerifyPayload(const Token,
-  ExpectedSubject, ExpectedIssuer, ExpectedAudience: RawUTF8;
-  Expiration: PUnixTime; Signature: PRawUTF8; Payload: PVariant;
+  ExpectedSubject, ExpectedIssuer, ExpectedAudience: RawUtf8;
+  Expiration: PUnixTime; Signature: PRawUtf8; Payload: PVariant;
   IgnoreTime: boolean; NotBeforeDelta: TUnixTime): TJWTResult;
 var
-  P, B: PUTF8Char;
-  V: array[0..4] of TValuePUTF8Char;
+  P, B: PUtf8Char;
+  V: array[0..4] of TValuePUtf8Char;
   now, time: PtrUInt;
-  text: RawUTF8;
+  text: RawUtf8;
 begin
   result := jwtInvalidAlgorithm;
   B := pointer(Token);
@@ -937,7 +937,7 @@ begin
   if self <> TJWTAbstract then
   begin
     text := Base64URIToBin(PAnsiChar(B), P - B);
-    if not IdemPropNameU(copy(ToText(self), 5, 10), JSONDecode(text, 'alg')) then
+    if not IdemPropNameU(copy(ToText(self), 5, 10), JsonDecode(text, 'alg')) then
       exit;
   end;
   B := P + 1;
@@ -951,7 +951,7 @@ begin
     exit;
   if Payload <> nil then
     _Json(text, Payload^, JSON_OPTIONS_FAST);
-  JSONDecode(pointer(text), ['iss', 'aud', 'exp', 'nbf', 'sub'], @V, true);
+  JsonDecode(pointer(text), ['iss', 'aud', 'exp', 'nbf', 'sub'], @V, true);
   result := jwtUnexpectedClaim;
   if ((ExpectedSubject <> '') and
       not V[4].Idem(ExpectedSubject)) or
@@ -998,15 +998,15 @@ end;
 { TJWTNone }
 
 constructor TJWTNone.Create(aClaims: TJWTClaims;
-  const aAudience: array of RawUTF8; aExpirationMinutes: integer;
-  aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUTF8);
+  const aAudience: array of RawUtf8; aExpirationMinutes: integer;
+  aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8);
 begin
   fHeader := '{"alg":"none"}'; // "typ":"JWT" is optional, so we save a few bytes
   inherited Create('none', aClaims, aAudience, aExpirationMinutes,
     aIDIdentifier, aIDObfuscationKey);
 end;
 
-procedure TJWTNone.CheckSignature(const headpayload: RawUTF8;
+procedure TJWTNone.CheckSignature(const headpayload: RawUtf8;
   const signature: RawByteString; var JWT: TJWTContent);
 begin
   if signature = '' then // JWA defined empty string for "none" JWS
@@ -1015,7 +1015,7 @@ begin
     JWT.result := jwtInvalidSignature;
 end;
 
-function TJWTNone.ComputeSignature(const headpayload: RawUTF8): RawUTF8;
+function TJWTNone.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
 begin
   result := '';
 end;
@@ -1051,10 +1051,10 @@ end;
 
 { TJWTSynSignerAbstract }
 
-constructor TJWTSynSignerAbstract.Create(const aSecret: RawUTF8;
+constructor TJWTSynSignerAbstract.Create(const aSecret: RawUtf8;
   aSecretPBKDF2Rounds: integer; aClaims: TJWTClaims;
-  const aAudience: array of RawUTF8; aExpirationMinutes: integer;
-  aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUTF8;
+  const aAudience: array of RawUtf8; aExpirationMinutes: integer;
+  aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8;
   aPBKDF2Secret: PHash512Rec);
 var
   algo: TSignAlgo;
@@ -1069,7 +1069,7 @@ begin
     fSignPrepared.Init(algo, aSecret);
 end;
 
-procedure TJWTSynSignerAbstract.CheckSignature(const headpayload: RawUTF8;
+procedure TJWTSynSignerAbstract.CheckSignature(const headpayload: RawUtf8;
   const signature: RawByteString; var JWT: TJWTContent);
 var
   signer: TSynSigner;
@@ -1089,7 +1089,7 @@ begin
 end;
 
 function TJWTSynSignerAbstract.ComputeSignature(
-  const headpayload: RawUTF8): RawUTF8;
+  const headpayload: RawUtf8): RawUtf8;
 var
   signer: TSynSigner;
   temp: THash512Rec;
@@ -1177,11 +1177,11 @@ end;
 { TJWTES256 }
 
 constructor TJWTES256.Create(aCertificate: TECCCertificate; aClaims: TJWTClaims;
-  const aAudience: array of RawUTF8; aExpirationMinutes: integer;
-  aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUTF8);
+  const aAudience: array of RawUtf8; aExpirationMinutes: integer;
+  aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8);
 begin
   if not aCertificate.CheckCRC then
-    raise EJWTException.CreateUTF8('%.Create(aCertificate?)', [self]);
+    raise EJWTException.CreateUtf8('%.Create(aCertificate?)', [self]);
   inherited Create('ES256', aClaims, aAudience, aExpirationMinutes,
     aIDIdentifier, aIDObfuscationKey);
   fCertificate := aCertificate;
@@ -1194,7 +1194,7 @@ begin
   inherited;
 end;
 
-procedure TJWTES256.CheckSignature(const headpayload: RawUTF8;
+procedure TJWTES256.CheckSignature(const headpayload: RawUtf8;
   const signature: RawByteString; var JWT: TJWTContent);
 var
   sha: TSHA256;
@@ -1208,7 +1208,7 @@ begin
     JWT.result := jwtValid;
 end;
 
-function TJWTES256.ComputeSignature(const headpayload: RawUTF8): RawUTF8;
+function TJWTES256.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
 var
   sha: TSHA256;
   hash: TSHA256Digest;
@@ -1216,11 +1216,11 @@ var
 begin
   if not fCertificate.InheritsFrom(TECCCertificateSecret) or
      not TECCCertificateSecret(fCertificate).HasSecret then
-    raise EECCException.CreateUTF8('%.ComputeSignature expects % (%) to hold ' +
+    raise EECCException.CreateUtf8('%.ComputeSignature expects % (%) to hold ' +
       'a private key', [self, fCertificate, fCertificate.Serial]);
   sha.Full(pointer(headpayload), length(headpayload), hash);
   if not ecdsa_sign(TECCCertificateSecret(fCertificate).PrivateKey, hash, sign) then
-    raise EECCException.CreateUTF8('%.ComputeSignature: ecdsa_sign?', [self]);
+    raise EECCException.CreateUtf8('%.ComputeSignature: ecdsa_sign?', [self]);
   result := BinToBase64URI(@sign, sizeof(sign));
 end;
 

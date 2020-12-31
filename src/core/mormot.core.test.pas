@@ -51,9 +51,9 @@ type
     /// the uncamelcased method name
     TestName: string;
     /// ready-to-be-displayed 'Ident - TestName' text, as UTF-8
-    IdentTestName: RawUTF8;
+    IdentTestName: RawUtf8;
     /// raw method name, as defined in pascal code (not uncamelcased)
-    MethodName: RawUTF8;
+    MethodName: RawUtf8;
     /// direct access to the method execution
     Method: TOnSynTest;
     /// the test case holding this method
@@ -89,7 +89,7 @@ type
     /// register a specified test to this class instance
     // - Create will register all published methods of this class, but
     // your code may initialize its own set of methods on need
-    procedure Add(const aMethod: TOnSynTest; const aMethodName: RawUTF8; const aIdent: string);
+    procedure Add(const aMethod: TOnSynTest; const aMethodName: RawUtf8; const aIdent: string);
     /// the test name
     // - either the Ident parameter supplied to the Create() method, either
     // a uncameled text from the class name
@@ -175,27 +175,27 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against integers
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
-    function CheckEqual(a, b: Int64; const msg: RawUTF8 = ''): boolean; overload;
+    function CheckEqual(a, b: Int64; const msg: RawUtf8 = ''): boolean; overload;
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against UTF-8 strings
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
-    function CheckEqual(const a, b: RawUTF8; const msg: RawUTF8 = ''): boolean; overload;
+    function CheckEqual(const a, b: RawUtf8; const msg: RawUtf8 = ''): boolean; overload;
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against pointers/classes
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
-    function CheckEqual(a, b: pointer; const msg: RawUTF8 = ''): boolean; overload;
+    function CheckEqual(a, b: pointer; const msg: RawUtf8 = ''): boolean; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against integers
     // - if a=b, will fail and include '#=#' text before the supplied msg
-    function CheckNotEqual(a, b: Int64; const msg: RawUTF8 = ''): boolean; overload;
+    function CheckNotEqual(a, b: Int64; const msg: RawUtf8 = ''): boolean; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against UTF-8 strings
     // - if a=b, will fail and include '#=#' text before the supplied msg
-    function CheckNotEqual(const a, b: RawUTF8; const msg: RawUTF8 = ''): boolean; overload;
+    function CheckNotEqual(const a, b: RawUtf8; const msg: RawUtf8 = ''): boolean; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run test assertion against pointers/classes
     // - if a=b, will fail and include '#=#' text before the supplied msg
-    function CheckNotEqual(a, b: pointer; const msg: RawUTF8 = ''): boolean; overload;
+    function CheckNotEqual(a, b: pointer; const msg: RawUtf8 = ''): boolean; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run a test assertion about two double values
     // - includes some optional precision argument
@@ -204,15 +204,15 @@ type
     /// perform a string comparison with several value
     // - test passes if (Value=Values[0]) or (Value=Value[1]) or (Value=Values[2])...
     // and ExpectedResult=true
-    function CheckMatchAny(const Value: RawUTF8; const Values: array of RawUTF8;
+    function CheckMatchAny(const Value: RawUtf8; const Values: array of RawUtf8;
       CaseSentitive: boolean = true; ExpectedResult: boolean = true; const msg: string = ''): boolean;
     /// used by the published methods to run a test assertion, with an UTF-8 error message
     // - condition must equals TRUE to pass the test
-    procedure CheckUTF8(condition: boolean; const msg: RawUTF8); overload;
+    procedure CheckUtf8(condition: boolean; const msg: RawUtf8); overload;
     /// used by the published methods to run a test assertion, with a error
-    // message computed via FormatUTF8()
+    // message computed via FormatUtf8()
     // - condition must equals TRUE to pass the test
-    procedure CheckUTF8(condition: boolean; const msg: RawUTF8; const args: array of const); overload;
+    procedure CheckUtf8(condition: boolean; const msg: RawUtf8; const args: array of const); overload;
     /// used by published methods to start some timing on associated log
     // - call this once, before one or several consecutive CheckLogTime()
     // - warning: this method is not thread-safe
@@ -224,13 +224,13 @@ type
     // - condition must equals TRUE to pass the test
     // - the supplied message would be appended, with its timing
     // - warning: this method is not thread-safe
-    procedure CheckLogTime(condition: boolean; const msg: RawUTF8; const args: array of const;
+    procedure CheckLogTime(condition: boolean; const msg: RawUtf8; const args: array of const;
       level: TSynLogInfo = sllTrace);
     /// create a temporary string random content, WinAnsi (code page 1252) content
     class function RandomString(CharCount: integer): RawByteString;
     /// create a temporary UTF-8 string random content, using WinAnsi
     // (code page 1252) content
-    class function RandomUTF8(CharCount: integer): RawUTF8;
+    class function RandomUtf8(CharCount: integer): RawUtf8;
     /// create a temporary UTF-16 string random content, using WinAnsi
     // (code page 1252) content
     class function RandomUnicode(CharCount: integer): SynUnicode;
@@ -242,10 +242,10 @@ type
     class function RandomURI(CharCount: integer): RawByteString;
     /// create a temporary string, containing some fake text, with paragraphs
     class function RandomTextParagraph(WordCount: integer; LastPunctuation: AnsiChar = '.';
-      const RandomInclude: RawUTF8 = ''): RawUTF8;
+      const RandomInclude: RawUtf8 = ''): RawUtf8;
     /// add containing some "bla bli blo blu" fake text, with paragraphs
     class procedure AddRandomTextParagraph(WR: TBaseWriter; WordCount: integer;
-      LastPunctuation: AnsiChar = '.'; const RandomInclude: RawUTF8 = '';
+      LastPunctuation: AnsiChar = '.'; const RandomInclude: RawUtf8 = '';
       NoLineFeed: boolean = false);
     /// this method is triggered internaly - e.g. by Check() - when a test failed
     procedure TestFailed(const msg: string);
@@ -258,7 +258,7 @@ type
       SizeInBytes: cardinal = 0; Timer: PPrecisionTimer = nil;
       OnlyLog: boolean = false): TSynMonitorOneMicroSec; overload;
     /// will add to the console a formatted message with a speed estimation
-    function NotifyTestSpeed(const ItemNameFmt: RawUTF8; const ItemNameArgs: array of const;
+    function NotifyTestSpeed(const ItemNameFmt: RawUtf8; const ItemNameArgs: array of const;
       ItemCount: integer; SizeInBytes: cardinal = 0; Timer: PPrecisionTimer = nil;
       OnlyLog: boolean = false): TSynMonitorOneMicroSec; overload;
     /// append some text to the current console
@@ -294,13 +294,13 @@ type
     /// the uncamelcased method name
     TestName: string;
     /// ready-to-be-displayed 'TestCaseIdent - TestName' text, as UTF-8
-    IdentTestName: RawUTF8;
+    IdentTestName: RawUtf8;
   end;
 
   TSynTestFaileds = array of TSynTestFailed;
 
   /// event signature for TSynTests.CustomOutput callback
-  TOnSynTestOutput = procedure(const value: RawUTF8) of object;
+  TOnSynTestOutput = procedure(const value: RawUtf8) of object;
 
   /// a class used to run a suit of test cases
   TSynTests = class(TSynTest)
@@ -319,11 +319,11 @@ type
     function GetFailed(Index: integer): TSynTestFailed;
     procedure CreateSaveToFile; virtual;
     procedure Color(aColor: TConsoleColor);
-    procedure Text(const value: RawUTF8); overload; virtual;
+    procedure Text(const value: RawUtf8); overload; virtual;
     procedure Text(const values: array of const); overload;
     procedure TextLn(const values: array of const); overload;
     /// could be overriden to redirect the content to proper TSynLog.Log()
-    procedure DoLog(Level: TSynLogInfo; const TextFmt: RawUTF8;
+    procedure DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
       const TextArgs: array of const); virtual;
     /// called when a test case failed: default is to add item to fFailed[]
     procedure AddFailed(const msg: string); virtual;
@@ -435,7 +435,7 @@ type
   TSynTestsLogged = class(TSynTests)
   protected
     fLogFile: TSynLog;
-    fConsoleDup: RawUTF8;
+    fConsoleDup: RawUtf8;
     procedure CreateSaveToFile; override;
     /// called when a test case failed: log into the file
     procedure AddFailed(const msg: string); override;
@@ -452,7 +452,7 @@ type
     property LogFile: TSynLog
       read fLogFile;
     /// a replicate of the text written to the console
-    property ConsoleDup: RawUTF8
+    property ConsoleDup: RawUtf8
       read fConsoleDup;
   end;
 
@@ -477,7 +477,7 @@ uses
 
 { TSynTest }
 
-procedure TSynTest.Add(const aMethod: TOnSynTest; const aMethodName: RawUTF8;
+procedure TSynTest.Add(const aMethod: TOnSynTest; const aMethodName: RawUtf8;
   const aIdent: string);
 var
   n: integer;
@@ -489,7 +489,7 @@ begin
   with fTests[n] do
   begin
     TestName := aIdent;
-    IdentTestName := StringToUTF8(fIdent + ' - ' + TestName);
+    IdentTestName := StringToUtf8(fIdent + ' - ' + TestName);
     Method := aMethod;
     MethodName := aMethodName;
     Test := self;
@@ -499,7 +499,7 @@ end;
 
 constructor TSynTest.Create(const Ident: string);
 var
-  id: RawUTF8;
+  id: RawUtf8;
   s: string;
   methods: TPublishedMethodInfoDynArray;
   i: integer;
@@ -648,65 +648,65 @@ begin
   result := CheckFailed(not condition, msg);
 end;
 
-function TSynTestCase.CheckEqual(a, b: Int64; const msg: RawUTF8): boolean;
+function TSynTestCase.CheckEqual(a, b: Int64; const msg: RawUtf8): boolean;
 begin
   result := a = b;
-  CheckUTF8(result, EQUAL_MSG, [a, b, msg]);
+  CheckUtf8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckEqual(const a, b: RawUTF8; const msg: RawUTF8): boolean;
+function TSynTestCase.CheckEqual(const a, b: RawUtf8; const msg: RawUtf8): boolean;
 begin
   result := a = b;
-  CheckUTF8(result, EQUAL_MSG, [a, b, msg]);
+  CheckUtf8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckEqual(a, b: pointer; const msg: RawUTF8): boolean;
+function TSynTestCase.CheckEqual(a, b: pointer; const msg: RawUtf8): boolean;
 begin
   result := a = b;
-  CheckUTF8(result, EQUAL_MSG, [a, b, msg]);
+  CheckUtf8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckNotEqual(a, b: Int64; const msg: RawUTF8): boolean;
+function TSynTestCase.CheckNotEqual(a, b: Int64; const msg: RawUtf8): boolean;
 begin
   result := a <> b;
-  CheckUTF8(result, NOTEQUAL_MSG, [a, b, msg]);
+  CheckUtf8(result, NOTEQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckNotEqual(const a, b: RawUTF8; const msg: RawUTF8): boolean;
+function TSynTestCase.CheckNotEqual(const a, b: RawUtf8; const msg: RawUtf8): boolean;
 begin
   result := a <> b;
-  CheckUTF8(result, NOTEQUAL_MSG, [a, b, msg]);
+  CheckUtf8(result, NOTEQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckNotEqual(a, b: pointer; const msg: RawUTF8): boolean;
+function TSynTestCase.CheckNotEqual(a, b: pointer; const msg: RawUtf8): boolean;
 begin
   result := a <> b;
-  CheckUTF8(result, NOTEQUAL_MSG, [a, b, msg]);
+  CheckUtf8(result, NOTEQUAL_MSG, [a, b, msg]);
 end;
 
 function TSynTestCase.CheckSame(const Value1, Value2: double; const Precision: double;
   const msg: string): boolean;
 begin
   result := SameValue(Value1, Value2, Precision);
-  CheckUTF8(result, EQUAL_MSG, [Value1, Value2, msg]);
+  CheckUtf8(result, EQUAL_MSG, [Value1, Value2, msg]);
 end;
 
-function TSynTestCase.CheckMatchAny(const Value: RawUTF8; const Values: array of RawUTF8;
+function TSynTestCase.CheckMatchAny(const Value: RawUtf8; const Values: array of RawUtf8;
   CaseSentitive: boolean; ExpectedResult: boolean; const msg: string): boolean;
 begin
-  result := (FindRawUTF8(Values, Value, CaseSentitive) >= 0) = ExpectedResult;
+  result := (FindRawUtf8(Values, Value, CaseSentitive) >= 0) = ExpectedResult;
   Check(result);
 end;
 
-procedure TSynTestCase.CheckUTF8(condition: boolean; const msg: RawUTF8);
+procedure TSynTestCase.CheckUtf8(condition: boolean; const msg: RawUtf8);
 begin
   inc(fAssertions);
   if not condition or
      (tcoLogEachCheck in fOptions) then
-    CheckUTF8(condition, '%', [msg]);
+    CheckUtf8(condition, '%', [msg]);
 end;
 
-procedure TSynTestCase.CheckUTF8(condition: boolean; const msg: RawUTF8;
+procedure TSynTestCase.CheckUtf8(condition: boolean; const msg: RawUtf8;
   const args: array of const);
 var
   str: string; // using a sub-proc may be faster, but unstable on Android
@@ -731,7 +731,7 @@ begin
   fCheckLogTime.Start;
 end;
 
-procedure TSynTestCase.CheckLogTime(condition: boolean; const msg: RawUTF8;
+procedure TSynTestCase.CheckLogTime(condition: boolean; const msg: RawUtf8;
   const args: array of const; level: TSynLogInfo);
 var
   str: string;
@@ -797,7 +797,7 @@ begin
   InitRandom64(@URL_CHARS, CharCount, result);
 end;
 
-class function TSynTestCase.RandomUTF8(CharCount: integer): RawUTF8;
+class function TSynTestCase.RandomUtf8(CharCount: integer): RawUtf8;
 begin
   result := WinAnsiToUtf8(WinAnsiString(RandomString(CharCount)));
 end;
@@ -808,7 +808,7 @@ begin
 end;
 
 class function TSynTestCase.RandomTextParagraph(WordCount: integer;
-  LastPunctuation: AnsiChar; const RandomInclude: RawUTF8): RawUTF8;
+  LastPunctuation: AnsiChar; const RandomInclude: RawUtf8): RawUtf8;
 var
   tmp: TTextWriterStackBuffer;
   WR: TBaseWriter;
@@ -823,7 +823,7 @@ begin
 end;
 
 class procedure TSynTestCase.AddRandomTextParagraph(WR: TBaseWriter;
-  WordCount: integer; LastPunctuation: AnsiChar; const RandomInclude: RawUTF8;
+  WordCount: integer; LastPunctuation: AnsiChar; const RandomInclude: RawUtf8;
   NoLineFeed: boolean);
 type
   TKind = (
@@ -952,7 +952,7 @@ begin
   result := Temp.TimeInMicroSec;
 end;
 
-function TSynTestCase.NotifyTestSpeed(const ItemNameFmt: RawUTF8;
+function TSynTestCase.NotifyTestSpeed(const ItemNameFmt: RawUtf8;
   const ItemNameArgs: array of const; ItemCount: integer; SizeInBytes: cardinal;
   Timer: PPrecisionTimer; OnlyLog: boolean): TSynMonitorOneMicroSec;
 var
@@ -1006,7 +1006,7 @@ begin
     TextColor(aColor);
 end;
 
-procedure TSynTests.Text(const value: RawUTF8);
+procedure TSynTests.Text(const value: RawUtf8);
 begin
   write(fSaveToFile, value);
   if Assigned(CustomOutput) then
@@ -1016,11 +1016,11 @@ end;
 procedure TSynTests.Text(const values: array of const);
 var
   i: PtrInt;
-  s: RawUTF8;
+  s: RawUtf8;
 begin
   for i := 0 to high(values) do
   begin
-    VarRecToUTF8(values[i], s);
+    VarRecToUtf8(values[i], s);
     Text(s);
   end;
 end;
@@ -1031,7 +1031,7 @@ begin
   Text(#13#10);
 end;
 
-procedure TSynTests.DoLog(Level: TSynLogInfo; const TextFmt: RawUTF8;
+procedure TSynTests.DoLog(Level: TSynLogInfo; const TextFmt: RawUtf8;
   const TextArgs: array of const);
 begin
   if Level = sllFail then
@@ -1086,7 +1086,7 @@ end;
 function TSynTests.Run: boolean;
 var
   i, t, m: integer;
-  Elapsed, Version: RawUTF8;
+  Elapsed, Version: RawUtf8;
   err: string;
   C: TSynTestCase;
   log: IUnknown;
@@ -1183,9 +1183,9 @@ begin
   Color(ccLightCyan);
   result := (fFailedCount = 0);
   if Exeversion.Version.Major <> 0 then
-    Version := FormatUTF8(#13#10'Software version tested: % (%)',
+    Version := FormatUtf8(#13#10'Software version tested: % (%)',
       [ExeVersion.Version.Detailed, ExeVersion.Version.BuildDateTimeString]);
-  FormatUTF8(#13#10#13#10'Time elapsed for all tests: %'#13#10'Performed % by % on %',
+  FormatUtf8(#13#10#13#10'Time elapsed for all tests: %'#13#10'Performed % by % on %',
     [RunTimer.Stop, NowToString, Exeversion.User, Exeversion.Host], Elapsed);
   TextLn([#13#10, Version, CustomVersions, #13#10'Generated with: ',
     COMPILER_VERSION, ' compiler', Elapsed]);
@@ -1345,7 +1345,7 @@ begin
       result := GetLastError
     else
       result := 0;
-    AppendBufferToRawUTF8(PPRawUTF8(@t.UserData)^^, t.BufPtr, t.Bufpos);
+    AppendBufferToRawUtf8(PPRawUtf8(@t.UserData)^^, t.BufPtr, t.Bufpos);
     t.BufPos := 0;
   end;
 end;
@@ -1357,7 +1357,7 @@ begin
   begin
     InOutFunc := @SynTestsTextOut;
     FlushFunc := @SynTestsTextOut;
-    PPRawUTF8(@UserData)^ := @fConsoleDup;
+    PPRawUtf8(@UserData)^ := @fConsoleDup;
   end;
 end;
 

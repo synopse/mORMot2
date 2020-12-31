@@ -229,7 +229,7 @@ type
     /// compute the per second count
     function PerSec(Count: cardinal): cardinal;
     /// compute the time elapsed by count, with appened time resolution (us,ms,s)
-    function ByCount(Count: cardinal): RawUTF8;
+    function ByCount(Count: cardinal): RawUtf8;
   end;
 
   /// reference counted high resolution timer (for accurate speed statistics)
@@ -258,7 +258,7 @@ type
     /// compute the per second count
     function PerSec(Count: cardinal): cardinal;
     /// compute the time elapsed by count, with appened time resolution (us,ms,s)
-    function ByCount(Count: cardinal): RawUTF8;
+    function ByCount(Count: cardinal): RawUtf8;
   end;
 
 
@@ -366,7 +366,7 @@ type
   // Lock/UnLock to access its individual properties
   TSynMonitor = class(TSynPersistentLock)
   protected
-    fName: RawUTF8;
+    fName: RawUtf8;
     fTaskCount: TSynMonitorCount64;
     fTotalTime: TSynMonitorTime;
     fLastTime: TSynMonitorOneTime;
@@ -389,7 +389,7 @@ type
     /// initialize the instance nested class properties
     // - you can specify identifier associated to this monitored resource
     // which would be used for TSynMonitorUsage persistence
-    constructor Create(const aName: RawUTF8); reintroduce; overload; virtual;
+    constructor Create(const aName: RawUtf8); reintroduce; overload; virtual;
     /// initialize the instance nested class properties
     constructor Create; overload; override;
     /// finalize the instance
@@ -425,7 +425,7 @@ type
     procedure ProcessErrorNumber(info: integer);
     /// should be called when an error occurred
     // - just a wraper around overloaded ProcessError(), so a thread-safe method
-    procedure ProcessErrorFmt(const Fmt: RawUTF8; const Args: array of const);
+    procedure ProcessErrorFmt(const Fmt: RawUtf8; const Args: array of const);
     /// should be called when an Exception occurred
     // - just a wraper around overloaded ProcessError(), so a thread-safe method
     procedure ProcessErrorRaised(E: Exception);
@@ -437,7 +437,7 @@ type
     procedure Sum(another: TSynMonitor);
     /// returns a JSON content with all published properties information
     // - thread-safe method
-    function ComputeDetailsJSON: RawUTF8;
+    function ComputeDetailsJSON: RawUtf8;
     /// appends a JSON content with all published properties information
     // - thread-safe method
     procedure ComputeDetailsTo(W: TBaseWriter); virtual;
@@ -467,7 +467,7 @@ type
     class procedure RttiCustomSet(Rtti: TRttiCustom); override;
     /// an identifier associated to this monitored resource
     // - is used e.g. for TSynMonitorUsage persistence/tracking
-    property Name: RawUTF8
+    property Name: RawUtf8
       read fName write fName;
   published
     /// indicates if this thread is currently working on some process
@@ -679,7 +679,7 @@ type
     // - minutes and seconds will set to 0
     function ToTimeLog: TTimeLog;
     /// convert to Iso-8601 encoded text
-    function Text(Expanded: boolean; FirstTimeChar: AnsiChar = 'T'): RawUTF8;
+    function Text(Expanded: boolean; FirstTimeChar: AnsiChar = 'T'): RawUtf8;
     /// retrieve the resolution of the stored information
     // - i.e. either mugHour, mugDay, mugMonth or mugYear, which will store
     // a true 0..23 hour value (for mugHour), or 29/30/31 pseudo-hour (i.e.
@@ -699,7 +699,7 @@ type
     Info: PRttiProp;
     /// property type, as recognized by MonitorPropUsageValue()
     Kind: TSynMonitorType;
-    Name: RawUTF8;
+    Name: RawUtf8;
     Values: array[mugHour..mugYear] of TInt64DynArray;
     ValueLast: Int64;
   end;
@@ -708,7 +708,7 @@ type
 
   TSynMonitorUsageTrack = record
     Instance: TObject;
-    Name: RawUTF8;
+    Name: RawUtf8;
     Props: TSynMonitorUsageTrackPropDynArray;
   end;
 
@@ -727,7 +727,7 @@ type
     fLastInstance: TObject;
     fLastTrack: PSynMonitorUsageTrack;
     fPrevious: TTimeLogBits;
-    fComment: RawUTF8;
+    fComment: RawUtf8;
     function TrackPropLock(Instance: TObject;
       Info: PRttiProp): PSynMonitorUsageTrackProp;
     // those methods will be protected (e.g. in Modified) by fSafe.Lock:
@@ -751,7 +751,7 @@ type
     // - the instance will be stored in fTracked[].Instance: ensure it will
     // stay available during the whole TSynMonitorUsage process
     function Track(Instance: TObject;
-      const Name: RawUTF8 = ''): integer; overload; virtual;
+      const Name: RawUtf8 = ''): integer; overload; virtual;
     /// track the values of the given object instances
     // - will recognize the TSynMonitor* properties as TSynMonitorType from
     // RTTI, using MonitorPropUsageValue(), within any (nested) object
@@ -761,11 +761,11 @@ type
     /// to be called when tracked properties changed on a tracked class instance
     function Modified(Instance: TObject): integer; overload;
     /// to be called when tracked properties changed on a tracked class instance
-    function Modified(Instance: TObject; const PropNames: array of RawUTF8;
+    function Modified(Instance: TObject; const PropNames: array of RawUtf8;
       ModificationTime: TTimeLog = 0): integer; overload; virtual;
     /// some custom text, associated with the current stored state
     // - will be persistented by Save() methods
-    property Comment: RawUTF8
+    property Comment: RawUtf8
       read fComment write fComment;
   end;
 
@@ -903,7 +903,7 @@ type
     // - the memory history (in MB) can be optionally returned in aDestMemoryMB
     // - on Linux, will return the /proc/loadavg pseudo-file content
     function HistoryText(aProcessID: integer = 0; aDepth: integer = 0;
-      aDestMemoryMB: PRawUTF8 = nil): RawUTF8;
+      aDestMemoryMB: PRawUtf8 = nil): RawUtf8;
     /// returns total (Kernel+User) CPU usage percent history of the supplied process
     // - aProcessID=0 will return information from the current process
     // - returns null if the Process ID was not registered via Create/Subscribe
@@ -969,12 +969,12 @@ type
     /// some text corresponding to current 'free/total' memory information
     // - returns e.g. '10.3 GB / 15.6 GB'
     class function FreeAsText(nospace: boolean = false;
-      processfree: PRawUTF8 = nil): ShortString;
+      processfree: PRawUtf8 = nil): ShortString;
     /// how many physical memory is currently installed, as text (e.g. '32 GB');
     class function PhysicalAsText(nospace: boolean = false): TShort16;
     /// returns a JSON object with the current system memory information
     // - numbers would be given in KB (Bytes shl 10)
-    class function ToJSON: RawUTF8;
+    class function ToJson: RawUtf8;
     /// fill a TDocVariant with the current system memory information
     // - numbers would be given in KB (Bytes shl 10)
     class function ToVariant: variant;
@@ -1035,7 +1035,7 @@ type
     destructor Destroy; override;
     /// some text corresponding to current 'free/total' disk information
     // - could return e.g. 'D: 64.4 GB / 213.4 GB'
-    class function FreeAsText: RawUTF8;
+    class function FreeAsText: RawUtf8;
   published
     /// the disk name
     property Name: TFileName
@@ -1059,9 +1059,9 @@ type
   end;
 
 
-/// convert Intel CPU features as plain CSV text
+/// convert Intel CPU features as plain Csv text
 function ToText(const aIntelCPUFeatures: TIntelCpuFeatures;
-  const Sep: RawUTF8 = ','): RawUTF8; overload;
+  const Sep: RawUtf8 = ','): RawUtf8; overload;
 
 
 /// retrieve low-level information about all mounted disk partitions as text
@@ -1071,16 +1071,16 @@ function ToText(const aIntelCPUFeatures: TIntelCpuFeatures;
 // - uses internally a cache unless nocache is true
 // - includes the free space if withfreespace is true - e.g. '(80 GB / 115 GB)'
 function GetDiskPartitionsText(nocache: boolean = false;
-  withfreespace: boolean = false; nospace: boolean = false): RawUTF8;
+  withfreespace: boolean = false; nospace: boolean = false): RawUtf8;
 
 {$ifdef CPUINTEL}
 /// returns the global Intel/AMD CpuFeatures flags as ready-to-be-displayed text
-function CpuFeaturesText: RawUTF8;
+function CpuFeaturesText: RawUtf8;
 {$endif CPUINTEL}
 
 /// returns a JSON object containing basic information about the computer
 // - including Host, User, CPU, OS, freemem, freedisk...
-function SystemInfoJson: RawUTF8;
+function SystemInfoJson: RawUtf8;
 
 /// returns a TDocVariant array of the latest intercepted exception texts
 // - runs ToText() over all information returned by overloaded GetLastExceptions
@@ -1283,7 +1283,7 @@ end;
 
 { TLocalPrecisionTimer }
 
-function TLocalPrecisionTimer.ByCount(Count: cardinal): RawUTF8;
+function TLocalPrecisionTimer.ByCount(Count: cardinal): RawUtf8;
 begin
   result := fTimer.ByCount(Count);
 end;
@@ -1404,7 +1404,7 @@ begin
   fMaximalTime := TSynMonitorOneTime.Create;
 end;
 
-constructor TSynMonitor.Create(const aName: RawUTF8);
+constructor TSynMonitor.Create(const aName: RawUtf8);
 begin
   Create;
   fName := aName;
@@ -1455,7 +1455,7 @@ end;
 procedure TSynMonitor.ProcessStart;
 begin
   if fProcessing then
-    raise ESynException.CreateUTF8('Unexpected %.ProcessStart', [self]);
+    raise ESynException.CreateUtf8('Unexpected %.ProcessStart', [self]);
   fSafe^.Lock;
   try
     InternalTimer.Resume;
@@ -1481,7 +1481,7 @@ end;
 procedure TSynMonitor.ProcessStartTask;
 begin
   if fProcessing then
-    raise ESynException.CreateUTF8('Reentrant %.ProcessStart', [self]);
+    raise ESynException.CreateUtf8('Reentrant %.ProcessStart', [self]);
   fSafe^.Lock;
   try
     InternalTimer.Resume;
@@ -1572,9 +1572,9 @@ begin
   end;
 end;
 
-procedure TSynMonitor.ProcessErrorFmt(const Fmt: RawUTF8; const Args: array of const);
+procedure TSynMonitor.ProcessErrorFmt(const Fmt: RawUtf8; const Args: array of const);
 begin
-  ProcessError(RawUTF8ToVariant(FormatUTF8(Fmt, Args)));
+  ProcessError(RawUtf8ToVariant(FormatUtf8(Fmt, Args)));
 end;
 
 procedure TSynMonitor.ProcessErrorRaised(E: Exception);
@@ -1645,7 +1645,7 @@ begin
   end;
 end;
 
-function TSynMonitor.ComputeDetailsJSON: RawUTF8;
+function TSynMonitor.ComputeDetailsJSON: RawUtf8;
 var
   W: TBaseWriter;
   temp: TTextWriterStackBuffer;
@@ -1865,7 +1865,7 @@ end;
 
 { TSynMonitorUsage }
 
-function TSynMonitorUsage.Track(Instance: TObject; const Name: RawUTF8): integer;
+function TSynMonitorUsage.Track(Instance: TObject; const Name: RawUtf8): integer;
 
   procedure ClassTrackProps(c: TClass;
     var props: TSynMonitorUsageTrackPropDynArray);
@@ -1908,7 +1908,7 @@ function TSynMonitorUsage.Track(Instance: TObject; const Name: RawUTF8): integer
 
 var
   i, n: PtrInt;
-  instanceName: RawUTF8;
+  instanceName: RawUtf8;
 begin
   result := -1;
   if Instance = nil then
@@ -1927,7 +1927,7 @@ begin
       if fTracked[i].Instance = Instance then
         exit
       else if IdemPropNameU(fTracked[i].Name, instanceName) then
-        raise ESynException.CreateUTF8('%.Track("%") name already exists',
+        raise ESynException.CreateUtf8('%.Track("%") name already exists',
           [self, instanceName]);
     SetLength(fTracked, n + 1);
     fTracked[n].Instance := Instance;
@@ -2009,7 +2009,7 @@ begin
 end;
 
 function TSynMonitorUsage.Modified(Instance: TObject;
-  const PropNames: array of RawUTF8; ModificationTime: TTimeLog): integer;
+  const PropNames: array of RawUtf8; ModificationTime: TTimeLog): integer;
 
   procedure save(const track: TSynMonitorUsageTrack);
 
@@ -2135,7 +2135,7 @@ var
   data, val: TDocVariantData;
 begin
   if Gran < low(fValues) then
-    raise ESynException.CreateUTF8('%.Save(%) unexpected', [self, ToText(Gran)^]);
+    raise ESynException.CreateUtf8('%.Save(%) unexpected', [self, ToText(Gran)^]);
   TDocVariant.IsOfTypeOrNewFast(fValues[Gran]);
   for t := 0 to length(fTracked) - 1 do
   begin
@@ -2334,7 +2334,7 @@ begin
 end;
 
 function TSynMonitorUsageID.Text(Expanded: boolean;
-  FirstTimeChar: AnsiChar): RawUTF8;
+  FirstTimeChar: AnsiChar): RawUtf8;
 var
   bits: TTimeLogBits;
 begin
@@ -2353,7 +2353,7 @@ end;
 { ************ Operating System Monitoring }
 
 function ToText(const aIntelCPUFeatures: TIntelCpuFeatures;
-  const Sep: RawUTF8): RawUTF8;
+  const Sep: RawUtf8): RawUtf8;
 var
   f: TIntelCpuFeature;
   List: PShortString;
@@ -2376,9 +2376,9 @@ end;
 {$ifdef CPUINTEL}
 
 var
-  _CpuFeatures: RawUTF8;
+  _CpuFeatures: RawUtf8;
 
-function CpuFeaturesText: RawUTF8;
+function CpuFeaturesText: RawUtf8;
 begin
   if _CpuFeatures = '' then
     _CpuFeatures := LowerCase(ToText(CpuFeatures, ' '));
@@ -2387,9 +2387,9 @@ end;
 
 {$endif CPUINTEL}
 
-function SystemInfoJson: RawUTF8;
+function SystemInfoJson: RawUtf8;
 var
-  cpu, mem, free: RawUTF8;
+  cpu, mem, free: RawUtf8;
 begin
   cpu := TSystemUse.Current(false).HistoryText(0, 15, @mem);
   if mem = '' then
@@ -2397,7 +2397,7 @@ begin
   else
     free := TSynMonitorMemory.FreeAsText;
   with SystemInfo do
-    result := JSONEncode([
+    result := JsonEncode([
       'host', ExeVersion.Host,
       'user', ExeVersion.User,
       'os', OSVersionText,
@@ -2678,10 +2678,10 @@ begin
 end;
 
 function TSystemUse.HistoryText(aProcessID, aDepth: integer;
-  aDestMemoryMB: PRawUTF8): RawUTF8;
+  aDestMemoryMB: PRawUtf8): RawUtf8;
 var
   data: TSystemUseDataDynArray;
-  mem: RawUTF8;
+  mem: RawUtf8;
   i: PtrInt;
 begin
   result := '';
@@ -2697,9 +2697,9 @@ begin
     for i := 0 to high(data) do
       with data[i] do
       begin
-        result := FormatUTF8('%% ', [result, TwoDigits(Kernel + User)]);
+        result := FormatUtf8('%% ', [result, TwoDigits(Kernel + User)]);
         if aDestMemoryMB <> nil then
-          mem := FormatUTF8('%% ', [mem, TwoDigits(WorkKB / 1024)]);
+          mem := FormatUtf8('%% ', [mem, TwoDigits(WorkKB / 1024)]);
       end;
   result := TrimU(result);
   if aDestMemoryMB <> nil then
@@ -2727,14 +2727,14 @@ end;
 var
   _DiskPartitions: TDiskPartitions;
 
-function GetDiskPartitionsText(nocache, withfreespace, nospace: boolean): RawUTF8;
+function GetDiskPartitionsText(nocache, withfreespace, nospace: boolean): RawUtf8;
 var
   i: PtrInt;
   parts: TDiskPartitions;
 
   function GetInfo(var p: TDiskPartition): shortstring;
   const
-    F: array[boolean] of RawUTF8 = ('% % (% / %)', '% % (%/%)');
+    F: array[boolean] of RawUtf8 = ('% % (% / %)', '% % (%/%)');
   var
     av, fr, tot: QWord;
   begin
@@ -2763,7 +2763,7 @@ begin
   else
     ShortStringToAnsi7String(GetInfo(parts[0]), result);
   for i := 1 to high(parts) do
-    result := FormatUTF8('%, %', [result, GetInfo(parts[i])]);
+    result := FormatUtf8('%, %', [result, GetInfo(parts[i])]);
 end;
 
 
@@ -2795,16 +2795,16 @@ begin
 end;
 
 class function TSynMonitorMemory.FreeAsText(nospace: boolean;
-  processfree: PRawUTF8): ShortString;
+  processfree: PRawUtf8): ShortString;
 const
-  F: array[boolean] of RawUTF8 = ('% / %', '%/%');
+  F: array[boolean] of RawUtf8 = ('% / %', '%/%');
 begin
   with TSynMonitorMemory.Create(nospace) do
   try
     RetrieveMemoryInfo;
     FormatShort(F[nospace], [fPhysicalMemoryFree.Text, fPhysicalMemoryTotal.Text], result);
     if processfree <> nil then
-      FormatUTF8(F[noSpace], [fAllocatedUsed.Text, FAllocatedReserved.Text], processfree^);
+      FormatUtf8(F[noSpace], [fAllocatedUsed.Text, FAllocatedReserved.Text], processfree^);
   finally
     Free;
   end;
@@ -2825,12 +2825,12 @@ begin
   result := PhysicalAsTextCache;
 end;
 
-class function TSynMonitorMemory.ToJSON: RawUTF8;
+class function TSynMonitorMemory.ToJson: RawUtf8;
 begin
   with TSynMonitorMemory.Create(false) do
   try
     RetrieveMemoryInfo;
-    FormatUTF8('{Allocated:{reserved:%,used:%},Physical:{total:%,free:%,percent:%},' +
+    FormatUtf8('{Allocated:{reserved:%,used:%},Physical:{total:%,free:%,percent:%},' +
       {$ifdef MSWINDOWS}'Virtual:{total:%,free:%},' + {$endif}'Paged:{total:%,free:%}}',
       [fAllocatedReserved.Bytes shr 10, fAllocatedUsed.Bytes shr 10,
       fPhysicalMemoryTotal.Bytes shr 10, fPhysicalMemoryFree.Bytes shr 10,
@@ -2844,7 +2844,7 @@ end;
 
 class function TSynMonitorMemory.ToVariant: variant;
 begin
-  result := _JsonFast(ToJSON);
+  result := _JsonFast(ToJson);
 end;
 
 function TSynMonitorMemory.GetAllocatedUsed: TSynMonitorOneSize;
@@ -2966,13 +2966,13 @@ begin
   result := fTotalSize;
 end;
 
-class function TSynMonitorDisk.FreeAsText: RawUTF8;
+class function TSynMonitorDisk.FreeAsText: RawUtf8;
 var
   name: TFileName;
   avail, free, total: QWord;
 begin
   GetDiskInfo(name, avail, free, total);
-  FormatUTF8('% % / %', [name, KB(free), KB(total)], result);
+  FormatUtf8('% % / %', [name, KB(free), KB(total)], result);
 end;
 
 procedure TSynMonitorDisk.RetrieveDiskInfo;

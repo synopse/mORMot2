@@ -42,33 +42,33 @@ type
     ['{77AB427C-1025-488B-8E04-3E62C8100E62}']
     /// returns a command line switch value as UTF-8 text
     // - you can specify a prompt text, when asking for any missing switch
-    function AsUTF8(const Switch, Default: RawUTF8;
-      const Prompt: string): RawUTF8;
+    function AsUtf8(const Switch, Default: RawUtf8;
+      const Prompt: string): RawUtf8;
     /// returns a command line switch value as VCL string text
     // - you can specify a prompt text, when asking for any missing switch
-    function AsString(const Switch: RawUTF8; const Default: string;
+    function AsString(const Switch: RawUtf8; const Default: string;
       const Prompt: string): string;
     /// returns a command line switch value as integer
     // - you can specify a prompt text, when asking for any missing switch
-    function AsInt(const Switch: RawUTF8; Default: Int64;
+    function AsInt(const Switch: RawUtf8; Default: Int64;
       const Prompt: string): Int64;
     /// returns a command line switch ISO-8601 value as date value
     // - here dates are expected to be encoded with ISO-8601, i.e. YYYY-MM-DD
     // - you can specify a prompt text, when asking for any missing switch
-    function AsDate(const Switch: RawUTF8; Default: TDateTime;
+    function AsDate(const Switch: RawUtf8; Default: TDateTime;
       const Prompt: string): TDateTime;
     /// returns a command line switch value as enumeration ordinal
     // - RTTI will be used to check for the enumeration text, or plain integer
     // value will be returned as ordinal value
     // - you can specify a prompt text, when asking for any missing switch
-    function AsEnum(const Switch, Default: RawUTF8; TypeInfo: pointer;
+    function AsEnum(const Switch, Default: RawUtf8; TypeInfo: pointer;
       const Prompt: string): integer;
     /// returns all command line values as an array of UTF-8 text
     // - i.e. won't interpret the various switches in the input parameters
     // - as created e.g. by TCommandLine.CreateAsArray constructor
-    function AsArray: TRawUTF8DynArray;
+    function AsArray: TRawUtf8DynArray;
     /// serialize all recognized switches as UTF-8 JSON text
-    function AsJSON(Format: TTextWriterJSONFormat): RawUTF8;
+    function AsJson(Format: TTextWriterJSONFormat): RawUtf8;
     /// equals TRUE if the -noprompt switch has been supplied
     // - may be used to force pure execution without console interaction,
     // e.g. when run from another process
@@ -78,7 +78,7 @@ type
     procedure TextColor(Color: TConsoleColor);
     /// write some console text, with an optional color
     // - will output the text even if NoPrompt is TRUE
-    procedure Text(const Fmt: RawUTF8; const Args: array of const;
+    procedure Text(const Fmt: RawUtf8; const Args: array of const;
       Color: TConsoleColor = ccLightGray);
   end;
 
@@ -91,7 +91,7 @@ type
     fValues: TDocVariantData;
     fNoPrompt: boolean;
     fNoConsole: boolean;
-    fLines: TRawUTF8DynArray;
+    fLines: TRawUtf8DynArray;
     procedure SetNoConsole(value: boolean);
   public
     /// initialize the internal storage from the command line
@@ -114,33 +114,33 @@ type
         aNoConsole: boolean = true); reintroduce; overload;
     /// returns a command line switch value as UTF-8 text
     // - you can specify a prompt text, when asking for any missing switch
-    function AsUTF8(const Switch, Default: RawUTF8;
-      const Prompt: string): RawUTF8;
+    function AsUtf8(const Switch, Default: RawUtf8;
+      const Prompt: string): RawUtf8;
     /// returns a command line switch value as VCL string text
     // - you can specify a prompt text, when asking for any missing switch
-    function AsString(const Switch: RawUTF8; const Default: string;
+    function AsString(const Switch: RawUtf8; const Default: string;
       const Prompt: string): string;
     /// returns a command line switch value as integer
     // - you can specify a prompt text, when asking for any missing switch
-    function AsInt(const Switch: RawUTF8; Default: Int64;
+    function AsInt(const Switch: RawUtf8; Default: Int64;
       const Prompt: string): Int64;
     /// returns a command line switch ISO-8601 value as date value
     // - here dates are expected to be encoded with ISO-8601, i.e. YYYY-MM-DD
     // - you can specify a prompt text, when asking for any missing switch
-    function AsDate(const Switch: RawUTF8; Default: TDateTime;
+    function AsDate(const Switch: RawUtf8; Default: TDateTime;
       const Prompt: string): TDateTime;
     /// returns a command line switch value as enumeration ordinal
     // - RTTI will be used to check for the enumeration text, or plain integer
     // value will be returned as ordinal value
     // - you can specify a prompt text, when asking for any missing switch
-    function AsEnum(const Switch, Default: RawUTF8; TypeInfo: pointer;
+    function AsEnum(const Switch, Default: RawUtf8; TypeInfo: pointer;
       const Prompt: string): integer;
     /// returns all command line values as an array of UTF-8 text
     // - i.e. won't interpret the various switches in the input parameters
     // - as created e.g. by TCommandLine.CreateAsArray constructor
-    function AsArray: TRawUTF8DynArray;
+    function AsArray: TRawUtf8DynArray;
     /// serialize all recognized switches as UTF-8 JSON text
-    function AsJSON(Format: TTextWriterJSONFormat): RawUTF8;
+    function AsJson(Format: TTextWriterJSONFormat): RawUtf8;
     /// equals TRUE if the -noprompt switch has been supplied
     // - may be used to force pure execution without console interaction,
     // e.g. when run from another process
@@ -151,11 +151,11 @@ type
     /// write some console text, with an optional color
     // - will output the text even if NoPrompt=TRUE, but not if NoConsole=TRUE
     // - will append the text to the internal storage, available from ConsoleText
-    procedure Text(const Fmt: RawUTF8; const Args: array of const;
+    procedure Text(const Fmt: RawUtf8; const Args: array of const;
       Color: TConsoleColor = ccLightGray);
     /// returns the UTF-8 text as inserted by Text() calls
     // - line feeds will be included to the ConsoleLines[] values
-    function ConsoleText(const LineFeed: RawUTF8 = sLineBreak): RawUTF8;
+    function ConsoleText(const LineFeed: RawUtf8 = sLineBreak): RawUtf8;
     /// low-level access to the internal switches storage
     property Values: TDocVariantData read fValues;
     /// if Text() should be redirected to ConsoleText internal storage
@@ -164,7 +164,7 @@ type
     property NoConsole: boolean
       read fNoConsole write SetNoConsole;
     /// low-level access to the internal UTF-8 console lines storage
-    property ConsoleLines: TRawUTF8DynArray
+    property ConsoleLines: TRawUtf8DynArray
       read fLines;
   end;
 
@@ -180,13 +180,13 @@ implementation
 constructor TCommandLine.Create;
 var
   i: integer;
-  p, sw: RawUTF8;
+  p, sw: RawUtf8;
 begin
   inherited Create;
   fValues.InitFast(ParamCount shr 1, dvObject);
   for i := 1 to ParamCount do
   begin
-    p := StringToUTF8(ParamStr(i));
+    p := StringToUtf8(ParamStr(i));
     if p <> '' then
       if p[1] in ['-', '/'] then
       begin
@@ -242,9 +242,9 @@ begin
   result := fNoPrompt;
 end;
 
-function TCommandLine.ConsoleText(const LineFeed: RawUTF8): RawUTF8;
+function TCommandLine.ConsoleText(const LineFeed: RawUtf8): RawUtf8;
 begin
-  result := RawUTF8ArrayToCSV(fLines, LineFeed);
+  result := RawUtf8ArrayToCsv(fLines, LineFeed);
 end;
 
 procedure TCommandLine.SetNoConsole(value: boolean);
@@ -262,17 +262,17 @@ begin
     mormot.core.os.TextColor(Color);
 end;
 
-procedure TCommandLine.Text(const Fmt: RawUTF8; const Args: array of const;
+procedure TCommandLine.Text(const Fmt: RawUtf8; const Args: array of const;
   Color: TConsoleColor);
 var
-  msg: RawUTF8;
+  msg: RawUtf8;
 begin
-  FormatUTF8(Fmt, Args, msg);
+  FormatUtf8(Fmt, Args, msg);
   {$I-}
   if msg <> '' then
   begin
     TextColor(Color);
-    AddRawUTF8(fLines, msg);
+    AddRawUtf8(fLines, msg);
     if not fNoConsole then
       write(Utf8ToConsole(msg));
   end;
@@ -284,15 +284,15 @@ begin
   {$I+}
 end;
 
-function TCommandLine.AsUTF8(const Switch, Default: RawUTF8;
-  const Prompt: string): RawUTF8;
+function TCommandLine.AsUtf8(const Switch, Default: RawUtf8;
+  const Prompt: string): RawUtf8;
 var
   i: integer;
 begin
   i := fValues.GetValueIndex(Switch);
   if i >= 0 then
   begin // found
-    VariantToUTF8(fValues.Values[i], result);
+    VariantToUtf8(fValues.Values[i], result);
     fValues.Delete(i);
     exit;
   end;
@@ -320,21 +320,21 @@ begin
     result := Default;
 end;
 
-function TCommandLine.AsInt(const Switch: RawUTF8; Default: Int64;
+function TCommandLine.AsInt(const Switch: RawUtf8; Default: Int64;
   const Prompt: string): Int64;
 var
-  res: RawUTF8;
+  res: RawUtf8;
 begin
-  res := AsUTF8(Switch, Int64ToUtf8(Default), Prompt);
+  res := AsUtf8(Switch, Int64ToUtf8(Default), Prompt);
   result := GetInt64Def(pointer(res), Default);
 end;
 
-function TCommandLine.AsDate(const Switch: RawUTF8; Default: TDateTime;
+function TCommandLine.AsDate(const Switch: RawUtf8; Default: TDateTime;
   const Prompt: string): TDateTime;
 var
-  res: RawUTF8;
+  res: RawUtf8;
 begin
-  res := AsUTF8(Switch, DateTimeToIso8601Text(Default), Prompt);
+  res := AsUtf8(Switch, DateTimeToIso8601Text(Default), Prompt);
   if res = '0' then
   begin
     result := 0;
@@ -345,30 +345,30 @@ begin
     result := Default;
 end;
 
-function TCommandLine.AsEnum(const Switch, Default: RawUTF8; TypeInfo: pointer;
+function TCommandLine.AsEnum(const Switch, Default: RawUtf8; TypeInfo: pointer;
   const Prompt: string): integer;
 var
-  res: RawUTF8;
+  res: RawUtf8;
 begin
-  res := AsUTF8(Switch, Default, Prompt);
+  res := AsUtf8(Switch, Default, Prompt);
   if not ToInteger(res, result) then
     result := GetEnumNameValue(TypeInfo, pointer(res), length(res), true);
 end;
 
-function TCommandLine.AsArray: TRawUTF8DynArray;
+function TCommandLine.AsArray: TRawUtf8DynArray;
 begin
-  fValues.ToRawUTF8DynArray(result);
+  fValues.ToRawUtf8DynArray(result);
 end;
 
-function TCommandLine.AsJSON(Format: TTextWriterJSONFormat): RawUTF8;
+function TCommandLine.AsJson(Format: TTextWriterJSONFormat): RawUtf8;
 begin
-  result := fValues.ToJSON('', '', Format);
+  result := fValues.ToJson('', '', Format);
 end;
 
-function TCommandLine.AsString(const Switch: RawUTF8;
+function TCommandLine.AsString(const Switch: RawUtf8;
   const Default, Prompt: string): string;
 begin
-  result := UTF8ToString(AsUTF8(Switch, StringToUTF8(Default), Prompt));
+  result := Utf8ToString(AsUtf8(Switch, StringToUtf8(Default), Prompt));
 end;
 
 

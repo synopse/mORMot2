@@ -1059,7 +1059,7 @@ function StrLenSSE2(S: pointer): PtrInt;
 @null:
 end;
 
-function BufferLineLength(Text, TextEnd: PUTF8Char): PtrInt;
+function BufferLineLength(Text, TextEnd: PUtf8Char): PtrInt;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         {$ifdef MSWINDOWS} // Win64 ABI to System-V ABI
         push    rsi

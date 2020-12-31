@@ -447,12 +447,12 @@ type
     // compatibility of existing code
     // - since SHA256Weak() is deprecated, consider using the more secure
     // (and more standard and proven) CreateFromPBKDF2() constructor
-    constructor CreateFromSha256(const aKey: RawUTF8); deprecated;
+    constructor CreateFromSha256(const aKey: RawUtf8); deprecated;
     {$endif PUREMORMOT2}
     /// Initialize AES context for cypher, from PBKDF2_HMAC_SHA256 derivation
     // - here the Key is supplied as a string, and will be hashed using
     // PBKDF2_HMAC_SHA256 with the specified salt and rounds
-    constructor CreateFromPBKDF2(const aKey: RawUTF8; const aSalt: RawByteString;
+    constructor CreateFromPBKDF2(const aKey: RawUtf8; const aSalt: RawByteString;
       aRounds: integer);
     /// compute a class instance similar to this one
     // - could be used to have a thread-safe re-use of a given encryption key
@@ -604,7 +604,7 @@ type
     {$ifndef PUREMORMOT2}
     /// simple wrapper able to cypher/decypher any in-memory content
     // - here data variables could be text or binary
-    // - use StringToUTF8() to define the Key parameter from a VCL string
+    // - use StringToUtf8() to define the Key parameter from a VCL string
     // - if IVAtBeginning is TRUE, a random Initialization Vector will be computed,
     // and stored at the beginning of the output binary buffer
     // - will use SHA256Weak() and PKCS7 padding with the current class mode,
@@ -614,7 +614,7 @@ type
       RaiseESynCryptoOnError: boolean = true): RawByteString; overload;
     /// simple wrapper able to cypher/decypher any file content
     // - just a wrapper around SimpleEncrypt() and StringFromFile/FileFromString
-    // - use StringToUTF8() to define the Key parameter from a VCL string
+    // - use StringToUtf8() to define the Key parameter from a VCL string
     // - if IVAtBeginning is TRUE, a random Initialization Vector will be computed,
     // and stored at the beginning of the output binary buffer
     // - will use SHA256Weak() and PKCS7 padding with the current class mode,
@@ -1060,7 +1060,7 @@ procedure CompressShaAesSetKey(const Key: RawByteString;
 // CompressShaAesClass variable to the expected TAES* class name
 // - will store a hash of both cyphered and clear stream: if the
 // data is corrupted during transmission, will instantly return ''
-function CompressShaAes(var Data: RawByteString; Compress: boolean): RawUTF8;
+function CompressShaAes(var Data: RawByteString; Compress: boolean): RawUtf8;
 
 {$endif PUREMORMOT2}
 
@@ -1133,7 +1133,7 @@ type
     function FillRandomBytes(Len: integer): TBytes;
     /// returns an hexa-encoded binary buffer filled with some pseudorandom data
     // - this method is thread-safe, and its AES process is non blocking
-    function FillRandomHex(Len: integer): RawUTF8;
+    function FillRandomHex(Len: integer): RawUtf8;
     /// returns a 32-bit unsigned random number
     // - is twice slower than Lecuyer's Random32 of mormot.core.bas unit, but
     // is cryptographic secure
@@ -1150,8 +1150,8 @@ type
     function RandomDouble: double;
     /// computes a random ASCII password
     // - will contain uppercase/lower letters, digits and $.:()?%!-+*/@#
-    // excluding ;,= to allow direct use in CSV content
-    function RandomPassword(Len: integer): RawUTF8;
+    // excluding ;,= to allow direct use in Csv content
+    function RandomPassword(Len: integer): RawUtf8;
     /// would force the internal generator to re-seed its private key
     // - avoid potential attacks on backward or forward security
     // - would be called by FillRandom() methods, according to SeedAfterBytes
@@ -1554,7 +1554,7 @@ type
     // - default DigestBits=0 will write the default number of bits to Digest
     // output memory buffer, according to the specified TSHA3Algo
     function FullStr(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
-      DigestBits: integer = 0): RawUTF8;
+      DigestBits: integer = 0): RawUtf8;
     /// uses SHA-3 in "Extendable-Output Function" (XOF) to cypher some content
     // - there is no MAC stored in the resulting binary
     // - Source and Dest will have the very same DataLen size in bytes,
@@ -1755,7 +1755,7 @@ function MD5Buf(const Buffer; Len: cardinal): TMD5Digest;
 
 /// compute the HTDigest for a user and a realm, according to a supplied password
 // - apache-compatible: 'agent007:download area:8364d0044ef57b3defcfa141e8f77b65'
-function HTDigest(const user, realm, pass: RawByteString): RawUTF8;
+function HTDigest(const user, realm, pass: RawByteString): RawUtf8;
 
 
 { ****************** HMAC Authentication over SHA and CRC32C }
@@ -1783,7 +1783,7 @@ type
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: TSHA1Digest; NoInit: boolean = false); overload;
     /// computes the HMAC of all supplied message according to the key
-    procedure Done(out result: RawUTF8; NoInit: boolean = false); overload;
+    procedure Done(out result: RawUtf8; NoInit: boolean = false); overload;
     /// computes the HMAC of the supplied message according to the key
     // - expects a previous call on Init() to setup the shared key
     // - similar to a single Update(msg,msglen) followed by Done, but re-usable
@@ -1839,7 +1839,7 @@ type
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: TSHA256Digest; NoInit: boolean = false); overload;
     /// computes the HMAC of all supplied message according to the key
-    procedure Done(out result: RawUTF8; NoInit: boolean = false); overload;
+    procedure Done(out result: RawUtf8; NoInit: boolean = false); overload;
     /// computes the HMAC of the supplied message according to the key
     // - expects a previous call on Init() to setup the shared key
     // - similar to a single Update(msg,msglen) followed by Done, but re-usable
@@ -1886,7 +1886,7 @@ type
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: TSHA384Digest; NoInit: boolean = false); overload;
     /// computes the HMAC of all supplied message according to the key
-    procedure Done(out result: RawUTF8; NoInit: boolean = false); overload;
+    procedure Done(out result: RawUtf8; NoInit: boolean = false); overload;
     /// computes the HMAC of the supplied message according to the key
     // - expects a previous call on Init() to setup the shared key
     // - similar to a single Update(msg,msglen) followed by Done, but re-usable
@@ -1933,7 +1933,7 @@ type
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: TSHA512Digest; NoInit: boolean = false); overload;
     /// computes the HMAC of all supplied message according to the key
-    procedure Done(out result: RawUTF8; NoInit: boolean = false); overload;
+    procedure Done(out result: RawUtf8; NoInit: boolean = false); overload;
     /// computes the HMAC of the supplied message according to the key
     // - expects a previous call on Init() to setup the shared key
     // - similar to a single Update(msg,msglen) followed by Done, but re-usable
@@ -2111,73 +2111,73 @@ procedure AESBlockToShortString(const block: TAESBlock; out result: short32); ov
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the hexadecial representation of an AES 16-byte block
-function AESBlockToString(const block: TAESBlock): RawUTF8;
+function AESBlockToString(const block: TAESBlock): RawUtf8;
 
 
 /// direct MD5 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
-function MD5(const s: RawByteString): RawUTF8;
+function MD5(const s: RawByteString): RawUtf8;
 
 /// compute the hexadecimal representation of a MD5 digest
-function MD5DigestToString(const D: TMD5Digest): RawUTF8;
+function MD5DigestToString(const D: TMD5Digest): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the MD5 digest from its hexadecimal representation
 // - returns true on success (i.e. Source has the expected size and characters)
 // - just a wrapper around mormot.core.text.HexToBin()
-function MD5StringToDigest(const Source: RawUTF8; out Dest: TMD5Digest): boolean;
+function MD5StringToDigest(const Source: RawUtf8; out Dest: TMD5Digest): boolean;
 
 
 /// direct SHA-1 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
-function SHA1(const s: RawByteString): RawUTF8;
+function SHA1(const s: RawByteString): RawUtf8;
 
 /// compute the hexadecimal representation of a SHA-1 digest
-function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;
+function SHA1DigestToString(const D: TSHA1Digest): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the SHA-1 digest from its hexadecimal representation
 // - returns true on success (i.e. Source has the expected size and characters)
 // - just a wrapper around mormot.core.text.HexToBin()
-function SHA1StringToDigest(const Source: RawUTF8; out Dest: TSHA1Digest): boolean;
+function SHA1StringToDigest(const Source: RawUtf8; out Dest: TSHA1Digest): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 
 /// direct SHA-256 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
-function SHA256(const s: RawByteString): RawUTF8; overload;
+function SHA256(const s: RawByteString): RawUtf8; overload;
 
 /// direct SHA-256 hash calculation of some binary data
 // - result is returned in hexadecimal format
-function SHA256(Data: pointer; Len: integer): RawUTF8; overload;
+function SHA256(Data: pointer; Len: integer): RawUtf8; overload;
 
 /// compute the hexadecimal representation of a SHA-256 digest
-function SHA256DigestToString(const D: TSHA256Digest): RawUTF8;
+function SHA256DigestToString(const D: TSHA256Digest): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the SHA-256 digest from its hexadecimal representation
 // - returns true on success (i.e. Source has the expected size and characters)
 // - just a wrapper around mormot.core.text.HexToBin()
 
-function SHA256StringToDigest(const Source: RawUTF8; out Dest: TSHA256Digest): boolean;
+function SHA256StringToDigest(const Source: RawUtf8; out Dest: TSHA256Digest): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 
 /// direct SHA-384 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
-function SHA384(const s: RawByteString): RawUTF8;
+function SHA384(const s: RawByteString): RawUtf8;
 
 /// compute the hexadecimal representation of a SHA-384 digest
-function SHA384DigestToString(const D: TSHA384Digest): RawUTF8;
+function SHA384DigestToString(const D: TSHA384Digest): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
 
 /// direct SHA-512 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
-function SHA512(const s: RawByteString): RawUTF8;
+function SHA512(const s: RawByteString): RawUtf8;
 
 /// compute the hexadecimal representation of a SHA-512 digest
-function SHA512DigestToString(const D: TSHA512Digest): RawUTF8;
+function SHA512DigestToString(const D: TSHA512Digest): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// direct SHA-3 hash calculation of some data (string-encoded)
@@ -2185,14 +2185,14 @@ function SHA512DigestToString(const D: TSHA512Digest): RawUTF8;
 // - default DigestBits=0 will write the default number of bits to Digest
 // output memory buffer, according to the specified TSHA3Algo
 function SHA3(Algo: TSHA3Algo; const s: RawByteString;
-  DigestBits: integer = 0): RawUTF8; overload;
+  DigestBits: integer = 0): RawUtf8; overload;
 
 /// direct SHA-3 hash calculation of some binary buffer
 // - result is returned in hexadecimal format
 // - default DigestBits=0 will write the default number of bits to Digest
 // output memory buffer, according to the specified TSHA3Algo
 function SHA3(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
-  DigestBits: integer = 0): RawUTF8; overload;
+  DigestBits: integer = 0): RawUtf8; overload;
 
 
 
@@ -3803,7 +3803,7 @@ begin
   if (aKeySizeBits <> 128) and
      (aKeySizeBits <> 192) and
      (aKeySizeBits <> 256) then
-    raise ESynCrypto.CreateUTF8('%.Create(KeySize=%): 128/192/256 required',
+    raise ESynCrypto.CreateUtf8('%.Create(KeySize=%): 128/192/256 required',
       [self, aKeySizeBits]);
   fKeySize := aKeySizeBits;
   fKeySizeBytes := fKeySize shr 3;
@@ -3838,7 +3838,7 @@ end;
 
 {$warn SYMBOL_DEPRECATED OFF} // we know it is deprecated
 
-constructor TAESAbstract.CreateFromSha256(const aKey: RawUTF8);
+constructor TAESAbstract.CreateFromSha256(const aKey: RawUtf8);
 var
   Digest: TSHA256Digest;
 begin
@@ -3849,7 +3849,7 @@ end;
 
 {$endif PUREMORMOT2}
 
-constructor TAESAbstract.CreateFromPBKDF2(const aKey: RawUTF8;
+constructor TAESAbstract.CreateFromPBKDF2(const aKey: RawUtf8;
   const aSalt: RawByteString; aRounds: integer);
 var
   Digest: TSHA256Digest;
@@ -3975,7 +3975,7 @@ begin
   if (InputLen < SizeOf(TAESBlock)) or
      (InputLen and AESBlockMod <> 0) then
     if RaiseESynCryptoOnError then
-      raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid InputLen=%',
+      raise ESynCrypto.CreateUtf8('%.DecryptPKCS7: Invalid InputLen=%',
         [self, InputLen])
     else
       result := false;
@@ -3996,7 +3996,7 @@ begin
         end
         else if fIVReplayAttackCheck = repMandatory then
           if RaiseESynCryptoOnError then
-            raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: IVCTR is not handled ' +
+            raise ESynCrypto.CreateUtf8('%.DecryptPKCS7: IVCTR is not handled ' +
               'on encryption', [self])
           else
             result := false
@@ -4009,7 +4009,7 @@ begin
       else if IsEqual(TAESBlock(ctr), TAESBlock(fIVCTR)) then
         inc(fIVCTR.ctr)
       else if RaiseESynCryptoOnError then
-        raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: wrong IVCTR %/% %/% -> ' +
+        raise ESynCrypto.CreateUtf8('%.DecryptPKCS7: wrong IVCTR %/% %/% -> ' +
           'potential replay attack', [self, ctr.magic, fIVCTR.magic, ctr.ctr, fIVCTR.ctr])
       else
         result := false;
@@ -4019,7 +4019,7 @@ begin
        (fIVHistoryDec.Depth > 0) and
        not fIVHistoryDec.Add(fIV) then
       if RaiseESynCryptoOnError then
-        raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: duplicated IV=% -> ' +
+        raise ESynCrypto.CreateUtf8('%.DecryptPKCS7: duplicated IV=% -> ' +
           'potential replay attack', [self, AESBlockToShortString(fIV)])
       else
         result := false;
@@ -4046,7 +4046,7 @@ begin
   padding := ord(P[InputLen - 1]); // result[1..len]
   if padding > SizeOf(TAESBlock) then
     if RaiseESynCryptoOnError then
-      raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid Input', [self])
+      raise ESynCrypto.CreateUtf8('%.DecryptPKCS7: Invalid Input', [self])
     else
       result := ''
   else
@@ -4085,7 +4085,7 @@ begin
   padding := result[len - 1]; // result[0..len-1]
   if padding > SizeOf(TAESBlock) then
     if RaiseESynCryptoOnError then
-      raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid Input', [self])
+      raise ESynCrypto.CreateUtf8('%.DecryptPKCS7: Invalid Input', [self])
     else
       result := nil
   else
@@ -4361,7 +4361,7 @@ begin
   if aes.DecryptInit(fKey, fKeySize) then
     fAESInit := initDecrypt
   else
-    raise ESynCrypto.CreateUTF8('%.DecryptInit', [self]);
+    raise ESynCrypto.CreateUtf8('%.DecryptInit', [self]);
 end;
 
 procedure TAESAbstractSyn.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
@@ -4376,7 +4376,7 @@ begin
   if aes.EncryptInit(fKey, fKeySize) then
     fAESInit := initEncrypt
   else
-    raise ESynCrypto.CreateUTF8('%.EncryptInit', [self]);
+    raise ESynCrypto.CreateUtf8('%.EncryptInit', [self]);
 end;
 
 procedure TAESAbstractSyn.TrailerBytes(count: cardinal);
@@ -5058,7 +5058,7 @@ constructor TAESGCM.Create(const aKey; aKeySize: cardinal);
 begin
   inherited Create(aKey, aKeySize); // set fKey/fKeySize
   if not fAES.Init(aKey, aKeySize) then
-    raise ESynCrypto.CreateUTF8('%.Create(keysize=%) failed', [self, aKeySize]);
+    raise ESynCrypto.CreateUtf8('%.Create(keysize=%) failed', [self, aKeySize]);
 end;
 
 function TAESGCM.Clone: TAESAbstract;
@@ -5085,10 +5085,10 @@ begin
       fAES.Reset(@fIV, CTR_POS); // caller should have set the IV
       fContext := ctxEncrypt;
     end else
-      raise ESynCrypto.CreateUTF8(
+      raise ESynCrypto.CreateUtf8(
         '%.Encrypt after Decrypt', [self]);
   if not fAES.Encrypt(BufIn, BufOut, Count) then
-    raise ESynCrypto.CreateUTF8(
+    raise ESynCrypto.CreateUtf8(
       '%.Encrypt called after GCM final state', [self]);
 end;
 
@@ -5100,10 +5100,10 @@ begin
       fAES.Reset(@fIV, CTR_POS);
       fContext := ctxDecrypt;
     end else
-      raise ESynCrypto.CreateUTF8(
+      raise ESynCrypto.CreateUtf8(
         '%.Decrypt after Encrypt', [self]);
   if not fAES.Decrypt(BufIn, BufOut, Count) then
-    raise ESynCrypto.CreateUTF8(
+    raise ESynCrypto.CreateUtf8(
       '%.Decrypt called after GCM final state', [self]);
 end;
 
@@ -5257,7 +5257,7 @@ end;
 
 procedure TAESCFB_API.InternalSetMode;
 begin
-  raise ESynCrypto.CreateUTF8('%: CRYPT_MODE_CFB does not work', [self]);
+  raise ESynCrypto.CreateUtf8('%: CRYPT_MODE_CFB does not work', [self]);
   fInternalMode := CRYPT_MODE_CFB;
 end;
 
@@ -5265,7 +5265,7 @@ end;
 
 procedure TAESOFB_API.InternalSetMode;
 begin
-  raise ESynCrypto.CreateUTF8('%: CRYPT_MODE_OFB not implemented by PROV_RSA_AES',
+  raise ESynCrypto.CreateUtf8('%: CRYPT_MODE_OFB not implemented by PROV_RSA_AES',
     [self]);
   fInternalMode := CRYPT_MODE_OFB;
 end;
@@ -5290,7 +5290,7 @@ begin
     SHA256Weak(Key, CompressShaAesKey);
 end;
 
-function CompressShaAes(var Data: RawByteString; Compress: boolean): RawUTF8;
+function CompressShaAes(var Data: RawByteString; Compress: boolean): RawUtf8;
 begin
   if (Data <> '') and
      (CompressShaAesClass <> nil) then
@@ -5617,7 +5617,7 @@ begin
   FillRandom(pointer(result), Len);
 end;
 
-function TAESPRNG.FillRandomHex(Len: integer): RawUTF8;
+function TAESPRNG.FillRandomHex(Len: integer): RawUtf8;
 var
   bin: pointer;
 begin
@@ -5669,7 +5669,7 @@ begin
   result := Hash128ToDouble(@block);
 end;
 
-function TAESPRNG.RandomPassword(Len: integer): RawUTF8;
+function TAESPRNG.RandomPassword(Len: integer): RawUtf8;
 const
   CHARS: array[0..127] of AnsiChar =
     'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' +
@@ -5884,7 +5884,7 @@ begin
   end;
 end;
 
-function Base64URI(P: pointer; len: integer): RawUTF8;
+function Base64URI(P: pointer; len: integer): RawUtf8;
 var
   blen, bdiv, bmod: integer;
 begin
@@ -5956,7 +5956,7 @@ begin
     {$endif MSWINDOWS}
     key := TAESCFB.SimpleEncrypt(key2, k256, 256, true, true);
     if not FileFromString(key, fn) then
-      ESynCrypto.CreateUTF8('Unable to write %', [fn]);
+      ESynCrypto.CreateUtf8('Unable to write %', [fn]);
     FileSetAttributes(fn, {secret=}true); // chmod 400
   finally
     FillZero(key);
@@ -6696,7 +6696,7 @@ begin
     SHAKE_256:
       InitSponge(1088, 512);
   else
-    raise ESynCrypto.CreateUTF8('Unexpected TSHA3Context.Init(%)', [ord(aAlgo)]);
+    raise ESynCrypto.CreateUtf8('Unexpected TSHA3Context.Init(%)', [ord(aAlgo)]);
   end;
   Algo := aAlgo;
 end;
@@ -6707,7 +6707,7 @@ begin
      (aRate <= 0) or
      (aRate >= 1600) or
      ((aRate and 63) <> 0) then
-    raise ESynCrypto.CreateUTF8('Unexpected TSHA3Context.Init(%,%)',
+    raise ESynCrypto.CreateUtf8('Unexpected TSHA3Context.Init(%,%)',
       [aRate, aCapacity]);
   FillCharFast(self, SizeOf(self), 0);
   Rate := aRate;
@@ -6821,7 +6821,7 @@ begin
   if not Squeezing then
     PadAndSwitchToSqueezingPhase;
   if outputLength and 7 <> 0 then
-    raise ESynCrypto.CreateUTF8('TSHA3Context.Squeeze(%?)', [outputLength]);
+    raise ESynCrypto.CreateUtf8('TSHA3Context.Squeeze(%?)', [outputLength]);
   i := 0;
   while i < outputLength do
   begin
@@ -6966,7 +6966,7 @@ begin
 end;
 
 function TSHA3.FullStr(Algo: TSHA3Algo; Buffer: pointer;
-  Len, DigestBits: integer): RawUTF8;
+  Len, DigestBits: integer): RawUtf8;
 var
   tmp: RawByteString;
 begin
@@ -7077,7 +7077,7 @@ begin
     FillZero(step7data.b);
 end;
 
-procedure THMAC_SHA1.Done(out result: RawUTF8; NoInit: boolean);
+procedure THMAC_SHA1.Done(out result: RawUtf8; NoInit: boolean);
 var
   res: TSHA1Digest;
 begin
@@ -7172,7 +7172,7 @@ begin
     FillZero(step7data.b);
 end;
 
-procedure THMAC_SHA256.Done(out result: RawUTF8; NoInit: boolean);
+procedure THMAC_SHA256.Done(out result: RawUtf8; NoInit: boolean);
 var
   res: THash256;
 begin
@@ -7252,7 +7252,7 @@ begin
     FillCharFast(step7data, SizeOf(step7data), 0);
 end;
 
-procedure THMAC_SHA384.Done(out result: RawUTF8; NoInit: boolean);
+procedure THMAC_SHA384.Done(out result: RawUtf8; NoInit: boolean);
 var
   res: THash384;
 begin
@@ -7332,7 +7332,7 @@ begin
     FillCharFast(step7data, SizeOf(step7data), 0);
 end;
 
-procedure THMAC_SHA512.Done(out result: RawUTF8; NoInit: boolean);
+procedure THMAC_SHA512.Done(out result: RawUtf8; NoInit: boolean);
 var
   res: THash512;
 begin
@@ -8096,7 +8096,7 @@ begin
   MD5.Full(@Buffer, Len, result);
 end;
 
-function HTDigest(const user, realm, pass: RawByteString): RawUTF8;
+function HTDigest(const user, realm, pass: RawByteString): RawUtf8;
 // apache-compatible: agent007:download area:8364d0044ef57b3defcfa141e8f77b65
 //    hash=`echo -n "$user:$realm:$pass" | md5sum | cut -b -32`
 //    echo "$user:$realm:$hash"
@@ -8396,7 +8396,7 @@ var
   j, tmp: PtrInt;
 begin
   if aKeyLen <= 0 then
-    raise ESynCrypto.CreateUTF8('TRC4.Init(invalid aKeyLen=%)', [aKeyLen]);
+    raise ESynCrypto.CreateUtf8('TRC4.Init(invalid aKeyLen=%)', [aKeyLen]);
   dec(aKeyLen);
   for i := 0 to high(state) do
     state[i] := i;
@@ -8537,13 +8537,13 @@ begin
   AESBlockToShortString(block, result);
 end;
 
-function AESBlockToString(const block: TAESBlock): RawUTF8;
+function AESBlockToString(const block: TAESBlock): RawUtf8;
 begin
   FastSetString(result, nil, 32);
   mormot.core.text.BinToHex(@block, pointer(result), 16);
 end;
 
-function MD5(const s: RawByteString): RawUTF8;
+function MD5(const s: RawByteString): RawUtf8;
 var
   MD5: TMD5;
   D: TMD5Digest;
@@ -8553,18 +8553,18 @@ begin
   FillZero(D);
 end;
 
-function MD5DigestToString(const D: TMD5Digest): RawUTF8;
+function MD5DigestToString(const D: TMD5Digest): RawUtf8;
 begin
   BinToHexLower(@D, SizeOf(D), result);
 end;
 
-function MD5StringToDigest(const Source: RawUTF8; out Dest: TMD5Digest): boolean;
+function MD5StringToDigest(const Source: RawUtf8; out Dest: TMD5Digest): boolean;
 begin
   result := mormot.core.text.HexToBin(pointer(Source), @Dest, SizeOf(Dest));
 end;
 
 
-function SHA1(const s: RawByteString): RawUTF8;
+function SHA1(const s: RawByteString): RawUtf8;
 var
   SHA: TSHA1;
   Digest: TSHA1Digest;
@@ -8574,18 +8574,18 @@ begin
   FillZero(Digest);
 end;
 
-function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;
+function SHA1DigestToString(const D: TSHA1Digest): RawUtf8;
 begin
   BinToHexLower(@D, SizeOf(D), result);
 end;
 
-function SHA1StringToDigest(const Source: RawUTF8; out Dest: TSHA1Digest): boolean;
+function SHA1StringToDigest(const Source: RawUtf8; out Dest: TSHA1Digest): boolean;
 begin
   result := mormot.core.text.HexToBin(pointer(Source), @Dest, SizeOf(Dest));
 end;
 
 
-function SHA256(const s: RawByteString): RawUTF8;
+function SHA256(const s: RawByteString): RawUtf8;
 var
   SHA: TSHA256;
   Digest: TSHA256Digest;
@@ -8595,7 +8595,7 @@ begin
   FillZero(Digest);
 end;
 
-function SHA256(Data: pointer; Len: integer): RawUTF8;
+function SHA256(Data: pointer; Len: integer): RawUtf8;
 var
   SHA: TSHA256;
   Digest: TSHA256Digest;
@@ -8605,23 +8605,23 @@ begin
   FillZero(Digest);
 end;
 
-function SHA256DigestToString(const D: TSHA256Digest): RawUTF8;
+function SHA256DigestToString(const D: TSHA256Digest): RawUtf8;
 begin
   BinToHexLower(@D, SizeOf(D), result);
 end;
 
-function SHA256StringToDigest(const Source: RawUTF8; out Dest: TSHA256Digest): boolean;
+function SHA256StringToDigest(const Source: RawUtf8; out Dest: TSHA256Digest): boolean;
 begin
   result := mormot.core.text.HexToBin(pointer(Source), @Dest, SizeOf(Dest));
 end;
 
 
-function SHA384DigestToString(const D: TSHA384Digest): RawUTF8;
+function SHA384DigestToString(const D: TSHA384Digest): RawUtf8;
 begin
   BinToHexLower(@D, SizeOf(D), result);
 end;
 
-function SHA384(const s: RawByteString): RawUTF8;
+function SHA384(const s: RawByteString): RawUtf8;
 var
   SHA: TSHA384;
   Digest: TSHA384Digest;
@@ -8632,12 +8632,12 @@ begin
 end;
 
 
-function SHA512DigestToString(const D: TSHA512Digest): RawUTF8;
+function SHA512DigestToString(const D: TSHA512Digest): RawUtf8;
 begin
   BinToHexLower(@D, SizeOf(D), result);
 end;
 
-function SHA512(const s: RawByteString): RawUTF8;
+function SHA512(const s: RawByteString): RawUtf8;
 var
   SHA: TSHA512;
   Digest: TSHA512Digest;
@@ -8647,12 +8647,12 @@ begin
   FillZero(Digest);
 end;
 
-function SHA3(Algo: TSHA3Algo; const s: RawByteString; DigestBits: integer): RawUTF8;
+function SHA3(Algo: TSHA3Algo; const s: RawByteString; DigestBits: integer): RawUtf8;
 begin
   result := SHA3(Algo, pointer(s), length(s), DigestBits);
 end;
 
-function SHA3(Algo: TSHA3Algo; Buffer: pointer; Len, DigestBits: integer): RawUTF8;
+function SHA3(Algo: TSHA3Algo; Buffer: pointer; Len, DigestBits: integer): RawUtf8;
 var
   instance: TSHA3;
 begin
@@ -9047,7 +9047,7 @@ begin
     exit;
   if (BufCount >= SizeOf(TAESBlock)) or
      not AES.Initialized or NoCrypt then
-    raise ESynCrypto.CreateUTF8('Unexpected %.Finish', [self]);
+    raise ESynCrypto.CreateUtf8('Unexpected %.Finish', [self]);
   XorOffset(@buf, DestSize, BufCount);
   Dest.WriteBuffer(buf, BufCount);
   BufCount := 0;
@@ -9055,12 +9055,12 @@ end;
 
 function TAESWriteStream.{%H-}Read(var Buffer; Count: integer): Longint;
 begin
-  raise ESynCrypto.CreateUTF8('Unexpected %.Read', [self]);
+  raise ESynCrypto.CreateUtf8('Unexpected %.Read', [self]);
 end;
 
 function TAESWriteStream.{%H-}Seek(Offset: integer; Origin: Word): Longint;
 begin
-  raise ESynCrypto.CreateUTF8('Unexpected %.Seek', [self]);
+  raise ESynCrypto.CreateUtf8('Unexpected %.Seek', [self]);
 end;
 
 function TAESWriteStream.Write(const Buffer; Count: integer): Longint;

@@ -47,36 +47,36 @@ type
   // read passwords strongly obfuscated for a given user using
   // mormot.core.crypto.pas' CryptDataForCurrentUser()
   // - a published property should be defined as such in inherited class:
-  // ! property PasswordPropertyName: RawUTF8 read fPassword write fPassword;
+  // ! property PasswordPropertyName: RawUtf8 read fPassword write fPassword;
   // - use the PassWordPlain property to access to its uncyphered value
   TSynPersistentWithPassword = class(TSynPersistent)
   protected
-    fPassWord: SPIUTF8;
+    fPassWord: SpiUtf8;
     fKey: cardinal;
     function GetKey: cardinal;
       {$ifdef HASINLINE}inline;{$endif}
-    function GetPassWordPlain: SPIUTF8;
-    function GetPassWordPlainInternal(AppSecret: RawUTF8): SPIUTF8;
-    procedure SetPassWordPlain(const Value: SPIUTF8);
+    function GetPassWordPlain: SpiUtf8;
+    function GetPassWordPlainInternal(AppSecret: RawUtf8): SpiUtf8;
+    procedure SetPassWordPlain(const Value: SpiUtf8);
   public
     /// finalize the instance
     destructor Destroy; override;
     /// this class method could be used to compute the encrypted password,
     // ready to be stored as JSON, according to a given private key
-    class function ComputePassword(const PlainPassword: SPIUTF8;
-      CustomKey: cardinal = 0): SPIUTF8; overload;
+    class function ComputePassword(const PlainPassword: SpiUtf8;
+      CustomKey: cardinal = 0): SpiUtf8; overload;
     /// this class method could be used to compute the encrypted password from
     // a binary digest, ready to be stored as JSON, according to a given private key
     // - just a wrapper around ComputePassword(BinToBase64URI())
     class function ComputePassword(PlainPassword: pointer; PlainPasswordLen: integer;
-      CustomKey: cardinal = 0): SPIUTF8; overload;
+      CustomKey: cardinal = 0): SpiUtf8; overload;
     /// this class method could be used to decrypt a password, stored as JSON,
     // according to a given private key
     // - may trigger a ESynException if the password was stored using hardened
     // CryptDataForCurrentUser, and the current user doesn't match the
     // expected user stored in the field
-    class function ComputePlainPassword(const CypheredPassword: SPIUTF8;
-      CustomKey: cardinal = 0; const AppSecret: RawUTF8 = ''): SPIUTF8;
+    class function ComputePlainPassword(const CypheredPassword: SpiUtf8;
+      CustomKey: cardinal = 0; const AppSecret: RawUtf8 = ''): SpiUtf8;
     /// the private key used to cypher the password storage on serialization
     // - application can override the default 0 value at runtime
     property Key: cardinal
@@ -85,7 +85,7 @@ type
     // - may trigger a ESynException if the password was stored using hardened
     // CryptDataForCurrentUser, and the current user doesn't match the
     // expected user stored in the field
-    property PasswordPlain: SPIUTF8
+    property PasswordPlain: SpiUtf8
       read GetPassWordPlain write SetPassWordPlain;
   end;
 
@@ -94,14 +94,14 @@ type
   // - password will be stored with TSynPersistentWithPassword encryption
   TSynUserPassword = class(TSynPersistentWithPassword)
   protected
-    fUserName: RawUTF8;
+    fUserName: RawUtf8;
   published
     /// the associated user name
-    property UserName: RawUTF8
+    property UserName: RawUtf8
       read fUserName write fUserName;
     /// the associated encrypted password
     // - use the PasswordPlain public property to access to the uncrypted password
-    property Password: SPIUTF8
+    property Password: SpiUtf8
       read fPassword write fPassword;
   end;
 
@@ -124,35 +124,35 @@ type
   TSynConnectionDefinition = class(TSynPersistentWithPassword)
   protected
     fKind: string;
-    fServerName: RawUTF8;
-    fDatabaseName: RawUTF8;
-    fUser: RawUTF8;
+    fServerName: RawUtf8;
+    fDatabaseName: RawUtf8;
+    fUser: RawUtf8;
   public
     /// unserialize the database definition from JSON
-    // - as previously serialized with the SaveToJSON method
+    // - as previously serialized with the SaveToJson method
     // - you can specify a custom Key used for password encryption, if the
     // default value is not safe enough for you
-    constructor CreateFromJSON(const JSON: RawUTF8; Key: cardinal = 0); virtual;
+    constructor CreateFromJson(const JSON: RawUtf8; Key: cardinal = 0); virtual;
     /// serialize the database definition as JSON
-    function SaveToJSON: RawUTF8; virtual;
+    function SaveToJson: RawUtf8; virtual;
   published
     /// the class name implementing the connection or TRest instance
     // - will be used to instantiate the expected class type
     property Kind: string
       read fKind write fKind;
     /// the associated server name (or file, for SQLite3) to be connected to
-    property ServerName: RawUTF8
+    property ServerName: RawUtf8
       read fServerName write fServerName;
     /// the associated database name (if any), or additional options
-    property DatabaseName: RawUTF8
+    property DatabaseName: RawUtf8
       read fDatabaseName write fDatabaseName;
     /// the associated User Identifier (if any)
-    property User: RawUTF8
+    property User: RawUtf8
       read fUser write fUser;
     /// the associated Password, e.g. for storage or transmission encryption
     // - will be persisted encrypted with a private key
     // - use the PassWordPlain property to access to its uncyphered value
-    property Password: SPIUTF8
+    property Password: SpiUtf8
       read fPassword write fPassword;
   end;
 
@@ -183,9 +183,9 @@ type
     fTokenSeed: Int64;
     fSafe: TSynLocker;
     function ComputeCredential(previous: boolean;
-      const UserName, PassWord: RawUTF8): cardinal; virtual;
-    function GetPassword(const UserName: RawUTF8;
-      out Password: RawUTF8): boolean; virtual; abstract;
+      const UserName, PassWord: RawUtf8): cardinal; virtual;
+    function GetPassword(const UserName: RawUtf8;
+      out Password: RawUtf8): boolean; virtual; abstract;
     function GetUsersCount: integer; virtual; abstract;
     // check the given Hash challenge, against stored credentials
     function CheckCredentials(const UserName: RaWUTF8; Hash: cardinal): boolean; virtual;
@@ -197,15 +197,15 @@ type
     /// register one credential for a given user
     // - this abstract method will raise an exception: inherited classes should
     // implement them as expected
-    procedure AuthenticateUser(const aName, aPassword: RawUTF8); virtual;
+    procedure AuthenticateUser(const aName, aPassword: RawUtf8); virtual;
     /// unregister one credential for a given user
     // - this abstract method will raise an exception: inherited classes should
     // implement them as expected
-    procedure DisauthenticateUser(const aName: RawUTF8); virtual;
+    procedure DisauthenticateUser(const aName: RawUtf8); virtual;
     /// create a new session
     // - should return 0 on authentication error, or an integer session ID
     // - this method will check the User name and password, and create a new session
-    function CreateSession(const User: RawUTF8; Hash: cardinal): integer; virtual;
+    function CreateSession(const User: RawUtf8; Hash: cardinal): integer; virtual;
     /// check if the session exists in the internal list
     function SessionExists(aID: integer): boolean;
     /// delete a session
@@ -225,7 +225,7 @@ type
     // challenge and create the session
     // - internal algorithm is not cryptographic secure, but fast and safe
     class function ComputeHash(Token: Int64;
-      const UserName, PassWord: RawUTF8): cardinal; virtual;
+      const UserName, PassWord: RawUtf8): cardinal; virtual;
   end;
 
   /// simple authentication class, implementing safe token/challenge security
@@ -236,18 +236,18 @@ type
   TSynAuthentication = class(TSynAuthenticationAbstract)
   protected
     fCredentials: TSynNameValue; // store user/password pairs
-    function GetPassword(const UserName: RawUTF8;
-      out Password: RawUTF8): boolean; override;
+    function GetPassword(const UserName: RawUtf8;
+      out Password: RawUtf8): boolean; override;
     function GetUsersCount: integer; override;
   public
     /// initialize the authentication scheme
     // - you can optionally register one user credential
-    constructor Create(const aUserName: RawUTF8 = '';
-      const aPassword: RawUTF8 = ''); reintroduce;
+    constructor Create(const aUserName: RawUtf8 = '';
+      const aPassword: RawUtf8 = ''); reintroduce;
     /// register one credential for a given user
-    procedure AuthenticateUser(const aName, aPassword: RawUTF8); override;
+    procedure AuthenticateUser(const aName, aPassword: RawUtf8); override;
     /// unregister one credential for a given user
-    procedure DisauthenticateUser(const aName: RawUTF8); override;
+    procedure DisauthenticateUser(const aName: RawUtf8); override;
   end;
 
 
@@ -264,11 +264,11 @@ type
     procedure SaveToWriter(aWriter: TBufferWriter); override;
   public
     /// register one IP to the list
-    function Add(const aIP: RawUTF8): boolean;
+    function Add(const aIP: RawUtf8): boolean;
     /// unregister one IP to the list
-    function Delete(const aIP: RawUTF8): boolean;
+    function Delete(const aIP: RawUtf8): boolean;
     /// returns true if the IP is in the list
-    function Exists(const aIP: RawUTF8): boolean;
+    function Exists(const aIP: RawUtf8): boolean;
     /// creates a TDynArray wrapper around the stored list of values
     // - could be used e.g. for binary persistence
     // - warning: caller should make Safe.Unlock when finished
@@ -350,12 +350,12 @@ type
     function Equal(const Another: TSynUniqueIdentifierBits): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// convert the identifier into a 16 chars hexadecimal string
-    function ToHexa: RawUTF8;
+    function ToHexa: RawUtf8;
       {$ifdef HASINLINE}inline;{$endif}
     /// fill this unique identifier back from a 16 chars hexadecimal string
     // - returns TRUE if the supplied hexadecimal is on the expected format
     // - returns FALSE if the supplied text is invalid
-    function FromHexa(const hexa: RawUTF8): boolean;
+    function FromHexa(const hexa: RawUtf8): boolean;
     /// fill this unique identifier with a fake value corresponding to a given
     // timestamp
     // - may be used e.g. to limit database queries on a particular time range
@@ -377,7 +377,7 @@ type
 
   /// a 24 chars cyphered hexadecimal string, mapping a TSynUniqueIdentifier
   // - has handled by TSynUniqueIdentifierGenerator.ToObfuscated/FromObfuscated
-  TSynUniqueIdentifierObfuscated = type RawUTF8;
+  TSynUniqueIdentifierObfuscated = type RawUtf8;
 
   /// thread-safe 64-bit integer unique identifier computation
   // - may be used on client side for something similar to a MongoDB ObjectID,
@@ -405,7 +405,7 @@ type
     // - you can supply an obfuscation key, which should be shared for the
     // whole system, so that you may use FromObfuscated/ToObfuscated methods
     constructor Create(aIdentifier: TSynUniqueIdentifierProcess;
-      const aSharedObfuscationKey: RawUTF8 = ''); reintroduce;
+      const aSharedObfuscationKey: RawUtf8 = ''); reintroduce;
     /// finalize the generator structure
     destructor Destroy; override;
     /// return a new unique ID
@@ -495,7 +495,7 @@ type
   // rounds=1000 and a fixed salt
   TSynSignerParams = packed record
     algo: TSignAlgo;
-    secret, salt: RawUTF8;
+    secret, salt: RawUtf8;
     rounds: integer;
   end;
 
@@ -511,13 +511,13 @@ type
     /// the algorithm used for digitial signature
     Algo: TSignAlgo;
     /// initialize the digital HMAC/SHA-3 signing context with some secret text
-    procedure Init(aAlgo: TSignAlgo; const aSecret: RawUTF8); overload;
+    procedure Init(aAlgo: TSignAlgo; const aSecret: RawUtf8); overload;
     /// initialize the digital HMAC/SHA-3 signing context with some secret binary
     procedure Init(aAlgo: TSignAlgo;
       aSecret: pointer; aSecretLen: integer); overload;
     /// initialize the digital HMAC/SHA-3 signing context with PBKDF2 safe
     // iterative key derivation of a secret salted text
-    procedure Init(aAlgo: TSignAlgo; const aSecret, aSalt: RawUTF8;
+    procedure Init(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
       aSecretPBKDF2Rounds: integer; aPBKDF2Secret: PHash512Rec = nil); overload;
     /// process some message content supplied as memory buffer
     procedure Update(aBuffer: pointer; aLen: integer); overload;
@@ -525,34 +525,34 @@ type
     procedure Update(const aBuffer: RawByteString); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns the computed digital signature as lowercase hexadecimal text
-    function Final: RawUTF8; overload;
+    function Final: RawUtf8; overload;
     /// returns the raw computed digital signature
     // - SignatureSize bytes will be written: use Signature.Lo/h0/b3/b accessors
     procedure Final(out aSignature: THash512Rec;
       aNoInit: boolean = false); overload;
     /// one-step digital signature of a buffer as lowercase hexadecimal string
-    function Full(aAlgo: TSignAlgo; const aSecret: RawUTF8;
-      aBuffer: Pointer; aLen: integer): RawUTF8; overload;
+    function Full(aAlgo: TSignAlgo; const aSecret: RawUtf8;
+      aBuffer: Pointer; aLen: integer): RawUtf8; overload;
     /// one-step digital signature of a buffer with PBKDF2 derivation
-    function Full(aAlgo: TSignAlgo; const aSecret, aSalt: RawUTF8;
-      aSecretPBKDF2Rounds: integer; aBuffer: Pointer; aLen: integer): RawUTF8; overload;
+    function Full(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
+      aSecretPBKDF2Rounds: integer; aBuffer: Pointer; aLen: integer): RawUtf8; overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
-    procedure PBKDF2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUTF8;
+    procedure PBKDF2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
       aSecretPBKDF2Rounds: integer; out aDerivatedKey: THash512Rec); overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
     procedure PBKDF2(const aParams: TSynSignerParams;
       out aDerivatedKey: THash512Rec); overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
     // - accept as input a TSynSignerParams serialized as JSON object
-    procedure PBKDF2(aParamsJSON: PUTF8Char; aParamsJSONLen: integer;
+    procedure PBKDF2(aParamsJson: PUtf8Char; aParamsJsonLen: integer;
       out aDerivatedKey: THash512Rec;
-      const aDefaultSalt: RawUTF8 = 'I6sWioAidNnhXO9BK';
+      const aDefaultSalt: RawUtf8 = 'I6sWioAidNnhXO9BK';
       aDefaultAlgo: TSignAlgo = saSha3S128); overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
     // - accept as input a TSynSignerParams serialized as JSON object
-    procedure PBKDF2(const aParamsJSON: RawUTF8;
+    procedure PBKDF2(const aParamsJson: RawUtf8;
       out aDerivatedKey: THash512Rec;
-      const aDefaultSalt: RawUTF8 = 'I6sWioAidNnhXO9BK';
+      const aDefaultSalt: RawUtf8 = 'I6sWioAidNnhXO9BK';
       aDefaultAlgo: TSignAlgo = saSha3S128); overload;
     /// prepare a TAES object with the key derivated via a PBKDF2() call
     // - aDerivatedKey is defined as "var", since it will be zeroed after use
@@ -598,9 +598,9 @@ type
     procedure Update(const aBuffer: RawByteString); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns the resulting hash as lowercase hexadecimal string
-    function Final: RawUTF8;
+    function Final: RawUtf8;
     /// one-step hash computation of a buffer as lowercase hexadecimal string
-    function Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUTF8;
+    function Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8;
     /// the hash algorithm used by this instance
     property Algo: THashAlgo
       read fAlgo;
@@ -611,7 +611,7 @@ function ToText(algo: THashAlgo): PShortString; overload;
 
 /// compute the hexadecimal hash of any (big) file
 // - using a temporary buffer of 1MB for the sequential reading
-function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUTF8; overload;
+function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUtf8; overload;
 
 /// compute the hexadecimal hashe(s) of one file, as external .md5/.sha256/.. files
 // - reading the file once in memory, then apply all algorithms on it and
@@ -619,7 +619,7 @@ function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUTF8; overlo
 procedure HashFile(const aFileName: TFileName; aAlgos: THashAlgos); overload;
 
 /// one-step hash computation of a buffer as lowercase hexadecimal string
-function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUTF8;
+function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8;
 
 
 
@@ -652,8 +652,8 @@ type
     // - returns sprSuccess and set something into OutData, depending on the
     // current step of the handshake
     // - returns an error code otherwise
-    function ProcessHandshake(const MsgIn: RawUTF8;
-      out MsgOut: RawUTF8): TProtocolResult;
+    function ProcessHandshake(const MsgIn: RawUtf8;
+      out MsgOut: RawUtf8): TProtocolResult;
     /// encrypt a message on one side, ready to be transmitted to the other side
     // - this method should be thread-safe in the implementation class
     procedure Encrypt(const aPlain: RawByteString;
@@ -678,8 +678,8 @@ type
   public
     /// initialize the communication by exchanging some client/server information
     // - this method will return sprUnsupported
-    function ProcessHandshake(const MsgIn: RawUTF8;
-      out MsgOut: RawUTF8): TProtocolResult;
+    function ProcessHandshake(const MsgIn: RawUtf8;
+      out MsgOut: RawUtf8): TProtocolResult;
     /// encrypt a message on one side, ready to be transmitted to the other side
     // - this method will return the plain text with no actual encryption
     procedure Encrypt(const aPlain: RawByteString;
@@ -714,8 +714,8 @@ type
     destructor Destroy; override;
     /// initialize the communication by exchanging some client/server information
     // - this method will return sprUnsupported
-    function ProcessHandshake(const MsgIn: RawUTF8;
-      out MsgOut: RawUTF8): TProtocolResult;
+    function ProcessHandshake(const MsgIn: RawUtf8;
+      out MsgOut: RawUtf8): TProtocolResult;
     /// encrypt a message on one side, ready to be transmitted to the other side
     // - this method uses AES encryption and PKCS7 padding
     procedure Encrypt(const aPlain: RawByteString;
@@ -792,7 +792,7 @@ begin
   Update(pointer(aBuffer), length(aBuffer));
 end;
 
-function TSynHasher.Final: RawUTF8;
+function TSynHasher.Final: RawUtf8;
 begin
   case fAlgo of
     hfMD5:
@@ -812,21 +812,21 @@ begin
   end;
 end;
 
-function TSynHasher.Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUTF8;
+function TSynHasher.Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8;
 begin
   Init(aAlgo);
   Update(aBuffer, aLen);
   result := Final;
 end;
 
-function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUTF8;
+function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8;
 var
   hasher: TSynHasher;
 begin
   result := hasher.Full(aAlgo, aBuffer, aLen);
 end;
 
-function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUTF8;
+function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUtf8;
 var
   hasher: TSynHasher;
   temp: RawByteString;
@@ -859,7 +859,7 @@ end;
 
 procedure HashFile(const aFileName: TFileName; aAlgos: THashAlgos);
 var
-  data, hash: RawUTF8;
+  data, hash: RawUtf8;
   efn, fn: string;
   a: THashAlgo;
 begin
@@ -871,7 +871,7 @@ begin
     for a := low(a) to high(a) do
       if a in aAlgos then
       begin
-        FormatUTF8('% *%',
+        FormatUtf8('% *%',
           [HashFull(a, pointer(data), length(data)), efn], hash);
         FormatString('%.%',
           [efn, LowerCase(TrimLeftLowerCaseShort(ToText(a)))], fn);
@@ -908,12 +908,12 @@ begin
   end;
 end;
 
-procedure TSynSigner.Init(aAlgo: TSignAlgo; const aSecret: RawUTF8);
+procedure TSynSigner.Init(aAlgo: TSignAlgo; const aSecret: RawUtf8);
 begin
   Init(aAlgo, pointer(aSecret), length(aSecret));
 end;
 
-procedure TSynSigner.Init(aAlgo: TSignAlgo; const aSecret, aSalt: RawUTF8;
+procedure TSynSigner.Init(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
   aSecretPBKDF2Rounds: integer; aPBKDF2Secret: PHash512Rec);
 var
   temp: THash512Rec;
@@ -967,7 +967,7 @@ begin
   end;
 end;
 
-function TSynSigner.Final: RawUTF8;
+function TSynSigner.Final: RawUtf8;
 var
   sig: THash512Rec;
 begin
@@ -975,23 +975,23 @@ begin
   result := BinToHexLower(@sig, SignatureSize);
 end;
 
-function TSynSigner.Full(aAlgo: TSignAlgo; const aSecret: RawUTF8;
-  aBuffer: Pointer; aLen: integer): RawUTF8;
+function TSynSigner.Full(aAlgo: TSignAlgo; const aSecret: RawUtf8;
+  aBuffer: Pointer; aLen: integer): RawUtf8;
 begin
   Init(aAlgo, aSecret);
   Update(aBuffer, aLen);
   result := Final;
 end;
 
-function TSynSigner.Full(aAlgo: TSignAlgo; const aSecret, aSalt: RawUTF8;
-  aSecretPBKDF2Rounds: integer; aBuffer: Pointer; aLen: integer): RawUTF8;
+function TSynSigner.Full(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
+  aSecretPBKDF2Rounds: integer; aBuffer: Pointer; aLen: integer): RawUtf8;
 begin
   Init(aAlgo, aSecret, aSalt, aSecretPBKDF2Rounds);
   Update(aBuffer, aLen);
   result := Final;
 end;
 
-procedure TSynSigner.PBKDF2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUTF8;
+procedure TSynSigner.PBKDF2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
   aSecretPBKDF2Rounds: integer; out aDerivatedKey: THash512Rec);
 var
   iter: TSynSigner;
@@ -1025,8 +1025,8 @@ begin
   PBKDF2(aParams.algo, aParams.secret, aParams.salt, aParams.rounds, aDerivatedKey);
 end;
 
-procedure TSynSigner.PBKDF2(aParamsJSON: PUTF8Char; aParamsJSONLen: integer;
-  out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUTF8; aDefaultAlgo: TSignAlgo);
+procedure TSynSigner.PBKDF2(aParamsJson: PUtf8Char; aParamsJsonLen: integer;
+  out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUtf8; aDefaultAlgo: TSignAlgo);
 var
   tmp: TSynTempBuffer;
   k: TSynSignerParams;
@@ -1041,21 +1041,21 @@ var
 
 begin
   SetDefault;
-  if (aParamsJSON = nil) or
-     (aParamsJSONLen <= 0) then
+  if (aParamsJson = nil) or
+     (aParamsJsonLen <= 0) then
     k.secret := aDefaultSalt
-  else if aParamsJSON[1] <> '{' then
-    FastSetString(k.secret, aParamsJSON, aParamsJSONLen)
+  else if aParamsJson[1] <> '{' then
+    FastSetString(k.secret, aParamsJson, aParamsJsonLen)
   else
   begin
-    tmp.Init(aParamsJSON, aParamsJSONLen);
+    tmp.Init(aParamsJson, aParamsJsonLen);
     try
-      if (RecordLoadJSON(k, tmp.buf, TypeInfo(TSynSignerParams)) = nil) or
+      if (RecordLoadJson(k, tmp.buf, TypeInfo(TSynSignerParams)) = nil) or
          (k.secret = '') or
          (k.salt = '') then
       begin
         SetDefault;
-        FastSetString(k.secret, aParamsJSON, aParamsJSONLen);
+        FastSetString(k.secret, aParamsJson, aParamsJsonLen);
       end;
     finally
       FillCharFast(tmp.buf^, tmp.len, 0);
@@ -1066,10 +1066,10 @@ begin
   FillZero(k.secret);
 end;
 
-procedure TSynSigner.PBKDF2(const aParamsJSON: RawUTF8;
-  out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUTF8; aDefaultAlgo: TSignAlgo);
+procedure TSynSigner.PBKDF2(const aParamsJson: RawUtf8;
+  out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUtf8; aDefaultAlgo: TSignAlgo);
 begin
-  PBKDF2(pointer(aParamsJSON), length(aParamsJSON),
+  PBKDF2(pointer(aParamsJson), length(aParamsJson),
     aDerivatedKey, aDefaultSalt, aDefaultAlgo);
 end;
 
@@ -1169,7 +1169,7 @@ begin
 end;
 
 class function TSynPersistentWithPassword.ComputePassword(
-  const PlainPassword: SPIUTF8; CustomKey: cardinal): SPIUTF8;
+  const PlainPassword: SpiUtf8; CustomKey: cardinal): SpiUtf8;
 var
   instance: TSynPersistentWithPassword;
 begin
@@ -1184,14 +1184,14 @@ begin
 end;
 
 class function TSynPersistentWithPassword.ComputePassword(PlainPassword: pointer;
-  PlainPasswordLen: integer; CustomKey: cardinal): SPIUTF8;
+  PlainPasswordLen: integer; CustomKey: cardinal): SpiUtf8;
 begin
   result := ComputePassword(BinToBase64uri(PlainPassword, PlainPasswordLen));
 end;
 
 class function TSynPersistentWithPassword.ComputePlainPassword(
-  const CypheredPassword: SPIUTF8; CustomKey: cardinal;
-  const AppSecret: RawUTF8): SPIUTF8;
+  const CypheredPassword: SpiUtf8; CustomKey: cardinal;
+  const AppSecret: RawUtf8): SpiUtf8;
 var
   instance: TSynPersistentWithPassword;
 begin
@@ -1213,16 +1213,16 @@ begin
     result := fKey xor $A5abba5A;
 end;
 
-function TSynPersistentWithPassword.GetPassWordPlain: SPIUTF8;
+function TSynPersistentWithPassword.GetPassWordPlain: SpiUtf8;
 begin
   result := GetPassWordPlainInternal('');
 end;
 
 function TSynPersistentWithPassword.GetPassWordPlainInternal(
-  AppSecret: RawUTF8): SPIUTF8;
+  AppSecret: RawUtf8): SpiUtf8;
 var
   value, pass: RawByteString;
-  usr: RawUTF8;
+  usr: RawUtf8;
   i, j: integer;
 begin
   result := '';
@@ -1250,7 +1250,7 @@ begin
   begin
     i := PosExChar(':', fPassword);
     if i > 0 then
-      raise ESynException.CreateUTF8('%.GetPassWordPlain unable to retrieve the ' +
+      raise ESynException.CreateUtf8('%.GetPassWordPlain unable to retrieve the ' +
         'stored value: current user is [%], but password in % was encoded for [%]',
         [self, ExeVersion.User, AppSecret, copy(fPassword, 1, i - 1)]);
   end;
@@ -1262,7 +1262,7 @@ begin
   end;
 end;
 
-procedure TSynPersistentWithPassword.SetPassWordPlain(const Value: SPIUTF8);
+procedure TSynPersistentWithPassword.SetPassWordPlain(const Value: SpiUtf8);
 var
   tmp: RawByteString;
 begin
@@ -1281,25 +1281,25 @@ end;
 
 { TSynConnectionDefinition }
 
-constructor TSynConnectionDefinition.CreateFromJSON(const JSON: RawUTF8; Key: cardinal);
+constructor TSynConnectionDefinition.CreateFromJson(const JSON: RawUtf8; Key: cardinal);
 var
-  privateCopy: RawUTF8;
-  values: array[0..4] of TValuePUTF8Char;
+  privateCopy: RawUtf8;
+  values: array[0..4] of TValuePUtf8Char;
 begin
   fKey := Key;
   privateCopy := JSON;
-  JSONDecode(privateCopy,
+  JsonDecode(privateCopy,
     ['Kind', 'ServerName', 'DatabaseName', 'User', 'Password'], @values);
   fKind := values[0].ToString;
-  values[1].ToUTF8(fServerName);
-  values[2].ToUTF8(fDatabaseName);
-  values[3].ToUTF8(fUser);
-  fPassWord := values[4].ToUTF8;
+  values[1].ToUtf8(fServerName);
+  values[2].ToUtf8(fDatabaseName);
+  values[3].ToUtf8(fUser);
+  fPassWord := values[4].ToUtf8;
 end;
 
-function TSynConnectionDefinition.SaveToJSON: RawUTF8;
+function TSynConnectionDefinition.SaveToJson: RawUtf8;
 begin
-  result := JSONEncode([
+  result := JsonEncode([
     'Kind', fKind,
     'ServerName', fServerName,
     'DatabaseName', fDatabaseName,
@@ -1327,7 +1327,7 @@ begin
 end;
 
 class function TSynAuthenticationAbstract.ComputeHash(Token: Int64;
-  const UserName, PassWord: RawUTF8): cardinal;
+  const UserName, PassWord: RawUtf8): cardinal;
 begin // rough authentication - xxHash32 is less reversible than crc32c
   result := xxHash32( xxHash32( xxHash32(
     Token, @Token, SizeOf(Token)),
@@ -1336,7 +1336,7 @@ begin // rough authentication - xxHash32 is less reversible than crc32c
 end;
 
 function TSynAuthenticationAbstract.ComputeCredential(previous: boolean;
-  const UserName, PassWord: RawUTF8): cardinal;
+  const UserName, PassWord: RawUtf8): cardinal;
 var
   tok: Int64;
 begin
@@ -1351,27 +1351,27 @@ begin
   result := (GetTickCount64 div 10000) xor fTokenSeed;
 end;
 
-procedure TSynAuthenticationAbstract.AuthenticateUser(const aName, aPassword: RawUTF8);
+procedure TSynAuthenticationAbstract.AuthenticateUser(const aName, aPassword: RawUtf8);
 begin
-  raise ESynException.CreateUTF8('%.AuthenticateUser() is not implemented', [self]);
+  raise ESynException.CreateUtf8('%.AuthenticateUser() is not implemented', [self]);
 end;
 
-procedure TSynAuthenticationAbstract.DisauthenticateUser(const aName: RawUTF8);
+procedure TSynAuthenticationAbstract.DisauthenticateUser(const aName: RawUtf8);
 begin
-  raise ESynException.CreateUTF8('%.DisauthenticateUser() is not implemented', [self]);
+  raise ESynException.CreateUtf8('%.DisauthenticateUser() is not implemented', [self]);
 end;
 
 function TSynAuthenticationAbstract.CheckCredentials(const UserName: RaWUTF8;
   Hash: cardinal): boolean;
 var
-  password: RawUTF8;
+  password: RawUtf8;
 begin
   result := GetPassword(UserName, password) and
     ((ComputeCredential({previous=}false, UserName, password{%H-}) = Hash) or
      (ComputeCredential({previous=}true,  UserName, password) = Hash));
 end;
 
-function TSynAuthenticationAbstract.CreateSession(const User: RawUTF8;
+function TSynAuthenticationAbstract.CreateSession(const User: RawUtf8;
   Hash: cardinal): integer;
 begin
   result := 0;
@@ -1417,7 +1417,7 @@ end;
 
 { TSynAuthentication }
 
-constructor TSynAuthentication.Create(const aUserName, aPassword: RawUTF8);
+constructor TSynAuthentication.Create(const aUserName, aPassword: RawUtf8);
 begin
   inherited Create;
   fCredentials.Init(true);
@@ -1425,8 +1425,8 @@ begin
     AuthenticateUser(aUserName, aPassword);
 end;
 
-function TSynAuthentication.GetPassword(const UserName: RawUTF8;
-  out Password: RawUTF8): boolean;
+function TSynAuthentication.GetPassword(const UserName: RawUtf8;
+  out Password: RawUtf8): boolean;
 var
   i: integer;
 begin // caller did protect this method via fSafe.Lock
@@ -1450,7 +1450,7 @@ begin
   end;
 end;
 
-procedure TSynAuthentication.AuthenticateUser(const aName, aPassword: RawUTF8);
+procedure TSynAuthentication.AuthenticateUser(const aName, aPassword: RawUtf8);
 begin
   fSafe.Lock;
   try
@@ -1460,7 +1460,7 @@ begin
   end;
 end;
 
-procedure TSynAuthentication.DisauthenticateUser(const aName: RawUTF8);
+procedure TSynAuthentication.DisauthenticateUser(const aName: RawUtf8);
 begin
   fSafe.Lock;
   try
@@ -1486,7 +1486,7 @@ begin
   aWriter.WriteVarUInt32Array(fIP4, fCount, wkUInt32);
 end;
 
-function TIPBan.Add(const aIP: RawUTF8): boolean;
+function TIPBan.Add(const aIP: RawUtf8): boolean;
 var
   ip4: cardinal;
 begin
@@ -1503,7 +1503,7 @@ begin
   end;
 end;
 
-function TIPBan.Delete(const aIP: RawUTF8): boolean;
+function TIPBan.Delete(const aIP: RawUtf8): boolean;
 var
   ip4: cardinal;
   i: integer;
@@ -1524,7 +1524,7 @@ begin
   end;
 end;
 
-function TIPBan.Exists(const aIP: RawUTF8): boolean;
+function TIPBan.Exists(const aIP: RawUtf8): boolean;
 var
   ip4: cardinal;
 begin
@@ -1605,12 +1605,12 @@ begin
   result := UnixTimeToDateTime(Value shr 31);
 end;
 
-function TSynUniqueIdentifierBits.ToHexa: RawUTF8;
+function TSynUniqueIdentifierBits.ToHexa: RawUtf8;
 begin
   Int64ToHex(Value, result);
 end;
 
-function TSynUniqueIdentifierBits.FromHexa(const hexa: RawUTF8): boolean;
+function TSynUniqueIdentifierBits.FromHexa(const hexa: RawUtf8): boolean;
 begin
   result := (Length(hexa) = 16) and HexDisplayToBin(pointer(hexa), @Value, SizeOf(Value));
 end;
@@ -1693,7 +1693,7 @@ begin // assume fLastCounter=0
 end;
 
 constructor TSynUniqueIdentifierGenerator.Create(
-  aIdentifier: TSynUniqueIdentifierProcess; const aSharedObfuscationKey: RawUTF8);
+  aIdentifier: TSynUniqueIdentifierProcess; const aSharedObfuscationKey: RawUtf8);
 var
   i, len: integer;
   crc: cardinal;
@@ -1814,8 +1814,8 @@ end;
 
 { TProtocolNone }
 
-function TProtocolNone.ProcessHandshake(const MsgIn: RawUTF8;
-  out MsgOut: RawUTF8): TProtocolResult;
+function TProtocolNone.ProcessHandshake(const MsgIn: RawUtf8;
+  out MsgOut: RawUtf8): TProtocolResult;
 begin
   result := sprUnsupported;
 end;
@@ -1867,8 +1867,8 @@ begin
   inherited Destroy;
 end;
 
-function TProtocolAES.ProcessHandshake(const MsgIn: RawUTF8;
-  out MsgOut: RawUTF8): TProtocolResult;
+function TProtocolAES.ProcessHandshake(const MsgIn: RawUtf8;
+  out MsgOut: RawUtf8): TProtocolResult;
 begin
   result := sprUnsupported;
 end;
@@ -1914,7 +1914,7 @@ procedure InitializeUnit;
 begin
   Rtti.RegisterType(TypeInfo(TSignAlgo));
   Rtti.RegisterFromText(TypeInfo(TSynSignerParams),
-    'algo:TSignAlgo secret,salt:RawUTF8 rounds:integer');
+    'algo:TSignAlgo secret,salt:RawUtf8 rounds:integer');
 end;
 
 procedure FinalizeUnit;

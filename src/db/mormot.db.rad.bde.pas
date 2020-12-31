@@ -62,7 +62,7 @@ type
     /// initialize the properties to connect to the BDE engine
     // - aServerName shall contain the BDE Alias name
     // - aDatabaseName is ignored
-    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
+    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8); override;
     /// create a new connection
     // - caller is responsible of freeing this instance
     // - this overridden method will create an TSqlDBBDEConnection instance
@@ -76,7 +76,7 @@ type
     fDatabase: TDatabase;
     fSession: TSession;
     fDBMS: TSqlDBDefinition;
-    fDBMSName: RawUTF8;
+    fDBMSName: RawUtf8;
   public
     /// prepare a connection to a specified BDE database server
     constructor Create(aProperties: TSqlDBConnectionProperties); override;
@@ -105,7 +105,7 @@ type
      read fDatabase;
   published
     /// the remote DBMS name, as retrieved at BDE connection creation
-    property DBMSName: RawUTF8
+    property DBMSName: RawUtf8
       read fDBMSName;
     /// the remote DBMS type, as retrieved at BDE connection creation
     property DBMS: TSqlDBDefinition
@@ -133,7 +133,7 @@ implementation
 { TSqlDBBDEConnectionProperties }
 
 constructor TSqlDBBDEConnectionProperties.Create(const aServerName,
-  aDatabaseName, aUserID, aPassWord: RawUTF8);
+  aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
   {$ifndef UNICODE}
@@ -191,12 +191,12 @@ begin
   fDatabase.SessionName := fSession.SessionName;
   fDatabase.LoginPrompt := false;
   inc(BDEConnectionCount);
-  alias := UTF8ToString(fProperties.ServerName);
+  alias := Utf8ToString(fProperties.ServerName);
   fDatabase.DatabaseName := 'SynDB' + alias + IntToStr(BDEConnectionCount);
   fDatabase.AliasName := alias;
   fDatabase.Params.Text := Format('USER NAME=%s'#13#10'PASSWORD=%s',
-    [UTF8ToString(fProperties.UserID), UTF8ToString(fProperties.PassWord)]);
-  fDBMSName := StringToUTF8(fSession.GetAliasDriverName(alias));
+    [Utf8ToString(fProperties.UserID), Utf8ToString(fProperties.PassWord)]);
+  fDBMSName := StringToUtf8(fSession.GetAliasDriverName(alias));
   fDBMS := TYPES[IdemPCharArray(pointer(fDBMSName), PCHARS)];
 end;
 
@@ -205,7 +205,7 @@ var Log: ISynLog;
 begin
   if (fSession = nil) or
      (fDatabase = nil) then
-    raise ESqlDBBDE.CreateUTF8('%.Connect() on % failed: Database=nil',
+    raise ESqlDBBDE.CreateUtf8('%.Connect() on % failed: Database=nil',
       [self, fProperties.ServerName]);
   Log := SynDBLog.Enter('Connect to Alias=%', [fDatabase.AliasName], self);
   try

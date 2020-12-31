@@ -167,12 +167,12 @@ end;
 
 procedure TTestCoreEcc.CertificatesAndSignatures;
 const
-  PUBPRIV64: RawUTF8 =
+  PUBPRIV64: RawUtf8 =
     'AQAKAAoAFAAp49cdwmwTSgk7ocIs+iWCLVmLFDvnzMbgAAAAAAAAACnj1x3CbBN' +
     'KCTuhwiz6JYItWYsUO+fMxuAAAAAAAAAAAgm92LeP/SogOQAmFAKppFHFPPn1vRERJ1dwk5y8' +
     'AloD66iKgas4FCX8yprik12Unvk3K45kS1tIkga7U273SBAoDj5WP1ENURn7znVgPm5UPrMZO' +
     'vaZNdUuDPlCy1uzNJeQTIkgAAAAnddux+slXpcupBr3m2g/2skZyPIT0Y2mk9As06J2mMY=';
-  PUBPRIVJSON: RawUTF8 =
+  PUBPRIVJSON: RawUtf8 =
     '{"Version":1,"Serial":"29E3D71DC26C134A093BA1C22CFA2582",' +
      '"Issuer":"synopse.info","IssueDate":"2016-08-11","ValidityStart":' +
      '"2016-08-11","ValidityEnd":"2016-08-21","AuthoritySerial":' +
@@ -205,9 +205,9 @@ const
 var
   selfsignedroot, secret: TECCCertificateSecret;
   cert: TECCCertificate;
-  sav, json, serial: RawUTF8;
+  sav, json, serial: RawUtf8;
   bin: RawByteString;
-  json1, json2, jsonchain: RawUTF8;
+  json1, json2, jsonchain: RawUtf8;
   chain: TECCCertificateChain;
   sign: TECCSignatureCertified;
   signcontent: TECCSignatureCertifiedContent;
@@ -367,11 +367,11 @@ var
   sw: ICommandLine;
   ctxt: TCommandLine;
   i: PtrInt;
-  previd, prevpass: RawUTF8;
+  previd, prevpass: RawUtf8;
   plainfn, rawfn: TFileName;
   keys: array of record
     priv, pub, test, crypt: TFileName;
-    id, issuer, pass, text: RawUTF8;
+    id, issuer, pass, text: RawUtf8;
     rounds: integer;
   end;
   exectemp: variant;
@@ -404,8 +404,8 @@ begin
     for i := 0 to high(keys) do
       with keys[i] do
       begin
-        formatUTF8('name%', [i], issuer);
-        formatUTF8('pass%', [i], pass);
+        formatUtf8('name%', [i], issuer);
+        formatUtf8('pass%', [i], pass);
         rounds := 1000 + i;
         ctxt := TCommandLine.Create([
           'auth', {%H-}previd,

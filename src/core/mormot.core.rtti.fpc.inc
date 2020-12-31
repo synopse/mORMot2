@@ -873,7 +873,7 @@ asm
 end;
 {$endif FPC_X64MM}
 
-function ToTempUTF8(var temp: TSynTempBuffer; p: pointer; len, cp: cardinal): pointer;
+function ToTempUtf8(var temp: TSynTempBuffer; p: pointer; len, cp: cardinal): pointer;
 begin
   if (len = 0) or
      (cp = CP_UTF8) or
@@ -887,7 +887,7 @@ begin
   else
   begin
     temp.Init(len * 3);
-    p := TSynAnsiConvert.Engine(cp).AnsiBufferToUTF8(temp.buf, p, len);
+    p := TSynAnsiConvert.Engine(cp).AnsiBufferToUtf8(temp.buf, p, len);
     temp.len := PAnsiChar(p) - PAnsiChar(temp.buf);
     result := temp.buf;
   end;
@@ -900,8 +900,8 @@ var
   p1, p2, p: PAnsiChar;
   eng: TSynAnsiConvert;
 begin
-  p1 := ToTempUTF8(t1, pointer(s1), length(s1), cp1);
-  p2 := ToTempUTF8(t2, pointer(s2), length(s2), cp2);
+  p1 := ToTempUtf8(t1, pointer(s1), length(s1), cp1);
+  p2 := ToTempUtf8(t2, pointer(s2), length(s2), cp2);
   if (cp = CP_UTF8) or
      (cp >= CP_RAWBLOB) or
      ((t1.buf = nil) and
@@ -916,7 +916,7 @@ begin
   begin
     eng := TSynAnsiConvert.Engine(cp);
     t.Init((t1.len + t2.len) shl eng.AnsiCharShift);
-    p := eng.UTF8BufferToAnsi(eng.UTF8BufferToAnsi(t.buf, p1, t1.len), p2, t2.len);
+    p := eng.Utf8BufferToAnsi(eng.Utf8BufferToAnsi(t.buf, p1, t1.len), p2, t2.len);
     FastSetStringCP(dest, t.buf, p - t.buf, cp);
     t.Done;
   end;
@@ -995,7 +995,7 @@ var
   t: TBaseWriter;
   i: PtrInt;
   p: pointer;
-  u: RawUTF8;
+  u: RawUtf8;
   tmp: TTextWriterStackBuffer;
 begin
   t := TBaseWriter.CreateOwnedStream(tmp);
@@ -1005,7 +1005,7 @@ begin
       p := pointer(s[i]);
       if p <> nil then
         // use mormot.core.unicode efficient conversion
-        t.AddNoJSONEscape(p, _lstrlen(RawByteString(p)), _lstrcp(RawByteString(p), cp));
+        t.AddNoJsonEscape(p, _lstrlen(RawByteString(p)), _lstrcp(RawByteString(p), cp));
     end;
     t.SetText(u);
   finally
@@ -1015,7 +1015,7 @@ begin
      (cp >= CP_RAWBLOB) then
     dest := u
   else
-    TSynAnsiConvert.Engine(cp).UTF8BufferToAnsi(pointer(u), length(u), dest);
+    TSynAnsiConvert.Engine(cp).Utf8BufferToAnsi(pointer(u), length(u), dest);
 end;
 
 procedure _ansistr_concat_multi_utf8(var dest: RawByteString;
@@ -1097,12 +1097,12 @@ begin
   end;
 end;
 
-procedure _fpc_ansistr_concat(var a: RawUTF8);
+procedure _fpc_ansistr_concat(var a: RawUtf8);
 begin
   a := a + a; // to generate "call fpc_ansistr_concat" opcode
 end;
 
-procedure _fpc_ansistr_concat_multi(var a: RawUTF8);
+procedure _fpc_ansistr_concat_multi(var a: RawUtf8);
 begin
   a := a + a + a; // to generate "call fpc_ansistr_concat_multi" opcode
 end;

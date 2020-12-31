@@ -68,10 +68,10 @@ type
   TRestStorageExternal = class(TRestStorage)
   protected
     /// values retrieved from fStoredClassProps.ExternalDB settings
-    fTableName: RawUTF8;
+    fTableName: RawUtf8;
     fProperties: TSqlDBConnectionProperties;
-    fSelectOneDirectSQL, fSelectAllDirectSQL, fSelectTableHasRowsSQL: RawUTF8;
-    fRetrieveBlobFieldsSQL, fUpdateBlobfieldsSQL: RawUTF8;
+    fSelectOneDirectSQL, fSelectAllDirectSQL, fSelectTableHasRowsSQL: RawUtf8;
+    fRetrieveBlobFieldsSQL, fUpdateBlobfieldsSQL: RawUtf8;
     // ID handling during Add/Insert
     fEngineAddUseSelectMaxID: boolean;
     fEngineLockedMaxID: TID;
@@ -93,34 +93,34 @@ type
     fBatchMethod: TURIMethod;
     fBatchCapacity, fBatchCount: integer;
     // BATCH sending uses TEXT storage for direct sending to database driver
-    fBatchValues: TRawUTF8DynArray;
+    fBatchValues: TRawUtf8DynArray;
     fBatchIDs: TIDDynArray;
     /// get fFieldsExternal[] index using fFieldsExternalToInternal[] mapping
     // - do handle ID/RowID fields and published methods
     function InternalFieldNameToFieldExternalIndex(
-      const InternalFieldName: RawUTF8): integer;
+      const InternalFieldName: RawUtf8): integer;
     /// create, prepare and bound inlined parameters to a thread-safe statement
     // - this implementation will call the ThreadSafeConnection virtual method,
     // then bound inlined parameters as :(1234): and call its Execute method
     // - should return nil on error, and not raise an exception
-    function PrepareInlinedForRows(const aSQL: RawUTF8): ISQLDBStatement;
-    /// overloaded method using FormatUTF8() and binding mormot.db.sql parameters
-    function PrepareDirectForRows(SQLFormat: PUTF8Char;
-      const Args, Params: array of const): ISQLDBStatement;
+    function PrepareInlinedForRows(const aSQL: RawUtf8): ISqlDBStatement;
+    /// overloaded method using FormatUtf8() and binding mormot.db.sql parameters
+    function PrepareDirectForRows(SqlFormat: PUtf8Char;
+      const Args, Params: array of const): ISqlDBStatement;
     /// create, prepare, bound inlined parameters and execute a thread-safe statement
     // - this implementation will call the ThreadSafeConnection virtual method,
     // then bound inlined parameters as :(1234): and call its Execute method
     // - should return nil on error, and not raise an exception
-    function ExecuteInlined(const aSQL: RawUTF8;
-      ExpectResults: boolean): ISQLDBRows; overload;
-    /// overloaded method using FormatUTF8() and inlined parameters
-    function ExecuteInlined(SQLFormat: PUTF8Char; const Args: array of const;
-      ExpectResults: boolean): ISQLDBRows; overload;
-    /// overloaded method using FormatUTF8() and binding mormot.db.sql parameters
-    function ExecuteDirect(SQLFormat: PUTF8Char; const Args, Params: array of const;
-      ExpectResults: boolean): ISQLDBRows;
-    /// overloaded method using FormatUTF8() and binding mormot.db.sql parameters
-    function ExecuteDirectSQLVar(SQLFormat: PUTF8Char; const Args: array of const;
+    function ExecuteInlined(const aSQL: RawUtf8;
+      ExpectResults: boolean): ISqlDBRows; overload;
+    /// overloaded method using FormatUtf8() and inlined parameters
+    function ExecuteInlined(SqlFormat: PUtf8Char; const Args: array of const;
+      ExpectResults: boolean): ISqlDBRows; overload;
+    /// overloaded method using FormatUtf8() and binding mormot.db.sql parameters
+    function ExecuteDirect(SqlFormat: PUtf8Char; const Args, Params: array of const;
+      ExpectResults: boolean): ISqlDBRows;
+    /// overloaded method using FormatUtf8() and binding mormot.db.sql parameters
+    function ExecuteDirectSqlVar(SqlFormat: PUtf8Char; const Args: array of const;
        var Params: TSqlVarDynArray; const LastIntegerParam: Int64;
        ParamsMatchCopiableFields: boolean): boolean;
     /// run INSERT of UPDATE from the corresponding JSON object
@@ -128,28 +128,28 @@ type
     // - each JSON field will be bound with the proper SQL type corresponding to
     // the real external table columns (e.g. as TEXT for variant)
     // - returns 0 on error, or the Updated/Inserted ID
-    function ExecuteFromJSON(const SentData: RawUTF8; Occasion: TOrmOccasion;
+    function ExecuteFromJson(const SentData: RawUtf8; Occasion: TOrmOccasion;
       UpdatedID: TID): TID;
     /// compute the INSERT or UPDATE statement as decoded from a JSON object
-    function JSONDecodedPrepareToSQL(var Decoder: TJSONObjectDecoder;
-      out ExternalFields: TRawUTF8DynArray; out Types: TSqlDBFieldTypeArray;
+    function JsonDecodedPrepareToSql(var Decoder: TJsonObjectDecoder;
+      out ExternalFields: TRawUtf8DynArray; out Types: TSqlDBFieldTypeArray;
       Occasion: TOrmOccasion; BatchOptions: TRestBatchOptions;
-      BoundArray: boolean): RawUTF8;
+      BoundArray: boolean): RawUtf8;
     function GetConnectionProperties: TSqlDBConnectionProperties;
     /// check rpmClearPoolOnConnectionIssue in fStoredClassMapping.Options
     function HandleClearPoolOnConnectionIssue: boolean;
   public
     // overridden methods calling the external engine with SQL via Execute
-    function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
-    function EngineExecute(const aSQL: RawUTF8): boolean; override;
+    function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8; override;
+    function EngineExecute(const aSQL: RawUtf8): boolean; override;
     function EngineLockedNextID: TID; virtual;
-    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; override;
+    function EngineAdd(TableModelIndex: integer; const SentData: RawUtf8): TID; override;
     function EngineUpdate(TableModelIndex: integer; ID: TID; const
-       SentData: RawUTF8): boolean; override;
-    function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
+       SentData: RawUtf8): boolean; override;
+    function EngineDeleteWhere(TableModelIndex: integer; const SqlWhere: RawUtf8;
       const IDs: TIDDynArray): boolean; override;
-    function EngineList(const SQL: RawUTF8; ForceAJAX: boolean = false;
-      ReturnedRowCount: PPtrInt = nil): RawUTF8; override;
+    function EngineList(const SQL: RawUtf8; ForceAjax: boolean = false;
+      ReturnedRowCount: PPtrInt = nil): RawUtf8; override;
     // BLOBs should be access directly, not through slower JSON Base64 encoding
     function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PRttiProp; out BlobData: RawBlob): boolean; override;
@@ -166,17 +166,17 @@ type
     // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
     procedure InternalBatchStop; override;
     /// called internally by EngineAdd/EngineUpdate/EngineDelete in batch mode
-    procedure InternalBatchAdd(const aValue: RawUTF8; const aID: TID);
+    procedure InternalBatchAdd(const aValue: RawUtf8; const aID: TID);
     /// TRestServer.URI use it for Static.EngineList to by-pass virtual table
     // - overridden method to handle most potential simple queries, e.g. like
     // $ SELECT Field1,RowID FROM table WHERE RowID=... AND/OR/NOT Field2=
     // - change 'RowID' into 'ID' column name, internal field names into
     // mapped external field names ('AS [InternalFieldName]' if needed), and
-    // SQLTableName into fTableName
+    // SqlTableName into fTableName
     // - any 'LIMIT #' clause will be changed into the appropriate SQL statement
     // - handle also statements to avoid slow virtual table full scan, e.g.
     // $ SELECT count(*) FROM table
-    function AdaptSQLForEngineList(var SQL: RawUTF8): boolean; override;
+    function AdaptSQLForEngineList(var SQL: RawUtf8): boolean; override;
   public
     /// initialize the remote database connection
     // - you should not use this, but rather call VirtualTableExternalRegister()
@@ -191,12 +191,12 @@ type
     /// search for a numerical field value
     // - return true on success (i.e. if some values have been added to ResultID)
     // - store the results into the ResultID dynamic array
-    function SearchField(const FieldName: RawUTF8; FieldValue: Int64;
+    function SearchField(const FieldName: RawUtf8; FieldValue: Int64;
       out ResultID: TIDDynArray): boolean; overload; override;
     /// search for a field value, according to its SQL content representation
     // - return true on success (i.e. if some values have been added to ResultID)
     // - store the results into the ResultID dynamic array
-    function SearchField(const FieldName, FieldValue: RawUTF8;
+    function SearchField(const FieldName, FieldValue: RawUtf8;
       out ResultID: TIDDynArray): boolean; overload; override;
     /// overridden method for direct external database engine call
     function TableRowCount(Table: TOrmClass): Int64; override;
@@ -221,18 +221,18 @@ type
     function RetrieveBlobFields(Value: TOrm): boolean; override;
     /// update a field value of the external database
     function EngineUpdateField(TableModelIndex: integer;
-      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
+      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUtf8): boolean; override;
     /// update a field value of the external database
     function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
-      const FieldName: RawUTF8; Increment: Int64): boolean; override;
+      const FieldName: RawUtf8; Increment: Int64): boolean; override;
     /// create one index for all specific FieldNames at once
     // - this method will in fact call the SQLAddIndex method, if the index
     // is not already existing
     // - for databases which do not support indexes on BLOB fields (i.e. all
     // engine but SQLite3), such FieldNames will be ignored
-    function CreateSQLMultiIndex(Table: TOrmClass;
-      const FieldNames: array of RawUTF8;
-      Unique: boolean; IndexName: RawUTF8 = ''): boolean; override;
+    function CreateSqlMultiIndex(Table: TOrmClass;
+      const FieldNames: array of RawUtf8;
+      Unique: boolean; IndexName: RawUtf8 = ''): boolean; override;
     /// this method is called by TRestServer.EndCurrentThread method just
     // before a thread is finished to ensure that the associated external DB
     // connection will be released for this thread
@@ -248,7 +248,7 @@ type
     procedure EngineAddForceSelectMaxID;
     /// compute the SQL query corresponding to a prepared request
     // - can be used internally e.g. for debugging purposes
-    function ComputeSQL(const Prepared: TOrmVirtualTablePrepared): RawUTF8;
+    function ComputeSql(const Prepared: TOrmVirtualTablePrepared): RawUtf8;
 
     /// retrieve the REST server instance corresponding to an external TOrm
     // - just map aServer.StaticVirtualTable[] and will return nil if not
@@ -305,8 +305,8 @@ type
   // - this is the cursor class associated to TOrmVirtualTableExternal
   TOrmVirtualTableCursorExternal = class(TOrmVirtualTableCursor)
   protected
-    fStatement: ISQLDBStatement;
-    fSQL: RawUTF8;
+    fStatement: ISqlDBStatement;
+    fSQL: RawUtf8;
     fHasData: boolean;
     // on exception, release fStatement and optionally clear the pool
     procedure HandleClearPoolOnConnectionIssue;
@@ -340,7 +340,7 @@ type
     // valid call, even if HasData will return false, i.e. no data match)
     function Next: boolean; override;
     /// read-only access to the SELECT statement
-    property SQL: RawUTF8
+    property SQL: RawUtf8
       read fSQL;
   end;
 
@@ -405,9 +405,9 @@ type
 // - the TSqlDBConnectionProperties instance should be shared by all classes,
 // and released globaly when the ORM is no longer needed
 // - the full table name, as expected by the external database, could be
-// provided here (SQLTableName will be used internaly as table name when
+// provided here (SqlTableName will be used internaly as table name when
 // called via the associated SQLite3 Virtual Table) - if no table name is
-// specified (''), will use SQLTableName (e.g. 'Customer' for 'TOrmCustomer')
+// specified (''), will use SqlTableName (e.g. 'Customer' for 'TOrmCustomer')
 // - typical usage is therefore for instance:
 // !  Props := TOleDBMSSQLConnectionProperties.Create('.\SQLEXPRESS','AdventureWorks2008R2','','');
 // !  Model := TOrmModel.Create([TOrmCustomer],'root');
@@ -423,7 +423,7 @@ type
 // - after registration, you can tune the field-name mapping by calling
 // ! aModel.Props[aClass].ExternalDB.MapField(..)
 function VirtualTableExternalRegister(aModel: TOrmModel; aClass: TOrmClass;
-  aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUTF8 = '';
+  aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUtf8 = '';
   aMappingOptions: TOrmPropertiesMappingOptions = []): boolean; overload;
 
 /// register several tables of the model to be external
@@ -437,7 +437,7 @@ function VirtualTableExternalRegister(aModel: TOrmModel;
 // definitions, in a fluent interface:
 function VirtualTableExternalMap(aModel: TOrmModel;
   aClass: TOrmClass; aExternalDB: TSqlDBConnectionProperties;
-  const aExternalTableName: RawUTF8 = '';
+  const aExternalTableName: RawUtf8 = '';
   aMapping: TOrmPropertiesMappingOptions = []): POrmPropertiesMapping;
 
 type
@@ -510,11 +510,11 @@ implementation
 { TRestStorageExternal }
 
 const
-  ORM_TO_SQLDB: array[TOrmFieldType] of TSqlDBFieldType =
+  ORM_TO_SqlDB: array[TOrmFieldType] of TSqlDBFieldType =
     // ftUnknown is used for Int32 values, ftInt64 for Int64 values
     (ftUnknown,   // oftUnknown
-     ftUTF8,      // oftAnsiText
-     ftUTF8,      // oftUTF8Text
+     ftUtf8,      // oftAnsiText
+     ftUtf8,      // oftUtf8Text
      ftUnknown,   // oftEnumerate
      ftInt64,     // oftSet
      ftInt64,     // oftInteger
@@ -525,13 +525,13 @@ const
      ftDate,      // oftDateTime
      ftInt64,     // oftTimeLog
      ftCurrency,  // oftCurrency
-     ftUTF8,      // oftObject
-     ftUTF8,      // oftVariant
-     ftUTF8,      // oftNullable (retrieved from Prop.OrmFieldTypeStored)
+     ftUtf8,      // oftObject
+     ftUtf8,      // oftVariant
+     ftUtf8,      // oftNullable (retrieved from Prop.OrmFieldTypeStored)
      ftBlob,      // oftBlob
      ftBlob,      // oftBlobDynArray
      ftBlob,      // oftBlobCustom
-     ftUTF8,      // oftUTF8Comp
+     ftUtf8,      // oftUtf8Comp
      ftInt64,     // oftMany
      ftInt64,     // oftModTime
      ftInt64,     // oftCreateTime
@@ -576,9 +576,9 @@ constructor TRestStorageExternal.Create(aClass: TOrmClass; aServer: TRestOrmServ
       result := false;
       exit;
     end;
-    Column.DBType := ORM_TO_SQLDB[Prop.OrmFieldTypeStored];
+    Column.DBType := ORM_TO_SqlDB[Prop.OrmFieldTypeStored];
     Column.Name := fStoredClassMapping^.ExtFieldNames[Prop.PropertyIndex];
-    if Column.DBType = ftUTF8 then
+    if Column.DBType = ftUtf8 then
       Column.Width := Prop.FieldWidth
     else
       Column.Width := 0;
@@ -588,7 +588,7 @@ constructor TRestStorageExternal.Create(aClass: TOrmClass; aServer: TRestOrmServ
   end;
 
 var
-  SQL: RawUTF8;
+  SQL: RawUtf8;
   i, f: PtrInt;
   nfo: TOrmPropInfo;
   Field: TSqlDBColumnCreate;
@@ -604,7 +604,7 @@ var
       fFieldsExternal, self);
   end;
 
-  function FieldsExternalIndexOf(const ColName: RawUTF8): PtrInt;
+  function FieldsExternalIndexOf(const ColName: RawUtf8): PtrInt;
   begin
     if rpmMissingFieldNameCaseSensitive in options then
     begin
@@ -631,7 +631,7 @@ begin
   log.Log(sllInfo, '% as % % Server=%',
     [StoredClass, fTableName, fProperties, Owner], self);
   if fProperties = nil then
-    raise ERestStorage.CreateUTF8('%.Create: no external DB defined for %',
+    raise ERestStorage.CreateUtf8('%.Create: no external DB defined for %',
       [self, StoredClass]);
   // ensure external field names are compatible with the external DB keywords
   for f := 0 to StoredClassRecordProps.Fields.Count - 1 do
@@ -686,7 +686,7 @@ begin
         begin
           GetFields;
           if fFieldsExternal = nil then
-            raise ERestStorage.CreateUTF8(
+            raise ERestStorage.CreateUtf8(
               '%.Create: external table creation % failed:  GetFields() ' +
               'returned nil - SQL="%"', [self, StoredClass, fTableName, SQL]);
           TableCreated := true;
@@ -715,7 +715,7 @@ begin
                    (ExecuteDirect(pointer(SQL), [], [], false) <> nil) then
                   FieldAdded := true
                 else
-                  raise ERestStorage.CreateUTF8(
+                  raise ERestStorage.CreateUtf8(
                     '%.Create: %: unable to create external missing field %.% - SQL="%"',
                     [self, StoredClass, fTableName, Fields.List[f].Name, SQL]);
               end;
@@ -730,26 +730,26 @@ begin
   // compute the SQL statements used internaly for external DB requests
   with fStoredClassMapping^ do
   begin
-    fSelectOneDirectSQL := FormatUTF8('select % from % where %=?',
+    fSelectOneDirectSQL := FormatUtf8('select % from % where %=?',
       [SQL.TableSimpleFields[true, false], fTableName, RowIDFieldName]);
-    fSelectAllDirectSQL := FormatUTF8('select %,% from %',
+    fSelectAllDirectSQL := FormatUtf8('select %,% from %',
       [SQL.InsertSet, RowIDFieldName, fTableName]);
-    fRetrieveBlobFieldsSQL := InternalCSVToExternalCSV(
-      StoredClassRecordProps.SQLTableRetrieveBlobFields);
-    fUpdateBlobFieldsSQL := InternalCSVToExternalCSV(
-      StoredClassRecordProps.SQLTableUpdateBlobFields, '=?,', '=?');
+    fRetrieveBlobFieldsSQL := InternalCsvToExternalCsv(
+      StoredClassRecordProps.SqlTableRetrieveBlobFields);
+    fUpdateBlobFieldsSQL := InternalCsvToExternalCsv(
+      StoredClassRecordProps.SqlTableUpdateBlobFields, '=?,', '=?');
   end;
-  fSelectTableHasRowsSQL := FormatUTF8('select ID from % limit 1',
-    [StoredClassRecordProps.SQLTableName]);
+  fSelectTableHasRowsSQL := FormatUtf8('select ID from % limit 1',
+    [StoredClassRecordProps.SqlTableName]);
   AdaptSQLForEngineList(fSelectTableHasRowsSQL);
 end;
 
-function TRestStorageExternal.AdaptSQLForEngineList(var SQL: RawUTF8): boolean;
+function TRestStorageExternal.AdaptSQLForEngineList(var SQL: RawUtf8): boolean;
 var
   Stmt: TSelectStatement;
   W: TTextWriter;
   limit: TSqlDBDefinitionLimitClause;
-  limitSQL, name: RawUTF8;
+  limitSQL, name: RawUtf8;
   f, n: PtrInt;
   tmp: TTextWriterStackBuffer;
 begin
@@ -760,8 +760,8 @@ begin
     fStoredClassRecordProps.Fields.IndexByName,
     fStoredClassRecordProps.SimpleFieldsBits[ooSelect]);
   try
-    if (Stmt.SQLStatement = '') or // parsing failed
-      not IdemPropNameU(Stmt.TableName, fStoredClassRecordProps.SQLTableName) then
+    if (Stmt.SqlStatement = '') or // parsing failed
+      not IdemPropNameU(Stmt.TableName, fStoredClassRecordProps.SqlTableName) then
     begin
       InternalLog('AdaptSQLForEngineList: complex statement -> switch to ' +
         'SQLite3 virtual engine - check efficiency', [], sllDebug);
@@ -785,9 +785,9 @@ begin
         exit;
       end;
       if limit.Position = posOuter then
-        FormatUTF8(limit.InsertFmt, ['%', Stmt.Limit], limitSQL)
+        FormatUtf8(limit.InsertFmt, ['%', Stmt.Limit], limitSQL)
       else
-        FormatUTF8(limit.InsertFmt, [Stmt.Limit], limitSQL);
+        FormatUtf8(limit.InsertFmt, [Stmt.Limit], limitSQL);
     end;
     W := TTextWriter.CreateOwnedStream(tmp);
     try
@@ -888,7 +888,7 @@ begin
             W.AddString(SubField);
             W.AddString(DB_SQLOPERATOR[Operation]);
             if not (Operation in [opIsNull, opIsNotNull]) then
-              W.AddNoJSONEscape(ValueSQL, ValueSQLLen);
+              W.AddNoJsonEscape(ValueSQL, ValueSQLLen);
             if ParenthesisAfter <> '' then
               W.AddString(ParenthesisAfter);
           end;
@@ -919,7 +919,7 @@ begin
         W.AddString(limitSQL);
       W.SetText(SQL);
       if limit.Position = posOuter then
-        SQL := FormatUTF8(limitSQL, [SQL]);
+        SQL := FormatUtf8(limitSQL, [SQL]);
       result := true;
     finally
       W.Free;
@@ -935,7 +935,7 @@ function TRestStorageExternal.EngineLockedNextID: TID;
   // fProperties.SQLCreate: ID Int64 PRIMARY KEY -> compute unique RowID
   // (not all DB engines handle autoincrement feature - e.g. Oracle does not)
   var
-    rows: ISQLDBRows;
+    rows: ISqlDBRows;
   begin
     rows := ExecuteDirect('select max(%) from %',
       [fStoredClassMapping^.RowIDFieldName, fTableName], [], true);
@@ -982,7 +982,7 @@ begin
     // lock protected by try..finally in TRestServer.RunBatch caller
     try
       if fBatchMethod <> mNone then
-        raise ERestStorage.CreateUTF8('Missing previous %.InternalBatchStop(%)',
+        raise ERestStorage.CreateUtf8('Missing previous %.InternalBatchStop(%)',
           [self, StoredClass]);
       fBatchMethod := Method;
       fBatchCount := 0;
@@ -997,19 +997,19 @@ end;
 procedure TRestStorageExternal.InternalBatchStop;
 var
   i, j, n, max, BatchBegin, BatchEnd, ValuesMax: PtrInt;
-  Query: ISQLDBStatement;
+  Query: ISqlDBStatement;
   NotifySQLEvent: TOrmEvent;
-  SQL: RawUTF8;
-  P: PUTF8Char;
-  Fields, ExternalFields: TRawUTF8DynArray;
+  SQL: RawUtf8;
+  P: PUtf8Char;
+  Fields, ExternalFields: TRawUtf8DynArray;
   Types: TSqlDBFieldTypeArray;
-  Values: TRawUTF8DynArrayDynArray;
+  Values: TRawUtf8DynArrayDynArray;
   Occasion: TOrmOccasion;
-  Decode: TJSONObjectDecoder;
+  Decode: TJsonObjectDecoder;
   tmp: TSynTempBuffer;
 begin
   if fBatchMethod = mNone then
-    raise ERestStorage.CreateUTF8('%.InternalBatchStop(%).BatchMethod=mNone',
+    raise ERestStorage.CreateUtf8('%.InternalBatchStop(%).BatchMethod=mNone',
       [self, StoredClass]);
   try
     if fBatchCount = 0 then
@@ -1056,7 +1056,7 @@ begin
                 if {%H-}Fields = nil then
                 begin
                   Decode.AssignFieldNamesTo(Fields);
-                  SQL := JSONDecodedPrepareToSQL(Decode, ExternalFields, Types,
+                  SQL := JsonDecodedPrepareToSql(Decode, ExternalFields, Types,
                     Occasion, [], {array=}true);
                   SetLength(Values, Decode.FieldCount);
                   ValuesMax := fBatchCount - BatchBegin;
@@ -1091,7 +1091,7 @@ begin
             else
               // regular SQL
               SQL := 'delete from % where %=?';
-            SQL := FormatUTF8(SQL, [fTableName, fStoredClassMapping^.RowIDFieldName]);
+            SQL := FormatUtf8(SQL, [fTableName, fStoredClassMapping^.RowIDFieldName]);
             n := BatchEnd - BatchBegin + 1;
             if n + 1 >= max then
             begin
@@ -1102,7 +1102,7 @@ begin
             SetLength(Values, 1);
             SetLength(Values[0], n);
             for i := 0 to n - 1 do
-              Values[0, i] := Int64ToUTF8(fBatchIDs[BatchBegin + i]); // var fails on D2007
+              Values[0, i] := Int64ToUtf8(fBatchIDs[BatchBegin + i]); // var fails on D2007
           end;
       end;
       n := BatchEnd - BatchBegin + 1;
@@ -1172,7 +1172,7 @@ begin
   end;
 end;
 
-procedure TRestStorageExternal.InternalBatchAdd(const aValue: RawUTF8;
+procedure TRestStorageExternal.InternalBatchAdd(const aValue: RawUtf8;
   const aID: TID);
 begin
   if fBatchCount >= fBatchCapacity then
@@ -1189,7 +1189,7 @@ begin
 end;
 
 function TRestStorageExternal.EngineAdd(TableModelIndex: integer;
-  const SentData: RawUTF8): TID;
+  const SentData: RawUtf8): TID;
 begin
   if (TableModelIndex < 0) or
      (fModel.Tables[TableModelIndex] <> fStoredClass) then
@@ -1200,7 +1200,7 @@ begin
         result := 0
       else
       begin
-        if not JSONGetID(pointer(SentData), result) then
+        if not JsonGetID(pointer(SentData), result) then
           result := EngineLockedNextID
         else if result > fEngineLockedMaxID then
           fEngineLockedMaxID := result;
@@ -1208,7 +1208,7 @@ begin
       end
     else
     begin
-      result := ExecuteFromJSON(SentData, ooInsert, 0);
+      result := ExecuteFromJson(SentData, ooInsert, 0);
       // UpdatedID=0 -> insert with EngineLockedNextID
       if (result > 0) and
          (Owner <> nil) then
@@ -1221,7 +1221,7 @@ begin
 end;
 
 function TRestStorageExternal.EngineUpdate(TableModelIndex: integer; ID: TID;
-  const SentData: RawUTF8): boolean;
+  const SentData: RawUtf8): boolean;
 begin
   if (ID <= 0) or
      (TableModelIndex < 0) or
@@ -1237,7 +1237,7 @@ begin
     end
   else
   begin
-    result := ExecuteFromJSON(SentData, ooUpdate, ID) = ID;
+    result := ExecuteFromJson(SentData, ooUpdate, ID) = ID;
     if result and
        (Owner <> nil) then
     begin
@@ -1275,12 +1275,12 @@ begin
 end;
 
 function TRestStorageExternal.EngineDeleteWhere(TableModelIndex: integer;
-  const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean;
+  const SqlWhere: RawUtf8; const IDs: TIDDynArray): boolean;
 const
   CHUNK_SIZE = 200;
 var
   i, n, chunk, pos: PtrInt;
-  rowid: RawUTF8;
+  rowid: RawUtf8;
 begin
   result := false;
   if (IDs = nil) or
@@ -1309,7 +1309,7 @@ begin
       if chunk > CHUNK_SIZE then
         chunk := CHUNK_SIZE;
       if ExecuteInlined('delete from % where % in (%)',
-          [fTableName, rowid, Int64DynArrayToCSV(pointer(@IDs[pos]), chunk)],
+          [fTableName, rowid, Int64DynArrayToCsv(pointer(@IDs[pos]), chunk)],
           false) = nil then
         exit;
       inc(pos, chunk);
@@ -1320,20 +1320,20 @@ begin
   result := true;
 end;
 
-function TRestStorageExternal.EngineList(const SQL: RawUTF8;
-  ForceAJAX: boolean; ReturnedRowCount: PPtrInt): RawUTF8;
+function TRestStorageExternal.EngineList(const SQL: RawUtf8;
+  ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawUtf8;
 var
-  Stmt: ISQLDBStatement;
+  Stmt: ISqlDBStatement;
 begin
   result := '';
   if ReturnedRowCount <> nil then
-    raise ERestStorage.CreateUTF8('%.EngineList(ReturnedRowCount<>nil) for %',
+    raise ERestStorage.CreateUtf8('%.EngineList(ReturnedRowCount<>nil) for %',
       [self, StoredClass]);
   Stmt := PrepareInlinedForRows(SQL);
   if Stmt <> nil then
   try
-    Stmt.ExecutePreparedAndFetchAllAsJSON(
-      ForceAJAX or (Owner = nil) or not Owner.Owner.NoAJAXJSON, result);
+    Stmt.ExecutePreparedAndFetchAllAsJson(
+      ForceAjax or (Owner = nil) or not Owner.Owner.NoAjaxJson, result);
   except
     Stmt := nil;
     HandleClearPoolOnConnectionIssue;
@@ -1341,9 +1341,9 @@ begin
 end;
 
 function TRestStorageExternal.EngineRetrieve(TableModelIndex: integer;
-  ID: TID): RawUTF8;
+  ID: TID): RawUtf8;
 var
-  Stmt: ISQLDBStatement;
+  Stmt: ISqlDBStatement;
 begin // TableModelIndex is not useful here
   result := '';
   if (self = nil) or
@@ -1353,8 +1353,8 @@ begin // TableModelIndex is not useful here
   if Stmt <> nil then
   try
     // Expanded=true -> '[{"ID":10,...}]'#10
-    Stmt.ExecutePreparedAndFetchAllAsJSON(true, result);
-    if IsNotAjaxJSON(pointer(result)) then
+    Stmt.ExecutePreparedAndFetchAllAsJson(true, result);
+    if IsNotAjaxJson(pointer(result)) then
       // '{"fieldCount":2,"values":["ID","FirstName"]}'#$A -> ID not found
       result := ''
     else
@@ -1366,7 +1366,7 @@ begin // TableModelIndex is not useful here
   end;
 end;
 
-function TRestStorageExternal.EngineExecute(const aSQL: RawUTF8): boolean;
+function TRestStorageExternal.EngineExecute(const aSQL: RawUtf8): boolean;
 begin
   if aSQL = '' then
     result := false
@@ -1376,7 +1376,7 @@ end;
 
 function TRestStorageExternal.TableHasRows(Table: TOrmClass): boolean;
 var
-  rows: ISQLDBRows;
+  rows: ISqlDBRows;
 begin
   if (self = nil) or
      (Table <> fStoredClass) then
@@ -1393,7 +1393,7 @@ end;
 
 function TRestStorageExternal.TableRowCount(Table: TOrmClass): Int64;
 var
-  rows: ISQLDBRows;
+  rows: ISqlDBRows;
 begin
   if (self = nil) or
      (Table <> fStoredClass) then
@@ -1412,7 +1412,7 @@ end;
 function TRestStorageExternal.EngineRetrieveBlob(TableModelIndex: integer;
   aID: TID; BlobField: PRttiProp; out BlobData: RawBlob): boolean;
 var
-  rows: ISQLDBRows;
+  rows: ISqlDBRows;
 begin
   result := false;
   if (aID <= 0) or
@@ -1439,7 +1439,7 @@ end;
 
 function TRestStorageExternal.RetrieveBlobFields(Value: TOrm): boolean;
 var
-  rows: ISQLDBRows;
+  rows: ISqlDBRows;
   f: PtrInt;
   data: TSqlVar;
   temp: RawByteString;
@@ -1459,8 +1459,8 @@ begin
         try
           for f := 0 to High(BlobFields) do
           begin
-            rows.ColumnToSQLVar(f, data, temp);
-            BlobFields[f].SetFieldSQLVar(Value, data);
+            rows.ColumnToSqlVar(f, data, temp);
+            BlobFields[f].SetFieldSqlVar(Value, data);
           end;
           rows.ReleaseRows;
           rows := nil;
@@ -1472,10 +1472,10 @@ begin
 end;
 
 function TRestStorageExternal.EngineUpdateField(TableModelIndex: integer;
-  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
+  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUtf8): boolean;
 var
-  rows: ISQLDBRows;
-  ExtWhereFieldName, JSON: RawUTF8;
+  rows: ISqlDBRows;
+  ExtWhereFieldName, JSON: RawUtf8;
 begin
   if (TableModelIndex < 0) or
      (Model.Tables[TableModelIndex] <> fStoredClass) then
@@ -1496,7 +1496,7 @@ begin
             [RowIDFieldName, fTableName, ExtWhereFieldName, WhereValue], true);
           if rows = nil then
             exit;
-          JSONEncodeNameSQLValue(SetFieldName, SetValue, JSON);
+          JsonEncodeNameSQLValue(SetFieldName, SetValue, JSON);
           while rows.Step do
             Owner.InternalUpdateEvent(
               oeUpdate, TableModelIndex, rows.ColumnInt(0), JSON, nil);
@@ -1508,10 +1508,10 @@ begin
 end;
 
 function TRestStorageExternal.EngineUpdateFieldIncrement(
-  TableModelIndex: integer; ID: TID; const FieldName: RawUTF8;
+  TableModelIndex: integer; ID: TID; const FieldName: RawUtf8;
   Increment: Int64): boolean;
 var
-  extField: RawUTF8;
+  extField: RawUtf8;
   Value: Int64;
 begin
   result := false;
@@ -1544,7 +1544,7 @@ end;
 function TRestStorageExternal.EngineUpdateBlob(TableModelIndex: integer;
   aID: TID; BlobField: PRttiProp; const BlobData: RawBlob): boolean;
 var
-  Statement: ISQLDBStatement;
+  Statement: ISqlDBStatement;
   AffectedField: TFieldBits;
 begin
   result := false;
@@ -1605,8 +1605,8 @@ begin
         SetLength(Params, length(BlobFields));
         SetLength(temp, length(BlobFields));
         for f := 0 to high(Params) do
-          BlobFields[f].GetFieldSQLVar(Value, Params[f], temp[f]);
-        result := ExecuteDirectSQLVar('update % set % where %=?',
+          BlobFields[f].GetFieldSqlVar(Value, Params[f], temp[f]);
+        result := ExecuteDirectSqlVar('update % set % where %=?',
           [fTableName, fUpdateBlobFieldsSQL, fStoredClassMapping^.RowIDFieldName],
           Params, aID, false);
         if result and
@@ -1622,9 +1622,9 @@ begin
 end;
 
 function TRestStorageExternal.PrepareInlinedForRows(
-  const aSQL: RawUTF8): ISQLDBStatement;
+  const aSQL: RawUtf8): ISqlDBStatement;
 var
-  stmt: ISQLDBStatement;
+  stmt: ISqlDBStatement;
 begin
   result := nil; // returns nil interface on error
   if self = nil then
@@ -1641,10 +1641,10 @@ begin
   end;
 end;
 
-function TRestStorageExternal.ExecuteInlined(const aSQL: RawUTF8;
-  ExpectResults: boolean): ISQLDBRows;
+function TRestStorageExternal.ExecuteInlined(const aSQL: RawUtf8;
+  ExpectResults: boolean): ISqlDBRows;
 var
-  stmt: ISQLDBStatement;
+  stmt: ISqlDBStatement;
 begin
   result := nil; // returns nil interface on error
   if self = nil then
@@ -1669,22 +1669,22 @@ begin
   end;
 end;
 
-function TRestStorageExternal.ExecuteInlined(SQLFormat: PUTF8Char;
-  const Args: array of const; ExpectResults: boolean): ISQLDBRows;
+function TRestStorageExternal.ExecuteInlined(SqlFormat: PUtf8Char;
+  const Args: array of const; ExpectResults: boolean): ISqlDBRows;
 begin
-  result := ExecuteInlined(FormatUTF8(SQLFormat, Args), ExpectResults);
+  result := ExecuteInlined(FormatUtf8(SqlFormat, Args), ExpectResults);
 end;
 
-function TRestStorageExternal.PrepareDirectForRows(SQLFormat: PUTF8Char;
-  const Args, Params: array of const): ISQLDBStatement;
+function TRestStorageExternal.PrepareDirectForRows(SqlFormat: PUtf8Char;
+  const Args, Params: array of const): ISqlDBStatement;
 var
-  stmt: ISQLDBStatement;
+  stmt: ISqlDBStatement;
 begin
   result := nil;
   if self <> nil then
   try
     stmt := fProperties.NewThreadSafeStatementPrepared(
-      SQLFormat, Args, {results=}true, {except=}true);
+      SqlFormat, Args, {results=}true, {except=}true);
     if stmt = nil then
       exit;
     stmt.Bind(Params);
@@ -1697,10 +1697,10 @@ begin
   end;
 end;
 
-function TRestStorageExternal.ExecuteDirect(SQLFormat: PUTF8Char;
-  const Args, Params: array of const; ExpectResults: boolean): ISQLDBRows;
+function TRestStorageExternal.ExecuteDirect(SqlFormat: PUtf8Char;
+  const Args, Params: array of const; ExpectResults: boolean): ISqlDBRows;
 var
-  stmt: ISQLDBStatement;
+  stmt: ISqlDBStatement;
 begin
   result := nil;
   if self = nil then
@@ -1710,13 +1710,13 @@ begin
     Owner.FlushInternalDBCache; // add/update/delete should flush DB cache
   try
     stmt := fProperties.NewThreadSafeStatementPrepared(
-      SQLFormat, Args, ExpectResults, {except=}true);
+      SqlFormat, Args, ExpectResults, {except=}true);
     stmt.Bind(Params);
     if ExpectResults and
        (oftDateTimeMS in fStoredClassRecordProps.HasTypeFields) then
       stmt.ForceDateWithMS := true;
     stmt.ExecutePrepared;
-    if IdemPChar(SQLFormat, 'DROP TABLE ') then
+    if IdemPChar(SqlFormat, 'DROP TABLE ') then
     begin
       fEngineLockedMaxID := 0;
     end;
@@ -1727,32 +1727,32 @@ begin
   end;
 end;
 
-function TRestStorageExternal.ExecuteDirectSQLVar(SQLFormat: PUTF8Char;
+function TRestStorageExternal.ExecuteDirectSqlVar(SqlFormat: PUtf8Char;
   const Args: array of const; var Params: TSqlVarDynArray;
   const LastIntegerParam: Int64; ParamsMatchCopiableFields: boolean): boolean;
 var
-  stmt: ISQLDBStatement;
+  stmt: ISqlDBStatement;
   ParamsCount, f: PtrInt;
 begin
   result := false;
   if Self <> nil then
   try
-    stmt := fProperties.NewThreadSafeStatementPrepared(SQLFormat, Args,
+    stmt := fProperties.NewThreadSafeStatementPrepared(SqlFormat, Args,
       {results=}false, {except=}true);
     if stmt = nil then
       exit;
     ParamsCount := length(Params);
     if ParamsMatchCopiableFields and
        (ParamsCount <> Length(fStoredClassRecordProps.CopiableFields)) then
-      raise ERestStorage.CreateUTF8(
-        '%.ExecuteDirectSQLVar(ParamsMatchCopiableFields) for %',
+      raise ERestStorage.CreateUtf8(
+        '%.ExecuteDirectSqlVar(ParamsMatchCopiableFields) for %',
         [self, StoredClass]);
     for f := 0 to ParamsCount - 1 do
       if ParamsMatchCopiableFields and
          (fStoredClassRecordProps.CopiableFields[f].
            OrmFieldTypeStored in [oftDateTime, oftDateTimeMS]) and
-         (Params[f].VType = ftUTF8) then
-        stmt.BindDateTime(f + 1, Iso8601ToDateTimePUTF8Char(Params[f].VText))
+         (Params[f].VType = ftUtf8) then
+        stmt.BindDateTime(f + 1, Iso8601ToDateTimePUtf8Char(Params[f].VText))
       else
         stmt.Bind(f + 1, Params[f]);
     if LastIntegerParam <> 0 then
@@ -1769,7 +1769,7 @@ function TRestStorageExternal.EngineSearchField(const FieldName: ShortString;
   const FieldValue: array of const; out ResultID: TIDDynArray): boolean;
 var
   n: integer;
-  rows: ISQLDBRows;
+  rows: ISqlDBRows;
 begin
   result := false;
   try
@@ -1791,13 +1791,13 @@ begin
   end;
 end;
 
-function TRestStorageExternal.SearchField(const FieldName: RawUTF8;
+function TRestStorageExternal.SearchField(const FieldName: RawUtf8;
   FieldValue: Int64; out ResultID: TIDDynArray): boolean;
 begin
   result := EngineSearchField(FieldName, [FieldValue], ResultID);
 end;
 
-function TRestStorageExternal.SearchField(const FieldName, FieldValue: RawUTF8;
+function TRestStorageExternal.SearchField(const FieldName, FieldValue: RawUtf8;
   out ResultID: TIDDynArray): boolean;
 begin
   result := EngineSearchField(FieldName, [FieldValue], ResultID);
@@ -1820,7 +1820,7 @@ const
     transCommitWithoutException, transCommitWithException);
 begin
   inherited Commit(SessionID, RaiseException);
-  // reset fTransactionActive + write all TOrmVirtualTableJSON
+  // reset fTransactionActive + write all TOrmVirtualTableJson
   fProperties.SharedTransaction(SessionID, ACTION[RaiseException]);
 end;
 
@@ -1830,12 +1830,12 @@ begin
   fProperties.SharedTransaction(SessionID, transRollback);
 end;
 
-function TRestStorageExternal.CreateSQLMultiIndex(Table: TOrmClass;
-  const FieldNames: array of RawUTF8; Unique: boolean;
-  IndexName: RawUTF8): boolean;
+function TRestStorageExternal.CreateSqlMultiIndex(Table: TOrmClass;
+  const FieldNames: array of RawUtf8; Unique: boolean;
+  IndexName: RawUtf8): boolean;
 var
-  SQL: RawUTF8;
-  ExtFieldNames: TRawUTF8DynArray;
+  SQL: RawUtf8;
+  ExtFieldNames: TRawUtf8DynArray;
   IntFieldIndex: TIntegerDynArray;
   Descending: boolean;
   i, n, extfield: PtrInt;
@@ -1882,7 +1882,7 @@ begin
     begin
       extfield := fFieldsInternalToExternal[IntFieldIndex[i] + 1];
       if (extfield >= 0) and
-         (fFieldsExternal[extfield].ColumnType in [ftBlob, ftUTF8]) and
+         (fFieldsExternal[extfield].ColumnType in [ftBlob, ftUtf8]) and
          (fFieldsExternal[extfield].ColumnLength <= 0) then
       begin
         if i = 0 then
@@ -1953,23 +1953,23 @@ begin
   end;
 end;
 
-function TRestStorageExternal.ExecuteFromJSON(const SentData: RawUTF8;
+function TRestStorageExternal.ExecuteFromJson(const SentData: RawUtf8;
   Occasion: TOrmOccasion; UpdatedID: TID): TID;
 var
-  Decoder: TJSONObjectDecoder;
-  SQL: RawUTF8;
+  Decoder: TJsonObjectDecoder;
+  SQL: RawUtf8;
   Types: TSqlDBFieldTypeArray;
-  ExternalFields: TRawUTF8DynArray;
+  ExternalFields: TRawUtf8DynArray;
   InsertedID: TID;
   F: PtrInt;
-  stmt: ISQLDBStatement;
+  stmt: ISqlDBStatement;
 begin
   result := 0;
   StorageLock(false, 'ExecuteFromJson'); // avoid race condition against max(ID)
   try
     case Occasion of
       ooInsert:
-        if not JSONGetID(pointer(SentData), InsertedID) then
+        if not JsonGetID(pointer(SentData), InsertedID) then
           // no specified "ID":... field value -> compute next
           InsertedID := EngineLockedNextID
         else if InsertedID > fEngineLockedMaxID then
@@ -1978,11 +1978,11 @@ begin
         if UpdatedID <> 0 then
           InsertedID := 0
         else
-          raise ERestStorage.CreateUTF8(
-            '%.ExecuteFromJSON(%,soUpdate,UpdatedID=%)',
+          raise ERestStorage.CreateUtf8(
+            '%.ExecuteFromJson(%,soUpdate,UpdatedID=%)',
             [self, StoredClass, UpdatedID]);
     else
-      raise ERestStorage.CreateUTF8('%.ExecuteFromJSON(%,Occasion=%)?',
+      raise ERestStorage.CreateUtf8('%.ExecuteFromJson(%,Occasion=%)?',
         [self, StoredClass, ToText(Occasion)^]);
     end;
     // decode fields
@@ -2000,11 +2000,11 @@ begin
     end;
     RecordVersionFieldHandle(Occasion, Decoder);
     // compute SQL statement and associated bound parameters
-    SQL := JSONDecodedPrepareToSQL(
+    SQL := JsonDecodedPrepareToSql(
       Decoder, ExternalFields, Types, Occasion, [], {array=}false);
     if Occasion = ooUpdate then
-      // Int64ToUTF8(var) fails on D2007
-      Decoder.FieldValues[Decoder.FieldCount - 1] := Int64ToUTF8(UpdatedID);
+      // Int64ToUtf8(var) fails on D2007
+      Decoder.FieldValues[Decoder.FieldCount - 1] := Int64ToUtf8(UpdatedID);
     // execute statement
     try
       stmt := fProperties.NewThreadSafeStatementPrepared(
@@ -2039,16 +2039,16 @@ begin
 end;
 
 function TRestStorageExternal.InternalFieldNameToFieldExternalIndex(
-  const InternalFieldName: RawUTF8): integer;
+  const InternalFieldName: RawUtf8): integer;
 begin
   result := fStoredClassRecordProps.Fields.IndexByNameOrExcept(InternalFieldName);
   result := fFieldsInternalToExternal[result + 1];
 end;
 
-function TRestStorageExternal.JSONDecodedPrepareToSQL(
-  var Decoder: TJSONObjectDecoder; out ExternalFields: TRawUTF8DynArray;
+function TRestStorageExternal.JsonDecodedPrepareToSql(
+  var Decoder: TJsonObjectDecoder; out ExternalFields: TRawUtf8DynArray;
   out Types: TSqlDBFieldTypeArray; Occasion: TOrmOccasion;
-  BatchOptions: TRestBatchOptions; BoundArray: boolean): RawUTF8;
+  BatchOptions: TRestBatchOptions; BoundArray: boolean): RawUtf8;
 var
   f, k: PtrInt;
 begin
@@ -2061,8 +2061,8 @@ begin
     // retrieve mormot.db.sql Types[f]
     k := fFieldsInternalToExternal[k + 1];
     if k < 0 then
-      raise ERestStorage.CreateUTF8(
-        '%.JSONDecodedPrepareToSQL(%): No column for [%] field in table %',
+      raise ERestStorage.CreateUtf8(
+        '%.JsonDecodedPrepareToSql(%): No column for [%] field in table %',
         [self, StoredClass, Decoder.FieldNames[f], fTableName]);
     Types[f] := fFieldsExternal[k].ColumnType;
   end;
@@ -2073,12 +2073,12 @@ begin
     // efficient mormot.db.sql.postgres array binding
     // e.g. via 'insert into ... values (unnest...)'
     Decoder.DecodedFieldTypesToUnnest := @Types;
-  result := Decoder.EncodeAsSQLPrepared(fTableName, Occasion,
+  result := Decoder.EncodeAsSqlPrepared(fTableName, Occasion,
     fStoredClassMapping^.RowIDFieldName, BatchOptions);
   if Occasion = ooUpdate then
     if Decoder.FieldCount = MAX_SQLFIELDS then
-      raise ERestStorage.CreateUTF8(
-        'Too many fields for %.JSONDecodedPrepareToSQL', [self])
+      raise ERestStorage.CreateUtf8(
+        'Too many fields for %.JsonDecodedPrepareToSql', [self])
     else
     begin
       // add "where ID=?" parameter
@@ -2095,16 +2095,16 @@ begin
 end;
 
 const
-  SQL_OPER_WITH_PARAM: array[soEqualTo..soGreaterThanOrEqualTo] of RawUTF8 = (
+  SQL_OPER_WITH_PARAM: array[soEqualTo..soGreaterThanOrEqualTo] of RawUtf8 = (
     '=?', '<>?', '<?', '<=?', '>?', '>=?');
 
-function TRestStorageExternal.ComputeSQL(
-  const Prepared: TOrmVirtualTablePrepared): RawUTF8;
+function TRestStorageExternal.ComputeSql(
+  const Prepared: TOrmVirtualTablePrepared): RawUtf8;
 var
   i: PtrInt;
   constraint: POrmVirtualTablePreparedConstraint;
   {$ifdef SQLVIRTUALLOGS}
-  log: RawUTF8;
+  log: RawUtf8;
   {$endif SQLVIRTUALLOGS}
 begin
   result := fSelectAllDirectSQL;
@@ -2112,7 +2112,7 @@ begin
   begin
     constraint := @Prepared.Where[i];
     {$ifdef SQLVIRTUALLOGS}
-    log := FormatUTF8('% [column=% oper=%]', [log, constraint^.Column,
+    log := FormatUtf8('% [column=% oper=%]', [log, constraint^.Column,
       ToText(constraint^.Operation)^]);
     {$endif SQLVIRTUALLOGS}
     if constraint^.Operation > high(SQL_OPER_WITH_PARAM) then
@@ -2141,7 +2141,7 @@ begin
         result := result + ' desc';
     end;
   {$ifdef SQLVIRTUALLOGS}
-  SQLite3Log.Add.Log(sllDebug, '%.ComputeSQL [%] %', [ClassType, result, log], self);
+  SQLite3Log.Add.Log(sllDebug, '%.ComputeSql [%] %', [ClassType, result, log], self);
   {$endif SQLVIRTUALLOGS}
 end;
 
@@ -2184,7 +2184,7 @@ begin
     else if cardinal(aColumn) >= n then
       // error if aColumn is out of range
       exit;
-    fStatement.ColumnToSQLVar(aColumn, aResult, fColumnTemp);
+    fStatement.ColumnToSqlVar(aColumn, aResult, fColumnTemp);
     result := aResult.VType <> ftUnknown;
   except
     HandleClearPoolOnConnectionIssue;
@@ -2226,7 +2226,7 @@ begin
     {$ifndef SQLVIRTUALLOGS}
     if fSQL = '' then
     {$endif SQLVIRTUALLOGS}
-      fSQL := storage.ComputeSQL(Prepared);
+      fSQL := storage.ComputeSql(Prepared);
     try
       fStatement := storage.fProperties.NewThreadSafeStatementPrepared(
         fSQL, {results=}true, {except=}true);
@@ -2351,9 +2351,9 @@ begin // aRowID is just ignored here since IDs are always auto calculated
       try
         insertedRowID := EngineLockedNextID;
         with fStoredClassMapping^ do
-          result := ExecuteDirectSQLVar('insert into % (%,%) values (%,?)',
+          result := ExecuteDirectSqlVar('insert into % (%,%) values (%,?)',
             [fTableName, SQL.InsertSet, RowIDFieldName,
-             CSVOfValue('?', length(Values))],
+             CsvOfValue('?', length(Values))],
             Values, insertedRowID, true);
       finally
         StorageUnLock;
@@ -2369,7 +2369,7 @@ begin
      (oldRowID = newRowID) and
      (newRowID > 0) then // don't allow ID change
     with Static as TRestStorageExternal, fStoredClassMapping^ do
-      result := ExecuteDirectSQLVar('update % set % where %=?',
+      result := ExecuteDirectSqlVar('update % set % where %=?',
         [fTableName, SQL.UpdateSetAll, RowIDFieldName],
         Values, oldRowID, true)
   else
@@ -2380,10 +2380,10 @@ end;
 { *********** External SQL Database Engines Registration }
 
 function VirtualTableExternalRegister(aModel: TOrmModel; aClass: TOrmClass;
-  aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUTF8;
+  aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUtf8;
   aMappingOptions: TOrmPropertiesMappingOptions): boolean;
 var
-  ExternalTableName: RawUTF8;
+  ExternalTableName: RawUtf8;
   Props: TOrmModelProperties;
 begin
   result := False;
@@ -2398,7 +2398,7 @@ begin
     exit;
   Props.Kind := ovkCustomAutoID; // force creation use of SQLite3 virtual table
   if aExternalTableName = '' then
-    ExternalTableName := Props.Props.SQLTableName
+    ExternalTableName := Props.Props.SqlTableName
   else
     ExternalTableName := aExternalTableName;
   result := aModel.VirtualTableRegister(aClass, TOrmVirtualTableExternal,
@@ -2462,7 +2462,7 @@ begin
 end;
 
 function VirtualTableExternalMap(aModel: TOrmModel; aClass: TOrmClass;
-  aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUTF8;
+  aExternalDB: TSqlDBConnectionProperties; const aExternalTableName: RawUtf8;
   aMapping: TOrmPropertiesMappingOptions): POrmPropertiesMapping;
 begin
   if VirtualTableExternalRegister(aModel, aClass, aExternalDB,

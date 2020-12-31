@@ -39,7 +39,7 @@ uses
 function SysErrorMessageWinInet(error: integer): string;
 
 /// low-level retrieval of a Domain User from a transmitted Token
-procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUTF8);
+procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUtf8);
 
 
 { ************  http.sys / HTTP Server API low-level direct access }
@@ -91,7 +91,7 @@ type
   // - used to alter the default logging behavior
   // - hlfLocalTimeRollover would force the log file rollovers by local time,
   // instead of the default GMT time
-  // - hlfUseUTF8Conversion will use UTF-8 instead of default local code page
+  // - hlfUseUtf8Conversion will use UTF-8 instead of default local code page
   // - only one of hlfLogErrorsOnly and hlfLogSuccessOnly flag could be set
   // at a time: if neither of them are present, both errors and success will
   // be logged, otherwise mutually exclusive flags could be set to force only
@@ -99,7 +99,7 @@ type
   // - match low-level HTTP_LOGGING_FLAG_* constants as defined in HTTP 2.0 API
   THttpApiLoggingFlags = set of (
     hlfLocalTimeRollover,
-    hlfUseUTF8Conversion,
+    hlfUseUtf8Conversion,
     hlfLogErrorsOnly,
     hlfLogSuccessOnly);
 
@@ -265,8 +265,8 @@ type
   HTTP_UNKNOWN_HEADER = record
     NameLength: word;          // in bytes not including the #0
     RawValueLength: word;      // in bytes not including the n#0
-    pName: PUTF8Char;          // The header name (minus the ':' character)
-    pRawValue: PUTF8Char;      // The header value
+    pName: PUtf8Char;          // The header name (minus the ':' character)
+    pRawValue: PUtf8Char;      // The header value
   end;
 
   PHTTP_UNKNOWN_HEADER = ^HTTP_UNKNOWN_HEADER;
@@ -511,7 +511,7 @@ type
     ReasonLength: word;
     // The HTTP reason (e.g., "OK"). This MUST not contain non-ASCII characters
     // (i.e., all chars must be in range 0x20-0x7E).
-    pReason: PUTF8Char;
+    pReason: PUtf8Char;
     // The response headers
     Headers: HTTP_RESPONSE_HEADERS;
     // number of elements in pEntityChunks[] array
@@ -525,19 +525,19 @@ type
     // will set both StatusCode and Reason
     // - OutStatus is a temporary variable which will be field with the
     // corresponding text
-    procedure SetStatus(code: integer; var OutStatus: RawUTF8);
+    procedure SetStatus(code: integer; var OutStatus: RawUtf8);
     // will set the content of the reponse, and ContentType header
     procedure SetContent(var DataChunk: HTTP_DATA_CHUNK_INMEMORY; const Content:
-      RawByteString; const ContentType: RawUTF8 = 'text/html');
+      RawByteString; const ContentType: RawUtf8 = 'text/html');
     /// will set all header values from lines
     // - Content-Type/Content-Encoding/Location will be set in KnownHeaders[]
     // - all other headers will be set in temp UnknownHeaders[]
-    procedure SetHeaders(P: PUTF8Char; var UnknownHeaders: HTTP_UNKNOWN_HEADERS);
+    procedure SetHeaders(P: PUtf8Char; var UnknownHeaders: HTTP_UNKNOWN_HEADERS);
     /// add one header value to the internal headers
     // - SetHeaders() method should have been called before to initialize the
     // internal UnknownHeaders[] array
-    function AddCustomHeader(P: PUTF8Char; var UnknownHeaders:
-      HTTP_UNKNOWN_HEADERS; ForceCustomHeader: boolean): PUTF8Char;
+    function AddCustomHeader(P: PUtf8Char; var UnknownHeaders:
+      HTTP_UNKNOWN_HEADERS; ForceCustomHeader: boolean): PUtf8Char;
   end;
 
   PHTTP_RESPONSE = ^HTTP_RESPONSE;
@@ -1170,12 +1170,12 @@ const
 procedure HttpApiInitialize;
 
 /// compute a http.sys compatible URI from https://root:port fields
-function RegURL(aRoot, aPort: RawUTF8; Https: boolean;
-  aDomainName: RawUTF8): SynUnicode;
+function RegURL(aRoot, aPort: RawUtf8; Https: boolean;
+  aDomainName: RawUtf8): SynUnicode;
 
 /// low-level adjustement of the HTTP_REQUEST headers
 function RetrieveHeaders(const Request: HTTP_REQUEST;
-  const RemoteIPHeadUp: RawUTF8; out RemoteIP: RawUTF8): RawUTF8;
+  const RemoteIPHeadUp: RawUtf8; out RemoteIP: RawUtf8): RawUtf8;
 
 
 { ******************** winhttp.dll Windows API Definitions }
@@ -1672,14 +1672,14 @@ function WinHTTP_WebSocketEnabled: boolean;
 procedure WebSocketApiInitialize;
 
 const
-  sProtocolHeader: RawUTF8 = 'SEC-WEBSOCKET-PROTOCOL';
+  sProtocolHeader: RawUtf8 = 'SEC-WEBSOCKET-PROTOCOL';
 
 /// retrieve an array of headers from WebSockets low-level information
 function HttpSys2ToWebSocketHeaders(const aHttpHeaders: HTTP_REQUEST_HEADERS): WEB_SOCKET_HTTP_HEADER_ARR;
 
 /// retrieve the linefeed separated text from WebSockets array of headers
 function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER;
-  const aHeadersCount: integer): RawUTF8;
+  const aHeadersCount: integer): RawUtf8;
 
 {$endif USEWININET}
 
@@ -1693,9 +1693,9 @@ uses
 
 { ************  http.sys / HTTP Server API low-level direct access }
 
-function RegURL(aRoot, aPort: RawUTF8; Https: boolean; aDomainName: RawUTF8): SynUnicode;
+function RegURL(aRoot, aPort: RawUtf8; Https: boolean; aDomainName: RawUtf8): SynUnicode;
 const
-  Prefix: array[boolean] of RawUTF8 = (
+  Prefix: array[boolean] of RawUtf8 = (
     'http://', 'https://');
 begin
   if aPort = '' then
@@ -1717,7 +1717,7 @@ begin
   else
     aRoot := '/'; // allow for instance 'http://*:2869/'
   aRoot := Prefix[Https] + aDomainName + ':' + aPort + aRoot;
-  result := UTF8ToSynUnicode(aRoot);
+  result := Utf8ToSynUnicode(aRoot);
 end;
 
 const
@@ -1725,7 +1725,7 @@ const
   REMOTEIP_HEADER: string[REMOTEIP_HEADERLEN] = 'RemoteIP: ';
 
 function RetrieveHeaders(const Request: HTTP_REQUEST;
-  const RemoteIPHeadUp: RawUTF8; out RemoteIP: RawUTF8): RawUTF8;
+  const RemoteIPHeadUp: RawUtf8; out RemoteIP: RawUtf8): RawUtf8;
 var
   i, L, Lip: integer;
   H: THttpHeader;
@@ -1875,7 +1875,7 @@ end;
 
 { HTTP_RESPONSE }
 
-procedure HTTP_RESPONSE.SetStatus(code: integer; var OutStatus: RawUTF8);
+procedure HTTP_RESPONSE.SetStatus(code: integer; var OutStatus: RawUtf8);
 begin
   StatusCode := code;
   OutStatus := StatusCodeToReason(code);
@@ -1884,7 +1884,7 @@ begin
 end;
 
 procedure HTTP_RESPONSE.SetContent(var DataChunk: HTTP_DATA_CHUNK_INMEMORY;
-  const Content: RawByteString; const ContentType: RawUTF8);
+  const Content: RawByteString; const ContentType: RawUtf8);
 begin
   FillcharFast(DataChunk, sizeof(DataChunk), 0);
   if ContentType <> '' then
@@ -1903,11 +1903,11 @@ end;
 
 {$ifndef NOXPOWEREDNAME}
 const
-  XPN: PUTF8Char = XPOWEREDNAME;
-  XPV: PUTF8Char = XPOWEREDVALUE;
+  XPN: PUtf8Char = XPOWEREDNAME;
+  XPV: PUtf8Char = XPOWEREDVALUE;
 {$endif NOXPOWEREDNAME}
 
-procedure HTTP_RESPONSE.SetHeaders(P: PUTF8Char;
+procedure HTTP_RESPONSE.SetHeaders(P: PUtf8Char;
   var UnknownHeaders: HTTP_UNKNOWN_HEADERS);
 begin
   Headers.pUnknownHeaders := pointer(UnknownHeaders);
@@ -1933,9 +1933,9 @@ begin
     until false;
 end;
 
-function HTTP_RESPONSE.AddCustomHeader(P: PUTF8Char;
+function HTTP_RESPONSE.AddCustomHeader(P: PUtf8Char;
   var UnknownHeaders: HTTP_UNKNOWN_HEADERS;
-  ForceCustomHeader: boolean): PUTF8Char;
+  ForceCustomHeader: boolean): PUtf8Char;
 const
   KNOWNHEADERS: array[reqCacheControl..respWwwAuthenticate] of PAnsiChar = (
     'CACHE-CONTROL:', 'CONNECTION:', 'DATE:', 'KEEP-ALIVE:', 'PRAGMA:',
@@ -1946,7 +1946,7 @@ const
     'PROXY-AUTHENTICATE:', 'RETRY-AFTER:', 'SERVER:', 'SET-COOKIE:', 'VARY:',
     'WWW-AUTHENTICATE:');
 var
-  UnknownName: PUTF8Char;
+  UnknownName: PUtf8Char;
   i: integer;
 begin
   if ForceCustomHeader then
@@ -2021,7 +2021,7 @@ begin
   end;
 end;
 
-procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUTF8);
+procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUtf8);
 var
   Buffer: array[0..511] of byte;
   BufferSize, UserSize, DomainSize: DWORD;
@@ -2181,7 +2181,7 @@ begin
 end;
 
 function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER; const
-  aHeadersCount: integer): RawUTF8;
+  aHeadersCount: integer): RawUtf8;
 var
   i: integer;
   h: PWEB_SOCKET_HTTP_HEADER;

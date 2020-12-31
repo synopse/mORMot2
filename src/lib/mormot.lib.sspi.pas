@@ -370,7 +370,7 @@ type
 // - if function returns True, client must send aOutData to server
 // and call function again width data, returned from servsr
 function ClientSSPIAuth(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
+  const aInData: RawByteString; const aSecKerberosSPN: RawUtf8;
   out aOutData: RawByteString): boolean;
 
 /// client-side authentication procedure with clear text password
@@ -385,8 +385,8 @@ function ClientSSPIAuth(var aSecContext: TSecContext;
 // - if function returns True, client must send aOutData to server
 // and call function again width data, returned from server
 function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aUserName: RawUTF8;
-  const aPassword: RawUTF8; out aOutData: RawByteString): boolean;
+  const aInData: RawByteString; const aUserName: RawUtf8;
+  const aPassword: RawUtf8; out aOutData: RawByteString): boolean;
 
 /// server-side authentication procedure
 // - aSecContext holds information between function calls
@@ -402,18 +402,18 @@ function ServerSSPIAuth(var aSecContext: TSecContext;
 // ServerSSPIAuth()
 // - aUserName contains authenticated user name
 procedure ServerSSPIAuthUser(var aSecContext: TSecContext;
-  out aUserName: RawUTF8);
+  out aUserName: RawUtf8);
 
 /// return the name of the security package that has been used
 // during the negotiation process
 // - aSecContext must be received from previous successful call to
 // ServerSSPIAuth() or ClientSSPIAuth()
-function SecPackageName(var aSecContext: TSecContext): RawUTF8;
+function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 
 /// force using aSecKerberosSPN for server identification
 // - aSecKerberosSPN is the Service Principal Name, as registered in domain,
 // e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
-procedure ClientForceSPN(const aSecKerberosSPN: RawUTF8);
+procedure ClientForceSPN(const aSecKerberosSPN: RawUtf8);
 
 /// force/unforce NTLM authentication instead of Negotiate for browser authenticaton
 // - use case: SPNs not configured properly in domain
@@ -439,7 +439,7 @@ var
   /// HTTP header to be set for SSPI authentication
   // - call ServerForceNTLM() to specialize this value to either
   // 'WWW-Authenticate: NTLM' or 'WWW-Authenticate: Negotiate';
-  SECPKGNAMEHTTPWWWAUTHENTICATE: RawUTF8;
+  SECPKGNAMEHTTPWWWAUTHENTICATE: RawUtf8;
 
   /// HTTP header pattern received for SSPI authentication
   // - call ServerForceNTLM() to specialize this value to either
@@ -743,13 +743,13 @@ begin
 end;
 
 function ClientSSPIAuth(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
+  const aInData: RawByteString; const aSecKerberosSPN: RawUtf8;
   out aOutData: RawByteString): boolean;
 var
   TargetName: PWideChar;
 begin
   if aSecKerberosSPN <> '' then
-    TargetName := pointer(UTF8ToSynUnicode(aSecKerberosSPN))
+    TargetName := pointer(Utf8ToSynUnicode(aSecKerberosSPN))
   else
   begin
     if ForceSecKerberosSPN <> '' then
@@ -762,8 +762,8 @@ begin
 end;
 
 function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aUserName: RawUTF8;
-  const aPassword: RawUTF8; out aOutData: RawByteString): boolean;
+  const aInData: RawByteString; const aUserName: RawUtf8;
+  const aPassword: RawUtf8; out aOutData: RawByteString): boolean;
 var
   UserPos: Integer;
   Domain, User, Password: SynUnicode;
@@ -774,14 +774,14 @@ begin
   if UserPos = 0 then
   begin
     Domain := '';
-    User := UTF8ToSynUnicode(aUserName);
+    User := Utf8ToSynUnicode(aUserName);
   end
   else
   begin
-    Domain := UTF8ToSynUnicode(Copy(aUserName, 1, UserPos - 1));
-    User := UTF8ToSynUnicode(Copy(aUserName, UserPos + 1, MaxInt));
+    Domain := Utf8ToSynUnicode(Copy(aUserName, 1, UserPos - 1));
+    User := Utf8ToSynUnicode(Copy(aUserName, UserPos + 1, MaxInt));
   end;
-  Password := UTF8ToSynUnicode(aPassword);
+  Password := Utf8ToSynUnicode(aPassword);
   AuthIdentity.Domain := pointer(Domain);
   AuthIdentity.DomainLength := Length(Domain);
   AuthIdentity.User := pointer(User);
@@ -860,7 +860,7 @@ begin
 end;
 
 procedure ServerSSPIAuthUser(var aSecContext: TSecContext;
-  out aUserName: RawUTF8);
+  out aUserName: RawUtf8);
 var
   Names: SecPkgContext_NamesW;
 begin
@@ -871,7 +871,7 @@ begin
   FreeContextBuffer(Names.sUserName);
 end;
 
-function SecPackageName(var aSecContext: TSecContext): RawUTF8;
+function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 var
   NegotiationInfo: TSecPkgContext_NegotiationInfo;
 begin
@@ -883,9 +883,9 @@ begin
   FreeContextBuffer(NegotiationInfo.PackageInfo);
 end;
 
-procedure ClientForceSPN(const aSecKerberosSPN: RawUTF8);
+procedure ClientForceSPN(const aSecKerberosSPN: RawUtf8);
 begin
-  ForceSecKerberosSPN := UTF8ToSynUnicode(aSecKerberosSPN);
+  ForceSecKerberosSPN := Utf8ToSynUnicode(aSecKerberosSPN);
 end;
 
 procedure ServerForceNTLM(ForceNTLM: boolean);

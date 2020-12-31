@@ -203,7 +203,7 @@ end;
 
 { TNetAddr }
 
-function TNetAddr.SetFrom(const address, addrport: RawUTF8;
+function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
 var
   h: PHostEnt;

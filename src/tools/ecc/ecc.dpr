@@ -53,11 +53,11 @@ uses
 
 function ProcessCommandLine: TECCCommandError;
 var
-  cmd: RawUTF8;
+  cmd: RawUtf8;
   main: TECCCommand;
   sw: ICommandLine;
 begin
-  cmd := StringToUTF8(ParamStr(1));
+  cmd := StringToUtf8(ParamStr(1));
   main := TECCCommand(
     GetEnumNameValueTrimmed(TypeInfo(TECCCommand), pointer(cmd), length(cmd)));
   if main = ecChain then

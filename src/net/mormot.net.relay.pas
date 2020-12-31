@@ -131,7 +131,7 @@ type
   /// TRelayFrame.payload for opcode = focRestPayload = focReservedF
   TRelayFrameRestPayload = packed record
     status: integer;
-    url, method, headers, contenttype: RawUTF8;
+    url, method, headers, contenttype: RawUtf8;
     content: RawByteString;
   end;
   TRelayFrameRestPayloadDynArray = array of TRelayFrameRestPayload;
@@ -164,16 +164,16 @@ type
   protected
     fOwner: TPublicRelay;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-      var Frame: TWebSocketFrame; const info: RawUTF8); override;
+      var Frame: TWebSocketFrame; const info: RawUtf8); override;
   public
     // implements mormot.net.ws.core's TWebSocketProtocolRest variants
-    function GetSubprotocols: RawUTF8; override;
-    function SetSubprotocol(const aProtocolName: RawUTF8): boolean; override;
+    function GetSubprotocols: RawUtf8; override;
+    function SetSubprotocol(const aProtocolName: RawUtf8): boolean; override;
   public
     /// initialize the protocol to be processed on a given TPublicRelay
     constructor Create(aOwner: TPublicRelay); reintroduce;
     /// used server-side for any new connection
-    function Clone(const aClientURI: RawUTF8): TWebSocketProtocol; override;
+    function Clone(const aClientURI: RawUtf8): TWebSocketProtocol; override;
   end;
 
   /// Public Relay to Private Relay connection, encapsulating connection ID
@@ -184,13 +184,13 @@ type
   protected
     fOwner: TPublicRelay;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-      var Frame: TWebSocketFrame; const info: RawUTF8); override;
+      var Frame: TWebSocketFrame; const info: RawUtf8); override;
   public
     /// initialize the protocol to be processed on a given TPublicRelay
     constructor Create(aOwner: TPublicRelay;
-      const aServerKey: RawUTF8); reintroduce;
+      const aServerKey: RawUtf8); reintroduce;
     /// used server-side for any new connection
-    function Clone(const aClientURI: RawUTF8): TWebSocketProtocol; override;
+    function Clone(const aClientURI: RawUtf8): TWebSocketProtocol; override;
   end;
 
   /// Private Relay to Public Relay connection, decapsulating connection ID
@@ -199,13 +199,13 @@ type
   protected
     fOwner: TPrivateRelay;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-      var Frame: TWebSocketFrame; const info: RawUTF8); override;
+      var Frame: TWebSocketFrame; const info: RawUtf8); override;
   public
     /// initialize the protocol to be processed on a given TPrivateRelay
     constructor Create(aOwner: TPrivateRelay;
-      const aRelayKey: RawUTF8); reintroduce;
+      const aRelayKey: RawUtf8); reintroduce;
     /// used server-side for any new connection
-    function Clone(const aClientURI: RawUTF8): TWebSocketProtocol; override;
+    function Clone(const aClientURI: RawUtf8): TWebSocketProtocol; override;
   end;
 
   /// Private Relay to local Server connection
@@ -214,14 +214,14 @@ type
   protected
     fOwner: TPrivateRelay;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-      var Frame: TWebSocketFrame; const info: RawUTF8); override;
+      var Frame: TWebSocketFrame; const info: RawUtf8); override;
   public
     /// initialize the protocol to be processed on a given TPrivateRelay
     // - the protocol is relayed from TRelayClientProtocol.ProcessIncomingFrame
     constructor Create(aOwner: TPrivateRelay;
-      const aProtocolName: RawUTF8); reintroduce;
+      const aProtocolName: RawUtf8); reintroduce;
     /// used server-side for any new connection
-    function Clone(const aClientURI: RawUTF8): TWebSocketProtocol; override;
+    function Clone(const aClientURI: RawUtf8): TWebSocketProtocol; override;
   end;
 
 
@@ -230,13 +230,13 @@ type
   TAbstractRelay = class(TSynPersistentLock)
   protected
     fLog: TSynLogClass;
-    fStarted: RawUTF8;
+    fStarted: RawUtf8;
     fSent, fReceived: QWord;
     fFrames, fValid, fInvalid, fRejected, fRestFrames: integer;
     fRestFrame: array of THttpServerRequest;
     fRestFrameCount: integer;
     fRestPending, fRestTimeoutMS: integer;
-    function EncapsulateAndSend(Process: TWebSocketProcess; const IP: RawUTF8;
+    function EncapsulateAndSend(Process: TWebSocketProcess; const IP: RawUtf8;
       const Frame: TWebSocketFrame; Connection: THttpServerConnectionID): boolean;
     function Decapsulate(Protocol: TWebSocketProtocol;
       var Frame: TWebSocketFrame): THttpServerConnectionID;
@@ -244,7 +244,7 @@ type
     constructor Create(aLog: TSynLogClass); reintroduce;
     destructor Destroy; override;
   published
-    property Started: RawUTF8
+    property Started: RawUtf8
       read fStarted;
     property Frames: integer
       read fFrames;
@@ -271,13 +271,13 @@ type
     fClients, fServer: TWebSocketServer;
     fServerConnected: TWebSocketProcess;
     fServerConnectedToLocalHost: boolean;
-    fStatCache: RawJSON;
+    fStatCache: RawJson;
     fStatTix: integer;
     function OnServerBeforeBody(const aURL,aMethod,aInHeaders, aInContentType,
-      aRemoteIP: RawUTF8; aContentLength: integer; aUseSSL: boolean): cardinal;
+      aRemoteIP: RawUtf8; aContentLength: integer; aUseSSL: boolean): cardinal;
     function OnServerRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     function OnClientsRequest(Ctxt: THttpServerRequestAbstract): cardinal;
-    function GetStats: RawJSON;
+    function GetStats: RawJson;
   public
     /// initialize the Public Relay
     // - WebSockets clients will connect to aClientsPort as usual
@@ -285,7 +285,7 @@ type
     // using the optional aServerKey for TWebSocketProtocol.SetEncryptKey(),
     // and aServerJWT to authenticate the incoming connection (owned by this instance)
     constructor Create(aLog: TSynLogClass;
-      const aClientsPort, aServerPort, aServerKey: RawUTF8;
+      const aClientsPort, aServerPort, aServerKey: RawUtf8;
       aServerJWT: TJWTAbstract; aClientsThreadPoolCount: integer = 2;
       aClientsKeepAliveTimeOut: integer = 30000); reintroduce;
     /// finalize the Public Relay server
@@ -307,7 +307,7 @@ type
   TServerClient = class(THttpClientWebSockets)
   protected
     Connection: THttpServerConnectionID;
-    OriginIP: RawUTF8;
+    OriginIP: RawUtf8;
   end;
   TServerClients = array of TServerClient;
 
@@ -316,7 +316,7 @@ type
   TPrivateRelay = class(TAbstractRelay)
   protected
     fRelayHost, fRelayPort, fRelayKey, fRelayCustomHeaders,
-    fServerHost, fServerPort, fServerRemoteIPHeader: RawUTF8;
+    fServerHost, fServerPort, fServerRemoteIPHeader: RawUtf8;
     fRelayClient: THttpClientWebSockets; // using TRelayClientProtocol
     fServers: TServerClients; // links to local ORM/SOA server
     fServersCount: integer;
@@ -325,12 +325,12 @@ type
     function FindServerClientByProcess(process: TWebSocketProcess;
       out index: integer): TServerClient;
     function NewServerClient(connection: THttpServerConnectionID;
-      const ipprotocoluri: RawUTF8): TServerClient;
+      const ipprotocoluri: RawUtf8): TServerClient;
   public
     /// initialize the Private Relay
     // - communication will be encapsulated and relayed to aServerHost/aServerPort
     // via a new TServerClient connection, using aServerWebSocketsURI,
-    // aServerWebSocketsEncryptionKey, aServerWebSocketsAJAX and
+    // aServerWebSocketsEncryptionKey, aServerWebSocketsAjax and
     // aServerWebSocketsCompression parameters as any regular client in the
     // local network - from the server point of view, those clients will
     // appear like local clients unless ServerRemoteIPHeader is set according
@@ -340,7 +340,7 @@ type
     // the Public Relay using aRelayHost/aRelayPort/aRelayKey/aRelayBearer
     constructor Create(aLog: TSynLogClass;
       const aRelayHost, aRelayPort, aRelayKey, aRelayBearer,
-      aServerHost, aServerPort, aServerRemoteIPHeader: RawUTF8); reintroduce;
+      aServerHost, aServerPort, aServerRemoteIPHeader: RawUtf8); reintroduce;
     /// check if the Public Relay did connect to this Private Relay instance
     function Connected: boolean;
     /// true if this Private Relay uses encryption with the Public Relay
@@ -354,10 +354,10 @@ type
     destructor Destroy; override;
   published
     /// Public Relay host address
-    property RelayHost: RawUTF8
+    property RelayHost: RawUtf8
       read fRelayHost;
     /// Public Relay host port
-    property RelayPort: RawUTF8
+    property RelayPort: RawUtf8
       read fRelayPort;
     /// true if the Private Relay is connected to the Public Relay
     property RelayConnected: boolean
@@ -366,10 +366,10 @@ type
     property RelayEncrypted: boolean
       read Encrypted;
     /// local processing server host address
-    property ServerHost: RawUTF8
+    property ServerHost: RawUtf8
       read fServerHost;
     /// local processing server host port
-    property ServerPort: RawUTF8
+    property ServerPort: RawUtf8
       read fServerPort;
     /// how many client connections are actually relayed via this instance
     property Connections: integer
@@ -404,7 +404,7 @@ end;
 { TRelayServerProtocol }
 
 procedure TRelayServerProtocol.ProcessIncomingFrame(Sender: TWebSocketProcess;
-  var Frame: TWebSocketFrame; const info: RawUTF8);
+  var Frame: TWebSocketFrame; const info: RawUtf8);
 var
   log: TSynLog;
   connection: THttpServerConnectionID;
@@ -422,7 +422,7 @@ begin
     case Frame.opcode of
       focContinuation:
         if fOwner.fServerConnected <> nil then
-          raise ERelayProtocol.CreateUTF8(
+          raise ERelayProtocol.CreateUtf8(
             '%: Only a single server instance is allowed', [self])
         else
         begin
@@ -438,7 +438,7 @@ begin
       focBinary:
         begin
           if fOwner.fServerConnected <> Sender then
-            raise ERelayProtocol.CreateUTF8(
+            raise ERelayProtocol.CreateUtf8(
               'Unexpected %.ProcessIncomingFrame Sender', [self]);
           connection := fOwner.Decapsulate(Sender.Protocol, Frame);
           if connection = 0 then
@@ -468,7 +468,7 @@ begin
                 else
                   inc(p);
             end;
-            raise ERelayProtocol.CreateUTF8(
+            raise ERelayProtocol.CreateUtf8(
               'Unexpected #$.% focRestPayload in %.ProcessIncomingFrame',
               [connection, self]);
           end
@@ -497,7 +497,7 @@ begin
           end;
         end;
     else
-      raise ERelayProtocol.CreateUTF8(
+      raise ERelayProtocol.CreateUtf8(
         'Unexpected % in %.ProcessIncomingFrame', [ToText(Frame.opcode)^, self]);
     end;
   finally
@@ -506,7 +506,7 @@ begin
 end;
 
 constructor TRelayServerProtocol.Create(aOwner: TPublicRelay;
-  const aServerKey: RawUTF8);
+  const aServerKey: RawUtf8);
 begin
   fOwner := aOwner;
   inherited Create('synopserelay', '');
@@ -515,7 +515,7 @@ begin
 end;
 
 function TRelayServerProtocol.Clone(
-  const aClientURI: RawUTF8): TWebSocketProtocol;
+  const aClientURI: RawUtf8): TWebSocketProtocol;
 begin
   result := TRelayServerProtocol.Create(fOwner, '');
   if fEncryption <> nil then
@@ -532,28 +532,28 @@ begin
 end;
 
 function TSynopseServerProtocol.Clone(
-  const aClientURI: RawUTF8): TWebSocketProtocol;
+  const aClientURI: RawUtf8): TWebSocketProtocol;
 begin
   result := TSynopseServerProtocol.Create(fOwner);
 end;
 
-function TSynopseServerProtocol.GetSubprotocols: RawUTF8;
+function TSynopseServerProtocol.GetSubprotocols: RawUtf8;
 begin
   // mormot.net.ws.core's TWebSocketProtocolRest variants
   result := 'synopsejson, synopsebin, synopsebinary';
 end;
 
 function TSynopseServerProtocol.SetSubprotocol(
-  const aProtocolName: RawUTF8): boolean;
+  const aProtocolName: RawUtf8): boolean;
 begin
   result := FindPropName(
     ['synopsejson', 'synopsebin', 'synopsebinary'], aProtocolName) >= 0;
 end;
 
 procedure TSynopseServerProtocol.ProcessIncomingFrame(Sender: TWebSocketProcess;
-  var Frame: TWebSocketFrame; const info: RawUTF8);
+  var Frame: TWebSocketFrame; const info: RawUtf8);
 var
-  ip: RawUTF8;
+  ip: RawUtf8;
 begin
   fOwner.fLog.Add.Log(sllTrace, 'ProcessIncomingFrame % %',
     [Sender.RemoteIP, ToText(Frame.opcode)^], self);
@@ -562,7 +562,7 @@ begin
     case Frame.opcode of
       focContinuation, focText, focBinary:
         if fOwner.fServerConnected = nil then
-          raise ERelayProtocol.CreateUTF8(
+          raise ERelayProtocol.CreateUtf8(
             '%.ProcessIncomingFrame: No server to relay to', [self]);
       focConnectionClose:
         if fOwner.fServerConnected = nil then
@@ -576,7 +576,7 @@ begin
     if not fOwner.EncapsulateAndSend(
         fOwner.fServerConnected, ip, Frame, Sender.OwnerConnection) and
        (Frame.opcode <> focConnectionClose) then
-      raise ERelayProtocol.CreateUTF8(
+      raise ERelayProtocol.CreateUtf8(
         '%.ProcessIncomingFrame: Error relaying % from #% % to server',
         [ToText(Frame.opcode)^, Sender.OwnerConnection, ip]);
   finally
@@ -588,7 +588,7 @@ end;
 { TRelayClientProtocol }
 
 constructor TRelayClientProtocol.Create(aOwner: TPrivateRelay;
-  const aRelayKey: RawUTF8);
+  const aRelayKey: RawUtf8);
 begin
   fOwner := aOwner;
   inherited Create('synopserelay', '');
@@ -596,13 +596,13 @@ begin
 end;
 
 function TRelayClientProtocol.Clone(
-  const aClientURI: RawUTF8): TWebSocketProtocol;
+  const aClientURI: RawUtf8): TWebSocketProtocol;
 begin
   result := nil; // not used on this client-side protocol
 end;
 
 procedure TRelayClientProtocol.ProcessIncomingFrame(Sender: TWebSocketProcess;
-  var Frame: TWebSocketFrame; const info: RawUTF8);
+  var Frame: TWebSocketFrame; const info: RawUtf8);
 var
   server, tobedeleted: TServerClient;
   connection: THttpServerConnectionID;
@@ -629,7 +629,7 @@ begin
       end;
     focBinary:
       if not fOwner.Connected then
-        raise ERelayProtocol.CreateUTF8(
+        raise ERelayProtocol.CreateUtf8(
           '%.ProcessIncomingFrame: not connected', [self]);
   else
     // relay meaningfull frames
@@ -642,7 +642,7 @@ begin
   begin
     if not RecordLoad(
         rest, Frame.payload, TypeInfo(TRelayFrameRestPayload)) then
-      raise ERelayProtocol.CreateUTF8(
+      raise ERelayProtocol.CreateUtf8(
         '%.ProcessIncomingFrame: focRestPayload payload', [self]);
     log.Log(sllTrace, 'ProcessIncomingFrame: relay #$.% %',
       [connection, rest.method], self);
@@ -664,7 +664,7 @@ begin
     except
       on E: Exception do
         SetRestFrame(Frame, HTTP_BADGATEWAY, '', '', '',
-          FormatUTF8('% failure: % %', [self, E, E.Message]), TEXT_CONTENT_TYPE);
+          FormatUtf8('% failure: % %', [self, E, E.Message]), TEXT_CONTENT_TYPE);
     end;
     fOwner.Safe.Lock;
     try
@@ -698,7 +698,7 @@ begin
             end;
           end
       else
-        raise ERelayProtocol.CreateUTF8('%.ProcessIncomingFrame #% %?',
+        raise ERelayProtocol.CreateUtf8('%.ProcessIncomingFrame #% %?',
           [self, connection, ToText(Frame.opcode)^]);
       end;
     case Frame.opcode of
@@ -722,20 +722,20 @@ end;
 { TSynopseClientProtocol }
 
 constructor TSynopseClientProtocol.Create(aOwner: TPrivateRelay;
-  const aProtocolName: RawUTF8);
+  const aProtocolName: RawUtf8);
 begin
   fOwner := aOwner;
   inherited Create(aProtocolName, '');
 end;
 
 function TSynopseClientProtocol.Clone(
-  const aClientURI: RawUTF8): TWebSocketProtocol;
+  const aClientURI: RawUtf8): TWebSocketProtocol;
 begin
   result := nil; // not used on this client-side only protocol
 end;
 
 procedure TSynopseClientProtocol.ProcessIncomingFrame(Sender: TWebSocketProcess;
-  var Frame: TWebSocketFrame; const info: RawUTF8);
+  var Frame: TWebSocketFrame; const info: RawUtf8);
 var
   server, tobedeleted: TServerClient;
   serverindex: integer;
@@ -749,7 +749,7 @@ begin
   try
     if (fOwner.fRelayClient = nil) and
        (Frame.opcode <> focConnectionClose) then
-      raise ERelayProtocol.CreateUTF8(
+      raise ERelayProtocol.CreateUtf8(
         '%.ProcessIncomingFrame: Public Relay down at %:%',
         [self, fOwner.fRelayHost, fOwner.fRelayPort]);
     server := fOwner.FindServerClientByProcess(Sender, serverindex);
@@ -759,14 +759,14 @@ begin
       if Frame.opcode = focConnectionClose then
         exit
       else
-        raise ERelayProtocol.CreateUTF8('%.ProcessIncomingFrame: Unexpected %',
+        raise ERelayProtocol.CreateUtf8('%.ProcessIncomingFrame: Unexpected %',
           [self, ToText(Frame.opcode)^]);
     if Frame.opcode = focConnectionClose then
       tobedeleted := server;
     if not fOwner.EncapsulateAndSend(fOwner.fRelayClient.WebSockets,
          server.OriginIP, Frame, server.Connection) and
        (tobedeleted = nil) then
-      raise ERelayProtocol.CreateUTF8(
+      raise ERelayProtocol.CreateUtf8(
         '%.ProcessIncomingFrame: Error sending to Public Relay %:%',
         [self, fOwner.fRelayHost, fOwner.fRelayPort]);
     if tobedeleted <> nil then
@@ -812,7 +812,7 @@ begin
 end;
 
 function TAbstractRelay.EncapsulateAndSend(Process: TWebSocketProcess;
-  const IP: RawUTF8; const Frame: TWebSocketFrame;
+  const IP: RawUtf8; const Frame: TWebSocketFrame;
   Connection: THttpServerConnectionID): boolean;
 var
   encapsulated: TRelayFrame;
@@ -897,7 +897,7 @@ end;
 { TPublicRelay }
 
 constructor TPublicRelay.Create(aLog: TSynLogClass;
-  const aClientsPort, aServerPort, aServerKey: RawUTF8; aServerJWT: TJWTAbstract;
+  const aClientsPort, aServerPort, aServerKey: RawUtf8; aServerJWT: TJWTAbstract;
   aClientsThreadPoolCount, aClientsKeepAliveTimeOut: integer);
 var
   log: ISynLog;
@@ -936,10 +936,10 @@ begin
 end;
 
 function TPublicRelay.OnServerBeforeBody(
-  const aURL, aMethod, aInHeaders, aInContentType, aRemoteIP: RawUTF8;
+  const aURL, aMethod, aInHeaders, aInContentType, aRemoteIP: RawUtf8;
   aContentLength: integer; aUseSSL: boolean): cardinal;
 var
-  bearer: RawUTF8;
+  bearer: RawUtf8;
   res: TJWTResult;
 begin
   if IdemPChar(pointer(aURL), '/STAT') then
@@ -992,17 +992,17 @@ begin
   log := fLog.Enter('OnClientsRequest #%.% % % %',  [Ctxt.ConnectionID,
     Ctxt.RequestID, Ctxt.RemoteIP, Ctxt.Method, Ctxt.URL], self);
   if Ctxt.RequestID = 0 then
-    raise ERelayProtocol.CreateUTF8('%.OnClientsRequest: RequestID=0', [self]);
+    raise ERelayProtocol.CreateUtf8('%.OnClientsRequest: RequestID=0', [self]);
   SetRestFrame(frame, 0,
     Ctxt.URL, Ctxt.Method, Ctxt.InHeaders, Ctxt.InContent, Ctxt.InContentType);
   Safe.Lock;
   try
     if fServerConnected = nil then
-      raise ERelayProtocol.CreateUTF8(
+      raise ERelayProtocol.CreateUtf8(
         '%.OnClientsRequest: No server to relay to', [self]);
     if not EncapsulateAndSend(
         fServerConnected, Ctxt.RemoteIP, frame, Ctxt.RequestID) then
-      raise ERelayProtocol.CreateUTF8(
+      raise ERelayProtocol.CreateUtf8(
         '%.OnClientsRequest: Error relaying from #% % to server',
         [Ctxt.ConnectionID, Ctxt.RemoteIP]);
     ObjArrayAddCount(fRestFrame, Ctxt, fRestFrameCount);
@@ -1051,10 +1051,10 @@ begin
   end;
 end;
 
-function TPublicRelay.GetStats: RawJSON;
+function TPublicRelay.GetStats: RawJson;
 var
   tix: integer;
-  ip: RawUTF8;
+  ip: RawUtf8;
 begin
   tix := GetTickCount64 shr 9; // 512 ms cache to avoid DoS attacks
   if tix <> fStatTix then
@@ -1064,7 +1064,7 @@ begin
       ip := 'not connected'
     else
       ip := fServerConnected.RemoteIP;
-    fStatCache := JSONReformat(JsonEncode([
+    fStatCache := JsonReformat(JsonEncode([
       'version', ExeVersion.Version.Detailed,
       'started', Started,
       'memory', TSynMonitorMemory.ToVariant,
@@ -1094,7 +1094,7 @@ end;
 
 constructor TPrivateRelay.Create(aLog: TSynLogClass;
   const aRelayHost, aRelayPort, aRelayKey, aRelayBearer,
-        aServerHost, aServerPort, aServerRemoteIPHeader: RawUTF8);
+        aServerHost, aServerPort, aServerRemoteIPHeader: RawUtf8);
 begin
   inherited Create(aLog);
   fRelayHost := aRelayHost;
@@ -1153,9 +1153,9 @@ begin
 end;
 
 function TPrivateRelay.NewServerClient(connection: THttpServerConnectionID;
-  const ipprotocoluri: RawUTF8): TServerClient;
+  const ipprotocoluri: RawUtf8): TServerClient;
 var
-  ip, protocol, url, header: RawUTF8;
+  ip, protocol, url, header: RawUtf8;
   log: ISynLog;
 begin
   // caller made fSafe.Lock

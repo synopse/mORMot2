@@ -44,13 +44,13 @@ type
     get: THttpSocket;
     post: TCrtSocket;
     stream: TCrtSocket;
-    session: RawUTF8;
+    session: RawUtf8;
   end;
 var
   streamer: TCrtSocket;
   req: array of TReq;
   rmax, r, i: PtrInt;
-  text: RawUTF8;
+  text: RawUtf8;
   log: ISynLog;
 begin
   // here we follow the steps and content stated by https://goo.gl/CX6VA3

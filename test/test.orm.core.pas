@@ -39,7 +39,7 @@ uses
   test.core.data;
 
 type
-  /// common ancestor for tables with digitally signed RawUTF8 content
+  /// common ancestor for tables with digitally signed RawUtf8 content
   // - content is signed according to a specific User Name and the digital
   // signature date and time
   // - internaly uses the very secure SHA-256 hashing algorithm for performing
@@ -49,8 +49,8 @@ type
     /// time and date of signature
     fSignatureTime: TTimeLog;
     /// hashed signature
-    fSignature: RawUTF8;
-    function ComputeSignature(const UserName, Content: RawByteString): RawUTF8;
+    fSignature: RawUtf8;
+    function ComputeSignature(const UserName, Content: RawByteString): RawUtf8;
   public
     /// time and date of signature
     // - if the signature is invalid, this field will contain numerical 1 value
@@ -66,21 +66,21 @@ type
     // - this property is defined here to allow inherited to just declared the name
     // in its published section:
     // ! property Signature;
-    property Signature: RawUTF8
+    property Signature: RawUtf8
       read fSignature write fSignature;
   public
     /// use this procedure to sign the supplied Content of this record for a
     // specified UserName, with the current Date and Time
     // - SHA-256 hashing is used internaly
     // - returns true if signed successfully (not already signed)
-    function SetAndSignContent(const UserName: RawUTF8; const Content:
+    function SetAndSignContent(const UserName: RawUtf8; const Content:
       RawByteString; ForcedSignatureTime: Int64 = 0): boolean;
     /// returns true if this record content is correct according to the
     // stored digital Signature
     function CheckSignature(const Content: RawByteString): boolean;
     /// retrieve the UserName who digitally signed this record
     // - returns '' if was not digitally signed
-    function SignedBy: RawUTF8;
+    function SignedBy: RawUtf8;
     /// reset the stored digital signature
     // - SetAndSignContent() can be called after this method
     procedure UnSign;
@@ -171,7 +171,7 @@ var
   Batch: TRestBatch;
   IDs: TIDDynArray;
   i, j, n: integer;
-  dummy, s: RawUTF8;
+  dummy, s: RawUtf8;
 
   procedure CheckVariantWith(const V: Variant; const i: Integer; const offset:
     integer = 0);
@@ -335,7 +335,7 @@ begin
           R.Free;
         end;
         s := Client.Orm.OneFieldValues(TOrmTest, 'Test',
-          FormatUTF8('ValWord=?', [], [110]));
+          FormatUtf8('ValWord=?', [], [110]));
         Check(s = '110');
         Check(Client.Orm.UpdateField(TOrmTest, 'Unicode', ['110'], 'ValWord', [120]),
           'update one field of a given record');
@@ -453,11 +453,11 @@ procedure TTestOrmCore._TOrm;
 var
   i: integer;
   P: PRttiProp;
-  s, s1, s2: RawUTF8;
+  s, s1, s2: RawUtf8;
   wa: WinAnsiString;
   M: TOrmModel;
   T, T2: TOrmTest;
-  s3: RawUTF8;
+  s3: RawUtf8;
   bin: RawByteString;
   valid: boolean;
   obj, v: Variant;
@@ -478,24 +478,24 @@ begin
   Check(not isSelect(' delete from toto'));
   Check(not isSelect('with recursive cnt(x) as (values(1) union all ' +
     'select x+1 from cnt where x<1000000) insert into toto select x from cnt'));
-  Check(GetTableNameFromSQLSelect('select a,b  from  titi', false) = 'titi');
-  Check(GetTableNameFromSQLSelect('select a,b  from  titi limit 10', false) = 'titi');
-  Check(GetTableNameFromSQLSelect('select a,b  from  titi,tutu', false) = 'titi');
-  Check(GetTableNameFromSQLSelect('select a,b  from  titi,tutu order by a',
+  Check(GetTableNameFromSqlSelect('select a,b  from  titi', false) = 'titi');
+  Check(GetTableNameFromSqlSelect('select a,b  from  titi limit 10', false) = 'titi');
+  Check(GetTableNameFromSqlSelect('select a,b  from  titi,tutu', false) = 'titi');
+  Check(GetTableNameFromSqlSelect('select a,b  from  titi,tutu order by a',
     false) = 'titi');
-  Check(GetTableNameFromSQLSelect('select a,b  from  titi,tutu', true) = '');
-  Check(RawUTF8ArrayToCSV(GetTableNamesFromSQLSelect(
+  Check(GetTableNameFromSqlSelect('select a,b  from  titi,tutu', true) = '');
+  Check(RawUtf8ArrayToCsv(GetTableNamesFromSqlSelect(
     'select a,b  from  titi where id=2')) = 'titi');
-  Check(RawUTF8ArrayToCSV(GetTableNamesFromSQLSelect(
+  Check(RawUtf8ArrayToCsv(GetTableNamesFromSqlSelect(
     'select a,b  from  titi,tutu')) = 'titi,tutu');
-  Check(RawUTF8ArrayToCSV(GetTableNamesFromSQLSelect(
+  Check(RawUtf8ArrayToCsv(GetTableNamesFromSqlSelect(
     'select a,b  from  titi, tutu ,  tata where a=2')) = 'titi,tutu,tata');
   T := TOrmTest.Create;
   M := TOrmModel.Create([TOrmTest]);
   for i := 0 to GetRttiProp(TOrmTest, P) - 1 do
   begin
-    Check(TOrmTest.OrmProps.Fields.IndexByName(LowerCase(P^.NameUTF8)) = i);
-    Check(T.OrmProps.Fields.ByRawUTF8Name(P^.NameUTF8) <> nil);
+    Check(TOrmTest.OrmProps.Fields.IndexByName(LowerCase(P^.NameUtf8)) = i);
+    Check(T.OrmProps.Fields.ByRawUtf8Name(P^.NameUtf8) <> nil);
     P := P^.Next;
   end;
   Check(TOrmTest.OrmProps.Fields.IndexByName('') < 0);
@@ -517,18 +517,18 @@ begin
   T2 := TOrmTest.Create;
   try
     Check(T.OrmProps = T.Orm);
-    Check(T.Orm.SQLTableName = 'Test');
-    Check(T.SQLTableName = 'Test');
+    Check(T.Orm.SqlTableName = 'Test');
+    Check(T.SqlTableName = 'Test');
     Check(GetCaptionFromClass(T.RecordClass) = 'Test');
-    s := T.GetSQLSet;
+    s := T.GetSqlSet;
     CheckEqual(s,
       'Int=0, Test='''', Unicode='''', Ansi='''', ValFloat=0, ValWord=0, ' +
       'ValDate='''', Next=0, ValVariant=null');
-    s := T.GetSQLValues;
+    s := T.GetSqlValues;
     CheckEqual(s,
       'Int,Test,Unicode,Ansi,ValFloat,ValWord,ValDate,Next,ValVariant ' +
       'VALUES (0,'''','''','''',0,0,'''',0,null)');
-    s := ObjectToJSON(T);
+    s := ObjectToJson(T);
     CheckEqual(s,
       '{"ID":0,"Int":0,"Test":"","Unicode":"","Ansi":"","ValFloat":0,' +
       '"ValWord":0,"ValDate":"","Next":null,"Data":null,"ValVariant":null}');
@@ -538,7 +538,7 @@ begin
     wa[9] := #$E0;
     wa[10] := #$E9;
     T.Ansi := wa;
-    T.Test := WinAnsiToUTF8(T.Ansi);
+    T.Test := WinAnsiToUtf8(T.Ansi);
     T.Unicode := Utf8DecodeToRawUnicode(T.Test);
     Check(RawUnicodeToWinAnsi(T.Unicode) = T.Ansi);
     // the same string is stored with some Delphi types, but will remain
@@ -546,16 +546,16 @@ begin
     T.Valfloat := 3.141592653;
     T.ValWord := 1203;
     T.ValVariant := 3.1416; // will be stored as TEXT, i.e. '3.1416'
-    s := T.GetSQLSet;
+    s := T.GetSqlSet;
     CheckEqual(s, 'Int=0, Test=''' + T.Test + ''', Unicode=''' + T.Test +
       ''', Ansi=''' + T.Test + ''', ValFloat=3.141592653, ValWord=1203, ' +
       'ValDate=''2009-03-10T21:19:36'', Next=0, ValVariant=''3.1416''');
-    s := T.GetSQLValues;
+    s := T.GetSqlValues;
     CheckEqual(s,
       'Int,Test,Unicode,Ansi,ValFloat,ValWord,ValDate,Next,ValVariant VALUES (0,''' +
       T.Test + ''',''' + T.Test + ''',''' + T.Test +
       ''',3.141592653,1203,''2009-03-10T21:19:36'',0,''3.1416'')');
-    s := T.GetJSONValues(false, true, ooSelect);
+    s := T.GetJsonValues(false, true, ooSelect);
     s1 := '{"fieldCount":10' +
       ',"values":["RowID","Int","Test","Unicode","Ansi",' +
       '"ValFloat","ValWord","ValDate","Next","ValVariant",0,0,"' +
@@ -566,29 +566,29 @@ begin
     Check(not T.SameValues(T2));
     T2.FillFrom(s);
     Check(T.SameValues(T2));
-    Check(T2.GetJSONValues(false, true, ooSelect) = s);
+    Check(T2.GetJsonValues(false, true, ooSelect) = s);
     T.IDValue := 10;
-    s := T.GetJSONValues(true, true, ooSelect);
+    s := T.GetJsonValues(true, true, ooSelect);
     {$ifdef VERBOSE}    writeln(s); {$endif}
     T2.ClearProperties;
     Check(not T.SameValues(T2));
     T2.FillFrom(s);
     Check(T.SameValues(T2));
-    Check(T2.GetJSONValues(true, true, ooSelect) = s);
+    Check(T2.GetJsonValues(true, true, ooSelect) = s);
     obj := T.GetSimpleFieldsAsDocVariant;
-    s3 := VariantSaveJSON(obj);
+    s3 := VariantSaveJson(obj);
     Check(s3 = s);
-    s := ObjectToJSON(T);
+    s := ObjectToJson(T);
     CheckEqual(s, '{"ID":10,"Int":0,"Test":"' + T.Test + '","Unicode":"' + T.Test
       + '","Ansi":"' + T.Test + '","ValFloat":3.141592653,"ValWord":1203,' +
       '"ValDate":"2009-03-10T21:19:36","Next":null,"Data":null,"ValVariant":3.1416}');
     T2.ClearProperties;
     Check(not T.SameValues(T2));
-    Check(JSONToObject(T2, pointer(s), valid) <> nil);
+    Check(JsonToObject(T2, pointer(s), valid) <> nil);
     Check(valid);
     Check(T.SameValues(T2));
     T.Int := 1234567890123456;
-    s := T.GetJSONValues(true, true, ooSelect);
+    s := T.GetJsonValues(true, true, ooSelect);
     CheckEqual(s, '{"RowID":10,"Int":1234567890123456,"Test":"' + T.Test +
       '","Unicode":"' + T.Test + '","Ansi":"' + T.Test +
       '","ValFloat":3.141592653,"ValWord":1203,' +
@@ -597,38 +597,38 @@ begin
     Check(not T.SameValues(T2));
     T2.FillFrom(s);
     Check(T.SameValues(T2));
-    Check(T2.GetJSONValues(true, true, ooSelect) = s);
+    Check(T2.GetJsonValues(true, true, ooSelect) = s);
     Check(T2.Int = 1234567890123456);
-    T.ValVariant := UTF8ToSynUnicode(T.Test);
-    s := T.GetJSONValues(true, true, ooSelect);
+    T.ValVariant := Utf8ToSynUnicode(T.Test);
+    s := T.GetJsonValues(true, true, ooSelect);
     s1 := '{"RowID":10,"Int":1234567890123456,"Test":"' + T.Test +
       '","Unicode":"' + T.Test + '","Ansi":"' + T.Test +
       '","ValFloat":3.141592653,"ValWord":1203,' +
       '"ValDate":"2009-03-10T21:19:36","Next":0';
     CheckEqual(s, s1 + ',"ValVariant":"' + T.Test + '"}');
-    s := T.GetSQLSet;
+    s := T.GetSqlSet;
     s2 := 'Int=1234567890123456, Test=''' + T.Test + ''', Unicode=''' + T.Test +
       ''', Ansi=''' + T.Test + ''', ValFloat=3.141592653, ValWord=1203, ' +
       'ValDate=''2009-03-10T21:19:36'', Next=0';
     Check(s = s2 + ', ValVariant=''' + T.Test + '''');
-    T.ValVariant := _JSON('{name:"John",int:1234}');
-    s := T.GetSQLSet;
+    T.ValVariant := _Json('{name:"John",int:1234}');
+    s := T.GetSqlSet;
     Check(s = s2 + ', ValVariant=''{"name":"John","int":1234}''',
       'JSON object as text');
-    s := T.GetJSONValues(true, true, ooSelect);
+    s := T.GetJsonValues(true, true, ooSelect);
     Check(s = s1 + ',"ValVariant":{"name":"John","int":1234}}');
     T2.ClearProperties;
     Check(not T.SameValues(T2));
     T2.FillFrom(s);
-    s := VariantSaveMongoJSON(T2.ValVariant, modMongoStrict);
-    CheckEqual(s, VariantSaveMongoJSON(T.ValVariant, modMongoStrict));
+    s := VariantSaveMongoJson(T2.ValVariant, modMongoStrict);
+    CheckEqual(s, VariantSaveMongoJson(T.ValVariant, modMongoStrict));
     Check(T.SameValues(T2));
-    s := T.GetJSONValues(true, true, ooSelect);
-    Check(T2.GetJSONValues(true, true, ooSelect) = s);
-    s := GetJSONObjectAsSQL(s, true, false, 0, true);
+    s := T.GetJsonValues(true, true, ooSelect);
+    Check(T2.GetJsonValues(true, true, ooSelect) = s);
+    s := GetJsonObjectAsSql(s, true, false, 0, true);
     CheckEqual(s, StringReplaceAll(s2, ', ', ',') +
       ',ValVariant=''{"name":"John","int":1234}''');
-    s := ObjectToJSON(T);
+    s := ObjectToJson(T);
     delete(s1, 3, 3); // "RowID":10 -> "ID":10
     s := StringReplaceAll(s, 'null', '0');
     CheckEqual(s, s1 + ',"Data":0,"ValVariant":{"name":"John","int":1234}}');
@@ -642,7 +642,7 @@ begin
     bin := VariantSave(T.ValVariant);
     Check(bin <> '');
     Check(VariantLoad(v, pointer(bin), @JSON_OPTIONS[true]) <> nil);
-    CheckEqual(VariantSaveMongoJSON(v, modMongoStrict), '{"name":"John","int":1234}');
+    CheckEqual(VariantSaveMongoJson(v, modMongoStrict), '{"name":"John","int":1234}');
   finally
     M.Free;
     T2.Free;
@@ -653,7 +653,7 @@ end;
 
 { TOrmSigned }
 
-function TOrmSigned.ComputeSignature(const UserName, Content: RawByteString): RawUTF8;
+function TOrmSigned.ComputeSignature(const UserName, Content: RawByteString): RawUtf8;
 var
   SHA: TSHA256;
   Digest: TSHA256Digest;
@@ -670,7 +670,7 @@ end;
 function TOrmSigned.CheckSignature(const Content: RawByteString): boolean;
 var
   i: integer;
-  sign: RawUTF8;
+  sign: RawUtf8;
 begin
   result := false;
   if self = nil then
@@ -683,7 +683,7 @@ begin
     result := true;
 end;
 
-function TOrmSigned.SetAndSignContent(const UserName: RawUTF8;
+function TOrmSigned.SetAndSignContent(const UserName: RawUtf8;
   const Content: RawByteString; ForcedSignatureTime: Int64): boolean;
 begin
   result := (fSignature = '') and (fSignatureTime = 0);
@@ -696,7 +696,7 @@ begin
   fSignature := UserName + '/' + ComputeSignature(UserName, Content);
 end;
 
-function TOrmSigned.SignedBy: RawUTF8;
+function TOrmSigned.SignedBy: RawUtf8;
 var
   i: integer;
 begin

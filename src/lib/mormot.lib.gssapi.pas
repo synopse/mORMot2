@@ -355,7 +355,7 @@ procedure GSSEnlistMechsSupported(MechList: TStringList);
 // - if function returns True, client must send aOutData to server
 // and call function again with data, returned from server
 function ClientSSPIAuth(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
+  const aInData: RawByteString; const aSecKerberosSPN: RawUtf8;
   out aOutData: RawByteString): boolean;
 
 /// Client-side authentication procedure with clear text password.
@@ -371,8 +371,8 @@ function ClientSSPIAuth(var aSecContext: TSecContext;
 // and call function again with data, returned from server
 // - you must use ClientForceSPN to specify server SPN before call
 function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aUserName: RawUTF8;
-  const aPassword: RawUTF8; out aOutData: RawByteString): boolean;
+  const aInData: RawByteString; const aUserName: RawUtf8;
+  const aPassword: RawUtf8; out aOutData: RawByteString): boolean;
 
 /// Server-side authentication procedure
 // - aSecContext holds information between function calls
@@ -386,23 +386,23 @@ function ServerSSPIAuth(var aSecContext: TSecContext;
 /// Server-side function that returns authenticated user name
 // - aSecContext must be received from previous successful call to ServerSSPIAuth
 // - aUserName contains authenticated user name
-procedure ServerSSPIAuthUser(var aSecContext: TSecContext; out aUserName: RawUTF8);
+procedure ServerSSPIAuthUser(var aSecContext: TSecContext; out aUserName: RawUtf8);
 
 /// Returns name of the security package that has been used with the negotiation process
 // - aSecContext must be received from previous success call to ServerSSPIAuth
 // or ClientSSPIAuth
-function SecPackageName(var aSecContext: TSecContext): RawUTF8;
+function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 
 /// Force using aSecKerberosSPN for server identification
 // - aSecKerberosSPN is the Service Principal Name, registered in domain, e.g.
 // 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
-procedure ClientForceSPN(const aSecKerberosSPN: RawUTF8);
+procedure ClientForceSPN(const aSecKerberosSPN: RawUtf8);
 
 /// Force loading server credentials from specified keytab file
 // - by default, clients may authenticate to any service principal
 // in the default keytab (/etc/krb5.keytab or the value of the KRB5_KTNAME
 // environment variable)
-procedure ServerForceKeytab(const aKeytab: RawUTF8);
+procedure ServerForceKeytab(const aKeytab: RawUtf8);
 
 const
   /// HTTP header to be set for authentication
@@ -425,10 +425,10 @@ const
 // ServerDomainMap.Add('CORP.ABC.COM', 'ABCCORP') change conversion for previuos
 // example to 'ABCCORP\user1'
 // - use only if automatic conversion (truncate on first dot) do it wrong
-procedure ServerDomainMapRegister(const aOld, aNew: RawUTF8);
+procedure ServerDomainMapRegister(const aOld, aNew: RawUtf8);
 
 /// help converting fully qualified domain names to NT4-style NetBIOS names
-procedure ServerDomainMapUnRegister(const aOld, aNew: RawUTF8);
+procedure ServerDomainMapUnRegister(const aOld, aNew: RawUtf8);
 
 /// help converting fully qualified domain names to NT4-style NetBIOS names
 procedure ServerDomainMapUnRegisterAll;
@@ -680,10 +680,10 @@ end;
 { ****************** High-Level Client and Server Authentication using GSSAPI }
 
 var
-  ForceSecKerberosSPN: RawUTF8;
+  ForceSecKerberosSPN: RawUtf8;
 
 function ClientSSPIAuthWorker(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
+  const aInData: RawByteString; const aSecKerberosSPN: RawUtf8;
   out aOutData: RawByteString): boolean;
 var
   TargetName: gss_name_t;
@@ -724,11 +724,11 @@ begin
 end;
 
 function ClientSSPIAuth(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
+  const aInData: RawByteString; const aSecKerberosSPN: RawUtf8;
   out aOutData: RawByteString): boolean;
 var
   MajStatus, MinStatus: cardinal;
-  SecKerberosSPN: RawUTF8;
+  SecKerberosSPN: RawUtf8;
 begin
   RequireGSSAPI;
   if aSecContext.CredHandle = nil then
@@ -748,7 +748,7 @@ begin
 end;
 
 function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aUserName, aPassword: RawUTF8;
+  const aInData: RawByteString; const aUserName, aPassword: RawUtf8;
   out aOutData: RawByteString): boolean;
 var
   MajStatus, MinStatus: cardinal;
@@ -810,10 +810,10 @@ end;
 
 var
   ServerDomainMap: array of record
-    Old, New: RawUTF8;
+    Old, New: RawUtf8;
   end;
 
-function ServerDomainFind(const aOld: RawUTF8): PtrInt;
+function ServerDomainFind(const aOld: RawUtf8): PtrInt;
 begin
   for result := 0 to length(ServerDomainMap) - 1 do
     with ServerDomainMap[result] do
@@ -823,7 +823,7 @@ begin
   result := -1;
 end;
 
-procedure ServerDomainMapRegister(const aOld, aNew: RawUTF8);
+procedure ServerDomainMapRegister(const aOld, aNew: RawUtf8);
 var
   i: PtrInt;
 begin
@@ -837,7 +837,7 @@ begin
   ServerDomainMap[i].New := aNew;
 end;
 
-procedure ServerDomainMapUnRegister(const aOld, aNew: RawUTF8);
+procedure ServerDomainMapUnRegister(const aOld, aNew: RawUtf8);
 var
   i: PtrInt;
 begin
@@ -852,11 +852,11 @@ begin
   ServerDomainMap := nil;
 end;
 
-procedure ConvertUserName(P: PUTF8Char; Len: PtrUInt; out aUserName: RawUTF8);
+procedure ConvertUserName(P: PUtf8Char; Len: PtrUInt; out aUserName: RawUtf8);
 var
-  DomainStart, DomainEnd: PUTF8Char;
+  DomainStart, DomainEnd: PUtf8Char;
   DomainLen, i: PtrInt;
-  Domain, User: RawUTF8;
+  Domain, User: RawUtf8;
 begin
   // Ensure GSSAPI buffer is null-terminated
   Assert(P[Len] = #0);
@@ -891,7 +891,7 @@ begin
 end;
 
 procedure ServerSSPIAuthUser(var aSecContext: TSecContext;
-  out aUserName: RawUTF8);
+  out aUserName: RawUtf8);
 var
   MajStatus, MinStatus: cardinal;
   SrcName: gss_name_t;
@@ -911,14 +911,14 @@ begin
     GSSCheck(MajStatus, MinStatus,
       'Failed to obtain name for authenticated user');
     if gss_compare_oid(NameType, GSS_KRB5_NT_PRINCIPAL_NAME) then
-      ConvertUserName(PUTF8Char(OutBuf.value), OutBuf.length, aUserName);
+      ConvertUserName(PUtf8Char(OutBuf.value), OutBuf.length, aUserName);
     GSSAPI.gss_release_buffer(MinStatus, OutBuf);
   finally
     GSSAPI.gss_release_name(MinStatus, SrcName);
   end;
 end;
 
-function SecPackageName(var aSecContext: TSecContext): RawUTF8;
+function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 var
   MajStatus, MinStatus: cardinal;
   MechType: gss_OID;
@@ -938,12 +938,12 @@ begin
   GSSAPI.gss_release_buffer(MinStatus, OutBuf);
 end;
 
-procedure ClientForceSPN(const aSecKerberosSPN: RawUTF8);
+procedure ClientForceSPN(const aSecKerberosSPN: RawUtf8);
 begin
   ForceSecKerberosSPN := aSecKerberosSPN;
 end;
 
-procedure ServerForceKeytab(const aKeytab: RawUTF8);
+procedure ServerForceKeytab(const aKeytab: RawUtf8);
 begin
   if Assigned(GSSAPI.krb5_gss_register_acceptor_identity) then
     GSSAPI.krb5_gss_register_acceptor_identity(pointer(aKeytab));

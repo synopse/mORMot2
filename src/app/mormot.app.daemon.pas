@@ -155,7 +155,7 @@ begin
   inherited Create;
   fLog := LOG_STACKTRACE + [sllNewRun];
   fLogRotateFileCount := 2;
-  fServiceName := UTF8ToString(ExeVersion.ProgramName);
+  fServiceName := Utf8ToString(ExeVersion.ProgramName);
   fServiceDisplayName := fServiceName;
   {$ifndef MSWINDOWS}
   fLogPath := GetSystemPath(spLog); // /var/log or $home
@@ -224,7 +224,7 @@ begin
     fn := {$ifdef MSWINDOWS}fWorkFolderName{$else}'/etc/'{$endif};
   fn :=  EnsureDirectoryExists(fn);
   if aSettingsName = '' then
-    fn := fn + UTF8ToString(ExeVersion.ProgramName)
+    fn := fn + Utf8ToString(ExeVersion.ProgramName)
   else
     fn := fn + aSettingsName;
   fSettings.LoadFromFile(fn + aSettingsExt);
@@ -287,9 +287,9 @@ const
     'H', 'I', 'R', 'F', 'U', 'C', 'K');
 var
   cmd, c: TExecuteCommandLineCmd;
-  p: PUTF8Char;
+  p: PUtf8Char;
   ch: AnsiChar;
-  param: RawUTF8;
+  param: RawUtf8;
   exe: RawByteString;
   log: TSynLog;
   {$ifdef MSWINDOWS}
@@ -342,14 +342,14 @@ var
       writeln(spaces, custom);
   end;
 
-  function cmdText: RawUTF8;
+  function cmdText: RawUtf8;
   begin
     result := GetEnumNameTrimed(TypeInfo(TExecuteCommandLineCmd), ord(cmd));
   end;
 
   procedure Show(Success: boolean);
   var
-    msg: RawUTF8;
+    msg: RawUtf8;
     error: integer;
   begin
     WriteCopyright;
@@ -361,14 +361,14 @@ var
     else
     begin
       error := GetLastError;
-      msg := FormatUTF8('Error % [%] occured with',
-        [error, StringToUTF8(SysErrorMessage(error))]);
+      msg := FormatUtf8('Error % [%] occured with',
+        [error, StringToUtf8(SysErrorMessage(error))]);
       TextColor(ccLightRed);
       ExitCode := 1; // notify error to caller batch
     end;
-    msg := FormatUTF8('% [%] (%) on Service ''%''',
+    msg := FormatUtf8('% [%] (%) on Service ''%''',
       [msg, param, cmdText, fSettings.ServiceName]);
-    writeln(UTF8ToConsole(msg));
+    writeln(Utf8ToConsole(msg));
     TextColor(ccLightGray);
     log.Log(sllDebug, 'CommandLine: %', [msg], self);
   end;
@@ -378,7 +378,7 @@ begin
      (fSettings = nil) then
     exit;
   log := nil;
-  param := TrimU(StringToUTF8(paramstr(1)));
+  param := TrimU(StringToUtf8(paramstr(1)));
   cmd := cNone;
   if (param <> '') and
      (param[1] in ['/', '-']) then

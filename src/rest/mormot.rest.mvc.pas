@@ -67,7 +67,7 @@ type
     /// the low-level content of this View
     Content: RawByteString;
     /// the MIME content type of this View
-    ContentType: RawUTF8;
+    ContentType: RawUtf8;
     /// some additional rendering information about this View
     Flags: TMVCViewFlags;
   end;
@@ -80,7 +80,7 @@ type
     fViewTemplateFolder, fViewStaticFolder: TFileName;
     fFactoryErrorIndex: integer;
     fViewFlags: TMVCViewFlags;
-    fViewGenerationTimeTag: RawUTF8;
+    fViewGenerationTimeTag: RawUtf8;
     procedure SetViewTemplateFolder(const aFolder: TFileName);
     /// overriden implementations should return the rendered content
     procedure Render(methodIndex: Integer; const Context: variant;
@@ -103,7 +103,7 @@ type
     /// any occurence of this tag in a rendered view will be converted
     // into the rendering time in microseconds
     // - equals '[[GENERATION_TIME_TAG]]' by default
-    property ViewGenerationTimeTag: RawUTF8
+    property ViewGenerationTimeTag: RawUtf8
       read fViewGenerationTimeTag write fViewGenerationTimeTag;
   end;
 
@@ -114,9 +114,9 @@ type
     /// where the mustache template files are stored
     // - if not set, will search in a 'Views' folder under the current executable
     Folder: TFileName;
-    /// the file extensions to search in the given Folder, specified as CSV
+    /// the file extensions to search in the given Folder, specified as Csv
     // - if not set, will search for 'html,json,css'
-    CSVExtensions: TFileName;
+    CsvExtensions: TFileName;
     /// defines if the view files should be checked for modification
     // - any value would automatically update the rendering template, if the file
     // changed after a given number of seconds - default is 5 seconds
@@ -138,13 +138,13 @@ type
     fViewHelpers: TSynMustacheHelpers;
     fViews: array of record // follows fFactory.Methods[]
       Mustache: TSynMustache;
-      Template: RawUTF8;
+      Template: RawUtf8;
       MethodName: TFileName;
       SearchPattern: TFileName;
       FileName: TFileName;
       ShortFileName: TFileName;
       FileExt: TFileName;
-      ContentType: RawUTF8;
+      ContentType: RawUtf8;
       Locker: IAutoLocker;
       FileAgeLast: PtrUInt;
       FileAgeCheckTick: Int64;
@@ -154,7 +154,7 @@ type
     /// search for template files in ViewTemplateFolder
     function FindTemplates(const Mask: TFileName): TFileNameDynArray; virtual;
     /// return the template file contents
-    function GetTemplate(const aFileName: TFileName): RawUTF8; virtual;
+    function GetTemplate(const aFileName: TFileName): RawUtf8; virtual;
     /// return the template file date and time
     function GetTemplateAge(const aFileName: TFileName): PtrUInt; virtual;
     /// overriden implementations should return the rendered content
@@ -181,7 +181,7 @@ type
       aExtensionForNotExistingTemplate: TFileName = ''); overload;
     /// define the supplied Expression Helpers definition
     // - returns self so that may be called in a fluent interface
-    function RegisterExpressionHelpers(const aNames: array of RawUTF8;
+    function RegisterExpressionHelpers(const aNames: array of RawUtf8;
       const aEvents: array of TSynMustacheHelperEvent): TMVCViewsMustache;
     /// define Expression Helpers for some ORM tables
     // - e.g. to read a TMyOrm from its ID value and put its fields
@@ -252,17 +252,17 @@ type
       PExpires: PCardinal = nil): integer; virtual; abstract;
     /// retrieve the session information as a JSON object
     // - returned as a TDocVariant, including any associated record Data
-    // - will call CheckAndRetrieve() then RecordSaveJSON() and _JsonFast()
+    // - will call CheckAndRetrieve() then RecordSaveJson() and _JsonFast()
     function CheckAndRetrieveInfo(
       PRecordDataTypeInfo: PRttiInfo): variant; virtual;
     /// clear the session
     procedure Finalize; virtual; abstract;
     /// return all session generation information as ready-to-be stored string
     // - to be retrieved via LoadContext, e.g. after restart
-    function SaveContext: RawUTF8; virtual; abstract;
+    function SaveContext: RawUtf8; virtual; abstract;
     /// restore session generation information from SaveContext format
     // - returns TRUE on success
-    function LoadContext(const Saved: RawUTF8): boolean; virtual; abstract;
+    function LoadContext(const Saved: RawUtf8): boolean; virtual; abstract;
   end;
 
   /// information used by TMVCSessionWithCookies for cookie generation
@@ -271,7 +271,7 @@ type
   // are available after server restart
   TMVCSessionWithCookiesContext = packed record
     /// the cookie name, used for storage on the client side
-    CookieName: RawUTF8;
+    CookieName: RawUtf8;
     /// an increasing counter, to implement unique session ID
     SessionSequence: integer;
     /// secret information, used for HMAC digital signature of cookie content
@@ -298,10 +298,10 @@ type
   protected
     fContext: TMVCSessionWithCookiesContext;
     // overriden e.g. in TMVCSessionWithRestServer using ServiceContext threadvar
-    function GetCookie: RawUTF8; virtual; abstract;
-    procedure SetCookie(const cookie: RawUTF8); virtual; abstract;
+    function GetCookie: RawUtf8; virtual; abstract;
+    procedure SetCookie(const cookie: RawUtf8); virtual; abstract;
     procedure Crypt(P: PAnsiChar; bytes: integer);
-    function CheckAndRetrieveFromCookie(const cookie: RawUTF8;
+    function CheckAndRetrieveFromCookie(const cookie: RawUtf8;
       PRecordData, PRecordTypeInfo: PRttiInfo; PExpires: PCardinal): integer;
   public
     /// create an instance of this ViewModel implementation class
@@ -327,14 +327,14 @@ type
     procedure Finalize; override;
     /// return all cookie generation information as base64 encoded text
     // - to be retrieved via LoadContext
-    function SaveContext: RawUTF8; override;
+    function SaveContext: RawUtf8; override;
     /// restore cookie generation information from SaveContext text format
     // - returns TRUE after checking the crc and unserializing the supplied data
     // - WARNING: if the unerlying record type structure changed (i.e. any
     // field is modified or added), restoration will lead to data corruption of
     // low-level binary content, then trigger unexpected GPF: if you change the
     // record type definition, do NOT use LoadContext - and reset all cookies
-    function LoadContext(const Saved: RawUTF8): boolean; override;
+    function LoadContext(const Saved: RawUtf8): boolean; override;
     /// direct access to the low-level information used for cookies generation
     // - use SaveContext and LoadContext methods to persist this information
     // before server shutdown, so that the cookies can be re-used after restart
@@ -342,7 +342,7 @@ type
       read fContext write fContext;
     /// you can customize the cookie name
     // - default is 'mORMot', and cookie is restricted to Path=/RestRoot
-    property CookieName: RawUTF8
+    property CookieName: RawUtf8
       read fContext.CookieName write fContext.CookieName;
   end;
 
@@ -350,8 +350,8 @@ type
   // - will use ServiceContext.Request threadvar to access the client cookies
   TMVCSessionWithRestServer = class(TMVCSessionWithCookies)
   protected
-    function GetCookie: RawUTF8; override;
-    procedure SetCookie(const cookie: RawUTF8); override;
+    function GetCookie: RawUtf8; override;
+    procedure SetCookie(const cookie: RawUtf8); override;
   end;
 
   /// implement a single ViewModel/Controller in-memory session
@@ -359,9 +359,9 @@ type
   // - do NOT use it with multiple clients, e.g. from HTTP remote access
   TMVCSessionSingle = class(TMVCSessionWithCookies)
   protected
-    fSingleCookie: RawUTF8;
-    function GetCookie: RawUTF8; override;
-    procedure SetCookie(const cookie: RawUTF8); override;
+    fSingleCookie: RawUtf8;
+    function GetCookie: RawUtf8; override;
+    procedure SetCookie(const cookie: RawUtf8); override;
   end;
 
 
@@ -379,10 +379,10 @@ type
   // so that TServiceMethod.InternalExecute() would handle it directly
   TMVCAction = record
     /// the method name to be executed
-    RedirectToMethodName: RawUTF8;
+    RedirectToMethodName: RawUtf8;
     /// may contain a JSON object which will be used to specify parameters
     // to the specified method
-    RedirectToMethodParameters: RawUTF8;
+    RedirectToMethodParameters: RawUtf8;
     /// which HTTP Status code should be returned
     // - if RedirectMethodName is set, will return 307 HTTP_TEMPORARYREDIRECT
     // by default, but you can set here the expected HTTP Status code, e.g.
@@ -402,11 +402,11 @@ type
     fApplication: TMVCApplication;
     fMethodIndex: integer;
     fMethodReturnsAction: boolean;
-    fInput: RawUTF8;
+    fInput: RawUtf8;
     procedure Renders(var outContext: variant; status: cardinal;
       forcesError: boolean); virtual; abstract;
     function Redirects(const action: TMVCAction): boolean; virtual;
-    procedure CommandError(const ErrorName: RawUTF8; const ErrorValue: variant;
+    procedure CommandError(const ErrorName: RawUtf8; const ErrorValue: variant;
       ErrorCode: Integer); virtual;
   public
     /// initialize a rendering process for a given MVC Application/ViewModel
@@ -416,7 +416,7 @@ type
     procedure ExecuteCommand(aMethodIndex: integer); virtual;
     /// incoming execution context, to be processed via ExecuteCommand() method
     // - should be specified as a raw JSON object
-    property Input: RawUTF8
+    property Input: RawUtf8
       read fInput write fInput;
   end;
 
@@ -445,7 +445,7 @@ type
     fCacheEnabled: boolean;
     fCacheCurrent: (noCache, rootCache, inputCache);
     fCacheCurrentSec: cardinal;
-    fCacheCurrentInputValueKey: RawUTF8;
+    fCacheCurrentInputValueKey: RawUtf8;
     function Redirects(const action: TMVCAction): boolean; override;
   public
     /// initialize a rendering process for a given MVC Application/ViewModel
@@ -502,7 +502,7 @@ type
       aMethodIndex: integer); overload; virtual;
     /// you may call this method to flush any caching mechanism for a MVC command
     procedure NotifyContentChangedForMethod(
-      const aMethodName: RawUTF8); overload;
+      const aMethodName: RawUtf8); overload;
     /// read-write access to the associated MVC Application/ViewModel instance
     property Application: TMVCApplication
       read fApplication write fApplication;
@@ -518,7 +518,7 @@ type
     fCache: array of record
       Policy: TMVCRendererCachePolicy;
       TimeOutSeconds: cardinal;
-      RootValue: RawUTF8;
+      RootValue: RawUtf8;
       RootValueExpirationTime: cardinal;
       InputValues: TSynNameValue;
     end;
@@ -534,7 +534,7 @@ type
     // - function calls can be chained to create some fluent definition interface
     // like in TAnyBLogapplication.Create:
     // ! fMainRunner := TMVCRunWithViews.Create(self).SetCache('default',cacheRoot);
-    function SetCache(const aMethodName: RawUTF8;
+    function SetCache(const aMethodName: RawUtf8;
       aPolicy: TMVCRendererCachePolicy;
       aTimeOutSeconds: cardinal = 0): TMVCRunWithViews; virtual;
     /// finalize this instance
@@ -574,14 +574,14 @@ type
   protected
     fRestServer: TRestServer;
     fPublishOptions: TMVCPublishOptions;
-    fMvcInfoCache: RawUTF8;
+    fMvcInfoCache: RawUtf8;
     fStaticCache: TSynNameValue;
     fStaticCacheControlMaxAge: integer;
     /// callback used for the rendering on the TRestServer
     procedure RunOnRestServerRoot(Ctxt: TRestServerURIContext);
     procedure RunOnRestServerSub(Ctxt: TRestServerURIContext);
     procedure InternalRunOnRestServer(Ctxt: TRestServerURIContext;
-      const MethodName: RawUTF8);
+      const MethodName: RawUtf8);
   public
     /// this constructor will publish some views to a TRestServer instance
     // - the associated RestModel can match the supplied TRestServer, or be
@@ -594,7 +594,7 @@ type
     // - will also create a TMVCSessionWithRestServer for simple cookie sessions
     // - aPublishOptions could be used to specify integration with the server
     constructor Create(aApplication: TMVCApplication;
-      aRestServer: TRestServer = nil; const aSubURI: RawUTF8 = '';
+      aRestServer: TRestServer = nil; const aSubURI: RawUtf8 = '';
       aViews: TMVCViewsAbtract = nil;
       aPublishOptions: TMVCPublishOptions=
         [low(TMVCPublishOption) .. high(TMVCPublishOption)]); reintroduce;
@@ -627,7 +627,7 @@ type
   public
     /// same as calling TMVCApplication.GotoView()
     // - HTTP_TEMPORARYREDIRECT will change the URI, but HTTP_SUCCESS won't
-    constructor CreateGotoView(const aMethod: RawUTF8;
+    constructor CreateGotoView(const aMethod: RawUtf8;
       const aParametersNameValuePairs: array of const;
       aStatus: cardinal = HTTP_TEMPORARYREDIRECT);
     /// same as calling TMVCApplication.GotoError()
@@ -649,7 +649,7 @@ type
     /// the error page
     // - in addition to the error message, a whole data context is retrieved
     // and returned as a TDocVariant
-    procedure Error(var Msg: RawUTF8; var Scope: variant);
+    procedure Error(var Msg: RawUtf8; var Scope: variant);
   end;
 
   /// parent class to implement a MVC/MVVM application
@@ -677,7 +677,7 @@ type
     // - this default implementation will call fMainRunner.NotifyContentChanged
     procedure FlushAnyCache; virtual;
     /// generic IMVCApplication.Error method implementation
-    procedure Error(var Msg: RawUTF8; var Scope: variant); virtual;
+    procedure Error(var Msg: RawUtf8; var Scope: variant); virtual;
     /// every view will have this data context transmitted as "main":...
     procedure GetViewInfo(MethodIndex: integer; out info: variant); virtual;
     /// compute the data context e.g. for the /mvc-info URI
@@ -685,7 +685,7 @@ type
     /// wrappers to redirect to IMVCApplication standard methods
     // - if status is HTTP_TEMPORARYREDIRECT, it will change the URI
     // whereas HTTP_SUCCESS would just render the view for the current URI
-    class procedure GotoView(var Action: TMVCAction; const MethodName: RawUTF8;
+    class procedure GotoView(var Action: TMVCAction; const MethodName: RawUtf8;
       const ParametersNameValuePairs: array of const;
       Status: cardinal = HTTP_TEMPORARYREDIRECT);
     class procedure GotoError(var Action: TMVCAction; const Msg: string;
@@ -838,7 +838,7 @@ var
   LowerExt: TFileName;
   files: TFileNameDynArray;
   partial: TSynMustache;
-  partialName: RawUTF8;
+  partialName: RawUtf8;
   info: variant;
 begin
   inherited Create(aInterface, aLogClass);
@@ -852,17 +852,17 @@ begin
   if (aParameters.ExtensionForNotExistingTemplate <> '') and
      not DirectoryExists(ViewTemplateFolder) then
     CreateDir(ViewTemplateFolder);
-  if aParameters.CSVExtensions = '' then
+  if aParameters.CsvExtensions = '' then
     LowerExt := ',html,json,css,'
   else
-    LowerExt := ',' + SysUtils.LowerCase(aParameters.CSVExtensions) + ',';
+    LowerExt := ',' + SysUtils.LowerCase(aParameters.CsvExtensions) + ',';
   SetLength(fViews, fFactory.MethodsCount);
   for m := 0 to fFactory.MethodsCount - 1 do
     if MethodHasView(fFactory.Methods[m]) then
       with fViews[m] do
       begin
         Locker := TAutoLocker.Create;
-        MethodName := UTF8ToString(fFactory.Methods[m].URI);
+        MethodName := Utf8ToString(fFactory.Methods[m].URI);
         SearchPattern := MethodName + '.*';
         files := FindTemplates(SearchPattern);
         if length(files) > 0 then
@@ -903,7 +903,7 @@ begin
   files := FindTemplates('*.partial');
   for i := 0 to length(files) - 1 do
   begin
-    StringToUTF8(GetFileNameWithoutExt(files[i]), partialName);
+    StringToUtf8(GetFileNameWithoutExt(files[i]), partialName);
     try
       partial := fViewPartials.Add(partialName, GetTemplate(files[i]));
       if not (viewHasGenerationTimeTag in fViewFlags) and
@@ -974,11 +974,11 @@ type
 constructor TExpressionHelperForTable.Create(aRest: TRest; aTable: TOrmClass;
   var aHelpers: TSynMustacheHelpers);
 var
-  HelperName: RawUTF8;
+  HelperName: RawUtf8;
 begin
   aRest.PrivateGarbageCollector.Add(self);
   Rest := aRest;
-  HelperName := RawUTF8(aTable.ClassName);
+  HelperName := RawUtf8(aTable.ClassName);
   Table := aTable;
   TableProps := aTable.OrmProps;
   TSynMustache.HelperAdd(aHelpers, HelperName, ExpressionGet);
@@ -997,7 +997,7 @@ var
   timelog: TTimeLogBits;
   caption: string;
   sets: TStringList;
-  u: RawUTF8;
+  u: RawUtf8;
   W: TTextWriter;
   tmp: TTextWriterStackBuffer;
 const
@@ -1018,7 +1018,7 @@ begin
         if i < 0 then
           continue;
         if not (Field.OrmFieldType in
-            [oftAnsiText, oftUTF8Text, oftInteger, oftFloat, oftCurrency,
+            [oftAnsiText, oftUtf8Text, oftInteger, oftFloat, oftCurrency,
              oftTimeLog, oftModTime, oftCreateTime, oftDateTime, oftDateTimeMS,
              oftUnixTime, oftUnixMSTime, oftBoolean, oftEnumerate, oftSet]) then
           // we support only most obvious types in 'case OrmFieldType of" below
@@ -1027,9 +1027,9 @@ begin
         GetCaptionFromPCharLen(TrimLeftLowerCase(Field.Name), caption);
         W.AddHtmlEscapeString(caption);
         HtmlTableStyle.BeforeValue(W);
-        VariantToUTF8(Rec^.Values[i], u);
+        VariantToUtf8(Rec^.Values[i], u);
         case Field.OrmFieldType of
-          oftAnsiText, oftUTF8Text, oftInteger, oftFloat, oftCurrency:
+          oftAnsiText, oftUtf8Text, oftInteger, oftFloat, oftCurrency:
             W.AddHtmlEscape(pointer(u));
           oftTimeLog, oftModTime, oftCreateTime:
             if VariantToInt64(Rec^.Values[i], timelog.Value) then
@@ -1075,7 +1075,7 @@ begin
         HtmlTableStyle.AfterValue(W);
       end;
       HtmlTableStyle.EndTable(W);
-      RawUTF8ToVariant(W.Text, result);
+      RawUtf8ToVariant(W.Text, result);
     finally
       W.Free;
     end;
@@ -1158,7 +1158,7 @@ begin
 end;
 
 function TMVCViewsMustache.RegisterExpressionHelpers(
-  const aNames: array of RawUTF8;
+  const aNames: array of RawUtf8;
   const aEvents: array of TSynMustacheHelperEvent): TMVCViewsMustache;
 begin
   if self <> nil then
@@ -1201,19 +1201,19 @@ end;
 class procedure TMVCViewsMustache.md5(const Value: variant;
   out result: variant);
 begin
-  RawUTF8ToVariant(mormot.core.crypto.MD5(ToUTF8(Value)), result);
+  RawUtf8ToVariant(mormot.core.crypto.MD5(ToUtf8(Value)), result);
 end;
 
 class procedure TMVCViewsMustache.sha1(const Value: variant;
   out result: variant);
 begin
-  RawUTF8ToVariant(mormot.core.crypto.SHA1(ToUTF8(Value)), result);
+  RawUtf8ToVariant(mormot.core.crypto.SHA1(ToUtf8(Value)), result);
 end;
 
 class procedure TMVCViewsMustache.sha256(const Value: variant;
   out result: variant);
 begin
-  RawUTF8ToVariant(mormot.core.crypto.SHA256(ToUTF8(Value)), result);
+  RawUtf8ToVariant(mormot.core.crypto.SHA256(ToUtf8(Value)), result);
 end;
 
 function TMVCViewsMustache.GetRenderer(methodIndex: integer;
@@ -1222,17 +1222,17 @@ var
   age: PtrUInt;
 begin
   if cardinal(methodIndex) >= fFactory.MethodsCount then
-    raise EMVCException.CreateUTF8(
+    raise EMVCException.CreateUtf8(
       '%.Render(methodIndex=%)', [self, methodIndex]);
   with fViews[methodIndex],
        Locker.ProtectMethod do
   begin
     if MethodName = '' then
-      raise EMVCException.CreateUTF8(
+      raise EMVCException.CreateUtf8(
         '%.Render(''%''): not a View', [self, MethodName]);
     if (Mustache = nil) and
        (FileName = '') then
-      raise EMVCException.CreateUTF8(
+      raise EMVCException.CreateUtf8(
         '%.Render(''%''): Missing Template in ''%''',
         [self, MethodName, SearchPattern]);
     if (Mustache = nil) or
@@ -1253,12 +1253,12 @@ begin
             include(Flags, viewHasGenerationTimeTag);
         except
           on E: Exception do
-            raise EMVCException.CreateUTF8(
+            raise EMVCException.CreateUtf8(
               '%.Render(''%''): Invalid Template: % - %',
               [self, ShortFileName, E, E.Message]);
         end
         else
-          raise EMVCException.CreateUTF8(
+          raise EMVCException.CreateUtf8(
             '%.Render(''%''): Missing Template in ''%''',
             [self, ShortFileName, SearchPattern]);
         if fViewTemplateFileTimestampMonitor <> 0 then
@@ -1279,9 +1279,9 @@ begin
     ViewTemplateFolder, Mask, '', {sorted=}false, {withdir=}false));
 end;
 
-function TMVCViewsMustache.GetTemplate(const aFileName: TFileName): RawUTF8;
+function TMVCViewsMustache.GetTemplate(const aFileName: TFileName): RawUtf8;
 begin
-  result := AnyTextFileToRawUTF8(ViewTemplateFolder + aFileName, true);
+  result := AnyTextFileToRawUtf8(ViewTemplateFolder + aFileName, true);
 end;
 
 {$WARN SYMBOL_DEPRECATED OFF} // we don't need TDateTime, just values to compare
@@ -1306,7 +1306,7 @@ begin
       finally
         Locker.Leave;
       end;
-      raise EMVCException.CreateUTF8(
+      raise EMVCException.CreateUtf8(
         '%.Render(''%''): Void [%] Template - please customize this file!',
         [self, ShortFileName, FileName]);
     end;
@@ -1331,11 +1331,11 @@ var
 
   procedure ProcessSession;
   var
-    recJSON: RawUTF8;
+    recJSON: RawUtf8;
   begin
     // create a TDocVariant from the binary record content
-    SaveJSON(rec, PRecordDataTypeInfo, TEXTWRITEROPTIONS_MUSTACHE, recJSON);
-    TDocVariantData(result).InitJSONInPlace(
+    SaveJson(rec, PRecordDataTypeInfo, TEXTWRITEROPTIONS_MUSTACHE, recJSON);
+    TDocVariantData(result).InitJsonInPlace(
       pointer(recJSON), JSON_OPTIONS_FAST);
   end;
 
@@ -1344,7 +1344,7 @@ begin
   recsize := PRecordDataTypeInfo^.RecordSize;
   // recize=0 if PRecordDataTypeInfo=nil (sessionID only) -> just do nothing
   if recsize > SizeOf(rec) then
-    raise EMVCException.CreateUTF8(
+    raise EMVCException.CreateUtf8(
       '%.CheckAndRetrieveInfo: recsize=%', [self, recsize]);
   FillCharFast(rec, recsize, 0);
   try
@@ -1429,7 +1429,7 @@ type
 function TMVCSessionWithCookies.CheckAndRetrieve(PRecordData: pointer;
   PRecordTypeInfo: PRttiInfo; PExpires: PCardinal): integer;
 var
-  cookie: RawUTF8;
+  cookie: RawUtf8;
 begin
   cookie := GetCookie;
   if cookie = '' then
@@ -1440,7 +1440,7 @@ begin
       cookie, PRecordData, PRecordTypeInfo, PExpires);
 end;
 
-function TMVCSessionWithCookies.CheckAndRetrieveFromCookie(const cookie: RawUTF8;
+function TMVCSessionWithCookies.CheckAndRetrieveFromCookie(const cookie: RawUtf8;
   PRecordData, PRecordTypeInfo: PRttiInfo; PExpires: PCardinal): integer;
 var
   clen, len: integer;
@@ -1525,13 +1525,13 @@ begin
   SetCookie(COOKIE_EXPIRED);
 end;
 
-function TMVCSessionWithCookies.LoadContext(const Saved: RawUTF8): boolean;
+function TMVCSessionWithCookies.LoadContext(const Saved: RawUtf8): boolean;
 begin
   result := RecordLoadBase64(pointer(Saved), length(Saved), fContext,
     TypeInfo(TMVCSessionWithCookiesContext));
 end;
 
-function TMVCSessionWithCookies.SaveContext: RawUTF8;
+function TMVCSessionWithCookies.SaveContext: RawUtf8;
 begin
   result := RecordSaveBase64(fContext, TypeInfo(TMVCSessionWithCookiesContext));
 end;
@@ -1539,12 +1539,12 @@ end;
 
 { TMVCSessionWithRestServer }
 
-function TMVCSessionWithRestServer.GetCookie: RawUTF8;
+function TMVCSessionWithRestServer.GetCookie: RawUtf8;
 begin
   result := ServiceRunningContext.Request.InCookie[fContext.CookieName];
 end;
 
-procedure TMVCSessionWithRestServer.SetCookie(const cookie: RawUTF8);
+procedure TMVCSessionWithRestServer.SetCookie(const cookie: RawUtf8);
 var
   ctxt: TRestServerURIContext;
 begin
@@ -1556,12 +1556,12 @@ end;
 
 { TMVCSessionSingle }
 
-function TMVCSessionSingle.GetCookie: RawUTF8;
+function TMVCSessionSingle.GetCookie: RawUtf8;
 begin
   result := fSingleCookie;
 end;
 
-procedure TMVCSessionSingle.SetCookie(const cookie: RawUTF8);
+procedure TMVCSessionSingle.SetCookie(const cookie: RawUtf8);
 begin
   fSingleCookie := cookie;
 end;
@@ -1578,7 +1578,7 @@ begin
   fApplication := aApplication;
 end;
 
-procedure TMVCRendererAbstract.CommandError(const ErrorName: RawUTF8;
+procedure TMVCRendererAbstract.CommandError(const ErrorName: RawUtf8;
   const ErrorValue: variant; ErrorCode: Integer);
 var
   info, renderContext: variant;
@@ -1589,7 +1589,7 @@ begin
     'msg', StatusCodeToErrorMsg(ErrorCode),
     'errorCode', ErrorCode,
     ErrorName, ErrorValue]);
-  renderContext.originalErrorContext := JSONReformat(ToUTF8(renderContext));
+  renderContext.originalErrorContext := JsonReformat(ToUtf8(renderContext));
   Renders(renderContext, ErrorCode, true);
 end;
 
@@ -1599,7 +1599,7 @@ var
   exec: TInterfaceMethodExecute;
   isAction: boolean;
   WR: TTextWriter;
-  methodOutput: RawUTF8;
+  methodOutput: RawUtf8;
   renderContext, info: variant;
   err: shortstring;
   tmp: TTextWriterStackBuffer;
@@ -1613,7 +1613,7 @@ begin
         try
           isAction := fApplication.fFactory.
             Methods[fMethodIndex].ArgsResultIsServiceCustomAnswer;
-          WR := TJSONSerializer.CreateOwnedStream(tmp);
+          WR := TJsonSerializer.CreateOwnedStream(tmp);
           try
             WR.Add('{');
             exec := TInterfaceMethodExecute.Create(
@@ -1625,11 +1625,11 @@ begin
               if not exec.ExecuteJson([fApplication.fFactoryEntry],
                   pointer(fInput), WR, @err, true) then
                 if err <> '' then
-                  raise EMVCException.CreateUTF8(
+                  raise EMVCException.CreateUtf8(
                     '%.CommandRunMethod: %', [self, err])
                 else
                   with fApplication.fFactory do
-                    raise EMVCException.CreateUTF8(
+                    raise EMVCException.CreateUtf8(
                       '%.CommandRunMethod: %.%() execution error',
                       [self, InterfaceTypeInfo^.Name, Methods[fMethodIndex].URI]);
               action.RedirectToMethodName := exec.ServiceCustomAnswerHead;
@@ -1655,7 +1655,7 @@ begin
             if fMethodIndex = fApplication.fFactoryErrorIndex then
               _ObjAddProps([
                 'errorCode', action.ReturnedStatus,
-                'originalErrorContext', JSONReformat(ToUTF8(renderContext))],
+                'originalErrorContext', JsonReformat(ToUtf8(renderContext))],
                 renderContext);
             Renders(renderContext, action.ReturnedStatus, false);
             exit; // success
@@ -1743,7 +1743,7 @@ end;
 procedure TMVCRendererJson.Renders(var outContext: variant; status: cardinal;
   forcesError: boolean);
 begin
-  fOutput.Content := JSONReformat(ToUTF8(outContext));
+  fOutput.Content := JsonReformat(ToUtf8(outContext));
   fOutput.Header := JSON_CONTENT_TYPE_HEADER_VAR;
   fOutput.Status := status;
 end;
@@ -1769,7 +1769,7 @@ begin
     NotifyContentChangedForMethod(m)
 end;
 
-procedure TMVCRun.NotifyContentChangedForMethod(const aMethodName: RawUTF8);
+procedure TMVCRun.NotifyContentChangedForMethod(const aMethodName: RawUtf8);
 begin
   NotifyContentChangedForMethod(
     fApplication.fFactory.FindMethodIndex(aMethodName));
@@ -1786,7 +1786,7 @@ begin
   fCacheLocker := TAutoLocker.Create;
 end;
 
-function TMVCRunWithViews.SetCache(const aMethodName: RawUTF8;
+function TMVCRunWithViews.SetCache(const aMethodName: RawUtf8;
   aPolicy: TMVCRendererCachePolicy;
   aTimeOutSeconds: cardinal): TMVCRunWithViews;
 const
@@ -1837,15 +1837,15 @@ end;
 { TMVCRunOnRestServer }
 
 constructor TMVCRunOnRestServer.Create(aApplication: TMVCApplication;
-  aRestServer: TRestServer; const aSubURI: RawUTF8; aViews: TMVCViewsAbtract;
+  aRestServer: TRestServer; const aSubURI: RawUtf8; aViews: TMVCViewsAbtract;
   aPublishOptions: TMVCPublishOptions);
 var
   m: PtrInt;
   bypass: boolean;
-  method: RawUTF8;
+  method: RawUtf8;
 begin
   if aApplication = nil then
-    raise EMVCException.CreateUTF8('%.Create(aApplication=nil)', [self]);
+    raise EMVCException.CreateUtf8('%.Create(aApplication=nil)', [self]);
   if aRestServer = nil then
     fRestServer := aApplication.RestModel as TRestServer
   else
@@ -1894,14 +1894,14 @@ begin
       aFileContent
   else
     result := '';
-  fStaticCache.Add(StringToUTF8(aFileName), result);
+  fStaticCache.Add(StringToUtf8(aFileName), result);
 end;
 
 procedure TMVCRunOnRestServer.InternalRunOnRestServer(
-  Ctxt: TRestServerURIContext; const MethodName: RawUTF8);
+  Ctxt: TRestServerURIContext; const MethodName: RawUtf8);
 var
   mvcinfo, inputContext: variant;
-  rawMethodName, rawFormat, cached, body, content: RawUTF8;
+  rawMethodName, rawFormat, cached, body, content: RawUtf8;
   staticFileName: TFileName;
   rendererClass: TMVCRendererReturningDataClass;
   renderer: TMVCRendererReturningData;
@@ -1941,7 +1941,7 @@ begin
           cached := ''
         else
         begin
-          staticFileName := UTF8ToString(
+          staticFileName := Utf8ToString(
             StringReplaceChars(rawFormat, '/', PathDelim));
           if cacheStatic in fPublishOptions then
           begin
@@ -1995,9 +1995,9 @@ begin
                  (Count > 0) then
                 // try {"p.a1":5,"p.a2":"dfasdfa"} -> {"p":{"a1":5,"a2":"dfasdfa"}}
                 if method^.ArgsInputValuesCount = 1 then
-                  FlattenAsNestedObject(ShortStringToUTF8(
+                  FlattenAsNestedObject(ShortStringToUtf8(
                     method^.Args[method^.ArgsInFirst].ParamName^));
-              renderer.fInput := ToJSON;
+              renderer.fInput := ToJson;
             end;
         end;
         renderer.ExecuteCommand(methodIndex);
@@ -2010,7 +2010,7 @@ begin
           ShortStringToAnsi7String(timer.Stop));
       Ctxt.Returns(body, renderer.Output.Status, renderer.Output.Header,
         {handle304=}true, {noerrorprocess=}true, {cachecontrol=}0,
-        {hashwithouttime=}crc32cUTF8ToHex(renderer.Output.Content));
+        {hashwithouttime=}crc32cUtf8ToHex(renderer.Output.Content));
     finally
       renderer.Free;
     end;
@@ -2041,13 +2041,13 @@ end;
 
 procedure TMVCRendererReturningData.ExecuteCommand(aMethodIndex: integer);
 
-  procedure SetOutputValue(const aValue: RawUTF8);
+  procedure SetOutputValue(const aValue: RawUtf8);
   begin
     fOutput.Status := HTTP_SUCCESS;
-    Split(aValue, #0, fOutput.Header, RawUTF8(fOutput.Content));
+    Split(aValue, #0, fOutput.Header, RawUtf8(fOutput.Content));
   end;
 
-  function RetrievedFromInputValues(const aKey: RawUTF8;
+  function RetrievedFromInputValues(const aKey: RawUtf8;
     const aInputValues: TSynNameValue): boolean;
   var
     i: PtrInt;
@@ -2195,7 +2195,7 @@ begin
   TMVCApplication.GotoError(fAction, aHtmlErrorCode);
 end;
 
-constructor EMVCApplication.CreateGotoView(const aMethod: RawUTF8;
+constructor EMVCApplication.CreateGotoView(const aMethod: RawUtf8;
   const aParametersNameValuePairs: array of const; aStatus: cardinal);
 begin
   inherited CreateFmt('GotoView(''%s'',%d)', [aMethod, aStatus]);
@@ -2215,12 +2215,12 @@ begin
   fFactory := TInterfaceFactory.Get(aInterface);
   fFactoryErrorIndex := fFactory.FindMethodIndex('Error');
   if fFactoryErrorIndex < 0 then
-    raise EMVCException.CreateUTF8(
+    raise EMVCException.CreateUtf8(
       '% does not implement the IMVCApplication.Error() method',
       [aInterface.Name]);
   entry := GetInterfaceEntry(fFactory.InterfaceIID);
   if entry = nil then
-    raise EMVCException.CreateUTF8(
+    raise EMVCException.CreateUtf8(
       '%.Start(%): this class should implement %',
       [self, aRestModel, fFactory.InterfaceTypeInfo^.Name]);
   fFactoryEntry := PAnsiChar(self) + entry^.IOffset;
@@ -2228,7 +2228,7 @@ begin
     if not MethodHasView(fFactory.Methods[m]) then
       with fFactory.Methods[m] do
         if ArgsOutFirst <> ArgsResultIndex then
-          raise EMVCException.CreateUTF8(
+          raise EMVCException.CreateUtf8(
             '%.Start(%): %.% var/out param not allowed with TMVCAction result',
             [self, aRestModel, fFactory.InterfaceTypeInfo^.Name, URI])
         else
@@ -2243,12 +2243,12 @@ begin
   fSession.Free;
 end;
 
-procedure TMVCApplication.Error(var Msg: RawUTF8; var Scope: variant);
+procedure TMVCApplication.Error(var Msg: RawUtf8; var Scope: variant);
 begin // do nothing: just pass input error Msg and data Scope to the view
 end;
 
 class procedure TMVCApplication.GotoView(var Action: TMVCAction; const
-  MethodName: RawUTF8; const ParametersNameValuePairs: array of const;
+  MethodName: RawUtf8; const ParametersNameValuePairs: array of const;
   status: cardinal);
 begin
   Action.ReturnedStatus := status;
@@ -2256,7 +2256,7 @@ begin
   if high(ParametersNameValuePairs) < 1 then
     Action.RedirectToMethodParameters := ''
   else
-    Action.RedirectToMethodParameters := JSONEncode(ParametersNameValuePairs);
+    Action.RedirectToMethodParameters := JsonEncode(ParametersNameValuePairs);
 end;
 
 class procedure TMVCApplication.GotoError(var Action: TMVCAction;

@@ -136,7 +136,7 @@ function  GetDesktopWindow;           external user32;
 function  Unicode_InPlaceUpper;       external user32 name 'CharUpperBuffW';
 function  Unicode_InPlaceLower;       external user32 name 'CharLowerBuffW';
 
-procedure DisplayFatalError(const title, msg: RawUTF8);
+procedure DisplayFatalError(const title, msg: RawUtf8);
 begin
   MessageBoxA(0, pointer(msg), pointer(title), MB_OK or MB_ICONWARNING);
 end;
@@ -408,13 +408,13 @@ end;
 
 {$ifdef NOSETTHREADNAME}
 
-procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUTF8);
+procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUtf8);
 begin
 end;
 
 {$else}
 
-procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUTF8);
+procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUtf8);
 var s: AnsiString;
     {$ifndef ISDELPHIXE2}
     {$ifdef MSWINDOWS}
@@ -452,7 +452,7 @@ const
   cSetThreadNameException = $406D1388;
 
   // https://docs.microsoft.com/en-us/archive/blogs/yizhang/interpreting-hresults-returned-from-netclr-0x8013xxxx
-  DOTNET_EXCEPTIONNAME: array[0..83] of PUTF8Char = (
+  DOTNET_EXCEPTIONNAME: array[0..83] of PUtf8Char = (
     'Access', 'AmbiguousMatch', 'appdomainUnloaded', 'Application', 'Argument',
     'ArgumentNull', 'ArgumentOutOfRange', 'Arithmetic', 'ArrayTypeMismatch',
     'BadImageFormat', 'CannotUnloadappdomain', 'ContextMarshal', 'Cryptographic',
@@ -510,7 +510,7 @@ begin
 end;
 
 function TSynLogExceptionContext.AdditionalInfo(
-  out ExceptionNames: TPUTF8CharDynArray): cardinal;
+  out ExceptionNames: TPUtf8CharDynArray): cardinal;
 var
   i: PtrInt;
 begin
@@ -742,7 +742,7 @@ begin
 end;
 
 // local RTL wrapper function to avoid linking mormot.core.unicode.pas
-procedure RawUnicodeToUtf8(P: PWideChar; Len: integer; out res: RawUTF8);
+procedure RawUnicodeToUtf8(P: PWideChar; Len: integer; out res: RawUtf8);
 var
   tmp: TSynTempBuffer;
 begin
@@ -756,7 +756,7 @@ begin
   tmp.Done;
 end;
 
-function GetErrorText(error: longint): RawUTF8;
+function GetErrorText(error: longint): RawUtf8;
 var
   Len: integer;
   Buffer: array[0..511] of WideChar;
@@ -769,7 +769,7 @@ begin
   RawUnicodeToUtf8(Buffer, Len, result);
 end;
 
-function EnumProcessName(PID: cardinal): RawUTF8;
+function EnumProcessName(PID: cardinal): RawUtf8;
 var
   h: THandle;
   len: DWORD;
@@ -1172,7 +1172,7 @@ begin
     result := 0;
 end;
 
-function Utf8ToConsole(const S: RawUTF8): RawByteString;
+function Utf8ToConsole(const S: RawUtf8): RawByteString;
 var
   tmp: SynUnicode;
   i: integer;
@@ -1180,7 +1180,7 @@ begin
   for i := 1 to length(S) do
     if S[i] > #127 then
     begin
-      tmp := UTF8Decode(S);
+      tmp := Utf8Decode(S);
       SetLength(result, length(tmp) * 4);
       CharToOemW(pointer(tmp), pointer(result));
       SetLength(result, StrLen(pointer(result)));
@@ -1199,19 +1199,19 @@ var
   Size, Size2: DWord;
   Pt: Pointer;
   Trans: PWordArray;
-  LanguageInfo: RawUTF8;
+  LanguageInfo: RawUtf8;
   Info: ^TVSFixedFileInfo;
   FileTime: TFILETIME;
   SystemTime: TSYSTEMTIME;
   tmp: TFileName;
 
-  function ReadResourceByName(const From: RawUTF8): RawUTF8;
+  function ReadResourceByName(const From: RawUtf8): RawUtf8;
   var
     StrValPt: pointer;
     sz: DWord;
     u: SynUnicode;
   begin
-    u := UTF8Decode('\StringFileInfo\' + LanguageInfo + '\' + From);
+    u := Utf8Decode('\StringFileInfo\' + LanguageInfo + '\' + From);
     VerQueryValueW(Pt, pointer(u), StrValPt, sz);
     if sz > 0 then
       RawUnicodeToUtf8(StrValPt, StrLenW(StrValPt), result)
@@ -1255,7 +1255,7 @@ begin
         VerQueryValue(Pt, '\VarFileInfo\Translation', pointer(Trans), Size2);
         if Size2 >= 4 then
         begin
-          LanguageInfo := RawUTF8(format('%4.4x%4.4x', [Trans^[0], Trans^[1]]));
+          LanguageInfo := RawUtf8(format('%4.4x%4.4x', [Trans^[0], Trans^[1]]));
           CompanyName := ReadResourceByName('CompanyName');
           FileDescription := ReadResourceByName('FileDescription');
           FileVersion := ReadResourceByName('FileVersion');
@@ -1278,7 +1278,7 @@ begin
     DecodeDate(fBuildDateTime, BuildYear, M, D);
 end;
 
-procedure GetUserHost(out User, Host: RawUTF8);
+procedure GetUserHost(out User, Host: RawUtf8);
 var
   tmp: array[byte] of WideChar;
   tmpsize: cardinal;
@@ -1363,7 +1363,7 @@ const
   _HKEY: array[TWinRegistryRoot] of HKEY = (
     HKEY_CLASSES_ROOT, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, HKEY_USERS);
 
-function TWinRegistry.ReadOpen(root: TWinRegistryRoot; const keyname: RawUTF8;
+function TWinRegistry.ReadOpen(root: TWinRegistryRoot; const keyname: RawUtf8;
   closefirst: boolean): boolean;
 var
   tmp: TSynTempBuffer;
@@ -1385,7 +1385,7 @@ begin
     RegCloseKey(key);
 end;
 
-function TWinRegistry.ReadString(const entry: SynUnicode; andtrim: boolean): RawUTF8;
+function TWinRegistry.ReadString(const entry: SynUnicode; andtrim: boolean): RawUtf8;
 var
   rtype, rsize: DWORD;
   tmp: TSynTempBuffer;
@@ -1435,7 +1435,7 @@ begin
   result := RegQueryValueExW(key, pointer(entry), nil, nil, Data, @DataLen) = 0;
 end;
 
-function TWinRegistry.ReadEnumEntries: TRawUTF8DynArray;
+function TWinRegistry.ReadEnumEntries: TRawUtf8DynArray;
 var
   count, maxlen, i, len: DWORD;
   tmp: TSynTempBuffer;
@@ -2127,7 +2127,7 @@ begin
     end
     else
       Exe := Path;
-  fName := RawUTF8(Name);
+  fName := RawUtf8(Name);
   fSCHandle := OpenSCManager(
     pointer(TargetComputer), pointer(DatabaseName), SC_MANAGER_ALL_ACCESS);
   if fSCHandle = 0 then
@@ -2159,7 +2159,7 @@ var
   backupError: cardinal;
 begin
   inherited Create;
-  fName := RawUTF8(Name);
+  fName := RawUtf8(Name);
   fSCHandle := OpenSCManager(
     pointer(TargetComputer), pointer(DataBaseName), GENERIC_READ);
   if fSCHandle = 0 then
@@ -2271,7 +2271,7 @@ var
   param: string;
   i: integer;
 
-  procedure ShowError(const Msg: RawUTF8);
+  procedure ShowError(const Msg: RawUtf8);
   begin
     if Assigned(ServiceLog) then
       ServiceLog(sllLastError, 'During % for %', [Msg, param]);
@@ -2854,7 +2854,7 @@ function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL;
   stdcall; external kernel32 name 'GetVersionExA';
 {$endif UNICODE}
 
-procedure TrimDualSpaces(var s: RawUTF8);
+procedure TrimDualSpaces(var s: RawUtf8);
 var
   i: integer;
 begin
@@ -2876,7 +2876,7 @@ var
   Res: BOOL;
   P: pointer;
   Vers: TWindowsVersion;
-  cpu, manuf, prod, prodver: RawUTF8;
+  cpu, manuf, prod, prodver: RawUtf8;
   reg: TWinRegistry;
 begin
   // late-binding of newest Windows APIs
@@ -2983,10 +2983,10 @@ begin
     OpenProcessAccess := PROCESS_QUERY_INFORMATION or PROCESS_VM_READ;
   with OSVersionInfo do
     if wServicePackMajor = 0 then
-      OSVersionText := RawUTF8(Format('Windows %s (%d.%d.%d)',
+      OSVersionText := RawUtf8(Format('Windows %s (%d.%d.%d)',
         [WINDOWS_NAME[Vers], dwMajorVersion, dwMinorVersion, dwBuildNumber]))
     else
-      OSVersionText := RawUTF8(Format(
+      OSVersionText := RawUtf8(Format(
         'Windows %s SP%d (%d.%d.%d)', [WINDOWS_NAME[Vers],
          wServicePackMajor, dwMajorVersion, dwMinorVersion, dwBuildNumber]));
   OSVersionInt32 := (integer(Vers) shl 8) + ord(osWindows);
@@ -3036,9 +3036,9 @@ begin
   if prodver <> '' then
     BiosInfoText := BiosInfoText + ' ' + prodver;
   if {%H-}cpu = '' then
-    cpu := RawUTF8(GetEnvironmentVariable('PROCESSOR_IDENTIFIER'));
+    cpu := RawUtf8(GetEnvironmentVariable('PROCESSOR_IDENTIFIER'));
   cpu := TrimU(cpu);
-  CpuInfoText := RawUTF8(Format('%d x %s (' + CPU_ARCH_TEXT + ')',
+  CpuInfoText := RawUtf8(Format('%d x %s (' + CPU_ARCH_TEXT + ')',
     [SystemInfo.dwNumberOfProcessors, cpu]));
   TrimDualSpaces(OSVersionText);
   TrimDualSpaces(OSVersionInfoEx);

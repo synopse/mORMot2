@@ -409,7 +409,7 @@ function getpeername(s: TSocket; name: PSockAddr; var namelen: integer): integer
 
 { TNetAddr }
 
-function SetAddr(const ip, port: RawUTF8; var h: TAddrInfo; var a: TSockAddr): boolean;
+function SetAddr(const ip, port: RawUtf8; var h: TAddrInfo; var a: TSockAddr): boolean;
 var
   res: PAddrInfo;
 begin
@@ -443,7 +443,7 @@ begin
     freeaddrinfo(res);
 end;
 
-function TNetAddr.SetFrom(const address, addrport: RawUTF8;
+function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
 var
   h4, h6: TAddrInfo;
@@ -810,7 +810,7 @@ type
     procedure HandshakeLoop(aSocket: THandle);
     procedure AppendData(const aBuffer: TSecBuffer);
   public
-    procedure AfterConnection(aSocket: TNetSocket; const aServerAddress: RawUTF8);
+    procedure AfterConnection(aSocket: TNetSocket; const aServerAddress: RawUtf8);
     procedure BeforeDisconnection(aSocket: TNetSocket);
     function Receive(aSocket: TNetSocket; aBuffer: pointer; var aLength: integer): TNetResult;
     function Send(aSocket: TNetSocket; aBuffer: pointer; var aLength: integer): TNetResult;
@@ -975,7 +975,7 @@ begin
 end;
 
 procedure TSChannelClient.AfterConnection(aSocket: TNetSocket;
-  const aServerAddress: RawUTF8);
+  const aServerAddress: RawUtf8);
 var
   buf: THandshakeBuf;
   res, f: cardinal;
@@ -1250,7 +1250,7 @@ var
 procedure InitializeUnit;
 begin
   WSAStartup($0202, WsaDataOnce);
-  SocketAPIVersion := RawUTF8(Format('%s.%d', [WsaDataOnce.szDescription,WsaDataOnce.wVersion]));
+  SocketAPIVersion := RawUtf8(Format('%s.%d', [WsaDataOnce.szDescription,WsaDataOnce.wVersion]));
   LibSecurHandle := LoadLibrary(DLLSecur32);
   if LibSecurHandle <> 0 then
   begin

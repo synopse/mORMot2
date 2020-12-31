@@ -58,7 +58,7 @@ type
     // the password may be a JSON-serialized TSynSignerParams object, or will use
     // AES-OFB-128 after SHAKE_128 with rounds=1000 and a fixed salt on plain password text
     // - other parameters (DataBaseName, UserID) are ignored
-    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8);
+    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8);
       overload; override;
     /// initialize access to an existing SQLite3 engine
     // - this overloaded constructor allows to access via SynDB methods to an
@@ -179,11 +179,11 @@ type
       IO: TSqlDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextU(Param: integer; const Value: RawUTF8;
+    procedure BindTextU(Param: integer; const Value: RawUtf8;
       IO: TSqlDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded buffer text (#0 ended) to a parameter
     // - the leftmost SQL parameter has an index of 1
-    procedure BindTextP(Param: integer; Value: PUTF8Char;
+    procedure BindTextP(Param: integer; Value: PUtf8Char;
       IO: TSqlDBParamInOutType = paramIn); overload; override;
     /// bind a UTF-8 encoded string to a parameter
     // - the leftmost SQL parameter has an index of 1
@@ -207,7 +207,7 @@ type
     // - if ExpectResults is TRUE, then Step() and Column*() methods are available
     // to retrieve the data rows
     // - raise an ESqlDBException on any error
-    procedure Prepare(const aSQL: RawUTF8; ExpectResults: boolean = false);
+    procedure Prepare(const aSQL: RawUtf8; ExpectResults: boolean = false);
       overload; override;
     /// Execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
@@ -225,18 +225,18 @@ type
     // - access the first or next row of data from the SQL Statement result:
     // if SeekFirst is TRUE, will put the cursor on the first row of results,
     // otherwise, it will fetch one row of data, to be called within a loop
-    // - raise an ESQLite3Exception exception on any error
+    // - raise an ESqlite3Exception exception on any error
     function Step(SeekFirst: boolean = false): boolean; override;
     /// finalize the cursor
     procedure ReleaseRows; override;
     /// retrieve a column name of the current Row
     // - Columns numeration (i.e. Col value) starts with 0
     // - it's up to the implementation to ensure than all column names are unique
-    function ColumnName(Col: integer): RawUTF8; override;
+    function ColumnName(Col: integer): RawUtf8; override;
     /// returns the Column index of a given Column name
     // - Columns numeration (i.e. Col value) starts with 0
     // - returns -1 if the Column name is not found (via case insensitive search)
-    function ColumnIndex(const aColumnName: RawUTF8): integer; override;
+    function ColumnIndex(const aColumnName: RawUtf8): integer; override;
     /// the Column type of the current Row
     // - ftCurrency type should be handled specificaly, for faster process and
     // avoid any rounding issue, since currency is a standard OleDB type
@@ -256,7 +256,7 @@ type
     // any rounding/conversion error from floating-point types
     function ColumnCurrency(Col: integer): currency; override;
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
-    function ColumnUTF8(Col: integer): RawUTF8; override;
+    function ColumnUtf8(Col: integer): RawUtf8; override;
     /// return a Column as a blob value of the current Row, first Col is 0
     // - ColumnBlob() will return the binary content of the field is was not ftBlob,
     // e.g. a 8 bytes RawByteString for a vtInt64/vtDouble/vtDate/vtCurrency,
@@ -267,13 +267,13 @@ type
     // - fast overridden implementation with no temporary variable
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"
     // format and contains true BLOB data
-    procedure ColumnsToJSON(WR: TJSONWriter); override;
+    procedure ColumnsToJson(WR: TJsonWriter); override;
   end;
 
 
 /// direct export of a DB statement rows into a SQLite3 database
 // - the corresponding table will be created within the specified DB file
-function RowsToSQLite3(const Dest: TFileName; const TableName: RawUTF8;
+function RowsToSqlite3(const Dest: TFileName; const TableName: RawUtf8;
   Rows: TSqlDBStatement; UseMormotCollations: boolean): integer;
 
 
@@ -281,7 +281,7 @@ implementation
 
 { ************ TSqlDBSQLite3Connection* and TSqlDBSQlite3Statement Classes }
 
-function RowsToSQLite3(const Dest: TFileName; const TableName: RawUTF8;
+function RowsToSqlite3(const Dest: TFileName; const TableName: RawUtf8;
   Rows: TSqlDBStatement; UseMormotCollations: boolean): integer;
 var
   DB: TSqlDBSQLite3ConnectionProperties;
@@ -293,7 +293,7 @@ begin
      (Rows.ColumnCount = 0) then
     exit;
   // we do not call DeleteFile(Dest) since DB may be completed on purpose
-  DB := TSqlDBSQLite3ConnectionProperties.Create(StringToUTF8(Dest), '', '', '');
+  DB := TSqlDBSQLite3ConnectionProperties.Create(StringToUtf8(Dest), '', '', '');
   try
     DB.UseMormotCollations := UseMormotCollations;
     Conn := DB.MainConnection as TSqlDBSQLite3Connection;
@@ -336,7 +336,7 @@ begin
 end;
 
 constructor TSqlDBSQLite3ConnectionProperties.Create(const aServerName,
-  aDatabaseName, aUserID, aPassWord: RawUTF8);
+  aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
   fDBMS := dSQLite;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
@@ -349,9 +349,9 @@ type
 constructor TSqlDBSQLite3ConnectionProperties.Create(aDB: TSqlDatabase);
 begin
   if aDB = nil then
-    raise ESqlDBException.CreateUTF8('%.Create(DB=nil)', [self]);
+    raise ESqlDBException.CreateUtf8('%.Create(DB=nil)', [self]);
   fExistingDB := aDB;
-  Create('', StringToUTF8(aDB.FileName), '', TSqlDatabaseHook(aDB).fPassword);
+  Create('', StringToUtf8(aDB.FileName), '', TSqlDatabaseHook(aDB).fPassword);
 end;
 
 procedure TSqlDBSQLite3ConnectionProperties.GetForeignKeys;
@@ -386,7 +386,7 @@ begin
   Disconnect; // force fTrans=fError=fServer=fContext=nil
   fDB := (Properties as TSqlDBSQLite3ConnectionProperties).fExistingDB;
   if fDB = nil then
-    fDB := TSqlDatabase.Create(UTF8ToString(Properties.ServerName), Properties.PassWord);
+    fDB := TSqlDatabase.Create(Utf8ToString(Properties.ServerName), Properties.PassWord);
   //fDB.SetWalMode(true); // slower INSERT in WAL mode for huge number of rows
   inherited Connect; // notify any re-connection
 end;
@@ -516,10 +516,10 @@ begin
   fStatement.BindNull(Param);
 end;
 
-procedure TSqlDBSQLite3Statement.BindTextP(Param: integer; Value: PUTF8Char;
+procedure TSqlDBSQLite3Statement.BindTextP(Param: integer; Value: PUtf8Char;
   IO: TSqlDBParamInOutType);
 var
-  V: RawUTF8;
+  V: RawUtf8;
 begin
   FastSetString(V, Value, StrLen(Value));
   BindTextU(Param, V);
@@ -528,22 +528,22 @@ end;
 procedure TSqlDBSQLite3Statement.BindTextS(Param: integer; const Value: string;
   IO: TSqlDBParamInOutType);
 begin
-  BindTextU(Param, StringToUTF8(Value));
+  BindTextU(Param, StringToUtf8(Value));
 end;
 
-procedure TSqlDBSQLite3Statement.BindTextU(Param: integer; const Value: RawUTF8;
+procedure TSqlDBSQLite3Statement.BindTextU(Param: integer; const Value: RawUtf8;
   IO: TSqlDBParamInOutType);
 begin
   if fShouldLogSQL and
      (cardinal(Param - 1) < cardinal(length(fLogSQLValues))) then
-    RawUTF8ToVariant(Value, fLogSQLValues[Param - 1]);
+    RawUtf8ToVariant(Value, fLogSQLValues[Param - 1]);
   fStatement.Bind(Param, Value);
 end;
 
 procedure TSqlDBSQLite3Statement.BindTextW(Param: integer;
   const Value: WideString; IO: TSqlDBParamInOutType);
 begin
-  BindTextU(Param, WideStringToUTF8(Value));
+  BindTextU(Param, WideStringToUtf8(Value));
 end;
 
 function TSqlDBSQLite3Statement.ColumnBlob(Col: integer): RawByteString;
@@ -559,8 +559,8 @@ end;
 function TSqlDBSQLite3Statement.ColumnDateTime(Col: integer): TDateTime;
 begin
   case ColumnType(Col) of
-    ftUTF8:
-      result := Iso8601ToDateTime(fStatement.FieldUTF8(Col));
+    ftUtf8:
+      result := Iso8601ToDateTime(fStatement.FieldUtf8(Col));
     ftInt64:
       result := TimeLogToDateTime(fStatement.FieldInt(Col));
   else
@@ -573,7 +573,7 @@ begin
   result := fStatement.FieldDouble(Col);
 end;
 
-function TSqlDBSQLite3Statement.ColumnIndex(const aColumnName: RawUTF8): integer;
+function TSqlDBSQLite3Statement.ColumnIndex(const aColumnName: RawUtf8): integer;
 begin
   result := fStatement.FieldIndex(aColumnName);
 end;
@@ -583,7 +583,7 @@ begin
   result := fStatement.FieldInt(Col);
 end;
 
-function TSqlDBSQLite3Statement.ColumnName(Col: integer): RawUTF8;
+function TSqlDBSQLite3Statement.ColumnName(Col: integer): RawUtf8;
 begin
   result := fStatement.FieldName(Col);
 end;
@@ -593,9 +593,9 @@ begin
   result := fStatement.FieldNull(Col);
 end;
 
-procedure TSqlDBSQLite3Statement.ColumnsToJSON(WR: TJSONWriter);
+procedure TSqlDBSQLite3Statement.ColumnsToJson(WR: TJsonWriter);
 begin
-  fStatement.FieldsToJSON(WR, fForceBlobAsNull);
+  fStatement.FieldsToJson(WR, fForceBlobAsNull);
 end;
 
 function TSqlDBSQLite3Statement.ColumnType(Col: integer;
@@ -614,7 +614,7 @@ begin
       SQLITE_FLOAT:
         result := ftDouble;
       SQLITE_TEXT:
-        result := ftUTF8;
+        result := ftUtf8;
       SQLITE_BLOB:
         result := ftBlob;
     else
@@ -624,15 +624,15 @@ begin
     FieldSize^ := 0; // no column size in SQLite3
 end;
 
-function TSqlDBSQLite3Statement.ColumnUTF8(Col: integer): RawUTF8;
+function TSqlDBSQLite3Statement.ColumnUtf8(Col: integer): RawUtf8;
 begin
-  result := fStatement.FieldUTF8(Col);
+  result := fStatement.FieldUtf8(Col);
 end;
 
 constructor TSqlDBSQLite3Statement.Create(aConnection: TSqlDBConnection);
 begin
   if not aConnection.InheritsFrom(TSqlDBSQLite3Connection) then
-    raise ESqlDBException.CreateUTF8('%.Create(%)', [self, aConnection]);
+    raise ESqlDBException.CreateUtf8('%.Create(%)', [self, aConnection]);
   inherited Create(aConnection);
   if (SynDBLog <> nil) and
      (sllSQL in SynDBLog.Family.Level) then
@@ -692,7 +692,7 @@ begin
   end;
 end;
 
-procedure TSqlDBSQLite3Statement.Prepare(const aSQL: RawUTF8; ExpectResults: boolean);
+procedure TSqlDBSQLite3Statement.Prepare(const aSQL: RawUtf8; ExpectResults: boolean);
 begin
   if fShouldLogSQL then
     SQLLogBegin(sllDB);
@@ -728,7 +728,7 @@ begin
   if SeekFirst then
   begin
     if fCurrentRow > 0 then
-      raise ESqlDBException.CreateUTF8('%.Step(SeekFirst=true) not implemented', [self]);
+      raise ESqlDBException.CreateUtf8('%.Step(SeekFirst=true) not implemented', [self]);
     fCurrentRow := 0;
     //fStatement.Reset;
   end;

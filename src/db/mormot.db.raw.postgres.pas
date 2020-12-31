@@ -143,7 +143,7 @@ type
   PPGresult = type pointer;
   PPPGresult = ^PPGresult;
 
-  PQnoticeProcessor = procedure(arg: pointer; message: PUTF8Char); cdecl;
+  PQnoticeProcessor = procedure(arg: pointer; message: PUtf8Char); cdecl;
 
   /// direct access to the libpq native Postgres protocol 3 library
   // - only the endpoints needed by this unit are imported
@@ -153,31 +153,31 @@ type
     LibVersion: function: integer; cdecl;
     IsThreadSafe: function: integer; cdecl;
     SetDBLogin: function(pghost, pgport, pgoptions, pgtty, dbName,
-      login, pwd: PUTF8Char): PPGconn; cdecl;
+      login, pwd: PUtf8Char): PPGconn; cdecl;
     Status: function(conn: PPGconn): integer; cdecl;
     Finish: procedure(conn: PPGconn); cdecl;
     ResultStatus: function(res: PPGresult): integer; cdecl;
-    ResultErrorField: function(res: PPGresult; fieldcode: integer): PUTF8Char; cdecl;
-    ErrorMessage: function(conn: PPGconn): PUTF8Char; cdecl;
+    ResultErrorField: function(res: PPGresult; fieldcode: integer): PUtf8Char; cdecl;
+    ErrorMessage: function(conn: PPGconn): PUtf8Char; cdecl;
     SetNoticeProcessor: function(conn: PPGconn; proc: PQnoticeProcessor;
       arg: pointer): PQnoticeProcessor; cdecl;
     Clear: procedure(res: PPGresult); cdecl;
     Freemem: procedure(ptr: pointer); cdecl;
-    Exec: function(conn: PPGconn; query: PUTF8Char): PPGresult; cdecl;
-    Prepare: function(conn: PPGconn; stmtName, query: PUTF8Char; nParams: integer;
+    Exec: function(conn: PPGconn; query: PUtf8Char): PPGresult; cdecl;
+    Prepare: function(conn: PPGconn; stmtName, query: PUtf8Char; nParams: integer;
       paramTypes: PCardinal): PPGresult; cdecl;
-    ExecPrepared: function(conn: PPGconn; stmtName: PUTF8Char; nParams: integer;
+    ExecPrepared: function(conn: PPGconn; stmtName: PUtf8Char; nParams: integer;
       paramValues: PPchar; paramLengths, paramFormats: PInteger;
       resultFormat: integer): PPGresult; cdecl;
-    ExecParams: function(conn: PPGconn; command: PUTF8Char; nParams: integer;
+    ExecParams: function(conn: PPGconn; command: PUtf8Char; nParams: integer;
       paramTypes: PCardinal; paramValues: PPchar; paramLengths, paramFormats: PInteger;
       resultFormat: integer):PPGresult; cdecl;
     nfields: function(res: PPGresult): integer; cdecl;
     ntuples: function(res: PPGresult): integer; cdecl;
-    cmdTuples: function(res: PPGresult): PUTF8Char; cdecl;
-    fname: function(res: PPGresult; field_num: integer): PUTF8Char; cdecl;
+    cmdTuples: function(res: PPGresult): PUtf8Char; cdecl;
+    fname: function(res: PPGresult; field_num: integer): PUtf8Char; cdecl;
     ftype: function(res: PPGresult; field_num: integer): cardinal; cdecl;
-    GetValue: function(res: PPGresult; tup_num, field_num: integer): PUTF8Char; cdecl;
+    GetValue: function(res: PPGresult; tup_num, field_num: integer): PUtf8Char; cdecl;
     GetLength: function(res: PPGresult; tup_num, field_num: integer): integer; cdecl;
     GetIsNull: function(res: PPGresult; tup_num, field_num: integer): integer; cdecl;
   public
@@ -185,8 +185,8 @@ type
     // - raise ESqlDBPostgres if the expected library is not found
     constructor Create;
     /// just a wrapper around FastSetString + GetValue/GetLength
-    procedure GetRawUTF8(res: PPGresult; tup_num, field_num: integer;
-      var result: RawUTF8);
+    procedure GetRawUtf8(res: PPGresult; tup_num, field_num: integer;
+      var result: RawUtf8);
     /// raise an exception on error and clean result
     // - will set pRes to nil if passed
     // - if andClear is true - will call always PQ.Clear(res)
@@ -251,8 +251,8 @@ begin
     Resolve(PQ_ENTRIES[i], @P[I], ESqlDBPostgres);
 end;
 
-procedure TSqlDBPostgresLib.GetRawUTF8(res: PPGresult;
-  tup_num, field_num: integer; var result: RawUTF8);
+procedure TSqlDBPostgresLib.GetRawUtf8(res: PPGresult;
+  tup_num, field_num: integer; var result: RawUtf8);
 begin
   FastSetString(result, GetValue(res, tup_num, field_num),
     GetLength(res, tup_num, field_num));
@@ -261,7 +261,7 @@ end;
 procedure TSqlDBPostgresLib.Check(conn: PPGconn; res: PPGresult;
   pRes: PPPGresult; andClear: boolean);
 var
-  errMsg, errCode: PUTF8Char;
+  errMsg, errCode: PUtf8Char;
 begin
   if (res = nil) or // nil in case of very fatal error, out of emory for example
      (ResultStatus(res) in
@@ -275,7 +275,7 @@ begin
     Clear(res);
     if pRes <> nil then
       pRes^ := nil;
-    raise ESqlDBPostgres.CreateUTF8(
+    raise ESqlDBPostgres.CreateUtf8(
             '% PGERRCODE: %, %', [self, errCode, errMsg]);
   end
   else if andClear then

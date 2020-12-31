@@ -72,41 +72,41 @@ type
     function GetStorage(aTable: TOrmClass): TRestStorageInMemory;
     /// overridden methods which will call fStaticData[TableModelIndex] directly
     // without the TRestOrmServer overhead
-    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; override;
-    function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
+    function EngineAdd(TableModelIndex: integer; const SentData: RawUtf8): TID; override;
+    function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8; override;
     function EngineUpdate(TableModelIndex: integer; ID: TID;
-      const SentData: RawUTF8): boolean; override;
+      const SentData: RawUtf8): boolean; override;
     function EngineDelete(TableModelIndex: integer; ID: TID): boolean; override;
-    function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
+    function EngineDeleteWhere(TableModelIndex: integer; const SqlWhere: RawUtf8;
       const IDs: TIDDynArray): boolean; override;
     function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PRttiProp; out BlobData: RawBlob): boolean; override;
     function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
       BlobField: PRttiProp; const BlobData: RawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
-      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
+      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUtf8): boolean; override;
     function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
-      const FieldName: RawUTF8; Increment: Int64): boolean; override;
+      const FieldName: RawUtf8; Increment: Int64): boolean; override;
     /// overridden methods which will return error (no main DB in our context)
-    function MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; override;
-    function MainEngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
-    function MainEngineList(const SQL: RawUTF8; ForceAJAX: boolean;
-      ReturnedRowCount: PPtrInt): RawUTF8; override;
+    function MainEngineAdd(TableModelIndex: integer; const SentData: RawUtf8): TID; override;
+    function MainEngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8; override;
+    function MainEngineList(const SQL: RawUtf8; ForceAjax: boolean;
+      ReturnedRowCount: PPtrInt): RawUtf8; override;
     function MainEngineUpdate(TableModelIndex: integer; aID: TID;
-      const SentData: RawUTF8): boolean; override;
+      const SentData: RawUtf8): boolean; override;
     function MainEngineDelete(TableModelIndex: integer; ID: TID): boolean; override;
-    function MainEngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
+    function MainEngineDeleteWhere(TableModelIndex: integer; const SqlWhere: RawUtf8;
       const IDs: TIDDynArray): boolean; override;
     function MainEngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PRttiProp; out BlobData: RawBlob): boolean; override;
     function MainEngineUpdateBlob(TableModelIndex: integer; aID: TID;
       BlobField: PRttiProp; const BlobData: RawBlob): boolean; override;
     function MainEngineUpdateField(TableModelIndex: integer;
-      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
+      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUtf8): boolean; override;
     function MainEngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
-      const FieldName: RawUTF8; Increment: Int64): boolean; override;
+      const FieldName: RawUtf8; Increment: Int64): boolean; override;
     // method not implemented: always return false
-    function EngineExecute(const aSQL: RawUTF8): boolean; override;
+    function EngineExecute(const aSQL: RawUtf8): boolean; override;
   public
     /// initialize an in-memory REST server with no database file
     constructor Create(aRest: TRest); overload; override;
@@ -146,8 +146,8 @@ type
     property FileName: TFileName
       read fFileName write fFileName;
     /// set if the file content is to be compressed binary, or standard JSON
-    // - it will use TRestStorageInMemory LoadFromJSON/LoadFromBinary
-    // SaveToJSON/SaveToBinary methods for optimized storage
+    // - it will use TRestStorageInMemory LoadFromJson/LoadFromBinary
+    // SaveToJson/SaveToBinary methods for optimized storage
     property BinaryFile: boolean
       read fBinaryFile write fBinaryFile;
   end;
@@ -188,8 +188,8 @@ type
     property FileName: TFileName
       read GetFileName;
     /// set if the file content is to be compressed binary, or standard JSON
-    // - it will use TRestStorageInMemory LoadFromJSON/LoadFromBinary
-    // SaveToJSON/SaveToBinary methods for optimized storage
+    // - it will use TRestStorageInMemory LoadFromJson/LoadFromBinary
+    // SaveToJson/SaveToBinary methods for optimized storage
     property BinaryFile: boolean
       read GetBinaryFile;
   published
@@ -217,7 +217,7 @@ type
 // - this data handles basic REST commands, since no complete SQL interpreter
 // can be implemented by TRestStorage; to provide full SQL process,
 // you should better use a Virtual Table class, inheriting e.g. from
-// TOrmVirtualTableAutoID associated with TOrmVirtualTableJSON/Binary
+// TOrmVirtualTableAutoID associated with TOrmVirtualTableJson/Binary
 // via a Model.VirtualTableRegister() call before TRestServer.Create
 // - you can use this method to change the filename of an existing storage
 // - return nil on any error, or an EModelException if the class is not in
@@ -311,8 +311,8 @@ end;
 
 procedure TRestOrmServerFullMemory.LoadFromStream(aStream: TStream);
 var
-  magic, JSON: RawUTF8;
-  P, TableName, Data: PUTF8Char;
+  magic, JSON: RawUtf8;
+  P, TableName, Data: PUtf8Char;
   t: PtrInt;
   wasString: boolean;
 begin
@@ -353,7 +353,7 @@ begin
       if P^ = ']' then
         break;
       inc(P);
-      TableName := GetJSONField(P, P, @wasString);
+      TableName := GetJsonField(P, P, @wasString);
       if not wasString or
          (P = nil) then
         exit;
@@ -361,10 +361,10 @@ begin
       if t < 0 then
         exit;
       Data := P;
-      P := GotoNextJSONObjectOrArray(P);
+      P := GotoNextJsonObjectOrArray(P);
       if P = nil then
         break;
-      TRestStorageInMemory(fStaticData[t]).LoadFromJSON(Data, P - Data);
+      TRestStorageInMemory(fStaticData[t]).LoadFromJson(Data, P - Data);
     until false;
   end;
 end;
@@ -418,7 +418,7 @@ begin
         with TRestStorageInMemory(fStaticData[t]) do
         begin
           // each TOrmClass is stored as SynLZ-compressed binary
-          WriteStringToStream(S, StoredClassRecordProps.SQLTableName);
+          WriteStringToStream(S, StoredClassRecordProps.SqlTableName);
           SaveToBinary(S);
         end;
     end
@@ -431,9 +431,9 @@ begin
         begin
           S.WriteBuffer(CHARS[1], 2);
           with StoredClassRecordProps do
-            S.WriteBuffer(pointer(SQLTableName)^, length(SQLTableName));
+            S.WriteBuffer(pointer(SqlTableName)^, length(SqlTableName));
           S.WriteBuffer(CHARS[2], 2);
-          SaveToJSON(S, true);
+          SaveToJson(S, true);
           S.WriteBuffer(CHARS[5], 1);
           if t < integer(fStaticDataCount - 1) then
             S.WriteBuffer(CHARS[4], 1);
@@ -446,7 +446,7 @@ begin
   InternalLog('UpdateToFile % done in %', [fFileName, timer.Stop], sllDB);
 end;
 
-function TRestOrmServerFullMemory.EngineExecute(const aSQL: RawUTF8): boolean;
+function TRestOrmServerFullMemory.EngineExecute(const aSQL: RawUtf8): boolean;
 begin
   result := false; // not implemented in this basic REST server class
 end;
@@ -466,20 +466,20 @@ end;
 // Engine*() methods will have direct access to static fStorage[])
 
 function TRestOrmServerFullMemory.EngineAdd(TableModelIndex: integer;
-  const SentData: RawUTF8): TID;
+  const SentData: RawUtf8): TID;
 begin
   result := fStaticData[TableModelIndex].EngineAdd(TableModelIndex, SentData);
   inc(InternalState);
 end;
 
 function TRestOrmServerFullMemory.EngineRetrieve(TableModelIndex: integer;
-  ID: TID): RawUTF8;
+  ID: TID): RawUtf8;
 begin
   result := fStaticData[TableModelIndex].EngineRetrieve(TableModelIndex, ID);
 end;
 
 function TRestOrmServerFullMemory.EngineUpdate(TableModelIndex: integer; ID: TID;
-  const SentData: RawUTF8): boolean;
+  const SentData: RawUtf8): boolean;
 begin
   result := fStaticData[TableModelIndex].EngineUpdate(TableModelIndex, ID, SentData);
 end;
@@ -491,10 +491,10 @@ begin
 end;
 
 function TRestOrmServerFullMemory.EngineDeleteWhere(TableModelIndex: integer;
-  const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean;
+  const SqlWhere: RawUtf8; const IDs: TIDDynArray): boolean;
 begin
   result := fStaticData[TableModelIndex].EngineDeleteWhere(TableModelIndex,
-    SQLWhere, IDs);
+    SqlWhere, IDs);
 end;
 
 function TRestOrmServerFullMemory.EngineRetrieveBlob(TableModelIndex: integer;
@@ -512,14 +512,14 @@ begin
 end;
 
 function TRestOrmServerFullMemory.EngineUpdateField(TableModelIndex: integer;
-  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
+  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUtf8): boolean;
 begin
   result := fStaticData[TableModelIndex].EngineUpdateField(TableModelIndex,
     SetFieldName, SetValue, WhereFieldName, WhereValue);
 end;
 
 function TRestOrmServerFullMemory.EngineUpdateFieldIncrement(
-  TableModelIndex: integer; ID: TID; const FieldName: RawUTF8;
+  TableModelIndex: integer; ID: TID; const FieldName: RawUtf8;
   Increment: Int64): boolean;
 begin
   result := fStaticData[TableModelIndex].EngineUpdateFieldIncrement(
@@ -529,25 +529,25 @@ end;
 // MainEngine*() methods should return error (only access via static fStaticData[])
 
 function TRestOrmServerFullMemory.MainEngineAdd(TableModelIndex: integer;
-  const SentData: RawUTF8): TID;
+  const SentData: RawUtf8): TID;
 begin
   result := 0;
 end;
 
 function TRestOrmServerFullMemory.MainEngineRetrieve(TableModelIndex: integer;
-  ID: TID): RawUTF8;
+  ID: TID): RawUtf8;
 begin
   result := '';
 end;
 
-function TRestOrmServerFullMemory.MainEngineList(const SQL: RawUTF8;
-  ForceAJAX: boolean; ReturnedRowCount: PPtrInt): RawUTF8;
+function TRestOrmServerFullMemory.MainEngineList(const SQL: RawUtf8;
+  ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawUtf8;
 begin
   result := '';
 end;
 
 function TRestOrmServerFullMemory.MainEngineUpdate(
-  TableModelIndex: integer; aID: TID; const SentData: RawUTF8): boolean;
+  TableModelIndex: integer; aID: TID; const SentData: RawUtf8): boolean;
 begin
   result := false;
 end;
@@ -559,7 +559,7 @@ begin
 end;
 
 function TRestOrmServerFullMemory.MainEngineDeleteWhere(
-  TableModelIndex: integer; const SQLWhere: RawUTF8;
+  TableModelIndex: integer; const SqlWhere: RawUtf8;
   const IDs: TIDDynArray): boolean;
 begin
   result := false;
@@ -581,13 +581,13 @@ end;
 
 function TRestOrmServerFullMemory.MainEngineUpdateField(
   TableModelIndex: integer;
-  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
+  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUtf8): boolean;
 begin
   result := false;
 end;
 
 function TRestOrmServerFullMemory.MainEngineUpdateFieldIncrement(
-  TableModelIndex: integer; ID: TID; const FieldName: RawUTF8;
+  TableModelIndex: integer; ID: TID; const FieldName: RawUtf8;
   Increment: Int64): boolean;
 begin
   result := false;

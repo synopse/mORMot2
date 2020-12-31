@@ -86,15 +86,15 @@ type
   // material about this horrible, but widely accepted, Apple hack
   TRTSPOverHTTPServer = class(TAsynchServer)
   protected
-    fRtspServer, fRtspPort: RawUTF8;
-    fPendingGet: TRawUTF8List;
-    function GetHttpPort: RawUTF8;
+    fRtspServer, fRtspPort: RawUtf8;
+    fPendingGet: TRawUtf8List;
+    function GetHttpPort: RawUtf8;
     // creates TPostConnection and TRtspConnection instances for a given stream
-    function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: RawUTF8;
+    function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: RawUtf8;
       out aConnection: TAsynchConnection): boolean; override;
   public
     /// initialize the proxy HTTP server forwarding specified RTSP server:port
-    constructor Create(const aRtspServer, aRtspPort, aHttpPort: RawUTF8;
+    constructor Create(const aRtspServer, aRtspPort, aHttpPort: RawUtf8;
       aLog: TSynLogClass; const aOnStart, aOnStop: TOnNotifyThread;
       aOptions: TAsynchConnectionsOptions = []); reintroduce;
     /// shutdown and finalize the server
@@ -102,17 +102,17 @@ type
     /// convert a rtsp://.... URI into a http://... proxy URI
     // - will reuse the rtsp public server name, but change protocol to http://
     // and set the port to RtspPort
-    function RtspToHttp(const RtspURI: RawUTF8): RawUTF8;
+    function RtspToHttp(const RtspURI: RawUtf8): RawUtf8;
     /// convert a http://... proxy URI into a rtsp://.... URI
-    function HttpToRtsp(const HttpURI: RawUTF8): RawUTF8;
+    function HttpToRtsp(const HttpURI: RawUtf8): RawUtf8;
     /// the associated RTSP server address
-    property RtspServer: RawUTF8
+    property RtspServer: RawUtf8
       read fRtspServer;
     /// the associated RTSP server port
-    property RtspPort: RawUTF8
+    property RtspPort: RawUtf8
       read fRtspPort;
     /// the bound HTTP port
-    property HttpPort: RawUTF8
+    property HttpPort: RawUtf8
       read GetHttpPort;
   end;
 
@@ -202,13 +202,13 @@ end;
 { TRTSPOverHTTPServer }
 
 constructor TRTSPOverHTTPServer.Create(
-  const aRtspServer, aRtspPort, aHttpPort: RawUTF8; aLog: TSynLogClass;
+  const aRtspServer, aRtspPort, aHttpPort: RawUtf8; aLog: TSynLogClass;
   const aOnStart, aOnStop: TOnNotifyThread; aOptions: TAsynchConnectionsOptions);
 begin
   fLog := aLog;
   fRtspServer := aRtspServer;
   fRtspPort := aRtspPort;
-  fPendingGet := TRawUTF8List.Create([fObjectsOwned, fCaseSensitive]);
+  fPendingGet := TRawUtf8List.Create([fObjectsOwned, fCaseSensitive]);
   inherited Create(
     aHttpPort, aOnStart, aOnStop, TPostConnection, 'rtsp/http', aLog, aOptions);
 end;
@@ -233,11 +233,11 @@ type
   end;
 
 function TRTSPOverHTTPServer.ConnectionCreate(aSocket: TNetSocket;
-  const aRemoteIp: RawUTF8; out aConnection: TAsynchConnection): boolean;
+  const aRemoteIp: RawUtf8; out aConnection: TAsynchConnection): boolean;
 var
   log: ISynLog;
   sock, get, old: TProxySocket;
-  cookie: RawUTF8;
+  cookie: RawUtf8;
   res: TNetResult;
   rtsp: TNetSocket;
   i, found: PtrInt;
@@ -245,7 +245,7 @@ var
   rtspconn: TRtspConnection;
   now: cardinal;
 
-  procedure PendingDelete(i: integer; const reason: RawUTF8);
+  procedure PendingDelete(i: integer; const reason: RawUtf8);
   begin
     if log <> nil then
       log.Log(sllDebug, 'ConnectionCreate rejected %', [reason], self);
@@ -295,7 +295,7 @@ begin
               PendingDelete(found, 'duplicated')
             else
             begin
-              sock.Write(FormatUTF8(
+              sock.Write(FormatUtf8(
                 'HTTP/1.0 200 OK'#13#10 +
                 'Server: % %'#13#10 +
                 'Connection: close'#13#10 +
@@ -349,13 +349,13 @@ begin
     res := NewSocket(
       fRtspServer, fRtspPort, nlTCP, {bind=}false, 1000, 1000, 1000, 0, rtsp);
     if res <> nrOK then
-      raise ERTSPOverHTTP.CreateUTF8('No RTSP server on %:% (%)',
+      raise ERTSPOverHTTP.CreateUtf8('No RTSP server on %:% (%)',
         [fRtspServer, fRtspPort, ToText(res)^]);
     postconn := TPostConnection.Create(aRemoteIp);
     rtspconn := TRtspConnection.Create(aRemoteIp);
     if not inherited ConnectionAdd(aSocket, postconn) or
        not inherited ConnectionAdd(rtsp, rtspconn) then
-      raise ERTSPOverHTTP.CreateUTF8('inherited %.ConnectionAdd(%) % failed',
+      raise ERTSPOverHTTP.CreateUtf8('inherited %.ConnectionAdd(%) % failed',
         [self, aSocket, cookie]);
     aConnection := postconn;
     postconn.fRtspTag := rtspconn.Handle;
@@ -381,7 +381,7 @@ begin
   end;
 end;
 
-function TRTSPOverHTTPServer.GetHttpPort: RawUTF8;
+function TRTSPOverHTTPServer.GetHttpPort: RawUtf8;
 begin
   if self <> nil then
     result := fServer.Port
@@ -389,7 +389,7 @@ begin
     result := '';
 end;
 
-function TRTSPOverHTTPServer.RtspToHttp(const RtspURI: RawUTF8): RawUTF8;
+function TRTSPOverHTTPServer.RtspToHttp(const RtspURI: RawUtf8): RawUtf8;
 var
   uri: TUri;
 begin
@@ -397,19 +397,19 @@ begin
      IdemPChar(pointer(RtspURI), 'RTSP://') and
      uri.From(copy(RtspURI, 8, maxInt), fRtspPort) and
      IdemPropNameU(uri.Port, fRtspPort) then
-    FormatUTF8('http://%:%/%', [uri.Server, fServer.Port, uri.Address], result)
+    FormatUtf8('http://%:%/%', [uri.Server, fServer.Port, uri.Address], result)
   else
     result := RtspURI;
 end;
 
-function TRTSPOverHTTPServer.HttpToRtsp(const HttpURI: RawUTF8): RawUTF8;
+function TRTSPOverHTTPServer.HttpToRtsp(const HttpURI: RawUtf8): RawUtf8;
 var
   uri: TUri;
 begin
   if (self <> nil) and
      uri.From(HttpURI, fServer.Port) and
      IdemPropNameU(uri.Port, fServer.Port) then
-    FormatUTF8('rtsp://%:%/%', [uri.Server, fRtspPort, uri.Address], result)
+    FormatUtf8('rtsp://%:%/%', [uri.Server, fRtspPort, uri.Address], result)
   else
     result := HttpURI;
 end;

@@ -50,23 +50,23 @@ type
   // TServiceContainerServer.SetServiceLog method
   TOrmServiceLog = class(TOrmNoCaseExtended)
   protected
-    fMethod: RawUTF8;
+    fMethod: RawUtf8;
     fInput: variant;
     fOutput: variant;
     fUser: integer;
     fSession: integer;
     fTime: TModTime;
     fMicroSec: integer;
-    fIP: RawUTF8;
+    fIP: RawUtf8;
   public
     /// overriden method creating an index on the Method/MicroSec columns
     class procedure InitializeTable(const Server: IRestOrmServer;
-      const FieldName: RawUTF8; Options: TOrmInitializeTableOptions); override;
+      const FieldName: RawUtf8; Options: TOrmInitializeTableOptions); override;
   published
     /// the 'interface.method' identifier of this call
     // - this column will be indexed, for fast SQL queries, with the MicroSec
     // column (for performance tuning)
-    property Method: RawUTF8
+    property Method: RawUtf8
       read fMethod write fMethod;
     /// the input parameters, as a JSON document
     // - will be stored in JSON_OPTIONS_FAST_EXTENDED format, i.e. with
@@ -95,7 +95,7 @@ type
     property MicroSec: integer
       read fMicroSec write fMicroSec;
     /// if not localhost/127.0.0.1, the remote IP address
-    property IP: RawUTF8
+    property IP: RawUtf8
       read fIP write fIP;
   end;
 
@@ -109,22 +109,22 @@ type
   public
     /// this overriden method will create an index on the 'Sent' column
     class procedure InitializeTable(const Server: IRestOrmServer;
-      const FieldName: RawUTF8; Options: TOrmInitializeTableOptions); override;
+      const FieldName: RawUtf8; Options: TOrmInitializeTableOptions); override;
     /// search for pending events since a supplied ID
     // - returns FALSE if no notification was found
     // - returns TRUE ad fill a TDocVariant array of JSON Objects, including
     // "ID": field, and Method as "MethodName": field
     class function LastEventsAsObjects(const Rest: IRestOrm; LastKnownID: TID;
       Limit: integer; Service: TInterfaceFactory; out Dest: TDocVariantData;
-      const MethodName: RawUTF8 = 'Method'; IDAsHexa: boolean = false): boolean;
+      const MethodName: RawUtf8 = 'Method'; IDAsHexa: boolean = false): boolean;
     /// allows to convert the Input array into a proper single JSON Object
     // - "ID": field will be included, and Method as "MethodName": field
     function SaveInputAsObject(Service: TInterfaceFactory;
-      const MethodName: RawUTF8 = 'Method'; IDAsHexa: boolean = false): variant; virtual;
+      const MethodName: RawUtf8 = 'Method'; IDAsHexa: boolean = false): variant; virtual;
     /// run FillOne and SaveInputAsObject into a TDocVariant array of JSON Objects
     // - "ID": field will be included, and Method as "MethodName": field
     procedure SaveFillInputsAsObjects(Service: TInterfaceFactory;
-      out Dest: TDocVariantData; const MethodName: RawUTF8 = 'Method';
+      out Dest: TDocVariantData; const MethodName: RawUtf8 = 'Method';
       IDAsHexa: boolean = false);
   published
     /// when this notification has been sent
@@ -243,18 +243,18 @@ type
   TServiceFactory = class(TInjectableObject)
   protected
     fInterface: TInterfaceFactory;
-    fInterfaceURI: RawUTF8;
-    fInterfaceMangledURI: RawUTF8;
+    fInterfaceURI: RawUtf8;
+    fInterfaceMangledURI: RawUtf8;
     fInstanceCreation: TServiceInstanceImplementation;
     fOrm: IRestOrm;
     fSharedInstance: TInterfacedObject;
-    fContract: RawUTF8;
-    fContractHash: RawUTF8;
-    fContractExpected: RawUTF8;
+    fContract: RawUtf8;
+    fContractHash: RawUtf8;
+    fContractExpected: RawUtf8;
     fExecution: TServiceFactoryExecutionDynArray;
     /// union of all fExecution[].Options
     fAnyOptions: TInterfaceMethodOptions;
-    procedure ExecutionAction(const aMethod: array of RawUTF8;
+    procedure ExecutionAction(const aMethod: array of RawUtf8;
       aOptions: TInterfaceMethodOptions; aAction: TServiceMethodOptionsAction);
     function GetInterfaceTypeInfo: PRttiInfo;
       {$ifdef HASINLINE}inline;{$endif}
@@ -268,7 +268,7 @@ type
     // and is typically a TRest instance
     constructor Create(aOwner: TInterfaceResolver; aInterface: PRttiInfo;
       aInstanceCreation: TServiceInstanceImplementation;
-      const aContractExpected: RawUTF8); reintroduce;
+      const aContractExpected: RawUtf8); reintroduce;
     /// retrieve an instance of this interface
     // - this virtual method will be overridden to reflect the expected
     // behavior of client or server side
@@ -282,7 +282,7 @@ type
     // - is always available on TServiceFactoryServer, but TServiceFactoryClient
     // will be able to retrieve it only if TServiceContainerServer.PublishSignature
     // is set to TRUE (which is not the default setting, for security reasons)
-    function RetrieveSignature: RawUTF8; virtual; abstract;
+    function RetrieveSignature: RawUtf8; virtual; abstract;
     /// access to the registered Interface RTTI information
     property InterfaceFactory: TInterfaceFactory
       read fInterface;
@@ -307,7 +307,7 @@ type
     // $               {"argument":"n2","direction":"in","type":"integer"},
     // $               {"argument":"Result","direction":"out","type":"integer"}
     // $ ]}]}
-    property Contract: RawUTF8
+    property Contract: RawUtf8
       read fContract;
     /// the published service contract, as expected by both client and server
     // - by default, will contain ContractHash property value (for security)
@@ -316,7 +316,7 @@ type
     // and TServiceFactoryServer instances must have a matching ContractExpected
     // - this value is returned by a '_contract_' pseudo-method name, with the URI:
     // $ POST /root/Interface._contract_
-    // or (if TRestRoutingJSON_RPC is used):
+    // or (if TRestRoutingJsonRpc is used):
     // $ POST /root/Interface
     // $ (...)
     // $ {"method":"_contract_","params":[]}
@@ -325,7 +325,7 @@ type
     // check and ask the server contract for consistency: it may be used e.g.
     // for accessing a plain REST HTTP server which is not based on mORMot,
     // so may not implement POST /root/Interface._contract_
-    property ContractExpected: RawUTF8
+    property ContractExpected: RawUtf8
       read fContractExpected write fContractExpected;
     /// direct access to the low-level per-method execution rights
     property Execution: TServiceFactoryExecutionDynArray
@@ -338,13 +338,13 @@ type
     /// the registered Interface URI
     // - in fact this is the Interface name without the initial 'I', e.g.
     // 'Calculator' for ICalculator
-    property InterfaceURI: RawUTF8
+    property InterfaceURI: RawUtf8
       read fInterfaceURI;
     /// the registered Interface mangled URI
     // - in fact this is encoding the GUID using BinToBase64URI(), e.g.
     // ! ['{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}'] into '00amyWGct0y_ze4lIsj2Mw'
     // - can be substituted to the clear InterfaceURI name
-    property InterfaceMangledURI: RawUTF8
+    property InterfaceMangledURI: RawUtf8
       read fInterfaceMangledURI;
     /// how each class instance is to be created
     // - only relevant on the server side; on the client side, this class will
@@ -356,7 +356,7 @@ type
     // (i.e. if you do not want to publish the available methods, but want
     // to check for the proper synchronization of both client and server)
     // - a possible value may be: "C351335A7406374C"
-    property ContractHash: RawUTF8
+    property ContractHash: RawUtf8
       read fContractHash;
   end;
 
@@ -383,13 +383,13 @@ type
   TServiceFactoryServerAbstract = class(TServiceFactory)
   protected
     fByPassAuthentication: boolean;
-    fResultAsJSONObject: boolean;
-    fResultAsJSONObjectWithoutResult: boolean;
+    fResultAsJsonObject: boolean;
+    fResultAsJsonObjectWithoutResult: boolean;
     fResultAsXMLObject: boolean;
-    fResultAsJSONObjectIfAccept: boolean;
-    fResultAsXMLObjectNameSpace: RawUTF8;
+    fResultAsJsonObjectIfAccept: boolean;
+    fResultAsXMLObjectNameSpace: RawUtf8;
     fExcludeServiceLogCustomAnswer: boolean;
-    function GetAuthGroupIDs(const aGroup: array of RawUTF8;
+    function GetAuthGroupIDs(const aGroup: array of RawUtf8;
       out IDs: TIDDynArray): boolean;
   public
     /// allow all methods execution for all TAuthGroup
@@ -410,7 +410,7 @@ type
     // Group ID from its main field
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
-    function AllowAllByName(const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
+    function AllowAllByName(const aGroup: array of RawUtf8): TServiceFactoryServerAbstract;
     /// deny all methods execution for all TAuthGroup
     // - all Groups will be affected by this method (on both client and server sides)
     // - this method returns self in order to allow direct chaining of security
@@ -429,13 +429,13 @@ type
     // Group ID from its main field
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
-    function DenyAllByName(const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
+    function DenyAllByName(const aGroup: array of RawUtf8): TServiceFactoryServerAbstract;
     /// allow specific methods execution for the all TAuthGroup
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
     // - all Groups will be affected by this method (on both client and server sides)
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
-    function Allow(const aMethod: array of RawUTF8): TServiceFactoryServerAbstract;
+    function Allow(const aMethod: array of RawUtf8): TServiceFactoryServerAbstract;
     /// allow specific methods execution for the specified TAuthGroup ID(s)
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
     // - the specified group ID(s) will be used to authorize remote service
@@ -444,7 +444,7 @@ type
     // ! UserGroupID := fServer.MainFieldID(TAuthGroup,'User');
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
-    function AllowByID(const aMethod: array of RawUTF8;
+    function AllowByID(const aMethod: array of RawUtf8;
       const aGroupID: array of TID): TServiceFactoryServerAbstract;
     /// allow specific methods execution for the specified TAuthGroup name(s)
     // - is just a wrapper around the other AllowByID() method, retrieving the
@@ -452,14 +452,14 @@ type
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
-    function AllowByName(const aMethod: array of RawUTF8;
-      const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
+    function AllowByName(const aMethod: array of RawUtf8;
+      const aGroup: array of RawUtf8): TServiceFactoryServerAbstract;
     /// deny specific methods execution for the all TAuthGroup
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
     // - all Groups will be affected by this method (on both client and server sides)
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
-    function Deny(const aMethod: array of RawUTF8): TServiceFactoryServerAbstract;
+    function Deny(const aMethod: array of RawUtf8): TServiceFactoryServerAbstract;
     /// deny specific methods execution for the specified TAuthGroup ID(s)
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
     // - the specified group ID(s) will be used to unauthorize remote service
@@ -468,7 +468,7 @@ type
     // ! UserGroupID := fServer.MainFieldID(TAuthGroup,'User');
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
-    function DenyByID(const aMethod: array of RawUTF8;
+    function DenyByID(const aMethod: array of RawUtf8;
       const aGroupID: array of TID): TServiceFactoryServerAbstract; overload;
     /// deny specific methods execution for the specified TAuthGroup name(s)
     // - is just a wrapper around the other DenyByID() method, retrieving the
@@ -476,8 +476,8 @@ type
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
-    function DenyByName(const aMethod: array of RawUTF8;
-      const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
+    function DenyByName(const aMethod: array of RawUtf8;
+      const aGroup: array of RawUtf8): TServiceFactoryServerAbstract;
     /// define execution options for a given set of methods
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
     // - if no method name is given (i.e. []), option will be set for all methods
@@ -485,7 +485,7 @@ type
     // a RunningThread.Synchronize() call - slower, but thread-safe
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
-    function SetOptions(const aMethod: array of RawUTF8;
+    function SetOptions(const aMethod: array of RawUtf8;
       aOptions: TInterfaceMethodOptions;
       aAction: TServiceMethodOptionsAction = moaReplace): TServiceFactoryServerAbstract;
     /// define the the instance life time-out, in seconds
@@ -504,7 +504,7 @@ type
     // TRest's model, unless a dedicated table is specified as aLogClass
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
-    function SetServiceLog(const aMethod: array of RawUTF8;
+    function SetServiceLog(const aMethod: array of RawUtf8;
       const aLogRest: IRestOrm;
       aLogClass: TOrmServiceLogClass = nil): TServiceFactoryServerAbstract;
       virtual; abstract;
@@ -524,20 +524,20 @@ type
     // useful e.g. when working with JavaScript clients
     // - Delphi clients (i.e. TServiceFactoryClient/TInterfacedObjectFake) will
     // transparently handle both formats
-    // - this value can be overridden by setting ForceServiceResultAsJSONObject
+    // - this value can be overridden by setting ForceServiceResultAsJsonObject
     // for a given TRestServerURIContext (e.g. for server-side JavaScript work)
-    property ResultAsJSONObject: boolean
-      read fResultAsJSONObject write fResultAsJSONObject;
+    property ResultAsJsonObject: boolean
+      read fResultAsJsonObject write fResultAsJsonObject;
     /// set to TRUE to return the interface's methods result as JSON object
     // with no '{"result":{...}}' nesting
     // - could be used e.g. for plain non mORMot REST Client with in sicSingle
     // or sicShared mode kind of services
     // - on client side, consider using TRestClientURI.ServiceDefineSharedAPI
-    property ResultAsJSONObjectWithoutResult: boolean
-      read fResultAsJSONObjectWithoutResult write fResultAsJSONObjectWithoutResult;
+    property ResultAsJsonObjectWithoutResult: boolean
+      read fResultAsJsonObjectWithoutResult write fResultAsJsonObjectWithoutResult;
     /// set to TRUE to return the interface's methods result as XML object
     // - by default (FALSE), method execution will return a JSON array with
-    // all VAR/OUT parameters, or a JSON object if ResultAsJSONObject is TRUE
+    // all VAR/OUT parameters, or a JSON object if ResultAsJsonObject is TRUE
     // - TRUE will generate a XML object instead, with the VAR/OUT parameter
     // names as field names (and "Result" for any function result) - may be
     // useful e.g. when working with some XML-only clients
@@ -556,13 +556,13 @@ type
     // - using this method allows to mix standard JSON requests (from JSON
     // or AJAX clients) and XML requests (from XML-only clients)
     property ResultAsXMLObjectIfAcceptOnlyXML: boolean
-      read fResultAsJSONObjectIfAccept write fResultAsJSONObjectIfAccept;
+      read fResultAsJsonObjectIfAccept write fResultAsJsonObjectIfAccept;
     /// specify a custom name space content when returning a XML object
     // - by default, no name space will be appended - but such rough XML will
     // have potential validation problems
     // - you may use e.g. XMLUTF8_NAMESPACE, which will append <content ...> ...
     // </content> around the generated XML data
-    property ResultAsXMLObjectNameSpace: RawUTF8
+    property ResultAsXMLObjectNameSpace: RawUtf8
       read fResultAsXMLObjectNameSpace write fResultAsXMLObjectNameSpace;
     /// disable base64-encoded TOrmServiceLog.Output for methods
     // returning TServiceCustomAnswer record (to reduce storage size)
@@ -578,7 +578,7 @@ type
   /// used to lookup one service in a global list of interface-based services
   TServiceContainerInterface = record
     /// one 'service' item, as set at URI, e.g. 'Calculator'
-    InterfaceName: RawUTF8;
+    InterfaceName: RawUtf8;
     /// the associated service provider
     Service: TServiceFactory;
   end;
@@ -593,7 +593,7 @@ type
   TServiceContainerInterfaceMethod = record
     /// one 'service.method' item, as set at URI
     // - e.g.'Calculator.Add','Calculator.Multiply'...
-    InterfaceDotMethodName: RawUTF8;
+    InterfaceDotMethodName: RawUtf8;
     /// the associated service provider
     InterfaceService: TServiceFactory;
     /// the index of the method for the given service
@@ -627,14 +627,14 @@ type
     fInterfaceMethods: TDynArrayHashed;
     fExpectMangledURI: boolean;
     procedure SetExpectMangledURI(aValue: boolean);
-    procedure SetInterfaceMethodBits(MethodNamesCSV: PUTF8Char;
+    procedure SetInterfaceMethodBits(MethodNamesCsv: PUtf8Char;
       IncludePseudoMethods: boolean; out bits: TServiceContainerInterfaceMethodBits);
-    function GetMethodName(ListInterfaceMethodIndex: integer): RawUTF8;
+    function GetMethodName(ListInterfaceMethodIndex: integer): RawUtf8;
     procedure CheckInterface(const aInterfaces: array of PRttiInfo);
     function AddServiceInternal(aService: TServiceFactory): integer;
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
     /// retrieve a service provider from its URI
-    function GetService(const aURI: RawUTF8): TServiceFactory;
+    function GetService(const aURI: RawUtf8): TServiceFactory;
   public
     /// initialize the Services list
     // - supplied TInterfaceResolver should be able to resolve IRestOrm,
@@ -684,16 +684,16 @@ type
     /// retrieve all registered Services names
     // - i.e. all interface names without the initial 'I', e.g. 'Calculator' for
     // ICalculator
-    procedure SetInterfaceNames(out Names: TRawUTF8DynArray);
+    procedure SetInterfaceNames(out Names: TRawUtf8DynArray);
     /// retrieve all registered Services contracts as a JSON array
     // - i.e. a JSON array of TServiceFactory.Contract JSON objects
-    function AsJson: RawJSON;
+    function AsJson: RawJson;
     /// retrieve a service provider from its URI
     // - it expects the supplied URI variable  to be e.g. '00amyWGct0y_ze4lIsj2Mw'
     // or 'Calculator', depending on the ExpectMangledURI property
     // - on match, it  will return the service the corresponding interface factory
     // - returns nil if the URI does not match any registered interface
-    property Services[const aURI: RawUTF8]: TServiceFactory
+    property Services[const aURI: RawUtf8]: TServiceFactory
       read GetService; default;
     /// direct access to the internal list of interfdce services ['Calculator',...]
     property InterfaceList: TServiceContainerInterfaces
@@ -736,7 +736,7 @@ type
     // - this method will be implemented as thread-safe
     // - you can specify some method names, or all methods redirection if []
     procedure Redirect(const aCallback: IInvokable;
-      const aMethodsNames: array of RawUTF8; aSubscribe: boolean = true); overload;
+      const aMethodsNames: array of RawUtf8; aSubscribe: boolean = true); overload;
     /// add or remove a class instance callback to the internal redirection list
     // - will register a callback if aSubscribe is true
     // - will unregister a callback if aSubscribe is false
@@ -744,7 +744,7 @@ type
     // - this method will be implemented as thread-safe
     // - you can specify some method names, or all methods redirection if []
     procedure Redirect(const aCallback: TInterfacedObject;
-      const aMethodsNames: array of RawUTF8; aSubscribe: boolean = true); overload;
+      const aMethodsNames: array of RawUtf8; aSubscribe: boolean = true); overload;
   end;
 
   /// a callback interface used to notify a TOrm modification in real time
@@ -757,10 +757,10 @@ type
     ['{8598E6BE-3590-4F76-9449-7AF7AF4241B0}']
     /// this event will be raised on any Add on a versioned record
     // - the supplied JSON object will contain the TRecordVersion field
-    procedure Added(const NewContent: RawJSON);
+    procedure Added(const NewContent: RawJson);
     /// this event will be raised on any Update on a versioned record
     // - the supplied JSON object will contain the TRecordVersion field
-    procedure Updated(const ModifiedContent: RawJSON);
+    procedure Updated(const ModifiedContent: RawJson);
     /// this event will be raised on any Delete on a versioned record
     procedure Deleted(const ID: TID; const Revision: TRecordVersion);
     /// allow to optimize process for WebSockets "jumbo frame" items
@@ -785,7 +785,7 @@ type
     /// a specialized UTF-8 string type, used for TRestServerURI storage
   // - URI format is 'address:port/root', but port or root are optional
   // - you could use TRestServerURI record to store and process it
-  TRestServerURIString = type RawUTF8;
+  TRestServerURIString = type RawUtf8;
 
   /// a list of UTF-8 strings, used for TRestServerURI storage
   // - URI format is 'address:port/root', but port or root are optional
@@ -805,11 +805,11 @@ type
     procedure SetURI(const Value: TRestServerURIString);
   public
     /// the TRestServer IP Address or DNS name
-    Address: RawUTF8;
+    Address: RawUtf8;
     /// the TRestServer IP port
-    Port: RawUTF8;
+    Port: RawUtf8;
     /// the TRestServer model Root
-    Root: RawUTF8;
+    Root: RawUtf8;
     /// returns TRUE if all field values do match, case insensitively
     function Equals(const other: TRestServerURI): boolean;
     /// property which allows to read or set the Address/Port/Root fields as
@@ -824,7 +824,7 @@ type
 
   /// used to publish all Services supported by a TRestServer instance
   // - as expected by TRestServer.ServicesPublishedInterfaces
-  // - can be serialized as a JSON object via RecordLoadJSON/RecordSaveJSON
+  // - can be serialized as a JSON object via RecordLoadJson/RecordSaveJson
   {$ifdef USERECORDWITHMETHODS}
   TServicesPublishedInterfaces = record
   {$else}
@@ -836,7 +836,7 @@ type
     /// the list of supported services names
     // - in fact this is the Interface name without the initial 'I', e.g.
     // 'Calculator' for ICalculator
-    Names: TRawUTF8DynArray;
+    Names: TRawUtf8DynArray;
   end;
 
   /// store a list of published Services supported by a TRestServer instance
@@ -853,7 +853,7 @@ type
     fTimeOut: integer;
   public
     /// the internal list of published services
-    // - the list is stored in-order, i.e. it will follow the RegisterFromJSON()
+    // - the list is stored in-order, i.e. it will follow the RegisterFromJson()
     // execution order: the latest registrations will appear last
     List: TServicesPublishedInterfacesDynArray;
     /// how many items are actually stored in List[]
@@ -867,12 +867,12 @@ type
     // - called by TRestServerURIContext.InternalExecuteSOAByInterface when
     // the client provides its own services as _contract_ HTTP body
     // - warning: supplied PublishedJson will be parsed in place, so modified
-    procedure RegisterFromClientJSON(var PublishedJson: RawUTF8);
+    procedure RegisterFromClientJSON(var PublishedJson: RawUtf8);
     /// set the list from JSON serialized TServicesPublishedInterfacesDynArray
     // - may be used to duplicate the whole TRestServer.AssociatedServices
     // content, as returned from /root/Stat?findservice=*
     // - warning: supplied PublishedJson will be parsed in place, so modified
-    procedure RegisterFromServerJSON(var PublishedJson: RawUTF8);
+    procedure RegisterFromServerJSON(var PublishedJson: RawUtf8);
     /// search for a public URI in the registration list
     function FindURI(const aPublicURI: TRestServerURI): PtrInt;
     /// search for the latest registrations of a service, by name
@@ -880,7 +880,7 @@ type
     // 'Calculator' for ICalculator - warning: research is case-sensitive
     // - if the service name has been registered several times, all
     // registration will be returned, the latest in first position
-    function FindService(const aServiceName: RawUTF8): TRestServerURIDynArray;
+    function FindService(const aServiceName: RawUtf8): TRestServerURIDynArray;
     /// return all services URI by name, from the registration list, as URIs
     // - will lookup for the Interface name without the initial 'I', e.g.
     // 'Calculator' for ICalculator - warning: research is case-sensitive
@@ -888,7 +888,7 @@ type
     // registration being the first to appear, e.g.
     // $ ["addresslast:port/root","addressprevious:port/root","addressfirst:port/root"]
     function FindServiceAll(
-      const aServiceName: RawUTF8): TRestServerURIStringDynArray; overload;
+      const aServiceName: RawUtf8): TRestServerURIStringDynArray; overload;
     /// return all services URI by name, from the registration list, as JSON
     // - will lookup for the Interface name without the initial 'I', e.g.
     // 'Calculator' for ICalculator - warning: research is case-sensitive
@@ -899,12 +899,12 @@ type
     // - if aServiceName='*', it will return ALL registration items, encoded as
     // a TServicesPublishedInterfaces JSON array, e.g.
     // $ [{"PublicURI":{"Address":"1.2.3.4","Port":"123","Root":"root"},"Names":['Calculator']},...]
-    procedure FindServiceAll(const aServiceName: RawUTF8;
+    procedure FindServiceAll(const aServiceName: RawUtf8;
       aWriter: TTextWriter); overload;
     /// the number of milliseconds after which an entry expires
     // - is 0 by default, meaning no expiration
     // - you can set it to a value so that any service URI registered with
-    // RegisterFromJSON() AFTER this property modification may expire
+    // RegisterFromJson() AFTER this property modification may expire
     property TimeOut: integer
       read fTimeOut write fTimeOut;
   end;
@@ -921,29 +921,29 @@ uses
 { TOrmServiceLog }
 
 class procedure TOrmServiceLog.InitializeTable(const Server: IRestOrmServer;
-  const FieldName: RawUTF8; Options: TOrmInitializeTableOptions);
+  const FieldName: RawUtf8; Options: TOrmInitializeTableOptions);
 begin
   inherited;
   if FieldName = '' then
-    Server.CreateSQLMultiIndex(self, ['Method', 'MicroSec'], false);
+    Server.CreateSqlMultiIndex(self, ['Method', 'MicroSec'], false);
 end;
 
 
 { TOrmServiceNotifications }
 
 class procedure TOrmServiceNotifications.InitializeTable(
-  const Server: IRestOrmServer; const FieldName: RawUTF8;
+  const Server: IRestOrmServer; const FieldName: RawUtf8;
   Options: TOrmInitializeTableOptions);
 begin
   inherited;
   if (FieldName = '') or
      (FieldName = 'Sent') then
-    Server.CreateSQLMultiIndex(self, ['Sent'], false);
+    Server.CreateSqlMultiIndex(self, ['Sent'], false);
 end;
 
 class function TOrmServiceNotifications.LastEventsAsObjects(
   const Rest: IRestOrm; LastKnownID: TID; Limit: integer; Service: TInterfaceFactory;
-  out Dest: TDocVariantData; const MethodName: RawUTF8; IDAsHexa: boolean): boolean;
+  out Dest: TDocVariantData; const MethodName: RawUtf8; IDAsHexa: boolean): boolean;
 var
   res: TOrmServiceNotifications;
 begin
@@ -963,7 +963,7 @@ begin
 end;
 
 function TOrmServiceNotifications.SaveInputAsObject(
-  Service: TInterfaceFactory; const MethodName: RawUTF8; IDAsHexa: boolean): variant;
+  Service: TInterfaceFactory; const MethodName: RawUtf8; IDAsHexa: boolean): variant;
 var
   m: integer;
 begin
@@ -984,7 +984,7 @@ begin
 end;
 
 procedure TOrmServiceNotifications.SaveFillInputsAsObjects(
-  Service: TInterfaceFactory; out Dest: TDocVariantData; const MethodName: RawUTF8;
+  Service: TInterfaceFactory; out Dest: TDocVariantData; const MethodName: RawUtf8;
   IDAsHexa: boolean);
 begin
   Dest.InitFast(FillTable.RowCount, dvArray);
@@ -999,7 +999,7 @@ end;
 
 constructor TServiceFactory.Create(aOwner: TInterfaceResolver;
   aInterface: PRttiInfo; aInstanceCreation: TServiceInstanceImplementation;
-  const aContractExpected: RawUTF8);
+  const aContractExpected: RawUtf8);
 begin
   inherited CreateWithResolver(aOwner, {raiseIfNotFound=}true);
   fInterface := TInterfaceFactory.Get(aInterface);
@@ -1007,11 +1007,11 @@ begin
   fInterfaceMangledURI := BinToBase64URI(@fInterface.InterfaceIID, SizeOf(TGUID));
   fInterfaceURI := fInterface.InterfaceURI;
   if fOrm.Model.GetTableIndex(fInterfaceURI) >= 0 then
-    raise EServiceException.CreateUTF8('%.Create: I% routing name is ' +
+    raise EServiceException.CreateUtf8('%.Create: I% routing name is ' +
       'already used by a % SQL table name', [self, fInterfaceURI, fInterfaceURI]);
   SetLength(fExecution, fInterface.MethodsCount);
   // compute interface signature (aka "contract"), serialized as a JSON object
-  FormatUTF8('{"contract":"%","implementation":"%","methods":%}', [fInterfaceURI,
+  FormatUtf8('{"contract":"%","implementation":"%","methods":%}', [fInterfaceURI,
     LowerCase(TrimLeftLowerCaseShort(ToText(InstanceCreation))), fInterface.Contract],
     fContract);
   fContractHash := '"' + CardinalToHex(Hash32(fContract)) +
@@ -1040,7 +1040,7 @@ begin
   result := fInterface.InterfaceIID;
 end;
 
-procedure TServiceFactory.ExecutionAction(const aMethod: array of RawUTF8;
+procedure TServiceFactory.ExecutionAction(const aMethod: array of RawUtf8;
   aOptions: TInterfaceMethodOptions; aAction: TServiceMethodOptionsAction);
 
   procedure SetAction(var exec: TServiceFactoryExecution);
@@ -1078,7 +1078,7 @@ end;
 { ************ TServiceFactoryServerAbstract Abstract Service Provider }
 
 function TServiceFactoryServerAbstract.GetAuthGroupIDs(
-  const aGroup: array of RawUTF8; out IDs: TIDDynArray): boolean;
+  const aGroup: array of RawUtf8; out IDs: TIDDynArray): boolean;
 var
   i: PtrInt;
 begin
@@ -1088,7 +1088,7 @@ begin
     for i := 0 to high(IDs) do
       // fExecution[].Denied set is able to store IDs up to 256 only
       if IDs[i] > 255 then
-        raise EServiceException.CreateUTF8(
+        raise EServiceException.CreateUtf8(
           'Unsupported %.Allow/Deny with GroupID=% >255', [self, IDs[i]]);
 end;
 
@@ -1116,7 +1116,7 @@ begin
 end;
 
 function TServiceFactoryServerAbstract.AllowAllByName(
-  const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
+  const aGroup: array of RawUtf8): TServiceFactoryServerAbstract;
 var
   IDs: TIDDynArray;
 begin
@@ -1149,7 +1149,7 @@ begin
 end;
 
 function TServiceFactoryServerAbstract.DenyAllByName(
-  const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
+  const aGroup: array of RawUtf8): TServiceFactoryServerAbstract;
 var
   IDs: TIDDynArray;
 begin
@@ -1159,7 +1159,7 @@ begin
 end;
 
 function TServiceFactoryServerAbstract.Allow(
-  const aMethod: array of RawUTF8): TServiceFactoryServerAbstract;
+  const aMethod: array of RawUtf8): TServiceFactoryServerAbstract;
 var
   m: PtrInt;
 begin
@@ -1171,7 +1171,7 @@ begin
 end;
 
 function TServiceFactoryServerAbstract.AllowByID(
-  const aMethod: array of RawUTF8;
+  const aMethod: array of RawUtf8;
   const aGroupID: array of TID): TServiceFactoryServerAbstract;
 var
   m, g: PtrInt;
@@ -1186,8 +1186,8 @@ begin
 end;
 
 function TServiceFactoryServerAbstract.AllowByName(
-  const aMethod: array of RawUTF8;
-  const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
+  const aMethod: array of RawUtf8;
+  const aGroup: array of RawUtf8): TServiceFactoryServerAbstract;
 var
   IDs: TIDDynArray;
 begin
@@ -1197,7 +1197,7 @@ begin
 end;
 
 function TServiceFactoryServerAbstract.Deny(
-  const aMethod: array of RawUTF8): TServiceFactoryServerAbstract;
+  const aMethod: array of RawUtf8): TServiceFactoryServerAbstract;
 var
   m: PtrInt;
 begin
@@ -1209,7 +1209,7 @@ begin
 end;
 
 function TServiceFactoryServerAbstract.DenyByID(
-  const aMethod: array of RawUTF8;
+  const aMethod: array of RawUtf8;
   const aGroupID: array of TID): TServiceFactoryServerAbstract;
 var
   m, g: PtrInt;
@@ -1222,8 +1222,8 @@ begin
   result := self;
 end;
 
-function TServiceFactoryServerAbstract.DenyByName(const aMethod: array of RawUTF8;
-  const aGroup: array of RawUTF8): TServiceFactoryServerAbstract;
+function TServiceFactoryServerAbstract.DenyByName(const aMethod: array of RawUtf8;
+  const aGroup: array of RawUtf8): TServiceFactoryServerAbstract;
 var
   IDs: TIDDynArray;
 begin
@@ -1233,39 +1233,39 @@ begin
 end;
 
 function TServiceFactoryServerAbstract.SetOptions(
-  const aMethod: array of RawUTF8; aOptions: TInterfaceMethodOptions;
+  const aMethod: array of RawUtf8; aOptions: TInterfaceMethodOptions;
   aAction: TServiceMethodOptionsAction): TServiceFactoryServerAbstract;
 begin
   if self <> nil then
   begin
     if (fInstanceCreation = sicPerThread) and
        (optExecLockedPerInterface in aOptions) then
-      raise EServiceException.CreateUTF8(
+      raise EServiceException.CreateUtf8(
         '%.SetOptions(I%,optExecLockedPerInterface) is not compatible ' +
         ' with sicPerThread', [self, fInterfaceURI]);
     if (fInstanceCreation = sicPerThread) and
        ([optExecInMainThread, optFreeInMainThread, optExecInPerInterfaceThread,
          optFreeInPerInterfaceThread] * aOptions <> []) then
-      raise EServiceException.CreateUTF8(
+      raise EServiceException.CreateUtf8(
         '%.SetOptions(I%,opt*In*Thread) is not compatible with sicPerThread',
         [self, fInterfaceURI]);
     if (optExecLockedPerInterface in aOptions) and
        ([optExecInMainThread, optFreeInMainThread, optExecInPerInterfaceThread,
          optFreeInPerInterfaceThread] * aOptions <> []) then
-      raise EServiceException.CreateUTF8(
+      raise EServiceException.CreateUtf8(
         '%.SetOptions(I%,optExecLockedPerInterface) with opt*In*Thread options',
         [self, fInterfaceURI]);
     ExecutionAction(aMethod, aOptions, aAction);
     if (optFreeInPerInterfaceThread in fAnyOptions) and
        not (optExecInPerInterfaceThread in fAnyOptions) then
-      raise EServiceException.CreateUTF8(
+      raise EServiceException.CreateUtf8(
         '%.SetOptions(I%,optFreeInPerInterfaceThread)' +
         ' without optExecInPerInterfaceThread', [self, fInterfaceURI]);
     if ([optExecInMainThread, optFreeInMainThread] *
          fAnyOptions <> []) and
        ([optExecInPerInterfaceThread, optFreeInPerInterfaceThread] *
          fAnyOptions <> []) then
-      raise EServiceException.CreateUTF8(
+      raise EServiceException.CreateUtf8(
         '%.SetOptions(I%): concurrent opt*InMainThread and ' +
         'opt*InPerInterfaceThread', [self, fInterfaceURI]);
   end;
@@ -1282,9 +1282,9 @@ constructor TServiceContainer.Create(aOwner: TInterfaceResolver);
 begin
   fOwner := aOwner;
   fInterfaces.InitSpecific(TypeInfo(TServiceContainerInterfaces),
-    fInterface, ptRawUTF8, nil, {caseinsensitive=}true);
+    fInterface, ptRawUtf8, nil, {caseinsensitive=}true);
   fInterfaceMethods.InitSpecific(TypeInfo(TServiceContainerInterfaceMethods),
-    fInterfaceMethod, ptRawUTF8, nil, {caseinsensitive=}true);
+    fInterfaceMethod, ptRawUtf8, nil, {caseinsensitive=}true);
 end;
 
 destructor TServiceContainer.Destroy;
@@ -1314,7 +1314,7 @@ function TServiceContainer.AddServiceInternal(aService: TServiceFactory): intege
 var
   MethodIndex: integer;
 
-  procedure AddOne(const aInterfaceDotMethodName: RawUTF8);
+  procedure AddOne(const aInterfaceDotMethodName: RawUtf8);
   var
     p: PServiceContainerInterfaceMethod;
   begin
@@ -1325,13 +1325,13 @@ var
   end;
 
 var
-  aURI: RawUTF8;
+  aURI: RawUtf8;
   internal: TServiceInternalMethod;
   m: PtrInt;
 begin
   if (self = nil) or
      (aService = nil) then
-    raise EServiceException.CreateUTF8(
+    raise EServiceException.CreateUtf8(
       '%.AddServiceInternal(%)', [self, aService]);
   // add TServiceFactory to the internal list
   if ExpectMangledURI then
@@ -1355,15 +1355,15 @@ var
 begin
   for i := 0 to high(aInterfaces) do
     if aInterfaces[i] = nil then
-      raise EServiceException.CreateUTF8('%: aInterfaces[%]=nil', [self, i])
+      raise EServiceException.CreateUtf8('%: aInterfaces[%]=nil', [self, i])
     else
       with aInterfaces[i]^ do
         if InterfaceGUID = nil then
-          raise EServiceException.CreateUTF8('%: % is not an interface', [self, Name^])
+          raise EServiceException.CreateUtf8('%: % is not an interface', [self, Name^])
         else if not (ifHasGuid in InterfaceType^.IntfFlags) then
-          raise EServiceException.CreateUTF8('%: % interface has no GUID', [self, Name^])
+          raise EServiceException.CreateUtf8('%: % interface has no GUID', [self, Name^])
         else if Info(InterfaceGUID^) <> nil then
-          raise EServiceException.CreateUTF8('%: % GUID already registered', [self, Name^]);
+          raise EServiceException.CreateUtf8('%: % GUID already registered', [self, Name^]);
 end;
 
 procedure TServiceContainer.SetExpectMangledURI(aValue: boolean);
@@ -1377,31 +1377,31 @@ begin
   toregisteragain := fInterface; // same services, but other URIs
   fInterface := nil;
   fInterfaces.InitSpecific(TypeInfo(TServiceContainerInterfaces),
-    fInterface, ptRawUTF8, nil, {caseinsensitive=}not aValue);
+    fInterface, ptRawUtf8, nil, {caseinsensitive=}not aValue);
   fInterfaceMethod := nil;
   fInterfaceMethods.InitSpecific(TypeInfo(TServiceContainerInterfaceMethods),
-    fInterfaceMethod, ptRawUTF8, nil, not aValue);
+    fInterfaceMethod, ptRawUtf8, nil, not aValue);
   for i := 0 to high(toregisteragain) do
     AddServiceInternal(toregisteragain[i].Service);
 end;
 
-procedure TServiceContainer.SetInterfaceMethodBits(MethodNamesCSV: PUTF8Char;
+procedure TServiceContainer.SetInterfaceMethodBits(MethodNamesCsv: PUtf8Char;
   IncludePseudoMethods: boolean; out bits: TServiceContainerInterfaceMethodBits);
 var
   i, n: PtrInt;
-  method: RawUTF8;
+  method: RawUtf8;
 begin
   FillCharFast(bits, SizeOf(bits), 0);
   n := length(fInterfaceMethod);
   if n > SizeOf(bits) shl 3 then
-    raise EServiceException.CreateUTF8('%.SetInterfaceMethodBits: n=%', [self, n]);
+    raise EServiceException.CreateUtf8('%.SetInterfaceMethodBits: n=%', [self, n]);
   if IncludePseudoMethods then
     for i := 0 to n - 1 do
       if fInterfaceMethod[i].InterfaceMethodIndex < SERVICE_PSEUDO_METHOD_COUNT then
         include(bits, i);
-  while MethodNamesCSV <> nil do
+  while MethodNamesCsv <> nil do
   begin
-    GetNextItem(MethodNamesCSV, ',', method);
+    GetNextItem(MethodNamesCsv, ',', method);
     if PosExChar('.', method) = 0 then
     begin
       for i := 0 to n - 1 do
@@ -1420,7 +1420,7 @@ begin
   end;
 end;
 
-function TServiceContainer.GetMethodName(ListInterfaceMethodIndex: integer): RawUTF8;
+function TServiceContainer.GetMethodName(ListInterfaceMethodIndex: integer): RawUtf8;
 begin
   if cardinal(ListInterfaceMethodIndex) >= cardinal(length(fInterfaceMethod)) then
     result := ''
@@ -1429,7 +1429,7 @@ begin
       result := InterfaceService.fInterface.GetMethodName(InterfaceMethodIndex);
 end;
 
-function TServiceContainer.GetService(const aURI: RawUTF8): TServiceFactory;
+function TServiceContainer.GetService(const aURI: RawUtf8): TServiceFactory;
 var
   i: PtrInt;
 begin
@@ -1512,7 +1512,7 @@ begin
     Services[i] := fInterface[i].Service.fInterface.InterfaceIID;
 end;
 
-procedure TServiceContainer.SetInterfaceNames(out Names: TRawUTF8DynArray);
+procedure TServiceContainer.SetInterfaceNames(out Names: TRawUtf8DynArray);
 var
   i, n: PtrInt;
 begin
@@ -1524,7 +1524,7 @@ begin
     Names[i] := fInterface[i].Service.fInterface.InterfaceURI;
 end;
 
-function TServiceContainer.AsJson: RawJSON;
+function TServiceContainer.AsJson: RawJson;
 var
   WR: TTextWriter;
   i: PtrInt;
@@ -1534,7 +1534,7 @@ begin
   if (self = nil) or
      (fInterface = nil) then
     exit;
-  WR := TJSONSerializer.CreateOwnedStream(temp);
+  WR := TJsonSerializer.CreateOwnedStream(temp);
   try
     WR.Add('[');
     for i := 0 to high(fInterface) do
@@ -1544,7 +1544,7 @@ begin
     end;
     WR.CancelLastComma;
     WR.Add(']');
-    WR.SetText(RawUTF8(result));
+    WR.SetText(RawUtf8(result));
   finally
     WR.Free;
   end;
@@ -1636,7 +1636,7 @@ begin
 end;
 
 function TServicesPublishedInterfacesList.FindService(
-  const aServiceName: RawUTF8): TRestServerURIDynArray;
+  const aServiceName: RawUtf8): TRestServerURIDynArray;
 var
   i, n: PtrInt;
   tix: Int64;
@@ -1662,7 +1662,7 @@ begin
 end;
 
 function TServicesPublishedInterfacesList.FindServiceAll(
-  const aServiceName: RawUTF8): TRestServerURIStringDynArray;
+  const aServiceName: RawUtf8): TRestServerURIStringDynArray;
 var
   i: PtrInt;
   n: integer;
@@ -1678,7 +1678,7 @@ begin
       if FindPropName(List[i].Names, aServiceName) >= 0 then
         if (fTimeOut = 0) or
            (fTimeoutTix[i] < tix) then
-          AddRawUTF8(TRawUTF8DynArray(result), n, List[i].PublicURI.URI);
+          AddRawUtf8(TRawUtf8DynArray(result), n, List[i].PublicURI.URI);
   finally
     Safe.UnLock;
   end;
@@ -1686,7 +1686,7 @@ begin
 end;
 
 procedure TServicesPublishedInterfacesList.FindServiceAll(
-  const aServiceName: RawUTF8; aWriter: TTextWriter);
+  const aServiceName: RawUtf8; aWriter: TTextWriter);
 var
   i: PtrInt;
   tix: Int64;
@@ -1727,7 +1727,7 @@ end;
 //TODO : to be implemented in mormot.soa.client
 {
 function TServicesPublishedInterfacesList.RegisterFromServer(Client: TRestClientURI): boolean;
-var json: RawUTF8;
+var json: RawUtf8;
 begin
   result := Client.CallBackGet('stat',['findservice','*'],json)=HTTP_SUCCESS;
   if result and
@@ -1737,14 +1737,14 @@ end;
 }
 
 procedure TServicesPublishedInterfacesList.RegisterFromServerJSON(
-  var PublishedJson: RawUTF8);
+  var PublishedJson: RawUtf8);
 var
   tix: Int64;
   i: PtrInt;
 begin
   Safe.Lock;
   try
-    fDynArray.LoadFromJSON(pointer(PublishedJson));
+    fDynArray.LoadFromJson(pointer(PublishedJson));
     fDynArrayTimeoutTix.Count := Count;
     tix := GetTickCount64;
     if fTimeout = 0 then
@@ -1759,13 +1759,13 @@ begin
 end;
 
 procedure TServicesPublishedInterfacesList.RegisterFromClientJSON(
-  var PublishedJson: RawUTF8);
+  var PublishedJson: RawUtf8);
 var
   i: PtrInt;
   nfo: TServicesPublishedInterfaces;
   crc: cardinal;
   tix: Int64;
-  P: PUTF8Char;
+  P: PUtf8Char;
 begin
   if PublishedJson = '' then
     exit;
@@ -1779,7 +1779,7 @@ begin
   if P^ = '[' then
     // when transmitted as [params] in a _contract_ HTTP body content
     inc(P);
-  if (RecordLoadJSON(nfo, P, TypeInfo(TServicesPublishedInterfaces)) = nil) or
+  if (RecordLoadJson(nfo, P, TypeInfo(TServicesPublishedInterfaces)) = nil) or
      (nfo.PublicURI.Address = '') then
     // invalid supplied JSON content
     exit;
@@ -1814,9 +1814,9 @@ end;
 const
   // text definitions, registered in unit's initialization block below
   _TRestServerURI =
-    'Address,Port,Root: RawUTF8';
+    'Address,Port,Root: RawUtf8';
   _TServicesPublishedInterfaces =
-    'PublicURI:TRestServerURI Names: array of RawUTF8';
+    'PublicURI:TRestServerURI Names: array of RawUtf8';
 
 procedure InitializeUnit;
 begin

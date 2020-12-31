@@ -233,7 +233,7 @@ const
   // GetTypeInfo() request for all data types
   SQL_ALL_TYPES = 0;
 
-  // Default conversion code for SQLBindCol(), SQLBindParam() and SQLGetData()
+  // Default conversion code for SQLBindCol(), SQLBindParam() and SqlGetData()
   SQL_DEFAULT = 99;
 
   // SQLSQLLEN GetData() code indicating that the application row descriptor
@@ -255,11 +255,11 @@ const
   SQL_NO_NULLS = 0;
   SQL_NULLABLE = 1;
 
-  // Value returned by SQLGetTypeInfo() to denote that it is
+  // Value returned by SqlGetTypeInfo() to denote that it is
   // not known whether or not a data type supports null values.
   SQL_NULLABLE_UNKNOWN = 2;
 
-  // Values returned by SQLGetTypeInfo() to show WHERE clause supported
+  // Values returned by SqlGetTypeInfo() to show WHERE clause supported
   SQL_PRED_NONE = 0;
   SQL_PRED_CHAR = 1;
   SQL_PRED_BASIC = 2;
@@ -301,7 +301,7 @@ const
   // null handle used in place of parent handle when allocating HENV
   SQL_NULL_HANDLE = nil;
 
-  // Information requested by SQLGetInfo()
+  // Information requested by SqlGetInfo()
   SQL_MAX_DRIVER_CONNECTIONS = 0;
   SQL_MAXIMUM_DRIVER_CONNECTIONS = SQL_MAX_DRIVER_CONNECTIONS;
   SQL_MAX_CONCURRENT_ACTIVITIES = 1;
@@ -373,7 +373,7 @@ const
   // Statement attributes
   SQL_SOPT_SS_BASE                      = 1225;
   SQL_SOPT_SS_TEXTPTR_LOGGING           = SQL_SOPT_SS_BASE + 0; // Text pointer logging
-  SQL_SOPT_SS_CURRENT_COMMAND           = SQL_SOPT_SS_BASE + 1; // dbcurcmd SQLGetStmtOption only
+  SQL_SOPT_SS_CURRENT_COMMAND           = SQL_SOPT_SS_BASE + 1; // dbcurcmd SqlGetStmtOption only
   SQL_SOPT_SS_HIDDEN_COLUMNS            = SQL_SOPT_SS_BASE + 2; // Expose FOR BROWSE hidden columns
   SQL_SOPT_SS_NOBROWSETABLE             = SQL_SOPT_SS_BASE + 3; // Set NOBROWSETABLE option
   SQL_SOPT_SS_REGIONALIZE               = SQL_SOPT_SS_BASE + 4; // Regionalize output character conversions
@@ -457,7 +457,7 @@ type
     // - depending on the column data type specified, it will return either an
     // ISO-8601 date (for SQL_TYPE_DATE), either a time (for SQL_TYPE_TIME),
     // either a full date + time ISO-8601 content (for SQL_TYPE_TIMESTAMP)
-    function ToIso8601(Dest: PUTF8Char; DataType: SqlSmallint;
+    function ToIso8601(Dest: PUtf8Char; DataType: SqlSmallint;
       WithMS: boolean = false): integer;
     /// convert a TDateTime into ODBC date or timestamp
     // - returns the corresponding C type, i.e. either SQL_C_TYPE_DATE,
@@ -762,11 +762,11 @@ type
     procedure HandleError(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
       Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
       InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
-    /// wrapper around SQLGetDiagField() API call
-    function GetDiagField(StatementHandle: SqlHStmt): RawUTF8;
+    /// wrapper around SqlGetDiagField() API call
+    function GetDiagField(StatementHandle: SqlHStmt): RawUtf8;
     /// wrapper around GetInfo() API call
     procedure GetInfoString(ConnectionHandle: SqlHDbc; InfoType: SqlUSmallint;
-      var Dest: RawUTF8);
+      var Dest: RawUtf8);
   end;
 
 var
@@ -840,7 +840,7 @@ begin
     result := result  +  time;
 end;
 
-function SQL_TIMESTAMP_STRUCT.ToIso8601(Dest: PUTF8Char; DataType: SqlSmallint;
+function SQL_TIMESTAMP_STRUCT.ToIso8601(Dest: PUtf8Char; DataType: SqlSmallint;
   WithMS: boolean): integer;
 begin
   Dest^ := '"';
@@ -893,13 +893,13 @@ const
     'SQLDescribeCol', 'SQLDescribeColW', 'SQLDisconnect', 'SQLEndTran',
     'SQLError', 'SQLErrorW', 'SQLExecDirect', 'SQLExecDirectW', 'SQLExecute',
     'SQLFetch', 'SQLFetchScroll', 'SQLFreeConnect', 'SQLFreeEnv',
-    'SQLFreeHandle', 'SQLFreeStmt', 'SQLGetConnectAttr', 'SQLGetConnectAttrW',
-    'SQLGetCursorName', 'SQLGetCursorNameW', 'SQLGetData', 'SQLGetDescField',
-    'SQLGetDescFieldW', 'SQLGetDescRec', 'SQLGetDescRecW', 'SQLGetDiagField',
-    'SQLGetDiagFieldW', 'SQLGetDiagRec', 'SQLGetDiagRecW', 'SQLMoreResults',
-    'SQLPrepare', 'SQLPrepareW', 'SQLRowCount', 'SQLNumResultCols', 'SQLGetInfo',
-    'SQLGetInfoW', 'SQLSetStmtAttr', 'SQLSetStmtAttrW', 'SQLSetEnvAttr',
-    'SQLSetConnectAttr', 'SQLSetConnectAttrW', 'SQLTables', 'SQLTablesW',
+    'SQLFreeHandle', 'SQLFreeStmt', 'SqlGetConnectAttr', 'SqlGetConnectAttrW',
+    'SqlGetCursorName', 'SqlGetCursorNameW', 'SqlGetData', 'SqlGetDescField',
+    'SqlGetDescFieldW', 'SqlGetDescRec', 'SqlGetDescRecW', 'SqlGetDiagField',
+    'SqlGetDiagFieldW', 'SqlGetDiagRec', 'SqlGetDiagRecW', 'SQLMoreResults',
+    'SQLPrepare', 'SQLPrepareW', 'SQLRowCount', 'SQLNumResultCols', 'SqlGetInfo',
+    'SqlGetInfoW', 'SQLSetStmtAttr', 'SQLSetStmtAttrW', 'SQLSetEnvAttr',
+    'SQLSetConnectAttr', 'SQLSetConnectAttrW', 'SqlTables', 'SqlTablesW',
     'SQLForeignKeys', 'SQLForeignKeysW', 'SQLDriverConnect', 'SQLDriverConnectW',
     'SQLProcedureColumnsA', 'SQLProcedureColumnsW', 'SQLProcedures');
 
@@ -976,7 +976,7 @@ begin
     Resolve(ODBC_ENTRIES[i], @P[i], EODBCException); // raise EODBCException on error
 end;
 
-function TODBCLib.GetDiagField(StatementHandle: SqlHStmt): RawUTF8;
+function TODBCLib.GetDiagField(StatementHandle: SqlHStmt): RawUtf8;
 var
   Status: array[0..7] of AnsiChar;
   StringLength: SqlSmallint;
@@ -989,7 +989,7 @@ begin
 end;
 
 procedure TODBCLib.GetInfoString(ConnectionHandle: SqlHDbc;
-  InfoType: SqlUSmallint; var Dest: RawUTF8);
+  InfoType: SqlUSmallint; var Dest: RawUtf8);
 var
   Len: SqlSmallint;
   Info: array[byte] of WideChar;
@@ -1005,13 +1005,13 @@ procedure TODBCLib.HandleError(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
   Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
   InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 const
-  FMT: PUTF8Char = '%[%] % (%)'#13#10;
+  FMT: PUtf8Char = '%[%] % (%)'#13#10;
 var
   Sqlstate: array[0..6] of WideChar;
   MessageText: array[0..1023] of WideChar;
   RecNum, NativeError: SqlInteger;
   TextLength: SqlSmallint;
-  msg: RawUTF8;
+  msg: RawUtf8;
 begin
   if (Handle = nil) or
      (Status = SQL_INVALID_HANDLE) then
@@ -1028,7 +1028,7 @@ begin
         dec(TextLength);
         MessageText[TextLength] := #0; // trim #13/#10 right of MessageText
       end;
-      msg := FormatUTF8(FMT, [{%H-}msg, Sqlstate, MessageText, NativeError]);
+      msg := FormatUtf8(FMT, [{%H-}msg, Sqlstate, MessageText, NativeError]);
       inc(RecNum);
     end;
     if msg = '' then
@@ -1049,9 +1049,9 @@ begin
   if LogLevelNoRaise <> sllNone then
     SynDBLog.Add.Log(LogLevelNoRaise, msg)
   else if Stmt = nil then
-    raise EODBCException.CreateUTF8('% error: %', [self, msg])
+    raise EODBCException.CreateUtf8('% error: %', [self, msg])
   else
-    raise EODBCException.CreateUTF8('% - % error: %', [Stmt, self, msg]);
+    raise EODBCException.CreateUtf8('% - % error: %', [Stmt, self, msg]);
 end;
 
 

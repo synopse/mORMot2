@@ -42,7 +42,7 @@ type
   /// a debugger symbol, as decoded by TSynMapFile from a .map file
   TSynMapSymbol = packed record
     /// symbol internal name
-    Name: RawUTF8;
+    Name: RawUtf8;
     /// starting offset of this symbol in the executable
     // - addresses are integer, since map be <0 in Kylix .map files
     Start: integer;
@@ -61,7 +61,7 @@ type
     /// Name, Start and Stop of this Unit
     Symbol: TSynMapSymbol;
     /// associated source file name
-    FileName: RawUTF8;
+    FileName: RawUtf8;
     /// list of all mapped source code lines of this unit
     Line: TIntegerDynArray;
     /// start code address of each source code line
@@ -134,17 +134,17 @@ type
     function FindUnit(aAddressOffset: integer; out LineNumber: integer): integer; overload;
     /// retrieve an unit information, according to the unit name
     // - will search within Units array
-    function FindUnit(const aUnitName: RawUTF8): integer; overload;
+    function FindUnit(const aUnitName: RawUtf8): integer; overload;
     /// return the symbol location according to the supplied absolute address
     // - i.e. unit name, symbol name and line number (if any), as plain text
     // - returns '' if no match found
-    function FindLocation(aAddressAbsolute: PtrUInt): RawUTF8; overload;
+    function FindLocation(aAddressAbsolute: PtrUInt): RawUtf8; overload;
     /// return the symbol location according to the supplied ESynException
     // - i.e. unit name, symbol name and line number (if any), as plain text
-    class function FindLocation(exc: ESynException): RawUTF8; overload;
+    class function FindLocation(exc: ESynException): RawUtf8; overload;
     /// returns the file name of
     // - if unitname = '', returns the main file name of the current executable
-    class function FindFileName(const unitname: RawUTF8): TFileName;
+    class function FindFileName(const unitname: RawUtf8): TFileName;
     /// all symbols associated to the executable
     property Symbols: TSynMapSymbolDynArray
       read fSymbol;
@@ -268,7 +268,7 @@ const
 
 /// returns the trimmed text value of a logging level
 // - i.e. 'Warning' for sllWarning
-function ToText(event: TSynLogInfo): RawUTF8; overload;
+function ToText(event: TSynLogInfo): RawUtf8; overload;
 
 /// returns the trimmed text value of a logging levels set
 function ToText(events: TSynLogInfos): ShortString; overload;
@@ -280,7 +280,7 @@ function ToCaption(event: TSynLogInfo): string; overload;
 function ToCaption(filter: TSynLogFilter): string; overload;
 
 /// returns a method event as text, using the .map/.mab information if available
-function ToText(const Event: TMethod): RawUTF8; overload;
+function ToText(const Event: TMethod): RawUtf8; overload;
 
 var
   /// low-level variable used internaly by this unit
@@ -328,7 +328,7 @@ type
     // the integer mapped value will be transmitted, therefore wrongly)
     // - if Instance is set, it will log the corresponding class name and address
     // (to be used if you didn't call TSynLog.Enter() method first)
-    procedure Log(Level: TSynLogInfo; const TextFmt: RawUTF8;
+    procedure Log(Level: TSynLogInfo; const TextFmt: RawUtf8;
       const TextArgs: array of const; Instance: TObject = nil); overload;
     /// call this method to add some information to the log at a specified level
     // - if Instance is set and Text is not '', it will log the corresponding
@@ -336,11 +336,11 @@ type
     // method first)
     // - if Instance is set and Text is '', will behave the same as
     // Log(Level,Instance), i.e. write the Instance as JSON content
-    procedure Log(Level: TSynLogInfo; const Text: RawUTF8;
+    procedure Log(Level: TSynLogInfo; const Text: RawUtf8;
       Instance: TObject = nil; TextTruncateAtLength: integer = maxInt); overload;
     {$ifdef UNICODE}
     /// call this method to add some VCL string to the log at a specified level
-    // - this overloaded version will avoid a call to StringToUTF8()
+    // - this overloaded version will avoid a call to StringToUtf8()
     procedure Log(Level: TSynLogInfo; const Text: string;
       Instance: TObject = nil); overload;
     {$endif UNICODE}
@@ -353,7 +353,7 @@ type
     // at a specified level
     // - TSynLog will handle enumerations and dynamic array; TSqlLog will be
     // able to write TObject/TOrm and sets content as JSON
-    procedure Log(Level: TSynLogInfo; const aName: RawUTF8; aTypeInfo: PRttiInfo;
+    procedure Log(Level: TSynLogInfo; const aName: RawUtf8; aTypeInfo: PRttiInfo;
       const aValue; Instance: TObject); overload;
     /// call this method to add the caller address to the log at the specified level
     // - if the debugging info is available from TSynMapFile, will log the
@@ -365,7 +365,7 @@ type
     // by #13#10 (CRLF)
     // - if a line starts with IgnoreWhenStartWith (already uppercase), it won't
     // be added to the log content (to be used e.g. with '--' for SQL statements)
-    procedure LogLines(Level: TSynLogInfo; LinesToLog: PUTF8Char;
+    procedure LogLines(Level: TSynLogInfo; LinesToLog: PUtf8Char;
       aInstance: TObject = nil; const IgnoreWhenStartWith: PAnsiChar = nil);
     /// retrieve the associated logging instance
     function Instance: TSynLog;
@@ -430,7 +430,7 @@ type
   /// callback signature used by TSynLogFamilly.OnBeforeException
   // - should return false to log the exception, or true to ignore it
   TOnBeforeException = function(const Context: TSynLogExceptionContext;
-    const ThreadName: RawUTF8): boolean of object;
+    const ThreadName: RawUtf8): boolean of object;
 
 {$endif NOEXCEPTIONINTERCEPT}
 
@@ -540,7 +540,7 @@ type
     // - expects a single file to be opened for this family
     // - will retrieve the log content for the current file, truncating the
     // text up to the specified number of KB (an up to 128 MB at most)
-    function GetExistingLog(MaximumKB: cardinal): RawUTF8;
+    function GetExistingLog(MaximumKB: cardinal): RawUtf8;
     /// callback to notify the current logger that its thread is finished
     // - method follows TOnNotifyThread signature, which can be assigned to
     // TSynBackgroundThreadAbstract.OnAfterExecute
@@ -792,8 +792,8 @@ type
     /// associated class instance to be displayed
     Instance: TObject;
     /// method name (or message) to be displayed
-    // - may be a RawUTF8 if MethodNameLocal=mnEnterOwnMethodName
-    MethodName: PUTF8Char;
+    // - may be a RawUtf8 if MethodNameLocal=mnEnterOwnMethodName
+    MethodName: PUtf8Char;
     /// internal reference count used at this recursion level by TSynLog._AddRef
     RefCount: integer;
     /// the caller address, ready to display stack trace dump if needed
@@ -817,7 +817,7 @@ type
     /// used by TSynLog.Enter methods to handle recursive calls tracing
     Recursion: array of TSynLogThreadRecursion;
     /// the associated thread name
-    ThreadName: RawUTF8;
+    ThreadName: RawUtf8;
   end;
 
   // pointer to thread-specific context information
@@ -867,11 +867,11 @@ type
     function _Release: TIntCnt;      {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
     class function FamilyCreate: TSynLogFamily;
     procedure CreateLogWriter; virtual;
-    procedure LogInternalFmt(Level: TSynLogInfo; const TextFmt: RawUTF8;
+    procedure LogInternalFmt(Level: TSynLogInfo; const TextFmt: RawUtf8;
       const TextArgs: array of const; Instance: TObject);
-    procedure LogInternalText(Level: TSynLogInfo; const Text: RawUTF8;
+    procedure LogInternalText(Level: TSynLogInfo; const Text: RawUtf8;
       Instance: TObject; TextTruncateAtLength: integer);
-    procedure LogInternalRtti(Level: TSynLogInfo; const aName: RawUTF8;
+    procedure LogInternalRtti(Level: TSynLogInfo; const aName: RawUtf8;
       aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
     // any call to this method MUST call LeaveCriticalSection(GlobalThreadLock)
     procedure LogHeader(Level: TSynLogInfo);
@@ -893,7 +893,7 @@ type
     procedure ThreadContextRehash;
     function Instance: TSynLog;
     function ConsoleEcho(Sender: TBaseWriter; Level: TSynLogInfo;
-      const Text: RawUTF8): boolean; virtual;
+      const Text: RawUtf8): boolean; virtual;
   public
     /// intialize for a TSynLog class instance
     // - WARNING: not to be called directly! Use TSynLog.Enter or TSynLog.Add
@@ -935,7 +935,7 @@ type
     procedure NotifyThreadEnded;
     /// handle generic method enter / auto-leave tracing
     // - this is the main method to be called within a procedure/function to trace:
-    // ! procedure TMyDB.SQLExecute(const SQL: RawUTF8);
+    // ! procedure TMyDB.SQLExecute(const SQL: RawUtf8);
     // ! var ILog: ISynLog;
     // ! begin
     // !   ILog := TSynLogDB.Enter(self,'SQLExecute');
@@ -986,13 +986,13 @@ type
     // ! end; // here Log will be released
     // otherwise, the ISynLog instance would be released just after the Enter()
     // call, so the timing won't match the method execution
-    class function Enter(aInstance: TObject = nil; aMethodName: PUTF8Char = nil;
+    class function Enter(aInstance: TObject = nil; aMethodName: PUtf8Char = nil;
       aMethodNameLocal: boolean = false): ISynLog; overload;
     /// handle method enter / auto-leave tracing, with some custom text
     // - this overloaded method would not write the method name, but the supplied
-    // text content, after expanding the parameters like FormatUTF8()
+    // text content, after expanding the parameters like FormatUtf8()
     // - it will append the corresponding sllLeave log entry when the method ends
-    class function Enter(const TextFmt: RawUTF8; const TextArgs: array of const;
+    class function Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
       aInstance: TObject = nil): ISynLog; overload;
     /// retrieve the current instance of this TSynLog class
     // - to be used for direct logging, without any Enter/Leave:
@@ -1013,7 +1013,7 @@ type
     /// low-level method helper which can be called to make debugging easier
     // - log some warning message to the TSynLog family
     // - will force a manual breakpoint if tests are run from the IDE
-    class procedure DebuggerNotify(Level: TSynLogInfo; const Format: RawUTF8;
+    class procedure DebuggerNotify(Level: TSynLogInfo; const Format: RawUtf8;
       const Args: array of const);
     /// call this method to add some information to the log at the specified level
     // - will use TBaseWriter.Add(...,twOnSameLine) to append its content
@@ -1021,13 +1021,13 @@ type
     // to be appended as text (e.g. class name), any variant as JSON...
     // - note that cardinal values should be type-casted to Int64() (otherwise
     // the integer mapped value will be transmitted, therefore wrongly)
-    procedure Log(Level: TSynLogInfo; const TextFmt: RawUTF8;
+    procedure Log(Level: TSynLogInfo; const TextFmt: RawUtf8;
       const TextArgs: array of const; aInstance: TObject = nil); overload;
-    /// same as Log(Level,TextFmt,[]) but with one RawUTF8 parameter
-    procedure Log(Level: TSynLogInfo; const TextFmt: RawUTF8;
-      const TextArg: RawUTF8; aInstance: TObject = nil); overload;
+    /// same as Log(Level,TextFmt,[]) but with one RawUtf8 parameter
+    procedure Log(Level: TSynLogInfo; const TextFmt: RawUtf8;
+      const TextArg: RawUtf8; aInstance: TObject = nil); overload;
     /// same as Log(Level,TextFmt,[]) but with one Int64 parameter
-    procedure Log(Level: TSynLogInfo; const TextFmt: RawUTF8;
+    procedure Log(Level: TSynLogInfo; const TextFmt: RawUtf8;
       const TextArg: Int64; aInstance: TObject = nil); overload;
     /// call this method to add some information to the log at the specified level
     // - if Instance is set and Text is not '', it will log the corresponding
@@ -1038,11 +1038,11 @@ type
     // $ 0000000000002DB9 debug TObjectList(00425E68) GarbageCollector
     // - if Instance is set and Text is '', will behave the same as
     // Log(Level,Instance), i.e. write the Instance as JSON content
-    procedure Log(Level: TSynLogInfo; const Text: RawUTF8; aInstance: TObject = nil;
+    procedure Log(Level: TSynLogInfo; const Text: RawUtf8; aInstance: TObject = nil;
       TextTruncateAtLength: integer = maxInt); overload;
     {$ifdef UNICODE}
     /// call this method to add some VCL string to the log at a specified level
-    // - this overloaded version will avoid a call to StringToUTF8()
+    // - this overloaded version will avoid a call to StringToUtf8()
     procedure Log(Level: TSynLogInfo; const Text: string;
       aInstance: TObject = nil); overload;
     {$endif UNICODE}
@@ -1064,7 +1064,7 @@ type
     // written as human readable JSON: handle dynamic arrays and enumerations
     // - TSqlLog from mORMot.pas unit will be able to write
     // TObject/TOrm and sets content as JSON
-    procedure Log(Level: TSynLogInfo; const aName: RawUTF8; aTypeInfo: PRttiInfo;
+    procedure Log(Level: TSynLogInfo; const aName: RawUtf8; aTypeInfo: PRttiInfo;
       const aValue; Instance: TObject); overload;
     /// call this method to add the caller address to the log at the specified level
     // - if the debugging info is available from TSynMapFile, will log the
@@ -1075,14 +1075,14 @@ type
     // - entry would also be replicated at the begining of any rotated log file
     // - is called automatically by SetThreadName() global function
     // - if Name='', will use CurrentThreadName threadvar
-    procedure LogThreadName(const Name: RawUTF8);
+    procedure LogThreadName(const Name: RawUtf8);
     /// call this method to add some multi-line information to the log at a
     // specified level
     // - LinesToLog content will be added, one line per one line, delimited by
     // #13#10 (CRLF)
     // - if a line starts with IgnoreWhenStartWith (already uppercase), it won't
     // be added to the log content (to be used e.g. with '--' for SQL statements)
-    procedure LogLines(Level: TSynLogInfo; LinesToLog: PUTF8Char; aInstance: TObject = nil;
+    procedure LogLines(Level: TSynLogInfo; LinesToLog: PUtf8Char; aInstance: TObject = nil;
       const IgnoreWhenStartWith: PAnsiChar = nil);
     /// allow to temporary disable remote logging
     // - to be used within a try ... finally section:
@@ -1100,7 +1100,7 @@ type
     // event handler, or used instead of Add.Log
     // - will flush the content to disk and avoid any memory reallocation
     // if Level is sllExceptionOS, e.g. on SIGABRT/SIGQUIT/SIGINT
-    class procedure DoLog(Level: TSynLogInfo; const Fmt: RawUTF8;
+    class procedure DoLog(Level: TSynLogInfo; const Fmt: RawUtf8;
       const Args: array of const; Instance: TObject = nil);
     /// Force log rotation; Can be used for example inside SUGHUP signal handler
     procedure ForceRotation;
@@ -1152,7 +1152,7 @@ type
     /// associated Exception.Message content (if any)
     Message: string;
     /// ready-to-be-displayed text of the exception address
-    Addr: RawUTF8;
+    Addr: RawUtf8;
   end;
 
   /// storage of information associated with one or several exceptions
@@ -1163,10 +1163,10 @@ type
 function GetLastException(out info: TSynLogExceptionInfo): boolean;
 
 /// convert low-level exception information into some human-friendly text
-function ToText(var info: TSynLogExceptionInfo): RawUTF8; overload;
+function ToText(var info: TSynLogExceptionInfo): RawUtf8; overload;
 
 /// returns some text about the latest intercepted exception
-function GetLastExceptionText: RawUTF8;
+function GetLastExceptionText: RawUtf8;
 
 /// makes a thread-safe copy of the latest intercepted exceptions
 procedure GetLastExceptions(out result: TSynLogExceptionInfoDynArray;
@@ -1185,7 +1185,7 @@ type
     // - similar to TOnTextWriterEcho, as defined in mormot.core.text
     // - an initial call with Level=sllNone and the whole previous Text may be
     // transmitted, if ReceiveExistingKB is set for TSynLogCallbacks.Subscribe()
-    procedure Log(Level: TSynLogInfo; const Text: RawUTF8);
+    procedure Log(Level: TSynLogInfo; const Text: RawUtf8);
   end;
 
   /// store a subscribe to ISynLogCallback
@@ -1223,7 +1223,7 @@ type
     /// notify a given log event
     // - matches the TOnTextWriterEcho signature
     function OnEcho(Sender: TBaseWriter; Level: TSynLogInfo;
-      const Text: RawUTF8): boolean;
+      const Text: RawUtf8): boolean;
   published
     /// how many registrations are currently defined
     property Count: integer
@@ -1310,7 +1310,7 @@ type
     fThreads: TWordDynArray;
     fThreadInfo: array of record
       Rows: cardinal;
-      SetThreadName: TPUTF8CharDynArray;
+      SetThreadName: TPUtf8CharDynArray;
     end;
     fThreadInfoMax: cardinal;
     fThreadsCount: integer;
@@ -1319,8 +1319,8 @@ type
     fLineTextOffset: cardinal;
     fLineHeaderCountToIgnore: integer;
     /// as extracted from the .log header
-    fExeName, fExeVersion, fInstanceName: RawUTF8;
-    fHost, fUser, fCPU, fOSDetailed, fFramework: RawUTF8;
+    fExeName, fExeVersion, fInstanceName: RawUtf8;
+    fHost, fUser, fCPU, fOSDetailed, fFramework: RawUtf8;
     fExeDate: TDateTime;
     fIntelCPU: TIntelCpuFeatures;
     fOS: TWindowsVersion;
@@ -1338,7 +1338,7 @@ type
     fFreqPerDay: double;
     /// custom headers, to be searched as .ini content
     fHeaderLinesCount: integer;
-    fHeaders: RawUTF8;
+    fHeaders: RawUtf8;
     /// method profiling data
     fLogProcCurrent: PSynLogFileProcArray;
     fLogProcCurrentCount: integer;
@@ -1353,14 +1353,14 @@ type
     /// used by ProcessOneLine//GetLogLevelTextMap
     fLogLevelsTextMap: array[TSynLogInfo] of cardinal;
     procedure SetLogProcMerged(const Value: boolean);
-    function GetEventText(index: integer): RawUTF8;
-    function GetLogLevelFromText(LineBeg: PUTF8Char): TSynLogInfo;
+    function GetEventText(index: integer): RawUtf8;
+    function GetLogLevelFromText(LineBeg: PUtf8Char): TSynLogInfo;
     /// retrieve headers + fLevels[] + fLogProcNatural[], and delete invalid fLines[]
     procedure LoadFromMap(AverageLineLength: integer = 32); override;
     procedure CleanLevels;
     function ComputeProperTime(var procndx: PtrInt): cardinal; // returns leave
     /// compute fLevels[] + fLogProcNatural[] for each .log line during initial reading
-    procedure ProcessOneLine(LineBeg, LineEnd: PUTF8Char); override;
+    procedure ProcessOneLine(LineBeg, LineEnd: PUtf8Char); override;
     /// called by LogProcSort method
     function LogProcSortComp(A, B: PtrInt): PtrInt;
     procedure LogProcSortInternal(L, R: PtrInt);
@@ -1368,7 +1368,7 @@ type
     /// initialize internal structure
     constructor Create; override;
     /// returns TRUE if the supplied text is contained in the corresponding line
-    function LineContains(const aUpperSearch: RawUTF8; aIndex: integer): boolean; override;
+    function LineContains(const aUpperSearch: RawUtf8; aIndex: integer): boolean; override;
     /// retrieve the date and time of an event
     // - returns 0 in case of an invalid supplied index
     function EventDateTime(aIndex: integer): TDateTime;
@@ -1378,7 +1378,7 @@ type
     // codepage to create a valid string
     // - you may specify a text to replace all #9 characters occurences
     // - is used e.g. in TMainLogView.ListDrawCell
-    function EventString(index: integer; const replaceTabs: RawUTF8 = '';
+    function EventString(index: integer; const replaceTabs: RawUtf8 = '';
       maxutf8len: integer = 0; includeFirstColumns: boolean = false): string;
     /// sort the LogProc[] array according to the supplied order
     procedure LogProcSort(Order: TLogProcSortOrder);
@@ -1386,12 +1386,12 @@ type
     function EventCount(const aSet: TSynLogInfos): integer;
     /// add a new line to the already parsed content
     // - overriden method which would identify the freq=%,%,% pseudo-header
-    procedure AddInMemoryLine(const aNewLine: RawUTF8); override;
+    procedure AddInMemoryLine(const aNewLine: RawUtf8); override;
     /// returns the name of a given thread, according to the position in the log
-    function ThreadName(ThreadID, CurrentLogIndex: integer): RawUTF8;
+    function ThreadName(ThreadID, CurrentLogIndex: integer): RawUtf8;
     /// returns the name of all threads, according to the position in the log
     // - result[0] stores the name of ThreadID = 1
-    function ThreadNames(CurrentLogIndex: integer): TRawUTF8DynArray;
+    function ThreadNames(CurrentLogIndex: integer): TRawUtf8DynArray;
     /// returns all days of this log file
     // - only available for low-resolution timestamp, i.e. Freq=0
     procedure GetDays(out Days: TDateTimeDynArray);
@@ -1409,7 +1409,7 @@ type
     /// retrieve the description text of an event
     // - returns '' if supplied index is out of range
     // - see also EventString() function, for direct VCL use
-    property EventText[index: integer]: RawUTF8
+    property EventText[index: integer]: RawUtf8
       read GetEventText;
     /// retrieve all event thread IDs
     // - contains something if TSynLogFamily.PerThreadLog was ptIdentifiedInOnFile
@@ -1448,7 +1448,7 @@ type
     property DayCount: TIntegerDynArray
       read fDayCount;
     /// custom headers, to be searched as .ini content
-    property Headers: RawUTF8
+    property Headers: RawUtf8
       read fHeaders;
     /// the available CPU features, as recognized at program startup
     // - is extracted from the last part of the CPU property text
@@ -1459,11 +1459,11 @@ type
   published
     /// the associated executable name (with path)
     // - returns e.g. 'C:\Dev\lib\SQLite3\exe\TestSQL3.exe'
-    property ExecutableName: RawUTF8
+    property ExecutableName: RawUtf8
       read fExeName;
     /// the associated executable version
     // - returns e.g. '0.0.0.0'
-    property ExecutableVersion: RawUTF8
+    property ExecutableVersion: RawUtf8
       read fExeVersion;
     /// the associated executable build date and time
     property ExecutableDate: TDateTime
@@ -1471,17 +1471,17 @@ type
     /// for a library, the associated instance name (with path)
     // - returns e.g. 'C:\Dev\lib\SQLite3\exe\TestLibrary.dll'
     // - for an executable, will be left void
-    property InstanceName: RawUTF8
+    property InstanceName: RawUtf8
       read fInstanceName;
     /// the computer host name in which the process was running on
-    property ComputerHost: RawUTF8
+    property ComputerHost: RawUtf8
       read fHost;
     /// the computer user name who launched the process
-    property RunningUser: RawUTF8
+    property RunningUser: RawUtf8
       read fUser;
     /// the computer CPU in which the process was running on
     // - returns e.g. '1*0-15-1027'
-    property CPU: RawUTF8
+    property CPU: RawUtf8
       read fCPU;
     /// the computer Operating System in which the process was running on
     // - equals wUnknown on Linux or BSD - use DetailedOS instead
@@ -1498,11 +1498,11 @@ type
     // - returns e.g. '2.3=5.1.2600' for Windows XP
     // - under Linux, it will return the full system version, e.g.
     // 'Ubuntu=Linux-3.13.0-43-generic#72-Ubuntu-SMP-Mon-Dec-8-19:35:44-UTC-2014'
-    property DetailedOS: RawUTF8
+    property DetailedOS: RawUtf8
       read fOSDetailed;
     /// the associated framework information
     // - returns e.g. 'TSynLog 2.0.1 x64MMs'
-    property Framework: RawUTF8
+    property Framework: RawUtf8
       read fFramework;
     /// the date and time at which the log file was started
     property StartDateTime: TDateTime
@@ -1528,16 +1528,16 @@ type
   public
     /// add a new line to the already parsed content
     // - overriden method would add the inserted index to Selected[]
-    procedure AddInMemoryLine(const aNewLine: RawUTF8); override;
+    procedure AddInMemoryLine(const aNewLine: RawUtf8); override;
     /// search for the next matching TSynLogInfo, from the current row index
     // - returns -1 if no match was found
     function SearchNextEvent(aEvent: TSynLogInfo; aRow: integer): PtrInt;
     /// search for the next matching text, from the current row index
     // - returns -1 if no match was found
-    function SearchNextText(const aPattern: RawUTF8; aRow, aDelta: integer): PtrInt;
+    function SearchNextText(const aPattern: RawUtf8; aRow, aDelta: integer): PtrInt;
     /// search for the previous matching text, from the current row index
     // - returns -1 if no match was found
-    function SearchPreviousText(const aPattern: RawUTF8; aRow: integer): PtrInt;
+    function SearchPreviousText(const aPattern: RawUtf8; aRow: integer): PtrInt;
     /// search for the matching Enter/Leave item, from the current row index
     // - returns -1 if no match was found
     function SearchEnterLeave(aRow: integer): PtrInt;
@@ -1651,7 +1651,7 @@ const
 // - returns the number of bytes written to destbuffer (which should have
 // destsize > 127)
 function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
-  const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: PtrInt;
+  const msg, procid, msgid: RawUtf8; destbuffer: PUtf8Char; destsize: PtrInt;
   trimmsgfromlog: boolean): PtrInt;
 
 
@@ -1670,7 +1670,7 @@ uses
 const
   MAGIC_MAB = $A5A5A5A5;
 
-function MatchPattern(P, PEnd, Up: PUTF8Char; var Dest: PUTF8Char): boolean;
+function MatchPattern(P, PEnd, Up: PUtf8Char; var Dest: PUtf8Char): boolean;
 begin
   result := false;
   repeat
@@ -1749,7 +1749,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName = ''; MabCreate: boolea
 
   procedure LoadMap;
   var
-    P, PEnd: PUTF8Char;
+    P, PEnd: PUtf8Char;
 
     procedure NextLine;
     begin
@@ -1891,7 +1891,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName = ''; MabCreate: boolea
     var
       Beg: PAnsiChar;
       i, Count, n: integer;
-      aName: RawUTF8;
+      aName: RawUtf8;
       added: boolean;
       U: ^TSynMapUnit;
     begin
@@ -1952,7 +1952,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName = ''; MabCreate: boolea
   var
     i, s, u: integer;
     RehashNeeded: boolean;
-    mapcontent: RawUTF8;
+    mapcontent: RawUtf8;
   begin // LoadMap
     fSymbols.Capacity := 8000;
     mapcontent := StringFromFile(fMapFile);
@@ -2015,7 +2015,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName = ''; MabCreate: boolea
           for i := 0 to fUnits.Count - 1 do
             with fUnit[i] do
             begin
-              R.VarUTF8(FileName);
+              R.VarUtf8(FileName);
               R.ReadVarUInt32Array(Line);
               R.ReadVarUInt32Array(Addr);
             end;
@@ -2036,7 +2036,7 @@ var
   SymCount, UnitCount, i: integer;
   MabFile: TFileName;
   MapAge, MabAge: TDateTime;
-  U: RawUTF8;
+  U: RawUtf8;
 begin
   fSymbols.Init(TypeInfo(TSynMapSymbolDynArray), fSymbol, @SymCount);
   fUnits.Init(TypeInfo(TSynMapUnitDynArray), fUnit, nil, nil, nil, @UnitCount);
@@ -2162,9 +2162,9 @@ procedure TSynMapFile.SaveToJson(W: TBaseWriter);
 begin
   W.AddShort('{"Symbols":');
   fSymbols.Capacity := fSymbols.Count;
-  fSymbols.SaveToJSON(W);
+  fSymbols.SaveToJson(W);
   W.AddShort(',"Units":');
-  fUnits.SaveToJSON(W);
+  fUnits.SaveToJson(W);
   W.Add('}');
 end;
 
@@ -2172,7 +2172,7 @@ procedure TSynMapFile.SaveToJson(const aJsonFile: TFileName;
   aHumanReadable: boolean);
 var
   W: TBaseWriter;
-  json: RawUTF8;
+  json: RawUtf8;
 begin
   W := DefaultTextWriterSerializer.CreateOwnedStream(65536);
   try
@@ -2399,7 +2399,7 @@ begin
   {$endif FPC}
 end;
 
-function TSynMapFile.FindLocation(aAddressAbsolute: PtrUInt): RawUTF8;
+function TSynMapFile.FindLocation(aAddressAbsolute: PtrUInt): RawUtf8;
 var
   u, s, Line, offset: integer;
 begin
@@ -2432,7 +2432,7 @@ begin
     result := result + ' (' + UInt32ToUtf8(Line) + ')';
 end;
 
-class function TSynMapFile.FindLocation(exc: ESynException): RawUTF8;
+class function TSynMapFile.FindLocation(exc: ESynException): RawUtf8;
 begin
   if (exc = nil) or
      (exc.RaisedAt = nil) then
@@ -2441,7 +2441,7 @@ begin
     result := GetInstanceMapFile.FindLocation(PtrUInt(exc.RaisedAt));
 end;
 
-function TSynMapFile.FindUnit(const aUnitName: RawUTF8): integer;
+function TSynMapFile.FindUnit(const aUnitName: RawUtf8): integer;
 begin
   if (self <> nil) and
      (aUnitName <> '') then
@@ -2451,10 +2451,10 @@ begin
   result := -1;
 end;
 
-class function TSynMapFile.FindFileName(const unitname: RawUTF8): TFileName;
+class function TSynMapFile.FindFileName(const unitname: RawUtf8): TFileName;
 var
   map: TSynMapFile;
-  name: RawUTF8;
+  name: RawUtf8;
   u: integer;
 begin
   result := '';
@@ -2467,17 +2467,17 @@ begin
     name := unitname;
   u := map.FindUnit(name);
   if u >= 0 then
-    result := UTF8ToString(map.fUnit[u].FileName);
+    result := Utf8ToString(map.fUnit[u].FileName);
 end;
 
 
 { ************** Logging via TSynLogFamily, TSynLog, ISynLog }
 
 var
-  _LogInfoText: array[TSynLogInfo] of RawUTF8;
+  _LogInfoText: array[TSynLogInfo] of RawUtf8;
   _LogInfoCaption: array[TSynLogInfo] of string;
 
-function ToText(event: TSynLogInfo): RawUTF8;
+function ToText(event: TSynLogInfo): RawUtf8;
 begin
   result := _LogInfoText[event];
 end;
@@ -2497,9 +2497,9 @@ begin
   result := GetCaptionFromEnum(TypeInfo(TSynLogFilter), Ord(filter))
 end;
 
-function ToText(const Event: TMethod): RawUTF8;
+function ToText(const Event: TMethod): RawUtf8;
 begin
-  FormatUTF8('% using %(%)', [GetInstanceMapFile.FindLocation(PtrUInt(Event.Code)),
+  FormatUtf8('% using %(%)', [GetInstanceMapFile.FindLocation(PtrUInt(Event.Code)),
     TObject(Event.Data), Event.Data], result);
 end;
 
@@ -2870,7 +2870,7 @@ begin
   try
     try
       fEchoRemoteEvent(nil, sllClient,
-        FormatUTF8('%00%    Remote Client % Disconnected',
+        FormatUtf8('%00%    Remote Client % Disconnected',
           [NowToString(false), LOG_LEVEL_TEXT[sllClient], self]));
     finally
       fEchoRemoteClient.Free;
@@ -2884,9 +2884,9 @@ begin
   fEchoRemoteEvent := nil;
 end;
 
-function TSynLogFamily.GetExistingLog(MaximumKB: cardinal): RawUTF8;
+function TSynLogFamily.GetExistingLog(MaximumKB: cardinal): RawUtf8;
 const
-  // a 128 MB RawUTF8 is fair enough
+  // a 128 MB RawUtf8 is fair enough
   MAXPREVIOUSCONTENTSIZE = 128 shl 20;
 var
   log: TSynLog;
@@ -3043,7 +3043,7 @@ begin
     if (rtticustom = nil) or
        (vmt <> rtticustom) then
       // TSynLog.Family / TSynLog.Add expect TRttiCustom in the first slot
-      raise ESynLogException.CreateUTF8('%.FamilyCreate: vmtAutoTable=% not %',
+      raise ESynLogException.CreateUtf8('%.FamilyCreate: vmtAutoTable=% not %',
         [self, vmt, rtticustom]);
     Rtti.DoLock;
     try
@@ -3054,7 +3054,7 @@ begin
           exit
         else
           // paranoid
-          raise ESynLogException.CreateUTF8('%.FamilyCreate: vmtAutoTable=%',
+          raise ESynLogException.CreateUtf8('%.FamilyCreate: vmtAutoTable=%',
             [self, result]);
       // create the TSynLogFamily instance associated with this TSynLog class
       result := TSynLogFamily.Create(self); // stored in SynLogFamily[]
@@ -3411,7 +3411,7 @@ end;
 
 {$STACKFRAMES ON}
 
-class function TSynLog.Enter(aInstance: TObject; aMethodName: PUTF8Char;
+class function TSynLog.Enter(aInstance: TObject; aMethodName: PUtf8Char;
   aMethodNameLocal: boolean): ISynLog;
 var
   log: TSynLog;
@@ -3469,7 +3469,7 @@ end;
 
 {$STACKFRAMES OFF}
 
-class function TSynLog.Enter(const TextFmt: RawUTF8; const TextArgs: array of const;
+class function TSynLog.Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
   aInstance: TObject): ISynLog;
 var
   log: TSynLog;
@@ -3491,7 +3491,7 @@ begin
         begin
           Instance := aInstance;
           MethodName := nil; // avoid GPF on next line
-          FormatUTF8(TextFmt, TextArgs, RawUTF8(pointer(MethodName)));
+          FormatUtf8(TextFmt, TextArgs, RawUtf8(pointer(MethodName)));
           MethodNameLocal := mnEnterOwnMethodName;
           Caller := 0; // No stack trace needed here
           RefCount := 0;
@@ -3521,10 +3521,10 @@ begin
 end;
 
 function TSynLog.ConsoleEcho(Sender: TBaseWriter; Level: TSynLogInfo;
-  const Text: RawUTF8): boolean;
+  const Text: RawUtf8): boolean;
 {$ifdef LINUXNOTBSD}
 var
-  tmp, mtmp: RawUTF8;
+  tmp, mtmp: RawUtf8;
   jvec: Array[0..1] of TioVec;
 {$endif LINUXNOTBSD}
 begin
@@ -3537,12 +3537,12 @@ begin
     if length(Text) < 18 then
       // should be at last "20200615 08003008  "
       exit;
-    FormatUTF8('PRIORITY=%', [LOG_TO_SYSLOG[Level]], tmp);
+    FormatUtf8('PRIORITY=%', [LOG_TO_SYSLOG[Level]], tmp);
     jvec[0].iov_base := pointer(tmp);
     jvec[0].iov_len := length(tmp);
     // skip time "20200615 08003008  ."
     // (journal do it for us, and first space after it)
-    FormatUTF8('MESSAGE=%', [PUTF8Char(pointer(Text))+18], mtmp);
+    FormatUtf8('MESSAGE=%', [PUtf8Char(pointer(Text))+18], mtmp);
     jvec[1].iov_base := pointer(mtmp);
     jvec[1].iov_len := length(mtmp);
     sd.journal_sendv(jvec[0], 2);
@@ -3553,7 +3553,7 @@ begin
   TextColor(ccLightGray);
 end;
 
-procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUTF8;
+procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUtf8;
   const TextArgs: array of const; aInstance: TObject);
 begin
   if (self <> nil) and
@@ -3561,15 +3561,15 @@ begin
     LogInternalFmt(Level, TextFmt, TextArgs, aInstance);
 end;
 
-procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUTF8;
-  const TextArg: RawUTF8; aInstance: TObject);
+procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUtf8;
+  const TextArg: RawUtf8; aInstance: TObject);
 begin
   if (self <> nil) and
      (Level in fFamily.fLevel) then
     LogInternalFmt(Level, TextFmt, [TextArg], aInstance);
 end;
 
-procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUTF8;
+procedure TSynLog.Log(Level: TSynLogInfo; const TextFmt: RawUtf8;
   const TextArg: Int64; aInstance: TObject);
 begin
   if (self <> nil) and
@@ -3577,7 +3577,7 @@ begin
     LogInternalFmt(Level, TextFmt, [TextArg], aInstance);
 end;
 
-procedure TSynLog.Log(Level: TSynLogInfo; const Text: RawUTF8;
+procedure TSynLog.Log(Level: TSynLogInfo; const Text: RawUtf8;
   aInstance: TObject; TextTruncateAtLength: integer);
 begin
   if (self <> nil) and
@@ -3594,12 +3594,12 @@ begin
 end;
 {$endif UNICODE}
 
-procedure TSynLog.LogLines(Level: TSynLogInfo; LinesToLog: PUTF8Char;
+procedure TSynLog.LogLines(Level: TSynLogInfo; LinesToLog: PUtf8Char;
   aInstance: TObject; const IgnoreWhenStartWith: PAnsiChar);
 
-  procedure DoLog(LinesToLog: PUTF8Char);
+  procedure DoLog(LinesToLog: PUtf8Char);
   var
-    s: RawUTF8;
+    s: RawUtf8;
   begin
     repeat
       GetNextItemTrimedCRLF(LinesToLog, s);
@@ -3617,9 +3617,9 @@ begin
     DoLog(LinesToLog);
 end;
 
-procedure TSynLog.LogThreadName(const Name: RawUTF8);
+procedure TSynLog.LogThreadName(const Name: RawUtf8);
 var
-  n: RawUTF8;
+  n: RawUtf8;
 begin
   if (self <> nil) and
      (sllInfo in fFamily.fLevel) and
@@ -3654,7 +3654,7 @@ begin
     result := PPointer(self)^;
 end;
 
-class procedure TSynLog.DoLog(Level: TSynLogInfo; const Fmt: RawUTF8;
+class procedure TSynLog.DoLog(Level: TSynLogInfo; const Fmt: RawUtf8;
    const Args: array of const; Instance: TObject);
 var
   log: TSynLog;
@@ -3720,7 +3720,7 @@ begin
       LogInternalText(Level, 'Instance=nil', nil, maxInt);
 end;
 
-procedure TSynLog.Log(Level: TSynLogInfo; const aName: RawUTF8;
+procedure TSynLog.Log(Level: TSynLogInfo; const aName: RawUtf8;
   aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
 begin
   if (self <> nil) and
@@ -3781,13 +3781,13 @@ end;
 {$endif CPU64DELPHI}
 
 class procedure TSynLog.DebuggerNotify(Level: TSynLogInfo;
-  const Format: RawUTF8; const Args: array of const);
+  const Format: RawUtf8; const Args: array of const);
 var
-  Msg: RawUTF8;
+  Msg: RawUtf8;
 begin
   if Format <> '' then
   begin
-    FormatUTF8(Format, Args, Msg);
+    FormatUtf8(Format, Args, Msg);
     Add.LogInternalText(Level, Msg, nil, maxInt);
     {$ifdef MSWINDOWS}
     if IsDebuggerPresent then
@@ -3910,7 +3910,7 @@ begin
     if IsLibrary then
     begin
       AddShort(' Instance=');
-      AddNoJSONEscapeString(InstanceFileName);
+      AddNoJsonEscapeString(InstanceFileName);
     end;
     {$ifdef MSWINDOWS}
     if not fFamily.fNoEnvironmentVariable then
@@ -3925,7 +3925,7 @@ begin
         if (L > 0) and
            (P^ <> '=') then
         begin
-          AddNoJSONEscapeW(PWord(P), 0);
+          AddNoJsonEscapeW(PWord(P), 0);
           Add(#9);
         end;
         inc(P, L + 1);
@@ -4124,7 +4124,7 @@ begin
         end;
 end;
 
-procedure TSynLog.LogInternalFmt(Level: TSynLogInfo; const TextFmt: RawUTF8;
+procedure TSynLog.LogInternalFmt(Level: TSynLogInfo; const TextFmt: RawUtf8;
   const TextArgs: array of const; Instance: TObject);
 var
   lasterror: cardinal;
@@ -4152,7 +4152,7 @@ begin
   end;
 end;
 
-procedure TSynLog.LogInternalText(Level: TSynLogInfo; const Text: RawUTF8;
+procedure TSynLog.LogInternalText(Level: TSynLogInfo; const Text: RawUtf8;
   Instance: TObject; TextTruncateAtLength: integer);
 var
   lasterror: cardinal;
@@ -4199,7 +4199,7 @@ begin
   end;
 end;
 
-procedure TSynLog.LogInternalRtti(Level: TSynLogInfo; const aName: RawUTF8;
+procedure TSynLog.LogInternalRtti(Level: TSynLogInfo; const aName: RawUtf8;
   aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
 begin
   EnterCriticalSection(GlobalThreadLock);
@@ -4211,7 +4211,7 @@ begin
         fFamily.WithInstancePointer);
     fWriter.AddOnSameLine(pointer(aName));
     fWriter.Add('=');
-    fWriter.AddTypedJSON(@aValue, aTypeInfo);
+    fWriter.AddTypedJson(@aValue, aTypeInfo);
     LogTrailer(Level);
   finally
     LeaveCriticalSection(GlobalThreadLock);
@@ -4225,9 +4225,9 @@ begin
   fFileName := fFamily.fCustomFileName;
   if fFileName = '' then
   begin
-    fFileName := UTF8ToString(ExeVersion.ProgramName);
+    fFileName := Utf8ToString(ExeVersion.ProgramName);
     if fFamily.IncludeComputerNameInFileName then
-      fFileName := fFileName + ' (' + UTF8ToString(ExeVersion.Host) + ')';
+      fFileName := fFileName + ' (' + Utf8ToString(ExeVersion.Host) + ')';
   end;
   fFileRotationSize := 0;
   if fFamily.fRotateFileCount > 0 then
@@ -4311,7 +4311,7 @@ begin
       fWriterStream.Seek(0, soFromEnd); // in rotation mode, append at the end
   end;
   if fWriterClass = nil then
-    // use TTextWriter or TJSONSerializer if mormot.core.json.pas is linked
+    // use TTextWriter or TJsonSerializer if mormot.core.json.pas is linked
     fWriterClass := DefaultTextWriterSerializer;
   if fWriter = nil then
   begin
@@ -4368,7 +4368,7 @@ begin
                 mnEnterOwnMethodName:
                   begin
                     MethodNameLocal := mnLeave;
-                    RawUTF8(pointer(MethodName)) := ''; // release temp string
+                    RawUtf8(pointer(MethodName)) := ''; // release temp string
                   end;
               end;
             end;
@@ -4767,22 +4767,22 @@ begin
   end;
 end;
 
-function ToText(var info: TSynLogExceptionInfo): RawUTF8;
+function ToText(var info: TSynLogExceptionInfo): RawUtf8;
 begin
   with info.Context do
     if ELevel <> sllNone then
     begin
       if info.Addr = '' then
         info.Addr := GetInstanceMapFile.FindLocation(EAddr);
-      FormatUTF8('% % at %: % [%]', [_LogInfoCaption[ELevel], EClass, info.Addr,
+      FormatUtf8('% % at %: % [%]', [_LogInfoCaption[ELevel], EClass, info.Addr,
         DateTimeToIsoString(ETimestamp / SecsPerDay + UnixDateDelta),
-        StringToUTF8(info.Message)], result);
+        StringToUtf8(info.Message)], result);
     end
     else
       result := '';
 end;
 
-function GetLastExceptionText: RawUTF8;
+function GetLastExceptionText: RawUtf8;
 var
   info: TSynLogExceptionInfo;
 begin
@@ -4795,14 +4795,14 @@ end;
 {$endif NOEXCEPTIONINTERCEPT}
 
 
-procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
+procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUtf8;
   const Args: array of const);
 var
-  name: RawUTF8;
+  name: RawUtf8;
   i: PtrInt;
   n: TShort31;
 begin
-  FormatUTF8(Format, Args, name);
+  FormatUtf8(Format, Args, name);
   for i := 1 to length(name) do
     if name[i] < ' ' then
       name[i] := ' '; // ensure on same line
@@ -4879,7 +4879,7 @@ begin
 end;
 
 function TSynLogCallbacks.OnEcho(Sender: TBaseWriter; Level: TSynLogInfo;
-  const Text: RawUTF8): boolean;
+  const Text: RawUtf8): boolean;
 var
   i: PtrInt;
 begin
@@ -4908,7 +4908,7 @@ function TSynLogCallbacks.Subscribe(const Levels: TSynLogInfos;
   const Callback: ISynLogCallback; ReceiveExistingKB: cardinal): integer;
 var
   Reg: TSynLogCallback;
-  previousContent: RawUTF8;
+  previousContent: RawUtf8;
 begin
   if Assigned(Callback) then
   try
@@ -4919,7 +4919,7 @@ begin
       if TrackedLog.HighResolutionTimestamp and
          (TrackedLog.fGlobalLog <> nil) then
         with TrackedLog.fGlobalLog do
-          Callback.Log(sllNone, FormatUTF8('freq=%,%,%',
+          Callback.Log(sllNone, FormatUtf8('freq=%,%,%',
             [1000000, double(fStartTimestampDateTime), fFileName]));
       Callback.Log(sllNone, previousContent);
     end;
@@ -4998,7 +4998,7 @@ begin
     fLogLevelsTextMap[L] := PCardinal(@LOG_LEVEL_TEXT[L][3])^; // [3] -> e.g. 'UST4'
 end;
 
-function TSynLogFile.GetLogLevelFromText(LineBeg: PUTF8Char): TSynLogInfo;
+function TSynLogFile.GetLogLevelFromText(LineBeg: PUtf8Char): TSynLogInfo;
 var
   P: PtrInt;
 begin
@@ -5022,7 +5022,7 @@ begin
         inc(result);
 end;
 
-function TSynLogFile.LineContains(const aUpperSearch: RawUTF8;
+function TSynLogFile.LineContains(const aUpperSearch: RawUtf8;
   aIndex: integer): boolean;
 begin
   if (self = nil) or
@@ -5030,14 +5030,14 @@ begin
      (aUpperSearch = '') then
     result := false
   else
-    result := GetLineContains(PUTF8Char(fLines[aIndex]) + fLineTextOffset,
+    result := GetLineContains(PUtf8Char(fLines[aIndex]) + fLineTextOffset,
       fMapEnd, pointer(aUpperSearch));
 end;
 
 function TSynLogFile.EventDateTime(aIndex: integer): TDateTime;
 var
   Timestamp: Int64;
-  P: PUTF8Char;
+  P: PUtf8Char;
   Y, M, D, HH, MM, SS, MS: cardinal;
   hex2bin: PByteArray;
 begin
@@ -5052,7 +5052,7 @@ begin
        Char2ToByte(P + 11, MM, hex2bin) or Char2ToByte(P + 13, SS, hex2bin) or
        Char2ToByte(P + 15, MS, hex2bin) then
       // not exact YYYYMMDD hhmmsszz layout -> try plain ISO-8601
-      Iso8601ToDateTimePUTF8CharVar(P, 17, result)
+      Iso8601ToDateTimePUtf8CharVar(P, 17, result)
     else if TryEncodeDate(Y, M, D, result) then
       // MS shl 4 = 16 ms resolution in TBaseWriter.AddCurrentLogTime()
       result := result + EncodeTime(HH, MM, SS, MS shl 4)
@@ -5142,7 +5142,7 @@ begin
   until false;
 end;
 
-function StrPosILen(P, PEnd: PUTF8Char; SearchUp: PAnsiChar): PUTF8Char;
+function StrPosILen(P, PEnd: PUtf8Char; SearchUp: PAnsiChar): PUtf8Char;
 var
   tab: PNormTable;
 begin
@@ -5158,9 +5158,9 @@ end;
 
 procedure TSynLogFile.LoadFromMap(AverageLineLength: integer);
 var
-  PBeg, P, PEnd: PUTF8Char;
+  PBeg, P, PEnd: PUtf8Char;
 
-  function GetOne(const UP: RawUTF8; var S: RawUTF8): boolean;
+  function GetOne(const UP: RawUtf8; var S: RawUtf8): boolean;
   var
     LUP: integer;
   begin
@@ -5177,7 +5177,7 @@ var
   end;
 
 var
-  aWow64, feat: RawUTF8;
+  aWow64, feat: RawUtf8;
   i: PtrInt;
   j, Level: integer;
   TSEnter, TSLeave: Int64;
@@ -5209,7 +5209,7 @@ begin
          (PEnd[0] <> '(') or
          (PEnd[11] <> ')') then
         exit;
-      Iso8601ToDateTimePUTF8CharVar(PEnd + 1, 10, fExeDate);
+      Iso8601ToDateTimePUtf8CharVar(PEnd + 1, 10, fExeDate);
     end
     else
     begin
@@ -5220,7 +5220,7 @@ begin
          (PEnd[0] <> '(') or
          (PEnd[20] <> ')') then
         exit;
-      Iso8601ToDateTimePUTF8CharVar(PEnd + 1, 19, fExeDate);
+      Iso8601ToDateTimePUtf8CharVar(PEnd + 1, 19, fExeDate);
     end;
     dec(PEnd);
     P := PEnd;
@@ -5237,8 +5237,8 @@ begin
         exit;
     until P^ <> ' ';
     FastSetString(fExeName, PBeg, P - PBeg + 1);
-    PBeg := PUTF8Char(fLines[1]) + 5;
-    PEnd := PUTF8Char(fLines[1]) + LineSize(1);
+    PBeg := PUtf8Char(fLines[1]) + 5;
+    PEnd := PUtf8Char(fLines[1]) + LineSize(1);
     if not GetOne(' USER=', fHost) or
        not GetOne(' CPU=', fUser) or
        not GetOne(' OS=', fCPU) or
@@ -5282,7 +5282,7 @@ begin
     if i > 0 then
     begin
       FastSetString(fFramework, PAnsiChar(P), i - 1);
-      Iso8601ToDateTimePUTF8CharVar(P + i, 19, fStartDateTime);
+      Iso8601ToDateTimePUtf8CharVar(P + i, 19, fStartDateTime);
     end;
     if fStartDateTime = 0 then
       exit;
@@ -5354,9 +5354,9 @@ begin
   end;
 end;
 
-procedure TSynLogFile.AddInMemoryLine(const aNewLine: RawUTF8);
+procedure TSynLogFile.AddInMemoryLine(const aNewLine: RawUtf8);
 var
-  P: PUTF8Char;
+  P: PUtf8Char;
 begin
   if aNewLine = '' then
     exit;
@@ -5369,7 +5369,7 @@ begin
     fFreq := GetNextItemInt64(P);
     fFreqPerDay := fFreq * SecsPerDay;
     fStartDateTime := GetNextItemDouble(P);
-    UTF8DecodeToString(P, StrLen(P), string(fFileName));
+    Utf8DecodeToString(P, StrLen(P), string(fFileName));
   end
   else
     inherited AddInMemoryLine(aNewLine);
@@ -5384,7 +5384,7 @@ begin
   LogProcSortInternal(0, LogProcCount - 1);
 end;
 
-function StrICompLeftTrim(Str1, Str2: PUTF8Char): PtrInt;
+function StrICompLeftTrim(Str1, Str2: PUtf8Char): PtrInt;
 var
   C1, C2: integer;
   tab: PByteArray;
@@ -5411,8 +5411,8 @@ begin
   case fLogProcSortInternalOrder of
     soByName:
       result := StrICompLeftTrim(
-        PUTF8Char(fLines[LogProc[A].index]) + fLineTextOffset,
-        PUTF8Char(fLines[LogProc[B].index]) + fLineTextOffset);
+        PUtf8Char(fLines[LogProc[A].index]) + fLineTextOffset,
+        PUtf8Char(fLines[LogProc[B].index]) + fLineTextOffset);
     soByOccurrence:
       result := LogProc[A].index - LogProc[B].index;
     soByTime:
@@ -5543,7 +5543,7 @@ begin // fast decode 00.020.006 at the end of the line
   end;
 end;
 
-procedure TSynLogFile.ProcessOneLine(LineBeg, LineEnd: PUTF8Char);
+procedure TSynLogFile.ProcessOneLine(LineBeg, LineEnd: PUtf8Char);
 var
   thread, n: cardinal;
   MS: integer;
@@ -5659,7 +5659,7 @@ begin
     result := 0;
 end;
 
-function TSynLogFile.ThreadName(ThreadID, CurrentLogIndex: integer): RawUTF8;
+function TSynLogFile.ThreadName(ThreadID, CurrentLogIndex: integer): RawUtf8;
 var
   i: PtrInt;
   lineptr: PtrUInt;
@@ -5692,11 +5692,11 @@ begin
       result := 'Thread';
   end;
   if cardinal(ThreadID) <= fThreadMax then
-    result := FormatUTF8('% % (% rows)',
+    result := FormatUtf8('% % (% rows)',
       [ThreadID, result, fThreadInfo[ThreadID].Rows]);
 end;
 
-function TSynLogFile.ThreadNames(CurrentLogIndex: integer): TRawUTF8DynArray;
+function TSynLogFile.ThreadNames(CurrentLogIndex: integer): TRawUtf8DynArray;
 var
   i: PtrInt;
 begin
@@ -5718,7 +5718,7 @@ begin
     Days[i] := EventDateTime(fDayChangeIndex[i]);
 end;
 
-function TSynLogFile.GetEventText(index: integer): RawUTF8;
+function TSynLogFile.GetEventText(index: integer): RawUtf8;
 var
   L: cardinal;
 begin
@@ -5736,10 +5736,10 @@ begin
   end;
 end;
 
-function TSynLogFile.EventString(index: integer; const replaceTabs: RawUTF8;
+function TSynLogFile.EventString(index: integer; const replaceTabs: RawUtf8;
   maxutf8len: integer; includeFirstColumns: boolean): string;
 var
-  tmp: RawUTF8;
+  tmp: RawUtf8;
   header: string;
 begin
   tmp := GetEventText(index);
@@ -5752,8 +5752,8 @@ begin
     Utf8TruncateToLength(tmp, maxutf8len);
   if replaceTabs <> '' then
     tmp := StringReplaceAll(tmp, #9, replaceTabs);
-  if IsValidUTF8(pointer(tmp)) then
-    result := UTF8ToString(tmp)
+  if IsValidUtf8(pointer(tmp)) then
+    result := Utf8ToString(tmp)
   else
     {$ifdef UNICODE}
     result := CurrentAnsiConvert.AnsiToUnicodeString(pointer(tmp), length(tmp));
@@ -5762,7 +5762,7 @@ begin
     {$endif UNICODE}
   if includeFirstColumns then
   begin
-    UTF8DecodeToString(fLines[index], fLineTextOffset, header);
+    Utf8DecodeToString(fLines[index], fLineTextOffset, header);
     result := header + result;
   end;
 end;
@@ -5796,8 +5796,8 @@ begin
             inc(i);
             inc(P);
           until (i >= fLogProcNaturalCount) or
-            (StrICompLeftTrim(PUTF8Char(fLines[LogProc[i - 1].index]) + 22,
-             PUTF8Char(fLines[P^.index]) + 22) <> 0);
+            (StrICompLeftTrim(PUtf8Char(fLines[LogProc[i - 1].index]) + 22,
+             PUtf8Char(fLines[P^.index]) + 22) <> 0);
         end;
         inc(fLogProcMergedCount);
       until i >= fLogProcNaturalCount;
@@ -5831,7 +5831,7 @@ begin
   end;
 end;
 
-procedure TSynLogFileView.AddInMemoryLine(const aNewLine: RawUTF8);
+procedure TSynLogFileView.AddInMemoryLine(const aNewLine: RawUtf8);
 var
   index: integer;
   tm: cardinal;
@@ -5947,7 +5947,7 @@ begin
   result := -1;
 end;
 
-function TSynLogFileView.SearchNextText(const aPattern: RawUTF8;
+function TSynLogFileView.SearchNextText(const aPattern: RawUtf8;
   aRow, aDelta: integer): PtrInt;
 begin
   result := -1;
@@ -5979,7 +5979,7 @@ begin
   result := -1;
 end;
 
-function TSynLogFileView.SearchPreviousText(const aPattern: RawUTF8;
+function TSynLogFileView.SearchPreviousText(const aPattern: RawUtf8;
   aRow: integer): PtrInt;
 begin
   result := -1;
@@ -6222,7 +6222,7 @@ end;
 
 { **************  SysLog Messages Support as defined by RFC 5424 }
 
-function PrintUSAscii(P: PUTF8Char; const text: RawUTF8): PUTF8Char;
+function PrintUSAscii(P: PUtf8Char; const text: RawUtf8): PUtf8Char;
 var
   i: PtrInt;
 begin
@@ -6245,11 +6245,11 @@ begin
 end;
 
 function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
-  const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: PtrInt;
+  const msg, procid, msgid: RawUtf8; destbuffer: PUtf8Char; destsize: PtrInt;
   trimmsgfromlog: boolean): PtrInt;
 var
   P: PAnsiChar;
-  start: PUTF8Char;
+  start: PUtf8Char;
   len: PtrInt;
   st: TSynSystemTime;
 begin

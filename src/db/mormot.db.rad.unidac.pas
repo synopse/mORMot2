@@ -72,7 +72,7 @@ type
     // ! 'Oracle?ClientLibrary=oci64\oci.dll'
     // ! 'MySQL?Server=192.168.2.60;Port=3306', 'world', 'root', 'dev'
     // - aDatabaseName shall contain the database server name
-    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUTF8); override;
+    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8); override;
     /// release internal structures
     destructor Destroy; override;
     /// create a new connection
@@ -94,19 +94,19 @@ type
     // ! PropsMySQL := TSqlDBUniDACConnectionProperties.Create(
     // !   TSqlDBUniDACConnectionProperties.URI(dMySQL,'192.168.2.60:3306'),
     // !   'world', 'root', 'dev');
-    class function URI(aServer: TSqlDBDefinition; const aServerName: RawUTF8;
+    class function URI(aServer: TSqlDBDefinition; const aServerName: RawUtf8;
       const aLibraryLocation: TFileName='';
-      aLibraryLocationAppendExePath: boolean=true): RawUTF8;
+      aLibraryLocationAppendExePath: boolean=true): RawUtf8;
 
     /// retrieve the column/field layout of a specified table
     // - this overridden method will use UniDAC metadata to retrieve the information
-    procedure GetFields(const aTableName: RawUTF8; out Fields: TSqlDBColumnDefineDynArray); override;
+    procedure GetFields(const aTableName: RawUtf8; out Fields: TSqlDBColumnDefineDynArray); override;
     /// get all table names
     // - this overridden method will use UniDAC metadata to retrieve the information
-    procedure GetTableNames(out Tables: TRawUTF8DynArray); override;
+    procedure GetTableNames(out Tables: TRawUtf8DynArray); override;
     /// retrieve the advanced indexed information of a specified Table
     // - this overridden method will use UniDAC metadata to retrieve the information
-    procedure GetIndexes(const aTableName: RawUTF8; out Indexes: TSqlDBIndexDefineDynArray); override;
+    procedure GetIndexes(const aTableName: RawUtf8; out Indexes: TSqlDBIndexDefineDynArray); override;
     /// allow to set the options specific to a UniDAC driver
     // - for instance, you can set for both SQLite3 and Firebird/Interbase:
     // ! Props.SpecificOptions.Values['ClientLibrary'] := ClientDllName;
@@ -157,7 +157,7 @@ type
     /// execute underlying TUniQuery.ExecSQL
     procedure DatasetExecSQL; override;
     /// overriden by itSDS to properly handle UniDAC parameters
-    procedure DataSetBindSQLParam(const aArrayIndex, aParamIndex: integer;
+    procedure DataSetBindSqlParam(const aArrayIndex, aParamIndex: integer;
       const aParam: TSqlDBParam); override;
   public
   end;
@@ -165,7 +165,7 @@ type
 
 const
   /// UniDAC provider names corresponding to mormot.db.sql recognized SQL engines
-  UNIDAC_PROVIDER: array[dOracle..high(TSqlDBDefinition)] of RawUTF8 = (
+  UNIDAC_PROVIDER: array[dOracle..high(TSqlDBDefinition)] of RawUtf8 = (
     'Oracle', 'SQL Server', 'Access', 'MySQL', 'SQLite', 'InterBase', 
     'NexusDB', 'PostgreSQL', 'DB2', '');
 
@@ -181,11 +181,11 @@ uses
 { TSqlDBUniDACConnectionProperties }
 
 constructor TSqlDBUniDACConnectionProperties.Create(const aServerName,
-  aDatabaseName, aUserID, aPassWord: RawUTF8);
+  aDatabaseName, aUserID, aPassWord: RawUtf8);
 var
   p: TSqlDBDefinition;
-  provider, options, namevalue: RawUTF8;
-  opt: PUTF8Char;
+  provider, options, namevalue: RawUtf8;
+  opt: PUtf8Char;
 begin
   Split(aServerName, '?', provider, options);
   for p := Low(UNIDAC_PROVIDER) to high(UNIDAC_PROVIDER) do
@@ -201,7 +201,7 @@ begin
   begin
     GetNextItem(opt, ';', namevalue);
     if namevalue <> '' then
-      fSpecificOptions.Add(UTF8ToString(namevalue));
+      fSpecificOptions.Add(Utf8ToString(namevalue));
   end;
   case fDBMS of
     dSQLite:
@@ -254,7 +254,7 @@ begin
   inherited;
 end;
 
-procedure TSqlDBUniDACConnectionProperties.GetFields(const aTableName: RawUTF8;
+procedure TSqlDBUniDACConnectionProperties.GetFields(const aTableName: RawUtf8;
   out Fields: TSqlDBColumnDefineDynArray);
 var
   meta: TDAMetaData;
@@ -262,7 +262,7 @@ var
   F: TSqlDBColumnDefine;
   FA: TDynArray;
   hasSubType: boolean;
-  Owner, Table: RawUTF8;
+  Owner, Table: RawUtf8;
 begin
   meta := (MainConnection as TSqlDBUniDACConnection).fDatabase.CreateMetaData;
   try
@@ -279,19 +279,19 @@ begin
     if Owner = '' then
       Owner := MainConnection.Properties.DatabaseName; // itSDS
     if Owner <> '' then
-      meta.Restrictions.Values['TABLE_SCHEMA'] := UTF8ToString(UpperCase(Owner))
+      meta.Restrictions.Values['TABLE_SCHEMA'] := Utf8ToString(UpperCase(Owner))
     else
       meta.Restrictions.Values['SCOPE'] := 'LOCAL';
-    meta.Restrictions.Values['TABLE_NAME'] := UTF8ToString(UpperCase(Table));
+    meta.Restrictions.Values['TABLE_NAME'] := Utf8ToString(UpperCase(Table));
     meta.Open;
     hasSubType := meta.FindField('DATA_SUBTYPE') <> nil;
     while not meta.Eof do
     begin
-      F.ColumnName := StringToUTF8(meta.FieldByName('COLUMN_NAME').AsString);
-      F.ColumnTypeNative := StringToUTF8(meta.FieldByName('DATA_TYPE').AsString);
+      F.ColumnName := StringToUtf8(meta.FieldByName('COLUMN_NAME').AsString);
+      F.ColumnTypeNative := StringToUtf8(meta.FieldByName('DATA_TYPE').AsString);
       if hasSubType then
         F.ColumnTypeNative := F.ColumnTypeNative +
-          StringToUTF8(meta.FieldByName('DATA_SUBTYPE').AsString);
+          StringToUtf8(meta.FieldByName('DATA_SUBTYPE').AsString);
       F.ColumnLength := meta.FieldByName('DATA_LENGTH').AsInteger;
       F.ColumnScale := meta.FieldByName('DATA_SCALE').AsInteger;
       F.ColumnPrecision := meta.FieldByName('DATA_PRECISION').AsInteger;
@@ -311,14 +311,14 @@ begin
   end;
 end;
 
-procedure TSqlDBUniDACConnectionProperties.GetIndexes(const aTableName: RawUTF8;
+procedure TSqlDBUniDACConnectionProperties.GetIndexes(const aTableName: RawUtf8;
   out Indexes: TSqlDBIndexDefineDynArray);
 var
   meta, indexs: TDAMetaData;
   F: TSqlDBIndexDefine;
   FA: TDynArray;
   n: integer;
-  ColName: RawUTF8;
+  ColName: RawUtf8;
   ndxName: string;
 begin
   SetLength(Indexes, 0);
@@ -328,20 +328,20 @@ begin
   indexs := (MainConnection as TSqlDBUniDACConnection).fDatabase.CreateMetaData;
   try
     meta.MetaDataKind := 'Indexes';
-    meta.Restrictions.Values['TABLE_NAME'] := UTF8ToString(UpperCase(aTableName));
+    meta.Restrictions.Values['TABLE_NAME'] := Utf8ToString(UpperCase(aTableName));
     meta.Open;
     while not meta.Eof do
     begin
       ndxName := meta.FieldByName('INDEX_NAME').AsString;
-      F.IndexName := StringToUTF8(ndxName);
+      F.IndexName := StringToUtf8(ndxName);
       F.KeyColumns := '';
       indexs.MetaDataKind := 'indexcolumns';
-      indexs.Restrictions.Values['TABLE_NAME'] := UTF8ToString(UpperCase(aTableName));
+      indexs.Restrictions.Values['TABLE_NAME'] := Utf8ToString(UpperCase(aTableName));
       indexs.Restrictions.Values['INDEX_NAME'] := ndxName;
       indexs.Open;
       while not indexs.Eof do
       begin
-        ColName := StringToUTF8(indexs.FieldByName('COLUMN_NAME').AsString);
+        ColName := StringToUtf8(indexs.FieldByName('COLUMN_NAME').AsString);
         if F.KeyColumns = '' then
           F.KeyColumns := ColName
         else
@@ -369,14 +369,14 @@ begin
   { TODO : get FOREIGN KEYS from UniDAC metadata ? }
 end;
 
-procedure TSqlDBUniDACConnectionProperties.GetTableNames(out Tables: TRawUTF8DynArray);
+procedure TSqlDBUniDACConnectionProperties.GetTableNames(out Tables: TRawUtf8DynArray);
 var
   List: TStringList;
 begin
   List := TStringList.Create;
   try
     (MainConnection as TSqlDBUniDACConnection).fDatabase.GetTableNames(List);
-    StringListToRawUTF8DynArray(List, Tables);
+    StringListToRawUtf8DynArray(List, Tables);
     exit;
   finally
     List.Free;
@@ -390,10 +390,10 @@ begin
 end;
 
 class function TSqlDBUniDACConnectionProperties.URI(aServer: TSqlDBDefinition;
-  const aServerName: RawUTF8; const aLibraryLocation: TFileName;
-  aLibraryLocationAppendExePath: boolean): RawUTF8;
+  const aServerName: RawUtf8; const aLibraryLocation: TFileName;
+  aLibraryLocationAppendExePath: boolean): RawUtf8;
 var
-  Server, Port: RawUTF8;
+  Server, Port: RawUtf8;
 begin
   if aServer < low(UNIDAC_PROVIDER) then
     result := ''
@@ -405,8 +405,8 @@ begin
   begin
     result := result + '?ClientLibrary=';
     if aLibraryLocationAppendExePath then
-      result := result + StringToUTF8(ExtractFilePath(ParamStr(0)));
-    result := result + StringToUTF8(aLibraryLocation);
+      result := result + StringToUtf8(ExtractFilePath(ParamStr(0)));
+    result := result + StringToUtf8(aLibraryLocation);
   end;
   if aServerName <> '' then
   begin
@@ -446,15 +446,15 @@ begin
     CoInit;
   fDatabase := TUniConnection.Create(nil);
   fDatabase.LoginPrompt := false;
-  fDatabase.ProviderName := UTF8ToString(fProperties.ServerName);
+  fDatabase.ProviderName := Utf8ToString(fProperties.ServerName);
   case aProperties.DBMS of
     dSQLite, dFirebird, dPostgreSQL, dMySQL, dDB2, dMSSQL:
-      fDatabase.Database := UTF8ToString(fProperties.DatabaseName);
+      fDatabase.Database := Utf8ToString(fProperties.DatabaseName);
   else
-    fDatabase.Server := UTF8ToString(fProperties.DatabaseName);
+    fDatabase.Server := Utf8ToString(fProperties.DatabaseName);
   end;
-  fDatabase.Username := UTF8ToString(fProperties.UserID);
-  fDatabase.Password := UTF8ToString(fProperties.PassWord);
+  fDatabase.Username := Utf8ToString(fProperties.UserID);
+  fDatabase.Password := Utf8ToString(fProperties.PassWord);
   if aProperties.DBMS = dMySQL then
     // s.d. 30.11.19 Damit der Connect schneller geht
     fDatabase.SpecificOptions.Add('MySQL.ConnectionTimeout=0');
@@ -473,8 +473,8 @@ begin
   if (fDatabase.Port = 0) and TryStrToInt(options.Values['Port'], PortNumber) then
     fDatabase.Port := PortNumber;
   for i := 0 to options.Count - 1 do
-    if FindRawUTF8(['Server', 'Database', 'Port'],
-        StringToUTF8(options.Names[i]), false) < 0 then
+    if FindRawUtf8(['Server', 'Database', 'Port'],
+        StringToUtf8(options.Names[i]), false) < 0 then
       fDatabase.SpecificOptions.Add(options[i]);
 end;
 
@@ -483,7 +483,7 @@ var
   Log: ISynLog;
 begin
   if fDatabase = nil then
-    raise ESqlDBUniDAC.CreateUTF8('%.Connect(%): Database=nil', [self,
+    raise ESqlDBUniDAC.CreateUtf8('%.Connect(%): Database=nil', [self,
       fProperties.ServerName]);
   Log := SynDBLog.Enter('Connect to ProviderName=% Database=% on Server=%',
     [fDatabase.ProviderName, fDatabase.Database, fDatabase.Server], self);
@@ -495,7 +495,7 @@ begin
           with TUniScript.Create(nil) do // always create database for embedded Firebird
           try
             NoPreconnect := true;
-            SQL.Text := UTF8ToString(fProperties.SQLCreateDatabase(fProperties.DatabaseName));
+            SQL.Text := Utf8ToString(fProperties.SQLCreateDatabase(fProperties.DatabaseName));
             Connection := fDatabase;
             Execute;
           finally
@@ -567,7 +567,7 @@ end;
 
 { TSqlDBUniDACStatement }
 
-procedure TSqlDBUniDACStatement.DataSetBindSQLParam(const aArrayIndex,
+procedure TSqlDBUniDACStatement.DataSetBindSqlParam(const aArrayIndex,
   aParamIndex: integer; const aParam: TSqlDBParam);
 var
   P: TDAParam;
@@ -578,7 +578,7 @@ begin
       if (VinOut <> paramInOut) and
          (VType = SynTable.ftBlob) then
       begin
-        P.ParamType := SQLParamTypeToDBParamType(VInOut);
+        P.ParamType := SqlParamTypeToDBParamType(VInOut);
         {$ifdef UNICODE}
         if aArrayIndex >= 0 then
           P.SetBlobData(Pointer(VArray[aArrayIndex]), Length(VArray[aArrayIndex]))
@@ -592,7 +592,7 @@ begin
         {$endif UNICODE}
         exit;
       end;
-  inherited DataSetBindSQLParam(aArrayIndex, aParamIndex, aParam);
+  inherited DataSetBindSqlParam(aArrayIndex, aParamIndex, aParam);
 end;
 
 procedure TSqlDBUniDACStatement.DatasetCreate;
