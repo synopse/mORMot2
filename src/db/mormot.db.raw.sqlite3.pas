@@ -4713,8 +4713,8 @@ begin
     exit; // avoid GPF in case of call from a static-only server
   if (aSQL = '') or
      IsCacheable(aSQL) then
-    fSafe.Lock
-  else // on non-concurent calls, is very fast
+    fSafe.Lock         // on non-concurent calls, is very fast
+  else
     LockAndFlushCache; // INSERT UPDATE DELETE statements need to flush cache
 end;
 
@@ -4872,6 +4872,17 @@ begin
   end;
   fBackupBackgroundInProcess := TSQLDatabaseBackupThread.Create(Backup,
     self, Dest, StepPageNumber, StepSleepMS, SynLzCompress, OnProgress);
+  repeat
+    Lock;
+    try
+      if (fBackupBackgroundInProcess = nil) or
+         (fBackupBackgroundInProcess.Step > backupNone) then
+        break;
+    finally
+      UnLock;
+    end;
+    SleepHiRes(0);
+  until false; // wait for the background thread to be actually started
   result := true;
 end;
 
@@ -4887,7 +4898,7 @@ begin
      (fBackupBackgroundInProcess <> nil) then
     exit;
   fLog.Add.Log(sllDB,'BackupBackgroundToDB("%") started on %',
-    [BackupDB.FileName,FileNameWithoutPath],self);
+    [BackupDB.FileName, FileNameWithoutPath], self);
   Backup := sqlite3.backup_init(BackupDB.DB, 'main', DB, 'main');
   if Backup = 0 then
     exit;
@@ -4898,35 +4909,50 @@ end;
 
 procedure TSQLDataBase.BackupBackgroundWaitUntilFinished(
   TimeOutSeconds: integer);
+
+  function StepAsText: shortstring;
+  begin
+    Lock;
+    if fBackupBackgroundInProcess = nil then
+      result := 'backupFinished'
+    else
+      result := GetEnumName(TypeInfo(TOnSQLDatabaseBackupStep),
+        ord(fBackupBackgroundInProcess.Step))^;
+    UnLock;
+  end;
+
 var
   endtix: Int64;
 begin
+  if fBackupBackgroundInProcess = nil then
+    exit;
+  if TimeOutSeconds < 0 then
+    // TimeOutSeconds=-1 for infinite wait (unsafe!) -> 1 minute seems enough
+    TimeOutSeconds := 60;
+  fLog.Add.Log(sllDB,'BackupBackgroundWaitUntilFinished(%) wait on % - %',
+    [TimeOutSeconds, FileNameWithoutPath, StepAsText], self);
+  endtix := GetTickCount64 + TimeOutSeconds * 1000;
+  repeat
+    // wait for "natural" process ending
+    SleepHiRes(10);
+    if fBackupBackgroundInProcess = nil then
+      exit;
+  until GetTickCount64 > endtix;
+  fLog.Add.Log(sllDB,'BackupBackgroundWaitUntilFinished force abort on % - %',
+    [FileNameWithoutPath, StepAsText], self);
+  Lock;
   if fBackupBackgroundInProcess <> nil then
-    if TimeOutSeconds < 0 then
-      // TimeOutSeconds=-1 for infinite wait (unsafe!)
-      while fBackupBackgroundInProcess <> nil do
-        SleepHiRes(10)
-    else
-    begin
-      endtix := GetTickCount64 + TimeOutSeconds * 1000;
-      repeat
-        // wait for "natural" process ending
-        SleepHiRes(10);
-        if fBackupBackgroundInProcess = nil then
-          exit;
-      until GetTickCount64 > endtix;
-      Lock;
-      if fBackupBackgroundInProcess <> nil then
-        // notify Execute to force loop abortion
-        fBackupBackgroundInProcess.Terminate;
-      UnLock;
-      endtix := GetTickCount64 + 5000;
-      repeat
-        // wait 5 seconds for process to be actually aborted
-        SleepHiRes(10);
-      until (fBackupBackgroundInProcess = nil) or
-            (GetTickCount64 > endtix);
-    end;
+    // notify Execute to force loop abortion
+    fBackupBackgroundInProcess.Terminate;
+  UnLock;
+  endtix := GetTickCount64 + TimeOutSeconds * 1000;
+  repeat
+    // wait for the background process to be actually aborted
+    SleepHiRes(10);
+  until (fBackupBackgroundInProcess = nil) or
+        (GetTickCount64 > endtix);
+  fLog.Add.Log(sllError,'BackupBackgroundWaitUntilFinished(%) ended on % - %',
+    [TimeOutSeconds, FileNameWithoutPath, StepAsText],self);
 end;
 
 class function TSQLDataBase.BackupSynLZ(const SourceDB, DestSynLZ: TFileName;
@@ -6232,85 +6258,92 @@ begin
   log := SQLite3Log.Enter(self, 'Execute');
   try
     try
-      NotifyProgressAndContinue(backupStart);
-      repeat
-        fSourceDB.Lock; // naive multi-thread protection of main process
-        res := sqlite3.backup_step(fBackup, fStepPageNumber);
-        fSourceDB.UnLock;
-        fStepNumberToFinish := sqlite3.backup_remaining(fBackup);
-        fStepNumberTotal := sqlite3.backup_pagecount(fBackup);
-        case res of
-          SQLITE_OK:
-            NotifyProgressAndContinue(backupStepOk);
-          SQLITE_BUSY:
-            begin
-              NotifyProgressAndContinue(backupStepBusy);
-              if fStepSleepMS = 0 then
-                SleepHiRes(1);
-            end;
-          SQLITE_LOCKED:
-            NotifyProgressAndContinue(backupStepLocked);
-          SQLITE_DONE:
-            break;
-        else
-          raise ESQLite3Exception.Create(fDestDB.DB, res, 'Backup');
-        end;
-        if Terminated then
-          raise ESQLite3Exception.Create('Backup process forced to terminate');
-        SleepHiRes(fStepSleepMS);
-      until false;
-      if fDestDB <> nil then
-      begin
-        sqlite3.backup_finish(fBackup);
-        // close destination backup database
-        if fOwnerDest then
-          FreeAndNil(fDestDB);
-        fDestDB := nil;
-      end;
-      if not IdemPChar(pointer(fn), SQLITE_MEMORY_DATABASE_NAME) then
-      begin
-        if fStepSynLzCompress then
+      try
+        NotifyProgressAndContinue(backupStart);
+        repeat
+          fSourceDB.Lock; // naive multi-thread protection of main process
+          res := sqlite3.backup_step(fBackup, fStepPageNumber);
+          fSourceDB.UnLock;
+          fStepNumberToFinish := sqlite3.backup_remaining(fBackup);
+          fStepNumberTotal := sqlite3.backup_pagecount(fBackup);
+          case res of
+            SQLITE_OK:
+              NotifyProgressAndContinue(backupStepOk);
+            SQLITE_BUSY:
+              begin
+                NotifyProgressAndContinue(backupStepBusy);
+                if fStepSleepMS = 0 then
+                  SleepHiRes(1);
+              end;
+            SQLITE_LOCKED:
+              NotifyProgressAndContinue(backupStepLocked);
+            SQLITE_DONE:
+              break;
+          else
+            raise ESQLite3Exception.Create(fDestDB.DB, res, 'Backup');
+          end;
+          if Terminated then
+            raise ESQLite3Exception.Create('Backup process forced to terminate');
+          SleepHiRes(fStepSleepMS);
+        until false;
+        if fDestDB <> nil then
         begin
-          NotifyProgressAndContinue(backupStepSynLz);
-          fn2 := ChangeFileExt(fn, '.db.tmp');
-          DeleteFile(fn2);
-          if not RenameFile(fn, fn2) then
-            raise ESQLite3Exception.CreateUTF8(
-              '%.Execute: RenameFile(%,%) failed', [self, fn, fn2]);
-          if not TSQLDatabase.BackupSynLZ(fn2, fn, true) then
-            raise ESQLite3Exception.CreateUTF8(
-              '%.Execute: BackupSynLZ(%,%) failed', [self, fn, fn2]);
-          if Assigned(log) then
-            log.Log(sllTrace, 'TSQLDatabase.BackupSynLZ into % %',
-              [KB(FileSize(fn)), fn], self);
+          sqlite3.backup_finish(fBackup);
+          // close destination backup database
+          if fOwnerDest then
+            FreeAndNil(fDestDB);
+          fDestDB := nil; // no abort below
         end;
-        fSourceDB.fBackupBackgroundLastFileName := ExtractFileName(fn);
+        if not IdemPChar(pointer(fn), SQLITE_MEMORY_DATABASE_NAME) then
+        begin
+          if fStepSynLzCompress then
+          begin
+            NotifyProgressAndContinue(backupStepSynLz);
+            fn2 := ChangeFileExt(fn, '.db.tmp');
+            DeleteFile(fn2);
+            if not RenameFile(fn, fn2) then
+              raise ESQLite3Exception.CreateUTF8(
+                '%.Execute: RenameFile(%,%) failed', [self, fn, fn2]);
+            if not TSQLDatabase.BackupSynLZ(fn2, fn, true) then
+              raise ESQLite3Exception.CreateUTF8(
+                '%.Execute: BackupSynLZ(%,%) failed', [self, fn, fn2]);
+            if Assigned(log) then
+              log.Log(sllTrace, 'TSQLDatabase.BackupSynLZ into % %',
+                [KB(FileSize(fn)), fn], self);
+          end;
+          fSourceDB.fBackupBackgroundLastFileName := ExtractFileName(fn);
+        end;
+        NotifyProgressAndContinue(backupSuccess);
+      finally
+        if fDestDB <> nil then
+        begin
+          if Assigned(log) then
+            log.Log(sllWarning, 'Execute Aborted', self);
+          sqlite3.backup_finish(fBackup);
+          if fOwnerDest then
+            // close destination backup database if not already
+            fDestDB.Free;
+        end;
       end;
-      NotifyProgressAndContinue(backupSuccess);
-    finally
-      if fDestDB <> nil then
+    except
+      on E: Exception do
       begin
-        sqlite3.backup_finish(fBackup);
-        if fOwnerDest then
-          // close destination backup database if not already
-          fDestDB.Free;
+        fError := E;
+        fStep := backupFailure;
+        if Assigned(fOnProgress) then
+          fOnProgress(self);
       end;
-      fSourceDB.fBackupBackgroundLastTime := fTimer.Stop;
-      fSourceDB.Lock;
-      fSourceDB.fBackupBackgroundInProcess := nil;
-      fSourceDB.Unlock;
     end;
-  except
-    on E: Exception do
-    begin
-      fError := E;
-      fStep := backupFailure;
-      if Assigned(fOnProgress) then
-        fOnProgress(self);
-    end;
+  finally
+    fSourceDB.fBackupBackgroundLastTime := fTimer.Stop;
+    fSourceDB.Lock;
+    fSourceDB.fBackupBackgroundInProcess := nil;
+    fSourceDB.Unlock;
+    if Assigned(log) then
+      log.Log(sllTrace, 'Execute Finished', self);
+    log := nil;
+    SQLite3Log.Add.NotifyThreadEnded;
   end;
-  log := nil;
-  SQLite3Log.Add.NotifyThreadEnded;
 end;
 
 function IsSQLite3File(const FileName: TFileName; PageSize: PInteger): boolean;
