@@ -3747,11 +3747,7 @@ begin
   j := VariantSaveJSON(V);
   Check(j = '{"Z":10,"a":1,"name":"John","year":1972}');
   V := _JsonFast('{"Database":"\u201d\u00c9\u00c3\u00b6\u00b1\u00a2\u00a7\u00ad\u00a5\u00a4"}');
-  {$ifdef FPC}
   j := VariantToUTF8(V.Database);
-  {$else}
-  j := ToUTF8(string(V.Database));
-  {$endif FPC}
   Check((j <> '') and
         (j[1] = #$E2) and
         (j[2] = #$80) and

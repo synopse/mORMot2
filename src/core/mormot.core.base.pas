@@ -165,39 +165,25 @@ type
 {$endif FPC}
 
 type
-  /// RawUnicode is an Unicode String stored in an AnsiString
-  // - faster than WideString, which are allocated in Global heap (for COM)
-  // - an AnsiChar(#0) is added at the end, for having a true WideChar(#0) at ending
-  // - length(RawUnicode) returns memory bytes count: use (length(RawUnicode) shr 1)
-  // for WideChar count (that's why the definition of this type since Delphi 2009
-  // is AnsiString(1200) and not UnicodeString)
-  // - pointer(RawUnicode) is compatible with Win32 'Wide' API call
-  // - mimic Delphi 2009 UnicodeString, without the WideString or Ansi conversion overhead
-  // - all conversion to/from AnsiString or RawUTF8 must be explicit: the
-  // compiler is not able to make valid implicit conversion on CP_UTF16
-  {$ifdef HASCODEPAGE}
-  RawUnicode = type AnsiString(CP_UTF16); // Codepage for an UnicodeString
-  {$else}
-  RawUnicode = type AnsiString;
-  {$endif HASCODEPAGE}
+  /// RawUTF8 is an UTF-8 String stored in an AnsiString, alias to System.UTF8String
+  // - all conversion to/from string or WinAnsiString must be explicit on
+  // Delphi 7/2007, and it will be faster anyway to use our optimized functions
+  // from mormot.core.unicode.pas unit like StringToUTF8/UTF8ToString
+  RawUTF8 = System.UTF8String; // CP_UTF8 Codepage
 
-  /// RawUTF8 is an UTF-8 String stored in an AnsiString
-  // - use this type instead of System.UTF8String, which behavior changed
-  // between Delphi 2009 compiler and previous versions: our implementation
-  // is consistent and compatible with all versions of Delphi compiler
-  // - mimic Delphi 2009 UTF8String, without the charset conversion overhead
-  // - all conversion to/from AnsiString or RawUnicode must be explicit
-  {$ifdef HASCODEPAGE}
-  RawUTF8 = type AnsiString(CP_UTF8); // Codepage for an UTF8 string
-  {$else}
-  RawUTF8 = type AnsiString;
-  {$endif HASCODEPAGE}
+  /// a RawUTF8 value which may contain Sensitive Personal Information
+  // (e.g. a bank card number or a plain password)
+  // - identified as a specific type e.g. to be hidden in the logs when the
+  // woHideSensitivePersonalInformation TTextWriterWriteObjectOption is set
+  SPIUTF8 = type RawUTF8;
 
   /// WinAnsiString is a WinAnsi-encoded AnsiString (code page 1252)
   // - use this type instead of System.String, which behavior changed
   // between Delphi 2009 compiler and previous versions: our implementation
   // is consistent and compatible with all versions of Delphi compiler
-  // - all conversion to/from RawUTF8 or RawUnicode must be explicit
+  // - all conversion to/from string or RawUTF8/UTF8String must be explicit on
+  // Delphi 7/2007, and it will be faster anyway to use our optimized functions
+  // from mormot.core.unicode.pas unit like StringToUTF8/UTF8ToString
   {$ifdef HASCODEPAGE}
   WinAnsiString = type AnsiString(CODEPAGE_US); // WinAnsi Codepage
   {$else}
@@ -220,9 +206,9 @@ type
   PRawByteString = ^RawByteString;
   {$endif HASCODEPAGE}
 
-  /// RawJSON will indicate that this variable content would stay in raw JSON
+  /// RawJSON will indicate that this variable content would stay as raw JSON
   // - i.e. won't be serialized into values
-  // - could be any JSON content: number, string, object or array
+  // - could be any JSON content: number, boolean, null, string, object or array
   // - e.g. interface-based service will use it for efficient and AJAX-ready
   // transmission of TOrmTableJSON result
   RawJSON = type RawUTF8;
@@ -243,12 +229,6 @@ type
   // - is defined here for proper TRttiProp.WriteAsJSON serialization
   RawBlob = type RawByteString;
 
-  /// a RawUTF8 value which may contain Sensitive Personal Information
-  // (e.g. a bank card number or a plain password)
-  // - identified as a specific type e.g. to be hidden in the logs when the
-  // woHideSensitivePersonalInformation TTextWriterWriteObjectOption is set
-  SPIUTF8 = type RawUTF8;
-
   /// SynUnicode is the fastest available Unicode native string type, depending
   //  on the compiler used
   // - this type is native to the compiler, so you can use Length() Copy() and
@@ -265,6 +245,23 @@ type
   {$else}
   SynUnicode = WideString;
   {$endif HASVARUSTRING}
+
+  /// low-level RawUnicode as an Unicode String stored in an AnsiString
+  // - deprecated type, introduced in Delphi 7/2007 days: SynUnicode is to be used
+  // - faster than WideString, which are allocated in Global heap (for COM)
+  // - an AnsiChar(#0) is added at the end, for having a true WideChar(#0) at ending
+  // - length(RawUnicode) returns memory bytes count: use (length(RawUnicode) shr 1)
+  // for WideChar count (that's why the definition of this type since Delphi 2009
+  // is AnsiString(1200) and not UnicodeString)
+  // - pointer(RawUnicode) is compatible with Win32 'Wide' API call
+  // - mimic Delphi 2009 UnicodeString, without the WideString or Ansi conversion overhead
+  // - all conversion to/from AnsiString or RawUTF8 must be explicit: the
+  // compiler is not able to make valid implicit conversion on CP_UTF16
+  {$ifdef HASCODEPAGE}
+  RawUnicode = type AnsiString(CP_UTF16); // Codepage for an UnicodeString
+  {$else}
+  RawUnicode = type AnsiString;
+  {$endif HASCODEPAGE}
 
   PRawUnicode = ^RawUnicode;
   PRawJSON = ^RawJSON;
