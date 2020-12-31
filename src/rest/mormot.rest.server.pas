@@ -6153,11 +6153,11 @@ constructor TRestServer.CreateWithOwnModel(
   const Tables: array of TOrmClass; aHandleUserAuthentication: boolean;
   const aRoot: RawUTF8);
 var
-  Model: TOrmModel;
+  model: TOrmModel;
 begin
-  Model := TOrmModel.Create(Tables, aRoot);
-  Create(Model, aHandleUserAuthentication);
-  Model.Owner := self;
+  model := TOrmModel.Create(Tables, aRoot);
+  Create(model, aHandleUserAuthentication);
+  model.Owner := self;
 end;
 
 procedure TRestServer.SetOrmInstance(aORM: TInterfacedObject);
@@ -6838,10 +6838,7 @@ begin // caller made fSessions.Safe.Lock
     fSessionsDeprecatedTix := result;
     for i := fSessions.Count - 1 downto 0 do
       if result > TAuthSession(fSessions.List[i]).TimeOutTix then
-      begin
         SessionDelete(i, nil);
-        inc(result);
-      end;
   end;
 end;
 
