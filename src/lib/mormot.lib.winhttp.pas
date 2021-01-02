@@ -1351,17 +1351,17 @@ type
 
   PWINHTTP_STATUS_CALLBACK = ^WINHTTP_STATUS_CALLBACK;
 
-  /// direct late-binding access to the WinHTTP API
+  /// direct late-binding access to the WinHttp API
   // - note: WebSocket* API calls require Windows 8 and later
-  TWinHTTPBinding = packed record
+  TWinHttpBinding = packed record
     /// access to the winhttp.dll loaded library
     LibraryHandle: THandle;
     /// depends on the published .dll functions
     WebSocketEnabled: boolean;
-    /// Initializes an application's use of the WinHTTP functions.
+    /// Initializes an application's use of the WinHttp functions.
     Open: function(pwszUserAgent: PWideChar; dwAccessType: DWORD; pwszProxyName,
       pwszProxyBypass: PWideChar; dwFlags: DWORD): HINTERNET; stdcall;
-    /// Sets up a callback function that WinHTTP can call as progress is made during an operation.
+    /// Sets up a callback function that WinHttp can call as progress is made during an operation.
     SetStatusCallback: function(hSession: HINTERNET;
       lpfnInternetCallback: WINHTTP_STATUS_CALLBACK; dwNotificationFlags: DWORD;
       dwReserved: PDWORD): WINHTTP_STATUS_CALLBACK; stdcall;
@@ -1427,7 +1427,7 @@ type
   end;
 
 var
-  WinHttpApi: TWinHTTPBinding;
+  WinHttpApi: TWinHttpBinding;
 
 type
   TWinHttpApis = (
@@ -1454,8 +1454,8 @@ const
 /// low-level thread-safe initialization of the WinHtpp API
 procedure WinHttpApiInitialize;
 
-/// a callback raising a EWinHTTP on error
-procedure WinHTTPSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
+/// a callback raising a EWinHttp on error
+procedure WinHttpSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
   dwInternetStatus: cardinal; lpvStatusInformation: pointer;
   dwStatusInformationLength: cardinal); stdcall;
 
@@ -1666,7 +1666,7 @@ var
   WebSocketApi: TWebSocketApi;
 
 /// is HTTP.SYS web socket API available on the target system Windows 8 and UP
-function WinHTTP_WebSocketEnabled: boolean;
+function WinHttp_WebSocketEnabled: boolean;
 
 /// low-level loading of the WebSockets API
 procedure WebSocketApiInitialize;
@@ -2053,13 +2053,13 @@ end;
 
 { ******************** winhttp.dll Windows API Definitions }
 
-procedure WinHTTPSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
+procedure WinHttpSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
   dwInternetStatus: cardinal; lpvStatusInformation: pointer;
   dwStatusInformationLength: cardinal); stdcall;
 begin
   // in case lpvStatusInformation^=-2147483648 this is attempt to connect to
   // non-https socket wrong port - perhaps must be 443?
-  raise EHttpSocket.CreateFmt('WinHTTP security error. Status %d, statusInfo: %d',
+  raise EHttpSocket.CreateFmt('WinHttp security error. Status %d, statusInfo: %d',
     [dwInternetStatus, PDWORD(lpvStatusInformation)^]);
 end;
 
@@ -2134,7 +2134,7 @@ begin
   WebSocketApi.WebSocketEnabled := true;
 end;
 
-function WinHTTP_WebSocketEnabled: boolean;
+function WinHttp_WebSocketEnabled: boolean;
 begin
   result := WebSocketApi.WebSocketEnabled;
 end;

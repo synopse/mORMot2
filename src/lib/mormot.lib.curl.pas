@@ -70,7 +70,7 @@ type
     coAutoReferer          = 58,
     coProxyPort            = 59,
     coPostFieldSize        = 60,
-    coHTTPProxyTunnel      = 61,
+    coHttpProxyTunnel      = 61,
     coSSLVerifyPeer        = 64,
     coMaxRedirs            = 68,
     coFileTime             = 69,
@@ -79,9 +79,9 @@ type
     coFreshConnect         = 74,
     coForbidResue          = 75,
     coConnectTimeout       = 78,
-    coHTTPGet              = 80,
+    coHttpGet              = 80,
     coSSLVerifyHost        = 81,
-    coHTTPVersion          = 84,
+    coHttpVersion          = 84,
     coFTPUseEPSV           = 85,
     coSSLEngineDefault     = 90,
     coDNSUseGlobalCache    = 91,
@@ -92,7 +92,7 @@ type
     coProxyType            = 101,
     coUnrestrictedAuth     = 105,
     coFTPUseEPRT           = 106,
-    coHTTPAuth             = 107,
+    coHttpAuth             = 107,
     coFTPCreateMissingDirs = 110,
     coProxyAuth            = 111,
     coFTPResponseTimeout   = 112,
@@ -117,8 +117,8 @@ type
     coFTPPort              = 10017,
     coUserAgent            = 10018,
     coCookie               = 10022,
-    coHTTPHeader           = 10023,
-    coHTTPPost             = 10024,
+    coHttpHeader           = 10023,
+    coHttpPost             = 10024,
     coSSLCert              = 10025,
     coSSLCertPasswd        = 10026,
     coQuote                = 10028,
@@ -149,7 +149,7 @@ type
     coEncoding             = 10102,
     coAcceptEncoding       = coEncoding,
     coPrivate              = 10103,
-    coHTTP200Aliases       = 10104,
+    coHttp200Aliases       = 10104,
     coSSLCtxData           = 10109,
     coNetRCFile            = 10118,
     coSourceUserPwd        = 10123,
@@ -347,7 +347,7 @@ type
     cvLast);
 
   /// low-level initialization option for libcurl library API
-  // - currently, only giSSL is set, since giWin32 is redundant with WinHTTP
+  // - currently, only giSSL is set, since giWin32 is redundant with WinHttp
   TCurlGlobalInit = set of (
     giNone,
     giSSL,

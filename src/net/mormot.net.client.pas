@@ -9,7 +9,7 @@ unit mormot.net.client;
    HTTP Client Classes
    - THttpClientSocket Implementing HTTP client over plain sockets
    - THttpRequest Abstract HTTP client class
-   - TWinHttp TWinINet TWinHttpWebSocketClient TCurlHTTP
+   - TWinHttp TWinINet TWinHttpWebSocketClient TCurlHttp
    - TSimpleHttpClient Wrapper Class
    - Cached HTTP Connection to a Remote Server
    - Send Email using the SMTP Protocol
@@ -139,7 +139,7 @@ function OpenHttpGet(const server, port, url, inHeaders: RawUtf8;
 
 type
   /// the supported authentication schemes which may be used by HTTP clients
-  // - supported only by TWinHTTP class yet
+  // - supported only by TWinHttp class yet
   THttpRequestAuthentication = (
     wraNone,
     wraBasic,
@@ -151,7 +151,7 @@ type
   // the actual mormot.net.http's THttpRequest implementation class
   THttpRequestExtendedOptions = record
     /// let HTTPS be less paranoid about SSL certificates
-    // - IgnoreSSLCertificateErrors is handled by TWinHttp and TCurlHTTP
+    // - IgnoreSSLCertificateErrors is handled by TWinHttp and TCurlHttp
     IgnoreSSLCertificateErrors: boolean;
     /// allow HTTP authentication to take place at connection
     // - Auth.Scheme and UserName/Password properties are handled
@@ -167,7 +167,7 @@ type
 
   {$M+} // to have existing RTTI for published properties
   /// abstract class to handle HTTP/1.1 request
-  // - never instantiate this class, but inherited TWinHTTP, TWinINet or TCurlHTTP
+  // - never instantiate this class, but inherited TWinHttp, TWinINet or TCurlHttp
   THttpRequest = class
   protected
     fServer: RawUtf8;
@@ -204,7 +204,7 @@ type
     // - optional aProxyName may contain the name of the proxy server to use,
     // and aProxyByPass an optional semicolon delimited list of host names or
     // IP addresses, or both, that should not be routed through the proxy:
-    // aProxyName/aProxyByPass will be recognized by TWinHTTP and TWinINet,
+    // aProxyName/aProxyByPass will be recognized by TWinHttp and TWinINet,
     // and aProxyName will set the CURLOPT_PROXY option to TCurlHttp
     // (see https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html as reference)
     // - you can customize the default client timeouts by setting appropriate
@@ -239,8 +239,8 @@ type
     // server name and port, and resource name
     // - aIgnoreSSLCerticateErrors will ignore the error when using untrusted certificates
     // - it will internally create a THttpRequest inherited instance: do not use
-    // THttpRequest.Get() but either TWinHTTP.Get(), TWinINet.Get() or
-    // TCurlHTTP.Get() methods
+    // THttpRequest.Get() but either TWinHttp.Get(), TWinINet.Get() or
+    // TCurlHttp.Get() methods
     class function Get(const aURI: RawUtf8; const aHeader: RawUtf8 = '';
       aIgnoreSSLCertificateErrors: boolean = true; outHeaders: PRawUtf8 = nil;
       outStatus: PInteger = nil): RawByteString;
@@ -251,8 +251,8 @@ type
     // - the supplied aData content is POSTed to the server, with an optional
     // aHeader content
     // - it will internally create a THttpRequest inherited instance: do not use
-    // THttpRequest.Post() but either TWinHTTP.Post(), TWinINet.Post() or
-    // TCurlHTTP.Post() methods
+    // THttpRequest.Post() but either TWinHttp.Post(), TWinINet.Post() or
+    // TCurlHttp.Post() methods
     class function Post(const aURI: RawUtf8; const aData: RawByteString;
       const aHeader: RawUtf8 = ''; aIgnoreSSLCertificateErrors: boolean = true;
       outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil): RawByteString;
@@ -263,8 +263,8 @@ type
     // - the supplied aData content is PUT to the server, with an optional
     // aHeader content
     // - it will internally create a THttpRequest inherited instance: do not use
-    // THttpRequest.Put() but either TWinHTTP.Put(), TWinINet.Put() or
-    // TCurlHTTP.Put() methods
+    // THttpRequest.Put() but either TWinHttp.Put(), TWinINet.Put() or
+    // TCurlHttp.Put() methods
     class function Put(const aURI: RawUtf8; const aData: RawByteString;
       const aHeader: RawUtf8 = ''; aIgnoreSSLCertificateErrors: boolean = true;
       outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil): RawByteString;
@@ -273,8 +273,8 @@ type
     // server name and port, and resource name
     // - aIgnoreSSLCerticateErrors will ignore the error when using untrusted certificates
     // - it will internally create a THttpRequest inherited instance: do not use
-    // THttpRequest.Delete() but either TWinHTTP.Delete(), TWinINet.Delete() or
-    // TCurlHTTP.Delete() methods
+    // THttpRequest.Delete() but either TWinHttp.Delete(), TWinINet.Delete() or
+    // TCurlHttp.Delete() methods
     class function Delete(const aURI: RawUtf8; const aHeader: RawUtf8 = '';
       aIgnoreSSLCertificateErrors: boolean = true; outHeaders: PRawUtf8 = nil;
       outStatus: PInteger = nil): RawByteString;
@@ -339,7 +339,7 @@ type
   {$M-}
 
   /// store the actual class of a HTTP/1.1 client instance
-  // - may be used to define at runtime which API to be used (e.g. WinHTTP,
+  // - may be used to define at runtime which API to be used (e.g. WinHttp,
   // WinINet or LibCurl), following the Liskov substitution principle
 
   THttpRequestClass = class of THttpRequest;
@@ -379,7 +379,7 @@ type
   TWinHttpUpload = function(Sender: TWinHttpApi;
     CurrentSize, ContentLength: cardinal): boolean of object;
 
-  /// a class to handle HTTP/1.1 request using either WinINet or WinHTTP API
+  /// a class to handle HTTP/1.1 request using either WinINet or WinHttp API
   // - both APIs have a common logic, which is encapsulated by this parent class
   // - this abstract class defined some abstract methods which will be
   // implemented by TWinINet or TWinHttp with the proper API calls
@@ -469,13 +469,13 @@ type
       read fLastError;
   end;
 
-  /// a class to handle HTTP/1.1 request using the WinHTTP API
+  /// a class to handle HTTP/1.1 request using the WinHttp API
   // - has a common behavior as THttpClientSocket() but seems to be faster
   // over a network and is able to retrieve the current proxy settings
   // (if available) and handle secure https connection - so it seems to be the
   // class to use in your client programs
-  // - WinHTTP does not share any proxy settings with Internet Explorer.
-  // The WinHTTP proxy configuration is set by either
+  // - WinHttp does not share any proxy settings with Internet Explorer.
+  // The WinHttp proxy configuration is set by either
   // $ proxycfg.exe
   // on Windows XP and Windows Server 2003 or earlier, either
   // $ netsh.exe
@@ -486,9 +486,9 @@ type
   // to use the current user's proxy settings for Internet Explorer (under 64-bit
   // Vista/Seven, to configure applications using the 32 bit WinHttp settings,
   // call netsh or proxycfg bits from %SystemRoot%\SysWOW64 folder explicitely)
-  // - Microsoft Windows HTTP Services (WinHTTP) is targeted at middle-tier and
+  // - Microsoft Windows HTTP Services (WinHttp) is targeted at middle-tier and
   // back-end server applications that require access to an HTTP client stack
-  TWinHTTP = class(TWinHttpApi)
+  TWinHttp = class(TWinHttpApi)
   protected
     // those internal methods will raise an EOSError exception on error
     procedure InternalConnect(ConnectionTimeOut, SendTimeout,
@@ -508,12 +508,12 @@ type
     destructor Destroy; override;
   end;
 
-  /// WinHTTP exception type
-  EWinHTTP = class(Exception);
+  /// WinHttp exception type
+  EWinHttp = class(Exception);
 
   /// establish a client connection to a WebSocket server using the Windows API
   // - used by TWinWebSocketClient class
-  TWinHTTPUpgradeable = class(TWinHTTP)
+  TWinHttpUpgradeable = class(TWinHttp)
   private
     fSocket: HINTERNET;
   protected
@@ -530,13 +530,13 @@ type
   end;
 
   /// WebSocket client implementation
-  TWinHTTPWebSocketClient = class
+  TWinHttpWebSocketClient = class
   protected
     fSocket: HINTERNET;
     function CheckSocket: boolean;
   public
     /// initialize the instance
-    // - all parameters do match TWinHTTP.Create except url: address of WebSocketServer
+    // - all parameters do match TWinHttp.Create except url: address of WebSocketServer
     // for sending upgrade request
     constructor Create(const aServer, aPort: RawUtf8; aHttps: boolean;
       const url: RawUtf8; const aSubProtocol: RawUtf8 = ''; const aProxyName: RawUtf8 = '';
@@ -560,7 +560,7 @@ type
 
 type
   /// libcurl exception type
-  ECurlHTTP = class(Exception);
+  ECurlHttp = class(Exception);
 
   /// a class to handle HTTP/1.1 request using the libcurl library
   // - libcurl is a free and easy-to-use cross-platform URL transfer library,
@@ -574,7 +574,7 @@ type
   // $ sudo apt-get install libcurl3:i386
   // - will use in fact libcurl.so, so either libcurl.so.3 or libcurl.so.4,
   // depending on the default version available on the system
-  TCurlHTTP = class(THttpRequest)
+  TCurlHttp = class(THttpRequest)
   protected
     fHandle: pointer;
     fRootURL: RawUtf8;
@@ -665,13 +665,13 @@ type
   end;
 
 /// returns the best THttpRequest class, depending on the system it runs on
-// - e.g. TWinHTTP or TCurlHTTP
+// - e.g. TWinHttp or TCurlHttp
 // - consider using TSimpleHttpClient if you just need a simple connection
 function MainHttpClass: THttpRequestClass;
 
 /// low-level forcing of another THttpRequest class
 // - could be used if we found out that the current MainHttpClass failed (which
-// could easily happen with TCurlHTTP if the library is missing or deprecated)
+// could easily happen with TCurlHttp if the library is missing or deprecated)
 procedure ReplaceMainHttpClass(aClass: THttpRequestClass);
 
 
@@ -738,14 +738,14 @@ type
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket for plain http URI,
-// or TWinHTTP/TCurlHTTP for any https URI, or if forceNotSocket is set to true
+// or TWinHttp/TCurlHttp for any https URI, or if forceNotSocket is set to true
 // - see also OpenHttpGet() for direct THttpClientSock call
 function HttpGet(const aURI: RawUtf8; outHeaders: PRawUtf8 = nil;
   forceNotSocket: boolean = false; outStatus: PInteger = nil): RawByteString; overload;
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket for plain http URI,
-// or TWinHTTP/TCurlHTTP for any https URI
+// or TWinHttp/TCurlHttp for any https URI
 function HttpGet(const aURI: RawUtf8; const inHeaders: RawUtf8;
   outHeaders: PRawUtf8 = nil; forceNotSocket: boolean = false;
   outStatus: PInteger = nil): RawByteString; overload;
@@ -1229,7 +1229,7 @@ function TWinHttpApi.InternalRetrieveAnswer(var Header, Encoding,
 var
   ChunkSize, Bytes, ContentLength, Read: cardinal;
   tmp: RawByteString;
-begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHTTP
+begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHttp
   result := InternalGetInfo32(HTTP_QUERY_STATUS_CODE);
   Header := InternalGetInfo(HTTP_QUERY_RAW_HEADERS_CRLF);
   Encoding := InternalGetInfo(HTTP_QUERY_CONTENT_ENCODING);
@@ -1304,15 +1304,15 @@ end;
 
 class function TWinHttpApi.IsAvailable: boolean;
 begin
-  result := true; // both WinINet and WinHTTP are statically linked
+  result := true; // both WinINet and WinHttp are statically linked
 end;
 
 
 
 
-{ TWinHTTP }
+{ TWinHttp }
 
-procedure TWinHTTP.InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal);
+procedure TWinHttp.InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal);
 var
   OpenType: integer;
   Callback: WINHTTP_STATUS_CALLBACK;
@@ -1332,11 +1332,11 @@ begin
   fSession := WinHttpApi.Open(pointer(Utf8ToSynUnicode(fExtendedOptions.UserAgent)),
     OpenType, pointer(Utf8ToSynUnicode(fProxyName)), pointer(Utf8ToSynUnicode(fProxyByPass)), 0);
   if fSession = nil then
-    RaiseLastModuleError(winhttpdll, EWinHTTP);
+    RaiseLastModuleError(winhttpdll, EWinHttp);
   // cf. http://msdn.microsoft.com/en-us/library/windows/desktop/aa384116
   if not WinHttpApi.SetTimeouts(fSession, HTTP_DEFAULT_RESOLVETIMEOUT,
     ConnectionTimeOut, SendTimeout, ReceiveTimeout) then
-    RaiseLastModuleError(winhttpdll, EWinHTTP);
+    RaiseLastModuleError(winhttpdll, EWinHttp);
   if fHTTPS then
   begin
     protocols := WINHTTP_FLAG_SECURE_PROTOCOL_SSL3 or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1;
@@ -1346,19 +1346,19 @@ begin
         (WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1 or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2);
     if not WinHttpApi.SetOption(fSession, WINHTTP_OPTION_SECURE_PROTOCOLS,
         @protocols, SizeOf(protocols)) then
-      RaiseLastModuleError(winhttpdll, EWinHTTP);
+      RaiseLastModuleError(winhttpdll, EWinHttp);
     Callback := WinHttpApi.SetStatusCallback(fSession,
-      WinHTTPSecurityErrorCallback, WINHTTP_CALLBACK_FLAG_SECURE_FAILURE, nil);
+      WinHttpSecurityErrorCallback, WINHTTP_CALLBACK_FLAG_SECURE_FAILURE, nil);
     if CallbackRes = WINHTTP_INVALID_STATUS_CALLBACK then
-      RaiseLastModuleError(winhttpdll, EWinHTTP);
+      RaiseLastModuleError(winhttpdll, EWinHttp);
   end;
   fConnection := WinHttpApi.Connect(fSession, pointer(Utf8ToSynUnicode(fServer)),
     fPort, 0);
   if fConnection = nil then
-    RaiseLastModuleError(winhttpdll, EWinHTTP);
+    RaiseLastModuleError(winhttpdll, EWinHttp);
 end;
 
-procedure TWinHTTP.InternalCreateRequest(const aMethod, aURL: RawUtf8);
+procedure TWinHttp.InternalCreateRequest(const aMethod, aURL: RawUtf8);
 const
   ALL_ACCEPT: array[0..1] of PWideChar = (
     '*/*', nil);
@@ -1373,17 +1373,17 @@ begin
   fRequest := WinHttpApi.OpenRequest(fConnection, pointer(Utf8ToSynUnicode(aMethod)),
     pointer(Utf8ToSynUnicode(aURL)), nil, nil, ACCEPT_TYPES[fNoAllAccept], Flags);
   if fRequest = nil then
-    RaiseLastModuleError(winhttpdll, EWinHTTP);
+    RaiseLastModuleError(winhttpdll, EWinHttp);
   if fKeepAlive = 0 then
   begin
     Flags := WINHTTP_DISABLE_KEEP_ALIVE;
     if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_DISABLE_FEATURE, @Flags,
       sizeOf(Flags)) then
-      RaiseLastModuleError(winhttpdll, EWinHTTP);
+      RaiseLastModuleError(winhttpdll, EWinHttp);
   end;
 end;
 
-procedure TWinHTTP.InternalCloseRequest;
+procedure TWinHttp.InternalCloseRequest;
 begin
   if fRequest <> nil then
   begin
@@ -1392,15 +1392,15 @@ begin
   end;
 end;
 
-procedure TWinHTTP.InternalAddHeader(const hdr: RawUtf8);
+procedure TWinHttp.InternalAddHeader(const hdr: RawUtf8);
 begin
   if (hdr <> '') and
      not WinHttpApi.AddRequestHeaders(FRequest,
     Pointer(Utf8ToSynUnicode(hdr)), length(hdr), WINHTTP_ADDREQ_FLAG_COALESCE) then
-    RaiseLastModuleError(winhttpdll, EWinHTTP);
+    RaiseLastModuleError(winhttpdll, EWinHttp);
 end;
 
-procedure TWinHTTP.InternalSendRequest(const aMethod: RawUtf8;
+procedure TWinHttp.InternalSendRequest(const aMethod: RawUtf8;
   const aData: RawByteString);
 
   function _SendRequest(L: cardinal): boolean;
@@ -1424,10 +1424,10 @@ procedure TWinHTTP.InternalSendRequest(const aMethod: RawUtf8;
             Bytes := Max;
           if not WinHttpApi.WriteData(fRequest, @PByteArray(aData)[Current],
              Bytes, BytesWritten) then
-            RaiseLastModuleError(winhttpdll, EWinHTTP);
+            RaiseLastModuleError(winhttpdll, EWinHttp);
           inc(Current, BytesWritten);
           if not fOnUpload(Self, Current, L) then
-            raise EWinHTTP.CreateFmt('OnUpload Canceled %s', [aMethod]);
+            raise EWinHttp.CreateFmt('OnUpload Canceled %s', [aMethod]);
         end;
       end;
     end
@@ -1450,37 +1450,37 @@ begin
         wraNegotiate:
           winAuth := WINHTTP_AUTH_SCHEME_NEGOTIATE;
       else
-        raise EWinHTTP.CreateFmt('Unsupported AuthScheme=%d', [ord(AuthScheme)]);
+        raise EWinHttp.CreateFmt('Unsupported AuthScheme=%d', [ord(AuthScheme)]);
       end;
       if not WinHttpApi.SetCredentials(fRequest, WINHTTP_AUTH_TARGET_SERVER,
          winAuth, pointer(AuthUserName), pointer(AuthPassword), nil) then
-        RaiseLastModuleError(winhttpdll, EWinHTTP);
+        RaiseLastModuleError(winhttpdll, EWinHttp);
     end;
   if fHTTPS and IgnoreSSLCertificateErrors then
     if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
        @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
-      RaiseLastModuleError(winhttpdll, EWinHTTP);
+      RaiseLastModuleError(winhttpdll, EWinHttp);
   L := length(aData);
   if not _SendRequest(L) or not WinHttpApi.ReceiveResponse(fRequest, nil) then
   begin
     if not fHTTPS then
-      RaiseLastModuleError(winhttpdll, EWinHTTP);
+      RaiseLastModuleError(winhttpdll, EWinHttp);
     if (GetLastError = ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED) and
       IgnoreSSLCertificateErrors then
     begin
       if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
          @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
-        RaiseLastModuleError(winhttpdll, EWinHTTP);
+        RaiseLastModuleError(winhttpdll, EWinHttp);
       if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_CLIENT_CERT_CONTEXT,
          pointer(WINHTTP_NO_CLIENT_CERT_CONTEXT), 0) then
-        RaiseLastModuleError(winhttpdll, EWinHTTP);
+        RaiseLastModuleError(winhttpdll, EWinHttp);
       if not _SendRequest(L) or not WinHttpApi.ReceiveResponse(fRequest, nil) then
-        RaiseLastModuleError(winhttpdll, EWinHTTP);
+        RaiseLastModuleError(winhttpdll, EWinHttp);
     end;
   end;
 end;
 
-function TWinHTTP.InternalGetInfo(Info: cardinal): RawUtf8;
+function TWinHttp.InternalGetInfo(Info: cardinal): RawUtf8;
 var
   dwSize, dwIndex: cardinal;
   tmp: TSynTempBuffer;
@@ -1504,7 +1504,7 @@ begin
   end;
 end;
 
-function TWinHTTP.InternalGetInfo32(Info: cardinal): cardinal;
+function TWinHttp.InternalGetInfo32(Info: cardinal): cardinal;
 var
   dwSize, dwIndex: cardinal;
 begin
@@ -1515,20 +1515,20 @@ begin
     result := 0;
 end;
 
-function TWinHTTP.InternalQueryDataAvailable: cardinal;
+function TWinHttp.InternalQueryDataAvailable: cardinal;
 begin
   if not WinHttpApi.QueryDataAvailable(fRequest, result) then
-    RaiseLastModuleError(winhttpdll, EWinHTTP);
+    RaiseLastModuleError(winhttpdll, EWinHttp);
 end;
 
-function TWinHTTP.InternalReadData(var Data: RawByteString; Read: integer;
+function TWinHttp.InternalReadData(var Data: RawByteString; Read: integer;
   Size: cardinal): cardinal;
 begin
   if not WinHttpApi.ReadData(fRequest, @PByteArray(Data)[Read], Size, result) then
-    RaiseLastModuleError(winhttpdll, EWinHTTP);
+    RaiseLastModuleError(winhttpdll, EWinHttp);
 end;
 
-destructor TWinHTTP.Destroy;
+destructor TWinHttp.Destroy;
 begin
   if fConnection <> nil then
     WinHttpApi.CloseHandle(fConnection);
@@ -1700,21 +1700,21 @@ begin
 end;
 
 
-{ TWinHTTPUpgradeable }
+{ TWinHttpUpgradeable }
 
-function TWinHTTPUpgradeable.InternalRetrieveAnswer(var Header, Encoding,
+function TWinHttpUpgradeable.InternalRetrieveAnswer(var Header, Encoding,
   AcceptEncoding: RawUtf8; var Data: RawByteString): integer;
 begin
   result := inherited InternalRetrieveAnswer(Header, Encoding, AcceptEncoding, Data);
 end;
 
-procedure TWinHTTPUpgradeable.InternalSendRequest(const aMethod: RawUtf8; const
+procedure TWinHttpUpgradeable.InternalSendRequest(const aMethod: RawUtf8; const
   aData: RawByteString);
 begin
   inherited InternalSendRequest(aMethod, aData);
 end;
 
-constructor TWinHTTPUpgradeable.Create(const aServer, aPort: RawUtf8; aHttps:
+constructor TWinHttpUpgradeable.Create(const aServer, aPort: RawUtf8; aHttps:
   boolean; const aProxyName: RawUtf8; const aProxyByPass: RawUtf8;
   ConnectionTimeOut: cardinal; SendTimeout: cardinal; ReceiveTimeout: cardinal; aLayer: TNetLayer);
 begin
@@ -1723,24 +1723,24 @@ begin
 end;
 
 
-{ TWinHTTPWebSocketClient }
+{ TWinHttpWebSocketClient }
 
-function TWinHTTPWebSocketClient.CheckSocket: boolean;
+function TWinHttpWebSocketClient.CheckSocket: boolean;
 begin
   result := fSocket <> nil;
 end;
 
-constructor TWinHTTPWebSocketClient.Create(const aServer, aPort: RawUtf8; aHttps:
+constructor TWinHttpWebSocketClient.Create(const aServer, aPort: RawUtf8; aHttps:
   boolean; const url: RawUtf8; const aSubProtocol: RawUtf8; const aProxyName:
   RawUtf8; const aProxyByPass: RawUtf8; ConnectionTimeOut: cardinal; SendTimeout:
   cardinal; ReceiveTimeout: cardinal);
 var
-  _http: TWinHTTPUpgradeable;
+  _http: TWinHttpUpgradeable;
   inH, outH: RawUtf8;
   outD: RawByteString;
 begin
   fSocket := nil;
-  _http := TWinHTTPUpgradeable.Create(aServer, aPort, aHttps, aProxyName,
+  _http := TWinHttpUpgradeable.Create(aServer, aPort, aHttps, aProxyName,
     aProxyByPass, ConnectionTimeOut, SendTimeout, ReceiveTimeout);
   try
     // WebSocketApi.BeginClientHandshake()
@@ -1751,13 +1751,13 @@ begin
     if _http.Request(url, 'GET', 0, inH, '', '', outH, outD) = 101 then
       fSocket := _http.fSocket
     else
-      raise EWinHTTP.Create('WebSocketClient creation fail');
+      raise EWinHttp.Create('WebSocketClient creation fail');
   finally
     _http.Free;
   end;
 end;
 
-function TWinHTTPWebSocketClient.Send(aBufferType:
+function TWinHttpWebSocketClient.Send(aBufferType:
   WINHTTP_WEB_SOCKET_BUFFER_TYPE; aBuffer: pointer; aBufferLength: cardinal): cardinal;
 begin
   if not CheckSocket then
@@ -1766,7 +1766,7 @@ begin
     result := WinHttpApi.WebSocketSend(fSocket, aBufferType, aBuffer, aBufferLength);
 end;
 
-function TWinHTTPWebSocketClient.Receive(aBuffer: pointer; aBufferLength: cardinal;
+function TWinHttpWebSocketClient.Receive(aBuffer: pointer; aBufferLength: cardinal;
   out aBytesRead: cardinal; out aBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE): cardinal;
 begin
   if not CheckSocket then
@@ -1776,7 +1776,7 @@ begin
       aBytesRead, aBufferType);
 end;
 
-function TWinHTTPWebSocketClient.CloseConnection(const aCloseReason: RawUtf8): cardinal;
+function TWinHttpWebSocketClient.CloseConnection(const aCloseReason: RawUtf8): cardinal;
 begin
   if not CheckSocket then
     result := ERROR_INVALID_HANDLE
@@ -1787,7 +1787,7 @@ begin
     fSocket := nil;
 end;
 
-destructor TWinHTTPWebSocketClient.Destroy;
+destructor TWinHttpWebSocketClient.Destroy;
 const
   CloseReason: PAnsiChar = 'object is destroyed';
 var
@@ -1812,9 +1812,9 @@ end;
 
 {$ifdef USELIBCURL}
 
-{ TCurlHTTP }
+{ TCurlHttp }
 
-procedure TCurlHTTP.InternalConnect(ConnectionTimeOut, SendTimeout,
+procedure TCurlHttp.InternalConnect(ConnectionTimeOut, SendTimeout,
   ReceiveTimeout: cardinal);
 const
   HTTPS: array[boolean] of string[1] = (
@@ -1835,24 +1835,24 @@ begin
     FormatUtf8('http%://%:%', [HTTPS[fHttps], fServer, fPort], fRootURL);
 end;
 
-destructor TCurlHTTP.Destroy;
+destructor TCurlHttp.Destroy;
 begin
   if fHandle <> nil then
     curl.easy_cleanup(fHandle);
   inherited;
 end;
 
-function TCurlHTTP.GetCACertFile: RawUtf8;
+function TCurlHttp.GetCACertFile: RawUtf8;
 begin
   result := fSSL.CACertFile;
 end;
 
-procedure TCurlHTTP.SetCACertFile(const aCertFile: RawUtf8);
+procedure TCurlHttp.SetCACertFile(const aCertFile: RawUtf8);
 begin
   fSSL.CACertFile := aCertFile;
 end;
 
-procedure TCurlHTTP.UseClientCertificate(const aCertFile, aCACertFile, aKeyName,
+procedure TCurlHttp.UseClientCertificate(const aCertFile, aCACertFile, aKeyName,
   aPassPhrase: RawUtf8);
 begin
   fSSL.CertFile := aCertFile;
@@ -1861,12 +1861,12 @@ begin
   fSSL.PassPhrase := aPassPhrase;
 end;
 
-procedure TCurlHTTP.InternalCreateRequest(const aMethod, aURL: RawUtf8);
+procedure TCurlHttp.InternalCreateRequest(const aMethod, aURL: RawUtf8);
 const
   CERT_PEM: RawUtf8 = 'PEM';
 begin
   fIn.URL := fRootURL + aURL;
-  curl.easy_setopt(fHandle, coFollowLocation, 1); // url redirection (as TWinHTTP)
+  curl.easy_setopt(fHandle, coFollowLocation, 1); // url redirection (as TWinHttp)
   //curl.easy_setopt(fHandle,coTCPNoDelay,0); // disable Nagle
   if fLayer = nlUNIX then
     curl.easy_setopt(fHandle, coUnixSocketPath, pointer(fServer));
@@ -1911,7 +1911,7 @@ begin
   Finalize(fOut);
 end;
 
-procedure TCurlHTTP.InternalAddHeader(const hdr: RawUtf8);
+procedure TCurlHttp.InternalAddHeader(const hdr: RawUtf8);
 var
   P: PUtf8Char;
   s: RawUtf8;
@@ -1925,12 +1925,12 @@ begin
   end;
 end;
 
-class function TCurlHTTP.IsAvailable: boolean;
+class function TCurlHttp.IsAvailable: boolean;
 begin
   result := CurlIsAvailable;
 end;
 
-procedure TCurlHTTP.InternalSendRequest(const aMethod: RawUtf8; const aData:
+procedure TCurlHttp.InternalSendRequest(const aMethod: RawUtf8; const aData:
   RawByteString);
 begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
   if fIn.Method = 'HEAD' then // the only verb what do not expect body in answer is HEAD
@@ -1940,12 +1940,12 @@ begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
   curl.easy_setopt(fHandle, coCustomRequest, pointer(fIn.Method));
   curl.easy_setopt(fHandle, coPostFields, pointer(aData));
   curl.easy_setopt(fHandle, coPostFieldSize, length(aData));
-  curl.easy_setopt(fHandle, coHTTPHeader, fIn.Headers);
+  curl.easy_setopt(fHandle, coHttpHeader, fIn.Headers);
   curl.easy_setopt(fHandle, coFile, @fOut.Data);
   curl.easy_setopt(fHandle, coWriteHeader, @fOut.Header);
 end;
 
-function TCurlHTTP.InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding:
+function TCurlHttp.InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding:
   RawUtf8; var Data: RawByteString): integer;
 var
   res: TCurlResult;
@@ -1956,7 +1956,7 @@ var
 begin
   res := curl.easy_perform(fHandle);
   if res <> crOK then
-    raise ECurlHTTP.CreateFmt('libcurl error %d (%s) on %s %s', [ord(res), curl.easy_strerror
+    raise ECurlHttp.CreateFmt('libcurl error %d (%s) on %s %s', [ord(res), curl.easy_strerror
       (res), fIn.Method, fIn.URL]);
   rc := 0;
   curl.easy_getinfo(fHandle, ciResponseCode, rc);
@@ -1983,7 +1983,7 @@ begin
   Data := fOut.Data;
 end;
 
-procedure TCurlHTTP.InternalCloseRequest;
+procedure TCurlHttp.InternalCloseRequest;
 begin
   if fIn.Headers <> nil then
   begin
@@ -2093,10 +2093,10 @@ begin
   if _MainHttpClass = nil then
   begin
     {$ifdef USEWININET}
-    _MainHttpClass := TWinHTTP;
+    _MainHttpClass := TWinHttp;
     {$else}
     {$ifdef USELIBCURL}
-    _MainHttpClass := TCurlHTTP
+    _MainHttpClass := TCurlHttp
     {$else}
     raise EHttpSocket.Create('No THttpRequest class known!');
     {$endif USELIBCURL}
@@ -2220,11 +2220,11 @@ begin
   if aHttpClass = nil then
   begin
     {$ifdef USEWININET}
-    aHttpClass := TWinHTTP;
+    aHttpClass := TWinHttp;
     {$else}
     {$ifdef USELIBCURL}
     if fUri.Https then
-      aHttpClass := TCurlHTTP;
+      aHttpClass := TCurlHttp;
     {$endif USELIBCURL}
     {$endif USEWININET}
   end;
@@ -2261,11 +2261,11 @@ begin
     if URI.Https or
        forceNotSocket then
       {$ifdef USEWININET}
-      result := TWinHTTP.Get(
+      result := TWinHttp.Get(
         aURI, inHeaders, {weakCA=}true, outHeaders, outStatus)
       {$else}
       {$ifdef USELIBCURL}
-      result := TCurlHTTP.Get(
+      result := TCurlHttp.Get(
         aURI, inHeaders, {weakCA=}true, outHeaders, outStatus)
       {$else}
       raise EHttpSocket.CreateFmt('https is not supported by HttpGet(%s)', [aURI])

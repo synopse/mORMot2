@@ -597,7 +597,7 @@ type
 type
   /// implements a generic HTTP client, able to access remotely any mormot.db.sql
   // - do not instantiate this class, but rather use TSqlDBSocketConnectionProperties
-  //  TSqlDBWinHTTPConnectionProperties TSqlDBWinINetConnectionProperties
+  //  TSqlDBWinHttpConnectionProperties TSqlDBWinINetConnectionProperties
   TSqlDBHTTPConnectionPropertiesAbstract = class(TSqlDBRemoteConnectionPropertiesAbstract)
   protected
     fKeepAliveMS: cardinal;
@@ -647,7 +647,7 @@ type
 
   /// implements an abstract HTTP client via THttpRequest abstract class,
   // able to access remotely any mormot.db.sql
-  // - never instantiate this class, but rather TSqlDBWinHTTPConnectionProperties
+  // - never instantiate this class, but rather TSqlDBWinHttpConnectionProperties
   // or TSqlDBWinINetConnectionProperties
   TSqlDBHttpRequestConnectionProperties = class(TSqlDBHTTPConnectionPropertiesAbstract)
   protected
@@ -656,7 +656,7 @@ type
   public
     /// released used memory
     destructor Destroy; override;
-    /// low-level direct access to the WinHTTP implementation instance
+    /// low-level direct access to the WinHttp implementation instance
     property Client: THttpRequest
       read fClient;
   end;
@@ -678,11 +678,11 @@ type
 
   {$ifdef USEWININET}
 
-  /// implements a HTTP client via WinHTTP API, able to access remotely
+  /// implements a HTTP client via WinHttp API, able to access remotely
   // any mormot.db.sql
-  TSqlDBWinHTTPConnectionProperties = class(TSqlDBHttpRequestConnectionProperties)
+  TSqlDBWinHttpConnectionProperties = class(TSqlDBHttpRequestConnectionProperties)
   public
-    /// initialize the properties for remote access via HTTP using WinHTTP
+    /// initialize the properties for remote access via HTTP using WinHttp
     // - aServerName should be the HTTP server address as 'server:port'
     // - aDatabaseName would be used to compute the URI as in TSqlDBServerAbstract
     // - the user/password credential should match server-side authentication
@@ -1994,13 +1994,13 @@ end;
 
 {$ifdef USEWININET}
 
-{ TSqlDBWinHTTPConnectionProperties }
+{ TSqlDBWinHttpConnectionProperties }
 
-constructor TSqlDBWinHTTPConnectionProperties.Create(const aServerName,
+constructor TSqlDBWinHttpConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
   SetServerName(aServerName);
-  fClient := TWinHTTP.Create(Server, Port, fUri.Https);
+  fClient := TWinHttp.Create(Server, Port, fUri.Https);
   inherited;
 end;
 
@@ -2024,7 +2024,7 @@ constructor TSqlDBCurlConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
   SetServerName(aServerName);
-  fClient := TCurlHTTP.Create(Server, Port, fUri.Https);
+  fClient := TCurlHttp.Create(Server, Port, fUri.Https);
   inherited;
 end;
 
@@ -2033,7 +2033,7 @@ end;
 initialization
   TSqlDBSocketConnectionProperties.RegisterClassNameForDefinition;
   {$ifdef USEWININET}
-  TSqlDBWinHTTPConnectionProperties.RegisterClassNameForDefinition;
+  TSqlDBWinHttpConnectionProperties.RegisterClassNameForDefinition;
   TSqlDBWinINetConnectionProperties.RegisterClassNameForDefinition;
   {$endif USEWININET}
   {$ifdef USELIBCURL}

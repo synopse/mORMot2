@@ -48,7 +48,7 @@ uses
 
 type
   /// holds a HTTP POST connection for RTSP proxy
-  // - as used by the TRTSPOverHTTPServer class
+  // - as used by the TRtspOverHttpServer class
   TPostConnection = class(TAsynchConnection)
   protected
     fRtspTag: TPollSocketTag;
@@ -60,7 +60,7 @@ type
   end;
 
   /// holds a RTSP connection for HTTP GET proxy
-  // - as used by the TRTSPOverHTTPServer class
+  // - as used by the TRtspOverHttpServer class
   TRtspConnection = class(TAsynchConnection)
   protected
     fGetBlocking: TCrtSocket;
@@ -77,14 +77,14 @@ type
 
 type
   /// exceptions raised by this unit
-  ERTSPOverHTTP = class(ESynException);
+  ERtspOverHttp = class(ESynException);
 
   /// implements RTSP over HTTP asynchronous proxy
   // - the HTTP transport is built from two separate HTTP GET and POST requests
   // initiated by the client; the server then binds the connections to form a
   // virtual full-duplex connection - see https://goo.gl/CX6VA3 for reference
   // material about this horrible, but widely accepted, Apple hack
-  TRTSPOverHTTPServer = class(TAsynchServer)
+  TRtspOverHttpServer = class(TAsynchServer)
   protected
     fRtspServer, fRtspPort: RawUtf8;
     fPendingGet: TRawUtf8List;
@@ -199,9 +199,9 @@ end;
 { ******************** RTSP over HTTP Tunnelling }
 
 
-{ TRTSPOverHTTPServer }
+{ TRtspOverHttpServer }
 
-constructor TRTSPOverHTTPServer.Create(
+constructor TRtspOverHttpServer.Create(
   const aRtspServer, aRtspPort, aHttpPort: RawUtf8; aLog: TSynLogClass;
   const aOnStart, aOnStop: TOnNotifyThread; aOptions: TAsynchConnectionsOptions);
 begin
@@ -213,7 +213,7 @@ begin
     aHttpPort, aOnStart, aOnStop, TPostConnection, 'rtsp/http', aLog, aOptions);
 end;
 
-destructor TRTSPOverHTTPServer.Destroy;
+destructor TRtspOverHttpServer.Destroy;
 var
   log: ISynLog;
 begin
@@ -232,7 +232,7 @@ type
     property RemoteIP;
   end;
 
-function TRTSPOverHTTPServer.ConnectionCreate(aSocket: TNetSocket;
+function TRtspOverHttpServer.ConnectionCreate(aSocket: TNetSocket;
   const aRemoteIp: RawUtf8; out aConnection: TAsynchConnection): boolean;
 var
   log: ISynLog;
@@ -349,13 +349,13 @@ begin
     res := NewSocket(
       fRtspServer, fRtspPort, nlTCP, {bind=}false, 1000, 1000, 1000, 0, rtsp);
     if res <> nrOK then
-      raise ERTSPOverHTTP.CreateUtf8('No RTSP server on %:% (%)',
+      raise ERtspOverHttp.CreateUtf8('No RTSP server on %:% (%)',
         [fRtspServer, fRtspPort, ToText(res)^]);
     postconn := TPostConnection.Create(aRemoteIp);
     rtspconn := TRtspConnection.Create(aRemoteIp);
     if not inherited ConnectionAdd(aSocket, postconn) or
        not inherited ConnectionAdd(rtsp, rtspconn) then
-      raise ERTSPOverHTTP.CreateUtf8('inherited %.ConnectionAdd(%) % failed',
+      raise ERtspOverHttp.CreateUtf8('inherited %.ConnectionAdd(%) % failed',
         [self, aSocket, cookie]);
     aConnection := postconn;
     postconn.fRtspTag := rtspconn.Handle;
@@ -381,7 +381,7 @@ begin
   end;
 end;
 
-function TRTSPOverHTTPServer.GetHttpPort: RawUtf8;
+function TRtspOverHttpServer.GetHttpPort: RawUtf8;
 begin
   if self <> nil then
     result := fServer.Port
@@ -389,7 +389,7 @@ begin
     result := '';
 end;
 
-function TRTSPOverHTTPServer.RtspToHttp(const RtspURI: RawUtf8): RawUtf8;
+function TRtspOverHttpServer.RtspToHttp(const RtspURI: RawUtf8): RawUtf8;
 var
   uri: TUri;
 begin
@@ -402,7 +402,7 @@ begin
     result := RtspURI;
 end;
 
-function TRTSPOverHTTPServer.HttpToRtsp(const HttpURI: RawUtf8): RawUtf8;
+function TRtspOverHttpServer.HttpToRtsp(const HttpURI: RawUtf8): RawUtf8;
 var
   uri: TUri;
 begin

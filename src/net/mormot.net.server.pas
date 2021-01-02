@@ -137,8 +137,8 @@ type
     procedure SetMaximumAllowedContentLength(aMax: cardinal); virtual;
     procedure SetRemoteIPHeader(const aHeader: RawUtf8); virtual;
     procedure SetRemoteConnIDHeader(const aHeader: RawUtf8); virtual;
-    function GetHTTPQueueLength: cardinal; virtual; abstract;
-    procedure SetHTTPQueueLength(aValue: cardinal); virtual; abstract;
+    function GetHttpQueueLength: cardinal; virtual; abstract;
+    procedure SetHttpQueueLength(aValue: cardinal); virtual; abstract;
     function DoBeforeRequest(Ctxt: THttpServerRequest): cardinal;
     function DoAfterRequest(Ctxt: THttpServerRequest): cardinal;
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Code: cardinal); virtual;
@@ -268,8 +268,8 @@ type
     // $       proxy_set_header        X-Conn-ID       $connection
     // $ }
     // see https://synopse.info/forum/viewtopic.php?pid=28174#p28174
-    property HTTPQueueLength: cardinal
-      read GetHTTPQueueLength write SetHTTPQueueLength;
+    property HttpQueueLength: cardinal
+      read GetHttpQueueLength write SetHttpQueueLength;
     /// TRUE if the inherited class is able to handle callbacks
     // - only TWebSocketServer has this ability by now
     property CanNotifyCallback: boolean
@@ -491,15 +491,15 @@ type
     fThreadRespClass: THttpServerRespClass;
     fOnSendFile: TOnHttpServerSendFile;
     fNginxSendFileFrom: array of TFileName;
-    fHTTPQueueLength: cardinal;
+    fHttpQueueLength: cardinal;
     fExecuteState: (esNotStarted, esBinding, esRunning, esFinished);
     fStats: array[THttpServerSocketGetRequestResult] of integer;
     fSocketClass: THttpServerSocketClass;
     fHeadersNotFiltered: boolean;
     fExecuteMessage: string;
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
-    function GetHTTPQueueLength: cardinal; override;
-    procedure SetHTTPQueueLength(aValue: cardinal); override;
+    function GetHttpQueueLength: cardinal; override;
+    procedure SetHttpQueueLength(aValue: cardinal); override;
     procedure InternalHttpServerRespListAdd(resp: THttpServerResp);
     procedure InternalHttpServerRespListRemove(resp: THttpServerResp);
     function OnNginxAllowSend(Context: THttpServerRequest;
@@ -699,8 +699,8 @@ type
     procedure SetReceiveBufferSize(Value: cardinal);
     function GetRegisteredUrl: SynUnicode;
     function GetCloned: boolean;
-    function GetHTTPQueueLength: cardinal; override;
-    procedure SetHTTPQueueLength(aValue: cardinal); override;
+    function GetHttpQueueLength: cardinal; override;
+    procedure SetHttpQueueLength(aValue: cardinal); override;
     function GetMaxBandwidth: cardinal;
     procedure SetMaxBandwidth(aValue: cardinal);
     function GetMaxConnections: cardinal;
@@ -1425,7 +1425,7 @@ begin
   if ServerThreadPoolCount > 0 then
   begin
     fThreadPool := TSynThreadPoolTHttpServer.Create(self, ServerThreadPoolCount);
-    fHTTPQueueLength := 1000;
+    fHttpQueueLength := 1000;
   end;
   fHeadersNotFiltered := HeadersUnFiltered;
   inherited Create(CreateSuspended, OnStart, OnStop, ProcessName);
@@ -1488,14 +1488,14 @@ begin
   result := fStats[one];
 end;
 
-function THttpServer.GetHTTPQueueLength: cardinal;
+function THttpServer.GetHttpQueueLength: cardinal;
 begin
-  result := fHTTPQueueLength;
+  result := fHttpQueueLength;
 end;
 
-procedure THttpServer.SetHTTPQueueLength(aValue: cardinal);
+procedure THttpServer.SetHttpQueueLength(aValue: cardinal);
 begin
-  fHTTPQueueLength := aValue;
+  fHttpQueueLength := aValue;
 end;
 
 procedure THttpServer.InternalHttpServerRespListAdd(resp: THttpServerResp);
@@ -1919,7 +1919,7 @@ end;
 constructor THttpServerSocket.Create(aServer: THttpServer);
 begin
   inherited Create(5000);
-  if aServer <> nil then // nil e.g. from TRTSPOverHTTPServer
+  if aServer <> nil then // nil e.g. from TRtspOverHttpServer
   begin
     fServer := aServer;
     fCompress := aServer.fCompress;
@@ -1973,7 +1973,7 @@ begin
     // get headers and content
     GetHeader(noheaderfilter);
     if fServer <> nil then
-    begin // nil from TRTSPOverHTTPServer
+    begin // nil from TRtspOverHttpServer
       if fServer.fRemoteIPHeaderUpper <> '' then
         // real Internet IP (replace 127.0.0.1 from a proxy)
         FindNameValue(headers, pointer(fServer.fRemoteIPHeaderUpper), fRemoteIP,
@@ -2246,7 +2246,7 @@ begin
   if fServer = nil then
     result := 10000
   else
-    result := fServer.fHTTPQueueLength;
+    result := fServer.fHttpQueueLength;
 end;
 {$endif USE_WINIOCP}
 
@@ -2995,7 +2995,7 @@ begin
   end;
 end;
 
-function THttpApiServer.GetHTTPQueueLength: cardinal;
+function THttpApiServer.GetHttpQueueLength: cardinal;
 var
   returnLength: ULONG;
 begin
@@ -3015,7 +3015,7 @@ begin
   end;
 end;
 
-procedure THttpApiServer.SetHTTPQueueLength(aValue: cardinal);
+procedure THttpApiServer.SetHttpQueueLength(aValue: cardinal);
 begin
   if Http.Version.MajorVersion < 2 then
     raise EHttpApiServer.Create(hSetRequestQueueProperty, ERROR_OLD_WIN_VERSION);

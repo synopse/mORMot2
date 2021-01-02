@@ -10,7 +10,7 @@ unit mormot.rest.http.client;
     - TRestHttpClientGeneric and TRestHttpClientRequest Parent Classes
     - TRestHttpClientWinSock REST Client Class over Sockets
     - TRestHttpClientWebsockets REST Client Class over WebSockets
-    - TRestHttpClientWinINet TRestHttpClientWinHTTP Windows REST Client Classes
+    - TRestHttpClientWinINet TRestHttpClientWinHttp Windows REST Client Classes
     - TRestHttpClientCurl REST Client Class over LibCurl
 
   *****************************************************************************
@@ -197,9 +197,9 @@ type
 
 
   /// HTTP/1.1 RESTful JSON mORMot Client abstract class using either WinINet,
-  // WinHTTP or libcurl API
+  // WinHttp or libcurl API
   // - not to be called directly, but via TRestHttpClientWinINet or (even
-  // better) TRestHttpClientWinHTTP overridden classes under Windows
+  // better) TRestHttpClientWinHttp overridden classes under Windows
   TRestHttpClientRequest = class(TRestHttpClientGeneric)
   protected
     fRequest: THttpRequest;
@@ -216,7 +216,7 @@ type
     procedure InternalSetClass; virtual; abstract;
   public
     /// internal class instance used for the connection
-    // - will return either a TWinINet, a TWinHTTP or a TCurlHTTP class instance
+    // - will return either a TWinINet, a TWinHttp or a TCurlHttp class instance
     property Request: THttpRequest
       read fRequest;
     /// allows to ignore untrusted SSL certificates
@@ -373,7 +373,7 @@ type
 {$endif NOHTTPCLIENTWEBSOCKETS}
 
 
-{ ************ TRestHttpClientWinINet TRestHttpClientWinHTTP Windows REST Client Classes }
+{ ************ TRestHttpClientWinINet TRestHttpClientWinHttp Windows REST Client Classes }
 
 {$ifdef USEWININET}
 
@@ -391,13 +391,13 @@ type
     procedure InternalSetClass; override;
   end;
 
-  /// HTTP/1.1 RESTful JSON Client class using WinHTTP API
+  /// HTTP/1.1 RESTful JSON Client class using WinHttp API
   // - has a common behavior as THttpClientSocket() but seems to be faster
   // over a network and is able to retrieve the current proxy settings
   // (if available) and handle secure HTTPS connection - so it seems to be used
   // in your client programs: TRestHttpClient will therefore map to this class
-  // - WinHTTP does not share directly any proxy settings with Internet Explorer.
-  // The default WinHTTP proxy configuration is set by either
+  // - WinHttp does not share directly any proxy settings with Internet Explorer.
+  // The default WinHttp proxy configuration is set by either
   // proxycfg.exe on Windows XP and Windows Server 2003 or earlier, either
   // netsh.exe on Windows Vista and Windows Server 2008 or later; for instance,
   // you can run "proxycfg -u" or "netsh winhttp import proxy source=ie" to use
@@ -405,9 +405,9 @@ type
   // Vista/Seven, to configure applications using the 32 bit WinHttp settings,
   // call netsh or proxycfg bits from %SystemRoot%\SysWOW64 folder explicitely)
   // - you can optionaly specify manual Proxy settings at constructor level
-  // - by design, the WinHTTP API can be used from a service or a server
-  // - is implemented by creating a TWinHTTP internal class instance
-  TRestHttpClientWinHTTP = class(TRestHttpClientRequest)
+  // - by design, the WinHttp API can be used from a service or a server
+  // - is implemented by creating a TWinHttp internal class instance
+  TRestHttpClientWinHttp = class(TRestHttpClientRequest)
   protected
     procedure InternalSetClass; override;
   end;
@@ -437,7 +437,7 @@ type
   {$else}
   {$ifdef USEWININET}
 
-  TRestHttpsClient = TRestHttpClientWinHTTP;
+  TRestHttpsClient = TRestHttpClientWinHttp;
   {$else}
 
   TRestHttpsClient = TRestHttpClientWinSock; // (Android) fallback to non-TLS class
@@ -446,14 +446,14 @@ type
   {$else ONLYUSEHTTPSOCKET}
   {$ifdef USEWININET}
   /// HTTP/1.1 RESTful JSON default mORMot Client class
-  // - under Windows, maps the TRestHttpClientWinHTTP class
+  // - under Windows, maps the TRestHttpClientWinHttp class
 
-  TRestHttpClient = TRestHttpClientWinHTTP;
+  TRestHttpClient = TRestHttpClientWinHttp;
   /// HTTP/HTTPS RESTful JSON default mORMot Client class
-  // - under Windows, maps the TRestHttpClientWinHTTP class, or TRestHttpClientCurl
+  // - under Windows, maps the TRestHttpClientWinHttp class, or TRestHttpClientCurl
   // under Linux
 
-  TRestHttpsClient = TRestHttpClientWinHTTP;
+  TRestHttpsClient = TRestHttpClientWinHttp;
   {$else}
 
   TRestHttpClient = TRestHttpClientWinSock;
@@ -479,7 +479,7 @@ type
   {$endif NOHTTPCLIENTWEBSOCKETS}
   {$ifdef USEWININET}
   TSqlRestHttpClientWinINet = TRestHttpClientWinINet;
-  TSqlRestHttpClientWinHTTP = TRestHttpClientWinHTTP;
+  TSqlRestHttpClientWinHttp = TRestHttpClientWinHttp;
   {$endif USEWININET}
   {$ifdef USELIBCURL}
   TSqlRestHttpClientCurl = TRestHttpClientCurl;
@@ -1065,7 +1065,7 @@ end;
 
 
 
-{ ************ TRestHttpClientWinINet TRestHttpClientWinHTTP Windows REST Client Classes }
+{ ************ TRestHttpClientWinINet TRestHttpClientWinHttp Windows REST Client Classes }
 
 {$ifdef USEWININET}
 
@@ -1078,11 +1078,11 @@ begin
 end;
 
 
-{ TRestHttpClientWinHTTP }
+{ TRestHttpClientWinHttp }
 
-procedure TRestHttpClientWinHTTP.InternalSetClass;
+procedure TRestHttpClientWinHttp.InternalSetClass;
 begin
-  fRequestClass := TWinHTTP;
+  fRequestClass := TWinHttp;
   inherited;
 end;
 
@@ -1098,7 +1098,7 @@ end;
 
 procedure TRestHttpClientCurl.InternalSetClass;
 begin
-  fRequestClass := TCurlHTTP;
+  fRequestClass := TCurlHttp;
   inherited;
 end;
 
@@ -1111,7 +1111,7 @@ initialization
   {$endif NOHTTPCLIENTWEBSOCKETS}
   {$ifdef USEWININET}
   TRestHttpClientWinINet.RegisterClassNameForDefinition;
-  TRestHttpClientWinHTTP.RegisterClassNameForDefinition;
+  TRestHttpClientWinHttp.RegisterClassNameForDefinition;
   {$endif USEWININET}
   {$ifdef USELIBCURL}
   TRestHttpClientCurl.RegisterClassNameForDefinition;
