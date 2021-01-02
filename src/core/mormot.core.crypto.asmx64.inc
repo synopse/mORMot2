@@ -16,9 +16,9 @@
 
 {$ifdef ASMX64}
 
-procedure aesencryptasm(const ctxt: TAESContext; bi, bo: PWA4);
+procedure aesencryptasm(const ctxt: TAesContext; bi, bo: PWA4);
 {$ifdef FPC}nostackframe; assembler; asm{$else}
-asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
+asm // input: rcx/rdi=TAesContext, rdx/rsi=source, r8/rdx=dest
         .noframe
 {$endif}
         // rolled optimized encryption asm version by A. Bouchez
@@ -38,7 +38,7 @@ asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
         mov     rdx, rsi
         mov     r12, rdi
         {$endif MSWINDOWS}
-        movzx   r13, byte ptr [r12].TAESContext.Rounds
+        movzx   r13, byte ptr [r12].TAesContext.Rounds
         mov     eax, dword ptr [rdx]
         mov     ebx, dword ptr [rdx + 4H]
         mov     ecx, dword ptr [rdx + 8H]
@@ -1611,7 +1611,7 @@ function gf2_multiply(x, y, m, bits: PtrUInt): PtrUInt;
         jne     @s
 end;
 
-procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
+procedure MD5Transform(var buf: TMd5Buf; const in_: TMd5In);
 // see https://synopse.info/forum/viewtopic.php?id=4369 for asm numbers
 {
  MD5_Transform-x64
@@ -2676,7 +2676,7 @@ procedure MakeDecrKeyAesNi(Rounds: integer; RK: Pointer);
         jnz     @loop
 end;
 
-procedure AesNiEncryptOFB_128(iv, aes, source, dest: pointer; blockcount: PtrUInt);
+procedure AesNiEncryptOfb128(iv, aes, source, dest: pointer; blockcount: PtrUInt);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         mov     rax, blockcount  // on Win64 ABI, blockcount is not a register
         test    eax, eax
@@ -2715,7 +2715,7 @@ procedure AesNiEncryptOFB_128(iv, aes, source, dest: pointer; blockcount: PtrUIn
 @z:
 end;
 
-procedure AesNiEncryptOFB_256(iv, aes, source, dest: pointer; blockcount: PtrUInt);
+procedure AesNiEncryptOfb256(iv, aes, source, dest: pointer; blockcount: PtrUInt);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         mov     rax, blockcount
         test    eax, eax

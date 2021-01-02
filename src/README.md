@@ -46,7 +46,7 @@ Generally speaking, we followed the [Kotlin good naming rules](https://kotlinlan
 
 Some types have been changed or enhanced:
 - `TSQLRawBlob` renamed as `RawBlob`;
-- `RawUTF8` is an alias to `System.UTF8String` type so you can use either of them in your code.
+- `RawUtf8` is an alias to `System.UTF8String` type so you can use either of them in your code.
 
 Note that the `PUREMORMOT2` conditional can be defined for your project, to disable the type names backward compatible redirection enabled by default.
 

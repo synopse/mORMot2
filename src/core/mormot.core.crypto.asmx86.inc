@@ -17,7 +17,7 @@
 
 // those functions use global variables, so are not PIC-compatible
 
-procedure aesencryptasm(const ctxt: TAESContext; bi, bo: PWA4);
+procedure aesencryptasm(const ctxt: TAesContext; bi, bo: PWA4);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // rolled optimized encryption asm version by A. Bouchez
         push    ebx
@@ -27,7 +27,7 @@ asm // rolled optimized encryption asm version by A. Bouchez
         add     esp,  - 24
         mov     [esp + 4], ecx
         mov     ecx, eax // ecx=pk
-        movzx   eax, byte ptr[eax].TAESContext.Rounds
+        movzx   eax, byte ptr[eax].TAesContext.Rounds
         dec     eax
         mov     [esp + 20], eax
         mov     ebx, [edx]
@@ -192,7 +192,7 @@ asm // rolled optimized encryption asm version by A. Bouchez
         pop     ebx
 end;
 
-procedure aesdecrypt386(const ctxt: TAESContext; bi, bo: PWA4);
+procedure aesdecrypt386(const ctxt: TAesContext; bi, bo: PWA4);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    ebx
@@ -956,11 +956,11 @@ end;
 
 {$ifdef USEAESNI}
 
-procedure AesNiTrailer; // = TAESAbstractSyn.EncryptTrailer from AES-NI procs
+procedure AesNiTrailer; // = TAesAbstractSyn.EncryptTrailer from AES-NI procs
   {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // eax=TAESContext ecx=len xmm7=CV esi=BufIn edi=BufOut
-    call   dword ptr [eax].TAESContext.AesNi32 // = AES.Encrypt(fCV,fCV)
-    lea    edx, [eax].TAESContext.buf // used as temporary buffer
+asm // eax=TAesContext ecx=len xmm7=CV esi=BufIn edi=BufOut
+    call   dword ptr [eax].TAesContext.AesNi32 // = AES.Encrypt(fCV,fCV)
+    lea    edx, [eax].TAesContext.buf // used as temporary buffer
     movups [edx], xmm7
     cld
 @s: lodsb
@@ -1120,7 +1120,7 @@ end;
 
 procedure AesNiEncryptXmm7_128;
   {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
+asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
         movups  xmm0, [eax + 16 * 0]
         movups  xmm1, [eax + 16 * 1]
         movups  xmm2, [eax + 16 * 2]
@@ -1172,7 +1172,7 @@ end;
 
 procedure AesNiEncryptXmm7_192;
   {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
+asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
         movups  xmm0, [eax + 16 * 0]
         movups  xmm1, [eax + 16 * 1]
         movups  xmm2, [eax + 16 * 2]
@@ -1230,7 +1230,7 @@ end;
 
 procedure AesNiEncryptXmm7_256;
   {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
+asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
         movups  xmm0, [eax + 16 * 0]
         movups  xmm1, [eax + 16 * 1]
         movups  xmm2, [eax + 16 * 2]
@@ -1666,10 +1666,10 @@ end;
    MD5 algorithm from RSA Data Security, Inc.
    Taken from https://github.com/maximmasiutin/MD5_Transform-x64
 }
-procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
+procedure MD5Transform(var buf: TMd5Buf; const in_: TMd5In);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 // see https://synopse.info/forum/viewtopic.php?id=4369 for asm numbers
-asm // eax=buf:TMD5Buf edx=in_:TMD5In
+asm // eax=buf:TMd5Buf edx=in_:TMd5In
         push    ebx
         push    esi
         push    edi

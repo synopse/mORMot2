@@ -59,7 +59,7 @@ Efficient Unicode Conversion Classes shared by all framework units
 
 Text Processing functions shared by all framework units
 - UTF-8 String Manipulation Functions
-- `TRawUTF8DynArray` Processing Functions
+- `TRawUtf8DynArray` Processing Functions
 - CSV-like Iterations over Text Buffers
 - `TBaseWriter` parent class for Text Generation
 - Numbers (integers or floats) and Variants to Text Conversion
@@ -113,7 +113,7 @@ Low-Level Data Processing Functions shared by all framework units
 - INI Files and In-memory Access
 - Efficient RTTI Values Binary Serialization and Comparison
 - `TDynArray`, `TDynArrayHashed` and `TSynQueue` Wrappers
-- `RawUTF8` String Values Interning and `TRawUTF8List`
+- `RawUtf8` String Values Interning and `TRawUtf8List`
 
 ### mormot.core.json
 
@@ -138,7 +138,7 @@ JSON functions shared by all framework units
 
 Several Indexing and Search Engines, as used by other parts of the framework
 - Files Search in Folders
-- ScanUTF8, GLOB and SOUNDEX Text Search
+- ScanUtf8, GLOB and SOUNDEX Text Search
 - Versatile Expression Search Engine
 - *Bloom Filter* Probabilistic Index
 - Binary Buffers Delta Compression
