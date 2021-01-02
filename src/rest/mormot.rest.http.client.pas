@@ -92,7 +92,7 @@ type
   /// abstract HTTP/1.1 RESTful JSON mORMot Client class
   // - this class, and other inherited classes defined in this unit, are
   // thread-safe, since each of their URI() method is protected by a giant lock
-  TRestHttpClientGeneric = class(TRestClientURI)
+  TRestHttpClientGeneric = class(TRestClientUri)
   protected
     fKeepAliveMS: cardinal;
     fCompression: TRestHttpCompressions;
@@ -106,14 +106,14 @@ type
     procedure SetCompression(Value: TRestHttpCompressions);
     procedure SetKeepAliveMS(Value: cardinal);
     /// process low-level HTTP/1.1 request
-    // - called by InternalURI(), therefore by URI() public method
+    // - called by InternalUri(), therefore by URI() public method
     // - returns 200,202,204 if OK, http status error otherwise in result.Lo
     // - returns Server-InternalState in result.Hi
     function InternalRequest(const url, method: RawUtf8;
       var Header, Data, DataType: RawUtf8): Int64Rec; virtual; abstract;
     /// method calling the RESTful server fServer via HTTP/1.1
     // - calls the InternalRequest() protected method
-    procedure InternalURI(var Call: TRestURIParams); override;
+    procedure InternalUri(var Call: TRestUriParams); override;
   public
     /// connect to TRestHttpServer on aServer:aPort
     // - optional aProxyName may contain the name of the proxy server to use,
@@ -133,7 +133,7 @@ type
     /// connect to TRestHttpServer via 'address:port/root' URI format
     // - if port is not specified, aDefaultPort is used
     // - if root is not specified, aModel.Root is used
-    constructor Create(const aServer: TRestServerURIString; aModel: TOrmModel;
+    constructor Create(const aServer: TRestServerUriString; aModel: TOrmModel;
       aDefaultPort: integer; aHttps: boolean = false); reintroduce; overload;
     /// initialize REST server instance from a TSynConnectionDefinition
     constructor RegisteredClassCreateFrom(aModel: TOrmModel;
@@ -149,7 +149,7 @@ type
     /// save the TRestHttpClientGeneric properties into a persistent storage object
     // - CreateFrom() will expect Definition.ServerName to store the URI as
     // 'server:port' or 'https://server:port', Definition.User/Password to store
-    // the TRestClientURI.SetUser() information, and Definition.DatabaseName
+    // the TRestClientUri.SetUser() information, and Definition.DatabaseName
     // to store the extended options as an URL-encoded string
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
 
@@ -495,14 +495,14 @@ implementation
 
 { TRestHttpClientGeneric }
 
-procedure TRestHttpClientGeneric.InternalURI(var Call: TRestURIParams);
+procedure TRestHttpClientGeneric.InternalUri(var Call: TRestUriParams);
 var
   Head, Content, ContentType: RawUtf8;
   P, PBeg: PUtf8Char;
   res: Int64Rec;
   log: ISynLog;
 begin
-  log := fLogClass.Enter('InternalURI %', [Call.Method], self);
+  log := fLogClass.Enter('InternalUri %', [Call.Method], self);
   if InternalCheckOpen then
   begin
     Head := Call.InHead;
@@ -625,7 +625,7 @@ end;
 constructor TRestHttpClientGeneric.RegisteredClassCreateFrom(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean);
 var
-  URI: TURI;
+  URI: TUri;
   P: PUtf8Char;
   V: cardinal;
   tmp: RawUtf8;
@@ -651,10 +651,10 @@ begin
   inherited RegisteredClassCreateFrom(aModel, aDefinition, false); // call SetUser()
 end;
 
-constructor TRestHttpClientGeneric.Create(const aServer: TRestServerURIString;
+constructor TRestHttpClientGeneric.Create(const aServer: TRestServerUriString;
   aModel: TOrmModel; aDefaultPort: integer; aHttps: boolean);
 var
-  URI: TRestServerURI;
+  URI: TRestServerUri;
 begin
   URI.URI := aServer;
   if URI.Root <> '' then
@@ -938,7 +938,7 @@ end;
 function TRestHttpClientWebsockets.CallbackRequest(
   Ctxt: THttpServerRequestAbstract): cardinal;
 var
-  params: TRestURIParams;
+  params: TRestUriParams;
 begin
   if (Ctxt = nil) or
      ((Ctxt.InContentType <> '') and

@@ -64,7 +64,7 @@ type
     constructor Create(aOwner: TInterfaceResolver); override;
     /// method called on the client side to register a service via its interface(s)
     // - will add a TServiceFactoryClient instance to the internal list
-    // - is called e.g. by TRestClientURI.ServiceRegister or even by
+    // - is called e.g. by TRestClientUri.ServiceRegister or even by
     // TRestServer.ServiceRegister(aClient: TRest...) for a remote access -
     // use TServiceContainerServer.AddImplementation() instead for normal
     // server side implementation
@@ -98,8 +98,8 @@ type
   // and call remotely the server to process the actual implementation
   TServiceFactoryClient = class(TServiceFactory)
   protected
-    fClient: TRest; // = fResolver as TRestClientURI
-    fForcedURI: RawUtf8;
+    fClient: TRest; // = fResolver as TRestClientUri
+    fForcedUri: RawUtf8;
     fParamsAsJsonObject: boolean;
     fResultAsJsonObject: boolean;
     fDelayedInstance: boolean;
@@ -192,21 +192,21 @@ type
       read fSendNotificationsRest;
   published
     /// could be used to force the remote URI to access the service
-    // - by default, the URI will be Root/Calculator or Root/InterfaceMangledURI
+    // - by default, the URI will be Root/Calculator or Root/InterfaceMangledUri
     // but you may use this property to use another value, e.g. if you are
     // accessign a non mORMot REST server (probably with aContractExpected set
     // to SERVICE_CONTRACT_NONE_EXPECTED, and running
     // Client.ServerTimestamp := TimeLogNowUTC to avoid an unsupported
     // ServerTimestampSynchronize call)
-    property ForcedURI: RawUtf8
-      read fForcedURI write fForcedURI;
+    property ForcedUri: RawUtf8
+      read fForcedUri write fForcedUri;
     /// set to TRUE to send the interface's methods parameters as JSON object
     // - by default (FALSE), any method execution will send a JSON array with
     // all CONST/VAR parameters, in order
     // - TRUE will generate a JSON object instead, with the CONST/VAR parameter
     // names as field names - may be useful e.g. when working with a non
     // mORMot server, or when the mORMot server exposes a public API
-    // - defined e.g. by TRestClientURI.ServiceDefineSharedAPI() method
+    // - defined e.g. by TRestClientUri.ServiceDefineSharedAPI() method
     property ParamsAsJsonObject: boolean
       read fParamsAsJsonObject write fParamsAsJsonObject;
     /// set to TRUE if the interface's methods result is expected to be a JSON object
@@ -217,8 +217,8 @@ type
     // names as field names (and "Result" for any function result) - may be
     // useful e.g. when working with JavaScript clients or any public API
     // - this value can be overridden by setting ForceServiceResultAsJsonObject
-    // for a given TRestServerURIContext (e.g. for server-side JavaScript work)
-    // - defined e.g. by TRestClientURI.ServiceDefineSharedAPI() method
+    // for a given TRestServerUriContext (e.g. for server-side JavaScript work)
+    // - defined e.g. by TRestClientUri.ServiceDefineSharedAPI() method
     property ResultAsJsonObjectWithoutResult: boolean
       read fResultAsJsonObject write fResultAsJsonObject;
     /// delay the sicClientDriven server-side instance to the first method call
@@ -467,7 +467,7 @@ begin
   fClient := aClient;
   opt := [];
   if fClient.fClient <> nil then
-    with fClient.fClient as TRestClientURI do
+    with fClient.fClient as TRestClientUri do
       if (Session.ID <> 0) and
          (Session.User <> nil) then
         opt := [ifoJsonAsExtended, ifoDontStoreVoidJSON];
@@ -478,7 +478,7 @@ procedure TInterfacedObjectFakeClient.InterfaceWrite(W: TTextWriter;
   const aMethod: TInterfaceMethod; const aParamInfo: TInterfaceMethodArgument;
   aParamValue: Pointer);
 begin
-  W.Add(TRestClientURI(fClient.fClient).FakeCallbackRegister(
+  W.Add(TRestClientUri(fClient.fClient).FakeCallbackRegister(
     fClient, aMethod, aParamInfo, aParamValue));
   W.Add(',');
 end;
@@ -587,7 +587,7 @@ var
   service: PInterfaceMethod;
   ctxt: TRestClientSideInvoke;
   withinput: boolean;
-  rcu: TRestClientURI absolute aClient;
+  rcu: TRestClientUri absolute aClient;
   log: ISynLog; // for Enter auto-leave to work with FPC
   p: RawUtf8;
 
@@ -634,10 +634,10 @@ begin
   log := fClient.LogClass.Enter('InternalInvoke I%.%(%) %',
     [fInterfaceURI, aMethod, {%H-}p, clientDrivenID], self);
   // call remote server according to current routing scheme
-  if fForcedURI <> '' then
-    baseuri := fForcedURI
-  else if TRestClientURI(fClient).Services.ExpectMangledURI then
-    baseuri := aClient.Model.Root + '/' + fInterfaceMangledURI
+  if fForcedUri <> '' then
+    baseuri := fForcedUri
+  else if TRestClientUri(fClient).Services.ExpectMangledUri then
+    baseuri := aClient.Model.Root + '/' + fInterfaceMangledUri
   else
     baseuri := aClient.Model.Root + '/' + fInterfaceURI;
   ctxt := [];
@@ -762,7 +762,7 @@ var
   Error, RemoteContract: RawUtf8;
 begin
   // extract interface RTTI and create fake interface (and any shared instance)
-  if not aRest.InheritsFrom(TRestClientURI) then
+  if not aRest.InheritsFrom(TRestClientUri) then
     EServiceException.CreateUtf8(
       '%.Create(): % interface needs a Client connection',
       [self, aInterface^.Name]);
@@ -782,17 +782,17 @@ begin
   if PosEx(SERVICE_CONTRACT_NONE_EXPECTED, ContractExpected) = 0 then
   begin
     if not InternalInvoke(SERVICE_PSEUDO_METHOD[imContract],
-       TRestClientURI(fClient).ServicePublishOwnInterfaces, @RemoteContract, @Error) then
+       TRestClientUri(fClient).ServicePublishOwnInterfaces, @RemoteContract, @Error) then
       raise EServiceException.CreateUtf8('%.Create(): I% interface or % routing not ' +
         'supported by server [%]', [self, fInterfaceURI,
-         TRestClientURI(fClient).ServicesRouting, Error]);
+         TRestClientUri(fClient).ServicesRouting, Error]);
     if ('[' + ContractExpected + ']' <> RemoteContract) and
        ('{"contract":' + ContractExpected + '}' <> RemoteContract) then
       raise EServiceException.CreateUtf8('%.Create(): server''s I% contract ' +
         'differs from client''s: expected [%], received % - you may need to ' +
         'upgrade your % client to match % server expectations',
         [self, fInterfaceURI, ContractExpected, RemoteContract,
-         ExeVersion.Version.DetailedOrVoid, TRestClientURI(fClient).Session.Version]);
+         ExeVersion.Version.DetailedOrVoid, TRestClientUri(fClient).Session.Version]);
   end;
 end;
 
@@ -940,7 +940,7 @@ end;
 function TServiceContainerClient.CallBackUnRegister(const Callback: IInvokable): boolean;
 begin
   if Assigned(Callback) then
-    result := (fOwner as TRestClientURI).FakeCallbacks.UnRegister(pointer(Callback))
+    result := (fOwner as TRestClientUri).FakeCallbacks.UnRegister(pointer(Callback))
   else
     result := false;
 end;

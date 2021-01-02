@@ -209,10 +209,10 @@ uses
 function TSqlDBPostgresConnection.PrepareCached(const aSQL: RawUtf8; aParamCount: integer;
   out aName: RawUtf8): integer;
 var
-  dig: TSHA256Digest;
+  dig: TSha256Digest;
 begin
-  dig := SHA256Digest(aSQL);
-  aName := SHA256DigestToString(dig);
+  dig := Sha256Digest(aSQL);
+  aName := Sha256DigestToString(dig);
   result := Hash256Index(pointer(fPrepared), fPreparedCount, @dig);
   if result >= 0 then
     exit; // already prepared

@@ -1272,7 +1272,7 @@ end;
 { ************ TSynDate / TSynDateTime / TSynSystemTime High-Level objects }
 
 var
-  // GlobalTime[LocalTime] cache protected using RCU128()
+  // GlobalTime[LocalTime] cache protected using Rcu128()
   GlobalTime: array[boolean] of record
     time: TSystemTime;
     clock: PtrInt; // avoid slower API call with 8-16ms loss of precision
@@ -1294,10 +1294,10 @@ begin
         GetLocalTime(newtimesys)
       else
         GetSystemTime(newtimesys);
-      RCU128(newtimesys, time);
+      Rcu128(newtimesys, time);
     end
     else
-      RCU128(time, NewTime);
+      Rcu128(time, NewTime);
   end;
   {$ifndef MSWINDOWS} // two TSystemTime fields are inverted in datih.inc :(
   tix := newtimesys.DayOfWeek;

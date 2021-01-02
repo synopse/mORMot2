@@ -1995,7 +1995,7 @@ type
     /// reference to the background execution thread, if any
     property BackgroundExecutionThread: TSynBackgroundThreadMethod
       read fBackgroundExecutionThread write fBackgroundExecutionThread;
-    /// points e.g. to TRestServerURIContext.ExecuteCallback
+    /// points e.g. to TRestServerUriContext.ExecuteCallback
     property OnCallback: TOnInterfaceMethodExecuteCallback
       read fOnCallback write fOnCallback;
     /// contains exception serialization after ExecuteJson of multiple instances
@@ -2994,7 +2994,7 @@ function TInterfacedObjectFake.FakeQueryInterface(
   out Obj): TIntQry;
 begin
   self := SelfFromInterface;
-  if IsEqualGUID(@IID, @fFactory.fInterfaceIID) then
+  if IsEqualGuid(@IID, @fFactory.fInterfaceIID) then
   begin
     pointer(Obj) := @fVTable;
     _AddRef;
@@ -3486,7 +3486,7 @@ begin
   fDocVariantOptions := JSON_OPTIONS_FAST;
   fInterfaceTypeInfo := aInterface;
   fInterfaceIID := aInterface^.InterfaceGUID^;
-  if IsNullGUID(fInterfaceIID) then
+  if IsNullGuid(fInterfaceIID) then
     raise EInterfaceFactory.CreateUtf8(
       '%.Create: % has no GUID', [self, aInterface^.RawName]);
   fInterfaceRTTI := Rtti.RegisterType(aInterface) as TRttiJson;
@@ -6127,7 +6127,7 @@ type
   // map TServiceRunningContext from mormot.rest.server.pas
   TPerThreadRunningContext = record
     Factory: TObject; // TServiceFactoryServer
-    Request: TObject; // TRestServerURIContext;
+    Request: TObject; // TRestServerUriContext;
     RunningThread: TThread;
   end;
   PPerThreadRunningContext = ^TPerThreadRunningContext;

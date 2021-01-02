@@ -1055,15 +1055,11 @@ type
     // $ 20110330 10010005 debug {"TObjectList(00B1AD60)":["TObjectList(00B1AE20)","TObjectList(00B1AE80)"]}
     // - if aInstance is an Exception, it will handle its class name and Message:
     // $ 20110330 10010005 debug "EClassName(00C2129A)":"Exception message"
-    // - use TSqlLog from mORMot.pas unit to add the record content, written
-    // as human readable JSON
     procedure Log(Level: TSynLogInfo; aInstance: TObject); overload;
     /// call this method to add the content of most low-level types to the log
     // at a specified level
     // - this overridden implementation will write the value content,
     // written as human readable JSON: handle dynamic arrays and enumerations
-    // - TSqlLog from mORMot.pas unit will be able to write
-    // TObject/TOrm and sets content as JSON
     procedure Log(Level: TSynLogInfo; const aName: RawUtf8; aTypeInfo: PRttiInfo;
       const aValue; Instance: TObject); overload;
     /// call this method to add the caller address to the log at the specified level

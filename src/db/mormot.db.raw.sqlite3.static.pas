@@ -731,18 +731,18 @@ var
 const
   _CODEC_PBKDF2_SALT = 'J6CuDftfPr22FnYn';
 
-procedure CodecGenerateKey(var aes: TAES;
+procedure CodecGenerateKey(var aes: TAes;
   userPassword: pointer; passwordLength: integer);
 var
   s: TSynSigner;
   k: THash512Rec;
 begin
-  s.PBKDF2(userPassword, passwordLength, k, _CODEC_PBKDF2_SALT);
+  s.Pbkdf2(userPassword, passwordLength, k, _CODEC_PBKDF2_SALT);
   s.AssignTo(k, aes, {encrypt=}true);
 end;
 
-function CodecGetReadKey(codec: pointer): PAES;  cdecl; external;
-function CodecGetWriteKey(codec: pointer): PAES; cdecl; external;
+function CodecGetReadKey(codec: pointer): PAes;  cdecl; external;
+function CodecGetWriteKey(codec: pointer): PAes; cdecl; external;
 
 procedure CodecGenerateReadKey(codec: pointer;
   userPassword: PAnsiChar; passwordLength: integer); cdecl;
@@ -759,12 +759,12 @@ begin
 end;
 
 procedure CodecAESProcess(page: cardinal; data: PAnsiChar; len: integer;
-  aes: PAES; encrypt: boolean);
+  aes: PAes; encrypt: boolean);
 var
   plain: Int64;    // bytes 16..23 should always be unencrypted
   iv: THash128Rec; // is genuine and AES-protected (since not random)
 begin
-  if (len and AESBlockMod <> 0) or
+  if (len and AesBlockMod <> 0) or
      (len <= 0) or
      (integer(page) <= 0) then
     raise ESqlite3Exception.CreateUtf8(
@@ -775,7 +775,7 @@ begin
   iv.c3 := page * 3266489917;
   if not ForceSQLite3LegacyAES then
     aes^.encrypt(iv.b); // avoid potential brute force attack
-  len := len shr AESBlockShift;
+  len := len shr AesBlockShift;
   if page = 1 then
     // ensure header bytes 16..23 are stored unencrypted
     if (PInt64(data)^ = SQLITE_FILE_HEADER128.lo) and
@@ -785,7 +785,7 @@ begin
       if encrypt then
       begin
         plain := PInt64(data + 16)^;
-        aes^.DoBlocksOFB(@iv.b, data + 16, data + 16, len - 1);
+        aes^.DoBlocksOfb(@iv.b, data + 16, data + 16, len - 1);
         // 8..15 are encrypted bytes 16..23
         PInt64(data + 8)^ := PInt64(data + 16)^;
         PInt64(data + 16)^ := plain;
@@ -793,7 +793,7 @@ begin
       else
       begin
         PInt64(data + 16)^ := PInt64(data + 8)^;
-        aes^.DoBlocksOFB(@iv.b, data + 16, data + 16, len - 1);
+        aes^.DoBlocksOfb(@iv.b, data + 16, data + 16, len - 1);
         if (data[21] = #64) and
            (data[22] = #32) and
            (data[23] = #32) then
@@ -805,7 +805,7 @@ begin
       FillZero(PHash128(data)^)
   else
     // whole page encryption if not the first one
-    aes^.DoBlocksOFB(@iv.b, data, data, len);
+    aes^.DoBlocksOfb(@iv.b, data, data, len);
 end;
 
 function CodecEncrypt(codec: pointer; page: integer; data: PAnsiChar;
@@ -844,7 +844,7 @@ var
   buf: PAnsiChar;
   temp: RawByteString;
   size, posi: Int64;
-  old, new: TAES;
+  old, new: TAes;
 begin
   result := false;
   if OldPassWord = NewPassword then
@@ -867,7 +867,7 @@ begin
     pagesize := cardinal(head.b[16]) shl 8 + head.b[17];
     pagecount := size div pagesize;
     if (pagesize < 1024) or
-       (pagesize and AESBlockMod <> 0) or
+       (pagesize and AesBlockMod <> 0) or
        (pagesize > bufsize) or
        (QWord(pagecount) * pagesize <> size) or
        (head.d0 <> SQLITE_FILE_HEADER128.Lo) or

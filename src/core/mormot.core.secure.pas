@@ -490,7 +490,7 @@ type
     saSha3S128,
     saSha3S256);
 
-  /// JSON-serialization ready object as used by TSynSigner.PBKDF2 overloaded methods
+  /// JSON-serialization ready object as used by TSynSigner.Pbkdf2() overloaded methods
   // - default value for unspecified parameters will be SHAKE_128 with
   // rounds=1000 and a fixed salt
   TSynSignerParams = packed record
@@ -518,7 +518,7 @@ type
     /// initialize the digital HMAC/SHA-3 signing context with PBKDF2 safe
     // iterative key derivation of a secret salted text
     procedure Init(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-      aSecretPBKDF2Rounds: integer; aPBKDF2Secret: PHash512Rec = nil); overload;
+      aSecretPbkdf2Round: integer; aPbkdf2Secret: PHash512Rec = nil); overload;
     /// process some message content supplied as memory buffer
     procedure Update(aBuffer: pointer; aLen: integer); overload;
     /// process some message content supplied as string
@@ -535,29 +535,29 @@ type
       aBuffer: Pointer; aLen: integer): RawUtf8; overload;
     /// one-step digital signature of a buffer with PBKDF2 derivation
     function Full(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-      aSecretPBKDF2Rounds: integer; aBuffer: Pointer; aLen: integer): RawUtf8; overload;
+      aSecretPbkdf2Round: integer; aBuffer: Pointer; aLen: integer): RawUtf8; overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
-    procedure PBKDF2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-      aSecretPBKDF2Rounds: integer; out aDerivatedKey: THash512Rec); overload;
+    procedure Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
+      aSecretPbkdf2Round: integer; out aDerivatedKey: THash512Rec); overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
-    procedure PBKDF2(const aParams: TSynSignerParams;
+    procedure Pbkdf2(const aParams: TSynSignerParams;
       out aDerivatedKey: THash512Rec); overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
     // - accept as input a TSynSignerParams serialized as JSON object
-    procedure PBKDF2(aParamsJson: PUtf8Char; aParamsJsonLen: integer;
+    procedure Pbkdf2(aParamsJson: PUtf8Char; aParamsJsonLen: integer;
       out aDerivatedKey: THash512Rec;
       const aDefaultSalt: RawUtf8 = 'I6sWioAidNnhXO9BK';
       aDefaultAlgo: TSignAlgo = saSha3S128); overload;
     /// convenient wrapper to perform PBKDF2 safe iterative key derivation
     // - accept as input a TSynSignerParams serialized as JSON object
-    procedure PBKDF2(const aParamsJson: RawUtf8;
+    procedure Pbkdf2(const aParamsJson: RawUtf8;
       out aDerivatedKey: THash512Rec;
       const aDefaultSalt: RawUtf8 = 'I6sWioAidNnhXO9BK';
       aDefaultAlgo: TSignAlgo = saSha3S128); overload;
-    /// prepare a TAES object with the key derivated via a PBKDF2() call
+    /// prepare a TAes object with the key derivated via a Pbkdf2() call
     // - aDerivatedKey is defined as "var", since it will be zeroed after use
     procedure AssignTo(var aDerivatedKey: THash512Rec;
-      out aAES: TAES; aEncrypt: boolean);
+      out aAES: TAes; aEncrypt: boolean);
     /// fill the intenral context with zeros, for security
     procedure Done;
   end;
@@ -640,8 +640,8 @@ type
     sprInvalidMAC);
 
   /// perform safe communication after unilateral or mutual authentication
-  // - see e.g. TProtocolNone or SynEcc's TECDHEProtocolClient and
-  // TECDHEProtocolServer implementation classes
+  // - see e.g. TProtocolNone or SynEcc's TEcdheProtocolClient and
+  // TEcdheProtocolServer implementation classes
   IProtocol = interface
     ['{91E3CA39-3AE2-44F4-9B8C-673AC37C1D1D}']
     /// initialize the communication by exchanging some client/server information
@@ -694,22 +694,22 @@ type
 
   /// implements a secure protocol using AES encryption
   // - as used e.g. by 'synopsebinary' WebSockets protocol
-  // - this class will maintain two TAESAbstract instances, one for encryption
+  // - this class will maintain two TAesAbstract instances, one for encryption
   // and another one for decryption, with PKCS7 padding and no MAC validation
-  TProtocolAES = class(TInterfacedObject, IProtocol)
+  TProtocolAes = class(TInterfacedObject, IProtocol)
   protected
     fSafe: TRTLCriticalSection; // no need of TSynLocker padding
-    fAES: array[boolean] of TAESAbstract; // [false]=decrypt [true]=encrypt
+    fAes: array[boolean] of TAesAbstract; // [false]=decrypt [true]=encrypt
   public
     /// initialize this encryption protocol with the given AES settings
     // - warning: aKey is an untyped constant, i.e. expects a raw set of memory
     // bytes: do NOT use assign it with a string or a TBytes instance: you would
     // use the pointer to the data as key
-    constructor Create(aClass: TAESAbstractClass; const aKey; aKeySize: cardinal;
-      aIVReplayAttackCheck: TAESIVReplayAttackCheck = repCheckedIfAvailable);
+    constructor Create(aClass: TAesAbstractClass; const aKey; aKeySize: cardinal;
+      aIVReplayAttackCheck: TAesIVReplayAttackCheck = repCheckedIfAvailable);
         reintroduce; virtual;
     /// will create another instance of this communication protocol
-    constructor CreateFrom(aAnother: TProtocolAES); reintroduce; virtual;
+    constructor CreateFrom(aAnother: TProtocolAes); reintroduce; virtual;
     /// finalize the encryption
     destructor Destroy; override;
     /// initialize the communication by exchanging some client/server information
@@ -729,7 +729,7 @@ type
   end;
 
   /// class-reference type (metaclass) of an AES secure protocol
-  TProtocolAESClass = class of TProtocolAES;
+  TProtocolAesClass = class of TProtocolAes;
 
 function ToText(res: TProtocolResult): PShortString; overload;
 
@@ -749,19 +749,19 @@ begin
   result := true;
   case aAlgo of
     hfMD5:
-      PMD5(@ctxt)^.Init;
+      PMd5(@ctxt)^.Init;
     hfSHA1:
-      PSHA1(@ctxt)^.Init;
+      PSha1(@ctxt)^.Init;
     hfSHA256:
-      PSHA256(@ctxt)^.Init;
+      PSha256(@ctxt)^.Init;
     hfSHA384:
-      PSHA384(@ctxt)^.Init;
+      PSha384(@ctxt)^.Init;
     hfSHA512:
-      PSHA512(@ctxt)^.Init;
+      PSha512(@ctxt)^.Init;
     hfSHA3_256:
-      PSHA3(@ctxt)^.Init(SHA3_256);
+      PSha3(@ctxt)^.Init(SHA3_256);
     hfSHA3_512:
-      PSHA3(@ctxt)^.Init(SHA3_512);
+      PSha3(@ctxt)^.Init(SHA3_512);
   else
     result := false;
   end;
@@ -771,19 +771,19 @@ procedure TSynHasher.Update(aBuffer: Pointer; aLen: integer);
 begin
   case fAlgo of
     hfMD5:
-      PMD5(@ctxt)^.Update(aBuffer^, aLen);
+      PMd5(@ctxt)^.Update(aBuffer^, aLen);
     hfSHA1:
-      PSHA1(@ctxt)^.Update(aBuffer, aLen);
+      PSha1(@ctxt)^.Update(aBuffer, aLen);
     hfSHA256:
-      PSHA256(@ctxt)^.Update(aBuffer, aLen);
+      PSha256(@ctxt)^.Update(aBuffer, aLen);
     hfSHA384:
-      PSHA384(@ctxt)^.Update(aBuffer, aLen);
+      PSha384(@ctxt)^.Update(aBuffer, aLen);
     hfSHA512:
-      PSHA512(@ctxt)^.Update(aBuffer, aLen);
+      PSha512(@ctxt)^.Update(aBuffer, aLen);
     hfSHA3_256:
-      PSHA3(@ctxt)^.Update(aBuffer, aLen);
+      PSha3(@ctxt)^.Update(aBuffer, aLen);
     hfSHA3_512:
-      PSHA3(@ctxt)^.Update(aBuffer, aLen);
+      PSha3(@ctxt)^.Update(aBuffer, aLen);
   end;
 end;
 
@@ -796,19 +796,19 @@ function TSynHasher.Final: RawUtf8;
 begin
   case fAlgo of
     hfMD5:
-      result := MD5DigestToString(PMD5(@ctxt)^.Final);
+      result := Md5DigestToString(PMd5(@ctxt)^.Final);
     hfSHA1:
-      result := SHA1DigestToString(PSHA1(@ctxt)^.Final);
+      result := Sha1DigestToString(PSha1(@ctxt)^.Final);
     hfSHA256:
-      result := SHA256DigestToString(PSHA256(@ctxt)^.Final);
+      result := Sha256DigestToString(PSha256(@ctxt)^.Final);
     hfSHA384:
-      result := SHA384DigestToString(PSHA384(@ctxt)^.Final);
+      result := Sha384DigestToString(PSha384(@ctxt)^.Final);
     hfSHA512:
-      result := SHA512DigestToString(PSHA512(@ctxt)^.Final);
+      result := Sha512DigestToString(PSha512(@ctxt)^.Final);
     hfSHA3_256:
-      result := SHA256DigestToString(PSHA3(@ctxt)^.Final256);
+      result := Sha256DigestToString(PSha3(@ctxt)^.Final256);
     hfSHA3_512:
-      result := SHA512DigestToString(PSHA3(@ctxt)^.Final512);
+      result := Sha512DigestToString(PSha3(@ctxt)^.Final512);
   end;
 end;
 
@@ -886,7 +886,7 @@ procedure TSynSigner.Init(aAlgo: TSignAlgo; aSecret: pointer; aSecretLen: intege
 const
   SIGN_SIZE: array[TSignAlgo] of byte = (
     20, 32, 48, 64, 28, 32, 48, 64, 32, 64);
-  SHA3_ALGO: array[saSha3224..saSha3S256] of TSHA3Algo = (
+  SHA3_ALGO: array[saSha3224..saSha3S256] of TSha3Algo = (
     SHA3_224, SHA3_256, SHA3_384, SHA3_512, SHAKE_128, SHAKE_256);
 begin
   Algo := aAlgo;
@@ -902,8 +902,8 @@ begin
       PHMAC_SHA512(@ctxt)^.Init(aSecret, aSecretLen);
     saSha3224..saSha3S256:
       begin
-        PSHA3(@ctxt)^.Init(SHA3_ALGO[Algo]);
-        PSHA3(@ctxt)^.Update(aSecret, aSecretLen);
+        PSha3(@ctxt)^.Init(SHA3_ALGO[Algo]);
+        PSha3(@ctxt)^.Update(aSecret, aSecretLen);
       end; // note: the HMAC pattern is included in SHA-3
   end;
 end;
@@ -914,16 +914,16 @@ begin
 end;
 
 procedure TSynSigner.Init(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-  aSecretPBKDF2Rounds: integer; aPBKDF2Secret: PHash512Rec);
+  aSecretPbkdf2Round: integer; aPbkdf2Secret: PHash512Rec);
 var
   temp: THash512Rec;
 begin
-  if aSecretPBKDF2Rounds > 1 then
+  if aSecretPbkdf2Round > 1 then
   begin
-    PBKDF2(aAlgo, aSecret, aSalt, aSecretPBKDF2Rounds, temp);
+    Pbkdf2(aAlgo, aSecret, aSalt, aSecretPbkdf2Round, temp);
     Init(aAlgo, @temp, SignatureSize);
-    if aPBKDF2Secret <> nil then
-      aPBKDF2Secret^ := temp;
+    if aPbkdf2Secret <> nil then
+      aPbkdf2Secret^ := temp;
     FillZero(temp.b);
   end
   else
@@ -947,7 +947,7 @@ begin
     saSha512:
       PHMAC_SHA512(@ctxt)^.Update(aBuffer, aLen);
     saSha3224..saSha3S256:
-      PSHA3(@ctxt)^.Update(aBuffer, aLen);
+      PSha3(@ctxt)^.Update(aBuffer, aLen);
   end;
 end;
 
@@ -963,7 +963,7 @@ begin
     saSha512:
       PHMAC_SHA512(@ctxt)^.Done(aSignature.b, aNoInit);
     saSha3224..saSha3S256:
-      PSHA3(@ctxt)^.Final(@aSignature, SignatureSize shl 3, aNoInit);
+      PSha3(@ctxt)^.Final(@aSignature, SignatureSize shl 3, aNoInit);
   end;
 end;
 
@@ -984,15 +984,15 @@ begin
 end;
 
 function TSynSigner.Full(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-  aSecretPBKDF2Rounds: integer; aBuffer: Pointer; aLen: integer): RawUtf8;
+  aSecretPbkdf2Round: integer; aBuffer: Pointer; aLen: integer): RawUtf8;
 begin
-  Init(aAlgo, aSecret, aSalt, aSecretPBKDF2Rounds);
+  Init(aAlgo, aSecret, aSalt, aSecretPbkdf2Round);
   Update(aBuffer, aLen);
   result := Final;
 end;
 
-procedure TSynSigner.PBKDF2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-  aSecretPBKDF2Rounds: integer; out aDerivatedKey: THash512Rec);
+procedure TSynSigner.Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
+  aSecretPbkdf2Round: integer; out aDerivatedKey: THash512Rec);
 var
   iter: TSynSigner;
   temp: THash512Rec;
@@ -1004,10 +1004,10 @@ begin
   if Algo < saSha3224 then
     iter.Update(#0#0#0#1); // padding and XoF mode already part of SHA-3 process
   iter.Final(aDerivatedKey, true);
-  if aSecretPBKDF2Rounds < 2 then
+  if aSecretPbkdf2Round < 2 then
     exit;
   temp := aDerivatedKey;
-  for i := 2 to aSecretPBKDF2Rounds do
+  for i := 2 to aSecretPbkdf2Round do
   begin
     iter := self;
     iter.Update(@temp, SignatureSize);
@@ -1019,13 +1019,13 @@ begin
   FillCharFast(ctxt, SizeOf(ctxt), 0);
 end;
 
-procedure TSynSigner.PBKDF2(const aParams: TSynSignerParams;
+procedure TSynSigner.Pbkdf2(const aParams: TSynSignerParams;
   out aDerivatedKey: THash512Rec);
 begin
-  PBKDF2(aParams.algo, aParams.secret, aParams.salt, aParams.rounds, aDerivatedKey);
+  Pbkdf2(aParams.algo, aParams.secret, aParams.salt, aParams.rounds, aDerivatedKey);
 end;
 
-procedure TSynSigner.PBKDF2(aParamsJson: PUtf8Char; aParamsJsonLen: integer;
+procedure TSynSigner.Pbkdf2(aParamsJson: PUtf8Char; aParamsJsonLen: integer;
   out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUtf8; aDefaultAlgo: TSignAlgo);
 var
   tmp: TSynTempBuffer;
@@ -1062,19 +1062,19 @@ begin
       tmp.Done;
     end;
   end;
-  PBKDF2(k.algo, k.secret, k.salt, k.rounds, aDerivatedKey);
+  Pbkdf2(k.algo, k.secret, k.salt, k.rounds, aDerivatedKey);
   FillZero(k.secret);
 end;
 
-procedure TSynSigner.PBKDF2(const aParamsJson: RawUtf8;
+procedure TSynSigner.Pbkdf2(const aParamsJson: RawUtf8;
   out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUtf8; aDefaultAlgo: TSignAlgo);
 begin
-  PBKDF2(pointer(aParamsJson), length(aParamsJson),
+  Pbkdf2(pointer(aParamsJson), length(aParamsJson),
     aDerivatedKey, aDefaultSalt, aDefaultAlgo);
 end;
 
 procedure TSynSigner.AssignTo(var aDerivatedKey: THash512Rec;
-  out aAES: TAES; aEncrypt: boolean);
+  out aAES: TAes; aEncrypt: boolean);
 var
   ks: integer;
 begin
@@ -1839,47 +1839,47 @@ begin
 end;
 
 
-{ TProtocolAES }
+{ TProtocolAes }
 
-constructor TProtocolAES.Create(aClass: TAESAbstractClass;
-  const aKey; aKeySize: cardinal; aIVReplayAttackCheck: TAESIVReplayAttackCheck);
+constructor TProtocolAes.Create(aClass: TAesAbstractClass;
+  const aKey; aKeySize: cardinal; aIVReplayAttackCheck: TAesIVReplayAttackCheck);
 begin
   inherited Create;
   InitializeCriticalSection(fSafe);
-  fAES[false] := aClass.Create(aKey, aKeySize);
-  fAES[false].IVReplayAttackCheck := aIVReplayAttackCheck;
-  fAES[true] := fAES[false].Clone;
+  fAes[false] := aClass.Create(aKey, aKeySize);
+  fAes[false].IVReplayAttackCheck := aIVReplayAttackCheck;
+  fAes[true] := fAes[false].Clone;
 end;
 
-constructor TProtocolAES.CreateFrom(aAnother: TProtocolAES);
+constructor TProtocolAes.CreateFrom(aAnother: TProtocolAes);
 begin
   inherited Create;
   InitializeCriticalSection(fSafe);
-  fAES[false] := aAnother.fAES[false].Clone;
-  fAES[true] := fAES[false].Clone;
+  fAes[false] := aAnother.fAes[false].Clone;
+  fAes[true] := fAes[false].Clone;
 end;
 
-destructor TProtocolAES.Destroy;
+destructor TProtocolAes.Destroy;
 begin
-  fAES[false].Free;
-  fAES[true].Free;
+  fAes[false].Free;
+  fAes[true].Free;
   DeleteCriticalSection(fSafe);
   inherited Destroy;
 end;
 
-function TProtocolAES.ProcessHandshake(const MsgIn: RawUtf8;
+function TProtocolAes.ProcessHandshake(const MsgIn: RawUtf8;
   out MsgOut: RawUtf8): TProtocolResult;
 begin
   result := sprUnsupported;
 end;
 
-function TProtocolAES.Decrypt(const aEncrypted: RawByteString;
+function TProtocolAes.Decrypt(const aEncrypted: RawByteString;
   out aPlain: RawByteString): TProtocolResult;
 begin
   EnterCriticalSection(fSafe);;
   try
     try
-      aPlain := fAES[false].DecryptPKCS7(aEncrypted, {iv=}true, {raise=}false);
+      aPlain := fAes[false].DecryptPkcs7(aEncrypted, {iv=}true, {raise=}false);
       if aPlain = '' then
         result := sprBadRequest
       else
@@ -1892,20 +1892,20 @@ begin
   end;
 end;
 
-procedure TProtocolAES.Encrypt(const aPlain: RawByteString;
+procedure TProtocolAes.Encrypt(const aPlain: RawByteString;
   out aEncrypted: RawByteString);
 begin
   EnterCriticalSection(fSafe);;
   try
-    aEncrypted := fAES[true].EncryptPKCS7(aPlain, {iv=}true);
+    aEncrypted := fAes[true].EncryptPkcs7(aPlain, {iv=}true);
   finally
     LeaveCriticalSection(fSafe);
   end;
 end;
 
-function TProtocolAES.Clone: IProtocol;
+function TProtocolAes.Clone: IProtocol;
 begin
-  result := TProtocolAESClass(ClassType).CreateFrom(self);
+  result := TProtocolAesClass(ClassType).CreateFrom(self);
 end;
 
 

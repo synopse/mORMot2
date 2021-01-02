@@ -2857,7 +2857,7 @@ end;
 
 function PasswordDigest(const UserName, Password: RawUtf8): RawUtf8;
 begin
-  result := MD5(UserName + ':mongo:' + Password);
+  result := Md5(UserName + ':mongo:' + Password);
 end;
 
 function TMongoClient.OpenAuth(const DatabaseName, UserName, PassWord: RawUtf8;
@@ -2909,9 +2909,9 @@ var
   res, bson: variant;
   err, nonce, first, key, user, msg, rnonce: RawUtf8;
   payload: RawByteString;
-  rnd: TAESBlock;
-  sha: TSHA1;
-  salted, client, stored, server: TSHA1Digest;
+  rnd: TAesBlock;
+  sha: TSha1;
+  salted, client, stored, server: TSha1Digest;
   resp: TDocVariantData;
 
   procedure CheckPayload;
@@ -2949,7 +2949,7 @@ begin
     if err <> '' then
       raise EMongoException.CreateUtf8('%.OpenAuthCR("%") step1: % - res=%',
         [self, DatabaseName, err, res]);
-    key := MD5(nonce + UserName + Digest);
+    key := Md5(nonce + UserName + Digest);
     bson := BsonVariant([
       'authenticate', 1,
       'user', UserName,
@@ -2965,7 +2965,7 @@ begin
     // SCRAM-SHA-1
     // https://tools.ietf.org/html/rfc5802#section-5
     user := StringReplaceAll(UserName, ['=', '=3D', ',', '=2C']);
-    TAESPRNG.Main.FillRandom(rnd);
+    TAesPrng.Main.FillRandom(rnd);
     nonce := BinToBase64(@rnd, sizeof(rnd));
     FormatUtf8('n=%,r=%', [user, nonce], first);
     BsonVariantType.FromBinary('n,,' + first, bbtGeneric, bson);
@@ -2988,13 +2988,13 @@ begin
     key := 'c=biws,r=' {%H-}+ rnonce;
     PBKDF2_HMAC_SHA1(Digest, Base64ToBin(resp.U['s']),
       Utf8ToInteger(resp.U['i']), salted);
-    HMAC_SHA1(salted, 'Client Key', client);
+    HMAC_Sha1(salted, 'Client Key', client);
     sha.Full(@client, SizeOf(client), stored);
     msg := first + ',' + RawUtf8({%H-}payload) + ',' + key;
-    HMAC_SHA1(stored, msg, stored);
+    HMAC_Sha1(stored, msg, stored);
     XorMemory(@client, @stored, SizeOf(client));
-    HMAC_SHA1(salted, 'Server Key', server);
-    HMAC_SHA1(server, msg, server);
+    HMAC_Sha1(salted, 'Server Key', server);
+    HMAC_Sha1(server, msg, server);
     msg := key + ',p=' + BinToBase64(@client, SizeOf(client));
     BsonVariantType.FromBinary(msg, bbtGeneric, bson);
     err := fConnections[ConnectionIndex].RunCommand(

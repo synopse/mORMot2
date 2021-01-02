@@ -54,7 +54,7 @@ uses
 
 type
   /// implements TRestServer.ORM process for REST server with abstract storage
-  // - works in conjunction with TRestClientURI from mormot.rest.client.pas
+  // - works in conjunction with TRestClientUri from mormot.rest.client.pas
   // - you should inherit it to provide its main storage capabilities
   // - is able to register and redirect some TOrm classes to their own
   // dedicated TRestStorage
@@ -163,13 +163,13 @@ type
     // this single field (and the ID) is available
     // - to be used only server-side, not to synchronize some clients: the framework
     // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
-    // clients ask the server for refresh (see TRestClientURI.UpdateFromServer)
+    // clients ask the server for refresh (see TRestClientUri.UpdateFromServer)
     OnUpdateEvent: TOnOrmEvent;
     /// a method can be specified here to trigger events after any blob update
     // - is called AFTER update of one or several blobs, never on delete nor insert
     // - to be used only server-side, not to synchronize some clients: the framework
     // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
-    // clients ask the server for refresh (see TRestClientURI.UpdateFromServer)
+    // clients ask the server for refresh (see TRestClientUri.UpdateFromServer)
     OnBlobUpdateEvent: TOnOrmFieldEvent;
 
     /// initialize the class, and associated to a TRest and its TOrmModel
@@ -1121,7 +1121,7 @@ var
   EndOfObject: AnsiChar;
   wasString, OK: boolean;
   TableName, Value, ErrMsg: RawUtf8;
-  URIMethod, RunningBatchURIMethod: TURIMethod;
+  URIMethod, RunningBatchURIMethod: TUriMethod;
   RunningBatchRest, RunningRest: TRestOrm;
   Sent, Method, MethodTable: PUtf8Char;
   AutomaticTransactionPerRow: cardinal;
@@ -1136,7 +1136,7 @@ var
   RunTableIndex, i, TableIndex: integer;
   RunStatic: TRestOrm;
   RunStaticKind: TRestServerKind;
-  CurrentContext: TRestServerURIContext;
+  CurrentContext: TRestServerUriContext;
   timer: TPrecisionTimer;
   counts: array[mPOST..mHEAD] of cardinal;
 
@@ -1165,7 +1165,7 @@ var
   begin
     result := (CurrentContext <> nil) and
               (CurrentContext.Command = execOrmWrite) and
-              not CurrentContext.CanExecuteORMWrite(URIMethod, RunTable,
+              not CurrentContext.CanExecuteOrmWrite(URIMethod, RunTable,
                 RunTableIndex, ID, CurrentContext.Call.RestAccessRights^);
   end;
 

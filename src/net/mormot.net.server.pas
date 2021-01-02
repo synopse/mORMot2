@@ -764,10 +764,10 @@ type
     // - if this method is not used within an overridden constructor, default
     // Create must have be called with CreateSuspended = TRUE and then call the
     // Resume method after all Url have been added
-    // - if aRegisterURI is TRUE, the URI will be registered (need adminitrator
+    // - if aRegisterUri is TRUE, the URI will be registered (need adminitrator
     // rights) - default is FALSE, as defined by Windows security policy
     function AddUrl(const aRoot, aPort: RawUtf8; Https: boolean = false;
-      const aDomainName: RawUtf8 = '*'; aRegisterURI: boolean = false;
+      const aDomainName: RawUtf8 = '*'; aRegisterUri: boolean = false;
       aContext: Int64 = 0): integer;
     /// un-register the URLs to Listen On
     // - this method expect the same parameters as specified to AddUrl()
@@ -1130,7 +1130,7 @@ type
     // - aProtocols is an array of a recond with callbacks, server call during
     // WebSocket activity
     function AddUrlWebSocket(const aRoot, aPort: RawUtf8; Https: boolean = false;
-      const aDomainName: RawUtf8 = '*'; aRegisterURI: boolean = false): integer;
+      const aDomainName: RawUtf8 = '*'; aRegisterUri: boolean = false): integer;
     /// handle the HTTP request
     function Request(Ctxt: THttpServerRequestAbstract): cardinal; override;
     /// Ping timeout in seconds. 0 mean no ping.
@@ -2321,7 +2321,7 @@ end;
 { THttpApiServer }
 
 function THttpApiServer.AddUrl(const aRoot, aPort: RawUtf8; Https: boolean;
-  const aDomainName: RawUtf8; aRegisterURI: boolean; aContext: Int64): integer;
+  const aDomainName: RawUtf8; aRegisterUri: boolean; aContext: Int64): integer;
 var
   uri: SynUnicode;
   n: integer;
@@ -2334,7 +2334,7 @@ begin
   uri := RegURL(aRoot, aPort, Https, aDomainName);
   if uri = '' then
     exit; // invalid parameters
-  if aRegisterURI then
+  if aRegisterUri then
     AddUrlAuthorize(aRoot, aPort, Https, aDomainName);
   if Http.Version.MajorVersion > 1 then
     result := Http.AddUrlToUrlGroup(fUrlGroupID, pointer(uri), aContext)
@@ -4111,10 +4111,10 @@ protocolFound:
 end;
 
 function THttpApiWebSocketServer.AddUrlWebSocket(const aRoot, aPort: RawUtf8;
-  Https: boolean; const aDomainName: RawUtf8; aRegisterURI: boolean): integer;
+  Https: boolean; const aDomainName: RawUtf8; aRegisterUri: boolean): integer;
 begin
   result := AddUrl(
-    aRoot, aPort, Https, aDomainName, aRegisterURI, WEB_SOCKET_URL_CONTEXT);
+    aRoot, aPort, Https, aDomainName, aRegisterUri, WEB_SOCKET_URL_CONTEXT);
 end;
 
 procedure THttpApiWebSocketServer.RegisterProtocol(const aName: RawUtf8;

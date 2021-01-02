@@ -200,7 +200,7 @@ type
     // - can be used from a remote client to ensure that any Add/Update/Delete
     // will be stored to disk, via
     // ! aClient.CallBackPut('Flush','',dummy)
-    procedure Flush(Ctxt: TRestServerURIContext);
+    procedure Flush(Ctxt: TRestServerUriContext);
   end;
 
 
@@ -687,7 +687,7 @@ begin
     result := (fOrmInstance as TRestOrmServerFullMemory).FileName;
 end;
 
-procedure TRestServerFullMemory.Flush(Ctxt: TRestServerURIContext);
+procedure TRestServerFullMemory.Flush(Ctxt: TRestServerUriContext);
 begin
   if Ctxt.Method = mPUT then
   begin

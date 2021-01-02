@@ -669,9 +669,9 @@ type
   // - will decode standard HTTP/HTTPS urls or Unix sockets URI like
   // 'http://unix:/path/to/socket.sock:/url/path'
   {$ifdef USERECORDWITHMETHODS}
-  TURI = record
+  TUri = record
   {$else}
-  TURI = object
+  TUri = object
   {$endif USERECORDWITHMETHODS}
   public
     /// if the server is accessible via https:// and not plain http://
@@ -2363,7 +2363,7 @@ begin
 end;
 
 
-{ TURI }
+{ TUri }
 
 function StartWith(p, up: PUtf8Char): boolean;
 // to avoid linking mormot.core.text for IdemPChar()
@@ -2390,14 +2390,14 @@ begin
   result := true;
 end;
 
-procedure TURI.Clear;
+procedure TUri.Clear;
 begin
   Https := false;
   layer := nlTCP;
   Finalize(self);
 end;
 
-function TURI.From(aURI: RawUtf8; const DefaultPort: RawUtf8): boolean;
+function TUri.From(aURI: RawUtf8; const DefaultPort: RawUtf8): boolean;
 var
   P, S: PAnsiChar;
 begin
@@ -2450,7 +2450,7 @@ begin
     result := true;
 end;
 
-function TURI.URI: RawUtf8;
+function TUri.URI: RawUtf8;
 const
   Prefix: array[boolean] of RawUtf8 = (
     'http://', 'https://');
@@ -2465,12 +2465,12 @@ begin
     result := Prefix[Https] + Server + ':' + port + '/' + address;
 end;
 
-function TURI.PortInt: integer;
+function TUri.PortInt: integer;
 begin
   result := GetCardinal(pointer(port));
 end;
 
-function TURI.Root: RawUtf8;
+function TUri.Root: RawUtf8;
 var
   i: PtrInt;
 begin

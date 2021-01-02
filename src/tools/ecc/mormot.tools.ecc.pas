@@ -38,107 +38,107 @@ uses
 
 /// end-user command to create a new private/public key file
 // - as used in the ecc.dpr command-line tool
-function ECCCommandNew(const AuthPrivKey: TFileName;
+function EccCommandNew(const AuthPrivKey: TFileName;
   const AuthPassword: RawUtf8; AuthPasswordRounds: integer;
   const Issuer: RawUtf8; StartDate: TDateTime; ExpirationDays: integer;
   const SavePassword: RawUtf8; SavePasswordRounds, SplitFiles: integer): TFileName;
 
 /// end-user command to create a renew a .private file password
 // - as used in the ecc.dpr command-line tool
-function ECCCommandRekey(const AuthPrivKey: TFileName;
+function EccCommandRekey(const AuthPrivKey: TFileName;
   const AuthPassword: RawUtf8; AuthPasswordRounds: integer;
   const SavePassword: RawUtf8; SavePasswordRounds: integer): TFileName;
 
 /// end-user command to sign a file using a private key file
 // - as used in the ecc.dpr command-line tool
-function ECCCommandSignFile(const FileToSign, AuthPrivKey: TFileName;
+function EccCommandSignFile(const FileToSign, AuthPrivKey: TFileName;
   const AuthPassword: RawUtf8; AuthPasswordRounds: integer;
   const MetaNameValuePairs: array of const): TFileName;
 
 /// end-user command to verify a file signature
 // - as used in the ecc.dpr command-line tool
-function ECCCommandVerifyFile(const FileToVerify, AuthPubKey: TFileName;
-  const AuthBase64: RawUtf8): TECCValidity;
+function EccCommandVerifyFile(const FileToVerify, AuthPubKey: TFileName;
+  const AuthBase64: RawUtf8): TEccValidity;
 
 /// end-user command to create a .inc pascal source file from a private key file
 // - ready to be included within the executable binary as private secret
 // - as used in the ecc.dpr command-line tool
-function ECCCommandSourceFile(const AuthPrivKey: TFileName;
+function EccCommandSourceFile(const AuthPrivKey: TFileName;
   const AuthPassword: RawUtf8; AuthPasswordRounds: integer;
   const ConstName, Comment, PassWord: RawUtf8): TFileName;
 
 /// end-user command to create a .json base-64 text array from a set of public key files
 // - ready to be included e.g. as settings of any server
-// - ECCCommandChainCertificates(['*']) will create a 'chain.ca' of all
+// - EccCommandChainCertificates(['*']) will create a 'chain.ca' of all
 // public key files in the current folder
 // - as used in the ecc.dpr command-line tool
-function ECCCommandChainCertificates(
+function EccCommandChainCertificates(
   const CertFiles: array of RawUtf8): TFileName;
 
 /// end-user command to display the json information from a .private file
 // - as used in the ecc.dpr command-line tool
-function ECCCommandInfoPrivFile(const AuthPrivKey: TFileName;
+function EccCommandInfoPrivFile(const AuthPrivKey: TFileName;
   const AuthPassword: RawUtf8; AuthPasswordRounds: integer): RawUtf8;
 
 /// end-user command to encrypt a file with the .synecc format
 // - as used in the ecc.dpr command-line tool
-procedure ECCCommandCryptFile(
+procedure EccCommandCryptFile(
   const FileToCrypt, DestFile, AuthPubKey: TFileName;
   const AuthBase64, AuthSerial, Password: RawUtf8; PasswordRounds: integer;
-  Algo: TECIESAlgo = ecaUnknown);
+  Algo: TEciesAlgo = ecaUnknown);
 
 /// end-user command to decrypt a .synecc file
 // - as used in the ecc.dpr command-line tool
-// - if AuthPrivKey is not set, it will search for the stored TECCCertificate.Serial
-function ECCCommandDecryptFile(
+// - if AuthPrivKey is not set, it will search for the stored TEccCertificate.Serial
+function EccCommandDecryptFile(
   const FileToDecrypt, DestFile, AuthPrivKey: TFileName;
   const AuthPassword: RawUtf8; AuthPasswordRounds: integer;
   const DecryptPassword: RawUtf8; DecryptPasswordRounds: integer;
-  Signature: PECCSignatureCertifiedContent; MetaData: PRawJson): TECCDecrypt;
+  Signature: PEccSignatureCertifiedContent; MetaData: PRawJson): TEccDecrypt;
 
 /// end-user command to verify a .synecc file signature, after decryption
 // - as used in the ecc.dpr command-line tool
-// - the supplied signature can be retrieved from ECCCommandDecryptFile()
-function ECCCommandVerifyDecryptedFile(
+// - the supplied signature can be retrieved from EccCommandDecryptFile()
+function EccCommandVerifyDecryptedFile(
   const FileToVerify: TFileName;
-  const Signature: TECCSignatureCertifiedContent): TECCValidity;
+  const Signature: TEccSignatureCertifiedContent): TEccValidity;
 
 /// end-user command to initialize local cheat.private/.public files
 // - as used in the ecc.dpr command-line tool
 // - those files will let new/rekey commands create a .cheat file, encrypted
 // using the master cheat.public key, so that the password of the generated
 // .private key file could be retrieved using the cheat.private key and its
-// password/round, via ECCCommandCheat (ECC cheat)
+// password/round, via EccCommandCheat (ECC cheat)
 // - it may be convenient to remember a single password instead of several,
 // and security will be enhanced by the fact that cheat.private stays hidden
-function ECCCommandCheatInit(const Issuer: RawUtf8;
+function EccCommandCheatInit(const Issuer: RawUtf8;
   const CheatPassword: RawUtf8; CheatRounds: integer): TFileName;
 
 /// end-user command to display a .private password as stored in its .cheat file
 // - as used in the ecc.dpr command-line tool
 // - using the master password/rounds of the local cheat.private key, as
-// generated by ECCCommandCheatInit (ECC cheatinit)
-function ECCCommandCheat(const PrivateFile: TFileName;
+// generated by EccCommandCheatInit (ECC cheatinit)
+function EccCommandCheat(const PrivateFile: TFileName;
   const CheatPassword: RawUtf8; CheatRounds: integer;
   out authpass: RawUtf8; out authround: integer): RawUtf8;
 
 /// end-user command to encrypt a file with the symetric .synaead format
 // - will use symetric encryption via AES-256-CFB/PKCS7 over PBKDF2_HMAC_SHA256
 // - as used in the ecc.dpr command-line tool
-procedure AEADCommandCryptFile(const FileToCrypt, DestFile: TFileName;
+procedure AeadCommandCryptFile(const FileToCrypt, DestFile: TFileName;
   const Password, PasswordSalt: RawUtf8; PasswordRounds: integer);
 
 /// end-user command to decrypt a symetric .synaead file
 // - will use symetric encryption via AES-256-CFB/PKCS7 over PBKDF2_HMAC_SHA256
 // - as used in the ecc.dpr command-line tool
-procedure AEADCommandDecryptFile(const FileToDecrypt, DestFile: TFileName;
+procedure AeadCommandDecryptFile(const FileToDecrypt, DestFile: TFileName;
   const Password, PasswordSalt: RawUtf8; PasswordRounds: integer);
 
 type
-  /// the actions implemented by ECCCommand()
+  /// the actions implemented by EccCommand()
   // - as used in the ecc.dpr command-line tool
   // - retrieved from the command line as first parameter
-  TECCCommand = (
+  TEccCommand = (
     ecHelp,
     ecNew,
     ecRekey,
@@ -156,9 +156,9 @@ type
     ecCheatInit,
     ecCheat);
 
-  /// the result code returned by ECCCommand()
+  /// the result code returned by EccCommand()
   // - as used in the ecc.dpr command-line tool
-  TECCCommandError = (
+  TEccCommandError = (
     eccSuccess,
     eccUnknownCommand,
     eccValidationError,
@@ -171,7 +171,7 @@ type
 /// execute the encryption process corresponding to the command line options
 // - as used in the ecc.dpr tool in this folder
 // - returns the ExitCode expected value (0=eccSuccess)
-function ECCCommand(cmd: TECCCommand; const sw: ICommandLine): TECCCommandError;
+function EccCommand(cmd: TEccCommand; const sw: ICommandLine): TEccCommandError;
 
 const
   CHEAT_FILEEXT = '.cheat';
@@ -188,14 +188,14 @@ implementation
 
 { **************** Implement End-User Commands }
 
-procedure CreateCheatFile(secret: TECCCertificateSecret;
+procedure CreateCheatFile(secret: TEccCertificateSecret;
   const SavePassword: RawUtf8; SavePasswordRounds: integer);
 var
   json, bin: RawByteString;
-  master: TECCCertificate;
+  master: TEccCertificate;
   fn: TFileName;
 begin
-  master := TECCCertificate.Create;
+  master := TEccCertificate.Create;
   try
     if master.FromFile(CHEAT_FILEMASTER) then
     try
@@ -203,7 +203,7 @@ begin
         json := SavePassword
       else
         json := JsonEncode(['pass', SavePassword, 'rounds', SavePasswordRounds]);
-      bin := TAESPRNG.Main.AFSplit(pointer(json)^, length(json), CHEAT_SPLIT);
+      bin := TAesPrng.Main.AFSplit(pointer(json)^, length(json), CHEAT_SPLIT);
       fn := Utf8ToString(secret.Serial) + CHEAT_FILEEXT;
       FileFromString(master.Encrypt(bin), fn);
     finally
@@ -215,22 +215,22 @@ begin
   end;
 end;
 
-function ECCCommandNew(const AuthPrivKey: TFileName;
+function EccCommandNew(const AuthPrivKey: TFileName;
   const AuthPassword: RawUtf8; AuthPasswordRounds: integer;
   const Issuer: RawUtf8; StartDate: TDateTime; ExpirationDays: integer;
   const SavePassword: RawUtf8; SavePasswordRounds: integer;
   SplitFiles: integer): TFileName;
 var
-  auth, new: TECCCertificateSecret;
+  auth, new: TEccCertificateSecret;
 begin
   if AuthPrivKey = '' then
     auth := nil
   else
-    auth := TECCCertificateSecret.CreateFromSecureFile(
+    auth := TEccCertificateSecret.CreateFromSecureFile(
       AuthPrivKey, AuthPassword, AuthPasswordRounds);
   try
     // generate pair
-    new := TECCCertificateSecret.CreateNew(
+    new := TEccCertificateSecret.CreateNew(
       auth, Issuer, ExpirationDays, StartDate);
     try
       // save private key as .private password-protected binary file
@@ -249,13 +249,13 @@ begin
   end;
 end;
 
-function ECCCommandRekey(const AuthPrivKey: TFileName;
+function EccCommandRekey(const AuthPrivKey: TFileName;
   const AuthPassword: RawUtf8; AuthPasswordRounds: integer;
   const SavePassword: RawUtf8; SavePasswordRounds: integer): TFileName;
 var
-  auth: TECCCertificateSecret;
+  auth: TEccCertificateSecret;
 begin
-  auth := TECCCertificateSecret.CreateFromSecureFile(
+  auth := TEccCertificateSecret.CreateFromSecureFile(
     AuthPrivKey, AuthPassword, AuthPasswordRounds);
   try
     auth.SaveToSecureFile(SavePassword, '.', 64, SavePasswordRounds);
@@ -266,13 +266,13 @@ begin
   end;
 end;
 
-function ECCCommandSignFile(const FileToSign, AuthPrivKey: TFileName;
+function EccCommandSignFile(const FileToSign, AuthPrivKey: TFileName;
   const AuthPassword: RawUtf8; AuthPasswordRounds: integer;
   const MetaNameValuePairs: array of const): TFileName;
 var
-  auth: TECCCertificateSecret;
+  auth: TEccCertificateSecret;
 begin
-  auth := TECCCertificateSecret.CreateFromSecureFile(
+  auth := TEccCertificateSecret.CreateFromSecureFile(
     AuthPrivKey, AuthPassword, AuthPasswordRounds);
   try
     result := auth.SignFile(FileToSign, MetaNameValuePairs);
@@ -281,13 +281,13 @@ begin
   end;
 end;
 
-function ECCCommandSourceFile(const AuthPrivKey: TFileName;
+function EccCommandSourceFile(const AuthPrivKey: TFileName;
   const AuthPassword: RawUtf8; AuthPasswordRounds: integer;
   const ConstName, Comment, PassWord: RawUtf8): TFileName;
 var
-  auth: TECCCertificateSecret;
+  auth: TEccCertificateSecret;
 begin
-  auth := TECCCertificateSecret.CreateFromSecureFile(
+  auth := TEccCertificateSecret.CreateFromSecureFile(
     AuthPrivKey, AuthPassword, AuthPasswordRounds);
   try
     result := AuthPrivKey + '.inc';
@@ -297,24 +297,24 @@ begin
   end;
 end;
 
-function ECCCommandVerifyFile(const FileToVerify, AuthPubKey: TFileName;
-  const AuthBase64: RawUtf8): TECCValidity;
+function EccCommandVerifyFile(const FileToVerify, AuthPubKey: TFileName;
+  const AuthBase64: RawUtf8): TEccValidity;
 var
   content: RawByteString;
-  auth: TECCCertificate;
-  cert: TECCSignatureCertified;
+  auth: TEccCertificate;
+  cert: TEccSignatureCertified;
 begin
   content := StringFromFile(FileToVerify);
   if content = '' then
     raise EECCException.CreateUtf8('File not found: %', [FileToVerify]);
-  cert := TECCSignatureCertified.CreateFromFile(FileToVerify);
+  cert := TEccSignatureCertified.CreateFromFile(FileToVerify);
   try
     if not cert.Check then
     begin
       result := ecvInvalidSignature;
       exit;
     end;
-    auth := TECCCertificate.Create;
+    auth := TEccCertificate.Create;
     try
       if auth.FromAuth(AuthPubKey, AuthBase64, cert.AuthoritySerial) then
         result := cert.Verify(auth, pointer(content), length(content))
@@ -328,19 +328,19 @@ begin
   end;
 end;
 
-function ECCCommandVerifyDecryptedFile(const FileToVerify: TFileName;
-  const Signature: TECCSignatureCertifiedContent): TECCValidity;
+function EccCommandVerifyDecryptedFile(const FileToVerify: TFileName;
+  const Signature: TEccSignatureCertifiedContent): TEccValidity;
 var
   content: RawByteString;
-  auth: TECCCertificate;
-  cert: TECCSignatureCertified;
+  auth: TEccCertificate;
+  cert: TEccSignatureCertified;
 begin
   content := StringFromFile(FileToVerify);
   if content = '' then
     raise EECCException.CreateUtf8('File not found: %', [FileToVerify]);
-  cert := TECCSignatureCertified.CreateFrom(Signature);
+  cert := TEccSignatureCertified.CreateFrom(Signature);
   try
-    auth := TECCCertificate.Create;
+    auth := TEccCertificate.Create;
     try
       result := ecvUnknownAuthority;
       if auth.FromAuth('', '', cert.AuthoritySerial) then
@@ -353,18 +353,18 @@ begin
   end;
 end;
 
-procedure ECCCommandCryptFile(
+procedure EccCommandCryptFile(
   const FileToCrypt, DestFile, AuthPubKey: TFileName;
   const AuthBase64, AuthSerial, Password: RawUtf8; PasswordRounds: integer;
-  Algo: TECIESAlgo);
+  Algo: TEciesAlgo);
 var
   content: RawByteString;
-  auth: TECCCertificate;
+  auth: TEccCertificate;
 begin
   content := StringFromFile(FileToCrypt);
   if content = '' then
     raise EECCException.CreateUtf8('File not found: %', [FileToCrypt]);
-  auth := TECCCertificate.Create;
+  auth := TEccCertificate.Create;
   try
     if not auth.FromAuth(AuthPubKey, AuthBase64, AuthSerial) then
       raise EECCException.Create('No public key');
@@ -377,27 +377,27 @@ begin
   end;
 end;
 
-function ECCCommandDecryptFile(
+function EccCommandDecryptFile(
   const FileToDecrypt, DestFile, AuthPrivKey: TFileName;
   const AuthPassword: RawUtf8; AuthPasswordRounds: integer;
   const DecryptPassword: RawUtf8; DecryptPasswordRounds: integer;
-  Signature: PECCSignatureCertifiedContent; MetaData: PRawJson): TECCDecrypt;
+  Signature: PEccSignatureCertifiedContent; MetaData: PRawJson): TEccDecrypt;
 var
-  auth: TECCCertificateSecret;
-  head: TECIESHeader;
+  auth: TEccCertificateSecret;
+  head: TEciesHeader;
   priv: TFileName;
 begin
-  auth := TECCCertificateSecret.Create;
+  auth := TEccCertificateSecret.Create;
   try
     result := ecdNoPrivateKey;
     if FileExists(AuthPrivKey) then
       priv := AuthPrivKey
     else
     begin
-      if not ECIESHeaderFile(FileToDecrypt, head) then
+      if not EciesHeaderFile(FileToDecrypt, head) then
         exit;
-      priv := Utf8ToString(ECCText(head.recid));
-      if not ECCKeyFileFind(priv, true) then
+      priv := Utf8ToString(EccText(head.recid));
+      if not EccKeyFileFind(priv, true) then
         exit; // not found local .private from header
     end;
     if not auth.LoadFromSecureFile(priv, AuthPassword, AuthPasswordRounds) then
@@ -409,7 +409,7 @@ begin
   end;
 end;
 
-function ECCCommandChainCertificates(
+function EccCommandChainCertificates(
   const CertFiles: array of RawUtf8): TFileName;
 var
   n, i: PtrInt;
@@ -431,12 +431,12 @@ begin
     for i := 0 to n - 1 do
     begin
       files[i] := Utf8ToString(CertFiles[i]);
-      if not ECCKeyFileFind(files[i], false) then
+      if not EccKeyFileFind(files[i], false) then
         exit;
     end;
     result := format('chain%d' + ECCCERTIFICATES_FILEEXT, [UnixTimeUTC]);
   end;
-  with TECCCertificateChain.CreateFromFiles(files) do
+  with TEccCertificateChain.CreateFromFiles(files) do
   try
     if ValidateItems <> nil then
     begin
@@ -449,12 +449,12 @@ begin
   end;
 end;
 
-function ECCCommandInfoPrivFile(const AuthPrivKey: TFileName;
+function EccCommandInfoPrivFile(const AuthPrivKey: TFileName;
   const AuthPassword: RawUtf8; AuthPasswordRounds: integer): RawUtf8;
 var
-  auth: TECCCertificateSecret;
+  auth: TEccCertificateSecret;
 begin
-  auth := TECCCertificateSecret.CreateFromSecureFile(
+  auth := TEccCertificateSecret.CreateFromSecureFile(
     AuthPrivKey, AuthPassword, AuthPasswordRounds);
   try
     result := JsonReformat(VariantSaveJson(auth.ToVariant))
@@ -463,17 +463,17 @@ begin
   end;
 end;
 
-function ECCCommandCheatInit(const Issuer, CheatPassword: RawUtf8;
+function EccCommandCheatInit(const Issuer, CheatPassword: RawUtf8;
   CheatRounds: integer): TFileName;
 var
-  new: TECCCertificateSecret;
+  new: TEccCertificateSecret;
   priv: RawByteString;
 begin
   if FileExists(CHEAT_FILEMASTER + ECCCERTIFICATEPUBLIC_FILEEXT) or
      FileExists(CHEAT_FILEMASTER + ECCCERTIFICATESECRET_FILEEXT) then
     raise EECCException.Create(CHEAT_FILEMASTER + ' file already exist');
   // generate pair
-  new := TECCCertificateSecret.CreateNew(nil, Issuer);
+  new := TEccCertificateSecret.CreateNew(nil, Issuer);
   try
     // save private key as cheat.private password-protected binary file
     priv := new.SaveToSecureBinary(CheatPassword, 128, CheatRounds);
@@ -487,27 +487,27 @@ begin
   end;
 end;
 
-function ECCCommandCheat(const PrivateFile: TFileName;
+function EccCommandCheat(const PrivateFile: TFileName;
   const CheatPassword: RawUtf8; CheatRounds: integer;
   out authpass: RawUtf8; out authround: integer): RawUtf8;
 var
   bin, split, json: RawByteString;
-  master: TECCCertificateSecret;
+  master: TEccCertificateSecret;
   doc: TDocVariantData;
   fn: TFileName;
-  res: TECCDecrypt;
+  res: TEccDecrypt;
 begin
   fn := ChangeFileExt(PrivateFile, CHEAT_FILEEXT);
   bin := StringFromFile(fn);
   if bin = '' then
     raise EECCException.CreateUtf8('Unknown file %', [fn]);
-  master := TECCCertificateSecret.CreateFromSecureFile(
+  master := TEccCertificateSecret.CreateFromSecureFile(
     CHEAT_FILEMASTER, CheatPassword, CheatRounds);
   try
     res := master.Decrypt(bin, split);
     if res <> ecdDecrypted then
       raise EECCException.CreateUtf8('% on %', [ToText(res)^, fn]);
-    json := TAESPRNG.AFUnsplit(split, CHEAT_SPLIT);
+    json := TAesPrng.AFUnsplit(split, CHEAT_SPLIT);
     if json = '' then
       raise EECCException.CreateUtf8('Incorrect file %', [fn]);
     if not doc.InitJson(json) then
@@ -522,7 +522,7 @@ begin
   end;
 end;
 
-procedure AEADProcess(Encrypt: boolean; var Source: RawByteString;
+procedure AeadProcess(Encrypt: boolean; var Source: RawByteString;
   const DestFileName: TFileName;
   const Password, PasswordSalt: RawUtf8; PasswordRounds: integer);
 var
@@ -533,11 +533,11 @@ begin
     PBKDF2_HMAC_SHA256(
       Password, PasswordSalt, PasswordRounds, aeskey, 'salt');
     try
-      dst := TAESCFBCRC.MACEncrypt(Source, aeskey, Encrypt);
+      dst := TAesCfbCrc.MacEncrypt(Source, aeskey, Encrypt);
       try
         if dst = '' then
           raise EECCException.CreateUtf8(
-            'MACEncrypt failed for %', [DestFileName]);
+            'MacEncrypt failed for %', [DestFileName]);
         if not FileFromString(dst, DestFileName) then
           raise EECCException.CreateUtf8(
             'FileFromString failed for %', [DestFileName]);
@@ -552,7 +552,7 @@ begin
   end;
 end;
 
-procedure AEADCommandCryptFile(const FileToCrypt, DestFile: TFileName;
+procedure AeadCommandCryptFile(const FileToCrypt, DestFile: TFileName;
   const Password, PasswordSalt: RawUtf8; PasswordRounds: integer);
 var
   plain: RawByteString;
@@ -565,11 +565,11 @@ begin
     dest := FileToCrypt + AEAD_FILEEXT
   else
     dest := DestFile;
-  AEADProcess({encrypt=}true,
+  AeadProcess({encrypt=}true,
     plain, dest, Password, PasswordSalt, PasswordRounds);
 end;
 
-procedure AEADCommandDecryptFile(const FileToDecrypt, DestFile: TFileName;
+procedure AeadCommandDecryptFile(const FileToDecrypt, DestFile: TFileName;
   const Password, PasswordSalt: RawUtf8; PasswordRounds: integer);
 var
   encrypted: RawByteString;
@@ -582,7 +582,7 @@ begin
     dest := GetFileNameWithoutExt(FileToDecrypt)
   else
     dest := DestFile;
-  AEADProcess({encrypt=}false,
+  AeadProcess({encrypt=}false,
     encrypted, dest, Password, PasswordSalt, PasswordRounds);
 end;
 
@@ -590,15 +590,15 @@ end;
 
 { **************** High-Level Command-Line Process }
 
-function ECCCommand(cmd: TECCCommand; const sw: ICommandLine): TECCCommandError;
+function EccCommand(cmd: TEccCommand; const sw: ICommandLine): TEccCommandError;
 
-  procedure WriteVerif(verif: TECCValidity; const filename: TFileName;
+  procedure WriteVerif(verif: TEccValidity; const filename: TFileName;
     const sw: ICommandLine);
   var
     res: string;
   begin
     res := SysUtils.LowerCase(
-      GetCaptionFromEnum(TypeInfo(TECCValidity), ord(verif)));
+      GetCaptionFromEnum(TypeInfo(TEccValidity), ord(verif)));
     if verif in ECC_VALIDSIGN then
       sw.Text(' % file verified as %.', [filename, res], ccLightGreen)
     else
@@ -612,7 +612,7 @@ function ECCCommand(cmd: TECCCommand; const sw: ICommandLine): TECCCommandError;
   procedure WritePassword(const privfile: TFileName;
     const pass: RawUtf8; rounds: integer);
   var
-    a: TECDHEAuth;
+    a: TEcdheAuth;
     privkey: RawUtf8;
   begin
     if privfile = '' then
@@ -623,7 +623,7 @@ function ECCCommand(cmd: TECCCommand; const sw: ICommandLine): TECCCommandError;
     privkey := StringToUtf8(copy(GetFileNameWithoutExt(privfile), 1, 8));
     for a := low(a) to high(a) do
       sw.Text(' % %', [ToText(a)^,
-        TECDHEProtocol.FromKeyCompute(privkey, pass, rounds, '', a)],
+        TEcdheProtocol.FromKeyCompute(privkey, pass, rounds, '', a)],
         ccLightBlue);
     sw.Text('', []);
   end;
@@ -635,13 +635,13 @@ var
   authrounds, days, saverounds, splitfiles: integer;
   msg: string;
   origfile, auth, newfile, jsonfile: TFileName;
-  algo: TECIESAlgo;
-  decrypt: TECCDecrypt;
-  decryptsign: TECCSignatureCertifiedContent;
+  algo: TEciesAlgo;
+  decrypt: TEccDecrypt;
+  decryptsign: TEccSignatureCertifiedContent;
 begin
   result := eccSuccess;
   if sw = nil then
-    raise EECCException.Create('ECCCommand(nil)');
+    raise EECCException.Create('EccCommand(nil)');
   try
     try
       case cmd of
@@ -652,7 +652,7 @@ begin
                 'Enter the first chars of the .private file name of the signing authority.'#13#10 +
                 'Will create a self-signed certificate if left void.');
             until (auth = '') or
-                  ECCKeyFileFind(auth, true) or
+                  EccKeyFileFind(auth, true) or
                   sw.NoPrompt;
             if auth <> '' then
             begin
@@ -674,7 +674,7 @@ begin
             else
               days := sw.AsInt('Days', 365, 'Enter the number of days of its validity.');
             repeat
-              savepass := sw.AsUtf8('NewPass', TAESPRNG.Main.RandomPassword(12),
+              savepass := sw.AsUtf8('NewPass', TAesPrng.Main.RandomPassword(12),
                 'Enter a private PassPhrase for the new key (at least 8 chars long).'#13#10 +
                 'Save this in a safe place: if you forget it, the key will be useless!');
             until (length(savepass) >= 8) or
@@ -705,7 +705,7 @@ begin
             repeat
               auth := sw.AsString('Auth', '',
                 'Enter the first chars of the .private certificate file name.');
-            until ECCKeyFileFind(auth, true) or
+            until EccKeyFileFind(auth, true) or
                   sw.NoPrompt;
             sw.Text('Will use: %'#13#10, [ExtractFileName(auth)]);
             authpass := sw.AsUtf8('AuthPass', '',
@@ -713,7 +713,7 @@ begin
             authrounds := sw.AsInt('AuthRounds', DEFAULT_ECCROUNDS,
               'Enter the PassPhrase iteration rounds of this .private file.');
             repeat
-              savepass := sw.AsUtf8('NewPass', TAESPRNG.Main.RandomPassword(12),
+              savepass := sw.AsUtf8('NewPass', TAesPrng.Main.RandomPassword(12),
                 'Enter a NEW private PassPhrase for the key (at least 8 chars long).'#13#10 +
                 'Save this in a safe place: if you forget it, the key will be useless!');
             until (length(savepass) >= 8) or
@@ -740,7 +740,7 @@ begin
             repeat
               auth := sw.AsString('Auth', '',
                 'Enter the first chars of the .private file name of the signing authority.');
-            until ECCKeyFileFind(auth, true) or
+            until EccKeyFileFind(auth, true) or
                   sw.NoPrompt;
             sw.Text('Will use: %'#13#10, [ExtractFileName(auth)]);
             authpass := sw.AsUtf8('Pass', '',
@@ -758,7 +758,7 @@ begin
             until sw.NoPrompt or
                   (FileExists(origfile) and
                    FileExists(origfile + ECCCERTIFICATESIGN_FILEEXT));
-            WriteVerif(ECCCommandVerifyFile(
+            WriteVerif(EccCommandVerifyFile(
               origfile, sw.AsString('auth', '', ''), ''), origfile, sw);
           end;
         ecSource:
@@ -766,7 +766,7 @@ begin
             repeat
               auth := sw.AsString('Auth', '',
                 'Enter the first chars of the .private certificate file name.');
-            until ECCKeyFileFind(auth, true) or
+            until EccKeyFileFind(auth, true) or
                   sw.NoPrompt;
             sw.Text('Will use: %'#13#10, [ExtractFileName(auth)]);
             authpass := sw.AsUtf8('Pass', '',
@@ -778,14 +778,14 @@ begin
             comment := sw.AsUtf8('Comment', '',
               'Enter some optional comment to identify this private key.');
             newfile := EccCommandSourceFile(auth, authpass, authrounds,
-              constname, comment, TAESPRNG.Main.RandomPassword(24));
+              constname, comment, TAesPrng.Main.RandomPassword(24));
           end;
         ecInfoPriv:
           begin
             repeat
               auth := sw.AsString('Auth', '',
                 'Enter the first chars of the .private certificate file name.');
-            until ECCKeyFileFind(auth, true) or
+            until EccKeyFileFind(auth, true) or
                   sw.NoPrompt;
             if not sw.NoPrompt then
               sw.Text('Will use: %'#13#10, [ExtractFileName(auth)]);
@@ -793,7 +793,7 @@ begin
               'Enter the PassPhrase of this .private file.');
             authrounds := sw.AsInt('Rounds', DEFAULT_ECCROUNDS,
               'Enter the PassPhrase iteration rounds of this .private file.');
-            json := ECCCommandInfoPrivFile(auth, authpass, authrounds);
+            json := EccCommandInfoPrivFile(auth, authpass, authrounds);
             sw.Text('%', [json]);
             jsonfile := sw.AsString('Json', '', '');
             if jsonfile <> '' then
@@ -802,9 +802,9 @@ begin
               WritePassword(auth, authpass, authrounds);
           end;
         ecChain:
-          newfile := ECCCommandChainCertificates(sw.AsArray);
+          newfile := EccCommandChainCertificates(sw.AsArray);
         ecChainAll:
-          newfile := ECCCommandChainCertificates(['*']);
+          newfile := EccCommandChainCertificates(['*']);
         ecCrypt:
           begin
             repeat
@@ -821,15 +821,15 @@ begin
             repeat
               auth := sw.AsString('Auth', '',
                 'Enter the first chars of the .public file name of the encryption authority.');
-            until ECCKeyFileFind(auth, false) or
+            until EccKeyFileFind(auth, false) or
                   sw.NoPrompt;
             sw.Text('Will use: %'#13#10, [ExtractFileName(auth)]);
             authpass := sw.AsUtf8('SaltPass', 'salt',
               'Enter the optional PassPhrase to be used for encryption.');
             authrounds := sw.AsInt('SaltRounds', DEFAULT_ECCROUNDS,
               'Enter the PassPhrase iteration rounds.');
-            algo := TECIESAlgo(sw.AsEnum('Algo', '0', TypeInfo(TECIESAlgo), ''));
-            ECCCommandCryptFile(
+            algo := TEciesAlgo(sw.AsEnum('Algo', '0', TypeInfo(TEciesAlgo), ''));
+            EccCommandCryptFile(
               origfile, newfile, auth, '', '', authpass, authrounds, algo);
           end;
         ecInfoCrypt:
@@ -840,7 +840,7 @@ begin
             until FileExists(origfile) or
                   sw.NoPrompt;
             newfile := sw.AsString('RawFile', '', '');
-            json := JsonReformat(ECIESHeaderText(origfile, newfile));
+            json := JsonReformat(EciesHeaderText(origfile, newfile));
             sw.Text('%', [json]);
             jsonfile := sw.AsString('Json', '', '');
             if jsonfile <> '' then
@@ -867,15 +867,15 @@ begin
               'Enter the optional PassPhrase to be used for decryption.');
             saverounds := sw.AsInt('SaltRounds', DEFAULT_ECCROUNDS,
               'Enter the PassPhrase iteration rounds.');
-            decrypt := ECCCommandDecryptFile(origfile, newfile,
+            decrypt := EccCommandDecryptFile(origfile, newfile,
               sw.AsString('Auth', '', ''), authpass, authrounds,
               savepass, saverounds, @decryptsign, @meta);
             msg := SysUtils.LowerCase(
-              GetCaptionFromEnum(TypeInfo(TECCDecrypt), ord(decrypt)));
+              GetCaptionFromEnum(TypeInfo(TEccDecrypt), ord(decrypt)));
             if decrypt in ECC_VALIDDECRYPT then
             begin
               if decrypt = ecdDecryptedWithSignature then
-                WriteVerif(ECCCommandVerifyDecryptedFile(
+                WriteVerif(EccCommandVerifyDecryptedFile(
                   newfile, decryptsign), newfile, sw);
               if meta <> '' then
                 sw.Text(' % file meta = %', [origfile, meta], ccGreen);
@@ -907,7 +907,7 @@ begin
               'Enter the optional PassPhrase to be used for encryption.');
             authrounds := sw.AsInt('Rounds', DEFAULT_AEADROUNDS,
               'Enter the PassPhrase iteration rounds.');
-            AEADCommandCryptFile(origfile, newfile, authpass, savepass, authrounds);
+            AeadCommandCryptFile(origfile, newfile, authpass, savepass, authrounds);
           end;
         ecAeadDecrypt:
           begin
@@ -928,7 +928,7 @@ begin
               'Enter the optional PassPhrase to be used for decryption.');
             authrounds := sw.AsInt('Rounds', DEFAULT_AEADROUNDS,
               'Enter the PassPhrase iteration rounds.');
-            AEADCommandDecryptFile(
+            AeadCommandDecryptFile(
               origfile, newfile, authpass, savepass, authrounds);
             sw.Text(' % file decrypted.', [origfile], ccLightGreen);
           end;
@@ -938,7 +938,7 @@ begin
               'Enter Issuer identifier text of the master cheat keys.'#13#10 +
               'Will be truncated to 15-20 ascii-7 chars.');
             repeat
-              savepass := sw.AsUtf8('NewPass', TAESPRNG.Main.RandomPassword(12),
+              savepass := sw.AsUtf8('NewPass', TAesPrng.Main.RandomPassword(12),
                 'Enter a private PassPhrase for the master cheat.private key (at least 8 chars).'#13#10 +
                 'Save this in a safe place: if you forget it, the key will be useless!');
             until (length(savepass) >= 8) or
@@ -948,7 +948,7 @@ begin
                 'Enter iteration rounds for the mastercheat.private key (at least 100000).');
             until (saverounds >= CHEAT_ROUNDS) or
                   sw.NoPrompt;
-            newfile := ECCCommandCheatInit(issuer, savepass, saverounds);
+            newfile := EccCommandCheatInit(issuer, savepass, saverounds);
             if newfile <> '' then
               newfile := newfile + '/.private';
           end;
@@ -957,7 +957,7 @@ begin
             repeat
               auth := sw.AsString('Auth', '',
                 'Enter the first chars of the .private certificate file name.');
-            until ECCKeyFileFind(auth, true) or
+            until EccKeyFileFind(auth, true) or
                   sw.NoPrompt;
             if not sw.NoPrompt then
               sw.Text('Will use: %'#13#10, [ExtractFileName(auth)]);
@@ -965,7 +965,7 @@ begin
               'Enter the PassPhrase of the master cheat.private file.');
             saverounds := sw.AsInt('AuthRounds', CHEAT_ROUNDS,
               'Enter the PassPhrase iteration rounds of the cheat.private file.');
-            sw.Text('%', [ECCCommandCheat(
+            sw.Text('%', [EccCommandCheat(
               auth, savepass, saverounds, authpass, authrounds)]);
             if not sw.NoPrompt then
               WritePassword(auth, authpass, authrounds);

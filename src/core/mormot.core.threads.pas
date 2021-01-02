@@ -123,7 +123,7 @@ type
   /// idle method called by TSynBackgroundThreadAbstract in the caller thread
   // during remote blocking process in a background thread
   // - typical use is to run Application.ProcessMessages, e.g. for
-  // TRestClientURI.URI() to provide a responsive UI even in case of slow
+  // TRestClientUri.URI() to provide a responsive UI even in case of slow
   // blocking remote access
   // - provide the time elapsed (in milliseconds) from the request start (can be
   // used e.g. to popup a temporary message to wait)
@@ -217,7 +217,7 @@ type
   /// abstract TThread able to run a method in its own execution content
   // - typical use is a background thread for processing data or remote access,
   // while the UI will be still responsive by running OnIdle event in loop: see
-  // e.g. how TRestClientURI.OnIdle handle this in mormot.rest.client.pas unit
+  // e.g. how TRestClientUri.OnIdle handle this in mormot.rest.client.pas unit
   // - you should not use this class directly, but inherit from it and override
   // the Process method, or use either TSynBackgroundThreadEvent /
   // TSynBackgroundThreadMethod and provide a much more convenient callback

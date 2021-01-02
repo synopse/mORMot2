@@ -345,14 +345,14 @@ type
     /// initialize the JWT processing using SHA3 algorithm
     // - the supplied set of claims are expected to be defined in the JWT payload
     // - the supplied secret text will be used to compute the digital signature,
-    // directly if aSecretPBKDF2Rounds=0, or via PBKDF2 iterative key derivation
+    // directly if aSecretPbkdf2Round=0, or via PBKDF2 iterative key derivation
     // if some number of rounds were specified
     // - aAudience are the allowed values for the jrcAudience claim
     // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
     // - aIDIdentifier and aIDObfuscationKey are passed to a
     // TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
-    // - optionally return the PBKDF2 derivated key for aSecretPBKDF2Rounds>0
-    constructor Create(const aSecret: RawUtf8; aSecretPBKDF2Rounds: integer;
+    // - optionally return the PBKDF2 derivated key for aSecretPbkdf2Round>0
+    constructor Create(const aSecret: RawUtf8; aSecretPbkdf2Round: integer;
       aClaims: TJWTClaims; const aAudience: array of RawUtf8;
       aExpirationMinutes: integer = 0; aIDIdentifier: TSynUniqueIdentifierProcess = 0;
       aIDObfuscationKey: RawUtf8 = ''; aPBKDF2Secret: PHash512Rec = nil); reintroduce;
@@ -487,7 +487,7 @@ type
   // takes 2.5 ms, but only 0.3 ms on x64) you may enable CacheTimeoutSeconds
   TJWTES256 = class(TJWTAbstract)
   protected
-    fCertificate: TECCCertificate;
+    fCertificate: TEccCertificate;
     fOwnCertificate: boolean;
     function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
     procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
@@ -495,25 +495,25 @@ type
   public
     /// initialize the JWT processing instance using ECDSA P-256 algorithm
     // - the supplied set of claims are expected to be defined in the JWT payload
-    // - the supplied ECC certificate should be a TECCCertificate storing the
-    // public key needed for Verify(), or a TECCCertificateSecret storing also
+    // - the supplied ECC certificate should be a TEccCertificate storing the
+    // public key needed for Verify(), or a TEccCertificateSecret storing also
     // the private key required by Compute()
     // - aCertificate is owned by this instance if property OwnCertificate is true
     // - aAudience are the allowed values for the jrcAudience claim
     // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
     // - aIDIdentifier and aIDObfuscationKey are passed to a
     // TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
-    constructor Create(aCertificate: TECCCertificate; aClaims: TJWTClaims;
+    constructor Create(aCertificate: TEccCertificate; aClaims: TJWTClaims;
       const aAudience: array of RawUtf8; aExpirationMinutes: integer = 0;
       aIDIdentifier: TSynUniqueIdentifierProcess = 0;
       aIDObfuscationKey: RawUtf8 = ''); reintroduce;
     /// finalize the instance
     destructor Destroy; override;
-    /// access to the associated TECCCertificate instance
-    // - which may be a TECCCertificateSecret for Compute() private key
-    property Certificate: TECCCertificate
+    /// access to the associated TEccCertificate instance
+    // - which may be a TEccCertificateSecret for Compute() private key
+    property Certificate: TEccCertificate
       read fCertificate;
-    /// if the associated TECCCertificate is to be owned by this instance
+    /// if the associated TEccCertificate is to be owned by this instance
     property OwnCertificate: boolean
       read fOwnCertificate write fOwnCertificate;
   end;
@@ -1052,7 +1052,7 @@ end;
 { TJWTSynSignerAbstract }
 
 constructor TJWTSynSignerAbstract.Create(const aSecret: RawUtf8;
-  aSecretPBKDF2Rounds: integer; aClaims: TJWTClaims;
+  aSecretPbkdf2Round: integer; aClaims: TJWTClaims;
   const aAudience: array of RawUtf8; aExpirationMinutes: integer;
   aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8;
   aPBKDF2Secret: PHash512Rec);
@@ -1063,8 +1063,8 @@ begin
   inherited Create(JWT_TEXT[algo], aClaims, aAudience, aExpirationMinutes,
     aIDIdentifier, aIDObfuscationKey);
   if (aSecret <> '') and
-     (aSecretPBKDF2Rounds > 0) then
-    fSignPrepared.Init(algo, aSecret, fHeaderB64, aSecretPBKDF2Rounds, aPBKDF2Secret)
+     (aSecretPbkdf2Round > 0) then
+    fSignPrepared.Init(algo, aSecret, fHeaderB64, aSecretPbkdf2Round, aPBKDF2Secret)
   else
     fSignPrepared.Init(algo, aSecret);
 end;
@@ -1176,7 +1176,7 @@ end;
 
 { TJWTES256 }
 
-constructor TJWTES256.Create(aCertificate: TECCCertificate; aClaims: TJWTClaims;
+constructor TJWTES256.Create(aCertificate: TEccCertificate; aClaims: TJWTClaims;
   const aAudience: array of RawUtf8; aExpirationMinutes: integer;
   aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8);
 begin
@@ -1197,29 +1197,29 @@ end;
 procedure TJWTES256.CheckSignature(const headpayload: RawUtf8;
   const signature: RawByteString; var JWT: TJWTContent);
 var
-  sha: TSHA256;
-  hash: TSHA256Digest;
+  sha: TSha256;
+  hash: TSha256Digest;
 begin
   JWT.result := jwtInvalidSignature;
-  if length(signature) <> sizeof(TECCSignature) then
+  if length(signature) <> sizeof(TEccSignature) then
     exit;
   sha.Full(pointer(headpayload), length(headpayload), hash);
-  if ecdsa_verify(fCertificate.Content.Signed.PublicKey, hash, PECCSignature(signature)^) then
+  if ecdsa_verify(fCertificate.Content.Signed.PublicKey, hash, PEccSignature(signature)^) then
     JWT.result := jwtValid;
 end;
 
 function TJWTES256.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
 var
-  sha: TSHA256;
-  hash: TSHA256Digest;
-  sign: TECCSignature;
+  sha: TSha256;
+  hash: TSha256Digest;
+  sign: TEccSignature;
 begin
-  if not fCertificate.InheritsFrom(TECCCertificateSecret) or
-     not TECCCertificateSecret(fCertificate).HasSecret then
+  if not fCertificate.InheritsFrom(TEccCertificateSecret) or
+     not TEccCertificateSecret(fCertificate).HasSecret then
     raise EECCException.CreateUtf8('%.ComputeSignature expects % (%) to hold ' +
       'a private key', [self, fCertificate, fCertificate.Serial]);
   sha.Full(pointer(headpayload), length(headpayload), hash);
-  if not ecdsa_sign(TECCCertificateSecret(fCertificate).PrivateKey, hash, sign) then
+  if not ecdsa_sign(TEccCertificateSecret(fCertificate).PrivateKey, hash, sign) then
     raise EECCException.CreateUtf8('%.ComputeSignature: ecdsa_sign?', [self]);
   result := BinToBase64URI(@sign, sizeof(sign));
 end;

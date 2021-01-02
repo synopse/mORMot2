@@ -198,7 +198,7 @@ type
   /// internal per-method list of execution context as hold in TServiceFactory
   TServiceFactoryExecution = record
     /// the list of denied TAuthGroup ID(s)
-    // - used on server side within TRestServerURIContext.ExecuteSOAByInterface
+    // - used on server side within TRestServerUriContext.ExecuteSOAByInterface
     // - bit 0 for client TAuthGroup.ID=1 and so on...
     // - is therefore able to store IDs up to 256 (maximum bit of 255 is a
     // limitation of the pascal compiler itself)
@@ -227,11 +227,11 @@ type
   // communicating via JSON on a client
   // - TRestServer will have to register an interface implementation as:
   // ! Server.ServiceRegister(TServiceCalculator,[TypeInfo(ICalculator)],sicShared);
-  // - TRestClientURI will have to register an interface remote access as:
+  // - TRestClientUri will have to register an interface remote access as:
   // ! Client.ServiceRegister([TypeInfo(ICalculator)],sicShared));
   // note that the implementation (TServiceCalculator) remain on the server side
   // only: the client only needs the ICalculator interface
-  // - then TRestServer and TRestClientURI will both have access to the
+  // - then TRestServer and TRestClientUri will both have access to the
   // service, via their Services property, e.g. as:
   // !var I: ICalculator;
   // !...
@@ -244,7 +244,7 @@ type
   protected
     fInterface: TInterfaceFactory;
     fInterfaceURI: RawUtf8;
-    fInterfaceMangledURI: RawUtf8;
+    fInterfaceMangledUri: RawUtf8;
     fInstanceCreation: TServiceInstanceImplementation;
     fOrm: IRestOrm;
     fSharedInstance: TInterfacedObject;
@@ -344,8 +344,8 @@ type
     // - in fact this is encoding the GUID using BinToBase64URI(), e.g.
     // ! ['{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}'] into '00amyWGct0y_ze4lIsj2Mw'
     // - can be substituted to the clear InterfaceURI name
-    property InterfaceMangledURI: RawUtf8
-      read fInterfaceMangledURI;
+    property InterfaceMangledUri: RawUtf8
+      read fInterfaceMangledUri;
     /// how each class instance is to be created
     // - only relevant on the server side; on the client side, this class will
     // be accessed only to retrieve a remote access instance, i.e. sicSingle
@@ -525,14 +525,14 @@ type
     // - Delphi clients (i.e. TServiceFactoryClient/TInterfacedObjectFake) will
     // transparently handle both formats
     // - this value can be overridden by setting ForceServiceResultAsJsonObject
-    // for a given TRestServerURIContext (e.g. for server-side JavaScript work)
+    // for a given TRestServerUriContext (e.g. for server-side JavaScript work)
     property ResultAsJsonObject: boolean
       read fResultAsJsonObject write fResultAsJsonObject;
     /// set to TRUE to return the interface's methods result as JSON object
     // with no '{"result":{...}}' nesting
     // - could be used e.g. for plain non mORMot REST Client with in sicSingle
     // or sicShared mode kind of services
-    // - on client side, consider using TRestClientURI.ServiceDefineSharedAPI
+    // - on client side, consider using TRestClientUri.ServiceDefineSharedAPI
     property ResultAsJsonObjectWithoutResult: boolean
       read fResultAsJsonObjectWithoutResult write fResultAsJsonObjectWithoutResult;
     /// set to TRUE to return the interface's methods result as XML object
@@ -544,7 +544,7 @@ type
     // - Delphi clients (i.e. TServiceFactoryClient/TInterfacedObjectFake) does
     // NOT handle this XML format yet
     // - this value can be overridden by setting ForceServiceResultAsXMLObject
-    // for a given TRestServerURIContext instance
+    // for a given TRestServerUriContext instance
     property ResultAsXMLObject: boolean
       read fResultAsXMLObject write fResultAsXMLObject;
     /// set to TRUE to return XML objects for the interface's methods result
@@ -552,7 +552,7 @@ type
     // - the header should be exactly 'Accept: application/xml' or
     // 'Accept: text/xml' (and no other value)
     // - in this case, ForceServiceResultAsXMLObject will be set for this
-    // particular TRestServerURIContext instance, and result returned as XML
+    // particular TRestServerUriContext instance, and result returned as XML
     // - using this method allows to mix standard JSON requests (from JSON
     // or AJAX clients) and XML requests (from XML-only clients)
     property ResultAsXMLObjectIfAcceptOnlyXML: boolean
@@ -625,8 +625,8 @@ type
     // list of service.method ['Calculator.Add','Calculator.Multiply',...]
     fInterfaceMethod: TServiceContainerInterfaceMethods;
     fInterfaceMethods: TDynArrayHashed;
-    fExpectMangledURI: boolean;
-    procedure SetExpectMangledURI(aValue: boolean);
+    fExpectMangledUri: boolean;
+    procedure SetExpectMangledUri(aValue: boolean);
     procedure SetInterfaceMethodBits(MethodNamesCsv: PUtf8Char;
       IncludePseudoMethods: boolean; out bits: TServiceContainerInterfaceMethodBits);
     function GetMethodName(ListInterfaceMethodIndex: integer): RawUtf8;
@@ -690,7 +690,7 @@ type
     function AsJson: RawJson;
     /// retrieve a service provider from its URI
     // - it expects the supplied URI variable  to be e.g. '00amyWGct0y_ze4lIsj2Mw'
-    // or 'Calculator', depending on the ExpectMangledURI property
+    // or 'Calculator', depending on the ExpectMangledUri property
     // - on match, it  will return the service the corresponding interface factory
     // - returns nil if the URI does not match any registered interface
     property Services[const aURI: RawUtf8]: TServiceFactory
@@ -713,8 +713,8 @@ type
     // the URI level (e.g. 'Calculator')
     // - if this property is set to TRUE, the mangled URI value will be expected
     // instead (may enhance security) - e.g. '00amyWGct0y_ze4lIsj2Mw'
-    property ExpectMangledURI: boolean
-      read fExpectMangledURI write SetExpectMangledURI;
+    property ExpectMangledUri: boolean
+      read fExpectMangledUri write SetExpectMangledUri;
   end;
 
 
@@ -782,27 +782,27 @@ type
 { ***************** TServicesPublishedInterfacesList Services Catalog }
 
 type
-    /// a specialized UTF-8 string type, used for TRestServerURI storage
+    /// a specialized UTF-8 string type, used for TRestServerUri storage
   // - URI format is 'address:port/root', but port or root are optional
-  // - you could use TRestServerURI record to store and process it
-  TRestServerURIString = type RawUtf8;
+  // - you could use TRestServerUri record to store and process it
+  TRestServerUriString = type RawUtf8;
 
-  /// a list of UTF-8 strings, used for TRestServerURI storage
+  /// a list of UTF-8 strings, used for TRestServerUri storage
   // - URI format is 'address:port/root', but port or root are optional
-  // - you could use TRestServerURI record to store and process each item
-  TRestServerURIStringDynArray = array of TRestServerURIString;
+  // - you could use TRestServerUri record to store and process each item
+  TRestServerUriStringDynArray = array of TRestServerUriString;
 
-  /// used to access a TRestServer from its TRestServerURIString URI
+  /// used to access a TRestServer from its TRestServerUriString URI
   // - URI format is 'address:port/root', and may be transmitted as
-  // TRestServerURIString text instances
+  // TRestServerUriString text instances
   {$ifdef USERECORDWITHMETHODS}
-  TRestServerURI = record
+  TRestServerUri = record
   {$else}
-  TRestServerURI = object
+  TRestServerUri = object
   {$endif USERECORDWITHMETHODS}
   private
-    function GetURI: TRestServerURIString;
-    procedure SetURI(const Value: TRestServerURIString);
+    function GetURI: TRestServerUriString;
+    procedure SetURI(const Value: TRestServerUriString);
   public
     /// the TRestServer IP Address or DNS name
     Address: RawUtf8;
@@ -811,16 +811,16 @@ type
     /// the TRestServer model Root
     Root: RawUtf8;
     /// returns TRUE if all field values do match, case insensitively
-    function Equals(const other: TRestServerURI): boolean;
+    function Equals(const other: TRestServerUri): boolean;
     /// property which allows to read or set the Address/Port/Root fields as
-    // one UTF-8 text field (i.e. a TRestServerURIString instance)
+    // one UTF-8 text field (i.e. a TRestServerUriString instance)
     // - URI format is 'address:port/root', but port or root are optional
-    property URI: TRestServerURIString
+    property URI: TRestServerUriString
       read GetURI write SetURI;
   end;
 
   /// store a list of TRestServer URIs
-  TRestServerURIDynArray = array of TRestServerURI;
+  TRestServerUriDynArray = array of TRestServerUri;
 
   /// used to publish all Services supported by a TRestServer instance
   // - as expected by TRestServer.ServicesPublishedInterfaces
@@ -832,7 +832,7 @@ type
   {$endif USERECORDWITHMETHODS}
   public
     /// how this TRestServer could be accessed
-    PublicURI: TRestServerURI;
+    PublicURI: TRestServerUri;
     /// the list of supported services names
     // - in fact this is the Interface name without the initial 'I', e.g.
     // 'Calculator' for ICalculator
@@ -864,7 +864,7 @@ type
     // to refresh the list (e.g. from _contract_ HTTP body)
     constructor Create(aTimeoutMS: integer); reintroduce; virtual;
     /// add the JSON serialized TServicesPublishedInterfaces to the list
-    // - called by TRestServerURIContext.InternalExecuteSOAByInterface when
+    // - called by TRestServerUriContext.InternalExecuteSOAByInterface when
     // the client provides its own services as _contract_ HTTP body
     // - warning: supplied PublishedJson will be parsed in place, so modified
     procedure RegisterFromClientJSON(var PublishedJson: RawUtf8);
@@ -874,13 +874,13 @@ type
     // - warning: supplied PublishedJson will be parsed in place, so modified
     procedure RegisterFromServerJSON(var PublishedJson: RawUtf8);
     /// search for a public URI in the registration list
-    function FindURI(const aPublicURI: TRestServerURI): PtrInt;
+    function FindURI(const aPublicURI: TRestServerUri): PtrInt;
     /// search for the latest registrations of a service, by name
     // - will lookup for the Interface name without the initial 'I', e.g.
     // 'Calculator' for ICalculator - warning: research is case-sensitive
     // - if the service name has been registered several times, all
     // registration will be returned, the latest in first position
-    function FindService(const aServiceName: RawUtf8): TRestServerURIDynArray;
+    function FindService(const aServiceName: RawUtf8): TRestServerUriDynArray;
     /// return all services URI by name, from the registration list, as URIs
     // - will lookup for the Interface name without the initial 'I', e.g.
     // 'Calculator' for ICalculator - warning: research is case-sensitive
@@ -888,12 +888,12 @@ type
     // registration being the first to appear, e.g.
     // $ ["addresslast:port/root","addressprevious:port/root","addressfirst:port/root"]
     function FindServiceAll(
-      const aServiceName: RawUtf8): TRestServerURIStringDynArray; overload;
+      const aServiceName: RawUtf8): TRestServerUriStringDynArray; overload;
     /// return all services URI by name, from the registration list, as JSON
     // - will lookup for the Interface name without the initial 'I', e.g.
     // 'Calculator' for ICalculator - warning: research is case-sensitive
     // - the returned JSON array will contain all matching server URI, encoded as
-    // a TRestServerURI JSON array, the latest registration being
+    // a TRestServerUri JSON array, the latest registration being
     // the first to appear, e.g.
     // $ [{"Address":"addresslast","Port":"port","Root":"root"},...]
     // - if aServiceName='*', it will return ALL registration items, encoded as
@@ -1004,7 +1004,7 @@ begin
   inherited CreateWithResolver(aOwner, {raiseIfNotFound=}true);
   fInterface := TInterfaceFactory.Get(aInterface);
   fInstanceCreation := aInstanceCreation;
-  fInterfaceMangledURI := BinToBase64URI(@fInterface.InterfaceIID, SizeOf(TGUID));
+  fInterfaceMangledUri := BinToBase64URI(@fInterface.InterfaceIID, SizeOf(TGUID));
   fInterfaceURI := fInterface.InterfaceURI;
   if fOrm.Model.GetTableIndex(fInterfaceURI) >= 0 then
     raise EServiceException.CreateUtf8('%.Create: I% routing name is ' +
@@ -1334,8 +1334,8 @@ begin
     raise EServiceException.CreateUtf8(
       '%.AddServiceInternal(%)', [self, aService]);
   // add TServiceFactory to the internal list
-  if ExpectMangledURI then
-    aURI := aService.fInterfaceMangledURI
+  if ExpectMangledUri then
+    aURI := aService.fInterfaceMangledUri
   else
     aURI := aService.fInterfaceURI;
   PServiceContainerInterface(fInterfaces.AddUniqueName(aURI, @result))^.
@@ -1366,14 +1366,14 @@ begin
           raise EServiceException.CreateUtf8('%: % GUID already registered', [self, Name^]);
 end;
 
-procedure TServiceContainer.SetExpectMangledURI(aValue: boolean);
+procedure TServiceContainer.SetExpectMangledUri(aValue: boolean);
 var
   i: PtrInt;
   toregisteragain: TServiceContainerInterfaces;
 begin
-  if aValue = fExpectMangledURI then
+  if aValue = fExpectMangledUri then
     exit;
-  fExpectMangledURI := aValue;
+  fExpectMangledUri := aValue;
   toregisteragain := fInterface; // same services, but other URIs
   fInterface := nil;
   fInterfaces.InitSpecific(TypeInfo(TServiceContainerInterfaces),
@@ -1578,9 +1578,9 @@ end;
 
 { ***************** TServicesPublishedInterfacesList Services Catalog }
 
-{ TRestServerURI }
+{ TRestServerUri }
 
-function TRestServerURI.GetURI: TRestServerURIString;
+function TRestServerUri.GetURI: TRestServerUriString;
 begin
   result := Address;
   if Port <> '' then
@@ -1589,7 +1589,7 @@ begin
     result := result + '/' + root;
 end;
 
-procedure TRestServerURI.SetURI(const Value: TRestServerURIString);
+procedure TRestServerUri.SetURI(const Value: TRestServerUriString);
 begin
   Split(Value, ':', Address, Port);
   if Port <> '' then
@@ -1598,7 +1598,7 @@ begin
     Split(Address, '/', Address, root);
 end;
 
-function TRestServerURI.Equals(const other: TRestServerURI): boolean;
+function TRestServerUri.Equals(const other: TRestServerUri): boolean;
 begin
   result := IdemPropNameU(Address, other.Address) and
             IdemPropNameU(Port, other.Port) and
@@ -1617,7 +1617,7 @@ begin
 end;
 
 function TServicesPublishedInterfacesList.FindURI(
-  const aPublicURI: TRestServerURI): PtrInt;
+  const aPublicURI: TRestServerUri): PtrInt;
 var
   tix: Int64;
 begin
@@ -1636,7 +1636,7 @@ begin
 end;
 
 function TServicesPublishedInterfacesList.FindService(
-  const aServiceName: RawUtf8): TRestServerURIDynArray;
+  const aServiceName: RawUtf8): TRestServerUriDynArray;
 var
   i, n: PtrInt;
   tix: Int64;
@@ -1662,7 +1662,7 @@ begin
 end;
 
 function TServicesPublishedInterfacesList.FindServiceAll(
-  const aServiceName: RawUtf8): TRestServerURIStringDynArray;
+  const aServiceName: RawUtf8): TRestServerUriStringDynArray;
 var
   i: PtrInt;
   n: integer;
@@ -1707,14 +1707,14 @@ begin
         end;
     end
     else
-      // from SQLRestClientURI.ServiceRetrieveAssociated:
-      // search matching (and non deprecated) services as TRestServerURI
+      // from SQLRestClientUri.ServiceRetrieveAssociated:
+      // search matching (and non deprecated) services as TRestServerUri
       for i := Count - 1 downto 0 do        // downwards to return the latest first
         if FindPropName(List[i].Names, aServiceName) >= 0 then
           if (fTimeOut = 0) or
              (fTimeoutTix[i] < tix) then
           begin
-            aWriter.AddRecordJSON(@List[i].PublicURI, TypeInfo(TRestServerURI));
+            aWriter.AddRecordJSON(@List[i].PublicURI, TypeInfo(TRestServerUri));
             aWriter.Add(',');
           end;
     aWriter.CancelLastComma;
@@ -1726,7 +1726,7 @@ end;
 
 //TODO : to be implemented in mormot.soa.client
 {
-function TServicesPublishedInterfacesList.RegisterFromServer(Client: TRestClientURI): boolean;
+function TServicesPublishedInterfacesList.RegisterFromServer(Client: TRestClientUri): boolean;
 var json: RawUtf8;
 begin
   result := Client.CallBackGet('stat',['findservice','*'],json)=HTTP_SUCCESS;
@@ -1813,15 +1813,15 @@ end;
 
 const
   // text definitions, registered in unit's initialization block below
-  _TRestServerURI =
+  _TRestServerUri =
     'Address,Port,Root: RawUtf8';
   _TServicesPublishedInterfaces =
-    'PublicURI:TRestServerURI Names: array of RawUtf8';
+    'PublicURI:TRestServerUri Names: array of RawUtf8';
 
 procedure InitializeUnit;
 begin
   Rtti.RegisterFromText(
-    [TypeInfo(TRestServerURI), _TRestServerURI,
+    [TypeInfo(TRestServerUri), _TRestServerUri,
      TypeInfo(TServicesPublishedInterfaces), _TServicesPublishedInterfaces]);
 end;
 

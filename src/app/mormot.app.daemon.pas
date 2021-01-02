@@ -409,8 +409,8 @@ begin
         writeln(' ', fSettings.ServiceName,
           #13#10' Size: ', length(exe), ' bytes (', KB(exe), ')' +
           #13#10' Build date: ', ExeVersion.Version.BuildDateTimeString,
-          #13#10' MD5: ', MD5(exe),
-          #13#10' SHA256: ', SHA256(exe));
+          #13#10' MD5: ', Md5(exe),
+          #13#10' SHA256: ', Sha256(exe));
         if ExeVersion.Version.Version32 <> 0 then
           writeln(' Version: ', ExeVersion.Version.Detailed);
       end;

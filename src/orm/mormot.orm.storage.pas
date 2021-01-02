@@ -1297,7 +1297,7 @@ type
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUtf8): boolean; override;
     function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
       const FieldName: RawUtf8; Increment: Int64): boolean; override;
-    function InternalBatchStart(Method: TURIMethod;
+    function InternalBatchStart(Method: TUriMethod;
       BatchOptions: TRestBatchOptions): boolean; override;
     procedure InternalBatchStop; override;
   public
@@ -4671,7 +4671,7 @@ begin
   end;
 end;
 
-function TRestStorageShard.InternalBatchStart(Method: TURIMethod;
+function TRestStorageShard.InternalBatchStart(Method: TUriMethod;
   BatchOptions: TRestBatchOptions): boolean;
 begin
   result := false;

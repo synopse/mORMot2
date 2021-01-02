@@ -67,7 +67,7 @@ type
     constructor Create(const aName, aURI: RawUtf8;
        const aOnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame); overload;
     /// compute a new instance of the WebSockets protocol, with same parameters
-    function Clone(const aClientURI: RawUtf8): TWebSocketProtocol; override;
+    function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
     /// on the server side, allows to send a message over the wire to a
     // specified client connection
     // - a temporary copy of the Frame content will be made for safety
@@ -263,9 +263,9 @@ begin
   fOnIncomingFrame := aOnIncomingFrame;
 end;
 
-function TWebSocketProtocolChat.Clone(const aClientURI: RawUtf8): TWebSocketProtocol;
+function TWebSocketProtocolChat.Clone(const aClientUri: RawUtf8): TWebSocketProtocol;
 begin
-  result := TWebSocketProtocolChat.Create(fName, fURI);
+  result := TWebSocketProtocolChat.Create(fName, fUri);
   if fEncryption <> nil then
     TWebSocketProtocolChat(result).fEncryption := fEncryption.Clone;
   TWebSocketProtocolChat(result).OnIncomingFrame := OnIncomingFrame;
@@ -344,7 +344,7 @@ var
   uri, version, prot, subprot, key, extin, extout, header: RawUtf8;
   extins: TRawUtf8DynArray;
   P: PUtf8Char;
-  Digest: TSHA1Digest;
+  Digest: TSha1Digest;
 begin
   result := HTTP_BADREQUEST;
   try
@@ -368,7 +368,7 @@ begin
             (Protocol <> nil);
       if (Protocol <> nil) and
          (Protocol.URI = '') and
-         not Protocol.ProcessHandshakeURI(uri) then
+         not Protocol.ProcessHandshakeUri(uri) then
       begin
         Protocol.Free;
         result := HTTP_UNAUTHORIZED;
@@ -377,10 +377,10 @@ begin
     end
     else
       // if no protocol is specified, try to match by URI
-      Protocol := Protocols.CloneByURI(uri);
+      Protocol := Protocols.CloneByUri(uri);
     if Protocol = nil then
       exit;
-    Protocol.UpgradeURI := uri;
+    Protocol.UpgradeUri := uri;
     Protocol.RemoteIP := ClientSock.HeaderGetValue('SEC-WEBSOCKET-REMOTEIP');
     if Protocol.RemoteIP = '' then
       Protocol.RemoteIP := ClientSock.RemoteIP;

@@ -258,17 +258,17 @@ type
     // TRestServerCallBack prototype: but you have to check the class
     // at runtime: it can be called by another similar but invalid URL, like
     // ModelRoot/OtherTableName/ID/DataAsHex
-    procedure DataAsHex(Ctxt: TRestServerURIContext);
+    procedure DataAsHex(Ctxt: TRestServerUriContext);
     /// method used to test the Server-Side ModelRoot/Sum or
     // ModelRoot/People/Sum Requests with JSON process
     // - implementation of this method returns the sum of two floating-points,
     // named A and B, as in the public TOrmPeople.Sum() method,
     // which implements the Client-Side of this service
     // - Table nor ID are never used here
-    procedure Sum(Ctxt: TRestServerURIContext);
+    procedure Sum(Ctxt: TRestServerUriContext);
     /// method used to test the Server-Side ModelRoot/Sum or
     // ModelRoot/People/Sum Requests with variant process
-    procedure Sum2(Ctxt: TRestServerURIContext);
+    procedure Sum2(Ctxt: TRestServerUriContext);
   end;
 
 
@@ -682,7 +682,7 @@ procedure TestMasterSlaveRecordVersion(Test: TSynTestCase; const DBExt: TFileNam
 var
   Model: TOrmModel;
   Master, Slave1, Slave2: TRestServerDB;
-  MasterAccess: TRestClientURI;
+  MasterAccess: TRestClientUri;
   IDs: TIDDynArray;
   Rec: TOrmPeopleVersioned;
   Slave2Callback: IServiceRecordVersionCallback;
@@ -989,7 +989,7 @@ end;
 
 
 /// will be re-used by both TTestSQLite3Engine and TTestExternalDatabase
-procedure InternalTestMany(Test: TSynTestCase; aClient: TRestOrmClientURI);
+procedure InternalTestMany(Test: TSynTestCase; aClient: TRestOrmClientUri);
 var
   MS: TOrmASource;
   MD, MD2: TOrmADest;
@@ -1476,7 +1476,7 @@ var
     end;
   end;
 
-  procedure TestClientDist(ClientDist: TRestClientURI);
+  procedure TestClientDist(ClientDist: TRestClientUri);
   var
     i: integer;
     ids: array[0..3] of TID;
@@ -1488,7 +1488,7 @@ var
       TestDynArray(ClientDist);
       TestObject(ClientDist);
 
-      InternalTestMany(self, ClientDist.OrmInstance as TRestOrmClientURI);
+      InternalTestMany(self, ClientDist.OrmInstance as TRestOrmClientUri);
       TestVirtual(ClientDist, false, 'Remote Virtual Table access via SQLite', TOrmDali1);
       TestVirtual(ClientDist, false, 'Remote Virtual Table access via SQLite', TOrmDali2);
       TestVirtual(ClientDist, true, 'Remote Direct Virtual Table', TOrmDali1);
@@ -1547,7 +1547,7 @@ var
 
   procedure Direct(const URI: RawUtf8; Hash: cardinal; const head: RawUtf8 = '');
   var
-    call: TRestURIParams;
+    call: TRestUriParams;
   begin
     FillCharFast(call, sizeof(call), 0);
     call.Method := 'GET';
@@ -1560,7 +1560,7 @@ var
   end;
 
 var
-  ClientDist: TRestClientURI;
+  ClientDist: TRestClientUri;
   json: RawUtf8;
 begin
   V := TOrmPeople.Create;
@@ -1739,7 +1739,7 @@ begin
         TestFTS3(Client);
         TestDynArray(Client);
         TestObject(Client);
-        InternalTestMany(self, Client.OrmInstance as TRestOrmClientURI);
+        InternalTestMany(self, Client.OrmInstance as TRestOrmClientUri);
         // RegisterVirtualTableModule(TOrmVirtualTableJson) done above
         TestVirtual(Client, false, 'Virtual Table access via SQLite 1', TOrmDali1);
         TestVirtual(Client, false, 'Virtual Table access via SQLite 1', TOrmDali2);
@@ -2706,7 +2706,7 @@ end;
 
 { TRestServerTest }
 
-procedure TRestServerTest.DataAsHex(Ctxt: TRestServerURIContext);
+procedure TRestServerTest.DataAsHex(Ctxt: TRestServerUriContext);
 var
   aData: RawBlob;
 begin
@@ -2720,7 +2720,7 @@ begin
     Ctxt.Error('Impossible to retrieve the Data BLOB field');
 end;
 
-procedure TRestServerTest.Sum(Ctxt: TRestServerURIContext);
+procedure TRestServerTest.Sum(Ctxt: TRestServerUriContext);
 var
   a, b: double;
 begin
@@ -2737,7 +2737,7 @@ begin
     Ctxt.Error('Missing Parameter');
 end;
 
-procedure TRestServerTest.Sum2(Ctxt: TRestServerURIContext);
+procedure TRestServerTest.Sum2(Ctxt: TRestServerUriContext);
 begin
   with Ctxt do
     Results([InputDouble['a'] + InputDouble['b']]);

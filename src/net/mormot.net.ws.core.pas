@@ -117,21 +117,21 @@ procedure FrameInit(opcode: TWebSocketFrameOpCode;
   const Content, ContentType: RawByteString; out frame: TWebSocketFrame);
 
 /// compute the SHA-1 signature of the given challenge
-procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSHA1Digest);
+procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSha1Digest);
 
 
 
 { ******************** WebSockets Protocols Implementation }
 
 var
-  /// the raw class used by TWebSocketProtocol.SetEncryptKey/SetEncryptKeyAES
-  // - was TAESCFB on mORMot 1.18, but we switched to TAESOFB with mORMot 2
-  // - you can put back the TAESCFB class here for backward compatibility
-  ProtocolAesClass: TAESAbstractClass = TAESOFB;
+  /// the raw class used by TWebSocketProtocol.SetEncryptKey/SetEncryptKeyAes
+  // - was TAesCfb on mORMot 1.18, but we switched to TAesOfb with mORMot 2
+  // - you can put back the TAesCfb class here for backward compatibility
+  ProtocolAesClass: TAesAbstractClass = TAesOfb;
 
   /// how TWebSocketProtocol.SetEncryptKey derivate its password via PBKDF2_SHA3()
   // - we use PBKDF2 over SHA-3 in 256-bit, for a future-proof derivation
-  // - if you set 0, it will use the mORMot 1.18 deprecated SHA256Weak() function
+  // - if you set 0, it will use the mORMot 1.18 deprecated Sha256Weak() function
   ProtocolAesRounds: integer = 1024;
 
   /// how TWebSocketProtocol.SetEncryptKey derivate its password via PBKDF2_SHA3()
@@ -177,7 +177,7 @@ type
   TWebSocketProtocol = class(TSynPersistent)
   protected
     fName: RawUtf8;
-    fURI: RawUtf8;
+    fUri: RawUtf8;
     fFramesInCount: integer;
     fFramesOutCount: integer;
     fFramesInBytes: QWord;
@@ -185,7 +185,7 @@ type
     fOnBeforeIncomingFrame: TOnWebSocketProtocolIncomingFrame;
     fRemoteLocalhost: boolean;
     fRemoteIP: RawUtf8;
-    fUpgradeURI: RawUtf8;
+    fUpgradeUri: RawUtf8;
     fLastError: string;
     fEncryption: IProtocol;
     // focText/focBinary or focContinuation/focConnectionClose from ProcessStart/ProcessStop
@@ -208,24 +208,24 @@ type
     // specify an URI to limit the protocol upgrade to a single resource
     constructor Create(const aName, aURI: RawUtf8); reintroduce;
     /// compute a new instance of the WebSockets protocol, with same parameters
-    function Clone(const aClientURI: RawUtf8): TWebSocketProtocol; virtual; abstract;
+    function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; virtual; abstract;
     /// returns Name by default, but could be e.g. 'synopsebin, synopsebinary'
     function GetSubprotocols: RawUtf8; virtual;
     /// specify the recognized sub-protocols, e.g. 'synopsebin, synopsebinary'
     function SetSubprotocol(const aProtocolName: RawUtf8): boolean; virtual;
     /// set the fEncryption: IProtocol according to the supplied key
     // - any asymmetric algorithm needs to know which side (client/server) to work on
-    // - try TECDHEProtocol.FromKey(aKey) and fallback to TProtocolAES.Create(TAESOFB)
-    // using the deprecated SHA256Weak(aKey) - consider using a safer hasher
-    // and SetEncryptKeyAES() with a safer derivated key
+    // - try TEcdheProtocol.FromKey(aKey) and fallback to TProtocolAes.Create(TAesOfb)
+    // using the deprecated Sha256Weak(aKey) - consider using a safer hasher
+    // and SetEncryptKeyAes() with a safer derivated key
     procedure SetEncryptKey(aServer: boolean; const aKey: RawUtf8);
-    /// set the fEncryption: IProtocol as TProtocolAES.Create(TAESOFB)
-    procedure SetEncryptKeyAES(const aKey; aKeySize: cardinal);
+    /// set the fEncryption: IProtocol as TProtocolAes.Create(TAesOfb)
+    procedure SetEncryptKeyAes(const aKey; aKeySize: cardinal);
     /// redirect to Encryption.ProcessHandshake, if defined
     function ProcessHandshake(const ExtIn: TRawUtf8DynArray;
       out ExtOut: RawUtf8; ErrorMsg: PRawUtf8): boolean; virtual;
     /// called e.g. for authentication during the WebSockets handshake
-    function ProcessHandshakeURI(const aClientURI: RawUtf8): boolean; virtual;
+    function ProcessHandshakeUri(const aClientUri: RawUtf8): boolean; virtual;
     /// allow low-level interception before ProcessIncomingFrame is done
     property OnBeforeIncomingFrame: TOnWebSocketProtocolIncomingFrame
       read fOnBeforeIncomingFrame write fOnBeforeIncomingFrame;
@@ -243,14 +243,14 @@ type
     /// the optional URI on which this protocol would be enabled
     // - leave to '' if any URI should match
     property URI: RawUtf8
-      read fURI;
+      read fUri;
     /// the associated 'Remote-IP' HTTP header value
     // - returns '' if self=nil or RemoteLocalhost=true
     property RemoteIP: RawUtf8
       read GetRemoteIP write fRemoteIP;
     /// the URI on which this protocol has been upgraded
-    property UpgradeURI: RawUtf8
-      read fUpgradeURI write fUpgradeURI;
+    property UpgradeUri: RawUtf8
+      read fUpgradeUri write fUpgradeUri;
     /// the last error message, during frame processing
     property LastError: string
       read fLastError;
@@ -329,7 +329,7 @@ type
     // specify an URI to limit the protocol upgrade to a single resource
     constructor Create(const aURI: RawUtf8); reintroduce;
     /// compute a new instance of the WebSockets protocol, with same parameters
-    function Clone(const aClientURI: RawUtf8): TWebSocketProtocol; override;
+    function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
   end;
 
   /// handle a REST application-level WebSockets protocol using compressed and
@@ -373,7 +373,7 @@ type
     /// initialize the WebSockets binary protocol with a symmetric AES key
     // - if aURI is '', any URI would potentially upgrade to this protocol; you
     // can specify an URI to limit the protocol upgrade to a single resource
-    // - if aKeySize if 128, 192 or 256, TProtocolAES (i.e. AES-CFB encryption)
+    // - if aKeySize if 128, 192 or 256, TProtocolAes (i.e. AES-CFB encryption)
     //  will be used to secure the transmission
     // - SynLZ compression is enabled by default, unless aCompressed is false
     constructor Create(const aURI: RawUtf8; const aKey; aKeySize: cardinal;
@@ -381,14 +381,14 @@ type
     /// initialize the WebSockets binary protocol from a textual key
     // - if aURI is '', any URI would potentially upgrade to this protocol; you
     // can specify an URI to limit the protocol upgrade to a single resource
-    // - will create a TProtocolAES or TECDHEProtocol instance, corresponding to
+    // - will create a TProtocolAes or TEcdheProtocol instance, corresponding to
     // the supplied aKey and aServer values, to secure the transmission using
     // a symmetric or assymetric algorithm
     // - SynLZ compression is enabled by default, unless aCompressed is false
     constructor Create(const aURI: RawUtf8; aServer: boolean;
       const aKey: RawUtf8; aCompressed: boolean = true); reintroduce; overload;
     /// compute a new instance of the WebSockets protocol, with same parameters
-    function Clone(const aClientURI: RawUtf8): TWebSocketProtocol; override;
+    function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
     /// returns Name by default, but could be e.g. 'synopsebin, synopsebinary'
     function GetSubprotocols: RawUtf8; override;
     /// specify the recognized sub-protocols, e.g. 'synopsebin, synopsebinary'
@@ -435,9 +435,9 @@ type
     /// finalize the list storage
     destructor Destroy; override;
     /// create a new protocol instance, from the internal list
-    function CloneByName(const aProtocolName, aClientURI: RawUtf8): TWebSocketProtocol;
+    function CloneByName(const aProtocolName, aClientUri: RawUtf8): TWebSocketProtocol;
     /// create a new protocol instance, from the internal list
-    function CloneByURI(const aClientURI: RawUtf8): TWebSocketProtocol;
+    function CloneByUri(const aClientUri: RawUtf8): TWebSocketProtocol;
     /// how many protocols are stored
     function Count: integer;
   end;
@@ -743,7 +743,7 @@ var
   // - you may set this global value to repCheckedIfAvailable if you are
   // really paranoid (but resulting security may be lower, since the IV is
   // somewhat more predictable than plain random)
-  WebSocketsIVReplayAttackCheck: TAESIVReplayAttackCheck = repNoCheck;
+  WebSocketsIVReplayAttackCheck: TAesIVReplayAttackCheck = repNoCheck;
 
   /// the allowed maximum size, in MB, of a WebSockets frame
   WebSocketsMaxFrameMB: cardinal = 256;
@@ -776,11 +776,11 @@ begin
   result := GetEnumName(TypeInfo(TWebSocketProcessState), ord(st));
 end;
 
-procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSHA1Digest);
+procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSha1Digest);
 const
   SALT: string[36] = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 var
-  SHA: TSHA1;
+  SHA: TSha1;
 begin
   SHA.Init;
   SHA.Update(pointer(Base64), length(Base64));
@@ -796,38 +796,38 @@ end;
 constructor TWebSocketProtocol.Create(const aName, aURI: RawUtf8);
 begin
   fName := aName;
-  fURI := aURI;
+  fUri := aURI;
 end;
 
 procedure TWebSocketProtocol.SetEncryptKey(aServer: boolean; const aKey: RawUtf8);
 var
-  key: TSHA256Digest;
+  key: TSha256Digest;
 begin
   if aKey = '' then
     fEncryption := nil
   else
   begin
     // first try asymetric ES-256 ephemeral secret key and mutual authentication
-    fEncryption := TECDHEProtocol.FromKey(aKey, aServer);
+    fEncryption := TEcdheProtocol.FromKey(aKey, aServer);
     if fEncryption = nil then
     begin
-      // use symetric TProtocolAES algorithm
+      // use symetric TProtocolAes algorithm
       if ProtocolAesRounds = 0 then
         // mORMot 1.18 deprecated password derivation
-        SHA256Weak(aKey, key)
+        Sha256Weak(aKey, key)
       else
         // new safer password derivation algorithm
         PBKDF2_SHA3(SHA3_256, aKey, ProtocolAesSalt, ProtocolAesRounds,
           @key, SizeOf(key));
-      SetEncryptKeyAES(key, 256);
+      SetEncryptKeyAes(key, 256);
     end;
   end;
 end;
 
-procedure TWebSocketProtocol.SetEncryptKeyAES(const aKey; aKeySize: cardinal);
+procedure TWebSocketProtocol.SetEncryptKeyAes(const aKey; aKeySize: cardinal);
 begin
   if aKeySize >= 128 then
-    fEncryption := TProtocolAES.Create(ProtocolAesClass, aKey, aKeySize,
+    fEncryption := TProtocolAes.Create(ProtocolAesClass, aKey, aKeySize,
       WebSocketsIVReplayAttackCheck);
 end;
 
@@ -903,7 +903,7 @@ begin
       GetCaptionFromEnum(TypeInfo(TProtocolResult), ord(res))]);
 end;
 
-function TWebSocketProtocol.ProcessHandshakeURI(const aClientURI: RawUtf8): boolean;
+function TWebSocketProtocol.ProcessHandshakeUri(const aClientUri: RawUtf8): boolean;
 begin
   result := true; // override and return false to return HTTP_UNAUTHORIZED
 end;
@@ -1192,9 +1192,9 @@ begin
   inherited Create('synopsejson', aURI);
 end;
 
-function TWebSocketProtocolJson.Clone(const aClientURI: RawUtf8): TWebSocketProtocol;
+function TWebSocketProtocolJson.Clone(const aClientUri: RawUtf8): TWebSocketProtocol;
 begin
-  result := TWebSocketProtocolJson.Create(fURI);
+  result := TWebSocketProtocolJson.Create(fUri);
 end;
 
 procedure TWebSocketProtocolJson.FrameCompress(const Head: RawUtf8;
@@ -1343,7 +1343,7 @@ constructor TWebSocketProtocolBinary.Create(const aURI: RawUtf8;
   const aKey; aKeySize: cardinal; aCompressed: boolean);
 begin
   Create(aURI, aCompressed);
-  SetEncryptKeyAES(aKey, aKeySize);
+  SetEncryptKeyAes(aKey, aKeySize);
 end;
 
 constructor TWebSocketProtocolBinary.Create(const aURI: RawUtf8; aServer:
@@ -1353,9 +1353,9 @@ begin
   SetEncryptKey(aServer, aKey);
 end;
 
-function TWebSocketProtocolBinary.Clone(const aClientURI: RawUtf8): TWebSocketProtocol;
+function TWebSocketProtocolBinary.Clone(const aClientUri: RawUtf8): TWebSocketProtocol;
 begin
-  result := TWebSocketProtocolBinary.Create(fURI, {dummykey=}self, 0, fCompressed);
+  result := TWebSocketProtocolBinary.Create(fUri, {dummykey=}self, 0, fCompressed);
   TWebSocketProtocolBinary(result).fSequencing := fSequencing;
   if fEncryption <> nil then
     result.fEncryption := fEncryption.Clone;
@@ -1645,7 +1645,7 @@ end;
 { TWebSocketProtocolList }
 
 function TWebSocketProtocolList.CloneByName(const aProtocolName,
-  aClientURI: RawUtf8): TWebSocketProtocol;
+  aClientUri: RawUtf8): TWebSocketProtocol;
 var
   i: integer;
 begin
@@ -1656,11 +1656,11 @@ begin
   try
     for i := 0 to length(fProtocols) - 1 do
       with fProtocols[i] do
-        if ((fURI = '') or
-            IdemPropNameU(fURI, aClientURI)) and
+        if ((fUri = '') or
+            IdemPropNameU(fUri, aClientUri)) and
            SetSubprotocol(aProtocolName) then
         begin
-          result := fProtocols[i].Clone(aClientURI);
+          result := fProtocols[i].Clone(aClientUri);
           result.fName := aProtocolName;
           exit;
         end;
@@ -1669,20 +1669,20 @@ begin
   end;
 end;
 
-function TWebSocketProtocolList.CloneByURI(const aClientURI: RawUtf8): TWebSocketProtocol;
+function TWebSocketProtocolList.CloneByUri(const aClientUri: RawUtf8): TWebSocketProtocol;
 var
   i: integer;
 begin
   result := nil;
   if (self = nil) or
-     (aClientURI = '') then
+     (aClientUri = '') then
     exit;
   fSafe.Lock;
   try
     for i := 0 to length(fProtocols) - 1 do
-      if IdemPropNameU(fProtocols[i].fURI, aClientURI) then
+      if IdemPropNameU(fProtocols[i].fUri, aClientUri) then
       begin
-        result := fProtocols[i].Clone(aClientURI);
+        result := fProtocols[i].Clone(aClientUri);
         exit;
       end;
   finally
@@ -1710,8 +1710,8 @@ begin
     for result := 0 to high(fProtocols) do
       with fProtocols[result] do
         if IdemPropNameU(fName, aName) and
-           ((fURI = '') or
-            IdemPropNameU(fURI, aURI)) then
+           ((fUri = '') or
+            IdemPropNameU(fUri, aURI)) then
           exit;
   result := -1;
 end;

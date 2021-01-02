@@ -390,10 +390,10 @@ type
     // !  doc.value := 10000;
     // !  html := mustache.Render(doc);
     // !  // here html='Hello Chris'#13#10'You have just won 10000 dollars!'
-    // - you can also retrieve the context from an ORM query of mORMot.pas:
+    // - you can also retrieve the context from an ORM query:
     // ! dummy := TSynMustache.Parse(
     // !   '{{#items}}'#13#10'{{Int}}={{Test}}'#13#10'{{/items}}').Render(
-    // !   aClient.RetrieveDocVariantArray(TOrmTest,'items','Int,Test'));
+    // !   aClient.RetrieveDocVariantArray(TOrmTest, 'items', 'Int,Test'));
     // - set EscapeInvert = true to force {{value}} NOT to escape HTML chars
     // and {{{value}} escaping chars (may be useful e.g. for code generation)
     function Render(const Context: variant;

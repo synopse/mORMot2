@@ -381,7 +381,7 @@ var
   extin, extout, prot: RawUtf8;
   extins: TRawUtf8DynArray;
   cmd: RawUtf8;
-  digest1, digest2: TSHA1Digest;
+  digest1, digest2: TSha1Digest;
 begin
   try
     if fProcess <> nil then
@@ -403,7 +403,7 @@ begin
             aWebSocketsEncryptionKey, aWebSocketsCompression);
       aProtocol.OnBeforeIncomingFrame := fOnBeforeIncomingFrame;
       RequestSendHeader(aWebSocketsURI, 'GET');
-      TAESPRNG.Main.FillRandom(key);
+      TAesPrng.Main.FillRandom(key);
       bin1 := BinToBase64(@key, sizeof(key));
       SockSend(['Content-Length: 0'#13#10'Connection: Upgrade'#13#10 +
         'Upgrade: websocket'#13#10'Sec-WebSocket-Key: ', bin1, #13#10 +

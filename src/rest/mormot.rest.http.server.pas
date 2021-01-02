@@ -122,7 +122,7 @@ type
 
 const
   /// the default access rights used by the HTTP server if none is specified
-  HTTP_DEFAULT_ACCESS_RIGHTS: PORMAccessRights = @SUPERVISOR_ACCESS_RIGHTS;
+  HTTP_DEFAULT_ACCESS_RIGHTS: POrmAccessRights = @SUPERVISOR_ACCESS_RIGHTS;
 
   /// the kind of HTTP server to be used by default
   // - will define the best available server class, depending on the platform
@@ -161,7 +161,7 @@ type
     /// internal servers to compute responses (protected by inherited fSafe)
     fDBServers: array of record
       Server: TRestServer;
-      RestAccessRights: PORMAccessRights;
+      RestAccessRights: POrmAccessRights;
       Security: TRestHttpServerSecurity;
     end;
     fHosts: TSynNameValue;
@@ -183,13 +183,13 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     function GetDBServer(Index: Integer): TRestServer;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure SetDBServerAccessRight(Index: integer; Value: PORMAccessRights);
+    procedure SetDBServerAccessRight(Index: integer; Value: POrmAccessRights);
     procedure SetDBServer(aIndex: integer; aServer: TRestServer;
-      aSecurity: TRestHttpServerSecurity; aRestAccessRights: PORMAccessRights);
+      aSecurity: TRestHttpServerSecurity; aRestAccessRights: POrmAccessRights);
     function GetDBServerNames: RawUtf8;
     function HttpApiAddUri(const aRoot, aDomainName: RawByteString;
       aSecurity: TRestHttpServerSecurity;
-      aRegisterURI, aRaiseExceptionOnError: boolean): RawUtf8;
+      aRegisterUri, aRaiseExceptionOnError: boolean): RawUtf8;
     function NotifyCallback(aSender: TRestServer;
       const aInterfaceDotMethodName, aParams: RawUtf8;
       aConnectionID: THttpServerConnectionID;
@@ -216,7 +216,7 @@ type
     // or using the standard Sockets library (useHttpSocket), possibly in its
     // WebSockets-friendly version (useBidirSocket - you shoud call the
     // WebSocketsEnable method to initialize the available protocols)
-    // - by default, the PORMAccessRights will be set to nil
+    // - by default, the POrmAccessRights will be set to nil
     // - the ServerThreadPoolCount parameter will set the number of threads
     // to be initialized to handle incoming connections (default is 32, which
     // may be sufficient for most cases, maximum is 256)
@@ -254,7 +254,7 @@ type
     constructor Create(const aPort: RawUtf8; aServer: TRestServer;
       const aDomainName: RawUtf8 = '+';
       aHttpServerKind: TRestHttpServerOptions = HTTP_DEFAULT_MODE;
-      aRestAccessRights: PORMAccessRights = nil;
+      aRestAccessRights: POrmAccessRights = nil;
       ServerThreadPoolCount: Integer = 32;
       aHttpServerSecurity: TRestHttpServerSecurity = secNone;
       const aAdditionalURL: RawUtf8 = '';
@@ -293,7 +293,7 @@ type
     // AES-256-CTR encryption identified as "ACCEPT-ENCODING: synshaaes"
     // - return true on success, false on error (e.g. duplicated Root value)
     function AddServer(aServer: TRestServer;
-      aRestAccessRights: PORMAccessRights = nil;
+      aRestAccessRights: POrmAccessRights = nil;
       aHttpServerSecurity: TRestHttpServerSecurity = secNone): boolean;
     /// un-register a TRestServer from the HTTP server
     // - each TRestServer class must have an unique Model.Root value, to
@@ -311,9 +311,9 @@ type
     // ! DomainHostRedirect('blog.project2.com','root2/blog');
     // for the last entry, you may have for instance initialized a MVC web
     // server on the 'blog' sub-URI of the 'root2' TRestServer via:
-    // !constructor TMyMVCApplication.Create(aRestModel: TRest; aInterface: PTypeInfo);
+    // !constructor TMyMvcApplication.Create(aRestModel: TRest; aInterface: PTypeInfo);
     // ! ...
-    // ! fMainRunner := TMVCRunOnRestServer.Create(self,nil,'blog');
+    // ! fMainRunner := TMvcRunOnRestServer.Create(self,nil,'blog');
     // ! ...
     // - if aURI='' is given, the corresponding host redirection will be disabled
     // - note: by design, 'something.localhost' is likely to be not recognized
@@ -323,12 +323,12 @@ type
     // - by default, only sub-URI, as defined by TRestServer.Model.Root, are
     // registered - you can define here a sub-URI to reach when the main server
     // is directly accessed from a browser, e.g. localhost:port will redirect to
-    // localhost:port/RedirectedURI
-    // - for http.sys server, would try to register '/' if aRegisterURI is TRUE
+    // localhost:port/RedirectedUri
+    // - for http.sys server, would try to register '/' if aRegisterUri is TRUE
     // - by default, will redirect http://localhost:port unless you set
     // aHttpServerSecurity=secSSL so that it would redirect https://localhost:port
-    procedure RootRedirectToURI(const aRedirectedURI: RawUtf8;
-      aRegisterURI: boolean = true; aHttps: boolean = false);
+    procedure RootRedirectToURI(const aRedirectedUri: RawUtf8;
+      aRegisterUri: boolean = true; aHttps: boolean = false);
     /// defines the WebSockets protocols to be used for useBidirSocket
     // - i.e. 'synopsebinary' and optionally 'synopsejson' protocols
     // - if aWebSocketsURI is '', any URI would potentially upgrade; you can
@@ -383,7 +383,7 @@ type
       read GetDBServer;
     /// write-only access to all internal servers access right
     // - can be used to override the default HTTP_DEFAULT_ACCESS_RIGHTS setting
-    property DBServerAccessRight[Index: integer]: PORMAccessRights
+    property DBServerAccessRight[Index: integer]: POrmAccessRights
       write SetDBServerAccessRight;
     /// find the first instance of a registered REST server
     // - note that the same REST server may appear several times in this HTTP
@@ -466,7 +466,7 @@ type
   published
     /// this HTTP server will publish a 'RemoteLog' method-based service
     // - expecting PUT with text as body, at http://server/root/RemoteLog
-    procedure RemoteLog(Ctxt: TRestServerURIContext);
+    procedure RemoteLog(Ctxt: TRestServerUriContext);
   end;
   {$M-}
 
@@ -500,7 +500,7 @@ end;
 { TRestHttpServer }
 
 function TRestHttpServer.AddServer(aServer: TRestServer;
-  aRestAccessRights: PORMAccessRights;
+  aRestAccessRights: POrmAccessRights;
   aHttpServerSecurity: TRestHttpServerSecurity): boolean;
 var
   i, n: PtrInt;
@@ -594,7 +594,7 @@ end;
 
 procedure TRestHttpServer.DomainHostRedirect(const aDomain, aURI: RawUtf8);
 var
-  uri: TURI;
+  uri: TUri;
 begin
   if uri.From(aDomain) and
      EndWith(uri.Server, '.LOCALHOST') then
@@ -724,7 +724,7 @@ end;
 
 constructor TRestHttpServer.Create(const aPort: RawUtf8; aServer: TRestServer;
   const aDomainName: RawUtf8; aHttpServerKind: TRestHttpServerOptions;
-  aRestAccessRights: PORMAccessRights; ServerThreadPoolCount: Integer;
+  aRestAccessRights: POrmAccessRights; ServerThreadPoolCount: Integer;
   aHttpServerSecurity: TRestHttpServerSecurity; const aAdditionalURL: RawUtf8;
   const aQueueName: SynUnicode);
 begin
@@ -811,7 +811,7 @@ begin
 end;
 
 procedure TRestHttpServer.SetDBServerAccessRight(Index: integer;
-  Value: PORMAccessRights);
+  Value: POrmAccessRights);
 begin
   if self = nil then
     exit;
@@ -827,7 +827,7 @@ begin
 end;
 
 procedure TRestHttpServer.SetDBServer(aIndex: integer; aServer: TRestServer;
-  aSecurity: TRestHttpServerSecurity; aRestAccessRights: PORMAccessRights);
+  aSecurity: TRestHttpServerSecurity; aRestAccessRights: POrmAccessRights);
 begin
   // note: caller should have made fSafe.Lock
   if (self <> nil) and
@@ -853,21 +853,21 @@ const
   HTTPS_SECURITY: array[boolean] of TRestHttpServerSecurity = (
     secNone, secSSL);
 
-procedure TRestHttpServer.RootRedirectToURI(const aRedirectedURI: RawUtf8;
-  aRegisterURI: boolean; aHttps: boolean);
+procedure TRestHttpServer.RootRedirectToURI(const aRedirectedUri: RawUtf8;
+  aRegisterUri: boolean; aHttps: boolean);
 begin
-  if fRootRedirectToURI[aHttps] = aRedirectedURI then
+  if fRootRedirectToURI[aHttps] = aRedirectedUri then
     exit;
   fLog.Add.Log(sllHttp, 'Redirect http%://localhost:% to http%://localhost:%/%',
     [HTTPS_TEXT[aHttps], fPublicPort, HTTPS_TEXT[aHttps], fPublicPort,
-     aRedirectedURI], self);
-  fRootRedirectToURI[aHttps] := aRedirectedURI;
-  if aRedirectedURI <> '' then
-    HttpApiAddUri('/', '+', HTTPS_SECURITY[aHttps], aRegisterURI, true);
+     aRedirectedUri], self);
+  fRootRedirectToURI[aHttps] := aRedirectedUri;
+  if aRedirectedUri <> '' then
+    HttpApiAddUri('/', '+', HTTPS_SECURITY[aHttps], aRegisterUri, true);
 end;
 
 function TRestHttpServer.HttpApiAddUri(const aRoot, aDomainName: RawByteString;
-  aSecurity: TRestHttpServerSecurity; aRegisterURI,
+  aSecurity: TRestHttpServerSecurity; aRegisterUri,
   aRaiseExceptionOnError: boolean): RawUtf8;
 {$ifndef ONLYUSEHTTPSOCKET}
 var
@@ -884,13 +884,13 @@ begin
     [HTTPS_TEXT[https], aDomainName, fPublicPort, aRoot], self);
   // try to register the URL to http.sys
   err := THttpApiServer(fHttpServer).AddUrl(aRoot, fPublicPort, https,
-    aDomainName, aRegisterURI);
+    aDomainName, aRegisterUri);
   if err = NO_ERROR then
     exit;
   FormatUtf8('http.sys URI registration error #% for http%://%:%/%',
     [err, HTTPS_TEXT[https], aDomainName, fPublicPort, aRoot], result);
   if err = ERROR_ACCESS_DENIED then
-    if aRegisterURI then
+    if aRegisterUri then
       result := result +
         ' (administrator rights needed, at least once to register the URI)'
     else
@@ -1294,7 +1294,7 @@ begin
   end;
 end;
 
-procedure TRestHttpRemoteLogServer.RemoteLog(Ctxt: TRestServerURIContext);
+procedure TRestHttpRemoteLogServer.RemoteLog(Ctxt: TRestServerUriContext);
 begin
   if Assigned(fEvent) and
      (Ctxt.Method = mPUT) then

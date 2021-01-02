@@ -86,7 +86,7 @@ type
     // - parameters and result types depends on the purpose of the function
     // - TRestServerTest.DataAsHex published method implements the result
     // calculation on the Server-Side
-    function DataAsHex(aClient: TRestClientURI): RawUtf8;
+    function DataAsHex(aClient: TRestClientUri): RawUtf8;
     /// method used to test the Client-Side
     // ModelRoot/MethodName RESTful request, i.e. ModelRoot/Sum in this case
     // - this method calls the supplied TRestClient to retrieve its results
@@ -99,7 +99,7 @@ type
     // on TOrmPeople at all
     // - you could also call the same servce from the ModelRoot/People/ID/Sum URL,
     // but it won't make any difference)
-    class function Sum(aClient: TRestClientURI; a, b: double; Method2: boolean): double;
+    class function Sum(aClient: TRestClientUri; a, b: double; Method2: boolean): double;
   end;
 
   /// a record used to test dynamic array serialization
@@ -250,12 +250,12 @@ implementation
 
 { TOrmPeople }
 
-function TOrmPeople.DataAsHex(aClient: TRestClientURI): RawUtf8;
+function TOrmPeople.DataAsHex(aClient: TRestClientUri): RawUtf8;
 begin
   Result := aClient.CallBackGetResult('DataAsHex', [], RecordClass, fID);
 end;
 
-class function TOrmPeople.Sum(aClient: TRestClientURI; a, b: double;
+class function TOrmPeople.Sum(aClient: TRestClientUri; a, b: double;
   Method2: boolean): double;
 var
   err: integer;
@@ -2220,7 +2220,7 @@ var
   str: string;
   P: PUtf8Char;
   GUID2: TGUID;
-  U: TURI;
+  U: TUri;
 const
   GUID: TGUID = '{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}';
 
@@ -2277,8 +2277,8 @@ begin
   Check(utf = '00amyWGct0y_ze4lIsj2Mw');
   FillCharFast(GUID2, sizeof(GUID2), 0);
   Check(Base64uriToBin(utf, @GUID2, SizeOf(GUID2)));
-  Check(IsEqualGUID(GUID2, GUID));
-  Check(IsEqualGUID(@GUID2, @GUID));
+  Check(IsEqualGuid(GUID2, GUID));
+  Check(IsEqualGuid(@GUID2, @GUID));
   Check(U.From('toto.com'));
   Check(U.URI = 'http://toto.com/');
   Check(U.From('toto.com:123'));
@@ -2305,9 +2305,9 @@ begin
   s := GUIDToRawUtf8(GUID);
   Check(s = '{C9A646D3-9C61-4CB7-BFCD-EE2522C8F633}');
   Check(TextToGUID(@s[2], @g2)^ = '}');
-  Check(IsEqualGUID(g2, GUID));
+  Check(IsEqualGuid(g2, GUID));
   Check(GUIDToString(GUID) = '{C9A646D3-9C61-4CB7-BFCD-EE2522C8F633}');
-  Check(IsEqualGUID(RawUtf8ToGUID(s), GUID));
+  Check(IsEqualGuid(RawUtf8ToGUID(s), GUID));
   for i := 1 to 1000 do
   begin
     g.D1 := Random(maxInt);
@@ -2316,25 +2316,25 @@ begin
     Int64(g.D4) := Int64(Random(maxInt)) * Random(maxInt);
     st := GUIDToString(g);
     Check(st = SysUtils.GUIDToString(g));
-    Check(IsEqualGUID(StringToGUID(st), g));
+    Check(IsEqualGuid(StringToGUID(st), g));
     s := GUIDToRawUtf8(g);
     Check(st = Utf8ToString(s));
     st[Random(38) + 1] := ' ';
     g2 := StringToGUID(st);
     Check(IsZero(@g2, sizeof(g2)));
     Check(TextToGUID(@s[2], @g2)^ = '}');
-    Check(IsEqualGUID(g2, g));
-    Check(IsEqualGUID(@g2, @g));
-    Check(IsEqualGUID(RawUtf8ToGUID(s), g));
+    Check(IsEqualGuid(g2, g));
+    Check(IsEqualGuid(@g2, @g));
+    Check(IsEqualGuid(RawUtf8ToGUID(s), g));
     inc(g.D1);
-    Check(not IsEqualGUID(g2, g));
-    Check(not IsEqualGUID(RawUtf8ToGUID(s), g));
+    Check(not IsEqualGuid(g2, g));
+    Check(not IsEqualGuid(RawUtf8ToGUID(s), g));
   end;
   // oldest Delphi can't compile TypeInfo(TGUID) -> use PT_INFO[ptGUID]
   s := RecordSaveJson(g, PT_INFO[ptGUID]);
   FillCharFast(g2, sizeof(g2), 0);
   Check(RecordLoadJson(g2, pointer(s), PT_INFO[ptGUID]) <> nil);
-  Check(IsEqualGUID(g2, g));
+  Check(IsEqualGuid(g2, g));
   FillCharFast(h, SizeOf(h), 1);
   for pt := ptGUID to ptHash512 do
   begin
@@ -3101,7 +3101,7 @@ begin
   check(hmac32.Done = c1);
   c2 := $12345678;
   HMAC_CRC256C(@c2, pointer(tmp), 4, length(tmp), digest);
-  check(SHA256DigestToString(digest) = '46da01fb9f4a97b5f8ba2c70512bc22aa' +
+  check(Sha256DigestToString(digest) = '46da01fb9f4a97b5f8ba2c70512bc22aa' +
     'a9b57e5030ced9f5c7c825ab5ec1715');
   FillZero(crc2);
   crcblock(@crc2, PBlock128(PAnsiChar('0123456789012345')));

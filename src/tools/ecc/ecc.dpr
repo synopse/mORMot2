@@ -51,20 +51,20 @@ uses
 
 {$R *.res}
 
-function ProcessCommandLine: TECCCommandError;
+function ProcessCommandLine: TEccCommandError;
 var
   cmd: RawUtf8;
-  main: TECCCommand;
+  main: TEccCommand;
   sw: ICommandLine;
 begin
   cmd := StringToUtf8(ParamStr(1));
-  main := TECCCommand(
-    GetEnumNameValueTrimmed(TypeInfo(TECCCommand), pointer(cmd), length(cmd)));
+  main := TEccCommand(
+    GetEnumNameValueTrimmed(TypeInfo(TEccCommand), pointer(cmd), length(cmd)));
   if main = ecChain then
     sw := TCommandLine.CreateAsArray({firstparam=}2)
   else
     sw := TCommandLine.Create;
-  result := ECCCommand(main, sw);
+  result := EccCommand(main, sw);
   if result = eccUnknownCommand then
   begin
     TextColor(ccLightGreen);

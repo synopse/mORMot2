@@ -220,7 +220,7 @@ type
       ConnectionTimeOut: cardinal = 0; SendTimeout: cardinal = 0;
       ReceiveTimeout: cardinal = 0; aLayer: TNetLayer = nlTCP); overload; virtual;
     /// connect to the supplied URI
-    // - is just a wrapper around TURI and the overloaded Create() constructor
+    // - is just a wrapper around TUri and the overloaded Create() constructor
     constructor Create(const aURI: RawUtf8; const aProxyName: RawUtf8 = '';
       const aProxyByPass: RawUtf8 = ''; ConnectionTimeOut: cardinal = 0;
       SendTimeout: cardinal = 0; ReceiveTimeout: cardinal = 0;
@@ -639,7 +639,7 @@ type
     /// finalize the connection
     destructor Destroy; override;
     /// low-level entry point of this instance
-    function RawRequest(const Uri: TURI; const Method, Header: RawUtf8;
+    function RawRequest(const Uri: TUri; const Method, Header: RawUtf8;
      const Data: RawByteString; const DataType: RawUtf8;
       KeepAlive: cardinal): integer; overload;
     /// simple-to-use entry point of this instance
@@ -691,7 +691,7 @@ type
   // for an already known ETAG header value
   THttpRequestCached = class(TSynPersistent)
   protected
-    fURI: TURI;
+    fUri: TUri;
     fHttp: THttpRequest; // either fHttp or fSocket is used
     fSocket: THttpClientSocket;
     fKeepAlive: integer;
@@ -731,8 +731,8 @@ type
     /// erase one resource from internal cache
     function Flush(const aAddress: RawUtf8): boolean;
     /// read-only access to the connected server
-    property URI: TURI
-      read fURI;
+    property URI: TUri
+      read fUri;
   end;
 
 
@@ -1018,7 +1018,7 @@ end;
 function OpenHttp(const aURI: RawUtf8;
   aAddress: PRawUtf8): THttpClientSocket;
 var
-  URI: TURI;
+  URI: TUri;
 begin
   result := nil;
   if URI.From(aURI) then
@@ -1058,7 +1058,7 @@ class function THttpRequest.InternalREST(const url, method: RawUtf8;
   const data: RawByteString; const header: RawUtf8; aIgnoreSSLCertificateErrors: boolean;
   outHeaders: PRawUtf8; outStatus: PInteger): RawByteString;
 var
-  URI: TURI;
+  URI: TUri;
   outh: RawUtf8;
   status: integer;
 begin
@@ -1114,7 +1114,7 @@ constructor THttpRequest.Create(const aURI: RawUtf8; const aProxyName: RawUtf8;
   const aProxyByPass: RawUtf8; ConnectionTimeOut: cardinal; SendTimeout: cardinal;
   ReceiveTimeout: cardinal; aIgnoreSSLCertificateErrors: boolean);
 var
-  URI: TURI;
+  URI: TUri;
 begin
   if not URI.From(aURI) then
     raise EHttpSocket.CreateFmt('%.Create: invalid url=%',
@@ -2016,7 +2016,7 @@ begin
   inherited Destroy;
 end;
 
-function TSimpleHttpClient.RawRequest(const Uri: TURI;
+function TSimpleHttpClient.RawRequest(const Uri: TUri;
   const Method, Header: RawUtf8; const Data: RawByteString;
   const DataType: RawUtf8; KeepAlive: cardinal): integer;
 begin
@@ -2076,7 +2076,7 @@ end;
 function TSimpleHttpClient.Request(const uri, method, header: RawUtf8;
   const data: RawByteString; const datatype: RawUtf8; keepalive: cardinal): integer;
 var
-  u: TURI;
+  u: TUri;
 begin
   if u.From(uri) then
     result := RawRequest(u, method, header, data, datatype, keepalive)
@@ -2134,7 +2134,7 @@ begin
   FreeAndNil(fSocket);
   if fCache <> nil then
     fCache.DeleteAll;
-  fURI.Clear;
+  fUri.Clear;
   fTokenHeader := '';
 end;
 
@@ -2173,7 +2173,7 @@ begin
     begin
       // server may close after a few requests (e.g. nginx keepalive_requests)
       FreeAndNil(fSocket);
-      fSocket := THttpClientSocket.Open(fURI.Server, fURI.Port)
+      fSocket := THttpClientSocket.Open(fUri.Server, fUri.Port)
     end;
     status := fSocket.Get(aAddress, fKeepAlive, headin);
     result := fSocket.Content;
@@ -2214,7 +2214,7 @@ begin
   if (self = nil) or
      (fHttp <> nil) or
      (fSocket <> nil) or
-     not fURI.From(aURI) then
+     not fUri.From(aURI) then
     exit;
   fTokenHeader := AuthorizationBearer(aToken);
   if aHttpClass = nil then
@@ -2223,15 +2223,15 @@ begin
     aHttpClass := TWinHTTP;
     {$else}
     {$ifdef USELIBCURL}
-    if fURI.Https then
+    if fUri.Https then
       aHttpClass := TCurlHTTP;
     {$endif USELIBCURL}
     {$endif USEWININET}
   end;
   if aHttpClass = nil then
-    fSocket := THttpClientSocket.Open(fURI.Server, fURI.Port)
+    fSocket := THttpClientSocket.Open(fUri.Server, fUri.Port)
   else
-    fHttp := aHttpClass.Create(fURI.Server, fURI.Port, fURI.Https);
+    fHttp := aHttpClass.Create(fUri.Server, fUri.Port, fUri.Https);
   result := true;
 end;
 
@@ -2255,7 +2255,7 @@ function HttpGet(const aURI: RawUtf8; const inHeaders: RawUtf8;
   outHeaders: PRawUtf8; forceNotSocket: boolean;
   outStatus: PInteger): RawByteString;
 var
-  URI: TURI;
+  URI: TUri;
 begin
   if URI.From(aURI) then
     if URI.Https or

@@ -811,7 +811,7 @@ function TBaseAggregatingRowset.QueryInterface(
   {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGUID;
   out Obj): TIntQry;
 begin
-  if IsEqualGUID(@IID, @IID_IUnknown) then
+  if IsEqualGuid(@IID, @IID_IUnknown) then
     IUnknown(Obj) := Self
   else
   begin
@@ -821,7 +821,7 @@ begin
       result := E_NOINTERFACE;
       Exit;
     end;
-    if IsEqualGUID(@IID, @IID_IRowset) then
+    if IsEqualGuid(@IID, @IID_IRowset) then
       IUnknown(Obj) := self
     else
     begin

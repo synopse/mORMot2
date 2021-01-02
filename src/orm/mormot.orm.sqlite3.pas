@@ -211,7 +211,7 @@ type
     // in this case, VACUUM will be a no-op
     function PrepareVacuum(const aSQL: RawUtf8): boolean;
   protected
-    fBatchMethod: TURIMethod;
+    fBatchMethod: TUriMethod;
     fBatchOptions: TRestBatchOptions;
     fBatchTableIndex: integer;
     fBatchID: TIDDynArray;
@@ -271,7 +271,7 @@ type
       LastChangeCount: PInteger = nil): boolean;
     // overridden method returning TRUE for next calls to EngineAdd
     // will properly handle operations until InternalBatchStop is called
-    function InternalBatchStart(Method: TURIMethod;
+    function InternalBatchStart(Method: TUriMethod;
       BatchOptions: TRestBatchOptions): boolean; override;
     // internal method called by TRestOrmServer.RunBatch() to process fast
     // multi-INSERT statements to the SQLite3 engine
@@ -393,7 +393,7 @@ type
 type
   /// REST ORM client with direct access to a SQLite3 database
   // - a hidden TRestOrmDB class is created and called internaly
-  TRestOrmClientDB = class(TRestOrmClientURI)
+  TRestOrmClientDB = class(TRestOrmClientUri)
   private
     // use internaly a TRestServerDB to access data in the proper JSON format
     fServer: TRestOrmServerDB;
@@ -633,7 +633,7 @@ begin
         costPrimaryIndex:
           pInfo.estimatedRows := 1;
       else
-        raise EORMException.Create('vt_BestIndex: unexpected EstimatedCost');
+        raise EOrmException.Create('vt_BestIndex: unexpected EstimatedCost');
       end;
     pInfo.idxStr := pointer(Prepared);
     pInfo.needToFreeIdxStr := 1; // will do sqlite3.free(idxStr) when needed
@@ -1069,7 +1069,7 @@ begin
       fShardOffset := num;
     dec(num, fShardOffset);
     if not SameText(DBFileName(num), db[f].Name) then
-      raise EORMException.CreateUtf8('%.InitShards(%)', [self, db[f].Name]);
+      raise EOrmException.CreateUtf8('%.InitShards(%)', [self, db[f].Name]);
     if f = high(db) then
       fInitShardsIsLast := true;
     fShardLast := num - 1; // 'folder\root0005.dbs' -> fShardLast := 4
@@ -1150,7 +1150,7 @@ begin
     exit; // no valid :(...): inlined parameter found -> manual bind
   sqlite3param := sqlite3.bind_parameter_count(fStatement^.Request);
   if sqlite3param <> fStatementMaxParam then
-    raise EORMException.CreateUtf8(
+    raise EOrmException.CreateUtf8(
       '%.GetAndPrepareStatement(%) recognized % params, and % for SQLite3',
       [self, fStatementGenericSQL, fStatementMaxParam, sqlite3param]);
   for i := 0 to fStatementMaxParam - 1 do
@@ -2162,7 +2162,7 @@ begin
   end;
 end;
 
-function TRestOrmServerDB.InternalBatchStart(Method: TURIMethod;
+function TRestOrmServerDB.InternalBatchStart(Method: TUriMethod;
   BatchOptions: TRestBatchOptions): boolean;
 begin
   result := false; // means BATCH mode not supported
@@ -2171,7 +2171,7 @@ begin
     if (fBatchMethod <> mNone) or
        (fBatchValuesCount <> 0) or
        (fBatchIDCount <> 0) then
-      raise EORMBatchException.CreateUtf8(
+      raise EOrmBatchException.CreateUtf8(
         '%.InternalBatchStop should have been called', [self]);
     fBatchMethod := Method;
     fBatchOptions := BatchOptions;
@@ -2201,11 +2201,11 @@ begin
      (fBatchTableIndex < 0) then
     exit; // nothing to add
   if fBatchMethod <> mPOST then
-    raise EORMBatchException.CreateUtf8('%.InternalBatchStop: BatchMethod=%',
+    raise EOrmBatchException.CreateUtf8('%.InternalBatchStop: BatchMethod=%',
       [self, ToText(fBatchMethod)^]);
   try
     if fBatchValuesCount <> fBatchIDCount then
-      raise EORMBatchException.CreateUtf8(
+      raise EOrmBatchException.CreateUtf8(
         '%.InternalBatchStop(*Count?)', [self]);
     UpdateEventNeeded := InternalUpdateEventNeeded(fBatchTableIndex);
     Props := fModel.Tables[fBatchTableIndex].OrmProps;
@@ -2219,7 +2219,7 @@ begin
       SQL := 'INSERT INTO ' + Props.SqlTableName + Decode.EncodeAsSql(False) + ';';
       if not InternalExecute(SQL, true) then
         // just like ESqlite3Exception below
-        raise EORMBatchException.CreateUtf8(
+        raise EOrmBatchException.CreateUtf8(
           '%.InternalBatchStop failed on %', [self, SQL]);
       if UpdateEventNeeded then
         InternalUpdateEvent(oeAdd, fBatchTableIndex,
@@ -2248,7 +2248,7 @@ begin
           else
             P := pointer(fBatchValues[ndx]);
           if P = nil then
-            raise EORMBatchException.CreateUtf8(
+            raise EOrmBatchException.CreateUtf8(
               '%.InternalBatchStop: fBatchValues[%]=""', [self, ndx]);
           while P^ in [#1..' ', '{', '['] do
             inc(P);
@@ -2354,7 +2354,7 @@ begin
     until DecodeSaved and
           (ndx = fBatchValuesCount);
     if valuesFirstRow <> fBatchValuesCount then
-      raise EORMBatchException.CreateUtf8(
+      raise EOrmBatchException.CreateUtf8(
         '%.InternalBatchStop(valuesFirstRow)', [self]);
   finally
     fBatchMethod := mNone;

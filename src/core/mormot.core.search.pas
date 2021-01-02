@@ -8,7 +8,7 @@ unit mormot.core.search;
 
    Several Indexing and Search Engines, as used by other parts of the framework
     - Files Search in Folders
-    - ScanUTF8, GLOB and SOUNDEX Text Search
+    - ScanUtf8, GLOB and SOUNDEX Text Search
     - Versatile Expression Search Engine
     - Bloom Filter Probabilistic Index
     - Binary Buffers Delta Compression
@@ -88,7 +88,7 @@ function SynchFolders(const Reference, Dest: TFileName; SubFolder: boolean = fal
   ByContent: boolean = false; WriteFileNameToConsole: boolean = false): integer;
 
 
-{ ****************** ScanUTF8, GLOB and SOUNDEX Text Search }
+{ ****************** ScanUtf8, GLOB and SOUNDEX Text Search }
 
 /// read and store text into values[] according to fmt specifiers
 // - %d as PInteger, %D as PInt64, %u as PCardinal, %U as PQWord, %f as PDouble,
@@ -1549,7 +1549,7 @@ end;
 {$I+}
  
 
-{ ****************** ScanUTF8, GLOB and SOUNDEX Text Search }
+{ ****************** ScanUtf8, GLOB and SOUNDEX Text Search }
 
 function ScanUtf8(P: PUtf8Char; PLen: PtrInt; const fmt: RawUtf8;
   const values:  array of pointer; ident: PRawUtf8DynArray): integer;
@@ -1645,7 +1645,7 @@ begin
             goto next;
         else
           raise ESynException.CreateUtf8(
-            'ScanUTF8: unknown ''%'' specifier [%]', [F^, fmt]);
+            'ScanUtf8: unknown ''%'' specifier [%]', [F^, fmt]);
         end;
         inc(result);
         tab := @TEXT_CHARS;

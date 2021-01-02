@@ -601,7 +601,7 @@ type
   TSqlDBHTTPConnectionPropertiesAbstract = class(TSqlDBRemoteConnectionPropertiesAbstract)
   protected
     fKeepAliveMS: cardinal;
-    fURI: TURI;
+    fUri: TUri;
     function GetServer: RawByteString;
       {$ifdef HASINLINE}inline;{$endif}
     function GetPort: RawByteString;
@@ -1892,23 +1892,23 @@ end;
 
 function TSqlDBHTTPConnectionPropertiesAbstract.GetServer: RawByteString;
 begin
-  result := fURI.Server;
+  result := fUri.Server;
 end;
 
 function TSqlDBHTTPConnectionPropertiesAbstract.GetPort: RawByteString;
 begin
-  result := fURI.Port;
+  result := fUri.Port;
 end;
 
 procedure TSqlDBHTTPConnectionPropertiesAbstract.SetServerName(
   const aServerName: RawUtf8);
 begin
   fKeepAliveMS := 60000;
-  if not fURI.From(aServerName) then
+  if not fUri.From(aServerName) then
     raise ESqlDBRemote.CreateUtf8('%.Create: expect a valid URI in aServerName="%"',
       [self, aServerName]);
-  if fURI.Port = '' then
-    fURI.Port := SYNDB_DEFAULT_HTTP_PORT;
+  if fUri.Port = '' then
+    fUri.Port := SYNDB_DEFAULT_HTTP_PORT;
 end;
 
 procedure TSqlDBHTTPConnectionPropertiesAbstract.ProcessMessage(const Input:
@@ -1922,10 +1922,10 @@ begin
   status := InternalRequest(Content, ContentType);
   if status <> HTTP_SUCCESS then
     raise ESqlDBRemote.CreateUtf8('%.ProcessMessage: Error % from %',
-      [self, status, fURI.URI]);
+      [self, status, fUri.URI]);
   if ContentType <> BINARY_CONTENT_TYPE then
     raise ESqlDBRemote.CreateUtf8('%.ProcessMessage: Invalid content type [%] from %',
-      [self, ContentType, fURI.URI]);
+      [self, ContentType, fUri.URI]);
   Output := Content;
 end;
 
@@ -2000,7 +2000,7 @@ constructor TSqlDBWinHTTPConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
   SetServerName(aServerName);
-  fClient := TWinHTTP.Create(Server, Port, fURI.Https);
+  fClient := TWinHTTP.Create(Server, Port, fUri.Https);
   inherited;
 end;
 
@@ -2010,7 +2010,7 @@ constructor TSqlDBWinINetConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
   SetServerName(aServerName);
-  fClient := TWinINet.Create(Server, Port, fURI.Https);
+  fClient := TWinINet.Create(Server, Port, fUri.Https);
   inherited;
 end;
 
@@ -2024,7 +2024,7 @@ constructor TSqlDBCurlConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
   SetServerName(aServerName);
-  fClient := TCurlHTTP.Create(Server, Port, fURI.Https);
+  fClient := TCurlHTTP.Create(Server, Port, fUri.Https);
   inherited;
 end;
 

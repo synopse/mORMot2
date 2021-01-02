@@ -124,7 +124,8 @@ type
 procedure TIntegrationTests.CoreUnits;
 begin
   AddCase([
-  // TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreEcc, TTestCoreCompress, TNetworkProtocols
+  //
+  TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreEcc, TTestCoreCompression, TNetworkProtocols
   ]);
 end;
 
@@ -133,14 +134,14 @@ begin
   AddCase([
     //
     //
-    TTestOrmCore, TTestFileBased, TTestFileBasedWAL, TTestMemoryBased
+    TTestOrmCore, TTestSqliteFile, TTestSqliteFileWAL, TTestSqliteMemory
   ]);
 end;
 
 
 
 begin
-  TIntegrationTests.RunAsConsole('mORMot2 Regression Tests'{, LOG_VERBOSE});
+  TIntegrationTests.RunAsConsole('mORMot2 Regression Tests', LOG_VERBOSE);
   {$ifdef FPC_X64MM}
   WriteHeapStatus(' ', 16, 8, {compileflags=}true);
   {$endif FPC_X64MM}

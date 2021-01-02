@@ -132,8 +132,8 @@ type
   // - should return FALSE if the method should not be executed, and set the
   // corresponding error to the supplied context e.g.
   // ! Ctxt.Error('Unauthorized method',HTTP_NOTALLOWED);
-  // - i.e. called by TRestServerURIContext.InternalExecuteSOAByInterface
-  TOnServiceCanExecute = function(Ctxt: TRestServerURIContext;
+  // - i.e. called by TRestServerUriContext.InternalExecuteSOAByInterface
+  TOnServiceCanExecute = function(Ctxt: TRestServerUriContext;
     const Method: TInterfaceMethod): boolean of object;
 
   /// callbacked used by TServiceFactoryServer.RunOnAllInstances method
@@ -248,7 +248,7 @@ type
     // $ {"result":[3],"id":0}
     // the returned "id" number is the Instance identifier to be used for any later
     // sicClientDriven remote call - or just 0 in case of sicSingle or sicShared
-    procedure ExecuteMethod(Ctxt: TRestServerURIContext);
+    procedure ExecuteMethod(Ctxt: TRestServerUriContext);
     /// call the supplied aEvent callback for all class instances implementing
     // this service
     function RunOnAllInstances(const aEvent: TOnServiceFactoryServerOne;
@@ -391,10 +391,10 @@ type
       aSharedImplementation: TInterfacedObject;
       const aContractExpected: RawUtf8): TServiceFactoryServer;
     /// initialize and register a server-side interface callback instance
-    procedure GetFakeCallback(Ctxt: TRestServerURIContext;
+    procedure GetFakeCallback(Ctxt: TRestServerUriContext;
       ParamInterfaceInfo: PRttiInfo; FakeID: PtrInt; out Obj);
     /// low-level function called from TRestServer.CacheFlush URI method
-    procedure FakeCallbackRelease(Ctxt: TRestServerURIContext);
+    procedure FakeCallbackRelease(Ctxt: TRestServerUriContext);
     /// class method able to check if a given server-side callback event fake
     // instance has been released on the client side
     // - may be used to automatically purge a list of subscribed callbacks,
@@ -504,7 +504,7 @@ type
     // a local slave REST server from a remote master REST server
     // - the optional low-level aOnNotify callback will be triggerred for each
     // incoming notification, to track the object changes in real-time
-    constructor Create(aSlave: TRestServer; aMaster: TRestClientURI;
+    constructor Create(aSlave: TRestServer; aMaster: TRestClientUri;
       aTable: TOrmClass; const aOnNotify: TOnBatchWrite); reintroduce;
     /// finalize this callback instance
     destructor Destroy; override;
@@ -1060,7 +1060,7 @@ begin
     end;
 end;
 
-procedure TServiceFactoryServer.ExecuteMethod(Ctxt: TRestServerURIContext);
+procedure TServiceFactoryServer.ExecuteMethod(Ctxt: TRestServerUriContext);
 var
   Inst: TServiceFactoryServerInstance;
   WR: TJsonSerializer;
@@ -1428,12 +1428,12 @@ type
       aClientDrivenID: PCardinal;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean; virtual;
   public
-    constructor Create(aRequest: TRestServerURIContext;
+    constructor Create(aRequest: TRestServerUriContext;
       aFactory: TInterfaceFactory; aFakeID: integer);
     destructor Destroy; override;
   end;
 
-constructor TInterfacedObjectFakeServer.Create(aRequest: TRestServerURIContext;
+constructor TInterfacedObjectFakeServer.Create(aRequest: TRestServerUriContext;
   aFactory: TInterfaceFactory; aFakeID: integer);
 var
   opt: TInterfacedObjectFromFactoryOptions;
@@ -1545,7 +1545,7 @@ begin
      aSharedImplementation.InheritsFrom(TInterfacedObjectFake) then
   begin
     // TInterfacedObjectFake has no RTTI
-    if IsEqualGUID(UID[0],
+    if IsEqualGuid(UID[0],
         @TInterfacedObjectFake(aSharedImplementation).Factory.InterfaceIID) then
       UID[0] := nil; // mark TGUID implemented by this fake interface
   end
@@ -1555,7 +1555,7 @@ begin
     implemented := GetRttiClassGUID(aImplementationClass);
     for j := 0 to high(UID) do
       for i := 0 to high(implemented) do
-        if IsEqualGUID(UID[j], implemented[i]) then
+        if IsEqualGuid(UID[j], implemented[i]) then
         begin
           UID[j] := nil; // mark TGUID found
           break;
@@ -1688,7 +1688,7 @@ begin
 end;
 
 procedure TServiceContainerServer.FakeCallbackRelease(
-  Ctxt: TRestServerURIContext);
+  Ctxt: TRestServerUriContext);
 var
   i: PtrInt;
   fake: TInterfacedObjectFakeServer;
@@ -1786,7 +1786,7 @@ begin
   result := true;
 end;
 
-procedure TServiceContainerServer.GetFakeCallback(Ctxt: TRestServerURIContext;
+procedure TServiceContainerServer.GetFakeCallback(Ctxt: TRestServerUriContext;
   ParamInterfaceInfo: PRttiInfo; FakeID: PtrInt; out Obj);
 var
   factory: TInterfaceFactory;
@@ -1971,7 +1971,7 @@ end;
 { TServiceRecordVersionCallback }
 
 constructor TServiceRecordVersionCallback.Create(aSlave: TRestServer;
-  aMaster: TRestClientURI; aTable: TOrmClass; const aOnNotify: TOnBatchWrite);
+  aMaster: TRestClientUri; aTable: TOrmClass; const aOnNotify: TOnBatchWrite);
 begin
   if aSlave = nil then
     raise EServiceException.CreateUtf8('%.Create(%): Slave=nil',

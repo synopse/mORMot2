@@ -524,7 +524,6 @@ function BoundArrayToJsonArray(const Values: TRawUtf8DynArray): RawUtf8;
 
 var
   /// the TSynLog class used for logging for all our mormot.db.sql related units
-  // - you may override it with TSqlLog, if available from mORMot.pas
   // - since not all exceptions are handled specificaly by this unit, you
   // may better use a common TSynLog class for the whole application or module
   SynDBLog: TSynLogClass = TSynLog;

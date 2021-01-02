@@ -12,7 +12,7 @@ unit mormot.rest.core;
     - TRestRunThreads Multi-Threading Process of a REST instance
     - TRest Abstract Parent Class
     - RESTful Authentication Support
-    - TRestURIParams REST URI Definitions
+    - TRestUriParams REST URI Definitions
     - TRestThread Background Process of a REST instance
     - TOrmHistory/TOrmTableDeleted Modifications Tracked Persistence
 
@@ -62,7 +62,7 @@ type
   // - execOrmGet for ORM reads i.e. Retrieve*() methods
   // - execOrmWrite for ORM writes i.e. Add Update Delete TransactionBegin
   // Commit Rollback methods
-  TRestServerURIContextCommand = (
+  TRestServerUriContextCommand = (
     execNone,
     execSOAByMethod,
     execSOAByInterface,
@@ -94,7 +94,7 @@ type
 
   /// define how a TRest class may execute its ORM and SOA operations
   TRestAcquireExecutions =
-    array[TRestServerURIContextCommand] of TRestAcquireExecution;
+    array[TRestServerUriContextCommand] of TRestAcquireExecution;
 
 
 const
@@ -264,7 +264,7 @@ type
 {$ifndef PUREMORMOT2}
 // backward compatibility types redirections
 
-  TSqlRestServerURIContextCommand = TRestServerURIContextCommand;
+  TSqlRestServerUriContextCommand = TRestServerUriContextCommand;
   TSqlRestServerAcquireMode = TRestServerAcquireMode;
   TSqlRestAcquireExecution = TRestAcquireExecution;
   TSqlRestBackgroundTimer = TRestBackgroundTimer;
@@ -445,13 +445,13 @@ type
     procedure SetServerTimestamp(const Value: TTimeLog);
     /// wrapper methods to access fAcquireExecution[]
     function GetAcquireExecutionMode(
-      Cmd: TRestServerURIContextCommand): TRestServerAcquireMode;
+      Cmd: TRestServerUriContextCommand): TRestServerAcquireMode;
     procedure SetAcquireExecutionMode(
-      Cmd: TRestServerURIContextCommand; Value: TRestServerAcquireMode);
+      Cmd: TRestServerUriContextCommand; Value: TRestServerAcquireMode);
     function GetAcquireExecutionLockedTimeOut(
-      Cmd: TRestServerURIContextCommand): cardinal;
+      Cmd: TRestServerUriContextCommand): cardinal;
     procedure SetAcquireExecutionLockedTimeOut(
-      Cmd: TRestServerURIContextCommand; Value: cardinal);
+      Cmd: TRestServerUriContextCommand; Value: cardinal);
     /// any overriden TRest class should call it in the initialization section
     class procedure RegisterClassNameForDefinition;
     /// ensure the thread will be taken into account during process
@@ -489,7 +489,7 @@ type
     /// create a new TRest instance from its Model and stored values
     // - aDefinition.Kind will define the actual class which will be
     // instantiated: currently TRestServerFullMemory, TRestServerDB,
-    // TRestClientURINamedPipe, TRestClientURIMessage,
+    // TRestClientUriNamedPipe, TRestClientUriMessage,
     // TRestHttpClientWinSock, TRestHttpClientWinINet, TRestHttpClientWinHTTP,
     // and TRestHttpClientCurl classes are recognized by this method
     // - then other aDefinition fields will be used to refine the instance:
@@ -587,14 +587,14 @@ type
     // ! aServer.AcquireExecutionMode[execOrmWrite] := am***;
     // here, safe blocking am*** modes are any mode but amUnlocked, i.e. either
     // amLocked, amBackgroundThread, amBackgroundORMSharedThread or amMainThread
-    property AcquireExecutionMode[Cmd: TRestServerURIContextCommand]: TRestServerAcquireMode
+    property AcquireExecutionMode[Cmd: TRestServerUriContextCommand]: TRestServerAcquireMode
       read GetAcquireExecutionMode write SetAcquireExecutionMode;
     /// the time (in mili seconds) to try locking internal commands of this class
     // - this value is used only for AcquireExecutionMode[*]=amLocked
     // - by default, TRestServer.URI() will lock for Write ORM according to
     // AcquireWriteTimeOut  (i.e. AcquireExecutionLockedTimeOut[execOrmWrite])
     // and other operations won't be locked nor have any time out set
-    property AcquireExecutionLockedTimeOut[Cmd: TRestServerURIContextCommand]: cardinal
+    property AcquireExecutionLockedTimeOut[Cmd: TRestServerUriContextCommand]: cardinal
       read GetAcquireExecutionLockedTimeOut write SetAcquireExecutionLockedTimeOut;
     /// how this class will handle write access to the database
     // - is a common wrapper to AcquireExecutionMode[execOrmWrite] property
@@ -865,12 +865,12 @@ type
 
 {$endif PUREMORMOT2}
 
-function ToText(cmd: TRestServerURIContextCommand): PShortString; overload;
+function ToText(cmd: TRestServerUriContextCommand): PShortString; overload;
 
 const
   /// custom contract value to ignore contract validation from client side
   // - you could set the aContractExpected parameter to this value for
-  // TRestClientURI.ServiceDefine or TRestClientURI.ServiceRegister
+  // TRestClientUri.ServiceDefine or TRestClientUri.ServiceRegister
   // so that the contract won't be checked with the server
   // - it will be used e.g. if the remote server is not a mORMot server,
   // but a plain REST/HTTP server - e.g. for public API notifications
@@ -1004,18 +1004,18 @@ type
     // - as expected by this class
     // - defined as virtual so that you may use your own hashing class
     // - you may specify your own values in aHashSalt/aHashRound, to enable
-    // PBKDF2_HMAC_SHA256() use instead of plain SHA256(): it will increase
+    // PBKDF2_HMAC_SHA256() use instead of plain Sha256(): it will increase
     // security on storage side (reducing brute force attack via rainbow tables)
     class function ComputeHashedPassword(const aPasswordPlain: RawUtf8;
       const aHashSalt: RawUtf8 = ''; aHashRound: integer = 20000): RawUtf8; virtual;
     /// able to set the PasswordHashHexa field from a plain password content
-    // - in fact, PasswordHashHexa := SHA256('salt'+PasswordPlain) in UTF-8
+    // - in fact, PasswordHashHexa := Sha256('salt'+PasswordPlain) in UTF-8
     // - use SetPassword() method if you want to customize the hash salt value
     // and use the much safer PBKDF2_HMAC_SHA256 algorithm
     property PasswordPlain: RawUtf8 write SetPasswordPlain;
     /// set the PasswordHashHexa field from a plain password content and salt
     // - use this method to specify aHashSalt/aHashRound values, enabling
-    // PBKDF2_HMAC_SHA256() use instead of plain SHA256(): it will increase
+    // PBKDF2_HMAC_SHA256() use instead of plain Sha256(): it will increase
     // security on storage side (reducing brute force attack via rainbow tables)
     // - you may use an application specific fixed salt, and/or append the
     // user LogonName to make the challenge unique for each TAuthUser
@@ -1025,7 +1025,7 @@ type
     procedure SetPassword(const aPasswordPlain, aHashSalt: RawUtf8;
       aHashRound: integer = 20000);
     /// check if the user can authenticate in its current state
-    // - Ctxt is a TRestServerURIContext instance
+    // - Ctxt is a TRestServerUriContext instance
     // - called by TRestServerAuthentication.GetUser() method
     // - this default implementation will return TRUE, i.e. allow the user
     // to log on
@@ -1072,7 +1072,7 @@ type
   TAuthGroupClass = class of TAuthGroup;
 
 
-{ ************ TRestURIParams REST URI Definitions }
+{ ************ TRestUriParams REST URI Definitions }
 
 type
   /// flags which may be set by the caller to notify low-level context
@@ -1080,20 +1080,20 @@ type
   // - llfSecured is set if the transmission is encrypted or in-process,
   // using e.g. HTTPS/SSL/TLS or our proprietary AES/ECDHE algorithms
   // - llfWebsockets communication was made using WebSockets
-  TRestURIParamsLowLevelFlag = (
+  TRestUriParamsLowLevelFlag = (
     llfHttps,
     llfSecured,
     llfWebsockets);
 
   /// some flags set by the caller to notify low-level context
-  TRestURIParamsLowLevelFlags = set of TRestURIParamsLowLevelFlag;
+  TRestUriParamsLowLevelFlags = set of TRestUriParamsLowLevelFlag;
 
   /// store all parameters for a Client or Server method call
-  // - as used by TRestServer.URI or TRestClientURI.InternalURI
+  // - as used by TRestServer.URI or TRestClientUri.InternalUri
   {$ifdef USERECORDWITHMETHODS}
-  TRestURIParams = record
+  TRestUriParams = record
   {$else}
-  TRestURIParams = object
+  TRestUriParams = object
   {$endif USERECORDWITHMETHODS}
   public
     /// input parameter containing the caller URI
@@ -1105,7 +1105,7 @@ type
     // - you can use e.g. to retrieve the remote IP:
     // ! Call.Header(HEADER_REMOTEIP_UPPER)
     // ! or FindNameValue(Call.InHead,HEADER_REMOTEIP_UPPER)
-    // but consider rather using TRestServerURIContext.RemoteIP
+    // but consider rather using TRestServerUriContext.RemoteIP
     InHead: RawUtf8;
     /// input parameter containing the caller message body
     // - e.g. some GET/POST/PUT JSON data can be specified here
@@ -1133,14 +1133,14 @@ type
     RestAccessRights: POrmAccessRights;
     /// opaque reference to the protocol context which made this request
     // - may point e.g. to a THttpServerResp, a TWebSocketServerResp,
-    // a THttpApiServer, a TRestClientURI, a TFastCGIServer or a
+    // a THttpApiServer, a TRestClientUri, a TFastCGIServer or a
     // TRestServerNamedPipeResponse instance
     // - stores SynCrtSock's THttpServerConnectionID, i.e. a Int64 as expected
     // by http.sys, or an incremental rolling sequence of 31-bit integers for
     // THttpServer/TWebSocketServer, or maybe a raw PtrInt(self/THandle)
     LowLevelConnectionID: Int64;
     /// low-level properties of the current protocol context
-    LowLevelFlags: TRestURIParamsLowLevelFlags;
+    LowLevelFlags: TRestUriParamsLowLevelFlags;
     /// initialize the non RawUtf8 values
     procedure Init; overload;
     /// initialize the input values
@@ -1160,8 +1160,8 @@ type
     /// just a wrapper around FindNameValue(InHead,UpperName)
     // - use e.g. as
     // ! Call.Header(HEADER_REMOTEIP_UPPER) or Call.Header(HEADER_BEARER_UPPER)
-    // - consider rather using TRestServerURIContext.InHeader[] or even
-    // dedicated TRestServerURIContext.RemoteIP/AuthenticationBearerToken
+    // - consider rather using TRestServerUriContext.InHeader[] or even
+    // dedicated TRestServerUriContext.RemoteIP/AuthenticationBearerToken
     function Header(UpperName: PAnsiChar): RawUtf8;
       {$ifdef HASINLINE}inline;{$endif}
     /// wrap FindNameValue(InHead,UpperName) with a cache store
@@ -1169,7 +1169,7 @@ type
   end;
 
   /// used to map set of parameters for a Client or Server method call
-  PRestURIParams = ^TRestURIParams;
+  PRestUriParams = ^TRestUriParams;
 
   /// how a TLibraryRequest function will release its Head and Resp returned values
   TLibraryRequestFree = procedure(Data: pointer); cdecl;
@@ -1190,10 +1190,10 @@ type
   TSqlAuthGroup = TAuthGroup;
   TSqlAuthUserClass = TAuthUserClass;
   TSqlAuthGroupClass = TAuthGroupClass;
-  TSqlRestURIParamsLowLevelFlag = TRestURIParamsLowLevelFlag;
-  TSqlRestURIParamsLowLevelFlags = TRestURIParamsLowLevelFlags;
-  TSqlRestURIParams = TRestURIParams;
-  PSqlRestURIParams = PRestURIParams;
+  TSqlRestUriParamsLowLevelFlag = TRestUriParamsLowLevelFlag;
+  TSqlRestUriParamsLowLevelFlags = TRestUriParamsLowLevelFlags;
+  TSqlRestUriParams = TRestUriParams;
+  PSqlRestUriParams = PRestUriParams;
 
 {$endif PUREMORMOT2}
 
@@ -1309,7 +1309,7 @@ type
       read fModifiedRecord write fModifiedRecord;
     /// when the modification was recorded
     // - even if in most cases, this timestamp may be synchronized over TRest
-    // instances (thanks to TRestClientURI.ServerTimestampSynchronize), it
+    // instances (thanks to TRestClientUri.ServerTimestampSynchronize), it
     // is not safe to use this field as absolute: you should rather rely on
     // pure monotonic ID/RowID increasing values (see e.g. TOrmVersion)
     property Timestamp: TModTime
@@ -1792,32 +1792,32 @@ begin
 end;
 
 function TRest.GetAcquireExecutionMode(
-  Cmd: TRestServerURIContextCommand): TRestServerAcquireMode;
+  Cmd: TRestServerUriContextCommand): TRestServerAcquireMode;
 begin
   result := fAcquireExecution[Cmd].Mode;
 end;
 
 procedure TRest.SetAcquireExecutionMode(
-  Cmd: TRestServerURIContextCommand; Value: TRestServerAcquireMode);
+  Cmd: TRestServerUriContextCommand; Value: TRestServerAcquireMode);
 begin
   fAcquireExecution[Cmd].Mode := Value;
 end;
 
 function TRest.GetAcquireExecutionLockedTimeOut(
-  Cmd: TRestServerURIContextCommand): cardinal;
+  Cmd: TRestServerUriContextCommand): cardinal;
 begin
   result := fAcquireExecution[Cmd].LockedTimeOut;
 end;
 
 procedure TRest.SetAcquireExecutionLockedTimeOut(
-  Cmd: TRestServerURIContextCommand; Value: cardinal);
+  Cmd: TRestServerUriContextCommand; Value: cardinal);
 begin
   fAcquireExecution[Cmd].LockedTimeOut := Value;
 end;
 
 constructor TRest.Create(aModel: TOrmModel);
 var
-  cmd: TRestServerURIContextCommand;
+  cmd: TRestServerUriContextCommand;
 begin
   fPrivateGarbageCollector := TSynObjectList.Create;
   fModel := aModel;
@@ -1842,7 +1842,7 @@ end;
 
 destructor TRest.Destroy;
 var
-  cmd: TRestServerURIContextCommand;
+  cmd: TRestServerUriContextCommand;
 begin
   InternalLog('TRest.Destroy %',[fModel.SafeRoot],sllInfo); // self->GPF
   if fOrm <> nil then
@@ -2683,9 +2683,9 @@ end;
 {$endif PUREMORMOT2}
 
 
-function ToText(cmd: TRestServerURIContextCommand): PShortString;
+function ToText(cmd: TRestServerUriContextCommand): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TRestServerURIContextCommand), ord(cmd));
+  result := GetEnumName(TypeInfo(TRestServerUriContextCommand), ord(cmd));
 end;
 
 
@@ -3288,14 +3288,14 @@ class function TAuthUser.ComputeHashedPassword(const aPasswordPlain,
 const
   DEPRECATED_SALT = 'salt';
 var
-  dig: TSHA256Digest;
+  dig: TSha256Digest;
 begin
   if aHashSalt = '' then
-    result := SHA256(DEPRECATED_SALT + aPasswordPlain)
+    result := Sha256(DEPRECATED_SALT + aPasswordPlain)
   else
   begin
     PBKDF2_HMAC_SHA256(aPasswordPlain, aHashSalt, aHashRound, dig);
-    result := SHA256DigestToString(dig);
+    result := Sha256DigestToString(dig);
     FillCharFast(dig, SizeOf(dig), 0);
   end;
 end;
@@ -3319,11 +3319,11 @@ begin
 end;
 
 
-{ ************ TRestURIParams REST URI Definitions }
+{ ************ TRestUriParams REST URI Definitions }
 
-{ TRestURIParams }
+{ TRestUriParams }
 
-procedure TRestURIParams.Init;
+procedure TRestUriParams.Init;
 begin
   OutStatus := 0;
   OutInternalState := 0;
@@ -3332,7 +3332,7 @@ begin
   byte(LowLevelFlags) := 0;
 end;
 
-procedure TRestURIParams.Init(const aURI, aMethod, aInHead, aInBody: RawUtf8);
+procedure TRestUriParams.Init(const aURI, aMethod, aInHead, aInBody: RawUtf8);
 begin
   Init;
   Url := aURI;
@@ -3341,7 +3341,7 @@ begin
   InBody := aInBody;
 end;
 
-function TRestURIParams.InBodyType(GuessJSONIfNoneSet: boolean): RawUtf8;
+function TRestUriParams.InBodyType(GuessJSONIfNoneSet: boolean): RawUtf8;
 begin
   FindNameValue(InHead, HEADER_CONTENT_TYPE_UPPER, result);
   if GuessJSONIfNoneSet and
@@ -3349,12 +3349,12 @@ begin
     result := JSON_CONTENT_TYPE_VAR;
 end;
 
-function TRestURIParams.InBodyTypeIsJson(GuessJSONIfNoneSet: boolean): boolean;
+function TRestUriParams.InBodyTypeIsJson(GuessJSONIfNoneSet: boolean): boolean;
 begin
   result := IdemPChar(pointer(InBodyType(GuessJSONIfNoneSet)), JSON_CONTENT_TYPE_UPPER);
 end;
 
-function TRestURIParams.OutBodyType(GuessJSONIfNoneSet: boolean): RawUtf8;
+function TRestUriParams.OutBodyType(GuessJSONIfNoneSet: boolean): RawUtf8;
 begin
   FindNameValue(OutHead, HEADER_CONTENT_TYPE_UPPER, result);
   if GuessJSONIfNoneSet and
@@ -3362,17 +3362,17 @@ begin
     result := JSON_CONTENT_TYPE_VAR;
 end;
 
-function TRestURIParams.OutBodyTypeIsJson(GuessJSONIfNoneSet: boolean): boolean;
+function TRestUriParams.OutBodyTypeIsJson(GuessJSONIfNoneSet: boolean): boolean;
 begin
   result := IdemPChar(pointer(OutBodyType(GuessJSONIfNoneSet)), JSON_CONTENT_TYPE_UPPER);
 end;
 
-function TRestURIParams.Header(UpperName: PAnsiChar): RawUtf8;
+function TRestUriParams.Header(UpperName: PAnsiChar): RawUtf8;
 begin
   FindNameValue(InHead, UpperName, result);
 end;
 
-function TRestURIParams.HeaderOnce(var Store: RawUtf8; UpperName: PAnsiChar): RawUtf8;
+function TRestUriParams.HeaderOnce(var Store: RawUtf8; UpperName: PAnsiChar): RawUtf8;
 begin
   if (Store = '') and
      (@self <> nil) then

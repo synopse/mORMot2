@@ -128,7 +128,7 @@ implementation
 procedure TTestOrmCore._TOrmModel;
 var
   M: TOrmModel;
-  U: TRestServerURI;
+  U: TRestServerUri;
 begin
   M := TOrmModel.Create([TOrmTest]);
   try
@@ -162,10 +162,10 @@ var
   Model: TOrmModel;
   Server: TRestServerFullMemory;
   {$ifdef MSWINDOWS2}
-  Client: TRestClientURIMessage;
+  Client: TRestClientUriMessage;
   {$else}
   // Under Linux, no windows message loop : URIDll will be used
-  Client: TRestClientURI;
+  Client: TRestClientUri;
   {$endif MSWINDOWS}
   R: TOrmTest;
   Batch: TRestBatch;
@@ -207,7 +207,7 @@ begin
       Server.{$ifdef PUREMORMOT2}Server.{$endif}CreateMissingTables;
       {$ifdef MSWINDOWS2}
       Check(Server.ExportServerMessage('fullmem'));
-      Client := TRestClientURIMessage.Create(Model, 'fullmem', 'fullmemclient', 1000);
+      Client := TRestClientUriMessage.Create(Model, 'fullmem', 'fullmemclient', 1000);
       {$else}
       Server.ExportServerGlobalLibraryRequest;
       Client := TRestClientLibraryRequest.Create(Model, LibraryRequest);
@@ -252,7 +252,7 @@ begin
       Server.Server.CreateMissingTables;
       {$ifdef MSWINDOWS2}
       Check(Server.ExportServerMessage('fullmem'));
-      Client := TRestClientURIMessage.Create(Model, 'fullmem', 'fullmemclient', 1000);
+      Client := TRestClientUriMessage.Create(Model, 'fullmem', 'fullmemclient', 1000);
       {$else}
       Server.ExportServerGlobalLibraryRequest;
       Client := TRestClientLibraryRequest.Create(Model, LibraryRequest);
@@ -655,8 +655,8 @@ end;
 
 function TOrmSigned.ComputeSignature(const UserName, Content: RawByteString): RawUtf8;
 var
-  SHA: TSHA256;
-  Digest: TSHA256Digest;
+  SHA: TSha256;
+  Digest: TSha256Digest;
 begin
   SHA.Init;
   SHA.Update(TTimeLogBits(fSignatureTime).Text(false));
@@ -664,7 +664,7 @@ begin
   SHA.Update(UserName);
   SHA.Update(Content);
   SHA.final(Digest);
-  result := SHA256DigestToString(Digest);
+  result := Sha256DigestToString(Digest);
 end;
 
 function TOrmSigned.CheckSignature(const Content: RawByteString): boolean;
@@ -679,7 +679,7 @@ begin
   if i = 0 then
     exit;
   sign := ComputeSignature(copy(fSignature, 1, i - 1), Content);
-  if IdemPropNameU(sign, copy(fSignature, i + 1, SizeOf(TSHA256Digest) * 2)) then
+  if IdemPropNameU(sign, copy(fSignature, i + 1, SizeOf(TSha256Digest) * 2)) then
     result := true;
 end;
 

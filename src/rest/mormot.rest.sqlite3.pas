@@ -135,7 +135,7 @@ type
     function GetDB: TSqlDataBase;
       {$ifdef HASINLINE}inline;{$endif}
     /// method calling the RESTful server fServer
-    procedure InternalURI(var Call: TRestURIParams); override;
+    procedure InternalUri(var Call: TRestUriParams); override;
     /// overridden protected method do nothing (direct DB access has no connection)
     function InternalCheckOpen: boolean; override;
     /// overridden protected method do nothing (direct DB access has no connection)
@@ -318,7 +318,7 @@ begin
   result := fServer.DB;
 end;
 
-procedure TRestClientDB.InternalURI(var Call: TRestURIParams);
+procedure TRestClientDB.InternalUri(var Call: TRestUriParams);
 begin
   if fInternalHeader = '' then
     fInternalHeader := 'RemoteIP: 127.0.0.1'#13#10'ConnectionID: ' +

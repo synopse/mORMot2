@@ -333,7 +333,7 @@ type
   // - OnUpdateEvent is called BEFORE deletion, and AFTER insertion or update; it
   // should be used only server-side, not to synchronize some clients: the framework
   // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
-  // clients ask the server for refresh (see TRestClientURI.UpdateFromServer)
+  // clients ask the server for refresh (see TRestClientUri.UpdateFromServer)
   // - is used also by TOrm.ComputeFieldsBeforeWrite virtual method
   TOrmEvent = (
     oeAdd, oeUpdate, oeDelete, oeUpdateBlob);
@@ -2050,7 +2050,7 @@ type
     // temporary TOrmTable
     // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
     // and TOrmMany fields (use RetrieveBlob method or set
-    // TRestClientURI.ForceBlobTransfert)
+    // TRestClientUri.ForceBlobTransfert)
     // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - if this default set of simple fields does not fit your need, you could
     // specify your own set
@@ -2077,8 +2077,8 @@ type
     // - this method will call EngineRetrieve() abstract method
     // - the RawBlob (BLOB) fields are not retrieved by this method, to
     // preserve bandwidth: use the RetrieveBlob() methods for handling
-    // BLOB fields, or set either the TRestClientURI.ForceBlobTransfert
-    // or TRestClientURI.ForceBlobTransfertTable[] properties
+    // BLOB fields, or set either the TRestClientUri.ForceBlobTransfert
+    // or TRestClientUri.ForceBlobTransfertTable[] properties
     // - the TOrmMany fields are not retrieved either: they are separate
     // instances created by TOrmMany.Create, with dedicated methods to
     // access to the separated pivot table
@@ -2093,8 +2093,8 @@ type
     // UnLock() method after Value usage, to release the record
     // - the RawBlob (BLOB) fields are not retrieved by this method, to
     // preserve bandwidth: use the RetrieveBlob() methods for handling
-    // BLOB fields, or set either the TRestClientURI.ForceBlobTransfert
-    // or TRestClientURI.ForceBlobTransfertTable[] properties
+    // BLOB fields, or set either the TRestClientUri.ForceBlobTransfert
+    // or TRestClientUri.ForceBlobTransfertTable[] properties
     // - the TOrmMany fields are not retrieved either: they are separate
     // instances created by TOrmMany.Create, with dedicated methods to
     // access to the separated pivot table
@@ -6913,7 +6913,7 @@ type
     /// this property value is used to auto free the database Model class
     // - set this property after Owner.Create() in order to have
     // Owner.Destroy autofreeing this instance
-    // - Owner is typically a TRest or a TRestORM class
+    // - Owner is typically a TRest or a TRestOrm class
     property Owner: TObject read fOwner write fOwner;
     /// for every table, contains a locked record list
     // - very fast, thanks to the use one TOrmLocks entry by table
@@ -6926,8 +6926,8 @@ type
     property RecordReferences: TOrmModelReferenceDynArray read fRecordReferences;
     /// set a callback event to be executed in loop during client remote
     // blocking process, e.g. to refresh the UI during a somewhat long request
-    // - will be passed to TRestClientURI.OnIdle property by
-    // TRestClientURI.RegisteredClassCreateFrom() method, if applying
+    // - will be passed to TRestClientUri.OnIdle property by
+    // TRestClientUri.RegisteredClassCreateFrom() method, if applying
     property OnClientIdle: TOnIdleSynBackgroundThread
       read fOnClientIdle write fOnClientIdle;
   published
@@ -7149,7 +7149,7 @@ type
 
   /// used to store a BATCH sequence of writing operations
   // - is used by TRest to process BATCH requests using BatchSend() method,
-  // or TRestClientURI for its Batch*() methods
+  // or TRestClientUri for its Batch*() methods
   // - but you can create your own stand-alone BATCH process, so that it will
   // be able to make some transactional process - aka the "Unit Of Work" pattern
   TRestBatch = class
@@ -7451,9 +7451,9 @@ type
     /// GET method (retrieve record) table access bits
     // - note that a GET request with a SQL statement without a table (i.e.
     // on 'ModelRoot' URI with a SQL statement as SentData, as used in
-    // TRestClientURI.UpdateFromServer) will be checked for simple cases
+    // TRestClientUri.UpdateFromServer) will be checked for simple cases
     // (i.e. the first table in the FROM clause), otherwise will follow , whatever the bits
-    // here are: since TRestClientURI.UpdateFromServer() is called only
+    // here are: since TRestClientUri.UpdateFromServer() is called only
     // for refreshing a direct statement, it will be OK; you can improve this
     // by overriding the TRestServer.URI() method
     // - if the REST request is LOCK, the PUT access bits will be read instead

@@ -173,7 +173,7 @@ type
     /// initialize the protocol to be processed on a given TPublicRelay
     constructor Create(aOwner: TPublicRelay); reintroduce;
     /// used server-side for any new connection
-    function Clone(const aClientURI: RawUtf8): TWebSocketProtocol; override;
+    function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
   end;
 
   /// Public Relay to Private Relay connection, encapsulating connection ID
@@ -190,7 +190,7 @@ type
     constructor Create(aOwner: TPublicRelay;
       const aServerKey: RawUtf8); reintroduce;
     /// used server-side for any new connection
-    function Clone(const aClientURI: RawUtf8): TWebSocketProtocol; override;
+    function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
   end;
 
   /// Private Relay to Public Relay connection, decapsulating connection ID
@@ -205,7 +205,7 @@ type
     constructor Create(aOwner: TPrivateRelay;
       const aRelayKey: RawUtf8); reintroduce;
     /// used server-side for any new connection
-    function Clone(const aClientURI: RawUtf8): TWebSocketProtocol; override;
+    function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
   end;
 
   /// Private Relay to local Server connection
@@ -221,7 +221,7 @@ type
     constructor Create(aOwner: TPrivateRelay;
       const aProtocolName: RawUtf8); reintroduce;
     /// used server-side for any new connection
-    function Clone(const aClientURI: RawUtf8): TWebSocketProtocol; override;
+    function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
   end;
 
 
@@ -515,7 +515,7 @@ begin
 end;
 
 function TRelayServerProtocol.Clone(
-  const aClientURI: RawUtf8): TWebSocketProtocol;
+  const aClientUri: RawUtf8): TWebSocketProtocol;
 begin
   result := TRelayServerProtocol.Create(fOwner, '');
   if fEncryption <> nil then
@@ -532,7 +532,7 @@ begin
 end;
 
 function TSynopseServerProtocol.Clone(
-  const aClientURI: RawUtf8): TWebSocketProtocol;
+  const aClientUri: RawUtf8): TWebSocketProtocol;
 begin
   result := TSynopseServerProtocol.Create(fOwner);
 end;
@@ -572,7 +572,7 @@ begin
     end;
     ip := Sender.RemoteIP;
     if Frame.opcode = focContinuation then
-      Frame.payload := ip + #13 + Name + #13 + UpgradeURI; // propagate to Private Relay
+      Frame.payload := ip + #13 + Name + #13 + UpgradeUri; // propagate to Private Relay
     if not fOwner.EncapsulateAndSend(
         fOwner.fServerConnected, ip, Frame, Sender.OwnerConnection) and
        (Frame.opcode <> focConnectionClose) then
@@ -596,7 +596,7 @@ begin
 end;
 
 function TRelayClientProtocol.Clone(
-  const aClientURI: RawUtf8): TWebSocketProtocol;
+  const aClientUri: RawUtf8): TWebSocketProtocol;
 begin
   result := nil; // not used on this client-side protocol
 end;
@@ -729,7 +729,7 @@ begin
 end;
 
 function TSynopseClientProtocol.Clone(
-  const aClientURI: RawUtf8): TWebSocketProtocol;
+  const aClientUri: RawUtf8): TWebSocketProtocol;
 begin
   result := nil; // not used on this client-side only protocol
 end;

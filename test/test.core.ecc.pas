@@ -33,10 +33,10 @@ type
   // in the mormot.core.ecc and mormot.core.ecc256r1 unit
   TTestCoreEcc = class(TSynTestCase)
   protected
-    pub: array of TECCPublicKey;
-    priv: array of TECCPrivateKey;
-    sign: array of TECCSignature;
-    hash: TECCHash;
+    pub: array of TEccPublicKey;
+    priv: array of TEccPrivateKey;
+    sign: array of TEccSignature;
+    hash: TEccHash;
   published
     /// avoid regression among platforms and compilers
     procedure ReferenceVectors;
@@ -51,7 +51,7 @@ type
     /// ECDSA certificates chains and digital signatures
     procedure CertificatesAndSignatures;
     /// run most commands of the ECC tool
-    procedure ECCCommandLineTool;
+    procedure EccCommandLineTool;
     /// ECDHE stream protocol
     procedure ECDHEStreamProtocol;
   end;
@@ -71,16 +71,16 @@ const
 
 procedure TTestCoreEcc.ReferenceVectors;
 var
-  pr1, pr2: TECCPrivateKey;
-  pu1, pu2: TECCPublicKey;
-  h1, h2: TECCHash;
-  si1, si2: TECCSignature;
-  s1, s2, s3: TECCSecretKey;
+  pr1, pr2: TEccPrivateKey;
+  pu1, pu2: TEccPublicKey;
+  h1, h2: TEccHash;
+  si1, si2: TEccSignature;
+  s1, s2, s3: TEccSecretKey;
 begin
   SetLength(pub, ECC_COUNT);
   SetLength(priv, ECC_COUNT);
   SetLength(sign, ECC_COUNT);
-  TAESPRNG.Main.FillRandom(@hash, sizeof(hash));
+  TAesPrng.Main.FillRandom(@hash, sizeof(hash));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     'DC5B79BD481E536DD8075D06C18D42B25B557B4671017BA2A26102B69FD9B70A'),
     @pr1, sizeof(pr1)));
@@ -154,7 +154,7 @@ end;
 
 procedure TTestCoreEcc._ecdh_shared_secret;
 var
-  sec1, sec2: TECCSecretKey;
+  sec1, sec2: TEccSecretKey;
   i: integer;
 begin
   for i := 0 to ECC_COUNT - 2 do
@@ -203,19 +203,19 @@ const
   MYPRIVKEY_PASS = '123456';
   MYPRIVKEY_CYPH = '4e/QgInP';
 var
-  selfsignedroot, secret: TECCCertificateSecret;
-  cert: TECCCertificate;
+  selfsignedroot, secret: TEccCertificateSecret;
+  cert: TEccCertificate;
   sav, json, serial: RawUtf8;
   bin: RawByteString;
   json1, json2, jsonchain: RawUtf8;
-  chain: TECCCertificateChain;
-  sign: TECCSignatureCertified;
-  signcontent: TECCSignatureCertifiedContent;
+  chain: TEccCertificateChain;
+  sign: TEccSignatureCertified;
+  signcontent: TEccSignatureCertifiedContent;
 begin
-  chain := TECCCertificateChain.Create;
+  chain := TEccCertificateChain.Create;
   try
     check(chain.Count = 0);
-    selfsignedroot := TECCCertificateSecret.CreateNew(nil, 'synopse.info', 10);
+    selfsignedroot := TEccCertificateSecret.CreateNew(nil, 'synopse.info', 10);
     check(selfsignedroot.IsSelfSigned);
     check(selfsignedroot.HasSecret);
     check(chain.IsValid(nil) = ecvBadParameter);
@@ -227,7 +227,7 @@ begin
     check(chain.Count = 1);
     check(not chain.IsValidCached);
     chain.IsValidCached := true;
-    selfsignedroot := TECCCertificateSecret.CreateNew(nil, 'mORMot.net', 0);
+    selfsignedroot := TEccCertificateSecret.CreateNew(nil, 'mORMot.net', 0);
     serial := selfsignedroot.Serial;
     check(length(serial) = 32);
     check(selfsignedroot.IsSelfSigned);
@@ -239,14 +239,14 @@ begin
     check(chain.Count = 1);
     check(chain.AddSelfSigned(selfsignedroot) = 1);
     check(chain.Count = 2);
-    secret := TECCCertificateSecret.CreateNew(selfsignedroot, 'google.fr');
+    secret := TEccCertificateSecret.CreateNew(selfsignedroot, 'google.fr');
     check(chain.Count = 2);
     check(secret.HasSecret);
     check(not secret.IsSelfSigned);
     check(chain.IsValid(secret) = ecvValidSigned);
     json1 := ObjectToJson(secret);
     sav := secret.PublicToBase64;
-    cert := TECCCertificate.CreateFromBase64(sav);
+    cert := TEccCertificate.CreateFromBase64(sav);
     check(cert.Serial = secret.Serial);
     check(not cert.IsSelfSigned);
     check(chain.IsValid(cert) = ecvValidSigned);
@@ -259,10 +259,10 @@ begin
     CheckEqual(json1, json2, 'serialization trim private key');
     secret.Free;
     inc(sav[10]); // corrupt
-    cert := TECCCertificate.Create;
+    cert := TEccCertificate.Create;
     check(not cert.FromBase64(sav));
     check(chain.IsValid(cert) = ecvCorrupted);
-    secret := TECCCertificateSecret.CreateFromBase64(PUBPRIV64);
+    secret := TEccCertificateSecret.CreateFromBase64(PUBPRIV64);
     check(secret.HasSecret);
     check(secret.IsSelfSigned);
     check(chain.IsValid(secret.Content, true) = ecvValidSelfSigned);
@@ -281,13 +281,13 @@ begin
     secret.Free;
     cert.Free;
     check(selfsignedroot.SaveToSecureFile('pass', '.', 64, 1000));
-    secret := TECCCertificateSecret.CreateNew(selfsignedroot, 'toto.com');
+    secret := TEccCertificateSecret.CreateNew(selfsignedroot, 'toto.com');
     check(chain.Count = 3);
     check(chain.IsValid(secret) = ecvValidSigned);
     json := chain.SaveToJson;
     check(length(json) = 718, 'certificates have fixed len');
     chain.Free; // will release selfsignedroot
-    chain := TECCCertificateChain.Create;
+    chain := TEccCertificateChain.Create;
     check(chain.IsValid(secret) = ecvUnknownAuthority);
     check(chain.LoadFromJson(json));
     check(chain.SaveToJson = json);
@@ -299,21 +299,21 @@ begin
     bin := secret.SaveToSecureBinary('toto', 64, 1000);
     check(length(bin) = 2320);
     secret.Free;
-    secret := TECCCertificateSecret.CreateFromSecureBinary(@MYPRIVKEY,
+    secret := TEccCertificateSecret.CreateFromSecureBinary(@MYPRIVKEY,
       MYPRIVKEY_LEN, MYPRIVKEY_PASS, MYPRIVKEY_ROUNDS);
     check(secret.Serial = '29E3D71DC26C134A093BA1C22CFA2582');
     check(chain.IsValid(secret.Content, true) = ecvValidSelfSigned);
     json2 := ObjectToJson(secret);
     check(json1 = json2);
     secret.Free;
-    secret := TECCCertificateSecret.Create;
+    secret := TEccCertificateSecret.Create;
     check(chain.IsValid(secret) = ecvCorrupted);
     check(not secret.LoadFromSecureBinary(bin, 'titi', 1000));
     check(secret.LoadFromSecureBinary(bin, 'toto', 1000));
     check(chain.IsValid(secret) = ecvValidSigned);
     chain.Add(secret);
     check(chain.Count = 4);
-    sign := TECCSignatureCertified.CreateNew(secret, pointer(json), length(json));
+    sign := TEccSignatureCertified.CreateNew(secret, pointer(json), length(json));
     check(sign.Check);
     check(sign.AuthoritySerial = secret.Serial);
     check(sign.AuthorityIssuer = secret.Issuer);
@@ -321,10 +321,10 @@ begin
     bin := sign.SaveToDERBinary;
     check(length(bin) >= ECC_BYTES * 2 + 6);
     sign.Free;
-    sign := TECCSignatureCertified.CreateFromBase64(sav);
+    sign := TEccSignatureCertified.CreateFromBase64(sav);
     check(sign.Check);
     check(sign.Version = 1);
-    check(sign.Date = ECCText(NowECCDate));
+    check(sign.Date = EccText(NowEccDate));
     check(sign.AuthoritySerial = secret.Serial);
     check(sign.AuthorityIssuer = 'toto.com');
     check(sign.SaveToDERBinary = bin);
@@ -345,13 +345,13 @@ begin
     check(chain.Count = 0);
     check(chain.IsSigned(sign, pointer(json), length(json)) = ecvUnknownAuthority);
     sign.Free;
-    selfsignedroot := TECCCertificateSecret.CreateFromSecureFile(
+    selfsignedroot := TEccCertificateSecret.CreateFromSecureFile(
        '.', serial, 'pass', 1000);
     check(chain.LoadFromFile('test'));
     check(chain.Count = 3);
     check(chain.IsValid(selfsignedroot) = ecvValidSelfSigned);
-    check(selfsignedroot.IssueDate = ECCText(NowECCDate));
-    check(selfsignedroot.Content.Signed.IssueDate = NowECCDate);
+    check(selfsignedroot.IssueDate = EccText(NowEccDate));
+    check(selfsignedroot.Content.Signed.IssueDate = NowEccDate);
     check(chain.GetBySerial(serial) <> nil);
     chain.IsValidCached := true;
     check(ObjectToJson(chain) = jsonchain);
@@ -362,7 +362,7 @@ begin
   end;
 end;
 
-procedure TTestCoreEcc.ECCCommandLineTool;
+procedure TTestCoreEcc.EccCommandLineTool;
 var
   sw: ICommandLine;
   ctxt: TCommandLine;
@@ -376,14 +376,14 @@ var
   end;
   exectemp: variant;
 
-  function Exec(const nv: array of const; cmd: TECCCommand): PDocVariantData;
+  function Exec(const nv: array of const; cmd: TEccCommand): PDocVariantData;
   var
     sw: ICommandLine;
     ctxt: TCommandLine;
   begin
     ctxt := TCommandLine.Create(nv);
     sw := ctxt;
-    {%H-}check(ECCCommand(cmd, sw) = eccSuccess);
+    {%H-}check(EccCommand(cmd, sw) = eccSuccess);
     if CheckFailed(ctxt.ConsoleLines <> nil) then
       result := @DocVariantDataFake
     else
@@ -416,7 +416,7 @@ begin
           'newpass', pass,
           'newrounds', rounds]);
         sw := ctxt;
-        check(ECCCommand(ecNew, sw) = eccSuccess);
+        check(EccCommand(ecNew, sw) = eccSuccess);
         if CheckFailed(ctxt.ConsoleLines <> nil) then
           exit;
         id := TrimU(split(ctxt.ConsoleLines[high(ctxt.ConsoleLines)], '.'));
@@ -434,7 +434,7 @@ begin
               'saltrounds', i + 10], ecCrypt);
       end;
     sw := TCommandLine.Create([]);
-    check(ECCCommand(ecChainAll, sw) = eccSuccess);
+    check(EccCommand(ecChainAll, sw) = eccSuccess);
     for i := 0 to high(keys) do
       with keys[i] do
       begin
@@ -452,7 +452,7 @@ begin
           check(I['Size'] = length(text));
           check(U['recipient'] = issuer);
           check(U['Recipientserial'] = id);
-          check(length(U['RandomPublicKey']) = sizeof(TECCPublicKey) * 2);
+          check(length(U['RandomPublicKey']) = sizeof(TEccPublicKey) * 2);
           check(U['Algorithm'] = ShortStringToAnsi7String(
             ToText(ecaPBKDF2_HMAC_SHA256_AES256_CFB_SYNLZ)^));
           check(O['Signature']^.VarType = varNull, 'not signed');
@@ -487,14 +487,14 @@ begin
           check(I['Size'] = length(text));
           check(U['recipient'] = issuer);
           check(U['Recipientserial'] = id);
-          check(length(U['RandomPublicKey']) = sizeof(TECCPublicKey) * 2);
+          check(length(U['RandomPublicKey']) = sizeof(TEccPublicKey) * 2);
           check(U['Algorithm'] = 'ecaPBKDF2_HMAC_SHA256_AES128_CTR');
           check(O['Signature']^.I['Version'] = 1, 'signed');
           check(O['Signature']^.U['AuthoritySerial'] = id, 'serial');
           check(B['Meta']);
         end;
         check(PosEx(StringFromFile(rawfn), StringFromFile(crypt)) =
-                sizeof(TECIESHeader) + 1);
+                sizeof(TEciesHeader) + 1);
         DeleteFile(plainfn);
         Exec([
           'file', crypt,
@@ -538,20 +538,20 @@ var
 
 var
   key: THash256;
-  a: TECDHEAuth;
-  c: TECDHEProtocolClient;
-  s: TECDHEProtocolServer;
-  cs, ss: TECCCertificateSecret;
+  a: TEcdheAuth;
+  c: TEcdheProtocolClient;
+  s: TEcdheProtocolServer;
+  cs, ss: TEccCertificateSecret;
   i: integer;
   enc, after: RawByteString;
 
   procedure handshake;
   var
-    cf: TECDHEFrameClient;
-    sf: TECDHEFrameServer;
+    cf: TEcdheFrameClient;
+    sf: TEcdheFrameServer;
   begin
-    c := TECDHEProtocolClient.Create(a, nil, cs);
-    s := TECDHEProtocolServer.Create(a, nil, ss);
+    c := TEcdheProtocolClient.Create(a, nil, cs);
+    s := TEcdheProtocolServer.Create(a, nil, ss);
 {    c.EF := efAesCfb128;
     c.MAC := macHmacCrc32c;
     s.EF := c.EF;
@@ -566,10 +566,10 @@ begin
   for i := 0 to MAX do
     str[i] := RandomString(i shr 3 + 1);
   Test(TProtocolNone.Create, 'none');
-  TAESPRNG.Main.FillRandom(key);
-  Test(TProtocolAES.Create(TAESCFB, key, 128), 'aes');
-  cs := TECCCertificateSecret.CreateNew(nil, 'client');
-  ss := TECCCertificateSecret.CreateNew(nil, 'server');
+  TAesPrng.Main.FillRandom(key);
+  Test(TProtocolAes.Create(TAesCfb, key, 128), 'aes');
+  cs := TEccCertificateSecret.CreateNew(nil, 'client');
+  ss := TEccCertificateSecret.CreateNew(nil, 'server');
   for a := low(a) to high(a) do
   begin
     handshake;

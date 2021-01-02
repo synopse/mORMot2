@@ -49,7 +49,7 @@ type
   // see http://www.iana.org/assignments/http-methods/http-methods.xhtml
   // - for basic CRUD operations, we consider Create=mPOST, Read=mGET,
   // Update=mPUT and Delete=mDELETE - even if it is not fully RESTful
-  TURIMethod = (
+  TUriMethod = (
     mNone,
     mGET,
     mPOST,
@@ -81,19 +81,19 @@ type
     mCONNECT);
 
   /// set of available HTTP methods transmitted between client and server
-  TURIMethods = set of TURIMethod;
+  TUriMethods = set of TUriMethod;
 
-/// convert a string HTTP verb into its TURIMethod enumerate
-function ToMethod(const method: RawUtf8): TURIMethod;
+/// convert a string HTTP verb into its TUriMethod enumerate
+function ToMethod(const method: RawUtf8): TUriMethod;
 
-function ToText(m: TURIMethod): PShortString; overload;
+function ToText(m: TUriMethod): PShortString; overload;
 
 
 {$ifdef PUREMORMOT2}
 
 type
-  TSqlURIMethod = TURIMethod;
-  TSqlURIMethods = TURIMethods;
+  TSqlURIMethod = TUriMethod;
+  TSqlURIMethods = TUriMethods;
 
 {$endif PUREMORMOT2}
 
@@ -233,7 +233,7 @@ type
     // - an overridden method returning TRUE shall ensure that calls to
     // EngineAdd / EngineUpdate / EngineDelete (depending of supplied Method)
     // will properly handle operations until InternalBatchStop() is called
-    function InternalBatchStart(Method: TURIMethod;
+    function InternalBatchStart(Method: TUriMethod;
       BatchOptions: TRestBatchOptions): boolean; virtual;
     /// internal method called by TRestServer.Batch() to process fast sending
     // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
@@ -525,9 +525,9 @@ implementation
 
 { ************ Some definitions Used by TRestOrm Implementation }
 
-function ToMethod(const method: RawUtf8): TURIMethod;
+function ToMethod(const method: RawUtf8): TUriMethod;
 const
-  NAME: array[mGET..high(TURIMethod)] of string[10] = (
+  NAME: array[mGET..high(TUriMethod)] of string[10] = (
     // sorted by occurence for in-order O(n) search
     'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT',
     'LOCK','UNLOCK','STATE', 'OPTIONS','PROPFIND','PROPPATCH','TRACE',
@@ -551,9 +551,9 @@ begin
   result := mNone;
 end;
 
-function ToText(m: TURIMethod): PShortString;
+function ToText(m: TUriMethod): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TURIMethod), ord(m));
+  result := GetEnumName(TypeInfo(TUriMethod), ord(m));
 end;
 
 
@@ -1973,7 +1973,7 @@ begin
   result := true;
 end;
 
-function TRestOrm.InternalBatchStart(Method: TURIMethod;
+function TRestOrm.InternalBatchStart(Method: TUriMethod;
   BatchOptions: TRestBatchOptions): boolean;
 begin
   result := false;

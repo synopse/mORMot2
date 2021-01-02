@@ -8,7 +8,7 @@ unit mormot.orm.client;
 
    Client-Side Object-Relational-Mapping (ORM) Process
     - TRestOrmClient Abstract Client
-    - TRestOrmClientURI REST Client from URI
+    - TRestOrmClientUri REST Client from URI
 
   *****************************************************************************
 }
@@ -54,17 +54,17 @@ type
     tusChanged,
     tusNoChange);
 
-  /// used by TRestOrmClientURI.UpdateFromServer() to let the client
+  /// used by TRestOrmClientUri.UpdateFromServer() to let the client
   // perform the rows update (for Marked[] e.g.)
   TOnTableUpdate = procedure(
     aTable: TOrmTableJson; State: TOnTableUpdateState) of object;
 
-  /// used by TRestOrmClientURI.Update() to let the client
+  /// used by TRestOrmClientUri.Update() to let the client
   // perform the record update (refresh associated report e.g.)
   TOnRecordUpdate = procedure(Value: TOrm) of object;
 
   /// a generic REpresentational State Transfer (REST) client
-  // - is RESTful (i.e. URI) remotely implemented (TRestOrmClientURI e.g.)
+  // - is RESTful (i.e. URI) remotely implemented (TRestOrmClientUri e.g.)
   // - or for direct access to a database (TRestOrmClientDB e.g.)
   TRestOrmClient = class(TRestOrm, IRestOrmClient)
   protected
@@ -274,26 +274,26 @@ type
 
 
 
-{ ************ TRestOrmClientURI REST Client from URI }
+{ ************ TRestOrmClientUri REST Client from URI }
 
 type
-  /// main entry point of TRestOrmClientURI, redirecting to TRestClientURI.URI()
-  TOnRestOrmClientURI = function(const url, method: RawUtf8; Resp: PRawUtf8 = nil;
+  /// main entry point of TRestOrmClientUri, redirecting to TRestClientUri.URI()
+  TOnRestOrmClientUri = function(const url, method: RawUtf8; Resp: PRawUtf8 = nil;
     Head: PRawUtf8 = nil; SendData: PRawUtf8 = nil; outStatus: PCardinal = nil): integer of object;
 
   /// URI-oriented REpresentational State Transfer (REST) client
   // - will later on be implemented over local, Windows messages, named pipe,
   // HTTP/1.1 or WebSockets
-  // - works in conjunction with TRestClientURI from mormot.rest.client.pas
-  TRestOrmClientURI = class(TRestOrmClient)
+  // - works in conjunction with TRestClientUri from mormot.rest.client.pas
+  TRestOrmClientUri = class(TRestOrmClient)
   protected
     // ForUpdate=true->LOCK ForUpdate=false->GET
     function URIGet(Table: TOrmClass; ID: TID; var Resp: RawUtf8;
       ForUpdate: boolean = false; outStatus: PCardinal = nil): integer;
   public
-    /// will redirect any client call to TRestClientURI.URI()
-    // - is injected by TRestClientURI.SetOrmInstance
-    URI: TOnRestOrmClientURI;
+    /// will redirect any client call to TRestClientUri.URI()
+    // - is injected by TRestClientUri.SetOrmInstance
+    URI: TOnRestOrmClientUri;
     // overridden methods actually calling URI()
     function ClientRetrieve(TableModelIndex: integer; ID: TID;
       ForUpdate: boolean; var InternalState: cardinal;
@@ -649,11 +649,11 @@ end;
 
 
 
-{ ************ TRestOrmClientURI REST Client from URI }
+{ ************ TRestOrmClientUri REST Client from URI }
 
-{ TRestOrmClientURI }
+{ TRestOrmClientUri }
 
-procedure TRestOrmClientURI.Commit(SessionID: cardinal; RaiseException: boolean);
+procedure TRestOrmClientUri.Commit(SessionID: cardinal; RaiseException: boolean);
 begin
   inherited Commit(CONST_AUTHENTICATION_NOT_USED, RaiseException);
   // inherited Commit = reset fTransactionActiveSession flag
@@ -661,7 +661,7 @@ begin
   URI(fModel.Root, 'END');
 end;
 
-function TRestOrmClientURI.TransactionBegin(aTable: TOrmClass;
+function TRestOrmClientUri.TransactionBegin(aTable: TOrmClass;
   SessionID: cardinal): boolean;
 begin
   result := inherited TransactionBegin(aTable, CONST_AUTHENTICATION_NOT_USED);
@@ -675,7 +675,7 @@ begin
       result := URI(fModel.URI[aTable], 'BEGIN') in [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
-procedure TRestOrmClientURI.RollBack(SessionID: cardinal);
+procedure TRestOrmClientUri.RollBack(SessionID: cardinal);
 begin
   inherited RollBack(CONST_AUTHENTICATION_NOT_USED);
   // inherited RollBack = reset fTransactionActiveSession flag
@@ -683,7 +683,7 @@ begin
   URI(fModel.Root, 'ABORT');
 end;
 
-function TRestOrmClientURI.UnLock(Table: TOrmClass; aID: TID): boolean;
+function TRestOrmClientUri.UnLock(Table: TOrmClass; aID: TID): boolean;
 begin
   if (self = nil) or
      not fModel.UnLock(Table, aID) then
@@ -695,7 +695,7 @@ begin
       [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
-function TRestOrmClientURI.URIGet(Table: TOrmClass; ID: TID;
+function TRestOrmClientUri.URIGet(Table: TOrmClass; ID: TID;
   var Resp: RawUtf8; ForUpdate: boolean; outStatus: PCardinal): integer;
 const
   METHOD: array[boolean] of RawUtf8 = (
@@ -706,7 +706,7 @@ begin
     METHOD[ForUpdate], @Resp, nil, nil, outStatus);
 end;
 
-function TRestOrmClientURI.ClientRetrieve(TableModelIndex: integer; ID: TID;
+function TRestOrmClientUri.ClientRetrieve(TableModelIndex: integer; ID: TID;
   ForUpdate: boolean; var InternalState: cardinal; var Resp: RawUtf8): boolean;
 begin
   if cardinal(TableModelIndex) <= cardinal(fModel.TablesMax) then
@@ -716,7 +716,7 @@ begin
     result := false;
 end;
 
-function TRestOrmClientURI.EngineList(const SQL: RawUtf8; ForceAjax: boolean;
+function TRestOrmClientUri.EngineList(const SQL: RawUtf8; ForceAjax: boolean;
   ReturnedRowCount: PPtrInt): RawUtf8;
 begin
   if (self = nil) or
@@ -727,14 +727,14 @@ begin
     result := '';
 end;
 
-function TRestOrmClientURI.EngineExecute(const SQL: RawUtf8): boolean;
+function TRestOrmClientUri.EngineExecute(const SQL: RawUtf8): boolean;
 begin
   // POST on 'root' URI with SQL as body
   result := URI(fModel.Root, 'POST', nil, nil, @SQL) in
     [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
-function TRestOrmClientURI.EngineAdd(TableModelIndex: integer;
+function TRestOrmClientUri.EngineAdd(TableModelIndex: integer;
   const SentData: RawUtf8): TID;
 var
   P: PUtf8Char;
@@ -775,7 +775,7 @@ begin
     until P^ = #0;
 end;
 
-function TRestOrmClientURI.EngineUpdate(TableModelIndex: integer; ID: TID;
+function TRestOrmClientUri.EngineUpdate(TableModelIndex: integer; ID: TID;
   const SentData: RawUtf8): boolean;
 var
   url: RawUtf8;
@@ -786,7 +786,7 @@ begin
     [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
-function TRestOrmClientURI.EngineDelete(TableModelIndex: integer;
+function TRestOrmClientUri.EngineDelete(TableModelIndex: integer;
   ID: TID): boolean;
 var
   url: RawUtf8;
@@ -796,7 +796,7 @@ begin
   result := URI(url, 'DELETE') in [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
-function TRestOrmClientURI.EngineDeleteWhere(TableModelIndex: integer;
+function TRestOrmClientUri.EngineDeleteWhere(TableModelIndex: integer;
   const SqlWhere: RawUtf8; const IDs: TIDDynArray): boolean;
 var
   url: RawUtf8;
@@ -807,7 +807,7 @@ begin
   result := URI(url, 'DELETE') in [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
-function TRestOrmClientURI.EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
+function TRestOrmClientUri.EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
   BlobField: PRttiProp; out BlobData: RawBlob): boolean;
 var
   url: RawUtf8;
@@ -825,7 +825,7 @@ begin
   end;
 end;
 
-function TRestOrmClientURI.EngineUpdateBlob(TableModelIndex: integer; aID: TID;
+function TRestOrmClientUri.EngineUpdateBlob(TableModelIndex: integer; aID: TID;
   BlobField: PRttiProp; const BlobData: RawBlob): boolean;
 var
   url, Head: RawUtf8;
@@ -845,7 +845,7 @@ begin
   end;
 end;
 
-function TRestOrmClientURI.EngineUpdateField(TableModelIndex: integer;
+function TRestOrmClientUri.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUtf8): boolean;
 var
   url: RawUtf8;
@@ -862,7 +862,7 @@ begin
   end;
 end;
 
-function TRestOrmClientURI.EngineBatchSend(Table: TOrmClass;
+function TRestOrmClientUri.EngineBatchSend(Table: TOrmClass;
   var Data: RawUtf8; var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
 var
   u, Resp: RawUtf8;
@@ -936,7 +936,7 @@ begin
   end;
 end;
 
-function TRestOrmClientURI.ExecuteList(const Tables: array of TOrmClass;
+function TRestOrmClientUri.ExecuteList(const Tables: array of TOrmClass;
   const SQL: RawUtf8): TOrmTable;
 var
   JSON: RawUtf8;
@@ -960,7 +960,7 @@ begin
   end;
 end;
 
-function TRestOrmClientURI.List(const Tables: array of TOrmClass;
+function TRestOrmClientUri.List(const Tables: array of TOrmClass;
   const SqlSelect: RawUtf8; const SqlWhere: RawUtf8): TOrmTable;
 var
   JSON, SQL: RawUtf8;
@@ -1000,7 +1000,7 @@ begin
   result.InternalState := state;
 end;
 
-function TRestOrmClientURI.ServerInternalState: cardinal;
+function TRestOrmClientUri.ServerInternalState: cardinal;
 begin
   if (self = nil) or
      (fModel = nil) or // avoid GPF
@@ -1008,7 +1008,7 @@ begin
     result := cardinal(-1);
 end;
 
-function TRestOrmClientURI.UpdateFromServer(const Data: array of TObject;
+function TRestOrmClientUri.UpdateFromServer(const Data: array of TObject;
   out Refreshed: boolean; PCurrentRow: PInteger): boolean;
 // notes about refresh mechanism:
 // - if server doesn't implement InternalState, its value is 0 -> always refresh
@@ -1072,7 +1072,7 @@ begin
           end;
 end;
 
-function TRestOrmClientURI.ServerCacheFlush(aTable: TOrmClass; aID: TID): boolean;
+function TRestOrmClientUri.ServerCacheFlush(aTable: TOrmClass; aID: TID): boolean;
 begin
   if (self = nil) or
      (Model = nil) then // avoid GPF

@@ -90,7 +90,7 @@ type
     // - expects [0] of RowID/ID, [1..length(fFieldNames)] for others
     fFieldsInternalToExternal: TIntegerDynArray;
     // multi-thread BATCH process is secured via Lock/UnLock critical section
-    fBatchMethod: TURIMethod;
+    fBatchMethod: TUriMethod;
     fBatchCapacity, fBatchCount: integer;
     // BATCH sending uses TEXT storage for direct sending to database driver
     fBatchValues: TRawUtf8DynArray;
@@ -160,7 +160,7 @@ type
     // overridden method returning TRUE for next calls to EngineAdd/Update/Delete
     // will properly handle operations until InternalBatchStop is called
     // BatchOptions is ignored with external DB (syntax are too much specific)
-    function InternalBatchStart(Method: TURIMethod;
+    function InternalBatchStart(Method: TUriMethod;
       BatchOptions: TRestBatchOptions): boolean; override;
     // internal method called by TRestServer.RunBatch() to process fast sending
     // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
@@ -255,12 +255,12 @@ type
     // a TRestStorageExternal
     // - you can use it e.g. to call MapField() method in a fluent interface
     class function Instance(aClass: TOrmClass;
-      aServer: TRestORMServer): TRestStorageExternal;
+      aServer: TRestOrmServer): TRestStorageExternal;
     /// retrieve the external database connection associated to a TOrm
     // - just map aServer.StaticVirtualTable[] and will return nil if not
     // a TRestStorageExternal
     class function ConnectionProperties(aClass: TOrmClass;
-      aServer: TRestORMServer): TSqlDBConnectionProperties; overload;
+      aServer: TRestOrmServer): TSqlDBConnectionProperties; overload;
     /// disable internal ID generation for INSERT
     // - by default, a new ID will be set (either with 'select max(ID)' or via
     // the OnEngineLockedNextID event)
@@ -967,7 +967,7 @@ begin
   result := fEngineLockedMaxID;
 end;
 
-function TRestStorageExternal.InternalBatchStart(Method: TURIMethod;
+function TRestStorageExternal.InternalBatchStart(Method: TUriMethod;
   BatchOptions: TRestBatchOptions): boolean;
 const
   BATCH: array[mPOST..mDELETE] of TSqlDBStatementCRUD = (
@@ -1904,7 +1904,7 @@ begin
 end;
 
 class function TRestStorageExternal.Instance(aClass: TOrmClass;
-  aServer: TRestORMServer): TRestStorageExternal;
+  aServer: TRestOrmServer): TRestStorageExternal;
 begin
   if (aClass = nil) or
      (aServer = nil) then
@@ -1919,7 +1919,7 @@ begin
 end;
 
 class function TRestStorageExternal.ConnectionProperties(aClass: TOrmClass;
-  aServer: TRestORMServer): TSqlDBConnectionProperties;
+  aServer: TRestOrmServer): TSqlDBConnectionProperties;
 begin
   result := Instance(aClass, aServer).GetConnectionProperties;
 end;

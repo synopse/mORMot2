@@ -221,7 +221,7 @@ type
   // - our ORM will therefore identify such properties as BLOB
   // - by default, the BLOB fields are not retrieved or updated with raw
   // TRest.Retrieve() method, that is "Lazy loading" is enabled by default
-  // for blobs, unless TRestClientURI.ForceBlobTransfert property is TRUE
+  // for blobs, unless TRestClientUri.ForceBlobTransfert property is TRUE
   // (for all tables), or ForceBlobTransfertTable[] (for a particular table);
   // so use RetrieveBlob() methods for handling BLOB fields
   // - could be defined as value in a TOrm property as such:
@@ -586,36 +586,36 @@ procedure FillZero(var result: TGUID); overload;
 
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
-function IsEqualGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+function IsEqualGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
   guid1, guid2: TGUID): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two TGUID values
 // - this version is faster than the one supplied by SysUtils
-function IsEqualGUID(guid1, guid2: PGUID): boolean; overload;
+function IsEqualGuid(guid1, guid2: PGUID): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// returns the index of a matching TGUID in an array
 // - returns -1 if no item matched
-function IsEqualGUIDArray(const guid: TGUID; const guids: array of TGUID): integer;
+function IsEqualGuidArray(const guid: TGUID; const guids: array of TGUID): integer;
 
 /// check if a TGUID value contains only 0 bytes
 // - this version is faster than the one supplied by SysUtils
-function IsNullGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGUID): boolean;
+function IsNullGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGUID): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// append one TGUID item to a TGUID dynamic array
 // - returning the newly inserted index in guids[], or an existing index in
 // guids[] if NoDuplicates is TRUE and TGUID already exists
-function AddGUID(var guids: TGUIDDynArray; const guid: TGUID;
+function AddGuid(var guids: TGUIDDynArray; const guid: TGUID;
   NoDuplicates: boolean = false): integer;
 
 /// compute a random GUID value
-procedure RandomGUID(out result: TGUID); overload;
+procedure RandomGuid(out result: TGUID); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute a random GUID value
-function RandomGUID: TGUID; overload;
+function RandomGuid: TGUID; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compute the new capacity when expanding an array of items
@@ -1831,7 +1831,7 @@ type
   PHash192 = ^THash192;
 
   /// store a 256-bit hash value
-  // - e.g. a SHA-256 digest, a TECCSignature result, or array[0..7] of cardinal
+  // - e.g. a SHA-256 digest, a TEccSignature result, or array[0..7] of cardinal
   // - consumes 32 bytes of memory
   THash256 = array[0..31] of byte;
   /// pointer to a 256-bit hash value
@@ -1845,7 +1845,7 @@ type
   PHash384 = ^THash384;
 
   /// store a 512-bit hash value
-  // - e.g. a SHA-512 digest, a TECCSignature result, or array[0..15] of cardinal
+  // - e.g. a SHA-512 digest, a TEccSignature result, or array[0..15] of cardinal
   // - consumes 64 bytes of memory
   THash512 = array[0..63] of byte;
   /// pointer to a 512-bit hash value
@@ -1898,7 +1898,7 @@ type
   /// pointer to an infinite array of 256-bit hash values
   PHash256Array = ^THash256Array;
   /// store several 256-bit hash values
-  // - e.g. SHA-256 digests, TECCSignature results, or array[0..7] of cardinal
+  // - e.g. SHA-256 digests, TEccSignature results, or array[0..7] of cardinal
   // - consumes 32 bytes of memory per item
   THash256DynArray = array of THash256;
 
@@ -2012,12 +2012,12 @@ function IsEqual(const A, B: THash160): boolean; overload;
 procedure FillZero(out dig: THash160); overload;
 
 /// returns TRUE if all 32 bytes of this 256-bit buffer equal zero
-// - e.g. a SHA-256 digest, or a TECCSignature result
+// - e.g. a SHA-256 digest, or a TEccSignature result
 function IsZero(const dig: THash256): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// returns TRUE if all 32 bytes of both 256-bit buffers do match
-// - e.g. a SHA-256 digest, or a TECCSignature result
+// - e.g. a SHA-256 digest, or a TEccSignature result
 // - this function is not sensitive to any timing attack, so is designed
 // for cryptographic purpose
 function IsEqual(const A, B: THash256): boolean; overload;
@@ -2072,19 +2072,19 @@ procedure FillZero(out dig: THash512); overload;
 function IsEqual(const A, B; count: PtrInt): boolean; overload;
 
 /// thread-safe move of a 32-bit value using a simple Read-Copy-Update pattern
-procedure RCU32(var src, dst);
+procedure Rcu32(var src, dst);
 
 /// thread-safe move of a 64-bit value using a simple Read-Copy-Update pattern
-procedure RCU64(var src, dst);
+procedure Rcu64(var src, dst);
 
 /// thread-safe move of a 128-bit value using a simple Read-Copy-Update pattern
-procedure RCU128(var src, dst);
+procedure Rcu128(var src, dst);
 
 /// thread-safe move of a pointer value using a simple Read-Copy-Update pattern
-procedure RCUPtr(var src, dst);
+procedure RcuPtr(var src, dst);
 
 /// thread-safe move of a memory buffer using a simple Read-Copy-Update pattern
-procedure RCU(var src, dst; len: integer);
+procedure Rcu(var src, dst; len: integer);
 
 /// fast computation of two 64-bit unsigned integers into a 128-bit value
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
@@ -2515,14 +2515,14 @@ type
 // - this function will use well documented and proven Pierre L'Ecuyer software
 // generator - which happens to be faster (and safer) than RDRAND opcode (which
 // is used for seeding anyway)
-// - consider using TAESPRNG.Main.Random32(), which offers cryptographic-level
+// - consider using TAesPrng.Main.Random32(), which offers cryptographic-level
 // randomness, but is twice slower (even with AES-NI)
 // - thread-safe function: each thread will maintain its own TLecuyer table
 function Random32: cardinal; overload;
 
 /// fast compute of bounded 32-bit random value, using the gsl_rng_taus2 generator
 // - calls internally the overloaded Random32 function
-// - consider using TAESPRNG.Main.Random32(), which offers cryptographic-level
+// - consider using TAesPrng.Main.Random32(), which offers cryptographic-level
 // randomness, but is twice slower (even with AES-NI)
 function Random32(max: cardinal): cardinal; overload;
 
@@ -2540,7 +2540,7 @@ procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
 // - the destination buffer is expected to be allocated as 32-bit items
 // - use internally crc32c() with some rough entropy source, and Random32
 // gsl_rng_taus2 generator
-// - consider using instead the cryptographic secure TAESPRNG.Main.FillRandom()
+// - consider using instead the cryptographic secure TAesPrng.Main.FillRandom()
 // method from the mormot.core.crypto unit
 procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
 
@@ -2551,7 +2551,7 @@ procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
 // current gsl_rng_taus2 Lecuyer state
 // - will also use RdRand32 and Rdtsc low-level sources, on Intel/AMD CPUs
 // - execution is fast, but not good as unique seed for a cryptographic PRNG:
-// TAESPRNG.GetEntropy will call it several times as one of the entropy sources
+// TAesPrng.GetEntropy will call it several times as one of the entropy sources
 procedure XorEntropy(entropy: PBlock128);
 
 /// convert the endianness of a given unsigned 32-bit integer into BigEndian
@@ -2787,7 +2787,7 @@ function crc63c(buf: PAnsiChar; len: cardinal): Int64;
 
 /// compute a 128-bit checksum on the supplied buffer, cascading two crc32c
 // - will use SSE 4.2 hardware accelerated instruction, if available
-// - will combine two crc32c() calls into a single TAESBlock result
+// - will combine two crc32c() calls into a single TAesBlock result
 // - by design, such combined hashes cannot be cascaded
 procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
 
@@ -2809,7 +2809,7 @@ procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
 // - apply four crc32c() calls on the 128-bit input chunks, into a 128-bit crc
 // - its output won't match crc128c() value, which works on 8-bit input
 // - will use SSE 4.2 hardware accelerated instruction, if available
-// - is used e.g. by SynEcc's TECDHEProtocol.ComputeMAC for macCrc128c
+// - is used e.g. by SynEcc's TEcdheProtocol.ComputeMAC for macCrc128c
 var crcblocks: procedure(crc128, data128: PBlock128; count: integer) = crcblocksfast;
 
 /// computation of our 128-bit CRC of a 128-bit binary buffer without SSE4.2
@@ -2837,7 +2837,7 @@ var
   // - apply four crc32c() calls on the 128-bit input chunk, into a 128-bit crc
   // - its output won't match crc128c() value, which works on 8-bit input
   // - will use SSE 4.2 hardware accelerated instruction, if available
-  // - is used e.g. by mormot.core.crypto's TAESCFBCRC to check for data integrity
+  // - is used e.g. by mormot.core.crypto's TAesCfbCrc to check for data integrity
   crcblock: procedure(crc128, data128: PBlock128)  = crcblockfast;
 
 /// compute CRC16-CCITT checkum on the supplied buffer
@@ -3845,25 +3845,25 @@ begin
 end;
 
 
-function IsEqualGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
+function IsEqualGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
   guid1, guid2: TGUID): boolean;
 begin
   result := (PHash128Rec(@guid1).L = PHash128Rec(@guid2).L) and
             (PHash128Rec(@guid1).H = PHash128Rec(@guid2).H);
 end;
 
-function IsEqualGUID(guid1, guid2: PGUID): boolean;
+function IsEqualGuid(guid1, guid2: PGUID): boolean;
 begin
   result := (PHash128Rec(guid1).L = PHash128Rec(guid2).L) and
             (PHash128Rec(guid1).H = PHash128Rec(guid2).H);
 end;
 
-function IsEqualGUIDArray(const guid: TGUID; const guids: array of TGUID): integer;
+function IsEqualGuidArray(const guid: TGUID; const guids: array of TGUID): integer;
 begin
   result := Hash128Index(@guids[0], length(guids), @guid);
 end;
 
-function IsNullGUID({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGUID): boolean;
+function IsNullGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: TGUID): boolean;
 var
   a: TPtrIntArray absolute guid;
 begin
@@ -3873,7 +3873,7 @@ begin
             (a[3] = 0) {$endif CPU64};
 end;
 
-function AddGUID(var guids: TGUIDDynArray; const guid: TGUID; NoDuplicates: boolean): integer;
+function AddGuid(var guids: TGUIDDynArray; const guid: TGUID; NoDuplicates: boolean): integer;
 begin
   if NoDuplicates then
   begin
@@ -3891,12 +3891,12 @@ begin
   FillZero(PHash128(@result)^);
 end;
 
-function RandomGUID: TGUID;
+function RandomGuid: TGUID;
 begin
   FillRandom(@result, SizeOf(TGUID) shr 2);
 end;
 
-procedure RandomGUID(out result: TGUID);
+procedure RandomGuid(out result: TGUID);
 begin
   FillRandom(@result, SizeOf(TGUID) shr 2);
 end;
@@ -7565,7 +7565,7 @@ asm
 end;
 {$endif ISDELPHI}
 
-procedure RCU32(var src, dst);
+procedure Rcu32(var src, dst);
 begin
   repeat
     integer(dst) := integer(src);
@@ -7573,7 +7573,7 @@ begin
   until integer(dst) = integer(src);
 end;
 
-procedure RCU64(var src, dst);
+procedure Rcu64(var src, dst);
 begin
   repeat
     Int64(dst) := Int64(src);
@@ -7581,7 +7581,7 @@ begin
   until Int64(dst) = Int64(src);
 end;
 
-procedure RCUPtr(var src, dst);
+procedure RcuPtr(var src, dst);
 begin
   repeat
     PtrInt(dst) := PtrInt(src);
@@ -7589,7 +7589,7 @@ begin
   until PtrInt(dst) = PtrInt(src);
 end;
 
-procedure RCU128(var src, dst);
+procedure Rcu128(var src, dst);
 var
   s: THash128Rec absolute src;
   d: THash128Rec absolute dst;
@@ -7601,7 +7601,7 @@ begin
         (d.H = s.H);
 end;
 
-procedure RCU(var src, dst; len: integer);
+procedure Rcu(var src, dst; len: integer);
 begin
   if len > 0 then
     repeat
