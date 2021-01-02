@@ -18008,7 +18008,7 @@ begin
   if JSON = '' then
     exit;
   T := TOrmTableJson.CreateFromTables(ObjectsClass, SQL, JSON,
-    {ownJSON=}PRefCnt(PtrUInt(JSON) - _DAREFCNT)^ = 1);
+    {ownJSON=}PRefCnt(PAnsiChar(pointer(JSON)) - _STRREFCNT)^ = 1);
   if (T = nil) or (T.fResults = nil) then
   begin
     T.Free;

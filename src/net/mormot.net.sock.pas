@@ -168,7 +168,7 @@ function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
 
 var
   /// contains the raw Socket API version, as returned by the Operating System
-  SocketAPIVersion: RawUtf8;
+  SocketApiVersion: RawUtf8;
 
   /// Queue length for completely established sockets waiting to be accepted,
   // a backlog parameter for listen() function. If queue overflows client count,

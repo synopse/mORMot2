@@ -57,8 +57,8 @@ type
     /// CryptDataForCurrentUser() function
     procedure _CryptDataForCurrentUser;
     {$ifdef MSWINDOWS}
-    /// CryptDataForCurrentUserAPI() function
-    procedure _CryptDataForCurrentUserAPI;
+    /// CryptDataForCurrentUserApi() function
+    procedure _CryptDataForCurrentUserApi;
     {$endif MSWINDOWS}
     /// JWT classes
     procedure _JWT;
@@ -642,7 +642,7 @@ begin
 end;
 
 {$ifdef MSWINDOWS}
-procedure TTestCoreCrypto._CryptDataForCurrentUserAPI;
+procedure TTestCoreCrypto._CryptDataForCurrentUserApi;
 begin
   CryptData(true);
 end;

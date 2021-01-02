@@ -297,7 +297,7 @@ type
   // using either NTLM (Windows only) or Kerberos - it will allow to safely
   // authenticate on a mORMot server without prompting the user to enter its
   // password
-  // - match TRestServerAuthenticationSSPI class on server side
+  // - match TRestServerAuthenticationSspi class on server side
   // - if ClientSetUser() receives aUserName as '', aPassword should be either
   // '' if you expect NTLM authentication to take place, or contain the SPN
   // registration (e.g. 'mymormotservice/myserver.mydomain.tld') for Kerberos
@@ -305,7 +305,7 @@ type
   // - if ClientSetUser() receives aUserName as 'DomainName\UserName', then
   // authentication will take place on the specified domain, with aPassword
   // as plain password value
-  TRestClientAuthenticationSSPI = class(TRestClientAuthenticationSignedUri)
+  TRestClientAuthenticationSspi = class(TRestClientAuthenticationSignedUri)
   protected
     class function ClientComputeSessionKey(Sender: TRestClientUri;
       User: TAuthUser): RawUtf8; override;
@@ -812,14 +812,14 @@ type
     // contain the already-hashed value, just as stored in PasswordHashHexa
     // (i.e. Sha256('salt'+Value) as in TAuthUser.SetPasswordPlain method)
     // - if SSPIAUTH conditional is defined, and aUserName='', a Windows
-    // authentication will be performed via TRestClientAuthenticationSSPI -
+    // authentication will be performed via TRestClientAuthenticationSspi -
     // in this case, aPassword will contain the SPN domain for Kerberos
     // (otherwise NTLM will be used), and table TAuthUser shall contain
     // an entry for the logged Windows user, with the LoginName in form
     // 'DomainName\UserName'
     // - you can directly create the class method ClientSetUser() of a given
     // TRestClientAuthentication inherited class, if neither
-    // TRestClientAuthenticationDefault nor TRestClientAuthenticationSSPI
+    // TRestClientAuthenticationDefault nor TRestClientAuthenticationSspi
     // match your need
     function SetUser(const aUserName, aPassword: RawUtf8;
       aHashedPassword: boolean = false): boolean;
@@ -1387,7 +1387,7 @@ end;
 {$ifdef DOMAINRESTAUTH}
 { will use mormot.lib.sspi/gssapi units depending on the OS }
 
-class function TRestClientAuthenticationSSPI.ClientComputeSessionKey(
+class function TRestClientAuthenticationSspi.ClientComputeSessionKey(
   Sender: TRestClientUri; User: TAuthUser): RawUtf8;
 var
   SecCtx: TSecContext;
@@ -1401,10 +1401,10 @@ begin
   try
     repeat
       if WithPassword then
-        ClientSSPIAuthWithPassword(SecCtx,
+        ClientSspiAuthWithPassword(SecCtx,
           Sender.fSession.Data, User.LogonName, User.PasswordHashHexa, OutData)
       else
-        ClientSSPIAuth(SecCtx,
+        ClientSspiAuth(SecCtx,
           Sender.fSession.Data, User.PasswordHashHexa, OutData);
       if OutData = '' then
         break;
@@ -1816,7 +1816,7 @@ begin
      (fSession.User <> nil) then
   begin
     {$ifdef DOMAINRESTAUTH}
-    if fSession.Authentication.InheritsFrom(TRestClientAuthenticationSSPI) then
+    if fSession.Authentication.InheritsFrom(TRestClientAuthenticationSspi) then
       Definition.User := SSPI_DEFINITION_USERNAME
     else
     {$endif DOMAINRESTAUTH}
@@ -2533,7 +2533,7 @@ begin
   result := true;
   if ((TrimU(aUserName) = '') or
       (PosExChar(SSPI_USER_CHAR, aUserName) > 0)) and
-     TRestClientAuthenticationSSPI.ClientSetUser(
+     TRestClientAuthenticationSspi.ClientSetUser(
        self, aUserName, aPassword, passKerberosSPN) then
     exit;
   {$endif DOMAINRESTAUTH}

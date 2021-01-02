@@ -1332,14 +1332,14 @@ type
   // authentication will take place on the specified domain, with aPassword
   // as plain password value
   // - this class is not available on some targets (e.g. Android)
-  TRestServerAuthenticationSSPI = class(TRestServerAuthenticationSignedUri)
+  TRestServerAuthenticationSspi = class(TRestServerAuthenticationSignedUri)
   protected
     /// Windows built-in authentication
-    // - holds information between calls to ServerSSPIAuth()
+    // - holds information between calls to ServerSspiAuth()
     // - access to this array is made thread-safe thanks to Safe.Lock/Unlock
-    fSSPIAuthContext: TSecContextDynArray;
-    fSSPIAuthContextCount: integer;
-    fSSPIAuthContexts: TDynArray;
+    fSspiAuthContext: TSecContextDynArray;
+    fSspiAuthContextCount: integer;
+    fSspiAuthContexts: TDynArray;
   public
     /// initialize this SSPI/GSSAPI authentication scheme
     constructor Create(aServer: TRestServer); override;
@@ -2034,7 +2034,7 @@ type
     // aHandleUserAuthentication set to TRUE, it will register the two
     // following classes:
     // ! AuthenticationRegister([
-    // !   TRestServerAuthenticationDefault, TRestServerAuthenticationSSPI]);
+    // !   TRestServerAuthenticationDefault, TRestServerAuthenticationSspi]);
     procedure AuthenticationRegister(
       const aMethods: array of TRestServerAuthenticationClass); overload;
     /// call this method to remove an authentication method to the server
@@ -2545,7 +2545,7 @@ type
   // - used by the overloaded TRestHttpServer.Create(TRestHttpServerDefinition)
   // constructor in mormot.rest.http.server.pas, and also in dddInfraSettings.pas
   // - map TRestServerAuthenticationDefault, TRestServerAuthenticationHttpBasic,
-  // TRestServerAuthenticationNone and TRestServerAuthenticationSSPI classes
+  // TRestServerAuthenticationNone and TRestServerAuthenticationSspi classes
   // - asSSPI will use mormot.lib.sspi/gssapi units depending on the OS, and
   // may be not available on some targets (e.g. Android)
   TRestHttpServerRestAuthentication = (
@@ -5648,25 +5648,25 @@ const
   MAXSSPIAUTHCONTEXTS = 64;
 
 
-{ TRestServerAuthenticationSSPI }
+{ TRestServerAuthenticationSspi }
 
-constructor TRestServerAuthenticationSSPI.Create(aServer: TRestServer);
+constructor TRestServerAuthenticationSspi.Create(aServer: TRestServer);
 begin
   inherited Create(aServer);
-  fSSPIAuthContexts.InitSpecific(TypeInfo(TSecContextDynArray),
-    fSSPIAuthContext, ptInt64, @fSSPIAuthContextCount);
+  fSspiAuthContexts.InitSpecific(TypeInfo(TSecContextDynArray),
+    fSspiAuthContext, ptInt64, @fSspiAuthContextCount);
 end;
 
-destructor TRestServerAuthenticationSSPI.Destroy;
+destructor TRestServerAuthenticationSspi.Destroy;
 var
   i: PtrInt;
 begin
-  for i := 0 to fSSPIAuthContextCount - 1 do
-    FreeSecContext(fSSPIAuthContext[i]);
+  for i := 0 to fSspiAuthContextCount - 1 do
+    FreeSecContext(fSspiAuthContext[i]);
   inherited Destroy;
 end;
 
-function TRestServerAuthenticationSSPI.Auth(
+function TRestServerAuthenticationSspi.Auth(
   Ctxt: TRestServerUriContext): boolean;
 var
   i, ndx: PtrInt;
@@ -5705,31 +5705,31 @@ begin
   // check for outdated auth context
   fSafe.Lock;
   try
-    // thread-safe deletion of deprecated fSSPIAuthContext[] pending auths
+    // thread-safe deletion of deprecated fSspiAuthContext[] pending auths
     ticks := GetTickCount64 - 30000;
-    for i := fSSPIAuthContextCount - 1  downto 0 do
-      if ticks > fSSPIAuthContext[i].CreatedTick64 then
+    for i := fSspiAuthContextCount - 1  downto 0 do
+      if ticks > fSspiAuthContext[i].CreatedTick64 then
       begin
-        FreeSecContext(fSSPIAuthContext[i]);
-        fSSPIAuthContexts.Delete(i);
+        FreeSecContext(fSspiAuthContext[i]);
+        fSspiAuthContexts.Delete(i);
       end;
     // if no auth context specified, create a new one
     result := true;
-    ndx := fSSPIAuthContexts.Find(connectionID);
+    ndx := fSspiAuthContexts.Find(connectionID);
     if ndx < 0 then
     begin
       // 1st call: create SecCtxId
-      if fSSPIAuthContextCount >= MAXSSPIAUTHCONTEXTS then
+      if fSspiAuthContextCount >= MAXSSPIAUTHCONTEXTS then
       begin
         fServer.InternalLog('Too many Windows Authenticated session in  pending' +
           ' state: MAXSSPIAUTHCONTEXTS=%', [MAXSSPIAUTHCONTEXTS], sllUserAuth);
         exit;
       end;
-      ndx := fSSPIAuthContexts.New; // add a new entry to fSSPIAuthContext[]
-      InvalidateSecContext(fSSPIAuthContext[ndx], connectionID);
+      ndx := fSspiAuthContexts.New; // add a new entry to fSspiAuthContext[]
+      InvalidateSecContext(fSspiAuthContext[ndx], connectionID);
     end;
     // call SSPI provider
-    if ServerSSPIAuth(fSSPIAuthContext[ndx], Base64ToBin(indataenc), outdata) then
+    if ServerSspiAuth(fSspiAuthContext[ndx], Base64ToBin(indataenc), outdata) then
     begin
       if browserauth then
       begin
@@ -5744,10 +5744,10 @@ begin
       exit; // 1st call: send back outdata to the client
     end;
     // 2nd call: user was authenticated -> release used context
-    ServerSSPIAuthUser(fSSPIAuthContext[ndx], username);
+    ServerSspiAuthUser(fSspiAuthContext[ndx], username);
     if sllUserAuth in fServer.fLogFamily.Level then
       fServer.fLogFamily.SynLog.Log(sllUserAuth, '% Authentication success for %',
-        [SecPackageName(fSSPIAuthContext[ndx]), username], self);
+        [SecPackageName(fSspiAuthContext[ndx]), username], self);
     // now client is authenticated -> create a session for aUserName
     // and send back outdata
     try
@@ -5766,18 +5766,18 @@ begin
                 (SECPKGNAMEHTTPWWWAUTHENTICATE + ' ') + BinToBase64(outdata))
             else
               SessionCreateReturns(Ctxt, session,
-                BinToBase64(SecEncrypt(fSSPIAuthContext[ndx], session.fPrivateSalt)),
+                BinToBase64(SecEncrypt(fSspiAuthContext[ndx], session.fPrivateSalt)),
                 BinToBase64(outdata),'');
       finally
         user.Free;
       end else
         Ctxt.AuthenticationFailed(afUnknownUser);
     finally
-      FreeSecContext(fSSPIAuthContext[ndx]);
-      fSSPIAuthContexts.Delete(ndx);
+      FreeSecContext(fSspiAuthContext[ndx]);
+      fSspiAuthContexts.Delete(ndx);
     end;
   finally
-    fSafe.UnLock; // protect fSSPIAuthContext[] process
+    fSafe.UnLock; // protect fSspiAuthContext[] process
   end;
 end;
 
@@ -6104,7 +6104,7 @@ begin
     AuthenticationRegister([
       TRestServerAuthenticationDefault
       {$ifdef DOMAINRESTAUTH},
-      TRestServerAuthenticationSSPI
+      TRestServerAuthenticationSspi
       {$endif DOMAINRESTAUTH}]);
   fAssociatedServices := TServicesPublishedInterfacesList.Create(0);
   fServicesRouting := TRestServerRoutingREST;

@@ -967,7 +967,7 @@ type
     );
 
   /// direct late-binding access to the HTTP API server 1.0 or 2.0
-  THttpAPI = packed record
+  THttpApi = packed record
     /// access to the httpapi.dll loaded library
     Module: THandle;
     /// will be either 1.0 or 2.0, depending on the published .dll functions
@@ -1110,10 +1110,10 @@ type
   end;
 
 var
-  Http: THttpAPI;
+  Http: THttpApi;
 
 type
-  THttpAPIs = (
+  THttpApis = (
     hInitialize, hTerminate, hCreateHttpHandle, hAddUrl, hRemoveUrl,
     hReceiveHttpRequest, hSendHttpResponse, hReceiveRequestEntityBody,
     hResponseEntityBody, hSetServiceConfiguration, hDeleteServiceConfiguration,
@@ -1125,7 +1125,7 @@ type
 
 const
   hHttpApi2First = hCancelHttpRequest;
-  HttpNames: array[THttpAPIs] of PChar = (
+  HttpNames: array[THttpApis] of PChar = (
     'HttpInitialize', 'HttpTerminate',
     'HttpCreateHttpHandle', 'HttpAddUrl', 'HttpRemoveUrl',
     'HttpReceiveHttpRequest', 'HttpSendHttpResponse',
@@ -1145,18 +1145,18 @@ type
   EHttpApiServer = class(ENetSock)
   protected
     fLastError: integer;
-    fLastApi: THttpAPIs;
+    fLastApi: THttpApis;
   public
     /// raise an EHttpApiServer if the http.sys API result code is an error
-    class procedure RaiseOnError(api: THttpAPIs; Error: integer);
+    class procedure RaiseOnError(api: THttpApis; Error: integer);
     /// initialize a new EHttpApiServer instance
-    constructor Create(api: THttpAPIs; Error: integer); reintroduce;
+    constructor Create(api: THttpApis; Error: integer); reintroduce;
   published
     /// the error code of this exception
     property LastError: integer
       read fLastError;
     /// the execution context of this exception
-    property LastApi: THttpAPIs
+    property LastApi: THttpApis
       read fLastApi;
   end;
 
@@ -1427,10 +1427,10 @@ type
   end;
 
 var
-  WinHttpAPI: TWinHTTPBinding;
+  WinHttpApi: TWinHTTPBinding;
 
 type
-  TWinHttpAPIs = (
+  TWinHttpApis = (
     hOpen, hSetStatusCallback, hConnect, hOpenRequest, hCloseHandle,
     hAddRequestHeaders, hSendRequest, hReceiveResponse, hQueryHeaders,
     hQueryDataAvailable, hReadData, hSetTimeouts, hSetOption, hSetCredentials,
@@ -1441,7 +1441,7 @@ const
   hWebSocketApiFirst = hWebSocketCompleteUpgrade;
 
 const
-  WinHttpNames: array[TWinHttpAPIs] of PChar = (
+  WinHttpNames: array[TWinHttpApis] of PChar = (
     'WinHttpOpen', 'WinHttpSetStatusCallback', 'WinHttpConnect',
     'WinHttpOpenRequest', 'WinHttpCloseHandle', 'WinHttpAddRequestHeaders',
     'WinHttpSendRequest', 'WinHttpReceiveResponse', 'WinHttpQueryHeaders',
@@ -1452,7 +1452,7 @@ const
 
 
 /// low-level thread-safe initialization of the WinHtpp API
-procedure WinHttpAPIInitialize;
+procedure WinHttpApiInitialize;
 
 /// a callback raising a EWinHTTP on error
 procedure WinHTTPSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
@@ -1517,7 +1517,7 @@ type
   end;
 
   /// direct late-binding access to the WebSocket Protocol Component API functions
-  TWebSocketAPI = packed record
+  TWebSocketApi = packed record
     /// acces to the loaded library handle
     LibraryHandle: THandle;
     /// depends on Windows version
@@ -1574,8 +1574,8 @@ type
       WEB_SOCKET_BUFFER_TYPE; pBuffer, Context: Pointer): HRESULT; stdcall;
   end;
 
-  /// identify each TWebSocketAPI late-binding API function
-  TWebSocketAPIs = (
+  /// identify each TWebSocketApi late-binding API function
+  TWebSocketApis = (
     hAbortHandle, hBeginClientHandshake, hBeginServerHandshake,
     hCompleteAction, hCreateClientHandle, hCreateServerHandle, hDeleteHandle,
     hEndClientHandshake, hEndServerHandshake, hGetAction, hGetGlobalProperty,
@@ -1585,24 +1585,24 @@ type
   EWebSocketApi = class(ENetSock)
   protected
     fLastError: integer;
-    fLastApi: TWebSocketAPIs;
+    fLastApi: TWebSocketApis;
   public
     /// raise an EWebSocketApi if the http.sys API result code is an error
-    class procedure RaiseOnError(api: TWebSocketAPIs; Error: integer);
+    class procedure RaiseOnError(api: TWebSocketApis; Error: integer);
     /// initialize a new EWebSocketApi instance
-    constructor Create(api: TWebSocketAPIs; Error: integer); reintroduce; overload;
+    constructor Create(api: TWebSocketApis; Error: integer); reintroduce; overload;
   published
     /// the error code of this exception
     property LastError: integer
       read fLastError;
     /// the execution context of this exception
-    property LastApi: TWebSocketAPIs
+    property LastApi: TWebSocketApis
       read fLastApi;
   end;
 
 const
   WEBSOCKET_DLL = 'websocket.dll';
-  WebSocketNames: array[TWebSocketAPIs] of PChar = (
+  WebSocketNames: array[TWebSocketApis] of PChar = (
     'WebSocketAbortHandle', 'WebSocketBeginClientHandshake',
     'WebSocketBeginServerHandshake', 'WebSocketCompleteAction',
     'WebSocketCreateClientHandle', 'WebSocketCreateServerHandle',
@@ -1663,7 +1663,7 @@ const
   WEB_SOCKET_SECURE_HANDSHAKE_ERROR_CLOSE_STATUS: WEB_SOCKET_CLOSE_STATUS = 1015;
 
 var
-  WebSocketAPI: TWebSocketAPI;
+  WebSocketApi: TWebSocketApi;
 
 /// is HTTP.SYS web socket API available on the target system Windows 8 and UP
 function WinHTTP_WebSocketEnabled: boolean;
@@ -1812,7 +1812,7 @@ end;
 
 procedure HttpApiInitialize;
 var
-  api: THttpAPIs;
+  api: THttpApis;
   P: PPointer;
 begin
   if Http.Module <> 0 then
@@ -1857,13 +1857,13 @@ end;
 
 { EHttpApiServer }
 
-class procedure EHttpApiServer.RaiseOnError(api: THttpAPIs; Error: integer);
+class procedure EHttpApiServer.RaiseOnError(api: THttpApis; Error: integer);
 begin
   if Error <> NO_ERROR then
     raise self.Create(api, Error);
 end;
 
-constructor EHttpApiServer.Create(api: THttpAPIs; Error: integer);
+constructor EHttpApiServer.Create(api: THttpApis; Error: integer);
 begin
   fLastError := Error;
   fLastApi := api;
@@ -2063,42 +2063,42 @@ begin
     [dwInternetStatus, PDWORD(lpvStatusInformation)^]);
 end;
 
-procedure WinHttpAPIInitialize;
+procedure WinHttpApiInitialize;
 var
-  api: TWinHttpAPIs;
+  api: TWinHttpApis;
   P: PPointer;
 begin
-  if WinHttpAPI.LibraryHandle <> 0 then
+  if WinHttpApi.LibraryHandle <> 0 then
     exit; // already loaded
   mormot.core.os.GlobalLock;
   try
-    if WinHttpAPI.LibraryHandle <> 0 then
+    if WinHttpApi.LibraryHandle <> 0 then
       exit; // thread-safe test
-    WinHttpAPI.LibraryHandle := SafeLoadLibrary(winhttpdll);
-    WinHttpAPI.WebSocketEnabled := true; // WebSocketEnabled if all functions are available
-    if WinHttpAPI.LibraryHandle = 0 then
+    WinHttpApi.LibraryHandle := SafeLoadLibrary(winhttpdll);
+    WinHttpApi.WebSocketEnabled := true; // WebSocketEnabled if all functions are available
+    if WinHttpApi.LibraryHandle = 0 then
       raise EHttpSocket.CreateFmt('Unable to load library %s', [winhttpdll]);
-    P := @@WinHttpAPI.Open;
+    P := @@WinHttpApi.Open;
     for api := low(api) to high(api) do
     begin
-      P^ := GetProcAddress(WinHttpAPI.LibraryHandle, WinHttpNames[api]);
+      P^ := GetProcAddress(WinHttpApi.LibraryHandle, WinHttpNames[api]);
       if P^ = nil then
         if api < hWebSocketApiFirst then
         begin
-          FreeLibrary(WinHttpAPI.LibraryHandle);
-          WinHttpAPI.LibraryHandle := 0;
+          FreeLibrary(WinHttpApi.LibraryHandle);
+          WinHttpApi.LibraryHandle := 0;
           raise EHttpSocket.CreateFmt('Unable to find %s() export in %s',
             [WinHttpNames[api], winhttpdll]);
         end
         else
           // e.g. system older than Windows 8
-          WinHttpAPI.WebSocketEnabled := false;
+          WinHttpApi.WebSocketEnabled := false;
       inc(P);
     end;
-    if WinHttpAPI.WebSocketEnabled then
+    if WinHttpApi.WebSocketEnabled then
       WebSocketApiInitialize
     else
-      WebSocketAPI.WebSocketEnabled := false;
+      WebSocketApi.WebSocketEnabled := false;
   finally
     mormot.core.os.GlobalUnlock;
   end;
@@ -2110,33 +2110,33 @@ end;
 
 procedure WebSocketApiInitialize;
 var
-  api: TWebSocketAPIs;
+  api: TWebSocketApis;
   P: PPointer;
 begin
-  if WebSocketAPI.LibraryHandle <> 0 then
+  if WebSocketApi.LibraryHandle <> 0 then
     exit; // already loaded
-  WebSocketAPI.WebSocketEnabled := false;
-  WebSocketAPI.LibraryHandle := SafeLoadLibrary(WEBSOCKET_DLL);
-  if WebSocketAPI.LibraryHandle = 0 then
+  WebSocketApi.WebSocketEnabled := false;
+  WebSocketApi.LibraryHandle := SafeLoadLibrary(WEBSOCKET_DLL);
+  if WebSocketApi.LibraryHandle = 0 then
     exit;
-  P := @@WebSocketAPI.AbortHandle;
+  P := @@WebSocketApi.AbortHandle;
   for api := low(api) to high(api) do
   begin
-    P^ := GetProcAddress(WebSocketAPI.LibraryHandle, WebSocketNames[api]);
+    P^ := GetProcAddress(WebSocketApi.LibraryHandle, WebSocketNames[api]);
     if P^ = nil then
     begin
-      FreeLibrary(WebSocketAPI.LibraryHandle);
-      WebSocketAPI.LibraryHandle := 0;
+      FreeLibrary(WebSocketApi.LibraryHandle);
+      WebSocketApi.LibraryHandle := 0;
       exit;
     end;
     inc(P);
   end;
-  WebSocketAPI.WebSocketEnabled := true;
+  WebSocketApi.WebSocketEnabled := true;
 end;
 
 function WinHTTP_WebSocketEnabled: boolean;
 begin
-  result := WebSocketAPI.WebSocketEnabled;
+  result := WebSocketApi.WebSocketEnabled;
 end;
 
 function HttpSys2ToWebSocketHeaders(
@@ -2220,13 +2220,13 @@ end;
 
 { EWebSocketApi }
 
-class procedure EWebSocketApi.RaiseOnError(api: TWebSocketAPIs; Error: integer);
+class procedure EWebSocketApi.RaiseOnError(api: TWebSocketApis; Error: integer);
 begin
   if Error <> NO_ERROR then
     raise self.Create(api, Error);
 end;
 
-constructor EWebSocketApi.Create(api: TWebSocketAPIs; Error: integer);
+constructor EWebSocketApi.Create(api: TWebSocketApis; Error: integer);
 begin
   fLastError := Error;
   fLastApi := api;
@@ -2264,7 +2264,7 @@ initialization
     (sizeof(THttpHeader) = 4) and
     (integer(HTTP_LOG_FIELD_TEST_SUB_STATUS) = HTTP_LOG_FIELD_SUB_STATUS)
   );
-  WinHttpAPIInitialize;
+  WinHttpApiInitialize;
 
 {$endif USEWININET}
 

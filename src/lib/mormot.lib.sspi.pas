@@ -58,7 +58,7 @@ type
   PSecContext = ^TSecContext;
 
   /// dynamic array of SSPI contexts
-  // - used to hold information between calls to ServerSSPIAuth
+  // - used to hold information between calls to ServerSspiAuth
   TSecContextDynArray = array of TSecContext;
 
   /// defines a SSPI buffer
@@ -295,16 +295,16 @@ procedure InvalidateSecContext(var aSecContext: TSecContext;
 procedure FreeSecContext(var aSecContext: TSecContext);
 
 /// encrypt a message
-// - aSecContext must be set e.g. from previous success call to ServerSSPIAuth
-// or ClientSSPIAuth
+// - aSecContext must be set e.g. from previous success call to ServerSspiAuth
+// or ClientSspiAuth
 // - aPlain contains data that must be encrypted
 // - returns encrypted message
 function SecEncrypt(var aSecContext: TSecContext;
   const aPlain: RawByteString): RawByteString;
 
 /// decrypt a message
-// - aSecContext must be set e.g. from previous success call to ServerSSPIAuth
-// or ClientSSPIAuth
+// - aSecContext must be set e.g. from previous success call to ServerSspiAuth
+// or ClientSspiAuth
 // - aEncrypted contains data that must be decrypted
 // - returns decrypted message
 function SecDecrypt(var aSecContext: TSecContext;
@@ -313,30 +313,30 @@ function SecDecrypt(var aSecContext: TSecContext;
 
 type
   /// exception class raised during SSPI/SChannel process
-  ESynSSPI = class(Exception)
+  ESynSspi = class(Exception)
   public
     constructor CreateLastOSError(const aContext: TSecContext);
   end;
 
   /// the supported TLS modes
   // - unsafe deprecated modes (e.g. SSL) are not defined at all
-  TSynSSPIMode = (
+  TSynSspiMode = (
     tls10,
     tls11,
     tls12);
 
   /// set of supported TLS modes
-  TSynSSPIModes = set of TSynSSPIMode;
+  TSynSspiModes = set of TSynSspiMode;
 
   /// used for low-level logging
-  TSynSSPILog =
+  TSynSspiLog =
     procedure(const Fmt: RawByteString; const Args: array of const) of object;
 
   /// abstract parent class for SSPI / SChannel process
-  TSynSSPIAbstract = class
+  TSynSspiAbstract = class
   protected
     fNewConversation: boolean;
-    fTLS: TSynSSPIModes;
+    fTLS: TSynSspiModes;
     fContext: TSecContext;
     fStreamSizes: TSecPkgContext_StreamSizes;
     procedure DeleteContext;
@@ -349,11 +349,11 @@ type
       read fContext.ID;
     /// the TLS modes supported by this instance
     // - only TLS 1.2 is suppported by default, for security reasons
-    property TLS: TSynSSPIModes
+    property TLS: TSynSspiModes
       read fTLS write fTLS;
   end;
 
-  TSynSSPIClient = class(TSynSSPIAbstract)
+  TSynSspiClient = class(TSynSspiAbstract)
   protected
   public
   end;
@@ -369,7 +369,7 @@ type
 // - aOutData contains data that must be sent to server
 // - if function returns True, client must send aOutData to server
 // and call function again width data, returned from servsr
-function ClientSSPIAuth(var aSecContext: TSecContext;
+function ClientSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; const aSecKerberosSPN: RawUtf8;
   out aOutData: RawByteString): boolean;
 
@@ -384,7 +384,7 @@ function ClientSSPIAuth(var aSecContext: TSecContext;
 // - aOutData contains data that must be sent to server
 // - if function returns True, client must send aOutData to server
 // and call function again width data, returned from server
-function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
+function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8;
   const aPassword: RawUtf8; out aOutData: RawByteString): boolean;
 
@@ -394,20 +394,20 @@ function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
 // - aOutData contains data that must be sent to client
 // - if this function returns True, server must send aOutData to client
 // and call function again width data, returned from client
-function ServerSSPIAuth(var aSecContext: TSecContext;
+function ServerSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; out aOutData: RawByteString): boolean;
 
 /// Server-side function that returns authenticated user name
 // - aSecContext must be received from a previous successful call to
-// ServerSSPIAuth()
+// ServerSspiAuth()
 // - aUserName contains authenticated user name
-procedure ServerSSPIAuthUser(var aSecContext: TSecContext;
+procedure ServerSspiAuthUser(var aSecContext: TSecContext;
   out aUserName: RawUtf8);
 
 /// return the name of the security package that has been used
 // during the negotiation process
 // - aSecContext must be received from previous successful call to
-// ServerSSPIAuth() or ClientSSPIAuth()
+// ServerSspiAuth() or ClientSspiAuth()
 function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 
 /// force using aSecKerberosSPN for server identification
@@ -558,7 +558,7 @@ begin
   // Sizes.cbSecurityTrailer is size of the trailer (signature + padding) block
   if QueryContextAttributesW(
        @aSecContext.CtxHandle, SECPKG_ATTR_SIZES, @Sizes) <> 0 then
-    raise ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSspi.CreateLastOSError(aSecContext);
   // Encrypted data buffer structure:
   //
   // SSPI/Kerberos Interoperability with GSSAPI
@@ -583,7 +583,7 @@ begin
   InDesc.Init(SECBUFFER_VERSION, @InBuf, 3);
   Status := EncryptMessage(@aSecContext.CtxHandle, 0, @InDesc, 0);
   if Status < 0 then
-    raise ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSspi.CreateLastOSError(aSecContext);
   EncLen := InBuf[0].cbBuffer + InBuf[1].cbBuffer + InBuf[2].cbBuffer;
   SetLength(result, EncLen);
   BufPtr := PByte(result);
@@ -609,7 +609,7 @@ begin
   if EncLen < SizeOf(cardinal) then
   begin
     SetLastError(ERROR_INVALID_PARAMETER);
-    raise ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSspi.CreateLastOSError(aSecContext);
   end;
   // Hack for compatibility with previous versions.
   // Should be removed in future.
@@ -627,15 +627,15 @@ begin
   InDesc.Init(SECBUFFER_VERSION, @InBuf, 2);
   Status := DecryptMessage(@aSecContext.CtxHandle, @InDesc, 0, QOP);
   if Status < 0 then
-    raise ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSspi.CreateLastOSError(aSecContext);
   SetString(result, PAnsiChar(InBuf[1].pvBuffer), InBuf[1].cbBuffer);
   FreeContextBuffer(InBuf[1].pvBuffer);
 end;
 
 
-{ ESynSSPI }
+{ ESynSspi }
 
-constructor ESynSSPI.CreateLastOSError(const aContext: TSecContext);
+constructor ESynSspi.CreateLastOSError(const aContext: TSecContext);
 var
   error: integer;
 begin
@@ -645,9 +645,9 @@ begin
 end;
 
 
-{ TSynSSPIAbstract }
+{ TSynSspiAbstract }
 
-constructor TSynSSPIAbstract.Create(aConnectionID: Int64);
+constructor TSynSspiAbstract.Create(aConnectionID: Int64);
 begin
   inherited Create;
   fNewConversation := true;
@@ -655,15 +655,15 @@ begin
   fTLS := [tls12];
 end;
 
-procedure TSynSSPIAbstract.EnsureStreamSizes;
+procedure TSynSspiAbstract.EnsureStreamSizes;
 begin
   if fStreamSizes.cbHeader = 0 then
     if QueryContextAttributesW(
         @fContext.CtxHandle, SECPKG_ATTR_STREAM_SIZES, @fStreamSizes) <> 0 then
-      raise ESynSSPI.CreateLastOSError(fContext);
+      raise ESynSspi.CreateLastOSError(fContext);
 end;
 
-procedure TSynSSPIAbstract.DeleteContext;
+procedure TSynSspiAbstract.DeleteContext;
 begin
   FreeSecurityContext(fContext.CtxHandle);
   FreeCredentialsContext(fContext.CredHandle);
@@ -675,7 +675,7 @@ end;
 var
   ForceSecKerberosSPN: WideString;
 
-function ClientSSPIAuthWorker(var aSecContext: TSecContext;
+function ClientSspiAuthWorker(var aSecContext: TSecContext;
   const aInData: RawByteString; pszTargetName: PWideChar;
   pAuthData: PSecWinntAuthIdentityW;
   out aOutData: RawByteString): boolean;
@@ -700,11 +700,11 @@ begin
   begin
     aSecContext.CreatedTick64 := GetTickCount64;
     if QuerySecurityPackageInfoW(SECPKGNAMENEGOTIATE, SecPkgInfo) <> 0 then
-      raise ESynSSPI.CreateLastOSError(aSecContext);
+      raise ESynSspi.CreateLastOSError(aSecContext);
     try
       if AcquireCredentialsHandleW(nil, SecPkgInfo^.Name, SECPKG_CRED_OUTBOUND,
           nil, pAuthData, nil, nil, @aSecContext.CredHandle, Expiry) <> 0 then
-        raise ESynSSPI.CreateLastOSError(aSecContext);
+        raise ESynSspi.CreateLastOSError(aSecContext);
     finally
       FreeContextBuffer(SecPkgInfo);
     end;
@@ -737,12 +737,12 @@ begin
      (Status = SEC_I_COMPLETE_AND_CONTINUE) then
     Status := CompleteAuthToken(@aSecContext.CtxHandle, @OutDesc);
   if Status < 0 then
-    raise ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSspi.CreateLastOSError(aSecContext);
   SetString(aOutData, PAnsiChar(OutBuf.pvBuffer), OutBuf.cbBuffer);
   FreeContextBuffer(OutBuf.pvBuffer);
 end;
 
-function ClientSSPIAuth(var aSecContext: TSecContext;
+function ClientSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; const aSecKerberosSPN: RawUtf8;
   out aOutData: RawByteString): boolean;
 var
@@ -757,11 +757,11 @@ begin
     else
       TargetName := nil;
   end;
-  Result := ClientSSPIAuthWorker(
+  Result := ClientSspiAuthWorker(
     aSecContext, aInData, TargetName, nil, aOutData);
 end;
 
-function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
+function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8;
   const aPassword: RawUtf8; out aOutData: RawByteString): boolean;
 var
@@ -793,11 +793,11 @@ begin
     TargetName := pointer(ForceSecKerberosSPN)
   else
     TargetName := nil;
-  Result := ClientSSPIAuthWorker(
+  Result := ClientSspiAuthWorker(
     aSecContext, aInData, TargetName, @AuthIdentity, aOutData);
 end;
 
-function ServerSSPIAuth(var aSecContext: TSecContext;
+function ServerSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; out aOutData: RawByteString): boolean;
 var
   InBuf: TSecBuffer;
@@ -823,15 +823,15 @@ begin
     if IdemPChar(Pointer(aInData), 'NTLMSSP') then
     begin
       if QuerySecurityPackageInfoW(SECPKGNAMENTLM, SecPkgInfo) <> 0 then
-        raise ESynSSPI.CreateLastOSError(aSecContext);
+        raise ESynSspi.CreateLastOSError(aSecContext);
     end
     else
       if QuerySecurityPackageInfoW(SECPKGNAMENEGOTIATE, SecPkgInfo) <> 0 then
-        raise ESynSSPI.CreateLastOSError(aSecContext);
+        raise ESynSspi.CreateLastOSError(aSecContext);
     try
       if AcquireCredentialsHandleW(nil, SecPkgInfo^.Name, SECPKG_CRED_INBOUND,
           nil, nil, nil, nil, @aSecContext.CredHandle, Expiry) <> 0 then
-        raise ESynSSPI.CreateLastOSError(aSecContext);
+        raise ESynSspi.CreateLastOSError(aSecContext);
     finally
       FreeContextBuffer(SecPkgInfo);
     end;
@@ -854,19 +854,19 @@ begin
      (Status = SEC_I_COMPLETE_AND_CONTINUE) then
     Status := CompleteAuthToken(@aSecContext.CtxHandle, @OutDesc);
   if Status < 0 then
-      raise ESynSSPI.CreateLastOSError(aSecContext);
+      raise ESynSspi.CreateLastOSError(aSecContext);
   SetString(aOutData, PAnsiChar(OutBuf.pvBuffer), OutBuf.cbBuffer);
   FreeContextBuffer(OutBuf.pvBuffer);
 end;
 
-procedure ServerSSPIAuthUser(var aSecContext: TSecContext;
+procedure ServerSspiAuthUser(var aSecContext: TSecContext;
   out aUserName: RawUtf8);
 var
   Names: SecPkgContext_NamesW;
 begin
   if QueryContextAttributesW(@aSecContext.CtxHandle,
        SECPKG_ATTR_NAMES, @Names) <> 0 then
-    raise ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSspi.CreateLastOSError(aSecContext);
   aUserName := RawUnicodeToUtf8(Names.sUserName, StrLenW(Names.sUserName));
   FreeContextBuffer(Names.sUserName);
 end;
@@ -877,7 +877,7 @@ var
 begin
   if QueryContextAttributesW(@aSecContext.CtxHandle,
        SECPKG_ATTR_NEGOTIATION_INFO, @NegotiationInfo) <> 0 then
-    raise ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSspi.CreateLastOSError(aSecContext);
   Result := RawUnicodeToUtf8(NegotiationInfo.PackageInfo^.Name,
               StrLenW(NegotiationInfo.PackageInfo^.Name));
   FreeContextBuffer(NegotiationInfo.PackageInfo);

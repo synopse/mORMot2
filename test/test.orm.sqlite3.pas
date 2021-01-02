@@ -424,7 +424,7 @@ begin
       password := 'password1';
     {$endif NOSQLITE3ENCRYPT}
   end;
-  EncryptedFile := (password <> '');
+  EncryptedFile := ({%H-}password <> '');
   Demo := TSqlDataBase.Create(TempFileName, password);
   Demo.Synchronous := smOff;
   Demo.LockingMode := lmExclusive;
@@ -2021,10 +2021,9 @@ end;
 
 procedure TTestSQLite3Engine._TOrmTableJson;
 var
-  J: TOrmTableJson;
+  J: TOrmTable;
   i1, i2, aR, aF, F1, F2, n: integer;
   Comp, Comp1, Comp2: TUtf8Compare;
-  DoTestODS: boolean;
   {$ifdef ISDELPHI2010}
   Peoples: TObjectList<TOrmPeople>;
   {$endif ISDELPHI2010}
@@ -2213,16 +2212,16 @@ begin
   finally
     J.Free;
   end;
-  DoTestODS := false;
-  if DoTestODS then
-    with TOrmTableDB.Create(Demo, [TOrmPeople],
-      'select id,FirstName,LastName,YearOfBirth,YearOfDeath from people', true) do
-    try
-      FileFromString(GetODSDocument(false), 'false.ods');
-      FileFromString(GetODSDocument(true), 'true.ods');
-    finally
-      Free;
-    end;
+  {
+  J := TOrmTableDB.Create(Demo, [TOrmPeople],
+    'select id,FirstName,LastName,YearOfBirth,YearOfDeath from people', true);
+  try
+    FileFromString(J.GetODSDocument(false), 'false.ods');
+    FileFromString(J.GetODSDocument(true), 'true.ods');
+  finally
+    J.Free;
+  end;
+  }
   // some tests to avoid regression about bugs reported by users on forum
   J := TOrmTableJson.Create('', TEST_DATA);
   try

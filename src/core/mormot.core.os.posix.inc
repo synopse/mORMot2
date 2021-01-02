@@ -1031,9 +1031,9 @@ end;
 
 {$ifdef LINUXNOTBSD} { the systemd API is Linux-specific }
 
-{ TSystemDAPI }
+{ TSystemD }
 
-procedure TSystemDAPI.DoLoad;
+procedure TSystemD.DoLoad;
 var
   p: PPointer;
   i, j: integer;
@@ -1070,14 +1070,14 @@ begin
   GlobalUnLock;
 end;
 
-function TSystemDAPI.IsAvailable: boolean;
+function TSystemD.IsAvailable: boolean;
 begin
   if not tested then
     DoLoad;
   result := Assigned(listen_fds);
 end;
 
-function TSystemDAPI.ProcessIsStartedBySystemd: boolean;
+function TSystemD.ProcessIsStartedBySystemd: boolean;
 begin
   result := IsAvailable and
     // note: for example on Ubuntu 20.04 INVOCATION_ID is always defined
@@ -1087,7 +1087,7 @@ begin
     (fpGetenv(ENV_INVOCATION_ID) <> nil);
 end;
 
-procedure TSystemDAPI.Done;
+procedure TSystemD.Done;
 begin
   if systemd <> nil then
   begin

@@ -684,8 +684,8 @@ type
   HCRYPTKEY = pointer;
   HCRYPTHASH = pointer;
 
-  /// direct access to the Windows CryptoAPI
-  TWinCryptoAPI = object
+  /// direct access to the Windows CryptoApi
+  TWinCryptoApi = object
   private
     /// if the presence of this API has been tested
     Tested: boolean;
@@ -721,7 +721,7 @@ type
     // - since Windows Vista with Service Pack 1 (SP1), an AES counter-mode
     // based PRNG specified in NIST Special Publication 800-90 is used
     GenRandom: function(hProv: HCRYPTPROV; dwLen: DWORD; pbBuffer: Pointer): BOOL; stdcall;
-    /// try to load the CryptoAPI on this system
+    /// try to load the CryptoApi on this system
     function Available: boolean; {$ifdef HASINLINE}inline;{$endif}
   end;
 
@@ -752,7 +752,7 @@ const
   CRYPT_VERIFYCONTEXT = DWORD($F0000000);
 
 var
-  CryptoAPI: TWinCryptoAPI;
+  CryptoApi: TWinCryptoApi;
 
 /// protect some data for the current user, using Windows DPAPI
 // - the application can specify a secret salt text, which should reflect the
@@ -971,7 +971,7 @@ type
   // - about systemd: see https://www.freedesktop.org/wiki/Software/systemd
   // and http://0pointer.de/blog/projects/socket-activation.html - to get headers
   // on debian: `sudo apt install libsystemd-dev && cd /usr/include/systemd`
-  TSystemDAPI = packed object
+  TSystemD = packed object
   private
     systemd: pointer;
     tested: boolean;
@@ -1012,7 +1012,7 @@ type
 
 var
   /// late-binding of the systemd library
-  sd: TSystemDAPI;
+  sd: TSystemD;
 
 {$endif LINUXNOTBSD}
 

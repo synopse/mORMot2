@@ -948,10 +948,11 @@ begin
   begin
     // GET on 'root' URI with SQL as body (not fully HTTP compatible)
     res := URI(fModel.Root, 'GET', @JSON, nil, @SQL, @state);
-    if res = HTTP_SUCCESS then
+    if (res = HTTP_SUCCESS) and
+       (JSON <> '') then
     begin
       result := TOrmTableJson.CreateFromTables(Tables, SQL, JSON,
-        {ownJSON=}PRefCnt(PtrUInt(JSON) - _DAREFCNT)^ = 1);
+        {ownJSON=}PRefCnt(PAnsiChar(pointer(JSON)) - _STRREFCNT)^ = 1);
       result.InternalState := state;
     end
     else
@@ -995,8 +996,10 @@ begin
   // multiple tables -> send SQL statement as HTTP body
   else if URI(Model.Root,'GET', @JSON, nil, @SQL, @state) <> HTTP_SUCCESS then
     exit;
+  if JSON = '' then
+    exit;
   result := TOrmTableJson.CreateFromTables(Tables, SQL, JSON,
-    {ownJSON=}PRefCnt(PtrUInt(JSON) - _DAREFCNT)^ = 1);
+    {ownJSON=}PRefCnt(PAnsiChar(pointer(JSON)) - _STRREFCNT)^ = 1);
   result.InternalState := state;
 end;
 

@@ -686,8 +686,8 @@ type
   protected
     fIn, fOut: PAesBlock;
     fCV: TAesBlock;
-    AES: TAes;
-    fAESInit: (initNone, initEncrypt, initDecrypt);
+    fAes: TAes;
+    fAesInit: (initNone, initEncrypt, initDecrypt);
     procedure EncryptInit;
     procedure DecryptInit;
     procedure TrailerBytes(count: cardinal);
@@ -926,7 +926,7 @@ type
 {$ifdef USE_PROV_RSA_AES}
 
 type
-  /// handle AES cypher/uncypher using Windows CryptoAPI and the
+  /// handle AES cypher/uncypher using Windows CryptoApi and the
   // official Microsoft AES Cryptographic Provider (PROV_RSA_AES)
   // - see @http://msdn.microsoft.com/en-us/library/windows/desktop/aa386979
   // - timing of our optimized asm versions, for small (<=8KB) block processing
@@ -935,21 +935,21 @@ type
   // ! AES128 - ECB:79.33ms CBC:83.37ms CFB:80.75ms OFB:78.98ms CTR:80.45ms
   // ! AES192 - ECB:91.16ms CBC:96.06ms CFB:96.45ms OFB:92.12ms CTR:93.38ms
   // ! AES256 - ECB:103.22ms CBC:119.14ms CFB:111.59ms OFB:107.00ms CTR:110.13ms
-  // - timing of the same process, using CryptoAPI official PROV_RSA_AES provider:
+  // - timing of the same process, using CryptoApi official PROV_RSA_AES provider:
   // ! AES128 - ECB_API:102.88ms CBC_API:124.91ms
   // ! AES192 - ECB_API:115.75ms CBC_API:129.95ms
   // ! AES256 - ECB_API:139.50ms CBC_API:154.02ms
-  // - but the CryptoAPI does not supports AES-NI, whereas our classes handle it,
+  // - but the CryptoApi does not supports AES-NI, whereas our classes handle it,
   // with a huge speed benefit
-  // - under Win64, the official CryptoAPI is slower our x86_64 asm version,
-  // and the Win32 version of CryptoAPI itself, but slower than our AES-NI code
+  // - under Win64, the official CryptoApi is slower our x86_64 asm version,
+  // and the Win32 version of CryptoApi itself, but slower than our AES-NI code
   // ! AES128 - ECB:107.95ms CBC:112.65ms CFB:109.62ms OFB:107.23ms CTR:109.42ms
   // ! AES192 - ECB:130.30ms CBC:133.04ms CFB:128.78ms OFB:127.25ms CTR:130.22ms
   // ! AES256 - ECB:145.33ms CBC:147.01ms CFB:148.36ms OFB:145.96ms CTR:149.67ms
   // ! AES128 - ECB_API:89.64ms CBC_API:100.84ms
   // ! AES192 - ECB_API:99.05ms CBC_API:105.85ms
   // ! AES256 - ECB_API:107.11ms CBC_API:118.04ms
-  // - in practice, you could forget about using the CryptoAPI, unless you are
+  // - in practice, you could forget about using the CryptoApi, unless you are
   // required to do so, for legal/corporate reasons
   TAesAbstractApi = class(TAesAbstract)
   protected
@@ -961,7 +961,7 @@ type
       dwKeyLength: cardinal;
     end;
     fKeyHeaderKey: TAesKey; // should be just after fKeyHeader record
-    fKeyCryptoAPI: pointer;
+    fKeyCryptoApi: pointer;
     fInternalMode: cardinal;
     procedure InternalSetMode; virtual; abstract;
     procedure EncryptDecrypt(BufIn, BufOut: pointer; Count: cardinal;
@@ -985,21 +985,21 @@ type
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
   end;
 
-  /// handle AES cypher/uncypher without chaining (ECB) using Windows CryptoAPI
+  /// handle AES cypher/uncypher without chaining (ECB) using Windows CryptoApi
   TAesEcbApi = class(TAesAbstractApi)
   protected
     /// will set fInternalMode := CRYPT_MODE_ECB
     procedure InternalSetMode; override;
   end;
 
-  /// handle AES cypher/uncypher Cipher-block chaining (CBC) using Windows CryptoAPI
+  /// handle AES cypher/uncypher Cipher-block chaining (CBC) using Windows CryptoApi
   TAesCbcApi = class(TAesAbstractApi)
   protected
     /// will set fInternalMode := CRYPT_MODE_CBC
     procedure InternalSetMode; override;
   end;
 
-  /// handle AES cypher/uncypher Cipher feedback (CFB) using Windows CryptoAPI
+  /// handle AES cypher/uncypher Cipher feedback (CFB) using Windows CryptoApi
   // - NOT TO BE USED: the current PROV_RSA_AES provider does not return
   // expected values for CFB
   TAesCfbApi = class(TAesAbstractApi)
@@ -1008,7 +1008,7 @@ type
     procedure InternalSetMode; override;
   end;
 
-  /// handle AES cypher/uncypher Output feedback (OFB) using Windows CryptoAPI
+  /// handle AES cypher/uncypher Output feedback (OFB) using Windows CryptoApi
   // - NOT TO BE USED: the current PROV_RSA_AES provider does not implement
   // this mode, and returns a NTE_BAD_ALGID error
   TAesOfbApi = class(TAesAbstractApi)
@@ -3788,7 +3788,7 @@ begin
   with aesivctr[DoEncrypt] do
   begin
     EnterCriticalSection(fSafe);
-    TAesContext(fAes.Context).DoBlock(fAes.Context, BI, BO);
+    TAesContext(fAes).DoBlock(fAes, BI, BO);
     LeaveCriticalSection(fSafe);
   end;
 end;
@@ -4334,7 +4334,7 @@ end;
 destructor TAesAbstractSyn.Destroy;
 begin
   inherited Destroy;
-  aes.Done; // fill buffer with 0 for safety
+  fAes.Done; // fill buffer with 0 for safety
   FillZero(fCV); // may contain sensitive data on some modes
 end;
 
@@ -4358,8 +4358,8 @@ end;
 
 procedure TAesAbstractSyn.DecryptInit;
 begin
-  if aes.DecryptInit(fKey, fKeySize) then
-    fAESInit := initDecrypt
+  if fAes.DecryptInit(fKey, fKeySize) then
+    fAesInit := initDecrypt
   else
     raise ESynCrypto.CreateUtf8('%.DecryptInit', [self]);
 end;
@@ -4373,17 +4373,17 @@ end;
 
 procedure TAesAbstractSyn.EncryptInit;
 begin
-  if aes.EncryptInit(fKey, fKeySize) then
-    fAESInit := initEncrypt
+  if fAes.EncryptInit(fKey, fKeySize) then
+    fAesInit := initEncrypt
   else
     raise ESynCrypto.CreateUtf8('%.EncryptInit', [self]);
 end;
 
 procedure TAesAbstractSyn.TrailerBytes(count: cardinal);
 begin
-  if fAESInit <> initEncrypt then
+  if fAesInit <> initEncrypt then
     EncryptInit;
-  TAesContext(aes.Context).DoBlock(aes.Context, fCV, fCV);
+  TAesContext(fAes).DoBlock(fAes, fCV, fCV);
   XorMemory(pointer(fOut), pointer(fIn), @fCV, count);
 end;
 
@@ -4395,11 +4395,11 @@ var
   i: integer;
 begin
   inherited; // CV := IV + set fIn,fOut
-  if fAESInit <> initDecrypt then
+  if fAesInit <> initDecrypt then
     DecryptInit;
   for i := 1 to Count shr AesBlockShift do
   begin
-    TAesContext(aes.Context).DoBlock(aes.Context, fIn^, fOut^);
+    TAesContext(fAes).DoBlock(fAes, fIn^, fOut^);
     inc(fIn);
     inc(fOut);
   end;
@@ -4413,11 +4413,11 @@ var
   i: integer;
 begin
   inherited; // CV := IV + set fIn,fOut
-  if fAESInit <> initEncrypt then
+  if fAesInit <> initEncrypt then
     EncryptInit;
   for i := 1 to Count shr AesBlockShift do
   begin
-    TAesContext(aes.Context).DoBlock(aes.Context, fIn^, fOut^);
+    TAesContext(fAes).DoBlock(fAes, fIn^, fOut^);
     inc(fIn);
     inc(fOut);
   end;
@@ -4437,12 +4437,12 @@ begin
   inherited; // CV := IV + set fIn,fOut
   if Count >= SizeOf(TAesBlock) then
   begin
-    if fAESInit <> initDecrypt then
+    if fAesInit <> initDecrypt then
       DecryptInit;
     for i := 1 to Count shr AesBlockShift do
     begin
       tmp := fIn^;
-      TAesContext(aes.Context).DoBlock(aes.Context, fIn^, fOut^);
+      TAesContext(fAes).DoBlock(fAes, fIn^, fOut^);
       XorBlock16(pointer(fOut), pointer(@fCV));
       fCV := tmp;
       inc(fIn);
@@ -4459,12 +4459,12 @@ var
   i: integer;
 begin
   inherited; // CV := IV + set fIn,fOut
-  if fAESInit <> initEncrypt then
+  if fAesInit <> initEncrypt then
     EncryptInit;
   for i := 1 to Count shr AesBlockShift do
   begin
     XorBlock16(pointer(fIn), pointer(fOut), pointer(@fCV));
-    TAesContext(aes.Context).DoBlock(aes.Context, fOut^, fOut^);
+    TAesContext(fAes).DoBlock(fAes, fOut^, fOut^);
     fCV := fOut^;
     inc(fIn);
     inc(fOut);
@@ -4501,7 +4501,7 @@ var
   tmp: TAesBlock;
 begin
   {$ifdef USEAESNI32}
-  if Assigned(TAesContext(aes.Context).AesNi32) then
+  if Assigned(TAesContext(fAes.Context).AesNi32) then
     asm
         push    esi
         push    edi
@@ -4510,7 +4510,7 @@ begin
         mov     esi, BufIn
         mov     edi, BufOut
         movups  xmm7, dqword ptr[eax].TAesCfb.fIV
-        lea     eax, [eax].TAesCfb.aes
+        lea     eax, [eax].TAesCfb.fAes
         push    ecx
         shr     ecx, AesBlockShift
         jz      @z
@@ -4539,7 +4539,7 @@ begin
     for i := 1 to Count shr AesBlockShift do
     begin
       tmp := fIn^;
-      TAesContext(aes.Context).DoBlock(aes.Context, fCV, fCV);
+      TAesContext(fAes).DoBlock(fAes, fCV, fCV);
       XorBlock16(pointer(fIn), pointer(fOut), pointer(@fCV));
       fCV := tmp;
       inc(fIn);
@@ -4556,7 +4556,7 @@ var
   i: integer;
 begin
   {$ifdef USEAESNI32}
-  if Assigned(TAesContext(aes.Context).AesNi32) then
+  if Assigned(TAesContext(fAes).AesNi32) then
     asm
         push    esi
         push    edi
@@ -4565,7 +4565,7 @@ begin
         mov     esi, BufIn
         mov     edi, BufOut
         movups  xmm7, dqword ptr[eax].TAesCfb.fIV
-        lea     eax, [eax].TAesCfb.aes
+        lea     eax, [eax].TAesCfb.fAes
         push    ecx
         shr     ecx, AesBlockShift
         jz      @z
@@ -4591,7 +4591,7 @@ begin
     inherited; // CV := IV + set fIn,fOut
     for i := 1 to Count shr AesBlockShift do
     begin
-      TAesContext(aes.Context).DoBlock(aes.Context, fCV, fCV);
+      TAesContext(fAes).DoBlock(fAes, fCV, fCV);
       XorBlock16(pointer(fIn), pointer(fOut), pointer(@fCV));
       fCV := fOut^;
       inc(fIn);
@@ -4636,7 +4636,7 @@ var
   rec: THash256Rec absolute aCRC;
 begin
   // encrypt the plain text crc, to perform message authentication and integrity
-  aes.Encrypt(fMac.plain, rec.Lo);
+  fAes.Encrypt(fMac.plain, rec.Lo);
   // store the encrypted text crc, to check for errors, with no compromission
   rec.Hi := fMac.encrypted;
   result := true;
@@ -4667,7 +4667,7 @@ begin
     exit;
   fMac := fMacKey; // reuse the same key until next MacSetNonce()
   {$ifdef USEAESNI32}
-  if Assigned(TAesContext(aes.Context).AesNi32) and
+  if Assigned(TAesContext(fAes).AesNi32) and
      (Count and AesBlockMod = 0) then
     asm
         push    ebx
@@ -4680,7 +4680,7 @@ begin
 @s:     lea     eax, [ebx].TAesCfbCrc.fMac.encrypted
         mov     edx, esi
         call    crcblock // using SSE4.2 or fast tables
-        lea     eax, [ebx].TAesCfbCrc.aes
+        lea     eax, [ebx].TAesCfbCrc.fAes
         call    dword ptr[eax].TAesContext.AesNi32 // AES.Encrypt(fCV,fCV)
         movups  xmm0, dqword ptr[esi]
         movaps  xmm1, xmm0
@@ -4707,7 +4707,7 @@ begin
     begin
       tmp := fIn^;
       crcblock(@fMac.encrypted, pointer(fIn)); // fIn may be = fOut
-      TAesContext(aes.Context).DoBlock(aes.Context, fCV, fCV);
+      TAesContext(fAes).DoBlock(fAes, fCV, fCV);
       XorBlock16(pointer(fIn), pointer(fOut), pointer(@fCV));
       fCV := tmp;
       crcblock(@fMac.plain, pointer(fOut));
@@ -4732,7 +4732,7 @@ begin
     exit;
   fMac := fMacKey; // reuse the same key until next MacSetNonce()
   {$ifdef USEAESNI32}
-  if Assigned(TAesContext(aes.Context).AesNi32) and
+  if Assigned(TAesContext(fAes).AesNi32) and
      (Count and AesBlockMod = 0) then
     asm
         push    ebx
@@ -4745,7 +4745,7 @@ begin
 @s:     lea     eax, [ebx].TAesCfbCrc.fMac.plain
         mov     edx, esi
         call    crcblock
-        lea     eax, [ebx].TAesCfbCrc.aes
+        lea     eax, [ebx].TAesCfbCrc.fAes
         call    dword ptr[eax].TAesContext.AesNi32 // AES.Encrypt(fCV,fCV)
         movups  xmm0, dqword ptr[esi]
         pxor    xmm7, xmm0
@@ -4768,7 +4768,7 @@ begin
     inherited; // CV := IV + set fIn,fOut
     for i := 1 to Count shr AesBlockShift do
     begin
-      TAesContext(aes.Context).DoBlock(aes.Context, fCV, fCV);
+      TAesContext(fAes).DoBlock(fAes, fCV, fCV);
       crcblock(@fMac.plain, pointer(fIn)); // fOut may be = fIn
       XorBlock16(pointer(fIn), pointer(fOut), pointer(@fCV));
       fCV := fOut^;
@@ -4797,7 +4797,7 @@ begin
     exit;
   fMac := fMacKey; // reuse the same key until next MacSetNonce()
   {$ifdef USEAESNI32}
-  if Assigned(TAesContext(aes.Context).AesNi32) and
+  if Assigned(TAesContext(fAes).AesNi32) and
      (Count and AesBlockMod = 0) then
     asm
         push    ebx
@@ -4810,7 +4810,7 @@ begin
 @s:     lea     eax, [ebx].TAesOfbCrc.fMac.encrypted
         mov     edx, esi
         call    crcblock
-        lea     eax, [ebx].TAesOfbCrc.aes
+        lea     eax, [ebx].TAesOfbCrc.fAes
         call    dword ptr[eax].TAesContext.AesNi32 // AES.Encrypt(fCV,fCV)
         movups  xmm0, dqword ptr[esi]
         pxor    xmm0, xmm7
@@ -4833,7 +4833,7 @@ begin
     inherited Encrypt(BufIn, BufOut, Count); // CV := IV + set fIn,fOut
     for i := 1 to Count shr AesBlockShift do
     begin
-      TAesContext(aes.Context).DoBlock(aes.Context, fCV, fCV);
+      TAesContext(fAes).DoBlock(fAes, fCV, fCV);
       crcblock(@fMac.encrypted, pointer(fIn)); // fOut may be = fIn
       XorBlock16(pointer(fIn), pointer(fOut), pointer(@fCV));
       crcblock(@fMac.plain, pointer(fOut));
@@ -4858,7 +4858,7 @@ begin
     exit;
   fMac := fMacKey; // reuse the same key until next MacSetNonce()
   {$ifdef USEAESNI32}
-  if Assigned(TAesContext(aes.Context).AesNi32) and
+  if Assigned(TAesContext(fAes).AesNi32) and
      (Count and AesBlockMod = 0) then
     asm
         push    ebx
@@ -4871,7 +4871,7 @@ begin
 @s:     lea     eax, [ebx].TAesOfbCrc.fMac.plain
         mov     edx, esi
         call    crcblock
-        lea     eax, [ebx].TAesOfbCrc.aes
+        lea     eax, [ebx].TAesOfbCrc.fAes
         call    dword ptr[eax].TAesContext.AesNi32 // AES.Encrypt(fCV,fCV)
         movups  xmm0, dqword ptr[esi]
         pxor    xmm0, xmm7
@@ -4894,7 +4894,7 @@ begin
     inherited Encrypt(BufIn, BufOut, Count); // CV := IV + set fIn,fOut
     for i := 1 to Count shr AesBlockShift do
     begin
-      TAesContext(aes.Context).DoBlock(aes.Context, fCV, fCV);
+      TAesContext(fAes).DoBlock(fAes, fCV, fCV);
       crcblock(@fMac.plain, pointer(fIn)); // fOut may be = fIn
       XorBlock16(pointer(fIn), pointer(fOut), pointer(@fCV));
       crcblock(@fMac.encrypted, pointer(fOut));
@@ -4925,11 +4925,11 @@ var
 begin
   {$ifdef USEAESNI64}
   if Count and AesBlockMod = 0 then
-    aes.DoBlocksOfb(@fCV, BufIn, BufOut, Count shr AesBlockShift)
+    fAes.DoBlocksOfb(@fCV, BufIn, BufOut, Count shr AesBlockShift)
   else
   {$endif USEAESNI64}
   {$ifdef USEAESNI32}
-  if Assigned(TAesContext(aes.Context).AesNi32) then
+  if Assigned(TAesContext(fAes).AesNi32) then
     asm
         push    esi
         push    edi
@@ -4938,7 +4938,7 @@ begin
         mov     esi, BufIn
         mov     edi, BufOut
         movups  xmm7, dqword ptr[eax].TAesOfb.fIV  // xmm7 = fCV
-        lea     eax, [eax].TAesOfb.aes
+        lea     eax, [eax].TAesOfb.fAes
         push    ecx
         shr     ecx, AesBlockShift
         jz      @z
@@ -4964,7 +4964,7 @@ begin
     inherited; // CV := IV + set fIn,fOut
     for i := 1 to Count shr AesBlockShift do
     begin
-      TAesContext(aes.Context).DoBlock(aes.Context, fCV, fCV);
+      TAesContext(fAes).DoBlock(fAes, fCV, fCV);
       XorBlock16(pointer(fIn), pointer(fOut), pointer(@fCV));
       inc(fIn);
       inc(fOut);
@@ -5022,7 +5022,7 @@ begin
   inherited; // CV := IV + set fIn,fOut
   for i := 1 to Count shr AesBlockShift do
   begin
-    TAesContext(aes.Context).DoBlock(aes.Context, fCV, tmp{%H-});
+    TAesContext(fAes).DoBlock(fAes, fCV, tmp{%H-});
     offs := fCTROffset;
     inc(fCV[offs]);
     if fCV[offs] = 0 then // manual big-endian increment
@@ -5040,7 +5040,7 @@ begin
   Count := Count and AesBlockMod;
   if Count <> 0 then
   begin
-    TAesContext(aes.Context).DoBlock(aes.Context, fCV, tmp);
+    TAesContext(fAes).DoBlock(fAes, fCV, tmp);
     XorMemory(pointer(fOut), pointer(fIn), @tmp, Count);
   end;
 end;
@@ -5144,20 +5144,20 @@ end;
 {$ifdef USE_PROV_RSA_AES}
 
 var
-  CryptoAPIAESProvider: HCRYPTPROV = HCRYPTPROV_NOTTESTED;
+  CryptoApiAesProvider: HCRYPTPROV = HCRYPTPROV_NOTTESTED;
 
-procedure EnsureCryptoAPIAESProviderAvailable;
+procedure EnsureCryptoApiAesProviderAvailable;
 begin
-  if CryptoAPIAESProvider = nil then
+  if CryptoApiAesProvider = nil then
     raise ESynCrypto.Create('PROV_RSA_AES provider not installed')
-  else if CryptoAPIAESProvider = HCRYPTPROV_NOTTESTED then
+  else if CryptoApiAesProvider = HCRYPTPROV_NOTTESTED then
   begin
-    CryptoAPIAESProvider := nil;
-    if CryptoAPI.Available then
+    CryptoApiAesProvider := nil;
+    if CryptoApi.Available then
     begin
-      if not CryptoAPI.AcquireContextA(CryptoAPIAESProvider, nil, nil, PROV_RSA_AES, 0) then
+      if not CryptoApi.AcquireContextA(CryptoApiAesProvider, nil, nil, PROV_RSA_AES, 0) then
         if (HRESULT(GetLastError) <> NTE_BAD_KEYSET) or
-           not CryptoAPI.AcquireContextA(CryptoAPIAESProvider, nil, nil,
+           not CryptoApi.AcquireContextA(CryptoApiAesProvider, nil, nil,
              PROV_RSA_AES, CRYPT_NEWKEYSET) then
           raise ESynCrypto.CreateLastOSError('in AcquireContext', []);
     end;
@@ -5169,7 +5169,7 @@ end;
 
 constructor TAesAbstractApi.Create(const aKey; aKeySize: cardinal);
 begin
-  EnsureCryptoAPIAESProviderAvailable;
+  EnsureCryptoApiAesProviderAvailable;
   inherited Create(aKey, aKeySize); // check and set fKeySize[Bytes]
   InternalSetMode;
   fKeyHeader.bType := PLAINTEXTKEYBLOB;
@@ -5188,8 +5188,8 @@ end;
 
 destructor TAesAbstractApi.Destroy;
 begin
-  if fKeyCryptoAPI <> nil then
-    CryptoAPI.DestroyKey(fKeyCryptoAPI);
+  if fKeyCryptoApi <> nil then
+    CryptoApi.DestroyKey(fKeyCryptoApi);
   FillCharFast(fKeyHeaderKey, SizeOf(fKeyHeaderKey), 0);
   inherited;
 end;
@@ -5201,17 +5201,17 @@ var
 begin
   if Count = 0 then
     exit; // nothing to do
-  if fKeyCryptoAPI <> nil then
+  if fKeyCryptoApi <> nil then
   begin
-    CryptoAPI.DestroyKey(fKeyCryptoAPI);
-    fKeyCryptoAPI := nil;
+    CryptoApi.DestroyKey(fKeyCryptoApi);
+    fKeyCryptoApi := nil;
   end;
-  if not CryptoAPI.ImportKey(CryptoAPIAESProvider, @fKeyHeader,
-     SizeOf(fKeyHeader) + fKeySizeBytes, nil, 0, fKeyCryptoAPI) then
+  if not CryptoApi.ImportKey(CryptoApiAesProvider, @fKeyHeader,
+     SizeOf(fKeyHeader) + fKeySizeBytes, nil, 0, fKeyCryptoApi) then
     raise ESynCrypto.CreateLastOSError('in CryptImportKey for %', [self]);
-  if not CryptoAPI.SetKeyParam(fKeyCryptoAPI, KP_IV, @fIV, 0) then
+  if not CryptoApi.SetKeyParam(fKeyCryptoApi, KP_IV, @fIV, 0) then
     raise ESynCrypto.CreateLastOSError('in CryptSetKeyParam(KP_IV) for %', [self]);
-  if not CryptoAPI.SetKeyParam(fKeyCryptoAPI, KP_MODE, @fInternalMode, 0) then
+  if not CryptoApi.SetKeyParam(fKeyCryptoApi, KP_MODE, @fInternalMode, 0) then
     raise ESynCrypto.CreateLastOSError('in CryptSetKeyParam(KP_MODE,%) for %',
        [fInternalMode, self]);
   if BufOut <> BufIn then
@@ -5219,10 +5219,10 @@ begin
   n := Count and not AesBlockMod;
   if DoEncrypt then
   begin
-    if not CryptoAPI.Encrypt(fKeyCryptoAPI, nil, false, 0, BufOut, n, Count) then
+    if not CryptoApi.Encrypt(fKeyCryptoApi, nil, false, 0, BufOut, n, Count) then
       raise ESynCrypto.CreateLastOSError('in Encrypt() for %', [self]);
   end
-  else if not CryptoAPI.Decrypt(fKeyCryptoAPI, nil, false, 0, BufOut, n) then
+  else if not CryptoApi.Decrypt(fKeyCryptoApi, nil, false, 0, BufOut, n) then
     raise ESynCrypto.CreateLastOSError('in Decrypt() for %', [self]);
   dec(Count, n);
   if Count > 0 then // remaining bytes will be XORed with the supplied IV
@@ -5399,12 +5399,12 @@ begin
   {$endif LINUX}
   {$ifdef MSWINDOWS}
   // warning: on some Windows versions, this could take up to 30 ms!
-  if CryptoAPI.Available then
-    if CryptoAPI.AcquireContextA(prov, nil, nil,
+  if CryptoApi.Available then
+    if CryptoApi.AcquireContextA(prov, nil, nil,
       PROV_RSA_FULL, CRYPT_VERIFYCONTEXT) then
     begin
-      fromos := CryptoAPI.GenRandom(prov, Len, Buffer);
-      CryptoAPI.ReleaseContext(prov, 0);
+      fromos := CryptoApi.GenRandom(prov, Len, Buffer);
+      CryptoApi.ReleaseContext(prov, 0);
     end;
   {$endif MSWINDOWS}
   if fromos then
@@ -9264,9 +9264,9 @@ begin
   FreeAndNil(aesivctr[true]);
   FreeAndNil(MainAesPrng);
   {$ifdef USE_PROV_RSA_AES}
-  if (CryptoAPIAESProvider <> nil) and
-     (CryptoAPIAESProvider <> HCRYPTPROV_NOTTESTED) then
-    CryptoAPI.ReleaseContext(CryptoAPIAESProvider, 0);
+  if (CryptoApiAesProvider <> nil) and
+     (CryptoApiAesProvider <> HCRYPTPROV_NOTTESTED) then
+    CryptoApi.ReleaseContext(CryptoApiAesProvider, 0);
   {$endif USE_PROV_RSA_AES}
   FillZero(__h);
 end;

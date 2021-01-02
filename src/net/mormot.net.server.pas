@@ -127,7 +127,7 @@ type
     fCanNotifyCallback: boolean;
     fRemoteIPHeader, fRemoteIPHeaderUpper: RawUtf8;
     fRemoteConnIDHeader, fRemoteConnIDHeaderUpper: RawUtf8;
-    function GetAPIVersion: RawUtf8; virtual; abstract;
+    function GetApiVersion: RawUtf8; virtual; abstract;
     procedure SetServerName(const aName: RawUtf8); virtual;
     procedure SetOnRequest(const aRequest: TOnHttpServerRequest); virtual;
     procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); virtual;
@@ -291,8 +291,8 @@ type
       read fRemoteConnIDHeader write SetRemoteConnIDHeader;
   published
     /// returns the API version used by the inherited implementation
-    property APIVersion: RawUtf8
-      read GetAPIVersion;
+    property ApiVersion: RawUtf8
+      read GetApiVersion;
     /// the Server name, UTF-8 encoded, e.g. 'mORMot/1.18 (Linux)'
     // - will be served as "Server: ..." HTTP header
     // - for THttpApiServer, when called from the main instance, will propagate
@@ -505,7 +505,7 @@ type
     function OnNginxAllowSend(Context: THttpServerRequest;
       const LocalFileName: TFileName): boolean;
     // this overridden version will return e.g. 'Winsock 2.514'
-    function GetAPIVersion: RawUtf8; override;
+    function GetApiVersion: RawUtf8; override;
     /// server main loop - don't change directly
     procedure Execute; override;
     /// this method is called on every new client connection, i.e. every time
@@ -706,7 +706,7 @@ type
     function GetMaxConnections: cardinal;
     procedure SetMaxConnections(aValue: cardinal);
     procedure SetOnTerminate(const Event: TOnNotifyThread); override;
-    function GetAPIVersion: RawUtf8; override;
+    function GetApiVersion: RawUtf8; override;
     function GetLogging: boolean;
     procedure SetServerName(const aName: RawUtf8); override;
     procedure SetOnRequest(const aRequest: TOnHttpServerRequest); override;
@@ -798,12 +798,12 @@ type
       read fClones;
   public { HTTP API 2.0 methods and properties }
     /// can be used to check if the HTTP API 2.0 is available
-    function HasAPI2: boolean;
+    function HasApi2: boolean;
     /// enable HTTP API 2.0 advanced timeout settings
     // - all those settings are set for the current URL group
     // - will raise an EHttpApiServer exception if the old HTTP API 1.x is used
     // so you should better test the availability of the method first:
-    // ! if aServer.HasAPI2 then
+    // ! if aServer.HasApi2 then
     // !   SetTimeOutLimits(....);
     // - aEntityBody is the time, in seconds, allowed for the request entity
     // body to arrive - default value is 2 minutes
@@ -826,7 +826,7 @@ type
     /// enable HTTP API 2.0 logging
     // - will raise an EHttpApiServer exception if the old HTTP API 1.x is used
     // so you should better test the availability of the method first:
-    // ! if aServer.HasAPI2 then
+    // ! if aServer.HasApi2 then
     // !   LogStart(....);
     // - this method won't do anything on the cloned instances, but the main
     // instance logging state will be replicated to all cloned instances
@@ -854,7 +854,7 @@ type
     // see https://msdn.microsoft.com/en-us/library/windows/desktop/aa364452
     // - will raise an EHttpApiServer exception if the old HTTP API 1.x is used
     // so you should better test the availability of the method first:
-    // ! if aServer.HasAPI2 then
+    // ! if aServer.HasApi2 then
     // !   SetAuthenticationSchemes(....);
     // - this method will work on the current group, for all instances
     // - see HTTPAPI_AUTH_ENABLE_ALL constant to set all available schemes
@@ -1431,9 +1431,9 @@ begin
   inherited Create(CreateSuspended, OnStart, OnStop, ProcessName);
 end;
 
-function THttpServer.GetAPIVersion: RawUtf8;
+function THttpServer.GetApiVersion: RawUtf8;
 begin
-  result := SocketAPIVersion;
+  result := SocketApiVersion;
 end;
 
 destructor THttpServer.Destroy;
@@ -2447,7 +2447,7 @@ begin
     fClones[i] := THttpApiServerClass(Self.ClassType).CreateClone(self);
 end;
 
-function THttpApiServer.GetAPIVersion: RawUtf8;
+function THttpApiServer.GetApiVersion: RawUtf8;
 begin
   FormatUtf8('HTTP API %.%',
     [Http.Version.MajorVersion, Http.Version.MinorVersion], result);
@@ -3151,7 +3151,7 @@ begin
   end;
 end;
 
-function THttpApiServer.HasAPI2: boolean;
+function THttpApiServer.HasApi2: boolean;
 begin
   result := Http.Version.MajorVersion >= 2;
 end;
@@ -3607,21 +3607,21 @@ begin
     exit;
   end;
   EWebSocketApi.RaiseOnError(hCreateServerHandle,
-    WebSocketAPI.CreateServerHandle(nil, 0, fWSHandle));
+    WebSocketApi.CreateServerHandle(nil, 0, fWSHandle));
   wsRequestHeaders := HttpSys2ToWebSocketHeaders(req^.headers);
   if aNeedHeader then
-    result := WebSocketAPI.BeginServerHandshake(fWSHandle, Pointer(fProtocol.name),
+    result := WebSocketApi.BeginServerHandshake(fWSHandle, Pointer(fProtocol.name),
       nil, 0, @wsRequestHeaders[0], Length(wsRequestHeaders), wsServerHeaders,
       wsServerHeadersCount) = S_OK
   else
-    result := WebSocketAPI.BeginServerHandshake(fWSHandle, nil, nil, 0,
+    result := WebSocketApi.BeginServerHandshake(fWSHandle, nil, nil, 0,
       pointer(wsRequestHeaders), Length(wsRequestHeaders),
       wsServerHeaders, wsServerHeadersCount) = S_OK;
   if result then
   try
     Ctxt.OutCustomHeaders := WebSocketHeadersToText(wsServerHeaders, wsServerHeadersCount);
   finally
-    result := WebSocketAPI.EndServerHandshake(fWSHandle) = S_OK;
+    result := WebSocketApi.EndServerHandshake(fWSHandle) = S_OK;
   end;
   if not result then
     Disconnect
@@ -3770,8 +3770,8 @@ var //Err: HRESULT; //todo: handle error
   httpSendEntity: HTTP_DATA_CHUNK_INMEMORY;
   bytesWrite: cardinal;
 begin
-  WebSocketAPI.AbortHandle(fWSHandle);
-  WebSocketAPI.DeleteHandle(fWSHandle);
+  WebSocketApi.AbortHandle(fWSHandle);
+  WebSocketApi.DeleteHandle(fWSHandle);
   fWSHandle := nil;
   httpSendEntity.DataChunkType := hctFromMemory;
   httpSendEntity.pBuffer := nil;
@@ -3788,13 +3788,13 @@ begin
     if Assigned(fLastActionContext) then
     begin
       EWebSocketApi.RaiseOnError(hCompleteAction,
-        WebSocketAPI.CompleteAction(fWSHandle, fLastActionContext,
+        WebSocketApi.CompleteAction(fWSHandle, fLastActionContext,
         fOverlapped.InternalHigh));
       fLastActionContext := nil;
     end
     else
       EWebSocketApi.RaiseOnError(hReceive,
-        WebSocketAPI.Receive(fWSHandle, nil, nil));
+        WebSocketApi.Receive(fWSHandle, nil, nil));
   end
   else
     raise EWebSocketApi.Create('THttpApiWebSocketConnection.BeforeRead state is not wsOpen');
@@ -3827,7 +3827,7 @@ var
       LeaveCriticalSection(fProtocol.fSafe);
     end;
     EWebSocketApi.RaiseOnError(hCompleteAction,
-      WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
+      WebSocketApi.CompleteAction(fWSHandle, ActionContext, 0));
   end;
 
 begin
@@ -3835,7 +3835,7 @@ begin
   repeat
     ulDataBufferCount := Length(Buffer);
     EWebSocketApi.RaiseOnError(hGetAction,
-      WebSocketAPI.GetAction(fWSHandle, ActionQueue, @Buffer[0], ulDataBufferCount,
+      WebSocketApi.GetAction(fWSHandle, ActionQueue, @Buffer[0], ulDataBufferCount,
       Action, BufferType, ApplicationContext, ActionContext));
     case Action of
       WEB_SOCKET_NO_ACTION:
@@ -3846,7 +3846,7 @@ begin
             WriteData(Buffer[i]);
           if fWSHandle <> nil then
           begin
-            Err := WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0);
+            Err := WebSocketApi.CompleteAction(fWSHandle, ActionContext, 0);
             EWebSocketApi.RaiseOnError(hCompleteAction, Err);
           end;
           result := False;
@@ -3887,28 +3887,28 @@ begin
           begin
             // todo: may be answer to client's ping
             EWebSocketApi.RaiseOnError(hCompleteAction,
-              WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
+              WebSocketApi.CompleteAction(fWSHandle, ActionContext, 0));
             exit;
           end
           else if BufferType = WEB_SOCKET_UNSOLICITED_PONG_BUFFER_TYPE then
           begin
             // todo: may be handle this situation
             EWebSocketApi.RaiseOnError(hCompleteAction,
-              WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
+              WebSocketApi.CompleteAction(fWSHandle, ActionContext, 0));
             exit;
           end
           else
           begin
             DoOnMessage(BufferType, Buffer[0].pbBuffer, Buffer[0].ulBufferLength);
             EWebSocketApi.RaiseOnError(hCompleteAction,
-              WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
+              WebSocketApi.CompleteAction(fWSHandle, ActionContext, 0));
             exit;
           end;
         end
     else
       raise EWebSocketApi.CreateFmt('Invalid WebSocket action %d', [byte(Action)]);
     end;
-    Err := WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0);
+    Err := WebSocketApi.CompleteAction(fWSHandle, ActionContext, 0);
     if ActionContext <> nil then
       EWebSocketApi.RaiseOnError(hCompleteAction, Err);
   until {%H-}Action = WEB_SOCKET_NO_ACTION;
@@ -3918,7 +3918,7 @@ procedure THttpApiWebSocketConnection.InternalSend(
   aBufferType: WEB_SOCKET_BUFFER_TYPE; WebsocketBufferData: pointer);
 begin
   EWebSocketApi.RaiseOnError(hSend,
-    WebSocketAPI.Send(fWSHandle, aBufferType, WebsocketBufferData, nil));
+    WebSocketApi.Send(fWSHandle, aBufferType, WebsocketBufferData, nil));
   ProcessActions(WEB_SOCKET_SEND_ACTION_QUEUE);
 end;
 
@@ -3960,7 +3960,7 @@ constructor THttpApiWebSocketServer.Create(CreateSuspended: boolean;
   const aOnWSThreadStart, aOnWSThreadTerminate: TOnNotifyThread);
 begin
   inherited Create(CreateSuspended, QueueName);
-  if not (WebSocketAPI.WebSocketEnabled) then
+  if not (WebSocketApi.WebSocketEnabled) then
     raise EWebSocketApi.Create('WebSocket is not supported');
   fPingTimeout := aPingTimeout;
   if fPingTimeout > 0 then
@@ -4214,7 +4214,7 @@ begin
     until not conn.ProcessActions(WEB_SOCKET_RECEIVE_ACTION_QUEUE);
   if conn.fState in [wsClosedByGuard] then
     EWebSocketApi.RaiseOnError(hCompleteAction,
-      WebSocketAPI.CompleteAction(conn.fWSHandle, conn.fLastActionContext, 0));
+      WebSocketApi.CompleteAction(conn.fWSHandle, conn.fLastActionContext, 0));
   if conn.fState in
        [wsClosedByClient, wsClosedByServer, wsClosedByGuard, wsClosedByShutdown] then
   begin

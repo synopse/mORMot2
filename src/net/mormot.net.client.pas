@@ -350,40 +350,40 @@ type
 { ******************** TWinHttp TWinINet TWinHttpWebSocketClient }
 
 type
-  TWinHttpAPI = class;
+  TWinHttpApi = class;
 
   /// event callback to track download progress, e.g. in the UI
-  // - used in TWinHttpAPI.OnProgress property
+  // - used in TWinHttpApi.OnProgress property
   // - CurrentSize is the current total number of downloaded bytes
   // - ContentLength is retrieved from HTTP headers, but may be 0 if not set
-  TOnWinHttpProgress = procedure(Sender: TWinHttpAPI;
+  TOnWinHttpProgress = procedure(Sender: TWinHttpApi;
     CurrentSize, ContentLength: cardinal) of object;
 
   /// event callback to process the download by chunks, not in memory
-  // - used in TWinHttpAPI.OnDownload property
+  // - used in TWinHttpApi.OnDownload property
   // - CurrentSize is the current total number of downloaded bytes
   // - ContentLength is retrieved from HTTP headers, but may be 0 if not set
   // - ChunkSize is the size of the latest downloaded chunk, available in
   // the untyped ChunkData memory buffer
   // - implementation should return TRUE to continue the download, or FALSE
   // to abort the download process
-  TWinHttpDownload = function(Sender: TWinHttpAPI; CurrentSize, ContentLength,
+  TWinHttpDownload = function(Sender: TWinHttpApi; CurrentSize, ContentLength,
     ChunkSize: cardinal; const ChunkData): boolean of object;
 
   /// event callback to track upload progress, e.g. in the UI
-  // - used in TWinHttpAPI.OnUpload property
+  // - used in TWinHttpApi.OnUpload property
   // - CurrentSize is the current total number of uploaded bytes
   // - ContentLength is the size of content
   // - implementation should return TRUE to continue the upload, or FALSE
   // to abort the upload process
-  TWinHttpUpload = function(Sender: TWinHttpAPI;
+  TWinHttpUpload = function(Sender: TWinHttpApi;
     CurrentSize, ContentLength: cardinal): boolean of object;
 
   /// a class to handle HTTP/1.1 request using either WinINet or WinHTTP API
   // - both APIs have a common logic, which is encapsulated by this parent class
   // - this abstract class defined some abstract methods which will be
   // implemented by TWinINet or TWinHttp with the proper API calls
-  TWinHttpAPI = class(THttpRequest)
+  TWinHttpApi = class(THttpRequest)
   protected
     fOnProgress: TOnWinHttpProgress;
     fOnDownload: TWinHttpDownload;
@@ -436,7 +436,7 @@ type
   // - note: WinINet is MUCH slower than THttpClientSocket or TWinHttp: do not
   // use this, only if you find some configuration benefit on some old networks
   // (e.g. to diaplay the dialup popup window for a GUI client application)
-  TWinINet = class(TWinHttpAPI)
+  TWinINet = class(TWinHttpApi)
   protected
     // those internal methods will raise an EWinINet exception on error
     procedure InternalConnect(ConnectionTimeOut, SendTimeout,
@@ -488,7 +488,7 @@ type
   // call netsh or proxycfg bits from %SystemRoot%\SysWOW64 folder explicitely)
   // - Microsoft Windows HTTP Services (WinHTTP) is targeted at middle-tier and
   // back-end server applications that require access to an HTTP client stack
-  TWinHTTP = class(TWinHttpAPI)
+  TWinHTTP = class(TWinHttpApi)
   protected
     // those internal methods will raise an EOSError exception on error
     procedure InternalConnect(ConnectionTimeOut, SendTimeout,
@@ -1222,9 +1222,9 @@ end;
 
 { ******************** TWinHttp TWinINet TWinHttpWebSocketClient }
 
-{ TWinHttpAPI }
+{ TWinHttpApi }
 
-function TWinHttpAPI.InternalRetrieveAnswer(var Header, Encoding,
+function TWinHttpApi.InternalRetrieveAnswer(var Header, Encoding,
   AcceptEncoding: RawUtf8; var Data: RawByteString): integer;
 var
   ChunkSize, Bytes, ContentLength, Read: cardinal;
@@ -1302,7 +1302,7 @@ begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHTT
   end;
 end;
 
-class function TWinHttpAPI.IsAvailable: boolean;
+class function TWinHttpApi.IsAvailable: boolean;
 begin
   result := true; // both WinINet and WinHTTP are statically linked
 end;
@@ -1329,12 +1329,12 @@ begin
       OpenType := WINHTTP_ACCESS_TYPE_NO_PROXY
   else
     OpenType := WINHTTP_ACCESS_TYPE_NAMED_PROXY;
-  fSession := WinHttpAPI.Open(pointer(Utf8ToSynUnicode(fExtendedOptions.UserAgent)),
+  fSession := WinHttpApi.Open(pointer(Utf8ToSynUnicode(fExtendedOptions.UserAgent)),
     OpenType, pointer(Utf8ToSynUnicode(fProxyName)), pointer(Utf8ToSynUnicode(fProxyByPass)), 0);
   if fSession = nil then
     RaiseLastModuleError(winhttpdll, EWinHTTP);
   // cf. http://msdn.microsoft.com/en-us/library/windows/desktop/aa384116
-  if not WinHttpAPI.SetTimeouts(fSession, HTTP_DEFAULT_RESOLVETIMEOUT,
+  if not WinHttpApi.SetTimeouts(fSession, HTTP_DEFAULT_RESOLVETIMEOUT,
     ConnectionTimeOut, SendTimeout, ReceiveTimeout) then
     RaiseLastModuleError(winhttpdll, EWinHTTP);
   if fHTTPS then
@@ -1344,15 +1344,15 @@ begin
     if OSVersion >= wSeven then
       protocols := protocols or
         (WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1 or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2);
-    if not WinHttpAPI.SetOption(fSession, WINHTTP_OPTION_SECURE_PROTOCOLS,
+    if not WinHttpApi.SetOption(fSession, WINHTTP_OPTION_SECURE_PROTOCOLS,
         @protocols, SizeOf(protocols)) then
       RaiseLastModuleError(winhttpdll, EWinHTTP);
-    Callback := WinHttpAPI.SetStatusCallback(fSession,
+    Callback := WinHttpApi.SetStatusCallback(fSession,
       WinHTTPSecurityErrorCallback, WINHTTP_CALLBACK_FLAG_SECURE_FAILURE, nil);
     if CallbackRes = WINHTTP_INVALID_STATUS_CALLBACK then
       RaiseLastModuleError(winhttpdll, EWinHTTP);
   end;
-  fConnection := WinHttpAPI.Connect(fSession, pointer(Utf8ToSynUnicode(fServer)),
+  fConnection := WinHttpApi.Connect(fSession, pointer(Utf8ToSynUnicode(fServer)),
     fPort, 0);
   if fConnection = nil then
     RaiseLastModuleError(winhttpdll, EWinHTTP);
@@ -1370,14 +1370,14 @@ begin
   Flags := WINHTTP_FLAG_REFRESH; // options for a true RESTful request
   if fHttps then
     Flags := Flags or WINHTTP_FLAG_SECURE;
-  fRequest := WinHttpAPI.OpenRequest(fConnection, pointer(Utf8ToSynUnicode(aMethod)),
+  fRequest := WinHttpApi.OpenRequest(fConnection, pointer(Utf8ToSynUnicode(aMethod)),
     pointer(Utf8ToSynUnicode(aURL)), nil, nil, ACCEPT_TYPES[fNoAllAccept], Flags);
   if fRequest = nil then
     RaiseLastModuleError(winhttpdll, EWinHTTP);
   if fKeepAlive = 0 then
   begin
     Flags := WINHTTP_DISABLE_KEEP_ALIVE;
-    if not WinHttpAPI.SetOption(fRequest, WINHTTP_OPTION_DISABLE_FEATURE, @Flags,
+    if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_DISABLE_FEATURE, @Flags,
       sizeOf(Flags)) then
       RaiseLastModuleError(winhttpdll, EWinHTTP);
   end;
@@ -1387,7 +1387,7 @@ procedure TWinHTTP.InternalCloseRequest;
 begin
   if fRequest <> nil then
   begin
-    WinHttpAPI.CloseHandle(fRequest);
+    WinHttpApi.CloseHandle(fRequest);
     FRequest := nil;
   end;
 end;
@@ -1395,7 +1395,7 @@ end;
 procedure TWinHTTP.InternalAddHeader(const hdr: RawUtf8);
 begin
   if (hdr <> '') and
-     not WinHttpAPI.AddRequestHeaders(FRequest,
+     not WinHttpApi.AddRequestHeaders(FRequest,
     Pointer(Utf8ToSynUnicode(hdr)), length(hdr), WINHTTP_ADDREQ_FLAG_COALESCE) then
     RaiseLastModuleError(winhttpdll, EWinHTTP);
 end;
@@ -1410,7 +1410,7 @@ procedure TWinHTTP.InternalSendRequest(const aMethod: RawUtf8;
     if Assigned(fOnUpload) and
        (IdemPropNameU(aMethod, 'POST') or IdemPropNameU(aMethod, 'PUT')) then
     begin
-      result := WinHttpAPI.SendRequest(fRequest, nil, 0, nil, 0, L, 0);
+      result := WinHttpApi.SendRequest(fRequest, nil, 0, nil, 0, L, 0);
       if result then
       begin
         Current := 0;
@@ -1422,7 +1422,7 @@ procedure TWinHTTP.InternalSendRequest(const aMethod: RawUtf8;
           Max := L - Current;
           if Bytes > Max then
             Bytes := Max;
-          if not WinHttpAPI.WriteData(fRequest, @PByteArray(aData)[Current],
+          if not WinHttpApi.WriteData(fRequest, @PByteArray(aData)[Current],
              Bytes, BytesWritten) then
             RaiseLastModuleError(winhttpdll, EWinHTTP);
           inc(Current, BytesWritten);
@@ -1432,7 +1432,7 @@ procedure TWinHTTP.InternalSendRequest(const aMethod: RawUtf8;
       end;
     end
     else
-      result := WinHttpAPI.SendRequest(fRequest, nil, 0, pointer(aData), L, L, 0);
+      result := WinHttpApi.SendRequest(fRequest, nil, 0, pointer(aData), L, L, 0);
   end;
 
 var
@@ -1452,29 +1452,29 @@ begin
       else
         raise EWinHTTP.CreateFmt('Unsupported AuthScheme=%d', [ord(AuthScheme)]);
       end;
-      if not WinHttpAPI.SetCredentials(fRequest, WINHTTP_AUTH_TARGET_SERVER,
+      if not WinHttpApi.SetCredentials(fRequest, WINHTTP_AUTH_TARGET_SERVER,
          winAuth, pointer(AuthUserName), pointer(AuthPassword), nil) then
         RaiseLastModuleError(winhttpdll, EWinHTTP);
     end;
   if fHTTPS and IgnoreSSLCertificateErrors then
-    if not WinHttpAPI.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
+    if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
        @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
       RaiseLastModuleError(winhttpdll, EWinHTTP);
   L := length(aData);
-  if not _SendRequest(L) or not WinHttpAPI.ReceiveResponse(fRequest, nil) then
+  if not _SendRequest(L) or not WinHttpApi.ReceiveResponse(fRequest, nil) then
   begin
     if not fHTTPS then
       RaiseLastModuleError(winhttpdll, EWinHTTP);
     if (GetLastError = ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED) and
       IgnoreSSLCertificateErrors then
     begin
-      if not WinHttpAPI.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
+      if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
          @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
         RaiseLastModuleError(winhttpdll, EWinHTTP);
-      if not WinHttpAPI.SetOption(fRequest, WINHTTP_OPTION_CLIENT_CERT_CONTEXT,
+      if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_CLIENT_CERT_CONTEXT,
          pointer(WINHTTP_NO_CLIENT_CERT_CONTEXT), 0) then
         RaiseLastModuleError(winhttpdll, EWinHTTP);
-      if not _SendRequest(L) or not WinHttpAPI.ReceiveResponse(fRequest, nil) then
+      if not _SendRequest(L) or not WinHttpApi.ReceiveResponse(fRequest, nil) then
         RaiseLastModuleError(winhttpdll, EWinHTTP);
     end;
   end;
@@ -1489,11 +1489,11 @@ begin
   result := '';
   dwSize := 0;
   dwIndex := 0;
-  if not WinHttpAPI.QueryHeaders(fRequest, Info, nil, nil, dwSize, dwIndex) and
+  if not WinHttpApi.QueryHeaders(fRequest, Info, nil, nil, dwSize, dwIndex) and
      (GetLastError = ERROR_INSUFFICIENT_BUFFER) then
   begin
     tmp.Init(dwSize);
-    if WinHttpAPI.QueryHeaders(fRequest, Info, nil, tmp.buf, dwSize, dwIndex) then
+    if WinHttpApi.QueryHeaders(fRequest, Info, nil, tmp.buf, dwSize, dwIndex) then
     begin
       dwSize := dwSize shr 1;
       SetLength(result, dwSize);
@@ -1511,29 +1511,29 @@ begin
   dwSize := sizeof(result);
   dwIndex := 0;
   Info := Info or WINHTTP_QUERY_FLAG_NUMBER;
-  if not WinHttpAPI.QueryHeaders(fRequest, Info, nil, @result, dwSize, dwIndex) then
+  if not WinHttpApi.QueryHeaders(fRequest, Info, nil, @result, dwSize, dwIndex) then
     result := 0;
 end;
 
 function TWinHTTP.InternalQueryDataAvailable: cardinal;
 begin
-  if not WinHttpAPI.QueryDataAvailable(fRequest, result) then
+  if not WinHttpApi.QueryDataAvailable(fRequest, result) then
     RaiseLastModuleError(winhttpdll, EWinHTTP);
 end;
 
 function TWinHTTP.InternalReadData(var Data: RawByteString; Read: integer;
   Size: cardinal): cardinal;
 begin
-  if not WinHttpAPI.ReadData(fRequest, @PByteArray(Data)[Read], Size, result) then
+  if not WinHttpApi.ReadData(fRequest, @PByteArray(Data)[Read], Size, result) then
     RaiseLastModuleError(winhttpdll, EWinHTTP);
 end;
 
 destructor TWinHTTP.Destroy;
 begin
   if fConnection <> nil then
-    WinHttpAPI.CloseHandle(fConnection);
+    WinHttpApi.CloseHandle(fConnection);
   if fSession <> nil then
-    WinHttpAPI.CloseHandle(fSession);
+    WinHttpApi.CloseHandle(fSession);
   inherited Destroy;
 end;
 
@@ -1743,7 +1743,7 @@ begin
   _http := TWinHTTPUpgradeable.Create(aServer, aPort, aHttps, aProxyName,
     aProxyByPass, ConnectionTimeOut, SendTimeout, ReceiveTimeout);
   try
-    // WebSocketAPI.BeginClientHandshake()
+    // WebSocketApi.BeginClientHandshake()
     if aSubProtocol <> '' then
       inH := HTTP_WEBSOCKET_PROTOCOL + ': ' + aSubProtocol
     else
@@ -1763,7 +1763,7 @@ begin
   if not CheckSocket then
     result := ERROR_INVALID_HANDLE
   else
-    result := WinHttpAPI.WebSocketSend(fSocket, aBufferType, aBuffer, aBufferLength);
+    result := WinHttpApi.WebSocketSend(fSocket, aBufferType, aBuffer, aBufferLength);
 end;
 
 function TWinHTTPWebSocketClient.Receive(aBuffer: pointer; aBufferLength: cardinal;
@@ -1772,7 +1772,7 @@ begin
   if not CheckSocket then
     result := ERROR_INVALID_HANDLE
   else
-    result := WinHttpAPI.WebSocketReceive(fSocket, aBuffer, aBufferLength,
+    result := WinHttpApi.WebSocketReceive(fSocket, aBuffer, aBufferLength,
       aBytesRead, aBufferType);
 end;
 
@@ -1781,7 +1781,7 @@ begin
   if not CheckSocket then
     result := ERROR_INVALID_HANDLE
   else
-    result := WinHttpAPI.WebSocketClose(fSocket, WEB_SOCKET_SUCCESS_CLOSE_STATUS,
+    result := WinHttpApi.WebSocketClose(fSocket, WEB_SOCKET_SUCCESS_CLOSE_STATUS,
       Pointer(aCloseReason), Length(aCloseReason));
   if result = 0 then
     fSocket := nil;
@@ -1797,12 +1797,12 @@ var
 begin
   if CheckSocket then
   begin // todo: check result
-    WinHttpAPI.WebSocketClose(fSocket, WEB_SOCKET_ABORTED_CLOSE_STATUS, Pointer(CloseReason),
+    WinHttpApi.WebSocketClose(fSocket, WEB_SOCKET_ABORTED_CLOSE_STATUS, Pointer(CloseReason),
       Length(CloseReason));
     SetLength(reason, WEB_SOCKET_MAX_CLOSE_REASON_LENGTH);
-    WinHttpAPI.WebSocketQueryCloseStatus(fSocket, status, Pointer(reason),
+    WinHttpApi.WebSocketQueryCloseStatus(fSocket, status, Pointer(reason),
       WEB_SOCKET_MAX_CLOSE_REASON_LENGTH, reasonLength);
-    WinHttpAPI.CloseHandle(fSocket);
+    WinHttpApi.CloseHandle(fSocket);
   end;
   inherited Destroy;
 end;

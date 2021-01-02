@@ -1941,16 +1941,16 @@ end;
 
 
 
-{ TWinCryptoAPI }
+{ TWinCryptoApi }
 
-function TWinCryptoAPI.Available: boolean;
+function TWinCryptoApi.Available: boolean;
 begin
   if not Tested then
     Resolve;
   result := Assigned(AcquireContextA);
 end;
 
-procedure TWinCryptoAPI.Resolve;
+procedure TWinCryptoApi.Resolve;
 const
   NAMES: array[0..7] of PAnsiChar = (
     'CryptAcquireContextA',
@@ -3049,8 +3049,8 @@ end;
 {$I-}
 procedure FinalizeSpecificUnit;
 begin
-  if CryptoAPI.Handle <> 0 then
-    Windows.FreeLibrary(CryptoAPI.Handle);
+  if CryptoApi.Handle <> 0 then
+    Windows.FreeLibrary(CryptoApi.Handle);
   if OleDBCoinitialized <> 0 then
   begin
     writeln('Missing ', OleDBCoInitialized, ' TOleDBConnection.Destroy call');

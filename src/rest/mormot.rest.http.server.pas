@@ -1219,7 +1219,7 @@ const
     TRestServerAuthenticationHttpBasic,
     TRestServerAuthenticationNone,
     {$ifdef DOMAINRESTAUTH}
-    TRestServerAuthenticationSSPI
+    TRestServerAuthenticationSspi
     {$else}
     nil
     {$endif DOMAINRESTAUTH});
