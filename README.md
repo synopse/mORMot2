@@ -2,7 +2,7 @@
 
 An Open Source Client-Server ORM/SOA framework, version 2
 
-(c) 2008-2020 Synopse Informatique - Arnaud Bouchez
+(c) 2008-2021 Synopse Informatique - Arnaud Bouchez
 
 https://synopse.info  - http://mORMot.net
 
