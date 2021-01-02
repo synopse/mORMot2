@@ -310,12 +310,12 @@ const
   // - you could use it e.g. on a TOrm variant published field to
   // reduce the JSON escape process during storage in the database, by
   // customizing your TOrmModel instance:
-  // !  (aModel.Props[TOrmMyRecord]['VariantProp'] as TOrmPropInfoRTTIVariant).
+  // !  (aModel.Props[TOrmMyRecord]['VariantProp'] as TOrmPropInfoRttiVariant).
   // !    DocVariantOptions := JSON_OPTIONS_FAST_EXTENDED;
   // or - in a cleaner way - by overriding TOrm.InternalDefineModel():
   // ! class procedure TOrmMyRecord.InternalDefineModel(Props: TOrmProperties);
   // ! begin
-  // !   (Props.Fields.ByName('VariantProp') as TOrmPropInfoRTTIVariant).
+  // !   (Props.Fields.ByName('VariantProp') as TOrmPropInfoRttiVariant).
   // !     DocVariantOptions := JSON_OPTIONS_FAST_EXTENDED;
   // ! end;
   // or to set all variant fields at once:
@@ -6873,7 +6873,7 @@ var
   V: TVarData absolute Value;
 begin
   // first handle any strict-JSON syntax objects or arrays into custom variants
-  // (e.g. when called directly from TOrmPropInfoRTTIVariant.SetValue)
+  // (e.g. when called directly from TOrmPropInfoRttiVariant.SetValue)
   if (TryCustomVariants <> nil) and
      (JSON <> nil) then
     if (GotoNextNotSpace(JSON)^ in ['{', '[']) and

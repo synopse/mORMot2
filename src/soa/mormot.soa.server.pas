@@ -491,7 +491,7 @@ type
     IServiceRecordVersionCallback)
   protected
     fTable: TOrmClass;
-    fRecordVersionField: TOrmPropInfoRTTIRecordVersion;
+    fRecordVersionField: TOrmPropInfoRttiRecordVersion;
     fBatch: TRestBatch;
     fSlave: TRestServer; // fRest is master remote access
     fOnNotify: TOnBatchWrite;
@@ -987,7 +987,7 @@ begin
           W.CancelAll;
           W.AddShort('"POST",{Method:"');
           W.AddString(InterfaceDotMethodName);
-          W.AddShort('",Input:{'); // as TOrmPropInfoRTTIVariant.GetJsonValues
+          W.AddShort('",Input:{'); // as TOrmPropInfoRttiVariant.GetJsonValues
           if not (optNoLogInput in Sender.Options) then
           begin
             for a := ArgsInFirst to ArgsInLast do

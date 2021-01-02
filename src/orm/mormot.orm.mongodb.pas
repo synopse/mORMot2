@@ -581,7 +581,7 @@ begin
                   SetVariantNull(Variant(V^))
                 else
                 begin
-                  rtti := (info as TOrmPropInfoRTTIDynArray).PropRtti;
+                  rtti := (info as TOrmPropInfoRttiDynArray).PropRtti;
                   if rtti.ArrayRtti.Cache.RttiOrd = roUByte then
                     // TBytes or TByteDynArray stored as BSON binary
                     js := ''
@@ -828,7 +828,7 @@ begin
     info := fStoredClassRecordProps.Fields.List[f];
     if info.OrmFieldType = oftBlob then
     begin
-      (info as TOrmPropInfoRTTIRawBlob).GetBlob(Value, blobRaw);
+      (info as TOrmPropInfoRttiRawBlob).GetBlob(Value, blobRaw);
       BsonVariantType.FromBinary(blobRaw, bbtGeneric, blob);
       update.AddValue(fStoredClassMapping^.ExtFieldNames[f], blob);
     end;
@@ -1012,7 +1012,7 @@ begin
         raise EOrmMongoDB.CreateUtf8(
           '%.RetrieveBlobFields(%): field [%] not found',
           [self, Value, fBsonProjectionBlobFieldsNames[f]]);
-      (fStoredClassRecordProps.BlobFields[f] as TOrmPropInfoRTTIRawBlob).
+      (fStoredClassRecordProps.BlobFields[f] as TOrmPropInfoRttiRawBlob).
         SetBlob(Value, blobRaw);
     end;
     result := true;

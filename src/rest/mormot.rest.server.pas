@@ -2015,7 +2015,7 @@ type
     // - used internally by TServiceContainerServer for client/server synchronization
     procedure RecordVersionHandle(Occasion: TOrmOccasion;
       TableIndex: integer; var Decoder: TJsonObjectDecoder;
-      RecordVersionField: TOrmPropInfoRTTIRecordVersion); virtual;
+      RecordVersionField: TOrmPropInfoRttiRecordVersion); virtual;
   public
     /// call this method to add an authentication method to the server
     // - will return the just created TRestServerAuthentication instance,
@@ -6263,7 +6263,7 @@ end;
 
 procedure TRestServer.RecordVersionHandle(Occasion: TOrmOccasion;
   TableIndex: integer; var Decoder: TJsonObjectDecoder;
-  RecordVersionField: TOrmPropInfoRTTIRecordVersion);
+  RecordVersionField: TOrmPropInfoRttiRecordVersion);
 begin
   if RecordVersionField = nil then
     // no TRecordVersion field to track

@@ -201,7 +201,7 @@ type
 
   /// abstract low-level parent class for generic compression/decompression algorithms
   // - will encapsulate the compression algorithm with crc32c hashing
-  // - all Algo* abtract methods should be overriden by inherited classes
+  // - all Algo* abstract methods should be overriden by inherited classes
   // - don't inherit from TSynPersistent since we don't need any of it
   TAlgoCompress = class
   public

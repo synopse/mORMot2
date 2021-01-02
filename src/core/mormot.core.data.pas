@@ -1589,7 +1589,7 @@ type
     // - since TDynArray is just a wrapper around an existing array, you should
     // better use direct access to its wrapped variable, and not this (slightly)
     // slower and more error prone method (such pointer access lacks of strong
-    // typing abilities), which is designed for TDynArray abtract/internal use
+    // typing abilities), which is designed for TDynArray abstract/internal use
     function ItemPtr(index: PtrInt): pointer;
       {$ifdef HASINLINE}inline;{$endif}
     /// just a convenient wrapper of Info.Cache.ItemSize

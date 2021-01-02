@@ -2456,7 +2456,7 @@ end;
 
 function TRttiProp.Next: PRttiProp;
 begin
-  // this abtract code compiles into 2 asm lines under FPC :)
+  // this abstract code compiles into 2 asm lines under FPC :)
   with PPropInfo(@self)^ do
     result := AlignToPtr(@PByteArray(@self)[
       (PtrUInt(@PPropInfo(nil).Name) + SizeOf(Name[0])) + Length(Name)]);

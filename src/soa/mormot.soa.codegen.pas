@@ -828,7 +828,7 @@ var
   t, f, s, n: PtrInt;
   nfoList: TOrmPropInfoList;
   nfo: TOrmPropInfo;
-  nfoOrmFieldRTTITypeName: RawUtf8;
+  nfoOrmFieldRttiTypeName: RawUtf8;
   kind: TCrossPlatformOrmFieldKind;
   hasRecord: boolean;
   fields, services: TDocVariantData;
@@ -866,17 +866,17 @@ begin
     for f := 0 to nfoList.Count - 1 do
     begin
       nfo := nfoList.List[f];
-      nfoOrmFieldRTTITypeName := nfo.SqlFieldRTTITypeName;
-      if nfo.InheritsFrom(TOrmPropInfoRTTI) then
+      nfoOrmFieldRttiTypeName := nfo.SqlFieldRttiTypeName;
+      if nfo.InheritsFrom(TOrmPropInfoRtti) then
         field := ContextFromRtti(TYPES_ORM[nfo.OrmFieldType],
-          TOrmPropInfoRTTI(nfo).PropRtti, nfoOrmFieldRTTITypeName)
+          TOrmPropInfoRtti(nfo).PropRtti, nfoOrmFieldRttiTypeName)
       else if nfo.InheritsFrom(TOrmPropInfoRecordTyped) then
       begin
         hasRecord := true;
         fHasAnyRecord := true;
         field := ContextFromRtti(wRecord,
           Rtti.RegisterType(TOrmPropInfoRecordTyped(nfo).TypeInfo),
-          nfoOrmFieldRTTITypeName);
+          nfoOrmFieldRttiTypeName);
       end
       else
         raise EWrapperContext.CreateUtf8('Unexpected type % for %.%',

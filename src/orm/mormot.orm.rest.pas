@@ -2432,8 +2432,8 @@ begin
       prop := ByRawUtf8Name(FieldName);
   if prop = nil then
     exit;
-  if prop.InheritsFrom(TOrmPropInfoRTTI) then
-    nfo := TOrmPropInfoRTTI(prop).PropType
+  if prop.InheritsFrom(TOrmPropInfoRtti) then
+    nfo := TOrmPropInfoRtti(prop).PropType
   else
     nfo := nil;
   SetFieldType(result, prop.OrmFieldTypeStored, nfo, prop.FieldWidth,

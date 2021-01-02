@@ -678,7 +678,7 @@ end;
 procedure TRestOrmServer.InternalRecordVersionMaxFromExisting(RetrieveNext: PID);
 var
   m: PtrInt;
-  field: TOrmPropInfoRTTIRecordVersion;
+  field: TOrmPropInfoRttiRecordVersion;
   current, max, mDeleted: Int64;
 begin
   fRest.AcquireExecution[execOrmWrite].Safe.Lock;

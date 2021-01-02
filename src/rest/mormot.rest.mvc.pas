@@ -55,14 +55,14 @@ uses
 
 type
   /// TMvcView.Flags rendering context
-  // - viewHasGenerationTimeTag is set if TMvcViewsAbtract.ViewGenerationTimeTag
+  // - viewHasGenerationTimeTag is set if TMvcViewsAbstract.ViewGenerationTimeTag
   // text appears in the template, for this time value not to affect the cache
   TMvcViewFlags = set of (
     viewHasGenerationTimeTag);
 
   /// define a particular rendered View
   // - is initialized by TMvcRendererFromViews.Renders(), then rendered by the
-  // TMvcViewsAbtract.Render() method
+  // TMvcViewsAbstract.Render() method
   TMvcView = record
     /// the low-level content of this View
     Content: RawByteString;
@@ -73,7 +73,7 @@ type
   end;
 
   /// an abstract class able to implement Views
-  TMvcViewsAbtract = class
+  TMvcViewsAbstract = class
   protected
     fFactory: TInterfaceFactory;
     fLogClass: TSynLogClass;
@@ -131,7 +131,7 @@ type
   end;
 
   /// a class able to implement Views using Mustache templates
-  TMvcViewsMustache = class(TMvcViewsAbtract)
+  TMvcViewsMustache = class(TMvcViewsAbstract)
   protected
     fViewTemplateFileTimestampMonitor: cardinal;
     fViewPartials: TSynMustachePartials;
@@ -392,7 +392,7 @@ type
 
   TMvcApplication = class;
 
-  /// abtract MVC rendering execution context
+  /// abstract MVC rendering execution context
   // - you shoud not execute this abstract class, but any of the inherited class
   // - one instance inherited from this class would be allocated for each event
   // - may return some data (when inheriting from TMvcRendererReturningData), or
@@ -513,7 +513,7 @@ type
   // an optional simple in-memory cache
   TMvcRunWithViews = class(TMvcRun)
   protected
-    fViews: TMvcViewsAbtract;
+    fViews: TMvcViewsAbstract;
     fCacheLocker: IAutoLocker;
     fCache: array of record
       Policy: TMvcRendererCachePolicy;
@@ -525,7 +525,7 @@ type
   public
     /// link this runner class to a specified MVC application
     constructor Create(aApplication: TMvcApplication;
-      aViews: TMvcViewsAbtract = nil); reintroduce;
+      aViews: TMvcViewsAbstract = nil); reintroduce;
     /// method called to flush the caching mechanism for a MVC command
     procedure NotifyContentChangedForMethod(aMethodIndex: integer); override;
     /// defines the caching policy for a given MVC command
@@ -540,7 +540,7 @@ type
     /// finalize this instance
     destructor Destroy; override;
     /// read-write access to the associated MVC Views instance
-    property Views: TMvcViewsAbtract
+    property Views: TMvcViewsAbstract
       read fViews;
   end;
 
@@ -595,7 +595,7 @@ type
     // - aPublishOptions could be used to specify integration with the server
     constructor Create(aApplication: TMvcApplication;
       aRestServer: TRestServer = nil; const aSubURI: RawUtf8 = '';
-      aViews: TMvcViewsAbtract = nil;
+      aViews: TMvcViewsAbstract = nil;
       aPublishOptions: TMvcPublishOptions=
         [low(TMvcPublishOption) .. high(TMvcPublishOption)]); reintroduce;
     /// define some content for a static file
@@ -656,7 +656,7 @@ type
   // - you should inherit from this class, then implement an interface inheriting
   // from IMvcApplication to define the various commands of the application
   // - here the Model would be a TRest instance, Views will be defined by
-  // TMvcViewsAbtract (e.g. TMvcViewsMustache), and the ViewModel/Controller
+  // TMvcViewsAbstract (e.g. TMvcViewsMustache), and the ViewModel/Controller
   // will be implemented with IMvcApplication methods of the inherited class
   // - inherits from TInjectableObject, so that you could resolve dependencies
   // via services or stubs, following the IoC pattern
@@ -791,9 +791,9 @@ const
 
 { ************ Web Views Implementation using Mustache }
 
-{ TMvcViewsAbtract }
+{ TMvcViewsAbstract }
 
-constructor TMvcViewsAbtract.Create(aInterface: PRttiInfo;
+constructor TMvcViewsAbstract.Create(aInterface: PRttiInfo;
   aLogClass: TSynLogClass);
 begin
   inherited Create;
@@ -806,7 +806,7 @@ begin
   fViewGenerationTimeTag := '[[GENERATION_TIME_TAG]]';
 end;
 
-procedure TMvcViewsAbtract.SetViewTemplateFolder(const aFolder: TFileName);
+procedure TMvcViewsAbstract.SetViewTemplateFolder(const aFolder: TFileName);
 begin
   fViewTemplateFolder :=
     IncludeTrailingPathDelimiter(aFolder);
@@ -814,7 +814,7 @@ begin
     IncludeTrailingPathDelimiter(fViewTemplateFolder + STATIC_URI);
 end;
 
-function TMvcViewsAbtract.GetStaticFile(
+function TMvcViewsAbstract.GetStaticFile(
   const aFileName: TFileName): RawByteString;
 begin
   result := StringFromFile(fViewStaticFolder + aFileName);
@@ -1049,19 +1049,19 @@ begin
               W.AddHtmlEscapeString(timelog.i18nText);
             end;
           oftBoolean, oftEnumerate:
-            if Field.InheritsFrom(TOrmPropInfoRTTIEnum) then
+            if Field.InheritsFrom(TOrmPropInfoRttiEnum) then
             begin
-              caption := TOrmPropInfoRTTIEnum(Field).GetCaption(u, int);
+              caption := TOrmPropInfoRttiEnum(Field).GetCaption(u, int);
               HtmlTableStyle.AddLabel(W, caption,
                 ENUM[Field.OrmFieldType = oftBoolean, int <> 0]);
             end;
           oftSet:
-            if Field.InheritsFrom(TOrmPropInfoRTTISet) and
+            if Field.InheritsFrom(TOrmPropInfoRttiSet) and
                VariantToInteger(Rec^.Values[i], int) then
             begin
               sets := TStringList.Create;
               try
-                TOrmPropInfoRTTISet(Field).SetEnumType^.AddCaptionStrings(sets);
+                TOrmPropInfoRttiSet(Field).SetEnumType^.AddCaptionStrings(sets);
                 for j := 0 to sets.Count - 1 do
                 begin
                   HtmlTableStyle.AddLabel(W, sets[j], ONOFF[GetBit(int, j)]);
@@ -1779,7 +1779,7 @@ end;
 { TMvcRunWithViews }
 
 constructor TMvcRunWithViews.Create(aApplication: TMvcApplication;
-  aViews: TMvcViewsAbtract);
+  aViews: TMvcViewsAbstract);
 begin
   inherited Create(aApplication);
   fViews := aViews;
@@ -1837,7 +1837,7 @@ end;
 { TMvcRunOnRestServer }
 
 constructor TMvcRunOnRestServer.Create(aApplication: TMvcApplication;
-  aRestServer: TRestServer; const aSubURI: RawUtf8; aViews: TMvcViewsAbtract;
+  aRestServer: TRestServer; const aSubURI: RawUtf8; aViews: TMvcViewsAbstract;
   aPublishOptions: TMvcPublishOptions);
 var
   m: PtrInt;

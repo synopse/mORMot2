@@ -2431,19 +2431,19 @@ begin
   // full scan optimized search for a specified value
   found := 0;
   currentRow := 0;
-  if P.InheritsFrom(TOrmPropInfoRTTIInt32) and
-     (TOrmPropInfoRTTIInt32(P).PropRtti.Kind in [rkInteger, rkEnumeration, rkSet]) then
+  if P.InheritsFrom(TOrmPropInfoRttiInt32) and
+     (TOrmPropInfoRttiInt32(P).PropRtti.Kind in [rkInteger, rkEnumeration, rkSet]) then
   begin
     // search 8/16/32-bit properties
     v := GetInt64(pointer(WhereValue), err); // 64-bit for cardinal
     if err <> 0 then
       exit;
-    nfo := TOrmPropInfoRTTI(P).PropInfo;
-    offs := TOrmPropInfoRTTI(P).GetterIsFieldPropOffset;
+    nfo := TOrmPropInfoRtti(P).PropInfo;
+    offs := TOrmPropInfoRtti(P).GetterIsFieldPropOffset;
     if offs <> 0 then
     begin
       // plain field with no getter
-      ot := TOrmPropInfoRTTI(P).PropRtti.Cache.RttiOrd;
+      ot := TOrmPropInfoRtti(P).PropRtti.Cache.RttiOrd;
       if ot in [roSLong, roULong] then
       begin
         // handle very common 32-bit integer field
@@ -2469,14 +2469,14 @@ begin
            FoundOneAndReachedLimit then
           break;
   end
-  else if P.InheritsFrom(TOrmPropInfoRTTIInt64) then
+  else if P.InheritsFrom(TOrmPropInfoRttiInt64) then
   begin
     // search 64-bit integer property
     v := GetInt64(pointer(WhereValue), err);
     if err <> 0 then
       exit;
-    nfo := TOrmPropInfoRTTI(P).PropInfo;
-    offs := TOrmPropInfoRTTI(P).GetterIsFieldPropOffset;
+    nfo := TOrmPropInfoRtti(P).PropInfo;
+    offs := TOrmPropInfoRtti(P).GetterIsFieldPropOffset;
     if offs <> 0 then
     begin
       // plain field with no getter
@@ -2531,9 +2531,9 @@ begin
   // search WHERE WhereField=WhereValue (WhereField=RTTIfield+1)
   dec(WhereField);
   P := fStoredClassRecordProps.Fields.List[WhereField];
-  if P.InheritsFrom(TOrmPropInfoRTTIInt32) then
+  if P.InheritsFrom(TOrmPropInfoRttiInt32) then
   begin
-    nfo := TOrmPropInfoRTTI(P).PropInfo;
+    nfo := TOrmPropInfoRtti(P).PropInfo;
     for i := 0 to fCount - 1 do
     begin
       v := nfo.GetOrdProp(fValue[i]);
@@ -2542,9 +2542,9 @@ begin
     end;
     result := true;
   end
-  else if P.InheritsFrom(TOrmPropInfoRTTIInt64) then
+  else if P.InheritsFrom(TOrmPropInfoRttiInt64) then
   begin
-    nfo := TOrmPropInfoRTTI(P).PropInfo;
+    nfo := TOrmPropInfoRtti(P).PropInfo;
     for i := 0 to fCount - 1 do
     begin
       v := nfo.GetInt64Prop(fValue[i]);
@@ -2651,11 +2651,11 @@ begin // exact same format as TOrmTable.GetJsonValues()
           if Stmt.Where[0].Field > 0 then
           begin
             Prop := fStoredClassRecordProps.Fields.List[Stmt.Where[0].Field - 1];
-            if Prop.InheritsFrom(TOrmPropInfoRTTIRawBlob) then
+            if Prop.InheritsFrom(TOrmPropInfoRttiRawBlob) then
             begin
               IsNull := Stmt.Where[0].Operation = opIsNull;
               for ndx := 0 to fCount - 1 do
-                if TOrmPropInfoRTTIRawBlob(Prop).IsNull(fValue[ndx]) = IsNull then
+                if TOrmPropInfoRttiRawBlob(Prop).IsNull(fValue[ndx]) = IsNull then
                 begin
                   fValue[ndx].GetJsonValues(W);
                   W.Add(',');
