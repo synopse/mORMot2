@@ -464,7 +464,7 @@ type
     // - see also IRestOrmServer.SetStaticVirtualTableDirect
     // - is set to TRUE by default to enable faster Direct mode
     // - in Direct mode, GET/POST/PUT/DELETE of individual records (or BLOB fields)
-    // from URI() will call directly the corresponding TRestStorage
+    // from Uri() will call directly the corresponding TRestStorage
     // instance, for better speed for most used RESTful operations; but complex
     // SQL requests (e.g. joined SELECT) will rely on the main SQL engine
     // - if set to false, will use the main SQLite3 engine for all statements

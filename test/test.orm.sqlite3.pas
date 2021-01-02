@@ -205,7 +205,7 @@ type
       opcode: TWebSocketFrameOpCode);
     procedure TestRest(Rest: TRest);
     procedure TestCallback(Rest: TRest);
-    procedure SOACallbackViaWebsockets(Ajax, Relay: boolean);
+    procedure SoaCallbackViaWebsockets(Ajax, Relay: boolean);
   published
     /// low-level test of our 'synopsejson' WebSockets JSON protocol
     procedure WebsocketsJSONProtocol;
@@ -217,19 +217,19 @@ type
     /// launch the WebSockets-ready HTTP server
     procedure RunHttpServer;
     /// test the callback mechanism via interface-based services on server side
-    procedure SOACallbackOnServerSide;
+    procedure SoaCallbackOnServerSide;
     /// test callbacks via interface-based services over JSON WebSockets
-    procedure SOACallbackViaJsonWebsockets;
+    procedure SoaCallbackViaJsonWebsockets;
     /// test callbacks via interface-based services over binary WebSockets
-    procedure SOACallbackViaBinaryWebsockets;
+    procedure SoaCallbackViaBinaryWebsockets;
     /// initialize SynProtoRelay tunnelling
     procedure RelayStart;
     /// test SynProtoRelay tunnelling over JSON WebSockets
-    procedure RelaySOACallbackViaJsonWebsockets;
+    procedure RelaySoaCallbackViaJsonWebsockets;
     /// verify ability to reconect from Private Relay to Public Relay
     procedure RelayConnectionRecreate;
     /// test SynProtoRelay tunnelling over binary WebSockets
-    procedure RelaySOACallbackViaBinaryWebsockets;
+    procedure RelaySoaCallbackViaBinaryWebsockets;
     /// finalize SynProtoRelay tunnelling
     procedure RelayShutdown;
     /// test Master/Slave replication using TRecordVersion field over WebSockets
@@ -1555,7 +1555,7 @@ var
     call.InHead := head;
     TRestClientAuthenticationDefault.ClientSessionSign(Client, call);
     call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
-    Server.URI(call);
+    Server.Uri(call);
     check(Hash32(call.OutBody) = Hash);
   end;
 
@@ -1813,14 +1813,14 @@ begin
             Direct('/root/People?select=%2A', $17AE45E3);
             Direct('/root/People?select=%2A&where=YearOfBirth%3D1873&startindex=10&results=20',
               $453C7201);
-            Server.URIPagingParameters.SendTotalRowsCountFmt := ',"Total":%';
+            Server.UriPagingParameters.SendTotalRowsCountFmt := ',"Total":%';
             Direct('/root/People?select=%2A&where=YearOfBirth%3D1873&startindex=10&results=2',
               $79AFDD53);
             Server.NoAjaxJson := false;
             Direct('/root/People?select=%2A&where=YearOfBirth%3D1873&startindex=10&results=2',
               $69FDAF5D, 'User-Agent: Ajax');
             Server.NoAjaxJson := true;
-            Server.URIPagingParameters.SendTotalRowsCountFmt := '';
+            Server.UriPagingParameters.SendTotalRowsCountFmt := '';
             // test Retrieve() and Delete()
             Check(Server.ExportServerGlobalLibraryRequest);
             ClientDist := TRestClientLibraryRequest.Create(ModelC, LibraryRequest);
@@ -3023,7 +3023,7 @@ begin
   check(fBidirServer.LaunchSynchCallback = 0);
 end; // here TBidirCallback.Free will notify Rest.Services.CallBackUnRegister()
 
-procedure TTestBidirectionalRemoteConnection.SOACallbackOnServerSide;
+procedure TTestBidirectionalRemoteConnection.SoaCallbackOnServerSide;
 begin
   TestRest(fServer);
   TestCallback(fServer);
@@ -3039,7 +3039,7 @@ begin
   result.WebSockets.Settings.SetFullLog;
 end;
 
-procedure TTestBidirectionalRemoteConnection.SOACallbackViaWebsockets(
+procedure TTestBidirectionalRemoteConnection.SoaCallbackViaWebsockets(
   Ajax, Relay: boolean);
 
   procedure ServiceDefine(c: TRestHttpClientWebsockets; const msg: string);
@@ -3088,14 +3088,14 @@ begin
   end;
 end;
 
-procedure TTestBidirectionalRemoteConnection.SOACallbackViaJsonWebsockets;
+procedure TTestBidirectionalRemoteConnection.SoaCallbackViaJsonWebsockets;
 begin
-  SOACallbackViaWebsockets({ajax=}true, {relay=}false);
+  SoaCallbackViaWebsockets({ajax=}true, {relay=}false);
 end;
 
-procedure TTestBidirectionalRemoteConnection.SOACallbackViaBinaryWebsockets;
+procedure TTestBidirectionalRemoteConnection.SoaCallbackViaBinaryWebsockets;
 begin
-  SOACallbackViaWebsockets({ajax=}false, {relay=}false);
+  SoaCallbackViaWebsockets({ajax=}false, {relay=}false);
 end;
 
 procedure TTestBidirectionalRemoteConnection.RelayStart;
@@ -3105,7 +3105,7 @@ var
   stats: RawUtf8;
 begin
   fPublicRelay := TPublicRelay.Create(nil, fPublicRelayClientsPort,
-    fPublicRelayPort, RELAYKEY, TJWTHS256.Create('jwtsecret', 100, [], []));
+    fPublicRelayPort, RELAYKEY, TJwtHS256.Create('jwtsecret', 100, [], []));
   fPrivateRelay := TPrivateRelay.Create(nil, '127.0.0.1', fPublicRelayPort,
     RELAYKEY, fPublicRelay.ServerJWT.Compute([]), '127.0.0.1', HTTP_DEFAULTPORT,
     'X-Real-IP');
@@ -3116,9 +3116,9 @@ begin
   check(PosEx('version', stats) > 0, 'stats');
 end;
 
-procedure TTestBidirectionalRemoteConnection.RelaySOACallbackViaJsonWebsockets;
+procedure TTestBidirectionalRemoteConnection.RelaySoaCallbackViaJsonWebsockets;
 begin
-  SOACallbackViaWebsockets({ajax=}true, {relay=}true);
+  SoaCallbackViaWebsockets({ajax=}true, {relay=}true);
 end;
 
 procedure TTestBidirectionalRemoteConnection.RelayConnectionRecreate;
@@ -3126,9 +3126,9 @@ begin
   check(fPrivateRelay.TryConnect);
 end;
 
-procedure TTestBidirectionalRemoteConnection.RelaySOACallbackViaBinaryWebsockets;
+procedure TTestBidirectionalRemoteConnection.RelaySoaCallbackViaBinaryWebsockets;
 begin
-  SOACallbackViaWebsockets({ajax=}false, {relay=}true);
+  SoaCallbackViaWebsockets({ajax=}false, {relay=}true);
 end;
 
 procedure TTestBidirectionalRemoteConnection.RelayShutdown;

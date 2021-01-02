@@ -5850,7 +5850,7 @@ const
   _b64: array[0..63] of AnsiChar =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 
-procedure RawBase64URI(rp, sp: PAnsiChar; lendiv, lenmod: integer);
+procedure RawBase64Uri(rp, sp: PAnsiChar; lendiv, lenmod: integer);
 var
   i: integer;
   c: cardinal;
@@ -5884,7 +5884,7 @@ begin
   end;
 end;
 
-function Base64URI(P: pointer; len: integer): RawUtf8;
+function Base64Uri(P: pointer; len: integer): RawUtf8;
 var
   blen, bdiv, bmod: integer;
 begin
@@ -5898,7 +5898,7 @@ begin
       inc(blen, 3);
   end;
   FastSetString(result, nil, blen);
-  RawBase64URI(pointer(result), P, bdiv, bmod);
+  RawBase64Uri(pointer(result), P, bdiv, bmod);
 end;
 
 procedure read__h__hmac;
@@ -5913,7 +5913,7 @@ begin
   SetString(appsec, PAnsiChar(@CryptProtectDataEntropy), 32);
   PBKDF2_HMAC_SHA256(appsec, ExeVersion.User, 100, k256);
   FillZero(appsec);
-  appsec := Base64URI(@k256, 15); // =BinToBase64URI()
+  appsec := Base64Uri(@k256, 15); // =BinToBase64Uri()
   fn := FormatString({$ifdef MSWINDOWS}'%_%'{$else}'%.syn-%'{$endif},
     [GetSystemPath(spUserData), appsec]);  // .* files are hidden under Linux
   SetString(appsec, PAnsiChar(@k256[15]), 17); // use remaining bytes as key

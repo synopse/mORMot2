@@ -267,7 +267,7 @@ type
   /// implements a Public Relay server, e.g. located on a small Linux/BSD box
   TPublicRelay = class(TAbstractRelay)
   protected
-    fServerJWT: TJWTAbstract;
+    fServerJWT: TJwtAbstract;
     fClients, fServer: TWebSocketServer;
     fServerConnected: TWebSocketProcess;
     fServerConnectedToLocalHost: boolean;
@@ -286,12 +286,12 @@ type
     // and aServerJWT to authenticate the incoming connection (owned by this instance)
     constructor Create(aLog: TSynLogClass;
       const aClientsPort, aServerPort, aServerKey: RawUtf8;
-      aServerJWT: TJWTAbstract; aClientsThreadPoolCount: integer = 2;
+      aServerJWT: TJwtAbstract; aClientsThreadPoolCount: integer = 2;
       aClientsKeepAliveTimeOut: integer = 30000); reintroduce;
     /// finalize the Public Relay server
     destructor Destroy; override;
     /// access to the JWT authentication for TPrivateRelay communication
-    property ServerJWT: TJWTAbstract
+    property ServerJWT: TJwtAbstract
       read fServerJWT;
   published
     /// raw access to the Private Relay server instance
@@ -897,7 +897,7 @@ end;
 { TPublicRelay }
 
 constructor TPublicRelay.Create(aLog: TSynLogClass;
-  const aClientsPort, aServerPort, aServerKey: RawUtf8; aServerJWT: TJWTAbstract;
+  const aClientsPort, aServerPort, aServerKey: RawUtf8; aServerJWT: TJwtAbstract;
   aClientsThreadPoolCount, aClientsKeepAliveTimeOut: integer);
 var
   log: ISynLog;
@@ -940,7 +940,7 @@ function TPublicRelay.OnServerBeforeBody(
   aContentLength: integer; aUseSSL: boolean): cardinal;
 var
   bearer: RawUtf8;
-  res: TJWTResult;
+  res: TJwtResult;
 begin
   if IdemPChar(pointer(aURL), '/STAT') then
   begin

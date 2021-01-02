@@ -91,7 +91,7 @@ type
 
   /// abstract HTTP/1.1 RESTful JSON mORMot Client class
   // - this class, and other inherited classes defined in this unit, are
-  // thread-safe, since each of their URI() method is protected by a giant lock
+  // thread-safe, since each of their Uri() method is protected by a giant lock
   TRestHttpClientGeneric = class(TRestClientUri)
   protected
     fKeepAliveMS: cardinal;
@@ -106,7 +106,7 @@ type
     procedure SetCompression(Value: TRestHttpCompressions);
     procedure SetKeepAliveMS(Value: cardinal);
     /// process low-level HTTP/1.1 request
-    // - called by InternalUri(), therefore by URI() public method
+    // - called by InternalUri(), therefore by Uri() public method
     // - returns 200,202,204 if OK, http status error otherwise in result.Lo
     // - returns Server-InternalState in result.Hi
     function InternalRequest(const url, method: RawUtf8;

@@ -596,7 +596,7 @@ type
     property ClientsMax: TSynMonitorOneCount
       read fClientsMax;
     /// how many concurrent requests are currently processed
-    // - modified via AddCurrentRequestCount() in TRestServer.URI()
+    // - modified via AddCurrentRequestCount() in TRestServer.Uri()
     property CurrentRequestCount: integer
       read fCurrentRequestCount;
   end;

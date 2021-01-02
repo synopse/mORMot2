@@ -132,7 +132,7 @@ type
   // - should return FALSE if the method should not be executed, and set the
   // corresponding error to the supplied context e.g.
   // ! Ctxt.Error('Unauthorized method',HTTP_NOTALLOWED);
-  // - i.e. called by TRestServerUriContext.InternalExecuteSOAByInterface
+  // - i.e. called by TRestServerUriContext.InternalExecuteSoaByInterface
   TOnServiceCanExecute = function(Ctxt: TRestServerUriContext;
     const Method: TInterfaceMethod): boolean of object;
 
@@ -562,22 +562,22 @@ begin
   InitializeCriticalSection(fInstanceLock);
   fRestServer := aRestServer;
   inherited Create(aRestServer, aInterface, aInstanceCreation, aContractExpected);
-  if fRestServer.MethodAddress(ShortString(InterfaceURI)) <> nil then
+  if fRestServer.MethodAddress(ShortString(InterfaceUri)) <> nil then
     raise EServiceException.CreateUtf8(
       '%.Create: I% already exposed as % published method',
-      [self, InterfaceURI, fRestServer]);
+      [self, InterfaceUri, fRestServer]);
   fImplementationClass := aImplementationClass;
   if fImplementationClass.InheritsFrom(TInterfacedObjectFake) then
   begin
     fImplementationClassKind := ickFake;
     if aSharedInstance = nil then
       raise EServiceException.CreateUtf8('%.Create: no Shared Instance for %/I%',
-        [self, fImplementationClass, fInterfaceURI]);
+        [self, fImplementationClass, fInterfaceUri]);
     if (aSharedInstance as TInterfacedObjectFake).
         Factory.InterfaceTypeInfo <> aInterface then
       raise EServiceException.CreateUtf8(
         '%.Create: shared % instance does not implement I%',
-        [self, fImplementationClass, fInterfaceURI]);
+        [self, fImplementationClass, fInterfaceUri]);
   end
   else
   begin
@@ -593,7 +593,7 @@ begin
       GetInterfaceEntry(fInterface.InterfaceIID);
     if fImplementationClassInterfaceEntry = nil then
       raise EServiceException.CreateUtf8('%.Create: % does not implement I%',
-        [self, fImplementationClass, fInterfaceURI]);
+        [self, fImplementationClass, fInterfaceUri]);
   end;
   if (fInterface.MethodIndexCallbackReleased >= 0) and
      (InstanceCreation <> sicShared) then
@@ -618,7 +618,7 @@ begin
                fImplementationClassInterfaceEntry, fSharedInterface) then
             raise EServiceException.CreateUtf8(
               '%.Create: % is no implementation of I%',
-              [self, fSharedInstance, fInterfaceURI]);
+              [self, fSharedInstance, fInterfaceUri]);
       end;
     sicClientDriven, sicPerSession, sicPerUser, sicPerGroup, sicPerThread:
       if (aTimeOutSec = 0) and
@@ -673,7 +673,7 @@ var
 begin
   if fInstanceCount > 0 then
     fRestServer.InternalLog('%.Destroy for I% %: fInstanceCount=%',
-      [ClassType, fInterfaceURI, ToText(InstanceCreation)^, fInstanceCount], sllDebug);
+      [ClassType, fInterfaceUri, ToText(InstanceCreation)^, fInstanceCount], sllDebug);
   try
     EnterCriticalSection(fInstanceLock);
     try
@@ -823,7 +823,7 @@ begin
   except
     on E: Exception do
       Factory.RestServer.Internallog('SafeFreeInstance: Ignored % exception ' +
-        'during %._Release', [E.ClassType, Factory.InterfaceURI], sllDebug);
+        'during %._Release', [E.ClassType, Factory.InterfaceUri], sllDebug);
   end;
 end;
 
@@ -844,7 +844,7 @@ function TServiceFactoryServer.InternalInstanceRetrieve(
     inc(fInstanceCount);
     fRestServer.InternalLog(
       '%.InternalInstanceRetrieve: Adding %(%) instance (id=%) count=%',
-      [ClassType, fInterfaceURI, pointer(Inst.Instance), Inst.InstanceID,
+      [ClassType, fInterfaceUri, pointer(Inst.Instance), Inst.InstanceID,
        fInstanceCount], sllDebug);
     P := pointer(fInstance);
     for i := 1 to fInstanceCapacity do
@@ -878,7 +878,7 @@ begin
         begin
           fRestServer.InternalLog('%.InternalInstanceRetrieve: Delete %(%) ' +
             'instance (id=%) after % minutes timeout (max % minutes)',
-            [ClassType, fInterfaceURI, pointer(Inst.Instance), P^.InstanceID,
+            [ClassType, fInterfaceUri, pointer(Inst.Instance), P^.InstanceID,
              (Inst.LastAccess64 - P^.LastAccess64) div 60000,
              fInstanceTimeOut div 60000], sllInfo);
           P^.SafeFreeInstance(self);
@@ -1456,7 +1456,7 @@ begin
   begin
     // may be called asynchronously AFTER server is down
     fServer.InternalLog('%(%:%).Destroy I%',
-      [ClassType, pointer(self), fClientDrivenID, fService.InterfaceURI]);
+      [ClassType, pointer(self), fClientDrivenID, fService.InterfaceUri]);
     if fServer.Services <> nil then
       with fServer.Services as TServiceContainerServer do
         if fFakeCallbacks <> nil then

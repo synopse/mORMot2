@@ -96,7 +96,7 @@ function WrapperFromModel(aServer: TRestServer;
 /// generate a code/doc wrapper for a given set of types and Mustache template content
 // - will use aTables[] to define the ORM information, and supplied aSharedServices[]
 // aSharedServicesContract[] for SOA definition of a shared API (expected to
-// be called from TRestClientUri.ServiceDefineSharedAPI)
+// be called from TRestClientUri.ServiceDefineSharedApi)
 // - aFileName will be transmitted as {{filename}}, e.g. 'mORMotClient'
 // - you should also specify a "fake" HTTP port e.g. 888
 // - the template content could be retrieved from a file via StringFromFile()
@@ -923,11 +923,11 @@ begin
       if fServer.Services.ExpectMangledUri then
         uri := srv.InterfaceMangledUri
       else
-        uri := srv.InterfaceURI;
+        uri := srv.InterfaceUri;
       with srv do
         rec := _ObjFast([
           'uri', uri,
-          'interfaceURI', InterfaceURI,
+          'interfaceUri', InterfaceUri,
           'interfaceMangledUri', InterfaceMangledUri,
           'interfaceName', InterfaceFactory.InterfaceTypeInfo^.Name,
           'GUID', GUIDToRawUtf8(InterfaceFactory.InterfaceIID),
@@ -1282,7 +1282,7 @@ begin
   else
   try
     context := ContextFromModel(Ctxt.Server, SourcePath, Descriptions);
-    context.uri := Ctxt.URIWithoutSignature;
+    context.uri := Ctxt.UriWithoutSignature;
     if llfHttps in Ctxt.Call^.LowLevelFlags then
       _ObjAddProps(['protocol', 'https',
                     'https', true], context)
@@ -1295,13 +1295,13 @@ begin
     if port = 0 then
       port := 80;
     _ObjAddProp('port', port, context);
-    if IdemPropNameU(Ctxt.URIBlobFieldName, 'context') then
+    if IdemPropNameU(Ctxt.UriBlobFieldName, 'context') then
     begin
       Ctxt.ReturnsJson(context, 200, {304=}true, twNone, {humanreadable=}true);
       exit;
     end;
     root := Ctxt.Server.Model.Root;
-    if Ctxt.URIBlobFieldName = '' then
+    if Ctxt.UriBlobFieldName = '' then
     begin
       result := '<html><title>mORMot Wrappers</title>' +
         '<body style="font-family:verdana;"><h1>Generated Code/Doc Wrappers</h1>' +
@@ -1335,7 +1335,7 @@ begin
   finally
     FindClose(SR);
   end;
-  Split(Ctxt.URIBlobFieldName, '/', templateName, unitName);
+  Split(Ctxt.UriBlobFieldName, '/', templateName, unitName);
   Split(unitName, '.', unitName, templateExt);
   if PosExChar('.', templateExt) > 0 then
   begin
@@ -1822,7 +1822,7 @@ var
   s: PtrInt;
 begin
   for s := 0 to high(fServices) do
-    if IdemPropNameU(fServices[s].InterfaceURI, name) then
+    if IdemPropNameU(fServices[s].InterfaceUri, name) then
     begin
       service := fServices[s];
       result := true;
@@ -1889,7 +1889,7 @@ var
 begin
   for i := 0 to high(fServices) do
   begin
-    ToConsole('% %', [fExe, fServices[i].InterfaceURI], ccWhite);
+    ToConsole('% %', [fExe, fServices[i].InterfaceUri], ccWhite);
     WriteDescription(
       fDescriptions.U[fServices[i].interfaceName], ccLightGray, true);
   end;
@@ -1899,13 +1899,13 @@ procedure TServiceClientCommandLine.ShowService(service: TInterfaceFactory);
 var
   m: PtrInt;
 begin
-  ToConsole('% %', [fExe, service.InterfaceURI], ccWhite);
+  ToConsole('% %', [fExe, service.InterfaceUri], ccWhite);
   WriteDescription(fDescriptions.U[service.InterfaceName], ccLightGray, false);
   for m := 0 to service.MethodsCount - 1 do
     with service.Methods[m] do
     begin
       ToConsole('% % % [parameters]',
-        [fExe, service.InterfaceURI, uri], ccWhite);
+        [fExe, service.InterfaceUri, uri], ccWhite);
       WriteDescription(
         fDescriptions.U[InterfaceDotMethodName], ccLightGray, true);
     end;
@@ -1945,7 +1945,7 @@ procedure TServiceClientCommandLine.ShowMethod(service: TInterfaceFactory;
 
 begin
   ToConsole('% % % [parameters]',
-    [fExe, service.InterfaceURI, method.URI], ccWhite);
+    [fExe, service.InterfaceUri, method.URI], ccWhite);
   WriteDescription(
     fDescriptions.U[method.InterfaceDotMethodName], ccLightGray, false);
   if method.ArgsInputValuesCount <> 0 then

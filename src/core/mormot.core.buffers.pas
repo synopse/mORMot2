@@ -10,7 +10,7 @@ unit mormot.core.buffers;
    - Variable Length integer Encoding / Decoding
    - TAlgoCompress Compression/Decompression Classes - with AlgoSynLZ
    - TFastReader / TBufferWriter Binary Streams
-   - Base64, Base64URI and Baudot Encoding / Decoding
+   - Base64, Base64Uri and Baudot Encoding / Decoding
    - URI-Encoded Text Buffer Process
    - Basic MIME Content Types Support
    - Text Memory Buffers and Files
@@ -944,7 +944,7 @@ const
 {$endif PUREMORMOT2}
 
 
-{ ************ Base64, Base64URI and Baudot Encoding / Decoding }
+{ ************ Base64, Base64Uri and Baudot Encoding / Decoding }
 
 const
   /// UTF-8 encoded \uFFF0 special code to mark Base64 binary content in JSON
@@ -1117,7 +1117,7 @@ function BinToBase64uriShort(Bin: PAnsiChar; BinBytes: integer): shortstring;
 // - warning: will modify the supplied base64 string in-place
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
-procedure Base64ToURI(var base64: RawUtf8);
+procedure Base64ToUri(var base64: RawUtf8);
 
 /// low-level conversion from a binary buffer into Base64-like URI-compatible encoded text
 // - you should rather use the overloaded BinToBase64uri() functions
@@ -5120,7 +5120,7 @@ end;
 {$endif PUREMORMOT2}
 
 
-{ ************ Base64, Base64URI, URL and Baudot Encoding / Decoding }
+{ ************ Base64, Base64Uri, URL and Baudot Encoding / Decoding }
 
 type
   TBase64Enc = array[0..63] of AnsiChar;
@@ -5131,14 +5131,14 @@ type
 const
   b64enc: TBase64Enc =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  b64URIenc: TBase64Enc =
+  b64Urienc: TBase64Enc =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 
 var
   /// a conversion table from Base64 text into binary data
   // - used by Base64ToBin/IsBase64 functions
   // - contains -1 for invalid char, -2 for '=', 0..63 for b64enc[] chars
-  ConvertBase64ToBin, ConvertBase64URIToBin: TBase64Dec;
+  ConvertBase64ToBin, ConvertBase64UriToBin: TBase64Dec;
 
 
 { --------- Base64 encoding/decoding }
@@ -5669,7 +5669,7 @@ var
   main, c: cardinal;
   enc: PBase64Enc; // faster especially on x86_64 and PIC
 begin
-  enc := @b64URIenc;
+  enc := @b64Urienc;
   main := len div 3;
   if main <> 0 then
   begin
@@ -5770,7 +5770,7 @@ end;
 
 function Base64uriDecode(sp, rp: PAnsiChar; len: PtrInt): boolean;
 begin
-  result := Base64AnyDecode(ConvertBase64URIToBin, sp, rp, len);
+  result := Base64AnyDecode(ConvertBase64UriToBin, sp, rp, len);
 end;
 
 function Base64uriToBin(sp: PAnsiChar; len: PtrInt): RawByteString;
@@ -5791,7 +5791,7 @@ begin
   if resultLen <> 0 then
   begin
     SetString(result, nil, resultLen);
-    if Base64AnyDecode(ConvertBase64URIToBin, sp, pointer(result), len) then
+    if Base64AnyDecode(ConvertBase64UriToBin, sp, pointer(result), len) then
       exit;
   end;
   result := '';
@@ -5801,7 +5801,7 @@ function Base64uriToBin(sp: PAnsiChar; len: PtrInt; var temp: TSynTempBuffer): b
 begin
   temp.Init(Base64uriToBinLength(len));
   result := (temp.len > 0) and
-            Base64AnyDecode(ConvertBase64URIToBin, sp, temp.buf, len);
+            Base64AnyDecode(ConvertBase64UriToBin, sp, temp.buf, len);
 end;
 
 function Base64uriToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt): boolean;
@@ -5815,10 +5815,10 @@ var
 begin
   resultLen := Base64uriToBinLength(base64len);
   result := (resultLen = binlen) and
-            Base64AnyDecode(ConvertBase64URIToBin, base64, bin, base64len);
+            Base64AnyDecode(ConvertBase64UriToBin, base64, bin, base64len);
 end;
 
-procedure Base64ToURI(var base64: RawUtf8);
+procedure Base64ToUri(var base64: RawUtf8);
 var
   P: PUtf8Char;
 begin
@@ -8169,7 +8169,7 @@ var
 var
   e: TEmoji;
 begin
-  // initialize Base64/Base64URI encoding/decoding tables
+  // initialize Base64/Base64Uri encoding/decoding tables
   FillcharFast(ConvertBase64ToBin, SizeOf(ConvertBase64ToBin), 255); // -1 = invalid
   for i := 0 to high(b64enc) do
     ConvertBase64ToBin[b64enc[i]] := i;

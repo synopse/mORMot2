@@ -536,8 +536,8 @@ function JsonRetrieveObjectRttiCustom(var JSON: PUtf8Char;
 /// encode a JSON object UTF-8 buffer into URI parameters
 // - you can specify property names to ignore during the object decoding
 // - you can omit the leading query delimiter ('?') by setting IncludeQueryDelimiter=false
-// - warning: the ParametersJSON input buffer will be modified in-place
-function UrlEncodeJsonObject(const URIName: RawUtf8; ParametersJSON: PUtf8Char;
+// - warning: the ParametersJson input buffer will be modified in-place
+function UrlEncodeJsonObject(const UriName: RawUtf8; ParametersJson: PUtf8Char;
   const PropNamesToIgnore: array of RawUtf8;
   IncludeQueryDelimiter: boolean = true): RawUtf8; overload;
 
@@ -545,7 +545,7 @@ function UrlEncodeJsonObject(const URIName: RawUtf8; ParametersJSON: PUtf8Char;
 // - you can specify property names to ignore during the object decoding
 // - you can omit the leading query delimiter ('?') by setting IncludeQueryDelimiter=false
 // - overloaded function which will make a copy of the input JSON before parsing
-function UrlEncodeJsonObject(const URIName, ParametersJSON: RawUtf8;
+function UrlEncodeJsonObject(const UriName, ParametersJson: RawUtf8;
   const PropNamesToIgnore: array of RawUtf8;
   IncludeQueryDelimiter: boolean = true): RawUtf8; overload;
 
@@ -4319,7 +4319,7 @@ begin
     result := 0;
 end;
 
-function UrlEncodeJsonObject(const URIName: RawUtf8; ParametersJSON: PUtf8Char;
+function UrlEncodeJsonObject(const UriName: RawUtf8; ParametersJson: PUtf8Char;
   const PropNamesToIgnore: array of RawUtf8; IncludeQueryDelimiter: boolean): RawUtf8;
 var
   i, j: integer;
@@ -4327,13 +4327,13 @@ var
   Params: TNameValuePUtf8CharDynArray;
   temp: TTextWriterStackBuffer;
 begin
-  if ParametersJSON = nil then
-    result := URIName
+  if ParametersJson = nil then
+    result := UriName
   else
     with TBaseWriter.CreateOwnedStream(temp) do
     try
-      AddString(URIName);
-      if (JsonDecode(ParametersJSON, Params, true) <> nil) and
+      AddString(UriName);
+      if (JsonDecode(ParametersJson, Params, true) <> nil) and
          (Params <> nil) then
       begin
         sep := '?';
@@ -4363,14 +4363,14 @@ begin
     end;
 end;
 
-function UrlEncodeJsonObject(const URIName, ParametersJSON: RawUtf8;
+function UrlEncodeJsonObject(const UriName, ParametersJson: RawUtf8;
   const PropNamesToIgnore: array of RawUtf8; IncludeQueryDelimiter: boolean): RawUtf8;
 var
   temp: TSynTempBuffer;
 begin
-  temp.Init(ParametersJSON);
+  temp.Init(ParametersJson);
   try
-    result := UrlEncodeJsonObject(URIName, temp.buf, PropNamesToIgnore, IncludeQueryDelimiter);
+    result := UrlEncodeJsonObject(UriName, temp.buf, PropNamesToIgnore, IncludeQueryDelimiter);
   finally
     temp.Done;
   end;

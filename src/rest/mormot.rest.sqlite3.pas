@@ -61,7 +61,7 @@ type
     function GetDB: TSqlDatabase;
     function GetStatementLastException: RawUtf8;
     // include addition SQLite3 specific information to the returned content
-    procedure InternalStat(Ctxt: TRestServerURIContext; W: TTextWriter); override;
+    procedure InternalStat(Ctxt: TRestServerUriContext; W: TTextWriter); override;
     procedure InternalInfo(var info: TDocVariantData); override;
   public
     /// initialize a REST server with a SQLite3 database
@@ -271,7 +271,7 @@ begin
   result := (fOrmInstance as TRestOrmServerDB).StatementLastException;
 end;
 
-procedure TRestServerDB.InternalStat(Ctxt: TRestServerURIContext; W: TTextWriter);
+procedure TRestServerDB.InternalStat(Ctxt: TRestServerUriContext; W: TTextWriter);
 var
   i: PtrInt;
   ndx: TIntegerDynArray;
@@ -325,7 +325,7 @@ begin
       PointerToHex(self);
   AddToCsv(fInternalHeader, call.InHead, #13#10);
   call.RestAccessRights := @FULL_ACCESS_RIGHTS;
-  fServer.URI(call);
+  fServer.Uri(call);
   if (call.OutInternalState = 0) and
      (fServer.DB.InternalState <> nil) then
     // manual update if necessary

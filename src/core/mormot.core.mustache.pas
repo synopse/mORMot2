@@ -286,7 +286,7 @@ type
     class procedure BlobToBase64(const Value: variant; out result: variant);
     class procedure ToJson(const Value: variant; out result: variant);
     class procedure JsonQuote(const Value: variant; out result: variant);
-    class procedure JsonQuoteURI(const Value: variant; out result: variant);
+    class procedure JsonQuoteUri(const Value: variant; out result: variant);
     class procedure WikiToHtml(const Value: variant; out result: variant);
     class procedure MarkdownToHtml(const Value: variant; out result: variant);
     class procedure SimpleToHtml(const Value: variant; out result: variant);
@@ -1584,7 +1584,7 @@ begin
   RawUtf8ToVariant(QuotedStrJson(json), result);
 end;
 
-class procedure TSynMustache.JsonQuoteURI(const Value: variant;
+class procedure TSynMustache.JsonQuoteUri(const Value: variant;
   out result: variant);
 var
   json: RawUtf8;

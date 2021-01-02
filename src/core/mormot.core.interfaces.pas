@@ -313,7 +313,7 @@ type
     // - that is, a custom Header+Content BLOB transfert, not a JSON object
     ArgsResultIsServiceCustomAnswer: boolean;
     /// true if there is a single input parameter as RawByteString/RawBlob
-    // - TRestRoutingREST.ExecuteSOAByInterface will identify binary input
+    // - TRestRoutingREST.ExecuteSoaByInterface will identify binary input
     // with mime-type 'application/octet-stream' as expected
     ArgsInputIsOctetStream: boolean;
     /// the index of the first argument expecting manual stack initialization
@@ -522,7 +522,7 @@ type
   protected
     fInterfaceTypeInfo: PRttiInfo;
     fInterfaceIID: TGUID;
-    fInterfaceRTTI: TRttiJson;
+    fInterfaceRtti: TRttiJson;
     fMethodsCount: cardinal;
     fAddMethodsLevel: integer;
     fMethods: TInterfaceMethodDynArray;
@@ -530,7 +530,7 @@ type
     // contains e.g. [{"method":"Add","arguments":[...]},{"method":"...}]
     fContract: RawUtf8;
     fInterfaceName: RawUtf8;
-    fInterfaceURI: RawUtf8;
+    fInterfaceUri: RawUtf8;
     fDocVariantOptions: TDocVariantOptions;
     fFakeVTable: array of pointer;
     fFakeStub: PByteArray;
@@ -657,11 +657,11 @@ type
       read fInterfaceIID;
     /// the interface name, without its initial 'I'
     // - e.g. ICalculator -> 'Calculator'
-    property InterfaceURI: RawUtf8
-      read fInterfaceURI write fInterfaceURI;
+    property InterfaceUri: RawUtf8
+      read fInterfaceUri write fInterfaceUri;
     /// the registered Interface high-level compiler RTTI type
-    property InterfaceRTTI: TRttiJson
-      read fInterfaceRTTI;
+    property InterfaceRtti: TRttiJson
+      read fInterfaceRtti;
     /// the service contract as a JSON array
     property Contract: RawUtf8
       read fContract;
@@ -3489,12 +3489,12 @@ begin
   if IsNullGuid(fInterfaceIID) then
     raise EInterfaceFactory.CreateUtf8(
       '%.Create: % has no GUID', [self, aInterface^.RawName]);
-  fInterfaceRTTI := Rtti.RegisterType(aInterface) as TRttiJson;
-  fInterfaceName := fInterfaceRTTI.Name;
-  fInterfaceURI := fInterfaceName;
-  if fInterfaceURI[1] in ['i','I'] then
+  fInterfaceRtti := Rtti.RegisterType(aInterface) as TRttiJson;
+  fInterfaceName := fInterfaceRtti.Name;
+  fInterfaceUri := fInterfaceName;
+  if fInterfaceUri[1] in ['i','I'] then
     // as in TServiceFactory.Create
-    delete(fInterfaceURI, 1, 1);
+    delete(fInterfaceUri, 1, 1);
   // retrieve all interface methods (recursively including ancestors)
   fMethod.InitSpecific(TypeInfo(TInterfaceMethodDynArray), fMethods, ptRawUtf8,
     @fMethodsCount, true);
@@ -3513,7 +3513,7 @@ begin
   for m := 0 to MethodsCount - 1 do
   with fMethods[m] do
   begin
-    InterfaceDotMethodName := fInterfaceURI + '.' + URI;
+    InterfaceDotMethodName := fInterfaceUri + '.' + URI;
     IsInherited := HierarchyLevel <> fAddMethodsLevel;
     ExecutionMethodIndex := m + RESERVED_VTABLE_SLOTS;
     ArgsInFirst := -1;
@@ -4354,7 +4354,7 @@ begin
   with meth^.Args[0] do
   begin
     ParamName := @PSEUDO_SELF_NAME;
-    ArgRtti := fInterfaceRTTI;
+    ArgRtti := fInterfaceRtti;
     ArgTypeName := fInterfaceTypeInfo^.Name;
   end;
   ns := length(fTempStrings);

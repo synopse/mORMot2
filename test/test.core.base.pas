@@ -2273,7 +2273,7 @@ begin
     s := RandomString(j);
     Check(UrlDecode(UrlEncode(s)) = s, string(s));
   end;
-  utf := BinToBase64URI(@GUID, sizeof(GUID));
+  utf := BinToBase64Uri(@GUID, sizeof(GUID));
   Check(utf = '00amyWGct0y_ze4lIsj2Mw');
   FillCharFast(GUID2, sizeof(GUID2), 0);
   Check(Base64uriToBin(utf, @GUID2, SizeOf(GUID2)));

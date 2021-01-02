@@ -67,7 +67,7 @@ type
       CustomKey: cardinal = 0): SpiUtf8; overload;
     /// this class method could be used to compute the encrypted password from
     // a binary digest, ready to be stored as JSON, according to a given private key
-    // - just a wrapper around ComputePassword(BinToBase64URI())
+    // - just a wrapper around ComputePassword(BinToBase64Uri())
     class function ComputePassword(PlainPassword: pointer; PlainPasswordLen: integer;
       CustomKey: cardinal = 0): SpiUtf8; overload;
     /// this class method could be used to decrypt a password, stored as JSON,
@@ -500,7 +500,7 @@ type
   end;
 
   /// a generic wrapper object to handle digital HMAC-SHA-2/SHA-3 signatures
-  // - used e.g. to implement TJWTSynSignerAbstract
+  // - used e.g. to implement TJwtSynSignerAbstract
   TSynSigner = object
   private
     ctxt: packed array[1..SHA3ContextSize] of byte; // enough space for all

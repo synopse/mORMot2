@@ -1514,7 +1514,7 @@ begin
     inc(saved.len, sizeof(cc.head));
     cc.head.hmac := fContext.Secret.Compute(@cc.head.session, saved.len - 8);
     Crypt(@cc, saved.len);
-    SetCookie(BinToBase64URI(@cc, saved.len));
+    SetCookie(BinToBase64Uri(@cc, saved.len));
   finally
     saved.Done;
   end;
@@ -2019,15 +2019,15 @@ end;
 
 procedure TMvcRunOnRestServer.RunOnRestServerRoot(Ctxt: TRestServerUriContext);
 begin
-  InternalRunOnRestServer(Ctxt, Ctxt.URI + '/' + Ctxt.URIBlobFieldName);
+  InternalRunOnRestServer(Ctxt, Ctxt.URI + '/' + Ctxt.UriBlobFieldName);
 end;
 
 procedure TMvcRunOnRestServer.RunOnRestServerSub(Ctxt: TRestServerUriContext);
 begin
-  if Ctxt.URIBlobFieldName = '' then
-    Ctxt.Redirect(Ctxt.URIWithoutSignature + '/default')
+  if Ctxt.UriBlobFieldName = '' then
+    Ctxt.Redirect(Ctxt.UriWithoutSignature + '/default')
   else
-    InternalRunOnRestServer(Ctxt, Ctxt.URIBlobFieldName);
+    InternalRunOnRestServer(Ctxt, Ctxt.UriBlobFieldName);
 end;
 
 

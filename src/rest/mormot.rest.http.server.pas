@@ -203,7 +203,7 @@ type
     // - port is an RawUtf8/AnsiString, as expected by the WinSock API - in case
     // of useHttpSocket or useBidirSocket kind of server, you should specify the
     // public server address to bind to: e.g. '1.2.3.4:1234' - even for http.sys,
-    // the public address could be used e.g. for TRestServer.SetPublicURI()
+    // the public address could be used e.g. for TRestServer.SetPublicUri()
     // - aDomainName is the URLprefix to be used for HttpAddUrl API call:
     // it could be either a fully qualified case-insensitive domain name
     // an IPv4 or IPv6 literal string, or a wildcard ('+' will bound
@@ -242,7 +242,7 @@ type
     // - port is an RawUtf8, as expected by the WinSock API - in case of
     // useHttpSocket or useBidirSocket kind of server, you can specify the
     // public server address to bind to: e.g. '1.2.3.4:1234' - even for http.sys,
-    // the public address could be used e.g. for TRestServer.SetPublicURI()
+    // the public address could be used e.g. for TRestServer.SetPublicUri()
     // - aDomainName is the URLprefix to be used for HttpAddUrl API call
     // - the aHttpServerSecurity can be set to secSSL to initialize a HTTPS
     // instance (after proper certificate installation as explained in the SAD
@@ -327,7 +327,7 @@ type
     // - for http.sys server, would try to register '/' if aRegisterUri is TRUE
     // - by default, will redirect http://localhost:port unless you set
     // aHttpServerSecurity=secSSL so that it would redirect https://localhost:port
-    procedure RootRedirectToURI(const aRedirectedUri: RawUtf8;
+    procedure RootRedirectToUri(const aRedirectedUri: RawUtf8;
       aRegisterUri: boolean = true; aHttps: boolean = false);
     /// defines the WebSockets protocols to be used for useBidirSocket
     // - i.e. 'synopsebinary' and optionally 'synopsejson' protocols
@@ -417,7 +417,7 @@ type
     // are bound with '; Path=/ModelRoot', which is case-sensitive on the
     // browser side
     // - set this property to TRUE so that only exact case URI would be handled
-    // by TRestServer.URI(), and any case-sensitive URIs (e.g. /Root/... or
+    // by TRestServer.Uri(), and any case-sensitive URIs (e.g. /Root/... or
     // /ROOT/...) would be temporary redirected to Model.Root (e.g. /root/...)
     // via a HTTP 307 command
     property RedirectServerRootUriForExactCase: boolean
@@ -516,7 +516,7 @@ begin
   try
     n := length(fDBServers);
     for i := 0 to n - 1 do
-      if (fDBServers[i].Server.Model.URIMatch(aServer.Model.Root) <> rmNoMatch) and
+      if (fDBServers[i].Server.Model.UriMatch(aServer.Model.Root) <> rmNoMatch) and
         (fDBServers[i].Security = aHttpServerSecurity) then
         exit; // register only once per URI Root address and per protocol
     {$ifndef ONLYUSEHTTPSOCKET}
@@ -581,7 +581,7 @@ begin
         SetLength(fDBServers, n);
         dec(n);
         aServer.OnNotifyCallback := nil;
-        aServer.SetPublicURI('', '');
+        aServer.SetPublicUri('', '');
         result := true; // don't break here: may appear with another Security
       end;
   finally
@@ -650,7 +650,7 @@ begin
         begin
           ServersRoot := {%H-}ServersRoot + ' ' + Root;
           for j := i + 1 to high(aServers) do
-            if aServers[j].Model.URIMatch(Root) <> rmNoMatch then
+            if aServers[j].Model.UriMatch(Root) <> rmNoMatch then
               FormatUtf8('Duplicated Root URI: % and %',
                 [Root, aServers[j].Model.Root], ErrMsg);
         end;
@@ -838,7 +838,7 @@ begin
       if (fHttpServer <> nil) and
          fHttpServer.CanNotifyCallback then
         Server.OnNotifyCallback := NotifyCallback;
-      Server.SetPublicURI(fPublicAddress, fPublicPort);
+      Server.SetPublicUri(fPublicAddress, fPublicPort);
       Security := aSecurity;
       if aRestAccessRights = nil then
         RestAccessRights := HTTP_DEFAULT_ACCESS_RIGHTS
@@ -853,7 +853,7 @@ const
   HTTPS_SECURITY: array[boolean] of TRestHttpServerSecurity = (
     secNone, secSSL);
 
-procedure TRestHttpServer.RootRedirectToURI(const aRedirectedUri: RawUtf8;
+procedure TRestHttpServer.RootRedirectToUri(const aRedirectedUri: RawUtf8;
   aRegisterUri: boolean; aHttps: boolean);
 begin
   if fRootRedirectToURI[aHttps] = aRedirectedUri then
@@ -991,7 +991,7 @@ begin
           if Ctxt.UseSSL = (Security = secSSL) then
           begin
             // registered for http or https
-            match := Server.Model.URIMatch(call.Url);
+            match := Server.Model.UriMatch(call.Url);
             if match = rmNoMatch then
               continue;
             call.RestAccessRights := RestAccessRights;
@@ -1014,11 +1014,11 @@ begin
     end
     else
     begin
-      // call matching TRestServer.URI()
+      // call matching TRestServer.Uri()
       call.Method := Ctxt.Method;
       call.InHead := Ctxt.InHeaders;
       call.InBody := Ctxt.InContent;
-      serv.URI(call);
+      serv.Uri(call);
     end;
     // set output content
     result := call.OutStatus;
@@ -1238,9 +1238,9 @@ begin
     thrdCnt := aDefinition.ThreadCount;
   Create(aDefinition.BindPort, aServer, '+', aForcedKind, nil, thrdCnt,
     HTTPS_SECURITY[aDefinition.Https], '', aDefinition.HttpSysQueueName);
-  if aDefinition.EnableCORS <> '' then
+  if aDefinition.EnableCors <> '' then
   begin
-    AccessControlAllowOrigin := aDefinition.EnableCORS;
+    AccessControlAllowOrigin := aDefinition.EnableCors;
     AccessControlAllowCredential := true;
   end;
   if fHttpServer <> nil then
@@ -1279,7 +1279,7 @@ begin
   fServer := TRestServerFullMemory.Create(aModel);
   aModel.Owner := fServer;
   fServer.ServiceMethodRegisterPublishedMethods('', self);
-  fServer.AcquireExecutionMode[execSOAByMethod] := amLocked; // protect aEvent
+  fServer.AcquireExecutionMode[execSoaByMethod] := amLocked; // protect aEvent
   inherited Create(UInt32ToUtf8(aPort), fServer, '+', HTTP_DEFAULT_MODE, nil, 1);
   fEvent := aEvent;
   SetAccessControlAllowOrigin('*'); // e.g. when called from AJAX/SMS

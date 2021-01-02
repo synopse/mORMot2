@@ -239,7 +239,7 @@ type
     /// create a temporary string random content, using A..Z,_,0..9 chars only
     class function RandomIdentifier(CharCount: integer): RawByteString;
     /// create a temporary string random content, using uri-compatible chars only
-    class function RandomURI(CharCount: integer): RawByteString;
+    class function RandomUri(CharCount: integer): RawByteString;
     /// create a temporary string, containing some fake text, with paragraphs
     class function RandomTextParagraph(WordCount: integer; LastPunctuation: AnsiChar = '.';
       const RandomInclude: RawUtf8 = ''): RawUtf8;
@@ -789,7 +789,7 @@ begin
   InitRandom64(@IDENT_CHARS, CharCount, result);
 end;
 
-class function TSynTestCase.RandomURI(CharCount: integer): RawByteString;
+class function TSynTestCase.RandomUri(CharCount: integer): RawByteString;
 const
   URL_CHARS: array[0..63] of AnsiChar =
     'abcdefghijklmnopqrstuvwxyz0123456789-abCdEfGH.JKlmnOP.RsTuVWxyz.';

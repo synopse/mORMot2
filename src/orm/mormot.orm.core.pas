@@ -6258,7 +6258,7 @@ type
     property SqlTableRetrieveAllFields: RawUtf8 read fSqlTableRetrieveAllFields;
   end;
 
-  /// how TOrmModel.URIMatch() will compare an URI
+  /// how TOrmModel.UriMatch() will compare an URI
   // - will allow to make a difference about case-sensitivity
   TRestModelMatch = (
     rmNoMatch, rmMatchExact, rmMatchWithCaseChange);
@@ -6766,13 +6766,13 @@ type
     // - the returned enumerates allow to check if the match was exact (e.g.
     // 'root/sub' matches exactly Root='root'), or with character case
     // approximation (e.g. 'Root/sub' approximates Root='root')
-    function URIMatch(const URI: RawUtf8): TRestModelMatch;
+    function UriMatch(const URI: RawUtf8): TRestModelMatch;
     /// returns the URI corresponding to a given table, i.e. 'root/table'
-    function GetURI(aTable: TOrmClass): RawUtf8;
+    function GetUri(aTable: TOrmClass): RawUtf8;
     /// return the 'root/table/ID' URI
-    function GetURIID(aTable: TOrmClass; aID: TID): RawUtf8;
+    function GetUriID(aTable: TOrmClass; aID: TID): RawUtf8;
     /// return the 'root/table/ID/method' URI
-    function GetURICallBack(const aMethodName: RawUtf8;
+    function GetUriCallBack(const aMethodName: RawUtf8;
       aTable: TOrmClass; aID: TID): RawUtf8;
     /// compute the SQL statement to be executed for a specific SELECT on Tables
     // - you can set multiple Table class in Tables: the statement will contain the
@@ -6907,8 +6907,8 @@ type
     /// returns the Root property, or '' if the instance is nil
     function SafeRoot: RawUtf8;
     /// compute the URI for a class in this Model, as 'ModelRoot/SqlTableName'
-    // - set also GetURI/GetURIID/GetURICallback methods
-    property URI[aClass: TOrmClass]: RawUtf8 read GetURI;
+    // - set also GetUri/GetUriID/GetUriCallback methods
+    property URI[aClass: TOrmClass]: RawUtf8 read GetUri;
 
     /// this property value is used to auto free the database Model class
     // - set this property after Owner.Create() in order to have
@@ -7455,7 +7455,7 @@ type
     // (i.e. the first table in the FROM clause), otherwise will follow , whatever the bits
     // here are: since TRestClientURI.UpdateFromServer() is called only
     // for refreshing a direct statement, it will be OK; you can improve this
-    // by overriding the TRestServer.URI() method
+    // by overriding the TRestServer.Uri() method
     // - if the REST request is LOCK, the PUT access bits will be read instead
     // of the GET bits value
     GET: TOrmFieldTables;
@@ -7510,7 +7510,7 @@ const
 
   /// Complete Database access right, i.e. allmighty over all Tables
   // - WITH the possibility to remotely execute any SQL statement (reSQL right)
-  // - is used by default by TRestClientDB.URI() method, i.e. for direct
+  // - is used by default by TRestClientDB.Uri() method, i.e. for direct
   // local/in-process access
   // - is used as reference to create TAuthUser 'Admin' access policy
   FULL_ACCESS_RIGHTS: TOrmAccessRights = (
@@ -20352,7 +20352,7 @@ begin
     result := -1;
 end;
 
-function TOrmModel.GetURI(aTable: TOrmClass): RawUtf8;
+function TOrmModel.GetUri(aTable: TOrmClass): RawUtf8;
 begin
   result := '';
   if self = nil then
@@ -20368,20 +20368,20 @@ begin
     result := Root + '/' + result;
 end;
 
-function TOrmModel.GetURIID(aTable: TOrmClass; aID: TID): RawUtf8;
+function TOrmModel.GetUriID(aTable: TOrmClass; aID: TID): RawUtf8;
 begin
-  result := GetURI(aTable);
+  result := GetUri(aTable);
   if aID > 0 then
     result := FormatUtf8('%/%', [result, aID]);
 end;
 
-function TOrmModel.GetURICallBack(const aMethodName: RawUtf8;
+function TOrmModel.GetUriCallBack(const aMethodName: RawUtf8;
   aTable: TOrmClass; aID: TID): RawUtf8;
 begin
-  result := GetURIID(aTable, aID) + '/' + aMethodName;
+  result := GetUriID(aTable, aID) + '/' + aMethodName;
 end;
 
-function TOrmModel.URIMatch(const URI: RawUtf8): TRestModelMatch;
+function TOrmModel.UriMatch(const URI: RawUtf8): TRestModelMatch;
 var
   URILen: integer;
 begin

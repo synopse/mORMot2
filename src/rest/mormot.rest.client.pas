@@ -59,7 +59,7 @@ uses
 type
   TRestClientUri = class;
 
-  /// used by TRestClientUri.URI() to let the client ask for an User name
+  /// used by TRestClientUri.Uri() to let the client ask for an User name
   // and password, in order to retry authentication to the server
   // - should return TRUE if aUserName and aPassword both contain some entered
   // values to be sent for remote secure authentication
@@ -147,7 +147,7 @@ type
       aPasswordKind: TRestClientSetUserPassword = passClear;
       const aHashSalt: RawUtf8 = ''; aHashRound: integer = 20000): boolean; virtual;
     /// class method to be called on client side to sign an URI
-    // - used by TRestClientUri.URI()
+    // - used by TRestClientUri.Uri()
     // - shall match the method as expected by RetrieveSession() virtual method
     class procedure ClientSessionSign(Sender: TRestClientUri;
       var Call: TRestUriParams); virtual; abstract;
@@ -157,7 +157,7 @@ type
   TRestClientAuthenticationClass = class of TRestClientAuthentication;
 
   /// weak authentication scheme using URL-level parameter
-  TRestClientAuthenticationURI = class(TRestClientAuthentication)
+  TRestClientAuthenticationUri = class(TRestClientAuthentication)
   public
     /// class method to be called on client side to add the SessionID to the URI
     // - append '&session_signature=SessionID' to the url
@@ -171,7 +171,7 @@ type
   // !Hexa8(Timestamp)+
   // !Hexa8(crc32('SessionID+HexaSessionPrivateKey'+Sha256('salt'+PassWord)+
   // !            Hexa8(Timestamp)+url))
-  TRestClientAuthenticationSignedUri = class(TRestClientAuthenticationURI)
+  TRestClientAuthenticationSignedUri = class(TRestClientAuthenticationUri)
   protected
     // class functions implementing TRestAuthenticationSignedUriAlgo
     class function ComputeSignatureCrc32(privatesalt: cardinal;
@@ -220,7 +220,7 @@ type
   // - on client side, this scheme is not called by TRestClientUri.SetUser()
   // method - so you have to write:
   // ! TRestClientAuthenticationNone.ClientSetUser(Client,'User','');
-  TRestClientAuthenticationNone = class(TRestClientAuthenticationURI)
+  TRestClientAuthenticationNone = class(TRestClientAuthenticationUri)
   protected
     /// class method used on client side to create a remote session
     // - will call the ModelRoot/Auth service, i.e. call TRestClient.Auth()
@@ -442,7 +442,7 @@ type
 
 { ************ TRestClientUri Base Class for Actual Clients }
 
-  /// called by TRestClientUri.URI() when an error occurred
+  /// called by TRestClientUri.Uri() when an error occurred
   // - so that you may have a single entry point for all client-side issues
   // - information will be available in Sender's LastErrorCode and
   // LastErrorMessage properties
@@ -527,7 +527,7 @@ type
     fLastErrorCode: integer;
     fLastErrorMessage: RawUtf8;
     fLastErrorException: ExceptClass;
-    fSafe: IAutoLocker; // to make the URI() method thread-safe
+    fSafe: IAutoLocker; // to make the Uri() method thread-safe
     fRemoteLogClass: TSynLog;
     fRemoteLogThread: TObject; // private TRemoteLogThread
     fRemoteLogOwnedByFamily: boolean;
@@ -619,7 +619,7 @@ type
     // - this method will retry the connection in case of authentication failure
     // (i.e. if the session was closed by the remote server, for any reason -
     // mostly a time out) if the OnAuthentificationFailed event handler is set
-    function URI(const url, method: RawUtf8; Resp: PRawUtf8 = nil;
+    function Uri(const url, method: RawUtf8; Resp: PRawUtf8 = nil;
       Head: PRawUtf8 = nil; SendData: PRawUtf8 = nil; outStatus: PCardinal = nil): integer;
     /// wrapper to the protected URI method to call a method on the server, using
     // a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
@@ -725,7 +725,7 @@ type
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     // - aIgnoreAnyException may be set to TRUE if the server is likely
     // to not propose this service, and any exception is to be catched
-    function ServiceDefineSharedAPI(const aInterface: TGUID;
+    function ServiceDefineSharedApi(const aInterface: TGUID;
       const aContractExpected: RawUtf8 = SERVICE_CONTRACT_NONE_EXPECTED;
       aIgnoreAnyException: boolean = false): TServiceFactoryClient;
     /// allow to notify a server the services this client may be actually capable
@@ -902,11 +902,11 @@ type
       read GetOnIdleBackgroundThreadActive;
     /// this Event is called in case of remote authentication failure
     // - client software can ask the user to enter a password and user name
-    // - if no event is specified, the URI() method will return directly
+    // - if no event is specified, the Uri() method will return directly
     // an HTTP_FORBIDDEN "403 Forbidden" error code
     property OnAuthentificationFailed: TOnAuthentificationFailed
       read fOnAuthentificationFailed write fOnAuthentificationFailed;
-    /// this Event is called if URI() was not successfull
+    /// this Event is called if Uri() was not successfull
     // - the callback will have all needed information
     // - e.g. Call^.OutStatus=HTTP_NOTIMPLEMENTED indicates a broken connection
     property OnFailed: TOnClientFailed
@@ -925,17 +925,17 @@ type
     // - check this value about HTTP_* constants
     // - HTTP_SUCCESS or HTTP_CREATED mean no error
     // - otherwise, check LastErrorMessage property for additional information
-    // - this property value will record status codes returned by URI() method
+    // - this property value will record status codes returned by Uri() method
     property LastErrorCode: integer
       read fLastErrorCode;
     /// low-level error message, as returned by server
-    // - this property value will record content returned by URI() method in
+    // - this property value will record content returned by Uri() method in
     // case of an error, or '' if LastErrorCode is HTTP_SUCCESS or HTTP_CREATED
     property LastErrorMessage: RawUtf8
       read fLastErrorMessage;
     /// low-level exception class, if any
-    // - will record any Exception class raised within URI() method
-    // - contains nil if URI() execution did not raise any exception (which
+    // - will record any Exception class raised within Uri() method
+    // - contains nil if Uri() execution did not raise any exception (which
     // is the most expected behavior, since server-side errors are trapped
     // into LastErrorCode/LastErrorMessage properties
     property LastErrorException: ExceptClass
@@ -1290,9 +1290,9 @@ begin
 end;
 
 
-{ TRestClientAuthenticationURI }
+{ TRestClientAuthenticationUri }
 
-class procedure TRestClientAuthenticationURI.ClientSessionSign(
+class procedure TRestClientAuthenticationUri.ClientSessionSign(
   Sender: TRestClientUri; var Call: TRestUriParams);
 begin
   if (Sender <> nil) and
@@ -1764,7 +1764,7 @@ end;
 
 function TRestClientUri.InternalRemoteLogSend(const aText: RawUtf8): boolean;
 begin
-  result := URI(fModel.GetURICallBack('RemoteLog', nil, 0),
+  result := Uri(fModel.GetUriCallBack('RemoteLog', nil, 0),
     'PUT', nil, nil, @aText) in [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
@@ -1962,7 +1962,7 @@ begin
   inherited SetOrmInstance(aORM); // set fOrm
   if not fOrmInstance.GetInterface(IRestOrmClient, fClient) then
     raise ERestException.CreateUtf8('%.Create with invalid %', [self, fOrmInstance]);
-  // enable redirection of URI() from IRestOrm/IRestOrmClient into this class
+  // enable redirection of Uri() from IRestOrm/IRestOrmClient into this class
   (fOrmInstance as TRestOrmClientUri).URI := URI;
 end;
 
@@ -2157,7 +2157,7 @@ begin
   end;
 end;
 
-function TRestClientUri.URI(const url, method: RawUtf8; Resp: PRawUtf8;
+function TRestClientUri.Uri(const url, method: RawUtf8; Resp: PRawUtf8;
   Head: PRawUtf8; SendData: PRawUtf8; outStatus: PCardinal): integer;
 var
   retry: integer;
@@ -2279,11 +2279,11 @@ begin
     result := HTTP_UNAVAILABLE
   else
   begin
-    url := fModel.GetURICallBack(aMethodName, aTable, aID);
+    url := fModel.GetUriCallBack(aMethodName, aTable, aID);
     if high(aNameValueParameters) > 0 then
       url := url + UrlEncode(aNameValueParameters);
     log := fLogClass.Enter('CallBackGet %', [url], self);
-    result := URI(url, 'GET', @aResponse, @header);
+    result := Uri(url, 'GET', @aResponse, @header);
     if aResponseHead <> nil then
       aResponseHead^ := header;
     if (log <> nil) and
@@ -2327,10 +2327,10 @@ begin
     result := HTTP_UNAVAILABLE
   else
   begin
-    u := fModel.GetURICallBack(aMethodName, aTable, aID);
+    u := fModel.GetUriCallBack(aMethodName, aTable, aID);
     log := fLogClass.Enter('Callback %', [u], self);
     m := TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TUriMethod), ord(method)));
-    result := URI(u, m, @aResponse, aResponseHead, @aSentData);
+    result := Uri(u, m, @aResponse, aResponseHead, @aSentData);
     InternalLog('% result=% resplen=%',
       [m, result, length(aResponse)], sllServiceReturn);
   end;
@@ -2425,7 +2425,7 @@ begin
     TInterfaceFactory.GUID2TypeInfo(aInterface), Obj, aContractExpected);
 end;
 
-function TRestClientUri.ServiceDefineSharedAPI(const aInterface: TGUID;
+function TRestClientUri.ServiceDefineSharedApi(const aInterface: TGUID;
   const aContractExpected: RawUtf8; aIgnoreAnyException: boolean): TServiceFactoryClient;
 begin
   try

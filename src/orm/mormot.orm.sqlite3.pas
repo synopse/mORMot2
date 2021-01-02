@@ -403,8 +403,8 @@ type
     constructor Create(aRest: TRest; aServer: TRestOrmServerDB); reintroduce;
     /// retrieve a list of members as a TOrmTable (implements REST GET Collection)
     // - this overridden method call directly the database to get its result,
-    // without any URI() call, but with use of DB JSON cache if available
-    // - other TRestClientDB methods use URI() function and JSON conversion
+    // without any Uri() call, but with use of DB JSON cache if available
+    // - other TRestClientDB methods use Uri() function and JSON conversion
     // of only one record properties values, which is very fast
     function List(const Tables: array of TOrmClass;
       const SqlSelect: RawUtf8 = 'ID';

@@ -712,14 +712,14 @@ type
       aTimeoutSeconds: integer = 15*60; const aToken: RawUtf8 = '';
       aHttpClass: THttpRequestClass = nil); reintroduce;
     /// finalize the current connnection and flush its in-memory cache
-    // - you may use LoadFromURI() to connect to a new server
+    // - you may use LoadFromUri() to connect to a new server
     procedure Clear;
     /// connect to a new server
     // - aToken is an optional token which will be transmitted as HTTP header:
     // $ Authorization: Bearer <aToken>
     // - TWinHttp will be used by default under Windows, unless you specify
     // another class
-    function LoadFromURI(const aURI: RawUtf8; const aToken: RawUtf8 = '';
+    function LoadFromUri(const aURI: RawUtf8; const aToken: RawUtf8 = '';
       aHttpClass: THttpRequestClass = nil): boolean;
     /// finalize the cache
     destructor Destroy; override;
@@ -2124,7 +2124,7 @@ begin
   if aTimeoutSeconds > 0 then // 0 means no cache
     fCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
       TypeInfo(THttpRequestCacheDynArray), true, aTimeoutSeconds);
-  if not LoadFromURI(aURI, aToken, aHttpClass) then
+  if not LoadFromUri(aURI, aToken, aHttpClass) then
     raise ESynException.CreateUtf8('%.Create: invalid aURI=%', [self, aURI]);
 end;
 
@@ -2207,7 +2207,7 @@ begin
     aStatus^ := status;
 end;
 
-function THttpRequestCached.LoadFromURI(const aURI, aToken: RawUtf8;
+function THttpRequestCached.LoadFromUri(const aURI, aToken: RawUtf8;
   aHttpClass: THttpRequestClass): boolean;
 begin
   result := false;

@@ -650,16 +650,16 @@ end;
 
 procedure TTestCoreCrypto._JWT;
 
-  procedure test(one: TJWTAbstract);
+  procedure test(one: TJwtAbstract);
   var
     t: RawUtf8;
-    jwt: TJWTContent;
+    jwt: TJwtContent;
     i: integer;
     exp: TUnixTime;
   begin
     t := one.Compute(['http://example.com/is_root', true], 'joe');
     check(t <> '');
-    check(TJWTAbstract.VerifyPayload(t, '', 'joe', '', @exp) = jwtValid);
+    check(TJwtAbstract.VerifyPayload(t, '', 'joe', '', @exp) = jwtValid);
     check(one.VerifyPayload(t, '', 'joe', '', @exp) = jwtValid);
     check(one.CacheTimeoutSeconds = 0);
     one.Options := one.Options + [joHeaderParse];
@@ -701,8 +701,8 @@ procedure TTestCoreCrypto._JWT;
   var
     i: integer;
     tok: RawUtf8;
-    j: TJWTAbstract;
-    jwt: TJWTContent;
+    j: TJwtAbstract;
+    jwt: TJwtContent;
     tim: TPrecisionTimer;
   begin
     j := JWT_CLASS[algo].Create('secret', 0, [jrcIssuer, jrcExpirationTime], []);
@@ -724,21 +724,21 @@ procedure TTestCoreCrypto._JWT;
 
 var
   i: integer;
-  j: TJWTAbstract;
-  jwt: TJWTContent;
+  j: TJwtAbstract;
+  jwt: TJwtContent;
   secret: TEccCertificateSecret;
   tok: RawUtf8;
   tim: TPrecisionTimer;
   a: TSignAlgo;
 begin
-  test(TJWTNone.Create([jrcIssuer, jrcExpirationTime], [], 60));
-  test(TJWTNone.Create([jrcIssuer, jrcExpirationTime, jrcIssuedAt], [], 60));
-  test(TJWTNone.Create([jrcIssuer, jrcExpirationTime, jrcIssuedAt, jrcJWTID], [], 60));
-  test(TJWTHS256.Create('sec', 100, [jrcIssuer, jrcExpirationTime], [], 60));
-  test(TJWTHS256.Create('sec', 200, [jrcIssuer, jrcExpirationTime, jrcIssuedAt], [], 60));
-  test(TJWTHS256.Create('sec', 10, [jrcIssuer, jrcExpirationTime, jrcIssuedAt,
+  test(TJwtNone.Create([jrcIssuer, jrcExpirationTime], [], 60));
+  test(TJwtNone.Create([jrcIssuer, jrcExpirationTime, jrcIssuedAt], [], 60));
+  test(TJwtNone.Create([jrcIssuer, jrcExpirationTime, jrcIssuedAt, jrcJWTID], [], 60));
+  test(TJwtHS256.Create('sec', 100, [jrcIssuer, jrcExpirationTime], [], 60));
+  test(TJwtHS256.Create('sec', 200, [jrcIssuer, jrcExpirationTime, jrcIssuedAt], [], 60));
+  test(TJwtHS256.Create('sec', 10, [jrcIssuer, jrcExpirationTime, jrcIssuedAt,
     jrcJWTID], [], 60));
-  j := TJWTHS256.Create('secret', 0, [jrcSubject], []);
+  j := TJwtHS256.Create('secret', 0, [jrcSubject], []);
   try
     jwt.result := jwtWrongFormat;
     j.Verify('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibm'
@@ -763,18 +763,18 @@ begin
   for i := 1 to 10 do
   begin
     secret := TEccCertificateSecret.CreateNew(nil); // self-signed certificate
-    test(TJWTES256.Create(secret,
+    test(TJwtES256.Create(secret,
       [jrcIssuer, jrcExpirationTime], [], 60));
-    test(TJWTES256.Create(secret,
+    test(TJwtES256.Create(secret,
       [jrcIssuer, jrcExpirationTime, jrcIssuedAt], [], 60));
-    test(TJWTES256.Create(secret,
+    test(TJwtES256.Create(secret,
       [jrcIssuer, jrcExpirationTime, jrcIssuedAt, jrcJWTID], [], 60));
     secret.Free;
   end;
   for a := saSha256 to high(a) do
     Benchmark(a);
   secret := TEccCertificateSecret.CreateNew(nil);
-  j := TJWTES256.Create(secret, [jrcIssuer, jrcExpirationTime], [], 60);
+  j := TJwtES256.Create(secret, [jrcIssuer, jrcExpirationTime], [], 60);
   try
     tok := j.Compute([], 'myself');
     tim.Start;

@@ -56,16 +56,16 @@ uses
 { ************ Customize REST Execution }
 
 type
-  /// all commands which may be executed by TRestServer.URI() method
-  // - execSOAByMethod for method-based services
-  // - execSOAByInterface for interface-based services
+  /// all commands which may be executed by TRestServer.Uri() method
+  // - execSoaByMethod for method-based services
+  // - execSoaByInterface for interface-based services
   // - execOrmGet for ORM reads i.e. Retrieve*() methods
   // - execOrmWrite for ORM writes i.e. Add Update Delete TransactionBegin
   // Commit Rollback methods
   TRestServerUriContextCommand = (
     execNone,
-    execSOAByMethod,
-    execSOAByInterface,
+    execSoaByMethod,
+    execSoaByInterface,
     execOrmGet,
     execOrmWrite);
 
@@ -574,13 +574,13 @@ type
       read fRun;
 
     /// how this class execute its internal commands
-    // - by default, TRestServer.URI() will lock for Write ORM according to
+    // - by default, TRestServer.Uri() will lock for Write ORM according to
     // AcquireWriteMode (i.e. AcquireExecutionMode[execOrmWrite]=amLocked) and
     // other operations won't be protected (for better scaling)
     // - you can tune this behavior by setting this property to the expected
     // execution mode, e.g. execute all method-based services in a dedicated
     // thread via
-    // ! aServer.AcquireExecutionMode[execSOAByMethod] := amBackgroundThread;
+    // ! aServer.AcquireExecutionMode[execSoaByMethod] := amBackgroundThread;
     // - if you use external DB and a custom ConnectionTimeOutMinutes value,
     // both read and write access should be locked, so you should set:
     // ! aServer.AcquireExecutionMode[execOrmGet] := am***;
@@ -591,7 +591,7 @@ type
       read GetAcquireExecutionMode write SetAcquireExecutionMode;
     /// the time (in mili seconds) to try locking internal commands of this class
     // - this value is used only for AcquireExecutionMode[*]=amLocked
-    // - by default, TRestServer.URI() will lock for Write ORM according to
+    // - by default, TRestServer.Uri() will lock for Write ORM according to
     // AcquireWriteTimeOut  (i.e. AcquireExecutionLockedTimeOut[execOrmWrite])
     // and other operations won't be locked nor have any time out set
     property AcquireExecutionLockedTimeOut[Cmd: TRestServerUriContextCommand]: cardinal
@@ -605,7 +605,7 @@ type
     // external database transaction process)
     // - amBackgroundORMSharedThread will execute all ORM methods in a queue, in
     // a dedicated unique thread, shared for both execOrmWrite and execOrmGet,
-    // but still dedicated for execSOAByMethod and execSOAByInterface
+    // but still dedicated for execSoaByMethod and execSoaByInterface
     // - a slower alternative to amBackgroundThread may be amMainThread
     // - you can set amUnlocked for a concurrent write access, but be aware
     // that it may lead into multi-thread race condition issues, depending on

@@ -159,7 +159,7 @@ type
     // - expect a REST instance, which will store all methods without any
     // results (i.e. procedure without any var/out parameters) on the
     // associated TOrmServiceNotifications class
-    // - once set, regular fClient.URI() won't be called but a new aLogClass
+    // - once set, regular fClient.Uri() won't be called but a new aLogClass
     // entry will be stored in aRest
     // - to disable this redirection, set aRest and aLogClass to nil
     procedure StoreNotifications(aRest: TRest;
@@ -206,7 +206,7 @@ type
     // - TRUE will generate a JSON object instead, with the CONST/VAR parameter
     // names as field names - may be useful e.g. when working with a non
     // mORMot server, or when the mORMot server exposes a public API
-    // - defined e.g. by TRestClientUri.ServiceDefineSharedAPI() method
+    // - defined e.g. by TRestClientUri.ServiceDefineSharedApi() method
     property ParamsAsJsonObject: boolean
       read fParamsAsJsonObject write fParamsAsJsonObject;
     /// set to TRUE if the interface's methods result is expected to be a JSON object
@@ -218,7 +218,7 @@ type
     // useful e.g. when working with JavaScript clients or any public API
     // - this value can be overridden by setting ForceServiceResultAsJsonObject
     // for a given TRestServerUriContext (e.g. for server-side JavaScript work)
-    // - defined e.g. by TRestClientUri.ServiceDefineSharedAPI() method
+    // - defined e.g. by TRestClientUri.ServiceDefineSharedApi() method
     property ResultAsJsonObjectWithoutResult: boolean
       read fResultAsJsonObject write fResultAsJsonObject;
     /// delay the sicClientDriven server-side instance to the first method call
@@ -486,7 +486,7 @@ end;
 destructor TInterfacedObjectFakeClient.Destroy;
 begin
   fClient.fClient.InternalLog('%(%).Destroy I%',
-    [ClassType, pointer(self), fClient.InterfaceURI]);
+    [ClassType, pointer(self), fClient.InterfaceUri]);
   inherited Destroy;
 end;
 
@@ -606,7 +606,7 @@ var
          (service^.ArgsOutputValuesCount = 0) then
         rcu.CallbackNonBlockingSetHeader(head);
     end;
-    status := rcu.URI(uri, 'POST', @resp, @head, @sent);
+    status := rcu.Uri(uri, 'POST', @resp, @head, @sent);
   end;
 
 begin
@@ -632,14 +632,14 @@ begin
     // include non-sensitive input in log
     p := aParams;
   log := fClient.LogClass.Enter('InternalInvoke I%.%(%) %',
-    [fInterfaceURI, aMethod, {%H-}p, clientDrivenID], self);
+    [fInterfaceUri, aMethod, {%H-}p, clientDrivenID], self);
   // call remote server according to current routing scheme
   if fForcedUri <> '' then
     baseuri := fForcedUri
   else if TRestClientUri(fClient).Services.ExpectMangledUri then
     baseuri := aClient.Model.Root + '/' + fInterfaceMangledUri
   else
-    baseuri := aClient.Model.Root + '/' + fInterfaceURI;
+    baseuri := aClient.Model.Root + '/' + fInterfaceUri;
   ctxt := [];
   if (service <> nil) and
      not ParamsAsJsonObject and
@@ -784,14 +784,14 @@ begin
     if not InternalInvoke(SERVICE_PSEUDO_METHOD[imContract],
        TRestClientUri(fClient).ServicePublishOwnInterfaces, @RemoteContract, @Error) then
       raise EServiceException.CreateUtf8('%.Create(): I% interface or % routing not ' +
-        'supported by server [%]', [self, fInterfaceURI,
+        'supported by server [%]', [self, fInterfaceUri,
          TRestClientUri(fClient).ServicesRouting, Error]);
     if ('[' + ContractExpected + ']' <> RemoteContract) and
        ('{"contract":' + ContractExpected + '}' <> RemoteContract) then
       raise EServiceException.CreateUtf8('%.Create(): server''s I% contract ' +
         'differs from client''s: expected [%], received % - you may need to ' +
         'upgrade your % client to match % server expectations',
-        [self, fInterfaceURI, ContractExpected, RemoteContract,
+        [self, fInterfaceUri, ContractExpected, RemoteContract,
          ExeVersion.Version.DetailedOrVoid, TRestClientUri(fClient).Session.Version]);
   end;
 end;
@@ -805,7 +805,7 @@ begin
         raise EServiceException.CreateUtf8(
           '%.Destroy with RefCount=%: you must release ' +
           'I% interface (setting := nil) before Client.Free',
-          [self, fRefCount, fInterfaceURI])
+          [self, fRefCount, fInterfaceUri])
       else
         _Release; // bonne nuit les petits
   inherited;
@@ -857,7 +857,7 @@ begin
   else
     c := aRest.ClassType;
   fClient.InternalLog('%.StoreNotifications(%,%) for I%',
-    [ClassType, c, aLogClass, fInterfaceURI]);
+    [ClassType, c, aLogClass, fInterfaceUri]);
 end;
 
 procedure TServiceFactoryClient.SendNotifications(aRest: TRest;
@@ -874,7 +874,7 @@ begin
        (aLogClass = fSendNotificationsLogClass) then
     begin
       fClient.InternalLog('%.SendNotifications(%,%) I% twice -> ignored',
-        [ClassType, aRest.ClassType, aLogClass, fInterfaceURI], sllInfo);
+        [ClassType, aRest.ClassType, aLogClass, fInterfaceUri], sllInfo);
       exit;
     end
     else

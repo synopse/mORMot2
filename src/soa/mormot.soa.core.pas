@@ -198,7 +198,7 @@ type
   /// internal per-method list of execution context as hold in TServiceFactory
   TServiceFactoryExecution = record
     /// the list of denied TAuthGroup ID(s)
-    // - used on server side within TRestServerUriContext.ExecuteSOAByInterface
+    // - used on server side within TRestServerUriContext.ExecuteSoaByInterface
     // - bit 0 for client TAuthGroup.ID=1 and so on...
     // - is therefore able to store IDs up to 256 (maximum bit of 255 is a
     // limitation of the pascal compiler itself)
@@ -243,7 +243,7 @@ type
   TServiceFactory = class(TInjectableObject)
   protected
     fInterface: TInterfaceFactory;
-    fInterfaceURI: RawUtf8;
+    fInterfaceUri: RawUtf8;
     fInterfaceMangledUri: RawUtf8;
     fInstanceCreation: TServiceInstanceImplementation;
     fOrm: IRestOrm;
@@ -338,12 +338,12 @@ type
     /// the registered Interface URI
     // - in fact this is the Interface name without the initial 'I', e.g.
     // 'Calculator' for ICalculator
-    property InterfaceURI: RawUtf8
-      read fInterfaceURI;
+    property InterfaceUri: RawUtf8
+      read fInterfaceUri;
     /// the registered Interface mangled URI
-    // - in fact this is encoding the GUID using BinToBase64URI(), e.g.
+    // - in fact this is encoding the GUID using BinToBase64Uri(), e.g.
     // ! ['{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}'] into '00amyWGct0y_ze4lIsj2Mw'
-    // - can be substituted to the clear InterfaceURI name
+    // - can be substituted to the clear InterfaceUri name
     property InterfaceMangledUri: RawUtf8
       read fInterfaceMangledUri;
     /// how each class instance is to be created
@@ -532,7 +532,7 @@ type
     // with no '{"result":{...}}' nesting
     // - could be used e.g. for plain non mORMot REST Client with in sicSingle
     // or sicShared mode kind of services
-    // - on client side, consider using TRestClientUri.ServiceDefineSharedAPI
+    // - on client side, consider using TRestClientUri.ServiceDefineSharedApi
     property ResultAsJsonObjectWithoutResult: boolean
       read fResultAsJsonObjectWithoutResult write fResultAsJsonObjectWithoutResult;
     /// set to TRUE to return the interface's methods result as XML object
@@ -801,8 +801,8 @@ type
   TRestServerUri = object
   {$endif USERECORDWITHMETHODS}
   private
-    function GetURI: TRestServerUriString;
-    procedure SetURI(const Value: TRestServerUriString);
+    function GetUri: TRestServerUriString;
+    procedure SetUri(const Value: TRestServerUriString);
   public
     /// the TRestServer IP Address or DNS name
     Address: RawUtf8;
@@ -816,7 +816,7 @@ type
     // one UTF-8 text field (i.e. a TRestServerUriString instance)
     // - URI format is 'address:port/root', but port or root are optional
     property URI: TRestServerUriString
-      read GetURI write SetURI;
+      read GetUri write SetURI;
   end;
 
   /// store a list of TRestServer URIs
@@ -832,7 +832,7 @@ type
   {$endif USERECORDWITHMETHODS}
   public
     /// how this TRestServer could be accessed
-    PublicURI: TRestServerUri;
+    PublicUri: TRestServerUri;
     /// the list of supported services names
     // - in fact this is the Interface name without the initial 'I', e.g.
     // 'Calculator' for ICalculator
@@ -864,7 +864,7 @@ type
     // to refresh the list (e.g. from _contract_ HTTP body)
     constructor Create(aTimeoutMS: integer); reintroduce; virtual;
     /// add the JSON serialized TServicesPublishedInterfaces to the list
-    // - called by TRestServerUriContext.InternalExecuteSOAByInterface when
+    // - called by TRestServerUriContext.InternalExecuteSoaByInterface when
     // the client provides its own services as _contract_ HTTP body
     // - warning: supplied PublishedJson will be parsed in place, so modified
     procedure RegisterFromClientJSON(var PublishedJson: RawUtf8);
@@ -874,7 +874,7 @@ type
     // - warning: supplied PublishedJson will be parsed in place, so modified
     procedure RegisterFromServerJSON(var PublishedJson: RawUtf8);
     /// search for a public URI in the registration list
-    function FindURI(const aPublicURI: TRestServerUri): PtrInt;
+    function FindUri(const aPublicUri: TRestServerUri): PtrInt;
     /// search for the latest registrations of a service, by name
     // - will lookup for the Interface name without the initial 'I', e.g.
     // 'Calculator' for ICalculator - warning: research is case-sensitive
@@ -898,7 +898,7 @@ type
     // $ [{"Address":"addresslast","Port":"port","Root":"root"},...]
     // - if aServiceName='*', it will return ALL registration items, encoded as
     // a TServicesPublishedInterfaces JSON array, e.g.
-    // $ [{"PublicURI":{"Address":"1.2.3.4","Port":"123","Root":"root"},"Names":['Calculator']},...]
+    // $ [{"PublicUri":{"Address":"1.2.3.4","Port":"123","Root":"root"},"Names":['Calculator']},...]
     procedure FindServiceAll(const aServiceName: RawUtf8;
       aWriter: TTextWriter); overload;
     /// the number of milliseconds after which an entry expires
@@ -1004,14 +1004,14 @@ begin
   inherited CreateWithResolver(aOwner, {raiseIfNotFound=}true);
   fInterface := TInterfaceFactory.Get(aInterface);
   fInstanceCreation := aInstanceCreation;
-  fInterfaceMangledUri := BinToBase64URI(@fInterface.InterfaceIID, SizeOf(TGUID));
-  fInterfaceURI := fInterface.InterfaceURI;
-  if fOrm.Model.GetTableIndex(fInterfaceURI) >= 0 then
+  fInterfaceMangledUri := BinToBase64Uri(@fInterface.InterfaceIID, SizeOf(TGUID));
+  fInterfaceUri := fInterface.InterfaceUri;
+  if fOrm.Model.GetTableIndex(fInterfaceUri) >= 0 then
     raise EServiceException.CreateUtf8('%.Create: I% routing name is ' +
-      'already used by a % SQL table name', [self, fInterfaceURI, fInterfaceURI]);
+      'already used by a % SQL table name', [self, fInterfaceUri, fInterfaceUri]);
   SetLength(fExecution, fInterface.MethodsCount);
   // compute interface signature (aka "contract"), serialized as a JSON object
-  FormatUtf8('{"contract":"%","implementation":"%","methods":%}', [fInterfaceURI,
+  FormatUtf8('{"contract":"%","implementation":"%","methods":%}', [fInterfaceUri,
     LowerCase(TrimLeftLowerCaseShort(ToText(InstanceCreation))), fInterface.Contract],
     fContract);
   fContractHash := '"' + CardinalToHex(Hash32(fContract)) +
@@ -1242,32 +1242,32 @@ begin
        (optExecLockedPerInterface in aOptions) then
       raise EServiceException.CreateUtf8(
         '%.SetOptions(I%,optExecLockedPerInterface) is not compatible ' +
-        ' with sicPerThread', [self, fInterfaceURI]);
+        ' with sicPerThread', [self, fInterfaceUri]);
     if (fInstanceCreation = sicPerThread) and
        ([optExecInMainThread, optFreeInMainThread, optExecInPerInterfaceThread,
          optFreeInPerInterfaceThread] * aOptions <> []) then
       raise EServiceException.CreateUtf8(
         '%.SetOptions(I%,opt*In*Thread) is not compatible with sicPerThread',
-        [self, fInterfaceURI]);
+        [self, fInterfaceUri]);
     if (optExecLockedPerInterface in aOptions) and
        ([optExecInMainThread, optFreeInMainThread, optExecInPerInterfaceThread,
          optFreeInPerInterfaceThread] * aOptions <> []) then
       raise EServiceException.CreateUtf8(
         '%.SetOptions(I%,optExecLockedPerInterface) with opt*In*Thread options',
-        [self, fInterfaceURI]);
+        [self, fInterfaceUri]);
     ExecutionAction(aMethod, aOptions, aAction);
     if (optFreeInPerInterfaceThread in fAnyOptions) and
        not (optExecInPerInterfaceThread in fAnyOptions) then
       raise EServiceException.CreateUtf8(
         '%.SetOptions(I%,optFreeInPerInterfaceThread)' +
-        ' without optExecInPerInterfaceThread', [self, fInterfaceURI]);
+        ' without optExecInPerInterfaceThread', [self, fInterfaceUri]);
     if ([optExecInMainThread, optFreeInMainThread] *
          fAnyOptions <> []) and
        ([optExecInPerInterfaceThread, optFreeInPerInterfaceThread] *
          fAnyOptions <> []) then
       raise EServiceException.CreateUtf8(
         '%.SetOptions(I%): concurrent opt*InMainThread and ' +
-        'opt*InPerInterfaceThread', [self, fInterfaceURI]);
+        'opt*InPerInterfaceThread', [self, fInterfaceUri]);
   end;
   result := self;
 end;
@@ -1337,7 +1337,7 @@ begin
   if ExpectMangledUri then
     aURI := aService.fInterfaceMangledUri
   else
-    aURI := aService.fInterfaceURI;
+    aURI := aService.fInterfaceUri;
   PServiceContainerInterface(fInterfaces.AddUniqueName(aURI, @result))^.
     Service := aService;
   // add associated methods - first SERVICE_PSEUDO_METHOD[], then from interface
@@ -1521,7 +1521,7 @@ begin
   n := length(fInterface);
   SetLength(Names, n);
   for i := 0 to n - 1 do
-    Names[i] := fInterface[i].Service.fInterface.InterfaceURI;
+    Names[i] := fInterface[i].Service.fInterface.InterfaceUri;
 end;
 
 function TServiceContainer.AsJson: RawJson;
@@ -1580,7 +1580,7 @@ end;
 
 { TRestServerUri }
 
-function TRestServerUri.GetURI: TRestServerUriString;
+function TRestServerUri.GetUri: TRestServerUriString;
 begin
   result := Address;
   if Port <> '' then
@@ -1589,7 +1589,7 @@ begin
     result := result + '/' + root;
 end;
 
-procedure TRestServerUri.SetURI(const Value: TRestServerUriString);
+procedure TRestServerUri.SetUri(const Value: TRestServerUriString);
 begin
   Split(Value, ':', Address, Port);
   if Port <> '' then
@@ -1616,8 +1616,8 @@ begin
   fDynArrayTimeoutTix.Init(TypeInfo(TInt64DynArray), fTimeoutTix, @fTimeoutTixCount);
 end;
 
-function TServicesPublishedInterfacesList.FindURI(
-  const aPublicURI: TRestServerUri): PtrInt;
+function TServicesPublishedInterfacesList.FindUri(
+  const aPublicUri: TRestServerUri): PtrInt;
 var
   tix: Int64;
 begin
@@ -1625,7 +1625,7 @@ begin
   Safe.Lock;
   try
     for result := 0 to Count - 1 do
-      if List[result].PublicURI.Equals(aPublicURI) then
+      if List[result].PublicUri.Equals(aPublicUri) then
         if (fTimeOut = 0) or
            (fTimeoutTix[result] < tix) then
           exit;
@@ -1653,7 +1653,7 @@ begin
            (fTimeoutTix[i] < tix) then
         begin
           SetLength(result, n + 1);
-          result[n] := List[i].PublicURI;
+          result[n] := List[i].PublicUri;
           inc(n);
         end;
   finally
@@ -1678,7 +1678,7 @@ begin
       if FindPropName(List[i].Names, aServiceName) >= 0 then
         if (fTimeOut = 0) or
            (fTimeoutTix[i] < tix) then
-          AddRawUtf8(TRawUtf8DynArray(result), n, List[i].PublicURI.URI);
+          AddRawUtf8(TRawUtf8DynArray(result), n, List[i].PublicUri.Uri);
   finally
     Safe.UnLock;
   end;
@@ -1714,7 +1714,7 @@ begin
           if (fTimeOut = 0) or
              (fTimeoutTix[i] < tix) then
           begin
-            aWriter.AddRecordJSON(@List[i].PublicURI, TypeInfo(TRestServerUri));
+            aWriter.AddRecordJSON(@List[i].PublicUri, TypeInfo(TRestServerUri));
             aWriter.Add(',');
           end;
     aWriter.CancelLastComma;
@@ -1780,14 +1780,14 @@ begin
     // when transmitted as [params] in a _contract_ HTTP body content
     inc(P);
   if (RecordLoadJson(nfo, P, TypeInfo(TServicesPublishedInterfaces)) = nil) or
-     (nfo.PublicURI.Address = '') then
+     (nfo.PublicUri.Address = '') then
     // invalid supplied JSON content
     exit;
   Safe.Lock;
   try
     // store so that the latest updated version is always at the end
     for i := 0 to Count - 1 do
-      if List[i].PublicURI.Equals(nfo.PublicURI) then
+      if List[i].PublicUri.Equals(nfo.PublicUri) then
       begin
         // we ignore the Timeout here
         fDynArray.Delete(i);
@@ -1816,7 +1816,7 @@ const
   _TRestServerUri =
     'Address,Port,Root: RawUtf8';
   _TServicesPublishedInterfaces =
-    'PublicURI:TRestServerUri Names: array of RawUtf8';
+    'PublicUri:TRestServerUri Names: array of RawUtf8';
 
 procedure InitializeUnit;
 begin
