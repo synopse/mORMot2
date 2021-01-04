@@ -4360,9 +4360,9 @@ end;
 
 destructor TSqlDataBase.Destroy;
 var
-  FPCLog: ISynLog;
+  log: ISynLog;
 begin
-  FPCLog := fLog.Enter('Destroy %', [fFileNameWithoutPath], self);
+  log := fLog.Enter('Destroy %', [fFileNameWithoutPath], self);
   if DB <> 0 then
   try
     Rollback; // any unfinished transaction is rollbacked
@@ -4799,9 +4799,9 @@ end;
 
 function TSqlDataBase.Backup(const BackupFileName: TFileName): boolean;
 var
-  Log: ISynLog;
+  log: ISynLog;
 begin
-  Log := fLog.Enter('Backup % -> %',
+  log := fLog.Enter('Backup % -> %',
     [fFileNameWithoutPath, BackupFileName], self);
   if self = nil then
   begin
@@ -4813,15 +4813,15 @@ begin
   LockAndFlushCache;
   try
     try
-      if Log <> nil then
-        Log.Log(sllTrace, 'close', self);
+      if log <> nil then
+        log.Log(sllTrace, 'close', self);
       DBClose;
-      if Log <> nil then
-        Log.Log(sllTrace, 'copy file', self);
+      if log <> nil then
+        log.Log(sllTrace, 'copy file', self);
       result := CopyFile(fFileName, BackupFileName, false);
     finally
-      if Log <> nil then
-        Log.Log(sllTrace, 'reopen', self);
+      if log <> nil then
+        log.Log(sllTrace, 'reopen', self);
       DBOpen;
     end;
   finally
@@ -4960,7 +4960,8 @@ class function TSqlDataBase.BackupSynLZ(const SourceDB, DestSynLZ: TFileName;
 begin
   result := AlgoSynLZ.FileCompress(
     SourceDB, DestSynLZ, SQLITE3_MAGIC, {hash32=}true);
-  if result and EraseSourceDB then
+  if result and
+     EraseSourceDB then
     result := DeleteFile(SourceDB);
 end;
 
@@ -4978,20 +4979,21 @@ begin
 end;
 
 function TSqlDataBase.DBClose: integer;
-var log: ISynLog;
+var
+  log: ISynLog;
 begin
   result := SQLITE_OK;
-  if (self=nil) or
-     (fDB=0) then
+  if (self = nil) or
+     (fDB = 0) then
     exit;
-  log := fLog.Enter(self,'DBClose');
-  if log<>nil then
-    log.Log(sllDB,'closing [%] %',[FileName, KB(GetFileSize)],self);
+  log := fLog.Enter(self, 'DBClose');
+  if log <> nil then
+    log.Log(sllDB,'closing [%] %', [FileName, KB(GetFileSize)], self);
   if (sqlite3 = nil) or
      not Assigned(sqlite3.close) then
     raise ESqlite3Exception.CreateUtf8(
-      '%.DBClose called with no sqlite3 global',[self]);
-  if fBackupBackgroundInProcess<>nil then
+      '%.DBClose called with no sqlite3 global', [self]);
+  if fBackupBackgroundInProcess <> nil then
     BackupBackgroundWaitUntilFinished;
   result := sqlite3.close(fDB);
   fDB := 0;
@@ -4999,19 +5001,20 @@ begin
 end;
 
 function TSqlDataBase.EnableCustomTokenizer: integer;
-var log: ISynLog;
+var
+  log: ISynLog;
 begin
   result := SQLITE_OK;
-  if (self=nil) or
-     (fDB=0) then
+  if (self = nil) or
+     (fDB = 0) then
     exit;
   log := fLog.Enter;
-  if log<>nil then
-    log.Log(sllDB,'Enable custom tokenizer for [%]',[FileName],self);
-  if (sqlite3=nil) or
+  if log <> nil then
+    log.Log(sllDB, 'Enable custom tokenizer for [%]', [FileName], self);
+  if (sqlite3 = nil) or
      not Assigned(sqlite3.db_config) then
     raise ESqlite3Exception.CreateUtf8(
-      '%.EnableCustomTokenizer called with no sqlite3 engine',[self]);
+      '%.EnableCustomTokenizer called with no sqlite3 engine', [self]);
   result := sqlite3.db_config(fDB, SQLITE_DBCONFIG_ENABLE_FTS3_TOKENIZER, 1);
 end;
 

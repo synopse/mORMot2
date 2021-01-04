@@ -4336,7 +4336,7 @@ procedure TRestStorageShard.InternalAddNewShard;
 var
   rest: TRestOrm;
   i: PtrInt;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  log: ISynLog; // for Enter auto-leave to work with FPC / Delphi 10.4+
 begin
   log := fOwner.Owner.Enter('InternalAddNewShard: #% for %',
     [fShardLast + 1, fStoredClass], self);

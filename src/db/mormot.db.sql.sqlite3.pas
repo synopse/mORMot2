@@ -382,9 +382,9 @@ end;
 
 procedure TSqlDBSQLite3Connection.Connect;
 var
-  Log: ISynLog;
+  log: ISynLog;
 begin
-  Log := SynDBLog.Enter;
+  log := SynDBLog.Enter;
   Disconnect; // force fTrans=fError=fServer=fContext=nil
   fDB := (Properties as TSqlDBSQLite3ConnectionProperties).fExistingDB;
   if fDB = nil then

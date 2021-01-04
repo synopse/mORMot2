@@ -133,6 +133,8 @@ type
 
   /// interface for TAutoFree to register another TObject instance
   // to an existing IAutoFree local variable
+  // - WARNING: both FPC and Delphi 10.4+ don't keep the IAutoFree instance
+  // up to the end-of-method -> you should not use TAutoFree for new projects :(
   IAutoFree = interface
     procedure Another(var objVar; obj: TObject);
     /// do-nothing method to circumvent the Delphi 10.4 IAutoFree early release
@@ -140,6 +142,8 @@ type
   end;
 
   /// simple reference-counted storage for local objects
+  // - WARNING: both FPC and Delphi 10.4+ don't keep the IAutoFree instance
+  // up to the end-of-method -> you should not use TAutoFree for new projects :(
   // - be aware that it won't implement a full ARC memory model, but may be
   // just used to avoid writing some try ... finally blocks on local variables
   // - use with caution, only on well defined local scope

@@ -2835,7 +2835,7 @@ var
   b: PtrInt;
   count, status: integer;
   res: TIDDynArray;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  log: ISynLog; // for Enter auto-leave to work with FPC /Delphi 10.4+
 begin
   try
     // send any pending json
@@ -2926,7 +2926,7 @@ function TRestBackgroundTimer.AsynchBatchStop(Table: TOrmClass): boolean;
 var
   b: PtrInt;
   timeout: Int64;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  log: ISynLog;
 begin
   result := false;
   if (self = nil) or
@@ -3069,7 +3069,7 @@ var
   call: TInterfacedObjectAsynchCall;
   o: PRawUtf8;
   output: RawUtf8;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  log: ISynLog;
 begin
   if not RecordLoad(call, Msg, TypeInfo(TInterfacedObjectAsynchCall)) then
     exit; // invalid message (e.g. periodic execution)

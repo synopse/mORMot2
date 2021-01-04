@@ -3316,6 +3316,8 @@ type
     class procedure AddFilterNotVoidAllTextFields;
 
     /// protect several TOrm local variable instances
+    // - WARNING: both FPC and Delphi 10.4+ don't keep the IAutoFree instance
+    // up to the end-of-method -> you should not use TAutoFree for new projects :(
     // - specified as localVariable/recordClass pairs
     // - is a wrapper around TAutoFree.Several(...) constructor
     // - be aware that it won't implement a full ARC memory model, but may be
@@ -3333,8 +3335,14 @@ type
     // - warning: under FPC, you should assign the result of this method to
     // a local IAutoFree variable, or use a with TOrm.AutoFree() do
     // statement - see http://bugs.freepascal.org/view.php?id=26602
+    // - Delphi 10.4 also did change it and release the IAutoFree before the
+    // end of the current method, and an "array of pointer" cannot be inlined
+    // by the Delphi compiler, so you should explicitly call ForMethod:
+    // !   TOrm.AutoFree([...]).ForMethod;
     class function AutoFree(varClassPairs: array of pointer): IAutoFree; overload;
     /// protect one TOrm local variable instance
+    // - WARNING: both FPC and Delphi 10.4+ don't keep the IAutoFree instance
+    // up to the end-of-method -> you should NOT use TAutoFree for new projects :(
     // - be aware that it won't implement a full ARC memory model, but may be
     // just used to avoid writing some try ... finally blocks on local variables
     // - use with caution, only on well defined local scope
@@ -3348,7 +3356,10 @@ type
     // a local IAutoFree variable, or use a with TOrm.AutoFree() do
     // statement - see http://bugs.freepascal.org/view.php?id=26602
     class function AutoFree(var localVariable): IAutoFree; overload;
+      {$ifdef ISDELPHI104} inline; {$endif}
     /// read and protect one TOrm local variable instance
+    // - WARNING: both FPC and Delphi 10.4+ don't keep the IAutoFree instance
+    // up to the end-of-method -> you should NOT use TAutoFree for new projects :(
     // - is a wrapper around TAutoFree.Create(localVariable,Create(Rest,ID))
     // - be aware that it won't implement a full ARC memory model, but may be
     // just used to avoid writing some try ... finally blocks on local variables
@@ -3357,7 +3368,10 @@ type
     // a local IAutoFree variable, or use a with TOrm.AutoFree() do
     // statement - see http://bugs.freepascal.org/view.php?id=26602
     class function AutoFree(var localVariable; const Rest: IRestOrm; ID: TID): IAutoFree; overload;
+      {$ifdef ISDELPHI104} inline; {$endif}
     /// FillPrepare and protect one TOrm local variable instance
+    // - WARNING: both FPC and Delphi 10.4+ don't keep the IAutoFree instance
+    // up to the end-of-method -> you should NOT use TAutoFree for new projects :(
     // - is a wrapper around TAutoFree.Create(localVariable,CreateAndFillPrepare(Rest,...))
     // - be aware that it won't implement a full ARC memory model, but may be
     // just used to avoid writing some try ... finally blocks on local variables
@@ -3369,6 +3383,8 @@ type
       const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
       const aCustomFieldsCsv: RawUtf8 = ''): IAutoFree; overload;
     /// FillPrepare and protect one TOrm local variable instance
+    // - WARNING: both FPC and Delphi 10.4+ don't keep the IAutoFree instance
+    // up to the end-of-method -> you should NOT use TAutoFree for new projects :(
     // - is a wrapper around TAutoFree.Create(localVariable,CreateAndFillPrepare(Rest,...))
     // - be aware that it won't implement a full ARC memory model, but may be
     // just used to avoid writing some try ... finally blocks on local variables
@@ -18283,12 +18299,18 @@ end;
 class function TOrm.AutoFree(var localVariable): IAutoFree;
 begin
   result := TAutoFree.Create(localVariable, Create);
+  {$ifdef ISDELPHI104}
+  result.ForMethod;
+  {$endif ISDELPHI104}
 end;
 
 class function TOrm.AutoFree(var localVariable; const Rest: IRestOrm;
   ID: TID): IAutoFree;
 begin
   result := TAutoFree.Create(localVariable, Create(Rest, ID));
+  {$ifdef ISDELPHI104}
+  result.ForMethod;
+  {$endif ISDELPHI104}
 end;
 
 class function TOrm.AutoFree(var localVariable; const Rest: IRestOrm;

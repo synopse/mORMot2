@@ -1527,8 +1527,10 @@ begin
 end;
 
 destructor TRestOrmServerDB.Destroy;
+var
+  log: ISynLog;
 begin
-  with fDB.Log.Enter('Destroy %', [fModel.SafeRoot], self) do
+  log := fDB.Log.Enter('Destroy %', [fModel.SafeRoot], self);
   try
     if (fDB <> nil) and
        (fDB.InternalState = @InternalState) then
@@ -1645,6 +1647,7 @@ function TRestOrmServerDB.StoredProcExecute(const aSql: RawUtf8;
 var
   R: TSqlRequest; // we don't use fStatementCache[] here
   Res: integer;
+  log: ISynLog;
 begin
   result := false;
   if (self <> nil) and
@@ -1652,7 +1655,7 @@ begin
      (aSql <> '') and
      Assigned(StoredProc) then
   try
-    fDB.Log.Enter('StoredProcExecute(%)', [aSql], self);
+    log := fDB.Log.Enter('StoredProcExecute(%)', [aSql], self);
     DB.LockAndFlushCache; // even if aSql is SELECT, StoredProc may update data
     try
       try

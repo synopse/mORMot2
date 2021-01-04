@@ -588,7 +588,7 @@ var
   ctxt: TRestClientSideInvoke;
   withinput: boolean;
   rcu: TRestClientUri absolute aClient;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  log: ISynLog; // for Enter auto-leave to work with FPC / Delphi 10.4+
   p: RawUtf8;
 
   procedure DoClientCall;
@@ -897,7 +897,7 @@ end;
 procedure TServiceFactoryClient.SendNotificationsWait(aTimeOutSeconds: integer);
 var
   timeOut: Int64;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  log: ISynLog;
 begin
   if SendNotificationsPending = 0 then
     exit;

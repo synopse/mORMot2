@@ -787,7 +787,7 @@ var
   Writer: TRestBatch;
   IDs: TIDDynArray;
   status: integer;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  log: ISynLog; // for Enter auto-leave to work with FPC / Delphi 10.4+
 begin
   log := fRest.LogClass.Enter('RecordVersionSynchronizeSlave %', [Table], self);
   result := -1; // error
@@ -849,7 +849,7 @@ var
   Rec: TOrm;
   DeletedMinID: TID;
   Deleted: TOrmTableDeleted;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  log: ISynLog;
 begin
   log := fRest.LogClass.Enter('RecordVersionSynchronizeSlaveToBatch %',
     [Table], self);
@@ -1170,7 +1170,7 @@ var
   end;
 
 var
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  log: ISynLog;
 begin
   log := fRest.LogClass.Enter('EngineBatchSend % inlen=%',
     [Table, length(Data)], self);
@@ -1575,8 +1575,7 @@ begin
   end;
 end;
 
-procedure TRestOrmServer.TrackChangesFlush(
-  aTableHistory: TOrmClass);
+procedure TRestOrmServer.TrackChangesFlush(aTableHistory: TOrmClass);
 var
   HistBlob: TOrmHistory;
   Rec: TOrm;
@@ -1586,7 +1585,7 @@ var
   TableHistoryIndex, i, HistIDCount, n: PtrInt;
   ModifRecord, ModifRecordCount, MaxRevisionJson: integer;
   T: TOrmTable;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  log: ISynLog;
 begin
   log := fRest.LogClass.Enter('TrackChangesFlush(%)', [aTableHistory], self);
   if (aTableHistory = nil) or

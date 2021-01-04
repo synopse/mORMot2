@@ -1735,7 +1735,7 @@ procedure TSqlDBOleDBConnection.Connect;
 var
   DataInitialize: IDataInitialize;
   unknown: IUnknown;
-  Log: ISynLog;
+  log: ISynLog;
 begin
   Log := SynDBLog.Enter(self, 'Connect');
   // check context
@@ -1774,7 +1774,7 @@ end;
 
 constructor TSqlDBOleDBConnection.Create(aProperties: TSqlDBConnectionProperties);
 var
-  Log: ISynLog;
+  log: ISynLog;
 begin
   Log := SynDBLog.Enter(self, 'Create');
   if not aProperties.InheritsFrom(TSqlDBOleDBConnectionProperties) then
@@ -1787,7 +1787,7 @@ end;
 
 destructor TSqlDBOleDBConnection.Destroy;
 var
-  Log: ISynLog;
+  log: ISynLog;
 begin
   Log := SynDBLog.Enter(self, 'Destroy');
   try
@@ -1803,7 +1803,7 @@ end;
 
 procedure TSqlDBOleDBConnection.Disconnect;
 var
-  Log: ISynLog;
+  log: ISynLog;
 begin
   Log := SynDBLog.Enter(self, 'Disconnect');
   try
@@ -1910,7 +1910,7 @@ end;
 
 procedure TSqlDBOleDBConnection.Commit;
 var
-  Log: ISynLog;
+  log: ISynLog;
 begin
   Log := SynDBLog.Enter(self, 'Commit');
   if assigned(fTransaction) then
@@ -1927,7 +1927,7 @@ end;
 
 procedure TSqlDBOleDBConnection.Rollback;
 var
-  Log: ISynLog;
+  log: ISynLog;
 begin
   Log := SynDBLog.Enter(self, 'Rollback');
   if assigned(fTransaction) then
@@ -1939,7 +1939,7 @@ end;
 
 procedure TSqlDBOleDBConnection.StartTransaction;
 var
-  Log: ISynLog;
+  log: ISynLog;
 begin
   Log := SynDBLog.Enter(self, 'StartTransaction');
   if assigned(fTransaction) then
@@ -1961,7 +1961,7 @@ var
   DBInitialize: IUnknown;
   res: HRESULT;
   tmp: PWideChar;
-  Log: ISynLog;
+  log: ISynLog;
 begin
   Log := SynDBLog.Enter(self, 'ConnectionStringDialog');
   result := false;

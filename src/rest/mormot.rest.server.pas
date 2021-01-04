@@ -6197,7 +6197,7 @@ end;
 procedure TRestServer.Shutdown(const aStateFileName: TFileName);
 var
   timeout: Int64;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  log: ISynLog; // for Enter auto-leave to work with FPC / Delphi 10.4+
 begin
   if fSessions = nil then
     // avoid GPF e.g. in case of missing sqlite3-64.dll
@@ -6461,7 +6461,7 @@ var
   service: IServiceRecordVersion;
   callback: IServiceRecordVersionCallback;
   retry: integer;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  log: ISynLog;
 begin
   log := fLogClass.Enter('RecordVersionSynchronizeSlaveStart % over %',
     [Table, MasterRemoteAccess], self);
@@ -7267,7 +7267,7 @@ var
   timeStart, timeEnd: Int64;
   elapsed, len: cardinal;
   outcomingfile: boolean;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  log: ISynLog;
 begin
   log := fLogClass.Enter('URI % % in=%',
     [Call.Method, Call.Url, KB(Call.InBody)], self);

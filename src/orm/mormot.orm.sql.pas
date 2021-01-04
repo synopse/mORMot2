@@ -595,7 +595,7 @@ var
   TableCreated, FieldAdded: boolean;
   CreateColumns: TSqlDBColumnCreateDynArray;
   options: TOrmPropertiesMappingOptions;
-  log: TSynLog;
+  log: ISynLog;
 
   procedure GetFields;
   begin
@@ -620,8 +620,7 @@ var
   end;
 
 begin
-  log := Owner.LogClass.Add;
-  log.Enter('Create %', [aClass], self);
+  log := Owner.LogClass.Enter('Create %', [aClass], self);
   inherited Create(aClass, aServer);
   // initialize external DB properties
   options := fStoredClassMapping^.options;

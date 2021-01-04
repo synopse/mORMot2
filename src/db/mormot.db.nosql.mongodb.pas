@@ -3044,13 +3044,14 @@ end;
 function TMongoClient.ReOpen: boolean;
 var
   digest: RawByteString;
+  log: ISynLog;
 begin
   result := false;
   with fGracefulReconnect do
     if Enabled then
     try
       if fLog <> nil then
-        fLog.Enter(self, 'ReOpen: graceful reconnect');
+        log := fLog.Enter(self, 'ReOpen: graceful reconnect');
       fConnections[0].Open;
       if EncryptedDigest <> '' then
       try
@@ -3355,6 +3356,7 @@ end;
 function TMongoCollection.Drop: RawUtf8;
 var
   res: Variant;
+  log: ISynLog;
 begin
   if self = nil then
   begin
@@ -3362,7 +3364,7 @@ begin
     exit;
   end;
   if Database.Client.Log <> nil then
-    Database.Client.Log.Enter('Drop %', [name], self);
+    log := Database.Client.Log.Enter('Drop %', [name], self);
   result := fDatabase.RunCommand(BsonVariant('{drop:?}', [], [name]), res);
   Database.Client.Log.Log(sllTrace, 'Drop("%")->%', [name, res], self);
   if result = '' then
@@ -3375,12 +3377,13 @@ var
   indexName: RawUtf8;
   ndx, order: integer;
   useCommand: boolean;
+  log: ISynLog;
 begin
   if (self = nil) or
      (Database = nil) then
     exit;
   if Database.Client.Log <> nil then
-    Database.Client.Log.Enter('EnsureIndex %', [name], self);
+    log := Database.Client.Log.Enter('EnsureIndex %', [name], self);
   if DocVariantData(Keys)^.kind <> dvObject then
     raise EMongoException.CreateUtf8('%[%].EnsureIndex(Keys?)', [self,
       FullCollectionName]);

@@ -2273,7 +2273,7 @@ function TRestClientUri.CallBackGet(const aMethodName: RawUtf8;
   aTable: TOrmClass; aID: TID; aResponseHead: PRawUtf8): integer;
 var
   url, header: RawUtf8;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  log: ISynLog; // for Enter auto-leave to work with FPC / Delphi 10.4+
 begin
   if self = nil then
     result := HTTP_UNAVAILABLE
@@ -2320,7 +2320,7 @@ function TRestClientUri.CallBack(method: TUriMethod; const aMethodName,
   aID: TID; aResponseHead: PRawUtf8): integer;
 var
   u, m: RawUtf8;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  log: ISynLog;
 begin
   if (self = nil) or
      (method = mNone) then
