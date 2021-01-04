@@ -652,8 +652,8 @@ var
     tm_wday: integer;           { Day of week.  [0-6]   }
     tm_yday: integer;           { Days in year. [0-365] }
     tm_isdst: integer;          { DST.          [-1/0/1]}
-    __tm_gmtoff: integer;       { Seconds east of UTC.  }
-    __tm_zone: ^Char;           { Timezone abbreviation.}
+    __tm_gmtoff: integer;       { Seconds east of UTC  }
+    __tm_zone: PChar;           { Timezone abbreviation}
   end;
 
 function localtime64(const t: Int64): pointer; cdecl; { always cdecl }
