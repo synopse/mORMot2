@@ -672,7 +672,7 @@ begin
       result := Uri(fModel.Root, 'BEGIN') in [HTTP_SUCCESS, HTTP_NOCONTENT]
     else
       // BEGIN on 'root/table' URI
-      result := Uri(fModel.URI[aTable], 'BEGIN') in [HTTP_SUCCESS, HTTP_NOCONTENT];
+      result := Uri(fModel.Uri[aTable], 'BEGIN') in [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
 procedure TRestOrmClientUri.RollBack(SessionID: cardinal);
@@ -695,7 +695,7 @@ begin
       [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
-function TRestOrmClientUri.URIGet(Table: TOrmClass; ID: TID;
+function TRestOrmClientUri.UriGet(Table: TOrmClass; ID: TID;
   var Resp: RawUtf8; ForUpdate: boolean; outStatus: PCardinal): integer;
 const
   METHOD: array[boolean] of RawUtf8 = (
@@ -741,7 +741,7 @@ var
   url, Head: RawUtf8;
 begin
   result := 0;
-  url := fModel.URI[fModel.Tables[TableModelIndex]];
+  url := fModel.Uri[fModel.Tables[TableModelIndex]];
   // POST on 'root/table' URI with JSON object as body
   if Uri(url, 'POST', nil, @Head, @SentData) <> HTTP_CREATED then
     // response must be '201 Created'
@@ -856,7 +856,7 @@ begin
   begin
     // PUT on 'root/table?setname=..&set=..&wherename=..&where=..' URI
     FormatUtf8('%?setname=%&set=%&wherename=%&where=%',
-      [fModel.URI[fModel.Tables[TableModelIndex]], SetFieldName,
+      [fModel.Uri[fModel.Tables[TableModelIndex]], SetFieldName,
        UrlEncode(SetValue), WhereFieldName, UrlEncode(WhereValue)], url);
     result := Uri(url, 'PUT') in [HTTP_SUCCESS, HTTP_NOCONTENT];
   end;
@@ -989,7 +989,7 @@ begin
         U := U + '?where=';
       U := U + UrlEncode(SqlWhere);
     end;
-    if Uri(Model.URI[Tables[0]] + U,
+    if Uri(Model.Uri[Tables[0]] + U,
        'GET', @JSON, nil, nil, @state) <> HTTP_SUCCESS then
       exit;
   end

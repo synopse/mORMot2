@@ -138,20 +138,20 @@ begin
   finally
     M.Free;
   end;
-  Check(U.URI = '');
-  U.URI := 'addr:port/root';
+  Check(U.Uri = '');
+  U.Uri := 'addr:port/root';
   Check(U.Address = 'addr');
   Check(U.Port = 'port');
   Check(U.Root = 'root');
-  U.URI := 'addr:port';
+  U.Uri := 'addr:port';
   Check(U.Address = 'addr');
   Check(U.Port = 'port');
   Check(U.Root = '');
-  U.URI := 'addr/root';
+  U.Uri := 'addr/root';
   Check(U.Address = 'addr');
   Check(U.Port = '');
   Check(U.Root = 'root');
-  U.URI := 'addr';
+  U.Uri := 'addr';
   Check(U.Address = 'addr');
   Check(U.Port = '');
   Check(U.Root = '');
@@ -510,9 +510,9 @@ begin
     'Ansi TEXT COLLATE NOCASE, ValFloat FLOAT, ValWord INTEGER, ' +
     'ValDate TEXT COLLATE ISO8601, Next INTEGER, Data BLOB, ' +
     'ValVariant TEXT COLLATE BINARY);');
-  s := TOrmTest.OrmProps.SQLAddField(0);
+  s := TOrmTest.OrmProps.SqlAddField(0);
   CheckEqual(s, 'ALTER TABLE Test ADD COLUMN Int INTEGER; ');
-  s := TOrmTest.OrmProps.SQLAddField(1000);
+  s := TOrmTest.OrmProps.SqlAddField(1000);
   CheckEqual(s, '');
   T2 := TOrmTest.Create;
   try

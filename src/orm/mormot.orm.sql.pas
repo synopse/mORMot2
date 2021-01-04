@@ -62,7 +62,7 @@ type
   /// REST server with direct access to a mormot.db.sql-based external database
   // - handle all REST commands, using the external SQL database connection,
   // and prepared statements
-  // - is used by TRestServer.URI for faster RESTful direct access
+  // - is used by TRestServer.Uri for faster RESTful direct access
   // - for JOINed SQL statements, the external database is also defined as
   // a SQLite3 virtual table, via the TOrmVirtualTableExternal[Cursor] classes
   TRestStorageExternal = class(TRestStorage)
@@ -103,7 +103,7 @@ type
     // - this implementation will call the ThreadSafeConnection virtual method,
     // then bound inlined parameters as :(1234): and call its Execute method
     // - should return nil on error, and not raise an exception
-    function PrepareInlinedForRows(const aSQL: RawUtf8): ISqlDBStatement;
+    function PrepareInlinedForRows(const aSql: RawUtf8): ISqlDBStatement;
     /// overloaded method using FormatUtf8() and binding mormot.db.sql parameters
     function PrepareDirectForRows(SqlFormat: PUtf8Char;
       const Args, Params: array of const): ISqlDBStatement;
@@ -111,7 +111,7 @@ type
     // - this implementation will call the ThreadSafeConnection virtual method,
     // then bound inlined parameters as :(1234): and call its Execute method
     // - should return nil on error, and not raise an exception
-    function ExecuteInlined(const aSQL: RawUtf8;
+    function ExecuteInlined(const aSql: RawUtf8;
       ExpectResults: boolean): ISqlDBRows; overload;
     /// overloaded method using FormatUtf8() and inlined parameters
     function ExecuteInlined(SqlFormat: PUtf8Char; const Args: array of const;
@@ -141,7 +141,7 @@ type
   public
     // overridden methods calling the external engine with SQL via Execute
     function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8; override;
-    function EngineExecute(const aSQL: RawUtf8): boolean; override;
+    function EngineExecute(const aSql: RawUtf8): boolean; override;
     function EngineLockedNextID: TID; virtual;
     function EngineAdd(TableModelIndex: integer; const SentData: RawUtf8): TID; override;
     function EngineUpdate(TableModelIndex: integer; ID: TID; const
@@ -167,7 +167,7 @@ type
     procedure InternalBatchStop; override;
     /// called internally by EngineAdd/EngineUpdate/EngineDelete in batch mode
     procedure InternalBatchAdd(const aValue: RawUtf8; const aID: TID);
-    /// TRestServer.URI use it for Static.EngineList to by-pass virtual table
+    /// TRestServer.Uri use it for Static.EngineList to by-pass virtual table
     // - overridden method to handle most potential simple queries, e.g. like
     // $ SELECT Field1,RowID FROM table WHERE RowID=... AND/OR/NOT Field2=
     // - change 'RowID' into 'ID' column name, internal field names into
@@ -176,7 +176,7 @@ type
     // - any 'LIMIT #' clause will be changed into the appropriate SQL statement
     // - handle also statements to avoid slow virtual table full scan, e.g.
     // $ SELECT count(*) FROM table
-    function AdaptSQLForEngineList(var SQL: RawUtf8): boolean; override;
+    function AdaptSqlForEngineList(var SQL: RawUtf8): boolean; override;
   public
     /// initialize the remote database connection
     // - you should not use this, but rather call VirtualTableExternalRegister()
@@ -226,7 +226,7 @@ type
     function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
       const FieldName: RawUtf8; Increment: Int64): boolean; override;
     /// create one index for all specific FieldNames at once
-    // - this method will in fact call the SQLAddIndex method, if the index
+    // - this method will in fact call the SqlAddIndex method, if the index
     // is not already existing
     // - for databases which do not support indexes on BLOB fields (i.e. all
     // engine but SQLite3), such FieldNames will be ignored
@@ -306,7 +306,7 @@ type
   TOrmVirtualTableCursorExternal = class(TOrmVirtualTableCursor)
   protected
     fStatement: ISqlDBStatement;
-    fSQL: RawUtf8;
+    fSql: RawUtf8;
     fHasData: boolean;
     // on exception, release fStatement and optionally clear the pool
     procedure HandleClearPoolOnConnectionIssue;
@@ -341,7 +341,7 @@ type
     function Next: boolean; override;
     /// read-only access to the SELECT statement
     property SQL: RawUtf8
-      read fSQL;
+      read fSql;
   end;
 
   /// mormot.db.sql-based virtual table for accessing any external database
@@ -680,7 +680,7 @@ begin
           // just ignore non handled field types
           SetLength(CreateColumns, f);
       end;
-      SQL := fProperties.SQLCreate(fTableName, CreateColumns, false);
+      SQL := fProperties.SqlCreate(fTableName, CreateColumns, false);
       if SQL <> '' then
         if ExecuteDirect(pointer(SQL), [], [], false) <> nil then
         begin
@@ -710,7 +710,7 @@ begin
               FillcharFast(Field, sizeof(Field), 0);
               if PropInfoToExternalField(Fields.List[f], Field) then
               begin
-                SQL := fProperties.SQLAddColumn(fTableName, Field);
+                SQL := fProperties.SqlAddColumn(fTableName, Field);
                 if (SQL <> '') and
                    (ExecuteDirect(pointer(SQL), [], [], false) <> nil) then
                   FieldAdded := true
@@ -741,10 +741,10 @@ begin
   end;
   fSelectTableHasRowsSQL := FormatUtf8('select ID from % limit 1',
     [StoredClassRecordProps.SqlTableName]);
-  AdaptSQLForEngineList(fSelectTableHasRowsSQL);
+  AdaptSqlForEngineList(fSelectTableHasRowsSQL);
 end;
 
-function TRestStorageExternal.AdaptSQLForEngineList(var SQL: RawUtf8): boolean;
+function TRestStorageExternal.AdaptSqlForEngineList(var SQL: RawUtf8): boolean;
 var
   Stmt: TSelectStatement;
   W: TTextWriter;
@@ -763,13 +763,13 @@ begin
     if (Stmt.SqlStatement = '') or // parsing failed
       not IdemPropNameU(Stmt.TableName, fStoredClassRecordProps.SqlTableName) then
     begin
-      InternalLog('AdaptSQLForEngineList: complex statement -> switch to ' +
+      InternalLog('AdaptSqlForEngineList: complex statement -> switch to ' +
         'SQLite3 virtual engine - check efficiency', [], sllDebug);
       exit;
     end;
     if Stmt.Offset <> 0 then
     begin
-      InternalLog('AdaptSQLForEngineList: unsupported OFFSET for [%]',
+      InternalLog('AdaptSqlForEngineList: unsupported OFFSET for [%]',
         [SQL], sllWarning);
       exit;
     end;
@@ -780,7 +780,7 @@ begin
       limit := fProperties.SQLLimitClause(Stmt);
       if limit.Position = posNone then
       begin
-        InternalLog('AdaptSQLForEngineList: unknown % LIMIT syntax for [%]',
+        InternalLog('AdaptSqlForEngineList: unknown % LIMIT syntax for [%]',
           [ToText(fProperties.DBMS)^, SQL], sllWarning);
         exit;
       end;
@@ -871,7 +871,7 @@ begin
             if (FunctionName <> '') or
                (Operation > high(DB_SQLOPERATOR)) then
             begin
-              InternalLog('AdaptSQLForEngineList: unsupported function %() for [%]',
+              InternalLog('AdaptSqlForEngineList: unsupported function %() for [%]',
                 [FunctionName, SQL], sllWarning);
               exit;
             end;
@@ -888,7 +888,7 @@ begin
             W.AddString(SubField);
             W.AddString(DB_SQLOPERATOR[Operation]);
             if not (Operation in [opIsNull, opIsNotNull]) then
-              W.AddNoJsonEscape(ValueSQL, ValueSQLLen);
+              W.AddNoJsonEscape(ValueSql, ValueSqlLen);
             if ParenthesisAfter <> '' then
               W.AddString(ParenthesisAfter);
           end;
@@ -932,7 +932,7 @@ end;
 function TRestStorageExternal.EngineLockedNextID: TID;
 
   procedure RetrieveFromDB;
-  // fProperties.SQLCreate: ID Int64 PRIMARY KEY -> compute unique RowID
+  // fProperties.SqlCreate: ID Int64 PRIMARY KEY -> compute unique RowID
   // (not all DB engines handle autoincrement feature - e.g. Oracle does not)
   var
     rows: ISqlDBRows;
@@ -1366,12 +1366,12 @@ begin // TableModelIndex is not useful here
   end;
 end;
 
-function TRestStorageExternal.EngineExecute(const aSQL: RawUtf8): boolean;
+function TRestStorageExternal.EngineExecute(const aSql: RawUtf8): boolean;
 begin
-  if aSQL = '' then
+  if aSql = '' then
     result := false
   else
-    result := ExecuteInlined(aSQL, false) <> nil;
+    result := ExecuteInlined(aSql, false) <> nil;
 end;
 
 function TRestStorageExternal.TableHasRows(Table: TOrmClass): boolean;
@@ -1622,7 +1622,7 @@ begin
 end;
 
 function TRestStorageExternal.PrepareInlinedForRows(
-  const aSQL: RawUtf8): ISqlDBStatement;
+  const aSql: RawUtf8): ISqlDBStatement;
 var
   stmt: ISqlDBStatement;
 begin
@@ -1630,7 +1630,7 @@ begin
   if self = nil then
     exit;
   try
-    stmt := fProperties.PrepareInlined(aSQL, true);
+    stmt := fProperties.PrepareInlined(aSql, true);
     if (stmt <> nil) and
        (oftDateTimeMS in fStoredClassRecordProps.HasTypeFields) then
       stmt.ForceDateWithMS := true;
@@ -1641,7 +1641,7 @@ begin
   end;
 end;
 
-function TRestStorageExternal.ExecuteInlined(const aSQL: RawUtf8;
+function TRestStorageExternal.ExecuteInlined(const aSql: RawUtf8;
   ExpectResults: boolean): ISqlDBRows;
 var
   stmt: ISqlDBStatement;
@@ -1653,7 +1653,7 @@ begin
      (Owner <> nil) then
     Owner.FlushInternalDBCache; // add/update/delete should flush DB cache
   try
-    stmt := fProperties.PrepareInlined(aSQL, ExpectResults);
+    stmt := fProperties.PrepareInlined(aSql, ExpectResults);
     if stmt = nil then
       exit;
     if ExpectResults and
@@ -1891,7 +1891,7 @@ begin
         break;
       end;
     end;
-  SQL := fProperties.SQLAddIndex(
+  SQL := fProperties.SqlAddIndex(
     fTableName, ExtFieldNames, Unique, Descending, IndexName);
   if (SQL = '') or
      (ExecuteDirect(pointer(SQL), [], [], false) = nil) then
@@ -2224,12 +2224,12 @@ begin
   begin
     storage := Table.Static as TRestStorageExternal;
     {$ifndef SQLVIRTUALLOGS}
-    if fSQL = '' then
+    if fSql = '' then
     {$endif SQLVIRTUALLOGS}
-      fSQL := storage.ComputeSql(Prepared);
+      fSql := storage.ComputeSql(Prepared);
     try
       fStatement := storage.fProperties.NewThreadSafeStatementPrepared(
-        fSQL, {results=}true, {except=}true);
+        fSql, {results=}true, {except=}true);
       if fStatement <> nil then
       begin
         if oftDateTimeMS in storage.fStoredClassRecordProps.HasTypeFields then

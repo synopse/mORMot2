@@ -102,7 +102,7 @@ type
     // - with proper error interception and optional logging, returning nil
     class function WebSocketsConnect(const aHost, aPort: RawUtf8;
       aProtocol: TWebSocketProtocol; aLog: TSynLogClass = nil;
-      const aLogContext: RawUtf8 = ''; const aURI: RawUtf8 = '';
+      const aLogContext: RawUtf8 = ''; const aUri: RawUtf8 = '';
       const aCustomHeaders: RawUtf8 = ''): THttpClientWebSockets;
     /// common initialization of all constructors
     // - this overridden method will set the UserAgent with some default value
@@ -277,7 +277,7 @@ end;
 
 class function THttpClientWebSockets.WebSocketsConnect(
   const aHost, aPort: RawUtf8; aProtocol: TWebSocketProtocol; aLog: TSynLogClass;
-  const aLogContext, aURI, aCustomHeaders: RawUtf8): THttpClientWebSockets;
+  const aLogContext, aUri, aCustomHeaders: RawUtf8): THttpClientWebSockets;
 var
   error: RawUtf8;
 begin
@@ -287,7 +287,7 @@ begin
     raise EWebSockets.CreateUtf8('%.WebSocketsConnect(nil)', [self]);
   try
     result := Open(aHost, aPort); // constructor
-    error := result.WebSocketsUpgrade(aURI, '', false, false, aProtocol, aCustomHeaders);
+    error := result.WebSocketsUpgrade(aUri, '', false, false, aProtocol, aCustomHeaders);
     if error <> '' then
       FreeAndNil(result);
   except
@@ -387,11 +387,11 @@ begin
     if fProcess <> nil then
     begin
       result := 'Already upgraded to WebSockets';
-      if IdemPropNameU(fProcess.Protocol.URI, aWebSocketsURI) then
+      if IdemPropNameU(fProcess.Protocol.Uri, aWebSocketsURI) then
         result := result + ' on this URI'
       else
         result := FormatUtf8('% with URI=[%] but requested [%]',
-          [result, fProcess.Protocol.URI, aWebSocketsURI]);
+          [result, fProcess.Protocol.Uri, aWebSocketsURI]);
       exit;
     end;
     try

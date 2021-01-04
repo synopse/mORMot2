@@ -315,10 +315,10 @@ type
     // ! ...
     // ! fMainRunner := TMvcRunOnRestServer.Create(self,nil,'blog');
     // ! ...
-    // - if aURI='' is given, the corresponding host redirection will be disabled
+    // - if aUri='' is given, the corresponding host redirection will be disabled
     // - note: by design, 'something.localhost' is likely to be not recognized
     // as aDomain, since 'localhost' can not be part of proper DNS resolution
-    procedure DomainHostRedirect(const aDomain, aURI: RawUtf8);
+    procedure DomainHostRedirect(const aDomain, aUri: RawUtf8);
     /// allow to temporarly redirect ip:port root URI to a given sub-URI
     // - by default, only sub-URI, as defined by TRestServer.Model.Root, are
     // registered - you can define here a sub-URI to reach when the main server
@@ -592,7 +592,7 @@ begin
   end;
 end;
 
-procedure TRestHttpServer.DomainHostRedirect(const aDomain, aURI: RawUtf8);
+procedure TRestHttpServer.DomainHostRedirect(const aDomain, aUri: RawUtf8);
 var
   uri: TUri;
 begin
@@ -601,11 +601,11 @@ begin
     fLog.Add.Log(sllWarning, 'DomainHostRedirect(%) is very likely to be ' +
       'unresolved: consider using a real host name instead of the loopback',
       [aDomain], self);
-  if aURI = '' then
+  if aUri = '' then
     fHosts.Delete(aDomain)
   else
     // e.g. Add('project1.com','root1')
-    fHosts.Add(aDomain, aURI);
+    fHosts.Add(aDomain, aUri);
 end;
 
 constructor TRestHttpServer.Create(const aPort: RawUtf8;
@@ -856,12 +856,12 @@ const
 procedure TRestHttpServer.RootRedirectToUri(const aRedirectedUri: RawUtf8;
   aRegisterUri: boolean; aHttps: boolean);
 begin
-  if fRootRedirectToURI[aHttps] = aRedirectedUri then
+  if fRootRedirectToUri[aHttps] = aRedirectedUri then
     exit;
   fLog.Add.Log(sllHttp, 'Redirect http%://localhost:% to http%://localhost:%/%',
     [HTTPS_TEXT[aHttps], fPublicPort, HTTPS_TEXT[aHttps], fPublicPort,
      aRedirectedUri], self);
-  fRootRedirectToURI[aHttps] := aRedirectedUri;
+  fRootRedirectToUri[aHttps] := aRedirectedUri;
   if aRedirectedUri <> '' then
     HttpApiAddUri('/', '+', HTTPS_SECURITY[aHttps], aRegisterUri, true);
 end;
@@ -918,9 +918,9 @@ begin
   else if ((Ctxt.URL = '') or
            (Ctxt.URL = '/')) and
           (Ctxt.Method = 'GET') then
-    if fRootRedirectToURI[Ctxt.UseSSL] <> '' then
+    if fRootRedirectToUri[Ctxt.UseSSL] <> '' then
     begin
-      Ctxt.OutCustomHeaders := 'Location: ' + fRootRedirectToURI[Ctxt.UseSSL];
+      Ctxt.OutCustomHeaders := 'Location: ' + fRootRedirectToUri[Ctxt.UseSSL];
       result := HTTP_TEMPORARYREDIRECT;
     end
     else

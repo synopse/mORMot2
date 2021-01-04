@@ -634,7 +634,7 @@ type
     function AddServiceInternal(aService: TServiceFactory): integer;
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
     /// retrieve a service provider from its URI
-    function GetService(const aURI: RawUtf8): TServiceFactory;
+    function GetService(const aUri: RawUtf8): TServiceFactory;
   public
     /// initialize the Services list
     // - supplied TInterfaceResolver should be able to resolve IRestOrm,
@@ -693,7 +693,7 @@ type
     // or 'Calculator', depending on the ExpectMangledUri property
     // - on match, it  will return the service the corresponding interface factory
     // - returns nil if the URI does not match any registered interface
-    property Services[const aURI: RawUtf8]: TServiceFactory
+    property Services[const aUri: RawUtf8]: TServiceFactory
       read GetService; default;
     /// direct access to the internal list of interfdce services ['Calculator',...]
     property InterfaceList: TServiceContainerInterfaces
@@ -1325,7 +1325,7 @@ var
   end;
 
 var
-  aURI: RawUtf8;
+  aUri: RawUtf8;
   internal: TServiceInternalMethod;
   m: PtrInt;
 begin
@@ -1335,18 +1335,18 @@ begin
       '%.AddServiceInternal(%)', [self, aService]);
   // add TServiceFactory to the internal list
   if ExpectMangledUri then
-    aURI := aService.fInterfaceMangledUri
+    aUri := aService.fInterfaceMangledUri
   else
-    aURI := aService.fInterfaceUri;
-  PServiceContainerInterface(fInterfaces.AddUniqueName(aURI, @result))^.
+    aUri := aService.fInterfaceUri;
+  PServiceContainerInterface(fInterfaces.AddUniqueName(aUri, @result))^.
     Service := aService;
   // add associated methods - first SERVICE_PSEUDO_METHOD[], then from interface
-  aURI := aURI + '.';
+  aUri := aUri + '.';
   MethodIndex := 0;
   for internal := Low(TServiceInternalMethod) to High(TServiceInternalMethod) do
-    AddOne(aURI + SERVICE_PSEUDO_METHOD[internal]);
+    AddOne(aUri + SERVICE_PSEUDO_METHOD[internal]);
   for m := 0 to aService.fInterface.MethodsCount - 1 do
-    AddOne(aURI + aService.fInterface.Methods[m].URI);
+    AddOne(aUri + aService.fInterface.Methods[m].Uri);
 end;
 
 procedure TServiceContainer.CheckInterface(const aInterfaces: array of PRttiInfo);
@@ -1408,7 +1408,7 @@ begin
         with fInterfaceMethod[i] do // O(n) search is fast enough here
           if (InterfaceMethodIndex >= SERVICE_PSEUDO_METHOD_COUNT) and
              IdemPropNameU(method, InterfaceService.fInterface.Methods[
-              InterfaceMethodIndex - SERVICE_PSEUDO_METHOD_COUNT].URI) then
+              InterfaceMethodIndex - SERVICE_PSEUDO_METHOD_COUNT].Uri) then
             include(bits, i);
     end
     else
@@ -1429,14 +1429,14 @@ begin
       result := InterfaceService.fInterface.GetMethodName(InterfaceMethodIndex);
 end;
 
-function TServiceContainer.GetService(const aURI: RawUtf8): TServiceFactory;
+function TServiceContainer.GetService(const aUri: RawUtf8): TServiceFactory;
 var
   i: PtrInt;
 begin
   if (self <> nil) and
-     (aURI <> '') then
+     (aUri <> '') then
   begin
-    i := fInterfaces.FindHashed(aURI);
+    i := fInterfaces.FindHashed(aUri);
     if i >= 0 then
       result := fInterface[i].Service
     else

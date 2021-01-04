@@ -172,12 +172,12 @@ function IsValidUtf8(const source: RawUtf8): boolean; overload;
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding with no #1..#31
 // control characters
 // - supplied input is a pointer to a #0 ended text buffer
-function IsValidUTF8WithoutControlChars(source: PUtf8Char): boolean; overload;
+function IsValidUtf8WithoutControlChars(source: PUtf8Char): boolean; overload;
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding with no #0..#31
 // control characters
 // - supplied input is a RawUtf8 variable
-function IsValidUTF8WithoutControlChars(const source: RawUtf8): boolean; overload;
+function IsValidUtf8WithoutControlChars(const source: RawUtf8): boolean; overload;
 
 /// will truncate the supplied UTF-8 value if its length exceeds the specified
 // UTF-16 Unicode characters count
@@ -402,7 +402,7 @@ type
   /// a class to handle UTF-8 to/from Unicode translation
   // - match the TSynAnsiConvert signature, for code page CP_UTF8
   // - this class is mostly a non-operation for conversion to/from UTF-8
-  TSynAnsiUTF8 = class(TSynAnsiConvert)
+  TSynAnsiUtf8 = class(TSynAnsiConvert)
   protected
     function UnicodeBufferToUtf8(Dest: PAnsiChar; DestChars: cardinal;
       Source: PWideChar; SourceChars: cardinal): PAnsiChar;
@@ -504,7 +504,7 @@ var
 
   /// global TSynAnsiConvert instance to handle UTF-8 encoding (code page CP_UTF8)
   // - this instance is global and instantied during the whole program life time
-  Utf8AnsiConvert: TSynAnsiUTF8;
+  Utf8AnsiConvert: TSynAnsiUtf8;
 
 
 
@@ -934,7 +934,7 @@ type
     tcWord,
     tcIdentifierFirstChar,
     tcIdentifier,
-    tcURIUnreserved);
+    tcUriUnreserved);
 
   /// defines an AnsiChar lookup table used for branch-less text parsing
   TTextCharSet = array[AnsiChar] of TTextChar;
@@ -1149,13 +1149,13 @@ function StrIComp(Str1, Str2: pointer): PtrInt;
 // - will return '?' if the Ucs4 value is higher than #255: so use this function
 // only if you need to deal with ASCII characters (e.g. it's used for Soundex
 // and for ContainsUTF8 function)
-function GetNextUTF8Upper(var U: PUtf8Char): PtrUInt;
+function GetNextUtf8Upper(var U: PUtf8Char): PtrUInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// points to the beginning of the next word stored in U
 // - returns nil if reached the end of U (i.e. #0 char)
 // - here a "word" is a Win-Ansi word, i.e. '0'..'9', 'A'..'Z'
-function FindNextUTF8WordBegin(U: PUtf8Char): PUtf8Char;
+function FindNextUtf8WordBegin(U: PUtf8Char): PUtf8Char;
 
 /// return true if UpperValue (Ansi) is contained in A^ (Ansi)
 // - find UpperValue starting at word beginning, not inside words
@@ -1992,7 +1992,7 @@ begin
   result := true;
 end;
 
-function IsValidUTF8WithoutControlChars(source: PUtf8Char): boolean;
+function IsValidUtf8WithoutControlChars(source: PUtf8Char): boolean;
 var
   extra, i: integer;
   c: cardinal;
@@ -2024,7 +2024,7 @@ begin
   result := true;
 end;
 
-function IsValidUTF8WithoutControlChars(const source: RawUtf8): boolean;
+function IsValidUtf8WithoutControlChars(const source: RawUtf8): boolean;
 var
   s, extra, i, len: integer;
   c: cardinal;
@@ -2418,7 +2418,7 @@ begin
     if result <> nil then
       exit;
     if aCodePage = CP_UTF8 then
-      result := TSynAnsiUTF8.Create(CP_UTF8)
+      result := TSynAnsiUtf8.Create(CP_UTF8)
     else if aCodePage = CP_UTF16 then
       result := TSynAnsiUTF16.Create(CP_UTF16)
     else if IsFixedWidthCodePage(aCodePage) then
@@ -3051,16 +3051,16 @@ begin
 end;
 
 
-{ TSynAnsiUTF8 }
+{ TSynAnsiUtf8 }
 
-function TSynAnsiUTF8.AnsiBufferToUnicode(Dest: PWideChar;
+function TSynAnsiUtf8.AnsiBufferToUnicode(Dest: PWideChar;
   Source: PAnsiChar; SourceChars: cardinal; NoTrailingZero: boolean): PWideChar;
 begin
   result := Dest + (Utf8ToWideChar(Dest,
     PUtf8Char(Source), SourceChars, NoTrailingZero) shr 1);
 end;
 
-function TSynAnsiUTF8.AnsiBufferToUtf8(Dest: PUtf8Char;
+function TSynAnsiUtf8.AnsiBufferToUtf8(Dest: PUtf8Char;
   Source: PAnsiChar; SourceChars: cardinal; NoTrailingZero: boolean): PUtf8Char;
 begin
   MoveFast(Source^, Dest^, SourceChars);
@@ -3069,33 +3069,33 @@ begin
   result := Dest + SourceChars;
 end;
 
-function TSynAnsiUTF8.AnsiToRawUnicode(Source: PAnsiChar;
+function TSynAnsiUtf8.AnsiToRawUnicode(Source: PAnsiChar;
   SourceChars: cardinal): RawUnicode;
 begin
   result := Utf8DecodeToRawUniCode(PUtf8Char(Source), SourceChars);
 end;
 
-constructor TSynAnsiUTF8.Create(aCodePage: cardinal);
+constructor TSynAnsiUtf8.Create(aCodePage: cardinal);
 begin
   if aCodePage <> CP_UTF8 then
     raise ESynUnicode.CreateFmt('%s.Create(%d)', [ClassNameShort(self)^, aCodePage]);
   inherited Create(aCodePage);
 end;
 
-function TSynAnsiUTF8.UnicodeBufferToUtf8(Dest: PAnsiChar;
+function TSynAnsiUtf8.UnicodeBufferToUtf8(Dest: PAnsiChar;
   DestChars: cardinal; Source: PWideChar; SourceChars: cardinal): PAnsiChar;
 begin
   result := Dest + RawUnicodeToUtf8(PUtf8Char(Dest), DestChars,
     Source, SourceChars, [ccfNoTrailingZero]);
 end;
 
-function TSynAnsiUTF8.UnicodeBufferToAnsi(Dest: PAnsiChar;
+function TSynAnsiUtf8.UnicodeBufferToAnsi(Dest: PAnsiChar;
   Source: PWideChar; SourceChars: cardinal): PAnsiChar;
 begin
   result := UnicodeBufferToUtf8(Dest, SourceChars, Source, SourceChars);
 end;
 
-function TSynAnsiUTF8.UnicodeBufferToAnsi(Source: PWideChar;
+function TSynAnsiUtf8.UnicodeBufferToAnsi(Source: PWideChar;
   SourceChars: cardinal): RawByteString;
 var
   tmp: TSynTempBuffer;
@@ -3112,20 +3112,20 @@ begin
   end;
 end;
 
-function TSynAnsiUTF8.Utf8BufferToAnsi(Dest: PAnsiChar;
+function TSynAnsiUtf8.Utf8BufferToAnsi(Dest: PAnsiChar;
   Source: PUtf8Char; SourceChars: cardinal): PAnsiChar;
 begin
   MoveFast(Source^, Dest^, SourceChars);
   result := Dest + SourceChars;
 end;
 
-procedure TSynAnsiUTF8.Utf8BufferToAnsi(Source: PUtf8Char; SourceChars: cardinal;
+procedure TSynAnsiUtf8.Utf8BufferToAnsi(Source: PUtf8Char; SourceChars: cardinal;
   var result: RawByteString);
 begin
   FastSetString(RawUtf8(result), Source, SourceChars);
 end;
 
-function TSynAnsiUTF8.Utf8ToAnsi(const u: RawUtf8): RawByteString;
+function TSynAnsiUtf8.Utf8ToAnsi(const u: RawUtf8): RawByteString;
 begin
   result := u;
   {$ifdef HASCODEPAGE}
@@ -3133,7 +3133,7 @@ begin
   {$endif HASCODEPAGE}
 end;
 
-function TSynAnsiUTF8.AnsiToUtf8(const AnsiText: RawByteString): RawUtf8;
+function TSynAnsiUtf8.AnsiToUtf8(const AnsiText: RawByteString): RawUtf8;
 begin
   result := AnsiText;
   {$ifdef HASCODEPAGE}
@@ -3141,7 +3141,7 @@ begin
   {$endif HASCODEPAGE}
 end;
 
-function TSynAnsiUTF8.AnsiBufferToRawUtf8(Source: PAnsiChar;
+function TSynAnsiUtf8.AnsiBufferToRawUtf8(Source: PAnsiChar;
   SourceChars: cardinal): RawUtf8;
 begin
   FastSetString(result, Source, SourceChars);
@@ -4075,7 +4075,7 @@ begin
     exit;
   while up^ <> #0 do
   begin
-    if GetNextUTF8Upper(p) <> ord(up^) then
+    if GetNextUtf8Upper(p) <> ord(up^) then
       exit;
     inc(up);
   end;
@@ -4300,7 +4300,7 @@ begin
   begin
     p := pointer(str);
     repeat
-      if GetNextUTF8Upper(p) = ord(substr^) then
+      if GetNextUtf8Upper(p) = ord(substr^) then
         if IdemPCharU(p, substr + 1) then
         begin
           result := p - pointer(str);
@@ -4559,20 +4559,20 @@ begin
     repeat
       u := pointer(up);
       repeat
-        if GetNextUTF8Upper(p) <> u^ then
+        if GetNextUtf8Upper(p) <> u^ then
           break
         else
           inc(u);
         if u^ = 0 then
           exit; // up^ was found inside p^
       until false;
-      p := FindNextUTF8WordBegin(p);
+      p := FindNextUtf8WordBegin(p);
     until p = nil;
   end;
   result := false;
 end;
 
-function GetNextUTF8Upper(var U: PUtf8Char): PtrUInt;
+function GetNextUtf8Upper(var U: PUtf8Char): PtrUInt;
 begin
   result := ord(U^);
   if result = 0 then
@@ -4589,21 +4589,21 @@ begin
     result := NormToUpperByte[result];
 end;
 
-function FindNextUTF8WordBegin(U: PUtf8Char): PUtf8Char;
+function FindNextUtf8WordBegin(U: PUtf8Char): PUtf8Char;
 var
   c: cardinal;
   V: PUtf8Char;
 begin
   result := nil;
   repeat
-    c := GetNextUTF8Upper(U);
+    c := GetNextUtf8Upper(U);
     if c = 0 then
       exit;
   until (c >= 127) or
         not (tcWord in TEXT_BYTES[c]); // not ['0'..'9', 'a'..'z', 'A'..'Z']
   repeat
     V := U;
-    c := GetNextUTF8Upper(U);
+    c := GetNextUtf8Upper(U);
     if c = 0 then
       exit;
   until (c < 127) and
@@ -5154,7 +5154,7 @@ begin
       inc(UpperValue);
     until false;
 Next: // find beginning of next word
-    U := FindNextUTF8WordBegin(U);
+    U := FindNextUtf8WordBegin(U);
   until U = nil;
 end;
 
@@ -5576,7 +5576,7 @@ begin
     if c in ['_', '-', '.', '0'..'9', 'a'..'z', 'A'..'Z'] then
       // '~' is part of the RFC 3986 but should be escaped in practice
       // see https://blog.synopse.info/?post/2020/08/11/The-RFC%2C-The-URI%2C-and-The-Tilde
-      include(TEXT_CHARS[c], tcURIUnreserved);
+      include(TEXT_CHARS[c], tcUriUnreserved);
     if c in [#1..#9, #11, #12, #14..' '] then
       include(TEXT_CHARS[c], tcCtrlNotLF);
     if c in [#1..' ', ';'] then
@@ -5585,7 +5585,7 @@ begin
   // setup basic Unicode conversion engines
   CurrentAnsiConvert := TSynAnsiConvert.Engine(Unicode_CodePage);
   WinAnsiConvert := TSynAnsiConvert.Engine(CODEPAGE_US) as TSynAnsiFixedWidth;
-  Utf8AnsiConvert := TSynAnsiConvert.Engine(CP_UTF8) as TSynAnsiUTF8;
+  Utf8AnsiConvert := TSynAnsiConvert.Engine(CP_UTF8) as TSynAnsiUtf8;
 end;
 
 procedure FinalizeUnit;

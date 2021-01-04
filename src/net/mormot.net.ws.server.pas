@@ -64,7 +64,7 @@ type
       var request: TWebSocketFrame; const info: RawUtf8); override;
   public
     /// initialize the chat protocol with an incoming frame callback
-    constructor Create(const aName, aURI: RawUtf8;
+    constructor Create(const aName, aUri: RawUtf8;
        const aOnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame); overload;
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
@@ -256,10 +256,10 @@ implementation
 
 { TWebSocketProtocolChat }
 
-constructor TWebSocketProtocolChat.Create(const aName, aURI: RawUtf8;
+constructor TWebSocketProtocolChat.Create(const aName, aUri: RawUtf8;
   const aOnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame);
 begin
-  inherited Create(aName, aURI);
+  inherited Create(aName, aUri);
   fOnIncomingFrame := aOnIncomingFrame;
 end;
 
@@ -367,7 +367,7 @@ begin
       until (P = nil) or
             (Protocol <> nil);
       if (Protocol <> nil) and
-         (Protocol.URI = '') and
+         (Protocol.Uri = '') and
          not Protocol.ProcessHandshakeUri(uri) then
       begin
         Protocol.Free;

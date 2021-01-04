@@ -694,7 +694,7 @@ type
     // - recognize e.g. 'http://Server:Port/Address', 'https://Server/Address',
     // 'Server/Address' (as http), or 'http://unix:/Server:/Address'
     // - returns TRUE is at least the Server has been extracted, FALSE on error
-    function From(aURI: RawUtf8; const DefaultPort: RawUtf8 = ''): boolean;
+    function From(aUri: RawUtf8; const DefaultPort: RawUtf8 = ''): boolean;
     /// compute the whole normalized URI
     // - e.g. 'https://Server:Port/Address' or 'http://unix:/Server:/Address'
     function URI: RawUtf8;
@@ -2397,16 +2397,16 @@ begin
   Finalize(self);
 end;
 
-function TUri.From(aURI: RawUtf8; const DefaultPort: RawUtf8): boolean;
+function TUri.From(aUri: RawUtf8; const DefaultPort: RawUtf8): boolean;
 var
   P, S: PAnsiChar;
 begin
   Clear;
   result := false;
-  aURI := TrimU(aURI);
-  if aURI = '' then
+  aUri := TrimU(aUri);
+  if aUri = '' then
     exit;
-  P := pointer(aURI);
+  P := pointer(aUri);
   S := P;
   while S^ in ['a'..'z', 'A'..'Z', '+', '-', '.', '0'..'9'] do
     inc(S);
@@ -2450,7 +2450,7 @@ begin
     result := true;
 end;
 
-function TUri.URI: RawUtf8;
+function TUri.Uri: RawUtf8;
 const
   Prefix: array[boolean] of RawUtf8 = (
     'http://', 'https://');

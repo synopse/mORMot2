@@ -204,9 +204,9 @@ type
     /// abstract constructor to initialize the protocol
     // - the protocol should be named, so that the client may be able to request
     // for a given protocol
-    // - if aURI is '', any URI would potentially upgrade to this protocol; you can
+    // - if aUri is '', any URI would potentially upgrade to this protocol; you can
     // specify an URI to limit the protocol upgrade to a single resource
-    constructor Create(const aName, aURI: RawUtf8); reintroduce;
+    constructor Create(const aName, aUri: RawUtf8); reintroduce;
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; virtual; abstract;
     /// returns Name by default, but could be e.g. 'synopsebin, synopsebinary'
@@ -325,9 +325,9 @@ type
     function FrameType(const frame: TWebSocketFrame): RawUtf8; override;
   public
     /// initialize the WebSockets JSON protocol
-    // - if aURI is '', any URI would potentially upgrade to this protocol; you can
+    // - if aUri is '', any URI would potentially upgrade to this protocol; you can
     // specify an URI to limit the protocol upgrade to a single resource
-    constructor Create(const aURI: RawUtf8); reintroduce;
+    constructor Create(const aUri: RawUtf8); reintroduce;
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
   end;
@@ -365,27 +365,27 @@ type
     function GetFramesOutCompression: integer;
   public
     /// initialize the WebSockets binary protocol with no encryption
-    // - if aURI is '', any URI would potentially upgrade to this protocol; you
+    // - if aUri is '', any URI would potentially upgrade to this protocol; you
     // can specify an URI to limit the protocol upgrade to a single resource
     // - SynLZ compression is enabled by default, unless aCompressed is false
-    constructor Create(const aURI: RawUtf8; aCompressed: boolean = true);
+    constructor Create(const aUri: RawUtf8; aCompressed: boolean = true);
       reintroduce; overload; virtual;
     /// initialize the WebSockets binary protocol with a symmetric AES key
-    // - if aURI is '', any URI would potentially upgrade to this protocol; you
+    // - if aUri is '', any URI would potentially upgrade to this protocol; you
     // can specify an URI to limit the protocol upgrade to a single resource
     // - if aKeySize if 128, 192 or 256, TProtocolAes (i.e. AES-CFB encryption)
     //  will be used to secure the transmission
     // - SynLZ compression is enabled by default, unless aCompressed is false
-    constructor Create(const aURI: RawUtf8; const aKey; aKeySize: cardinal;
+    constructor Create(const aUri: RawUtf8; const aKey; aKeySize: cardinal;
       aCompressed: boolean = true); reintroduce; overload;
     /// initialize the WebSockets binary protocol from a textual key
-    // - if aURI is '', any URI would potentially upgrade to this protocol; you
+    // - if aUri is '', any URI would potentially upgrade to this protocol; you
     // can specify an URI to limit the protocol upgrade to a single resource
     // - will create a TProtocolAes or TEcdheProtocol instance, corresponding to
     // the supplied aKey and aServer values, to secure the transmission using
     // a symmetric or assymetric algorithm
     // - SynLZ compression is enabled by default, unless aCompressed is false
-    constructor Create(const aURI: RawUtf8; aServer: boolean;
+    constructor Create(const aUri: RawUtf8; aServer: boolean;
       const aKey: RawUtf8; aCompressed: boolean = true); reintroduce; overload;
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
@@ -417,7 +417,7 @@ type
   protected
     fProtocols: array of TWebSocketProtocol;
     // caller should make fSafe.Lock/UnLock
-    function FindIndex(const aName, aURI: RawUtf8): integer;
+    function FindIndex(const aName, aUri: RawUtf8): integer;
   public
     /// add a protocol to the internal list
     // - returns TRUE on success
@@ -431,7 +431,7 @@ type
     // if the protocol has been replaced or is invalid (e.g. aProtocol=nil)
     function AddOnce(aProtocol: TWebSocketProtocol): boolean;
     /// erase a protocol from the internal list, specified by its name
-    function Remove(const aProtocolName, aURI: RawUtf8): boolean;
+    function Remove(const aProtocolName, aUri: RawUtf8): boolean;
     /// finalize the list storage
     destructor Destroy; override;
     /// create a new protocol instance, from the internal list
@@ -793,10 +793,10 @@ end;
 
 { TWebSocketProtocol }
 
-constructor TWebSocketProtocol.Create(const aName, aURI: RawUtf8);
+constructor TWebSocketProtocol.Create(const aName, aUri: RawUtf8);
 begin
   fName := aName;
-  fUri := aURI;
+  fUri := aUri;
 end;
 
 procedure TWebSocketProtocol.SetEncryptKey(aServer: boolean; const aKey: RawUtf8);
@@ -1187,9 +1187,9 @@ end;
 
 { TWebSocketProtocolJson }
 
-constructor TWebSocketProtocolJson.Create(const aURI: RawUtf8);
+constructor TWebSocketProtocolJson.Create(const aUri: RawUtf8);
 begin
-  inherited Create('synopsejson', aURI);
+  inherited Create('synopsejson', aUri);
 end;
 
 function TWebSocketProtocolJson.Clone(const aClientUri: RawUtf8): TWebSocketProtocol;
@@ -1333,23 +1333,23 @@ end;
 
 { TWebSocketProtocolBinary }
 
-constructor TWebSocketProtocolBinary.Create(const aURI: RawUtf8; aCompressed: boolean);
+constructor TWebSocketProtocolBinary.Create(const aUri: RawUtf8; aCompressed: boolean);
 begin
-  inherited Create('synopsebin', aURI);
+  inherited Create('synopsebin', aUri);
   fCompressed := aCompressed;
 end;
 
-constructor TWebSocketProtocolBinary.Create(const aURI: RawUtf8;
+constructor TWebSocketProtocolBinary.Create(const aUri: RawUtf8;
   const aKey; aKeySize: cardinal; aCompressed: boolean);
 begin
-  Create(aURI, aCompressed);
+  Create(aUri, aCompressed);
   SetEncryptKeyAes(aKey, aKeySize);
 end;
 
-constructor TWebSocketProtocolBinary.Create(const aURI: RawUtf8; aServer:
+constructor TWebSocketProtocolBinary.Create(const aUri: RawUtf8; aServer:
   boolean; const aKey: RawUtf8; aCompressed: boolean);
 begin
-  Create(aURI, aCompressed);
+  Create(aUri, aCompressed);
   SetEncryptKey(aServer, aKey);
 end;
 
@@ -1704,14 +1704,14 @@ begin
   inherited;
 end;
 
-function TWebSocketProtocolList.FindIndex(const aName, aURI: RawUtf8): integer;
+function TWebSocketProtocolList.FindIndex(const aName, aUri: RawUtf8): integer;
 begin
   if aName <> '' then
     for result := 0 to high(fProtocols) do
       with fProtocols[result] do
         if IdemPropNameU(fName, aName) and
            ((fUri = '') or
-            IdemPropNameU(fUri, aURI)) then
+            IdemPropNameU(fUri, aUri)) then
           exit;
   result := -1;
 end;
@@ -1725,7 +1725,7 @@ begin
     exit;
   fSafe.Lock;
   try
-    i := FindIndex(aProtocol.Name, aProtocol.URI);
+    i := FindIndex(aProtocol.Name, aProtocol.Uri);
     if i < 0 then
     begin
       ObjArrayAdd(fProtocols, aProtocol);
@@ -1745,7 +1745,7 @@ begin
     exit;
   fSafe.Lock;
   try
-    i := FindIndex(aProtocol.Name, aProtocol.URI);
+    i := FindIndex(aProtocol.Name, aProtocol.Uri);
     if i < 0 then
     begin
       ObjArrayAdd(fProtocols, aProtocol);
@@ -1761,13 +1761,13 @@ begin
   end;
 end;
 
-function TWebSocketProtocolList.Remove(const aProtocolName, aURI: RawUtf8): boolean;
+function TWebSocketProtocolList.Remove(const aProtocolName, aUri: RawUtf8): boolean;
 var
   i: integer;
 begin
   fSafe.Lock;
   try
-    i := FindIndex(aProtocolName, aURI);
+    i := FindIndex(aProtocolName, aUri);
     if i >= 0 then
     begin
       ObjArrayDelete(fProtocols, i);

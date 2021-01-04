@@ -1621,9 +1621,9 @@ type
     pctRecordReferenceToBeDeleted,
     pctRecordVersion);
 
-  PRTTIParserType = ^TRttiParserType;
+  PRttiParserType = ^TRttiParserType;
   TRttiParserTypes = set of TRttiParserType;
-  PRTTIParserComplexType = ^TRttiParserComplexType;
+  PRttiParserComplexType = ^TRttiParserComplexType;
 
 const
   /// map a PtrInt type to the TRttiParserType set
@@ -1705,13 +1705,13 @@ function ParserTypeToTypeInfo(pt: TRttiParserType;
 // - will return ptNone for any unknown type
 // - for ptORM and ptTimeLog, optional Complex will contain the specific type found
 function TypeNameToStandardParserType(Name: PUtf8Char; NameLen: integer;
-  Complex: PRTTIParserComplexType = nil): TRttiParserType; overload;
+  Complex: PRttiParserComplexType = nil): TRttiParserType; overload;
 
 /// recognize a simple value type from a supplied type name
 // - from known ('byte', 'string', 'RawUtf8', 'TGUID'...) type names
 // - will return ptNone for any unknown type
 function TypeNameToStandardParserType(Name: PShortString;
-  Complex: PRTTIParserComplexType = nil): TRttiParserType; overload;
+  Complex: PRttiParserComplexType = nil): TRttiParserType; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// recognize a simple value type from a supplied type name
@@ -1719,20 +1719,20 @@ function TypeNameToStandardParserType(Name: PShortString;
 // calling Rtti.Find() if CheckRttiCustomTypes=true
 // - will return ptNone for any unknown type
 function TypeNameToStandardParserType(const Name: RawUtf8;
-  Complex: PRTTIParserComplexType = nil): TRttiParserType; overload;
+  Complex: PRttiParserComplexType = nil): TRttiParserType; overload;
 
 /// recognize a simple value type from a supplied type information
 // - if FirstSearchByName=true, call TypeNameToStandardParserType(Info^.Name^)
 // - will return ptNone for any unknown type
 function TypeInfoToStandardParserType(Info: PRttiInfo;
   FirstSearchByName: boolean = true;
-  Complex: PRTTIParserComplexType = nil): TRttiParserType; overload;
+  Complex: PRttiParserComplexType = nil): TRttiParserType; overload;
 
 /// recognize a simple value type from a dynamic array RTTI
 // - if ExactType=false, will approximate the first field
 function DynArrayTypeInfoToStandardParserType(
   DynArrayInfo, ElemInfo: PRttiInfo; ElemSize: integer; ExactType: boolean;
-  out FieldSize: integer; Complex: PRTTIParserComplexType = nil): TRttiParserType;
+  out FieldSize: integer; Complex: PRttiParserComplexType = nil): TRttiParserType;
 
 /// trim ending 'DynArray' or 's' chars from a dynamic array type name
 // - used internally to guess the associated item type name
@@ -2194,13 +2194,13 @@ type
     // - returns a new (or existing if it was already registered) TRttiCustom if
     // the supplied name matches a known type - returns nil if nothing was found
     function RegisterTypeFromName(Name: PUtf8Char; NameLen: PtrInt;
-      ParserType: PRTTIParserType = nil): TRttiCustom; overload;
+      ParserType: PRttiParserType = nil): TRttiCustom; overload;
     /// recognize (and register if needed) a standard simple type
     // - calls TypeNameToStandardParserType() to check for known type names
     // - returns a new (or existing if it was already registered) TRttiCustom if
     // the supplied name matches a known type - returns nil if nothing was found
     function RegisterTypeFromName(const Name: RawUtf8;
-      ParserType: PRTTIParserType = nil): TRttiCustom; overload;
+      ParserType: PRttiParserType = nil): TRttiCustom; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// register a given class type, using its RTTI
     // - returns existing or new TRttiCustom
@@ -3915,7 +3915,7 @@ begin
       else
       begin
         P := pointer(Value);
-        v := NextUTF8Ucs4(P);
+        v := NextUtf8Ucs4(P);
       end;
       SetOrdProp(Instance, v);
     end;
@@ -5275,7 +5275,7 @@ begin
 end;
 
 function TypeNameToStandardParserType(Name: PUtf8Char; NameLen: integer;
-  Complex: PRTTIParserComplexType): TRttiParserType;
+  Complex: PRttiParserComplexType): TRttiParserType;
 const
   SORTEDMAX = 43;
   // fast branchless O(log(N)) binary search on x86_64
@@ -5339,19 +5339,19 @@ begin
 end;
 
 function TypeNameToStandardParserType(Name: PShortString;
-  Complex: PRTTIParserComplexType): TRttiParserType;
+  Complex: PRttiParserComplexType): TRttiParserType;
 begin
   result := TypeNameToStandardParserType(@Name^[1], ord(Name^[0]), Complex);
 end;
 
 function TypeNameToStandardParserType(const Name: RawUtf8;
-  Complex: PRTTIParserComplexType): TRttiParserType;
+  Complex: PRttiParserComplexType): TRttiParserType;
 begin
   result := TypeNameToStandardParserType(pointer(Name), length(Name), Complex);
 end;
 
 function TypeInfoToStandardParserType(Info: PRttiInfo; FirstSearchByName: boolean;
-  Complex: PRTTIParserComplexType): TRttiParserType;
+  Complex: PRttiParserComplexType): TRttiParserType;
 var
   cp: integer;
 begin
@@ -5492,7 +5492,7 @@ end;
 
 function DynArrayTypeInfoToStandardParserType(DynArrayInfo, ElemInfo: PRttiInfo;
   ElemSize: integer; ExactType: boolean; out FieldSize: integer;
-  Complex: PRTTIParserComplexType): TRttiParserType;
+  Complex: PRttiParserComplexType): TRttiParserType;
 // warning: we can't use TRttiInfo.RecordAllFields since it would break
 // backward compatibility and code expectations
 var
@@ -7051,7 +7051,7 @@ begin
 end;
 
 function TRttiCustomList.RegisterTypeFromName(Name: PUtf8Char;
-  NameLen: PtrInt; ParserType: PRTTIParserType): TRttiCustom;
+  NameLen: PtrInt; ParserType: PRttiParserType): TRttiCustom;
 var
   pt: TRttiParserType;
   pct: TRttiParserComplexType;
@@ -7073,7 +7073,7 @@ begin
 end;
 
 function TRttiCustomList.RegisterTypeFromName(const Name: RawUtf8;
-  ParserType: PRTTIParserType): TRttiCustom;
+  ParserType: PRttiParserType): TRttiCustom;
 begin
   result := RegisterTypeFromName(pointer(Name), length(Name), ParserType);
 end;

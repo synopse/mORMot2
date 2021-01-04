@@ -246,12 +246,12 @@ type
     // - if ExpectResults is TRUE, then Step() and Column*() methods are available
     // to retrieve the data rows
     // - raise an ESqlDBOracle on any error
-    // - if aSQL requires a trailing ';', you should end it with ';;' e.g. for
+    // - if aSql requires a trailing ';', you should end it with ';;' e.g. for
     // $ DB.ExecuteNoResult(
     // $  'CREATE OR REPLACE FUNCTION ORA_POC(MAIN_TABLE IN VARCHAR2, REC_COUNT IN NUMBER, BATCH_SIZE IN NUMBER) RETURN VARCHAR2' +
     // $  ' AS LANGUAGE JAVA' +
     // $  ' NAME ''OraMain.selectTable(java.lang.String, int, int) return java.lang.String'';;', []);
-    procedure Prepare(const aSQL: RawUtf8; ExpectResults: boolean = false); overload; override;
+    procedure Prepare(const aSql: RawUtf8; ExpectResults: boolean = false); overload; override;
     /// Execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
     // - raise an ESqlDBOracle on any error
@@ -2181,7 +2181,7 @@ begin
   end;
 end;
 
-procedure TSqlDBOracleStatement.Prepare(const aSQL: RawUtf8; ExpectResults: boolean);
+procedure TSqlDBOracleStatement.Prepare(const aSql: RawUtf8; ExpectResults: boolean);
 var
   env: POCIEnv;
   L: PtrInt;
@@ -2194,20 +2194,20 @@ begin
         raise ESqlDBOracle.CreateUtf8(
           '%.Prepare should be called only once', [self]);
       // 1. process SQL
-      inherited Prepare(aSQL, ExpectResults); // set fSQL + Connect if necessary
-      fPreparedParamsCount := ReplaceParamsByNumbers(aSQL, fSQLPrepared, ':', true);
-      L := Length(fSQLPrepared);
+      inherited Prepare(aSql, ExpectResults); // set fSql + Connect if necessary
+      fPreparedParamsCount := ReplaceParamsByNumbers(aSql, fSqlPrepared, ':', true);
+      L := Length(fSqlPrepared);
       while (L > 0) and
-            (fSQLPrepared[L] <= ' ') do // trim right
+            (fSqlPrepared[L] <= ' ') do // trim right
         dec(L);
       // allow one trailing ';' by writing ';;' or allows 'END;' at the end of a statement
       if (L > 5) and
-         (fSQLPrepared[L] = ';') and
-         not (IdemPChar(@fSQLPrepared[L - 3], 'END') and
-              (fSQLPrepared[L - 4] <= 'A')) then
+         (fSqlPrepared[L] = ';') and
+         not (IdemPChar(@fSqlPrepared[L - 3], 'END') and
+              (fSqlPrepared[L - 4] <= 'A')) then
         dec(L);
-      if L <> Length(fSQLPrepared) then
-        SetLength(fSQLPrepared, L); // trim trailing spaces or ';' if needed
+      if L <> Length(fSqlPrepared) then
+        SetLength(fSqlPrepared, L); // trim trailing spaces or ';' if needed
       // 2. prepare statement
       env := (Connection as TSqlDBOracleConnection).fEnv;
       with OCI do
@@ -2216,19 +2216,19 @@ begin
         if fUseServerSideStatementCache then
         begin
           if StmtPrepare2(TSqlDBOracleConnection(Connection).fContext,
-             fStatement, fError, pointer(fSQLPrepared), length(fSQLPrepared), nil,
+             fStatement, fError, pointer(fSqlPrepared), length(fSqlPrepared), nil,
              0, OCI_NTV_SYNTAX, OCI_PREP2_CACHE_SEARCHONLY) = OCI_SUCCESS then
             fCacheIndex := 1
           else
             Check(nil, self, StmtPrepare2(TSqlDBOracleConnection(Connection).fContext,
-              fStatement, fError, pointer(fSQLPrepared), length(fSQLPrepared),
+              fStatement, fError, pointer(fSqlPrepared), length(fSqlPrepared),
               nil, 0, OCI_NTV_SYNTAX, OCI_DEFAULT), fError);
         end
         else
         begin
           HandleAlloc(env, fStatement, OCI_HTYPE_STMT);
-          Check(nil, self, StmtPrepare(fStatement, fError, pointer(fSQLPrepared),
-            length(fSQLPrepared), OCI_NTV_SYNTAX, OCI_DEFAULT), fError);
+          Check(nil, self, StmtPrepare(fStatement, fError, pointer(fSqlPrepared),
+            length(fSqlPrepared), OCI_NTV_SYNTAX, OCI_DEFAULT), fError);
         end;
       end;
       // note: if SetColumnsForPreparedStatement is called here, we randomly got

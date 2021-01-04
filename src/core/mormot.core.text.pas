@@ -1772,13 +1772,13 @@ procedure VarRecToUtf8(const V: TVarRec; var result: RawUtf8;
 type
   /// a memory structure which avoids a temporary RawUtf8 allocation
   // - used by VarRecToTempUtf8() and FormatUtf8()/FormatShort()
-  TTempUTF8 = record
+  TTempUtf8 = record
     Len: PtrInt;
     Text: PUtf8Char;
     TempRawUtf8: pointer;
     Temp: array[0..23] of AnsiChar;
   end;
-  PTempUTF8 = ^TTempUTF8;
+  PTempUtf8 = ^TTempUtf8;
 
 /// convert an open array (const Args: array of const) argument to an UTF-8
 // encoded text, using a specified temporary buffer
@@ -1789,7 +1789,7 @@ type
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
-function VarRecToTempUtf8(const V: TVarRec; var Res: TTempUTF8): integer;
+function VarRecToTempUtf8(const V: TVarRec; var Res: TTempUtf8): integer;
 
 /// convert an open array (const Args: array of const) argument to an UTF-8
 // encoded text, returning FALSE if the argument was not a string value
@@ -8877,7 +8877,7 @@ begin
   result := true;
 end;
 
-function VarRecToTempUtf8(const V: TVarRec; var Res: TTempUTF8): integer;
+function VarRecToTempUtf8(const V: TVarRec; var Res: TTempUtf8): integer;
 var
   v64: Int64;
   isString: boolean;
@@ -9155,9 +9155,9 @@ end;
 type
   // only supported token is %, with any const arguments
   TFormatUtf8 = object
-    b: PTempUTF8;
+    b: PTempUtf8;
     L, argN: integer;
-    blocks: array[0..63] of TTempUTF8; // to avoid most heap allocations
+    blocks: array[0..63] of TTempUtf8; // to avoid most heap allocations
     procedure Parse(const Format: RawUtf8; const Args: array of const);
     procedure Write(Dest: PUtf8Char);
     function WriteMax(Dest: PUtf8Char; Max: PtrUInt): PUtf8Char;
@@ -9218,7 +9218,7 @@ end;
 
 procedure TFormatUtf8.Write(Dest: PUtf8Char);
 var
-  d: PTempUTF8;
+  d: PTempUtf8;
 begin
   d := @blocks;
   repeat
@@ -9240,7 +9240,7 @@ end;
 
 function TFormatUtf8.WriteMax(Dest: PUtf8Char; Max: PtrUInt): PUtf8Char;
 var
-  d: PTempUTF8;
+  d: PTempUtf8;
 begin
   if Max > 0 then
   begin

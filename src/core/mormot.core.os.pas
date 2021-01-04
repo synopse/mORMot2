@@ -1824,7 +1824,7 @@ type
     /// internal padding data, also used to store up to 7 variant values
     // - this memory buffer will ensure no CPU cache line mixup occurs
     // - you should not use this field directly, but rather the Locked[],
-    // LockedInt64[], LockedUTF8[] or LockedPointer[] methods
+    // LockedInt64[], LockedUtf8[] or LockedPointer[] methods
     // - if you want to access those array values, ensure you protect them
     // using a Safe.Lock; try ... Padding[n] ... finally Safe.Unlock structure,
     // and maintain the PaddingUsedCount field accurately
@@ -1916,27 +1916,27 @@ type
       read fInitialized;
     /// safe locked access to a Variant value
     // - you may store up to 7 variables, using an 0..6 index, shared with
-    // LockedBool, LockedInt64, LockedPointer and LockedUTF8 array properties
+    // LockedBool, LockedInt64, LockedPointer and LockedUtf8 array properties
     // - returns null if the Index is out of range
     property Locked[Index: integer]: Variant
       read GetVariant write SetVariant;
     /// safe locked access to a Int64 value
     // - you may store up to 7 variables, using an 0..6 index, shared with
-    // Locked and LockedUTF8 array properties
+    // Locked and LockedUtf8 array properties
     // - Int64s will be stored internally as a varInt64 variant
     // - returns nil if the Index is out of range, or does not store a Int64
     property LockedInt64[Index: integer]: Int64
       read GetInt64 write SetInt64;
     /// safe locked access to a boolean value
     // - you may store up to 7 variables, using an 0..6 index, shared with
-    // Locked, LockedInt64, LockedPointer and LockedUTF8 array properties
+    // Locked, LockedInt64, LockedPointer and LockedUtf8 array properties
     // - value will be stored internally as a varboolean variant
     // - returns nil if the Index is out of range, or does not store a boolean
     property LockedBool[Index: integer]: boolean
       read GetBool write SetBool;
     /// safe locked access to a pointer/TObject value
     // - you may store up to 7 variables, using an 0..6 index, shared with
-    // Locked, LockedBool, LockedInt64 and LockedUTF8 array properties
+    // Locked, LockedBool, LockedInt64 and LockedUtf8 array properties
     // - pointers will be stored internally as a varUnknown variant
     // - returns nil if the Index is out of range, or does not store a pointer
     property LockedPointer[Index: integer]: Pointer
@@ -1946,30 +1946,30 @@ type
     // Locked and LockedPointer array properties
     // - UTF-8 string will be stored internally as a varString variant
     // - returns '' if the Index is out of range, or does not store a string
-    property LockedUTF8[Index: integer]: RawUtf8
-      read GetUTF8 write SetUTF8;
+    property LockedUtf8[Index: integer]: RawUtf8
+      read GetUtf8 write SetUtf8;
     /// safe locked in-place increment to an Int64 value
     // - you may store up to 7 variables, using an 0..6 index, shared with
-    // Locked and LockedUTF8 array properties
+    // Locked and LockedUtf8 array properties
     // - Int64s will be stored internally as a varInt64 variant
     // - returns the newly stored value
     // - if the internal value is not defined yet, would use 0 as default value
     function LockedInt64Increment(Index: integer; const Increment: Int64): Int64;
     /// safe locked in-place exchange of a Variant value
     // - you may store up to 7 variables, using an 0..6 index, shared with
-    // Locked and LockedUTF8 array properties
+    // Locked and LockedUtf8 array properties
     // - returns the previous stored value, or null if the Index is out of range
     function LockedExchange(Index: integer; const Value: variant): variant;
     /// safe locked in-place exchange of a pointer/TObject value
     // - you may store up to 7 variables, using an 0..6 index, shared with
-    // Locked and LockedUTF8 array properties
+    // Locked and LockedUtf8 array properties
     // - pointers will be stored internally as a varUnknown variant
     // - returns the previous stored value, nil if the Index is out of range,
     // or does not store a pointer
     function LockedPointerExchange(Index: integer; Value: pointer): pointer;
     /// unsafe access to a Int64 value
     // - you may store up to 7 variables, using an 0..6 index, shared with
-    // Locked and LockedUTF8 array properties
+    // Locked and LockedUtf8 array properties
     // - Int64s will be stored internally as a varInt64 variant
     // - returns nil if the Index is out of range, or does not store a Int64
     // - you should rather call LockedInt64[] property, or use this property

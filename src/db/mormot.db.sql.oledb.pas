@@ -360,7 +360,7 @@ type
     // - if ExpectResults is TRUE, then Step() and Column*() methods are available
     // to retrieve the data rows
     // - raise an EOleDBException on any error
-    procedure Prepare(const aSQL: RawUtf8; ExpectResults: boolean = false); overload; override;
+    procedure Prepare(const aSql: RawUtf8; ExpectResults: boolean = false); overload; override;
     /// Execute an UTF-8 encoded SQL statement
     // - parameters marked as ? should have been already bound with Bind*()
     // functions above
@@ -828,7 +828,7 @@ begin
     Int32ToUtf8(Status, msg);
   {$endif}
   SynDBLog.Add.Log(sllError, 'Invalid [%] status for column [%] at row % for %',
-    [{%H-}msg, Column^.ColumnName, fCurrentRow, fSQL], self);
+    [{%H-}msg, Column^.ColumnName, fCurrentRow, fSql], self);
 end;
 
 function TSqlDBOleDBStatement.GetCol(Col: integer;
@@ -1222,7 +1222,7 @@ const
 
   TABLE_PARAM_DATASOURCE: WideString = 'table';
 
-procedure TSqlDBOleDBStatement.Prepare(const aSQL: RawUtf8; ExpectResults: boolean);
+procedure TSqlDBOleDBStatement.Prepare(const aSql: RawUtf8; ExpectResults: boolean);
 var
   L: integer;
   SQLW: RawUnicode;
@@ -1242,13 +1242,13 @@ begin
     OleDBCheck(self, (fSession as IDBCreateCommand).CreateCommand(nil,
       IID_ICommandText, ICommand(fCommand)));
   end;
-  L := Length(fSQL);
+  L := Length(fSql);
   if StripSemicolon then
     while (L > 0) and
-          (fSQL[L] in [#1..' ', ';']) do
+          (fSql[L] in [#1..' ', ';']) do
       dec(L); // trim ' ' or ';' right (last ';' could be found incorrect)
   SetLength(SQLW, L * 2 + 1);
-  Utf8ToWideChar(pointer(SQLW), pointer(fSQL), L);
+  Utf8ToWideChar(pointer(SQLW), pointer(fSql), L);
   fCommand.SetCommandText(DBGUID_DEFAULT, pointer(SQLW));
   SQLLogEnd;
 end;
@@ -1298,7 +1298,7 @@ begin
         case fParams[i].VType of
           ftUnknown:
             raise EOleDBException.CreateUtf8('%.Execute: missing #% bound parameter for [%]',
-              [self, i + 1, fSQL]);
+              [self, i + 1, fSql]);
         end;
       P := pointer(fParams);
       SetLength(fParamBindings, fParamCount);
@@ -1597,7 +1597,7 @@ begin
     fColumn.ReHash;
     // faster if full command is re-prepared!
     fCommand := nil;
-    Prepare(fSQL, fExpectResults);
+    Prepare(fSql, fExpectResults);
   end;
   fUpdateCount := 0;
   inherited Reset;
@@ -1713,7 +1713,7 @@ begin
       else
         raise EOleDBException.CreateUtf8(
           '%.Execute: wrong column [%] (%) for [%]', [self, aName,
-           GetEnumName(TypeInfo(TSqlDBFieldType), ord(Col^.ColumnType))^, fSQL]);
+           GetEnumName(TypeInfo(TSqlDBFieldType), ord(Col^.ColumnType))^, fSql]);
       end;
       inc(nfo);
       inc(B);

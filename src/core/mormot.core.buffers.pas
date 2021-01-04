@@ -1380,7 +1380,7 @@ function IsUrlValid(P: PUtf8Char): boolean;
 function AreUrlValid(const Url: array of RawUtf8): boolean;
 
 /// ensure the supplied URI contains a trailing '/' charater
-function IncludeTrailingURIDelimiter(const URI: RawByteString): RawByteString;
+function IncludeTrailingUriDelimiter(const URI: RawByteString): RawByteString;
 
 
 { *********** Basic MIME Content Types Support }
@@ -1606,14 +1606,14 @@ function EscapeToShort(const source: RawByteString): shortstring; overload;
 // 2009 and up) according to any BOM marker at the beginning of the file
 // - before Delphi 2009, the current string code page is used (i.e. CurrentAnsiConvert)
 function AnyTextFileToString(const FileName: TFileName;
-  ForceUTF8: boolean = false): string;
+  ForceUtf8: boolean = false): string;
 
 /// get text file contents (even UTF-16 or UTF-8) and convert it into an
 // Unicode string according to any BOM marker at the beginning of the file
 // - any file without any BOM marker will be interpreted as plain ASCII: in this
 // case, the current string code page is used (i.e. CurrentAnsiConvert class)
 function AnyTextFileToSynUnicode(const FileName: TFileName;
-  ForceUTF8: boolean = false): SynUnicode;
+  ForceUtf8: boolean = false): SynUnicode;
 
 /// get text file contents (even UTF-16 or UTF-8) and convert it into an
 // UTF-8 string according to any BOM marker at the beginning of the file
@@ -6236,7 +6236,7 @@ begin
   repeat
     c := s^;
     inc(s);
-    if tcURIUnreserved in tab[c] then
+    if tcUriUnreserved in tab[c] then
     begin // was ['_', '-', '.', '~', '0'..'9', 'a'..'z', 'A'..'Z']
       p^ := c;
       inc(p);
@@ -6266,7 +6266,7 @@ begin
   repeat
     c := s^;
     inc(s);
-    if (tcURIUnreserved in tab[c]) or
+    if (tcUriUnreserved in tab[c]) or
        (c = 32) then
     begin
       inc(result);
@@ -6323,7 +6323,7 @@ begin
     exit;
   tab := @TEXT_CHARS;
   repeat
-    if tcURIUnreserved in tab[P^] then
+    if tcUriUnreserved in tab[P^] then
       inc(P) // was  ['_', '-', '.', '~', '0'..'9', 'a'..'z', 'A'..'Z']
     else
       exit;
@@ -6342,10 +6342,10 @@ begin
   result := true;
 end;
 
-function IncludeTrailingURIDelimiter(const URI: RawByteString): RawByteString;
+function IncludeTrailingUriDelimiter(const URI: RawByteString): RawByteString;
 begin
   if (URI <> '') and
-     (URI[length(URI)] <> '/') then
+     (Uri[length(URI)] <> '/') then
     result := URI + '/'
   else
     result := URI;
@@ -7411,14 +7411,14 @@ begin
     @result[1], length(source), 80) - @result[1]);
 end;
 
-function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUTF8: boolean): SynUnicode;
+function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUtf8: boolean): SynUnicode;
 var
   Map: TMemoryMap;
 begin
   result := '';
   if Map.Map(FileName) then
   try
-    if ForceUTF8 then
+    if ForceUtf8 then
       Utf8ToSynUnicode(PUtf8Char(Map.Buffer), Map.Size, result)
     else
       case Map.TextFileKind of
@@ -7461,7 +7461,7 @@ begin
   end;
 end;
 
-function AnyTextFileToString(const FileName: TFileName; ForceUTF8: boolean): string;
+function AnyTextFileToString(const FileName: TFileName; ForceUtf8: boolean): string;
 var
   Map: TMemoryMap;
 begin
@@ -7469,7 +7469,7 @@ begin
   if Map.Map(FileName) then
   try
     {$ifdef UNICODE}
-    if ForceUTF8 then
+    if ForceUtf8 then
       Utf8DecodeToString(PUtf8Char(Map.Buffer), Map.Size, result)
     else
       case Map.TextFileKind of
@@ -7484,7 +7484,7 @@ begin
             Map.Buffer, Map.Size);
       end;
     {$else}
-    if ForceUTF8 then
+    if ForceUtf8 then
       result := CurrentAnsiConvert.Utf8BufferToAnsi(
         PUtf8Char(Map.Buffer), Map.Size)
     else
@@ -8104,7 +8104,7 @@ begin
       if P^ = #0 then
         break;
       B := P;
-      c := NextUTF8Ucs4(P) - $1f5ff;
+      c := NextUtf8Ucs4(P) - $1f5ff;
       if c <= cardinal(high(TEmoji)) then
         W.AddNoJsonEscapeUtf8(EMOJI_TAG[TEmoji(c)])
       else

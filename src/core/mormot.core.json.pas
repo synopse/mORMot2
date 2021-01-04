@@ -1712,7 +1712,7 @@ type
     function ParseNext: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the next JSON value as text
-    function ParseUTF8: RawUtf8;
+    function ParseUtf8: RawUtf8;
     /// set the EndOfObject field of a JSON buffer, just like GetJsonField() does
     procedure ParseEndOfObject;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1861,7 +1861,7 @@ type
     // - to be used instead of homonomous Rtti.RegisterFromText() to supply
     // an additional set of serialization/unserialization JSON options
     class function RegisterFromText(DynArrayOrRecord: PRttiInfo;
-      const RTTIDefinition: RawUtf8;
+      const RttiDefinition: RawUtf8;
       IncludeReadOptions: TJsonParserOptions;
       IncludeWriteOptions: TTextWriterWriteObjectOptions): TRttiJSON;
     /// define an additional set of unserialization JSON options
@@ -4028,7 +4028,7 @@ var
   WR: TBaseWriter;
   temp: TTextWriterStackBuffer;
 
-  procedure AddFromStart(const name: RaWUTF8);
+  procedure AddFromStart(const name: RawUtf8);
   begin
     start := GotoNextNotSpace(start);
     ending := GotoEndJsonItem(start);
@@ -6931,7 +6931,7 @@ begin
   Valid := result;
 end;
 
-function TJsonParserContext.ParseUTF8: RawUtf8;
+function TJsonParserContext.ParseUtf8: RawUtf8;
 begin
   if ParseNext then
     FastSetString(result, Value, ValueLen)
@@ -9664,11 +9664,11 @@ begin
 end;
 
 class function TRttiJson.RegisterFromText(DynArrayOrRecord: PRttiInfo;
-  const RTTIDefinition: RawUtf8;
+  const RttiDefinition: RawUtf8;
   IncludeReadOptions: TJsonParserOptions;
   IncludeWriteOptions: TTextWriterWriteObjectOptions): TRttiJSON;
 begin
-  result := Rtti.RegisterFromText(DynArrayOrRecord, RTTIDefinition) as TRttiJson;
+  result := Rtti.RegisterFromText(DynArrayOrRecord, RttiDefinition) as TRttiJson;
   result.fIncludeReadOptions := IncludeReadOptions;
   result.fIncludeWriteOptions := IncludeWriteOptions;
 end;

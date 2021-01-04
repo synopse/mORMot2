@@ -207,7 +207,7 @@ type
     // - returns nil if the main engine is to be used
     // - or returns the target TRestStorage instance, with the adapted SQL
     // statement, ready to be run on it
-    function InternalAdaptSQL(TableIndex: integer; var SQL: RawUtf8): TRestOrm;
+    function InternalAdaptSql(TableIndex: integer; var SQL: RawUtf8): TRestOrm;
     /// retrieve a list of members as JSON encoded data
     // - used by OneFieldValue() and MultiFieldValue() methods
     function InternalListRawUtf8(TableIndex: integer; const SQL: RawUtf8): RawUtf8;
@@ -990,7 +990,7 @@ var
   sqladapted: RawUtf8;
 begin
   sqladapted := SQL;
-  rest := InternalAdaptSQL(fModel.GetTableIndexFromSqlSelect(SQL, false), sqladapted);
+  rest := InternalAdaptSql(fModel.GetTableIndexFromSqlSelect(SQL, false), sqladapted);
   if rest = nil then
     result := MainEngineList(SQL, ForceAjax, ReturnedRowCount)
   else
@@ -1121,7 +1121,7 @@ var
   EndOfObject: AnsiChar;
   wasString, OK: boolean;
   TableName, Value, ErrMsg: RawUtf8;
-  URIMethod, RunningBatchURIMethod: TUriMethod;
+  UriMethod, RunningBatchUriMethod: TUriMethod;
   RunningBatchRest, RunningRest: TRestOrm;
   Sent, Method, MethodTable: PUtf8Char;
   AutomaticTransactionPerRow: cardinal;
@@ -1165,7 +1165,7 @@ var
   begin
     result := (CurrentContext <> nil) and
               (CurrentContext.Command = execOrmWrite) and
-              not CurrentContext.CanExecuteOrmWrite(URIMethod, RunTable,
+              not CurrentContext.CanExecuteOrmWrite(UriMethod, RunTable,
                 RunTableIndex, ID, CurrentContext.Call.RestAccessRights^);
   end;
 
@@ -1220,7 +1220,7 @@ begin
   MethodTable := nil;
   RunningBatchRest := nil;
   RunningBatchTable := nil;
-  RunningBatchURIMethod := mNone;
+  RunningBatchUriMethod := mNone;
   Count := 0;
   FillCharFast(counts, SizeOf(counts), 0);
   fRest.AcquireExecution[execOrmWrite].Safe.Lock; // multi thread protection
@@ -1266,7 +1266,7 @@ begin
             begin
               // '{"Table":[...,"POST",{object},...]}'
               // or '[...,"POST@Table",{object},...]'
-              URIMethod := mPOST;
+              UriMethod := mPOST;
               Value := JsonGetObject(Sent, @ID, EndOfObject, true);
               if Sent = nil then
                 raise EOrmBatchException.CreateUtf8(
@@ -1283,7 +1283,7 @@ begin
             begin
               // '{"Table":[...,"PUT",{object},...]}'
               // or '[...,"PUT@Table",{object},...]'
-              URIMethod := mPUT;
+              UriMethod := mPUT;
               Value := JsonGetObject(Sent, @ID, EndOfObject, false);
               if (Sent = nil) or
                  (Value = '') or
@@ -1299,7 +1299,7 @@ begin
             begin
               // '{"Table":[...,"DELETE",ID,...]}'
               // or '[...,"DELETE@Table",ID,...]'
-              URIMethod := mDELETE;
+              UriMethod := mDELETE;
               ID := GetInt64(GetJsonField(Sent, Sent, @wasString, @EndOfObject));
               if (ID <= 0) or
                  wasString then
@@ -1317,7 +1317,7 @@ begin
             begin
               // '{"Table":[...,"SIMPLE",[values],...]}'
               // or '[...,"SIMPLE@Table",[values],...]'
-              URIMethod := mPOST;
+              UriMethod := mPOST;
               Value := fModel.TableProps[RunTableIndex].Props.
                 SaveSimpleFieldsFromJsonArray(Sent, EndOfObject, true);
               ID := 0; // no ID is never transmitted with simple fields
@@ -1381,7 +1381,7 @@ begin
           // handle batch pending request sending (if table or method changed)
           if (RunningBatchRest <> nil) and
              ((RunTable <> RunningBatchTable) or
-              (RunningBatchURIMethod <> URIMethod)) then
+              (RunningBatchUriMethod <> UriMethod)) then
           begin
             RunningBatchRest.InternalBatchStop; // send pending statements
             RunningBatchRest := nil;
@@ -1389,20 +1389,20 @@ begin
           end;
           if (RunStatic <> nil) and
              (RunStatic <> RunningBatchRest) and
-             RunStatic.InternalBatchStart(URIMethod, batchOptions) then
+             RunStatic.InternalBatchStart(UriMethod, batchOptions) then
           begin
             RunningBatchRest := RunStatic;
             RunningBatchTable := RunTable;
-            RunningBatchURIMethod := URIMethod;
+            RunningBatchUriMethod := UriMethod;
           end
           else
           if (RunningBatchRest = nil) and
              (RunStatic = nil) and
-             InternalBatchStart(URIMethod, batchOptions) then
+             InternalBatchStart(UriMethod, batchOptions) then
           begin
             RunningBatchRest := self; // e.g. multi-insert in main SQlite3 engine
             RunningBatchTable := RunTable;
-            RunningBatchURIMethod := URIMethod;
+            RunningBatchUriMethod := UriMethod;
           end;
           if Count >= length(Results) then
             SetLength(Results, NextGrow(Count));
@@ -1410,7 +1410,7 @@ begin
         // process CRUD method operation
         OK := false;
         Results[Count] := HTTP_NOTMODIFIED;
-        case URIMethod of
+        case UriMethod of
           mDELETE:
             begin
               if EngineDelete(RunTableIndex, ID) then
@@ -1453,7 +1453,7 @@ begin
             '%.EngineBatchSend: Results[%]=% on % %',
             [self, Count, Results[Count], Method, RunTable]);
         inc(Count);
-        inc(counts[URIMethod]);
+        inc(counts[UriMethod]);
         inc(counts[mHEAD]);
       until EndOfObject = ']';
       if (AutomaticTransactionPerRow > 0) and
@@ -1782,7 +1782,7 @@ begin
   end;
 end;
 
-function TRestOrmServer.InternalAdaptSQL(TableIndex: integer;
+function TRestOrmServer.InternalAdaptSql(TableIndex: integer;
   var SQL: RawUtf8): TRestOrm;
 begin
   result := nil;
@@ -1802,7 +1802,7 @@ begin
       // virtual table may need adaptation (e.g. RowID -> ID)
       if result <> nil then
         if result.InheritsFrom(TRestStorage) and
-           not TRestStorage(result).AdaptSQLForEngineList(SQL) then
+           not TRestStorage(result).AdaptSqlForEngineList(SQL) then
           // complex request will use SQlite3 virtual engine module
           result := nil;
     end;
@@ -1812,14 +1812,14 @@ end;
 function TRestOrmServer.InternalListRawUtf8(TableIndex: integer;
   const SQL: RawUtf8): RawUtf8;
 var
-  aSQL: RawUtf8; // use a private copy for InternalAdaptSQL()
+  aSql: RawUtf8; // use a private copy for InternalAdaptSql()
   Rest: TRestOrm;
 begin
-  aSQL := SQL;
-  Rest := InternalAdaptSQL(TableIndex, aSQL);
+  aSql := SQL;
+  Rest := InternalAdaptSql(TableIndex, aSql);
   if Rest <> nil then
      // this SQL statement is handled by direct connection, faster adaptation
-    result := Rest.EngineList(aSQL)
+    result := Rest.EngineList(aSql)
   else
     // complex TOrmVirtualTableJson/External queries will rely on virtual table
     result := MainEngineList(SQL, false, nil);

@@ -126,7 +126,7 @@ type
 type
   /// REST client with direct access to a SQLite3 database
   // - a hidden TRestServerDB server is created and called internaly
-  TRestClientDB = class(TRestClientURI)
+  TRestClientDB = class(TRestClientUri)
   protected
     fServer: TRestServerDB;
     fOwnedServer: TRestServerDB;
@@ -290,7 +290,7 @@ begin
         for i := 0 to Count - 1 do
           with Cache[ndx[i]] do
           begin
-            W.AddJsonEscape([StatementSQL, Timer]);
+            W.AddJsonEscape([StatementSql, Timer]);
             W.Add(',');
           end;
       finally

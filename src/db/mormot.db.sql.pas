@@ -47,7 +47,7 @@ uses
 
 type
   /// an array of RawUtf8, for each existing column type
-  // - used e.g. by SQLCreate method
+  // - used e.g. by SqlCreate method
   // - ftUnknown maps int32 field (e.g. boolean), ftNull maps RawUtf8 index # field,
   // ftUtf8 maps RawUtf8 blob field, other types map their default kind
   // - for UTF-8 text, ftUtf8 will define the BLOB field, whereas ftNull will
@@ -68,7 +68,7 @@ type
     paramInOut);
 
   /// used to define a field/column layout in a table schema
-  // - for TSqlDBConnectionProperties.SQLCreate to describe the new table
+  // - for TSqlDBConnectionProperties.SqlCreate to describe the new table
   // - for TSqlDBConnectionProperties.GetFields to retrieve the table layout
   TSqlDBColumnDefine = packed record
     /// the Column name
@@ -76,7 +76,7 @@ type
     /// the Column type, as retrieved from the database provider
     // - returned as plain text by GetFields method, to be used e.g. by
     // TSqlDBConnectionProperties.GetFieldDefinitions method
-    // - SQLCreate will check for this value to override the default type
+    // - SqlCreate will check for this value to override the default type
     ColumnTypeNative: RawUtf8;
     /// the Column default width (in chars or bytes) of ftUtf8 or ftBlob
     // - can be set to value <0 for CLOB or BLOB column type, i.e. for
@@ -174,13 +174,13 @@ type
     colDataTruncated);
 
   /// used to define a field/column layout
-  // - for TSqlDBConnectionProperties.SQLCreate to describe the table
+  // - for TSqlDBConnectionProperties.SqlCreate to describe the table
   // - for T*Statement.Execute/Column*() methods to map the IRowSet content
   TSqlDBColumnProperty = packed record
     /// the Column name
     ColumnName: RawUtf8;
     /// a general purpose integer value
-    // - for SQLCreate: default width (in WideChars or Bytes) of ftUtf8 or ftBlob;
+    // - for SqlCreate: default width (in WideChars or Bytes) of ftUtf8 or ftBlob;
     // if set to 0, a CLOB or BLOB column type will be created - note that
     // UTF-8 encoding is expected when calculating the maximum column byte size
     // for the CREATE TABLE statement (e.g. for Oracle 1333=4000/3 is used)
@@ -193,7 +193,7 @@ type
     // - for TSqlDBPostgresStatement: contains the column type OID
     ColumnAttr: PtrUInt;
     /// the Column type, used for storage
-    // - for SQLCreate: should not be ftUnknown nor ftNull
+    // - for SqlCreate: should not be ftUnknown nor ftNull
     // - for TOleDBStatement: should not be ftUnknown
     // - for mormot.db.sql.oracle: never ftUnknown, may be ftNull (for SQLT_RSET)
     ColumnType: TSqlDBFieldType;
@@ -410,7 +410,7 @@ const
   // - Positon indicates if should be included within the WHERE clause,
   // at the beginning of the SQL statement, or at the end of the SQL statement
   // - InsertFmt will replace '%' with the maximum number of lines to be retrieved
-  // - used by TSqlDBConnectionProperties.AdaptSQLLimitForEngineList()
+  // - used by TSqlDBConnectionProperties.AdaptSqlLimitForEngineList()
   DB_SQLLIMITCLAUSE: array[TSqlDBDefinition] of TSqlDBDefinitionLimitClause = (
     ( // dUnknown
     Position: posNone;
@@ -497,20 +497,20 @@ procedure LogTruncatedColumn(const Col: TSqlDBColumnProperty);
 function TrimLeftSchema(const TableName: RawUtf8): RawUtf8;
 
 /// replace all '?' in the SQL statement with named parameters like :AA :AB..
-// - returns the number of ? parameters found within aSQL
+// - returns the number of ? parameters found within aSql
 // - won't generate any SQL keyword parameters (e.g. :AS :OF :BY), to be
 // compliant with Oracle OCI expectations
 // - any ending ';' character is deleted, unless aStripSemicolon is unset
-function ReplaceParamsByNames(const aSQL: RawUtf8; var aNewSQL: RawUtf8;
+function ReplaceParamsByNames(const aSql: RawUtf8; var aNewSql: RawUtf8;
   aStripSemicolon: boolean = true): integer;
 
 /// replace all '?' in the SQL statement with indexed parameters like $1 $2 ...
-// - returns the number of ? parameters found within aSQL
+// - returns the number of ? parameters found within aSql
 // - as used e.g. by PostgreSQL & Oracle (:1 :2) library
 // - if AllowSemicolon is false (by default), reject any statement with ;
 // (Postgres do not allow ; inside prepared statement); it should be
 // true for Oracle
-function ReplaceParamsByNumbers(const aSQL: RawUtf8; var aNewSQL: RawUtf8;
+function ReplaceParamsByNumbers(const aSql: RawUtf8; var aNewSql: RawUtf8;
   IndexChar: AnsiChar = '$'; AllowSemicolon: boolean = false): integer;
 
 /// create a JSON array from an array of UTF-8 bound values
@@ -1046,7 +1046,7 @@ type
     fMainConnection: TSqlDBConnection;
     fBatchSendingAbilities: TSqlDBStatementCRUDs;
     fBatchMaxSentAtOnce: integer;
-    fLoggedSQLMaxSize: integer;
+    fLoggedSqlMaxSize: integer;
     fOnBatchInsert: TOnBatchInsert;
     fDBMS: TSqlDBDefinition;
     fUseCache, fStoreVoidStringAsNull, fLogSqlStatementOnException,
@@ -1275,7 +1275,7 @@ type
     // Connection.LastErrorException to retrieve corresponding error information
     // (if RaiseExceptionOnError is left to default FALSE value, otherwise, it will
     // raise an exception)
-    function NewThreadSafeStatementPrepared(const aSQL: RawUtf8;
+    function NewThreadSafeStatementPrepared(const aSql: RawUtf8;
       ExpectResults: boolean; RaiseExceptionOnError: boolean = false): ISqlDBStatement; overload;
     /// create a new thread-safe statement from an internal cache (if any)
     // - this method will call the overloaded NewThreadSafeStatementPrepared method
@@ -1296,7 +1296,7 @@ type
     // then bound inlined parameters as :(1234): and return the resulting statement
     // - raise an exception on error
     // - consider using ExecuteInlined() for direct execution
-    function PrepareInlined(const aSQL: RawUtf8; ExpectResults: boolean): ISqlDBStatement; overload;
+    function PrepareInlined(const aSql: RawUtf8; ExpectResults: boolean): ISqlDBStatement; overload;
     /// create, prepare and bound inlined parameters to a thread-safe statement
     // - overloaded method using FormatUtf8() and inlined parameters
     // - consider using ExecuteInlined() for direct execution
@@ -1331,7 +1331,7 @@ type
     // ! end;
     // - you can any BLOB field to be returned as null with the ForceBlobAsNull
     // optional parameter
-    function Execute(const aSQL: RawUtf8; const Params: array of const;
+    function Execute(const aSql: RawUtf8; const Params: array of const;
       RowsVariant: PVariant = nil; ForceBlobAsNull: boolean = false): ISqlDBRows;
     /// execute a SQL query, without returning any rows
     // - can be used to launch INSERT, DELETE or UPDATE statement, e.g.
@@ -1339,12 +1339,12 @@ type
     // statement instance, then run the corresponding Execute() method
     // - return the number of modified rows, i.e. the ISqlDBStatement.UpdateCount
     // value (or 0 if the DB driver does not supply this value)
-    function ExecuteNoResult(const aSQL: RawUtf8; const Params: array of const): integer;
+    function ExecuteNoResult(const aSql: RawUtf8; const Params: array of const): integer;
     /// create, prepare, bound inlined parameters and execute a thread-safe statement
     // - this implementation will call the NewThreadSafeStatement virtual method,
     // then bound inlined parameters as :(1234): and call its Execute method
     // - raise an exception on error
-    function ExecuteInlined(const aSQL: RawUtf8; ExpectResults: boolean):
+    function ExecuteInlined(const aSql: RawUtf8; ExpectResults: boolean):
       ISqlDBRows; overload;
     /// create, prepare, bound inlined parameters and execute a thread-safe statement
     // - overloaded method using FormatUtf8() and inlined parameters
@@ -1377,7 +1377,7 @@ type
     // fSqlCreateFieldMax protected values, which contains by default the
     // ANSI SQL Data Types and maximum 1000 inlined WideChars: inherited classes
     // may change the default fSqlCreateField* content or override this method
-    function SQLCreate(const aTableName: RawUtf8; const aFields:
+    function SqlCreate(const aTableName: RawUtf8; const aFields:
       TSqlDBColumnCreateDynArray; aAddID: boolean): RawUtf8; virtual;
     /// returns the SQL statement used to add a column to a Table
     // - should return the SQL "ALTER TABLE" statement needed to add a column to
@@ -1386,7 +1386,7 @@ type
     // fSqlCreateFieldMax protected values, which contains by default the
     // ANSI SQL Data Types and maximum 1000 inlined WideChars: inherited classes
     // may change the default fSqlCreateField* content or override this method
-    function SQLAddColumn(const aTableName: RawUtf8; const aField:
+    function SqlAddColumn(const aTableName: RawUtf8; const aField:
       TSqlDBColumnCreate): RawUtf8; virtual;
     /// returns the SQL statement used to add an index to a Table
     // - should return the SQL "CREATE INDEX" statement needed to add an index
@@ -1395,7 +1395,7 @@ type
     // parameter is set to true
     // - this default implementation will return the standard SQL statement, i.e.
     // 'CREATE [UNIQUE] INDEX index_name ON table_name (column_name[s])'
-    function SQLAddIndex(const aTableName: RawUtf8; const aFieldNames: array of
+    function SqlAddIndex(const aTableName: RawUtf8; const aFieldNames: array of
       RawUtf8; aUnique: boolean; aDescending: boolean = false; const aIndexName:
       RawUtf8 = ''): RawUtf8; virtual;
     /// used to compute a SELECT statement for the given fields
@@ -1410,7 +1410,7 @@ type
       TSqlDBColumnDefineDynArray; aExcludeTypes: TSqlDBFieldTypes): RawUtf8; virtual;
     /// SQL statement to create the corresponding database
     // - this default implementation will only handle dFirebird by now
-    function SQLCreateDatabase(const aDatabaseName: RawUtf8; aDefaultPageSize:
+    function SqlCreateDatabase(const aDatabaseName: RawUtf8; aDefaultPageSize:
       integer = 0): RawUtf8; virtual;
     /// convert an ISO-8601 encoded time and date into a date appropriate to
     // be pasted in the SQL request
@@ -1502,8 +1502,8 @@ type
 
     /// returns the information to adapt the LIMIT # clause in the SQL SELECT
     // statement to a syntax matching the underlying DBMS
-    // - e.g. TRestStorageExternal.AdaptSQLForEngineList() calls this
-    // to let TRestServer.URI by-pass virtual table mechanism
+    // - e.g. TRestStorageExternal.AdaptSqlForEngineList() calls this
+    // to let TRestServer.Uri by-pass virtual table mechanism
     function SQLLimitClause(AStmt: TSelectStatement):
       TSqlDBDefinitionLimitClause; virtual;
     /// determine if the SQL statement can be cached
@@ -1585,8 +1585,8 @@ type
     // - setting -1 will log statement without any parameter value (just ?)
     // - setting any value >0 will log statement and parameters up to the
     // number of bytes (default set to 2048 to log up to 2KB per statement)
-    property LoggedSQLMaxSize: integer
-      read fLoggedSQLMaxSize write fLoggedSQLMaxSize;
+    property LoggedSqlMaxSize: integer
+      read fLoggedSqlMaxSize write fLoggedSqlMaxSize;
     /// allow to log the SQL statement when any low-level ESqlDBException is raised
     property LogSqlStatementOnException: boolean read
       fLogSqlStatementOnException write fLogSqlStatementOnException;
@@ -1726,7 +1726,7 @@ type
     // implement handle statement caching is UseCache=true - in this case,
     // the TSqlDBStatement.Reset method shall have been overridden to allow
     // binding and execution of the very same prepared statement
-    // - the same aSQL can cache up to 9 statements in this TSqlDBConnection
+    // - the same aSql can cache up to 9 statements in this TSqlDBConnection
     // - this method should return a prepared statement instance on success
     // - on error, if RaiseExceptionOnError=false (by default), it returns nil
     // and you can check LastErrorMessage and LastErrorException properties to
@@ -1734,7 +1734,7 @@ type
     // - if TSqlDBConnectionProperties.ReconnectAfterConnectionError is set,
     // any connection error will be trapped, unless AllowReconnect is false
     // - on error, if RaiseExceptionOnError=true, an exception is raised
-    function NewStatementPrepared(const aSQL: RawUtf8; ExpectResults: boolean;
+    function NewStatementPrepared(const aSql: RawUtf8; ExpectResults: boolean;
       RaiseExceptionOnError: boolean = false;
       AllowReconnect: boolean = true): ISqlDBStatement; virtual;
     /// begin a Transaction for this connection
@@ -2025,10 +2025,10 @@ type
     // - if ExpectResults is TRUE, then Step() and Column*() methods are available
     // to retrieve the data rows
     // - should raise an Exception on any error
-    // - this default implementation will just store aSQL content and the
+    // - this default implementation will just store aSql content and the
     // ExpectResults parameter, and connect to the remote server is was not
     // already connected
-    procedure Prepare(const aSQL: RawUtf8; ExpectResults: boolean); overload; virtual;
+    procedure Prepare(const aSql: RawUtf8; ExpectResults: boolean); overload; virtual;
     /// Execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
     // - should raise an Exception on any error
@@ -2052,7 +2052,7 @@ type
     //  to retrieve the data rows
     // - should raise an Exception on any error
     // - this method will call Prepare then ExecutePrepared methods
-    procedure Execute(const aSQL: RawUtf8; ExpectResults: boolean); overload;
+    procedure Execute(const aSql: RawUtf8; ExpectResults: boolean); overload;
     /// Prepare and Execute an UTF-8 encoded SQL statement
     // - parameters marked as ? should be specified as method parameter in Params[]
     // - BLOB parameters could not be bound with this method, but need an explicit
@@ -2061,7 +2061,7 @@ type
     // to retrieve the data rows
     // - should raise an Exception on any error
     // - this method will bind parameters, then call Excecute() virtual method
-    procedure Execute(const aSQL: RawUtf8; ExpectResults: boolean;
+    procedure Execute(const aSql: RawUtf8; ExpectResults: boolean;
       const Params: array of const); overload;
     /// Prepare and Execute an UTF-8 encoded SQL statement
     // - parameters marked as % will be replaced by Args[] value in the SQL text
@@ -2721,7 +2721,7 @@ begin
     result := copy(TableName, j, maxInt);
 end;
 
-function ReplaceParamsByNames(const aSQL: RawUtf8; var aNewSQL: RawUtf8;
+function ReplaceParamsByNames(const aSql: RawUtf8; var aNewSql: RawUtf8;
   aStripSemicolon: boolean): integer;
 var
   i, j, B, L: PtrInt;
@@ -2732,23 +2732,23 @@ const
   SQL_KEYWORDS: array[0..19] of AnsiChar = 'ASATBYIFINISOFONORTO';
 begin
   result := 0;
-  L := Length(aSQL);
+  L := Length(aSql);
   if aStripSemicolon then
     while (L > 0) and
-          (aSQL[L] in [#1..' ', ';']) do
-      if (aSQL[L] = ';') and
+          (aSql[L] in [#1..' ', ';']) do
+      if (aSql[L] = ';') and
          (L > 5) and
-         IdemPChar(@aSQL[L - 3], 'END') then
+         IdemPChar(@aSql[L - 3], 'END') then
         break
       else // allows 'END;' at the end of a statement
         dec(L);    // trim ' ' or ';' right (last ';' could be found incorrect)
-  if PosExChar('?', aSQL) > 0 then
+  if PosExChar('?', aSql) > 0 then
   begin
-    aNewSQL := '';
+    aNewSql := '';
     // change ? into :AA :BA ..
     c := ':AA';
     i := 0;
-    P := pointer(aSQL);
+    P := pointer(aSql);
     if P <> nil then
       repeat
         B := i;
@@ -2768,13 +2768,13 @@ begin
           inc(i);
         end;
         FastSetString(tmp, P + B, i - B);
-        aNewSQL := aNewSQL + tmp;
+        aNewSql := aNewSql + tmp;
         if i = L then
           break;
         // store :AA :BA ..
-        j := length(aNewSQL);
-        SetLength(aNewSQL, j + 3);
-        PCardinal(PtrInt(aNewSQL) + j)^ := PCardinal(@c)^;
+        j := length(aNewSql);
+        SetLength(aNewSql, j + 3);
+        PCardinal(PtrInt(aNewSql) + j)^ := PCardinal(@c)^;
         repeat
           if c[1] = 'Z' then
           begin
@@ -2791,23 +2791,23 @@ begin
       until i = L;
   end
   else
-    aNewSQL := copy(aSQL, 1, L); // trim right ';' if any
+    aNewSql := copy(aSql, 1, L); // trim right ';' if any
 end;
 
-function ReplaceParamsByNumbers(const aSQL: RawUtf8; var aNewSQL: RawUtf8;
+function ReplaceParamsByNumbers(const aSql: RawUtf8; var aNewSql: RawUtf8;
   IndexChar: AnsiChar; AllowSemicolon: boolean): integer;
 var
   ndx, L: PtrInt;
   s, d: PUtf8Char;
   c: AnsiChar;
 begin
-  aNewSQL := aSQL;
+  aNewSql := aSql;
   result := 0;
   ndx := 0;
-  L := Length(aSQL);
-  s := pointer(aSQL);
+  L := Length(aSql);
+  s := pointer(aSql);
   if (s = nil) or
-     (PosExChar('?', aSQL) = 0) then
+     (PosExChar('?', aSql) = 0) then
     exit;
   // calculate ? parameters count, check for ;
   while s^ <> #0 do
@@ -2850,9 +2850,9 @@ begin
     exit;
   result := ndx;
   // parse SQL and replace ? into $n $nn $nnn
-  FastSetString(aNewSQL, nil, L);
-  s := pointer(aSQL);
-  d := pointer(aNewSQL);
+  FastSetString(aNewSql, nil, L);
+  s := pointer(aSql);
+  d := pointer(aNewSql);
   ndx := 0;
   repeat
     c := s^;
@@ -2890,7 +2890,7 @@ begin
     end;
     inc(s);
   until s^ = #0;
-  //assert(d - pointer(aNewSQL) = length(aNewSQL)); // until stabilized
+  //assert(d - pointer(aNewSql) = length(aNewSql)); // until stabilized
 end;
 
 function BoundArrayToJsonArray(const Values: TRawUtf8DynArray): RawUtf8;
@@ -3067,7 +3067,7 @@ begin
   fEngineName := EngineName;
   fRollbackOnDisconnect := true; // enabled by default
   fUseCache := true;
-  fLoggedSQLMaxSize := 2048; // log up to 2KB of inlined SQL by default
+  fLoggedSqlMaxSize := 2048; // log up to 2KB of inlined SQL by default
   SetInternalProperties; // virtual method used to override default parameters
   aDBMS := GetDBMS;
   if aDBMS in [dSQLite, dDB2, dPostgreSQL] then // for SqlDateToIso8601Quoted()
@@ -3116,12 +3116,12 @@ begin
   inherited;
 end;
 
-function TSqlDBConnectionProperties.Execute(const aSQL: RawUtf8;
+function TSqlDBConnectionProperties.Execute(const aSql: RawUtf8;
   const Params: array of const; RowsVariant: PVariant; ForceBlobAsNull: boolean): ISqlDBRows;
 var
   Stmt: ISqlDBStatement;
 begin
-  Stmt := NewThreadSafeStatementPrepared(aSQL, true, true);
+  Stmt := NewThreadSafeStatementPrepared(aSql, true, true);
   Stmt.ForceBlobAsNull := ForceBlobAsNull;
   Stmt.Bind(Params);
   Stmt.ExecutePrepared;
@@ -3133,12 +3133,12 @@ begin
       RowsVariant^ := result.RowData;
 end;
 
-function TSqlDBConnectionProperties.ExecuteNoResult(const aSQL: RawUtf8;
+function TSqlDBConnectionProperties.ExecuteNoResult(const aSql: RawUtf8;
   const Params: array of const): integer;
 var
   Stmt: ISqlDBStatement;
 begin
-  Stmt := NewThreadSafeStatementPrepared(aSQL, false, true);
+  Stmt := NewThreadSafeStatementPrepared(aSql, false, true);
   Stmt.Bind(Params);
   Stmt.ExecutePrepared;
   try
@@ -3148,7 +3148,7 @@ begin
   end;
 end;
 
-function TSqlDBConnectionProperties.PrepareInlined(const aSQL: RawUtf8;
+function TSqlDBConnectionProperties.PrepareInlined(const aSql: RawUtf8;
   ExpectResults: boolean): ISqlDBStatement;
 var
   Query: ISqlDBStatement;
@@ -3156,14 +3156,14 @@ var
   Types: TSqlParamTypeDynArray;
   Nulls: TFieldBits;
   Values: TRawUtf8DynArray;
-  GenericSQL: RawUtf8;
+  GenericSql: RawUtf8;
 begin
   result := nil; // returns nil interface on error
   if self = nil then
     exit;
   // convert inlined :(1234): parameters into Values[] for Bind*() calls
-  GenericSQL := ExtractInlineParameters(aSQL, Types, Values, maxParam, Nulls);
-  Query := NewThreadSafeStatementPrepared(GenericSQL, ExpectResults, true);
+  GenericSql := ExtractInlineParameters(aSql, Types, Values, maxParam, Nulls);
+  Query := NewThreadSafeStatementPrepared(GenericSql, ExpectResults, true);
   if Query = nil then
     exit;
   for i := 0 to maxParam - 1 do
@@ -3186,7 +3186,7 @@ begin
           Query.BindDateTime(i + 1, Iso8601ToDateTime(Values[i]));
       else
         raise ESqlDBException.CreateUtf8('%.PrepareInlined: Unrecognized parameter Type[%] = % in [%]',
-          [self, i + 1, ord(Types[i]), aSQL]);
+          [self, i + 1, ord(Types[i]), aSql]);
       end;
   result := Query;
 end;
@@ -3197,7 +3197,7 @@ begin
   result := PrepareInlined(FormatUtf8(SqlFormat, Args), ExpectResults);
 end;
 
-function TSqlDBConnectionProperties.ExecuteInlined(const aSQL: RawUtf8;
+function TSqlDBConnectionProperties.ExecuteInlined(const aSql: RawUtf8;
   ExpectResults: boolean): ISqlDBRows;
 var
   Query: ISqlDBStatement;
@@ -3205,9 +3205,9 @@ begin
   result := nil; // returns nil interface on error
   if self = nil then
     exit;
-  Query := PrepareInlined(aSQL, ExpectResults);
+  Query := PrepareInlined(aSql, ExpectResults);
   if Query = nil then
-    exit; // e.g. invalid aSQL
+    exit; // e.g. invalid aSql
   Query.ExecutePrepared;
   result := Query;
 end;
@@ -3257,10 +3257,10 @@ begin
   result := ThreadSafeConnection.NewStatement;
 end;
 
-function TSqlDBConnectionProperties.NewThreadSafeStatementPrepared(const aSQL:
+function TSqlDBConnectionProperties.NewThreadSafeStatementPrepared(const aSql:
   RawUtf8; ExpectResults, RaiseExceptionOnError: boolean): ISqlDBStatement;
 begin
-  result := ThreadSafeConnection.NewStatementPrepared(aSQL, ExpectResults,
+  result := ThreadSafeConnection.NewStatementPrepared(aSql, ExpectResults,
     RaiseExceptionOnError);
 end;
 
@@ -4197,7 +4197,7 @@ begin
   end;
 end;
 
-function TSqlDBConnectionProperties.SQLCreateDatabase(const aDatabaseName:
+function TSqlDBConnectionProperties.SqlCreateDatabase(const aDatabaseName:
   RawUtf8; aDefaultPageSize: integer): RawUtf8;
 begin
   case DBMS of
@@ -4382,7 +4382,7 @@ begin
   result := DateTimeToIso8601(DateTime, true, DateTimeFirstChar, false, '''');
 end;
 
-function TSqlDBConnectionProperties.SQLCreate(const aTableName: RawUtf8;
+function TSqlDBConnectionProperties.SqlCreate(const aTableName: RawUtf8;
   const aFields: TSqlDBColumnCreateDynArray; aAddID: boolean): RawUtf8;
 var
   i: integer;
@@ -4441,7 +4441,7 @@ begin
   result := aField.Name + result;
 end;
 
-function TSqlDBConnectionProperties.SQLAddColumn(const aTableName: RawUtf8;
+function TSqlDBConnectionProperties.SqlAddColumn(const aTableName: RawUtf8;
   const aField: TSqlDBColumnCreate): RawUtf8;
 var
   AddPrimaryKey: RawUtf8;
@@ -4450,7 +4450,7 @@ begin
     SqlFieldCreate(aField, AddPrimaryKey)], result);
 end;
 
-function TSqlDBConnectionProperties.SQLAddIndex(const aTableName: RawUtf8;
+function TSqlDBConnectionProperties.SqlAddIndex(const aTableName: RawUtf8;
   const aFieldNames: array of RawUtf8; aUnique, aDescending: boolean;
   const aIndexName: RawUtf8): RawUtf8;
 const
@@ -5676,11 +5676,11 @@ begin
   result := ftUnknown;
 end;
 
-procedure TSqlDBStatement.Execute(const aSQL: RawUtf8; ExpectResults: boolean);
+procedure TSqlDBStatement.Execute(const aSql: RawUtf8; ExpectResults: boolean);
 begin
   Connection.InternalProcess(speActive);
   try
-    Prepare(aSQL, ExpectResults);
+    Prepare(aSql, ExpectResults);
     SetForceBlobAsNull(true);
     ExecutePrepared;
   finally
@@ -5982,12 +5982,12 @@ begin
   end;
 end;
 
-procedure TSqlDBStatement.Execute(const aSQL: RawUtf8; ExpectResults: boolean;
+procedure TSqlDBStatement.Execute(const aSql: RawUtf8; ExpectResults: boolean;
   const Params: array of const);
 begin
   Connection.InternalProcess(speActive);
   try
-    Prepare(aSQL, ExpectResults);
+    Prepare(aSql, ExpectResults);
     Bind(Params);
     ExecutePrepared;
   finally
@@ -6226,7 +6226,7 @@ begin
   if fConnection = nil then
     maxSize := 0
   else
-    maxSize := fConnection.fProperties.fLoggedSQLMaxSize;
+    maxSize := fConnection.fProperties.fLoggedSqlMaxSize;
   if (integer(maxSize) < 0) or
      (PosExChar('?', fSql) = 0) then
     // maxsize=-1 -> log statement without any parameter value (just ?)
@@ -6340,22 +6340,22 @@ begin
   TDocVariantData(aDocument).InitObjectFromVariants(names, values, aOptions);
 end;
 
-procedure TSqlDBStatement.Prepare(const aSQL: RawUtf8; ExpectResults: boolean);
+procedure TSqlDBStatement.Prepare(const aSql: RawUtf8; ExpectResults: boolean);
 var
   L: integer;
 begin
   Connection.InternalProcess(speActive);
   try
-    L := length(aSQL);
+    L := length(aSql);
     if StripSemicolon then
       if (L > 5) and
-         (aSQL[L] = ';') and // avoid syntax error for some drivers
-         not IdemPChar(@aSQL[L - 4], ' END') then
-        fSql := copy(aSQL, 1, L - 1)
+         (aSql[L] = ';') and // avoid syntax error for some drivers
+         not IdemPChar(@aSql[L - 4], ' END') then
+        fSql := copy(aSql, 1, L - 1)
       else
-        fSql := aSQL
+        fSql := aSql
     else
-      fSql := aSQL;
+      fSql := aSql;
     fExpectResults := ExpectResults;
     if (fConnection <> nil) and
        not fConnection.IsConnected then
@@ -6625,7 +6625,7 @@ begin
     Properties.ExceptionIsAboutConnection(fErrorException, fErrorMessage);
 end;
 
-function TSqlDBConnection.NewStatementPrepared(const aSQL: RawUtf8;
+function TSqlDBConnection.NewStatementPrepared(const aSql: RawUtf8;
   ExpectResults: boolean; RaiseExceptionOnError: boolean;
   AllowReconnect: boolean): ISqlDBStatement;
 var
@@ -6643,7 +6643,7 @@ var
       InternalProcess(speActive);
       try
         Stmt := NewStatement;
-        Stmt.Prepare(aSQL, ExpectResults);
+        Stmt.Prepare(aSql, ExpectResults);
         if ToCache then
         begin
           if fCache = nil then
@@ -6680,11 +6680,11 @@ begin
   result := nil;
   fErrorMessage := '';
   fErrorException := nil;
-  if length(aSQL) < 5 then
+  if length(aSql) < 5 then
     exit;
   // first check if could be retrieved from cache
-  cachedSQL := aSQL;
-  ToCache := fProperties.IsCachable(Pointer(aSQL));
+  cachedSQL := aSql;
+  ToCache := fProperties.IsCachable(Pointer(aSql));
   if ToCache and
      (fCache <> nil) then
   begin
@@ -6708,7 +6708,7 @@ begin
         else
           for altern := 1 to fProperties.StatementCacheReplicates do
           begin
-            cachedSQL := aSQL + RawUtf8(AnsiChar(altern)); // safe SQL duplicate
+            cachedSQL := aSql + RawUtf8(AnsiChar(altern)); // safe SQL duplicate
             ndx := fCache.IndexOf(cachedSQL);
             if ndx >= 0 then
             begin
@@ -6829,7 +6829,7 @@ begin
           Properties.GetTableNames(Tables);
           if FindRawUtf8(Tables, TableName, false) < 0 then
             with Properties do
-              ExecuteNoResult(SQLCreate(aTableName, Fields, false), []);
+              ExecuteNoResult(SqlCreate(aTableName, Fields, false), []);
           Ins := NewStatement;
           Ins.Prepare(SQL, false);
         end;

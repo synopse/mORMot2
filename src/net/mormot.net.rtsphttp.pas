@@ -102,9 +102,9 @@ type
     /// convert a rtsp://.... URI into a http://... proxy URI
     // - will reuse the rtsp public server name, but change protocol to http://
     // and set the port to RtspPort
-    function RtspToHttp(const RtspURI: RawUtf8): RawUtf8;
+    function RtspToHttp(const RtspUri: RawUtf8): RawUtf8;
     /// convert a http://... proxy URI into a rtsp://.... URI
-    function HttpToRtsp(const HttpURI: RawUtf8): RawUtf8;
+    function HttpToRtsp(const HttpUri: RawUtf8): RawUtf8;
     /// the associated RTSP server address
     property RtspServer: RawUtf8
       read fRtspServer;
@@ -389,29 +389,29 @@ begin
     result := '';
 end;
 
-function TRtspOverHttpServer.RtspToHttp(const RtspURI: RawUtf8): RawUtf8;
+function TRtspOverHttpServer.RtspToHttp(const RtspUri: RawUtf8): RawUtf8;
 var
   uri: TUri;
 begin
   if (self <> nil) and
-     IdemPChar(pointer(RtspURI), 'RTSP://') and
-     uri.From(copy(RtspURI, 8, maxInt), fRtspPort) and
+     IdemPChar(pointer(RtspUri), 'RTSP://') and
+     uri.From(copy(RtspUri, 8, maxInt), fRtspPort) and
      IdemPropNameU(uri.Port, fRtspPort) then
     FormatUtf8('http://%:%/%', [uri.Server, fServer.Port, uri.Address], result)
   else
-    result := RtspURI;
+    result := RtspUri;
 end;
 
-function TRtspOverHttpServer.HttpToRtsp(const HttpURI: RawUtf8): RawUtf8;
+function TRtspOverHttpServer.HttpToRtsp(const HttpUri: RawUtf8): RawUtf8;
 var
   uri: TUri;
 begin
   if (self <> nil) and
-     uri.From(HttpURI, fServer.Port) and
+     uri.From(HttpUri, fServer.Port) and
      IdemPropNameU(uri.Port, fServer.Port) then
     FormatUtf8('rtsp://%:%/%', [uri.Server, fRtspPort, uri.Address], result)
   else
-    result := HttpURI;
+    result := HttpUri;
 end;
 
 

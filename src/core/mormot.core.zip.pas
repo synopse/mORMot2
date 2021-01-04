@@ -152,11 +152,11 @@ type
     procedure SetAlgoID(Algorithm: integer);
     function GetAlgoID: integer;
       {$ifdef HASINLINE}inline;{$endif}
-    function GetUTF8FileName: boolean;
+    function GetUtf8FileName: boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure SetUTF8FileName;
+    procedure SetUtf8FileName;
       {$ifdef HASINLINE}inline;{$endif}
-    procedure UnSetUTF8FileName;
+    procedure UnSetUtf8FileName;
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
@@ -819,18 +819,18 @@ begin
            (Algorithm and 15) shl 7; // proprietary flag for SynZipFiles.pas
 end;
 
-function TFileInfo.GetUTF8FileName: boolean;
+function TFileInfo.GetUtf8FileName: boolean;
 begin
   // from PKware appnote, Bit 11: Language encoding flag (EFS)
   result := (flags and (1 shl 11)) <> 0;
 end;
 
-procedure TFileInfo.SetUTF8FileName;
+procedure TFileInfo.SetUtf8FileName;
 begin
   flags := flags or (1 shl 11);
 end;
 
-procedure TFileInfo.UnSetUTF8FileName;
+procedure TFileInfo.UnSetUtf8FileName;
 begin
   flags := flags and not (1 shl 11);
 end;
@@ -876,12 +876,12 @@ begin
       {$else}  // intName := zipName -> error reference count under Delphi 6
       SetString(intName, PAnsiChar(pointer(zipName)), length(zipName));
       {$endif UNICODE}
-      fHr.fileInfo.UnSetUTF8FileName;
+      fHr.fileInfo.UnSetUtf8FileName;
     end
     else
     begin
       intName := StringToUtf8(zipName);
-      fHr.fileInfo.SetUTF8FileName;
+      fHr.fileInfo.SetUtf8FileName;
     end;
     fHr.fileInfo.nameLen := length(intName);
     InternalWrite(fMagic, sizeof(fMagic));
@@ -1218,7 +1218,7 @@ begin
       for j := 0 to infoLocal^.nameLen - 1 do
         if storedName[j] = '/' then // normalize path delimiter
           PAnsiChar(Pointer(tmp))[j] := '\';
-      if infoLocal^.GetUTF8FileName then
+      if infoLocal^.GetUtf8FileName then
         // decode UTF-8 file name into native string/TFileName type
         zipName := Utf8ToString(tmp)
       else

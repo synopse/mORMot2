@@ -862,7 +862,7 @@ begin
       with fViews[m] do
       begin
         Locker := TAutoLocker.Create;
-        MethodName := Utf8ToString(fFactory.Methods[m].URI);
+        MethodName := Utf8ToString(fFactory.Methods[m].Uri);
         SearchPattern := MethodName + '.*';
         files := FindTemplates(SearchPattern);
         if length(files) > 0 then
@@ -1631,7 +1631,7 @@ begin
                   with fApplication.fFactory do
                     raise EMvcException.CreateUtf8(
                       '%.CommandRunMethod: %.%() execution error',
-                      [self, InterfaceTypeInfo^.Name, Methods[fMethodIndex].URI]);
+                      [self, InterfaceTypeInfo^.Name, Methods[fMethodIndex].Uri]);
               action.RedirectToMethodName := exec.ServiceCustomAnswerHead;
               action.ReturnedStatus := exec.ServiceCustomAnswerStatus;
             finally
@@ -1864,7 +1864,7 @@ begin
   begin
     for m := 0 to fApplication.fFactory.MethodsCount - 1 do
     begin
-      method := fApplication.fFactory.Methods[m].URI;
+      method := fApplication.fFactory.Methods[m].Uri;
       if method[1] = '_' then
         // e.g. IService._Start() -> /service/start
         delete(method, 1, 1);
@@ -2019,7 +2019,7 @@ end;
 
 procedure TMvcRunOnRestServer.RunOnRestServerRoot(Ctxt: TRestServerUriContext);
 begin
-  InternalRunOnRestServer(Ctxt, Ctxt.URI + '/' + Ctxt.UriBlobFieldName);
+  InternalRunOnRestServer(Ctxt, Ctxt.Uri + '/' + Ctxt.UriBlobFieldName);
 end;
 
 procedure TMvcRunOnRestServer.RunOnRestServerSub(Ctxt: TRestServerUriContext);
@@ -2290,7 +2290,7 @@ end;
 procedure TMvcApplication.GetViewInfo(MethodIndex: integer; out info: variant);
 begin
   if MethodIndex >= 0 then
-    info := _ObjFast(['pageName', fFactory.Methods[MethodIndex].URI])
+    info := _ObjFast(['pageName', fFactory.Methods[MethodIndex].Uri])
   else
     info := _ObjFast([]);
 end;

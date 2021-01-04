@@ -123,7 +123,7 @@ function OpenHttp(const aServer, aPort: RawUtf8; aTLS: boolean = false;
 
 /// create a THttpClientSocket, returning nil on error
 // - useful to easily catch socket error exception ENetSock
-function OpenHttp(const aURI: RawUtf8;
+function OpenHttp(const aUri: RawUtf8;
   aAddress: PRawUtf8 = nil): THttpClientSocket; overload;
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
@@ -221,7 +221,7 @@ type
       ReceiveTimeout: cardinal = 0; aLayer: TNetLayer = nlTCP); overload; virtual;
     /// connect to the supplied URI
     // - is just a wrapper around TUri and the overloaded Create() constructor
-    constructor Create(const aURI: RawUtf8; const aProxyName: RawUtf8 = '';
+    constructor Create(const aUri: RawUtf8; const aProxyName: RawUtf8 = '';
       const aProxyByPass: RawUtf8 = ''; ConnectionTimeOut: cardinal = 0;
       SendTimeout: cardinal = 0; ReceiveTimeout: cardinal = 0;
       aIgnoreSSLCertificateErrors: boolean = false); overload;
@@ -241,7 +241,7 @@ type
     // - it will internally create a THttpRequest inherited instance: do not use
     // THttpRequest.Get() but either TWinHttp.Get(), TWinINet.Get() or
     // TCurlHttp.Get() methods
-    class function Get(const aURI: RawUtf8; const aHeader: RawUtf8 = '';
+    class function Get(const aUri: RawUtf8; const aHeader: RawUtf8 = '';
       aIgnoreSSLCertificateErrors: boolean = true; outHeaders: PRawUtf8 = nil;
       outStatus: PInteger = nil): RawByteString;
     /// wrapper method to create a resource via an HTTP POST
@@ -253,7 +253,7 @@ type
     // - it will internally create a THttpRequest inherited instance: do not use
     // THttpRequest.Post() but either TWinHttp.Post(), TWinINet.Post() or
     // TCurlHttp.Post() methods
-    class function Post(const aURI: RawUtf8; const aData: RawByteString;
+    class function Post(const aUri: RawUtf8; const aData: RawByteString;
       const aHeader: RawUtf8 = ''; aIgnoreSSLCertificateErrors: boolean = true;
       outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil): RawByteString;
     /// wrapper method to update a resource via an HTTP PUT
@@ -265,7 +265,7 @@ type
     // - it will internally create a THttpRequest inherited instance: do not use
     // THttpRequest.Put() but either TWinHttp.Put(), TWinINet.Put() or
     // TCurlHttp.Put() methods
-    class function Put(const aURI: RawUtf8; const aData: RawByteString;
+    class function Put(const aUri: RawUtf8; const aData: RawByteString;
       const aHeader: RawUtf8 = ''; aIgnoreSSLCertificateErrors: boolean = true;
       outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil): RawByteString;
     /// wrapper method to delete a resource via an HTTP DELETE
@@ -275,7 +275,7 @@ type
     // - it will internally create a THttpRequest inherited instance: do not use
     // THttpRequest.Delete() but either TWinHttp.Delete(), TWinINet.Delete() or
     // TCurlHttp.Delete() methods
-    class function Delete(const aURI: RawUtf8; const aHeader: RawUtf8 = '';
+    class function Delete(const aUri: RawUtf8; const aHeader: RawUtf8 = '';
       aIgnoreSSLCertificateErrors: boolean = true; outHeaders: PRawUtf8 = nil;
       outStatus: PInteger = nil): RawByteString;
 
@@ -708,7 +708,7 @@ type
     // $ Authorization: Bearer <aToken>
     // - TWinHttp will be used by default under Windows, unless you specify
     // another class
-    constructor Create(const aURI: RawUtf8; aKeepAliveSeconds: integer = 30;
+    constructor Create(const aUri: RawUtf8; aKeepAliveSeconds: integer = 30;
       aTimeoutSeconds: integer = 15*60; const aToken: RawUtf8 = '';
       aHttpClass: THttpRequestClass = nil); reintroduce;
     /// finalize the current connnection and flush its in-memory cache
@@ -719,7 +719,7 @@ type
     // $ Authorization: Bearer <aToken>
     // - TWinHttp will be used by default under Windows, unless you specify
     // another class
-    function LoadFromUri(const aURI: RawUtf8; const aToken: RawUtf8 = '';
+    function LoadFromUri(const aUri: RawUtf8; const aToken: RawUtf8 = '';
       aHttpClass: THttpRequestClass = nil): boolean;
     /// finalize the cache
     destructor Destroy; override;
@@ -740,13 +740,13 @@ type
 // - this method will use a low-level THttpClientSock socket for plain http URI,
 // or TWinHttp/TCurlHttp for any https URI, or if forceNotSocket is set to true
 // - see also OpenHttpGet() for direct THttpClientSock call
-function HttpGet(const aURI: RawUtf8; outHeaders: PRawUtf8 = nil;
+function HttpGet(const aUri: RawUtf8; outHeaders: PRawUtf8 = nil;
   forceNotSocket: boolean = false; outStatus: PInteger = nil): RawByteString; overload;
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket for plain http URI,
 // or TWinHttp/TCurlHttp for any https URI
-function HttpGet(const aURI: RawUtf8; const inHeaders: RawUtf8;
+function HttpGet(const aUri: RawUtf8; const inHeaders: RawUtf8;
   outHeaders: PRawUtf8 = nil; forceNotSocket: boolean = false;
   outStatus: PInteger = nil): RawByteString; overload;
 
@@ -1015,13 +1015,13 @@ begin
   end;
 end;
 
-function OpenHttp(const aURI: RawUtf8;
+function OpenHttp(const aUri: RawUtf8;
   aAddress: PRawUtf8): THttpClientSocket;
 var
   URI: TUri;
 begin
   result := nil;
-  if URI.From(aURI) then
+  if URI.From(aUri) then
   begin
     result := OpenHttp(URI.Server,URI.Port,URI.Https,URI.Layer);
     if aAddress <> nil then
@@ -1058,12 +1058,12 @@ class function THttpRequest.InternalREST(const url, method: RawUtf8;
   const data: RawByteString; const header: RawUtf8; aIgnoreSSLCertificateErrors: boolean;
   outHeaders: PRawUtf8; outStatus: PInteger): RawByteString;
 var
-  URI: TUri;
+  uri: TUri;
   outh: RawUtf8;
   status: integer;
 begin
   result := '';
-  with URI do
+  with uri do
     if From(url) then
     try
       with self.Create(Server, Port, Https, '', '', 0, 0, 0, Layer) do
@@ -1110,18 +1110,18 @@ begin
   InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout); // raise an exception on error
 end;
 
-constructor THttpRequest.Create(const aURI: RawUtf8; const aProxyName: RawUtf8;
+constructor THttpRequest.Create(const aUri: RawUtf8; const aProxyName: RawUtf8;
   const aProxyByPass: RawUtf8; ConnectionTimeOut: cardinal; SendTimeout: cardinal;
   ReceiveTimeout: cardinal; aIgnoreSSLCertificateErrors: boolean);
 var
-  URI: TUri;
+  uri: TUri;
 begin
-  if not URI.From(aURI) then
+  if not uri.From(aUri) then
     raise EHttpSocket.CreateFmt('%.Create: invalid url=%',
-      [ClassNameShort(self)^, aURI]);
+      [ClassNameShort(self)^, aUri]);
   IgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
-  Create(URI.Server, URI.Port, URI.Https, aProxyName, aProxyByPass,
-    ConnectionTimeOut, SendTimeout, ReceiveTimeout, URI.Layer);
+  Create(uri.Server, uri.Port, uri.Https, aProxyName, aProxyByPass,
+    ConnectionTimeOut, SendTimeout, ReceiveTimeout, uri.Layer);
 end;
 
 function THttpRequest.Request(const url, method: RawUtf8; KeepAlive: cardinal;
@@ -1178,34 +1178,34 @@ begin
   end;
 end;
 
-class function THttpRequest.Get(const aURI: RawUtf8; const aHeader: RawUtf8;
+class function THttpRequest.Get(const aUri: RawUtf8; const aHeader: RawUtf8;
   aIgnoreSSLCertificateErrors: boolean; outHeaders: PRawUtf8; outStatus: PInteger): RawByteString;
 begin
-  result := InternalREST(aURI, 'GET', '', aHeader, aIgnoreSSLCertificateErrors,
+  result := InternalREST(aUri, 'GET', '', aHeader, aIgnoreSSLCertificateErrors,
     outHeaders, outStatus);
 end;
 
-class function THttpRequest.Post(const aURI: RawUtf8; const aData: RawByteString;
+class function THttpRequest.Post(const aUri: RawUtf8; const aData: RawByteString;
   const aHeader: RawUtf8; aIgnoreSSLCertificateErrors: boolean; outHeaders: PRawUtf8;
   outStatus: PInteger): RawByteString;
 begin
-  result := InternalREST(aURI, 'POST', aData, aHeader,
+  result := InternalREST(aUri, 'POST', aData, aHeader,
     aIgnoreSSLCertificateErrors, outHeaders, outStatus);
 end;
 
-class function THttpRequest.Put(const aURI: RawUtf8; const aData: RawByteString;
+class function THttpRequest.Put(const aUri: RawUtf8; const aData: RawByteString;
   const aHeader: RawUtf8; aIgnoreSSLCertificateErrors: boolean; outHeaders:
   PRawUtf8; outStatus: PInteger): RawByteString;
 begin
-  result := InternalREST(aURI, 'PUT', aData, aHeader,
+  result := InternalREST(aUri, 'PUT', aData, aHeader,
     aIgnoreSSLCertificateErrors, outHeaders, outStatus);
 end;
 
-class function THttpRequest.Delete(const aURI: RawUtf8; const aHeader: RawUtf8;
+class function THttpRequest.Delete(const aUri: RawUtf8; const aHeader: RawUtf8;
   aIgnoreSSLCertificateErrors: boolean; outHeaders: PRawUtf8;
   outStatus: PInteger): RawByteString;
 begin
-  result := InternalREST(aURI, 'DELETE', '', aHeader,
+  result := InternalREST(aUri, 'DELETE', '', aHeader,
     aIgnoreSSLCertificateErrors, outHeaders, outStatus);
 end;
 
@@ -2116,7 +2116,7 @@ end;
 
 { THttpRequestCached }
 
-constructor THttpRequestCached.Create(const aURI: RawUtf8; aKeepAliveSeconds,
+constructor THttpRequestCached.Create(const aUri: RawUtf8; aKeepAliveSeconds,
   aTimeoutSeconds: integer; const aToken: RawUtf8; aHttpClass: THttpRequestClass);
 begin
   inherited Create;
@@ -2124,8 +2124,8 @@ begin
   if aTimeoutSeconds > 0 then // 0 means no cache
     fCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
       TypeInfo(THttpRequestCacheDynArray), true, aTimeoutSeconds);
-  if not LoadFromUri(aURI, aToken, aHttpClass) then
-    raise ESynException.CreateUtf8('%.Create: invalid aURI=%', [self, aURI]);
+  if not LoadFromUri(aUri, aToken, aHttpClass) then
+    raise ESynException.CreateUtf8('%.Create: invalid aUri=%', [self, aUri]);
 end;
 
 procedure THttpRequestCached.Clear;
@@ -2207,14 +2207,14 @@ begin
     aStatus^ := status;
 end;
 
-function THttpRequestCached.LoadFromUri(const aURI, aToken: RawUtf8;
+function THttpRequestCached.LoadFromUri(const aUri, aToken: RawUtf8;
   aHttpClass: THttpRequestClass): boolean;
 begin
   result := false;
   if (self = nil) or
      (fHttp <> nil) or
      (fSocket <> nil) or
-     not fUri.From(aURI) then
+     not fUri.From(aUri) then
     exit;
   fTokenHeader := AuthorizationBearer(aToken);
   if aHttpClass = nil then
@@ -2245,40 +2245,40 @@ end;
 
 
 
-function HttpGet(const aURI: RawUtf8; outHeaders: PRawUtf8;
+function HttpGet(const aUri: RawUtf8; outHeaders: PRawUtf8;
   forceNotSocket: boolean; outStatus: PInteger): RawByteString;
 begin
-  result := HttpGet(aURI, '', outHeaders, forceNotSocket, outStatus);
+  result := HttpGet(aUri, '', outHeaders, forceNotSocket, outStatus);
 end;
 
-function HttpGet(const aURI: RawUtf8; const inHeaders: RawUtf8;
+function HttpGet(const aUri: RawUtf8; const inHeaders: RawUtf8;
   outHeaders: PRawUtf8; forceNotSocket: boolean;
   outStatus: PInteger): RawByteString;
 var
-  URI: TUri;
+  uri: TUri;
 begin
-  if URI.From(aURI) then
-    if URI.Https or
+  if uri.From(aUri) then
+    if uri.Https or
        forceNotSocket then
       {$ifdef USEWININET}
       result := TWinHttp.Get(
-        aURI, inHeaders, {weakCA=}true, outHeaders, outStatus)
+        aUri, inHeaders, {weakCA=}true, outHeaders, outStatus)
       {$else}
       {$ifdef USELIBCURL}
       result := TCurlHttp.Get(
-        aURI, inHeaders, {weakCA=}true, outHeaders, outStatus)
+        aUri, inHeaders, {weakCA=}true, outHeaders, outStatus)
       {$else}
-      raise EHttpSocket.CreateFmt('https is not supported by HttpGet(%s)', [aURI])
+      raise EHttpSocket.CreateFmt('https is not supported by HttpGet(%s)', [aUri])
       {$endif USELIBCURL}
       {$endif USEWININET}
     else
       result := OpenHttpGet(
-        URI.Server, URI.Port, URI.Address, inHeaders, outHeaders, URI.Layer)
+        uri.Server, uri.Port, uri.Address, inHeaders, outHeaders, uri.Layer)
     else
       result := '';
   {$ifdef LINUX_RAWDEBUGVOIDHTTPGET}
   if result = '' then
-    writeln('HttpGet returned VOID for ',URI.server,':',URI.Port,' ',URI.Address);
+    writeln('HttpGet returned VOID for ',uri.server,':',uri.Port,' ',uri.Address);
   {$endif LINUX_RAWDEBUGVOIDHTTPGET}
 end;
 

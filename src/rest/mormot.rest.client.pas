@@ -1029,7 +1029,7 @@ type
 implementation
 
 uses
-  mormot.orm.client; // for injection of TRestOrmClientUri.URI field
+  mormot.orm.client; // for injection of TRestOrmClientUri.Uri field
 
 
 { ************ Client Authentication and Authorization Logic }
@@ -1774,7 +1774,7 @@ function TRestClientUri.{%H-}FakeCallbackRegister(Sender: TServiceFactory;
 begin
   raise EServiceException.CreateUtf8('% does not support interface parameters ' +
     'for %.%(%: %): consider using another kind of client',
-    [self, Sender.InterfaceFactory.InterfaceName, Method.URI,
+    [self, Sender.InterfaceFactory.InterfaceName, Method.Uri,
      ParamInfo.ParamName^, ParamInfo.ArgTypeName^]);
 end;
 
@@ -1963,7 +1963,7 @@ begin
   if not fOrmInstance.GetInterface(IRestOrmClient, fClient) then
     raise ERestException.CreateUtf8('%.Create with invalid %', [self, fOrmInstance]);
   // enable redirection of Uri() from IRestOrm/IRestOrmClient into this class
-  (fOrmInstance as TRestOrmClientUri).URI := URI;
+  (fOrmInstance as TRestOrmClientUri).Uri := URI;
 end;
 
 procedure TRestClientUri.SessionClose;

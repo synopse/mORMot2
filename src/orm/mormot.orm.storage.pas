@@ -549,12 +549,12 @@ type
     // - returns TRUE if the table has been refreshed and its content was modified:
     // therefore the client will know he'll need to refresh some content
     function RefreshedAndModified: boolean; virtual;
-    /// TRestOrmServer.URI use it for Static.EngineList to by-pass virtual table
+    /// TRestOrmServer.Uri use it for Static.EngineList to by-pass virtual table
     // - this default implementation will return TRUE and replace SQL with
     // SqlSelectAll[true] if it SQL equals SqlSelectAll[false] (i.e. 'SELECT *')
     // - this method is called only if the WHERE clause of SQL refers to the
     // static table name only (not needed to check it twice)
-    function AdaptSQLForEngineList(var SQL: RawUtf8): boolean; virtual;
+    function AdaptSqlForEngineList(var SQL: RawUtf8): boolean; virtual;
     /// create one index for all specific FieldNames at once
     // - do nothing virtual/abstract method by default: will return FALSE (i.e. error)
     function CreateSqlMultiIndex(Table: TOrmClass; const FieldNames: array of RawUtf8;
@@ -744,9 +744,9 @@ type
     function GetJsonValues(Stream: TStream; Expand: boolean;
       Stmt: TSelectStatement): PtrInt;
   public
-    /// TRestOrmServer.URI use it for Static.EngineList to by-pass virtual table
+    /// TRestOrmServer.Uri use it for Static.EngineList to by-pass virtual table
     // - overridden method to handle basic queries as handled by EngineList()
-    function AdaptSQLForEngineList(var SQL: RawUtf8): boolean; override;
+    function AdaptSqlForEngineList(var SQL: RawUtf8): boolean; override;
     /// overridden methods for direct in-memory database engine thread-safe process
     function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8; override;
     function EngineList(const SQL: RawUtf8; ForceAjax: boolean = false;
@@ -759,7 +759,7 @@ type
       BlobField: PRttiProp; const BlobData: RawBlob): boolean; override;
     function EngineDeleteWhere(TableModelIndex: integer; const SqlWhere: RawUtf8;
       const IDs: TIDDynArray): boolean; override;
-    function EngineExecute(const aSQL: RawUtf8): boolean; override;
+    function EngineExecute(const aSql: RawUtf8): boolean; override;
   public
     /// initialize the table storage data, reading it from a file if necessary
     // - data encoding on file is UTF-8 JSON format by default, or
@@ -1196,7 +1196,7 @@ type
     function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8; override;
     function EngineList(const SQL: RawUtf8; ForceAjax: boolean = false;
       ReturnedRowCount: PPtrInt = nil): RawUtf8; override;
-    function EngineExecute(const aSQL: RawUtf8): boolean; override;
+    function EngineExecute(const aSql: RawUtf8): boolean; override;
     function EngineAdd(TableModelIndex: integer;
       const SentData: RawUtf8): TID; override;
     function EngineUpdate(TableModelIndex: integer; ID: TID;
@@ -1281,7 +1281,7 @@ type
     function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8; override;
     function EngineList(const SQL: RawUtf8; ForceAjax: boolean = false;
       ReturnedRowCount: PPtrInt = nil): RawUtf8; override;
-    function EngineExecute(const aSQL: RawUtf8): boolean; override;
+    function EngineExecute(const aSql: RawUtf8): boolean; override;
     function EngineAdd(TableModelIndex: integer;
       const SentData: RawUtf8): TID; override;
     function EngineUpdate(TableModelIndex: integer; ID: TID;
@@ -1543,7 +1543,7 @@ class function TOrmVirtualTable.StructureFromClass(aClass: TOrmClass;
   const aTableName: RawUtf8): RawUtf8;
 begin
   FormatUtf8('CREATE TABLE % (%', [aTableName,
-    GetVirtualTableSQLCreate(aClass.OrmProps)], result);
+    GetVirtualTableSqlCreate(aClass.OrmProps)], result);
 end;
 
 function TOrmVirtualTable.Structure: RawUtf8;
@@ -1805,7 +1805,7 @@ begin
   result := Model.UnLock(Table, aID);
 end;
 
-function TRestStorage.AdaptSQLForEngineList(var SQL: RawUtf8): boolean;
+function TRestStorage.AdaptSqlForEngineList(var SQL: RawUtf8): boolean;
 begin
   if fStoredClassProps = nil then
     result := false
@@ -1971,7 +1971,7 @@ begin
      (fStoredClassProps <> nil) then
     with fStoredClassProps do
     begin
-      // used by AdaptSQLForEngineList() method
+      // used by AdaptSqlForEngineList() method
       fBasicUpperSqlSelect[false] := UpperCase(SQL.SelectAllWithRowID);
       SetLength(fBasicUpperSqlSelect[false],
         length(fBasicUpperSqlSelect[false]) - 1); // trim right ';'
@@ -2220,7 +2220,7 @@ begin // RecordCanBeUpdated() has already been called
   end;
 end;
 
-function TRestStorageInMemory.EngineExecute(const aSQL: RawUtf8): boolean;
+function TRestStorageInMemory.EngineExecute(const aSql: RawUtf8): boolean;
 begin
   result := false; // there is no SQL engine with this class
 end;
@@ -2254,13 +2254,13 @@ begin
   W.Add(',');
 end;
 
-function TRestStorageInMemory.AdaptSQLForEngineList(var SQL: RawUtf8): boolean;
+function TRestStorageInMemory.AdaptSqlForEngineList(var SQL: RawUtf8): boolean;
 var
   P: PUtf8Char;
   Prop: RawUtf8;
   WithoutRowID: boolean;
 begin
-  result := inherited AdaptSQLForEngineList(SQL);
+  result := inherited AdaptSqlForEngineList(SQL);
   if result then
     // 'select * from table'
     exit;
@@ -4178,9 +4178,9 @@ begin
   result := fRemoteRest.EngineDeleteWhere(fRemoteTableIndex, SqlWhere, IDs);
 end;
 
-function TRestStorageRemote.EngineExecute(const aSQL: RawUtf8): boolean;
+function TRestStorageRemote.EngineExecute(const aSql: RawUtf8): boolean;
 begin
-  result := fRemoteRest.EngineExecute(aSQL);
+  result := fRemoteRest.EngineExecute(aSql);
 end;
 
 function TRestStorageRemote.EngineList(const SQL: RawUtf8; ForceAjax: boolean;
@@ -4500,13 +4500,13 @@ begin
   end;
 end;
 
-function TRestStorageShard.EngineExecute(const aSQL: RawUtf8): boolean;
+function TRestStorageShard.EngineExecute(const aSql: RawUtf8): boolean;
 begin
   StorageLock(false, 'EngineExecute');
   try
     if (fShardLast >= 0) and
        not (ssoNoExecute in fOptions) then
-      result := fShards[fShardLast].EngineExecute(aSQL)
+      result := fShards[fShardLast].EngineExecute(aSql)
     else
       result := false;
   finally

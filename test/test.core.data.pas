@@ -705,8 +705,8 @@ begin // '[1,2001,3001,4001,"1","1001"],[2,2002,3002,4002,"2","1002"],...'
   PFV(Data)^.Minor := GetNextItemCardinal(Context.JSON);
   PFV(Data)^.Release := GetNextItemCardinal(Context.JSON);
   PFV(Data)^.Build := GetNextItemCardinal(Context.JSON);
-  PFV(Data)^.Main := Utf8ToString(Context.ParseUTF8);
-  PFV(Data)^.Detailed := Utf8ToString(Context.ParseUTF8);
+  PFV(Data)^.Main := Utf8ToString(Context.ParseUtf8);
+  PFV(Data)^.Detailed := Utf8ToString(Context.ParseUtf8);
   Context.ParseEndOfObject;
 end;
 
@@ -1006,7 +1006,7 @@ type
   {$ifdef ISDELPHI2010}
   TStaticArrayOfInt = packed array[1..5] of Integer;
 
-  TNewRTTI = record
+  TNewRtti = record
     Number: integer;
     StaticArray: array[1..2] of record
       Name: string;
@@ -1382,7 +1382,7 @@ var
     i, a, v: PtrInt;
     {$ifdef ISDELPHI2010}
     nav, nav2: TConsultaNav;
-    nrtti, nrtti2: TNewRTTI;
+    nrtti, nrtti2: TNewRtti;
     book: TBookRecord;
     {$endif ISDELPHI2010}
   begin
@@ -1648,15 +1648,15 @@ var
     Check(CompareMem(@nav, @nav2, sizeof(nav)));
     Finalize(nrtti);
     FillCharFast(nrtti, sizeof(nrtti), 0);
-    U := RecordSaveJson(nrtti, TypeInfo(TNewRTTI));
+    U := RecordSaveJson(nrtti, TypeInfo(TNewRtti));
     CheckEqual(U,
       '{"Number":0,"StaticArray":[{"Name":"","Single":0,"Double":0},' +
       '{"Name":"","Single":0,"Double":0}],"Int":[0,0,0,0,0]}');
     Finalize(nrtti2);
     FillCharFast(nrtti2, sizeof(nrtti2), 0);
-    Check(RecordLoadJson(nrtti2, pointer(U), TypeInfo(TNewRTTI)) <> nil);
-    J := RecordSaveJson(nrtti2, TypeInfo(TNewRTTI));
-    CheckEqual(J, RecordSaveJson(nrtti, TypeInfo(TNewRTTI)));
+    Check(RecordLoadJson(nrtti2, pointer(U), TypeInfo(TNewRtti)) <> nil);
+    J := RecordSaveJson(nrtti2, TypeInfo(TNewRtti));
+    CheckEqual(J, RecordSaveJson(nrtti, TypeInfo(TNewRtti)));
     nrtti.Number := 1;
     nrtti.StaticArray[1].Name := 'one';
     nrtti.StaticArray[1].Single := 1.5;
@@ -1669,15 +1669,15 @@ var
     nrtti.Int[3] := 3;
     nrtti.Int[4] := 4;
     nrtti.Int[5] := 5;
-    U := RecordSaveJson(nrtti, TypeInfo(TNewRTTI));
+    U := RecordSaveJson(nrtti, TypeInfo(TNewRtti));
     CheckEqual(U,
       '{"Number":1,"StaticArray":[{"Name":"one","Single":1.5,"Double":1.7},' +
       '{"Name":"two","Single":2.5,"Double":2.7}],"Int":[1,2,3,4,5]}');
     Finalize(nrtti2);
     FillCharFast(nrtti2, sizeof(nrtti2), 0);
-    Check(RecordLoadJson(nrtti2, pointer(U), TypeInfo(TNewRTTI)) <> nil);
-    J := RecordSaveJson(nrtti2, TypeInfo(TNewRTTI));
-    CheckEqual(J, RecordSaveJson(nrtti, TypeInfo(TNewRTTI)));
+    Check(RecordLoadJson(nrtti2, pointer(U), TypeInfo(TNewRtti)) <> nil);
+    J := RecordSaveJson(nrtti2, TypeInfo(TNewRtti));
+    CheckEqual(J, RecordSaveJson(nrtti, TypeInfo(TNewRtti)));
     U :=
       '{ "name": "Book the First", "author": { "first_name": "Bob", "last_name": "White" } }';
     RecordLoadJson(book, UniqueRawUtf8(U), TypeInfo(TBookRecord));
@@ -1794,34 +1794,34 @@ begin
   CheckEqual(QuotedStrJson('a'#13'b'#1'c'), '"a\rb\u0001c"');
   CheckEqual(QuotedStrJson('a'#13'b'#31'c'), '"a\rb\u001Fc"');
   CheckEqual(QuotedStrJson('a'#13'b'#31), '"a\rb\u001F"');
-  Check(UTF8ContentType('null') = oftUnknown);
-  Check(UTF8ContentType('0') = oftInteger);
-  Check(UTF8ContentType('123') = oftInteger);
-  Check(UTF8ContentType('0123') = oftUtf8Text);
-  Check(UTF8ContentType('-123') = oftInteger);
-  Check(UTF8ContentType('123.1') = oftCurrency);
-  Check(UTF8ContentType('123.12') = oftCurrency);
-  Check(UTF8ContentType('123.1234') = oftCurrency);
-  Check(UTF8ContentType('123.12345678') = oftFloat);
-  Check(UTF8ContentType('1.13e+12') = oftFloat);
-  Check(UTF8ContentType('1.13e12') = oftFloat);
-  Check(UTF8ContentType('-1.13e-12') = oftFloat);
-  Check(UTF8ContentType('1.13e+120') = oftFloat);
-  Check(UTF8ContentType('1.13E120') = oftFloat);
-  Check(UTF8ContentType('1.13E-120') = oftFloat);
-  Check(UTF8ContentType('1.13E307') = oftFloat);
-  Check(UTF8ContentType('1.13E-323') = oftFloat);
-  Check(UTF8ContentType('1.13e+a3') = oftUtf8Text);
-  Check(UTF8ContentType('1.13e+3a') = oftUtf8Text);
-  Check(UTF8ContentType('1.13e+330') = oftUtf8Text);
-  Check(UTF8ContentType('1.13e330') = oftUtf8Text);
-  Check(UTF8ContentType('1.13e-330') = oftUtf8Text);
-  Check(UTF8ContentType('420014165100E335') = oftUtf8Text);
-  Check(UTF8ContentType('123.') = oftUtf8Text);
-  Check(UTF8ContentType('123.a') = oftUtf8Text);
-  Check(UTF8ContentType('123.1a') = oftUtf8Text);
-  Check(UTF8ContentType('123.1234a') = oftUtf8Text);
-  Check(UTF8ContentType('123-2') = oftUtf8Text);
+  Check(Utf8ContentType('null') = oftUnknown);
+  Check(Utf8ContentType('0') = oftInteger);
+  Check(Utf8ContentType('123') = oftInteger);
+  Check(Utf8ContentType('0123') = oftUtf8Text);
+  Check(Utf8ContentType('-123') = oftInteger);
+  Check(Utf8ContentType('123.1') = oftCurrency);
+  Check(Utf8ContentType('123.12') = oftCurrency);
+  Check(Utf8ContentType('123.1234') = oftCurrency);
+  Check(Utf8ContentType('123.12345678') = oftFloat);
+  Check(Utf8ContentType('1.13e+12') = oftFloat);
+  Check(Utf8ContentType('1.13e12') = oftFloat);
+  Check(Utf8ContentType('-1.13e-12') = oftFloat);
+  Check(Utf8ContentType('1.13e+120') = oftFloat);
+  Check(Utf8ContentType('1.13E120') = oftFloat);
+  Check(Utf8ContentType('1.13E-120') = oftFloat);
+  Check(Utf8ContentType('1.13E307') = oftFloat);
+  Check(Utf8ContentType('1.13E-323') = oftFloat);
+  Check(Utf8ContentType('1.13e+a3') = oftUtf8Text);
+  Check(Utf8ContentType('1.13e+3a') = oftUtf8Text);
+  Check(Utf8ContentType('1.13e+330') = oftUtf8Text);
+  Check(Utf8ContentType('1.13e330') = oftUtf8Text);
+  Check(Utf8ContentType('1.13e-330') = oftUtf8Text);
+  Check(Utf8ContentType('420014165100E335') = oftUtf8Text);
+  Check(Utf8ContentType('123.') = oftUtf8Text);
+  Check(Utf8ContentType('123.a') = oftUtf8Text);
+  Check(Utf8ContentType('123.1a') = oftUtf8Text);
+  Check(Utf8ContentType('123.1234a') = oftUtf8Text);
+  Check(Utf8ContentType('123-2') = oftUtf8Text);
   Check(uct('null') = oftUnknown);
   Check(uct('0') = oftInteger);
   Check(uct('123') = oftInteger);
@@ -2777,7 +2777,7 @@ procedure TTestCoreProcess._TDecimal128;
     Check(v2.Equals(v));
   end;
 
-  procedure Test2(const fromvalue, expected: RaWUTF8;
+  procedure Test2(const fromvalue, expected: RawUtf8;
     h: QWord = 0; l: QWord = 0);
   var
     v: TDecimal128;
@@ -3889,7 +3889,7 @@ begin
       continue;
     check(length(EMOJI_UTF8[e]) = 4);
     P := Pointer(EMOJI_UTF8[e]);
-    checkEqual(NextUTF8Ucs4(P), $1f5ff + ord(e));
+    checkEqual(NextUtf8Ucs4(P), $1f5ff + ord(e));
     FormatUtf8(':smile % ok', [EMOJI_TAG[e]], tmp);
     P := pointer(tmp);
     check(EmojiParseDots(P) = eNone);

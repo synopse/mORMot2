@@ -106,7 +106,7 @@ type
     function MainEngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
       const FieldName: RawUtf8; Increment: Int64): boolean; override;
     // method not implemented: always return false
-    function EngineExecute(const aSQL: RawUtf8): boolean; override;
+    function EngineExecute(const aSql: RawUtf8): boolean; override;
   public
     /// initialize an in-memory REST server with no database file
     constructor Create(aRest: TRest); overload; override;
@@ -446,7 +446,7 @@ begin
   InternalLog('UpdateToFile % done in %', [fFileName, timer.Stop], sllDB);
 end;
 
-function TRestOrmServerFullMemory.EngineExecute(const aSQL: RawUtf8): boolean;
+function TRestOrmServerFullMemory.EngineExecute(const aSql: RawUtf8): boolean;
 begin
   result := false; // not implemented in this basic REST server class
 end;

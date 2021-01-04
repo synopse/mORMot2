@@ -77,7 +77,7 @@ type
     /// TRUE if you want the SQL creation fields to use mORMot collation
     // - default value is TRUE for use within the mORMot framework, to use
     // dedicated UTF-8 collation and full Unicode support, and Iso8601 handling
-    // - when set to FALSE, SQLCreate() method will return standard ASCII
+    // - when set to FALSE, SqlCreate() method will return standard ASCII
     // SQLite collations for TEXT: it will make interaction with other programs
     // more compatible, at database file level
     property UseMormotCollations: boolean
@@ -207,7 +207,7 @@ type
     // - if ExpectResults is TRUE, then Step() and Column*() methods are available
     // to retrieve the data rows
     // - raise an ESqlDBException on any error
-    procedure Prepare(const aSQL: RawUtf8; ExpectResults: boolean = false);
+    procedure Prepare(const aSql: RawUtf8; ExpectResults: boolean = false);
       overload; override;
     /// Execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
@@ -317,7 +317,7 @@ const
     ' TEXT COLLATE ISO8601', ' TEXT COLLATE SYSTEMNOCASE', ' BLOB'));
 begin
   fUseMormotCollations := Value;
-  fSQLCreateField := SQLITE3_FIELDS[Value];
+  fSqlCreateField := SQLITE3_FIELDS[Value];
 end;
 
 function TSqlDBSQLite3ConnectionProperties.GetMainDB: TSqlDataBase;
@@ -692,12 +692,12 @@ begin
   end;
 end;
 
-procedure TSqlDBSQLite3Statement.Prepare(const aSQL: RawUtf8; ExpectResults: boolean);
+procedure TSqlDBSQLite3Statement.Prepare(const aSql: RawUtf8; ExpectResults: boolean);
 begin
   if fShouldLogSQL then
     SQLLogBegin(sllDB);
-  inherited Prepare(aSQL, ExpectResults); // set fSQL + Connect if necessary
-  fStatement.Prepare(TSqlDBSQLite3Connection(Connection).fDB.DB, aSQL);
+  inherited Prepare(aSql, ExpectResults); // set fSql + Connect if necessary
+  fStatement.Prepare(TSqlDBSQLite3Connection(Connection).fDB.DB, aSql);
   fColumnCount := fStatement.FieldCount;
   if fShouldLogSQL then
   begin

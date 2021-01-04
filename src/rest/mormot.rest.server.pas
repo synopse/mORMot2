@@ -265,9 +265,9 @@ type
     /// the URI address, excluding trailing /info and ?par1=.... parameters
     // - can be either the table name (in RESTful protocol), or a service name
     Uri: RawUtf8;
-    /// same as Call^.URI, but without the &session_signature=... ending
+    /// same as Call^.Uri, but without the &session_signature=... ending
     UriWithoutSignature: RawUtf8;
-    /// points inside Call^.URI, after the 'root/' prefix
+    /// points inside Call^.Uri, after the 'root/' prefix
     UriAfterRoot: PUtf8Char;
     /// the optional Blob field name as specified in URI
     // - e.g. retrieved from "ModelRoot/TableName/TableID/BlobFieldName"
@@ -386,7 +386,7 @@ type
     // TRestServer.RecordCanBeUpdated failure
     CustomErrorMsg: RawUtf8;
     /// high-resolution timimg of the execution command, in micro-seconds
-    // - only set when TRestServer.URI finished
+    // - only set when TRestServer.Uri finished
     MicroSecondsElapsed: QWord;
     /// JWT validation information, as filled by AuthenticationCheck()
     JwtContent: TJwtContent;
@@ -754,21 +754,21 @@ type
   // to the DataSnap technology, but in a KISS way; it's fully integrated in the
   // Client/Server architecture of our framework
   // - just add a published method of this type to any TRestServer descendant
-  // - when TRestServer.URI receive a request for ModelRoot/MethodName
+  // - when TRestServer.Uri receive a request for ModelRoot/MethodName
   // or ModelRoot/TableName/TableID/MethodName, it will check for a published method
   // in its self instance named MethodName which MUST be of TOnRestServerCallBack
   // type (not checked neither at compile time neither at runtime: beware!) and
   // call it to handle the request
   // - important warning: the method implementation MUST be thread-safe
-  // - when TRestServer.URI receive a request for ModelRoot/MethodName,
+  // - when TRestServer.Uri receive a request for ModelRoot/MethodName,
   // it calls the corresponding published method with aRecord set to nil
-  // - when TRestServer.URI receive a request for ModelRoot/TableName/TableID/MethodName,
+  // - when TRestServer.Uri receive a request for ModelRoot/TableName/TableID/MethodName,
   // it calls the corresponding published method with aRecord pointing to a
   // just created instance of the corresponding class,  with its field ID set;
   // note that the only set field is ID: other fields of aRecord are not set, but
   // must secificaly be retrieved on purpose
   // - for ModelRoot/TableName/TableID/MethodName, the just created instance will
-  // be freed by TRestServer.URI when the method returns
+  // be freed by TRestServer.Uri when the method returns
   // - Ctxt.Parameters values are set from incoming URI, and each parameter can be
   // retrieved with a loop like this:
   // !  if not UrlDecodeNeedParameters(Ctxt.Parameters,'SORT,COUNT') then
@@ -1383,7 +1383,7 @@ type
     fDeleted: TSynMonitorCount64;
     // [Write: boolean] per-table statistics
     fPerTable: array[boolean] of TSynMonitorWithSizeObjArray;
-    // no overriden Changed: TRestServer.URI will do it in finally block
+    // no overriden Changed: TRestServer.Uri will do it in finally block
   public
     /// initialize the instance
     constructor Create(aServer: TRestServer); reintroduce;
@@ -1756,14 +1756,14 @@ type
     Reason: TOnAuthenticationFailedReason; Session: TAuthSession;
     Ctxt: TRestServerUriContext) of object;
 
-  /// callback raised before TRestServer.URI execution
+  /// callback raised before TRestServer.Uri execution
   // - should return TRUE to execute the command, FALSE to cancel it
   TOnBeforeUri = function(Ctxt: TRestServerUriContext): boolean of object;
 
-  /// callback raised after TRestServer.URI execution
+  /// callback raised after TRestServer.Uri execution
   TOnAfterUri = procedure(Ctxt: TRestServerUriContext) of object;
 
-  /// callback raised if TRestServer.URI execution failed
+  /// callback raised if TRestServer.Uri execution failed
   // - should return TRUE to execute Ctxt.Error(E,...), FALSE if returned
   // content has already been set as expected by the client
   TNotifyErrorUri = function(Ctxt: TRestServerUriContext;
@@ -1917,7 +1917,7 @@ type
     // - should return FALSE if the method should not be executed, and the
     // callback should set the corresponding error to the supplied context e.g.
     // ! Ctxt.Error('Unauthorized method',HTTP_NOTALLOWED);
-    // - since this event will be executed by every TRestServer.URI call,
+    // - since this event will be executed by every TRestServer.Uri call,
     // it should better not make any slow process (like writing to a remote DB)
     // - see also TRest.OnDecryptBody, which is common to the client side, so
     // may be a better place for implementing shared process (e.g. encryption)
@@ -1925,7 +1925,7 @@ type
     /// event trigerred when Uri() finished to process a request
     // - the supplied Ctxt parameter will give access to the command which has
     // been executed, e.g. via Ctxt.Call.OutStatus or Ctxt.MicroSecondsElapsed
-    // - since this event will be executed by every TRestServer.URI call,
+    // - since this event will be executed by every TRestServer.Uri call,
     // it should better not make any slow process (like writing to a remote DB)
     // - see also TRest.OnDecryptBody/OnEncryptBody, which is common to the
     // client side, so may be better to implement shared process (e.g. encryption)
@@ -1942,7 +1942,7 @@ type
     OnInternalInfo: TOnInternalInfo;
     /// event trigerred when Uri() is called, and at least 128 ms is elapsed
     // - could be used to execute some additional process after a period of time
-    // - note that if TRestServer.URI is not called by any client, this
+    // - note that if TRestServer.Uri is not called by any client, this
     // callback won't be executed either
     OnIdle: TNotifyEvent;
     /// this property can be used to specify the URI parmeters to be used
@@ -2348,7 +2348,7 @@ type
     property ShutdownRequested: boolean
       read fShutdownRequested;
   published
-    /// allow to customize how TRestServer.URI process the requests
+    /// allow to customize how TRestServer.Uri process the requests
     // - e.g. if HTTP_SUCCESS with no body should be translated into HTTP_NOCONTENT
     property Options: TRestServerOptions
       read fOptions write fOptions;
@@ -3390,10 +3390,10 @@ procedure TRestServerUriContext.ExecuteOrmGet;
   end;
 
 var
-  SqlSelect, SqlWhere, SqlWhereCount, SQLSort, SQLDir, SQL: RawUtf8;
-  SQLStartIndex, SQLResults, SQLTotalRowsCount: integer;
+  SqlSelect, SqlWhere, SqlWhereCount, SqlSort, SqlDir, Sql: RawUtf8;
+  SqlStartIndex, SqlResults, SqlTotalRowsCount: integer;
   NonStandardSqlSelectParameter, NonStandardSqlWhereParameter: boolean;
-  SQLisSelect: boolean;
+  SqlisSelect: boolean;
   ResultList: TOrmTable;
   TableIndexes: TIntegerDynArray;
   rec: TOrm;
@@ -3412,26 +3412,26 @@ begin
           begin
             if (Call.InBody = '') and
                (Parameters <> nil) and
-               (reUrlEncodedSQL in Call.RestAccessRights^.AllowRemoteExecute) then
+               (reUrlEncodedSql in Call.RestAccessRights^.AllowRemoteExecute) then
             begin
               // GET with a SQL statement sent in URI, as sql=....
-              while not UrlDecodeValue(Parameters, 'SQL=', SQL, @Parameters) do
+              while not UrlDecodeValue(Parameters, 'SQL=', Sql, @Parameters) do
                 if Parameters = nil then
                   break;
             end
             else
               // GET with a SQL statement sent as UTF-8 body (not 100% HTTP compatible)
-              SQL := Call.InBody;
-            if SQL <> '' then
+              Sql := Call.InBody;
+            if Sql <> '' then
             begin
-              SQLisSelect := isSelect(pointer(SQL), @SqlSelect);
-              if SQLisSelect or
-                 (reSQL in Call.RestAccessRights^.AllowRemoteExecute) then
+              SqlisSelect := isSelect(pointer(Sql), @SqlSelect);
+              if SqlisSelect or
+                 (reSql in Call.RestAccessRights^.AllowRemoteExecute) then
               begin
                 StaticOrm := nil;
-                if SQLisSelect then
+                if SqlisSelect then
                 begin
-                  TableIndexes := Server.fModel.GetTableIndexesFromSqlSelect(SQL);
+                  TableIndexes := Server.fModel.GetTableIndexesFromSqlSelect(Sql);
                   if TableIndexes = nil then
                   begin
                     // check for SELECT without any known table
@@ -3453,17 +3453,17 @@ begin
                       end;
                     // use the first static table (poorman's JOIN)
                     StaticOrm := TRestOrmServer(Server.fOrmInstance).
-                      InternalAdaptSQL(TableIndexes[0], SQL);
+                      InternalAdaptSql(TableIndexes[0], Sql);
                   end;
                 end;
                 if StaticOrm <> nil then
                 begin
                   TableEngine := StaticOrm;
-                  Call.OutBody := TableEngine.EngineList(SQL);
+                  Call.OutBody := TableEngine.EngineList(Sql);
                 end
                 else
                   Call.OutBody := TRestOrmServer(Server.fOrmInstance).
-                    MainEngineList(SQL, false, nil);
+                    MainEngineList(Sql, false, nil);
                 // security note: only first statement is run by EngineList()
                 if Call.OutBody <> '' then
                 begin
@@ -3477,9 +3477,9 @@ begin
                       ConvertOutBodyAsPlainJson(SqlSelect, opt);
                   end;
                   Call.OutStatus := HTTP_SUCCESS;  // 200 OK
-                  if not SQLisSelect then
+                  if not SqlisSelect then
                    // needed for fStats.NotifyOrm(Method) below
-                    Method := TUriMethod(IdemPCharArray(SQLBegin(pointer(SQL)),
+                    Method := TUriMethod(IdemPCharArray(SqlBegin(pointer(Sql)),
                       ['INSERT', 'UPDATE', 'DELETE']) + 2); // -1+2 -> mGET=1
                 end;
               end;
@@ -3567,12 +3567,12 @@ begin
             // Safe.Lock not available here
             SqlSelect := 'RowID'; // if no select is specified (i.e. ModelRoot/TableName)
             // all IDs of this table are returned to the client
-            SQLTotalRowsCount := 0;
+            SqlTotalRowsCount := 0;
             if Parameters <> nil then
             begin
               // '?select=...&where=...' or '?where=...'
-              SQLStartIndex := 0;
-              SQLResults := 0;
+              SqlStartIndex := 0;
+              SqlResults := 0;
               if Parameters^ <> #0 then
                 with Server.UriPagingParameters do
                 begin
@@ -3581,10 +3581,10 @@ begin
                   NonStandardSqlWhereParameter :=
                     Where <> PAGINGPARAMETERS_YAHOO.Where;
                   repeat
-                    UrlDecodeValue(Parameters, Sort, SQLSort);
-                    UrlDecodeValue(Parameters, Dir, SQLDir);
-                    UrlDecodeInteger(Parameters, StartIndex, SQLStartIndex);
-                    UrlDecodeInteger(Parameters, Results, SQLResults);
+                    UrlDecodeValue(Parameters, Sort, SqlSort);
+                    UrlDecodeValue(Parameters, Dir, SqlDir);
+                    UrlDecodeInteger(Parameters, StartIndex, SqlStartIndex);
+                    UrlDecodeInteger(Parameters, Results, SqlResults);
                     UrlDecodeValue(Parameters, Select, SqlSelect);
                     if NonStandardSqlSelectParameter and
                        (SqlSelect = '') then
@@ -3598,16 +3598,16 @@ begin
                 end;
               // let SQLite3 do the sort and the paging (will be ignored by Static)
               SqlWhereCount := SqlWhere; // "select count(*)" won't expect any ORDER
-              if (SQLSort <> '') and
+              if (SqlSort <> '') and
                  (StrPosI('ORDER BY ', pointer(SqlWhere)) = nil) then
               begin
-                if SameTextU(SQLDir, 'DESC') then
+                if SameTextU(SqlDir, 'DESC') then
                   // allow DESC, default is ASC
-                  SQLSort := SQLSort + ' DESC';
-                SqlWhere := SqlWhere + ' ORDER BY ' + SQLSort;
+                  SqlSort := SqlSort + ' DESC';
+                SqlWhere := SqlWhere + ' ORDER BY ' + SqlSort;
               end;
               SqlWhere := TrimU(SqlWhere);
-              if (SQLResults <> 0) and
+              if (SqlResults <> 0) and
                  (StrPosI('LIMIT ', pointer(SqlWhere)) = nil) then
               begin
                 if Server.UriPagingParameters.SendTotalRowsCountFmt <> '' then
@@ -3624,19 +3624,19 @@ begin
                       SqlFromSelectWhere('Count(*)', SqlWhereCount));
                   if ResultList <> nil then
                   try
-                    SQLTotalRowsCount := ResultList.GetAsInteger(1, 0);
+                    SqlTotalRowsCount := ResultList.GetAsInteger(1, 0);
                   finally
                     ResultList.Free;
                   end;
                 end;
                 SqlWhere := FormatUtf8('% LIMIT % OFFSET %', [SqlWhere,
-                  SQLResults, SQLStartIndex]);
+                  SqlResults, SqlStartIndex]);
               end;
             end;
-            SQL := Server.fModel.TableProps[TableIndex].SqlFromSelectWhere(
+            Sql := Server.fModel.TableProps[TableIndex].SqlFromSelectWhere(
               SqlSelect, TrimU(SqlWhere));
             Call.OutBody := TRestOrmServer(Server.fOrmInstance).
-              InternalListRawUtf8(TableIndex, SQL);
+              InternalListRawUtf8(TableIndex, Sql);
             if Call.OutBody <> '' then
             begin
               // got JSON list '[{...}]' ?
@@ -3667,18 +3667,18 @@ begin
                         dec(L);
                   if j > 0 then
                     Insert(FormatUtf8(Server.UriPagingParameters.SendTotalRowsCountFmt,
-                      [SQLTotalRowsCount]), Call.OutBody, j);
+                      [SqlTotalRowsCount]), Call.OutBody, j);
                 end
                 else
                 begin
                   // expanded format -> as {"values":[...],"total":n}
-                  if SQLTotalRowsCount = 0 then // avoid sending fields array
+                  if SqlTotalRowsCount = 0 then // avoid sending fields array
                     Call.OutBody := '[]'
                   else
                     Call.OutBody := TrimU(Call.OutBody);
                   Call.OutBody := '{"values":' + Call.OutBody +
                     FormatUtf8(Server.UriPagingParameters.SendTotalRowsCountFmt,
-                     [SQLTotalRowsCount]) + '}';
+                     [SqlTotalRowsCount]) + '}';
                 end;
             end
             else
@@ -3739,7 +3739,7 @@ var
   Blob: PRttiProp;
   cache: TRestCache;
   orm: TRestOrmServer;
-  SqlSelect, SqlWhere, SQLSort, SQLDir: RawUtf8;
+  SqlSelect, SqlWhere, SqlSort, SqlDir: RawUtf8;
 begin
   if MethodIndex = Server.fPublishedMethodBatchIndex then
   begin
@@ -3833,16 +3833,16 @@ begin
         // PUT ModelRoot/TableName?setname=..&set=..&wherename=..&where=..
         repeat
           UrlDecodeValue(Parameters, 'SETNAME=', SqlSelect);
-          UrlDecodeValue(Parameters, 'SET=', SQLDir);
-          UrlDecodeValue(Parameters, 'WHERENAME=', SQLSort);
+          UrlDecodeValue(Parameters, 'SET=', SqlDir);
+          UrlDecodeValue(Parameters, 'WHERENAME=', SqlSort);
           UrlDecodeValue(Parameters, 'WHERE=', SqlWhere, @Parameters);
         until Parameters = nil;
         if (SqlSelect <> '') and
-           (SQLDir <> '') and
-           (SQLSort <> '') and
+           (SqlDir <> '') and
+           (SqlSort <> '') and
            (SqlWhere <> '') then
-          if TableEngine.EngineUpdateField(TableIndex, SqlSelect, SQLDir,
-            SQLSort, SqlWhere) then
+          if TableEngine.EngineUpdateField(TableIndex, SqlSelect, SqlDir,
+            SqlSort, SqlWhere) then
           begin
             if rsoAddUpdateReturnsContent in Server.Options then
               Call.OutBody := TableEngine.EngineRetrieve(TableIndex, TableID);
@@ -4339,7 +4339,7 @@ begin
   if self = nil then
     exit;
   aOutSetCookie := TrimU(aOutSetCookie);
-  if not IsValidUTF8WithoutControlChars(aOutSetCookie) then
+  if not IsValidUtf8WithoutControlChars(aOutSetCookie) then
     raise EParsingException.CreateUtf8('Unsafe %.SetOutSetCookie', [self]);
   if PosExChar('=', aOutSetCookie) < 2 then
     raise EParsingException.CreateUtf8(

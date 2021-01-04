@@ -238,7 +238,7 @@ type
   // - oftUtf8Custom is a custom property, stored as JSON in a TEXT field,
   // defined by overriding TOrm.InternalRegisterCustomProperties
   // virtual method, and adding a TOrmPropInfoCustom instance, e.g. via
-  // RegisterCustomPropertyFromTypeName() or RegisterCustomPropertyFromRTTI();
+  // RegisterCustomPropertyFromTypeName() or RegisterCustomPropertyFromRtti();
   // they will be retrieved by default, i.e. recognized as "simple fields"
   // - oftMany is a 'many to many' field (TOrmMany Delphi property);
   // nothing is stored in the table row, but in a separate pivot table: so
@@ -333,7 +333,7 @@ type
   // - OnUpdateEvent is called BEFORE deletion, and AFTER insertion or update; it
   // should be used only server-side, not to synchronize some clients: the framework
   // is designed around a stateless RESTful architecture (like HTTP/1.1), in which
-  // clients ask the server for refresh (see TRestClientURI.UpdateFromServer)
+  // clients ask the server for refresh (see TRestClientUri.UpdateFromServer)
   // - is used also by TOrm.ComputeFieldsBeforeWrite virtual method
   TOrmEvent = (
     oeAdd, oeUpdate, oeDelete, oeUpdateBlob);
@@ -794,7 +794,7 @@ type
     fAttributes: TOrmPropInfoAttributes;
     fFieldWidth: integer;
     fPropertyIndex: integer;
-    fFromRTTI: boolean;
+    fFromRtti: boolean;
     function GetNameDisplay: string; virtual;
     /// those two protected methods allow custom storage of binary content as text
     // - default implementation is to use hexa (ToSql=true) or Base64 encodings
@@ -1557,7 +1557,7 @@ type
     // !    property FieldName: TMyRecord read fFieldName write fFieldName;
     // !  end;
     // you will have to register it via a call to
-    // TOrmProperties.RegisterCustomPropertyFromRTTI()
+    // TOrmProperties.RegisterCustomPropertyFromRtti()
     // - optional aIsNotUnique parameter can be defined
     // - implementation will use internally RecordLoadJson/RecordSave functions
     // - you can specify optional aData2Text/aText2Data callbacks to store
@@ -2050,7 +2050,7 @@ type
     // temporary TOrmTable
     // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
     // and TOrmMany fields (use RetrieveBlob method or set
-    // TRestClientURI.ForceBlobTransfert)
+    // TRestClientUri.ForceBlobTransfert)
     // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - if this default set of simple fields does not fit your need, you could
     // specify your own set
@@ -2077,8 +2077,8 @@ type
     // - this method will call EngineRetrieve() abstract method
     // - the RawBlob (BLOB) fields are not retrieved by this method, to
     // preserve bandwidth: use the RetrieveBlob() methods for handling
-    // BLOB fields, or set either the TRestClientURI.ForceBlobTransfert
-    // or TRestClientURI.ForceBlobTransfertTable[] properties
+    // BLOB fields, or set either the TRestClientUri.ForceBlobTransfert
+    // or TRestClientUri.ForceBlobTransfertTable[] properties
     // - the TOrmMany fields are not retrieved either: they are separate
     // instances created by TOrmMany.Create, with dedicated methods to
     // access to the separated pivot table
@@ -2093,8 +2093,8 @@ type
     // UnLock() method after Value usage, to release the record
     // - the RawBlob (BLOB) fields are not retrieved by this method, to
     // preserve bandwidth: use the RetrieveBlob() methods for handling
-    // BLOB fields, or set either the TRestClientURI.ForceBlobTransfert
-    // or TRestClientURI.ForceBlobTransfertTable[] properties
+    // BLOB fields, or set either the TRestClientUri.ForceBlobTransfert
+    // or TRestClientUri.ForceBlobTransfertTable[] properties
     // - the TOrmMany fields are not retrieved either: they are separate
     // instances created by TOrmMany.Create, with dedicated methods to
     // access to the separated pivot table
@@ -2297,7 +2297,7 @@ type
     // - implements POST SQL on ModelRoot URI
     // - return true on success
     // - will call EngineExecute() abstract method to run the SQL statement
-    function Execute(const aSQL: RawUtf8): boolean;
+    function Execute(const aSql: RawUtf8): boolean;
     /// Execute directly a SQL statement with supplied parameters, with no result
     // - expect the same format as FormatUtf8() function, replacing all '%' chars
     // with Args[] values
@@ -4526,16 +4526,16 @@ type
     /// initialize the result table
     // - you can optionaly associate the corresponding TOrmClass types,
     // by which the results were computed (it will use RTTI for column typing)
-    constructor Create(const aSQL: RawUtf8);
+    constructor Create(const aSql: RawUtf8);
     /// initialize the result table
     // - you can associate the corresponding TOrmClass types,
     // by which the results were computed (it will use RTTI for column typing)
     constructor CreateFromTables(const Tables: array of TOrmClass;
-      const aSQL: RawUtf8);
+      const aSql: RawUtf8);
     /// initialize the result table
     // - you can set the expected column types matching the results column layout
     constructor CreateWithColumnTypes(const ColumnTypes: array of TOrmFieldType;
-      const aSQL: RawUtf8);
+      const aSql: RawUtf8);
     /// free associated memory and owned records
     destructor Destroy; override;
     /// read-only access to a particular field value, as UTF-8 encoded buffer
@@ -5274,19 +5274,19 @@ type
     // variable (Results/JsonResults[] will point inside this memory buffer):
     // use instead the overloaded Create constructor expecting a const
     // aJson: RawUtf8 parameter to allocate and hold a private copy of the data
-    constructor Create(const aSQL: RawUtf8;
+    constructor Create(const aSql: RawUtf8;
       JsonBuffer: PUtf8Char; JsonBufferLen: integer); reintroduce; overload;
     /// create the result table from a JSON-formated Data message
     // - the JSON data is parsed and formatted in-place, after having been
     // copied in the protected fPrivateCopy variable
-    constructor Create(const aSQL, aJson: RawUtf8); reintroduce; overload;
+    constructor Create(const aSql, aJson: RawUtf8); reintroduce; overload;
     /// create the result table from a JSON-formated Data message
     // - the JSON data is parsed and formatted in-place
     // - you can specify a set of TOrm classes which will be used to
     // retrieve the column exact type information
     // - please note that the supplied JSON buffer content will be changed
     constructor CreateFromTables(const Tables: array of TOrmClass;
-      const aSQL: RawUtf8;
+      const aSql: RawUtf8;
       JsonBuffer: PUtf8Char; JsonBufferLen: integer); reintroduce; overload;
     /// create the result table from a JSON-formated Data message
     // - you can specify a set of TOrm classes which will be used to
@@ -5294,19 +5294,19 @@ type
     // - the JSON data is parsed and formatted in-place, after copied
     // in the protected fPrivateCopy variable (by reference if aJsonOwned=true)
     constructor CreateFromTables(const Tables: array of TOrmClass; const
-      aSQL, aJson: RawUtf8; aJsonOwned: boolean = false); reintroduce; overload;
+      aSql, aJson: RawUtf8; aJsonOwned: boolean = false); reintroduce; overload;
     /// initialize the result table from a JSON-formated Data message
     // - you can set the expected column types matching the results column layout
     // - the JSON data is parsed and formatted in-place
     constructor CreateWithColumnTypes(const ColumnTypes: array of TOrmFieldType;
-      const aSQL: RawUtf8; JsonBuffer: PUtf8Char; JsonBufferLen: integer);
+      const aSql: RawUtf8; JsonBuffer: PUtf8Char; JsonBufferLen: integer);
       reintroduce; overload;
     /// initialize the result table from a JSON-formated Data message
     // - you can set the expected column types matching the results column layout
     // - the JSON data is parsed and formatted in-place, after having been
     // copied in the protected fPrivateCopy variable
     constructor CreateWithColumnTypes(const ColumnTypes: array of TOrmFieldType;
-      const aSQL, aJson: RawUtf8); reintroduce; overload;
+      const aSql, aJson: RawUtf8); reintroduce; overload;
 
     /// update the result table content from a JSON-formated Data message
     // - return true on parsing success, false if no valid JSON data was found
@@ -5989,8 +5989,8 @@ type
     // - this method will create TSynValidateText corresponding to the maximum
     // field size specified by the "index" attribute, to validate before write
     // - will expect the "index" value to be in UTF-16 codepoints, unless
-    // IndexIsUTF8Length is set to TRUE, indicating UTF-8 length in "index"
-    procedure SetMaxLengthValidatorForTextFields(IndexIsUTF8Length: boolean = false);
+    // IndexIsUtf8Length is set to TRUE, indicating UTF-8 length in "index"
+    procedure SetMaxLengthValidatorForTextFields(IndexIsUtf8Length: boolean = false);
     /// allow to filter the length of all text published properties of this table
     // - the "index" attribute of the RawUtf8/string published properties could
     // be used to specify a maximum length for external VARCHAR() columns
@@ -5999,8 +5999,8 @@ type
     // - this method will create TSynFilterTruncate corresponding to the maximum
     // field size specified by the "index" attribute, to filter before write
     // - will expect the "index" value to be in UTF-16 codepoints, unless
-    // IndexIsUTF8Length is set to TRUE, indicating UTF-8 length in "index"
-    procedure SetMaxLengthFilterForTextFields(IndexIsUTF8Length: boolean = false);
+    // IndexIsUtf8Length is set to TRUE, indicating UTF-8 length in "index"
+    procedure SetMaxLengthFilterForTextFields(IndexIsUtf8Length: boolean = false);
     /// customize the TDocVariant options for all variant published properties
     // - will change the TOrmPropInfoRttiVariant.DocVariantOptions value
     // - use e.g. as SetVariantFieldDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED)
@@ -6009,7 +6009,7 @@ type
     /// return the UTF-8 encoded SQL statement source to alter the table for
     //  adding the specified field
     // - returns something like 'ALTER TABLE tablename ADD COLUMN coldef UNIQUE'
-    function SQLAddField(FieldIndex: integer): RawUtf8;
+    function SqlAddField(FieldIndex: integer): RawUtf8;
 
     /// create a TJsonWriter, ready to be filled with TOrm.GetJsonValues
     // - you can use TOrmProperties.FieldBitsFromCsv() or
@@ -6106,10 +6106,10 @@ type
     // !class procedure TOrmMyRecord.InternalRegisterCustomProperties(
     // !  Props: TOrmProperties);
     // !begin
-    // !  Props.RegisterCustomPropertyFromRTTI(self, TypeInfo(TMyRec),
+    // !  Props.RegisterCustomPropertyFromRtti(self, TypeInfo(TMyRec),
     // !    'RecField', @TOrmMyRecord(nil).fRecField);
     // !end;
-    procedure RegisterCustomPropertyFromRTTI(aTable: TClass;
+    procedure RegisterCustomPropertyFromRtti(aTable: TClass;
       aTypeInfo: PRttiInfo; const aName: RawUtf8; aPropertyPointer: pointer;
       aAttributes: TOrmPropInfoAttributes = []; aFieldWidth: integer = 0);
     /// add a custom property from its type name, stored as JSON
@@ -6356,12 +6356,12 @@ type
     fRowIDFieldName: RawUtf8;
     fExtFieldNames: TRawUtf8DynArray;
     fExtFieldNamesUnQuotedSQL: TRawUtf8DynArray;
-    fSQL: TOrmModelPropertiesSQL;
+    fSql: TOrmModelPropertiesSQL;
     fFieldNamesMatchInternal: TFieldBits;
     fOptions: TOrmPropertiesMappingOptions;
     fAutoComputeSql: boolean;
     fMappingVersion: cardinal;
-    /// fill fRowIDFieldName/fSQL with the current information
+    /// fill fRowIDFieldName/fSql with the current information
     procedure ComputeSql;
   public
     /// add a custom field mapping
@@ -6480,7 +6480,7 @@ type
     /// pre-computed SQL statements for this external TOrm in this model
     // - you can use those SQL statements directly with the external engine
     // - filled if AutoComputeSql was set to true in Init() method
-    property SQL: TOrmModelPropertiesSQL read fSQL;
+    property SQL: TOrmModelPropertiesSQL read fSql;
     /// the ID/RowID customized external field name, if any
     // - is 'ID' by default, since 'RowID' is a reserved column name for some
     // database engines (e.g. Oracle)
@@ -6801,8 +6801,8 @@ type
     // - this method will create TSynValidateText corresponding to the maximum
     // field size specified by the "index" attribute, to validate before write
     // - will expect the "index" value to be in UTF-16 codepoints, unless
-    // IndexIsUTF8Length is set to TRUE, indicating UTF-8 length
-    procedure SetMaxLengthValidatorForAllTextFields(IndexIsUTF8Length: boolean = false);
+    // IndexIsUtf8Length is set to TRUE, indicating UTF-8 length
+    procedure SetMaxLengthValidatorForAllTextFields(IndexIsUtf8Length: boolean = false);
     /// allow to filter the length of all text published properties of all tables
     // of this model
     // - the "index" attribute of the RawUtf8/string published properties could
@@ -6812,8 +6812,8 @@ type
     // - this method will create TSynFilterTruncate corresponding to the maximum
     // field size specified by the "index" attribute, to validate before write
     // - will expect the "index" value to be in UTF-16 codepoints, unless
-    // IndexIsUTF8Length is set to TRUE, indicating UTF-8 length
-    procedure SetMaxLengthFilterForAllTextFields(IndexIsUTF8Length: boolean = false);
+    // IndexIsUtf8Length is set to TRUE, indicating UTF-8 length
+    procedure SetMaxLengthFilterForAllTextFields(IndexIsUtf8Length: boolean = false);
     /// customize the TDocVariant options for all variant published properties
     // - will change the TOrmPropInfoRttiVariant.DocVariantOptions value
     // - use e.g. as SetVariantFieldDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED)
@@ -6908,7 +6908,7 @@ type
     function SafeRoot: RawUtf8;
     /// compute the URI for a class in this Model, as 'ModelRoot/SqlTableName'
     // - set also GetUri/GetUriID/GetUriCallback methods
-    property URI[aClass: TOrmClass]: RawUtf8 read GetUri;
+    property Uri[aClass: TOrmClass]: RawUtf8 read GetUri;
 
     /// this property value is used to auto free the database Model class
     // - set this property after Owner.Create() in order to have
@@ -6926,8 +6926,8 @@ type
     property RecordReferences: TOrmModelReferenceDynArray read fRecordReferences;
     /// set a callback event to be executed in loop during client remote
     // blocking process, e.g. to refresh the UI during a somewhat long request
-    // - will be passed to TRestClientURI.OnIdle property by
-    // TRestClientURI.RegisteredClassCreateFrom() method, if applying
+    // - will be passed to TRestClientUri.OnIdle property by
+    // TRestClientUri.RegisteredClassCreateFrom() method, if applying
     property OnClientIdle: TOnIdleSynBackgroundThread
       read fOnClientIdle write fOnClientIdle;
   published
@@ -7149,7 +7149,7 @@ type
 
   /// used to store a BATCH sequence of writing operations
   // - is used by TRest to process BATCH requests using BatchSend() method,
-  // or TRestClientURI for its Batch*() methods
+  // or TRestClientUri for its Batch*() methods
   // - but you can create your own stand-alone BATCH process, so that it will
   // be able to make some transactional process - aka the "Unit Of Work" pattern
   TRestBatch = class
@@ -7451,9 +7451,9 @@ type
     /// GET method (retrieve record) table access bits
     // - note that a GET request with a SQL statement without a table (i.e.
     // on 'ModelRoot' URI with a SQL statement as SentData, as used in
-    // TRestClientURI.UpdateFromServer) will be checked for simple cases
+    // TRestClientUri.UpdateFromServer) will be checked for simple cases
     // (i.e. the first table in the FROM clause), otherwise will follow , whatever the bits
-    // here are: since TRestClientURI.UpdateFromServer() is called only
+    // here are: since TRestClientUri.UpdateFromServer() is called only
     // for refreshing a direct statement, it will be OK; you can improve this
     // by overriding the TRestServer.Uri() method
     // - if the REST request is LOCK, the PUT access bits will be read instead
@@ -7561,7 +7561,7 @@ var
 function ToText(vk: TOrmVirtualKind): PShortString; overload;
 
 /// compute the SQL field names, used to create a SQLite3 virtual table
-function GetVirtualTableSQLCreate(Props: TOrmProperties): RawUtf8;
+function GetVirtualTableSqlCreate(Props: TOrmProperties): RawUtf8;
 
 /// TDynArraySortCompare compatible function, sorting by TOrm.ID
 function TOrmDynArrayCompare(const Item1, Item2): integer;
@@ -9591,11 +9591,11 @@ begin
   if (Source = nil) or (DestInfo = nil) or (Dest = nil) then
     exit; // avoid GPF
   with TOrmPropInfoRtti(self) do
-    if fFromRTTI and (fFlattenedProps <> nil) then
+    if fFromRtti and (fFlattenedProps <> nil) then
       for i := 0 to length(fFlattenedProps) - 1 do
         Source := fFlattenedProps[i].GetObjProp(Source);
   with TOrmPropInfoRtti(DestInfo) do
-    if fFromRTTI and (fFlattenedProps <> nil) then
+    if fFromRtti and (fFlattenedProps <> nil) then
       for i := 0 to length(fFlattenedProps) - 1 do
         Dest := fFlattenedProps[i].GetObjProp(Dest);
   if DestInfo.ClassType = ClassType then
@@ -9829,7 +9829,7 @@ begin
     if aPropInfo.SetterCall = rpcField then
       fInPlaceCopySameClassPropOffset := fGetterIsFieldPropOffset;
   end;
-  fFromRTTI := true;
+  fFromRtti := true;
 end;
 
 
@@ -12816,7 +12816,7 @@ begin
   result := GetEnumName(TypeInfo(TOrmVirtualKind), ord(vk));
 end;
 
-function GetVirtualTableSQLCreate(Props: TOrmProperties): RawUtf8;
+function GetVirtualTableSqlCreate(Props: TOrmProperties): RawUtf8;
 var
   i: PtrInt;
   SQL: RawUtf8;
@@ -14939,7 +14939,7 @@ begin
           if ndx < 0 then
             exit; // no ID column available
           if @Comp = nil then
-            Comp := @UTF8CompareInt64;
+            Comp := @Utf8CompareInt64;
         end;
         continue;
       end;
@@ -14968,19 +14968,19 @@ begin
   fFieldCount := source.fFieldCount;
 end;
 
-constructor TOrmTable.Create(const aSQL: RawUtf8);
+constructor TOrmTable.Create(const aSql: RawUtf8);
 begin
-  fQuerySql := aSQL;
+  fQuerySql := aSql;
   fFieldIndexID := -1;
   fQueryTableIndexFromSql := -2; // indicates not searched
 end;
 
 constructor TOrmTable.CreateFromTables(const Tables: array of TOrmClass;
-  const aSQL: RawUtf8);
+  const aSql: RawUtf8);
 var
   n: integer;
 begin
-  Create(aSQL);
+  Create(aSql);
   n := length(Tables);
   if n > 0 then
   begin
@@ -14990,9 +14990,9 @@ begin
 end;
 
 constructor TOrmTable.CreateWithColumnTypes(
-  const ColumnTypes: array of TOrmFieldType; const aSQL: RawUtf8);
+  const ColumnTypes: array of TOrmFieldType; const aSql: RawUtf8);
 begin
-  Create(aSQL);
+  Create(aSql);
   SetLength(fQueryColumnTypes, length(ColumnTypes));
   MoveFast(ColumnTypes[0], fQueryColumnTypes[0], length(ColumnTypes) * SizeOf(TOrmFieldType));
 end;
@@ -16186,33 +16186,33 @@ begin
     result := true;
 end;
 
-constructor TOrmTableJson.Create(const aSQL: RawUtf8; JsonBuffer: PUtf8Char;
+constructor TOrmTableJson.Create(const aSql: RawUtf8; JsonBuffer: PUtf8Char;
   JsonBufferLen: integer);
 begin // don't raise exception on error parsing
-  inherited Create(aSQL);
+  inherited Create(aSql);
   ParseAndConvert(JsonBuffer, JsonBufferLen);
 end;
 
-constructor TOrmTableJson.Create(const aSQL, aJson: RawUtf8);
+constructor TOrmTableJson.Create(const aSql, aJson: RawUtf8);
 var
   len: integer;
 begin
   len := length(aJson);
   PrivateCopyChanged(pointer(aJson), len, {updatehash=}false);
-  Create(aSQL, pointer(fPrivateCopy), len);
+  Create(aSql, pointer(fPrivateCopy), len);
 end;
 
 constructor TOrmTableJson.CreateFromTables(
-  const Tables: array of TOrmClass; const aSQL: RawUtf8;
+  const Tables: array of TOrmClass; const aSql: RawUtf8;
   JsonBuffer: PUtf8Char; JsonBufferLen: integer);
 begin
   // don't raise exception on error parsing
-  inherited CreateFromTables(Tables, aSQL);
+  inherited CreateFromTables(Tables, aSql);
   ParseAndConvert(JsonBuffer, JsonBufferLen);
 end;
 
 constructor TOrmTableJson.CreateFromTables(const Tables: array of TOrmClass;
-  const aSQL, aJson: RawUtf8; aJsonOwned: boolean);
+  const aSql, aJson: RawUtf8; aJsonOwned: boolean);
 var
   len: integer;
 begin
@@ -16221,26 +16221,26 @@ begin
     fPrivateCopy := aJson
   else
     PrivateCopyChanged(pointer(aJson), len, {updatehash=}false);
-  CreateFromTables(Tables, aSQL, pointer(fPrivateCopy), len);
+  CreateFromTables(Tables, aSql, pointer(fPrivateCopy), len);
 end;
 
 constructor TOrmTableJson.CreateWithColumnTypes(
-  const ColumnTypes: array of TOrmFieldType; const aSQL: RawUtf8;
+  const ColumnTypes: array of TOrmFieldType; const aSql: RawUtf8;
   JsonBuffer: PUtf8Char; JsonBufferLen: integer);
 begin
   // don't raise exception on error parsing
-  inherited CreateWithColumnTypes(ColumnTypes, aSQL);
+  inherited CreateWithColumnTypes(ColumnTypes, aSql);
   ParseAndConvert(JsonBuffer, JsonBufferLen);
 end;
 
 constructor TOrmTableJson.CreateWithColumnTypes(
-  const ColumnTypes: array of TOrmFieldType; const aSQL, aJson: RawUtf8);
+  const ColumnTypes: array of TOrmFieldType; const aSql, aJson: RawUtf8);
 var
   len: integer;
 begin
   len := length(aJson);
   PrivateCopyChanged(pointer(aJson), len, {updatehash=}false);
-  CreateWithColumnTypes(ColumnTypes, aSQL, pointer(fPrivateCopy), len);
+  CreateWithColumnTypes(ColumnTypes, aSql, pointer(fPrivateCopy), len);
 end;
 
 
@@ -17404,7 +17404,7 @@ begin
           result[length(result)] := ')';
         end;
       ovkCustomForcedID, ovkCustomAutoID:
-        result := result + GetVirtualTableSQLCreate(Props.Props);
+        result := result + GetVirtualTableSqlCreate(Props.Props);
     end;
   end
   else
@@ -17751,7 +17751,7 @@ function TOrm.EnginePrepareMany(const aClient: IRestOrm;
   const aFormatSQLJoin: RawUtf8; const aParamsSQLJoin, aBoundsSQLJoin: array of const;
   out ObjectsClass: TOrmClassDynArray; out SQL: RawUtf8): RawUtf8;
 var
-  aSqlFields, aSqlFrom, aSqlWhere, aSQLJoin: RawUtf8;
+  aSqlFields, aSqlFrom, aSqlWhere, aSqlJoin: RawUtf8;
   aField: string[3];
   aMany: RawUtf8;
   f, n, i, SqlFieldsCount: integer;
@@ -17950,8 +17950,8 @@ begin
   if aFormatSQLJoin <> '' then
   begin
     aSqlWhere := '';
-    FormatUtf8(aFormatSQLJoin, aParamsSQLJoin, aSQLJoin);
-    JBeg := pointer(aSQLJoin);
+    FormatUtf8(aFormatSQLJoin, aParamsSQLJoin, aSqlJoin);
+    JBeg := pointer(aSqlJoin);
     repeat
       J := JBeg;
       while not (tcIdentifier in TEXT_CHARS[J^]) do
@@ -19315,7 +19315,7 @@ begin
 end;
 
 procedure TOrmProperties.SetMaxLengthValidatorForTextFields(
-  IndexIsUTF8Length: boolean);
+  IndexIsUtf8Length: boolean);
 var
   i: PtrInt;
 begin
@@ -19323,12 +19323,12 @@ begin
     for i := 0 to Fields.Count - 1 do
       with Fields.List[i] do
         if (SqlDBFieldType in TEXT_DBFIELDS) and (cardinal(FieldWidth - 1) < 262144) then
-          AddFilterOrValidate(i, TSynValidateText.CreateUtf8('{maxLength:%,UTF8Length:%}',
-            [FieldWidth, IndexIsUTF8Length], []));
+          AddFilterOrValidate(i, TSynValidateText.CreateUtf8('{maxLength:%,Utf8Length:%}',
+            [FieldWidth, IndexIsUtf8Length], []));
 end;
 
 procedure TOrmProperties.SetMaxLengthFilterForTextFields(
-  IndexIsUTF8Length: boolean);
+  IndexIsUtf8Length: boolean);
 var
   i: PtrInt;
 begin
@@ -19336,8 +19336,8 @@ begin
     for i := 0 to Fields.Count - 1 do
       with Fields.List[i] do
         if (SqlDBFieldType in TEXT_DBFIELDS) and (cardinal(FieldWidth - 1) < 262144) then
-          AddFilterOrValidate(i, TSynFilterTruncate.CreateUtf8('{maxLength:%,UTF8Length:%}',
-            [FieldWidth, IndexIsUTF8Length], []));
+          AddFilterOrValidate(i, TSynFilterTruncate.CreateUtf8('{maxLength:%,Utf8Length:%}',
+            [FieldWidth, IndexIsUtf8Length], []));
 end;
 
 procedure TOrmProperties.SetVariantFieldsDocVariantOptions(
@@ -19352,7 +19352,7 @@ begin
         TOrmPropInfoRttiVariant(Fields.List[i]).DocVariantOptions := Options;
 end;
 
-function TOrmProperties.SQLAddField(FieldIndex: integer): RawUtf8;
+function TOrmProperties.SqlAddField(FieldIndex: integer): RawUtf8;
 begin
   result := OrmFieldTypeToSql(FieldIndex);
   if result = '' then
@@ -19823,7 +19823,7 @@ begin
     aPropertyPointer, aAttributes, aFieldWidth, aData2Text, aText2Data));
 end;
 
-procedure TOrmProperties.RegisterCustomPropertyFromRTTI(aTable: TClass;
+procedure TOrmProperties.RegisterCustomPropertyFromRtti(aTable: TClass;
   aTypeInfo: PRttiInfo; const aName: RawUtf8; aPropertyPointer: pointer;
   aAttributes: TOrmPropInfoAttributes; aFieldWidth: integer);
 begin
@@ -20391,7 +20391,7 @@ begin
   if IdemPChar(pointer(URI), pointer(fRootUpper)) then
   begin
     URILen := length(fRoot);
-    if URI[URILen + 1] in [#0, '/', '?'] then
+    if Uri[URILen + 1] in [#0, '/', '?'] then
       if CompareMemFixed(pointer(URI), pointer(fRoot), URILen) then
         result := rmMatchExact
       else
@@ -20452,22 +20452,22 @@ begin
     fTableProps[i].fProps.SetCustomCollationForAll(aFieldType, aCollationName);
 end;
 
-procedure TOrmModel.SetMaxLengthValidatorForAllTextFields(IndexIsUTF8Length: boolean);
+procedure TOrmModel.SetMaxLengthValidatorForAllTextFields(IndexIsUtf8Length: boolean);
 var
   i: PtrInt;
 begin
   if self <> nil then
     for i := 0 to high(fTableProps) do
-      fTableProps[i].fProps.SetMaxLengthValidatorForTextFields(IndexIsUTF8Length);
+      fTableProps[i].fProps.SetMaxLengthValidatorForTextFields(IndexIsUtf8Length);
 end;
 
-procedure TOrmModel.SetMaxLengthFilterForAllTextFields(IndexIsUTF8Length: boolean);
+procedure TOrmModel.SetMaxLengthFilterForAllTextFields(IndexIsUtf8Length: boolean);
 var
   i: PtrInt;
 begin
   if self <> nil then
     for i := 0 to high(fTableProps) do
-      fTableProps[i].fProps.SetMaxLengthFilterForTextFields(IndexIsUTF8Length);
+      fTableProps[i].fProps.SetMaxLengthFilterForTextFields(IndexIsUtf8Length);
 end;
 
 procedure TOrmModel.SetVariantFieldsDocVariantOptions(const Options: TDocVariantOptions);
@@ -20528,7 +20528,7 @@ begin
   if (self = nil) or (cardinal(aTableIndex) > cardinal(fTablesMax)) then
     result := ''
   else
-    result := TableProps[aTableIndex].Props.SQLAddField(aFieldIndex);
+    result := TableProps[aTableIndex].Props.SqlAddField(aFieldIndex);
 end;
 
 function TOrmModel.isLocked(aTable: TOrmClass; aID: TID): boolean;
@@ -21033,17 +21033,17 @@ var
 begin
   W := TTextWriter.CreateOwnedStream(temp);
   try // SQL.TableSimpleFields[withID: boolean; withTableName: boolean]
-    SetSQL(W, false, false, fSQL.TableSimpleFields[false, false]);
-    SetSQL(W, false, true, fSQL.TableSimpleFields[false, true]);
-    SetSQL(W, true, false, fSQL.TableSimpleFields[true, false]);
-    SetSQL(W, true, true, fSQL.TableSimpleFields[true, true]);
+    SetSQL(W, false, false, fSql.TableSimpleFields[false, false]);
+    SetSQL(W, false, true, fSql.TableSimpleFields[false, true]);
+    SetSQL(W, true, false, fSql.TableSimpleFields[true, false]);
+    SetSQL(W, true, true, fSql.TableSimpleFields[true, true]);
     // SQL.SelectAll: array[withRowID: boolean]
-    fSQL.SelectAllWithRowID := SqlFromSelect(
-      TableName, '*', '', fSQL.TableSimpleFields[true, false]);
-    fSQL.SelectAllWithID := fSQL.SelectAllWithRowID;
-    SetSQL(W, false, false, fSQL.UpdateSetSimple, cUpdateSimple);
-    SetSQL(W, false, false, fSQL.UpdateSetAll, cUpdateSetAll);
-    SetSQL(W, false, false, fSQL.InsertSet, cInsertAll);
+    fSql.SelectAllWithRowID := SqlFromSelect(
+      TableName, '*', '', fSql.TableSimpleFields[true, false]);
+    fSql.SelectAllWithID := fSql.SelectAllWithRowID;
+    SetSQL(W, false, false, fSql.UpdateSetSimple, cUpdateSimple);
+    SetSQL(W, false, false, fSql.UpdateSetAll, cUpdateSetAll);
+    SetSQL(W, false, false, fSql.InsertSet, cInsertAll);
   finally
     W.Free;
   end;

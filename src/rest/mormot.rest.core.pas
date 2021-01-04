@@ -618,7 +618,7 @@ type
     // - in order to handle safe transactions and multi-thread safe writing, the
     // server will identify transactions using the client Session ID: this
     // property will set the time out wait period
-    // - default value is 5000, i.e. TRestServer.URI will wait up to 5 seconds
+    // - default value is 5000, i.e. TRestServer.Uri will wait up to 5 seconds
     // in order to acquire the right to write on the database before returning
     // a "408 Request Time-out" status error
     property AcquireWriteTimeOut: cardinal index execOrmWrite
@@ -745,7 +745,7 @@ type
     function ExecuteJson(const Tables: array of TOrmClass;
       const SQL: RawUtf8; ForceAjax: boolean = false;
       ReturnedRowCount: PPtrInt = nil): RawJson;
-    function Execute(const aSQL: RawUtf8): boolean;
+    function Execute(const aSql: RawUtf8): boolean;
     function ExecuteFmt(const SqlFormat: RawUtf8;
       const Args: array of const): boolean; overload;
     function ExecuteFmt(const SqlFormat: RawUtf8;
@@ -1050,7 +1050,7 @@ type
     /// the associated access rights of this user
     // - access rights are managed by group
     // - in TAuthSession.User instance, GroupRights property will contain a
-    // REAL TAuthGroup instance for fast retrieval in TRestServer.URI
+    // REAL TAuthGroup instance for fast retrieval in TRestServer.Uri
     // - note that 'Group' field name is not allowed by SQLite
     property GroupRights: TAuthGroup
       read fGroupRights write fGroupRights;
@@ -1089,7 +1089,7 @@ type
   TRestUriParamsLowLevelFlags = set of TRestUriParamsLowLevelFlag;
 
   /// store all parameters for a Client or Server method call
-  // - as used by TRestServer.URI or TRestClientUri.InternalUri
+  // - as used by TRestServer.Uri or TRestClientUri.InternalUri
   {$ifdef USERECORDWITHMETHODS}
   TRestUriParams = record
   {$else}
@@ -1144,7 +1144,7 @@ type
     /// initialize the non RawUtf8 values
     procedure Init; overload;
     /// initialize the input values
-    procedure Init(const aURI,aMethod,aInHead,aInBody: RawUtf8); overload;
+    procedure Init(const aUri,aMethod,aInHead,aInBody: RawUtf8); overload;
     /// retrieve the "Content-Type" value from InHead
     // - if GuessJSONIfNoneSet is TRUE, returns JSON if none was set in headers
     function InBodyType(GuessJSONIfNoneSet: boolean = True): RawUtf8;
@@ -2277,9 +2277,9 @@ begin
   result := fOrm.ExecuteJson(Tables, SQL, ForceAjax, ReturnedRowCount);
 end;
 
-function TRest.Execute(const aSQL: RawUtf8): boolean;
+function TRest.Execute(const aSql: RawUtf8): boolean;
 begin
-  result := fOrm.Execute(aSQL);
+  result := fOrm.Execute(aSql);
 end;
 
 function TRest.ExecuteFmt(const SqlFormat: RawUtf8;
@@ -3332,10 +3332,10 @@ begin
   byte(LowLevelFlags) := 0;
 end;
 
-procedure TRestUriParams.Init(const aURI, aMethod, aInHead, aInBody: RawUtf8);
+procedure TRestUriParams.Init(const aUri, aMethod, aInHead, aInBody: RawUtf8);
 begin
   Init;
-  Url := aURI;
+  Url := aUri;
   Method := aMethod;
   InHead := aInHead;
   InBody := aInBody;

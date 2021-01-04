@@ -2280,15 +2280,15 @@ begin
   Check(IsEqualGuid(GUID2, GUID));
   Check(IsEqualGuid(@GUID2, @GUID));
   Check(U.From('toto.com'));
-  Check(U.URI = 'http://toto.com/');
+  Check(U.Uri = 'http://toto.com/');
   Check(U.From('toto.com:123'));
-  Check(U.URI = 'http://toto.com:123/');
+  Check(U.Uri = 'http://toto.com:123/');
   Check(U.From('https://toto.com:123/tata/titi'));
-  Check(U.URI = 'https://toto.com:123/tata/titi');
+  Check(U.Uri = 'https://toto.com:123/tata/titi');
   Check(U.From('https://toto.com:123/tata/tutu:tete'));
-  Check(U.URI = 'https://toto.com:123/tata/tutu:tete');
+  Check(U.Uri = 'https://toto.com:123/tata/tutu:tete');
   Check(U.From('toto.com/tata/tutu:tete'));
-  Check(U.URI = 'http://toto.com/tata/tutu:tete');
+  Check(U.Uri = 'http://toto.com/tata/tutu:tete');
 end;
 
 procedure TTestCoreBase._GUID;
@@ -4441,10 +4441,10 @@ begin
     Check(IsWinAnsiU(pointer(U)) = WA);
     Up := mormot.core.unicode.UpperCase(U);
     Check(mormot.core.unicode.UpperCase(mormot.core.unicode.LowerCase(U)) = Up);
-    Check(UTF8IComp(pointer(U), pointer(U)) = 0);
-    Check(UTF8IComp(pointer(U), pointer(Up)) = 0);
-    Check(UTF8ILComp(pointer(U), pointer(U), length(U), length(U)) = 0);
-    Check(UTF8ILComp(pointer(U), pointer(Up), length(U), length(Up)) = 0);
+    Check(Utf8IComp(pointer(U), pointer(U)) = 0);
+    Check(Utf8IComp(pointer(U), pointer(Up)) = 0);
+    Check(Utf8ILComp(pointer(U), pointer(U), length(U), length(U)) = 0);
+    Check(Utf8ILComp(pointer(U), pointer(Up), length(U), length(Up)) = 0);
     Check(LowerCase(U) = LowerCaseReference(U));
     L := Length(U);
     SetString(Up, nil, L);
@@ -5315,8 +5315,8 @@ var
 begin
   CheckEqual(GetMimeContentType(nil, 0, 'toto.h264'), 'video/H264');
   for i := 0 to high(MIMES) shr 1 do
-    CheckEqual(GetMimeContentType(nil, 0, 'toto.' + MIMES[i * 2]), ToUtf8(MIMES[i
-      * 2 + 1]));
+    CheckEqual(GetMimeContentType(nil, 0, 'toto.' + MIMES[i * 2]),
+      ToUtf8(MIMES[i * 2 + 1]));
   for i := 0 to high(BIN) do
   begin
     CheckEqual(GetMimeContentType(@BIN[i], 34, ''), BIN_MIME[i]);
@@ -5438,18 +5438,18 @@ begin
     + 'Host=MyPC User=MySelf CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545 '
     + 'Instance=D:\Dev\MyLibrary.dll'#13#10 +
     'TSynLog 1.15 LVCL 2011-04-07 12:04:09'#13#10#13#10 +
-    '20110407 12040903  +    SQLite3Commons.TRestServer.URI (14163)'#13#10 +
+    '20110407 12040903  +    SQLite3Commons.TRestServer.Uri (14163)'#13#10 +
     '20110407 12040904 debug {"TObjectList(00AF8D00)":["TObjectList(00AF8D20)",' +
     '"TObjectList(00AF8D60)","TFileVersion(00ADC0B0)","TSynMapFile(00ACC990)"]}'#13#10 +
-    '20110407 12040915  -    SQLite3Commons.TRestServer.URI (14163) 10.020.006',
+    '20110407 12040915  -    SQLite3Commons.TRestServer.Uri (14163) 10.020.006',
     40640.464653);
   Test('D:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.4 (2011-04-08 11:09:06)'#13#10
     + 'Host=MyPC User=MySelf CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545'#13#10
     + 'TSynLog 1.15 LVCL 2011-04-07 12:04:09'#13#10#13#10 +
-    '20110407 12040903  +    SQLite3Commons.TRestServer.URI (14163)'#13#10 +
+    '20110407 12040903  +    SQLite3Commons.TRestServer.Uri (14163)'#13#10 +
     '20110407 12040904 debug {"TObjectList(00AF8D00)":["TObjectList(00AF8D20)",' +
     '"TObjectList(00AF8D60)","TFileVersion(00ADC0B0)","TSynMapFile(00ACC990)"]}'#13#10 +
-    '20110407 12040915  -    SQLite3Commons.TRestServer.URI (14163) 10.020.006',
+    '20110407 12040915  -    SQLite3Commons.TRestServer.Uri (14163) 10.020.006',
     40641.464653);
 end;
 

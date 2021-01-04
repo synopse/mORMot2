@@ -39,7 +39,7 @@ type
   TSqlDBODBCConnectionProperties = class(TSqlDBConnectionPropertiesThreadSafe)
   protected
     fDriverDoesNotHandleUnicode: boolean;
-    fSQLDriverConnectPrompt: boolean;
+    fSqlDriverConnectPrompt: boolean;
     /// this overridden method will hide de DATABASE/PWD fields in ODBC connection string
     function GetDatabaseNameSafe: RawUtf8; override;
     /// this overridden method will retrieve the kind of DBMS from the main connection
@@ -114,7 +114,7 @@ type
     // is '' and aDatabaseName contains a full connection string)
     // - set to TRUE to allow UI prompt if needed
     property SQLDriverConnectPrompt: boolean
-      read fSQLDriverConnectPrompt write fSQLDriverConnectPrompt;
+      read fSqlDriverConnectPrompt write fSqlDriverConnectPrompt;
   end;
 
   /// implements a direct connection to the ODBC library
@@ -124,7 +124,7 @@ type
     fEnv: pointer;
     fDbc: pointer;
     fDBMS: TSqlDBDefinition;
-    fDBMSName, fDriverName, fDBMSVersion, fSQLDriverFullString: RawUtf8;
+    fDBMSName, fDriverName, fDBMSVersion, fSqlDriverFullString: RawUtf8;
   public
     /// connect to a specified ODBC database
     constructor Create(aProperties: TSqlDBConnectionProperties); override;
@@ -158,7 +158,7 @@ type
       read fDBMS;
     /// the full connection string (expanded from ServerName)
     property SQLDriverFullString: RawUtf8
-      read fSQLDriverFullString;
+      read fSqlDriverFullString;
   published
     /// the remote DBMS name, as retrieved at ODBC connection opening
     property DBMSName: RawUtf8
@@ -176,7 +176,7 @@ type
   protected
     fStatement: pointer;
     fColData: TRawByteStringDynArray;
-    fSQLW: RawUnicode;
+    fSqlW: RawUnicode;
     procedure AllocStatement;
     procedure DeallocStatement;
     procedure BindColumns;
@@ -198,7 +198,7 @@ type
     // - if ExpectResults is TRUE, then Step() and Column*() methods are available
     //   to retrieve the data rows
     // - raise an EODBCException or ESqlDBException on any error
-    procedure Prepare(const aSQL: RawUtf8; ExpectResults: boolean = false);
+    procedure Prepare(const aSql: RawUtf8; ExpectResults: boolean = false);
       overload; override;
     /// Execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
@@ -323,15 +323,15 @@ begin
           'Need ServerName=DataSourceName or DataBaseName=FullConnectString')
       else
       begin
-        SetString(fSQLDriverFullString, nil, 1024);
-        fSQLDriverFullString[1] := #0;
+        SetString(fSqlDriverFullString, nil, 1024);
+        fSqlDriverFullString[1] := #0;
         Len := 0;
         Check(self, nil,
           SQLDriverConnectA(fDbc, GetDesktopWindow, Pointer(fDatabaseName),
-            length(fDatabaseName), pointer(fSQLDriverFullString), length(fSQLDriverFullString),
-            Len, DRIVERCOMPLETION[fODBCProperties.fSQLDriverConnectPrompt]),
+            length(fDatabaseName), pointer(fSqlDriverFullString), length(fSqlDriverFullString),
+            Len, DRIVERCOMPLETION[fODBCProperties.fSqlDriverConnectPrompt]),
           SQL_HANDLE_DBC, fDbc);
-        SetLength(fSQLDriverFullString, Len);
+        SetLength(fSqlDriverFullString, Len);
       end;
     // retrieve information of the just created connection
     GetInfoString(fDbc, SQL_DRIVER_NAME, fDriverName);
@@ -1171,7 +1171,7 @@ begin
   result := RowCount;
 end;
 
-procedure TSqlDBODBCStatement.Prepare(const aSQL: RawUtf8; ExpectResults: boolean);
+procedure TSqlDBODBCStatement.Prepare(const aSql: RawUtf8; ExpectResults: boolean);
 begin
   SQLLogBegin(sllDB);
   if (fStatement <> nil) or
@@ -1179,13 +1179,13 @@ begin
     raise EODBCException.CreateUtf8(
       '%.Prepare should be called only once', [self]);
   // 1. process SQL
-  inherited Prepare(aSQL, ExpectResults); // set fSQL + Connect if necessary
-  fSQLW := Utf8DecodeToRawUnicode(fSQL);
+  inherited Prepare(aSql, ExpectResults); // set fSql + Connect if necessary
+  fSqlW := Utf8DecodeToRawUnicode(fSql);
   // 2. prepare statement and bind result columns (if any)
   AllocStatement;
   try
     ODBC.Check(nil, self,
-      ODBC.PrepareW(fStatement, pointer(fSQLW), length(fSQLW) shr 1),
+      ODBC.PrepareW(fStatement, pointer(fSqlW), length(fSqlW) shr 1),
       SQL_HANDLE_STMT, fStatement);
     SQLLogEnd;
   except

@@ -83,15 +83,15 @@ type
     // fServerSettings: set of (ssByteAasHex);
     // maintain fPrepared[] hash list to identify already cached
     // - returns statement index in prepared cache array
-    function PrepareCached(const aSQL: RawUtf8; aParamCount: integer;
+    function PrepareCached(const aSql: RawUtf8; aParamCount: integer;
       out aName: RawUtf8): integer;
     /// direct execution of SQL statement what do not returns a result
     // - statement should not contains parameters
     // - raise an ESqlDBPostgres on error
-    procedure DirectExecSQL(const SQL: RawUtf8); overload;
+    procedure DirectExecSql(const SQL: RawUtf8); overload;
     /// direct execution of SQL statement what do not returns a result
     // - overloaded method to return a single value e.g. from a SELECT
-    procedure DirectExecSQL(const SQL: RawUtf8; out Value: RawUtf8); overload;
+    procedure DirectExecSql(const SQL: RawUtf8; out Value: RawUtf8); overload;
     /// query the pg_settings table for a given setting
     function GetServerSetting(const Name: RawUtf8): RawUtf8;
   public
@@ -148,7 +148,7 @@ type
     // - if ExpectResults is TRUE, then Step() and Column*() methods are available
     // to retrieve the data rows
     // - raise an ESqlDBPostgres on any error
-    procedure Prepare(const aSQL: RawUtf8; ExpectResults: boolean = False); overload; override;
+    procedure Prepare(const aSql: RawUtf8; ExpectResults: boolean = False); overload; override;
     /// Execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
     // - this implementation will also handle bound array of values (if any)
@@ -206,18 +206,18 @@ uses
 
 { TSqlDBPostgresConnection }
 
-function TSqlDBPostgresConnection.PrepareCached(const aSQL: RawUtf8; aParamCount: integer;
+function TSqlDBPostgresConnection.PrepareCached(const aSql: RawUtf8; aParamCount: integer;
   out aName: RawUtf8): integer;
 var
   dig: TSha256Digest;
 begin
-  dig := Sha256Digest(aSQL);
+  dig := Sha256Digest(aSql);
   aName := Sha256DigestToString(dig);
   result := Hash256Index(pointer(fPrepared), fPreparedCount, @dig);
   if result >= 0 then
     exit; // already prepared
   PQ.Check(fPGConn,
-    PQ.Prepare(fPGConn, pointer(aName), pointer(aSQL), aParamCount, nil));
+    PQ.Prepare(fPGConn, pointer(aName), pointer(aSql), aParamCount, nil));
   result := fPreparedCount;
   inc(fPreparedCount);
   if result = length(fPrepared) then
@@ -225,13 +225,13 @@ begin
   fPrepared[result] := dig;
 end;
 
-procedure TSqlDBPostgresConnection.DirectExecSQL(const SQL: RawUtf8);
+procedure TSqlDBPostgresConnection.DirectExecSql(const SQL: RawUtf8);
 begin
   PQ.Check(fPGConn,
     PQ.Exec(fPGConn, pointer(SQL)));
 end;
 
-procedure TSqlDBPostgresConnection.DirectExecSQL(const SQL: RawUtf8; out Value: RawUtf8);
+procedure TSqlDBPostgresConnection.DirectExecSql(const SQL: RawUtf8; out Value: RawUtf8);
 var
   res: PPGresult;
 begin
@@ -246,7 +246,7 @@ var
   sql: RawUtf8;
 begin
   FormatUtf8('select setting from pg_settings where name=''%''', [Name], sql);
-  DirectExecSQL(sql, result);
+  DirectExecSql(sql, result);
 end;
 
 // our conversion is faster than PQUnescapeByteA - which requires libpq 8.3+
@@ -350,7 +350,7 @@ begin
       'transactions are not supported by the Postgres - use SAVEPOINT instead', [self]);
   try
     inherited StartTransaction;
-    DirectExecSQL('START TRANSACTION');
+    DirectExecSql('START TRANSACTION');
   except
     on E: Exception do
     begin
@@ -367,7 +367,7 @@ procedure TSqlDBPostgresConnection.Commit;
 begin
   inherited Commit;
   try
-    DirectExecSQL('COMMIT');
+    DirectExecSql('COMMIT');
   except
     inc(fTransactionCount); // the transaction is still active
     raise;
@@ -377,7 +377,7 @@ end;
 procedure TSqlDBPostgresConnection.Rollback;
 begin
   inherited;
-  DirectExecSQL('ROLLBACK');
+  DirectExecSql('ROLLBACK');
 end;
 
 { TSqlDBPostgresConnectionProperties }
@@ -515,19 +515,19 @@ end;
 
 // see https://www.postgresql.org/docs/9.3/libpq-exec.html
 
-procedure TSqlDBPostgresStatement.Prepare(const aSQL: RawUtf8; ExpectResults: boolean);
+procedure TSqlDBPostgresStatement.Prepare(const aSql: RawUtf8; ExpectResults: boolean);
 begin
   SQLLogBegin(sllDB);
-  if aSQL = '' then
+  if aSql = '' then
     raise ESqlDBPostgres.CreateUtf8('%.Prepare: empty statement', [self]);
-  inherited Prepare(aSQL, ExpectResults); // will strip last ;
-  fPreparedParamsCount := ReplaceParamsByNumbers(fSQL, fSQLPrepared, '$');
+  inherited Prepare(aSql, ExpectResults); // will strip last ;
+  fPreparedParamsCount := ReplaceParamsByNumbers(fSql, fSqlPrepared, '$');
   if (fPreparedParamsCount > 0) and
-     (IdemPCharArray(pointer(fSQLPrepared),
+     (IdemPCharArray(pointer(fSqlPrepared),
       ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'VALUES']) >= 0) then
   begin // preparable
     fCacheIndex := TSqlDBPostgresConnection(fConnection).PrepareCached(
-      fSQLPrepared, fPreparedParamsCount, fPreparedStmtName);
+      fSqlPrepared, fPreparedParamsCount, fPreparedStmtName);
     SQLLogEnd(' name=% cache=%', [fPreparedStmtName, fCacheIndex]);
   end
   else
@@ -544,7 +544,7 @@ var
   c: TSqlDBPostgresConnection;
 begin
   SQLLogBegin(sllSQL);
-  if fSQLPrepared = '' then
+  if fSqlPrepared = '' then
     raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Statement not prepared', [self]);
   if fParamCount <> fPreparedParamsCount then
     raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Query expects % parameters ' +
@@ -599,8 +599,8 @@ begin
       pointer(fPGParams), pointer(fPGparamLengths), pointer(fPGParamFormats), PGFMT_TEXT)
   else if fPreparedParamsCount = 0 then
     // PQexec handles multiple SQL commands
-    fRes := PQ.Exec(c.fPGConn, pointer(fSQLPrepared)) else
-    fRes := PQ.ExecParams(c.fPGConn, pointer(fSQLPrepared), fPreparedParamsCount, nil,
+    fRes := PQ.Exec(c.fPGConn, pointer(fSqlPrepared)) else
+    fRes := PQ.ExecParams(c.fPGConn, pointer(fSqlPrepared), fPreparedParamsCount, nil,
       pointer(fPGParams), pointer(fPGparamLengths), pointer(fPGParamFormats), PGFMT_TEXT);
   PQ.Check(c.fPGConn, fRes, @fRes, {forceClean=}false);
   fResStatus := PQ.ResultStatus(fRes);

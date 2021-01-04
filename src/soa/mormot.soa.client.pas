@@ -522,7 +522,7 @@ function TServiceFactoryClient.Invoke(const aMethod: TInterfaceMethod;
   begin
     pending := fSendNotificationsLogClass.Create;
     try
-      pending.Method := aMethod.URI;
+      pending.Method := aMethod.Uri;
       json := '[' + aParams + ']';
       input.InitJsonInPlace(pointer(json), JSON_OPTIONS_FAST_EXTENDED);
       pending.Input := variant(input);
@@ -550,7 +550,7 @@ begin
     result := true;
   end
   else
-    result := InternalInvoke(aMethod.URI, aParams, aResult, aErrorMsg,
+    result := InternalInvoke(aMethod.Uri, aParams, aResult, aErrorMsg,
       aClientDrivenID, aServiceCustomAnswer);
 end;
 

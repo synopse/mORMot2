@@ -1945,7 +1945,7 @@ procedure TServiceClientCommandLine.ShowMethod(service: TInterfaceFactory;
 
 begin
   ToConsole('% % % [parameters]',
-    [fExe, service.InterfaceUri, method.URI], ccWhite);
+    [fExe, service.InterfaceUri, method.Uri], ccWhite);
   WriteDescription(
     fDescriptions.U[method.InterfaceDotMethodName], ccLightGray, false);
   if method.ArgsInputValuesCount <> 0 then

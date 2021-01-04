@@ -349,7 +349,7 @@ type
       aName: PUtf8Char; aNameLen: integer): integer;
     /// returns a list of most used static Expression Helpers
     // - registered helpers are DateTimeToText, DateToText, DateFmt, TimeLogToText,
-    // BlobToBase64, JsonQuote, JsonQuoteURI, ToJson, EnumTrim, EnumTrimRight,
+    // BlobToBase64, JsonQuote, JsonQuoteUri, ToJson, EnumTrim, EnumTrimRight,
     // Lower, Upper, PowerOfTwo, Equals (expecting two parameters), MarkdownToHtml,
     // SimpleToHtml (Markdown with no HTML pass-through) and WikiToHtml
     // (following TTextWriter.AddHtmlEscapeWiki syntax)
@@ -1491,11 +1491,11 @@ begin
   if HelpersStandardList = nil then
     HelperAdd(HelpersStandardList, [
       'DateTimeToText', 'DateToText', 'DateFmt', 'TimeLogToText', 'JsonQuote',
-      'JsonQuoteURI', 'ToJson', 'MarkdownToHtml', 'SimpleToHtml', 'WikiToHtml',
+      'JsonQuoteUri', 'ToJson', 'MarkdownToHtml', 'SimpleToHtml', 'WikiToHtml',
       'BlobToBase64', 'EnumTrim', 'EnumTrimRight', 'PowerOfTwo', 'Equals',
       'If', 'NewGUID', 'ExtractFileName', 'Lower', 'Upper'], [
       DateTimeToText, DateToText, DateFmt, TimeLogToText, JsonQuote,
-      JsonQuoteURI, ToJson, MarkdownToHtml, SimpleToHtml, WikiToHtml,
+      JsonQuoteUri, ToJson, MarkdownToHtml, SimpleToHtml, WikiToHtml,
       BlobToBase64, EnumTrim, EnumTrimRight, PowerOfTwo, Equals_,
       If_, NewGUID, ExtractFileName, Lower, Upper]);
   result := HelpersStandardList;

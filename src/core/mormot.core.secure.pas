@@ -188,7 +188,7 @@ type
       out Password: RawUtf8): boolean; virtual; abstract;
     function GetUsersCount: integer; virtual; abstract;
     // check the given Hash challenge, against stored credentials
-    function CheckCredentials(const UserName: RaWUTF8; Hash: cardinal): boolean; virtual;
+    function CheckCredentials(const UserName: RawUtf8; Hash: cardinal): boolean; virtual;
   public
     /// initialize the authentication scheme
     constructor Create;
@@ -1361,7 +1361,7 @@ begin
   raise ESynException.CreateUtf8('%.DisauthenticateUser() is not implemented', [self]);
 end;
 
-function TSynAuthenticationAbstract.CheckCredentials(const UserName: RaWUTF8;
+function TSynAuthenticationAbstract.CheckCredentials(const UserName: RawUtf8;
   Hash: cardinal): boolean;
 var
   password: RawUtf8;

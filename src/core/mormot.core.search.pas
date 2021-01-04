@@ -1023,7 +1023,7 @@ type
   private
     /// used to store all associated validation properties by index
     fProps: TSynValidateTextProps;
-    fUTF8Length: boolean;
+    fUtf8Length: boolean;
   protected
     /// use sInvalidTextChar resourcestring to create a translated error message
     procedure SetErrorMsg(fPropsIndex, InvalidTextIndex, MainIndex: integer;
@@ -1110,7 +1110,7 @@ type
     // - you can set this property to TRUE so that the UTF-8 byte count would
     // be used for truncation againts the MaxLength parameter
     property Utf8Length: boolean
-      read fUTF8Length write fUTF8Length;
+      read fUtf8Length write fUtf8Length;
   end;
 {$M-}
 
@@ -1208,7 +1208,7 @@ type
   TSynFilterTruncate = class(TSynFilter)
   protected
     fMaxLength: cardinal;
-    fUTF8Length: boolean;
+    fUtf8Length: boolean;
     /// decode the MaxLength: and Utf8Length: parameters
     procedure SetParameters(const Value: RawUtf8); override;
   public
@@ -1227,7 +1227,7 @@ type
     // - you can set this property to TRUE so that the UTF-8 byte count would
     // be used for truncation againts the MaxLength parameter
     property Utf8Length: boolean
-      read fUTF8Length write fUTF8Length;
+      read fUtf8Length write fUtf8Length;
   end;
 
 resourcestring
@@ -2963,7 +2963,7 @@ begin
   old := 0;
   if Values <> nil then
     repeat
-      v := GetNextUTF8Upper(U);
+      v := GetNextUtf8Upper(U);
       if not (tcWord in TEXT_BYTES[v]) then
         break;
       dec(v, ord('B'));
@@ -2992,7 +2992,7 @@ err:result := 0;
     exit;
   end;
   repeat
-    result := GetNextUTF8Upper(U);
+    result := GetNextUtf8Upper(U);
     if result = 0 then
       goto err; // end of input text, without a word
     // trim initial spaces or 'H'
@@ -3101,7 +3101,7 @@ begin
     end
     else
       repeat
-        c := GetNextUTF8Upper(U);
+        c := GetNextUtf8Upper(U);
         if c = 0 then
           exit;
       until not (tcWord in TEXT_BYTES[c]);
@@ -3110,7 +3110,7 @@ begin
       if U = nil then
         exit;
       V := U;
-      c := GetNextUTF8Upper(U);
+      c := GetNextUtf8Upper(U);
       if c = 0 then
         exit;
     until tcWord in TEXT_BYTES[c];
@@ -3169,7 +3169,7 @@ begin
     SoundExComputeUtf8(U, result, SOUNDEXVALUES[Lang]);
   end;
   if next <> nil then
-    next^ := FindNextUTF8WordBegin(U);
+    next^ := FindNextUtf8WordBegin(U);
 end;
 
 
@@ -5098,16 +5098,16 @@ var
   tmp: TSynTempBuffer;
 begin
   tmp.Init(value);
-  JsonDecode(tmp.buf, ['MaxLength', 'UTF8Length'], @V);
+  JsonDecode(tmp.buf, ['MaxLength', 'Utf8Length'], @V);
   fMaxLength := GetCardinalDef(V[0].value, 0);
-  fUTF8Length := V[1].Idem('1') or V[1].Idem('true');
+  fUtf8Length := V[1].Idem('1') or V[1].Idem('true');
   tmp.Done;
 end;
 
 procedure TSynFilterTruncate.Process(aFieldIndex: integer; var value: RawUtf8);
 begin
   if fMaxLength - 1 < cardinal(maxInt) then
-    if fUTF8Length then
+    if fUtf8Length then
       Utf8TruncateToLength(value, fMaxLength)
     else
       Utf8TruncateToUnicodeLength(value, fMaxLength);
@@ -5258,7 +5258,7 @@ var
   Min: array[2..7] of cardinal;
 begin
   result := false;
-  if fUTF8Length then
+  if fUtf8Length then
     L := length(value)
   else
     L := Utf8ToUnicodeLength(pointer(value));
@@ -5356,11 +5356,11 @@ begin
       'MinDigitCount', 'MinPunctCount', 'MinLowerCount', 'MinUpperCount',
       'MinSpaceCount', 'MaxLeftTrimCount', 'MaxRightTrimCount', 'MaxAlphaCount',
       'MaxDigitCount', 'MaxPunctCount', 'MaxLowerCount', 'MaxUpperCount',
-      'MaxSpaceCount', 'UTF8Length'], @V);
+      'MaxSpaceCount', 'Utf8Length'], @V);
     for i := 0 to high(fProps) do
       fProps[i] := GetCardinalDef(V[i].value, fProps[i]);
     with V[high(V)] do
-      fUTF8Length := Idem('1') or Idem('true');
+      fUtf8Length := Idem('1') or Idem('true');
   finally
     tmp.Done;
   end;

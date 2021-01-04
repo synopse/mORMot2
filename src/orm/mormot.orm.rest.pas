@@ -92,8 +92,8 @@ function ToText(m: TUriMethod): PShortString; overload;
 {$ifdef PUREMORMOT2}
 
 type
-  TSqlURIMethod = TUriMethod;
-  TSqlURIMethods = TUriMethods;
+  TSqlUriMethod = TUriMethod;
+  TSqlUriMethods = TUriMethods;
 
 {$endif PUREMORMOT2}
 
@@ -145,7 +145,7 @@ type
     // - override this method for proper calling the database engine
     // - don't call this method in normal cases
     // - this method must be implemented to be thread-safe
-    function EngineExecute(const aSQL: RawUtf8): boolean; virtual; abstract;
+    function EngineExecute(const aSql: RawUtf8): boolean; virtual; abstract;
     /// get a member from its ID
     // - implements REST GET member
     // - returns the data of this object as JSON
@@ -364,7 +364,7 @@ type
     function ExecuteJson(const Tables: array of TOrmClass;
       const SQL: RawUtf8; ForceAjax: boolean = false;
       ReturnedRowCount: PPtrInt = nil): RawJson; virtual;
-    function Execute(const aSQL: RawUtf8): boolean; virtual;
+    function Execute(const aSql: RawUtf8): boolean; virtual;
     function ExecuteFmt(const SqlFormat: RawUtf8;
       const Args: array of const): boolean; overload;
     function ExecuteFmt(const SqlFormat: RawUtf8;
@@ -1601,9 +1601,9 @@ begin
   result := EngineList(SQL, ForceAjax, ReturnedRowCount);
 end;
 
-function TRestOrm.Execute(const aSQL: RawUtf8): boolean;
+function TRestOrm.Execute(const aSql: RawUtf8): boolean;
 begin
-  result := EngineExecute(aSQL);
+  result := EngineExecute(aSql);
 end;
 
 function TRestOrm.ExecuteFmt(const SqlFormat: RawUtf8;

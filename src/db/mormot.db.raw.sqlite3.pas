@@ -2126,7 +2126,7 @@ type
     DB: TSqlite3DB;
     /// create the exception, getting the message from DB
     constructor Create(aDB: TSqlite3DB; aErrorCode: integer;
-      const aSQL: RawUtf8); reintroduce; overload;
+      const aSql: RawUtf8); reintroduce; overload;
   published
     /// the corresponding error code, e.g. 21 (for SQLITE_MISUSE)
     property ErrorCode: integer
@@ -2299,57 +2299,57 @@ type
     // - the statement is closed
     // - raise an ESqlite3Exception on any error
     procedure ExecuteAll; overload;
-    /// Execute all SQL statements in the aSQL UTF-8 encoded string
-    // - internaly call Prepare() then Step then PrepareNext until end of aSQL
+    /// Execute all SQL statements in the aSql UTF-8 encoded string
+    // - internaly call Prepare() then Step then PrepareNext until end of aSql
     // - Close is always called internaly
     // - raise an ESqlite3Exception on any error
-    procedure ExecuteAll(aDB: TSqlite3DB; const aSQL: RawUtf8); overload;
+    procedure ExecuteAll(aDB: TSqlite3DB; const aSql: RawUtf8); overload;
     /// Execute one SQL statement already prepared by a call to Prepare()
     // - the statement is closed
     // - raise an ESqlite3Exception on any error
     procedure Execute; overload;
-    /// Execute one SQL statement in the aSQL UTF-8 encoded string
-    // - Execute the first statement in aSQL: call Prepare() then Step once
+    /// Execute one SQL statement in the aSql UTF-8 encoded string
+    // - Execute the first statement in aSql: call Prepare() then Step once
     // - Close is always called internaly
     // - raise an ESqlite3Exception on any error
-    procedure Execute(aDB: TSqlite3DB; const aSQL: RawUtf8); overload;
-    /// Execute one SQL statement in the aSQL UTF-8 encoded string
-    // - Execute the first statement in aSQL: call Prepare() then Step once
+    procedure Execute(aDB: TSqlite3DB; const aSql: RawUtf8); overload;
+    /// Execute one SQL statement in the aSql UTF-8 encoded string
+    // - Execute the first statement in aSql: call Prepare() then Step once
     // - Close is always called internaly
     // - returns TRUE on success, and raise no ESqlite3Exception on error, but returns FALSE
-    function ExecuteNoException(aDB: TSqlite3DB; const aSQL: RawUtf8): boolean;
-    /// Execute a SQL statement which return integers from the aSQL UTF-8 encoded string
-    // - Execute the first statement in aSQL
+    function ExecuteNoException(aDB: TSqlite3DB; const aSql: RawUtf8): boolean;
+    /// Execute a SQL statement which return integers from the aSql UTF-8 encoded string
+    // - Execute the first statement in aSql
     // - this statement must get (at least) one field/column result of INTEGER
     // - return result as a dynamic array of Int64 in ID
     // - return count of row in integer function result (may be < length(ID))
     // - raise an ESqlite3Exception on any error
-    function Execute(aDB: TSqlite3DB; const aSQL: RawUtf8;
+    function Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
       var ID: TInt64DynArray): integer; overload;
-    /// Execute a SQL statement which return one integer from the aSQL UTF-8 encoded string
-    // - Execute the first statement in aSQL
+    /// Execute a SQL statement which return one integer from the aSql UTF-8 encoded string
+    // - Execute the first statement in aSql
     // - this statement must get (at least) one field/column result of INTEGER
     // - return result as an unique Int64 in ID
     // - raise an ESqlite3Exception on any error }
-    procedure Execute(aDB: TSqlite3DB; const aSQL: RawUtf8;
+    procedure Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
       out ID: Int64); overload;
-    /// Execute a SQL statement which return one TEXT value from the aSQL UTF-8 encoded string
-    // - Execute the first statement in aSQL
+    /// Execute a SQL statement which return one TEXT value from the aSql UTF-8 encoded string
+    // - Execute the first statement in aSql
     // - this statement must get (at least) one field/column result of TEXT
     // - raise an ESqlite3Exception on any error
-    procedure Execute(aDB: TSqlite3DB; const aSQL: RawUtf8;
+    procedure Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
       out Value: RawUtf8); overload;
-    /// Execute a SQL statement which return TEXT from the aSQL UTF-8 encoded string
-    // - Execute the first statement in aSQL
+    /// Execute a SQL statement which return TEXT from the aSql UTF-8 encoded string
+    // - Execute the first statement in aSql
     // - this statement must get (at least) one field/column result of TEXT
     // - return result as a dynamic array of RawUtf8 in ID
     // - return count of row in integer function result (may be < length(ID))
     // - raise an ESqlite3Exception on any error
-    function Execute(aDB: TSqlite3DB; const aSQL: RawUtf8;
+    function Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
       var Values: TRawUtf8DynArray): integer; overload;
     /// Execute one SQL statement which return the results in JSON format
     // - JSON format is more compact than XML and well supported
-    // - Execute the first statement in aSQL
+    // - Execute the first statement in aSql
     // - if SQL is '', the statement should have been prepared, reset and bound if necessary
     // - raise an ESqlite3Exception on any error
     // - JSON data is added to TStream, with UTF-8 encoding
@@ -2362,7 +2362,7 @@ type
     // format and contains true BLOB data (no conversion into TEXT, as with
     // TOrmTableDB) - so will work for sftBlob, sftBlobDynArray and sftBlobRecord
     // - returns the number of data rows added to JSON (excluding the headers)
-    function Execute(aDB: TSqlite3DB; const aSQL: RawUtf8; JSON: TStream;
+    function Execute(aDB: TSqlite3DB; const aSql: RawUtf8; JSON: TStream;
       Expand: boolean = false): PtrInt; overload;
     /// Execute one SQL statement which return the results in JSON format
     // - use internaly Execute() above with a TRawByteStringStream, and return a string
@@ -2370,11 +2370,11 @@ type
     // - returns the number of data rows added to JSON (excluding the headers)
     // in the integer variable mapped by aResultCount (if any)
     // - if any error occurs, the ESqlite3Exception is handled and '' is returned
-    function ExecuteJson(aDB: TSqlite3DB; const aSQL: RawUtf8;
+    function ExecuteJson(aDB: TSqlite3DB; const aSql: RawUtf8;
       Expand: boolean = false; aResultCount: PPtrInt = nil): RawUtf8;
-    /// Execute all SQL statements in the aSQL UTF-8 encoded string, results will
+    /// Execute all SQL statements in the aSql UTF-8 encoded string, results will
     // be written as ANSI text in OutFile
-    procedure ExecuteDebug(aDB: TSqlite3DB; const aSQL: RawUtf8;
+    procedure ExecuteDebug(aDB: TSqlite3DB; const aSql: RawUtf8;
       var OutFile: Text);
     /// close the Request handle
     // - call it even if an ESqlite3Exception has been raised
@@ -2512,7 +2512,7 @@ type
   /// used to retrieve a SQLite3 prepared statement
   TSqlStatementCache = record
     /// associated SQL statement
-    StatementSQL: RawUtf8;
+    StatementSql: RawUtf8;
     /// associated prepared statement, ready to be executed after binding
     Statement: TSqlRequest;
     /// used to monitor execution time
@@ -2543,7 +2543,7 @@ type
     /// intialize the cache
     procedure Init(aDB: TSqlite3DB);
     /// add or retrieve a generic SQL (with ? parameters) statement from cache
-    function Prepare(const GenericSQL: RawUtf8; WasPrepared: PBoolean = nil;
+    function Prepare(const GenericSql: RawUtf8; WasPrepared: PBoolean = nil;
       ExecutionTimer: PPPrecisionTimer = nil;
       ExecutionMonitor: PSynMonitor = nil): PSqlRequest;
     /// used internaly to release all prepared statements from Cache[]
@@ -2557,7 +2557,7 @@ type
   TSqlDataBaseSQLFunction = class
   protected
     fInternalFunction: TSqlFunctionFunc;
-    fSQLName: RawUtf8;
+    fSqlName: RawUtf8;
     fFunctionParametersCount: integer;
     function CreateFunction(DB: TSqlite3DB): integer; virtual;
   public
@@ -2577,7 +2577,7 @@ type
     // - the same function name may be registered several times with a diverse
     // number of parameters (e.g. to implement optional parameters)
     property FunctionName: RawUtf8
-      read fSQLName;
+      read fSqlName;
     /// the number of parameters expected by the SQL function
     property FunctionParametersCount: integer
       read fFunctionParametersCount;
@@ -2682,7 +2682,7 @@ type
     fLogResultMaximumSize: integer;
     fLog: TSynLogClass;
     /// store TSqlDataBaseSQLFunction instances
-    fSQLFunctions: TSynObjectList;
+    fSqlFunctions: TSynObjectList;
     function GetUseCache: boolean;
     procedure SetUseCache(const Value: boolean);
     procedure SetBusyTimeout(const ms: integer);
@@ -2705,13 +2705,13 @@ type
     function GetLimit(Category: TSqlLimitCategory): integer;
     procedure SetLimit(Category: TSqlLimitCategory; Value: integer);
     function GetBackupBackgroundInProcess: boolean;
-    function SQLShouldBeLogged(const aSQL: RawUtf8): boolean;
+    function SQLShouldBeLogged(const aSql: RawUtf8): boolean;
     function GetSqlite3Library: TSqlite3Library; // class function = bug in D2005
   public
     /// enter the internal mutex: called before any DB access
     // - provide the SQL statement about to be executed: handle proper caching
     // - if the SQL statement is void, assume a SELECT statement (no cache flush)
-    procedure Lock(const aSQL: RawUtf8); overload;
+    procedure Lock(const aSql: RawUtf8); overload;
     /// enter the internal mutex without any cache flush
     // - same as Lock('');
     procedure Lock; overload;
@@ -2731,7 +2731,7 @@ type
     // this statement is not a SELECT and doesn't have to be cached!
     // - if aResultCount does map to an integer variable, it will be filled
     // with the returned row count of data (excluding field names) in the result
-    function LockJson(const aSQL: RawUtf8; aResultCount: PPtrInt): RawUtf8;
+    function LockJson(const aSql: RawUtf8; aResultCount: PPtrInt): RawUtf8;
     /// leave the internal mutex: called after any DB access
     // - caller must provide the JSON result for the SQL statement previously set
     //  by LockJson()
@@ -2784,59 +2784,59 @@ type
     /// close a database and free its memory and context
     //- if TransactionBegin was called but not commited, a RollBack is performed
     destructor Destroy; override;
-    /// Execute all SQL statements in aSQL UTF-8 encoded string
+    /// Execute all SQL statements in aSql UTF-8 encoded string
     // - can be prepared with TransactionBegin()
     // - raise an ESqlite3Exception on any error
-    procedure ExecuteAll(const aSQL: RawUtf8);
-    /// Execute one SQL statements in aSQL UTF-8 encoded string
+    procedure ExecuteAll(const aSql: RawUtf8);
+    /// Execute one SQL statements in aSql UTF-8 encoded string
     // - can be prepared with TransactionBegin()
     // - raise an ESqlite3Exception on any error
-    procedure Execute(const aSQL: RawUtf8); overload;
-    /// Execute one SQL statement which return integers from the aSQL UTF-8 encoded string
-    // - Execute the first statement in aSQL
+    procedure Execute(const aSql: RawUtf8); overload;
+    /// Execute one SQL statement which return integers from the aSql UTF-8 encoded string
+    // - Execute the first statement in aSql
     // - this statement must get a one field/column result of INTEGER
     // - return result as a dynamic array of RawUtf8, as TEXT result
     // - return count of row in integer function result (may be < length(ID))
     // - raise an ESqlite3Exception on any error
-    function Execute(const aSQL: RawUtf8;
+    function Execute(const aSql: RawUtf8;
       var ID: TInt64DynArray): integer; overload;
-    /// Execute one SQL statement returning TEXT from the aSQL UTF-8 encoded string
-    // - Execute the first statement in aSQL
+    /// Execute one SQL statement returning TEXT from the aSql UTF-8 encoded string
+    // - Execute the first statement in aSql
     // - this statement must get (at least) one field/column result of TEXT
     // - return result as a dynamic array of RawUtf8 in ID
     // - return count of row in integer function result (may be < length(ID))
     // - raise an ESqlite3Exception on any error
-    function Execute(const aSQL: RawUtf8;
+    function Execute(const aSql: RawUtf8;
       var Values: TRawUtf8DynArray): integer; overload;
-    /// Execute one SQL statement which returns one integer from the aSQL UTF-8 encoded string
-    // - Execute the first statement in aSQL
+    /// Execute one SQL statement which returns one integer from the aSql UTF-8 encoded string
+    // - Execute the first statement in aSql
     // - this statement must get a one field/column result of INTEGER
     // - raise an ESqlite3Exception on any error
-    procedure Execute(const aSQL: RawUtf8;
+    procedure Execute(const aSql: RawUtf8;
       out ID: Int64; NoLog: boolean = false); overload;
     /// Execute one SQL statement which returns one UTF-8 encoded string value
-    // - Execute the first statement in aSQL
+    // - Execute the first statement in aSql
     // - this statement must get a one field/column result of TEXT
     // - raise an ESqlite3Exception on any error
-    procedure Execute(const aSQL: RawUtf8;
+    procedure Execute(const aSql: RawUtf8;
       out ID: RawUtf8; NoLog: boolean = false); overload;
-    /// Execute one SQL statements in aSQL UTF-8 encoded string
+    /// Execute one SQL statements in aSql UTF-8 encoded string
     // - can be prepared with TransactionBegin()
     // - raise no Exception on error, but returns FALSE in such case
-    function ExecuteNoException(const aSQL: RawUtf8): boolean;
+    function ExecuteNoException(const aSql: RawUtf8): boolean;
     /// Seamless execution of a SQL statement which returns one integer
-    // - Execute the first statement in aSQL
+    // - Execute the first statement in aSql
     // - this statement must get a one field/column result of INTEGER
     // - returns 0 on any error
-    function ExecuteNoExceptionInt64(const aSQL: RawUtf8): Int64;
+    function ExecuteNoExceptionInt64(const aSql: RawUtf8): Int64;
     /// Seamless execution of a SQL statement which returns one UTF-8 encoded string
-    // - Execute the first statement in aSQL
+    // - Execute the first statement in aSql
     // - this statement must get a one field/column result of TEXT
     // - returns '' on any error
-    function ExecuteNoExceptionUtf8(const aSQL: RawUtf8): RawUtf8;
+    function ExecuteNoExceptionUtf8(const aSql: RawUtf8): RawUtf8;
     /// Execute one SQL statement returning its results in JSON format
     // - the BLOB data is encoded as '"\uFFF0base64encodedbinary"'
-    function ExecuteJson(const aSQL: RawUtf8; Expand: boolean = false;
+    function ExecuteJson(const aSql: RawUtf8; Expand: boolean = false;
       aResultCount: PPtrInt = nil): RawUtf8;
     /// begin a transaction
     // - Execute SQL statements with Execute() procedure below
@@ -3503,14 +3503,14 @@ end;
 { ESqlite3Exception }
 
 constructor ESqlite3Exception.Create(aDB: TSqlite3DB; aErrorCode: integer;
-  const aSQL: RawUtf8);
+  const aSql: RawUtf8);
 var
   msg: RawUtf8;
 begin
   fErrorCode := aErrorCode;
   fSQLite3ErrorCode := sqlite3_resultToErrorCode(aErrorCode);
   FormatUtf8('Error % (%) [%] using %', [ErrorCodeToText(SQLite3ErrorCode),
-    aErrorCode, aSQL, sqlite3.VersionText], msg);
+    aErrorCode, aSql, sqlite3.VersionText], msg);
   if aDB = 0 then
     msg := msg + ' with aDB=nil'
   else
@@ -4352,7 +4352,7 @@ begin
     fFileNameWithoutPath := ExtractFileName(fFileName);
   fPassword := aPassword;
   fUseCacheSize := 16384 * 1024;
-  fSQLFunctions := TSynObjectList.Create;
+  fSqlFunctions := TSynObjectList.Create;
   result := DBOpen;
   if result <> SQLITE_OK then
     raise ESqlite3Exception.Create(fDB, result, 'DBOpen');
@@ -4389,44 +4389,44 @@ begin
   end;
   FillZero(fPassword);
   fCache.Free;
-  fSQLFunctions.Free;
+  fSqlFunctions.Free;
   inherited Destroy;
 end;
 
-function TSqlDataBase.SQLShouldBeLogged(const aSQL: RawUtf8): boolean;
+function TSqlDataBase.SQLShouldBeLogged(const aSql: RawUtf8): boolean;
 begin
   result := false;
   if (self = nil) or
      (fLog = nil) or
      not (sllSQL in fLog.Family.Level) then
     exit;
-  if not IdemPChar(pointer(aSQL), 'PRAGMA ') or
-     (PosEx('=', aSQL) > 0) then
+  if not IdemPChar(pointer(aSql), 'PRAGMA ') or
+     (PosEx('=', aSql) > 0) then
     result := true;
 end;
 
-procedure TSqlDataBase.ExecuteAll(const aSQL: RawUtf8);
+procedure TSqlDataBase.ExecuteAll(const aSql: RawUtf8);
 var
   R: TSqlRequest;
   log: ISynLog;
 begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
-  if SQLShouldBeLogged(aSQL) then
+  if SQLShouldBeLogged(aSql) then
   begin
     log := fLog.Enter(self, 'ExecuteAll');
     if log <> nil then
-      log.Log(sllSQL, aSQL, self, 4096);
+      log.Log(sllSQL, aSql, self, 4096);
   end;
-  LockAndFlushCache; // don't trust aSQL -> assume modify -> inc(InternalState^)
+  LockAndFlushCache; // don't trust aSql -> assume modify -> inc(InternalState^)
   try
-    R.ExecuteAll(DB, aSQL);
+    R.ExecuteAll(DB, aSql);
   finally
     UnLock;
   end;
 end;
 
-procedure TSqlDataBase.Execute(const aSQL: RawUtf8);
+procedure TSqlDataBase.Execute(const aSql: RawUtf8);
 var
   R: TSqlRequest;
   Timer: TPrecisionTimer;
@@ -4434,16 +4434,16 @@ begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
   Timer.Start;
-  Lock(aSQL); // run one statement -> we can trust isSelect()
+  Lock(aSql); // run one statement -> we can trust isSelect()
   try
-    R.Execute(DB, aSQL);
+    R.Execute(DB, aSql);
   finally
     UnLock;
-    fLog.Add.Log(sllSQL, '% % %', [Timer.Stop, FileNameWithoutPath, aSQL], self);
+    fLog.Add.Log(sllSQL, '% % %', [Timer.Stop, FileNameWithoutPath, aSql], self);
   end;
 end;
 
-function TSqlDataBase.Execute(const aSQL: RawUtf8;
+function TSqlDataBase.Execute(const aSql: RawUtf8;
   var ID: TInt64DynArray): integer;
 var
   R: TSqlRequest;
@@ -4454,21 +4454,21 @@ begin
     result := 0;
     exit; // avoid GPF in case of call from a static-only server
   end;
-  if SQLShouldBeLogged(aSQL) then
+  if SQLShouldBeLogged(aSql) then
   begin
     log := fLog.Enter(self, 'Execute');
     if log <> nil then
-      log.Log(sllSQL, aSQL, self, 2048);
+      log.Log(sllSQL, aSql, self, 2048);
   end;
-  Lock(aSQL);
+  Lock(aSql);
   try
-    result := R.Execute(DB, aSQL, ID);
+    result := R.Execute(DB, aSql, ID);
   finally
     UnLock;
   end;
 end;
 
-procedure TSqlDataBase.Execute(const aSQL: RawUtf8;
+procedure TSqlDataBase.Execute(const aSql: RawUtf8;
   out ID: Int64; NoLog: boolean);
 var
   R: TSqlRequest;
@@ -4477,18 +4477,18 @@ begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
   Timer.Start;
-  Lock(aSQL);
+  Lock(aSql);
   try
-    R.Execute(DB, aSQL, ID);
+    R.Execute(DB, aSql, ID);
   finally
     UnLock;
     if not NoLog then
       fLog.Add.Log(sllSQL, '% % returned % for %', [Timer.Stop,
-        FileNameWithoutPath, ID, aSQL], self);
+        FileNameWithoutPath, ID, aSql], self);
   end;
 end;
 
-procedure TSqlDataBase.Execute(const aSQL: RawUtf8;
+procedure TSqlDataBase.Execute(const aSql: RawUtf8;
   out ID: RawUtf8; NoLog: boolean);
 var
   R: TSqlRequest;
@@ -4497,18 +4497,18 @@ begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
   Timer.Start;
-  Lock(aSQL);
+  Lock(aSql);
   try
-    R.Execute(DB, aSQL, ID);
+    R.Execute(DB, aSql, ID);
   finally
     UnLock;
     if not NoLog then
       fLog.Add.Log(sllSQL, '% % returned [%] for %', [Timer.Stop,
-        FileNameWithoutPath, ID, aSQL], self);
+        FileNameWithoutPath, ID, aSql], self);
   end;
 end;
 
-function TSqlDataBase.ExecuteNoException(const aSQL: RawUtf8): boolean;
+function TSqlDataBase.ExecuteNoException(const aSql: RawUtf8): boolean;
 var
   R: TSqlRequest;
   Timer: TPrecisionTimer;
@@ -4518,43 +4518,43 @@ begin
      (DB = 0) then
     exit; // avoid GPF in case of call from a static-only server
   Timer.Start;
-  Lock(aSQL); // run one statement -> we can trust IsCacheable()
+  Lock(aSql); // run one statement -> we can trust IsCacheable()
   try
-    result := R.ExecuteNoException(DB, aSQL);
+    result := R.ExecuteNoException(DB, aSql);
   finally
     UnLock;
-    fLog.Add.Log(sllSQL, '% % % = %', [Timer.Stop, FileNameWithoutPath, aSQL,
+    fLog.Add.Log(sllSQL, '% % % = %', [Timer.Stop, FileNameWithoutPath, aSql,
       BOOL_STR[result]], self);
   end;
 end;
 
-function TSqlDataBase.ExecuteNoExceptionInt64(const aSQL: RawUtf8): Int64;
+function TSqlDataBase.ExecuteNoExceptionInt64(const aSql: RawUtf8): Int64;
 begin
   if (self = nil) or
      (DB = 0) then
     result := 0
   else
   try
-    Execute(aSQL, result, true);
+    Execute(aSql, result, true);
   except
     result := 0;
   end;
 end;
 
-function TSqlDataBase.ExecuteNoExceptionUtf8(const aSQL: RawUtf8): RawUtf8;
+function TSqlDataBase.ExecuteNoExceptionUtf8(const aSql: RawUtf8): RawUtf8;
 begin
   if (self = nil) or
      (DB = 0) then
     result := ''
   else
   try
-    Execute(aSQL, result, true);
+    Execute(aSql, result, true);
   except
     result := '';
   end;
 end;
 
-function TSqlDataBase.ExecuteJson(const aSQL: RawUtf8; Expand: boolean;
+function TSqlDataBase.ExecuteJson(const aSql: RawUtf8; Expand: boolean;
   aResultCount: PPtrInt): RawUtf8;
 var
   R: TSqlRequest;
@@ -4567,21 +4567,21 @@ begin
     exit; // avoid GPF in case of call from a static-only server
   end;
   Timer.Start;
-  result := LockJson(aSQL, aResultCount); // lock and try getting the request from the cache
+  result := LockJson(aSql, aResultCount); // lock and try getting the request from the cache
   if result = '' then
   // only Execute the DB request if not got from cache
   try
-    result := R.ExecuteJson(DB, aSQL, Expand, @Count);
+    result := R.ExecuteJson(DB, aSql, Expand, @Count);
     if aResultCount <> nil then
       aResultCount^ := Count;
   finally
     UnLockJson(result, Count);
     fLog.Add.Log(sllSQL, '% % returned % bytes %', [Timer.Stop,
-      FileNameWithoutPath, length(result), aSQL], self);
+      FileNameWithoutPath, length(result), aSql], self);
   end;
 end;
 
-function TSqlDataBase.Execute(const aSQL: RawUtf8;
+function TSqlDataBase.Execute(const aSql: RawUtf8;
   var Values: TRawUtf8DynArray): integer;
 var
   R: TSqlRequest;
@@ -4591,13 +4591,13 @@ begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
   Timer.Start;
-  Lock(aSQL);
+  Lock(aSql);
   try
-    result := R.Execute(DB, aSQL, Values);
+    result := R.Execute(DB, aSql, Values);
   finally
     UnLock;
     fLog.Add.Log(sllSQL, '% % returned % rows %', [Timer.Stop,
-      FileNameWithoutPath, length(Values), aSQL], self);
+      FileNameWithoutPath, length(Values), aSql], self);
   end;
 end;
 
@@ -4701,18 +4701,18 @@ begin
         FreeAndNil(fCache);
 end;
 
-function IsCacheable(const aSQL: RawUtf8): boolean;
+function IsCacheable(const aSql: RawUtf8): boolean;
 begin
-  result := isSelect(pointer(aSQL)) and
-            (PosEx(SQLDATABASE_NOCACHE, aSQL) = 0);
+  result := isSelect(pointer(aSql)) and
+            (PosEx(SQLDATABASE_NOCACHE, aSql) = 0);
 end;
 
-procedure TSqlDataBase.Lock(const aSQL: RawUtf8);
+procedure TSqlDataBase.Lock(const aSql: RawUtf8);
 begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
-  if (aSQL = '') or
-     IsCacheable(aSQL) then
+  if (aSql = '') or
+     IsCacheable(aSql) then
     fSafe.Lock         // on non-concurent calls, is very fast
   else
     LockAndFlushCache; // INSERT UPDATE DELETE statements need to flush cache
@@ -4746,7 +4746,7 @@ begin
     fSafe.UnLock; // on non-concurent calls, this API is very fast
 end;
 
-function TSqlDataBase.LockJson(const aSQL: RawUtf8;
+function TSqlDataBase.LockJson(const aSql: RawUtf8;
   aResultCount: PPtrInt): RawUtf8;
 begin
   if self = nil then
@@ -4756,14 +4756,14 @@ begin
   end;
   fSafe.Lock; // cache access is also protected by fSafe
   try
-    if IsCacheable(aSQL) then
+    if IsCacheable(aSql) then
     begin
-      result := fCache.Find(aSQL, aResultCount); // try to get JSON result from cache
+      result := fCache.Find(aSql, aResultCount); // try to get JSON result from cache
       if result <> '' then
       begin
         if fLog <> nil then
         begin
-          fLog.Add.Log(sllSQL, 'from cache % %', [FileNameWithoutPath, aSQL], self);
+          fLog.Add.Log(sllSQL, 'from cache % %', [FileNameWithoutPath, aSql], self);
           fLog.Add.Log(sllResult, result, self, fLogResultMaximumSize);
         end;
         fSafe.UnLock; // found in cache -> leave critical section
@@ -5128,7 +5128,7 @@ begin
   sqlite3.create_function(DB, 'RAWUTF8DYNARRAYCONTAINSCASE', 2, SQLITE_ANY,
     nil, InternalRawUtf8DynArray, nil, nil);
   sqlite3.create_function(DB, 'RAWUTF8DYNARRAYCONTAINSNOCASE', 2, SQLITE_ANY,
-    @UTF8ILComp, InternalRawUtf8DynArray, nil, nil);
+    @Utf8ILComp, InternalRawUtf8DynArray, nil, nil);
   // JSON related functions (e.g. for ORM storing variants as JSON UTF-8 text)
   sqlite3.create_function(DB, 'JSONGET', 2, SQLITE_ANY, nil,
     InternalJsonGet, nil, nil);
@@ -5137,8 +5137,8 @@ begin
   sqlite3.create_function(DB, 'JSONSET', 3, SQLITE_ANY, nil,
     InternalJsonSet, nil, nil);
   // reallocate all TSqlDataBaseSQLFunction for re-Open (TRestServerDB.Backup)
-  for i := 0 to fSQLFunctions.Count - 1 do
-    TSqlDataBaseSQLFunction(fSQLFunctions.List[i]).CreateFunction(DB);
+  for i := 0 to fSqlFunctions.Count - 1 do
+    TSqlDataBaseSQLFunction(fSqlFunctions.List[i]).CreateFunction(DB);
   i := CacheSize;
   if i < 0 then
     i := (-i) shr 10
@@ -5290,8 +5290,8 @@ begin
   if (self = nil) or
      (aFunction = nil) then
     exit;
-  for i := 0 to fSQLFunctions.Count - 1 do
-    with TSqlDataBaseSQLFunction(fSQLFunctions.List[i]) do
+  for i := 0 to fSqlFunctions.Count - 1 do
+    with TSqlDataBaseSQLFunction(fSqlFunctions.List[i]) do
       if (FunctionParametersCount = aFunction.FunctionParametersCount) and
         IdemPropNameU(FunctionName, aFunction.FunctionName) then
       begin
@@ -5301,7 +5301,7 @@ begin
   if fLog <> nil then
     fLog.Add.Log(sllDB, '% RegisterSQLFunction("%") %',
       [FileNameWithoutPath, aFunction.FunctionName], self);
-  fSQLFunctions.Add(aFunction);
+  fSqlFunctions.Add(aFunction);
   if DB <> 0 then
     // DB already opened -> register this custom function
     aFunction.CreateFunction(DB);
@@ -5461,20 +5461,20 @@ begin
   end;
 end;
 
-procedure TSqlRequest.ExecuteAll(aDB: TSqlite3DB; const aSQL: RawUtf8);
+procedure TSqlRequest.ExecuteAll(aDB: TSqlite3DB; const aSql: RawUtf8);
 begin
   try
-    Prepare(aDB, aSQL); // will raise an ESqlite3Exception on error
+    Prepare(aDB, aSql); // will raise an ESqlite3Exception on error
     ExecuteAll;
   finally
     Close; // always release statement, even if done normally in EngineExecuteAll
   end;
 end;
 
-procedure TSqlRequest.Execute(aDB: TSqlite3DB; const aSQL: RawUtf8);
+procedure TSqlRequest.Execute(aDB: TSqlite3DB; const aSql: RawUtf8);
 begin
   try
-    Prepare(aDB, aSQL); // will raise an ESqlite3Exception on error
+    Prepare(aDB, aSql); // will raise an ESqlite3Exception on error
     Execute;
   finally
     Close; // always release statement, even if done normally in Execute
@@ -5482,13 +5482,13 @@ begin
 end;
 
 function TSqlRequest.ExecuteNoException(aDB: TSqlite3DB;
-  const aSQL: RawUtf8): boolean;
+  const aSql: RawUtf8): boolean;
 begin // avoid sqlite3_check() calls for no ESqlite3Exception
   result := false;
   if (aDB <> 0) and
-     (aSQL <> '') then
+     (aSql <> '') then
   try
-    if not (Prepare(aDB, aSQL, {noexcept=}true) in SQLITE_ERRORS) and
+    if not (Prepare(aDB, aSql, {noexcept=}true) in SQLITE_ERRORS) and
        (Request <> 0) and
        not (sqlite3.step(Request) in SQLITE_ERRORS) then
       result := true;
@@ -5497,14 +5497,14 @@ begin // avoid sqlite3_check() calls for no ESqlite3Exception
   end;
 end;
 
-function TSqlRequest.Execute(aDB: TSqlite3DB; const aSQL: RawUtf8;
+function TSqlRequest.Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
   var ID: TInt64DynArray): integer;
 var
   Res: integer;
 begin
   result := 0;
   try
-    Prepare(aDB, aSQL); // will raise an ESqlite3Exception on error
+    Prepare(aDB, aSql); // will raise an ESqlite3Exception on error
     if FieldCount > 0 then
       repeat
         Res := Step;
@@ -5517,12 +5517,12 @@ begin
   end;
 end;
 
-procedure TSqlRequest.Execute(aDB: TSqlite3DB; const aSQL: RawUtf8;
+procedure TSqlRequest.Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
   out ID: Int64);
 begin
   ID := 0;
   try
-    Prepare(aDB, aSQL); // will raise an ESqlite3Exception on error
+    Prepare(aDB, aSql); // will raise an ESqlite3Exception on error
     if FieldCount > 0 then
       if Step = SQLITE_ROW then
         // retrieve first column value
@@ -5532,12 +5532,12 @@ begin
   end;
 end;
 
-procedure TSqlRequest.Execute(aDB: TSqlite3DB; const aSQL: RawUtf8;
+procedure TSqlRequest.Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
   out Value: RawUtf8);
 begin
   Value := '';
   try
-    Prepare(aDB, aSQL); // will raise an ESqlite3Exception on error
+    Prepare(aDB, aSql); // will raise an ESqlite3Exception on error
     if FieldCount > 0 then
       if Step = SQLITE_ROW then
         // retrieve first column value
@@ -5547,14 +5547,14 @@ begin
   end;
 end;
 
-function TSqlRequest.Execute(aDB: TSqlite3DB; const aSQL: RawUtf8;
+function TSqlRequest.Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
   var Values: TRawUtf8DynArray): integer;
 var
   Res: integer;
 begin
   result := 0;
   try
-    Prepare(aDB, aSQL); // will raise an ESqlite3Exception on error
+    Prepare(aDB, aSql); // will raise an ESqlite3Exception on error
     if FieldCount > 0 then
       repeat
         Res := Step;
@@ -5567,7 +5567,7 @@ begin
   end;
 end;
 
-function TSqlRequest.Execute(aDB: TSqlite3DB; const aSQL: RawUtf8;
+function TSqlRequest.Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
   JSON: TStream; Expand: boolean): PtrInt;
 // expand=true: [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
 // expand=false: { "FieldCount":2,"Values":["col1","col2",val11,"val12",val21,..] }
@@ -5580,8 +5580,8 @@ begin
   W := TJsonWriter.Create(JSON, Expand, false, nil, 0, @tmp);
   try
     // prepare the SQL request
-    if aSQL <> '' then // if not already prepared, reset and bound by caller
-      Prepare(aDB, aSQL); // will raise an ESqlite3Exception on error
+    if aSql <> '' then // if not already prepared, reset and bound by caller
+      Prepare(aDB, aSql); // will raise an ESqlite3Exception on error
     if FieldCount <= 0 then
     begin
       W.CancelAllVoid;
@@ -5620,7 +5620,7 @@ begin
     W.EndJsonObject(0, result);
   finally
     try
-      if aSQL <> '' then
+      if aSql <> '' then
         Close; // always release statement (if not prepared and closed by caller)
     finally
       W.Free;
@@ -5628,7 +5628,7 @@ begin
   end;
 end;
 
-procedure TSqlRequest.ExecuteDebug(aDB: TSqlite3DB; const aSQL: RawUtf8;
+procedure TSqlRequest.ExecuteDebug(aDB: TSqlite3DB; const aSql: RawUtf8;
   var OutFile: Text);
 var
   Res, i, n: integer;
@@ -5636,7 +5636,7 @@ begin
   {$I-}
   writeln;
   try
-    Prepare(aDB, aSQL); // will raise an ESqlite3Exception on error
+    Prepare(aDB, aSql); // will raise an ESqlite3Exception on error
     repeat
       repeat
         Res := Step;
@@ -5659,7 +5659,7 @@ begin
   end;
 end;
 
-function TSqlRequest.ExecuteJson(aDB: TSqlite3DB; const aSQL: RawUtf8;
+function TSqlRequest.ExecuteJson(aDB: TSqlite3DB; const aSql: RawUtf8;
   Expand: boolean; aResultCount: PPtrInt): RawUtf8;
 var
   Stream: TRawByteStringStream;
@@ -5669,7 +5669,7 @@ begin
   try
     try
       // create JSON data in Stream
-      RowCount := Execute(aDB, aSQL, Stream, Expand);
+      RowCount := Execute(aDB, aSql, Stream, Expand);
       if aResultCount <> nil then
         aResultCount^ := RowCount;
       result := Stream.DataString;
@@ -5677,7 +5677,7 @@ begin
       on ESqlite3Exception do
         result := '';
     end;
-    // Close has been called in Execute() above since aSQL<>''
+    // Close has been called in Execute() above since aSql<>''
   finally
     Stream.Free;
   end;
@@ -6054,15 +6054,15 @@ begin
   fInternalFunction := aFunction;
   fFunctionParametersCount := aFunctionParametersCount;
   if aFunctionName = '' then
-    fSQLName := RawUtf8(copy(ClassName, 2, maxInt))
+    fSqlName := RawUtf8(copy(ClassName, 2, maxInt))
   else
-    fSQLName := aFunctionName;
+    fSqlName := aFunctionName;
 end;
 
 function TSqlDataBaseSQLFunction.CreateFunction(DB: TSqlite3DB): integer;
 begin
   if self <> nil then
-    result := sqlite3.create_function(DB, pointer(fSQLName),
+    result := sqlite3.create_function(DB, pointer(fSqlName),
       FunctionParametersCount, SQLITE_ANY, self, fInternalFunction, nil, nil)
   else
     result := SQLITE_ERROR;
@@ -6134,20 +6134,20 @@ begin
   DB := aDB;
 end;
 
-function TSqlStatementCached.Prepare(const GenericSQL: RawUtf8; WasPrepared:
+function TSqlStatementCached.Prepare(const GenericSql: RawUtf8; WasPrepared:
   PBoolean; ExecutionTimer: PPPrecisionTimer;
   ExecutionMonitor: PSynMonitor): PSqlRequest;
 var
   added: boolean;
   ndx: integer;
 begin
-  ndx := Caches.FindHashedForAdding(GenericSQL, added);
+  ndx := Caches.FindHashedForAdding(GenericSql, added);
   with Cache[ndx] do
   begin
     if added then
     begin
-      StatementSQL := GenericSQL;
-      Statement.Prepare(DB, GenericSQL);
+      StatementSql := GenericSql;
+      Statement.Prepare(DB, GenericSql);
       Timer  := TSynMonitor.Create;
       if WasPrepared <> nil then
         WasPrepared^ := true;
@@ -6156,7 +6156,7 @@ begin
     begin
       if Timer = nil then // there was a Statement.Prepare exception on previous call
         raise ESqlite3Exception.CreateUtf8(
-          'TSqlStatementCached.Prepare failed [%]', [GenericSQL]);
+          'TSqlStatementCached.Prepare failed [%]', [GenericSql]);
       if Statement.Request <> 0 then
         Statement.Reset;
       if WasPrepared <> nil then

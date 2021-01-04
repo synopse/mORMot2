@@ -656,7 +656,7 @@ constructor TRestHttpClientGeneric.Create(const aServer: TRestServerUriString;
 var
   URI: TRestServerUri;
 begin
-  URI.URI := aServer;
+  URI.Uri := aServer;
   if URI.Root <> '' then
     aModel.Root := URI.Root;
   if (URI.Port = '') and
@@ -906,7 +906,7 @@ begin
   if WebSockets = nil then
     raise EServiceException.CreateUtf8('Missing %.WebSocketsUpgrade() call ' +
       'to enable interface parameter callbacks for %.%(%: %)',
-      [self, Sender.InterfaceTypeInfo ^.Name, Method.URI,
+      [self, Sender.InterfaceTypeInfo ^.Name, Method.Uri,
        ParamInfo.ParamName^, ParamInfo.ArgTypeName^]);
   if ParamValue = nil then
     result := 0

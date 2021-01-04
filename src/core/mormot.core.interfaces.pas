@@ -261,7 +261,7 @@ type
     /// the method URI, i.e. the method name
     // - as declared in object pascal code, e.g. 'Add' for ICalculator.Add
     // - this property value is hashed internaly for faster access
-    URI: RawUtf8;
+    Uri: RawUtf8;
     /// the method default result, formatted as a JSON array
     // - example of content may be '[]' for a procedure or '[0]' for a function
     // - any var/out and potential function result will be set as a JSON array
@@ -517,7 +517,7 @@ type
   // and not manual TInterfaceFactory.Create / Free
   // - if you want to search the interfaces by name or TGUID, call once
   // Get(TypeInfo(IMyInterface)) or RegisterInterfaces() for proper registration
-  // - will use TInterfaceFactoryRTTI classes generated from compiler RTTI
+  // - will use TInterfaceFactoryRtti classes generated from compiler RTTI
   TInterfaceFactory = class
   protected
     fInterfaceTypeInfo: PRttiInfo;
@@ -585,7 +585,7 @@ type
     // - do not call this constructor directly, but TInterfaceFactory.Get()
     constructor Create(aInterface: PRttiInfo);
     /// find the index of a particular method in internal Methods[] list
-    // - will search for a match against Methods[].URI property
+    // - will search for a match against Methods[].Uri property
     // - won't find the default AddRef/Release/QueryInterface methods
     // - will return -1 if the method is not known
     // - if aMethodName does not have an exact method match, it will try with a
@@ -682,7 +682,7 @@ type
   /// class handling interface RTTI and fake implementation class
   // - this class only exists for Delphi 6 and up, and newer FPC, which has
   // the expected RTTI - see http://bugs.freepascal.org/view.php?id=26774
-  TInterfaceFactoryRTTI = class(TInterfaceFactory)
+  TInterfaceFactoryRtti = class(TInterfaceFactory)
   protected
     procedure AddMethodsFromTypeInfo(aInterface: PRttiInfo); override;
   end;
@@ -3029,7 +3029,7 @@ var
   begin
     msg := FormatUtf8(Format, Args);
     raise EInterfaceFactory.CreateUtf8('%.FakeCall(%.%) failed: %',
-      [self, fFactory.fInterfaceName, method^.URI, msg]);
+      [self, fFactory.fInterfaceName, method^.Uri, msg]);
   end;
 
   procedure InternalProcess;
@@ -3242,7 +3242,7 @@ procedure TInterfacedObjectFake.InterfaceWrite(W: TTextWriter;
   aParamValue: Pointer);
 begin
   raise EInterfaceFactory.CreateUtf8('%: unhandled %.%(%: %) argument', [self,
-    fFactory.fInterfaceName, aMethod.URI, aParamInfo.ParamName^, aParamInfo.ArgTypeName^]);
+    fFactory.fInterfaceName, aMethod.Uri, aParamInfo.ParamName^, aParamInfo.ArgTypeName^]);
 end;
 
 
@@ -3312,7 +3312,7 @@ begin
         inc(F);
     // not existing -> create new instance from RTTI
     {$ifdef HASINTERFACERTTI}
-    result := TInterfaceFactoryRTTI.Create(aInterface);
+    result := TInterfaceFactoryRtti.Create(aInterface);
     InterfaceFactoryCache.Add(result);
     {$else}
     result := nil; // make compiler happy
@@ -3876,7 +3876,7 @@ begin
     if MethodsCount < 10 then
     begin
       for result := 0 to MethodsCount - 1 do
-        if IdemPropNameU(fMethods[result].URI, aMethodName) then
+        if IdemPropNameU(fMethods[result].Uri, aMethodName) then
           exit;
       result := -1;
     end
@@ -3955,7 +3955,7 @@ begin
   begin
     dec(MethodIndex, SERVICE_PSEUDO_METHOD_COUNT);
     if cardinal(MethodIndex) < MethodsCount then
-      result := fMethods[MethodIndex].URI
+      result := fMethods[MethodIndex].Uri
     else
       result := '';
   end;
@@ -4291,9 +4291,9 @@ end;
 
 {$ifdef HASINTERFACERTTI}
 
-{ TInterfaceFactoryRTTI }
+{ TInterfaceFactoryRtti }
 
-procedure TInterfaceFactoryRTTI.AddMethodsFromTypeInfo(aInterface: PRttiInfo);
+procedure TInterfaceFactoryRtti.AddMethodsFromTypeInfo(aInterface: PRttiInfo);
 var
   info: TRttiInterface;
   nm, na: integer;
@@ -5060,7 +5060,7 @@ constructor EInterfaceStub.Create(Sender: TInterfaceStub;
   const Method: TInterfaceMethod; const Error: RawUtf8);
 begin
   inherited CreateUtf8('Error in % for %.% - %', [Sender, Sender.fInterface.fInterfaceName,
-    Method.URI, Error]);
+    Method.Uri, Error]);
 end;
 
 constructor EInterfaceStub.Create(Sender: TInterfaceStub;
@@ -5150,7 +5150,7 @@ procedure TInterfaceStubLog.AddAsText(WR: TTextWriter; aScope:
   TInterfaceStubLogLayouts; SepChar: AnsiChar);
 begin
   if wName in aScope then
-    WR.AddString(method^.URI);
+    WR.AddString(method^.Uri);
   if wParams in aScope then
   begin
     WR.Add('(');
@@ -5488,7 +5488,7 @@ begin
       '%.IntCheckCount(): Unexpected % operator', [self, Ord(aOperator)]);
   end;
   InternalCheck(ok, True, 'ExpectsCount(''%'',%,%) failed: count=%',
-    [fInterface.Methods[aMethodIndex].URI, ToText(aOperator)^, aCount, aComputed]);
+    [fInterface.Methods[aMethodIndex].Uri, ToText(aOperator)^, aCount, aComputed]);
 end;
 
 procedure TInterfaceStub.InstanceDestroyed(aClientDrivenID: cardinal);
@@ -5525,7 +5525,7 @@ begin
                 InternalCheck(
                   ExpectedTraceHash = Hash32(IntGetLogAsText(asmndx, Params,
                     [wName, wParams, wResults], ',')), True,
-                  'ExpectsTrace(''%'') failed', [fInterface.Methods[m].URI]);
+                  'ExpectsTrace(''%'') failed', [fInterface.Methods[m].Uri]);
         end;
   finally
     if not (imoFakeInstanceWontReleaseTInterfaceStub in Options) then
@@ -5815,7 +5815,7 @@ begin
           begin
             result := false;
             FormatUtf8('No stubbing rule defined for %.%',
-              [fInterface.fInterfaceName, aMethod.URI], log.CustomResults);
+              [fInterface.fInterfaceName, aMethod.Uri], log.CustomResults);
           end
           else
             result := true;

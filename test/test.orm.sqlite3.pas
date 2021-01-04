@@ -242,17 +242,17 @@ type
   TRestServerTest = class(TRestServerDB)
   published
     /// test ModelRoot/People/ID/DataAsHex
-    // - this method is called by TRestServer.URI when a
+    // - this method is called by TRestServer.Uri when a
     // ModelRoot/People/ID/DataAsHex GET request is provided
     // - Parameters values are not used here: this service only need aRecord.ID
     // - SentData is set with incoming data from a PUT method
     // - if called from ModelRoot/People/ID/DataAsHex with GET or PUT methods,
-    // TRestServer.URI will create a TOrm instance and set its ID
+    // TRestServer.Uri will create a TOrm instance and set its ID
     // (but won't retrieve its other field values automaticaly)
     // - if called from ModelRoot/People/DataAsHex with GET or PUT methods,
-    // TRestServer.URI will leave aRecord.ID=0 before launching it
+    // TRestServer.Uri will leave aRecord.ID=0 before launching it
     // - if called from ModelRoot/DataAsHex with GET or PUT methods,
-    // TRestServer.URI will leave aRecord=nil before launching it
+    // TRestServer.Uri will leave aRecord=nil before launching it
     // - implementation must return the HTTP error code (e.g. 200 as success)
     // - Table is overloaded as TOrmPeople here, and still match the
     // TRestServerCallBack prototype: but you have to check the class
@@ -841,14 +841,14 @@ type
     fRec: TFTSMatchInfo;
   {$endif PUBLISHRECORD}
     fFileVersion: TFVs;
-    fUTF8: RawUtf8;
+    fU: RawUtf8;
   published
   {$ifdef PUBLISHRECORD}
     property Rec: TFTSMatchInfo
       read fRec write fRec;
   {$endif PUBLISHRECORD}
     property U: RawUtf8
-      read fUTF8 write fUTF8;
+      read fU write fU;
     property Ints: TIntegerDynArray
       index 1 read fInts write fInts;
     property Currency: TCurrencyDynArray
@@ -860,7 +860,7 @@ type
   TOrmPeopleObject = class(TOrmPeople)
   private
     fPersistent: TCollTst;
-    fUTF8: TRawUtf8List;
+    fU: TRawUtf8List;
   public
     /// will create internal U/Persistent instances
     constructor Create; override;
@@ -868,7 +868,7 @@ type
     destructor Destroy; override;
   published
     property U: TRawUtf8List
-      read fUTF8;
+      read fU;
     property Persistent: TCollTst
       read fPersistent;
   end;
@@ -971,7 +971,7 @@ constructor TOrmPeopleObject.Create;
 begin
   inherited;
   fPersistent := TCollTst.Create;
-  fUTF8 := TRawUtf8List.Create;
+  fU := TRawUtf8List.Create;
 end;
 
 destructor TOrmPeopleObject.Destroy;
@@ -3133,7 +3133,7 @@ end;
 
 procedure TTestBidirectionalRemoteConnection.RelayShutdown;
 var
-  stats: RaWUTF8;
+  stats: RawUtf8;
 begin
   stats := OpenHttpGet('127.0.0.1', fPublicRelayPort, '/stats', '');
   check(PosEx('"version"', stats) > 0, 'stats');

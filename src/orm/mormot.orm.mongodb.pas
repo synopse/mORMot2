@@ -84,7 +84,7 @@ type
 
   /// REST server with direct access to a MongoDB external database
   // - handle all REST commands via direct SynMongoDB call
-  // - is used by TRestServer.URI for faster RESTful direct access
+  // - is used by TRestServer.Uri for faster RESTful direct access
   // - JOINed SQL statements are not handled yet
   TRestStorageMongoDB = class(TRestStorage)
   protected
@@ -131,11 +131,11 @@ type
     function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
       BlobField: PRttiProp; const BlobData: RawBlob): boolean; override;
     // method not implemented: always return false
-    function EngineExecute(const aSQL: RawUtf8): boolean; override;
-    /// TRestServer.URI use it for Static.EngineList to by-pass virtual table
+    function EngineExecute(const aSql: RawUtf8): boolean; override;
+    /// TRestServer.Uri use it for Static.EngineList to by-pass virtual table
     // - overridden method which allows return TRUE, i.e. always by-pass
     // virtual tables process
-    function AdaptSQLForEngineList(var SQL: RawUtf8): boolean; override;
+    function AdaptSqlForEngineList(var SQL: RawUtf8): boolean; override;
   public
     /// initialize the direct access to the MongoDB collection
     // - in practice, you should not have to call this constructor, but rather
@@ -1021,7 +1021,7 @@ begin
   end;
 end;
 
-function TRestStorageMongoDB.AdaptSQLForEngineList(var SQL: RawUtf8): boolean;
+function TRestStorageMongoDB.AdaptSqlForEngineList(var SQL: RawUtf8): boolean;
 begin
   result := true; // we do not have any Virtual Table yet -> always accept
 end;
@@ -1536,7 +1536,7 @@ begin
     ReturnedRowCount^ := ResCount;
 end;
 
-function TRestStorageMongoDB.EngineExecute(const aSQL: RawUtf8): boolean;
+function TRestStorageMongoDB.EngineExecute(const aSql: RawUtf8): boolean;
 begin
   result := false; // it is a NO SQL engine, we said! :)
 end;
