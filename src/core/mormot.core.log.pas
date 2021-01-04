@@ -3810,7 +3810,7 @@ begin
   if fFamily.LocalTimestamp then
     fStartTimestampDateTime := Now
   else
-    fStartTimestampDateTime := NowUTC;
+    fStartTimestampDateTime := NowUtc;
   Include(fInternalFlags, logInitDone);
 end;
 
@@ -3936,7 +3936,7 @@ begin
     if fFamily.LocalTimestamp then
       AddDateTime(Now)
     else
-      AddDateTime(NowUTC);
+      AddDateTime(NowUtc);
     if WithinEvents then
       fWriterEcho.AddEndOfLine(sllNone)
     else
@@ -6259,7 +6259,7 @@ begin
   PInteger(destbuffer)^ :=
     ord('>') + ord('1') shl 8 + ord(' ') shl 16; // VERSION=1
   inc(destbuffer, 3);
-  st.FromNowUTC;
+  st.FromNowUtc;
   DateToIso8601PChar(destbuffer,
     true, st.Year, st.Month, st.Day);
   TimeToIso8601PChar(destbuffer + 10,

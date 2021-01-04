@@ -277,7 +277,7 @@ type
     procedure ToVariant(var result: variant); overload;
     /// returns the timestamp portion of the ObjectId() object as a TDateTime
     // - time is expressed in Coordinated Universal Time (UTC), not local time
-    // so you can compare it to NowUTC returned time
+    // so you can compare it to NowUtc returned time
     function CreateDateTime: TDateTime;
     /// compare two Object IDs
     function Equal(const Another: TBsonObjectID): boolean; overload;
@@ -1026,7 +1026,7 @@ function Bson(const JSON: RawUtf8; kind: PBsonElementType = nil): TBsonDocument;
 // ! Bson('{%:[?,?,?]}',['BSON'],['awesome',5.05,1986])
 // ! Bson('{%:?}',['BSON'],[_Arr(['awesome',5.05,1986])])
 // ! Bson('{name:?,field:/%/i}',['acme.*corp'],['John']);
-// ! Bson('{id:new ObjectId(),doc:{name:?,date:ISODate(?)}}',[],['John',NowUTC]);
+// ! Bson('{id:new ObjectId(),doc:{name:?,date:ISODate(?)}}',[],['John',NowUtc]);
 // - will create the BSON binary without any temporary TDocVariant storage,
 // by calling JsonBufferToBsonDocument() on the generated JSON content
 // - since all content will be transformed into JSON internally, use this
@@ -1913,7 +1913,7 @@ procedure TBsonObjectID.ComputeNew;
 var
   now, count: cardinal;
 begin
-  now := UnixTimeUTC; // fast API call (no need of cache)
+  now := UnixTimeUtc; // fast API call (no need of cache)
   with GlobalBsonObjectID do
   begin
     EnterCriticalSection(Section);
@@ -2207,7 +2207,7 @@ var
     if GotoEndOfObject = ')' then
       if P^ = ')' then
       begin // new date() constructor
-        varvalue.VDate := NowUTC;
+        varvalue.VDate := NowUtc;
         Return(betDateTime, P, #0);
         exit;
       end

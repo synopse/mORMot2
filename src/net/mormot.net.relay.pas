@@ -787,7 +787,7 @@ end;
 constructor TAbstractRelay.Create(aLog: TSynLogClass);
 begin
   inherited Create;
-  fStarted := NowUTCToString;
+  fStarted := NowUtcToString;
   if aLog = nil then
     fLog := TSynLog
   else

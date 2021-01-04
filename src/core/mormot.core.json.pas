@@ -8358,7 +8358,7 @@ begin
     begin
       MoveFast(pointer(v^.Value)^, PByteArray(tmp)[v^.Position], length(v^.Value));
       {$ifdef FPC}
-      Finalize(v^.Value);
+      FastAssignNew(v^.Value);
       {$else}
       v^.Value := '';
       {$endif FPC}

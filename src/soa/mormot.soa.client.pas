@@ -196,7 +196,7 @@ type
     // but you may use this property to use another value, e.g. if you are
     // accessign a non mORMot REST server (probably with aContractExpected set
     // to SERVICE_CONTRACT_NONE_EXPECTED, and running
-    // Client.ServerTimestamp := TimeLogNowUTC to avoid an unsupported
+    // Client.ServerTimestamp := TimeLogNowUtc to avoid an unsupported
     // ServerTimestampSynchronize call)
     property ForcedUri: RawUtf8
       read fForcedUri write fForcedUri;
@@ -397,7 +397,7 @@ begin // one at a time, since InternalInvoke() is the bottleneck
       output.InitObject([
         'errorcount', count,
         'lasterror', error,
-        'lasttime', NowUTCToString(true, 'T'),
+        'lasttime', NowUtcToString(true, 'T'),
         'lastelapsed', timer.Stop], JSON_OPTIONS_FAST_EXTENDED);
       pending.Output := variant(output);
       fClient.fSendNotificationsRest.ORM.Update(pending, 'Output', true);
@@ -408,7 +408,7 @@ begin // one at a time, since InternalInvoke() is the bottleneck
     fClient.fClient.InternalLog(
       'ProcessPendingNotification %(%) in % [ID=%,pending=%]',
       [pending.Method, params, timer.Stop, pending.IDValue, pendings]);
-    pending.Sent := TimeLogNowUTC;
+    pending.Sent := TimeLogNowUtc;
     pending.MicroSec := timer.LastTimeInMicroSec;
     fClient.fSendNotificationsRest.ORM.Update(pending, 'MicroSec,Sent', true);
     fSafe.LockedInt64Increment(0, -1);

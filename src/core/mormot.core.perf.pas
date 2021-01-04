@@ -674,7 +674,7 @@ type
     procedure FromTimeLog(const TimeLog: TTimeLog);
     /// computes an ID corresponding to the current UTC date/time
     // - minutes and seconds will be ignored
-    procedure FromNowUTC;
+    procedure FromNowUtc;
     /// returns the date/time
     // - minutes and seconds will set to 0
     function ToTimeLog: TTimeLog;
@@ -741,7 +741,7 @@ type
     function LoadDB(ID: integer; Gran: TSynMonitorUsageGranularity;
       out Track: variant): boolean; virtual; abstract;
     // may be overriden for testing purposes
-    procedure SetCurrentUTCTime(out minutes: TTimeLogBits); virtual;
+    procedure SetCurrentUtcTime(out minutes: TTimeLogBits); virtual;
   public
     /// finalize the statistics, saving any pending information
     destructor Destroy; override;
@@ -2003,9 +2003,9 @@ begin
     result := 0;
 end;
 
-procedure TSynMonitorUsage.SetCurrentUTCTime(out minutes: TTimeLogBits);
+procedure TSynMonitorUsage.SetCurrentUtcTime(out minutes: TTimeLogBits);
 begin
-  minutes.FromUTCTime;
+  minutes.FromUtcTime;
 end;
 
 function TSynMonitorUsage.Modified(Instance: TObject;
@@ -2036,7 +2036,7 @@ function TSynMonitorUsage.Modified(Instance: TObject;
     v, diff: Int64;
   begin
     if ModificationTime = 0 then
-      SetCurrentUTCTime(time)
+      SetCurrentUtcTime(time)
     else
       time.Value := ModificationTime;
     time.Value := time.Value and AS_MINUTES; // save every minute
@@ -2261,11 +2261,11 @@ begin
            (bits.Year - USAGE_ID_YEAROFFSET) shl USAGE_ID_SHIFT[mugYear];
 end;
 
-procedure TSynMonitorUsageID.FromNowUTC;
+procedure TSynMonitorUsageID.FromNowUtc;
 var
   now: TTimeLogBits;
 begin
-  now.FromUTCTime;
+  now.FromUtcTime;
   From(now.Value);
 end;
 
@@ -2439,7 +2439,7 @@ begin
      not fProcessInfo.Start then
     exit;
   fTimer := Sender;
-  now := NowUTC;
+  now := NowUtc;
   fSafe.Lock;
   try
     inc(fDataIndex);

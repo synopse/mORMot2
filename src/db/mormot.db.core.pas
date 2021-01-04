@@ -1316,7 +1316,7 @@ begin
             Output.VDouble := VSingle;
           end;
         varDouble:
-          begin // varDate would be converted into ISO8601 by VariantToUtf8()
+          begin // varDate would be converted into ISO-8601 by VariantToUtf8()
             Output.VType := ftDouble;
             Output.VDouble := VDouble;
           end;

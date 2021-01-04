@@ -3829,7 +3829,7 @@ begin
     fSnapShotAfterMinutes := 30;
     fSnapshotTimestamp := 0;
     fSnapshotInsertCount := 0;
-    fRevision := UnixTimeUTC shl 31;
+    fRevision := UnixTimeUtc shl 31;
     fKnownRevision := 0;
     fKnownStore := '';
   finally

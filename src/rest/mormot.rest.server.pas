@@ -5796,7 +5796,7 @@ begin
   fServer := aServer;
   SetLength(fPerTable[false], length(aServer.Model.Tables));
   SetLength(fPerTable[true], length(aServer.Model.Tables));
-  fStartDate := NowUTCToString;
+  fStartDate := NowUtcToString;
 end;
 
 destructor TRestServerMonitor.Destroy;

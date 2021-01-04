@@ -3010,9 +3010,9 @@ begin
   o2 := o;
   Check(double(o) = double(o2));
   o := ObjectID;
-  Check(Abs(NowUTC - double(o)) < 0.1);
+  Check(Abs(NowUtc - double(o)) < 0.1);
   oid.FromText(ToUtf8(string(o)));
-  Check(Abs(NowUTC - oid.CreateDateTime) < 0.1);
+  Check(Abs(NowUtc - oid.CreateDateTime) < 0.1);
   oid2.ComputeNew;
   Check(oid.MachineID.b1 = oid2.MachineID.b1);
   Check(oid.MachineID.b2 = oid2.MachineID.b2);
@@ -3299,7 +3299,7 @@ begin
   Check(o.name = o2.name);
   d := TDateTime(o.date);
   d2 := TDateTime(o2.date);
-  Check(d > NowUTC - 1);
+  Check(d > NowUtc - 1);
   Check(d2 - d < 0.1);
   u := VariantSaveMongoJson(o.Field, modMongoStrict);
   u2 := VariantSaveMongoJson(o2.Field, modMongoStrict);
@@ -3330,7 +3330,7 @@ begin
   u2 := BsonToJson(b, betDoc, 0, modMongoShell);
   CheckEqual(u, u2);
   temp := Bson('{id:ObjectId(),doc:{name:?,date:ISODate(?)}}', [],
-    ['John', NowUTC]);
+    ['John', NowUtc]);
   b := pointer(temp);
   u := BsonToJson(b, betDoc, 0, modMongoShell);
   Check(IdemPChar(pointer(u), '{ID:OBJECTID("'));
@@ -4279,7 +4279,7 @@ var
   s, s2: RawUtf8;
 begin
   id.Value := 0;
-  now := TimeLogNowUTC and not pred(1 shl 12); // truncate to hour resolution
+  now := TimeLogNowUtc and not pred(1 shl 12); // truncate to hour resolution
   id.FromTimeLog(now);
   s := n.Text(true);
   id2 := id.ToTimeLog;

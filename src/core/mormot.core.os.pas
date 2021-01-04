@@ -1202,31 +1202,31 @@ function GetTickCount64: Int64;
 
 /// returns the current UTC time
 // - will convert from clock_gettime(CLOCK_REALTIME_COARSE) if available
-function NowUTC: TDateTime;
+function NowUtc: TDateTime;
 
 /// returns the current UTC date/time as a second-based c-encoded time
 // - i.e. current number of seconds elapsed since Unix epoch 1/1/1970
-// - faster than NowUTC or GetTickCount64, on Windows or Unix platforms
+// - faster than NowUtc or GetTickCount64, on Windows or Unix platforms
 // (will use e.g. fast clock_gettime(CLOCK_REALTIME_COARSE) under Linux,
 // or GetSystemTimeAsFileTime under Windows)
 // - returns a 64-bit unsigned value, so is "Year2038bug" free
-function UnixTimeUTC: Int64;
+function UnixTimeUtc: Int64;
 
 /// returns the current UTC date/time as a millisecond-based c-encoded time
 // - i.e. current number of milliseconds elapsed since Unix epoch 1/1/1970
-// - faster and more accurate than NowUTC or GetTickCount64, on Windows or Unix
+// - faster and more accurate than NowUtc or GetTickCount64, on Windows or Unix
 // - will use e.g. fast clock_gettime(CLOCK_REALTIME_COARSE) under Linux,
 // or GetSystemTimeAsFileTime/GetSystemTimePreciseAsFileTime under Windows - the
 // later being more accurate, but slightly slower than the former, so you may
-// consider using UnixMSTimeUTCFast on Windows if its 10-16ms accuracy is enough
-function UnixMSTimeUTC: Int64;
+// consider using UnixMSTimeUtcFast on Windows if its 10-16ms accuracy is enough
+function UnixMSTimeUtc: Int64;
 
 /// returns the current UTC date/time as a millisecond-based c-encoded time
-// - under Linux/POSIX, is the very same than UnixMSTimeUTC (inlined call)
+// - under Linux/POSIX, is the very same than UnixMSTimeUtc (inlined call)
 // - under Windows 8+, will call GetSystemTimeAsFileTime instead of
 // GetSystemTimePreciseAsFileTime, which has higher precision, but is slower
 // - prefer it under Windows, if a dozen of ms resolution is enough for your task
-function UnixMSTimeUTCFast: Int64;
+function UnixMSTimeUtcFast: Int64;
   {$ifdef LINUX} inline; {$endif}
 
 {$ifndef NOEXCEPTIONINTERCEPT}
@@ -1250,7 +1250,7 @@ type
     /// = FPC's RaiseProc() FrameCount if EStack is Frame: PCodePointer
     EStackCount: integer;
     /// timestamp of this exception, as number of seconds since UNIX Epoch (TUnixTime)
-    // - UnixTimeUTC is faster than NowUTC or GetSystemTime
+    // - UnixTimeUtc is faster than NowUtc or GetSystemTime
     // - use UnixTimeToDateTime() to convert it into a regular TDateTime
     ETimestamp: Int64;
     /// the logging level corresponding to this exception
@@ -2871,9 +2871,9 @@ begin
     res[0] := AnsiChar(Unicode_WideToAnsi(W, PAnsiChar(@res[1]), LW, 255, CodePage));
 end;
 
-function NowUTC: TDateTime;
+function NowUtc: TDateTime;
 begin
-  result := UnixMSTimeUTC / MSecsPerDay + UnixDelta;
+  result := UnixMSTimeUtc / MSecsPerDay + UnixDelta;
 end;
 
 function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;
@@ -3172,7 +3172,7 @@ begin
           ctxt.ELevel := sllExceptionOS
         else
           ctxt.ELevel := sllException;
-        ctxt.ETimestamp := UnixTimeUTC;
+        ctxt.ETimestamp := UnixTimeUtc;
         ctxt.EStack := pointer(Frame);
         ctxt.EStackCount := FrameCount;
         backuphandler(ctxt);

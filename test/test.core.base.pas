@@ -4877,14 +4877,14 @@ begin
   finally
     tz.Free;
   end;
-  dt := NowUTC;
+  dt := NowUtc;
   {$ifdef FPC}
   CheckSame(_LocalTimeToUniversal(Now(), -GetLocalTimeOffset) - dt, 0, 1E-2,
-    'NowUTC should not shift or truncate time');
+    'NowUtc should not shift or truncate time');
   {$endif FPC}
   sleep(200);
-  Check(not SameValue(dt, NowUTC),
-    'NowUTC should not truncate time to 5 sec resolution');
+  Check(not SameValue(dt, NowUtc),
+    'NowUtc should not truncate time to 5 sec resolution');
   {$ifdef MSWINDOWS}
   tz := TSynTimeZone.CreateDefault;
   try
@@ -5549,7 +5549,7 @@ begin
       dec(obfusc[12]);
     end;
     //writeln('LastUnixCreateTime=', gen.LastUnixCreateTime);
-    //writeln('UnixTimeUTC=', UnixTimeUTC);
+    //writeln('UnixTimeUtc=', UnixTimeUtc);
   finally
     gen.Free;
   end;

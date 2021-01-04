@@ -517,7 +517,7 @@ function Utf8CompareDouble(P1, P2: PUtf8Char): PtrInt;
 
 /// special comparison function for sorting oftDateTime or oftDateTimeMS
 // UTF-8 encoded values in the SQLite3 database or JSON content
-function Utf8CompareISO8601(P1, P2: PUtf8Char): PtrInt;
+function Utf8CompareIso8601(P1, P2: PUtf8Char): PtrInt;
 
 type
   /// the available options for TRest.BatchStart() process
@@ -8360,7 +8360,7 @@ er: result := Utf8IComp(P1, P2);
     result := +1;
 end;
 
-function Utf8CompareISO8601(P1, P2: PUtf8Char): PtrInt;
+function Utf8CompareIso8601(P1, P2: PUtf8Char): PtrInt;
 var
   V1, V2: TDateTime;
 begin
@@ -14512,7 +14512,7 @@ var
     Utf8CompareRecord,   // Record
     Utf8CompareBoolean,  // boolean
     Utf8CompareDouble,   // Float
-    Utf8CompareISO8601,  // TDateTime
+    Utf8CompareIso8601,  // TDateTime
     Utf8CompareInt64,    // TTimeLog
     Utf8CompareCurr64,   // Currency
     nil,                 // Object (TEXT serialization) = StrComp
@@ -14528,7 +14528,7 @@ var
     Utf8CompareInt64,    // TID
     Utf8CompareInt64,    // TRecordVersion
     Utf8CompareInt64,    // TSessionUserID
-    Utf8CompareISO8601,  // TDateTimeMS
+    Utf8CompareIso8601,  // TDateTimeMS
     Utf8CompareInt64,    // TUnixTime
     Utf8CompareInt64);   // TUnixMSTime
 

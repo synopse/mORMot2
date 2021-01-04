@@ -3614,7 +3614,7 @@ type
   // - see TUnixMSTime for a millisecond resolution Unix Timestamp
   // - use UnixTimeToDateTime/DateTimeToUnixTime functions to convert it to/from
   // a regular TDateTime
-  // - use UnixTimeUTC to return the current timestamp, using fast OS API call
+  // - use UnixTimeUtc to return the current timestamp, using fast OS API call
   // - also one of the encodings supported by SQLite3 date/time functions
   TUnixTime = type Int64;
   /// pointer to a timestamp stored as second-based Unix Time

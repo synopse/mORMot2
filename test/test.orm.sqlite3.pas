@@ -919,7 +919,7 @@ type
     fPeopleCascade: TOrmPeopleToBeDeletedID;
     {$ifdef PUBLISHRECORD}
     fGUIDXE6: TGUID;
-    {$endif}
+    {$endif PUBLISHRECORD}
     class procedure InternalRegisterCustomProperties(Props: TOrmProperties); override;
   public
     property GUID: TGUID
@@ -934,7 +934,7 @@ type
     {$ifdef PUBLISHRECORD}
     property GUIDXE6: TGUID
       read fGUIDXE6 write fGUIDXE6;
-    {$endif}
+    {$endif PUBLISHRECORD}
   end;
 
   TOrmFtsTest = class(TOrmFTS3)
@@ -1764,7 +1764,7 @@ begin
             VP.fGUID.D1 := n;
             {$ifdef PUBLISHRECORD}
             VP.fGUIDXE6.D1 := n shl 1;
-            {$endif}
+            {$endif PUBLISHRECORD}
             check(Client.Orm.Add(VP, true) = n);
           end;
           Client.Orm.Commit;
@@ -1775,7 +1775,7 @@ begin
             check(Integer(VP.GUID.D1) = VP.ID);
             {$ifdef PUBLISHRECORD}
             check(Integer(VP.GUIDXE6.D1) = VP.ID shl 1);
-            {$endif}
+            {$endif PUBLISHRECORD}
           end;
         except
           Client.Orm.RollBack;

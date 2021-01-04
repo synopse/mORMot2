@@ -68,7 +68,7 @@ type
   // - or for direct access to a database (TRestOrmClientDB e.g.)
   TRestOrmClient = class(TRestOrm, IRestOrmClient)
   protected
-    fForceBlobTransfert: array of boolean;
+    fForceBlobTransfert: TBooleanDynArray;
     fOnTableUpdate: TOnTableUpdate;
     fOnRecordUpdate: TOnRecordUpdate;
     fBatchCurrent: TRestBatch;

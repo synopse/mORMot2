@@ -2390,7 +2390,7 @@ begin
     end
     else if vt = varString then
       {$ifdef FPC}
-      Finalize(RawUtf8(V^.VAny))
+      FastAssignNew(V^.VAny)
       {$else}
       RawUtf8(V^.VAny) := ''
       {$endif FPC}

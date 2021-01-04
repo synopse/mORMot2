@@ -434,7 +434,7 @@ begin
       if not EccKeyFileFind(files[i], false) then
         exit;
     end;
-    result := format('chain%d' + ECCCERTIFICATES_FILEEXT, [UnixTimeUTC]);
+    result := format('chain%d' + ECCCERTIFICATES_FILEEXT, [UnixTimeUtc]);
   end;
   with TEccCertificateChain.CreateFromFiles(files) do
   try
@@ -666,7 +666,7 @@ begin
               authrounds := 0;
             issuer := sw.AsUtf8('Issuer', ExeVersion.User,
               'Enter Issuer identifier text.'#13#10'Will be truncated to 15-20 ascii-7 chars.');
-            start := sw.AsDate('Start', NowUTC,
+            start := sw.AsDate('Start', NowUtc,
               'Enter the YYYY-MM-DD start date of its validity.'#13#10 +
               '0 will create a never-expiring certificate.');
             if start <= 0 then

@@ -1108,7 +1108,7 @@ var
     if exec.CurrentStep < smsAfter then
       W.AddShort('},Output:{Failed:"Probably due to wrong input"');
     W.Add('},Session:%,User:%,Time:%,MicroSec:%',
-      [integer(Ctxt.Session), Ctxt.SessionUser, TimeLogNowUTC, timeEnd]);
+      [integer(Ctxt.Session), Ctxt.SessionUser, TimeLogNowUtc, timeEnd]);
     if Ctxt.RemoteIPIsLocalHost then
       W.Add('}', ',')
     else

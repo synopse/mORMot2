@@ -904,12 +904,12 @@ end;
 
 procedure TAsynchConnection.AfterCreate(Sender: TAsynchConnections);
 begin
-  fLastOperation := UnixTimeUTC;
+  fLastOperation := UnixTimeUtc;
 end;
 
 procedure TAsynchConnection.OnLastOperationIdle(Sender: TAsynchConnections);
 begin
-  fLastOperation := UnixTimeUTC;
+  fLastOperation := UnixTimeUtc;
 end;
 
 procedure TAsynchConnection.AfterWrite(Sender: TAsynchConnections);
@@ -949,7 +949,7 @@ begin
     fOwner.fLog.Add.Log(sllTrace, 'OnRead% len=%', [ac, length(ac.fSlot.readbuf)], self);
   result := ac.OnRead(fOwner);
   if not (acoLastOperationNoRead in fOwner.Options) then
-    ac.fLastOperation := UnixTimeUTC;
+    ac.fLastOperation := UnixTimeUtc;
 end;
 
 function TAsynchConnectionsSockets.SlotFromConnection(connection: TObject):
@@ -981,7 +981,7 @@ begin
   result := inherited Write(connection, data, datalen, timeout);
   if result and
      not (acoLastOperationNoWrite in fOwner.Options) then
-    (connection as TAsynchConnection).fLastOperation := UnixTimeUTC;
+    (connection as TAsynchConnection).fLastOperation := UnixTimeUtc;
   if (fOwner.fLog <> nil) and
      not (acoNoLogWrite in fOwner.Options) then
     fOwner.fLog.Add.Log(sllTrace, 'Write%=% len=%%', [connection,
@@ -1313,7 +1313,7 @@ begin
   fConnectionLock.Lock;
   try
     n := 0;
-    allowed := UnixTimeUTC - LastOperationIdleSeconds;
+    allowed := UnixTimeUtc - LastOperationIdleSeconds;
     for i := 0 to fConnectionCount - 1 do
       if fConnection[i].fLastOperation < allowed then
       try

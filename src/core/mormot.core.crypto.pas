@@ -5461,7 +5461,7 @@ begin
     data.i0 := integer(HInstance); // override data.d0d1/h0
     data.i1 := PtrInt(GetCurrentThreadId);
     data.i2 := PtrInt(MainThreadID);
-    data.i3 := integer(UnixMSTimeUTCFast);
+    data.i3 := integer(UnixMSTimeUtcFast);
     {$ifdef FPC}
     ThreadSwitch; // non deterministic time shift
     {$else}

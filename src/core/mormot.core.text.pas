@@ -2452,7 +2452,7 @@ begin
   if source = nil then
   begin
     {$ifdef FPC}
-    Finalize(result);
+    FastAssignNew(result);
     {$else}
     result := '';
     {$endif FPC}
@@ -2902,7 +2902,7 @@ begin
   end;
   if tmp <> nil then
     {$ifdef FPC}
-    Finalize(RawUtf8(tmp));
+    FastAssignNew(tmp);
     {$else}
     RawUtf8(tmp) := '';
     {$endif FPC}
@@ -3185,7 +3185,11 @@ begin
   else
   begin
     if not KeepNotFoundValue then
-      {$ifdef FPC} Finalize(Value); {$else} Value := ''; {$endif}
+      {$ifdef FPC}
+      FastAssignNew(Value);
+      {$else}
+      Value := '';
+      {$endif FPC}
     result := false;
   end;
 end;
@@ -9230,7 +9234,7 @@ begin
     inc(Dest, d^.Len);
     if d^.TempRawUtf8 <> nil then
       {$ifdef FPC}
-      Finalize(RawUtf8(d^.TempRawUtf8));
+      FastAssignNew(d^.TempRawUtf8);
       {$else}
       RawUtf8(d^.TempRawUtf8) := '';
       {$endif FPC}
@@ -9258,7 +9262,7 @@ begin
           repeat
             if d^.TempRawUtf8 <> nil then
               {$ifdef FPC}
-              Finalize(RawUtf8(d^.TempRawUtf8));
+              FastAssignNew(d^.TempRawUtf8);
               {$else}
               RawUtf8(d^.TempRawUtf8) := '';
               {$endif FPC}
@@ -9275,7 +9279,7 @@ begin
         inc(Dest, d^.Len);
         if d^.TempRawUtf8 <> nil then
           {$ifdef FPC}
-          Finalize(RawUtf8(d^.TempRawUtf8));
+          FastAssignNew(d^.TempRawUtf8);
           {$else}
           RawUtf8(d^.TempRawUtf8) := '';
           {$endif FPC}

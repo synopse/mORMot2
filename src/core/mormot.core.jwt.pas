@@ -631,11 +631,11 @@ begin
       payload.AddValueFromText(JWT_CLAIMS_TEXT[jrcAudience], Audience, true);
   if jrcNotBefore in fClaims then
     if NotBefore <= 0 then
-      payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcNotBefore], UnixTimeUTC)
+      payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcNotBefore], UnixTimeUtc)
     else
       payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcNotBefore], DateTimeToUnixTime(NotBefore));
   if jrcIssuedAt in fClaims then
-    payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcIssuedAt], UnixTimeUTC);
+    payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcIssuedAt], UnixTimeUtc);
   if jrcExpirationTime in fClaims then
   begin
     if ExpirationMinutes = 0 then
@@ -643,7 +643,7 @@ begin
     else
       ExpirationMinutes := ExpirationMinutes * 60;
     payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcExpirationTime],
-      UnixTimeUTC + ExpirationMinutes);
+      UnixTimeUtc + ExpirationMinutes);
   end;
   if jrcJwtID in fClaims then
     if joNoJwtIDGenerate in fOptions then
@@ -712,7 +712,7 @@ begin
   if [jrcExpirationTime, jrcNotBefore, jrcIssuedAt] * JWT.claims <> [] then
   begin
     result := false;
-    nowunix := UnixTimeUTC; // validate against actual timestamp
+    nowunix := UnixTimeUtc; // validate against actual timestamp
     if jrcExpirationTime in JWT.claims then
       if not ToCardinal(JWT.reg[jrcExpirationTime], unix) or
          (nowunix > {%H-}unix) then
@@ -758,7 +758,7 @@ var
   tok: PAnsiChar absolute Token;
 begin
   // 0. initialize parsing
-  Finalize(JWT.reg);
+  FastAssignNew(JWT.reg);
   JWT.data.InitFast(0, dvObject); // custom claims
   byte(JWT.claims) := 0;
   word(JWT.audience) := 0;
@@ -967,7 +967,7 @@ begin
   if (V[2].value <> nil) or
      (V[3].value <> nil) then
   begin
-    now := UnixTimeUTC;
+    now := UnixTimeUtc;
     if V[2].value <> nil then
     begin
       time := V[2].ToCardinal;

@@ -1638,7 +1638,7 @@ procedure TSynUniqueIdentifierGenerator.ComputeNew(
 var
   currentTime: cardinal;
 begin
-  currentTime := UnixTimeUTC; // under Windows faster than GetTickCount64
+  currentTime := UnixTimeUtc; // under Windows faster than GetTickCount64
   fSafe.Lock;
   try
     if currentTime > fUnixCreateTime then
@@ -1797,7 +1797,7 @@ var
 begin
   tix := GetTickCount64 + TimeOutSeconds * 1000;
   repeat
-    if UnixTimeUTC >= fUnixCreateTime then
+    if UnixTimeUtc >= fUnixCreateTime then
       break;
     SleepHiRes(100);
   until GetTickCount64 > tix;

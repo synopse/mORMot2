@@ -3897,7 +3897,7 @@ begin
       if PRefCnt(PAnsiChar(s^) - _STRREFCNT)^ <= aMaxRefCount then
       begin
         {$ifdef FPC}
-        Finalize(PRawUtf8(s)^);
+        FastAssignNew(PRawUtf8(s)^);
         {$else}
         PRawUtf8(s)^ := '';
         {$endif FPC}

@@ -1418,7 +1418,7 @@ type
       cryptnonce: cardinal; // ctr=hash32(cryptnonce)
       hmac: cardinal;       // = signature
       session: integer;     // = jti claim
-      issued: cardinal;     // = iat claim (from UnixTimeUTC - Y2106)
+      issued: cardinal;     // = iat claim (from UnixTimeUtc - Y2106)
       expires: cardinal;    // = exp claim
     end;
     data: array[0..2047] of byte; // binary serialization of record value
@@ -1462,7 +1462,7 @@ begin
     begin
       if PExpires <> nil then
         PExpires^ := cc.head.expires;
-      now := UnixTimeUTC;
+      now := UnixTimeUtc;
       if (cc.head.issued <= now) and
          (cc.head.expires >= now) and
          (fContext.Secret.Compute (@cc.head.session, len - 8) = cc.head.hmac) then
@@ -1504,7 +1504,7 @@ begin
       raise EMvcApplication.CreateGotoError('Too Big Too Fat Cookie');
     cc.head.cryptnonce := Random32;
     cc.head.session := result;
-    cc.head.issued := UnixTimeUTC;
+    cc.head.issued := UnixTimeUtc;
     if SessionTimeOutMinutes = 0 then
       // 1 month expiration is a reasonable high value
       SessionTimeOutMinutes := 31 * 24 * 60;

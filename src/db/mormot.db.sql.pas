@@ -6603,7 +6603,7 @@ function TSqlDBConnection.GetServerDateTime: TDateTime;
 var
   Current: TDateTime;
 begin
-  Current := NowUTC; // so won't conflict with any potential time zone change
+  Current := NowUtc; // so won't conflict with any potential time zone change
   if (fServerTimestampOffset = 0) and
      (fProperties.fSqlGetServerTimestamp <> '') then
   begin

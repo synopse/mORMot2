@@ -533,7 +533,7 @@ type
     function GetCurrentSessionUserID: TID; virtual; abstract;
     /// retrieve the server time stamp
     // - default implementation will use an internal Offset to compute
-    // the value from PC time (i.e. NowUTC+Offset as TTimeLog)
+    // the value from PC time (i.e. NowUtc+Offset as TTimeLog)
     // - inherited classes may override this method, or set the appropriate
     // value in Offset field
     function GetServerTimestamp: TTimeLog; virtual;
@@ -1779,14 +1779,14 @@ begin
     else
     begin
       CacheTix := tix;
-      CacheValue.From(NowUTC + offset);
+      CacheValue.From(NowUtc + offset);
       result := CacheValue.Value;
     end;
 end;
 
 procedure TRest.SetServerTimestamp(const Value: TTimeLog);
 begin
-  fServerTimestamp.Offset := PTimeLogBits(@Value)^.ToDateTime - NowUTC;
+  fServerTimestamp.Offset := PTimeLogBits(@Value)^.ToDateTime - NowUtc;
   if fServerTimestamp.Offset = 0 then
     fServerTimestamp.Offset := 0.000001; // retrieve server date/time only once
 end;

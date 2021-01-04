@@ -1875,7 +1875,7 @@ const
 
 function NowEccDate: TEccDate;
 begin
-  result := Trunc(NowUTC) - ECC_DELTA;
+  result := Trunc(NowUtc) - ECC_DELTA;
 end;
 
 function EccDate(const DateTime: TDateTime): TEccDate;
