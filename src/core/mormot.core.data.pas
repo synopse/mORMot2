@@ -135,6 +135,8 @@ type
   // to an existing IAutoFree local variable
   IAutoFree = interface
     procedure Another(var objVar; obj: TObject);
+    /// do-nothing method to circumvent the Delphi 10.4 IAutoFree early release
+    procedure ForMethod;
   end;
 
   /// simple reference-counted storage for local objects
@@ -145,6 +147,8 @@ type
   protected
     fObject: TObject;
     fObjectList: array of TObject;
+    // do-nothing method to circumvent the Delphi 10.4 IAutoFree early release
+    procedure ForMethod;
   public
     /// initialize the TAutoFree class for one local variable
     // - do not call this constructor, but class function One() instead
@@ -171,7 +175,12 @@ type
     // !end; // here myVar will be released
     // - warning: under FPC, you should assign the result of this method to a local
     // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
+    // - Delphi 10.4 also did change it and release the IAutoFree before the
+    // end of the current method, so we inlined a void method call trying to
+    // circumvent this problem - https://quality.embarcadero.com/browse/RSP-30050
+    // - for both Delphi 10.4+ and FPC, you may use with TAutoFree.One() do
     class function One(var localVariable; obj: TObject): IAutoFree;
+      {$ifdef ISDELPHI104} inline; {$endif}
     /// protect several local TObject variable instances life time
     // - specified as localVariable/objectInstance pairs
     // - you may write:
@@ -184,7 +193,13 @@ type
     // !end; // here var1 and var2 will be released
     // - warning: under FPC, you should assign the result of this method to a local
     // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
-     class function Several(const varObjPairs: array of pointer): IAutoFree;
+    // - Delphi 10.4 also did change it and release the IAutoFree before the
+    // end of the current method, and an "array of pointer" cannot be inlined
+    // by the Delphi compiler, so you should explicitly call ForMethod:
+    // !  TAutoFree.Several([
+    // !    @var1,TMyClass.Create,
+    // !    @var2,TMyClass.Create]).ForMethod;
+    class function Several(const varObjPairs: array of pointer): IAutoFree;
     /// protect another TObject variable to an existing IAutoFree instance life time
     // - you may write:
     // !var var1,var2: TMyClass;
@@ -2753,16 +2768,6 @@ begin
   TObject(localVariable) := obj;
 end;
 
-class function TAutoFree.One(var localVariable; obj: TObject): IAutoFree;
-begin
-  result := Create(localVariable,obj);
-end;
-
-class function TAutoFree.Several(const varObjPairs: array of pointer): IAutoFree;
-begin
-  result := Create(varObjPairs);
-end;
-
 constructor TAutoFree.Create(const varObjPairs: array of pointer);
 var
   n, i: PtrInt;
@@ -2788,6 +2793,25 @@ begin
   end;
 end;
 
+procedure TAutoFree.ForMethod;
+begin
+  // do-nothing method to circumvent the Delphi 10.4 IAutoFree early release
+end;
+
+class function TAutoFree.One(var localVariable; obj: TObject): IAutoFree;
+begin
+  result := Create(localVariable,obj);
+  {$ifdef ISDELPHI104}
+  result.ForMethod;
+  {$endif ISDELPHI104}
+end;
+
+class function TAutoFree.Several(const varObjPairs: array of pointer): IAutoFree;
+begin
+  result := Create(varObjPairs);
+  // inlining is not possible on Delphi -> Delphi 10.4 caller should run ForMethod :(
+end;
+
 procedure TAutoFree.Another(var localVariable; obj: TObject);
 var
   n: PtrInt;
@@ -2803,7 +2827,7 @@ var
   i: PtrInt;
 begin
   if fObjectList <> nil then
-    for i := high(fObjectList) downto 0 do // release FILO
+    for i := length(fObjectList) - 1 downto 0 do // release FILO
       fObjectList[i].Free;
   fObject.Free;
   inherited;
