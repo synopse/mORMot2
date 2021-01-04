@@ -321,24 +321,26 @@ begin
 end;
 
 function TSqlDBSQLite3ConnectionProperties.GetMainDB: TSqlDataBase;
+var
+  conn: TSqlDBSQLite3Connection;
 begin
   if self = nil then
     result := nil
   else if fExistingDB <> nil then
     result := fExistingDB
   else
-    with MainConnection as TSqlDBSQLite3Connection do
-    begin
-      if not IsConnected then
-        Connect; // we expect the SQLite3 instance to be created if needed
-      result := DB;
-    end;
+  begin
+    conn := MainConnection as TSqlDBSQLite3Connection;
+    if not conn.IsConnected then
+      conn.Connect; // we expect the SQLite3 instance to be created if needed
+    result := conn.DB;
+  end;
 end;
 
 constructor TSqlDBSQLite3ConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
-  fDBMS := dSQLite;
+  fDbms := dSQLite;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
   UseMormotCollations := true;
 end;
@@ -658,7 +660,7 @@ begin
   if fExpectResults then
     exit; // execution done in Step()
   if fShouldLogSQL then
-    SQLLogBegin(sllSQL);
+    SqlLogBegin(sllSQL);
   try  // INSERT/UPDATE/DELETE (i.e. not SELECT) -> try to execute directly now
     repeat // Execute all steps of the first statement
 
@@ -666,7 +668,7 @@ begin
     fUpdateCount := DB.LastChangeCount;
   finally
     if fShouldLogSQL then
-      SQLLogEnd;
+      SqlLogEnd;
   end;
 end;
 
@@ -695,7 +697,7 @@ end;
 procedure TSqlDBSQLite3Statement.Prepare(const aSql: RawUtf8; ExpectResults: boolean);
 begin
   if fShouldLogSQL then
-    SQLLogBegin(sllDB);
+    SqlLogBegin(sllDB);
   inherited Prepare(aSql, ExpectResults); // set fSql + Connect if necessary
   fStatement.Prepare(TSqlDBSQLite3Connection(Connection).fDB.DB, aSql);
   fColumnCount := fStatement.FieldCount;
@@ -703,7 +705,7 @@ begin
   begin
     fParamCount := fStatement.ParamCount;
     SetLength(fLogSQLValues, fParamCount);
-    SQLLogEnd(' %', [TSqlDBSQLite3Connection(Connection).fDB.FileNameWithoutPath]);
+    SqlLogEnd(' %', [TSqlDBSQLite3Connection(Connection).fDB.FileNameWithoutPath]);
   end;
 end;
 
@@ -740,7 +742,7 @@ begin
       if fShouldLogSQL then
         SynDBLog.Add.Log(sllError, 'Error % on % for [%] as [%]', [E,
           TSqlDBSQLite3Connection(Connection).DB.FileNameWithoutPath, SQL,
-          SQLWithInlinedParams], self);
+          SqlWithInlinedParams], self);
       raise;
     end;
   end;

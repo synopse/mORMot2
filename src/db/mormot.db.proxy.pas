@@ -74,7 +74,7 @@ type
   // - Output is RawUtf8 result data for cExecuteToJson and cExecuteToExpandedJson
   // - calls could be declared as such:
   // ! Process(cGetToken,?,result: Int64);
-  // ! Process(cGetDBMS,User#1Hash: RawUtf8,fDBMS: TSqlDBDefinition);
+  // ! Process(cGetDbms,User#1Hash: RawUtf8,fDbms: TSqlDBDefinition);
   // ! Process(cConnect,?,?);
   // ! Process(cDisconnect,?,?);
   // ! Process(cTryStartTransaction,?,started: boolean);
@@ -93,7 +93,7 @@ type
   // to the client in case of execution problem on the server side
   TSqlDBProxyConnectionCommand = (
     cGetToken,
-    cGetDBMS,
+    cGetDbms,
     cConnect,
     cDisconnect,
     cTryStartTransaction,
@@ -221,7 +221,7 @@ type
     // - returns the session ID (if any)
     function Process(Command: TSqlDBProxyConnectionCommand;
       const Input; var Output): integer; virtual; abstract;
-    /// calls Process(cGetToken) + Process(cGetDBMS)
+    /// calls Process(cGetToken) + Process(cGetDbms)
     // - override this method and set fProtocol before calling inherited
     procedure SetInternalProperties; override;
     /// calls Process(cGetForeignKeys,self,fForeignKeys)
@@ -876,7 +876,7 @@ begin
     raise ESqlDBRemote.CreateUtf8('Wrong %.RemoteProcessMessage() input', [self]);
   if (Authenticate <> nil) and
      (Authenticate.UsersCount > 0) and
-     not (header.Command in [cGetToken, cGetDBMS]) then
+     not (header.Command in [cGetToken, cGetDbms]) then
     if not Authenticate.SessionExists(header.SessionID) then
       raise ESqlDBRemote.Create('You do not have the right to be here');
   O := pointer(msgInput);
@@ -886,7 +886,7 @@ begin
     case header.Command of
       cGetToken:
         AppendOutput(Authenticate.CurrentToken);
-      cGetDBMS:
+      cGetDbms:
         begin
           session := 0;
           if (Authenticate <> nil) and
@@ -1038,7 +1038,7 @@ begin
   PCardinal(InputCredential)^ := fProtocol.Authenticate.ComputeHash(
     token, UserID, PassWord);
   InputCredential := UserID + #1 + InputCredential;
-  fCurrentSession := Process(cGetDBMS, InputCredential, fDBMS);
+  fCurrentSession := Process(cGetDbms, InputCredential, fDbms);
 end;
 
 destructor TSqlDBProxyConnectionPropertiesAbstract.Destroy;
@@ -1113,7 +1113,7 @@ begin // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
     cGetToken, cConnect, cDisconnect, cTryStartTransaction, cCommit, cRollback,
       cServerTimestamp, cGetTableNames, cGetForeignKeys, cQuit:
       ; // no input parameters here, just the command
-    cGetDBMS, cGetFields, cGetIndexes:
+    cGetDbms, cGetFields, cGetIndexes:
       msgInput := msgInput + InputText;
     cExecute, cExecuteToBinary, cExecuteToJson, cExecuteToExpandedJson:
       msgInput := msgInput +
@@ -1133,7 +1133,7 @@ begin // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
   case outheader.Command of
     cGetToken, cServerTimestamp:
       OutputInt64 := PInt64(O)^;
-    cGetDBMS:
+    cGetDbms:
       OutputSqlDBDefinition := TSqlDBDefinition(O^);
     cConnect, cDisconnect, cCommit, cRollback, cQuit:
       ; // no output parameters here

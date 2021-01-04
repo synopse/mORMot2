@@ -105,7 +105,7 @@ type
   /// a record used e.g. by IComplexCalculator.EchoRecord
   TConsultaNav = packed record
     MaxRows, Row0, RowCount: int64;
-    IsSQLUpdateBack, EOF: boolean;
+    IsSqlUpdateBack, EOF: boolean;
   end;
 
   TOrmTest = class(TOrm)

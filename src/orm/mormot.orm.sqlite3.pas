@@ -200,7 +200,7 @@ type
     fStatementGenericSql: RawUtf8;
     fStatementMaxParam: integer;
     fStatementLastException: RawUtf8;
-    fStatementTruncateSQLLogLen: integer;
+    fStatementTruncateSqlLogLen: integer;
     fStatementPreparedSelectQueryPlan: boolean;
     /// check if a VACUUM statement is possible
     // - VACUUM in fact DISCONNECT all virtual modules (sounds like a SQLite3
@@ -371,8 +371,8 @@ type
     /// after how many bytes a sllSQL statement log entry should be truncated
     // - default is 0, meaning no truncation
     // - typical value is 2048 (2KB), which will avoid any heap allocation
-    property StatementTruncateSQLLogLen: integer
-      read fStatementTruncateSQLLogLen write fStatementTruncateSQLLogLen;
+    property StatementTruncateSqlLogLen: integer
+      read fStatementTruncateSqlLogLen write fStatementTruncateSqlLogLen;
     /// executes (therefore log) the QUERY PLAN for each prepared statement
     property StatementPreparedSelectQueryPlan: boolean
       read fStatementPreparedSelectQueryPlan
@@ -1183,14 +1183,14 @@ begin
       else
         fStatementTimer^.Pause;
       if E = nil then
-        if (fStatementTruncateSQLLogLen > 0) and
-           (length(fStatementSql) > fStatementTruncateSQLLogLen) then
+        if (fStatementTruncateSqlLogLen > 0) and
+           (length(fStatementSql) > fStatementTruncateSqlLogLen) then
         begin
-          c := fStatementSql[fStatementTruncateSQLLogLen];
-          fStatementSql[fStatementTruncateSQLLogLen] := #0; // truncate
+          c := fStatementSql[fStatementTruncateSqlLogLen];
+          fStatementSql[fStatementTruncateSqlLogLen] := #0; // truncate
           InternalLog('% % %... len=%', [fStatementTimer^.LastTime, Msg,
             PAnsiChar(pointer(fStatementSql)), length(fStatementSql)], sllSQL);
-          fStatementSql[fStatementTruncateSQLLogLen] := c; // restore
+          fStatementSql[fStatementTruncateSqlLogLen] := c; // restore
         end
         else
           InternalLog('% % %', [fStatementTimer^.LastTime, Msg, fStatementSql], sllSQL)

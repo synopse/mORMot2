@@ -3820,7 +3820,7 @@ begin
   fLoader.TryLoadLibrary([{%H-}l1, LibraryName], ESqlite3Exception);
   P := @@initialize;
   for i := 0 to High(SQLITE3_ENTRIES) do
-    fLoader.Resolve(SQLITE3_ENTRIES[i], @P^[i]);
+    fLoader.Resolve(SQLITE3_ENTRIES[i], @P^[i]); // no exception, but set nil
   if not Assigned(initialize) or
      not Assigned(libversion) or
      not Assigned(open) or

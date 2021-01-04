@@ -891,7 +891,7 @@ function SetFileOpenLimit(max: integer; hard: boolean = false): integer;
 
 type
   /// Low-level access to the ICU library installed on this system
-  TICULibrary = packed object
+  TIcuLibrary = packed object
   protected
     icu, icudata, icui18n: pointer;
     Loaded: boolean;
@@ -947,7 +947,7 @@ type
 
 var
   /// late-binding of the ICU library
-  icu: TICULibrary;
+  icu: TIcuLibrary;
 
 {$ifdef LINUXNOTBSD} { the systemd API is Linux-specific }
 

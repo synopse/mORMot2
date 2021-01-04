@@ -1635,7 +1635,7 @@ begin
   TryLoadLibrary([{%H-}l1, l2, l3, LIBNAME], ESqlDBOracle);
   P := @@ClientVersion;
   for i := 0 to High(OCI_ENTRIES) do
-    Resolve(OCI_ENTRIES[i], @P[i], ESqlDBOracle); // raise an ESqlDBOracle on error
+    Resolve(OCI_ENTRIES[i], @P[i], {raiseonfailure=}ESqlDBOracle);
   ClientVersion(major_version, minor_version, update_num, patch_num, port_update_num);
   SupportsInt64Params := (major_version > 11) or
                          ((major_version = 11) and

@@ -591,7 +591,8 @@ type
     fSSL: record
       CertFile, CACertFile, KeyName, PassPhrase: RawUtf8;
     end;
-    procedure InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); override;
+    procedure InternalConnect(
+      ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); override;
     procedure InternalCreateRequest(const aMethod, aURL: RawUtf8); override;
     procedure InternalSendRequest(const aMethod: RawUtf8;
       const aData: RawByteString); override;
@@ -1930,8 +1931,8 @@ begin
   result := CurlIsAvailable;
 end;
 
-procedure TCurlHttp.InternalSendRequest(const aMethod: RawUtf8; const aData:
-  RawByteString);
+procedure TCurlHttp.InternalSendRequest(const aMethod: RawUtf8;
+  const aData: RawByteString);
 begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
   if fIn.Method = 'HEAD' then // the only verb what do not expect body in answer is HEAD
     curl.easy_setopt(fHandle, coNoBody, 1)

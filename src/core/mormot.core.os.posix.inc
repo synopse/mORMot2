@@ -59,9 +59,9 @@ begin
 end;
 
 
-{ TICULibrary }
+{ TIcuLibrary }
 
-procedure TICULibrary.Done;
+procedure TIcuLibrary.Done;
 begin
   if icui18n <> nil then
     dlclose(icui18n);
@@ -75,7 +75,7 @@ begin
   @ucnv_open := nil;
 end;
 
-function TICULibrary.IsAvailable: boolean;
+function TIcuLibrary.IsAvailable: boolean;
 begin
   if not Loaded then
     DoLoad;
@@ -98,7 +98,7 @@ begin
   end;
 end;
 
-procedure TICULibrary.DoLoad(const LibName: TFileName; const Version: string);
+procedure TIcuLibrary.DoLoad(const LibName: TFileName; const Version: string);
 const
   NAMES: array[0..12] of string = (
     'ucnv_open', 'ucnv_close', 'ucnv_setSubstChars', 'ucnv_setFallback',
@@ -208,7 +208,7 @@ begin
   end;
 end;
 
-function TICULibrary.ForceLoad(const LibName: TFileName; const Version: string): boolean;
+function TIcuLibrary.ForceLoad(const LibName: TFileName; const Version: string): boolean;
 begin
   Done;
   Loaded := false;
@@ -216,7 +216,7 @@ begin
   result := Assigned(ucnv_open);
 end;
 
-function TICULibrary.ucnv(codepage: cardinal): pointer;
+function TIcuLibrary.ucnv(codepage: cardinal): pointer;
 var
   s: shortstring;
   err: SizeInt;
@@ -304,11 +304,11 @@ var
   cnv: pointer;
   err: SizeInt;
 begin
-  if codepage = CP_UTF8 then
+  if CodePage = CP_UTF8 then
     exit(Utf8ToUnicode(W, A, LA));
-  cnv := icu.ucnv(codepage);
+  cnv := icu.ucnv(CodePage);
   if cnv = nil then
-    exit(AnsiToWideRTL(codepage, A, W, LA));
+    exit(AnsiToWideRTL(CodePage, A, W, LA));
   err := 0;
   result := icu.ucnv_toUChars(cnv, W, LW, A, LA, err);
   if result < 0 then

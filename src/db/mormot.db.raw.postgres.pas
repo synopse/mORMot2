@@ -248,7 +248,7 @@ begin
     {%H-}l2, LIBNAME, LIBNAME2], ESqlDBPostgres);
   P := @@LibVersion;
   for i := 0 to High(PQ_ENTRIES) do
-    Resolve(PQ_ENTRIES[i], @P[I], ESqlDBPostgres);
+    Resolve(PQ_ENTRIES[i], @P[I], {raiseonfailure=}ESqlDBPostgres);
 end;
 
 procedure TSqlDBPostgresLib.GetRawUtf8(res: PPGresult;

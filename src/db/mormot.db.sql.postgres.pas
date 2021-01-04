@@ -58,7 +58,8 @@ type
     // - if aDatabaseName contains connection URI with password we recommend to repeat password
     // in aPassword parameter to prevent logging it (see TSqlDBConnectionProperties.DatabaseNameSafe)
     // - better to use environment variables and postgres config file for connection parameters
-    constructor Create(const aServerName, aDatabaseName, aUserID, aPassword: RawUtf8); override;
+    constructor Create(
+      const aServerName, aDatabaseName, aUserID, aPassword: RawUtf8); override;
     /// create a new connection
     // - caller is responsible of freeing this instance
     // - this overridden method will create an TSqlDBPostgresConnection instance
@@ -198,7 +199,7 @@ type
 implementation
 
 uses
-  mormot.core.crypto, // libpq requires named prepared statements = use SHA-256
+  mormot.core.crypto,  // libpq requires named prepared statements = use SHA-256
   mormot.db.raw.postgres; // raw libpq library API access
 
 { ************ TSqlDBPostgreConnection* and TSqlDBPostgreStatement Classes }
@@ -422,7 +423,7 @@ begin
   PostgresLibraryInitialize; // raise an ESqlDBPostgres on loading failure
   if PQ.IsThreadSafe <> 1 then
     raise ESqlDBPostgres.Create('libpq should be compiled in threadsafe mode');
-  fDBMS := dPostgreSQL;
+  fDbms := dPostgreSQL;
   FillOidMapping;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
   // JsonDecodedPrepareToSql will detect cPostgreBulkArray and set
@@ -517,7 +518,7 @@ end;
 
 procedure TSqlDBPostgresStatement.Prepare(const aSql: RawUtf8; ExpectResults: boolean);
 begin
-  SQLLogBegin(sllDB);
+  SqlLogBegin(sllDB);
   if aSql = '' then
     raise ESqlDBPostgres.CreateUtf8('%.Prepare: empty statement', [self]);
   inherited Prepare(aSql, ExpectResults); // will strip last ;
@@ -528,10 +529,10 @@ begin
   begin // preparable
     fCacheIndex := TSqlDBPostgresConnection(fConnection).PrepareCached(
       fSqlPrepared, fPreparedParamsCount, fPreparedStmtName);
-    SQLLogEnd(' name=% cache=%', [fPreparedStmtName, fCacheIndex]);
+    SqlLogEnd(' name=% cache=%', [fPreparedStmtName, fCacheIndex]);
   end
   else
-    SQLLogEnd;
+    SqlLogEnd;
   SetLength(fPGParams, fPreparedParamsCount);
   SetLength(fPGParamFormats, fPreparedParamsCount);
   SetLength(fPGparamLengths, fPreparedParamsCount);
@@ -543,7 +544,7 @@ var
   p: PSqlDBParam;
   c: TSqlDBPostgresConnection;
 begin
-  SQLLogBegin(sllSQL);
+  SqlLogBegin(sllSQL);
   if fSqlPrepared = '' then
     raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Statement not prepared', [self]);
   if fParamCount <> fPreparedParamsCount then
@@ -617,10 +618,10 @@ begin
     fCurrentRow := -1;
     if fColumn.Count = 0 then // if columns exist then statement is already cached
       BindColumns;
-    SQLLogEnd(' rows=%', [fTotalRowsRetrieved]);
+    SqlLogEnd(' rows=%', [fTotalRowsRetrieved]);
   end
   else
-    SQLLogEnd;
+    SqlLogEnd;
 end;
 
 function TSqlDBPostgresStatement.UpdateCount: integer;

@@ -486,14 +486,14 @@ type
 
 type
   /// generic Exception type, generated for ODBC connection
-  EODBCException = class(ESqlDBException);
+  EOdbcException = class(ESqlDBException);
 
   /// direct access to the ODBC library
   // - this wrapper will initialize both Ansi and Wide versions of the ODBC
   // driver functions, and will work with 32 bit and 64 bit version of the
   // interfaces, on Windows or POSIX platforms
   // - within this unit, we will only use Wide version, and UTF-8 conversion
-  TODBCLib = class(TSynLibrary)
+  TOdbcLib = class(TSynLibrary)
   public
     AllocEnv: function (var EnvironmentHandle: SqlHEnv): SqlReturn;
       {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
@@ -732,19 +732,19 @@ type
       OutConnectionString: PWideChar; BufferLength: SqlSmallint;
       var StringLength2Ptr: SqlSmallint; DriverCompletion: SqlUSmallint): SqlReturn;
       {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
-    SQLProcedureColumnsA: function(StatementHandle: SqlHStmt;
+    SqlProcedureColumnsA: function(StatementHandle: SqlHStmt;
       CatalogName: PAnsiChar; NameLength1: SqlSmallint;
       SchemaName: PAnsiChar;  NameLength2: SqlSmallint;
       ProcName: PAnsiChar;   NameLength3: SqlSmallint;
       ColumnName: PAnsiChar;  NameLength4: SqlSmallint): SqlReturn;
       {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
-    SQLProcedureColumnsW: function(StatementHandle: SqlHStmt;
+    SqlProcedureColumnsW: function(StatementHandle: SqlHStmt;
       CatalogName: PWideChar; NameLength1: SqlSmallint;
       SchemaName: PWideChar;  NameLength2: SqlSmallint;
       ProcName: PWideChar;   NameLength3: SqlSmallint;
       ColumnName: PWideChar;  NameLength4: SqlSmallint): SqlReturn;
       {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
-    SQLProcedures: function(StatementHandle: SqlHStmt;
+    SqlProcedures: function(StatementHandle: SqlHStmt;
       CatalogName: PWideChar; NameLength1: SqlSmallint;
       SchemaName: PWideChar;  NameLength2: SqlSmallint;
       ProcName: PWideChar;   NameLength3: SqlSmallint): SqlReturn;
@@ -770,7 +770,7 @@ type
   end;
 
 var
-  ODBC: TODBCLib = nil;
+  ODBC: TOdbcLib = nil;
 
 
 {$ifdef MSWINDOWS}
@@ -798,7 +798,8 @@ uses
 
 { SQL_TIMESTAMP_STRUCT }
 
-function SQL_TIMESTAMP_STRUCT.From(DateTime: TDateTime; var ColumnSize: SqlLen): SqlSmallint;
+function SQL_TIMESTAMP_STRUCT.From(DateTime: TDateTime;
+  var ColumnSize: SqlLen): SqlSmallint;
 var
   Y, MS: word;
 begin
@@ -954,9 +955,9 @@ end;
 {$endif MSWINDOWS}
 
 
-{ TODBCLib }
+{ TOdbcLib }
 
-procedure TODBCLib.Check(Conn: TSqlDBConnection; Stmt: TSqlDBStatement; Status:
+procedure TOdbcLib.Check(Conn: TSqlDBConnection; Stmt: TSqlDBStatement; Status:
   SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
   InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 begin
@@ -965,18 +966,18 @@ begin
       LogLevelNoRaise);
 end;
 
-constructor TODBCLib.Create;
+constructor TOdbcLib.Create;
 var
   P: PPointerArray;
   i: PtrInt;
 begin
-  TryLoadLibrary([ODBC_LIB], EODBCException);
+  TryLoadLibrary([ODBC_LIB], EOdbcException);
   P := @@AllocEnv;
   for i := 0 to High(ODBC_ENTRIES) do
-    Resolve(ODBC_ENTRIES[i], @P[i], EODBCException); // raise EODBCException on error
+    Resolve(ODBC_ENTRIES[i], @P[i], {raiseonfailure=}EOdbcException);
 end;
 
-function TODBCLib.GetDiagField(StatementHandle: SqlHStmt): RawUtf8;
+function TOdbcLib.GetDiagField(StatementHandle: SqlHStmt): RawUtf8;
 var
   Status: array[0..7] of AnsiChar;
   StringLength: SqlSmallint;
@@ -988,7 +989,7 @@ begin
     result := '';
 end;
 
-procedure TODBCLib.GetInfoString(ConnectionHandle: SqlHDbc;
+procedure TOdbcLib.GetInfoString(ConnectionHandle: SqlHDbc;
   InfoType: SqlUSmallint; var Dest: RawUtf8);
 var
   Len: SqlSmallint;
@@ -997,11 +998,11 @@ begin
   Len := 0;
   Check(nil, nil,
     GetInfoW(ConnectionHandle, InfoType, @Info, SizeOf(Info) shr 1, @Len),
-    SQL_HANDLE_DBC, ConnectionHandle);
+      SQL_HANDLE_DBC, ConnectionHandle);
   Dest := RawUnicodeToUtf8(Info, Len shr 1);
 end;
 
-procedure TODBCLib.HandleError(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
+procedure TOdbcLib.HandleError(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
   Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
   InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 const
@@ -1049,9 +1050,9 @@ begin
   if LogLevelNoRaise <> sllNone then
     SynDBLog.Add.Log(LogLevelNoRaise, msg)
   else if Stmt = nil then
-    raise EODBCException.CreateUtf8('% error: %', [self, msg])
+    raise EOdbcException.CreateUtf8('% error: %', [self, msg])
   else
-    raise EODBCException.CreateUtf8('% - % error: %', [Stmt, self, msg]);
+    raise EOdbcException.CreateUtf8('% - % error: %', [Stmt, self, msg]);
 end;
 
 

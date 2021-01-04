@@ -552,7 +552,7 @@ type
   /// OleDB connection properties to MySQL Server
   TSqlDBOleDBMySQLConnectionProperties = class(TSqlDBOleDBConnectionProperties)
   protected
-    /// will set the appropriate provider name, i.e. 'MySQLProv'
+    /// will set the appropriate provider name, i.e. 'MySqlProv'
     procedure SetInternalProperties; override;
   end;
 
@@ -597,7 +597,7 @@ type
   // - you should better use direct connection classes, like
   // TSqlDBOleDBMSSQLConnectionProperties or TSqlDBOleDBOracleConnectionProperties
   // as defined in mormot.db.sql.odbc.pas
-  TSqlDBOleDBODBCSQLConnectionProperties = class(TSqlDBOleDBConnectionProperties)
+  TSqlDBOleDBOdbcSQLConnectionProperties = class(TSqlDBOleDBConnectionProperties)
   protected
     fDriver: RawUtf8;
     /// will set the appropriate provider name, i.e. 'MSDASQL'
@@ -633,7 +633,7 @@ type
   {$endif}
   TOleDBACEConnectionProperties = TSqlDBOleDBACEConnectionProperties;
   TOleDBAS400ConnectionProperties = TSqlDBOleDBAS400ConnectionProperties;
-  TOleDBODBCSQLConnectionProperties = TSqlDBOleDBODBCSQLConnectionProperties;
+  TOleDBOdbcSQLConnectionProperties = TSqlDBOleDBOdbcSQLConnectionProperties;
 
 {$endif PUREMORMOT2}
 
@@ -1227,7 +1227,7 @@ var
   L: integer;
   SQLW: RawUnicode;
 begin
-  SQLLogBegin(sllDB);
+  SqlLogBegin(sllDB);
   if Assigned(fCommand) or
      Assigned(fRowSet) or
      (fColumnCount > 0) or
@@ -1250,7 +1250,7 @@ begin
   SetLength(SQLW, L * 2 + 1);
   Utf8ToWideChar(pointer(SQLW), pointer(fSql), L);
   fCommand.SetCommandText(DBGUID_DEFAULT, pointer(SQLW));
-  SQLLogEnd;
+  SqlLogEnd;
 end;
 
 procedure TSqlDBOleDBStatement.ExecutePrepared;
@@ -1275,7 +1275,7 @@ var
   ssParamPropsCount: integer;
   IDLists: array of TIDListRowset;
 begin
-  SQLLogBegin(sllSQL);
+  SqlLogBegin(sllSQL);
   // 1. check execution context
   if not Assigned(fCommand) then
     raise EOleDBException.CreateUtf8('%s.Prepare should have been called', [self]);
@@ -1462,7 +1462,7 @@ begin
         IDLists[i].Free;
       end;
   end;
-  SQLLogEnd;
+  SqlLogEnd;
 end;
 
 procedure TSqlDBOleDBStatement.FromRowSet(RowSet: IRowSet);
@@ -2274,7 +2274,7 @@ procedure TSqlDBOleDBOracleConnectionProperties.SetInternalProperties;
 begin
   if fProviderName = '' then
     fProviderName := 'OraOLEDB.Oracle.1';
-  fDBMS := dOracle;
+  fDbms := dOracle;
   inherited SetInternalProperties;
 end;
 
@@ -2284,7 +2284,7 @@ end;
 procedure TSqlDBOleDBMSOracleConnectionProperties.SetInternalProperties;
 begin
   fProviderName := 'MSDAORA';
-  fDBMS := dOracle;
+  fDbms := dOracle;
   inherited SetInternalProperties;
 end;
 
@@ -2347,7 +2347,7 @@ begin
   OnCustomError := MSOnCustomError;
   if fProviderName = '' then
     fProviderName := 'SQLNCLI10';
-  fDBMS := dMSSQL;
+  fDbms := dMSSQL;
   inherited SetInternalProperties;
   if fUserID = '' then
     fConnectionString := fConnectionString +
@@ -2382,16 +2382,16 @@ begin
 end;
 
 
-{ TSqlDBOleDBODBCSQLConnectionProperties }
+{ TSqlDBOleDBOdbcSQLConnectionProperties }
 
-constructor TSqlDBOleDBODBCSQLConnectionProperties.Create(const aDriver,
+constructor TSqlDBOleDBOdbcSQLConnectionProperties.Create(const aDriver,
   aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
   fDriver := aDriver;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
 end;
 
-procedure TSqlDBOleDBODBCSQLConnectionProperties.SetInternalProperties;
+procedure TSqlDBOleDBOdbcSQLConnectionProperties.SetInternalProperties;
 begin
   fProviderName := 'MSDASQL'; // we could have left it void - never mind
   inherited SetInternalProperties;
@@ -2405,7 +2405,7 @@ end;
 procedure TSqlDBOleDBMySQLConnectionProperties.SetInternalProperties;
 begin
   fProviderName := 'MYSQLPROV';
-  fDBMS := dMySQL;
+  fDbms := dMySQL;
   inherited;
 end;
 
@@ -2424,7 +2424,7 @@ end;
 procedure TSqlDBOleDBInformixConnectionProperties.SetInternalProperties;
 begin
   fProviderName := 'Ifxoledbc';
-  fDBMS := dInformix;
+  fDbms := dInformix;
   inherited SetInternalProperties;
 end;
 
@@ -2435,7 +2435,7 @@ end;
 procedure TSqlDBOleDBJetConnectionProperties.SetInternalProperties;
 begin
   fProviderName := 'Microsoft.Jet.OLEDB.4.0';
-  fDBMS := dJet;
+  fDbms := dJet;
   inherited SetInternalProperties;
   if not FileExists(Utf8ToString(ServerName)) then
     CreateDatabase;
@@ -2449,7 +2449,7 @@ end;
 procedure TSqlDBOleDBACEConnectionProperties.SetInternalProperties;
 begin
   fProviderName := 'Microsoft.ACE.OLEDB.12.0';
-  fDBMS := dJet;
+  fDbms := dJet;
   inherited SetInternalProperties;
   if not FileExists(Utf8ToString(ServerName)) then
     CreateDatabase;
@@ -2471,7 +2471,7 @@ initialization
   {$endif}
   TSqlDBOleDBACEConnectionProperties.RegisterClassNameForDefinition;
   TSqlDBOleDBAS400ConnectionProperties.RegisterClassNameForDefinition;
-  TSqlDBOleDBODBCSQLConnectionProperties.RegisterClassNameForDefinition;
+  TSqlDBOleDBOdbcSQLConnectionProperties.RegisterClassNameForDefinition;
 
   {$ifndef PUREMORMOT2}
   // backward compatibility types registration
@@ -2488,7 +2488,7 @@ initialization
   {$endif}
   TOleDBACEConnectionProperties.RegisterClassNameForDefinition;
   TOleDBAS400ConnectionProperties.RegisterClassNameForDefinition;
-  TOleDBODBCSQLConnectionProperties.RegisterClassNameForDefinition;
+  TOleDBOdbcSQLConnectionProperties.RegisterClassNameForDefinition;
   {$endif PUREMORMOT2}
 
 

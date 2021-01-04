@@ -746,7 +746,7 @@ begin
         ], ECurl);
       P := @@curl.global_init;
       for api := low(NAMES) to high(NAMES) do
-        curl.Resolve(NAMES[api], @P[api], ECurl);
+        curl.Resolve(NAMES[api], @P[api], {raiseonfailure=}ECurl);
     except
       FreeAndNil(curl); // ECurl raised during initialization above
       exit;
@@ -758,7 +758,7 @@ begin
     curl.info := curl.version_info(cvFour)^;
     curl.infoText := format('%s version %s', [LIBCURL_DLL, curl.info.version]);
     if curl.info.ssl_version <> nil then
-      curl.infoText := format('%s using %s',[curl.infoText, curl.info.ssl_version]);
+      curl.infoText := format('%s using %s', [curl.infoText, curl.info.ssl_version]);
     // api := 0; with curl.info do while protocols[api]<>nil do
     // begin write(protocols[api], ' '); inc(api); end; writeln(#13#10,curl.infoText);
   finally

@@ -6227,6 +6227,8 @@ begin
   result := UrlEncode(pointer(svar));
 end;
 
+// two sub-functions for better code generation of UrlEncode()
+
 procedure _UrlEncode_Write(s, p: PByte; tab: PTextByteSet);
 var
   c: cardinal;

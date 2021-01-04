@@ -75,7 +75,7 @@ type
     /// determine if the SQL statement can be cached
     // - always returns false, to force server-side caching only on this driver
     function IsCachable(P: PUtf8Char): boolean; override;
-    function SQLLimitClause(AStmt: TSelectStatement): TSqlDBDefinitionLimitClause; override;
+    function SqlLimitClause(AStmt: TSelectStatement): TSqlDBDefinitionLimitClause; override;
   published
     /// returns the Client version e.g. 'oci.dll rev. 11.2.0.1'
     property ClientVersion: RawUtf8
@@ -145,7 +145,7 @@ type
     {$ifndef UNICODE}
     procedure STRToAnsiString(P: PAnsiChar; var result: AnsiString;
       ColumnDBCharSet,ColumnDBForm: cardinal);
-    {$endif}
+    {$endif UNICODE}
   public
     /// prepare a connection to a specified Oracle database server
     constructor Create(aProperties: TSqlDBConnectionProperties); override;
@@ -382,7 +382,7 @@ end;
 constructor TSqlDBOracleConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
-  fDBMS := dOracle;
+  fDbms := dOracle;
   fBatchSendingAbilities := [cCreate, cUpdate, cDelete]; // array DML feature
   fBatchMaxSentAtOnce := 10000;  // iters <= 32767 for better performance
   inherited Create(aServerName, '', aUserID, aPassWord);
@@ -434,7 +434,7 @@ begin
     FOnPasswordChanged(Self);
 end;
 
-function TSqlDBOracleConnectionProperties.SQLLimitClause(
+function TSqlDBOracleConnectionProperties.SqlLimitClause(
   AStmt: TSelectStatement): TSqlDBDefinitionLimitClause;
 begin
   if AStmt.OrderByField <> nil then
@@ -443,7 +443,7 @@ begin
     result.InsertFmt := 'select * from (%) where rownum<=%';
   end
   else
-    result := inherited SQLLimitClause(AStmt);
+    result := inherited SqlLimitClause(AStmt);
 end;
 
 
@@ -1330,7 +1330,7 @@ begin
   if fStatement = nil then
     raise ESqlDBOracle.CreateUtf8('%.ExecutePrepared without previous Prepare', [self]);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
-  SQLLogBegin(sllSQL);
+  SqlLogBegin(sllSQL);
   try
     ociArraysCount := 0;
     Env := (Connection as TSqlDBOracleConnection).fEnv;
@@ -1729,7 +1729,7 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
             end;
     end;
   finally
-    fTimeElapsed.FromExternalMicroSeconds(SQLLogEnd);
+    fTimeElapsed.FromExternalMicroSeconds(SqlLogEnd);
   end;
 end;
 
@@ -2186,7 +2186,7 @@ var
   env: POCIEnv;
   L: PtrInt;
 begin
-  SQLLogBegin(sllDB);
+  SqlLogBegin(sllDB);
   try
     try
       if (fStatement <> nil) or
@@ -2241,7 +2241,7 @@ begin
       end;
     end;
   finally
-    fTimeElapsed.FromExternalMicroSeconds(SQLLogEnd(' cache=%', [fCacheIndex]));
+    fTimeElapsed.FromExternalMicroSeconds(SqlLogEnd(' cache=%', [fCacheIndex]));
   end;
 end;
 

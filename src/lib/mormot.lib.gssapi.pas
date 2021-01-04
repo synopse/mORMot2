@@ -512,7 +512,7 @@ begin
   begin
     P := @@api.gss_import_name;
     for i := 0 to high(GSS_NAMES) do
-      api.Resolve(GSS_NAMES[i], @P^[i]);
+      api.Resolve(GSS_NAMES[i], @P^[i]); // no exception, set nil on failure
     if not Assigned(api.krb5_gss_register_acceptor_identity) then
       // try alternate function name
       api.Resolve('gsskrb5_register_acceptor_identity',

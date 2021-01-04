@@ -206,7 +206,7 @@ type
     // which is the most common case, when column data < 4 KB
     // - for TSqlDBOracleStatement: FALSE if column is an array of
     // POCILobLocator (SQLT_CLOB/SQLT_BLOB) or POCIStmt (SQLT_RSET)
-    // - for TSqlDBODBCStatement: FALSE if bigger than 255 WideChar (ftUtf8) or
+    // - for TSqlDBOdbcStatement: FALSE if bigger than 255 WideChar (ftUtf8) or
     // 255 bytes (ftBlob)
     ColumnValueInlined: boolean;
     /// expected column data size
@@ -220,7 +220,7 @@ type
     // - for TSqlDBOracleStatement: used to store the DefineByPos() TypeCode,
     // can be SQLT_STR/SQLT_CLOB, SQLT_FLT, SQLT_INT, SQLT_DAT, SQLT_BLOB,
     // SQLT_BIN and SQLT_RSET
-    // - for TSqlDBODBCStatement: used to store the DataType as returned
+    // - for TSqlDBOdbcStatement: used to store the DataType as returned
     // by ODBC.DescribeColW() - use private ODBC_TYPE_TO[ColumnType] to
     // retrieve the marshalled type used during column retrieval
     // - for TSqlDBFirebirdStatement: used to store XSQLVAR.sqltype
@@ -311,7 +311,7 @@ type
   TSqlDBDefinitions = set of TSqlDBDefinition;
 
   /// where the LIMIT clause should be inserted for a given SQL syntax
-  // - used by TSqlDBDefinitionLimitClause and SQLLimitClause() method
+  // - used by TSqlDBDefinitionLimitClause and SqlLimitClause() method
   TSqlDBDefinitionLimitPosition = (
     posNone,
     posWhere,
@@ -320,7 +320,7 @@ type
     posOuter);
 
   /// defines the LIMIT clause to be inserted for a given SQL syntax
-  // - used by TSqlDBDefinitionLimitClause and SQLLimitClause() method
+  // - used by TSqlDBDefinitionLimitClause and SqlLimitClause() method
   TSqlDBDefinitionLimitClause = record
     Position: TSqlDBDefinitionLimitPosition;
     InsertFmt: PUtf8Char;
@@ -483,8 +483,8 @@ const
 
 
 /// retrieve the text of a given Database SQL dialect enumeration
-// - see also TSqlDBConnectionProperties.GetDBMSName() method
-function ToText(DBMS: TSqlDBDefinition): PShortString; overload;
+// - see also TSqlDBConnectionProperties.GetDbmsName() method
+function ToText(Dbms: TSqlDBDefinition): PShortString; overload;
 
 
 { ************ General SQL Processing Functions }
@@ -1048,7 +1048,7 @@ type
     fBatchMaxSentAtOnce: integer;
     fLoggedSqlMaxSize: integer;
     fOnBatchInsert: TOnBatchInsert;
-    fDBMS: TSqlDBDefinition;
+    fDbms: TSqlDBDefinition;
     fUseCache, fStoreVoidStringAsNull, fLogSqlStatementOnException,
       fRollbackOnDisconnect, fReconnectAfterConnectionError,
       fFilterTableViewSchemaName: boolean;
@@ -1073,10 +1073,10 @@ type
     fExecuteWhenConnected: TRawUtf8DynArray;
     procedure SetConnectionTimeOutMinutes(minutes: cardinal);
     function GetConnectionTimeOutMinutes: cardinal;
-    // this default implementation just returns the fDBMS value or dDefault
+    // this default implementation just returns the fDbms value or dDefault
     // (never returns dUnknwown)
-    function GetDBMS: TSqlDBDefinition; virtual;
-    function GetDBMSName: RawUtf8; virtual;
+    function GetDbms: TSqlDBDefinition; virtual;
+    function GetDbmsName: RawUtf8; virtual;
     function GetForeignKeysData: RawByteString;
     procedure SetForeignKeysData(const Value: RawByteString);
     function FieldsFromList(const aFields: TSqlDBColumnDefineDynArray;
@@ -1187,7 +1187,8 @@ type
     /// initialize the properties
     // - children may optionaly handle the fact that no UserID or Password
     // is supplied here, by displaying a corresponding Dialog box
-    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8); virtual;
+    constructor Create(
+      const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8); virtual;
     /// release related memory, and close MainConnection
     destructor Destroy; override;
     /// save the properties into a persistent storage object
@@ -1206,18 +1207,21 @@ type
     // - you can specify a custom Key, if the default is not enough for you
     procedure DefinitionToFile(const aJsonFile: TFileName; Key: cardinal = 0);
     /// create a new TSqlDBConnectionProperties instance from the stored values
-    class function CreateFrom(aDefinition: TSynConnectionDefinition): TSqlDBConnectionProperties; virtual;
+    class function CreateFrom(
+      aDefinition: TSynConnectionDefinition): TSqlDBConnectionProperties; virtual;
     /// create a new TSqlDBConnectionProperties instance from a JSON content
     // - as previously serialized with TSqlDBConnectionProperties.DefinitionToJson
     // - you can specify a custom Key, if the default is not safe enough for you
-    class function CreateFromJson(const aJsonDefinition: RawUtf8; aKey: cardinal = 0): TSqlDBConnectionProperties; virtual;
+    class function CreateFromJson(
+      const aJsonDefinition: RawUtf8; aKey: cardinal = 0): TSqlDBConnectionProperties; virtual;
     /// create a new TSqlDBConnectionProperties instance from a JSON file
     // - as previously serialized with TSqlDBConnectionProperties.DefinitionToFile
     // - you can specify a custom Key, if the default is not safe enough for you
-    class function CreateFromFile(const aJsonFile: TFileName; aKey: cardinal = 0):
-      TSqlDBConnectionProperties;
+    class function CreateFromFile(
+      const aJsonFile: TFileName; aKey: cardinal = 0): TSqlDBConnectionProperties;
     /// retrieve the registered class from the aDefinition.Kind string
-    class function ClassFrom(aDefinition: TSynConnectionDefinition): TSqlDBConnectionPropertiesClass;
+    class function ClassFrom(
+      aDefinition: TSynConnectionDefinition): TSqlDBConnectionPropertiesClass;
 
     /// create a new connection
     // - call this method if the shared MainConnection is not enough (e.g. for
@@ -1344,8 +1348,8 @@ type
     // - this implementation will call the NewThreadSafeStatement virtual method,
     // then bound inlined parameters as :(1234): and call its Execute method
     // - raise an exception on error
-    function ExecuteInlined(const aSql: RawUtf8; ExpectResults: boolean):
-      ISqlDBRows; overload;
+    function ExecuteInlined(const aSql: RawUtf8;
+      ExpectResults: boolean): ISqlDBRows; overload;
     /// create, prepare, bound inlined parameters and execute a thread-safe statement
     // - overloaded method using FormatUtf8() and inlined parameters
     function ExecuteInlined(const SqlFormat: RawUtf8; const Args: array of const;
@@ -1364,8 +1368,8 @@ type
     /// convert a textual column data type, as retrieved e.g. from SqlGetField,
     // into our internal primitive types
     // - default implementation will always return ftUtf8
-    function ColumnTypeNativeToDB(const aNativeType: RawUtf8; aScale: integer):
-      TSqlDBFieldType; virtual;
+    function ColumnTypeNativeToDB(const aNativeType: RawUtf8;
+      aScale: integer): TSqlDBFieldType; virtual;
     /// returns the SQL statement used to create a Table
     // - should return the SQL "CREATE" statement needed to create a table with
     // the specified field/column names and types
@@ -1377,8 +1381,8 @@ type
     // fSqlCreateFieldMax protected values, which contains by default the
     // ANSI SQL Data Types and maximum 1000 inlined WideChars: inherited classes
     // may change the default fSqlCreateField* content or override this method
-    function SqlCreate(const aTableName: RawUtf8; const aFields:
-      TSqlDBColumnCreateDynArray; aAddID: boolean): RawUtf8; virtual;
+    function SqlCreate(const aTableName: RawUtf8;
+      const aFields: TSqlDBColumnCreateDynArray; aAddID: boolean): RawUtf8; virtual;
     /// returns the SQL statement used to add a column to a Table
     // - should return the SQL "ALTER TABLE" statement needed to add a column to
     // an existing table
@@ -1386,8 +1390,8 @@ type
     // fSqlCreateFieldMax protected values, which contains by default the
     // ANSI SQL Data Types and maximum 1000 inlined WideChars: inherited classes
     // may change the default fSqlCreateField* content or override this method
-    function SqlAddColumn(const aTableName: RawUtf8; const aField:
-      TSqlDBColumnCreate): RawUtf8; virtual;
+    function SqlAddColumn(const aTableName: RawUtf8;
+      const aField: TSqlDBColumnCreate): RawUtf8; virtual;
     /// returns the SQL statement used to add an index to a Table
     // - should return the SQL "CREATE INDEX" statement needed to add an index
     // to the specified column names of an existing table
@@ -1395,9 +1399,9 @@ type
     // parameter is set to true
     // - this default implementation will return the standard SQL statement, i.e.
     // 'CREATE [UNIQUE] INDEX index_name ON table_name (column_name[s])'
-    function SqlAddIndex(const aTableName: RawUtf8; const aFieldNames: array of
-      RawUtf8; aUnique: boolean; aDescending: boolean = false; const aIndexName:
-      RawUtf8 = ''): RawUtf8; virtual;
+    function SqlAddIndex(const aTableName: RawUtf8;
+      const aFieldNames: array of RawUtf8; aUnique: boolean;
+      aDescending: boolean = false; const aIndexName: RawUtf8 = ''): RawUtf8; virtual;
     /// used to compute a SELECT statement for the given fields
     // - should return the SQL "SELECT ... FROM ..." statement to retrieve
     // the specified column names of an existing table
@@ -1406,18 +1410,19 @@ type
     // - but if you specify a value in aExcludeTypes, it will compute the
     // matching column names to ignore those kind of content (e.g. [stBlob] to
     // save time and space)
-    function SqlSelectAll(const aTableName: RawUtf8; const aFields:
-      TSqlDBColumnDefineDynArray; aExcludeTypes: TSqlDBFieldTypes): RawUtf8; virtual;
+    function SqlSelectAll(const aTableName: RawUtf8;
+      const aFields: TSqlDBColumnDefineDynArray;
+      aExcludeTypes: TSqlDBFieldTypes): RawUtf8; virtual;
     /// SQL statement to create the corresponding database
     // - this default implementation will only handle dFirebird by now
-    function SqlCreateDatabase(const aDatabaseName: RawUtf8; aDefaultPageSize:
-      integer = 0): RawUtf8; virtual;
+    function SqlCreateDatabase(const aDatabaseName: RawUtf8;
+      aDefaultPageSize: integer = 0): RawUtf8; virtual;
     /// convert an ISO-8601 encoded time and date into a date appropriate to
     // be pasted in the SQL request
     // - this default implementation will return the quoted ISO-8601 value, i.e.
     // 'YYYY-MM-DDTHH:MM:SS' (as expected by Microsoft SQL server e.g.)
     // - returns  to_date('....','YYYY-MM-DD HH24:MI:SS')  for Oracle
-    function SQLIso8601ToDate(const Iso8601: RawUtf8): RawUtf8; virtual;
+    function SqlIso8601ToDate(const Iso8601: RawUtf8): RawUtf8; virtual;
     /// convert a TDateTime into a ISO-8601 encoded time and date, as expected
     // by the database provider
     // - e.g. SQLite3, DB2 and PostgreSQL will use non-standard ' ' instead of 'T'
@@ -1425,17 +1430,17 @@ type
     /// split a table name to its OWNER.TABLE full name (if applying)
     // - will use ForcedSchemaName property (if applying), or the OWNER. already
     // available within the supplied table name
-    procedure SQLSplitTableName(const aTableName: RawUtf8; out Owner, Table:
-      RawUtf8); virtual;
+    procedure SqlSplitTableName(const aTableName: RawUtf8;
+      out Owner, Table: RawUtf8); virtual;
     /// split a procedure name to its OWNER.PACKAGE.PROCEDURE full name (if applying)
     // - will use ForcedSchemaName property (if applying), or the OWNER. already
     // available within the supplied table name
-    procedure SQLSplitProcedureName(const aProcName: RawUtf8; out Owner, package,
-      ProcName: RawUtf8); virtual;
+    procedure SqlSplitProcedureName(const aProcName: RawUtf8;
+      out Owner, package, ProcName: RawUtf8); virtual;
     /// return the fully qualified SQL table name
     // - will use ForcedSchemaName property (if applying), or return aTableName
     // - you can override this method to force the expected format
-    function SQLFullTableName(const aTableName: RawUtf8): RawUtf8; virtual;
+    function SqlFullTableName(const aTableName: RawUtf8): RawUtf8; virtual;
     /// return a SQL table name with quotes if necessary
     // - can be used e.g. with SELECT statements
     // - you can override this method to force the expected format
@@ -1447,41 +1452,42 @@ type
     // - used e.g. by GetFieldDefinitions
     // - will call ColumnTypeNativeToDB protected virtual method to guess the
     // each mORMot TSqlDBFieldType
-    procedure GetFields(const aTableName: RawUtf8; out Fields:
-      TSqlDBColumnDefineDynArray); virtual;
+    procedure GetFields(const aTableName: RawUtf8;
+      out Fields: TSqlDBColumnDefineDynArray); virtual;
     /// retrieve the advanced indexed information of a specified Table
     //  - this default implementation will use protected SqlGetIndex virtual
     // method to retrieve the index names and properties
     // - currently only MS SQL and Oracle are supported
-    procedure GetIndexes(const aTableName: RawUtf8; out Indexes:
-      TSqlDBIndexDefineDynArray); virtual;
+    procedure GetIndexes(const aTableName: RawUtf8;
+      out Indexes: TSqlDBIndexDefineDynArray); virtual;
     /// get all field/column definition for a specified Table as text
     // - call the GetFields method and retrieve the column field name and
     // type as 'Name [Type Length Precision Scale]'
     // - if WithForeignKeys is set, will add external foreign keys as '% tablename'
-    procedure GetFieldDefinitions(const aTableName: RawUtf8; out Fields:
-      TRawUtf8DynArray; WithForeignKeys: boolean);
+    procedure GetFieldDefinitions(const aTableName: RawUtf8;
+      out Fields: TRawUtf8DynArray; WithForeignKeys: boolean);
     /// get one field/column definition as text
     // - return column type as 'Name [Type Length Precision Scale]'
-    class function GetFieldDefinition(const Column: TSqlDBColumnDefine): RawUtf8;
+    class function GetFieldDefinition(
+      const Column: TSqlDBColumnDefine): RawUtf8;
     /// get one field/column definition as text, targeting a TOrm
     // published property
     // - return e.g. property type information as:
     // ! 'Name: RawUtf8 read fName write fName index 20;';
     class function GetFieldORMDefinition(const Column: TSqlDBColumnDefine): RawUtf8;
     /// check if the supplied text word is not a keyword for a given database engine
-    class function IsSQLKeyword(aDB: TSqlDBDefinition; aWord: RawUtf8): boolean;
+    class function IsSqlKeyword(aDB: TSqlDBDefinition; aWord: RawUtf8): boolean;
       overload; virtual;
     /// check if the supplied text word is not a keyword for the current database engine
     // - just a wrapper around the overloaded class function
-    function IsSQLKeyword(aWord: RawUtf8): boolean; overload;
+    function IsSqlKeyword(aWord: RawUtf8): boolean; overload;
     /// retrieve a list of stored procedure names from current connection
     procedure GetProcedureNames(out Procedures: TRawUtf8DynArray); virtual;
     /// retrieve procedure input/output parameter information
     // - aProcName: stored procedure name to retrieve parameter infomation.
     // - Parameters: parameter list info (name, datatype, direction, default)
-    procedure GetProcedureParameters(const aProcName: RawUtf8; out Parameters:
-      TSqlDBProcColumnDefineDynArray); virtual;
+    procedure GetProcedureParameters(const aProcName: RawUtf8;
+      out Parameters: TSqlDBProcColumnDefineDynArray); virtual;
     /// get all table names
     // - this default implementation will use protected SqlGetTableNames virtual
     // method to retrieve the table names
@@ -1504,8 +1510,8 @@ type
     // statement to a syntax matching the underlying DBMS
     // - e.g. TRestStorageExternal.AdaptSqlForEngineList() calls this
     // to let TRestServer.Uri by-pass virtual table mechanism
-    function SQLLimitClause(AStmt: TSelectStatement):
-      TSqlDBDefinitionLimitClause; virtual;
+    function SqlLimitClause(
+      AStmt: TSelectStatement): TSqlDBDefinitionLimitClause; virtual;
     /// determine if the SQL statement can be cached
     // - used by TSqlDBConnection.NewStatementPrepared() for handling cache
     function IsCachable(P: PUtf8Char): boolean; virtual;
@@ -1565,11 +1571,11 @@ type
       read fUserID;
     /// the remote DBMS type, as stated by the inheriting class itself, or
     //  retrieved at connecton time (e.g. for ODBC)
-    property DBMS: TSqlDBDefinition
-      read GetDBMS;
+    property Dbms: TSqlDBDefinition
+      read GetDbms;
     /// the remote DBMS type name, retrieved as text from the DBMS property
-    property DBMSEngineName: RawUtf8
-      read GetDBMSName;
+    property DbmsEngineName: RawUtf8
+      read GetDbmsName;
     /// the abilities of the database for batch sending
     // - e.g. Oracle will handle array DML binds, or MS SQL bulk insert
     property BatchSendingAbilities: TSqlDBStatementCRUDs
@@ -1660,7 +1666,7 @@ type
     // this won't affect other Column*() methods, or JSON production
     property VariantStringAsWideString: boolean
       read fVariantWideString write fVariantWideString;
-    {$endif}
+    {$endif UNICODE}
     /// SQL statements what will be executed for each new connection
     // usage scenarios examples:
     // - Oracle: force case-insensitive like
@@ -1840,7 +1846,7 @@ type
     fCurrentRow: integer;
     fForceBlobAsNull: boolean;
     fForceDateWithMS: boolean;
-    fDBMS: TSqlDBDefinition;
+    fDbms: TSqlDBDefinition;
     {$ifndef SYNDB_SILENCE}
     fSqlLogLog: TSynLog;
     fSqlLogLevel: TSynLogInfo;
@@ -1874,9 +1880,9 @@ type
     /// return the associated statement instance for a ISqlDBRows interface
     function Instance: TSqlDBStatement;
     /// wrappers to compute sllSQL/sllDB SQL context with a local timer
-    function SQLLogBegin(level: TSynLogInfo): TSynLog;
-    function SQLLogEnd(const Fmt: RawUtf8; const Args: array of const): Int64; overload;
-    function SQLLogEnd(msg: PShortString = nil): Int64; overload;
+    function SqlLogBegin(level: TSynLogInfo): TSynLog;
+    function SqlLogEnd(const Fmt: RawUtf8; const Args: array of const): Int64; overload;
+    function SqlLogEnd(msg: PShortString = nil): Int64; overload;
   public
     /// create a statement instance
     constructor Create(aConnection: TSqlDBConnection); virtual;
@@ -2335,19 +2341,19 @@ type
     procedure ColumnsToBinary(W: TBufferWriter; Null: pointer;
       const ColTypes: TSqlDBFieldTypeDynArray); virtual;
     /// low-level access to the Timer used for last DB operation
-    property SQLLogTimer: TPrecisionTimer
+    property SqlLogTimer: TPrecisionTimer
       read fSqlLogTimer;
     /// after a call to Prepare(), contains the query text to be passed to the DB
     // - depending on the DB, parameters placeholders are replaced by ?, :1, $1 etc
     // - this SQL is ready to be used in any DB tool, e.g. to check the real
     // execution plan/timing
-    property SQLPrepared: RawUtf8
+    property SqlPrepared: RawUtf8
       read fSqlPrepared;
     /// the prepared SQL statement, in its current state
-    // - if statement is prepared, then equals SQLPrepared, otherwise, contains
+    // - if statement is prepared, then equals SqlPrepared, otherwise, contains
     // the raw SQL property content
     // - used internally by the implementation units, e.g. for errors logging
-    property SQLCurrent: RawUtf8
+    property SqlCurrent: RawUtf8
       read GetSqlCurrent;
     /// low-level access to the statement cache index, after a call to Prepare()
     // - contains >= 0 if the database supports prepared statement cache
@@ -2356,13 +2362,13 @@ type
       read fCacheIndex;
   published
     /// the prepared SQL statement, as supplied to Prepare() method
-    property SQL: RawUtf8
+    property Sql: RawUtf8
       read fSql;
     /// the prepared SQL statement, with all '?' changed into the supplied
     // parameter values
     // - such statement query plan usually differ from a real execution plan
-    // for prepared statements with parameters - see SQLPrepared property instead
-    property SQLWithInlinedParams: RawUtf8
+    // for prepared statements with parameters - see SqlPrepared property instead
+    property SqlWithInlinedParams: RawUtf8
       read GetSqlWithInlinedParams;
     /// the current row after Execute/Step call, corresponding to Column*() methods
     // - contains 0 before initial Step call, or a number >=1 during data retrieval
@@ -2996,9 +3002,9 @@ end;
 
 { ************ Define Database Engine Specific Behavior }
 
-function ToText(DBMS: TSqlDBDefinition): PShortString;
+function ToText(Dbms: TSqlDBDefinition): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TSqlDBDefinition), ord(DBMS));
+  result := GetEnumName(TypeInfo(TSqlDBDefinition), ord(Dbms));
 end;
 
 
@@ -3006,7 +3012,8 @@ end;
 
 { ESqlDBException }
 
-constructor ESqlDBException.CreateUtf8(const Format: RawUtf8; const Args: array of const);
+constructor ESqlDBException.CreateUtf8(const Format: RawUtf8;
+  const Args: array of const);
 var
   msg {$ifndef SYNDB_SILENCE}, sql{$endif}: RawUtf8;
 begin
@@ -3035,21 +3042,21 @@ end;
 
 { TSqlDBRowVariantType }
 
-function TSqlDBRowVariantType.IntGet(var Dest: TVarData; const Instance:
-  TVarData; Name: PAnsiChar; NameLen: PtrInt): boolean;
+function TSqlDBRowVariantType.IntGet(var Dest: TVarData;
+  const Instance: TVarData; Name: PAnsiChar; NameLen: PtrInt): boolean;
 var
-  Rows: TSqlDBStatement;
+  smt: TSqlDBStatement;
   col: RawUtf8;
   ndx: integer;
 begin
-  Rows := TSqlDBStatement(Instance.VPointer);
-  if Rows = nil then
+  smt := TSqlDBStatement(Instance.VPointer);
+  if smt = nil then
     raise ESqlDBException.CreateUtf8('Invalid % call', [self]);
   FastSetString(col, Name, NameLen);
-  ndx := Rows.ColumnIndex(col);
+  ndx := smt.ColumnIndex(col);
   result := ndx >= 0;
   if ndx >= 0 then
-    Rows.ColumnToVariant(ndx, Variant(Dest));
+    smt.ColumnToVariant(ndx, Variant(Dest));
 end;
 
 
@@ -3058,7 +3065,7 @@ end;
 constructor TSqlDBConnectionProperties.Create(const aServerName, aDatabaseName,
   aUserID, aPassWord: RawUtf8);
 var
-  aDBMS: TSqlDBDefinition;
+  db: TSqlDBDefinition;
 begin
   fServerName := aServerName;
   fDatabaseName := aDatabaseName;
@@ -3069,30 +3076,30 @@ begin
   fUseCache := true;
   fLoggedSqlMaxSize := 2048; // log up to 2KB of inlined SQL by default
   SetInternalProperties; // virtual method used to override default parameters
-  aDBMS := GetDBMS;
-  if aDBMS in [dSQLite, dDB2, dPostgreSQL] then // for SqlDateToIso8601Quoted()
+  db := GetDbms;
+  if db in [dSQLite, dDB2, dPostgreSQL] then // for SqlDateToIso8601Quoted()
     fDateTimeFirstChar := ' '
   else
     fDateTimeFirstChar := 'T';
   if fForcedSchemaName = '' then
-    case aDBMS of // should make every one life's easier
+    case db of // should make every one life's easier
       dMSSQL:
         fForcedSchemaName := 'dbo';
       dPostgreSql:
         fForcedSchemaName := 'public';
     end;
   if fSqlCreateField[ftUnknown] = '' then
-    fSqlCreateField := DB_FIELDS[aDBMS];
+    fSqlCreateField := DB_FIELDS[db];
   if fSqlCreateFieldMax = 0 then
-    fSqlCreateFieldMax := DB_FIELDSMAX[aDBMS];
+    fSqlCreateFieldMax := DB_FIELDSMAX[db];
   if fSqlGetServerTimestamp = '' then
-    fSqlGetServerTimestamp := DB_SERVERTIME[aDBMS];
-  case aDBMS of
+    fSqlGetServerTimestamp := DB_SERVERTIME[db];
+  case db of
     dMSSQL, dJet:
       fStoreVoidStringAsNull := true;
   end;
   if byte(fBatchSendingAbilities) = 0 then // if not already handled by driver
-    case aDBMS of
+    case db of
       dSQlite, dMySQL, dPostgreSQL, dNexusDB, dMSSQL, dDB2, // INSERT with multi VALUES
       //dFirebird,  EXECUTE BLOCK with params is slower (at least for embedded)
       dOracle:
@@ -3353,7 +3360,7 @@ end;
 procedure TSqlDBConnectionProperties.SetSchemaNameToOwner(out Owner: RawUtf8);
 begin
   if fForcedSchemaName = '' then
-    case fDBMS of
+    case fDbms of
       dMySql:
         Owner := DatabaseName;
       dInformix:
@@ -3439,7 +3446,7 @@ end;
 var
   DB_KEYWORDS: array[TSqlDBDefinition] of TRawUtf8DynArray;
 
-class function TSqlDBConnectionProperties.IsSQLKeyword(aDB: TSqlDBDefinition;
+class function TSqlDBConnectionProperties.IsSqlKeyword(aDB: TSqlDBDefinition;
   aWord: RawUtf8): boolean;
 const
   /// Csv of the known reserved keywords per database engine, in alphabetic order
@@ -3618,9 +3625,9 @@ begin
     result := true;
 end;
 
-function TSqlDBConnectionProperties.IsSQLKeyword(aWord: RawUtf8): boolean;
+function TSqlDBConnectionProperties.IsSqlKeyword(aWord: RawUtf8): boolean;
 begin
-  result := IsSQLKeyword(DBMS, aWord);
+  result := IsSqlKeyword(GetDbms, aWord);
 end;
 
 procedure TSqlDBConnectionProperties.GetFieldDefinitions(
@@ -3655,7 +3662,7 @@ begin
   FA.Init(TypeInfo(TSqlDBColumnDefineDynArray), Fields, @n);
   FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
   FillCharFast(F, sizeof(F), 0);
-  if fDBMS = dSQLite then
+  if fDbms = dSQLite then
   begin // SQLite3 has a specific PRAGMA metadata query
     try
       with Execute('PRAGMA table_info(`' + aTableName + '`)', []) do
@@ -3859,10 +3866,10 @@ begin
   end;
 end;
 
-procedure TSqlDBConnectionProperties.SQLSplitTableName(const aTableName: RawUtf8;
+procedure TSqlDBConnectionProperties.SqlSplitTableName(const aTableName: RawUtf8;
   out Owner, Table: RawUtf8);
 begin
-  case fDBMS of
+  case fDbms of
     dSQLite:
       Table := aTableName;
   else
@@ -3872,7 +3879,7 @@ begin
       begin
         Table := Owner;
         if fForcedSchemaName = '' then
-          case fDBMS of
+          case fDbms of
             dMySql:
               Owner := DatabaseName;
           else
@@ -3885,7 +3892,7 @@ begin
   end;
 end;
 
-procedure TSqlDBConnectionProperties.SQLSplitProcedureName(
+procedure TSqlDBConnectionProperties.SqlSplitProcedureName(
   const aProcName: RawUtf8; out Owner, package, ProcName: RawUtf8);
 var
   lOccur, i: integer;
@@ -3900,7 +3907,7 @@ begin
     SetSchemaNameToOwner(Owner);
     Exit;
   end;
-  case fDBMS of
+  case fDbms of
     dSQLite:
       ProcName := aProcName;
     dOracle, dFirebird:
@@ -3924,14 +3931,14 @@ begin
         ProcName := Owner;
         SetSchemaNameToOwner(Owner);
       end
-      else if fDBMS = dMSSQL then
+      else if fDbms = dMSSQL then
       // discard ;1 when MSSQL stored procedure name is ProcName;1
         Split(ProcName, ';', ProcName);
     end;
   end;
 end;
 
-function TSqlDBConnectionProperties.SQLFullTableName(const aTableName: RawUtf8): RawUtf8;
+function TSqlDBConnectionProperties.SqlFullTableName(const aTableName: RawUtf8): RawUtf8;
 begin
   if (aTableName <> '') and
      (fForcedSchemaName <> '') and
@@ -3947,7 +3954,7 @@ var
   FMT: RawUtf8;
 begin
   result := '';
-  case DBMS of
+  case GetDbms of
     dOracle:
       FMT :=
         'select c.column_name, c.data_type, c.data_length, c.data_precision, c.data_scale, ' +
@@ -3987,7 +3994,7 @@ begin
   else
     exit; // others (e.g. dDB2) will retrieve info from (ODBC) driver
   end;
-  SQLSplitTableName(aTableName, Owner, Table);
+  SqlSplitTableName(aTableName, Owner, Table);
   FormatUtf8(FMT, [UpperCase(Owner), UpperCase(Table)], result);
 end;
 
@@ -3997,7 +4004,7 @@ var
   FMT: RawUtf8;
 begin
   result := '';
-  case DBMS of
+  case GetDbms of
     dOracle:
       FMT :=
         'select  index_name, decode(max(uniqueness),''NONUNIQUE'',0,1) as is_unique, ' +
@@ -4059,8 +4066,8 @@ var
   FMT: RawUtf8;
 begin
   result := '';
-  SQLSplitProcedureName(aProcName, Owner, package, Proc);
-  case DBMS of
+  SqlSplitProcedureName(aProcName, Owner, package, Proc);
+  case GetDbms of
     dOracle:
       FMT :=
         'select a.argument_name, a.data_type, a.char_length, a.data_precision, a.data_scale, a.in_out ' +
@@ -4114,7 +4121,7 @@ var
   FMT, Owner: RawUtf8;
 begin
   result := '';
-  case DBMS of
+  case GetDbms of
     dOracle:
       FMT := 'select' + '  case P.OBJECT_TYPE' +
         '  when ''PACKAGE'' then P.OBJECT_NAME || ''.'' || P.PROCEDURE_NAME' +
@@ -4143,7 +4150,7 @@ end;
 
 function TSqlDBConnectionProperties.SqlGetTableNames: RawUtf8;
 begin
-  case DBMS of
+  case GetDbms of
     dOracle:
       result := 'select owner||''.''||table_name name ' +
         'from sys.all_tables order by owner, table_name';
@@ -4171,7 +4178,7 @@ end;
 
 function TSqlDBConnectionProperties.SqlGetViewNames: RawUtf8;
 begin
-  case DBMS of
+  case GetDbms of
     dOracle:
       result := 'select owner||''.''||view_name name ' +
         'from sys.all_views order by owner, view_name';
@@ -4200,7 +4207,7 @@ end;
 function TSqlDBConnectionProperties.SqlCreateDatabase(const aDatabaseName:
   RawUtf8; aDefaultPageSize: integer): RawUtf8;
 begin
-  case DBMS of
+  case GetDbms of
     dFirebird:
       begin
         if (aDefaultPageSize <> 8192) or
@@ -4312,7 +4319,7 @@ function TSqlDBConnectionProperties.ColumnTypeNativeToDB(const aNativeType:
   end;
 
 begin
-  case DBMS of
+  case GetDbms of
     dOracle:
       result := ColumnTypeNativeToDBOracle;
     dFireBird:
@@ -4350,7 +4357,7 @@ begin
   fForeignKeys.BlobData := Value;
 end;
 
-function TSqlDBConnectionProperties.SQLIso8601ToDate(const Iso8601: RawUtf8): RawUtf8;
+function TSqlDBConnectionProperties.SqlIso8601ToDate(const Iso8601: RawUtf8): RawUtf8;
 
   function TrimTInIso: RawUtf8;
   begin
@@ -4361,7 +4368,7 @@ function TSqlDBConnectionProperties.SQLIso8601ToDate(const Iso8601: RawUtf8): Ra
   end;
 
 begin
-  case DBMS of
+  case GetDbms of
     dSQLite:
       result := TrimTInIso;
     dOracle:
@@ -4412,7 +4419,7 @@ begin // use 'ID' instead of 'RowID' here since some DB (e.g. Oracle) use it
   if AddPrimaryKey <> '' then
     result := result + ', PRIMARY KEY(' + AddPrimaryKey + ')';
   result := 'CREATE TABLE ' + aTableName + ' (' + result + ')';
-  case DBMS of
+  case GetDbms of
     dDB2:
       result := result + ' CCSID Unicode';
   end;
@@ -4432,7 +4439,7 @@ begin
      not aField.PrimaryKey then
     result := result + ' UNIQUE'; // see http://www.w3schools.com/sql/sql_unique.asp
   if aField.PrimaryKey then
-    case DBMS of
+    case GetDbms of
       dSQLite, dMSSQL, dOracle, dJet, dPostgreSQL, dFirebird, dNexusDB, dInformix:
         result := result + ' PRIMARY KEY';
       dDB2, dMySQL:
@@ -4468,9 +4475,9 @@ begin
     result := 'UNIQUE ';
   if aIndexName = '' then
   begin
-    SQLSplitTableName(aTableName, Owner, Table);
+    SqlSplitTableName(aTableName, Owner, Table);
     if (Owner <> '') and
-       not (fDBMS in [dMSSQL, dPostgreSQL, dMySQL, dFirebird, dDB2, dInformix]) then
+       not (fDbms in [dMSSQL, dPostgreSQL, dMySQL, dFirebird, dDB2, dInformix]) then
       // some DB engines do not expect any schema in the index name
       IndexName := Owner + '.';
     FieldsCsv := RawUtf8ArrayToCsv(aFieldNames, '');
@@ -4484,7 +4491,7 @@ begin
   else
     IndexName := aIndexName;
   if aDescending then
-    case DB_SQLDESENDINGINDEXPOS[DBMS] of
+    case DB_SQLDESENDINGINDEXPOS[GetDbms] of
       posGlobalBefore:
         result := result + 'DESC ';
       posWithColumn:
@@ -4493,7 +4500,7 @@ begin
   if {%H-}ColsDesc = '' then
     ColsDesc := RawUtf8ArrayToCsv(aFieldNames, ',');
   result := FormatUtf8('CREATE %INDEX %% ON %(%)', [result,
-    CREATNDXIFNE[DBMS in DB_HANDLECREATEINDEXIFNOTEXISTS],
+    CREATNDXIFNE[GetDbms in DB_HANDLECREATEINDEXIFNOTEXISTS],
     IndexName, aTableName, ColsDesc]);
 end;
 
@@ -4505,7 +4512,7 @@ begin
   BeginQuoteChar := '"';
   EndQuoteChar := '"';
   UseQuote := PosExChar(' ', aTableName) > 0;
-  case fDBMS of
+  case fDbms of
     dPostgresql:
       if PosExChar('.', aTableName) = 0 then
         UseQuote := true; // quote if not schema.identifier format
@@ -4572,7 +4579,7 @@ function TSqlDBConnectionProperties.ExceptionIsAboutConnection(
   end;
 
 begin // see more complete list in feature request [f024266c0839]
-  case fDBMS of
+  case fDbms of
     dOracle:
       result := IdemPCharArray(PosErrorNumber(aMessage, '-'), ['00028', '01012',
         '01017', '01033', '01089', '02396', '03113', '03114', '03135', '12152',
@@ -4601,8 +4608,8 @@ procedure TSqlDBConnectionProperties.MultipleValuesInsert(
   const FieldNames: TRawUtf8DynArray; const FieldTypes: TSqlDBFieldTypeArray;
   RowCount: integer; const FieldValues: TRawUtf8DynArrayDynArray);
 var
-  SQL: RawUtf8;
-  SQLCached: boolean;
+  sql: RawUtf8;
+  sqlcached: boolean;
   prevrowcount: integer;
   maxf: integer;
 
@@ -4611,13 +4618,13 @@ var
     f, r, p, len: integer;
     tmp: TTextWriterStackBuffer;
   begin
-    if (fDBMS <> dFireBird) and
+    if (fDbms <> dFireBird) and
        (rowcount = prevrowcount) then
       exit;
     prevrowcount := rowcount;
     with TTextWriter.CreateOwnedStream(tmp) do
     try
-      case Props.fDBMS of
+      case Props.fDbms of
         dFirebird:
           begin
             AddShort('execute block('#10);
@@ -4681,7 +4688,7 @@ var
             if TextLength > 32700 then
               raise ESqlDBException.CreateUtf8('%.MultipleValuesInsert: Firebird Execute Block length=%',
                 [self, TextLength]);
-            SQLCached := false; // ftUtf8 values will have varying field length
+            sqlcached := false; // ftUtf8 values will have varying field length
           end;
         dOracle:
           begin // INSERT ALL INTO ... VALUES ... SELECT 1 FROM DUAL
@@ -4704,7 +4711,7 @@ var
               AddShorter(')'#10);
             end;
             AddShort('select 1 from dual');
-            SQLCached := true;
+            sqlcached := true;
           end;
       else
         begin //  e.g. NexusDB/SQlite3/MySQL/PostgreSQL/MSSQL2008/DB2/INFORMIX
@@ -4727,10 +4734,10 @@ var
             Add(')', ',');
           end;
           CancelLastComma;
-          SQLCached := true;
+          sqlcached := true;
         end;
       end;
-      SetText(SQL);
+      SetText(sql);
     finally
       Free;
     end;
@@ -4751,7 +4758,7 @@ begin
       [self, TableName]);
   batchRowCount := 0;
   paramCountLimit := 0;
-  case Props.fDBMS of
+  case Props.fDbms of
     // values below were done empirically, assuring < 667 (maximum :AA..:ZZ)
     // see http://stackoverflow.com/a/6582902 for theoritical high limits
     dSQlite:
@@ -4769,7 +4776,7 @@ begin
     dNexusDB:
       paramCountLimit := 100;  // empirical limit (above is slower)
     dFirebird:
-      begin // compute from max SQL statement size of 32KB
+      begin // compute from max sql statement size of 32KB
         sqllen := maxf * 48; // worse case (with BLOB param)
         for f := 0 to maxf - 1 do
           inc(sqllen, Length(FieldNames[f]));
@@ -4788,7 +4795,7 @@ begin
       [self, TableName, RowCount * maxf, paramCountLimit]);
   dec(maxf);
   prevrowcount := 0;
-  SQLCached := false;
+  sqlcached := false;
   currentRow := 0;
   repeat
     if RowCount - currentRow > batchRowCount then
@@ -4796,24 +4803,24 @@ begin
     else
     begin
       ComputeSql(RowCount - currentRow, currentRow);
-      SQLCached := false; // truncate number of parameters should not be unique
+      sqlcached := false; // truncate number of parameters should not be unique
     end;
-    if SQLCached then
-      Query := Props.NewThreadSafeStatementPrepared(SQL, false)
+    if sqlcached then
+      Query := Props.NewThreadSafeStatementPrepared(sql, false)
     else
     begin
       Stmt := Props.NewThreadSafeStatement;
       try
-        Stmt.Prepare(SQL, false);
+        Stmt.Prepare(sql, false);
         Query := Stmt; // Stmt will be released by Query := nil below
       except
         on Exception do
-          Stmt.Free; // avoid memory leak in case of invalid SQL statement
+          Stmt.Free; // avoid memory leak in case of invalid sql statement
       end; // exception leaves Query=nil to raise exception
     end;
     if Query = nil then
       raise ESqlDBException.CreateUtf8(
-        '%.MultipleValuesInsert: Query=nil for [%]', [self, SQL]);
+        '%.MultipleValuesInsert: Query=nil for [%]', [self, sql]);
     try
       p := 1;
       for i := 1 to prevrowcount do
@@ -4846,7 +4853,7 @@ begin
      (FieldNames = nil) or
      (TableName = '') or
      (length(FieldValues) <> maxf) or
-     (Props.fDBMS <> dFirebird) then
+     (Props.fDbms <> dFirebird) then
     raise ESqlDBException.CreateUtf8(
       'Invalid %.MultipleValuesInsertFirebird(%,%)', [self, Props, TableName]);
   sqllenwitoutvalues := 3 * maxf + 24;
@@ -4997,19 +5004,19 @@ begin
   end;
 end;
 
-function TSqlDBConnectionProperties.GetDBMS: TSqlDBDefinition;
+function TSqlDBConnectionProperties.GetDbms: TSqlDBDefinition;
 begin
-  if fDBMS = dUnknown then
+  if fDbms = dUnknown then
     result := dDefault
   else
-    result := fDBMS;
+    result := fDbms;
 end;
 
-function TSqlDBConnectionProperties.GetDBMSName: RawUtf8;
+function TSqlDBConnectionProperties.GetDbmsName: RawUtf8;
 var
   PS: PShortString;
 begin
-  PS := ToText(DBMS);
+  PS := ToText(GetDbms);
   FastSetString(result, @PS^[2], ord(PS^[0]) - 1);
 end;
 
@@ -5018,10 +5025,10 @@ begin
   result := StringReplaceAll(fDatabaseName, PassWord, '***');
 end;
 
-function TSqlDBConnectionProperties.SQLLimitClause(AStmt: TSelectStatement):
+function TSqlDBConnectionProperties.SqlLimitClause(AStmt: TSelectStatement):
   TSqlDBDefinitionLimitClause;
 begin
-  result := DB_SQLLIMITCLAUSE[DBMS];
+  result := DB_SQLLIMITCLAUSE[GetDbms];
 end;
 
 var
@@ -5427,7 +5434,7 @@ begin
   fStripSemicolon := true;
   fCacheIndex := -1;
   if aConnection <> nil then
-    fDBMS := aConnection.fProperties.DBMS;
+    fDbms := aConnection.fProperties.GetDbms;
 end;
 
 function TSqlDBStatement.ColumnCount: integer;
@@ -6093,7 +6100,7 @@ begin
   result := Self;
 end;
 
-function TSqlDBStatement.SQLLogBegin(level: TSynLogInfo): TSynLog;
+function TSqlDBStatement.SqlLogBegin(level: TSynLogInfo): TSynLog;
 begin
   if level = sllDB then // prepare
     fSqlLogTimer.Start
@@ -6116,7 +6123,7 @@ begin
   {$endif SYNDB_SILENCE}
 end;
 
-function TSqlDBStatement.SQLLogEnd(msg: PShortString): Int64;
+function TSqlDBStatement.SqlLogEnd(msg: PShortString): Int64;
 {$ifndef SYNDB_SILENCE}
 var
   tmp: TShort16;
@@ -6152,7 +6159,7 @@ begin
   {$endif}
 end;
 
-function TSqlDBStatement.SQLLogEnd(const Fmt: RawUtf8; const Args: array of const): Int64;
+function TSqlDBStatement.SqlLogEnd(const Fmt: RawUtf8; const Args: array of const): Int64;
 var
   tmp: shortstring;
 begin
@@ -6164,7 +6171,7 @@ begin
   if Fmt <> '' then
     FormatShort(Fmt, Args, tmp);
   {$endif}
-  result := SQLLogEnd(@tmp);
+  result := SqlLogEnd(@tmp);
 end;
 
 function TSqlDBStatement.GetSqlCurrent: RawUtf8;
@@ -6577,7 +6584,8 @@ begin
      (fProperties.fConnectionTimeOutTicks = 0) then
     exit;
   if fLastAccessTicks < 0 then
-  begin // was forced by ClearConnectionPool
+  begin
+    // connection release was forced by ClearConnectionPool
     result := true;
     exit;
   end;
@@ -6585,7 +6593,8 @@ begin
      (tix - fLastAccessTicks < fProperties.fConnectionTimeOutTicks) then
     // brand new connection, or active enough connection
     fLastAccessTicks := tix
-  else    // notify connection is clearly outdated
+  else
+    // notify connection is clearly outdated
     result := true;
 end;
 
@@ -6632,7 +6641,7 @@ var
   Stmt: TSqlDBStatement;
   ToCache: boolean;
   ndx, altern: integer;
-  cachedSQL: RawUtf8;
+  cachedSql: RawUtf8;
 
   procedure TryPrepare(doraise: boolean);
   var
@@ -6648,11 +6657,11 @@ var
         begin
           if fCache = nil then
             fCache := TRawUtf8List.Create([fObjectsOwned, fNoDuplicate, fCaseSensitive]);
-          if fCache.AddObject(cachedSQL, Stmt) >= 0 then
+          if fCache.AddObject(cachedSql, Stmt) >= 0 then
             Stmt._AddRef
           else // will be owned by fCache.Objects[]
             SynDBLog.Add.Log(sllWarning, 'NewStatementPrepared: unexpected ' +
-              'cache duplicate for %', [Stmt.SQLWithInlinedParams], self);
+              'cache duplicate for %', [Stmt.SqlWithInlinedParams], self);
         end;
         result := Stmt;
       finally
@@ -6664,7 +6673,7 @@ var
         {$ifndef SYNDB_SILENCE}
         with SynDBLog.Add do
           if [sllSQL, sllDB, sllException, sllError] * Family.Level <> [] then
-            LogLines(sllSQL, pointer(Stmt.SQLWithInlinedParams), self, '--');
+            LogLines(sllSQL, pointer(Stmt.SqlWithInlinedParams), self, '--');
         {$endif}
         Stmt.Free;
         result := nil;
@@ -6683,12 +6692,12 @@ begin
   if length(aSql) < 5 then
     exit;
   // first check if could be retrieved from cache
-  cachedSQL := aSql;
+  cachedSql := aSql;
   ToCache := fProperties.IsCachable(Pointer(aSql));
   if ToCache and
      (fCache <> nil) then
   begin
-    ndx := fCache.IndexOf(cachedSQL);
+    ndx := fCache.IndexOf(cachedSql);
     if ndx >= 0 then
     begin
       Stmt := fCache.Objects[ndx];
@@ -6704,12 +6713,12 @@ begin
         if fProperties.StatementCacheReplicates = 0 then
           SynDBLog.Add.Log(sllWarning,
             'NewStatementPrepared: cached statement still in use ' +
-            '-> you should release ISqlDBStatement ASAP [%]', [cachedSQL], self)
+            '-> you should release ISqlDBStatement ASAP [%]', [cachedSql], self)
         else
           for altern := 1 to fProperties.StatementCacheReplicates do
           begin
-            cachedSQL := aSql + RawUtf8(AnsiChar(altern)); // safe SQL duplicate
-            ndx := fCache.IndexOf(cachedSQL);
+            cachedSql := aSql + RawUtf8(AnsiChar(altern)); // safe SQL duplicate
+            ndx := fCache.IndexOf(cachedSql);
             if ndx >= 0 then
             begin
               Stmt := fCache.Objects[ndx];
@@ -6789,7 +6798,7 @@ function TSqlDBConnection.NewTableFromRows(const TableName: RawUtf8;
   ColumnForcedTypes: TSqlDBFieldTypeDynArray): integer;
 var
   Fields: TSqlDBColumnCreateDynArray;
-  aTableName, SQL: RawUtf8;
+  aTableName, sql: RawUtf8;
   Tables: TRawUtf8DynArray;
   Ins: TSqlDBStatement;
   i, n: integer;
@@ -6811,7 +6820,7 @@ begin
         // init when first row of data is available
         if Ins = nil then
         begin
-          SQL := Rows.ColumnsToSqlInsert(aTableName, Fields);
+          sql := Rows.ColumnsToSqlInsert(aTableName, Fields);
           n := length(Fields);
           if Length(ColumnForcedTypes) <> n then
           begin
@@ -6831,7 +6840,7 @@ begin
             with Properties do
               ExecuteNoResult(SqlCreate(aTableName, Fields, false), []);
           Ins := NewStatement;
-          Ins.Prepare(SQL, false);
+          Ins.Prepare(sql, false);
         end;
         Rows.ReleaseRows;
         // write row data

@@ -1019,7 +1019,7 @@ function TRestOrmClientUri.UpdateFromServer(const Data: array of TObject;
 // the Server stated fInternalState=cardinal(-1) for them -> always refresh
 var
   i: PtrInt;
-  State: cardinal;
+  s: cardinal;
   Resp: RawUtf8;
   T: TOrmTableJson;
   TRefreshed: boolean; // to check for each Table refresh
@@ -1031,17 +1031,17 @@ begin
   Refreshed := false;
   if not result then
     exit; // avoid GPF
-  State := ServerInternalState; // get revision state from server
+  s := ServerInternalState; // get revision s from server
   for i := 0 to high(Data) do
     if Data[i] <> nil then
       if Data[i].InheritsFrom(TOrmTableJson) then
       begin
         T := TOrmTableJson(Data[i]);
         if (T.QuerySql <> '') and
-           (T.InternalState <> State) then
+           (T.InternalState <> s) then
         begin
           // refresh needed
-          if Uri(fModel.Root, 'GET', @Resp, nil, @T.QuerySql, @State) = HTTP_SUCCESS then
+          if Uri(fModel.Root, 'GET', @Resp, nil, @T.QuerySql, @s) = HTTP_SUCCESS then
           begin
             // refresh after proper GET with SQL sent
             if Assigned(OnTableUpdate) then
@@ -1052,7 +1052,7 @@ begin
               result := false
             else
               // successfully refreshed with new data
-              T.InternalState := State;
+              T.InternalState := s;
             if TRefreshed then
               Refreshed := true;
             if Assigned(OnTableUpdate) then
@@ -1066,7 +1066,7 @@ begin
       else if Data[i].InheritsFrom(TOrm) then
         with TOrm(Data[i]) do
           if (IDValue <> 0) and
-             (InternalState <> State) then
+             (InternalState <> s) then
           begin
             // refresh needed
             if not Refresh(IDValue, TOrm(Data[i]), Refreshed) then

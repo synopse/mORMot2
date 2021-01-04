@@ -642,10 +642,10 @@ begin
       SQL := fStoredClassMapping^.ExtFieldNames[f];
       if rpmQuoteFieldName in options then
         fStoredClassMapping^.MapField(nfo.Name, '"' + SQL + '"')
-      else if fProperties.IsSQLKeyword(SQL) then
+      else if fProperties.IsSqlKeyword(SQL) then
       begin
         log.Log(sllWarning, '%.%: Field name % is not compatible with %',
-          [fStoredClass, nfo.Name, SQL, fProperties.DBMSEngineName], self);
+          [fStoredClass, nfo.Name, SQL, fProperties.DbmsEngineName], self);
         if rpmAutoMapKeywordFields in options then
         begin
           log.Log(sllWarning, '-> %.% mapped to %_',
@@ -777,11 +777,11 @@ begin
       limit.Position := posNone
     else
     begin
-      limit := fProperties.SQLLimitClause(Stmt);
+      limit := fProperties.SqlLimitClause(Stmt);
       if limit.Position = posNone then
       begin
         InternalLog('AdaptSqlForEngineList: unknown % LIMIT syntax for [%]',
-          [ToText(fProperties.DBMS)^, SQL], sllWarning);
+          [ToText(fProperties.Dbms)^, SQL], sllWarning);
         exit;
       end;
       if limit.Position = posOuter then
@@ -1853,7 +1853,7 @@ begin
   if n = 1 then
   begin // handle case of index over a single column
     if IntFieldIndex[0] < 0 then // ID/RowID?
-      case fProperties.DBMS of
+      case fProperties.Dbms of
         dSQLite, dPostgreSQL, dMSSQL, dMySQL, dOracle, dNexusDB:
           begin
             // most DB create an implicit index on primary key
@@ -1876,7 +1876,7 @@ begin
       end;
     end;
   end;
-  if not (fProperties.DBMS in DB_HANDLEINDEXONBLOBS) then
+  if not (fProperties.Dbms in DB_HANDLEINDEXONBLOBS) then
     // BLOB fields cannot be indexed (only in SQLite3+PostgreSQL)
     for i := 0 to n - 1 do
     begin
@@ -2402,7 +2402,7 @@ begin
   else
     ExternalTableName := aExternalTableName;
   result := aModel.VirtualTableRegister(aClass, TOrmVirtualTableExternal,
-    aExternalDB.SQLFullTableName(ExternalTableName), aExternalDB, aMappingOptions);
+    aExternalDB.SqlFullTableName(ExternalTableName), aExternalDB, aMappingOptions);
 end;
 
 function VirtualTableExternalRegister(aModel: TOrmModel;
