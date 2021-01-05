@@ -1832,7 +1832,8 @@ implementation
 { ************ Variable Length integer Encoding / Decoding }
 
 function ToVarInt32(Value: PtrInt; Dest: PByte): PByte;
-begin // 0=0,1=1,2=-1,3=2,4=-2...
+begin
+  // 0=0,1=1,2=-1,3=2,4=-2...
   if Value < 0 then
     // -1->2, -2->4..
     Value := (-Value) shl 1
@@ -1918,19 +1919,22 @@ begin
   result := p^;
   inc(p);
   if result > $7f then
-  begin // Values between 128 and 16256
+  begin
+    // Values between 128 and 16256
     c := p^;
     c := c shl 7;
     result := result and $7F or c;
     inc(p);
     if c > $7f shl 7 then
-    begin // Values between 16257 and 2080768
+    begin
+      // Values between 16257 and 2080768
       c := p^;
       c := c shl 14;
       inc(p);
       result := result and $3FFF or c;
       if c > $7f shl 14 then
-      begin // Values between 2080769 and 266338304
+      begin
+        // Values between 2080769 and 266338304
         c := p^;
         c := c shl 21;
         inc(p);
@@ -1952,12 +1956,14 @@ function FromVarUInt32Up128(var Source: PByte): cardinal;
 var
   c: cardinal;
   p: PByte;
-begin // Values above 128
+begin
+  // Values above 128
   p := Source;
   result := p^ shl 7;
   inc(p);
   if result > $7f shl 7 then
-  begin // Values above 16257
+  begin
+    // Values above 16257
     c := p^;
     c := c shl 14;
     inc(p);
@@ -2006,7 +2012,8 @@ begin
   inc(Source);
   Value := c;
   if c > $7f then
-  begin // Values between 128 and 16256
+  begin
+    // Values between 128 and 16256
     if PAnsiChar(Source) >= PAnsiChar(SourceMax) then
       exit;
     c := Source^;
@@ -2014,7 +2021,8 @@ begin
     Value := Value and $7F or c;
     inc(Source);
     if c > $7f shl 7 then
-    begin // Values between 16257 and 2080768
+    begin
+      // Values between 16257 and 2080768
       if PAnsiChar(Source) >= PAnsiChar(SourceMax) then
         exit;
       c := Source^;
@@ -2022,7 +2030,8 @@ begin
       inc(Source);
       Value := Value and $3FFF or c;
       if c > $7f shl 14 then
-      begin // Values between 2080769 and 266338304
+      begin
+        // Values between 2080769 and 266338304
         if PAnsiChar(Source) >= PAnsiChar(SourceMax) then
           exit;
         c := Source^;
@@ -2118,7 +2127,8 @@ begin
 end;
 
 function ToVarInt64(Value: Int64; Dest: PByte): PByte;
-begin // 0=0,1=1,2=-1,3=2,4=-2...
+begin
+  // 0=0,1=1,2=-1,3=2,4=-2...
 {$ifdef CPU32}
   if Value <= 0 then
     // 0->0, -1->2, -2->4..
@@ -2265,7 +2275,8 @@ end;
 function FromVarInt64(var Source: PByte): Int64;
 var
   c, n: PtrUInt;
-begin // 0=0,1=1,2=-1,3=2,4=-2...
+begin
+  // 0=0,1=1,2=-1,3=2,4=-2...
 {$ifdef CPU64}
   result := Source^;
   if result > $7f then
@@ -2330,7 +2341,8 @@ end;
 function FromVarInt64Value(Source: PByte): Int64;
 var
   c, n: PtrUInt;
-begin // 0=0,1=1,2=-1,3=2,4=-2...
+begin
+// 0=0,1=1,2=-1,3=2,4=-2...
   c := Source^;
   if c > $7f then
   begin
@@ -5559,7 +5571,8 @@ end;
 
 function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt;
   nofullcheck: boolean): boolean;
-begin // nofullcheck is just ignored and deprecated
+begin
+  // nofullcheck is just ignored and deprecated
   result := (bin <> nil) and
             (Base64ToBinLength(base64, base64len) = binlen) and
             Base64Decode(base64, bin, base64len shr 2);
@@ -5833,7 +5846,8 @@ begin
         '/':
           P^ := '_';
         '=':
-          begin // trim unsignificant trailing '=' characters
+          begin
+            // trim unsignificant trailing '=' characters
             SetLength(base64, P - pointer(base64));
             break;
           end;
@@ -6239,7 +6253,8 @@ begin
     c := s^;
     inc(s);
     if tcUriUnreserved in tab[c] then
-    begin // was ['_', '-', '.', '~', '0'..'9', 'a'..'z', 'A'..'Z']
+    begin
+      // was ['_', '-', '.', '~', '0'..'9', 'a'..'z', 'A'..'Z']
       p^ := c;
       inc(p);
     end
@@ -6758,7 +6773,8 @@ end;
 
 function GetMimeContentTypeFromBuffer(Content: Pointer; Len: PtrInt;
   const DefaultContentType: RawUtf8): RawUtf8;
-begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
+begin
+  // see http://www.garykessler.net/library/file_sigs.html for magic numbers
   result := DefaultContentType;
   if (Content <> nil) and
      (Len > 4) then
@@ -6848,7 +6864,8 @@ function GetMimeContentType(Content: Pointer; Len: PtrInt;
   const FileName: TFileName): RawUtf8;
 begin
   if FileName <> '' then
-  begin // file extension is more precise -> check first
+  begin
+    // file extension is more precise -> check first
     result := LowerCase(RawUtf8(ExtractFileExt(FileName)));
     case PosEx(copy(result, 2, 4),
       'png,gif,tiff,jpg,jpeg,bmp,doc,htm,html,css,js,ico,wof,txt,svg,' +
@@ -6927,7 +6944,8 @@ begin
 end;
 
 function IsContentCompressed(Content: Pointer; Len: PtrInt): boolean;
-begin // see http://www.garykessler.net/library/file_sigs.html
+begin
+  // see http://www.garykessler.net/library/file_sigs.html
   result := false;
   if (Content <> nil) and
      (Len > 8) then
@@ -6984,7 +7002,8 @@ end;
 function GetJpegSize(jpeg: PAnsiChar; len: PtrInt; out Height, Width: integer): boolean;
 var
   je: PAnsiChar;
-begin // see https://en.wikipedia.org/wiki/JPEG#Syntax_and_structure
+begin
+  // see https://en.wikipedia.org/wiki/JPEG#Syntax_and_structure
   result := false;
   if (jpeg = nil) or
      (len < 100) or
@@ -7145,7 +7164,8 @@ end;
 procedure ParseLines(P, PEnd: PUtf8Char; Map: TMemoryMapText);
 var
   PBeg: PUtf8Char;
-begin // generated asm is much better with a local proc
+begin
+  // generated asm is much better with a local proc
   if P < PEnd then
   repeat
     PBeg := P;
@@ -7320,7 +7340,8 @@ begin
   result[len] := ' ';
   L := ord(itemname[0]);
   if L in [1..240] then
-  begin // avoid buffer overflow
+  begin
+    // avoid buffer overflow
     MoveSmall(@itemname[1], @result[len + 1], L);
     inc(len, L);
     if itemcount > 1 then
@@ -7693,7 +7714,8 @@ begin
     while not (P^ in [#0, ')']) do
       inc(P);
     if P^ = ')' then
-    begin // [GitHub](https://github.com)
+    begin
+      // [GitHub](https://github.com)
       result := true;
       exit;
     end;
@@ -7818,7 +7840,8 @@ begin
       else
         goto none;
     '1'..'9':
-      begin // first should be 1. then any ##. number to continue
+      begin
+        // first should be 1. then any ##. number to continue
         B := P;
         repeat
           inc(P)
@@ -8053,7 +8076,8 @@ begin
 end;
 
 function EmojiFromText(P: PUtf8Char; len: PtrInt): TEmoji;
-begin // RTTI has shortstrings in adjacent L1 cache lines -> faster than EMOJI_TEXT[]
+begin
+  // RTTI has shortstrings in adjacent L1 cache lines -> faster than EMOJI_TEXT[]
   result := TEmoji(FindShortStringListTrimLowerCase(
     EMOJI_RTTI, ord(high(TEmoji)) - 1, P, len) + 1);
 end;

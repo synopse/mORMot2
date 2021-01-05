@@ -827,7 +827,8 @@ begin
     end; // allow YYYY-MM-DD
     D := 1;
     if L >= 6 then
-    begin // YYYYMM
+    begin
+      // YYYYMM
       M := ord(P[4]) * 10 + ord(P[5]) - (48 + 480);
       if (M = 0) or
          (M > 12) then
@@ -838,7 +839,8 @@ begin
         dec(L);
       end; // allow YYYY-MM-DD
       if L >= 8 then
-      begin // YYYYMMDD
+      begin
+        // YYYYMMDD
         if (L > 8) and
            not (P[8] in [#0, ' ', 'T']) then
           exit; // invalid date format
@@ -1001,7 +1003,8 @@ procedure IntervalTextToDateTimeVar(Text: PUtf8Char; var result: TDateTime);
 var
   negative: boolean;
   Time: TDateTime;
-begin // e.g. IntervalTextToDateTime('+0 06:03:20')
+begin
+  // e.g. IntervalTextToDateTime('+0 06:03:20')
   result := 0;
   if Text = nil then
     exit;
@@ -1076,7 +1079,8 @@ var
   {$else}
   tab: PWordArray;
   {$endif CPUX86NOTPIC}
-begin // use Thhmmss[.sss] format
+begin
+  // use Thhmmss[.sss] format
   if FirstChar <> #0 then
   begin
     P^ := FirstChar;
@@ -1118,13 +1122,15 @@ function DateToIso8601PChar(Date: TDateTime; P: PUtf8Char;
   Expanded: boolean): PUtf8Char;
 var
   T: TSynSystemTime;
-begin // use YYYYMMDD / YYYY-MM-DD date format
+begin
+  // use YYYYMMDD / YYYY-MM-DD date format
   T.FromDate(Date);
   result := DateToIso8601PChar(P, Expanded, T.Year, T.Month, T.Day);
 end;
 
 function DateToIso8601Text(Date: TDateTime): RawUtf8;
-begin // into 'YYYY-MM-DD' date format
+begin
+  // into 'YYYY-MM-DD' date format
   if Date = 0 then
     result := ''
   else
@@ -1168,7 +1174,8 @@ end;
 function DateTimeToIso8601(D: TDateTime; Expanded: boolean;
   FirstChar: AnsiChar; WithMS: boolean; QuotedChar: AnsiChar): RawUtf8;
 var tmp: array[0 .. 31] of AnsiChar;
-begin // D=0 is handled in DateTimeToIso8601Text()
+begin
+  // D=0 is handled in DateTimeToIso8601Text()
   FastSetString(result, @tmp,
     DateTimeToIso8601(@tmp, D, Expanded, FirstChar, WithMS, QuotedChar));
 end;
@@ -1442,7 +1449,8 @@ function TryEncodeDayOfWeekInMonth(AYear, AMonth, ANthDayOfWeek, ADayOfWeek: int
   out AValue: TDateTime): boolean;
 var
   LStartOfMonth, LDay: integer;
-begin // adapted from DateUtils
+begin
+  // adapted from DateUtils
   result := TryEncodeDate(AYear, AMonth, 1, AValue);
   if not result then
     exit;
@@ -1845,7 +1853,8 @@ function DateTimeMSToString(DateTime: TDateTime; Expanded: boolean;
   FirstTimeChar: AnsiChar; const TZD: RawUtf8): RawUtf8;
 var
   T: TSynSystemTime;
-begin //  'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
+begin
+  //  'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
   if DateTime = 0 then
     result := ''
   else
@@ -1858,7 +1867,8 @@ end;
 
 function DateTimeMSToString(HH, MM, SS, MS, Y, M, D: cardinal; Expanded: boolean;
   FirstTimeChar: AnsiChar; const TZD: RawUtf8): RawUtf8;
-begin //  'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
+begin
+  //  'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
   FormatUtf8(DTMS_FMT[Expanded], [
     UInt4DigitsToShort(Y), UInt2DigitsToShortFast(M), UInt2DigitsToShortFast(D),
     FirstTimeChar, UInt2DigitsToShortFast(HH), UInt2DigitsToShortFast(MM),
@@ -1900,7 +1910,8 @@ var
   {$else}
   tab: PWordArray;
   {$endif CPUX86NOTPIC}
-begin // use 'YYMMDDHHMMSS' format
+begin
+  // use 'YYMMDDHHMMSS' format
   if DateTime <= 0 then
   begin
     PWord(@result[0])^ := 1 + ord('0') shl 8;
@@ -1942,13 +1953,15 @@ end;
 
 function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean;
   FirstTimeChar: AnsiChar): RawUtf8;
-begin // inlined UnixTimeToDateTime
+begin
+  // inlined UnixTimeToDateTime
   result := DateTimeToIso8601(UnixTime / SecsPerDay + UnixDateDelta,
     Expanded, FirstTimeChar, false);
 end;
 
 procedure UnixTimeToFileShort(const UnixTime: TUnixTime; out result: TShort16);
-begin // use 'YYMMDDHHMMSS' format
+begin
+  // use 'YYMMDDHHMMSS' format
   if UnixTime <= 0 then
     PWord(@result[0])^ := 1 + ord('0') shl 8
   else
@@ -1995,7 +2008,8 @@ begin
 end;
 
 function UnixMSTimeToString(const UnixMSTime: TUnixMSTime; Expanded: boolean; FirstTimeChar: AnsiChar; const TZD: RawUtf8): RawUtf8;
-begin // inlined UnixMSTimeToDateTime()
+begin
+  // inlined UnixMSTimeToDateTime()
   if UnixMSTime <= 0 then
     result := ''
   else
@@ -2271,7 +2285,8 @@ function TTimeLogBits.FullText(Dest: PUtf8Char; Expanded: boolean;
   FirstTimeChar, QuotedChar: AnsiChar): PUtf8Char;
 var
   lo: PtrUInt;
-begin // convert full time and date
+begin
+  // convert full time and date
   if QuotedChar <> #0 then
   begin
     Dest^ := QuotedChar;
@@ -2370,7 +2385,8 @@ begin
   if P[0] = 'T' then
     dec(P, 8)
   else
-  begin // 'YYYY' -> year decode
+  begin
+    // 'YYYY' -> year decode
     {$ifndef CPUX86NOTPIC}
     tab := @ConvertHexToBin;
     {$endif CPUX86NOTPIC}
@@ -2399,7 +2415,8 @@ begin
       dec(L);
     end; // allow YYYY-MM-DD
     if L >= 6 then
-    begin // YYYYMM
+    begin
+      // YYYYMM
       V := ord(P[4]) * 10 + ord(P[5]) - (48 + 480 + 1); // Month 1..12 -> 0..11
       if V <= 11 then
         inc(result, V shl 22)
@@ -2429,7 +2446,8 @@ begin
       end;
     end;
     if L < 15 then
-    begin // not enough place to retrieve a time
+    begin
+      // not enough place to retrieve a time
       if ContainsNoTime <> nil then
         ContainsNoTime^ := true;
       exit;

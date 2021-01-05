@@ -800,7 +800,8 @@ begin
 end;
 
 function TFileInfo.SameAs(aInfo: PFileInfo): boolean;
-begin // tolerate a time change through a network: zcrc32 is accurate enough
+begin
+  // tolerate a time change through a network: zcrc32 is accurate enough
   if (zzipSize = 0) or
      (aInfo.zzipSize = 0) then
     raise ESynZip.Create('SameAs() with crc+sizes in "data descriptor"');
@@ -1191,14 +1192,16 @@ begin
   for i := 1 to lhr^.totalFiles do
   begin
     if H^.signature + 1 <> ENTRY_SIGNATURE_INC then
-    begin // +1 to avoid match in exe
+    begin
+      // +1 to avoid match in exe
       fMap.UnMap;
       raise ESynZip.Create('ZIP format');
     end;
     lfhr := @BufZip[H^.localHeadOff];
     with lfhr^.fileInfo do
       if flags and (1 shl 3) <> 0 then
-      begin // crc+sizes in "data descriptor"
+      begin
+        // crc+sizes in "data descriptor"
         if (zcrc32 <> 0) or
            (zzipSize <> 0) or
            (zfullSize <> 0) then

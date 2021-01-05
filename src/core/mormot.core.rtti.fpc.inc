@@ -31,7 +31,8 @@ end;
 // use complex AlignTypeData() inlined function from typinfo.pp
 // = AlignToQword() as defined in system.inc and used in rtti.inc
 function GetTypeData(TypeInfo: pointer): PTypeData;
-begin // qword aligned jump over Kind+Name - compiles as 2 x86_64 asm opcodes
+begin
+  // qword aligned jump over Kind+Name - compiles as 2 x86_64 asm opcodes
   result := AlignTypeData(@PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2]);
 end;
 
@@ -41,7 +42,8 @@ type
   AlignToPtr = pointer;
 
 function GetTypeData(TypeInfo: pointer): PTypeData;
-begin // jump over Kind+Name - compiles as 2 x86_64 asm opcodes
+begin
+  // jump over Kind+Name - compiles as 2 x86_64 asm opcodes
   result := @PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2];
 end;
 
@@ -93,7 +95,8 @@ begin
 end;
 
 function TRttiProps.PropList: PRttiProp;
-begin // see TPropData.GetProp(0)
+begin
+  // see TPropData.GetProp(0)
   result := AlignToPtr(@PPropData(@self)^.PropList);
 end;
 
@@ -104,7 +107,8 @@ begin
   begin
     CP := GetRttiProps(C);
     if CP <> nil then
-    begin // no more RTTI information available
+    begin
+      // no more RTTI information available
       PropInfo := CP^.PropList;
       exit(CP^.PropCount);
     end;
@@ -139,7 +143,8 @@ const
 function TRttiEnumType.GetEnumNameOrd(Value: cardinal): PShortString;
 var
   n: integer;
-begin // this code is very aggressively inlined on FPC
+begin
+  // this code is very aggressively inlined on FPC
   if Value <= cardinal(PTypeData(@self).MaxValue) then
   begin
     result := @PTypeData(@self).NameList;
@@ -254,7 +259,8 @@ begin
       // no 'read' was defined -> try from 'write' field
       if (SetProc <> nil) and
          ((integer(PropProcs) shr 2) and 3 = ptField) then
-      begin // bits 2..3 = SetProc
+      begin
+        // bits 2..3 = SetProc
         Call.Data := pointer(PtrUInt(Instance) + PtrUInt(SetProc));
         exit(rpcField);
       end
@@ -293,7 +299,8 @@ begin
       // no 'write' was defined -> try from 'read' field
       if (GetProc <> nil) and
          (integer(PropProcs) and 3 = ptField) then
-      begin // bits 0..1 = GetProc
+      begin
+        // bits 0..1 = GetProc
         Call.Data := pointer(PtrUInt(Instance) + PtrUInt(GetProc));
         exit(rpcField);
       end
@@ -548,7 +555,7 @@ begin
   begin
     ShortStringToAnsi7String(aInterface^.Name, Definition.Name);
     ShortStringToAnsi7String(info^.UnitName, Definition.UnitName);
-    Definition.GUID := info^.GUID;
+    Definition.Guid := info^.GUID;
   end;
   ancestor := DeRef(info^.Parent);
   if ancestor <> nil then
@@ -1072,7 +1079,8 @@ begin
     p := pointer(s[first]);
     l := _lstrlen(RawByteString(p));
     if p = pointer(dest) then
-    begin // dest := dest+s... -> self-resize
+    begin
+      // dest := dest+s... -> self-resize
       SetLength(dest, len);
       new := pointer(dest);
       PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codepage := cp;

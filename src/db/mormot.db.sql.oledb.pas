@@ -1050,7 +1050,8 @@ var
   C: PSqlDBColumnProperty;
   V: PColumnValue;
   P: pointer;
-begin // dedicated version to avoid as much memory allocation than possible
+begin
+  // dedicated version to avoid as much memory allocation than possible
   V := GetCol(Col, C);
   if V = nil then
     result := ftNull
@@ -1103,7 +1104,8 @@ var
   P: Pointer;
 label
   Write;
-begin // dedicated version to avoid as much memory allocation than possible
+begin
+  // dedicated version to avoid as much memory allocation than possible
   if CurrentRow <= 0 then
     raise EOleDBException.CreateUtf8('%.ColumnsToJson() with no prior Step', [self]);
   if WR.Expand then
@@ -1678,7 +1680,8 @@ begin
             inc(result, sizeof(PtrUInt)); // TColumnValue.Length
             B^.obValue := result;
             if nfo^.ulColumnSize < MAXCOLUMNSIZE then
-            begin // inline up to 4 KB
+            begin
+              // inline up to 4 KB
               B^.wType := B^.wType and not DBTYPE_BYREF;
               len := nfo^.ulColumnSize;
               Col^.ColumnValueDBSize := len;
@@ -1700,7 +1703,8 @@ begin
               B^.cbMaxLen := len;
             end
             else
-            begin // get huge content by pointer (includes DBTYPE_BYREF)
+            begin
+              // get huge content by pointer (includes DBTYPE_BYREF)
               fHasColumnValueInlined := true;
               Col^.ColumnValueInlined := false;
               B^.cbMaxLen := sizeof(Pointer); // value=pointer in fRowSetData[]
@@ -1905,7 +1909,8 @@ begin
 end;
 
 procedure TSqlDBOleDBConnection.OnDBInitialized;
-begin // do nothing by default
+begin
+  // do nothing by default
 end;
 
 procedure TSqlDBOleDBConnection.Commit;

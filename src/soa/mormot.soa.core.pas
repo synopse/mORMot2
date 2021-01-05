@@ -663,9 +663,9 @@ type
     // ! if fClient.Services.Info(ICalculator).Get(I) then
     // !   ... use I
     {$ifdef FPC_HAS_CONSTREF}
-    function Info(constref aGUID: TGUID): TServiceFactory; overload;
+    function Info(constref aGuid: TGUID): TServiceFactory; overload;
     {$else}
-    function Info(const aGUID: TGUID): TServiceFactory; overload;
+    function Info(const aGuid: TGUID): TServiceFactory; overload;
     {$endif FPC_HAS_CONSTREF}
     /// retrieve a service provider from its type information
     // - on match, it  will return the service the corresponding interface factory
@@ -680,7 +680,7 @@ type
     // - this default implementation will do nothing
     function CallBackUnRegister(const Callback: IInvokable): boolean; virtual;
     /// retrieve all registered Services TGUID
-    procedure SetGUIDs(out Services: TGUIDDynArray);
+    procedure SetGUIDs(out Services: TGuidDynArray);
     /// retrieve all registered Services names
     // - i.e. all interface names without the initial 'I', e.g. 'Calculator' for
     // ICalculator
@@ -872,7 +872,7 @@ type
     // - may be used to duplicate the whole TRestServer.AssociatedServices
     // content, as returned from /root/Stat?findservice=*
     // - warning: supplied PublishedJson will be parsed in place, so modified
-    procedure RegisterFromServerJSON(var PublishedJson: RawUtf8);
+    procedure RegisterFromServerJson(var PublishedJson: RawUtf8);
     /// search for a public URI in the registration list
     function FindUri(const aPublicUri: TRestServerUri): PtrInt;
     /// search for the latest registrations of a service, by name
@@ -1358,11 +1358,11 @@ begin
       raise EServiceException.CreateUtf8('%: aInterfaces[%]=nil', [self, i])
     else
       with aInterfaces[i]^ do
-        if InterfaceGUID = nil then
+        if InterfaceGuid = nil then
           raise EServiceException.CreateUtf8('%: % is not an interface', [self, Name^])
         else if not (ifHasGuid in InterfaceType^.IntfFlags) then
           raise EServiceException.CreateUtf8('%: % interface has no GUID', [self, Name^])
-        else if Info(InterfaceGUID^) <> nil then
+        else if Info(InterfaceGuid^) <> nil then
           raise EServiceException.CreateUtf8('%: % GUID already registered', [self, Name^]);
 end;
 
@@ -1470,14 +1470,14 @@ begin
 end;
 
 {$ifdef FPC_HAS_CONSTREF}
-function TServiceContainer.Info(constref aGUID: TGUID): TServiceFactory;
+function TServiceContainer.Info(constref aGuid: TGUID): TServiceFactory;
 {$else}
-function TServiceContainer.Info(const aGUID: TGUID): TServiceFactory;
+function TServiceContainer.Info(const aGuid: TGUID): TServiceFactory;
 {$endif FPC_HAS_CONSTREF}
 var
   n: TDALen;
   p: PServiceContainerInterface;
-  g: THash128Rec absolute aGUID;
+  g: THash128Rec absolute aGuid;
 begin
   // very efficient generated asm on FPC
   if self <> nil then
@@ -1500,7 +1500,7 @@ begin
   result := nil;
 end;
 
-procedure TServiceContainer.SetGUIDs(out Services: TGUIDDynArray);
+procedure TServiceContainer.SetGUIDs(out Services: TGuidDynArray);
 var
   i, n: PtrInt;
 begin
@@ -1702,7 +1702,7 @@ begin
         if (fTimeOut = 0) or
            (fTimeoutTix[i] < tix) then
         begin
-          aWriter.AddRecordJSON(@List[i], TypeInfo(TServicesPublishedInterfaces));
+          aWriter.AddRecordJson(@List[i], TypeInfo(TServicesPublishedInterfaces));
           aWriter.Add(',');
         end;
     end
@@ -1714,7 +1714,7 @@ begin
           if (fTimeOut = 0) or
              (fTimeoutTix[i] < tix) then
           begin
-            aWriter.AddRecordJSON(@List[i].PublicUri, TypeInfo(TRestServerUri));
+            aWriter.AddRecordJson(@List[i].PublicUri, TypeInfo(TRestServerUri));
             aWriter.Add(',');
           end;
     aWriter.CancelLastComma;
@@ -1732,11 +1732,11 @@ begin
   result := Client.CallBackGet('stat',['findservice','*'],json)=HTTP_SUCCESS;
   if result and
      (json<>'') then
-    RegisterFromServerJSON(json);
+    RegisterFromServerJson(json);
 end;
 }
 
-procedure TServicesPublishedInterfacesList.RegisterFromServerJSON(
+procedure TServicesPublishedInterfacesList.RegisterFromServerJson(
   var PublishedJson: RawUtf8);
 var
   tix: Int64;

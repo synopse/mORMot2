@@ -587,14 +587,14 @@ type
   // internal memory buffer when it appears undersized - FlushFinal will set it
   // before calling a last FlushToStream
   // - by default, custom serializers defined via RegisterCustomJsonSerializer()
-  // would let AddRecordJSON() and AddDynArrayJson() write enumerates and sets
+  // would let AddRecordJson() and AddDynArrayJson() write enumerates and sets
   // as integer numbers, unless twoEnumSetsAsTextInRecord or
   // twoEnumSetsAsBooleanInRecord (exclusively) are set - for Mustache data
   // context, twoEnumSetsAsBooleanInRecord will return a JSON object with
   // "setname":true/false fields
   // - variants and nested objects would be serialized with their default
-  // JSON serialization options, unless twoForceJSONExtended or
-  // twoForceJSONStandard is defined
+  // JSON serialization options, unless twoForceJsonExtended or
+  // twoForceJsonStandard is defined
   // - when enumerates and sets are serialized as text into JSON, you may force
   // the identifiers to be left-trimed for all their lowercase characters
   // (e.g. sllError -> 'Error') by setting twoTrimLeftEnumSets: this option
@@ -612,14 +612,14 @@ type
     twoEnumSetsAsBooleanInRecord,
     twoFullSetsAsStar,
     twoTrimLeftEnumSets,
-    twoForceJSONExtended,
-    twoForceJSONStandard,
+    twoForceJsonExtended,
+    twoForceJsonStandard,
     twoEndOfLineCRLF,
     twoBufferIsExternal,
     twoIgnoreDefaultInRecord);
     
   /// options set for a TBaseWriter / TBaseWriter instance
-  // - allows to override e.g. AddRecordJSON() and AddDynArrayJson() behavior;
+  // - allows to override e.g. AddRecordJson() and AddDynArrayJson() behavior;
   // or set global process customization for a TBaseWriter
   TTextWriterOptions = set of TTextWriterOption;
 
@@ -728,7 +728,7 @@ type
   // - jsonUnquotedPropNameCompact will emit single-line layout with unquoted
   // property names
   // - those features are not implemented in this unit, but in mormot.core.json
-  TTextWriterJSONFormat = (
+  TTextWriterJsonFormat = (
     jsonCompact,
     jsonHumanReadable,
     jsonUnquotedPropName,
@@ -815,7 +815,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the data as a string
     // - will avoid creation of a temporary RawUtf8 variable as for Text function
-    procedure SetText(out result: RawUtf8; reformat: TTextWriterJSONFormat = jsonCompact);
+    procedure SetText(out result: RawUtf8; reformat: TTextWriterJsonFormat = jsonCompact);
     /// set the internal stream content with the supplied UTF-8 text
     procedure ForceContent(const text: RawUtf8);
     /// write pending data to the Stream, with automatic buffer resizal
@@ -1018,20 +1018,20 @@ type
     /// append a property name, as '"PropName":'
     // - PropName content should not need to be JSON escaped (e.g. no " within,
     // and only ASCII 7-bit characters)
-    // - if twoForceJSONExtended is defined in CustomOptions, it would append
+    // - if twoForceJsonExtended is defined in CustomOptions, it would append
     // 'PropName:' without the double quotes
     procedure AddProp(PropName: PUtf8Char; PropNameLen: PtrInt);
     /// append a ShortString property name, as '"PropName":'
     // - PropName content should not need to be JSON escaped (e.g. no " within,
     // and only ASCII 7-bit characters)
-    // - if twoForceJSONExtended is defined in CustomOptions, it would append
+    // - if twoForceJsonExtended is defined in CustomOptions, it would append
     // 'PropName:' without the double quotes
     // - is a wrapper around AddProp()
     procedure AddPropName(const PropName: ShortString);
       {$ifdef HASINLINE}inline;{$endif}
     /// append a RawUtf8 property name, as '"FieldName":'
     // - FieldName content should not need to be JSON escaped (e.g. no " within)
-    // - if twoForceJSONExtended is defined in CustomOptions, it would append
+    // - if twoForceJsonExtended is defined in CustomOptions, it would append
     // 'PropName:' without the double quotes
     // - is a wrapper around AddProp()
     procedure AddFieldName(const FieldName: RawUtf8);
@@ -1103,7 +1103,7 @@ type
       WriteObjectOptions: TTextWriterWriteObjectOptions = [woFullExpand]); overload; virtual;
     /// this class implementation will raise an exception
     // - use overriden TTextWriter version instead!
-    function AddJsonReformat(JSON: PUtf8Char; Format: TTextWriterJSONFormat;
+    function AddJsonReformat(Json: PUtf8Char; Format: TTextWriterJsonFormat;
       EndOfObject: PUtf8Char): PUtf8Char; virtual;
     /// this class implementation will raise an exception
     // - use overriden TTextWriter version instead!
@@ -1172,7 +1172,7 @@ type
     property Stream: TStream
       read fStream write SetStream;
     /// global options to customize this TBaseWriter instance process
-    // - allows to override e.g. AddRecordJSON() and AddDynArrayJson() behavior
+    // - allows to override e.g. AddRecordJson() and AddDynArrayJson() behavior
     property CustomOptions: TTextWriterOptions
       read fCustomOptions write fCustomOptions;
     /// optional event called before FlushToStream method process
@@ -1196,7 +1196,7 @@ var
 /// - serialize as JSON the published integer, Int64, floating point values,
 // TDateTime (stored as ISO 8601 text), string, variant and enumerate
 // (e.g. boolean) properties of the object (and its parents)
-// - would set twoForceJSONStandard to force standard (non-extended) JSON
+// - would set twoForceJsonStandard to force standard (non-extended) JSON
 // - the enumerates properties are stored with their integer index value
 // - will write also the properties published in the parent classes
 // - nested properties are serialized as nested JSON objects
@@ -1229,7 +1229,7 @@ function HtmlEscapeString(const text: string;
 
 const
   /// JSON serialization options focusing of sets support
-  // - as used e.g. by TTextWriter.AddRecordJSON/AddDynArrayJson and
+  // - as used e.g. by TTextWriter.AddRecordJson/AddDynArrayJson and
   // TDynArray.SaveJson methods, and SaveJson/RecordSaveJson functions
   // - to be used as TEXTWRITEROPTIONS_TEXTSET[EnumSetsAsText]
   TEXTWRITEROPTIONS_SETASTEXT: array[boolean] of TTextWriterOptions = (
@@ -1749,7 +1749,7 @@ var
   // - is properly implemented by mormot.core.json.pas: if this unit is not
   // included in the project, this function is nil
   // - used by mormot.core.data.pas RTTI_BINARYLOAD[tkVariant]() for complex types
-  BinaryVariantLoadAsJson: procedure(var Value: variant; JSON: PUtf8Char;
+  BinaryVariantLoadAsJson: procedure(var Value: variant; Json: PUtf8Char;
     TryCustomVariant: pointer);
 
 
@@ -2347,59 +2347,59 @@ function IPToCardinal(const aIP: RawUtf8): cardinal; overload;
 // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {})
 // - this will be the format used for JSON encoding, e.g.
 // $ { "UID": "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633" }
-function GUIDToText(P: PUtf8Char; guid: PByteArray): PUtf8Char;
+function GuidToText(P: PUtf8Char; guid: PByteArray): PUtf8Char;
 
 /// convert a TGUID into UTF-8 encoded { text }
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - if you do not need the embracing { }, use ToUtf8() overloaded function
-function GUIDToRawUtf8(const guid: TGUID): RawUtf8;
+function GuidToRawUtf8(const guid: TGUID): RawUtf8;
 
 /// convert a TGUID into UTF-8 encoded text
 // - will return e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without the {})
-// - if you need the embracing { }, use GUIDToRawUtf8() function instead
+// - if you need the embracing { }, use GuidToRawUtf8() function instead
 function ToUtf8(const guid: TGUID): RawUtf8; overload;
 
 /// convert a TGUID into text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - this version is faster than the one supplied by SysUtils
-function GUIDToString(const guid: TGUID): string;
+function GuidToString(const guid: TGUID): string;
 
 type
-  /// stack-allocated ASCII string, used by GUIDToShort() function
-  TGUIDShortString = string[38];
+  /// stack-allocated ASCII string, used by GuidToShort() function
+  TGuidShortString = string[38];
 
 /// convert a TGUID into text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - using a shortstring will allow fast allocation on the stack, so is
 // preferred e.g. when providing a GUID to a ESynException.CreateUtf8()
-function GUIDToShort(const guid: TGUID): TGUIDShortString; overload;
+function GuidToShort(const guid: TGUID): TGuidShortString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a TGUID into text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - using a shortstring will allow fast allocation on the stack, so is
 // preferred e.g. when providing a GUID to a ESynException.CreateUtf8()
-procedure GUIDToShort(const
-  guid: TGUID; out dest: TGUIDShortString); overload;
+procedure GuidToShort(const
+  guid: TGUID; out dest: TGuidShortString); overload;
 
 /// convert some text into its TGUID binary value
 // - expect e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {})
 // - return nil if the supplied text buffer is not a valid TGUID
 // - this will be the format used for JSON encoding, e.g.
 // $ { "UID": "C9A646D3-9C61-4CB7-BFCD-EE2522C8F633" }
-function TextToGUID(P: PUtf8Char; guid: PByteArray): PUtf8Char;
+function TextToGuid(P: PUtf8Char; guid: PByteArray): PUtf8Char;
 
 /// convert some VCL text into a TGUID
 // - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - return {00000000-0000-0000-0000-000000000000} if the supplied text buffer
 // is not a valid TGUID
-function StringToGUID(const text: string): TGUID;
+function StringToGuid(const text: string): TGUID;
 
 /// convert some UTF-8 encoded text into a TGUID
 // - expect e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - return {00000000-0000-0000-0000-000000000000} if the supplied text buffer
 // is not a valid TGUID
-function RawUtf8ToGUID(const text: RawByteString): TGUID;
+function RawUtf8ToGuid(const text: RawByteString): TGUID;
 
 /// read a TStream content into a String
 // - it will read binary or text content from the current position until the
@@ -2911,7 +2911,8 @@ end;
 function GotoEndOfQuotedString(P: PUtf8Char): PUtf8Char;
 var
   quote: AnsiChar;
-begin // P^=" or P^=' at function call
+begin
+  // P^=" or P^=' at function call
   quote := P^;
   inc(P);
   repeat
@@ -3455,7 +3456,8 @@ begin
   DBeg := D;
   if (D <> nil) and
      (P <> nil) then
-  begin // avoid GPF
+  begin
+    // avoid GPF
     Space := D;
     SpaceBeg := D;
     repeat
@@ -3921,7 +3923,8 @@ var
   ValueLen, SepLen: cardinal;
   i: cardinal;
   P: PAnsiChar;
-begin // CsvOfValue('?',3)='?,?,?'
+begin
+  // CsvOfValue('?',3)='?,?,?'
   result := '';
   if Count = 0 then
     exit;
@@ -4676,8 +4679,8 @@ begin
     '%.AddTypedJson unimplemented: use TTextWriter', [self]);
 end;
 
-function TBaseWriter.{%H-}AddJsonReformat(JSON: PUtf8Char;
-  Format: TTextWriterJSONFormat; EndOfObject: PUtf8Char): PUtf8Char;
+function TBaseWriter.{%H-}AddJsonReformat(Json: PUtf8Char;
+  Format: TTextWriterJsonFormat; EndOfObject: PUtf8Char): PUtf8Char;
 begin
   raise ESynException.CreateUtf8(
     '%.AddJsonReformat unimplemented: use TTextWriter', [self]);
@@ -4843,7 +4846,7 @@ begin
   fTotalFileSize := fInitialStreamPosition + cardinal(length(text));
 end;
 
-procedure TBaseWriter.SetText(out result: RawUtf8; reformat: TTextWriterJSONFormat);
+procedure TBaseWriter.SetText(out result: RawUtf8; reformat: TTextWriterJsonFormat);
 var
   Len: cardinal;
 begin
@@ -5134,7 +5137,7 @@ begin
     B^ := QuotedChar;
     inc(B);
   end;
-  GUIDToText(B, pointer(Value));
+  GuidToText(B, pointer(Value));
   inc(B, 36);
   if QuotedChar <> #0 then
     B^ := QuotedChar
@@ -5254,7 +5257,8 @@ end;
 procedure TBaseWriter.AddMicroSec(MS: cardinal);
 var
   W: PWordArray;
-begin // in 00.000.000 TSynLog format
+begin
+  // in 00.000.000 TSynLog format
   if B >= BEnd then
     FlushToStream;
   B[3] := '.';
@@ -5307,7 +5311,8 @@ procedure EngineAppendUtf8(W: TBaseWriter; Engine: TSynAnsiConvert;
   P: PAnsiChar; Len: PtrInt);
 var
   tmp: TSynTempBuffer;
-begin // explicit conversion using a temporary buffer on stack
+begin
+  // explicit conversion using a temporary buffer on stack
   Len := Engine.AnsiBufferToUtf8(tmp.Init(Len * 3), P, Len) - PUtf8Char({%H-}tmp.buf);
   W.AddNoJsonEscape(tmp.buf, Len);
   tmp.Done;
@@ -5392,7 +5397,7 @@ begin
         inc(B);
       end
       else
-        inc(B, UTF16CharToUtf8(B + 1, WideChar));
+        inc(B, Utf16CharToUtf8(B + 1, WideChar));
     until false
   else
   begin
@@ -5412,7 +5417,7 @@ begin
         else
           break;
       end;
-      inc(B, UTF16CharToUtf8(B + 1, WideChar));
+      inc(B, Utf16CharToUtf8(B + 1, WideChar));
       if PtrUInt(WideChar) < PEnd then
         continue
       else
@@ -5427,7 +5432,7 @@ begin
     exit; // paranoid check
   if BEnd - B <= PropNameLen then
     FlushToStream;
-  if twoForceJSONExtended in CustomOptions then
+  if twoForceJsonExtended in CustomOptions then
   begin
     MoveSmall(PropName, B + 1, PropNameLen);
     inc(B, PropNameLen + 1);
@@ -5614,7 +5619,7 @@ begin
           inc(P);
         end;
     else // characters higher than #126 -> UTF-8 encode
-      inc(B, UTF16CharToUtf8(B + 1, P));
+      inc(B, Utf16CharToUtf8(B + 1, P));
     end;
   end;
 end;
@@ -5696,7 +5701,8 @@ end;
 procedure TBaseWriter.AddUnixTime(Value: PInt64; QuoteChar: AnsiChar);
 var
   DT: TDateTime;
-begin // inlined UnixTimeToDateTime()
+begin
+  // inlined UnixTimeToDateTime()
   DT := Value^ / SecsPerDay + UnixDateDelta;
   AddDateTime(@DT, 'T', QuoteChar, {withms=}false, {dateandtime=}true);
 end;
@@ -5705,7 +5711,8 @@ procedure TBaseWriter.AddUnixMSTime(Value: PInt64; WithMS: boolean;
   QuoteChar: AnsiChar);
 var
   DT: TDateTime;
-begin // inlined UnixMSTimeToDateTime()
+begin
+  // inlined UnixMSTimeToDateTime()
   DT := Value^ / MSecsPerDay + UnixDateDelta;
   AddDateTime(@DT, 'T', QuoteChar, WithMS, {dateandtime=}true);
 end;
@@ -6120,7 +6127,8 @@ begin
         #1..#8, #11, #12, #14..#31:
           ; // ignore invalid character - see http://www.w3.org/TR/xml/#NT-Char
         #9, #10, #13:
-          begin // characters below ' ', #9 e.g. -> // '&#x09;'
+          begin
+            // characters below ' ', #9 e.g. -> // '&#x09;'
             AddShorter('&#x');
             AddByteToHex(ord(Text[i]));
             Add(';');
@@ -6251,7 +6259,7 @@ begin
   else
     with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
     try
-      include(fCustomOptions, twoForceJSONStandard);
+      include(fCustomOptions, twoForceJsonStandard);
       WriteObject(Value, Options);
       SetText(result);
     finally
@@ -6631,7 +6639,8 @@ begin
       until false;
     end
     else if P^[0] = nil then
-    begin // '' should be in lowest P[] slot
+    begin
+      // '' should be in lowest P[] slot
       result := 0;
       exit;
     end;
@@ -6771,7 +6780,8 @@ begin
         end;
       until I > J;
       if J - L < R - I then
-      begin // use recursion only for smaller range
+      begin
+        // use recursion only for smaller range
         if L < J then
           Sort(L, J);
         L := I;
@@ -7076,7 +7086,8 @@ begin
       until P^ <> ' ';
   end;
   if P^ = '.' then
-  begin // '.5' -> 500
+  begin
+    // '.5' -> 500
     Dec := 2;
     inc(P);
   end
@@ -8796,7 +8807,8 @@ procedure VariantSaveJson(const Value: variant; Escape: TTextWriterKind;
   var result: RawUtf8);
 var
   temp: TTextWriterStackBuffer;
-begin // not very fast, but creates valid JSON
+begin
+  // not very fast, but creates valid JSON
   with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
   try
     AddVariant(Value, Escape); // may encounter TObjectVariant -> WriteObject
@@ -8886,11 +8898,14 @@ var
   v64: Int64;
   isString: boolean;
 label
-  smlu32;
+  smlu32, none;
 begin
   Res.TempRawUtf8 := nil; // avoid GPF
   case V.VType of
     vtString:
+      if V.VString = nil then
+        goto none
+      else
       begin
         Res.Text := @V.VString^[1];
         Res.Len := ord(V.VString^[0]);
@@ -8898,7 +8913,8 @@ begin
         exit;
       end;
     vtAnsiString:
-      begin // expect UTF-8 content
+      begin
+        // expect UTF-8 content
         Res.Text := pointer(V.VAnsiString);
         Res.Len := length(RawUtf8(V.VAnsiString));
         result := Res.Len;
@@ -8913,7 +8929,8 @@ begin
       RawUnicodeToUtf8(V.VPWideChar, length(WideString(V.VWideString)),
         RawUtf8(Res.TempRawUtf8));
     vtPChar:
-      begin // expect UTF-8 content
+      begin
+        // expect UTF-8 content
         Res.Text := V.VPointer;
         Res.Len := StrLen(V.VPointer);
         result := Res.Len;
@@ -9006,25 +9023,19 @@ smlu32:   Res.Text := pointer(SmallUInt32Utf8[result]);
       end;
     vtClass:
       begin
-        if V.VClass <> nil then
-        begin
-          Res.Text := PPUtf8Char(PtrInt(PtrUInt(V.VClass)) + vmtClassName)^ + 1;
-          Res.Len := ord(Res.Text[-1]);
-        end
-        else
-          Res.Len := 0;
+        if V.VClass = nil then
+          goto none;
+        Res.Text := PPUtf8Char(PtrInt(PtrUInt(V.VClass)) + vmtClassName)^ + 1;
+        Res.Len := ord(Res.Text[-1]);
         result := Res.Len;
         exit;
       end;
     vtObject:
       begin
-        if V.VObject <> nil then
-        begin
-          Res.Text := PPUtf8Char(PPtrInt(V.VObject)^ + vmtClassName)^ + 1;
-          Res.Len := ord(Res.Text[-1]);
-        end
-        else
-          Res.Len := 0;
+        if V.VObject = nil then
+          goto none;
+        Res.Text := PPUtf8Char(PPtrInt(V.VObject)^ + vmtClassName)^ + 1;
+        Res.Len := ord(Res.Text[-1]);
         result := Res.Len;
         exit;
       end;
@@ -9047,7 +9058,7 @@ smlu32:   Res.Text := pointer(SmallUInt32Utf8[result]);
         VariantToUtf8(V.VVariant^, RawUtf8(Res.TempRawUtf8), isString);
   else
     begin
-      Res.Len := 0;
+none: Res.Len := 0;
       result := 0;
       exit;
     end;
@@ -9060,13 +9071,18 @@ end;
 procedure VarRecToUtf8(const V: TVarRec; var result: RawUtf8; wasString: PBoolean);
 var
   isString: boolean;
+label
+  none;
 begin
   isString := not (V.VType in [vtBoolean, vtInteger, vtInt64
     {$ifdef FPC}, vtQWord{$endif}, vtCurrency, vtExtended]);
   with V do
     case V.VType of
       vtString:
-        FastSetString(result, @VString^[1], ord(VString^[0]));
+        if VString = nil then
+          goto none
+        else
+          FastSetString(result, @VString^[1], ord(VString^[0]));
       vtAnsiString:
         result := RawUtf8(VAnsiString); // expect UTF-8 content
       {$ifdef HASVARUSTRING}
@@ -9107,7 +9123,7 @@ begin
         if VClass <> nil then
           ClassToText(VClass, result)
         else
-          result := '';
+none:     result := '';
       vtObject:
         if VObject <> nil then
           ClassToText(PClass(VObject)^, result)
@@ -9118,7 +9134,7 @@ begin
         if VInterface <> nil then
           ClassToText((IInterface(VInterface) as TObject).ClassType, result)
         else
-          result := '';
+          goto none;
       {$else}
         PointerToHex(VInterface,result);
       {$endif HASINTERFACEASTOBJECT}
@@ -9253,7 +9269,8 @@ begin
     if Dest <> nil then
       repeat
         if PtrUInt(Dest) + PtrUInt(d^.Len) > Max then
-        begin // avoid buffer overflow
+        begin
+          // avoid buffer overflow
           {$ifdef HASINLINE}
           MoveSmall(d^.Text, Dest, Max - PtrUInt(Dest));
           {$else}
@@ -10350,10 +10367,11 @@ begin
   IPToCardinal(pointer(aIP), result);
 end;
 
-function GUIDToText(P: PUtf8Char; guid: PByteArray): PUtf8Char;
+function GuidToText(P: PUtf8Char; guid: PByteArray): PUtf8Char;
 var
-  i: integer;
-begin // encode as '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
+  i: PtrInt;
+begin
+  // encode as '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
   for i := 3 downto 0 do
   begin
     PWord(P)^ := TwoDigitsHexWB[guid[i]];
@@ -10382,42 +10400,42 @@ begin // encode as '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
   result := P;
 end;
 
-function GUIDToRawUtf8(const guid: TGUID): RawUtf8;
+function GuidToRawUtf8(const guid: TGUID): RawUtf8;
 var
   P: PUtf8Char;
 begin
   FastSetString(result, nil, 38);
   P := pointer(result);
   P^ := '{';
-  GUIDToText(P + 1, @guid)^ := '}';
+  GuidToText(P + 1, @guid)^ := '}';
 end;
 
 function ToUtf8(const guid: TGUID): RawUtf8;
 begin
   FastSetString(result, nil, 36);
-  GUIDToText(pointer(result), @guid);
+  GuidToText(pointer(result), @guid);
 end;
 
-function GUIDToShort(const guid: TGUID): TGUIDShortString;
+function GuidToShort(const guid: TGUID): TGuidShortString;
 begin
-  GUIDToShort(guid, result);
+  GuidToShort(guid, result);
 end;
 
-procedure GUIDToShort(const guid: TGUID; out dest: TGUIDShortString);
+procedure GuidToShort(const guid: TGUID; out dest: TGuidShortString);
 begin
   dest[0] := #38;
   dest[1] := '{';
   dest[38] := '}';
-  GUIDToText(@dest[2], @guid);
+  GuidToText(@dest[2], @guid);
 end;
 
 {$ifdef UNICODE}
-function GUIDToString(const guid: TGUID): string;
+function GuidToString(const guid: TGUID): string;
 var
   tmp: array[0..35] of AnsiChar;
   i: integer;
 begin
-  GUIDToText(tmp, @guid);
+  GuidToText(tmp, @guid);
   SetString(result, nil, 38);
   PWordArray(result)[0] := ord('{');
   for i := 1 to 36 do
@@ -10425,9 +10443,9 @@ begin
   PWordArray(result)[37] := ord('}');
 end;
 {$else}
-function GUIDToString(const guid: TGUID): string;
+function GuidToString(const guid: TGUID): string;
 begin
-  result := GUIDToRawUtf8(guid);
+  result := GuidToRawUtf8(guid);
 end;
 {$endif UNICODE}
 
@@ -10450,7 +10468,7 @@ begin
   result := false; // mark error
 end;
 
-function TextToGUID(P: PUtf8Char; guid: PByteArray): PUtf8Char;
+function TextToGuid(P: PUtf8Char; guid: PByteArray): PUtf8Char;
 var
   i: PtrInt;
 begin
@@ -10487,7 +10505,7 @@ begin
   result := P;
 end;
 
-function StringToGUID(const text: string): TGUID;
+function StringToGuid(const text: string): TGUID;
 {$ifdef UNICODE}
 var
   tmp: array[0..35] of byte;
@@ -10501,22 +10519,22 @@ begin
     {$ifdef UNICODE}
     for i := 0 to 35 do
       tmp[i] := PWordArray(text)[i + 1];
-    if TextToGUID(@tmp, @result) <> nil then
+    if TextToGuid(@tmp, @result) <> nil then
     {$else}
-    if TextToGUID(@text[2], @result) <> nil then
+    if TextToGuid(@text[2], @result) <> nil then
     {$endif UNICODE}
       exit; // conversion OK
   end;
   FillZero(PHash128(@result)^);
 end;
 
-function RawUtf8ToGUID(const text: RawByteString): TGUID;
+function RawUtf8ToGuid(const text: RawByteString): TGUID;
 begin
   // decode from '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}'
   if (length(text) <> 38) or
      (text[1] <> '{') or
      (text[38] <> '}') or
-     (TextToGUID(@text[2], @result) = nil) then
+     (TextToGuid(@text[2], @result) = nil) then
    FillZero(PHash128(@result)^);
 end;
 
@@ -10600,12 +10618,12 @@ begin
     TwoDigitsHexLower[i][2] := HexCharsLower[i and $f];
   end;
   {$ifndef EXTENDEDTOSHORT_USESTR}
-    {$ifdef ISDELPHIXE}
-    SettingsUS := TFormatSettings.Create($0409);
-    {$else}
-    GetLocaleFormatSettings($0409, SettingsUS);
-    {$endif ISDELPHIXE}
-    SettingsUS.DecimalSeparator := '.'; // value may have been overriden :(
+  {$ifdef ISDELPHIXE}
+  SettingsUS := TFormatSettings.Create($0409);
+  {$else}
+  GetLocaleFormatSettings($0409, SettingsUS);
+  {$endif ISDELPHIXE}
+  SettingsUS.DecimalSeparator := '.'; // value may have been overriden :(
   {$endif EXTENDEDTOSHORT_USESTR}
   {$ifdef DOUBLETOSHORT_USEGRISU}
   MoveFast(TwoDigitLookup[0], TwoDigitByteLookupW[0], SizeOf(TwoDigitLookup));

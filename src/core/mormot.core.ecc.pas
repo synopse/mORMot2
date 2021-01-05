@@ -1755,7 +1755,8 @@ begin
     begin
       dec := AlgoSynLZ.Compress(content);
       if length(dec) > length(content) then
-      begin // SynLZ was inefficient
+      begin
+        // SynLZ was inefficient -> just store, don't compress
         FillZero(dec);
         dec := content;
         Algo := ECIES_NOSYNLZ[Algo];

@@ -1465,7 +1465,8 @@ begin
       QuickSortRawUtf8(masks, length(masks), nil,
         {$ifdef MSWINDOWS} @StrIComp {$else} @StrComp {$endif});
     for m := 0 to length(masks) - 1 do
-    begin // masks[] recursion
+    begin
+      // masks[] recursion
       masked := FindFiles(Directory, Utf8ToString(masks[m]), IgnoreFileName,
         SortByName, IncludesDir, SubFolder);
       da.AddArray(masked);
@@ -1964,7 +1965,8 @@ begin
           end;
         end
         else
-        begin // '?'
+        begin
+          // '?'
           if aText <= txtend then
           begin
             inc(pat);
@@ -1973,7 +1975,8 @@ begin
           end;
         end
       else
-      begin // '*'
+      begin
+        // '*'
         inc(pat);
         txtretry := aText + 1;
         patretry := pat;
@@ -2223,7 +2226,8 @@ end;
 
 function CompareMemU(P1, P2: PUtf8Char; len: PtrInt; U: PNormTable): boolean;
   {$ifdef FPC} inline;{$endif}
-begin // here we know that len>0
+begin
+  // here we know that len>0
   result := false;
   repeat
     dec(len);
@@ -2285,7 +2289,8 @@ end;
 
 {$ifdef CPU64}
 function SearchContains8(aMatch: PMatch; aText: PUtf8Char; aTextLen: PtrInt): boolean;
-begin // optimized e.g. to search an IP address as '*12.34.56.78*' in logs
+begin
+  // optimized e.g. to search an IP address as '*12.34.56.78*' in logs
   dec(aTextLen, aMatch.PMax);
   if aTextLen > 0 then
     result := SimpleContains8(aText, aText + aTextLen, aMatch.Pattern, aMatch.PMax)
@@ -3389,7 +3394,8 @@ function TParserAbstract.Execute: boolean;
 var
   n: TExprNode;
   st: PBoolean;
-begin // code below compiles very efficiently on FPC/x86-64
+begin
+  // code below compiles very efficiently on FPC/x86-64
   st := @fFoundStack;
   n := fFirstNode;
   repeat
@@ -4220,7 +4226,8 @@ end;
 {$endif CPUINTEL}
 
 function hash32prime(buf: pointer): cardinal;
-begin // xxhash32-inspired - and won't pollute L1 cache with lookup tables
+begin
+  // xxhash32-inspired - and won't pollute L1 cache with lookup tables
   result := PCardinal(buf)^;
   result := result xor (result shr 15);
   result := result * 2246822519;
@@ -4296,7 +4303,8 @@ begin
       // hash 4 next bytes from NewBuf, and find longest match in OldBuf
       ofs := PCardinal(@HTab^[hash(NewBuf) and HTabMask])^ and HListMask;
       if ofs <> HListMask then
-      begin // brute force search loop of best hash match
+      begin
+        // brute force search loop of best hash match
         curlevel := MaxLevel;
         repeat
           with PHash128Rec(OldBuf + ofs)^ do
@@ -4486,7 +4494,8 @@ begin
   end;
   NewSizeSave := NewSize;
   if OldSize = 0 then
-  begin // Delta from nothing -> direct copy of whole block
+  begin
+    // Delta from nothing -> direct copy of whole block
     CreateCopied;
     exit;
   end;

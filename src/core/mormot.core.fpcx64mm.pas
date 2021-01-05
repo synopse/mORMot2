@@ -961,7 +961,8 @@ var
 begin
   header := pointer(PByte(p) - LargeBlockHeaderSize);
   if header.BlockSizeAndFlags and IsFreeBlockFlag <> 0 then
-  begin // try to duplicate the same pointer twice
+  begin
+    // try to duplicate the same pointer twice
     result := 0;
     exit;
   end;
@@ -2224,7 +2225,8 @@ begin
         end;
       until I > J;
       if J - L < R - I then
-      begin // use recursion only for smaller range
+      begin
+        // use recursion only for smaller range
         if L < J then
           QuickSortRes(Res, L, J, Level);
         L := I;

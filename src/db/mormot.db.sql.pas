@@ -756,7 +756,7 @@ type
     // - similar to corresponding TSqlRequest.Execute method in the
     // mormot.db.raw.sqlite3 unit
     // - returns the number of row data returned (excluding field names)
-    function FetchAllToJson(JSON: TStream; Expanded: boolean): PtrInt;
+    function FetchAllToJson(Json: TStream; Expanded: boolean): PtrInt;
     /// append all rows content as binary stream
     // - will save the column types and name, then every data row in optimized
     // binary format (faster and smaller than JSON)
@@ -932,7 +932,7 @@ type
     // & { "FieldCount":1,"Values":["col1","col2",val11,"val12",val21,..] }
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
-    procedure ExecutePreparedAndFetchAllAsJson(Expanded: boolean; out JSON: RawUtf8);
+    procedure ExecutePreparedAndFetchAllAsJson(Expanded: boolean; out Json: RawUtf8);
     function GetForceBlobAsNull: boolean;
     procedure SetForceBlobAsNull(value: boolean);
     /// if set, any BLOB field won't be retrieved, and forced to be null
@@ -2093,7 +2093,7 @@ type
     // format and contains true BLOB data
     // - this virtual implementation calls ExecutePrepared then FetchAllAsJson()
     procedure ExecutePreparedAndFetchAllAsJson(Expanded: boolean;
-      out JSON: RawUtf8); virtual;
+      out Json: RawUtf8); virtual;
     /// gets a number of updates made by latest executed statement
     // - default implementation returns 0
     function UpdateCount: integer; virtual;
@@ -2301,7 +2301,7 @@ type
     // - returns the number of row data returned (excluding field names)
     // - warning: TRestStorageExternal.EngineRetrieve in mormot.orm.sql unit
     // expects the Expanded=true format to return '[{...}]'#10
-    function FetchAllToJson(JSON: TStream; Expanded: boolean): PtrInt;
+    function FetchAllToJson(Json: TStream; Expanded: boolean): PtrInt;
     // Append all rows content as a Csv stream
     // - Csv data is added to the supplied TStream, with UTF-8 encoding
     // - if Tab=TRUE, will use TAB instead of ',' between columns
@@ -2923,7 +2923,8 @@ begin
       inc(L, vl);
       s := pointer(v^);
       if s^ = '''' then
-      begin // quoted ftUtf8
+      begin
+        // quoted ftUtf8
         dec(vl, 2);
         if vl > 0 then
           repeat
@@ -3103,13 +3104,15 @@ begin
       dSQlite, dMySQL, dPostgreSQL, dNexusDB, dMSSQL, dDB2, // INSERT with multi VALUES
       //dFirebird,  EXECUTE BLOCK with params is slower (at least for embedded)
       dOracle:
-        begin // Oracle expects weird INSERT ALL INTO ... statement
+        begin
+          // Oracle expects weird INSERT ALL INTO ... statement
           fBatchSendingAbilities := [cCreate];
           fOnBatchInsert := MultipleValuesInsert;
           fBatchMaxSentAtOnce := 4096; // MultipleValuesInsert will do chunking
         end;
       dFirebird:
-        begin // will run EXECUTE BLOCK without parameters
+        begin
+          // will run EXECUTE BLOCK without parameters
           fBatchSendingAbilities := [cCreate];
           fOnBatchInsert := MultipleValuesInsertFirebird;
           fBatchMaxSentAtOnce := 4096; // MultipleValuesInsert will do chunking
@@ -3375,7 +3378,8 @@ end;
 function TSqlDBConnectionProperties.IsCachable(P: PUtf8Char): boolean;
 var
   NoWhere: boolean;
-begin // cachable if with ? parameter or SELECT without WHERE clause
+begin
+  // cachable if with ? parameter or SELECT without WHERE clause
   if (P <> nil) and
      fUseCache then
   begin
@@ -3390,7 +3394,8 @@ begin // cachable if with ? parameter or SELECT without WHERE clause
       while P^ <> #0 do
       begin
         if P^ = '"' then
-        begin // ignore chars within quotes
+        begin
+          // ignore chars within quotes
           repeat
             inc(P)
           until P^ in [#0, '"'];
@@ -3431,7 +3436,8 @@ end;
 
 class function TSqlDBConnectionProperties.GetFieldORMDefinition(const Column:
   TSqlDBColumnDefine): RawUtf8;
-begin // 'Name: RawUtf8 index 20 read fName write fName;';
+begin
+  // 'Name: RawUtf8 index 20 read fName write fName;';
   with Column do
   begin
     FormatUtf8('property %: %',
@@ -3663,7 +3669,8 @@ begin
   FA.Compare := SortDynArrayAnsiStringI; // FA.Find() case insensitive
   FillCharFast(F, sizeof(F), 0);
   if fDbms = dSQLite then
-  begin // SQLite3 has a specific PRAGMA metadata query
+  begin
+    // SQLite3 has a specific PRAGMA metadata query
     try
       with Execute('PRAGMA table_info(`' + aTableName + '`)', []) do
         while Step do
@@ -3911,14 +3918,17 @@ begin
     dSQLite:
       ProcName := aProcName;
     dOracle, dFirebird:
-      begin // Firebird 3 has packages
+      begin
+        // Firebird 3 has packages
         if lOccur = 2 then
-        begin // OWNER.PACKAGE.PROCNAME
+        begin
+          // OWNER.PACKAGE.PROCNAME
           Split(aProcName, '.', Owner, package);
           Split(package, '.', package, ProcName);
         end
         else
-        begin // PACKAGE.PROCNAME
+        begin
+          // PACKAGE.PROCNAME
           Split(aProcName, '.', package, ProcName);
           Owner := UserID;
         end;
@@ -4102,7 +4112,8 @@ begin
         exit;
       end;
     dNexusDB:
-      begin // NOT TESTED !!!
+      begin
+        // NOT TESTED !!!
         result :=
           'select PROCEDURE_ARGUMENT_NAME, PROCEDURE_ARGUMENT_TYPE, PROCEDURE_ARGUMENT_UNITS,' +
           ' PROCEDURE_ARGUMENT_UNITS, PROCEDURE_ARGUMENT_DECIMALS, PROCEDURE_ARGUMENT_KIND,' +
@@ -4136,7 +4147,8 @@ begin
         'from RDB$PROCEDURES P ' + 'where P.RDB$OWNER_NAME = ''%'' ' +
         'order by NAME_ROUTINE';
     dNexusDB:
-      begin // NOT TESTED !!!
+      begin
+        // NOT TESTED !!!
         result := 'select P.PROCEDURE_NAME NAME_ROUTINE ' +
           'from #PROCEDURES P ' + 'order by NAME_ROUTINE';
         exit;
@@ -4396,7 +4408,8 @@ var
   F: RawUtf8;
   FieldID: TSqlDBColumnCreate;
   AddPrimaryKey: RawUtf8;
-begin // use 'ID' instead of 'RowID' here since some DB (e.g. Oracle) use it
+begin
+  // use 'ID' instead of 'RowID' here since some DB (e.g. Oracle) use it
   result := '';
   if high(aFields) < 0 then
     exit; // nothing to create
@@ -4568,7 +4581,8 @@ function TSqlDBConnectionProperties.ExceptionIsAboutConnection(
   aClass: ExceptClass; const aMessage: RawUtf8): boolean;
 
   function PosErrorNumber(const aMessage: RawUtf8; aSepChar: AnsiChar): PUtf8Char;
-  begin // search aSepChar followed by a number
+  begin
+    // search aSepChar followed by a number
     result := pointer(aMessage);
     repeat
       result := PosChar(result, aSepChar);
@@ -4578,7 +4592,8 @@ function TSqlDBConnectionProperties.ExceptionIsAboutConnection(
     until result^ in ['0'..'9'];
   end;
 
-begin // see more complete list in feature request [f024266c0839]
+begin
+  // see more complete list in feature request [f024266c0839]
   case fDbms of
     dOracle:
       result := IdemPCharArray(PosErrorNumber(aMessage, '-'), ['00028', '01012',
@@ -4691,7 +4706,8 @@ var
             sqlcached := false; // ftUtf8 values will have varying field length
           end;
         dOracle:
-          begin // INSERT ALL INTO ... VALUES ... SELECT 1 FROM DUAL
+          begin
+            // INSERT ALL INTO ... VALUES ... SELECT 1 FROM DUAL
             AddShort('insert all'#10); // see http://stackoverflow.com/a/93724
             for r := 1 to rowcount do
             begin
@@ -4714,7 +4730,8 @@ var
             sqlcached := true;
           end;
       else
-        begin //  e.g. NexusDB/SQlite3/MySQL/PostgreSQL/MSSQL2008/DB2/INFORMIX
+        begin
+          //  e.g. NexusDB/SQlite3/MySQL/PostgreSQL/MSSQL2008/DB2/INFORMIX
           AddShort('INSERT INTO '); // INSERT .. VALUES (..),(..),(..),..
           AddString(TableName);
           Add(' ', '(');
@@ -4776,7 +4793,8 @@ begin
     dNexusDB:
       paramCountLimit := 100;  // empirical limit (above is slower)
     dFirebird:
-      begin // compute from max sql statement size of 32KB
+      begin
+        // compute from max sql statement size of 32KB
         sqllen := maxf * 48; // worse case (with BLOB param)
         for f := 0 to maxf - 1 do
           inc(sqllen, Length(FieldNames[f]));
@@ -4861,7 +4879,8 @@ begin
   for f := 0 to maxf do
     case FieldTypes[f] of
       ftBlob:
-        begin // not possible to inline BLOBs -> fallback to regular
+        begin
+          // not possible to inline BLOBs -> fallback to regular
           MultipleValuesInsert(Props, TableName, FieldNames, FieldTypes,
             RowCount, FieldValues);
           exit;
@@ -4905,7 +4924,8 @@ begin
             begin
               W.AddShort('timestamp ');
               if length(v) > 12 then
-              begin // not 'CCYY-MM-DD' -> fix needed?
+              begin
+                // not 'CCYY-MM-DD' -> fix needed?
                 if v[12] = 'T' then // handle 'CCYY-MM-DDTHH:MM:SS' common case
                   v[12] := ' '
                 else
@@ -5695,14 +5715,14 @@ begin
   end;
 end;
 
-function TSqlDBStatement.FetchAllToJson(JSON: TStream; Expanded: boolean): PtrInt;
+function TSqlDBStatement.FetchAllToJson(Json: TStream; Expanded: boolean): PtrInt;
 var
   W: TJsonWriter;
   col: integer;
   tmp: TTextWriterStackBuffer;
 begin
   result := 0;
-  W := TJsonWriter.Create(JSON, Expanded, false, nil, 0, @tmp);
+  W := TJsonWriter.Create(Json, Expanded, false, nil, 0, @tmp);
   try
     Connection.InternalProcess(speActive);
     // get col names and types
@@ -5873,7 +5893,8 @@ begin
     begin
       ft := ColTypes[F];
       if ft < ftInt64 then
-      begin // ftUnknown,ftNull
+      begin
+        // ftUnknown,ftNull
         ft := ColumnType(F); // per-row column type (SQLite3 only)
         W.Write1(ord(ft));
       end;
@@ -6014,10 +6035,10 @@ begin
 end;
 
 procedure TSqlDBStatement.ExecutePreparedAndFetchAllAsJson(Expanded: boolean;
-  out JSON: RawUtf8);
+  out Json: RawUtf8);
 begin
   ExecutePrepared;
-  JSON := FetchAllAsJson(Expanded);
+  Json := FetchAllAsJson(Expanded);
 end;
 
 function TSqlDBStatement.ColumnString(Col: integer): string;
@@ -6702,13 +6723,15 @@ begin
     begin
       Stmt := fCache.Objects[ndx];
       if Stmt.RefCount = 1 then
-      begin // ensure statement is not currently in use
+      begin
+        // ensure statement is not currently in use
         result := Stmt; // acquire the statement
         Stmt.Reset;
         exit;
       end
       else
-      begin // in use -> create cached alternatives
+      begin
+        // in use -> create cached alternatives
         ToCache := false; // if all slots are used, won't cache this statement
         if fProperties.StatementCacheReplicates = 0 then
           SynDBLog.Add.Log(sllWarning,
@@ -6900,7 +6923,8 @@ var
   id: TThreadID;
   tix: Int64;
   conn: TSqlDBConnectionThreadSafe;
-begin // caller made fConnectionPool.Safe.Lock
+begin
+  // caller made fConnectionPool.Safe.Lock
   if self <> nil then
   begin
     id := GetCurrentThreadId;
@@ -6947,7 +6971,8 @@ begin
   try
     i := CurrentThreadConnectionIndex;
     if i >= 0 then
-    begin // do nothing if this thread has no active connection
+    begin
+      // do nothing if this thread has no active connection
       fConnectionPool.Delete(i); // release thread's TSqlDBConnection instance
       if i = fLatestConnectionRetrievedInPool then
         fLatestConnectionRetrievedInPool := -1;

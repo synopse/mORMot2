@@ -773,7 +773,8 @@ begin
       exit;
     if pseError in notif.events then
       if not OnError(connection, notif.events) then
-      begin // false = shutdown
+      begin
+        // false = shutdown
         CloseConnection({withinlock=}false);
         exit;
       end;
@@ -876,7 +877,8 @@ begin
         delete(slot.writebuf, 1, sent);
       end;
       if slot.writebuf = '' then
-      begin // no data any more to be sent
+      begin
+        // no data any more to be sent
         fWrite.Unsubscribe(slot.socket, notif.tag);
         try
           AfterWrite(connection);
@@ -913,7 +915,8 @@ begin
 end;
 
 procedure TAsynchConnection.AfterWrite(Sender: TAsynchConnections);
-begin // do nothing
+begin
+  // do nothing
 end;
 
 procedure TAsynchConnection.BeforeDestroy(Sender: TAsynchConnections);
@@ -1056,7 +1059,8 @@ end;
 { TAsynchConnections }
 
 function TAsynchConnectionCompareByHandle(const A, B): integer;
-begin // for fast binary search from the connection handle
+begin
+  // for fast binary search from the connection handle
   result := TAsynchConnection(A).Handle - TAsynchConnection(B).Handle;
 end;
 
@@ -1132,7 +1136,8 @@ end;
 
 function TAsynchConnections.ConnectionCreate(aSocket: TNetSocket;
   const aRemoteIp: RawUtf8; out aConnection: TAsynchConnection): boolean;
-begin // you can override this class then call ConnectionAdd
+begin
+  // you can override this class then call ConnectionAdd
   if Terminated then
     result := false
   else
@@ -1169,7 +1174,8 @@ function TAsynchConnections.ConnectionDelete(aConnection: TAsynchConnection;
 var
   t: TClass;
   h: TAsynchConnectionHandle;
-begin // caller should have done fConnectionLock.Lock
+begin
+  // caller should have done fConnectionLock.Lock
   try
     h := aConnection.Handle;
     t := aConnection.ClassType;
@@ -1187,7 +1193,8 @@ function TAsynchConnections.ConnectionDelete(aHandle: TAsynchConnectionHandle): 
 var
   i: integer;
   conn: TAsynchConnection;
-begin // don't call fClients.Stop() here - see ConnectionRemove()
+begin
+  // don't call fClients.Stop() here - see ConnectionRemove()
   result := false;
   if Terminated or
      (aHandle <= 0) then

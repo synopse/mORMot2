@@ -381,7 +381,8 @@ function GetTickCount64ForXP: Int64; stdcall;
 var
   t32: cardinal;
   p: PQWordRec;
-begin // warning: GetSystemTimeAsFileTime() is fast, but not monotonic!
+begin
+  // warning: GetSystemTimeAsFileTime() is fast, but not monotonic!
   t32 := Windows.GetTickCount; // we only have the 32-bit counter
   p := @LastTickXP;
   if t32 < p^.L then
@@ -1054,7 +1055,8 @@ begin
   drives := GetLogicalDrives;
   m := 1 shl 2;
   for drive := 3 to 26 do
-  begin // retrieve partitions mounted as C..Z drives
+  begin
+    // retrieve partitions mounted as C..Z drives
     if drives and m <> 0 then
     begin
       fn[1] := char(64 + drive);
@@ -1840,7 +1842,7 @@ begin
     exit;
   Include(aInfo.AvailableInfo, wpaiPID);
   aInfo.PID := aPid;
-  buf.InitZero(1024);
+  buf.InitZero(0); // 0 to initialize the whole buf.tmp[] stack buffer to zero
   try
     sizeneeded := 0;
     if NtQueryInformationProcess(prochandle,
@@ -2965,7 +2967,8 @@ begin
   if Vers >= wVista then
   begin
     if OSVersionInfo.wProductType <> VER_NT_WORKSTATION then
-    begin // Server edition
+    begin
+      // Server edition
       inc(Vers, 2); // e.g. wEight -> wServer2012
       if (Vers = wServer2016) and
          (OSVersionInfo.dwBuildNumber >= 17763) then

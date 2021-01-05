@@ -948,9 +948,10 @@ type
     // ! end; // here log will be released, and method leaving will be logged
     // otherwise, the ISynLog instance would be released just after the Enter()
     // call, so the timing won't match the method execution
-    // - it is convenient to define a local variable to store the returned ISynLog
-    // and use it for any specific logging within the method execution
-    // - on Delphi earlier to 10.4 (and not FPC), you could just call Enter()
+    // - as a benefit, it is convenient to define a local variable to store
+    // the returned ISynLog and use it for any specific logging within
+    // the method execution
+    // - on Delphi earlier than 10.4 (and not FPC), you could just call Enter()
     // inside the method block, without any ISynLog interface variable - but
     // it is not very future-proof to write the following code:
     // ! procedure TMyDB.SQLFlush;
@@ -1679,7 +1680,8 @@ begin
       inc(Up);
       if (Up^ = ' ') and
          (P^ in [#1..' ']) then
-      begin // ignore multiple spaces in P^
+      begin
+        // ignore multiple spaces in P^
         while (P < PEnd) and
               (P^ in [#1..' ']) do
           inc(P);
@@ -1946,7 +1948,8 @@ constructor TSynMapFile.Create(const aExeName: TFileName = ''; MabCreate: boolea
     i, s, u: integer;
     RehashNeeded: boolean;
     mapcontent: RawUtf8;
-  begin // LoadMap
+  begin
+    // LoadMap
     fSymbols.Capacity := 8000;
     mapcontent := StringFromFile(fMapFile);
     // parse .map sections into fSymbol[] and fUnit[]
@@ -4105,7 +4108,8 @@ begin
       with fThreadContexts[i] do
         if (PtrUInt(ID) <> 0) and
            (ThreadName <> '') then
-        begin // see TSynLog.LogThreadName
+        begin
+          // see TSynLog.LogThreadName
           LogCurrentTime;
           fWriter.AddInt18ToChars3(i + 1);
           fWriter.AddShorter(LOG_LEVEL_TEXT[sllInfo]);
@@ -4310,7 +4314,7 @@ begin
   begin
     fWriter := fWriterClass.Create(fWriterStream, fFamily.BufferSize);
     fWriter.CustomOptions := fWriter.CustomOptions +
-      [twoEnumSetsAsTextInRecord, twoFullSetsAsStar, twoForceJSONExtended];
+      [twoEnumSetsAsTextInRecord, twoFullSetsAsStar, twoForceJsonExtended];
     fWriterEcho := TEchoWriter.Create(fWriter);
   end;
   fWriterEcho.EndOfLineCRLF := fFamily.EndOfLineCRLF;
@@ -4374,7 +4378,8 @@ begin
         if aLevel <> sllNone then
         begin
           if not fFamily.HighResolutionTimestamp then
-          begin // no previous TSynLog.LogCurrentTime call
+          begin
+            // no previous TSynLog.LogCurrentTime call
             QueryPerformanceMicroSeconds(fCurrentTimestamp);
             dec(fCurrentTimestamp, fStartTimestamp);
           end;
@@ -4667,7 +4672,8 @@ adr:with log.fWriter do
     // warning: BackTraceStrFunc is much slower than TSynMapFile.Log
     with log.fWriter do
       if @BackTraceStrFunc = @SysBackTraceStr then
-      begin // no debug information
+      begin
+        // no debug information
         AddPointer(Ctxt.EAddr); // write addresses as hexa
         for i := 0 to Ctxt.EStackCount - 1 do
           if (i = 0) or
@@ -4847,7 +4853,7 @@ begin
           fGlobalLog.LogThreadName(name); // try to put the full name in log
   finally
     LeaveCriticalSection(GlobalThreadLock);
-    CurrentThreadName := n; // low-level short name
+    CurrentThreadName := n; // low-level short name will be used from now
   end;
 end;
 
@@ -5282,7 +5288,8 @@ begin
     // 3. compute fCount and fLines[] so that all fLevels[]<>sllNone
     CleanLevels;
     if Length(fLevels) - fCount > 16384 then
-    begin // size down only if worth it
+    begin
+      // size down only if worth it
       SetLength(fLevels, fCount);
       if fThreads <> nil then
       begin
@@ -5294,7 +5301,8 @@ begin
     SetLength(fLogProcNatural, fLogProcNaturalCount);
     for i := 0 to fLogProcNaturalCount - 1 do
       if fLogProcNatural[i].Time >= 99000000 then
-      begin // 99.xxx.xxx means over range -> compute
+      begin
+        // 99.xxx.xxx means over range -> compute
         Level := 0;
         j := fLogProcNatural[i].index;
         repeat
@@ -5453,7 +5461,8 @@ begin
         end;
       until I > J;
       if J - L < R - I then
-      begin // use recursion only for smaller range
+      begin
+        // use recursion only for smaller range
         if L < J then
           LogProcSortInternal(L, J);
         L := I;
@@ -5471,7 +5480,8 @@ function DecodeMicroSec(P: PByte): integer;
 var
   B: integer;
   tab: PByteArray;
-begin // fast decode 00.020.006 at the end of the line
+begin
+  // fast decode 00.020.006 at the end of the line
   tab := @ConvertHexToBin;
   B := tab[P^];   // 00
   if B > 9 then
@@ -5604,7 +5614,8 @@ begin
     if (L = sllInfo) and
        IdemPChar(LineBeg + fLineLevelOffset + 5, 'SETTHREADNAME ') then
       with fThreadInfo[thread] do
-      begin // see TSynLog.LogThreadName
+      begin
+        // see TSynLog.LogThreadName
         n := length(SetThreadName);
         SetLength(SetThreadName, n + 1);
         SetThreadName[n] := LineBeg;
@@ -5632,7 +5643,8 @@ begin
          (LineEnd[-4] = '.') and
          (LineEnd[-8] = '.') and
          (fLogProcStackCount[thread] > 0) then
-      begin // 00.020.006
+      begin
+        // 00.020.006
         MS := DecodeMicroSec(PByte(LineEnd - 10));
         if MS >= 0 then
         begin
@@ -5948,7 +5960,8 @@ begin
      (aPattern = '') then
     exit;
   if fLevels = nil then
-  begin // plain text search
+  begin
+    // plain text search
     // search from next item
     for result := aRow + aDelta to fCount - 1 do
       if LineContains(aPattern, result) then

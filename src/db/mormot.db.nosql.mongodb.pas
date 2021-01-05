@@ -179,9 +179,9 @@ type
     // - this overridden version will adjust the size in the message header
     procedure ToBsonDocument(var result: TBsonDocument); override;
     /// write the main parameters of the request as JSON
-    procedure ToJson(W: TTextWriter; Mode: TMongoJSONMode); overload; virtual;
+    procedure ToJson(W: TTextWriter; Mode: TMongoJsonMode); overload; virtual;
     /// write the main parameters of the request as JSON
-    function ToJson(Mode: TMongoJSONMode): RawUtf8; overload;
+    function ToJson(Mode: TMongoJsonMode): RawUtf8; overload;
     /// identify the message, after call to any reintroduced Create() constructor
     property MongoRequestID: integer
       read fRequestID;
@@ -227,7 +227,7 @@ type
       const Selector, Update: variant;
       Flags: TMongoUpdateFlags = []); reintroduce;
     /// write the main parameters of the request as JSON
-    procedure ToJson(W: TTextWriter; Mode: TMongoJSONMode); override;
+    procedure ToJson(W: TTextWriter; Mode: TMongoJsonMode); override;
   end;
 
   /// a MongoDB client message to insert one or more documents in a collection
@@ -282,7 +282,7 @@ type
       const Selector: variant;
       Flags: TMongoDeleteFlags = []); reintroduce;
     /// write the main parameters of the request as JSON
-    procedure ToJson(W: TTextWriter; Mode: TMongoJSONMode); override;
+    procedure ToJson(W: TTextWriter; Mode: TMongoJsonMode); override;
   end;
 
   /// a MongoDB client message to query one or more documents in a collection
@@ -320,7 +320,7 @@ type
       const Query, ReturnFieldsSelector: variant; NumberToReturn: integer;
       NumberToSkip: integer = 0; Flags: TMongoQueryFlags = []); reintroduce;
     /// write the main parameters of the request as JSON
-    procedure ToJson(W: TTextWriter; Mode: TMongoJSONMode); override;
+    procedure ToJson(W: TTextWriter; Mode: TMongoJsonMode); override;
     /// retrieve the NumberToReturn parameter as set to the constructor
     property NumberToReturn: integer
       read fNumberToReturn;
@@ -359,7 +359,7 @@ type
     constructor Create(const FullCollectionName: RawUtf8;
       const CursorIDs: array of Int64); reintroduce;
     /// write the main parameters of the request as JSON
-    procedure ToJson(W: TTextWriter; Mode: TMongoJSONMode); override;
+    procedure ToJson(W: TTextWriter; Mode: TMongoJsonMode); override;
   end;
 
 
@@ -478,7 +478,7 @@ type
     // ! ...
     // !   Reply.Init(ResponseMessage);
     // !   while Reply.Next(doc) do
-    // !     writeln(BSONToJson(doc,0,modMongoShell)); // fast display
+    // !     writeln(BsonToJson(doc,0,modMongoShell)); // fast display
     function Next(out doc: PByte): boolean; overload;
     /// retrieve the next document in the list, as a BSON binary document
     // - return TRUE if the supplied document has been retrieved - then doc
@@ -493,7 +493,7 @@ type
     // ! ...
     // !   Reply.Init(ResponseMessage);
     // !   while Reply.Next(doc) do
-    // !     writeln(BSONToJson(doc,0,modMongoShell)); // fast display
+    // !     writeln(BsonToJson(doc,0,modMongoShell)); // fast display
     function Next(out BSON: TBsonDocument): boolean; overload;
     /// retrieve the next document in the list, as JSON content
     // - return TRUE if the supplied document has been retrieved
@@ -506,8 +506,8 @@ type
     // !   Reply.Init(ResponseMessage);
     // !   while Reply.Next(json,modMongoShell) do
     // !     writeln(json); // fast display
-    function Next(out JSON: RawUtf8;
-      Mode: TMongoJSONMode = modMongoStrict): boolean; overload;
+    function Next(out Json: RawUtf8;
+      Mode: TMongoJsonMode = modMongoStrict): boolean; overload;
     /// let Next() overloaded methods point to the first document of this message
     procedure Rewind;
 
@@ -530,13 +530,13 @@ type
     // - this method is very optimized and will convert the BSON binary content
     // directly into JSON
     procedure FetchAllToJson(W: TTextWriter;
-      Mode: TMongoJSONMode = modMongoStrict; WithHeader: boolean = false;
+      Mode: TMongoJsonMode = modMongoStrict; WithHeader: boolean = false;
       MaxSize: cardinal = 0);
     /// return all documents content as a JSON array, or one JSON object
     // if there is only one document in this reply
     // - this method is very optimized and will convert the BSON binary content
     // directly into JSON
-    function ToJson(Mode: TMongoJSONMode = modMongoStrict;
+    function ToJson(Mode: TMongoJsonMode = modMongoStrict;
       WithHeader: boolean = false; MaxSize: cardinal = 0): RawUtf8;
     /// append all documents content to a dynamic array of TDocVariant
     // - return the new size of the Dest[] array
@@ -732,7 +732,7 @@ type
     // - if Query.NumberToReturn=1, it will return either 'null' or a single
     // '{...}' JSON object
     // - the supplied Query instance will be released when not needed any more
-    function GetJsonAndFree(Query: TMongoRequestQuery; Mode: TMongoJSONMode): RawUtf8;
+    function GetJsonAndFree(Query: TMongoRequestQuery; Mode: TMongoJsonMode): RawUtf8;
 
     /// send a message to the MongoDB server
     // - will apply Client.WriteConcern policy, and run an EMongoException
@@ -1106,7 +1106,7 @@ type
     fDatabase: TMongoDatabase;
     fName: RawUtf8;
     fFullCollectionName: RawUtf8;
-    function AggregateCallFromJson(const pipelineJSON: RawUtf8;
+    function AggregateCallFromJson(const pipelineJson: RawUtf8;
       var reply, res: variant): boolean; overload;
     function AggregateCallFromVariant(const pipelineArray: variant;
       var reply, res: variant): boolean; overload;
@@ -1223,7 +1223,7 @@ type
     function FindJson(const Criteria, Projection: Variant;
       NumberToReturn: integer = maxInt; NumberToSkip: integer = 0;
       Flags: TMongoQueryFlags = [];
-      Mode: TMongoJSONMode = modMongoStrict): RawUtf8; overload;
+      Mode: TMongoJsonMode = modMongoStrict): RawUtf8; overload;
     /// select documents in a collection and returns a JSON array of documents
     // containing the selected documents
     // - Criteria can specify the query selector as (extended) JSON and
@@ -1240,7 +1240,7 @@ type
     function FindJson(const Criteria: RawUtf8; const Params: array of const;
       NumberToReturn: integer = maxInt; NumberToSkip: integer = 0;
       Flags: TMongoQueryFlags = [];
-      Mode: TMongoJSONMode = modMongoStrict): RawUtf8; overload;
+      Mode: TMongoJsonMode = modMongoStrict): RawUtf8; overload;
     /// select documents in a collection and returns a JSON array of documents
     // containing the selected documents
     // - Criteria and Projection can specify the query selector as (extended)
@@ -1248,7 +1248,7 @@ type
     function FindJson(const Criteria: RawUtf8; const Params: array of const;
       const Projection: variant; NumberToReturn: integer = maxInt;
       NumberToSkip: integer = 0; Flags: TMongoQueryFlags = [];
-      Mode: TMongoJSONMode = modMongoStrict): RawUtf8; overload;
+      Mode: TMongoJsonMode = modMongoStrict): RawUtf8; overload;
 
     /// select documents in a collection and returns a TBsonDocument instance
     // containing the selected documents as a raw binary BSON array document
@@ -1482,7 +1482,7 @@ type
     // ! AggregateJson('{ $sort : { age : -1, posts: 1 } }',[])
     function AggregateJson(const Operators: RawUtf8;
       const Params: array of const;
-      Mode: TMongoJSONMode = modMongoStrict): RawUtf8; overload;
+      Mode: TMongoJsonMode = modMongoStrict): RawUtf8; overload;
     /// calculate aggregate values using the MongoDB aggregation framework
     // and return the result as a TDocVariant instance
     // - overloaded method to specify the pipeline as a BSON raw document
@@ -1492,7 +1492,7 @@ type
     // - overloaded method to specify the pipeline as a BSON raw document
     // as detailed by http://docs.mongodb.org/manual/core/aggregation-pipeline
     function AggregateJsonFromVariant(const pipelineArray: variant;
-      Mode: TMongoJSONMode = modMongoStrict): RawUtf8; overload;
+      Mode: TMongoJsonMode = modMongoStrict): RawUtf8; overload;
     /// calculate aggregate values using the MongoDB aggregation framework
     // and return the result as a TDocVariant instance
     // - overloaded method to specify the pipeline as a JSON text object
@@ -1500,12 +1500,12 @@ type
     // - for instance, the following will return the maximum _id value of
     // the collection:
     // ! AggregateDoc('{$group:{_id:null,max:{$max:"$_id"}}}').max
-    function AggregateDocFromJson(const PipelineJSON: RawUtf8): variant;
+    function AggregateDocFromJson(const PipelineJson: RawUtf8): variant;
     /// calculate JSON aggregate values using the MongoDB aggregation framework
     // - overloaded method to specify the pipeline as a JSON text object
     // as detailed by http://docs.mongodb.org/manual/core/aggregation-pipeline
-    function AggregateJsonFromJson(const PipelineJSON: RawUtf8;
-      Mode: TMongoJSONMode = modMongoStrict): RawUtf8; overload;
+    function AggregateJsonFromJson(const PipelineJson: RawUtf8;
+      Mode: TMongoJsonMode = modMongoStrict): RawUtf8; overload;
   published
     /// the collection name
     property Name: RawUtf8
@@ -1687,7 +1687,7 @@ begin
   result := fBSONDocument;
 end;
 
-procedure TMongoRequest.ToJson(W: TTextWriter; Mode: TMongoJSONMode);
+procedure TMongoRequest.ToJson(W: TTextWriter; Mode: TMongoJsonMode);
 begin
   if self = nil then
   begin
@@ -1709,7 +1709,7 @@ begin
   W.Add('}');
 end;
 
-function TMongoRequest.ToJson(Mode: TMongoJSONMode): RawUtf8;
+function TMongoRequest.ToJson(Mode: TMongoJsonMode): RawUtf8;
 var
   W: TTextWriter;
   tmp: TTextWriterStackBuffer;
@@ -1738,14 +1738,14 @@ begin
   BsonWriteParam(Update);
 end;
 
-procedure TMongoRequestUpdate.ToJson(W: TTextWriter; Mode: TMongoJSONMode);
+procedure TMongoRequestUpdate.ToJson(W: TTextWriter; Mode: TMongoJsonMode);
 begin
   inherited;
   W.CancelLastChar('}');
   W.AddShort(',selector:');
-  AddMongoJSON(variant(fSelector), W, modMongoShell);
+  AddMongoJson(variant(fSelector), W, modMongoShell);
   W.AddShort(',update:');
-  AddMongoJSON(variant(fUpdate), W, modMongoShell);
+  AddMongoJson(variant(fUpdate), W, modMongoShell);
   W.Add('}');
 end;
 
@@ -1796,12 +1796,12 @@ begin
   BsonWriteParam(Selector);
 end;
 
-procedure TMongoRequestDelete.ToJson(W: TTextWriter; Mode: TMongoJSONMode);
+procedure TMongoRequestDelete.ToJson(W: TTextWriter; Mode: TMongoJsonMode);
 begin
   inherited;
   W.CancelLastChar('}');
   W.AddShort(',query:');
-  AddMongoJSON(variant(fQuery), W, modMongoShell);
+  AddMongoJson(variant(fQuery), W, modMongoShell);
   W.Add('}');
 end;
 
@@ -1825,16 +1825,16 @@ begin
     BsonWriteParam(ReturnFieldsSelector);
 end;
 
-procedure TMongoRequestQuery.ToJson(W: TTextWriter; Mode: TMongoJSONMode);
+procedure TMongoRequestQuery.ToJson(W: TTextWriter; Mode: TMongoJsonMode);
 begin
   inherited;
   W.CancelLastChar('}');
   W.AddShort(',query:');
-  AddMongoJSON(variant(fQuery), W, modMongoShell);
+  AddMongoJson(variant(fQuery), W, modMongoShell);
   if fReturnFieldsSelector.VType <> varNull then
   begin
     W.AddShort(',projection:');
-    AddMongoJSON(variant(fReturnFieldsSelector), W, modMongoShell);
+    AddMongoJson(variant(fReturnFieldsSelector), W, modMongoShell);
   end;
   if fNumberToReturn < maxInt then
   begin
@@ -1881,7 +1881,7 @@ begin
   Write(pointer(fCursors), n);
 end;
 
-procedure TMongoRequestKillCursor.ToJson(W: TTextWriter; Mode: TMongoJSONMode);
+procedure TMongoRequestKillCursor.ToJson(W: TTextWriter; Mode: TMongoJsonMode);
 var
   i: PtrInt;
 begin
@@ -1950,7 +1950,8 @@ end;
 function TMongoReplyCursor.GetOneDocument(index: integer): variant;
 begin
   if fLatestDocIndex <> index then
-  begin // naive but efficient cache
+  begin
+    // naive but efficient cache
     GetDocument(index, fLatestDocValue);
     fLatestDocIndex := index;
   end;
@@ -1964,7 +1965,7 @@ begin
       [index, length(fDocuments)]);
   if fDocuments = nil then
     ComputeDocumentsList;
-  BSONToDoc(fDocuments[index], result, 0, asDocVariantPerReference);
+  BsonToDoc(fDocuments[index], result, 0, asDocVariantPerReference);
 end;
 
 function TMongoReplyCursor.Next(out doc: variant;
@@ -1974,7 +1975,7 @@ var
 begin
   if Next(b) then
   begin
-    BSONToDoc(b, doc, 0, option);
+    BsonToDoc(b, doc, 0, option);
     result := true;
   end
   else
@@ -2010,13 +2011,13 @@ begin
     result := false;
 end;
 
-function TMongoReplyCursor.Next(out JSON: RawUtf8; Mode: TMongoJSONMode): boolean;
+function TMongoReplyCursor.Next(out Json: RawUtf8; Mode: TMongoJsonMode): boolean;
 var
   b: PByte;
 begin
   if Next(b) then
   begin
-    JSON := BSONToJson(b, betDoc, 0, Mode);
+    Json := BsonToJson(b, betDoc, 0, Mode);
     result := true;
   end
   else
@@ -2042,7 +2043,7 @@ begin
   Rewind;
   while Next(b) do
   begin
-    BSONToDoc(b, Dest[result], 0, asDocVariantPerReference);
+    BsonToDoc(b, Dest[result], 0, asDocVariantPerReference);
     inc(result);
   end;
   if result <> length(Dest) then
@@ -2085,7 +2086,7 @@ begin
     raise EMongoException.Create('Invalid opReply Documents');
 end;
 
-procedure TMongoReplyCursor.FetchAllToJson(W: TTextWriter; Mode: TMongoJSONMode;
+procedure TMongoReplyCursor.FetchAllToJson(W: TTextWriter; Mode: TMongoJsonMode;
   WithHeader: boolean; MaxSize: cardinal);
 var
   b: PByte;
@@ -2119,7 +2120,7 @@ begin
     W.Add(']', '}');
 end;
 
-function TMongoReplyCursor.ToJson(Mode: TMongoJSONMode; WithHeader: boolean;
+function TMongoReplyCursor.ToJson(Mode: TMongoJsonMode; WithHeader: boolean;
   MaxSize: cardinal): RawUtf8;
 var
   W: TTextWriter;
@@ -2256,7 +2257,7 @@ begin
 end;
 
 function TMongoConnection.GetJsonAndFree(Query: TMongoRequestQuery; Mode:
-  TMongoJSONMode): RawUtf8;
+  TMongoJsonMode): RawUtf8;
 var
   W: TTextWriter;
   ReturnAsJsonArray: boolean;
@@ -2504,7 +2505,7 @@ begin
         ord(opMsgOld):
           if Client.Log <> nil then
             Client.Log.Log(sllWarning, 'Msg (deprecated) from MongoDB: %',
-              [BSONToJson(@PByteArray(result)[sizeof(Header)], betDoc, DataLen,
+              [BsonToJson(@PByteArray(result)[sizeof(Header)], betDoc, DataLen,
                modMongoShell)], Request);
         ord(opMsg):
           // TODO: parse https://docs.mongodb.com/manual/reference/mongodb-wire-protocol/#op-msg
@@ -2771,7 +2772,8 @@ function TMongoClient.GetOneReadConnection: TMongoConnection;
     else
     begin
       for retry := 1 to 100 do
-      begin // search for an inactive connection
+      begin
+        // search for an inactive connection
         result := fLatestReadConnectionIndex; // simple round-robin pattern
         if result = high(fConnections) then
           if ReadPreference = rpSecondary then
@@ -2843,7 +2845,8 @@ begin
   begin
     result := fDatabases.GetObjectFrom(DatabaseName);
     if result = nil then
-    begin // not already opened -> try now from primary host
+    begin
+      // not already opened -> try now from primary host
       if not fConnections[0].Opened then
       begin
         fConnections[0].Open;
@@ -3240,7 +3243,7 @@ begin
   fFullCollectionName := fDatabase.Name + '.' + fName;
 end;
 
-function TMongoCollection.AggregateCallFromJson(const pipelineJSON: RawUtf8;
+function TMongoCollection.AggregateCallFromJson(const pipelineJson: RawUtf8;
   var reply, res: variant): boolean;
 begin
   // see http://docs.mongodb.org/manual/reference/command/aggregate
@@ -3251,7 +3254,7 @@ begin
     // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}],cursor:{}})
     Database.RunCommand(BsonVariant(
       '{aggregate:"%",pipeline:[%],cursor:{}}',
-      [name, pipelineJSON], []), reply);
+      [name, pipelineJson], []), reply);
     // {"cursor":{"firstBatch":[{"_id":null,"max":1510}],"id":0,"ns":"db.test"},"ok":1}
     res := reply.cursor;
     if not VarIsNull(res) then
@@ -3262,7 +3265,7 @@ begin
     // db.runCommand({aggregate:"test",pipeline:[{$group:{_id:null,max:{$max:"$_id"}}}]})
     Database.RunCommand(BsonVariant(
       '{aggregate:"%",pipeline:[%]}',
-      [name, pipelineJSON], []), reply);
+      [name, pipelineJson], []), reply);
     // { "result" : [ { "_id" : null, "max" : 1250 } ], "ok" : 1 }
     res := reply.result;
   end;
@@ -3276,7 +3279,7 @@ begin
 end;
 
 function TMongoCollection.AggregateJson(const Operators: RawUtf8;
-  const Params: array of const; Mode: TMongoJSONMode): RawUtf8;
+  const Params: array of const; Mode: TMongoJsonMode): RawUtf8;
 begin
   result := AggregateJsonFromJson(FormatUtf8(Operators, Params), Mode);
 end;
@@ -3322,33 +3325,33 @@ begin
 end;
 
 function TMongoCollection.AggregateJsonFromVariant(const pipelineArray: variant;
-  Mode: TMongoJSONMode = modMongoStrict): RawUtf8;
+  Mode: TMongoJsonMode = modMongoStrict): RawUtf8;
 var
   reply, res: variant;
 begin
   if AggregateCallFromVariant(pipelineArray, reply, res) then
-    result := VariantSaveMongoJSON(res, Mode)
+    result := VariantSaveMongoJson(res, Mode)
   else
     result := '';
 end;
 
-function TMongoCollection.AggregateDocFromJson(const PipelineJSON: RawUtf8): variant;
+function TMongoCollection.AggregateDocFromJson(const PipelineJson: RawUtf8): variant;
 var
   reply: variant;
 begin
-  if AggregateCallFromJson(PipelineJSON, reply, result) then
+  if AggregateCallFromJson(PipelineJson, reply, result) then
     TDocVariant.GetSingleOrDefault(result, result, result)
   else
     SetVariantNull(result);
 end;
 
-function TMongoCollection.AggregateJsonFromJson(const PipelineJSON: RawUtf8;
-  Mode: TMongoJSONMode): RawUtf8;
+function TMongoCollection.AggregateJsonFromJson(const PipelineJson: RawUtf8;
+  Mode: TMongoJsonMode): RawUtf8;
 var
   reply, res: variant;
 begin
-  if AggregateCallFromJson(PipelineJSON, reply, res) then
-    result := VariantSaveMongoJSON(res, Mode)
+  if AggregateCallFromJson(PipelineJson, reply, res) then
+    result := VariantSaveMongoJson(res, Mode)
   else
     result := '';
 end;
@@ -3564,7 +3567,7 @@ end;
 
 function TMongoCollection.FindJson(const Criteria, Projection: Variant;
   NumberToReturn, NumberToSkip: integer; Flags: TMongoQueryFlags;
-  Mode: TMongoJSONMode): RawUtf8;
+  Mode: TMongoJsonMode): RawUtf8;
 begin
   result := Database.Client.GetOneReadConnection.GetJsonAndFree(
     TMongoRequestQuery.Create(fFullCollectionName,
@@ -3573,7 +3576,7 @@ end;
 
 function TMongoCollection.FindJson(const Criteria: RawUtf8;
   const Params: array of const; NumberToReturn, NumberToSkip: integer;
-  Flags: TMongoQueryFlags; Mode: TMongoJSONMode): RawUtf8;
+  Flags: TMongoQueryFlags; Mode: TMongoJsonMode): RawUtf8;
 begin
   result := FindJson(
     BsonVariant(Criteria, [], Params), null, NumberToReturn,
@@ -3583,7 +3586,7 @@ end;
 function TMongoCollection.FindJson(
   const Criteria: RawUtf8; const Params: array of const;
   const Projection: variant; NumberToReturn, NumberToSkip: integer;
-  Flags: TMongoQueryFlags; Mode: TMongoJSONMode): RawUtf8;
+  Flags: TMongoQueryFlags; Mode: TMongoJsonMode): RawUtf8;
 begin
   result := FindJson(
     BsonVariant(Criteria, [], Params), Projection, NumberToReturn,
@@ -3664,7 +3667,7 @@ var
   oid: PVariant;
 begin
   if not DocVariantType.IsOfType(Document) then
-    Document := _JsonFast(VariantSaveMongoJSON(Document, modMongoShell));
+    Document := _JsonFast(VariantSaveMongoJson(Document, modMongoShell));
   result := EnsureDocumentHasID(
     _Safe(Document, dvObject)^, @oid, DocumentObjectID);
   if result then

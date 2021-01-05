@@ -2170,7 +2170,8 @@ function TRestOrmServerDB.InternalBatchStart(Method: TUriMethod;
 begin
   result := false; // means BATCH mode not supported
   if Method = mPOST then
-  begin // POST=ADD=INSERT -> MainEngineAdd() to fBatchValues[]
+  begin
+    // POST=ADD=INSERT -> MainEngineAdd() to fBatchValues[]
     if (fBatchMethod <> mNone) or
        (fBatchValuesCount <> 0) or
        (fBatchIDCount <> 0) then

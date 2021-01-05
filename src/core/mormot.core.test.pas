@@ -596,7 +596,8 @@ begin
   begin
     crc := Hash32(pointer(msg), length(msg) * SizeOf(msg[1]));
     if crc = fCheckLastMsg then
-    begin // no need to be too much verbose
+    begin
+      // no need to be too much verbose
       tix := GetTickCount64 shr 8; // also avoid to use a lock
       if tix = fCheckLastTix then
         exit;
@@ -843,7 +844,8 @@ begin
   begin
     rnd := Random32; // get 32-bit of randomness
     for n := 0 to rnd and 3 do
-    begin // consume up to 20-bit from rnd
+    begin
+      // consume up to 20-bit from rnd
       rnd := rnd shr 2;
       s := bla[rnd and 7];
       rnd := rnd shr 3;
@@ -1304,7 +1306,8 @@ begin
   end;
   {$ifndef LINUX}
   if ParamCount = 0 then
-  begin // direct exit if an external file was generated
+  begin
+    // direct exit if an external file was generated
     WriteLn(#13#10'Done - Press ENTER to Exit');
     ReadLn;
   end;

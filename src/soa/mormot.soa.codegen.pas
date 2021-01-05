@@ -767,8 +767,8 @@ begin
           RegisterType(fSets);
       end;
     wGUID:
-      _ObjAddProps(['toVariant', 'GUIDToVariant',
-                    'fromVariant', 'VariantToGUID'], result);
+      _ObjAddProps(['toVariant', 'GuidToVariant',
+                    'fromVariant', 'VariantToGuid'], result);
     wCustomAnswer:
       _ObjAddProps(['toVariant', 'HttpBodyToVariant',
                     'fromVariant', 'VariantToHttpBody'], result);
@@ -929,8 +929,8 @@ begin
           'uri', uri,
           'interfaceUri', InterfaceUri,
           'interfaceMangledUri', InterfaceMangledUri,
-          'interfaceName', InterfaceFactory.InterfaceTypeInfo^.Name,
-          'GUID', GUIDToRawUtf8(InterfaceFactory.InterfaceIID),
+          'interfaceName', InterfaceFactory.InterfaceTypeInfo^.RawName,
+          'GUID', GuidToRawUtf8(InterfaceFactory.InterfaceIID),
           'contractExpected', UnQuoteSqlString(ContractExpected),
           'instanceCreation', ord(InstanceCreation),
           'instanceCreationName', GetEnumNameTrimed(
@@ -971,7 +971,7 @@ begin
   for i := 0 to interfaces.Count - 1 do
     services.AddItem(_ObjFast([
       'interfaceName',
-        TInterfaceFactory(interfaces.List[i]).InterfaceTypeInfo^.Name,
+        TInterfaceFactory(interfaces.List[i]).InterfaceTypeInfo^.RawName,
       'methods', ContextFromMethods(interfaces.List[i])]));
   fSOA := _ObjFast([
     'enabled', true,
@@ -1740,7 +1740,7 @@ begin
     for i := 0 to high(services) do
       if i < length(queries) then
       begin
-        intf := ToUtf8(TInterfaceFactory.GUID2TypeInfo(services[i])^.RawName);
+        intf := ToUtf8(TInterfaceFactory.Guid2TypeInfo(services[i])^.RawName);
         if _Safe(context.soa.services)^.
             GetDocVariantByProp('interfaceName', intf, false, service) then
           service^.AddValue('query', queries[i].ClassName)

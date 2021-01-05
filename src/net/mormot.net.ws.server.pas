@@ -76,7 +76,7 @@ type
     // specified client connection
     // - the supplied JSON content is supplied as "var", since it may be
     // modified during execution, e.g. XORed for frame masking
-    function SendFrameJson(Sender: THttpServerResp; var JSON: RawUtf8): boolean;
+    function SendFrameJson(Sender: THttpServerResp; var Json: RawUtf8): boolean;
     /// you can assign an event to this property to be notified of incoming messages
     property OnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame
       read fOnIncomingFrame write fOnIncomingFrame;
@@ -305,7 +305,7 @@ begin
 end;
 
 function TWebSocketProtocolChat.SendFrameJson(Sender: THttpServerResp;
-  var JSON: RawUtf8): boolean;
+  var Json: RawUtf8): boolean;
 var
   frame: TWebSocketFrame;
 begin
@@ -318,7 +318,7 @@ begin
     exit;
   frame.opcode := focText;
   frame.content := [];
-  frame.payload := JSON;
+  frame.payload := Json;
   result := (Sender as TWebSocketServerResp).fProcess.SendFrame(frame)
 end;
 
@@ -418,7 +418,8 @@ begin
     result := HTTP_SUCCESS; // connection upgraded: never back to HTTP/1.1
   finally
     if result <> HTTP_SUCCESS then
-    begin // notify upgrade failure to client
+    begin
+      // notify upgrade failure to client
       FormatUtf8('HTTP/1.0 % WebSocket Upgrade Error'#13#10 +
         'Connection: Close'#13#10#13#10, [result], header);
       ClientSock.TrySndLow(pointer(header), length(header));
@@ -514,7 +515,8 @@ function TWebSocketServer.IsActiveWebSocketThread(
 var
   i: integer;
   c: PWebSocketServerResp;
-begin // no need to optimize (not called often)
+begin
+  // no need to optimize with a hash table (not called often)
   result := nil;
   if Terminated or
      (ConnectionThread = nil) or

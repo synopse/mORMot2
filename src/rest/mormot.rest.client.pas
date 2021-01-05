@@ -8,7 +8,7 @@ unit mormot.rest.client;
 
    Client-Side REST Process
     - Client Authentication and Authorization Logic
-    - TRestClientRoutingREST/TRestClientRoutingJsonRpc Routing Schemes
+    - TRestClientRoutingRest/TRestClientRoutingJsonRpc Routing Schemes
     - TRestClientUri Base Class for Actual Clients
     - TRestClientLibraryRequest after TRestServer.ExportServerGlobalLibraryRequest
 
@@ -373,7 +373,7 @@ type
 
 
 
-{ ************ TRestClientRoutingREST/TRestClientRoutingJsonRpc Routing Schemes }
+{ ************ TRestClientRoutingRest/TRestClientRoutingJsonRpc Routing Schemes }
 
   //// used to customize TRestClientRouting.ClientSideInvoke process
   TRestClientSideInvoke = set of (
@@ -381,7 +381,7 @@ type
 
   /// abstract Client side service routing
   // - match TRestServerUriContext reciprocal class
-  // - never use this abstract class, but rather TRestClientRoutingREST or
+  // - never use this abstract class, but rather TRestClientRoutingRest or
   // TRestClientRoutingJsonRpc classes
   TRestClientRouting = class
   public
@@ -402,13 +402,13 @@ type
   // - match TRestServerUriContextClass reciprocal meta-class
   // - most of the internal methods are declared as virtual, so it allows any
   // kind of custom routing or execution scheme
-  // - TRestClientRoutingREST and TRestClientRoutingJsonRpc classes are provided
+  // - TRestClientRoutingRest and TRestClientRoutingJsonRpc classes are provided
   // in this unit, to allow RESTful and JSON/RPC protocols on Client side
   TRestClientRoutingClass = class of TRestClientRouting;
 
   /// client calling context using simple REST for interface-based services
-  // - match TRestServerRoutingREST reciprocal class
-  TRestClientRoutingREST = class(TRestClientRouting)
+  // - match TRestServerRoutingRest reciprocal class
+  TRestClientRoutingRest = class(TRestClientRouting)
     /// at Client Side, compute URI and BODY according to RESTful routing scheme
     // - e.g. on input uri='root/Calculator', method='Add', params='1,2' and
     // clientDrivenID='1234' -> on output uri='root/Calculator.Add/1234' and
@@ -504,7 +504,7 @@ type
   end;
 
   /// signature e.g. of the TRestClientUri.OnSetUser event handler
-  TOnRestClientNotify = procedure(Sender: TRestClientUri) of object;
+  TOnClientNotify = procedure(Sender: TRestClientUri) of object;
 
   /// a generic REpresentational State Transfer (REST) client with URI
   // - URI are standard Collection/Member implemented as ModelRoot/TableName/TableID
@@ -519,7 +519,7 @@ type
     fOnIdle: TOnIdleSynBackgroundThread;
     fOnFailed: TOnClientFailed;
     fOnAuthentificationFailed: TOnAuthentificationFailed;
-    fOnSetUser: TOnRestClientNotify;
+    fOnSetUser: TOnClientNotify;
     fBackgroundThread: TSynBackgroundThreadEvent;
     fMaximumAuthentificationRetry: integer;
     fRetryOnceOnTimeout: boolean;
@@ -739,7 +739,7 @@ type
     property ServicePublishOwnInterfaces: RawUtf8
       read fServicePublishOwnInterfaces write fServicePublishOwnInterfaces;
     /// the routing class of the service remote request on client side
-    // - by default, contains TRestClientRoutingREST, i.e. an URI-based
+    // - by default, contains TRestClientRoutingRest, i.e. an URI-based
     // layout which is secure (since will use our RESTful authentication scheme),
     // and also very fast
     // - but TRestClientRoutingJsonRpc can e.g. be set (with
@@ -918,7 +918,7 @@ type
     // - could be used to refresh the User Interface layout according to
     // current authenticated user rights, or to subscribe to some services
     // via callbacks
-    property OnSetUser: TOnRestClientNotify
+    property OnSetUser: TOnClientNotify
       read fOnSetUser write fOnSetUser;
   published
     /// low-level error code, as returned by server
@@ -1428,11 +1428,11 @@ end;
 {$endif DOMAINRESTAUTH}
 
 
-{ ************ TRestClientRoutingREST/TRestClientRoutingJsonRpc Routing Schemes }
+{ ************ TRestClientRoutingRest/TRestClientRoutingJsonRpc Routing Schemes }
 
-{ TRestClientRoutingREST }
+{ TRestClientRoutingRest }
 
-class procedure TRestClientRoutingREST.ClientSideInvoke(var uri: RawUtf8;
+class procedure TRestClientRoutingRest.ClientSideInvoke(var uri: RawUtf8;
   ctxt: TRestClientSideInvoke; const method, params, clientDrivenID: RawUtf8;
   out sent, head: RawUtf8);
 begin
@@ -1906,7 +1906,7 @@ begin
   {$else}
   fSafe := TAutoLocker.Create;
   {$endif USELOCKERDEBUG}
-  fServicesRouting := TRestClientRoutingREST;
+  fServicesRouting := TRestClientRoutingRest;
   TRestOrmClientUri.Create(self); // asssign the URI-based ORM kernel
 end;
 
@@ -2403,7 +2403,7 @@ function TRestClientUri.ServiceDefine(const aInterfaces: array of TGUID;
   const aContractExpected: RawUtf8): boolean;
 begin
   if self <> nil then
-    result := ServiceRegister(TInterfaceFactory.GUID2TypeInfo(aInterfaces),
+    result := ServiceRegister(TInterfaceFactory.Guid2TypeInfo(aInterfaces),
       aInstanceCreation, aContractExpected)
   else
     result := false;
@@ -2414,7 +2414,7 @@ function TRestClientUri.ServiceDefine(const aInterface: TGUID;
   const aContractExpected: RawUtf8; aIgnoreAnyException: boolean): TServiceFactoryClient;
 begin
   result := TServiceFactoryClient(
-    ServiceRegister(TInterfaceFactory.GUID2TypeInfo(aInterface),
+    ServiceRegister(TInterfaceFactory.Guid2TypeInfo(aInterface),
      aInstanceCreation, aContractExpected, aIgnoreAnyException));
 end;
 
@@ -2422,7 +2422,7 @@ function TRestClientUri.ServiceDefineClientDriven(const aInterface: TGUID;
   out Obj; const aContractExpected: RawUtf8): boolean;
 begin
   result := ServiceRegisterClientDriven(
-    TInterfaceFactory.GUID2TypeInfo(aInterface), Obj, aContractExpected);
+    TInterfaceFactory.Guid2TypeInfo(aInterface), Obj, aContractExpected);
 end;
 
 function TRestClientUri.ServiceDefineSharedApi(const aInterface: TGUID;

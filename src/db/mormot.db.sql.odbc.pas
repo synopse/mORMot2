@@ -489,7 +489,8 @@ end;
 
 function ODBCColumnToFieldType(DataType, ColumnPrecision, ColumnScale: integer):
   TSqlDBFieldType;
-begin // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUtf8, ftBlob
+begin
+  // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUtf8, ftBlob
   case DataType of
     SQL_DECIMAL, SQL_NUMERIC, SQL_FLOAT:
       begin
@@ -658,7 +659,8 @@ function TSqlDBOdbcStatement.GetCol(Col: integer;
   ExpectedType: TSqlDBFieldType): TSqlDBStatementGetCol;
 var
   c: integer;
-begin // colNull, colWrongType, colTmpUsed, colTmpUsedTruncated
+begin
+  // colNull, colWrongType, colTmpUsed, colTmpUsedTruncated
   CheckCol(Col); // check Col<fColumnCount
   if not Assigned(fStatement) or
      (fColData = nil) then
@@ -774,7 +776,8 @@ begin
 end;
 
 function TSqlDBOdbcStatement.ColumnNull(Col: integer): boolean;
-begin // will check for NULL but never returns colWrongType
+begin
+  // will check for NULL but never returns colWrongType
   result := GetCol(Col, ftNull) = colNull;
 end;
 
@@ -1012,7 +1015,8 @@ retry:            VData := CurrentAnsiConvert.Utf8ToAnsi(VData);
                 begin
                   VData := Utf8DecodeToRawUnicode(VData);
                   if fDbms = dMSSQL then
-                  begin // CONTAINS(field, ?) do not accept NVARCHAR(max)
+                  begin
+                    // CONTAINS(field, ?) do not accept NVARCHAR(max)
                     ColumnSize := length(VData) shr 1; // length in characters
                     if ColumnSize > 4000 then // > 8000 bytes - use varchar(max)
                       ColumnSize := 0;
@@ -1221,7 +1225,8 @@ begin
       SQL_NO_DATA:
         exit;
       SQL_SUCCESS, SQL_SUCCESS_WITH_INFO:
-        begin // ignore WITH_INFO messages
+        begin
+          // ignore WITH_INFO messages
           fCurrentRow := sav + 1;
           inc(fTotalRowsRetrieved);
           result := true; // mark data available for Column*() methods

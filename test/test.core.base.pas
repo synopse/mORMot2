@@ -320,7 +320,8 @@ begin
 end;
 
 function GetBitsCount64(const Bits; Count: PtrInt): PtrInt;
-begin // reference implementation
+begin
+  // reference implementation
   result := 0;
   while Count > 0 do
   begin
@@ -1929,7 +1930,8 @@ end;
 
 {$ifdef CPUINTEL}
 function BufEquals(P, n, b: PtrInt): boolean;
-begin // slower than FillChar, faster than for loop, but fast enough for testing
+begin
+  // slower than FillChar, faster than for loop, but fast enough for testing
   result := false;
   {$ifdef CPU32}
   b := b * $01010101;
@@ -2219,7 +2221,7 @@ var
   name, value, utf: RawUtf8;
   str: string;
   P: PUtf8Char;
-  GUID2: TGUID;
+  Guid2: TGUID;
   U: TUri;
 const
   GUID: TGUID = '{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}';
@@ -2275,10 +2277,10 @@ begin
   end;
   utf := BinToBase64Uri(@GUID, sizeof(GUID));
   Check(utf = '00amyWGct0y_ze4lIsj2Mw');
-  FillCharFast(GUID2, sizeof(GUID2), 0);
-  Check(Base64uriToBin(utf, @GUID2, SizeOf(GUID2)));
-  Check(IsEqualGuid(GUID2, GUID));
-  Check(IsEqualGuid(@GUID2, @GUID));
+  FillCharFast(Guid2, sizeof(Guid2), 0);
+  Check(Base64uriToBin(utf, @Guid2, SizeOf(Guid2)));
+  Check(IsEqualGuid(Guid2, GUID));
+  Check(IsEqualGuid(@Guid2, @GUID));
   Check(U.From('toto.com'));
   Check(U.Uri = 'http://toto.com/');
   Check(U.From('toto.com:123'));
@@ -2302,41 +2304,41 @@ var
 const
   GUID: TGUID = '{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}';
 begin
-  s := GUIDToRawUtf8(GUID);
+  s := GuidToRawUtf8(GUID);
   Check(s = '{C9A646D3-9C61-4CB7-BFCD-EE2522C8F633}');
-  Check(TextToGUID(@s[2], @g2)^ = '}');
+  Check(TextToGuid(@s[2], @g2)^ = '}');
   Check(IsEqualGuid(g2, GUID));
-  Check(GUIDToString(GUID) = '{C9A646D3-9C61-4CB7-BFCD-EE2522C8F633}');
-  Check(IsEqualGuid(RawUtf8ToGUID(s), GUID));
+  Check(GuidToString(GUID) = '{C9A646D3-9C61-4CB7-BFCD-EE2522C8F633}');
+  Check(IsEqualGuid(RawUtf8ToGuid(s), GUID));
   for i := 1 to 1000 do
   begin
     g.D1 := Random(maxInt);
     g.D2 := Random(65535);
     g.D3 := Random(65535);
     Int64(g.D4) := Int64(Random(maxInt)) * Random(maxInt);
-    st := GUIDToString(g);
-    Check(st = SysUtils.GUIDToString(g));
-    Check(IsEqualGuid(StringToGUID(st), g));
-    s := GUIDToRawUtf8(g);
+    st := GuidToString(g);
+    Check(st = SysUtils.GuidToString(g));
+    Check(IsEqualGuid(StringToGuid(st), g));
+    s := GuidToRawUtf8(g);
     Check(st = Utf8ToString(s));
     st[Random(38) + 1] := ' ';
-    g2 := StringToGUID(st);
+    g2 := StringToGuid(st);
     Check(IsZero(@g2, sizeof(g2)));
-    Check(TextToGUID(@s[2], @g2)^ = '}');
+    Check(TextToGuid(@s[2], @g2)^ = '}');
     Check(IsEqualGuid(g2, g));
     Check(IsEqualGuid(@g2, @g));
-    Check(IsEqualGuid(RawUtf8ToGUID(s), g));
+    Check(IsEqualGuid(RawUtf8ToGuid(s), g));
     inc(g.D1);
     Check(not IsEqualGuid(g2, g));
-    Check(not IsEqualGuid(RawUtf8ToGUID(s), g));
+    Check(not IsEqualGuid(RawUtf8ToGuid(s), g));
   end;
-  // oldest Delphi can't compile TypeInfo(TGUID) -> use PT_INFO[ptGUID]
-  s := RecordSaveJson(g, PT_INFO[ptGUID]);
+  // oldest Delphi can't compile TypeInfo(TGUID) -> use PT_INFO[ptGuid]
+  s := RecordSaveJson(g, PT_INFO[ptGuid]);
   FillCharFast(g2, sizeof(g2), 0);
-  Check(RecordLoadJson(g2, pointer(s), PT_INFO[ptGUID]) <> nil);
+  Check(RecordLoadJson(g2, pointer(s), PT_INFO[ptGuid]) <> nil);
   Check(IsEqualGuid(g2, g));
   FillCharFast(h, SizeOf(h), 1);
-  for pt := ptGUID to ptHash512 do
+  for pt := ptGuid to ptHash512 do
   begin
     FillRandom(@h, PT_SIZE[pt] shr 2);
     s := SaveJson(h, PT_INFO[pt]); // ptHash* are not record types
@@ -2446,7 +2448,8 @@ var
   end;
 
   function GL(a, b: PAnsiChar; const c: RawUtf8): boolean;
-  begin // avoid Delphi compiler complains about PUtf8Char/PAnsiChar types
+  begin
+    // avoid Delphi compiler complains about PUtf8Char/PAnsiChar types
     result := GetLineContains(pointer(a), pointer(b), pointer(c));
   end;
 
@@ -2939,7 +2942,8 @@ begin
     s1 := 0;
     s2 := 0;
     for i := 1 to Len shr 2 do
-    begin // 4 bytes (DWORD) by loop
+    begin
+      // 4 bytes (DWORD) by loop
       inc(s1, Data^);
       inc(s2, s1);
       inc(Data);
@@ -4401,7 +4405,8 @@ begin
       end;
     end;
     for j := 1 to lenup100 do
-    begin // validates with offset parameter
+    begin
+      // validates with offset parameter
       check(PosEx(#13, U, j) = 0);
       check(PosEx(U[j], U, j) = j);
       if (j > 1) and
@@ -5645,7 +5650,8 @@ begin
         check(dict.FindAndCopy(k, v));
         check(v = i);
         if i < 10000 then
-        begin // FindKeyFromValue() brute force is slow
+        begin
+          // FindKeyFromValue() brute force is slow
           k := '';
           check(dict.FindKeyFromValue(v, k));
           check(GetInteger(pointer(k)) = i);

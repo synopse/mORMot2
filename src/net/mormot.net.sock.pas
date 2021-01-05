@@ -1587,7 +1587,8 @@ begin
   begin
     fSock := aSock; // ACCEPT mode -> socket is already created by caller
     if TimeOut > 0 then
-    begin // set timout values for both directions
+    begin
+      // set timout values for both directions
       ReceiveTimeout := TimeOut;
       SendTimeout := TimeOut;
     end;
@@ -1713,12 +1714,14 @@ begin
   F.BufPos := 0;
   F.BufEnd := 0;
   if F.Mode = fmInput then
-  begin // ReadLn
+  begin
+    // ReadLn
     F.InOutFunc := @InputSock;
     F.FlushFunc := nil;
   end
   else
-  begin // WriteLn
+  begin
+    // WriteLn
     F.Mode := fmOutput;
     F.InOutFunc := @OutputSock;
     F.FlushFunc := @OutputSock;
@@ -1831,7 +1834,8 @@ begin
   {$ifdef LINUXNOTBSD}
   if fWasBind and
      (fPort = '') then
-  begin // binded on external socket
+  begin
+    // binded on external socket
     fSock := TNetSocket(-1);
     exit;
   end;
@@ -2099,7 +2103,8 @@ begin
       exit; // raw socket error
     if available = 0 then // no data in the allowed timeout
       if result = '' then
-      begin // wait till something
+      begin
+        // wait till something
         SleepHiRes(1); // some delay in infinite loop
         continue;
       end
@@ -2143,7 +2148,8 @@ begin
       else
         res := fSock.Recv(Buffer, read);
       if res <> nrOK then
-      begin // no more to read, or socket issue?
+      begin
+        // no more to read, or socket issue?
         {$ifdef SYNCRTDEBUGLOW}
         TSynLog.Add.Log(sllCustom2, 'TrySockRecv: sock=% AsynchRecv=% %',
           [sock, read, SocketErrorMessage], self);
@@ -2233,8 +2239,9 @@ var
   L, Error: PtrInt;
 begin
   if CROnly then
-  begin // slower but accurate version expecting #13 as line end
-  // SockIn^ expect either #10, either #13#10 -> a dedicated version is needed
+  begin
+    // slower but accurate version expecting #13 as line end
+    // SockIn^ expect either #10, either #13#10 -> a dedicated version is needed
     repeat
       SockRecv(@c, 1); // this is slow but works
       if c in [0, 13] then

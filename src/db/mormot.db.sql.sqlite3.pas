@@ -508,7 +508,8 @@ end;
 
 procedure TSqlDBSQLite3Statement.BindDateTime(Param: integer; Value: TDateTime;
   IO: TSqlDBParamInOutType);
-begin // see http://www.sqlite.org/lang_datefunc.html
+begin
+  // see http://www.sqlite.org/lang_datefunc.html
   BindTextU(Param, DateTimeToIso8601Text(Value, 'T'));
 end;
 

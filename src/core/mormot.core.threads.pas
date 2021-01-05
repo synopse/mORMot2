@@ -1183,7 +1183,8 @@ begin
   try
     result := fPendingProcessFlag;
     if result = flagIdle then
-    begin // we just acquired the thread! congrats!
+    begin
+      // we just acquired the thread! congrats!
       fPendingProcessFlag := flagStarted; // atomic set "started" flag
       fCallerThreadID := ThreadID;
     end;
@@ -1484,7 +1485,8 @@ begin
 end;
 
 function TSynBackgroundTimer.Find(const aProcess: TMethod): integer;
-begin // caller should have made fTaskLock.Lock;
+begin
+  // caller should have made fTaskLock.Lock;
   for result := length(fTask) - 1 downto 0 do
     with TMethod(fTask[result].OnProcess) do
       if (Code = aProcess.Code) and
@@ -2001,7 +2003,8 @@ begin
   if Terminated then
     exit;
   if MS < 32 then
-  begin // smaller than GetTickCount resolution (under Windows)
+  begin
+    // smaller than GetTickCount resolution (under Windows)
     SleepHiRes(MS);
     if Terminated then
       exit;
@@ -2111,7 +2114,8 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
 {$ifdef USE_WINIOCP}
 
   function Enqueue: boolean;
-  begin // IOCP has its own queue
+  begin
+    // IOCP has its own queue
     result := PostQueuedCompletionStatus(fRequestQueue, 0, nil, aContext);
   end;
 

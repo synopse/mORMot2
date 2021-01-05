@@ -63,7 +63,8 @@ end;
 function GetRttiProps(RttiClass: TClass): PRttiProps;
 var
   p: PTypeInfo;
-begin // code is a bit abstract, but compiles very well
+begin
+  // code is a bit abstract, but compiles very well
   p := PPointer(PtrInt(RttiClass) + vmtTypeInfo)^;
   if p <> nil then // avoid GPF if no RTTI available for this class
     with PTypeData(@p^.Name[ord(p^.Name[0]) + 1])^ do
@@ -586,7 +587,7 @@ type
         ManagedCount8: integer);
   end;
 const
-  _TGUID: TFakeTypeInfo = (    // stored in PT_INFO[ptGUID]
+  _TGUID: TFakeTypeInfo = (    // stored in PT_INFO[ptGuid]
     Kind: tkRecord;
     Name5: 'TGUID';
     RecSize5: SizeOf(TGUID);
@@ -627,7 +628,7 @@ var
   pi: PTypeData absolute p;
   ps: PShortString absolute p;
 
-  procedure AddArgFromRTTI;
+  procedure AddArgFromRtti;
   var
     pp: ^PPRttiInfo absolute p;
   begin
@@ -653,7 +654,7 @@ begin
   begin
     ShortStringToAnsi7String(aInterface^.Name, Definition.Name);
     ShortStringToAnsi7String(pi^.IntfUnit, Definition.UnitName);
-    Definition.GUID := pi^.Guid;
+    Definition.Guid := pi^.Guid;
   end;
   ancestor := pi^.IntfParent^;
   if ancestor <> nil then
@@ -687,7 +688,7 @@ begin
       inc(p, SizeOf(flags^));
       name := ps;
       ps := @ps^[ord(ps^[0]) + 1];
-      AddArgFromRTTI;
+      AddArgFromRtti;
       {$ifdef ISDELPHIXE}
       inc(p, pw^); // skip custom attributes
       {$endif ISDELPHIXE}
@@ -695,7 +696,7 @@ begin
     end;
     name := nil;
     if kind = mkFunction then
-      AddArgFromRTTI;
+      AddArgFromRtti;
     {$ifdef ISDELPHIXE}
     inc(p, pw^); // skip custom attributes
     {$endif ISDELPHIXE}

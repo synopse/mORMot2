@@ -1331,12 +1331,12 @@ var
 
   procedure ProcessSession;
   var
-    recJSON: RawUtf8;
+    recjson: RawUtf8;
   begin
     // create a TDocVariant from the binary record content
-    SaveJson(rec, PRecordDataTypeInfo, TEXTWRITEROPTIONS_MUSTACHE, recJSON);
+    SaveJson(rec, PRecordDataTypeInfo, TEXTWRITEROPTIONS_MUSTACHE, recjson);
     TDocVariantData(result).InitJsonInPlace(
-      pointer(recJSON), JSON_OPTIONS_FAST);
+      pointer(recjson), JSON_OPTIONS_FAST);
   end;
 
 begin
@@ -1631,7 +1631,7 @@ begin
                   with fApplication.fFactory do
                     raise EMvcException.CreateUtf8(
                       '%.CommandRunMethod: %.%() execution error',
-                      [self, InterfaceTypeInfo^.Name, Methods[fMethodIndex].Uri]);
+                      [self, InterfaceTypeInfo^.RawName, Methods[fMethodIndex].Uri]);
               action.RedirectToMethodName := exec.ServiceCustomAnswerHead;
               action.ReturnedStatus := exec.ServiceCustomAnswerStatus;
             finally
@@ -1758,7 +1758,8 @@ begin
 end;
 
 procedure TMvcRun.NotifyContentChangedForMethod(aMethodIndex: integer);
-begin // do nothing at this abstract level
+begin
+  // do nothing at this abstract level
 end;
 
 procedure TMvcRun.NotifyContentChanged;
@@ -1975,7 +1976,7 @@ begin
     // 3. render regular page using proper viewer
     timer.Start;
     if IdemPropNameU(rawFormat, 'json') then
-      rendererClass := TMvcRendererJSON
+      rendererClass := TMvcRendererJson
     else
       rendererClass := TMvcRendererFromViews;
     renderer := rendererClass.Create(self);
@@ -2222,7 +2223,7 @@ begin
   if entry = nil then
     raise EMvcException.CreateUtf8(
       '%.Start(%): this class should implement %',
-      [self, aRestModel, fFactory.InterfaceTypeInfo^.Name]);
+      [self, aRestModel, fFactory.InterfaceTypeInfo^.RawName]);
   fFactoryEntry := PAnsiChar(self) + entry^.IOffset;
   for m := 0 to fFactory.MethodsCount - 1 do
     if not MethodHasView(fFactory.Methods[m]) then
@@ -2230,7 +2231,7 @@ begin
         if ArgsOutFirst <> ArgsResultIndex then
           raise EMvcException.CreateUtf8(
             '%.Start(%): %.% var/out param not allowed with TMvcAction result',
-            [self, aRestModel, fFactory.InterfaceTypeInfo^.Name, URI])
+            [self, aRestModel, fFactory.InterfaceTypeInfo^.RawName, URI])
         else
           // maps TMvcAction in TMvcApplication.RunOnRestServer
           ArgsResultIsServiceCustomAnswer := true;
@@ -2244,7 +2245,8 @@ begin
 end;
 
 procedure TMvcApplication.Error(var Msg: RawUtf8; var Scope: variant);
-begin // do nothing: just pass input error Msg and data Scope to the view
+begin
+  // do nothing: just pass input error Msg and data Scope to the view
 end;
 
 class procedure TMvcApplication.GotoView(var Action: TMvcAction; const
@@ -2297,7 +2299,7 @@ end;
 
 procedure TMvcApplication.GetMvcInfo(out info: variant);
 begin
-  info := _ObjFast(['name', fFactory.InterfaceTypeInfo^.Name,
+  info := _ObjFast(['name', fFactory.InterfaceTypeInfo^.RawName,
                     'mORMot', SYNOPSE_FRAMEWORK_VERSION,
                     'root', RestModel.Model.Root,
                     'methods', ContextFromMethods(fFactory)]);

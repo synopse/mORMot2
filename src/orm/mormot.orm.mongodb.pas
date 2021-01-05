@@ -101,7 +101,7 @@ type
     fBatchIDs: TIDDynArray;
     fBatchIDsCount: integer;
     function EngineNextID: TID;
-    function DocFromJson(const JSON: RawUtf8; Occasion: TOrmOccasion;
+    function DocFromJson(const Json: RawUtf8; Occasion: TOrmOccasion;
       var Doc: TDocVariantData): TID;
     procedure JsonFromDoc(var doc: TDocVariantData; var result: RawUtf8);
     function BsonProjectionSet(var Projection: variant; WithID: boolean;
@@ -474,7 +474,7 @@ begin
   LeaveCriticalSection(fStorageCriticalSection);
 end;
 
-function TRestStorageMongoDB.DocFromJson(const JSON: RawUtf8;
+function TRestStorageMongoDB.DocFromJson(const Json: RawUtf8;
   Occasion: TOrmOccasion; var Doc: TDocVariantData): TID;
 var
   i, ndx: PtrInt;
@@ -486,10 +486,10 @@ var
   MissingID: boolean;
   V: PVarData;
 begin
-  Doc.InitJson(JSON, [dvoValueCopiedByReference, dvoAllowDoubleValue]);
+  Doc.InitJson(Json, [dvoValueCopiedByReference, dvoAllowDoubleValue]);
   if (Doc.Kind <> dvObject) and
      (Occasion <> ooInsert) then
-    raise EOrmMongoDB.CreateUtf8('%.DocFromJson: invalid JSON context', [self]);
+    raise EOrmMongoDB.CreateUtf8('%.DocFromJson: invalid Json context', [self]);
   if not (Occasion in [ooInsert, ooUpdate]) then
     raise EOrmMongoDB.CreateUtf8(
       'Unexpected %.DocFromJson(Occasion=%)', [self, ToText(Occasion)^]);
@@ -575,7 +575,7 @@ begin
               end;
             oftBlobDynArray:
               begin
-                // store dynamic array as object (if has any JSON)
+                // store dynamic array as object (if has any Json)
                 blob := BlobToRawBlob(RawByteString(V^.VAny));
                 if blob = '' then
                   SetVariantNull(Variant(V^))
@@ -586,7 +586,7 @@ begin
                     // TBytes or TByteDynArray stored as BSON binary
                     js := ''
                   else
-                    // try to store dynamic array as BSON array (via JSON)
+                    // try to store dynamic array as BSON array (via Json)
                     js := DynArrayBlobSaveJson(rtti.Info, pointer(blob));
                   if (js <> '') and
                      (PInteger(js)^ and $00ffffff <> JSON_BASE64_MAGIC_C) then
@@ -596,7 +596,7 @@ begin
                 end;
               end;
           end;
-        // oftObject,oftVariant,oftUtf8Custom were already converted to object from JSON
+        // oftObject,oftVariant,oftUtf8Custom were already converted to object from Json
       end;
     end;
   if Occasion = ooInsert then
@@ -635,7 +635,7 @@ begin
   end;
   if Doc.Kind <> dvObject then
     raise EOrmMongoDB.CreateUtf8(
-      '%.DocFromJson: Invalid JSON context', [self]);
+      '%.DocFromJson: Invalid Json context', [self]);
 end;
 
 function TRestStorageMongoDB.EngineAdd(TableModelIndex: integer;
@@ -704,7 +704,7 @@ end;
 function TRestStorageMongoDB.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUtf8): boolean;
 var
-  JSON: RawUtf8;
+  json: RawUtf8;
   query, update: variant; // use explicit TBsonVariant for type safety
   id: TBsonIterator;
 begin
@@ -718,7 +718,7 @@ begin
     result := false
   else
   try
-    // use {%:%} here since WhereValue/SetValue are already JSON encoded
+    // use {%:%} here since WhereValue/SetValue are already json encoded
     query := BsonVariant('{%:%}',
       [fStoredClassMapping^.InternalToExternal(WhereFieldName), WhereValue], []);
     update := BsonVariant('{$set:{%:%}}',
@@ -729,10 +729,10 @@ begin
       if Owner.InternalUpdateEventNeeded(TableModelIndex) and
          id.Init(fCollection.FindBson(query, BsonVariant(['_id', 1]))) then
       begin
-        JsonEncodeNameSQLValue(SetFieldName, SetValue, JSON);
+        JsonEncodeNameSQLValue(SetFieldName, SetValue, json);
         while id.Next do
           Owner.InternalUpdateEvent(oeUpdate, TableModelIndex,
-            id.Item.DocItemToInteger('_id'), JSON, nil);
+            id.Item.DocItemToInteger('_id'), json, nil);
       end;
       Owner.FlushInternalDBCache;
     end;
@@ -882,7 +882,8 @@ function TRestStorageMongoDB.EngineDeleteWhere(TableModelIndex: Integer;
   const SqlWhere: RawUtf8; const IDs: TIDDynArray): boolean;
 var
   i: PtrInt;
-begin // here we use the pre-computed IDs[]
+begin
+  // here we use the pre-computed IDs[]
   result := false;
   if (fCollection <> nil) and
      (TableModelIndex >= 0) and
@@ -1070,7 +1071,8 @@ function TRestStorageMongoDB.GetJsonValues(const Res: TBsonDocument;
     if aNameLen <> 0 then
     begin
       if o1ndx < itemcount then
-      begin // O(1) optimistic search
+      begin
+        // O(1) optimistic search
         result := @PAnsiChar(item)[o1ndx * sizeof(item^)];
         if (result^.NameLen = aNameLen) and
            IdemPropNameUSameLen(pointer(aName), result^.name, aNameLen) then
@@ -1219,7 +1221,8 @@ const
   var
     B: TBsonWriter;
     n, i: integer;
-  begin // here we compute a BSON query, since it is the fastest
+  begin
+    // here we compute a BSON query, since it is the fastest
     result := false;
     if Stmt.SqlStatement = '' then
     begin

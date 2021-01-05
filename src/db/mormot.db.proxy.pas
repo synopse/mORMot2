@@ -380,7 +380,7 @@ type
     // - this overridden implementation will use JSON for transmission, and
     // binary encoding only for parameters (to avoid unneeded conversions, e.g.
     // when called from mormot.orm.sql.pas)
-    procedure ExecutePreparedAndFetchAllAsJson(Expanded: boolean; out JSON: RawUtf8); override;
+    procedure ExecutePreparedAndFetchAllAsJson(Expanded: boolean; out Json: RawUtf8); override;
     /// append all rows content as binary stream
     // - will save the column types and name, then every data row in optimized
     // binary format (faster and smaller than JSON)
@@ -1104,7 +1104,8 @@ var
   OutputRawUtf8DynArray: TRawUtf8DynArray absolute Output;
   OutputRawUtf8: RawUtf8 absolute Output;
   OutputSynNameValue: TSynNameValue absolute Output;
-begin // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
+begin
+  // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
   header.Magic := REMOTE_MAGIC;
   header.SessionID := fCurrentSession;
   header.Command := Command;
@@ -1227,7 +1228,8 @@ begin
 end;
 
 function TSqlDBProxyConnection.NewStatement: TSqlDBStatement;
-begin // always create a new proxy statement instance (cached on remote side)
+begin
+  // always create a new proxy statement instance (cached on remote side)
   result := TSqlDBProxyStatement.Create(self);
 end;
 
@@ -1333,7 +1335,8 @@ begin
     begin
       ft := fColumns[F].ColumnType;
       if ft < ftInt64 then
-      begin // per-row column type (SQLite3 only)
+      begin
+        // per-row column type (SQLite3 only)
         ft := TSqlDBFieldType(Reader^);
         inc(Reader);
       end;
@@ -1655,7 +1658,7 @@ begin
 end;
 
 procedure TSqlDBProxyStatement.ExecutePreparedAndFetchAllAsJson(
-  Expanded: boolean; out JSON: RawUtf8);
+  Expanded: boolean; out Json: RawUtf8);
 var
   Input: TSqlDBProxyConnectionCommandExecute;
 const
@@ -1663,8 +1666,8 @@ const
     cExecuteToJson, cExecuteToExpandedJson);
 begin
   ParamsToCommand(Input);
-  TSqlDBProxyConnectionPropertiesAbstract(fConnection.Properties).Process(cmd[Expanded],
-    Input, JSON);
+  TSqlDBProxyConnectionPropertiesAbstract(fConnection.Properties).Process(
+    cmd[Expanded], Input, Json);
 end;
 
 function TSqlDBProxyStatement.FetchAllToBinary(Dest: TStream;
@@ -1684,7 +1687,8 @@ begin
 end;
 
 function TSqlDBProxyStatement.Step(SeekFirst: boolean): boolean;
-begin // retrieve one row of data from TSqlDBStatement.FetchAllToBinary() format
+begin
+  // retrieve one row of data from TSqlDBStatement.FetchAllToBinary() format
   if SeekFirst then
     fCurrentRow := 0;
   if cardinal(fCurrentRow) >= cardinal(fDataRowCount) then
@@ -1723,7 +1727,8 @@ begin
         with fColumns[f] do
           if ColumnType in [ftUtf8, ftBlob] then
             if ColumnValueDBSize = 0 then
-            begin // unknown size -> compute
+            begin
+              // unknown size -> compute
               for i := 0 to DataRowCount - 1 do
                 IntFillDataCurrent(Reader, false); // will compute ColumnDataSize
               break;
@@ -1755,7 +1760,8 @@ begin
     else
       exit;
   if fDataCurrentRowIndex <> Index then
-  begin // compute only if changed :)
+  begin
+    // compute only if changed :)
     Reader := @PAnsiChar(fDataRowReaderOrigin)[fRowData[Index]];
     IntFillDataCurrent(Reader, false);
     fDataCurrentRowIndex := Index;

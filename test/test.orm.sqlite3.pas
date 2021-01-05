@@ -208,7 +208,7 @@ type
     procedure SoaCallbackViaWebsockets(Ajax, Relay: boolean);
   published
     /// low-level test of our 'synopsejson' WebSockets JSON protocol
-    procedure WebsocketsJSONProtocol;
+    procedure WebsocketsJsonProtocol;
     /// low-level test of our 'synopsebinary' WebSockets binary protocol
     procedure WebsocketsBinaryProtocol;
     procedure WebsocketsBinaryProtocolEncrypted;
@@ -499,7 +499,8 @@ begin
   check(Hash32(JS) = $40C1649A, 'Expected ExecuteJson result not retrieved');
   {$ifndef NOSQLITE3ENCRYPT}
   if password <> '' then
-  begin // check file encryption password change
+  begin
+    // check file encryption password change
     check(Demo.MemoryMappedMB = 0, 'mmap pragma disallowed');
     FreeAndNil(Demo); // if any exception occurs in Create(), Demo.Free is OK
     check(IsSQLite3File(TempFileName));
@@ -530,7 +531,8 @@ begin
   else
   {$endif NOSQLITE3ENCRYPT}
   if ClassType = TTestSqliteFileMemoryMap then
-  begin // force re-open to test reading
+  begin
+    // force re-open to test reading
     FreeAndNil(Demo);
     Demo := TSqlDataBase.Create(TempFileName, password);
     Demo.Synchronous := smOff;
@@ -1787,7 +1789,8 @@ begin
         check(Client.DB.BackupBackground(BackupFN, 1024, 0, OnBackupProgress, true));
         // test per-one and batch requests
         if ClassType = TTestSqliteMemory then
-        begin // time consuming, so do it once
+        begin
+          // time consuming, so do it once
           Server := TRestServerTest.Create(TOrmModel.Create([TOrmPeople]), false);
           try
             Server.Model.Owner := Server; // we just use TOrmPeople here
@@ -1877,7 +1880,8 @@ begin
                 nupd := 0;
                 for i := 0 to aStatic.Count - 1 do
                   if i and 7 <> 0 then
-                  begin // not yet deleted in BATCH mode
+                  begin
+                    // not yet deleted in BATCH mode
                     check(ClientDist.Orm.Retrieve(aStatic.ID[i], V));
                     V.YearOfBirth := 1800 + nupd;
                     check(ClientDist.Client.BatchUpdate(V) = nupd + n);
@@ -2834,7 +2838,7 @@ end;
 const
   WEBSOCKETS_KEY = 'key';
 
-procedure TTestBidirectionalRemoteConnection.WebsocketsJSONProtocol;
+procedure TTestBidirectionalRemoteConnection.WebsocketsJsonProtocol;
 begin
   WebsocketsLowLevel(
     TWebSocketProtocolJson.Create(''), focText);

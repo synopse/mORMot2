@@ -1827,7 +1827,8 @@ var
     begin
       s := GetNextLine(P, {next=}P);
       if s <> '' then
-      begin // no void line (means headers ending)
+      begin
+        // no void line (means headers ending)
         ClientSock.SockSend(s);
         if IdemPChar(pointer(s), 'CONTENT-ENCODING:') then
           // custom encoding: don't compress
@@ -1973,7 +1974,8 @@ begin
     // get headers and content
     GetHeader(noheaderfilter);
     if fServer <> nil then
-    begin // nil from TRtspOverHttpServer
+    begin
+      // nil from TRtspOverHttpServer
       if fServer.fRemoteIPHeaderUpper <> '' then
         // real Internet IP (replace 127.0.0.1 from a proxy)
         FindNameValue(headers, pointer(fServer.fRemoteIPHeaderUpper), fRemoteIP,

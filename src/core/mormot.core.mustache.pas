@@ -297,7 +297,7 @@ type
     class procedure PowerOfTwo(const Value: variant; out result: variant);
     class procedure Equals_(const Value: variant; out result: variant);
     class procedure If_(const Value: variant; out result: variant);
-    class procedure NewGUID(const Value: variant; out result: variant);
+    class procedure NewGuid(const Value: variant; out result: variant);
     class procedure ExtractFileName(const Value: variant; out result: variant);
   public
     /// parse a {{mustache}} template, and returns the corresponding
@@ -410,7 +410,7 @@ type
     // ! html := mustache.RenderJson('{things:["one", "two", "three"]}');
     // - set EscapeInvert = true to force {{value}} NOT to escape HTML chars
     // and {{{value}} escaping chars (may be useful e.g. for code generation)
-    function RenderJson(const JSON: RawUtf8;
+    function RenderJson(const Json: RawUtf8;
       Partials: TSynMustachePartials = nil;
       Helpers: TSynMustacheHelpers = nil;
       const OnTranslate: TOnStringTranslate = nil;
@@ -424,7 +424,7 @@ type
     // !   html := mustache.RenderJson('{name:?,value:?}',[],['Chris',10000]);
     // - set EscapeInvert = true to force {{value}} NOT to escape HTML chars
     // and {{{value}} escaping chars (may be useful e.g. for code generation)
-    function RenderJson(const JSON: RawUtf8;
+    function RenderJson(const Json: RawUtf8;
       const Args, Params: array of const;
       Partials: TSynMustachePartials = nil;
       Helpers: TSynMustacheHelpers = nil;
@@ -446,7 +446,7 @@ const
   /// Mustache-friendly JSON Serialization Options
   // - as used e.g. from mormot.rest.mvc Data Context from Cookies
   TEXTWRITEROPTIONS_MUSTACHE =
-     [twoForceJSONExtended,
+     [twoForceJsonExtended,
       twoEnumSetsAsBooleanInRecord,
       twoTrimLeftEnumSets];
 
@@ -1394,24 +1394,24 @@ begin
   end;
 end;
 
-function TSynMustache.RenderJson(const JSON: RawUtf8;
+function TSynMustache.RenderJson(const Json: RawUtf8;
   Partials: TSynMustachePartials; Helpers: TSynMustacheHelpers;
   const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUtf8;
 var
   context: variant;
 begin
-  _Json(JSON, context{%H-}, JSON_OPTIONS[true]);
+  _Json(Json, context{%H-}, JSON_OPTIONS[true]);
   result := Render(context, Partials, Helpers, OnTranslate, EscapeInvert);
 end;
 
-function TSynMustache.RenderJson(const JSON: RawUtf8;
+function TSynMustache.RenderJson(const Json: RawUtf8;
   const Args, Params: array of const; Partials: TSynMustachePartials;
   Helpers: TSynMustacheHelpers; const OnTranslate: TOnStringTranslate;
   EscapeInvert: boolean): RawUtf8;
 var
   context: variant;
 begin
-  _Json(FormatUtf8(JSON, Args, Params, true), context{%H-}, JSON_OPTIONS[true]);
+  _Json(FormatUtf8(Json, Args, Params, true), context{%H-}, JSON_OPTIONS[true]);
   result := Render(context, Partials, Helpers, OnTranslate, EscapeInvert);
 end;
 
@@ -1493,11 +1493,11 @@ begin
       'DateTimeToText', 'DateToText', 'DateFmt', 'TimeLogToText', 'JsonQuote',
       'JsonQuoteUri', 'ToJson', 'MarkdownToHtml', 'SimpleToHtml', 'WikiToHtml',
       'BlobToBase64', 'EnumTrim', 'EnumTrimRight', 'PowerOfTwo', 'Equals',
-      'If', 'NewGUID', 'ExtractFileName', 'Lower', 'Upper'], [
+      'If', 'NewGuid', 'ExtractFileName', 'Lower', 'Upper'], [
       DateTimeToText, DateToText, DateFmt, TimeLogToText, JsonQuote,
       JsonQuoteUri, ToJson, MarkdownToHtml, SimpleToHtml, WikiToHtml,
       BlobToBase64, EnumTrim, EnumTrimRight, PowerOfTwo, Equals_,
-      If_, NewGUID, ExtractFileName, Lower, Upper]);
+      If_, NewGuid, ExtractFileName, Lower, Upper]);
   result := HelpersStandardList;
 end;
 
@@ -1766,13 +1766,13 @@ begin
     end;
 end;
 
-class procedure TSynMustache.NewGUID(const Value: variant;
+class procedure TSynMustache.NewGuid(const Value: variant;
   out result: variant);
 var
   g: TGUID;
 begin
   CreateGUID(g);
-  RawUtf8ToVariant(GUIDToRawUtf8(g), result);
+  RawUtf8ToVariant(GuidToRawUtf8(g), result);
 end;
 
 class procedure TSynMustache.ExtractFileName(const Value: variant;

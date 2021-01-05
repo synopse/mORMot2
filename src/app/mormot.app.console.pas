@@ -68,7 +68,7 @@ type
     // - as created e.g. by TCommandLine.CreateAsArray constructor
     function AsArray: TRawUtf8DynArray;
     /// serialize all recognized switches as UTF-8 JSON text
-    function AsJson(Format: TTextWriterJSONFormat): RawUtf8;
+    function AsJson(Format: TTextWriterJsonFormat): RawUtf8;
     /// equals TRUE if the -noprompt switch has been supplied
     // - may be used to force pure execution without console interaction,
     // e.g. when run from another process
@@ -140,7 +140,7 @@ type
     // - as created e.g. by TCommandLine.CreateAsArray constructor
     function AsArray: TRawUtf8DynArray;
     /// serialize all recognized switches as UTF-8 JSON text
-    function AsJson(Format: TTextWriterJSONFormat): RawUtf8;
+    function AsJson(Format: TTextWriterJsonFormat): RawUtf8;
     /// equals TRUE if the -noprompt switch has been supplied
     // - may be used to force pure execution without console interaction,
     // e.g. when run from another process
@@ -291,7 +291,8 @@ var
 begin
   i := fValues.GetValueIndex(Switch);
   if i >= 0 then
-  begin // found
+  begin
+    // found
     VariantToUtf8(fValues.Values[i], result);
     fValues.Delete(i);
     exit;
@@ -360,7 +361,7 @@ begin
   fValues.ToRawUtf8DynArray(result);
 end;
 
-function TCommandLine.AsJson(Format: TTextWriterJSONFormat): RawUtf8;
+function TCommandLine.AsJson(Format: TTextWriterJsonFormat): RawUtf8;
 begin
   result := fValues.ToJson('', '', Format);
 end;

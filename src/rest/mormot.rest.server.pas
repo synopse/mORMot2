@@ -8,7 +8,7 @@ unit mormot.rest.server;
 
    Server-Side REST Process
     - TRestServerUriContext Access to the Server-Side Execution
-    - TRestServerRoutingREST/TRestServerRoutingJsonRpc Requests Parsing Scheme
+    - TRestServerRoutingRest/TRestServerRoutingJsonRpc Requests Parsing Scheme
     - TAuthSession for In-Memory User Sessions
     - TRestServerAuthentication Implementing Authentication Schemes
     - TRestServerMonitor for High-Level Statistics of a REST Server
@@ -158,7 +158,7 @@ type
   // kind of custom routing or execution scheme
   // - instantiated by the TRestServer.Uri() method using its ServicesRouting
   // property
-  // - see TRestServerRoutingREST and TRestServerRoutingJsonRpc for working inherited
+  // - see TRestServerRoutingRest and TRestServerRoutingJsonRpc for working inherited
   // classes - NEVER set this abstract TRestServerUriContext class to
   // TRest.ServicesRouting property !
   TRestServerUriContext = class
@@ -848,11 +848,11 @@ type
   PRestServerMethod = ^TRestServerMethod;
 
 
-{ ************ TRestServerRoutingREST/TRestServerRoutingJsonRpc Requests Parsing Scheme }
+{ ************ TRestServerRoutingRest/TRestServerRoutingRest Requests Parsing Scheme }
 
   /// calling context for a TOnRestServerCallBack using simple REST for
   // interface-based services
-  // - match TRestClientRoutingREST reciprocal class
+  // - match TRestClientRoutingRest reciprocal class
   // - this class will use RESTful routing for interface-based services:
   // method name will be identified within the URI, as
   // $ /Model/Interface.Method[/ClientDrivenID]
@@ -871,7 +871,7 @@ type
   // - one benefit of having .../ClientDrivenID encoded at URI is that it will
   // be more secured in our RESTful authentication scheme: each method and even
   // client driven session will be signed individualy
-  TRestServerRoutingREST = class(TRestServerUriContext)
+  TRestServerRoutingJsonRpc = class(TRestServerUriContext)
   protected
     /// retrieve interface-based SOA with URI RESTful routing
     // - should set Service member (and possibly ServiceMethodIndex)
@@ -902,7 +902,7 @@ type
   // $ POST /root/ComplexNumber
   // $ (...)
   // $ {"method":"Add","params":[20,30],"id":1234}
-  TRestServerRoutingJsonRpc = class(TRestServerUriContext)
+  TRestServerRoutingRest = class(TRestServerUriContext)
   protected
     /// retrieve interface-based SOA with URI JSON/RPC routing
     // - this overridden implementation expects an URI encoded with
@@ -921,7 +921,7 @@ type
   // - match TRestClientRoutingClass reciprocal meta-class
   // - most of the internal methods are declared as virtual, so it allows any
   // kind of custom routing or execution scheme
-  // - TRestServerRoutingREST and TRestServerRoutingJsonRpc classes
+  // - TRestServerRoutingJsonRpc and TRestServerRoutingRest classes
   // are provided in this unit, to allow RESTful and JSON/RPC protocols
   TRestServerUriContextClass = class of TRestServerUriContext;
 
@@ -1543,7 +1543,7 @@ type
     fInterface: TGUID;
   public
     /// initialize the instance for a given REST and callback interface
-    constructor Create(aRest: TRest; const aGUID: TGUID); reintroduce;
+    constructor Create(aRest: TRest; const aGuid: TGUID); reintroduce;
     /// notify the associated TRestServer that the callback is disconnnected
     // - i.e. will call TRestServer's TServiceContainer.CallBackUnRegister()
     // - this method will process the unsubscription only once
@@ -1575,7 +1575,7 @@ type
     // - you can optionally set a REST and callback interface for automatic
     // notification when this TInterfacedCallback will be released
     constructor Create(aTimeOutMs: integer;
-      aRest: TRest; const aGUID: TGUID); reintroduce;
+      aRest: TRest; const aGuid: TGUID); reintroduce;
     /// finalize the callback instance
     destructor Destroy; override;
     /// called to wait for the callback to be processed, or trigger timeout
@@ -1766,7 +1766,7 @@ type
   /// callback raised if TRestServer.Uri execution failed
   // - should return TRUE to execute Ctxt.Error(E,...), FALSE if returned
   // content has already been set as expected by the client
-  TNotifyErrorUri = function(Ctxt: TRestServerUriContext;
+  TOnErrorUri = function(Ctxt: TRestServerUriContext;
     E: Exception): boolean of object;
 
   /// event signature used to notify a client callback
@@ -1930,12 +1930,12 @@ type
     // - see also TRest.OnDecryptBody/OnEncryptBody, which is common to the
     // client side, so may be better to implement shared process (e.g. encryption)
     OnAfterUri: TOnAfterUri;
-    /// event trigerred when Uri() failed to process a request
-    // - if Ctxt.ExecuteCommand raised an execption, this callback will be
+    /// event trigerred when Uri() raise an exception and failed to process a request
+    // - if Ctxt.ExecuteCommand raised an exception, this callback will be
     // run with all neeed information
     // - should return TRUE to execute Ctxt.Error(E,...), FALSE if returned
     // content has already been set as expected by the client
-    OnErrorUri: TNotifyErrorUri;
+    OnErrorUri: TOnErrorUri;
     /// event to customize the information returned by root/timestamp/info
     // - called by TRestServer.InternalInfo method
     // - you can add some application-level information for monitoring
@@ -2218,7 +2218,7 @@ type
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
       const aContractExpected: RawUtf8 = ''): boolean; overload;
     /// the routing classs of the service remote request
-    // - by default, will use TRestRoutingREST, i.e. an URI-based
+    // - by default, will use TRestRoutingRest, i.e. an URI-based
     // layout which is secure (since will use our RESTful authentication scheme),
     // and also very fast
     // - but TRestRoutingJsonRpc can e.g. be set (on BOTH client and
@@ -3376,7 +3376,7 @@ procedure TRestServerUriContext.ExecuteOrmGet;
       W := TableModelProps.Props.CreateJsonWriter(
         TRawByteStringStream.Create, true, FieldsCsv, {knownrows=}0);
       try
-        W.CustomOptions := W.CustomOptions + [twoForceJSONStandard]; // regular JSON
+        W.CustomOptions := W.CustomOptions + [twoForceJsonStandard]; // regular JSON
         W.OrmOptions := Options; // will do the magic
         rec.AppendFillAsJsonValues(W);
         W.SetText(Call.OutBody);
@@ -4301,8 +4301,8 @@ begin
     RetrieveCookies;
   n := length(fInputCookies);
   for i := 0 to n - 1 do
-    if fInputCookies[i].Name = CookieName then
-    begin // cookies are case-sensitive
+    if fInputCookies[i].Name = CookieName then // cookies are case-sensitive
+    begin
       fInputCookies[i].Value := CookieValue; // in-place update
       exit;
     end;
@@ -4766,11 +4766,11 @@ end;
 
 
 
-{ ************ TRestServerRoutingREST/TRestServerRoutingJsonRpc Requests Parsing Scheme }
+{ ************ TRestServerRoutingJsonRpc/TRestServerRoutingRest Requests Parsing Scheme }
 
-{ TRestServerRoutingJsonRpc }
+{ TRestServerRoutingRest }
 
-procedure TRestServerRoutingJsonRpc.UriDecodeSoaByInterface;
+procedure TRestServerRoutingRest.UriDecodeSoaByInterface;
 var
   i: PtrInt;
   method, clientdrivenid: RawUtf8;
@@ -4816,9 +4816,9 @@ begin
   end;
 end;
 
-procedure TRestServerRoutingJsonRpc.ExecuteSoaByInterface;
+procedure TRestServerRoutingRest.ExecuteSoaByInterface;
 var
-  JSON: RawUtf8;
+  json: RawUtf8;
 
   procedure DecodeUriParametersIntoJSON(const input: TRawUtf8DynArray);
   var
@@ -4828,7 +4828,7 @@ var
     temp: TTextWriterStackBuffer;
   begin
     WR := TJsonSerializer.CreateOwnedStream(temp);
-    try // convert URI parameters into the expected ordered JSON array
+    try // convert URI parameters into the expected ordered json array
       WR.Add('[');
       with PInterfaceMethod(ServiceMethod)^ do
       begin
@@ -4853,7 +4853,7 @@ var
       end;
       WR.CancelLastComma;
       WR.Add(']');
-      WR.SetText(JSON);
+      WR.SetText(json);
     finally
       WR.Free;
     end;
@@ -4861,20 +4861,21 @@ var
 
 var
   Par: PUtf8Char;
-begin // here Ctxt.Service and ServiceMethod(Index) are set
+begin
+  // here Ctxt.Service and ServiceMethod(Index) are set
   if (Server.Services = nil) or
      (Service = nil) then
     raise EServiceException.CreateUtf8(
       '%.ExecuteSoaByInterface invalid call', [self]);
   //  URI as '/Model/Interface.Method[/ClientDrivenID]'
   if Call.InBody <> '' then
-    // parameters sent as JSON array/object (the Delphi/AJAX way) or single blob
+    // parameters sent as json array/object (the Delphi/AJAX way) or single blob
     if (ServiceMethod <> nil) and
        PInterfaceMethod(ServiceMethod)^.ArgsInputIsOctetStream and
        not Call.InBodyTypeIsJson then
     begin
-      JSON := BinToBase64(Call.InBody, '["', '"]', false);
-      ServiceParameters := pointer(JSON); // as expected by InternalExecuteSoaByInterface
+      json := BinToBase64(Call.InBody, '["', '"]', false);
+      ServiceParameters := pointer(json); // as expected by InternalExecuteSoaByInterface
     end
     else
       ServiceParameters := pointer(Call.InBody)
@@ -4888,8 +4889,8 @@ begin // here Ctxt.Service and ServiceMethod(Index) are set
         inc(Par); // ignore trailing spaces
       if (Par^ = '[') or
          IdemPChar(Par, '%5B') then
-        // as JSON array (input is e.g. '+%5B...' for ' [...')
-        JSON := UrlDecode(Parameters)
+        // as json array (input is e.g. '+%5B...' for ' [...')
+        json := UrlDecode(Parameters)
       else
       begin
         // or as a list of parameters (input is 'Param1=Value1&Param2=Value2...')
@@ -4899,16 +4900,16 @@ begin // here Ctxt.Service and ServiceMethod(Index) are set
           DecodeUriParametersIntoJSON(fInput);
       end;
     end;
-    ServiceParameters := pointer({%H-}JSON);
+    ServiceParameters := pointer({%H-}json);
   end;
   // now Service, ServiceParameters, ServiceMethod(Index) are set
   InternalExecuteSoaByInterface;
 end;
 
 
-{ TRestServerRoutingREST }
+{ TRestServerRoutingJsonRpc }
 
-procedure TRestServerRoutingREST.UriDecodeSoaByInterface;
+procedure TRestServerRoutingJsonRpc.UriDecodeSoaByInterface;
 begin
   if (Table = nil) and
      (MethodIndex < 0) and
@@ -4919,13 +4920,14 @@ begin
   // ServiceMethodIndex will be retrieved from "method": in body
 end;
 
-procedure TRestServerRoutingREST.ExecuteSoaByInterface;
+procedure TRestServerRoutingJsonRpc.ExecuteSoaByInterface;
 var
   method: RawUtf8;
   Values: array[0..2] of TValuePUtf8Char;
   m: TServiceInternalMethod;
   tmp: TSynTempBuffer;
-begin // here Ctxt.Service is set (not ServiceMethodIndex yet)
+begin
+  // here Ctxt.Service is set (not ServiceMethodIndex yet)
   if (Server.Services = nil) or
      (Service = nil) then
     raise EServiceException.CreateUtf8(
@@ -5948,7 +5950,8 @@ begin
   if rec.IDValue = recid then
     result := true
   else if fStorage.Retrieve(recid, rec) then
-  begin // may use REST cache
+  begin
+    // may use REST cache
     Track := rec.Info;
     if rec.Gran = mugHour then
       fComment := rec.Comment;
@@ -6010,11 +6013,11 @@ end;
 
 { TInterfacedCallback }
 
-constructor TInterfacedCallback.Create(aRest: TRest; const aGUID: TGUID);
+constructor TInterfacedCallback.Create(aRest: TRest; const aGuid: TGUID);
 begin
   inherited Create;
   fRest := aRest;
-  fInterface := aGUID;
+  fInterface := aGuid;
 end;
 
 procedure TInterfacedCallback.CallbackRestUnregister;
@@ -6042,9 +6045,9 @@ end;
 { TBlockingCallback }
 
 constructor TBlockingCallback.Create(aTimeOutMs: integer; aRest: TRest;
-  const aGUID: TGUID);
+  const aGuid: TGUID);
 begin
-  inherited Create(aRest, aGUID);
+  inherited Create(aRest, aGuid);
   fProcess := TBlockingProcess.Create(aTimeOutMs, fSafe);
 end;
 
@@ -6107,7 +6110,7 @@ begin
       TRestServerAuthenticationSspi
       {$endif DOMAINRESTAUTH}]);
   fAssociatedServices := TServicesPublishedInterfacesList.Create(0);
-  fServicesRouting := TRestServerRoutingREST;
+  fServicesRouting := TRestServerRoutingRest;
   inherited Create(aModel);
   fAfterCreation := true;
   fStats := TRestServerMonitor.Create(self);
@@ -6828,7 +6831,8 @@ end;
 function TRestServer.SessionDeleteDeprecated: cardinal;
 var
   i: PtrInt;
-begin // caller made fSessions.Safe.Lock
+begin
+  // caller made fSessions.Safe.Lock
   result := GetTickCount64 shr 10;
   if (self <> nil) and
      (fSessions<>nil) and
@@ -6847,7 +6851,8 @@ var
   i: integer;
   tix, session: cardinal;
   sessions: ^TAuthSession;
-begin // caller of RetrieveSession() made fSessions.Safe.Lock
+begin
+  // caller of RetrieveSession() made fSessions.Safe.Lock
   if (self <> nil) and
      (fSessions <> nil) then
   begin
@@ -7080,7 +7085,7 @@ function TRestServer.ServiceDefine(aImplementationClass: TInterfacedClass;
 var
   ti: PRttiInfoDynArray;
 begin
-  ti := TInterfaceFactory.GUID2TypeInfo(aInterfaces);
+  ti := TInterfaceFactory.Guid2TypeInfo(aInterfaces);
   result := ServiceRegister(aImplementationClass, ti, aInstanceCreation,
     aContractExpected);
 end;
@@ -7091,7 +7096,7 @@ function TRestServer.ServiceDefine(aSharedImplementation: TInterfacedObject;
 var
   ti: PRttiInfoDynArray;
 begin
-  ti := TInterfaceFactory.GUID2TypeInfo(aInterfaces);
+  ti := TInterfaceFactory.Guid2TypeInfo(aInterfaces);
   result := ServiceRegister(aSharedImplementation, ti, aContractExpected);
 end;
 
@@ -7102,7 +7107,7 @@ function TRestServer.ServiceDefine(aClient: TRest;
 var
   ti: PRttiInfoDynArray;
 begin
-  ti := TInterfaceFactory.GUID2TypeInfo(aInterfaces);
+  ti := TInterfaceFactory.Guid2TypeInfo(aInterfaces);
   result := ServiceRegister(aClient, ti, aInstanceCreation, aContractExpected);
 end;
 

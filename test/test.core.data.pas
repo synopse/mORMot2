@@ -608,7 +608,7 @@ begin
     '{{newguid}}');
   html := mustache.RenderJson('{}', nil, TSynMustache.HelpersGetStandardList);
   check((html <> '') and
-        (TextToGUID(@html[2], @guid) <> nil));
+        (TextToGuid(@html[2], @guid) <> nil));
   mustache := TSynMustache.Parse(
     '<h1>{{header}}</h1>'#$D#$A'{{#items}}'#$D#$A'{{#first}}'#$D#$A +
     '<li><strong>{{name}}</strong></li>'#$D#$A'{{/first}}'#$D#$A +
@@ -698,7 +698,8 @@ end;
 
 class procedure TCollTstDynArray.FVReader(
     var Context: TJsonParserContext; Data: pointer);
-begin // '[1,2001,3001,4001,"1","1001"],[2,2002,3002,4002,"2","1002"],...'
+begin
+  // '[1,2001,3001,4001,"1","1001"],[2,2002,3002,4002,"2","1002"],...'
   if not Context.ParseArray then
     exit;
   PFV(Data)^.Major := GetNextItemCardinal(Context.JSON);
@@ -1539,8 +1540,8 @@ var
     Check(JAS.A = 1);
     Check(JAS.B = 2);
     Check(length(JAS.C) = 2);
-    Check(GUIDToRawUtf8(JAS.C[0]) = '{C9A646D3-9C61-4CB7-BFCD-EE2522C8F633}');
-    Check(GUIDToRawUtf8(JAS.C[1]) = '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}');
+    Check(GuidToRawUtf8(JAS.C[0]) = '{C9A646D3-9C61-4CB7-BFCD-EE2522C8F633}');
+    Check(GuidToRawUtf8(JAS.C[1]) = '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}');
     Check(JAS.D = '4');
     Check(length(JAS.E) = 1);
     Check(JAS.E[0].F = 'f');
@@ -2797,7 +2798,8 @@ var
   str: RawUtf8;
   i: integer;
   o: variant;
-begin // see https://github.com/mongodb/libbson/blob/master/tests/test-decimal128.c
+begin
+  // see https://github.com/mongodb/libbson/blob/master/tests/test-decimal128.c
   Check(v.FromText('') = dsvError);
   Check(v.FromText('.') = dsvError);
   Check(v.FromText('.e') = dsvError);
@@ -3388,7 +3390,7 @@ procedure TTestCoreProcess._TDocVariant;
 
   procedure CheckDoc(var Doc: TDocVariantData; ExpectedYear: integer = 1972);
   var
-    JSON: RawUtf8;
+    json: RawUtf8;
   begin
     if CheckFailed(Doc.VarType = DocVariantVType) then
       exit;
@@ -3408,12 +3410,12 @@ procedure TTestCoreProcess._TDocVariant;
     Check(variant(Doc)._(1) = ExpectedYear);
     Check(variant(Doc).Value(0) = 'John');
     Check(variant(Doc).Value(1) = ExpectedYear);
-    JSON := '{"name":"John","birthyear":' + Int32ToUtf8(ExpectedYear) + '}';
-    Check(Doc.ToJson = JSON);
-    Check(variant(Doc)._JSON = JSON);
-    Check(variant(Doc)._JSON__ = JSON, 'pseudo methods use IdemPChar');
-    Check(VariantSaveMongoJson(variant(Doc), modMongoStrict) = JSON);
-    Check(VariantToUtf8(variant(Doc)) = JSON);
+    json := '{"name":"John","birthyear":' + Int32ToUtf8(ExpectedYear) + '}';
+    Check(Doc.ToJson = json);
+    Check(variant(Doc)._JSON = json);
+    Check(variant(Doc)._JSON__ = json, 'pseudo methods use IdemPChar');
+    Check(VariantSaveMongoJson(variant(Doc), modMongoStrict) = json);
+    Check(VariantToUtf8(variant(Doc)) = json);
     Check(Doc.U['name'] = 'John');
     Check(Doc.I['birthyear'] = ExpectedYear);
   end;
@@ -4371,7 +4373,8 @@ const
 function ReferenceCrc32(aCRC32: cardinal; inBuf: pointer; inLen: integer): cardinal;
 var
   i: integer;
-begin // slowest reference version
+begin
+  // slowest reference version
   result := not aCRC32;
   for i := 1 to inLen do
   begin

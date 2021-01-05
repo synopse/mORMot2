@@ -205,7 +205,8 @@ begin
   end;
   case fDBMS of
     dSQLite:
-      begin // UniDAC support of SQLite3 is just buggy
+      begin
+        // UniDAC support of SQLite3 is just buggy
         fSpecificOptions.Values['ForceCreateDatabase'] := 'true';
         fSQLCreateField[ftInt64] := ' BIGINT'; // SQLite3 INTEGER = 32bit for UniDAC
       end;
@@ -297,7 +298,8 @@ begin
       F.ColumnPrecision := meta.FieldByName('DATA_PRECISION').AsInteger;
       F.ColumnType := ColumnTypeNativeToDB(F.ColumnTypeNative, F.ColumnScale);
       if F.ColumnType = ftUnknown then
-      begin // UniDAC metadata failed -> use SQL
+      begin
+        // UniDAC metadata failed -> use SQL
         inherited GetFields(aTableName, Fields);
         exit;
       end;

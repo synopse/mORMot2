@@ -307,12 +307,14 @@ implementation
 // inlined zutil.obj for Delphi Win32
 
 function zcalloc(AppData: Pointer; Items, Size: cardinal): Pointer; cdecl;
-begin // direct use of the (FastMM4) delphi heap for all zip memory allocation
+begin
+  // direct use of the (FastMM4) delphi heap for all zip memory allocation
   Getmem(result, Items * Size);
 end;
 
 procedure zcfree(AppData, Block: Pointer); cdecl;
-begin // direct use of the (FastMM4) delphi heap for all zip memory allocation
+begin
+  // direct use of the (FastMM4) delphi heap for all zip memory allocation
   FreeMem(Block);
 end;
 

@@ -304,7 +304,8 @@ var
   sha: TSha512;
   c: AnsiChar;
   temp: RawByteString;
-begin // includes SHA-384, which is a truncated SHA-512
+begin
+  // includes SHA-384, which is a truncated SHA-512
   Check(SHA384('') =
     '38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63' +
     'f6e1da274edebfe76f65fbd51ad2f14898b95b');

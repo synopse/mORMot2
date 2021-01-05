@@ -464,7 +464,8 @@ var
   mach_timenanosecond: boolean; // very likely to be TRUE on Intel CPUs
 
 procedure QueryPerformanceCounter(out Value: Int64);
-begin // returns time in nano second resolution
+begin
+  // returns time in nano second resolution
   Value := mach_absolute_time;
   if mach_timeinfo.Denom = 1 then
     if mach_timeinfo.Numer = 1 then
@@ -1016,10 +1017,7 @@ begin
       (integer(limit.rlim_max) = max)) or
      (not hard and
       (integer(limit.rlim_cur) = max)) then
-  begin
-    result := max; // already to the expected value
-    exit;
-  end;
+    exit(max); // already to the expected value
   if hard then
     limit.rlim_max := max
   else
@@ -1105,10 +1103,8 @@ function IdemPChar(p, up: PUtf8Char): boolean; inline;
 var
   c, u: AnsiChar;
 begin
+  // we know that p<>nil and up<>nil within this unit
   result := false;
-  if (p = nil) or
-     (up = nil) then
-    exit;
   repeat
     u := up^;
     if u = #0 then
@@ -1116,11 +1112,16 @@ begin
     inc(up);
     c := p^;
     inc(p);
-    if (c >= 'a') and
-       (c <= 'z') then
-      dec(c, 32);
     if c <> u then
-      exit;
+      if (c >= 'a') and
+         (c <= 'z') then
+      begin
+        dec(c, 32);
+        if c <> u then
+          exit;
+      end
+      else
+        exit;
   until false;
   result := true;
 end;
@@ -1216,7 +1217,8 @@ end;
 // we bypass crt.pp since this unit cancels the SIGINT signal
 
 procedure AllocConsole;
-begin // nothing to do on Linux
+begin
+  // nothing to do on Linux
 end;
 
 {$I-}
@@ -1243,7 +1245,8 @@ begin
 end;
 
 procedure TextBackground(Color: TConsoleColor);
-begin // not implemented yet - but not needed either
+begin
+  // not implemented yet - but not needed either
 end;
 
 function UnixKeyPending: boolean;
@@ -1374,7 +1377,10 @@ begin
 end;
 
 var
-  _HomePath, _TempPath, _UserPath, _LogPath: TFileName;
+  _HomePath,
+  _TempPath,
+  _UserPath,
+  _LogPath: TFileName;
 
 function GetSystemPath(kind: TSystemPath): TFileName;
 begin
@@ -1508,7 +1514,8 @@ var
 begin
   proc := '/proc/' + IntToStr(PID);
   if tryprocexe then
-  begin // need to be root to follow /proc/[pid]/exe
+  begin
+    // need to be root to follow /proc/[pid]/exe
     result := fpReadLink(proc + '/exe');
     if result <> '' then
       exit;

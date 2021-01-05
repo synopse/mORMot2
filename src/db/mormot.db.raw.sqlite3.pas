@@ -2362,7 +2362,7 @@ type
     // format and contains true BLOB data (no conversion into TEXT, as with
     // TOrmTableDB) - so will work for sftBlob, sftBlobDynArray and sftBlobRecord
     // - returns the number of data rows added to JSON (excluding the headers)
-    function Execute(aDB: TSqlite3DB; const aSql: RawUtf8; JSON: TStream;
+    function Execute(aDB: TSqlite3DB; const aSql: RawUtf8; Json: TStream;
       Expand: boolean = false): PtrInt; overload;
     /// Execute one SQL statement which return the results in JSON format
     // - use internaly Execute() above with a TRawByteStringStream, and return a string
@@ -3886,7 +3886,7 @@ begin
     result := 1
   else
     result := Unicode_CompareString(s1, s2, s1Len shr 1, s2Len shr 1,
-      {igncase=}true) - 2;
+      {igncase=} true) - 2;
 end;
 
 function Utf8SQLCompNoCase(CollateParam: pointer; s1Len: integer; s1: pointer;
@@ -3958,7 +3958,8 @@ procedure InternalMod(Context: TSqlite3FunctionContext; argc: integer;
   var argv: TSqlite3ValueArray); cdecl;
 var
   A1, A2: Int64;
-begin // implements the MOD() function, just like Oracle and others
+begin
+  // implements the MOD() function, just like Oracle and others
   if argc <> 2 then
   begin
     ErrorWrongNumberOfArgs(Context);
@@ -4110,7 +4111,8 @@ begin
     exit;
   Blob := sqlite3.value_blob(argv[0]);
   if Blob <> nil then
-  begin // search into direct in-memory mapping (no allocation)
+  begin
+    // search into direct in-memory mapping (no allocation)
     Blob := SimpleDynArrayLoadFrom(
       Blob, sqlite3.user_data(Context), Count, ElemSize);
     if Blob <> nil then
@@ -4727,7 +4729,8 @@ begin
     CacheFlush;
   except
     on Exception do
-    begin // ensure critical section is left even on error
+    begin
+      // ensure critical section is left even on error
       fSafe.UnLock;
       raise;
     end;
@@ -4777,7 +4780,8 @@ begin
     end;
   except
     on Exception do
-    begin // ensure critical section is left even on error
+    begin
+      // ensure critical section is left even on error
       fSafe.UnLock;
       raise;
     end;
@@ -4836,7 +4840,8 @@ begin
 end;
 
 function TSqlDataBase.GetSqlite3Library: TSqlite3Library;
-begin // class function may be better, but fails on Delphi 2005
+begin
+  // class function may be better, but fails on Delphi 2005
   result := sqlite3;
 end;
 
@@ -5369,7 +5374,8 @@ var
   len: integer;
 begin
   if pointer(Value) = nil then
-  begin // avoid to bind '' as null
+  begin
+    // avoid to bind '' as null
     sqlite3_check(RequestDB,
       sqlite3.bind_text(Request, Param, @NULCHAR, 0, SQLITE_STATIC));
     exit;
@@ -5486,7 +5492,8 @@ end;
 
 function TSqlRequest.ExecuteNoException(aDB: TSqlite3DB;
   const aSql: RawUtf8): boolean;
-begin // avoid sqlite3_check() calls for no ESqlite3Exception
+begin
+  // avoid sqlite3_check() calls for no ESqlite3Exception
   result := false;
   if (aDB <> 0) and
      (aSql <> '') then
@@ -5571,7 +5578,7 @@ begin
 end;
 
 function TSqlRequest.Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
-  JSON: TStream; Expand: boolean): PtrInt;
+  Json: TStream; Expand: boolean): PtrInt;
 // expand=true: [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
 // expand=false: { "FieldCount":2,"Values":["col1","col2",val11,"val12",val21,..] }
 var
@@ -5580,7 +5587,7 @@ var
   tmp: TTextWriterStackBuffer;
 begin
   result := 0;
-  W := TJsonWriter.Create(JSON, Expand, false, nil, 0, @tmp);
+  W := TJsonWriter.Create(Json, Expand, false, nil, 0, @tmp);
   try
     // prepare the SQL request
     if aSql <> '' then // if not already prepared, reset and bound by caller
@@ -5594,7 +5601,7 @@ begin
     SetLength(W.ColNames, FieldCount);
     for i := 0 to FieldCount - 1 do
       W.ColNames[i] := sqlite3.column_name(Request, i);
-    W.AddColumns; // write or init field names for appropriate JSON Expand
+    W.AddColumns; // write or init field names for appropriate Json Expand
     if Expand then
       W.Add('[');
     // write rows data
@@ -5728,7 +5735,8 @@ begin
 end;
 
 function TSqlRequest.FieldInt(Col: integer): Int64;
-begin // internaly, SQLite always uses Int64 -> pure integer function is useless
+begin
+  // internaly, SQLite always uses Int64 -> pure integer function is useless
   if cardinal(Col) >= cardinal(FieldCount) then
     raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldInt');
   result := sqlite3.column_int64(Request, Col);

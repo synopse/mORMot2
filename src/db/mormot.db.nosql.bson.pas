@@ -401,7 +401,7 @@ type
     function GetNewDoc(const BsonDoc: TBsonDocument): variant;
   public
     /// customization of JSON conversion into TBsonVariant kind of variants
-    function TryJsonToVariant(var JSON: PUtf8Char; var Value: variant;
+    function TryJsonToVariant(var Json: PUtf8Char; var Value: variant;
       EndOfObject: PUtf8Char): boolean; override;
     /// variant serialization will use modMongoStrict JSON-compatible mode
     procedure ToJson(W: TTextWriter; const Value: variant; Escape:
@@ -773,7 +773,7 @@ type
     // - this method is used recursively by BsonWriteDocFromJson(), and should
     // not be called directly
     // - will return JSON=nil in case of unexpected error in the supplied JSON
-    procedure BsonWriteFromJson(const name: RawUtf8; var JSON: PUtf8Char;
+    procedure BsonWriteFromJson(const name: RawUtf8; var Json: PUtf8Char;
       EndOfObject: PUtf8Char; DoNotTryExtendedMongoSyntax: boolean = false);
 
     /// recursive writing of a BSON document or value from a TDocVariant
@@ -823,7 +823,7 @@ type
     // $ {name:"John",field:/acme.*corp/i}
     // - if DoNotTryExtendedMongoSyntax is TRUE, process may be slightly faster
     // - will create the BSON binary without any temporary TDocVariant storage
-    function BsonWriteDocFromJson(JSON: PUtf8Char; aEndOfObject: PUtf8Char;
+    function BsonWriteDocFromJson(Json: PUtf8Char; aEndOfObject: PUtf8Char;
       out Kind: TBsonElementType; DoNotTryExtendedMongoSyntax: boolean = false): PUtf8Char;
 
     /// to be called before a BSON document will be written
@@ -1010,7 +1010,7 @@ function BsonFieldSelector(const FieldNamesCsv: RawUtf8): TBsonDocument; overloa
 // ! Bson('{name:"John",field:/acme.*corp/i}');
 // - will create the BSON binary without any temporary TDocVariant storage, by
 // calling JsonBufferToBsonDocument() on a temporary copy of the supplied JSON
-function Bson(const JSON: RawUtf8; kind: PBsonElementType = nil): TBsonDocument; overload;
+function Bson(const Json: RawUtf8; kind: PBsonElementType = nil): TBsonDocument; overload;
   {$ifndef ISDELPHI20092010}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// store some object content, supplied as (extended) JSON and parameters,
@@ -1055,7 +1055,7 @@ function BsonFromInt64s(const Integers: array of Int64): TBsonDocument;
 /// store some object content, supplied as (extended) JSON into BSON binary
 // - warning: the supplied JSON buffer will be modified in-place, if necessary:
 // so you should create a temporary copy before calling this function, or call
-// Bson(const JSON: RawUtf8) function instead
+// Bson(const Json: RawUtf8) function instead
 // - in addition to the JSON RFC specification strict mode, this method will
 // handle some BSON-like extensions, e.g. unquoted field names
 // - if DoNotTryExtendedMongoSyntax is FALSE, then MongoDB Shell syntax will
@@ -1066,7 +1066,7 @@ function BsonFromInt64s(const Integers: array of Int64): TBsonDocument;
 // ! Bson('{name:"John",field:/acme.*corp/i}');
 // - will create the BSON binary without any temporary TDocVariant storage
 // - will return the kind of BSON document created, i.e. either betDoc or betArray
-function JsonBufferToBsonDocument(JSON: PUtf8Char; var doc: TBsonDocument;
+function JsonBufferToBsonDocument(Json: PUtf8Char; var doc: TBsonDocument;
   DoNotTryExtendedMongoSyntax: boolean = false): TBsonElementType;
 
 /// store one JSON array into an array of BSON binary
@@ -1076,7 +1076,7 @@ function JsonBufferToBsonDocument(JSON: PUtf8Char; var doc: TBsonDocument;
 // handle some BSON-like extensions, e.g. unquoted field names
 // - if DoNotTryExtendedMongoSyntax is FALSE, then MongoDB Shell syntax will
 // be recognized to create BSON custom values - but it will be slightly slower
-function JsonBufferToBsonArray(JSON: PUtf8Char; out docs: TBsonDocumentDynArray;
+function JsonBufferToBsonArray(Json: PUtf8Char; out docs: TBsonDocumentDynArray;
   DoNotTryExtendedMongoSyntax: boolean = false): boolean;
 
 /// store some object content into a TBsonVariant betDoc type instance
@@ -1100,7 +1100,7 @@ function BsonVariantFieldSelector(const FieldNamesCsv: RawUtf8): variant; overlo
 // - in addition to the JSON RFC specification strict mode, this method will
 // handle some BSON-like extensions, as with the overloaded Bson() function
 
-function BsonVariant(const JSON: RawUtf8): variant; overload;
+function BsonVariant(const Json: RawUtf8): variant; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// store some object content, supplied as (extended) JSON, into a TBsonVariant
@@ -1108,10 +1108,10 @@ function BsonVariant(const JSON: RawUtf8): variant; overload;
 // - in addition to the JSON RFC specification strict mode, this method will
 // handle some BSON-like extensions, as with the overloaded Bson() function
 // - warning: this overloaded method will mofify the supplied JSON buffer
-// in-place: you can use the overloaded BsonVariant(const JSON: RawUtf8) function
+// in-place: you can use the overloaded BsonVariant(const Json: RawUtf8) function
 // instead if you do not want to modify the input buffer content
 
-procedure BsonVariant(JSON: PUtf8Char; var result: variant); overload;
+procedure BsonVariant(Json: PUtf8Char; var result: variant); overload;
 
 /// store some object content, supplied as (extended) JSON and parameters,
 // into a TBsonVariant betDoc type instance
@@ -1350,7 +1350,8 @@ begin
 end;
 
 procedure TDecimal128.FromCurr(const value: currency);
-begin // force exactly 4 decimals
+begin
+  // force exactly 4 decimals
   if value < 0 then
   begin
     Bits.lo := -PInt64(@value)^;
@@ -1545,7 +1546,8 @@ begin
       dest^ := '.';   // radix char
       inc(dest);
       while radixpos < 0 do
-      begin // leading zeros after radix
+      begin
+        // leading zeros after radix
         dest^ := '0';
         inc(dest);
         inc(radixpos);
@@ -1708,7 +1710,8 @@ begin
     exit;
   digfirst := 0;
   if digstored = 0 then
-  begin // value is zero
+  begin
+    // value is zero
     diglast := 0;
     digits[0] := 0;
     digcount := 1;
@@ -1735,7 +1738,8 @@ begin
     digits[diglast] := 0;
     if diglast - digfirst > BSON_DECIMAL128_MAX_DIGITS then
       if signdig = 0 then
-      begin // zero clamping is allowed
+      begin
+        // zero clamping is allowed
         exp := BSON_DECIMAL128_EXPONENT_MAX;
         break;
       end
@@ -1748,7 +1752,8 @@ begin
   begin
     if diglast = 0 then
       if signdig = 0 then
-      begin // zero clamping
+      begin
+        // zero clamping
         exp := BSON_DECIMAL128_EXPONENT_MIN;
         break;
       end
@@ -1900,7 +1905,8 @@ begin
 end;
 
 procedure TBsonObjectID.Init;
-begin // 12 bytes fill zero
+begin
+  // 12 bytes fill zero
   with PHash128Rec(@self)^ do
   begin
     i0 := 0;
@@ -1943,7 +1949,8 @@ begin
 end;
 
 function TBsonObjectID.Equal(const Another: TBsonObjectID): boolean;
-begin // first check Counter last field, which is more likely to diverse
+begin
+  // first check Counter last field, which is more likely to diverse
   {$ifdef CPU64}
   result := (PIntegerArray(@Self)[2] = PIntegerArray(@Another)[2]) and
             (PInt64(@Self)^ = PInt64(@Another)^);
@@ -2150,7 +2157,7 @@ const
 
 {$ifdef fpc} {$push} {$endif} {$hints off} // avoid hints with CompareMemFixed() inlining
 
-function TBsonVariant.TryJsonToVariant(var JSON: PUtf8Char; var Value: variant;
+function TBsonVariant.TryJsonToVariant(var Json: PUtf8Char; var Value: variant;
   EndOfObject: PUtf8Char): boolean;
 // warning: code should NOT modify JSON buffer in-place, unless it returns true
 var
@@ -2174,12 +2181,13 @@ var
     if EndOfObject <> nil then
       EndOfObject^ := P^;
     if P^ <> #0 then
-      JSON := P + 1
+      Json := P + 1
     else
-      JSON := P;
+      Json := P;
     case kind of
       betObjectID, betRegEx, betDecimal128:
-        begin // see TBsonWriter.BsonWrite()
+        begin
+          // see TBsonWriter.BsonWrite()
           bsonvalue.VType := VarType;
           bsonvalue.VKind := kind;
         end;
@@ -2206,7 +2214,8 @@ var
     P := GotoNextNotSpace(P);
     if GotoEndOfObject = ')' then
       if P^ = ')' then
-      begin // new date() constructor
+      begin
+        // new date() constructor
         varvalue.VDate := NowUtc;
         Return(betDateTime, P, #0);
         exit;
@@ -2241,7 +2250,8 @@ var
     P := GotoNextNotSpace(P);
     if (GotoEndOfObject = ')') and
        (P^ = ')') then
-    begin // ObjectId() constructor
+    begin
+      // ObjectId() constructor
       bsonvalue.VObjectID.ComputeNew;
       Return(betObjectID, P, #0);
       exit;
@@ -2319,7 +2329,8 @@ var
   end;
 
   procedure TryRegExStrict(P: PUtf8Char);
-  begin // warning: this won't escape double quotes...
+  begin
+    // warning: this won't escape double quotes...
     P := GotoNextNotSpace(P);
     if P^ <> '"' then
       exit
@@ -2368,7 +2379,7 @@ begin
   // see http://docs.mongodb.org/manual/reference/mongodb-extended-json
   result := false;
   // here JSON does not start with " or 1..9 (obvious simple types)
-  P := JSON;
+  P := Json;
   case NormToUpperAnsi7[P^] of
     '{':
       begin
@@ -2560,7 +2571,8 @@ var
   i, n, cap: integer;
   intnames: TRawUtf8Interning;
   items: array[0..63] of TBsonElement;
-begin // very fast optimized code
+begin
+  // very fast optimized code
   if BSON = nil then
     TVarData(Doc).VType := varNull
   else
@@ -2897,7 +2909,8 @@ begin
   vt := v.VType;
   case vt of
     0..varDate, varBoolean..high(ELEMKIND):
-      begin // simple types
+      begin
+        // simple types
         Element := @Data.InternalStorage;
         Kind := ELEMKIND[vt];
         case Kind of
@@ -3011,7 +3024,8 @@ begin
 end;
 
 procedure TBsonElement.FromBson(bson: PByte);
-begin // see http://bsonspec.org/#/specification
+begin
+  // see http://bsonspec.org/#/specification
   Element := bson;
   case Kind of // handle variable-size storage
     betString, betJS, betDeprecatedSymbol:
@@ -3430,7 +3444,7 @@ procedure TBsonWriter.BsonWriteVariant(const name: RawUtf8; const value: variant
   procedure WriteComplex;
   var
     temp: RawUtf8;
-    JSON: PUtf8Char;
+    json: PUtf8Char;
   begin
     with TVarData(value) do
       case VType of
@@ -3449,9 +3463,9 @@ procedure TBsonWriter.BsonWriteVariant(const name: RawUtf8; const value: variant
       else
         begin
           VariantSaveJson(value, twJsonEscape, temp);
-          JSON := pointer(temp);
-          BsonWriteFromJson(name, JSON, nil);
-          if JSON = nil then
+          json := pointer(temp);
+          BsonWriteFromJson(name, json, nil);
+          if json = nil then
             raise EBsonException.CreateUtf8('%.BsonWriteVariant(VType=%)', [self, VType]);
         end;
       end;
@@ -3618,7 +3632,8 @@ begin
         BsonWriteRegEx(name, like, 'i'); // /like/i for case-insensitivity
       end;
     opContains:
-      begin // http://docs.mongodb.org/manual/reference/operator/query/in
+      begin
+        // http://docs.mongodb.org/manual/reference/operator/query/in
         BsonDocumentBegin(name);
         if _Safe(Value)^.Kind = dvArray then
           BsonWriteVariant(QUERY_OPS[opIn], Value)
@@ -3681,7 +3696,7 @@ begin
   BsonDocumentEnd;
 end;
 
-procedure TBsonWriter.BsonWriteFromJson(const name: RawUtf8; var JSON: PUtf8Char;
+procedure TBsonWriter.BsonWriteFromJson(const name: RawUtf8; var Json: PUtf8Char;
   EndOfObject: PUtf8Char; DoNotTryExtendedMongoSyntax: boolean);
 var
   tmp: variant;
@@ -3694,38 +3709,41 @@ var
   VInt64: Int64 absolute VDouble;
   Kind: TBsonElementType;
 begin
-  if JSON^ in [#1..' '] then
+  if Json^ in [#1..' '] then
     repeat
-      inc(JSON)
-    until not (JSON^ in [#1..' ']);
+      inc(Json)
+    until not (Json^ in [#1..' ']);
   if not DoNotTryExtendedMongoSyntax and
-     BsonVariantType.TryJsonToVariant(JSON, tmp, EndOfObject) then
-    // was betDateTime, betObjectID or betRegEx, from strict or extended JSON
+     BsonVariantType.TryJsonToVariant(Json, tmp, EndOfObject) then
+    // was betDateTime, betObjectID or betRegEx, from strict or extended Json
     BsonWriteVariant(name, tmp)
   else    // try from simple types
-    case JSON^ of
+    case Json^ of
       #0:
         begin
-          JSON := nil;
+          Json := nil;
           exit;
         end;
       '[':
-        begin // nested array
+        begin
+          // nested array
           BsonWrite(name, betArray);
-          JSON := BsonWriteDocFromJson(JSON, EndOfObject, Kind,
+          Json := BsonWriteDocFromJson(Json, EndOfObject, Kind,
             DoNotTryExtendedMongoSyntax);
         end;
       '{':
-        begin // nested document
+        begin
+          // nested document
           BsonWrite(name, betDoc);
-          JSON := BsonWriteDocFromJson(JSON, EndOfObject, Kind,
+          Json := BsonWriteDocFromJson(Json, EndOfObject, Kind,
             DoNotTryExtendedMongoSyntax);
         end;
     else
-      begin // simple types
-        Value := GetJsonField(JSON, JSON, @wasString, EndOfObject, @ValueLen);
-        if JSON = nil then
-          JSON := @NULCHAR;
+      begin
+        // simple types
+        Value := GetJsonField(Json, Json, @wasString, EndOfObject, @ValueLen);
+        if Json = nil then
+          Json := @NULCHAR;
         if (Value = nil) or
            not wasString then
           if GetVariantFromNotStringJson(Value, TVarData(tmp), true) then
@@ -3744,7 +3762,7 @@ begin
            Iso8601CheckAndDecode(Value + 3, ValueLen - 3, ValueDateTime) then
           // recognized TTextWriter.AddDateTime(woDateTimeWithMagic) pattern
           BsonWriteDateTime(name, ValueDateTime)
-        else        // will point to the in-place escaped JSON text
+        else        // will point to the in-place escaped Json text
           BsonWriteString(name, Value, ValueLen);
       end;
     end;
@@ -3753,7 +3771,7 @@ begin
       TotalWritten, BSON_MAXDOCUMENTSIZE]);
 end;
 
-function TBsonWriter.BsonWriteDocFromJson(JSON: PUtf8Char; aEndOfObject:
+function TBsonWriter.BsonWriteDocFromJson(Json: PUtf8Char; aEndOfObject:
   PUtf8Char; out Kind: TBsonElementType; DoNotTryExtendedMongoSyntax: boolean): PUtf8Char;
 var
   ndx: cardinal;
@@ -3761,28 +3779,28 @@ var
   Name: RawUtf8;
 begin
   result := nil;
-  if JSON = nil then
+  if Json = nil then
     exit;
-  if JSON^ in [#1..' '] then
+  if Json^ in [#1..' '] then
     repeat
-      inc(JSON)
-    until not (JSON^ in [#1..' ']);
-  case JSON^ of
+      inc(Json)
+    until not (Json^ in [#1..' ']);
+  case Json^ of
     '[':
       begin
         Kind := betArray;
         BsonDocumentBegin;
         repeat
-          inc(JSON)
-        until not (JSON^ in [#1..' ']);
+          inc(Json)
+        until not (Json^ in [#1..' ']);
         ndx := 0;
-        if JSON^ = ']' then
-          inc(JSON)
+        if Json^ = ']' then
+          inc(Json)
         else
           repeat
             UInt32ToUtf8(ndx, Name);
-            BsonWriteFromJson(Name, JSON, @EndOfObject, DoNotTryExtendedMongoSyntax);
-            if JSON = nil then
+            BsonWriteFromJson(Name, Json, @EndOfObject, DoNotTryExtendedMongoSyntax);
+            if Json = nil then
               exit; // invalid content
             inc(ndx);
           until EndOfObject = ']';
@@ -3792,26 +3810,27 @@ begin
         Kind := betDoc;
         BsonDocumentBegin;
         repeat
-          inc(JSON)
-        until not (JSON^ in [#1..' ']);
-        if JSON^ = '}' then
-          inc(JSON)
+          inc(Json)
+        until not (Json^ in [#1..' ']);
+        if Json^ = '}' then
+          inc(Json)
         else
           repeat
-            // see http://docs.mongodb.org/manual/reference/mongodb-extended-json
-            Name := GetJsonPropName(JSON); // BSON/JSON accepts "" as key name
-            BsonWriteFromJson(Name, JSON, @EndOfObject, DoNotTryExtendedMongoSyntax);
-            if (JSON = nil) or
+            // see http://docs.mongodb.org/manual/reference/mongodb-extended-Json
+            Name := GetJsonPropName(Json); // BSON/Json accepts "" as key name
+            BsonWriteFromJson(Name, Json, @EndOfObject, DoNotTryExtendedMongoSyntax);
+            if (Json = nil) or
                (EndOfObject = #0) then
               exit; // invalid content
           until EndOfObject = '}';
       end;
     'n', 'N':
-      if IdemPChar(JSON + 1, 'ULL') then
-      begin // append null as {}
+      if IdemPChar(Json + 1, 'ULL') then
+      begin
+        // append null as {}
         Kind := betDoc;
         BsonDocumentBegin;
-        inc(JSON, 4);
+        inc(Json, 4);
       end
       else
         exit;
@@ -3819,17 +3838,17 @@ begin
     exit;
   end;
   BsonDocumentEnd;
-  if JSON^ in [#1..' '] then
+  if Json^ in [#1..' '] then
     repeat
-      inc(JSON)
-    until not (JSON^ in [#1..' ']);
+      inc(Json)
+    until not (Json^ in [#1..' ']);
   if aEndOfObject <> nil then
-    aEndOfObject^ := JSON^;
-  if JSON^ <> #0 then
+    aEndOfObject^ := Json^;
+  if Json^ <> #0 then
     repeat
-      inc(JSON)
-    until not (JSON^ in [#1..' ']);
-  result := JSON; // indicates successfully parsed
+      inc(Json)
+    until not (Json^ in [#1..' ']);
+  result := Json; // indicates successfully parsed
 end;
 
 
@@ -4199,21 +4218,21 @@ begin
   result := BsonFieldSelector(FieldNames);
 end;
 
-function JsonBufferToBsonDocument(JSON: PUtf8Char; var doc: TBsonDocument;
+function JsonBufferToBsonDocument(Json: PUtf8Char; var doc: TBsonDocument;
   DoNotTryExtendedMongoSyntax: boolean): TBsonElementType;
 var
   W: TBsonWriter;
 begin
   W := TBsonWriter.Create(TRawByteStringStream);
   try
-    W.BsonWriteDocFromJson(JSON, nil, result, DoNotTryExtendedMongoSyntax);
+    W.BsonWriteDocFromJson(Json, nil, result, DoNotTryExtendedMongoSyntax);
     W.ToBsonDocument(doc);
   finally
     W.Free;
   end;
 end;
 
-function JsonBufferToBsonArray(JSON: PUtf8Char; out docs: TBsonDocumentDynArray;
+function JsonBufferToBsonArray(Json: PUtf8Char; out docs: TBsonDocumentDynArray;
   DoNotTryExtendedMongoSyntax: boolean): boolean;
 var
   W: TBsonWriter;
@@ -4223,19 +4242,19 @@ var
   n: integer;
 begin
   result := false;
-  if JSON = nil then
+  if Json = nil then
     exit;
-  JSON := GotoNextNotSpace(JSON);
-  if JSON^ <> '[' then
+  Json := GotoNextNotSpace(Json);
+  if Json^ <> '[' then
     exit;
-  JSON := GotoNextNotSpace(JSON + 1);
+  Json := GotoNextNotSpace(Json + 1);
   n := 0;
   W := TBsonWriter.Create(TRawByteStringStream, 16384);
   try
     repeat
-      JSON := W.BsonWriteDocFromJson(JSON, @EndOfObject, Kind,
+      Json := W.BsonWriteDocFromJson(Json, @EndOfObject, Kind,
         DoNotTryExtendedMongoSyntax);
-      if JSON = nil then
+      if Json = nil then
         exit;
       W.ToBsonDocument(doc);
       if n >= length({%H-}docs) then
@@ -4254,7 +4273,7 @@ end;
 function Bson(const Format: RawUtf8; const Args, Params: array of const;
   kind: PBsonElementType): TBsonDocument;
 var
-  JSON: RawUtf8; // since we use FormatUtf8(), TSynTempBuffer is useless here
+  Json: RawUtf8; // since we use FormatUtf8(), TSynTempBuffer is useless here
   v: variant;
   k: TBsonElementType;
 begin
@@ -4273,19 +4292,19 @@ begin
       exit;
     end;
   end;
-  JSON := FormatUtf8(Format, Args, Params, true);
-  UniqueRawUtf8(JSON); // ensure Format is untouched if Args=[]
-  k := JsonBufferToBsonDocument(pointer(JSON), result);
+  Json := FormatUtf8(Format, Args, Params, true);
+  UniqueRawUtf8(Json); // ensure Format is untouched if Args=[]
+  k := JsonBufferToBsonDocument(pointer(Json), result);
   if kind <> nil then
     kind^ := k;
 end;
 
-function Bson(const JSON: RawUtf8; kind: PBsonElementType): TBsonDocument;
+function Bson(const Json: RawUtf8; kind: PBsonElementType): TBsonDocument;
 var
   tmp: TSynTempBuffer;
   k: TBsonElementType;
 begin
-  tmp.Init(JSON);
+  tmp.Init(Json);
   try
     k := JsonBufferToBsonDocument(tmp.buf, result);
     if kind <> nil then
@@ -4300,20 +4319,20 @@ begin
   BsonVariantType.FromBsonDocument(bson(NameValuePairs), result, betDoc);
 end;
 
-function BsonVariant(const JSON: RawUtf8): variant;
+function BsonVariant(const Json: RawUtf8): variant;
 var
   k: TBsonElementType;
   b: RawByteString;
 begin
-  b := bson(JSON, @k);
+  b := bson(Json, @k);
   BsonVariantType.FromBsonDocument(b, result, k);
 end;
 
-procedure BsonVariant(JSON: PUtf8Char; var result: variant);
+procedure BsonVariant(Json: PUtf8Char; var result: variant);
 var
   tmp: TBsonDocument;
 begin
-  JsonBufferToBsonDocument(JSON, tmp);
+  JsonBufferToBsonDocument(Json, tmp);
   BsonVariantType.FromBsonDocument(tmp, result);
 end;
 

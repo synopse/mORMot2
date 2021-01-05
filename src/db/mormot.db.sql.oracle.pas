@@ -801,7 +801,8 @@ var
 begin
   V := GetCol(Col, C);
   if V <> nil then
-  begin // V=nil means column is NULL
+  begin
+    // V=nil means column is NULL
     if C^.ColumnType = ftBlob then
       if C^.ColumnValueInlined then
         raise ESqlDBOracle.CreateUtf8('%.ColumnBlobFromStream(ColumnValueInlined) '
@@ -1097,7 +1098,8 @@ begin
         else // direct retrieval
           IntervalTextToDateTimeVar(V, VDate); // from SQLT_INTERVAL_* text
       ftUtf8:
-        begin // see TSqlDBStatement.ColumnToVariant() for reference
+        begin
+          // see TSqlDBStatement.ColumnToVariant() for reference
           VAny := nil;
           with TSqlDBOracleConnection(Connection) do
             if C^.ColumnValueInlined then
@@ -1271,7 +1273,8 @@ begin
 end;
 
 procedure UnQuoteSqlString(S, D: PUtf8Char; SLen: integer);
-begin // internal method, tuned for our OCI process
+begin
+  // internal method, tuned for our OCI process
   if S = nil then
     D^ := #0
   else if S^ <> '''' then
@@ -1714,7 +1717,8 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
                   SQLT_DAT: // retrieve OUT date parameter
                     PDateTime(@VInt64)^ := POracleDate(@VInt64)^.ToDateTime;
                   SQLT_TIMESTAMP:
-                    begin // release OCIDateTime resource
+                    begin
+                      // release OCIDateTime resource
                       oOCIDateTime := PPointer(VData)^;
                       if OCI.DescriptorFree(oOCIDateTime, OCI_DTYPE_TIMESTAMP)
                         <> OCI_SUCCESS then
@@ -1788,7 +1792,8 @@ begin
 end;
 
 procedure TSqlDBOracleStatement.ReleaseRows;
-begin // not implemented yet
+begin
+  // not implemented yet
   inherited ReleaseRows;
 end;
 
@@ -2105,7 +2110,8 @@ begin
     assert(fRowBuffer = nil);
     fRowCount := (fInternalBufferSize - ColCount shl 4) div RowSize;
     if fRowCount = 0 then
-    begin // reserve space for at least one row of data
+    begin
+      // reserve space for at least one row of data
       fInternalBufferSize := RowSize + ColCount shl 4;
       fRowCount := 1;
     end
@@ -2260,7 +2266,8 @@ begin
   if fColumnCount = 0 then
     exit; // no row available at all (e.g. for SQL UPDATE) -> return false
   if sav <> 0 then
-  begin // ignore if just retrieved ROW #1
+  begin
+    // ignore if just retrieved ROW #1
     if SeekFirst then
     begin
       fTimeElapsed.Resume;
@@ -2282,7 +2289,8 @@ begin
       // ensure we have some data in fRowBuffer[] for this row
       inc(fRowFetchedCurrent);
       if fRowFetchedCurrent >= fRowFetched then
-      begin // reached end of buffer
+      begin
+        // reached end of buffer
         if fRowFetchedEnded then
           exit; // no more data
         fTimeElapsed.Resume;

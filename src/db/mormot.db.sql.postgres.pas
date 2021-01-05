@@ -396,7 +396,8 @@ begin
 end;
 
 procedure TSqlDBPostgresConnectionProperties.FillOidMapping;
-begin // see pg_type.h (most used first)
+begin
+  // see pg_type.h (most used first)
   mapOid(INT4OID, ftInt64);
   mapOid(INT8OID, ftInt64);
   mapOid(TEXTOID, ftUtf8);
@@ -526,7 +527,8 @@ begin
   if (fPreparedParamsCount > 0) and
      (IdemPCharArray(pointer(fSqlPrepared),
       ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'VALUES']) >= 0) then
-  begin // preparable
+  begin
+    // preparable
     fCacheIndex := TSqlDBPostgresConnection(fConnection).PrepareCached(
       fSqlPrepared, fPreparedParamsCount, fPreparedStmtName);
     SqlLogEnd(' name=% cache=%', [fPreparedStmtName, fCacheIndex]);
@@ -608,7 +610,8 @@ begin
   if fExpectResults then
   begin
     if fResStatus <> PGRES_TUPLES_OK then
-    begin // paranoid check
+    begin
+      // paranoid check
       PQ.Clear(fRes);
       fRes := nil;
       raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: result expected but ' +
@@ -699,7 +702,8 @@ end;
 function TSqlDBPostgresStatement.ColumnBlob(Col: integer): RawByteString;
 var
   P: PAnsiChar;
-begin // PGFMT_TEXT was used -> need to convert into binary
+begin
+  // PGFMT_TEXT was used -> need to convert into binary
   CheckColAndRowset(Col);
   P := pointer(PQ.GetValue(fRes, fCurrentRow, Col));
   SetString(result, P, BlobInPlaceDecode(P, PQ.GetLength(fRes, fCurrentRow, col)));

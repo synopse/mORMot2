@@ -715,7 +715,7 @@ type
     // if you set this option, ensure that you use the content as read-only
     // - any registered custom types may have an extended JSON syntax (e.g.
     // TBsonVariant does for MongoDB types), and will be searched during JSON
-    // parsing, unless dvoJSONParseDoNotTryCustomVariants is set (slightly faster)
+    // parsing, unless dvoJsonParseDoNotTryCustomVariants is set (slightly faster)
     // - by default, it will only handle direct JSON [array] of {object}: but if
     // you define dvoJsonObjectParseWithinString, it will also try to un-escape
     // a JSON string first, i.e. handle "[array]" or "{object}" content (may be
@@ -741,7 +741,7 @@ type
        dvoCheckForDuplicatedNames,
        dvoReturnNullForUnknownProperty,
        dvoValueCopiedByReference,
-       dvoJSONParseDoNotTryCustomVariants,
+       dvoJsonParseDoNotTryCustomVariants,
        dvoJsonObjectParseWithinString,
        dvoSerializeAsExtendedJson,
        dvoAllowDoubleValue,
@@ -1051,7 +1051,7 @@ var
   // - this unit will just set a wrapper raising an ERttiException
   // - link mormot.core.json.pas to have a working implementation
   // - rather call LoadJson() from mormot.core.json than this low-level function
-  GetDataFromJson: procedure(Data: pointer; var JSON: PUtf8Char;
+  GetDataFromJson: procedure(Data: pointer; var Json: PUtf8Char;
     EndOfObject: PUtf8Char; TypeInfo: PRttiInfo;
     CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
 
@@ -1521,13 +1521,13 @@ type
     // - is just a wrapper around TTextWriter.AddTypedJson()
     // - this method will therefore recognize T*ObjArray types
     function SaveToJson(EnumSetsAsText: boolean = false;
-      reformat: TTextWriterJSONFormat = jsonCompact): RawUtf8; overload;
+      reformat: TTextWriterJsonFormat = jsonCompact): RawUtf8; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// serialize the dynamic array content as JSON
     // - is just a wrapper around TTextWriter.AddTypedJson()
     // - this method will therefore recognize T*ObjArray types
     procedure SaveToJson(out result: RawUtf8; EnumSetsAsText: boolean = false;
-      reformat: TTextWriterJSONFormat = jsonCompact); overload;
+      reformat: TTextWriterJsonFormat = jsonCompact); overload;
     /// serialize the dynamic array content as JSON
     // - is just a wrapper around TTextWriter.AddTypedJson()
     // - this method will therefore recognize T*ObjArray types
@@ -1847,9 +1847,9 @@ type
     procedure SaveTo(W: TBufferWriter); overload; inline;
     procedure Sort(aCompare: TDynArraySortCompare = nil); inline;
     function SaveToJson(EnumSetsAsText: boolean = false;
-      reformat: TTextWriterJSONFormat = jsonCompact): RawUtf8; overload; inline;
+      reformat: TTextWriterJsonFormat = jsonCompact): RawUtf8; overload; inline;
     procedure SaveToJson(out result: RawUtf8; EnumSetsAsText: boolean = false;
-      reformat: TTextWriterJSONFormat = jsonCompact); overload; inline;
+      reformat: TTextWriterJsonFormat = jsonCompact); overload; inline;
     procedure SaveToJson(W: TBaseWriter); overload; inline;
     function LoadFromJson(P: PUtf8Char; aEndOfObject: PUtf8Char = nil;
       CustomVariantOptions: PDocVariantOptions = nil): PUtf8Char; inline;
@@ -2708,14 +2708,16 @@ uses
 { TPersistentWithCustomCreate }
 
 constructor TPersistentWithCustomCreate.Create;
-begin // nothing to do by default - overridden constructor may add custom code
+begin
+  // nothing to do by default - overridden constructor may add custom code
 end;
 
 
 { TInterfacedObjectWithCustomCreate }
 
 constructor TInterfacedObjectWithCustomCreate.Create;
-begin // nothing to do by default - overridden constructor may add custom code
+begin
+  // nothing to do by default - overridden constructor may add custom code
 end;
 
 procedure TInterfacedObjectWithCustomCreate.RefCountUpdate(Release: boolean);
@@ -2738,7 +2740,8 @@ end;
 { TSynInterfacedObject }
 
 constructor TSynInterfacedObject.Create;
-begin // do-nothing virtual constructor
+begin
+  // do-nothing virtual constructor
 end;
 
 function TSynInterfacedObject._AddRef: TIntCnt;
@@ -2920,7 +2923,8 @@ end;
 
 procedure TSynPersistent.RttiAfterWriteObject(W: TBaseWriter;
   Options: TTextWriterWriteObjectOptions);
-begin // nothing to do
+begin
+  // nothing to do
 end;
 
 function TSynPersistent.RttiBeforeReadObject(Ctxt: pointer): boolean;
@@ -2929,7 +2933,8 @@ begin
 end;
 
 procedure TSynPersistent.RttiAfterReadObject;
-begin // nothing to do
+begin
+  // nothing to do
 end;
 
 procedure TSynPersistent.AssignTo(Dest: TSynPersistent);
@@ -2946,7 +2951,8 @@ begin
 end;
 
 class function TSynPersistent.NewInstance: TObject;
-begin // bypass vmtIntfTable and vmt^.vInitTable (FPC management operators)
+begin
+  // bypass vmtIntfTable and vmt^.vInitTable (FPC management operators)
   GetMem(pointer(result), InstanceSize); // InstanceSize is inlined
   FillCharFast(pointer(result)^, InstanceSize, 0);
   PPointer(result)^ := pointer(self); // store VMT
@@ -3324,7 +3330,8 @@ function IdemPChar2(table: PNormTable; p: PUtf8Char; up: PAnsiChar): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 var
   u: AnsiChar;
-begin // here p and up are expected to be <> nil
+begin
+  // here p and up are expected to be <> nil
   result := false;
   dec(PtrUInt(p), PtrUInt(up));
   repeat
@@ -3395,7 +3402,8 @@ var
   {$else}
   table: PNormTable;
   {$endif CPUX86NOTPIC}
-begin // expect UpperName as 'NAME='
+begin
+  // expect UpperName as 'NAME='
   if (P <> nil) and
      (P^ <> '[') and
      (UpperName <> nil) then
@@ -4020,7 +4028,8 @@ begin
   else if self = nil then
     aResult := aText
   else
-  begin // inlined fPool[].Values.HashElement
+  begin
+    // inlined fPool[].Values.HashElement
     hash := InterningHasher(0, pointer(aText), length(aText));
     fPool[hash and fPoolLast].Unique(aResult, aText, hash);
   end;
@@ -4032,7 +4041,8 @@ var
 begin
   if (self <> nil) and
      (aText <> '') then
-  begin // inlined fPool[].Values.HashElement
+  begin
+    // inlined fPool[].Values.HashElement
     hash := InterningHasher(0, pointer(aText), length(aText));
     fPool[hash and fPoolLast].UniqueText(aText, hash);
   end;
@@ -4047,7 +4057,8 @@ begin
   else if self = nil then
     result := aText
   else
-  begin // inlined fPool[].Values.HashElement
+  begin
+    // inlined fPool[].Values.HashElement
     hash := InterningHasher(0, pointer(aText), length(aText));
     fPool[hash and fPoolLast].Unique(result, aText, hash);
   end;
@@ -4314,7 +4325,8 @@ begin
 end;
 
 procedure TRawUtf8List.InternalDelete(Index: PtrInt);
-begin // caller ensured Index is correct
+begin
+  // caller ensured Index is correct
   fValues.Delete(Index); // includes dec(fCount)
   if PtrUInt(Index) < PtrUInt(length(fObjects)) then
   begin
@@ -5031,7 +5043,8 @@ end;
 
 function DelphiType(Info: PRttiInfo): integer;
   {$ifdef HASINLINE}inline;{$endif}
-begin // compatible with legacy TDynArray.SaveTo() format
+begin
+  // compatible with legacy TDynArray.SaveTo() format
   if Info = nil then
     result := 0
   else
@@ -5445,7 +5458,8 @@ procedure _BS_VariantComplex(Data: PVariant; Dest: TBufferWriter);
 var
   temp: TTextWriterStackBuffer;
   tempstr: RawUtf8;
-begin // not very fast, but creates valid JSON - see also VariantSaveJson()
+begin
+  // not very fast, but creates valid JSON - see also VariantSaveJson()
   with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
   try
     AddVariant(Data^, twJsonEscape);
@@ -6249,7 +6263,8 @@ label
   ok;
 var
   c: PtrUInt;
-begin // very efficient code on FPC and modern Delphi
+begin
+  // very efficient code on FPC and modern Delphi
   result := pointer(fValue);
   if result = nil then
     exit;
@@ -6341,7 +6356,8 @@ begin
     P1 := fValue^;
     case siz of
       1:
-        begin // optimized version for TByteDynArray and such
+        begin
+          // optimized version for TByteDynArray and such
           P2 := P1 + n;
           while P1 < P2 do
           begin
@@ -6353,7 +6369,8 @@ begin
           end;
         end;
       4:
-        begin // optimized version for TIntegerDynArray and such
+        begin
+          // optimized version for TIntegerDynArray and such
           P2 := P1 + n * SizeOf(integer);
           while P1 < P2 do
           begin
@@ -6365,7 +6382,8 @@ begin
           end;
         end;
       8:
-        begin // optimized version for TInt64DynArray + TDoubleDynArray and such
+        begin
+          // optimized version for TInt64DynArray + TDoubleDynArray and such
           P2 := P1 + n * SizeOf(Int64);
           while P1 < P2 do
           begin
@@ -6377,7 +6395,8 @@ begin
           end;
         end;
       16:
-        begin // optimized version for 32-bit TVariantDynArray and such
+        begin
+          // optimized version for 32-bit TVariantDynArray and such
           P2 := P1 + n * 16;
           while P1 < P2 do
           begin
@@ -6388,7 +6407,8 @@ begin
         end;
     {$ifdef CPU64}
       24:
-        begin // optimized version for 64-bit TVariantDynArray and such
+        begin
+          // optimized version for 64-bit TVariantDynArray and such
           P2 := P1 + n * 24;
           while P1 < P2 do
           begin
@@ -6399,7 +6419,8 @@ begin
         end;
     {$endif CPU64}
     else
-      begin // generic version
+      begin
+        // generic version
         P2 := P1 + n * siz;
         while P1 < P2 do
         begin
@@ -6477,13 +6498,13 @@ begin
     fCountP^ := PDALen(PAnsiChar(fValue^) - _DALEN)^ + _DAOFF;
 end;
 
-function TDynArray.SaveToJson(EnumSetsAsText: boolean; reformat: TTextWriterJSONFormat): RawUtf8;
+function TDynArray.SaveToJson(EnumSetsAsText: boolean; reformat: TTextWriterJsonFormat): RawUtf8;
 begin
   SaveToJson(result, EnumSetsAsText, reformat);
 end;
 
 procedure TDynArray.SaveToJson(out result: RawUtf8; EnumSetsAsText: boolean;
-  reformat: TTextWriterJSONFormat);
+  reformat: TTextWriterJsonFormat);
 var
   W: TBaseWriter;
   temp: TTextWriterStackBuffer;
@@ -6525,7 +6546,7 @@ begin
   end;
 end;
 
-procedure _GetDataFromJson(Data: pointer; var JSON: PUtf8Char;
+procedure _GetDataFromJson(Data: pointer; var Json: PUtf8Char;
   EndOfObject: PUtf8Char; TypeInfo: PRttiInfo;
   CustomVariantOptions: PDocVariantOptions; Tolerant: boolean);
 begin
@@ -6732,7 +6753,8 @@ begin
       dec(n);
       cmp := fCompare(Item, P[n * fInfo.Cache.ItemSize]);
       if cmp >= 0 then
-      begin // greater than last sorted item
+      begin
+        // greater than last sorted item
         Index := n;
         if cmp = 0 then
           result := true
@@ -6742,7 +6764,8 @@ begin
       end;
       Index := 0;
       while Index <= n do
-      begin // O(log(n)) binary search of the sorted position
+      begin
+        // O(log(n)) binary search of the sorted position
         i := (Index + n) shr 1;
         cmp := fCompare(P[i * fInfo.Cache.ItemSize], Item);
         if cmp = 0 then
@@ -6873,7 +6896,8 @@ begin
         end;
       until I > J;
       if J - L < R - I then
-      begin // use recursion only for smaller range
+      begin
+        // use recursion only for smaller range
         if L < J then
           QuickSort(L, J);
         L := I;
@@ -6923,7 +6947,8 @@ begin
         end;
       until I > J;
       if J - L < R - I then
-      begin // use recursion only for smaller range
+      begin
+        // use recursion only for smaller range
         if L < J then
           QuickSortEvent(L, J);
         L := I;
@@ -6973,7 +6998,8 @@ begin
         end;
       until I > J;
       if J - L < R - I then
-      begin // use recursion only for smaller range
+      begin
+        // use recursion only for smaller range
         if L < J then
           QuickSortEventReverse(L, J);
         L := I;
@@ -7020,7 +7046,8 @@ begin
         end;
       until I > J;
       if J - L < R - I then
-      begin // use recursion only for smaller range
+      begin
+        // use recursion only for smaller range
         if L < J then
           QuickSortIndexed(L, J);
         L := I;
@@ -7069,7 +7096,8 @@ begin
         end;
       until I > J;
       if J - L < R - I then
-      begin // use recursion only for smaller range
+      begin
+        // use recursion only for smaller range
         if L < J then
           QuickSortPtr(L, J, Compare, V);
         L := I;
@@ -7187,7 +7215,8 @@ begin
   if ndx < 0 then
     exit;
   if aIndex <> nil then
-  begin // whole FillIncreasing(aIndex[]) for first time
+  begin
+    // whole FillIncreasing(aIndex[]) for first time
     if ndx >= length(aIndex) then
       SetLength(aIndex, NextGrow(ndx)); // grow aIndex[] if needed
     aIndex[ndx] := ndx;
@@ -7691,7 +7720,8 @@ begin
 end;
 
 function HashWideString(Item: PWideString; Hasher: THasher): cardinal;
-begin // WideString internal size is in bytes, not WideChar
+begin
+  // WideString internal size is in bytes, not WideChar
   if PtrUInt(Item^) = 0 then
     result := 0
   else
@@ -8023,7 +8053,8 @@ var
   P: PAnsiChar;
 begin
   if not (canHash in State) then
-  begin // e.g. Count<CountTrigger
+  begin
+    // e.g. Count<CountTrigger
     result := Scan(Item);
     exit;
   end;
@@ -8074,7 +8105,8 @@ end;
 procedure TDynArrayHasher.HashAdd(aHashCode: cardinal; var result: integer);
 var
   n: integer;
-begin // on input: HashTable[result] slot is already computed
+begin
+  // on input: HashTable[result] slot is already computed
   n := DynArray^.Count;
   if HashTableSize < n then
     RaiseFatalCollision('HashAdd HashTableSize', aHashCode);
@@ -8161,7 +8193,8 @@ begin
     ReHash({forced=}true, {grow=}false); // hash previous CountTrigger items
   result := FindOrNew(aHashCode, Item, nil);
   if result < 0 then
-  begin // found no matching item
+  begin
+    // found no matching item
     wasAdded := true;
     HashAdd(aHashCode, result);
   end;
@@ -8187,7 +8220,8 @@ end;
 
 procedure TDynArrayHasher.RaiseFatalCollision(const caller: RawUtf8;
   aHashCode: cardinal);
-begin // a dedicated sub-procedure reduces code size
+begin
+  // a dedicated sub-procedure reduces code size
   raise EDynArray.CreateUtf8('TDynArrayHasher.% fatal collision: ' +
     'aHashCode=% HashTableSize=% Count=% Capacity=% Array=% Parser=%',
     [caller, CardinalToHexShort(aHashCode), HashTableSize, DynArray^.Count,
@@ -8431,13 +8465,13 @@ begin
 end;
 
 function TDynArrayHashed.SaveToJson(EnumSetsAsText: boolean;
-  reformat: TTextWriterJSONFormat): RawUtf8;
+  reformat: TTextWriterJsonFormat): RawUtf8;
 begin
   result := InternalDynArray.SaveToJson(EnumSetsAsText, reformat);
 end;
 
 procedure TDynArrayHashed.SaveToJson(out result: RawUtf8; EnumSetsAsText: boolean;
-  reformat: TTextWriterJSONFormat);
+  reformat: TTextWriterJsonFormat);
 begin
   InternalDynArray.SaveToJson(result, EnumSetsAsText, reformat);
 end;
@@ -8488,7 +8522,8 @@ begin
 end;
 
 function TDynArrayHashed.FindFromHash(const Item; aHashCode: cardinal): integer;
-begin // overload FindHashed() trigger F2084 Internal Error: C2130 on Delphi XE3
+begin
+  // overload FindHashed() trigger F2084 Internal Error: C2130 on Delphi XE3
   result := fHash.FindOrNew(aHashCode, @Item); // fallback to Scan() if needed
   if result < 0 then
     result := -1; // for coherency with most methods
@@ -8519,7 +8554,8 @@ begin
     aName := '_';
   ndx := FindHashedForAdding(aName, added);
   if not added then
-  begin // force unique column name
+  begin
+    // force unique column name
     aName_ := aName + '_';
     j := 1;
         repeat
@@ -8724,7 +8760,8 @@ begin
         fValues.Count := 64;
     end
     else if fFirst <= fLast then
-    begin // stored in-order
+    begin
+      // stored in-order
       inc(fLast);
       if fLast = fCount then
         InternalGrow;

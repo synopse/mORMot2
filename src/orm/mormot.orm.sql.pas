@@ -1343,7 +1343,8 @@ function TRestStorageExternal.EngineRetrieve(TableModelIndex: integer;
   ID: TID): RawUtf8;
 var
   Stmt: ISqlDBStatement;
-begin // TableModelIndex is not useful here
+begin
+  // TableModelIndex is not useful here
   result := '';
   if (self = nil) or
      (ID <= 0) then
@@ -1474,7 +1475,7 @@ function TRestStorageExternal.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUtf8): boolean;
 var
   rows: ISqlDBRows;
-  ExtWhereFieldName, JSON: RawUtf8;
+  ExtWhereFieldName, json: RawUtf8;
 begin
   if (TableModelIndex < 0) or
      (Model.Tables[TableModelIndex] <> fStoredClass) then
@@ -1495,10 +1496,10 @@ begin
             [RowIDFieldName, fTableName, ExtWhereFieldName, WhereValue], true);
           if rows = nil then
             exit;
-          JsonEncodeNameSQLValue(SetFieldName, SetValue, JSON);
+          JsonEncodeNameSQLValue(SetFieldName, SetValue, json);
           while rows.Step do
             Owner.InternalUpdateEvent(
-              oeUpdate, TableModelIndex, rows.ColumnInt(0), JSON, nil);
+              oeUpdate, TableModelIndex, rows.ColumnInt(0), json, nil);
           rows.ReleaseRows;
         end;
         Owner.FlushInternalDBCache;
@@ -1850,7 +1851,8 @@ begin
   fStoredClassMapping^.InternalToExternalDynArray(
     FieldNames, ExtFieldNames, @IntFieldIndex);
   if n = 1 then
-  begin // handle case of index over a single column
+  begin
+    // handle case of index over a single column
     if IntFieldIndex[0] < 0 then // ID/RowID?
       case fProperties.Dbms of
         dSQLite, dPostgreSQL, dMSSQL, dMySQL, dOracle, dNexusDB:
@@ -2340,7 +2342,8 @@ end;
 
 function TOrmVirtualTableExternal.Insert(aRowID: Int64;
   var Values: TSqlVarDynArray; out insertedRowID: Int64): boolean;
-begin // aRowID is just ignored here since IDs are always auto calculated
+begin
+  // aRowID is just ignored here since IDs are always auto calculated
   result := false;
   if (self <> nil) and
      (Static <> nil) then

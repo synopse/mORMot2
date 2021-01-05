@@ -604,7 +604,7 @@ function TJwtAbstract.PayloadToJson(const DataNameValue: array of const;
 
   procedure RaiseMissing(c: TJwtClaim);
   begin
-    raise EJwtException.CreateUtf8('%.PayloadJSON: missing %', [self, ToText(c)^]);
+    raise EJwtException.CreateUtf8('%.PayloadToJson: missing %', [self, ToText(c)^]);
   end;
 
 var
@@ -772,7 +772,8 @@ begin
   // 1. validate the header (including algorithm "alg" verification)
   JWT.result := jwtInvalidAlgorithm;
   if joHeaderParse in fOptions then
-  begin // slower parsing
+  begin
+    // slower parsing
     headerlen := PosExChar('.', Token);
     if (headerlen = 0) or
        (headerlen > 512) then
@@ -785,7 +786,8 @@ begin
       exit;
   end
   else
-  begin // fast direct compare of fHeaderB64 (including "alg")
+  begin
+    // fast direct compare of fHeaderB64 (including "alg")
     headerlen := length(fHeaderB64);
     if (toklen <= headerlen) or
        not CompareMem(pointer(fHeaderB64), tok, headerlen) then

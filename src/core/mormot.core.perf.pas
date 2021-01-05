@@ -437,7 +437,7 @@ type
     procedure Sum(another: TSynMonitor);
     /// returns a JSON content with all published properties information
     // - thread-safe method
-    function ComputeDetailsJSON: RawUtf8;
+    function ComputeDetailsJson: RawUtf8;
     /// appends a JSON content with all published properties information
     // - thread-safe method
     procedure ComputeDetailsTo(W: TBaseWriter); virtual;
@@ -1192,7 +1192,8 @@ begin
 end;
 
 function TPrecisionTimer.FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
-begin // mimics Pause from already known elapsed time
+begin
+  // mimics Pause from already known elapsed time
   FromExternalMicroSeconds(CounterDiff);
   result := fLastTime;
 end;
@@ -1431,7 +1432,8 @@ begin
 end;
 
 procedure TSynMonitor.Changed;
-begin // do nothing by default - overriden classes may track modified changes
+begin
+  // do nothing by default - overriden classes may track modified changes
 end;
 
 class procedure TSynMonitor.RttiCustomSet(Rtti: TRttiCustom);
@@ -1645,7 +1647,7 @@ begin
   end;
 end;
 
-function TSynMonitor.ComputeDetailsJSON: RawUtf8;
+function TSynMonitor.ComputeDetailsJson: RawUtf8;
 var
   W: TBaseWriter;
   temp: TTextWriterStackBuffer;
@@ -1661,7 +1663,7 @@ end;
 
 function TSynMonitor.ComputeDetails: variant;
 begin
-  _Json(ComputeDetailsJSON, result{%H-}, JSON_OPTIONS_FAST);
+  _Json(ComputeDetailsJson, result{%H-}, JSON_OPTIONS_FAST);
 end;
 
 
@@ -2536,7 +2538,8 @@ begin
 end;
 
 function TSystemUse.ProcessIndex(aProcessID: integer): PtrInt;
-begin // caller should have made fSafe.Enter
+begin
+  // caller should have made fSafe.Enter
   {$ifdef MSWINDOWS}
   if aProcessID = 0 then
     aProcessID := GetCurrentProcessID;
@@ -3032,13 +3035,15 @@ threadvar
 
 {$ifndef CPU64}
 constructor TSynFPUException.Create(Expected8087Flag: word);
-begin // $1372=Delphi $137F=library (mask all exceptions)
+begin
+  // $1372=Delphi $137F=library (mask all exceptions)
   inherited Create;
   fExpected8087 := Expected8087Flag;
 end;
 {$else}
 constructor TSynFPUException.Create(ExpectedMXCSR: word);
-begin // $1920=Delphi $1FA0=library (mask all exceptions)
+begin
+  // $1920=Delphi $1FA0=library (mask all exceptions)
   inherited Create;
   fExpectedMXCSR := ExpectedMXCSR;
 end;

@@ -600,7 +600,7 @@ type
     // - P should be after the initial '{' or '[' character, i.e. at first field
     // - P returns the next object start or nil on unexpected end of input
     // - P^ buffer will let the JSON be decoded in-place, so consider using
-    // the overloaded Decode(JSON: RawUtf8; ...) method
+    // the overloaded Decode(Json: RawUtf8; ...) method
     // - FieldValues[] strings will be quoted and/or inlined depending on Params
     // - if RowID is set, a RowID column will be added within the returned content
     procedure Decode(var P: PUtf8Char; const Fields: TRawUtf8DynArray;
@@ -610,7 +610,7 @@ type
     // - overloaded method expecting a RawUtf8 buffer, making a private copy
     // of the JSON content to avoid unexpected in-place modification, then
     // calling Decode(P: PUtf8Char) to perform the process
-    procedure Decode(const JSON: RawUtf8; const Fields: TRawUtf8DynArray;
+    procedure Decode(const Json: RawUtf8; const Fields: TRawUtf8DynArray;
       Params: TJsonObjectDecoderParams; const RowID: TID = 0;
       ReplaceRowIDWithID: boolean = false); overload;
     /// can be used after Decode() to add a new field in FieldNames/FieldValues
@@ -677,7 +677,7 @@ function GetJsonObjectAsSql(var P: PUtf8Char; const Fields: TRawUtf8DynArray;
 // - returns '(COL1, COL2) VALUES ("VAL1", VAL2)' otherwise (INSERT format)
 // - if InlinedParams is set, will create prepared parameters like 'COL2=:(VAL2):'
 // - if RowID is set, a RowID column will be added within the returned content
-function GetJsonObjectAsSql(const JSON: RawUtf8; Update, InlinedParams: boolean;
+function GetJsonObjectAsSql(const Json: RawUtf8; Update, InlinedParams: boolean;
   RowID: TID = 0; ReplaceRowIDWithID: boolean = false): RawUtf8; overload;
 
 /// get the FIRST field value of the FIRST row, from a JSON content
@@ -3811,7 +3811,7 @@ type
     // - layout and fields should have been set at TJsonSerializer construction:
     // to append some content to an existing TJsonSerializer, call the
     // AppendAsJsonObject() method
-    procedure GetJsonValuesAndFree(JSON: TJsonSerializer); overload;
+    procedure GetJsonValuesAndFree(Json: TJsonSerializer); overload;
     /// return the UTF-8 encoded JSON objects for the values contained
     // in the current published fields of a TOrm child
     // - only simple fields (i.e. not RawBlob/TOrmMany) are retrieved:
@@ -3825,7 +3825,7 @@ type
     // property instance will be serialized as a JSON object or array, not a
     // JSON string (which is the default, as expected by the database storage),
     // or if an "ID_str" string field should be added for JavaScript
-    procedure GetJsonValues(JSON: TStream; Expand, withID: boolean;
+    procedure GetJsonValues(Json: TStream; Expand, withID: boolean;
       Occasion: TOrmOccasion; OrmOptions: TJsonSerializerOrmOptions = []); overload;
     /// same as overloaded GetJsonValues(), but returning result into a RawUtf8
     // - if UsingStream is not set, it will use a temporary TRawByteStringStream
@@ -4773,7 +4773,7 @@ type
     procedure GetJsonValues(W: TJsonWriter;
       RowFirst: integer = 0; RowLast: integer = 0; IDBinarySize: integer = 0); overload;
     /// same as the overloaded method, but appending an array to a TStream
-    procedure GetJsonValues(JSON: TStream; Expand: boolean;
+    procedure GetJsonValues(Json: TStream; Expand: boolean;
       RowFirst: integer = 0; RowLast: integer = 0; IDBinarySize: integer = 0); overload;
     /// same as the overloaded method, but returning result into a RawUtf8
     function GetJsonValues(Expand: boolean; IDBinarySize: integer = 0;
@@ -6030,19 +6030,19 @@ type
     /// create a TJsonWriter, ready to be filled with TOrm.GetJsonValues
     // - you can use TOrmProperties.FieldBitsFromCsv() or
     // TOrmProperties.FieldBitsFromRawUtf8() to compute aFields
-    function CreateJsonWriter(JSON: TStream; Expand, withID: boolean;
+    function CreateJsonWriter(Json: TStream; Expand, withID: boolean;
       const aFields: TFieldBits; KnownRowsCount: integer;
       aBufSize: integer = 8192): TJsonSerializer; overload;
     /// create a TJsonWriter, ready to be filled with TOrm.GetJsonValues(W)
     // - you can use TOrmProperties.FieldBitsFromCsv() or
     // TOrmProperties.FieldBitsFromRawUtf8() to compute aFields
-    function CreateJsonWriter(JSON: TStream; Expand, withID: boolean;
+    function CreateJsonWriter(Json: TStream; Expand, withID: boolean;
       const aFields: TFieldIndexDynArray; KnownRowsCount: integer;
       aBufSize: integer = 8192): TJsonSerializer; overload;
     /// create a TJsonWriter, ready to be filled with TOrm.GetJsonValues(W)
     // - this overloaded method will call FieldBitsFromCsv(aFieldsCsv,bits,withID)
     // to retrieve the bits just like a SELECT (i.e. '*' for simple fields)
-    function CreateJsonWriter(JSON: TStream; Expand: boolean;
+    function CreateJsonWriter(Json: TStream; Expand: boolean;
       const aFieldsCsv: RawUtf8; KnownRowsCount: integer;
       aBufSize: integer = 8192): TJsonSerializer; overload;
     /// set the W.ColNames[] array content + W.AddColumns
@@ -6976,7 +6976,7 @@ type
     // - not used by TRestCache, but available at TRestCacheEntry level
     Tag: cardinal;
     /// JSON encoded UTF-8 serialization of the record
-    JSON: RawUtf8;
+    Json: RawUtf8;
   end;
 
   /// for TRestCache, stores all tables values
@@ -8644,14 +8644,14 @@ begin
   end;
 end;
 
-procedure TJsonObjectDecoder.Decode(const JSON: RawUtf8;
+procedure TJsonObjectDecoder.Decode(const Json: RawUtf8;
   const Fields: TRawUtf8DynArray; Params: TJsonObjectDecoderParams;
   const RowID: TID; ReplaceRowIDWithID: boolean);
 var
   tmp: TSynTempBuffer;
   P: PUtf8Char;
 begin
-  tmp.Init(JSON);
+  tmp.Init(Json);
   try
     P := tmp.buf;
     if P <> nil then
@@ -8926,12 +8926,12 @@ begin
   result := Decoder.EncodeAsSql(Update);
 end;
 
-function GetJsonObjectAsSql(const JSON: RawUtf8; Update, InlinedParams: boolean;
+function GetJsonObjectAsSql(const Json: RawUtf8; Update, InlinedParams: boolean;
   RowID: TID; ReplaceRowIDWithID: boolean): RawUtf8;
 var
   Decoder: TJsonObjectDecoder;
 begin
-  Decoder.Decode(JSON, nil, FROMINLINED[InlinedParams], RowID, ReplaceRowIDWithID);
+  Decoder.Decode(Json, nil, FROMINLINED[InlinedParams], RowID, ReplaceRowIDWithID);
   result := Decoder.EncodeAsSql(Update);
 end;
 
@@ -9781,7 +9781,7 @@ begin
   end
   else if pilRaiseEOrmExceptionIfNotHandled in aOptions then
     raise EModelException.CreateUtf8('%.CreateFrom: Unhandled %/% type for property %',
-      [self, ToText(aOrmFieldType)^, ToText(aType^.Kind)^, aPropInfo^.Name]);
+      [self, ToText(aOrmFieldType)^, ToText(aType^.Kind)^, aPropInfo^.Name^]);
 end;
 
 function TOrmPropInfoRtti.GetSqlFieldRttiTypeName: RawUtf8;
@@ -11622,7 +11622,7 @@ begin
     with TJsonSerializer.CreateOwnedStream(temp) do
     try
       if ExtendedJson then
-        include(fCustomOptions, twoForceJSONExtended); // smaller content
+        include(fCustomOptions, twoForceJsonExtended); // smaller content
       AddDynArrayJson(da);
       SetText(RawUtf8(data));
     finally
@@ -11875,7 +11875,7 @@ begin
   fPropInfo.GetVariantProp(Instance, value, {byref=}true);
   backup := W.CustomOptions;
   if jwoAsJsonNotAsString in W.fOrmOptions then
-    W.CustomOptions := backup + [twoForceJSONStandard] - [twoForceJSONExtended];
+    W.CustomOptions := backup + [twoForceJsonStandard] - [twoForceJsonExtended];
   W.AddVariant(value, twJsonEscape); // even oftNullable should escape strings
   W.CustomOptions := backup;
 end;
@@ -12360,14 +12360,13 @@ end;
 
 procedure TOrmPropInfoCustomJson.GetBinary(Instance: TObject; W: TBufferWriter);
 var
-  JSON: RawUtf8;
+  json: RawUtf8;
 begin
-  GetValueVar(Instance, false, JSON, nil);
-  W.Write(JSON);
+  GetValueVar(Instance, false, json, nil);
+  W.Write(json);
 end;
 
-function TOrmPropInfoCustomJson.SetBinary(Instance: TObject; P, PEnd: PAnsiChar):
-  PAnsiChar;
+function TOrmPropInfoCustomJson.SetBinary(Instance: TObject; P, PEnd: PAnsiChar): PAnsiChar;
 var
   tmp: TSynTempBuffer;
 begin // stored as JSON VarString in the binary stream
@@ -14141,13 +14140,13 @@ str:          W.Add('"');
   W.EndJsonObject(1, 0, false); // "RowCount": set by W.AddColumns() above
 end;
 
-procedure TOrmTable.GetJsonValues(JSON: TStream; Expand: boolean;
+procedure TOrmTable.GetJsonValues(Json: TStream; Expand: boolean;
   RowFirst, RowLast, IDBinarySize: integer);
 var
   W: TJsonWriter;
   tmp: TTextWriterStackBuffer;
 begin
-  W := TJsonWriter.Create(JSON, Expand, false, nil, 0, @tmp);
+  W := TJsonWriter.Create(Json, Expand, false, nil, 0, @tmp);
   try
     GetJsonValues(W, RowFirst, RowLast, IDBinarySize);
     W.FlushFinal;
@@ -17238,22 +17237,22 @@ begin
         end;
 end;
 
-procedure TOrm.GetJsonValuesAndFree(JSON: TJsonSerializer);
+procedure TOrm.GetJsonValuesAndFree(Json: TJsonSerializer);
 begin
-  if JSON <> nil then
+  if Json <> nil then
   try
     // write the row data
-    GetJsonValues(JSON);
-    // end the JSON object
-    if not JSON.Expand then
-      JSON.AddNoJsonEscape(PAnsiChar(']}'), 2);
-    JSON.FlushFinal;
+    GetJsonValues(Json);
+    // end the Json object
+    if not Json.Expand then
+      Json.AddNoJsonEscape(PAnsiChar(']}'), 2);
+    Json.FlushFinal;
   finally
-    JSON.Free;
+    Json.Free;
   end;
 end;
 
-procedure TOrm.GetJsonValues(JSON: TStream; Expand, withID: boolean;
+procedure TOrm.GetJsonValues(Json: TStream; Expand, withID: boolean;
   Occasion: TOrmOccasion; OrmOptions: TJsonSerializerOrmOptions);
 var
   serializer: TJsonSerializer;
@@ -17261,7 +17260,7 @@ begin
   if self = nil then
     exit;
   with Orm do
-    serializer := CreateJsonWriter(JSON, Expand, withID, SimpleFieldsBits[Occasion],
+    serializer := CreateJsonWriter(Json, Expand, withID, SimpleFieldsBits[Occasion],
       {knownrows=}0);
   serializer.OrmOptions := OrmOptions;
   GetJsonValuesAndFree(serializer);
@@ -19410,15 +19409,15 @@ begin
   W.AddColumns(KnownRowsCount);
 end;
 
-function TOrmProperties.CreateJsonWriter(JSON: TStream;
+function TOrmProperties.CreateJsonWriter(Json: TStream;
   Expand, withID: boolean; const aFields: TFieldBits;
   KnownRowsCount, aBufSize: integer): TJsonSerializer;
 begin
-  result := CreateJsonWriter(JSON, Expand, withID,
+  result := CreateJsonWriter(Json, Expand, withID,
     FieldBitsToIndex(aFields, Fields.Count), KnownRowsCount, aBufSize);
 end;
 
-function TOrmProperties.CreateJsonWriter(JSON: TStream;
+function TOrmProperties.CreateJsonWriter(Json: TStream;
   Expand, withID: boolean; const aFields: TFieldIndexDynArray;
   KnownRowsCount, aBufSize: integer): TJsonSerializer;
 begin
@@ -19426,19 +19425,19 @@ begin
     result := nil
   else
   begin
-    result := TJsonSerializer.Create(JSON, Expand, withID, aFields, aBufSize);
+    result := TJsonSerializer.Create(Json, Expand, withID, aFields, aBufSize);
     SetJsonWriterColumnNames(result, KnownRowsCount);
   end;
 end;
 
-function TOrmProperties.CreateJsonWriter(JSON: TStream; Expand: boolean;
+function TOrmProperties.CreateJsonWriter(Json: TStream; Expand: boolean;
   const aFieldsCsv: RawUtf8; KnownRowsCount, aBufSize: integer): TJsonSerializer;
 var
   withID: boolean;
   bits: TFieldBits;
 begin
   FieldBitsFromCsv(aFieldsCsv, bits, withID);
-  result := CreateJsonWriter(JSON, Expand, withID, bits, KnownRowsCount, aBufSize);
+  result := CreateJsonWriter(Json, Expand, withID, bits, KnownRowsCount, aBufSize);
 end;
 
 function TOrmProperties.SaveSimpleFieldsFromJsonArray(var P: PUtf8Char;
@@ -21407,11 +21406,11 @@ end;
 function TRestCacheEntry.RetrieveJson(aID: TID; aValue: TOrm;
   aTag: PCardinal): boolean;
 var
-  JSON: RawUtf8;
+  json: RawUtf8;
 begin
-  if RetrieveJson(aID, JSON, aTag) then
+  if RetrieveJson(aID, json, aTag) then
   begin
-    aValue.FillFrom(JSON);
+    aValue.FillFrom(json);
     aValue.fID := aID; // override RowID field (may be not present after Update)
     result := true;
   end
@@ -21840,7 +21839,7 @@ begin
   end;
   fOptions := Options;
   if boExtendedJson in Options then
-    include(fBatch.fCustomOptions, twoForceJSONExtended);
+    include(fBatch.fCustomOptions, twoForceJsonExtended);
   Options := Options - [boExtendedJson, boPostNoSimpleFields]; // client-side only
   if byte(Options) <> 0 then
   begin

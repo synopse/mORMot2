@@ -775,7 +775,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// for rkInterface: get the TGUID of a given interface type information
     // - returns nil if this type is not an interface
-    function InterfaceGUID: PGUID;
+    function InterfaceGuid: PGUID;
     /// for rkInterface: get the unit name of a given interface type information
     // - returns '' if this type is not an interface
     function InterfaceUnitName: PShortString;
@@ -1424,7 +1424,7 @@ type
     /// the unit where the interface was defined
     UnitName: RawUtf8;
     /// the associated GUID of this interface
-    GUID: TGUID;
+    Guid: TGUID;
     /// the interface methods
     Methods: array of TRttiMethod;
   end;
@@ -1445,7 +1445,7 @@ function GetInterfaceFromEntry(Instance: TObject; Entry: PInterfaceEntry;
 
 /// returns all TGUID implemented by a given class
 // - TObject.GetInterfaceTable is not consistent on Delphi and FPC
-function GetRttiClassGUID(aClass: TClass): PGUIDDynArray;
+function GetRttiClassGuid(aClass: TClass): PGuidDynArray;
 
 const
   PSEUDO_RESULT_NAME: string[6] = 'Result';
@@ -1588,7 +1588,7 @@ type
     ptSynUnicode,
     ptDateTime,
     ptDateTimeMS,
-    ptGUID,
+    ptGuid,
     ptHash128,
     ptHash256,
     ptHash512,
@@ -1655,7 +1655,7 @@ var
   // - nil for unmanaged types (e.g. rkOrdinals) or for more complex types
   // requering additional PRttiInfo (rkRecord, rkDynArray, rkArray...)
   // - you can use PT_INFO[] for types with no RTTI before Delphi 2010, for
-  // instance PT_INFO[ptGUID], PT_INFO[ptHash128], PT_INFO[ptHash256] and
+  // instance PT_INFO[ptGuid], PT_INFO[ptHash128], PT_INFO[ptHash256] and
   // PT_INFO[ptHash512] since oldest compilers refuse to compile TypeInfo(TGUID),
   // TypeInfo(THash128), TypeInfo(THash256) and TypeInfo(THash512)
   PT_INFO: array[TRttiParserType] of PRttiInfo;
@@ -2558,7 +2558,8 @@ begin
         P := @V^[1];
         while (L > 0) and
               (P^ in ['a'..'z']) do
-        begin // ignore left lowercase chars
+        begin
+          // ignore left lowercase chars
           inc(P);
           dec(L);
         end;
@@ -3077,7 +3078,7 @@ begin
   end;
 end;
 
-function TRttiInfo.InterfaceGUID: PGUID;
+function TRttiInfo.InterfaceGuid: PGUID;
 begin
   if (@self = nil) or
      (Kind <> rkInterface) then
@@ -4032,7 +4033,7 @@ begin
   for i := 0 to n - 1 do
     with props[i]^ do
       if IncludePropType then
-        FormatUtf8('%: %', [Name^, TypeInfo^.Name], result[i])
+        FormatUtf8('%: %', [Name^, TypeInfo^.Name^], result[i])
       else
         ShortStringToAnsi7String(Name^, result[i]);
 end;
@@ -4562,7 +4563,10 @@ begin
   if {$ifdef FPC} pfSelf in aFlags {$else} ArgCount = 1 {$endif} then
     a^.ParamName := @PSEUDO_SELF_NAME
   else if aParamName = nil then
-    a^.ParamName := @PSEUDO_RESULT_NAME
+  begin
+    a^.ParamName := @PSEUDO_RESULT_NAME;
+    include(aFlags, pfOut); // result is an "out"
+  end
   else
     a^.ParamName := aParamName;
   a^.TypeInfo := aInfo;
@@ -4574,12 +4578,12 @@ begin
     begin
       if aFlags * [pfConst, pfVar, pfOut] = [] then
         RaiseError('%: % parameter should be declared as const, var or out',
-          [aParamName^, aTypeName^]);
+          [a^.ParamName^, aTypeName^]);
     end
     else if aInfo^.Kind = rkInterface then
       if not (pfConst in aFlags) then
         RaiseError('%: % parameter should be declared as const',
-          [aParamName^, aTypeName^]);
+          [a^.ParamName^, aTypeName^]);
   if aParamName = nil then
     a^.Direction := rmdResult
   else if pfVar in aFlags then
@@ -4625,7 +4629,8 @@ function GetInterfaceFromEntry(Instance: TObject; Entry: PInterfaceEntry;
     TGetProc = function: IInterface of object;
   var
     Call: TMethod;
-  begin // sub-procedure to avoid try..finally for TGetProc(): Interface result
+  begin
+    // sub-procedure to avoid try..finally for TGetProc(): Interface result
     if PropWrap(ImplGetter).Kind = ptVirtual then
       Call.Code := PPointer(PPtrInt(Instance)^ + SmallInt(ImplGetter))^
     else
@@ -4655,7 +4660,7 @@ begin
 end;
 
 
-function GetRttiClassGUID(aClass: TClass): PGUIDDynArray;
+function GetRttiClassGuid(aClass: TClass): PGuidDynArray;
 var
   T: PInterfaceTable;
   n, i: PtrInt;
@@ -4678,6 +4683,7 @@ begin
     aClass := GetClassParent(aClass);
   end;
 end;
+
 
 { ************* Efficient Dynamic Arrays and Records Process }
 
@@ -5294,7 +5300,7 @@ const
     ptInt64, ptInteger, ptInterface, ptInteger, ptCardinal, ptPtrInt, ptPtrUInt, ptQWord,
     ptRawByteString, ptRawByteString, ptRawJson, ptRawUtf8, ptRecord, ptSingle,
     ptRawUtf8, ptString, ptSynUnicode,
-    ptTimeLog, ptDateTime, ptDateTimeMS, ptGUID, ptHash128, ptHash256, ptHash512,
+    ptTimeLog, ptDateTime, ptDateTimeMS, ptGuid, ptHash128, ptHash256, ptHash512,
     ptORM, ptTimeLog, ptORM, ptORM, ptORM, ptUnixMSTime,
     ptUnixTime, ptTimeLog, ptUnicodeString,
     ptRawUtf8, ptVariant, ptWideString, ptWord);
@@ -7459,12 +7465,12 @@ begin
   PT_INFO[ptDateTime] := TypeInfo(TDateTime);
   PT_INFO[ptDateTimeMS] := TypeInfo(TDateTimeMS);
   {$ifdef HASNOSTATICRTTI} // for Delphi 7/2007: use fake TypeInfo()
-  PT_INFO[ptGUID] := @_TGUID;
+  PT_INFO[ptGuid] := @_TGUID;
   PT_INFO[ptHash128] := @_THASH128;
   PT_INFO[ptHash256] := @_THASH256;
   PT_INFO[ptHash512] := @_THASH512;
   {$else}
-  PT_INFO[ptGUID] := TypeInfo(TGUID);
+  PT_INFO[ptGuid] := TypeInfo(TGUID);
   PT_INFO[ptHash128] := TypeInfo(THash128);
   PT_INFO[ptHash256] := TypeInfo(THash256);
   PT_INFO[ptHash512] := TypeInfo(THash512);

@@ -366,8 +366,8 @@ type
   PWideStringDynArray = ^TWideStringDynArray;
   TSynUnicodeDynArray = array of SynUnicode;
   PSynUnicodeDynArray = ^TSynUnicodeDynArray;
-  TGUIDDynArray = array of TGUID;
-  PGUIDDynArray = array of PGUID;
+  TGuidDynArray = array of TGUID;
+  PGuidDynArray = array of PGUID;
 
   PObject = ^TObject;
   PClass = ^TClass;
@@ -436,8 +436,8 @@ type
   ExceptionClass = class of Exception;
 
 type
-  /// stack-allocated ASCII string, used by GUIDToShort() function
-  TGUIDShortString = string[38];
+  /// stack-allocated ASCII string, used by GuidToShort() function
+  TGuidShortString = string[38];
 
   /// used e.g. for SetThreadName/GetCurrentThreadName
   TShort31 = string[31];
@@ -607,7 +607,7 @@ function IsNullGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: 
 /// append one TGUID item to a TGUID dynamic array
 // - returning the newly inserted index in guids[], or an existing index in
 // guids[] if NoDuplicates is TRUE and TGUID already exists
-function AddGuid(var guids: TGUIDDynArray; const guid: TGUID;
+function AddGuid(var guids: TGuidDynArray; const guid: TGUID;
   NoDuplicates: boolean = false): integer;
 
 /// compute a random GUID value
@@ -2671,18 +2671,22 @@ type
     // and using temp.buf and temp.len safely in the call, only calling
     // temp.Init(expectedsize) if the API returned an error about insufficient
     // buffer space
-    function Init: integer; overload; {$ifdef HASINLINE}inline;{$endif}
+    function Init: integer; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// initialize a new temporary buffer of a given number of random bytes
     // - will fill the buffer via FillRandom() calls
     function InitRandom(RandomLen: integer): pointer;
     /// initialize a new temporary buffer filled with 32-bit integer increasing values
     function InitIncreasing(Count: PtrInt; Start: PtrInt = 0): PIntegerArray;
     /// initialize a new temporary buffer of a given number of zero bytes
+    // - if ZeroLen=0, will initialize the whole tmp[] stack buffer to 0
     function InitZero(ZeroLen: PtrInt): pointer;
     /// inlined wrapper around buf + len
-    function BufEnd: pointer; {$ifdef HASINLINE}inline;{$endif}
+    function BufEnd: pointer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// finalize the temporary storage
-    procedure Done; overload; {$ifdef HASINLINE}inline;{$endif}
+    procedure Done; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// finalize the temporary storage, and create a RawUtf8 string from it
     procedure Done(EndBuf: pointer; var Dest: RawUtf8); overload;
   end;
@@ -3873,7 +3877,7 @@ begin
             (a[3] = 0) {$endif CPU64};
 end;
 
-function AddGuid(var guids: TGUIDDynArray; const guid: TGUID; NoDuplicates: boolean): integer;
+function AddGuid(var guids: TGuidDynArray; const guid: TGUID; NoDuplicates: boolean): integer;
 begin
   if NoDuplicates then
   begin
@@ -3902,7 +3906,8 @@ begin
 end;
 
 function NextGrow(capacity: integer): integer;
-begin // algorithm similar to TFPList.Expand for the increasing ranges
+begin
+  // algorithm similar to TFPList.Expand for the increasing ranges
   result := capacity;
   if result < 128 shl 20 then
     if result < 8 shl 20 then
@@ -4149,7 +4154,8 @@ zero:
 end;
 
 function DateTimeToIsoString(dt: TDateTime): string;
-begin // avoid to link mormot.core.datetime
+begin
+// avoid to link mormot.core.datetime
   DateTimeToString(result, 'yyyy-mm-dd hh:nn:ss', dt);
 end;
 
@@ -4480,22 +4486,26 @@ end;
 {$ifdef CPU64}
 
 procedure SetInt64(P: PUtf8Char; var result: Int64);
-begin // PtrInt is already int64 -> call PtrInt version
+begin
+  // PtrInt is already int64 -> call PtrInt version
   result := GetInteger(P);
 end;
 
 procedure SetQWord(P: PUtf8Char; var result: QWord);
-begin // PtrUInt is already QWord -> call PtrUInt version
+begin
+  // PtrUInt is already QWord -> call PtrUInt version
   result := GetCardinal(P);
 end;
 
 function GetInt64(P: PUtf8Char): Int64;
-begin // PtrInt is already int64 -> call previous version
+begin
+  // PtrInt is already int64 -> call previous version
   result := GetInteger(P);
 end;
 
 function GetInt64(P: PUtf8Char; var err: integer): Int64;
-begin // PtrInt is already int64 -> call previous version
+begin
+  // PtrInt is already int64 -> call previous version
   result := GetInteger(P, err);
 end;
 
@@ -5416,7 +5426,8 @@ begin
         result := -1;
       end;
   else
-    begin // generic binary comparison (fast with inlined CompareMemSmall)
+    begin
+      // generic binary comparison (fast with inlined CompareMemSmall)
       for result := 0 to Count - 1 do
         if (PInt64(P)^ = PInt64(Elem)^) and // not better using a local Int64 var
            CompareMemSmall(PAnsiChar(P) + 8, PAnsiChar(Elem) + 8, ElemSize - 8) then
@@ -5454,7 +5465,8 @@ begin
         result := false;
       end;
   else
-    begin // generic binary comparison (fast with leading 64-bit comparison)
+    begin
+      // generic binary comparison (fast with leading 64-bit comparison)
       result := true;
       if Count > 0 then
         repeat
@@ -5682,7 +5694,8 @@ begin
   x := Length(Excluded);
   if (x > ExcludedSortSize) or
      (v > ExcludedSortSize) then
-  begin // sort if worth it
+  begin
+    // sort if worth it
     dec(x);
     QuickSortInteger(pointer(Excluded), 0, x);
     for i := 0 to v - 1 do
@@ -5724,7 +5737,8 @@ begin
   x := Length(Included);
   if (x > IncludedSortSize) or
      (v > IncludedSortSize) then
-  begin // sort if worth it
+  begin
+    // sort if worth it
     dec(x);
     QuickSortInteger(pointer(Included), 0, x);
     for i := 0 to v - 1 do
@@ -5759,7 +5773,8 @@ begin
   x := Length(Excluded);
   if (x > ExcludedSortSize) or
      (v > ExcludedSortSize) then
-  begin // sort if worth it
+  begin
+    // sort if worth it
     dec(x);
     QuickSortInt64(pointer(Excluded), 0, x);
     for i := 0 to v - 1 do
@@ -5797,7 +5812,8 @@ begin
   x := Length(Included);
   if (x > IncludedSortSize) or
      (v > IncludedSortSize) then
-  begin // sort if worth it
+  begin
+    // sort if worth it
     dec(x);
     QuickSortInt64(pointer(Included), 0, x);
     for i := 0 to v - 1 do
@@ -5828,7 +5844,8 @@ end;
 function DeduplicateIntegerSorted(val: PIntegerArray; last: PtrInt): PtrInt;
 var
   i: PtrInt;
-begin // sub-function for better code generation
+begin
+  // sub-function for better code generation
   i := 0;
   repeat // here last>0 so i<last
     if val[i] = val[i + 1] then
@@ -5876,7 +5893,8 @@ end;
 function DeduplicateInt64Sorted(val: PInt64Array; last: PtrInt): PtrInt;
 var
   i: PtrInt;
-begin // sub-function for better code generation
+begin
+  // sub-function for better code generation
   i := 0;
   repeat // here last>0 so i<last
     if val[i] = val[i + 1] then
@@ -5966,7 +5984,8 @@ begin
   begin
     dec(ValuesCount, 4);
     while i < ValuesCount do
-    begin // faster pipelined version
+    begin
+      // faster pipelined version
       Reversed[Values[i]] := i;
       Reversed[Values[i + 1]] := i + 1;
       Reversed[Values[i + 2]] := i + 2;
@@ -6041,7 +6060,8 @@ begin
         end;
       until I > J;
       if J - L < R - I then
-      begin // use recursion only for smaller range
+      begin
+        // use recursion only for smaller range
         if L < J then
           QuickSortInteger(ID, L, J);
         L := I;
@@ -6097,7 +6117,8 @@ begin
         end;
       until I > J;
       if J - L < R - I then
-      begin // use recursion only for smaller range
+      begin
+        // use recursion only for smaller range
         if L < J then
           QuickSortInteger(ID, CoValues, L, J);
         L := I;
@@ -6145,7 +6166,8 @@ begin
         end;
       until I > J;
       if J - L < R - I then
-      begin // use recursion only for smaller range
+      begin
+        // use recursion only for smaller range
         if L < J then
           QuickSortWord(ID, L, J);
         L := I;
@@ -6200,7 +6222,8 @@ begin
         end;
       until I > J;
       if J - L < R - I then
-      begin // use recursion only for smaller range
+      begin
+        // use recursion only for smaller range
         if L < J then
           QuickSortInt64(ID, L, J);
         L := I;
@@ -6255,7 +6278,8 @@ begin
         end;
       until I > J;
       if J - L < R - I then
-      begin // use recursion only for smaller range
+      begin
+        // use recursion only for smaller range
         if L < J then
           QuickSortQWord(ID, L, J);
         L := I;
@@ -6313,7 +6337,8 @@ begin
         end;
       until I > J;
       if J - L < R - I then
-      begin // use recursion only for smaller range
+      begin
+        // use recursion only for smaller range
         if L < J then
           QuickSortInt64(ID, CoValues, L, J);
         L := I;
@@ -6620,7 +6645,8 @@ begin
   ValuesCount := Length(Values);
   result := FastLocateIntegerSorted(pointer(Values), ValuesCount - 1, Value);
   if result >= 0 then
-  begin // if Value exists -> fails
+  begin
+    // if Value exists -> fails
     SetLength(Values, ValuesCount + 1); // manual size increase
     result := InsertInteger(Values, ValuesCount, Value, result, CoValues);
   end;
@@ -6778,12 +6804,14 @@ begin
   median := high shr 1;
   repeat
     if high <= low then
-    begin // one item left
+    begin
+      // one item left
       result := Values[median];
       exit;
     end;
     if high = low + 1 then
-    begin // two items -> return the smallest (not average)
+    begin
+      // two items -> return the smallest (not average)
       if Values[low] > Values[high] then
         Exchg32(Values[low], Values[high]);
       result := Values[median];
@@ -6842,13 +6870,15 @@ begin
   median := high shr 1;
   repeat
     if high <= low then
-    begin // one item left
+    begin
+      // one item left
       result := ndx[median];
       TempBuffer.Done;
       exit;
     end;
     if high = low + 1 then
-    begin // two items -> return the smallest (not average)
+    begin
+      // two items -> return the smallest (not average)
       if OnCompare(ndx[low], ndx[high]) then
         Exchg32(ndx[low], ndx[high]);
       result := ndx[median];
@@ -7184,7 +7214,8 @@ begin
     repeat
       obj := o^;
       if obj <> nil then
-      begin // inlined FreeAndNil(o^)
+      begin
+        // inlined FreeAndNil(o^)
         o^ := nil;
         obj.Destroy;
       end;
@@ -7334,7 +7365,8 @@ function IsEqual(const A, B: THash128): boolean;
 var
   a_: TPtrIntArray absolute A;
   b_: TPtrIntArray absolute B;
-begin // uses anti-forensic time constant "xor/or" pattern
+begin
+  // uses anti-forensic time constant "xor/or" pattern
   result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) {$ifndef CPU64} or
              (a_[2] xor b_[2]) or (a_[3] xor b_[3]) {$endif} ) = 0;
 end;
@@ -7434,7 +7466,8 @@ function IsEqual(const A, B: THash160): boolean;
 var
   a_: TIntegerArray absolute A;
   b_: TIntegerArray absolute B;
-begin // uses anti-forensic time constant "xor/or" pattern
+begin
+  // uses anti-forensic time constant "xor/or" pattern
   result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) or (a_[2] xor b_[2]) or
              (a_[3] xor b_[3]) or (a_[4] xor b_[4])) = 0;
 end;
@@ -7458,7 +7491,8 @@ function IsEqual(const A, B: THash256): boolean;
 var
   a_: TPtrIntArray absolute A;
   b_: TPtrIntArray absolute B;
-begin // uses anti-forensic time constant "xor/or" pattern
+begin
+  // uses anti-forensic time constant "xor/or" pattern
   result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) or (a_[2] xor b_[2]) or
     (a_[3] xor b_[3]) {$ifndef CPU64}  or (a_[4] xor b_[4]) or (a_[5] xor b_[5]) or
     (a_[6] xor b_[6]) or (a_[7] xor b_[7]) {$endif} ) = 0;
@@ -7486,7 +7520,8 @@ function IsEqual(const A, B: THash384): boolean;
 var
   a_: TPtrIntArray absolute A;
   b_: TPtrIntArray absolute B;
-begin // uses anti-forensic time constant "xor/or" pattern
+begin
+  // uses anti-forensic time constant "xor/or" pattern
   result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) or (a_[2] xor b_[2]) or
     (a_[3] xor b_[3]) or (a_[4] xor b_[4]) or (a_[5] xor b_[5]) {$ifndef CPU64} or
     (a_[6] xor b_[6]) or (a_[7] xor b_[7]) or (a_[8] xor b_[8]) or
@@ -7517,7 +7552,8 @@ function IsEqual(const A, B: THash512): boolean;
 var
   a_: TPtrIntArray absolute A;
   b_: TPtrIntArray absolute B;
-begin // uses anti-forensic time constant "xor/or" pattern
+begin
+  // uses anti-forensic time constant "xor/or" pattern
   result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) or (a_[2] xor b_[2]) or
              (a_[3] xor b_[3]) or (a_[4] xor b_[4]) or (a_[5] xor b_[5]) or
              (a_[6] xor b_[6]) or (a_[7] xor b_[7]) {$ifndef CPU64} or
@@ -8308,7 +8344,8 @@ begin
   crcblock(entropy, @e.b);
   {$ifdef CPUINTEL}
   if cfRAND in CpuFeatures then
-  begin // won't hurt
+  begin
+    // won't hurt
     f := e;
     e.c0 := f.c3 xor RdRand32;
     e.c1 := f.c2 xor RdRand32;
@@ -8408,7 +8445,7 @@ begin
   if cfRAND in CpuFeatures then
     c := RdRand32 // won't hurt
   else
-    c := Rdtsc; // lowest 32-bit part of RDTSC is highly unpredictable
+    c := Rdtsc;   // lowest 32-bit part of RDTSC is highly unpredictable
   {$else}
   c := Random(MaxInt); // good enough as seed, especially on FPC
   {$endif CPUINTEL}
@@ -8598,7 +8635,8 @@ begin
     s1 := 0;
     s2 := 0;
     for i := 1 to Len shr 4 do
-    begin // 16 bytes (128-bit) loop - aligned read
+    begin
+      // 16 bytes (128-bit) loop - aligned read
       inc(s1, Data[0]);
       inc(s2, s1);
       inc(s1, Data[1]);
@@ -8610,7 +8648,8 @@ begin
       Data := @Data[4];
     end;
     for i := 1 to (Len shr 2) and 3 do
-    begin // 4 bytes (DWORD) by loop
+    begin
+      // 4 bytes (DWORD) by loop
       inc(s1, Data[0]);
       inc(s2, s1);
       Data := @Data[1];
@@ -8753,7 +8792,8 @@ end;
     whereas FPC RTL's popcnt() is much slower }
 
 function GetBitsCountPas(value: PtrInt): PtrInt;
-begin // generic branchless Wilkes-Wheeler-Gill pure pascal version
+begin
+  // generic branchless Wilkes-Wheeler-Gill pure pascal version
   result := value;
   {$ifdef CPU64}
   result := result - ((result shr 1) and $5555555555555555);
@@ -8778,7 +8818,8 @@ var
   l: TQWordRec absolute left;
   r: TQWordRec absolute right;
   t1, t2, t3: TQWordRec;
-begin // CPU-neutral implementation
+begin
+  // CPU-neutral implementation
   t1.V := QWord(l.L) * r.L;
   t2.V := QWord(l.H) * r.L + t1.H;
   t3.V := QWord(l.L) * r.H + t2.L;
@@ -8797,7 +8838,8 @@ begin
 end;
 
 function RefCntDecFree(var refcnt: TRefCnt): boolean;
-begin // fallback to RTL asm e.g. for ARM
+begin
+  // fallback to RTL asm e.g. for ARM
   {$ifdef FPC_64}
   result := InterLockedDecrement64(refcnt) <= 0;
   {$else}
@@ -8853,7 +8895,8 @@ end;
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 var
   tab: PCrc32tab;
-begin // on ARM, we use slicing-by-4 to avoid polluting smaller L1 cache
+begin
+  // on ARM, we use slicing-by-4 to avoid polluting smaller L1 cache
   tab := @crc32ctab;
   result := not crc;
   if (buf <> nil) and
@@ -8899,7 +8942,8 @@ function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
 var
   c100: PtrUInt; // val/c100 are QWord on 64-bit CPU
   tab: PWordArray;
-begin // this code is faster than Borland's original str() or IntToStr()
+begin
+  // this code is faster than Borland's original str() or IntToStr()
   tab := @TwoDigitLookupW;
   repeat
     if val < 10 then
@@ -8955,12 +8999,14 @@ end;
 {$endif CPUX64}
 
 function SynLZcompressdestlen(in_len: integer): integer;
-begin // get maximum possible (worse) compressed size for out_p
+begin
+  // get maximum possible (worse) compressed size for out_p
   result := in_len + in_len shr 3 + 16;
 end;
 
 function SynLZdecompressdestlen(in_p: PAnsiChar): integer;
-begin // get uncompressed size from lz-compressed buffer (to reserve memory, e.g.)
+begin
+  // get uncompressed size from lz-compressed buffer (to reserve memory, e.g.)
   result := PWord(in_p)^;
   if result and $8000 <> 0 then
     result := (result and $7fff) or (integer(PWord(in_p + 2)^) shl 15);
@@ -8981,7 +9027,8 @@ begin
   dst_beg := dst;
   // 1. store in_len
   if size >= $8000 then
-  begin // size in 32KB..2GB -> stored as integer
+  begin
+    // size in 32KB..2GB -> stored as integer
     PWord(dst)^ := $8000 or (size and $7fff);
     PWord(dst + 2)^ := size shr 15;
     inc(dst, 4);
@@ -9031,12 +9078,14 @@ begin
         h := h shl 4;
         // here we have always t>0
         if t <= 15 then
-        begin // mark 2 to 17 bytes -> size=1..15
+        begin
+          // mark 2 to 17 bytes -> size=1..15
           PWord(dst)^ := integer(t or h);
           inc(dst, 2);
         end
         else
-        begin // mark 18 to (255+16) bytes -> size=0, next byte=t
+        begin
+          // mark 18 to (255+16) bytes -> size=0, next byte=t
           dec(t, 16);
           PWord(dst)^ := h; // size=0
           dst[2] := ansichar(t);
@@ -9250,7 +9299,8 @@ nextCW:
           inc(src);
         end;
         if dst + t >= dst_end then
-        begin // avoid buffer overflow by all means
+        begin
+          // avoid buffer overflow by all means
           MoveSmall(offset[h], dst, dst_end - dst);
           break;
         end;
@@ -9409,7 +9459,7 @@ end;
 
 function TSynTempBuffer.InitRandom(RandomLen: integer): pointer;
 begin
-  Init(RandomLen); // ensure has 16 bytes more than RandomLen so +1 below is ok
+  Init(RandomLen); // ensured has 16 bytes more than RandomLen so +1 below is ok
   if RandomLen > 0 then
     FillRandom(buf, (RandomLen shr 2) + 1);
   result := buf;
@@ -9425,8 +9475,8 @@ end;
 function TSynTempBuffer.InitZero(ZeroLen: PtrInt): pointer;
 begin
   if ZeroLen = 0 then
-    ZeroLen := SizeOf(tmp);
-  Init(ZeroLen - 16);
+    ZeroLen := SizeOf(tmp) - 16;
+  Init(ZeroLen);
   FillCharFast(buf^, ZeroLen, 0);
   result := buf;
 end;
@@ -9596,7 +9646,8 @@ end;
 function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): boolean;
 label
   zero;
-begin // cut-down version of our pure pascal CompareMem() function
+begin
+  // cut-down version of our pure pascal CompareMem() function
   {$ifndef CPUX86}
   result := false;
   {$endif CPUX86}
@@ -9653,7 +9704,8 @@ procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
 var
   h: THash128Rec absolute crc;
   h1, h2: cardinal;
-begin // see https://goo.gl/Pls5wi
+begin
+  // see https://goo.gl/Pls5wi
   h1 := crc32c(0, buf, len);
   h2 := crc32c(h1, buf, len);
   h.i0 := h1;
@@ -9669,7 +9721,8 @@ procedure crc256c(buf: PAnsiChar; len: cardinal; out crc: THash256);
 var
   h: THash256Rec absolute crc;
   h1, h2: cardinal;
-begin // see https://goo.gl/Pls5wi
+begin
+  // see https://goo.gl/Pls5wi
   h1 := crc32c(0, buf, len);
   h2 := crc32c(h1, buf, len);
   h.i0 := h1;
@@ -9724,7 +9777,8 @@ end;
 {$ifdef ASMX86}
 
 procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
-begin // call optimized x86 asm within the loop
+begin
+  // call optimized x86 asm within the loop
   while count > 0 do
   begin
     crcblockfast(crc128, data128);
@@ -9738,7 +9792,8 @@ end;
 function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
 label
   zero;
-begin // this code compiles well under FPC and Delphi on both 32-bit and 64-bit
+begin
+  // this code compiles well under FPC and Delphi on both 32-bit and 64-bit
   Length := PtrInt(@PAnsiChar(P1)[Length - SizeOf(PtrInt) * 2]); // = 2*PtrInt end
   if Length >= PtrInt(PtrUInt(P1)) then
   begin
@@ -9994,7 +10049,8 @@ var
   AbsA, AbsB, Res: double;
 begin
   if PInt64(@DoublePrec)^ = 0 then
-  begin // Max(Min(Abs(A),Abs(B))*1E-12,1E-12)
+  begin
+    // Max(Min(Abs(A),Abs(B))*1E-12,1E-12)
     AbsA := Abs(A);
     AbsB := Abs(B);
     Res := 1E-12;
@@ -10016,7 +10072,8 @@ var
   AbsA, AbsB, Res: TSynExtended;
 begin
   if DoublePrec = 0 then
-  begin // Max(Min(Abs(A),Abs(B))*1E-12,1E-12)
+  begin
+    // Max(Min(Abs(A),Abs(B))*1E-12,1E-12)
     AbsA := Abs(A);
     AbsB := Abs(B);
     Res := 1E-12; // also for TSynExtended (FPC uses 1E-4!)
@@ -10512,7 +10569,8 @@ function _SortDynArrayVariantComp(const A, B: TVarData;
   caseInsensitive: boolean): integer;
 const
   ICMP: array[TVariantRelationship] of integer = (0, -1, 1, 1);
-begin // caseInsensitive not supported by the RTL
+begin
+  // caseInsensitive not supported by the RTL
   result := ICMP[VarCompareValue(PVariant(@A)^, PVariant(@B)^)];
 end;
 
@@ -10579,7 +10637,8 @@ end;
 function SortDynArrayFileName(const A, B): integer;
 var
   Aname, Aext, Bname, Bext: TFileName;
-begin // code below is not very fast, but correct ;)
+begin
+  // code below is not very fast, but correct ;)
   Aname := GetFileNameWithoutExt(string(A), @Aext);
   Bname := GetFileNameWithoutExt(string(B), @Bext);
   result := AnsiCompareFileName(Aext, Bext);
@@ -10589,7 +10648,8 @@ begin // code below is not very fast, but correct ;)
 end;
 
 function SortDynArrayUnicodeString(const A, B): integer;
-begin // works for tkWString and tkUString
+begin
+  // works for tkWString and tkUString
   result := StrCompW(PWideChar(A), PWideChar(B));
 end;
 
@@ -10633,7 +10693,8 @@ function SortDynArrayRawByteString(const A, B): integer;
 var
   p1, p2: PByteArray;
   l1, l2, i, l: PtrInt; // FPC will use very efficiently the CPU registers
-begin // we can't use StrComp() since a RawByteString may contain #0
+begin
+  // we can't use StrComp() since a RawByteString may contain #0
   p1 := pointer(A);
   p2 := pointer(B);
   if p1 <> p2 then
@@ -10728,12 +10789,14 @@ end;
 { TFakeWriterStream }
 
 function TFakeWriterStream.Read(var Buffer; Count: Longint): Longint;
-begin // do nothing
+begin
+  // do nothing
   result := Count;
 end;
 
 function TFakeWriterStream.Write(const Buffer; Count: Longint): Longint;
-begin // do nothing
+begin
+  // do nothing
   inc(fWritten, Count);
   result := Count;
 end;
@@ -10827,7 +10890,8 @@ end;
 {$endif FPC}
 
 function TRawByteStringStream.GetSize: Int64;
-begin // faster than the TStream inherited method calling Seek() twice
+begin
+  // faster than the TStream inherited method calling Seek() twice
   result := length(fDataString);
 end;
 

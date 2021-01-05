@@ -291,7 +291,7 @@ type
       Compression: boolean;
       Ajax: boolean;
     end;
-    fOnWebSocketsUpgraded: TOnRestClientNotify;
+    fOnWebSocketsUpgraded: TOnClientNotify;
     fOnWebSocketsClosed: TNotifyEvent;
     fWebSocketLoopDelay: integer;
     fDefaultWebSocketProcessSettings: TWebSocketProcessSettings;
@@ -352,7 +352,7 @@ type
     // occuring when the HTTP-TCP/IP link is re-created, and user re-authenticated
     // - this event handler is the right place to setup link-driven connection,
     // e.g. SOA real-time callbacks registration (using Sender.Services)
-    property OnWebSocketsUpgraded: TOnRestClientNotify
+    property OnWebSocketsUpgraded: TOnClientNotify
       read fOnWebSocketsUpgraded write fOnWebSocketsUpgraded;
     /// this event handler will be executed when the WebSocket link is destroyed
     // - may happen e.g. after graceful close from the server side, or
@@ -929,7 +929,7 @@ begin
   end;
   if WebSockets = nil then
     raise EServiceException.CreateUtf8('Missing %.WebSocketsUpgrade() call', [self]);
-  FormatUtf8('{"%":%}', [Factory.InterfaceTypeInfo^.Name, FakeCallbackID], body);
+  FormatUtf8('{"%":%}', [Factory.InterfaceTypeInfo^.RawName, FakeCallbackID], body);
   CallbackNonBlockingSetHeader(head); // frames gathering + no wait
   result := CallBack(mPOST, 'CacheFlush/_callback_', body, resp, nil, 0, @head)
     in [HTTP_SUCCESS, HTTP_NOCONTENT];

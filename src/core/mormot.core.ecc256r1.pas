@@ -1627,7 +1627,8 @@ begin
   else
     ProductBits := _numBits(ProductVLI_Lo^);
   if ProductBits < ModBits then
-  begin // l_product < p_mod
+  begin
+    // l_product < p_mod
     Output := PVLI(@Product)^;
     exit;
   end;

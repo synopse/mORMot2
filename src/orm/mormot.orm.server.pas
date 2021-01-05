@@ -523,7 +523,7 @@ begin
       if fStaticVirtualTable[i].RefCount <> 1 then
         raise ERestStorage.CreateUtf8('%.Destroy: static virtual % refcnt=%',
           [self, fStaticVirtualTable[i], fStaticVirtualTable[i].RefCount]);
-      TRestOrmServer(fStaticVirtualTable[i])._Release;
+      IInterface(fStaticVirtualTable[i])._Release;
       if fStaticData <> nil then
         // free once as fStaticVirtualTable[i], just clear reference here
         fStaticData[i] := nil;
@@ -537,7 +537,7 @@ begin
       if orm.RefCount <> 1 then
         raise ERestStorage.CreateUtf8('%.Destroy: static % refcnt=%',
           [self, orm, orm.RefCount]);
-      TRestOrmServer(orm)._Release;
+      IInterface(orm)._Release;
     end;
   end;
   inherited Destroy; // fCache.Free
@@ -1580,7 +1580,7 @@ var
   HistBlob: TOrmHistory;
   Rec: TOrm;
   HistJson: TOrmHistory;
-  WhereClause, JSON: RawUtf8;
+  WhereClause, json: RawUtf8;
   HistID, ModifiedRecord: TInt64DynArray;
   TableHistoryIndex, i, HistIDCount, n: PtrInt;
   ModifRecord, ModifRecordCount, MaxRevisionJson: integer;
@@ -1681,14 +1681,14 @@ begin
           else
           begin
             // HistBlob.fID=0 -> no previous BLOB content
-            JSON := JsonEncode([
+            json := JsonEncode([
               'ModifiedRecord', HistJson.ModifiedRecord,
               'Timestamp', GetServerTimestamp,
               'Event', ord(heArchiveBlob)]);
             if HistJson.Event = heAdd then
             begin
               // allow versioning from scratch
-              HistBlob.IDValue := EngineAdd(TableHistoryIndex, JSON);
+              HistBlob.IDValue := EngineAdd(TableHistoryIndex, json);
               Rec := HistJson.ModifiedTable(fModel).Create;
               HistBlob.HistoryOpen(fModel);
             end
@@ -1698,7 +1698,7 @@ begin
               if Rec <> nil then
               try
                 // initialize BLOB with latest revision
-                HistBlob.IDValue := EngineAdd(TableHistoryIndex, JSON);
+                HistBlob.IDValue := EngineAdd(TableHistoryIndex, json);
                 HistBlob.HistoryOpen(fModel);
                 HistBlob.HistoryAdd(Rec, HistJson);
               finally
@@ -1752,9 +1752,9 @@ begin
       'SetStaticTable(%): existing % for %',
       [aTableIndex, aStatics[aTableIndex], aStatic]);
   if aStatic <> nil then
-    TRestOrmServer(aStatic)._AddRef // manual reference counting
+    IInterface(aStatic)._AddRef // manual reference counting
   else
-    TRestOrmServer(aStatics[aTableIndex])._Release;
+    IInterface(aStatics[aTableIndex])._Release;
   aStatics[aTableIndex] := aStatic;
   if IsZero(pointer(aStatics), aTableCount * SizeOf(pointer)) then
     // void array if no more static
@@ -1833,16 +1833,16 @@ function TRestOrmServer.InternalUpdateEvent(aEvent: TOrmEvent;
   procedure DoTrackChanges(TableHistoryIndex: integer);
   var
     TableHistoryClass: TOrmHistoryClass;
-    JSON: RawUtf8;
-    Event: TOrmHistoryEvent;
+    json: RawUtf8;
+    event: TOrmHistoryEvent;
   begin
     case aEvent of
       oeAdd:
-        Event := heAdd;
+        event := heAdd;
       oeUpdate:
-        Event := heUpdate;
+        event := heUpdate;
       oeDelete:
-        Event := heDelete;
+        event := heDelete;
     else
       exit;
     end;
@@ -1850,12 +1850,12 @@ function TRestOrmServer.InternalUpdateEvent(aEvent: TOrmEvent;
       fModel.Tables[TableHistoryIndex]);
     TableHistoryClass.InitializeFields([
       'ModifiedRecord', aTableIndex + aID shl 6,
-      'Event', ord(Event),
+      'event', ord(event),
       'SentDataJson', aSentData,
-      'Timestamp', GetServerTimestamp], JSON);
+      'Timestamp', GetServerTimestamp], json);
     fRest.AcquireExecution[execOrmWrite].Safe.Lock; // avoid race condition
     try // low-level Add(TOrmHistory) without cache
-      EngineAdd(TableHistoryIndex, JSON);
+      EngineAdd(TableHistoryIndex, json);
       { TODO: use a BATCH (in background thread) to speed up TOrmHistory storage? }
       if fTrackChangesHistory[TableHistoryIndex].CurrentRow >
            fTrackChangesHistory[TableHistoryIndex].MaxSentDataJsonRow then
@@ -1865,7 +1865,7 @@ function TRestOrmServer.InternalUpdateEvent(aEvent: TOrmEvent;
         fTrackChangesHistory[TableHistoryIndex].CurrentRow := 0;
       end
       else
-        // fast append as JSON until reached MaxSentDataJsonRow
+        // fast append as json until reached MaxSentDataJsonRow
         inc(fTrackChangesHistory[TableHistoryIndex].CurrentRow);
     finally
       fRest.AcquireExecution[execOrmWrite].Safe.UnLock;
@@ -1966,7 +1966,8 @@ begin
 end;
 
 procedure TRestOrmServer.FlushInternalDBCache;
-begin // do nothing by default
+begin
+  // do nothing by default
 end;
 
 procedure TRestOrmServer.RefreshInternalStateFromStatic;

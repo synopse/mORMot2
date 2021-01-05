@@ -373,7 +373,8 @@ begin
     meta.Connection := (MainConnection as TSqlDBFireDACConnection).fDatabase;
     indexs.Connection := meta.Connection;
     for kind := true to true do
-    begin // primary keys may not be indexed
+    begin
+      // primary keys may not be indexed
       meta.MetaInfoKind := MASTER[kind];
       meta.ObjectName := TableName;
       meta.Open;

@@ -1237,11 +1237,11 @@ begin
          ((Ctxt.Call.InHead = '') or
           (Ctxt.ClientKind = ckFramework)) then
         // return extended/optimized pseudo-JSON, as recognized by mORMot
-        WR.CustomOptions := WR.CustomOptions + [twoForceJSONExtended]
+        WR.CustomOptions := WR.CustomOptions + [twoForceJsonExtended]
       else
         // return standard JSON, as expected e.g. by a regular AJAX client
-        WR.CustomOptions := WR.CustomOptions + [twoForceJSONStandard];
-      if optDontStoreVoidJSON in opt then
+        WR.CustomOptions := WR.CustomOptions + [twoForceJsonStandard];
+      if optDontStoreVoidJson in opt then
         WR.CustomOptions := WR.CustomOptions + [twoIgnoreDefaultInRecord];
       // root/calculator {"method":"add","params":[1,2]} -> {"result":[3],"id":0}
       Ctxt.ServiceResultStart(WR);
@@ -1271,8 +1271,8 @@ begin
             WR, @err, Ctxt.ForceServiceResultAsJsonObject);
         if not execres then
         begin
+          // wrong request returns HTTP error 406
           if err <> '' then
-            // wrong request
             Ctxt.Error('%', [err], HTTP_NOTACCEPTABLE)
           else
             Error('execution failed (probably due to bad input parameters)',
@@ -1439,7 +1439,7 @@ var
   opt: TInterfacedObjectFromFactoryOptions;
 begin
   if aRequest.ClientKind = ckFramework then
-    opt := [ifoJsonAsExtended, ifoDontStoreVoidJSON]
+    opt := [ifoJsonAsExtended, ifoDontStoreVoidJson]
   else
     opt := [];
   fServer := aRequest.Server;
@@ -1522,7 +1522,7 @@ function TServiceContainerServer.AddImplementation(
   const aContractExpected: RawUtf8): TServiceFactoryServer;
 var
   i, j: PtrInt;
-  UID, implemented: PGUIDDynArray;
+  UID, implemented: PGuidDynArray;
   F: TServiceFactoryServer;
 begin
   result := nil;
@@ -1539,7 +1539,7 @@ begin
   CheckInterface(aInterfaces);
   SetLength(UID, length(aInterfaces));
   for j := 0 to high(aInterfaces) do
-    UID[j] := pointer(aInterfaces[j]^.InterfaceGUID);
+    UID[j] := pointer(aInterfaces[j]^.InterfaceGuid);
   // check all interfaces available in aSharedImplementation/aImplementationClass
   if (aSharedImplementation <> nil) and
      aSharedImplementation.InheritsFrom(TInterfacedObjectFake) then
@@ -1552,7 +1552,7 @@ begin
   else
   begin
     // search all implemented TGUID for this class
-    implemented := GetRttiClassGUID(aImplementationClass);
+    implemented := GetRttiClassGuid(aImplementationClass);
     for j := 0 to high(UID) do
       for i := 0 to high(implemented) do
         if IsEqualGuid(UID[j], implemented[i]) then

@@ -311,7 +311,7 @@ end;
 
 procedure TRestOrmServerFullMemory.LoadFromStream(aStream: TStream);
 var
-  magic, JSON: RawUtf8;
+  magic, json: RawUtf8;
   P, TableName, Data: PUtf8Char;
   t: PtrInt;
   wasString: boolean;
@@ -333,10 +333,10 @@ begin
   else
   begin
     // [{"AuthUser":[{....},{...}]},{"AuthGroup":[{...},{...}]}]
-    JSON := StreamToRawByteString(aStream); // assume UTF-8 content
-    if JSON = '' then
+    json := StreamToRawByteString(aStream); // assume UTF-8 content
+    if json = '' then
       exit;
-    P := pointer(JSON);
+    P := pointer(json);
     while P^ <> '[' do
       if P^ = #0 then
         exit

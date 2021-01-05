@@ -425,7 +425,8 @@ begin
   for i := 0 to n - 1 do
     with Compress[i] do
       if Name = aName then
-      begin // already set
+      begin
+        // already set
         if @Func = @aFunction then // update min. compress size value
           CompressMinSize := aCompressMinSize;
         exit;
@@ -734,7 +735,8 @@ begin
   {$I-}
   // direct read bytes, as indicated by Content-Length or Chunked
   if hfTransferChuked in HeaderFlags then
-  begin // we ignore the Length
+  begin
+    // we ignore the Length
     LContent := 0; // current read position in Content
     repeat
       if SockIn <> nil then
@@ -751,7 +753,8 @@ begin
         Len := HttpChunkToHex32(pointer(Line)); // get chunk length in hexa
       end;
       if Len = 0 then
-      begin // ignore next line (normally void)
+      begin
+        // ignore next line (normally void)
         SockRecvLn;
         break;
       end;
@@ -832,8 +835,17 @@ begin
 end;
 
 function THttpSocket.HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
+var
+  head: array[byte] of AnsiChar;
+  L: integer;
 begin
-  FindNameValue(Headers, pointer(aUpperName), result);
+  L := length(aUpperName);
+  if L > 253 then
+    raise EHttpSocket.CreateFmt('THttpSocket.HeaderGetValue(''%s'') too long key (%d)',
+      [aUpperName, L]);
+  MoveFast(pointer(aUpperName)^, head, L);
+  PWord(@head[L])^ := Ord(':'); // asciiz HTTP header
+  FindNameValue(Headers, pointer(@head), result);
 end;
 
 function THttpSocket.RegisterCompress(aFunction: THttpSocketCompress;

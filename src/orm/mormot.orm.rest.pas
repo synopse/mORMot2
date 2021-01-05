@@ -1084,7 +1084,8 @@ begin
          (T.RowCount > 0) then
       begin
         for Row := 1 to T.RowCount do
-        begin // ignore Row 0 i.e. field names
+        begin
+          // ignore Row 0 i.e. field names
           aID := GetInt64(T.Get(Row, 0));
           Strings.AddObject(T.GetString(Row, 1), pointer(PtrInt(aID)));
           if (IDToIndex <> nil) and
@@ -1585,12 +1586,12 @@ end;
 function TRestOrm.ExecuteList(const Tables: array of TOrmClass;
   const SQL: RawUtf8): TOrmTable;
 var
-  JSON: RawUtf8;
+  json: RawUtf8;
 begin
-  JSON := EngineList(SQL, false);
-  if JSON <> '' then
-    result := TOrmTableJson.CreateFromTables(Tables, SQL, JSON,
-      {ownJSON=}PRefCnt(PAnsiChar(pointer(JSON)) - _STRREFCNT)^ = 1)
+  json := EngineList(SQL, false);
+  if json <> '' then
+    result := TOrmTableJson.CreateFromTables(Tables, SQL, json,
+      {ownJSON=}PRefCnt(PAnsiChar(pointer(json)) - _STRREFCNT)^ = 1)
   else
     result := nil;
 end;
@@ -1684,7 +1685,7 @@ begin
   end;
   // on success, Value.ID is updated with the new RowID
   Value.IDValue := result;
-  // here fCache.Notify is not called, since the JSONValues is verbose
+  // here fCache.Notify is not called, since the JsonValues is verbose
 end;
 
 function TRestOrm.AddSimple(aTable: TOrmClass;
@@ -1712,7 +1713,7 @@ end;
 function TRestOrm.Update(Value: TOrm; const CustomFields: TFieldBits;
   DoNotAutoComputeFields: boolean): boolean;
 var
-  JSONValues: RawUtf8;
+  JsonValues: RawUtf8;
   t: integer;
   FieldBits: TFieldBits;
 begin
@@ -1748,12 +1749,12 @@ begin
     result := true; // a TOrm with NO simple fields (e.g. ID/blob pair)
     exit;
   end;
-  fCache.Notify(Value, ooUpdate); // will serialize Value (JSONValues may not be enough)
-  JSONValues := Value.GetJsonValues(true, false, FieldBits);
+  fCache.Notify(Value, ooUpdate); // will serialize Value (JsonValues may not be enough)
+  JsonValues := Value.GetJsonValues(true, false, FieldBits);
   WriteLock;
   try
     // may be within a batch in another thread
-    result := EngineUpdate(t, Value.IDValue, JSONValues);
+    result := EngineUpdate(t, Value.IDValue, JsonValues);
   finally
     WriteUnLock;
   end;
@@ -2493,7 +2494,8 @@ begin
     end;
   ndx := FieldCount;
   for i := 1 to fRowCount do
-  begin // merge data
+  begin
+    // merge data
     k := From.SearchFieldSorted(fResults[ndx + dk], fk);
     if k > 0 then
     begin

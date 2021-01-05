@@ -168,7 +168,7 @@ type
     // e.g. if a callback is run from a thread, and then the callback code try
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
-    procedure AsynchRedirect(const aGUID: TGUID;
+    procedure AsynchRedirect(const aGuid: TGUID;
       const aDestinationInterface: IInvokable; out aCallbackInterface;
       const aOnResult: TOnAsynchRedirectResult = nil); overload;
     /// define asynchronous execution of interface methods in a background thread
@@ -188,7 +188,7 @@ type
     // e.g. if a callback is run from a thread, and then the callback code try
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
-    procedure AsynchRedirect(const aGUID: TGUID;
+    procedure AsynchRedirect(const aGuid: TGUID;
       const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
       const aOnResult: TOnAsynchRedirectResult = nil); overload;
     /// prepare an asynchronous ORM BATCH process, executed in a background thread
@@ -351,7 +351,7 @@ type
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
     // - is a wrapper around BackgroundTimer.AsynchRedirect()
-    procedure AsynchRedirect(const aGUID: TGUID;
+    procedure AsynchRedirect(const aGuid: TGUID;
       const aDestinationInterface: IInvokable; out aCallbackInterface;
       const aOnResult: TOnAsynchRedirectResult = nil); overload;
     /// define asynchronous execution of interface methods in a background thread
@@ -364,7 +364,7 @@ type
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
     // - is a wrapper around BackgroundTimer.AsynchRedirect()
-    procedure AsynchRedirect(const aGUID: TGUID;
+    procedure AsynchRedirect(const aGuid: TGUID;
       const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
       const aOnResult: TOnAsynchRedirectResult = nil); overload;
     /// allows background garbage collection of specified RawUtf8 interning
@@ -381,7 +381,7 @@ type
     // - this class allows to implements any interface via a fake class, which
     // will redirect all methods calls to one or several other interfaces
     // - returned aCallbackInterface will redirect all its methods (identified
-    // by aGUID) into an internal list handled by IMultiCallbackRedirect.Redirect
+    // by aGuid) into an internal list handled by IMultiCallbackRedirect.Redirect
     // - typical use is thefore:
     // ! fSharedCallback: IMyService;
     // ! fSharedCallbacks: IMultiCallbackRedirect;
@@ -397,7 +397,7 @@ type
     // ! ...
     // !   fSharedCallbacks := nil; // will stop redirection
     // !                            // and unregister callbacks, if needed
-    function MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
+    function MultiRedirect(const aGuid: TGUID; out aCallbackInterface;
       aCallBackUnRegisterNeeded: boolean = true): IMultiCallbackRedirect; overload;
     /// low-level access to the associated timer
     // - may contain nil if EnsureBackgroundTimerExists has not yet been called
@@ -840,15 +840,15 @@ type
     function EnsureBackgroundTimerExists: TRestBackgroundTimer;
     procedure BeginCurrentThread(Sender: TThread); virtual;
     procedure EndCurrentThread(Sender: TThread); virtual;
-    procedure AsynchRedirect(const aGUID: TGUID;
+    procedure AsynchRedirect(const aGuid: TGUID;
       const aDestinationInterface: IInvokable; out aCallbackInterface;
       const aOnResult: TOnAsynchRedirectResult = nil); overload;
-    procedure AsynchRedirect(const aGUID: TGUID;
+    procedure AsynchRedirect(const aGuid: TGUID;
       const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
       const aOnResult: TOnAsynchRedirectResult = nil); overload;
     procedure AsynchInterning(Interning: TRawUtf8Interning;
       InterningMaxRefCount: integer = 2; PeriodMinutes: integer = 5);
-    function MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
+    function MultiRedirect(const aGuid: TGUID; out aCallbackInterface;
       aCallBackUnRegisterNeeded: boolean = true): IMultiCallbackRedirect; overload;
     function BackgroundTimer: TRestBackgroundTimer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1146,17 +1146,17 @@ type
     /// initialize the input values
     procedure Init(const aUri,aMethod,aInHead,aInBody: RawUtf8); overload;
     /// retrieve the "Content-Type" value from InHead
-    // - if GuessJSONIfNoneSet is TRUE, returns JSON if none was set in headers
-    function InBodyType(GuessJSONIfNoneSet: boolean = True): RawUtf8;
+    // - if GuessJsonIfNoneSet is TRUE, returns JSON if none was set in headers
+    function InBodyType(GuessJsonIfNoneSet: boolean = True): RawUtf8;
     /// check if the "Content-Type" value from InHead is JSON
-    // - if GuessJSONIfNoneSet is TRUE, assume JSON is used
-    function InBodyTypeIsJson(GuessJSONIfNoneSet: boolean = True): boolean;
+    // - if GuessJsonIfNoneSet is TRUE, assume JSON is used
+    function InBodyTypeIsJson(GuessJsonIfNoneSet: boolean = True): boolean;
     /// retrieve the "Content-Type" value from OutHead
-    // - if GuessJSONIfNoneSet is TRUE, returns JSON if none was set in headers
-    function OutBodyType(GuessJSONIfNoneSet: boolean = True): RawUtf8;
+    // - if GuessJsonIfNoneSet is TRUE, returns JSON if none was set in headers
+    function OutBodyType(GuessJsonIfNoneSet: boolean = True): RawUtf8;
     /// check if the "Content-Type" value from OutHead is JSON
-    // - if GuessJSONIfNoneSet is TRUE, assume JSON is used
-    function OutBodyTypeIsJson(GuessJSONIfNoneSet: boolean = True): boolean;
+    // - if GuessJsonIfNoneSet is TRUE, assume JSON is used
+    function OutBodyTypeIsJson(GuessJsonIfNoneSet: boolean = True): boolean;
     /// just a wrapper around FindNameValue(InHead,UpperName)
     // - use e.g. as
     // ! Call.Header(HEADER_REMOTEIP_UPPER) or Call.Header(HEADER_BEARER_UPPER)
@@ -1347,7 +1347,7 @@ type
     destructor Destroy; override;
     /// override this to customize fields intialization
     class procedure InitializeFields(const Fields: array of const;
-      var JSON: RawUtf8); virtual;
+      var Json: RawUtf8); virtual;
     /// called when the associated table is created in the database
     // - create index on History(ModifiedRecord,Event) for process speed-up
     class procedure InitializeTable(const Server: IRestOrmServer;
@@ -1660,7 +1660,7 @@ begin
   fCallBackUnRegisterNeeded := aCallBackUnRegisterNeeded;
   fList := TInterfacedObjectMultiList.Create;
   fList.fFakeCallback := self;
-  inherited Create(aFactory, nil, [ifoJsonAsExtended, ifoDontStoreVoidJSON],
+  inherited Create(aFactory, nil, [ifoJsonAsExtended, ifoDontStoreVoidJson],
     FakeInvoke, nil);
   Get(aCallbackInterface);
 end;
@@ -2635,22 +2635,22 @@ begin
     fRun.EndCurrentThread(Sender);
 end;
 
-procedure TRest.AsynchRedirect(const aGUID: TGUID;
+procedure TRest.AsynchRedirect(const aGuid: TGUID;
   const aDestinationInterface: IInvokable; out aCallbackInterface;
   const aOnResult: TOnAsynchRedirectResult);
 begin
   if self <> nil then
     fRun.AsynchRedirect(
-      aGUID, aDestinationInterface, aCallbackInterface, aOnResult);
+      aGuid, aDestinationInterface, aCallbackInterface, aOnResult);
 end;
 
-procedure TRest.AsynchRedirect(const aGUID: TGUID;
+procedure TRest.AsynchRedirect(const aGuid: TGUID;
   const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
   const aOnResult: TOnAsynchRedirectResult);
 begin
   if self <> nil then
     fRun.AsynchRedirect(
-      aGUID, aDestinationInstance, aCallbackInterface, aOnResult);
+      aGuid, aDestinationInstance, aCallbackInterface, aOnResult);
 end;
 
 procedure TRest.AsynchInterning(Interning: TRawUtf8Interning;
@@ -2661,13 +2661,13 @@ begin
       Interning, InterningMaxRefCount, PeriodMinutes);
 end;
 
-function TRest.MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
+function TRest.MultiRedirect(const aGuid: TGUID; out aCallbackInterface;
   aCallBackUnRegisterNeeded: boolean): IMultiCallbackRedirect;
 begin
   if self = nil then
     result := nil
   else
-    result := fRun.MultiRedirect(aGUID, aCallbackInterface,
+    result := fRun.MultiRedirect(aGuid, aCallbackInterface,
       aCallBackUnRegisterNeeded);
 end;
 
@@ -2723,7 +2723,7 @@ begin
   fName := fTimer.fThreadName;
   fDest := aDestinationInterface;
   fOnResult := aOnResult;
-  inherited Create(aFactory, nil, [ifoJsonAsExtended, ifoDontStoreVoidJSON],
+  inherited Create(aFactory, nil, [ifoJsonAsExtended, ifoDontStoreVoidJson],
     FakeInvoke, nil);
   Get(aCallbackInterface);
 end;
@@ -3092,16 +3092,16 @@ begin
   end;
 end;
 
-procedure TRestBackgroundTimer.AsynchRedirect(const aGUID: TGUID;
+procedure TRestBackgroundTimer.AsynchRedirect(const aGuid: TGUID;
   const aDestinationInterface: IInvokable; out aCallbackInterface;
   const aOnResult: TOnAsynchRedirectResult);
 var
   factory: TInterfaceFactory;
 begin
-  factory := TInterfaceFactory.Get(aGUID);
+  factory := TInterfaceFactory.Get(aGuid);
   if factory = nil then
     raise EServiceException.CreateUtf8('%.AsynchRedirect: unknown %',
-      [self, GUIDToShort(aGUID)]);
+      [self, GuidToShort(aGuid)]);
   if aDestinationInterface = nil then
     raise EServiceException.CreateUtf8('%.AsynchRedirect(nil)', [self]);
   fRest.InternalLog('AsynchRedirect % to % using %',
@@ -3111,7 +3111,7 @@ begin
     aCallbackInterface, aOnResult);
 end;
 
-procedure TRestBackgroundTimer.AsynchRedirect(const aGUID: TGUID;
+procedure TRestBackgroundTimer.AsynchRedirect(const aGuid: TGUID;
   const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
   const aOnResult: TOnAsynchRedirectResult);
 var
@@ -3119,10 +3119,10 @@ var
 begin
   if aDestinationInstance = nil then
     raise EServiceException.CreateUtf8('%.AsynchRedirect(nil)', [self]);
-  if not aDestinationInstance.GetInterface(aGUID, dest) then
+  if not aDestinationInstance.GetInterface(aGuid, dest) then
     raise EServiceException.CreateUtf8('%.AsynchRedirect [%]: % is not a %',
-      [self, fThreadName, aDestinationInstance, GUIDToShort(aGUID)]);
-  AsynchRedirect(aGUID, dest, aCallbackInterface, aOnResult);
+      [self, fThreadName, aDestinationInstance, GuidToShort(aGuid)]);
+  AsynchRedirect(aGuid, dest, aCallbackInterface, aOnResult);
 end;
 
 procedure TRestBackgroundTimer.AsynchBackgroundInterning(
@@ -3341,30 +3341,30 @@ begin
   InBody := aInBody;
 end;
 
-function TRestUriParams.InBodyType(GuessJSONIfNoneSet: boolean): RawUtf8;
+function TRestUriParams.InBodyType(GuessJsonIfNoneSet: boolean): RawUtf8;
 begin
   FindNameValue(InHead, HEADER_CONTENT_TYPE_UPPER, result);
-  if GuessJSONIfNoneSet and
+  if GuessJsonIfNoneSet and
      (result = '') then
     result := JSON_CONTENT_TYPE_VAR;
 end;
 
-function TRestUriParams.InBodyTypeIsJson(GuessJSONIfNoneSet: boolean): boolean;
+function TRestUriParams.InBodyTypeIsJson(GuessJsonIfNoneSet: boolean): boolean;
 begin
-  result := IdemPChar(pointer(InBodyType(GuessJSONIfNoneSet)), JSON_CONTENT_TYPE_UPPER);
+  result := IdemPChar(pointer(InBodyType(GuessJsonIfNoneSet)), JSON_CONTENT_TYPE_UPPER);
 end;
 
-function TRestUriParams.OutBodyType(GuessJSONIfNoneSet: boolean): RawUtf8;
+function TRestUriParams.OutBodyType(GuessJsonIfNoneSet: boolean): RawUtf8;
 begin
   FindNameValue(OutHead, HEADER_CONTENT_TYPE_UPPER, result);
-  if GuessJSONIfNoneSet and
+  if GuessJsonIfNoneSet and
      (result = '') then
     result := JSON_CONTENT_TYPE_VAR;
 end;
 
-function TRestUriParams.OutBodyTypeIsJson(GuessJSONIfNoneSet: boolean): boolean;
+function TRestUriParams.OutBodyTypeIsJson(GuessJsonIfNoneSet: boolean): boolean;
 begin
-  result := IdemPChar(pointer(OutBodyType(GuessJSONIfNoneSet)), JSON_CONTENT_TYPE_UPPER);
+  result := IdemPChar(pointer(OutBodyType(GuessJsonIfNoneSet)), JSON_CONTENT_TYPE_UPPER);
 end;
 
 function TRestUriParams.Header(UpperName: PAnsiChar): RawUtf8;
@@ -3629,22 +3629,22 @@ begin
     fOwner.OnEndCurrentThread(sender);
 end;
 
-procedure TRestRunThreads.AsynchRedirect(const aGUID: TGUID;
+procedure TRestRunThreads.AsynchRedirect(const aGuid: TGUID;
   const aDestinationInterface: IInvokable; out aCallbackInterface;
   const aOnResult: TOnAsynchRedirectResult);
 begin
   if self <> nil then
     EnsureBackgroundTimerExists.AsynchRedirect(
-      aGUID, aDestinationInterface, aCallbackInterface, aOnResult);
+      aGuid, aDestinationInterface, aCallbackInterface, aOnResult);
 end;
 
-procedure TRestRunThreads.AsynchRedirect(const aGUID: TGUID;
+procedure TRestRunThreads.AsynchRedirect(const aGuid: TGUID;
   const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
   const aOnResult: TOnAsynchRedirectResult);
 begin
   if self <> nil then
     EnsureBackgroundTimerExists.AsynchRedirect(
-      aGUID, aDestinationInstance, aCallbackInterface, aOnResult);
+      aGuid, aDestinationInstance, aCallbackInterface, aOnResult);
 end;
 
 procedure TRestRunThreads.AsynchInterning(Interning: TRawUtf8Interning;
@@ -3655,7 +3655,7 @@ begin
       Interning, InterningMaxRefCount, PeriodMinutes);
 end;
 
-function TRestRunThreads.MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
+function TRestRunThreads.MultiRedirect(const aGuid: TGUID; out aCallbackInterface;
   aCallBackUnRegisterNeeded: boolean): IMultiCallbackRedirect;
 var factory: TInterfaceFactory;
 begin
@@ -3663,10 +3663,10 @@ begin
     result := nil
   else
   begin
-    factory := TInterfaceFactory.Get(aGUID);
+    factory := TInterfaceFactory.Get(aGuid);
     if factory = nil then
       raise EServiceException.CreateUtf8('%.MultiRedirect: unknown %',
-        [self, GUIDToShort(aGUID)]);
+        [self, GuidToShort(aGuid)]);
      result := TInterfacedObjectMulti.Create(fOwner, factory,
        aCallBackUnRegisterNeeded, aCallbackInterface).fList;
   end;
@@ -3769,10 +3769,10 @@ begin
 end;
 
 class procedure TOrmHistory.InitializeFields(const Fields: array of const;
-  var JSON: RawUtf8);
+  var Json: RawUtf8);
 begin
   // you may use a TDocVariant to add some custom fields in your own class
-  JSON := JsonEncode(Fields);
+  Json := JsonEncode(Fields);
 end;
 
 function TOrmHistory.HistoryOpen(Model: TOrmModel): boolean;

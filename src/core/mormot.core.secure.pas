@@ -132,7 +132,7 @@ type
     // - as previously serialized with the SaveToJson method
     // - you can specify a custom Key used for password encryption, if the
     // default value is not safe enough for you
-    constructor CreateFromJson(const JSON: RawUtf8; Key: cardinal = 0); virtual;
+    constructor CreateFromJson(const Json: RawUtf8; Key: cardinal = 0); virtual;
     /// serialize the database definition as JSON
     function SaveToJson: RawUtf8; virtual;
   published
@@ -1281,13 +1281,13 @@ end;
 
 { TSynConnectionDefinition }
 
-constructor TSynConnectionDefinition.CreateFromJson(const JSON: RawUtf8; Key: cardinal);
+constructor TSynConnectionDefinition.CreateFromJson(const Json: RawUtf8; Key: cardinal);
 var
   privateCopy: RawUtf8;
   values: array[0..4] of TValuePUtf8Char;
 begin
   fKey := Key;
-  privateCopy := JSON;
+  privateCopy := Json;
   JsonDecode(privateCopy,
     ['Kind', 'ServerName', 'DatabaseName', 'User', 'Password'], @values);
   fKind := values[0].ToString;
@@ -1328,7 +1328,8 @@ end;
 
 class function TSynAuthenticationAbstract.ComputeHash(Token: Int64;
   const UserName, PassWord: RawUtf8): cardinal;
-begin // rough authentication - xxHash32 is less reversible than crc32c
+begin
+  // rough authentication - xxHash32 is less reversible than crc32c
   result := xxHash32( xxHash32( xxHash32(
     Token, @Token, SizeOf(Token)),
     pointer(UserName), length(UserName)),
@@ -1429,7 +1430,8 @@ function TSynAuthentication.GetPassword(const UserName: RawUtf8;
   out Password: RawUtf8): boolean;
 var
   i: integer;
-begin // caller did protect this method via fSafe.Lock
+begin
+  // caller did protect this method via fSafe.Lock
   i := fCredentials.Find(UserName);
   if i < 0 then
   begin
@@ -1686,7 +1688,8 @@ end;
 
 procedure TSynUniqueIdentifierGenerator.ComputeFromUnixTime(const aUnixTime: TUnixTime;
   out result: TSynUniqueIdentifierBits);
-begin // assume fLastCounter=0
+begin
+  // assume fLastCounter=0
   result.Value := aUnixTime shl 31;
   if self <> nil then
     result.Value := result.Value or fIdentifierShifted;

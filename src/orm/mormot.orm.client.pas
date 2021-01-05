@@ -939,7 +939,7 @@ end;
 function TRestOrmClientUri.ExecuteList(const Tables: array of TOrmClass;
   const SQL: RawUtf8): TOrmTable;
 var
-  JSON: RawUtf8;
+  json: RawUtf8;
   res, state: cardinal;
 begin
   if self = nil then
@@ -947,12 +947,12 @@ begin
   else
   begin
     // GET on 'root' URI with SQL as body (not fully HTTP compatible)
-    res := Uri(fModel.Root, 'GET', @JSON, nil, @SQL, @state);
+    res := Uri(fModel.Root, 'GET', @json, nil, @SQL, @state);
     if (res = HTTP_SUCCESS) and
-       (JSON <> '') then
+       (json <> '') then
     begin
-      result := TOrmTableJson.CreateFromTables(Tables, SQL, JSON,
-        {ownJSON=}PRefCnt(PAnsiChar(pointer(JSON)) - _STRREFCNT)^ = 1);
+      result := TOrmTableJson.CreateFromTables(Tables, SQL, json,
+        {ownJSON=}PRefCnt(PAnsiChar(pointer(json)) - _STRREFCNT)^ = 1);
       result.InternalState := state;
     end
     else

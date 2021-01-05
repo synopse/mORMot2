@@ -179,7 +179,7 @@ type
     // - this method could be overridden to identify any custom JSON content
     // and convert it into a dedicated variant instance, then return TRUE
     // - warning: should NOT modify JSON buffer in-place, unless it returns true
-    function TryJsonToVariant(var JSON: PUtf8Char; var Value: variant;
+    function TryJsonToVariant(var Json: PUtf8Char; var Value: variant;
       EndOfObject: PUtf8Char): boolean; virtual;
     /// customization of variant into JSON serialization
     procedure ToJson(W: TTextWriter; const Value: variant;
@@ -274,7 +274,7 @@ const
   JSON_OPTIONS_FAST_STRICTJson: TDocVariantOptions =
     [dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference,
-     dvoJSONParseDoNotTryCustomVariants];
+     dvoJsonParseDoNotTryCustomVariants];
 
   /// TDocVariant options to be used for case-sensitive TSynNameValue-like
   // storage, with optional extended JSON syntax serialization
@@ -340,7 +340,7 @@ const
     [dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference,
      dvoSerializeAsExtendedJson,
-     dvoJSONParseDoNotTryCustomVariants,
+     dvoJsonParseDoNotTryCustomVariants,
      dvoInternNames,
      dvoInternValues];
 
@@ -497,7 +497,7 @@ type
     // will increase the process speed a lot
     // - in practice, you should better use the function _Json()/_JsonFast()
     // which are handy wrappers around this class method
-    class function NewJson(const JSON: RawUtf8;
+    class function NewJson(const Json: RawUtf8;
       Options: TDocVariantOptions = [dvoReturnNullForUnknownProperty]): variant;
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize a variant instance to store some document-based object content
@@ -774,7 +774,7 @@ type
     // - this method is called e.g. by _JsonFmt() _JsonFastFmt() global functions
     // with a temporary JSON buffer content created from a set of parameters
     // - if you call Init*() methods in a row, ensure you call Clear in-between
-    function InitJsonInPlace(JSON: PUtf8Char;
+    function InitJsonInPlace(Json: PUtf8Char;
       aOptions: TDocVariantOptions = [];
       aEndOfObject: PUtf8Char = nil): PUtf8Char;
     /// initialize a variant instance to store some document-based object content
@@ -783,7 +783,7 @@ type
     // it will call the other overloaded InitJsonInPlace() method
     // - this method is called e.g. by _Json() and _JsonFast() global functions
     // - if you call Init*() methods in a row, ensure you call Clear in-between
-    function InitJson(const JSON: RawUtf8;
+    function InitJson(const Json: RawUtf8;
       aOptions: TDocVariantOptions = []): boolean;
     /// ensure a document-based variant instance will have one unique options set
     // - this will create a copy of the supplied TDocVariant instance, forcing
@@ -857,7 +857,7 @@ type
     // - will write  'null'  if Kind is dvUndefined
     // - implemented as just a wrapper around VariantSaveJson()
     function ToJson(const Prefix: RawUtf8 = ''; const Suffix: RawUtf8 = '';
-      Format: TTextWriterJSONFormat = jsonCompact): RawUtf8;
+      Format: TTextWriterJsonFormat = jsonCompact): RawUtf8;
     /// save an array of objects as UTF-8 encoded non expanded layout JSON
     // - returned content would be a JSON object in mORMot's TOrmTable non
     // expanded format, with reduced JSON size, i.e.
@@ -1642,7 +1642,7 @@ function _Arr(const Items: array of const;
 // properties can be slow - if you expect the data to be read-only or not
 // propagated into another place, add dvoValueCopiedByReference in Options
 // will increase the process speed a lot, or use _JsonFast()
-function _Json(const JSON: RawUtf8;
+function _Json(const Json: RawUtf8;
   Options: TDocVariantOptions = [dvoReturnNullForUnknownProperty]): variant; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -1686,7 +1686,7 @@ procedure _JsonFmt(const Format: RawUtf8; const Args, Params: array of const;
 // properties can be slow - if you expect the data to be read-only or not
 // propagated into another place, add dvoValueCopiedByReference in Options
 // will increase the process speed a lot, or use _JsonFast()
-function _Json(const JSON: RawUtf8; var Value: variant;
+function _Json(const Json: RawUtf8; var Value: variant;
   Options: TDocVariantOptions = [dvoReturnNullForUnknownProperty]): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -1719,13 +1719,13 @@ function _ArrFast(const Items: array of const): variant; overload;
 // speed - but you should better write on the resulting variant tree with caution
 // - in addition to the JSON RFC specification strict mode, this method will
 // handle some BSON-like extensions, e.g. unquoted field names or ObjectID()
-function _JsonFast(const JSON: RawUtf8): variant;
+function _JsonFast(const Json: RawUtf8): variant;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// initialize a variant instance to store some extended document-based content
 // - this global function is an handy alias to:
 // ! _Json(JSON,JSON_OPTIONS_FAST_EXTENDED);
-function _JsonFastExt(const JSON: RawUtf8): variant;
+function _JsonFastExt(const Json: RawUtf8): variant;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// initialize a variant instance to store some document-based content
@@ -2027,7 +2027,7 @@ type
 // options (e.g. @JSON_OPTIONS[true] for fast instance) and input is a known
 // object or array, either encoded as strict-JSON (i.e. {..} or [..]),
 // or with some extended (e.g. BSON) syntax
-procedure GetVariantFromJson(JSON: PUtf8Char; wasString: boolean;
+procedure GetVariantFromJson(Json: PUtf8Char; wasString: boolean;
   var Value: variant; TryCustomVariants: PDocVariantOptions = nil;
   AllowDouble: boolean = false);
 
@@ -2038,7 +2038,7 @@ procedure GetVariantFromJson(JSON: PUtf8Char; wasString: boolean;
 // - will recognize null, boolean, integer, Int64, currency, double
 // (if AllowDouble is true) input, then set Value and return TRUE
 // - returns FALSE if the supplied input has no expected JSON format
-function GetVariantFromNotStringJson(JSON: PUtf8Char;
+function GetVariantFromNotStringJson(Json: PUtf8Char;
   var Value: TVarData; AllowDouble: boolean): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -2046,7 +2046,7 @@ function GetVariantFromNotStringJson(JSON: PUtf8Char;
 // - any non valid number is returned as varString
 // - is used e.g. by GetVariantFromJson() to guess the destination variant type
 // - warning: supplied JSON is expected to be not nil
-function TextToVariantNumberType(JSON: PUtf8Char): cardinal;
+function TextToVariantNumberType(Json: PUtf8Char): cardinal;
 
 /// identify either varInt64 or varCurrency types following JSON format
 // - this version won't return varDouble, i.e. won't handle more than 4 exact
@@ -2056,13 +2056,13 @@ function TextToVariantNumberType(JSON: PUtf8Char): cardinal;
 // - any non valid number is returned as varString
 // - is used e.g. by GetVariantFromJson() to guess the destination variant type
 // - warning: supplied JSON is expected to be not nil
-function TextToVariantNumberTypeNoDouble(JSON: PUtf8Char): cardinal;
+function TextToVariantNumberTypeNoDouble(Json: PUtf8Char): cardinal;
 
 /// low-level function to set a numerical variant from an unescaped JSON number
 // - returns TRUE if TextToVariantNumberType/TextToVariantNumberTypeNoDouble(JSON)
 // identified it as a number and set Value to the corresponding content
 // - returns FALSE if JSON is a string, or null/true/false
-function GetNumericVariantFromJson(JSON: PUtf8Char;
+function GetNumericVariantFromJson(Json: PUtf8Char;
   var Value: TVarData; AllowVarDouble: boolean): boolean;
 
  /// return a variant, may be containing a RawUtf8 stored within this class
@@ -2092,7 +2092,7 @@ function GetNextItemToVariant(var P: PUtf8Char;
 // - warning: the JSON buffer will be modified in-place during process - use
 // a temporary copy or the overloaded functions with RawUtf8 parameter
 // if you need to access it later
-procedure JsonToVariantInPlace(var Value: Variant; JSON: PUtf8Char;
+procedure JsonToVariantInPlace(var Value: Variant; Json: PUtf8Char;
   Options: TDocVariantOptions = [dvoReturnNullForUnknownProperty];
   AllowDouble: boolean = false);
 
@@ -2106,7 +2106,7 @@ procedure JsonToVariantInPlace(var Value: Variant; JSON: PUtf8Char;
 // extended (e.g. BSON) syntax
 // - this overloaded procedure will make a temporary copy before JSON parsing
 // and return the variant as result
-function JsonToVariant(const JSON: RawUtf8;
+function JsonToVariant(const Json: RawUtf8;
   Options: TDocVariantOptions = [dvoReturnNullForUnknownProperty];
   AllowDouble: boolean = false): variant;
 
@@ -2121,7 +2121,7 @@ function JsonToVariant(const JSON: RawUtf8;
 // - warning: the JSON buffer will be modified in-place during process - use
 // a temporary copy or the overloaded functions with RawUtf8 parameter
 // if you need to access it later
-function VariantLoadJson(var Value: variant; JSON: PUtf8Char;
+function VariantLoadJson(var Value: variant; Json: PUtf8Char;
   EndOfObject: PUtf8Char = nil; TryCustomVariants: PDocVariantOptions = nil;
   AllowDouble: boolean = false): PUtf8Char; overload;
 
@@ -2135,7 +2135,7 @@ function VariantLoadJson(var Value: variant; JSON: PUtf8Char;
 // extended (e.g. BSON) syntax
 // - this overloaded procedure will make a temporary copy before JSON parsing
 // and return the variant as result
-procedure VariantLoadJson(var Value: Variant; const JSON: RawUtf8;
+procedure VariantLoadJson(var Value: Variant; const Json: RawUtf8;
   TryCustomVariants: PDocVariantOptions = nil;
   AllowDouble: boolean = false); overload;
 
@@ -2149,7 +2149,7 @@ procedure VariantLoadJson(var Value: Variant; const JSON: RawUtf8;
 // extended (e.g. BSON) syntax
 // - this overloaded procedure will make a temporary copy before JSON parsing
 // and return the variant as result
-function VariantLoadJson(const JSON: RawUtf8;
+function VariantLoadJson(const Json: RawUtf8;
   TryCustomVariants: PDocVariantOptions = nil;
   AllowDouble: boolean = false): variant; overload;
 
@@ -2351,7 +2351,8 @@ begin
 end;
 
 procedure ZeroFill(Value: PVarData);
-begin // slightly faster than FillChar(Value,SizeOf(Value),0);
+begin
+  // slightly faster than FillChar(Value,SizeOf(Value),0);
   PInt64Array(Value)^[0] := 0;
   PInt64Array(Value)^[1] := 0;
   {$ifdef CPU64}
@@ -2418,12 +2419,14 @@ hdr:      handler.Clear(V^)
   until n = 0;
 end;
 
-procedure FormatUtf8ToVariant(const Fmt: RawUtf8; const Args: array of const; var Value: variant);
+procedure FormatUtf8ToVariant(const Fmt: RawUtf8; const Args: array of const;
+  var Value: variant);
 begin
   RawUtf8ToVariant(FormatUtf8(Fmt, Args), Value);
 end;
 
-procedure RawUtf8ToVariant(const Txt: RawUtf8; var Value: TVarData; ExpectedValueType: cardinal);
+procedure RawUtf8ToVariant(const Txt: RawUtf8; var Value: TVarData;
+  ExpectedValueType: cardinal);
 begin
   if ExpectedValueType = varString then
   begin
@@ -2705,7 +2708,7 @@ end;
 
 { ************** Custom Variant Types with JSON support }
 
-procedure GetJsonToAnyVariant(var Value: variant; var JSON: PUtf8Char;
+procedure GetJsonToAnyVariant(var Value: variant; var Json: PUtf8Char;
   EndOfObject: PUtf8Char; Options: PDocVariantOptions; AllowDouble: boolean); forward;
 
 
@@ -2773,7 +2776,8 @@ end;
 
 procedure TSynInvokeableVariantType.Iterate(var Dest: TVarData;
   const V: TVarData; Index: integer);
-begin // do nothing
+begin
+  // do nothing
 end;
 
 {$ifdef ISDELPHI}
@@ -2907,7 +2911,7 @@ begin
   Copy(Dest, Source, false);
 end;
 
-function TSynInvokeableVariantType.TryJsonToVariant(var JSON: PUtf8Char;
+function TSynInvokeableVariantType.TryJsonToVariant(var Json: PUtf8Char;
   var Value: variant; EndOfObject: PUtf8Char): boolean;
 begin
   result := false;
@@ -3017,7 +3021,6 @@ begin
       end
   else
     result := false;
-    //GlobalJSONCustomParsers.VariantWrite(CustomVariantType, W, Value, Escape)
 end;
 
 
@@ -3220,17 +3223,17 @@ begin
         else
         begin
           forced := [];
-          if [twoForceJSONExtended, twoForceJSONStandard] * W.CustomOptions = [] then
+          if [twoForceJsonExtended, twoForceJsonStandard] * W.CustomOptions = [] then
           begin
             if dvoSerializeAsExtendedJson in VOptions then
-              forced := [twoForceJSONExtended]
+              forced := [twoForceJsonExtended]
             else
-              forced := [twoForceJSONStandard];
+              forced := [twoForceJsonStandard];
             W.CustomOptions := W.CustomOptions + forced;
           end;
           if dvoIsObject in VOptions then
           begin
-            checkExtendedPropName := twoForceJSONExtended in W.CustomOptions;
+            checkExtendedPropName := twoForceJsonExtended in W.CustomOptions;
             W.Add('{');
             for ndx := 0 to VCount - 1 do
             begin
@@ -3424,7 +3427,7 @@ begin
   TDocVariantData(result).InitArrayFromVariants(Items, Options);
 end;
 
-class function TDocVariant.NewJson(const JSON: RawUtf8;
+class function TDocVariant.NewJson(const Json: RawUtf8;
   Options: TDocVariantOptions): variant;
 begin
   _Json(JSON, result, Options);
@@ -3971,7 +3974,7 @@ begin
   end;
 end;
 
-function TDocVariantData.InitJsonInPlace(JSON: PUtf8Char;
+function TDocVariantData.InitJsonInPlace(Json: PUtf8Char;
   aOptions: TDocVariantOptions; aEndOfObject: PUtf8Char): PUtf8Char;
 var
   EndOfObject: AnsiChar;
@@ -4108,7 +4111,7 @@ begin
   result := JSON; // indicates successfully parsed
 end;
 
-function TDocVariantData.InitJson(const JSON: RawUtf8;
+function TDocVariantData.InitJson(const Json: RawUtf8;
   aOptions: TDocVariantOptions): boolean;
 var
   tmp: TSynTempBuffer;
@@ -4569,7 +4572,8 @@ begin
         end;
       until I > J;
       if J - L < R - I then
-      begin // use recursion only for smaller range
+      begin
+        // use recursion only for smaller range
         if L < J then
           SortByName(L, J);
         L := I;
@@ -4616,7 +4620,8 @@ begin
         end;
       until I > J;
       if J - L < R - I then
-      begin // use recursion only for smaller range
+      begin
+        // use recursion only for smaller range
         if L < J then
           SortByValue(L, J);
         L := I;
@@ -4720,7 +4725,8 @@ begin
         end;
       until I > J;
       if J - L < R - I then
-      begin // use recursion only for smaller range
+      begin
+        // use recursion only for smaller range
         if L < J then
           Sort(L, J);
         L := I;
@@ -4903,7 +4909,8 @@ var
   ndx, len: PtrInt;
   Up: array[byte] of AnsiChar;
   nested: TDocVariantData;
-begin // {"p.a1":5,"p.a2":"dfasdfa"} -> {"p":{"a1":5,"a2":"dfasdfa"}}
+begin
+  // {"p.a1":5,"p.a2":"dfasdfa"} -> {"p":{"a1":5,"a2":"dfasdfa"}}
   result := false;
   if (VCount = 0) or
      (aObjectPropName = '') or
@@ -5660,7 +5667,7 @@ begin
 end;
 
 function TDocVariantData.ToJson(const Prefix, Suffix: RawUtf8;
-  Format: TTextWriterJSONFormat): RawUtf8;
+  Format: TTextWriterJsonFormat): RawUtf8;
 var
   W: TTextWriter;
   temp: TTextWriterStackBuffer;
@@ -6047,7 +6054,8 @@ begin
     TDocVariantData(Obj).InitObject(NameValuePairs, JSON_OPTIONS_FAST);
   end
   else
-  begin // append new names/values to existing object
+  begin
+    // append new names/values to existing object
     if o <> @Obj then
       // ensure not stored by reference
       TVarData(Obj) := PVarData(o)^;
@@ -6088,19 +6096,19 @@ begin
   TDocVariantData(result).InitArray(Items, JSON_OPTIONS_FAST);
 end;
 
-function _Json(const JSON: RawUtf8; Options: TDocVariantOptions): variant;
+function _Json(const Json: RawUtf8; Options: TDocVariantOptions): variant;
 begin
-  _Json(JSON, result, Options);
+  _Json(Json, result, Options);
 end;
 
-function _JsonFast(const JSON: RawUtf8): variant;
+function _JsonFast(const Json: RawUtf8): variant;
 begin
-  _Json(JSON, result, JSON_OPTIONS_FAST);
+  _Json(Json, result, JSON_OPTIONS_FAST);
 end;
 
-function _JsonFastExt(const JSON: RawUtf8): variant;
+function _JsonFastExt(const Json: RawUtf8): variant;
 begin
-  _Json(JSON, result, JSON_OPTIONS_FAST_EXTENDED);
+  _Json(Json, result, JSON_OPTIONS_FAST_EXTENDED);
 end;
 
 function _JsonFmt(const Format: RawUtf8; const Args, Params: array of const;
@@ -6125,11 +6133,11 @@ begin
   _JsonFmt(Format, Args, Params, JSON_OPTIONS_FAST, result);
 end;
 
-function _Json(const JSON: RawUtf8; var Value: variant;
+function _Json(const Json: RawUtf8; var Value: variant;
   Options: TDocVariantOptions): boolean;
 begin
   VarClear(Value);
-  if not TDocVariantData(Value).InitJson(JSON, Options) then
+  if not TDocVariantData(Value).InitJson(Json, Options) then
   begin
     VarClear(Value);
     result := false;
@@ -6139,12 +6147,14 @@ begin
 end;
 
 procedure _Unique(var DocVariant: variant);
-begin // TDocVariantData(DocVariant): InitCopy() will check the DocVariant type
+begin
+  // TDocVariantData(DocVariant): InitCopy() will check the DocVariant type
   TDocVariantData(DocVariant).InitCopy(DocVariant, JSON_OPTIONS[false]);
 end;
 
 procedure _UniqueFast(var DocVariant: variant);
-begin // TDocVariantData(DocVariant): InitCopy() will check the DocVariant type
+begin
+  // TDocVariantData(DocVariant): InitCopy() will check the DocVariant type
   TDocVariantData(DocVariant).InitCopy(DocVariant, JSON_OPTIONS_FAST);
 end;
 
@@ -6239,7 +6249,8 @@ end;
 
 procedure TLockedDocVariant.ReplaceAndUnlock(
   const Name: RawUtf8; const Value: Variant; out LocalValue: Variant);
-begin // caller made fLock.Enter
+begin
+  // caller made fLock.Enter
   try
     SetValue(Name, Value);
     LocalValue := Value;
@@ -6269,7 +6280,8 @@ end;
 
 procedure TLockedDocVariant.AddNewPropAndUnlock(const Name: RawUtf8;
   const Value: variant; var Obj: variant);
-begin // caller made fLock.Enter
+begin
+  // caller made fLock.Enter
   try
     SetValue(Name, Value);
     _ObjAddProps([Name, Value], Obj);
@@ -6385,31 +6397,31 @@ end;
 
 { ************** JSON Parsing into Variant }
 
-function GetVariantFromNotStringJson(JSON: PUtf8Char; var Value: TVarData;
+function GetVariantFromNotStringJson(Json: PUtf8Char; var Value: TVarData;
   AllowDouble: boolean): boolean;
 begin
-  if JSON <> nil then
-    while (JSON^ <= ' ') and
-          (JSON^ <> #0) do
-      inc(JSON);
-  if (JSON = nil) or
-     ((PInteger(JSON)^ = NULL_LOW) and
-      (jcEndOfJSONValueField in JSON_CHARS[JSON[4]])) then
+  if Json <> nil then
+    while (Json^ <= ' ') and
+          (Json^ <> #0) do
+      inc(Json);
+  if (Json = nil) or
+     ((PInteger(Json)^ = NULL_LOW) and
+      (jcEndOfJsonValueField in JSON_CHARS[Json[4]])) then
     Value.VType := varNull
-  else if (PInteger(JSON)^ = FALSE_LOW) and
-          (JSON[4] = 'e') and
-          (jcEndOfJSONValueField in JSON_CHARS[JSON[5]]) then
+  else if (PInteger(Json)^ = FALSE_LOW) and
+          (Json[4] = 'e') and
+          (jcEndOfJsonValueField in JSON_CHARS[Json[5]]) then
   begin
     Value.VType := varBoolean;
     Value.VBoolean := false;
   end
-  else if (PInteger(JSON)^ = TRUE_LOW) and
-          (jcEndOfJSONValueField in JSON_CHARS[JSON[4]]) then
+  else if (PInteger(Json)^ = TRUE_LOW) and
+          (jcEndOfJsonValueField in JSON_CHARS[Json[4]]) then
   begin
     Value.VType := varBoolean;
     Value.VBoolean := true;
   end
-  else if not GetNumericVariantFromJson(JSON, Value, AllowDouble) then
+  else if not GetNumericVariantFromJson(Json, Value, AllowDouble) then
   begin
     result := false;
     exit;
@@ -6419,7 +6431,7 @@ end;
 
 // internal method used by VariantLoadJson(), GetVariantFromJson() and
 // TDocVariantData.InitJson()
-procedure GetJsonToAnyVariant(var Value: variant; var JSON: PUtf8Char;
+procedure GetJsonToAnyVariant(var Value: variant; var Json: PUtf8Char;
   EndOfObject: PUtf8Char; Options: PDocVariantOptions; AllowDouble: boolean);
 var
   V: TVarData absolute Value;
@@ -6438,7 +6450,7 @@ begin
     AllowDouble := true; // for GetVariantFromNotStringJson() below
   if EndOfObject <> nil then
     EndOfObject^ := ' ';
-  P := JSON;
+  P := Json;
   while (P^ <= ' ') and
         (P^ <> #0) do
     inc(P);
@@ -6450,7 +6462,7 @@ begin
      (PInteger(P)^ = TRUE_LOW) or
      (PInteger(P)^ = FALSE_LOW) then
   begin
-s:  P := GetJsonField(P, JSON, @wasString, EndOfObject, @Plen);
+s:  P := GetJsonField(P, Json, @wasString, EndOfObject, @Plen);
     // try any numerical value
 w:  if {%H-}wasString or
        not GetVariantFromNotStringJson(P, V, AllowDouble) then
@@ -6466,7 +6478,7 @@ w:  if {%H-}wasString or
   if P^ = '"' then
     if dvoJsonObjectParseWithinString in Options^ then
     begin
-      P := GetJsonField(P, JSON, @wasString, EndOfObject, @Plen);
+      P := GetJsonField(P, Json, @wasString, EndOfObject, @Plen);
       EndOfObject := nil;
       wasParsedWithinString := true;
     end
@@ -6474,7 +6486,7 @@ w:  if {%H-}wasString or
       goto s;
   t := pointer(SynVariantTypes);
   if (t <> nil) and
-     not (dvoJSONParseDoNotTryCustomVariants in Options^) then
+     not (dvoJsonParseDoNotTryCustomVariants in Options^) then
   begin
     P2 := P;
     n := PDALen(PAnsiChar(t) - _DALEN)^ + _DAOFF;
@@ -6490,7 +6502,7 @@ w:  if {%H-}wasString or
         begin
           if EndOfObject <> nil then
             EndOfObject^ := EndOfObject2;
-          JSON := P2;
+          Json := P2;
         end;
         exit;
       end;
@@ -6498,7 +6510,7 @@ w:  if {%H-}wasString or
   end;
   if P^ in ['[', '{'] then
   begin
-    // default JSON parsing and conversion to TDocVariant instance
+    // default Json parsing and conversion to TDocVariant instance
     P := TDocVariantData(Value).
       InitJsonInPlace(P, Options^, EndOfObject);
     if P = nil then
@@ -6507,7 +6519,7 @@ w:  if {%H-}wasString or
       exit; // eror parsing
     end;
     if not wasParsedWithinString then
-      JSON := P;
+      Json := P;
   end
   else // back to simple variant types
     if wasParsedWithinString then
@@ -6516,51 +6528,51 @@ w:  if {%H-}wasString or
       goto s;
 end;
 
-function TextToVariantNumberTypeNoDouble(json: PUtf8Char): cardinal;
+function TextToVariantNumberTypeNoDouble(Json: PUtf8Char): cardinal;
 var
   start: PUtf8Char;
   c: AnsiChar;
 begin
   result := varString;
-  c := json[0];
+  c := Json[0];
   if (jcDigitFirstChar in JSON_CHARS[c]) and // ['-', '0'..'9']
      (((c >= '1') and
        (c <= '9')) or      // is first char numeric?
      ((c = '0') and
-      ((json[1] = '.') or
-       (json[1] = #0))) or // '012' is not JSON, but '0.xx' and '0' are
+      ((Json[1] = '.') or
+       (Json[1] = #0))) or // '012' is not Json, but '0.xx' and '0' are
      ((c = '-') and
-      (json[1] >= '0') and
-      (json[1] <= '9'))) then  // negative number
+      (Json[1] >= '0') and
+      (Json[1] <= '9'))) then  // negative number
   begin
-    start := json;
+    start := Json;
     repeat
-      inc(json)
-    until (json^ < '0') or
-          (json^ > '9'); // check digits
-    case json^ of
+      inc(Json)
+    until (Json^ < '0') or
+          (Json^ > '9'); // check digits
+    case Json^ of
       #0:
-        if json - start <= 19 then
+        if Json - start <= 19 then
           // no decimal, and matcthing signed Int64 precision
           result := varInt64;
       '.':
-        if (json[1] >= '0') and
-           (json[1] <= '9') and
-           (json[2] in [#0, '0'..'9']) then
-          if (json[2] = #0) or
-             (json[3] = #0) or
-             ((json[3] >= '0') and
-              (json[3] <= '9') and
-              (json[4] = #0) or
-             ((json[4] >= '0') and
-              (json[4] <= '9') and
-              (json[5] = #0))) then
+        if (Json[1] >= '0') and
+           (Json[1] <= '9') and
+           (Json[2] in [#0, '0'..'9']) then
+          if (Json[2] = #0) or
+             (Json[3] = #0) or
+             ((Json[3] >= '0') and
+              (Json[3] <= '9') and
+              (Json[4] = #0) or
+             ((Json[4] >= '0') and
+              (Json[4] <= '9') and
+              (Json[5] = #0))) then
             result := varCurrency; // currency ###.1234 number
     end;
   end;
 end;
 
-function TextToVariantNumberType(json: PUtf8Char): cardinal;
+function TextToVariantNumberType(Json: PUtf8Char): cardinal;
 var
   start: PUtf8Char;
   exp: PtrInt;
@@ -6569,81 +6581,81 @@ label
   exponent;
 begin
   result := varString;
-  c := json[0];
+  c := Json[0];
   if (jcDigitFirstChar in JSON_CHARS[c]) and // ['-', '0'..'9']
      (((c >= '1') and
        (c <= '9')) or      // is first char numeric?
      ((c = '0') and
-      ((json[1] = '.') or
-       (json[1] = #0))) or // '012' is not JSON, but '0.xx' and '0' are
+      ((Json[1] = '.') or
+       (Json[1] = #0))) or // '012' is not Json, but '0.xx' and '0' are
      ((c = '-') and
-      (json[1] >= '0') and
-      (json[1] <= '9'))) then  // negative number
+      (Json[1] >= '0') and
+      (Json[1] <= '9'))) then  // negative number
   begin
-    start := json;
+    start := Json;
     repeat
-      inc(json)
-    until (json^ < '0') or
-          (json^ > '9'); // check digits
-    case json^ of
+      inc(Json)
+    until (Json^ < '0') or
+          (Json^ > '9'); // check digits
+    case Json^ of
       #0:
-        if json - start <= 19 then // signed Int64 precision
+        if Json - start <= 19 then // signed Int64 precision
           result := varInt64
         else
           result := varDouble; // we may lost precision, but still a number
       '.':
-        if (json[1] >= '0') and
-           (json[1] <= '9') and
-           (json[2] in [#0, '0'..'9']) then
-          if (json[2] = #0) or
-             (json[3] = #0) or
-             ((json[3] >= '0') and
-              (json[3] <= '9') and
-              (json[4] = #0) or
-             ((json[4] >= '0') and
-              (json[4] <= '9') and
-              (json[5] = #0))) then
+        if (Json[1] >= '0') and
+           (Json[1] <= '9') and
+           (Json[2] in [#0, '0'..'9']) then
+          if (Json[2] = #0) or
+             (Json[3] = #0) or
+             ((Json[3] >= '0') and
+              (Json[3] <= '9') and
+              (Json[4] = #0) or
+             ((Json[4] >= '0') and
+              (Json[4] <= '9') and
+              (Json[5] = #0))) then
             result := varCurrency // currency ###.1234 number
           else
           begin
             repeat // more than 4 decimals
-              inc(json)
-            until (json^ < '0') or
-                  (json^ > '9');
-            case json^ of
+              inc(Json)
+            until (Json^ < '0') or
+                  (Json^ > '9');
+            case Json^ of
               #0:
                 result := varDouble;
               'e', 'E':
                 begin
-exponent:         inc(json); // inlined custom GetInteger()
-                  start := json;
-                  c := json^;
+exponent:         inc(Json); // inlined custom GetInteger()
+                  start := Json;
+                  c := Json^;
                   if (c = '-') or
                      (c = '+') then
                   begin
-                    inc(json);
-                    c := json^;
+                    inc(Json);
+                    c := Json^;
                   end;
-                  inc(json);
+                  inc(Json);
                   dec(c, 48);
                   if c > #9 then
                     exit;
                   exp := ord(c);
-                  c := json^;
+                  c := Json^;
                   dec(c, 48);
                   if c <= #9 then
                   begin
-                    inc(json);
+                    inc(Json);
                     exp := exp * 10 + ord(c);
-                    c := json^;
+                    c := Json^;
                     dec(c, 48);
                     if c <= #9 then
                     begin
-                      inc(json);
+                      inc(Json);
                       exp := exp * 10 + ord(c);
                     end;
                   end;
-                  if json^ <> #0 then
+                  if Json^ <> #0 then
                     exit;
                   if start^ = '-' then
                     exp := -exp;
@@ -6659,7 +6671,7 @@ exponent:         inc(json); // inlined custom GetInteger()
   end;
 end;
 
-function GetNumericVariantFromJson(JSON: PUtf8Char; var Value: TVarData;
+function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
   AllowVarDouble: boolean): boolean;
 var
   // logic below is extracted from mormot.core.base.pas' GetExtended()
@@ -6674,22 +6686,22 @@ begin
   byte(flags) := 0;
   v := 0;
   frac := 0;
-  if JSON = nil then
+  if Json = nil then
     exit;
-  c := JSON^;
-  if c = '-' then // note: '+xxx' is not valid JSON so is not handled here
+  c := Json^;
+  if c = '-' then // note: '+xxx' is not valid Json so is not handled here
   begin
-    inc(JSON);
-    c := JSON^;
+    inc(Json);
+    c := Json^;
     include(flags, fNeg);
   end;
   if (c = '0') and
-     ((JSON[1] <> '.') and
-      (JSON[1] <> #0)) then // '012' is not JSON, but '0.xx' and '0' are
+     ((Json[1] <> '.') and
+      (Json[1] <> #0)) then // '012' is not Json, but '0.xx' and '0' are
     exit;
   digit := 19; // max Int64 resolution
   repeat
-    inc(JSON);
+    inc(Json);
     if (c >= '0') and
        (c <= '9') then
     begin
@@ -6706,12 +6718,12 @@ begin
         include(flags, fValid);
         if frac <> 0 then
           dec(frac); // frac<0 for digits after '.'
-        c := JSON^;
+        c := Json^;
         continue;
       end;
       if frac >= 0 then
         inc(frac); // frac>0 to handle #############00000
-      c := JSON^;
+      c := Json^;
       continue;
     end;
     if c <> '.' then
@@ -6719,7 +6731,7 @@ begin
     if frac > 0 then
       exit;
     dec(frac);
-    c := JSON^;
+    c := Json^;
     if c = #0 then
       exit; // invalid '123.'
   until false;
@@ -6730,17 +6742,17 @@ begin
   begin
     exp := 0;
     exclude(flags, fValid);
-    c := JSON^;
+    c := Json^;
     if c = '+' then
-      inc(JSON)
+      inc(Json)
     else if c = '-' then
     begin
-      inc(JSON);
+      inc(Json);
       include(flags, fNegExp);
     end;
     repeat
-      c := JSON^;
-      inc(JSON);
+      c := Json^;
+      inc(Json);
       if (c < '0') or
          (c > '9') then
         break;
@@ -6818,22 +6830,22 @@ begin
   end;
 end;
 
-procedure JsonToVariantInPlace(var Value: variant; JSON: PUtf8Char;
+procedure JsonToVariantInPlace(var Value: variant; Json: PUtf8Char;
   Options: TDocVariantOptions; AllowDouble: boolean);
 begin
-  if (JSON <> nil) and
-     (JSON^ <> #0) then
-    GetJsonToAnyVariant(Value, JSON, nil, @Options, AllowDouble)
+  if (Json <> nil) and
+     (Json^ <> #0) then
+    GetJsonToAnyVariant(Value, Json, nil, @Options, AllowDouble)
   else
     VarClear(Value);
 end;
 
-function JsonToVariant(const JSON: RawUtf8; Options: TDocVariantOptions;
+function JsonToVariant(const Json: RawUtf8; Options: TDocVariantOptions;
   AllowDouble: boolean): variant;
 var
   tmp: TSynTempBuffer;
 begin
-  tmp.Init(JSON); // temp copy before in-place decoding
+  tmp.Init(Json); // temp copy before in-place decoding
   try
     JsonToVariantInPlace(result, tmp.buf, Options, AllowDouble);
   finally
@@ -6866,20 +6878,20 @@ begin
   end;
 end;
 
-procedure GetVariantFromJson(JSON: PUtf8Char; wasString: boolean;
+procedure GetVariantFromJson(Json: PUtf8Char; wasString: boolean;
   var Value: variant; TryCustomVariants: PDocVariantOptions;
   AllowDouble: boolean);
 var
   V: TVarData absolute Value;
 begin
-  // first handle any strict-JSON syntax objects or arrays into custom variants
+  // first handle any strict-Json syntax objects or arrays into custom variants
   // (e.g. when called directly from TOrmPropInfoRttiVariant.SetValue)
   if (TryCustomVariants <> nil) and
-     (JSON <> nil) then
-    if (GotoNextNotSpace(JSON)^ in ['{', '[']) and
+     (Json <> nil) then
+    if (GotoNextNotSpace(Json)^ in ['{', '[']) and
        not wasString then
     begin
-      GetJsonToAnyVariant(Value, JSON, nil, TryCustomVariants, AllowDouble);
+      GetJsonToAnyVariant(Value, Json, nil, TryCustomVariants, AllowDouble);
       exit;
     end
     else
@@ -6888,31 +6900,31 @@ begin
   VarClear(Value);
   // try any numerical value
   if wasString or
-     not GetVariantFromNotStringJson(JSON, V, AllowDouble) then
+     not GetVariantFromNotStringJson(Json, V, AllowDouble) then
   begin
     // found no numerical value -> return a string in the expected format
     V.VType := varString;
     V.VString := nil; // avoid GPF below
-    FastSetString(RawUtf8(V.VString), JSON, StrLen(JSON));
+    FastSetString(RawUtf8(V.VString), Json, StrLen(Json));
   end;
 end;
 
-procedure _BinaryVariantLoadAsJson(var Value: variant; JSON: PUtf8Char;
+procedure _BinaryVariantLoadAsJson(var Value: variant; Json: PUtf8Char;
   TryCustomVariant: pointer);
 begin
   if TryCustomVariant = nil then
     TryCustomVariant := @JSON_OPTIONS[true];
-  GetJsonToAnyVariant(Value, JSON, nil, TryCustomVariant, {double=}true);
+  GetJsonToAnyVariant(Value, Json, nil, TryCustomVariant, {double=}true);
 end;
 
-function VariantLoadJson(var Value: variant; JSON, EndOfObject: PUtf8Char;
+function VariantLoadJson(var Value: variant; Json, EndOfObject: PUtf8Char;
   TryCustomVariants: PDocVariantOptions; AllowDouble: boolean): PUtf8Char;
 var
   wasString: boolean;
   Val: PUtf8Char;
 begin
-  result := JSON;
-  if JSON = nil then
+  result := Json;
+  if Json = nil then
     exit;
   if TryCustomVariants <> nil then
   begin
@@ -6920,8 +6932,8 @@ begin
       AllowDouble := true;
     if dvoJsonObjectParseWithinString in TryCustomVariants^ then
     begin
-      JSON := GotoNextNotSpace(JSON);
-      if JSON^ = '"' then
+      Json := GotoNextNotSpace(Json);
+      if Json^ = '"' then
       begin
         Val := GetJsonField(result, result, @wasString, EndOfObject);
         GetJsonToAnyVariant(
@@ -6944,12 +6956,12 @@ begin
     result := @NULCHAR; // reached end, but not invalid input
 end;
 
-procedure VariantLoadJson(var Value: Variant; const JSON: RawUtf8;
+procedure VariantLoadJson(var Value: Variant; const Json: RawUtf8;
   TryCustomVariants: PDocVariantOptions; AllowDouble: boolean);
 var
   tmp: TSynTempBuffer;
 begin
-  tmp.Init(JSON); // temp copy before in-place decoding
+  tmp.Init(Json); // temp copy before in-place decoding
   try
     VariantLoadJson(Value, tmp.buf, nil, TryCustomVariants, AllowDouble);
   finally
@@ -6957,12 +6969,12 @@ begin
   end;
 end;
 
-function VariantLoadJson(const JSON: RawUtf8;
+function VariantLoadJson(const Json: RawUtf8;
   TryCustomVariants: PDocVariantOptions; AllowDouble: boolean): variant;
 var
   tmp: TSynTempBuffer;
 begin
-  tmp.Init(JSON);
+  tmp.Init(Json);
   try
     VariantLoadJson(result, tmp.buf, nil, TryCustomVariants, AllowDouble);
   finally

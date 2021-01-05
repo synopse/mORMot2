@@ -949,7 +949,8 @@ begin
           KeepAlive := 0; // HTTP/1.0 -> force connection close
       end
       else
-      begin // error on reading answer
+      begin
+        // error on reading answer
         DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, Command); // 505=wrong format
         exit;
       end;
@@ -1230,7 +1231,8 @@ function TWinHttpApi.InternalRetrieveAnswer(var Header, Encoding,
 var
   ChunkSize, Bytes, ContentLength, Read: cardinal;
   tmp: RawByteString;
-begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHttp
+begin
+  // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHttp
   result := InternalGetInfo32(HTTP_QUERY_STATUS_CODE);
   Header := InternalGetInfo(HTTP_QUERY_RAW_HEADERS_CRLF);
   Encoding := InternalGetInfo(HTTP_QUERY_CONTENT_ENCODING);
@@ -1542,7 +1544,8 @@ end;
 { EWinINet }
 
 constructor EWinINet.Create;
-begin // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383884
+begin
+  // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383884
   fLastError := GetLastError;
   inherited CreateFmt('%s (%d)', [SysErrorMessageWinInet(fLastError), fLastError]);
 end;
@@ -1797,7 +1800,8 @@ var
   reasonLength: cardinal;
 begin
   if CheckSocket then
-  begin // todo: check result
+  begin
+    // todo: check result
     WinHttpApi.WebSocketClose(fSocket, WEB_SOCKET_ABORTED_CLOSE_STATUS, Pointer(CloseReason),
       Length(CloseReason));
     SetLength(reason, WEB_SOCKET_MAX_CLOSE_REASON_LENGTH);
@@ -1933,7 +1937,8 @@ end;
 
 procedure TCurlHttp.InternalSendRequest(const aMethod: RawUtf8;
   const aData: RawByteString);
-begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
+begin
+  // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
   if fIn.Method = 'HEAD' then // the only verb what do not expect body in answer is HEAD
     curl.easy_setopt(fHandle, coNoBody, 1)
   else

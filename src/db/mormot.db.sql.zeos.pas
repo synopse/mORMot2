@@ -414,7 +414,8 @@ constructor TSqlDBZEOSConnectionProperties.CreateWithZURL(const aURL: TZURL;
 var
   protocol: RawUtf8;
 {$endif ZEOS73UP}
-begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
+begin
+  // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
   if aOwnsURL then
     fURL := aURL
   else
@@ -766,7 +767,8 @@ end;
 class function TSqlDBZEOSConnectionProperties.URI(const aProtocol, aServerName:
   RawUtf8; const aLibraryLocation: TFileName; aLibraryLocationAppendExePath:
   boolean): RawUtf8;
-begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
+begin
+  // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
   result := TrimU(aProtocol);
   if result = '' then
     exit;
@@ -1322,7 +1324,8 @@ var
   end;
 {$ifend}
 
-begin // take care of the layout of internal ZDBC buffers for each provider
+begin
+  // take care of the layout of internal ZDBC buffers for each provider
   {$if defined(ZEOS73UP) and defined(USE_SYNCOMMONS)}
   fResultSet.ColumnsToJson(WR, fJSONComposeOptions);
   {$else}

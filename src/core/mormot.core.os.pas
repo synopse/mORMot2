@@ -3034,7 +3034,8 @@ function TemporaryFileName: TFileName;
 var
   folder: TFileName;
   retry: integer;
-begin // fast cross-platform implementation
+begin
+  // fast cross-platform implementation
   folder := GetSystemPath(spTempFolder);
   if _TmpCounter = 0 then
     _TmpCounter := Random32;
@@ -3470,7 +3471,8 @@ begin
 end;
 {$else}
 procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
-begin // nothing to be done
+begin
+  // nothing to be done
 end;
 {$endif UNIX}
 

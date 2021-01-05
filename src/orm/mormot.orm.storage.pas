@@ -1359,7 +1359,7 @@ type
 
 
 
-function ToText(t: TORMVirtualTableTransaction): PShortString; overload;
+function ToText(t: TOrmVirtualTableTransaction): PShortString; overload;
 
 
 implementation
@@ -2194,7 +2194,8 @@ function TRestStorageInMemory.EngineDeleteWhere(TableModelIndex: integer;
 var
   ndx: TIntegerDynArray;
   n, i: PtrInt;
-begin // RecordCanBeUpdated() has already been called
+begin
+  // RecordCanBeUpdated() has already been called
   result := false;
   n := length(IDs);
   SetLength(ndx, n);
@@ -2586,7 +2587,8 @@ var
   withID: boolean;
 label
   err;
-begin // exact same format as TOrmTable.GetJsonValues()
+begin
+  // exact same format as TOrmTable.GetJsonValues()
   result := 0;
   if length(Stmt.Where) > 1 then
     raise ERestStorage.CreateUtf8('%.GetJsonValues on % with Stmt.Where[]=%',
@@ -3682,25 +3684,25 @@ end;
 
 procedure TRestStorageInMemory.ReloadFromFile;
 var
-  JSON: RawUtf8;
-  Stream: TStream;
+  json: RawUtf8;
+  stream: TStream;
 begin
   if (fFileName <> '') and
      FileExists(fFileName) then
   begin
     if fBinaryFile then
     begin
-      Stream := FileStreamSequentialRead(fFileName);
+      stream := FileStreamSequentialRead(fFileName);
       try
-        LoadFromBinary(Stream)
+        LoadFromBinary(stream)
       finally
-        Stream.Free;
+        stream.Free;
       end;
     end
     else
     begin
-      JSON := AnyTextFileToRawUtf8(fFileName, true);
-      LoadFromJson(pointer(JSON), length(JSON)); // buffer parsed in-place
+      json := AnyTextFileToRawUtf8(fFileName, true);
+      LoadFromJson(pointer(json), length(json)); // buffer parsed in-place
     end;
   end;
 end;
@@ -4294,7 +4296,7 @@ begin
       if rest.RefCount <> 1 then
         raise ERestStorage.CreateUtf8('%.Destroy: %.RefCount=%',
           [self, rest.RefCount]);
-      TRestStorageShard(rest)._Release;
+      IInterface(rest)._Release; // manual reference counting
       for j := i + 1 to high(fShards) do
         if fShards[j] = rest then
           fShards[j] := nil; // same instance re-used in fShards[]
@@ -4303,7 +4305,8 @@ begin
 end;
 
 procedure TRestStorageShard.ConsolidateShards;
-begin // do nothing by default
+begin
+  // do nothing by default
 end;
 
 procedure TRestStorageShard.RemoveShard(aShardIndex: integer);
@@ -4322,7 +4325,7 @@ begin
           [self, aShardIndex, fShards[aShardIndex]]);
       if rest <> nil then
       begin
-        TRestStorageShard(rest)._Release;
+        IInterface(rest)._Release; // manual reference counting
         fShards[aShardIndex] := nil;
       end;
       fShardTableIndex[aShardIndex] := -1;
@@ -4548,7 +4551,8 @@ begin
     else if IdemPropNameU(fBasicSqlHasRows[false], SQL) or
             IdemPropNameU(fBasicSqlHasRows[true], SQL) then
       if fShards <> nil then
-      begin // return one row with fake ID=1
+      begin
+        // return one row with fake ID=1
         result := '[{"RowID":1}]'#$A;
         ResCount := 1;
       end
@@ -4733,9 +4737,9 @@ begin
 end;
 
 
-function ToText(t: TORMVirtualTableTransaction): PShortString;
+function ToText(t: TOrmVirtualTableTransaction): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TORMVirtualTableTransaction), ord(t));
+  result := GetEnumName(TypeInfo(TOrmVirtualTableTransaction), ord(t));
 end;
 
 

@@ -912,7 +912,8 @@ function TWebSocketProtocol.SendFrames(Owner: TWebSocketProcess;
   var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean;
 var
   i, n: PtrInt;
-begin // this default implementation will send all frames one by one
+begin
+  // this default implementation will send all frames one by one
   n := FramesCount;
   if (n > 0) and
      (Owner <> nil) then
@@ -1036,7 +1037,8 @@ begin
 end;
 
 procedure TWebSocketFrameList.Delete(i: integer);
-begin // slightly faster than a TDynArray which would release the memory
+begin
+  // slightly faster than a TDynArray which would release the memory
   List[i].payload := '';
   dec(Count);
   if i < Count then
@@ -2293,7 +2295,8 @@ type
   end;
 
 function TWebProcessInFrame.GetBytes(P: PAnsiChar; count: integer): boolean;
-begin // SockInRead() below raise a ENetSock error on failure
+begin
+  // SockInRead() below raise a ENetSock error on failure
   inc(len, process.ReceiveBytes(P + len, count - len));
   result := len = count;
 end;

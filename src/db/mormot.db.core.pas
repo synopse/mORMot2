@@ -1316,7 +1316,8 @@ begin
             Output.VDouble := VSingle;
           end;
         varDouble:
-          begin // varDate would be converted into ISO-8601 by VariantToUtf8()
+          begin
+            // varDate would be converted into ISO-8601 by VariantToUtf8()
             Output.VType := ftDouble;
             Output.VDouble := VDouble;
           end;
@@ -1326,7 +1327,8 @@ begin
             Output.VInt64 := VInt64;
           end;
         varString:
-          begin // assume RawUtf8
+          begin
+            // assume RawUtf8
             Output.VType := ftUtf8;
             Output.VText := VPointer;
           end;
@@ -1877,7 +1879,8 @@ begin
           inc(P)
         until P^ in [#0, #10]
       else if PWord(P)^ = ord('/') + ord('*') shl 8 then
-      begin // C comments
+      begin
+        // C comments
         inc(P);
         repeat
           inc(P);
@@ -2134,7 +2137,7 @@ var
 begin
   if fExpand then
   begin
-    if twoForceJSONExtended in CustomOptions then
+    if twoForceJsonExtended in CustomOptions then
       for i := 0 to High(ColNames) do
         ColNames[i] := ColNames[i] + ':'
     else
@@ -2419,7 +2422,8 @@ var
     Where.NotClause := whereNotClause;
     Where.Field := FieldIndex; // 0 = ID, otherwise PropertyIndex+1
     if P^ = '.' then
-    begin // MongoDB-like field.subfield1.subfield2
+    begin
+      // MongoDB-like field.subfield1.subfield2
       B := P;
       repeat
         inc(P);
@@ -2537,7 +2541,8 @@ begin
   if P^ = #0 then
     exit; // no SQL statement
   if P^ = '*' then
-  begin // all simple (not RawBlob/TOrmMany) fields
+  begin
+    // all simple (not RawBlob/TOrmMany) fields
     inc(P);
     len := GetBitsCount(SimpleFieldsBits, MAX_SQLFIELDS) + 1;
     SetLength(fSelect, len);
@@ -2669,7 +2674,8 @@ lim2: if IdemPropNameU(Prop, 'LIMIT') then
               exit; // incorrect SQL statement
             AddFieldIndex(fOrderByField, ndx);
             if P^ <> ',' then
-            begin // check ORDER BY ... ASC/DESC
+            begin
+              // check ORDER BY ... ASC/DESC
               B := P;
               if GetNextFieldProp(P, Prop) then
                 if IdemPropNameU(Prop, 'DESC') then

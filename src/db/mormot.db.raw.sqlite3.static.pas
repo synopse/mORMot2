@@ -445,26 +445,30 @@ end;
 function strlen(p: PAnsiChar): integer; cdecl; { always cdecl }
   {$ifdef FPC}public name{$ifdef CPU64}'strlen'{$else}'_strlen'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
-begin // called only by some obscure FTS3 functions (normal code use dedicated functions)
+begin
+  // called only by some obscure FTS3 functions (normal code use dedicated functions)
   result := mormot.core.base.StrLen(pointer(p));
 end;
 
 function strcmp(p1,p2: PAnsiChar): integer; cdecl; { always cdecl }
   {$ifdef FPC}public name{$ifdef CPU64}'strcmp'{$else}'_strcmp'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
-begin // called only by some obscure FTS3 functions (normal code use dedicated functions)
+begin
+  // called only by some obscure FTS3 functions (normal code use dedicated functions)
   result := mormot.core.base.StrComp(p1, p2);
 end;
 
 function strcspn(str,reject: PAnsiChar): integer; cdecl;
   {$ifdef FPC}public name{$ifdef CPU64}'strcspn'{$else}'_strcspn'{$endif};{$endif}
-begin // called e.g. during LIKE process
+begin
+  // called e.g. during LIKE process
   result := mormot.core.unicode.strcspn(str, reject); // use SSE4.2 if available
 end;
 
 function strrchr(s: PAnsiChar; c: AnsiChar): PAnsiChar; cdecl;
   {$ifdef FPC}public name{$ifdef CPU64}'strrchr'{$else}'_strrchr'{$endif};{$endif}
-begin // simple full pascal version of the standard C library function
+begin
+  // simple full pascal version of the standard C library function
   result := nil;
   if s <> nil then
     while s^<>#0 do
@@ -483,7 +487,8 @@ begin
 end;
 {$else}
 function memcmp(p1, p2: pByte; Size: integer): integer; cdecl; { always cdecl }
-begin // full pascal version of the standard C library function
+begin
+  // full pascal version of the standard C library function
   if (p1 <> p2) and
      (Size <> 0) then
     if p1 <> nil then
@@ -518,7 +523,8 @@ function strncmp(p1, p2: PByte; Size: integer): integer; cdecl; { always cdecl }
   {$ifdef FPC}public name{$ifdef CPU64}'strncmp'{$else}'_strncmp'{$endif};{$endif}
 var
   i: integer;
-begin // a fast full pascal version of the standard C library function
+begin
+  // a fast full pascal version of the standard C library function
   for i := 1 to Size do
   begin
     result := p1^ - p2^;
@@ -965,7 +971,8 @@ const
   procedure XorOffset(P: PByte; Index, Count: cardinal; SQLEncryptTable: PByteArray);
   var
     Len: cardinal;
-  begin // fast and simple Cypher using Index (= offset in file)
+  begin
+    // deprecated fast and simple Cypher using Index (= offset in file)
     if Count > 0 then
       repeat
         Index := Index and (SQLEncryptTableSize - 1);

@@ -2481,7 +2481,8 @@ var
   i: integer;
 begin
   for i := 1 to Count shr 4 do
-  begin // proceed through 16 bytes blocs
+  begin
+    // proceed through 16 bytes blocs
     Cod := (Cod shl 11) xor integer(Td0[Cod shr 21]); // shr 21 -> 8*[byte] of cardinal
     P^[0] := P^[0] xor Cod;
     P^[1] := P^[1] xor Cod;
@@ -2491,7 +2492,8 @@ begin
   end;
   Cod := (Cod shl 11) xor integer(Td0[Cod shr 21]);
   for i := 1 to (Count and AesBlockMod) shr 2 do
-  begin // last 4 bytes blocs
+  begin
+    // last 4 bytes blocs
     P^[0] := P^[0] xor Cod;
     inc(PByte(P), 4);
   end;
@@ -2528,7 +2530,8 @@ procedure XorConst(P: PIntegerArray; Count: integer);
 var
   i: integer;
   Code: integer;
-begin // 1 to 3 bytes may stay unencrypted: not relevant
+begin
+  // 1 to 3 bytes may stay unencrypted: not relevant
   Code := integer(Td0[Count and $3FF]);
   for i := 1 to (Count shr 4) do
   begin
@@ -2719,7 +2722,8 @@ var
   j: PtrInt;
   pow, log: array[byte] of byte;
   c: cardinal;
-begin // 744 bytes of x86_64 code to compute 4.5 KB of tables
+begin
+  // 744 bytes of x86_64 code to compute 4.5 KB of tables
   x := 1;
   for i := 0 to 255 do
   begin
@@ -5316,7 +5320,8 @@ begin
     end;
   except
     on Exception do
-    begin // e.g. ESynCrypto in DecryptPkcs7(Data)
+    begin
+      // e.g. ESynCrypto in DecryptPkcs7(Data)
       result := '';
       exit; // invalid content
     end;
@@ -5836,7 +5841,8 @@ begin
 end;
 
 procedure TAesPrngSystem.Seed;
-begin // do nothing
+begin
+  // do nothing
 end;
 
 
@@ -7378,7 +7384,8 @@ end;
 { HMAC_CRC256C }
 
 procedure crc256cmix(h1, h2: cardinal; h: PCardinalArray);
-begin // see https://goo.gl/Pls5wi
+begin
+  // see https://goo.gl/Pls5wi
   h^[0] := h1;
   inc(h1, h2);
   h^[1] := h1;

@@ -364,7 +364,8 @@ var
   pendings, count: integer;
   timer: TPrecisionTimer;
   output: TDocVariantData;
-begin // one at a time, since InternalInvoke() is the bottleneck
+begin
+  // one at a time, since InternalInvoke() is the bottleneck
   pending := fClient.fSendNotificationsLogClass.Create(
     fClient.SendNotificationsRest.ORM, 'Sent is null order by id limit 1');
   try
@@ -470,7 +471,7 @@ begin
     with fClient.fClient as TRestClientUri do
       if (Session.ID <> 0) and
          (Session.User <> nil) then
-        opt := [ifoJsonAsExtended, ifoDontStoreVoidJSON];
+        opt := [ifoJsonAsExtended, ifoDontStoreVoidJson];
   inherited Create(aClient.fInterface, aClient, opt, aInvoke, aNotifyDestroy);
 end;
 
@@ -597,7 +598,8 @@ var
     rcu.ServicesRouting.ClientSideInvoke(
       uri, ctxt, aMethod, aParams, clientDrivenID, sent, head);
     if service <> nil then
-    begin // ParamsAsJsonObject won't apply to _signature_ e.g.
+    begin
+      // ParamsAsJsonObject won't apply to _signature_ e.g.
       if fParamsAsJsonObject and
          (clientDrivenID = '') then
         sent := service^.ArgsArrayToObject(Pointer(sent), true);
@@ -709,7 +711,8 @@ begin
     begin
       if (JsonDecode(pointer(resp), ['result', 'id'], @Values, true) = nil) or
          ({%H-}Values[0].Value = nil) then
-      begin // no "result":... layout
+      begin
+        // no "result":... layout
         if aErrorMsg <> nil then
         begin
           UniqueRawUtf8ZeroToTilde(resp, 1 shl 10);
@@ -800,14 +803,13 @@ destructor TServiceFactoryClient.Destroy;
 begin
   FreeAndNil(fSendNotificationsThread);
   if fSharedInstance <> nil then
-    with TInterfacedObjectFake(fSharedInstance) do
-      if fRefCount <> 1 then
-        raise EServiceException.CreateUtf8(
-          '%.Destroy with RefCount=%: you must release ' +
-          'I% interface (setting := nil) before Client.Free',
-          [self, fRefCount, fInterfaceUri])
-      else
-        _Release; // bonne nuit les petits
+    if fSharedInstance.RefCount <> 1 then
+      raise EServiceException.CreateUtf8(
+        '%.Destroy with RefCount=%: you must release ' +
+        'I% interface (setting := nil) before Client.Free',
+        [self, fSharedInstance.RefCount, fInterfaceUri])
+    else
+      IInterface(fSharedInstance)._Release; // bonne nuit les petits
   inherited;
 end;
 
