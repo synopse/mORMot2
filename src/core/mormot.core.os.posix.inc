@@ -498,7 +498,7 @@ begin
   result := result div MILLION; // ns to ms
 end;
 
-function UnixTimeUTC: Int64;
+function UnixTimeUtc: Int64;
 var
   tz: timeval;
 begin
@@ -506,7 +506,7 @@ begin
   result := tz.tv_sec;
 end;
 
-function UnixMSTimeUTC: Int64;
+function UnixMSTimeUtc: Int64;
 var
   tz: timeval;
 begin
@@ -563,7 +563,7 @@ var
   // contains CLOCK_MONOTONIC_COARSE since kernel 2.6.32
   CLOCK_MONOTONIC_FAST: integer = CLOCK_MONOTONIC;
 
-function UnixMSTimeUTC: Int64;
+function UnixMSTimeUtc: Int64;
 var
   r: timespec;
 begin
@@ -572,7 +572,7 @@ begin
   result := PtrUInt(r.tv_nsec) div MILLION + (r.tv_sec * THOUSAND);
 end;
 
-function UnixTimeUTC: Int64;
+function UnixTimeUtc: Int64;
 var
   r: timespec;
 begin
@@ -610,9 +610,9 @@ end;
 
 {$endif DARWIN}
 
-function UnixMSTimeUTCFast: Int64;
+function UnixMSTimeUtcFast: Int64;
 begin
-  result := UnixMSTimeUTC;
+  result := UnixMSTimeUtc;
 end;
 
 var
@@ -1480,7 +1480,7 @@ begin
   if d = nil then
     exit;
   n := 0;
-  SetLength(result, 64);
+  SetLength(result, 128);
   repeat
     e := FpReaddir(d^);
     if e = nil then

@@ -741,7 +741,6 @@ type
   TSynThreadPoolSubThread = class(TSynThread)
   protected
     fOwner: TSynThreadPool;
-    fNotifyThreadStartName: RawUtf8;
     fThreadNumber: integer;
     {$ifndef USE_WINIOCP}
     fProcessingContext: pointer;
@@ -775,7 +774,7 @@ type
     fContentionCount: cardinal;
     fContentionAbortDelay: integer;
     {$ifdef USE_WINIOCP}
-    fRequestQueue: THandle; // IOCSP has its own internal queue
+    fRequestQueue: THandle; // IOCP has its own internal queue
     {$else}
     fQueuePendingContext: boolean;
     fPendingContext: array of pointer;
@@ -2058,10 +2057,9 @@ begin
   {$ifdef USE_WINIOCP}
   fRequestQueue := CreateIoCompletionPort(aOverlapHandle, 0, nil, NumberOfThreads);
   if fRequestQueue = INVALID_HANDLE_VALUE then
-  begin
     fRequestQueue := 0;
+  if fRequestQueue = 0 then
     exit;
-  end;
   {$else}
   InitializeCriticalSection(fSafe);
   fQueuePendingContext := aQueuePendingContext;
@@ -2271,7 +2269,7 @@ begin
   {$ifndef USE_WINIOCP}
   fEvent := TEvent.Create(nil, false, false, '');
   {$endif USE_WINIOCP}
-  inherited Create(false);
+  inherited Create({suspended=}false);
 end;
 
 destructor TSynThreadPoolSubThread.Destroy;
@@ -2307,7 +2305,8 @@ begin
     repeat
       {$ifdef USE_WINIOCP}
       if (not GetQueuedCompletionStatus(fOwner.fRequestQueue,
-          dum1, dum2, ctxt, INFINITE) and fOwner.NeedStopOnIOError) or
+           dum1, dum2, ctxt, INFINITE) and
+          fOwner.NeedStopOnIOError) or
          fOwner.fTerminated then
         break;
       if ctxt <> nil then
@@ -2330,7 +2329,8 @@ begin
         LeaveCriticalSection(fOwner.fSafe);
       end;
      {$endif USE_WINIOCP}
-    until fOwner.fTerminated or Terminated;
+    until fOwner.fTerminated or
+          Terminated;
   finally
     LockedDec32(@fOwner.fRunningThreads);
   end;
@@ -2340,22 +2340,15 @@ procedure TSynThreadPoolSubThread.NotifyThreadStart(Sender: TSynThread);
 begin
   if Sender = nil then
     raise ESynThread.CreateUtf8('%.NotifyThreadStart(nil)', [self]);
-{$ifdef FPC}
-{$ifdef LINUX}
-  if fNotifyThreadStartName = '' then
-  begin
-    FormatUtf8('Pool%-%', [fThreadNumber, PointerToHexShort(fOwner)],
-      fNotifyThreadStartName);
-    RawSetThreadName(fThreadID, fNotifyThreadStartName);
-  end;
-{$endif LINUX}
-{$endif FPC}
   if Assigned(fOwner.fOnThreadStart) and
      not Assigned(Sender.fStartNotified) then
   begin
     fOwner.fOnThreadStart(Sender);
     Sender.fStartNotified := self;
   end;
+  if CurrentThreadName[0] = #0 then
+    SetCurrentThreadName('Pool%-%',
+      [fThreadNumber, PointerToHexShort(fOwner)]);
 end;
 
 

@@ -80,7 +80,7 @@ begin
   {$endif CPU64}
 end;
 
-function UnixTimeUTC: Int64;
+function UnixTimeUtc: Int64;
 var
   ft: TFileTime;
 begin
@@ -90,9 +90,10 @@ end;
 
 var
   // redirect to a separated slower but more accurate API since Windows 8
+  // - points to GetSystemTimeAsFileTime() before Windows 8
   GetSystemTimePreciseAsFileTime: procedure(var ft: TFILETIME); stdcall;
 
-function UnixMSTimeUTC: Int64;
+function UnixMSTimeUtc: Int64;
 var
   ft: TFileTime;
 begin
@@ -100,7 +101,7 @@ begin
   result := FileTimeToUnixMSTime(ft);
 end;
 
-function UnixMSTimeUTCFast: Int64;
+function UnixMSTimeUtcFast: Int64;
 var
   ft: TFileTime;
 begin
@@ -400,7 +401,7 @@ procedure SleepHiRes(ms: cardinal);
 begin
   if (ms <> 0) or
      not SwitchToThread then
-    Windows.Sleep(ms);
+    Windows.Sleep(ms); // follow the HW timer: typically up to 16ms on Windows
 end;
 
 {$ifdef FPC}
@@ -607,7 +608,7 @@ begin
     end;
     ctxt.EStack := stack;
     ctxt.EStackCount := 0;
-    ctxt.ETimestamp := UnixTimeUTC; // fast API call
+    ctxt.ETimestamp := UnixTimeUtc; // fast API call
     backuphandler(ctxt);
   except
     { ignore any nested exception }
@@ -729,9 +730,11 @@ begin
   repeat
     SetLength(result, n);
     if EnumProcesses(pointer(result), n * 4, Count) then
+      // Count=n if buffer is too small
       Count := Count shr 2
-    else // Count=n if buffer is too small
-      Count := 0; // error
+    else
+      // error
+      Count := 0;
     if Count < n then
     begin
       if Count = 0 then

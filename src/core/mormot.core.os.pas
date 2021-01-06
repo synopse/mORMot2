@@ -729,8 +729,7 @@ const
   NO_ERROR = Windows.NO_ERROR;
   ERROR_ACCESS_DENIED = Windows.ERROR_ACCESS_DENIED;
   ERROR_INVALID_PARAMETER = Windows.ERROR_INVALID_PARAMETER;
-
-  INVALID_HANDLE_VALUE = DWORD(-1);
+  INVALID_HANDLE_VALUE = Windows.INVALID_HANDLE_VALUE;
   
   PROV_RSA_AES = 24;
   CRYPT_NEWKEYSET = 8;
@@ -838,7 +837,7 @@ procedure LeaveCriticalSection(var cs: TRTLCriticalSection); stdcall;
 
 /// initialize IOCP instance
 // - redefined in mormot.core.os to avoid dependency to Windows
-function CreateIoCompletionPort(FileHandle: THandle; ExistingCompletionPort: THandle;
+function CreateIoCompletionPort(FileHandle, ExistingCompletionPort: THandle;
   CompletionKey: pointer; NumberOfConcurrentThreads: DWORD): THandle; stdcall;
 
 /// retrieve IOCP instance status
@@ -2855,6 +2854,8 @@ end;
 
 procedure Unicode_WideToShort(W: PWideChar; LW, CodePage: PtrInt;
   var res: shortstring);
+var
+  i: PtrInt;
 begin
   if LW <= 0 then
     res[0] := #0
@@ -2862,11 +2863,14 @@ begin
           IsAnsiCompatibleW(W, LW) then
   begin
     res[0] := AnsiChar(LW);
+    i := 1;
     repeat
-      res[LW + 1] := AnsiChar(ord(W^)); // fast pure English content
+      res[i] := AnsiChar(W^); // fast pure English content
+      if i = LW then
+        break;
       inc(W);
-      dec(LW);
-    until LW = 0
+      inc(i);
+    until false;
   end
   else
     res[0] := AnsiChar(Unicode_WideToAnsi(W, PAnsiChar(@res[1]), LW, 255, CodePage));
@@ -2874,7 +2878,7 @@ end;
 
 function NowUtc: TDateTime;
 begin
-  result := UnixMSTimeUtc / MSecsPerDay + UnixDelta;
+  result := UnixMSTimeUtcFast / MSecsPerDay + UnixDelta;
 end;
 
 function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;
@@ -4305,9 +4309,6 @@ begin
       inc(D);
   until false;
 end;
-
-
-
 
 
 procedure FinalizeUnit;
