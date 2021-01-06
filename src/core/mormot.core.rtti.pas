@@ -5300,8 +5300,8 @@ const
     ptInt64, ptInteger, ptInterface, ptInteger, ptCardinal, ptPtrInt, ptPtrUInt, ptQWord,
     ptRawByteString, ptRawByteString, ptRawJson, ptRawUtf8, ptRecord, ptSingle,
     ptRawUtf8, ptString, ptSynUnicode,
-    ptTimeLog, ptDateTime, ptDateTimeMS, ptGuid, ptHash128, ptHash256, ptHash512,
-    ptORM, ptTimeLog, ptORM, ptORM, ptORM, ptUnixMSTime,
+    ptTimeLog, ptDateTime, ptDateTimeMS, ptGuid, ptHash128, ptHash256,
+    ptHash512, ptORM, ptTimeLog, ptORM, ptORM, ptORM, ptUnixMSTime,
     ptUnixTime, ptTimeLog, ptUnicodeString,
     ptRawUtf8, ptVariant, ptWideString, ptWord);
   SORTEDCOMPLEX: array[0..SORTEDMAX] of TRttiParserComplexType = (
@@ -6458,9 +6458,9 @@ end;
 
 function {%H-}_New_NotImplemented(Rtti: TRttiCustom): pointer;
 begin
-  raise ERttiException.CreateUtf8('%.ClassNewInstance(%) not implemented -> ' +
+  raise ERttiException.CreateUtf8('%.ClassNewInstance(%:%) not implemented -> ' +
     'please include mormot.core.json unit to register TRttiJson',
-    [Rtti, Rtti.Name]);
+    [Rtti, Rtti.Name, ToText(Rtti.Kind)^]);
 end;
 
 function TRttiCustom.SetParserType(aParser: TRttiParserType;

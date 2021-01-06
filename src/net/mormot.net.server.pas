@@ -486,7 +486,7 @@ type
     fServerConnectionCount: integer;
     fServerConnectionActive: integer;
     fServerKeepAliveTimeOut: cardinal;
-    fSockPort, fTCPPrefix: RawUtf8;
+    fSockPort: RawUtf8;
     fSock: TCrtSocket;
     fThreadRespClass: THttpServerRespClass;
     fOnSendFile: TOnHttpServerSendFile;
@@ -602,15 +602,6 @@ type
     // - TCrtSocket.Bind() occurs in the Execute method
     property SockPort: RawUtf8
       read fSockPort;
-    /// TCP/IP prefix to mask HTTP protocol
-    // - if not set, will create full HTTP/1.0 or HTTP/1.1 compliant content
-    // - in order to make the TCP/IP stream not HTTP compliant, you can specify
-    // a prefix which will be put before the first header line: in this case,
-    // the TCP/IP stream won't be recognized as HTTP, and will be ignored by
-    // most AntiVirus programs, and increase security - but you won't be able
-    // to use an Internet Browser nor AJAX application for remote access any more
-    property TCPPrefix: RawUtf8
-      read fTCPPrefix write fTCPPrefix;
     /// the associated thread pool
     // - may be nil if ServerThreadPoolCount was 0 on constructor
     property ThreadPool: TSynThreadPoolTHttpServer
@@ -1814,8 +1805,6 @@ var
         [self, Code, Code, reason, HtmlEscapeString(ErrorMsg), fServerName]);
     end;
     // 1. send HTTP status command
-    if ClientSock.TCPPrefix <> '' then
-      ClientSock.SockSend(ClientSock.TCPPrefix);
     if ClientSock.KeepAliveClient then
       ClientSock.SockSend(['HTTP/1.1 ', Code, ' ', reason])
     else
@@ -1926,7 +1915,6 @@ begin
     fCompress := aServer.fCompress;
     fCompressAcceptEncoding := aServer.fCompressAcceptEncoding;
     fSocketLayer := aServer.Sock.SocketLayer;
-    TCPPrefix := aServer.TCPPrefix;
   end;
 end;
 
@@ -1957,11 +1945,6 @@ begin
       noheaderfilter := false;
     // 1st line is command: 'GET /path HTTP/1.1' e.g.
     SockRecvLn(Command);
-    if TCPPrefix <> '' then
-      if TCPPrefix <> Command then
-        exit
-      else
-        SockRecvLn(Command);
     P := pointer(Command);
     if P = nil then
       exit; // broken

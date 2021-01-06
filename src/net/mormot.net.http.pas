@@ -142,14 +142,6 @@ type
     procedure CompressDataAndWriteHeaders(const OutContentType: RawUtf8;
       var OutContent: RawByteString);
   public
-    /// TCP/IP prefix to mask HTTP protocol
-    // - if not set, will create full HTTP/1.0 or HTTP/1.1 compliant content
-    // - in order to make the TCP/IP stream not HTTP compliant, you can specify
-    // a prefix which will be put before the first header line: in this case,
-    // the TCP/IP stream won't be recognized as HTTP, and will be ignored by
-    // most AntiVirus programs, and increase security - but you won't be able
-    // to use an Internet Browser nor AJAX application for remote access any more
-    TCPPrefix: RawUtf8;
     /// will contain the first header line:
     // - 'GET /path HTTP/1.1' for a GET request with THttpServer, e.g.
     // - 'HTTP/1.0 200 OK' for a GET response after Get() e.g.

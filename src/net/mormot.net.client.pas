@@ -836,8 +836,6 @@ begin
     exit;
   if SockIn = nil then // done once
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
-  if TCPPrefix <> '' then
-    SockSend(TCPPrefix);
   if (url = '') or
      (url[1] <> '/') then
     SockSend([method, ' /', url, ' HTTP/1.1'])
@@ -920,14 +918,6 @@ begin
         exit;
       end;
       SockRecvLn(Command); // will raise ENetSock on any error
-      if TCPPrefix <> '' then
-        if Command <> TCPPrefix then
-        begin
-          result := HTTP_HTTPVERSIONNONSUPPORTED; // 505
-          exit;
-        end
-        else
-          SockRecvLn(Command);
       P := pointer(Command);
       if IdemPChar(P, 'HTTP/1.') then
       begin
