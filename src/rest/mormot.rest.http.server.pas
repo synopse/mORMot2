@@ -497,7 +497,7 @@ begin
     n := length(fDBServers);
     for i := 0 to n - 1 do
       if (fDBServers[i].Server.Model.UriMatch(aServer.Model.Root) <> rmNoMatch) and
-        (fDBServers[i].Security = aSecurity) then
+         (fDBServers[i].Security = aSecurity) then
         exit; // register only once per URI Root address and per protocol
     {$ifndef ONLYUSEHTTPSOCKET}
     if fUse in [useHttpApi, useHttpApiRegisteringURI] then
@@ -647,7 +647,7 @@ begin
     if PosEx('Wine', OSVersionInfoEx) > 0 then
       log.Log(sllWarning,
         '%: httpapi probably not supported on % -> try useHttpSocket',
-        [ToText(aUse)^, OSVersionInfoEx]);
+        [ToText(aUse)^, OSVersionInfoEx], self);
     // first try to use fastest http.sys
     fHttpServer := THttpApiServer.Create(false, aQueueName, HttpThreadStart,
       HttpThreadTerminate, GetDBServerNames);
@@ -1127,9 +1127,7 @@ begin
   end
   else
     raise EWebSockets.CreateUtf8(
-      '%.WebSocketEnable(%): expected useBidirSocket',
-      [self, GetEnumName(TypeInfo(TRestHttpServerUse),
-       ord(fUse))^]);
+      '%.WebSocketEnable(%): expected useBidirSocket', [self, ToText(fUse)^]);
 end;
 
 function TRestHttpServer.WebSocketsEnable(aServer: TRestServer;

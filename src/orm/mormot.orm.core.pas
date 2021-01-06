@@ -6782,7 +6782,7 @@ type
     // - the returned enumerates allow to check if the match was exact (e.g.
     // 'root/sub' matches exactly Root='root'), or with character case
     // approximation (e.g. 'Root/sub' approximates Root='root')
-    function UriMatch(const URI: RawUtf8): TRestModelMatch;
+    function UriMatch(const Uri: RawUtf8): TRestModelMatch;
     /// returns the URI corresponding to a given table, i.e. 'root/table'
     function GetUri(aTable: TOrmClass): RawUtf8;
     /// return the 'root/table/ID' URI
@@ -20402,18 +20402,18 @@ begin
   result := GetUriID(aTable, aID) + '/' + aMethodName;
 end;
 
-function TOrmModel.UriMatch(const URI: RawUtf8): TRestModelMatch;
+function TOrmModel.UriMatch(const Uri: RawUtf8): TRestModelMatch;
 var
-  URILen: integer;
+  UriLen: integer;
 begin
   result := rmNoMatch;
-  if (self = nil) or (fRoot = '') or (URI = '') then
+  if (self = nil) or (fRoot = '') or (Uri = '') then
     exit;
-  if IdemPChar(pointer(URI), pointer(fRootUpper)) then
+  if IdemPChar(pointer(Uri), pointer(fRootUpper)) then
   begin
-    URILen := length(fRoot);
-    if Uri[URILen + 1] in [#0, '/', '?'] then
-      if CompareMemFixed(pointer(URI), pointer(fRoot), URILen) then
+    UriLen := length(fRoot);
+    if Uri[UriLen + 1] in [#0, '/', '?'] then
+      if CompareMemFixed(pointer(Uri), pointer(fRoot), UriLen) then
         result := rmMatchExact
       else
         result := rmMatchWithCaseChange;
