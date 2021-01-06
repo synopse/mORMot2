@@ -234,7 +234,8 @@ function FindNameValue(P: PUtf8Char; UpperName: PAnsiChar): PUtf8Char; overload;
 // - could be used e.g. to efficently extract a value from HTTP headers, whereas
 // FindIniNameValue() is tuned for [section]-oriented INI files
 function FindNameValue(const NameValuePairs: RawUtf8; UpperName: PAnsiChar;
-  var Value: RawUtf8; KeepNotFoundValue: boolean = false): boolean; overload;
+  var Value: RawUtf8; KeepNotFoundValue: boolean = false;
+  UpperNameSeparator: AnsiChar = #0): boolean; overload;
 
 /// compute the line length from source array of chars
 // - if PEnd = nil, end counting at either #0, #13 or #10
@@ -3165,14 +3166,19 @@ _0:   result := nil; // reached P^=#0 -> not found
 end;
 
 function FindNameValue(const NameValuePairs: RawUtf8; UpperName: PAnsiChar;
-  var Value: RawUtf8; KeepNotFoundValue: boolean): boolean;
+  var Value: RawUtf8; KeepNotFoundValue: boolean; UpperNameSeparator: AnsiChar): boolean;
 var
   P: PUtf8Char;
   L: PtrInt;
 begin
   P := FindNameValue(pointer(NameValuePairs), UpperName);
   if P <> nil then
-  begin
+  repeat
+    if UpperNameSeparator <> #0 then
+      if P^ = UpperNameSeparator then
+        inc(P)
+      else
+        break;
     while P^ in [#9, ' '] do // trim left
       inc(P);
     L := 0;
@@ -3182,17 +3188,15 @@ begin
       dec(L);
     FastSetString(Value, P, L);
     result := true;
-  end
-  else
-  begin
-    if not KeepNotFoundValue then
-      {$ifdef FPC}
-      FastAssignNew(Value);
-      {$else}
-      Value := '';
-      {$endif FPC}
-    result := false;
-  end;
+    exit;
+  until false;
+  if not KeepNotFoundValue then
+    {$ifdef FPC}
+    FastAssignNew(Value);
+    {$else}
+    Value := '';
+    {$endif FPC}
+  result := false;
 end;
 
 function GetLineSize(P, PEnd: PUtf8Char): PtrUInt;
@@ -9937,8 +9941,8 @@ end;
 
 function PointerToHexShort(aPointer: Pointer): TShort16;
 begin
-  result[0] := AnsiChar(SizeOf(aPointer) * 2);
-  BinToHexDisplay(@aPointer, @result[1], SizeOf(aPointer));
+  result[0] := AnsiChar(DisplayMinChars(aPointer, SizeOf(aPointer)) * 2);
+  BinToHexDisplayLower(@aPointer, @result[1], ord(result[0]) shr 1);
 end;
 
 function CardinalToHexShort(aCardinal: cardinal): TShort16;

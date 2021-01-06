@@ -827,17 +827,8 @@ begin
 end;
 
 function THttpSocket.HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
-var
-  head: array[byte] of AnsiChar;
-  L: integer;
 begin
-  L := length(aUpperName);
-  if L > 253 then
-    raise EHttpSocket.CreateFmt('THttpSocket.HeaderGetValue(''%s'') too long key (%d)',
-      [aUpperName, L]);
-  MoveFast(pointer(aUpperName)^, head, L);
-  PWord(@head[L])^ := Ord(':'); // asciiz HTTP header
-  FindNameValue(Headers, pointer(@head), result);
+  FindNameValue(Headers, pointer(aUpperName), result, false, ':');
 end;
 
 function THttpSocket.RegisterCompress(aFunction: THttpSocketCompress;

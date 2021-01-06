@@ -2253,13 +2253,13 @@ begin
   end
   else if SockIn <> nil then
   begin
-  {$I-}
+    {$I-}
     readln(SockIn^, Line); // example: HTTP/1.0 200 OK
     Error := ioresult;
     if Error <> 0 then
       raise ENetSock.CreateFmt('SockRecvLn error %d after %d chars',
         [Error, Length(Line)]);
-  {$I+}
+    {$I+}
   end
   else
     RecvLn(Line); // slow under Windows -> use SockIn^ instead

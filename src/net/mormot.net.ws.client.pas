@@ -172,11 +172,6 @@ begin
 end;
 
 
-{$ifdef ISDELPHI20062007}
-  {$warnings on} // avoid paranoid Delphi 2007 warning
-{$endif ISDELPHI20062007}
-
-
 { TWebSocketProcessClient }
 
 constructor TWebSocketProcessClient.Create(aSender: THttpClientWebSockets;
@@ -466,6 +461,10 @@ begin
     aProtocol.Free;
   end;
 end;
+
+{$ifdef ISDELPHI20062007}
+  {$warnings on}
+{$endif ISDELPHI20062007}
 
 
 end.
