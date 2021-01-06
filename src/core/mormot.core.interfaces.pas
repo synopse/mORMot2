@@ -723,11 +723,10 @@ type
   // (via POST), to retrieve some custom content
   TServiceCustomAnswer = record
     /// mandatory response type, as encoded in the HTTP header
-    // - useful to set the response mime-type - see e.g. JSON_CONTENT_TYPE_HEADER_VAR
+    // - set the response mime-type - use e.g. JSON_CONTENT_TYPE_HEADER_VAR
     // TEXT_CONTENT_TYPE_HEADER or BINARY_CONTENT_TYPE_HEADER constants or
     // GetMimeContentType() function
-    // - in order to be handled as expected, this field SHALL be set to NOT ''
-    // (otherwise TServiceCustomAnswer will be transmitted as raw JSON)
+    // - if this field is not set, then JSON_CONTENT_TYPE_HEADER will be forced
     Header: RawUtf8;
     /// the response body
     // - corresponding to the response type, as defined in Header
@@ -2249,9 +2248,15 @@ procedure TInterfaceMethodArgument.AddJson(WR: TTextWriter; V: pointer;
 var
   ctxt: TJsonSaveContext;
 begin
-  // use direct TRttiJson serialization
-  {%H-}ctxt.Init(WR, ObjectOptions, ArgRtti);
-  TRttiJsonSave(ArgRtti.JsonSave)(V, ctxt);
+  if ArgRtti.JsonSave <> nil then
+  begin
+    // use direct TRttiJson serialization
+    {%H-}ctxt.Init(WR, ObjectOptions, ArgRtti);
+    TRttiJsonSave(ArgRtti.JsonSave)(V, ctxt);
+  end
+  else
+    // fallback to raw RTTI binary serialization with Base64 encoding
+    BinarySaveBase64(V, ArgRtti.Info, false, rkAllTypes);
 end;
 
 procedure TInterfaceMethodArgument.AsJson(var DestValue: RawUtf8; V: pointer);
@@ -7115,18 +7120,22 @@ begin
       // handle custom content (not JSON array/object answer)
       if ArgsResultIsServiceCustomAnswer then
         with PServiceCustomAnswer(fValues[ArgsResultIndex])^ do
-          if Header <> '' then
-          begin
+        begin
+          if Header = '' then
+            // set to 'Content-Type: application/json; charset=UTF-8' by default
+            fServiceCustomAnswerHead := JSON_CONTENT_TYPE_HEADER_VAR
+          else
+            // implementation could override the Header content
             fServiceCustomAnswerHead := Header;
-            Res.ForceContent(Content);
-            if Status = 0 then
-              // Values[]=@Records[] is filled with 0 by default
-              fServiceCustomAnswerStatus := HTTP_SUCCESS
-            else
-              fServiceCustomAnswerStatus := Status;
-            result := true;
-            exit;
-          end;
+          Res.ForceContent(Content);
+          if Status = 0 then
+            // Values[]=@Records[] is filled with 0 by default
+            fServiceCustomAnswerStatus := HTTP_SUCCESS
+          else
+            fServiceCustomAnswerStatus := Status;
+          result := true;
+          exit;
+        end;
       // write the '{"result":[...' array or object
       opt[{smdVar=}false] := DEFAULT_WRITEOPTIONS[optDontStoreVoidJson in Options];
       opt[{smdVar=}true] := []; // let var params override void/default values

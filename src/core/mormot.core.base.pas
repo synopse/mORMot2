@@ -3412,6 +3412,7 @@ const
   JSON_CONTENT_TYPE = 'application/json; charset=UTF-8';
 
   /// HTTP header for MIME content type used for plain JSON
+  // - i.e. 'Content-Type: application/json; charset=UTF-8'
   JSON_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + JSON_CONTENT_TYPE;
 
   /// MIME content type used for plain JSON, in upper case

@@ -1522,7 +1522,8 @@ var
       '{"abArr":[{"a":"AB0","b":0},{"a":"AB1","b":1}],"cdArr":[{"c":0,"d":"CD0"},' + '{"c":1,"d":"CD1"},{"c":2,"d":"CD2"}]}';
     Check(Hash32(U) = $E3AC9C44);
     check(IsValidJson(U));
-    Check(RecordSaveJson(agg, TypeInfo(TAggregate)) = U);
+    J := RecordSaveJson(agg, TypeInfo(TAggregate));
+    CheckEqual(J, U);
     RecordLoadJson(agg2, UniqueRawUtf8(U), TypeInfo(TAggregate));
     J := RecordSaveJson(agg2, TypeInfo(TAggregate));
     Check(Hash32(J) = $E3AC9C44);
