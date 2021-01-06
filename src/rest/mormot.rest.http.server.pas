@@ -144,6 +144,7 @@ type
       RestAccessRights: POrmAccessRights;
       Security: TRestHttpServerSecurity;
     end;
+    fDBServerNames: RawUtf8;
     fHosts: TSynNameValue;
     fAccessControlAllowOrigin: RawUtf8;
     fAccessControlAllowOriginsMatch: TMatchs;
@@ -166,7 +167,6 @@ type
     procedure SetDBServerAccessRight(Index: integer; Value: POrmAccessRights);
     procedure SetDBServer(aIndex: integer; aServer: TRestServer;
       aSecurity: TRestHttpServerSecurity; aRestAccessRights: POrmAccessRights);
-    function GetDBServerNames: RawUtf8;
     function HttpApiAddUri(const aRoot, aDomainName: RawByteString;
       aSecurity: TRestHttpServerSecurity;
       aRegisterUri, aRaiseExceptionOnError: boolean): RawUtf8;
@@ -507,14 +507,15 @@ begin
     {$endif ONLYUSEHTTPSOCKET}
     SetLength(fDBServers, n + 1);
     SetDBServer(n, aServer, aSecurity, aRestAccessRights);
-    fHttpServer.ProcessName := GetDBServerNames;
+    fDBServerNames := fDBServerNames + ' ' + aServer.Model.Root;
+    fHttpServer.ProcessName := fDBServerNames;
     result := true;
   finally
     fSafe.UnLock;
     if log <> nil then
-      log.Log(sllHttp, 'AddServer(%,Root=%,Port=%,Public=%:%)=%',
+      log.Log(sllHttp, 'AddServer(%,Root=%,Port=%,Public=%:%)=% servers=%',
         [aServer, aServer.Model.Root, fPort, fPublicAddress, fPublicPort,
-         BOOL_STR[result]], self);
+         BOOL_STR[result], fDBServerNames], self);
   end;
 end;
 
@@ -595,7 +596,6 @@ constructor TRestHttpServer.Create(const aPort: RawUtf8;
   const aQueueName: SynUnicode; aHeadersUnFiltered: boolean);
 var
   i, j: PtrInt;
-  ServersRoot: RawUtf8;
   ErrMsg: RawUtf8;
   log: ISynLog;
 begin
@@ -628,14 +628,14 @@ begin
       for i := 0 to high(aServers) do
         with aServers[i].Model do
         begin
-          ServersRoot := {%H-}ServersRoot + ' ' + Root;
+          fDBServerNames := fDBServerNames + ' ' + Root;
           for j := i + 1 to high(aServers) do
             if aServers[j].Model.UriMatch(Root) <> rmNoMatch then
               FormatUtf8('Duplicated Root URI: % and %',
                 [Root, aServers[j].Model.Root], ErrMsg);
         end;
     if ErrMsg <> '' then
-      raise ERestHttpServer.CreateUtf8('%.Create(% ): %', [self, ServersRoot, ErrMsg]);
+      raise ERestHttpServer.CreateUtf8('%.Create(% ): %', [self, fDBServerNames, ErrMsg]);
     // associate before HTTP server is started, for TRestServer.BeginCurrentThread
     SetLength(fDBServers, length(aServers));
     for i := 0 to high(aServers) do
@@ -650,7 +650,7 @@ begin
         [ToText(aUse)^, OSVersionInfoEx], self);
     // first try to use fastest http.sys
     fHttpServer := THttpApiServer.Create(false, aQueueName, HttpThreadStart,
-      HttpThreadTerminate, GetDBServerNames);
+      HttpThreadTerminate, fDBServerNames);
     for i := 0 to high(aServers) do
       HttpApiAddUri(aServers[i].Model.Root, fDomainName, aSecurity,
         fUse = useHttpApiRegisteringURI, true);
@@ -661,7 +661,7 @@ begin
     on E: Exception do
     begin
       log.Log(sllError, '% for % % at%  -> fallback to socket-based server',
-        [E, ToText(aUse)^, fHttpServer, ServersRoot], self);
+        [E, ToText(aUse)^, fHttpServer, fDBServerNames], self);
       FreeAndNil(fHttpServer); // if http.sys initialization failed
     end;
   end;
@@ -671,10 +671,10 @@ begin
     // http.sys not running -> create one instance of our pure socket server
     if aUse = useBidirSocket then
       fHttpServer := TWebSocketServerRest.Create(fPort, HttpThreadStart,
-        HttpThreadTerminate, GetDBServerNames)
+        HttpThreadTerminate, fDBServerNames)
     else
       fHttpServer := THttpServer.Create(fPort, HttpThreadStart,
-        HttpThreadTerminate, GetDBServerNames, aThreadPoolCount, 30000,
+        HttpThreadTerminate, fDBServerNames, aThreadPoolCount, 30000,
         aHeadersUnFiltered);
     THttpServer(fHttpServer).WaitStarted;
   end;
@@ -699,7 +699,7 @@ begin
   if fHttpServer.CanNotifyCallback then
     for i := 0 to high(fDBServers) do
       fDBServers[i].Server.OnNotifyCallback := NotifyCallback;
-  log.Log(sllHttp, '% initialized for%', [fHttpServer, ServersRoot], self);
+  log.Log(sllHttp, '% initialized for %', [fHttpServer, fDBServerNames], self);
 end;
 
 constructor TRestHttpServer.Create(const aPort: RawUtf8; aServer: TRestServer;
@@ -772,22 +772,6 @@ end;
 function TRestHttpServer.GetDBServerCount: integer;
 begin
   result := length(fDBServers);
-end;
-
-function TRestHttpServer.GetDBServerNames: RawUtf8;
-var
-  i: PtrInt;
-begin
-  result := '';
-  if self = nil then
-    exit;
-  fSafe.Lock; // protect fDBServers[]
-  try
-    for i := 0 to high(fDBServers) do
-      result := result + fDBServers[i].Server.Model.Root + ' ';
-  finally
-    fSafe.UnLock;
-  end;
 end;
 
 procedure TRestHttpServer.SetDBServerAccessRight(Index: integer;
@@ -1065,7 +1049,7 @@ var
 begin
   if self = nil then
     exit;
-  SetCurrentThreadName('% %/%%', [self, fPort, GetDBServerNames, Sender]);
+  SetCurrentThreadName('% %% %', [self, fPort, fDBServerNames, Sender]);
   fSafe.Lock; // protect fDBServers[]
   try
     for i := 0 to high(fDBServers) do
