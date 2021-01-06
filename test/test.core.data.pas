@@ -1049,7 +1049,7 @@ const
     'pagination{per_page,items,page Integer}' +
     'releases[status,title,format,label,artist RawUtf8 year,id integer]';
   __TRestCacheEntryValue =
-    'ID: Int64; Timestamp512,Tag: cardinal; JSON: RawUtf8';
+    'ID: Int64; Timestamp512,Tag: cardinal; Json: RawUtf8';
   __TSubAB =
     'a : RawUtf8; b : integer;';
   __TSubCD =
@@ -1608,28 +1608,28 @@ var
     Finalize(Cache);
     FillCharFast(Cache, sizeof(Cache), 0);
     U := RecordSaveJson(Cache, TypeInfo(TRestCacheEntryValue));
-    CheckEqual(U, '{"ID":0,"Timestamp512":0,"Tag":0,"JSON":""}');
+    CheckEqual(U, '{"ID":0,"Timestamp512":0,"Tag":0,"Json":""}');
     check(IsValidJson(U));
     Cache.ID := 10;
     Cache.Timestamp512 := 200;
-    Cache.JSON := 'test';
+    Cache.Json := 'test';
     Cache.Tag := 12;
     U := RecordSaveJson(Cache, TypeInfo(TRestCacheEntryValue));
-    CheckEqual(U, '{"ID":10,"Timestamp512":200,"Tag":12,"JSON":"test"}');
+    CheckEqual(U, '{"ID":10,"Timestamp512":200,"Tag":12,"Json":"test"}');
     check(IsValidJson(U));
-    U := '{"ID":210,"Timestamp512":2200,"JSON":"test2"}';
+    U := '{"ID":210,"Timestamp512":2200,"Json":"test2"}';
     check(IsValidJson(U));
     RecordLoadJson(Cache, UniqueRawUtf8(U), TypeInfo(TRestCacheEntryValue));
     Check(Cache.ID = 210);
     Check(Cache.Timestamp512 = 2200);
-    Check(Cache.JSON = 'test2');
+    Check(Cache.Json = 'test2');
     Check(Cache.Tag = 12);
-    U := '{ID:220,JSON:"test3",Timestamp512:2300}';
+    U := '{ID:220,Json:"test3",Timestamp512:2300}';
     check(IsValidJson(U));
     RecordLoadJson(Cache, UniqueRawUtf8(U), TypeInfo(TRestCacheEntryValue));
     Check(Cache.ID = 220);
     Check(Cache.Timestamp512 = 2300);
-    Check(Cache.JSON = 'test3');
+    Check(Cache.Json = 'test3');
     Check(Cache.Tag = 12);
 
     {$ifdef ISDELPHI2010}

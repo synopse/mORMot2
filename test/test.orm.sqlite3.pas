@@ -3123,6 +3123,7 @@ end;
 procedure TTestBidirectionalRemoteConnection.RelaySoaCallbackViaJsonWebsockets;
 begin
   SoaCallbackViaWebsockets({ajax=}true, {relay=}true);
+  SleepHiRes(10);
 end;
 
 procedure TTestBidirectionalRemoteConnection.RelayConnectionRecreate;
@@ -3142,10 +3143,11 @@ begin
   stats := OpenHttpGet('127.0.0.1', fPublicRelayPort, '/stats', '');
   check(PosEx('"version"', stats) > 0, 'stats');
   fPrivateRelay.Free;
-  sleep(100);
+  SleepHiRes(100);
   stats := OpenHttpGet('127.0.0.1', fPublicRelayPort, '/stats', '');
   check(PosEx('"version"', stats) > 0, 'stats');
   fPublicRelay.Free;
+  SleepHiRes(10);
 end;
 
 procedure TTestBidirectionalRemoteConnection._TRecordVersion;
