@@ -4805,7 +4805,7 @@ begin
   for i := 1 to length(name) do
     if name[i] < ' ' then
       name[i] := ' '; // ensure on same line
-  name := StringReplaceAll(name, [
+  name := TrimU(StringReplaceAll(name, [
     'TSqlRest', '',
     'TRest', '',
     'TSql', '',
@@ -4828,7 +4828,7 @@ begin
     'Backup', 'Bak',
     'memory', 'mem',
     '  ', ' '
-    ]);
+    ]));
   n[0] := #0;
   for i := 1 to length(name) do
     if name[i] in ['a'..'z', 'A'..'Z', '0'..'9', '.'

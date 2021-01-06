@@ -2082,6 +2082,7 @@ threadvar
 
 /// retrieve the thread name, as set by SetThreadName()
 // - if possible, direct CurrentThreadName threadvar access is slightly faster
+// - will return the CurrentThreadName value, truncated to 31 chars
 function GetCurrentThreadName: RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
