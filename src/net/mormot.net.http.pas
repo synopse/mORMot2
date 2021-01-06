@@ -277,7 +277,7 @@ type
   THttpServerRequestAbstract = class
   protected
     fRemoteIP,
-    fURL,
+    fUrl,
     fMethod,
     fInHeaders,
     fInContentType,
@@ -301,8 +301,8 @@ type
     /// append some lines to the InHeaders input parameter
     procedure AddInHeader(additionalHeader: RawUtf8);
     /// input parameter containing the caller URI
-    property URL: RawUtf8
-      read fURL;
+    property Url: RawUtf8
+      read fUrl;
     /// input parameter containing the caller method (GET/POST...)
     property Method: RawUtf8
       read fMethod;

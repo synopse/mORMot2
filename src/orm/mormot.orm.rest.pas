@@ -2259,6 +2259,7 @@ end;
 function TRestOrm.AsynchBatchStop(Table: TOrmClass): boolean;
 begin
   if (self = nil) or
+     (fRest.Run = nil) or
      (fRest.Run.BackgroundTimer = nil) or
      (fRest.Run.BackgroundTimer.BackgroundBatch = nil) then
     result := false

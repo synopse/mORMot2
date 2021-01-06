@@ -1819,7 +1819,7 @@ begin
     exit; // already loaded
   mormot.core.os.GlobalLock;
   try
-    if Http.Module <> 0 then
+    if Http.Module = 0 then
     try
       Http.Module := LoadLibrary(HTTPAPI_DLL);
       Http.Version.MajorVersion := 2; // API 2.0 if all functions are available

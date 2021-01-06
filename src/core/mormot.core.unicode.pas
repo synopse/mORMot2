@@ -746,7 +746,7 @@ function ToUtf8(const Text: string): RawUtf8; overload;
 // - this overloaded function use a TSynTempBuffer for the result to avoid any
 // memory allocation for the shorter content
 // - caller should call u.Done to release any heap-allocated memory
-function StringToUtf8(const Text: string; var u: TSynTempBuffer): integer; overload;
+function StringToUtf8(const Text: string; var Temp: TSynTempBuffer): integer; overload;
 
 /// convert any UTF-8 encoded shortstring Text into an UTF-8 encoded String
 // - expects the supplied content to be already ASCII-7 or UTF-8 encoded, e.g.
@@ -3503,13 +3503,13 @@ begin
   RawUnicodeToUtf8(pointer(Text), Length(Text), result);
 end;
 
-function StringToUtf8(const Text: string; var u: TSynTempBuffer): integer;
+function StringToUtf8(const Text: string; var Temp: TSynTempBuffer): integer;
 var
   len: integer;
 begin
   len := length(Text);
-  u.Init(len * 3);
-  result := RawUnicodeToUtf8(u.buf, u.len + 1, pointer(Text), len, []);
+  Temp.Init(len * 3);
+  result := RawUnicodeToUtf8(Temp.buf, Temp.len + 1, pointer(Text), len, []);
 end;
 
 function ToUtf8(const Text: string): RawUtf8;
@@ -3625,14 +3625,14 @@ begin
   result := CurrentAnsiConvert.AnsiToUtf8(Text);
 end;
 
-function StringToUtf8(const Text: string; var u: TSynTempBuffer): integer;
+function StringToUtf8(const Text: string; var Temp: TSynTempBuffer): integer;
 var
   len: integer;
 begin
   len := length(Text);
-  u.Init(len * 3);
-  result := CurrentAnsiConvert.AnsiBufferToUtf8(u.buf, pointer(Text), len)
-     - PUtf8Char(u.buf);
+  Temp.Init(len * 3);
+  result := CurrentAnsiConvert.AnsiBufferToUtf8(Temp.buf, pointer(Text), len)
+     - PUtf8Char(Temp.buf);
 end;
 
 function ToUtf8(const Text: string): RawUtf8;

@@ -718,7 +718,7 @@ type
     /// use this method to send back an error to the caller
     // - will serialize the supplied exception, with an optional error message
     procedure Error(E: Exception; const Format: RawUtf8;
-      const Args: array of const; Status: integer = HTTP_BADREQUEST); overload;
+      const Args: array of const; Status: integer = HTTP_BADREQUEST); overload; virtual;
     /// implements a method-based service for live update of some settings
     // - should be called from a method-based service, e.g. Configuration()
     // - the settings are expected to be stored e.g. in a TSynAutoCreateFields
@@ -745,7 +745,7 @@ type
     /// event raised by ExecuteMethod() for interface parameters
     // - match TInterfaceMethodInternalExecuteCallback signature
     procedure ExecuteCallback(var Par: PUtf8Char; ParamInterfaceInfo: TRttiJson;
-      out Obj);
+      out Obj); virtual;
   end;
 
   /// method prototype to be used on Server-Side for method-based services

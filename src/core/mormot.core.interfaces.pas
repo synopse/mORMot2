@@ -3448,7 +3448,7 @@ begin
     try
       F := pointer(InterfaceFactoryCache.List);
       for i := 1 to InterfaceFactoryCache.Count do
-        if IdemPropName(F^.fInterfaceName, pointer(aInterfaceName), L) then
+        if IdemPropNameU(F^.fInterfaceName, pointer(aInterfaceName), L) then
         begin
           result := F^;
           exit; // retrieved from cache

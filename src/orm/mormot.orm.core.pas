@@ -18031,7 +18031,7 @@ begin
   end;
   { assert(T.FieldCount=SqlFieldsCount);
     for i := 0 to SqlFieldsCount-1 do
-      assert(IdemPropName(SqlFields[i].SQL,T.fResults[i],StrLen(T.fResults[i]))); }
+      assert(IdemPropNameU(SqlFields[i].SQL,T.fResults[i],StrLen(T.fResults[i]))); }
   fFill.fTable := T;
   T.OwnerMustFree := true;
   fFill.fFillCurrentRow := 1; // point to first data row (0 is field names)

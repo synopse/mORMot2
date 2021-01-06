@@ -2816,7 +2816,7 @@ end;
 
 function TMatchs.Match(const aText: RawUtf8): integer;
 begin
-  result := match(pointer(aText), length(aText));
+  result := Match(pointer(aText), length(aText));
 end;
 
 function TMatchs.Match(aText: PUtf8Char; aLen: integer): integer;
@@ -2855,13 +2855,7 @@ var
   temp: TSynTempBuffer;
   len: integer;
 begin
-  len := length(aText);
-  temp.Init(len * 3);
-  {$ifdef UNICODE}
-  len := RawUnicodeToUtf8(temp.buf, temp.len + 1, pointer(aText), len, [ccfNoTrailingZero]);
-  {$else}
-  len := CurrentAnsiConvert.AnsiBufferToUtf8(temp.buf, pointer(aText), len, true) - temp.buf;
-  {$endif UNICODE}
+  len := StringToUtf8(aText, temp);
   result := match(temp.buf, len);
   temp.Done;
 end;
