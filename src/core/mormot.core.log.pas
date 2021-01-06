@@ -3963,7 +3963,7 @@ begin
   {$else}
   W.Add(' %: %/% sleep=% ', [name, KBNoSpace(a.CurrentBytes),
     KBNoSpace(a.CumulativeBytes), K(a.SleepCount)]);
-  {$endif}
+  {$endif FPCMM_DEBUG}
 end;
 
 procedure WriteX64MM(W: TBaseWriter);
@@ -4826,6 +4826,9 @@ begin
     'Thread', 'Thd',
     'Database', 'DB',
     'Backup', 'Bak',
+    'Server', 'Svr',
+    'Client', 'Clt',
+    'synopse', 'syn',
     'memory', 'mem',
     '  ', ' '
     ]));

@@ -4998,31 +4998,37 @@ begin
       SqlTableName(aTableName);
 end;
 
+{$ifdef ISDELPHI20062007}
+  {$warnings off} // avoid paranoid Delphi 2007 warning
+{$endif ISDELPHI20062007}
+
 class function TSqlDBConnectionProperties.EngineName: RawUtf8;
 var
   L: integer;
 begin
+  result := '';
   if self = nil then
-    result := ''
-  else
-  begin
-    result := ToText(PClass(self)^);
-    if IdemPChar(pointer(result), 'TSqlDB') then
-      Delete(result, 1, 6)
-    else if result[1] = 'T' then
-      Delete(result, 1, 1);
-    L := length(result);
-    if (L > 20) and
-       IdemPropName('ConnectionProperties', @result[L - 19], 20) then
-      SetLength(result, L - 20);
-    if (L > 5) and
-       IdemPropName('OleDB', pointer(result), 5) then
-      Delete(result, 1, 5)
-    else if (L > 4) and
-         IdemPropName('ODBC', pointer(result), 4) then
-        Delete(result, 1, 4);
-  end;
+    exit;
+  ClassToText(PClass(self)^, result);
+  if IdemPChar(pointer(result), 'TSqlDB') then
+    Delete(result, 1, 6)
+  else if result[1] = 'T' then
+    Delete(result, 1, 1);
+  L := length(result);
+  if (L > 20) and
+     IdemPropName('ConnectionProperties', @result[L - 19], 20) then
+    SetLength(result, L - 20);
+  if (L > 5) and
+     IdemPropName('OleDB', pointer(result), 5) then
+    Delete(result, 1, 5)
+  else if (L > 4) and
+       IdemPropName('ODBC', pointer(result), 4) then
+      Delete(result, 1, 4);
 end;
+
+{$ifdef ISDELPHI20062007}
+  {$warnings on}
+{$endif ISDELPHI20062007}
 
 function TSqlDBConnectionProperties.GetDbms: TSqlDBDefinition;
 begin

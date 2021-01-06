@@ -696,9 +696,9 @@ function ClassNameShort(Instance: TObject): PShortString; overload;
 /// just a wrapper around vmtClassName to avoid a string conversion
 procedure ClassToText(C: TClass; var result: RawUtf8);
 
-/// just a wrapper around vmtClassName to avoid a string conversion
+/// just a wrapper around ClassToText() to avoid a string conversion
 function ToText(C: TClass): RawUtf8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASSAFEINLINE}inline;{$endif}
 
 var
   /// retrieve the unit name where a given class is implemented
