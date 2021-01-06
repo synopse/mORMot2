@@ -3279,7 +3279,7 @@ const
   // ptRecord, ptSingle, ptString, ptSynUnicode, ptDateTime, ptDateTimeMS,
     imvRecord, imvDouble, imvString, imvSynUnicode, imvDateTime, imvDateTime,
   // ptGuid, ptHash128, ptHash256, ptHash512, ptORM, ptTimeLog, ptUnicodeString,
-    imvBinary, imvBinary, imvBinary, imvBinary, imvObject, imvInt64, imvUnicodeString,
+    imvBinary, imvBinary, imvBinary, imvBinary, imvInt64, imvInt64, imvUnicodeString,
   // ptUnixTime, ptUnixMSTime, ptVariant, ptWideString, ptWinAnsi, ptWord,
     imvInt64, imvInt64, imvVariant, imvWideString, imvRawUtf8, imvNone,
   // ptEnumeration, ptSet, ptClass, ptDynArray, ptInterface, ptCustom);
