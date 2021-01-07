@@ -74,6 +74,8 @@ type
   // the program does not run as Administrator - it is therefore sufficient
   // to run such a program once as Administrator to register the URI, when this
   // useHttpApiRegisteringURI option is set
+  // - useHttpApiOnly and useHttpApiRegisteringURIOnly won't fallback to the
+  // socket-based HTTP server if http.sys initialization failed
   // - useHttpSocket will run the standard Sockets library (i.e. socket-based
   // THttpServer) - it will trigger the Windows firewall popup UAC window at
   // first execution
@@ -86,6 +88,8 @@ type
     {$ifndef ONLYUSEHTTPSOCKET}
     useHttpApi,
     useHttpApiRegisteringURI,
+    useHttpApiOnly,
+    useHttpApiRegisteringURIOnly,
     {$endif ONLYUSEHTTPSOCKET}
     useHttpSocket,
     useBidirSocket);
@@ -106,12 +110,16 @@ const
 
   /// the kind of HTTP server to be used by default
   // - will define the best available server class, depending on the platform
-  HTTP_DEFAULT_MODE =
-    {$ifdef ONLYUSEHTTPSOCKET}
-    useHttpSocket
-    {$else}
-    useHttpApiRegisteringURI
-    {$endif ONLYUSEHTTPSOCKET};
+  {$ifdef ONLYUSEHTTPSOCKET}
+  HTTP_DEFAULT_MODE = useHttpSocket;
+  {$else}
+  HTTP_DEFAULT_MODE = useHttpApiRegisteringURI;
+
+  /// the kind of HTTP server which involves http.sys
+  HTTP_API_MODES = [useHttpApi .. useHttpApiRegisteringURIOnly];
+  /// the http.sys modes which won't have any fallback to the sockets server
+  HTTP_API_REGISTERING_MODES = [useHttpApiRegisteringURI, useHttpApiRegisteringURIOnly];
+  {$endif ONLYUSEHTTPSOCKET}
 
 
 type
@@ -500,9 +508,9 @@ begin
          (fDBServers[i].Security = aSecurity) then
         exit; // register only once per URI Root address and per protocol
     {$ifndef ONLYUSEHTTPSOCKET}
-    if fUse in [useHttpApi, useHttpApiRegisteringURI] then
+    if fUse in HTTP_API_MODES then
       if HttpApiAddUri(aServer.Model.Root, fDomainName, aSecurity,
-          fUse = useHttpApiRegisteringURI, false) <> '' then
+          fUse in HTTP_API_REGISTERING_MODES, false) <> '' then
         exit;
     {$endif ONLYUSEHTTPSOCKET}
     SetLength(fDBServers, n + 1);
@@ -642,7 +650,7 @@ begin
       SetDBServer(i, aServers[i], aSecurity, HTTP_DEFAULT_ACCESS_RIGHTS);
   end;
   {$ifndef ONLYUSEHTTPSOCKET}
-  if aUse in [useHttpApi, useHttpApiRegisteringURI] then
+  if aUse in HTTP_API_MODES then
   try
     if PosEx('Wine', OSVersionInfoEx) > 0 then
       log.Log(sllWarning,
@@ -653,16 +661,19 @@ begin
       HttpThreadTerminate, fDBServerNames);
     for i := 0 to high(aServers) do
       HttpApiAddUri(aServers[i].Model.Root, fDomainName, aSecurity,
-        fUse = useHttpApiRegisteringURI, true);
+        fUse in HTTP_API_REGISTERING_MODES, true);
     if aAdditionalUrl <> '' then
       HttpApiAddUri(aAdditionalUrl, fDomainName, aSecurity,
-        fUse = useHttpApiRegisteringURI, true);
+        fUse in HTTP_API_REGISTERING_MODES, true);
   except
     on E: Exception do
     begin
       log.Log(sllError, '% for % % at%  -> fallback to socket-based server',
         [E, ToText(aUse)^, fHttpServer, fDBServerNames], self);
       FreeAndNil(fHttpServer); // if http.sys initialization failed
+      if fUse in [useHttpApiOnly, useHttpApiRegisteringURIOnly] then
+        // propagate fatal exception with no fallback to the sockets HTTP server
+        raise;
     end;
   end;
   {$endif ONLYUSEHTTPSOCKET}
@@ -679,10 +690,10 @@ begin
     THttpServer(fHttpServer).WaitStarted;
   end;
   fHttpServer.OnRequest := Request;
-{$ifndef PUREMORMOT2}
+  {$ifndef PUREMORMOT2}
   if aSecurity = secSynShaAes then
     fHttpServer.RegisterCompress(CompressShaAes, 0); // CompressMinSize=0
-{$endif PUREMORMOT2}
+  {$endif PUREMORMOT2}
   {$ifdef COMPRESSSYNLZ} // SynLZ registered first, since will be prefered
   fHttpServer.RegisterCompress(CompressSynLZ);
   {$endif COMPRESSSYNLZ}
