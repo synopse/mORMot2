@@ -398,14 +398,19 @@ type
     fCrypto: array[0..7] of cardinal; // only fCrypto[6..7] are used in practice
     fCryptoCRC: cardinal;
     fSafe: TSynLocker;
+    fCryptoAesE, fCryptoAesD: TAes; // Initialized if aSharedObfuscationKeyNewKDF
     function GetComputedCount: Int64;
     function GetCollisions: Int64;
   public
     /// initialize the generator for the given 16-bit process identifier
     // - you can supply an obfuscation key, which should be shared for the
     // whole system, so that you may use FromObfuscated/ToObfuscated methods
+    // - if aSharedObfuscationKeyNewKDF=true safer AES/SHA3 algorithms will be
+    // used for the obfuscation cryptography - keep it as false for mORMot 1.18
+    // backward compatibility
     constructor Create(aIdentifier: TSynUniqueIdentifierProcess;
-      const aSharedObfuscationKey: RawUtf8 = ''); reintroduce;
+      const aSharedObfuscationKey: RawUtf8 = '';
+      aSharedObfuscationKeyNewKDF: boolean = false); reintroduce;
     /// finalize the generator structure
     destructor Destroy; override;
     /// return a new unique ID
@@ -422,13 +427,15 @@ type
     // - may be used e.g. to limit database queries on a particular time range
     procedure ComputeFromUnixTime(const aUnixTime: TUnixTime;
       out result: TSynUniqueIdentifierBits);
-    /// map a TSynUniqueIdentifier as 24 chars cyphered hexadecimal text
+    /// map a TSynUniqueIdentifier as 24/32 chars cyphered hexadecimal text
     // - cyphering includes simple key-based encryption and a CRC-32 digital signature
+    // - text size is 32 chars if aSharedObfuscationKeyNewKDF was set to true
     function ToObfuscated(
       const aIdentifier: TSynUniqueIdentifier): TSynUniqueIdentifierObfuscated;
-    /// retrieve a TSynUniqueIdentifier from 24 chars cyphered hexadecimal text
+    /// retrieve a TSynUniqueIdentifier from 24/32 chars cyphered hexadecimal text
     // - any file extension (e.g. '.jpeg') would be first deleted from the
     // supplied obfuscated text
+    // - text size is 32 chars if aSharedObfuscationKeyNewKDF was set to true
     // - returns true if the supplied obfuscated text has the expected layout
     // and a valid digital signature
     // - returns false if the supplied obfuscated text is invalid
@@ -1696,10 +1703,12 @@ begin
 end;
 
 constructor TSynUniqueIdentifierGenerator.Create(
-  aIdentifier: TSynUniqueIdentifierProcess; const aSharedObfuscationKey: RawUtf8);
+  aIdentifier: TSynUniqueIdentifierProcess; const aSharedObfuscationKey: RawUtf8;
+  aSharedObfuscationKeyNewKDF: boolean);
 var
   i, len: integer;
   crc: cardinal;
+  key: THash256Rec;
 begin
   fIdentifier := aIdentifier;
   fIdentifierShifted := aIdentifier shl 15;
@@ -1708,29 +1717,43 @@ begin
   fSafe.LockedInt64[SYNUNIQUEGEN_COLLISIONCOUNT] := 0;
   // compute obfuscation key using hash diffusion of the supplied text
   len := length(aSharedObfuscationKey);
-  crc := crc32ctab[0, len and 1023];
-  for i := 0 to high(fCrypto) + 1 do
+  if aSharedObfuscationKeyNewKDF then
   begin
-    crc := crc32ctab[0, crc and 1023] xor
-           crc32ctab[3, i] xor
-           kr32(crc, pointer(aSharedObfuscationKey), len) xor
-           crc32c(crc, pointer(aSharedObfuscationKey), len) xor
-           fnv32(crc, pointer(aSharedObfuscationKey), len);
-    // do not modify those hashes above or you will break obfuscation pattern!
-    if i <= high(fCrypto) then
-      fCrypto[i] := crc
-    else
-      fCryptoCRC := crc;
+    // efficient and safe obfuscation based on proven algoriths (AES + SHA3)
+    PBKDF2_SHA3(SHA3_256, aSharedObfuscationKey, ToText(ClassType), 100, @key);
+    fCryptoAesE.EncryptInit(key, 128);
+    fCryptoAesD.DecryptInitFrom(fCryptoAesE, key, 128);
+    fCryptoCRC := key.c[7];
+    // fCrypto[] is not used if fCryptoAes.Initialized is set
+  end
+  else
+  begin
+    // due to the weakness of the hash algorithms used, this approach is a bit
+    // naive and would be broken easily with brute force - but point here is to
+    // hide/obfuscate public values at end-user level (e.g. when publishing URIs),
+    // not implement strong security, so it sounds good enough for our purpose
+    crc := crc32ctab[0, len and 1023];
+    for i := 0 to high(fCrypto) + 1 do
+    begin
+      crc := crc32ctab[0, crc and 1023] xor
+             crc32ctab[3, i] xor
+             kr32(crc, pointer(aSharedObfuscationKey), len) xor
+             crc32c(crc, pointer(aSharedObfuscationKey), len) xor
+             fnv32(crc, pointer(aSharedObfuscationKey), len);
+      // do not modify those hashes above or you will break obfuscation pattern!
+      if i <= high(fCrypto) then
+        fCrypto[i] := crc
+      else
+        fCryptoCRC := crc;
+    end;
   end;
-  // due to the weakness of the hash algorithms used, this approach is a bit
-  // naive and would be broken easily with brute force - but point here is to
-  // hide/obfuscate public values at end-user level (e.g. when publishing URIs),
-  // not implement strong security, so it sounds good enough for our purpose
 end;
 
 destructor TSynUniqueIdentifierGenerator.Destroy;
 begin
   fSafe.Done;
+  fCryptoAesE.Done;
+  fCryptoAesD.Done;
   FillCharFast(fCrypto, SizeOf(fCrypto), 0);
   fCryptoCRC := 0;
   inherited Destroy;
@@ -1745,7 +1768,8 @@ type // compute a 24 hexadecimal chars (96 bits) obfuscated pseudo file name
 function TSynUniqueIdentifierGenerator.ToObfuscated(
   const aIdentifier: TSynUniqueIdentifier): TSynUniqueIdentifierObfuscated;
 var
-  bits: TSynUniqueIdentifierObfuscatedBits;
+  block: THash128Rec;
+  bits: TSynUniqueIdentifierObfuscatedBits absolute block;
   key: cardinal;
 begin
   result := '';
@@ -1758,15 +1782,24 @@ begin
     key := crc32ctab[0, bits.id.ProcessID and 1023] xor fCryptoCRC;
   bits.crc := crc32c(bits.id.ProcessID, @bits.id, SizeOf(bits.id)) xor key;
   if self <> nil then
-    bits.id.Value := bits.id.Value xor PInt64(@fCrypto[high(fCrypto) - 1])^;
-  result := BinToHexLower(@bits, SizeOf(bits));
+    if fCryptoAesE.Initialized then
+    begin
+      block.c3 := fCryptoCRC; // used as IV during AES permutation
+      fCryptoAesE.Encrypt(block.b);
+      result := BinToHexLower(@block, SizeOf(block)); // 32 hexa chars
+      exit;
+    end
+    else
+      bits.id.Value := bits.id.Value xor PInt64(@fCrypto[high(fCrypto) - 1])^;
+  result := BinToHexLower(@bits, SizeOf(bits)); // 24 hexa chars
 end;
 
 function TSynUniqueIdentifierGenerator.FromObfuscated(
   const aObfuscated: TSynUniqueIdentifierObfuscated;
   out aIdentifier: TSynUniqueIdentifier): boolean;
 var
-  bits: TSynUniqueIdentifierObfuscatedBits;
+  block: THash128Rec;
+  bits: TSynUniqueIdentifierObfuscatedBits absolute block;
   len: integer;
   key: cardinal;
 begin
@@ -1776,15 +1809,29 @@ begin
     len := Length(aObfuscated)
   else
     dec(len); // trim right '.jpg'
-  if (len <> SizeOf(bits) * 2) or
-     not mormot.core.text.HexToBin(pointer(aObfuscated), @bits, SizeOf(bits)) then
-    exit;
-  if self = nil then
-    key := 0
+  if (self <> nil) and
+     fCryptoAesD.Initialized then
+  begin
+    if (len <> SizeOf(block) * 2) or // 32 hexa chars
+       not mormot.core.text.HexToBin(pointer(aObfuscated), @block, SizeOf(block)) then
+      exit;
+    fCryptoAesD.Decrypt(block.b);
+    if block.c3 <> fCryptoCRC then
+      exit;
+    key := crc32ctab[0, bits.id.ProcessID and 1023] xor fCryptoCRC;
+  end
   else
   begin
-    bits.id.Value := bits.id.Value xor PInt64(@fCrypto[high(fCrypto) - 1])^;
-    key := crc32ctab[0, bits.id.ProcessID and 1023] xor fCryptoCRC;
+    if (len <> SizeOf(bits) * 2) or // 24 hexa chars
+       not mormot.core.text.HexToBin(pointer(aObfuscated), @bits, SizeOf(bits)) then
+      exit;
+    if self = nil then
+      key := 0
+    else
+    begin
+      bits.id.Value := bits.id.Value xor PInt64(@fCrypto[high(fCrypto) - 1])^;
+      key := crc32ctab[0, bits.id.ProcessID and 1023] xor fCryptoCRC;
+    end;
   end;
   if crc32c(bits.id.ProcessID, @bits.id, SizeOf(bits.id)) xor key = bits.crc then
   begin

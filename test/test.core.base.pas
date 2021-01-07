@@ -5521,44 +5521,51 @@ var
   gen: TSynUniqueIdentifierGenerator;
   i1, i2: TSynUniqueIdentifierBits;
   i3: TSynUniqueIdentifier;
+  newalgo: boolean;
   i: integer;
   json, obfusc: RawUtf8;
   timer: TPrecisionTimer;
 begin
-  gen := TSynUniqueIdentifierGenerator.Create(10, 'toto');
-  try
-    for i := 1 to 100000 do
-    begin
-      gen.ComputeNew(i1);
-      gen.ComputeNew(i2);
-      check(i1.ProcessID = 10);
-      check(i2.ProcessID = 10);
-      check(i1.CreateTimeUnix > JAN2015_UNIX);
-      check(i1.CreateTimeUnix <= i2.CreateTimeUnix);
-      check(i1.Value < i2.Value);
-      check(not i1.Equal(i2));
-      i2.From(i1.Value);
-      check(i1.Equal(i2));
-      json := VariantSaveJson(i1.AsVariant);
-      check(VariantSaveJson(i2.AsVariant) = json);
-      CheckEqual(json, FormatUtf8(
-        '{"Created":"%","Identifier":%,"Counter":%,"Value":%,"Hex":"%"}',
-        [DateTimeToIso8601Text(i1.CreateDateTime), i1.ProcessID, i1.Counter,
-         i1.Value, Int64ToHex(i1.Value)]), 'asvariant');
-      obfusc := gen.ToObfuscated(i1.Value);
-      check(gen.FromObfuscated(obfusc, i3));
-      check(i1.Value = i3);
-      check(Length(obfusc) = 24);
-      inc(obfusc[12]);
-      check(not gen.FromObfuscated(obfusc, i3));
-      dec(obfusc[12]);
+  for newalgo := false to true do
+  begin
+    gen := TSynUniqueIdentifierGenerator.Create(10, 'toto', newalgo);
+    try
+      for i := 1 to 50000 do
+      begin
+        gen.ComputeNew(i1);
+        gen.ComputeNew(i2);
+        check(i1.ProcessID = 10);
+        check(i2.ProcessID = 10);
+        check(i1.CreateTimeUnix > JAN2015_UNIX);
+        check(i1.CreateTimeUnix <= i2.CreateTimeUnix);
+        check(i1.Value < i2.Value);
+        check(not i1.Equal(i2));
+        i2.From(i1.Value);
+        check(i1.Equal(i2));
+        json := VariantSaveJson(i1.AsVariant);
+        check(VariantSaveJson(i2.AsVariant) = json);
+        CheckEqual(json, FormatUtf8(
+          '{"Created":"%","Identifier":%,"Counter":%,"Value":%,"Hex":"%"}',
+          [DateTimeToIso8601Text(i1.CreateDateTime), i1.ProcessID, i1.Counter,
+           i1.Value, Int64ToHex(i1.Value)]), 'asvariant');
+        obfusc := gen.ToObfuscated(i1.Value);
+        check(gen.FromObfuscated(obfusc, i3));
+        check(i1.Value = i3);
+        if newalgo then
+          check(Length(obfusc) = 32)
+        else
+          check(Length(obfusc) = 24);
+        inc(obfusc[12]);
+        check(not gen.FromObfuscated(obfusc, i3), 'tampered text');
+        dec(obfusc[12]);
+      end;
+      //writeln('LastUnixCreateTime=', gen.LastUnixCreateTime);
+      //writeln('UnixTimeUtc=', UnixTimeUtc);
+    finally
+      gen.Free;
     end;
-    //writeln('LastUnixCreateTime=', gen.LastUnixCreateTime);
-    //writeln('UnixTimeUtc=', UnixTimeUtc);
-  finally
-    gen.Free;
   end;
-  gen := TSynUniqueIdentifierGenerator.Create(10, 'toto');
+  gen := TSynUniqueIdentifierGenerator.Create(10, 'toto', true);
   try
     i3 := 0;
     check(gen.FromObfuscated(obfusc, i3), 'SharedObfuscationKey');

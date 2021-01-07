@@ -232,7 +232,7 @@ type
   public
     /// Initialize AES contexts for cypher
     // - first method to call before using this object for encryption
-    // - KeySize is in bits, i.e. 128,192,256
+    // - KeySize is in bits, i.e. 128, 192 or 256
     function EncryptInit(const Key; KeySize: cardinal): boolean;
     /// encrypt an AES data block into another data block
     procedure Encrypt(const BI: TAesBlock; var BO: TAesBlock); overload;
@@ -241,7 +241,7 @@ type
 
     /// Initialize AES contexts for uncypher
     // - first method to call before using this object for decryption
-    // - KeySize is in bits, i.e. 128,192,256
+    // - KeySize is in bits, i.e. 128, 192 or 256
     function DecryptInit(const Key; KeySize: cardinal): boolean;
     /// Initialize AES contexts for uncypher, from another TAes.EncryptInit
     function DecryptInitFrom(const Encryption: TAes;
