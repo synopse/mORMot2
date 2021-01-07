@@ -114,7 +114,7 @@ type
     /// where the mustache template files are stored
     // - if not set, will search in a 'Views' folder under the current executable
     Folder: TFileName;
-    /// the file extensions to search in the given Folder, specified as Csv
+    /// the file extensions to search in the given Folder, specified as CSV
     // - if not set, will search for 'html,json,css'
     CsvExtensions: TFileName;
     /// defines if the view files should be checked for modification

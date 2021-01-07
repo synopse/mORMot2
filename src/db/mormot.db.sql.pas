@@ -2302,8 +2302,8 @@ type
     // - warning: TRestStorageExternal.EngineRetrieve in mormot.orm.sql unit
     // expects the Expanded=true format to return '[{...}]'#10
     function FetchAllToJson(Json: TStream; Expanded: boolean): PtrInt;
-    // Append all rows content as a Csv stream
-    // - Csv data is added to the supplied TStream, with UTF-8 encoding
+    // Append all rows content as a CSV stream
+    // - CSV data is added to the supplied TStream, with UTF-8 encoding
     // - if Tab=TRUE, will use TAB instead of ',' between columns
     // - you can customize the ',' separator - use e.g. the global ListSeparator
     // variable (from SysUtils) to reflect the current system definition (some
@@ -3455,7 +3455,7 @@ var
 class function TSqlDBConnectionProperties.IsSqlKeyword(aDB: TSqlDBDefinition;
   aWord: RawUtf8): boolean;
 const
-  /// Csv of the known reserved keywords per database engine, in alphabetic order
+  /// CSV of the known reserved keywords per database engine, in alphabetic order
   DB_KEYWORDS_Csv: array[TSqlDBDefinition] of PUtf8Char = (
     '',  // dUnknown
     // dDefault = ODBC / SQL-92 keywords (always checked first)
@@ -5795,7 +5795,7 @@ begin
   try
     if AddBOM then
       W.AddShorter(#$ef#$bb#$bf); // add UTF-8 byte Order Mark
-    // add Csv header
+    // add CSV header
     for F := 0 to FMax do
     begin
       if not Tab then
@@ -5808,7 +5808,7 @@ begin
     end;
     W.CancelLastChar;
     W.AddCR;
-    // add Csv rows
+    // add CSV rows
     {$ifdef SYNDB_SILENCE}
     fSqlLogTimer.Resume;
     {$endif}

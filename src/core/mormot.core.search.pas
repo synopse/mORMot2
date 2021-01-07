@@ -178,7 +178,7 @@ type
   end;
 
   /// stores an array of GLOB search engines
-  // - use SetMatchs() to initialize such an array from a Csv pattern text
+  // - use SetMatchs() to initialize such an array from a CSV pattern text
   TMatchDynArray = array of TMatch;
 
   /// TMatch descendant owning a copy of the Pattern string to avoid GPF issues
@@ -207,7 +207,7 @@ type
     procedure Subscribe(const aPatterns: TRawUtf8DynArray;
       CaseInsensitive: boolean); overload; virtual;
     /// add once some glob patterns to the internal TMach list
-    // - each Csv item in aPatterns follows the IsMatch() syntax
+    // - each CSV item in aPatterns follows the IsMatch() syntax
     procedure Subscribe(const aPatternsCsv: RawUtf8;
       CaseInsensitive: boolean); overload;
     /// search patterns in the supplied UTF-8 text
@@ -226,14 +226,14 @@ type
   end;
 
 
-/// fill the Match[] dynamic array with all glob patterns supplied as Csv
+/// fill the Match[] dynamic array with all glob patterns supplied as CSV
 // - returns how many patterns have been set in Match[|]
 // - note that the CsvPattern instance should remain in memory, since it will
 // be pointed to by the Match[].Pattern private field
 function SetMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
   out Match: TMatchDynArray): integer; overload;
 
-/// fill the Match[0..MatchMax] static array with all glob patterns supplied as Csv
+/// fill the Match[0..MatchMax] static array with all glob patterns supplied as CSV
 // - note that the CsvPattern instance should remain in memory, since it will
 // be pointed to by the Match[].Pattern private field
 function SetMatchs(CsvPattern: PUtf8Char; CaseInsensitive: boolean;
@@ -248,12 +248,12 @@ function MatchAdd(const One: TMatch; var Several: TMatchDynArray): boolean;
 /// returns TRUE if Match=nil or if any Match[].Match(Text) is TRUE
 function MatchAny(const Match: TMatchDynArray; const Text: RawUtf8): boolean;
 
-/// apply the Csv-supplied glob patterns to an array of RawUtf8
+/// apply the CSV-supplied glob patterns to an array of RawUtf8
 // - any text not maching the pattern will be deleted from the array
 procedure FilterMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
   var Values: TRawUtf8DynArray); overload;
 
-/// apply the Csv-supplied glob patterns to an array of string
+/// apply the CSV-supplied glob patterns to an array of string
 // - any text not maching the pattern will be deleted from the array
 procedure FilterMatchs(const CsvPattern: RawUtf8; CaseInsensitive: boolean;
   var Values: TStringDynArray); overload;
@@ -919,7 +919,7 @@ type
   /// IP address validation to be applied to a Record field content
   // (typicaly a TOrm)
   // - optional JSON encoded parameters are "AllowedTLD" or "ForbiddenTLD",
-  // expecting a Csv lis of Top-Level-Domain (TLD) names, e.g.
+  // expecting a CSV lis of Top-Level-Domain (TLD) names, e.g.
   // $ '{"AllowedTLD":"com,org,net","ForbiddenTLD":"fr"}'
   // $ '{AnyTLD:true,ForbiddenDomains:"mailinator.com,yopmail.com"}'
   // - this will process a validation according to RFC 822 (calling the
@@ -947,17 +947,17 @@ type
     // - the only restriction is that it should be ascii characters
     property AnyTLD: boolean
       read fAnyTLD write fAnyTLD;
-    /// a Csv list of allowed TLD
+    /// a CSV list of allowed TLD
     // - if accessed directly, should be set as lower case values
     // - e.g. 'com,org,net'
     property AllowedTLD: RawUtf8
       read fAllowedTLD write fAllowedTLD;
-    /// a Csv list of forbidden TLD
+    /// a CSV list of forbidden TLD
     // - if accessed directly, should be set as lower case values
     // - e.g. 'fr'
     property ForbiddenTLD: RawUtf8
       read fForbiddenTLD write fForbiddenTLD;
-    /// a Csv list of forbidden domain names
+    /// a CSV list of forbidden domain names
     // - if accessed directly, should be set as lower case values
     // - not only the TLD, but whole domains like 'cracks.ru,hotmail.com' or such
     property ForbiddenDomains: RawUtf8

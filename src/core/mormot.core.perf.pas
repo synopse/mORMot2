@@ -1059,7 +1059,7 @@ type
   end;
 
 
-/// convert Intel CPU features as plain Csv text
+/// convert Intel CPU features as plain CSV text
 function ToText(const aIntelCPUFeatures: TIntelCpuFeatures;
   const Sep: RawUtf8 = ','): RawUtf8; overload;
 

@@ -896,7 +896,7 @@ type
     /// prepare a connection to a MongoDB server or Replica Set
     // - this constructor won't create the connection until the Open method
     // is called
-    // - you can specify multiple hosts, as Csv values, if necessary
+    // - you can specify multiple hosts, as CSV values, if necessary
     // - depending on the platform, you may request for a TLS secured connection
     constructor Create(const Host: RawUtf8; Port: integer = MONGODB_DEFAULTPORT;
       aTLS: boolean = false; const SecondaryHostCsv: RawUtf8 = ''; const
@@ -1123,7 +1123,7 @@ type
     // ! FindDoc(BsonVariant('{name:"John",age:{$gt:21}}'),null);
     // ! FindDoc(BsonVariant('{name:?,age:{$gt:?}}',[],['John',21]),null);
     // see http://docs.mongodb.org/manual/reference/operator for reference
-    // - Projection can be null (to retrieve all fields) or a Csv string to set
+    // - Projection can be null (to retrieve all fields) or a CSV string to set
     // field names to retrieve, or a TDocVariant or TBsonVariant - e.g.:
     // ! FindDoc(BsonVariant(['name','John']),null);
     // ! FindDoc(BsonVariant(['name','John']),'_id,name');
@@ -1171,7 +1171,7 @@ type
       ReturnNewObjectIfNotFound: boolean = false): variant; overload;
     /// returns a dynamic array of TDocVariant instance containing
     // all documents of a collection
-    // - Projection can be null (to retrieve all fields) or a Csv string to set
+    // - Projection can be null (to retrieve all fields) or a CSV string to set
     // field names to retrieve, or a TDocVariant or TBsonVariant with
     // projection operators
     procedure FindDocs(var result: TVariantDynArray; const Projection: variant;
@@ -1181,7 +1181,7 @@ type
     // TDocVariant instance containing the selected documents
     // - you can e.g. fill a res: TVariantDynArray with the following query:
     // ! FindDocs('{name:?,age:{$gt:?}}',['John',21],res,null);
-    // - Projection can be null (to retrieve all fields) or a Csv string to set
+    // - Projection can be null (to retrieve all fields) or a CSV string to set
     // field names to retrieve, or a TDocVariant or TBsonVariant with
     // projection operators
     procedure FindDocs(const Criteria: RawUtf8; const Params: array of const;
@@ -1193,7 +1193,7 @@ type
     // - could be used to fill a VCL grid using a TDocVariantArrayDataSet
     // as defined in SynVirtualDataSet.pas:
     // ! ds1.DataSet := ToDataSet(self,FindDocs('{name:?,age:{$gt:?}}',['John',21],null));
-    // - Projection can be null (to retrieve all fields) or a Csv string to set
+    // - Projection can be null (to retrieve all fields) or a CSV string to set
     // field names to retrieve, or a TDocVariant or TBsonVariant with
     // projection operators
     function FindDocs(const Criteria: RawUtf8;
@@ -1208,7 +1208,7 @@ type
     // ! FindJson(BsonVariant('{name:"John",age:{$gt:21}}'),null);
     // ! FindJson(BsonVariant('{name:?,age:{$gt:?}}',[],['John',21]),null);
     // see http://docs.mongodb.org/manual/reference/operator for reference
-    // - Projection can be null (to retrieve all fields) or a Csv string to set
+    // - Projection can be null (to retrieve all fields) or a CSV string to set
     // the field names to retrieve, or a TDocVariant or TBsonVariant - e.g.:
     // ! FindJson(BsonVariant(['name','John']),null);
     // ! FindJson(BsonVariant(['name','John']),'_id');
@@ -1256,7 +1256,7 @@ type
     // TBsonVariant query selector:
     // ! FindBson(BsonVariant('{name:"John",age:{$gt:21}}'),null);
     // ! FindBson(BsonVariant('{name:?,age:{$gt:?}}',[],['John',21]),null);
-    // - Projection can be null (to retrieve all fields) or a Csv string to set
+    // - Projection can be null (to retrieve all fields) or a CSV string to set
     // the field names to retrieve, or a TDocVariant or TBsonVariant - e.g.:
     // ! FindBson(BsonVariant(['name','John']),null);
     // ! FindBson(BsonVariant(['name','John']),'_id');

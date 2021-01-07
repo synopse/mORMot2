@@ -719,11 +719,12 @@ function TWebSocketServerSocket.GetRequest(withBody: boolean;
   headerMaxTix: Int64): THttpServerSocketGetRequestResult;
 begin
   result := inherited GetRequest(withBody, headerMaxTix);
-  if (result = grHeaderReceived) and
+{  if (result = grHeaderReceived) and
      (hfConnectionUpgrade in HeaderFlags) and
-    KeepAliveClient and IdemPropNameU(Method, 'GET') and
-    IdemPropNameU(Upgrade, 'websocket') then
-    //writeln('!!');
+     KeepAliveClient and
+     IdemPropNameU(Method, 'GET') and
+     IdemPropNameU(Upgrade, 'websocket') then
+    result := grOwned; }
 end;
 
 

@@ -431,7 +431,7 @@ type
     // writing if aLogRest is nil
     // - will write to a (inherited) TOrmServiceLog table, as available in
     // TRest's model, unless a dedicated table is specified as aLogClass
-    // - you could specify a Csv list of method names to be excluded from logging
+    // - you could specify a CSV list of method names to be excluded from logging
     // (containing e.g. a password or a credit card number), containing either
     // the interface name (as 'ICalculator.Add'), or not (as 'Add')
     procedure SetServiceLog(const aLogRest: IRestOrm;

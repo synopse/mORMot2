@@ -388,7 +388,7 @@ type
     /// at Client Side, compute URI and BODY according to the routing scheme
     // - abstract implementation which is to be overridden
     // - as input, method should be the method name to be executed,
-    // params should contain the incoming parameters as JSON Csv (without []),
+    // params should contain the incoming parameters as JSON CSV (without []),
     // and clientDriven ID should contain the optional Client ID value
     // - at output, should update the HTTP uri corresponding to the proper
     // routing, and should return the corresponding HTTP body within sent

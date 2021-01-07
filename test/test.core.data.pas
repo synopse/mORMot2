@@ -4028,7 +4028,7 @@ var
   begin
     Stmt.Free;
     Stmt := TSelectStatement.Create(SQL,
-      Props.Fields.IndexByName, Props.SimpleFieldsBits[ooSelect]);
+      Props.Fields.IndexByName, Props.SimpleFieldSelect);
     Check(Stmt.SqlStatement = SQL, 'Statement should be valid');
   end;
 

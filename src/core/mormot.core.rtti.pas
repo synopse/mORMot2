@@ -409,11 +409,11 @@ type
     // - names could be optionally trimmed left from their initial lower chars
     procedure GetEnumNameAll(var result: TRawUtf8DynArray;
       TrimLeftLowerCase: boolean); overload;
-    /// retrieve all element names as Csv, with optional quotes
+    /// retrieve all element names as CSV, with optional quotes
     procedure GetEnumNameAll(out result: RawUtf8; const Prefix: RawUtf8 = '';
       quotedValues: boolean = false; const Suffix: RawUtf8 = '';
       trimedValues: boolean = false; unCamelCased: boolean = false); overload;
-    /// retrieve all trimed element names as Csv
+    /// retrieve all trimed element names as CSV
     procedure GetEnumNameTrimedAll(var result: RawUtf8; const Prefix: RawUtf8 = '';
       quotedValues: boolean = false; const Suffix: RawUtf8 = '');
     /// get all enumeration names as a JSON array of strings
@@ -1342,10 +1342,10 @@ function GetEnumNameValue(aTypeInfo: PRttiInfo; const aValue: RawUtf8;
 /// store an enumeration value from its ordinal representation
 procedure SetEnumFromOrdinal(aTypeInfo: PRttiInfo; out Value; Ordinal: PtrUInt);
 
-/// helper to retrieve the Csv text of all enumerate items defined in a set
+/// helper to retrieve the CSV text of all enumerate items defined in a set
 function GetSetName(aTypeInfo: PRttiInfo; const value): RawUtf8;
 
-/// helper to retrieve the Csv text of all enumerate items defined in a set
+/// helper to retrieve the CSV text of all enumerate items defined in a set
 procedure GetSetNameShort(aTypeInfo: PRttiInfo; const value; out result: ShortString;
   trimlowercase: boolean = false);
 

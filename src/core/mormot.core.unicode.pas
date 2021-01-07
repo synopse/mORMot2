@@ -1086,7 +1086,8 @@ function IdemFileExt(p: PUtf8Char; extup: PAnsiChar; sepChar: AnsiChar = '.'): b
 // - ignore case - extup[] must be already Upper
 // - chars are compared as WinAnsi (codepage 1252), not as UTF-8
 // - could be used e.g. like IdemFileExts(aFileName,['.PAS','.INC']);
-function IdemFileExts(p: PUtf8Char; const extup: array of PAnsiChar; sepChar: AnsiChar = '.'): integer;
+function IdemFileExts(p: PUtf8Char; const extup: array of PAnsiChar;
+  sepChar: AnsiChar = '.'): integer;
 
 /// fast retrieve the position of a given character
 function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char;

@@ -2577,7 +2577,7 @@ type
     /// allow Cross-origin resource sharing (CORS) access
     // - set this property to '*' if you want to be able to access the
     // REST methods from an HTML5 application hosted in another location,
-    // or define a Csv white list of TMatch-compatible origins
+    // or define a CSV white list of TMatch-compatible origins
     // - will set e.g. the following HTTP header:
     // ! Access-Control-Allow-Origin: *
     property EnableCors: RawUtf8
@@ -3393,7 +3393,7 @@ var
   SqlSelect, SqlWhere, SqlWhereCount, SqlSort, SqlDir, Sql: RawUtf8;
   SqlStartIndex, SqlResults, SqlTotalRowsCount: integer;
   NonStandardSqlSelectParameter, NonStandardSqlWhereParameter: boolean;
-  SqlisSelect: boolean;
+  SqlIsSelect: boolean;
   ResultList: TOrmTable;
   TableIndexes: TIntegerDynArray;
   rec: TOrm;
@@ -3424,12 +3424,12 @@ begin
               Sql := Call.InBody;
             if Sql <> '' then
             begin
-              SqlisSelect := isSelect(pointer(Sql), @SqlSelect);
-              if SqlisSelect or
+              SqlIsSelect := IsSelect(pointer(Sql), @SqlSelect);
+              if SqlIsSelect or
                  (reSql in Call.RestAccessRights^.AllowRemoteExecute) then
               begin
                 StaticOrm := nil;
-                if SqlisSelect then
+                if SqlIsSelect then
                 begin
                   TableIndexes := Server.fModel.GetTableIndexesFromSqlSelect(Sql);
                   if TableIndexes = nil then
@@ -3477,7 +3477,7 @@ begin
                       ConvertOutBodyAsPlainJson(SqlSelect, opt);
                   end;
                   Call.OutStatus := HTTP_SUCCESS;  // 200 OK
-                  if not SqlisSelect then
+                  if not SqlIsSelect then
                    // needed for fStats.NotifyOrm(Method) below
                     Method := TUriMethod(IdemPCharArray(SqlBegin(pointer(Sql)),
                       ['INSERT', 'UPDATE', 'DELETE']) + 2); // -1+2 -> mGET=1

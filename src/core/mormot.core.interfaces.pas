@@ -30,6 +30,7 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.buffers,
   mormot.core.variants,
   mormot.core.data,
   mormot.core.rtti,
@@ -1332,7 +1333,7 @@ type
     /// the method called
     // - a pointer to the existing information in shared TInterfaceFactory
     Method: PInterfaceMethod;
-    /// the parameters at execution call, as JSON Csv (i.e. array without [ ])
+    /// the parameters at execution call, as JSON CSV (i.e. array without [ ])
     Params: RawUtf8;
     /// any non default result returned after execution
     // - if not set (i.e. if equals ''), Method^.DefaultResult has been returned
@@ -2224,12 +2225,20 @@ var
   tmp: shortstring;
   ctxt: TJsonParserContext;
 begin
-  // use direct TRttiJson unserialization
   ctxt.Init(R, ArgRtti, JSONPARSER_SERVICE, @DVO, nil);
-  TRttiJsonLoad(ArgRtti.JsonLoad)(V, ctxt);
+  if ArgRtti.JsonLoad = nil then
+    // fallback to raw record RTTI binary unserialization with Base64 encoding
+    ctxt.Valid := ctxt.ParseNext and
+              (ctxt.Value <> nil) and
+              (PCardinal(ctxt.Value)^ and $ffffff = JSON_BASE64_MAGIC_C) and
+              BinaryLoadBase64(pointer(ctxt.Value + 3), ctxt.ValueLen - 3,
+                V, ctxt.Info.Info, {uri=}false, rkRecordTypes)
+  else
+    // use direct TRttiJson unserialization
+    TRttiJsonLoad(ArgRtti.JsonLoad)(V, ctxt);
   if not ctxt.Valid then
   begin
-    FormatShort('I% failed parsing %:% from JSON',
+    FormatShort('I% failed parsing %:% from input JSON',
       [MethodName, ParamName^, ArgTypeName^], tmp);
     if Error = nil then
       raise EInterfaceFactory.CreateUtf8('%', [tmp]);
@@ -2255,8 +2264,8 @@ begin
     TRttiJsonSave(ArgRtti.JsonSave)(V, ctxt);
   end
   else
-    // fallback to raw RTTI binary serialization with Base64 encoding
-    BinarySaveBase64(V, ArgRtti.Info, false, rkAllTypes);
+    // fallback to raw record RTTI binary serialization with Base64 encoding
+    BinarySaveBase64(V, ArgRtti.Info, false, rkRecordTypes);
 end;
 
 procedure TInterfaceMethodArgument.AsJson(var DestValue: RawUtf8; V: pointer);

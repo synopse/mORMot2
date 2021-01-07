@@ -378,7 +378,7 @@ type
     /// enable cross-origin resource sharing (CORS) for proper AJAX process
     // - see @https://developer.mozilla.org/en-US/docs/HTTP/Access_control_CORS
     // - can be set e.g. to '*' to allow requests from any site/domain; or
-    // specify an Csv white-list of URI to be allowed as origin e.g. as
+    // specify an CSV white-list of URI to be allowed as origin e.g. as
     // 'https://foo.example1,https://foo.example2' or 'https://*.foo.example' or
     // (faster) '*.foo.example1,*.foo.example2' following the TMatch syntax
     // - see also AccessControlAllowCredential property

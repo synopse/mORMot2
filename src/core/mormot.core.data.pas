@@ -910,8 +910,9 @@ procedure BinarySave(Data: pointer; var Dest: TSynTempBuffer;
   Info: PRttiInfo; Kinds: TRttiKinds); overload;
 
 /// binary persistence of any value using RTTI, into a Base64-encoded text
-// - contains a trailing crc32c hash before the actual data - so is not
-// the WrBase64() regular format - unless NoCrc32Trailer is set to true
+// - contains a trailing crc32c hash before the actual data, as with mORMot 1.18
+// RecordSaveBase64() - so is not the WrBase64() regular format, unless
+// NoCrc32Trailer is set to true
 function BinarySaveBase64(Data: pointer; Info: PRttiInfo; UriCompatible: boolean;
   Kinds: TRttiKinds; NoCrc32Trailer: boolean = false): RawUtf8;
 
@@ -5838,6 +5839,7 @@ begin
         P := pointer(tmp);
       end;
       if not NoCrc32Trailer then
+        // as mORMot 1.18 RecordSaveBase64()
         PCardinal(P)^ := crc32c(0, P + 4, len - 4);
       if UriCompatible then
         result := BinToBase64uri(P, len)

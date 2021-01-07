@@ -9,7 +9,7 @@ unit mormot.core.text;
    Text Processing functions shared by all framework units
     - UTF-8 String Manipulation Functions
     - TRawUtf8DynArray Processing Functions
-    - Csv-like Iterations over Text Buffers
+    - CSV-like Iterations over Text Buffers
     - TBaseWriter parent class for Text Generation
     - Numbers (integers or floats) and Variants to Text Conversion
     - Hexadecimal Text And Binary Conversion
@@ -342,7 +342,7 @@ procedure GetCaptionFromPCharLen(P: PUtf8Char; out result: string);
 
 
 
-{ ************ Csv-like Iterations over Text Buffers }
+{ ************ CSV-like Iterations over Text Buffers }
 
 /// return true if IdemPChar(source,searchUp) matches, and retrieve the value item
 // - typical use may be:
@@ -351,20 +351,20 @@ procedure GetCaptionFromPCharLen(P: PUtf8Char; out result: string);
 function IdemPCharAndGetNextItem(var source: PUtf8Char; const searchUp: RawUtf8;
   var Item: RawUtf8; Sep: AnsiChar = #13): boolean;
 
-/// return next Csv string from P
+/// return next CSV string from P
 // - P=nil after call when end of text is reached
 function GetNextItem(var P: PUtf8Char; Sep: AnsiChar = ','): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// return next Csv string from P
+/// return next CSV string from P
 // - P=nil after call when end of text is reached
 procedure GetNextItem(var P: PUtf8Char; Sep: AnsiChar; var result: RawUtf8); overload;
 
-/// return next Csv string (unquoted if needed) from P
+/// return next CSV string (unquoted if needed) from P
 // - P=nil after call when end of text is reached
 procedure GetNextItem(var P: PUtf8Char; Sep, Quote: AnsiChar; var result: RawUtf8); overload;
 
-/// return trimmed next Csv string from P
+/// return trimmed next CSV string from P
 // - P=nil after call when end of text is reached
 procedure GetNextItemTrimed(var P: PUtf8Char; Sep: AnsiChar; var result: RawUtf8);
 
@@ -374,7 +374,7 @@ procedure GetNextItemTrimed(var P: PUtf8Char; Sep: AnsiChar; var result: RawUtf8
 // - P=nil after call when end of text is reached
 procedure GetNextItemTrimedCRLF(var P: PUtf8Char; var result: RawUtf8);
 
-/// return next Csv string from P, nil if no more
+/// return next CSV string from P, nil if no more
 // - this function returns the generic string type of the compiler, and
 // therefore can be used with ready to be displayed text (e.g. for the VCL)
 function GetNextItemString(var P: PChar; Sep: Char = ','): string;
@@ -387,33 +387,33 @@ function GetNextItemString(var P: PChar; Sep: Char = ','): string;
 // - extension match is case-insensitive
 function GetFileNameExtIndex(const FileName, CsvExt: TFileName): integer;
 
-/// return next Csv string from P, nil if no more
+/// return next CSV string from P, nil if no more
 // - output text would be trimmed from any left or right space
 procedure GetNextItemShortString(var P: PUtf8Char; out Dest: ShortString; Sep: AnsiChar = ',');
 
 /// append some text lines with the supplied Values[]
 // - if any Values[] item is '', no line is added
-// - otherwise, appends 'Caption: Value', with Caption taken from Csv
+// - otherwise, appends 'Caption: Value', with Caption taken from CSV
 procedure AppendCsvValues(const Csv: string; const Values: array of string;
   var Result: string; const AppendBefore: string = #13#10);
 
-/// return a Csv list of the iterated same value
+/// return a CSV list of the iterated same value
 // - e.g. CsvOfValue('?',3)='?,?,?'
 function CsvOfValue(const Value: RawUtf8; Count: cardinal; const Sep: RawUtf8 = ','): RawUtf8;
 
- /// retrieve the next Csv separated bit index
-// - each bit was stored as BitIndex+1, i.e. 0 to mark end of Csv chunk
+ /// retrieve the next CSV separated bit index
+// - each bit was stored as BitIndex+1, i.e. 0 to mark end of CSV chunk
 // - several bits set to one can be regrouped via 'first-last,' syntax
 procedure SetBitCsv(var Bits; BitsCount: integer; var P: PUtf8Char);
 
-/// convert a set of bit into a Csv content
+/// convert a set of bit into a CSV content
 // - each bit is stored as BitIndex+1, and separated by a ','
 // - several bits set to one can be regrouped via 'first-last,' syntax
-// - ',0' is always appended at the end of the Csv chunk to mark its end
+// - ',0' is always appended at the end of the CSV chunk to mark its end
 function GetBitCsv(const Bits; BitsCount: integer): RawUtf8;
 
-/// decode next Csv hexadecimal string from P, nil if no more or not matching BinBytes
-// - Bin is filled with 0 if the supplied Csv content is invalid
+/// decode next CSV hexadecimal string from P, nil if no more or not matching BinBytes
+// - Bin is filled with 0 if the supplied CSV content is invalid
 // - if Sep is #0, it will read the hexadecimal chars until a whitespace is reached
 function GetNextItemHexDisplayToBin(var P: PUtf8Char; Bin: PByte; BinBytes: integer;
   Sep: AnsiChar = ','): boolean;
@@ -423,28 +423,28 @@ type
   // - as used by GetNextTChar64
   TChar64 = array[0..63] of AnsiChar;
 
-/// return next Csv string from P as a #0-ended buffer, false if no more
+/// return next CSV string from P as a #0-ended buffer, false if no more
 // - if Sep is #0, will copy all characters until next whitespace char
 // - returns the number of bytes stored into Buf[]
 function GetNextTChar64(var P: PUtf8Char; Sep: AnsiChar; out Buf: TChar64): PtrInt;
 
-/// return next Csv string as unsigned integer from P, 0 if no more
+/// return next CSV string as unsigned integer from P, 0 if no more
 // - if Sep is #0, it won't be searched for
 function GetNextItemCardinal(var P: PUtf8Char; Sep: AnsiChar = ','): PtrUInt;
 
-/// return next Csv string as signed integer from P, 0 if no more
+/// return next CSV string as signed integer from P, 0 if no more
 // - if Sep is #0, it won't be searched for
 function GetNextItemInteger(var P: PUtf8Char; Sep: AnsiChar = ','): PtrInt;
 
-/// return next Csv string as 64-bit signed integer from P, 0 if no more
+/// return next CSV string as 64-bit signed integer from P, 0 if no more
 // - if Sep is #0, it won't be searched for
 function GetNextItemInt64(var P: PUtf8Char; Sep: AnsiChar = ','): Int64;
 
-/// return next Csv string as 64-bit unsigned integer from P, 0 if no more
+/// return next CSV string as 64-bit unsigned integer from P, 0 if no more
 // - if Sep is #0, it won't be searched for
 function GetNextItemQWord(var P: PUtf8Char; Sep: AnsiChar = ','): QWord;
 
-/// return next Csv hexadecimal string as 64-bit unsigned integer from P
+/// return next CSV hexadecimal string as 64-bit unsigned integer from P
 // - returns 0 if no valid hexadecimal text is available in P
 // - if Sep is #0, it won't be searched for
 // - will first fill the 64-bit value with 0, then decode each two hexadecimal
@@ -452,111 +452,111 @@ function GetNextItemQWord(var P: PUtf8Char; Sep: AnsiChar = ','): QWord;
 // - could be used to decode TBaseWriter.AddBinToHexDisplayMinChars() output
 function GetNextItemHexa(var P: PUtf8Char; Sep: AnsiChar = ','): QWord;
 
-/// return next Csv string as unsigned integer from P, 0 if no more
+/// return next CSV string as unsigned integer from P, 0 if no more
 // - P^ will point to the first non digit character (the item separator, e.g.
-// ',' for Csv)
+// ',' for CSV)
 function GetNextItemCardinalStrict(var P: PUtf8Char): PtrUInt;
 
-/// return next Csv string as unsigned integer from P, 0 if no more
+/// return next CSV string as unsigned integer from P, 0 if no more
 // - this version expects P^ to point to an Unicode char array
 function GetNextItemCardinalW(var P: PWideChar; Sep: WideChar = ','): PtrUInt;
 
-/// return next Csv string as double from P, 0.0 if no more
+/// return next CSV string as double from P, 0.0 if no more
 // - if Sep is #0, will return all characters until next whitespace char
 function GetNextItemDouble(var P: PUtf8Char; Sep: AnsiChar = ','): double;
 
-/// return next Csv string as currency from P, 0.0 if no more
+/// return next CSV string as currency from P, 0.0 if no more
 // - if Sep is #0, will return all characters until next whitespace char
 function GetNextItemCurrency(var P: PUtf8Char; Sep: AnsiChar = ','): currency; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// return next Csv string as currency from P, 0.0 if no more
+/// return next CSV string as currency from P, 0.0 if no more
 // - if Sep is #0, will return all characters until next whitespace char
 procedure GetNextItemCurrency(var P: PUtf8Char; out result: currency;
   Sep: AnsiChar = ','); overload;
 
-/// return n-th indexed Csv string in P, starting at Index=0 for first one
+/// return n-th indexed CSV string in P, starting at Index=0 for first one
 function GetCsvItem(P: PUtf8Char; Index: PtrUInt; Sep: AnsiChar = ','): RawUtf8; overload;
 
-/// return n-th indexed Csv string (unquoted if needed) in P, starting at Index=0 for first one
+/// return n-th indexed CSV string (unquoted if needed) in P, starting at Index=0 for first one
 function GetUnQuoteCsvItem(P: PUtf8Char; Index: PtrUInt; Sep: AnsiChar = ',';
   Quote: AnsiChar = ''''): RawUtf8; overload;
 
-/// return n-th indexed Csv string in P, starting at Index=0 for first one
+/// return n-th indexed CSV string in P, starting at Index=0 for first one
 // - this function return the generic string type of the compiler, and
 // therefore can be used with ready to be displayed text (i.e. the VCL)
 function GetCsvItemString(P: PChar; Index: PtrUInt; Sep: Char = ','): string;
 
-/// return last Csv string in the supplied UTF-8 content
+/// return last CSV string in the supplied UTF-8 content
 function GetLastCsvItem(const Csv: RawUtf8; Sep: AnsiChar = ','): RawUtf8;
 
-/// return the index of a Value in a Csv string
+/// return the index of a Value in a CSV string
 // - start at Index=0 for first one
-// - return -1 if specified Value was not found in Csv items
+// - return -1 if specified Value was not found in CSV items
 function FindCsvIndex(Csv: PUtf8Char; const Value: RawUtf8; Sep: AnsiChar = ',';
   CaseSensitive: boolean = true; TrimValue: boolean = false): integer;
 
-/// add the strings in the specified Csv text into a dynamic array of UTF-8 strings
+/// add the strings in the specified CSV text into a dynamic array of UTF-8 strings
 procedure CsvToRawUtf8DynArray(Csv: PUtf8Char; var Result: TRawUtf8DynArray;
   Sep: AnsiChar = ','; TrimItems: boolean = false; AddVoidItems: boolean = false); overload;
 
-/// add the strings in the specified Csv text into a dynamic array of UTF-8 strings
+/// add the strings in the specified CSV text into a dynamic array of UTF-8 strings
 procedure CsvToRawUtf8DynArray(const Csv, Sep, SepEnd: RawUtf8;
   var Result: TRawUtf8DynArray); overload;
 
-/// return the corresponding Csv text from a dynamic array of UTF-8 strings
+/// return the corresponding CSV text from a dynamic array of UTF-8 strings
 function RawUtf8ArrayToCsv(const Values: array of RawUtf8;
   const Sep: RawUtf8 = ','): RawUtf8;
 
-/// return the corresponding Csv quoted text from a dynamic array of UTF-8 strings
+/// return the corresponding CSV quoted text from a dynamic array of UTF-8 strings
 // - apply QuoteStr() function to each Values[] item
 function RawUtf8ArrayToQuotedCsv(const Values: array of RawUtf8;
   const Sep: RawUtf8 = ','; Quote: AnsiChar = ''''): RawUtf8;
 
-/// append some prefix to all Csv values
+/// append some prefix to all CSV values
 // ! AddPrefixToCsv('One,Two,Three','Pre')='PreOne,PreTwo,PreThree'
 function AddPrefixToCsv(Csv: PUtf8Char; const Prefix: RawUtf8;
   Sep: AnsiChar = ','): RawUtf8;
 
-/// append a Value to a Csv string
+/// append a Value to a CSV string
 procedure AddToCsv(const Value: RawUtf8; var Csv: RawUtf8; const Sep: RawUtf8 = ',');
   {$ifdef HASINLINE}inline;{$endif}
 
-/// change a Value within a Csv string
+/// change a Value within a CSV string
 function RenameInCsv(const OldValue, NewValue: RawUtf8; var Csv: RawUtf8;
   const Sep: RawUtf8 = ','): boolean;
 
-/// append the strings in the specified Csv text into a dynamic array of integer
+/// append the strings in the specified CSV text into a dynamic array of integer
 procedure CsvToIntegerDynArray(Csv: PUtf8Char; var Result: TIntegerDynArray;
   Sep: AnsiChar = ',');
 
-/// append the strings in the specified Csv text into a dynamic array of integer
+/// append the strings in the specified CSV text into a dynamic array of integer
 procedure CsvToInt64DynArray(Csv: PUtf8Char; var Result: TInt64DynArray;
   Sep: AnsiChar = ','); overload;
 
-/// convert the strings in the specified Csv text into a dynamic array of integer
+/// convert the strings in the specified CSV text into a dynamic array of integer
 function CsvToInt64DynArray(Csv: PUtf8Char; Sep: AnsiChar = ','): TInt64DynArray; overload;
 
-/// return the corresponding Csv text from a dynamic array of 32-bit integer
+/// return the corresponding CSV text from a dynamic array of 32-bit integer
 // - you can set some custom Prefix and Suffix text
 function IntegerDynArrayToCsv(Values: PIntegerArray; ValuesCount: integer;
   const Prefix: RawUtf8 = ''; const Suffix: RawUtf8 = '';
   InlinedValue: boolean = false): RawUtf8; overload;
 
-/// return the corresponding Csv text from a dynamic array of 32-bit integer
+/// return the corresponding CSV text from a dynamic array of 32-bit integer
 // - you can set some custom Prefix and Suffix text
 function IntegerDynArrayToCsv(const Values: TIntegerDynArray;
   const Prefix: RawUtf8 = ''; const Suffix: RawUtf8 = '';
   InlinedValue: boolean = false): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// return the corresponding Csv text from a dynamic array of 64-bit integers
+/// return the corresponding CSV text from a dynamic array of 64-bit integers
 // - you can set some custom Prefix and Suffix text
 function Int64DynArrayToCsv(Values: PInt64Array; ValuesCount: integer;
   const Prefix: RawUtf8 = ''; const Suffix: RawUtf8 = '';
   InlinedValue: boolean = false): RawUtf8; overload;
 
-/// return the corresponding Csv text from a dynamic array of 64-bit integers
+/// return the corresponding CSV text from a dynamic array of 64-bit integers
 // - you can set some custom Prefix and Suffix text
 function Int64DynArrayToCsv(const Values: TInt64DynArray;
   const Prefix: RawUtf8 = ''; const Suffix: RawUtf8 = '';
@@ -3599,7 +3599,7 @@ begin
 end;
 
 
-{ ************ Csv-like Iterations over Text Buffers }
+{ ************ CSV-like Iterations over Text Buffers }
 
 function IdemPCharAndGetNextItem(var source: PUtf8Char; const searchUp: RawUtf8;
   var Item: RawUtf8; Sep: AnsiChar): boolean;
@@ -3885,7 +3885,7 @@ begin
     until false;
   end;
   if Sep <> #0 then
-    while (P^ <> #0) and (P^ <> Sep) do // go to end of Csv item (ignore any decimal)
+    while (P^ <> #0) and (P^ <> Sep) do // go to end of CSV item (ignore any decimal)
       inc(P);
   if P^ = #0 then
     P := nil
@@ -4039,7 +4039,7 @@ begin
       inc(P);
     until false;
   end;
-  while (P^ <> #0) and (P^ <> Sep) do // go to end of Csv item (ignore any decimal)
+  while (P^ <> #0) and (P^ <> Sep) do // go to end of CSV item (ignore any decimal)
     inc(P);
   if P^ = #0 then
     P := nil

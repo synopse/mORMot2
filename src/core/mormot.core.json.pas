@@ -778,13 +778,13 @@ type
     // - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
     procedure AddDateTimeMS(const Value: TDateTime; Expanded: boolean = true;
       FirstTimeChar: AnsiChar = 'T'; const TZD: RawUtf8 = 'Z');
-    /// append an array of integers as Csv
+    /// append an array of integers as CSV
     procedure AddCsvInteger(const Integers: array of integer); overload;
-    /// append an array of doubles as Csv
+    /// append an array of doubles as CSV
     procedure AddCsvDouble(const Doubles: array of double); overload;
-    /// append an array of RawUtf8 as Csv of JSON strings
+    /// append an array of RawUtf8 as CSV of JSON strings
     procedure AddCsvUtf8(const Values: array of RawUtf8); overload;
-    /// append an array of const as Csv of JSON values
+    /// append an array of const as CSV of JSON values
     procedure AddCsvConst(const Values: array of const);
     /// append a quoted string as JSON, with in-place decoding
     // - if QuotedString does not start with ' or ", it will written directly
@@ -1024,7 +1024,7 @@ type
     procedure InitFromIniSection(Section: PUtf8Char;
       const OnTheFlyConvert: TOnSynNameValueConvertRawUtf8 = nil;
       const OnAdd: TOnSynNameValueNotify = nil);
-    /// reset content, then add all name=value; Csv pairs
+    /// reset content, then add all name=value; CSV pairs
     // - will first call Init(false) to initialize the internal array
     // - if ItemSep=#10, then any kind of line feed (CRLF or LF) will be handled
     procedure InitFromCsv(Csv: PUtf8Char; NameValueSep: AnsiChar = '=';
@@ -1067,7 +1067,7 @@ type
     // - returns false if no match was found
     function ValueEnum(const aName: RawUtf8; aEnumTypeInfo: PRttiInfo;
       out aEnum; aEnumDefault: byte = 0): boolean; overload;
-    /// returns all values, as Csv or INI content
+    /// returns all values, as CSV or INI content
     function AsCsv(const KeySeparator: RawUtf8 = '=';
       const ValueSeparator: RawUtf8 = #13#10; const IgnoreKey: RawUtf8 = ''): RawUtf8;
     /// returns all values as a JSON object of string fields
@@ -6865,7 +6865,7 @@ begin
     TRttiJsonSave(ctxt.Info.JsonSave)(Value, ctxt);
   end
   else
-    // fallback to binary serialization and Base64 encoding
+    // fallback to binary serialization, trailing crc32c and Base64 encoding
     BinarySaveBase64(Value, RecordInfo.Info, rkRecordTypes, {magic=}true);
   result := RecordInfo.Size;
 end;

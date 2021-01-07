@@ -1028,7 +1028,7 @@ begin
     if (T.FieldCount <> 1) or
        (T.RowCount <= 0) then
       exit;
-    // calculate row values Csv needed memory
+    // calculate row values CSV needed memory
     SetLength(Lens, T.RowCount);
     SepLen := length(Separator);
     Len := SepLen * (T.RowCount - 1);
@@ -1039,7 +1039,7 @@ begin
       Lens[i - 1] := L;
     end;
     SetLength(result, Len);
-    // add row values as Csv
+    // add row values as CSV
     P := pointer(result);
     i := 1;
     repeat

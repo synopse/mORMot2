@@ -2750,7 +2750,7 @@ begin
     begin
       Stmt := TSelectStatement.Create(SQL,
         fStoredClassRecordProps.Fields.IndexByName,
-        fStoredClassRecordProps.SimpleFieldsBits[ooSelect]);
+        fStoredClassRecordProps.SimpleFieldSelect);
       try
         if (Stmt.SqlStatement = '') or // parsing failed
            (length(Stmt.Where) > 1) or // only a SINGLE expression is allowed yet

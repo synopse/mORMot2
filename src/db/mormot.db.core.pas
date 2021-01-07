@@ -695,7 +695,7 @@ procedure SqlAddWhereAnd(var where: RawUtf8; const condition: RawUtf8);
 // - WITH recursive statement expect no INSERT/UPDATE/DELETE pattern in the SQL
 // - if P^ is a SELECT and SelectClause is set to a variable, it would
 // contain the field names, from SELECT ...field names... FROM
-function isSelect(P: PUtf8Char; SelectClause: PRawUtf8 = nil): boolean;
+function IsSelect(P: PUtf8Char; SelectClause: PRawUtf8 = nil): boolean;
 
 /// compute the SQL corresponding to a WHERE clause
 // - returns directly the Where value if it starts with one the
@@ -930,14 +930,15 @@ type
     /// parse the given SELECT SQL statement and retrieve the corresponding
     // parameters into this class read-only properties
     // - the supplied GetFieldIndex() method is used to populate the
-    // SelectedFields and Where[].Field properties
-    // - SimpleFieldsBits is used for '*' field names
+    // SelectedFields and Where[].Field properties; SimpleFields is used for '*'
+    // field names - typically set from TOrmProperties.Fields.IndexByName and
+    // TOrmProperties.SimpleFieldSelect
     // - SqlStatement is left '' if the SQL statement is not correct
     // - if SqlStatement is set, the caller must check for TableName to match
     // the expected value, then use the Where[] to retrieve the content
     constructor Create(const SQL: RawUtf8; const GetFieldIndex: TOnGetFieldIndex;
-      const SimpleFieldsBits: TFieldBits = [0 .. MAX_SQLFIELDS - 1]);
-    /// compute the SELECT column bits from the SelectFields array
+      const SimpleFields: TSelectStatementSelectDynArray);
+    /// compute the SELECT column bits from the Select[] array
     // - optionally set Select[].SubField into SubFields[Select[].Field]
     // (e.g. to include specific fields from MongoDB embedded document)
     procedure SelectFieldBits(var Fields: TFieldBits; var withID: boolean;
@@ -1821,7 +1822,7 @@ begin
 end;
 
 
-function isSelect(P: PUtf8Char; SelectClause: PRawUtf8): boolean;
+function IsSelect(P: PUtf8Char; SelectClause: PRawUtf8): boolean;
 var
   from: PUtf8Char;
 begin
@@ -1829,9 +1830,11 @@ begin
   begin
     P := SqlBegin(P);
     case IdemPCharArray(P,
-      ['SELECT', 'EXPLAIN ', 'VACUUM', 'PRAGMA', 'WITH']) of
+      ['SELECT', 'EXPLAIN ', 'VACUUM', 'PRAGMA', 'WITH', 'EXECUTE']) of
       0:
-        if P[6] <= ' ' then
+        // SELECT SelectClause^ FROM ...
+        if (P[6] <= ' ') and
+           (P[6] <> #0) then
         begin
           if SelectClause <> nil then
           begin
@@ -1847,14 +1850,24 @@ begin
         else
           result := false;
       1:
+        // EXPLAIN ...
         result := true;
       2, 3:
+        // VACUUM or PRAGMA
         result := P[6] in [#0..' ', ';'];
       4:
+        // WITH ... INSERT/UPDATE/DELETE
         result := (P[4] <= ' ') and
                   (StrPosI('INSERT', P + 5) = nil) and
                   (StrPosI('UPDATE', P + 5) = nil) and
                   (StrPosI('DELETE', P + 5) = nil);
+      5:
+        // FireBird specific EXECUTE BLOCK RETURNS
+        begin
+          P := GotoNextNotSpace(P + 7);
+          result := IdemPChar(P, 'BLOCK') and
+                    IdemPChar(GotoNextNotSpace(P + 5), 'RETURNS');
+        end;
     else
       result := false;
     end;
@@ -1867,14 +1880,16 @@ function SqlBegin(P: PUtf8Char): PUtf8Char;
 begin
   if P <> nil then
     repeat
-      if P^ <= ' ' then // ignore blanks
+      if P^ <= ' ' then
+        // ignore blanks
         repeat
           if P^ = #0 then
             break
           else
             inc(P)
         until P^ > ' ';
-      if PWord(P)^ = ord('-') + ord('-') shl 8 then // SQL comments
+      if PWord(P)^ = ord('-') + ord('-') shl 8 then
+        // SQL comments
         repeat
           inc(P)
         until P^ in [#0, #10]
@@ -2027,7 +2042,7 @@ end;
 function GetTableNameFromSqlSelect(const SQL: RawUtf8;
   EnsureUniqueTableInFrom: boolean): RawUtf8;
 var
-  i, j, k: integer;
+  i, j, k: PtrInt;
 begin
   i := PosI(' FROM ', SQL);
   if i > 0 then
@@ -2056,7 +2071,7 @@ end;
 
 function GetTableNamesFromSqlSelect(const SQL: RawUtf8): TRawUtf8DynArray;
 var
-  i, j, k, n: integer;
+  i, j, k, n: PtrInt;
 begin
   result := nil;
   n := 0;
@@ -2231,7 +2246,7 @@ const
   NULL_UPP = ord('N') + ord('U') shl 8 + ord('L') shl 16 + ord('L') shl 24;
 
 constructor TSelectStatement.Create(const SQL: RawUtf8;
-  const GetFieldIndex: TOnGetFieldIndex; const SimpleFieldsBits: TFieldBits);
+  const GetFieldIndex: TOnGetFieldIndex; const SimpleFields: TSelectStatementSelectDynArray);
 var
   Prop, whereBefore: RawUtf8;
   P, B: PUtf8Char;
@@ -2253,7 +2268,7 @@ var
     end;
   end;
 
-  function SetFields: boolean;
+  function GetNextSelectField: boolean;
   var
     select: TSelectStatementSelect;
     B: PUtf8Char;
@@ -2533,9 +2548,10 @@ begin
   P := GotoNextNotSpace(P); // trim left
   if not IdemPChar(P, 'SELECT ') then
     exit
-  else // handle only SELECT statement
+  else
+    // handle only SELECT statement
     inc(P, 7);
-  // 1. get SELECT clause: set bits in Fields from Csv field IDs in SQL
+  // 1. get SELECT clause: set bits in Fields from CSV field IDs in SQL
   selectCount := 0;
   P := GotoNextNotSpace(P); // trim left
   if P^ = #0 then
@@ -2544,29 +2560,21 @@ begin
   begin
     // all simple (not RawBlob/TOrmMany) fields
     inc(P);
-    len := GetBitsCount(SimpleFieldsBits, MAX_SQLFIELDS) + 1;
-    SetLength(fSelect, len);
-    selectCount := 1; // Select[0].Field := 0 -> ID
-    for ndx := 0 to MAX_SQLFIELDS - 1 do
-      if ndx in SimpleFieldsBits then
-      begin
-        fSelect[selectCount].Field := ndx + 1;
-        inc(selectCount);
-        if selectCount = len then
-          break;
-      end;
     GetNextFieldProp(P, Prop);
+    if SimpleFields = nil then
+      exit;
+    fSelect := copy(SimpleFields); // use precalculated array of simple fields
   end
-  else if not SetFields then
+  else if not GetNextSelectField then
+    // we need at least one field name
     exit
-  else // we need at least one field name
-  if P^ <> ',' then
+  else if P^ <> ',' then
     GetNextFieldProp(P, Prop)
   else
     repeat
       while P^ in [',', #1..' '] do
         inc(P); // trim left
-    until not SetFields; // add other Csv field names
+    until not GetNextSelectField; // add other CSV field names
   // 2. get FROM clause
   if not IdemPropNameU(Prop, 'FROM') then
     exit; // incorrect SQL statement
@@ -2727,8 +2735,8 @@ var
 begin
   FillZero(Fields);
   withID := false;
-  f := pointer(select);
-  for i := 1 to Length(select) do
+  f := pointer(fSelect);
+  for i := 1 to Length(fSelect) do
   begin
     if f^.Field = 0 then
       withID := true

@@ -1150,7 +1150,7 @@ type
     function RandomDouble: double;
     /// computes a random ASCII password
     // - will contain uppercase/lower letters, digits and $.:()?%!-+*/@#
-    // excluding ;,= to allow direct use in Csv content
+    // excluding ;,= to allow direct use in CSV content
     function RandomPassword(Len: integer): RawUtf8;
     /// would force the internal generator to re-seed its private key
     // - avoid potential attacks on backward or forward security

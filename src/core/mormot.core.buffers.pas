@@ -1343,7 +1343,7 @@ function UrlDecodeDouble(U: PUtf8Char; const Upper: RawUtf8;
   var Value: double; Next: PPUtf8Char = nil): boolean;
 
 /// returns TRUE if all supplied parameters do exist in the URI encoded text
-// - CsvNames parameter shall provide as a Csv list of names
+// - CsvNames parameter shall provide as a CSV list of names
 // - e.g. UrlDecodeNeedParameters('price=20.45&where=LastName%3D','price,where')
 // will return TRUE
 function UrlDecodeNeedParameters(U, CsvNames: PUtf8Char): boolean;
@@ -6307,7 +6307,7 @@ end;
 function UrlEncode(const NameValuePairs: array of const): RawUtf8;
 // (['select','*','where','ID=12','offset',23,'object',aObject]);
 var
-  A, n: PtrInt;
+  a, n: PtrInt;
   name, value: RawUtf8;
 begin
   result := '';
@@ -6315,16 +6315,16 @@ begin
   if (n > 0) and
      (n and 1 = 1) then
   begin
-    for A := 0 to n shr 1 do
+    for a := 0 to n shr 1 do
     begin
-      VarRecToUtf8(NameValuePairs[A * 2], name);
+      VarRecToUtf8(NameValuePairs[a * 2], name);
       if not IsUrlValid(pointer(name)) then
         continue; // just skip invalid names
-      with NameValuePairs[A * 2 + 1] do
+      with NameValuePairs[a * 2 + 1] do
         if VType = vtObject then
           value := ObjectToJson(VObject, [])
         else
-          VarRecToUtf8(NameValuePairs[A * 2 + 1], value);
+          VarRecToUtf8(NameValuePairs[a * 2 + 1], value);
       result := result + '&' + name + '=' + UrlEncode(value);
     end;
     result[1] := '?';
@@ -6741,12 +6741,12 @@ begin
       tmp[L] := NormToUpper[CsvNames^];
       if L = high(tmp) then
         exit
-      else // invalid Csv parameter
+      else // invalid CSV parameter
         inc(L);
       inc(CsvNames);
     end;
     if L = 0 then
-      exit; // invalid Csv parameter
+      exit; // invalid CSV parameter
     PWord(@tmp[L])^ := ord('=');
     Beg := U;
     repeat

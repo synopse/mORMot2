@@ -462,21 +462,21 @@ var
   valid: boolean;
   obj, v: Variant;
 begin
-  Check(isSelect('select * from toto'));
-  Check(isSelect(' select * from toto'));
-  Check(isSelect('vacuum'));
-  Check(isSelect(' vacuum'));
-  Check(isSelect('pragma'));
-  Check(isSelect(' pragma'));
-  Check(isSelect('with recursive cnt(x) as (values(1) union all ' +
+  Check(IsSelect('select * from toto'));
+  Check(IsSelect(' select * from toto'));
+  Check(IsSelect('vacuum'));
+  Check(IsSelect(' vacuum'));
+  Check(IsSelect('pragma'));
+  Check(IsSelect(' pragma'));
+  Check(IsSelect('with recursive cnt(x) as (values(1) union all ' +
     'select x+1 from cnt where x<1000000) select x from cnt'));
-  Check(not isSelect('update toto'));
-  Check(not isSelect(' update toto'));
-  Check(not isSelect('insert into toto'));
-  Check(not isSelect(' insert into toto'));
-  Check(not isSelect('delete from toto'));
-  Check(not isSelect(' delete from toto'));
-  Check(not isSelect('with recursive cnt(x) as (values(1) union all ' +
+  Check(not IsSelect('update toto'));
+  Check(not IsSelect(' update toto'));
+  Check(not IsSelect('insert into toto'));
+  Check(not IsSelect(' insert into toto'));
+  Check(not IsSelect('delete from toto'));
+  Check(not IsSelect(' delete from toto'));
+  Check(not IsSelect('with recursive cnt(x) as (values(1) union all ' +
     'select x+1 from cnt where x<1000000) insert into toto select x from cnt'));
   Check(GetTableNameFromSqlSelect('select a,b  from  titi', false) = 'titi');
   Check(GetTableNameFromSqlSelect('select a,b  from  titi limit 10', false) = 'titi');

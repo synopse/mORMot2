@@ -1937,7 +1937,7 @@ type
     function OneFieldValues(Table: TOrmClass; const FieldName: RawUtf8;
       const WhereClause: RawUtf8; var Data: TInt64DynArray;
       SQL: PRawUtf8 = nil): boolean; overload;
-    /// get the Csv-encoded UTF-8 encoded values of an unique field with a Where Clause
+    /// get the CSV-encoded UTF-8 encoded values of an unique field with a Where Clause
     // - example of use: OneFieldValue(TOrm,'FirstName','Name=:("Smith")',Data)
     // (using inlined parameters via :(...): is always a good idea)
     // - leave WhereClause void to get all records
@@ -1957,7 +1957,7 @@ type
       RawUtf8; Strings: TStrings; IDToIndex: PID = nil): boolean; overload;
     /// Execute directly a SQL statement, returning a TOrmTable list of resutls
     // - return a TOrmTableJson instance on success, nil on failure
-    // - FieldNames can be the Csv list of field names to be retrieved
+    // - FieldNames can be the CSV list of field names to be retrieved
     // - if FieldNames is '', will get all simple fields, excluding BLOBs
     // - if FieldNames is '*', will get ALL fields, including ID and BLOBs
     // - call internaly ExecuteList() to get the list
@@ -1966,7 +1966,7 @@ type
       const WhereClause: RawUtf8 = ''): TOrmTable; overload;
     /// Execute directly a SQL statement, returning a TOrmTable list of resutls
     // - return a TOrmTableJson instance on success, nil on failure
-    // - FieldNames can be the Csv list of field names to be retrieved
+    // - FieldNames can be the CSV list of field names to be retrieved
     // - if FieldNames is '', will get all simple fields, excluding BLOBs
     // - if FieldNames is '*', will get ALL fields, including ID and BLOBs
     // - this overloaded function will call FormatUtf8 to create the Where Clause
@@ -1982,7 +1982,7 @@ type
       const WhereClauseFormat: RawUtf8; const BoundsSqlWhere: array of const): TOrmTable; overload;
     /// Execute directly a SQL statement, returning a TOrmTable list of resutls
     // - return a TOrmTableJson instance on success, nil on failure
-    // - FieldNames can be the Csv list of field names to be retrieved
+    // - FieldNames can be the CSV list of field names to be retrieved
     // - if FieldNames is '', will get all simple fields, excluding BLOBs
     // - if FieldNames is '*', will get ALL fields, including ID and BLOBs
     // - in this version, the WHERE clause can be created with the same format
@@ -2112,7 +2112,7 @@ type
     // follow the order of values supplied in BoundsSqlWhere open array - use
     // DateToSql()/DateTimeToSql() for TDateTime, or directly any integer,
     // double, currency, RawUtf8 values to be bound to the request as parameters
-    // - aCustomFieldsCsv can be the Csv list of field names to be retrieved
+    // - aCustomFieldsCsv can be the CSV list of field names to be retrieved
     // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
     // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - return a TObjectList on success (possibly with Count=0) - caller is
@@ -2135,7 +2135,7 @@ type
     // follow the order of values supplied in BoundsSqlWhere open array - use
     // DateToSql()/DateTimeToSql() for TDateTime, or directly any integer,
     // double, currency, RawUtf8 values to be bound to the request as parameters
-    // - aCustomFieldsCsv can be the Csv list of field names to be retrieved
+    // - aCustomFieldsCsv can be the CSV list of field names to be retrieved
     // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
     // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - returns the raw JSON array content with all items on success, with
@@ -2153,7 +2153,7 @@ type
     // - implements REST GET collection
     // - this overloaded version expect the SqlWhere clause to be already
     // prepared with inline parameters using a previous FormatUtf8() call
-    // - aCustomFieldsCsv can be the Csv list of field names to be retrieved
+    // - aCustomFieldsCsv can be the CSV list of field names to be retrieved
     // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
     // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - returns the raw JSON array content with all items on success, with
@@ -2173,7 +2173,7 @@ type
     // - if ObjectName is set, it will return a TDocVariant of dvObject kind,
     // with one property containing the array of values: this returned variant
     // can be pasted e.g. directly as parameter to TSynMustache.Render()
-    // - aCustomFieldsCsv can be the Csv list of field names to be retrieved
+    // - aCustomFieldsCsv can be the CSV list of field names to be retrieved
     // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
     // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - the data will be converted to variants and TDocVariant following the
@@ -2195,7 +2195,7 @@ type
     // follow the order of values supplied in BoundsSqlWhere open array - use
     // DateToSql()/DateTimeToSql() for TDateTime, or directly any integer,
     // double, currency, RawUtf8 values to be bound to the request as parameters
-    // - aCustomFieldsCsv can be the Csv list of field names to be retrieved
+    // - aCustomFieldsCsv can be the CSV list of field names to be retrieved
     // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
     // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - the data will be converted to variants and TDocVariant following the
@@ -2235,7 +2235,7 @@ type
     // follow the order of values supplied in BoundsSqlWhere open array - use
     // DateToSql()/DateTimeToSql() for TDateTime, or directly any integer,
     // double, currency, RawUtf8 values to be bound to the request as parameters
-    // - aCustomFieldsCsv can be the Csv list of field names to be retrieved
+    // - aCustomFieldsCsv can be the CSV list of field names to be retrieved
     // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
     // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - set the T*ObjArray variable with all items on success - so that it can
@@ -2257,7 +2257,7 @@ type
     // double, currency, RawUtf8 values to be bound to the request as parameters
     // - if OutputFieldName is set, the JSON array will be written as a JSON,
     // property i.e. surrounded as '"OutputFieldName":[....],' - note ending ','
-    // - CustomFieldsCsv can be the Csv list of field names to be retrieved
+    // - CustomFieldsCsv can be the CSV list of field names to be retrieved
     // - if CustomFieldsCsv is '', will get all simple fields, excluding BLOBs
     // - if CustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - is just a wrapper around TOrm.AppendFillAsJsonArray()
@@ -3579,7 +3579,7 @@ type
     // - aCustomFieldsCsv can be used to specify which fields must be retrieved
     // - default aCustomFieldsCsv='' will retrieve all simple table fields
     // - if aCustomFieldsCsv='*', it will retrieve all fields, including BLOBs
-    // - aCustomFieldsCsv can also be set to a Csv field list to retrieve only
+    // - aCustomFieldsCsv can also be set to a CSV field list to retrieve only
     // the needed fields, and save remote bandwidth - note that any later
     // Update() will update all simple fields, so potentially with wrong
     // values; but BatchUpdate() can be safely used since it will
@@ -4347,7 +4347,7 @@ type
     function Generics: TRestOrmGenerics;
     /// get a list of members from a SQL statement
     // - implements REST GET collection
-    // - aCustomFieldsCsv can be the Csv list of field names to be retrieved
+    // - aCustomFieldsCsv can be the CSV list of field names to be retrieved
     // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
     // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - return a TObjectList<T> on success (possibly with Count=0) - caller is
@@ -4378,7 +4378,7 @@ type
     // follow the order of values supplied in BoundsSqlWhere open array - use
     // DateToSql()/DateTimeToSql() for TDateTime, or directly any integer,
     // double, currency, RawUtf8 values to be bound to the request as parameters
-    // - aCustomFieldsCsv can be the Csv list of field names to be retrieved
+    // - aCustomFieldsCsv can be the CSV list of field names to be retrieved
     // - if aCustomFieldsCsv is '', will get all simple fields, excluding BLOBs
     // - if aCustomFieldsCsv is '*', will get ALL fields, including ID and BLOBs
     // - return a TObjectList<T> on success (possibly with Count=0) - caller is
@@ -4712,8 +4712,8 @@ type
     /// get all values for a specified field into a dynamic integer array
     // - returns the number of rows in Values[]
     function GetRowValues(Field: integer; out Values: TInt64DynArray): integer; overload;
-    /// get all values for a specified field as Csv
-    // - don't perform any conversion, but create a Csv from raw PUtf8Char data
+    /// get all values for a specified field as CSV
+    // - don't perform any conversion, but create a CSV from raw PUtf8Char data
     function GetRowValues(Field: integer; const Sep: RawUtf8 = ',';
       const Head: RawUtf8 = ''; const Trail: RawUtf8 = ''): RawUtf8; overload;
     /// get all values lengths for a specified field into a PIntegerArray
@@ -4778,7 +4778,7 @@ type
     /// same as the overloaded method, but returning result into a RawUtf8
     function GetJsonValues(Expand: boolean; IDBinarySize: integer = 0;
       BufferSize: integer = 0): RawUtf8; overload;
-    /// save the table as Csv format, into a stream
+    /// save the table as CSV format, into a stream
     // - if Tab=TRUE, will use TAB instead of ',' between columns
     // - you can customize the ',' separator - use e.g. the global ListSeparator
     // variable (from SysUtils) to reflect the current system definition (some
@@ -4786,7 +4786,7 @@ type
     // - AddBOM will add a UTF-8 byte Order Mark at the beginning of the content
     procedure GetCsvValues(Dest: TStream; Tab: boolean; CommaSep: AnsiChar = ',';
       AddBOM: boolean = false; RowFirst: integer = 0; RowLast: integer = 0); overload;
-    /// save the table as Csv format, into a string variable
+    /// save the table as CSV format, into a string variable
     // - if Tab=TRUE, will use TAB instead of ',' between columns
     // - you can customize the ',' separator - use e.g. the global ListSeparator
     // variable (from SysUtils) to reflect the current system definition (some
@@ -5902,18 +5902,18 @@ type
     /// set all bits corresponding to the supplied field names
     // - returns the matching fields set
     function FieldBitsFromRawUtf8(const aFields: array of RawUtf8): TFieldBits; overload;
-    /// set all bits corresponding to the supplied Csv field names
+    /// set all bits corresponding to the supplied CSV field names
     // - returns TRUE on success, FALSE if any field name is not existing
     function FieldBitsFromCsv(const aFieldsCsv: RawUtf8;
       var Bits: TFieldBits): boolean; overload;
-    /// set all bits corresponding to the supplied Csv field names, including ID
+    /// set all bits corresponding to the supplied CSV field names, including ID
     // - returns TRUE on success, FALSE if any field name is not existing
     // - this overloaded method will identify ID/RowID field name, and set
     // withID output parameter according to its presence
     // - if aFieldsCsv='*', Bits will contain all simple fields, and withID=true
     function FieldBitsFromCsv(const aFieldsCsv: RawUtf8; var Bits: TFieldBits;
       out withID: boolean): boolean; overload;
-    /// set all bits corresponding to the supplied Csv field names
+    /// set all bits corresponding to the supplied CSV field names
     // - returns the matching fields set
     function FieldBitsFromCsv(const aFieldsCsv: RawUtf8): TFieldBits; overload;
     /// set all simple bits corresponding to the simple fields, excluding some
@@ -5926,7 +5926,7 @@ type
     // - returns TRUE on success, FALSE if blob field is not recognized
     function FieldBitsFromBlobField(aBlobField: PRttiProp;
       var Bits: TFieldBits): boolean;
-    /// compute the Csv field names text from a set of bits
+    /// compute the CSV field names text from a set of bits
     function CsvFromFieldBits(const Bits: TFieldBits): RawUtf8;
     /// set all field indexes corresponding to the supplied field names
     // - returns TRUE on success, FALSE if any field name is not existing
@@ -5936,11 +5936,11 @@ type
     // - returns the matching fields set
     function FieldIndexDynArrayFromRawUtf8(
       const aFields: array of RawUtf8): TFieldIndexDynArray; overload;
-    /// set all field indexes corresponding to the supplied Csv field names
+    /// set all field indexes corresponding to the supplied CSV field names
     // - returns TRUE on success, FALSE if any field name is not existing
     function FieldIndexDynArrayFromCsv(const aFieldsCsv: RawUtf8;
       var Indexes: TFieldIndexDynArray): boolean; overload;
-    /// set all field indexes corresponding to the supplied Csv field names
+    /// set all field indexes corresponding to the supplied CSV field names
     // - returns the matching fields set
     function FieldIndexDynArrayFromCsv(
       const aFieldsCsv: RawUtf8): TFieldIndexDynArray; overload;
@@ -6240,6 +6240,8 @@ type
     // - this array will handle special cases, like the TCreateTime fields
     // which shall not be included in ooUpdate but ooInsert and ooSelect e.g.
     SimpleFieldsCount: array[TOrmOccasion] of integer;
+    /// "simple" fields SELECT expressions for TSelectStatement.Create
+    SimpleFieldSelect: TSelectStatementSelectDynArray;
     /// bit set to 1 for an unique field
     // - an unique field is defined as "stored AS_UNIQUE" (i.e. "stored false")
     // in its property definition
@@ -6439,12 +6441,12 @@ type
     // - raise an EOrmException if the supplied field name is not defined in
     // the TOrm as ID or a published property
     function InternalToExternal(BlobField: PRttiProp): RawUtf8; overload;
-    /// map a Csv list of field names from its internals to its externals values
+    /// map a CSV list of field names from its internals to its externals values
     // - raise an EOrmException if any of the supplied field name is not defined
     // in the TOrm as ID or as property (RowIDFieldName or FieldNames[])
-    // - to be used for a simple Csv (e.g. for INSERT/SELECT statements):
+    // - to be used for a simple CSV (e.g. for INSERT/SELECT statements):
     // ! ExtCsv := InternalCsvToExternalCsv('ID,Name');
-    // - or for a more complex Csv (e.g. for UPDATE statements);
+    // - or for a more complex CSV (e.g. for UPDATE statements);
     // ! ExtCsv := InternalCsvToExternalCsv('ID=?,Name=?', '=?, '=?');
     function InternalCsvToExternalCsv(const CsvFieldNames: RawUtf8;
       const Sep: RawUtf8 = ','; const SepEnd: RawUtf8 = ''): RawUtf8;
@@ -7404,7 +7406,7 @@ type
   end;
 
   /// will define an unicity validation for a set of TOrm text fields
-  // - field names should be specified as Csv in the JSON "FieldNames" property
+  // - field names should be specified as CSV in the JSON "FieldNames" property
   // in the constructor, or the Parameters field, e.g. like
   // ! TOrmSampleRecord.AddFilterOrValidate('propA',
   // !   TSynValidateUniqueFields.Create('{"FieldNames":"propA,propB"}'));
@@ -7502,10 +7504,10 @@ type
     procedure Edit(aModel: TOrmModel; aTable: TOrmClass;
       aRights: TOrmOccasions); overload;
     /// serialize the content as TEXT
-    // - use the TAuthGroup.AccessRights Csv format
+    // - use the TAuthGroup.AccessRights CSV format
     function ToString: RawUtf8;
     /// unserialize the content from TEXT
-    // - use the TAuthGroup.AccessRights Csv format
+    // - use the TAuthGroup.AccessRights CSV format
     procedure FromString(P: PUtf8Char);
   end;
 
@@ -19056,6 +19058,7 @@ begin
   SetLength(fDynArrayFields, MAX_SQLFIELDS);
   SetLength(fBlobCustomFields, MAX_SQLFIELDS);
   SetLength(fBlobFields, MAX_SQLFIELDS);
+  SetLength(SimpleFieldSelect, MAX_SQLFIELDS + 1); // [0] is ID
   MainField[false] := -1;
   MainField[true] := -1;
   nMany := 0;
@@ -19171,6 +19174,7 @@ Small:  include(SmallFieldsBits, i);
         // this code follows NOT_SIMPLE_FIELDS/COPIABLE_FIELDS constants
 Simple: SimpleFields[nSimple] := F;
         inc(nSimple);
+        SimpleFieldSelect[nSimple].Field := i + 1; // [0]=ID
         include(SimpleFieldsBits[ooSelect], i);
         fSqlTableSimpleFieldsNoRowID := fSqlTableSimpleFieldsNoRowID + F.Name + ',';
         fSqlTableRetrieveAllFields := fSqlTableRetrieveAllFields + ',' + F.Name;
@@ -19188,6 +19192,7 @@ Copiabl:include(CopiableFieldsBits, i);
     SetLength(fSqlTableRetrieveBlobFields, length(fSqlTableRetrieveBlobFields) - 1);
   SetLength(fManyFields, nMany);
   SetLength(fSimpleFields, nSimple);
+  SetLength(SimpleFieldSelect, nSimple + 1); // Select[0].Field := 0 -> ID
   SetLength(fJoinedFields, nORM);
   if nORM > 0 then
   begin

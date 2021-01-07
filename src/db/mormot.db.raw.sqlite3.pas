@@ -583,9 +583,9 @@ type
   /// defines a module object used to implement a virtual table.
   // - Think of a module as a class from which one can construct multiple virtual
   // tables having similar properties. For example, one might have a module that
-  // provides read-only access to comma-separated-value (Csv) files on disk.
+  // provides read-only access to comma-separated-value (CSV) files on disk.
   // That one module can then be used to create several virtual tables where each
-  // virtual table refers to a different Csv file.
+  // virtual table refers to a different CSV file.
   // - The module structure contains methods that are invoked by SQLite to perform
   // various actions on the virtual table such as creating new instances of a
   // virtual table or destroying old ones, reading and writing data, searching
@@ -4436,7 +4436,7 @@ begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
   Timer.Start;
-  Lock(aSql); // run one statement -> we can trust isSelect()
+  Lock(aSql); // run one statement -> we can trust IsSelect()
   try
     R.Execute(DB, aSql);
   finally
@@ -4705,7 +4705,7 @@ end;
 
 function IsCacheable(const aSql: RawUtf8): boolean;
 begin
-  result := isSelect(pointer(aSql)) and
+  result := IsSelect(pointer(aSql)) and
             (PosEx(SQLDATABASE_NOCACHE, aSql) = 0);
 end;
 

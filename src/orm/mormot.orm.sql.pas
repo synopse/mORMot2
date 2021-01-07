@@ -757,7 +757,7 @@ begin
     exit;
   Stmt := TSelectStatement.Create(SQL,
     fStoredClassRecordProps.Fields.IndexByName,
-    fStoredClassRecordProps.SimpleFieldsBits[ooSelect]);
+    fStoredClassRecordProps.SimpleFieldSelect);
   try
     if (Stmt.SqlStatement = '') or // parsing failed
       not IdemPropNameU(Stmt.TableName, fStoredClassRecordProps.SqlTableName) then
