@@ -530,11 +530,11 @@ begin
       inc(p);
     repeat
       v0 := ConvertHexToBin[ord(p[0])];
-      if v0 > 15 then
+      if v0 = 255 then
         break; // not in '0'..'9','a'..'f'
       v1 := ConvertHexToBin[ord(p[1])];
       inc(p);
-      if v1 > 15 then
+      if v1 = 255 then
       begin
         result := (result shl 4) or v0; // only one hexa char supplied
         break;

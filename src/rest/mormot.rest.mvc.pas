@@ -1325,7 +1325,7 @@ end;
 function TMvcSessionAbstract.CheckAndRetrieveInfo(
   PRecordDataTypeInfo: PRttiInfo): variant;
 var
-  rec: array[byte] of word; // 512 bytes to store locally any kind of record
+  rec: TByteToWord; // 512 bytes to store locally any kind of record
   recsize: integer;
   sessionID: integer;
 

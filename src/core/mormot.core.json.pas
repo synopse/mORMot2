@@ -70,7 +70,7 @@ var
   // - 1 = JSON_ESCAPE_ENDINGZERO indicates #0 (end of string)
   // - 2 = JSON_ESCAPE_UNICODEHEX should be escaped as \u00xx
   // - b,t,n,f,r,\," as escaped character for #8,#9,#10,#12,#13,\,"
-  JSON_ESCAPE: TNormTableByte;
+  JSON_ESCAPE: array[byte] of byte;
 
 const
   /// JSON_ESCAPE[] lookup value: indicates no escape needed
@@ -2310,7 +2310,7 @@ uses
 
 function NeedsJsonEscape(P: PUtf8Char; PLen: integer): boolean;
 var
-  tab: PNormTableByte;
+  tab: PByteArray;
 begin
   result := true;
   tab := @JSON_ESCAPE;
@@ -2331,7 +2331,7 @@ end;
 
 function NeedsJsonEscape(P: PUtf8Char): boolean;
 var
-  tab: PNormTableByte;
+  tab: PByteArray;
   esc: byte;
 begin
   result := false;
@@ -6489,7 +6489,7 @@ var
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute JSON_ESCAPE;
   {$else}
-  tab: PNormTableByte;
+  tab: PByteArray;
   {$endif CPUX86NOTPIC}
 label
   noesc;
@@ -6576,7 +6576,7 @@ procedure TTextWriter.AddJsonEscapeW(P: PWord; Len: PtrInt);
 var
   i, c, s: PtrInt;
   esc: byte;
-  tab: PNormTableByte;
+  tab: PByteArray;
 begin
   if P = nil then
     exit;

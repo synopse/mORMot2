@@ -236,8 +236,10 @@ type
     function EncryptInit(const Key; KeySize: cardinal): boolean;
     /// encrypt an AES data block into another data block
     procedure Encrypt(const BI: TAesBlock; var BO: TAesBlock); overload;
+      {$ifdef FPC}inline;{$endif}
     /// encrypt an AES data block
     procedure Encrypt(var B: TAesBlock); overload;
+      {$ifdef FPC}inline;{$endif}
 
     /// Initialize AES contexts for uncypher
     // - first method to call before using this object for decryption
@@ -248,8 +250,10 @@ type
       const Key; KeySize: cardinal): boolean;
     /// decrypt an AES data block
     procedure Decrypt(var B: TAesBlock); overload;
+      {$ifdef FPC}inline;{$endif}
     /// decrypt an AES data block into another data block
     procedure Decrypt(const BI: TAesBlock; var BO: TAesBlock); overload;
+      {$ifdef FPC}inline;{$endif}
 
     /// Finalize AES contexts for both cypher and uncypher
     // - would fill the TAes instance with zeros, for (paranoid) safety
@@ -3219,7 +3223,7 @@ end;
 
 const
   // 512 bytes lookup table as used by mul_x/gf_mul/gf_mul_h
-  gft_le: array[byte] of word = (
+  gft_le: TByteToWord = (
      $0000, $c201, $8403, $4602, $0807, $ca06, $8c04, $4e05,
      $100e, $d20f, $940d, $560c, $1809, $da08, $9c0a, $5e0b,
      $201c, $e21d, $a41f, $661e, $281b, $ea1a, $ac18, $6e19,
@@ -4640,7 +4644,7 @@ var
   rec: THash256Rec absolute aCRC;
 begin
   // encrypt the plain text crc, to perform message authentication and integrity
-  fAes.Encrypt(fMac.plain, rec.Lo);
+  fAes.Encrypt(fMac.plain, rec{%H-}.Lo);
   // store the encrypted text crc, to check for errors, with no compromission
   rec.Hi := fMac.encrypted;
   result := true;

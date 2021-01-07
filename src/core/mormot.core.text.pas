@@ -1070,7 +1070,7 @@ type
     procedure AddPointer(P: PtrUInt; QuotedChar: AnsiChar = #0);
       {$ifdef HASINLINE}inline;{$endif}
     /// write a byte as hexa chars
-    procedure AddByteToHex(Value: byte);
+    procedure AddByteToHex(Value: PtrUInt);
     /// write a Int18 value (0..262143) as 3 chars
     // - this encoding is faster than Base64, and has spaces on the left side
     // - use function Chars3ToInt18() to decode the textual content
@@ -2045,29 +2045,32 @@ function StatusCodeToErrorMsg(Code: integer): shortstring;
 
 { **************** Hexadecimal Text And Binary Conversion }
 
-var
-  /// a conversion table from hexa chars into binary data
-  // - returns 255 for any character out of 0..9,A..Z,a..z range
-  // - used e.g. by HexToBin() function
-  // - is defined globally, since may be used from an inlined function
-  ConvertHexToBin: TNormTableByte;
 
 type
+  /// lookup table used for fast hexadecimal conversion
+  THexToDualByte = packed array[0..511] of byte;
   TAnsiCharToByte = array[AnsiChar] of byte;
   TAnsiCharToWord = array[AnsiChar] of word;
   TByteToWord = array[byte] of word;
 
 var
+  /// a conversion table from hexa chars into binary data
+  // - [0..255] range maps the 0..15 binary, [256..511] maps 0..15 binary shl 4
+  // - returns 255 for any character out of 0..9,A..Z,a..z range
+  // - used e.g. by HexToBin() function
+  // - is defined globally, since may be used from an inlined function
+  ConvertHexToBin: THexToDualByte;
+
   /// fast lookup table for converting hexadecimal numbers from 0 to 15
   // into their ASCII equivalence
   // - is local for better code generation
   TwoDigitsHex: array[byte] of array[1..2] of AnsiChar;
   TwoDigitsHexW: TAnsiCharToWord absolute TwoDigitsHex;
-  TwoDigitsHexWB: array[byte] of word absolute TwoDigitsHex;
+  TwoDigitsHexWB: TByteToWord absolute TwoDigitsHex;
   /// lowercase hexadecimal lookup table
   TwoDigitsHexLower: array[byte] of array[1..2] of AnsiChar;
   TwoDigitsHexWLower: TAnsiCharToWord absolute TwoDigitsHexLower;
-  TwoDigitsHexWBLower: array[byte] of word absolute TwoDigitsHexLower;
+  TwoDigitsHexWBLower: TByteToWord absolute TwoDigitsHexLower;
 
 /// fast conversion from hexa chars into binary data
 // - BinBytes contain the bytes count to be converted: Hex^ must contain
@@ -5678,11 +5681,11 @@ begin
     end;
 end;
 
-procedure TBaseWriter.AddByteToHex(Value: byte);
+procedure TBaseWriter.AddByteToHex(Value: PtrUInt);
 begin
   if B >= BEnd then
     FlushToStream;
-  ByteToHex(PAnsiChar(B) + 1, Value);
+  PWord(B + 1)^ := TwoDigitsHexWB[Value];
   inc(B, 2);
 end;
 
@@ -9981,9 +9984,9 @@ function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean
 var
   b, c: byte;
   {$ifdef CPUX86NOTPIC}
-  tab: TNormTableByte absolute ConvertHexToBin;
+  tab: THexToDualByte absolute ConvertHexToBin;
   {$else}
-  tab: PNormTableByte; // faster on PIC, ARM and x86_64
+  tab: PByteArray; // faster on PIC, ARM and x86_64
   {$endif CPUX86NOTPIC}
 begin
   result := false; // return false if any invalid char
@@ -9997,14 +10000,12 @@ begin
   begin
     inc(Bin, BinBytes - 1);
     repeat
-      b := tab[Ord(Hex[0])];
+      b := tab[Ord(Hex[0]) + 256]; // + 256 for shl 4
       c := tab[Ord(Hex[1])];
-      if (b > 15) or
-         (c > 15) then
+      if (b = 255) or
+         (c = 255) then
         exit;
-      b := b shl 4; // better FPC generation code in small explicit steps
-      b := b or c;
-      Bin^ := b;
+      Bin^ := b or c;
       dec(Bin);
       inc(Hex, 2);
       dec(BinBytes);
@@ -10037,9 +10038,9 @@ function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
 var
   b, c: byte;
   {$ifdef CPUX86NOTPIC}
-  tab: TNormTableByte absolute ConvertHexToBin;
+  tab: THexToDualByte absolute ConvertHexToBin;
   {$else}
-  tab: PNormTableByte; // faster on PIC, ARM and x86_64
+  tab: PByteArray; // faster on PIC, ARM and x86_64
   {$endif CPUX86NOTPIC}
 begin
   result := false; // return false if any invalid char
@@ -10051,15 +10052,13 @@ begin
   if BinBytes > 0 then
     if Bin <> nil then
       repeat
-        b := tab[Ord(Hex[0])];
+        b := tab[Ord(Hex[0]) + 256]; // + 256 for shl 4
         c := tab[Ord(Hex[1])];
-        if (b > 15) or
-           (c > 15) then
+        if (b = 255) or
+           (c = 255) then
           exit;
         inc(Hex, 2);
-        b := b shl 4;
-        b := b or c;
-        Bin^ := b;
+        Bin^ := b or c;
         inc(Bin);
         dec(BinBytes);
       until BinBytes = 0
@@ -10077,9 +10076,9 @@ end;
 procedure HexToBinFast(Hex: PAnsiChar; Bin: PByte; BinBytes: integer);
 var
   {$ifdef CPUX86NOTPIC}
-  tab: TNormTableByte absolute ConvertHexToBin;
+  tab: THexToDualByte absolute ConvertHexToBin;
   {$else}
-  tab: PNormTableByte; // faster on PIC, ARM and x86_64
+  tab: PByteArray; // faster on PIC, ARM and x86_64
   {$endif CPUX86NOTPIC}
   c: byte;
 begin
@@ -10088,8 +10087,7 @@ begin
   {$endif CPUX86NOTPIC}
   if BinBytes > 0 then
     repeat
-      c := tab[ord(Hex[0])];
-      c := c shl 4;
+      c := tab[ord(Hex[0]) + 256]; // + 256 for shl 4
       c := tab[ord(Hex[1])] or c;
       Bin^ := c;
       inc(Hex, 2);
@@ -10112,11 +10110,11 @@ end;
 
 function HexToChar(Hex: PAnsiChar; Bin: PUtf8Char): boolean;
 var
-  B, C: PtrUInt;
+  b, c: byte;
   {$ifdef CPUX86NOTPIC}
-  tab: TNormTableByte absolute ConvertHexToBin;
+  tab: THexToDualByte absolute ConvertHexToBin;
   {$else}
-  tab: PNormTableByte; // faster on PIC, ARM and x86_64
+  tab: PByteArray; // faster on PIC, ARM and x86_64
   {$endif CPUX86NOTPIC}
 begin
   if Hex <> nil then
@@ -10124,13 +10122,13 @@ begin
     {$ifndef CPUX86NOTPIC}
     tab := @ConvertHexToBin;
     {$endif CPUX86NOTPIC}
-    B := tab[Ord(Hex[0])];
-    C := tab[Ord(Hex[1])];
-    if (B <= 15) and
-       (C <= 15) then
+    b := tab[Ord(Hex[0]) + 256]; // + 256 for shl 4
+    c := tab[Ord(Hex[1])];
+    if (b <> 255) and
+       (c <> 255) then
     begin
       if Bin <> nil then
-        Bin^ := AnsiChar(B shl 4 + C);
+        Bin^ := AnsiChar(b + c);
       result := true;
       exit;
     end;
@@ -10457,15 +10455,15 @@ end;
 function HexaToByte(P: PUtf8Char; var Dest: byte): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 var
-  B, C: PtrUInt;
+  b, c: byte;
 begin
-  B := ConvertHexToBin[Ord(P[0])];
-  if B <= 15 then
+  b := ConvertHexToBin[Ord(P[0]) + 256]; // + 256 for shl 4
+  if b <> 255 then
   begin
-    C := ConvertHexToBin[Ord(P[1])];
-    if C <= 15 then
+    c := ConvertHexToBin[Ord(P[1])];
+    if c <> 255 then
     begin
-      Dest := B shl 4 + C;
+      Dest := b + c;
       result := true;
       exit;
     end;
@@ -10609,6 +10607,7 @@ var
   i: PtrInt;
   v: byte;
   P: PAnsiChar;
+  B: PByteArray;
   tmp: array[0..15] of AnsiChar;
 const
   HexChars:      array[0..15] of AnsiChar = '0123456789ABCDEF';
@@ -10636,16 +10635,20 @@ begin
     dec(PByteArray(@TwoDigitByteLookupW)[i], ord('0')); // '0'..'9' -> 0..9
   {$endif DOUBLETOSHORT_USEGRISU}
   FillcharFast(ConvertHexToBin[0], SizeOf(ConvertHexToBin), 255); // all to 255
+  B := @ConvertHexToBin;
   v := 0;
   for i := ord('0') to ord('9') do
   begin
-    ConvertHexToBin[i] := v;
+    B[i] := v;
+    B[i + 256] := v shl 4;
     inc(v);
   end;
   for i := ord('A') to ord('F') do
   begin
-    ConvertHexToBin[i] := v;
-    ConvertHexToBin[i+(ord('a') - ord('A'))] := v;
+    B[i] := v;
+    B[i + 256] := v shl 4;
+    B[i + (ord('a') - ord('A'))] := v;
+    B[i + (ord('a') - ord('A') + 256)] := v shl 4;
     inc(v);
   end;
   for i := 0 to high(SmallUInt32Utf8) do

@@ -891,10 +891,9 @@ type
   TNormTable = packed array[AnsiChar] of AnsiChar;
   /// pointer to a lookup table used for fast case conversion
   PNormTable = ^TNormTable;
+
   /// lookup table used for fast case conversion
   TNormTableByte = packed array[byte] of byte;
-  /// pointer to a lookup table used for fast case conversion
-  PNormTableByte = ^TNormTableByte;
 
 var
   /// lookup table used for fast case conversion to uppercase
@@ -3994,7 +3993,7 @@ function IdemPCharByte(
   {$ifdef CPUX86NOTPIC}
   const table: TNormTableByte;
   {$else}
-  const table: PNormTableByte;
+  const table: PByteArray;
   {$endif CPUX86NOTPIC}
   p: PUtf8Char; up: PAnsiChar): boolean;
   {$ifdef HASINLINE}inline;{$endif}
@@ -4040,7 +4039,7 @@ var
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute NormToUpperAnsi7;
   {$else}
-  tab: PNormTableByte; // faster on PIC/ARM and x86_64
+  tab: PByteArray; // faster on PIC/ARM and x86_64
   {$endif CPUX86NOTPIC}
 begin
   if p <> nil then
@@ -4121,7 +4120,7 @@ var
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute NormToUpperAnsi7;
   {$else}            
-  tab: PNormTableByte; // faster on PIC/ARM and x86_64
+  tab: PByteArray; // faster on PIC/ARM and x86_64
   {$endif CPUX86NOTPIC}
 begin
   t := length(text);
@@ -4425,7 +4424,7 @@ var
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute NormToUpperAnsi7Byte;
   {$else}
-  tab: PNormTableByte; // faster on PIC/ARM and x86_64
+  tab: PByteArray; // faster on PIC/ARM and x86_64
   {$endif CPUX86NOTPIC}
 begin
   i := 0;
@@ -4453,7 +4452,7 @@ var
   {$ifdef CPUX86NOTPIC}
   table: TNormTableByte absolute NormToUpperAnsi7Byte;
   {$else}
-  table: PNormTableByte;
+  table: PByteArray;
   {$endif CPUX86NOTPIC}
 begin
   result := PtrInt(PtrUInt(Str2)) - PtrInt(PtrUInt(Str1));
@@ -4626,7 +4625,7 @@ var
   {$ifdef CPUX86NOTPIC}
   table: TNormTableByte absolute NormToUpperAnsi7Byte;
   {$else}
-  table: PNormTableByte;
+  table: PByteArray;
   {$endif CPUX86NOTPIC}
 begin
   if u1 <> u2 then
@@ -4795,7 +4794,7 @@ var
   {$ifdef CPUX86NOTPIC}
   table: TNormTableByte absolute NormToUpperByte;
   {$else}
-  table: PNormTableByte;
+  table: PByteArray;
   {$endif CPUX86NOTPIC}
 begin
   // fast UTF-8 comparison using the NormToUpper[] array for all 8 bits values
@@ -4873,7 +4872,7 @@ var
   {$ifdef CPUX86NOTPIC}
   table: TNormTableByte absolute NormToUpperByte;
   {$else}
-  table: PNormTableByte;
+  table: PByteArray;
   {$endif CPUX86NOTPIC}
 label
   neg, pos;
@@ -5230,7 +5229,7 @@ var
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute NormToUpperByte;
   {$else}
-  tab: PNormTableByte; // faster on PIC/ARM and x86_64
+  tab: PByteArray; // faster on PIC/ARM and x86_64
   {$endif CPUX86NOTPIC}
 begin
   if source = '' then

@@ -1815,7 +1815,7 @@ begin
     if (len <> SizeOf(block) * 2) or // 32 hexa chars
        not mormot.core.text.HexToBin(pointer(aObfuscated), @block, SizeOf(block)) then
       exit;
-    fCryptoAesD.Decrypt(block.b);
+    fCryptoAesD.Decrypt(block.b, block.b);
     if block.c3 <> fCryptoCRC then
       exit;
     key := crc32ctab[0, bits.id.ProcessID and 1023] xor fCryptoCRC;

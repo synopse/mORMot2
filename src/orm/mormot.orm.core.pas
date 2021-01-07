@@ -12617,7 +12617,7 @@ var
   {$ifdef CPUX86NOTPIC}
   table: TNormTableByte absolute NormToUpperAnsi7Byte;
   {$else}
-  table: PNormTableByte;
+  table: PByteArray;
   {$endif CPUX86NOTPIC}
 begin
   if (self <> nil) and (aName <> nil) and (fCount > 0) then

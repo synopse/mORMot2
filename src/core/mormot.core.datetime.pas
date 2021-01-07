@@ -779,7 +779,7 @@ var
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
-  tab: PNormTableByte; // faster on PIC, ARM and x86_64
+  tab: PByteArray; // faster on PIC, ARM and x86_64
   {$endif CPUX86NOTPIC}
 // expect 'YYYYMMDDThhmmss[.sss]' format but handle also 'YYYY-MM-DDThh:mm:ss[.sss]'
 begin
@@ -2372,7 +2372,7 @@ var
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
-  tab: PNormTableByte; // faster on PIC/x86_64/ARM
+  tab: PByteArray; // faster on PIC/x86_64/ARM
   {$endif CPUX86NOTPIC}
 begin
   result := 0;
