@@ -5870,7 +5870,7 @@ type
     fRecordVersionField: TOrmPropInfoRttiRecordVersion;
     fWeakZeroClass: TObject;
     /// the associated TOrmModel instances
-    // - e.g. allow O(1) search of a TOrmClass in a model
+    // - e.g. allow almost O(1) search of a TOrmClass in a model
     fModel: array of record
       /// one associated model
       Model: TOrmModel;
@@ -20351,10 +20351,10 @@ begin
 end;
 
 function TOrmModel.GetTableIndex(const SqlTableName: RawUtf8): PtrInt;
-begin
+begin // use length(SqlTableName)
   if (self <> nil) and (SqlTableName <> '') then
   begin
-    result := FastFindUpperPUtf8CharSorted( // branchless O(log(n)) binary search
+    result := FastFindUpperPUtf8CharSorted( // branchless O(log(n)) bin search
       pointer(fSortedTablesNameUpper), fTablesMax,
       pointer(SqlTableName), length(SqlTableName));
     if result >= 0 then
@@ -20365,10 +20365,10 @@ begin
 end;
 
 function TOrmModel.GetTableIndexPtr(SqlTableName: PUtf8Char): PtrInt;
-begin
+begin // use StrLen(SqlTableName)
   if (self <> nil) and (SqlTableName <> nil) then
   begin
-    result := FastFindUpperPUtf8CharSorted( // branchless O(log(n)) binary search
+    result := FastFindUpperPUtf8CharSorted( // branchless O(log(n)) bin search
       pointer(fSortedTablesNameUpper), fTablesMax,
       SqlTableName, StrLen(SqlTableName));
     if result >= 0 then

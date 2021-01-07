@@ -1398,6 +1398,7 @@ function FastFindPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt;
 // - slightly faster than plain FastFindPUtf8CharSorted(P,R,Value,@StrIComp)
 function FastFindUpperPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt;
   Value: PUtf8Char; ValueLen: PtrInt): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// retrieve the index where is located a PUtf8Char in a sorted PUtf8Char array
 // - R is the last index of available entries in P^ (i.e. Count-1)
