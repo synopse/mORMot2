@@ -388,6 +388,7 @@ type
   // given time
   // - identifiers may be obfuscated as hexadecimal text, using both encryption
   // and digital signature
+  // - all its methods are thread-safe, even during obfuscation processing
   TSynUniqueIdentifierGenerator = class(TSynPersistent)
   protected
     fUnixCreateTime: cardinal;
@@ -419,26 +420,30 @@ type
     /// return a new unique ID, type-casted to an Int64
     function ComputeNew: Int64; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// return an unique ID matching this generator pattern, at a given timestamp
+    /// return an ID matching this generator pattern, at a given timestamp
     // - may be used e.g. to limit database queries on a particular time range
+    // - the ID is not guaranted to be unique, but match the supplied TDateTime
     procedure ComputeFromDateTime(const aDateTime: TDateTime;
       out result: TSynUniqueIdentifierBits);
-    /// return an unique ID matching this generator pattern, at a given timestamp
+    /// return an ID matching this generator pattern, at a given timestamp
     // - may be used e.g. to limit database queries on a particular time range
+    // - the ID is not guaranted to be unique, but match the supplied TUnixTime
     procedure ComputeFromUnixTime(const aUnixTime: TUnixTime;
       out result: TSynUniqueIdentifierBits);
     /// map a TSynUniqueIdentifier as 24/32 chars cyphered hexadecimal text
     // - cyphering includes simple key-based encryption and a CRC-32 digital signature
-    // - text size is 32 chars if aSharedObfuscationKeyNewKDF was set to true
+    // - returned text size is 24 for the legacy format, and 32 chars if
+    // aSharedObfuscationKeyNewKDF was set to true
     function ToObfuscated(
       const aIdentifier: TSynUniqueIdentifier): TSynUniqueIdentifierObfuscated;
     /// retrieve a TSynUniqueIdentifier from 24/32 chars cyphered hexadecimal text
     // - any file extension (e.g. '.jpeg') would be first deleted from the
     // supplied obfuscated text
-    // - text size is 32 chars if aSharedObfuscationKeyNewKDF was set to true
     // - returns true if the supplied obfuscated text has the expected layout
     // and a valid digital signature
     // - returns false if the supplied obfuscated text is invalid
+    // - note that this method will work for any TSynUniqueIdentifierProcess
+    // of the same aSharedObfuscationKey - not only the Identifier of this node
     function FromObfuscated(const aObfuscated: TSynUniqueIdentifierObfuscated;
       out aIdentifier: TSynUniqueIdentifier): boolean;
     /// paranoid loop until LastUnixCreateTime
