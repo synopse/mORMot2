@@ -12672,9 +12672,8 @@ begin
     result := -1
   else
   begin
-    inc(aName[0]);
-    aName[ord(aName[0])] := #0; // make ASCIIZ
-    result := IndexByName(@aName[0]); // fast O(log(n)) binary search
+    aName[ord(aName[0]) + 1] := #0; // make ASCIIZ
+    result := IndexByName(@aName[1]); // fast O(log(n)) binary search
     if result < 0 then
       raise EOrmException.CreateUtf8(
         '%.IndexByNameOrExceptShort(%): unkwnown in %', [self, aName, fTable]);

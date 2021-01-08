@@ -512,7 +512,7 @@ begin
       ndx := fStoredClassRecordProps.Fields.IndexByName(Doc.Names[i]);
       if ndx < 0 then
         raise EOrmMongoDB.CreateUtf8(
-          '%.DocFromJson: unkwnown field name [%]', [self, Doc.Names[i]]);
+          '%.DocFromJson: unknown field name [%]', [self, Doc.Names[i]]);
       Doc.Names[i] := fStoredClassMapping^.ExtFieldNames[ndx];
       info := fStoredClassRecordProps.Fields.List[ndx];
       V := @Doc.Values[i];

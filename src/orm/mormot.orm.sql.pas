@@ -620,7 +620,9 @@ var
   end;
 
 begin
-  log := Owner.LogClass.Enter('Create %', [aClass], self);
+  if aServer = nil then
+    raise ERestStorage.CreateUTF8('%.Create(%): aServer=%', [self, aClass, aServer]);
+  log := aServer.LogClass.Enter('Create %', [aClass], self);
   inherited Create(aClass, aServer);
   // initialize external DB properties
   options := fStoredClassMapping^.options;

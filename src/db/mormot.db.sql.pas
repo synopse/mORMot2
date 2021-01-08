@@ -5009,7 +5009,7 @@ begin
   result := '';
   if self = nil then
     exit;
-  ClassToText(PClass(self)^, result);
+  ClassToText(self, result);
   if IdemPChar(pointer(result), 'TSqlDB') then
     Delete(result, 1, 6)
   else if result[1] = 'T' then
