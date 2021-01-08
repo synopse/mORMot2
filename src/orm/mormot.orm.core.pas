@@ -4411,7 +4411,7 @@ type
       const aCustomFieldsCsv: RawUtf8 = ''): TObjectList<T>; overload;
   end;
 
-  TRestOrmParent = TRestOrmGenerics;
+  TRestOrmParent = class(TRestOrmGenerics);
 
   {$else}
 

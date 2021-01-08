@@ -109,7 +109,9 @@ uses
   test.core.ecc            in '.\test.core.ecc.pas',
   test.net.proto           in '.\test.net.proto.pas',
   test.orm.core            in '.\test.orm.core.pas',
-  test.orm.sqlite3         in '.\test.orm.sqlite3.pas';
+  test.orm.sqlite3         in '.\test.orm.sqlite3.pas',
+  test.orm.extdb           in '.\test.orm.extdb.pas',
+  test.soa.network         in '.\test.soa.network.pas';
 
 
 { TIntegrationTests }
@@ -119,6 +121,7 @@ type
   published
     procedure CoreUnits;
     procedure ORM;
+    procedure SOA;
   end;
 
 procedure TIntegrationTests.CoreUnits;
@@ -133,8 +136,15 @@ procedure TIntegrationTests.ORM;
 begin
   AddCase([
     //
+    TTestOrmCore, TTestSqliteFile, TTestSqliteFileWAL, TTestSqliteMemory, TTestExternalDatabase
+  ]);
+end;
+
+procedure TIntegrationTests.SOA;
+begin
+  AddCase([
     //
-    TTestOrmCore, TTestSqliteFile, TTestSqliteFileWAL, TTestSqliteMemory
+    TTestBidirectionalRemoteConnection
   ]);
 end;
 

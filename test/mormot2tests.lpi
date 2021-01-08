@@ -552,7 +552,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="86">
+    <Units Count="88">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -897,6 +897,14 @@
         <Filename Value="test.orm.sqlite3.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit85>
+      <Unit86>
+        <Filename Value="test.soa.network.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit86>
+      <Unit87>
+        <Filename Value="test.orm.extdb.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit87>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -940,7 +948,7 @@
     </Other>
   </CompilerOptions>
   <Debugging>
-    <Exceptions Count="9">
+    <Exceptions Count="10">
       <Item1>
         <Name Value="EAbort"/>
       </Item1>
@@ -968,6 +976,9 @@
       <Item9>
         <Name Value="ENetSock"/>
       </Item9>
+      <Item10>
+        <Name Value="EThreadError"/>
+      </Item10>
     </Exceptions>
   </Debugging>
 </CONFIG>
