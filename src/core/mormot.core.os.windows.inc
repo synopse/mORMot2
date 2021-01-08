@@ -1446,9 +1446,10 @@ var
   tmp: TSynTempBuffer;
 begin
   result := nil;
+  count := 0;
   if (RegQueryInfoKeyW(key, nil, nil, nil, @count, @maxlen,
        nil, nil, nil, nil, nil, nil) <> 0) or
-     ({%H-}count = 0) then
+     (count = 0) then
     exit;
   SetLength(result, count);
   inc(maxlen);

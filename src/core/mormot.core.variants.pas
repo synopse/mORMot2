@@ -119,6 +119,17 @@ procedure VariantToVarRec(const V: variant; var result: TVarRec);
 // but this version may be slightly faster than a string(aVariant)
 function VariantToString(const V: Variant): string;
 
+/// convert a dynamic array of variants into its JSON serialization
+// - will use a TDocVariantData temporary storage
+function VariantDynArrayToJson(const V: TVariantDynArray): RawUTF8;
+
+/// convert a JSON array into a dynamic array of variants
+// - will use a TDocVariantData temporary storage
+function JsonToVariantDynArray(const Json: RawUTF8): TVariantDynArray;
+
+/// convert an open array list into a dynamic array of variants
+// - will use a TDocVariantData temporary storage
+function ValuesToVariantDynArray(const items: array of const): TVariantDynArray;
 
 type
   /// function prototype used internally for variant comparison
@@ -2558,6 +2569,30 @@ begin
     else
       raise ESynVariant.CreateUtf8('Unhandled TVarRec.VType=%', [V.VType]);
     end;
+end;
+
+function VariantDynArrayToJson(const V: TVariantDynArray): RawUTF8;
+var
+  tmp: TDocVariantData;
+begin
+  tmp.InitArrayFromVariants(V);
+  result := tmp.ToJson;
+end;
+
+function JsonToVariantDynArray(const Json: RawUTF8): TVariantDynArray;
+var
+  tmp: TDocVariantData;
+begin
+  tmp.InitJSON(Json, JSON_OPTIONS_FAST);
+  result := tmp.VValue;
+end;
+
+function ValuesToVariantDynArray(const items: array of const): TVariantDynArray;
+var
+  tmp: TDocVariantData;
+begin
+  tmp.InitArray(items, JSON_OPTIONS_FAST);
+  result := tmp.VValue;
 end;
 
 function SortDynArrayVariantCompareAsString(const A, B: variant): integer;

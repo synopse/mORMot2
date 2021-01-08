@@ -4812,6 +4812,8 @@ var
   i: PtrInt;
   n: TShort31;
 begin
+  if SynLogFileFreeing then
+    exit;
   FormatUtf8(Format, Args, name);
   for i := 1 to length(name) do
     if name[i] < ' ' then
