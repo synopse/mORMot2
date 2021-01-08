@@ -1520,13 +1520,13 @@ var
     agg.cdArr[2] := cd2;
     U :=
       '{"abArr":[{"a":"AB0","b":0},{"a":"AB1","b":1}],"cdArr":[{"c":0,"d":"CD0"},' + '{"c":1,"d":"CD1"},{"c":2,"d":"CD2"}]}';
-    Check(Hash32(U) = $E3AC9C44);
+    CheckHash(U, $E3AC9C44);
     check(IsValidJson(U));
     J := RecordSaveJson(agg, TypeInfo(TAggregate));
     CheckEqual(J, U);
     RecordLoadJson(agg2, UniqueRawUtf8(U), TypeInfo(TAggregate));
     J := RecordSaveJson(agg2, TypeInfo(TAggregate));
-    Check(Hash32(J) = $E3AC9C44);
+    CheckHash(J, $E3AC9C44);
     check(IsValidJson(J));
 
     Finalize(JAS);
@@ -2171,7 +2171,7 @@ begin
       '[{"Color":10,"Length":0,"Name":""},{"Color":0,"Length":0,"Name":"name"}],"Str":null}');
     J := ObjectToJson(Coll, [woHumanReadable]);
     check(IsValidJson(U));
-    Check(Hash32(J) = $7694E4C1);
+    CheckHash(J, $7694E4C1);
     Check(JsonReformat(J, jsonCompact) = U);
     Check(JsonReformat('{ "empty": {} }') =
       '{'#$D#$A#9'"empty": {'#$D#$A#9#9'}'#$D#$A'}');
@@ -2223,7 +2223,7 @@ begin
     Coll.Coll.EndUpdate;
     U := ObjectToJson(Coll.Coll);
     check(IsValidJson(U));
-    Check(Hash32(U) = $DB782098);
+    CheckHash(U, $DB782098);
     C2.Coll.Clear;
     Check(JsonToObject(C2.fColl, pointer(U), Valid)^ = #0);
     Check(Valid);
@@ -2238,7 +2238,7 @@ begin
     U := ObjectToJson(Coll);
     check(IsValidJson(U));
     Check(length(U) = 443114);
-    Check(Hash32(U) = $B1BD5123);
+    CheckHash(U, $B1BD5123);
     C2.One.Name := '';
     C2.Coll.Clear;
     Check(JsonToObject(C2, pointer(U), Valid)^ = #0);
@@ -2247,7 +2247,7 @@ begin
     U := ObjectToJson(C2);
     check(IsValidJson(U));
     Check(length(U) = 443114);
-    Check(Hash32(U) = $B1BD5123);
+    CheckHash(U, $B1BD5123);
     for i := 1 to C2.Coll.Count - 2 do
       with C2.Coll[i + 1] do
       begin
@@ -2263,7 +2263,7 @@ begin
     Coll.Str.EndUpdate;
     U := ObjectToJson(Coll);
     check(IsValidJson(U));
-    Check(Hash32(U) = $85926050);
+    CheckHash(U, $85926050);
     J := ObjectToJson(Coll, [woHumanReadable]);
     check(IsValidJson(J));
     U2 := JsonReformat(J, jsonCompact);
@@ -2277,7 +2277,7 @@ begin
       Check(StrToInt(C2.Str[i - 1]) = i);
     J := ObjectToJson(C2);
     check(IsValidJson(J));
-    Check(Hash32(J) = $85926050);
+    CheckHash(J, $85926050);
     C2.One.Color := 0;
     C2.One.Name := '';
     U := '{"One":{"Color":1,"Length":0,"Name":"test","Unknown":123},"Coll":[]}';
@@ -2319,7 +2319,7 @@ begin
     C2.One.Length := 10;
     J := ObjectToJson(C2);
     check(IsValidJson(J));
-    Check(Hash32(J) = $41281936);
+    CheckHash(J, $41281936);
     // (custom) dynamic array serialization
     TCollTstDynArrayTest; // first TFVs prop is serialized as binary+base64
     TRttiJson.RegisterCustomSerializer(TypeInfo(TFVs),
@@ -2349,14 +2349,14 @@ begin
       CheckEqual(J, '{"Color":20,"len":10,"n":"ABC"}');
       J := ObjectToJson(C2);
       Check(IsValidJson(J));
-      Check(Hash32(J) = $FFBC77A, 'RegisterCustomSerializerFieldNames');
+      CheckHash(J, $FFBC77A, 'RegisterCustomSerializerFieldNames');
       TCollTstDynArrayTest;
       Rtti.ByClass[TCollTest].Props.NameChanges([], []);
       J := ObjectToJson(MyItem);
       CheckEqual(J, '{"Color":20,"Length":10,"Name":"ABC"}');
       J := ObjectToJson(C2);
       Check(IsValidJson(J));
-      Check(Hash32(J) = $41281936, 'unRegisterCustomSerializerFieldNames');
+      CheckHash(J, $41281936, 'unRegisterCustomSerializerFieldNames');
       TCollTstDynArrayTest;
       Rtti.ByClass[TCollTest].Props.NameChanges(['length'], ['']);
       J := ObjectToJson(MyItem);
@@ -3052,10 +3052,10 @@ begin
   {$ifndef EXTENDEDTOSHORT_USESTR}
   check(json = '{"double_params":[-12.12345678,-9.9E-15,-9.88E-15,-9E-15]}');
   {$endif EXTENDEDTOSHORT_USESTR}
-  CheckSame(double(TDocVariantData(o).a['double_params'].value[1]), -9.9E-15);
+  CheckSame(double(TDocVariantData(o).A['double_params'].value[1]), -9.9E-15);
   // floats are stored as varCurrency by default in _Json()
   o := _Json('{"value":99.99}');
-  d := _Safe(o)^.d['value'];
+  d := _Safe(o)^.D['value'];
   CheckSame(d, 99.99, DOUBLE_SAME, '99.99');
   CheckEqual(DoubleToStr(d), '99.99');
   // see http://bsonspec.org/#/specification
@@ -3455,19 +3455,19 @@ var
     Check(Doc2.ToJson = JSON);
     Check(Doc2.I['id'] = 10);
     Check(Doc2.O['doc'].U['name'] = 'John');
-    Check(Doc2.O['doc'].i['birthyear'] = 1972);
+    Check(Doc2.O['doc'].I['birthyear'] = 1972);
   //Doc2Doc.birthyear := 1980;
     variant(DocVariantData(Doc2Doc)^).birthyear := 1980;
     JSON2 := Doc2.ToJson;
     if dvoValueCopiedByReference in aOptions then
     begin
       Check(JSON2 = '{"id":10,"doc":{"name":"John","birthyear":1980}}');
-      Check(Doc2.O['doc'].i['birthyear'] = 1980);
+      Check(Doc2.O['doc'].I['birthyear'] = 1980);
     end
     else
     begin
       Check(JSON2 = JSON);
-      Check(Doc2.O['doc'].i['birthyear'] = 1972);
+      Check(Doc2.O['doc'].I['birthyear'] = 1972);
     end;
     _Json(JSON, V, aOptions);
     Check(V._count = 2);
@@ -3661,7 +3661,7 @@ begin
   Doc2.Clear;
   check(Doc2.Count = 0);
   s := Doc.ToJson;
-  CheckEqual(Hash32(s), 2110959969, 'bigjson');
+  CheckHash(s, 2110959969, 'bigjson');
   Doc2.InitJson(s);
   check(Doc2.Count = MAX + 1);
   for i := 0 to MAX do
@@ -3674,9 +3674,9 @@ begin
   for i := 0 to Doc.Count - 1 do
     Check(Doc.Names[i] = Doc.Values[i]);
   s := Doc2.ToJson;
-  CheckEqual(Hash32(s), 2110959969, 'bigjson2');
+  CheckHash(s, 2110959969, 'bigjson2');
   Check(TDocVariantData(V1)._[1].U['name'] = 'Jim');
-  Check(TDocVariantData(V1)._[1].i['year'] = 1972);
+  Check(TDocVariantData(V1)._[1].I['year'] = 1972);
   {$ifdef FPC}
   _Safe(V1)^.AddItem(3.1415);
   Check(V1._JSON = '["root",{"name":"Jim","year":1972},3.1415]');
@@ -3704,28 +3704,28 @@ begin
     '"Competitions":[{"Name":"Ligue1","Url":"ligue-1"},{"Name":"Ligue2","Url":"ligue-2"}]},' +
     '{"Name":"2010/2011","Url":"2010-2011","Competitions":[{"Name":"Ligue1","Url":"ligue-1"},' +
     '{"Name":"Ligue2","Url":"ligue-2"}]}]}';
-  Check(Hash32(s) = $BF60E202);
+  CheckHash(s, $BF60E202);
   V1 := _Json(s);
   V2 := V1.seasons;
   DoChange(V2);
   j := VariantSaveJson(V1);
   Check(j <> s);
-  Check(Hash32(j) = $6998B225, 'changed');
-  Check(Hash32(VariantSaveJson(V2)) = $92FEB37B);
+  CheckHash(j, $6998B225, 'changed');
+  CheckHash(VariantSaveJson(V2), $92FEB37B);
   V1 := _Json(s);
   V2 := V1.seasons;
   _Unique(V2);
   DoChange(V2);
   Check(VariantSaveJson(V1) = s);
-  Check(Hash32(VariantSaveJson(V2)) = $92FEB37B);
+  CheckHash(VariantSaveJson(V2), $92FEB37B);
   V2 := TDocVariant.NewUnique(V1.Seasons);
   DoChange(V2);
   Check(VariantSaveJson(V1) = s);
-  Check(Hash32(VariantSaveJson(V2)) = $92FEB37B);
+  CheckHash(VariantSaveJson(V2), $92FEB37B);
   V2 := _copy(V1.Seasons);
   DoChange(V2);
   Check(VariantSaveJson(V1) = s);
-  Check(Hash32(VariantSaveJson(V2)) = $92FEB37B);
+  CheckHash(VariantSaveJson(V2), $92FEB37B);
   s := _Safe(V1.Seasons)^.ToNonExpandedJson;
   Check(s =
     '{"fieldCount":3,"rowCount":2,"values":["Name","Url","Competitions",' + '"2011/2012","2011-2012",[{"Name":"Ligue1","Url":"ligue-1"},{"Name":"Ligue2"' +
@@ -4478,7 +4478,7 @@ begin
     CompressZLib(tmp, true);
     Check(len div length(tmp) > 2, 'compressible');
     CompressZLib(tmp, false);
-    CheckEqual(Hash32(tmp), hash);
+    CheckHash(tmp, hash, 'CompressZLib');
   end;
 end;
 

@@ -1187,7 +1187,7 @@ const
     Check(length(IA) = D.Capacity);
     for i := 0 to 16256 do
       Check(IA[i] = i * 5);
-    Check(Hash32(D.SaveTo) = $57B23EC4, 'test64k'); // was $36937D84 with hash32
+    CheckHash(D.SaveTo, $57B23EC4, 'test64k');
   end;
 
   procedure TestCities;
@@ -1287,7 +1287,7 @@ begin
     Check(not IntegerScanExists(Pointer(AI), AIP.Count, i + 2000));
   end;
   Test := AIP.SaveTo;
-  Check(Hash32(Test) = $712CA318, 'hash32i'); // was $924462C with hash32
+  CheckHash(Test, $712CA318, 'hash32i');
   PI := IntegerDynArrayLoadFrom(pointer(Test), AIcount);
   Check(AIcount = 1001);
   Check(PI <> nil);
@@ -1298,7 +1298,7 @@ begin
   P := pointer(U);
   for i := 0 to 1000 do
     Check(GetNextItemCardinal(P) = cardinal(i));
-  Check(Hash32(U) = $CBDFDAFC, 'hash32a');
+  CheckHash(U, $CBDFDAFC, 'hash32a');
   for i := 0 to 1000 do
   begin
     Test2 := AIP.ItemSave(@i);
@@ -1346,7 +1346,7 @@ begin
   for i := 0 to AIP.Count - 1 do
     Check(AIP.Find(i) = i);
   Test := AIP.SaveTo;
-  Check(Hash32(Test) = $67E62807, 'hash32b');
+  CheckHash(Test, $67E62807, 'hash32b');
   AIP.Reverse;
   for i := 0 to 50000 do
     Check(AI[i] = 50000 - i);
@@ -1355,7 +1355,7 @@ begin
   AIP.Compare := SortDynArrayInteger;
   AIP.Sort;
   Test := AIP.SaveTo;
-  Check(Hash32(Test) = $67E62807, 'hash32c');
+  CheckHash(Test, $67E62807, 'hash32c');
   AIP.Reverse;
   AIP.Slice(AI2, 2000, 1000);
   Check(length(AI2) = 2000);
@@ -1409,9 +1409,9 @@ begin
   end;
   Test := AVP.SaveTo;
   {$ifdef CPU64}
-  CheckEqual(Hash32(Test), 1847370524, 'hash64d');
+  CheckHash(Test, 1847370524, 'hash64d');
   {$else}
-  Check(Hash32(Test) = $712CA318, 'hash32d');
+  CheckHash(Test, $712CA318, 'hash32d');
   {$endif CPU64}
   // validate TRawUtf8DynArray
   AUP.Init(TypeInfo(TRawUtf8DynArray), AU);
@@ -1429,7 +1429,7 @@ begin
     Check(AUP.IndexOf(U) = i);
   end;
   Test := AUP.SaveTo;
-  Check(Hash32(@Test[2], length(Test) - 1) = $1EC51463, 'hash32e');
+  CheckEqual(Hash32(@Test[2], length(Test) - 1), $1EC51463, 'hash32e');
   // trimed Test[1]=ElemSize
   for i := 0 to 1000 do
   begin
@@ -1452,7 +1452,7 @@ begin
   W.CancelAll;
   W.AddDynArrayJson(AUP);
   W.SetText(U);
-  Check(Hash32(U) = $1D682EF8, 'hash32f');
+  CheckHash(U, $1D682EF8, 'hash32f');
   P := pointer(U);
   if not CheckFailed(P^ = '[') then
     inc(P);
@@ -1663,7 +1663,7 @@ begin
     h := $CAA117C1;
     {$endif UNICODE}
   {$endif CPU64}
-  CheckEqual(Hash32(Test), h, 'hash32h');
+  CheckHash(Test, h, 'hash32h');
   for i := 0 to 1000 do
   begin
     Fill(F, i);
@@ -1685,7 +1685,7 @@ begin
   Check(IdemPChar(pointer(U), '[{"MAJOR":0,"MINOR":1,"RELEASE":2,"BUILD":3,' +
     '"MAIN":"1000","DETAILED":"2000","BUILDDATETIME":"1999-02-24T02:52:48",' +
     '"BUILDYEAR":2011},{"MAJOR":1,"MINOR":2,"RELEASE":3,"BUILD":4,'));
-  CheckEqual(Hash32(U), $74523E0F, 'hash32i');
+  CheckHash(U, $74523E0F, 'hash32i');
   {$else}
   Check(U = '[' + JSON_BASE64_MAGIC_UTF8 + BinToBase64(Test) + '"]');
   {$endif ISDELPHI2010}
@@ -2051,7 +2051,7 @@ var
     until moved + len >= length(buf);
     NotifyTestSpeed(msg, 1, moved, @timer);
     Check(IsBufIncreasing(P, moved, 1));
-    CheckEqual(Hash32(buf), 2284147540);
+    CheckHash(buf, 2284147540);
      // forward and backward overlapped moves on small buffers
     elapsed := 0;
     moved := 0;
@@ -2076,7 +2076,7 @@ var
     end;
     timer.FromExternalMicroSeconds(elapsed);
     NotifyTestSpeed('small %', [msg], 1, moved, @timer);
-    CheckEqual(Hash32(buf), 1635609040);
+    CheckHash(buf, 1635609040);
      // forward and backward non-overlapped moves on big buffers
     len := (length(buf) - 3200) shr 1;
     timer.Start;
@@ -2092,7 +2092,7 @@ var
         MoveFast(P[i], P[len], len - i * 10);
       end;
     NotifyTestSpeed('big %', [msg], 1, 50 * len, @timer);
-    CheckEqual(Hash32(buf), 818419281);
+    CheckHash(buf, 818419281);
      // forward and backward overlapped moves on big buffers
     len := length(buf) - 3200;
     for i := 1 to 3 do
@@ -2106,7 +2106,7 @@ var
         MoveFast(P[3100], P[i], len - i);
         MoveFast(P[i], P[3200], len - i);
       end;
-    CheckEqual(Hash32(buf), 1646145792);
+    CheckHash(buf, 1646145792);
   end;
 {$ifdef ASMX64}
 
@@ -3842,7 +3842,7 @@ begin
   begin
     j := i shr 6; // circumvent weird FPC code generation bug in -O2 mode
     s := RandomString(j);
-    Check(hash32(s) = Hash32Reference(pointer(s), length(s)));
+    CheckHash(s, Hash32Reference(pointer(s), length(s)));
     Check(kr32(0, pointer(s), length(s)) = kr32reference(pointer(s), length(s)));
     Check(fnv32(0, pointer(s), length(s)) = fnv32reference(0, pointer(s), length(s)));
     crc := crc32creference(0, pointer(s), length(s));

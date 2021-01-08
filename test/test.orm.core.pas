@@ -316,7 +316,7 @@ begin
         dummy := TSynMustache.Parse('{{#items}}'#13#10'{{Int}}={{Test}}'#13#10'{{/items}}').
           Render(Client.Orm.RetrieveDocVariantArray(TOrmTest, 'items', 'Int,Test'));
         check(IdemPChar(pointer(dummy), '1=1'#$D#$A'2=2'#$D#$A'3=3'#$D#$A'4=4'));
-        check(Hash32(dummy) = $BC89CA72);
+        CheckHash(dummy, $BC89CA72);
         Check(Client.Orm.UpdateField(TOrmTest, 100, 'ValWord', [100 + 10]),
           'update one field of a given record');
         R := TOrmTest.Create(Client.Orm, 100);

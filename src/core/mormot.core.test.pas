@@ -201,7 +201,7 @@ type
     // - includes some optional precision argument
     function CheckSame(const Value1, Value2: double;
       const Precision: double = DOUBLE_SAME; const msg: string = ''): boolean;
-    /// perform a string comparison with several value
+    /// used by the published methods to perform a string comparison with several values
     // - test passes if (Value=Values[0]) or (Value=Value[1]) or (Value=Values[2])...
     // and ExpectedResult=true
     function CheckMatchAny(const Value: RawUtf8; const Values: array of RawUtf8;
@@ -226,6 +226,9 @@ type
     // - warning: this method is not thread-safe
     procedure CheckLogTime(condition: boolean; const msg: RawUtf8; const args: array of const;
       level: TSynLogInfo = sllTrace);
+    /// used by the published methods to run test assertion against a Hash32() constant
+    procedure CheckHash(const data: RawByteString; expectedhash32: cardinal;
+      const msg: RawUtf8 = '');
     /// create a temporary string random content, WinAnsi (code page 1252) content
     class function RandomString(CharCount: integer): RawByteString;
     /// create a temporary UTF-8 string random content, using WinAnsi
@@ -741,6 +744,16 @@ begin
   Check(condition, str);
   fOwner.DoLog(level, '% %', [str, fCheckLogTime.Stop]);
   fCheckLogTime.Start;
+end;
+
+procedure TSynTestCase.CheckHash(const data: RawByteString;
+  expectedhash32: cardinal; const msg: RawUtf8);
+var
+  crc: cardinal;
+begin
+  crc := Hash32(data);
+  CheckUTF8(crc = expectedhash32, 'Hash32()=% expected=% %',
+    [crc, expectedhash32, msg]);
 end;
 
 class function TSynTestCase.RandomString(CharCount: integer): RawByteString;
