@@ -276,7 +276,7 @@ type
     // between TRestServer instances in a single service
     // - returns a newly created TRestStorageRemote instance
     function RemoteDataCreate(aClass: TOrmClass;
-      aRemoteRest: TRestOrm): TRestOrm; virtual;
+      aRemoteRest: TRestOrmParent): TRestOrmParent; virtual;
     /// fast get the associated TRestStorageRemote from its index, if any
     // - returns nil if aTableIndex is invalid or is not assigned to a TRestStorageRemote
     function GetRemoteTable(TableIndex: integer): TRestOrm;
@@ -639,7 +639,7 @@ begin
 end;
 
 function TRestOrmServer.RemoteDataCreate(aClass: TOrmClass;
-  aRemoteRest: TRestOrm): TRestOrm;
+  aRemoteRest: TRestOrmParent): TRestOrmParent;
 var
   t: integer;
   existing: TRestOrm;
@@ -649,8 +649,8 @@ begin
   if existing <> nil then
     raise ERestStorage.CreateUtf8('Duplicated %.RemoteDataCreate(%) as %',
       [self, aClass, existing]);
-  result := TRestStorageRemote.Create(aClass, self, aRemoteRest);
-  StaticTableSetup(t, result, sStaticDataTable);
+  result := TRestStorageRemote.Create(aClass, self, aRemoteRest as TRestOrm);
+  StaticTableSetup(t, result as TRestOrm, sStaticDataTable);
 end;
 
 function TRestOrmServer.GetRemoteTable(TableIndex: integer): TRestOrm;
