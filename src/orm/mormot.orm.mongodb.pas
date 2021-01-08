@@ -440,14 +440,14 @@ function TRestStorageMongoDB.EngineNextID: TID;
           res := fCollection.FindDoc(BsonVariant(
             '{$query:{},$orderby:{_id:-1}}'), BsonVariant(['_id', 1]));
           if not VarIsEmptyOrNull(res) then
-            fEngineLastID := _Safe(res)^.i['_id'];
+            fEngineLastID := _Safe(res)^.I['_id'];
         end;
       eacMaxIDOnce, eacMaxIDEachTime:
         begin
           res := fCollection.AggregateDocFromJson(
             '{$group:{_id:null,max:{$max:"$_id"}}}');
           if not VarIsEmptyOrNull(res) then
-            fEngineLastID := _Safe(res)^.i['max'];
+            fEngineLastID := _Safe(res)^.I['max'];
         end;
     else
       raise EOrmMongoDB.CreateUtf8(

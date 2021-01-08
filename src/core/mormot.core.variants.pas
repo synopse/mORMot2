@@ -1395,6 +1395,8 @@ type
     // - due to the internal implementation of variant execution (somewhat
     // slow _DispInvoke() function), it is a bit faster to execute:
     // ! aValue := TDocVariantData(aVariant).Value['name'];
+    // or
+    // ! aValue := _Safe(aVariant).Value['name'];
     // instead of
     // ! aValue := aVariant.name;
     // but of course, if want to want to access the content by index (typically
