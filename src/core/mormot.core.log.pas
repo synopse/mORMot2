@@ -2559,26 +2559,36 @@ begin
       break;
     EnterCriticalSection(GlobalThreadLock);
     try
+      if Terminated or
+         SynLogFileFreeing then
+        exit;
       files := copy(SynLogFile); // thread-safe local copy
     finally
       LeaveCriticalSection(GlobalThreadLock);
     end;
     if files <> nil then
+    try
+      inc(AutoFlushSecondElapsed);
+      for i := 0 to high(files) do
+        with files[i] do
+          if Terminated or
+             SynLogFileFreeing then
+            // avoid GPF
+            break
+          else if (fFamily.fAutoFlushTimeOut <> 0) and
+                  (fWriter <> nil) and
+                  (fWriter.PendingBytes > 1) and
+                  (AutoFlushSecondElapsed mod fFamily.fAutoFlushTimeOut = 0) then
+              Flush({forcediskwrite=}false); // write pending data
+    except
+      // on stability issue, try to identify this thread
+      if not Terminated then
       try
-        inc(AutoFlushSecondElapsed);
-        for i := 0 to high(files) do
-          with files[i] do
-            if Terminated then
-              break // avoid GPF
-            else if (fFamily.fAutoFlushTimeOut <> 0) and
-                    (fWriter <> nil) and
-                    (fWriter.PendingBytes > 1) and
-                    (AutoFlushSecondElapsed mod fFamily.fAutoFlushTimeOut = 0) then
-                Flush({forcediskwrite=}false); // write pending data
-      except
-        // on stability issue, identify this thread
         SetCurrentThreadName('log autoflush');
+      except
+        exit;
       end;
+    end;
   until Terminated;
 end;
 
@@ -2692,6 +2702,11 @@ end;
 
 function TSynLogFamily.CreateSynLog: TSynLog;
 begin
+  if SynLogFileFreeing then
+  begin
+    result := nil;
+    exit;
+  end;
   EnterCriticalSection(GlobalThreadLock);
   try
     result := fSynLogClass.Create(self);
@@ -2717,6 +2732,7 @@ end;
 procedure TSynLogFamily.StartAutoFlush;
 begin
   if (AutoFlushThread = nil) and
+     not SynLogFileFreeing and
      (fAutoFlushTimeOut <> 0)
      {$ifndef FPC} and (DebugHook = 0) {$endif} then
   begin
@@ -2735,12 +2751,6 @@ var
 begin
   fDestroying := true;
   EchoRemoteStop;
-  if AutoFlushThread <> nil then
-  begin
-    AutoFlushThread.Terminate;
-    AutoFlushThread.fEvent.SetEvent; // notify TAutoFlushThread.Execute
-    FreeAndNil(AutoFlushThread); // wait till actually finished
-  end;
   ExceptionIgnore.Free;
   try
     if Assigned(OnArchive) then
@@ -4608,7 +4618,8 @@ label
   adr, fin;
 begin
   if ExceptionIgnorePerThread or
-     (Ctxt.EClass = ESynLogSilent) then
+     (Ctxt.EClass = ESynLogSilent) or
+     SynLogFileFreeing  then
     exit;
   {$ifdef CPU64DELPHI} // Delphi<XE6 in System.pas to retrieve x64 dll exit code
   {$ifndef ISDELPHIXE6}
@@ -6339,10 +6350,23 @@ begin
 end;
 
 procedure FinalizeUnit;
+var
+  files: TSynLogDynArray;
 begin
-  ExeInstanceMapFile.Free;
   SynLogFileFreeing := true; // to avoid GPF at shutdown
-  ObjArrayClear(SynLogFile); // TSynLogFamily are freed as TRttiCustom.Private
+  EnterCriticalSection(GlobalThreadLock);
+  files := SynLogFile;
+  SynLogFile := nil;
+  LeaveCriticalSection(GlobalThreadLock);
+  if AutoFlushThread <> nil then
+  begin
+    AutoFlushThread.Terminate;
+    AutoFlushThread.fEvent.SetEvent; // notify TAutoFlushThread.Execute
+    AutoFlushThread.WaitFor;
+    FreeAndNil(AutoFlushThread);
+  end;
+  ObjArrayClear(files); // TSynLogFamily are freed as TRttiCustom.Private
+  ExeInstanceMapFile.Free;
   DeleteCriticalSection(GlobalThreadLock);
 end;
 
