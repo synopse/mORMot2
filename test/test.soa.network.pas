@@ -7,25 +7,10 @@ interface
 
 {$I ..\src\mormot.defines.inc}
 
-{$ifdef ISDELPHIXE}
-  // since Delphi XE, we have unit System.RegularExpressionsAPI available
-  {.$define TEST_REGEXP}
-  { TODO : refactor RegExp support to use regexp.c }
-{$else}
-  // define only if you have unit PCRE.pas installed (not set by default)
-  {.$define TEST_REGEXP}
-{$endif ISDELPHIXE}
-
 uses
   sysutils,
   contnrs,
   classes,
-  {$ifndef FPC}
-  typinfo, // to avoid Delphi inlining problems
-  {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics are buggy
-  Generics.Collections,
-  {$endif ISDELPHI2010}
-  {$endif FPC}
   mormot.core.base,
   mormot.core.os,
   mormot.core.text,

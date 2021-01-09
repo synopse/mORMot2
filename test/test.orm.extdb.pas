@@ -9,12 +9,6 @@ interface
 
 uses
   sysutils,
-  {$ifndef FPC}
-  typinfo, // to avoid Delphi inlining problems
-  {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics are buggy
-  Generics.Collections,
-  {$endif ISDELPHI2010}
-  {$endif FPC}
   mormot.core.base,
   mormot.core.os,
   mormot.core.text,
@@ -49,6 +43,8 @@ uses
   mormot.rest.server,
   mormot.rest.memserver,
   mormot.rest.sqlite3,
+  mormot.rest.http.server,
+  mormot.rest.http.client,
   test.core.base,
   test.core.data,
   test.orm.sqlite3;
@@ -191,7 +187,7 @@ begin
   fExternalModel := TOrmModel.Create([TOrmPeopleExt, TOrmOnlyBlob, TOrmTestJoin,
     TOrmASource, TOrmADest, TOrmADests, TOrmPeople, TOrmMyHistory]);
   ReplaceParamsByNames(ToUtf8(StringOfChar('?', 200)), sql);
-  Check(Hash32(sql) = $AD27D1E0, 'excludes :IF :OF');
+  CheckHash(sql, $AD27D1E0, 'excludes :IF :OF');
 end;
 
 procedure TTestExternalDatabase.AutoAdaptSQL;

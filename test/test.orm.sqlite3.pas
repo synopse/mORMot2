@@ -462,7 +462,7 @@ begin
   check(WinAnsiToUtf8(Utf8ToWinAnsi(Req)) = Req, 'WinAnsiToUtf8/Utf8ToWinAnsi');
   JS := Demo.ExecuteJson(Req); // get result in JSON format
   FileFromString(JS, 'Test1.json');
-  check(Hash32(JS) = $40C1649A, 'Expected ExecuteJson result not retrieved');
+  CheckHash(JS, $40C1649A, 'Expected ExecuteJson result not retrieved');
   {$ifndef NOSQLITE3ENCRYPT}
   if password <> '' then
   begin
@@ -491,7 +491,7 @@ begin
     Demo.WALMode := InheritsFrom(TTestSqliteFileWAL); // test Write-Ahead Logging
     check(Demo.WALMode = InheritsFrom(TTestSqliteFileWAL));
     check(Demo.MemoryMappedMB = 0, 'mmap pragma disallowed');
-    check(Hash32(Demo.ExecuteJson(Req)) = $40C1649A, 'ExecuteJson crypted');
+    CheckHash(Demo.ExecuteJson(Req), $40C1649A, 'ExecuteJson crypted');
     check(Demo.MemoryMappedMB = 0, 'mmap pragma disallowed');
   end
   else
@@ -511,7 +511,7 @@ begin
   check(Names[0] = 'People');
   Demo.Execute(
     'SELECT Concat(FirstName," and ") FROM People WHERE LastName="Einstein"', s);
-  check(Hash32(s) = $68A74D8E, 'Albert1 and Albert1 and Albert2 and Albert3 and ...');
+  CheckHash(s, $68A74D8E, 'Albert1 and Albert1 and Albert2 and Albert3 and ...');
   i1 := Demo.Execute(
     'SELECT FirstName from People WHERE FirstName like "%eona%"', Names);
   check(i1 = 2002, 'like/strcspn');
@@ -1490,7 +1490,7 @@ var
     TRestClientAuthenticationDefault.ClientSessionSign(Client, call);
     call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
     Server.Uri(call);
-    check(Hash32(call.OutBody) = Hash);
+    CheckHash(call.OutBody, Hash);
   end;
 
 var
@@ -2166,9 +2166,9 @@ begin
     lData := J.GetJsonValues(true);
     check(lData[1] = '[');
     check(JsonArrayCount(@lData[2]) = J.rowCount);
-    check(Hash32(lData) = $B1C13092);
+    CheckHash(lData, $B1C13092);
     lData := J.GetJsonValues(false);
-    check(Hash32(lData) = $6AB30A2);
+    CheckHash(lData, $6AB30A2);
   finally
     J.Free;
   end;
@@ -2178,7 +2178,7 @@ begin
   lData := lContactDataQueueDynArray.SaveToJson;
   lDocData.InitJson(lData, [dvoJsonObjectParseWithinString]);
   check(lDocData.Count = 3);
-  check(Hash32(lDocData.ToJson) = $FCF948A5);
+  CheckHash(lDocData.ToJson, $FCF948A5);
   check(lDocData.Value[0].QUEUE_CALL = 2);
   s := TEST_DATA;
   i1 := PosEx(',"CHANNEL":132', s);
