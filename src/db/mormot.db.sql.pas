@@ -3456,7 +3456,7 @@ class function TSqlDBConnectionProperties.IsSqlKeyword(aDB: TSqlDBDefinition;
   aWord: RawUtf8): boolean;
 const
   /// CSV of the known reserved keywords per database engine, in alphabetic order
-  DB_KEYWORDS_Csv: array[TSqlDBDefinition] of PUtf8Char = (
+  DB_KEYWORDS_CSV: array[TSqlDBDefinition] of PUtf8Char = (
     '',  // dUnknown
     // dDefault = ODBC / SQL-92 keywords (always checked first)
     'absolute,action,ada,add,all,allocate,alter,and,any,are,as,asc,assertion,at,authorization,' +
@@ -3614,10 +3614,11 @@ const
 var
   db: TSqlDBDefinition;
 begin
-  // search using fast binary lookup in the alphabetic ordered arrays
+  // prepare the keywords arrays from the per-DB CSV references
   if DB_KEYWORDS[dDefault] = nil then
-    for db := Low(DB_KEYWORDS) to high(DB_KEYWORDS) do
-      CsvToRawUtf8DynArray(DB_KEYWORDS_Csv[db], DB_KEYWORDS[db]);
+    for db := low(DB_KEYWORDS) to high(DB_KEYWORDS) do
+      CsvToRawUtf8DynArray(DB_KEYWORDS_CSV[db], DB_KEYWORDS[db]);
+  // search using fast binary lookup in the alphabetic ordered arrays
   aWord := TrimU(LowerCase(aWord));
   if (aDB = dSQLite) or
      (FastFindPUtf8CharSorted(pointer(DB_KEYWORDS[dDefault]),

@@ -1846,7 +1846,8 @@ var
 begin
   InternalLog('TRest.Destroy %',[fModel.SafeRoot],sllInfo); // self->GPF
   if fOrm <> nil then
-    fOrm.AsynchBatchStop(nil); // abort any pending TRestBatch
+    // abort any (unlikely) pending TRestBatch
+    fOrm.AsynchBatchStop(nil);
   FreeAndNil(fRun);
   FreeAndNil(fServices);
   if fOrmInstance <> nil then
@@ -1855,7 +1856,8 @@ begin
       raise ERestException.CreateUtf8('%.Destroy: %.RefCount=%',
         [self, fOrmInstance, fOrmInstance.RefCount])
     else
-      fOrmInstance := nil; // avoid dubious GPF
+      // avoid dubious GPF
+      fOrmInstance := nil;
   fOrm := nil;
   if (fModel <> nil) and
      (fModel.Owner = self) then

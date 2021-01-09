@@ -6124,6 +6124,7 @@ begin
   all := RecordInfo^.RecordAllFields(dummy);
   InternalClear;
   if all = nil then
+    // enhanced RTTI is available since Delphi 2010
     exit;
   Count := length(all);
   SetLength(List, Count);

@@ -9666,8 +9666,16 @@ var
 class procedure TOrmPropInfoRtti.RegisterTypeInfo(aTypeInfo: PRttiInfo);
 begin
   if OrmPropInfoRegistration = nil then
-    OrmPropInfoRegistration := TSynDictionary.Create(
-      TypeInfo(TPointerDynArray), TypeInfo(TPointerDynArray));
+  begin
+    GlobalLock;
+    try
+      if OrmPropInfoRegistration = nil then
+        OrmPropInfoRegistration := TSynDictionary.Create(
+          TypeInfo(TPointerDynArray), TypeInfo(TPointerDynArray));
+    finally
+      GlobalUnLock;
+    end;
+  end;
   OrmPropInfoRegistration.AddOrUpdate(aTypeInfo, self);
 end;
 
@@ -9802,7 +9810,7 @@ begin
       FlattenedPropNameSet;
   end
   else if pilRaiseEOrmExceptionIfNotHandled in aOptions then
-    raise EModelException.CreateUtf8('%.CreateFrom: Unhandled %/% type for property %',
+    raise EOrmException.CreateUtf8('%.CreateFrom: Unhandled %/% type for property %',
       [self, ToText(aOrmFieldType)^, ToText(aType^.Kind)^, aPropInfo^.Name^]);
 end;
 

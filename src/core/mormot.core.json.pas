@@ -6179,11 +6179,11 @@ var
   save: TRttiJsonSave;
 begin
   {%H-}ctxt.Init(self, WriteOptions, TRttiCustom(RttiCustom));
-  save := TRttiCustom(RttiCustom).JsonSave;
+  save := ctxt.Info.JsonSave;
   if Assigned(save) then
     save(Value, ctxt)
   else
-    AddNull;
+    BinarySaveBase64(Value, ctxt.Info.Info, rkAllTypes, {magic=}true);
 end;
 
 procedure TTextWriter.AddRttiVarData(const Value: TRttiVarData;
