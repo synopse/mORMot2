@@ -1397,7 +1397,8 @@ procedure AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// add an integer array at the end of a dynamic array of integer
-function AddInteger(var Values: TIntegerDynArray; const Another: TIntegerDynArray): PtrInt; overload;
+function AddInteger(var Values: TIntegerDynArray;
+  const Another: TIntegerDynArray): PtrInt; overload;
 
 /// add an integer value at the end of a dynamic array of integers
 // - this overloaded function will use a separate Count variable (faster),
@@ -1409,10 +1410,12 @@ function AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
   Value: integer; NoDuplicates: boolean): boolean; overload;
 
 /// add a 16-bit integer value at the end of a dynamic array of integers
-function AddWord(var Values: TWordDynArray; var ValuesCount: integer; Value: Word): PtrInt;
+function AddWord(var Values: TWordDynArray; var ValuesCount: integer;
+  Value: Word): PtrInt;
 
 /// add a 64-bit integer value at the end of a dynamic array of integers
-function AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: Int64): PtrInt; overload;
+function AddInt64(var Values: TInt64DynArray; var ValuesCount: integer;
+  Value: Int64): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// add a 64-bit integer value at the end of a dynamic array
@@ -1420,7 +1423,8 @@ function AddInt64(var Values: TInt64DynArray; Value: Int64): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// add a 64-bit integer array at the end of a dynamic array
-function AddInt64(var Values: TInt64DynArray; const Another: TInt64DynArray): PtrInt; overload;
+function AddInt64(var Values: TInt64DynArray;
+  const Another: TInt64DynArray): PtrInt; overload;
 
 /// if not already existing, add a 64-bit integer value to a dynamic array
 function AddInt64Once(var Values: TInt64DynArray; Value: Int64): PtrInt;
@@ -1432,7 +1436,8 @@ procedure AddInt64Sorted(var Values: TInt64DynArray; Value: Int64);
 procedure DeleteInteger(var Values: TIntegerDynArray; Index: PtrInt); overload;
 
 /// delete any 32-bit integer in Values[]
-procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: integer; Index: PtrInt); overload;
+procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
+  Index: PtrInt); overload;
 
 /// remove some 32-bit integer from Values[]
 // - Excluded is declared as var, since it will be sorted in-place during process
@@ -1466,7 +1471,8 @@ procedure DeleteWord(var Values: TWordDynArray; Index: PtrInt);
 procedure DeleteInt64(var Values: TInt64DynArray; Index: PtrInt); overload;
 
 /// delete any 64-bit integer in Values[]
-procedure DeleteInt64(var Values: TInt64DynArray; var ValuesCount: integer; Index: PtrInt); overload;
+procedure DeleteInt64(var Values: TInt64DynArray; var ValuesCount: integer;
+  Index: PtrInt); overload;
 
 /// remove some 64-bit integer from Values[]
 // - Excluded is declared as var, since it will be sorted in-place during process

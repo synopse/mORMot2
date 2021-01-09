@@ -395,7 +395,7 @@ procedure GetNextItemShortString(var P: PUtf8Char; out Dest: ShortString; Sep: A
 // - if any Values[] item is '', no line is added
 // - otherwise, appends 'Caption: Value', with Caption taken from CSV
 procedure AppendCsvValues(const Csv: string; const Values: array of string;
-  var Result: string; const AppendBefore: string = #13#10);
+  var result: string; const AppendBefore: string = #13#10);
 
 /// return a CSV list of the iterated same value
 // - e.g. CsvOfValue('?',3)='?,?,?'
@@ -497,12 +497,12 @@ function FindCsvIndex(Csv: PUtf8Char; const Value: RawUtf8; Sep: AnsiChar = ',';
   CaseSensitive: boolean = true; TrimValue: boolean = false): integer;
 
 /// add the strings in the specified CSV text into a dynamic array of UTF-8 strings
-procedure CsvToRawUtf8DynArray(Csv: PUtf8Char; var Result: TRawUtf8DynArray;
+procedure CsvToRawUtf8DynArray(Csv: PUtf8Char; var List: TRawUtf8DynArray;
   Sep: AnsiChar = ','; TrimItems: boolean = false; AddVoidItems: boolean = false); overload;
 
 /// add the strings in the specified CSV text into a dynamic array of UTF-8 strings
 procedure CsvToRawUtf8DynArray(const Csv, Sep, SepEnd: RawUtf8;
-  var Result: TRawUtf8DynArray); overload;
+  var List: TRawUtf8DynArray); overload;
 
 /// return the corresponding CSV text from a dynamic array of UTF-8 strings
 function RawUtf8ArrayToCsv(const Values: array of RawUtf8;
@@ -527,11 +527,11 @@ function RenameInCsv(const OldValue, NewValue: RawUtf8; var Csv: RawUtf8;
   const Sep: RawUtf8 = ','): boolean;
 
 /// append the strings in the specified CSV text into a dynamic array of integer
-procedure CsvToIntegerDynArray(Csv: PUtf8Char; var Result: TIntegerDynArray;
+procedure CsvToIntegerDynArray(Csv: PUtf8Char; var List: TIntegerDynArray;
   Sep: AnsiChar = ',');
 
 /// append the strings in the specified CSV text into a dynamic array of integer
-procedure CsvToInt64DynArray(Csv: PUtf8Char; var Result: TInt64DynArray;
+procedure CsvToInt64DynArray(Csv: PUtf8Char; var List: TInt64DynArray;
   Sep: AnsiChar = ','); overload;
 
 /// convert the strings in the specified CSV text into a dynamic array of integer
@@ -1355,11 +1355,11 @@ function RawUtf8DynArrayEquals(const A, B: TRawUtf8DynArray;
 
 /// convert the string dynamic array into a dynamic array of UTF-8 strings
 procedure StringDynArrayToRawUtf8DynArray(const Source: TStringDynArray;
-  var Result: TRawUtf8DynArray);
+  var result: TRawUtf8DynArray);
 
 /// convert the string list into a dynamic array of UTF-8 strings
 procedure StringListToRawUtf8DynArray(Source: TStringList;
-  var Result: TRawUtf8DynArray);
+  var result: TRawUtf8DynArray);
 
 /// retrieve the index where to insert a PUtf8Char in a sorted PUtf8Char array
 // - R is the last index of available entries in P^ (i.e. Count-1)
@@ -4264,13 +4264,13 @@ begin
   result := -1; // not found
 end;
 
-procedure CsvToRawUtf8DynArray(Csv: PUtf8Char; var Result: TRawUtf8DynArray;
+procedure CsvToRawUtf8DynArray(Csv: PUtf8Char; var List: TRawUtf8DynArray;
   Sep: AnsiChar; TrimItems, AddVoidItems: boolean);
 var
   s: RawUtf8;
   n: integer;
 begin
-  n := length(Result);
+  n := length(List);
   while Csv <> nil do
   begin
     if TrimItems then
@@ -4279,20 +4279,21 @@ begin
       GetNextItem(Csv, Sep, s);
     if (s <> '') or
        AddVoidItems then
-      AddRawUtf8(Result, n, s);
+      AddRawUtf8(List, n, s);
   end;
-  if n <> length(Result) then
-    SetLength(Result, n);
+  if n <> length(List) then
+    SetLength(List, n);
 end;
 
-procedure CsvToRawUtf8DynArray(const Csv, Sep, SepEnd: RawUtf8; var Result: TRawUtf8DynArray);
+procedure CsvToRawUtf8DynArray(const Csv, Sep, SepEnd: RawUtf8;
+  var List: TRawUtf8DynArray);
 var
-  offs, i: integer;
+  offs, i, n: integer;
 begin
+  n := length(List);
   offs := 1;
   while offs < length(Csv) do
   begin
-    SetLength(Result, length(Result) + 1);
     i := PosEx(Sep, Csv, offs);
     if i = 0 then
     begin
@@ -4301,12 +4302,13 @@ begin
         i := MaxInt
       else
         dec(i, offs);
-      Result[high(Result)] := Copy(Csv, offs, i);
-      exit;
+      AddRawUtf8(List, n, Copy(Csv, offs, i));
+      break;
     end;
-    Result[high(Result)] := Copy(Csv, offs, i - offs);
+    AddRawUtf8(List, n, Copy(Csv, offs, i - offs));
     offs := i + length(Sep);
   end;
+  SetLength(List, n);
 end;
 
 function AddPrefixToCsv(Csv: PUtf8Char; const Prefix: RawUtf8; Sep: AnsiChar): RawUtf8;
@@ -4414,34 +4416,36 @@ begin
   result := RawUtf8ArrayToCsv(tmp, Sep);
 end;
 
-procedure CsvToIntegerDynArray(Csv: PUtf8Char; var Result: TIntegerDynArray;
+procedure CsvToIntegerDynArray(Csv: PUtf8Char; var List: TIntegerDynArray;
   Sep: AnsiChar);
+var
+  n: integer;
 begin
+  n := length(List);
   while Csv <> nil do
-  begin
-    SetLength(Result, length(Result) + 1);
-    Result[high(Result)] := GetNextItemInteger(Csv, Sep);
-  end;
+    AddInteger(List, n, GetNextItemInteger(Csv, Sep));
+  SetLength(List, n);
 end;
 
-procedure CsvToInt64DynArray(Csv: PUtf8Char; var Result: TInt64DynArray;
+procedure CsvToInt64DynArray(Csv: PUtf8Char; var List: TInt64DynArray;
   Sep: AnsiChar);
+var
+  n: integer;
 begin
+  n := length(List);
   while Csv <> nil do
-  begin
-    SetLength(Result, length(Result) + 1);
-    Result[high(Result)] := GetNextItemInt64(Csv, Sep);
-  end;
+    AddInt64(List, n, GetNextItemInt64(Csv, Sep));
+  SetLength(List, n);
 end;
 
 function CsvToInt64DynArray(Csv: PUtf8Char; Sep: AnsiChar): TInt64DynArray;
+var
+  n: integer;
 begin
-  Finalize(Result);
+  n := 0;
   while Csv <> nil do
-  begin
-    SetLength(Result, length(Result) + 1);
-    Result[high(Result)] := GetNextItemInt64(Csv, Sep);
-  end;
+    AddInt64(result, n, GetNextItemInt64(Csv, Sep));
+  SetLength(result, n);
 end;
 
 function IntegerDynArrayToCsv(Values: PIntegerArray; ValuesCount: integer;
