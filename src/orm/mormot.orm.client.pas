@@ -989,8 +989,8 @@ begin
         U := U + '?where=';
       U := U + UrlEncode(SqlWhere);
     end;
-    if Uri(Model.Uri[Tables[0]] + U,
-       'GET', @JSON, nil, nil, @state) <> HTTP_SUCCESS then
+    U := Model.Uri[Tables[0]] + U;
+    if Uri(U, 'GET', @JSON, nil, nil, @state) <> HTTP_SUCCESS then
       exit;
   end
   // multiple tables -> send SQL statement as HTTP body

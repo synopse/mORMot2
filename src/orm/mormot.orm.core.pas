@@ -16021,8 +16021,7 @@ begin
   end
   else
     result := true; // from Create() for better performance on single use
-  FastSetString(fPrivateCopy, nil, aLen + 16); // +16 for SSE4.2 read-ahead
-  MoveFast(pointer(aJson)^, pointer(fPrivateCopy)^, aLen + 1); // +1 for trailing #0
+  FastSetString(fPrivateCopy, pointer(aJson), aLen);
 end;
 
 function GetFieldCountExpanded(P: PUtf8Char): integer;
