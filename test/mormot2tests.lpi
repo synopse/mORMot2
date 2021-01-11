@@ -552,7 +552,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="88">
+    <Units Count="89">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -905,6 +905,10 @@
         <Filename Value="test.orm.extdb.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit87>
+      <Unit88>
+        <Filename Value="test.orm.network.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit88>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

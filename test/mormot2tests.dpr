@@ -111,6 +111,7 @@ uses
   test.orm.core            in '.\test.orm.core.pas',
   test.orm.sqlite3         in '.\test.orm.sqlite3.pas',
   test.orm.extdb           in '.\test.orm.extdb.pas',
+  test.orm.network         in '.\test.orm.network.pas',
   test.soa.network         in '.\test.soa.network.pas';
 
 
@@ -136,7 +137,9 @@ procedure TIntegrationTests.ORM;
 begin
   AddCase([
     //
-    TTestOrmCore, TTestSqliteFile, TTestSqliteFileWAL, TTestSqliteMemory, TTestExternalDatabase
+    TTestOrmCore, TTestSqliteFile, TTestSqliteFileWAL, TTestSqliteMemory,
+    TTestExternalDatabase, TTestClientServerAccess
+    //
   ]);
 end;
 
