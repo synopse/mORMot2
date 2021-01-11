@@ -752,8 +752,8 @@ var
   crc: cardinal;
 begin
   crc := Hash32(data);
-  CheckUTF8(crc = expectedhash32, 'Hash32()=% expected=% %',
-    [crc, expectedhash32, msg]);
+  CheckUTF8(crc = expectedhash32, 'Hash32()=$% expected=$% %',
+    [CardinalToHexShort(crc), CardinalToHexShort(expectedhash32), msg]);
 end;
 
 class function TSynTestCase.RandomString(CharCount: integer): RawByteString;
