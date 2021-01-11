@@ -1606,7 +1606,7 @@ function RdRand32: cardinal;
 {$ifdef FPC}nostackframe; assembler; asm{$else} asm .noframe {$endif FPC}
         // rdrand eax: same opcodes for x86 and x64
         db $0f, $c7, $f0
-        // returns in eax, ignore carry flag (eax=0 won't hurt)
+        // we ignore the carry flag (handled once in TestIntelCpuFeatures)
 end;
 
 function Rdtsc: Int64;
