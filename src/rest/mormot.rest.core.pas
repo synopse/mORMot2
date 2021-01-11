@@ -490,7 +490,7 @@ type
     // - aDefinition.Kind will define the actual class which will be
     // instantiated: currently TRestServerFullMemory, TRestServerDB,
     // TRestClientUriNamedPipe, TRestClientUriMessage,
-    // TRestHttpClientWinSock, TRestHttpClientWinINet, TRestHttpClientWinHttp,
+    // TRestHttpClientSocket, TRestHttpClientWinINet, TRestHttpClientWinHttp,
     // and TRestHttpClientCurl classes are recognized by this method
     // - then other aDefinition fields will be used to refine the instance:
     // please refer to each overriden DefinitionTo() method documentation

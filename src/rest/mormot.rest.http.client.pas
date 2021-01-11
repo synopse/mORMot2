@@ -8,10 +8,11 @@ unit mormot.rest.http.client;
 
    Client-Side REST Process over HTTP/WebSockets
     - TRestHttpClientGeneric and TRestHttpClientRequest Parent Classes
-    - TRestHttpClientWinSock REST Client Class over Sockets
+    - TRestHttpClientSocket REST Client Class over Sockets
     - TRestHttpClientWebsockets REST Client Class over WebSockets
     - TRestHttpClientWinINet TRestHttpClientWinHttp Windows REST Client Classes
     - TRestHttpClientCurl REST Client Class over LibCurl
+    - TRestHttpClient/TRestHttpClients Main Usable Classes
 
   *****************************************************************************
 }
@@ -119,7 +120,7 @@ type
     // - optional aProxyName may contain the name of the proxy server to use,
     // and aProxyByPass an optional semicolon delimited list of host names or
     // IP addresses, or both, that should not be routed through the proxy - note
-    // that proxy parameters are currently not available for TRestHttpClientWinSock
+    // that proxy parameters are currently not available for TRestHttpClientSocket
     // - you can customize the default client timeouts by setting appropriate
     // ConnectTimeout, SendTimeout and ReceiveTimeout parameters (in ms) - if
     // you left the 0 default parameters, it would use global
@@ -242,7 +243,7 @@ type
   TRestHttpClientRequestClass = class of TRestHttpClientRequest;
 
 
-{ ************ TRestHttpClientWinSock REST Client Class over Sockets }
+{ ************ TRestHttpClientSocket REST Client Class over Sockets }
 
   /// HTTP/1.1 RESTful JSON mORMot Client class using SynCrtSock's Sockets
   // - will give the best performance on a local computer, but has been found
@@ -251,7 +252,7 @@ type
   // - note that, in its current implementation, this class is not thread-safe:
   // you need either to lock its access via a critical section, or initialize
   // one client instance per thread
-  TRestHttpClientWinSock = class(TRestHttpClientGeneric)
+  TRestHttpClientSocket = class(TRestHttpClientGeneric)
   protected
     /// internal HTTP/1.1 compatible client
     fSocketClass: THttpClientSocketClass;
@@ -278,12 +279,12 @@ type
 {$ifndef NOHTTPCLIENTWEBSOCKETS}
 
   /// HTTP/1.1 RESTful JSON mORMot Client able to upgrade to WebSockets
-  // - in addition to TRestHttpClientWinSock, this client class is able
+  // - in addition to TRestHttpClientSocket, this client class is able
   // to upgrade its HTTP connection to the WebSockets protocol, so that the
   // server may be able to notify the client via a callback
   // - the internal Socket class will be in fact a THttpClientWebSockets
   // instance, as defined in the mormot.net.ws.client unit
-  TRestHttpClientWebsockets = class(TRestHttpClientWinSock)
+  TRestHttpClientWebsockets = class(TRestHttpClientSocket)
   protected
     fWebSocketParams: record
       AutoUpgrade: boolean;
@@ -426,40 +427,43 @@ type
   end;
   {$endif USELIBCURL}
 
+
+  { ************ TRestHttpClient/TRestHttpClients Main Usable Classes }
+
+type
   {$ifdef ONLYUSEHTTPSOCKET}
+
   /// HTTP/1.1 RESTful JSON default mORMot Client class
   // -  maps the raw socket implementation class
+  TRestHttpClient = TRestHttpClientSocket;
 
-  TRestHttpClient = TRestHttpClientWinSock;
   {$ifdef USELIBCURL}
-
+  /// HTTP/HTTPS RESTful JSON default mORMot Client class
   TRestHttpsClient = TRestHttpClientCurl;
   {$else}
   {$ifdef USEWININET}
-
   TRestHttpsClient = TRestHttpClientWinHttp;
   {$else}
-
-  TRestHttpsClient = TRestHttpClientWinSock; // (Android) fallback to non-TLS class
+  TRestHttpsClient = TRestHttpClientSocket; // (Android) fallback to non-TLS class
   {$endif USEWININET}
   {$endif USELIBCURL}
+
   {$else ONLYUSEHTTPSOCKET}
+
   {$ifdef USEWININET}
   /// HTTP/1.1 RESTful JSON default mORMot Client class
   // - under Windows, maps the TRestHttpClientWinHttp class
-
   TRestHttpClient = TRestHttpClientWinHttp;
+
   /// HTTP/HTTPS RESTful JSON default mORMot Client class
   // - under Windows, maps the TRestHttpClientWinHttp class, or TRestHttpClientCurl
   // under Linux
-
   TRestHttpsClient = TRestHttpClientWinHttp;
   {$else}
-
-  TRestHttpClient = TRestHttpClientWinSock;
-
-  TRestHttpsClient = TRestHttpClientWinSock; // wouls use SChannel if available
+  TRestHttpClient = TRestHttpClientSocket;
+  TRestHttpsClient = TRestHttpClientSocket; // wouls use SChannel if available
   {$endif USEWININET}
+
   {$endif ONLYUSEHTTPSOCKET}
 
 var
@@ -468,12 +472,11 @@ var
   HttpClientFullWebSocketsLog: boolean;
 
 
-
 {$ifndef PUREMORMOT2}
 // backward compatibility types redirections
 
 type
-  TSqlRestHttpClientWinSock = TRestHttpClientWinSock;
+  TSqlRestHttpClientWinSock = TRestHttpClientSocket;
   {$ifndef NOHTTPCLIENTWEBSOCKETS}
   TSqlRestHttpClientWebsockets = TRestHttpClientWebsockets;
   {$endif NOHTTPCLIENTWEBSOCKETS}
@@ -677,12 +680,12 @@ begin
 end;
 
 
-{ ************ TRestHttpClientWinSock REST Client Class over Sockets }
+{ ************ TRestHttpClientSocket REST Client Class over Sockets }
 
 
-{ TRestHttpClientWinSock }
+{ TRestHttpClientSocket }
 
-function TRestHttpClientWinSock.InternalCheckOpen: boolean;
+function TRestHttpClientSocket.InternalCheckOpen: boolean;
 var
   started, elapsed: Int64;
   wait, retry: integer;
@@ -757,7 +760,7 @@ begin
   end;
 end;
 
-procedure TRestHttpClientWinSock.InternalClose;
+procedure TRestHttpClientSocket.InternalClose;
 begin
   if fSocket <> nil then
   try
@@ -768,8 +771,8 @@ begin
   end;
 end;
 
-function TRestHttpClientWinSock.InternalRequest(const url, method: RawUtf8; var
-  Header, Data, DataType: RawUtf8): Int64Rec;
+function TRestHttpClientSocket.InternalRequest(const url, method: RawUtf8;
+  var Header, Data, DataType: RawUtf8): Int64Rec;
 begin
   fLogFamily.SynLog.Log(sllTrace, 'InternalRequest % calling %(%).Request',
     [method, fSocket.ClassType, pointer(fSocket)], self);
@@ -778,6 +781,7 @@ begin
   result.Hi := fSocket.ServerInternalState;
   Header := fSocket.HeaderGetText;
   Data := fSocket.Content;
+  fSocket.Content := ''; // ensure RefCnt=1 to avoid body alloc+copy
 end;
 
 
@@ -1105,7 +1109,7 @@ end;
 {$endif USELIBCURL}
 
 initialization
-  TRestHttpClientWinSock.RegisterClassNameForDefinition;
+  TRestHttpClientSocket.RegisterClassNameForDefinition;
   {$ifndef NOHTTPCLIENTWEBSOCKETS}
   TRestHttpClientWebsockets.RegisterClassNameForDefinition;
   {$endif NOHTTPCLIENTWEBSOCKETS}
