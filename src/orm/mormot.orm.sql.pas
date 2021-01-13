@@ -843,7 +843,7 @@ begin
               W.Add(')', '"');
             end;
           end;
-          W.Add(',');
+          W.AddComma;
         end;
       W.CancelLastComma;
       W.AddShorter(' from ');
@@ -900,7 +900,7 @@ begin
         for f := 0 to high(Stmt.GroupByField) do
         begin
           W.AddString(fStoredClassMapping^.FieldNameByIndex(Stmt.GroupByField[f] - 1));
-          W.Add(',');
+          W.AddComma;
         end;
         W.CancelLastComma;
       end;
@@ -910,7 +910,7 @@ begin
         for f := 0 to high(Stmt.OrderByField) do
         begin
           W.AddString(fStoredClassMapping^.FieldNameByIndex(Stmt.OrderByField[f] - 1));
-          W.Add(',');
+          W.AddComma;
         end;
         W.CancelLastComma;
         if Stmt.OrderByDesc then

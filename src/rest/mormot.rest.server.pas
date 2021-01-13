@@ -158,9 +158,10 @@ type
   // kind of custom routing or execution scheme
   // - instantiated by the TRestServer.Uri() method using its ServicesRouting
   // property
-  // - see TRestServerRoutingRest and TRestServerRoutingJsonRpc for working inherited
-  // classes - NEVER set this abstract TRestServerUriContext class to
-  // TRest.ServicesRouting property !
+  // - see TRestServerRoutingRest and TRestServerRoutingJsonRpc for workable
+  // classes - this abstract class will be rejected for TRest.ServicesRouting
+  // - on client side, see TRestClientRouting reciprocal class hierarchy and
+  // the ClientRouting class method - as defined in mormot.rest.client.pas
   TRestServerUriContext = class
   protected
     fInput: TRawUtf8DynArray; // even items are parameter names, odd are values
@@ -209,7 +210,7 @@ type
     procedure InternalSetTableFromTableIndex(Index: integer); virtual;
     procedure InternalSetTableFromTableName(TableName: PUtf8Char); virtual;
     procedure InternalExecuteSoaByInterface; virtual;
-    function IsRemoteIPBanned: boolean;
+    function IsRemoteIPBanned: boolean; // as method to avoid temp IP string
     /// retrieve RESTful URI routing
     // - should set URI, Table,TableIndex,TableRecordProps,TableEngine,
     // ID, UriBlobFieldName and Parameters members
@@ -875,9 +876,6 @@ type
   // client driven session will be signed individualy
   TRestServerRoutingJsonRpc = class(TRestServerUriContext)
   protected
-    /// the associated routing class on the client side
-    // - this overriden method returns TRestClientRoutingJsonRpc
-    class function ClientRouting: TRestClientRoutingClass; override;
     /// retrieve interface-based SOA with URI RESTful routing
     // - should set Service member (and possibly ServiceMethodIndex)
     // - this overridden implementation expects an URI encoded with
@@ -893,6 +891,10 @@ type
     // !  URL='root/Calculator.Add?+%5B+1%2C2+%5D' // decoded as ' [ 1,2 ]'
     // !  URL='root/Calculator.Add?n1=1&n2=2'      // in any order, even missing
     procedure ExecuteSoaByInterface; override;
+  public
+    /// the associated routing class on the client side
+    // - this overriden method returns TRestClientRoutingJsonRpc
+    class function ClientRouting: TRestClientRoutingClass; override;
   end;
 
   /// calling context for a TOnRestServerCallBack using JSON/RPC for
@@ -909,9 +911,6 @@ type
   // $ {"method":"Add","params":[20,30],"id":1234}
   TRestServerRoutingRest = class(TRestServerUriContext)
   protected
-    /// the associated routing class on the client side
-    // - this overriden method returns TRestClientRoutingRest
-    class function ClientRouting: TRestClientRoutingClass; override;
     /// retrieve interface-based SOA with URI JSON/RPC routing
     // - this overridden implementation expects an URI encoded with
     // '/Model/Interface' as for the JSON/RPC routing scheme, and won't
@@ -923,6 +922,10 @@ type
     // of a JSON object body:
     // $ {"method":"Add","params":[20,30],"id":1234}
     procedure ExecuteSoaByInterface; override;
+  public
+    /// the associated routing class on the client side
+    // - this overriden method returns TRestClientRoutingRest
+    class function ClientRouting: TRestClientRoutingClass; override;
   end;
 
   /// class used to define the Server side expected routing
@@ -4675,7 +4678,7 @@ begin
           AddJsonEscape(Values[i]);
           if i = h then
             break;
-          Add(',');
+          AddComma;
           inc(i);
         until false;
         Add(']');
@@ -6641,7 +6644,7 @@ begin
   begin
     W.AddShort(',"cachedMemoryBytes":');
     W.AddU(fOrm.CacheOrNil.CachedMemory); // will also flush outdated JSON
-    W.Add(',');
+    W.AddComma;
   end;
   if (fRun.BackgroundTimer <> nil) and
      (fRun.BackgroundTimer.Stats <> nil) then
@@ -6649,7 +6652,7 @@ begin
     W.CancelLastComma;
     W.AddShort(',"backgroundTimer":');
     fRun.BackgroundTimer.Stats.ComputeDetailsTo(W);
-    W.Add(',');
+    W.AddComma;
   end;
   if withtables in Flags then
   begin
@@ -6946,7 +6949,7 @@ begin
       for i := 0 to fSessions.Count - 1 do
       begin
         W.WriteObject(fSessions.List[i]);
-        W.Add(',');
+        W.AddComma;
       end;
       W.CancelLastComma;
       W.Add(']');

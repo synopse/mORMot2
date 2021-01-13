@@ -1979,7 +1979,7 @@ begin
           if ValuesInlinedMax > n then
             AddShorter('):,')
           else
-            Add(',');
+            AddComma;
         end;
         CancelLastComma;
         Add(')');
@@ -2025,7 +2025,7 @@ begin
           if ValuesInlinedMax > n then
             AddShorter('):,')
           else
-            Add(',');
+            AddComma;
         end;
         CancelLastComma;
         Add(')');

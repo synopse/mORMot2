@@ -930,7 +930,7 @@ begin
           [self, doc.Names[i], fStoredClass]);
       W.AddProp(pointer(name), Length(name));
       W.AddVariant(doc.Values[i], twJsonEscape);
-      W.Add(',');
+      W.AddComma;
     end;
     W.CancelLastComma;
     W.Add('}');
@@ -1140,13 +1140,13 @@ begin
           W.AddShort('null')
         else
           itemfound^.AddMongoJson(W, modNoMongo);
-        W.Add(',');
+        W.AddComma;
       end;
       W.CancelLastComma;
       if W.Expand then
         W.Add('}', ',')
       else
-        W.Add(',');
+        W.AddComma;
       inc(result);
     end;
   end;

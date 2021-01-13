@@ -4048,7 +4048,7 @@ var
       WR.Add('{');
     end
     else
-      WR.Add(',');
+      WR.AddComma;
     WR.AddFieldName(name);
     while (ending > start) and
           (ending[-1] <= ' ') do
@@ -4141,9 +4141,9 @@ begin
          not (ve^ in [',', '}']) then
         exit;
       wk.AddNoJsonEscape(kb, ke - kb);
-      wk.Add(',');
+      wk.AddComma;
       wv.AddNoJsonEscape(vb, ve - vb);
-      wv.Add(',');
+      wv.AddComma;
       kb := ve + 1;
     until ve^ = '}';
     wk.CancelLastComma;
@@ -4819,7 +4819,7 @@ end;
 procedure TTextWriter.BlockAfterItem(Options: TTextWriterWriteObjectOptions);
 begin
   // defined here for proper inlining
-  Add(',');
+  AddComma;
   if woHumanReadable in Options then
     AddCRAndIndent;
 end;
@@ -5613,7 +5613,7 @@ procedure TTextWriter.AddPropJsonString(const PropName: shortstring;
 begin
   AddProp(@PropName[1], ord(PropName[0]));
   AddJsonString(Text);
-  Add(',');
+  AddComma;
 end;
 
 procedure TTextWriter.AddPropJSONInt64(const PropName: shortstring;
@@ -5621,7 +5621,7 @@ procedure TTextWriter.AddPropJSONInt64(const PropName: shortstring;
 begin
   AddProp(@PropName[1], ord(PropName[0]));
   Add(Value);
-  Add(',');
+  AddComma;
 end;
 
 procedure TTextWriter.InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: cardinal;
@@ -5978,7 +5978,7 @@ begin
   for i := 0 to high(Integers) do
   begin
     Add(Integers[i]);
-    Add(',');
+    AddComma;
   end;
   CancelLastComma;
 end;
@@ -5992,7 +5992,7 @@ begin
   for i := 0 to high(Doubles) do
   begin
     AddDouble(Doubles[i]);
-    Add(',');
+    AddComma;
   end;
   CancelLastComma;
 end;
@@ -6021,7 +6021,7 @@ begin
   for i := 0 to high(Values) do
   begin
     AddJsonEscape(Values[i]);
-    Add(',');
+    AddComma;
   end;
   CancelLastComma;
 end;
@@ -6785,7 +6785,7 @@ begin
     AddNoJsonEscape(keys, k - keys);
     Add(':');
     AddNoJsonEscape(values, v - values);
-    Add(',');
+    AddComma;
     if (k^ <> ',') or
        (v^ <> ',') then
       break; // reached the end of the input JSON arrays
@@ -6835,7 +6835,7 @@ var
     else
       AddJsonEscape(NameValuePairs[a]);
     end;
-    Add(',');
+    AddComma;
   end;
 
 begin

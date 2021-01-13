@@ -1217,7 +1217,7 @@ begin
     for i := 0 to High(Values) do
     begin
       WR.AddJsonEscape(Values[i]);
-      WR.Add(',');
+      WR.AddComma;
     end;
     WR.Add('"');
     WR.AddString(ContentType);

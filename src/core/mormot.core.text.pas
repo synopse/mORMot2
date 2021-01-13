@@ -838,6 +838,9 @@ type
     /// append one ASCII char to the buffer
     procedure Add(c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// append one comma (',') character
+    procedure AddComma;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append one ASCII char to the buffer, if not already there as LastChar
     procedure AddOnce(c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -4737,7 +4740,7 @@ begin
   for i := 0 to length(a) - 1 do
   begin
     WriteObject(a[i], aOptions);
-    Add(',');
+    AddComma;
   end;
   CancelLastComma;
   Add(']');
@@ -4941,6 +4944,14 @@ begin
   if B >= BEnd then
     FlushToStream;
   B[1] := c;
+  inc(B);
+end;
+
+procedure TBaseWriter.AddComma;
+begin
+  if B >= BEnd then
+    FlushToStream;
+  B[1] := ',';
   inc(B);
 end;
 
@@ -6297,7 +6308,7 @@ begin
         else
           AddPropName(ClassNameShort(Values[i])^);
         WriteObject(Values[i], Options);
-        Add(',');
+        AddComma;
       end;
     CancelLastComma;
     Add('}');

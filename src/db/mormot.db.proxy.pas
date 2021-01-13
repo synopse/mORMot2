@@ -1407,7 +1407,7 @@ begin
             WR.WrBase64(PAnsiChar(Data), DataLen, {withMagic=}true);
           end;
       end;
-    WR.Add(',');
+    WR.AddComma;
   end;
   WR.CancelLastComma; // cancel last ','
   if WR.Expand then

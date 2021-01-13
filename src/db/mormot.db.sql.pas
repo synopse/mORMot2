@@ -4686,7 +4686,7 @@ var
               for f := 0 to maxf do
               begin
                 AddString(FieldNames[f]);
-                Add(',');
+                AddComma;
               end;
               CancelLastComma;
               AddShort(') VALUES (');
@@ -4695,7 +4695,7 @@ var
                 inc(p);
                 Add(':', 'i');
                 AddU(p);
-                Add(',');
+                AddComma;
               end;
               CancelLastComma;
               AddShorter(');'#10);
@@ -4718,7 +4718,7 @@ var
               for f := 0 to maxf do
               begin
                 AddString(FieldNames[f]);
-                Add(',');
+                AddComma;
               end;
               CancelLastComma;
               AddShort(') VALUES (');
@@ -4739,7 +4739,7 @@ var
           for f := 0 to maxf do
           begin
             AddString(FieldNames[f]);
-            Add(',');
+            AddComma;
           end;
           CancelLastComma;
           AddShort(') VALUES');
@@ -4908,7 +4908,7 @@ begin
         for f := 0 to maxf do
         begin
           W.AddString(FieldNames[f]);
-          W.Add(',');
+          W.AddComma;
         end;
         W.CancelLastComma;
         W.AddShort(') VALUES (');
@@ -4940,7 +4940,7 @@ begin
             end
           else
             W.AddString(v);
-          W.Add(',');
+          W.AddComma;
         end;
         W.CancelLastComma;
         W.AddShorter(');'#10);
@@ -5629,7 +5629,7 @@ begin
           '%.ColumnsToJson: invalid ColumnType(%)=%',
           [self, col, ord(ColumnType(col))]);
       end;
-    WR.Add(',');
+    WR.AddComma;
   end;
   WR.CancelLastComma; // cancel last ','
   if WR.Expand then
@@ -5746,7 +5746,7 @@ begin
     while Step do
     begin
       ColumnsToJson(W);
-      W.Add(',');
+      W.AddComma;
       inc(result);
     end;
     {$ifdef SYNDB_SILENCE}

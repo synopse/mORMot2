@@ -1168,7 +1168,7 @@ Write:    case ColumnType of
           LogStatusError(V^.Status, @fColumns[col]);
         end;
       end;
-      WR.Add(',');
+      WR.AddComma;
     end;
   WR.CancelLastComma; // cancel last ','
   if WR.Expand then

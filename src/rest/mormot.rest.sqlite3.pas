@@ -291,7 +291,7 @@ begin
           with Cache[ndx[i]] do
           begin
             W.AddJsonEscape([StatementSql, Timer]);
-            W.Add(',');
+            W.AddComma;
           end;
       finally
         DB.UnLock;

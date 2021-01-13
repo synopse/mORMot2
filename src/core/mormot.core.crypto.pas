@@ -9130,7 +9130,7 @@ begin
     result := false
   else
   begin
-    Crypt.Decrypt(PAesBlock(buff)^, TAesBlock(Head));
+    Crypt.Decrypt(PAesBlock(buff)^, PAesBlock({%H-}@Head)^);
     result := Head.Calc(Key, KeySize) = Head.HeaderCheck;
     Crypt.Done;
   end;

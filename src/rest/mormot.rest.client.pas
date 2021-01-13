@@ -391,7 +391,8 @@ type
     // params should contain the incoming parameters as JSON CSV (without []),
     // and clientDriven ID should contain the optional Client ID value
     // - at output, should update the HTTP uri corresponding to the proper
-    // routing, and should return the corresponding HTTP body within sent
+    // routing, and should return the corresponding HTTP body/headers within
+    // sent/head parameters
     class procedure ClientSideInvoke(var uri: RawUtf8;
       ctxt: TRestClientSideInvoke;
       const method, params, clientDrivenID: RawUtf8;
@@ -404,6 +405,8 @@ type
   // kind of custom routing or execution scheme
   // - TRestClientRoutingRest and TRestClientRoutingJsonRpc classes are provided
   // in this unit, to allow RESTful and JSON/RPC protocols on Client side
+  // - you can retrieve the client class from the reciprocal server-side class
+  // using TRestServerUriContext.ClientRouting class method
   TRestClientRoutingClass = class of TRestClientRouting;
 
   /// client calling context using simple REST for interface-based services

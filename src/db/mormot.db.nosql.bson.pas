@@ -3930,7 +3930,7 @@ begin
           else
             W.AddProp(item.Name, item.NameLen);
           item.AddMongoJson(W, Mode);
-          W.Add(',');
+          W.AddComma;
         end;
         W.CancelLastComma;
         W.Add('}');
@@ -3941,7 +3941,7 @@ begin
         while item.FromNext(BsonList) do
         begin
           item.AddMongoJson(W, Mode);
-          W.Add(',');
+          W.AddComma;
         end;
         W.CancelLastComma;
         W.Add(']');

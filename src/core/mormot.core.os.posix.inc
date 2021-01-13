@@ -1201,19 +1201,6 @@ begin
   FastSetString(result, S, P - S);
 end;
 
-function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char; inline;
-begin
-  result := nil;
-  repeat
-    if Str^ = #0 then
-      exit;
-    if Str^ = Chr then
-      break;
-    inc(Str);
-  until false;
-  result := Str;
-end;
-
 // we bypass crt.pp since this unit cancels the SIGINT signal
 
 procedure AllocConsole;

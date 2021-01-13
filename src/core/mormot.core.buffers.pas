@@ -7604,7 +7604,7 @@ begin
       Dest.Add('$');
       Dest.AddByteToHex(P^);
       inc(P);
-      Dest.Add(',');
+      Dest.AddComma;
     end;
     dec(Len,line);
   until Len = 0;

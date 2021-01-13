@@ -3287,7 +3287,7 @@ begin
               end;
               W.Add(':');
               W.AddVariant(VValue[ndx], twJsonEscape);
-              W.Add(',');
+              W.AddComma;
             end;
             W.CancelLastComma;
             W.Add('}');
@@ -3298,7 +3298,7 @@ begin
             for ndx := 0 to VCount - 1 do
             begin
               W.AddVariant(VValue[ndx], twJsonEscape);
-              W.Add(',');
+              W.AddComma;
             end;
             W.CancelLastComma;
             W.Add(']');
@@ -5525,7 +5525,7 @@ begin
         end;
         W.Add(':');
         W.AddVariant(VValue[ndx], twJsonEscape);
-        W.Add(',');
+        W.AddComma;
       end;
     W.CancelLastComma;
     W.Add('}');
@@ -5780,7 +5780,7 @@ begin
         else
         begin
           W.AddVariant(row^.VValue[f], twJsonEscape);
-          W.Add(',');
+          W.AddComma;
         end;
     end;
     W.CancelLastComma;

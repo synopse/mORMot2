@@ -399,19 +399,19 @@ type
     fCrypto: array[0..7] of cardinal; // only fCrypto[6..7] are used in practice
     fCryptoCRC: cardinal;
     fSafe: TSynLocker;
-    fCryptoAesE, fCryptoAesD: TAes; // Initialized if aSharedObfuscationKeyNewKDF
+    fCryptoAesE, fCryptoAesD: TAes; // Initialized if aSharedObfuscationKeyNewKdf
     function GetComputedCount: Int64;
     function GetCollisions: Int64;
   public
     /// initialize the generator for the given 16-bit process identifier
     // - you can supply an obfuscation key, which should be shared for the
     // whole system, so that you may use FromObfuscated/ToObfuscated methods
-    // - if aSharedObfuscationKeyNewKDF=true safer AES/SHA3 algorithms will be
-    // used for the obfuscation cryptography - keep it as false for mORMot 1.18
-    // backward compatibility
+    // - if aSharedObfuscationKeyNewKdf is > 0, indicates the rounds count for
+    // a safer AES/SHA3 algorithm used for the obfuscation cryptography - keep
+    // it as default 0 for mORMot 1.18 backward compatibility
     constructor Create(aIdentifier: TSynUniqueIdentifierProcess;
       const aSharedObfuscationKey: RawUtf8 = '';
-      aSharedObfuscationKeyNewKDF: boolean = false); reintroduce;
+      aSharedObfuscationKeyNewKdf: integer = 0); reintroduce;
     /// finalize the generator structure
     destructor Destroy; override;
     /// return a new unique ID
@@ -433,7 +433,7 @@ type
     /// map a TSynUniqueIdentifier as 24/32 chars cyphered hexadecimal text
     // - cyphering includes simple key-based encryption and a CRC-32 digital signature
     // - returned text size is 24 for the legacy format, and 32 chars if
-    // aSharedObfuscationKeyNewKDF was set to true
+    // aSharedObfuscationKeyNewKdf was set to true
     function ToObfuscated(
       const aIdentifier: TSynUniqueIdentifier): TSynUniqueIdentifierObfuscated;
     /// retrieve a TSynUniqueIdentifier from 24/32 chars cyphered hexadecimal text
@@ -1709,7 +1709,7 @@ end;
 
 constructor TSynUniqueIdentifierGenerator.Create(
   aIdentifier: TSynUniqueIdentifierProcess; const aSharedObfuscationKey: RawUtf8;
-  aSharedObfuscationKeyNewKDF: boolean);
+  aSharedObfuscationKeyNewKdf: integer);
 var
   i, len: integer;
   crc: cardinal;
@@ -1722,14 +1722,15 @@ begin
   fSafe.LockedInt64[SYNUNIQUEGEN_COLLISIONCOUNT] := 0;
   // compute obfuscation key using hash diffusion of the supplied text
   len := length(aSharedObfuscationKey);
-  if aSharedObfuscationKeyNewKDF then
+  if aSharedObfuscationKeyNewKdf > 0 then
   begin
     // efficient and safe obfuscation based on proven algoriths (AES + SHA3)
-    PBKDF2_SHA3(SHA3_256, aSharedObfuscationKey, ToText(ClassType), 100, @key);
+    PBKDF2_SHA3(SHA3_256, aSharedObfuscationKey,
+       ToText(ClassType), aSharedObfuscationKeyNewKdf, @key);
     fCryptoAesE.EncryptInit(key, 128);
     fCryptoAesD.DecryptInitFrom(fCryptoAesE, key, 128);
     fCryptoCRC := key.c[7];
-    // fCrypto[] is not used if fCryptoAes.Initialized is set
+    // fCrypto[] is not used if fCryptoAes*.Initialized are set
   end
   else
   begin

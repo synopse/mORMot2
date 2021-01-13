@@ -1891,7 +1891,7 @@ begin
   for i := 0 to high(fCursors) do
   begin
     W.Add(fCursors[i]);
-    W.Add(',');
+    W.AddComma;
   end;
   W.CancelLastComma;
   W.Add(']', '}');
@@ -2107,7 +2107,7 @@ begin
   begin
     inc(b, sizeof(integer)); // points to the "e_list" of "int32 e_list #0"
     BSONListToJson(b, betDoc, W, Mode);
-    W.Add(',');
+    W.AddComma;
     if (MaxSize > 0) and
        (W.TextLength > MaxSize) then
     begin
@@ -2355,7 +2355,7 @@ var
   W: TTextWriter absolute Opaque;
 begin
   Reply.FetchAllToJson(W, modMongoStrict, false);
-  W.Add(',');
+  W.AddComma;
 end;
 
 procedure TMongoConnection.ReplyJsonExtended(Request: TMongoRequest;
@@ -2364,7 +2364,7 @@ var
   W: TTextWriter absolute Opaque;
 begin
   Reply.FetchAllToJson(W, modMongoShell, false);
-  W.Add(',');
+  W.AddComma;
 end;
 
 procedure TMongoConnection.ReplyJsonNoMongo(Request: TMongoRequest;
@@ -2373,7 +2373,7 @@ var
   W: TTextWriter absolute Opaque;
 begin
   Reply.FetchAllToJson(W, modNoMongo, false);
-  W.Add(',');
+  W.AddComma;
 end;
 
 procedure TMongoConnection.ReplyBson(Request: TMongoRequest;

@@ -1401,7 +1401,7 @@ begin
           [self, col, fColumns[col].ColumnName, ord(fColumns[col].ColumnType)]);
       end;
     end;
-    WR.Add(',');
+    WR.AddComma;
   end;
   WR.CancelLastComma; // cancel last ','
   if WR.Expand then

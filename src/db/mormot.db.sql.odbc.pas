@@ -825,7 +825,7 @@ begin
         else
           assert(false);
         end;
-      WR.Add(',');
+      WR.AddComma;
     end;
   WR.CancelLastComma; // cancel last ','
   if WR.Expand then

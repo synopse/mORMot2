@@ -5611,7 +5611,7 @@ begin
           begin
             inc(result);
             FieldsToJson(W);
-            W.Add(',');
+            W.AddComma;
           end;
         SQLITE_DONE:
           break;
@@ -5973,7 +5973,7 @@ begin
           WR.Add('"');
         end;
     end; // case ColTypes[]
-    WR.Add(',');
+    WR.AddComma;
   end;
   WR.CancelLastComma; // cancel last ','
   if WR.Expand then

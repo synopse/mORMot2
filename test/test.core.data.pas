@@ -1969,12 +1969,12 @@ begin
     with TTextWriter.CreateOwnedStream do
     try
       AddVariant(a);
-      Add(',');
+      AddComma;
       AddVariant(r);
-      Add(',');
+      AddComma;
       PInt64(@c)^ := a;
       AddVariant(c);
-      Add(',');
+      AddComma;
       U := Int32ToUtf8(a);
       AddVariant(U);
       J := Text;

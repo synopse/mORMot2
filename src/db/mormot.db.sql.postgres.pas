@@ -764,7 +764,7 @@ begin
           raise ESqlDBPostgres.CreateUtf8('%.ColumnsToJson: %?', [self, ToText(ColumnType)^]);
       end;
     end;
-    WR.Add(',');
+    WR.AddComma;
   end;
   WR.CancelLastComma; // cancel last ','
   if WR.Expand then

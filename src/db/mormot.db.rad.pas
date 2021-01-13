@@ -1053,7 +1053,7 @@ begin
             else
               W.AddNull; // unhandled field type
             end;
-        W.Add(',');
+        W.AddComma;
       end;
       W.CancelLastComma;
       W.Add('}', ',');
@@ -1607,7 +1607,7 @@ begin
           raise ESqlDBException.CreateUtf8('%: Invalid ColumnType()=%',
             [self, ord(ColumnType)]);
         end;
-      WR.Add(',');
+      WR.AddComma;
     end;
   WR.CancelLastComma; // cancel last ','
   if WR.Expand then

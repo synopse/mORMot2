@@ -1540,7 +1540,7 @@ begin
     for i := 0 to high(fInterface) do
     begin
       WR.AddString(fInterface[i].Service.Contract);
-      WR.Add(',');
+      WR.AddComma;
     end;
     WR.CancelLastComma;
     WR.Add(']');
@@ -1703,7 +1703,7 @@ begin
            (fTimeoutTix[i] < tix) then
         begin
           aWriter.AddRecordJson(@List[i], TypeInfo(TServicesPublishedInterfaces));
-          aWriter.Add(',');
+          aWriter.AddComma;
         end;
     end
     else
@@ -1715,7 +1715,7 @@ begin
              (fTimeoutTix[i] < tix) then
           begin
             aWriter.AddRecordJson(@List[i].PublicUri, TypeInfo(TRestServerUri));
-            aWriter.Add(',');
+            aWriter.AddComma;
           end;
     aWriter.CancelLastComma;
     aWriter.Add(']');

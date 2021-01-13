@@ -63,7 +63,7 @@ type
   // generated, e.g. "iat":1477438667
   // - jrcJwtID provides a unique identifier for the JWT, to prevent any replay;
   // TJwtAbstract.Compute will set an obfuscated TSynUniqueIdentifierGenerator
-  // hexadecimal value
+  // hexadecimal value stored as "jti" payload field
   TJwtClaim = (
     jrcIssuer,
     jrcSubject,
@@ -117,6 +117,8 @@ type
     // $ {"sub": "1234567890","name": "John Doe","admin": true}
     // but data.U['sub'] if not defined, and reg[jrcSubject]='1234567890'
     data: TDocVariantData;
+    /// match the jrcJwtID "jti" claim desobfuscated value
+    id: TSynUniqueIdentifierBits;
   end;
   /// pointer to a JWT decoded content, as processed by TJwtAbstract
 
@@ -181,11 +183,12 @@ type
     // - the supplied set of claims are expected to be defined in the JWT payload
     // - aAudience are the allowed values for the jrcAudience claim
     // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
-    // - aIDIdentifier and aIDObfuscationKey are passed to a
-    // TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
+    // - aIDIdentifier and aIDObfuscationKey/aIDObfuscationKeyNewKdf are passed
+    // to a TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
     constructor Create(const aAlgorithm: RawUtf8; aClaims: TJwtClaims;
       const aAudience: array of RawUtf8; aExpirationMinutes: integer;
-      aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8); reintroduce;
+      aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8;
+      aIDObfuscationKeyNewKdf: integer = 0); reintroduce;
     /// finalize the instance
     destructor Destroy; override;
     /// compute a new JWT for a given payload
@@ -285,6 +288,9 @@ type
     // - only used if CacheTimeoutSeconds>0
     property CacheResults: TJwtResults
       read fCacheResults write fCacheResults;
+    /// access to the low-level generator associated with jrcJwtID "jti" claim
+    property IDGen: TSynUniqueIdentifierGenerator
+      read fIDGen;
   end;
 
   /// class-reference type (metaclass) of a JWT algorithm process
@@ -304,11 +310,13 @@ type
     // - the supplied set of claims are expected to be defined in the JWT payload
     // - aAudience are the allowed values for the jrcAudience claim
     // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
-    // - aIDIdentifier and aIDObfuscationKey are passed to a
-    // TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
+    // - aIDIdentifier and aIDObfuscationKey/aIDObfuscationKeyNewKdf are passed
+    // to a TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
     constructor Create(aClaims: TJwtClaims; const aAudience: array of RawUtf8;
-      aExpirationMinutes: integer = 0; aIDIdentifier: TSynUniqueIdentifierProcess = 0;
-      aIDObfuscationKey: RawUtf8 = ''); reintroduce;
+      aExpirationMinutes: integer = 0;
+      aIDIdentifier: TSynUniqueIdentifierProcess = 0;
+      aIDObfuscationKey: RawUtf8 = '';
+      aIDObfuscationKeyNewKdf: integer = 0); reintroduce;
   end;
 
 
@@ -349,13 +357,16 @@ type
     // if some number of rounds were specified
     // - aAudience are the allowed values for the jrcAudience claim
     // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
-    // - aIDIdentifier and aIDObfuscationKey are passed to a
-    // TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
+    // - aIDIdentifier and aIDObfuscationKey/aIDObfuscationKeyNewKdf are passed
+    // to a TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
     // - optionally return the PBKDF2 derivated key for aSecretPbkdf2Round>0
     constructor Create(const aSecret: RawUtf8; aSecretPbkdf2Round: integer;
       aClaims: TJwtClaims; const aAudience: array of RawUtf8;
-      aExpirationMinutes: integer = 0; aIDIdentifier: TSynUniqueIdentifierProcess = 0;
-      aIDObfuscationKey: RawUtf8 = ''; aPBKDF2Secret: PHash512Rec = nil); reintroduce;
+      aExpirationMinutes: integer = 0;
+      aIDIdentifier: TSynUniqueIdentifierProcess = 0;
+      aIDObfuscationKey: RawUtf8 = '';
+      aIDObfuscationKeyNewKdf: integer = 0;
+      aPBKDF2Secret: PHash512Rec = nil); reintroduce;
     /// finalize the instance
     destructor Destroy; override;
     /// the digital signature size, in byte
@@ -501,12 +512,13 @@ type
     // - aCertificate is owned by this instance if property OwnCertificate is true
     // - aAudience are the allowed values for the jrcAudience claim
     // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
-    // - aIDIdentifier and aIDObfuscationKey are passed to a
-    // TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
+    // - aIDIdentifier and aIDObfuscationKey/aIDObfuscationKeyNewKdf are passed
+    // to a TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
     constructor Create(aCertificate: TEccCertificate; aClaims: TJwtClaims;
       const aAudience: array of RawUtf8; aExpirationMinutes: integer = 0;
       aIDIdentifier: TSynUniqueIdentifierProcess = 0;
-      aIDObfuscationKey: RawUtf8 = ''); reintroduce;
+      aIDObfuscationKey: RawUtf8 = '';
+      aIDObfuscationKeyNewKdf: integer = 0); reintroduce;
     /// finalize the instance
     destructor Destroy; override;
     /// access to the associated TEccCertificate instance
@@ -529,7 +541,8 @@ implementation
 
 constructor TJwtAbstract.Create(const aAlgorithm: RawUtf8; aClaims: TJwtClaims;
   const aAudience: array of RawUtf8; aExpirationMinutes: integer;
-  aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8);
+  aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8;
+  aIDObfuscationKeyNewKdf: integer);
 begin
   if aAlgorithm = '' then
     raise EJwtException.CreateUtf8('%.Create(algo?)', [self]);
@@ -549,7 +562,8 @@ begin
   fAlgorithm := aAlgorithm;
   fClaims := aClaims;
   if jrcJwtID in aClaims then
-    fIDGen := TSynUniqueIdentifierGenerator.Create(aIDIdentifier, aIDObfuscationKey);
+    fIDGen := TSynUniqueIdentifierGenerator.Create(
+      aIDIdentifier, aIDObfuscationKey, aIDObfuscationKeyNewKdf);
   if fHeader = '' then
     FormatUtf8('{"alg":"%","typ":"JWT"}', [aAlgorithm], fHeader);
   fHeaderB64 := BinToBase64Uri(fHeader) + '.';
@@ -750,39 +764,40 @@ var
   EndOfObject: AnsiChar;
   claim: TJwtClaim;
   requiredclaims: TJwtClaims;
-  id: TSynUniqueIdentifierBits;
   value: variant;
-  payload: RawUtf8;
   head: array[0..1] of TValuePUtf8Char;
   aud: TDocVariantData;
   tok: PAnsiChar absolute Token;
+  temp: TSynTempBuffer;
 begin
   // 0. initialize parsing
-  FastAssignNew(JWT.reg);
-  JWT.data.InitFast(0, dvObject); // custom claims
+  JWT.result := jwtNoToken;
   byte(JWT.claims) := 0;
   word(JWT.audience) := 0;
+  Finalize(JWT.reg);
+  JWT.data.InitFast(0, dvObject); // custom claims
+  JWT.id.Value := 0;
   toklen := length(Token);
   if (toklen = 0) or
      (self = nil) then
-  begin
-    JWT.result := jwtNoToken;
     exit;
-  end;
   // 1. validate the header (including algorithm "alg" verification)
   JWT.result := jwtInvalidAlgorithm;
   if joHeaderParse in fOptions then
   begin
-    // slower parsing
+    // (slightly) slower parsing
     headerlen := PosExChar('.', Token);
     if (headerlen = 0) or
        (headerlen > 512) then
       exit;
-    Base64UriToBin(tok, headerlen - 1, signature);
-    JsonDecode(pointer(signature), ['alg', 'typ'], @head);
-    if not head[0].Idem(fAlgorithm) or
-       ((head[1].value <> nil) and
+    if not Base64UriToBin(tok, headerlen - 1, temp) or
+       (JsonDecode(temp.buf, ['alg', 'typ'], @head) = nil) or
+       not {%H-}head[0].Idem(fAlgorithm) or
+       ((head[1].Value <> nil) and
         not head[1].Idem('JWT')) then
+      headerlen := 0;
+    temp.Done;
+    if headerlen = 0 then
       exit;
   end
   else
@@ -806,62 +821,76 @@ begin
      (payloadend <> toklen) then
     exit;
   JWT.result := jwtInvalidPayload;
-  Base64UriToBin(tok + headerlen, payloadend - headerlen - 1, RawByteString(payload));
-  if payload = '' then
-    exit;
-  // 3. decode the payload into JWT.reg[]/JWT.claims (known) and JWT.data (custom)
-  P := GotoNextNotSpace(pointer(payload));
-  if P^ <> '{' then
-    exit;
-  P := GotoNextNotSpace(P + 1);
-  cap := JsonObjectPropCount(P);
-  if cap < 0 then
-    exit;
-  requiredclaims := fClaims - excluded;
-  if cap > 0 then
-    repeat
-      N := GetJsonPropName(P);
-      if N = nil then
-        exit;
-      V := GetJsonFieldOrObjectOrArray(P, @wasString, @EndOfObject, true);
-      if V = nil then
-        exit;
-      len := StrLen(N);
-      if len = 3 then
-      begin
-        c := PInteger(N)^;
-        for claim := low(claim) to high(claim) do
-          if PInteger(JWT_CLAIMS_TEXT[claim])^ = c then
-          begin
-            if V^ = #0 then
-              exit;
-            include(JWT.claims, claim);
-            if not (claim in fClaims) and
-               not (joAllowUnexpectedClaims in fOptions) then
+  try
+    if not Base64UriToBin(tok + headerlen, payloadend - headerlen - 1, temp) then
+      exit;
+    // 3. decode the payload into JWT.reg[]/JWT.claims (known) and JWT.data (custom)
+    P := GotoNextNotSpace(temp.buf);
+    if P^ <> '{' then
+      exit;
+    P := GotoNextNotSpace(P + 1);
+    cap := JsonObjectPropCount(P);
+    if cap < 0 then
+      exit;
+    requiredclaims := fClaims - excluded;
+    if cap > 0 then
+      repeat
+        N := GetJsonPropName(P);
+        if N = nil then
+          exit;
+        V := GetJsonFieldOrObjectOrArray(P, @wasString, @EndOfObject, true);
+        if V = nil then
+          exit;
+        len := StrLen(N);
+        if len = 3 then
+        begin
+          c := PInteger(N)^;
+          for claim := low(claim) to high(claim) do
+            if PInteger(JWT_CLAIMS_TEXT[claim])^ = c then
             begin
-              JWT.result := jwtUnexpectedClaim;
-              exit;
-            end;
-            FastSetString(JWT.reg[claim], V, StrLen(V));
-            if claim in requiredclaims then
-              case claim of
-                jrcJwtID:
-                  if not (joNoJwtIDCheck in fOptions) then
-                    if not fIDGen.FromObfuscated(JWT.reg[jrcJwtID], id.Value) or
-                       (id.CreateTimeUnix < UNIXTIME_MINIMAL) then
+              if V^ = #0 then
+                exit;
+              include(JWT.claims, claim);
+              if not (claim in fClaims) and
+                 not (joAllowUnexpectedClaims in fOptions) then
+              begin
+                JWT.result := jwtUnexpectedClaim;
+                exit;
+              end;
+              FastSetString(JWT.reg[claim], V, StrLen(V));
+              if claim in requiredclaims then
+                case claim of
+                  jrcJwtID:
+                    if not (joNoJwtIDCheck in fOptions) then
+                      if not fIDGen.FromObfuscated(JWT.reg[jrcJwtID], JWT.id.Value) or
+                         (JWT.id.CreateTimeUnix < UNIXTIME_MINIMAL) then
+                      begin
+                        JWT.result := jwtInvalidID;
+                        exit;
+                      end;
+                  jrcAudience:
+                    if JWT.reg[jrcAudience][1] = '[' then
                     begin
-                      JWT.result := jwtInvalidID;
-                      exit;
-                    end;
-                jrcAudience:
-                  if JWT.reg[jrcAudience][1] = '[' then
-                  begin
-                    aud.InitJson(JWT.reg[jrcAudience], JSON_OPTIONS_FAST);
-                    if aud.Count = 0 then
-                      exit;
-                    for j := 0 to aud.Count - 1 do
+                      aud.InitJson(JWT.reg[jrcAudience], JSON_OPTIONS_FAST);
+                      if aud.Count = 0 then
+                        exit;
+                      for j := 0 to aud.Count - 1 do
+                      begin
+                        a := FindRawUtf8(fAudience, VariantToUtf8(aud.Values[j]));
+                        if a < 0 then
+                        begin
+                          JWT.result := jwtUnknownAudience;
+                          if not (joAllowUnexpectedAudience in fOptions) then
+                            exit;
+                        end
+                        else
+                          include(JWT.audience, a);
+                      end;
+                      aud.Clear;
+                    end
+                    else
                     begin
-                      a := FindRawUtf8(fAudience, VariantToUtf8(aud.Values[j]));
+                      a := FindRawUtf8(fAudience, JWT.reg[jrcAudience]);
                       if a < 0 then
                       begin
                         JWT.result := jwtUnknownAudience;
@@ -871,42 +900,31 @@ begin
                       else
                         include(JWT.audience, a);
                     end;
-                    aud.Clear;
-                  end
-                  else
-                  begin
-                    a := FindRawUtf8(fAudience, JWT.reg[jrcAudience]);
-                    if a < 0 then
-                    begin
-                      JWT.result := jwtUnknownAudience;
-                      if not (joAllowUnexpectedAudience in fOptions) then
-                        exit;
-                    end
-                    else
-                      include(JWT.audience, a);
-                  end;
-              end;
-            len := 0; // don't add to JWT.data
-            dec(cap);
-            break;
-          end;
-        if len = 0 then
-          continue;
-      end;
-      GetVariantFromJson(V, wasString, value, @JSON_OPTIONS[true],
-        joDoubleInData in fOptions);
-      if JWT.data.Count = 0 then
-        JWT.data.Capacity := cap;
-      JWT.data.AddValue(N, len, value)
-    until EndOfObject = '}';
-  if JWT.data.Count > 0 then
-    JWT.data.Capacity := JWT.data.Count;
-  if requiredclaims - JWT.claims <> [] then
-    JWT.result := jwtMissingClaim
-  else
-  begin
-    FastSetString(headpayload, tok, payloadend - 1);
-    JWT.result := jwtValid;
+                end;
+              len := 0; // don't add to JWT.data
+              dec(cap);
+              break;
+            end;
+          if len = 0 then
+            continue;
+        end;
+        GetVariantFromJson(V, wasString, value, @JSON_OPTIONS[true],
+          joDoubleInData in fOptions);
+        if JWT.data.Count = 0 then
+          JWT.data.Capacity := cap;
+        JWT.data.AddValue(N, len, value)
+      until EndOfObject = '}';
+    if JWT.data.Count > 0 then
+      JWT.data.Capacity := JWT.data.Count;
+    if requiredclaims - JWT.claims <> [] then
+      JWT.result := jwtMissingClaim
+    else
+    begin
+      FastSetString(headpayload, tok, payloadend - 1);
+      JWT.result := jwtValid;
+    end;
+  finally
+    temp.Done;
   end;
 end;
 
@@ -929,17 +947,22 @@ var
   P, B: PUtf8Char;
   V: array[0..4] of TValuePUtf8Char;
   now, time: PtrUInt;
-  text: RawUtf8;
+  temp, temp2: TSynTempBuffer;
 begin
   result := jwtInvalidAlgorithm;
-  B := pointer(Token);
-  P := PosChar(B, '.');
+  P := PosChar(pointer(Token), '.');
   if P = nil then
     exit;
   if self <> TJwtAbstract then
   begin
-    text := Base64UriToBin(PAnsiChar(B), P - B);
-    if not IdemPropNameU(copy(ToText(self), 5, 10), JsonDecode(text, 'alg')) then
+    B := pointer(Token);
+    if not Base64UriToBin(PAnsiChar(B), P - B, temp) or
+       (JsonDecode(temp.buf, ['alg'], @V, false) = nil) or
+       not IdemPropName(copy(ClassNameShort(self)^, 5, 10),
+         {%H-}V[0].Value, {%H-}V[0].ValueLen) then
+      B := nil;
+    temp.Done;
+    if B = nil then
       exit;
   end;
   B := P + 1;
@@ -948,52 +971,64 @@ begin
   if P = nil then
     exit;
   result := jwtInvalidPayload;
-  text := Base64UriToBin(PAnsiChar(B), P - B);
-  if text = '' then
-    exit;
-  if Payload <> nil then
-    _Json(text, Payload^, JSON_OPTIONS_FAST);
-  JsonDecode(pointer(text), ['iss', 'aud', 'exp', 'nbf', 'sub'], @V, true);
-  result := jwtUnexpectedClaim;
-  if ((ExpectedSubject <> '') and
-      not V[4].Idem(ExpectedSubject)) or
-     ((ExpectedIssuer <> '') and
-      not V[0].Idem(ExpectedIssuer)) then
-    exit;
-  result := jwtUnknownAudience;
-  if (ExpectedAudience <> '') and
-     not V[1].Idem(ExpectedAudience) then
-    exit;
-  if Expiration <> nil then
-    Expiration^ := 0;
-  if (V[2].value <> nil) or
-     (V[3].value <> nil) then
+  if not Base64UriToBin(PAnsiChar(B), P - B, temp) then
   begin
-    now := UnixTimeUtc;
-    if V[2].value <> nil then
-    begin
-      time := V[2].ToCardinal;
-      result := jwtExpired;
-      if not IgnoreTime and
-         (now > time) then
-        exit;
-      if Expiration <> nil then
-        Expiration^ := time;
-    end;
-    if not IgnoreTime and
+    temp.Done;
+    exit;
+  end;
+  if Payload <> nil then
+  begin
+    VarClear(PayLoad^);
+    temp2.Init(temp.buf, temp.len); // its own copy for in-place parsing
+    PDocVariantData(PayLoad)^.InitJsonInPlace(temp2.buf, JSON_OPTIONS_FAST);
+    temp2.Done;
+  end;
+  repeat // avoid try..finally
+    if JsonDecode(temp.buf, ['iss', 'aud', 'exp', 'nbf', 'sub'], @V, true) = nil then
+      break;
+    result := jwtUnexpectedClaim;
+    if ((ExpectedSubject <> '') and
+        not V[4].Idem(ExpectedSubject)) or
+       ((ExpectedIssuer <> '') and
+        not V[0].Idem(ExpectedIssuer)) then
+      break;
+    result := jwtUnknownAudience;
+    if (ExpectedAudience <> '') and
+       not V[1].Idem(ExpectedAudience) then
+      break;
+    if Expiration <> nil then
+      Expiration^ := 0;
+    if (V[2].value <> nil) or
        (V[3].value <> nil) then
     begin
-      time := V[3].ToCardinal;
-      result := jwtNotBeforeFailed;
-      if (time = 0) or
-         (now + PtrUInt(NotBeforeDelta) < time) then
-        exit;
+      now := UnixTimeUtc;
+      if V[2].value <> nil then
+      begin
+        time := V[2].ToCardinal;
+        result := jwtExpired;
+        if not IgnoreTime and
+           (now > time) then
+          break;
+        if Expiration <> nil then
+          Expiration^ := time;
+      end;
+      if not IgnoreTime and
+         (V[3].value <> nil) then
+      begin
+        time := V[3].ToCardinal;
+        result := jwtNotBeforeFailed;
+        if (time = 0) or
+           (now + PtrUInt(NotBeforeDelta) < time) then
+          break;
+      end;
     end;
-  end;
-  inc(P);
-  if Signature <> nil then
-    FastSetString(Signature^, P, StrLen(P));
-  result := jwtValid;
+    inc(P);
+    if Signature <> nil then
+      FastSetString(Signature^, P, StrLen(P));
+    result := jwtValid;
+    break;
+  until false;
+  temp.Done;
 end;
 
 
@@ -1001,11 +1036,12 @@ end;
 
 constructor TJwtNone.Create(aClaims: TJwtClaims;
   const aAudience: array of RawUtf8; aExpirationMinutes: integer;
-  aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8);
+  aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8;
+  aIDObfuscationKeyNewKdf: integer);
 begin
   fHeader := '{"alg":"none"}'; // "typ":"JWT" is optional, so we save a few bytes
   inherited Create('none', aClaims, aAudience, aExpirationMinutes,
-    aIDIdentifier, aIDObfuscationKey);
+    aIDIdentifier, aIDObfuscationKey, aIDObfuscationKeyNewKdf);
 end;
 
 procedure TJwtNone.CheckSignature(const headpayload: RawUtf8;
@@ -1057,13 +1093,13 @@ constructor TJwtSynSignerAbstract.Create(const aSecret: RawUtf8;
   aSecretPbkdf2Round: integer; aClaims: TJwtClaims;
   const aAudience: array of RawUtf8; aExpirationMinutes: integer;
   aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8;
-  aPBKDF2Secret: PHash512Rec);
+  aIDObfuscationKeyNewKdf: integer; aPBKDF2Secret: PHash512Rec);
 var
   algo: TSignAlgo;
 begin
   algo := GetAlgo;
   inherited Create(JWT_TEXT[algo], aClaims, aAudience, aExpirationMinutes,
-    aIDIdentifier, aIDObfuscationKey);
+    aIDIdentifier, aIDObfuscationKey, aIDObfuscationKeyNewKdf);
   if (aSecret <> '') and
      (aSecretPbkdf2Round > 0) then
     fSignPrepared.Init(algo, aSecret, fHeaderB64, aSecretPbkdf2Round, aPBKDF2Secret)
@@ -1180,12 +1216,13 @@ end;
 
 constructor TJwtES256.Create(aCertificate: TEccCertificate; aClaims: TJwtClaims;
   const aAudience: array of RawUtf8; aExpirationMinutes: integer;
-  aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8);
+  aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8;
+  aIDObfuscationKeyNewKdf: integer);
 begin
   if not aCertificate.CheckCRC then
     raise EJwtException.CreateUtf8('%.Create(aCertificate?)', [self]);
   inherited Create('ES256', aClaims, aAudience, aExpirationMinutes,
-    aIDIdentifier, aIDObfuscationKey);
+    aIDIdentifier, aIDObfuscationKey, aIDObfuscationKeyNewKdf);
   fCertificate := aCertificate;
 end;
 

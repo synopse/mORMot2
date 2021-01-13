@@ -2640,7 +2640,7 @@ begin
         AddShort(V^);
       if quotedValues then
         Add('"');
-      Add(',');
+      AddComma;
       inc(PByte(V), length(V^) + 1);
     end;
     CancelLastComma;

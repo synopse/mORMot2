@@ -2339,7 +2339,7 @@ begin
   else
   begin
     WR.AddString(Value);
-    WR.Add(',');
+    WR.AddComma;
   end;
 end;
 
@@ -2357,7 +2357,7 @@ begin
     imvRecord:
       begin
         WR.AddVoidRecordJson(ArgRtti);
-        WR.Add(',');
+        WR.AddComma;
       end;
     imvVariant:
       WR.AddShorter('null,');
@@ -2651,7 +2651,7 @@ begin
         if arginfo^.ValueType = imvDynArray then
           W.Add(']');
       end;
-      W.Add(',');
+      W.AddComma;
     end;
     W.CancelLastComma;
     W.Add('}');
@@ -3132,12 +3132,12 @@ var
                       Params.AddObjArrayJson(V^, opt)
                     else
                       Params.AddDynArrayJson(DynArrays[IndexVar]);
-                    Params.Add(',');
+                    Params.AddComma;
                   end;
               else
                 begin
                   AddJson(Params, V, opt);
-                  Params.Add(',');
+                  Params.AddComma;
                 end;
               end;
           end;
@@ -5366,7 +5366,7 @@ begin
           else
           begin
             W.AddVariant(fOutput[ndx], twJsonEscape);
-            W.Add(',');
+            W.AddComma;
           end;
           inc(ndx);
           if cardinal(ndx) >= cardinal(fMethod^.ArgsOutputValuesCount) then
@@ -7163,7 +7163,7 @@ begin
           else
             AddJson(Res, fValues[a], opt[ValueDirection = imdVar]);
           end;
-          Res.Add(',');
+          Res.AddComma;
         end;
       Res.CancelLastComma;
     end;

@@ -481,7 +481,7 @@ procedure TInterfacedObjectFakeClient.InterfaceWrite(W: TTextWriter;
 begin
   W.Add(TRestClientUri(fClient.fClient).FakeCallbackRegister(
     fClient, aMethod, aParamInfo, aParamValue));
-  W.Add(',');
+  W.AddComma;
 end;
 
 destructor TInterfacedObjectFakeClient.Destroy;

@@ -6863,7 +6863,8 @@ type
     // whole system, so that you may use FromObfuscated/ToObfuscated methods
     function SetIDGenerator(aTable: TOrmClass;
       aIdentifier: TSynUniqueIdentifierProcess;
-      const aSharedObfuscationKey: RawUtf8 = ''): TSynUniqueIdentifierGenerator;
+      const aSharedObfuscationKey: RawUtf8 = '';
+      aSharedObfuscationKeyNewKdf: integer = 0): TSynUniqueIdentifierGenerator;
     /// returns the TSynUniqueIdentifierGenerator associated to a table, if any
     function GetIDGenerator(aTable: TOrmClass): TSynUniqueIdentifierGenerator;
     /// low-level access to the TSynUniqueIdentifierGenerator instances, if any
@@ -8740,7 +8741,7 @@ begin
               W.AddString(DecodedFieldNames^[F]);
               W.AddShorter('=v.');
               W.AddString(DecodedFieldNames^[F]);
-              W.Add(',');
+              W.AddComma;
             end;
             W.CancelLastComma;
             W.AddShort(' from ( select');
@@ -8754,7 +8755,7 @@ begin
             for F := 0 to FieldCount - 1 do
             begin
               W.AddString(DecodedFieldNames^[F]);
-              W.Add(',');
+              W.AddComma;
             end;
             W.AddString(UpdateIDFieldName);
             W.AddShort(') where t.');
@@ -8794,7 +8795,7 @@ begin
             for F := 0 to FieldCount - 1 do
             begin // append 'COL1,COL2'
               W.AddString(DecodedFieldNames^[F]);
-              W.Add(',');
+              W.AddComma;
             end;
             W.CancelLastComma;
             W.AddShort(') values (');
@@ -8841,7 +8842,7 @@ var
     if InlinedParams = pInlined then
       W.AddShorter('):,')
     else
-      W.Add(',');
+      W.AddComma;
   end;
 
 begin
@@ -8868,7 +8869,7 @@ begin
       for F := 0 to FieldCount - 1 do
       begin // append 'COL1,COL2'
         W.AddString(DecodedFieldNames^[F]);
-        W.Add(',');
+        W.AddComma;
       end;
       W.CancelLastComma;
       W.AddShort(') VALUES (');
@@ -8904,7 +8905,7 @@ begin
           W.AddQuotedStringAsJson(FieldValues[F])
       else
         W.AddString(FieldValues[F]);
-      W.Add(',');
+      W.AddComma;
     end;
     W.CancelLastComma;
     W.Add('}');
@@ -14152,7 +14153,7 @@ str:          W.Add('"');
           else
             goto nostr;
         end;
-      W.Add(',');
+      W.AddComma;
       inc(U); // points to next value
     end;
     W.CancelLastComma;
@@ -14163,7 +14164,7 @@ str:          W.Add('"');
         W.AddCR; // make expanded json more human readable
     end
     else
-      W.Add(',');
+      W.AddComma;
   end;
   W.EndJsonObject(1, 0, false); // "RowCount": set by W.AddColumns() above
 end;
@@ -17017,7 +17018,7 @@ begin
   while FillOne do
   begin
     GetJsonValues(W);
-    W.Add(',');
+    W.AddComma;
   end;
   W.CancelLastComma;
   W.Add(']');
@@ -17170,7 +17171,7 @@ begin
   if W.WithID then
   begin
     W.Add(fID);
-    W.Add(',');
+    W.AddComma;
     if (jwoID_str in W.fOrmOptions) and W.Expand then
     begin
       W.AddShort('"ID_str":"');
@@ -17190,7 +17191,7 @@ begin
         inc(c);
       end;
       Props.List[W.Fields[f]].GetJsonValues(self, W);
-      W.Add(',');
+      W.AddComma;
     end;
   end;
   W.CancelLastComma; // cancel last ','
@@ -17235,12 +17236,12 @@ begin
   while FillOne do
   begin
     AppendAsJsonObject(W, Fields);
-    W.Add(',');
+    W.AddComma;
   end;
   W.CancelLastComma;
   W.Add(']');
   if FieldName <> '' then
-    W.Add(',');
+    W.AddComma;
 end;
 
 procedure TOrm.ForceVariantFieldsOptions(aOptions: TDocVariantOptions);
@@ -19508,7 +19509,7 @@ begin
          not (P^ in [',', ']']) then
         exit;
       W.AddNoJsonEscape(Start, P - Start);
-      W.Add(',');
+      W.AddComma;
       repeat
         inc(P)
       until (P^ > ' ') or
@@ -19753,7 +19754,7 @@ begin
       if f in Bits then
       begin
         W.AddString(Fields.List[f].Name);
-        W.Add(',');
+        W.AddComma;
       end;
     W.CancelLastComma;
     W.SetText(result);
@@ -20531,15 +20532,16 @@ begin
 end;
 
 function TOrmModel.SetIDGenerator(aTable: TOrmClass;
-  aIdentifier: TSynUniqueIdentifierProcess;
-  const aSharedObfuscationKey: RawUtf8): TSynUniqueIdentifierGenerator;
+  aIdentifier: TSynUniqueIdentifierProcess; const aSharedObfuscationKey: RawUtf8;
+  aSharedObfuscationKeyNewKdf: integer): TSynUniqueIdentifierGenerator;
 var
   i: PtrInt;
 begin
   i := GetTableIndexExisting(aTable);
   if i >= length(fIDGenerator) then
     SetLength(fIDGenerator, fTablesMax + 1);
-  result := TSynUniqueIdentifierGenerator.Create(aIdentifier, aSharedObfuscationKey);
+  result := TSynUniqueIdentifierGenerator.Create(
+    aIdentifier, aSharedObfuscationKey, aSharedObfuscationKeyNewKdf);
   fIDGenerator[i].Free;
   fIDGenerator[i] := result;
 end;
@@ -21046,7 +21048,7 @@ type
         W.AddStrings([TableName, '.']);
       W.AddString(RowIDFieldName);
       if 0 in FieldNamesMatchInternal then
-        W.Add(',')
+        W.AddComma
       else
         W.AddShorter(' as ID,');
     end;
@@ -21064,7 +21066,7 @@ type
                   if not (f + 1 in FieldNamesMatchInternal) then
                     // to get expected JSON column name
                     W.AddStrings([' as ', Name]);
-                  W.Add(',');
+                  W.AddComma;
                 end;
               cUpdateSimple:
                 if f in SimpleFieldsBits[ooSelect] then
@@ -21866,7 +21868,7 @@ begin
   begin // should be the first command
     fBatch.AddShort('"automaticTransactionPerRow",');
     fBatch.Add(AutomaticTransactionPerRow);
-    fBatch.Add(',');
+    fBatch.AddComma;
   end;
   fOptions := Options;
   if boExtendedJson in Options then
@@ -21876,7 +21878,7 @@ begin
   begin
     fBatch.AddShort('"options",');
     fBatch.Add(byte(Options));
-    fBatch.Add(',');
+    fBatch.AddComma;
   end;
 end;
 
@@ -21938,7 +21940,7 @@ begin // '{"Table":[...,"POST",{object},...]}'
     raise EOrmException.CreateUtf8('%.RawAdd %', [self, SentData]);
   fBatch.AddShorter('"POST",');
   fBatch.AddString(SentData);
-  fBatch.Add(',');
+  fBatch.AddComma;
   result := fBatchCount;
   inc(fBatchCount);
   inc(fAddCount);
@@ -21955,9 +21957,9 @@ begin // '{"Table":[...,"PUT",{object},...]}'
     raise EOrmException.CreateUtf8('%.RawUpdate ID=% <> %', [self, ID, SentData]);
   fBatch.AddShort('"PUT",{ID:');
   fBatch.Add(ID);
-  fBatch.Add(',');
+  fBatch.AddComma;
   fBatch.AddStringCopy(SentData, 2, maxInt shr 2);
-  fBatch.Add(',');
+  fBatch.AddComma;
   result := fBatchCount;
   inc(fBatchCount);
   inc(fUpdateCount);
@@ -22021,7 +22023,7 @@ begin
       for f := 0 to length(Props.SimpleFields) - 1 do
       begin
         Props.SimpleFields[f].GetJsonValues(Value, fBatch);
-        fBatch.Add(',');
+        fBatch.AddComma;
       end;
       fBatch.CancelLastComma;
       fBatch.Add(']');
@@ -22033,7 +22035,7 @@ begin
   end
   else
     fBatch.Add('{', '}'); // '{"Table":[...,"POST",{},...]}'
-  fBatch.Add(',');
+  fBatch.AddComma;
   result := fBatchCount;
   inc(fBatchCount);
   inc(fAddCount);
@@ -22058,7 +22060,7 @@ begin
   fBatch.AddString(Table.OrmProps.SqlTableName);
   fBatch.Add('"', ',');
   fBatch.Add(ID);
-  fBatch.Add(',');
+  fBatch.AddComma;
   result := fBatchCount;
   inc(fBatchCount);
   inc(fDeleteCount);
@@ -22078,7 +22080,7 @@ begin
   AddID(fDeletedRecordRef, fDeletedCount, RecordReference(fTableIndex, ID));
   fBatch.AddShort('"DELETE",'); // '{"Table":[...,"DELETE",ID,...]}'
   fBatch.Add(ID);
-  fBatch.Add(',');
+  fBatch.AddComma;
   result := fBatchCount;
   inc(fBatchCount);
   inc(fDeleteCount);
@@ -22156,7 +22158,7 @@ begin
   if not DoNotAutoComputeFields then
     Value.ComputeFieldsBeforeWrite(fRest, oeUpdate); // update oftModTime fields
   Value.GetJsonValues(fBatch);
-  fBatch.Add(',');
+  fBatch.AddComma;
   if fCalledWithinRest and (FieldBits - Props.SimpleFieldsBits[ooUpdate] = []) then
     ForceCacheUpdate := true; // safe to update the cache with supplied values
   if ForceCacheUpdate then
