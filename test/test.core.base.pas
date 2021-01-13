@@ -411,7 +411,7 @@ const
       {$endif FPC}
       v := random32;
       {$ifdef CPU64}
-      v := v or (PtrUInt(random32) shl 32);
+      v := v or (PtrUInt(Random32) shl 32);
       {$endif CPU64}
       c := GetBitsCount64(v, POINTERBITS);
       CheckEqual(GetBitsCountPtrInt(v), c);
@@ -586,8 +586,8 @@ begin
     if i < 500 then
       V1 := i * 3
     else
-      V1 := Random * (Int64(MaxInt) * 10);
-    if Random(10) < 4 then
+      V1 := Random64 shr 28;
+    if Random32 and 3 = 0 then
       V1 := -V1;
     v := Curr64ToStr(PInt64(@V1)^);
     tmp[0] := AnsiChar(Curr64ToPChar(PInt64(@V1)^, @tmp[1]));
@@ -657,12 +657,10 @@ var
   P: PUtf8Char;
 begin
   Content := '';
-  Randomize;
-  //RandSeed := 10;
   for i := 1 to 1000 do
   begin
-    Si := Random(20);
-    Ni := Random(50);
+    Si := Random32(20);
+    Ni := Random32(50);
     Vi := Si * Ni + Ni;
     if Si = 0 then
       S := ''
@@ -2312,16 +2310,16 @@ begin
   Check(IsEqualGuid(RawUtf8ToGuid(s), GUID));
   for i := 1 to 1000 do
   begin
-    g.D1 := Random(maxInt);
-    g.D2 := Random(65535);
-    g.D3 := Random(65535);
-    Int64(g.D4) := Int64(Random(maxInt)) * Random(maxInt);
+    g.D1 := Random32;
+    g.D2 := Random32(65535);
+    g.D3 := Random32(65535);
+    Int64(g.D4) := Random64;
     st := GuidToString(g);
     Check(st = SysUtils.GuidToString(g));
     Check(IsEqualGuid(StringToGuid(st), g));
     s := GuidToRawUtf8(g);
     Check(st = Utf8ToString(s));
-    st[Random(38) + 1] := ' ';
+    st[Random32(38) + 1] := ' ';
     g2 := StringToGuid(st);
     Check(IsZero(@g2, sizeof(g2)));
     Check(TextToGuid(@s[2], @g2)^ = '}');
@@ -2787,7 +2785,8 @@ end;
 
 procedure TTestCoreBase._Random32;
 var
-  i: PtrInt;
+  i, n: PtrInt;
+  q, qp: QWord;
   c: array[0..1000] of cardinal;
   timer: TPrecisionTimer;
 begin
@@ -2802,7 +2801,19 @@ begin
     Check(Random32(i) < cardinal(i));
   for i := 0 to 100000 do
     Check(Random32(maxInt - i) < cardinal(maxInt - i));
-  NotifyTestSpeed('Random32', 100000 * 2, 100000 * 8, @timer);
+  qp := 0;
+  n := 0;
+  for i := 1 to 20000 do
+  begin
+    q := Random64;
+    Check((q = 0) or (q <> qp));
+    if q and $ffffffff00000000 <> 0 then
+      inc(n);
+    qp := q;
+  end;
+  Check(n > 20000 - 20, 'Random64');
+  n := 100000 * 2 + 20000 * 2;
+  NotifyTestSpeed('Random32', n, n * 4, @timer);
 end;
 
 procedure TTestCoreBase._TRawUtf8Interning;
@@ -4099,7 +4110,7 @@ begin
   Timer.Start;
   RandSeed := 10;
   for i := 0 to 99999 do
-    StrInt64(@varint[31], Int64(7777) * Random32);
+    StrInt64(@varint[31], Int64(7777) * Random(maxInt));
   fRunConsole := format('%s StrInt64 %s %s/s', [fRunConsole, Timer.Stop,
     IntToThousandString(Timer.PerSec(100000))]);
 end;

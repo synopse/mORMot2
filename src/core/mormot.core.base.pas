@@ -2532,6 +2532,9 @@ function Random32: cardinal; overload;
 // randomness, but is twice slower (even with AES-NI)
 function Random32(max: cardinal): cardinal; overload;
 
+/// fast compute of a 64-bit random value, using the gsl_rng_taus2 generator
+function Random64: QWord;
+
 /// seed the gsl_rng_taus2 Random32 generator
 // - by default, gsl_rng_taus2 generator is re-seeded every 256KB, much more
 // often than the Pierre L'Ecuyer's algorithm period of 2^88
@@ -8439,6 +8442,14 @@ end;
 function Random32(max: cardinal): cardinal;
 begin
   result := (QWord(_Lecuyer.Next) * max) shr 32;
+end;
+
+function Random64: QWord;
+var
+  gen: ^TLecuyer; // with _Lecuyer do ... get twice the threadvar on FPC :(
+begin
+  gen := @_Lecuyer;
+  result := QWord(gen^.Next) * gen^.Next;
 end;
 
 procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
