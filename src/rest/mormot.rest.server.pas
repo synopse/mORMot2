@@ -115,7 +115,7 @@ type
     Request: TRestServerUriContext;
     /// the thread which launched the request
     // - is set by TRestServer.BeginCurrentThread from multi-thread server
-    // handlers - e.g. TSqlite3HttpServer or TRestServerNamedPipeResponse
+    // handlers - e.g. TRestHttpServer
     RunningThread: TThread;
   end;
 
@@ -584,6 +584,8 @@ type
     // - will be used e.g. by ClientOrmOptions to check if the
     // current remote client expects standard JSON in all cases
     function ClientKind: TRestServerUriContextClientKind;
+    /// the associated routing class on the client side
+    class function ClientRouting: TRestClientRoutingClass; virtual; abstract;
     /// identify if the request is about a Table containing nested objects or
     // arrays, which could be serialized as JSON objects or arrays, instead
     // of plain JSON string (as stored in the database)
@@ -873,6 +875,9 @@ type
   // client driven session will be signed individualy
   TRestServerRoutingJsonRpc = class(TRestServerUriContext)
   protected
+    /// the associated routing class on the client side
+    // - this overriden method returns TRestClientRoutingJsonRpc
+    class function ClientRouting: TRestClientRoutingClass; override;
     /// retrieve interface-based SOA with URI RESTful routing
     // - should set Service member (and possibly ServiceMethodIndex)
     // - this overridden implementation expects an URI encoded with
@@ -904,6 +909,9 @@ type
   // $ {"method":"Add","params":[20,30],"id":1234}
   TRestServerRoutingRest = class(TRestServerUriContext)
   protected
+    /// the associated routing class on the client side
+    // - this overriden method returns TRestClientRoutingRest
+    class function ClientRouting: TRestClientRoutingClass; override;
     /// retrieve interface-based SOA with URI JSON/RPC routing
     // - this overridden implementation expects an URI encoded with
     // '/Model/Interface' as for the JSON/RPC routing scheme, and won't
@@ -924,7 +932,6 @@ type
   // - TRestServerRoutingJsonRpc and TRestServerRoutingRest classes
   // are provided in this unit, to allow RESTful and JSON/RPC protocols
   TRestServerUriContextClass = class of TRestServerUriContext;
-
 
 
 { ************ TAuthSession for In-Memory User Sessions }
@@ -4770,6 +4777,11 @@ end;
 
 { TRestServerRoutingRest }
 
+class function TRestServerRoutingRest.ClientRouting: TRestClientRoutingClass;
+begin
+  result := TRestClientRoutingRest;
+end;
+
 procedure TRestServerRoutingRest.UriDecodeSoaByInterface;
 var
   i: PtrInt;
@@ -4908,6 +4920,11 @@ end;
 
 
 { TRestServerRoutingJsonRpc }
+
+class function TRestServerRoutingJsonRpc.ClientRouting: TRestClientRoutingClass;
+begin
+  result := TRestClientRoutingJsonRpc;
+end;
 
 procedure TRestServerRoutingJsonRpc.UriDecodeSoaByInterface;
 begin
