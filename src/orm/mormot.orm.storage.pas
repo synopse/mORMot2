@@ -2893,11 +2893,15 @@ begin
   end;
   if binary then
   begin
-    fMaxID := FindMaxID(pointer(fValue), fCount);
-    fUnSortedID := false; // by SaveToBinary design
+    // IDs are sorted by SaveToBinary design
+    if fCount = 0 then
+      fMaxID := 0
+    else
+      fMaxID := fValue[fCount - 1].IDValue;
+    fUnSortedID := false;
   end
   else
-  // JSON may have been tampered
+    // JSON may have been tampered, so we actually ensure IDs are sorted
     fMaxID := FindMaxIDAndCheckSorted(pointer(fValue), fCount, fUnSortedID);
   InternalLog('LoadFrom% % count=% load=% index=%',
     [_CALLER[binary], fStoredClass, fCount, loaded.Stop, timer.Stop]);
