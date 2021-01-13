@@ -4182,36 +4182,14 @@ begin
 end;
 
 function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char;
-var
-  c: cardinal;
 begin
-  // FPC is efficient at compiling this code
   result := nil;
   if Str <> nil then
   begin
     repeat
-      c := PCardinal(Str)^;
-      if ToByte(c) = 0 then
+      if Str^ = #0 then
         exit
-      else if ToByte(c) = byte(Chr) then
-        break;
-      c := c shr 8;
-      inc(Str);
-      if ToByte(c) = 0 then
-        exit
-      else if ToByte(c) = byte(Chr) then
-        break;
-      c := c shr 8;
-      inc(Str);
-      if ToByte(c) = 0 then
-        exit
-      else if ToByte(c) = byte(Chr) then
-        break;
-      c := c shr 8;
-      inc(Str);
-      if ToByte(c) = 0 then
-        exit
-      else if ToByte(c) = byte(Chr) then
+      else if Str^ = Chr then
         break;
       inc(Str);
     until false;
