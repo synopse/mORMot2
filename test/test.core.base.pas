@@ -4396,15 +4396,18 @@ begin
     Test(CP_UTF16, W);
     W := WinAnsiString(RandomString(len));
     U := WinAnsiToUtf8(W);
+    check(PosChar(pointer(U), #10) = nil);
     if len > 0 then
     begin
       check(PosEx(U[1], U) = 1);
       check(PosExChar(U[1], U) = 1);
+      check(PosChar(pointer(U), U[1]) = @U[1]);
       if (len > 1) and
          (U[1] <> U[2]) then
       begin
         check(PosEx(U[2], U) = 2);
         check(PosExChar(U[2], U) = 2);
+        check(PosChar(pointer(U), U[2]) = @U[2]);
         if (len > 2) and
            (U[1] <> U[2]) and
            (U[2] <> U[3]) and
@@ -4412,11 +4415,13 @@ begin
         begin
           check(PosEx(U[3], U) = 3);
           check(PosExChar(U[3], U) = 3);
+          check(PosChar(pointer(U), U[3]) = @U[3]);
         end;
       end;
     end;
     for j := 1 to lenup100 do
     begin
+      check(PosChar(pointer(U), U[j])^ = U[j]);
       // validates with offset parameter
       check(PosEx(#13, U, j) = 0);
       check(PosEx(U[j], U, j) = j);
@@ -4476,6 +4481,10 @@ begin
     Up := UpperCaseUnicode(U);
     Check(Up = UpperCaseUnicode(LowerCaseUnicode(U)));
     Check(kr32(0, pointer(U), length(U)) = kr32reference(pointer(U), length(U)));
+    U2 := U + #10;
+    check(PosChar(pointer(U2), #0) = nil);
+    check(PosChar(pointer(U2), #1) = nil);
+    check(PosChar(pointer(U2), #10) = @U2[length(U2)]);
     if U = '' then
       continue;
     U2 := QuotedStr(U, '"');
@@ -4653,7 +4662,7 @@ procedure TTestCoreBase.Iso8601DateAndTime;
     check(d1.IsZero);
     {%H-}d2.SetMax;
     check(not d2.IsZero);
-    check(not d1.IsEqual(d2));
+    check{%H-}(not d1.IsEqual(d2));
     check(d1.Compare(d2) < 0);
     check(d2.Compare(d1) > 0);
     t := d2.ToText(false);
@@ -5023,6 +5032,13 @@ begin
     check(JsonPropNameValid(@edf[i]) <> (i in [5, 7]));
   for i := 15 downto 0 do
     check(JsonPropNameValid(@eda[i]) = (i > 8));
+  Check(PosChar('ABC', 'z') = nil);
+  Check(PosChar(nil, 'A') = nil);
+  Check(PosChar('ABC', 'A')^ = 'A');
+  Check(PosChar('ABC', 'B')^ = 'B');
+  Check(PosChar('ABC', 'C')^ = 'C');
+  Check(PosChar('ABC', 'a') = nil);
+  Check(PosChar('ABC', #0) = nil);
   Check(PosCharAny('ABC', 'z') = nil);
   Check(PosCharAny('ABC', 'A')^ = 'A');
   Check(PosCharAny('ABC', 'B')^ = 'B');
@@ -5532,14 +5548,13 @@ var
   gen: TSynUniqueIdentifierGenerator;
   i1, i2: TSynUniqueIdentifierBits;
   i3: TSynUniqueIdentifier;
-  newalgo: boolean;
-  i: integer;
+  rounds, i: integer;
   json, obfusc: RawUtf8;
   timer: TPrecisionTimer;
 begin
-  for newalgo := false to true do
+  for rounds := 0 to 1 do
   begin
-    gen := TSynUniqueIdentifierGenerator.Create(10, 'toto', newalgo);
+    gen := TSynUniqueIdentifierGenerator.Create(10, 'toto', rounds * 100);
     try
       for i := 1 to 50000 do
       begin
@@ -5562,7 +5577,7 @@ begin
         obfusc := gen.ToObfuscated(i1.Value);
         check(gen.FromObfuscated(obfusc, i3));
         check(i1.Value = i3);
-        if newalgo then
+        if rounds > 0 then
           check(Length(obfusc) = 32)
         else
           check(Length(obfusc) = 24);
@@ -5576,7 +5591,7 @@ begin
       gen.Free;
     end;
   end;
-  gen := TSynUniqueIdentifierGenerator.Create(10, 'toto', true);
+  gen := TSynUniqueIdentifierGenerator.Create(10, 'toto', 100);
   try
     i3 := 0;
     check(gen.FromObfuscated(obfusc, i3), 'SharedObfuscationKey');
@@ -5813,7 +5828,7 @@ begin
   n := RandomTextParagraph(100);
   d := DeltaCompress(n, o{%H-});
   check(DeltaExtract(d, o, s) = dsSuccess, 'delta0');
-  Check(s = n);
+  Check(s = n);{%H-}
   d := DeltaCompress(n, s);
   check(d = '=');
   for i := 1 to 20 do
