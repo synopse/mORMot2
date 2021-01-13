@@ -6151,7 +6151,7 @@ type
   // map TServiceRunningContext from mormot.rest.server.pas
   TPerThreadRunningContext = record
     Factory: TObject; // TServiceFactoryServer
-    Request: TObject; // TRestServerUriContext;
+    Request: TObject; // TRestServerUriContext
     RunningThread: TThread;
   end;
   PPerThreadRunningContext = ^TPerThreadRunningContext;

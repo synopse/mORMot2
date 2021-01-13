@@ -293,16 +293,16 @@ type
   // - mapped by TSynUniqueIdentifierBits memory structure
   // - may be used on client side for something similar to a MongoDB ObjectID,
   // but compatible with TOrm.ID: TID properties
-  TSynUniqueIdentifier = type Int64;
+  TSynUniqueIdentifier = type TID;
 
   /// 16-bit unique process identifier, used to compute TSynUniqueIdentifier
   // - each TSynUniqueIdentifierGenerator instance is expected to have
-  // its own unique process identifier, stored as a 16 bit integer 1..65535 value
+  // its own unique process identifier, stored as a 16 bit integer 0..65535 value
   TSynUniqueIdentifierProcess = type word;
 
   {$A-}
   /// map 64-bit integer unique identifier internal memory structure
-  // - as stored in TSynUniqueIdentifier = Int64 values, and computed by
+  // - as stored in TSynUniqueIdentifier = TID = Int64 values, and computed by
   // TSynUniqueIdentifierGenerator
   // - bits 0..14 map a 15-bit increasing counter (collision-free)
   // - bits 15..30 map a 16-bit process identifier
@@ -312,45 +312,28 @@ type
     /// the actual 64-bit storage value
     // - in practice, only first 63 bits are used
     Value: TSynUniqueIdentifier;
-    /// 15-bit counter (0..32767), starting with a random value
+    /// extract the 15-bit counter (0..32767), starting with a random value
     function Counter: word;
       {$ifdef HASINLINE}inline;{$endif}
-    /// 16-bit unique process identifier
+    /// extract the 16-bit unique process identifier
     // - as specified to TSynUniqueIdentifierGenerator constructor
     function ProcessID: TSynUniqueIdentifierProcess;
       {$ifdef HASINLINE}inline;{$endif}
-    /// low-endian 4-byte value representing the seconds since the Unix epoch
+    /// extract the UTC generation timestamp as seconds since the Unix epoch
     // - time is expressed in Coordinated Universal Time (UTC), not local time
     // - it uses in fact a 33-bit resolution, so is "Year 2038" bug-free
     function CreateTimeUnix: TUnixTime;
       {$ifdef HASINLINE}inline;{$endif}
-    /// fill this unique identifier structure from its TSynUniqueIdentifier value
-    // - is just a wrapper around PInt64(@self)^
-    procedure From(const AID: TSynUniqueIdentifier);
-      {$ifdef HASINLINE}inline;{$endif}
-    /// convert this identifier as an explicit TDocVariant JSON object
-    // - returns e.g.
-    // ! {"Created":"2016-04-19T15:27:58","Identifier":1,"Counter":1,
-    // ! "Value":3137644716930138113,"Hex":"2B8B273F00008001"}
-    function AsVariant: variant;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// convert this identifier to an explicit TDocVariant JSON object
-    // - returns e.g.
-    // ! {"Created":"2016-04-19T15:27:58","Identifier":1,"Counter":1,
-    // ! "Value":3137644716930138113,"Hex":"2B8B273F00008001"}
-    procedure ToVariant(out result: variant);
-    /// extract the UTC generation timestamp from the identifier as TDateTime
+    /// extract the UTC generation timestamp as TDateTime
     // - time is expressed in Coordinated Universal Time (UTC), not local time
     function CreateDateTime: TDateTime;
       {$ifdef HASINLINE}inline;{$endif}
-    /// extract the UTC generation timestamp from the identifier
+    /// extract the UTC generation timestamp as our TTimeLog
     // - time is expressed in Coordinated Universal Time (UTC), not local time
     function CreateTimeLog: TTimeLog;
-    /// compare two Identifiers
-    function Equal(const Another: TSynUniqueIdentifierBits): boolean;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// convert the identifier into a 16 chars hexadecimal string
-    function ToHexa: RawUtf8;
+    /// fill this unique identifier structure from its TSynUniqueIdentifier value
+    // - is just a wrapper around PInt64(@self)^
+    procedure From(const AID: TSynUniqueIdentifier);
       {$ifdef HASINLINE}inline;{$endif}
     /// fill this unique identifier back from a 16 chars hexadecimal string
     // - returns TRUE if the supplied hexadecimal is on the expected format
@@ -366,6 +349,23 @@ type
     // - may be used e.g. to limit database queries on a particular time range
     // - bits 0..30 would be 0, i.e. would set Counter = 0 and ProcessID = 0
     procedure FromUnixTime(const aUnixTime: TUnixTime);
+    /// compare two Identifiers
+    function Equal(const Another: TSynUniqueIdentifierBits): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// convert the identifier into a 16 chars hexadecimal string
+    function ToHexa: RawUtf8;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// convert this identifier as an explicit TDocVariant JSON object
+    // - returns e.g.
+    // ! {"Created":"2016-04-19T15:27:58","Identifier":1,"Counter":1,
+    // ! "Value":3137644716930138113,"Hex":"2B8B273F00008001"}
+    function AsVariant: variant;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// convert this identifier to an explicit TDocVariant JSON object
+    // - returns e.g.
+    // ! {"Created":"2016-04-19T15:27:58","Identifier":1,"Counter":1,
+    // ! "Value":3137644716930138113,"Hex":"2B8B273F00008001"}
+    procedure ToVariant(out result: variant);
   end;
   {$A+}
 

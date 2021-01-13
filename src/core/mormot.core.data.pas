@@ -8357,9 +8357,11 @@ begin
       hc := HashItem(P^, Hasher);
     ndx := FindOrNew(hc, P, nil);
     if ndx >= 0 then
+      // found duplicated value
       inc(result)
-    else         // found duplicated value
-      HashTable[-ndx - 1] := i;  // store index+1 (0 means void entry)
+    else
+      // store index+1 (0 means void entry)
+      HashTable[-ndx - 1] := i;
     inc(P, siz);
   end;
 end;
@@ -8560,7 +8562,7 @@ begin
     // force unique column name
     aName_ := aName + '_';
     j := 1;
-        repeat
+    repeat
       aName := aName_ + UInt32ToUtf8(j);
       ndx := FindHashedForAdding(aName, added);
       inc(j);
