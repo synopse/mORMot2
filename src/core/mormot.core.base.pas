@@ -2409,6 +2409,10 @@ function PosExString(const SubStr, S: string; Offset: PtrUInt = 1): PtrInt;
 function PosExChar(Chr: AnsiChar; const Str: RawUtf8): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// fast retrieve the position of a given character in a #0 ended buffer
+// - will use fast SSE2 asm on x86_64
+function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char;
+
 {$ifndef PUREMORMOT2}
 /// fast dedicated RawUtf8 version of Trim()
 // - in the middle of VCL code, consider using TrimU() which won't have name
@@ -2669,8 +2673,10 @@ type
     /// initialize a temporary copy of the supplied text buffer, ending with #0
     function Init(Source: PUtf8Char): PUtf8Char; overload;
     /// initialize a temporary copy of the supplied text buffer
+    // - also include ending #0 at SourceLen position
     procedure Init(Source: pointer; SourceLen: PtrInt); overload;
     /// initialize a new temporary buffer of a given number of bytes
+    // - also include ending #0 at SourceLen position
     function Init(SourceLen: PtrInt): pointer; overload;
     /// initialize a temporary buffer with the length of the internal stack
     function InitOnStack: pointer;
@@ -9014,6 +9020,25 @@ begin
   dec(result, PtrInt(Text)); // returns length
 end;
 
+function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char;
+var
+  c: AnsiChar;
+begin
+  result := nil;
+  if Str = nil then
+    exit;
+  repeat
+    c := Str^;
+    if c = #0 then
+      exit
+    else if c = Chr then
+      break
+    else
+      inc(Str);
+  until false;
+  result := Str;
+end;
+
 {$endif CPUX64}
 
 function SynLZcompressdestlen(in_len: integer): integer;
@@ -9464,6 +9489,7 @@ begin
       buf := @tmp
     else
       GetMem(buf, SourceLen + 16); // +16 for trailing #0 and buffer overflow
+    PPtrInt(PAnsiChar(buf) + SourceLen)^ := 0; // init last 4/8 bytes
   end;
   result := buf;
 end;

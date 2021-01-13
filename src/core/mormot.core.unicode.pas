@@ -1088,10 +1088,6 @@ function IdemFileExt(p: PUtf8Char; extup: PAnsiChar; sepChar: AnsiChar = '.'): b
 function IdemFileExts(p: PUtf8Char; const extup: array of PAnsiChar;
   sepChar: AnsiChar = '.'): integer;
 
-/// fast retrieve the position of a given character
-function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char;
-  {$ifdef HASINLINE}inline;{$endif}
-
 /// fast retrieve the position of any value of a given set of characters
 // - see also strspn() function which is likely to be faster
 function PosCharAny(Str: PUtf8Char; Characters: PAnsiChar): PUtf8Char;
@@ -1119,7 +1115,6 @@ function PosIU(substr: PUtf8Char; const str: RawUtf8): integer;
 // - please note that this optimized version may read up to 3 bytes beyond
 // accept but never after s end, so is safe e.g. over memory mapped files
 function strspn(s, accept: pointer): integer;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// pure pascal version of strcspn(), to be used with PUtf8Char/PAnsiChar
 // - returns size of initial segment of s which doesn't appears in reject chars, e.g.
@@ -1127,7 +1122,6 @@ function strspn(s, accept: pointer): integer;
 // - please note that this optimized version may read up to 3 bytes beyond
 // reject but never after s end, so is safe e.g. over memory mapped files
 function strcspn(s, reject: pointer): integer;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// our fast version of StrCompL(), to be used with PUtf8Char
 // - i.e. make a binary comparison of two memory buffers, using supplied length
@@ -4181,22 +4175,6 @@ begin
   end;
 end;
 
-function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char;
-begin
-  result := nil;
-  if Str <> nil then
-  begin
-    repeat
-      if Str^ = #0 then
-        exit
-      else if Str^ = Chr then
-        break;
-      inc(Str);
-    until false;
-    result := Str;
-  end;
-end;
-
 function PosCharAny(Str: PUtf8Char; Characters: PAnsiChar): PUtf8Char;
 var
   s: PAnsiChar;
@@ -4297,6 +4275,7 @@ begin
 end;
 
 function strspn(s, accept: pointer): integer;
+// FPC is efficient at compiling this code, but is SLOWER when inlined
 var
   p: PCardinal;
   c: AnsiChar;
@@ -4337,6 +4316,7 @@ begin
 end;
 
 function strcspn(s, reject: pointer): integer;
+// FPC is efficient at compiling this code, but is SLOWER when inlined
 var
   p: PCardinal;
   c: AnsiChar;

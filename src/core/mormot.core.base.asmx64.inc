@@ -1059,6 +1059,60 @@ function StrLenSSE2(S: pointer): PtrInt;
 @null:
 end;
 
+function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        // fast version searching for both Chr and #0 over 16 bytes at once
+        {$ifdef MSWINDOWS}
+        movzx   edx, dl
+        mov     rax, rcx             // get pointer to string from rcx
+        imul    edx, $01010101
+        test    rcx, rcx
+        {$else}
+        imul    edx, esi, $01010101
+        mov     rax, rdi
+        mov     ecx, edi
+        test    rdi, rdi
+        {$endif MSWINDOWS}
+        jz      @null                // returns 0 if S=nil
+        movd    xmm1, edx
+        // rax=Str, ecx=32-bit of Str, xmm1=Chr
+        pxor    xmm0, xmm0           // set xmm0 to zero
+        pshufd  xmm1, xmm1, 0        // set Chr into all bytes of xmm1
+        and     ecx, 15              // lower 4 bits indicate misalignment
+        and     rax, -16             // align pointer by 16
+        // will never read outside a memory page boundary, so won't trigger GPF
+        movaps  xmm2, [rax]          // read from nearest preceding boundary
+        movaps  xmm3, xmm2
+        pcmpeqb xmm2, xmm0           // compare 16 bytes with zero
+        pcmpeqb xmm3, xmm1           // compare 16 bytes with Chr
+        por     xmm2, xmm3
+        pmovmskb edx, xmm2           // get one bit for each byte result
+        shr     edx, cl              // shift out false bits
+        shl     edx, cl              // shift back again
+        bsf     edx, edx             // find first 1-bit
+        jnz     @L2                  // found
+        // Main loop, search 16 bytes at a time
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@L1:    add     rax, 10H             // increment pointer by 16
+        movaps  xmm2, [rax]          // read 16 bytes aligned
+        movaps  xmm3, xmm2
+        pcmpeqb xmm2, xmm0           // compare 16 bytes with zero
+        pcmpeqb xmm3, xmm1           // compare 16 bytes with Chr
+        por     xmm2, xmm3
+        pmovmskb edx, xmm2           // get one bit for each byte result
+        bsf     edx, edx             // find first 1-bit
+        // (moving the bsf out of the loop and using test here would be faster
+        // for long strings on old processors, but we are assuming that most
+        // strings are short, and newer processors have higher priority)
+        jz      @L1                  // loop if not found
+@L2:    // Zero or Chr byte found
+        add     rax, rdx             // add byte index for rax = match address
+        cmp     byte ptr[rax], 0
+        jz      @z                   // return nil if zero was reached
+@null:  ret
+@z:     xor     eax, eax
+end;
+
 function BufferLineLength(Text, TextEnd: PUtf8Char): PtrInt;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         {$ifdef MSWINDOWS} // Win64 ABI to System-V ABI
