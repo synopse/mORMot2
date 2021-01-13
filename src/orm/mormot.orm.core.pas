@@ -20435,7 +20435,7 @@ end;
 
 function TOrmModel.UriMatch(const Uri: RawUtf8): TRestModelMatch;
 var
-  UriLen: integer;
+  UriLen: PtrInt;
 begin
   result := rmNoMatch;
   if (self = nil) or (fRoot = '') or (Uri = '') then
@@ -20444,7 +20444,7 @@ begin
   begin
     UriLen := length(fRoot);
     if Uri[UriLen + 1] in [#0, '/', '?'] then
-      if CompareMemFixed(pointer(Uri), pointer(fRoot), UriLen) then
+      if CompareMem(pointer(Uri), pointer(fRoot), UriLen) then
         result := rmMatchExact
       else
         result := rmMatchWithCaseChange;

@@ -1235,19 +1235,19 @@ begin
            not wasString then
           raise EOrmBatchException.CreateUtf8(
             '%.EngineBatchSend: Missing CMD', [self]);
-        MethodTable := PosChar(Method, '@');
-        if MethodTable = nil then
+        if TableIndex >= 0 then
         begin
           // e.g. '{"Table":[...,"POST",{object},...]}'
-          if TableIndex < 0 then
-            raise EOrmBatchException.CreateUtf8(
-              '%.EngineBatchSend: "..@Table" expected', [self]);
           RunTableIndex := TableIndex;
           RunTable := Table;
         end
         else
         begin
           // e.g. '[...,"POST@Table",{object},...]'
+          MethodTable := PosChar(Method, '@');
+          if MethodTable = nil then
+            raise EOrmBatchException.CreateUtf8(
+              '%.EngineBatchSend: "..@Table" expected', [self]);
           RunTableIndex := fModel.GetTableIndexPtr(MethodTable + 1);
           if RunTableIndex < 0 then
             raise EOrmBatchException.CreateUtf8(
@@ -1260,8 +1260,8 @@ begin
         else
           RunningRest := RunStatic;
         // get CRUD method and associated Value/ID
-        case IdemPCharArray(Method, ['POST', 'PUT', 'DELETE', 'SIMPLE']) of
-          // IdemPCharArray() ignores '@' char if appended after method name
+        case IdemPCharArray(Method, 'POPUDESI') of
+          // optimistic check of 2 first chars, ignoring e.g. any '@'
           0:
             begin
               // '{"Table":[...,"POST",{object},...]}'

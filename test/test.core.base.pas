@@ -2156,6 +2156,8 @@ var
   i: integer;
 begin
   FillCharFast(A, sizeof(A), 0);
+  FillCharFast(B, sizeof(B), 0);
+  FillCharFast(C, sizeof(C), 0);
   for i := 0 to High(A.Bulk) do
     A.Bulk[i] := i;
   A.S1 := 'one';

@@ -1046,7 +1046,7 @@ function IdemPCharArray(p: PUtf8Char; const upArray: array of PAnsiChar): intege
 // - returns -1 if no item matched
 // - ignore case - upArray^ must be already Upper
 // - chars are compared as 7 bit Ansi only (no accentuated characters)
-function IdemPCharArray(p: PUtf8Char; const upArrayBy2Chars: RawUtf8): integer; overload;
+function IdemPCharArray(p: PUtf8Char; const upArrayBy2Chars: RawUtf8): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// returns true if the beginning of p^ is the same as up^
@@ -4053,13 +4053,21 @@ begin
   result := -1;
 end;
 
-function IdemPCharArray(p: PUtf8Char; const upArrayBy2Chars: RawUtf8): integer;
+function IdemPCharArray(p: PUtf8Char; const upArrayBy2Chars: RawUtf8): PtrInt;
 var
   w: word;
+  {$ifdef CPUX86NOTPIC}
+  tab: TNormTableByte absolute NormToUpperAnsi7;
+  {$else}
+  tab: PByteArray; // faster on PIC/ARM and x86_64
+  {$endif CPUX86NOTPIC}
 begin
   if p <> nil then
   begin
-    w := NormToUpperAnsi7Byte[ord(p[0])] + NormToUpperAnsi7Byte[ord(p[1])] shl 8;
+    {$ifndef CPUX86NOTPIC}
+    tab := @NormToUpperAnsi7;
+    {$endif CPUX86NOTPIC}
+    w := tab[ord(p[0])] + tab[ord(p[1])] shl 8;
     for result := 0 to pred(length(upArrayBy2Chars) shr 1) do
       if PWordArray(upArrayBy2Chars)[result] = w then
         exit;
