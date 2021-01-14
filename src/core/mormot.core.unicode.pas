@@ -4056,6 +4056,7 @@ end;
 function IdemPCharArray(p: PUtf8Char; const upArrayBy2Chars: RawUtf8): PtrInt;
 var
   w: word;
+  u: PWordArray; // better code generation when inlined
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute NormToUpperAnsi7;
   {$else}
@@ -4068,8 +4069,9 @@ begin
     tab := @NormToUpperAnsi7;
     {$endif CPUX86NOTPIC}
     w := tab[ord(p[0])] + tab[ord(p[1])] shl 8;
+    u := pointer(upArrayBy2Chars);
     for result := 0 to pred(length(upArrayBy2Chars) shr 1) do
-      if PWordArray(upArrayBy2Chars)[result] = w then
+      if u[result] = w then
         exit;
   end;
   result := -1;

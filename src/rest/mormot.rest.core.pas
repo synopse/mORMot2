@@ -1144,10 +1144,11 @@ type
     /// initialize the non RawUtf8 values
     procedure Init; overload;
     /// initialize the input values
-    procedure Init(const aUri,aMethod,aInHead,aInBody: RawUtf8); overload;
+    procedure Init(const aUri, aMethod, aInHead, aInBody: RawUtf8); overload;
     /// retrieve the "Content-Type" value from InHead
     // - if GuessJsonIfNoneSet is TRUE, returns JSON if none was set in headers
-    function InBodyType(GuessJsonIfNoneSet: boolean = True): RawUtf8;
+    procedure InBodyType(out ContentType: RawUtf8;
+      GuessJsonIfNoneSet: boolean = True);
     /// check if the "Content-Type" value from InHead is JSON
     // - if GuessJsonIfNoneSet is TRUE, assume JSON is used
     function InBodyTypeIsJson(GuessJsonIfNoneSet: boolean = True): boolean;
@@ -3343,17 +3344,20 @@ begin
   InBody := aInBody;
 end;
 
-function TRestUriParams.InBodyType(GuessJsonIfNoneSet: boolean): RawUtf8;
+procedure TRestUriParams.InBodyType(out ContentType: RawUtf8; GuessJsonIfNoneSet: boolean);
 begin
-  FindNameValue(InHead, HEADER_CONTENT_TYPE_UPPER, result);
+  FindNameValue(InHead, HEADER_CONTENT_TYPE_UPPER, ContentType);
   if GuessJsonIfNoneSet and
-     (result = '') then
-    result := JSON_CONTENT_TYPE_VAR;
+     (ContentType = '') then
+    ContentType := JSON_CONTENT_TYPE_VAR;
 end;
 
 function TRestUriParams.InBodyTypeIsJson(GuessJsonIfNoneSet: boolean): boolean;
+var
+  contenttype: RawUTF8;
 begin
-  result := IdemPChar(pointer(InBodyType(GuessJsonIfNoneSet)), JSON_CONTENT_TYPE_UPPER);
+  InBodyType(contenttype, GuessJsonIfNoneSet);
+  result := IdemPChar(pointer(contenttype), JSON_CONTENT_TYPE_UPPER);
 end;
 
 function TRestUriParams.OutBodyType(GuessJsonIfNoneSet: boolean): RawUtf8;

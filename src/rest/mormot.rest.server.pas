@@ -595,6 +595,7 @@ type
     function ClientOrmOptions: TJsonSerializerOrmOptions;
     /// true if called from TRestServer.AdministrationExecute
     function IsRemoteAdministrationExecute: boolean;
+      {$ifdef FPC}inline;{$endif}
     /// compute the file name corresponding to the URI
     // - e.g. '/root/methodname/toto/index.html' will return 'toto\index.html'
     property ResourceFileName: TFileName
@@ -1806,7 +1807,7 @@ type
   TRestServer = class(TRest)
   protected
     fHandleAuthentication: boolean;
-    fBypassORMAuthentication: TUriMethods;
+    fBypassOrmAuthentication: TUriMethods;
     /// the TAuthUser and TAuthGroup classes, as defined in model
     fAuthUserClass: TAuthUserClass;
     fAuthGroupClass: TAuthGroupClass;
@@ -2373,8 +2374,8 @@ type
     /// setting: but you could define some HTTP verb to this property, which
     // will by-pass the authentication - may be used e.g. for public GET
     // of the content by an AJAX client
-    property BypassORMAuthentication: TUriMethods
-      read fBypassORMAuthentication write fBypassORMAuthentication;
+    property BypassOrmAuthentication: TUriMethods
+      read fBypassOrmAuthentication write fBypassOrmAuthentication;
     /// read-only access to the high-level Server statistics
     // - see ServiceMethodStat[] for information about method-based services,
     // or TServiceFactoryServer.Stats / Stat[] for interface-based services
@@ -2711,7 +2712,7 @@ end;
 function TRestServerUriContext.UriDecodeRest: boolean;
 var
   i, j, slash: PtrInt;
-  Par: PUtf8Char;
+  Par, P: PUtf8Char;
 begin
   // expects 'ModelRoot[/TableName[/TableID][/UriBlobFieldName]][?param=...]' format
   // check root URI and Parameters
@@ -2735,18 +2736,18 @@ begin
     Parameters := @Call^.url[ParametersPos + 1];
   if Method = mPost then
   begin
-    fInputPostContentType := Call^.InBodyType(false);
+    Call^.InBodyType(fInputPostContentType, {guessjsonifnone=}false);
     if (Parameters = nil) and
        IdemPChar(pointer(fInputPostContentType), 'APPLICATION/X-WWW-FORM-URLENCODED') then
       Parameters := pointer(Call^.InBody);
   end;
   // compute URI without any root nor parameter
   inc(i, j + 2);
-  if ParametersPos = 0 then
-    Uri := copy(Call^.url, i, maxInt)
-  else
-    Uri := copy(Call^.url, i, ParametersPos - i);
   UriAfterRoot := PUtf8Char(pointer(Call^.url)) + i - 1;
+  if ParametersPos = 0 then
+    FastSetString(Uri, UriAfterRoot, length(Call^.url) - i + 1)
+  else
+    FastSetString(Uri, UriAfterRoot, ParametersPos - i);
   // compute Table, TableID and UriBlobFieldName
   slash := PosExChar('/', Uri);
   if slash > 0 then
@@ -2762,17 +2763,20 @@ begin
     else
       // URI like "ModelRoot/TableName/MethodName"
       TableID := -1;
-    UriBlobFieldName := Par;
     if Table <> nil then
     begin
-      j := PosExChar('/', UriBlobFieldName);
-      if j > 0 then
+      P := PosChar(Par, '/');
+      if P <> nil then
       begin
         // handle "ModelRoot/TableName/UriBlobFieldName/ID"
-        TableID := GetCardinalDef(pointer(PtrInt(UriBlobFieldName) + j), cardinal(-1));
-        SetLength(UriBlobFieldName, j - 1);
-      end;
-    end;
+        TableID := GetCardinalDef(P + 1, cardinal(-1));
+        FastSetString(UriBlobFieldName, Par, Par - P);
+      end
+      else
+        FastSetString(UriBlobFieldName, Par, StrLen(Par));
+    end
+    else
+      FastSetString(UriBlobFieldName, Par, StrLen(Par));
     SetLength(Uri, slash - 1);
   end
   else
@@ -2788,7 +2792,7 @@ begin
   if UriSessionSignaturePos = 0 then
     UriWithoutSignature := Call^.Url
   else
-    UriWithoutSignature := Copy(Call^.Url, 1, UriSessionSignaturePos - 1);
+    FastSetString(UriWithoutSignature, pointer(Call^.Url), UriSessionSignaturePos - 1);
   result := True;
 end;
 
@@ -2804,8 +2808,15 @@ begin
     MethodIndex := -1;
 end;
 
-var // as set by TRestServer.AdministrationExecute()
+var
+  // as set by TRestServer.AdministrationExecute()
   BYPASS_ACCESS_RIGHTS: TOrmAccessRights;
+
+function TRestServerUriContext.IsRemoteAdministrationExecute: boolean;
+begin
+  result := (self <> nil) and
+            (Call.RestAccessRights = @BYPASS_ACCESS_RIGHTS);
+end;
 
 function TRestServerUriContext.Authenticate: boolean;
 var
@@ -2813,11 +2824,22 @@ var
   a: ^TRestServerAuthentication;
   n: integer;
 begin
+  result := true;
   if Server.fHandleAuthentication and
      not IsRemoteAdministrationExecute then
   begin
     Session := CONST_AUTHENTICATION_SESSION_NOT_STARTED;
-    result := false;
+    if // /auth + /timestamp are e.g. allowed methods without signature
+       ((MethodIndex >= 0) and
+       Server.fPublishedMethod[MethodIndex].ByPassAuthentication) or
+       // you can allow a service to be called directly
+       ((Service <> nil) and
+       TServiceFactoryServerAbstract(Service).ByPassAuthentication) or
+       // allow by-pass for a set of HTTP verbs (e.g. mGET)
+       ((Table <> nil) and
+       (Method in Server.BypassOrmAuthentication)) then
+      // no need to check the sessions
+      exit;
     Server.fSessions.Safe.Lock;
     try
       a := pointer(Server.fSessionAuthentication);
@@ -2832,7 +2854,6 @@ begin
                (aSession.RemoteIP <> '127.0.0.1') then
               Log.Log(sllUserAuth, '%/% %', [aSession.User.LogonName,
                 aSession.ID, aSession.RemoteIP], self);
-            result := true;
             exit;
           end;
           inc(a);
@@ -2842,24 +2863,12 @@ begin
     finally
       Server.fSessions.Safe.UnLock;
     end;
-    // if we reached here, no session was found
-    if Service <> nil then
-      // you can allow a service to be called directly
-      result := TServiceFactoryServerAbstract(Service).ByPassAuthentication
-    else if MethodIndex >= 0 then
-        // /auth + /timestamp are e.g. allowed methods without signature
-        result := Server.fPublishedMethod[MethodIndex].ByPassAuthentication
-      else if (Table <> nil) and
-              (Method in Server.fBypassORMAuthentication) then
-        // allow by-pass for a set of HTTP verbs (e.g. mGET)
-        result := true;
+    // if we reached here, no session has been identified
+    result := false;
   end
   else
-  begin
     // default unique session if authentication is not enabled
     Session := CONST_AUTHENTICATION_NOT_USED;
-    result := true;
-  end;
 end;
 
 procedure TRestServerUriContext.AuthenticationFailed(
@@ -3089,7 +3098,7 @@ begin
       end;
       Stats.Processing := true;
     end;
-    if Parameters <> '' then
+    if Parameters <> nil then
       Server.InternalLog('% %', [Name, Parameters], sllServiceCall);
     CallBack(self);
     if Stats <> nil then
@@ -4448,12 +4457,6 @@ begin
   result := fClientKind;
 end;
 
-function TRestServerUriContext.IsRemoteAdministrationExecute: boolean;
-begin
-  result := (self <> nil) and
-            (Call.RestAccessRights = @BYPASS_ACCESS_RIGHTS);
-end;
-
 function TRestServerUriContext.ClientOrmOptions: TJsonSerializerOrmOptions;
 begin
   result := [];
@@ -5295,8 +5298,8 @@ end;
 
 { TRestServerAuthenticationUri }
 
-function TRestServerAuthenticationUri.RetrieveSession(Ctxt:
-  TRestServerUriContext): TAuthSession;
+function TRestServerAuthenticationUri.RetrieveSession(
+  Ctxt: TRestServerUriContext): TAuthSession;
 begin
   result := nil;
   if (Ctxt = nil) or
