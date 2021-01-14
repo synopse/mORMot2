@@ -566,6 +566,11 @@ var
   // contains CLOCK_MONOTONIC_COARSE since kernel 2.6.32
   CLOCK_MONOTONIC_FAST: integer = CLOCK_MONOTONIC;
 
+  // contains CLOCK_MONOTONIC_RAW since kernel 2.6.28
+  // - so that QueryPerformanceMicroSeconds() is not subject to NTP adjustments
+  CLOCK_MONOTONIC_PRECISE: integer = CLOCK_MONOTONIC;
+
+
 function UnixMSTimeUtc: Int64;
 var
   r: timespec;
@@ -587,7 +592,7 @@ procedure QueryPerformanceMicroSeconds(out Value: Int64);
 var
   r : TTimeSpec;
 begin
-  clock_gettime(CLOCK_MONOTONIC, @r);
+  clock_gettime(CLOCK_MONOTONIC_PRECISE, @r);
   // convert from nanoseconds into microseconds
   value := PtrUInt(r.tv_nsec) div THOUSAND + r.tv_sec * MILLION;
 end;
@@ -2306,12 +2311,18 @@ begin
     CLOCK_REALTIME_FAST := CLOCK_REALTIME_COARSE;
   if clock_gettime(CLOCK_MONOTONIC_COARSE, @tp) = 0 then
     CLOCK_MONOTONIC_FAST := CLOCK_MONOTONIC_COARSE;
+  {$ifdef LINUXNOTBSD}
+  if clock_gettime(CLOCK_MONOTONIC_RAW, @tp) = 0 then
+    CLOCK_MONOTONIC_PRECISE := CLOCK_MONOTONIC_RAW;
+  {$endif LINUXNOTBSD}
   if (clock_gettime(CLOCK_REALTIME_FAST, @tp) <> 0) or // paranoid check
-     (clock_gettime(CLOCK_MONOTONIC_FAST, @tp) <> 0) then
+     (clock_gettime(CLOCK_MONOTONIC_FAST, @tp) <> 0) or
+     (clock_gettime(CLOCK_MONOTONIC_PRECISE, @tp) <> 0) then
     raise EOSException.CreateFmt(
       'clock_gettime() not supported by %s kernel - errno=%d',
       [PAnsiChar(@uts.release), fpgeterrno]);
   // redirect some syscall FPC RTL functions to faster vDSO libc variant
+  {$ifdef CPUX64}
   {$ifdef LINUXNOTBSD}
   {$ifndef NOPATCHRTL}
   // will avoid syscall e.g. for events timeout in cthreads.pp
@@ -2321,6 +2332,7 @@ begin
   {$endif FPC_USE_LIBC}
   {$endif NOPATCHRTL}
   {$endif LINUXNOTBSD}
+  {$endif CPUX64}
   {$endif LINUX}
   {$endif DARWIN}
 end;
