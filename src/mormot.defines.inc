@@ -152,8 +152,9 @@
   {$ifend}
 
   {$ifdef ANDROID}
-    {$define LINUX} // a Linux-based system
-  {$endif}
+    {$define LINUX}      // a Linux-based system
+    {$define NOPATCHRTL} // don't mess with asm stuff
+  {$endif ANDROID}
 
   {$ifdef BSD}
     // LINUX conditional includes Darwin and BSD family like FreeBSD

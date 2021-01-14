@@ -607,23 +607,6 @@ end;
 
 {$ifdef FPC_CPUX64}
 
-procedure RedirectCode(Func, RedirectFunc: Pointer);
-var
-  NewJump: packed record
-    Code: byte;        // $e9 = jmp {relative}
-    Distance: integer; // relative jump is 32-bit even on CPU64
-  end;
-begin
-  if (Func = nil) or
-     (RedirectFunc = nil) or
-     (Func = RedirectFunc) then
-    exit; // nothing to redirect to
-  NewJump.Code := $e9;
-  NewJump.Distance := integer(PtrUInt(RedirectFunc) - PtrUInt(Func) - SizeOf(NewJump));
-  PatchCode(Func, @NewJump, SizeOf(NewJump));
-  assert(PByte(Func)^ = $e9);
-end;
-
 // access to lowest level FPC RTL functions by their raw linking name
 procedure fpc_ansistr_decr_ref;      external name 'FPC_ANSISTR_DECR_REF';
 procedure fpc_ansistr_incr_ref;      external name 'FPC_ANSISTR_INCR_REF';
@@ -645,7 +628,7 @@ procedure _Getmem;                   external name 'FPC_GETMEM';
 procedure _Freemem(p: pointer);      external name 'FPC_FREEMEM';
 {$endif FPC_X64MM}
 
-procedure PatchJmp(old, new: PByteArray; size: PtrInt; jmp: PtrUInt=0);
+procedure PatchJmp(old, new: PByteArray; size: PtrInt; jmp: PtrUInt = 0);
 var
   rel: PCardinal;
 begin

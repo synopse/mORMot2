@@ -551,8 +551,11 @@ const
 // is compiled without FPC_USE_LIBC defined and do a syscall each time
 //   GetTickCount64 fpc    2 494 563 op/sec
 //   GetTickCount64 libc 119 919 893 op/sec
-function clock_gettime(clk_id : clockid_t; tp: ptimespec) : cint;
+function clock_gettime(clk_id : clockid_t; tp: ptimespec): cint;
   cdecl; external 'c' name 'clock_gettime';
+
+function gettimeofday(tp: ptimeval; tzp: ptimezone): cint;
+  cdecl; external 'c' name 'gettimeofday';
 
 {$endif BSD}
 
@@ -2113,7 +2116,29 @@ begin
   end;
 end;
 
+function clock_gettime_c(clk_id: clockid_t; tp: ptimespec): cint;
+begin
+  case clk_id of
+    // 1 ms resolution is good enough for milliseconds-based RTL functions
+    CLOCK_REALTIME:
+      clk_id := CLOCK_REALTIME_FAST;
+    CLOCK_MONOTONIC:
+      clk_id := CLOCK_MONOTONIC_FAST;
+    // no CLOCK_MONOTONIC_RAW redirect because it doesn't match CLOCK_MONOTONIC
+    // and cthreads.pp forces pthread_condattr_setclock(CLOCK_MONOTONIC_RAW)
+  end;
+  // it is much faster to not use the Linux syscall but the libc vDSO call
+  result := clock_gettime(clk_id, tp);
+end;
+
+function gettimeofday_c(tp: ptimeval; tzp: ptimezone): cint;
+begin
+  // it is much faster to not use the Linux syscall but the libc vDSO call
+  result := gettimeofday(tp, tzp);
+end;
+
 {$endif BSD}
+
 
 
 procedure InitializeUnit;
@@ -2286,6 +2311,16 @@ begin
     raise EOSException.CreateFmt(
       'clock_gettime() not supported by %s kernel - errno=%d',
       [PAnsiChar(@uts.release), fpgeterrno]);
+  // redirect some syscall FPC RTL functions to faster vDSO libc variant
+  {$ifdef LINUXNOTBSD}
+  {$ifndef NOPATCHRTL}
+  // will avoid syscall e.g. for events timeout in cthreads.pp
+  RedirectCode(@Linux.clock_gettime, @clock_gettime_c);
+  {$ifndef FPC_USE_LIBC}
+  RedirectCode(@fpgettimeofday, @gettimeofday_c);
+  {$endif FPC_USE_LIBC}
+  {$endif NOPATCHRTL}
+  {$endif LINUXNOTBSD}
   {$endif LINUX}
   {$endif DARWIN}
 end;
