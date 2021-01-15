@@ -42,6 +42,7 @@ Client-Side REST Process
 - Client Authentication and Authorization Logic
 - `TRestClientRoutingREST`/`TRestClientRoutingJSON_RPC` Routing Schemes
 - `TRestClientURI` Base Class for Actual Clients
+- `TRestClientLibraryRequest` after `TRestServer.ExportServerGlobalLibraryRequest`
 
 ### mormot.rest.server
 

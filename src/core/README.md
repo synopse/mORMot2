@@ -239,6 +239,7 @@ Implements SOLID Process via Interface types
 - `TInterfaceResolver` `TInjectableObject` for IoC / Dependency Injection
 - `TInterfaceStub` `TInterfaceMock` for Dependency Mocking
 - `TInterfaceMethodExecute` for Method Execution from JSON
+- `SetWeak` and `SetWeakZero` Weak Interface Reference Functions
 
 ### mormot.core.test
 
