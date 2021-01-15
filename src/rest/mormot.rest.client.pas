@@ -742,6 +742,24 @@ type
     // via the ServiceRetrieveAssociated method
     property ServicePublishOwnInterfaces: RawUtf8
       read fServicePublishOwnInterfaces write fServicePublishOwnInterfaces;
+    /// return all REST server URI associated to this client, for a given
+    // service name, the latest registered in first position
+    // - will lookup for the Interface name without the initial 'I', e.g.
+    // 'Calculator' for ICalculator - warning: research is case-sensitive
+    // - this methods is the reverse from ServicePublishOwnInterfaces: it allows
+    // to guess an associated REST server which may implement a given service
+    function ServiceRetrieveAssociated(const aServiceName: RawUtf8;
+      out URI: TRestServerURIDynArray): boolean; overload;
+    /// return all REST server URI associated to this client, for a given service
+    // - here the service is specified as its TGUID, e.g. IMyInterface
+    // - this method expects the interface to have been registered previously:
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
+    // - the URI[] output array contains the matching server URIs, the latest
+    // registered in first position
+    // - this methods is the reverse from ServicePublishOwnInterfaces: it allows
+    // to guess an associated REST server which may implement a given service
+    function ServiceRetrieveAssociated(const aInterface: TGUID;
+      out URI: TRestServerUriDynArray): boolean; overload;
     /// the routing class of the service remote request on client side
     // - by default, contains TRestClientRoutingRest, i.e. an URI-based
     // layout which is secure (since will use our RESTful authentication scheme),
@@ -2446,6 +2464,27 @@ begin
     else
       raise;
   end;
+end;
+
+function TRestClientUri.ServiceRetrieveAssociated(const aServiceName: RawUtf8;
+  out URI: TRestServerUriDynArray): boolean;
+var
+  json: RawUtf8;
+begin
+  result := (CallBackGet('stat', ['findservice', aServiceName], json) = HTTP_SUCCESS) and
+    (DynArrayLoadJson(URI, pointer(json), TypeInfo(TRestServerUriDynArray)) <> nil);
+end;
+
+function TRestClientUri.ServiceRetrieveAssociated(const aInterface: TGUID;
+  out URI: TRestServerUriDynArray): boolean;
+var
+  fact: TInterfaceFactory;
+begin
+  fact := TInterfaceFactory.Get(aInterface);
+  if fact = nil then
+    result := false
+  else
+    result := ServiceRetrieveAssociated(copy(fact.InterfaceName, 2, maxInt), URI);
 end;
 
 function TRestClientUri.ServerTimestampSynchronize: boolean;
