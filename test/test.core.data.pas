@@ -2330,10 +2330,10 @@ begin
     TCollTstDynArrayTest; // TFVs serialized with FVReader2/FVWriter2
     // (custom) class serialization
     TFileVersionTest(false);
-    TRttiJson.RegisterCustomSerializer(TFileVersion,
+    TRttiJson.RegisterCustomSerializerClass(TFileVersion,
       TCollTstDynArray.FVClassReader, TCollTstDynArray.FVClassWriter);
     TFileVersionTest(true);
-    TRttiJson.UnRegisterCustomSerializer(TFileVersion);
+    TRttiJson.UnRegisterCustomSerializerClass(TFileVersion);
     TFileVersionTest(false);
     MyItem := TCollTest.Create(nil);
     try

@@ -9822,7 +9822,7 @@ end;
 function TOrmPropInfoRtti.GetRttiCustomProp(Instance: TObject): PRttiCustomProp;
 begin
   if (fRttiCustomProp = nil) and (Instance <> nil) then
-    fRttiCustomProp := Rtti.RegisterClass(PClass(Instance)^).Props.Find(Name);
+    fRttiCustomProp := Rtti.RegisterClass(Instance).Props.Find(Name);
   result := fRttiCustomProp;
 end;
 

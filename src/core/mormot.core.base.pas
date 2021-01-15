@@ -333,6 +333,7 @@ type
   PPersistentDynArray = ^TPersistentDynArray;
   TPointerDynArray = array of pointer;
   PPointerDynArray = ^TPointerDynArray;
+  TPointerDynArrayDynArray = array of TPointerDynArray;
   TPPointerDynArray = array of PPointer;
   PPPointerDynArray = ^TPPointerDynArray;
   TMethodDynArray = array of TMethod;

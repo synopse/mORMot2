@@ -1509,8 +1509,8 @@ type
     // - expect the stored value to be a dynamic array itself
     // - would search for aKey as primary key, then use TDynArray.FindAndDelete
     // to delete any aArrayValue match in the associated dynamic array
-    // - returns FALSE if Values is not a tkDynArray, or if aKey or aArrayValue were
-    // not found
+    // - returns FALSE if Values is not a tkDynArray, or if aKey or aArrayValue
+    // were not found
     // - this method is thread-safe, since it will lock the instance
     function DeleteInArray(const aKey, aArrayValue;
       aCompare: TDynArraySortCompare): boolean;
@@ -1846,16 +1846,16 @@ type
     // - for a dynamic array, will customize the item serialization callbacks
     // - replace deprecated TJsonSerializer.RegisterCustomSerializer() method
     class function RegisterCustomSerializer(Info: PRttiInfo;
-      const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJSON; overload;
-    /// register a custom callback for JSON serialization of a given class
-    // - replace deprecated TJsonSerializer.RegisterCustomSerializer() method
-    class function RegisterCustomSerializer(ObjectClass: TClass;
-      const Reader: TOnClassJsonRead; const Writer: TOnClassJsonWrite): TRttiJSON; overload;
+      const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJSON;
     /// unregister any custom callback for JSON serialization of a given TypeInfo()
     // - will also work after RegisterFromText()
-    class function UnRegisterCustomSerializer(Info: PRttiInfo): TRttiJSON; overload;
+    class function UnRegisterCustomSerializer(Info: PRttiInfo): TRttiJSON;
+    /// register a custom callback for JSON serialization of a given class
+    // - replace deprecated TJsonSerializer.RegisterCustomSerializer() method
+    class function RegisterCustomSerializerClass(ObjectClass: TClass;
+      const Reader: TOnClassJsonRead; const Writer: TOnClassJsonWrite): TRttiJSON;
     /// unregister any custom callback for JSON serialization of a given class
-    class function UnRegisterCustomSerializer(ObjectClass: TClass): TRttiJSON; overload;
+    class function UnRegisterCustomSerializerClass(ObjectClass: TClass): TRttiJSON;
     /// register TypeInfo() custom JSON serialization for a given dynamic
     // array or record
     // - to be used instead of homonomous Rtti.RegisterFromText() to supply
@@ -5391,7 +5391,7 @@ begin
         begin
           // need to retrieve the RTTI
           c := v;
-          ctxt.Info := Rtti.RegisterClass(v);
+          ctxt.Info := Rtti.RegisterClass(TClass(v));
           save := ctxt.Info.JsonSave;
         end;
         // this is where each object is serialized
@@ -9668,7 +9668,7 @@ begin
     result.SetParserType(result.Parser, result.ParserComplex);
 end;
 
-class function TRttiJson.RegisterCustomSerializer(ObjectClass: TClass;
+class function TRttiJson.RegisterCustomSerializerClass(ObjectClass: TClass;
   const Reader: TOnClassJsonRead; const Writer: TOnClassJsonWrite): TRttiJson;
 begin
   // without {$M+} ObjectClasss.ClassInfo=nil -> ensure fake RTTI is available
@@ -9687,7 +9687,7 @@ begin
     result.SetParserType(result.Parser, result.ParserComplex);
 end;
 
-class function TRttiJson.UnRegisterCustomSerializer(ObjectClass: TClass): TRttiJSON;
+class function TRttiJson.UnRegisterCustomSerializerClass(ObjectClass: TClass): TRttiJSON;
 begin
   // without {$M+} ObjectClasss.ClassInfo=nil -> ensure fake RTTI is available
   result := Rtti.RegisterClass(ObjectClass) as TRttiJson;
@@ -9935,7 +9935,7 @@ var
 begin
   if pointer(ObjectInstance) = nil then
     raise ERttiException.Create('JsonToObject(nil)');
-  ctxt.Init(From, Rtti.RegisterClass(PPointer(ObjectInstance)^), Options,
+  ctxt.Init(From, Rtti.RegisterClass(TObject(ObjectInstance)), Options,
     nil, TObjectListItemClass);
   TRttiJsonLoad(Ctxt.Info.JsonLoad)(@ObjectInstance, ctxt);
   Valid := ctxt.Valid;

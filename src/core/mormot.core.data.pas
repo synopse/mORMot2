@@ -554,8 +554,7 @@ type
   end;
 
   /// add locking methods to a TSynObjectList
-  // - this class overrides the regular TSynObjectList, and do not share any
-  // code with the TObjectListHashedAbstract/TObjectListHashed classes
+  // - this class overrides the regular TSynObjectList
   // - you need to call the Safe.Lock/Unlock methods by hand to protect the
   // execution of index-oriented methods (like Delete/Items/Count...): the
   // list content may change in the background, so using indexes is thread-safe
@@ -589,6 +588,7 @@ type
     property Safe: TSynLocker
       read fSafe;
   end;
+
 
   /// abstract persistent class with a 64-bit TID field
   // - class is e.g. the parent of our TOrm ORM classes
@@ -2883,7 +2883,7 @@ end;
 constructor TSynPersistent.Create;
 begin
   if PPointer(PPAnsiChar(self)^ + vmtAutoTable)^ = nil then
-    Rtti.RegisterClass(PClass(self)^); // ensure TRttiCustom is set
+    Rtti.RegisterClass(self); // ensure TRttiCustom is set
 end;
 
 class function TSynPersistent.RttiCustom: TRttiCustom;
@@ -5580,7 +5580,7 @@ begin
     exit;
   end;
   result := 0;
-  rA := Rtti.RegisterClass(PClass(A)^); // faster than RegisterType(Info)
+  rA := Rtti.RegisterClass(A); // faster than RegisterType(Info)
   pA := pointer(rA.Props.List);
   if PClass(B)^.InheritsFrom(PClass(A)^) then
     // same (or similar/inherited) class -> compare per exact properties
@@ -5594,7 +5594,7 @@ begin
   else
   begin
     // compare properties by name
-    rB := Rtti.RegisterClass(PPointer(B)^);
+    rB := Rtti.RegisterClass(B);
     for i := 1 to rA.Props.Count do
     begin
       if pA^.Name <> '' then

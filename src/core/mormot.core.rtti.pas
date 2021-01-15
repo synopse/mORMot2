@@ -2157,6 +2157,8 @@ type
            array[0..RTTICUSTOMTYPEINFOHASH] of TPointerDynArray;
     // used to release memory used by registered customizations
     Instances: array of TRttiCustom;
+    function GetByClass(ObjectClass: TClass): TRttiCustom;
+      {$ifdef HASINLINE}inline;{$endif}
     // called by FindOrRegister() for proper inlining
     function DoRegister(Info: PRttiInfo): TRttiCustom; overload;
     function DoRegister(ObjectClass: TClass): TRttiCustom; overload;
@@ -2216,7 +2218,13 @@ type
     // - returns existing or new TRttiCustom
     // - please call RegisterCollection for TCollection
     // - will use the ObjectClass vmtAutoTable slot for very fast O(1) lookup
-    function RegisterClass(ObjectClass: TClass): TRttiCustom;
+    function RegisterClass(ObjectClass: TClass): TRttiCustom; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// register a given class type, using its RTTI
+    // - returns existing or new TRttiCustom
+    // - please call RegisterCollection for TCollection
+    // - will use the ObjectClass vmtAutoTable slot for very fast O(1) lookup
+    function RegisterClass(aObject: TObject): TRttiCustom; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// register one or several RTTI TypeInfo()
     // - to ensure that those classes will be recognized by text definition
@@ -2329,7 +2337,7 @@ type
     // - you can access or register one type by using this default property:
     // ! Rtti.ByClass[TMyClass].Props.NameChanges(['old', 'new'])
     property ByClass[C: TClass]: TRttiCustom
-      read RegisterClass;
+      read GetByClass;
   end;
 
 
@@ -7100,6 +7108,18 @@ begin
   result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
   if result = nil then
     result := DoRegister(ObjectClass);
+end;
+
+function TRttiCustomList.GetByClass(ObjectClass: TClass): TRttiCustom;
+begin
+  result := RegisterClass(ObjectClass);
+end;
+
+function TRttiCustomList.RegisterClass(aObject: TObject): TRttiCustom;
+begin
+  result := PPointer(PPAnsiChar(aObject)^ + vmtAutoTable)^;
+  if result = nil then
+    result := DoRegister(PClass(aObject)^);
 end;
 
 procedure TRttiCustomList.RegisterClasses(const ObjectClass: array of TClass);
