@@ -2611,6 +2611,7 @@ begin
         end;
         if P^ = '(' then
         begin
+          // where sum(...)
           inc(P);
           SetLength(fWhere, whereCount + 1);
           with fWhere[whereCount] do
@@ -2716,9 +2717,11 @@ lim2: if IdemPropNameU(Prop, 'LIMIT') then
         else
           exit; // incorrect SQL statement
       end
-      else if Prop <> '' then
+      else if (Prop <> '') or
+              not (GotoNextNotSpace(P)^ in [#0, ';']) then
+        // incorrect SQL statement
         exit
-      else // incorrect SQL statement
+      else
         break; // reached the end of the statement
     end;
   end

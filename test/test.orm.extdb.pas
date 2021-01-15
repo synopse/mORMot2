@@ -371,6 +371,9 @@ begin
           'select id,firstname from SampleRecord order by firstname limit 2');
         Test(dSQLite, true,
           'select id,firstname from SampleRecord order by firstname limit 2');
+        SqlOrigin := 'SELECT RowID,firstname FROM PeopleExt WHERE :(3001): ' +
+          'BETWEEN firstname AND RowID LIMIT 1';
+        Test(dSQLite, false);
       finally
         Ext.Free;
       end;
