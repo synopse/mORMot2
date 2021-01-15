@@ -1985,13 +1985,15 @@ type
     fParser: TRttiParserType;
     fParserComplex: TRttiParserComplexType;
     fFlags: TRttiCustomFlags;
-    fPrivate: pointer; // used e.g. by mormot.orm.base.pas or mormot.core.log.pas
+    fPrivateSlot: pointer;
+    fPrivateSlot2: TObject;
     fArrayRtti: TRttiCustom;
     fFinalize: TRttiFinalizer;
     fCopy: TRttiCopier;
     fName: RawUtf8;
     fProps: TRttiCustomProps;
     fOwnedRtti: array of TRttiCustom;
+    fValueRtlClass: TRttiValueClass;
     fArrayFirstField: TRttiParserType;
     // used by mormot.core.json.pas
     fBinarySize: integer;
@@ -2005,7 +2007,6 @@ type
     fNoRttiInfo: TByteDynArray;
     // customize class process
     fValueClass: TClass;
-    fValueRtlClass: TRttiValueClass;
     fObjArrayClass: TClass;
     fCollectionItem: TCollectionItemClass;
     fCollectionItemRtti: TRttiCustom;
@@ -2129,8 +2130,12 @@ type
     /// opaque private instance used by mormot.orm.base.pas or mormot.core.log.pas
     // - stores e.g. the TOrmProperties ORM information of a TOrm,
     // or the TSynLogFamily of a TSynLog instance
+    // - is owned, as TObject, by this TRttiCustom
     property PrivateSlot: pointer
-      read fPrivate write fPrivate;
+      read fPrivateSlot write fPrivateSlot;
+    /// another opaque private class instance, owned by this TRttiCustom
+    property PrivateSlot2: TObject
+      read fPrivateSlot2 write fPrivateSlot2;
     /// opaque TRttiJsonLoad callback used by mormot.core.json.pas
     property JsonLoad: pointer
       read fJsonLoad write fJsonLoad;
@@ -6404,7 +6409,8 @@ destructor TRttiCustom.Destroy;
 begin
   inherited Destroy;
   ObjArrayClear(fOwnedRtti);
-  TObject(fPrivate).Free;
+  TObject(fPrivateSlot).Free;
+  fPrivateSlot2.Free;
 end;
 
 constructor TRttiCustom.CreateFromText(const RttiDefinition: RawUtf8);

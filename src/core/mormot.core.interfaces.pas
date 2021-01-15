@@ -12,6 +12,7 @@ unit mormot.core.interfaces;
     - TInterfaceResolver TInjectableObject for IoC / Dependency Injection
     - TInterfaceStub TInterfaceMock for Dependency Mocking
     - TInterfaceMethodExecute for Method Execution from JSON
+    - SetWeak and SetWeakZero Weak Interface Reference
 
   *****************************************************************************
 }
@@ -2141,6 +2142,33 @@ procedure BackgroundExecuteInstanceRelease(instance: TObject;
 function PerThreadRunningContextAddress: pointer;
 
 
+{ ************ SetWeak and SetWeakZero Weak Interface Reference }
+
+/// assign a Weak interface reference, to be used for circular references
+// - by default setting aInterface.Field := aValue will increment the internal
+// reference count of the implementation object: when underlying objects reference
+// each other via interfaces (e.g. as parent and children), what causes the
+// reference count to never reach zero, therefore resulting in memory links
+// - to avoid this issue, use this procedure instead
+procedure SetWeak(aInterfaceField: PInterface; const aValue: IInterface);
+  {$ifdef FPC}inline;{$endif} // raise Internal Error C2170 on some Delphis
+
+/// assign a Weak interface reference, which will be ZEROed (set to nil) when
+// the corresponding object will be released
+// - this function is bit slower than SetWeak, but will avoid any GPF, by
+// maintaining a list of per-instance weak interface field reference, and
+// hook the FreeInstance virtual method in order to reset any reference to nil:
+// FreeInstance will be overridden for this given class VMT only (to avoid
+// unnecessary slowdown of other classes), calling the previous method afterward
+// (so will work even with custom FreeInstance implementations)
+// - for faster possible retrieval, it will assign the unused vmtAutoTable VMT
+// entry trick (just like TSQLRecord.RecordProps) - note that it will be
+// compatible also with interfaces implemented via TSQLRecord children
+// - thread-safe implementation, using a per-class fast lock
+procedure SetWeakZero(aObject: TObject; aObjectInterfaceField: PInterface;
+  const aValue: IInterface);
+
+
 implementation
 
 
@@ -3377,12 +3405,12 @@ class function TInterfaceFactory.Get(constref aGuid: TGUID): TInterfaceFactory;
 class function TInterfaceFactory.Get(const aGuid: TGUID): TInterfaceFactory;
 {$endif FPC_HAS_CONSTREF}
 var
-  n: PtrInt;
+  n: integer;
   F: ^TInterfaceFactory;
-  GL: QWord;
   {$ifdef CPUX86NOTPIC}
   cache: TSynObjectListLocked absolute InterfaceFactoryCache;
   {$else}
+  GL: QWord;
   cache: TSynObjectListLocked;
   {$endif CPUX86NOTPIC}
 begin
@@ -3391,13 +3419,19 @@ begin
   {$endif CPUX86NOTPIC}
   if cache <> nil then
   begin
-    GL := PHash128Rec(@aGuid)^.L;
     cache.Safe.Lock; // no GPF is expected within the loop -> no try...finally
+    {$ifndef CPUX86NOTPIC}
+    GL := PHash128Rec(@aGuid)^.L;
+    {$endif CPUX86NOTPIC}
     F := pointer(cache.List);
     n := cache.Count;
     if n > 0 then
       repeat
+        {$ifdef CPUX86NOTPIC}
+        if (PHash128Rec(@F^.fInterfaceIID)^.L = PHash128Rec(@aGuid)^.L) and
+        {$else}
         if (PHash128Rec(@F^.fInterfaceIID)^.L = GL) and
+        {$endif CPUX86NOTPIC}
            (PHash128Rec(@F^.fInterfaceIID)^.H = PHash128Rec(@aGuid)^.H) then
         begin
           result := F^;
@@ -4481,7 +4515,7 @@ end;
 function ObjectFromInterface(const aValue: IInterface): TObject;
 begin
   if aValue <> nil then
-    // calling the RTL is slower but always working
+    // calling the RTL is the standard way, and fast enough on FPC
     result := aValue as TObject
   else
     result := nil;
@@ -4493,8 +4527,10 @@ function ObjectFromInterface(const aValue: IInterface): TObject;
     TObjectFromInterfaceStub = packed record
       Stub: cardinal;
       case integer of
-        0: (ShortJmp: shortint);
-        1: (LongJmp:  integer)
+        0:
+          (ShortJmp: shortint);
+        1:
+          (LongJmp:  integer)
     end;
     PObjectFromInterfaceStub = ^TObjectFromInterfaceStub;
 begin
@@ -4504,12 +4540,12 @@ begin
       // check first asm opcodes of VMT[0] entry, i.e. QueryInterface()
       $04244483:
         begin
-          result := pointer(PtrInt(aValue)+ShortJmp);
+          result := pointer(PtrInt(aValue) + ShortJmp);
           exit;
         end;
       $04244481:
         begin
-          result := pointer(PtrInt(aValue)+LongJmp);
+          result := pointer(PtrInt(aValue) + LongJmp);
           exit;
         end;
       else if Stub = PCardinal(@TInterfacedObjectFake.FakeQueryInterface)^ then
@@ -7196,6 +7232,105 @@ begin
 end;
 
 
+{ ************ SetWeak and SetWeakZero Weak Interface Reference }
+
+procedure SetWeak(aInterfaceField: PInterface; const aValue: IInterface);
+begin
+  PPointer(aInterfaceField)^ := Pointer(aValue);
+end;
+
+
+{ TSetWeakZero maintains a per-instance reference list }
+
+type
+  TSetWeakZero = class(TSynDictionary)
+  protected
+    fHookedFreeInstance: PtrUInt;
+  public
+    constructor Create(aClass: TClass); reintroduce;
+    procedure HookedFreeInstance;
+  end;
+
+constructor TSetWeakZero.Create(aClass: TClass);
+var
+  P: PPtrUInt;
+begin
+  // key = instance TObject, value = dynarray field(s) to be zeroed
+  inherited Create(TypeInfo(TPointerDynArray), TypeInfo(TPointerDynArrayDynArray));
+  P := pointer(PAnsiChar(aClass) + vmtFreeInstance);
+  fHookedFreeInstance := P^;
+  PatchCodePtrUInt(P, PtrUInt(@TSetWeakZero.HookedFreeInstance));
+end;
+
+type
+  TSimpleMethodCall = procedure(self: TObject);
+
+procedure TSetWeakZero.HookedFreeInstance;
+var
+  inst: TSetWeakZero;
+  i: PtrInt;
+  fields: TPointerDynArray;
+begin
+  inst := pointer(Rtti.Find(PClass(self)^).PrivateSlot2);
+  if inst.FindAndExtract(self, fields) then
+    for i := 0 to length(fields) - 1 do
+      fields[i] := nil;
+  TSimpleMethodCall(fHookedFreeInstance)(self); // CleanupInstance + FreeMem()
+end;
+
+function GetWeakZero(aClass: TClass; CreateIfNonExisting: boolean): TSetWeakZero;
+var
+  rc: TRttiCustom;
+begin
+  rc := Rtti.RegisterClass(aClass);
+  result := pointer(rc.PrivateSlot2);
+  if (result <> nil) or
+     not CreateIfNonExisting then
+    exit;
+  Rtti.DoLock;
+  if rc.PrivateSlot2 = nil then
+    rc.PrivateSlot2 := TSetWeakZero.Create(aClass);
+  Rtti.DoUnLock;
+  result := pointer(rc.PrivateSlot2);
+end;
+
+procedure SetWeakZero(aObject: TObject; aObjectInterfaceField: PInterface;
+  const aValue: IInterface);
+var
+  c: TObject;
+  o, v: TSetWeakZero;
+begin
+  if (aObjectInterfaceField = nil) or
+     (aObject = nil) or
+     (aObjectInterfaceField^ = aValue) then
+    exit;
+  o := GetWeakZero(PClass(aObject)^, {createifneeded=}false);
+  if aObjectInterfaceField^ <> nil then
+  begin
+    if (aValue = nil) and
+       (o <> nil) then
+      o.DeleteInArray(aObject, aObjectInterfaceField, SortDynArrayPointer);
+    c := ObjectFromInterface(aObjectInterfaceField^);
+    v := GetWeakZero(PClass(c)^, {createifneeded=}false);
+    if v <> nil then
+      v.DeleteInArray(c, aObjectInterfaceField, SortDynArrayPointer);
+    PPointer(aObjectInterfaceField)^ := nil;
+    if aValue = nil then
+      exit;
+  end;
+  if o = nil then
+    o := GetWeakZero(PClass(aObject)^, {createifneeded=}true);
+  o.AddInArray(aObject, aObjectInterfaceField, SortDynArrayPointer);
+  if aValue <> nil then
+  begin
+    c := ObjectFromInterface(aValue);
+    v := GetWeakZero(PClass(c)^, {createifneeded=}true);
+    v.AddInArray(c, aObjectInterfaceField, SortDynArrayPointer);
+  end;
+  PPointer(aObjectInterfaceField)^ := pointer(aValue);
+end;
+
+
 procedure InitializeUnit;
 begin
   {$ifdef CPUARM}
@@ -7214,6 +7349,7 @@ begin
   GlobalInterfaceResolution := nil; // also cleanup Instance fields
   DeleteCriticalSection(GlobalInterfaceResolutionLock);
 end;
+
 
 initialization
   InitializeUnit;
