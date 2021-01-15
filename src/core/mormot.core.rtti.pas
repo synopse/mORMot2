@@ -1966,6 +1966,15 @@ type
     eeCurly,
     eeEndKeyWord);
 
+  /// the recognized classes as stored in TRttiCustom.ValueRtlClass
+  TRttiValueClass = (
+    vcNone,
+    vcCollection,
+    vcStrings,
+    vcObjectList,
+    vcList);
+
+
   /// allow to customize the process of a given TypeInfo/PRttiInfo
   // - a global list of TRttiCustom instances mapping TypeInfo() is maintained
   // in Rtti: TRttiCustomList
@@ -1995,7 +2004,8 @@ type
     // used by NoRttiSetAndRegister()
     fNoRttiInfo: TByteDynArray;
     // customize class process
-    fValueClass, fValueRTLClass: TClass;
+    fValueClass: TClass;
+    fValueRtlClass: TRttiValueClass;
     fObjArrayClass: TClass;
     fCollectionItem: TCollectionItemClass;
     fCollectionItemRtti: TRttiCustom;
@@ -2105,8 +2115,8 @@ type
       read fValueClass;
     /// identify most common RTL inherited classes for special handling
     // - recognize TCollection TStrings TObjectList TList parents
-    property ValueRTLClass: TClass
-      read fValueRTLClass;
+    property ValueRtlClass: TRttiValueClass
+      read fValueRtlClass;
     /// store the class of a T*ObjArray dynamic array
     // - shortcut to ArrayRtti.Info.RttiClass.RttiClass
     // - used when rcfObjArray is defined in Flags
@@ -6320,13 +6330,13 @@ begin
         // set vmtAutoTable slot for efficient Find(TClass) - to be done asap
         ClassPropertiesAdd(fValueClass, self, {freexist=}false);
         if fValueClass.InheritsFrom(TCollection) then
-          fValueRTLClass := TCollection
+          fValueRtlClass := vcCollection
         else if fValueClass.InheritsFrom(TStrings) then
-          fValueRTLClass := TStrings
+          fValueRtlClass := vcStrings
         else if fValueClass.InheritsFrom(TObjectList) then
-          fValueRTLClass := TObjectList
+          fValueRtlClass := vcObjectList
         else if fValueClass.InheritsFrom(TList) then
-          fValueRTLClass := TList;
+          fValueRtlClass := vcList;
         fProps.AddFromClass(aInfo, {includeparents=}true);
         if fProps.Count = 0 then
           if fValueClass.InheritsFrom(Exception) then
@@ -7280,11 +7290,11 @@ begin
      (aTo <> nil) then
   begin
     cf := Rtti.RegisterClass(PClass(aFrom)^);
-    if (cf.ValueRTLClass = TCollection) and
+    if (cf.ValueRtlClass = vcCollection) and
        (PClass(aFrom)^ = PClass(aTo)^)  then
       // specific process of TCollection items
       CopyCollection(TCollection(aFrom), TCollection(aTo))
-    else if (cf.ValueRTLClass = TStrings) and
+    else if (cf.ValueRtlClass = vcStrings) and
             PClass(aTo)^.InheritsFrom(TStrings) then
       // specific process of TStrings items using VCL-style copy
       TStrings(aTo).Assign(TStrings(aFrom))

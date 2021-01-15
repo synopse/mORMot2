@@ -9559,13 +9559,15 @@ begin
       end;
       break;
     until false;
-    if fValueRTLClass = TStrings then
-    begin
-      fJsonSave := @_JS_TStrings;
-      fJsonLoad := @_JL_TStrings;
-    end
-    else if fValueRTLClass = TList then
-      fJsonSave := @_JS_TList;
+    case fValueRtlClass of
+      vcStrings:
+        begin
+          fJsonSave := @_JS_TStrings;
+          fJsonLoad := @_JL_TStrings;
+        end;
+      vcList:
+        fJsonSave := @_JS_TList;
+    end;
   end
   else if rcfBinary in Flags then
   begin
