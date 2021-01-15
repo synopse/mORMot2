@@ -3379,7 +3379,7 @@ class function TInterfaceFactory.Get(const aGuid: TGUID): TInterfaceFactory;
 var
   n: PtrInt;
   F: ^TInterfaceFactory;
-  g: THash128Rec absolute aGuid;
+  GL: QWord;
   {$ifdef CPUX86NOTPIC}
   cache: TSynObjectListLocked absolute InterfaceFactoryCache;
   {$else}
@@ -3391,19 +3391,19 @@ begin
   {$endif CPUX86NOTPIC}
   if cache <> nil then
   begin
+    GL := PHash128Rec(@aGuid)^.L;
     cache.Safe.Lock; // no GPF is expected within the loop -> no try...finally
     F := pointer(cache.List);
     n := cache.Count;
     if n > 0 then
       repeat
-        with PHash128Rec(@F^.fInterfaceIID)^ do
-          if (g.L = L) and
-             (g.H = H) then
-          begin
-            result := F^;
-            cache.Safe.UnLock;
-            exit;
-          end;
+        if (PHash128Rec(@F^.fInterfaceIID)^.L = GL) and
+           (PHash128Rec(@F^.fInterfaceIID)^.H = PHash128Rec(@aGuid)^.H) then
+        begin
+          result := F^;
+          cache.Safe.UnLock;
+          exit;
+        end;
         inc(F);
         dec(n);
       until n = 0;
@@ -3566,9 +3566,9 @@ begin
           FormatUtf8(' (%)', [ToText(ArgRtti.Info^.Kind)], ErrorMsg);
         end;
       imvObject:
-        if ArgRtti.ValueClass = TList then
-          ErrorMsg := ' - use TObjectList instead'
-        else if (ArgRtti.ValueRTLClass = TCollection) and
+        if ArgRtti.ValueRtlClass = vcList then
+          ErrorMsg := ' - use TObjectList or T*ObjArray instead'
+        else if (ArgRtti.ValueRtlClass = vcCollection) and
                 (ArgRtti.CollectionItem = nil) then
           ErrorMsg :=
             ' - inherit from TInterfacedCollection or call Rtti.RegisterCollection() first'
