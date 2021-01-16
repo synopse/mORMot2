@@ -1328,7 +1328,8 @@ type
     iaFindAndDelete,
     iaFindAndUpdate,
     iaFindAndAddIfNotExisting,
-    iaAdd);
+    iaAdd,
+    iaAddForced);
 
   /// event called by TSynDictionary.ForEach methods to iterate over stored items
   // - if the implementation method returns TRUE, will continue the loop
@@ -1495,6 +1496,14 @@ type
     // - returns FALSE if Values is not a tkDynArray, or if aKey was not found
     // - this method is thread-safe, since it will lock the instance
     function AddInArray(const aKey, aArrayValue;
+      aCompare: TDynArraySortCompare): boolean;
+    /// add aArrayValue item within a dynamic-array value associated via aKey
+    // - expect the stored value to be a dynamic array itself
+    // - would search for aKey as primary key, create the entry if not found,
+    //  then use TDynArray.Add to add aArrayValue to the associated dynamic array
+    // - returns FALSE if Values is not a tkDynArray
+    // - this method is thread-safe, since it will lock the instance
+    function AddInArrayForced(const aKey, aArrayValue;
       aCompare: TDynArraySortCompare): boolean;
     /// add once aArrayValue within a dynamic-array value associated via aKey
     // - expect the stored value to be a dynamic array itself
@@ -8964,7 +8973,8 @@ function TSynDictionary.InArray(const aKey, aArrayValue;
   aAction: TSynDictionaryInArray; aCompare: TDynArraySortCompare): boolean;
 var
   nested: TDynArray;
-  ndx: integer;
+  ndx: PtrInt;
+  new: pointer;
 begin
   result := false;
   if (fValues.Info.ArrayRtti = nil) or
@@ -8975,7 +8985,13 @@ begin
   try
     ndx := fKeys.FindHashed(aKey);
     if ndx < 0 then
-      exit;
+      if aAction <> iaAddForced then
+        exit
+      else
+      begin
+        new := nil;
+        ndx := Add(aKey, new);
+      end;
     nested.InitRtti(fValues.Info.ArrayRtti, fValues.ItemPtr(ndx)^);
     nested.Compare := aCompare;
     case aAction of
@@ -8987,7 +9003,7 @@ begin
         result := nested.FindAndUpdate(aArrayValue) >= 0;
       iaFindAndAddIfNotExisting:
         result := nested.FindAndAddIfNotExisting(aArrayValue) >= 0;
-      iaAdd:
+      iaAdd, iaAddForced:
         result := nested.Add(aArrayValue) >= 0;
     end;
   finally
@@ -9037,6 +9053,12 @@ function TSynDictionary.AddInArray(const aKey, aArrayValue;
   aCompare: TDynArraySortCompare): boolean;
 begin
   result := InArray(aKey, aArrayValue, iaAdd, aCompare);
+end;
+
+function TSynDictionary.AddInArrayForced(const aKey, aArrayValue;
+  aCompare: TDynArraySortCompare): boolean;
+begin
+  result := InArray(aKey, aArrayValue, iaAddForced, aCompare);
 end;
 
 function TSynDictionary.AddOnceInArray(const aKey, aArrayValue;

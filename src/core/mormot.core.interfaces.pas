@@ -7248,29 +7248,12 @@ type
     fHookedFreeInstance: PtrUInt;
   public
     constructor Create(aClass: TClass); reintroduce;
-    /// called when the refered interface or the class with fields is released,
-    // zeroing all known weak references
-    procedure HookedFreeInstance;
   end;
 
-constructor TSetWeakZero.Create(aClass: TClass);
-var
-  P: PPtrUInt;
-begin
-  // key = instance TObject, value = dynarray field(s) to be zeroed
-  inherited Create(TypeInfo(TPointerDynArray), TypeInfo(TPointerDynArrayDynArray));
-  P := pointer(PAnsiChar(aClass) + vmtFreeInstance);
-  if P^ = PtrUInt(@TSetWeakZero.HookedFreeInstance) then
-    // hook once - Create may be done twice in GetWeakZero() for SetPrivateSlot
-    exit;
-  fHookedFreeInstance := P^;
-  PatchCodePtrUInt(P, PtrUInt(@TSetWeakZero.HookedFreeInstance));
-end;
-
 type
-  TSimpleMethodCall = procedure(self: TObject);
+  TFreeInstanceMethod = procedure(self: TObject);
 
-procedure TSetWeakZero.HookedFreeInstance;
+procedure HookedFreeInstance(self: TObject);
 var
   inst: TSetWeakZero;
   i: PtrInt;
@@ -7286,7 +7269,21 @@ begin
       fields[i] := nil;
     FastDynArrayClear(@fields, nil);
   end;
-  TSimpleMethodCall(inst.fHookedFreeInstance)(self); // CleanupInstance + FreeMem()
+  TFreeInstanceMethod(inst.fHookedFreeInstance)(self); // CleanupInstance + FreeMem()
+end;
+
+constructor TSetWeakZero.Create(aClass: TClass);
+var
+  P: PPtrUInt;
+begin
+  // key = instance TObject, value = dynarray field(s) to be zeroed
+  inherited Create(TypeInfo(TPointerDynArray), TypeInfo(TPointerDynArrayDynArray));
+  P := pointer(PAnsiChar(aClass) + vmtFreeInstance);
+  if P^ = PtrUInt(@HookedFreeInstance) then
+    // hook once - Create may be done twice in GetWeakZero() for SetPrivateSlot
+    exit;
+  fHookedFreeInstance := P^;
+  PatchCodePtrUInt(P, PtrUInt(@HookedFreeInstance));
 end;
 
 function GetWeakZero(aClass: TClass; CreateIfNonExisting: boolean): TSetWeakZero;
@@ -7326,12 +7323,12 @@ begin
   end;
   if o = nil then
     o := GetWeakZero(PClass(aObject)^, {createifneeded=}true);
-  o.AddInArray(aObject, aObjectInterfaceField, SortDynArrayPointer);
+  o.AddInArrayForced(aObject, aObjectInterfaceField, SortDynArrayPointer);
   if aValue <> nil then
   begin
     c := ObjectFromInterface(aValue);
     v := GetWeakZero(PClass(c)^, {createifneeded=}true);
-    v.AddInArray(c, aObjectInterfaceField, SortDynArrayPointer);
+    v.AddInArrayForced(c, aObjectInterfaceField, SortDynArrayPointer);
   end;
   PPointer(aObjectInterfaceField)^ := pointer(aValue);
 end;
