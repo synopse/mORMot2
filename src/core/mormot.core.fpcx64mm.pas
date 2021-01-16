@@ -454,12 +454,12 @@ end;
 
 { ********* Some Assembly Helpers }
 
-procedure NotifyAlloc(var Arena: TMMStatusArena; Size: PtrUInt);
+procedure NotifyMediumLargeAlloc(var Arena: TMMStatusArena; Size: PtrUInt);
   nostackframe; assembler;
 asm
         mov     rax, Size
   lock  xadd    qword ptr [Arena].TMMStatusArena.CurrentBytes, rax
-  lock  xadd    qword ptr [Arena].TMMStatusArena.CumulativeBytes, Size
+  lock  xadd    qword ptr [Arena].TMMStatusArena.CumulativeBytes, rax
         {$ifdef FPCMM_DEBUG}
   lock  inc     qword ptr [Arena].TMMStatusArena.CumulativeAlloc
         mov     rax, qword ptr [Arena].TMMStatusArena.CurrentBytes
@@ -469,7 +469,7 @@ asm
 @s:     {$endif FPCMM_DEBUG}
 end;
 
-procedure NotifyFree(var Arena: TMMStatusArena; Size: PtrUInt);
+procedure NotifyMediumLargeFree(var Arena: TMMStatusArena; Size: PtrUInt);
   nostackframe; assembler;
 asm
         neg     Size
@@ -478,6 +478,8 @@ asm
   lock  inc     qword ptr [Arena].TMMStatusArena.CumulativeFree
         {$endif FPCMM_DEBUG}
 end;
+
+{$ifdef FPCMM_NOMREMAP}
 
 // faster than Move() as called from ReallocateLargeBlock
 procedure MoveLarge(src, dst: pointer; cnt: PtrInt); nostackframe; assembler;
@@ -497,6 +499,7 @@ asm
         mov     qword ptr [dst + cnt], rax
 end;
 
+{$endif FPCMM_NOMREMAP}
 
 
 { ********* Constants and Data Structures Definitions }
@@ -629,7 +632,7 @@ type
     BlockType: PSmallBlockType;
     {$ifdef CPU32}
     Padding32Bits: cardinal;
-    {$endif}
+    {$endif CPU32}
     NextPartiallyFreePool: PSmallBlockPoolHeader;
     PreviousPartiallyFreePool: PSmallBlockPoolHeader;
     FirstFreeBlock: pointer;
@@ -849,7 +852,7 @@ end;
 procedure FreeMedium(ptr: PMediumBlockPoolHeader);
 begin
   Free(ptr, MediumBlockPoolSizeMem);
-  NotifyFree(HeapStatus.Medium, MediumBlockPoolSizeMem);
+  NotifyMediumLargeFree(HeapStatus.Medium, MediumBlockPoolSizeMem);
 end;
 
 function AllocNewSequentialFeedMediumPool(blocksize: cardinal): pointer;
@@ -873,7 +876,7 @@ begin
     result := pointer(PByte(new) + MediumBlockPoolSize - blocksize);
     LastSequentiallyFed := result;
     PPtrUInt(PByte(result) - BlockHeaderSize)^ := blocksize or IsMediumBlockFlag;
-    NotifyAlloc(HeapStatus.Medium, MediumBlockPoolSizeMem);
+    NotifyMediumLargeAlloc(HeapStatus.Medium, MediumBlockPoolSizeMem);
   end
   else
   begin
@@ -928,9 +931,9 @@ begin
     {$endif FPCMM_NOMREMAP}
   if header <> nil then
   begin
-    NotifyAlloc(HeapStatus.Large, blocksize);
+    NotifyMediumLargeAlloc(HeapStatus.Large, blocksize);
     if existing <> nil then
-      NotifyFree(HeapStatus.Large, oldsize);
+      NotifyMediumLargeFree(HeapStatus.Large, oldsize);
     header.BlockSizeAndFlags := blocksize or IsLargeBlockFlag;
     LockLargeBlocks;
     old := LargeBlocksCircularList.NextLargeBlockHeader;
@@ -951,7 +954,7 @@ end;
 
 procedure FreeLarge(ptr: PLargeBlockHeader; size: PtrUInt);
 begin
-  NotifyFree(HeapStatus.Large, size);
+  NotifyMediumLargeFree(HeapStatus.Large, size);
   Free(ptr, size);
 end;
 
@@ -1163,7 +1166,7 @@ asm
         jz      @RemoveSmallPool
         // Unlock the block type and leave
         mov     byte ptr [rbx].TSmallBlockType.BlockTypeLocked, false
-@Done:  pop     rbx
+        pop     rbx
         {$ifdef MSWINDOWS}
         pop     rdi
         pop     rsi
@@ -1304,12 +1307,12 @@ asm
         jnz     @GotMediumBlock // rsi=freeblock rbx=blocktype edi=blocksize
         mov     [r10 + TMediumBlockInfo.Locked], al
         mov     [rbx].TSmallBlockType.BlockTypeLocked, al
-        {$ifdef MSWINDOWS}
-        jmp     @Done
-        {$else}
         pop     rbx
-        ret
+        {$ifdef MSWINDOWS}
+        pop     rdi
+        pop     rsi
         {$endif MSWINDOWS}
+        ret
 @UseWholeBlock:
         // rsi = free block, rbx = block type, edi = block size
         // Mark this block as used in the block following it
@@ -1405,22 +1408,22 @@ asm
         or      rbx, IsMediumBlockFlag
         mov     [rax - BlockHeaderSize], rbx
         mov     byte ptr [r10 + TMediumBlockInfo.Locked], false
-        {$ifdef MSWINDOWS}
-        jmp     @Done
-        {$else}
         pop     rbx
-        ret
+        {$ifdef MSWINDOWS}
+        pop     rdi
+        pop     rsi
         {$endif MSWINDOWS}
+        ret
 @AllocateNewSequentialFeedForMedium:
         mov     size, rbx // 'size' variable is the first argument register in ABI call
         call    AllocNewSequentialFeedMediumPool
         mov     byte ptr [rip + MediumBlockInfo.Locked], false // r10 has been overwritten
-        {$ifdef MSWINDOWS}
-        jmp     @Done
-        {$else}
         pop     rbx
-        ret
+        {$ifdef MSWINDOWS}
+        pop     rdi
+        pop     rsi
         {$endif MSWINDOWS}
+        ret
 @GotBinAndGroup:
         // ebx = block size, ecx = bin number, edx = group number
         // Compute rdi = @bin, rsi = free block
@@ -1472,12 +1475,12 @@ asm
         // Unlock medium blocks and leave
         mov     byte ptr [r10 + TMediumBlockInfo.Locked], false
         mov     rax, rsi
-        {$ifdef MSWINDOWS}
-        jmp     @Done
-        {$else}
         pop     rbx
-        ret
+        {$ifdef MSWINDOWS}
+        pop     rdi
+        pop     rsi
         {$endif MSWINDOWS}
+        ret
         { ---------- LARGE block allocation ---------- }
 @IsALargeBlockRequest:
         xor     rax, rax
@@ -1486,10 +1489,10 @@ asm
         // Note: size is still in the rcx/rdi first param register
         call    AllocateLargeBlock
 @DoneLarge:
-        {$ifdef MSWINDOWS}
-        jmp     @Done
-        {$else}
         pop     rbx
+        {$ifdef MSWINDOWS}
+        pop     rdi
+        pop     rsi
         {$endif MSWINDOWS}
 end;
 
