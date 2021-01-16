@@ -108,6 +108,7 @@ uses
   mormot.core.json,
   mormot.core.jwt,
   mormot.core.perf,
+  mormot.core.secure,
   mormot.net.sock,
   mormot.net.http,
   mormot.net.ws.core,

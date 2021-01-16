@@ -2010,6 +2010,7 @@ type
     fObjArrayClass: TClass;
     fCollectionItem: TCollectionItemClass;
     fCollectionItemRtti: TRttiCustom;
+    procedure SetValueClass(aClass: TClass; aInfo: PRttiInfo);
     // for TRttiCustomList.RegisterObjArray/RegisterBinaryType/RegisterFromText
     function SetObjArray(Item: TClass): TRttiCustom;
     function SetBinaryType(BinarySize: integer): TRttiCustom;
@@ -6327,6 +6328,26 @@ begin
   result := PtrInt(@Message);
 end;
 
+procedure TRttiCustom.SetValueClass(aClass: TClass; aInfo: PRttiInfo);
+begin
+  fValueClass := aClass;
+  // set vmtAutoTable slot for efficient Find(TClass) - to be done asap
+  ClassPropertiesAdd(aClass, self, {freexist=}false);
+  if aClass.InheritsFrom(TCollection) then
+    fValueRtlClass := vcCollection
+  else if aClass.InheritsFrom(TStrings) then
+    fValueRtlClass := vcStrings
+  else if aClass.InheritsFrom(TObjectList) then
+    fValueRtlClass := vcObjectList
+  else if aClass.InheritsFrom(TList) then
+    fValueRtlClass := vcList;
+  fProps.AddFromClass(aInfo, {includeparents=}true);
+  if fProps.Count = 0 then
+    if aClass.InheritsFrom(Exception) then
+      // manual registration of the Exception.Message property
+      fProps.Add(TypeInfo(string), EHook(nil).MessageOffset, 'Message');
+end;
+
 constructor TRttiCustom.Create(aInfo: PRttiInfo);
 var
   dummy: integer;
@@ -6343,24 +6364,7 @@ begin
   aInfo^.ComputeCache(fCache);
   case fCache.Kind of
     rkClass:
-      begin
-        fValueClass := aInfo.RttiClass.RttiClass;
-        // set vmtAutoTable slot for efficient Find(TClass) - to be done asap
-        ClassPropertiesAdd(fValueClass, self, {freexist=}false);
-        if fValueClass.InheritsFrom(TCollection) then
-          fValueRtlClass := vcCollection
-        else if fValueClass.InheritsFrom(TStrings) then
-          fValueRtlClass := vcStrings
-        else if fValueClass.InheritsFrom(TObjectList) then
-          fValueRtlClass := vcObjectList
-        else if fValueClass.InheritsFrom(TList) then
-          fValueRtlClass := vcList;
-        fProps.AddFromClass(aInfo, {includeparents=}true);
-        if fProps.Count = 0 then
-          if fValueClass.InheritsFrom(Exception) then
-            // manual registration of the Exception.Message property
-            fProps.Add(TypeInfo(string), EHook(nil).MessageOffset, 'Message');
-      end;
+      SetValueClass(aInfo.RttiClass.RttiClass, aInfo);
     rkRecord:
       fProps.SetFromRecordExtendedRtti(aInfo); // only for Delphi 2010+
     rkLString:
@@ -7074,9 +7078,7 @@ begin
     EnterCriticalSection(Lock);
     try
       result := GlobalClass.Create(nil);
-      result.fValueClass := ObjectClass;
-      if ObjectClass.InheritsFrom(Exception) then
-        result.Props.Add(TypeInfo(string), EHook(nil).MessageOffset, 'Message');
+      result.SetValueClass(ObjectClass, nil);
       result.NoRttiSetAndRegister(ptClass, ToText(ObjectClass), nil, {noreg=}false);
       GetTypeData(result.fCache.Info)^.ClassType := ObjectClass;
     finally
