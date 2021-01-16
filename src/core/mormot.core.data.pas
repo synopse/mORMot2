@@ -1186,6 +1186,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     function FindIndex(const Item; aIndex: PIntegerDynArray;
       aCompare: TDynArraySortCompare): PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
     /// faster than RTL + handle T*ObjArray + ensure unique
     procedure InternalSetLength(OldLength, NewLength: PtrUInt);
   public
@@ -1229,6 +1230,7 @@ type
     /// initialize the wrapper with a one-dimension dynamic array
     // - low-level method, as called by Init() and InitSpecific()
     // - can be called directly for a very fast TDynArray initialization
+    // - warning: caller should check that aInfo.Kind=rkDynArray
     procedure InitRtti(aInfo: TRttiCustom; var aValue; aCountPointer: PInteger); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize the wrapper with a one-dimension dynamic array
@@ -8152,7 +8154,7 @@ begin
     if ndx < 0 then
       break; // stop at void entry
     if n = high(indexes) then // paranoid (typical 0..23 range)
-      RaiseFatalCollision('HashDelete indexes overflow', aHashCode);
+      RaiseFatalCollision('HashDelete indexes[] overflow', aHashCode);
     indexes[n] := ndx;
     inc(n);
   until false;

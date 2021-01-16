@@ -3964,12 +3964,12 @@ begin
       inc(fIVCtr.ctr); // replay attack protection
     end
     else
-      TAesPrng.Main.FillRandom(fIV); // PRNG from real entropy
+      TAesPrng.Main.FillRandom(fIV); // unfixed PRNG from system entropy
     PAesBlock(Output)^ := fIV;
   end;
-  MoveFast(Input^, PByteArray(Output)^[ivsize], InputLen);
-  FillcharFast(PByteArray(Output)^[ivsize + InputLen], padding, padding);
   Inc(PByte(Output), ivsize);
+  MoveFast(Input^, Output^, InputLen);
+  FillcharFast(PByteArray(Output)^[InputLen], padding, padding);
   Encrypt(Output, Output, InputLen + padding);
   result := true;
 end;
@@ -4066,7 +4066,7 @@ begin
     else
     begin
       P[InputLen] := #0; // as SetString - needed if parsed e.g. as text/JSON
-      PStrLen(P - _STRLEN)^ := InputLen;
+      PStrLen(P - _STRLEN)^ := InputLen; // fake length with no realloc
     end;
   end;
 end;

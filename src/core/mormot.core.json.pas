@@ -6904,7 +6904,7 @@ end;
 procedure TTextWriter.AddDynArrayJson(var DynArray: TDynArrayHashed;
   WriteOptions: TTextWriterWriteObjectOptions);
 begin
-  // needed if UNDIRECTDYNARRAY is set (Delphi 2009+)
+  // needed if UNDIRECTDYNARRAY is defined (Delphi 2009+)
   AddDynArrayJson(PDynArray(@DynArray)^, WriteOptions);
 end;
 
@@ -6913,6 +6913,9 @@ function TTextWriter.AddDynArrayJson(Value: pointer; Info: TRttiCustom;
 var
   temp: TDynArray;
 begin
+  if Info.Kind <> rkDynArray then
+    raise EDynArray.CreateUtf8('%.AddDynArrayJson: % is %, expected rkDynArray',
+      [self, Info.Name, ToText(Info.Kind)^]);
   temp.InitRtti(Info, Value^);
   AddDynArrayJson(temp, WriteOptions);
   result := temp.Info.Cache.ItemSize;

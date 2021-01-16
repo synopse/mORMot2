@@ -1986,7 +1986,7 @@ type
     fParserComplex: TRttiParserComplexType;
     fFlags: TRttiCustomFlags;
     fPrivateSlot: pointer;
-    fPrivateSlot2: TObject;
+    fPrivateSlots: TObjectDynArray;
     fArrayRtti: TRttiCustom;
     fFinalize: TRttiFinalizer;
     fCopy: TRttiCopier;
@@ -2065,6 +2065,14 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// reset all stored Props[] and associated flags
     procedure PropsClear;
+    /// register once an instance of a given class per RTTI
+    // - thread-safe returns aObject, or an existing object (freeing aObject)
+    // - just like PrivateSlot property, but for as many class as needed
+    function SetPrivateSlot(aObject: TObject): pointer;
+    /// retrieve an instance of a given class per RTTI
+    // - previously registered by SetPrivateSlot
+    function GetPrivateSlot(aClass: TClass): pointer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// low-level RTTI kind, taken from Rtti property
     property Kind: TRttiKind
       read fCache.Kind;
@@ -2133,9 +2141,6 @@ type
     // - is owned, as TObject, by this TRttiCustom
     property PrivateSlot: pointer
       read fPrivateSlot write fPrivateSlot;
-    /// another opaque private class instance, owned by this TRttiCustom
-    property PrivateSlot2: TObject
-      read fPrivateSlot2 write fPrivateSlot2;
     /// opaque TRttiJsonLoad callback used by mormot.core.json.pas
     property JsonLoad: pointer
       read fJsonLoad write fJsonLoad;
@@ -6410,7 +6415,7 @@ begin
   inherited Destroy;
   ObjArrayClear(fOwnedRtti);
   TObject(fPrivateSlot).Free;
-  fPrivateSlot2.Free;
+  ObjArrayClear(fPrivateSlots);
 end;
 
 constructor TRttiCustom.CreateFromText(const RttiDefinition: RawUtf8);
@@ -6863,6 +6868,35 @@ begin
     include(fFlags, rcfHasNestedManagedProperties);
 end;
 
+function TRttiCustom.GetPrivateSlot(aClass: TClass): pointer;
+var
+  i: PtrInt;
+begin
+  for i := 0 to length(fPrivateSlots) - 1 do
+  begin
+    result := fPrivateSlots[i];
+    if PClass(result)^ = aClass then
+      exit;
+  end;
+  result := nil;
+end;
+
+function TRttiCustom.SetPrivateSlot(aObject: TObject): pointer;
+begin
+  Rtti.DoLock;
+  try
+    result := GetPrivateSlot(PClass(aObject)^);
+    if result = nil then
+    begin
+      ObjArrayAdd(fPrivateSlots, aObject);
+      result := aObject;
+    end
+    else
+      aObject.Free;
+  finally
+    Rtti.DoUnLock;
+  end;
+end;
 
 
 { TRttiCustomList }

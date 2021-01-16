@@ -1951,7 +1951,7 @@ end;
 procedure TProtocolAes.Encrypt(const aPlain: RawByteString;
   out aEncrypted: RawByteString);
 begin
-  EnterCriticalSection(fSafe);;
+  EnterCriticalSection(fSafe);
   try
     aEncrypted := fAes[true].EncryptPkcs7(aPlain, {iv=}true);
   finally

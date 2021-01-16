@@ -7248,6 +7248,8 @@ type
     fHookedFreeInstance: PtrUInt;
   public
     constructor Create(aClass: TClass); reintroduce;
+    /// called when the refered interface or the class with fields is released,
+    // zeroing all known weak references
     procedure HookedFreeInstance;
   end;
 
@@ -7258,6 +7260,9 @@ begin
   // key = instance TObject, value = dynarray field(s) to be zeroed
   inherited Create(TypeInfo(TPointerDynArray), TypeInfo(TPointerDynArrayDynArray));
   P := pointer(PAnsiChar(aClass) + vmtFreeInstance);
+  if P^ = PtrUInt(@TSetWeakZero.HookedFreeInstance) then
+    // hook once - Create may be done twice in GetWeakZero() for SetPrivateSlot
+    exit;
   fHookedFreeInstance := P^;
   PatchCodePtrUInt(P, PtrUInt(@TSetWeakZero.HookedFreeInstance));
 end;
@@ -7269,13 +7274,19 @@ procedure TSetWeakZero.HookedFreeInstance;
 var
   inst: TSetWeakZero;
   i: PtrInt;
-  fields: TPointerDynArray;
+  fields: PPointerArray; // holds a TPointerDynArray but avoid try..finally
 begin
-  inst := pointer(Rtti.Find(PClass(self)^).PrivateSlot2);
-  if inst.FindAndExtract(self, fields) then
-    for i := 0 to length(fields) - 1 do
+  inst := Rtti.Find(PClass(self)^).GetPrivateSlot(TSetWeakZero);
+  fields := nil;
+  if inst.FindAndExtract(self, fields) and
+     (fields <> nil) then
+  begin
+    // zeroing of weak references in object fields
+    for i := 0 to PDALen(PAnsiChar(fields) - _DALEN)^ + (_DAOFF - 1) do
       fields[i] := nil;
-  TSimpleMethodCall(fHookedFreeInstance)(self); // CleanupInstance + FreeMem()
+    FastDynArrayClear(@fields, nil);
+  end;
+  TSimpleMethodCall(inst.fHookedFreeInstance)(self); // CleanupInstance + FreeMem()
 end;
 
 function GetWeakZero(aClass: TClass; CreateIfNonExisting: boolean): TSetWeakZero;
@@ -7283,15 +7294,10 @@ var
   rc: TRttiCustom;
 begin
   rc := Rtti.RegisterClass(aClass);
-  result := pointer(rc.PrivateSlot2);
-  if (result <> nil) or
-     not CreateIfNonExisting then
-    exit;
-  Rtti.DoLock;
-  if rc.PrivateSlot2 = nil then
-    rc.PrivateSlot2 := TSetWeakZero.Create(aClass);
-  Rtti.DoUnLock;
-  result := pointer(rc.PrivateSlot2);
+  result := rc.GetPrivateSlot(TSetWeakZero);
+  if (result = nil) and
+     CreateIfNonExisting then
+    result := rc.SetPrivateSlot(TSetWeakZero.Create(aClass));
 end;
 
 procedure SetWeakZero(aObject: TObject; aObjectInterfaceField: PInterface;

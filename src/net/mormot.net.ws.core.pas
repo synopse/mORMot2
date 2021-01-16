@@ -1267,7 +1267,7 @@ begin
   begin
     result := P + 1;
     if HeadFound <> nil then
-      SetString(HeadFound^, txt, P - txt);
+      FastSetString(HeadFound^, txt, P - txt);
   end;
 end;
 
@@ -1275,7 +1275,7 @@ function TWebSocketProtocolJson.FrameDecompress(const frame: TWebSocketFrame;
   const Head: RawUtf8; const values: array of PRawByteString;
   var contentType, content: RawByteString): boolean;
 var
-  i: integer;
+  i: PtrInt;
   P: PUtf8Char;
   b64: PUtf8Char;
   b64len: integer;
@@ -1330,7 +1330,7 @@ begin
     exit;
   txt := P;
   P := GotoEndOfJsonString(P);
-  SetString(result, txt, P - txt);
+  FastSetString(result, txt, P - txt);
 end;
 
 
@@ -1412,7 +1412,7 @@ function TWebSocketProtocolBinary.FrameData(const frame: TWebSocketFrame;
   const Head: RawUtf8; HeadFound: PRawUtf8): pointer;
 var
   len: PtrInt;
-  P: PAnsiChar;
+  P: PUtf8Char;
 begin
   P := pointer(frame.payload);
   len := length(Head);
@@ -1420,11 +1420,11 @@ begin
      (length(frame.payload) >= len + 6) and
      CompareMemSmall(pointer(Head), P, len) then
   begin
-    result := PosChar(PUtf8Char(P) + len, FRAME_HEAD_SEP);
+    result := PosChar(P + len, FRAME_HEAD_SEP);
     if result <> nil then
     begin
       if HeadFound <> nil then
-        SetString(HeadFound^, P, PAnsiChar(result) - P);
+        FastSetString(HeadFound^, P, PAnsiChar(result) - P);
       inc(PByte(result));
     end;
   end
@@ -1434,7 +1434,7 @@ end;
 
 function TWebSocketProtocolBinary.FrameType(const frame: TWebSocketFrame): RawUtf8;
 var
-  i: integer;
+  i: PtrInt;
 begin
   if (length(frame.payload) < 10) or
      (frame.opcode <> focBinary) then
@@ -1444,7 +1444,7 @@ begin
   if i = 0 then
     result := '*'
   else
-    result := copy(frame.payload, 1, i - 1);
+    FastSetString(result, pointer(frame.payload), i - 1);
 end;
 
 procedure TWebSocketProtocolBinary.BeforeSendFrame(var frame: TWebSocketFrame);
@@ -1504,7 +1504,7 @@ function TWebSocketProtocolBinary.FrameDecompress(const frame: TWebSocketFrame;
   const Head: RawUtf8; const values: array of PRawByteString;
   var contentType, content: RawByteString): boolean;
 var
-  i: integer;
+  i: PtrInt;
   P: PByte;
 begin
   result := false;
@@ -1650,7 +1650,7 @@ end;
 function TWebSocketProtocolList.CloneByName(const aProtocolName,
   aClientUri: RawUtf8): TWebSocketProtocol;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := nil;
   if self = nil then
@@ -1674,7 +1674,7 @@ end;
 
 function TWebSocketProtocolList.CloneByUri(const aClientUri: RawUtf8): TWebSocketProtocol;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := nil;
   if (self = nil) or
@@ -1721,7 +1721,7 @@ end;
 
 function TWebSocketProtocolList.Add(aProtocol: TWebSocketProtocol): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := false;
   if aProtocol = nil then
@@ -1741,7 +1741,7 @@ end;
 
 function TWebSocketProtocolList.AddOnce(aProtocol: TWebSocketProtocol): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := false;
   if aProtocol = nil then
@@ -1766,7 +1766,7 @@ end;
 
 function TWebSocketProtocolList.Remove(const aProtocolName, aUri: RawUtf8): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   fSafe.Lock;
   try
