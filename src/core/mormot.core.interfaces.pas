@@ -2260,7 +2260,7 @@ begin
     TRttiJsonLoad(ArgRtti.JsonLoad)(V, ctxt);
   if not ctxt.Valid then
   begin
-    FormatShort('I% failed parsing %:% from input JSON',
+    FormatShort('I% failed parsing %: % from input JSON',
       [MethodName, ParamName^, ArgTypeName^], tmp);
     if Error = nil then
       raise EInterfaceFactory.CreateUtf8('%', [tmp]);
@@ -2379,7 +2379,7 @@ begin
       WR.AddShorter('[],');
     imvRecord:
       begin
-        WR.AddVoidRecordJson(ArgRtti);
+        WR.AddVoidRecordJson(ArgRtti.Info);
         WR.AddComma;
       end;
     imvVariant:

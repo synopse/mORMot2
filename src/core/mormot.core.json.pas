@@ -844,12 +844,12 @@ type
     // twoEnumSetsAsTextInRecord or twoEnumSetsAsBooleanInRecord is set in
     // the instance CustomOptions
     // - returns the element size
-    function AddRecordJson(Value: pointer; RecordInfo: TRttiCustom;
+    function AddRecordJson(Value: pointer; RecordInfo: PRttiInfo;
       WriteOptions: TTextWriterWriteObjectOptions = []): PtrInt;
     /// append a void record content as UTF-8 encoded JSON or custom serialization
     // - this method will first create a void record (i.e. filled with #0 bytes)
     // then save its content with default or custom serialization
-    procedure AddVoidRecordJson(RecordInfo: TRttiCustom;
+    procedure AddVoidRecordJson(RecordInfo: PRttiInfo;
       WriteOptions: TTextWriterWriteObjectOptions = []);
     /// append a dynamic array content as UTF-8 encoded JSON array
     // - typical content could be
@@ -6862,29 +6862,27 @@ begin
   Add('}');
 end;
 
-function TTextWriter.AddRecordJson(Value: pointer; RecordInfo: TRttiCustom;
+function TTextWriter.AddRecordJson(Value: pointer; RecordInfo: PRttiInfo;
   WriteOptions: TTextWriterWriteObjectOptions): PtrInt;
 var
   ctxt: TJsonSaveContext;
 begin
-  if rcfHasNestedProperties in RecordInfo.Flags then
-  begin
+  {%H-}ctxt.Init(self, WriteOptions, Rtti.RegisterType(RecordInfo));
+  if rcfHasNestedProperties in ctxt.Info.Flags then
     // we know the fields from text definition
-    {%H-}ctxt.Init(self, WriteOptions, RecordInfo);
-    TRttiJsonSave(ctxt.Info.JsonSave)(Value, ctxt);
-  end
+    TRttiJsonSave(ctxt.Info.JsonSave)(Value, ctxt)
   else
     // fallback to binary serialization, trailing crc32c and Base64 encoding
-    BinarySaveBase64(Value, RecordInfo.Info, rkRecordTypes, {magic=}true);
-  result := RecordInfo.Size;
+    BinarySaveBase64(Value, RecordInfo, rkRecordTypes, {magic=}true);
+  result := ctxt.Info.Size;
 end;
 
-procedure TTextWriter.AddVoidRecordJson(RecordInfo: TRttiCustom;
+procedure TTextWriter.AddVoidRecordJson(RecordInfo: PRttiInfo;
   WriteOptions: TTextWriterWriteObjectOptions);
 var
   tmp: TSynTempBuffer;
 begin
-  tmp.InitZero(RecordInfo.Size);
+  tmp.InitZero(RecordInfo.RecordSize);
   AddRecordJson(tmp.buf, RecordInfo, WriteOptions);
   tmp.Done;
 end;
