@@ -111,10 +111,9 @@ type
   // - another possibility is to register a TCollection/TCollectionItem pair
   // via a call to Rtti.RegisterCollection()
   TInterfacedCollection = class(TCollection)
-  protected
+  public
     /// you shall override this abstract method
     class function GetClass: TCollectionItemClass; virtual; abstract;
-  public
     /// this constructor will call GetClass to initialize the collection
     constructor Create; reintroduce; virtual;
   end;
@@ -1802,7 +1801,8 @@ type
     // - returns the number of duplicated values found
     function ReHash(forced, forceGrow: boolean): integer;
     /// compute the hash of a given item
-    function HashOne(Item: pointer): cardinal; {$ifdef FPC_OR_DELPHIXE4}inline;{$endif}
+    function HashOne(Item: pointer): cardinal;
+      {$ifdef FPC_OR_DELPHIXE4}inline;{$endif}
       { not inlined to circumvent Delphi 2007=C1632, 2010=C1872, XE3=C2130 }
     /// retrieve the low-level hash of a given item
     function GetHashFromIndex(aIndex: PtrInt): cardinal;
@@ -7710,7 +7710,7 @@ begin
   if PtrUInt(Item^) = 0 then
     result := 0
   else
-    result := Hasher(0, Pointer(Item^), length(Item^) * 2);
+    result := Hasher(0, Pointer(Item^), Length(Item^) * 2);
 end;
 
 function HashSynUnicodeI(Item: PSynUnicode; Hasher: THasher): cardinal;
@@ -7885,7 +7885,7 @@ const
     nil, nil, nil, nil, nil, nil),
    (nil, nil, @HashByte, @HashByte, @HashInteger, @HashInt64, @HashInt64,
     @HashExtended, @HashInt64, @HashInteger, @HashInt64, @HashAnsiString,
-    @HashAnsiStringI, @HashAnsiString, nil, @HashInteger,
+    @HashAnsiStringI, @HashAnsiStringI, nil, @HashInteger,
     {$ifdef UNICODE} @HashSynUnicodeI {$else} @HashAnsiStringI {$endif},
     @HashSynUnicodeI, @HashInt64, @HashInt64, @Hash128, @Hash128, @Hash256, @Hash512,
     @HashInt64, @HashInt64, @HashSynUnicodeI, @HashInt64, @HashInt64,

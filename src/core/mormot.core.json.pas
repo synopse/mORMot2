@@ -9556,6 +9556,11 @@ begin
         fClassNewInstance := @_New_Component
       else if C = TInterfacedCollection then
       begin
+        if fValueClass <> C then
+        begin
+          fCollectionItem := TInterfacedCollectionClass(fValueClass).GetClass;
+          fCollectionItemRtti := Rtti.RegisterClass(fCollectionItem);
+        end;
         fClassNewInstance := @_New_InterfacedCollection;
         fJsonSave := @_JS_TCollection;
         fJsonLoad := @_JL_TCollection;

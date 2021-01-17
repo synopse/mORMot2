@@ -1011,9 +1011,9 @@ begin
       'already used by a % SQL table name', [self, fInterfaceUri, fInterfaceUri]);
   SetLength(fExecution, fInterface.MethodsCount);
   // compute interface signature (aka "contract"), serialized as a JSON object
-  FormatUtf8('{"contract":"%","implementation":"%","methods":%}', [fInterfaceUri,
-    LowerCase(TrimLeftLowerCaseShort(ToText(InstanceCreation))), fInterface.Contract],
-    fContract);
+  FormatUtf8('{"contract":"%","implementation":"%","methods":%}',
+    [fInterfaceUri, LowerCase(TrimLeftLowerCaseShort(ToText(InstanceCreation))),
+     fInterface.Contract], fContract);
   fContractHash := '"' + CardinalToHex(Hash32(fContract)) +
     CardinalToHex(CRC32string(fContract)) + '"'; // 2 hashes to avoid collision
   if aContractExpected <> '' then // override default contract

@@ -2547,6 +2547,8 @@ begin
       result := sizeof(word)
     else if result < 32 then
       result := sizeof(cardinal)
+    else if result < 64 then
+      result := sizeof(QWord)
     else
       result := 0;
   end
@@ -5444,8 +5446,10 @@ begin
       result := ptByte;
     rkWChar:
       result := ptWord;
-    rkMethod, rkInterface:
+    rkMethod:
       result := ptPtrInt;
+    rkInterface:
+      result := ptInterface;
     rkInteger:
       case Info^.RttiOrd of
         roSByte, roUByte:

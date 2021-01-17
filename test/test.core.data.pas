@@ -126,16 +126,26 @@ type
     procedure CheckWith(test: TSynTestCase; i: Integer; offset: integer = 0;
       checkblob: boolean = true);
   published
-    property Int: int64 read fInt write SetInt default 12;
-    property Test: RawUtf8 read fTest write fTest;
-    property Unicode: RawUnicode read fUnicode write fUnicode;
-    property Ansi: WinAnsiString read fAnsi write fAnsi;
-    property ValFloat: double read fValfloat write fValFloat;
-    property ValWord: word read fValWord write fValWord;
-    property ValDate: tdatetime read fValDate write fValDate;
-    property Next: TOrmTest read fNext write fNext;
-    property Data: RawBlob read fData write fData;
-    property ValVariant: variant read fVariant write fVariant;
+    property Int: int64
+      read fInt write SetInt default 12;
+    property Test: RawUtf8
+      read fTest write fTest;
+    property Unicode: RawUnicode
+      read fUnicode write fUnicode;
+    property Ansi: WinAnsiString
+      read fAnsi write fAnsi;
+    property ValFloat: double
+      read fValfloat write fValFloat;
+    property ValWord: word
+      read fValWord write fValWord;
+    property ValDate: tdatetime
+      read fValDate write fValDate;
+    property Next: TOrmTest
+      read fNext write fNext;
+    property Data: RawBlob
+      read fData write fData;
+    property ValVariant: variant
+      read fVariant write fVariant;
   end;
 
 type
@@ -145,24 +155,27 @@ type
     FColor: Integer;
     FName: RawUtf8;
   published
-    property Color: Integer read FColor write FColor;
-    property Length: Integer read FLength write FLength;
-    property Name: RawUtf8 read FName write FName;
+    property Color: Integer
+      read FColor write FColor;
+    property Length: Integer
+      read FLength write FLength;
+    property Name: RawUtf8
+      read FName write FName;
   end;
 
   TCollTestsI = class(TInterfacedCollection)
-  protected
+  public
     class function GetClass: TCollectionItemClass; override;
   end;
 
   TCollTests = class(TInterfacedCollection)
   private
     function GetCollItem(Index: Integer): TCollTest;
-  protected
-    class function GetClass: TCollectionItemClass; override;
   public
+    class function GetClass: TCollectionItemClass; override;
     function Add: TCollTest;
-    property Item[Index: Integer]: TCollTest read GetCollItem; default;
+    property Item[Index: Integer]: TCollTest
+      read GetCollItem; default;
   end;
 
   TMyCollection = class(TCollection);
@@ -177,9 +190,12 @@ type
     constructor Create;
     destructor Destroy; override;
   published
-    property One: TCollTest read fTCollTest write fTCollTest;
-    property Coll: TCollTests read fColl write SetColl;
-    property Str: TStringList read fStr write fStr;
+    property One: TCollTest
+      read fTCollTest write fTCollTest;
+    property Coll: TCollTests
+      read fColl write SetColl;
+    property Str: TStringList
+      read fStr write fStr;
   end;
 
   TCollTstDynArray = class(TCollTst)
@@ -198,9 +214,12 @@ type
     class procedure FVClassWriter(W: TTextWriter; Value: TObject;
       Options: TTextWriterWriteObjectOptions);
   published
-    property Ints: TIntegerDynArray read fInts write fInts;
-    property TimeLog: TTimeLogDynArray read fTimeLog write fTimeLog;
-    property FileVersion: TFVs read fFileVersions write fFileVersions;
+    property Ints: TIntegerDynArray
+      read fInts write fInts;
+    property TimeLog: TTimeLogDynArray
+      read fTimeLog write fTimeLog;
+    property FileVersion: TFVs
+      read fFileVersions write fFileVersions;
   end;
 
 
@@ -822,10 +841,12 @@ type
     fEnum: TSynBackgroundThreadProcessStep;
     fSets: TSynBackgroundThreadProcessSteps;
   published
-    property Name: RawUtf8 read fName write fName;
-    property Enum: TSynBackgroundThreadProcessStep read fEnum write fEnum
-      default flagIdle;
-    property Sets: TSynBackgroundThreadProcessSteps read fSets write fSets default[];
+    property Name: RawUtf8
+      read fName write fName;
+    property Enum: TSynBackgroundThreadProcessStep
+      read fEnum write fEnum default flagIdle;
+    property Sets: TSynBackgroundThreadProcessSteps
+      read fSets write fSets default[];
   end;
   {$M-}
 
@@ -846,9 +867,12 @@ type
   public
     Off: TOffense;
   published
-    property Enabled: Boolean read fEnabled write fEnabled;
-    property Name: string read fName write fName;
-    property Offense: RawJson read GetOffense write SetOffense;
+    property Enabled: Boolean
+      read fEnabled write fEnabled;
+    property Name: string
+      read fName write fName;
+    property Offense: RawJson
+      read GetOffense write SetOffense;
   end;
 
 function TEnemy.GetOffense: RawJson;
@@ -990,9 +1014,12 @@ type
     FFieldInteger: integer;
     FFieldVariant: variant;
   published
-    property FieldString: RawUtf8 read FFieldString write FFieldString;
-    property FieldInteger: integer read FFieldInteger write FFieldInteger;
-    property FieldVariant: variant read FFieldVariant write FFieldVariant;
+    property FieldString: RawUtf8
+      read FFieldString write FFieldString;
+    property FieldInteger: integer
+      read FFieldInteger write FFieldInteger;
+    property FieldVariant: variant
+      read FFieldVariant write FFieldVariant;
   end;
 
   TDtoObject = class(TSynAutoCreateFields)
@@ -1000,8 +1027,10 @@ type
     FFieldNestedObject: TNestedDtoObject;
     FSomeField: RawUtf8;
   published
-    property NestedObject: TNestedDtoObject read FFieldNestedObject;
-    property SomeField: RawUtf8 read FSomeField write FSomeField;
+    property NestedObject: TNestedDtoObject
+      read FFieldNestedObject;
+    property SomeField: RawUtf8
+      read FSomeField write FSomeField;
   end;
 
   {$ifdef ISDELPHI2010}
