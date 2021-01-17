@@ -1624,6 +1624,7 @@ type
   PRttiParserType = ^TRttiParserType;
   TRttiParserTypes = set of TRttiParserType;
   PRttiParserComplexType = ^TRttiParserComplexType;
+  TRttiParserComplexTypes = set of TRttiParserComplexType;
 
 const
   /// map a PtrInt type to the TRttiParserType set
@@ -1966,13 +1967,14 @@ type
     eeCurly,
     eeEndKeyWord);
 
-  /// the recognized classes as stored in TRttiCustom.ValueRtlClass
+  /// the recognized raw RTL classes as identified in TRttiCustom.ValueRtlClass
   TRttiValueClass = (
     vcNone,
     vcCollection,
     vcStrings,
     vcObjectList,
-    vcList);
+    vcList,
+    vcException);
 
 
   /// allow to customize the process of a given TypeInfo/PRttiInfo
@@ -6344,10 +6346,12 @@ begin
   else if aClass.InheritsFrom(TObjectList) then
     fValueRtlClass := vcObjectList
   else if aClass.InheritsFrom(TList) then
-    fValueRtlClass := vcList;
+    fValueRtlClass := vcList
+  else if aClass.InheritsFrom(Exception) then
+    fValueRtlClass := vcException;
   fProps.AddFromClass(aInfo, {includeparents=}true);
   if fProps.Count = 0 then
-    if aClass.InheritsFrom(Exception) then
+    if fValueRtlClass = vcException then
       // manual registration of the Exception.Message property
       fProps.Add(TypeInfo(string), EHook(nil).MessageOffset, 'Message');
 end;
@@ -7366,7 +7370,7 @@ begin
       TStrings(aTo).Assign(TStrings(aFrom))
     else if PClass(aTo)^.InheritsFrom(PClass(aFrom)^) then
       // fast copy from RTTI properties of the common (or same) hierarchy
-      cf.Props.CopyProperties(pointer(aFrom), pointer(aTo))
+      cf.Props.CopyProperties(pointer(aTo), pointer(aFrom))
     else
     begin
       // no common inheritance -> slower lookup by property name
