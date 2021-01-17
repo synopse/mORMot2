@@ -895,7 +895,8 @@ function BinarySave(Data: pointer; Dest: PAnsiChar; Info: PRttiInfo;
 {$endif PUREMORMOT2}
 
 /// binary persistence of any value using RTTI, into a RawByteString buffer
-function BinarySave(Data: pointer; Info: PRttiInfo; Kinds: TRttiKinds): RawByteString; overload;
+function BinarySave(Data: pointer; Info: PRttiInfo; Kinds: TRttiKinds;
+  NoCrc32Trailer: boolean = true): RawByteString; overload;
 
 /// binary persistence of any value using RTTI, into a TBytes buffer
 function BinarySaveBytes(Data: pointer; Info: PRttiInfo; Kinds: TRttiKinds): TBytes;
@@ -906,7 +907,7 @@ procedure BinarySave(Data: pointer; Info: PRttiInfo; Dest: TBufferWriter); overl
 
 /// binary persistence of any value using RTTI, into a TSynTempBuffer buffer
 procedure BinarySave(Data: pointer; var Dest: TSynTempBuffer;
-  Info: PRttiInfo; Kinds: TRttiKinds); overload;
+  Info: PRttiInfo; Kinds: TRttiKinds; NoCrc32Trailer: boolean = true); overload;
 
 /// binary persistence of any value using RTTI, into a Base64-encoded text
 // - contains a trailing crc32c hash before the actual data, as with mORMot 1.18
@@ -5737,7 +5738,7 @@ begin
 end;
 
 function BinarySave(Data: pointer; Info: PRttiInfo;
-  Kinds: TRttiKinds): RawByteString;
+  Kinds: TRttiKinds; NoCrc32Trailer: boolean): RawByteString;
 var
   W: TBufferWriter;
   temp: TTextWriterStackBuffer; // 8KB
@@ -5749,8 +5750,13 @@ begin
   begin
     W := TBufferWriter.Create(temp{%H-});
     try
+      if not NoCrc32Trailer then
+        W.Write4(0);
       save(Data, W, Info);
       result := W.FlushTo;
+      if not NoCrc32Trailer then
+        PCardinal(result)^ :=
+          crc32c(0, @PCardinalArray(result)[1], length(result) - 4);
     finally
       W.Free;
     end;
@@ -5783,7 +5789,7 @@ begin
 end;
 
 procedure BinarySave(Data: pointer; var Dest: TSynTempBuffer; Info: PRttiInfo;
-  Kinds: TRttiKinds);
+  Kinds: TRttiKinds; NoCrc32Trailer: boolean);
 var
   W: TBufferWriter;
   save: TRttiBinarySave;
@@ -5795,6 +5801,8 @@ begin
     W := TBufferWriter.Create(TRawByteStringStream, @Dest.tmp,
       SizeOf(Dest.tmp) - 16); // Dest.Init() reserves 16 additional bytes
     try
+      if not NoCrc32Trailer then
+        W.Write4(0);
       save(Data, W, Info);
       if W.Stream.Position = 0 then
         // only Dest.tmp buffer was used -> just set the proper size
@@ -5802,6 +5810,9 @@ begin
       else
         // more than 4KB -> temporary allocation through the temp RawByteString
         Dest.Init(W.FlushTo);
+      if not NoCrc32Trailer then
+        PCardinal(Dest.buf)^ :=
+          crc32c(0, @PCardinalArray(Dest.buf)[1], Dest.len  - 4);
     finally
       W.Free;
     end;

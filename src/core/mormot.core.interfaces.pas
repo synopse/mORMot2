@@ -2148,23 +2148,17 @@ function PerThreadRunningContextAddress: pointer;
 // - by default setting aInterface.Field := aValue will increment the internal
 // reference count of the implementation object: when underlying objects reference
 // each other via interfaces (e.g. as parent and children), what causes the
-// reference count to never reach zero, therefore resulting in memory links
+// reference count to never reach zero, therefore resulting in memory leaks
 // - to avoid this issue, use this procedure instead
 procedure SetWeak(aInterfaceField: PInterface; const aValue: IInterface);
   {$ifdef FPC}inline;{$endif} // raise Internal Error C2170 on some Delphis
 
 /// assign a Weak interface reference, which will be ZEROed (set to nil) when
-// the corresponding object will be released
-// - this function is bit slower than SetWeak, but will avoid any GPF, by
-// maintaining a list of per-instance weak interface field reference, and
-// hook the FreeInstance virtual method in order to reset any reference to nil:
-// FreeInstance will be overridden for this given class VMT only (to avoid
-// unnecessary slowdown of other classes), calling the previous method afterward
-// (so will work even with custom FreeInstance implementations)
-// - for faster possible retrieval, it will assign the unused vmtAutoTable VMT
-// entry trick (just like TSQLRecord.RecordProps) - note that it will be
-// compatible also with interfaces implemented via TSQLRecord children
-// - thread-safe implementation, using a per-class fast lock
+// the associated aObject and/or aValue will be released
+// - this function is slower than SetWeak, but will avoid any GPF, by
+// maintaining a list of per-instance weak interface field references, and
+// hook the TObject.FreeInstance virtual method for proper zeroings
+// - thread-safe implementation, using per-class locked lists
 procedure SetWeakZero(aObject: TObject; aObjectInterfaceField: PInterface;
   const aValue: IInterface);
 
@@ -2293,7 +2287,8 @@ begin
   end
   else
     // fallback to raw record RTTI binary serialization with Base64 encoding
-    BinarySaveBase64(V, ArgRtti.Info, false, rkRecordTypes);
+    WR.BinarySaveBase64(V, ArgRtti.Info, rkRecordTypes,
+      {magic=}true, {NoCrc32=}false);
 end;
 
 procedure TInterfaceMethodArgument.AsJson(var DestValue: RawUtf8; V: pointer);
@@ -3752,10 +3747,10 @@ begin
         imvSet:
           begin
             SizeInStorage := ArgRtti.Cache.EnumInfo.SizeInStorageAsSet;
-            if SizeInStorage = 0 then
+            if not (SizeInStorage in [1, 2, 4]) then
               raise EInterfaceFactory.CreateUtf8(
-                '%.Create: % set invalid SizeInStorage=% in %.% method % parameter',
-                [self, ArgTypeName^, SizeInStorage, fInterfaceName, URI, ParamName^]);
+                '%.Create: invalid SizeInStorage=% in %.% method % parameter for % set',
+                [self, SizeInStorage, fInterfaceName, URI, ParamName^, ArgTypeName^]);
           end;
         imvRecord:
           if ArgRtti.Size <= POINTERBYTES then

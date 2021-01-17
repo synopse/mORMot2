@@ -768,7 +768,7 @@ type
     // - if withMagic is TRUE, will write as '"\uFFF0base64encodedbinary"'
     // - is a wrapper around BinarySave() and WrBase64()
     procedure BinarySaveBase64(Data: pointer; Info: PRttiInfo;
-      Kinds: TRttiKinds; withMagic: boolean);
+      Kinds: TRttiKinds; withMagic: boolean; NoCrc32Trailer: boolean = true);
     /// append some values at once
     // - text values (e.g. RawUtf8) will be escaped as JSON
     procedure Add(const Values: array of const); overload;
@@ -5919,11 +5919,11 @@ begin
 end;
 
 procedure TTextWriter.BinarySaveBase64(Data: pointer; Info: PRttiInfo;
-  Kinds: TRttiKinds; withMagic: boolean);
+  Kinds: TRttiKinds; withMagic, NoCrc32Trailer: boolean);
 var
   temp: TSynTempBuffer;
 begin
-  BinarySave(Data, temp, Info, Kinds);
+  BinarySave(Data, temp, Info, Kinds, NoCrc32Trailer);
   WrBase64(temp.buf, temp.len, withMagic);
   temp.Done;
 end;
