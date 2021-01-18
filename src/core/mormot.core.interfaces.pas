@@ -2254,7 +2254,7 @@ begin
               (ctxt.Value <> nil) and
               (PCardinal(ctxt.Value)^ and $ffffff = JSON_BASE64_MAGIC_C) and
               BinaryLoadBase64(pointer(ctxt.Value + 3), ctxt.ValueLen - 3,
-                V, ctxt.Info.Info, {uri=}false, rkRecordTypes)
+                V, ctxt.Info.Info, {uri=}false, rkRecordTypes, {nocrc=}true)
   else
     // use direct TRttiJson unserialization
     TRttiJsonLoad(ArgRtti.JsonLoad)(V, ctxt);
@@ -2288,7 +2288,7 @@ begin
   else
     // fallback to raw record RTTI binary serialization with Base64 encoding
     WR.BinarySaveBase64(V, ArgRtti.Info, rkRecordTypes,
-      {magic=}true, {NoCrc32=}false);
+      {magic=}true, {nocrc=}true);
 end;
 
 procedure TInterfaceMethodArgument.AsJson(var DestValue: RawUtf8; V: pointer);
@@ -7261,7 +7261,7 @@ begin
   begin
     // zeroing of weak references in object fields
     for i := 0 to PDALen(PAnsiChar(fields) - _DALEN)^ + (_DAOFF - 1) do
-      fields[i] := nil;
+      PPointer(fields[i])^ := nil;
     FastDynArrayClear(@fields, nil);
   end;
   TFreeInstanceMethod(inst.fHookedFreeInstance)(self); // CleanupInstance + FreeMem()
