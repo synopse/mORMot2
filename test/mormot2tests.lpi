@@ -100,7 +100,7 @@
             <TargetCPU Value="x86_64"/>
             <TargetOS Value="win64"/>
             <Optimizations>
-              <OptimizationLevel Value="3"/>
+              <OptimizationLevel Value="2"/>
             </Optimizations>
           </CodeGeneration>
           <Linking>
@@ -111,12 +111,13 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <OtherDefines Count="5">
+            <OtherDefines Count="6">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
               <Define2 Value="FPCMM_DEBUG"/>
               <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
               <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -149,6 +150,9 @@
             </Checks>
             <TargetCPU Value="i386"/>
             <TargetOS Value="linux"/>
+            <Optimizations>
+              <OptimizationLevel Value="3"/>
+            </Optimizations>
           </CodeGeneration>
           <Linking>
             <Debugging>
@@ -552,7 +556,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="89">
+    <Units Count="90">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -909,6 +913,10 @@
         <Filename Value="test.orm.network.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit88>
+      <Unit89>
+        <Filename Value="test.soa.core.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit89>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
