@@ -7834,7 +7834,7 @@ var
     @_JL_Double, @_JL_Extended, @_JL_Int64, @_JL_Integer, @_JL_QWord,
     @_JL_RawByteString, @_JL_RawJson, @_JL_RawUtf8, nil,
     @_JL_Single, @_JL_String, @_JL_SynUnicode, @_JL_DateTime, @_JL_DateTime,
-    @_JL_GUID, @_JL_Hash, @_JL_Hash, @_JL_Hash, @_JL_QWord, @_JL_TimeLog,
+    @_JL_GUID, @_JL_Hash, @_JL_Hash, @_JL_Hash, @_JL_Int64, @_JL_TimeLog,
     @_JL_UnicodeString, @_JL_UnixTime, @_JL_UnixMSTime, @_JL_Variant,
     @_JL_WideString, @_JL_WinAnsi, @_JL_Word, @_JL_Enumeration, @_JL_Set,
     nil, @_JL_DynArray, @_JL_Interface, nil);
