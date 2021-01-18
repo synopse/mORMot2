@@ -5503,7 +5503,8 @@ var
   n: PtrInt;
 begin
   n := Length(Values);
-  if NoDuplicates and IntegerScanExists(pointer(Values), n, Value) then
+  if NoDuplicates and
+     IntegerScanExists(pointer(Values), n, Value) then
   begin
     result := false;
     exit;
@@ -5524,7 +5525,8 @@ end;
 function AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
   Value: integer; NoDuplicates: boolean): boolean;
 begin
-  if NoDuplicates and IntegerScanExists(pointer(Values), ValuesCount, Value) then
+  if NoDuplicates and
+     IntegerScanExists(pointer(Values), ValuesCount, Value) then
   begin
     result := false;
     exit;

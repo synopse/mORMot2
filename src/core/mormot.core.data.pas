@@ -5374,13 +5374,19 @@ end;
 
 function _BC_Record(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  Compared := _RecordCompare(A, B, Info, {caseinsens=}false);
+  if A = B then
+    Compared := 0
+  else
+    Compared := _RecordCompare(A, B, Info, {caseinsens=}false);
   result := Info^.RecordSize;
 end;
 
 function _BCI_Record(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  Compared := _RecordCompare(A, B, Info, {caseinsens=}true);
+  if A = B then
+    Compared := 0
+  else
+    Compared := _RecordCompare(A, B, Info, {caseinsens=}true);
   result := Info^.RecordSize;
 end;
 
@@ -5559,13 +5565,19 @@ end;
 
 function _BC_Variant(A, B: PVarData; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  Compared := SortDynArrayVariantComp(A^, B^, {caseinsens=}false);
+  if A = B then
+    Compared := 0
+  else
+    Compared := SortDynArrayVariantComp(A^, B^, {caseinsens=}false);
   result := SizeOf(variant);
 end;
 
 function _BCI_Variant(A, B: PVarData; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  Compared := SortDynArrayVariantComp(A^, B^, {caseinsens=}true);
+  if A = B then
+    Compared := 0
+  else
+    Compared := SortDynArrayVariantComp(A^, B^, {caseinsens=}true);
   result := SizeOf(variant);
 end;
 
@@ -5644,22 +5656,17 @@ var
   size, comp: integer;
   cmp: TRttiCompare;
 begin
-  if A <> B then
+  cmp := RTTI_COMPARE[CaseInSensitive, Info^.Kind];
+  if Assigned(cmp) and
+     (Info^.Kind in Kinds) then
   begin
-    cmp := RTTI_COMPARE[CaseInSensitive, Info^.Kind];
-    if Assigned(cmp) and
-       (Info^.Kind in Kinds) then
-    begin
-      size := cmp(A, B, Info, comp);
-      if PSize <> nil then
-        PSize^ := size; // warning: PSize not set if RTTI_COMPARE[] not available
-      result := comp = 0;
-    end
-    else
-      result := false; // no fair comparison possible
+    size := cmp(A, B, Info, comp);
+    if PSize <> nil then
+      PSize^ := size;
+    result := comp = 0;
   end
   else
-    result := true; // A=B at pointer level
+    result := false; // no fair comparison possible
 end;
 
 function BinaryCompare(A, B: pointer; Info: PRttiInfo;
@@ -5667,13 +5674,17 @@ function BinaryCompare(A, B: pointer; Info: PRttiInfo;
 var
   cmp: TRttiCompare;
 begin
-  result := 0; // A=B at pointer level, or no fair comparison possible
-  if (A = B) or
-     (Info = nil) then
-    exit;
-  cmp := RTTI_COMPARE[CaseInSensitive, Info^.Kind];
-  if Assigned(cmp) then
-    cmp(A, B, Info, result);
+  if (A <> B) and
+     (Info <> nil) then
+  begin
+    cmp := RTTI_COMPARE[CaseInSensitive, Info^.Kind];
+    if Assigned(cmp) then
+      cmp(A, B, Info, result)
+    else
+      result := ComparePointer(A, B);
+  end
+  else
+    result := 0;
 end;
 
 {$ifndef PUREMORMOT2}
