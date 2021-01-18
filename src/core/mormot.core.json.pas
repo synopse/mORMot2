@@ -5177,7 +5177,8 @@ begin
   end
   else
     // fallback to raw RTTI binary serialization with Base64 encoding
-    c.W.BinarySaveBase64(Data, Ctxt.Info.Info, [rkArray], {withMagic=}true);
+    c.W.BinarySaveBase64(Data, Ctxt.Info.Info, [rkArray],
+      {withMagic=}true, {nocrc=}true);
   c.W.BlockEnd(']', c.Options);
 end;
 
@@ -5226,7 +5227,8 @@ begin
     end
     else
       // fallback to raw RTTI binary serialization with Base64 encoding
-      c.W.BinarySaveBase64(Data, Ctxt.Info.Info, [rkDynArray], {withMagic=}true);
+      c.W.BinarySaveBase64(Data, Ctxt.Info.Info, [rkDynArray],
+        {withMagic=}true, {nocrc=}true);
   end
   else if (woHumanReadableEnumSetAsComment in Ctxt.Options) and
           (c.Info <> nil) and
@@ -9151,7 +9153,7 @@ begin
     ndx := fKeys.FindHashedAndDelete(aKey);
     if ndx >= 0 then
     begin
-      fValues.ItemCopyAt(ndx, @aValue);
+      fValues.ItemMoveTo(ndx, @aValue); // faster than ItemCopyAt()
       fValues.Delete(ndx);
       if fSafe.Padding[DIC_TIMESEC].VInteger > 0 then
         fTimeOuts.Delete(ndx);
