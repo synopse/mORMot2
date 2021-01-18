@@ -896,7 +896,7 @@ function BinarySave(Data: pointer; Dest: PAnsiChar; Info: PRttiInfo;
 
 /// binary persistence of any value using RTTI, into a RawByteString buffer
 function BinarySave(Data: pointer; Info: PRttiInfo; Kinds: TRttiKinds;
-  NoCrc32Trailer: boolean = true): RawByteString; overload;
+  WithCrc: boolean = false): RawByteString; overload;
 
 /// binary persistence of any value using RTTI, into a TBytes buffer
 function BinarySaveBytes(Data: pointer; Info: PRttiInfo; Kinds: TRttiKinds): TBytes;
@@ -907,14 +907,12 @@ procedure BinarySave(Data: pointer; Info: PRttiInfo; Dest: TBufferWriter); overl
 
 /// binary persistence of any value using RTTI, into a TSynTempBuffer buffer
 procedure BinarySave(Data: pointer; var Dest: TSynTempBuffer;
-  Info: PRttiInfo; Kinds: TRttiKinds; NoCrc32Trailer: boolean = true); overload;
+  Info: PRttiInfo; Kinds: TRttiKinds; WithCrc: boolean = false); overload;
 
 /// binary persistence of any value using RTTI, into a Base64-encoded text
-// - contains a trailing crc32c hash before the actual data, as with mORMot 1.18
-// RecordSaveBase64() - so is not the WrBase64() regular format, unless
-// NoCrc32Trailer is set to true
+// - contains a trailing crc32c hash before the actual data
 function BinarySaveBase64(Data: pointer; Info: PRttiInfo; UriCompatible: boolean;
-  Kinds: TRttiKinds; NoCrc32Trailer: boolean = false): RawUtf8;
+  Kinds: TRttiKinds; WithCrc: boolean = true): RawUtf8;
 
 /// unserialize any value from BinarySave() memory buffer, using RTTI
 function BinaryLoad(Data: pointer; Source: PAnsiChar; Info: PRttiInfo;
@@ -926,11 +924,10 @@ function BinaryLoad(Data: pointer; const Source: RawByteString; Info: PRttiInfo;
   Kinds: TRttiKinds; TryCustomVariants: PDocVariantOptions = nil): boolean; overload;
 
 /// unserialize any value from BinarySaveBase64() encoding, using RTTI
-// - contains a trailing crc32c hash before the actual data - so is not
-// the WrBase64() regular format, unless NoCrc32Trailer is true
+// - optionally contains a trailing crc32c hash before the actual data
 function BinaryLoadBase64(Source: PAnsiChar; Len: PtrInt; Data: pointer;
   Info: PRttiInfo; UriCompatible: boolean; Kinds: TRttiKinds;
-  NoCrc32Trailer: boolean = false; TryCustomVariants: PDocVariantOptions = nil): boolean;
+  WithCrc: boolean = true; TryCustomVariants: PDocVariantOptions = nil): boolean;
 
 
 /// check equality of two records by content
@@ -5749,7 +5746,7 @@ begin
 end;
 
 function BinarySave(Data: pointer; Info: PRttiInfo;
-  Kinds: TRttiKinds; NoCrc32Trailer: boolean): RawByteString;
+  Kinds: TRttiKinds; WithCrc: boolean): RawByteString;
 var
   W: TBufferWriter;
   temp: TTextWriterStackBuffer; // 8KB
@@ -5761,11 +5758,11 @@ begin
   begin
     W := TBufferWriter.Create(temp{%H-});
     try
-      if not NoCrc32Trailer then
+      if WithCrc then
         W.Write4(0);
       save(Data, W, Info);
       result := W.FlushTo;
-      if not NoCrc32Trailer then
+      if WithCrc then
         PCardinal(result)^ :=
           crc32c(0, @PCardinalArray(result)[1], length(result) - 4);
     finally
@@ -5800,7 +5797,7 @@ begin
 end;
 
 procedure BinarySave(Data: pointer; var Dest: TSynTempBuffer; Info: PRttiInfo;
-  Kinds: TRttiKinds; NoCrc32Trailer: boolean);
+  Kinds: TRttiKinds; WithCrc: boolean);
 var
   W: TBufferWriter;
   save: TRttiBinarySave;
@@ -5812,7 +5809,7 @@ begin
     W := TBufferWriter.Create(TRawByteStringStream, @Dest.tmp,
       SizeOf(Dest.tmp) - 16); // Dest.Init() reserves 16 additional bytes
     try
-      if not NoCrc32Trailer then
+      if WithCrc then
         W.Write4(0);
       save(Data, W, Info);
       if W.Stream.Position = 0 then
@@ -5821,7 +5818,7 @@ begin
       else
         // more than 4KB -> temporary allocation through the temp RawByteString
         Dest.Init(W.FlushTo);
-      if not NoCrc32Trailer then
+      if WithCrc then
         PCardinal(Dest.buf)^ :=
           crc32c(0, @PCardinalArray(Dest.buf)[1], Dest.len  - 4);
     finally
@@ -5833,7 +5830,7 @@ begin
 end;
 
 function BinarySaveBase64(Data: pointer; Info: PRttiInfo; UriCompatible: boolean;
-  Kinds: TRttiKinds; NoCrc32Trailer: boolean): RawUtf8;
+  Kinds: TRttiKinds; WithCrc: boolean): RawUtf8;
 var
   W: TBufferWriter;
   temp: TTextWriterStackBuffer; // 8KB
@@ -5848,7 +5845,7 @@ begin
   begin
     W := TBufferWriter.Create(temp{%H-});
     try
-      if not NoCrc32Trailer then
+      if WithCrc then
         // placeholder for the trailing crc32c
         W.Write4(0);
       save(Data, W, Info);
@@ -5862,7 +5859,7 @@ begin
         tmp := W.FlushTo;
         P := pointer(tmp);
       end;
-      if not NoCrc32Trailer then
+      if WithCrc then
         // as mORMot 1.18 RecordSaveBase64()
         PCardinal(P)^ := crc32c(0, P + 4, len - 4);
       if UriCompatible then
@@ -5918,7 +5915,7 @@ end;
 
 function BinaryLoadBase64(Source: PAnsiChar; Len: PtrInt; Data: pointer;
   Info: PRttiInfo; UriCompatible: boolean; Kinds: TRttiKinds;
-  NoCrc32Trailer: boolean; TryCustomVariants: PDocVariantOptions): boolean;
+  WithCrc: boolean; TryCustomVariants: PDocVariantOptions): boolean;
 var
   temp: TSynTempBuffer;
   tempend: pointer;
@@ -5932,13 +5929,13 @@ begin
       result := Base64ToBin(Source, Len, temp);
     tempend := PAnsiChar(temp.buf) + temp.len;
     if result then
-      if NoCrc32Trailer then
-        result := (BinaryLoad(Data, temp.buf, Info, nil, tempend,
-            Kinds, TryCustomVariants) = tempend)
-      else
+      if WithCrc then
         result := (temp.len >= 4) and
           (crc32c(0, PAnsiChar(temp.buf) + 4, temp.len - 4) = PCardinal(temp.buf)^) and
           (BinaryLoad(Data, PAnsiChar(temp.buf) + 4, Info, nil, tempend,
+            Kinds, TryCustomVariants) = tempend)
+      else
+        result := (BinaryLoad(Data, temp.buf, Info, nil, tempend,
             Kinds, TryCustomVariants) = tempend);
     temp.Done;
   end
@@ -5993,7 +5990,7 @@ end;
 
 function RecordSaveBase64(const Rec; TypeInfo: PRttiInfo; UriCompatible: boolean): RawUtf8;
 begin
-  result := BinarySaveBase64(@Rec, TypeInfo, UriCompatible, rkRecordTYpes);
+  result := BinarySaveBase64(@Rec, TypeInfo, UriCompatible, rkRecordTypes);
 end;
 
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: PRttiInfo;
@@ -6016,7 +6013,7 @@ function RecordLoadBase64(Source: PAnsiChar; Len: PtrInt; var Rec;
   TypeInfo: PRttiInfo; UriCompatible: boolean; TryCustomVariants: PDocVariantOptions): boolean;
 begin
   result := BinaryLoadBase64(Source, Len, @Rec, TypeInfo, UriCompatible,
-    rkRecordTypes, {notrailer=}false, TryCustomVariants);
+    rkRecordTypes, {withcrc=}true, TryCustomVariants);
 end;
 
 

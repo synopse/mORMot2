@@ -768,7 +768,7 @@ type
     // - if withMagic is TRUE, will write as '"\uFFF0base64encodedbinary"'
     // - is a wrapper around BinarySave() and WrBase64()
     procedure BinarySaveBase64(Data: pointer; Info: PRttiInfo;
-      Kinds: TRttiKinds; withMagic: boolean; NoCrc32Trailer: boolean = true);
+      Kinds: TRttiKinds; withMagic: boolean; withCrc: boolean = false);
     /// append some values at once
     // - text values (e.g. RawUtf8) will be escaped as JSON
     procedure Add(const Values: array of const); overload;
@@ -5178,7 +5178,7 @@ begin
   else
     // fallback to raw RTTI binary serialization with Base64 encoding
     c.W.BinarySaveBase64(Data, Ctxt.Info.Info, [rkArray],
-      {withMagic=}true, {nocrc=}true);
+      {withMagic=}true, {withcrc=}false);
   c.W.BlockEnd(']', c.Options);
 end;
 
@@ -5228,7 +5228,7 @@ begin
     else
       // fallback to raw RTTI binary serialization with Base64 encoding
       c.W.BinarySaveBase64(Data, Ctxt.Info.Info, [rkDynArray],
-        {withMagic=}true, {nocrc=}true);
+        {withMagic=}true, {withcrc=}false);
   end
   else if (woHumanReadableEnumSetAsComment in Ctxt.Options) and
           (c.Info <> nil) and
@@ -5921,11 +5921,11 @@ begin
 end;
 
 procedure TTextWriter.BinarySaveBase64(Data: pointer; Info: PRttiInfo;
-  Kinds: TRttiKinds; withMagic, NoCrc32Trailer: boolean);
+  Kinds: TRttiKinds; withMagic, withCrc: boolean);
 var
   temp: TSynTempBuffer;
 begin
-  BinarySave(Data, temp, Info, Kinds, NoCrc32Trailer);
+  BinarySave(Data, temp, Info, Kinds, withCrc);
   WrBase64(temp.buf, temp.len, withMagic);
   temp.Done;
 end;
@@ -7353,7 +7353,7 @@ begin
               (Ctxt.Value <> nil) and
               (PCardinal(Ctxt.Value)^ and $ffffff = JSON_BASE64_MAGIC_C) and
               BinaryLoadBase64(pointer(Ctxt.Value + 3), Ctxt.ValueLen - 3,
-                Data, Ctxt.Info.Info, {uri=}false, [rkArray], {nocrc=}true)
+                Data, Ctxt.Info.Info, {uri=}false, [rkArray], {withcrc=}false)
   else
   begin
     // efficient load of all JSON items
@@ -7409,7 +7409,7 @@ begin
               (Ctxt.Value <> nil) and
               (PCardinal(Ctxt.Value)^ and $ffffff = JSON_BASE64_MAGIC_C) and
               BinaryLoadBase64(pointer(Ctxt.Value + 3), Ctxt.ValueLen - 3,
-                Data, Ctxt.Info.Info, {uri=}false, [rkDynArray], {nocrc=}true)
+                Data, Ctxt.Info.Info, {uri=}false, [rkDynArray], {withcrc=}false)
   else
   begin
     // efficient load of all JSON items
@@ -9662,7 +9662,7 @@ begin
             (Ctxt.Value <> nil) and
             (PCardinal(Ctxt.Value)^ and $ffffff = JSON_BASE64_MAGIC_C) and
             BinaryLoadBase64(pointer(Ctxt.Value + 3), Ctxt.ValueLen - 3,
-              Data, Ctxt.Info.Info, {uri=}false, rkAllTypes, {nocrc=}true);
+              Data, Ctxt.Info.Info, {uri=}false, rkAllTypes, {withcrc=}false);
     if ctxt.Valid then
       Json := ctxt.Json
     else

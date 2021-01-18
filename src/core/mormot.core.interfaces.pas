@@ -2254,7 +2254,7 @@ begin
               (ctxt.Value <> nil) and
               (PCardinal(ctxt.Value)^ and $ffffff = JSON_BASE64_MAGIC_C) and
               BinaryLoadBase64(pointer(ctxt.Value + 3), ctxt.ValueLen - 3,
-                V, ctxt.Info.Info, {uri=}false, rkRecordTypes, {nocrc=}true)
+                V, ctxt.Info.Info, {uri=}false, rkRecordTypes, {withcrc=}false)
   else
     // use direct TRttiJson unserialization
     TRttiJsonLoad(ArgRtti.JsonLoad)(V, ctxt);
@@ -2288,7 +2288,7 @@ begin
   else
     // fallback to raw record RTTI binary serialization with Base64 encoding
     WR.BinarySaveBase64(V, ArgRtti.Info, rkRecordTypes,
-      {magic=}true, {nocrc=}true);
+      {magic=}true, {withcrc=}false);
 end;
 
 procedure TInterfaceMethodArgument.AsJson(var DestValue: RawUtf8; V: pointer);
