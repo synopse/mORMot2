@@ -851,7 +851,7 @@ begin
      not hasher.Init(aAlgo) then
     exit;
   F := FileOpenSequentialRead(aFileName);
-  if PtrInt(F) >= 0 then
+  if ValidHandle(F) then
   try
     size := FileSize(F);
     SetLength(temp, 1 shl 20); // 1MB temporary buffer for reading

@@ -1107,7 +1107,7 @@ var
   i: PtrInt;
 begin
   Handle := FileOpen(aFileName, fmOpenReadWrite or fmShareDenyNone);
-  if Handle < 0 then
+  if not ValidHandle(Handle) then
   begin
     R := nil;
     Handle := 0;
@@ -1252,7 +1252,7 @@ constructor TZipRead.Create(aFile: THandle; ZipStartOffset, Size: cardinal;
 var
   i, ExeOffset: PtrInt;
 begin
-  if aFile <= 0 then
+  if not ValidHandle(aFile) then
     exit;
   if not fMap.Map(aFile, Size, {offset=}0, aFileOwned) then
     raise ESynZip.Create('FileMap failed');

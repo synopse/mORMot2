@@ -7537,7 +7537,7 @@ begin
     Hasher := DefaultHasher;
   result := 0;
   f := FileOpenSequentialRead(FileName);
-  if PtrInt(f) >= 0 then
+  if ValidHandle(f) then
   begin
     repeat
       read := FileRead(f, buf, SizeOf(buf));

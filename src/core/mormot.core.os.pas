@@ -723,7 +723,8 @@ type
     // based PRNG specified in NIST Special Publication 800-90 is used
     GenRandom: function(hProv: HCRYPTPROV; dwLen: DWORD; pbBuffer: Pointer): BOOL; stdcall;
     /// try to load the CryptoApi on this system
-    function Available: boolean; {$ifdef HASINLINE}inline;{$endif}
+    function Available: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
 const
@@ -1277,6 +1278,10 @@ procedure RawExceptionIntercept(const Handler: TOnRawLogException);
 // - under Windows, calls QueryPerformanceCounter / QueryPerformanceFrequency
 procedure QueryPerformanceMicroSeconds(out Value: Int64);
 
+/// cross-platform check if the supplied THandle is not invalid
+function ValidHandle(Handle: THandle): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// get a file date and time, from its name
 // - returns 0 if file doesn't exist
 // - under Windows, will use GetFileAttributesEx fast API
@@ -1291,7 +1296,7 @@ function DateTimeToWindowsFileTime(DateTime: TDateTime): integer;
 function FileAgeToWindowsTime(const FileName: TFileName): integer;
 
 /// copy the date of one file to another
-function FileSetDateFrom(const Dest: TFileName; SourceHandle: integer): boolean;
+function FileSetDateFrom(const Dest: TFileName; SourceHandle: THandle): boolean;
 
 /// copy the date of one file from a Windows File 32-bit TimeStamp
 // - this cross-system function is used e.g. by mormot.core.zip which expects
@@ -2919,6 +2924,11 @@ begin
               integer((DD shl 16) or (MM shl 21) or (word(YY - 1980) shl 25));
 end;
 
+function ValidHandle(Handle: THandle): boolean;
+begin
+  result := PtrInt(Handle) > 0;
+end;
+
 function SearchRecToDateTime(const F: TSearchRec): TDateTime;
 begin
   {$ifdef ISDELPHIXE}
@@ -2978,7 +2988,7 @@ begin
   if FileName = '' then
     exit;
   F := FileOpenSequentialRead(FileName);
-  if PtrInt(F) >= 0 then
+  if ValidHandle(F) then
   begin
     if HasNoSize then
     begin
@@ -3252,8 +3262,8 @@ end;
 
 { TMemoryMap }
 
-function TMemoryMap.Map(aFile: THandle; aCustomSize: PtrUInt; aCustomOffset: Int64;
-  aFileOwned: boolean): boolean;
+function TMemoryMap.Map(aFile: THandle; aCustomSize: PtrUInt;
+  aCustomOffset: Int64; aFileOwned: boolean): boolean;
 var
   Available: Int64;
 begin
@@ -3309,7 +3319,7 @@ begin
   // Memory-mapped file access does not go through the cache manager so
   // using FileOpenSequentialRead() is pointless here
   F := FileOpen(aFileName, fmOpenRead or fmShareDenyNone);
-  if PtrInt(F) < 0 then
+  if not ValidHandle(F) then
     exit;
   if Map(F) then
     result := true

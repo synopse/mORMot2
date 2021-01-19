@@ -703,7 +703,7 @@ begin
     result := 0;
 end;
 
-function FileSetDateFrom(const Dest: TFileName; SourceHandle: integer): boolean;
+function FileSetDateFrom(const Dest: TFileName; SourceHandle: THandle): boolean;
 begin
   result := FileSetDate(Dest, FileGetDate(SourceHandle)) = 0;
 end;
@@ -738,7 +738,7 @@ var
   f: THandle;
 begin
   f := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
-  if PtrInt(f) > 0 then
+  if ValidHandle(f) then
   begin
     result := FileSize(f);
     FileClose(f);

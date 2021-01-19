@@ -856,7 +856,7 @@ begin
   if OldPassWord = NewPassword then
     exit;
   F := FileOpen(FileName, fmOpenReadWrite);
-  if F > 0 then
+  if ValidHandle(F) then
   try
     if OldPassWord <> '' then
       CodecGenerateKey(old, pointer(OldPassWord), length(OldPassWord));
@@ -929,7 +929,7 @@ var
 begin
   result := false;
   F := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
-  if F <= 0 then
+  if not ValidHandle(F) then
     exit;
   if (FileRead(F, Header, SizeOf(Header)) = SizeOf(Header)) and
      // see https://www.sqlite.org/fileformat.html (4 in big endian = 1024 bytes)
@@ -994,7 +994,7 @@ var
   OldP: array[0..SQLEncryptTableSize - 1] of byte; // 2x16KB tables
 begin
   F := FileOpen(FileName, fmOpenReadWrite);
-  if F <= 0 then
+  if not ValidHandle(F) then
     exit;
   Size := FileSize(F);
   if Size <= 1024 then

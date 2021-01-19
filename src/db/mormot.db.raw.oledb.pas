@@ -991,7 +991,7 @@ var
   Header: array[0..31] of AnsiChar;
 begin
   F := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
-  if F = INVALID_HANDLE_VALUE then
+  if not ValidHandle(F) then
     result := false
   else
   begin

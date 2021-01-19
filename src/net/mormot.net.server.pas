@@ -2460,7 +2460,7 @@ begin
     EHttpApiServer.RaiseOnError(hCreateRequestQueue,
       Http.CreateRequestQueue(Http.Version, pointer(QueueName), nil, 0, fReqQueue));
     bindInfo.Flags := 1;
-    bindInfo.RequestQueueHandle := FReqQueue;
+    bindInfo.RequestQueueHandle := fReqQueue;
     EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
       Http.SetUrlGroupProperty(fUrlGroupID, HttpServerBindingProperty,
         @bindInfo, SizeOf(bindInfo)));
@@ -2685,7 +2685,7 @@ var
       // response is file -> OutContent is UTF-8 file name to be served
       FileHandle := FileOpen(Utf8ToString(Context.OutContent),
         fmOpenRead or fmShareDenyNone);
-      if PtrInt(FileHandle) < 0 then
+      if not ValidHandle(FileHandle)  then
       begin
         SendError(HTTP_NOTFOUND, SysErrorMessage(GetLastError));
         result := false; // notify fatal error
@@ -3678,7 +3678,7 @@ begin
   result := 0;
   if fWSHandle = nil then
     exit;
-  Err := Http.ReceiveRequestEntityBody(fProtocol.fServer.FReqQueue,
+  Err := Http.ReceiveRequestEntityBody(fProtocol.fServer.fReqQueue,
     fOpaqueHTTPRequestId, 0, aBuf.pbBuffer, aBuf.ulBufferLength, fBytesRead,
     @self.fOverlapped);
   case Err of
@@ -3710,7 +3710,7 @@ begin
   httpSendEntity.DataChunkType := hctFromMemory;
   httpSendEntity.pBuffer := aBuf.pbBuffer;
   httpSendEntity.BufferLength := aBuf.ulBufferLength;
-  Err := Http.SendResponseEntityBody(fProtocol.fServer.FReqQueue,
+  Err := Http.SendResponseEntityBody(fProtocol.fServer.fReqQueue,
     fOpaqueHTTPRequestId, HTTP_SEND_RESPONSE_FLAG_BUFFER_DATA or
     HTTP_SEND_RESPONSE_FLAG_MORE_DATA, 1, @httpSendEntity, bytesWrite, nil, nil,
     @fProtocol.fServer.fSendOverlaped);

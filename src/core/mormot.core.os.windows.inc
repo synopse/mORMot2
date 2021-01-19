@@ -303,13 +303,13 @@ begin
   result := SysUtils.FileCreate(aFileName);
 end;
 
-function FileSetDateFrom(const Dest: TFileName; SourceHandle: integer): boolean;
+function FileSetDateFrom(const Dest: TFileName; SourceHandle: THandle): boolean;
 var
   FileTime: TFileTime;
   D: THandle;
 begin
   D := FileOpen(Dest, fmOpenWrite);
-  if D<>THandle(-1) then
+  if ValidHandle(D) then
   begin
     result := GetFileTime(SourceHandle, nil, nil, @FileTime) and
               SetFileTime(D, nil, nil, @FileTime);
@@ -346,33 +346,6 @@ begin
       OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN, 0)
   else
     result := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
-end;
-
-function TMemoryMap.DoMap(aCustomOffset: Int64): boolean;
-begin
-  with PInt64Rec(@fFileSize)^ do
-    fMap := CreateFileMapping(fFile, nil, PAGE_READONLY, Hi, Lo, nil);
-  if fMap = 0 then
-    raise EOSException.Create('TMemoryMap.Map: CreateFileMapping()=0');
-  with PInt64Rec(@aCustomOffset)^ do
-    fBuf := MapViewOfFile(fMap, FILE_MAP_READ, Hi, Lo, fBufSize);
-  if fBuf = nil then
-  begin
-    // Windows failed to find a contiguous VA space -> fall back on direct read
-    CloseHandle(fMap);
-    fMap := 0;
-  end;
-  result := fMap <> 0;
-end;
-
-procedure TMemoryMap.DoUnMap;
-begin
-  if fMap <> 0 then
-  begin
-    UnmapViewOfFile(fBuf);
-    CloseHandle(fMap);
-    fMap := 0;
-  end;
 end;
 
 threadvar // mandatory: GetTickCount seems per-thread on XP :(
@@ -666,6 +639,35 @@ end;
 
 {$endif NOEXCEPTIONINTERCEPT}
 
+{ TMemoryMap }
+
+function TMemoryMap.DoMap(aCustomOffset: Int64): boolean;
+begin
+  with PInt64Rec(@fFileSize)^ do
+    fMap := CreateFileMapping(fFile, nil, PAGE_READONLY, Hi, Lo, nil);
+  if fMap = 0 then
+    raise EOSException.Create('TMemoryMap.Map: CreateFileMapping()=0');
+  with PInt64Rec(@aCustomOffset)^ do
+    fBuf := MapViewOfFile(fMap, FILE_MAP_READ, Hi, Lo, fBufSize);
+  if fBuf = nil then
+  begin
+    // Windows failed to find a contiguous VA space -> fall back on direct read
+    CloseHandle(fMap);
+    fMap := 0;
+  end;
+  result := fMap <> 0;
+end;
+
+procedure TMemoryMap.DoUnMap;
+begin
+  if fMap <> 0 then
+  begin
+    UnmapViewOfFile(fBuf);
+    CloseHandle(fMap);
+    fMap := 0;
+  end;
+end;
+
 const
   STUB_SIZE = 65536; // 16*4 KB (4 KB = memory granularity)
 
@@ -765,8 +767,9 @@ var
   Len: integer;
   Buffer: array[0..511] of WideChar;
 begin
-  Len := FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM or FORMAT_MESSAGE_ARGUMENT_ARRAY,
-    nil, error, 0, Buffer{%H-}, SizeOf(Buffer), nil);
+  Len := FormatMessageW(
+    FORMAT_MESSAGE_FROM_SYSTEM or FORMAT_MESSAGE_ARGUMENT_ARRAY, nil,
+    error, 0, Buffer{%H-}, SizeOf(Buffer), nil);
   while (Len > 0) and
         (ord(Buffer[Len - 1]) in [0..32, ord('.')]) do
     dec(Len);
@@ -792,7 +795,7 @@ begin
           RawUnicodeToUtf8(name, len, result);
       end
       else
-        if GetModuleFileNameExW(h,0,name,high(name)) <> 0 then
+        if GetModuleFileNameExW(h, 0, name, high(name)) <> 0 then
           RawUnicodeToUtf8(name, StrLenW(name), result);
     finally
       CloseHandle(h);
@@ -1042,7 +1045,8 @@ begin
     GetVolumeInformationW(pointer(dn), tmp, MAX_PATH, nil, dummy, flags, nil, 0);
     aVolumeName^ := tmp;
   end;
-  result := GetDiskFreeSpaceExW(pointer(dn), aAvailableBytes, aTotalBytes, aFreeBytes);
+  result := GetDiskFreeSpaceExW(pointer(dn),
+    aAvailableBytes, aTotalBytes, aFreeBytes);
 end;
 
 function GetDiskPartitions: TDiskPartitions;
@@ -1230,7 +1234,7 @@ begin
   begin
     // GetFileVersionInfo modifies the filename parameter data while parsing
     // Copy the string const into a local variable to create a writeable copy
-    SetString(tmp, PChar(aFileName), length(aFileName));
+    SetString(tmp, PChar(pointer(aFileName)), length(aFileName));
     Size := GetFileVersionInfoSize(pointer(tmp), Size2);
     if Size > 0 then
     begin
@@ -1323,7 +1327,8 @@ begin
   result := _SystemPath[kind];
   if result <> '' then
     exit;
-  if (kind = spLog) and IsDirectoryWritable(ExeVersion.ProgramFilePath) then
+  if (kind = spLog) and
+     IsDirectoryWritable(ExeVersion.ProgramFilePath) then
     result := EnsureDirectoryExists(ExeVersion.ProgramFilePath + 'log')
   else if (csidl[kind] <> 0) and
           (SHGetFolderPath(0, csidl[kind], 0, 0, @tmp) = S_OK) then
@@ -1366,7 +1371,10 @@ end;
 
 const
   _HKEY: array[TWinRegistryRoot] of HKEY = (
-    HKEY_CLASSES_ROOT, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, HKEY_USERS);
+    HKEY_CLASSES_ROOT,
+    HKEY_CURRENT_USER,
+    HKEY_LOCAL_MACHINE,
+    HKEY_USERS);
 
 function TWinRegistry.ReadOpen(root: TWinRegistryRoot; const keyname: RawUtf8;
   closefirst: boolean): boolean;
@@ -1453,7 +1461,7 @@ begin
     exit;
   SetLength(result, count);
   inc(maxlen);
-  tmp.Init(maxlen * 3);
+  tmp.Init(maxlen * 2);
   for i := 0 to count - 1 do
   begin
     len := maxlen;
@@ -1637,7 +1645,7 @@ var
   buf: TSynTempBuffer;
   tp: PTOKEN_PRIVILEGES;
   len: cardinal;
-  i: integer;
+  i: PtrInt;
   name: string;
   p: TWinSystemPrivilege;
 begin
@@ -1656,11 +1664,11 @@ begin
       else
       begin
         buf.Done;
-        buf.Init(len);
+        buf.Init(len); // we need a bigger buffer
         if not GetTokenInformation(
                  Token, TokenPrivileges, buf.buf, buf.len, len) then
           raise EOSException.CreateFmt(
-            'TSynWindowsPrivileges cannot retrive token information (error=%d)',
+            'TSynWindowsPrivileges cannot retrieve token information (error=%d)',
             [GetLastError])
       end;
     tp := buf.buf;

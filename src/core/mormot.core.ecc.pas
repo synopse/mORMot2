@@ -1401,7 +1401,7 @@ begin
   if encryptedfile = '' then
     exit;
   F := FileOpen(encryptedfile, fmOpenRead or fmShareDenyNone);
-  if PtrInt(F) < 0 then
+  if not ValidHandle(F) then
     exit;
   if FileRead(F, head, sizeof(head)) = sizeof(head) then
     result := EciesHeader(head);

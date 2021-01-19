@@ -6361,7 +6361,7 @@ var
   Header: THash256Rec;
 begin
   F := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
-  if F <= 0 then
+  if not ValidHandle(F) then
     result := false
   else
   begin
@@ -6387,7 +6387,7 @@ begin
   // see CodecEncrypt/CodecDecrypt in mormot.db.raw.sqlite3.static
   result := false;
   F := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
-  if F <= 0 then
+  if not ValidHandle(F) then
     exit;
   if (FileRead(F, Header, SizeOf(Header)) = SizeOf(Header)) and
      // header bytes 8..15 are encrypted bytes 16..23
