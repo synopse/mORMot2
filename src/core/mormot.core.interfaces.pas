@@ -1832,7 +1832,7 @@ type
     optNoLogInput,
     optNoLogOutput,
     optErrorOnMissingParam,
-    optForceStandardJSON,
+    optForceStandardJson,
     optDontStoreVoidJson,
     optIgnoreException);
 
@@ -1866,7 +1866,7 @@ type
   // is defined to reject the call
   // - by default, it wil check for the client user agent, and use extended
   // JSON if none is found (e.g. from WebSockets), or if it contains 'mORMot':
-  // you can set optForceStandardJSON to ensure standard JSON is always returned
+  // you can set optForceStandardJson to ensure standard JSON is always returned
   // - optDontStoreVoidJson will reduce the JSON object verbosity by not writing
   // void (e.g. 0 or '') properties when serializing objects and records
   // - any exceptions will be propagated during execution, unless

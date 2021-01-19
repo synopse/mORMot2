@@ -1773,7 +1773,7 @@ begin
     if StatusCodeIsSuccess(ErrorCode) then
       fLastErrorMessage := ''
     else
-      fLastErrorMessage := StatusCodeToReason(ErrorCode);
+      StatusCodeToReason(ErrorCode, fLastErrorMessage);
   end
   else
   begin
@@ -2270,7 +2270,7 @@ begin
     end;
     if not StatusCodeIsSuccess(Call.OutStatus) then
     begin
-      StatusMsg := StatusCodeToReason(Call.OutStatus);
+      StatusCodeToReason(Call.OutStatus, StatusMsg);
       if Call.OutBody = '' then
         fLastErrorMessage := StatusMsg
       else

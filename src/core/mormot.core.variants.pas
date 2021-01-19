@@ -121,11 +121,11 @@ function VariantToString(const V: Variant): string;
 
 /// convert a dynamic array of variants into its JSON serialization
 // - will use a TDocVariantData temporary storage
-function VariantDynArrayToJson(const V: TVariantDynArray): RawUTF8;
+function VariantDynArrayToJson(const V: TVariantDynArray): RawUtf8;
 
 /// convert a JSON array into a dynamic array of variants
 // - will use a TDocVariantData temporary storage
-function JsonToVariantDynArray(const Json: RawUTF8): TVariantDynArray;
+function JsonToVariantDynArray(const Json: RawUtf8): TVariantDynArray;
 
 /// convert an open array list into a dynamic array of variants
 // - will use a TDocVariantData temporary storage
@@ -2571,7 +2571,7 @@ begin
     end;
 end;
 
-function VariantDynArrayToJson(const V: TVariantDynArray): RawUTF8;
+function VariantDynArrayToJson(const V: TVariantDynArray): RawUtf8;
 var
   tmp: TDocVariantData;
 begin
@@ -2579,11 +2579,11 @@ begin
   result := tmp.ToJson;
 end;
 
-function JsonToVariantDynArray(const Json: RawUTF8): TVariantDynArray;
+function JsonToVariantDynArray(const Json: RawUtf8): TVariantDynArray;
 var
   tmp: TDocVariantData;
 begin
-  tmp.InitJSON(Json, JSON_OPTIONS_FAST);
+  tmp.InitJson(Json, JSON_OPTIONS_FAST);
   result := tmp.VValue;
 end;
 
@@ -3467,7 +3467,7 @@ end;
 class function TDocVariant.NewJson(const Json: RawUtf8;
   Options: TDocVariantOptions): variant;
 begin
-  _Json(JSON, result, Options);
+  _Json(Json, result, Options);
 end;
 
 class function TDocVariant.NewUnique(const SourceDocVariant: variant;
@@ -4021,34 +4021,34 @@ var
 begin
   Init(aOptions);
   result := nil;
-  if JSON = nil then
+  if Json = nil then
     exit;
   if dvoInternValues in VOptions then
     intvalues := DocVariantType.InternValues
   else
     intvalues := nil;
-  while (JSON^ <= ' ') and
-        (JSON^ <> #0) do
-    inc(JSON);
-  case JSON^ of
+  while (Json^ <= ' ') and
+        (Json^ <> #0) do
+    inc(Json);
+  case Json^ of
     '[':
       begin
         repeat
-          inc(JSON);
-          if JSON^ = #0 then
+          inc(Json);
+          if Json^ = #0 then
             exit;
-        until JSON^ > ' ';
+        until Json^ > ' ';
         include(VOptions, dvoIsArray);
-        if JSON^ = ']' then
+        if Json^ = ']' then
           // void but valid input array
           repeat
-            inc(JSON)
-          until (JSON^ = #0) or
-                (JSON^ > ' ')
+            inc(Json)
+          until (Json^ = #0) or
+                (Json^ > ' ')
         else
         begin
-          // guess of the JSON array count - will browse up to 256KB of input
-          cap := abs(JsonArrayCount(JSON, JSON + 256 shl 10));
+          // guess of the Json array count - will browse up to 256KB of input
+          cap := abs(JsonArrayCount(Json, Json + 256 shl 10));
           if cap = 0 then
             exit; // invalid content
           SetLength(VValue, cap);
@@ -4060,9 +4060,9 @@ begin
               SetLength(VValue, cap);
             end;
             // unserialize the next item
-            GetJsonToAnyVariant(VValue[VCount], JSON, @EndOfObject, @VOptions,
+            GetJsonToAnyVariant(VValue[VCount], Json, @EndOfObject, @VOptions,
               {double=}false{is set from VOptions});
-            if JSON = nil then
+            if Json = nil then
             begin
               VCount := 0;
               exit; // invalid input
@@ -4077,11 +4077,11 @@ begin
     '{':
       begin
         repeat
-          inc(JSON);
-          if JSON^ = #0 then
+          inc(Json);
+          if Json^ = #0 then
             exit;
-        until JSON^ > ' ';
-        cap := JsonObjectPropCount(JSON); // slow if object is huge (uncommon)
+        until Json^ > ' ';
+        cap := JsonObjectPropCount(Json); // slow if object is huge (uncommon)
         if cap < 0 then
           exit; // invalid content
         include(VOptions, dvoIsObject);
@@ -4095,19 +4095,19 @@ begin
           SetLength(VName, cap);
           repeat
             if VCount >= cap then
-              exit; // unexpected object size means invalid JSON
-            // see http://docs.mongodb.org/manual/reference/mongodb-extended-json
-            Name := GetJsonPropName(JSON, @NameLen);
+              exit; // unexpected object size means invalid Json
+            // see http://docs.mongodb.org/manual/reference/mongodb-extended-Json
+            Name := GetJsonPropName(Json, @NameLen);
             if Name = nil then
               exit;
             FastSetString(VName[VCount], Name, NameLen);
             if intnames <> nil then
               intnames.UniqueText(VName[VCount]);
-            GetJsonToAnyVariant(VValue[VCount], JSON, @EndOfObject, @VOptions,
+            GetJsonToAnyVariant(VValue[VCount], Json, @EndOfObject, @VOptions,
               {double=}false{is set from VOptions});
-            if JSON = nil then
+            if Json = nil then
               if EndOfObject = '}' then // valid object end
-                JSON := @NULCHAR
+                Json := @NULCHAR
               else
                 exit; // invalid input
             if intvalues <> nil then
@@ -4115,37 +4115,37 @@ begin
             inc(VCount);
           until EndOfObject = '}';
         end
-        else if JSON^ = '}' then // cap=0
+        else if Json^ = '}' then // cap=0
           repeat
-            inc(JSON)
-          until (JSON^ = #0) or
-                (JSON^ > ' ')
+            inc(Json)
+          until (Json^ = #0) or
+                (Json^ > ' ')
         else
           exit;
       end;
     'n', 'N':
       begin
-        if IdemPChar(JSON + 1, 'ULL') then
+        if IdemPChar(Json + 1, 'ULL') then
         begin
           include(VOptions, dvoIsObject);
-          result := GotoNextNotSpace(JSON + 4);
+          result := GotoNextNotSpace(Json + 4);
         end;
         exit;
       end;
   else
     exit;
   end;
-  while (JSON^ <= ' ') and
-        (JSON^ <> #0) do
-    inc(JSON);
+  while (Json^ <= ' ') and
+        (Json^ <> #0) do
+    inc(Json);
   if aEndOfObject <> nil then
-    aEndOfObject^ := JSON^;
-  if JSON^ <> #0 then
+    aEndOfObject^ := Json^;
+  if Json^ <> #0 then
     repeat
-      inc(JSON)
-    until (JSON^ = #0) or
-          (JSON^ > ' ');
-  result := JSON; // indicates successfully parsed
+      inc(Json)
+    until (Json^ = #0) or
+          (Json^ > ' ');
+  result := Json; // indicates successfully parsed
 end;
 
 function TDocVariantData.InitJson(const Json: RawUtf8;
@@ -4153,11 +4153,11 @@ function TDocVariantData.InitJson(const Json: RawUtf8;
 var
   tmp: TSynTempBuffer;
 begin
-  if JSON = '' then
+  if Json = '' then
     result := false
   else
   begin
-    tmp.Init(JSON);
+    tmp.Init(Json);
     try
       result := InitJsonInPlace(tmp.buf, aOptions) <> nil;
     finally

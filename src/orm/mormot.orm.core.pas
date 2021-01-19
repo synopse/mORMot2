@@ -10407,13 +10407,8 @@ begin
   W.Write(@V, SizeOf(V));
 end;
 
-{$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-type
-  unaligned = Double;
-{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-
-function TOrmPropInfoRttiDouble.SetBinary(Instance: TObject; P, PEnd: PAnsiChar):
-  PAnsiChar;
+function TOrmPropInfoRttiDouble.SetBinary(Instance: TObject;
+  P, PEnd: PAnsiChar): PAnsiChar;
 begin
   if P = nil then
     result := nil
@@ -18043,17 +18038,17 @@ function TOrm.FillPrepareMany(const aClient: IRestOrm;
   const aFormatSQLJoin: RawUtf8;
   const aParamsSQLJoin, aBoundsSQLJoin: array of const): boolean;
 var
-  JSON, SQL: RawUtf8;
+  json, sql: RawUtf8;
   ObjectsClass: TOrmClassDynArray;
   T: TOrmTable;
 begin
   result := false;
-  JSON := EnginePrepareMany(aClient, aFormatSQLJoin, aParamsSQLJoin,
-    aBoundsSQLJoin, ObjectsClass, SQL);
-  if JSON = '' then
+  json := EnginePrepareMany(aClient, aFormatSQLJoin, aParamsSQLJoin,
+    aBoundsSQLJoin, ObjectsClass, sql);
+  if json = '' then
     exit;
-  T := TOrmTableJson.CreateFromTables(ObjectsClass, SQL, JSON,
-    {ownJSON=}PRefCnt(PAnsiChar(pointer(JSON)) - _STRREFCNT)^ = 1);
+  T := TOrmTableJson.CreateFromTables(ObjectsClass, sql, json,
+    {ownJSON=}PRefCnt(PAnsiChar(pointer(json)) - _STRREFCNT)^ = 1);
   if (T = nil) or (T.fResults = nil) then
   begin
     T.Free;
@@ -18061,7 +18056,7 @@ begin
   end;
   { assert(T.FieldCount=SqlFieldsCount);
     for i := 0 to SqlFieldsCount-1 do
-      assert(IdemPropNameU(SqlFields[i].SQL,T.fResults[i],StrLen(T.fResults[i]))); }
+      assert(IdemPropNameU(SqlFields[i].sql,T.fResults[i],StrLen(T.fResults[i]))); }
   fFill.fTable := T;
   T.OwnerMustFree := true;
   fFill.fFillCurrentRow := 1; // point to first data row (0 is field names)
@@ -20446,7 +20441,7 @@ begin
   begin
     UriLen := length(fRoot);
     if Uri[UriLen + 1] in [#0, '/', '?'] then
-      if CompareMem(pointer(Uri), pointer(fRoot), UriLen) then
+      if CompareMemFixed(pointer(Uri), pointer(fRoot), UriLen) then
         result := rmMatchExact
       else
         result := rmMatchWithCaseChange;

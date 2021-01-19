@@ -410,7 +410,7 @@ begin
         SockSend(['Sec-WebSocket-Extensions: ', extout]);
       if aCustomHeaders <> '' then
         SockSend(aCustomHeaders);
-      SockSend; // CRLF
+      SockSendCRLF;
       SockSendFlush('');
       SockRecvLn(cmd);
       GetHeader(false);

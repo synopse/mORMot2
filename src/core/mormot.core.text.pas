@@ -358,15 +358,18 @@ function GetNextItem(var P: PUtf8Char; Sep: AnsiChar = ','): RawUtf8; overload;
 
 /// return next CSV string from P
 // - P=nil after call when end of text is reached
-procedure GetNextItem(var P: PUtf8Char; Sep: AnsiChar; var result: RawUtf8); overload;
+procedure GetNextItem(var P: PUtf8Char; Sep: AnsiChar;
+  var result: RawUtf8); overload;
 
 /// return next CSV string (unquoted if needed) from P
 // - P=nil after call when end of text is reached
-procedure GetNextItem(var P: PUtf8Char; Sep, Quote: AnsiChar; var result: RawUtf8); overload;
+procedure GetNextItem(var P: PUtf8Char; Sep, Quote: AnsiChar;
+  var result: RawUtf8); overload;
 
 /// return trimmed next CSV string from P
 // - P=nil after call when end of text is reached
-procedure GetNextItemTrimed(var P: PUtf8Char; Sep: AnsiChar; var result: RawUtf8);
+procedure GetNextItemTrimed(var P: PUtf8Char; Sep: AnsiChar;
+  var result: RawUtf8);
 
 /// return next CRLF separated value string from P, ending #10 or #13#10 trimmed
 // - any kind of line feed (CRLF or LF) will be handled, on all operating systems
@@ -3699,7 +3702,8 @@ begin
   else
   begin
     S := P;
-    while (S^ <> #0) and (S^ <> #10) do
+    while (S^ <> #0) and
+          (S^ <> #10) do
       inc(S);
     E := S;
     if (E > P) and
@@ -3722,7 +3726,8 @@ begin
   else
   begin
     S := P;
-    while (S^ <> #0) and (S^ <> Sep) do
+    while (S^ <> #0) and
+          (S^ <> Sep) do
       inc(S);
     SetString(result, P, S - P);
     if S^ <> #0 then
@@ -9736,7 +9741,7 @@ function StatusCodeToErrorMsg(Code: integer): shortstring;
 var
   msg: RawUtf8;
 begin
-  msg := StatusCodeToReason(Code);
+  StatusCodeToReason(Code, msg);
   FormatShort('HTTP Error % - %', [Code, msg], result);
 end;
 

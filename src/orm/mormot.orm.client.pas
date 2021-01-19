@@ -952,7 +952,7 @@ begin
        (json <> '') then
     begin
       result := TOrmTableJson.CreateFromTables(Tables, SQL, json,
-        {ownJSON=}PRefCnt(PAnsiChar(pointer(json)) - _STRREFCNT)^ = 1);
+        {ownjson=}PRefCnt(PAnsiChar(pointer(json)) - _STRREFCNT)^ = 1);
       result.InternalState := state;
     end
     else
@@ -999,7 +999,7 @@ begin
   if JSON = '' then
     exit;
   result := TOrmTableJson.CreateFromTables(Tables, SQL, JSON,
-    {ownJSON=}PRefCnt(PAnsiChar(pointer(JSON)) - _STRREFCNT)^ = 1);
+    {ownjson=}PRefCnt(PAnsiChar(pointer(JSON)) - _STRREFCNT)^ = 1);
   result.InternalState := state;
 end;
 

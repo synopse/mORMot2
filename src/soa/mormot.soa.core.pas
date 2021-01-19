@@ -860,14 +860,14 @@ type
     Count: integer;
     /// initialize the storage
     // - an optional time out period, in milliseconds, may be defined - but the
-    // clients should ensure that RegisterFromClientJSON() is called in order
+    // clients should ensure that RegisterFromClientJson() is called in order
     // to refresh the list (e.g. from _contract_ HTTP body)
     constructor Create(aTimeoutMS: integer); reintroduce; virtual;
     /// add the JSON serialized TServicesPublishedInterfaces to the list
     // - called by TRestServerUriContext.InternalExecuteSoaByInterface when
     // the client provides its own services as _contract_ HTTP body
     // - warning: supplied PublishedJson will be parsed in place, so modified
-    procedure RegisterFromClientJSON(var PublishedJson: RawUtf8);
+    procedure RegisterFromClientJson(var PublishedJson: RawUtf8);
     /// set the list from JSON serialized TServicesPublishedInterfacesDynArray
     // - may be used to duplicate the whole TRestServer.AssociatedServices
     // content, as returned from /root/Stat?findservice=*
@@ -1758,7 +1758,7 @@ begin
   end;
 end;
 
-procedure TServicesPublishedInterfacesList.RegisterFromClientJSON(
+procedure TServicesPublishedInterfacesList.RegisterFromClientJson(
   var PublishedJson: RawUtf8);
 var
   i: PtrInt;

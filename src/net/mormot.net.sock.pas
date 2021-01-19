@@ -519,18 +519,18 @@ type
     // - raise ENetSock exception on socket error
     procedure SockSend(const Values: array of const); overload;
     /// simulate writeln() with a single line - includes trailing #13#10
-    procedure SockSend(const Line: RawByteString = ''); overload;
+    procedure SockSend(const Line: RawByteString); overload;
     /// append P^ data into SndBuf (used by SockSend(), e.g.) - no trailing #13#10
     // - call SockSendFlush to send it through the network via SndLow()
     procedure SockSend(P: pointer; Len: integer); overload;
+    /// append #13#10 characters
+    procedure SockSendCRLF;
     /// flush all pending data to be sent, optionally with some body content
     // - raise ENetSock on error
     procedure SockSendFlush(const aBody: RawByteString = '');
-    /// flush all pending data to be sent
-    // - returning true on success
-    function TrySockSendFlush: boolean;
     /// how many bytes could be added by SockSend() in the internal buffer
     function SockSendRemainingSize: integer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// fill the Buffer with Length bytes
     // - use TimeOut milliseconds wait for incoming data
     // - bypass the SockIn^ buffers
@@ -1969,8 +1969,16 @@ begin
   inc(fSndBufLen, Len);
 end;
 
-const
-  CRLF: array[0..1] of AnsiChar = (#13,#10);
+procedure TCrtSocket.SockSendCRLF;
+var
+  cap: integer;
+begin
+  cap := Length(fSndBuf);
+  if fSndBufLen + 2 > cap then
+    SetLength(fSndBuf, cap + cap shr 3 + 2048);
+  PWord(@PByteArray(fSndBuf)[fSndBufLen])^ := $0a0d;
+  inc(fSndBufLen, 2);
+end;
 
 procedure TCrtSocket.SockSend(const Values: array of const);
 var
@@ -1981,7 +1989,7 @@ begin
     with Values[i] do
       case VType of
         vtString:
-          SockSend(@VString^[1], pByte(VString)^);
+          SockSend(@VString^[1], PByte(VString)^);
         vtAnsiString:
           SockSend(VAnsiString, Length(RawByteString(VAnsiString)));
         {$ifdef HASVARUSTRING}
@@ -2009,29 +2017,32 @@ begin
             SockSend(@tmp[1], Length(tmp));
           end;
       end;
-  SockSend(@CRLF, 2);
+  SockSendCRLF;
 end;
 
 procedure TCrtSocket.SockSend(const Line: RawByteString);
 begin
   if Line <> '' then
     SockSend(pointer(Line), Length(Line));
-  SockSend(@CRLF, 2);
+  SockSendCRLF;
+end;
+
+function TCrtSocket.SockSendRemainingSize: integer;
+begin
+  result := Length(fSndBuf) - fSndBufLen;
 end;
 
 procedure TCrtSocket.SockSendFlush(const aBody: RawByteString);
 var
-  body, avail: integer;
+  body: integer;
 begin
   body := Length(aBody);
-  if body > 0 then
+  if (body > 0) and
+     (SockSendRemainingSize >= body) then // around 1800 bytes
   begin
-    avail := SockSendRemainingSize; // around 1800 bytes
-    if avail >= body then
-    begin
-      SockSend(pointer(aBody), body); // append to buffer as single TCP packet
-      body := 0;
-    end;
+    MoveFast(pointer(aBody)^, PByteArray(fSndBuf)[fSndBufLen], body);
+    inc(fSndBufLen, body); // append to buffer as single TCP packet
+    body := 0;
   end;
   {$ifdef SYNCRTDEBUGLOW}
   TSynLog.Add.Log(sllCustom2, 'SockSend sock=% flush len=% body=% %', [fSock,
@@ -2040,28 +2051,14 @@ begin
     TSynLog.Add.Log(sllCustom2, 'SockSend sock=% body len=% %', [fSock, body,
       LogEscapeFull(pointer(aBody), body)], self);
   {$endif SYNCRTDEBUGLOW}
-  if not TrySockSendFlush then
-    raise ENetSock.CreateFmt('SockSendFlush(%s) len=%d %s',
-      [fServer, fSndBufLen, NetLastErrorMsg]);
+  if fSndBufLen > 0 then
+    if TrySndLow(pointer(fSndBuf), fSndBufLen) then
+      fSndBufLen := 0
+    else
+      raise ENetSock.CreateFmt('SockSendFlush(%s) len=%d %s',
+        [fServer, fSndBufLen, NetLastErrorMsg]);
   if body > 0 then
     SndLow(pointer(aBody), body); // direct sending of biggest packets
-end;
-
-function TCrtSocket.TrySockSendFlush: boolean;
-begin
-  if fSndBufLen = 0 then
-    result := true
-  else
-  begin
-    result := TrySndLow(pointer(fSndBuf), fSndBufLen);
-    if result then
-      fSndBufLen := 0;
-  end;
-end;
-
-function TCrtSocket.SockSendRemainingSize: integer;
-begin
-  result := Length(fSndBuf) - fSndBufLen;
 end;
 
 procedure TCrtSocket.SockRecv(Buffer: pointer; Length: integer);

@@ -4498,7 +4498,7 @@ procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
         if ((st > max_stack) or
            (st < min_stack)) and
            not IsBadReadPtr(pointer(st - 8), 12) and
-           ((pByte(st - 5)^ = $E8) or check2(st)) then
+           ((PByte(st - 5)^ = $E8) or check2(st)) then
         begin
           TSynMapFile.Log(fWriter, st, false); // ignore any TSynLog.* methods
           dec(depth);

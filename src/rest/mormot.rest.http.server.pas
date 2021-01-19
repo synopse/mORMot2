@@ -123,6 +123,12 @@ const
 
 
 type
+  TRestHttpOneServer = record
+    Server: TRestServer;
+    RestAccessRights: POrmAccessRights;
+    Security: TRestHttpServerSecurity;
+  end;
+
   /// HTTP/1.1 RESTFUL JSON mORMot Server class
   // - this server is multi-threaded and not blocking
   // - under Windows, it will first try to use fastest http.sys kernel-mode
@@ -147,12 +153,9 @@ type
     fPort, fDomainName: RawUtf8;
     fPublicAddress, fPublicPort: RawUtf8;
     /// internal servers to compute responses (protected by inherited fSafe)
-    fDBServers: array of record
-      Server: TRestServer;
-      RestAccessRights: POrmAccessRights;
-      Security: TRestHttpServerSecurity;
-    end;
+    fDBServers: array of TRestHttpOneServer;
     fDBServerNames: RawUtf8;
+    fDBSingleServer: ^TRestHttpOneServer;
     fHosts: TSynNameValue;
     fAccessControlAllowOrigin: RawUtf8;
     fAccessControlAllowOriginsMatch: TMatchs;
@@ -805,8 +808,9 @@ procedure TRestHttpServer.SetDBServer(aIndex: integer; aServer: TRestServer;
   aSecurity: TRestHttpServerSecurity; aRestAccessRights: POrmAccessRights);
 begin
   // note: caller should have made fSafe.Lock
-  if (self <> nil) and
-     (cardinal(aIndex) < cardinal(length(fDBServers))) then
+  if self = nil then
+    exit;
+  if cardinal(aIndex) < cardinal(length(fDBServers)) then
     with fDBServers[aIndex] do
     begin
       Server := aServer;
@@ -820,6 +824,10 @@ begin
       else
         RestAccessRights := aRestAccessRights;
     end;
+  if length(fDBServers) = 1 then
+    fDBSingleServer := pointer(fDBServers)
+  else
+    fDBSingleServer := nil;
 end;
 
 const
@@ -891,7 +899,7 @@ begin
      fShutdownInProgress then
     result := HTTP_NOTFOUND
   else if ((Ctxt.Url = '') or
-           (Ctxt.Url = '/')) and
+           (PWord(Ctxt.Url)^ = ord('/'))) and
           (Ctxt.Method = 'GET') then
     // RootRedirectToUri() to redirect ip:port root URI to a given sub-URI
     if fRootRedirectToUri[Ctxt.UseSSL] <> '' then
@@ -945,7 +953,7 @@ begin
     end;
     if hostroot <> '' then
       if (Ctxt.Url = '') or
-         (Ctxt.Url = '/') then
+         (PWord(Ctxt.Url)^ = ord('/')) then
         call.Url := hostroot
       else if Ctxt.Url[1] = '/' then
         call.Url := hostroot + Ctxt.Url
@@ -960,26 +968,43 @@ begin
     result := HTTP_NOTFOUND; // page not found by default (in case of wrong URL)
     serv := nil;
     match := rmNoMatch;
-    fSafe.Lock; // protect fDBServers[]
-    try
-      for i := 0 to length(fDBServers) - 1 do
-        with fDBServers[i] do
-          if Ctxt.UseSSL = (Security = secSSL) then
-          begin
-            // registered for http or https
-            match := Server.Model.UriMatch(call.Url);
-            if match = rmNoMatch then
-              continue;
-            call.RestAccessRights := RestAccessRights;
-            serv := Server;
-            break;
-          end;
-    finally
-      fSafe.UnLock;
+    if fDBSingleServer <> nil then
+      // optimized for the most used case of a single DB server
+      with fDBSingleServer^ do
+      begin
+        if Ctxt.UseSSL = (Security = secSSL) then
+        begin
+          match := Server.Model.UriMatch(call.Url);
+          if match = rmNoMatch then
+            exit;
+          call.RestAccessRights := RestAccessRights;
+          serv := Server;
+        end;
+      end
+    else
+    begin
+      // thread-safe use of dynamic fDBServers[] array
+      fSafe.Lock;
+      try
+        for i := 0 to length(fDBServers) - 1 do
+          with fDBServers[i] do
+            if Ctxt.UseSSL = (Security = secSSL) then
+            begin
+              // registered for http or https
+              match := Server.Model.UriMatch(call.Url);
+              if match = rmNoMatch then
+                continue;
+              call.RestAccessRights := RestAccessRights;
+              serv := Server;
+              break;
+            end;
+      finally
+        fSafe.UnLock;
+      end;
+      if (match = rmNoMatch) or
+         (serv = nil) then
+        exit;
     end;
-    if (match = rmNoMatch) or
-       (serv = nil) then
-      exit;
     if fRedirectServerRootUriForExactCase and
        (match = rmMatchWithCaseChange) then
     begin
@@ -1005,7 +1030,7 @@ begin
     begin
       // change mime type if modified in HTTP header (e.g. GET blob fields)
       Ctxt.OutContentType := GetNextLine(P + 14, P);
-      call.OutHead := P;
+      FastSetString(call.OutHead, P, StrLen(P));
     end
     else
       // default content type is JSON
@@ -1025,8 +1050,8 @@ begin
           call.OutHead := 'Location: ' + copy(redirect, hostlen + 1, maxInt);
       end
       else if ExistsIniName(P, 'SET-COOKIE:') then
-        call.OutHead := StringReplaceAll(call.OutHead, '; Path=/' +
-          serv.Model.Root, '; Path=/')
+        call.OutHead := StringReplaceAll(call.OutHead,
+          '; Path=/' + serv.Model.Root, '; Path=/')
     end;
     Ctxt.OutCustomHeaders := TrimU(call.OutHead);
     if call.OutInternalState <> 0 then

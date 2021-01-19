@@ -3181,7 +3181,7 @@ procedure TRestServerUriContext.InternalExecuteSoaByInterface;
 
   procedure ComputeResult;
 
-    procedure ServiceResult(const Name, JSONValue: RawUtf8);
+    procedure ServiceResult(const Name, JsonValue: RawUtf8);
     var
       WR: TTextWriter;
       temp: TTextWriterStackBuffer;
@@ -3191,7 +3191,7 @@ procedure TRestServerUriContext.InternalExecuteSoaByInterface;
         ServiceResultStart(WR);
         if ForceServiceResultAsJsonObject then
           WR.AddFieldName(Name);
-        WR.AddString(JSONValue);
+        WR.AddString(JsonValue);
         ServiceResultEnd(WR, 0);
         Returns(WR.Text);
       finally
@@ -3236,7 +3236,7 @@ procedure TRestServerUriContext.InternalExecuteSoaByInterface;
           // "method":"_contract_" to retrieve the implementation contract
           if (Call^.InBody <> '') and
              (Call^.InBody <> '[]') then
-            Server.AssociatedServices.RegisterFromClientJSON(Call^.InBody);
+            Server.AssociatedServices.RegisterFromClientJson(Call^.InBody);
           ServiceResult('contract', Service.ContractExpected);
           exit; // "id":0 for this method -> no instance was created
         end;
@@ -4747,7 +4747,7 @@ begin
     exit;
   end;
   if ErrorMessage = '' then
-    ErrorMsg := StatusCodeToReason(Status)
+    StatusCodeToReason(Status, ErrorMsg)
   else
     ErrorMsg := ErrorMessage;
   with TTextWriter.CreateOwnedStream(temp) do
@@ -4838,7 +4838,7 @@ procedure TRestServerRoutingRest.ExecuteSoaByInterface;
 var
   json: RawUtf8;
 
-  procedure DecodeUriParametersIntoJSON(const input: TRawUtf8DynArray);
+  procedure DecodeUriParametersIntoJson(const input: TRawUtf8DynArray);
   var
     a, i, iLow: PtrInt;
     WR: TTextWriter;
@@ -4915,7 +4915,7 @@ begin
         FillInput; // fInput[0]='Param1',fInput[1]='Value1',fInput[2]='Param2'...
         if (fInput <> nil) and
            (ServiceMethod <> nil) then
-          DecodeUriParametersIntoJSON(fInput);
+          DecodeUriParametersIntoJson(fInput);
       end;
     end;
     ServiceParameters := pointer({%H-}json);
@@ -5720,7 +5720,7 @@ begin
       // no auth data sent, reply with supported auth methods
       Ctxt.Call.OutHead := SECPKGNAMEHTTPWWWAUTHENTICATE;
       Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED; // (401)
-      Ctxt.Call.OutBody := StatusCodeToReason(HTTP_UNAUTHORIZED);
+      StatusCodeToReason(HTTP_UNAUTHORIZED, Ctxt.Call.OutBody);
       exit;
     end;
     browserauth := True;
@@ -5761,7 +5761,7 @@ begin
         Ctxt.Call.OutHead :=
           (SECPKGNAMEHTTPWWWAUTHENTICATE + ' ') + BinToBase64(outdata);
         Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED; // (401)
-        Ctxt.Call.OutBody := StatusCodeToReason(HTTP_UNAUTHORIZED);
+        StatusCodeToReason(HTTP_UNAUTHORIZED, Ctxt.Call.OutBody);
       end
       else
         Ctxt.Returns(['result', '',

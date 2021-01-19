@@ -1287,13 +1287,17 @@ begin
 end;
 
 function THttpServerGeneric.Request(Ctxt: THttpServerRequestAbstract): cardinal;
+var
+  thrd: TSynThread;
 begin
   if (self = nil) or
      fShutdownInProgress then
     result := HTTP_NOTFOUND
   else
   begin
-    NotifyThreadStart(THttpServerRequest(Ctxt).ConnectionThread);
+    thrd := THttpServerRequest(Ctxt).ConnectionThread;
+    if not Assigned(thrd.StartNotified) then
+      NotifyThreadStart(thrd);
     if Assigned(OnRequest) then
       result := OnRequest(Ctxt)
     else
@@ -1701,7 +1705,8 @@ begin
   result := true;
 end;
 
-procedure ExtractNameValue(var headers: RawUtf8; const upname: RawUtf8; out res: RawUtf8);
+procedure ExtractNameValue(var headers: RawUtf8; const upname: RawUtf8;
+  out res: RawUtf8);
 var
   i, j, k: PtrInt;
 begin
@@ -1744,16 +1749,35 @@ procedure THttpServer.Process(ClientSock: THttpServerSocket;
   ConnectionID: THttpServerConnectionID; ConnectionThread: TSynThread);
 var
   ctxt: THttpServerRequest;
-  P: PUtf8Char;
   respsent: boolean;
   Code, afterCode: cardinal;
-  s, reason: RawUtf8;
+  reason: RawUtf8;
   ErrorMsg: string;
+
+  function SendFileAsResponse: boolean;
+  var
+    fn: TFileName;
+  begin
+    result := true;
+    ExtractNameValue(ctxt.fOutCustomHeaders, 'CONTENT-TYPE:', ctxt.fOutContentType);
+    fn := Utf8ToString(ctxt.OutContent);
+    if not Assigned(fOnSendFile) or
+       not fOnSendFile(ctxt, fn) then
+    begin
+       ctxt.OutContent := StringFromFile(fn);
+       if ctxt.OutContent = '' then
+       begin
+         FormatString('Impossible to send void file: %', [fn], ErrorMsg);
+         Code := HTTP_NOTFOUND;
+         result := false; // fatal error
+       end;
+    end;
+  end;
 
   function SendResponse: boolean;
   var
-    fs: TFileStream;
-    fn: TFileName;
+    P, PEnd: PUtf8Char;
+    len: PtrInt;
   begin
     result := not Terminated; // true=success
     if not result then
@@ -1766,36 +1790,14 @@ var
     // handle case of direct sending of static file (as with http.sys)
     if (ctxt.OutContent <> '') and
        (ctxt.OutContentType = STATICFILE_CONTENT_TYPE) then
-    try
-      ExtractNameValue(ctxt.fOutCustomHeaders, 'CONTENT-TYPE:', ctxt.fOutContentType);
-      fn := Utf8ToString(ctxt.OutContent);
-      if not Assigned(fOnSendFile) or
-         not fOnSendFile(ctxt, fn) then
-      begin
-        fs := TFileStream.Create(fn, fmOpenRead or fmShareDenyNone);
-        try
-          SetString(ctxt.fOutContent, nil, fs.Size);
-          fs.Read(Pointer(ctxt.fOutContent)^, length(ctxt.fOutContent));
-        finally
-          fs.Free;
-        end;
-      end;
-    except
-      on E: Exception do
-      begin
-        // error reading or sending file
-        FormatString('%: %', [E, E.Message], ErrorMsg);
-        Code := HTTP_NOTFOUND;
-        result := false; // fatal error
-      end;
-    end;
-    if ctxt.OutContentType = NORESPONSE_CONTENT_TYPE then
+      result := SendFileAsResponse
+    else if ctxt.OutContentType = NORESPONSE_CONTENT_TYPE then
       ctxt.OutContentType := ''; // true HTTP always expects a response
     // send response (multi-thread OK) at once
     if (Code < HTTP_SUCCESS) or
        (ClientSock.Headers = '') then
       Code := HTTP_NOTFOUND;
-    reason := StatusCodeToReason(Code);
+    StatusCodeToReason(Code, reason);
     if ErrorMsg <> '' then
     begin
       ctxt.OutCustomHeaders := '';
@@ -1812,17 +1814,24 @@ var
     // 2. send headers
     // 2.1. custom headers from Request() method
     P := pointer(ctxt.fOutCustomHeaders);
-    while P <> nil do
+    if P <> nil then
     begin
-      s := GetNextLine(P, {next=}P);
-      if s <> '' then
-      begin
-        // no void line (means headers ending)
-        ClientSock.SockSend(s);
-        if IdemPChar(pointer(s), 'CONTENT-ENCODING:') then
-          // custom encoding: don't compress
-          integer(ClientSock.fCompressAcceptHeader) := 0;
-      end;
+      PEnd := P + length(ctxt.fOutCustomHeaders);
+      repeat
+        len := BufferLineLength(P, PEnd);
+        if len > 0 then
+        begin
+          // no void line (means headers ending)
+          if IdemPChar(P, 'CONTENT-ENCODING:') then
+            // custom encoding: don't compress
+            integer(ClientSock.fCompressAcceptHeader) := 0;
+          ClientSock.SockSend(P, len);
+          ClientSock.SockSendCRLF;
+          inc(P, len);
+        end;
+        while P^ in [#10, #13] do
+          inc(P);
+      until P^ = #0;
     end;
     // 2.2. generic headers
     ClientSock.SockSend([
@@ -1838,7 +1847,7 @@ var
       ClientSock.SockSend('Connection: Keep-Alive'#13#10); // #13#10 -> end headers
     end
     else
-      ClientSock.SockSend; // headers must end with a void line
+      ClientSock.SockSendCRLF; // headers must end with a void line
     // 3. sent HTTP body content (if any)
     ClientSock.SockSendFlush(ctxt.OutContent); // flush all data to network
   end;
@@ -1872,7 +1881,8 @@ begin
       {$endif SYNCRTDEBUGLOW}
       if afterCode > 0 then
         Code := afterCode;
-      if respsent or SendResponse then
+      if respsent or
+         SendResponse then
         DoAfterResponse(ctxt, Code);
       {$ifdef SYNCRTDEBUGLOW}
       TSynLog.Add.Log(sllCustom2, 'DoAfterResponse respsent=% ErrorMsg=%',
@@ -1883,7 +1893,7 @@ begin
         if not respsent then
         begin
           // notify the exception as server response
-          ErrorMsg := E.ClassName + ': ' + E.Message;
+          FormatString('%: %', [E, E.Message], ErrorMsg);
           Code := HTTP_SERVERERROR;
           SendResponse;
         end;
@@ -1950,9 +1960,9 @@ begin
       exit; // broken
     GetNextItem(P, ' ', fMethod); // 'GET'
     GetNextItem(P, ' ', fURL);    // '/path'
-    fKeepAliveClient := (fServer = nil) or
-                        (fServer.ServerKeepAliveTimeOut > 0)
-      and IdemPChar(P, 'HTTP/1.1');
+    fKeepAliveClient := ((fServer = nil) or
+                         (fServer.ServerKeepAliveTimeOut > 0)) and
+                        IdemPChar(P, 'HTTP/1.1');
     Content := '';
     // get headers and content
     GetHeader(noheaderfilter);
@@ -2005,7 +2015,7 @@ begin
         {$endif SYNCRTDEBUGLOW}
         if status <> HTTP_SUCCESS then
         begin
-          reason := StatusCodeToReason(status);
+          StatusCodeToReason(status, reason);
           SockSend(['HTTP/1.0 ', status, ' ', reason, #13#10#13#10,
             reason, ' ', status]);
           SockSendFlush('');

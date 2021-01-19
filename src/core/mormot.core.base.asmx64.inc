@@ -1061,7 +1061,7 @@ end;
 
 function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        // fast version searching for both Chr and #0 over 16 bytes at once
+        // fast SSE2 version searching for both Chr and #0 over 16 bytes at once
         {$ifdef MSWINDOWS}
         movzx   edx, dl
         mov     rax, rcx             // get pointer to string from rcx

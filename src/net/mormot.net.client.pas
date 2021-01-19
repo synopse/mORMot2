@@ -909,7 +909,7 @@ begin
         SockSend(header);
       if fCompressAcceptEncoding <> '' then
         SockSend(fCompressAcceptEncoding);
-      SockSend; // send CRLF
+      SockSendCRLF;
       SockSendFlush(aData); // flush all pending data to network
       // get headers
       if SockReceivePending(1000) = cspSocketError then

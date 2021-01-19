@@ -3354,7 +3354,7 @@ end;
 
 function TRestUriParams.InBodyTypeIsJson(GuessJsonIfNoneSet: boolean): boolean;
 var
-  contenttype: RawUTF8;
+  contenttype: RawUtf8;
 begin
   InBodyType(contenttype, GuessJsonIfNoneSet);
   result := IdemPChar(pointer(contenttype), JSON_CONTENT_TYPE_UPPER);

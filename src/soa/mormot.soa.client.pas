@@ -670,7 +670,7 @@ begin
       begin
         if resp = '' then
         begin
-          resp := StatusCodeToReason(status);
+          StatusCodeToReason(status, resp);
           error := GetErrorMessage(status);
           if error <> '' then
             error := ' - ' + error;

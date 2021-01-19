@@ -1855,16 +1855,16 @@ type
     // - for a dynamic array, will customize the item serialization callbacks
     // - replace deprecated TJsonSerializer.RegisterCustomSerializer() method
     class function RegisterCustomSerializer(Info: PRttiInfo;
-      const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJSON;
+      const Reader: TOnRttiJsonRead; const Writer: TOnRttiJsonWrite): TRttiJson;
     /// unregister any custom callback for JSON serialization of a given TypeInfo()
     // - will also work after RegisterFromText()
-    class function UnRegisterCustomSerializer(Info: PRttiInfo): TRttiJSON;
+    class function UnRegisterCustomSerializer(Info: PRttiInfo): TRttiJson;
     /// register a custom callback for JSON serialization of a given class
     // - replace deprecated TJsonSerializer.RegisterCustomSerializer() method
     class function RegisterCustomSerializerClass(ObjectClass: TClass;
-      const Reader: TOnClassJsonRead; const Writer: TOnClassJsonWrite): TRttiJSON;
+      const Reader: TOnClassJsonRead; const Writer: TOnClassJsonWrite): TRttiJson;
     /// unregister any custom callback for JSON serialization of a given class
-    class function UnRegisterCustomSerializerClass(ObjectClass: TClass): TRttiJSON;
+    class function UnRegisterCustomSerializerClass(ObjectClass: TClass): TRttiJson;
     /// register TypeInfo() custom JSON serialization for a given dynamic
     // array or record
     // - to be used instead of homonomous Rtti.RegisterFromText() to supply
@@ -1872,7 +1872,7 @@ type
     class function RegisterFromText(DynArrayOrRecord: PRttiInfo;
       const RttiDefinition: RawUtf8;
       IncludeReadOptions: TJsonParserOptions;
-      IncludeWriteOptions: TTextWriterWriteObjectOptions): TRttiJSON;
+      IncludeWriteOptions: TTextWriterWriteObjectOptions): TRttiJson;
     /// define an additional set of unserialization JSON options
     // - is included for this type to the supplied TJsonParserOptions
     property IncludeReadOptions: TJsonParserOptions
@@ -6938,7 +6938,7 @@ end;
 procedure TJsonParserContext.Init(P: PUtf8Char; Rtti: TRttiCustom;
   O: TJsonParserOptions; CV: PDocVariantOptions; ObjectListItemClass: TClass);
 begin
-  JSON := P;
+  Json := P;
   Valid := true;
   if Rtti <> nil then
     O := O + TRttiJson(Rtti).fIncludeReadOptions;
@@ -6967,8 +6967,8 @@ end;
 
 function TJsonParserContext.ParseNext: boolean;
 begin
-  Value := GetJsonField(JSON, JSON, @WasString, @EndOfObject, @ValueLen);
-  result := JSON <> nil;
+  Value := GetJsonField(Json, Json, @WasString, @EndOfObject, @ValueLen);
+  result := Json <> nil;
   Valid := result;
 end;
 
@@ -6984,9 +6984,9 @@ procedure TJsonParserContext.ParseEndOfObject;
 begin
   if Valid then
   begin
-    if JSON^ <> #0 then
-      JSON := mormot.core.json.ParseEndOfObject(JSON, EndOfObject);
-    Valid := JSON <> nil;
+    if Json^ <> #0 then
+      Json := mormot.core.json.ParseEndOfObject(Json, EndOfObject);
+    Valid := Json <> nil;
   end;
 end;
 
@@ -6996,16 +6996,16 @@ var
 begin
   result := false;
   if Valid then
-    if JSON <> nil then
+    if Json <> nil then
     begin
-      P := GotoNextNotSpace(JSON);
-      JSON := P;
+      P := GotoNextNotSpace(Json);
+      Json := P;
       if PCardinal(P)^ = NULL_LOW then
       begin
         P := mormot.core.json.ParseEndOfObject(P + 4, EndOfObject);
         if P <> nil then
         begin
-          JSON := P;
+          Json := P;
           result := true;
         end
         else
@@ -7021,8 +7021,8 @@ var
   P: PUtf8Char;
 begin
   result := false; // no need to parse
-  P := GotoNextNotSpace(JSON);
-  JSON := P;
+  P := GotoNextNotSpace(Json);
+  Json := P;
   if P^ = '[' then
   begin
     P := GotoNextNotSpace(P + 1); // ignore trailing [
@@ -7031,13 +7031,13 @@ begin
       // void but valid array
       P := mormot.core.json.ParseEndOfObject(P + 1, EndOfObject);
       Valid := P <> nil;
-      JSON := P;
+      Json := P;
     end
     else
     begin
       // we have a non void [...] array -> caller should parse it
       result := true;
-      JSON := P;
+      Json := P;
     end;
   end
   else
@@ -7048,11 +7048,11 @@ function TJsonParserContext.ParseNewObject: TObject;
 begin
   if ObjectListItem = nil then
   begin
-    Info := JsonRetrieveObjectRttiCustom(JSON,
+    Info := JsonRetrieveObjectRttiCustom(Json,
       jpoObjectListClassNameGlobalFindClass in Options);
     if (Info <> nil) and
-       (JSON^ = ',') then
-      JSON^ := '{' // will now parse other properties as a regular JSON object
+       (Json^ = ',') then
+      Json^ := '{' // will now parse other properties as a regular Json object
     else
     begin
       Valid := false;
@@ -7066,8 +7066,8 @@ end;
 function TJsonParserContext.ParseObject(const Names: array of RawUtf8;
   Values: PValuePUtf8CharArray; HandleValuesAsObjectOrArray: boolean): boolean;
 begin
-  JSON := JsonDecode(JSON, Names, Values, HandleValuesAsObjectOrArray);
-  if JSON = nil then
+  Json := JsonDecode(Json, Names, Values, HandleValuesAsObjectOrArray);
+  if Json = nil then
     Valid := false
   else
     ParseEndOfObject;
@@ -7161,8 +7161,8 @@ end;
 
 procedure _JL_RawJson(Data: PRawJson; var Ctxt: TJsonParserContext);
 begin
-  GetJsonItemAsRawJson(Ctxt.JSON, Data^, @Ctxt.EndOfObject);
-  Ctxt.Valid := Ctxt.JSON <> nil;
+  GetJsonItemAsRawJson(Ctxt.Json, Data^, @Ctxt.EndOfObject);
+  Ctxt.Valid := Ctxt.Json <> nil;
 end;
 
 procedure _JL_RawUtf8(Data: PRawByteString; var Ctxt: TJsonParserContext);
@@ -7280,9 +7280,9 @@ end;
 
 procedure _JL_Variant(Data: PVariant; var Ctxt: TJsonParserContext);
 begin
-  Ctxt.JSON := VariantLoadJson(Data^, Ctxt.JSON, @Ctxt.EndOfObject,
+  Ctxt.Json := VariantLoadJson(Data^, Ctxt.Json, @Ctxt.EndOfObject,
     Ctxt.CustomVariant, jpoAllowDouble in Ctxt.Options);
-  Ctxt.Valid := Ctxt.JSON <> nil;
+  Ctxt.Valid := Ctxt.Json <> nil;
 end;
 
 procedure _JL_WideString(Data: PWideString; var Ctxt: TJsonParserContext);
@@ -7333,8 +7333,8 @@ var
   v: QWord;
 begin
   v := GetSetNameValue(Ctxt.Info.Cache.EnumList,
-    Ctxt.Info.Cache.EnumMax, Ctxt.JSON, Ctxt.EndOfObject);
-  Ctxt.Valid := Ctxt.JSON <> nil;
+    Ctxt.Info.Cache.EnumMax, Ctxt.Json, Ctxt.EndOfObject);
+  Ctxt.Valid := Ctxt.Json <> nil;
   MoveSmall(@v, Data, Ctxt.Info.Size);
 end;
 
@@ -7346,7 +7346,7 @@ begin
   if not Ctxt.ParseArray then
     // detect void (i.e. []) or invalid array
     exit;
-  if PCardinal(Ctxt.JSON)^ = JSON_BASE64_MAGIC_QUOTE_C then
+  if PCardinal(Ctxt.Json)^ = JSON_BASE64_MAGIC_QUOTE_C then
     // raw RTTI binary layout with a single Base-64 encoded item
     Ctxt.Valid := Ctxt.ParseNext and
               (Ctxt.EndOfObject = ']') and
@@ -7402,7 +7402,7 @@ begin
   if not Ctxt.ParseArray then
     // detect void (i.e. []) or invalid array
     exit;
-  if PCardinal(Ctxt.JSON)^ = JSON_BASE64_MAGIC_QUOTE_C then
+  if PCardinal(Ctxt.Json)^ = JSON_BASE64_MAGIC_QUOTE_C then
     // raw RTTI binary layout with a single Base-64 encoded item
     Ctxt.Valid := Ctxt.ParseNext and
               (Ctxt.EndOfObject = ']') and
@@ -7426,7 +7426,7 @@ begin
         load := Ctxt.Info.JsonLoad;
     end;
     // initial guess of the JSON array count - will browse up to 256KB of input
-    cap := abs(JsonArrayCount(Ctxt.JSON, Ctxt.JSON + 256 shl 10));
+    cap := abs(JsonArrayCount(Ctxt.Json, Ctxt.Json + 256 shl 10));
     if (cap = 0) or
        not Assigned(load) then
     begin
@@ -7551,8 +7551,8 @@ var
 label
   nxt, any;
 begin
-  if Ctxt.JSON <> nil then
-    Ctxt.JSON := GotoNextNotSpace(Ctxt.JSON);
+  if Ctxt.Json <> nil then
+    Ctxt.Json := GotoNextNotSpace(Ctxt.Json);
   if TRttiJson(Ctxt.Info).fJsonReader.Code <> nil then
   begin
     // TRttiJson.RegisterCustomSerializer() custom callbacks
@@ -7590,16 +7590,16 @@ begin
         exit;
     end;
     // regular JSON unserialization using nested fields/properties
-    Ctxt.JSON := GotoNextNotSpace(Ctxt.JSON);
-    if Ctxt.JSON^ <> '{' then
+    Ctxt.Json := GotoNextNotSpace(Ctxt.Json);
+    if Ctxt.Json^ <> '{' then
     begin
       Ctxt.Valid := false;
       exit;
     end;
-    Ctxt.JSON := GotoNextNotSpace(Ctxt.JSON + 1);
-    if Ctxt.JSON^ = '}' then
+    Ctxt.Json := GotoNextNotSpace(Ctxt.Json + 1);
+    if Ctxt.Json^ = '}' then
     begin
-      inc(Ctxt.JSON);
+      inc(Ctxt.Json);
       Ctxt.ParseEndOfObject;
     end
     else
@@ -7608,8 +7608,8 @@ begin
       prop := pointer(root.Props.List);
       for p := 1 to root.Props.Count do
       begin
-nxt:    propname := GetJsonPropName(Ctxt.JSON, @propnamelen);
-        Ctxt.Valid := (Ctxt.JSON <> nil) and
+nxt:    propname := GetJsonPropName(Ctxt.Json, @propnamelen);
+        Ctxt.Valid := (Ctxt.Json <> nil) and
                       (propname <> nil);
         if not Ctxt.Valid then
           break;
@@ -7627,8 +7627,8 @@ nxt:    propname := GetJsonPropName(Ctxt.JSON, @propnamelen);
                 IdemPropName('ClassName', propname, propnamelen) then
         begin
           // woStoreClassName was used -> just ignore the class name
-          Ctxt.JSON := GotoNextJsonItem(Ctxt.JSON, 1, @Ctxt.EndOfObject);
-          Ctxt.Valid := Ctxt.JSON <> nil;
+          Ctxt.Json := GotoNextJsonItem(Ctxt.Json, 1, @Ctxt.EndOfObject);
+          Ctxt.Valid := Ctxt.Json <> nil;
           if Ctxt.Valid then
             goto nxt;
           break;
@@ -7643,8 +7643,8 @@ nxt:    propname := GetJsonPropName(Ctxt.JSON, @propnamelen);
               if (rcfReadIgnoreUnknownFields in root.Flags) or
                  (jpoIgnoreUnknownProperty in Ctxt.Options) then
               begin
-                Ctxt.JSON := GotoNextJsonItem(Ctxt.JSON, 1, @Ctxt.EndOfObject);
-                Ctxt.Valid := Ctxt.JSON <> nil;
+                Ctxt.Json := GotoNextJsonItem(Ctxt.Json, 1, @Ctxt.EndOfObject);
+                Ctxt.Valid := Ctxt.Json <> nil;
               end
               else
                 Ctxt.Valid := false
@@ -7653,8 +7653,8 @@ nxt:    propname := GetJsonPropName(Ctxt.JSON, @propnamelen);
             if (not Ctxt.Valid) or
                (Ctxt.EndOfObject = '}') then
                break;
-any:        propname := GetJsonPropName(Ctxt.JSON, @propnamelen);
-            Ctxt.Valid := (Ctxt.JSON <> nil) and
+any:        propname := GetJsonPropName(Ctxt.Json, @propnamelen);
+            Ctxt.Valid := (Ctxt.Json <> nil) and
                           (propname <> nil);
           until not Ctxt.Valid;
           break;
@@ -7701,7 +7701,7 @@ end;
 
 procedure _JL_TCollection(Data: PCollection; var Ctxt: TJsonParserContext);
 var
-  root: TRttiJSON;
+  root: TRttiJson;
   load: TRttiJsonLoad;
   item: TCollectionItem;
 begin
@@ -7716,7 +7716,7 @@ begin
     if Ctxt.ParseNull or
        not Ctxt.ParseArray then
       exit;
-    root := TRttiJSON(Ctxt.Info);
+    root := TRttiJson(Ctxt.Info);
     load := nil;
     repeat
       item := Data^.Add;
@@ -9708,7 +9708,7 @@ begin
   result.SetParserType(ptClass, pctNone);
 end;
 
-class function TRttiJson.UnRegisterCustomSerializer(Info: PRttiInfo): TRttiJSON;
+class function TRttiJson.UnRegisterCustomSerializer(Info: PRttiInfo): TRttiJson;
 begin
   result := Rtti.RegisterType(Info) as TRttiJson;
   result.fJsonWriter.Code := nil; // force reset of the JSON serialization
@@ -9717,7 +9717,7 @@ begin
     result.SetParserType(result.Parser, result.ParserComplex);
 end;
 
-class function TRttiJson.UnRegisterCustomSerializerClass(ObjectClass: TClass): TRttiJSON;
+class function TRttiJson.UnRegisterCustomSerializerClass(ObjectClass: TClass): TRttiJson;
 begin
   // without {$M+} ObjectClasss.ClassInfo=nil -> ensure fake RTTI is available
   result := Rtti.RegisterClass(ObjectClass) as TRttiJson;
@@ -9729,7 +9729,7 @@ end;
 class function TRttiJson.RegisterFromText(DynArrayOrRecord: PRttiInfo;
   const RttiDefinition: RawUtf8;
   IncludeReadOptions: TJsonParserOptions;
-  IncludeWriteOptions: TTextWriterWriteObjectOptions): TRttiJSON;
+  IncludeWriteOptions: TTextWriterWriteObjectOptions): TRttiJson;
 begin
   result := Rtti.RegisterFromText(DynArrayOrRecord, RttiDefinition) as TRttiJson;
   result.fIncludeReadOptions := IncludeReadOptions;

@@ -1878,7 +1878,7 @@ end;
 procedure HTTP_RESPONSE.SetStatus(code: integer; var OutStatus: RawUtf8);
 begin
   StatusCode := code;
-  OutStatus := StatusCodeToReason(code);
+  StatusCodeToReason(code, OutStatus);
   ReasonLength := length(OutStatus);
   pReason := pointer(OutStatus);
 end;

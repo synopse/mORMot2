@@ -3089,7 +3089,7 @@ begin
         #255:
           begin
             // B:255 B:byOne
-            for n := 1 to pByte(p + 1)^ do
+            for n := 1 to PByte(p + 1)^ do
             begin
               inc(i);
               V^ := i;
@@ -4088,7 +4088,7 @@ const
   COMPRESS_SYNLZ = 1;
 
 var
-  // don't use TObjectList before mormot.core.json registered TRttiJSON
+  // don't use TObjectList before mormot.core.json registered TRttiJson
   SynCompressAlgos: array of TAlgoCompress;
 
 constructor TAlgoCompress.Create;

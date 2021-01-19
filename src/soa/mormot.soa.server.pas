@@ -1233,7 +1233,7 @@ begin
     WR := TJsonSerializer.CreateOwnedStream(temp);
     try
       Ctxt.ThreadServer^.Factory := self;
-      if not (optForceStandardJSON in opt) and
+      if not (optForceStandardJson in opt) and
          ((Ctxt.Call.InHead = '') or
           (Ctxt.ClientKind = ckFramework)) then
         // return extended/optimized pseudo-JSON, as recognized by mORMot
