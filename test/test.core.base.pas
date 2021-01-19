@@ -4228,6 +4228,7 @@ var
   str: string;
   U, U2, res, Up, Up2: RawUtf8;
   arr: TRawUtf8DynArray;
+  P: PUTF8Char;
   PB: PByte;
   q: RawUtf8;
   Unic: RawUnicode;
@@ -4398,18 +4399,19 @@ begin
     Test(CP_UTF16, W);
     W := WinAnsiString(RandomString(len));
     U := WinAnsiToUtf8(W);
-    check(PosChar(pointer(U), #10) = nil);
+    P := pointer(U);
+    check(PosChar(P, #10) = nil);
     if len > 0 then
     begin
       check(PosEx(U[1], U) = 1);
       check(PosExChar(U[1], U) = 1);
-      check(PosChar(pointer(U), U[1]) = @U[1]);
+      check(PosChar(P, P[0]) = @P[0], 'PosChar0');
       if (len > 1) and
          (U[1] <> U[2]) then
       begin
         check(PosEx(U[2], U) = 2);
         check(PosExChar(U[2], U) = 2);
-        check(PosChar(pointer(U), U[2]) = @U[2]);
+        check(PosChar(P, P[1]) = @P[1], 'PosChar1');
         if (len > 2) and
            (U[1] <> U[2]) and
            (U[2] <> U[3]) and
@@ -4417,13 +4419,13 @@ begin
         begin
           check(PosEx(U[3], U) = 3);
           check(PosExChar(U[3], U) = 3);
-          check(PosChar(pointer(U), U[3]) = @U[3]);
+          check(PosChar(P, P[2]) = @P[2], 'PosChar2');
         end;
       end;
     end;
     for j := 1 to lenup100 do
     begin
-      check(PosChar(pointer(U), U[j])^ = U[j]);
+      check(PosChar(P, U[j])^ = U[j], 'PosCharj');
       // validates with offset parameter
       check(PosEx(#13, U, j) = 0);
       check(PosEx(U[j], U, j) = j);
