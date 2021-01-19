@@ -138,15 +138,15 @@ type
   /// generic file information structure, as used in .zip file format
   // - used in any header, contains info about following block
   TFileInfo = object
-    neededVersion : word;            // $14
-    flags         : word;            // 0
-    zzipMethod    : word;            // 0=Z_STORED 8=Z_DEFLATED 12=BZ2 14=LZMA
-    zlastMod      : integer;         // time in dos format
-    zcrc32        : cardinal;           // crc32 checksum of uncompressed data
-    zzipSize      : cardinal;           // size of compressed data
-    zfullSize     : cardinal;           // size of uncompressed data
-    nameLen       : word;            // length(name)
-    extraLen      : word;            // 0
+    neededVersion: word;   // $14
+    flags: word;           // 0
+    zzipMethod: word;      // 0=Z_STORED 8=Z_DEFLATED 12=BZ2 14=LZMA
+    zlastMod: integer;     // time in dos format
+    zcrc32: cardinal;      // crc32 checksum of uncompressed data
+    zzipSize: cardinal;    // size of compressed data
+    zfullSize: cardinal;   // size of uncompressed data
+    nameLen: word;         // length(name)
+    extraLen: word;        // 0
     function SameAs(aInfo: PFileInfo): boolean;
     // 1..15  (1=SynLZ e.g.) from flags bits 7..10 and method=Z_STORED
     procedure SetAlgoID(Algorithm: integer);
@@ -284,12 +284,25 @@ type
     function RetrieveFileInfo(Index: integer; var Info: TFileInfo): boolean;
   end;
 
+  /// used internally by TZipWrite/TZipWriteAbstract to store the zip entries
+  TZipWriteEntry = record
+    /// the file name, as stored in the .zip internal directory
+    intName: RawByteString;
+    /// the corresponding file header
+    fhr: TFileHeader;
+  end;
+  PZipWriteEntry = ^TZipWriteEntry;
+
   /// abstract write-only access for creating a .zip archive
+  // - update can be done manualy by using a TZipRead instance and the
+  // AddFromZip() method
   TZipWriteAbstract = class
   protected
     fAppendOffset: cardinal;
     fMagic: cardinal;
-    function InternalAdd(const zipName: TFileName; Buf: pointer; Size: integer): cardinal;
+    function InternalAddEntry: PZipWriteEntry;
+    function InternalAdd(
+      const zipName: TFileName; Buf: pointer; Size: integer): cardinal;
     function InternalWritePosition: cardinal; virtual; abstract;
     procedure InternalWrite(const buf; len: cardinal); virtual; abstract;
   public
@@ -297,12 +310,7 @@ type
     Count: integer;
     /// the resulting file entries, ready to be written as a .zip catalog
     // - those will be appended after the data blocks at the end of the .zip file
-    Entry: array of record
-      /// the file name, as stored in the .zip internal directory
-      intName: RawByteString;
-      /// the corresponding file header
-      fhr: TFileHeader;
-    end;
+    Entry: array of TZipWriteEntry;
     /// initialize the .zip archive
     // - a new .zip file content is prepared
     constructor Create;
@@ -318,17 +326,17 @@ type
     // DateTimeToWindowsFileTime() and FileAgeToWindowsTime()
     procedure AddStored(const aZipName: TFileName; Buf: pointer; Size: integer;
       FileAge: integer = 0);
+    /// add a file from an already compressed zip entry
+    procedure AddFromZip(const ZipEntry: TZipEntry);
     /// append a file content into the destination file
     // - useful to add the initial Setup.exe file, e.g.
     procedure Append(const Content: RawByteString);
-    /// release associated memory, and close destination archive
+    /// write trailer and close destination file, then release associated memory
     destructor Destroy; override;
   end;
 
   /// write-only access for creating a .zip archive file
   // - not to be used to update a .zip file, but to create a new one
-  // - update can be done manualy by using a TZipRead instance and the
-  // AddFromZip() method
   TZipWrite = class(TZipWriteAbstract)
   protected
     fFileName: TFileName;
@@ -336,7 +344,7 @@ type
     procedure InternalWrite(const buf; len: cardinal); override;
   public
     /// the associated file handle
-    Handle: integer;
+    Handle: THandle;
     /// initialize the .zip file
     // - a new .zip file content is created
     constructor Create(const aFileName: TFileName); overload;
@@ -356,8 +364,6 @@ type
     procedure AddFolder(const FolderName: TFileName;
       const Mask: TFileName = FILES_ALL; Recursive: boolean = true;
       CompressLevel: integer = 6);
-    /// add a file from an already compressed zip entry
-    procedure AddFromZip(const ZipEntry: TZipEntry);
     /// release associated memory, and close destination file
     destructor Destroy; override;
   end;
@@ -859,6 +865,13 @@ begin
   dec(fMagic); // +1 to avoid finding it in the exe generated code
 end;
 
+function TZipWriteAbstract.InternalAddEntry: PZipWriteEntry;
+begin
+  if Count >= length(Entry) then
+    SetLength(Entry, NextGrow(length(Entry)));
+  result := @Entry[Count];
+end;
+
 function TZipWriteAbstract.InternalAdd(const zipName: TFileName; Buf: pointer;
   Size: integer): cardinal;
 begin
@@ -872,11 +885,7 @@ begin
     fHr.localHeadOff := result - fAppendOffset;
     if Is7BitAnsi(pointer(zipName)) then
     begin
-      {$ifdef UNICODE}
-      intName := AnsiString(zipName);
-      {$else}  // intName := zipName -> error reference count under Delphi 6
-      SetString(intName, PAnsiChar(pointer(zipName)), length(zipName));
-      {$endif UNICODE}
+      intName := StringToAnsi7(zipName);
       fHr.fileInfo.UnSetUtf8FileName;
     end
     else
@@ -899,51 +908,56 @@ end;
 procedure TZipWriteAbstract.AddDeflated(const aZipName: TFileName; Buf: pointer;
   Size, CompressLevel, FileAge: integer);
 var
-  tmp: pointer;
-  tmpsize: integer;
+  tmp: TSynTempBuffer;
 begin
-  if self = nil then
-    exit;
-  if Count >= length(Entry) then
-    SetLength(Entry, length(Entry) + 20);
-  with Entry[Count] do
-  begin
-    with fhr.fileInfo do
+  if self <> nil then
+    with InternalAddEntry^ do
     begin
-      zcrc32 := mormot.lib.z.crc32(0, Buf, Size);
-      zfullSize := Size;
-      zzipMethod := Z_DEFLATED;
-      if FileAge = 0 then
-        zlastMod := DateTimeToWindowsFileTime(Now)
-      else
-        zlastMod := FileAge;
-      tmpsize := (Int64(Size) * 11) div 10 + 12;
-      Getmem(tmp, tmpsize);
-      zzipSize := CompressMem(Buf, tmp, Size, tmpsize, CompressLevel);
-      InternalAdd(aZipName, tmp, zzipSize); // write stored data
-      Freemem(tmp);
+      with fhr.fileInfo do
+      begin
+        zcrc32 := mormot.lib.z.crc32(0, Buf, Size);
+        zfullSize := Size;
+        zzipMethod := Z_DEFLATED;
+        if FileAge = 0 then
+          zlastMod := DateTimeToWindowsFileTime(Now)
+        else
+          zlastMod := FileAge;
+        tmp.Init((Int64(Size) * 11) div 10 + 12);
+        try
+          zzipSize := CompressMem(Buf, tmp.buf, Size, tmp.len, CompressLevel);
+          InternalAdd(aZipName, tmp.buf, zzipSize); // write stored data
+        finally
+          tmp.Done;
+        end;
+      end;
     end;
-  end;
 end;
 
 procedure TZipWriteAbstract.AddStored(const aZipName: TFileName; Buf: pointer;
   Size, FileAge: integer);
 begin
-  if self = nil then
-    exit;
-  if Count >= length(Entry) then
-    SetLength(Entry, length(Entry) + 20);
-  with Entry[Count], fhr.fileInfo do
-  begin
-    zcrc32 := mormot.lib.z.crc32(0, Buf, Size);
-    zfullSize := Size;
-    zzipSize := Size;
-    if FileAge = 0 then
-      zlastMod := DateTimeToWindowsFileTime(Now)
-    else
-      zlastMod := FileAge;
-    InternalAdd(aZipName, Buf, Size);
-  end;
+  if self <> nil then
+    with InternalAddEntry^, fhr.fileInfo do
+    begin
+      zcrc32 := mormot.lib.z.crc32(0, Buf, Size);
+      zfullSize := Size;
+      zzipSize := Size;
+      if FileAge = 0 then
+        zlastMod := DateTimeToWindowsFileTime(Now)
+      else
+        zlastMod := FileAge;
+      InternalAdd(aZipName, Buf, Size);
+    end;
+end;
+
+procedure TZipWriteAbstract.AddFromZip(const ZipEntry: TZipEntry);
+begin
+  if self <> nil then
+    with InternalAddEntry^ do
+    begin
+      fhr.fileInfo := ZipEntry.infoLocal^;
+      InternalAdd(ZipEntry.zipName, ZipEntry.data, fhr.fileInfo.zzipSize);
+    end;
 end;
 
 procedure TZipWriteAbstract.Append(const Content: RawByteString);
@@ -958,7 +972,7 @@ end;
 destructor TZipWriteAbstract.Destroy;
 var
   lhr: TLastHeader;
-  i: integer;
+  i: PtrInt;
 begin
   FillcharFast(lhr, sizeof(lhr), 0);
   lhr.signature := LASTHEADER_SIGNATURE_INC;
@@ -1045,8 +1059,6 @@ begin
     Size := S.Size;
     if Size64.Hi <> 0 then
       raise ESynZip.CreateFmt('%s file too big for .zip', [aFileName]);
-    if Count >= length(Entry) then
-      SetLength(Entry, length(Entry) + 20);
     OffsHead := InternalAdd(ZipName, nil, 0);
     D := THandleStream.Create(Handle);
     Z := TSynZipCompressor.Create(D, CompressLevel);
@@ -1054,7 +1066,7 @@ begin
       Z.CopyFrom(S, Size64.Lo);
       Z.Flush;
       assert(Z.SizeIn = Size64.Lo);
-      with Entry[Count] do
+      with InternalAddEntry^ do
       begin
         with fhr.fileInfo do
         begin
@@ -1076,20 +1088,6 @@ begin
     end;
   finally
     S.Free;
-  end;
-end;
-
-procedure TZipWrite.AddFromZip(const ZipEntry: TZipEntry);
-begin
-  if (self = nil) or
-     (Handle <= 0) then
-    exit;
-  if Count >= length(Entry) then
-    SetLength(Entry, length(Entry) + 20);
-  with Entry[Count] do
-  begin
-    fhr.fileInfo := ZipEntry.infoLocal^;
-    InternalAdd(ZipEntry.zipName, ZipEntry.data, fhr.fileInfo.zzipSize);
   end;
 end;
 
@@ -1539,7 +1537,7 @@ begin
     P := pointer(result);
     MoveFast(GZHEAD, P^, GZHEAD_SIZE);
     inc(P, GZHEAD_SIZE);
-    inc(P, CompressMem(pointer(Data), P, L ,
+    inc(P, CompressMem(pointer(Data), P, L,
       length(result) - (GZHEAD_SIZE + 8), HTTP_LEVEL));
     PCardinal(P)^ := crc32(0, pointer(Data), L);
     inc(P,4);
@@ -1562,8 +1560,8 @@ begin
   if Compress then
   begin
     SetString(Data, nil, DataLen + 256 + DataLen shr 3); // max mem required
-    DataLen := CompressMem(pointer(tmp), pointer(Data), DataLen, length(Data),
-      HTTP_LEVEL, ZLib);
+    DataLen := CompressMem(
+      pointer(tmp), pointer(Data), DataLen, length(Data), HTTP_LEVEL, ZLib);
     if DataLen <= 0 then
       Data := ''
     else
