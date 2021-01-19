@@ -488,6 +488,7 @@ begin
   result := GetEnumName(TypeInfo(TRestHttpServerSecurity), ord(sec));
 end;
 
+
 { TRestHttpServer }
 
 function TRestHttpServer.AddServer(aServer: TRestServer;
@@ -572,6 +573,10 @@ begin
           fDBServers[j] := fDBServers[j + 1];
         SetLength(fDBServers, n);
         dec(n);
+        if n = 1 then
+          fDBSingleServer := pointer(fDBServers)
+        else
+          fDBSingleServer := nil;
         aServer.OnNotifyCallback := nil;
         aServer.SetPublicUri('', '');
         result := true; // don't break here: may appear with another Security
@@ -896,6 +901,7 @@ var
   c: THttpServerRequest absolute Ctxt;
 begin
   if (self = nil) or
+     (pointer(fDBServers) = nil) or
      fShutdownInProgress then
     result := HTTP_NOTFOUND
   else if ((Ctxt.Url = '') or
@@ -969,7 +975,7 @@ begin
     serv := nil;
     match := rmNoMatch;
     if fDBSingleServer <> nil then
-      // optimized for the most used case of a single DB server
+      // optimized for the most common case of a single DB server
       with fDBSingleServer^ do
       begin
         if Ctxt.UseSSL = (Security = secSSL) then

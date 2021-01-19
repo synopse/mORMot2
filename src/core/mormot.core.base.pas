@@ -682,6 +682,10 @@ procedure AppendShortInt64(value: Int64; var dest: shortstring);
 procedure AppendShortChar(chr: AnsiChar; var dest: shortstring);
   {$ifdef FPC} inline; {$endif}
 
+/// simple concatenation of a shortstring text into a shorstring
+procedure AppendShort(const src: shortstring; var dest: shortstring);
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// simple concatenation of a #0 ending text into a shorstring
 // - if Len is < 0, will use StrLen(buf)
 procedure AppendShortBuffer(buf: PAnsiChar; len: integer; var dest: shortstring);
@@ -2413,6 +2417,7 @@ function PosExChar(Chr: AnsiChar; const Str: RawUtf8): PtrInt;
 /// fast retrieve the position of a given character in a #0 ended buffer
 // - will use fast SSE2 asm on x86_64
 function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char;
+  {$ifndef CPUX64}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 {$ifndef PUREMORMOT2}
 /// fast dedicated RawUtf8 version of Trim()
@@ -4037,12 +4042,23 @@ begin
   FastSetString(result, @source[1], ord(source[0]));
 end;
 
+procedure AppendShort(const src: shortstring; var dest: shortstring);
+var
+  len: PtrInt;
+begin
+  len := ord(src[0]);
+  if len + ord(dest[0]) > 255 then
+    exit;
+  MoveFast(src[1], dest[ord(dest[0]) + 1], len);
+  inc(dest[0], len);
+end;
+
 procedure AppendShortInteger(value: integer; var dest: shortstring);
 var
   temp: shortstring;
 begin
   str(value, temp);
-  AppendShortBuffer(@temp[1], ord(temp[0]), dest);
+  AppendShort(temp, dest);
 end;
 
 procedure AppendShortInt64(value: Int64; var dest: shortstring);
@@ -4050,7 +4066,7 @@ var
   temp: shortstring;
 begin
   str(value, temp);
-  AppendShortBuffer(@temp[1], ord(temp[0]), dest);
+  AppendShort(temp, dest);
 end;
 
 procedure AppendShortChar(chr: AnsiChar; var dest: shortstring);
@@ -9042,9 +9058,8 @@ begin
     if c = #0 then
       exit
     else if c = Chr then
-      break
-    else
-      inc(Str);
+      break;
+    inc(Str);
   until false;
   result := Str;
 end;

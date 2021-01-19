@@ -276,7 +276,8 @@ type
     fAuthenticatedUser,
     fOutContentType,
     fOutCustomHeaders: RawUtf8;
-    fInContent, fOutContent: RawByteString;
+    fInContent,
+    fOutContent: RawByteString;
     fRequestID: integer;
     fConnectionID: THttpServerConnectionID;
     fUseSSL: boolean;
@@ -621,9 +622,7 @@ begin
           1:
             begin
               // 'CONTENT-TYPE:'
-              inc(P, 13);
-              while P^ = ' ' do
-                inc(P);
+              P := GotoNextNotSpace(P + 13);
               if IdemPChar(P, 'APPLICATION/JSON') then
                 ContentType := JSON_CONTENT_TYPE_VAR
               else
@@ -667,9 +666,7 @@ begin
               include(HeaderFlags, hfConnectionKeepAlive);
               if P[22] = ',' then
               begin
-                inc(P, 23);
-                while P^ = ' ' do
-                  inc(P);
+                P := GotoNextNotSpace(P + 23);
                 if IdemPChar(P, 'UPGRADE') then
                   // 'CONNECTION: KEEP-ALIVE, UPGRADE'
                   include(HeaderFlags, hfConnectionUpgrade);
@@ -718,8 +715,8 @@ end;
 
 procedure THttpSocket.GetBody;
 var
-  Line: RawUtf8; // 32 bits chunk length in hexa
-  LinePChar: array[0..31] of AnsiChar;
+  Line: RawUtf8;
+  LinePChar: array[0..31] of AnsiChar; // 32 bits chunk length in hexa
   Len, LContent, Error: integer;
 begin
   fBodyRetrieved := true;

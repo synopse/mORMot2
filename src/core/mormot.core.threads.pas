@@ -715,7 +715,7 @@ type
     fOnThreadTerminate: TOnNotifyThread;
     procedure DoTerminate; override;
   public
-    /// initialize the server instance, in non suspended state
+    /// initialize the thread instance, in non suspended state
     constructor Create(CreateSuspended: boolean); reintroduce; virtual;
     {$ifndef HASTTHREADSTART}
     /// method to be called when the thread was created as suspended

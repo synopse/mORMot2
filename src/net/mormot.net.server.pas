@@ -140,7 +140,9 @@ type
     function GetHttpQueueLength: cardinal; virtual; abstract;
     procedure SetHttpQueueLength(aValue: cardinal); virtual; abstract;
     function DoBeforeRequest(Ctxt: THttpServerRequest): cardinal;
+      {$ifdef HASINLINE}inline;{$endif}
     function DoAfterRequest(Ctxt: THttpServerRequest): cardinal;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Code: cardinal); virtual;
     function NextConnectionID: integer; // 31-bit internal sequence
   public
@@ -1899,9 +1901,9 @@ begin
         end;
     end;
   finally
+    // add transfert stats to main socket
     if Sock <> nil then
     begin
-      // add transfert stats to main socket
       EnterCriticalSection(fProcessCS);
       Sock.BytesIn := Sock.BytesIn + ClientSock.BytesIn;
       Sock.BytesOut := Sock.BytesOut + ClientSock.BytesOut;
@@ -1928,8 +1930,8 @@ begin
   end;
 end;
 
-function THttpServerSocket.GetRequest(withBody: boolean; headerMaxTix: Int64):
-  THttpServerSocketGetRequestResult;
+function THttpServerSocket.GetRequest(withBody: boolean;
+  headerMaxTix: Int64): THttpServerSocketGetRequestResult;
 var
   P: PUtf8Char;
   status: cardinal;
@@ -2007,7 +2009,7 @@ begin
       begin
         allheaders := HeaderGetText(fRemoteIP);
         status := fServer.OnBeforeBody(fURL, fMethod, allheaders, ContentType,
-          RemoteIP, ContentLength, false);
+          fRemoteIP, ContentLength, false);
         {$ifdef SYNCRTDEBUGLOW}
         TSynLog.Add.Log(sllCustom2,
           'GetRequest sock=% OnBeforeBody=% Command=% Headers=%', [fSock, status,
