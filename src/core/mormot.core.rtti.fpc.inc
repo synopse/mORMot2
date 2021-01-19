@@ -69,12 +69,8 @@ function TRttiClass.RttiProps: PRttiProps;
 begin
   result := @self;
   if result <> nil then
-    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    result := pointer(PClassData(result)^.PropertyTable)
-    {$else}
     with PTypeData(result)^ do
-      result := @UnitName[ord(UnitName[0]) + 1];
-    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+      result := AlignToPtr(@UnitName[ord(UnitName[0]) + 1]);
 end;
 
 function TRttiClass.PropCount: integer;
