@@ -4676,11 +4676,8 @@ begin
     SetLength(comp2, AlgoSynLZ.Compressdestlen(length(s)));
     complen2 := SynLZCompress1pas(Pointer(s), length(s), pointer(comp2));
     Check(complen2 < length(comp2));
-    {$ifndef CPUINTEL}
-    // validate the only available pascal version
-    Check(@SynLZCompress1 = @SynLZCompress1pas);
-    Check(@SynLZDecompress1 = @SynLZDecompress1pas);
-    {$else}
+    {$ifdef CPUINTEL}
+    // validate the i386/i86_64 asm versions against their pascal reference
     SetLength(comp1, AlgoSynLZ.Compressdestlen(length(s)));
     complen1 := SynLZCompress1(Pointer(s), length(s), pointer(comp1));
     Check(complen1 < length(comp1));

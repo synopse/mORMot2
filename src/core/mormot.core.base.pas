@@ -684,7 +684,7 @@ procedure AppendShortChar(chr: AnsiChar; var dest: shortstring);
 
 /// simple concatenation of a shortstring text into a shorstring
 procedure AppendShort(const src: shortstring; var dest: shortstring);
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC} inline; {$endif}
 
 /// simple concatenation of a #0 ending text into a shorstring
 // - if Len is < 0, will use StrLen(buf)
@@ -2417,7 +2417,7 @@ function PosExChar(Chr: AnsiChar; const Str: RawUtf8): PtrInt;
 /// fast retrieve the position of a given character in a #0 ended buffer
 // - will use fast SSE2 asm on x86_64
 function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char;
-  {$ifndef CPUX64}{$ifdef HASINLINE}inline;{$endif}{$endif}
+  {$ifndef CPUX64}{$ifdef FPC}inline;{$endif}{$endif}
 
 {$ifndef PUREMORMOT2}
 /// fast dedicated RawUtf8 version of Trim()

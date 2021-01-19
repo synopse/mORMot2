@@ -2486,14 +2486,14 @@ type
     // - values are stored as in SQL (i.e. number, 'quoted string',
     // 'YYYY-MM-DD hh:mm:ss', null)
     VArray: TRawUtf8DynArray;
+    /// storage used for ftInt64, ftDouble, ftDate and ftCurrency value
+    VInt64: Int64;
     /// the column/parameter Value type
     VType: TSqlDBFieldType;
     /// define if parameter can be retrieved after a stored procedure execution
     VInOut: TSqlDBParamInOutType;
     /// used e.g. by TSqlDBOracleStatement
     VDBType: word;
-    /// storage used for ftInt64, ftDouble, ftDate and ftCurrency value
-    VInt64: Int64;
   end;
 
   PSqlDBParam = ^TSqlDBParam;

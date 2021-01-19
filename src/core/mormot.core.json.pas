@@ -4877,14 +4877,17 @@ begin
 end;
 
 procedure TJsonSaveContext.AddDateTime(Value: PDateTime; WithMS: boolean);
+var
+  d: double;
 begin
   if woDateTimeWithMagic in Options then
     W.AddShorter(JSON_SQLDATE_MAGIC_QUOTE_STR)
   else
     W.Add('"');
-  W.AddDateTime(Value^, WithMS);
+  d := unaligned(Value^);
+  W.AddDateTime(d, WithMS);
   if woDateTimeWithZSuffix in Options then
-    if frac(Value^) = 0 then // FireFox can't decode short form "2017-01-01Z"
+    if frac(d) = 0 then // FireFox can't decode short form "2017-01-01Z"
       W.AddShorter('T00:00Z')
     else
       W.Add('Z');

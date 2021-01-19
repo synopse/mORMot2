@@ -238,13 +238,13 @@ begin
   check(s = 'toto=$1 titi=$2 and a=''d?d''');
   check(ReplaceParamsByNumbers('1?2?3?4?5?6?7?8?9?10?11?12? x', s) = 12);
   check(s = '1$12$23$34$45$56$67$78$89$910$1011$1112$12 x');
-  checkequal(BoundArrayToJSONArray(TRawUtf8DynArrayFrom([])), '');
-  checkequal(BoundArrayToJSONArray(TRawUtf8DynArrayFrom(['1'])), '{1}');
-  checkequal(BoundArrayToJSONArray(TRawUtf8DynArrayFrom(['''1'''])), '{"1"}');
-  checkequal(BoundArrayToJSONArray(TRawUtf8DynArrayFrom(['1', '2', '3'])), '{1,2,3}');
-  checkequal(BoundArrayToJSONArray(TRawUtf8DynArrayFrom(['''1''', '2', '''3'''])),
+  checkequal(BoundArrayToJsonArray(TRawUtf8DynArrayFrom([])), '');
+  checkequal(BoundArrayToJsonArray(TRawUtf8DynArrayFrom(['1'])), '{1}');
+  checkequal(BoundArrayToJsonArray(TRawUtf8DynArrayFrom(['''1'''])), '{"1"}');
+  checkequal(BoundArrayToJsonArray(TRawUtf8DynArrayFrom(['1', '2', '3'])), '{1,2,3}');
+  checkequal(BoundArrayToJsonArray(TRawUtf8DynArrayFrom(['''1''', '2', '''3'''])),
     '{"1",2,"3"}');
-  checkequal(BoundArrayToJSONArray(TRawUtf8DynArrayFrom(['''1"1''', '2',
+  checkequal(BoundArrayToJsonArray(TRawUtf8DynArrayFrom(['''1"1''', '2',
     '''"3\'''])), '{"1\"1",2,"\"3\\"}');
 
   check(TSqlDBConnectionProperties.IsSQLKeyword(dUnknown, 'SELEct'));
@@ -737,12 +737,12 @@ var
   json: RawUtf8;
 begin
   Props := TSqlDBSQLite3ConnectionProperties.Create('server', '', '', '');
-  json := Props.DefinitionToJSON(14);
+  json := Props.DefinitionToJson(14);
   Check(json = '{"Kind":"TSqlDBSQLite3ConnectionProperties",' +
     '"ServerName":"server","DatabaseName":"","User":"","Password":""}');
   Props.Free;
   Props := TSqlDBSQLite3ConnectionProperties.Create('server', '', '', '1234');
-  json := Props.DefinitionToJSON(14);
+  json := Props.DefinitionToJson(14);
   Check(json = '{"Kind":"TSqlDBSQLite3ConnectionProperties",' +
     '"ServerName":"server","DatabaseName":"","User":"","Password":"MnVfJg=="}');
   Props.DefinitionToFile('connectionprops.json');
@@ -1063,7 +1063,7 @@ begin
             Check(RExt.YearOfDeath = RInt.YearOfDeath);
             Check(RExt.YearOfBirth <> RExt.YearOfDeath);
             json := FormatUTF8('["text",%]', [RInt.YearOfDeath]);
-            Check(VariantDynArrayToJSON(RExt.Value) = json);
+            Check(VariantDynArrayToJson(RExt.Value) = json);
           end;
           inc(n);
         end;
@@ -1089,7 +1089,7 @@ begin
             Check(RExt.YearOfBirth = RInt.YearOfBirth);
             Check(RExt.YearOfDeath = RInt.YearOfDeath);
             Check(RExt.YearOfBirth <> RExt.YearOfDeath);
-            CheckEqual(VariantDynArrayToJSON(RExt.Value),
+            CheckEqual(VariantDynArrayToJson(RExt.Value),
               FormatUTF8('["text",%]', [RInt.YearOfDeath]));
           end;
         end;
@@ -1104,7 +1104,7 @@ begin
             Check(aExternalClient.Orm.Retrieve(i, RExt, true), 'for update');
             Check(RExt.YearOfBirth <> RExt.YearOfDeath);
             Check(RExt.CreatedAt <= Updated);
-            CheckEqual(VariantDynArrayToJSON(RExt.Value),
+            CheckEqual(VariantDynArrayToJson(RExt.Value),
               FormatUTF8('["text",%]', [RExt.YearOfDeath]));
             RExt.YearOfBirth := RExt.YearOfDeath; // YOB=YOD for 1/100 rows
             if i > 4000 then
@@ -1129,7 +1129,7 @@ begin
               Check(RExt.CreatedAt >= Start);
               Check(RExt.CreatedAt <= Updated);
               Check(RExt.LastChange >= Updated);
-              CheckEqual(VariantDynArrayToJSON(RExt.Value),
+              CheckEqual(VariantDynArrayToJson(RExt.Value),
                 FormatUTF8('["text",%]', [RExt.YearOfDeath]));
             end;
           end;
@@ -1165,7 +1165,7 @@ begin
           Check(ok = (i and 127 <> 0), 'deletion');
           if ok then
           begin
-            CheckEqual(VariantDynArrayToJSON(RExt.Value),
+            CheckEqual(VariantDynArrayToJson(RExt.Value),
               FormatUTF8('["text",%]', [RExt.YearOfDeath]));
             Check(RExt.CreatedAt >= Start);
             Check(RExt.CreatedAt <= Updated);

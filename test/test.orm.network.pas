@@ -159,10 +159,10 @@ begin
   if CheckFailed(Resp <> nil) then
     exit;
   try
-    Check(Resp.InheritsFrom(TOrmTableJSON));
+    Check(Resp.InheritsFrom(TOrmTableJson));
     CheckEqual(Resp.RowCount, 11011);
-    CheckHash(TOrmTableJSON(Resp).PrivateInternalCopy, 4045204160);
-    //FileFromString(TOrmTableJSON(Resp).PrivateInternalCopy, 'internalfull2.parsed');
+    CheckHash(TOrmTableJson(Resp).PrivateInternalCopy, 4045204160);
+    //FileFromString(TOrmTableJson(Resp).PrivateInternalCopy, 'internalfull2.parsed');
     //FileFromString(Resp.GetODSDocument,'people.ods');
   finally
     Resp.Free;
@@ -260,8 +260,8 @@ begin
   if CheckFailed(Resp <> nil) then
     exit;
   CheckEqual(Resp.RowCount, 113);
-  CheckHash(TOrmTableJSON(Resp).PrivateInternalCopy, $8D727024);
-  onelen := length(TOrmTableJSON(Resp).PrivateInternalCopy);
+  CheckHash(TOrmTableJson(Resp).PrivateInternalCopy, $8D727024);
+  onelen := length(TOrmTableJson(Resp).PrivateInternalCopy);
   CheckEqual(onelen, 4818);
   Resp.Free;
 {$ifdef WTIME}
@@ -340,10 +340,10 @@ begin
     if CheckFailed(Resp <> nil) then
       exit;
     try
-      Check(Resp.InheritsFrom(TOrmTableJSON));
+      Check(Resp.InheritsFrom(TOrmTableJson));
       // every answer contains 113 rows, for a total JSON size of 4803 bytes
       CheckEqual(Resp.RowCount, 113);
-      CheckHash(TOrmTableJSON(Resp).PrivateInternalCopy, $8D727024);
+      CheckHash(TOrmTableJson(Resp).PrivateInternalCopy, $8D727024);
     finally
       Resp.Free;
     end;

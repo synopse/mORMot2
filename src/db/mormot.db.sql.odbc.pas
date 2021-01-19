@@ -995,7 +995,7 @@ begin
                 end;
               ftDate:
                 begin
-                  CValueType := timestamp.From(PDateTime(@VInt64)^, BufferSize);
+                  CValueType := timestamp.From(unaligned(PDateTime(@VInt64)^), BufferSize);
                   SetString(VData, PAnsiChar(@timestamp), BufferSize);
                   // A workaround for "[ODBC Driver 13 for SQL Server]Datetime field overflow.
                   // Fractional second precision exceeds the scale specified in the parameter binding"
