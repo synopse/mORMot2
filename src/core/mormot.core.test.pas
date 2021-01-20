@@ -77,8 +77,10 @@ type
     fIdent: string;
     fInternalTestsCount: integer;
     fOptions: TSynTestOptions;
+    fWorkDir: TFileName;
     function GetCount: integer;
     function GetIdent: string;
+    procedure SetWorkDir(const Folder: TFileName);
   public
     /// create the test instance
     // - if an identifier is not supplied, the class name is used, after
@@ -89,7 +91,8 @@ type
     /// register a specified test to this class instance
     // - Create will register all published methods of this class, but
     // your code may initialize its own set of methods on need
-    procedure Add(const aMethod: TOnSynTest; const aMethodName: RawUtf8; const aIdent: string);
+    procedure Add(const aMethod: TOnSynTest;
+      const aMethodName: RawUtf8; const aIdent: string);
     /// the test name
     // - either the Ident parameter supplied to the Create() method, either
     // a uncameled text from the class name
@@ -109,6 +112,11 @@ type
     /// allows to tune the test case process
     property Options: TSynTestOptions
       read fOptions write fOptions;
+    /// folder name which can be used to store the temporary data during testing
+    // - equals ExeVersion.ProgramFilePath by default
+    // - when set, will ensure it contains a trailing path delimiter (\ or /)
+    property WorkDir: TFileName
+      read fWorkDir write SetWorkDir;
   published
     { all published methods of the children will be run as individual tests
       - these methods must be declared as procedure with no parameter }
@@ -372,7 +380,7 @@ type
     // ! TMyTestsClass.RunAsConsole('My Automated Tests',LOG_VERBOSE);
     class procedure RunAsConsole(const CustomIdent: string = '';
       withLogs: TSynLogInfos = [sllLastError, sllError, sllException, sllExceptionOS, sllFail];
-      options: TSynTestOptions = []); virtual;
+      options: TSynTestOptions = []; const workdir: TFileName = ''); virtual;
     /// save the debug messages into an external file
     // - if no file name is specified, the current Ident is used
     procedure SaveToFile(const DestPath: TFileName; const FileName: TFileName = '');
@@ -480,26 +488,6 @@ uses
 
 { TSynTest }
 
-procedure TSynTest.Add(const aMethod: TOnSynTest; const aMethodName: RawUtf8;
-  const aIdent: string);
-var
-  n: integer;
-begin
-  if self = nil then
-    exit; // avoid GPF
-  n := Length(fTests);
-  SetLength(fTests, n + 1);
-  with fTests[n] do
-  begin
-    TestName := aIdent;
-    IdentTestName := StringToUtf8(fIdent + ' - ' + TestName);
-    Method := aMethod;
-    MethodName := aMethodName;
-    Test := self;
-    MethodIndex := n;
-  end;
-end;
-
 constructor TSynTest.Create(const Ident: string);
 var
   id: RawUtf8;
@@ -524,6 +512,7 @@ begin
       Delete(id, 1, 1);
     fIdent := string(UnCamelCase(id));
   end;
+  fWorkDir := ExeVersion.ProgramFilePath;
   for i := 0 to GetPublishedMethods(self, methods) - 1 do
     with methods[i] do
     begin
@@ -534,6 +523,26 @@ begin
         s := Ansi7ToString(UnCamelCase(Name));
       Add(TOnSynTest(Method), Name, s);
     end;
+end;
+
+procedure TSynTest.Add(const aMethod: TOnSynTest; const aMethodName: RawUtf8;
+  const aIdent: string);
+var
+  n: integer;
+begin
+  if self = nil then
+    exit; // avoid GPF
+  n := Length(fTests);
+  SetLength(fTests, n + 1);
+  with fTests[n] do
+  begin
+    TestName := aIdent;
+    IdentTestName := StringToUtf8(fIdent + ' - ' + TestName);
+    Method := aMethod;
+    MethodName := aMethodName;
+    Test := self;
+    MethodIndex := n;
+  end;
 end;
 
 function TSynTest.GetCount: integer;
@@ -550,6 +559,14 @@ begin
     result := ''
   else
     result := fIdent;
+end;
+
+procedure TSynTest.SetWorkDir(const Folder: TFileName);
+begin
+  if Folder = '' then
+    fWorkDir := ExeVersion.ProgramFilePath
+  else
+    fWorkDir := EnsureDirectoryExists(Folder, {excfail=}true);
 end;
 
 
@@ -1102,6 +1119,7 @@ function TSynTests.Run: boolean;
 var
   i, t, m: integer;
   Elapsed, Version: RawUtf8;
+  dir: TFileName;
   err: string;
   C: TSynTestCase;
   log: IUnknown;
@@ -1115,6 +1133,7 @@ begin
   fFailed := nil;
   fAssertions := 0;
   fAssertionsFailed := 0;
+  dir := GetCurrentDir;
   for m := 0 to Count - 1 do
   try
     Color(ccWhite);
@@ -1131,6 +1150,8 @@ begin
           Color(ccLightGray);
           C.fAssertions := 0; // reset assertions count
           C.fAssertionsFailed := 0;
+          C.fWorkDir := fWorkDir;
+          SetCurrentDir(fWorkDir);
           TotalTimer.Start;
           C.Setup;
           for t := 0 to C.Count - 1 do
@@ -1195,6 +1216,7 @@ begin
       Text(['! ', err]);
     end;
   end;
+  SetCurrentDir(dir);
   Color(ccLightCyan);
   result := (fFailedCount = 0);
   if Exeversion.Version.Major <> 0 then
@@ -1287,7 +1309,7 @@ end;
 {$I+}
 
 class procedure TSynTests.RunAsConsole(const CustomIdent: string;
-  withLogs: TSynLogInfos; options: TSynTestOptions);
+  withLogs: TSynLogInfos; options: TSynTestOptions; const workdir: TFileName);
 var
   tests: TSynTests;
 begin
@@ -1305,6 +1327,8 @@ begin
   // testing is performed by some dedicated classes defined in the caller units
   tests := Create(CustomIdent);
   try
+    if workdir <> '' then
+      tests.WorkDir := workdir;
     tests.Options := options;
     if ParamCount <> 0 then
     begin
