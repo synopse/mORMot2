@@ -1479,7 +1479,7 @@ type
     // were not found
     // - this method is thread-safe, since it will lock the instance
     function FindInArray(const aKey, aArrayValue;
-      aCompare: TDynArraySortCompare): boolean;
+      aCompare: TDynArraySortCompare = nil): boolean;
     /// search of a stored key by its associated key, and return a key local copy
     // - won't use any hashed index but RTTI TDynArray.IndexOf search over
     // over fValues() so is much slower than FindAndCopy() for huge arrays
@@ -1496,7 +1496,7 @@ type
     // - returns FALSE if Values is not a tkDynArray, or if aKey was not found
     // - this method is thread-safe, since it will lock the instance
     function AddInArray(const aKey, aArrayValue;
-      aCompare: TDynArraySortCompare): boolean;
+      aCompare: TDynArraySortCompare = nil): boolean;
     /// add aArrayValue item within a dynamic-array value associated via aKey
     // - expect the stored value to be a dynamic array itself
     // - would search for aKey as primary key, create the entry if not found,
@@ -1504,7 +1504,7 @@ type
     // - returns FALSE if Values is not a tkDynArray
     // - this method is thread-safe, since it will lock the instance
     function AddInArrayForced(const aKey, aArrayValue;
-      aCompare: TDynArraySortCompare): boolean;
+      aCompare: TDynArraySortCompare = nil): boolean;
     /// add once aArrayValue within a dynamic-array value associated via aKey
     // - expect the stored value to be a dynamic array itself
     // - would search for aKey as primary key, then use
@@ -1513,7 +1513,7 @@ type
     // - returns FALSE if Values is not a tkDynArray, or if aKey was not found
     // - this method is thread-safe, since it will lock the instance
     function AddOnceInArray(const aKey, aArrayValue;
-      aCompare: TDynArraySortCompare): boolean;
+      aCompare: TDynArraySortCompare = nil): boolean;
     /// clear aArrayValue item of a dynamic-array value associated via aKey
     // - expect the stored value to be a dynamic array itself
     // - would search for aKey as primary key, then use TDynArray.FindAndDelete
@@ -1522,7 +1522,7 @@ type
     // were not found
     // - this method is thread-safe, since it will lock the instance
     function DeleteInArray(const aKey, aArrayValue;
-      aCompare: TDynArraySortCompare): boolean;
+      aCompare: TDynArraySortCompare = nil): boolean;
     /// replace aArrayValue item of a dynamic-array value associated via aKey
     // - expect the stored value to be a dynamic array itself
     // - would search for aKey as primary key, then use TDynArray.FindAndUpdate
@@ -1531,7 +1531,7 @@ type
     // not found
     // - this method is thread-safe, since it will lock the instance
     function UpdateInArray(const aKey, aArrayValue;
-      aCompare: TDynArraySortCompare): boolean;
+      aCompare: TDynArraySortCompare = nil): boolean;
     /// make a copy of the stored values
     // - this method is thread-safe, since it will lock the instance during copy
     // - resulting length(Dest) will match the exact values count

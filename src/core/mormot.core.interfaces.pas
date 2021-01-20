@@ -5838,7 +5838,7 @@ function TInterfaceStub.Invoke(const aMethod: TInterfaceMethod;
 var
   ndx: cardinal;
   rule: integer;
-  ExecutesCtxtJSON: TOnInterfaceStubExecuteParamsJson;
+  ExecutesCtxtJson: TOnInterfaceStubExecuteParamsJson;
   ExecutesCtxtVariant: TOnInterfaceStubExecuteParamsVariant;
   log: TInterfaceStubLog;
 begin
@@ -5882,14 +5882,14 @@ begin
           case Kind of
             isExecutesJson:
               begin
-                ExecutesCtxtJSON := TOnInterfaceStubExecuteParamsJson.Create(
+                ExecutesCtxtJson := TOnInterfaceStubExecuteParamsJson.Create(
                   self, @aMethod, aParams, Values);
                 try
-                  TOnInterfaceStubExecuteJson(Execute)(ExecutesCtxtJSON);
-                  result := not ExecutesCtxtJSON.Failed;
-                  log.CustomResults := ExecutesCtxtJSON.result;
+                  TOnInterfaceStubExecuteJson(Execute)(ExecutesCtxtJson);
+                  result := not ExecutesCtxtJson.Failed;
+                  log.CustomResults := ExecutesCtxtJson.result;
                 finally
-                  ExecutesCtxtJSON.Free;
+                  ExecutesCtxtJson.Free;
                 end;
               end;
             isExecutesVariant:
@@ -7307,23 +7307,23 @@ begin
   begin
     if (aValue = nil) and
        (o <> nil) then
-      o.DeleteInArray(aObject, aObjectInterfaceField, SortDynArrayPointer);
+      o.DeleteInArray(aObject, aObjectInterfaceField);
     c := ObjectFromInterface(aObjectInterfaceField^);
     v := GetWeakZero(PClass(c)^, {createifneeded=}false);
     if v <> nil then
-      v.DeleteInArray(c, aObjectInterfaceField, SortDynArrayPointer);
+      v.DeleteInArray(c, aObjectInterfaceField);
     PPointer(aObjectInterfaceField)^ := nil;
     if aValue = nil then
       exit;
   end;
   if o = nil then
     o := GetWeakZero(PClass(aObject)^, {createifneeded=}true);
-  o.AddInArrayForced(aObject, aObjectInterfaceField, SortDynArrayPointer);
+  o.AddInArrayForced(aObject, aObjectInterfaceField);
   if aValue <> nil then
   begin
     c := ObjectFromInterface(aValue);
     v := GetWeakZero(PClass(c)^, {createifneeded=}true);
-    v.AddInArrayForced(c, aObjectInterfaceField, SortDynArrayPointer);
+    v.AddInArrayForced(c, aObjectInterfaceField);
   end;
   PPointer(aObjectInterfaceField)^ := pointer(aValue);
 end;

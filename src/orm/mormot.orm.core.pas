@@ -21332,7 +21332,7 @@ begin
       with Values[Index] do
       begin
         Timestamp512 := 0;
-        JSON := '';
+        Json := '';
         Tag := 0;
       end;
 end;
@@ -21352,7 +21352,7 @@ begin
         with Values[i] do
         begin
           Timestamp512 := 0;
-          JSON := '';
+          Json := '';
           Tag := 0;
         end;
   finally
@@ -21386,7 +21386,7 @@ var
   i: integer;
 begin
   Rec.ID := aID;
-  Rec.JSON := aJson;
+  Rec.Json := aJson;
   Rec.Timestamp512 := GetTickCount64 shr 9;
   Rec.Tag := aTag;
   EnterCriticalSection(Mutex);
