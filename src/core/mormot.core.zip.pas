@@ -300,7 +300,7 @@ type
   protected
     fAppendOffset: cardinal;
     fMagic: cardinal;
-    function InternalAddEntry: PZipWriteEntry;
+    function InternalPrepareEntry: PZipWriteEntry;
     function InternalAdd(
       const zipName: TFileName; Buf: pointer; Size: integer): cardinal;
     function InternalWritePosition: cardinal; virtual; abstract;
@@ -865,7 +865,7 @@ begin
   dec(fMagic); // +1 to avoid finding it in the exe generated code
 end;
 
-function TZipWriteAbstract.InternalAddEntry: PZipWriteEntry;
+function TZipWriteAbstract.InternalPrepareEntry: PZipWriteEntry;
 begin
   if Count >= length(Entry) then
     SetLength(Entry, NextGrow(length(Entry)));
@@ -911,7 +911,7 @@ var
   tmp: TSynTempBuffer;
 begin
   if self <> nil then
-    with InternalAddEntry^ do
+    with InternalPrepareEntry^ do
     begin
       with fhr.fileInfo do
       begin
@@ -925,7 +925,7 @@ begin
         tmp.Init((Int64(Size) * 11) div 10 + 12);
         try
           zzipSize := CompressMem(Buf, tmp.buf, Size, tmp.len, CompressLevel);
-          InternalAdd(aZipName, tmp.buf, zzipSize); // write stored data
+          InternalAdd(aZipName, tmp.buf, zzipSize); // write data and inc(Count)
         finally
           tmp.Done;
         end;
@@ -937,7 +937,7 @@ procedure TZipWriteAbstract.AddStored(const aZipName: TFileName; Buf: pointer;
   Size, FileAge: integer);
 begin
   if self <> nil then
-    with InternalAddEntry^, fhr.fileInfo do
+    with InternalPrepareEntry^, fhr.fileInfo do
     begin
       zcrc32 := mormot.lib.z.crc32(0, Buf, Size);
       zfullSize := Size;
@@ -946,14 +946,14 @@ begin
         zlastMod := DateTimeToWindowsFileTime(Now)
       else
         zlastMod := FileAge;
-      InternalAdd(aZipName, Buf, Size);
+      InternalAdd(aZipName, Buf, Size); // write data and inc(Count)
     end;
 end;
 
 procedure TZipWriteAbstract.AddFromZip(const ZipEntry: TZipEntry);
 begin
   if self <> nil then
-    with InternalAddEntry^ do
+    with InternalPrepareEntry^ do
     begin
       fhr.fileInfo := ZipEntry.infoLocal^;
       InternalAdd(ZipEntry.zipName, ZipEntry.data, fhr.fileInfo.zzipSize);
@@ -1059,14 +1059,15 @@ begin
     Size := S.Size;
     if Size64.Hi <> 0 then
       raise ESynZip.CreateFmt('%s file too big for .zip', [aFileName]);
-    OffsHead := InternalAdd(ZipName, nil, 0);
+    InternalPrepareEntry;
+    OffsHead := InternalAdd(ZipName, nil, 0); // write data and inc(Count)
     D := THandleStream.Create(Handle);
     Z := TSynZipCompressor.Create(D, CompressLevel);
     try
       Z.CopyFrom(S, Size64.Lo);
       Z.Flush;
       assert(Z.SizeIn = Size64.Lo);
-      with InternalAddEntry^ do
+      with InternalPrepareEntry^ do
       begin
         with fhr.fileInfo do
         begin
