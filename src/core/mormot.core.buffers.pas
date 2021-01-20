@@ -8080,6 +8080,7 @@ begin
   // RTTI has shortstrings in adjacent L1 cache lines -> faster than EMOJI_TEXT[]
   result := TEmoji(FindShortStringListTrimLowerCase(
     EMOJI_RTTI, ord(high(TEmoji)) - 1, P, len) + 1);
+  // note: we may enhance performance by using FastFindPUtf8CharSorted()
 end;
 
 function EmojiParseDots(var P: PUtf8Char; W: TBaseWriter): TEmoji;
@@ -8192,7 +8193,6 @@ end;
 procedure InitializeUnit;
 var
   i: PtrInt;
-var
   e: TEmoji;
 begin
   // initialize Base64/Base64Uri encoding/decoding tables

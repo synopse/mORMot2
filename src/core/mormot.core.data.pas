@@ -1233,11 +1233,12 @@ type
     /// initialize the wrapper with a one-dimension dynamic array
     // - low-level method, as called by Init() and InitSpecific()
     // - can be called directly for a very fast TDynArray initialization
+    // - warning: caller should check that aInfo.Kind=rkDynArray
     procedure InitRtti(aInfo: TRttiCustom; var aValue); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// fast initialize a wrapper for an existing dynamic array of the same type
     // - is slightly faster than
-    // ! Init(aAnother.ArrayType,aValue,nil);
+    // ! InitRtti(aAnother.Info, aValue, nil);
     procedure InitFrom(aAnother: PDynArray; var aValue);
       {$ifdef HASINLINE}inline;{$endif}
     /// define the reference to an external count integer variable
@@ -1318,7 +1319,8 @@ type
     function IndexOf(const Item; CaseInSensitive: boolean = true): PtrInt;
     /// search for an element value inside the dynamic array
     // - this method will use the Compare property function, or the supplied
-    // aCompare for the search; call IndexOf() if you want to use RTTI search
+    // aCompare for the search; if none of them are set, it will fallback to
+    // IndexOf() to perform a default case-sensitive RTTI search
     // - return the index found (0..Count-1), or -1 if Item was not found
     // - if the array is sorted, it will use fast O(log(n)) binary search
     // - if the array is not sorted, it will use slower O(n) iterating search
@@ -1326,22 +1328,20 @@ type
     // and must be a reference to a variable (you can't write Find(i+10) e.g.)
     function Find(const Item; aCompare: TDynArraySortCompare = nil): PtrInt; overload;
     /// search for an element value inside the dynamic array, from an external
-    // indexed lookup table
+    // aIndex[] lookup table - e.g. created by CreateOrderedIndex()
     // - return the index found (0..Count-1), or -1 if Item was not found
-    // - this method will use a custom comparison function, with an external
-    // integer table, as created by the CreateOrderedIndex() method: it allows
-    // multiple search orders in the same dynamic array content
     // - if an indexed lookup is supplied, it must already be sorted:
-    // this function will then use fast O(log(n)) binary search
-    // - if an indexed lookup is not supplied (i.e aIndex=nil),
-    // this function will use slower but accurate O(n) iterating search
-    // - warning; the lookup index should be synchronized if array content
-    // is modified (in case of adding or deletion)
+    // this function will then use fast O(log(n)) binary search over aCompare
+    // - if the indexed lookup is not correct (e.g. aIndex=nil), iterate O(n)
+    // using aCompare - it won't fallback to IndexOf() RTTI search
+    // - warning: the lookup aIndex[] should be synchronized if array content
+    // is modified (in case of addition or deletion)
     function Find(const Item; const aIndex: TIntegerDynArray;
       aCompare: TDynArraySortCompare): PtrInt; overload;
     /// search for an element value, then fill all properties if match
     // - this method will use the Compare property function for the search,
-    // or the supplied indexed lookup table and its associated compare function
+    // or the supplied indexed lookup table and its associated compare function,
+    // and fallback to case-sensitive RTTI search if none is defined
     // - if Item content matches, all Item fields will be filled with the record
     // - can be used e.g. as a simple dictionary: if Compare will match e.g. the
     // first string field (i.e. set to SortDynArrayString), you can fill the
@@ -1355,7 +1355,8 @@ type
       aCompare: TDynArraySortCompare = nil): integer;
     /// search for an element value, then delete it if match
     // - this method will use the Compare property function for the search,
-    // or the supplied indexed lookup table and its associated compare function
+    // or the supplied indexed lookup table and its associated compare function,
+    // and fallback to case-sensitive RTTI search if none is defined
     // - if Item content matches, this item will be deleted from the array
     // - can be used e.g. as a simple dictionary: if Compare will match e.g. the
     // first string field (i.e. set to SortDynArrayString), you can fill the
@@ -1369,7 +1370,8 @@ type
       aCompare: TDynArraySortCompare = nil): integer;
     /// search for an element value, then update the item if match
     // - this method will use the Compare property function for the search,
-    // or the supplied indexed lookup table and its associated compare function
+    // or the supplied indexed lookup table and its associated compare function,
+    // and fallback to case-sensitive RTTI search if none is defined
     // - if Item content matches, this item will be updated with the supplied value
     // - can be used e.g. as a simple dictionary: if Compare will match e.g. the
     // first string field (i.e. set to SortDynArrayString), you can fill the
@@ -1383,7 +1385,8 @@ type
       aCompare: TDynArraySortCompare = nil): integer;
     /// search for an element value, then add it if none matched
     // - this method will use the Compare property function for the search,
-    // or the supplied indexed lookup table and its associated compare function
+    // or the supplied indexed lookup table and its associated compare function,
+    // and fallback to case-sensitive RTTI search if none is defined
     // - if no Item content matches, the item will added to the array
     // - can be used e.g. as a simple dictionary: if Compare will match e.g. the
     // first string field (i.e. set to SortDynArrayString), you can fill the
@@ -6653,6 +6656,57 @@ begin
   result := -1;
 end;
 
+function TDynArray.Find(const Item; aCompare: TDynArraySortCompare): PtrInt;
+var
+  n, L: PtrInt;
+  cmp: integer;
+  P: PAnsiChar;
+begin
+  n := GetCount;
+  if not Assigned(aCompare) then
+    aCompare := fCompare;
+  if n > 0 then
+    if Assigned(aCompare) then
+    begin
+      dec(n);
+      P := fValue^;
+      if fSorted and
+         (@aCompare = @fCompare) and
+         (n > 10) then
+      begin
+        // array is sorted -> use fast O(log(n)) binary search
+        L := 0;
+        repeat
+          result := (L + n) shr 1;
+          cmp := aCompare(P[result * fInfo.Cache.ItemSize], Item);
+          if cmp = 0 then
+            exit;
+          if cmp < 0 then
+            L := result + 1
+          else
+            n := result - 1;
+        until L > n;
+      end
+      else
+      begin
+        // array is very small, or not sorted -> O(n) iterative search
+        L := fInfo.Cache.ItemSize;
+        for result := 0 to n do
+          if aCompare(P^, Item) = 0 then
+            exit
+          else
+            inc(P, L);
+      end;
+    end
+    else
+    begin
+      // aCompare/fCompare not set -> fallback to case-sensitive IndexOf()
+      result := IndexOf(Item, {caseinsens=}false);
+      exit;
+    end;
+  result := -1;
+end;
+
 function TDynArray.FindIndex(const Item; aIndex: PIntegerDynArray;
   aCompare: TDynArraySortCompare): PtrInt;
 begin
@@ -6666,7 +6720,8 @@ function TDynArray.FindAndFill(var Item; aIndex: PIntegerDynArray;
   aCompare: TDynArraySortCompare): integer;
 begin
   result := FindIndex(Item, aIndex, aCompare);
-  if result >= 0 then // if found, fill Item with the matching item
+  if result >= 0 then
+    // if found, fill Item with the matching item
     ItemCopy(PAnsiChar(fValue^) + (result * fInfo.Cache.ItemSize), @Item);
 end;
 
@@ -6675,6 +6730,7 @@ function TDynArray.FindAndDelete(const Item; aIndex: PIntegerDynArray;
 begin
   result := FindIndex(Item, aIndex, aCompare);
   if result >= 0 then
+    // if found, delete the item from the array
     Delete(result);
 end;
 
@@ -6682,7 +6738,8 @@ function TDynArray.FindAndUpdate(const Item; aIndex: PIntegerDynArray;
   aCompare: TDynArraySortCompare): integer;
 begin
   result := FindIndex(Item, aIndex, aCompare);
-  if result >= 0 then // if found, fill Elem with the matching item
+  if result >= 0 then
+    // if found, fill Elem with the matching item
     ItemCopy(@Item, PAnsiChar(fValue^) + (result * fInfo.Cache.ItemSize));
 end;
 
@@ -6691,52 +6748,8 @@ function TDynArray.FindAndAddIfNotExisting(const Item; aIndex: PIntegerDynArray;
 begin
   result := FindIndex(Item, aIndex, aCompare);
   if result < 0 then
-    Add(Item); // -1 will mark success
-end;
-
-function TDynArray.Find(const Item; aCompare: TDynArraySortCompare): PtrInt;
-var
-  n, L: PtrInt;
-  cmp: integer;
-  P: PAnsiChar;
-begin
-  n := GetCount;
-  if not Assigned(aCompare) then
-    aCompare := fCompare;
-  if Assigned(aCompare) and
-     (n > 0) then
-  begin
-    dec(n);
-    P := fValue^;
-    if fSorted and
-       (@aCompare = @fCompare) and
-       (n > 10) then
-    begin
-      // array is sorted -> use fast O(log(n)) binary search
-      L := 0;
-      repeat
-        result := (L + n) shr 1;
-        cmp := aCompare(P[result * fInfo.Cache.ItemSize], Item);
-        if cmp = 0 then
-          exit;
-        if cmp < 0 then
-          L := result + 1
-        else
-          n := result - 1;
-      until L > n;
-    end
-    else
-    begin
-      // array is very small, or not sorted
-      L := fInfo.Cache.ItemSize;
-      for result := 0 to n do
-        if aCompare(P^, Item) = 0 then // O(n) search
-          exit
-        else
-          inc(P, L);
-    end;
-  end;
-  result := -1;
+    // -1 will mark success
+    Add(Item);
 end;
 
 function TDynArray.FindAllSorted(const Item;
