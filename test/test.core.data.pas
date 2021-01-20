@@ -452,8 +452,8 @@ type
 const
   __TMustacheTest = 'desc string template,expected RawUtf8 data,partials variant';
   __TMustacheTests = 'tests array of TMustacheTest';
-  MUSTACHE_SPECS: array[0..4] of TFileName = ('interpolation', 'comments',
-    'sections', 'inverted', 'partials');
+  MUSTACHE_SPECS: array[0..4] of TFileName = (
+    'interpolation', 'comments', 'sections', 'inverted', 'partials');
 
 procedure TTestCoreProcess.MustacheRenderer;
 var
@@ -664,13 +664,13 @@ begin
     JSONPARSER_TOLERANTOPTIONS, []);
   for spec := 0 to High(MUSTACHE_SPECS) do
   begin
-    mustacheJsonFileName := MUSTACHE_SPECS[spec] + '.json';
+    mustacheJsonFileName := WorkDir + MUSTACHE_SPECS[spec] + '.json';
     mustacheJson := StringFromFile(mustacheJsonFileName);
     if mustacheJson = '' then
     begin
       mustacheJson := HttpGet(
        'https://raw.githubusercontent.com/mustache/spec/' +
-       'master/specs/' + StringToAnsi7(mustacheJsonFileName));
+       'master/specs/' + StringToAnsi7(MUSTACHE_SPECS[spec]) + '.json');
       FileFromString(mustacheJson, mustacheJsonFileName);
     end;
     RecordLoadJson(mus, pointer(mustacheJson), TypeInfo(TMustacheTests));
@@ -721,10 +721,10 @@ begin
   // '[1,2001,3001,4001,"1","1001"],[2,2002,3002,4002,"2","1002"],...'
   if not Context.ParseArray then
     exit;
-  PFV(Data)^.Major := GetNextItemCardinal(Context.JSON);
-  PFV(Data)^.Minor := GetNextItemCardinal(Context.JSON);
-  PFV(Data)^.Release := GetNextItemCardinal(Context.JSON);
-  PFV(Data)^.Build := GetNextItemCardinal(Context.JSON);
+  PFV(Data)^.Major := GetNextItemCardinal(Context.Json);
+  PFV(Data)^.Minor := GetNextItemCardinal(Context.Json);
+  PFV(Data)^.Release := GetNextItemCardinal(Context.Json);
+  PFV(Data)^.Build := GetNextItemCardinal(Context.Json);
   PFV(Data)^.Main := Utf8ToString(Context.ParseUtf8);
   PFV(Data)^.Detailed := Utf8ToString(Context.ParseUtf8);
   Context.ParseEndOfObject;
@@ -888,11 +888,11 @@ begin
       '}']);
 end;
 
-procedure RangeFromJson(out Range: TRange; JSON: PUtf8Char);
+procedure RangeFromJson(out Range: TRange; Json: PUtf8Char);
 var
   V: array[0..1] of TValuePUtf8Char;
 begin
-  JsonDecode(JSON, ['min', 'max'], @V);
+  JsonDecode(Json, ['min', 'max'], @V);
   Range.Min := V[0].ToInteger;
   Range.Max := V[1].ToInteger;
 end;
@@ -1321,7 +1321,7 @@ var
     U := DynArraySaveJson(git, TypeInfo(TTestCustomJsonGitHubs));
     check(IsValidJson(U));
     if woHumanReadable in wo then
-      FileFromString(U, 'zendframeworkSaved.json');
+      FileFromString(U, WorkDir + 'zendframeworkSaved.json');
     Check(length(git) >= 30);
     Check(length(U) > 3000);
     if git[0].id = 8079771 then
@@ -2078,7 +2078,7 @@ begin
     J := ObjectToJson(O, [woHumanReadable]);
     check(IsValidJson(J));
     CheckEqual(J,
-      #13#10'{'#$D#$A#9'"Name": "",'#$D#$A#9'"Enum": "flagIdle",'#$D#$A#9'"Sets": []'#$D#$A'}');
+      #$D#$A'{'#$D#$A#9'"Name": "",'#$D#$A#9'"Enum": "flagIdle",'#$D#$A#9'"Sets": []'#$D#$A'}');
     with PRttiInfo(TypeInfo(TSynBackgroundThreadProcessStep))^.EnumBaseType^ do
       for E := low(E) to high(E) do
       begin
@@ -2561,20 +2561,20 @@ begin
   Check(JA.D = '1234');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJsonArrayWithoutF), '');
 
-  discogsJson := StringFromFile(discogsFileName);
+  discogsJson := StringFromFile(WorkDir + discogsFileName);
   if discogsJson = '' then
   begin
     discogsJson := HttpGet(
       'https://api.discogs.com/artists/45/releases?page=1&per_page=100');
-    FileFromString(discogsJson, discogsFileName);
+    FileFromString(discogsJson, WorkDir + discogsFileName);
   end;
   Check(IsValidJson(discogsJson));
-  zendframeworkJson := StringFromFile(zendframeworkFileName);
+  zendframeworkJson := StringFromFile(WorkDir + zendframeworkFileName);
   if zendframeworkJson = '' then
   begin
     zendframeworkJson := HttpGet(
       'https://api.github.com/users/zendframework/repos');
-    FileFromString(zendframeworkJson, zendframeworkFileName);
+    FileFromString(zendframeworkJson, WorkDir + zendframeworkFileName);
   end;
   Check(IsValidJson(zendframeworkJson));
   TestGit([jpoIgnoreUnknownProperty], []);
@@ -2604,7 +2604,7 @@ begin
     TestTrans;
   end;
   U := RecordSaveJson(Trans, TypeInfo(TTestCustomJson2));
-  FileFromString(U, 'transactions.json');
+  FileFromString(U, WorkDir + 'transactions.json');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJson2Title), '');
   Rtti.RegisterFromText(TypeInfo(TTestCustomJson2), '');
   U := RecordSaveJson(Trans, TypeInfo(TTestCustomJson2));
@@ -2631,7 +2631,7 @@ begin
   TRttiJson(Parser).IncludeWriteOptions := [woHumanReadable];
   U := RecordSaveJson(Disco, TypeInfo(TTestCustomDiscogs));
   Check(IsValidJson(U));
-  FileFromString(U, 'discoExtract.json');
+  FileFromString(U, WorkDir + 'discoExtract.json');
   Finalize(Disco);
   FillCharFast(Disco, sizeof(Disco), 0);
   U := '{"pagination":{"per_page":1},"releases":[{"title":"TEST","id":10}]}';
@@ -3210,18 +3210,18 @@ begin
   Check(VariantSaveMongoJson(o, modMongoStrict) = u);
   Check(VariantSaveMongoJson('test', modMongoStrict) = '"test"');
   Check(VariantSaveMongoJson(1.5, modMongoStrict) = '1.5');
-  Check(VariantSaveMongoJson(_JSON('{BSON:["awesome",5.05,1986]}'),
+  Check(VariantSaveMongoJson(_Json('{BSON:["awesome",5.05,1986]}'),
     modMongoStrict) = BSONAWESOME);
-  Check(VariantSaveMongoJson(_JSONFast('{ BSON : ["awesome", 5.05, 1986] }'),
+  Check(VariantSaveMongoJson(_JsonFast('{ BSON : ["awesome", 5.05, 1986] }'),
     modMongoStrict) = BSONAWESOME);
-  Check(VariantSaveMongoJson(_JSONFast('{ ''BSON'' : ["awesome", 5.05, 1986] } '),
+  Check(VariantSaveMongoJson(_JsonFast('{ ''BSON'' : ["awesome", 5.05, 1986] } '),
     modMongoStrict) = BSONAWESOME);
   Check(VariantSaveJson(o) = u);
   Check(VariantSaveJson('test') = '"test"');
   Check(VariantSaveJson(1.5) = '1.5');
-  Check(VariantSaveJson(_JSON('{BSON:["awesome",5.05,1986]}')) = BSONAWESOME);
-  Check(VariantSaveJson(_JSONFast('{ BSON : ["awesome", 5.05, 1986] }')) = BSONAWESOME);
-  Check(VariantSaveJson(_JSONFast('{ ''BSON'' : ["awesome", 5.05, 1986] } ')) =
+  Check(VariantSaveJson(_Json('{BSON:["awesome",5.05,1986]}')) = BSONAWESOME);
+  Check(VariantSaveJson(_JsonFast('{ BSON : ["awesome", 5.05, 1986] }')) = BSONAWESOME);
+  Check(VariantSaveJson(_JsonFast('{ ''BSON'' : ["awesome", 5.05, 1986] } ')) =
     BSONAWESOME);
   Check(Bson('{BSON:["awesome",5.05,1986]}', [], []) = BSONAWESOMEBIN);
   Check(Bson('{ BSON : ["awesome", 5.05, 1986] }', [], []) = BSONAWESOMEBIN);
@@ -3442,8 +3442,8 @@ procedure TTestCoreProcess._TDocVariant;
     Check(variant(Doc).Value(1) = ExpectedYear);
     json := '{"name":"John","birthyear":' + Int32ToUtf8(ExpectedYear) + '}';
     Check(Doc.ToJson = json);
-    Check(variant(Doc)._JSON = json);
-    Check(variant(Doc)._JSON__ = json, 'pseudo methods use IdemPChar');
+    Check(variant(Doc)._Json = json);
+    Check(variant(Doc)._Json__ = json, 'pseudo methods use IdemPChar');
     Check(VariantSaveMongoJson(variant(Doc), modMongoStrict) = json);
     Check(VariantToUtf8(variant(Doc)) = json);
     Check(Doc.U['name'] = 'John');
@@ -3455,13 +3455,13 @@ var
 
   procedure CheckNestedDoc(aOptions: TDocVariantOptions = []);
   var
-    JSON, JSON2: RawUtf8;
+    json, json2: RawUtf8;
     Doc, Doc2: TDocVariantData;
     Doc2Doc, V, Disco: variant;
     i: Integer;
   begin
     V := _Json('["one",2,3]', aOptions);
-    Check(V._JSON = '["one",2,3]');
+    Check(V._Json = '["one",2,3]');
     Doc.InitObject(['name', 'John', 'birthyear', 1972],
       aOptions + [dvoReturnNullForUnknownProperty]);
     CheckDoc(Doc);
@@ -3480,25 +3480,25 @@ var
     CheckDoc(DocVariantData(Doc2Doc)^);
     CheckDoc(DocVariantData(variant(Doc2).Doc)^);
     Doc2Doc := Doc2.GetValueOrRaiseException('doc');
-    JSON := '{"id":10,"doc":{"name":"John","birthyear":1972}}';
-    Check(Doc2.ToJson = JSON);
+    json := '{"id":10,"doc":{"name":"John","birthyear":1972}}';
+    Check(Doc2.ToJson = json);
     Check(Doc2.I['id'] = 10);
     Check(Doc2.O['doc'].U['name'] = 'John');
     Check(Doc2.O['doc'].I['birthyear'] = 1972);
   //Doc2Doc.birthyear := 1980;
     variant(DocVariantData(Doc2Doc)^).birthyear := 1980;
-    JSON2 := Doc2.ToJson;
+    json2 := Doc2.ToJson;
     if dvoValueCopiedByReference in aOptions then
     begin
-      Check(JSON2 = '{"id":10,"doc":{"name":"John","birthyear":1980}}');
+      Check(json2 = '{"id":10,"doc":{"name":"John","birthyear":1980}}');
       Check(Doc2.O['doc'].I['birthyear'] = 1980);
     end
     else
     begin
-      Check(JSON2 = JSON);
+      Check(json2 = json);
       Check(Doc2.O['doc'].I['birthyear'] = 1972);
     end;
-    _Json(JSON, V, aOptions);
+    _Json(json, V, aOptions);
     Check(V._count = 2);
     Check(V.id = 10);
     Check(V.doc._kind = ord(dvObject));
@@ -3506,7 +3506,8 @@ var
     Check(V.doc.birthYear = 1972);
     if discogs <> '' then
     begin
-      FileFromString(JsonReformat(discogs), ChangeFileExt(discogsFileName, '2.json'));
+      FileFromString(JsonReformat(discogs),
+        WorkDir + ChangeFileExt(discogsFileName, '2.json'));
       Disco := _Json(discogs, aOptions);
       Check(Disco.releases._count <= Disco.pagination.items);
       for i := 0 to Disco.Releases._count - 1 do
@@ -3603,7 +3604,7 @@ begin
       Check(VariantCompare(Doc.Values[i], Doc.Value[i]) = 0);
   end;
   Check(Doc.ToJson = '["one",2,3]');
-  Check(Variant(Doc)._JSON = '["one",2,3]');
+  Check(Variant(Doc)._Json = '["one",2,3]');
   Doc.ToArrayOfConst(vr);
   s := FormatUtf8('[?,?,?]', [], vr, true);
   check(s = '["one",2,3]');
@@ -3639,8 +3640,8 @@ begin
     Check(V._(i) = Doc.Values[i]);
   Check(V._(3) = 4);
   Check(V._(4) = 'a5');
-  Check(V._JSON = '["one",2,3,4,"a5"]');
-  discogs := StringFromFile(discogsFileName);
+  Check(V._Json = '["one",2,3,4,"a5"]');
+  discogs := StringFromFile(WorkDir + discogsFileName);
   CheckNestedDoc([]);
   CheckNestedDoc([dvoValueCopiedByReference]);
   CheckNestedDoc([dvoJsonObjectParseWithinString]);
@@ -3651,7 +3652,7 @@ begin
   Check(V1.name = 'James');
   Check(V2.name = 'James');
   {$ifdef FPC}
-  Check(V1._JSON = '{"name":"James","year":1972}');
+  Check(V1._Json = '{"name":"James","year":1972}');
   {$else}
   Check(V1 = '{"name":"James","year":1972}');
   {$endif FPC}
@@ -3664,11 +3665,11 @@ begin
   Check(V1._Count = 2);
   _UniqueFast(V1);      // change options of V1 to be by-reference
   V2 := V1;
-  Check(V1._(1)._JSON = '{"name":"John","year":1972}');
+  Check(V1._(1)._Json = '{"name":"John","year":1972}');
   {$ifdef FPC}
   TDocVariantData(V1).Values[1].name := 'Jim';
-  Check(V1._JSON = '["root",{"name":"Jim","year":1972}]');
-  Check(V2._JSON = '["root",{"name":"Jim","year":1972}]');
+  Check(V1._Json = '["root",{"name":"Jim","year":1972}]');
+  Check(V2._Json = '["root",{"name":"Jim","year":1972}]');
   {$else}
   V1._(1).name := 'Jim';
   Check(V1 = '["root",{"name":"Jim","year":1972}]');
@@ -3708,15 +3709,15 @@ begin
   Check(TDocVariantData(V1)._[1].I['year'] = 1972);
   {$ifdef FPC}
   _Safe(V1)^.AddItem(3.1415);
-  Check(V1._JSON = '["root",{"name":"Jim","year":1972},3.1415]');
+  Check(V1._Json = '["root",{"name":"Jim","year":1972},3.1415]');
   TDocVariantData(V1)._[1].Delete('year');
-  Check(V1._JSON = '["root",{"name":"Jim"},3.1415]');
+  Check(V1._Json = '["root",{"name":"Jim"},3.1415]');
   TDocVariantData(V1).Delete(1);
-  Check(V1._JSON = '["root",3.1415]');
+  Check(V1._Json = '["root",3.1415]');
   TDocVariantData(V2).DeleteByProp('name', 'JIM', true);
-  Check(V2._JSON = '["root",{"name":"Jim","year":1972}]');
+  Check(V2._Json = '["root",{"name":"Jim","year":1972}]');
   TDocVariantData(V2).DeleteByProp('name', 'JIM', false);
-  Check(V2._JSON = '["root"]');
+  Check(V2._Json = '["root"]');
   {$else}
   V1.Add(3.1415);
   Check(V1 = '["root",{"name":"Jim","year":1972},3.1415]');
@@ -3761,7 +3762,7 @@ begin
     ',"Url":"ligue-2"}],"2010/2011","2010-2011",[{"Name":"Ligue1","Url":"ligue-1"}' +
     ',{"Name":"Ligue2","Url":"ligue-2"}]]}');
   V := _Json('{result:{data:{"1000":"D1", "1001":"D2"}}}');
-  Check(V.result._JSON = '{"data":{"1000":"D1","1001":"D2"}}');
+  Check(V.result._Json = '{"data":{"1000":"D1","1001":"D2"}}');
   Check(V.result.data.Exists('1000'));
   Check(V.result.data.Exists('1001'));
   Check(not V.result.data.Exists('1002'));
@@ -4349,7 +4350,7 @@ begin
   Data := StringFromFile(ExeVersion.ProgramFileName);
   if length(Data) > 1 shl 20 then
     SetLength(Data, 1 shl 20); // no need to compress more than 1MB
-  DataFile := ChangeFileExt(ExeVersion.ProgramFileName, '.1mb');
+  DataFile := WorkDir + 'exe.1mb';
   FileFromString(Data, DataFile);
 end;
 
@@ -4554,7 +4555,7 @@ var
       i := NameToIndex('REP1\twO.exe');
       Check(i = 4, 'unzip8');
       Check(UnZip(i) = Data, 'unzip6');
-      tmpFN := 'mormot2zipformat.tmp';
+      tmpFN := WorkDir + 'mormot2zipformat.tmp';
       Check(UnZip('REP1\one.exe', tmpFN, true), 'unzipa');
       Check(StringFromFile(tmpFN) = Data, 'unzipb');
       Check(DeleteFile(tmpFN), 'unzipc');
@@ -4586,7 +4587,7 @@ var
 var
   i: integer;
 begin
-  FN := ChangeFileExt(ExeVersion.ProgramFileName, '.zip');
+  FN := WorkDir + 'write.zip';
   Prepare(TZipWrite.Create(FN));
   test(TZipRead.Create(FN), 4);
   S := TRawByteStringStream.Create;
@@ -4606,19 +4607,13 @@ begin
   end;
   test(TZipRead.Create(FN), 5);
   DeleteFile(FN);
-  FN2 := ExeVersion.ProgramFilePath + 'ddd.zip';
+  FN2 := WorkDir + 'json.zip';
   with TZipWrite.Create(FN2) do
   try
-    FN := ExeVersion.ProgramFilePath + 'ddd';
-    if not DirectoryExists(FN) then
-      FN := ExeVersion.ProgramFilePath + '..' + PathDelim + 'ddd';
-    if DirectoryExists(FN) then
-    begin
-      AddFolder(FN, '*.pas');
-      Check(Count > 10);
-      for i := 0 to Count - 1 do
-        Check(SameText(ExtractFileExt(Ansi7ToString(Entry[i].intName)), '.pas'), 'ddd');
-    end;
+    AddFolder(WorkDir, '*.json');
+    Check(Count > 2);
+    for i := 0 to Count - 1 do
+      Check(SameText(ExtractFileExt(Ansi7ToString(Entry[i].intName)), '.json'), 'json');
   finally
     Free;
   end;
@@ -4728,7 +4723,7 @@ procedure TTestCoreCompression._TAlgoCompress;
     comp := 0;
     timecomp := 0;
     timedecomp := 0;
-    log := StringFromFile('bigTest.log');
+    log := StringFromFile(WorkDir + 'bigTest.log');
     for i := 0 to 100 do
     begin
       if log = '' then
@@ -4744,7 +4739,7 @@ procedure TTestCoreCompression._TAlgoCompress;
       Check(s2 = s, algo.ClassName);
       if (log <> '') and
          (s2 <> s) then
-        FileFromString(s2, 'bigTest' + algo.ClassName + '.log');
+        FileFromString(s2, WorkDir + 'bigTest' + algo.ClassName + '.log');
       inc(plain, length(s));
       inc(comp, length(t));
       if log <> '' then

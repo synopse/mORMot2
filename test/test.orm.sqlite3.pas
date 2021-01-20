@@ -382,7 +382,7 @@ begin
     TempFileName := SQLITE_MEMORY_DATABASE_NAME
   else
   begin
-    TempFileName := 'test.db3';
+    TempFileName := WorkDir + 'test.db3';
     DeleteFile(TempFileName); // use a temporary file
     {$ifndef NOSQLITE3ENCRYPT}
     if ClassType <> TTestSqliteFileMemoryMap then
@@ -461,7 +461,7 @@ begin
   Req := 'SELECT * FROM People WHERE LastName=''M' + _uF4 + 'net'' ORDER BY FirstName;';
   check(WinAnsiToUtf8(Utf8ToWinAnsi(Req)) = Req, 'WinAnsiToUtf8/Utf8ToWinAnsi');
   JS := Demo.ExecuteJson(Req); // get result in JSON format
-  FileFromString(JS, 'Test1.json');
+  FileFromString(JS, WorkDir + 'Test1.json');
   CheckHash(JS, $40C1649A, 'Expected ExecuteJson result not retrieved');
   {$ifndef NOSQLITE3ENCRYPT}
   if password <> '' then
@@ -698,7 +698,8 @@ begin
   Slave1 := CreateServer('testversionreplicated' + DBExt, true);
   Slave2 := CreateServer('testversioncallback' + DBExt, true);
   try
-    Rec := TOrmPeopleVersioned.CreateAndFillPrepare(StringFromFile('Test1.json'));
+    Rec := TOrmPeopleVersioned.CreateAndFillPrepare(
+      StringFromFile(test.WorkDir + 'Test1.json'));
     try
       // Rec contains 1001 input rows of data
       TestMasterSlave(Master, Slave1, MasterAccess);
@@ -1505,8 +1506,8 @@ begin
   try
     if ClassType <> TTestSqliteMemory then
     begin
-      DeleteFile('dali1.json');
-      DeleteFile('dali2.data');
+      DeleteFile(WorkDir + 'dali1.json');
+      DeleteFile(WorkDir + 'dali2.data');
     end;
     Demo.RegisterSQLFunction(TypeInfo(TIntegerDynArray), @SortDynArrayInteger,
       'MyIntegerDynArrayContains');
@@ -1588,8 +1589,8 @@ begin
             end;
           List.Free;
         end;
-        Client.Server.SessionsSaveToFile('sessions.data');
-        Client.Server.SessionsLoadFromFile('sessions.data', false);
+        Client.Server.SessionsSaveToFile(WorkDir + 'sessions.data');
+        Client.Server.SessionsLoadFromFile(WorkDir + 'sessions.data', false);
         check(Client.Orm.TransactionBegin(TOrmPeople)); // for UpdateBlob() below
         for i := 0 to high(IntArray) do
         begin
@@ -1715,7 +1716,7 @@ begin
           Client.Orm.RollBack;
         end;
         // test backup API
-        BackupFN := Format('backupbackground%s.dbsynlz', [ClassName]);
+        BackupFN := Format('%sbackupbackground%s.dbsynlz', [WorkDir, ClassName]);
         deleteFile(BackupFN);
         BackupTimer.Start;
         check(Client.DB.BackupBackground(BackupFN, 1024, 0, OnBackupProgress, true));
@@ -1727,8 +1728,8 @@ begin
           try
             Server.Model.Owner := Server; // we just use TOrmPeople here
             Server.NoAjaxJson := true;
-            DeleteFile('People.json');
-            DeleteFile('People.data');
+            DeleteFile(WorkDir + 'People.json');
+            DeleteFile(WorkDir + 'People.data');
             StaticDataCreate(Server.OrmInstance, TOrmPeople, 'People.data', true);
             json := Demo.ExecuteJson('SELECT * From People');
             aStatic := (Server.OrmInstance as TRestOrmServer).
@@ -1916,7 +1917,7 @@ begin
             check(V.FirstName = 'Jane1');
             check(aStatic.Retrieve(4294967297, V));
             check(V.FirstName = 'first');
-            aStatic.FileName := 'People.json';
+            aStatic.FileName := WorkDir + 'People.json';
             aStatic.BinaryFile := false;
             aStatic.Modified := true;
             aStatic.UpdateFile; // force People.json file content write
@@ -2152,8 +2153,8 @@ begin
   J := TOrmTableDB.Create(Demo, [TOrmPeople],
     'select id,FirstName,LastName,YearOfBirth,YearOfDeath from people', true);
   try
-    FileFromString(J.GetODSDocument(false), 'false.ods');
-    FileFromString(J.GetODSDocument(true), 'true.ods');
+    FileFromString(J.GetODSDocument(false), WorkDir + 'false.ods');
+    FileFromString(J.GetODSDocument(true), WorkDir + 'true.ods');
   finally
     J.Free;
   end;
@@ -2498,7 +2499,7 @@ function TTestSqliteMemory.CreateShardDB(maxshard: Integer): TRestServer;
 begin
   result := TRestServerDB.CreateWithOwnModel([TOrmTest], false, 'shardroot');
   check(TRestStorageShardDB.Create(
-    TOrmTest, result, SHARD_RANGE, [], '', maxshard) <> nil);
+    TOrmTest, result, SHARD_RANGE, [], WorkDir + 'test', maxshard) <> nil);
 end;
 
 procedure TTestSqliteMemory.ShardWrite;
@@ -2508,7 +2509,7 @@ var
   db: TRestServer;
   b: TRestBatch;
 begin
-  DirectoryDelete(ExeVersion.ProgramFilePath, 'Test0*.dbs', True);
+  DirectoryDelete(WorkDir, 'test0*.dbs', True);
   db := CreateShardDB(100);
   try
     R := TOrmTest.Create;
@@ -2568,8 +2569,8 @@ var
   i: integer;
   db: TRestServer;
 begin
-  check(DeleteFile(ExeVersion.ProgramFilePath + 'Test0000.dbs'));
-  check(DeleteFile(ExeVersion.ProgramFilePath + 'Test0001.dbs'));
+  check(DeleteFile(WorkDir + 'test0000.dbs'));
+  check(DeleteFile(WorkDir + 'test0001.dbs'));
   db := CreateShardDB(100);
   try
     R := TOrmTest.Create;

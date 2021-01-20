@@ -163,7 +163,7 @@ begin
     CheckEqual(Resp.RowCount, 11011);
     CheckHash(TOrmTableJson(Resp).PrivateInternalCopy, 4045204160);
     //FileFromString(TOrmTableJson(Resp).PrivateInternalCopy, 'internalfull2.parsed');
-    //FileFromString(Resp.GetODSDocument,'people.ods');
+    //FileFromString(Resp.GetODSDocument, WorkDir + 'people.ods');
   finally
     Resp.Free;
   end;
@@ -190,7 +190,7 @@ begin
     Server := TRestHttpServer.Create(HTTP_DEFAULTPORT, [DataBase], '+',
       HTTP_DEFAULT_MODE, 16, secSynShaAes);
     fRunConsole := fRunConsole + 'using ' + UTF8ToString(Server.HttpServer.APIVersion);
-    Database.NoAJAXJSON := true; // expect not expanded JSON from now on
+    Database.NoAjaxJson := true; // expect not expanded JSON from now on
   except
     on E: Exception do
       Check(false, E.Message);
@@ -439,7 +439,7 @@ begin
       begin
         Model := TOrmModel.Create([TOrmPeople], 'root' + Int32ToUtf8(i));
         DataBase := TRestServerDB.Create(Model, SQLITE_MEMORY_DATABASE_NAME);
-        Database.NoAJAXJSON := true; // expect not expanded JSON from now on
+        Database.NoAjaxJson := true; // expect not expanded JSON from now on
         DataBase.Server.CreateMissingTables;
       end;
     // launch one HTTP server for all TRestServerDB instances
@@ -526,7 +526,7 @@ begin
     DataBase.DB, TRestServerTest);
   ClientTest;
   Client.CallBackGet('stat', ['withall', true], stats);
-  FileFromString(JSONReformat(stats), 'statsClientServer.json');
+  FileFromString(JSONReformat(stats), WorkDir + 'statsClientServer.json');
   FreeAndNil(Client);
 end;
 

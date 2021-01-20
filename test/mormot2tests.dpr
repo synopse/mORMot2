@@ -128,7 +128,7 @@ type
 
 procedure TIntegrationTests.CoreUnits;
 begin
- //exit;
+  //exit;
   AddCase([
   //
   TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreEcc,
@@ -143,21 +143,23 @@ begin
     //
     TTestOrmCore, TTestSqliteFile, TTestSqliteFileWAL, TTestSqliteFileMemoryMap,
     TTestSqliteMemory, TTestExternalDatabase, TTestClientServerAccess
-    //
   ]);
 end;
 
 procedure TIntegrationTests.SOA;
 begin
+  //exit;
   AddCase([
     //
-    TTestServiceOrientedArchitecture,
-    TTestBidirectionalRemoteConnection
+    TTestServiceOrientedArchitecture, TTestBidirectionalRemoteConnection
   ]);
 end;
 
 begin
-  TIntegrationTests.RunAsConsole('mORMot2 Regression Tests'{, LOG_VERBOSE});
+  TIntegrationTests.RunAsConsole('mORMot2 Regression Tests',
+    //LOG_VERBOSE,
+    LOG_FILTER[lfExceptions],
+    [], ExeVersion.ProgramFilePath + 'data');
   {$ifdef FPC_X64MM}
   WriteHeapStatus(' ', 16, 8, {compileflags=}true);
   {$endif FPC_X64MM}

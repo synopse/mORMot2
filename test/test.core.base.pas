@@ -674,14 +674,14 @@ begin
     Check(FindIniEntry(Content, S, 'no') = '');
     Check(FindIniEntry(Content, 'no', N) = '');
   end;
-  Check(FileFromString(Content, 'test.ini'), 'test.ini');
-  Check(AlgoSynLZ.FileCompress(
-    'test.ini', 'test.ini.synlz', $ABA51051), 'synLZ');
-  if CheckFailed(AlgoSynLZ.FileUnCompress(
-    'test.ini.synlz', 'test2.ini', $ABA51051), 'unSynLZ') then
+  Check(FileFromString(Content, WorkDir + 'test.ini'), 'test.ini');
+  Check(AlgoSynLZ.FileCompress(WorkDir + 'test.ini',
+     WorkDir + 'test.ini.synlz', $ABA51051), 'synLZ');
+  if CheckFailed(AlgoSynLZ.FileUnCompress(WorkDir + 'test.ini.synlz',
+     WorkDir + 'test2.ini', $ABA51051), 'unSynLZ') then
     exit;
-  S := StringFromFile('test2.ini');
-  Check(S = Content, 'test2.ini');
+  S := StringFromFile(WorkDir + 'test2.ini');
+  Check(S = Content, WorkDir + 'test2.ini');
   Content := 'abc'#13#10'def'#10'ghijkl'#13'1234567890';
   P := pointer(Content);
   Check(GetNextLine(P, P) = 'abc');
@@ -844,17 +844,17 @@ begin
       UInt32ToUtf8(i, s);
       Check((L.IndexOf(s) >= 0) = (i and 127 <> 0));
     end;
-    L.SaveToFile('utf8list.txt');
+    L.SaveToFile(WorkDir + 'utf8list.txt');
     L.Clear;
     Check(L.Count = 0);
-    L.LoadFromFile('utf8list.txt');
+    L.LoadFromFile(WorkDir + 'utf8list.txt');
     Check(L.Count = n);
     for i := 1 to MAX do
     begin
       UInt32ToUtf8(i, s);
       Check((L.IndexOf(s) >= 0) = (i and 127 <> 0));
     end;
-    DeleteFile('utf8list.txt');
+    DeleteFile(WorkDir + 'utf8list.txt');
   finally
     L.Free;
   end;
@@ -4838,9 +4838,9 @@ var
   hdl, reload: boolean;
   buf: RawByteString;
   dt: TDateTime;
-    {$ifdef MSWINDOWS}
+  {$ifdef MSWINDOWS}
   local: TDateTime;
-    {$endif MSWINDOWS}
+  {$endif MSWINDOWS}
 
   procedure testBias(year, expected: integer);
   begin

@@ -937,6 +937,8 @@ begin
   Check(BinToBase64(Value) = Value64);
   Check(IsBase64(Value64));
   tmp := StringFromFile(ExeVersion.ProgramFileName);
+  if length(tmp) > 1 shl 20 then
+    SetLength(tmp, 1 shl 20);
   b64 := BinToBase64(tmp);
   Check(IsBase64(b64));
   Check(Base64ToBin(b64) = tmp);

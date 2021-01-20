@@ -200,9 +200,9 @@ var
 begin
   Model := TOrmModel.Create([TOrmTest]);
   try
-    DeleteFile('fullmem.data');
-    Check(not FileExists('fullmem.data'));
-    Server := TRestServerFullMemory.Create(Model, 'fullmem.data', true, true);
+    DeleteFile(WorkDir + 'fullmem.data');
+    Check(not FileExists(WorkDir + 'fullmem.data'));
+    Server := TRestServerFullMemory.Create(Model, WorkDir + 'fullmem.data', true, true);
     try
       Server.{$ifdef PUREMORMOT2}Server.{$endif}CreateMissingTables;
       {$ifdef MSWINDOWS2}
@@ -233,9 +233,9 @@ begin
           end;
           CheckEqual(Client.Client.BatchSend(IDs), HTTP_SUCCESS);
           Check(Length(IDs) = 9900);
-          Check(not FileExists('fullmem.data'));
+          Check(not FileExists(WorkDir + 'fullmem.data'));
           Check(Client.CallBackPut('Flush', '', dummy) = HTTP_SUCCESS);
-          Check(FileExists('fullmem.data'));
+          Check(FileExists(WorkDir + 'fullmem.data'));
           Check(Client.Orm.Retrieve(200, R));
           R.CheckWith(self, 200);
         finally
@@ -247,7 +247,7 @@ begin
     finally
       Server.Free;
     end;
-    Server := TRestServerFullMemory.Create(Model, 'fullmem.data', true, true);
+    Server := TRestServerFullMemory.Create(Model, WorkDir + 'fullmem.data', true, true);
     try
       Server.Server.CreateMissingTables;
       {$ifdef MSWINDOWS2}

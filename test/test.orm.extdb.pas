@@ -745,16 +745,16 @@ begin
   json := Props.DefinitionToJson(14);
   Check(json = '{"Kind":"TSqlDBSQLite3ConnectionProperties",' +
     '"ServerName":"server","DatabaseName":"","User":"","Password":"MnVfJg=="}');
-  Props.DefinitionToFile('connectionprops.json');
+  Props.DefinitionToFile(WorkDir + 'connectionprops.json');
   Props.Free;
-  Props := TSqlDBConnectionProperties.CreateFromFile('connectionprops.json');
+  Props := TSqlDBConnectionProperties.CreateFromFile(WorkDir + 'connectionprops.json');
   Check(Props.ClassType = TSqlDBSQLite3ConnectionProperties);
   Check(Props.ServerName = 'server');
   Check(Props.DatabaseName = '');
   Check(Props.UserID = '');
   Check(Props.PassWord = '1234');
   Props.Free;
-  DeleteFile('connectionprops.json');
+  DeleteFile(WorkDir + 'connectionprops.json');
 end;
 
 procedure TTestExternalDatabase.CryptedDatabase;

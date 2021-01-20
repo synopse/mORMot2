@@ -1537,8 +1537,8 @@ begin
   exit;
   {$endif}
   {$endif DARWIN}
-  DeleteFile('servicelog.db');
-  Log := TRestServerDB.CreateWithOwnModel([TOrmServiceLog], 'servicelog.db');
+  DeleteFile(WorkDir + 'servicelog.db');
+  Log := TRestServerDB.CreateWithOwnModel([TOrmServiceLog], WorkDir + 'servicelog.db');
   try
     Log.DB.Synchronous := smOff;
     Log.DB.LockingMode := lmExclusive;
@@ -1567,7 +1567,7 @@ begin
     fClient.Server.StatUsage := TSynMonitorUsageRest.Create(store.Orm, 1);
     ClientTest(TRestServerRoutingRest, false);
     fClient.CallBackGet('stat', ['withall', true], stats);
-    JsonReformatToFile(stats, 'statsSessions.Json');
+    JsonReformatToFile(stats, WorkDir + 'statsSessions.Json');
     fClient.Server.StatLevels := SERVERDEFAULTMONITORLEVELS;
     fClient.Server.StatUsage := nil;
   finally
@@ -1785,7 +1785,7 @@ begin
       'withmethods', true,
       'withinterfaces', true,
       'withsessions', true], stats);
-    FileFromString(JsonReformat(stats), 'stats.Json');
+    FileFromString(JsonReformat(stats), WorkDir + 'stats.Json');
   end;
   FreeAndNil(fClient);
   FreeAndNil(fModel);
