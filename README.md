@@ -104,6 +104,17 @@ This allows the use of our code in as wide a variety of software projects as pos
 
 See [the full licensing terms](LICENCE.md).
 
+## Sub-Folders
+
+The mORMOt 2 repository content is split into the following sub-folders:
+
+- [`src`](src) is the main source code folder, where you should find the actual framework;
+- [`res`](res) to compile some resources used within `src`;
+- [`static`](static) contains raw library `.o`/`.obj` files needed for FPC and Delphi static linking;
+- [`test`](test) defines the regression tests of all framework features;
+- [`doc`](doc) holds the documentation of the framework;
+- [`ex`](ex) contains various samples.
+
 ## Links
 
 (to be fixed)
