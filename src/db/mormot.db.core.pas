@@ -1912,19 +1912,22 @@ begin
   result := P;
 end;
 
-procedure SqlAddWhereAnd(var where: RawUtf8; const condition: RawUtf8);
+procedure SqlAddWhereAnd(var Where: RawUtf8; const Condition: RawUtf8);
 begin
-  if where = '' then
-    where := condition
+  if Where = '' then
+    Where := Condition
   else
-    where := where + ' and ' + condition;
+    Where := Where + ' and ' + Condition;
 end;
 
 function SqlWhereIsEndClause(const Where: RawUtf8): boolean;
 begin
-  result := IdemPCharArray(pointer(Where), [
-    'ORDER BY ', 'GROUP BY ', 'LIMIT ', 'OFFSET ',
-    'LEFT ', 'RIGHT ', 'INNER ', 'OUTER ', 'JOIN ']) >= 0;
+  if Where = '' then
+    result := false
+  else
+    result := IdemPCharArray(GotoNextNotSpace(pointer(Where)), [
+      'ORDER BY ', 'GROUP BY ', 'LIMIT ', 'OFFSET ',
+      'LEFT ', 'RIGHT ', 'INNER ', 'OUTER ', 'JOIN ']) >= 0;
 end;
 
 function SqlFromWhere(const Where: RawUtf8): RawUtf8;
