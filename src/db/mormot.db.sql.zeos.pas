@@ -685,9 +685,11 @@ begin
     { mormot does not create the Tables casesensitive but gives mixed cased strings as tablename
       so we normalize the identifiers to database defaults : }
     sTableName := meta.GetIdentifierConvertor.ExtractQuote(Utf8ToString(TableName));
-    sTableName := meta.AddEscapeCharToWildcards(sTableName); //do not use "like" search patterns ['_','%'] so they need to be escaped
+    sTableName := meta.AddEscapeCharToWildcards(sTableName);
+    //do not use "like" search patterns ['_','%'] so they need to be escaped
     res := meta.GetColumns('', sSchema, sTableName, '');
-    FA.InitSpecific(TypeInfo(TSqlDBColumnDefineDynArray), Fields, ptRawUtf8, @n, true);
+    FA.InitSpecific(TypeInfo(TSqlDBColumnDefineDynArray), Fields,
+      ptRawUtf8, @n, {caseinsens=}true);
     FillCharFast(F, sizeof(F), 0);
     while res.Next do
     begin

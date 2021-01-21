@@ -7422,7 +7422,7 @@ constructor TSqlDBStatementWithParamsAndColumns.Create(aConnection: TSqlDBConnec
 begin
   inherited Create(aConnection);
   fColumn.InitSpecific(TypeInfo(TSqlDBColumnPropertyDynArray),
-    fColumns, ptRawUtf8, @fColumnCount, True);
+    fColumns, ptRawUtf8, @fColumnCount, {caseinsens=}true);
 end;
 
 function TSqlDBStatementWithParamsAndColumns.ColumnIndex(

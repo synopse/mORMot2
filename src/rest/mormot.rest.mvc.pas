@@ -1341,12 +1341,18 @@ var
 
 begin
   SetVariantNull(result);
-  recsize := PRecordDataTypeInfo^.RecordSize;
-  // recize=0 if PRecordDataTypeInfo=nil (sessionID only) -> just do nothing
-  if recsize > SizeOf(rec) then
-    raise EMvcException.CreateUtf8(
-      '%.CheckAndRetrieveInfo: recsize=%', [self, recsize]);
-  FillCharFast(rec, recsize, 0);
+  if PRecordDataTypeInfo = nil then
+    // sessionID decoding only
+    recsize := 0
+  else
+  begin
+    // binary decoding of a rkRecord
+    recsize := PRecordDataTypeInfo^.RecordSize;
+    if recsize > SizeOf(rec) then
+      raise EMvcException.CreateUtf8(
+        '%.CheckAndRetrieveInfo: recsize=% overflow', [self, recsize]);
+    FillCharFast(rec, recsize, 0);
+  end;
   try
     sessionID := CheckAndRetrieve(@rec, PRecordDataTypeInfo);
     if sessionID <> 0 then
@@ -1391,13 +1397,12 @@ begin
     ctr := ((ctr xor (ctr shr 13)) * 3266489917);
     ctr := ctr xor (ctr shr 16);
   end;
-  if size = 0 then
-    exit; // no padding
-  repeat
+  while size <> 0 do
+  begin
     dec(size);
     PByteArray(data)[size] := PByteArray(data)[size] xor ctr;
     ctr := ctr shr 8; // 1..3 pending iterations
-  until size = 0;
+  end;
 end;
 
 procedure TMvcSessionWithCookies.Crypt(P: PAnsiChar; bytes: integer);
@@ -1423,7 +1428,6 @@ type
     end;
     data: array[0..2047] of byte; // binary serialization of record value
   end;
-
   PCookieContent = ^TCookieContent;
 
 function TMvcSessionWithCookies.CheckAndRetrieve(PRecordData: pointer;
@@ -1466,14 +1470,14 @@ begin
       if (cc.head.issued <= now) and
          (cc.head.expires >= now) and
          (fContext.Secret.Compute (@cc.head.session, len - 8) = cc.head.hmac) then
-        if PRecordData = nil then
+        if (PRecordData = nil) or
+           (PRecordTypeInfo = nil) then
           result := cc.head.session
-        else if (PRecordTypeInfo <> nil) and
-                (len > sizeof(cc.head)) then
+        else if len > sizeof(cc.head) then
         begin
           ccend := PAnsiChar(@cc) + len;
-          if RecordLoad(
-              PRecordData^, @cc.data, PRecordTypeInfo, nil, ccend) = ccend then
+          if BinaryLoad(PRecordData, @cc.data, PRecordTypeInfo,
+              nil, ccend, rkRecordTypes) = ccend then
             result := cc.head.session;
         end;
     end;
@@ -1497,7 +1501,7 @@ begin
      (PRecordTypeInfo <> nil) then
     BinarySave(PRecordData, saved, PRecordTypeInfo, rkRecordTypes)
   else
-    saved.Init(0);
+    saved.Init(0); // save.buf=nil and save.len=0
   try
     if saved.len > sizeof(cc.data) then
       // all cookies storage should be < 4K
@@ -1599,6 +1603,7 @@ var
   exec: TInterfaceMethodExecute;
   isAction: boolean;
   WR: TTextWriter;
+  m: PInterfaceMethod;
   methodOutput: RawUtf8;
   renderContext, info: variant;
   err: shortstring;
@@ -1611,27 +1616,24 @@ begin
     begin
       repeat
         try
-          isAction := fApplication.fFactory.
-            Methods[fMethodIndex].ArgsResultIsServiceCustomAnswer;
+          m := @fApplication.fFactory.Methods[fMethodIndex];
+          isAction := m^.ArgsResultIsServiceCustomAnswer;
           WR := TJsonSerializer.CreateOwnedStream(tmp);
           try
             WR.Add('{');
-            exec := TInterfaceMethodExecute.Create(
-              @fApplication.fFactory.Methods[fMethodIndex]);
+            exec := TInterfaceMethodExecute.Create(m);
             try
               exec.Options := [optVariantCopiedByReference];
               exec.ServiceCustomAnswerStatus := action.ReturnedStatus;
               err := '';
               if not exec.ExecuteJson([fApplication.fFactoryEntry],
                   pointer(fInput), WR, @err, true) then
-                if err <> '' then
-                  raise EMvcException.CreateUtf8(
-                    '%.CommandRunMethod: %', [self, err])
-                else
-                  with fApplication.fFactory do
-                    raise EMvcException.CreateUtf8(
-                      '%.CommandRunMethod: %.%() execution error',
-                      [self, InterfaceTypeInfo^.RawName, Methods[fMethodIndex].Uri]);
+              begin
+                if err = '' then
+                  err := 'execution error';
+                raise EMvcException.CreateUtf8('%.CommandRunMethod(I%): %',
+                  [self, m^.InterfaceDotMethodName, err])
+              end;
               action.RedirectToMethodName := exec.ServiceCustomAnswerHead;
               action.ReturnedStatus := exec.ServiceCustomAnswerStatus;
             finally
@@ -1662,10 +1664,13 @@ begin
           end;
         except
           on E: EMvcApplication do
+            // lower level exceptions will be handled below
             action := E.fAction;
-        end; // lower level exceptions will be handled below
+        end;
+        // handle TMvcAction redirection
         fInput := action.RedirectToMethodParameters;
-        fMethodIndex := fApplication.fFactory.FindMethodIndex(action.RedirectToMethodName);
+        fMethodIndex := fApplication.fFactory.
+          FindMethodIndex(action.RedirectToMethodName);
         if action.ReturnedStatus = 0 then
           action.ReturnedStatus := HTTP_SUCCESS
         else if (action.ReturnedStatus = HTTP_TEMPORARYREDIRECT) or

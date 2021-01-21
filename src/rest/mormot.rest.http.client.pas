@@ -951,7 +951,7 @@ begin
     result := HTTP_BADREQUEST;
     exit;
   end;
-  params.Init(Ctxt.URL, Ctxt.Method, Ctxt.InHeaders, Ctxt.InContent);
+  params.Init(Ctxt.Url, Ctxt.Method, Ctxt.InHeaders, Ctxt.InContent);
   InternalNotificationMethodExecute(params);
   Ctxt.OutContent := params.OutBody;
   Ctxt.OutCustomHeaders := params.OutHead;

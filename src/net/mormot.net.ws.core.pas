@@ -1125,7 +1125,7 @@ begin
   end
   else
     head := 'request';
-  FrameCompress(head, [{%H-}Method, Ctxt.URL, Ctxt.InHeaders, ord(aNoAnswer)],
+  FrameCompress(head, [{%H-}Method, Ctxt.Url, Ctxt.InHeaders, ord(aNoAnswer)],
     Ctxt.InContent, InContentType{%H-}, request);
   if fSequencing then
     head[1] := 'a'
@@ -2117,7 +2117,7 @@ begin
     exit;
   if WebSocketLog <> nil then
     WebSocketLog.Add.Log(sllTrace, 'NotifyCallback(%,%)',
-      [aRequest.URL, _TWebSocketProcessNotifyCallback[aMode]^], self);
+      [aRequest.Url, _TWebSocketProcessNotifyCallback[aMode]^], self);
   TWebSocketProtocolRest(fProtocol).InputToFrame(aRequest,
     aMode in [wscBlockWithoutAnswer, wscNonBlockWithoutAnswer], request, head);
   case aMode of

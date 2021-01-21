@@ -1486,7 +1486,7 @@ var
   begin
     FillCharFast(call, sizeof(call), 0);
     call.Method := 'GET';
-    call.url := URI;
+    call.Url := URI;
     call.InHead := head;
     TRestClientAuthenticationDefault.ClientSessionSign(Client, call);
     call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;

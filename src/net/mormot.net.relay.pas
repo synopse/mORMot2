@@ -971,7 +971,7 @@ end;
 function TPublicRelay.OnServerRequest(
   Ctxt: THttpServerRequestAbstract): cardinal;
 begin
-  if IdemPChar(pointer(Ctxt.URL), '/STAT') then
+  if IdemPChar(pointer(Ctxt.Url), '/STAT') then
   begin
     Ctxt.OutContent := GetStats;
     Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
@@ -991,11 +991,11 @@ var
 begin
   result := 504; // HTTP_GATEWAYTIMEOUT
   log := fLog.Enter('OnClientsRequest #%.% % % %',  [Ctxt.ConnectionID,
-    Ctxt.RequestID, Ctxt.RemoteIP, Ctxt.Method, Ctxt.URL], self);
+    Ctxt.RequestID, Ctxt.RemoteIP, Ctxt.Method, Ctxt.Url], self);
   if Ctxt.RequestID = 0 then
     raise ERelayProtocol.CreateUtf8('%.OnClientsRequest: RequestID=0', [self]);
   SetRestFrame(frame, 0,
-    Ctxt.URL, Ctxt.Method, Ctxt.InHeaders, Ctxt.InContent, Ctxt.InContentType);
+    Ctxt.Url, Ctxt.Method, Ctxt.InHeaders, Ctxt.InContent, Ctxt.InContentType);
   Safe.Lock;
   try
     if fServerConnected = nil then

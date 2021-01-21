@@ -631,11 +631,13 @@ type
     /// the declared internal methods
     // - list does not contain default AddRef/Release/QueryInterface methods
     // - nor the _free_/_contract_/_signature_ pseudo-methods
-    property Methods: TInterfaceMethodDynArray read fMethods;
+    property Methods: TInterfaceMethodDynArray
+      read fMethods;
     /// the number of internal methods
     // - does not include the default AddRef/Release/QueryInterface methods
     // - nor the _free_/_contract_/_signature_ pseudo-methods
-    property MethodsCount: cardinal read fMethodsCount;
+    property MethodsCount: cardinal
+      read fMethodsCount;
     /// identifies a CallbackReleased() method in this interface
     // - i.e. the index in Methods[] of the following signature:
     // ! procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUtf8);
@@ -3550,7 +3552,8 @@ begin
     delete(fInterfaceUri, 1, 1);
   // retrieve all interface methods (recursively including ancestors)
   fMethod.InitSpecific(TypeInfo(TInterfaceMethodDynArray), fMethods, ptRawUtf8,
-    @fMethodsCount, true);
+    @fMethodsCount, {caseinsens=}true);
+  fMethod.HashCountTrigger := 3;
   AddMethodsFromTypeInfo(aInterface); // from RTTI or generated code
   if fMethodsCount = 0 then
     raise EInterfaceFactory.CreateUtf8('%.Create(%): interface has ' +

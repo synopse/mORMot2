@@ -656,7 +656,7 @@ begin
   else
   begin
     WebSocketLog.Add.Log(sllTrace, 'Callback(%) on socket=%',
-      [Ctxt.URL, Ctxt.ConnectionID], self);
+      [Ctxt.Url, Ctxt.ConnectionID], self);
     connection := IsActiveWebSocket(Ctxt.ConnectionID);
   end;
   if connection <> nil then

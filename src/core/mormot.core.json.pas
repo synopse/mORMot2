@@ -4922,7 +4922,7 @@ end;
 
 procedure _JS_Extended(Data: PSynExtended; const Ctxt: TJsonSaveContext);
 begin
-  Ctxt.W.AddDouble(Data^);
+  Ctxt.W.AddDouble({$ifndef TSYNEXTENDED80}unaligned{$endif}(Data^));
 end;
 
 procedure _JS_Int64(Data: PInt64; const Ctxt: TJsonSaveContext);

@@ -429,27 +429,27 @@ implementation
 constructor TOrmTableDB.Create(aDB: TSqlDatabase;
   const Tables: array of TOrmClass; const aSql: RawUtf8; Expand: boolean);
 var
-  JSONCached: RawUtf8;
-  R: TSqlRequest;
+  jsoncached: RawUtf8;
+  r: TSqlRequest;
   n: PtrInt;
 begin
   if aDB = nil then
     exit;
-  JSONCached := aDB.LockJson(aSql, @n);
-  if JSONCached = '' then
+  jsoncached := aDB.LockJson(aSql, @n);
+  if jsoncached = '' then
     // not retrieved from cache -> call SQLite3 engine
     try
       n := 0;
-      JSONCached := R.ExecuteJson(aDB.DB, aSql, Expand, @n);
+      jsoncached := r.ExecuteJson(aDB.DB, aSql, Expand, @n);
       // big JSON is faster than sqlite3_get_table(): less heap allocations
-      inherited CreateFromTables(Tables, aSql, JSONCached);
+      inherited CreateFromTables(Tables, aSql, jsoncached);
       Assert(n = fRowCount);
     finally
-      aDB.UnLockJson(JSONCached, n);
+      aDB.UnLockJson(jsoncached, n);
     end
   else
   begin
-    inherited CreateFromTables(Tables, aSql, JSONCached);
+    inherited CreateFromTables(Tables, aSql, jsoncached);
     Assert(n = fRowCount);
   end;
 end;
@@ -469,18 +469,18 @@ function vt_Create(DB: TSqlite3DB; pAux: Pointer; argc: integer;
   const argv: PPUtf8CharArray; var ppVTab: PSqlite3VTab;
   var pzErr: PUtf8Char): integer; cdecl;
 var
-  Module: TOrmVirtualTableModuleSQLite3 absolute pAux;
-  Table: TOrmVirtualTable;
-  Structure: RawUtf8;
-  ModuleName: RawUtf8;
+  module: TOrmVirtualTableModuleSQLite3 absolute pAux;
+  table: TOrmVirtualTable;
+  struct: RawUtf8;
+  modname: RawUtf8;
 begin
-  if Module <> nil then
-    ModuleName := Module.ModuleName;
-  if (Module = nil) or
-     (Module.DB.DB <> DB) or
-     (StrIComp(pointer(ModuleName), argv[0]) <> 0) then
+  if module <> nil then
+    modname := module.ModuleName;
+  if (module = nil) or
+     (module.DB.DB <> DB) or
+     (StrIComp(pointer(modname), argv[0]) <> 0) then
   begin
-    Notify('vt_Create(%<>%)', [argv[0], ModuleName]);
+    Notify('vt_Create(%<>%)', [argv[0], modname]);
     result := SQLITE_ERROR;
     exit;
   end;
@@ -492,8 +492,8 @@ begin
   end;
   FillcharFast(ppVTab^, sizeof(ppVTab^), 0);
   try
-    Table := Module.TableClass.Create(
-      Module, RawUtf8(argv[2]), argc - 3, @argv[3]);
+    table := module.TableClass.Create(
+      module, RawUtf8(argv[2]), argc - 3, @argv[3]);
   except
     on E: Exception do
     begin
@@ -503,17 +503,17 @@ begin
       exit;
     end;
   end;
-  Structure := Table.Structure;
-  result := sqlite3.declare_vtab(DB, pointer(Structure));
+  struct := table.Structure;
+  result := sqlite3.declare_vtab(DB, pointer(struct));
   if result <> SQLITE_OK then
   begin
-    Notify('vt_Create(%) declare_vtab(%)', [ModuleName, Structure]);
-    Table.Free;
+    Notify('vt_Create(%) declare_vtab(%)', [modname, struct]);
+    table.Free;
     sqlite3.free_(ppVTab);
     result := SQLITE_ERROR;
   end
   else
-    ppVTab^.pInstance := Table;
+    ppVTab^.pInstance := table;
 end;
 
 function vt_Disconnect(pVTab: PSqlite3VTab): integer; cdecl;
@@ -542,12 +542,12 @@ const
          1E10, 1E8, 10, 1);
       // costFullScan, costScanWhere, costSecondaryIndex, costPrimaryIndex
 var
-  Prepared: POrmVirtualTablePrepared;
-  Table: TOrmVirtualTable;
+  prepared: POrmVirtualTablePrepared;
+  table: TOrmVirtualTable;
   i, n: PtrInt;
 begin
   result := SQLITE_ERROR;
-  Table := TOrmVirtualTable(pVTab.pInstance);
+  table := TOrmVirtualTable(pVTab.pInstance);
   if (cardinal(pInfo.nOrderBy) > MAX_SQLFIELDS) or
      (cardinal(pInfo.nConstraint) > MAX_SQLFIELDS) then
   begin
@@ -555,13 +555,13 @@ begin
     Notify('nOrderBy=% nConstraint=%', [pInfo.nOrderBy, pInfo.nConstraint]);
     exit;
   end;
-  Prepared := sqlite3.malloc(sizeof(TOrmVirtualTablePrepared));
+  prepared := sqlite3.malloc(sizeof(TOrmVirtualTablePrepared));
   try
-    // encode the incoming parameters into Prepared^ record
-    Prepared^.WhereCount := pInfo.nConstraint;
-    Prepared^.EstimatedCost := costFullScan;
+    // encode the incoming parameters into prepared^ record
+    prepared^.WhereCount := pInfo.nConstraint;
+    prepared^.EstimatedCost := costFullScan;
     for i := 0 to pInfo.nConstraint - 1 do
-      with Prepared^.Where[i], pInfo.aConstraint^[i] do
+      with prepared^.Where[i], pInfo.aConstraint^[i] do
       begin
         OmitCheck := False;
         Value.VType := ftUnknown;
@@ -588,46 +588,46 @@ begin
         else
           Column := VIRTUAL_TABLE_IGNORE_COLUMN;
       end;
-    Prepared^.OmitOrderBy := false;
+    prepared^.OmitOrderBy := false;
     if pInfo.nOrderBy > 0 then
     begin
       assert(sizeof(TOrmVirtualTablePreparedOrderBy) = sizeof(TSqlite3IndexOrderBy));
-      Prepared^.OrderByCount := pInfo.nOrderBy;
-      MoveFast(pInfo.aOrderBy^[0], Prepared^.OrderBy[0],
-        pInfo.nOrderBy * sizeof(Prepared^.OrderBy[0]));
+      prepared^.OrderByCount := pInfo.nOrderBy;
+      MoveFast(pInfo.aOrderBy^[0], prepared^.OrderBy[0],
+        pInfo.nOrderBy * sizeof(prepared^.OrderBy[0]));
     end
     else
-      Prepared^.OrderByCount := 0;
+      prepared^.OrderByCount := 0;
     // perform the index query
-    if not Table.Prepare(Prepared^) then
+    if not table.Prepare(prepared^) then
       exit;
-    // update pInfo and store Prepared into pInfo.idxStr for vt_Filter()
+    // update pInfo and store prepared into pInfo.idxStr for vt_Filter()
     n := 0;
     for i := 0 to pInfo.nConstraint - 1 do
-      if Prepared^.Where[i].Value.VType <> ftUnknown then
+      if prepared^.Where[i].Value.VType <> ftUnknown then
       begin
         if i <> n then
           // expression needed for Search() method to be moved at [n]
-          MoveFast(Prepared^.Where[i], Prepared^.Where[n],
-            sizeof(Prepared^.Where[i]));
+          MoveFast(prepared^.Where[i], prepared^.Where[n],
+            sizeof(prepared^.Where[i]));
         inc(n);
         pInfo.aConstraintUsage[i].argvIndex := n;
-        pInfo.aConstraintUsage[i].omit := Prepared^.Where[i].OmitCheck;
+        pInfo.aConstraintUsage[i].omit := prepared^.Where[i].OmitCheck;
       end;
-    Prepared^.WhereCount := n; // will match argc in vt_Filter()
-    if Prepared^.OmitOrderBy then
+    prepared^.WhereCount := n; // will match argc in vt_Filter()
+    if prepared^.OmitOrderBy then
       pInfo.orderByConsumed := 1
     else
       pInfo.orderByConsumed := 0;
-    pInfo.estimatedCost := COST[Prepared^.EstimatedCost];
+    pInfo.estimatedCost := COST[prepared^.EstimatedCost];
     if sqlite3.VersionNumber >= 3008002000 then
       // starting with SQLite 3.8.2: fill estimatedRows
-      case Prepared^.EstimatedCost of
+      case prepared^.EstimatedCost of
         costFullScan:
-          pInfo.estimatedRows := Prepared^.EstimatedRows;
+          pInfo.estimatedRows := prepared^.EstimatedRows;
         costScanWhere:
           // estimate a WHERE clause is a slight performance gain
-          pInfo.estimatedRows := Prepared^.EstimatedRows shr 1;
+          pInfo.estimatedRows := prepared^.EstimatedRows shr 1;
         costSecondaryIndex:
           pInfo.estimatedRows := 10;
         costPrimaryIndex:
@@ -635,20 +635,20 @@ begin
       else
         raise EOrmException.Create('vt_BestIndex: unexpected EstimatedCost');
       end;
-    pInfo.idxStr := pointer(Prepared);
+    pInfo.idxStr := pointer(prepared);
     pInfo.needToFreeIdxStr := 1; // will do sqlite3.free(idxStr) when needed
     result := SQLITE_OK;
     {$ifdef OrmVirtualLOGS}
-    if Table.Static is TRestStorageExternal then
-      TRestStorageExternal(Table.Static).ComputeSql(Prepared^);
+    if table.Static is TRestStorageExternal then
+      TRestStorageExternal(table.Static).ComputeSql(prepared^);
     SQLite3Log.Add.Log(sllDebug, 'vt_BestIndex(%) plan=% -> cost=% rows=%',
-      [sqlite3.VersionNumber, ord(Prepared^.EstimatedCost),
+      [sqlite3.VersionNumber, ord(prepared^.EstimatedCost),
        pInfo.estimatedCost, pInfo.estimatedRows]);
     {$endif OrmVirtualLOGS}
   finally
     if result <> SQLITE_OK then
       // avoid memory leak on error
-      sqlite3.free_(Prepared);
+      sqlite3.free_(prepared);
   end;
 end;
 
@@ -656,19 +656,19 @@ function vt_Filter(var pVtabCursor: TSqlite3VTabCursor; idxNum: integer;
   const idxStr: PAnsiChar; argc: integer;
   var argv: TSqlite3ValueArray): integer; cdecl;
 var
-  Prepared: POrmVirtualTablePrepared absolute idxStr; // idxNum is not used
+  prepared: POrmVirtualTablePrepared absolute idxStr; // idxNum is not used
   i: PtrInt;
 begin
   result := SQLITE_ERROR;
-  if Prepared^.WhereCount <> argc then
+  if prepared^.WhereCount <> argc then
   begin
     // invalid prepared array (should not happen)
-    Notify('vt_Filter WhereCount=% argc=%', [Prepared^.WhereCount, argc]);
+    Notify('vt_Filter WhereCount=% argc=%', [prepared^.WhereCount, argc]);
     exit;
   end;
   for i := 0 to argc - 1 do
-    SQlite3ValueToSqlVar(argv[i], Prepared^.Where[i].Value);
-  if TOrmVirtualTableCursor(pVtabCursor.pInstance).Search(Prepared^) then
+    SQlite3ValueToSqlVar(argv[i], prepared^.Where[i].Value);
+  if TOrmVirtualTableCursor(pVtabCursor.pInstance).Search(prepared^) then
     result := SQLITE_OK
   else
     Notify('vt_Filter Search()', []);
@@ -677,7 +677,7 @@ end;
 function vt_Open(var pVTab: TSqlite3VTab;
   var ppCursor: PSqlite3VTabCursor): integer; cdecl;
 var
-  Table: TOrmVirtualTable;
+  table: TOrmVirtualTable;
 begin
   ppCursor := sqlite3.malloc(sizeof(TSqlite3VTabCursor));
   if ppCursor = nil then
@@ -685,17 +685,17 @@ begin
     result := SQLITE_NOMEM;
     exit;
   end;
-  Table := TOrmVirtualTable(pVTab.pInstance);
-  if (Table = nil) or
-     (Table.Module = nil) or
-     (Table.Module.CursorClass = nil) then
+  table := TOrmVirtualTable(pVTab.pInstance);
+  if (table = nil) or
+     (table.Module = nil) or
+     (table.Module.CursorClass = nil) then
   begin
     Notify('vt_Open', []);
     sqlite3.free_(ppCursor);
     result := SQLITE_ERROR;
     exit;
   end;
-  ppCursor.pInstance := Table.Module.CursorClass.Create(Table);
+  ppCursor.pInstance := table.Module.CursorClass.Create(table);
   result := SQLITE_OK;
 end;
 
@@ -725,16 +725,16 @@ end;
 function vt_Column(var pVtabCursor: TSqlite3VTabCursor;
   sContext: TSqlite3FunctionContext; N: integer): integer; cdecl;
 var
-  Res: TSqlVar;
+  res: TSqlVar;
 begin
-  Res.VType := ftUnknown;
+  res.VType := ftUnknown;
   if (N >= 0) and
-     TOrmVirtualTableCursor(pVtabCursor.pInstance).Column(N, Res) and
-     SqlVarToSQlite3Context(Res, sContext) then
+     TOrmVirtualTableCursor(pVtabCursor.pInstance).Column(N, res) and
+     SqlVarToSQlite3Context(res, sContext) then
     result := SQLITE_OK
   else
   begin
-    Notify('vt_Column(%) Res=%', [N, ord(Res.VType)]);
+    Notify('vt_Column(%) res=%', [N, ord(res.VType)]);
     result := SQLITE_ERROR;
   end;
 end;
@@ -742,24 +742,24 @@ end;
 function vt_Rowid(var pVtabCursor: TSqlite3VTabCursor;
   var pRowid: Int64): integer; cdecl;
 var
-  Res: TSqlVar;
+  res: TSqlVar;
 begin
   result := SQLITE_ERROR;
   with TOrmVirtualTableCursor(pVtabCursor.pInstance) do
-    if Column(-1, Res) then
+    if Column(-1, res) then
     begin
-      case Res.VType of
+      case res.VType of
         ftInt64:
-          pRowid := Res.VInt64;
+          pRowid := res.VInt64;
         ftDouble:
-          pRowid := trunc(Res.VDouble);
+          pRowid := trunc(res.VDouble);
         ftCurrency:
-          pRowid := trunc(Res.VCurrency);
+          pRowid := trunc(res.VCurrency);
         ftUtf8:
-          pRowid := GetInt64(Res.VText);
+          pRowid := GetInt64(res.VText);
       else
         begin
-          Notify('vt_Rowid Res=%', [ord(Res.VType)]);
+          Notify('vt_Rowid res=%', [ord(res.VType)]);
           exit;
         end;
       end;
@@ -772,47 +772,47 @@ end;
 function vt_Update(var pVTab: TSqlite3VTab; nArg: integer;
   var ppArg: TSqlite3ValueArray; var pRowid: Int64): integer; cdecl;
 var
-  Values: TSqlVarDynArray;
-  Table: TOrmVirtualTable;
-  RowID0, RowID1: Int64;
+  values: TSqlVarDynArray;
+  table: TOrmVirtualTable;
+  id0, id1: Int64;
   i: PtrInt;
-  OK: boolean;
+  ok: boolean;
 begin
   // call Delete/Insert/Update methods according to supplied parameters
-  Table := TOrmVirtualTable(pVTab.pInstance);
+  table := TOrmVirtualTable(pVTab.pInstance);
   result := SQLITE_ERROR;
   if (nArg <= 0) or
      (nArg > 1024) then
     exit;
   case sqlite3.value_type(ppArg[0]) of
     SQLITE_INTEGER:
-      RowID0 := sqlite3.value_int64(ppArg[0]);
+      id0 := sqlite3.value_int64(ppArg[0]);
     SQLITE_NULL:
-      RowID0 := 0;
+      id0 := 0;
   else
     exit; // invalid call
   end;
   if nArg = 1 then
-    OK := Table.Delete(RowID0)
+    ok := table.Delete(id0)
   else
   begin
     case sqlite3.value_type(ppArg[1]) of
       SQLITE_INTEGER:
-        RowID1 := sqlite3.value_int64(ppArg[1]);
+        id1 := sqlite3.value_int64(ppArg[1]);
       SQLITE_NULL:
-        RowID1 := 0;
+        id1 := 0;
     else
       exit; // invalid call
     end;
-    SetLength(Values, nArg - 2);
+    SetLength(values, nArg - 2);
     for i := 0 to nArg - 3 do
-      SQlite3ValueToSqlVar(ppArg[i + 2], Values[i]);
-    if RowID0 = 0 then
-      OK := Table.Insert(RowID1, Values, pRowid)
+      SQlite3ValueToSqlVar(ppArg[i + 2], values[i]);
+    if id0 = 0 then
+      ok := table.Insert(id1, values, pRowid)
     else
-      OK := Table.Update(RowID0, RowID1, Values);
+      ok := table.Update(id0, id1, values);
   end;
-  if OK then
+  if ok then
     result := SQLITE_OK
   else
     Notify('vt_Update(%)', [pRowid]);
@@ -1096,7 +1096,7 @@ end;
 
 procedure TRestOrmServerDB.PrepareStatement(Cached: boolean);
 var
-  wasPrepared: boolean;
+  wasprepared: boolean;
   timer: PPPrecisionTimer;
 begin
   fStaticStatementTimer.Start;
@@ -1114,9 +1114,9 @@ begin
     timer := @fStatementTimer
   else
     timer := nil;
-  fStatement := fStatementCache.Prepare(fStatementGenericSql, @wasPrepared,
+  fStatement := fStatementCache.Prepare(fStatementGenericSql, @wasprepared,
     timer, @fStatementMonitor);
-  if wasPrepared then
+  if wasprepared then
   begin
     InternalLog('prepared % % %', [fStaticStatementTimer.Stop,
       DB.FileNameWithoutPath, fStatementGenericSql], sllDB);
@@ -1136,14 +1136,14 @@ procedure TRestOrmServerDB.GetAndPrepareStatement(const SQL: RawUtf8;
   ForceCacheStatement: boolean);
 var
   i, sqlite3param: PtrInt;
-  Types: TSqlParamTypeDynArray;
-  Nulls: TFieldBits;
-  Values: TRawUtf8DynArray;
+  types: TSqlParamTypeDynArray;
+  nulls: TFieldBits;
+  values: TRawUtf8DynArray;
 begin
   // prepare statement
   fStatementSql := SQL;
   fStatementGenericSql := ExtractInlineParameters(
-    SQL, Types, Values, fStatementMaxParam, Nulls);
+    SQL, types, values, fStatementMaxParam, nulls);
   PrepareStatement(ForceCacheStatement or (fStatementMaxParam <> 0));
   // bind parameters
   if fStatementMaxParam = 0 then
@@ -1154,19 +1154,19 @@ begin
       '%.GetAndPrepareStatement(%) recognized % params, and % for SQLite3',
       [self, fStatementGenericSql, fStatementMaxParam, sqlite3param]);
   for i := 0 to fStatementMaxParam - 1 do
-    if i in Nulls then
+    if i in nulls then
       fStatement^.BindNull(i + 1)
     else
-      case Types[i] of
+      case types[i] of
         sptDateTime, // date/time are stored as ISO-8601 TEXT in SQLite3
         sptText:
-          fStatement^.Bind(i + 1, Values[i]);
+          fStatement^.Bind(i + 1, values[i]);
         sptBlob:
-          fStatement^.BindBlob(i + 1, Values[i]);
+          fStatement^.BindBlob(i + 1, values[i]);
         sptInteger:
-          fStatement^.Bind(i + 1, GetInt64(pointer(Values[i])));
+          fStatement^.Bind(i + 1, GetInt64(pointer(values[i])));
         sptFloat:
-          fStatement^.Bind(i + 1, GetExtended(pointer(Values[i])));
+          fStatement^.Bind(i + 1, GetExtended(pointer(values[i])));
       end;
 end;
 
@@ -1238,15 +1238,15 @@ end;
 
 function TRestOrmServerDB.TableMaxID(Table: TOrmClass): TID;
 var
-  SQL: RawUtf8;
+  sql: RawUtf8;
 begin
   if StaticTable[Table] <> nil then
     result := inherited TableMaxID(Table)
   else
   begin
-    SQL := 'select rowid from ' + Table.SqlTableName +
+    sql := 'select rowid from ' + Table.SqlTableName +
            ' order by rowid desc limit 1';
-    if not InternalExecute(SQL, true, PInt64(@result)) then
+    if not InternalExecute(sql, true, PInt64(@result)) then
       result := 0;
   end;
 end;
@@ -1254,21 +1254,21 @@ end;
 function TRestOrmServerDB.MainEngineAdd(TableModelIndex: integer;
   const SentData: RawUtf8): TID;
 var
-  Props: TOrmProperties;
-  SQL: RawUtf8;
-  Decoder: TJsonObjectDecoder;
+  props: TOrmProperties;
+  sql: RawUtf8;
+  decoder: TJsonObjectDecoder;
 begin
   result := 0;
   if TableModelIndex < 0 then
     exit;
-  Props := fModel.TableProps[TableModelIndex].Props;
-  SQL := Props.SqlTableName;
+  props := fModel.TableProps[TableModelIndex].Props;
+  sql := props.SqlTableName;
   if fBatchMethod <> mNone then
   begin
     result := 0; // indicates error
     if SentData = '' then
       InternalLog('BATCH with MainEngineAdd(%,SentData="") -> ' +
-        'DEFAULT VALUES not implemented', [SQL], sllError)
+        'DEFAULT VALUES not implemented', [sql], sllError)
     else if (fBatchMethod = mPOST) and
             (fBatchIDMax >= 0) and
             ((fBatchTableIndex < 0) or
@@ -1284,7 +1284,7 @@ begin
       begin
         if fBatchIDMax = 0 then
         begin
-          fBatchIDMax := TableMaxID(Props.Table);
+          fBatchIDMax := TableMaxID(props.Table);
           if fBatchIDMax < 0 then
             // will force error for whole BATCH block
             exit;
@@ -1297,43 +1297,43 @@ begin
     end;
     exit;
   end;
-  SQL := 'INSERT INTO ' + SQL;
+  sql := 'INSERT INTO ' + sql;
   if TrimU(SentData) = '' then
-    SQL := SQL + ' DEFAULT VALUES;'
+    sql := sql + ' DEFAULT VALUES;'
   else
   begin
     JsonGetID(pointer(SentData), result);
-    Decoder.Decode(SentData, nil, pInlined, result, false);
+    decoder.Decode(SentData, nil, pInlined, result, false);
     if (fOwner <> nil) and
-       (Props.RecordVersionField <> nil) then
-      fOwner.RecordVersionHandle(ooInsert, TableModelIndex, Decoder,
-        Props.RecordVersionField);
-    SQL := SQL + Decoder.EncodeAsSql(false) + ';';
+       (props.RecordVersionField <> nil) then
+      fOwner.RecordVersionHandle(ooInsert, TableModelIndex, decoder,
+        props.RecordVersionField);
+    sql := sql + decoder.EncodeAsSql(false) + ';';
   end;
-  if InternalExecute(SQL, true, nil, nil, nil, PInt64(@result)) then
+  if InternalExecute(sql, true, nil, nil, nil, PInt64(@result)) then
     InternalUpdateEvent(oeAdd, TableModelIndex, result, SentData, nil);
 end;
 
 procedure InternalRTreeIn(Context: TSqlite3FunctionContext;
   argc: integer; var argv: TSqlite3ValueArray); cdecl;
 var
-  aRTree: TOrmRTreeClass;
-  BlobA, BlobB: pointer;
+  rtree: TOrmRTreeClass;
+  blob0, blob1: pointer;
 begin
   if argc <> 2 then
   begin
     ErrorWrongNumberOfArgs(Context);
     exit;
   end;
-  aRTree := sqlite3.user_data(Context);
-  BlobA := sqlite3.value_blob(argv[0]);
-  BlobB := sqlite3.value_blob(argv[1]);
-  if (aRTree = nil) or
-     (BlobA = nil) or
-     (BlobB = nil) then
+  rtree := sqlite3.user_data(Context);
+  blob0 := sqlite3.value_blob(argv[0]);
+  blob1 := sqlite3.value_blob(argv[1]);
+  if (rtree = nil) or
+     (blob0 = nil) or
+     (blob1 = nil) then
     sqlite3.result_error(Context, 'invalid call')
   else
-    sqlite3.result_int64(Context, byte(aRTree.ContainedIn(BlobA^, BlobB^)));
+    sqlite3.result_int64(Context, byte(rtree.ContainedIn(blob0^, blob1^)));
 end;
 
 procedure TRestOrmServerDB.InitializeEngine;
@@ -1342,13 +1342,13 @@ var
   module: TOrmVirtualTableClass;
   registered: array of TOrmVirtualTableClass;
 begin
-  for i := 0 to high(model.TableProps) do
-    case model.TableProps[i].Kind of
+  for i := 0 to high(Model.TableProps) do
+    case Model.TableProps[i].Kind of
       ovkRTree, ovkRTreeInteger:
         // register all RTREE associated *_in() SQL functions
         sqlite3_check(DB.DB, sqlite3.create_function_v2(
-          DB.DB, pointer(TOrmRTreeClass(model.Tables[i]).RTreeSQLFunctionName),
-          2, SQLITE_ANY, model.Tables[i], InternalRTreeIn, nil, nil, nil));
+          DB.DB, pointer(TOrmRTreeClass(Model.Tables[i]).RTreeSQLFunctionName),
+          2, SQLITE_ANY, Model.Tables[i], InternalRTreeIn, nil, nil, nil));
       ovkCustomForcedID, ovkCustomAutoID:
         begin
           // register once each TOrmVirtualTableModuleServerDB
@@ -1367,61 +1367,61 @@ procedure TRestOrmServerDB.CreateMissingTables(user_version: cardinal;
   Options: TOrmInitializeTableOptions);
 var
   t, f, nt, nf: PtrInt;
-  TableNamesAtCreation, aFields: TRawUtf8DynArray;
-  TableJustCreated: TOrmFieldTables;
-  aSql: RawUtf8;
+  tablesatcreation, fieldsatcreation: TRawUtf8DynArray;
+  tablecreated: TOrmFieldTables;
+  sqladd: RawUtf8;
 begin
   if DB.TransactionActive then
     raise ERestStorage.Create('CreateMissingTables in transaction');
-  fDB.GetTableNames(TableNamesAtCreation);
-  nt := length(TableNamesAtCreation);
-  QuickSortRawUtf8(TableNamesAtCreation, nt, nil, @StrIComp);
+  fDB.GetTableNames(tablesatcreation);
+  nt := length(tablesatcreation);
+  QuickSortRawUtf8(tablesatcreation, nt, nil, @StrIComp);
   fDB.Log.Add.Log(sllDB, 'CreateMissingTables on %', [fDB], self);
   fDB.Log.Add.Log(sllDB, 'GetTables', TypeInfo(TRawUtf8DynArray),
-    TableNamesAtCreation, self);
-  FillcharFast(TableJustCreated, sizeof(TOrmFieldTables), 0);
+    tablesatcreation, self);
+  FillcharFast(tablecreated, sizeof(TOrmFieldTables), 0);
   try
     // create not static and not existing tables
-    for t := 0 to high(model.Tables) do
+    for t := 0 to high(Model.Tables) do
       if (fStaticData = nil) or
          (fStaticData[t] = nil) then
         // this table is not static -> check if already existing, create if necessary
-        with model.TableProps[t], Props do
+        with Model.TableProps[t], Props do
           if not NoCreateMissingTable then
             if FastFindPUtf8CharSorted(
-              pointer(TableNamesAtCreation), nt - 1,
+              pointer(tablesatcreation), nt - 1,
               pointer(SqlTableName), @StrIComp) < 0 then
             begin
               if not DB.TransactionActive then
                 // make initialization faster by using transaction
                 DB.TransactionBegin;
               // note: don't catch Execute() exception in constructor
-              DB.Execute(model.GetSqlCreate(t));
-              include(TableJustCreated, t); // mark to be initialized below
+              DB.Execute(Model.GetSqlCreate(t));
+              include(tablecreated, t); // mark to be initialized below
             end
             else if not (itoNoCreateMissingField in Options) then
             begin
               // this table is existing: check that all fields exist -> create if necessary
-              DB.GetFieldNames(aFields, SqlTableName);
-              nf := length(aFields);
-              QuickSortRawUtf8(aFields, nf, nil, @StrIComp);
+              DB.GetFieldNames(fieldsatcreation, SqlTableName);
+              nf := length(fieldsatcreation);
+              QuickSortRawUtf8(fieldsatcreation, nf, nil, @StrIComp);
               for f := 0 to Fields.Count - 1 do
                 with Fields.List[f] do
                   if OrmFieldType in COPIABLE_FIELDS then
                     /// real database columns exist for Simple + Blob fields (not Many)
-                    if FastFindPUtf8CharSorted(pointer(aFields), nf - 1,
+                    if FastFindPUtf8CharSorted(pointer(fieldsatcreation), nf - 1,
                       pointer(Name), @StrIComp) < 0 then
                     begin
-                      aSql := model.GetSqlAddField(t, f);
-                      if aSql <> '' then
+                      sqladd := Model.GetSqlAddField(t, f);
+                      if sqladd <> '' then
                       begin
                         // need a true field with data
                         if not DB.TransactionActive then
                           // make initialization faster by using transaction
                           DB.TransactionBegin;
-                        DB.Execute(aSql);
+                        DB.Execute(sqladd);
                       end;
-                      model.Tables[t].InitializeTable(self, Name, Options);
+                      Model.Tables[t].InitializeTable(self, Name, Options);
                     end;
             end;
     if not DB.TransactionActive then
@@ -1430,13 +1430,13 @@ begin
     if user_version <> 0 then
       DB.user_version := user_version;
     // initialize new tables AFTER creation of ALL tables
-    if not IsZero(@TableJustCreated, sizeof(TOrmFieldTables)) then
-      for t := 0 to high(model.Tables) do
-        if t in TableJustCreated then
-          if not (model.TableProps[t].Kind in IS_CUSTOM_VIRTUAL) or
-             not TableHasRows(model.Tables[t]) then
+    if not IsZero(@tablecreated, sizeof(TOrmFieldTables)) then
+      for t := 0 to high(Model.Tables) do
+        if t in tablecreated then
+          if not (Model.TableProps[t].Kind in IS_CUSTOM_VIRTUAL) or
+             not TableHasRows(Model.Tables[t]) then
             // check is really void
-            model.Tables[t].InitializeTable(self, '', Options);
+            Model.Tables[t].InitializeTable(self, '', Options);
             // FieldName='' for table creation
     DB.Commit;
   except
@@ -1467,7 +1467,7 @@ function TRestOrmServerDB.MainEngineDeleteWhere(TableModelIndex: integer;
   const SqlWhere: RawUtf8; const IDs: TIDDynArray): boolean;
 var
   i: PtrInt;
-  aSqlWhere: RawUtf8;
+  sql: RawUtf8;
 begin
   if (TableModelIndex < 0) or
      (IDs = nil) then
@@ -1481,12 +1481,12 @@ begin
        IdemPChar(pointer(SqlWhere), 'ORDER BY ') then
       // LIMIT is not handled by SQLite3 when built from amalgamation
       // see http://www.sqlite.org/compile.html#enable_update_delete_limit
-      aSqlWhere := Int64DynArrayToCsv(pointer(IDs), length(IDs), 'RowID IN (', ')')
+      sql := Int64DynArrayToCsv(pointer(IDs), length(IDs), 'RowID IN (', ')')
     else
-      aSqlWhere := SqlWhere;
+      sql := SqlWhere;
     result := ExecuteFmt('DELETE FROM %%',
       [fModel.TableProps[TableModelIndex].Props.SqlTableName,
-       SqlFromWhere(aSqlWhere)]);
+       SqlFromWhere(sql)]);
   end;
 end;
 
@@ -1563,7 +1563,7 @@ function TRestOrmServerDB.InternalExecute(const aSql: RawUtf8;
   ValueInts: PInt64DynArray; LastInsertedID: PInt64;
   LastChangeCount: PInteger): boolean;
 var
-  ValueIntsCount, Res: integer;
+  n, res: integer;
   msg: shortstring;
 begin
   msg := '';
@@ -1580,14 +1580,14 @@ begin
         GetAndPrepareStatement(aSql, ForceCacheStatement);
         if ValueInts <> nil then
         begin
-          ValueIntsCount := 0;
+          n := 0;
           repeat
-            Res := fStatement^.Step;
-            if Res = SQLITE_ROW then
-              AddInt64(ValueInts^, ValueIntsCount, fStatement^.FieldInt(0));
-          until Res = SQLITE_DONE;
-          SetLength(ValueInts^, ValueIntsCount);
-          FormatShort('returned Int64 len=%', [ValueIntsCount], msg);
+            res := fStatement^.Step;
+            if res = SQLITE_ROW then
+              AddInt64(ValueInts^, n, fStatement^.FieldInt(0));
+          until res = SQLITE_DONE;
+          SetLength(ValueInts^, n);
+          FormatShort('returned Int64 len=%', [n], msg);
         end
         else if (ValueInt = nil) and
                 (ValueUTF8 = nil) then
@@ -1645,8 +1645,8 @@ end;
 function TRestOrmServerDB.StoredProcExecute(const aSql: RawUtf8;
   const StoredProc: TOnSqlStoredProc): boolean;
 var
-  R: TSqlRequest; // we don't use fStatementCache[] here
-  Res: integer;
+  req: TSqlRequest; // we don't use fStatementCache[] here
+  res: integer;
   log: ISynLog;
 begin
   result := false;
@@ -1659,16 +1659,16 @@ begin
     DB.LockAndFlushCache; // even if aSql is SELECT, StoredProc may update data
     try
       try
-        R.Prepare(DB.DB, aSql);
-        if R.FieldCount > 0 then
+        req.Prepare(DB.DB, aSql);
+        if req.FieldCount > 0 then
           repeat
-            Res := R.Step;
-            if Res = SQLITE_ROW then
-              StoredProc(R); // apply the stored procedure to all rows
-          until Res = SQLITE_DONE;
+            res := req.Step;
+            if res = SQLITE_ROW then
+              StoredProc(req); // apply the stored procedure to all rows
+          until res = SQLITE_DONE;
         result := true;
       finally
-        R.Close; // always release statement
+        req.Close; // always release statement
       end;
     finally
       DB.UnLock;
@@ -1716,11 +1716,11 @@ end;
 function TRestOrmServerDB.MainEngineList(const SQL: RawUtf8; ForceAjax: boolean;
   ReturnedRowCount: PPtrInt): RawUtf8;
 var
-  MS: TRawByteStringStream;
-  RowCount: integer;
+  strm: TRawByteStringStream;
+  rows: integer;
 begin
   result := '';
-  RowCount := 0;
+  rows := 0;
   if (self <> nil) and
      (DB <> nil) and
      (SQL <> '') then
@@ -1733,41 +1733,41 @@ begin
       // Execute request if was not got from cache
       try
         GetAndPrepareStatement(SQL, {forcecache=}false);
-        MS := TRawByteStringStream.Create;
+        strm := TRawByteStringStream.Create;
         try
-          RowCount := fStatement^.Execute(0, '', MS,
+          rows := fStatement^.Execute(0, '', strm,
             ForceAjax or not fOwner.NoAjaxJson);
-          result := MS.DataString;
+          result := strm.DataString;
         finally
-          MS.Free;
+          strm.Free;
         end;
         GetAndPrepareStatementRelease(nil, 'returned % as %',
-          [Plural('row', RowCount), KB(result)]);
+          [Plural('row', rows), KB(result)]);
       except
         on E: ESqlite3Exception do
           GetAndPrepareStatementRelease(E);
       end;
     finally
-      DB.UnLockJson(result, RowCount);
+      DB.UnLockJson(result, rows);
     end;
   end;
   if ReturnedRowCount <> nil then
-    ReturnedRowCount^ := RowCount;
+    ReturnedRowCount^ := rows;
 end;
 
 function TRestOrmServerDB.MainEngineRetrieve(TableModelIndex: integer;
   ID: TID): RawUtf8;
 var
-  aSql: RawUtf8;
+  sqlwhere: RawUtf8;
 begin
   result := '';
   if (ID < 0) or
      (TableModelIndex < 0) then
     exit;
-  with model.TableProps[TableModelIndex] do
+  with Model.TableProps[TableModelIndex] do
     FormatUtf8('SELECT % FROM % WHERE RowID=:(%):;',
-      [sql.TableSimpleFields[true, false], Props.SqlTableName, ID], aSql);
-  result := EngineList(aSql, {ForceAjax=}true); // ForceAjax -> '[{...}]'#10
+      [SQL.TableSimpleFields[true, false], Props.SqlTableName, ID], sqlwhere);
+  result := EngineList(sqlwhere, {ForceAjax=}true); // ForceAjax -> '[{...}]'#10
   if result <> '' then
     if IsNotAjaxJson(pointer(result)) then
       // '{"fieldCount":2,"values":["ID","FirstName"]}'#$A -> ID not found
@@ -1780,21 +1780,21 @@ end;
 function TRestOrmServerDB.MainEngineRetrieveBlob(TableModelIndex: integer;
   aID: TID; BlobField: PRttiProp; out BlobData: RawBlob): boolean;
 var
-  SQL: RawUtf8;
+  sql: RawUtf8;
 begin
   result := false;
   if (aID < 0) or
      (TableModelIndex < 0) or
      not BlobField^.IsRawBlob then
     exit;
-  // retrieve the BLOB using SQL
+  // retrieve the BLOB using sql
   try
-    SQL := FormatUtf8('SELECT % FROM % WHERE RowID=?',
-      [BlobField^.NameUtf8, model.TableProps[TableModelIndex].Props.SqlTableName],
+    sql := FormatUtf8('SELECT % FROM % WHERE RowID=?',
+      [BlobField^.NameUtf8, Model.TableProps[TableModelIndex].Props.SqlTableName],
       [aID]);
-    DB.Lock(SQL); // UPDATE for a blob field -> no JSON cache flush, but UI refresh
+    DB.Lock(sql); // UPDATE for a blob field -> no JSON cache flush, but UI refresh
     try
-      GetAndPrepareStatement(SQL, true);
+      GetAndPrepareStatement(sql, true);
       try
         if (fStatement^.FieldCount = 1) and
            (fStatement^.Step = SQLITE_ROW) then
@@ -1819,7 +1819,7 @@ end;
 function TRestOrmServerDB.RetrieveBlobFields(Value: TOrm): boolean;
 var
   s: TRestOrm;
-  SQL: RawUtf8;
+  sql: RawUtf8;
   f: PtrInt;
   size: Int64;
   data: TSqlVar;
@@ -1836,11 +1836,11 @@ begin
     with Value.Orm do
       if BlobFields <> nil then
       begin
-        SQL := FormatUtf8('SELECT % FROM % WHERE ROWID=?',
+        sql := FormatUtf8('SELECT % FROM % WHERE ROWID=?',
           [SqlTableRetrieveBlobFields, SqlTableName], [Value.ID]);
-        DB.Lock(SQL);
+        DB.Lock(sql);
         try
-          GetAndPrepareStatement(SQL, true);
+          GetAndPrepareStatement(sql, true);
           try
             if fStatement^.Step <> SQLITE_ROW then
               exit;
@@ -1874,9 +1874,9 @@ end;
 function TRestOrmServerDB.MainEngineUpdate(TableModelIndex: integer; ID: TID;
   const SentData: RawUtf8): boolean;
 var
-  Props: TOrmProperties;
-  Decoder: TJsonObjectDecoder;
-  SQL: RawUtf8;
+  props: TOrmProperties;
+  decoder: TJsonObjectDecoder;
+  sql: RawUtf8;
 begin
   if (TableModelIndex < 0) or
      (ID <= 0) then
@@ -1886,15 +1886,15 @@ begin
     result := true
   else
   begin
-    // this SQL statement use :(inlined params): for all values
-    Props := fModel.TableProps[TableModelIndex].Props;
-    Decoder.Decode(SentData, nil, pInlined, ID, false);
-    if Props.RecordVersionField <> nil then
+    // this sql statement use :(inlined params): for all values
+    props := fModel.TableProps[TableModelIndex].Props;
+    decoder.Decode(SentData, nil, pInlined, ID, false);
+    if props.RecordVersionField <> nil then
       fOwner.RecordVersionHandle(ooUpdate, TableModelIndex,
-        Decoder, Props.RecordVersionField);
-    SQL := Decoder.EncodeAsSql(true);
+        decoder, props.RecordVersionField);
+    sql := decoder.EncodeAsSql(true);
     result := ExecuteFmt('UPDATE % SET % WHERE RowID=:(%):',
-      [Props.SqlTableName, SQL, ID]);
+      [props.SqlTableName, sql, ID]);
     InternalUpdateEvent(oeUpdate, TableModelIndex, ID, SentData, nil);
   end;
 end;
@@ -1902,22 +1902,22 @@ end;
 function TRestOrmServerDB.MainEngineUpdateBlob(TableModelIndex: integer;
   aID: TID; BlobField: PRttiProp; const BlobData: RawBlob): boolean;
 var
-  SQL: RawUtf8;
-  AffectedField: TFieldBits;
-  Props: TOrmProperties;
+  sql: RawUtf8;
+  affectedfields: TFieldBits;
+  props: TOrmProperties;
 begin
   result := false;
   if (aID < 0) or
      (TableModelIndex < 0) or
      not BlobField^.IsRawBlob then
     exit;
-  Props := model.TableProps[TableModelIndex].Props;
+  props := Model.TableProps[TableModelIndex].Props;
   try
     FormatUtf8('UPDATE % SET %=? WHERE RowID=?',
-      [Props.SqlTableName, BlobField^.NameUtf8], SQL);
-    DB.Lock(SQL); // UPDATE for a blob field -> no JSON cache flush, but UI refresh
+      [props.SqlTableName, BlobField^.NameUtf8], sql);
+    DB.Lock(sql); // UPDATE for a blob field -> no JSON cache flush, but UI refresh
     try
-      GetAndPrepareStatement(SQL, true);
+      GetAndPrepareStatement(sql, true);
       try
         if BlobData = '' then
           fStatement^.BindNull(1)
@@ -1936,8 +1936,8 @@ begin
     finally
       DB.UnLock;
     end;
-    Props.FieldBitsFromBlobField(BlobField, AffectedField);
-    InternalUpdateEvent(oeUpdateBlob, TableModelIndex, aID, '', @AffectedField);
+    props.FieldBitsFromBlobField(BlobField, affectedfields);
+    InternalUpdateEvent(oeUpdateBlob, TableModelIndex, aID, '', @affectedfields);
   except
     on ESqlite3Exception do
       result := false;
@@ -1948,63 +1948,62 @@ function TRestOrmServerDB.MainEngineUpdateFieldIncrement(
   TableModelIndex: integer; ID: TID; const FieldName: RawUtf8;
   Increment: Int64): boolean;
 var
-  Props: TOrmProperties;
-  Value: Int64;
+  props: TOrmProperties;
+  value: Int64;
 begin
   result := false;
   if (TableModelIndex < 0) or
      (FieldName = '') then
     exit;
-  Props := model.TableProps[TableModelIndex].Props;
-  if Props.Fields.IndexByName(FieldName) < 0 then
+  props := Model.TableProps[TableModelIndex].Props;
+  if props.Fields.IndexByName(FieldName) < 0 then
     Exit;
   if InternalUpdateEventNeeded(TableModelIndex) or
-     (Props.RecordVersionField <> nil) then
-    result := OneFieldValue(Props.Table, FieldName, 'ID=?', [], [ID], Value) and
-      UpdateField(Props.Table, ID, FieldName, [Value + Increment])
+     (props.RecordVersionField <> nil) then
+    result := OneFieldValue(props.Table, FieldName, 'ID=?', [], [ID], value) and
+      UpdateField(props.Table, ID, FieldName, [value + Increment])
   else
-    result := RecordCanBeUpdated(Props.Table, ID, oeUpdate) and
+    result := RecordCanBeUpdated(props.Table, ID, oeUpdate) and
       ExecuteFmt('UPDATE % SET %=%+:(%): WHERE ID=:(%):',
-       [Props.SqlTableName, FieldName, FieldName, Increment, ID]);
+       [props.SqlTableName, FieldName, FieldName, Increment, ID]);
 end;
 
 function TRestOrmServerDB.MainEngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUtf8): boolean;
 var
-  Props: TOrmProperties;
-  WhereID, RecordVersion: TID;
+  props: TOrmProperties;
+  whereid, recvers: TID;
   i: PtrInt;
-  JSON, IDs: RawUtf8;
+  json, IDs: RawUtf8;
   ID: TIDDynArray;
 begin
   result := false;
   if (TableModelIndex < 0) or
      (SetFieldName = '') then
     exit;
-  Props := model.TableProps[TableModelIndex].Props;
-  if Props.Fields.IndexByName(SetFieldName) < 0 then
+  props := Model.TableProps[TableModelIndex].Props;
+  if props.Fields.IndexByName(SetFieldName) < 0 then
     exit;
   if IsRowID(pointer(WhereFieldName)) then
   begin
-    WhereID := GetInt64(Pointer(WhereValue));
-    if WhereID <= 0 then
+    whereid := GetInt64(Pointer(WhereValue));
+    if whereid <= 0 then
       exit;
   end
-  else if Props.Fields.IndexByName(WhereFieldName) < 0 then
+  else if props.Fields.IndexByName(WhereFieldName) < 0 then
     exit
   else
-    WhereID := 0;
+    whereid := 0;
   if InternalUpdateEventNeeded(TableModelIndex) or
-     (Props.RecordVersionField <> nil) then
+     (props.RecordVersionField <> nil) then
   begin
-    if WhereID > 0 then
+    if whereid > 0 then
     begin
       SetLength(ID, 1);
-      ID[0] := WhereID;
+      ID[0] := whereid;
     end
     else if not InternalExecute(FormatUtf8('select RowID from % where %=:(%):',
-       [Props.SqlTableName, WhereFieldName, WhereValue]), true, nil, nil,
-       @ID) then
+       [props.SqlTableName, WhereFieldName, WhereValue]), true, nil, nil, @ID) then
       exit
     else if ID = nil then
     begin
@@ -2012,49 +2011,49 @@ begin
       exit;
     end;
     for i := 0 to high(ID) do
-      if not RecordCanBeUpdated(Props.Table, ID[i], oeUpdate) then
+      if not RecordCanBeUpdated(props.Table, ID[i], oeUpdate) then
         exit;
     if Length(ID) = 1 then
-      if Props.RecordVersionField = nil then
+      if props.RecordVersionField = nil then
         result := ExecuteFmt('UPDATE % SET %=:(%): WHERE RowID=:(%):',
-          [Props.SqlTableName, SetFieldName, SetValue, ID[0]])
+          [props.SqlTableName, SetFieldName, SetValue, ID[0]])
       else
         result := ExecuteFmt('UPDATE % SET %=:(%):,%=:(%): WHERE RowID=:(%):',
-          [Props.SqlTableName, SetFieldName, SetValue,
-          Props.RecordVersionField.Name, RecordVersionCompute, ID[0]])
+          [props.SqlTableName, SetFieldName, SetValue,
+          props.RecordVersionField.Name, RecordVersionCompute, ID[0]])
     else
     begin
       IDs := Int64DynArrayToCsv(pointer(ID), length(ID));
-      if Props.RecordVersionField = nil then
+      if props.RecordVersionField = nil then
         result := ExecuteFmt('UPDATE % SET %=% WHERE RowID IN (%)',
-          [Props.SqlTableName, SetFieldName, SetValue, IDs])
+          [props.SqlTableName, SetFieldName, SetValue, IDs])
       else
       begin
-        RecordVersion := RecordVersionCompute;
+        recvers := RecordVersionCompute;
         result := ExecuteFmt('UPDATE % SET %=%,%=% WHERE RowID IN (%)',
-          [Props.SqlTableName, SetFieldName, SetValue,
-           Props.RecordVersionField.Name, RecordVersion, IDs]);
+          [props.SqlTableName, SetFieldName, SetValue,
+           props.RecordVersionField.Name, recvers, IDs]);
       end;
     end;
     if not result then
       exit;
-    JsonEncodeNameSQLValue(SetFieldName, SetValue, JSON);
+    JsonEncodeNameSQLValue(SetFieldName, SetValue, json);
     for i := 0 to high(ID) do
-      InternalUpdateEvent(oeUpdate, TableModelIndex, ID[i], JSON, nil);
+      InternalUpdateEvent(oeUpdate, TableModelIndex, ID[i], json, nil);
   end
-  else if (WhereID > 0) and
-          not RecordCanBeUpdated(Props.Table, WhereID, oeUpdate) then
+  else if (whereid > 0) and
+          not RecordCanBeUpdated(props.Table, whereid, oeUpdate) then
     exit
   else // limitation: will only check for update when RowID is provided
     result := ExecuteFmt('UPDATE % SET %=:(%): WHERE %=:(%):',
-      [Props.SqlTableName, SetFieldName, SetValue, WhereFieldName, WhereValue]);
+      [props.SqlTableName, SetFieldName, SetValue, WhereFieldName, WhereValue]);
 end;
 
 function TRestOrmServerDB.UpdateBlobFields(Value: TOrm): boolean;
 var
   s: TRestOrm;
-  SQL: RawUtf8;
-  TableModelIndex, f: PtrInt;
+  sql: RawUtf8;
+  tableindex, f: PtrInt;
   data: TSqlVar;
   size: Int64;
   temp: RawByteString;
@@ -2062,21 +2061,21 @@ begin
   result := false;
   if Value = nil then
     exit;
-  TableModelIndex := model.GetTableIndexExisting(POrmClass(Value)^);
-  s := GetStaticTableIndex(TableModelIndex);
+  tableindex := Model.GetTableIndexExisting(POrmClass(Value)^);
+  s := GetStaticTableIndex(tableindex);
   if s <> nil then
     result := s.UpdateBlobFields(Value)
   else if (DB <> nil) and
           (Value.ID > 0) and
           (POrmClass(Value)^ <> nil) then
-    with model.TableProps[TableModelIndex].Props do
+    with Model.TableProps[tableindex].Props do
       if BlobFields <> nil then
       begin
         FormatUtf8('UPDATE % SET % WHERE ROWID=?',
-          [SqlTableName, SqlTableUpdateBlobFields], SQL);
-        DB.Lock(SQL); // UPDATE for all blob fields -> no cache flush, but UI refresh
+          [SqlTableName, SqlTableUpdateBlobFields], sql);
+        DB.Lock(sql); // UPDATE for all blob fields -> no cache flush, but UI refresh
         try
-          GetAndPrepareStatement(SQL, true);
+          GetAndPrepareStatement(sql, true);
           try
             size := 0;
             for f := 1 to length(BlobFields) do
@@ -2104,7 +2103,7 @@ begin
         finally
           DB.UnLock;
         end;
-        InternalUpdateEvent(oeUpdateBlob, TableModelIndex, Value.ID, '',
+        InternalUpdateEvent(oeUpdateBlob, tableindex, Value.ID, '',
           @FieldBits[oftBlob]);
       end
       else
@@ -2189,16 +2188,16 @@ procedure TRestOrmServerDB.InternalBatchStop;
 const
   MAX_PARAMS = 500; // pragmatic value (theoritical limit is 999)
 var
-  ndx, r, prop, fieldCount, valuesCount, rowCount, valuesFirstRow: integer;
+  ndx, r, prop, fieldcount, valuescount, rowcount, valuesfirstrow: integer;
   f: PtrInt;
   P: PUtf8Char;
-  DecodeSaved, UpdateEventNeeded: boolean;
-  Fields, Values: TRawUtf8DynArray;
-  ValuesNull: TByteDynArray;
-  Types: TSqlDBFieldTypeDynArray;
-  SQL: RawUtf8;
-  Props: TOrmProperties;
-  Decode: TJsonObjectDecoder;
+  decodesaved, updateeventneeded: boolean;
+  fields, values: TRawUtf8DynArray;
+  valuesnull: TByteDynArray;
+  types: TSqlDBFieldTypeDynArray;
+  sql: RawUtf8;
+  props: TOrmProperties;
+  decode: TJsonObjectDecoder;
   tmp: TSynTempBuffer;
 begin
   if (fBatchValuesCount = 0) or
@@ -2211,40 +2210,40 @@ begin
     if fBatchValuesCount <> fBatchIDCount then
       raise EOrmBatchException.CreateUtf8(
         '%.InternalBatchStop(*Count?)', [self]);
-    UpdateEventNeeded := InternalUpdateEventNeeded(fBatchTableIndex);
-    Props := fModel.Tables[fBatchTableIndex].OrmProps;
+    updateeventneeded := InternalUpdateEventNeeded(fBatchTableIndex);
+    props := fModel.Tables[fBatchTableIndex].OrmProps;
     if fBatchValuesCount = 1 then
     begin
       // handle single record insert
-      Decode.Decode(fBatchValues[0], nil, pInlined, fBatchID[0]);
-      if Props.RecordVersionField <> nil then
+      decode.Decode(fBatchValues[0], nil, pInlined, fBatchID[0]);
+      if props.RecordVersionField <> nil then
         fOwner.RecordVersionHandle(
-          ooInsert, fBatchTableIndex, Decode, Props.RecordVersionField);
-      SQL := 'INSERT INTO ' + Props.SqlTableName + Decode.EncodeAsSql(False) + ';';
-      if not InternalExecute(SQL, true) then
+          ooInsert, fBatchTableIndex, decode, props.RecordVersionField);
+      sql := 'INSERT INTO ' + props.SqlTableName + decode.EncodeAsSql(False) + ';';
+      if not InternalExecute(sql, true) then
         // just like ESqlite3Exception below
         raise EOrmBatchException.CreateUtf8(
-          '%.InternalBatchStop failed on %', [self, SQL]);
-      if UpdateEventNeeded then
+          '%.InternalBatchStop failed on %', [self, sql]);
+      if updateeventneeded then
         InternalUpdateEvent(oeAdd, fBatchTableIndex,
           fBatchID[0], fBatchValues[0], nil);
       exit;
     end;
-    DecodeSaved := true;
-    valuesCount := 0;
-    rowCount := 0;
-    valuesFirstRow := 0;
-    SetLength(ValuesNull, (MAX_PARAMS shr 3) + 1);
-    SetLength(Values, 32);
-    Fields := nil; // makes compiler happy
-    fieldCount := 0;
+    decodesaved := true;
+    valuescount := 0;
+    rowcount := 0;
+    valuesfirstrow := 0;
+    SetLength(valuesnull, (MAX_PARAMS shr 3) + 1);
+    SetLength(values, 32);
+    fields := nil; // makes compiler happy
+    fieldcount := 0;
     ndx := 0;
     repeat
       repeat
         // decode a row
-        if DecodeSaved then
+        if decodesaved then
         try
-          if UpdateEventNeeded then
+          if updateeventneeded then
           begin
             tmp.Init(fBatchValues[ndx]);
             P := tmp.buf;
@@ -2256,90 +2255,90 @@ begin
               '%.InternalBatchStop: fBatchValues[%]=""', [self, ndx]);
           while P^ in [#1..' ', '{', '['] do
             inc(P);
-          Decode.Decode(P, nil, pNonQuoted, fBatchID[ndx]);
-          if Props.RecordVersionField <> nil then
+          decode.decode(P, nil, pNonQuoted, fBatchID[ndx]);
+          if props.RecordVersionField <> nil then
             fOwner.RecordVersionHandle(ooInsert, fBatchTableIndex,
-              Decode, Props.RecordVersionField);
+              decode, props.RecordVersionField);
           inc(ndx);
-          DecodeSaved := false;
+          decodesaved := false;
         finally
-          if UpdateEventNeeded then
+          if updateeventneeded then
             tmp.Done;
         end;
-        if Fields = nil then
+        if fields = nil then
         begin
-          Decode.AssignFieldNamesTo(Fields);
-          fieldCount := Decode.FieldCount;
-          SQL := Decode.EncodeAsSqlPrepared(Props.SqlTableName, ooInsert, '',
+          decode.AssignFieldNamesTo(fields);
+          fieldcount := decode.fieldcount;
+          sql := decode.EncodeAsSqlPrepared(props.SqlTableName, ooInsert, '',
             fBatchOptions);
-          SetLength(Types, fieldCount);
-          for f := 0 to fieldCount - 1 do
+          SetLength(types, fieldcount);
+          for f := 0 to fieldcount - 1 do
           begin
-            prop := Props.Fields.IndexByNameOrExcept(Decode.FieldNames[f]);
+            prop := props.fields.IndexByNameOrExcept(decode.FieldNames[f]);
             if prop < 0 then
               // RowID
-              Types[f] := ftInt64
+              types[f] := ftInt64
             else
-              Types[f] := Props.Fields.List[prop].SqlDBFieldType;
+              types[f] := props.fields.List[prop].SqlDBFieldType;
           end;
         end
-        else if not Decode.SameFieldNames(Fields) then
-          // this item would break the SQL statement
+        else if not decode.SameFieldNames(fields) then
+          // this item would break the sql statement
           break
         else
-          if valuesCount + fieldCount > MAX_PARAMS then
+          if valuescount + fieldcount > MAX_PARAMS then
             // this item would bound too many params
             break;
-        // if we reached here, we can add this row to Values[]
-        if valuesCount + fieldCount > length(Values) then
-          SetLength(Values, MAX_PARAMS);
-        for f := 0 to fieldCount - 1 do
-          if Decode.FieldTypeApproximation[f] = ftaNull then
-            SetBitPtr(pointer(ValuesNull), valuesCount + f)
+        // if we reached here, we can add this row to values[]
+        if valuescount + fieldcount > length(values) then
+          SetLength(values, MAX_PARAMS);
+        for f := 0 to fieldcount - 1 do
+          if decode.FieldTypeApproximation[f] = ftaNull then
+            SetBitPtr(pointer(valuesnull), valuescount + f)
           else
-            Values[valuesCount + f] := Decode.FieldValues[f];
-        inc(valuesCount, fieldCount);
-        inc(rowCount);
-        DecodeSaved := true;
+            values[valuescount + f] := decode.FieldValues[f];
+        inc(valuescount, fieldcount);
+        inc(rowcount);
+        decodesaved := true;
       until ndx = fBatchValuesCount;
-      // INSERT Values[] into the DB
+      // INSERT values[] into the DB
       DB.LockAndFlushCache;
       try
         try
-          FormatUtf8('% multi %', [rowCount, SQL], fStatementSql);
-          if rowCount > 1 then
-            SQL := SQL + ',' +
-              CsvOfValue('(' + CsvOfValue('?', fieldCount) + ')', rowCount - 1);
-          fStatementGenericSql := SQL; // full log on error
-          PrepareStatement((rowCount < 5) or
-                           (valuesCount + fieldCount > MAX_PARAMS));
+          FormatUtf8('% multi %', [rowcount, sql], fStatementSql);
+          if rowcount > 1 then
+            sql := sql + ',' +
+              CsvOfValue('(' + CsvOfValue('?', fieldcount) + ')', rowcount - 1);
+          fStatementGenericSql := sql; // full log on error
+          PrepareStatement((rowcount < 5) or
+                           (valuescount + fieldcount > MAX_PARAMS));
           prop := 0;
-          for f := 0 to valuesCount - 1 do
+          for f := 0 to valuescount - 1 do
           begin
-            if GetBitPtr(pointer(ValuesNull), f) then
+            if GetBitPtr(pointer(valuesnull), f) then
               fStatement^.BindNull(f + 1)
             else
-              case Types[prop] of
+              case types[prop] of
                 ftInt64:
-                  fStatement^.Bind(f + 1, GetInt64(pointer(Values[f])));
+                  fStatement^.Bind(f + 1, GetInt64(pointer(values[f])));
                 ftDouble, ftCurrency:
-                  fStatement^.Bind(f + 1, GetExtended(pointer(Values[f])));
+                  fStatement^.Bind(f + 1, GetExtended(pointer(values[f])));
                 ftDate, ftUtf8:
-                  fStatement^.Bind(f + 1, Values[f]);
+                  fStatement^.Bind(f + 1, values[f]);
                 ftBlob:
-                  fStatement^.BindBlob(f + 1, Values[f]);
+                  fStatement^.BindBlob(f + 1, values[f]);
               end;
             inc(prop);
-            if prop = fieldCount then
+            if prop = fieldcount then
               prop := 0;
           end;
           repeat
           until fStatement^.Step <> SQLITE_ROW; // ESqlite3Exception on error
-          if UpdateEventNeeded then
-            for r := valuesFirstRow to valuesFirstRow + rowCount - 1 do
+          if updateeventneeded then
+            for r := valuesfirstrow to valuesfirstrow + rowcount - 1 do
               InternalUpdateEvent(oeAdd, fBatchTableIndex,
                 fBatchID[r], fBatchValues[r], nil);
-          inc(valuesFirstRow, rowCount);
+          inc(valuesfirstrow, rowcount);
           GetAndPrepareStatementRelease;
         except
           on E: Exception do
@@ -2351,15 +2350,15 @@ begin
       finally
         DB.UnLock;
       end;
-      FillcharFast(ValuesNull[0], (valuesCount shr 3) + 1, 0);
-      valuesCount := 0;
-      rowCount := 0;
-      Fields := nil; // force new SQL statement and Values[]
-    until DecodeSaved and
+      FillcharFast(valuesnull[0], (valuescount shr 3) + 1, 0);
+      valuescount := 0;
+      rowcount := 0;
+      fields := nil; // force new sql statement and values[]
+    until decodesaved and
           (ndx = fBatchValuesCount);
-    if valuesFirstRow <> fBatchValuesCount then
+    if valuesfirstrow <> fBatchValuesCount then
       raise EOrmBatchException.CreateUtf8(
-        '%.InternalBatchStop(valuesFirstRow)', [self]);
+        '%.InternalBatchStop(valuesfirstrow)', [self]);
   finally
     fBatchMethod := mNone;
     fBatchValuesCount := 0;
@@ -2393,7 +2392,7 @@ end;
 function TRestOrmClientDB.List(const Tables: array of TOrmClass;
   const SqlSelect: RawUtf8; const SqlWhere: RawUtf8): TOrmTable;
 var
-  aSql: RawUtf8;
+  sql: RawUtf8;
   n: integer;
 begin
   result := nil;
@@ -2402,13 +2401,13 @@ begin
      (n > 0) then
   try
     // direct SQL execution, using the JSON cache if available
-    aSql := fModel.SqlFromSelectWhere(Tables, SqlSelect, SqlWhere);
+    sql := fModel.SqlFromSelectWhere(Tables, SqlSelect, SqlWhere);
     if n = 1 then
       // InternalListJson will handle both static and DB tables
-      result := fServer.ExecuteList(Tables, aSql)
+      result := fServer.ExecuteList(Tables, sql)
     else
       // we access localy the DB -> TOrmTableDB handle Tables parameter
-      result := TOrmTableDB.Create(fServer.DB, Tables, aSql,
+      result := TOrmTableDB.Create(fServer.DB, Tables, sql,
         not fServer.Owner.NoAjaxJson);
     if fServer.DB.InternalState <> nil then
       result.InternalState := fServer.DB.InternalState^;

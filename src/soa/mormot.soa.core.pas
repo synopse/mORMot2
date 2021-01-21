@@ -626,7 +626,7 @@ type
     fInterfaceMethod: TServiceContainerInterfaceMethods;
     fInterfaceMethods: TDynArrayHashed;
     fExpectMangledUri: boolean;
-    procedure SetExpectMangledUri(aValue: boolean);
+    procedure SetExpectMangledUri(Mangled: boolean);
     procedure SetInterfaceMethodBits(MethodNamesCsv: PUtf8Char;
       IncludePseudoMethods: boolean; out bits: TServiceContainerInterfaceMethodBits);
     function GetMethodName(ListInterfaceMethodIndex: integer): RawUtf8;
@@ -1366,21 +1366,21 @@ begin
           raise EServiceException.CreateUtf8('%: % GUID already registered', [self, Name^]);
 end;
 
-procedure TServiceContainer.SetExpectMangledUri(aValue: boolean);
+procedure TServiceContainer.SetExpectMangledUri(Mangled: boolean);
 var
   i: PtrInt;
   toregisteragain: TServiceContainerInterfaces;
 begin
-  if aValue = fExpectMangledUri then
+  if Mangled = fExpectMangledUri then
     exit;
-  fExpectMangledUri := aValue;
+  fExpectMangledUri := Mangled;
   toregisteragain := fInterface; // same services, but other URIs
   fInterface := nil;
   fInterfaces.InitSpecific(TypeInfo(TServiceContainerInterfaces),
-    fInterface, ptRawUtf8, nil, {caseinsensitive=}not aValue);
+    fInterface, ptRawUtf8, nil, {caseinsensitive=}not Mangled);
   fInterfaceMethod := nil;
   fInterfaceMethods.InitSpecific(TypeInfo(TServiceContainerInterfaceMethods),
-    fInterfaceMethod, ptRawUtf8, nil, not aValue);
+    fInterfaceMethod, ptRawUtf8, nil, {caseinsens=}not Mangled);
   for i := 0 to high(toregisteragain) do
     AddServiceInternal(toregisteragain[i].Service);
 end;

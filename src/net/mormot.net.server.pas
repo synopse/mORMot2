@@ -1592,9 +1592,9 @@ end;
 
 procedure THttpServer.Execute;
 var
-  ClientSock: TNetSocket;
-  ClientSin: TNetAddr;
-  ClientCrtSock: THttpServerSocket;
+  cltsock: TNetSocket;
+  cltaddr: TNetAddr;
+  cltservsock: THttpServerSocket;
   res: TNetResult;
   {$ifdef MONOTHREAD}
   endtix: Int64;
@@ -1618,7 +1618,7 @@ begin
       raise EHttpServer.CreateUtf8('%.Execute: %.Bind failed', [self, fSock]);
     while not Terminated do
     begin
-      res := Sock.Sock.Accept(ClientSock, ClientSin);
+      res := Sock.Sock.Accept(cltsock, cltaddr);
       if not (res in [nrOK, nrRetry]) then
         if Terminated then
           break
@@ -1630,41 +1630,41 @@ begin
       if Terminated or
          (Sock = nil) then
       begin
-        ClientSock.ShutdownAndClose({rdwr=}true);
+        cltsock.ShutdownAndClose({rdwr=}true);
         break; // don't accept input if server is down
       end;
       OnConnect;
       {$ifdef MONOTHREAD}
-      ClientCrtSock := fSocketClass.Create(self);
+      cltservsock := fSocketClass.Create(self);
       try
-        ClientCrtSock.InitRequest(ClientSock);
+        cltservsock.InitRequest(cltsock);
         endtix := fHeaderRetrieveAbortDelay;
         if endtix > 0 then
           inc(endtix, mormot.core.os.GetTickCount64);
-        if ClientCrtSock.GetRequest({withbody=}true, endtix)
+        if cltservsock.GetRequest({withbody=}true, endtix)
             in [grBodyReceived, grHeaderReceived] then
-          Process(ClientCrtSock, 0, self);
+          Process(cltservsock, 0, self);
         OnDisconnect;
-        DirectShutdown(ClientSock);
+        DirectShutdown(cltsock);
       finally
-        ClientCrtSock.Free;
+        cltservsock.Free;
       end;
       {$else}
       if Assigned(fThreadPool) then
       begin
         // use thread pool to process the request header, and probably its body
-        ClientCrtSock := fSocketClass.Create(self);
-        ClientCrtSock.AcceptRequest(ClientSock, @ClientSin);
-        if not fThreadPool.Push(pointer(PtrUInt(ClientCrtSock)),
+        cltservsock := fSocketClass.Create(self);
+        cltservsock.AcceptRequest(cltsock, @cltaddr);
+        if not fThreadPool.Push(pointer(PtrUInt(cltservsock)),
             {waitoncontention=}true) then
         begin
           // returned false if there is no idle thread in the pool, and queue is full
-          ClientCrtSock.Free; // will call DirectShutdown(ClientSock)
+          cltservsock.Free; // will call DirectShutdown(cltsock)
         end;
       end
       else
         // default implementation creates one thread for each incoming socket
-        fThreadRespClass.Create(ClientSock, ClientSin, self);
+        fThreadRespClass.Create(cltsock, cltaddr, self);
       {$endif MONOTHREAD}
     end;
   except
@@ -1752,9 +1752,9 @@ procedure THttpServer.Process(ClientSock: THttpServerSocket;
 var
   ctxt: THttpServerRequest;
   respsent: boolean;
-  Code, afterCode: cardinal;
+  cod, aftercode: cardinal;
   reason: RawUtf8;
-  ErrorMsg: string;
+  errmsg: string;
 
   function SendFileAsResponse: boolean;
   var
@@ -1769,8 +1769,8 @@ var
        ctxt.OutContent := StringFromFile(fn);
        if ctxt.OutContent = '' then
        begin
-         FormatString('Impossible to send void file: %', [fn], ErrorMsg);
-         Code := HTTP_NOTFOUND;
+         FormatString('Impossible to send void file: %', [fn], errmsg);
+         cod := HTTP_NOTFOUND;
          result := false; // fatal error
        end;
     end;
@@ -1785,8 +1785,8 @@ var
     if not result then
       exit;
     {$ifdef SYNCRTDEBUGLOW}
-    TSynLog.Add.Log(sllCustom2, 'SendResponse respsent=% code=%', [respsent,
-      Code], self);
+    TSynLog.Add.Log(sllCustom2, 'SendResponse respsent=% cod=%', [respsent,
+      cod], self);
     {$endif SYNCRTDEBUGLOW}
     respsent := true;
     // handle case of direct sending of static file (as with http.sys)
@@ -1796,23 +1796,23 @@ var
     else if ctxt.OutContentType = NORESPONSE_CONTENT_TYPE then
       ctxt.OutContentType := ''; // true HTTP always expects a response
     // send response (multi-thread OK) at once
-    if (Code < HTTP_SUCCESS) or
+    if (cod < HTTP_SUCCESS) or
        (ClientSock.Headers = '') then
-      Code := HTTP_NOTFOUND;
-    StatusCodeToReason(Code, reason);
-    if ErrorMsg <> '' then
+      cod := HTTP_NOTFOUND;
+    StatusCodeToReason(cod, reason);
+    if errmsg <> '' then
     begin
       ctxt.OutCustomHeaders := '';
       ctxt.OutContentType := 'text/html; charset=utf-8'; // create message to display
       ctxt.OutContent := FormatUtf8('<body style="font-family:verdana">'#10 +
         '<h1>% Server Error %</h1><hr><p>HTTP % %<p>%<p><small>%',
-        [self, Code, Code, reason, HtmlEscapeString(ErrorMsg), fServerName]);
+        [self, cod, cod, reason, HtmlEscapeString(errmsg), fServerName]);
     end;
     // 1. send HTTP status command
     if ClientSock.KeepAliveClient then
-      ClientSock.SockSend(['HTTP/1.1 ', Code, ' ', reason])
+      ClientSock.SockSend(['HTTP/1.1 ', cod, ' ', reason])
     else
-      ClientSock.SockSend(['HTTP/1.0 ', Code, ' ', reason]);
+      ClientSock.SockSend(['HTTP/1.0 ', cod, ' ', reason]);
     // 2. send headers
     // 2.1. custom headers from Request() method
     P := pointer(ctxt.fOutCustomHeaders);
@@ -1868,35 +1868,35 @@ begin
       ctxt.Prepare(URL, Method, HeaderGetText(fRemoteIP), Content, ContentType,
         '', ClientSock.fTLS);
     try
-      Code := DoBeforeRequest(ctxt);
+      cod := DoBeforeRequest(ctxt);
       {$ifdef SYNCRTDEBUGLOW}
-      TSynLog.Add.Log(sllCustom2, 'DoBeforeRequest=%', [Code], self);
+      TSynLog.Add.Log(sllCustom2, 'DoBeforeRequest=%', [cod], self);
       {$endif SYNCRTDEBUGLOW}
-      if Code > 0 then
+      if cod > 0 then
         if not SendResponse or
-           (Code <> HTTP_ACCEPTED) then
+           (cod <> HTTP_ACCEPTED) then
           exit;
-      Code := Request(ctxt);
-      afterCode := DoAfterRequest(ctxt);
+      cod := Request(ctxt);
+      aftercode := DoAfterRequest(ctxt);
       {$ifdef SYNCRTDEBUGLOW}
-      TSynLog.Add.Log(sllCustom2, 'Request=% DoAfterRequest=%', [Code, afterCode], self);
+      TSynLog.Add.Log(sllCustom2, 'Request=% DoAfterRequest=%', [cod, aftercode], self);
       {$endif SYNCRTDEBUGLOW}
-      if afterCode > 0 then
-        Code := afterCode;
+      if aftercode > 0 then
+        cod := aftercode;
       if respsent or
          SendResponse then
-        DoAfterResponse(ctxt, Code);
+        DoAfterResponse(ctxt, cod);
       {$ifdef SYNCRTDEBUGLOW}
-      TSynLog.Add.Log(sllCustom2, 'DoAfterResponse respsent=% ErrorMsg=%',
-        [respsent, ErrorMsg], self);
+      TSynLog.Add.Log(sllCustom2, 'DoAfterResponse respsent=% errmsg=%',
+        [respsent, errmsg], self);
       {$endif SYNCRTDEBUGLOW}
     except
       on E: Exception do
         if not respsent then
         begin
           // notify the exception as server response
-          FormatString('%: %', [E, E.Message], ErrorMsg);
-          Code := HTTP_SERVERERROR;
+          FormatString('%: %', [E, E.Message], errmsg);
+          cod := HTTP_SERVERERROR;
           SendResponse;
         end;
     end;
@@ -2178,7 +2178,7 @@ procedure THttpServerResp.Execute;
   end;
 
 var
-  aSock: TNetSocket;
+  netsock: TNetSocket;
 begin
   fServer.NotifyThreadStart(self);
   try
@@ -2186,9 +2186,9 @@ begin
       if fClientSock.Socket <> 0 then
       begin
         // direct call from incoming socket
-        aSock := fClientSock;
+        netsock := fClientSock;
         fClientSock := nil; // fServerSock owns fClientSock
-        fServerSock.AcceptRequest(aSock, @fClientSin);
+        fServerSock.AcceptRequest(netsock, @fClientSin);
         if fServer <> nil then
           HandleRequestsProcess;
       end
@@ -2249,11 +2249,11 @@ end;
 
 procedure TSynThreadPoolTHttpServer.Task(aCaller: TSynThread; aContext: Pointer);
 var
-  ServerSock: THttpServerSocket;
+  srvsock: THttpServerSocket;
   headertix: Int64;
   res: THttpServerSocketGetRequestResult;
 begin
-  ServerSock := aContext;
+  srvsock := aContext;
   try
     if fServer.Terminated then
       exit;
@@ -2261,7 +2261,7 @@ begin
     headertix := fServer.HeaderRetrieveAbortDelay;
     if headertix > 0 then
       headertix := headertix + GetTickCount64;
-    res := ServerSock.GetRequest({withbody=}false, headertix);
+    res := srvsock.GetRequest({withbody=}false, headertix);
     if (fServer = nil) or
        fServer.Terminated then
       exit;
@@ -2273,35 +2273,35 @@ begin
           // connection and header seem valid -> process request further
           if (fServer.ServerKeepAliveTimeOut > 0) and
              (fServer.fInternalHttpServerRespList.Count < fMaxBodyThreadCount) and
-             (ServerSock.KeepAliveClient or
-              (ServerSock.ContentLength > fBigBodySize)) then
+             (srvsock.KeepAliveClient or
+              (srvsock.ContentLength > fBigBodySize)) then
           begin
             // HTTP/1.1 Keep Alive (including WebSockets) or posted data > 16 MB
             // -> process in dedicated background thread
-            fServer.fThreadRespClass.Create(ServerSock, fServer);
-            ServerSock := nil; // THttpServerResp will own and free ServerSock
+            fServer.fThreadRespClass.Create(srvsock, fServer);
+            srvsock := nil; // THttpServerResp will own and free srvsock
           end
           else
           begin
             // no Keep Alive = multi-connection -> process in the Thread Pool
-            if not (hfConnectionUpgrade in ServerSock.HeaderFlags) and
-               (IdemPCharArray(pointer(ServerSock.fMethod), ['HEAD', 'OPTIONS']) < 0) then
+            if not (hfConnectionUpgrade in srvsock.HeaderFlags) and
+               (IdemPCharArray(pointer(srvsock.fMethod), ['HEAD', 'OPTIONS']) < 0) then
             begin
-              ServerSock.GetBody; // we need to get it now
+              srvsock.GetBody; // we need to get it now
               LockedInc32(@fServer.fStats[grBodyReceived]);
             end;
             // multi-connection -> process now
-            fServer.Process(ServerSock, ServerSock.RemoteConnectionID, aCaller);
+            fServer.Process(srvsock, srvsock.RemoteConnectionID, aCaller);
             fServer.OnDisconnect;
             // no Shutdown here: will be done client-side
           end;
         end;
       grOwned:
         // e.g. for asynchrounous WebSockets
-        ServerSock := nil; // to ignore FreeAndNil(ServerSock) below
+        srvsock := nil; // to ignore FreeAndNil(srvsock) below
     end; // errors will close the connection
   finally
-    FreeAndNil(ServerSock);
+    srvsock.Free;
   end;
 end;
 
@@ -2385,8 +2385,8 @@ const
   HTTPADDURLSECDESC: PWideChar = 'D:(A;;GA;;;S-1-1-0)';
 var
   prefix: SynUnicode;
-  Error: HRESULT;
-  Config: HTTP_SERVICE_CONFIG_URLACL_SET;
+  err: HRESULT;
+  cfg: HTTP_SERVICE_CONFIG_URLACL_SET;
 begin
   try
     HttpApiInitialize;
@@ -2398,22 +2398,22 @@ begin
       EHttpApiServer.RaiseOnError(hInitialize,
         Http.Initialize(Http.Version, HTTP_INITIALIZE_CONFIG));
       try
-        FillcharFast(Config, sizeof(Config), 0);
-        Config.KeyDesc.pUrlPrefix := pointer(prefix);
+        FillcharFast(cfg, sizeof(cfg), 0);
+        cfg.KeyDesc.pUrlPrefix := pointer(prefix);
         // first delete any existing information
-        Error := Http.DeleteServiceConfiguration(
-          0, hscUrlAclInfo, @Config, Sizeof(Config));
+        err := Http.DeleteServiceConfiguration(
+          0, hscUrlAclInfo, @cfg, Sizeof(cfg));
         // then add authorization rule
         if not OnlyDelete then
         begin
-          Config.KeyDesc.pUrlPrefix := pointer(prefix);
-          Config.ParamDesc.pStringSecurityDescriptor := HTTPADDURLSECDESC;
-          Error := Http.SetServiceConfiguration(
-            0, hscUrlAclInfo, @Config, Sizeof(Config));
+          cfg.KeyDesc.pUrlPrefix := pointer(prefix);
+          cfg.ParamDesc.pStringSecurityDescriptor := HTTPADDURLSECDESC;
+          err := Http.SetServiceConfiguration(
+            0, hscUrlAclInfo, @cfg, Sizeof(cfg));
         end;
-        if (Error <> NO_ERROR) and
-           (Error <> ERROR_ALREADY_EXISTS) then
-          raise EHttpApiServer.Create(hSetServiceConfiguration, Error);
+        if (err <> NO_ERROR) and
+           (err <> ERROR_ALREADY_EXISTS) then
+          raise EHttpApiServer.Create(hSetServiceConfiguration, err);
         result := ''; // success
       finally
         Http.Terminate(HTTP_INITIALIZE_CONFIG);
@@ -2454,7 +2454,7 @@ constructor THttpApiServer.Create(CreateSuspended: boolean;
   QueueName: SynUnicode; const OnStart, OnStop: TOnNotifyThread;
   const ProcessName: RawUtf8);
 var
-  bindInfo: HTTP_BINDING_INFO;
+  binding: HTTP_BINDING_INFO;
 begin
   SetLength(fLogDataStorage, sizeof(HTTP_LOG_FIELDS_DATA)); // should be done 1st
   inherited Create({suspended=}true, OnStart, OnStop, ProcessName);
@@ -2471,11 +2471,11 @@ begin
       QueueName := Utf8ToSynUnicode(Int64ToUtf8(fServerSessionID));
     EHttpApiServer.RaiseOnError(hCreateRequestQueue,
       Http.CreateRequestQueue(Http.Version, pointer(QueueName), nil, 0, fReqQueue));
-    bindInfo.Flags := 1;
-    bindInfo.RequestQueueHandle := fReqQueue;
+    binding.Flags := 1;
+    binding.RequestQueueHandle := fReqQueue;
     EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
       Http.SetUrlGroupProperty(fUrlGroupID, HttpServerBindingProperty,
-        @bindInfo, SizeOf(bindInfo)));
+        @binding, SizeOf(binding)));
   end
   else
     EHttpApiServer.RaiseOnError(hCreateHttpHandle,
@@ -2594,49 +2594,49 @@ const
     'TRACE', 'CONNECT', 'TRACK', 'MOVE', 'COPY', 'PROPFIND', 'PROPPATCH',
     'MKCOL', 'LOCK', 'UNLOCK', 'SEARCH');
 var
-  Req: PHTTP_REQUEST;
-  ReqID: HTTP_REQUEST_ID;
-  ReqBuf, RespBuf: RawByteString;
-  RemoteIP, RemoteConn: RawUtf8;
+  req: PHTTP_REQUEST;
+  reqid: HTTP_REQUEST_ID;
+  reqbuf, respbuf: RawByteString;
+  remoteip, remoteconn: RawUtf8;
   i, L: PtrInt;
   P: PHTTP_UNKNOWN_HEADER;
-  flags, bytesRead, bytesSent: cardinal;
-  Err: HRESULT;
-  InCompressAccept: THttpSocketCompressSet;
-  InContentLength, InContentLengthChunk, InContentLengthRead: cardinal;
-  InContentEncoding, InAcceptEncoding, Range: RawUtf8;
-  OutContentEncoding, OutStatus: RawUtf8;
-  OutStatusCode, AfterStatusCode: cardinal;
-  RespSent: boolean;
-  Context: THttpServerRequest;
-  FileHandle: THandle;
-  Resp: PHTTP_RESPONSE;
-  BufRead, R: PUtf8Char;
-  Heads: HTTP_UNKNOWN_HEADERs;
-  RangeStart, RangeLength: ULONGLONG;
-  OutContentLength: ULARGE_INTEGER;
-  DataChunkInMemory: HTTP_DATA_CHUNK_INMEMORY;
-  DataChunkFile: HTTP_DATA_CHUNK_FILEHANDLE;
-  CurrentLog: PHTTP_LOG_FIELDS_DATA;
-  ContentRange: ShortString;
-  Verbs: TVerbText; // to avoid memory allocation
+  flags, bytesread, bytessent: cardinal;
+  err: HRESULT;
+  compressset: THttpSocketCompressSet;
+  incontlen, incontlenchunk, incontlenread: cardinal;
+  incontenc, inaccept, range: RawUtf8;
+  outcontenc, outstat: RawUtf8;
+  outstatcode, afterstatcode: cardinal;
+  respsent: boolean;
+  ctxt: THttpServerRequest;
+  filehandle: THandle;
+  reps: PHTTP_RESPONSE;
+  bufread, R: PUtf8Char;
+  heads: HTTP_UNKNOWN_HEADERs;
+  rangestart, rangelen: ULONGLONG;
+  outcontlen: ULARGE_INTEGER;
+  datachunkmem: HTTP_DATA_CHUNK_INMEMORY;
+  datachunkfile: HTTP_DATA_CHUNK_FILEHANDLE;
+  logdata: PHTTP_LOG_FIELDS_DATA;
+  contrange: ShortString;
+  vervs: TVerbText; // to avoid memory allocation
 
   procedure SendError(StatusCode: cardinal; const ErrorMsg: string; E: Exception = nil);
   var
-    Msg: RawUtf8;
+    msg: RawUtf8;
   begin
     try
-      Resp^.SetStatus(StatusCode, OutStatus);
-      CurrentLog^.ProtocolStatus := StatusCode;
+      reps^.SetStatus(StatusCode, outstat);
+      logdata^.ProtocolStatus := StatusCode;
       FormatUtf8('<html><body style="font-family:verdana;"><h1>Server Error %: %</h1><p>',
-        [StatusCode, OutStatus], Msg);
+        [StatusCode, outstat], msg);
       if E <> nil then
-        Msg := FormatUtf8('%% Exception raised:<br>', [Msg, E]);
-      Resp^.SetContent(DataChunkInMemory, Msg + HtmlEscapeString(ErrorMsg)
+        msg := FormatUtf8('%% Exception raised:<br>', [msg, E]);
+      reps^.SetContent(datachunkmem, msg + HtmlEscapeString(ErrorMsg)
         {$ifndef NOXPOWEREDNAME} + '</p><p><small>' + XPOWEREDVALUE {$endif},
         'text/html; charset=utf-8');
-      Http.SendHttpResponse(fReqQueue, Req^.RequestId, 0, Resp^, nil,
-        bytesSent, nil, 0, nil, fLogData);
+      Http.SendHttpResponse(fReqQueue, req^.RequestId, 0, reps^, nil,
+        bytessent, nil, 0, nil, fLogData);
     except
       on Exception do
         ; // ignore any HttpApi level errors here (client may crashed)
@@ -2648,13 +2648,13 @@ var
     result := not Terminated; // true=success
     if not result then
       exit;
-    RespSent := true;
-    Resp^.SetStatus(OutStatusCode, OutStatus);
+    respsent := true;
+    reps^.SetStatus(outstatcode, outstat);
     if Terminated then
       exit;
     // update log information
     if Http.Version.MajorVersion >= 2 then
-      with Req^, CurrentLog^ do
+      with req^, logdata^ do
       begin
         MethodNum := Verb;
         UriStemLength := CookedUrl.AbsPathLength;
@@ -2674,173 +2674,173 @@ var
           ReferrerLength := RawValueLength;
           Referrer := pRawValue;
         end;
-        ProtocolStatus := Resp^.StatusCode;
-        ClientIp := pointer(RemoteIP);
-        ClientIpLength := length(RemoteIP);
-        Method := pointer(Context.fMethod);
-        MethodLength := length(Context.fMethod);
-        UserName := pointer(Context.fAuthenticatedUser);
-        UserNameLength := Length(Context.fAuthenticatedUser);
+        ProtocolStatus := reps^.StatusCode;
+        ClientIp := pointer(remoteip);
+        ClientIpLength := length(remoteip);
+        Method := pointer(ctxt.fMethod);
+        MethodLength := length(ctxt.fMethod);
+        UserName := pointer(ctxt.fAuthenticatedUser);
+        UserNameLength := Length(ctxt.fAuthenticatedUser);
       end;
     // send response
-    Resp^.Version := Req^.Version;
-    Resp^.SetHeaders(pointer(Context.OutCustomHeaders), Heads);
+    reps^.Version := req^.Version;
+    reps^.SetHeaders(pointer(ctxt.OutCustomHeaders), heads);
     if fCompressAcceptEncoding <> '' then
-      Resp^.AddCustomHeader(pointer(fCompressAcceptEncoding), Heads, false);
-    with Resp^.headers.KnownHeaders[respServer] do
+      reps^.AddCustomHeader(pointer(fCompressAcceptEncoding), heads, false);
+    with reps^.headers.KnownHeaders[respServer] do
     begin
       pRawValue := pointer(fServerName);
       RawValueLength := length(fServerName);
     end;
-    if Context.OutContentType = STATICFILE_CONTENT_TYPE then
+    if ctxt.OutContentType = STATICFILE_CONTENT_TYPE then
     begin
       // response is file -> OutContent is UTF-8 file name to be served
-      FileHandle := FileOpen(Utf8ToString(Context.OutContent),
+      filehandle := FileOpen(Utf8ToString(ctxt.OutContent),
         fmOpenRead or fmShareDenyNone);
-      if not ValidHandle(FileHandle)  then
+      if not ValidHandle(filehandle)  then
       begin
         SendError(HTTP_NOTFOUND, SysErrorMessage(GetLastError));
         result := false; // notify fatal error
       end;
       try // http.sys will serve then close the file from kernel
-        DataChunkFile.DataChunkType := hctFromFileHandle;
-        DataChunkFile.FileHandle := FileHandle;
+        datachunkfile.DataChunkType := hctFromFileHandle;
+        datachunkfile.filehandle := filehandle;
         flags := 0;
-        DataChunkFile.ByteRange.StartingOffset.QuadPart := 0;
-        Int64(DataChunkFile.ByteRange.Length.QuadPart) := -1; // to eof
-        with Req^.headers.KnownHeaders[reqRange] do
+        datachunkfile.ByteRange.StartingOffset.QuadPart := 0;
+        Int64(datachunkfile.ByteRange.Length.QuadPart) := -1; // to eof
+        with req^.headers.KnownHeaders[reqRange] do
         begin
           if (RawValueLength > 6) and
              IdemPChar(pointer(pRawValue), 'BYTES=') and
              (pRawValue[6] in ['0'..'9']) then
           begin
-            FastSetString(Range, pRawValue + 6, RawValueLength - 6); // need #0 end
-            R := pointer(Range);
-            RangeStart := GetNextNumber(R);
+            FastSetString(range, pRawValue + 6, RawValueLength - 6); // need #0 end
+            R := pointer(range);
+            rangestart := GetNextNumber(R);
             if R^ = '-' then
             begin
-              OutContentLength.QuadPart := FileSize(FileHandle);
-              DataChunkFile.ByteRange.Length.QuadPart :=
-                OutContentLength.QuadPart - RangeStart;
+              outcontlen.QuadPart := FileSize(filehandle);
+              datachunkfile.ByteRange.Length.QuadPart :=
+                outcontlen.QuadPart - rangestart;
               inc(R);
               flags := HTTP_SEND_RESPONSE_FLAG_PROCESS_RANGES;
-              DataChunkFile.ByteRange.StartingOffset.QuadPart := RangeStart;
+              datachunkfile.ByteRange.StartingOffset.QuadPart := rangestart;
               if R^ in ['0'..'9'] then
               begin
-                RangeLength := GetNextNumber(R) - RangeStart + 1;
-                if RangeLength < DataChunkFile.ByteRange.Length.QuadPart then
+                rangelen := GetNextNumber(R) - rangestart + 1;
+                if rangelen < datachunkfile.ByteRange.Length.QuadPart then
                   // "bytes=0-499" -> start=0, len=500
-                  DataChunkFile.ByteRange.Length.QuadPart := RangeLength;
+                  datachunkfile.ByteRange.Length.QuadPart := rangelen;
               end; // "bytes=1000-" -> start=1000, to eof)
-              FormatShort('Content-Range: bytes %-%/%'#0, [RangeStart,
-                RangeStart + DataChunkFile.ByteRange.Length.QuadPart - 1,
-                OutContentLength.QuadPart], ContentRange);
-              Resp^.AddCustomHeader(@ContentRange[1], Heads, false);
-              Resp^.SetStatus(HTTP_PARTIALCONTENT, OutStatus);
+              FormatShort('Content-range: bytes %-%/%'#0, [rangestart,
+                rangestart + datachunkfile.ByteRange.Length.QuadPart - 1,
+                outcontlen.QuadPart], contrange);
+              reps^.AddCustomHeader(@contrange[1], heads, false);
+              reps^.SetStatus(HTTP_PARTIALCONTENT, outstat);
             end;
           end;
-          with Resp^.headers.KnownHeaders[respAcceptRanges] do
+          with reps^.headers.KnownHeaders[respAcceptRanges] do
           begin
             pRawValue := 'bytes';
             RawValueLength := 5;
           end;
         end;
-        Resp^.EntityChunkCount := 1;
-        Resp^.pEntityChunks := @DataChunkFile;
-        Http.SendHttpResponse(fReqQueue, Req^.RequestId, flags, Resp^, nil,
-          bytesSent, nil, 0, nil, fLogData);
+        reps^.EntityChunkCount := 1;
+        reps^.pEntityChunks := @datachunkfile;
+        Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, reps^, nil,
+          bytessent, nil, 0, nil, fLogData);
       finally
-        FileClose(FileHandle);
+        FileClose(filehandle);
       end;
     end
     else
     begin
       // response is in OutContent -> send it from memory
-      if Context.OutContentType = NORESPONSE_CONTENT_TYPE then
-        Context.OutContentType := ''; // true HTTP always expects a response
+      if ctxt.OutContentType = NORESPONSE_CONTENT_TYPE then
+        ctxt.OutContentType := ''; // true HTTP always expects a response
       if fCompress <> nil then
       begin
-        with Resp^.headers.KnownHeaders[reqContentEncoding] do
+        with reps^.headers.KnownHeaders[reqContentEncoding] do
           if RawValueLength = 0 then
           begin
           // no previous encoding -> try if any compression
-            OutContentEncoding := CompressDataAndGetHeaders(InCompressAccept,
-              fCompress, Context.OutContentType, Context.fOutContent);
-            pRawValue := pointer(OutContentEncoding);
-            RawValueLength := length(OutContentEncoding);
+            outcontenc := CompressDataAndGetHeaders(compressset,
+              fCompress, ctxt.OutContentType, ctxt.fOutContent);
+            pRawValue := pointer(outcontenc);
+            RawValueLength := length(outcontenc);
           end;
       end;
-      Resp^.SetContent(DataChunkInMemory, Context.OutContent, Context.OutContentType);
+      reps^.SetContent(datachunkmem, ctxt.OutContent, ctxt.OutContentType);
       EHttpApiServer.RaiseOnError(hSendHttpResponse,
-        Http.SendHttpResponse(fReqQueue, Req^.RequestId,
-          getSendResponseFlags(Context), Resp^, nil,
-          bytesSent, nil, 0, nil, fLogData));
+        Http.SendHttpResponse(fReqQueue, req^.RequestId,
+          getSendResponseFlags(ctxt), reps^, nil,
+          bytessent, nil, 0, nil, fLogData));
     end;
   end;
 
 begin
   if Terminated then
     exit;
-  Context := nil;
+  ctxt := nil;
   try
     // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
     NotifyThreadStart(self);
     // reserve working buffers
-    SetLength(Heads, 64);
-    SetLength(RespBuf, sizeof(HTTP_RESPONSE));
-    Resp := pointer(RespBuf);
-    SetLength(ReqBuf, 16384 + sizeof(HTTP_REQUEST)); // Req^ + 16 KB of headers
-    Req := pointer(ReqBuf);
-    CurrentLog := pointer(fLogDataStorage);
-    Verbs := VERB_TEXT;
-    Context := THttpServerRequest.Create(self, 0, self);
-    // main loop reusing a single Context instance for this thread
-    ReqID := 0;
-    Context.fServer := self;
+    SetLength(heads, 64);
+    SetLength(respbuf, sizeof(HTTP_RESPONSE));
+    reps := pointer(respbuf);
+    SetLength(reqbuf, 16384 + sizeof(HTTP_REQUEST)); // req^ + 16 KB of headers
+    req := pointer(reqbuf);
+    logdata := pointer(fLogDataStorage);
+    vervs := VERB_TEXT;
+    ctxt := THttpServerRequest.Create(self, 0, self);
+    // main loop reusing a single ctxt instance for this thread
+    reqid := 0;
+    ctxt.fServer := self;
     repeat
-      Context.fInContent := ''; // release input/output body buffers ASAP
-      Context.fOutContent := '';
+      ctxt.fInContent := ''; // release input/output body buffers ASAP
+      ctxt.fOutContent := '';
       // reset authentication status & user between requests
-      Context.fAuthenticationStatus := hraNone;
-      Context.fAuthenticatedUser := '';
+      ctxt.fAuthenticationStatus := hraNone;
+      ctxt.fAuthenticatedUser := '';
       // retrieve next pending request, and read its headers
-      FillcharFast(Req^, sizeof(HTTP_REQUEST), 0);
-      Err := Http.ReceiveHttpRequest(fReqQueue, ReqID, 0,
-        Req^, length(ReqBuf), bytesRead);
+      FillcharFast(req^, sizeof(HTTP_REQUEST), 0);
+      err := Http.ReceiveHttpRequest(fReqQueue, reqid, 0,
+        req^, length(reqbuf), bytesread);
       if Terminated then
         break;
-      case Err of
+      case err of
         NO_ERROR:
           try
             // parse method and headers
-            Context.fConnectionID := Req^.ConnectionID;
-            Context.fHttpApiRequest := Req;
-            SetString(Context.fFullURL, Req^.CookedUrl.pFullUrl, Req^.CookedUrl.FullUrlLength);
-            FastSetString(Context.fURL, Req^.pRawUrl, Req^.RawUrlLength);
-            if Req^.Verb in [low(Verbs)..high(Verbs)] then
-              Context.fMethod := Verbs[Req^.Verb]
+            ctxt.fConnectionID := req^.ConnectionID;
+            ctxt.fHttpApiRequest := req;
+            SetString(ctxt.fFullURL, req^.CookedUrl.pFullUrl, req^.CookedUrl.FullUrlLength);
+            FastSetString(ctxt.fURL, req^.pRawUrl, req^.RawUrlLength);
+            if req^.Verb in [low(vervs)..high(vervs)] then
+              ctxt.fMethod := vervs[req^.Verb]
             else
-              FastSetString(Context.fMethod, Req^.pUnknownVerb, Req^.UnknownVerbLength);
-            with Req^.headers.KnownHeaders[reqContentType] do
-              FastSetString(Context.fInContentType, pRawValue, RawValueLength);
-            with Req^.headers.KnownHeaders[reqAcceptEncoding] do
-              FastSetString(InAcceptEncoding, pRawValue, RawValueLength);
-            InCompressAccept := ComputeContentEncoding(fCompress, pointer(InAcceptEncoding));
-            Context.fUseSSL := Req^.pSslInfo <> nil;
-            Context.fInHeaders := RetrieveHeaders(Req^, fRemoteIPHeaderUpper, RemoteIP);
+              FastSetString(ctxt.fMethod, req^.pUnknownVerb, req^.UnknownVerbLength);
+            with req^.headers.KnownHeaders[reqContentType] do
+              FastSetString(ctxt.fInContentType, pRawValue, RawValueLength);
+            with req^.headers.KnownHeaders[reqAcceptEncoding] do
+              FastSetString(inaccept, pRawValue, RawValueLength);
+            compressset := ComputeContentEncoding(fCompress, pointer(inaccept));
+            ctxt.fUseSSL := req^.pSslInfo <> nil;
+            ctxt.fInHeaders := RetrieveHeaders(req^, fRemoteIPHeaderUpper, remoteip);
             // compute remote connection ID
             L := length(fRemoteConnIDHeaderUpper);
             if L <> 0 then
             begin
-              P := Req^.headers.pUnknownHeaders;
+              P := req^.headers.pUnknownHeaders;
               if P <> nil then
-                for i := 1 to Req^.headers.UnknownHeaderCount do
+                for i := 1 to req^.headers.UnknownHeaderCount do
                   if (P^.NameLength = L) and
                      IdemPChar(P^.pName, Pointer(fRemoteConnIDHeaderUpper)) then
                   begin
-                    FastSetString(RemoteConn, P^.pRawValue, P^.RawValueLength); // need #0 end
-                    R := pointer(RemoteConn);
-                    Context.fConnectionID := GetNextNumber(R);
+                    FastSetString(remoteconn, P^.pRawValue, P^.RawValueLength); // need #0 end
+                    R := pointer(remoteconn);
+                    ctxt.fConnectionID := GetNextNumber(R);
                     break;
                   end
                   else
@@ -2848,153 +2848,153 @@ begin
             end;
             // retrieve any SetAuthenticationSchemes() information
             if byte(fAuthenticationSchemes) <> 0 then // set only with HTTP API 2.0
-              for i := 0 to Req^.RequestInfoCount - 1 do
-                if Req^.pRequestInfo^[i].InfoType = HttpRequestInfoTypeAuth then
-                  with PHTTP_REQUEST_AUTH_INFO(Req^.pRequestInfo^[i].pInfo)^ do
+              for i := 0 to req^.RequestInfoCount - 1 do
+                if req^.pRequestInfo^[i].InfoType = HttpRequestInfoTypeAuth then
+                  with PHTTP_REQUEST_AUTH_INFO(req^.pRequestInfo^[i].pInfo)^ do
                     case AuthStatus of
                       HttpAuthStatusSuccess:
                         if AuthType > HttpRequestAuthTypeNone then
                         begin
-                          byte(Context.fAuthenticationStatus) := ord(AuthType) + 1;
+                          byte(ctxt.fAuthenticationStatus) := ord(AuthType) + 1;
                           if AccessToken <> 0 then
                           begin
-                            GetDomainUserNameFromToken(AccessToken, Context.fAuthenticatedUser);
+                            GetDomainUserNameFromToken(AccessToken, ctxt.fAuthenticatedUser);
                             // Per spec https://docs.microsoft.com/en-us/windows/win32/http/authentication-in-http-version-2-0
                             // AccessToken lifecycle is application responsability and should be closed after use
                             CloseHandle(AccessToken);
                           end;
                         end;
                       HttpAuthStatusFailure:
-                        Context.fAuthenticationStatus := hraFailed;
+                        ctxt.fAuthenticationStatus := hraFailed;
                     end;
-            with Req^.headers.KnownHeaders[reqContentLength] do
-              InContentLength := GetCardinal(
+            with req^.headers.KnownHeaders[reqContentLength] do
+              incontlen := GetCardinal(
                 pointer(pRawValue), pointer(pRawValue + RawValueLength));
-            if (InContentLength > 0) and
+            if (incontlen > 0) and
                (MaximumAllowedContentLength > 0) and
-               (InContentLength > MaximumAllowedContentLength) then
+               (incontlen > MaximumAllowedContentLength) then
             begin
               SendError(HTTP_PAYLOADTOOLARGE, 'Rejected');
               continue;
             end;
             if Assigned(OnBeforeBody) then
             begin
-              Err := OnBeforeBody(Context.URL, Context.Method, Context.InHeaders,
-                Context.InContentType, RemoteIP, InContentLength, Context.fUseSSL);
-              if Err <> HTTP_SUCCESS then
+              err := OnBeforeBody(ctxt.URL, ctxt.Method, ctxt.InHeaders,
+                ctxt.InContentType, remoteip, incontlen, ctxt.fUseSSL);
+              if err <> HTTP_SUCCESS then
               begin
-                SendError(Err, 'Rejected');
+                SendError(err, 'Rejected');
                 continue;
               end;
             end;
             // retrieve body
-            if HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS and Req^.flags <> 0 then
+            if HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS and req^.flags <> 0 then
             begin
-              with Req^.headers.KnownHeaders[reqContentEncoding] do
-                FastSetString(InContentEncoding, pRawValue, RawValueLength);
-              if InContentLength <> 0 then
+              with req^.headers.KnownHeaders[reqContentEncoding] do
+                FastSetString(incontenc, pRawValue, RawValueLength);
+              if incontlen <> 0 then
               begin
-                SetLength(Context.fInContent, InContentLength);
-                BufRead := pointer(Context.InContent);
-                InContentLengthRead := 0;
+                SetLength(ctxt.fInContent, incontlen);
+                bufread := pointer(ctxt.InContent);
+                incontlenread := 0;
                 repeat
-                  bytesRead := 0;
+                  bytesread := 0;
                   if Http.Version.MajorVersion > 1 then // speed optimization for Vista+
                     flags := HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER
                   else
                     flags := 0;
-                  InContentLengthChunk := InContentLength - InContentLengthRead;
+                  incontlenchunk := incontlen - incontlenread;
                   if (fReceiveBufferSize >= 1024) and
-                     (InContentLengthChunk > fReceiveBufferSize) then
-                    InContentLengthChunk := fReceiveBufferSize;
-                  Err := Http.ReceiveRequestEntityBody(fReqQueue, Req^.RequestId,
-                    flags, BufRead, InContentLengthChunk, bytesRead);
+                     (incontlenchunk > fReceiveBufferSize) then
+                    incontlenchunk := fReceiveBufferSize;
+                  err := Http.ReceiveRequestEntityBody(fReqQueue, req^.RequestId,
+                    flags, bufread, incontlenchunk, bytesread);
                   if Terminated then
                     exit;
-                  inc(InContentLengthRead, bytesRead);
-                  if Err = ERROR_HANDLE_EOF then
+                  inc(incontlenread, bytesread);
+                  if err = ERROR_HANDLE_EOF then
                   begin
-                    if InContentLengthRead < InContentLength then
-                      SetLength(Context.fInContent, InContentLengthRead);
-                    Err := NO_ERROR;
+                    if incontlenread < incontlen then
+                      SetLength(ctxt.fInContent, incontlenread);
+                    err := NO_ERROR;
                     break; // should loop until returns ERROR_HANDLE_EOF
                   end;
-                  if Err <> NO_ERROR then
+                  if err <> NO_ERROR then
                     break;
-                  inc(BufRead, bytesRead);
-                until InContentLengthRead = InContentLength;
-                if Err <> NO_ERROR then
+                  inc(bufread, bytesread);
+                until incontlenread = incontlen;
+                if err <> NO_ERROR then
                 begin
-                  SendError(HTTP_NOTACCEPTABLE, SysErrorMessagePerModule(Err, HTTPAPI_DLL));
+                  SendError(HTTP_NOTACCEPTABLE, SysErrorMessagePerModule(err, HTTPAPI_DLL));
                   continue;
                 end;
-                if InContentEncoding <> '' then
+                if incontenc <> '' then
                   for i := 0 to high(fCompress) do
-                    if fCompress[i].Name = InContentEncoding then
+                    if fCompress[i].Name = incontenc then
                     begin
-                      fCompress[i].Func(Context.fInContent, false); // uncompress
+                      fCompress[i].Func(ctxt.fInContent, false); // uncompress
                       break;
                     end;
               end;
             end;
             try
               // compute response
-              Context.OutContent := '';
-              Context.OutContentType := '';
-              Context.OutCustomHeaders := '';
-              FillcharFast(Resp^, sizeof(Resp^), 0);
-              RespSent := false;
-              OutStatusCode := DoBeforeRequest(Context);
-              if OutStatusCode > 0 then
+              ctxt.OutContent := '';
+              ctxt.OutContentType := '';
+              ctxt.OutCustomHeaders := '';
+              FillcharFast(reps^, sizeof(reps^), 0);
+              respsent := false;
+              outstatcode := DoBeforeRequest(ctxt);
+              if outstatcode > 0 then
                 if not SendResponse or
-                   (OutStatusCode <> HTTP_ACCEPTED) then
+                   (outstatcode <> HTTP_ACCEPTED) then
                   continue;
-              OutStatusCode := Request(Context);
-              AfterStatusCode := DoAfterRequest(Context);
-              if AfterStatusCode > 0 then
-                OutStatusCode := AfterStatusCode;
+              outstatcode := Request(ctxt);
+              afterstatcode := DoAfterRequest(ctxt);
+              if afterstatcode > 0 then
+                outstatcode := afterstatcode;
               // send response
-              if not RespSent then
+              if not respsent then
                 if not SendResponse then
                   continue;
-              DoAfterResponse(Context, OutStatusCode);
+              DoAfterResponse(ctxt, outstatcode);
             except
               on E: Exception do
                 // handle any exception raised during process: show must go on!
-                if not RespSent then
+                if not respsent then
                   if not E.InheritsFrom(EHttpApiServer) or // ensure still connected
                     (EHttpApiServer(E).LastError <> HTTPAPI_ERROR_NONEXISTENTCONNECTION) then
                     SendError(HTTP_SERVERERROR, E.Message, E);
             end;
           finally
-            ReqID := 0; // reset Request ID to handle the next pending request
+            reqid := 0; // reset Request ID to handle the next pending request
           end;
         ERROR_MORE_DATA:
           begin
             // input buffer was too small to hold the request headers
             // -> increase buffer size and call the API again
-            ReqID := Req^.RequestId;
-            SetLength(ReqBuf, bytesRead);
-            Req := pointer(ReqBuf);
+            reqid := req^.RequestId;
+            SetLength(reqbuf, bytesread);
+            req := pointer(reqbuf);
           end;
         ERROR_CONNECTION_INVALID:
-          if ReqID = 0 then
+          if reqid = 0 then
             break
           else
             // TCP connection was corrupted by the peer -> ignore + next request
-            ReqID := 0;
+            reqid := 0;
       else
-        break; // unhandled Err value
+        break; // unhandled err value
       end;
     until Terminated;
   finally
-    Context.Free;
+    ctxt.Free;
   end;
 end;
 
 function THttpApiServer.GetHttpQueueLength: cardinal;
 var
-  returnLength: ULONG;
+  len: ULONG;
 begin
   if (Http.Version.MajorVersion < 2) or
      (self = nil) then
@@ -3008,7 +3008,7 @@ begin
     else
       EHttpApiServer.RaiseOnError(hQueryRequestQueueProperty,
         Http.QueryRequestQueueProperty(fReqQueue, HttpServerQueueLengthProperty,
-          @result, sizeof(result), 0, @returnLength, nil));
+          @result, sizeof(result), 0, @len, nil));
   end;
 end;
 
@@ -3042,8 +3042,8 @@ end;
 
 procedure THttpApiServer.SetMaxBandwidth(aValue: cardinal);
 var
-  qosInfo: HTTP_QOS_SETTING_INFO;
-  limitInfo: HTTP_BANDWIDTH_LIMIT_INFO;
+  qos: HTTP_QOS_SETTING_INFO;
+  limit: HTTP_BANDWIDTH_LIMIT_INFO;
 begin
   if Http.Version.MajorVersion < 2 then
     raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
@@ -3051,28 +3051,28 @@ begin
      (fUrlGroupID <> 0) then
   begin
     if aValue = 0 then
-      limitInfo.MaxBandwidth := HTTP_LIMIT_INFINITE
+      limit.MaxBandwidth := HTTP_LIMIT_INFINITE
     else if aValue < HTTP_MIN_ALLOWED_BANDWIDTH_THROTTLING_RATE then
-      limitInfo.MaxBandwidth := HTTP_MIN_ALLOWED_BANDWIDTH_THROTTLING_RATE
+      limit.MaxBandwidth := HTTP_MIN_ALLOWED_BANDWIDTH_THROTTLING_RATE
     else
-      limitInfo.MaxBandwidth := aValue;
-    limitInfo.Flags := 1;
-    qosInfo.QosType := HttpQosSettingTypeBandwidth;
-    qosInfo.QosSetting := @limitInfo;
+      limit.MaxBandwidth := aValue;
+    limit.Flags := 1;
+    qos.QosType := HttpQosSettingTypeBandwidth;
+    qos.QosSetting := @limit;
     EHttpApiServer.RaiseOnError(hSetServerSessionProperty,
       Http.SetServerSessionProperty(fServerSessionID, HttpServerQosProperty,
-        @qosInfo, SizeOf(qosInfo)));
+        @qos, SizeOf(qos)));
     EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
       Http.SetUrlGroupProperty(fUrlGroupID, HttpServerQosProperty,
-        @qosInfo, SizeOf(qosInfo)));
+        @qos, SizeOf(qos)));
   end;
 end;
 
 function THttpApiServer.GetMaxBandwidth: cardinal;
 var
-  qosInfoGet: record
-    qosInfo: HTTP_QOS_SETTING_INFO;
-    limitInfo: HTTP_BANDWIDTH_LIMIT_INFO;
+  info: record
+    qos: HTTP_QOS_SETTING_INFO;
+    limit: HTTP_BANDWIDTH_LIMIT_INFO;
   end;
 begin
   if (Http.Version.MajorVersion < 2) or
@@ -3088,21 +3088,21 @@ begin
     result := 0;
     exit;
   end;
-  qosInfoGet.qosInfo.QosType := HttpQosSettingTypeBandwidth;
-  qosInfoGet.qosInfo.QosSetting := @qosInfoGet.limitInfo;
+  info.qos.QosType := HttpQosSettingTypeBandwidth;
+  info.qos.QosSetting := @info.limit;
   EHttpApiServer.RaiseOnError(hQueryUrlGroupProperty,
     Http.QueryUrlGroupProperty(fUrlGroupID, HttpServerQosProperty,
-      @qosInfoGet, SizeOf(qosInfoGet)));
-  result := qosInfoGet.limitInfo.MaxBandwidth;
+      @info, SizeOf(info)));
+  result := info.limit.MaxBandwidth;
 end;
 
 function THttpApiServer.GetMaxConnections: cardinal;
 var
-  qosInfoGet: record
-    qosInfo: HTTP_QOS_SETTING_INFO;
-    limitInfo: HTTP_CONNECTION_LIMIT_INFO;
+  info: record
+    qos: HTTP_QOS_SETTING_INFO;
+    limit: HTTP_CONNECTION_LIMIT_INFO;
   end;
-  returnLength: ULONG;
+  len: ULONG;
 begin
   if (Http.Version.MajorVersion < 2) or
      (self = nil) then
@@ -3117,18 +3117,18 @@ begin
     result := 0;
     exit;
   end;
-  qosInfoGet.qosInfo.QosType := HttpQosSettingTypeConnectionLimit;
-  qosInfoGet.qosInfo.QosSetting := @qosInfoGet.limitInfo;
+  info.qos.QosType := HttpQosSettingTypeConnectionLimit;
+  info.qos.QosSetting := @info.limit;
   EHttpApiServer.RaiseOnError(hQueryUrlGroupProperty,
     Http.QueryUrlGroupProperty(fUrlGroupID, HttpServerQosProperty,
-      @qosInfoGet, SizeOf(qosInfoGet), @returnLength));
-  result := qosInfoGet.limitInfo.MaxConnections;
+      @info, SizeOf(info), @len));
+  result := info.limit.MaxConnections;
 end;
 
 procedure THttpApiServer.SetMaxConnections(aValue: cardinal);
 var
-  qosInfo: HTTP_QOS_SETTING_INFO;
-  limitInfo: HTTP_CONNECTION_LIMIT_INFO;
+  qos: HTTP_QOS_SETTING_INFO;
+  limit: HTTP_CONNECTION_LIMIT_INFO;
 begin
   if Http.Version.MajorVersion < 2 then
     raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
@@ -3136,15 +3136,15 @@ begin
      (fUrlGroupID <> 0) then
   begin
     if aValue = 0 then
-      limitInfo.MaxConnections := HTTP_LIMIT_INFINITE
+      limit.MaxConnections := HTTP_LIMIT_INFINITE
     else
-      limitInfo.MaxConnections := aValue;
-    limitInfo.Flags := 1;
-    qosInfo.QosType := HttpQosSettingTypeConnectionLimit;
-    qosInfo.QosSetting := @limitInfo;
+      limit.MaxConnections := aValue;
+    limit.Flags := 1;
+    qos.QosType := HttpQosSettingTypeConnectionLimit;
+    qos.QosSetting := @limit;
     EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
       Http.SetUrlGroupProperty(fUrlGroupID, HttpServerQosProperty,
-        @qosInfo, SizeOf(qosInfo)));
+        @qos, SizeOf(qos)));
   end;
 end;
 
@@ -3163,7 +3163,7 @@ procedure THttpApiServer.LogStart(const aLogFolder: TFileName;
   aRolloverType: THttpApiLoggingRollOver; aRolloverSize: cardinal;
   aLogFields: THttpApiLogFields; aFlags: THttpApiLoggingFlags);
 var
-  logInfo: HTTP_LOGGING_INFO;
+  log: HTTP_LOGGING_INFO;
   folder, software: SynUnicode;
 begin
   if (self = nil) or
@@ -3172,9 +3172,9 @@ begin
   if Http.Version.MajorVersion < 2 then
     raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
   fLogData := nil; // disable any previous logging
-  FillcharFast(logInfo, SizeOf(logInfo), 0);
-  logInfo.Flags := 1;
-  logInfo.LoggingFlags := byte(aFlags);
+  FillcharFast(log, SizeOf(log), 0);
+  log.Flags := 1;
+  log.LoggingFlags := byte(aFlags);
   if aLogFolder = '' then
     raise EHttpApiServer.CreateFmt('LogStart(aLogFolder="")', []);
   if length(aLogFolder) > 212 then
@@ -3182,20 +3182,20 @@ begin
     raise EHttpApiServer.CreateFmt('aLogFolder is too long for LogStart(%s)', [aLogFolder]);
   folder := SynUnicode(aLogFolder);
   software := SynUnicode(aSoftwareName);
-  logInfo.SoftwareNameLength := length(software) * 2;
-  logInfo.SoftwareName := pointer(software);
-  logInfo.DirectoryNameLength := length(folder) * 2;
-  logInfo.DirectoryName := pointer(folder);
-  logInfo.Format := HTTP_LOGGING_TYPE(aType);
+  log.SoftwareNameLength := length(software) * 2;
+  log.SoftwareName := pointer(software);
+  log.DirectoryNameLength := length(folder) * 2;
+  log.DirectoryName := pointer(folder);
+  log.Format := HTTP_LOGGING_TYPE(aType);
   if aType = hltNCSA then
     aLogFields := [hlfDate..hlfSubStatus];
-  logInfo.Fields := integer(aLogFields);
-  logInfo.RolloverType := HTTP_LOGGING_ROLLOVER_TYPE(aRolloverType);
+  log.Fields := integer(aLogFields);
+  log.RolloverType := HTTP_LOGGING_ROLLOVER_TYPE(aRolloverType);
   if aRolloverType = hlrSize then
-    logInfo.RolloverSize := aRolloverSize;
+    log.RolloverSize := aRolloverSize;
   EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
     Http.SetUrlGroupProperty(fUrlGroupID, HttpServerLoggingProperty,
-      @logInfo, SizeOf(logInfo)));
+      @log, SizeOf(log)));
   // on success, update the actual log memory structure
   fLogData := pointer(fLogDataStorage);
 end;
@@ -3333,14 +3333,17 @@ begin
   if self = nil then
     exit;
   fLoggingServiceName := aName;
-  PHTTP_LOG_FIELDS_DATA(fLogDataStorage)^.ServiceNameLength := Length(fLoggingServiceName);
-  PHTTP_LOG_FIELDS_DATA(fLogDataStorage)^.ServiceName := pointer(fLoggingServiceName);
+  with PHTTP_LOG_FIELDS_DATA(fLogDataStorage)^ do
+  begin
+    ServiceName := pointer(fLoggingServiceName);
+    ServiceNameLength := Length(fLoggingServiceName);
+  end;
 end;
 
 procedure THttpApiServer.SetAuthenticationSchemes(schemes:
   THttpApiRequestAuthentications; const DomainName, Realm: SynUnicode);
 var
-  authInfo: HTTP_SERVER_AUTHENTICATION_INFO;
+  auth: HTTP_SERVER_AUTHENTICATION_INFO;
 begin
   if (self = nil) or
      (fOwner <> nil) then
@@ -3348,18 +3351,18 @@ begin
   if Http.Version.MajorVersion < 2 then
     raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
   fAuthenticationSchemes := schemes;
-  FillcharFast(authInfo, SizeOf(authInfo), 0);
-  authInfo.Flags := 1;
-  authInfo.AuthSchemes := byte(schemes);
-  authInfo.ReceiveMutualAuth := true;
+  FillcharFast(auth, SizeOf(auth), 0);
+  auth.Flags := 1;
+  auth.AuthSchemes := byte(schemes);
+  auth.ReceiveMutualAuth := true;
   if haBasic in schemes then
-    with authInfo.BasicParams do
+    with auth.BasicParams do
     begin
       RealmLength := Length(Realm);
       Realm := pointer(Realm);
     end;
   if haDigest in schemes then
-    with authInfo.DigestParams do
+    with auth.DigestParams do
     begin
       DomainNameLength := Length(DomainName);
       DomainName := pointer(DomainName);
@@ -3368,30 +3371,30 @@ begin
     end;
   EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
     Http.SetUrlGroupProperty(fUrlGroupID, HttpServerAuthenticationProperty,
-      @authInfo, SizeOf(authInfo)));
+      @auth, SizeOf(auth)));
 end;
 
 procedure THttpApiServer.SetTimeOutLimits(aEntityBody, aDrainEntityBody,
   aRequestQueue, aIdleConnection, aHeaderWait, aMinSendRate: cardinal);
 var
-  timeoutInfo: HTTP_TIMEOUT_LIMIT_INFO;
+  timeout: HTTP_TIMEOUT_LIMIT_INFO;
 begin
   if (self = nil) or
      (fOwner <> nil) then
     exit;
   if Http.Version.MajorVersion < 2 then
     raise EHttpApiServer.Create(hSetUrlGroupProperty, ERROR_OLD_WIN_VERSION);
-  FillcharFast(timeoutInfo, SizeOf(timeoutInfo), 0);
-  timeoutInfo.Flags := 1;
-  timeoutInfo.EntityBody := aEntityBody;
-  timeoutInfo.DrainEntityBody := aDrainEntityBody;
-  timeoutInfo.RequestQueue := aRequestQueue;
-  timeoutInfo.IdleConnection := aIdleConnection;
-  timeoutInfo.HeaderWait := aHeaderWait;
-  timeoutInfo.MinSendRate := aMinSendRate;
+  FillcharFast(timeout, SizeOf(timeout), 0);
+  timeout.Flags := 1;
+  timeout.EntityBody := aEntityBody;
+  timeout.DrainEntityBody := aDrainEntityBody;
+  timeout.RequestQueue := aRequestQueue;
+  timeout.IdleConnection := aIdleConnection;
+  timeout.HeaderWait := aHeaderWait;
+  timeout.MinSendRate := aMinSendRate;
   EHttpApiServer.RaiseOnError(hSetUrlGroupProperty,
     Http.SetUrlGroupProperty(fUrlGroupID, HttpServerTimeoutsProperty,
-      @timeoutInfo, SizeOf(timeoutInfo)));
+      @timeout, SizeOf(timeout)));
 end;
 
 
@@ -3583,9 +3586,9 @@ function THttpApiWebSocketConnection.TryAcceptConnection(
   Ctxt: THttpServerRequestAbstract; aNeedHeader: boolean): boolean;
 var
   req: PHTTP_REQUEST;
-  wsRequestHeaders: WEB_SOCKET_HTTP_HEADER_ARR;
-  wsServerHeaders: PWEB_SOCKET_HTTP_HEADER;
-  wsServerHeadersCount: ULONG;
+  reqhead: WEB_SOCKET_HTTP_HEADER_ARR;
+  srvhead: PWEB_SOCKET_HTTP_HEADER;
+  srvheadcount: ULONG;
 begin
   fState := wsConnecting;
   fBuffer := '';
@@ -3605,18 +3608,18 @@ begin
   end;
   EWebSocketApi.RaiseOnError(hCreateServerHandle,
     WebSocketApi.CreateServerHandle(nil, 0, fWSHandle));
-  wsRequestHeaders := HttpSys2ToWebSocketHeaders(req^.headers);
+  reqhead := HttpSys2ToWebSocketHeaders(req^.headers);
   if aNeedHeader then
-    result := WebSocketApi.BeginServerHandshake(fWSHandle, Pointer(fProtocol.name),
-      nil, 0, @wsRequestHeaders[0], Length(wsRequestHeaders), wsServerHeaders,
-      wsServerHeadersCount) = S_OK
+    result := WebSocketApi.BeginServerHandshake(fWSHandle,
+      Pointer(fProtocol.name), nil, 0, @reqhead[0], Length(reqhead), srvhead,
+      srvheadcount) = S_OK
   else
     result := WebSocketApi.BeginServerHandshake(fWSHandle, nil, nil, 0,
-      pointer(wsRequestHeaders), Length(wsRequestHeaders),
-      wsServerHeaders, wsServerHeadersCount) = S_OK;
+      pointer(reqhead), Length(reqhead),
+      srvhead, srvheadcount) = S_OK;
   if result then
   try
-    Ctxt.OutCustomHeaders := WebSocketHeadersToText(wsServerHeaders, wsServerHeadersCount);
+    Ctxt.OutCustomHeaders := WebSocketHeadersToText(srvhead, srvheadcount);
   finally
     result := WebSocketApi.EndServerHandshake(fWSHandle) = S_OK;
   end;
@@ -3683,17 +3686,17 @@ end;
 
 function THttpApiWebSocketConnection.ReadData(const WebsocketBufferData): integer;
 var
-  Err: HRESULT;
-  fBytesRead: cardinal;
-  aBuf: WEB_SOCKET_BUFFER_DATA absolute WebsocketBufferData;
+  err: HRESULT;
+  read: cardinal;
+  buf: WEB_SOCKET_BUFFER_DATA absolute WebsocketBufferData;
 begin
   result := 0;
   if fWSHandle = nil then
     exit;
-  Err := Http.ReceiveRequestEntityBody(fProtocol.fServer.fReqQueue,
-    fOpaqueHTTPRequestId, 0, aBuf.pbBuffer, aBuf.ulBufferLength, fBytesRead,
+  err := Http.ReceiveRequestEntityBody(fProtocol.fServer.fReqQueue,
+    fOpaqueHTTPRequestId, 0, buf.pbBuffer, buf.ulBufferLength, read,
     @self.fOverlapped);
-  case Err of
+  case err of
     // On page reload Safari do not send a WEB_SOCKET_INDICATE_RECEIVE_COMPLETE_ACTION
     // with BufferType = WEB_SOCKET_CLOSE_BUFFER_TYPE, instead it send a dummy packet
     // (WEB_SOCKET_RECEIVE_FROM_NETWORK_ACTION) and terminate socket
@@ -3711,22 +3714,22 @@ end;
 
 procedure THttpApiWebSocketConnection.WriteData(const WebsocketBufferData);
 var
-  Err: HRESULT;
-  httpSendEntity: HTTP_DATA_CHUNK_INMEMORY;
-  bytesWrite: cardinal;
-  aBuf: WEB_SOCKET_BUFFER_DATA absolute WebsocketBufferData;
+  err: HRESULT;
+  inmem: HTTP_DATA_CHUNK_INMEMORY;
+  writ: cardinal;
+  buf: WEB_SOCKET_BUFFER_DATA absolute WebsocketBufferData;
 begin
   if fWSHandle = nil then
     exit;
-  bytesWrite := 0;
-  httpSendEntity.DataChunkType := hctFromMemory;
-  httpSendEntity.pBuffer := aBuf.pbBuffer;
-  httpSendEntity.BufferLength := aBuf.ulBufferLength;
-  Err := Http.SendResponseEntityBody(fProtocol.fServer.fReqQueue,
+  writ := 0;
+  inmem.DataChunkType := hctFromMemory;
+  inmem.pBuffer := buf.pbBuffer;
+  inmem.BufferLength := buf.ulBufferLength;
+  err := Http.SendResponseEntityBody(fProtocol.fServer.fReqQueue,
     fOpaqueHTTPRequestId, HTTP_SEND_RESPONSE_FLAG_BUFFER_DATA or
-    HTTP_SEND_RESPONSE_FLAG_MORE_DATA, 1, @httpSendEntity, bytesWrite, nil, nil,
+    HTTP_SEND_RESPONSE_FLAG_MORE_DATA, 1, @inmem, writ, nil, nil,
     @fProtocol.fServer.fSendOverlaped);
-  case Err of
+  case err of
     ERROR_HANDLE_EOF:
       Disconnect;
     ERROR_IO_PENDING:
@@ -3741,8 +3744,6 @@ end;
 procedure THttpApiWebSocketConnection.CheckIsActive;
 var
   elapsed: Int64;
-const
-  sCloseReason = 'Closed after ping timeout';
 begin
   if (fLastReceiveTickCount > 0) and
      (fProtocol.fServer.fPingTimeout > 0) then
@@ -3753,7 +3754,7 @@ begin
       fProtocol.RemoveConnection(fIndex);
       fState := wsClosedByGuard;
       fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
-      fBuffer := sCloseReason;
+      fBuffer := 'Closed after ping timeout';
       PostQueuedCompletionStatus(
         fProtocol.fServer.fThreadPoolServer.FRequestQueue, 0, nil, @fOverlapped);
     end
@@ -3764,17 +3765,17 @@ end;
 
 procedure THttpApiWebSocketConnection.Disconnect;
 var //Err: HRESULT; //todo: handle error
-  httpSendEntity: HTTP_DATA_CHUNK_INMEMORY;
-  bytesWrite: cardinal;
+  chunk: HTTP_DATA_CHUNK_INMEMORY;
+  writ: cardinal;
 begin
   WebSocketApi.AbortHandle(fWSHandle);
   WebSocketApi.DeleteHandle(fWSHandle);
   fWSHandle := nil;
-  httpSendEntity.DataChunkType := hctFromMemory;
-  httpSendEntity.pBuffer := nil;
-  httpSendEntity.BufferLength := 0;
+  chunk.DataChunkType := hctFromMemory;
+  chunk.pBuffer := nil;
+  chunk.BufferLength := 0;
   Http.SendResponseEntityBody(fProtocol.fServer.fReqQueue, fOpaqueHTTPRequestId,
-    HTTP_SEND_RESPONSE_FLAG_DISCONNECT, 1, @httpSendEntity, bytesWrite, nil, nil, nil);
+    HTTP_SEND_RESPONSE_FLAG_DISCONNECT, 1, @chunk, writ, nil, nil, nil);
 end;
 
 procedure THttpApiWebSocketConnection.BeforeRead;
@@ -3806,14 +3807,14 @@ type
 function THttpApiWebSocketConnection.ProcessActions(
   ActionQueue: WEB_SOCKET_ACTION_QUEUE): boolean;
 var
-  ulDataBufferCount: ULONG;
-  Action: WEB_SOCKET_ACTION;
-  BufferType: WEB_SOCKET_BUFFER_TYPE;
-  ApplicationContext: Pointer;
-  ActionContext: Pointer;
+  buf: TWebSocketBufferDataArr;
+  bufcount: ULONG;
+  buftyp: WEB_SOCKET_BUFFER_TYPE;
+  action: WEB_SOCKET_ACTION;
+  appctxt: Pointer;
+  actctxt: Pointer;
   i: PtrInt;
-  Err: HRESULT;
-  Buffer: TWebSocketBufferDataArr;
+  err: HRESULT;
 
   procedure CloseConnection;
   begin
@@ -3824,27 +3825,27 @@ var
       LeaveCriticalSection(fProtocol.fSafe);
     end;
     EWebSocketApi.RaiseOnError(hCompleteAction,
-      WebSocketApi.CompleteAction(fWSHandle, ActionContext, 0));
+      WebSocketApi.CompleteAction(fWSHandle, actctxt, 0));
   end;
 
 begin
   result := true;
   repeat
-    ulDataBufferCount := Length(Buffer);
+    bufcount := Length(buf);
     EWebSocketApi.RaiseOnError(hGetAction,
-      WebSocketApi.GetAction(fWSHandle, ActionQueue, @Buffer[0], ulDataBufferCount,
-      Action, BufferType, ApplicationContext, ActionContext));
-    case Action of
+      WebSocketApi.GetAction(fWSHandle, ActionQueue, @buf[0], bufcount,
+      action, buftyp, appctxt, actctxt));
+    case action of
       WEB_SOCKET_NO_ACTION:
         ;
       WEB_SOCKET_SEND_TO_NETWORK_ACTION:
         begin
-          for i := 0 to ulDataBufferCount - 1 do
-            WriteData(Buffer[i]);
+          for i := 0 to bufcount - 1 do
+            WriteData(buf[i]);
           if fWSHandle <> nil then
           begin
-            Err := WebSocketApi.CompleteAction(fWSHandle, ActionContext, 0);
-            EWebSocketApi.RaiseOnError(hCompleteAction, Err);
+            err := WebSocketApi.CompleteAction(fWSHandle, actctxt, 0);
+            EWebSocketApi.RaiseOnError(hCompleteAction, err);
           end;
           result := False;
           exit;
@@ -3853,62 +3854,62 @@ begin
         ;
       WEB_SOCKET_RECEIVE_FROM_NETWORK_ACTION:
         begin
-          for i := 0 to ulDataBufferCount - 1 do
-            if ReadData(Buffer[i]) = -1 then
+          for i := 0 to bufcount - 1 do
+            if ReadData(buf[i]) = -1 then
             begin
               fState := wsClosedByClient;
               fBuffer := '';
               fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
               CloseConnection;
             end;
-          fLastActionContext := ActionContext;
+          fLastActionContext := actctxt;
           result := False;
           exit;
         end;
       WEB_SOCKET_INDICATE_RECEIVE_COMPLETE_ACTION:
         begin
           fLastReceiveTickCount := GetTickCount64;
-          if BufferType = WEB_SOCKET_CLOSE_BUFFER_TYPE then
+          if buftyp = WEB_SOCKET_CLOSE_BUFFER_TYPE then
           begin
             if fState = wsOpen then
               fState := wsClosedByClient
             else
               fState := wsClosedByServer;
-            SetString(fBuffer, PAnsiChar(Buffer[0].pbBuffer), Buffer[0].ulBufferLength);
-            fCloseStatus := Buffer[0].Reserved1;
+            SetString(fBuffer, PAnsiChar(buf[0].pbBuffer), buf[0].ulBufferLength);
+            fCloseStatus := buf[0].Reserved1;
             CloseConnection;
             result := False;
             exit;
           end
-          else if BufferType = WEB_SOCKET_PING_PONG_BUFFER_TYPE then
+          else if buftyp = WEB_SOCKET_PING_PONG_BUFFER_TYPE then
           begin
             // todo: may be answer to client's ping
             EWebSocketApi.RaiseOnError(hCompleteAction,
-              WebSocketApi.CompleteAction(fWSHandle, ActionContext, 0));
+              WebSocketApi.CompleteAction(fWSHandle, actctxt, 0));
             exit;
           end
-          else if BufferType = WEB_SOCKET_UNSOLICITED_PONG_BUFFER_TYPE then
+          else if buftyp = WEB_SOCKET_UNSOLICITED_PONG_BUFFER_TYPE then
           begin
             // todo: may be handle this situation
             EWebSocketApi.RaiseOnError(hCompleteAction,
-              WebSocketApi.CompleteAction(fWSHandle, ActionContext, 0));
+              WebSocketApi.CompleteAction(fWSHandle, actctxt, 0));
             exit;
           end
           else
           begin
-            DoOnMessage(BufferType, Buffer[0].pbBuffer, Buffer[0].ulBufferLength);
+            DoOnMessage(buftyp, buf[0].pbBuffer, buf[0].ulBufferLength);
             EWebSocketApi.RaiseOnError(hCompleteAction,
-              WebSocketApi.CompleteAction(fWSHandle, ActionContext, 0));
+              WebSocketApi.CompleteAction(fWSHandle, actctxt, 0));
             exit;
           end;
         end
     else
-      raise EWebSocketApi.CreateFmt('Invalid WebSocket action %d', [byte(Action)]);
+      raise EWebSocketApi.CreateFmt('Invalid WebSocket action %d', [byte(action)]);
     end;
-    Err := WebSocketApi.CompleteAction(fWSHandle, ActionContext, 0);
-    if ActionContext <> nil then
-      EWebSocketApi.RaiseOnError(hCompleteAction, Err);
-  until {%H-}Action = WEB_SOCKET_NO_ACTION;
+    err := WebSocketApi.CompleteAction(fWSHandle, actctxt, 0);
+    if actctxt <> nil then
+      EWebSocketApi.RaiseOnError(hCompleteAction, err);
+  until {%H-}action = WEB_SOCKET_NO_ACTION;
 end;
 
 procedure THttpApiWebSocketConnection.InternalSend(
@@ -3922,26 +3923,26 @@ end;
 procedure THttpApiWebSocketConnection.Send(aBufferType: WEB_SOCKET_BUFFER_TYPE;
   aBuffer: Pointer; aBufferSize: ULONG);
 var
-  wsSendBuf: WEB_SOCKET_BUFFER_DATA;
+  buf: WEB_SOCKET_BUFFER_DATA;
 begin
   if fState <> wsOpen then
     exit;
-  wsSendBuf.pbBuffer := aBuffer;
-  wsSendBuf.ulBufferLength := aBufferSize;
-  InternalSend(aBufferType, @wsSendBuf);
+  buf.pbBuffer := aBuffer;
+  buf.ulBufferLength := aBufferSize;
+  InternalSend(aBufferType, @buf);
 end;
 
 procedure THttpApiWebSocketConnection.Close(aStatus: WEB_SOCKET_CLOSE_STATUS;
   aBuffer: Pointer; aBufferSize: ULONG);
 var
-  wsSendBuf: WEB_SOCKET_BUFFER_DATA;
+  buf: WEB_SOCKET_BUFFER_DATA;
 begin
   if fState = wsOpen then
     fState := wsClosing;
-  wsSendBuf.pbBuffer := aBuffer;
-  wsSendBuf.ulBufferLength := aBufferSize;
-  wsSendBuf.Reserved1 := aStatus;
-  InternalSend(WEB_SOCKET_CLOSE_BUFFER_TYPE, @wsSendBuf);
+  buf.pbBuffer := aBuffer;
+  buf.ulBufferLength := aBufferSize;
+  buf.Reserved1 := aStatus;
+  InternalSend(WEB_SOCKET_CLOSE_BUFFER_TYPE, @buf);
 end;
 
 procedure THttpApiWebSocketConnection.Ping;
@@ -3972,12 +3973,12 @@ end;
 
 constructor THttpApiWebSocketServer.CreateClone(From: THttpApiServer);
 var
-  wsServer: THttpApiWebSocketServer absolute From;
+  serv: THttpApiWebSocketServer absolute From;
 begin
   inherited CreateClone(From);
-  fThreadPoolServer := wsServer.fThreadPoolServer;
-  fPingTimeout := wsServer.fPingTimeout;
-  fRegisteredProtocols := wsServer.fRegisteredProtocols
+  fThreadPoolServer := serv.fThreadPoolServer;
+  fPingTimeout := serv.fPingTimeout;
+  fRegisteredProtocols := serv.fRegisteredProtocols
 end;
 
 procedure THttpApiWebSocketServer.DestroyMainThread;
@@ -4035,19 +4036,19 @@ end;
 function THttpApiWebSocketServer.UpgradeToWebSocket(
   Ctxt: THttpServerRequestAbstract): cardinal;
 var
-  Protocol: THttpApiWebSocketServerProtocol;
+  proto: THttpApiWebSocketServerProtocol;
   i, j: PtrInt;
   req: PHTTP_REQUEST;
   p: PHTTP_UNKNOWN_HEADER;
   ch, chB: PUtf8Char;
-  aName: RawUtf8;
-  ProtocolHeaderFound: boolean;
+  protoname: RawUtf8;
+  protofound: boolean;
 label
-  protocolFound;
+  fnd;
 begin
   result := 404;
-  Protocol := nil;
-  ProtocolHeaderFound := false;
+  proto := nil;
+  protofound := false;
   req := PHTTP_REQUEST((Ctxt as THttpServerRequest).HttpApiRequest);
   p := req^.headers.pUnknownHeaders;
   for j := 1 to req^.headers.UnknownHeaderCount do
@@ -4055,7 +4056,7 @@ begin
     if (p.NameLength = Length(sProtocolHeader)) and
        IdemPChar(p.pName, Pointer(sProtocolHeader)) then
     begin
-      ProtocolHeaderFound := True;
+      protofound := True;
       for i := 0 to Length(fRegisteredProtocols^) - 1 do
       begin
         ch := p.pRawValue;
@@ -4068,31 +4069,31 @@ begin
           while ((ch - p.pRawValue) < p.RawValueLength) and
                 not (ch^ in [',']) do
             inc(ch);
-          FastSetString(aName, chB, ch - chB);
-          if aName = fRegisteredProtocols^[i].name then
+          FastSetString(protoname, chB, ch - chB);
+          if protoname = fRegisteredProtocols^[i].name then
           begin
-            Protocol := fRegisteredProtocols^[i];
-            goto protocolFound;
+            proto := fRegisteredProtocols^[i];
+            goto fnd;
           end;
         end;
       end;
     end;
     inc(p);
   end;
-  if not ProtocolHeaderFound and
-     (Protocol = nil) and
+  if not protofound and
+     (proto = nil) and
      (Length(fRegisteredProtocols^) = 1) then
-    Protocol := fRegisteredProtocols^[0];
-protocolFound:
-  if Protocol <> nil then
+    proto := fRegisteredProtocols^[0];
+fnd:
+  if proto <> nil then
   begin
-    EnterCriticalSection(Protocol.fSafe);
+    EnterCriticalSection(proto.fSafe);
     try
       New(fLastConnection);
       if fLastConnection.TryAcceptConnection(
-          Protocol, Ctxt, ProtocolHeaderFound) then
+          proto, Ctxt, protofound) then
       begin
-        Protocol.AddConnection(fLastConnection);
+        proto.AddConnection(fLastConnection);
         result := 101
       end
       else
@@ -4102,7 +4103,7 @@ protocolFound:
         result := 405;
       end;
     finally
-      LeaveCriticalSection(Protocol.fSafe);
+      LeaveCriticalSection(proto.fSafe);
     end;
   end;
 end;

@@ -787,7 +787,7 @@ begin
   fOleDBConnection := TSqlDBOleDBConnection(aConnection);
   fParam.Init(TypeInfo(TSqlDBOleDBStatementParamDynArray), fParams, @fParamCount);
   fColumn.InitSpecific(TypeInfo(TSqlDBColumnPropertyDynArray), fColumns,
-    ptRawUtf8, @fColumnCount, True);
+    ptRawUtf8, @fColumnCount, {caseinsens=}true);
   fRowBufferSize := 16384;
   fAlignBuffer := true;
 end;

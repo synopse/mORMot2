@@ -515,8 +515,8 @@ end;
 
 function TRestOrmClient.Retrieve(aID: TID; Value: TOrm; ForUpdate: boolean): boolean;
 var
-  Resp: RawUtf8;
-  TableIndex: integer;
+  resp: RawUtf8;
+  tableindex: integer;
   state: cardinal;
 begin
   result := false;
@@ -524,18 +524,18 @@ begin
      (aID <= 0) or
      (Value = nil) then
     exit;
-  TableIndex := fModel.GetTableIndexExisting(POrmClass(Value)^);
+  tableindex := fModel.GetTableIndexExisting(POrmClass(Value)^);
   if ForUpdate then
   begin
-    if not fModel.Lock(TableIndex, aID) then
+    if not fModel.Lock(tableindex, aID) then
       exit; // error marking as locked by the client
   end
   else
   begin
-    Resp := fCache.Retrieve(TableIndex, aID);
-    if Resp <> '' then
+    resp := fCache.Retrieve(tableindex, aID);
+    if resp <> '' then
     begin
-      Value.FillFrom(Resp);
+      Value.FillFrom(resp);
       Value.IDValue := aID; // JSON object may not contain the ID
       result := true;
       exit; // fast retrieved from internal Client cache (BLOBs ignored)
@@ -543,15 +543,15 @@ begin
   end;
   try
     state := Value.InternalState;
-    if ClientRetrieve(TableIndex, aID, ForUpdate, state, Resp) then
+    if ClientRetrieve(tableindex, aID, ForUpdate, state, resp) then
     begin
       Value.InternalState := state;
       if not ForUpdate then
-        fCache.Notify(TableIndex, aID, Resp, ooSelect);
-      Value.FillFrom(Resp);
+        fCache.Notify(tableindex, aID, resp, ooSelect);
+      Value.FillFrom(resp);
       Value.IDValue := aID; // JSON object may not contain the ID
       if (fForceBlobTransfert <> nil) and
-         fForceBlobTransfert[TableIndex] then
+         fForceBlobTransfert[tableindex] then
         result := RetrieveBlobFields(Value)
       else
         result := true;
@@ -559,7 +559,7 @@ begin
     end;
   finally
     if ForUpdate then
-      fModel.UnLock(TableIndex, aID);
+      fModel.UnLock(tableindex, aID);
   end;
 end;
 
@@ -581,13 +581,13 @@ end;
 
 function TRestOrmClient.BeforeUpdateEvent(Value: TOrm): boolean;
 begin
-  Result := true; // by default, just allow the update to proceed
+  result := true; // by default, just allow the update to proceed
 end;
 
 function TRestOrmClient.Refresh(aID: TID; Value: TOrm;
   var Refreshed: boolean): boolean;
 var
-  Resp, Original: RawUtf8;
+  resp, original: RawUtf8;
   state: cardinal;
 begin
   result := false;
@@ -597,20 +597,20 @@ begin
   begin
     state := Value.InternalState;
     if ClientRetrieve(fModel.GetTableIndexExisting(POrmClass(Value)^),
-        aID, False, state, Resp) then
+        aID, False, state, resp) then
     begin
       Value.InternalState := state;
-      Original := Value.GetJsonValues(
-        IsNotAjaxJson(pointer(Resp)), true, ooSelect);
-      Resp := TrimU(Resp);
-      if (Resp <> '') and
-         (Resp[1] = '[') then // '[{....}]' -> '{...}'
-        Resp := copy(Resp, 2, length(Resp) - 2);
-      if Original <> Resp then
+      original := Value.GetJsonValues(
+        IsNotAjaxJson(pointer(resp)), true, ooSelect);
+      resp := TrimU(resp);
+      if (resp <> '') and
+         (resp[1] = '[') then // '[{....}]' -> '{...}'
+        resp := copy(resp, 2, length(resp) - 2);
+      if original <> resp then
       begin
         // did the content really change?
         Refreshed := true;
-        Value.FillFrom(Resp);
+        Value.FillFrom(resp);
       end;
       result := true;
     end;
@@ -738,15 +738,15 @@ function TRestOrmClientUri.EngineAdd(TableModelIndex: integer;
   const SentData: RawUtf8): TID;
 var
   P: PUtf8Char;
-  url, Head: RawUtf8;
+  url, head: RawUtf8;
 begin
   result := 0;
   url := fModel.Uri[fModel.Tables[TableModelIndex]];
   // POST on 'root/table' URI with JSON object as body
-  if Uri(url, 'POST', nil, @Head, @SentData) <> HTTP_CREATED then
+  if Uri(url, 'POST', nil, @head, @SentData) <> HTTP_CREATED then
     // response must be '201 Created'
     exit;
-  P := pointer(Head); // we need to check the headers
+  P := pointer(head); // we need to check the headers
   if P <> nil then
     repeat
       // find ID from 'Location: Member Entry URI' header entry
@@ -828,9 +828,9 @@ end;
 function TRestOrmClientUri.EngineUpdateBlob(TableModelIndex: integer; aID: TID;
   BlobField: PRttiProp; const BlobData: RawBlob): boolean;
 var
-  url, Head: RawUtf8;
+  url, head: RawUtf8;
 begin
-  Head := 'Content-Type: application/octet-stream';
+  head := 'Content-Type: application/octet-stream';
   if (self = nil) or
      (aID <= 0) or
      (BlobField = nil) then
@@ -840,7 +840,7 @@ begin
     // PUT on 'root/table/ID/BlobFieldName' URI
     url := fModel.GetUriCallBack(BlobField^.NameUtf8,
       fModel.Tables[TableModelIndex], aID);
-    result := Uri(url, 'PUT', nil, @Head, @BlobData) in
+    result := Uri(url, 'PUT', nil, @head, @BlobData) in
       [HTTP_SUCCESS, HTTP_NOCONTENT];
   end;
 end;
@@ -865,7 +865,7 @@ end;
 function TRestOrmClientUri.EngineBatchSend(Table: TOrmClass;
   var Data: RawUtf8; var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
 var
-  u, Resp: RawUtf8;
+  u, resp: RawUtf8;
   R: PUtf8Char;
   i: PtrInt;
   c: PtrUInt;
@@ -875,11 +875,11 @@ begin
   try
     // PUT on 'root/Batch' or 'root/Batch/Table' URI
     u := fModel.GetUriCallBack('Batch', Table, 0);
-    result := Uri(u, 'PUT', @Resp, nil, @Data);
+    result := Uri(u, 'PUT', @resp, nil, @Data);
     if result <> HTTP_SUCCESS then
       exit;
-    // returned Resp shall be an array of integers: '[200,200,...]'
-    R := pointer(Resp);
+    // returned resp shall be an array of integers: '[200,200,...]'
+    R := pointer(resp);
     if R <> nil then
       while not (R^ in ['[', #0]) do
         inc(R);
@@ -964,42 +964,42 @@ end;
 function TRestOrmClientUri.List(const Tables: array of TOrmClass;
   const SqlSelect: RawUtf8; const SqlWhere: RawUtf8): TOrmTable;
 var
-  JSON, SQL: RawUtf8;
-  U: RawUtf8;
+  json, sql: RawUtf8;
+  u: RawUtf8;
   state: cardinal;
 begin
   result := nil;
   if high(Tables) < 0 then
   exit;
   // GET Collection
-  SQL := Model.SqlFromSelectWhere(Tables, SqlSelect, SqlWhere);
+  sql := Model.SqlFromSelectWhere(Tables, SqlSelect, SqlWhere);
   if high(Tables) = 0 then
   begin
-    // one Table -> use REST protocol (SQL as parameters)
+    // one Table -> use REST protocol (sql as parameters)
     if not IsRowID(pointer(SqlSelect)) then
       // ID selected by default
-      U := '?select=' + UrlEncode(SqlSelect)
+      u := '?select=' + UrlEncode(SqlSelect)
     else
-      U := '';
+      u := '';
     if SqlWhere <> '' then
     begin
-      if U <> '' then
-        U := U + '&where='
+      if u <> '' then
+        u := u + '&where='
       else
-        U := U + '?where=';
-      U := U + UrlEncode(SqlWhere);
+        u := u + '?where=';
+      u := u + UrlEncode(SqlWhere);
     end;
-    U := Model.Uri[Tables[0]] + U;
-    if Uri(U, 'GET', @JSON, nil, nil, @state) <> HTTP_SUCCESS then
+    u := Model.Uri[Tables[0]] + u;
+    if Uri(u, 'GET', @json, nil, nil, @state) <> HTTP_SUCCESS then
       exit;
   end
-  // multiple tables -> send SQL statement as HTTP body
-  else if Uri(Model.Root,'GET', @JSON, nil, @SQL, @state) <> HTTP_SUCCESS then
+  // multiple tables -> send sql statement as HTTP body
+  else if Uri(Model.Root,'GET', @json, nil, @sql, @state) <> HTTP_SUCCESS then
     exit;
-  if JSON = '' then
+  if json = '' then
     exit;
-  result := TOrmTableJson.CreateFromTables(Tables, SQL, JSON,
-    {ownjson=}PRefCnt(PAnsiChar(pointer(JSON)) - _STRREFCNT)^ = 1);
+  result := TOrmTableJson.CreateFromTables(Tables, sql, json,
+    {ownjson=}PRefCnt(PAnsiChar(pointer(json)) - _STRREFCNT)^ = 1);
   result.InternalState := state;
 end;
 
@@ -1020,9 +1020,9 @@ function TRestOrmClientUri.UpdateFromServer(const Data: array of TObject;
 var
   i: PtrInt;
   s: cardinal;
-  Resp: RawUtf8;
-  T: TOrmTableJson;
-  TRefreshed: boolean; // to check for each Table refresh
+  resp: RawUtf8;
+  table: TOrmTableJson;
+  wasrefreshed: boolean; // to check for each Table refresh
 const
   _ST: array[boolean] of TOnTableUpdateState = (
     tusNoChange, tusChanged);
@@ -1036,27 +1036,27 @@ begin
     if Data[i] <> nil then
       if Data[i].InheritsFrom(TOrmTableJson) then
       begin
-        T := TOrmTableJson(Data[i]);
-        if (T.QuerySql <> '') and
-           (T.InternalState <> s) then
+        table := TOrmTableJson(Data[i]);
+        if (table.QuerySql <> '') and
+           (table.InternalState <> s) then
         begin
           // refresh needed
-          if Uri(fModel.Root, 'GET', @Resp, nil, @T.QuerySql, @s) = HTTP_SUCCESS then
+          if Uri(fModel.Root, 'GET', @resp, nil, @table.QuerySql, @s) = HTTP_SUCCESS then
           begin
             // refresh after proper GET with SQL sent
             if Assigned(OnTableUpdate) then
-              OnTableUpdate(T, tusPrepare);
-            TRefreshed := false;
-            if not T.UpdateFrom(Resp, TRefreshed, PCurrentRow) then
+              OnTableUpdate(table, tusPrepare);
+            wasrefreshed := false;
+            if not table.UpdateFrom(resp, wasrefreshed, PCurrentRow) then
               // mark error retrieving new content
               result := false
             else
               // successfully refreshed with new data
-              T.InternalState := s;
-            if TRefreshed then
+              table.InternalState := s;
+            if wasrefreshed then
               Refreshed := true;
             if Assigned(OnTableUpdate) then
-              OnTableUpdate(T, _ST[TRefreshed]);
+              OnTableUpdate(table, _ST[wasrefreshed]);
           end
           else
             // mark error retrieving new content
@@ -1078,7 +1078,7 @@ end;
 function TRestOrmClientUri.ServerCacheFlush(aTable: TOrmClass; aID: TID): boolean;
 begin
   if (self = nil) or
-     (Model = nil) then // avoid GPF
+     (fModel = nil) then // avoid GPF
     result := false
   else
     result := Uri(fModel.GetUriCallBack('CacheFlush', aTable, aID), 'GET')
