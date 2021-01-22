@@ -1665,6 +1665,7 @@ type
   // unless rsoGetUserRetrieveNoBlobData is defined
   // - rsoNoInternalState could be state to avoid transmitting the
   // 'Server-InternalState' header, e.g. if the clients wouldn't need it
+  // - rsoNoTableURI will disable any /root/tablename URI for safety
   TRestServerOption = (
     rsoNoAjaxJson,
     rsoGetAsJsonNotAsString,
@@ -1680,7 +1681,8 @@ type
     rsoTimestampInfoUriDisable,
     rsoHttpHeaderCheckDisable,
     rsoGetUserRetrieveNoBlobData,
-    rsoNoInternalState);
+    rsoNoInternalState,
+    rsoNoTableURI);
 
   /// allow to customize the TRestServer process via its Options property
   TRestServerOptions = set of TRestServerOption;
@@ -2689,7 +2691,10 @@ procedure TRestServerUriContext.InternalSetTableFromTableName(
   TableName: PUtf8Char);
 begin
   TableEngine := TRestOrm(Server.fOrmInstance);
-  InternalSetTableFromTableIndex(Server.fModel.GetTableIndexPtr(TableName));
+  if rsoNoTableURI in Server.Options then
+    TableIndex := -1
+  else
+    InternalSetTableFromTableIndex(Server.fModel.GetTableIndexPtr(TableName));
   if TableIndex < 0 then
     exit;
   StaticOrm := TRestOrmServer(Server.fOrmInstance).
@@ -7026,7 +7031,8 @@ begin
   aMethodName := TrimU(aMethodName);
   if aMethodName = '' then
     raise EServiceException.CreateUtf8('%.ServiceMethodRegister('''')', [self]);
-  if Model.GetTableIndex(aMethodName) >= 0 then
+  if not (rsoNoTableURI in fOptions) and
+     (Model.GetTableIndex(aMethodName) >= 0) then
     raise EServiceException.CreateUtf8('Published method name %.% ' +
       'conflicts with a Table in the Model!', [self, aMethodName]);
   with PRestServerMethod(fPublishedMethods.AddUniqueName(aMethodName,
