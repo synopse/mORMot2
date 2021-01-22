@@ -558,7 +558,12 @@ procedure TServiceComplexCalculator.EnsureInExpectedThread;
 begin
   case GlobalInterfaceTestMode of
     itmDirect, itmClient, itmMainThread:
+      {$ifndef Android}
       if GetThreadID <> PtrUInt(MainThreadID) then
+      {$else}
+      // On Android, processes never run in the mainthread.
+      if false then
+      {$endif}
         raise Exception.Create('Shall be in main thread');
     itmPerInterfaceThread, itmHttp, itmLocked:
       if GetThreadID = PtrUInt(MainThreadID) then
@@ -1816,17 +1821,22 @@ end;
 
 procedure TTestServiceOrientedArchitecture.ClientSideRESTMainThread;
 begin
+  {$ifdef Android}
+  // Tests on Android do not run in MainThread
+  exit;
+  {$endif}
   with TTestThread.Create(true) do
   try
     Test := self;
     options := [optExecInMainThread, optFreeInMainThread];
     Start;
-    while Test <> nil do
+    while (Test<>nil) do
+      //CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif};
     begin
       if IsMultiThread and (GetCurrentThreadID=MainThreadID) then
         CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
       else
-        sleep(0);
+          sleep(1);
     end;
   finally
     Free;
@@ -1849,11 +1859,12 @@ begin
     options := [optExecLockedPerInterface];
     Start;
     while Test <> nil do
+      //CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif};
     begin
       if IsMultiThread and (GetCurrentThreadID=MainThreadID) then
         CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
       else
-        sleep(0);
+          sleep(1);
     end;
   finally
     Free;
