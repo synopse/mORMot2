@@ -384,6 +384,7 @@ type
     /// save the debug messages into an external file
     // - if no file name is specified, the current Ident is used
     procedure SaveToFile(const DestPath: TFileName; const FileName: TFileName = '');
+    procedure SaveToText(var aDest: Text);
     /// register a specified Test case from its class name
     // - an instance of the supplied class will be created during Run
     // - the published methods of the children must call this method in order
@@ -1304,6 +1305,13 @@ begin
   rewrite(fSaveToFile);
   if IOResult <> 0 then
     FillCharFast(fSaveToFile, sizeof(fSaveToFile), 0);
+end;
+
+procedure TSynTests.SaveToText(var aDest: Text);
+begin
+  if TTextRec(fSaveToFile).Handle<>0 then
+    Close(fSaveToFile);
+  fSaveToFile:=aDest;
 end;
 
 {$I+}

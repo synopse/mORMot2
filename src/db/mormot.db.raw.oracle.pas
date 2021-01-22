@@ -47,7 +47,7 @@ type
   sb1     = ShortInt;
   ub1     = byte;
   dvoid   = Pointer;
-  text    = PAnsiChar;
+  text    = PAnsiChar; // this conflicts with the standard text definition in FPC (and Delphi perhaps)
   OraText = PAnsiChar;
   size_T  = PtrUInt;
 

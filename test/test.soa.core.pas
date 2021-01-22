@@ -1299,7 +1299,7 @@ begin
     exit; // should be called once
   // create model, client and server
   fModel := TOrmModel.Create([TOrmPeople, TAuthUser, TAuthGroup]);
-  fClient := TRestClientDB.Create(fModel, nil, 'test.db3', TRestServerDB, true);
+  fClient := TRestClientDB.Create(fModel, nil, WorkDir + 'test.db3', TRestServerDB, true);
   fClient.Server.Server.CreateMissingTables; // if tests are run with no db
   Check(fClient.SetUser('User', 'synopse'), 'default user for Security tests');
   Check(fClient.Server.ServiceRegister(TServiceCalculator,
@@ -1559,7 +1559,7 @@ var
   store: TRestServerDB;
 begin
   fClient.Server.StatLevels := SERVERDEFAULTMONITORLEVELS + [mlSessions];
-  store := TRestServerDB.CreateWithOwnModel([TOrmMonitorUsage], 'servicestats.db3');
+  store := TRestServerDB.CreateWithOwnModel([TOrmMonitorUsage], WorkDir + 'servicestats.db3');
   try
     store.DB.Synchronous := smOff;
     store.DB.LockingMode := lmExclusive;
@@ -1822,7 +1822,12 @@ begin
     options := [optExecInMainThread, optFreeInMainThread];
     Start;
     while Test <> nil do
-      CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif};
+    begin
+      if IsMultiThread and (GetCurrentThreadID=MainThreadID) then
+        CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
+      else
+        sleep(0);
+    end;
   finally
     Free;
   end;
@@ -1844,7 +1849,12 @@ begin
     options := [optExecLockedPerInterface];
     Start;
     while Test <> nil do
-      CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif};
+    begin
+      if IsMultiThread and (GetCurrentThreadID=MainThreadID) then
+        CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
+      else
+        sleep(0);
+    end;
   finally
     Free;
   end;

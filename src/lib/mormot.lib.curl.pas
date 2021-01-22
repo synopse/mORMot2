@@ -770,8 +770,10 @@ end;
 
 initialization
 
+{$ifndef LIBCURLSTATIC}
 finalization
   curl.Free;
+{$endif}
 
 end.
 

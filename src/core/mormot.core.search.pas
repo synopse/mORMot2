@@ -1876,7 +1876,7 @@ end;
 
 // faster alternative (without recursion) for only * ? (but not [...])
 
-{$ifdef CPUX86} // less registers on this CPU
+{$ifdef CPU32} // less registers on this CPU
 
 function SearchNoRange(aMatch: PMatch; aText: PUtf8Char; aTextLen: PtrInt): boolean;
 var
