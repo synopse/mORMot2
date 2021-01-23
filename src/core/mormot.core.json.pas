@@ -2759,7 +2759,7 @@ lit:        inc(P);
                     c4 := c4 shr 6;
                     dec(extra);
                   until extra = 0;
-                  D^ := AnsiChar(byte(c4) or UTF8_EXTRAFIRSTBYTE[ord(c)]);
+                  D^ := AnsiChar(byte(c4) or UTF8_TABLE.FirstByte[ord(c)]);
                   inc(D, ord(c));
                   inc(P, 5);
                 end

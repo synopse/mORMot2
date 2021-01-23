@@ -279,6 +279,7 @@ type
     fTags: TSynMustacheTagDynArray;
     fInternalPartials: TSynMustachePartials;
     fSectionMaxCount: Integer;
+    // standard helpers implementation
     class procedure DateTimeToText(const Value: variant; out result: variant);
     class procedure DateToText(const Value: variant; out result: variant);
     class procedure DateFmt(const Value: variant; out result: variant);
@@ -346,7 +347,7 @@ type
       const aName: RawUtf8);
     /// search for one Expression Helper event by name
     class function HelperFind(const Helpers: TSynMustacheHelpers;
-      aName: PUtf8Char; aNameLen: integer): integer;
+      aName: PUtf8Char; aNameLen: TStrLen): PtrInt;
     /// returns a list of most used static Expression Helpers
     // - registered helpers are DateTimeToText, DateToText, DateFmt, TimeLogToText,
     // BlobToBase64, JsonQuote, JsonQuoteUri, ToJson, EnumTrim, EnumTrimRight,
@@ -658,8 +659,8 @@ begin
     end;
     // if helper not found, will return the unprocessed value
   end;
+  // recursive search of {{value}}
   for i := fContextCount - 1 downto 0 do
-    // recursive search of {{value}}
     with fContext[i] do
       if DocumentType <> nil then
         if ListCount < 0 then
@@ -687,9 +688,9 @@ begin
           if Value.VType >= varNull then
             exit;
         end;
+  // no matching {{value}} -> try if was not {{helper}}
   if space = 0 then
   begin
-    // {{helper}}
     space := length(ValueName);
     helper := TSynMustache.HelperFind(Helpers, pointer(ValueName), space);
     if helper >= 0 then
@@ -1475,11 +1476,27 @@ begin
 end;
 
 class function TSynMustache.HelperFind(const Helpers: TSynMustacheHelpers;
-  aName: PUtf8Char; aNameLen: integer): integer;
+  aName: PUtf8Char; aNameLen: TStrLen): PtrInt;
+var
+  h: ^TSynMustacheHelper;
+  p: PUtf8Char;
+  n: integer;
 begin
-  for result := 0 to length(Helpers) - 1 do
-    if IdemPropNameU(Helpers[result].Name, aName, aNameLen) then
-      exit;
+  h := pointer(Helpers);
+  if h <> nil then
+  begin
+    result := 0;
+    n := PDALen(PAnsiChar(h) - _DALEN)^ + _DAOFF;
+    repeat
+      P := pointer(h^.Name);
+      if (PStrLen(P - _STRLEN)^ = aNameLen) and
+         IdemPropNameUSameLen(P, aName, aNameLen) then
+        exit;
+      inc(h);
+      inc(result);
+      dec(n);
+    until n = 0;
+  end;
   result := -1;
 end;
 
