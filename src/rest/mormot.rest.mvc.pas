@@ -1421,7 +1421,7 @@ begin
   fContext.Secret.Init(@rnd, sizeof(rnd));
 end;
 
-procedure XorMemoryCTR(data: PCardinal; key256bytes: PCardinalArray;
+procedure XorMemoryCtr(data: PCardinal; key256bytes: PCardinalArray;
   size: PtrUInt; ctr: cardinal);
 begin
   while size >= sizeof(cardinal) do
@@ -1443,7 +1443,7 @@ end;
 
 procedure TMvcSessionWithCookies.Crypt(P: PAnsiChar; bytes: integer);
 begin
-  XorMemoryCTR(@P[4], @fContext.Crypt, bytes - 4,
+  XorMemoryCtr(@P[4], @fContext.Crypt, bytes - 4,
     {ctr=}xxHash32(fContext.CryptNonce, P, 4));
 end;
 
@@ -1531,7 +1531,7 @@ var
 begin
   result := InterlockedIncrement(fContext.SessionSequence);
   if result = MaxInt - 1024 then
-    // thread-safe overflow rounding
+    // thread-safe overflow rounding (disconnecting previous sessions)
     fContext.SessionSequence := 0;
   if (PRecordData <> nil) and
      (PRecordTypeInfo <> nil) then

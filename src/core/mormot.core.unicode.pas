@@ -2054,7 +2054,7 @@ end;
 
 function IsValidUtf8(source: PUtf8Char; sourcelen: PtrInt): boolean;
 var
-  extra: integer;
+  extra: PtrInt;
   c: cardinal;
   {$ifdef CPUX86NOTPIC}
   utf8: TUtf8Table absolute UTF8_TABLE;
@@ -2077,13 +2077,13 @@ begin
       if c and $80 <> 0 then
       begin
         extra := utf8.Bytes[c];
-        if extra = 0 then
+        if (extra = 0) or
+           (PtrInt(PtrUInt(source)) + extra > sourcelen) then
           // invalid leading byte
           exit;
         // check valid UTF-8 content
         repeat
-          if (PtrInt(PtrUInt(source)) >= sourcelen) or
-             (byte(source^) and $c0 <> $80) then
+          if byte(source^) and $c0 <> $80 then
             exit;
           inc(source);
           dec(extra)
@@ -3188,8 +3188,8 @@ By1:  c := byte(Source^);
         until i = 0;
         dec(c, utf8.Extra[extra].offset);
         if c > $ffff then
-          Dest^ := '?'
-        else // '?' as in unknown fWideToAnsi[] items
+          Dest^ := '?' // '?' as in unknown fWideToAnsi[] items
+        else
           Dest^ := AnsiChar(fWideToAnsi[c]);
         inc(Dest);
         if (PtrUInt(Source) and 3 = 0) and
@@ -6084,12 +6084,12 @@ begin
   end;
 end;
 
+// branchless Unicode 10.0 uppercase folding using our internal tables
 function Ucs4Upper(c: PtrUInt): PtrInt;
   {$ifdef HASINLINE} inline;{$endif}
 var
   i: PtrUInt;
 begin
-  // branchless Unicode 10.0 uppercase folding
   i := c shr UU_BLOCK_HI;
   with UU do // UU reference compiles into a register on x86_64 and ARM
     result := PtrInt(c) + Block[IndexLo[
