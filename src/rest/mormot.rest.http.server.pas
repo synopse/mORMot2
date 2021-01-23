@@ -1048,6 +1048,9 @@ begin
          (result = HTTP_TEMPORARYREDIRECT) then
       begin
         redirect := FindIniNameValue(P, 'LOCATION: ');
+        if (redirect <> '') and
+           (redirect[1] = '/') then
+          delete(redirect, 1, 1); // what is needed for real URI doesn't help here
         hostlen := length(hostroot);
         if (length(redirect) > hostlen) and
            (redirect[hostlen + 1] = '/') and
@@ -1056,6 +1059,7 @@ begin
           call.OutHead := 'Location: ' + copy(redirect, hostlen + 1, maxInt);
       end
       else if ExistsIniName(P, 'SET-COOKIE:') then
+        // cookie Path=/hostroot... -> /...
         call.OutHead := StringReplaceAll(call.OutHead,
           '; Path=/' + serv.Model.Root, '; Path=/')
     end;
