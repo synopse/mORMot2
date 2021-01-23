@@ -1157,6 +1157,8 @@ function Unicode_CompareString(
 // - returns the number of WideChar written into W^ destination buffer
 // - on POSIX, use the ICU library, or fallback to FPC RTL widestringmanager
 // with a temporary variable - you would need to include cwstring unit
+// - raw function called by TSynAnsiConvert.AnsiBufferToUnicode from
+// mormot.core.unicode unit
 function Unicode_AnsiToWide(
   A: PAnsiChar; W: PWideChar; LA, LW, CodePage: PtrInt): integer;
 
@@ -1164,21 +1166,25 @@ function Unicode_AnsiToWide(
 // - returns the number of AnsiChar written into A^ destination buffer
 // - on POSIX, use the ICU library, or fallback to FPC RTL widestringmanager
 // with a temporary variable - you would need to include cwstring unit
+// - raw function called by TSynAnsiConvert.UnicodeBufferToAnsi from
+// mormot.core.unicode unit
 function Unicode_WideToAnsi(
   W: PWideChar; A: PAnsiChar; LW, LA, CodePage: PtrInt): integer;
 
-/// conversion of some UTF-16 buffer into a temporary shortstring
+/// conversion of some UTF-16 buffer into a temporary Ansi shortstring
 // - used when mormot.core.unicode is an overkill, e.g. TCrtSocket.SockSend()
 procedure Unicode_WideToShort(
   W: PWideChar; LW, CodePage: PtrInt; var res: shortstring);
 
 /// compatibility function, wrapping Win32 API CharUpperBuffW()
 // - on POSIX, use the ICU library, or fallback to 'a'..'z' conversion only
+// - raw function called by UpperCaseUnicode() from mormot.core.unicode unit
 function Unicode_InPlaceUpper(W: PWideChar; WLen: integer): integer;
   {$ifdef MSWINDOWS} stdcall; {$endif}
 
 /// compatibility function, wrapping Win32 API CharLowerBuffW()
 // - on POSIX, use the ICU library, or fallback to 'A'..'Z' conversion only
+// - raw function called by LowerCaseUnicode() from mormot.core.unicode unit
 function Unicode_InPlaceLower(W: PWideChar; WLen: integer): integer;
   {$ifdef MSWINDOWS} stdcall; {$endif}
 
@@ -2891,10 +2897,11 @@ begin
   else if (LW <= 255) and
           IsAnsiCompatibleW(W, LW) then
   begin
+    // fast handling of pure English content
     res[0] := AnsiChar(LW);
     i := 1;
     repeat
-      res[i] := AnsiChar(W^); // fast pure English content
+      res[i] := AnsiChar(W^);
       if i = LW then
         break;
       inc(W);
@@ -2902,6 +2909,7 @@ begin
     until false;
   end
   else
+    // use ICU or cwstring/RTL for accurate conversion
     res[0] := AnsiChar(Unicode_WideToAnsi(W, PAnsiChar(@res[1]), LW, 255, CodePage));
 end;
 
