@@ -4524,7 +4524,7 @@ begin
     begin
       FindNameValue(Call.InHead, 'IF-NONE-MATCH: ', clienthash);
       if ServerHash = '' then
-        ServerHash := '"' + crc32cUtf8ToHex(result) + '"';
+        ServerHash := crc32cUtf8ToHex(result);
       ServerHash := '"' + ServerHash + '"';
       if clienthash <> ServerHash then
         Call.OutHead := Call.OutHead + #13#10'ETag: ' + ServerHash
