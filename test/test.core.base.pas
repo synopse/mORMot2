@@ -4117,7 +4117,7 @@ begin
     IntToThousandString(Timer.PerSec(100000))]);
 end;
 
-function LowerCaseReference(const S: RawByteString): RawByteString;
+function LowerCaseAscii7(const S: RawByteString): RawByteString;
 var
   Ch: AnsiChar;
   L: Integer;
@@ -4180,7 +4180,29 @@ begin
   end;
 end;
 
+
 procedure TTestCoreBase._UTF8;
+
+  procedure CaseFoldingTest;
+  const
+    _CASEFOLDINGTESTS: array[0..23] of word =
+      ($61, $41, $62, $42, $e0, $c0, $fd, $dd, $14b, $14a, $371, $370,
+       $3F3, $37F, $451, $401, $435, $415, $442, $422, $4e1, $4e0, $2d00, $10a0);
+  var
+    i: PtrInt;
+    up, lo, up2: array[0..10] of AnsiChar;
+  begin
+    for i := 0 to 11 do
+    begin
+      lo[WideCharToUtf8(@lo, _CASEFOLDINGTESTS[i * 2])] := #0;
+      up[WideCharToUtf8(@up, _CASEFOLDINGTESTS[i * 2 + 1])] := #0;
+      Utf8UpperReference(@lo, @up2);
+      Check(StrComp(@up, @up2) = 0, 'CaseFolding');
+      CheckEqual(Utf8ICompReference(@lo, @up), 0, 'CaseFoldingComp');
+      CheckEqual(Utf8ILCompReference(@lo, @up, StrLen(@lo), StrLen(@up)), 0,
+        'CaseFoldingLComp');
+    end;
+  end;
 
   procedure Test(CP: cardinal; const W: WinAnsiString);
   var
@@ -4242,6 +4264,7 @@ const
   IDPA: array[0..15] of PAnsiChar = (nil, 'T', '1', 'TE', 'TE', 'TE', 'TES',
     'TEST', 'TEST', 'TES', 'TEST', 'TESTE', 't', 'U', '2', 'TESTe');
 begin
+  CaseFoldingTest;
   for i := 0 to high(ROWIDS) do
     Check(isRowID(ROWIDS[i]) = (i < 8));
   U := 'old1,old2,old3';
@@ -4399,7 +4422,9 @@ begin
     Test(CP_UTF16, W);
     W := WinAnsiString(RandomString(len));
     U := WinAnsiToUtf8(W);
+    check(IsValidUtf8(U), 'IsValidUtf8U');
     P := pointer(U);
+    check(IsValidUtf8(P), 'IsValidUtf8');
     check(PosChar(P, #10) = nil);
     if len > 0 then
     begin
@@ -4470,7 +4495,15 @@ begin
     Check(Utf8IComp(pointer(U), pointer(Up)) = 0);
     Check(Utf8ILComp(pointer(U), pointer(U), length(U), length(U)) = 0);
     Check(Utf8ILComp(pointer(U), pointer(Up), length(U), length(Up)) = 0);
-    Check(LowerCase(U) = LowerCaseReference(U));
+    Check(Utf8ICompReference(pointer(U), pointer(U)) = 0);
+    Check(Utf8ILCompReference(pointer(U), pointer(U), length(U), length(U)) = 0);
+    if WA then
+    begin
+      CheckEqual(Utf8ICompReference(pointer(U), pointer(Up)), 0, 'Utf8ICompReference');
+      CheckEqual(Utf8ILCompReference(pointer(U), pointer(Up), length(U), length(Up)),
+        0, 'Utf8ILCompReference');
+    end;
+    Check(LowerCase(U) = LowerCaseAscii7(U));
     L := Length(U);
     SetString(Up, nil, L);
     SetString(Up2, PAnsiChar(pointer(U)), L);
@@ -4481,10 +4514,17 @@ begin
       Check(CompareMem(Pointer(Up), pointer(Up2), L));
     if CurrentAnsiConvert.CodePage = CODEPAGE_US then
        // initial text above is WinAnsiString (CP 1252)
-      Check(StringToUtf8(Utf8ToString(U)) = U);
+      CheckEqual(StringToUtf8(Utf8ToString(U)), U, '1252');
     Up := UpperCaseUnicode(U);
-    Check(Up = UpperCaseUnicode(LowerCaseUnicode(U)));
-    Check(kr32(0, pointer(U), length(U)) = kr32reference(pointer(U), length(U)));
+    CheckEqual(Up, UpperCaseUnicode(LowerCaseUnicode(U)), 'upper/lower');
+    {$ifndef MSWINDOWS}
+    if not Icu.IsAvailable then
+      // fallback when only a..z chars are translated
+      CheckEqual(UpperCaseReference(LowerCaseUnicode(U)), UpperCaseReference(U), 'UCR')
+    else
+    {$endif MSWINDOWS}
+      CheckEqual(Up, UpperCaseReference(U), 'UpperCaseReference');
+    CheckEqual(kr32(0, pointer(U), length(U)), kr32reference(pointer(U), length(U)), 'kr32');
     U2 := U + #10;
     check(PosChar(pointer(U2), #0) = nil);
     check(PosChar(pointer(U2), #1) = nil);
