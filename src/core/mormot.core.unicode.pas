@@ -1213,11 +1213,11 @@ function UpperCopy255Buf(dest: PAnsiChar; source: PUtf8Char; sourceLen: PtrInt):
 // AnsiChar)
 function UpperCopyWin255(dest: PWinAnsiChar; const source: RawUtf8): PWinAnsiChar;
 
-/// copy WideChar source into dest^ with upper case conversion
+/// copy UTF-16 source into dest^ with ASCII 7-bit upper case conversion
 // - used internally for short keys match or case-insensitive hash
 // - returns final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be array[byte] of
-// AnsiChar)
+// AnsiChar), replacing any non WinAnsi character by '?'
 function UpperCopy255W(dest: PAnsiChar; const source: SynUnicode): PAnsiChar; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -1225,64 +1225,62 @@ function UpperCopy255W(dest: PAnsiChar; const source: SynUnicode): PAnsiChar; ov
 // - used internally for short keys match or case-insensitive hash
 // - returns final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be array[byte] of
-// AnsiChar)
+// AnsiChar), replacing any non WinAnsi character by '?'
 function UpperCopy255W(dest: PAnsiChar; source: PWideChar; L: PtrInt): PAnsiChar; overload;
 
-/// copy source into dest^ with 7 bits upper case conversion
+/// copy source into dest^ with ASCII 7-bit upper case conversion
 // - returns final dest pointer
 // - will copy up to the source buffer end: so Dest^ should be big enough -
 // which will the case e.g. if Dest := pointer(source)
 function UpperCopy(dest: PAnsiChar; const source: RawUtf8): PAnsiChar;
 
-/// copy source into dest^ with 7 bits upper case conversion
+/// copy source into dest^ with ASCII 7-bit upper case conversion
 // - returns final dest pointer
 // - this special version expect source to be a shortstring
 function UpperCopyShort(dest: PAnsiChar; const source: shortstring): PAnsiChar;
 
-/// fast UTF-8 comparison using the NormToUpper[] array for all 8 bits values
+/// fast UTF-8 comparison handling WinAnsi CP-1252 case folding
 // - this version expects u1 and u2 to be zero-terminated
-// - this version will decode each UTF-8 glyph before using NormToUpper[]
-// - current implementation handles UTF-16 surrogates
+// - decode the UTF-8 content before using NormToUpper[] lookup table
+// - consider Utf8ICompReference() for Unicode 10.0 support
 function Utf8IComp(u1, u2: PUtf8Char): PtrInt;
 
-/// copy WideChar source into dest^ with upper case conversion, using the
-// NormToUpper[] array for all 8 bits values, encoding the result as UTF-8
-// - returns final dest pointer
+/// fast UTF-8 comparison handling WinAnsi CP-1252 case folding
+// - this version expects u1 and u2 not to be necessary zero-terminated, but
+// uses L1 and L2 as length for u1 and u2 respectively
+// - decode the UTF-8 content before using NormToUpper[] lookup table
+// - consider Utf8ILCompReference() for Unicode 10.0 support
+function Utf8ILComp(u1, u2: PUtf8Char; L1, L2: cardinal): PtrInt;
+
+/// copy UTF-8 buffer into dest^ handling WinAnsi CP-1252 NormToUpper[] folding
+// - returns the final dest pointer
 // - current implementation handles UTF-16 surrogates
 function Utf8UpperCopy(Dest, Source: PUtf8Char; SourceChars: cardinal): PUtf8Char;
 
-/// copy WideChar source into dest^ with upper case conversion, using the
-// NormToUpper[] array for all 8 bits values, encoding the result as UTF-8
-// - returns final dest pointer
+/// copy UTF-8 buffer into dest^ handling WinAnsi CP-1252 NormToUpper[] folding
+// - returns the final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be array[byte] of
 // AnsiChar), with UTF-8 encoding
 function Utf8UpperCopy255(dest: PAnsiChar; const source: RawUtf8): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// fast UTF-8 comparison using the NormToUpper[] array for all 8 bits values
-// - this version expects u1 and u2 not to be necessary zero-terminated, but
-// uses L1 and L2 as length for u1 and u2 respectively
-// - use this function for SQLite3 collation (TSqlCollateFunc)
-// - this version will decode the UTF-8 content before using NormToUpper[]
-// - current implementation handles UTF-16 surrogates
-function Utf8ILComp(u1, u2: PUtf8Char; L1, L2: cardinal): PtrInt;
-
-/// fast case-insensitive Unicode comparison
+/// fast case-insensitive Unicode comparison handling ASCII 7-bit chars
 // - use the NormToUpperAnsi7Byte[] array, i.e. compare 'a'..'z' as 'A'..'Z'
 // - this version expects u1 and u2 to be zero-terminated
 function AnsiICompW(u1, u2: PWideChar): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two "array of AnsiString" elements, with no case sensitivity
+// - just a wrapper around StrIComp()
 function SortDynArrayAnsiStringI(const A, B): integer;
 
 /// compare two "array of PUtf8Char/PAnsiChar" elements, with no case sensitivity
-// - implemented here since would call StrIComp()
+// - just a wrapper around StrIComp()
 function SortDynArrayPUtf8CharI(const A, B): integer;
 
 /// compare two "array of generic string" elements, with no case sensitivity
 // - the expected string type is the generic VCL string
-// - implemented here since would call AnsiICompW()
+// - just a wrapper around StrIComp() for AnsiString or AnsiICompW() for UNICODE
 function SortDynArrayStringI(const A, B): integer;
 
 /// compare two "array of WideString/UnicodeString" elements, with no case sensitivity
@@ -1290,7 +1288,7 @@ function SortDynArrayStringI(const A, B): integer;
 function SortDynArrayUnicodeStringI(const A, B): integer;
 
 /// SameText() overloaded function with proper UTF-8 decoding
-// - fast version using NormToUpper[] array for all Win-Ansi characters
+// - fast version using NormToUpper[] array for all WinAnsi characters
 // - this version will decode each UTF-8 glyph before using NormToUpper[]
 // - current implementation handles UTF-16 surrogates as Utf8IComp()
 function SameTextU(const S1, S2: RawUtf8): boolean;
@@ -1364,16 +1362,15 @@ procedure LowerCaseSelf(var S: RawUtf8);
 
 /// accurate conversion of the supplied UTF-8 content into the corresponding
 // upper-case Unicode characters
-// - this version will use the Operating System API, and will therefore be
-// much slower than UpperCase/UpperCaseU versions, but will handle all
-// kind of unicode characters
+// - will use the available API (e.g. Win32 or ICU), so may not be consistent on
+// all systems - consider UpperCaseReference() to use our Unicode 10.0 tables
+// - will temporary decode S into and from UTF-16 so is likely to be slower
 function UpperCaseUnicode(const S: RawUtf8): RawUtf8;
 
 /// accurate conversion of the supplied UTF-8 content into the corresponding
 // lower-case Unicode characters
-// - this version will use the Operating System API, and will therefore be
-// much slower than LowerCase/LowerCaseU versions, but will handle all
-// kind of unicode characters
+// - will use the available API (e.g. Win32 or ICU), so may not be consistent on
+// all systems - and also slower than LowerCase/LowerCaseU versions
 function LowerCaseUnicode(const S: RawUtf8): RawUtf8;
 
 /// fast WinAnsi comparison using the NormToUpper[] array for all 8 bits values
@@ -1387,24 +1384,28 @@ function AnsiIComp(Str1, Str2: pointer): PtrInt;
 // - won't call the Operating System, so is consistent on all platforms,
 // whereas UpperCaseUnicode() may vary depending on each library implementation
 // - some codepoints enhance in length, so D^ should be at least twice than S^
+// - won't use temporary UTF-16 decoding, and optimized for plain ASCII content
 function Utf8UpperReference(S, D: PUtf8Char): PUtf8Char;
 
 /// UpperCase conversion of a UTF-8 string using our Unicode 10.0 tables
 // - won't call the Operating System, so is consistent on all platforms,
 // whereas UpperCaseUnicode() may vary depending on each library implementation
+// - won't use temporary UTF-16 decoding, and optimized for plain ASCII content
 function UpperCaseReference(const S: RawUtf8): RawUtf8;
 
 /// UTF-8 comparison using our Unicode 10.0 tables
 // - this version expects u1 and u2 to be zero-terminated
-// - Utf8IComp() only handle Win1252 latin accents
-// - won't call the Operating System, so is consistent on all platforms
+// - Utf8IComp() only handle WinAnsi CP-1252 latin accents
+// - won't call the Operating System, so is consistent on all platforms, and
+// don't require any temporary UTF-16 decoding
 function Utf8ICompReference(u1, u2: PUtf8Char): PtrInt;
 
 /// UTF-8 comparison using our Unicode 10.0 tables
 // - this version expects u1 and u2 not to be necessary zero-terminated, but
 // uses L1 and L2 as length for u1 and u2 respectively
-// - Utf8ILComp() only handle Win1252 latin accents
-// - won't call the Operating System, so is consistent on all platforms
+// - Utf8ILComp() only handle WinAnsi CP-1252 latin accents
+// - won't call the Operating System, so is consistent on all platforms, and
+// don't require any temporary UTF-16 decoding
 function Utf8ILCompReference(u1, u2: PUtf8Char; L1, L2: integer): PtrInt;
 
 

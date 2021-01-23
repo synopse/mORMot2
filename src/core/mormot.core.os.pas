@@ -1150,6 +1150,8 @@ function Unicode_CodePage: integer;
 // with a temporary variable - you would need to include cwstring unit
 // - in practice, is seldom called, unless our proprietary WIN32CASE collation
 // is used in mormot.db.raw.sqlite3
+// - consider Utf8ILCompReference() from mormot.core.unicode.pas for an
+// operating-system-independent Unicode 10.0 comparison function
 function Unicode_CompareString(
   PW1, PW2: PWideChar; L1, L2: PtrInt; IgnoreCase: boolean): integer;
 

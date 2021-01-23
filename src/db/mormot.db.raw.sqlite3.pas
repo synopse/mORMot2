@@ -2768,12 +2768,15 @@ type
     // value (which corresponds to the sqlite3.open() behavior)
     // - by default, 10000 pages are used to cache data in memory (using around
     // 40 MB of RAM), but you may specify another value for performance tuning
-    // - SYSTEMNOCASE collation is added (our custom fast UTF-8 case insensitive
-    // Utf8ILComp() function, which is used also in the SQLite3UI unit for
-    // coherency and efficiency
+    // - SYSTEMNOCASE collation is registered, for WinAnsi CP-1252 comparison
+    // via the Utf8ILComp() function from mormot.core.unicode.pas
+    // - UNICODENOCASE collation is registered, for Unicode 10.0 comparison as
+    // implemented by the Utf8ILCompReference() from mormot.core.unicode.pas
+    // - WIN32CASE and WIN32NOCASE collations are registered, calling the
+    // Operating System (Win32 API or ICU) - so may not be consistent when you
+    // move the SQLite3 database file: consider SYSTEMNOCASE or UNICODENOCASE
     // - ISO8601 collation is added (TDateTime stored as ISO-8601 encoded TEXT)
-    // - WIN32CASE and WIN32NOCASE collations are added (use slow but accurate Win32 CompareW)
-    // - some additional SQl functions are registered: MOD, SOUNDEX/SOUNDEXFR/SOUNDEXES,
+    // - some additional SQL functions are registered: MOD, SOUNDEX/SOUNDEXFR/SOUNDEXES,
     // RANK, CONCAT, TIMELOG, TIMELOGUNIX, JSONGET/JSONHAS/JSONSET and TDynArray-Blob
     // Byte/Word/Integer/Cardinal/Int64/Currency/RawUtf8DynArrayContains
     // - initialize a internal mutex to ensure that all access to the database is atomic
@@ -3852,14 +3855,18 @@ end;
 
 { ************ High-Level Classes for SQlite3 Queries }
 
-{ Custom SQL Functions Implementation }
+{ Some remarks about our custom SQLite3 functions:
 
-{ from WladiD about all SQLite3 collation functions:
-  If a field with your custom collate ISO8601 is empty '' (not NULL),
-  then SQLite calls the registered collate function with s1len=0 or s2len=0,
-  but the pointers s1 or s2 map to the string of the previous call }
+  1. From WladiD: if a field is empty '' (not NULL), SQLite calls the registered
+     collate function with s1len=0 or s2len=0, but the pointers s1 or s2 map to
+     the string of the previous call - so s1len/s2len should be first checked.
 
-function Utf16SQLCompCase(CollateParam: pointer; s1Len: integer; S1: pointer;
+  2. Some collations (WIN32CASE/WIN32NOCASE) may not be consistent depenging
+     on the system/libray they run on: if you expect to move the SQLite3 file,
+     consider SYSTEMNOCASE or UNICODENOCASE safer (and faster) functions.
+  }
+
+function Utf16_WIN32CASE(CollateParam: pointer; s1Len: integer; S1: pointer;
   s2Len: integer; S2: pointer): integer; cdecl;
 begin
   if s1Len <= 0 then
@@ -3870,11 +3877,12 @@ begin
   else if s2Len <= 0 then
     result := 1
   else
+    // Windows / ICU comparison - warning: may vary on systems
     result := Unicode_CompareString(S1, S2, s1Len shr 1, s2Len shr 1,
       {igncase=} false) - 2;
 end;
 
-function Utf16SQLCompNoCase(CollateParam: pointer; s1Len: integer; s1: pointer;
+function Utf16_WIN32NOCASE(CollateParam: pointer; s1Len: integer; s1: pointer;
   s2Len: integer; s2: pointer): integer; cdecl;
 begin
   if s1Len <= 0 then
@@ -3885,11 +3893,12 @@ begin
   else if s2Len <= 0 then
     result := 1
   else
+    // Windows / ICU case folding - warning: may vary on systems
     result := Unicode_CompareString(s1, s2, s1Len shr 1, s2Len shr 1,
       {igncase=} true) - 2;
 end;
 
-function Utf8SQLCompNoCase(CollateParam: pointer; s1Len: integer; s1: pointer;
+function Utf8_SYSTEMNOCASE(CollateParam: pointer; s1Len: integer; s1: pointer;
   s2Len: integer; s2: pointer): integer; cdecl;
 begin
   if s1Len <= 0 then
@@ -3900,15 +3909,31 @@ begin
   else if s2Len <= 0 then
     result := 1
   else
+    // WinAnsi CP-1252 case folding
     result := Utf8ILComp(s1, s2, s1Len, s2Len);
 end;
 
-function Utf8SqlDateTime(CollateParam: pointer; s1Len: integer; s1: pointer;
+function Utf8_UNICODENOCASE(CollateParam: pointer; s1Len: integer; s1: pointer;
+  s2Len: integer; s2: pointer): integer; cdecl;
+begin
+  if s1Len <= 0 then
+    if s2Len <= 0 then
+      result := 0
+    else
+      result := -1
+  else if s2Len <= 0 then
+    result := 1
+  else
+    // case folding using our Unicode 10.0 tables - will remain stable
+    result := Utf8ILCompReference(s1, s2, s1Len, s2Len);
+end;
+
+function Utf8_ISO8601(CollateParam: pointer; s1Len: integer; s1: pointer;
   s2Len: integer; s2: pointer): integer; cdecl;
 var
   V1, V2: TDateTime; // will handle up to .sss milliseconds resolution
 begin
-  if s1Len <= 0 then // see WladiD note above
+  if s1Len <= 0 then
     s1 := nil;
   if s2Len <= 0 then
     s2 := nil;
@@ -5085,15 +5110,20 @@ begin
     fDB := 0;
     exit;
   end;
-  // our custom fast UTF-8 WinAnsi case insensitive compare, using NormToUpper[]
-  sqlite3.create_collation(DB, 'SYSTEMNOCASE', SQLITE_UTF8, nil, Utf8SQLCompNoCase);
-  // our custom fast ISO-8601 date time encoded
-  sqlite3.create_collation(DB, 'ISO8601', SQLITE_UTF8, nil, Utf8SqlDateTime);
-  // two slow but always accurate compare, using the Win32 Unicode API
+  // custom fast UTF-8 WinAnsi case insensitive comparison, using NormToUpper[]
+  sqlite3.create_collation(DB, 'SYSTEMNOCASE', SQLITE_UTF8, nil,
+    Utf8_SYSTEMNOCASE);
+  // custom fast UTF-8 Unicode 10.0 case insensitive comparison
+  sqlite3.create_collation(DB, 'UNICODENOCASE', SQLITE_UTF8, nil,
+    Utf8_UNICODENOCASE);
+  // custom fast ISO-8601 date time encoded
+  sqlite3.create_collation(DB, 'ISO8601', SQLITE_UTF8, nil,
+    Utf8_ISO8601);
+  // two slow but always accurate comparers, using the Win32/ICU UTF-16 API
   sqlite3.create_collation(DB, 'WIN32CASE', SQLITE_UTF16, nil,
-    Utf16SQLCompCase);
+    Utf16_WIN32CASE);
   sqlite3.create_collation(DB, 'WIN32NOCASE', SQLITE_UTF16, nil,
-    Utf16SQLCompNoCase);
+    Utf16_WIN32NOCASE);
   // note: standard SQLite3 NOCASE collation is used for AnsiString
   // register the MOD() user function, similar to the standard % operator
   sqlite3.create_function(DB, 'MOD', 2, SQLITE_ANY, nil,

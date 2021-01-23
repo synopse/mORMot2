@@ -775,7 +775,7 @@ type
 type
   /// ORM attributes for a TOrmPropInfo definition
   TOrmPropInfoAttribute = (
-    aIsUnique, aAuxiliaryRTreeField, aBinaryCollation);
+    aIsUnique, aAuxiliaryRTreeField, aBinaryCollation, aUnicodeNoCaseCollation);
 
   /// set of ORM attributes for a TOrmPropInfo definition
   TOrmPropInfoAttributes = set of TOrmPropInfoAttribute;
@@ -5994,8 +5994,9 @@ type
     function OrmFieldTypeToSql(FieldIndex: integer): RawUtf8;
     /// set a custom SQlite3 text column collation for a specified field
     // - can be used e.g. to override the default COLLATE SYSTEMNOCASE of RawUtf8
-    // - collations defined within our mormot.db.raw.sqlite3 unit are named BINARY, NOCASE,
-    // RTRIM and our custom SYSTEMNOCASE, ISO8601, WIN32CASE, WIN32NOCASE
+    // - collations defined within our mormot.db.raw.sqlite3 unit are the SQLite3
+    // standard BINARY, NOCASE, RTRIM and our custom SYSTEMNOCASE, UNICODENOCASE,
+    // ISO8601, WIN32CASE, WIN32NOCASE alternatives
     // - do nothing if FieldIndex is not valid, and returns false
     // - could be set in overridden class procedure TOrm.InternalDefineModel
     // so that it will be common to all database models, for both client and server
@@ -6008,8 +6009,9 @@ type
     // - can be used e.g. to override ALL default COLLATE SYSTEMNOCASE of RawUtf8,
     // or the default COLLATE ISO8601 of TDateTime, and let the generated SQLite3
     // file be available outside the scope of mORMot's SQLite3 engine
-    // - collations defined within our mormot.db.raw.sqlite3 unit are named BINARY, NOCASE,
-    // RTRIM and our custom SYSTEMNOCASE, ISO8601, WIN32CASE, WIN32NOCASE
+    // - collations defined within our mormot.db.raw.sqlite3 unit are the SQLite3
+    // standard BINARY, NOCASE, RTRIM and our custom SYSTEMNOCASE, UNICODENOCASE,
+    // ISO8601, WIN32CASE, WIN32NOCASE alternatives
     // - could be set in overridden class procedure TOrm.InternalDefineModel
     // so that it will be common to all database models, for both client and server
     // - note that you may inherit from TOrmNoCase to use the NOCASE
@@ -6821,12 +6823,11 @@ type
     // - can be used e.g. to override ALL default COLLATE SYSTEMNOCASE of RawUtf8,
     // or COLLATE ISO8601 for TDateTime, and let the generated SQLite3 file be
     // available outside the scope of mORMot's SQLite3 engine
-    // - collations defined within our mormot.db.raw.sqlite3 unit are named BINARY, NOCASE,
-    // RTRIM and our custom SYSTEMNOCASE, ISO8601, WIN32CASE, WIN32NOCASE: if
-    // you want to use the slow but Unicode ready Windows API, set for each model:
-    // ! SetCustomCollationForAll(oftUtf8Text, 'WIN32CASE');
-    // - shall be set on both Client and Server sides, otherwise some issues
-    // may occur
+    // - collations defined within our mormot.db.raw.sqlite3 unit are the SQLite3
+    // standard BINARY, NOCASE, RTRIM and our custom SYSTEMNOCASE, UNICODENOCASE,
+    // ISO8601, WIN32CASE, WIN32NOCASE: if you want to use the NOCASE, write:
+    // ! SetCustomCollationForAll(oftUtf8Text, 'NOCASE');
+    // - shall be set on both Client and Server sides for consistency
     procedure SetCustomCollationForAll(aFieldType: TOrmFieldType;
       const aCollationName: RawUtf8);
     /// allow to validate length of all text published properties of all tables
@@ -7739,6 +7740,24 @@ type
   TOrmCaseSensitive = class(TOrm)
   protected
     /// will call Props.SetCustomCollationForAll(oftUtf8Text,'BINARY')
+    class procedure InternalDefineModel(Props: TOrmProperties); override;
+  end;
+
+  /// root class for defining and mapping database records with case-insensitive
+  // UNICODENOCASE collation
+  // - abstract ancestor, from which you may inherit your own ORM classes
+  // - by default, any oftUtf8Text field (RawUtf8, UnicodeString, WideString
+  // properties) will use our Unicode SYSTEMNOCASE SQLite3 collation, which calls
+  // Utf8ILComp() to handle most western languages
+  // - you may inherit from this class to ensure any text field will use our
+  // Utf8ILCompReference() function which handles Unicode 10.0
+  // - inherit from TOrmNoCase or TOrmCaseSensitive if you expect
+  // your text fields to contain only basic (un)accentued ASCCI characters, and
+  // to be opened by any standard/ SQlite3 library or tool (outside of
+  // mormot.db.raw.sqlite3.pas/SynDBExplorer)
+  TOrmUnicodeNoCase = class(TOrm)
+  protected
+    /// will call Props.SetCustomCollationForAll(oftUtf8Text,'UNICODENOCASE')
     class procedure InternalDefineModel(Props: TOrmProperties); override;
   end;
 
@@ -11099,21 +11118,23 @@ begin
   aValue.VText := Pointer(temp);
 end;
 
-function CompareUTF8WithLocalTempCopy(prop: PRttiProp;
-  Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt;
-var
-  tmp1, tmp2: RawByteString;
-begin
-  prop.GetLongStrProp(Item1, tmp1);
-  prop.GetLongStrProp(Item2, tmp2);
-  if CaseInsensitive then
-    result := Utf8IComp(pointer(tmp1), pointer(tmp2))
-  else
-    result := StrComp(pointer(tmp1), pointer(tmp2));
-end;
-
 function TOrmPropInfoRttiRawUtf8.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): PtrInt;
+
+  function CompareUTF8WithLocalTempCopy: PtrInt;
+  var
+    tmp1, tmp2: RawByteString;
+  begin
+    fPropInfo.GetLongStrProp(Item1, tmp1);
+    fPropInfo.GetLongStrProp(Item2, tmp2);
+    if aUnicodeNoCaseCollation in Attributes then
+      result := Utf8ICompReference(pointer(tmp1), pointer(tmp2))
+    else if CaseInsensitive then
+      result := Utf8IComp(pointer(tmp1), pointer(tmp2))
+    else
+      result := StrComp(pointer(tmp1), pointer(tmp2));
+  end;
+
 var
   offs: PtrUInt;
   p1, p2: pointer;
@@ -11132,13 +11153,15 @@ begin
       p1 := PPointer(PtrUInt(Item1) + offs)^;
       p2 := PPointer(PtrUInt(Item2) + offs)^;
       if CaseInsensitive then
-        result := Utf8IComp(p1, p2)
+        if aUnicodeNoCaseCollation in Attributes then
+          result := Utf8ICompReference(p1, p2)
+        else
+          result := Utf8IComp(p1, p2)
       else
         result := StrComp(p1, p2);
     end
     else
-      result := CompareUTF8WithLocalTempCopy(
-        fPropInfo, Item1, Item2, CaseInsensitive);
+      result := CompareUTF8WithLocalTempCopy;
   end;
 end;
 
@@ -19339,10 +19362,13 @@ begin
       SetLength(fCustomCollation, Fields.Count);
     fCustomCollation[FieldIndex] := aCollationName;
     with Fields.List[FieldIndex] do
+    begin
+      fAttributes := fAttributes - [aBinaryCollation, aUnicodeNoCaseCollation];
       if IdemPropNameU(aCollationName, 'BINARY') then
         include(fAttributes, aBinaryCollation)
-      else
-        exclude(fAttributes, aBinaryCollation);
+      else if IdemPropNameU(aCollationName, 'UNICODENOCASE') then
+        include(fAttributes, aUnicodeNoCaseCollation);
+    end;
   end;
 end;
 
@@ -22391,6 +22417,13 @@ end;
 class procedure TOrmCaseSensitive.InternalDefineModel(Props: TOrmProperties);
 begin
   Props.SetCustomCollationForAll(oftUtf8Text, 'BINARY');
+end;
+
+{ TOrmUnicodeNoCase }
+
+class procedure TOrmUnicodeNoCase.InternalDefineModel(Props: TOrmProperties);
+begin
+  Props.SetCustomCollationForAll(oftUtf8Text, 'UNICODENOCASE');
 end;
 
 { TOrmNoCaseExtended }
