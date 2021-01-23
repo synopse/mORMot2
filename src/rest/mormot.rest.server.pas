@@ -1769,11 +1769,16 @@ type
     Reason: TOnAuthenticationFailedReason; Session: TAuthSession;
     Ctxt: TRestServerUriContext) of object;
 
-  /// callback raised before TRestServer.Uri execution
+  /// callback raised when TRestServer.Uri start to process a request
+  // - should return HTTP_SUCCESS (200) to continue, or an error code to abort
+  // - could also change the Call fields on the fly, if needed
+  TOnStartUri = function(var Call: TRestUriParams): integer of object;
+
+  /// callback raised before TRestServer.Uri ORM/SOA command execution
   // - should return TRUE to execute the command, FALSE to cancel it
   TOnBeforeUri = function(Ctxt: TRestServerUriContext): boolean of object;
 
-  /// callback raised after TRestServer.Uri execution
+  /// callback raised after TRestServer.Uri ORM/SOA command execution
   TOnAfterUri = procedure(Ctxt: TRestServerUriContext) of object;
 
   /// callback raised if TRestServer.Uri execution failed
@@ -1921,7 +1926,11 @@ type
     // !end;
     // - consider using a TInjectableObjectClass implementation for pure IoC/DI
     OnServiceCreateInstance: TOnServiceCreateInstance;
-    /// event trigerred when Uri() starts to process a request
+    /// event trigerred when Uri start to process a request
+    // - should return HTTP_SUCCESS (200) to continue, or an error code to abort
+    // - could also change the Call fields on the fly, if needed
+    OnStartUri: TOnStartUri;
+    /// event trigerred when Uri() is about to execute an ORM/SOA command
     // - the supplied Ctxt parameter will give access to the command about to
     // be executed, e.g. Ctxt.Command=execSoaByInterface will identify a SOA
     // service execution, with the corresponding Service and ServiceMethodIndex
@@ -1935,7 +1944,7 @@ type
     // - see also TRest.OnDecryptBody, which is common to the client side, so
     // may be a better place for implementing shared process (e.g. encryption)
     OnBeforeUri: TOnBeforeUri;
-    /// event trigerred when Uri() finished to process a request
+    /// event trigerred when Uri() finished to process an ORM/SOA command
     // - the supplied Ctxt parameter will give access to the command which has
     // been executed, e.g. via Ctxt.Call.OutStatus or Ctxt.MicroSecondsElapsed
     // - since this event will be executed by every TRestServer.Uri call,
@@ -7323,6 +7332,17 @@ begin
      (sllEnter in fLogFamily.Level) then
     log := fLogClass.Enter('URI % % in=%',
       [Call.Method, Call.Url, KB(Call.InBody)], self);
+  if Assigned(OnStartUri) then
+  begin
+    Call.OutStatus := OnStartUri(Call);
+    if Call.OutStatus <> HTTP_SUCCESS then
+    begin
+      if log <> nil then
+        log.Log(sllServer, 'Uri: rejected by OnStartUri(% %)=%',
+          [Call.Method, Call.Url, Call.OutStatus], self);
+      exit;
+    end;
+  end;
   QueryPerformanceMicroSeconds(msstart);
   fStats.AddCurrentRequestCount(1);
   Call.OutStatus := HTTP_BADREQUEST; // default error code is 400 BAD REQUEST
