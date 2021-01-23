@@ -2259,7 +2259,7 @@ begin
   if fFactoryErrorIndex < 0 then
     raise EMvcException.CreateUtf8(
       '% does not implement the IMvcApplication.Error() method',
-      [aInterface.Name]);
+      [aInterface.RawName]);
   entry := GetInterfaceEntry(fFactory.InterfaceIID);
   if entry = nil then
     raise EMvcException.CreateUtf8(
@@ -2276,6 +2276,7 @@ begin
         else
           // maps TMvcAction in TMvcApplication.RunOnRestServer
           ArgsResultIsServiceCustomAnswer := true;
+  FlushAnyCache;
 end;
 
 destructor TMvcApplication.Destroy;
