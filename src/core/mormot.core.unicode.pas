@@ -11,6 +11,7 @@ unit mormot.core.unicode;
    - UTF-8 / UTF-16 / Ansi Conversion Classes
    - Low-Level String Conversion Functions
    - Text Case-(in)sensitive Conversion and Comparison
+   - Operating-System Independent Unicode Process
 
   *****************************************************************************
 }
@@ -29,34 +30,44 @@ uses
 { *************** UTF-8 Efficient Encoding / Decoding }
 
 // some constants used for UTF-8 conversion, including surrogates
+type
+  // see http://floodyberry.wordpress.com/2007/04/14/utf-8-conversion-tricks
+  TUtf8Table = record
+    Bytes: array[$80..$ff] of byte;
+    Extra: array[0..6] of record
+      offset, minimum: cardinal;
+    end;
+    FirstByte: array[2..6] of byte;
+  end;
+
 const
+  UTF8_TABLE: TUtf8Table = (
+    Bytes: (
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+      1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+      2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+      3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 0, 0);
+    Extra: (
+      (offset: $00000000;  minimum: $00010000),
+      (offset: $00003080;  minimum: $00000080),
+      (offset: $000e2080;  minimum: $00000800),
+      (offset: $03c82080;  minimum: $00010000),
+      (offset: $fa082080;  minimum: $00200000),
+      (offset: $82082080;  minimum: $04000000),
+      (offset: $00000000;  minimum: $04000000));
+    FirstByte: (
+      $c0, $e0, $f0, $f8, $fc));
+
   UTF8_EXTRA_SURROGATE = 3;
   UTF16_HISURROGATE_MIN = $d800;
   UTF16_HISURROGATE_MAX = $dbff;
   UTF16_LOSURROGATE_MIN = $dc00;
   UTF16_LOSURROGATE_MAX = $dfff;
-  UTF8_EXTRABYTES: array[$80..$ff] of byte = (
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-    3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 0, 0);
-  // see http://floodyberry.wordpress.com/2007/04/14/utf-8-conversion-tricks
-  UTF8_EXTRA: array[0..6] of record
-    offset, minimum: cardinal;
-  end = (
-    (offset: $00000000;  minimum: $00010000),
-    (offset: $00003080;  minimum: $00000080),
-    (offset: $000e2080;  minimum: $00000800),
-    (offset: $03c82080;  minimum: $00010000),
-    (offset: $fa082080;  minimum: $00200000),
-    (offset: $82082080;  minimum: $04000000),
-    (offset: $00000000;  minimum: $04000000));
-  UTF8_EXTRAFIRSTBYTE: array[2..6] of byte = (
-    $c0, $e0, $f0, $f8, $fc);
+
 
 /// internal function, used to retrieve a Ucs4 codepoint (>127) from UTF-8
 // - not to be called directly, but from inlined higher-level functions
@@ -92,7 +103,7 @@ function Utf16CharToUtf8(Dest: PUtf8Char; var Source: PWord): integer;
 /// UTF-8 encode one Ucs4 character into Dest
 // - return the number of bytes written into Dest (i.e. from 1 up to 6)
 // - this method DOES handle UTF-16 surrogate pairs
-function Ucs4ToUtf8(ucs4: cardinal; Dest: PUtf8Char): integer;
+function Ucs4ToUtf8(ucs4: cardinal; Dest: PUtf8Char): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 type
@@ -1370,6 +1381,34 @@ function AnsiIComp(Str1, Str2: pointer): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 
+{ ************** Operating-System Independent Unicode Process }
+
+/// UpperCase conversion of a UTF-8 buffer using our Unicode 10.0 tables
+// - won't call the Operating System, so is consistent on all platforms,
+// whereas UpperCaseUnicode() may vary depending on each library implementation
+// - some codepoints enhance in length, so D^ should be at least twice than S^
+function Utf8UpperReference(S, D: PUtf8Char): PUtf8Char;
+
+/// UpperCase conversion of a UTF-8 string using our Unicode 10.0 tables
+// - won't call the Operating System, so is consistent on all platforms,
+// whereas UpperCaseUnicode() may vary depending on each library implementation
+function UpperCaseReference(const S: RawUtf8): RawUtf8;
+
+/// UTF-8 comparison using our Unicode 10.0 tables
+// - this version expects u1 and u2 to be zero-terminated
+// - Utf8IComp() only handle Win1252 latin accents
+// - won't call the Operating System, so is consistent on all platforms
+function Utf8ICompReference(u1, u2: PUtf8Char): PtrInt;
+
+/// UTF-8 comparison using our Unicode 10.0 tables
+// - this version expects u1 and u2 not to be necessary zero-terminated, but
+// uses L1 and L2 as length for u1 and u2 respectively
+// - Utf8ILComp() only handle Win1252 latin accents
+// - won't call the Operating System, so is consistent on all platforms
+function Utf8ILCompReference(u1, u2: PUtf8Char; L1, L2: integer): PtrInt;
+
+
+
 implementation
 
 
@@ -1380,22 +1419,31 @@ var
   extra, i: PtrInt;
   v: byte;
   c: PtrUInt;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: ^TUtf8Table;
+  {$endif CPUX86NOTPIC}
 begin
+  {$ifndef CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   result := 0;
   c := byte(U^); // here U^>=#80
   inc(U);
-  extra := UTF8_EXTRABYTES[c];
+  extra := utf8.Bytes[c];
   if extra = 0 then
     exit; // invalid leading byte
-  for i := 1 to extra do
-  begin
+  i := extra;
+  repeat
     v := byte(U^);
     if v and $c0 <> $80 then
       exit; // invalid input content
     c := (c shl 6) + v;
     inc(U);
-  end;
-  with UTF8_EXTRA[extra] do
+    dec(i);
+  until i = 0;
+  with utf8.Extra[extra] do
   begin
     dec(c, offset);
     if c < minimum then
@@ -1428,7 +1476,6 @@ begin
     if result <= 127 then
       inc(P)
     else
-    begin
       if result and $20 = 0 then
       begin
         result := (result shl 6) + byte(P[1]) - $3080; // fast process $0..$7ff
@@ -1436,7 +1483,6 @@ begin
       end
       else
         result := GetHighUtf8Ucs4(P); // handle even surrogates
-    end;
   end
   else
     result := 0;
@@ -1507,12 +1553,12 @@ begin
     c := c shr 6;
     dec(j);
   until j = 0;
-  Dest^ := AnsiChar(byte(c) or UTF8_EXTRAFIRSTBYTE[result]);
+  Dest^ := AnsiChar(byte(c) or UTF8_TABLE.FirstByte[result]);
 end;
 
-function Ucs4ToUtf8(ucs4: cardinal; Dest: PUtf8Char): integer;
+function Ucs4ToUtf8(ucs4: cardinal; Dest: PUtf8Char): PtrInt;
 var
-  j: integer;
+  j: PtrInt;
 begin
   if ucs4 <= $7f then
   begin
@@ -1521,9 +1567,20 @@ begin
     exit;
   end
   else if ucs4 <= $7ff then
-    result := 2
+  begin
+    Dest[0] := AnsiChar($C0 or (ucs4 shr 6));
+    Dest[1] := AnsiChar($80 or (ucs4 and $3F));
+    result := 2;
+    exit;
+  end
   else if ucs4 <= $ffff then
-    result := 3
+  begin
+    Dest[0] := AnsiChar($E0 or (ucs4 shr 12));
+    Dest[1] := AnsiChar($80 or ((ucs4 shr 6) and $3F));
+    Dest[2] := AnsiChar($80 or (ucs4 and $3F));
+    result := 3;
+    exit;
+  end
   else if ucs4 <= $1FFFFF then
     result := 4
   else if ucs4 <= $3FFFFFF then
@@ -1536,7 +1593,7 @@ begin
     ucs4 := ucs4 shr 6;
     dec(j);
   until j = 0;
-  Dest^ := AnsiChar(byte(ucs4) or UTF8_EXTRAFIRSTBYTE[result]);
+  Dest^ := AnsiChar(byte(ucs4) or UTF8_TABLE.FirstByte[result]);
 end;
 
 function RawUnicodeToUtf8(Dest: PUtf8Char; DestLen: PtrInt; Source: PWideChar;
@@ -1639,7 +1696,7 @@ unmatch:      if (PtrInt(PtrUInt(@Dest[3])) > DestLen) or
           c := c shr 6;
           dec(j);
         until j = 0;
-        Dest^ := AnsiChar(byte(c) or UTF8_EXTRAFIRSTBYTE[i]);
+        Dest^ := AnsiChar(byte(c) or UTF8_TABLE.FirstByte[i]);
         inc(Dest, i);
         if (PtrInt(PtrUInt(Dest)) < DestLen) and
            (PtrInt(PtrUInt(Source)) < SourceLen) then
@@ -1696,7 +1753,15 @@ procedure Utf8ToShortString(var dest: shortstring; source: PUtf8Char);
 var
   c: cardinal;
   len, extra, i: integer;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: ^TUtf8Table;
+  {$endif CPUX86NOTPIC}
 begin
+  {$ifndef CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   len := 0;
   if source <> nil then
     repeat
@@ -1715,11 +1780,11 @@ begin
       end
       else
       begin
-        extra := UTF8_EXTRABYTES[c];
+        extra := utf8.Bytes[c];
         if extra = 0 then
           break; // invalid leading byte
-        for i := 1 to extra do
-        begin
+        i := extra;
+        repeat
           if byte(source^) and $c0 <> $80 then
           begin
             dest[0] := AnsiChar(len);
@@ -1727,9 +1792,10 @@ begin
           end;
           c := (c shl 6) + byte(source^);
           inc(source);
-        end;
-        dec(c, UTF8_EXTRA[extra].offset);
-      // #256.. -> slower but accurate conversion
+          dec(i);
+        until i = 0;
+        dec(c, utf8.Extra[extra].offset);
+        // #256.. -> slower but accurate conversion
         inc(len);
         if c > $ffff then
           dest[len] := '?'
@@ -1753,6 +1819,11 @@ var
   endSource: PUtf8Char;
   endDest: PWideChar;
   i, extra: integer;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: ^TUtf8Table;
+  {$endif CPUX86NOTPIC}
 label
   Quit, NoSource;
 begin
@@ -1767,6 +1838,9 @@ begin
       goto NoSource;
     sourceBytes := StrLen(source);
   end;
+  {$ifndef CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   endSource := source + sourceBytes;
   endDest := dest + MaxDestChars;
   begd := dest;
@@ -1783,18 +1857,19 @@ begin
       else
         break;
     end;
-    extra := UTF8_EXTRABYTES[c];
+    extra := utf8.Bytes[c];
     if (extra = 0) or
        (source + extra > endSource) then
       break;
-    for i := 1 to extra do
-    begin
+    i := extra;
+    repeat
       if byte(source^) and $c0 <> $80 then
         goto Quit; // invalid input content
       c := (c shl 6) + byte(source^);
       inc(source);
-    end;
-    with UTF8_EXTRA[extra] do
+      dec(i);
+    until i = 0;
+    with utf8.Extra[extra] do
     begin
       dec(c, offset);
       if c < minimum then
@@ -1833,6 +1908,11 @@ var
   begd: PWideChar;
   endSource, endSourceBy4: PUtf8Char;
   i, extra: PtrInt;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: ^TUtf8Table;
+  {$endif CPUX86NOTPIC}
 label
   Quit, NoSource, By1, By4;
 begin
@@ -1847,6 +1927,9 @@ begin
       goto NoSource;
     sourceBytes := StrLen(source);
   end;
+  {$ifndef CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   begd := dest;
   endSource := source + sourceBytes;
   endSourceBy4 := endSource - 4;
@@ -1878,18 +1961,19 @@ By1:  c := byte(source^);
         else
           break;
       end;
-      extra := UTF8_EXTRABYTES[c];
+      extra := utf8.Bytes[c];
       if (extra = 0) or
          (source + extra > endSource) then
         break;
-      for i := 1 to extra do
-      begin
+      i := extra;
+      repeat
         if byte(source^) and $c0 <> $80 then
           goto Quit; // invalid input content
         c := (c shl 6) + byte(source^);
         inc(source);
-      end;
-      with UTF8_EXTRA[extra] do
+        dec(i);
+      until i = 0;
+      with utf8.Extra[extra] do
       begin
         dec(c, offset);
         if c < minimum then
@@ -1926,9 +2010,17 @@ end;
 
 function IsValidUtf8(source: PUtf8Char): boolean;
 var
-  extra, i: integer;
+  extra: integer;
   c: cardinal;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: ^TUtf8Table;
+  {$endif CPUX86NOTPIC}
 begin
+  {$ifndef CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   result := false;
   if source <> nil then
     repeat
@@ -1938,15 +2030,17 @@ begin
         break;
       if c and $80 <> 0 then
       begin
-        extra := UTF8_EXTRABYTES[c];
+        extra := utf8.Bytes[c];
         if extra = 0 then
-          exit
-        else // invalid leading byte
-          for i := 1 to extra do
-            if byte(source^) and $c0 <> $80 then
-              exit
-            else
-              inc(source); // check valid UTF-8 content
+          // invalid leading byte
+          exit;
+        // check valid UTF-8 content
+        repeat
+          if byte(source^) and $c0 <> $80 then
+            exit;
+          inc(source);
+          dec(extra);
+        until extra = 0;
       end;
     until false;
   result := true;
@@ -1959,9 +2053,17 @@ end;
 
 function IsValidUtf8(source: PUtf8Char; sourcelen: PtrInt): boolean;
 var
-  extra, i: integer;
+  extra: integer;
   c: cardinal;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: ^TUtf8Table;
+  {$endif CPUX86NOTPIC}
 begin
+  {$ifndef CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   result := false;
   inc(sourcelen, PtrInt(source));
   if source <> nil then
@@ -1973,16 +2075,18 @@ begin
         exit;
       if c and $80 <> 0 then
       begin
-        extra := UTF8_EXTRABYTES[c];
+        extra := utf8.Bytes[c];
         if extra = 0 then
-          exit
-        else // invalid leading byte
-          for i := 1 to extra do
-            if (PtrInt(PtrUInt(source)) >= sourcelen) or
-               (byte(source^) and $c0 <> $80) then
-              exit
-            else
-              inc(source); // check valid UTF-8 content
+          // invalid leading byte
+          exit;
+        // check valid UTF-8 content
+        repeat
+          if (PtrInt(PtrUInt(source)) >= sourcelen) or
+             (byte(source^) and $c0 <> $80) then
+            exit;
+          inc(source);
+          dec(extra)
+        until extra = 0;
       end;
     end;
   result := true;
@@ -1990,9 +2094,17 @@ end;
 
 function IsValidUtf8WithoutControlChars(source: PUtf8Char): boolean;
 var
-  extra, i: integer;
+  extra: integer;
   c: cardinal;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: ^TUtf8Table;
+  {$endif CPUX86NOTPIC}
 begin
+  {$ifndef CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   result := false;
   if source <> nil then
     repeat
@@ -2004,17 +2116,17 @@ begin
         exit; // disallow #1..#31 control char
       if c and $80 <> 0 then
       begin
-        extra := UTF8_EXTRABYTES[c];
+        extra := utf8.Bytes[c];
         if extra = 0 then
           // invalid leading byte
-          exit
-        else
-          for i := 1 to extra do
-            if byte(source^) and $c0 <> $80 then
-              // invalid UTF-8 encoding
-              exit
-            else
-              inc(source);
+          exit;
+        // check valid UTF-8 content
+        repeat
+          if byte(source^) and $c0 <> $80 then
+            exit;
+          inc(source);
+          dec(extra);
+        until extra = 0;
       end;
     until false;
   result := true;
@@ -2022,9 +2134,17 @@ end;
 
 function IsValidUtf8WithoutControlChars(const source: RawUtf8): boolean;
 var
-  s, extra, i, len: integer;
+  s, extra, len: integer;
   c: cardinal;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: ^TUtf8Table;
+  {$endif CPUX86NOTPIC}
 begin
+  {$ifndef CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   result := false;
   s := 1;
   len := Length(source);
@@ -2036,19 +2156,17 @@ begin
       exit; // disallow #0..#31 control char
     if c and $80 <> 0 then
     begin
-      extra := UTF8_EXTRABYTES[c];
+      extra := utf8.Bytes[c];
       if extra = 0 then
         // invalid leading byte
-        exit
-      else
-        // note: inc(source,extra) is faster but not safe
-        for i := 1 to extra do
-          if byte(source[s]) and $c0 <> $80 then
-            // reached #0 or invalid UTF-8
-            exit
-          else
-            // valid UTF-8 content up to now
-            inc(s);
+        exit;
+      // check valid UTF-8 content
+      repeat
+        if byte(source[s]) and $c0 <> $80 then
+          exit;
+        inc(s);
+        dec(extra);
+      until extra = 0;
     end;
   end;
   result := true;
@@ -2057,8 +2175,16 @@ end;
 function Utf8ToUnicodeLength(source: PUtf8Char): PtrUInt;
 var
   c: PtrUInt;
-  extra, i: integer;
+  extra: integer;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: ^TUtf8Table;
+  {$endif CPUX86NOTPIC}
 begin
+  {$ifndef CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   result := 0;
   if source <> nil then
     repeat
@@ -2070,7 +2196,7 @@ begin
         inc(result)
       else
       begin
-        extra := UTF8_EXTRABYTES[c];
+        extra := utf8.Bytes[c];
         if extra = 0 then
           // invalid leading byte
           exit;
@@ -2078,14 +2204,13 @@ begin
           inc(result, 2)
         else
           inc(result);
-        for i := 1 to extra do
-          // note: inc(source,extra) is faster but not safe
+        // check valid UTF-8 content
+        repeat
           if byte(source^) and $c0 <> $80 then
-            // reached #0 or invalid UTF-8
-            exit
-          else
-            // valid UTF-8 content up to now
-            inc(source);
+            exit;
+          inc(source);
+          dec(extra);
+        until extra = 0;
       end;
     until false;
 end;
@@ -2093,9 +2218,17 @@ end;
 function Utf8TruncateToUnicodeLength(var text: RawUtf8; maxUtf16: integer): boolean;
 var
   c: PtrUInt;
-  extra, i: integer;
+  extra: integer;
   source: PUtf8Char;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: ^TUtf8Table;
+  {$endif CPUX86NOTPIC}
 begin
+  {$ifndef CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   source := pointer(text);
   if (source <> nil) and
      (cardinal(maxUtf16) < cardinal(Length(text))) then
@@ -2114,18 +2247,20 @@ begin
         dec(maxUtf16)
       else
       begin
-        extra := UTF8_EXTRABYTES[c];
+        extra := utf8.Bytes[c];
         if extra = 0 then
           break; // invalid leading byte
         if extra >= UTF8_EXTRA_SURROGATE then
           dec(maxUtf16, 2)
         else
           dec(maxUtf16);
-        for i := 1 to extra do // inc(source,extra) is faster but not safe
+        // check valid UTF-8 content
+        repeat
           if byte(source^) and $c0 <> $80 then
-            break
-          else
-            inc(source); // check valid UTF-8 content
+            break;
+          inc(source);
+          dec(extra);
+        until extra = 0;
       end;
     until false;
   result := false;
@@ -2181,19 +2316,28 @@ end;
 function Utf8FirstLineToUnicodeLength(source: PUtf8Char): PtrInt;
 var
   c, extra: PtrUInt;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: ^TUtf8Table;
+  {$endif CPUX86NOTPIC}
 begin
+  {$ifndef CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   result := 0;
   if source <> nil then
     repeat
       c := byte(source^);
       inc(source);
-      if c in [0, 10, 13] then
-        break; // #0, #10 or #13 stop the count
       if c <= 127 then
-        inc(result)
+        if c in [0, 10, 13] then
+          break // #0, #10 or #13 stop the count
+        else
+          inc(result)
       else
       begin
-        extra := UTF8_EXTRABYTES[c];
+        extra := utf8.Bytes[c];
         if extra = 0 then
           exit; // invalid leading byte
         if extra >= UTF8_EXTRA_SURROGATE then
@@ -2855,7 +2999,15 @@ function TSynAnsiFixedWidth.IsValidAnsiU(Utf8Text: PUtf8Char): boolean;
 var
   c: PtrUInt;
   i, extra: PtrInt;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: ^TUtf8Table;
+  {$endif CPUX86NOTPIC}
 begin
+  {$ifndef CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   result := false;
   if Utf8Text <> nil then
     repeat
@@ -2867,17 +3019,19 @@ begin
         continue
       else
       begin
-        extra := UTF8_EXTRABYTES[c];
-        if UTF8_EXTRA[extra].minimum > $ffff then
+        extra := utf8.Bytes[c];
+        if (extra = 0) or
+           (utf8.Extra[extra].minimum > $ffff) then
           exit;
-        for i := 1 to extra do
-        begin
+        i := extra;
+        repeat
           if byte(Utf8Text^) and $c0 <> $80 then
             exit; // invalid UTF-8 content
           c := (c shl 6) + byte(Utf8Text^);
           inc(Utf8Text);
-        end;
-        dec(c, UTF8_EXTRA[extra].offset);
+          dec(i)
+        until i = 0;
+        dec(c, utf8.Extra[extra].offset);
         if (c > $ffff) or
            (fWideToAnsi[c] = ord('?')) then
           exit; // invalid char in the WinAnsi code page
@@ -2890,7 +3044,15 @@ function TSynAnsiFixedWidth.IsValidAnsiU8Bit(Utf8Text: PUtf8Char): boolean;
 var
   c: PtrUInt;
   i, extra: PtrInt;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: ^TUtf8Table;
+  {$endif CPUX86NOTPIC}
 begin
+  {$ifndef CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   result := false;
   if Utf8Text <> nil then
     repeat
@@ -2902,17 +3064,19 @@ begin
         continue
       else
       begin
-        extra := UTF8_EXTRABYTES[c];
-        if UTF8_EXTRA[extra].minimum > $ffff then
+        extra := utf8.Bytes[c];
+        if (extra = 0) or
+           (utf8.Extra[extra].minimum > $ffff) then
           exit;
-        for i := 1 to extra do
-        begin
+        i := extra;
+        repeat
           if byte(Utf8Text^) and $c0 <> $80 then
             exit; // invalid UTF-8 content
           c := (c shl 6) + byte(Utf8Text^);
           inc(Utf8Text);
-        end;
-        dec(c, UTF8_EXTRA[extra].offset);
+          dec(i);
+        until i = 0;
+        dec(c, utf8.Extra[extra].offset);
         if (c > 255) or
            (fAnsiToWide[c] > 255) then
           exit; // not 8 bit char (like "tm" or such) is marked invalid
@@ -2965,9 +3129,17 @@ var
   c: cardinal;
   endSource, endSourceBy4: PUtf8Char;
   i, extra: PtrInt;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: ^TUtf8Table;
+  {$endif CPUX86NOTPIC}
 label
   By1, By4, Quit; // ugly but faster
 begin
+  {$ifndef CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   // first handle trailing 7 bit ASCII chars, by quad (Sha optimization)
   endSource := Source + SourceChars;
   endSourceBy4 := endSource - 4;
@@ -2983,6 +3155,7 @@ By4:  c := PCardinal(Source)^;
     until Source > endSourceBy4;
   // generic loop, handling one UTF-8 code per iteration
   if Source < endSource then
+  begin
     repeat
 By1:  c := byte(Source^);
       inc(Source);
@@ -3000,18 +3173,19 @@ By1:  c := byte(Source^);
       end
       else
       begin
-        extra := UTF8_EXTRABYTES[c];
+        extra := utf8.Bytes[c];
         if (extra = 0) or
            (Source + extra > endSource) then
           break;
-        for i := 1 to extra do
-        begin
+        i := extra;
+        repeat
           if byte(Source^) and $c0 <> $80 then
             goto Quit; // invalid UTF-8 content
           c := (c shl 6) + byte(Source^);
           inc(Source);
-        end;
-        dec(c, UTF8_EXTRA[extra].offset);
+          dec(i);
+        until i = 0;
+        dec(c, utf8.Extra[extra].offset);
         if c > $ffff then
           Dest^ := '?'
         else // '?' as in unknown fWideToAnsi[] items
@@ -3026,6 +3200,7 @@ By1:  c := byte(Source^);
           break;
       end;
     until false;
+  end;
 Quit:
   result := Dest;
 end;
@@ -4685,10 +4860,18 @@ var
   D, S: PUtf8Char;
   c: PtrUInt;
   extra, i: PtrInt;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: ^TUtf8Table;
+  {$endif CPUX86NOTPIC}
 begin
   result := 0;
   if P = nil then
     exit;
+  {$ifndef CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   D := P;
   repeat
     c := byte(P[0]);
@@ -4702,16 +4885,17 @@ begin
     end
     else
     begin
-      extra := UTF8_EXTRABYTES[c];
+      extra := utf8.Bytes[c];
       if extra = 0 then
-        exit // invalid leading byte
-      else
-        for i := 0 to extra - 1 do
-          if byte(P[i]) and $c0 <> $80 then
-            exit // invalid input content
-          else
-            c := (c shl 6) + byte(P[i]);
-      with UTF8_EXTRA[extra] do
+        exit; // invalid leading byte
+      i := 0;
+      repeat
+        if byte(P[i]) and $c0 <> $80 then
+          exit; // invalid input content
+        c := (c shl 6) + byte(P[i]);
+        inc(i);
+      until i = extra;
+      with utf8.Extra[extra] do
       begin
         dec(c, offset);
         if c < minimum then
@@ -4839,8 +5023,10 @@ var
   extra, i: integer;
   {$ifdef CPUX86NOTPIC}
   table: TNormTableByte absolute NormToUpperByte;
+  utf8: TUtf8Table absolute UTF8_TABLE;
   {$else}
   table: PByteArray;
+  utf8: ^TUtf8Table;
   {$endif CPUX86NOTPIC}
 label
   neg, pos;
@@ -4848,6 +5034,7 @@ begin
   // fast UTF-8 comparison using the NormToUpper[] array for all 8 bits values
   {$ifndef CPUX86NOTPIC}
   table := @NormToUpperByte;
+  utf8 := @UTF8_TABLE;
   {$endif CPUX86NOTPIC}
   if u1 <> u2 then
     if (u1 <> nil) and
@@ -4864,37 +5051,50 @@ begin
             result := table[result];
             if c2 <= 127 then
             begin
+              // 'a'..'z' / 'A'..'Z' case insensitive comparison
               dec(result, table[c2]);
               dec(L2);
               inc(u2);
               if result <> 0 then
+                // found unmatching char
                 exit
               else if L1 <> 0 then
                 if L2 <> 0 then
-                  continue  // L1>0 and L2>0 -> next char
+                  // L1>0 and L2>0 -> next char
+                  continue
                 else
-                  goto pos  // L1>0 and L2=0 -> u1>u2
+                  // L1>0 and L2=0 -> u1>u2
+                  goto pos
               else
               if L2 <> 0 then
-                goto neg    // L1=0 and L2>0 -> u1<u2
+                // L1=0 and L2>0 -> u1<u2
+                goto neg
               else
-                exit;       // L1=0 and L2=0 -> u1=u2
+                // L1=0 and L2=0 -> u1=u2 -> returns 0
+                exit;
             end;
           end
           else
           begin
-            extra := UTF8_EXTRABYTES[result];
+            // Win-1252 case insensitive comparison
+            extra := utf8.Bytes[result];
             if extra = 0 then
-              goto neg; // invalid leading byte
+              // invalid leading byte
+              goto neg;
             dec(L1, extra);
             if integer(L1) < 0 then
               goto neg;
-            for i := 0 to extra - 1 do
-              result := (result shl 6) + PByteArray(u1)[i];
-            dec(result, UTF8_EXTRA[extra].offset);
+            i := 0;
+            repeat
+              result := result shl 6;
+              inc(result, ord(u1[i]));
+              inc(i);
+            until i = extra;
+            dec(result, utf8.Extra[extra].offset);
             inc(u1, extra);
             if result and $ffffff00 = 0 then
-              result := table[result]; // 8 bits to upper, 32-bit as is
+              // 8 bits to upper conversion, 32-bit as is
+              result := table[result];
           end;
           // here result=NormToUpper[u1^]
           inc(u2);
@@ -4903,43 +5103,58 @@ begin
           begin
             dec(result, table[c2]);
             if result <> 0 then
+              // found unmatching char
               exit;
           end
           else
           begin
-            extra := UTF8_EXTRABYTES[c2];
+            extra := utf8.Bytes[c2];
             if extra = 0 then
               goto pos;
             dec(L2, extra);
             if integer(L2) < 0 then
               goto pos;
-            for i := 0 to extra - 1 do
-              c2 := (c2 shl 6) + PByteArray(u2)[i];
-            dec(c2, UTF8_EXTRA[extra].offset);
+            i := 0;
+            repeat
+              c2 := c2 shl 6;
+              inc(c2, ord(u2[i]));
+              inc(i);
+            until i = extra;
+            dec(c2, utf8.Extra[extra].offset);
             inc(u2, extra);
             if c2 and $ffffff00 = 0 then
+              // 8 bits to upper
               dec(result, table[c2])
-            else // 8 bits to upper
-              dec(result, c2); // returns 32-bit diff
+            else
+              // returns 32-bit diff
+              dec(result, c2);
             if result <> 0 then
+              // found unmatching char
               exit;
           end;
           // here we have result=NormToUpper[u2^]-NormToUpper[u1^]=0
-          if L1 = 0 then // test if we reached end of u1 or end of u2
+          if L1 = 0 then
+            // test if we reached end of u1 or end of u2
             if L2 = 0 then
-              exit     // u1=u2
+              // u1=u2
+              exit
             else
-              goto neg // u1<u2
+              // u1<u2
+              goto neg
           else
           if L2 = 0 then
-            goto pos;  // u1>u2
+            // u1>u2
+            goto pos;
         until false
       else
-pos:    result := 1  // u2='' or u1>u2
+pos:    // u2='' or u1>u2
+        result := 1
     else
-neg:  result := -1   // u1='' or u1<u2
+neg:  // u1='' or u1<u2
+      result := -1
   else
-    result := 0;     // u1=u2
+    // u1=u2
+    result := 0;
 end;
 
 function SameTextU(const S1, S2: RawUtf8): boolean;
@@ -5048,6 +5263,11 @@ var
   ValueStart: PAnsiChar;
   c: PtrUInt;
   FirstChar: AnsiChar;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: ^TUtf8Table;
+  {$endif CPUX86NOTPIC}
 label
   Next;
 begin
@@ -5056,6 +5276,9 @@ begin
      (UpperValue = nil) then
     exit;
   // handles 8-bits WinAnsi chars inside UTF-8 encoded data
+  {$ifndef CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   FirstChar := UpperValue^;
   ValueStart := UpperValue + 1;
   repeat
@@ -5088,12 +5311,12 @@ begin
               break;
         end;
       end
-      else if UTF8_EXTRABYTES[c] = 0 then
+      else if utf8.Bytes[c] = 0 then
         // invalid leading byte
         exit
       else
         // just ignore surrogates for soundex
-        inc(U, UTF8_EXTRABYTES[c]);
+        inc(U, utf8.Bytes[c]);
     until false;
     // here we had the first char match -> check if this word match UpperValue
     UpperValue := ValueStart;
@@ -5122,11 +5345,11 @@ begin
       end
       else
       begin
-        if UTF8_EXTRABYTES[c] = 0 then
+        if utf8.Bytes[c] = 0 then
           // invalid leading byte
           exit
         else
-          inc(U, UTF8_EXTRABYTES[c]);
+          inc(U, utf8.Bytes[c]);
         break;
       end;
       inc(UpperValue);
@@ -5221,12 +5444,20 @@ var
   c: cardinal;
   endSource, endSourceBy4, up: PUtf8Char;
   extra, i: PtrInt;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: ^TUtf8Table;
+  {$endif CPUX86NOTPIC}
 label
   By1, By4, set1; // ugly but faster
 begin
   if (Source <> nil) and
      (Dest <> nil) then
   begin
+    {$ifndef CPUX86NOTPIC}
+    utf8 := @UTF8_TABLE;
+    {$endif CPUX86NOTPIC}
     // first handle trailing 7 bit ASCII chars, by quad (Sha optimization)
     endSource := Source + SourceChars;
     endSourceBy4 := endSource - 4;
@@ -5263,13 +5494,16 @@ Set1:     inc(Dest);
         end
         else
         begin
-          extra := UTF8_EXTRABYTES[c];
+          extra := utf8.Bytes[c];
           if (extra = 0) or
              (Source + extra > endSource) then
             break;
-          for i := 0 to extra - 1 do
+          i := 0;
+          repeat
             c := (c shl 6) + byte(Source[i]);
-          with UTF8_EXTRA[extra] do
+            inc(i)
+          until i = extra;
+          with utf8.Extra[extra] do
           begin
             dec(c, offset);
             if c < minimum then
@@ -5506,6 +5740,576 @@ begin
       inc(P[i], 32);
 end;
 
+
+{ ************** Operating-System Independent Unicode Process }
+
+// freely inspired by Bero's PUCU library, released under zlib license
+//  https://github.com/BeRo1985/pucu  (C)2016-2020 Benjamin Rosseaux
+
+type
+  // 20016 bytes for full Unicode 10.0 case folding branchless conversion :)
+  TUnicodeUpperTable = record
+    IndexHi: array[0..271] of byte;
+    IndexLo: array[0..8, 0..31] of byte;
+    Block: array[0..37, 0..127] of integer;
+  end;
+
+const
+  UU_BLOCK_HI = 7;
+  UU_BLOCK_LO = 127;
+  UU_INDEX_HI = 5;
+  UU_INDEX_LO = 31;
+  UU: TUnicodeUpperTable = (
+    IndexHi: (0, 1, 2, 3, 3, 3, 3, 3, 3, 3, 4, 3, 3, 3, 3, 5, 6, 7, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 8, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3);
+    IndexLo: ((0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12, 12, 12, 12, 12, 12,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12), (12, 12, 12, 12, 12,
+      12, 12, 13, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+      12, 14, 15, 12, 16, 17, 18, 19), (12, 12, 20, 21, 12, 12, 12, 12, 12, 22,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 23, 24, 25, 12, 12,
+      12, 12, 12), (12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12), (12,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 26, 27, 28, 29, 12, 12, 12, 12,
+      12, 12, 30, 31, 12, 12, 12, 12, 12, 12, 12, 12), (12, 12, 12, 12, 12, 12,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+      12, 12, 12, 12, 12, 32, 12), (12, 12, 12, 12, 12, 12, 12, 12, 33, 34, 12,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 35, 12, 12, 12, 12,
+      12, 12), (12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+      12, 36, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12), (12, 12,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 37, 12, 12,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12));
+    Block: (
+     (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32,
+      -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, 0, 0, 0, 0, 0),
+     (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 743, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -32, -32, -
+      32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32,
+      -32, -32, -32, -32, -32, -32, 0, -32, -32, -32, -32, -32, -32, -32, 121),
+     (0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1,
+      0, -1, 0, -1, 0, -1, 0, -232, 0, -1, 0, -1, 0, -1, 0, 0, -1, 0, -1, 0, -1,
+      0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1,
+      0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 0, -1, 0, -1, 0, -1, -300),
+     (195, 0, 0, -1, 0, -1, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, 0, 0, -1, 0,
+      0, 97, 0, 0, 0, -1, 163, 0, 0, 0, 130, 0, 0, -1, 0, -1, 0, -1, 0, 0, -1, 0,
+      0, 0, 0, -1, 0, 0, -1, 0, 0, 0, -1, 0, -1, 0, 0, -1, 0, 0, 0, -1, 0, 56, 0,
+      0, 0, 0, 0, -1, -2, 0, -1, -2, 0, -1, -2, 0, -1, 0, -1, 0, -1, 0, -1, 0, -
+      1, 0, -1, 0, -1, 0, -1, -79, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, 0, -1, -2, 0, -1, 0, 0, 0, -1, 0, -1, 0, -1, 0, -1),
+     (0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 0, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 10815,
+      10815, 0, -1, 0, 0, 0, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 10783, 10780,
+      10782, -210, -206, 0, -205, -205, 0, -202, 0, -203, 42319, 0, 0, 0, -205,
+      42315, 0, -207, 0, 42280, 42308, 0, -209, -211, 42308, 10743, 42305, 0, 0,
+      -211, 0, 10749, -213, 0, 0, -214, 0, 0, 0, 0, 0, 0, 0, 10727, 0, 0),
+     (-218, 0, 0, -218, 0, 0, 0, 42282, -218, -69, -217, -217, -71, 0, 0, 0, 0, 0,
+      -219, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 42261, 42258, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+     (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 84, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, -1, 0, -1, 0, 0, 0, -1, 0, 0, 0, 130, 130, 130, 0, 0),
+     (0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -38, -37, -37, -37, 0, -32,
+      -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32,
+      -32, -31, -32, -32, -32, -32, -32, -32, -32, -32, -32, -64, -63, -63, 0,
+      -62, -57, 0, 0, 0, -47, -54, -8, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1,
+      0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, -86, -80, 7, -116, 0, -96, 0, 0,
+      -1, 0, 0, -1, 0, 0, 0, 0),
+     (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32,
+      -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32,
+      -32, -32, -32, -32, -32, -32, -80, -80, -80, -80, -80, -80, -80, -80, -80,
+      -80, -80, -80, -80, -80, -80, -80, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1),
+     (0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1,
+      0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, -15, 0, -1, 0, -1, 0, -1,
+      0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1),
+     (0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1,
+      0, -1, 0, -1, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, -48, -48, -48, -48, -48, -48, -48, -48, -48, -48, -48,
+      -48, -48, -48, -48, -48, -48, -48, -48, -48, -48, -48, -48, -48, -48, -48,
+      -48, -48, -48, -48, -48),
+     (-48, -48, -48, -48, -48, -48, -48, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+     (0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+     (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -8, -8, -8,
+      -8, -8, -8, 0, 0),
+     (-6254, -6253, -6244, -6242, -6242, -6243, -6236, -6181, 35266, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+     (0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 35332, 0, 0, 0, 3814, 0, 0),
+     (0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1,
+      0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1,
+      0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1),
+     (0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1,
+      0, -1, 0, 0, 0, 0, 0, -59, 0, 0, 0, 0, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1,
+      0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1,
+      0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1,
+      0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1),
+     (8, 8, 8, 8, 8, 8, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0, 8, 8, 8, 8, 8, 8, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 8, 8, 8, 8, 8, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0,
+      8, 8, 8, 8, 8, 8, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0, 8, 8, 8, 8, 8, 8, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 8, 0, 8, 0, 8, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 8, 8,
+      8, 8, 8, 8, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0, 74, 74, 86, 86, 86, 86, 100, 100,
+      128, 128, 112, 112, 126, 126, 0, 0),
+     (8, 8, 8, 8, 8, 8, 8, 8, 0, 0, 0, 0,
+      0, 0, 0, 0, 8, 8, 8, 8, 8, 8, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0, 8, 8, 8, 8, 8,
+      8, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      -7205, 0, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 8, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+     (0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -28, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, -16, -16, -16, -16, -16, -16, -16, -16, -16, -16, -16,
+      -16, -16, -16, -16, -16),
+     (0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+     (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -26, -26, -26, -26,
+      -26, -26, -26, -26, -26, -26, -26, -26, -26, -26, -26, -26, -26, -26, -26,
+      -26, -26, -26, -26, -26, -26, -26, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0),
+     (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, -48, -48, -48, -48, -48, -48, -48, -48, -48, -48,
+      -48, -48, -48, -48, -48, -48, -48, -48, -48, -48, -48, -48, -48, -48, -48,
+      -48, -48, -48, -48, -48, -48, -48, -48, -48, -48, -48, -48, -48, -48, -48,
+      -48, -48, -48, -48, -48, -48, -48, 0, 0, -1, 0, 0, 0, -10795, -10792, 0, -1,
+      0, -1, 0, -1, 0, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+     (0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1,
+      0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 0, 0, 0, 0, 0, 0,
+      0, -1, 0, -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+     (-7264, -7264, -7264, -7264, -7264, -7264, -7264, -7264, -7264, -7264, -7264,
+      -7264, -7264, -7264, -7264, -7264, -7264, -7264, -7264, -7264, -7264, -7264,
+      -7264, -7264, -7264, -7264, -7264, -7264, -7264, -7264, -7264, -7264, -7264,
+      -7264, -7264, -7264, -7264, -7264, 0, -7264, 0, 0, 0, 0, 0, -7264, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0),
+     (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+     (0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0),
+     (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1,
+      0, -1, 0, 0, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1,
+      0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, -1, 0, 0, -1),
+     (0, -1, 0, -1, 0,  -1, 0, -1, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1, 0, -1, 0, 0,
+      0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+     (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -928, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -38864, -38864,
+      -38864, -38864, -38864, -38864, -38864, -38864, -38864, -38864, -38864,
+      -38864, -38864, -38864, -38864, -38864),
+     (-38864, -38864, -38864, -38864, -38864, -38864, -38864, -38864, -38864,
+      -38864, -38864, -38864, -38864, -38864, -38864, -38864, -38864, -38864,
+      -38864, -38864, -38864, -38864, -38864, -38864, -38864, -38864, -38864,
+      -38864, -38864, -38864, -38864, -38864, -38864, -38864, -38864, -38864,
+      -38864, -38864, -38864, -38864, -38864, -38864, -38864, -38864, -38864,
+      -38864, -38864, -38864, -38864, -38864, -38864, -38864, -38864, -38864,
+      -38864, -38864, -38864, -38864, -38864, -38864, -38864, -38864, -38864,
+      -38864, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+     (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -32, -32, -32, -32, -32, -32,
+      -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32,
+      -32, -32, -32, -32, -32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+     (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -40, -40, -40, -40,
+      -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40,
+      -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40,
+      -40, -40, -40, -40, -40, -40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0),
+     (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -40, -40,
+      -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40,
+      -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40, -40,
+      -40, -40, -40, -40, 0, 0, 0, 0), (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      -64, -64, -64, -64, -64, -64, -64, -64, -64, -64, -64, -64, -64, -64, -64,
+      -64, -64, -64, -64, -64, -64, -64, -64, -64, -64, -64, -64, -64, -64, -64,
+      -64, -64, -64, -64, -64, -64, -64, -64, -64, -64, -64, -64, -64, -64, -64,
+      -64, -64, -64, -64, -64, -64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+     (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -32, -32, -32, -32, -32, -32, -32,
+      -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, -32,
+      -32, -32, -32, -32, -32, -32, -32, -32, -32, -32, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+     (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, -34, -34, -34, -34, -34, -34, -34, -34, -34, -34,
+      -34, -34, -34, -34, -34, -34, -34, -34, -34, -34, -34, -34, -34, -34, -34,
+      -34, -34, -34, -34, -34, -34, -34, -34, -34, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    );
+  );
+
+function Utf8UpperReference(S, D: PUtf8Char): PUtf8Char;
+var
+  c, i: cardinal;
+begin
+  if S <> nil then
+    repeat
+      c := byte(S[0]);
+      if c <= 127 then
+        if c = 0 then
+          break
+        else
+          inc(S)
+      else if c and $20 = 0 then
+      begin
+        c := (c shl 6) + byte(S[1]) - $3080; // fast process $0..$7ff
+        inc(S, 2);
+      end
+      else
+      begin
+        c := GetHighUtf8Ucs4(S); // handle even surrogates
+        if c = 0 then
+          c := ord('?'); // PlaceHolder for invalid UTF-8 input
+      end;
+      i := c shr UU_BLOCK_HI;
+      with UU do // branchless Unicode 10.0 case folding
+        c := cardinal(integer(c) + Block[IndexLo[
+          IndexHi[i shr UU_INDEX_HI], i and UU_INDEX_LO], c and UU_BLOCK_LO]);
+      inc(D, Ucs4ToUtf8(c, D));
+    until false;
+  D^ := #0;
+  result := D;
+end;
+
+function UpperCaseReference(const S: RawUtf8): RawUtf8;
+var
+  tmp: TSynTempBuffer;
+begin
+  tmp.Len := length(S);
+  if IsAnsiCompatible(pointer(S), tmp.Len) then
+    UpperCaseCopy(S, result)
+  else
+  begin
+    tmp.Init(tmp.Len * 2); // some codepoints enhance in length
+    tmp.Done(Utf8UpperReference(pointer(S), tmp.buf), result);
+  end;
+end;
+
+function Ucs4Upper(c: PtrUInt): PtrInt;
+  {$ifdef HASINLINE} inline;{$endif}
+var
+  i: PtrUInt;
+begin
+  // branchless Unicode 10.0 uppercase folding
+  i := c shr UU_BLOCK_HI;
+  with UU do // UU reference compiles into a register on x86_64 and ARM
+    result := PtrInt(c) + Block[IndexLo[
+      IndexHi[i shr UU_INDEX_HI], i and UU_INDEX_LO], c and UU_BLOCK_LO];
+end;
+
+function Utf8ICompReference(u1, u2: PUtf8Char): PtrInt;
+var
+  c2: PtrInt;
+  {$ifdef CPUX86NOTPIC}
+  table: TNormTableByte absolute NormToUpperAnsi7Byte;
+  {$else}
+  table: PByteArray;
+  {$endif CPUX86NOTPIC}
+begin
+  {$ifndef CPUX86NOTPIC}
+  table := @NormToUpperAnsi7Byte;
+  {$endif CPUX86NOTPIC}
+  if u1 <> u2 then
+    if u1 <> nil then
+      if u2 <> nil then
+        repeat
+          result := ord(u1^);
+          c2 := ord(u2^);
+          if result <= 127 then
+            if result <> 0 then
+            begin
+              inc(u1);
+              result := table[result]; // branchless a..z -> A..Z conversion
+              if c2 <= 127 then
+              begin
+                if c2 = 0 then
+                  exit; // u1>u2 -> return u1^
+                inc(u2);
+                dec(result, table[c2]);
+                if result <> 0 then
+                  exit;
+                continue;
+              end;
+            end
+            else
+            begin
+              // result=u1^=#0 -> end of u1 reached
+              if c2 <> 0 then    // end of u2 reached -> u1=u2 -> return 0
+                result := -1;    // u1<u2
+              exit;
+            end
+          else
+          begin
+            // fast Unicode 10.0 uppercase conversion
+            if result and $20 = 0 then
+            begin
+              result := (result shl 6) + byte(u1[1]) - $3080; // $0..$7ff
+              inc(u1, 2);
+            end
+            else
+              result := GetHighUtf8Ucs4(u1);
+            result := Ucs4Upper(result);
+          end;
+          if c2 <= 127 then
+          begin
+            if c2 = 0 then
+              exit; // u1>u2 -> return u1^
+            inc(u2);
+            dec(result, table[c2]);
+            if result <> 0 then
+              exit;
+            continue;
+          end
+          else
+          begin
+            if c2 and $20 = 0 then
+            begin
+              c2 := (c2 shl 6) + byte(u2[1]) - $3080; // process $0..$7ff
+              inc(u2, 2);
+            end
+            else
+              c2 := GetHighUtf8Ucs4(u2);
+            dec(result, Ucs4Upper(c2));
+            if result <> 0 then
+              exit;
+          end;
+        until false
+      else
+        result := 1 // u2=''
+    else
+      result := -1  // u1=''
+  else
+    result := 0;    // u1=u2
+end;
+
+function Utf8ILCompReference(u1, u2: PUtf8Char; L1, L2: integer): PtrInt;
+var
+  c2: PtrInt;
+  extra, i: integer;
+  {$ifdef CPUX86NOTPIC}
+  table: TNormTableByte absolute NormToUpperAnsi7Byte;
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  table: PByteArray;
+  utf8: ^TUtf8Table;
+  {$endif CPUX86NOTPIC}
+label
+  neg, pos;
+begin
+  {$ifndef CPUX86NOTPIC}
+  table := @NormToUpperAnsi7Byte;
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
+  if u1 <> u2 then
+    if (u1 <> nil) and
+       (L1 <> 0) then
+      if (u2 <> nil) and
+         (L2 <> 0) then
+        repeat
+          result := ord(u1^);
+          c2 := ord(u2^);
+          inc(u1);
+          dec(L1);
+          if result <= 127 then
+          begin
+            result := table[result]; // branchless a..z -> A..Z conversion
+            if c2 <= 127 then
+            begin
+              dec(result, table[c2]);
+              dec(L2);
+              inc(u2);
+              if result <> 0 then
+                // found unmatching char
+                exit
+              else if L1 <> 0 then
+                if L2 <> 0 then
+                  // L1>0 and L2>0 -> next char
+                  continue
+                else
+                  // L1>0 and L2=0 -> u1>u2
+                  goto pos
+              else
+              if L2 <> 0 then
+                // L1=0 and L2>0 -> u1<u2
+                goto neg
+              else
+                // L1=0 and L2=0 -> u1=u2 -> returns 0
+                exit;
+            end;
+          end
+          else
+          begin
+            // fast Unicode 10.0 uppercase conversion
+            extra := utf8.Bytes[result];
+            if extra = 0 then
+              // invalid leading byte
+              goto neg;
+            dec(L1, extra);
+            if L1 < 0 then
+              goto neg;
+            i := 0;
+            repeat
+              result := result shl 6;
+              inc(result, ord(u1[i]));
+              inc(i);
+            until i = extra;
+            dec(result, utf8.Extra[extra].offset);
+            inc(u1, extra);
+            result := Ucs4Upper(result);
+          end;
+          // here result=NormToUpper[u1^]
+          inc(u2);
+          dec(L2);
+          if c2 <= 127 then
+          begin
+            dec(result, table[c2]);
+            if result <> 0 then
+              // found unmatching codepoint
+              exit;
+          end
+          else
+          begin
+            extra := utf8.Bytes[c2];
+            if extra = 0 then
+              goto pos;
+            dec(L2, extra);
+            if L2 < 0 then
+              goto pos;
+            i := 0;
+            repeat
+              c2 := c2 shl 6;
+              inc(c2, ord(u2[i]));
+              inc(i);
+            until i = extra;
+            dec(c2, utf8.Extra[extra].offset);
+            inc(u2, extra);
+            dec(result, Ucs4Upper(c2));
+            if result <> 0 then
+              // found unmatching codepoint
+              exit;
+          end;
+          // here we have result=0
+          if L1 = 0 then
+            // test if we reached end of u1 or end of u2
+            if L2 = 0 then
+              // u1=u2
+              exit
+            else
+              // u1<u2
+              goto neg
+          else
+          if L2 = 0 then
+            // u1>u2
+            goto pos;
+        until false
+      else
+pos:    // u2='' or u1>u2
+        result := 1
+    else
+neg:  // u1='' or u1<u2
+      result := -1
+  else
+    // u1=u2
+    result := 0;
+end;
 
 
 procedure InitializeUnit;

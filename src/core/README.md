@@ -54,6 +54,7 @@ Efficient Unicode Conversion Classes shared by all framework units
 - UTF-8 / UTF-16 / Ansi Conversion Classes
 - Low-Level String Conversion Functions
 - Text Case-(in)sensitive Conversion and Comparison
+- Operating-System Independent Unicode Process
 
 ### mormot.core.text
 
