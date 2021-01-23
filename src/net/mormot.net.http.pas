@@ -240,11 +240,12 @@ type
 
   /// event handler used by THttpServerGeneric.OnBeforeBody property
   // - if defined, is called just before the body is retrieved from the client
-  // - supplied parameters reflect the current input state
+  // - supplied parameters reflect the current input state, and could be
+  // modified on the fly to adapt to the expected behavior
   // - should return HTTP_SUCCESS=200 to continue the process, or an HTTP
   // error code (e.g. HTTP_FORBIDDEN or HTTP_PAYLOADTOOLARGE) to reject
   // the request
-  TOnHttpServerBeforeBody = function(const aURL, aMethod, aInHeaders,
+  TOnHttpServerBeforeBody = function(var aURL, aMethod, aInHeaders,
     aInContentType, aRemoteIP: RawUtf8; aContentLength: integer;
     aUseSSL: boolean): cardinal of object;
 
