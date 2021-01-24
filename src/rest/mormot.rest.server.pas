@@ -1941,16 +1941,12 @@ type
     // ! Ctxt.Error('Unauthorized method',HTTP_NOTALLOWED);
     // - since this event will be executed by every TRestServer.Uri call,
     // it should better not make any slow process (like writing to a remote DB)
-    // - see also TRest.OnDecryptBody, which is common to the client side, so
-    // may be a better place for implementing shared process (e.g. encryption)
     OnBeforeUri: TOnBeforeUri;
     /// event trigerred when Uri() finished to process an ORM/SOA command
     // - the supplied Ctxt parameter will give access to the command which has
     // been executed, e.g. via Ctxt.Call.OutStatus or Ctxt.MicroSecondsElapsed
     // - since this event will be executed by every TRestServer.Uri call,
     // it should better not make any slow process (like writing to a remote DB)
-    // - see also TRest.OnDecryptBody/OnEncryptBody, which is common to the
-    // client side, so may be better to implement shared process (e.g. encryption)
     OnAfterUri: TOnAfterUri;
     /// event trigerred when Uri() raise an exception and failed to process a request
     // - if Ctxt.ExecuteCommand raised an exception, this callback will be
