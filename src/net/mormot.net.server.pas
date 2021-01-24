@@ -1272,7 +1272,7 @@ end;
 constructor THttpServerGeneric.Create(CreateSuspended: boolean;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8);
 begin
-  SetServerName('mORMot (' + OS_TEXT + ')');
+  SetServerName('mORMot2 (' + OS_TEXT + ')');
   inherited Create(CreateSuspended, OnStart, OnStop, ProcessName);
 end;
 

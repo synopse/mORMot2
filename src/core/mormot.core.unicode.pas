@@ -5749,45 +5749,24 @@ end;
 
 type
   // 20016 bytes for full Unicode 10.0 case folding branchless conversion :)
-  TUnicodeUpperTable = record
+  TUnicodeUpperTable = object
+    Block: array[0..37, 0..127] of integer;
     IndexHi: array[0..271] of byte;
     IndexLo: array[0..8, 0..31] of byte;
-    Block: array[0..37, 0..127] of integer;
+    function Ucs4Upper(c: PtrUInt): PtrInt;
+      {$ifdef HASINLINE} inline;{$endif}
   end;
+  PUnicodeUpperTable = ^TUnicodeUpperTable;
 
 const
   UU_BLOCK_HI = 7;
   UU_BLOCK_LO = 127;
   UU_INDEX_HI = 5;
   UU_INDEX_LO = 31;
+  UU_MAX = $10ffff;
+
+var
   UU: TUnicodeUpperTable = (
-    IndexHi: (0, 1, 2, 3, 3, 3, 3, 3, 3, 3, 4, 3, 3, 3, 3, 5, 6, 7, 3, 3, 3, 3,
-      3, 3, 3, 3, 3, 3, 3, 3, 8, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3);
-    IndexLo: ((0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12, 12, 12, 12, 12, 12,
-      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12), (12, 12, 12, 12, 12,
-      12, 12, 13, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
-      12, 14, 15, 12, 16, 17, 18, 19), (12, 12, 20, 21, 12, 12, 12, 12, 12, 22,
-      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 23, 24, 25, 12, 12,
-      12, 12, 12), (12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
-      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12), (12,
-      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 26, 27, 28, 29, 12, 12, 12, 12,
-      12, 12, 30, 31, 12, 12, 12, 12, 12, 12, 12, 12), (12, 12, 12, 12, 12, 12,
-      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
-      12, 12, 12, 12, 12, 32, 12), (12, 12, 12, 12, 12, 12, 12, 12, 33, 34, 12,
-      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 35, 12, 12, 12, 12,
-      12, 12), (12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
-      12, 36, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12), (12, 12,
-      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 37, 12, 12,
-      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12));
     Block: (
      (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -6035,20 +6014,62 @@ const
       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
     );
+    IndexHi: (0, 1, 2, 3, 3, 3, 3, 3, 3, 3, 4, 3, 3, 3, 3, 5, 6, 7, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 8, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+      3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3);
+    IndexLo: ((0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12, 12, 12, 12, 12, 12,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12), (12, 12, 12, 12, 12,
+      12, 12, 13, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+      12, 14, 15, 12, 16, 17, 18, 19), (12, 12, 20, 21, 12, 12, 12, 12, 12, 22,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 23, 24, 25, 12, 12,
+      12, 12, 12), (12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12), (12,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 26, 27, 28, 29, 12, 12, 12, 12,
+      12, 12, 30, 31, 12, 12, 12, 12, 12, 12, 12, 12), (12, 12, 12, 12, 12, 12,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+      12, 12, 12, 12, 12, 32, 12), (12, 12, 12, 12, 12, 12, 12, 12, 33, 34, 12,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 35, 12, 12, 12, 12,
+      12, 12), (12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+      12, 36, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12), (12, 12,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 37, 12, 12,
+      12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12));
   );
 
 function Utf8UpperReference(S, D: PUtf8Char): PUtf8Char;
 var
-  c, i: cardinal;
+  c, i: PtrUInt;
+  S2: PUtf8Char;
+  {$ifdef CPUX86NOTPIC}
+  tab: TUnicodeUpperTable absolute UU;
+  {$else}
+  tab: PUnicodeUpperTable;
+  {$endif CPUX86NOTPIC}
 begin
+  {$ifndef CPUX86NOTPIC}
+  tab := @UU;
+  {$endif CPUX86NOTPIC}
   if S <> nil then
     repeat
-      c := byte(S[0]);
+      c := ord(S^);
       if c <= 127 then
         if c = 0 then
           break
         else
-          inc(S)
+        begin
+          inc(c, tab.Block[0, c]); // branchless a..z -> A..Z
+          D^ := AnsiChar(c);
+          inc(S);
+          inc(D);
+          continue;
+        end
       else if c and $20 = 0 then
       begin
         c := (c shl 6) + byte(S[1]) - $3080; // fast process $0..$7ff
@@ -6056,14 +6077,19 @@ begin
       end
       else
       begin
-        c := GetHighUtf8Ucs4(S); // handle even surrogates
+        S2 := S;
+        c := GetHighUtf8Ucs4(S2); // handle even surrogates
+        S := S2;
         if c = 0 then
           c := ord('?'); // PlaceHolder for invalid UTF-8 input
       end;
-      i := c shr UU_BLOCK_HI;
-      with UU do // branchless Unicode 10.0 case folding
-        c := cardinal(integer(c) + Block[IndexLo[
-          IndexHi[i shr UU_INDEX_HI], i and UU_INDEX_LO], c and UU_BLOCK_LO]);
+      if c <= UU_MAX then
+      begin
+        // branchless Unicode 10.0 case folding
+        i := c shr UU_BLOCK_HI;
+        c := PtrUInt(PtrInt(c) + tab.Block[tab.IndexLo[
+          tab.IndexHi[i shr UU_INDEX_HI], i and UU_INDEX_LO], c and UU_BLOCK_LO]);
+      end;
       inc(D, Ucs4ToUtf8(c, D));
     until false;
   D^ := #0;
@@ -6085,28 +6111,26 @@ begin
 end;
 
 // branchless Unicode 10.0 uppercase folding using our internal tables
-function Ucs4Upper(c: PtrUInt): PtrInt;
-  {$ifdef HASINLINE} inline;{$endif}
+function TUnicodeUpperTable.Ucs4Upper(c: PtrUInt): PtrInt;
 var
   i: PtrUInt;
 begin
   i := c shr UU_BLOCK_HI;
-  with UU do // UU reference compiles into a register on x86_64 and ARM
-    result := PtrInt(c) + Block[IndexLo[
-      IndexHi[i shr UU_INDEX_HI], i and UU_INDEX_LO], c and UU_BLOCK_LO];
+  result := PtrInt(c) + Block[IndexLo[
+    IndexHi[i shr UU_INDEX_HI], i and UU_INDEX_LO], c and UU_BLOCK_LO];
 end;
 
 function Utf8ICompReference(u1, u2: PUtf8Char): PtrInt;
 var
   c2: PtrInt;
   {$ifdef CPUX86NOTPIC}
-  table: TNormTableByte absolute NormToUpperAnsi7Byte;
+  tab: TUnicodeUpperTable absolute UU;
   {$else}
-  table: PByteArray;
+  tab: PUnicodeUpperTable;
   {$endif CPUX86NOTPIC}
 begin
   {$ifndef CPUX86NOTPIC}
-  table := @NormToUpperAnsi7Byte;
+  tab := @UU;
   {$endif CPUX86NOTPIC}
   if u1 <> u2 then
     if u1 <> nil then
@@ -6118,13 +6142,14 @@ begin
             if result <> 0 then
             begin
               inc(u1);
-              result := table[result]; // branchless a..z -> A..Z conversion
+              inc(result, tab.Block[0, result]); // branchless a..z -> A..Z
               if c2 <= 127 then
               begin
                 if c2 = 0 then
                   exit; // u1>u2 -> return u1^
                 inc(u2);
-                dec(result, table[c2]);
+                inc(c2, tab.Block[0, c2]);
+                dec(result, c2);
                 if result <> 0 then
                   exit;
                 continue;
@@ -6147,14 +6172,16 @@ begin
             end
             else
               result := GetHighUtf8Ucs4(u1);
-            result := Ucs4Upper(result);
+            if result <= UU_MAX then
+              result := tab.Ucs4Upper(result);
           end;
           if c2 <= 127 then
           begin
             if c2 = 0 then
               exit; // u1>u2 -> return u1^
             inc(u2);
-            dec(result, table[c2]);
+            inc(c2, tab.Block[0, c2]);
+            dec(result, c2);
             if result <> 0 then
               exit;
             continue;
@@ -6168,7 +6195,9 @@ begin
             end
             else
               c2 := GetHighUtf8Ucs4(u2);
-            dec(result, Ucs4Upper(c2));
+            if c2 <= UU_MAX then
+              c2 := tab.Ucs4Upper(c2);
+            dec(result, c2);
             if result <> 0 then
               exit;
           end;
@@ -6186,17 +6215,17 @@ var
   c2: PtrInt;
   extra, i: integer;
   {$ifdef CPUX86NOTPIC}
-  table: TNormTableByte absolute NormToUpperAnsi7Byte;
+  tab: TUnicodeUpperTable absolute UU;
   utf8: TUtf8Table absolute UTF8_TABLE;
   {$else}
-  table: PByteArray;
+  tab: PUnicodeUpperTable;
   utf8: ^TUtf8Table;
   {$endif CPUX86NOTPIC}
 label
   neg, pos;
 begin
   {$ifndef CPUX86NOTPIC}
-  table := @NormToUpperAnsi7Byte;
+  tab := @UU;
   utf8 := @UTF8_TABLE;
   {$endif CPUX86NOTPIC}
   if u1 <> u2 then
@@ -6211,10 +6240,11 @@ begin
           dec(L1);
           if result <= 127 then
           begin
-            result := table[result]; // branchless a..z -> A..Z conversion
+            inc(result, tab.Block[0, result]); // branchless a..z -> A..Z
             if c2 <= 127 then
             begin
-              dec(result, table[c2]);
+              inc(c2, tab.Block[0, c2]);
+              dec(result, c2);
               dec(L2);
               inc(u2);
               if result <> 0 then
@@ -6254,14 +6284,16 @@ begin
             until i = extra;
             dec(result, utf8.Extra[extra].offset);
             inc(u1, extra);
-            result := Ucs4Upper(result);
+            if result <= UU_MAX then
+              result := tab.Ucs4Upper(result);
           end;
           // here result=NormToUpper[u1^]
           inc(u2);
           dec(L2);
           if c2 <= 127 then
           begin
-            dec(result, table[c2]);
+            inc(c2, tab.Block[0, c2]);
+            dec(result, c2);
             if result <> 0 then
               // found unmatching codepoint
               exit;
@@ -6282,7 +6314,9 @@ begin
             until i = extra;
             dec(c2, utf8.Extra[extra].offset);
             inc(u2, extra);
-            dec(result, Ucs4Upper(c2));
+            if c2 <= UU_MAX then
+              c2 := tab.Ucs4Upper(c2);
+            dec(result, c2);
             if result <> 0 then
               // found unmatching codepoint
               exit;
