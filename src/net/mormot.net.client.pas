@@ -1816,7 +1816,7 @@ const
     '', 's');
 begin
   if not IsAvailable then
-    raise ENetSock.CreateFmt('No available %s', [LIBCURL_DLL]);
+    raise ECurlHttp.CreateFmt('No available %s', [LIBCURL_DLL]);
   fHandle := curl.easy_init;
   ConnectionTimeOut := ConnectionTimeOut div 1000; // curl expects seconds
   if ConnectionTimeOut = 0 then

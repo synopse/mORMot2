@@ -1156,7 +1156,7 @@ begin
     exit; // nothing to cypher
   {$ifdef FPC}
   UniqueString(data); // @data[1] won't call UniqueString() under FPC :(
-  {$endif}
+  {$endif FPC}
   d := @data[1];
   len := length(data);
   key := key xor cardinal(len);

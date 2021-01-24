@@ -529,21 +529,21 @@ function ToMethod(const method: RawUtf8): TUriMethod;
 const
   NAME: array[mGET..high(TUriMethod)] of string[10] = (
     // sorted by occurence for in-order O(n) search
-    'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT',
-    'LOCK','UNLOCK','STATE', 'OPTIONS','PROPFIND','PROPPATCH','TRACE',
-    'COPY','MKCOL','MOVE','PURGE','REPORT', 'MKACTIVITY','MKCALENDAR',
-    'CHECKOUT','MERGE','NOTIFY','PATCH','SEARCH','CONNECT');
+    'GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'BEGIN', 'END', 'ABORT',
+    'LOCK', 'UNLOCK', 'STATE',  'OPTIONS', 'PROPFIND', 'PROPPATCH', 'TRACE',
+    'COPY', 'MKCOL', 'MOVE', 'PURGE', 'REPORT',  'MKACTIVITY', 'MKCALENDAR',
+    'CHECKOUT', 'MERGE', 'NOTIFY', 'PATCH', 'SEARCH', 'CONNECT');
 var
-  L: PtrInt;
-  N: PShortString;
+  L: byte;
+  N: PByteArray;
 begin
   L := Length(method);
   if L < 11 then
   begin
     N := @NAME;
     for result := low(NAME) to high(NAME) do
-      if (L = ord(N^[0])) and
-         IdemPropNameUSameLen(@N^[1], pointer(method), L) then
+      if (N^[0] = L) and
+         IdemPropNameUSameLen(pointer(@N^[1]), pointer(method), L) then
         exit
       else
         inc(PByte(N), 11);

@@ -2759,7 +2759,7 @@ lit:        inc(P);
                     c4 := c4 shr 6;
                     dec(extra);
                   until extra = 0;
-                  D^ := AnsiChar(byte(c4) or UTF8_EXTRAFIRSTBYTE[ord(c)]);
+                  D^ := AnsiChar(byte(c4) or UTF8_TABLE.FirstByte[ord(c)]);
                   inc(D, ord(c));
                   inc(P, 5);
                 end
@@ -3874,10 +3874,12 @@ begin
     end;
   if (P = nil) or
      (P^ <> ']') then
-    // invalid or aborted when PMax was reached 
-    result := -result;
+    // aborted when PMax or #0 was reached or the JSON input was invalid
+    if result = 0 then
+      dec(result) // -1 to ensure the caller tries to get something
+    else
+      result := -result; // return the current count as negative
 end;
-
 
 function JsonArrayDecode(P: PUtf8Char; out Values: TPUtf8CharDynArray): boolean;
 var

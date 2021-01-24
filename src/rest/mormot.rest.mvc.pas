@@ -130,6 +130,36 @@ type
     Helpers: TSynMustacheHelpers;
   end;
 
+  /// define TMvcViewsMustache.RegisterExpressionHelpersForTables labels
+  THtmlTableStyleLabel = (
+    labelFalse,
+    labelTrue,
+    labelOff,
+    labelOn,
+    labelValue);
+
+  /// define TMvcViewsMustache.RegisterExpressionHelpersForTables CSS styling
+  TExpressionHtmlTableStyle = class
+  public
+    class procedure StartTable(WR: TTextWriter); virtual;
+    class procedure BeforeFieldName(WR: TTextWriter); virtual;
+    class procedure BeforeValue(WR: TTextWriter); virtual;
+    class procedure AddLabel(WR: TTextWriter; const text: string;
+      kind: THtmlTableStyleLabel); virtual;
+    class procedure AfterValue(WR: TTextWriter); virtual;
+    class procedure EndTable(WR: TTextWriter); virtual;
+  end;
+  /// to define TMvcViewsMustache.RegisterExpressionHelpersForTables CSS styling
+  TExpressionHtmlTableStyleClass = class of TExpressionHtmlTableStyle;
+
+  /// TMvcViewsMustache.RegisterExpressionHelpersForTables via Bootstrap CSS
+  TExpressionHtmlTableStyleBootstrap = class(TExpressionHtmlTableStyle)
+  public
+    class procedure StartTable(WR: TTextWriter); override;
+    class procedure AddLabel(WR: TTextWriter; const text: string;
+      kind: THtmlTableStyleLabel); override;
+  end;
+
   /// a class able to implement Views using Mustache templates
   TMvcViewsMustache = class(TMvcViewsAbstract)
   protected
@@ -160,10 +190,11 @@ type
     /// overriden implementations should return the rendered content
     procedure Render(methodIndex: Integer; const Context: variant;
       var View: TMvcView); override;
-    // some helpers defined here to avoid SynCrypto link in SynMustache
+    // some helpers defined here to avoid mormot.core.crypto link
     class procedure md5(const Value: variant; out result: variant);
     class procedure sha1(const Value: variant; out result: variant);
     class procedure sha256(const Value: variant; out result: variant);
+    class procedure sha512(const Value: variant; out result: variant);
   public
     /// create an instance of this ViewModel implementation class
     // - define the associated REST instance, the interface definition and the
@@ -189,9 +220,11 @@ type
     // ! aView.RegisterExpressionHelpersForTables(aServer,[TMyOrm]);
     // then use the following Mustache tag
     // ! {{#TMyOrm MyRecordID}} ... {{/TMyOrm MyRecordID}}
+    // - use Bootstap CSS by default, but you can supply your aHtmlTableStyle
     // - returns self so that may be called in a fluent interface
     function RegisterExpressionHelpersForTables(aRest: TRest;
-      const aTables: array of TOrmClass): TMvcViewsMustache; overload;
+      const aTables: array of TOrmClass;
+      aHtmlTableStyle: TExpressionHtmlTableStyleClass = nil): TMvcViewsMustache; overload;
     /// define Expression Helpers for all ORM tables of the supplied model
     // - e.g. to read a TMyOrm from its ID value and put its fields
     // in the current rendering data context, you can write:
@@ -199,10 +232,10 @@ type
     // then use the following Mustache tag
     // ! {{#TMyOrm MyRecordID}} ... {{/TMyOrm MyRecordID}}
     // - returns self so that may be called in a fluent interface
-    function RegisterExpressionHelpersForTables(
-      aRest: TRest): TMvcViewsMustache; overload;
+    function RegisterExpressionHelpersForTables(aRest: TRest;
+      aHtmlTableStyle: TExpressionHtmlTableStyleClass = nil): TMvcViewsMustache; overload;
     /// define some Expression Helpers for hashing
-    // - i.e. md5, sha1 and sha256 hashing
+    // - i.e. md5, sha1 sha256 and sha512 hashing
     // - would allow e.g. to compute a Gravatar URI via:
     // ! <img src=http://www.gravatar.com/avatar/{{md5 email}}?s=200></img>
     // - returns self so that may be called in a fluent interface
@@ -821,13 +854,230 @@ begin
 end;
 
 
+{ Customization of HTML CSS tables }
+
+type
+  TExpressionHelperForTable = class
+  public
+    Rest: TRest;
+    Table: TOrmClass;
+    TableProps: TOrmProperties;
+    HtmlTableStyle: TExpressionHtmlTableStyleClass;
+    constructor Create(aRest: TRest; aTable: TOrmClass;
+      var aHelpers: TSynMustacheHelpers;
+      aHtmlTableStyle: TExpressionHtmlTableStyleClass);
+    procedure ExpressionGet(const Value: variant; out result: variant);
+    procedure ExpressionHtmlTable(const Value: variant; out result: variant);
+  end;
+
+
+{ TExpressionHelperForTable }
+
+constructor TExpressionHelperForTable.Create(aRest: TRest; aTable: TOrmClass;
+  var aHelpers: TSynMustacheHelpers;
+  aHtmlTableStyle: TExpressionHtmlTableStyleClass);
+var
+  HelperName: RawUtf8;
+begin
+  aRest.PrivateGarbageCollector.Add(self);
+  Rest := aRest;
+  HelperName := RawUtf8(aTable.ClassName);
+  Table := aTable;
+  TableProps := aTable.OrmProps;
+  TSynMustache.HelperAdd(aHelpers, HelperName, ExpressionGet);
+  if aHtmlTableStyle = nil then
+    aHtmlTableStyle := TExpressionHtmlTableStyleBootstrap;
+  HtmlTableStyle := aHtmlTableStyle;
+  TSynMustache.HelperAdd(aHelpers,
+    HelperName + '.HtmlTable', ExpressionHtmlTable);
+end;
+
+procedure TExpressionHelperForTable.ExpressionHtmlTable(const Value: variant;
+  out result: variant);
+var
+  Rec: PDocVariantData;
+  f, i, j: PtrInt;
+  int: integer;
+  Field: TOrmPropInfo;
+  timelog: TTimeLogBits;
+  caption: string;
+  sets: TStringList;
+  u: RawUtf8;
+  W: TTextWriter;
+  tmp: TTextWriterStackBuffer;
+const
+  ONOFF: array[boolean] of THtmlTableStyleLabel = (
+    labelOff, labelOn);
+  ENUM: array[boolean, boolean] of THtmlTableStyleLabel = (
+   (labelValue, labelValue),
+   (labelFalse, labelTrue));
+begin
+  Rec := _Safe(Value);
+  if Rec^.Kind = dvObject then
+  begin
+    W := TTextWriter.CreateOwnedStream(tmp);
+    try
+      HtmlTableStyle.StartTable(W);
+      for f := 0 to TableProps.Fields.Count - 1 do
+      begin
+        Field := TableProps.Fields.List[f];
+        i := Rec^.GetValueIndex(Field.Name);
+        if i < 0 then
+          continue;
+        if not (Field.OrmFieldType in
+            [oftAnsiText, oftUtf8Text, oftInteger, oftFloat, oftCurrency,
+             oftTimeLog, oftModTime, oftCreateTime, oftDateTime, oftDateTimeMS,
+             oftUnixTime, oftUnixMSTime, oftBoolean, oftEnumerate, oftSet]) then
+          // we support only most obvious types in 'case OrmFieldType of" below
+          continue;
+        HtmlTableStyle.BeforeFieldName(W);
+        GetCaptionFromPCharLen(TrimLeftLowerCase(Field.Name), caption);
+        W.AddHtmlEscapeString(caption);
+        HtmlTableStyle.BeforeValue(W);
+        VariantToUtf8(Rec^.Values[i], u);
+        case Field.OrmFieldType of
+          oftAnsiText, oftUtf8Text, oftInteger, oftFloat, oftCurrency:
+            W.AddHtmlEscape(pointer(u));
+          oftTimeLog, oftModTime, oftCreateTime:
+            if VariantToInt64(Rec^.Values[i], timelog.Value) then
+              W.AddHtmlEscapeString(timelog.i18nText);
+          oftDateTime, oftDateTimeMS:
+            begin
+              timelog.From(u);
+              W.AddHtmlEscapeString(timelog.i18nText);
+            end;
+          oftUnixTime, oftUnixMSTime:
+            if VariantToInt64(Rec^.Values[i], timelog.Value) then
+            begin
+              if Field.OrmFieldType = oftUnixTime then
+                timelog.FromUnixTime(timelog.Value)
+              else
+                timelog.FromUnixMSTime(timelog.Value);
+              W.AddHtmlEscapeString(timelog.i18nText);
+            end;
+          oftBoolean, oftEnumerate:
+            if Field.InheritsFrom(TOrmPropInfoRttiEnum) then
+            begin
+              caption := TOrmPropInfoRttiEnum(Field).GetCaption(u, int);
+              HtmlTableStyle.AddLabel(W, caption,
+                ENUM[Field.OrmFieldType = oftBoolean, int <> 0]);
+            end;
+          oftSet:
+            if Field.InheritsFrom(TOrmPropInfoRttiSet) and
+               VariantToInteger(Rec^.Values[i], int) then
+            begin
+              sets := TStringList.Create;
+              try
+                TOrmPropInfoRttiSet(Field).SetEnumType^.AddCaptionStrings(sets);
+                for j := 0 to sets.Count - 1 do
+                begin
+                  HtmlTableStyle.AddLabel(W, sets[j], ONOFF[GetBit(int, j)]);
+                  W.AddShort('<br/>');
+                end;
+              finally
+                sets.Free;
+              end;
+            end;
+        end;
+        HtmlTableStyle.AfterValue(W);
+      end;
+      HtmlTableStyle.EndTable(W);
+      RawUtf8ToVariant(W.Text, result);
+    finally
+      W.Free;
+    end;
+  end
+  else
+    // not an object -> return input value as is
+    result := Value;
+end;
+
+procedure TExpressionHelperForTable.ExpressionGet(const Value: variant;
+  out result: variant);
+var
+  Rec: TOrm;
+  ID: integer;
+begin
+  SetVariantNull(result);
+  if not VariantToInteger(Value, ID) then
+    exit;
+  Rec := Table.Create;
+  try
+    if Rest.ORM.Retrieve(ID, Rec) then
+      result := Rec.GetSimpleFieldsAsDocVariant(true);
+  finally
+    Rec.Free;
+  end;
+end;
+
+
+{ TExpressionHtmlTableStyle }
+
+class procedure TExpressionHtmlTableStyle.AddLabel(WR: TTextWriter;
+  const text: string; kind: THtmlTableStyleLabel);
+const
+  SETLABEL: array[THtmlTableStyleLabel] of string[3] = (
+    '', '', '- ', '+ ', '');
+begin
+  WR.AddShort(SETLABEL[kind]);
+  WR.AddHtmlEscapeString(text);
+  WR.AddShort('&nbsp;');
+end;
+
+class procedure TExpressionHtmlTableStyle.AfterValue(WR: TTextWriter);
+begin
+  WR.AddShort('</td></tr>');
+end;
+
+class procedure TExpressionHtmlTableStyle.BeforeFieldName(WR: TTextWriter);
+begin
+  WR.AddShort('<tr><td>');
+end;
+
+class procedure TExpressionHtmlTableStyle.BeforeValue(WR: TTextWriter);
+begin
+  WR.AddShort('</td><td>');
+end;
+
+class procedure TExpressionHtmlTableStyle.EndTable(WR: TTextWriter);
+begin
+  WR.AddShort('</table>');
+end;
+
+class procedure TExpressionHtmlTableStyle.StartTable(WR: TTextWriter);
+begin
+  WR.AddShort('<table>');
+end;
+
+
+{ TExpressionHtmlTableStyleBootstrap }
+
+class procedure TExpressionHtmlTableStyleBootstrap.AddLabel(WR: TTextWriter;
+  const text: string; kind: THtmlTableStyleLabel);
+const
+  SETLABEL: array[THtmlTableStyleLabel] of string[7] = (
+    'danger', 'success', 'danger', 'success', 'primary');
+begin
+  WR.AddShort('<span class="label label-');
+  WR.AddShort(SETLABEL[kind]);
+  WR.Add('"', '>');
+  WR.AddHtmlEscapeString(text);
+  WR.AddShort('</span>');
+end;
+
+class procedure TExpressionHtmlTableStyleBootstrap.StartTable(WR: TTextWriter);
+begin
+  WR.AddShort('<table class="table table-striped table-bordered">');
+end;
+
+
+
 { TMvcViewsMustache }
 
 function MethodHasView(const aMethod: TInterfaceMethod): boolean;
 begin
-  // any method returning a TMvcAction do not have any associated view
+  // any method returning a TMvcAction does not have an associated view
   result := (aMethod.ArgsResultIndex < 0) or
-    (aMethod.Args[aMethod.ArgsResultIndex].ValueType <> imvRecord) or
     (aMethod.Args[aMethod.ArgsResultIndex].ArgRtti.Info <> TypeInfo(TMvcAction));
 end;
 
@@ -935,228 +1185,6 @@ begin
   fViewPartials.Free;
 end;
 
-type
-  THtmlTableStyleLabel = (
-    labelFalse, labelTrue, labelOff, labelOn, labelValue);
-
-  TExpressionHtmlTableStyle = class
-  public
-    class procedure StartTable(WR: TTextWriter); virtual;
-    class procedure BeforeFieldName(WR: TTextWriter); virtual;
-    class procedure BeforeValue(WR: TTextWriter); virtual;
-    class procedure AddLabel(WR: TTextWriter; const text: string;
-      kind: THtmlTableStyleLabel); virtual;
-    class procedure AfterValue(WR: TTextWriter); virtual;
-    class procedure EndTable(WR: TTextWriter); virtual;
-  end;
-
-  TExpressionHtmlTableStyleBootstrap = class(TExpressionHtmlTableStyle)
-  public
-    class procedure StartTable(WR: TTextWriter); override;
-    class procedure AddLabel(WR: TTextWriter; const text: string;
-      kind: THtmlTableStyleLabel); override;
-  end;
-
-  TExpressionHtmlTableStyleClass = class of TExpressionHtmlTableStyle;
-
-  TExpressionHelperForTable = class
-  public
-    Rest: TRest;
-    Table: TOrmClass;
-    TableProps: TOrmProperties;
-    HtmlTableStyle: TExpressionHtmlTableStyleClass;
-    constructor Create(aRest: TRest; aTable: TOrmClass;
-      var aHelpers: TSynMustacheHelpers);
-    procedure ExpressionGet(const Value: variant; out result: variant);
-    procedure ExpressionHtmlTable(const Value: variant; out result: variant);
-  end;
-
-constructor TExpressionHelperForTable.Create(aRest: TRest; aTable: TOrmClass;
-  var aHelpers: TSynMustacheHelpers);
-var
-  HelperName: RawUtf8;
-begin
-  aRest.PrivateGarbageCollector.Add(self);
-  Rest := aRest;
-  HelperName := RawUtf8(aTable.ClassName);
-  Table := aTable;
-  TableProps := aTable.OrmProps;
-  TSynMustache.HelperAdd(aHelpers, HelperName, ExpressionGet);
-  HtmlTableStyle := TExpressionHtmlTableStyleBootstrap;
-  TSynMustache.HelperAdd(aHelpers,
-    HelperName + '.HtmlTable', ExpressionHtmlTable);
-end;
-
-procedure TExpressionHelperForTable.ExpressionHtmlTable(const Value: variant;
-  out result: variant);
-var
-  Rec: PDocVariantData;
-  f, i, j: PtrInt;
-  int: integer;
-  Field: TOrmPropInfo;
-  timelog: TTimeLogBits;
-  caption: string;
-  sets: TStringList;
-  u: RawUtf8;
-  W: TTextWriter;
-  tmp: TTextWriterStackBuffer;
-const
-  ONOFF: array[boolean] of THtmlTableStyleLabel = (labelOff, labelOn);
-  ENUM: array[boolean, boolean] of THtmlTableStyleLabel = ((labelValue,
-    labelValue), (labelFalse, labelTrue));
-begin
-  Rec := _Safe(Value);
-  if Rec^.Kind = dvObject then
-  begin
-    W := TTextWriter.CreateOwnedStream(tmp);
-    try
-      HtmlTableStyle.StartTable(W);
-      for f := 0 to TableProps.Fields.Count - 1 do
-      begin
-        Field := TableProps.Fields.List[f];
-        i := Rec^.GetValueIndex(Field.Name);
-        if i < 0 then
-          continue;
-        if not (Field.OrmFieldType in
-            [oftAnsiText, oftUtf8Text, oftInteger, oftFloat, oftCurrency,
-             oftTimeLog, oftModTime, oftCreateTime, oftDateTime, oftDateTimeMS,
-             oftUnixTime, oftUnixMSTime, oftBoolean, oftEnumerate, oftSet]) then
-          // we support only most obvious types in 'case OrmFieldType of" below
-          continue;
-        HtmlTableStyle.BeforeFieldName(W);
-        GetCaptionFromPCharLen(TrimLeftLowerCase(Field.Name), caption);
-        W.AddHtmlEscapeString(caption);
-        HtmlTableStyle.BeforeValue(W);
-        VariantToUtf8(Rec^.Values[i], u);
-        case Field.OrmFieldType of
-          oftAnsiText, oftUtf8Text, oftInteger, oftFloat, oftCurrency:
-            W.AddHtmlEscape(pointer(u));
-          oftTimeLog, oftModTime, oftCreateTime:
-            if VariantToInt64(Rec^.Values[i], timelog.Value) then
-              W.AddHtmlEscapeString(timelog.i18nText);
-          oftDateTime, oftDateTimeMS:
-            begin
-              timelog.From(u);
-              W.AddHtmlEscapeString(timelog.i18nText);
-            end;
-          oftUnixTime, oftUnixMSTime:
-            if VariantToInt64(Rec^.Values[i], timelog.Value) then
-            begin
-              if Field.OrmFieldType = oftUnixTime then
-                timelog.FromUnixTime(timelog.Value)
-              else
-                timelog.FromUnixMSTime(timelog.Value);
-              W.AddHtmlEscapeString(timelog.i18nText);
-            end;
-          oftBoolean, oftEnumerate:
-            if Field.InheritsFrom(TOrmPropInfoRttiEnum) then
-            begin
-              caption := TOrmPropInfoRttiEnum(Field).GetCaption(u, int);
-              HtmlTableStyle.AddLabel(W, caption,
-                ENUM[Field.OrmFieldType = oftBoolean, int <> 0]);
-            end;
-          oftSet:
-            if Field.InheritsFrom(TOrmPropInfoRttiSet) and
-               VariantToInteger(Rec^.Values[i], int) then
-            begin
-              sets := TStringList.Create;
-              try
-                TOrmPropInfoRttiSet(Field).SetEnumType^.AddCaptionStrings(sets);
-                for j := 0 to sets.Count - 1 do
-                begin
-                  HtmlTableStyle.AddLabel(W, sets[j], ONOFF[GetBit(int, j)]);
-                  W.AddShort('<br/>');
-                end;
-              finally
-                sets.Free;
-              end;
-            end;
-        end;
-        HtmlTableStyle.AfterValue(W);
-      end;
-      HtmlTableStyle.EndTable(W);
-      RawUtf8ToVariant(W.Text, result);
-    finally
-      W.Free;
-    end;
-  end
-  else
-    // not an object -> return input value as is
-    result := Value;
-end;
-
-procedure TExpressionHelperForTable.ExpressionGet(const Value: variant;
-  out result: variant);
-var
-  Rec: TOrm;
-  ID: integer;
-begin
-  SetVariantNull(result);
-  if not VariantToInteger(Value, ID) then
-    exit;
-  Rec := Table.Create;
-  try
-    if Rest.ORM.Retrieve(ID, Rec) then
-      result := Rec.GetSimpleFieldsAsDocVariant(true);
-  finally
-    Rec.Free;
-  end;
-end;
-
-class procedure TExpressionHtmlTableStyle.AddLabel(WR: TTextWriter;
-  const text: string; kind: THtmlTableStyleLabel);
-const
-  SETLABEL: array[THtmlTableStyleLabel] of string[3] = (
-    '', '', '- ', '+ ', '');
-begin
-  WR.AddShort(SETLABEL[kind]);
-  WR.AddHtmlEscapeString(text);
-  WR.AddShort('&nbsp;');
-end;
-
-class procedure TExpressionHtmlTableStyle.AfterValue(WR: TTextWriter);
-begin
-  WR.AddShort('</td></tr>');
-end;
-
-class procedure TExpressionHtmlTableStyle.BeforeFieldName(WR: TTextWriter);
-begin
-  WR.AddShort('<tr><td>');
-end;
-
-class procedure TExpressionHtmlTableStyle.BeforeValue(WR: TTextWriter);
-begin
-  WR.AddShort('</td><td>');
-end;
-
-class procedure TExpressionHtmlTableStyle.EndTable(WR: TTextWriter);
-begin
-  WR.AddShort('</table>');
-end;
-
-class procedure TExpressionHtmlTableStyle.StartTable(WR: TTextWriter);
-begin
-  WR.AddShort('<table>');
-end;
-
-class procedure TExpressionHtmlTableStyleBootstrap.AddLabel(WR: TTextWriter;
-  const text: string; kind: THtmlTableStyleLabel);
-const
-  SETLABEL: array[THtmlTableStyleLabel] of string[7] = (
-    'danger', 'success', 'danger', 'success', 'primary');
-begin
-  WR.AddShort('<span class="label label-');
-  WR.AddShort(SETLABEL[kind]);
-  WR.Add('"', '>');
-  WR.AddHtmlEscapeString(text);
-  WR.AddShort('</span>');
-end;
-
-class procedure TExpressionHtmlTableStyleBootstrap.StartTable(WR: TTextWriter);
-begin
-  WR.AddShort('<table class="table table-striped table-bordered">');
-end;
-
 function TMvcViewsMustache.RegisterExpressionHelpers(
   const aNames: array of RawUtf8;
   const aEvents: array of TSynMustacheHelperEvent): TMvcViewsMustache;
@@ -1167,7 +1195,8 @@ begin
 end;
 
 function TMvcViewsMustache.RegisterExpressionHelpersForTables(
-  aRest: TRest; const aTables: array of TOrmClass): TMvcViewsMustache;
+  aRest: TRest; const aTables: array of TOrmClass;
+  aHtmlTableStyle: TExpressionHtmlTableStyleClass): TMvcViewsMustache;
 var
   t: PtrInt;
 begin
@@ -1175,12 +1204,13 @@ begin
      (aRest <> nil) then
     for t := 0 to high(aTables) do
       if aRest.Model.GetTableIndex(aTables[t]) >= 0 then
-        TExpressionHelperForTable.Create(aRest, aTables[t], fViewHelpers);
+        TExpressionHelperForTable.Create(
+          aRest, aTables[t], fViewHelpers, aHtmlTableStyle);
   result := self;
 end;
 
-function TMvcViewsMustache.RegisterExpressionHelpersForTables(
-  aRest: TRest): TMvcViewsMustache;
+function TMvcViewsMustache.RegisterExpressionHelpersForTables(aRest: TRest;
+  aHtmlTableStyle: TExpressionHtmlTableStyleClass): TMvcViewsMustache;
 var
   t: PtrInt;
 begin
@@ -1188,14 +1218,14 @@ begin
      (aRest <> nil) then
     for t := 0 to aRest.Model.TablesMax do
       TExpressionHelperForTable.Create(
-        aRest, aRest.Model.Tables[t], fViewHelpers);
+        aRest, aRest.Model.Tables[t], fViewHelpers, aHtmlTableStyle);
   result := self;
 end;
 
 function TMvcViewsMustache.RegisterExpressionHelpersForCrypto: TMvcViewsMustache;
 begin
-  result := RegisterExpressionHelpers(['md5', 'sha1', 'sha256'],
-                                      [md5, sha1, sha256]);
+  result := RegisterExpressionHelpers(['md5', 'sha1', 'sha256', 'sha512'],
+                                      [md5, sha1, sha256, sha512]);
 end;
 
 class procedure TMvcViewsMustache.md5(const Value: variant;
@@ -1214,6 +1244,12 @@ class procedure TMvcViewsMustache.sha256(const Value: variant;
   out result: variant);
 begin
   RawUtf8ToVariant(mormot.core.crypto.Sha256(ToUtf8(Value)), result);
+end;
+
+class procedure TMvcViewsMustache.sha512(const Value: variant;
+  out result: variant);
+begin
+  RawUtf8ToVariant(mormot.core.crypto.Sha512(ToUtf8(Value)), result);
 end;
 
 function TMvcViewsMustache.GetRenderer(methodIndex: integer;
@@ -1385,7 +1421,7 @@ begin
   fContext.Secret.Init(@rnd, sizeof(rnd));
 end;
 
-procedure XorMemoryCTR(data: PCardinal; key256bytes: PCardinalArray;
+procedure XorMemoryCtr(data: PCardinal; key256bytes: PCardinalArray;
   size: PtrUInt; ctr: cardinal);
 begin
   while size >= sizeof(cardinal) do
@@ -1407,7 +1443,7 @@ end;
 
 procedure TMvcSessionWithCookies.Crypt(P: PAnsiChar; bytes: integer);
 begin
-  XorMemoryCTR(@P[4], @fContext.Crypt, bytes - 4,
+  XorMemoryCtr(@P[4], @fContext.Crypt, bytes - 4,
     {ctr=}xxHash32(fContext.CryptNonce, P, 4));
 end;
 
@@ -1495,7 +1531,7 @@ var
 begin
   result := InterlockedIncrement(fContext.SessionSequence);
   if result = MaxInt - 1024 then
-    // thread-safe overflow rounding
+    // thread-safe overflow rounding (disconnecting previous sessions)
     fContext.SessionSequence := 0;
   if (PRecordData <> nil) and
      (PRecordTypeInfo <> nil) then
@@ -2223,7 +2259,7 @@ begin
   if fFactoryErrorIndex < 0 then
     raise EMvcException.CreateUtf8(
       '% does not implement the IMvcApplication.Error() method',
-      [aInterface.Name]);
+      [aInterface.RawName]);
   entry := GetInterfaceEntry(fFactory.InterfaceIID);
   if entry = nil then
     raise EMvcException.CreateUtf8(
@@ -2240,6 +2276,7 @@ begin
         else
           // maps TMvcAction in TMvcApplication.RunOnRestServer
           ArgsResultIsServiceCustomAnswer := true;
+  FlushAnyCache;
 end;
 
 destructor TMvcApplication.Destroy;

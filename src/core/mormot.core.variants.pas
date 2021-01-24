@@ -1945,6 +1945,8 @@ type
     procedure Clear;
     /// save the stored values as UTF-8 encoded JSON Object
     function ToJson(HumanReadable: boolean = false): RawUtf8;
+    /// low-level access to the associated thread-safe mutex
+    function Lock: TAutoLocker;
     /// the document fields would be safely accessed via this property
     // - this is the main entry point of this storage
     // - will raise an EDocVariant exception if Name does not exist at reading
@@ -2018,6 +2020,8 @@ type
     /// save the stored value as UTF-8 encoded JSON Object
     // - implemented as just a wrapper around VariantSaveJson()
     function ToJson(HumanReadable: boolean = false): RawUtf8;
+    /// low-level access to the associated thread-safe mutex
+    function Lock: TAutoLocker;
     /// the document fields would be safely accessed via this property
     // - will raise an EDocVariant exception if Name does not exist
     // - result variant is returned as a copy, not as varByRef, since a copy
@@ -6429,6 +6433,11 @@ begin
     JsonBufferReformat(pointer(tmp), result)
   else
     result := tmp;
+end;
+
+function TLockedDocVariant.Lock: TAutoLocker;
+begin
+  result := fLock;
 end;
 
 

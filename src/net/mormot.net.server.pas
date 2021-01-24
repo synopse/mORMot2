@@ -2879,8 +2879,8 @@ begin
             end;
             if Assigned(OnBeforeBody) then
             begin
-              err := OnBeforeBody(ctxt.URL, ctxt.Method, ctxt.InHeaders,
-                ctxt.InContentType, remoteip, incontlen, ctxt.fUseSSL);
+              err := OnBeforeBody(ctxt.fURL, ctxt.fMethod, ctxt.fInHeaders,
+                ctxt.fInContentType, remoteip, incontlen, ctxt.fUseSSL);
               if err <> HTTP_SUCCESS then
               begin
                 SendError(err, 'Rejected');

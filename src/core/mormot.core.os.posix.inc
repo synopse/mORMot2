@@ -126,7 +126,6 @@ begin
     if Loaded then
       exit;
     Loaded := true;
-    exit;
     if LibName <> '' then
     begin
       icu := dlopen(pointer(LibName), RTLD_LAZY);
@@ -351,6 +350,7 @@ var
 begin
   if icu.IsAvailable then
   begin
+    // call the accurate ICU library
     err := 0;
     result := icu.u_strToUpper(W, WLen, W, WLen, nil, err);
   end
@@ -370,6 +370,7 @@ var
 begin
   if icu.IsAvailable then
   begin
+    // call the accurate ICU library
     err := 0;
     result := icu.u_strToLower(W, WLen, W, WLen, nil, err);
   end
