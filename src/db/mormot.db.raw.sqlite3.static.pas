@@ -780,7 +780,7 @@ begin
   iv.c2 := page * 2246822519;
   iv.c3 := page * 3266489917;
   if not ForceSQLite3LegacyAES then
-    aes^.encrypt(iv.b); // avoid potential brute force attack
+    aes^.Encrypt(iv.b); // avoid potential brute force attack
   len := len shr AesBlockShift;
   if page = 1 then
     // ensure header bytes 16..23 are stored unencrypted

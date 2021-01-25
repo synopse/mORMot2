@@ -340,7 +340,7 @@ var
   i, i1, i2: integer;
   Res: Int64;
   id: TID;
-  password, s: RawUtf8;
+  password, s, s2: RawUtf8;
   R: TSqlRequest;
 begin
   check(JsonGetID('{"id":123}', id) and
@@ -406,7 +406,10 @@ begin
   begin
     s := FormatUtf8('SELECT SoundEx("%");', [SoundexValues[i1]]);
     Demo.Execute(s, Res);
-    CheckUtf8(Res = SoundExUtf8(pointer(SoundexValues[i1])), s);
+    CheckEqual(Res, SoundExUtf8(pointer(SoundexValues[i1])), s);
+    s := FormatUtf8('SELECT UnicodeUpper("%");', [SoundexValues[i1]]);
+    Demo.Execute(s, s2);
+    CheckEqual(s2, UpperCaseReference(SoundexValues[i1]), s);
   end;
   for i1 := 0 to high(SoundexValues) do
   begin

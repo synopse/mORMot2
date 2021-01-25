@@ -4192,11 +4192,19 @@ procedure TTestCoreBase._UTF8;
     i: PtrInt;
     up, lo, up2: array[0..10] of AnsiChar;
   begin
+    CheckEqual('A', UpperCaseReference('a'));
+    CheckEqual('ABC', UpperCaseReference('aBc'));
+    CheckEqual('ABCDEF', UpperCaseReference('aBcdEf'));
+    CheckEqual('ABCDEFGH', UpperCaseReference('aBcdEfgh'));
     for i := 0 to 11 do
     begin
       lo[WideCharToUtf8(@lo, _CASEFOLDINGTESTS[i * 2])] := #0;
       up[WideCharToUtf8(@up, _CASEFOLDINGTESTS[i * 2 + 1])] := #0;
+      PInt64(@up2)^ := 0;
       Utf8UpperReference(@lo, @up2);
+      Check(StrComp(@up, @up2) = 0, 'CaseFolding');
+      PInt64(@up2)^ := 0;
+      Utf8UpperReference(@lo, @up2, StrLen(@lo));
       Check(StrComp(@up, @up2) = 0, 'CaseFolding');
       CheckEqual(Utf8ICompReference(@lo, @up), 0, 'CaseFoldingComp');
       CheckEqual(Utf8ILCompReference(@lo, @up, StrLen(@lo), StrLen(@up)), 0,
@@ -4523,7 +4531,11 @@ begin
       CheckEqual(UpperCaseReference(LowerCaseUnicode(U)), UpperCaseReference(U), 'UCR')
     else
     {$endif MSWINDOWS}
-      CheckEqual(Up, UpperCaseReference(U), 'UpperCaseReference');
+    begin
+      U2 := UpperCaseReference(U);
+      CheckEqual(length(Up), length(U2));
+      CheckEqual(Up, U2, 'UpperCaseReference');
+    end;
     CheckEqual(kr32(0, pointer(U), length(U)), kr32reference(pointer(U), length(U)), 'kr32');
     U2 := U + #10;
     check(PosChar(pointer(U2), #0) = nil);
