@@ -932,14 +932,14 @@ type
     procedure SetVariant(Instance: TObject; const Source: Variant); virtual;
     /// compare the content of the property of two objects
     // - not all kind of properties are handled: only main types (like GetHash)
-    // - if CaseInsensitive is TRUE, will apply NormToUpper[] 8 bits uppercase,
+    // - if CaseInsensitive is TRUE, will apply NormToUpper[] 8-bit uppercase,
     // handling RawUtf8 properties just like the SYSTEMNOCASE collation
     // - this method should match the case-sensitivity of GetHash()
     // - this default implementation will call GetValueVar() for slow comparison
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; virtual;
     /// retrieve an unsigned 32-bit hash of the corresponding property
     // - not all kind of properties are handled: only main types
-    // - if CaseInsensitive is TRUE, will apply NormToUpper[] 8 bits uppercase,
+    // - if CaseInsensitive is TRUE, will apply NormToUpper[] 8-bit uppercase,
     // handling RawUtf8 properties just like the SYSTEMNOCASE collation
     // - note that this method can return a hash value of 0
     // - this method should match the case-sensitivity of CompareValue()
@@ -14567,9 +14567,9 @@ var
   // - some functions do not match exactly the TUtf8Compare signature, so will
   // be set in the initialization section of this unit
   OrmFieldTypeComp: array[TOrmFieldType] of TUtf8Compare  =
-   (nil,                  // unknown
+   (nil,                 // unknown
     nil,                 // AnsiText = AnsiIComp (in initialization below)
-    Utf8IComp,           // Utf8Text, 8 bits case insensitive compared
+    Utf8IComp,           // Utf8Text, 8-bit case insensitive compared
     Utf8CompareUInt32,   // Enumerate
     Utf8CompareUInt32,   // Set
     Utf8CompareInt64,    // integer

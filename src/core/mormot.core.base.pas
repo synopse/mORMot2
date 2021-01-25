@@ -1280,7 +1280,7 @@ procedure QuickSortInteger(ID,CoValues: PIntegerArray; L, R: PtrInt); overload;
 /// sort an integer array, low values first
 procedure QuickSortInteger(var ID: TIntegerDynArray); overload;
 
-/// sort a 16 bit unsigned integer array, low values first
+/// sort a 16-bit unsigned integer array, low values first
 procedure QuickSortWord(ID: PWordArray; L, R: PtrInt);
 
 /// sort a 64-bit signed integer array, low values first
@@ -1333,7 +1333,7 @@ function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): Ptr
 function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// fast O(log(n)) binary search of a 16 bit unsigned integer value in a sorted array
+/// fast O(log(n)) binary search of a 16-bit unsigned integer value in a sorted array
 function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
 
 /// fast O(log(n)) binary search of a 64-bit signed integer value in a sorted array
@@ -8238,7 +8238,7 @@ begin
       if PC^ = #0 then
         break
       else if PC^ <= #127 then
-        // 7 bits chars are always OK, whatever codepage/charset is used
+        // 7-bit chars are always OK, whatever codepage/charset is used
         inc(PC)
       else
         exit;
@@ -8282,7 +8282,7 @@ begin
         break
       else if ord(PW^) <= 127 then
         inc(PW)
-      else // 7 bits chars are always OK, whatever codepage/charset is used
+      else // 7-bit chars are always OK, whatever codepage/charset is used
         exit;
   result := true;
 end;

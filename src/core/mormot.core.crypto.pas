@@ -6187,7 +6187,7 @@ begin
   // append bit '1' after Buffer
   Data.Buffer[Data.Index] := $80;
   FillcharFast(Data.Buffer[Data.Index + 1], 63 - Data.Index, 0);
-  // compress if more than 448 bits (no space for 64 bit length storage)
+  // compress if more than 448-bit (no space for 64 bit length storage)
   if Data.Index >= 56 then
   begin
     RawSha256Compress(Data.Hash, @Data.Buffer);
@@ -6878,7 +6878,7 @@ begin
   // update state with final bits
   if ll < 9 then
   begin
-    // 0..8 bits, one call to update
+    // 0..8-bit, one call to update
     lw := lw shl (8 - ll);
     AbsorbFinal(@lw, ll);
     // squeeze the digits from the sponge
@@ -6886,7 +6886,7 @@ begin
   end
   else
   begin
-    // more than 8 bits, first a regular update with low byte
+    // more than 8-bit, first a regular update with low byte
     AbsorbFinal(@lw, 8);
     // finally update remaining last bits
     dec(ll, 8);
@@ -8317,7 +8317,7 @@ begin
   // 1. append bit '1' after Buffer
   Data.Buffer[Data.Index] := $80;
   FillcharFast(Data.Buffer[Data.Index + 1], 63 - Data.Index, 0);
-  // 2. Compress if more than 448 bits, (no room for 64 bit length
+  // 2. Compress if more than 448-bit, (no room for 64 bit length
   if Data.Index >= 56 then
   begin
     sha1Compress(Data.Hash, @Data.Buffer);

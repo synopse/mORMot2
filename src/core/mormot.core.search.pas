@@ -351,7 +351,7 @@ function SoundExUtf8(U: PUtf8Char; next: PPUtf8Char = nil;
 
 const
   /// number of bits to use for each interresting soundex char
-  // - default is to use 8 bits, i.e. 4 soundex chars, which is the
+  // - default is to use 8-bit, i.e. 4 soundex chars, which is the
   // standard approach
   // - for a more detailled soundex, use 4 bits resolution, which will
   // compute up to 7 soundex chars in a cardinal (that's our choice)
@@ -2916,7 +2916,7 @@ begin
   old := 0;
   if Values <> nil then
     repeat
-      v := NormToUpperByte[ord(p^)]; // also handle 8 bit WinAnsi (1252 accents)
+      v := NormToUpperByte[ord(p^)]; // also handle 8-bit WinAnsi (1252 accents)
       if not (tcWord in TEXT_BYTES[v]) then
         break;
       inc(p);
@@ -2931,7 +2931,7 @@ begin
       result := result shl SOUNDEX_BITS;
       inc(result, v);
       inc(n);
-      if n = ((32 - 8) div SOUNDEX_BITS) then // first char use up to 8 bits
+      if n = ((32 - 8) div SOUNDEX_BITS) then // first char use up to 8-bit
         break; // result up to a cardinal size
     until false;
 end;
@@ -2946,7 +2946,7 @@ err:result := 0;
     exit;
   end;
   repeat
-    result := NormToUpperByte[ord(p^)]; // also handle 8 bit WinAnsi (CP 1252)
+    result := NormToUpperByte[ord(p^)]; // also handle 8-bit WinAnsi (CP 1252)
     if result = 0 then
       goto err; // end of input text, without a word
     inc(p);
@@ -2976,7 +2976,7 @@ begin
       result := result shl SOUNDEX_BITS;
       inc(result, v);
       inc(n);
-      if n = ((32 - 8) div SOUNDEX_BITS) then // first char use up to 8 bits
+      if n = ((32 - 8) div SOUNDEX_BITS) then // first char use up to 8-bit
         break; // result up to a cardinal size
     until false;
 end;

@@ -295,7 +295,7 @@ type
     // with the internal TDataSet, to avoid any character data loss:
     // the access to the property will be slower, but you won't have any
     // potential data loss
-    // - if the text value contains only ASCII 7 bit characters, it won't be
+    // - if the text value contains only ASCII 7-bit characters, it won't be
     // converted to WideString (since it is not necessary)
     // - starting with Delphi 2009, the TEXT content will be processed as an
     // UnicodeString, so this property is not necessary for most cases,

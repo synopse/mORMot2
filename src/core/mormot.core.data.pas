@@ -1883,7 +1883,7 @@ type
     // - if no THasher function is supplied, it will use the one supplied in
     // DefaultHasher global variable, set to crc32c() by default - using
     // SSE4.2 instruction if available
-    // - if CaseInsensitive is set to TRUE, it will ignore difference in 7 bit
+    // - if CaseInsensitive is set to TRUE, it will ignore difference in 7-bit
     // alphabetic characters (e.g. compare 'a' and 'A' as equal)
     procedure Init(aTypeInfo: PRttiInfo; var aValue; aHashItem: TDynArrayHashOne = nil;
       aCompare: TDynArraySortCompare = nil; aHasher: THasher = nil;

@@ -5838,7 +5838,7 @@ begin
         end;
     else
       begin
-        // first handle trailing 7 bit ASCII chars, by quad
+        // first handle trailing 7-bit ASCII chars, by quad
         B := pointer(P);
         if Len >= 4 then
           repeat

@@ -1349,7 +1349,7 @@ function UrlDecodeDouble(U: PUtf8Char; const Upper: RawUtf8;
 function UrlDecodeNeedParameters(U, CsvNames: PUtf8Char): boolean;
 
 /// decode the next Name=Value&.... pair from input URI
-// - Name is returned directly (should be plain ASCII 7 bit text)
+// - Name is returned directly (should be plain ASCII 7-bit text)
 // - Value is returned after URI decoding (from %.. patterns)
 // - if a pair is decoded, return a PUtf8Char pointer to the next pair in
 // the input buffer, or points to #0 if all content has been processed
