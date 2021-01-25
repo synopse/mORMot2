@@ -21,8 +21,6 @@ interface
 
 {$I ..\mormot.defines.inc}
 
-{.$define ASMORIG}
-
 uses
   sysutils,
   classes,
@@ -6417,11 +6415,11 @@ load_regs:
    str   r1, [v2,#TCallMethodArgs.res64.Hi]
 {$ifdef HAS_FPREG}
    ldr   r2, [v2,#TCallMethodArgs.resKind]
-   cmp   r2, smvDouble
+   cmp   r2, imvDouble
    beq   float_result
-   cmp   r2, smvDateTime
+   cmp   r2, imvDateTime
    beq   float_result
-   cmp   r2, smvCurrency
+   cmp   r2, imvCurrency
    bne   asmcall_end
    // store double result in res64
 float_result:
@@ -6501,11 +6499,11 @@ load_regs:
    // store normal result
    str  x0, [x19, #TCallMethodArgs.res64]
    ldr  x15, [x19, #TCallMethodArgs.resKind]
-   cmp  x15, smvDouble
+   cmp  x15, imvDouble
    b.eq float_result
-   cmp  x15, smvDateTime
+   cmp  x15, imvDateTime
    b.eq float_result
-   cmp  x15, smvCurrency
+   cmp  x15, imvCurrency
    b.ne asmcall_end
    // store double result in res64
 float_result:
@@ -6584,11 +6582,11 @@ asm
         // retrieve result
         mov     [r12].TCallMethodArgs.res64, rax
         mov     cl, [r12].TCallMethodArgs.resKind
-        cmp     cl, smvDouble
+        cmp     cl, imvDouble
         je      @d
-        cmp     cl, smvDateTime
+        cmp     cl, imvDateTime
         je      @d
-        cmp     cl, smvCurrency
+        cmp     cl, imvCurrency
         jne     @e
 @d:     movlpd  qword ptr[r12].TCallMethodArgs.res64, xmm0
         // movlpd to ignore upper 64-bit of 128-bit xmm0 reg
@@ -6631,11 +6629,11 @@ asm
         call    [esi].TCallMethodArgs.method
         // retrieve result
         mov     cl, [esi].TCallMethodArgs.resKind
-        cmp     cl, smvDouble
+        cmp     cl, imvDouble
         je      @d
-        cmp     cl, smvDateTime
+        cmp     cl, imvDateTime
         je      @d
-        cmp     cl, smvCurrency
+        cmp     cl, imvCurrency
         jne     @i
         fistp   qword [esi].TCallMethodArgs.res64
         jmp     @e
