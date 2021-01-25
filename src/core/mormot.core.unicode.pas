@@ -1394,7 +1394,17 @@ function AnsiIComp(Str1, Str2: pointer): PtrInt;
 // - some codepoints enhance in length, so D^ should be at least twice than S^
 // - any invalid input is replaced by UNICODE_REPLACEMENT_CHARACTER=$fffd
 // - won't use temporary UTF-16 decoding, and optimized for plain ASCII content
-function Utf8UpperReference(S, D: PUtf8Char): PUtf8Char;
+function Utf8UpperReference(S, D: PUtf8Char): PUtf8Char; overload;
+
+/// UpperCase conversion of a UTF-8 buffer using our Unicode 10.0 tables
+// - won't call the Operating System, so is consistent on all platforms,
+// whereas UpperCaseUnicode() may vary depending on each library implementation
+// - some codepoints enhance in length, so D^ should be at least twice than S^
+// - any invalid input is replaced by UNICODE_REPLACEMENT_CHARACTER=$fffd
+// - won't use temporary UTF-16 decoding, and optimized for plain ASCII content
+// - knowing the Source length, this function will handle any ASCII 7-bit input
+// by quad, for efficiency
+function Utf8UpperReference(S, D: PUtf8Char; SLen: PtrUInt): PUtf8Char; overload;
 
 /// UpperCase conversion of a UTF-8 string using our Unicode 10.0 tables
 // - won't call the Operating System, so is consistent on all platforms,
@@ -1944,7 +1954,7 @@ begin
   begd := dest;
   endSource := source + sourceBytes;
   endSourceBy4 := endSource - 4;
-  if (PtrUInt(source) and 3 = 0) and
+  if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(source) and 3 = 0) and{$endif}
      (source <= endSourceBy4) then
     repeat // handle 7 bit ASCII chars, by quad (Sha optimization)
 By4:  c := PCardinal(source)^;
@@ -1964,7 +1974,7 @@ By1:  c := byte(source^);
       begin
         PWord(dest)^ := c; // much faster than dest^ := WideChar(c) for FPC
         inc(dest);
-        if (PtrUInt(source) and 3 = 0) and
+        if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(source) and 3 = 0) and{$endif}
            (source <= endSourceBy4) then
           goto By4;
         if source < endSource then
@@ -1994,7 +2004,7 @@ By1:  c := byte(source^);
       begin
         PWord(dest)^ := c;
         inc(dest);
-        if (PtrUInt(source) and 3 = 0) and
+        if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(source) and 3 = 0) and{$endif}
            (source <= endSourceBy4) then
           goto By4;
         if source < endSource then
@@ -2006,7 +2016,7 @@ By1:  c := byte(source^);
       PWordArray(dest)[0] := (c shr 10) or UTF16_HISURROGATE_MIN;
       PWordArray(dest)[1] := (c and $3FF) or UTF16_LOSURROGATE_MIN;
       inc(dest, 2);
-      if (PtrUInt(source) and 3 = 0) and
+      if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(source) and 3 = 0) and{$endif}
          (source <= endSourceBy4) then
         goto By4;
       if source >= endSource then
@@ -2812,7 +2822,7 @@ begin
     // handle 7 bit ASCII WideChars, by quads (Sha optimization)
     EndSource := Source + SourceChars;
     EndSourceBy4 := EndSource - 4;
-    if (PtrUInt(Source) and 3 = 0) and
+    if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
        (Source <= EndSourceBy4) then
       repeat
 By4:    c := PCardinal(Source)^;
@@ -2831,7 +2841,7 @@ By1:    c := byte(Source^);
         begin
           Dest^ := AnsiChar(c); // 0..127 don't need any translation
           Inc(Dest);
-          if (PtrUInt(Source) and 3 = 0) and
+          if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
              (Source <= EndSourceBy4) then
             goto By4;
           if Source < EndSource then
@@ -2849,7 +2859,7 @@ By1:    c := byte(Source^);
             Dest[1] := AnsiChar($80 or ((c shr 6) and $3F));
             Dest[2] := AnsiChar($80 or (c and $3F));
             Inc(Dest, 3);
-            if (PtrUInt(Source) and 3 = 0) and
+            if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
                (Source <= EndSourceBy4) then
               goto By4;
             if Source < EndSource then
@@ -2862,7 +2872,7 @@ By1:    c := byte(Source^);
             Dest[0] := AnsiChar($C0 or (c shr 6));
             Dest[1] := AnsiChar($80 or (c and $3F));
             Inc(Dest, 2);
-            if (PtrUInt(Source) and 3 = 0) and
+            if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
                (Source < EndSourceBy4) then
               goto By4;
             if Source < EndSource then
@@ -3154,7 +3164,7 @@ begin
   // first handle trailing 7 bit ASCII chars, by quad (Sha optimization)
   endSource := Source + SourceChars;
   endSourceBy4 := endSource - 4;
-  if (PtrUInt(Source) and 3 = 0) and
+  if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
      (Source <= endSourceBy4) then
     repeat
 By4:  c := PCardinal(Source)^;
@@ -3174,7 +3184,7 @@ By1:  c := byte(Source^);
       begin
         Dest^ := AnsiChar(c);
         inc(Dest);
-        if (PtrUInt(Source) and 3 = 0) and
+        if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
            (Source <= endSourceBy4) then
           goto By4;
         if Source < endSource then
@@ -3202,7 +3212,7 @@ By1:  c := byte(Source^);
         else
           Dest^ := AnsiChar(fWideToAnsi[c]);
         inc(Dest);
-        if (PtrUInt(Source) and 3 = 0) and
+        if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
            (Source <= endSourceBy4) then
           goto By4;
         if Source < endSource then
@@ -5473,7 +5483,7 @@ begin
     endSource := Source + SourceChars;
     endSourceBy4 := endSource - 4;
     up := @NormToUpper;
-    if (PtrUInt(Source) and 3 = 0) and
+    if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
        (Source <= endSourceBy4) then
       repeat
 By4:    c := PCardinal(Source)^;
@@ -5495,7 +5505,7 @@ By1:    c := byte(Source^);
         begin
           Dest^ := up[c];
 Set1:     inc(Dest);
-          if (PtrUInt(Source) and 3 = 0) and
+          if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
              (Source < endSourceBy4) then
             goto By4
           else if Source < endSource then
@@ -6111,18 +6121,107 @@ begin
   result := D;
 end;
 
+function Utf8UpperReference(S, D: PUtf8Char; SLen: PtrUInt): PUtf8Char;
+var
+  c: PtrUInt;
+  endS, endSBy4: PUtf8Char;
+  extra, i: PtrInt;
+  {$ifdef CPUX86NOTPIC}
+  tab: TUnicodeUpperTable absolute UU;
+  {$else}
+  tab: PUnicodeUpperTable;
+  {$endif CPUX86NOTPIC}
+label
+  by1, by4; // ugly but faster
+begin
+  if (S <> nil) and
+     (D <> nil) then
+  begin
+    {$ifndef CPUX86NOTPIC}
+    tab := @UU;
+    {$endif CPUX86NOTPIC}
+    // first handle trailing 7 bit ASCII chars, by quad
+    endS := S + SLen;
+    endSBy4 := endS - 4;
+    if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(S) and 3 = 0) and {$endif}
+       (S <= endSBy4) then
+      repeat
+by4:    c := PCardinal(S)^;
+        if c and $80808080 <> 0 then
+          goto by1; // break on first non ASCII quad
+        inc(S, 4);
+        i := ToByte(c);
+        inc(i, tab.Block[0, i]); // branchless a..z -> A..Z
+        D[0] := AnsiChar(i);
+        i := ToByte(c shr 8);
+        inc(i, tab.Block[0, i]);
+        D[1] := AnsiChar(i);
+        i := ToByte(c shr 16);
+        inc(i, tab.Block[0, i]);
+        D[2] := AnsiChar(i);
+        i := ToByte(c shr 24);
+        inc(i, tab.Block[0, i]);
+        D[3] := AnsiChar(i);
+        inc(D, 4);
+      until S > endSBy4;
+    // generic loop, handling one UCS4 CodePoint per iteration
+    if S < endS then
+      repeat
+by1:    c := byte(S^);
+        inc(S);
+        if c <= 127 then
+        begin
+          inc(c, tab.Block[0, c]); // branchless a..z -> A..Z
+          D^ := AnsiChar(c);
+          inc(D);
+          if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(S) and 3 = 0) and{$endif}
+             (S < endSBy4) then
+            goto By4
+          else if S < endS then
+            continue
+          else
+            break;
+        end
+        else
+        begin
+          extra := UTF8_TABLE.Bytes[c];
+          if (extra = 0) or
+             (S + extra > endS) then
+            break;
+          i := 0;
+          repeat
+            c := (c shl 6) + byte(S[i]);
+            inc(i)
+          until i = extra;
+          inc(S, extra);
+          with UTF8_TABLE.Extra[extra] do
+          begin
+            dec(c, offset);
+            if c < minimum then
+              break; // invalid input content
+          end;
+          if c <= UU_MAX then
+            c := tab.Ucs4Upper(c);
+          inc(D, Ucs4ToUtf8(c, D));
+          if S < endS then
+            continue
+          else
+            break;
+        end;
+      until false;
+    D^ := #0;
+  end;
+  result := D;
+end;
+
 function UpperCaseReference(const S: RawUtf8): RawUtf8;
 var
+  len: integer;
   tmp: TSynTempBuffer;
 begin
-  tmp.Len := length(S);
-  if IsAnsiCompatible(pointer(S), tmp.Len) then
-    UpperCaseCopy(S, result)
-  else
-  begin
-    tmp.Init(tmp.Len * 2); // some codepoints enhance in length
-    tmp.Done(Utf8UpperReference(pointer(S), tmp.buf), result);
-  end;
+  len := length(S);
+  tmp.Init(len * 2); // some codepoints enhance in length
+  tmp.Done(Utf8UpperReference(pointer(S), tmp.buf, len), result);
 end;
 
 function Utf8ICompReference(u1, u2: PUtf8Char): PtrInt;
