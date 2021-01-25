@@ -10171,7 +10171,8 @@ begin
   if (Value = nil) or (PInteger(Value)^ = NULL_LOW) then
     i := 0
   else
-    i := GetUtf8Char(Value);
+    // decode one UTF-16 or return UNICODE_REPLACEMENT_CHARACTER
+    i := GetUtf8WideChar(Value);
   fPropInfo.SetOrdProp(Instance, i);
 end;
 

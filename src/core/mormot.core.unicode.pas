@@ -68,8 +68,14 @@ const
   UTF16_LOSURROGATE_MIN = $dc00;
   UTF16_LOSURROGATE_MAX = $dfff;
 
+  /// replace any incoming character whose value is unrepresentable in Unicode
+  // - set e.g. by GetUtf8WideChar(), Utf8UpperReference() or
+  // RawUnicodeToUtf8() when ccfReplacementCharacterForUnmatchedSurrogate is set
+  // - encoded as $ef $bf $bd bytes in UTF-8
+  UNICODE_REPLACEMENT_CHARACTER = $fffd;
 
-/// internal function, used to retrieve a Ucs4 codepoint (>127) from UTF-8
+
+/// internal function, used to retrieve a UCS4 CodePoint (>127) from UTF-8
 // - not to be called directly, but from inlined higher-level functions
 // - here U^ shall be always >= #80
 // - typical use is as such:
@@ -79,12 +85,12 @@ const
 // !    ch := GetHighUtf8Ucs4(P);
 function GetHighUtf8Ucs4(var U: PUtf8Char): PtrUInt;
 
-/// get the WideChar stored in P^ (decode UTF-8 if necessary)
-// - any surrogate (Ucs4>$ffff) will be returned as '?'
-function GetUtf8Char(P: PUtf8Char): cardinal;
+/// decode UTF-16 WideChar from UTF-8 input buffer
+// - any surrogate (Ucs4>$ffff) is returned as UNICODE_REPLACEMENT_CHARACTER=$fffd
+function GetUtf8WideChar(P: PUtf8Char): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// get the Ucs4 char stored in P^ (decode UTF-8 if necessary)
+/// get the UCS4 CodePoint stored in P^ (decode UTF-8 if necessary)
 function NextUtf8Ucs4(var P: PUtf8Char): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -94,13 +100,13 @@ function NextUtf8Ucs4(var P: PUtf8Char): cardinal;
 function WideCharToUtf8(Dest: PUtf8Char; aWideChar: PtrUInt): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
- /// UTF-8 encode one UTF-16 encoded Ucs4 character into Dest
+ /// UTF-8 encode one UTF-16 encoded UCS4 CodePoint into Dest
 // - return the number of bytes written into Dest (i.e. from 1 up to 6)
 // - Source will contain the next UTF-16 character
 // - this method DOES handle UTF-16 surrogate pairs
 function Utf16CharToUtf8(Dest: PUtf8Char; var Source: PWord): integer;
 
-/// UTF-8 encode one Ucs4 character into Dest
+/// UTF-8 encode one UCS4 CodePoint into Dest
 // - return the number of bytes written into Dest (i.e. from 1 up to 6)
 // - this method DOES handle UTF-16 surrogate pairs
 function Ucs4ToUtf8(ucs4: cardinal; Dest: PUtf8Char): PtrInt;
@@ -126,8 +132,8 @@ function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
 // since Delphi 2009+
 // - append a trailing #0 to the ending PUtf8Char, unless ccfNoTrailingZero is set
 // - if ccfReplacementCharacterForUnmatchedSurrogate is set, this function will identify
-// unmatched surrogate pairs and replace them with EF BF BD / FFFD  Unicode
-// Replacement character - see https://en.wikipedia.org/wiki/Specials_(Unicode_block)
+// unmatched surrogate pairs and replace them with UNICODE_REPLACEMENT_CHARACTER -
+// see https://en.wikipedia.org/wiki/Specials_(Unicode_block)
 function RawUnicodeToUtf8(Dest: PUtf8Char; DestLen: PtrInt;
   Source: PWideChar; SourceLen: PtrInt; Flags: TCharConversionFlags): PtrInt; overload;
 
@@ -161,10 +167,11 @@ function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char;
   MaxDestChars, sourceBytes: PtrInt; NoTrailingZero: boolean = false): PtrInt; overload;
 
 /// direct conversion of a UTF-8 encoded buffer into a WinAnsi shortstring buffer
+// - non WinAnsi chars are replaced by '?' placeholders
 procedure Utf8ToShortString(var dest: shortstring; source: PUtf8Char);
 
 /// calculate the UTF-16 Unicode characters count, UTF-8 encoded in source^
-// - count may not match the Ucs4 glyphs number, in case of UTF-16 surrogates
+// - count may not match the UCS4 CodePoint, in case of UTF-16 surrogates
 // - faster than System.Utf8ToUnicode with dest=nil
 function Utf8ToUnicodeLength(source: PUtf8Char): PtrUInt;
 
@@ -192,7 +199,7 @@ function IsValidUtf8WithoutControlChars(const source: RawUtf8): boolean; overloa
 
 /// will truncate the supplied UTF-8 value if its length exceeds the specified
 // UTF-16 Unicode characters count
-// - count may not match the Ucs4 glyphs number, in case of UTF-16 surrogates
+// - count may not match the UCS4 CodePoint, in case of UTF-16 surrogates
 // - returns FALSE if text was not truncated, TRUE otherwise
 function Utf8TruncateToUnicodeLength(var text: RawUtf8; maxUtf16: integer): boolean;
 
@@ -219,7 +226,7 @@ function Utf8TruncatedLength(text: PAnsiChar;
   textlen, maxBytes: PtrUInt): PtrInt; overload;
 
 /// calculate the UTF-16 Unicode characters count of the UTF-8 encoded first line
-// - count may not match the Ucs4 glyphs number, in case of UTF-16 surrogates
+// - count may not match the UCS4 CodePoint, in case of UTF-16 surrogates
 // - end the parsing at first #13 or #10 character
 function Utf8FirstLineToUnicodeLength(source: PUtf8Char): PtrInt;
 
@@ -377,6 +384,7 @@ type
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars bytes
     // - no trailing #0 is appended to the buffer
+    // - non Ansi compatible characters are replaced as '?'
     function Utf8BufferToAnsi(Dest: PAnsiChar; Source: PUtf8Char;
       SourceChars: cardinal): PAnsiChar; override;
     /// conversion of a wide char into the corresponding Ansi character
@@ -1151,9 +1159,9 @@ function StrCompIL(P1, P2: pointer; L: PtrInt; Default: PtrInt = 0): PtrInt;
 function StrIComp(Str1, Str2: pointer): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// retrieve the next Ucs4 value stored in U, then update the U pointer
+/// retrieve the next UCS4 CodePoint stored in U, then update the U pointer
 // - this function will decode the UTF-8 content before using NormToUpper[]
-// - will return '?' if the Ucs4 value is higher than #255: so use this function
+// - will return '?' if the UCS4 CodePoint is higher than #255: so use this function
 // only if you need to deal with ASCII characters (e.g. it's used for Soundex
 // and for ContainsUTF8 function)
 function GetNextUtf8Upper(var U: PUtf8Char): PtrUInt;
@@ -1384,6 +1392,7 @@ function AnsiIComp(Str1, Str2: pointer): PtrInt;
 // - won't call the Operating System, so is consistent on all platforms,
 // whereas UpperCaseUnicode() may vary depending on each library implementation
 // - some codepoints enhance in length, so D^ should be at least twice than S^
+// - any invalid input is replaced by UNICODE_REPLACEMENT_CHARACTER=$fffd
 // - won't use temporary UTF-16 decoding, and optimized for plain ASCII content
 function Utf8UpperReference(S, D: PUtf8Char): PUtf8Char;
 
@@ -1453,7 +1462,7 @@ begin
   result := c;
 end;
 
-function GetUtf8Char(P: PUtf8Char): cardinal;
+function GetUtf8WideChar(P: PUtf8Char): cardinal;
 begin
   if P <> nil then
   begin
@@ -1462,7 +1471,8 @@ begin
     begin
       result := GetHighUtf8Ucs4(P);
       if result > $ffff then
-        result := ord('?'); // do not handle surrogates now
+        // surrogates can't be stored in a single UTF-16 WideChar
+        result := UNICODE_REPLACEMENT_CHARACTER;
     end;
   end
   else
@@ -1483,7 +1493,7 @@ begin
         inc(P, 2);
       end
       else
-        result := GetHighUtf8Ucs4(P); // handle even surrogates
+        result := GetHighUtf8Ucs4(P); // handle even UTF-16 surrogates
   end
   else
     result := 0;
@@ -1626,7 +1636,7 @@ begin
         inc(Dest, 2);
       until (Source > Tail) or
             (PtrInt(PtrUInt(Dest)) >= DestLen);
-    // generic loop, handling one Ucs4 char per iteration
+    // generic loop, handling one UCS4 CodePoint per iteration
     if (PtrInt(PtrUInt(Dest)) < DestLen) and
        (PtrInt(PtrUInt(Source)) < SourceLen) then
       repeat
@@ -1652,7 +1662,7 @@ begin
 unmatch:      if (PtrInt(PtrUInt(@Dest[3])) > DestLen) or
                  not (ccfReplacementCharacterForUnmatchedSurrogate in Flags) then
                 break;
-              PWord(Dest)^ := $BFEF; // store Unicode Replacement Char
+              PWord(Dest)^ := $BFEF; // UTF-8 UNICODE_REPLACEMENT_CHARACTER
               Dest[2] := AnsiChar($BD);
               inc(Dest, 3);
               if (PtrInt(PtrUInt(Dest)) < DestLen) and
@@ -4986,7 +4996,7 @@ begin
           else
           begin
             result := GetHighUtf8Ucs4(u1);
-            if result and $ffffff00 = 0 then
+            if result <= 255 then
               result := table[result]; // 8 bits to upper, 32-bit as is
           end;
           if c2 <= 127 then
@@ -5476,7 +5486,7 @@ By4:    c := PCardinal(Source)^;
         Dest[3] := up[ToByte(c shr 24)];
         inc(Dest, 4);
       until Source > endSourceBy4;
-    // generic loop, handling one Ucs4 char per iteration
+    // generic loop, handling one UCS4 CodePoint per iteration
     if Source < endSource then
       repeat
 By1:    c := byte(Source^);
@@ -6091,7 +6101,7 @@ begin
         c := GetHighUtf8Ucs4(S2); // handle even surrogates
         S := S2;
         if c = 0 then
-          c := ord('?'); // PlaceHolder for invalid UTF-8 input
+          c := UNICODE_REPLACEMENT_CHARACTER; // =$fffd for invalid input
       end;
       if c <= UU_MAX then
         c := tab.Ucs4Upper(c);
@@ -6239,9 +6249,9 @@ begin
             if c2 <= 127 then
             begin
               inc(c2, tab.Block[0, c2]);
-              dec(result, c2);
               dec(L2);
               inc(u2);
+              dec(result, c2);
               if result <> 0 then
                 // found unmatching char
                 exit

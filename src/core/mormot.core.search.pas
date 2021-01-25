@@ -1105,7 +1105,7 @@ type
       read fProps[9] write fProps[9];
     /// defines if lengths parameters expects UTF-8 or UTF-16 codepoints number
     // - with default FALSE, the length is calculated with UTF-16 Unicode
-    // codepoints - MaxLength may not match the Ucs4 glyphs number, in case of
+    // codepoints - MaxLength may not match the UCS4 CodePoint, in case of
     // UTF-16 surrogates
     // - you can set this property to TRUE so that the UTF-8 byte count would
     // be used for truncation againts the MaxLength parameter
@@ -1222,7 +1222,7 @@ type
       read fMaxLength write fMaxLength;
     /// defines if MaxLength is stored as UTF-8 or UTF-16 codepoints number
     // - with default FALSE, the length is calculated with UTF-16 Unicode
-    // codepoints - MaxLength may not match the Ucs4 glyphs number, in case of
+    // codepoints - MaxLength may not match the UCS4 CodePoint, in case of
     // UTF-16 surrogates
     // - you can set this property to TRUE so that the UTF-8 byte count would
     // be used for truncation againts the MaxLength parameter
