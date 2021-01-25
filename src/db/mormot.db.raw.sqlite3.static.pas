@@ -1142,11 +1142,11 @@ function sqlite3_trace_v2(DB: TSqlite3DB; Mask: integer; Callback: TSqlTraceCall
 
 const
   // error message if statically linked sqlite3.o(bj) does not match this
-  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}''{$else}'3.34.0'{$endif};
+  EXPECTED_SQLITE3_VERSION = '3.34.0';
 
   // where to download the latest available static binaries, including SQLite3
-  EXPECTED_STATIC_DOWNLOAD = 'https://github.com/synopse/mORMot2/releases/' +
-     'download/pre1/mormot2static.7z';
+  EXPECTED_STATIC_DOWNLOAD =
+    'https://github.com/synopse/mORMot2/releases/tag/sqlite.' + EXPECTED_SQLITE3_VERSION;
 
 constructor TSqlite3LibraryStatic.Create;
 var

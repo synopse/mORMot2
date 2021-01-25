@@ -5753,6 +5753,7 @@ type
     Block: array[0..37, 0..127] of integer;
     IndexHi: array[0..271] of byte;
     IndexLo: array[0..8, 0..31] of byte;
+    // branchless Unicode 10.0 uppercase folding using our internal tables
     function Ucs4Upper(c: PtrUInt): PtrInt;
       {$ifdef HASINLINE} inline;{$endif}
   end;
@@ -6043,9 +6044,18 @@ var
       12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12));
   );
 
+function TUnicodeUpperTable.Ucs4Upper(c: PtrUInt): PtrInt;
+var
+  i: PtrUInt;
+begin
+  i := c shr UU_BLOCK_HI;
+  result := PtrInt(c) + Block[IndexLo[
+    IndexHi[i shr UU_INDEX_HI], i and UU_INDEX_LO], c and UU_BLOCK_LO];
+end;
+
 function Utf8UpperReference(S, D: PUtf8Char): PUtf8Char;
 var
-  c, i: PtrUInt;
+  c: PtrUInt;
   S2: PUtf8Char;
   {$ifdef CPUX86NOTPIC}
   tab: TUnicodeUpperTable absolute UU;
@@ -6084,12 +6094,7 @@ begin
           c := ord('?'); // PlaceHolder for invalid UTF-8 input
       end;
       if c <= UU_MAX then
-      begin
-        // branchless Unicode 10.0 case folding
-        i := c shr UU_BLOCK_HI;
-        c := PtrUInt(PtrInt(c) + tab.Block[tab.IndexLo[
-          tab.IndexHi[i shr UU_INDEX_HI], i and UU_INDEX_LO], c and UU_BLOCK_LO]);
-      end;
+        c := tab.Ucs4Upper(c);
       inc(D, Ucs4ToUtf8(c, D));
     until false;
   D^ := #0;
@@ -6108,16 +6113,6 @@ begin
     tmp.Init(tmp.Len * 2); // some codepoints enhance in length
     tmp.Done(Utf8UpperReference(pointer(S), tmp.buf), result);
   end;
-end;
-
-// branchless Unicode 10.0 uppercase folding using our internal tables
-function TUnicodeUpperTable.Ucs4Upper(c: PtrUInt): PtrInt;
-var
-  i: PtrUInt;
-begin
-  i := c shr UU_BLOCK_HI;
-  result := PtrInt(c) + Block[IndexLo[
-    IndexHi[i shr UU_INDEX_HI], i and UU_INDEX_LO], c and UU_BLOCK_LO];
 end;
 
 function Utf8ICompReference(u1, u2: PUtf8Char): PtrInt;
