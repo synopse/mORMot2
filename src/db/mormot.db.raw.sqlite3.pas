@@ -90,7 +90,7 @@ type
 const
   {$ifdef MSWINDOWS}
   {$ifdef CPU64}
-  // see https://synopse.info/files/SQLite3-64.7z
+  // see https://synopse.info/files/SQLite3-64.7z or static/delphi folder
   SQLITE_LIBRARY_DEFAULT_NAME = 'sqlite3-64.dll';
   {$else}
   SQLITE_LIBRARY_DEFAULT_NAME = 'sqlite3.dll';
@@ -1108,7 +1108,7 @@ type
     close: function(DB: TSqlite3DB): integer; cdecl;
 
     /// Return the version of the SQLite database engine, in ascii format
-    // - currently returns '3.34.0', when used with our mormot.db.raw.sqlite3.static unit
+    // - currently returns '3.34.1', when used with our mormot.db.raw.sqlite3.static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
     libversion: function: PUtf8Char; cdecl;

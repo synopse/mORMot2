@@ -6,7 +6,7 @@ unit mormot.db.raw.sqlite3.static;
 {
   *****************************************************************************
 
-    Statically linked SQLite3 3.34.0 engine with optional AES encryption
+    Statically linked SQLite3 3.34.1 engine with optional AES encryption
     - TSqlite3LibraryStatic Implementation
     - Encryption-Related Functions
 
@@ -1142,7 +1142,8 @@ function sqlite3_trace_v2(DB: TSqlite3DB; Mask: integer; Callback: TSqlTraceCall
 
 const
   // error message if statically linked sqlite3.o(bj) does not match this
-  EXPECTED_SQLITE3_VERSION = '3.34.0';
+  // - Android version may be a little behind, so we are more releaxed here
+  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}'3.34'{$else}'3.34.1'{$endif};
 
   // where to download the latest available static binaries, including SQLite3
   EXPECTED_STATIC_DOWNLOAD =
@@ -1257,7 +1258,7 @@ begin
   sqlite3_initialize;
   inherited Create; // set fVersionNumber/fVersionText
   if (EXPECTED_SQLITE3_VERSION <> '') and
-     (fVersionText <> EXPECTED_SQLITE3_VERSION) then
+     not IdemPChar(pointer(fVersionText), EXPECTED_SQLITE3_VERSION) then
   begin
     FormatUtf8('Static SQLite3 library as included within % is outdated!' + CRLF +
       'Linked version is % whereas the current/expected is ' + EXPECTED_SQLITE3_VERSION +
