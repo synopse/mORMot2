@@ -245,7 +245,7 @@ type
     /// create a temporary UTF-16 string random content, using WinAnsi
     // (code page 1252) content
     class function RandomUnicode(CharCount: integer): SynUnicode;
-    /// create a temporary string random content, using ASCII 7 bit content
+    /// create a temporary string random content, using ASCII 7-bit content
     class function RandomAnsi7(CharCount: integer): RawByteString;
     /// create a temporary string random content, using A..Z,_,0..9 chars only
     class function RandomIdentifier(CharCount: integer): RawByteString;

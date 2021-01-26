@@ -788,7 +788,7 @@ type
 
 /// send an email using the SMTP protocol
 // - retry true on success
-// - the Subject is expected to be in plain 7 bit ASCII, so you could use
+// - the Subject is expected to be in plain 7-bit ASCII, so you could use
 // SendEmailSubject() to encode it as Unicode, if needed
 // - you can optionally set the encoding charset to be used for the Text body
 function SendEmail(const Server, From, CsvDest, Subject, Text: RawUtf8;
@@ -798,7 +798,7 @@ function SendEmail(const Server, From, CsvDest, Subject, Text: RawUtf8;
 
 /// send an email using the SMTP protocol
 // - retry true on success
-// - the Subject is expected to be in plain 7 bit ASCII, so you could use
+// - the Subject is expected to be in plain 7-bit ASCII, so you could use
 // SendEmailSubject() to encode it as Unicode, if needed
 // - you can optionally set the encoding charset to be used for the Text body
 function SendEmail(const Server: TSMTPConnection;
@@ -1490,7 +1490,7 @@ begin
     begin
       dwSize := dwSize shr 1;
       SetLength(result, dwSize);
-      for i := 0 to dwSize - 1 do // fast ANSI 7 bit conversion
+      for i := 0 to dwSize - 1 do // fast ANSI 7-bit conversion
         PByteArray(result)^[i] := PWordArray(tmp.buf)^[i];
     end;
     tmp.Done;

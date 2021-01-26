@@ -7,15 +7,6 @@ interface
 
 {$I ..\src\mormot.defines.inc}
 
-{$ifdef ISDELPHIXE}
-  // since Delphi XE, we have unit System.RegularExpressionsAPI available
-  {.$define TEST_REGEXP}
-  { TODO : refactor RegExp support to use regexp.c }
-{$else}
-  // define only if you have unit PCRE.pas installed (not set by default)
-  {.$define TEST_REGEXP}
-{$endif ISDELPHIXE}
-
 uses
   sysutils,
   contnrs,
@@ -111,10 +102,8 @@ type
     // arrays published properties handling
     // - test dynamic tables
     procedure _TRestClientDB;
-    {$ifdef TEST_REGEXP}
-    /// check the PCRE-based REGEX function
+    /// check SQlite3 internal regex.c function
     procedure RegexpFunction;
-    {$endif TEST_REGEXP}
     /// test Master/Slave replication using TRecordVersion field
     procedure _TRecordVersion;
   end;
@@ -351,7 +340,7 @@ var
   i, i1, i2: integer;
   Res: Int64;
   id: TID;
-  password, s: RawUtf8;
+  password, s, s2: RawUtf8;
   R: TSqlRequest;
 begin
   check(JsonGetID('{"id":123}', id) and
@@ -417,7 +406,10 @@ begin
   begin
     s := FormatUtf8('SELECT SoundEx("%");', [SoundexValues[i1]]);
     Demo.Execute(s, Res);
-    CheckUtf8(Res = SoundExUtf8(pointer(SoundexValues[i1])), s);
+    CheckEqual(Res, SoundExUtf8(pointer(SoundexValues[i1])), s);
+    s := FormatUtf8('SELECT UnicodeUpper("%");', [SoundexValues[i1]]);
+    Demo.Execute(s, s2);
+    CheckEqual(s2, UpperCaseReference(SoundexValues[i1]), s);
   end;
   for i1 := 0 to high(SoundexValues) do
   begin
@@ -565,7 +557,6 @@ begin
   CheckEqual(n, 0);
 end;
 
-{$ifdef TEST_REGEXP}
 procedure TTestSQLite3Engine.RegexpFunction;
 const
   EXPRESSIONS: array[0..2] of RawUtf8 = (
@@ -575,26 +566,25 @@ var
   Client: TRestClientDB;
   i, n: integer;
 begin
+  // validate compact https://www.sqlite.org/src/file?name=ext/misc/regexp.c
   Model := TOrmModel.Create([TOrmPeople]);
   Client := TRestClientDB.Create(Model, nil, 'test.db3', TRestServerDB, false, '');
   try
-    if CheckFailed(CreateRegExpFunction(Client.Server.DB.DB)) then
-      exit;
     for i := 0 to high(EXPRESSIONS) do
       with TOrmPeople.CreateAndFillPrepare(Client.Orm,
         'FirstName REGEXP ?', [EXPRESSIONS[i]]) do
       try
-        if not CheckFailed(fFill <> nil) then
+        if not CheckFailed(FillContext <> nil) then
         begin
-          check(fFill.Table.RowCount = 1001);
+          CheckEqual(FillContext.Table.RowCount, 1001);
           n := 0;
           while FillOne do
           begin
-            check(LastName = 'Morse');
+            CheckEqual(LastName, 'Morse');
             check(IdemPChar(pointer(FirstName), 'SAMUEL FINLEY '));
             inc(n);
           end;
-          check(n = 1001);
+          CheckEqual(n, 1001);
         end;
         Client.Server.DB.CacheFlush; // force compile '\bFinley\b' twice
       finally
@@ -605,7 +595,6 @@ begin
     Model.Free;
   end;
 end;
-{$endif TEST_REGEXP}
 
 type
   TOrmPeopleVersioned = class(TOrmPeople)

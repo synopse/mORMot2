@@ -2090,7 +2090,7 @@ function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean; overl
 /// fast conversion with no validity check from hexa chars into binary data
 procedure HexToBinFast(Hex: PAnsiChar; Bin: PByte; BinBytes: integer);
 
-/// fast conversion from one hexa char pair into a 8 bit AnsiChar
+/// fast conversion from one hexa char pair into a 8-bit AnsiChar
 // - return false if any invalid (non hexa) char is found in Hex^
 // - similar to HexToBin(Hex,nil,1)
 function HexToCharValid(Hex: PAnsiChar): boolean;
@@ -2100,14 +2100,14 @@ function HexToCharValid(Hex: PAnsiChar): boolean;
 // of a binary buffer of a given number of bytes
 function IsHex(const Hex: RawByteString; BinBytes: integer): boolean;
 
-/// fast conversion from one hexa char pair into a 8 bit AnsiChar
+/// fast conversion from one hexa char pair into a 8-bit AnsiChar
 // - return false if any invalid (non hexa) char is found in Hex^
 // - similar to HexToBin(Hex,Bin,1) but with Bin<>nil
 // - use HexToCharValid if you want to check a hexadecimal char content
 function HexToChar(Hex: PAnsiChar; Bin: PUtf8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// fast conversion from two hexa bytes into a 16 bit UTF-16 WideChar
+/// fast conversion from two hexa bytes into a 16-bit UTF-16 WideChar
 // - similar to HexToBin(Hex,@wordvar,2) + bswap(wordvar)
 function HexToWideChar(Hex: PAnsiChar): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
@@ -5358,7 +5358,7 @@ begin
         AddNoJsonEscapeW(PWord(P), 0);
     else
       begin
-        // first handle trailing 7 bit ASCII chars, by quad
+        // first handle trailing 7-bit ASCII chars, by quad
         B := P;
         if Len >= 4 then
           repeat
@@ -5642,7 +5642,7 @@ begin
         end;
       33..126:
         begin
-          B[1] := AnsiChar(c); // direct store 7 bits ASCII
+          B[1] := AnsiChar(c); // direct store 7-bit ASCII
           inc(B);
           inc(P);
         end;
@@ -10462,7 +10462,7 @@ begin
   SetString(result, nil, 38);
   PWordArray(result)[0] := ord('{');
   for i := 1 to 36 do
-    PWordArray(result)[i] := ord(tmp[i - 1]); // no conversion for 7 bit Ansi
+    PWordArray(result)[i] := ord(tmp[i - 1]); // no conversion for 7-bit Ansi
   PWordArray(result)[37] := ord('}');
 end;
 {$else}

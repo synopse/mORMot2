@@ -1453,7 +1453,7 @@ type
 
   /// ORM table used to store TSynMonitorUsage information in TSynMonitorUsageRest
   // - the ID primary field is the TSynMonitorUsageID (accessible from UsageID
-  // public property) shifted by 16 bits (by default) to include a
+  // public property) shifted by 16-bit (by default) to include a
   // TSynUniqueIdentifierProcess value
   TOrmMonitorUsage = class(TOrmNoCaseExtended)
   protected
@@ -1464,7 +1464,7 @@ type
   public
     /// compute the corresponding 23 bit TSynMonitorUsageID.Value time slice
     // - according to the stored Process field, after bit shift
-    // - allows a custom aProcessIDShift if it is not set as default 16 bits
+    // - allows a custom aProcessIDShift if it is not set as default 16-bit
     function UsageID(aProcessIDShift: integer = 16): integer;
   published
     /// the granularity of the statistics of this entry
@@ -1526,7 +1526,7 @@ type
     property ProcessID: Int64
       read fProcessID;
     /// how process ID are stored within the mORMot TOrm.ID
-    // - equals 16 bits by default, to match TSynUniqueIdentifierProcess resolution
+    // - equals 16-bit by default, to match TSynUniqueIdentifierProcess resolution
     property ProcessIDShift: integer
       read fProcessIDShift;
   end;

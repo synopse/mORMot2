@@ -297,7 +297,7 @@ type
 
   /// 16-bit unique process identifier, used to compute TSynUniqueIdentifier
   // - each TSynUniqueIdentifierGenerator instance is expected to have
-  // its own unique process identifier, stored as a 16 bit integer 0..65535 value
+  // its own unique process identifier, stored as a 16-bit integer 0..65535 value
   TSynUniqueIdentifierProcess = type word;
 
   {$A-}
