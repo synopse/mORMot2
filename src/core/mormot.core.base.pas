@@ -263,6 +263,13 @@ type
   RawUnicode = type AnsiString;
   {$endif HASCODEPAGE}
 
+  /// low-level storage of UCS4 CodePoints, stored as 32-bit integers
+  RawUcs4 = TIntegerDynArray;
+
+  /// store one UCS4 CodePoint, stored as a 32/64-bit PtrInt for better code gen
+  // - RTL's Ucs4Char is buggy, especially on oldest Delphi
+  Ucs4CodePoint = PtrUInt;
+
   PRawUnicode = ^RawUnicode;
   PRawJson = ^RawJson;
   PRawUtf8 = ^RawUtf8;
