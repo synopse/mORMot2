@@ -324,8 +324,12 @@ type
   // - get a PRttiClass with PRttiInfo.RttiClass() or GetRttiClass()
   TRttiClass = object
   public
+    {$ifdef FPC_PROVIDE_ATTR_TABLE}
+    AttributeTable : PAttributeTable;
+    {$endif}
     /// the class type
     // - not defined as an inlined function, since first field is always aligned
+    // - Alf: I hope this is still true on FPC trunk for the second field also ... :-)
     RttiClass: TClass;
     /// the parent class type information
     function ParentInfo: PRttiInfo;
