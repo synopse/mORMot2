@@ -553,7 +553,7 @@ begin
           begin
             inc(n);
             Check(Client.Orm.Add(R, true, true) =
-              R.FillContext.Table.IDColumnHiddenValue(n));
+              R.FillContext.Table.GetID(n));
             if n > 999 then
               break; // Jet is very slow e.g. within the Delphi IDE
           end;
@@ -567,7 +567,7 @@ begin
           for i := 1 to n do
           begin
             R.ClearProperties;
-            ID := R.FillContext.Table.IDColumnHiddenValue(n);
+            ID := R.FillContext.Table.GetID(n);
             Check(Client.Orm.Retrieve(ID, R));
             Check(R.IDValue = ID);
             Check(R.ID = ID);
@@ -1070,8 +1070,8 @@ begin
         Check(aExternalClient.Orm.Retrieve(1, RInt1));
         Check(RInt1.IDValue = 1);
         Check(n = fPeopleData.RowCount);
-        Check(aExternalClient.Client.BatchSend(BatchID) = HTTP_SUCCESS);
-        Check(length(BatchID) = n - 99);
+        CheckEqual(aExternalClient.Client.BatchSend(BatchID), HTTP_SUCCESS, 'bs');
+        CheckEqual(length(BatchID), n - 99, 'bsn');
         Check(aExternalClient.Orm.TableHasRows(TOrmPeopleExt));
         Check(aExternalClient.Orm.TableMaxID(TOrmPeopleExt) = n);
         Check(aExternalClient.Orm.TableRowCount(TOrmPeopleExt) = n);

@@ -144,7 +144,8 @@ type
   TOnAuthenticationFailedReason = (
     afInvalidSignature,
     afRemoteServiceExecutionNotAllowed,
-    afUnknownUser,afInvalidPassword,
+    afUnknownUser,
+    afInvalidPassword,
     afSessionAlreadyStartedForThisUser,
     afSessionCreationAborted,
     afSecureConnectionRequired,

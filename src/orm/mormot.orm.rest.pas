@@ -485,13 +485,13 @@ type
     fNewValuesInterning: TRawUtf8Interning;
   public
     /// modify a field value in-place, using a RawUtf8 text value
-    procedure Update(Row, Field: integer; const Value: RawUtf8); overload;
+    procedure Update(Row, Field: PtrInt; const Value: RawUtf8); overload;
     /// modify a field value in-place, using a RawUtf8 text value
-    procedure Update(Row: integer; const FieldName, Value: RawUtf8); overload;
+    procedure Update(Row: PtrInt; const FieldName, Value: RawUtf8); overload;
     /// modify a field value in-place, using a variant value
-    procedure Update(Row, Field: integer; const Value: variant); overload;
+    procedure Update(Row, Field: PtrInt; const Value: variant); overload;
     /// modify a field value in-place, using a variant value
-    procedure Update(Row: integer; const FieldName: RawUtf8;
+    procedure Update(Row: PtrInt; const FieldName: RawUtf8;
       const Value: variant); overload;
     /// define a new field to be stored in this table
     // - returns the internal index of the newly created field
@@ -909,7 +909,7 @@ begin
         // get field values from the first (and unique) row
         for i := 0 to T.FieldCount - 1 do
         begin
-          P := T.Results[T.FieldCount + i];
+          P := T.Get(1, i);
           FastSetString(FieldValue[i], P, StrLen(P));
         end;
         result := true;
@@ -1394,9 +1394,9 @@ begin
     try
       T.ToDocVariant(v, {readonly=}false); // not readonly -> TDocVariant dvArray
       if FirstRecordID <> nil then
-        FirstRecordID^ := T.IDColumnHiddenValue(1);
+        FirstRecordID^ := T.GetID(1);
       if LastRecordID <> nil then
-        LastRecordID^ := T.IDColumnHiddenValue(T.RowCount);
+        LastRecordID^ := T.GetID(T.RowCount);
     finally
       T.Free;
     end;
@@ -2352,7 +2352,7 @@ end;
 
 function TOrmTableWritable.AddField(const FieldName: RawUtf8): integer;
 var
-  prev: TPUtf8CharDynArray;
+  prev: TOrmTableJsonDataArray;
   rowlen, i: integer;
   S, D: PByte;
 begin
@@ -2363,51 +2363,53 @@ begin
   inc(fFieldCount);
   SetLength(fFieldNames, fFieldCount);
   fFieldNames[result] := FieldName;
-  fFieldNameOrder := nil;
-  prev := fJsonResults;
-  fJsonResults := nil;
-  SetLength(fJsonResults, (fRowCount + 1) * fFieldCount);
-  fResults := pointer(fJsonResults);
+  prev := fJsonData;
+  fJsonData := nil;
+  SetLength(fJsonData, (fRowCount + 1) * fFieldCount);
+  fData := pointer(fJsonData);
   S := pointer(prev);
-  D := pointer(fJsonResults);
-  rowlen := result * SizeOf(pointer);
+  D := pointer(fJsonData);
+  rowlen := result * SizeOf(fJsonData[0]);
+  // copy first row (fields names) + add new field name
   MoveFast(S^, D^, rowlen);
   inc(S, rowlen);
   inc(D, rowlen);
-  PPUtf8Char(D)^ := pointer(FieldName);
-  inc(D, SizeOf(pointer));
+  SetResultsSafe(result, pointer(fFieldNames[result]));
+  inc(D, SizeOf(fJsonData[0]));
+  QuickSortIndexedPUtf8Char(pointer(fFieldNames), fFieldCount, fFieldNameOrder);
+  // copy data rows
   for i := 1 to fRowCount do
   begin
     MoveFast(S^, D^, rowlen);
     inc(S, rowlen);
-    inc(D, rowlen + SizeOf(pointer)); // leave new field value as D^=nil
+    inc(D, rowlen + SizeOf(fJsonData[0])); // leave new field value as D^=nil
   end;
 end;
 
-procedure TOrmTableWritable.Update(Row: integer; const FieldName, Value: RawUtf8);
+procedure TOrmTableWritable.Update(Row: PtrInt; const FieldName, Value: RawUtf8);
 begin
   Update(Row, FieldIndexExisting(FieldName), Value);
 end;
 
-procedure TOrmTableWritable.Update(Row, Field: integer; const Value: RawUtf8);
+procedure TOrmTableWritable.Update(Row, Field: PtrInt; const Value: RawUtf8);
 var
-  U: PPUtf8Char;
+  U: PUtf8Char;
 begin
   if (self = nil) or
-     (fResults = nil) or
+     (fData = nil) or
      (Row <= 0) or
      (Row > fRowCount) or
-     (cardinal(Field) >= cardinal(FieldCount)) then
+     (PtrUInt(Field) >= PtrUInt(fFieldCount)) then
     exit;
-  U := @fResults[Row * FieldCount + Field];
-  if (U^ = nil) or
-     (StrComp(U^, pointer(Value)) <> 0) then
+  Row := Row * fFieldCount + Field;
+  U := GetResults(Row);
+  if ((U = nil) and (Value <> '')) or (StrComp(U, pointer(Value)) <> 0) then
     if fNewValuesInterning <> nil then
-      U^ := pointer(fNewValuesInterning.Unique(Value))
+      SetResultsSafe(Row, pointer(fNewValuesInterning.Unique(Value)))
     else
     begin
       AddRawUtf8(fNewValues, fNewValuesCount, Value);
-      U^ := pointer(Value);
+      SetResultsSafe(Row, pointer(Value));
     end;
 end;
 
@@ -2422,7 +2424,7 @@ function TOrmTableWritable.AddField(const FieldName: RawUtf8;
   FieldTable: TOrmClass; const FieldTableName: RawUtf8): integer;
 var
   prop: TOrmPropInfo;
-  nfo: pointer;
+  nfo: PRttiInfo;
 begin
   result := AddField(FieldName);
   if FieldTable = nil then
@@ -2442,13 +2444,13 @@ begin
     PtrArrayAddOnce(fQueryTables, FieldTable));
 end;
 
-procedure TOrmTableWritable.Update(Row: integer; const FieldName: RawUtf8;
+procedure TOrmTableWritable.Update(Row: PtrInt; const FieldName: RawUtf8;
   const Value: variant);
 begin
   Update(Row, FieldIndexExisting(FieldName), Value);
 end;
 
-procedure TOrmTableWritable.Update(Row, Field: integer; const Value: variant);
+procedure TOrmTableWritable.Update(Row, Field: PtrInt; const Value: variant);
 var
   U: RawUtf8;
   wasString: boolean;
@@ -2497,13 +2499,13 @@ begin
   for i := 1 to fRowCount do
   begin
     // merge data
-    k := From.SearchFieldSorted(fResults[ndx + dk], fk);
+    k := From.SearchFieldSorted(Results[ndx + dk], fk);
     if k > 0 then
     begin
       k := k * From.FieldCount;
       for f := 0 to From.FieldCount - 1 do
-        if f <> fk then
-          fResults[ndx + new[f]] := From.Results[k + f]; // fast PUtf8Char copy
+        if f <> fk then // fast PUtf8Char copy
+          SetResultsSafe(ndx + new[f], From.Results[k + f]);
     end;
     inc(ndx, FieldCount);
   end;

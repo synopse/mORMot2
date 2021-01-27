@@ -256,7 +256,7 @@ type
   // - pointer(RawUnicode) is compatible with Win32 'Wide' API call
   // - mimic Delphi 2009 UnicodeString, without the WideString or Ansi conversion overhead
   // - all conversion to/from AnsiString or RawUtf8 must be explicit: the
-  // compiler is not able to make valid implicit conversion on CP_UTF16
+  // compiler may not be able to perform implicit conversions on CP_UTF16
   {$ifdef HASCODEPAGE}
   RawUnicode = type AnsiString(CP_UTF16); // Codepage for an UnicodeString
   {$else}
@@ -266,7 +266,7 @@ type
   /// low-level storage of UCS4 CodePoints, stored as 32-bit integers
   RawUcs4 = TIntegerDynArray;
 
-  /// store one UCS4 CodePoint, stored as a 32/64-bit PtrInt for better code gen
+  /// store one UCS4 CodePoint, as a 32/64-bit PtrInt for better codegen
   // - RTL's Ucs4Char is buggy, especially on oldest Delphi
   Ucs4CodePoint = PtrUInt;
 
