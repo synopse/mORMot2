@@ -12768,10 +12768,10 @@ end;
 // very efficient branchless asm - rcx/rdi=Item1 rdx/rsi=Item2
 function TOrmDynArrayCompare(const Item1,Item2): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        mov     rcx, qword ptr[Item1]
-        mov     rdx, qword ptr[Item2]
-        mov     rcx, qword ptr[rcx + TOrm.fID]
-        mov     rdx, qword ptr[rdx + TOrm.fID]
+        mov     rcx, qword ptr [Item1]
+        mov     rdx, qword ptr [Item2]
+        mov     rcx, qword ptr [rcx + TOrm.fID]
+        mov     rdx, qword ptr [rdx + TOrm.fID]
         xor     eax, eax
         cmp     rcx, rdx
         seta    al

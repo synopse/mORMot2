@@ -519,7 +519,7 @@ end;
 
 procedure TTestClientServerAccess.DirectInProcessAccess;
 var
-  stats: RawUTF8;
+  stats: RawUtf8;
 begin
   FreeAndNil(Client);
   Client := TRestClientDB.Create(Model, TOrmModel.Create([TOrmPeople], 'root'),

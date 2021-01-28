@@ -4202,7 +4202,7 @@ asm
         mov     edx, eax
         xor     eax, eax
         {$ifdef ISDELPHI2010}
-        crc32   eax, dword ptr[edx]
+        crc32   eax, dword ptr [edx]
         {$else}
         db $F2, $0F, $38, $F1, $02
         {$endif ISDELPHI2010}
@@ -4214,7 +4214,7 @@ asm // ecx=buf (Linux: edi=buf)
         .noframe
 {$endif FPC}
         xor     eax, eax
-        crc32   eax, dword ptr[buf]
+        crc32   eax, dword ptr [buf]
 end;
 {$endif CPUX86}
 {$endif CPUINTEL}

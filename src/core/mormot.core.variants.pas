@@ -3539,12 +3539,12 @@ end;
 function _Safe(const DocVariant: variant): PDocVariantData;
 asm
         mov     ecx, DocVariantVType
-        movzx   edx, word ptr[eax].TVarData.VType
+        movzx   edx, word ptr [eax].TVarData.VType
         cmp     edx, ecx
         jne     @by
         ret
 @ptr:   mov     eax, [eax].TVarData.VPointer
-        movzx   edx, word ptr[eax].TVarData.VType
+        movzx   edx, word ptr [eax].TVarData.VType
         cmp     edx, ecx
         je      @ok
 @by:    cmp     edx, varByRef OR varVariant

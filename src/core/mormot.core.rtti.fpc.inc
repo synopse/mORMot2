@@ -643,15 +643,15 @@ end;
 
 procedure _ansistr_decr_ref(var p: Pointer); nostackframe; assembler;
 asm
-        mov     rax, qword ptr[p]
+        mov     rax, qword ptr [p]
         xor     edx, edx
         test    rax, rax
         jz      @z
-        mov     qword ptr[p], rdx
+        mov     qword ptr [p], rdx
         mov     p, rax
-        cmp     qword ptr[rax - _STRREFCNT], rdx
+        cmp     qword ptr [rax - _STRREFCNT], rdx
         jl      @z
-lock    dec     qword ptr[rax - _STRREFCNT]
+lock    dec     qword ptr [rax - _STRREFCNT]
         jbe     @free
 @z:     ret
 @free:  sub     p, _STRRECSIZE
@@ -662,30 +662,30 @@ procedure _ansistr_incr_ref(p: pointer); nostackframe; assembler;
 asm
         test    p, p
         jz      @z
-        cmp     qword ptr[p - _STRREFCNT], 0
+        cmp     qword ptr [p - _STRREFCNT], 0
         jl      @z
-lock    inc     qword ptr[p - _STRREFCNT]
+lock    inc     qword ptr [p - _STRREFCNT]
 @z:
 end;
 
 procedure _ansistr_assign(var d: pointer; s: pointer); nostackframe; assembler;
 asm
-        mov     rax, qword ptr[d]
+        mov     rax, qword ptr [d]
         cmp     rax, s
         jz      @eq
         test    s, s
         jz      @ns
-        cmp     qword ptr[s - _STRREFCNT], 0
+        cmp     qword ptr [s - _STRREFCNT], 0
         jl      @ns
-lock    inc     qword ptr[s - _STRREFCNT]
-@ns:    mov     qword ptr[d], s
+lock    inc     qword ptr [s - _STRREFCNT]
+@ns:    mov     qword ptr [d], s
         test    rax, rax
         jnz     @z
 @eq:    ret
 @z:     mov     d, rax
-        cmp     qword ptr[rax - _STRREFCNT], 0
+        cmp     qword ptr [rax - _STRREFCNT], 0
         jl      @n
- lock   dec     qword ptr[rax - _STRREFCNT]
+ lock   dec     qword ptr [rax - _STRREFCNT]
         ja      @n
 @free:  sub     d, _STRRECSIZE
         jmp     _Freemem
@@ -704,20 +704,20 @@ asm
         je      @0
         test    s1, s2
         jz      @maybe0
-@first: mov     al, byte ptr[s1] // we can check the first char (for quicksort)
-        sub     al, byte ptr[s2]
+@first: mov     al, byte ptr [s1] // we can check the first char (for quicksort)
+        sub     al, byte ptr [s2]
         jne     @ne
-        mov     r8, qword ptr[s1 - _STRLEN]
+        mov     r8, qword ptr [s1 - _STRLEN]
         mov     r11, r8
-        sub     r8, qword ptr[s2 - _STRLEN] // r8 = length(s1)-length(s2)
+        sub     r8, qword ptr [s2 - _STRLEN] // r8 = length(s1)-length(s2)
         adc     rax, -1
         and     rax, r8  // rax = -min(length(s1),length(s2))
         sub     rax, r11
         sub     s1, rax
         sub     s2, rax
         align   16
-@s:     mov     r10, qword ptr[s1 + rax] // compare by 8 bytes (may include len)
-        xor     r10, qword ptr[s2 + rax]
+@s:     mov     r10, qword ptr [s1 + rax] // compare by 8 bytes (may include len)
+        xor     r10, qword ptr [s2 + rax]
         jnz     @d
         add     rax, 8
         js      @s
@@ -729,8 +729,8 @@ asm
         shr     r10, 3
         add     rax, r10
         jns     @e
-        movzx   edx, byte ptr[s2 + rax]
-        movzx   eax, byte ptr[s1 + rax]
+        movzx   edx, byte ptr [s2 + rax]
+        movzx   eax, byte ptr [s1 + rax]
         sub     rax, rdx
         ret
 @maybe0:test    s2, s2
@@ -749,20 +749,20 @@ asm
         je      @q
         test    s1, s2
         jz      @maybe0
-@ok:    mov     rax, qword ptr[s1 - _STRLEN] // len must match
-        cmp     rax, qword ptr[s2 - _STRLEN]
+@ok:    mov     rax, qword ptr [s1 - _STRLEN] // len must match
+        cmp     rax, qword ptr [s2 - _STRLEN]
         jne     @q
-        lea     s1, qword ptr[s1 + rax - 8]
-        lea     s2, qword ptr[s2 + rax - 8]
+        lea     s1, qword ptr [s1 + rax - 8]
+        lea     s2, qword ptr [s2 + rax - 8]
         neg     rax
-        mov     r8, qword ptr[s1] // compare last 8 bytes (may include len)
-        cmp     r8, qword ptr[s2]
+        mov     r8, qword ptr [s1] // compare last 8 bytes (may include len)
+        cmp     r8, qword ptr [s2]
         jne     @q
         align 16
 @s:     add     rax, 8 // compare remaining 8 bytes per iteration
         jns     @0
-        mov     r8, qword ptr[s1 + rax]
-        cmp     r8, qword ptr[s2 + rax]
+        mov     r8, qword ptr [s1 + rax]
+        cmp     r8, qword ptr [s2 + rax]
         je      @s
         mov     eax, 1
         ret
@@ -779,9 +779,9 @@ procedure _dynarray_incr_ref(p: pointer); nostackframe; assembler;
 asm
         test    p, p
         jz      @z
-        cmp     qword ptr[p - _DAREFCNT], 0
+        cmp     qword ptr [p - _DAREFCNT], 0
         jle     @z
-lock    inc     qword ptr[p - _DAREFCNT]
+lock    inc     qword ptr [p - _DAREFCNT]
 @z:
 end;
 
@@ -799,15 +799,15 @@ end;
 
 procedure _dynarray_decr_ref(var p: Pointer; info: pointer); nostackframe; assembler;
 asm
-        mov     rax, qword ptr[p]
+        mov     rax, qword ptr [p]
         test    rax, rax
         jz      @z
-        mov     qword ptr[p], 0
+        mov     qword ptr [p], 0
         mov     p, rax
         sub     p, SizeOf(TDynArrayRec)
-        cmp     qword ptr[rax - _DAREFCNT], 0
+        cmp     qword ptr [rax - _DAREFCNT], 0
         jle     @z
-lock    dec     qword ptr[p]
+lock    dec     qword ptr [p]
         jbe     @free
 @z:     ret
 @free:  jmp     _dynarray_decr_ref_free
@@ -839,23 +839,23 @@ end;
 procedure _ansistr_setlength(var s: RawByteString; len: PtrInt; cp: cardinal);
   nostackframe; assembler;
 asm
-        mov     rax, qword ptr[s]
+        mov     rax, qword ptr [s]
         test    len, len
         jle     _ansistr_decr_ref
         test    rax, rax
         jz      _ansistr_setlength_new
-        cmp     qword ptr[rax - _STRREFCNT], 1
+        cmp     qword ptr [rax - _STRREFCNT], 1
         jne     _ansistr_setlength_new
         push    len
         push    s
-        sub     qword ptr[s], _STRRECSIZE
+        sub     qword ptr [s], _STRRECSIZE
         add     len, _STRRECSIZE + 1
         call    _reallocmem // rely on MM in-place detection
         pop     s
         pop     len
-        add     qword ptr[s], _STRRECSIZE
-        mov     qword ptr[rax].TStrRec.length, len
-        mov     byte ptr[rax + len + _STRRECSIZE], 0
+        add     qword ptr [s], _STRRECSIZE
+        mov     qword ptr [rax].TStrRec.length, len
+        mov     byte ptr [rax + len + _STRRECSIZE], 0
 end;
 {$endif FPC_X64MM}
 

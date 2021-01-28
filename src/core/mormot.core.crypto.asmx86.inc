@@ -27,7 +27,7 @@ asm // rolled optimized encryption asm version by A. Bouchez
         add     esp,  - 24
         mov     [esp + 4], ecx
         mov     ecx, eax // ecx=pk
-        movzx   eax, byte ptr[eax].TAesContext.Rounds
+        movzx   eax, byte ptr [eax].TAesContext.Rounds
         dec     eax
         mov     [esp + 20], eax
         mov     ebx, [edx]
@@ -41,54 +41,54 @@ asm // rolled optimized encryption asm version by A. Bouchez
         lea     ecx, [ecx + 16]
 @1:     // pk=ecx s0=ebx s1=esi s2=eax s3=edx
         movzx   edi, bl
-        mov     edi, dword ptr[4 * edi + Te0]
+        mov     edi, dword ptr [4 * edi + Te0]
         movzx   ebp, si
         shr     ebp, $08
-        xor     edi, dword ptr[4 * ebp + Te1]
+        xor     edi, dword ptr [4 * ebp + Te1]
         mov     ebp, eax
         shr     ebp, $10
         and     ebp, $ff
-        xor     edi, dword ptr[4 * ebp + Te2]
+        xor     edi, dword ptr [4 * ebp + Te2]
         mov     ebp, edx
         shr     ebp, $18
-        xor     edi, dword ptr[4 * ebp + Te3]
+        xor     edi, dword ptr [4 * ebp + Te3]
         mov     [esp + 8], edi
         mov     edi, esi
         and     edi, 255
-        mov     edi, dword ptr[4 * edi + Te0]
+        mov     edi, dword ptr [4 * edi + Te0]
         movzx   ebp, ax
         shr     ebp, $08
-        xor     edi, dword ptr[4 * ebp + Te1]
+        xor     edi, dword ptr [4 * ebp + Te1]
         mov     ebp, edx
         shr     ebp, $10
         and     ebp, 255
-        xor     edi, dword ptr[4 * ebp + Te2]
+        xor     edi, dword ptr [4 * ebp + Te2]
         mov     ebp, ebx
         shr     ebp, $18
-        xor     edi, dword ptr[4 * ebp + Te3]
+        xor     edi, dword ptr [4 * ebp + Te3]
         mov     [esp + 12], edi
         movzx   edi, al
-        mov     edi, dword ptr[4 * edi + Te0]
+        mov     edi, dword ptr [4 * edi + Te0]
         movzx   ebp, dh
-        xor     edi, dword ptr[4 * ebp + Te1]
+        xor     edi, dword ptr [4 * ebp + Te1]
         mov     ebp, ebx
         shr     ebp, $10
         and     ebp, 255
-        xor     edi, dword ptr[4 * ebp + Te2]
+        xor     edi, dword ptr [4 * ebp + Te2]
         mov     ebp, esi
         shr     ebp, $18
-        xor     edi, dword ptr[4 * ebp + Te3]
+        xor     edi, dword ptr [4 * ebp + Te3]
         mov     [esp + 16], edi
         and     edx, 255
-        mov     edx, dword ptr[4 * edx + Te0]
+        mov     edx, dword ptr [4 * edx + Te0]
         shr     ebx, $08
         and     ebx, 255
-        xor     edx, dword ptr[4 * ebx + Te1]
+        xor     edx, dword ptr [4 * ebx + Te1]
         shr     esi, $10
         and     esi, 255
-        xor     edx, dword ptr[4 * esi + Te2]
+        xor     edx, dword ptr [4 * esi + Te2]
         shr     eax, $18
-        xor     edx, dword ptr[4 * eax + Te3]
+        xor     edx, dword ptr [4 * eax + Te3]
         mov     ebx, [ecx]
         xor     ebx, [esp + 8]
         mov     esi, [ecx + 4]
@@ -97,26 +97,26 @@ asm // rolled optimized encryption asm version by A. Bouchez
         xor     eax, [esp + 16]
         xor     edx, [ecx + 12]
         lea     ecx, [ecx + 16]
-        dec     byte ptr[esp + 20]
+        dec     byte ptr [esp + 20]
         jne     @1
         mov     ebp, ecx // ebp=pk
         movzx   ecx, bl
         mov     edi, esi
-        movzx   ecx, byte ptr[ecx + SBox]
+        movzx   ecx, byte ptr [ecx + SBox]
         shr     edi, $08
         and     edi, 255
-        movzx   edi, byte ptr[edi + SBox]
+        movzx   edi, byte ptr [edi + SBox]
         shl     edi, $08
         xor     ecx, edi
         mov     edi, eax
         shr     edi, $10
         and     edi, 255
-        movzx   edi, byte ptr[edi + SBox]
+        movzx   edi, byte ptr [edi + SBox]
         shl     edi, $10
         xor     ecx, edi
         mov     edi, edx
         shr     edi, $18
-        movzx   edi, byte ptr[edi + SBox]
+        movzx   edi, byte ptr [edi + SBox]
         shl     edi, $18
         xor     ecx, edi
         xor     ecx, [ebp]
@@ -124,20 +124,20 @@ asm // rolled optimized encryption asm version by A. Bouchez
         mov     [edi], ecx
         mov     ecx, esi
         and     ecx, 255
-        movzx   ecx, byte ptr[ecx + SBox]
+        movzx   ecx, byte ptr [ecx + SBox]
         movzx   edi, ah
-        movzx   edi, byte ptr[edi + SBox]
+        movzx   edi, byte ptr [edi + SBox]
         shl     edi, $08
         xor     ecx, edi
         mov     edi, edx
         shr     edi, $10
         and     edi, 255
-        movzx   edi, byte ptr[edi + SBox]
+        movzx   edi, byte ptr [edi + SBox]
         shl     edi, $10
         xor     ecx, edi
         mov     edi, ebx
         shr     edi, $18
-        movzx   edi, byte ptr[edi + SBox]
+        movzx   edi, byte ptr [edi + SBox]
         shl     edi, $18
         xor     ecx, edi
         xor     ecx, [ebp + 4]
@@ -145,41 +145,41 @@ asm // rolled optimized encryption asm version by A. Bouchez
         mov     [edi + 4], ecx
         mov     ecx, eax
         and     ecx, 255
-        movzx   ecx, byte ptr[ecx + SBox]
+        movzx   ecx, byte ptr [ecx + SBox]
         movzx   edi, dh
-        movzx   edi, byte ptr[edi + SBox]
+        movzx   edi, byte ptr [edi + SBox]
         shl     edi, $08
         xor     ecx, edi
         mov     edi, ebx
         shr     edi, $10
         and     edi, 255
-        movzx   edi, byte ptr[edi + SBox]
+        movzx   edi, byte ptr [edi + SBox]
         shl     edi, $10
         xor     ecx, edi
         mov     edi, esi
         shr     edi, $18
-        movzx   edi, byte ptr[edi + SBox]
+        movzx   edi, byte ptr [edi + SBox]
         shl     edi, $18
         xor     ecx, edi
         xor     ecx, [ebp + 8]
         mov     edi, [esp + 4]
         mov     [edi + 8], ecx
         and     edx, 255
-        movzx   edx, byte ptr[edx + SBox]
+        movzx   edx, byte ptr [edx + SBox]
         shr     ebx, $08
         and     ebx, 255
         xor     ecx, ecx
-        mov     cl, byte ptr[ebx + SBox]
+        mov     cl, byte ptr [ebx + SBox]
         shl     ecx, $08
         xor     edx, ecx
         shr     esi, $10
         and     esi, 255
         xor     ecx, ecx
-        mov     cl, byte ptr[esi + SBox]
+        mov     cl, byte ptr [esi + SBox]
         shl     ecx, $10
         xor     edx, ecx
         shr     eax, $18
-        movzx   eax, byte ptr[eax + SBox]
+        movzx   eax, byte ptr [eax + SBox]
         shl     eax, $18
         xor     edx, eax
         xor     edx, [ebp + 12]
@@ -201,7 +201,7 @@ asm
         push    ebp
         add     esp,  - 20
         mov     [esp], ecx
-        movzx   ecx, byte ptr[eax].taescontext.rounds
+        movzx   ecx, byte ptr [eax].taescontext.rounds
         lea     esi, [4 * ecx]
         lea     ecx, [ecx - 1]
         lea     eax, [eax + 4 * esi] // eax=@ctx.rk[ctx.rounds]=pk
@@ -217,52 +217,52 @@ asm
         lea     eax, [eax - 16]
 @1:     // pk=eax s0=ebx s1=esi s2=ecx s3=edx
         movzx   edi, bl
-        mov     edi, dword ptr[4 * edi + Td0]
+        mov     edi, dword ptr [4 * edi + Td0]
         movzx   ebp, dh
-        xor     edi, dword ptr[4 * ebp + Td1]
+        xor     edi, dword ptr [4 * ebp + Td1]
         mov     ebp, ecx
         shr     ebp, $10
         and     ebp, 255
-        xor     edi, dword ptr[4 * ebp + Td2]
+        xor     edi, dword ptr [4 * ebp + Td2]
         mov     ebp, esi
         shr     ebp, $18
-        xor     edi, dword ptr[4 * ebp + Td3]
+        xor     edi, dword ptr [4 * ebp + Td3]
         mov     [esp + 4], edi
         mov     edi, esi
         and     edi, 255
-        mov     edi, dword ptr[4 * edi + Td0]
+        mov     edi, dword ptr [4 * edi + Td0]
         movzx   ebp, bh
-        xor     edi, dword ptr[4 * ebp + Td1]
+        xor     edi, dword ptr [4 * ebp + Td1]
         mov     ebp, edx
         shr     ebp, $10
         and     ebp, 255
-        xor     edi, dword ptr[4 * ebp + Td2]
+        xor     edi, dword ptr [4 * ebp + Td2]
         mov     ebp, ecx
         shr     ebp, $18
-        xor     edi, dword ptr[4 * ebp + Td3]
+        xor     edi, dword ptr [4 * ebp + Td3]
         mov     [esp + 8], edi
         movzx   edi, cl
-        mov     edi, dword ptr[4 * edi + Td0]
+        mov     edi, dword ptr [4 * edi + Td0]
         movzx   ebp, si
         shr     ebp, $08
-        xor     edi, dword ptr[4 * ebp + Td1]
+        xor     edi, dword ptr [4 * ebp + Td1]
         mov     ebp, ebx
         shr     ebp, $10
         and     ebp, 255
-        xor     edi, dword ptr[4 * ebp + Td2]
+        xor     edi, dword ptr [4 * ebp + Td2]
         mov     ebp, edx
         shr     ebp, $18
-        xor     edi, dword ptr[4 * ebp + Td3]
+        xor     edi, dword ptr [4 * ebp + Td3]
         mov     [esp + 12], edi
         and     edx, 255
-        mov     edx, dword ptr[4 * edx + Td0]
+        mov     edx, dword ptr [4 * edx + Td0]
         movzx   ecx, ch
-        xor     edx, dword ptr[4 * ecx + Td1]
+        xor     edx, dword ptr [4 * ecx + Td1]
         shr     esi, $10
         and     esi, 255
-        xor     edx, dword ptr[4 * esi + Td2]
+        xor     edx, dword ptr [4 * esi + Td2]
         shr     ebx, $18
-        xor     edx, dword ptr[4 * ebx + Td3]
+        xor     edx, dword ptr [4 * ebx + Td3]
         xor     edx, [eax + 12]
         mov     ebx, [eax]
         xor     ebx, [esp + 4]
@@ -271,24 +271,24 @@ asm
         mov     ecx, [eax + 8]
         xor     ecx, [esp + 12]
         lea     eax, [eax - 16]
-        dec     byte ptr[esp + 16]
+        dec     byte ptr [esp + 16]
         jnz     @1
         mov     ebp, eax
         movzx   eax, bl
-        movzx   eax, byte ptr[eax + InvSBox]
+        movzx   eax, byte ptr [eax + InvSBox]
         movzx   edi, dh
-        movzx   edi, byte ptr[edi + InvSBox]
+        movzx   edi, byte ptr [edi + InvSBox]
         shl     edi, $08
         xor     eax, edi
         mov     edi, ecx
         shr     edi, $10
         and     edi, 255
-        movzx   edi, byte ptr[edi + InvSBox]
+        movzx   edi, byte ptr [edi + InvSBox]
         shl     edi, $10
         xor     eax, edi
         mov     edi, esi
         shr     edi, $18
-        movzx   edi, byte ptr[edi + InvSBox]
+        movzx   edi, byte ptr [edi + InvSBox]
         shl     edi, $18
         xor     eax, edi
         xor     eax, [ebp]
@@ -296,60 +296,60 @@ asm
         mov     [edi], eax
         mov     eax, esi
         and     eax, 255
-        movzx   eax, byte ptr[eax + InvSBox]
+        movzx   eax, byte ptr [eax + InvSBox]
         movzx   edi, bh
-        movzx   edi, byte ptr[edi + InvSBox]
+        movzx   edi, byte ptr [edi + InvSBox]
         shl     edi, $08
         xor     eax, edi
         mov     edi, edx
         shr     edi, $10
         and     edi, 255
-        movzx   edi, byte ptr[edi + InvSBox]
+        movzx   edi, byte ptr [edi + InvSBox]
         shl     edi, $10
         xor     eax, edi
         mov     edi, ecx
         shr     edi, $18
-        movzx   edi, byte ptr[edi + InvSBox]
+        movzx   edi, byte ptr [edi + InvSBox]
         shl     edi, $18
         xor     eax, edi
         xor     eax, [ebp + 4]
         mov     edi, [esp]
         mov     [edi + 4], eax
         movzx   eax, cl
-        movzx   eax, byte ptr[eax + InvSBox]
+        movzx   eax, byte ptr [eax + InvSBox]
         movzx   edi, si
         shr     edi, $08
-        movzx   edi, byte ptr[edi + InvSBox]
+        movzx   edi, byte ptr [edi + InvSBox]
         shl     edi, $08
         xor     eax, edi
         mov     edi, ebx
         shr     edi, $10
         and     edi, 255
-        movzx   edi, byte ptr[edi + InvSBox]
+        movzx   edi, byte ptr [edi + InvSBox]
         shl     edi, $10
         xor     eax, edi
         mov     edi, edx
         shr     edi, $18
-        movzx   edi, byte ptr[edi + InvSBox]
+        movzx   edi, byte ptr [edi + InvSBox]
         shl     edi, $18
         xor     eax, edi
         xor     eax, [ebp + 8]
         mov     edi, [esp]
         mov     [edi + 8], eax
         and     edx, 255
-        movzx   eax, byte ptr[edx + InvSBox]
+        movzx   eax, byte ptr [edx + InvSBox]
         shr     ecx, $08
         and     ecx, 255
-        movzx   edx, byte ptr[ecx + InvSBox]
+        movzx   edx, byte ptr [ecx + InvSBox]
         shl     edx, $08
         xor     eax, edx
         shr     esi, $10
         and     esi, 255
-        movzx   edx, byte ptr[esi + InvSBox]
+        movzx   edx, byte ptr [esi + InvSBox]
         shl     edx, $10
         xor     eax, edx
         shr     ebx, $18
-        movzx   edx, byte ptr[ebx + InvSBox]
+        movzx   edx, byte ptr [ebx + InvSBox]
         shl     edx, $18
         xor     eax, edx
         xor     eax, [ebp + 12]
@@ -1023,7 +1023,7 @@ procedure ShiftAesNi(KeySize: cardinal; pk: pointer);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=KeySize edx=pk
         movups  xmm1, [edx]
-        movups  xmm5, dqword ptr[@mask]
+        movups  xmm5, dqword ptr [@mask]
         cmp     al, 128
         je      @128
         cmp     al, 192
@@ -1461,9 +1461,9 @@ end;
 procedure gf_mul_pclmulqdq(a, b: pointer);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
-        movups  xmm0, dqword ptr[a]
-        movups  xmm1, dqword ptr[b]
-        movdqu  xmm2, dqword ptr[@swap]
+        movups  xmm0, dqword ptr [a]
+        movups  xmm1, dqword ptr [b]
+        movdqu  xmm2, dqword ptr [@swap]
         pshufb  xmm0, xmm2
         pshufb  xmm1, xmm2
         movdqa  xmm5, xmm0
@@ -1526,7 +1526,7 @@ asm
         psllq   xmm3, 57
         por     xmm4, xmm7
         psrlq   xmm0, 7
-        movdqu  xmm7, dqword ptr[@swap]
+        movdqu  xmm7, dqword ptr [@swap]
         por     xmm0, xmm3
         psllq   xmm5, 62
         pxor    xmm1, xmm0
@@ -1537,7 +1537,7 @@ asm
         pxor    xmm0, xmm1
         pxor    xmm0, xmm2
         pshufb  xmm0, xmm7
-        movups  dqword ptr[a], xmm0
+        movups  dqword ptr [a], xmm0
         ret
 @swap:  db 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0
 end;
@@ -1628,7 +1628,7 @@ asm
         jge     @39
 @38:    test    eax, eax
         je      @42
-@43:    movzx   edx, byte ptr[esi]
+@43:    movzx   edx, byte ptr [esi]
         add     ebx, edx
         dec     eax
         lea     esi, [esi + 1]

@@ -4517,17 +4517,17 @@ begin
         mov     ecx, Count
         mov     esi, BufIn
         mov     edi, BufOut
-        movups  xmm7, dqword ptr[eax].TAesCfb.fIV
+        movups  xmm7, dqword ptr [eax].TAesCfb.fIV
         lea     eax, [eax].TAesCfb.fAes
         push    ecx
         shr     ecx, AesBlockShift
         jz      @z
-@s:     call    dword ptr[eax].TAesContext.AesNi32 // AES.Encrypt(fCV,fCV)
-        movups  xmm0, dqword ptr[esi]
+@s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fCV,fCV)
+        movups  xmm0, dqword ptr [esi]
         movaps  xmm1, xmm0
         pxor    xmm0, xmm7
         movaps  xmm7, xmm1              // fCV := fIn
-        movups  dqword ptr[edi], xmm0  // fOut := fIn xor fCV
+        movups  dqword ptr [edi], xmm0  // fOut := fIn xor fCV
         add     esi, 16
         add     edi, 16
         dec     ecx
@@ -4572,15 +4572,15 @@ begin
         mov     ecx, Count
         mov     esi, BufIn
         mov     edi, BufOut
-        movups  xmm7, dqword ptr[eax].TAesCfb.fIV
+        movups  xmm7, dqword ptr [eax].TAesCfb.fIV
         lea     eax, [eax].TAesCfb.fAes
         push    ecx
         shr     ecx, AesBlockShift
         jz      @z
-@s:     call    dword ptr[eax].TAesContext.AesNi32 // AES.Encrypt(fCV,fCV)
-        movups  xmm0, dqword ptr[esi]
+@s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fCV,fCV)
+        movups  xmm0, dqword ptr [esi]
         pxor    xmm7, xmm0
-        movups  dqword ptr[edi], xmm7  // fOut := fIn xor fCV
+        movups  dqword ptr [edi], xmm7  // fOut := fIn xor fCV
         add     esi, 16
         add     edi, 16
         dec     ecx
@@ -4684,23 +4684,23 @@ begin
         mov     ebx, self
         mov     esi, BufIn
         mov     edi, BufOut
-        movups  xmm7, dqword ptr[ebx].TAesCfbCrc.fIV
+        movups  xmm7, dqword ptr [ebx].TAesCfbCrc.fIV
 @s:     lea     eax, [ebx].TAesCfbCrc.fMac.encrypted
         mov     edx, esi
         call    crcblock // using SSE4.2 or fast tables
         lea     eax, [ebx].TAesCfbCrc.fAes
-        call    dword ptr[eax].TAesContext.AesNi32 // AES.Encrypt(fCV,fCV)
-        movups  xmm0, dqword ptr[esi]
+        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fCV,fCV)
+        movups  xmm0, dqword ptr [esi]
         movaps  xmm1, xmm0
         pxor    xmm0, xmm7
         movaps  xmm7, xmm1              // fCV := fIn
-        movups  dqword ptr[edi], xmm0  // fOut := fIn xor fCV
+        movups  dqword ptr [edi], xmm0  // fOut := fIn xor fCV
         lea     eax, [ebx].TAesCfbCrc.fMac.plain
         mov     edx, edi
         call    crcblock
         add     esi, 16
         add     edi, 16
-        sub     dword ptr[Count], 16
+        sub     dword ptr [Count], 16
         ja      @s
 @z:     pop     edi
         pop     esi
@@ -4749,21 +4749,21 @@ begin
         mov     ebx, self
         mov     esi, BufIn
         mov     edi, BufOut
-        movups  xmm7, dqword ptr[ebx].TAesCfbCrc.fIV
+        movups  xmm7, dqword ptr [ebx].TAesCfbCrc.fIV
 @s:     lea     eax, [ebx].TAesCfbCrc.fMac.plain
         mov     edx, esi
         call    crcblock
         lea     eax, [ebx].TAesCfbCrc.fAes
-        call    dword ptr[eax].TAesContext.AesNi32 // AES.Encrypt(fCV,fCV)
-        movups  xmm0, dqword ptr[esi]
+        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fCV,fCV)
+        movups  xmm0, dqword ptr [esi]
         pxor    xmm7, xmm0
-        movups  dqword ptr[edi], xmm7  // fOut := fIn xor fCV  +  fCV := fOut^
+        movups  dqword ptr [edi], xmm7  // fOut := fIn xor fCV  +  fCV := fOut^
         lea     eax, [ebx].TAesCfbCrc.fMac.encrypted
         mov     edx, edi
         call    crcblock
         add     esi, 16
         add     edi, 16
-        sub     dword ptr[Count], 16
+        sub     dword ptr [Count], 16
         ja      @s
         pop     edi
         pop     esi
@@ -4814,21 +4814,21 @@ begin
         mov     ebx, self
         mov     esi, BufIn
         mov     edi, BufOut
-        movups  xmm7, dqword ptr[ebx].TAesOfbCrc.fIV
+        movups  xmm7, dqword ptr [ebx].TAesOfbCrc.fIV
 @s:     lea     eax, [ebx].TAesOfbCrc.fMac.encrypted
         mov     edx, esi
         call    crcblock
         lea     eax, [ebx].TAesOfbCrc.fAes
-        call    dword ptr[eax].TAesContext.AesNi32 // AES.Encrypt(fCV,fCV)
-        movups  xmm0, dqword ptr[esi]
+        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fCV,fCV)
+        movups  xmm0, dqword ptr [esi]
         pxor    xmm0, xmm7
-        movups  dqword ptr[edi], xmm0  // fOut := fIn xor fCV
+        movups  dqword ptr [edi], xmm0  // fOut := fIn xor fCV
         lea     eax, [ebx].TAesOfbCrc.fMac.plain
         mov     edx, edi
         call    crcblock
         add     esi, 16
         add     edi, 16
-        sub     dword ptr[Count], 16
+        sub     dword ptr [Count], 16
         ja      @s
         pop     edi
         pop     esi
@@ -4875,21 +4875,21 @@ begin
         mov     ebx, self
         mov     esi, BufIn
         mov     edi, BufOut
-        movups  xmm7, dqword ptr[ebx].TAesOfbCrc.fIV
+        movups  xmm7, dqword ptr [ebx].TAesOfbCrc.fIV
 @s:     lea     eax, [ebx].TAesOfbCrc.fMac.plain
         mov     edx, esi
         call    crcblock
         lea     eax, [ebx].TAesOfbCrc.fAes
-        call    dword ptr[eax].TAesContext.AesNi32 // AES.Encrypt(fCV,fCV)
-        movups  xmm0, dqword ptr[esi]
+        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fCV,fCV)
+        movups  xmm0, dqword ptr [esi]
         pxor    xmm0, xmm7
-        movups  dqword ptr[edi], xmm0  // fOut := fIn xor fCV
+        movups  dqword ptr [edi], xmm0  // fOut := fIn xor fCV
         lea     eax, [ebx].TAesOfbCrc.fMac.encrypted
         mov     edx, edi
         call    crcblock
         add     esi, 16
         add     edi, 16
-        sub     dword ptr[Count], 16
+        sub     dword ptr [Count], 16
         ja      @s
         pop     edi
         pop     esi
@@ -4945,15 +4945,15 @@ begin
         mov     ecx, Count
         mov     esi, BufIn
         mov     edi, BufOut
-        movups  xmm7, dqword ptr[eax].TAesOfb.fIV  // xmm7 = fCV
+        movups  xmm7, dqword ptr [eax].TAesOfb.fIV  // xmm7 = fCV
         lea     eax, [eax].TAesOfb.fAes
         push    ecx
         shr     ecx, AesBlockShift
         jz      @z
-@s:     call    dword ptr[eax].TAesContext.AesNi32 // AES.Encrypt(fCV,fCV)
-        movups  xmm0, dqword ptr[esi]
+@s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fCV,fCV)
+        movups  xmm0, dqword ptr [esi]
         pxor    xmm0, xmm7
-        movups  dqword ptr[edi], xmm0  // fOut := fIn xor fCV
+        movups  dqword ptr [edi], xmm0  // fOut := fIn xor fCV
         add     esi, 16
         add     edi, 16
         dec     ecx

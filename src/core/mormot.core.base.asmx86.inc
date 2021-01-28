@@ -27,9 +27,9 @@ asm
         mov     [eax + 4], cx
         mov     [eax + 6], cx
         sub     edx, 16
-        fld     qword ptr[eax]
-        fst     qword ptr[eax + edx]    // fill last 16 bytes
-        fst     qword ptr[eax + edx + 8]
+        fld     qword ptr [eax]
+        fst     qword ptr [eax + edx]    // fill last 16 bytes
+        fst     qword ptr [eax + edx + 8]
         mov     ecx, eax
         and     ecx, 7                 // 8-byte align writes
         sub     ecx, 8
@@ -38,8 +38,8 @@ asm
         add     eax, edx
         neg     edx
         {$ifdef FPC} align 8 {$endif}
-@loop:  fst     qword ptr[eax + edx]    // fill 16 bytes per loop
-        fst     qword ptr[eax + edx + 8]
+@loop:  fst     qword ptr [eax + edx]    // fill 16 bytes per loop
+        fst     qword ptr [eax + edx + 8]
         add     edx, 16
         jl      @loop
         ffree   st(0)
@@ -83,41 +83,41 @@ asm
         ja      @lrg                   // count > 32 or count < 0
         sub     ecx, 8
         jg      @sml                   // 9..32 byte move
-        jmp     dword ptr[@table + 32 + ecx * 4]   // 0..8 byte move
-@sml:   fild    qword ptr[eax + ecx]   // load last 8
-        fild    qword ptr[eax]         // load first 8
+        jmp     dword ptr [@table + 32 + ecx * 4]   // 0..8 byte move
+@sml:   fild    qword ptr [eax + ecx]   // load last 8
+        fild    qword ptr [eax]         // load first 8
         cmp     ecx, 8
         jle     @sml16
-        fild    qword ptr[eax + 8]     // load second 8
+        fild    qword ptr [eax + 8]     // load second 8
         cmp     ecx, 16
         jle     @sml24
-        fild    qword ptr[eax + 16]    // load third 8
-        fistp   qword ptr[edx + 16]    // save third 8
-@sml24: fistp   qword ptr[edx + 8]     // save second 8
-@sml16: fistp   qword ptr[edx]         // save first 8
-        fistp   qword ptr[edx + ecx]   // save last 8
+        fild    qword ptr [eax + 16]    // load third 8
+        fistp   qword ptr [edx + 16]    // save third 8
+@sml24: fistp   qword ptr [edx + 8]     // save second 8
+@sml16: fistp   qword ptr [edx]         // save first 8
+        fistp   qword ptr [edx + ecx]   // save last 8
         ret
 @exit:  rep     ret
         {$ifdef FPC} align 4 {$endif}
 @table: dd      @exit, @m01, @m02, @m03, @m04, @m05, @m06, @m07, @m08
 @lrgfwd:push    edx
-        fild    qword ptr[eax]       // first 8
+        fild    qword ptr [eax]       // first 8
         lea     eax, [eax + ecx - 8]
         lea     ecx, [ecx + edx - 8]
-        fild    qword ptr[eax]       // last 8
+        fild    qword ptr [eax]       // last 8
         push    ecx
         neg     ecx
         and     edx,  -8             // 8-byte align writes
         lea     ecx, [ecx + edx + 8]
         pop     edx
         {$ifdef FPC} align 8 {$endif}
-@fwd:   fild    qword ptr[eax + ecx]
-        fistp   qword ptr[edx + ecx]
+@fwd:   fild    qword ptr [eax + ecx]
+        fistp   qword ptr [edx + ecx]
         add     ecx, 8
         jl      @fwd
-        fistp   qword ptr[edx]       // last 8
+        fistp   qword ptr [edx]       // last 8
         pop     edx
-        fistp   qword ptr[edx]       // first 8
+        fistp   qword ptr [edx]       // first 8
         ret
 @lrg:   jng     @exit                // count < 0
         cmp     eax, edx
@@ -128,24 +128,24 @@ asm
         jna     @lrgfwd
         sub     ecx, 8               // backward move
         push    ecx
-        fild    qword ptr[eax + ecx] // last 8
-        fild    qword ptr[eax]       // first 8
+        fild    qword ptr [eax + ecx] // last 8
+        fild    qword ptr [eax]       // first 8
         add     ecx, edx
         and     ecx, -8              // 8-byte align writes
         sub     ecx, edx
         {$ifdef FPC} align 8 {$endif}
-@bwd:   fild    qword ptr[eax + ecx]
-        fistp   qword ptr[edx + ecx]
+@bwd:   fild    qword ptr [eax + ecx]
+        fistp   qword ptr [edx + ecx]
         sub     ecx, 8
         jg      @bwd
         pop     ecx
-        fistp   qword ptr[edx]       // first 8
-        fistp   qword ptr[edx + ecx] // last 8
+        fistp   qword ptr [edx]       // first 8
+        fistp   qword ptr [edx + ecx] // last 8
         ret
-@m01:   movzx   ecx, byte ptr[eax]
+@m01:   movzx   ecx, byte ptr [eax]
         mov     [edx], cl
         ret
-@m02:   movzx   ecx, word ptr[eax]
+@m02:   movzx   ecx, word ptr [eax]
         mov     [edx], cx
         ret
 @m03:   mov     cx, [eax]
@@ -259,11 +259,11 @@ asm
         lea     ebp, [crc32ctab]
 @head:  test    dl, 3
         jz      @align
-        movzx   ebx, byte ptr[edx]
+        movzx   ebx, byte ptr [edx]
         inc     edx
         xor     bl, al
         shr     eax, 8
-        xor     eax, dword ptr[ebx * 4 + ebp]
+        xor     eax, dword ptr [ebx * 4 + ebp]
         inc     ecx
         jnz     @head
         pop     ebp
@@ -280,23 +280,23 @@ asm
         mov     ebx, [edi + ecx - 4]
         xor     edx, [edi + ecx - 8]
         movzx   esi, bl
-        mov     eax, dword ptr[esi * 4 + ebp + 1024 * 3]
+        mov     eax, dword ptr [esi * 4 + ebp + 1024 * 3]
         movzx   esi, bh
-        xor     eax, dword ptr[esi * 4 + ebp + 1024 * 2]
+        xor     eax, dword ptr [esi * 4 + ebp + 1024 * 2]
         shr     ebx, 16
         movzx   esi, bl
-        xor     eax, dword ptr[esi * 4 + ebp + 1024 * 1]
+        xor     eax, dword ptr [esi * 4 + ebp + 1024 * 1]
         movzx   esi, bh
-        xor     eax, dword ptr[esi * 4 + ebp + 1024 * 0]
+        xor     eax, dword ptr [esi * 4 + ebp + 1024 * 0]
         movzx   esi, dl
-        xor     eax, dword ptr[esi * 4 + ebp + 1024 * 7]
+        xor     eax, dword ptr [esi * 4 + ebp + 1024 * 7]
         movzx   esi, dh
-        xor     eax, dword ptr[esi * 4 + ebp + 1024 * 6]
+        xor     eax, dword ptr [esi * 4 + ebp + 1024 * 6]
         shr     edx, 16
         movzx   esi, dl
-        xor     eax, dword ptr[esi * 4 + ebp + 1024 * 5]
+        xor     eax, dword ptr [esi * 4 + ebp + 1024 * 5]
         movzx   esi, dh
-        xor     eax, dword ptr[esi * 4 + ebp + 1024 * 4]
+        xor     eax, dword ptr [esi * 4 + ebp + 1024 * 4]
         add     ecx, 8
         jle     @by8
         mov     edx, edi
@@ -311,7 +311,7 @@ asm
 @tail:  movzx   ebx, byte[edx + ecx]
         xor     bl, al
         shr     eax, 8
-        xor     eax, dword ptr[ebx * 4 + ebp]
+        xor     eax, dword ptr [ebx * 4 + ebp]
         inc     ecx
         jnz     @tail
 @e:     pop     ebp
@@ -328,54 +328,54 @@ asm
         push    esi
         mov     ebp, eax  // ebp=crc128 edi=data128
         mov     edi, edx
-        mov     edx, dword ptr[eax]
-        mov     ecx, dword ptr[eax + 4]
-        xor     edx, dword ptr[edi]
-        xor     ecx, dword ptr[edi + 4]
+        mov     edx, dword ptr [eax]
+        mov     ecx, dword ptr [eax + 4]
+        xor     edx, dword ptr [edi]
+        xor     ecx, dword ptr [edi + 4]
         movzx   esi, dl
-        mov     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 3]
+        mov     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 3]
         movzx   esi, dh
         shr     edx, 16
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 2]
+        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 2]
         movzx   esi, dl
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 1]
+        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 1]
         movzx   esi, dh
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 0]
-        mov     edx, dword ptr[ebp + 8]
-        xor     edx, dword ptr[edi + 8]
-        mov     dword ptr[ebp], eax
+        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 0]
+        mov     edx, dword ptr [ebp + 8]
+        xor     edx, dword ptr [edi + 8]
+        mov     dword ptr [ebp], eax
         movzx   esi, cl
-        mov     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 3]
+        mov     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 3]
         movzx   esi, ch
         shr     ecx, 16
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 2]
+        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 2]
         movzx   esi, cl
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 1]
+        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 1]
         movzx   esi, ch
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 0]
-        mov     dword ptr[ebp + 4], eax
-        mov     ecx, dword ptr[ebp + 12]
-        xor     ecx, dword ptr[edi + 12]
+        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 0]
+        mov     dword ptr [ebp + 4], eax
+        mov     ecx, dword ptr [ebp + 12]
+        xor     ecx, dword ptr [edi + 12]
         movzx   esi, dl
-        mov     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 3]
+        mov     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 3]
         movzx   esi, dh
         shr     edx, 16
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 2]
+        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 2]
         movzx   esi, dl
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 1]
+        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 1]
         movzx   esi, dh
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 0]
-        mov     dword ptr[ebp + 8], eax
+        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 0]
+        mov     dword ptr [ebp + 8], eax
         movzx   esi, cl
-        mov     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 3]
+        mov     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 3]
         movzx   esi, ch
         shr     ecx, 16
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 2]
+        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 2]
         movzx   esi, cl
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 1]
+        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 1]
         movzx   esi, ch
-        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 0]
-        mov     dword ptr[ebp + 12], eax
+        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 0]
+        mov     dword ptr [ebp + 12], eax
         pop     esi
         pop     edi
         pop     ebp
@@ -391,7 +391,7 @@ asm
         neg     ecx
         jz      @0
         sub     edx, ecx
-@1:     movzx   ebx, byte ptr[edx + ecx]
+@1:     movzx   ebx, byte ptr [edx + ecx]
         xor     eax, ebx
         imul    eax, eax, 16777619
         inc     ecx
@@ -441,7 +441,7 @@ asm
         jz      @z
 @s:     mov     esi, eax
 @1:     shl     eax, 5
-        movzx   ebx, byte ptr[edx]
+        movzx   ebx, byte ptr [edx]
         inc     edx
         sub     eax, esi
         lea     esi, [eax + ebx]
@@ -553,7 +553,7 @@ asm
         jz      @z // avoid GPF
         cmp     edx, 8
         jae     @s1
-        jmp     dword ptr[edx * 4 + @Table]
+        jmp     dword ptr [edx * 4 + @Table]
 @Table: dd      @z, @1, @2, @3, @4, @5, @6, @7
 @s1:    // fast search by 8 integers (pipelined instructions)
         sub     edx, 8
@@ -576,7 +576,7 @@ asm
         add     eax, 32
         cmp     edx, 8
         jae     @s1
-        jmp     dword ptr[edx * 4 + @Table]
+        jmp     dword ptr [edx * 4 + @Table]
 @7:     cmp     [eax + 24], ecx
         je      @ok
 @6:     cmp     [eax + 20], ecx
@@ -655,21 +655,21 @@ asm
         shr     edx, 5          // now edx=eax div 100
         mov     eax, edx
         imul    edx, -200
-        movzx   edx, word ptr[TwoDigitLookup + ecx * 2 + edx]
+        movzx   edx, word ptr [TwoDigitLookup + ecx * 2 + edx]
         mov     [edi], dx
         cmp     eax, 10
         jae     @s
 @1:     dec     edi
         or      al, '0'
-        mov     byte ptr[edi - 1], '-'
+        mov     byte ptr [edi - 1], '-'
         mov     [edi], al
         mov     eax, edi
         pop     edi
         pop     ecx
         add     eax, ecx // includes '-' if val<0
         ret
-@2:     movzx   eax, word ptr[TwoDigitLookup + eax * 2]
-        mov     byte ptr[edi - 1], '-'
+@2:     movzx   eax, word ptr [TwoDigitLookup + eax * 2]
+        mov     byte ptr [edi - 1], '-'
         mov     [edi], ax
         mov     eax, edi
         pop     edi
@@ -679,7 +679,7 @@ asm
 @3:     dec     eax
         pop     ecx
         or      dl, '0'
-        mov     byte ptr[eax - 1], '-'
+        mov     byte ptr [eax - 1], '-'
         mov     [eax], dl
         add     eax, ecx // includes '-' if val<0
 end;
@@ -702,7 +702,7 @@ asm
         shr     edx, 5          // now edx=eax div 100
         mov     eax, edx
         imul    edx, -200
-        movzx   edx, word ptr[TwoDigitLookup + ecx * 2 + edx]
+        movzx   edx, word ptr [TwoDigitLookup + ecx * 2 + edx]
         mov     [edi], dx
         cmp     eax, 10
         jae     @s
@@ -712,7 +712,7 @@ asm
         mov     eax, edi
         pop     edi
         ret
-@2:     movzx   eax, word ptr[TwoDigitLookup + eax * 2]
+@2:     movzx   eax, word ptr [TwoDigitLookup + eax * 2]
         mov     [edi], ax
         mov     eax, edi
         pop     edi
@@ -731,9 +731,9 @@ asm
         mov     edx, 1374389535 // use power of two reciprocal to avoid division
         mul     edx
         shr     edx, 5          // now edx=Y div 100
-        movzx   eax, word ptr[TwoDigitLookup + edx * 2]
+        movzx   eax, word ptr [TwoDigitLookup + edx * 2]
         imul    edx, -200
-        movzx   edx, word ptr[TwoDigitLookup + ecx * 2 + edx]
+        movzx   edx, word ptr [TwoDigitLookup + ecx * 2 + edx]
         pop     ecx
         shl     edx, 16
         or      eax, edx
@@ -759,13 +759,13 @@ asm
         shr     edx, 4
         jz      @by4
         nop
-@by16:  add     esi, dword ptr[eax]
+@by16:  add     esi, dword ptr [eax]
         add     edi, esi
-        add     esi, dword ptr[eax+4]
+        add     esi, dword ptr [eax+4]
         add     edi, esi
-        add     esi, dword ptr[eax+8]
+        add     esi, dword ptr [eax+8]
         add     edi, esi
-        add     esi, dword ptr[eax+12]
+        add     esi, dword ptr [eax+12]
         add     edi, esi
         add     eax, 16
         dec     edx
@@ -774,7 +774,7 @@ asm
         jz      @0
         shr     cl, 2
         jz      @rem
-@4:     add     esi, dword ptr[eax]
+@4:     add     esi, dword ptr [eax]
         add     edi, esi
         add     eax, 4
         dec     cl
@@ -785,12 +785,12 @@ asm
         jz      @1
         dec     ch
         jz      @2
-        mov     eax, dword ptr[eax]
+        mov     eax, dword ptr [eax]
         and     eax, $ffffff
         jmp     @e
-@2:     movzx   eax, word ptr[eax]
+@2:     movzx   eax, word ptr [eax]
         jmp     @e
-@1:     movzx   eax, byte ptr[eax]
+@1:     movzx   eax, byte ptr [eax]
 @e:     add     esi, eax
 @0:     add     edi, esi
         mov     eax, esi
@@ -974,8 +974,8 @@ function bswap64({$ifdef FPC}constref{$else}const{$endif} a: QWord): QWord;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         {$ifdef FPC}
-        mov     edx, dword ptr[eax]
-        mov     eax, dword ptr[eax + 4]
+        mov     edx, dword ptr [eax]
+        mov     eax, dword ptr [eax + 4]
         {$else}
         mov     edx, a.TQWordRec.L
         mov     eax, a.TQWordRec.H
@@ -989,12 +989,12 @@ procedure bswap64array(a,b: PQWordArray; n: PtrInt);
 asm
         push    ebx
         push    esi
-@1:     mov     ebx, dword ptr[eax]
-        mov     esi, dword ptr[eax + 4]
+@1:     mov     ebx, dword ptr [eax]
+        mov     esi, dword ptr [eax + 4]
         bswap   ebx
         bswap   esi
-        mov     dword ptr[edx + 4], ebx
-        mov     dword ptr[edx], esi
+        mov     dword ptr [edx + 4], ebx
+        mov     dword ptr [edx], esi
         add     eax, 8
         add     edx, 8
         dec     ecx
@@ -1049,13 +1049,13 @@ asm
         mov     edx, eax
         test    eax, eax
         jz      @0
-@s:     cmp     byte ptr[eax], 0
+@s:     cmp     byte ptr [eax], 0
         je      @0
-        cmp     byte ptr[eax + 1], 0
+        cmp     byte ptr [eax + 1], 0
         je      @1
-        cmp     byte ptr[eax + 2], 0
+        cmp     byte ptr [eax + 2], 0
         je      @2
-        cmp     byte ptr[eax + 3], 0
+        cmp     byte ptr [eax + 3], 0
         je      @3
         add     eax, 4
         jmp     @s
@@ -1090,7 +1090,7 @@ asm
         push    ebp
         lea     edi, [ebx - 2]     // edi = length(SubStr)-2
         mov     esi, eax           // esi = SubStr
-        movzx   ebx, byte ptr[eax] // bl = search character
+        movzx   ebx, byte ptr [eax] // bl = search character
         nop; nop
 @l:     cmp     bl, [edx]          // compare 2 characters per @l
         je      @c1fnd
@@ -1107,7 +1107,7 @@ asm
         pop     ebx
         ret
 @c1fnd: mov     ebp, edi            // ebp = length(SubStr)-2
-@c1l:   movzx   eax, word ptr[esi + ebp]
+@c1l:   movzx   eax, word ptr [esi + ebp]
         cmp     ax, [edx + ebp]     // compare 2 chars per @c1l (may include #0)
         jne     @notc1
         sub     ebp, 2
@@ -1116,7 +1116,7 @@ asm
         pop     edi
         jmp     @setres
 @c2fnd: mov     ebp, edi            // ebp = length(SubStr)-2
-@c2l:   movzx   eax, word ptr[esi + ebp]
+@c2l:   movzx   eax, word ptr [esi + ebp]
         cmp     ax, [edx + ebp + 1] // compare 2 chars per @c2l (may include #0)
         jne     @notc2
         sub     ebp, 2
@@ -1125,7 +1125,7 @@ asm
         pop     edi
         jmp     @chkres
 @onec:  jl      @notfnd             // needed for zero-length non-nil strings
-        movzx   eax, byte ptr[eax]  // search character
+        movzx   eax, byte ptr [eax]  // search character
 @charl: cmp     al, [edx]
         je      @setres
         cmp     al, [edx + 1]
@@ -1257,7 +1257,7 @@ asm
         je      @0
         test    eax, edx
         jz      @n1
-@n2:    movzx   ecx, byte ptr[eax] // first char comparison (quicksort speedup)
+@n2:    movzx   ecx, byte ptr [eax] // first char comparison (quicksort speedup)
         sub     cl, [edx]
         jne     @no
         push    ebx
@@ -1281,8 +1281,8 @@ asm
         shr     ebx, 3
         add     ecx, ebx
         jns     @l
-        movzx   eax, byte ptr[eax + ecx]
-        movzx   edx, byte ptr[edx + ecx]
+        movzx   eax, byte ptr [eax + ecx]
+        movzx   edx, byte ptr [edx + ecx]
         pop     ebx
         pop     ebx
         sub     eax, edx
@@ -1309,8 +1309,8 @@ end;
 function SortDynArrayDouble(const A,B): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
-        fld     qword ptr[eax]
-        fcomp   qword ptr[edx]
+        fld     qword ptr [eax]
+        fcomp   qword ptr [edx]
         fstsw   ax
         sahf
         jz      @0
@@ -1325,8 +1325,8 @@ end;
 function SortDynArraySingle(const A,B): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
-        fld     dword ptr[eax]
-        fcomp   dword ptr[edx]
+        fld     dword ptr [eax]
+        fcomp   dword ptr [edx]
         fstsw   ax
         sahf
         jz      @0
@@ -1366,31 +1366,31 @@ asm
         // eax=crc128, edx=data128
         mov     ecx, eax
         {$ifdef HASAESNI}
-        mov     eax, dword ptr[ecx]
-        crc32   eax, dword ptr[edx]
-        mov     dword ptr[ecx], eax
-        mov     eax, dword ptr[ecx + 4]
-        crc32   eax, dword ptr[edx + 4]
-        mov     dword ptr[ecx + 4], eax
-        mov     eax, dword ptr[ecx + 8]
-        crc32   eax, dword ptr[edx + 8]
-        mov     dword ptr[ecx + 8], eax
-        mov     eax, dword ptr[ecx + 12]
-        crc32   eax, dword ptr[edx + 12]
-        mov     dword ptr[ecx + 12], eax
+        mov     eax, dword ptr [ecx]
+        crc32   eax, dword ptr [edx]
+        mov     dword ptr [ecx], eax
+        mov     eax, dword ptr [ecx + 4]
+        crc32   eax, dword ptr [edx + 4]
+        mov     dword ptr [ecx + 4], eax
+        mov     eax, dword ptr [ecx + 8]
+        crc32   eax, dword ptr [edx + 8]
+        mov     dword ptr [ecx + 8], eax
+        mov     eax, dword ptr [ecx + 12]
+        crc32   eax, dword ptr [edx + 12]
+        mov     dword ptr [ecx + 12], eax
         {$else} // oldest Delphi don't support these opcodes
-        mov     eax, dword ptr[ecx]
+        mov     eax, dword ptr [ecx]
         db      $F2, $0F, $38, $F1, $02
-        mov     dword ptr[ecx], eax
-        mov     eax, dword ptr[ecx + 4]
+        mov     dword ptr [ecx], eax
+        mov     eax, dword ptr [ecx + 4]
         db      $F2, $0F, $38, $F1, $42, $04
-        mov     dword ptr[ecx + 4], eax
-        mov     eax, dword ptr[ecx + 8]
+        mov     dword ptr [ecx + 4], eax
+        mov     eax, dword ptr [ecx + 8]
         db      $F2, $0F, $38, $F1, $42, $08
-        mov     dword ptr[ecx + 8], eax
-        mov     eax, dword ptr[ecx + 12]
+        mov     dword ptr [ecx + 8], eax
+        mov     eax, dword ptr [ecx + 12]
         db      $F2, $0F, $38, $F1, $42, $0C
-        mov     dword ptr[ecx + 12], eax
+        mov     dword ptr [ecx + 12], eax
         {$endif HASAESNI}
 end;
 
@@ -1407,18 +1407,18 @@ asm
           mov     ebp, count
           mov     esi, crc128
           mov     edi, data128
-          mov     eax, dword ptr[esi]
-          mov     ebx, dword ptr[esi + 4]
-          mov     ecx, dword ptr[esi + 8]
-          mov     edx, dword ptr[esi + 12]
+          mov     eax, dword ptr [esi]
+          mov     ebx, dword ptr [esi + 4]
+          mov     ecx, dword ptr [esi + 8]
+          mov     edx, dword ptr [esi + 12]
           {$ifdef HASAESNI}
           {$ifdef FPC}
           align 8
           {$endif FPC}
-@s:       crc32   eax, dword ptr[edi]
-          crc32   ebx, dword ptr[edi + 4]
-          crc32   ecx, dword ptr[edi + 8]
-          crc32   edx, dword ptr[edi + 12]
+@s:       crc32   eax, dword ptr [edi]
+          crc32   ebx, dword ptr [edi + 4]
+          crc32   ecx, dword ptr [edi + 8]
+          crc32   edx, dword ptr [edi + 12]
           {$else}  // oldest Delphi don't support these opcodes
 @s:       db $F2, $0F, $38, $F1, $07
           db $F2, $0F, $38, $F1, $5F, $04
@@ -1428,10 +1428,10 @@ asm
           add     edi, 16
           dec     ebp
           jnz     @s
-          mov     dword ptr[esi], eax
-          mov     dword ptr[esi + 4], ebx
-          mov     dword ptr[esi + 8], ecx
-          mov     dword ptr[esi + 12], edx
+          mov     dword ptr [esi], eax
+          mov     dword ptr [esi + 4], ebx
+          mov     dword ptr [esi + 8], ecx
+          mov     dword ptr [esi + 12], edx
 @z:       pop     ebp
           pop     edi
           pop     esi
@@ -1449,7 +1449,7 @@ asm
         jz      @0
         jmp     @align
 @a:     {$ifdef HASAESNI}
-        crc32   eax, byte ptr[edx]
+        crc32   eax, byte ptr [edx]
         {$else} // oldest Delphi don't support these opcodes
         db      $F2, $0F, $38, $F0, $02
         {$endif HASAESNI}
@@ -1465,7 +1465,7 @@ asm
         test    cl, 4
         jz      @4
         {$ifdef HASAESNI}
-        crc32   eax, dword ptr[edx]
+        crc32   eax, dword ptr [edx]
         {$else}
         db      $F2, $0F, $38, $F1, $02
         {$endif HASAESNI}
@@ -1473,7 +1473,7 @@ asm
 @4:     test    cl, 2
         jz      @2
         {$ifdef HASAESNI}
-        crc32   eax, word ptr[edx]
+        crc32   eax, word ptr [edx]
         {$else}
         db      $66, $F2, $0F, $38, $F1, $02
         {$endif HASAESNI}
@@ -1481,15 +1481,15 @@ asm
 @2:     test    cl, 1
         jz      @0
         {$ifdef HASAESNI}
-        crc32   eax, byte ptr[edx]
+        crc32   eax, byte ptr [edx]
         {$else}
         db      $F2, $0F, $38, $F0, $02
         {$endif HASAESNI}
 @0:     not     eax
         ret
         {$ifdef HASAESNI}
-@by8:   crc32   eax, dword ptr[edx]
-        crc32   eax, dword ptr[edx + 4]
+@by8:   crc32   eax, dword ptr [edx]
+        crc32   eax, dword ptr [edx + 4]
         {$else}
 @by8:   db      $F2, $0F, $38, $F1, $02
         db      $F2, $0F, $38, $F1, $42, $04
@@ -1591,37 +1591,37 @@ asm
         mov     [esi], ecx         // safe since src_endmatch := src_end-(6+5)
         mov     [esi+4], eax
         jmp     @movend
-@9_32:  fild    qword ptr[eax+edx]
-        fild    qword ptr[eax]
+@9_32:  fild    qword ptr [eax+edx]
+        fild    qword ptr [eax]
         cmp     edx, 8
         jle     @16
-        fild    qword ptr[eax+8]
+        fild    qword ptr [eax+8]
         cmp     edx, 16
         jle     @24
-        fild    qword ptr[eax+16]
-        fistp   qword ptr[esi+16]
-@24:    fistp   qword ptr[esi+8]
-@16:    fistp   qword ptr[esi]
-        fistp   qword ptr[esi+edx]
+        fild    qword ptr [eax+16]
+        fistp   qword ptr [esi+16]
+@24:    fistp   qword ptr [esi+8]
+@16:    fistp   qword ptr [esi]
+        fistp   qword ptr [esi+edx]
         jmp     @movend
         nop
 @large: push    esi
-        fild    qword ptr[eax]
+        fild    qword ptr [eax]
         lea     eax, [eax+edx-8]
         lea     edx, [esi+edx-8]
-        fild    qword ptr[eax]
+        fild    qword ptr [eax]
         push    edx
         neg     edx
         and     esi,  -8
         lea     edx, [edx+esi+8]
         pop     esi
-@lrgnxt:fild    qword ptr[eax+edx]
-        fistp   qword ptr[esi+edx]
+@lrgnxt:fild    qword ptr [eax+edx]
+        fistp   qword ptr [esi+edx]
         add     edx, 8
         jl      @lrgnxt
-        fistp   qword ptr[esi]
+        fistp   qword ptr [esi]
         pop     esi
-        fistp   qword ptr[esi]
+        fistp   qword ptr [esi]
 @movend:cmp     esi, ebp
         jbe     @@0916
 @@0915: inc     ebp
@@ -1742,7 +1742,7 @@ asm
         cmp     eax, 2
         jle     @@0897
         lea     esi, [esi+2]
-        or      dword ptr[ecx], ebx
+        or      dword ptr [ecx], ebx
         mov     ecx, [esp+0CH]
         add     ebp, 2
         mov     eax, 1
@@ -1846,7 +1846,7 @@ end;
 function RefCntDecFree(var refcnt: TRefCnt): boolean;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
-        lock dec dword ptr[refcnt]  // TRefCnt=longint on Delphi and FPC 32-bit
+        lock dec dword ptr [refcnt]  // TRefCnt=longint on Delphi and FPC 32-bit
         setbe   al
 end; // we don't check for ismultithread global since lock is cheap on new CPUs
 
@@ -1907,7 +1907,7 @@ asm
         push    eax                 // allocate local storage for loading fpu
         test    esi, esi
         jz      @nil                // nil string
-@trim:  movzx   ebx, byte ptr[esi]  // strip leading spaces
+@trim:  movzx   ebx, byte ptr [esi] // strip leading spaces
         inc     esi
         cmp     bl, ' '
         je      @trim
@@ -1924,8 +1924,8 @@ asm
         mov     cl, 1               // set digit found flag
         mov     [esp], ebx          // store for fpu use
         fmul    st(0), st(1)        // multply by 10
-        fiadd   dword ptr[esp]      // add next digit
-        movzx   ebx, byte ptr[esi]  // get next char
+        fiadd   dword ptr [esp]     // add next digit
+        movzx   ebx, byte ptr [esi] // get next char
         inc     esi
         test    bl, bl              // end reached?
         jnz     @digl               // no,get next digit
@@ -1938,12 +1938,12 @@ asm
         jz      @error              // no digits found
         jmp     @dig1
 @minus: mov     ch, 1               // set sign flag
-@sigset:movzx   ebx, byte ptr[esi]  // get next char
+@sigset:movzx   ebx, byte ptr [esi] // get next char
         inc     esi
         jmp     @gdig1
 @frac:  cmp     bl, '.' - '0'
         jne     @exp                // no decimal point
-        movzx   ebx, byte ptr[esi]  // get next char
+        movzx   ebx, byte ptr [esi] // get next char
         test    bl, bl
         jz      @dotend             // string ends with '.'
         inc     esi
@@ -1953,8 +1953,8 @@ asm
         mov     [esp], ebx
         dec     eax                 // -(number of decimal places)
         fmul    st(0), st(1)        // multply by 10
-        fiadd   dword ptr[esp]      // add next digit
-        movzx   ebx, byte ptr[esi]  // get next char
+        fiadd   dword ptr [esp]     // add next digit
+        movzx   ebx, byte ptr [esi] // get next char
         inc     esi
         test    bl, bl              // end reached?
         jnz     @fracl              // no, get next digit
@@ -1965,7 +1965,7 @@ asm
 @exp:   or      bl, $20
         cmp     bl, 'e' - '0'
         jne     @error              // not 'e' or 'e'
-        movzx   ebx, byte ptr[esi]  // get next char
+        movzx   ebx, byte ptr [esi] // get next char
         inc     esi
         mov     cl, 0               // clear exponent sign flag
         cmp     bl, '-'
@@ -1974,7 +1974,7 @@ asm
         je      @expset
         jmp     @expl
 @minexp:mov     cl, 1               // set exponent sign flag
-@expset:movzx   ebx, byte ptr[esi]  // get next char
+@expset:movzx   ebx, byte ptr [esi] // get next char
         inc     esi
 @expl:  sub     bl, '0'
         cmp     bl, 9
@@ -1982,7 +1982,7 @@ asm
         lea     edi, [edi + edi * 4]// multiply by 10
         add     edi, edi
         add     edi, ebx            // add next digit
-        movzx   ebx, byte ptr[esi]  // get next char
+        movzx   ebx, byte ptr [esi] // get next char
         inc     esi
         test    bl, bl              // end reached?
         jnz     @expl               // no, get next digit

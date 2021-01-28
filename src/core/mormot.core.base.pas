@@ -5051,24 +5051,24 @@ begin
       {$ifdef CPUX86}
       asm // by-passing the RTL is a good idea here
         push    ebx
-        mov     edx, dword ptr[c + 4]
-        mov     eax, dword ptr[c]
+        mov     edx, dword ptr [c + 4]
+        mov     eax, dword ptr [c]
         mov     ebx, 100
         mov     ecx, eax
         mov     eax, edx
         xor     edx, edx
         div     ebx
-        mov     dword ptr[c100 + 4], eax
+        mov     dword ptr [c100 + 4], eax
         xchg    eax, ecx
         div     ebx
-        mov     dword ptr[c100], eax
+        mov     dword ptr [c100], eax
         imul    ebx, ecx
         mov     ecx, 100
         mul     ecx
         add     edx, ebx
         pop     ebx
-        sub     dword ptr[c + 4], edx
-        sbb     dword ptr[c], eax
+        sub     dword ptr [c + 4], edx
+        sbb     dword ptr [c], eax
       end;
       {$else}
       c100 := c div 100;   // one div by two digits

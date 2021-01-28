@@ -4302,7 +4302,7 @@ procedure InternalUnicodeUpper(Context: TSqlite3FunctionContext; argc: integer;
 var
   input: PUtf8Char;
   len: integer;
-  tmp: RawUTF8;
+  tmp: RawUtf8;
 begin
   if not CheckNumberOfArgs(Context, 1, argc) then
     exit;
