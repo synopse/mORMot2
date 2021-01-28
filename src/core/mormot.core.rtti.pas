@@ -5367,7 +5367,7 @@ var
   tmp: array[byte] of AnsiChar; // avoid unneeded memory allocation
   c: TRttiParserComplexType;
 begin
-  UpperCopy255Buf(@tmp, Name, NameLen);
+  UpperCopy255Buf(@tmp, Name, NameLen)^ := #0;
   up := @tmp;
   //for ndx := 1 to SORTEDMAX do if StrComp(SORTEDNAMES[ndx], SORTEDNAMES[ndx-1])<=0 then
   //writeln(SORTEDNAMES[ndx]);
