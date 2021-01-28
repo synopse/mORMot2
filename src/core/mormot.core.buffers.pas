@@ -5254,7 +5254,7 @@ asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
         // edi=b64enc[] ebx=sp esi=rp ebp=len div 3
         xor     eax, eax
         @1:     // read 3 bytes from sp
-        movzx   edx, byte ptr[ebx]
+        movzx   edx, byte ptr [ebx]
         shl     edx, 16
         mov     al, [ebx + 2]
         mov     ah, [ebx + 1]
@@ -5610,7 +5610,7 @@ asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
         // edi=b64urienc[] ebx=sp esi=rp ebp=len div 3
         xor     eax, eax
 @1:    // read 3 bytes from sp
-        movzx   edx, byte ptr[ebx]
+        movzx   edx, byte ptr [ebx]
         shl     edx, 16
         mov     al, [ebx + 2]
         mov     ah, [ebx + 1]
@@ -7288,6 +7288,24 @@ begin
   result := Buffer;
 end;
 
+function Append999ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
+var
+  L: integer;
+  P: PAnsiChar;
+  c: cardinal;
+begin
+  P := pointer(SmallUInt32Utf8[Value]);
+  L := PStrLen(P - _STRLEN)^;
+  c := PCardinal(P)^;
+  repeat // PCardinal() write = FastMM4 FullDebugMode errors
+    Buffer^ := AnsiChar(c);
+    inc(Buffer);
+    c := c shr 8;
+    dec(L);
+  until L = 0;
+  result := pointer(Buffer);
+end;
+
 function AppendUInt32ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
 var
   L: PtrInt;
@@ -7295,41 +7313,14 @@ var
   tmp: array[0..23] of AnsiChar;
 begin
   if Value <= high(SmallUInt32Utf8) then
-  begin
-    P := pointer(SmallUInt32Utf8[Value]);
-    L := PStrLen(P - _STRLEN)^;
-  end
+    result := Append999ToBuffer(Buffer, Value)
   else
   begin
     P := StrUInt32(@tmp[23], Value);
     L := @tmp[23] - P;
+    MoveSmall(P, Buffer, L);
+    result := Buffer + L;
   end;
-  MoveSmall(P, Buffer, L);
-  result := Buffer + L;
-end;
-
-function Append999ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
-var
-  L: PtrInt;
-  P: PAnsiChar;
-  c: cardinal;
-begin
-  P := pointer(SmallUInt32Utf8[Value]);
-  L := PStrLen(P - _STRLEN)^;
-  c := PCardinal(P)^;
-  Buffer[0] := AnsiChar(c); // PCardinal() write = FastMM4 FullDebugMode errors
-  inc(Buffer);
-  if L > 1 then
-  begin
-    Buffer^ := AnsiChar(c shr 8);
-    inc(Buffer);
-    if L > 2 then
-    begin
-      Buffer^ := AnsiChar(c shr 16);
-      inc(Buffer);
-    end;
-  end;
-  result := pointer(Buffer);
 end;
 
 function Plural(const itemname: shortstring; itemcount: cardinal): shortstring;
