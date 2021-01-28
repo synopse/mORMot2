@@ -4509,23 +4509,23 @@ type
     {$endif NOPOINTEROFFSET}
     fFieldType: array of TOrmTableFieldType;
     fFieldTypeAllRows: boolean;
-    fFieldNames: TRawUtf8DynArray;
-    fFieldNameOrder: TCardinalDynArray; // O(log(n)) binary search for FieldIndex()
-    fFieldIndexID: integer; // index of a 'ID' field, -1 if none
-    fInternalState: cardinal; // DB state counter when the data was retrieved
-    fSortParams: TOrmTableSortParams; // last sorting parameters (for re-sort)
-    fOwnedRecords: TSynObjectList; // holds NewRecord() returned instances
     fOwnerMustFree: boolean; // if owner TOrm should free it
+    fFieldIndexID: integer; // index of a 'ID' field, -1 if none
     fStepRow: integer; // current 1..RowCount position during Step() process
+    fInternalState: cardinal; // DB state counter when the data was retrieved
+    fFieldNames: TRawUtf8DynArray;
+    fFieldNameOrder: TCardinalDynArray; // O(log(n)) bin search for FieldIndex()
+    fSortParams: TOrmTableSortParams; // last sorting parameters (for re-sort)
     fQueryTables: TOrmClassDynArray; // which TOrm classes generated the data
     fQueryColumnTypes: array of TOrmFieldType;
     fQuerySql: RawUtf8; // any associated SQL statement, set by Create()
     fQueryTableNameFromSql: RawUtf8;
     fQueryTableIndexFromSql: integer; // -2=nosearch -1=notfound fQueryTables[0..n]
-    fFieldLengthMean: TIntegerDynArray;
     fFieldLengthMeanSum: integer;
+    fFieldLengthMean: TIntegerDynArray;
     fFieldParsedAsString: set of 0..255; // set at parsing at wasstring=true
     fOnExportValue: TOnOrmTableGetValue;
+    fOwnedRecords: TSynObjectList; // holds NewRecord() returned instances
     function GetResults(Offset: PtrInt): PUtf8Char; // low-level data access
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetResults(Offset: PtrInt; Value: PUtf8Char);
