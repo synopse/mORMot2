@@ -10117,12 +10117,8 @@ end;
 { ********************* Abstract Classes with Auto-Create-Fields }
 
 function DoRegisterAutoCreateFields(ObjectInstance: TObject): TRttiJson;
-begin
-  result := Rtti.RegisterClass(PClass(ObjectInstance)^) as TRttiJson;
-  if PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^ <> result then
-    raise ERttiException.CreateUtf8( // paranoid check
-      'AutoCreateFields(%): unexpected vmtAutoTable', [ObjectInstance]);
-  result.SetAutoCreateFields;
+begin // sub procedure for smaller code generation in AutoCreateFields/Create
+  result := Rtti.RegisterAutoCreateFieldsClass(PClass(ObjectInstance)^) as TRttiJson;
 end;
 
 procedure AutoCreateFields(ObjectInstance: TObject);
@@ -10131,7 +10127,7 @@ var
   n: integer;
   p: ^PRttiCustomProp;
 begin
-  // inlined ClassPropertiesGet: we know it is the first slot
+  // inlined ClassPropertiesGet
   rtti := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
   if (rtti = nil) or
      not (rcfAutoCreateFields in rtti.Flags) then
