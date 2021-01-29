@@ -32,9 +32,8 @@ end;
 // = AlignToQword() as defined in system.inc and used in rtti.inc
 function GetTypeData(TypeInfo: pointer): PTypeData;
 begin
-  // qword aligned jump over Kind+Name - compiles as 2 x86_64 asm opcodes
-  result := TYPINFO.GetTypeData(TypeInfo);
-  //result := AlignTypeData(@PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2]);
+  // qword aligned jump over Kind+Name - compiles as 2 x86_64 asm opcodes on x86_64
+  result := AlignTypeData(@PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2]);
 end;
 
 {$else}
@@ -44,7 +43,7 @@ type
 
 function GetTypeData(TypeInfo: pointer): PTypeData;
 begin
-  // jump over Kind+Name - compiles as 2 x86_64 asm opcodes
+  // jump over Kind+Name - compiles as 2 x86_64 asm opcodes on x86_64
   result := @PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2];
 end;
 
