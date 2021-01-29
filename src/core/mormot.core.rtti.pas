@@ -324,13 +324,8 @@ type
   // - get a PRttiClass with PRttiInfo.RttiClass() or GetRttiClass()
   TRttiClass = object
   public
-    {$ifdef FPC_PROVIDE_ATTR_TABLE}
-    AttributeTable : PAttributeTable;
-    {$endif}
     /// the class type
-    // - not defined as an inlined function, since first field is always aligned
-    // - Alf: I hope this is still true on FPC trunk for the second field also ... :-)
-    RttiClass: TClass;
+    function RttiClass: TClass;
     /// the parent class type information
     function ParentInfo: PRttiInfo;
       {$ifdef HASINLINE}inline;{$endif}
@@ -371,8 +366,7 @@ type
   public
     /// specify ordinal storage size and sign
     // - is prefered to MaxValue to identify the number of stored bytes
-    // - not defined as an inlined function, since first field is always aligned
-    RttiOrd: TRttiOrd;
+    function RttiOrd: TRttiOrd;
     /// first value of enumeration type, typicaly 0
     // - may be < 0 e.g. for boolean
     function MinValue: PtrInt;
@@ -2534,6 +2528,11 @@ end;
 
 
 { TRttiEnumType }
+
+function TRttiEnumType.RttiOrd: TRttiOrd;
+begin
+  result := TRttiOrd(PTypeData(@self)^.OrdType);
+end;
 
 function TRttiEnumType.MinValue: PtrInt;
 begin

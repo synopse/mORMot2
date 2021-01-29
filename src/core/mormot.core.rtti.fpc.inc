@@ -33,7 +33,8 @@ end;
 function GetTypeData(TypeInfo: pointer): PTypeData;
 begin
   // qword aligned jump over Kind+Name - compiles as 2 x86_64 asm opcodes
-  result := AlignTypeData(@PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2]);
+  result := TYPINFO.GetTypeData(TypeInfo);
+  //result := AlignTypeData(@PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2]);
 end;
 
 {$else}
@@ -58,6 +59,11 @@ begin
     result := pointer(GetTypeData(@self))
   else
     result := nil;
+end;
+
+function TRttiClass.RttiClass: TClass;
+begin
+  result := PTypeData(@self)^.ClassType;
 end;
 
 function TRttiClass.ParentInfo: PRttiInfo;
@@ -376,10 +382,10 @@ begin
   info := GetTypeData(@self);
   Fields.Size := info^.RecSize;
   if Assigned(info^.RecInitInfo) then // see RTTIRecordOp() in rtti.inc
-    d := pointer(GetTypeData(info^.RecInitInfo));
+    //d := TYPINFO.AlignTypeData(info+2+PByte(info)[1]);
+    d := info^.RecInitData;
   Fields.Count := d^.ManagedFieldCount;
-  inc(d); // ManagedFields[] just follow TRecInitData/TRecordInfoInit
-  Fields.Fields := AlignToPtr(d);
+  Fields.Fields:=AlignToPtr(Pointer(@d^.ManagedFieldCount)+SizeOf(d^.ManagedFieldCount));
 end;
 
 function TRttiInfo.RecordManagedFieldsCount: integer;
@@ -389,7 +395,8 @@ var
 begin
   info := GetTypeData(@self);
   if Assigned(info^.RecInitInfo) then
-    d := pointer(GetTypeData(info^.RecInitInfo));
+    //d := pointer(GetTypeData(info^.RecInitInfo));
+    d := info^.RecInitData;
   result := d^.ManagedFieldCount;
 end;
 
