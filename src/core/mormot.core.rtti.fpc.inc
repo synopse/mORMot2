@@ -382,8 +382,7 @@ begin
   info := GetTypeData(@self);
   Fields.Size := info^.RecSize;
   if Assigned(info^.RecInitInfo) then // see RTTIRecordOp() in rtti.inc
-    //d := TYPINFO.AlignTypeData(info+2+PByte(info)[1]);
-    d := info^.RecInitData;
+    d := pointer(GetTypeData(info^.RecInitInfo));
   Fields.Count := d^.ManagedFieldCount;
   Fields.Fields:=AlignToPtr(Pointer(@d^.ManagedFieldCount)+SizeOf(d^.ManagedFieldCount));
 end;
@@ -395,8 +394,7 @@ var
 begin
   info := GetTypeData(@self);
   if Assigned(info^.RecInitInfo) then
-    //d := pointer(GetTypeData(info^.RecInitInfo));
-    d := info^.RecInitData;
+    d := pointer(GetTypeData(info^.RecInitInfo));
   result := d^.ManagedFieldCount;
 end;
 
