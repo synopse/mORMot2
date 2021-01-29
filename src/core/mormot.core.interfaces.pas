@@ -3281,11 +3281,11 @@ begin
   case resultType of
     imvDouble, imvDateTime:
       asm
-        fld     qword ptr[result]
+        fld     qword ptr [result]
       end;  // in st(0)
     imvCurrency:
       asm
-        fild    qword ptr[result]
+        fild    qword ptr [result]
       end;  // in st(0)
   end;
   {$endif CPUINTEL}
@@ -6542,7 +6542,7 @@ asm
         jmp     @checkstack
 @addstack:
         dec     ecx
-        push    qword ptr[rdx]
+        push    qword ptr [rdx]
         sub     rdx, 8
 @checkstack:
         test    ecx, ecx
@@ -6556,14 +6556,14 @@ asm
         mov     rcx, [r12 + TCallMethodArgs.ParamRegs + REGRCX * 8 - 8]
         mov     r8, [r12 + TCallMethodArgs.ParamRegs + REGR8 * 8 - 8]
         mov     r9, [r12 + TCallMethodArgs.ParamRegs + REGR9 * 8 - 8]
-        movsd   xmm0, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM0 * 8 - 8]
-        movsd   xmm1, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM1 * 8 - 8]
-        movsd   xmm2, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM2 * 8 - 8]
-        movsd   xmm3, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM3 * 8 - 8]
-        movsd   xmm4, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM4 * 8 - 8]
-        movsd   xmm5, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM5 * 8 - 8]
-        movsd   xmm6, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM6 * 8 - 8]
-        movsd   xmm7, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM7 * 8 - 8]
+        movsd   xmm0, qword ptr [r12 + TCallMethodArgs.FPRegs + REGXMM0 * 8 - 8]
+        movsd   xmm1, qword ptr [r12 + TCallMethodArgs.FPRegs + REGXMM1 * 8 - 8]
+        movsd   xmm2, qword ptr [r12 + TCallMethodArgs.FPRegs + REGXMM2 * 8 - 8]
+        movsd   xmm3, qword ptr [r12 + TCallMethodArgs.FPRegs + REGXMM3 * 8 - 8]
+        movsd   xmm4, qword ptr [r12 + TCallMethodArgs.FPRegs + REGXMM4 * 8 - 8]
+        movsd   xmm5, qword ptr [r12 + TCallMethodArgs.FPRegs + REGXMM5 * 8 - 8]
+        movsd   xmm6, qword ptr [r12 + TCallMethodArgs.FPRegs + REGXMM6 * 8 - 8]
+        movsd   xmm7, qword ptr [r12 + TCallMethodArgs.FPRegs + REGXMM7 * 8 - 8]
         call    [r12].TCallMethodArgs.method
         {$else}
         // Win64 ABI
@@ -6571,10 +6571,10 @@ asm
         mov     rdx, [r12 + TCallMethodArgs.ParamRegs + REGRDX * 8 - 8]
         mov     r8, [r12 + TCallMethodArgs.ParamRegs + REGR8 * 8 - 8]
         mov     r9, [r12 + TCallMethodArgs.ParamRegs + REGR9 * 8 - 8]
-        movsd   xmm0, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM0 * 8 - 8]
-        movsd   xmm1, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM1 * 8 - 8]
-        movsd   xmm2, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM2 * 8 - 8]
-        movsd   xmm3, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM3 * 8 - 8]
+        movsd   xmm0, qword ptr [r12 + TCallMethodArgs.FPRegs + REGXMM0 * 8 - 8]
+        movsd   xmm1, qword ptr [r12 + TCallMethodArgs.FPRegs + REGXMM1 * 8 - 8]
+        movsd   xmm2, qword ptr [r12 + TCallMethodArgs.FPRegs + REGXMM2 * 8 - 8]
+        movsd   xmm3, qword ptr [r12 + TCallMethodArgs.FPRegs + REGXMM3 * 8 - 8]
         sub     rsp, 8 * 4   // reserve shadow-space for RCX,RDX,R8,R9 registers
         call    [r12].TCallMethodArgs.method
         add     rsp, 8 * 4
@@ -6588,7 +6588,7 @@ asm
         je      @d
         cmp     cl, imvCurrency
         jne     @e
-@d:     movlpd  qword ptr[r12].TCallMethodArgs.res64, xmm0
+@d:     movlpd  qword ptr [r12].TCallMethodArgs.res64, xmm0
         // movlpd to ignore upper 64-bit of 128-bit xmm0 reg
 @e:     {$ifdef FPC}
         mov     rsp, rbp
@@ -6611,7 +6611,7 @@ asm
         mov     esi, Args
         // copy stack content (if any)
         mov     eax, [esi].TCallMethodArgs.StackSize
-        mov     edx, dword ptr[esi].TCallMethodArgs.StackAddr
+        mov     edx, dword ptr [esi].TCallMethodArgs.StackAddr
         add     edx, eax // pascal/register convention = left-to-right
         shr     eax, 2
         jz      @z

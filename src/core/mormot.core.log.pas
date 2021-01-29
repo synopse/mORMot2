@@ -81,7 +81,7 @@ type
     fUnit: TSynMapUnitDynArray;
     fSymbols: TDynArray;
     fUnits: TDynArrayHashed;
-    fUnitSynLogIndex, fUnitSystemIndex: integer;
+    fSymCount, fUnitCount, fUnitSynLogIndex, fUnitSystemIndex: integer;
     fCodeOffset: PtrUInt;
     fHasDebugInfo: boolean;
   public
@@ -115,7 +115,7 @@ type
     /// save all debugging information as a JSON file
     // - may be useful from debugging purposes
     procedure SaveToJson(const aJsonFile: TFileName;
-      aHumanReadable: boolean = false); overload;
+      aJsonFormat: TTextWriterJsonFormat = jsonCompact); overload;
     /// add some debugging information about the supplied absolute memory address
     // - will create a global TSynMapFile instance for the current process, if
     // necessary
@@ -131,10 +131,13 @@ type
     function FindSymbol(aAddressOffset: integer): PtrInt;
     /// retrieve an unit and source line, according to a relative code address
     // - use fast O(log n) binary search
-    function FindUnit(aAddressOffset: integer; out LineNumber: integer): integer; overload;
+    function FindUnit(aAddressOffset: integer; out LineNumber: integer): PtrInt; overload;
+    /// retrieve an unit, according to a relative code address
+    // - use fast O(log n) binary search
+    function FindUnit(aAddressOffset: integer): PtrInt; overload;
     /// retrieve an unit information, according to the unit name
     // - will search within Units array
-    function FindUnit(const aUnitName: RawUtf8): integer; overload;
+    function FindUnit(const aUnitName: RawUtf8): PtrInt; overload;
     /// return the symbol location according to the supplied absolute address
     // - i.e. unit name, symbol name and line number (if any), as plain text
     // - returns '' if no match found
@@ -1821,8 +1824,12 @@ constructor TSynMapFile.Create(const aExeName: TFileName = ''; MabCreate: boolea
 
     procedure ReadSymbols;
     var
-      Beg: PAnsiChar;
+      Beg: PUtf8Char;
       Sym: TSynMapSymbol;
+      {$ifdef ISDELPHI2005ANDUP}
+      l, u: PtrInt;
+      LastUnitUp: RawUtf8; // e.g. 'MORMOT.CORE.DATA.'
+      {$endif ISDELPHI2005ANDUP}
     begin
       NextLine;
       NextLine;
@@ -1835,44 +1842,37 @@ constructor TSynMapFile.Create(const aExeName: TFileName = ''; MabCreate: boolea
                 (P^ = ' ') do
             inc(P);
           Beg := pointer(P);
-          {$ifdef ISDELPHI2005ANDUP}
-          // trim left 'UnitName.' for each symbol (since Delphi 2005)
-          case IdemPCharArray(P, 'SYWIFMVC') of // ignore RTL namespaces
-            0:
-              if IdemPChar(P + 2, 'STEM.') then
-                if IdemPCharArray(P + 7, ['WIN.', 'RTTI.', 'TYPES.', 'ZLIB.',
-                  'CLASSES.', 'SYSUTILS.', 'VARUTILS.', 'STRUTILS.', 'SYNCOBJS.',
-                  'GENERICS.', 'CHARACTER.', 'TYPINFO.', 'VARIANTS.']) >= 0 then
-                    inc(P, 9);
-            1:
-              if IdemPChar(P + 2, 'NAPI.') then
-                inc(P, 7);
-            2:
-              if IdemPChar(P + 2, 'X.') then
-                inc(P, 7);
-            3:
-              if IdemPChar(P + 2, 'L.') then
-                inc(P, 7);
-          end;
-          while (P < PEnd) and
-                (P^ <> '.') do
-            if P^ <= ' ' then
-              break
-            else
-              inc(P);
-          if P^ = '.' then
-          begin
-            while (P < PEnd) and
-                  (P^ = '.') do
-              inc(P);
-            Beg := pointer(P);
-          end
-          else
-            P := pointer(Beg); // no '.' found
-          {$endif ISDELPHI2005ANDUP}
           while (P < PEnd) and
                 (P^ > ' ') do
             inc(P);
+          {$ifdef ISDELPHI2005ANDUP}
+          // trim left 'UnitName.' for each symbol (since Delphi 2005)
+          if (LastUnitUp <> '') and
+             IdemPChar(Beg, pointer(LastUnitUp)) then
+            // most common case since symbols are grouped address, i.e. by unit
+            inc(Beg, length(LastUnitUp))
+          else
+          begin
+            // manual unit name search
+            LastUnitUp := '';
+            for u := 0 to fUnits.Count - 1 do
+              with fUnit[u].Symbol do
+              begin
+                l := length(Name);
+                if (Beg[l] = '.') and
+                   (l > length(LastUnitUp)) and
+                   IdemPropNameU(Name, Beg, l) then
+                  LastUnitUp := UpperCase(Name); // find longest match
+              end;
+            if LastUnitUp <> '' then
+            begin
+              l := length(LastUnitUp);
+              SetLength(LastUnitUp, l + 1);
+              LastUnitUp[l] := '.';
+              inc(Beg, l + 1);
+            end;
+          end;
+          {$endif ISDELPHI2005ANDUP}
           FastSetString(Sym.Name, Beg, P - Beg);
           if (Sym.Name <> '') and
              not (Sym.Name[1] in ['$', '?']) then
@@ -2029,13 +2029,13 @@ constructor TSynMapFile.Create(const aExeName: TFileName = ''; MabCreate: boolea
   end;
 
 var
-  SymCount, UnitCount, i: integer;
+  i: integer;
   MabFile: TFileName;
   MapAge, MabAge: TDateTime;
   U: RawUtf8;
 begin
-  fSymbols.Init(TypeInfo(TSynMapSymbolDynArray), fSymbol, @SymCount);
-  fUnits.Init(TypeInfo(TSynMapUnitDynArray), fUnit, nil, nil, nil, @UnitCount);
+  fSymbols.Init(TypeInfo(TSynMapSymbolDynArray), fSymbol, @fSymCount);
+  fUnits.Init(TypeInfo(TSynMapUnitDynArray), fUnit, nil, nil, nil, @fUnitCount);
   fUnitSynLogIndex := -1;
   fUnitSystemIndex := -1;
   // 1. search for an external .map file matching the running .exe/.dll name
@@ -2062,22 +2062,22 @@ begin
        (MabAge < MapAge) then
       LoadMap; // if no faster-to-load .mab available and accurate
     // 2. search for a .mab file matching the running .exe/.dll name
-    if (SymCount = 0) and
+    if (fSymCount = 0) and
        (MabAge <> 0) then
       LoadMab(MabFile);
     // 3. search for an embedded compressed .mab file appended to the .exe/.dll
-    if SymCount = 0 then
+    if fSymCount = 0 then
       if aExeName = '' then
         LoadMab(GetModuleName(hInstance))
       else
         LoadMab(aExeName);
     // finalize symbols
-    if SymCount > 0 then
+    if fSymCount > 0 then
     begin
-      for i := 1 to SymCount - 1 do
+      for i := 1 to fSymCount - 1 do
         assert(fSymbol[i].Start > fSymbol[i - 1].Stop);
-      SetLength(fSymbol, SymCount);
-      SetLength(fUnit, UnitCount);
+      SetLength(fSymbol, fSymCount);
+      SetLength(fUnit, fUnitCount);
       fSymbols.Init(TypeInfo(TSynMapSymbolDynArray), fSymbol);
       fUnits.Init(TypeInfo(TSynMapUnitDynArray), fUnit);
       if MabCreate then
@@ -2165,7 +2165,7 @@ begin
 end;
 
 procedure TSynMapFile.SaveToJson(const aJsonFile: TFileName;
-  aHumanReadable: boolean);
+  aJsonFormat: TTextWriterJsonFormat);
 var
   W: TBaseWriter;
   json: RawUtf8;
@@ -2173,10 +2173,7 @@ begin
   W := DefaultTextWriterSerializer.CreateOwnedStream(65536);
   try
     SaveToJson(W);
-    if aHumanReadable then
-      W.SetText(json, jsonHumanReadable)
-    else
-      W.SetText(json);
+    W.SetText(json, aJsonFormat);
     FileFromString(json, aJsonFile);
   finally
     W.Free;
@@ -2252,17 +2249,15 @@ begin
         else if aAddressOffset > Stop then
           L := result + 1
         else
-          exit;
+          exit; // found
     until L > R;
   result := -1;
 end;
 
-function TSynMapFile.FindUnit(aAddressOffset: integer;
-  out LineNumber: integer): integer;
+function TSynMapFile.FindUnit(aAddressOffset: integer): PtrInt;
 var
-  L, R, n, max: integer;
+  L, R: PtrInt;
 begin
-  LineNumber := 0;
   R := high(fUnit);
   L := 0;
   if (R >= 0) and
@@ -2276,30 +2271,41 @@ begin
         else if aAddressOffset > Symbol.Stop then
           L := result + 1
         else
-        begin
-        // unit found -> search line number
-          L := 0;
-          max := high(Addr);
-          R := max;
-          if R >= 0 then
-            repeat
-              n := (L + R) shr 1;
-              if aAddressOffset < Addr[n] then
-                R := n - 1
-              else if (n < max) and
-                      (aAddressOffset >= Addr[n + 1]) then
-                L := n + 1
-              else
-              begin
-                LineNumber := Line[n];
-                exit;
-              end;
-            until L > R;
           exit;
-        end;
     until L > R;
   result := -1;
 end;
+
+function TSynMapFile.FindUnit(aAddressOffset: integer;
+  out LineNumber: integer): PtrInt;
+var
+  L, R, n, max: PtrInt;
+begin
+  LineNumber := 0;
+  result := FindUnit(aAddressOffset);
+  if result >= 0 then
+    with fUnit[result] do
+    begin
+      // unit found -> search line number
+      max := high(Addr);
+      L := 0;
+      R := max;
+      if R >= 0 then
+        repeat
+          n := (L + R) shr 1;
+          if aAddressOffset < Addr[n] then
+            R := n - 1
+          else if (n < max) and
+                  (aAddressOffset >= Addr[n + 1]) then
+            L := n + 1
+          else
+          begin
+            LineNumber := Line[n];
+            exit;
+          end;
+        until L > R;
+    end;
+  end;
 
 function TSynMapFile.AbsoluteToOffset(aAddressAbsolute: PtrUInt): integer;
 begin
@@ -2332,9 +2338,9 @@ begin
      (aAddressAbsolute = 0) then
     exit;
   {$ifdef FPC}
-  // it won't actually use TSynMapFile, but just a FPC RTL raw function
+  // no TSynMapFile available: use FPC RTL raw function
   s := BacktraceStrFunc(pointer(aAddressAbsolute));
-  if Pos('core.log', s) = 0 then // don't log internal calls
+  if Pos('.core.log.pas', s) = 0 then // don't log internal calls of this unit
     W.AddShort(s);
   {$else}
   with GetInstanceMapFile do
@@ -2437,7 +2443,7 @@ begin
     result := GetInstanceMapFile.FindLocation(PtrUInt(exc.RaisedAt));
 end;
 
-function TSynMapFile.FindUnit(const aUnitName: RawUtf8): integer;
+function TSynMapFile.FindUnit(const aUnitName: RawUtf8): PtrInt;
 begin
   if (self <> nil) and
      (aUnitName <> '') then
@@ -6341,8 +6347,14 @@ begin
 end;
 
 
+const
+  _TSynMapSymbol = 'Name:RawUtf8 Start,Stop:integer';
+  _TSynMapUnit ='Symbol:TSynMapSymbol FileName:RawUtf8 Line,Addr:TIntegerDynArray';
+
 procedure InitializeUnit;
 begin
+  Rtti.RegisterFromText([TypeInfo(TSynMapSymbol), _TSynMapSymbol,
+                         TypeInfo(TSynMapUnit), _TSynMapUnit]);
   InitializeCriticalSection(GlobalThreadLock);
   GetEnumTrimmedNames(TypeInfo(TSynLogInfo), @_LogInfoText);
   GetEnumCaptions(TypeInfo(TSynLogInfo), @_LogInfoCaption);
@@ -6371,6 +6383,7 @@ begin
   ExeInstanceMapFile.Free;
   DeleteCriticalSection(GlobalThreadLock);
 end;
+
 
 initialization
   InitializeUnit;

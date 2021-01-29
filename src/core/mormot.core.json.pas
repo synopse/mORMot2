@@ -736,14 +736,17 @@ type
     // - if Escape is a constant, consider calling directly AddNoJsonEscape,
     // AddJsonEscape or AddOnSameLine methods
     procedure Add(P: PUtf8Char; Escape: TTextWriterKind); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// write some #0 ended UTF-8 text, according to the specified format
     // - if Escape is a constant, consider calling directly AddNoJsonEscape,
     // AddJsonEscape or AddOnSameLine methods
     procedure Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// write some #0 ended Unicode text as UTF-8, according to the specified format
     // - if Escape is a constant, consider calling directly AddNoJsonEscapeW,
     // AddJsonEscapeW or AddOnSameLineW methods
     procedure AddW(P: PWord; Len: PtrInt; Escape: TTextWriterKind);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 encoded chars to the buffer, from the main AnsiString type
     // - use the current system code page for AnsiString parameter
     procedure AddAnsiString(const s: AnsiString; Escape: TTextWriterKind); overload;
@@ -10117,12 +10120,8 @@ end;
 { ********************* Abstract Classes with Auto-Create-Fields }
 
 function DoRegisterAutoCreateFields(ObjectInstance: TObject): TRttiJson;
-begin
-  result := Rtti.RegisterClass(PClass(ObjectInstance)^) as TRttiJson;
-  if PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^ <> result then
-    raise ERttiException.CreateUtf8( // paranoid check
-      'AutoCreateFields(%): unexpected vmtAutoTable', [ObjectInstance]);
-  result.SetAutoCreateFields;
+begin // sub procedure for smaller code generation in AutoCreateFields/Create
+  result := Rtti.RegisterAutoCreateFieldsClass(PClass(ObjectInstance)^) as TRttiJson;
 end;
 
 procedure AutoCreateFields(ObjectInstance: TObject);
@@ -10131,7 +10130,7 @@ var
   n: integer;
   p: ^PRttiCustomProp;
 begin
-  // inlined ClassPropertiesGet: we know it is the first slot
+  // inlined ClassPropertiesGet
   rtti := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
   if (rtti = nil) or
      not (rcfAutoCreateFields in rtti.Flags) then

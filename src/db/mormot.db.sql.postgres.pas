@@ -398,24 +398,24 @@ end;
 procedure TSqlDBPostgresConnectionProperties.FillOidMapping;
 begin
   // see pg_type.h (most used first)
-  mapOid(INT4OID, ftInt64);
-  mapOid(INT8OID, ftInt64);
-  mapOid(TEXTOID, ftUtf8);
-  mapOid(FLOAT8OID, ftDouble);
-  mapOid(TIMESTAMPOID, ftDate);
-  mapOid(BYTEAOID, ftBlob);
-  mapOid(NUMERICOID, ftCurrency);// our ORM uses NUMERIC(19,4) for currency
-  mapOid(BOOLOID, ftInt64);
-  mapOid(INT2OID, ftInt64);
-  mapOid(CASHOID, ftCurrency);
-  mapOid(TIMESTAMPTZOID, ftDate);
-  mapOid(ABSTIMEOID, ftDate);
-  mapOid(DATEOID, ftDate);
-  mapOid(TIMEOID, ftDate);
-  mapOid(TIMETZOID, ftDate);
-  mapOid(REGPROCOID, ftInt64);
-  mapOid(OIDOID, ftInt64);
-  mapOid(FLOAT4OID, ftDouble);
+  MapOid(INT4OID, ftInt64);
+  MapOid(INT8OID, ftInt64);
+  MapOid(TEXTOID, ftUtf8);
+  MapOid(FLOAT8OID, ftDouble);
+  MapOid(TIMESTAMPOID, ftDate);
+  MapOid(BYTEAOID, ftBlob);
+  MapOid(NUMERICOID, ftCurrency);// our ORM uses NUMERIC(19,4) for currency
+  MapOid(BOOLOID, ftInt64);
+  MapOid(INT2OID, ftInt64);
+  MapOid(CASHOID, ftCurrency);
+  MapOid(TIMESTAMPTZOID, ftDate);
+  MapOid(ABSTIMEOID, ftDate);
+  MapOid(DATEOID, ftDate);
+  MapOid(TIMEOID, ftDate);
+  MapOid(TIMETZOID, ftDate);
+  MapOid(REGPROCOID, ftInt64);
+  MapOid(OIDOID, ftInt64);
+  MapOid(FLOAT4OID, ftDouble);
 end; // any unregistered OID will be handled as ftUtf8
 
 constructor TSqlDBPostgresConnectionProperties.Create(
@@ -492,8 +492,8 @@ begin
     with PSqlDBColumnProperty(fColumn.AddAndMakeUniqueName(cName))^ do
     begin
       ColumnAttr := PQ.ftype(fRes, c);
-      ColumnType := TSqlDBPostgresConnectionProperties(Connection.
-        Properties).Oid2FieldType(ColumnAttr);
+      ColumnType := TSqlDBPostgresConnectionProperties(Connection.Properties).
+        Oid2FieldType(ColumnAttr);
     end;
   end;
 end;

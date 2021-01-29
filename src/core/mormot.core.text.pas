@@ -910,7 +910,7 @@ type
     // - indentation depth is defined by the HumanReadableLevel value
     procedure AddCRAndIndent; virtual;
     /// write the same character multiple times
-    procedure AddChars(aChar: AnsiChar; aCount: integer);
+    procedure AddChars(aChar: AnsiChar; aCount: PtrInt);
     /// append an integer Value as a 2 digits text with comma
     procedure Add2(Value: PtrUInt);
     /// append an integer Value as a 3 digits text without any comma
@@ -5199,16 +5199,19 @@ begin
   inc(B, ntabs + 2);
 end;
 
-procedure TBaseWriter.AddChars(aChar: AnsiChar; aCount: integer);
+procedure TBaseWriter.AddChars(aChar: AnsiChar; aCount: PtrInt);
 var
-  n: integer;
+  n: PtrInt;
 begin
   repeat
     n := BEnd - B;
+    if n <= aCount then
+    begin
+      FlushToStream;
+      n := BEnd - B;
+    end;
     if aCount < n then
-      n := aCount
-    else
-      FlushToStream; // loop to avoid buffer overflow
+      n := aCount;
     FillCharFast(B[1], n, ord(aChar));
     inc(B, n);
     dec(aCount, n);
@@ -5314,19 +5317,22 @@ begin
   begin
     inc(B); // allow CancelLastChar
     repeat
-      i := BEnd - B  + 1; // guess biggest size to be added into buf^ at once
-      if Len < i then
-        i := Len;
-      // add UTF-8 bytes
-      if i > 0 then
+      i := BEnd - B; // guess biggest size to be added into buf^ at once
+      if i >= 0 then // -1..-15 may happen because Add up to BEnd + 16
       begin
-        MoveFast(P^, B^, i);
-        inc(B, i);
+        if Len < i then
+          i := Len;
+        // add UTF-8 bytes
+        if i > 0 then
+        begin
+          MoveFast(P^, B^, i);
+          inc(B, i);
+        end;
+        if i = Len then
+          break;
+        inc(PByte(P), i);
+        dec(Len, i);
       end;
-      if i = Len then
-        break;
-      inc(PByte(P), i);
-      dec(Len, i);
       // FlushInc writes B-buf+1 -> special one below:
       WriteToStream(fTempBuf, B - fTempBuf);
       B := fTempBuf;
@@ -6580,15 +6586,15 @@ function FastFindPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt; Value: PUtf8Char
         jl      @err
         test    Value, Value
         jz      @void
-        mov     cl, byte ptr[Value]  // to check first char (likely diverse)
-@s:     lea     rax, qword ptr[r9 + R]
+        mov     cl, byte ptr [Value]  // to check first char (likely diverse)
+@s:     lea     rax, qword ptr [r9 + R]
         shr     rax, 1
-        lea     r12, qword ptr[rax - 1]  // branchless main loop
-        lea     r13, qword ptr[rax + 1]
-        mov     r10, qword ptr[rdi + rax * 8]
+        lea     r12, qword ptr [rax - 1]  // branchless main loop
+        lea     r13, qword ptr [rax + 1]
+        mov     r10, qword ptr [rdi + rax * 8]
         test    r10, r10
         jz      @lt
-        cmp     cl, byte ptr[r10]
+        cmp     cl, byte ptr [r10]
         je      @eq
         cmovc   R, r12
         cmovnc  r9, r13
@@ -6604,22 +6610,22 @@ function FastFindPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt; Value: PUtf8Char
 @lt:    mov     r9, r13 // very unlikely P[rax]=nil
         jmp     @nxt
 @eq:    mov     r11, Value // first char equal -> check others
-@sub:   mov     cl, byte ptr[r10]
+@sub:   mov     cl, byte ptr [r10]
         inc     r10
         inc     r11
         test    cl, cl
         jz      @found
-        mov     cl, byte ptr[r11]
-        cmp     cl, byte ptr[r10]
+        mov     cl, byte ptr [r11]
+        cmp     cl, byte ptr [r10]
         je      @sub
-        mov     cl, byte ptr[Value]  // reset first char
+        mov     cl, byte ptr [Value]  // reset first char
         cmovc   R, r12
         cmovnc  r9, r13
         cmp     r9, R
         jle     @s
         jmp     @err
 @void:  or      rax, -1
-        cmp     qword ptr[P], 0
+        cmp     qword ptr [P], 0
         cmove   rax, Value
         jmp     @found
 end;
@@ -6682,7 +6688,7 @@ function FastFindUpperPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt;
 var
   tmp: array[byte] of AnsiChar;
 begin
-  UpperCopy255Buf(@tmp, Value, ValueLen);
+  UpperCopy255Buf(@tmp, Value, ValueLen)^ := #0;
   result := FastFindPUtf8CharSorted(P, R, @tmp);
 end;
 

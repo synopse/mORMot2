@@ -1751,6 +1751,7 @@ const
   /// TRttiCustomList stores its TypeInfo() by PRttiInfo.Kind + Name[0..1]
   // - optimized "hash table of the poor" (tm) for Find(TypeInfo) and Find(Name)
   // - should be a bit mask (i.e. power of two minus 1)
+  // - the fact that we use modulo 32 makes Find(Name) case insensitive :)
   RTTICUSTOMTYPEINFOHASH = 31;
 
 type
@@ -2035,8 +2036,6 @@ type
     // - returns self to allow cascaded calls as a fluent interface
     function SetParserType(aParser: TRttiParserType;
       aParserComplex: TRttiParserComplexType): TRttiCustom; virtual;
-    // set AutoCreate* and AutoResolve internal fields
-    procedure SetAutoCreateFields;
   public
     /// initialize the customizer class from known RTTI
     constructor Create(aInfo: PRttiInfo); virtual;
@@ -2179,7 +2178,8 @@ type
     // called by FindOrRegister() for proper inlining
     function DoRegister(Info: PRttiInfo): TRttiCustom; overload;
     function DoRegister(ObjectClass: TClass): TRttiCustom; overload;
-    procedure DoRegister(Instance: TRttiCustom); overload;
+    function DoRegister(ObjectClass: TClass; ToDo: TRttiCustomFlags): TRttiCustom; overload;
+    procedure Add(Instance: TRttiCustom);
   public
     /// which kind of TRttiCustom class is to be used for registration
     // - properly set e.g. by mormot.core.json.pas to TRttiJson for JSON support
@@ -2199,11 +2199,11 @@ type
     function Find(ObjectClass: TClass): TRttiCustom; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// efficient search of TRttiCustom from a given type name
-    // - internally use "hash table of the poor" (tm) for quick search
+    // - internally use our "hash table of the poor" (tm) for quick search
     function Find(Name: PUtf8Char; NameLen: PtrInt;
       Kind: TRttiKind): TRttiCustom; overload;
     /// efficient search of TRttiCustom from a given type name
-    // - internally use "hash table of the poor" (tm) for quick search
+    // - internally use our "hash table of the poor" (tm) for quick search
     function Find(Name: PUtf8Char; NameLen: PtrInt;
       Kinds: TRttiKinds = []): TRttiCustom; overload;
     /// efficient search of TRttiCustom from a given type name
@@ -2243,12 +2243,18 @@ type
     // - will use the ObjectClass vmtAutoTable slot for very fast O(1) lookup
     function RegisterClass(aObject: TObject): TRttiCustom; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// register a given class type, using its RTTI, to auto-create/free its
+    // class and dynamic array published fields
+    function RegisterAutoCreateFieldsClass(ObjectClass: TClass): TRttiCustom;
+      {$ifdef HASINLINE}inline;{$endif}
     /// register one or several RTTI TypeInfo()
     // - to ensure that those classes will be recognized by text definition
     // - will just call RegisterClass() for each ObjectClass[]
     procedure RegisterClasses(const ObjectClass: array of TClass);
     /// define how a given TCollectionClass should instantiate its items
     // - we need to know the CollectionItem to propertly initialize a TCollection
+    // - not thread-safe: should be called once from the main thread, at startup,
+    // e.g. in the initialization section of your collection definition unit
     function RegisterCollection(Collection: TCollectionClass;
       CollectionItem: TCollectionItemClass): TRttiCustom;
     /// register some TypeInfo() containing unsafe parameter values
@@ -2256,6 +2262,8 @@ type
     // a bank card number or a plain password
     // - such values will force associated values to be ignored during loging,
     // as a more tuned alternative to optNoLogInput or optNoLogOutput
+    // - not thread-safe: should be called once from the main thread, at startup,
+    // e.g. in the initialization section of your types definition unit
     procedure RegisterUnsafeSPIType(const Types: array of PRttiInfo);
     /// register one RTTI TypeInfo() to be serialized as hexadecimal
     // - data will be serialized as BinToHexDisplayLower() JSON hexadecimal
@@ -2265,11 +2273,15 @@ type
     // - will also ensure that those types will be recognized by text definition
     // - leave BinarySize=0 to write all bytes as hexadecimal
     // - set BinarySize=-1 to unregister the binary serialization for the type
+    // - not thread-safe: should be called once from the main thread, at startup,
+    // e.g. in the initialization section of your types definition unit
     function RegisterBinaryType(Info: PRttiInfo; BinarySize: integer = 0): TRttiCustom;
     /// register one or several RTTI TypeInfo() to be serialized as hexadecimal
     // - TypeInfo() and associated size information will here be defined by pairs:
     // ([TypeInfo(TType1),TYPE1_BYTES,TypeInfo(TType2),TYPE2_BYTES])
     // - a wrapper around the RegisterBinaryType() method
+    // - not thread-safe: should be called once from the main thread, at startup,
+    // e.g. in the initialization section of your types definition unit
     procedure RegisterBinaryTypes(const InfoBinarySize: array of const);
     /// register one dynamic array RTTI TypeInfo() to be serialized as T*ObjArray
     // - not needed on FPC and Delphi 2010+ since "array of TSomeClass" will be
@@ -2287,6 +2299,8 @@ type
     // to bypass the FPC and Delphi 2010+ automatic recognition
     // - may return nil if DynArray is not a rkDynArray
     // - replace deprecated TJsonSerializer.RegisterObjArrayForJson() method
+    // - not thread-safe: should be called once from the main thread, at startup,
+    // e.g. in the initialization section of your T*ObjArray definition unit
     function RegisterObjArray(DynArray: PRttiInfo; Item: TClass): TRttiCustom;
     /// register one or several dynamic array RTTI TypeInfo() to be serialized
     // as T*ObjArray
@@ -2296,6 +2310,8 @@ type
     // ! Rtti.RegisterObjArrays([
     // !   TypeInfo(TAddressObjArray), TAddress,
     // !   TypeInfo(TUserObjArray), TUser]);
+    // - not thread-safe: should be called once from the main thread, at startup,
+    // e.g. in the initialization section of your T*ObjArray definition unit
     procedure RegisterObjArrays(const DynArrayItem: array of const);
     /// register TypeInfo() custom serialization for a given dynamic array or record
     // - DynArrayOrRecord should be valid TypeInfo() - use overloaded
@@ -5355,7 +5371,7 @@ var
   tmp: array[byte] of AnsiChar; // avoid unneeded memory allocation
   c: TRttiParserComplexType;
 begin
-  UpperCopy255Buf(@tmp, Name, NameLen);
+  UpperCopy255Buf(@tmp, Name, NameLen)^ := #0;
   up := @tmp;
   //for ndx := 1 to SORTEDMAX do if StrComp(SORTEDNAMES[ndx], SORTEDNAMES[ndx-1])<=0 then
   //writeln(SORTEDNAMES[ndx]);
@@ -6498,8 +6514,8 @@ begin
   end;
   // initialize process
   SetParserType(ParserType, pctNone);
-  // register
-  Rtti.DoRegister(self);
+  // register to the internal list
+  Rtti.Add(self);
 end;
 
 function {%H-}_New_NotImplemented(Rtti: TRttiCustom): pointer;
@@ -6528,29 +6544,6 @@ begin
     include(fFlags, rcfArrayItemManaged);
   fClassNewInstance := @_New_NotImplemented;
   result := self;
-end;
-
-procedure TRttiCustom.SetAutoCreateFields;
-var
-  i: integer;
-  p: PRttiCustomProp;
-begin
-  p := pointer(Props.List);
-  for i := 1 to Props.Count do
-  begin
-    case p^.Value.Kind of
-      rkClass:
-        if (p^.OffsetGet >= 0) and
-           (p^.OffsetSet >= 0) then
-          PtrArrayAdd(fAutoCreateClasses, p);
-      rkDynArray:
-        if (rcfObjArray in p^.Value.Flags) and
-           (p^.OffsetGet >= 0) then
-          PtrArrayAdd(fAutoCreateObjArrays, p);
-    end;
-    inc(p);
-  end;
-  include(fFlags, rcfAutoCreateFields);
 end;
 
 procedure TRttiCustom.NoRttiArrayFinalize(Data: PAnsiChar);
@@ -6924,7 +6917,7 @@ var
 begin
   if Info^.Kind <> rkClass then
   begin
-    // use optimized "hash table of the poor" (tm) lists
+    // our optimized "hash table of the poor" (tm) lookup
     result := pointer(Pairs[Info^.Kind, (PtrUInt(Info.RawName[0]) xor
       PtrUInt(Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH]);
     // note: we tried to include RawName[1] and $df, but with no gain
@@ -6994,7 +6987,7 @@ begin
     if (result <> nil) and
        IdemPropNameU(result.Name, Name, NameLen) then
       exit;
-    // use optimized "hash table of the poor" (tm) lists
+    // our optimized "hash table of the poor" (tm) lookup
     result := pointer(Pairs[Kind,
       (PtrUInt(NameLen) xor PtrUInt(Name[0])) and RTTICUSTOMTYPEINFOHASH]);
     if result <> nil then
@@ -7070,7 +7063,7 @@ begin
     if result <> nil then
       exit; // already registered in the background
     result := GlobalClass.Create(Info);
-    DoRegister(result);
+    Add(result);
   finally
     LeaveCriticalSection(Lock);
   end;
@@ -7089,6 +7082,9 @@ begin
     // generate fake RTTI for classes without {$M+}, e.g. TObject or Exception
     EnterCriticalSection(Lock);
     try
+      result := Find(ObjectClass); // search again (for thread safety)
+      if result <> nil then
+        exit; // already registered in the background
       result := GlobalClass.Create(nil);
       result.SetValueClass(ObjectClass, nil);
       result.NoRttiSetAndRegister(ptClass, ToText(ObjectClass), nil, {noreg=}false);
@@ -7099,26 +7095,55 @@ begin
   end;
 end;
 
-procedure TRttiCustomList.DoRegister(Instance: TRttiCustom);
+function TRttiCustomList.DoRegister(ObjectClass: TClass; ToDo: TRttiCustomFlags): TRttiCustom;
 var
-  hash, n: PtrInt;
-  newlist: TPointerDynArray; // don't touch List during background Find()
+  i: integer;
+  p: PRttiCustomProp;
 begin
-  EnterCriticalSection(Lock);
+  EnterCriticalSection(Lock); // nested log for real thread-safety
   try
-    hash := (PtrUInt(Instance.Info.RawName[0]) xor
-             PtrUInt(Instance.Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH;
-    newlist := copy(Pairs[Instance.Kind, hash]);
-    n := length(newlist);
-    SetLength(newlist, n + 2); // PRttiInfo/TRttiCustom pairs
-    newlist[n] := Instance.Info;
-    newlist[n + 1] := Instance;
-    Pairs[Instance.Kind, hash] := newlist; // atomic set for almost-thread-safe Find()
-    ObjArrayAddCount(Instances, Instance, Count); // to release memory
-    inc(Counts[Instance.Kind]);
+    result := DoRegister(ObjectClass);
+    if (rcfAutoCreateFields in ToDo) and
+       not (rcfAutoCreateFields in result.fFlags) then
+    begin
+      // detect T*AutoCreate fields
+      p := pointer(result.Props.List);
+      for i := 1 to result.Props.Count do
+      begin
+        case p^.Value.Kind of
+          rkClass:
+            if (p^.OffsetGet >= 0) and
+               (p^.OffsetSet >= 0) then
+              PtrArrayAdd(result.fAutoCreateClasses, p);
+          rkDynArray:
+            if (rcfObjArray in p^.Value.Flags) and
+               (p^.OffsetGet >= 0) then
+              PtrArrayAdd(result.fAutoCreateObjArrays, p);
+        end;
+        inc(p);
+      end;
+      include(result.fFlags, rcfAutoCreateFields); // should be set once defined
+    end;
   finally
     LeaveCriticalSection(Lock);
   end;
+end;
+
+procedure TRttiCustomList.Add(Instance: TRttiCustom);
+var
+  hash, n: PtrInt;
+  newlist: TPointerDynArray; // don't touch List during background Find()
+begin // call is made within Lock..UnLock
+  hash := (PtrUInt(Instance.Info.RawName[0]) xor
+           PtrUInt(Instance.Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH;
+  newlist := copy(Pairs[Instance.Kind, hash]);
+  n := length(newlist);
+  SetLength(newlist, n + 2); // PRttiInfo/TRttiCustom pairs
+  newlist[n] := Instance.Info;
+  newlist[n + 1] := Instance;
+  Pairs[Instance.Kind, hash] := newlist; // almost atomic set
+  ObjArrayAddCount(Instances, Instance, Count); // to release memory
+  inc(Counts[Instance.Kind]);
 end;
 
 procedure TRttiCustomList.RegisterTypes(const Info: array of PRttiInfo);
@@ -7174,6 +7199,14 @@ begin
   result := PPointer(PPAnsiChar(aObject)^ + vmtAutoTable)^;
   if result = nil then
     result := DoRegister(PClass(aObject)^);
+end;
+
+function TRttiCustomList.RegisterAutoCreateFieldsClass(ObjectClass: TClass): TRttiCustom;
+begin
+  result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
+  if (result = nil) or // caller is likely to have checked it - paranoiac we are
+     not (rcfAutoCreateFields in result.Flags) then
+    result := DoRegister(ObjectClass, [rcfAutoCreateFields]);
 end;
 
 procedure TRttiCustomList.RegisterClasses(const ObjectClass: array of TClass);
@@ -7266,28 +7299,33 @@ begin
      not (DynArrayOrRecord^.Kind in rkRecordOrDynArrayTypes) then
     raise ERttiException.Create('Rtti.RegisterFromText(DynArrayOrRecord?)');
   result := RegisterType(DynArrayOrRecord);
-  if result.Kind = rkDynArray then
-    if result.ArrayRtti = nil then
+  EnterCriticalSection(Lock);
+  try
+    if result.Kind = rkDynArray then
+      if result.ArrayRtti = nil then
+      begin
+        result.fArrayRtti := RegisterFromText('', RttiDefinition);
+        result := result.fArrayRtti;
+        exit;
+      end
+      else
+        result := result.ArrayRtti;
+    result.PropsClear; // reset to the Base64 serialization if RttiDefinition=''
+    P := pointer(RttiDefinition);
+    if P <> nil then
     begin
-      result.fArrayRtti := RegisterFromText('', RttiDefinition);
-      result := result.fArrayRtti;
-      exit;
+      result.SetPropsFromText(P, eeNothing, {NoRegister=}false);
+      if result.Props.Size <> result.Size then
+        raise ERttiException.CreateUtf8('Rtti.RegisterFromText(%): text ' +
+          'definition  covers % bytes, but RTTI defined %',
+          [DynArrayOrRecord^.RawName, result.Props.Size, result.Size]);
     end
-    else
-      result := result.ArrayRtti;
-  result.PropsClear; // reset to the Base64 serialization if RttiDefinition=''
-  P := pointer(RttiDefinition);
-  if P <> nil then
-  begin
-    result.SetPropsFromText(P, eeNothing, {NoRegister=}false);
-    if result.Props.Size <> result.Size then
-      raise ERttiException.CreateUtf8('Rtti.RegisterFromText(%): text ' +
-        'definition  covers % bytes, but RTTI defined %',
-        [DynArrayOrRecord^.RawName, result.Props.Size, result.Size]);
-  end
-  else if result.Kind in rkRecordTypes then
-    result.Props.SetFromRecordExtendedRtti(result.Info); // only for Delphi 2010+
-  result.SetParserType(result.Parser, result.ParserComplex);
+    else if result.Kind in rkRecordTypes then
+      result.Props.SetFromRecordExtendedRtti(result.Info); // only for Delphi 2010+
+    result.SetParserType(result.Parser, result.ParserComplex);
+  finally
+    LeaveCriticalSection(Lock);
+  end;
 end;
 
 function TRttiCustomList.RegisterFromText(const TypeName: RawUtf8;
@@ -7296,18 +7334,23 @@ var
   P: PUtf8Char;
   new: boolean;
 begin
-  result := Find(pointer(TypeName), length(TypeName));
-  new := result = nil;
-  if new then
-    result := GlobalClass.Create(nil)
-  else if not (result.Kind in rkRecordTypes) then
-    raise ERttiException.CreateUtf8('Rtti.RegisterFromText: existing % is a %',
-      [TypeName, ToText(result.Kind)^]);
-  result.PropsClear;
-  P := pointer(RttiDefinition);
-  result.SetPropsFromText(P, eeNothing, {NoRegister=}false);
-  if new then
-    result.NoRttiSetAndRegister(ptRecord, TypeName, nil, {NoRegister=}false);
+  EnterCriticalSection(Lock);
+  try
+    result := Find(pointer(TypeName), length(TypeName));
+    new := result = nil;
+    if new then
+      result := GlobalClass.Create(nil)
+    else if not (result.Kind in rkRecordTypes) then
+      raise ERttiException.CreateUtf8('Rtti.RegisterFromText: existing % is a %',
+        [TypeName, ToText(result.Kind)^]);
+    result.PropsClear;
+    P := pointer(RttiDefinition);
+    result.SetPropsFromText(P, eeNothing, {NoRegister=}false);
+    if new then
+      result.NoRttiSetAndRegister(ptRecord, TypeName, nil, {NoRegister=}false);
+  finally
+    LeaveCriticalSection(Lock);
+  end;
 end;
 
 procedure TRttiCustomList.RegisterFromText(
@@ -7326,6 +7369,7 @@ begin
       else
          RegisterFromText(TypeInfoTextDefinitionPairs[i * 2].VPointer, d);
 end;
+
 
 procedure CopyCollection(Source, Dest: TCollection);
 var

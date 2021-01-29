@@ -4257,6 +4257,7 @@ var
   WS: WideString;
   SU: SynUnicode;
   str: string;
+  up4: RawUcs4;
   U, U2, res, Up, Up2: RawUtf8;
   arr: TRawUtf8DynArray;
   P: PUTF8Char;
@@ -4506,6 +4507,17 @@ begin
     Check(Utf8ILComp(pointer(U), pointer(Up), length(U), length(Up)) = 0);
     Check(Utf8ICompReference(pointer(U), pointer(U)) = 0);
     Check(Utf8ILCompReference(pointer(U), pointer(U), length(U), length(U)) = 0);
+    up4 := UpperCaseUcs4Reference(U);
+    CheckEqual(StrPosIReference(pointer(U), Up4), pointer(U));
+    if U <> '' then
+    begin
+      Up2 := 'abcDE G' + U;
+      CheckEqual(StrPosIReference(pointer(Up2), Up4) - pointer(Up2),  7);
+      SetLength(Up2, length(Up2) - 1);
+      Check(StrPosIReference(pointer(Up2), Up4) = nil);
+      Up2 := 'abcDEF' + U + 'PZE';
+      CheckEqual(StrPosIReference(pointer(Up2), Up4) - pointer(Up2),  6);
+    end;
     if WA then
     begin
       CheckEqual(Utf8ICompReference(pointer(U), pointer(Up)), 0, 'Utf8ICompReference');
@@ -4588,7 +4600,7 @@ begin
   if not CheckFailed(length(SU) = 2) then
     Check(PCardinal(SU)^ = $DCD2D863);
   Check(Utf8ToUnicodeLength(Pointer(U)) = 2);
-  Check(Utf8FirstLineToUnicodeLength(Pointer(U)) = 2);
+  Check(Utf8FirstLineToUtf16Length(Pointer(U)) = 2);
   U := SynUnicodeToUtf8(SU);
   if not CheckFailed(length(U) = 4) then
     Check(PCardinal(U)^ = $92b3a8f0);

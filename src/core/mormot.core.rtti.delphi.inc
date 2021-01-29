@@ -26,7 +26,7 @@ end;
 function GetTypeData(TypeInfo: pointer): PTypeData;
 asm
         // faster code for oldest Delphi
-        movzx   edx, byte ptr[eax].TTypeInfo.Name
+        movzx   edx, byte ptr [eax].TTypeInfo.Name
         lea     eax, [eax + edx].TTypeInfo.Name[1]
 end;
 
@@ -140,12 +140,12 @@ function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
 asm // eax=aTypeInfo edx=aIndex
         test    eax, eax
         jz      @0
-        cmp     byte ptr[eax], tkEnumeration
+        cmp     byte ptr [eax], tkEnumeration
         jnz     @0
-        movzx   ecx, byte ptr[eax + TTypeInfo.Name]
+        movzx   ecx, byte ptr [eax + TTypeInfo.Name]
         mov     eax, [eax + ecx + TTypeData.BaseType + 2]
         mov     eax, [eax]
-        movzx   ecx, byte ptr[eax + TTypeInfo.Name]
+        movzx   ecx, byte ptr [eax + TTypeInfo.Name]
         cmp     edx, [eax + ecx + TTypeData.MaxValue + 2]
         ja      @0
         lea     eax, [eax + ecx + TTypeData.NameList + 2]
@@ -155,13 +155,13 @@ asm // eax=aTypeInfo edx=aIndex
         shr     edx, 2 // fast by-four scanning
         jz      @1
 @4:     dec     edx
-        movzx   ecx, byte ptr[eax]
+        movzx   ecx, byte ptr [eax]
         lea     eax, [eax + ecx + 1]
-        movzx   ecx, byte ptr[eax]
+        movzx   ecx, byte ptr [eax]
         lea     eax, [eax + ecx + 1]
-        movzx   ecx, byte ptr[eax]
+        movzx   ecx, byte ptr [eax]
         lea     eax, [eax + ecx + 1]
-        movzx   ecx, byte ptr[eax]
+        movzx   ecx, byte ptr [eax]
         lea     eax, [eax + ecx + 1]
         jnz     @4
         pop     edx
@@ -169,7 +169,7 @@ asm // eax=aTypeInfo edx=aIndex
         jnz     @s
         ret
 @1:     pop     edx
-@s:     movzx   ecx, byte ptr[eax]
+@s:     movzx   ecx, byte ptr [eax]
         lea     eax, [eax + ecx + 1] // last 1..3 iterations
         dec     edx
         jnz     @s

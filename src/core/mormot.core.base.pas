@@ -256,12 +256,19 @@ type
   // - pointer(RawUnicode) is compatible with Win32 'Wide' API call
   // - mimic Delphi 2009 UnicodeString, without the WideString or Ansi conversion overhead
   // - all conversion to/from AnsiString or RawUtf8 must be explicit: the
-  // compiler is not able to make valid implicit conversion on CP_UTF16
+  // compiler may not be able to perform implicit conversions on CP_UTF16
   {$ifdef HASCODEPAGE}
   RawUnicode = type AnsiString(CP_UTF16); // Codepage for an UnicodeString
   {$else}
   RawUnicode = type AnsiString;
   {$endif HASCODEPAGE}
+
+  /// low-level storage of UCS4 CodePoints, stored as 32-bit integers
+  RawUcs4 = TIntegerDynArray;
+
+  /// store one UCS4 CodePoint, as a 32/64-bit PtrInt for better codegen
+  // - RTL's Ucs4Char is buggy, especially on oldest Delphi
+  Ucs4CodePoint = PtrUInt;
 
   PRawUnicode = ^RawUnicode;
   PRawJson = ^RawJson;
@@ -5044,24 +5051,24 @@ begin
       {$ifdef CPUX86}
       asm // by-passing the RTL is a good idea here
         push    ebx
-        mov     edx, dword ptr[c + 4]
-        mov     eax, dword ptr[c]
+        mov     edx, dword ptr [c + 4]
+        mov     eax, dword ptr [c]
         mov     ebx, 100
         mov     ecx, eax
         mov     eax, edx
         xor     edx, edx
         div     ebx
-        mov     dword ptr[c100 + 4], eax
+        mov     dword ptr [c100 + 4], eax
         xchg    eax, ecx
         div     ebx
-        mov     dword ptr[c100], eax
+        mov     dword ptr [c100], eax
         imul    ebx, ecx
         mov     ecx, 100
         mul     ecx
         add     edx, ebx
         pop     ebx
-        sub     dword ptr[c + 4], edx
-        sbb     dword ptr[c], eax
+        sub     dword ptr [c + 4], edx
+        sbb     dword ptr [c], eax
       end;
       {$else}
       c100 := c div 100;   // one div by two digits

@@ -78,6 +78,8 @@
 {.$define NOGSSAPIAUTH}
 // disable Posix mormot.lib.gsssapi support in mormot.rest.client/server units
 
+{.$define NOPOINTEROFFSET}
+// disable TOrmTable offsets on 64-bit if your memory is huge or fragmented
 
 {$ifdef FPC}
 
@@ -553,7 +555,6 @@
     - TRestHttpClientGeneric.Compression shall contain hcSynLZ to handle it }
 {$endif NOCOMPRESSSYNLZ}
 
-
 {$ifndef NOCOMPRESSDEFLATE}
   {$define COMPRESSDEFLATE}
   { if defined, mormot.rest.http.server will use gzip for content compression
@@ -567,4 +568,6 @@
     - TRestHttpClientGeneric.Compression shall contain hcDeflate to handle it }
 {$endif NOCOMPRESSDEFLATE}
 
-
+{$ifdef CPU32}
+  {$define NOPOINTEROFFSET} // 32-bit CPU will always store pointers
+{$endif CPU32}

@@ -144,7 +144,8 @@ type
   TOnAuthenticationFailedReason = (
     afInvalidSignature,
     afRemoteServiceExecutionNotAllowed,
-    afUnknownUser,afInvalidPassword,
+    afUnknownUser,
+    afInvalidPassword,
     afSessionAlreadyStartedForThisUser,
     afSessionCreationAborted,
     afSecureConnectionRequired,
@@ -4064,7 +4065,7 @@ end;
 
 function TRestServerUriContext.GetInputNameIndex(const ParamName: RawUtf8): PtrInt;
 var
-  P: PRawUTF8;
+  P: PRawUtf8;
 begin
   // fInput[0]='Param1',fInput[1]='Value1',fInput[2]='Param2'...
   if (fInput = nil) and
