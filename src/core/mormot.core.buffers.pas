@@ -656,7 +656,10 @@ type
     // - returns true on read success
     function VarUtf8Safe(out Value: RawUtf8): boolean;
     /// read the next RawByteString value from the buffer
-    function VarString: RawByteString;
+    function VarString: RawByteString; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read the next RawByteString value from the buffer
+    function VarString(CodePage: integer): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// read the next pointer and length value from the buffer
     procedure VarBlob(out result: TValueResult); overload;
@@ -2979,6 +2982,12 @@ function TFastReader.VarString: RawByteString;
 begin
   with VarBlob do
     SetString(result, Ptr, Len);
+end;
+
+function TFastReader.VarString(CodePage: integer): RawByteString;
+begin
+  with VarBlob do
+    FastSetStringCP(result, Ptr, Len, CodePage)
 end;
 
 procedure TFastReader.VarUtf8(out result: RawUtf8);
