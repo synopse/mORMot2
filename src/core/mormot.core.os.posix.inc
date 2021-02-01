@@ -447,6 +447,9 @@ end;
 
 {$ifdef DARWIN} // OSX has no clock_gettime() API
 
+const
+  LIBCSO = 'libc.dylib';
+
 type
   TTimebaseInfoData = record
     Numer: cardinal;
@@ -454,10 +457,10 @@ type
   end;
 
 function mach_absolute_time: UInt64;
-  cdecl external 'libc.dylib' name 'mach_absolute_time';
+  cdecl external LIBCSO name 'mach_absolute_time';
 
 function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): integer;
-  cdecl external 'libc.dylib' name 'mach_timebase_info';
+  cdecl external LIBCSO name 'mach_timebase_info';
 
 var
   mach_timeinfo: TTimebaseInfoData;
@@ -526,23 +529,25 @@ end;
 
 {$else}
 
+const
+  LIBCSO = 'libc.so';
+
 {$ifdef BSD}
 
-const // see https://github.com/freebsd/freebsd/blob/master/sys/sys/time.h
+  // see https://github.com/freebsd/freebsd/blob/master/sys/sys/time.h
   CLOCK_REALTIME = 0;
   CLOCK_MONOTONIC = 4;
   CLOCK_REALTIME_COARSE = 10; // named CLOCK_REALTIME_FAST in FreeBSD 8.1+
   CLOCK_MONOTONIC_COARSE = 12;
 
 function clock_gettime(ID: cardinal; r: ptimespec): integer;
-  cdecl external 'libc.so' name 'clock_gettime';
+  cdecl external LIBCSO name 'clock_gettime';
 
 function clock_getres(ID: cardinal; r: ptimespec): integer;
-  cdecl external 'libc.so' name 'clock_getres';
+  cdecl external LIBCSO name 'clock_getres';
 
 {$else}
 
-const
   CLOCK_REALTIME = 0;
   CLOCK_MONOTONIC = 1;
   CLOCK_REALTIME_COARSE = 5; // see http://lwn.net/Articles/347811
@@ -1681,22 +1686,21 @@ begin
   until p = nil;
 end;
 
-{$if defined(BSD) or defined(Android)}
+{$ifdef BSDORANDROID}
 function mprotect(Addr: Pointer; Len: size_t; Prot: integer): integer;
-  {$ifdef Darwin} cdecl external 'libc.dylib' name 'mprotect';
-  {$else} cdecl external 'libc.so' name 'mprotect'; {$endif}
-{$endif BSD or Android}
+  cdecl; external LIBCSO name 'mprotect';
+{$endif BSDORANDROID}
 
 function SynMProtect(addr: pointer; size: size_t; prot: integer): integer;
 begin
   result := -1;
   {$ifdef UNIX}
-    {$if defined(BSD) or defined(Android)}
+    {$ifdef BSDORANDROID}
     result := mprotect(addr, size, prot);
     {$else}
     if Do_SysCall(syscall_nr_mprotect, PtrUInt(addr), size, prot) >= 0 then
       result := 0;
-    {$endif BSD or Android}
+    {$endif BSDORANDROID}
   {$endif UNIX}
 end;
 
