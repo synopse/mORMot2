@@ -558,7 +558,12 @@ procedure TServiceComplexCalculator.EnsureInExpectedThread;
 begin
   case GlobalInterfaceTestMode of
     itmDirect, itmClient, itmMainThread:
+      {$ifndef Android}
       if GetThreadID <> PtrUInt(MainThreadID) then
+      {$else}
+      // On Android, processes never run in the mainthread.
+      if false then
+      {$endif}
         raise Exception.Create('Shall be in main thread');
     itmPerInterfaceThread, itmHttp, itmLocked:
       if GetThreadID = PtrUInt(MainThreadID) then
@@ -1299,7 +1304,7 @@ begin
     exit; // should be called once
   // create model, client and server
   fModel := TOrmModel.Create([TOrmPeople, TAuthUser, TAuthGroup]);
-  fClient := TRestClientDB.Create(fModel, nil, 'test.db3', TRestServerDB, true);
+  fClient := TRestClientDB.Create(fModel, nil, WorkDir + 'test.db3', TRestServerDB, true);
   fClient.Server.Server.CreateMissingTables; // if tests are run with no db
   Check(fClient.SetUser('User', 'synopse'), 'default user for Security tests');
   Check(fClient.Server.ServiceRegister(TServiceCalculator,
@@ -1559,7 +1564,7 @@ var
   store: TRestServerDB;
 begin
   fClient.Server.StatLevels := SERVERDEFAULTMONITORLEVELS + [mlSessions];
-  store := TRestServerDB.CreateWithOwnModel([TOrmMonitorUsage], 'servicestats.db3');
+  store := TRestServerDB.CreateWithOwnModel([TOrmMonitorUsage], WorkDir + 'servicestats.db3');
   try
     store.DB.Synchronous := smOff;
     store.DB.LockingMode := lmExclusive;
@@ -1816,13 +1821,23 @@ end;
 
 procedure TTestServiceOrientedArchitecture.ClientSideRESTMainThread;
 begin
+  {$ifdef Android}
+  // Tests on Android do not run in MainThread
+  exit;
+  {$endif}
   with TTestThread.Create(true) do
   try
     Test := self;
     options := [optExecInMainThread, optFreeInMainThread];
     Start;
-    while Test <> nil do
-      CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif};
+    while (Test<>nil) do
+      //CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif};
+    begin
+      if IsMultiThread and (GetCurrentThreadID=MainThreadID) then
+        CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
+      else
+          sleep(1);
+    end;
   finally
     Free;
   end;
@@ -1844,7 +1859,13 @@ begin
     options := [optExecLockedPerInterface];
     Start;
     while Test <> nil do
-      CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif};
+      //CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif};
+    begin
+      if IsMultiThread and (GetCurrentThreadID=MainThreadID) then
+        CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
+      else
+          sleep(1);
+    end;
   finally
     Free;
   end;

@@ -1137,8 +1137,9 @@ var
   tmp: TSynTempBuffer;
 const
   MAGIC: array[0..1] of word = (34, $fff0);
+  BUILDDATETIME: TDateTime = 36215.12;
 
-  procedure Fill(var F: TFV; i: integer);
+  procedure Fill(var F: TFV; const i: integer);
   begin
     F.Major := i;
     F.Minor := i + 1;
@@ -1146,7 +1147,7 @@ const
     F.Build := i + 3;
     F.Main := IntToString(i + 1000);
     F.Detailed := IntToString(2000 - i);
-    unaligned(F.BuildDateTime) := 36215.12;
+    F.BuildDateTime := BUILDDATETIME;
     F.BuildYear := i + 2011;
   end;
 
@@ -1639,7 +1640,7 @@ begin
       Check(Build = i + 3);
       Check(Main = IntToString(i + 1000));
       Check(Detailed = IntToString(2000 - i));
-      CheckSame(unaligned(BuildDateTime), 36215.12);
+      CheckSame(BuildDateTime, BUILDDATETIME);
       Check(BuildYear = i + 2011);
     end;
   for i := 0 to 1000 do

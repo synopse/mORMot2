@@ -2910,6 +2910,7 @@ const
   PARAMREG_LAST = REGR3;
   PARAMREG_RESULT = REGR1;
   // 64-bit floating-point (double) registers
+  {$ifdef CPUARMHF}
   REGD0 = 1;
   REGD1 = 2;
   REGD2 = 3;
@@ -2921,6 +2922,7 @@ const
   FPREG_FIRST = REGD0;
   FPREG_LAST = REGD7;
   {$define HAS_FPREG}
+  {$endif CPUARMHF}
 {$endif CPUARM}
 
 {$ifdef CPUAARCH64}
@@ -3113,17 +3115,18 @@ var
         with method^.Args[arg] do
           if ValueType > imvSelf then
           begin
-            {$ifdef HAS_FPREG} // x64, arm, aarch64
+            V := nil;
+            {$ifndef CPUX86}
+            {$ifdef HAS_FPREG} // x64, armhf, aarch64
             if FPRegisterIdent > 0 then
               V := @ctxt.FPRegs[FPREG_FIRST + FPRegisterIdent - 1]
-            else if RegisterIdent > 0 then
-              V := @ctxt.ParamRegs[PARAMREG_FIRST + RegisterIdent - 1]
             else
             {$endif HAS_FPREG}
-              V := nil;
+            if RegisterIdent > 0 then
+              V := @ctxt.ParamRegs[PARAMREG_FIRST + RegisterIdent - 1];
             if RegisterIdent = PARAMREG_FIRST then
               RaiseError('unexpected self', []);
-            {$ifdef CPUX86}
+            {$else}
             case RegisterIdent of
               REGEAX:
                 RaiseError('unexpected self', []);
@@ -3269,11 +3272,13 @@ begin
   result := 0;
   resultType := imvNone;
   InternalProcess; // use an inner proc to ensure direct fld/fild FPU ops
-  case resultType of // al/ax/eax/eax:edx/rax already in result
+  // al/ax/eax/eax:edx/rax/r0:r1/x0:x1 already in result
   {$ifdef HAS_FPREG}
-    imvDouble, imvDateTime:
+  if resultType in [imvDouble, imvDateTime] then
       ctxt.FPRegs[FPREG_FIRST] := unaligned(PDouble(@result)^);
   {$else}
+  {$ifdef CPUINTEL}
+  case resultType of
     imvDouble, imvDateTime:
       asm
         fld     qword ptr [result]
@@ -3282,9 +3287,10 @@ begin
       asm
         fild    qword ptr [result]
       end;  // in st(0)
+  end;
+  {$endif CPUINTEL}
   {$endif HAS_FPREG}
   end;
-end;
 
 procedure TInterfacedObjectFake.InterfaceWrite(W: TTextWriter;
   const aMethod: TInterfaceMethod; const aParamInfo: TInterfaceMethodArgument;
@@ -3691,11 +3697,11 @@ begin
   begin
     // prepare stack and register layout
     reg := PARAMREG_FIRST;
-    {$ifndef CPUX86}
+    {$ifdef HAS_FPREG}
     {$ifdef LINUX}
     fpreg := FPREG_FIRST;
     {$endif LINUX}
-    {$endif CPUX86}
+    {$endif HAS_FPREG}
     for a := 0 to high(Args) do
     with Args[a] do
     begin
@@ -3792,16 +3798,16 @@ begin
         // on ARM, ordinals>POINTERBYTES can also be placed in the normal registers !!
         (SizeInStack <> POINTERBYTES) or
         {$endif CPUARM}
-        {$ifdef CPUX86}
-        (reg>PARAMREG_LAST) // Win32, Linux x86
-        {$else}
-        {$ifdef LINUX}  // Linux x64, arm, aarch64
+        {$ifdef HAS_FPREG}
+        {$ifdef LINUX}  // Linux x64, armhf, aarch64
         ((ValueIsInFPR) and (fpreg > FPREG_LAST)) or
-        (not ValueIsInFPR and (reg > PARAMREG_LAST))
+        ((not ValueIsInFPR) and (reg > PARAMREG_LAST))
         {$else}
         (reg>PARAMREG_LAST) // Win64: XMMs overlap regular registers
         {$endif LINUX}
-        {$endif CPUX86}
+        {$else}
+        (reg>PARAMREG_LAST) // Win32, Linux x86, armel
+        {$endif HAS_FPREG}
         {$ifdef FPC}
         or ((ValueType in [imvRecord]) and
           // trunk i386/x86_64\cpupara.pas: DynArray const is passed as register
@@ -3809,6 +3815,13 @@ begin
         {$endif FPC} then
       begin
         // this parameter will go on the stack
+        {$ifdef CPUARM}
+        // parameter must be aligned on a SizeInStack boundary
+        if (SizeInStack>POINTERBYTES) then
+        begin
+          Inc(ArgsSizeInStack,(ArgsSizeInStack MOD SizeInStack));
+        end;
+        {$endif CPUARM}
         InStackOffset := ArgsSizeInStack;
         inc(ArgsSizeInStack, SizeInStack);
       end
@@ -4042,12 +4055,15 @@ procedure TInterfacedObjectFake.ArmFakeStub;
 var
   // warning: exact local variables order should match TFakeCallStack
   smetndx: pointer;
+  {$ifdef HAS_FPREG}
   sd7, sd6, sd5, sd4, sd3, sd2, sd1, sd0: double;
+  {$endif HAS_FPREG}
   sr3,sr2,sr1,sr0: pointer;
 asm
     // get method index
     str  v1,smetndx
     // store registers
+    {$ifdef HAS_FPREG}
     vstr d0,sd0
     vstr d1,sd1
     vstr d2,sd2
@@ -4056,19 +4072,20 @@ asm
     vstr d5,sd5
     vstr d6,sd6
     vstr d7,sd7
+    {$endif HAS_FPREG}
     str  r0,sr0
     str  r1,sr1
     str  r2,sr2
     str  r3,sr3
     // TFakeCallStack address as 2nd parameter
-    // there is no lea equivalent instruction for ARM (AFAIK), so this is
-    // calculated by hand (looking at assembler)
-    sub  r1, fp, #128
+    add  r1,sp, #12
     // branch to the FakeCall function
     bl   FakeCall
     // FakeCall should set Int64 result in method result,
     // and float in aCall.FPRegs["sd0"]
+    {$ifdef HAS_FPREG}
     vstr d0,sd0
+    {$endif HAS_FPREG}
 end;
 {$else}
 procedure TInterfacedObjectFake.ArmFakeStub; nostackframe;assembler;
@@ -4079,6 +4096,7 @@ asm
       mov   r12,r13
       stmfd r13!,{r11,r12,r14,r15}
       sub   r11,r12,#4
+      {$ifdef HAS_FPREG}
       sub   r13,r13,#128
       // store registers
       vstr  d0,[r11, #-112]
@@ -4093,12 +4111,22 @@ asm
       str   r1,[r11, #-124]
       str   r2,[r11, #-120]
       str   r3,[r11, #-116]
+      {$else}
+      sub   r13,r13,#64
+      // store registers
+      str   r0,[r11, #-64]
+      str   r1,[r11, #-60]
+      str   r2,[r11, #-56]
+      str   r3,[r11, #-52]
+      {$endif HAS_FPREG}
       // set stack address
       add   r1,r13, #12
       // branch to the FakeCall function
       bl    FakeCall
       // store result
+      {$ifdef HAS_FPREG}
       vstr  d0,[r11, #-112]
+      {$endif HAS_FPREG}
       ldmea r11,{r11,r13,r15}
 end;
 {$endif ASMORIG}
@@ -6304,7 +6332,11 @@ type
 
 procedure CallMethod(var Args: TCallMethodArgs); assembler; nostackframe;
 label
-  stack_loop,load_regs,asmcall_end,float_result;
+  stack_loop,load_regs
+  {$ifdef HAS_FPREG}
+  ,asmcall_end,float_result
+  {$endif HAS_FPREG}
+  ;
 asm
    //name  r#(normally, darwin can differ)
    //a1    0           argument 1 / integer result / scratch register
@@ -6333,6 +6365,8 @@ asm
    sub	 fp, ip, #4
    // make space on stack
    sub	 sp, sp, #MAX_EXECSTACK
+   // align stack
+   bic	 sp, sp, #7
    mov   v2, Args
    // copy (push) stack content (if any)
    ldr   a1, [v2,#TCallMethodArgs.StackSize]
@@ -6356,6 +6390,7 @@ load_regs:
    ldr   r1, [v2,#TCallMethodArgs.ParamRegs+REGR1*4-4]
    ldr   r2, [v2,#TCallMethodArgs.ParamRegs+REGR2*4-4]
    ldr   r3, [v2,#TCallMethodArgs.ParamRegs+REGR3*4-4]
+   {$ifdef HAS_FPREG}
    vldr  d0, [v2,#TCallMethodArgs.FPRegs+REGD0*8-8]
    vldr  d1, [v2,#TCallMethodArgs.FPRegs+REGD1*8-8]
    vldr  d2, [v2,#TCallMethodArgs.FPRegs+REGD2*8-8]
@@ -6364,6 +6399,7 @@ load_regs:
    vldr  d5, [v2,#TCallMethodArgs.FPRegs+REGD5*8-8]
    vldr  d6, [v2,#TCallMethodArgs.FPRegs+REGD6*8-8]
    vldr  d7, [v2,#TCallMethodArgs.FPRegs+REGD7*8-8]
+   {$endif HAS_FPREG}
    ldr   v1, [v2,#TCallMethodArgs.method]
    {$ifdef CPUARM_HAS_BLX}
    blx   v1
@@ -6375,19 +6411,21 @@ load_regs:
    mov pc, v1
    {$endif CPUARM_HAS_BX}
    {$endif CPUARM_HAS_BLX}
-   str   a1, [v2,#TCallMethodArgs.res64.Lo]
-   str   a2, [v2,#TCallMethodArgs.res64.Hi]
-   ldr   a3, [v2,#TCallMethodArgs.resKind]
-   cmp   a3, smvDouble
+   str   r0, [v2,#TCallMethodArgs.res64.Lo]
+   str   r1, [v2,#TCallMethodArgs.res64.Hi]
+{$ifdef HAS_FPREG}
+   ldr   r2, [v2,#TCallMethodArgs.resKind]
+   cmp   r2, imvDouble
    beq   float_result
-   cmp   a3, smvDateTime
+   cmp   r2, imvDateTime
    beq   float_result
-   cmp   a3, smvCurrency
+   cmp   r2, imvCurrency
    bne   asmcall_end
    // store double result in res64
 float_result:
    vstr  d0, [v2,#TCallMethodArgs.res64]
 asmcall_end:
+{$endif HAS_FPREG}
    // epilog
    ldmea fp, {v1, v2, sb, sl, fp, sp, pc}
 end;
@@ -6461,11 +6499,11 @@ load_regs:
    // store normal result
    str  x0, [x19, #TCallMethodArgs.res64]
    ldr  x15, [x19, #TCallMethodArgs.resKind]
-   cmp  x15, smvDouble
+   cmp  x15, imvDouble
    b.eq float_result
-   cmp  x15, smvDateTime
+   cmp  x15, imvDateTime
    b.eq float_result
-   cmp  x15, smvCurrency
+   cmp  x15, imvCurrency
    b.ne asmcall_end
    // store double result in res64
 float_result:
@@ -6591,11 +6629,11 @@ asm
         call    [esi].TCallMethodArgs.method
         // retrieve result
         mov     cl, [esi].TCallMethodArgs.resKind
-        cmp     cl, smvDouble
+        cmp     cl, imvDouble
         je      @d
-        cmp     cl, smvDateTime
+        cmp     cl, imvDateTime
         je      @d
-        cmp     cl, smvCurrency
+        cmp     cl, imvCurrency
         jne     @i
         fistp   qword [esi].TCallMethodArgs.res64
         jmp     @e
@@ -6832,14 +6870,14 @@ begin
               call.ParamRegs[RegisterIdent + 1] := PPtrInt(Value + POINTERBYTES)^;
             {$endif CPUARM}
           end;
-          {$ifndef CPUX86}
+          {$ifdef HAS_FPREG}
           if FPRegisterIdent > 0 then
             call.FPRegs[FPRegisterIdent] := unaligned(PDouble(Value)^);
-          {$endif CPUX86}
           if (RegisterIdent > 0) and
              (FPRegisterIdent > 0) then
             raise EInterfaceFactory.CreateUtf8('Unexpected % reg=% FP=%',
               [ParamName^, RegisterIdent, FPRegisterIdent]); // should never happen
+          {$endif HAS_FPREG}
         end;
       end;
     end;
