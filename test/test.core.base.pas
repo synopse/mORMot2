@@ -1137,7 +1137,7 @@ var
   tmp: TSynTempBuffer;
 const
   MAGIC: array[0..1] of word = (34, $fff0);
-  BUILDDATETIME: TDateTime = 36215.12;
+  BUILDDATETIME: TDateTime = 36215.12; // circumvent a weird FPC/Android issue (Alf)
 
   procedure Fill(var F: TFV; const i: integer);
   begin

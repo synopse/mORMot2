@@ -326,6 +326,7 @@ type
   public
     /// the class type
     function RttiClass: TClass;
+      {$ifdef HASINLINE}inline;{$endif}
     /// the parent class type information
     function ParentInfo: PRttiInfo;
       {$ifdef HASINLINE}inline;{$endif}
@@ -367,6 +368,7 @@ type
     /// specify ordinal storage size and sign
     // - is prefered to MaxValue to identify the number of stored bytes
     function RttiOrd: TRttiOrd;
+      {$ifdef HASINLINE}inline;{$endif}
     /// first value of enumeration type, typicaly 0
     // - may be < 0 e.g. for boolean
     function MinValue: PtrInt;
@@ -2456,6 +2458,11 @@ type
 { ************* Low-Level Cross-Compiler RTTI Definitions }
 
 { TRttiClass }
+
+function TRttiClass.RttiClass: TClass;
+begin
+  result := PTypeData(@self)^.ClassType;
+end;
 
 function TRttiClass.UnitName: PShortString;
 begin

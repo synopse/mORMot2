@@ -1685,18 +1685,18 @@ end;
 function mprotect(Addr: Pointer; Len: size_t; Prot: integer): integer;
   {$ifdef Darwin} cdecl external 'libc.dylib' name 'mprotect';
   {$else} cdecl external 'libc.so' name 'mprotect'; {$endif}
-{$endif}
+{$endif BSD or Android}
 
 function SynMProtect(addr: pointer; size: size_t; prot: integer): integer;
 begin
   result := -1;
   {$ifdef UNIX}
-    {$if (defined(BSD) or defined(Android))}
+    {$if defined(BSD) or defined(Android)}
     result := mprotect(addr, size, prot);
     {$else}
     if Do_SysCall(syscall_nr_mprotect, PtrUInt(addr), size, prot) >= 0 then
       result := 0;
-    {$endif BSD}
+    {$endif BSD or Android}
   {$endif UNIX}
 end;
 

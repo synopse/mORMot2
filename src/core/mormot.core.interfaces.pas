@@ -51,7 +51,7 @@ type
   // - records will be serialized as Base64 string, with our RecordSave/RecordLoad
   // low-level format by default, or as true JSON objects since Delphi 2010 or
   // after registration via a TTextWriter.RegisterCustomJsonSerializer call
-  // - smvRawJson will transmit the raw JSON content, without serialization
+  // - imvRawJson will transmit the raw JSON content, without serialization
   TInterfaceMethodValueType = (
     imvNone,
     imvSelf,
@@ -3806,7 +3806,7 @@ begin
         (reg>PARAMREG_LAST) // Win64: XMMs overlap regular registers
         {$endif LINUX}
         {$else}
-        (reg>PARAMREG_LAST) // Win32, Linux x86, armel
+        (reg > PARAMREG_LAST) // Win32, Linux x86, armel
         {$endif HAS_FPREG}
         {$ifdef FPC}
         or ((ValueType in [imvRecord]) and
@@ -3817,10 +3817,8 @@ begin
         // this parameter will go on the stack
         {$ifdef CPUARM}
         // parameter must be aligned on a SizeInStack boundary
-        if (SizeInStack>POINTERBYTES) then
-        begin
-          Inc(ArgsSizeInStack,(ArgsSizeInStack MOD SizeInStack));
-        end;
+        if SizeInStack > POINTERBYTES then
+          Inc(ArgsSizeInStack, ArgsSizeInStack mod SizeInStack);
         {$endif CPUARM}
         InStackOffset := ArgsSizeInStack;
         inc(ArgsSizeInStack, SizeInStack);
@@ -6332,11 +6330,10 @@ type
 
 procedure CallMethod(var Args: TCallMethodArgs); assembler; nostackframe;
 label
-  stack_loop,load_regs
   {$ifdef HAS_FPREG}
-  ,asmcall_end,float_result
+  asmcall_end, float_result,
   {$endif HAS_FPREG}
-  ;
+  stack_loop, load_regs;
 asm
    //name  r#(normally, darwin can differ)
    //a1    0           argument 1 / integer result / scratch register

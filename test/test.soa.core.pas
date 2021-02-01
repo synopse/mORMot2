@@ -563,7 +563,7 @@ begin
       {$else}
       // On Android, processes never run in the mainthread.
       if false then
-      {$endif}
+      {$endif Android}
         raise Exception.Create('Shall be in main thread');
     itmPerInterfaceThread, itmHttp, itmLocked:
       if GetThreadID = PtrUInt(MainThreadID) then
@@ -1824,20 +1824,18 @@ begin
   {$ifdef Android}
   // Tests on Android do not run in MainThread
   exit;
-  {$endif}
+  {$endif Android}
   with TTestThread.Create(true) do
   try
     Test := self;
     options := [optExecInMainThread, optFreeInMainThread];
     Start;
-    while (Test<>nil) do
-      //CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif};
-    begin
-      if IsMultiThread and (GetCurrentThreadID=MainThreadID) then
+    while Test<>nil do
+      if IsMultiThread and
+         (GetCurrentThreadID = MainThreadID) then
         CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
       else
-          sleep(1);
-    end;
+        sleep(1);
   finally
     Free;
   end;
@@ -1859,13 +1857,11 @@ begin
     options := [optExecLockedPerInterface];
     Start;
     while Test <> nil do
-      //CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif};
-    begin
-      if IsMultiThread and (GetCurrentThreadID=MainThreadID) then
+      if IsMultiThread and
+         (GetCurrentThreadID=MainThreadID) then
         CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
       else
-          sleep(1);
-    end;
+        sleep(1);
   finally
     Free;
   end;

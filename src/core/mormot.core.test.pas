@@ -322,7 +322,7 @@ type
     fAssertions: integer;
     fAssertionsFailed: integer;
     fCurrentMethodInfo: PSynTestMethodInfo;
-    fSaveToFile: Text;
+    fSaveToFile: System.Text;
     fSafe: TSynLocker;
     fFailed: TSynTestFaileds;
     fFailedCount: integer;
@@ -384,7 +384,8 @@ type
     /// save the debug messages into an external file
     // - if no file name is specified, the current Ident is used
     procedure SaveToFile(const DestPath: TFileName; const FileName: TFileName = '');
-    procedure SaveToText(var aDest: Text);
+    /// save the debug messages into an existing Text file
+    procedure SaveToText(var aDest: System.Text);
     /// register a specified Test case from its class name
     // - an instance of the supplied class will be created during Run
     // - the published methods of the children must call this method in order
@@ -1308,11 +1309,11 @@ begin
     FillCharFast(fSaveToFile, sizeof(fSaveToFile), 0);
 end;
 
-procedure TSynTests.SaveToText(var aDest: Text);
+procedure TSynTests.SaveToText(var aDest: System.Text);
 begin
-  if TTextRec(fSaveToFile).Handle<>0 then
+  if TTextRec(fSaveToFile).Handle <> 0 then
     Close(fSaveToFile);
-  fSaveToFile:=aDest;
+  TTextRec(fSaveToFile) := TTextRec(aDest);
 end;
 
 {$I+}

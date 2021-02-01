@@ -726,8 +726,8 @@ begin
       Minor := GetNextItemCardinal(Context.Json);
       Release := GetNextItemCardinal(Context.Json);
       Build := GetNextItemCardinal(Context.Json);
-      Main := Utf8ToString(Context.ParseUtf8);
-      Detailed := Utf8ToString(Context.ParseUtf8);
+      Main := Context.ParseString;
+      Detailed := Context.ParseString;
       Context.ParseEndOfObject;
     end;
 end;
@@ -763,8 +763,12 @@ class procedure TCollTstDynArray.FVWriter2(W: TTextWriter; Data: pointer;
   Options: TTextWriterWriteObjectOptions);
 begin
   with PFV(Data)^ do
-    W.AddJsonEscape(['Major', Major, 'Minor', Minor, 'Release', Release, 'Build',
-      Build, 'Main', Main, 'Detailed', Detailed]);
+    W.AddJsonEscape(['Major', Major,
+                     'Minor', Minor,
+                     'Release', Release,
+                     'Build', Build,
+                     'Main', Main,
+                     'Detailed', Detailed]);
 end;
 
 class procedure TCollTstDynArray.FVClassReader(var Context: TJsonParserContext;
@@ -791,8 +795,12 @@ class procedure TCollTstDynArray.FVClassWriter(W: TTextWriter; Value: TObject;
   Options: TTextWriterWriteObjectOptions);
 begin
   with TFileVersion(Value) do
-    W.AddJsonEscape(['Major', Major, 'Minor', Minor, 'Release', Release, 'Build',
-      Build, 'Main', Main, 'BuildDateTime', DateTimeToIso8601Text(BuildDateTime)]);
+    W.AddJsonEscape(['Major', Major,
+                     'Minor', Minor,
+                     'Release', Release,
+                     'Build', Build,
+                     'Main', Main,
+                     'BuildDateTime', DateTimeToIso8601Text(BuildDateTime)]);
 end;
 
 
