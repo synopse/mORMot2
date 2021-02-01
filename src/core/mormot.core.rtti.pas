@@ -1752,6 +1752,7 @@ const
 
 type
   TRttiCustom = class;
+
   PRttiCustomProp = ^TRttiCustomProp;
 
   /// variant-like value as returned by TRttiCustomProp.GetValueDirect and

@@ -1523,6 +1523,8 @@ type
     // - return a non nil pointer just after the Source content on success
     // - this method will raise an ESynException for T*ObjArray types
     function LoadFrom(Source: PAnsiChar; SourceMax: PAnsiChar = nil): PAnsiChar; 
+    /// unserialize dynamic array content from binary written by TDynArray.SaveTo
+    procedure LoadFromReader(var Read: TFastReader);
     /// unserialize the dynamic array content from a TDynArray.SaveTo binary string
     // - same as LoadFrom, and will check for any buffer overflow since we
     // know the actual end of input buffer
@@ -6513,15 +6515,37 @@ begin
 end;
 
 function TDynArray.LoadFrom(Source, SourceMax: PAnsiChar): PAnsiChar;
+var
+  read: TFastReader;
 begin
   if SourceMax = nil then
     // backward compatible: assume fake 100MB Source input buffer
     SourceMax := Source + 100 shl 20;
-  result := BinaryLoad(fValue, Source, Info.Info, nil, SourceMax, [rkDynArray]);
-  if (fCountP <> nil) and
-     (fValue^ <> nil) then
-    // BinaryLoad() set the array length, not the external count
-    fCountP^ := GetCapacity;
+  read.Init(Source, SourceMax - Source);
+  LoadFromReader(read);
+  if read.P <> Source then
+    result := read.P
+  else
+    result := nil;
+end;
+
+function TDynArray.LoadFromBinary(const Buffer: RawByteString): boolean;
+var
+  read: TFastReader;
+begin
+  read.Init(Buffer);
+  LoadFromReader(read);
+  result := read.P = read.Last;
+end;
+
+procedure TDynArray.LoadFromReader(var Read: TFastReader);
+begin
+  if fValue <> nil then
+  begin
+    _BL_DynArray(pointer(fValue), Read, Info.Info);
+    if fCountP <> nil then // _BL_DynArray() set length -> reflect on Count
+      fCountP^ := PDALen(PAnsiChar(fValue^) - _DALEN)^ + _DAOFF;
+  end;
 end;
 
 procedure TDynArray.LoadFromStream(Stream: TCustomMemoryStream);
@@ -6531,15 +6555,6 @@ begin
   S := PAnsiChar(Stream.Memory);
   P := LoadFrom(S + Stream.Position, S + Stream.Size);
   Stream.Seek(P - S, soFromBeginning);
-end;
-
-function TDynArray.LoadFromBinary(const Buffer: RawByteString): boolean;
-begin
-  result := BinaryLoad(fValue, Buffer, Info.Info, [rkDynArray]);
-  if (fCountP <> nil) and
-     (fValue^ <> nil) then
-    // BinaryLoad() set the array length, not the external count
-    fCountP^ := PDALen(PAnsiChar(fValue^) - _DALEN)^ + _DAOFF;
 end;
 
 function TDynArray.SaveToJson(EnumSetsAsText: boolean; reformat: TTextWriterJsonFormat): RawUtf8;
