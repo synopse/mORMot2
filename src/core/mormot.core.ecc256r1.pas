@@ -938,7 +938,8 @@ var Output: TCardinalArray absolute Output64;
     Right: TCardinalArray absolute Right64;
 {$else}
 function _add(var Output: TVLI; const Left, Right: TVLI): PtrUInt;
- {$ifdef HASINLINE}inline;{$endif} {$endif CPU32}
+ {$ifdef HASINLINE}inline;{$endif}
+{$endif CPU32}
 var
   sum: PtrUInt;
 begin
@@ -1462,8 +1463,8 @@ begin
   X1 := t7;
 end;
 
-procedure EccPointMult(out Output: TEccPoint; const Point: TEccPoint; Scalar:
-  TVLI; InitialZ: PVLI);
+procedure EccPointMult(out Output: TEccPoint; const Point: TEccPoint;
+  const Scalar: TVLI; InitialZ: PVLI);
 var
   Rx, Ry: array[0..1] of TVLI;
   z: TVLI;
@@ -1540,8 +1541,8 @@ begin
     _sub(Point.y, Curve_P_32, Point.y);
 end;
 
-function ecc_make_key_pas(out PublicKey: TEccPublicKey; out PrivateKey:
-  TEccPrivateKey): boolean;
+function ecc_make_key_pas(out PublicKey: TEccPublicKey;
+  out PrivateKey: TEccPrivateKey): boolean;
 var
   PrivateK: TVLI;
   PublicPoint: TEccPoint;
@@ -1592,14 +1593,14 @@ begin
   _clear(RandomKey);
 end;
 
-procedure ecc_uncompress_key_pas(const Compressed: TEccPublicKey; out
-  Uncompressed: TEccPublicKeyUncompressed);
+procedure ecc_uncompress_key_pas(const Compressed: TEccPublicKey;
+  out Uncompressed: TEccPublicKeyUncompressed);
 begin
   EccPointDecompress(TEccPoint(Uncompressed), @Compressed);
 end;
 
-function ecdh_shared_secret_pas(const PublicKey: TEccPublicKey; const PrivateKey:
-  TEccPrivateKey; out Secret: TEccSecretKey): boolean;
+function ecdh_shared_secret_pas(const PublicKey: TEccPublicKey;
+  const PrivateKey: TEccPrivateKey; out Secret: TEccSecretKey): boolean;
 var
   PublicPoint: TEccPublicKeyUncompressed;
 begin
