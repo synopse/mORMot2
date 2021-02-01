@@ -3804,8 +3804,7 @@ begin
     if not fHistoryTable.OrmProps.CheckBinaryHeader(R) then
       // invalid content: TOrm layout may have changed
       exit;
-    R.ReadVarUInt32Array(fHistoryUncompressedOffset);
-    fHistoryUncompressedCount := length(fHistoryUncompressedOffset);
+    fHistoryUncompressedCount := R.ReadVarUInt32Array(fHistoryUncompressedOffset);
     start := R.P - PAnsiChar(pointer(tmp));
     for i := 0 to fHistoryUncompressedCount - 1 do
       inc(fHistoryUncompressedOffset[i], start);

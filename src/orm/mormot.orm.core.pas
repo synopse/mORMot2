@@ -14645,8 +14645,8 @@ begin
   {$ifndef NOPOINTEROFFSET}
   quicksort.DataStart := fDataStart;
   {$endif NOPOINTEROFFSET}
-  if fFieldIndexID < 0 then // if no ID colum, use first on field collision
-    quicksort.OField2ID := Field
+  if fFieldIndexID < 0 then // consummed as OffsetID = OffsetField - OField2ID
+    quicksort.OField2ID := Field // if no ID colum, use first on field collision
   else
     quicksort.OField2ID := Field - fFieldIndexID;
   if PCurrentRow = nil then

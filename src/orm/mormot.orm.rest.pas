@@ -2403,7 +2403,7 @@ begin
     exit;
   Row := Row * fFieldCount + Field;
   U := GetResults(Row);
-  if ((U = nil) and (Value <> '')) or (StrComp(U, pointer(Value)) <> 0) then
+  if StrComp(U, pointer(Value)) <> 0 then
     if fNewValuesInterning <> nil then
       SetResultsSafe(Row, pointer(fNewValuesInterning.Unique(Value)))
     else
