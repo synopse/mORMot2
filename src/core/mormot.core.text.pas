@@ -643,7 +643,7 @@ type
   // class name, sets/enumerates as text, and reference pointer - as used by
   // TSynLog and ObjectToJsonFull()
   // - woStoreClassName will add a "ClassName":"TMyClass" field
-  // - woStorePointer will add a "Address":"0431298A" field, and .map/.mab
+  // - woStorePointer will add a "Address":"0431298A" field, and .map/.dbg/.mab
   // source code line number corresponding to ESynException.RaisedAt
   // - woStoreStoredFalse will write the 'stored false' properties, even
   // if they are marked as such (used e.g. to persist all settings on file,
@@ -1074,7 +1074,6 @@ type
       QuotedChar: AnsiChar = #0);
     /// add the pointer into significant hexa chars, ready to be displayed
     procedure AddPointer(P: PtrUInt; QuotedChar: AnsiChar = #0);
-      {$ifdef HASINLINE}inline;{$endif}
     /// write a byte as hexa chars
     procedure AddByteToHex(Value: PtrUInt);
     /// write a Int18 value (0..262143) as 3 chars
@@ -2027,10 +2026,10 @@ type
     {$endif NOEXCEPTIONINTERCEPT}
     /// the code location when this exception was triggered
     // - populated by SynLog unit, during interception - so may be nil
-    // - you can use TSynMapFile.FindLocation(ESynException) class function to
+    // - you can use TDebugFile.FindLocation(ESynException) class function to
     // guess the corresponding source code line
-    // - will be serialized as "Address": hexadecimal and source code location
-    // (using TSynMapFile .map/.mab information) in TJsonSerializer.WriteObject
+    // - will be serialized as "Address": hexadecimal and source code location,
+    // using TDebugFile .map/.dbg/.mab information, by JSON WriteObject
     // when woStorePointer option is defined - e.g. with ObjectToJsonDebug()
     property RaisedAt: pointer
       read fRaisedAt write fRaisedAt;

@@ -1866,10 +1866,10 @@ type
     /// check if the Value is void (0 / '' / null)
     function ValueIsVoid(Data: pointer): boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    /// compare two properties values
+    /// compare two properties values with proper getter method call
     function CompareValue(Data, Other: pointer; const OtherRtti: TRttiCustomProp;
       CaseInsensitive: boolean): integer;
-    /// append the field value as JSON with proper support
+    /// append the field value as JSON with proper getter method call
     // - wrap GetValue() + AddVariant() over a temp TRttiVarData
     procedure AddValueJson(W: TBaseWriter; Data: pointer;
       Options: TTextWriterWriteObjectOptions);
@@ -1975,6 +1975,7 @@ type
     vcStrings,
     vcObjectList,
     vcList,
+    vcESynException,
     vcException);
 
 
@@ -6363,6 +6364,8 @@ begin
     fValueRtlClass := vcObjectList
   else if aClass.InheritsFrom(TList) then
     fValueRtlClass := vcList
+  else if aClass.InheritsFrom(ESynException) then
+    fValueRtlClass := vcESynException
   else if aClass.InheritsFrom(Exception) then
     fValueRtlClass := vcException;
   fProps.AddFromClass(aInfo, {includeparents=}true);
