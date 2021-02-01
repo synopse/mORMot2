@@ -978,9 +978,10 @@ end;
 
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // uses built-in 64-bit -> 128-bit multiplication
         {$ifdef MSWINDOWS}
         mov     rax, rcx
-        mul     rdx // uses built-in 64-bit -> 128-bit multiplication
+        mul     rdx
         {$else}
         mov     r8, rdx
         mov     rax, rdi

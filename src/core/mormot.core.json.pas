@@ -5297,7 +5297,9 @@ begin
     // regular JSON serialization using nested fields/properties
     c.W.BlockBegin('{', c.Options);
     c.Prop := pointer(Ctxt.Info.Props.List);
-    if Ctxt.Info.Kind = rkClass then
+    n := Ctxt.Info.Props.Count;
+    if (Ctxt.Info.Kind = rkClass) and
+       (c.Options * [woFullExpand, woStoreClassName, woStorePointer, woDontStoreInherited] <> []) then
     begin
       if woFullExpand in c.Options then
       begin
@@ -5317,20 +5319,25 @@ begin
       if woStorePointer in c.Options then
       begin
         c.W.WriteObjectPropNameShort('Address', c.Options);
-        c.W.AddPointer(PtrUInt(Data), '"');
+        if Ctxt.Info.ValueRtlClass = vcESynException then
+        begin // run TDebugFile.FindLocationShort if mormot.core.log is used
+          c.W.Add('"');
+          c.W.AddShort(GetExecutableLocation(ESynException(Data).RaisedAt));
+          c.W.Add('"');
+        end
+        else
+          c.W.AddPointer(PtrUInt(Data), '"');
         if c.Prop <> nil then
           c.W.BlockAfterItem(c.Options);
       end;
+      if woDontStoreInherited in c.Options then
+        with Ctxt.Info.Props do
+        begin
+          // List[NotInheritedIndex]..List[Count-1] store the last hierarchy level
+          n := Count - NotInheritedIndex;
+          inc(c.Prop, NotInheritedIndex);
+        end;
     end;
-    if woDontStoreInherited in c.Options then
-      with Ctxt.Info.Props do
-      begin
-        // List[NotInheritedIndex]..List[Count-1] store the last hierarchy level
-        n := Count - NotInheritedIndex;
-        inc(c.Prop, NotInheritedIndex);
-      end
-    else
-      n := Ctxt.Info.Props.Count;
     done := false;
     if n > 0 then
       // this is the main loop serializing Info.Props[]
@@ -6745,7 +6752,7 @@ begin
            (VString^[0] <> #0) then
           Add(@VString^[1], ord(VString^[0]), Escape);
       vtInterface, vtPointer:
-        AddBinToHexDisplayMinChars(@VPointer, SizeOf(VPointer));
+        AddPointer(PtrUInt(VPointer));
       vtPChar:
         Add(PUtf8Char(VPChar), Escape);
       vtObject:

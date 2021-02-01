@@ -5541,7 +5541,7 @@ begin
     'TSynLog 1.15 LVCL 2011-04-07 12:04:09'#13#10#13#10 +
     '20110407 12040903  +    SQLite3Commons.TRestServer.Uri (14163)'#13#10 +
     '20110407 12040904 debug {"TObjectList(00AF8D00)":["TObjectList(00AF8D20)",' +
-    '"TObjectList(00AF8D60)","TFileVersion(00ADC0B0)","TSynMapFile(00ACC990)"]}'#13#10 +
+    '"TObjectList(00AF8D60)","TFileVersion(00ADC0B0)","TDebugFile(00ACC990)"]}'#13#10 +
     '20110407 12040915  -    SQLite3Commons.TRestServer.Uri (14163) 10.020.006',
     40640.464653);
   Test('D:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.4 (2011-04-08 11:09:06)'#13#10
@@ -5549,7 +5549,7 @@ begin
     + 'TSynLog 1.15 LVCL 2011-04-07 12:04:09'#13#10#13#10 +
     '20110407 12040903  +    SQLite3Commons.TRestServer.Uri (14163)'#13#10 +
     '20110407 12040904 debug {"TObjectList(00AF8D00)":["TObjectList(00AF8D20)",' +
-    '"TObjectList(00AF8D60)","TFileVersion(00ADC0B0)","TSynMapFile(00ACC990)"]}'#13#10 +
+    '"TObjectList(00AF8D60)","TFileVersion(00ADC0B0)","TDebugFile(00ACC990)"]}'#13#10 +
     '20110407 12040915  -    SQLite3Commons.TRestServer.Uri (14163) 10.020.006',
     40641.464653);
 end;

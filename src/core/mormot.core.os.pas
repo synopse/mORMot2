@@ -484,6 +484,16 @@ procedure SetExecutableVersion(aMajor,aMinor,aRelease,aBuild: integer); overload
 // - e.g. SetExecutableVersion('7.1.2.512');
 procedure SetExecutableVersion(const aVersionText: RawUtf8); overload;
 
+/// return a function/method location according to the supplied code address
+// - returns the address as hexadecimal by default
+// - if mormot.core.log.pas is defined in the project, will redirect to
+// TDebugFile.FindLocationShort() method using .map/.dbg/.mab information, and
+// return filename, symbol name and line number (if any) as plain text, e.g.
+// '4cb765 ../src/core/mormot.core.base.pas statuscodeissuccess (11183)' on FPC
+var
+  GetExecutableLocation: function(aAddress: pointer): shortstring;
+
+
 type
   /// identify an operating system folder
   TSystemPath = (
@@ -1463,7 +1473,7 @@ type
     fMap: THandle;
     {$endif MSWINDOWS}
     fFileSize: Int64;
-    fFileLocal: boolean;
+    fFileLocal, fLoadedNotMapped: boolean;
     function DoMap(aCustomOffset: Int64): boolean;
     procedure DoUnMap;
   public
@@ -3306,7 +3316,23 @@ begin
       fBufSize := Available;
     fBufSize := aCustomSize;
   end;
-  result := DoMap(aCustomOffset); // call actual Windows/POSIX map API
+  fLoadedNotMapped := fBufSize < 1 shl 20;
+  if fLoadedNotMapped then
+  begin
+    // mapping is not worth it for size < 1MB which can be just read at once
+    GetMem(fBuf, fBufSize);
+    FileSeek64(fFile, aCustomOffset, soFromBeginning);
+    result := PtrUInt(FileRead(fFile, fBuf^, fBufSize)) = fBufSize;
+    if not result then
+    begin
+      Freemem(fBuf);
+      fBuf := nil;
+      fLoadedNotMapped := false;
+    end;
+  end
+  else
+    // call actual Windows/POSIX map API
+    result := DoMap(aCustomOffset);
 end;
 
 procedure TMemoryMap.Map(aBuffer: pointer; aBufferSize: PtrUInt);
@@ -3340,7 +3366,12 @@ end;
 
 procedure TMemoryMap.UnMap;
 begin
-  DoUnMap; // call actual Windows/POSIX unmap API
+  if fLoadedNotMapped then
+    // mapping was not worth it
+    Freemem(fBuf)
+  else
+    // call actual Windows/POSIX map API
+    DoUnMap;
   fBuf := nil;
   fBufSize := 0;
   if fFile <> 0 then
@@ -3777,6 +3808,25 @@ begin
     Hash.c1 := crc32c(Hash.c0, pointer(User), length(User));
     Hash.c2 := crc32c(Hash.c1, pointer(ProgramFullSpec), length(ProgramFullSpec));
     Hash.c3 := crc32c(Hash.c2, pointer(InstanceFileName), length(InstanceFileName));
+  end;
+end;
+
+const
+  // hexstr() is not available on Delphi -> use our own simple version
+  HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
+
+function _GetExecutableLocation(aAddress: pointer): shortstring;
+var
+  i: PtrInt;
+  b: PByte;
+begin
+  result[0] := AnsiChar(SizeOf(aAddress) * 2);
+  b := @aAddress;
+  for i := SizeOf(aAddress) - 1 downto 0 do
+  begin
+    result[i * 2 + 1] := HexCharsLower[b^ shr 4];
+    result[i * 2 + 2] := HexCharsLower[b^ and $F];
+    inc(b);
   end;
 end;
 
@@ -4374,6 +4424,7 @@ initialization
   InitializeUnit; // in mormot.core.os.posix/windows.inc files
   OSVersionShort := ToTextOS(OSVersionInt32);
   SetExecutableVersion(0,0,0,0);
+  GetExecutableLocation := _GetExecutableLocation;
   SetThreadName := _SetThreadName;
 
 finalization

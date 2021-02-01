@@ -679,6 +679,11 @@ function ShortStringToAnsi7String(const source: shortstring): RawByteString; ove
 procedure ShortStringToAnsi7String(const source: shortstring; var result: RawUtf8); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// direct conversion of an ANSI-7 AnsiString into an shortstring
+// - can be used e.g. for names retrieved from RTTI
+procedure Ansi7StringToShortString(const source: RawUtf8; var result: shortstring);
+  {$ifdef FPC}inline;{$endif}
+
 /// simple concatenation of a 32-bit integer as text into a shorstring
 procedure AppendShortInteger(value: integer; var dest: shortstring);
 
@@ -696,6 +701,11 @@ procedure AppendShort(const src: shortstring; var dest: shortstring);
 /// simple concatenation of a #0 ending text into a shorstring
 // - if Len is < 0, will use StrLen(buf)
 procedure AppendShortBuffer(buf: PAnsiChar; len: integer; var dest: shortstring);
+
+/// simple concatenation of an ANSI-7 AnsiString into a shorstring
+// - if Len is < 0, will use StrLen(buf)
+procedure AppendShortAnsi7String(const buf: RawByteString; var dest: shortstring);
+  {$ifdef FPC}inline;{$endif}
 
 /// just a wrapper around vmtClassName to avoid a string conversion
 function ClassNameShort(C: TClass): PShortString; overload;
@@ -4031,6 +4041,51 @@ begin
     MoveFast(p^, aligned^, len);
 end;
 
+// CompareMemSmall/MoveSmall defined now for proper inlining below
+
+function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): boolean;
+var
+  c: AnsiChar;
+label
+  zero;
+begin
+  {$ifndef CPUX86}
+  result := false;
+  {$endif CPUX86}
+  inc(PtrUInt(P1), PtrUInt(Length));
+  inc(PtrUInt(P2), PtrUInt(Length));
+  Length := -Length;
+  if Length <> 0 then
+    repeat
+      c := PAnsiChar(P1)[Length];
+      if c <> PAnsiChar(P2)[Length] then
+        goto zero;
+      inc(Length);
+    until Length = 0;
+  result := true;
+  {$ifdef CPUX86}
+  exit;
+  {$endif CPUX86}
+zero:
+  {$ifdef CPUX86}
+  result := false;
+  {$endif CPUX86}
+end;
+
+procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
+var
+  c: AnsiChar; // better code generation on FPC
+begin
+  inc(PtrUInt(Source), Count);
+  inc(PtrUInt(Dest), Count);
+  PtrInt(Count) := -PtrInt(Count);
+  repeat
+    c := PAnsiChar(Source)[Count];
+    PAnsiChar(Dest)[Count] := c;
+    inc(Count);
+  until Count = 0;
+end;
+
 function UniqueRawUtf8(var u: RawUtf8): pointer;
 begin
   {$ifdef FPC}
@@ -4049,14 +4104,20 @@ begin
   FastSetString(result, @source[1], ord(source[0]));
 end;
 
+procedure Ansi7StringToShortString(const source: RawUtf8; var result: shortstring);
+begin
+  SetString(result, PAnsiChar(pointer(source)), length(source));
+end;
+
 procedure AppendShort(const src: shortstring; var dest: shortstring);
 var
   len: PtrInt;
 begin
   len := ord(src[0]);
-  if len + ord(dest[0]) > 255 then
+  if (len = 0) or
+     (len + ord(dest[0]) > 255) then
     exit;
-  MoveFast(src[1], dest[ord(dest[0]) + 1], len);
+  MoveSmall(@src[1], @dest[ord(dest[0]) + 1], len);
   inc(dest[0], len);
 end;
 
@@ -4093,6 +4154,12 @@ begin
     exit;
   MoveFast(buf^, dest[ord(dest[0]) + 1], len);
   inc(dest[0], len);
+end;
+
+procedure AppendShortAnsi7String(const buf: RawByteString; var dest: shortstring);
+begin
+  if buf <> '' then
+    AppendShortBuffer(pointer(buf), PStrLen(PAnsiChar(pointer(buf)) - _STRLEN)^, dest);
 end;
 
 function ClassNameShort(C: TClass): PShortString;
@@ -5404,51 +5471,6 @@ end;
 
 {$endif FPC}
 
-
-// CompareMemSmall/MoveSmall defined now for proper inlining below
-
-function CompareMemSmall(P1, P2: Pointer; Length: PtrInt): boolean;
-var
-  c: AnsiChar;
-label
-  zero;
-begin
-  {$ifndef CPUX86}
-  result := false;
-  {$endif CPUX86}
-  inc(PtrUInt(P1), PtrUInt(Length));
-  inc(PtrUInt(P2), PtrUInt(Length));
-  Length := -Length;
-  if Length <> 0 then
-    repeat
-      c := PAnsiChar(P1)[Length];
-      if c <> PAnsiChar(P2)[Length] then
-        goto zero;
-      inc(Length);
-    until Length = 0;
-  result := true;
-  {$ifdef CPUX86}
-  exit;
-  {$endif CPUX86}
-zero:
-  {$ifdef CPUX86}
-  result := false;
-  {$endif CPUX86}
-end;
-
-procedure MoveSmall(Source, Dest: Pointer; Count: PtrUInt);
-var
-  c: AnsiChar; // better code generation on FPC
-begin
-  inc(PtrUInt(Source), Count);
-  inc(PtrUInt(Dest), Count);
-  PtrInt(Count) := -PtrInt(Count);
-  repeat
-    c := PAnsiChar(Source)[Count];
-    PAnsiChar(Dest)[Count] := c;
-    inc(Count);
-  until Count = 0;
-end;
 
 function AnyScanIndex(P, Elem: pointer; Count, ElemSize: PtrInt): PtrInt;
 begin

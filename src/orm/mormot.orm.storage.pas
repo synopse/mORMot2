@@ -3019,7 +3019,7 @@ var
   i, n, f: PtrInt;
   ID32: TIntegerDynArray;
   rec: TOrm;
-  id: TID;
+  id: QWord;
   s: RawUtf8;
   prop: TOrmPropInfo;
   timer: TPrecisionTimer;
@@ -3054,13 +3054,14 @@ begin
       id := 0;
       for i := 0 to n - 1 do
       begin
-        rec := fStoredClass.Create;  // avoid URW699 with Delphi6/Kylix
-        id := id + {$ifdef FPC_OR_UNICODE}TID{$endif}(R.VarUInt64);
+        rec := fStoredClass.Create;
+        inc(id, R.VarUInt64);
         rec.IDValue := id;
         fValue[i] := rec;
       end;
     end
     else
+      // ReadVarUInt32Array() decoded TID into ID32[]
       for i := 0 to n - 1 do
       begin
         rec := fStoredClass.Create;

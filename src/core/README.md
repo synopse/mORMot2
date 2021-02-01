@@ -150,7 +150,7 @@ Several Indexing and Search Engines, as used by other parts of the framework
 ### mormot.core.log
 
 Logging functions shared by all framework units
-- Executable Symbols Processing
+- Debug Symbols Processing from Delphi .map or FPC/GDB DWARF
 - Logging via `TSynLogFamily` `TSynLog` `ISynLog`
 - High-Level Logs and Exception Related Features
 - Efficient `.log` File Access via `TSynLogFile`

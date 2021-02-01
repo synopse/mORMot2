@@ -903,6 +903,7 @@ procedure Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt; var result: string); ov
 /// convert any generic VCL Text into Ansi 7-bit encoded String
 // - the Text content must contain only 7-bit pure ASCII characters
 function StringToAnsi7(const Text: string): RawByteString;
+  {$ifndef UNICODE}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// convert any generic VCL Text into WinAnsi (Win-1252) 8-bit encoded String
 function StringToWinAnsi(const Text: string): WinAnsiString;

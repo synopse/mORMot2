@@ -519,7 +519,7 @@ const
     'Host=MyPC User=MySelf CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545'#13#10 +
     'TSynLog 1.13 LVCL 2011-04-07 12:04:09'#13#10#13#10 +
     '20110407 12040904 debug {"TObjectList(00AF8D00)":["TObjectList(00AF8D20)",' +
-    '"TObjectList(00AF8D60)","TFileVersion(00ADC0B0)","TSynMapFile(00ACC990)"]}';
+    '"TObjectList(00AF8D60)","TFileVersion(00ADC0B0)","TDebugFile(00ACC990)"]}';
 var
   Res: Int64;
   s, s2, s3: RawUtf8;
@@ -549,7 +549,7 @@ begin
   check(s3 =
     '{"fieldCount":3,"values":["DateTime","Level","Content","2011-04-07T12:04:09.064",' +
     '2,"20110407 12040904 debug {\"TObjectList(00AF8D00)\":[\"TObjectList(00AF8D20)\",' +
-    '\"TObjectList(00AF8D60)\",\"TFileVersion(00ADC0B0)\",\"TSynMapFile(00ACC990)\"]}"],' +
+    '\"TObjectList(00AF8D60)\",\"TFileVersion(00ADC0B0)\",\"TDebugFile(00ACC990)\"]}"],' +
     '"rowCount":1}'#$A);
   s3 := Demo.ExecuteJson('select * from test where level=3', False, @n);
   CheckEqual(s3,

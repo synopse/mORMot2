@@ -682,6 +682,9 @@ type
     /// read the next byte from the buffer, checking
     function NextByteSafe(dest: pointer): boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// read the next 2 bytes from the buffer as a 16-bit unsigned value
+    function Next2: cardinal;
+      {$ifdef HASINLINE}inline;{$endif}
     /// read the next 4 bytes from the buffer as a 32-bit unsigned value
     function Next4: cardinal;
       {$ifdef HASINLINE}inline;{$endif}
@@ -740,7 +743,7 @@ type
   // case of a difference of similar value (e.g. 1) between two values - note
   // that this encoding is efficient only if the difference is mainly < 253
   // - wkOffsetU and wkOffsetI will write the difference between two successive
-  // values, with detection of any constant difference (Unsigned or integer)
+  // values, with detection of any constant difference (unsigned or signed)
   // - wkFakeMarker won't be used by WriteVarUInt32Array, but to notify a
   // custom encoding
   TBufferWriterKind = (
@@ -2571,6 +2574,14 @@ begin
   end;
 end;
 
+function TFastReader.Next2: cardinal;
+begin
+  if P + 1 >= Last then
+    ErrorOverflow;
+  result := PWord(P)^;
+  inc(P, 2);
+end;
+
 function TFastReader.Next4: cardinal;
 begin
   if P + 3 >= Last then
@@ -3949,8 +3960,8 @@ begin
             PBeg := PAnsiChar(P) + 4; // leave space for chunk size
             P := PByte(CleverStoreInteger(pointer(Values), PBeg, PEnd, ValuesCount, n));
             if P = nil then
-              raise ESynException.CreateUtf8('%.WriteVarUInt32Array: data not sorted',
-                [self]);
+              raise ESynException.CreateUtf8(
+                '%.WriteVarUInt32Array: data not sorted', [self]);
             PInteger(PBeg - 4)^ := PAnsiChar(P) - PBeg; // format: Isize+cleverStorage
           end;
       end;
