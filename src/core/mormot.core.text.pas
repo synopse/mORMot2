@@ -3819,7 +3819,8 @@ begin
     else
       inc(len);
     Dest[0] := AnsiChar(len);
-    MoveSmall(P, @Dest[1], len);
+    if len > 0 then
+      MoveSmall(P, @Dest[1], len);
     if S^ <> #0 then
       P := S + 1
     else
@@ -10636,7 +10637,7 @@ var
   B: PByteArray;
   tmp: array[0..15] of AnsiChar;
 const
-  HexChars:      array[0..15] of AnsiChar = '0123456789ABCDEF';
+  HexChars: array[0..15] of AnsiChar = '0123456789ABCDEF';
   HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
 begin
   // initialize internal lookup tables for various text conversions
