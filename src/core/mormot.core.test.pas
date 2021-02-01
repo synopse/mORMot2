@@ -964,7 +964,8 @@ begin
 end;
 
 function TSynTestCase.NotifyTestSpeed(const ItemName: string; ItemCount: integer;
-  SizeInBytes: cardinal; Timer: PPrecisionTimer; OnlyLog: boolean): TSynMonitorOneMicroSec;
+  SizeInBytes: cardinal; Timer: PPrecisionTimer;
+  OnlyLog: boolean): TSynMonitorOneMicroSec;
 var
   Temp: TPrecisionTimer;
   msg: string;
@@ -1413,8 +1414,11 @@ end;
 procedure TSynTestsLogged.AddFailed(const msg: string);
 begin
   inherited AddFailed(msg);
-  with fCurrentMethodInfo^ do
-    fLogFile.Log(sllFail, '% [%]', [IdentTestName, msg], Test);
+  if fCurrentMethodInfo <> nil then
+    with fCurrentMethodInfo^ do
+      fLogFile.Log(sllFail, '% [%]', [IdentTestName, msg], Test)
+  else
+    fLogFile.Log(sllFail, 'no context', self)
 end;
 
 
