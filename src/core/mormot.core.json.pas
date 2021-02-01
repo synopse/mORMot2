@@ -1708,12 +1708,12 @@ type
     Prop: PRttiCustomProp;
     /// force the item class when reading a TObjectList without "ClassName":...
     ObjectListItem: TRttiCustom;
-    /// if ParseNext unserialized a JSON string
-    WasString: boolean;
     /// ParseNext unserialized value
     Value: PUtf8Char;
     /// ParseNext unserialized value length
     ValueLen: integer;
+    /// if ParseNext unserialized a JSON string
+    WasString: boolean;
     /// TDocVariant initialization options
     DVO: TDocVariantOptions;
     /// initialize this unserialization context
@@ -1723,22 +1723,26 @@ type
     // - on success, return true and set Value/ValueLen and WasString fields
     function ParseNext: boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    /// retrieve the next JSON value as text
+    /// retrieve the next JSON value as UTF-8 text
     function ParseUtf8: RawUtf8;
+    /// retrieve the next JSON value as VCL string text
+    function ParseString: string;
     /// set the EndOfObject field of a JSON buffer, just like GetJsonField() does
+    // - to be called whan a JSON object or JSON array has been manually parsed
     procedure ParseEndOfObject;
       {$ifdef HASINLINE}inline;{$endif}
     /// parse a 'null' value from JSON buffer
     function ParseNull: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// parse initial '[' token from JSON buffer
+    // - once all the nested values have been read, call ParseEndOfObject
     function ParseArray: boolean;
     /// parse a JSON object from the buffer into a
     // - if ObjectListItem was not defined, expect the JSON input to start as
     // '{"ClassName":"TMyClass",...}'
     function ParseNewObject: TObject;
       {$ifdef HASINLINE}inline;{$endif}
-    /// wrapper around JsonDecode()
+    /// wrapper around JsonDecode() to easily get JSON object values
     function ParseObject(const Names: array of RawUtf8;
       Values: PValuePUtf8CharArray;
       HandleValuesAsObjectOrArray: boolean = false): boolean;
@@ -6989,10 +6993,16 @@ end;
 
 function TJsonParserContext.ParseUtf8: RawUtf8;
 begin
-  if ParseNext then
-    FastSetString(result, Value, ValueLen)
-  else
-    result := '';
+  if not ParseNext then
+    ValueLen := 0; // return ''
+  FastSetString(result, Value, ValueLen)
+end;
+
+function TJsonParserContext.ParseString: string;
+begin
+  if not ParseNext then
+    ValueLen := 0; // return ''
+  Utf8DecodeToString(Value, ValueLen, result);
 end;
 
 procedure TJsonParserContext.ParseEndOfObject;
