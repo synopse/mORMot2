@@ -5507,7 +5507,7 @@ begin
   else
     AddShort(ClassNameShort(Instance)^);
   Add('(');
-  AddBinToHexDisplayMinChars(@Instance, SizeOf(Instance));
+  AddPointer(PtrUInt(Instance));
   Add(')', '"');
   if SepChar <> #0 then
     Add(SepChar);
@@ -5525,7 +5525,7 @@ begin
   if IncludePointer then
   begin
     Add('(');
-    AddBinToHexDisplayMinChars(@Instance, SizeOf(Instance));
+    AddPointer(PtrUInt(Instance));
     Add(')');
   end;
   if SepChar<>#0 then
@@ -5931,7 +5931,7 @@ end;
 
 procedure TBaseWriter.AddPointer(P: PtrUInt; QuotedChar: AnsiChar);
 begin
-  AddBinToHexDisplayMinChars(@P, SizeOf(P), QuotedChar);
+  AddBinToHexDisplayLower(@P, DisplayMinChars(@P, SizeOf(P)), QuotedChar);
 end;
 
 procedure TBaseWriter.AddBinToHex(Bin: Pointer; BinBytes: PtrInt);
@@ -9972,7 +9972,7 @@ end;
 
 function PointerToHexShort(aPointer: Pointer): TShort16;
 begin
-  result[0] := AnsiChar(DisplayMinChars(aPointer, SizeOf(aPointer)) * 2);
+  result[0] := AnsiChar(DisplayMinChars(@aPointer, SizeOf(aPointer)) * 2);
   BinToHexDisplayLower(@aPointer, @result[1], ord(result[0]) shr 1);
 end;
 
