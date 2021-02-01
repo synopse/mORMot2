@@ -634,10 +634,7 @@ begin
     CheckEqual(s, s1 + ',"Data":0,"ValVariant":{"name":"John","int":1234}}');
     bin := T.GetBinary;
     T2.ClearProperties;
-    Check(T2.SetBinary(pointer(bin), PAnsiChar(pointer(bin)) + length(bin)));
-    Check(T.SameValues(T2));
-    T2.ClearProperties;
-    Check(T2.SetBinary(bin));
+    T2.SetBinary(bin);
     Check(T.SameValues(T2));
     bin := VariantSave(T.ValVariant);
     Check(bin <> '');

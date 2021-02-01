@@ -3826,31 +3826,25 @@ function TOrmHistory.HistoryGet(Index: integer;
   out Event: TOrmHistoryEvent; out Timestamp: TModTime;
   Rec: TOrm): boolean;
 var
-  P, PEnd: PAnsiChar;
+  read: TFastReader;
 begin
-  result := false;
   if cardinal(Index) >= cardinal(HistoryCount) then
+  begin
+    result := false;
     exit;
-  P := pointer(fHistoryUncompressed);
-  PEnd := P + length(fHistoryUncompressed);
-  inc(P, fHistoryUncompressedOffset[Index]);
-  if P >= PEnd then
-    exit;
-  Event := TOrmHistoryEvent(P^);
-  inc(P);
-  P := pointer(FromVarUInt64Safe(pointer(P), pointer(PEnd), PQWord(@Timestamp)^));
-  if P = nil then
-    exit;
+  end;
+  read.Init(fHistoryUncompressed);
+  read.Next(fHistoryUncompressedOffset[Index]);
+  Event := TOrmHistoryEvent(read.NextByte);
+  Timestamp := read.VarUInt64;
   if (Rec <> nil) and
      (Rec.RecordClass = fHistoryTable) then
   begin
     if Event = heDelete then
       Rec.ClearProperties
     else
-      Rec.SetBinaryValuesSimpleFields(P, PEnd);
+      Rec.SetBinaryValuesSimpleFields(read);
     Rec.IDValue := ModifiedID;
-    if P = nil then
-      exit;
   end;
   result := true;
 end;

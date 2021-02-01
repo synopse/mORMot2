@@ -978,8 +978,7 @@ type
       aUser: TAuthUser); reintroduce; virtual;
     /// initialize a session instance from some persisted buffer
     // - following the TRestServer.SessionsSaveToFile binary layout
-    constructor CreateFrom(var P: PAnsiChar; PEnd: PAnsiChar;
-      Server: TRestServer); virtual;
+    constructor CreateFrom(var Read: TFastReader; Server: TRestServer); virtual;
     /// will release the User and User.GroupRights instances
     destructor Destroy; override;
     /// initialize the Interfaces: TSynMonitorInputOutputObjArray statistics
@@ -5133,7 +5132,7 @@ const
 procedure TAuthSession.SaveTo(W: TBufferWriter);
 begin
   W.Write1(TAUTHSESSION_MAGIC);
-  W.WriteVarUInt32(IDCardinal);
+  W.WriteVarUInt32(fIDCardinal);
   W.WriteVarUInt32(fUser.IDValue);
   fUser.GetBinaryValues(W); // User.fGroup is a pointer, but will be overriden
   W.WriteVarUInt32(fUser.GroupRights.IDValue);
@@ -5142,43 +5141,21 @@ begin
   W.Write(fSentHeaders);
 end; // TODO: persist ORM/SOA stats? -> rather integrate them before saving
 
-constructor TAuthSession.CreateFrom(var P: PAnsiChar; PEnd: PAnsiChar;
-  Server: TRestServer);
-
-  procedure RaiseError;
-  begin
-    raise ESecurityException.CreateUtf8(
-      '%.CreateFrom() with invalid format', [self]);
-  end;
-
-var
-  PB: PByte absolute P;
-  i32: cardinal;
+constructor TAuthSession.CreateFrom(var Read: TFastReader; Server: TRestServer);
 begin
-  if PB^ = TAUTHSESSION_MAGIC then
-    inc(PB)
-  else
-    RaiseError;
-  PB := FromVarUInt32Safe(PB, pointer(PEnd), fIDCardinal);
-  if PB = nil then
-    RaiseError;
+  if Read.NextByte <> TAUTHSESSION_MAGIC then
+    raise ESecurityException.CreateUtf8(
+      '%.CreateFrom() with invalid format on % %', [self, Server, Server.Model.Root]);
+  fIDCardinal := Read.VarUInt32;
   UInt32ToUtf8(fIDCardinal, fID);
   fUser := Server.AuthUserClass.Create;
-  PB := FromVarUInt32Safe(PB, pointer(PEnd), i32);
-  if PB = nil then
-    RaiseError;
-  fUser.IDValue := i32;
-  fUser.SetBinaryValues(P, PEnd); // fUser.fGroup will be overriden by true instance
+  fUser.IDValue := Read.VarUInt32;
+  fUser.SetBinaryValues(Read); // fUser.fGroup will be overriden by true instance
   fUser.GroupRights := Server.AuthGroupClass.Create;
-  PB := FromVarUInt32Safe(PB, pointer(PEnd), i32);
-  if PB = nil then
-    RaiseError;
-  fUser.GroupRights.IDValue := i32;
-  fUser.GroupRights.SetBinaryValues(P, PEnd);
-  fPrivateKey := FromVarString(PB, pointer(PEnd));
-  fSentHeaders := FromVarString(PB, pointer(PEnd));
-  if PB = nil then
-    RaiseError;
+  fUser.GroupRights.IDValue := Read.VarUInt32;
+  fUser.GroupRights.SetBinaryValues(Read);
+  Read.VarUtf8(fPrivateKey);
+  Read.VarUtf8(fSentHeaders);
   ComputeProtectedValues;
   FindNameValue(fSentHeaders, HEADER_REMOTEIP_UPPER, fRemoteIP);
 end;
@@ -7224,7 +7201,7 @@ begin
   s := AlgoSynLZ.Decompress(s);
   if s = '' then
     exit;
-  R.Init(pointer(s), length(s));
+  R.Init(s);
   fSessions.Safe.Lock;
   try
     (fOrmInstance as TRestOrmServer).InternalState := R.VarUInt32;
@@ -7235,7 +7212,7 @@ begin
     fSessions.Clear;
     for i := 1 to n do
     begin
-      fSessions.Add(fSessionClass.CreateFrom(R.P, R.Last, self));
+      fSessions.Add(fSessionClass.CreateFrom(R, self));
       fStats.ClientConnect;
     end;
     fSessionCounter := PCardinal(R.P)^;

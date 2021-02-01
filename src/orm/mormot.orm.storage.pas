@@ -3033,57 +3033,54 @@ begin
     exit;
   StorageLock(true, 'LoadFromBinary');
   try
-    // check header: expect same exact RTTI
-    R.Init(MS.Memory, MS.Size);
-    R.VarUtf8(s);
-    if (s <> '') and // 0='' in recent mORMot 1.18 format
-       not IdemPropNameU(s, 'TSqlRecordProperties') then // old buggy format
-      exit;
-    if not fStoredClassRecordProps.CheckBinaryHeader(R) then
-      exit;
-    // create instances and read their IDs
-    if fCount > 0 then
-      DropValues({andupdatefile=}false);
-    fModified := false;
-    n := R.ReadVarUInt32Array(ID32);
-    SetLength(fValue, abs(n)); // allocate all at once
-    if n < 0 then
-    begin
-      // was wkFakeMarker -> TID were stored as VarUInt64 diffs
-      n := abs(n);
-      id := 0;
-      for i := 0 to n - 1 do
+    try
+      // check header: expect same exact RTTI
+      R.Init(MS.Memory, MS.Size);
+      R.VarUtf8(s);
+      if (s <> '') and // 0='' in recent mORMot 1.18 format
+         not IdemPropNameU(s, 'TSqlRecordProperties') then // old buggy format
+        exit;
+      if not fStoredClassRecordProps.CheckBinaryHeader(R) then
+        exit;
+      // create instances and read their IDs
+      if fCount > 0 then
+        DropValues({andupdatefile=}false);
+      fModified := false;
+      n := R.ReadVarUInt32Array(ID32);
+      SetLength(fValue, abs(n)); // allocate all at once
+      if n < 0 then
       begin
-        rec := fStoredClass.Create;
-        inc(id, R.VarUInt64);
-        rec.IDValue := id;
-        fValue[i] := rec;
-      end;
-    end
-    else
-      // ReadVarUInt32Array() decoded TID into ID32[]
-      for i := 0 to n - 1 do
-      begin
-        rec := fStoredClass.Create;
-        rec.IDValue := ID32[i];
-        fValue[i] := rec;
-      end;
-    // read content, grouped by field (for better compression)
-    for f := 0 to fStoredClassRecordProps.Fields.Count - 1 do
-    begin
-      prop := fStoredClassRecordProps.Fields.List[f];
-      for i := 0 to n - 1 do
-      begin
-        R.P := prop.SetBinary(fValue[i], R.P, R.Last);
-        if R.P = nil then
+        // was wkFakeMarker -> TID were stored as VarUInt64 diffs
+        n := abs(n);
+        id := 0;
+        for i := 0 to n - 1 do
         begin
-          DropValues(false); // on error, reset all values
-          exit;
+          rec := fStoredClass.Create;
+          inc(id, R.VarUInt64);
+          rec.IDValue := id;
+          fValue[i] := rec;
         end;
+      end
+      else
+        // ReadVarUInt32Array() decoded TID into ID32[]
+        for i := 0 to n - 1 do
+        begin
+          rec := fStoredClass.Create;
+          rec.IDValue := ID32[i];
+          fValue[i] := rec;
+        end;
+      // read content, grouped by field (for better compression)
+      for f := 0 to fStoredClassRecordProps.Fields.Count - 1 do
+      begin
+        prop := fStoredClassRecordProps.Fields.List[f];
+        for i := 0 to n - 1 do
+          prop.SetBinary(fValue[i], R);
       end;
+      ComputeStateAfterLoad(timer, {binary=}true);
+      result := true;
+    except
+      DropValues(false); // on error, reset all values and return false
     end;
-    ComputeStateAfterLoad(timer, {binary=}true);
-    result := true;
   finally
     StorageUnlock;
     MS.Free;
