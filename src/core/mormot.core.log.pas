@@ -7166,6 +7166,7 @@ begin
   _LogInfoCaption[sllNone] := '';
   SetThreadName := _SetThreadName;
   SetCurrentThreadName('MainThread');
+  GetExecutableLocation := _GetExecutableLocation; // use FindLocationShort()
   //writeln(BacktraceStrFpc(Get_pc_addr));
   //writeln(GetInstanceDebugFile.FindLocationShort(PtrUInt(@TDynArray.InitFrom)));
   //GetInstanceDebugFile.SaveToJson(DateTimeToFileShort(Now)+'.json',jsonUnquotedPropName);
@@ -7192,7 +7193,6 @@ begin
   if @BacktraceStrFunc = @BacktraceStrFpc then
     BacktraceStrFunc := SysBacktraceStr; // avoid instability
   {$endif FPC}
-  GetExecutableLocation := _GetExecutableLocation; // use FindLocationShort()
   ExeInstanceDebugFile.Free;
   DeleteCriticalSection(GlobalThreadLock);
 end;
