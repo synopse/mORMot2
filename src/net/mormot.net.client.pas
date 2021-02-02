@@ -2291,6 +2291,8 @@ type
     destructor Destroy; override;
     function Search(const Host: RawUtf8; out NetAddr: TNetAddr): boolean;
     procedure Add(const Host: RawUtf8; const NetAddr: TNetAddr);
+    procedure Flush(const Host: RawUtf8);
+    procedure SetTimeOut(aSeconds: integer);
   end;
 
 constructor TNewSocketAddressCache.Create(aTimeOutSeconds: integer);
@@ -2315,7 +2317,18 @@ end;
 procedure TNewSocketAddressCache.Add(const Host: RawUtf8;
   const NetAddr: TNetAddr);
 begin
+  Data.DeleteDeprecated; // flush cache only when we may need some new space
   Data.Add(Host, NetAddr); // ignore if already added in another thread
+end;
+
+procedure TNewSocketAddressCache.Flush(const Host: RawUtf8);
+begin
+  Data.Delete(Host);
+end;
+
+procedure TNewSocketAddressCache.SetTimeOut(aSeconds: integer);
+begin
+  Data.TimeOutSeconds := aSeconds; // warning: will clear the cache
 end;
 
 
@@ -2456,7 +2469,7 @@ end;
 
 
 initialization
-  NewSocketAddressCache := TNewSocketAddressCache.Create(60 * 60); // 1h timeout
+  NewSocketAddressCache := TNewSocketAddressCache.Create(600); // 10min timeout
 
 finalization
   NewSocketAddressCache := nil;

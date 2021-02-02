@@ -168,11 +168,17 @@ type
   end;
 
 
-  /// used by NewSocket() to cache the host names
+  /// used by NewSocket() to cache the host names via NewSocketAddressCache global
   // - defined in this unit, but implemented in mormot.net.client.pas
   INewSocketAddressCache = interface
+    /// method called by NewSocket() to resolve its address
     function Search(const Host: RawUtf8; out NetAddr: TNetAddr): boolean;
+    /// once resolved, NewSocket() will call this method to cache the TNetAddr
     procedure Add(const Host: RawUtf8; const NetAddr: TNetAddr);
+    /// called by NewSocket() if connection failed, and force DNS resolution
+    procedure Flush(const Host: RawUtf8);
+    /// you can call this method to change the default timeout of 10 minutes
+    procedure SetTimeOut(aSeconds: integer);
   end;
 
 
@@ -188,6 +194,7 @@ var
 
   /// used by NewSocket() to cache the host names
   // - implemented by mormot.net.client unit using a TSynDictionary
+  // - you may call its SetTimeOut or Flush methods to tune the caching
   NewSocketAddressCache: INewSocketAddressCache;
 
   /// Queue length for completely established sockets waiting to be accepted,
@@ -998,17 +1005,21 @@ function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
 var
   addr: TNetAddr;
   sock: TSocket;
-  tobecached: boolean;
+  fromcache, tobecached: boolean;
   p: cardinal;
 begin
   netsocket := nil;
+  fromcache := false;
   tobecached := false;
   if (layer in nlIP) and
      (not dobind) and
      Assigned(NewSocketAddressCache) and
      ToCardinal(port, p, 1) then
     if NewSocketAddressCache.Search(address, addr) then
-      result := addr.SetPort(p)
+    begin
+      fromcache := true;
+      result := addr.SetPort(p);
+    end
     else
     begin
       tobecached := true;
@@ -1022,6 +1033,9 @@ begin
   if sock = -1 then
   begin
     result := NetLastError(WSAEADDRNOTAVAIL);
+    if fromcache then
+      // force call the DNS resolver again, perhaps load-balacing is needed
+      NewSocketAddressCache.Flush(address);
     exit;
   end;
   repeat
@@ -1056,7 +1070,11 @@ begin
     SleepHiRes(10);
   until false;
   if result <> nrOK then
-    closesocket(sock)
+  begin
+    closesocket(sock);
+    if fromcache then
+      NewSocketAddressCache.Flush(address);
+  end
   else
   begin
     if tobecached then
