@@ -8432,10 +8432,10 @@ begin
   e.i2 := f.i1 xor Random(maxInt);
   e.i3 := f.i0 xor Random(maxInt);
   crcblock(entropy, @e.b);
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   CreateGUID(PGuid(@e)^); // FPC uses Random() on non-Windows -> not needed
   crcblock(entropy, @e.b);
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
   // persist the current entropy state for the next call
   _EntropyGlobal.c := entropy^;
   // final cross-wired xxHash32() round not to rely on crc32c hash only
@@ -10236,7 +10236,7 @@ end;
 
 {$ifdef HASINLINE}
 
-{$if defined(BSD) and defined(ARM3264)}
+{$if defined(OSBSDDARWIN) and defined(ARM3264)}
 
 procedure VarClear(var v: variant); // Alfred reported issues with VTYPE_STATIC
 begin

@@ -435,10 +435,19 @@ type
 
 const
   /// low-level libcurl library file name, depending on the running OS
-  LIBCURL_DLL = {$ifdef Darwin} 'libcurl.dylib'   {$else}
-                {$ifdef Linux}  'libcurl.so'      {$else}
-                {$ifdef CPU64}  'libcurl-x64.dll' {$else}
-                                'libcurl.dll' {$endif}{$endif}{$endif};
+  LIBCURL_DLL =
+    {$ifdef OSDARWIN}
+      'libcurl.dylib';
+    {$else} {$ifdef OSWINDOWS}
+      {$ifdef CPU64}
+        'libcurl-x64.dll';
+      {$else}
+        'libcurl.dll';
+      {$endif CPU64}
+    {$else}
+      'libcurl.so';
+    {$endif OSWINDOWS}
+    {$endif OSDARWIN}
 
 type
   /// low-level late binding functions access to the libcurl library API
@@ -550,7 +559,7 @@ implementation
 
 {$ifdef FPC}
 
-  {$ifdef ANDROID}
+  {$ifdef OSANDROID}
     {$ifdef CPUAARCH64}
       {$L ..\..\static\aarch64-android\libcurl.a}
     {$endif CPUAARCH64}
@@ -558,7 +567,7 @@ implementation
       {$L ..\..\static\arm-android\libcurl.a}
     {$endif CPUARM}
     {$linklib libz.so}
-  {$endif ANDROID}
+  {$endif OSANDROID}
 
   function curl_global_init(flags: TCurlGlobalInit): TCurlResult; cdecl; external;
   /// finalize the library
@@ -726,23 +735,23 @@ begin
     curl := TLibCurl.Create;
     try
       curl.TryLoadLibrary([
-      {$ifdef MSWINDOWS}
+      {$ifdef OSWINDOWS}
         // first try the libcurl.dll in the local executable folder
         ExeVersion.ProgramFilePath + dllname,
-      {$endif MSWINDOWS}
+      {$endif OSWINDOWS}
         // search standard library in path
         dllname
-      {$ifdef Darwin}
+      {$ifdef OSDARWIN}
         // another common names on MacOS
         , 'libcurl.4.dylib', 'libcurl.3.dylib'
       {$else}
-      {$ifdef Linux}
+      {$ifdef OSPOSIX}
         // another common names on POSIX
         , 'libcurl.so.4', 'libcurl.so.3'
         // for latest Linux Mint and other similar distros using gnutls
         , 'libcurl-gnutls.so.4', 'libcurl-gnutls.so.3'
-      {$endif Linux}
-      {$endif Darwin}
+      {$endif OSPOSIX}
+      {$endif OSDARWIN}
         ], ECurl);
       P := @@curl.global_init;
       for api := low(NAMES) to high(NAMES) do

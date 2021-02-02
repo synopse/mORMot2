@@ -28,10 +28,10 @@ interface
 {$I ..\mormot.defines.inc}
 
 uses
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   Windows, // needed here e.g. for redefinition of standard types
   Messages,
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
   classes,
   contnrs,
   syncobjs,
@@ -168,23 +168,69 @@ const
   COMP_TEXT = {$ifdef FPC}'Fpc'{$else}'Delphi'{$endif};
 
   /// the target Operating System used for compilation, as short text
-  OS_TEXT = {$ifdef MSWINDOWS}'Win'{$else}{$ifdef DARWIN}'OSX'{$else}
-  {$ifdef BSD}'BSD'{$else}{$ifdef ANDROID}'Android'{$else}{$ifdef LINUX}'Linux'{$else}'Posix'
-  {$endif}{$endif}{$endif}{$endif}{$endif};
+  OS_TEXT =
+    {$ifdef OSWINDOWS}
+      'Win';
+    {$else} {$ifdef OSDARWIN}
+      'OSX';
+    {$else}{$ifdef OSBSD}
+      'BSD';
+    {$else} {$ifdef OSANDROID}
+      'Android';
+    {$else} {$ifdef OSLINUX}
+      'Linux';
+    {$else}
+       'Posix';
+    {$endif OSLINUX}
+    {$endif OSANDROID}
+    {$endif OSBSD}
+    {$endif OSDARWIN}
+    {$endif OSWINDOWS}
 
   /// the CPU architecture used for compilation
-  CPU_ARCH_TEXT = {$ifdef CPUX86}'x86'{$else}{$ifdef CPUX64}'x64'{$else}
-    {$ifdef CPUARM3264}'arm'+{$else}
-    {$ifdef CPUPOWERPC}'ppc'+{$else}
-    {$ifdef CPUSPARC}'sparc'+{$endif}{$endif}{$endif}
-    {$ifdef CPU32}'32'{$else}'64'{$endif}{$endif}{$endif};
+  CPU_ARCH_TEXT =
+    {$ifdef CPUX86}
+      'x86'
+    {$else} {$ifdef CPUX64}
+      'x64'
+    {$else} {$ifdef CPUARM3264}
+      'arm' +
+    {$else} {$ifdef CPUPOWERPC}
+      'ppc' +
+    {$else} {$ifdef CPUSPARC}
+      'sparc' +
+    {$endif CPUSPARC}
+    {$endif CPUPOWERPC}
+    {$endif CPUARM3264}
+    {$ifdef CPU32}
+      '32'
+    {$else}
+      '64'
+    {$endif CPU32}
+    {$endif CPUX64}
+    {$endif CPUX86};
 
 var
   /// the target Operating System used for compilation, as TOperatingSystem
   // - a specific Linux distribution may be detected instead of plain osLinux
-  OS_KIND: TOperatingSystem = {$ifdef MSWINDOWS}osWindows{$else}{$ifdef DARWIN}osOSX{$else}
-  {$ifdef BSD}osBSD{$else}{$ifdef Android}osAndroid{$else}{$ifdef LINUX}osLinux{$else}osPOSIX
-  {$endif}{$endif}{$endif}{$endif}{$endif};
+  OS_KIND: TOperatingSystem =
+    {$ifdef OSWINDOWS}
+      osWindows
+    {$else} {$ifdef OSDARWIN}
+      osOSX
+    {$else} {$ifdef OSBSD}
+      osBSD
+    {$else} {$ifdef OSANDROID}
+      osAndroid
+    {$else} {$ifdef OSLINUX}
+      osLinux
+    {$else}
+      osPOSIX
+    {$endif OSLINUX}
+    {$endif OSANDROID}
+    {$endif OSBSD}
+    {$endif OSDARWIN}
+    {$endif OSWINDOWS};
 
   /// the current Operating System version, as retrieved for the current process
   // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or
@@ -270,7 +316,7 @@ function GetDelphiCompilerVersion: RawUtf8; deprecated;
 
 {$endif PUREMORMOT2}
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 
 {$ifdef UNICODE}
 
@@ -320,7 +366,7 @@ var
   /// the current Windows edition, as retrieved for the current process
   OSVersion: TWindowsVersion;
 
-{$else MSWINDOWS}
+{$else OSWINDOWS}
 
 var
   /// emulate only some used fields of Windows' TSystemInfo
@@ -337,7 +383,7 @@ var
     release: RawUtf8;
   end;
   
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 {$M+} // to have existing RTTI for published properties
 
@@ -517,7 +563,7 @@ function GetSystemPath(kind: TSystemPath): TFileName;
 
 { ****************** Operating System Specific Types (e.g. TWinRegistry) }
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 
 type
   TThreadID = DWORD;
@@ -960,7 +1006,7 @@ var
   /// late-binding of the ICU library
   icu: TIcuLibrary;
 
-{$ifdef LINUXNOTBSD} { the systemd API is Linux-specific }
+{$ifdef OSLINUX} { the systemd API is Linux-specific }
 
 const
   /// The first passed file descriptor is fd 3
@@ -1025,14 +1071,14 @@ var
   /// late-binding of the systemd library
   sd: TSystemD;
 
-{$endif LINUXNOTBSD}
+{$endif OSLINUX}
 
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 
 { ****************** Unicode, Time, File, Console, Library process }
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 
 type
   /// redefined as our own mormot.core.os type to avoid dependency to Windows
@@ -1059,7 +1105,7 @@ type
 // defined in mormot.core.datetime which is really cross-platform
 procedure GetLocalTime(out result: TSystemTime); stdcall;
 
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 /// raw cross-platform library loading function
 // - alternative to LoadLibrary() Windows API and FPC RTL
@@ -1073,7 +1119,7 @@ procedure LibraryClose(Lib: TLibHandle);
 /// raw cross-platform library resolution function, as defined in FPC RTL
 // - alternative to GetProcAddr() Windows API and FPC RTL
 function LibraryResolve(Lib: TLibHandle; ProcName: PAnsiChar): pointer;
-  {$ifdef MSWINDOWS} stdcall; {$endif}
+  {$ifdef OSWINDOWS} stdcall; {$endif}
 
 
 const
@@ -1084,13 +1130,13 @@ const
 // - redefined in mormot.core.os to avoid dependency to Windows
 // - under Delphi/Windows, directly call the homonymous Win32 API
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
-  {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
+  {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// finalize a Critical Section (for Lock/UnLock)
 // - redefined in mormot.core.os to avoid dependency to Windows
 // - under Delphi/Windows, directly call the homonymous Win32 API
 procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
-  {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
+  {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// returns TRUE if the supplied mutex has been initialized
 // - will check if the supplied mutex is void (i.e. all filled with 0 bytes)
@@ -1114,23 +1160,23 @@ procedure DeleteCriticalSectionIfNeeded(var cs: TRTLCriticalSection);
 // - warning: do not call this function directly, but use TSynSystemTime as
 // defined in mormot.core.datetime which is really cross-platform
 procedure GetSystemTime(out result: TSystemTime);
-  {$ifdef MSWINDOWS} stdcall; {$endif}
+  {$ifdef OSWINDOWS} stdcall; {$endif}
 
 /// compatibility function, wrapping Win32 API file truncate at current position
 procedure SetEndOfFile(F: THandle);
-  {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
+  {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// compatibility function, wrapping Win32 API file flush to disk
 procedure FlushFileBuffers(F: THandle);
-  {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
+  {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// compatibility function, wrapping Win32 API last error code
 function GetLastError: integer;
-  {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
+  {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// compatibility function, wrapping Win32 API last error code
 procedure SetLastError(error: integer);
-  {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
+  {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// returns a given error code as plain text
 // - calls FormatMessageW on Windows, or StrError() on POSIX
@@ -1146,7 +1192,7 @@ procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
 /// compatibility function, wrapping Win32 API function
 // - returns the current main Window handle on Windows, or 0 on POSIX/Linux
 function GetDesktopWindow: PtrInt;
-  {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
+  {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// compatibility function, wrapping GetACP() Win32 API function
 // - returns the curent system code page (default WinAnsi)
@@ -1192,13 +1238,13 @@ procedure Unicode_WideToShort(
 // - on POSIX, use the ICU library, or fallback to 'a'..'z' conversion only
 // - raw function called by UpperCaseUnicode() from mormot.core.unicode unit
 function Unicode_InPlaceUpper(W: PWideChar; WLen: integer): integer;
-  {$ifdef MSWINDOWS} stdcall; {$endif}
+  {$ifdef OSWINDOWS} stdcall; {$endif}
 
 /// compatibility function, wrapping Win32 API CharLowerBuffW()
 // - on POSIX, use the ICU library, or fallback to 'A'..'Z' conversion only
 // - raw function called by LowerCaseUnicode() from mormot.core.unicode unit
 function Unicode_InPlaceLower(W: PWideChar; WLen: integer): integer;
-  {$ifdef MSWINDOWS} stdcall; {$endif}
+  {$ifdef OSWINDOWS} stdcall; {$endif}
 
 /// returns a system-wide current monotonic timestamp as milliseconds
 // - will use the corresponding native API function under Vista+, or will be
@@ -1212,12 +1258,12 @@ function Unicode_InPlaceLower(W: PWideChar; WLen: integer): integer;
 // on Darwin, which is not monotonic -> always use this safe version
 // - do not expect exact millisecond resolution - it may rather be within the
 // 10-16 ms range, especially under Windows
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 var
   GetTickCount64: function: Int64; stdcall;
 {$else}
 function GetTickCount64: Int64;
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 /// returns the current UTC time
 // - will convert from clock_gettime(CLOCK_REALTIME_COARSE) if available
@@ -1246,7 +1292,7 @@ function UnixMSTimeUtc: Int64;
 // GetSystemTimePreciseAsFileTime, which has higher precision, but is slower
 // - prefer it under Windows, if a dozen of ms resolution is enough for your task
 function UnixMSTimeUtcFast: Int64;
-  {$ifdef LINUX} inline; {$endif}
+  {$ifdef OSPOSIX} inline; {$endif}
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 
@@ -1372,18 +1418,18 @@ procedure DisplayFatalError(const title, msg: RawUtf8);
 
 const
   /// operating-system dependent Line Feed characters
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   CRLF = #13#10;
   {$else}
   CRLF = #10;
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 
   /// operating-system dependent wildchar to match all files in a folder
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   FILES_ALL = '*.*';
   {$else}
   FILES_ALL = '*';
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 
 /// get a file date and time, from a FindFirst/FindNext search
 // - the returned timestamp is in local time, not UTC
@@ -1469,9 +1515,9 @@ type
     fBuf: PAnsiChar;
     fBufSize: PtrUInt;
     fFile: THandle;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     fMap: THandle;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     fFileSize: Int64;
     fFileLocal, fLoadedNotMapped: boolean;
     function DoMap(aCustomOffset: Int64): boolean;
@@ -1574,10 +1620,10 @@ type
   /// low-level structure used to compute process memory and CPU usage
   TProcessInfo = object
   private
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     fSysPrevIdle, fSysPrevKernel, fSysPrevUser,
     fDiffIdle, fDiffKernel, fDiffUser, fDiffTotal: Int64;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
   public
     /// initialize the system/process resource tracking
     function Init: boolean;
@@ -1670,7 +1716,7 @@ function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 // in respect to global aFreeBytes
 function GetDiskInfo(var aDriveFolderOrFile: TFileName;
   out aAvailableBytes, aFreeBytes, aTotalBytes: QWord
-  {$ifdef MSWINDOWS}; aVolumeName: PSynUnicode = nil{$endif}): boolean;
+  {$ifdef OSWINDOWS}; aVolumeName: PSynUnicode = nil{$endif}): boolean;
 
 /// retrieve low-level information about all mounted disk partitions of the system
 // - returned partitions array is sorted by "mounted" ascending order
@@ -1696,15 +1742,15 @@ type
     ccYellow,
     ccWhite);
 
-{$ifdef LINUX}
+{$ifdef OSPOSIX}
 var
   stdoutIsTTY: boolean;
-{$endif LINUX}
+{$endif OSPOSIX}
 
 /// similar to Windows AllocConsole API call, to be truly cross-platform
 // - do nothing on Linux/POSIX
 procedure AllocConsole;
-  {$ifdef MSWINDOWS} stdcall; {$else} inline; {$endif}
+  {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// change the console text writing color
 // - you should call this procedure to initialize StdOut global variable, if
@@ -1731,12 +1777,12 @@ procedure ConsoleWaitForEnterKey;
 // - the content is not converted, so will follow the encoding used for storage
 function ConsoleReadBody: RawByteString;
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 
 /// low-level access to the keyboard state of a given key
 function ConsoleKeyPressed(ExpectedKey: Word): boolean;
 
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 /// direct conversion of a UTF-8 encoded string into a console OEM-encoded string
 // - under Windows, will use the CP_OEMCP encoding
@@ -2050,7 +2096,7 @@ type
   /// meta-class definition of the TSynLocked hierarchy
   TSynLockedClass = class of TSynLocked;
 
-{$ifndef MSWINDOWS}
+{$ifdef OSPOSIX}
 
 var
   /// could be set to TRUE to force SleepHiRes(0) to call the sched_yield API
@@ -2060,7 +2106,7 @@ var
   // - you may tempt the devil and try it by yourself
   SleepHiRes0Yield: boolean = false;
 
-{$endif MSWINDOWS}
+{$endif OSPOSIX}
 
 /// similar to Windows sleep() API call, to be truly cross-platform
 // - using millisecond resolution
@@ -2142,7 +2188,7 @@ type
   TOnDaemonLog = procedure(Level: TSynLogInfo; const Fmt: RawUtf8;
     const Args: array of const; Instance: TObject = nil) of object;
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 
 { *** some minimal Windows API definitions, replacing WinSvc.pas missing for FPC }
 
@@ -2648,7 +2694,7 @@ var
 // - onLog can be assigned from TSynLog.DoLog for proper logging
 procedure SynDaemonIntercept(const onlog: TOnDaemonLog = nil);
 
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 type
   /// command line patterns recognized by ParseCommandArgs()
@@ -2691,7 +2737,7 @@ const
 // should be considered as indicative only with posix=false
 function ParseCommandArgs(const cmd: RawUtf8; argv: PParseCommandsArgs = nil;
   argc: PInteger = nil; temp: PRawUtf8 = nil;
-  posix: boolean = {$ifdef MSWINDOWS} false {$else} true {$endif}): TParseCommands;
+  posix: boolean = {$ifdef OSWINDOWS} false {$else} true {$endif}): TParseCommands;
 
 /// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
 // - optional env value follows 'n1=v1'#0'n2=v2'#0'n3=v3'#0#0 Windows layout
@@ -2717,13 +2763,13 @@ implementation
 // note: the *.inc files start with their own "uses" clause, so both $include
 // should remain here, just after the "implementation" clause
 
-{$ifdef LINUX}
+{$ifdef OSPOSIX}
   {$include mormot.core.os.posix.inc}
-{$endif LINUX}
+{$endif OSPOSIX}
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
   {$include mormot.core.os.windows.inc}
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 
 { ****************** Gather Operating System Information }
@@ -2835,16 +2881,16 @@ const
   ERROR_WINHTTP_INVALID_SERVER_RESPONSE = 12152;
 
 function SysErrorMessagePerModule(Code: DWORD; ModuleName: PChar): string;
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 var
   tmpLen: DWORD;
   err: PChar;
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 begin
   result := '';
   if Code = 0 then
     exit;
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   tmpLen := FormatMessage(
     FORMAT_MESSAGE_FROM_HMODULE or FORMAT_MESSAGE_ALLOCATE_BUFFER,
     pointer(GetModuleHandle(ModuleName)), Code, ENGLISH_LANGID, @err, 0, nil);
@@ -2856,7 +2902,7 @@ begin
   finally
     LocalFree(HLOCAL(err));
   end;
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
   if result = '' then
   begin
     result := SysErrorMessage(Code);
@@ -3074,7 +3120,7 @@ begin
   end;
   if FlushOnDisk then
     FlushFileBuffers(F);
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   if FileDate <> 0 then
     FileSetDate(F, DateTimeToFileDate(FileDate));
   FileClose(F);
@@ -3082,7 +3128,7 @@ begin
   FileClose(F); // POSIX expects the file to be closed to set the date
   if FileDate <> 0 then
     FileSetDate(FileName, DateTimeToFileDate(FileDate));
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
   result := true;
 end;
 
@@ -3289,9 +3335,9 @@ var
 begin
   fBuf := nil;
   fBufSize := 0;
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   fMap := 0;
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
   fFileLocal := aFileOwned;
   fFile := aFile;
   fFileSize := FileSeek64(fFile, 0, soFromEnd);
@@ -3340,9 +3386,9 @@ begin
   fBuf := aBuffer;
   fFileSize := aBufferSize;
   fBufSize := aBufferSize;
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   fMap := 0;
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
   fFile := 0;
   fFileLocal := false;
 end;
@@ -3476,10 +3522,10 @@ var
 
 constructor TFakeStubBuffer.Create;
 begin
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   fStub := VirtualAlloc(nil, STUB_SIZE, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
   if fStub = nil then
-  {$else MSWINDOWS}
+  {$else OSWINDOWS}
   if not MemoryProtection then
     fStub := StubCallAllocMem(STUB_SIZE, PROT_READ or PROT_WRITE or PROT_EXEC);
   if (fStub = MAP_FAILED) or
@@ -3491,17 +3537,17 @@ begin
       MemoryProtection := True;
   end;
   if fStub = MAP_FAILED then
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
     raise EOSException.Create('ReserveExecutableMemory(): OS memory allocation failed');
 end;
 
 destructor TFakeStubBuffer.Destroy;
 begin
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   VirtualFree(fStub, 0, MEM_RELEASE);
   {$else}
   fpmunmap(fStub, STUB_SIZE);
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
   inherited;
 end;
 
@@ -3638,14 +3684,14 @@ function TSynLibrary.TryLoadLibrary(const aLibrary: array of TFileName;
   aRaiseExceptionOnFailure: ExceptionClass): boolean;
 var
   i: integer;
-  lib, libs {$ifdef MSWINDOWS} , nwd, cwd {$endif}: TFileName;
+  lib, libs {$ifdef OSWINDOWS} , nwd, cwd {$endif}: TFileName;
 begin
   for i := 0 to high(aLibrary) do
   begin
     lib := aLibrary[i];
     if lib = '' then
       continue;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     nwd := ExtractFilePath(lib);
     if nwd <> '' then
     begin
@@ -3657,7 +3703,7 @@ begin
       SetCurrentDir(cwd{%H-});
     {$else}
     fHandle := LibraryOpen(lib); // use regular .so loading behavior
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     if fHandle <> 0 then
     begin
       fLibraryPath := lib;
@@ -3738,10 +3784,10 @@ begin
     begin
       fUserAgent := RawUtf8(Format('%s/%s%s', [GetFileNameWithoutExt(
         ExtractFileName(fFileName)), DetailedOrVoid, OS_INITIAL[OS_KIND]]));
-      {$ifdef MSWINDOWS}
+      {$ifdef OSWINDOWS}
       if OSVersion in WINDOWS_32 then
         fUserAgent := fUserAgent + '32';
-      {$endif MSWINDOWS}
+      {$endif OSWINDOWS}
     end;
     result := fUserAgent;
   end;
@@ -3775,13 +3821,13 @@ begin
   begin
     if Version = nil then
     begin
-      {$ifdef MSWINDOWS}
+      {$ifdef OSWINDOWS}
       ProgramFileName := paramstr(0);
       {$else}
       ProgramFileName := GetModuleName(HInstance);
       if ProgramFileName = '' then
         ProgramFileName := ExpandFileName(paramstr(0));
-      {$endif MSWINDOWS}
+      {$endif OSWINDOWS}
       ProgramFilePath := ExtractFilePath(ProgramFileName);
       if IsLibrary then
         InstanceFileName := GetModuleName(HInstance)

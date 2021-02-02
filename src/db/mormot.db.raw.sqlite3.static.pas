@@ -42,10 +42,10 @@ begin
     sqlite3.ForceToUseSharedMemoryManager; // faster process
   except
     on E: Exception do
-      {$ifdef LINUX} // there is always an error console ouput on POSIX
+      {$ifdef OSPOSIX} // there is always an error console ouput on POSIX
       writeln(SQLITE_LIBRARY_DEFAULT_NAME + ' initialization failed with ',
         ClassNameShort(E)^, ': ', E.Message);
-      {$endif LINUX}
+      {$endif OSPOSIX}
   end;
 end;
 
@@ -132,7 +132,7 @@ var
 
 implementation
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 
 uses
   Windows; // statically linked .obj requires the Windows API
@@ -146,7 +146,7 @@ uses
 
 {$ifdef FPC}  // FPC expects .o linking, and only one version including FTS
 
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
     {$ifdef CPU64}
       const _PREFIX = '';
       {$L ..\..\static\x86_64-win64\sqlite3.o}
@@ -160,18 +160,18 @@ uses
       {$linklib ..\..\static\i386-win32\libgcc.a}
       {$linklib ..\..\static\i386-win32\libmsvcrt.a}
     {$endif CPU64}
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 
-  {$ifdef Darwin}
+  {$ifdef OSDARWIN}
     const _PREFIX = '_';
     {$ifdef CPU64}
       {$linklib ..\..\static\x86_64-darwin\libsqlite3.a}
     {$else}
       {$linklib ..\..\static\i386-darwin\libsqlite3.a}
     {$endif}
-  {$endif Darwin}
+  {$endif OSDARWIN}
 
-  {$ifdef ANDROID}
+  {$ifdef OSANDROID}
     const _PREFIX = '';
     {$ifdef CPUAARCH64}
       {$L ..\..\static\aarch64-android\libsqlite3.a}
@@ -181,9 +181,9 @@ uses
       {$L ..\..\static\arm-android\libsqlite3.a}
       {$L ..\..\static\arm-android\libgcc.a}
     {$endif CPUARM}
-  {$endif ANDROID}
+  {$endif OSANDROID}
 
-  {$ifdef FREEBSD}
+  {$ifdef OSFREEBSD}
     {$ifdef CPUX86}
     const _PREFIX = '';
     {$L ..\..\static\i386-freebsd\sqlite3.o}
@@ -198,9 +198,9 @@ uses
       {$linklib ..\..\static\x86_64-freebsd\libgcc.a}
     {$endif}
     {$endif CPUX64}
-  {$endif FREEBSD}
+  {$endif OSFREEBSD}
 
-  {$ifdef OPENBSD}
+  {$ifdef OSOPENBSD}
     {$ifdef CPUX86}
       const _PREFIX = '';
       {$L ..\..\static\i386-openbsd\sqlite3.o}
@@ -215,9 +215,9 @@ uses
         {$linklib ..\..\static\x86_64-openbsd\libgcc.a}
       {$endif}
     {$endif CPUX64}
-  {$endif OPENBSD}
+  {$endif OSOPENBSD}
 
-  {$if defined(Linux) and not defined(BSD) and not defined(Android)}
+  {$ifdef OSLINUX}
     const _PREFIX = '';
     {$ifdef CPUAARCH64}
       {$L ..\..\static\aarch64-linux\sqlite3.o}
@@ -239,14 +239,14 @@ uses
         {$linklib ..\..\static\x86_64-linux\libgcc.a}
       {$endif}
     {$endif CPUX64}
-  {$ifend}
+  {$endif OSLINUX}
 
 function log(x: double): double; cdecl; public name _PREFIX + 'log'; export;
 begin
   result := ln(x);
 end;
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 {$ifdef CPUX86} // not a compiler intrinsic on x86
 
 function _InterlockedCompareExchange(
@@ -257,9 +257,9 @@ begin
 end;
 
 {$endif CPUX86}
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
-{$ifdef DARWIN}
+{$ifdef OSDARWIN}
 
 function moddi3(num, den: int64): int64; cdecl; public alias: '___moddi3';
 begin
@@ -278,9 +278,9 @@ begin
   result := num div den;
 end;
 
-{$endif DARWIN}
+{$endif OSDARWIN}
 
-{$ifdef ANDROID}
+{$ifdef OSANDROID}
 {$ifdef CPUARM}
 function bswapsi2(num:uint32):uint32; cdecl; public alias: '__bswapsi2';
 asm
@@ -295,18 +295,18 @@ asm
   bx  lr
 end;
 {$endif}
-{$endif ANDROID}
+{$endif OSANDROID}
 
 {$else FPC}
 
   // Delphi has a diverse linking strategy, since $linklib doesn't exist :(
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
     {$ifdef CPU64}
       {$L ..\..\static\delphi\sqlite3.o}  // compiled with C++ Builder 10.3 Community Edition bcc64
     {$else}
       {$L ..\..\static\delphi\sqlite3.obj}  // compiled with free Borland C++ Compiler 5.5
     {$endif}
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 
 // those functions will be called only under Delphi + Win32/Win64
 
@@ -335,7 +335,7 @@ begin
     result := -1;
 end;
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 {$ifdef CPU32} // Delphi Win32 will link static Borland C++ sqlite3.obj
 
 // we then implement all needed Borland C++ runtime functions in pure pascal:
@@ -417,7 +417,7 @@ asm
 end;
 
 {$endif CPU32}
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 function memset(P: Pointer; B: integer; count: integer): pointer; cdecl; { always cdecl }
 // a fast full pascal version of the standard C library function
@@ -684,7 +684,7 @@ begin
   result := localtime64(t^);
 end;
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 
 const
   msvcrt = 'msvcrt.dll';
@@ -724,7 +724,7 @@ var
 
 {$endif CPU64}
 
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 {$endif FPC}
 
@@ -1143,7 +1143,8 @@ function sqlite3_trace_v2(DB: TSqlite3DB; Mask: integer; Callback: TSqlTraceCall
 const
   // error message if statically linked sqlite3.o(bj) does not match this
   // - Android version may be a little behind, so we are more releaxed here
-  EXPECTED_SQLITE3_VERSION = {$ifdef ANDROID}'3.34'{$else}'3.34.1'{$endif};
+  EXPECTED_SQLITE3_VERSION =
+    {$ifdef OSANDROID} '3.34' {$else} '3.34.1' {$endif};
 
   // where to download the latest available static binaries, including SQLite3
   EXPECTED_STATIC_DOWNLOAD =

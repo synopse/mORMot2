@@ -48,11 +48,11 @@ const
   cAnyPort = '0';
   cLocalhost32 = $0100007f;
 
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   SOCKADDR_SIZE = 28;
   {$else}
   SOCKADDR_SIZE = 110; // able to store UNIX domain socket name
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 
 var
   /// global variable containing '127.0.0.1'
@@ -748,13 +748,13 @@ implementation
 { includes are below inserted just after 'implementation' keyword to allow
   their own private 'uses' clause }
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
   {$I mormot.net.sock.windows.inc}
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
-{$ifdef LINUX}
+{$ifdef OSPOSIX}
   {$I mormot.net.sock.posix.inc}
-{$endif LINUX}
+{$endif OSPOSIX}
 
 const
   // we don't use RTTI to avoid linking mormot.core.rtti.pas
@@ -779,10 +779,10 @@ begin
     Error^ := err;
   if err = NO_ERROR then
     result := nrOK
-  else if {$ifdef MSWINDOWS}
+  else if {$ifdef OSWINDOWS}
           (err <> WSAETIMEDOUT) and
           (err <> WSAEWOULDBLOCK) and
-          {$endif MSWINDOWS}
+          {$endif OSWINDOWS}
           (err <> WSATRY_AGAIN) and
           (err <> WSAEINTR) and
           (err <> AnotherNonFatal) then
@@ -879,10 +879,10 @@ begin
       result := nfIP4;
     AF_INET6:
       result := nfIP6;
-    {$ifndef MSWINDOWS}
+    {$ifdef OSPOSIX}
     AF_UNIX:
       result := nfUNIX;
-    {$endif MSWINDOWS}
+    {$endif OSPOSIX}
     else
       result := nfUnknown;
   end;
@@ -947,11 +947,11 @@ begin
           end;
         end;
       end;
-    {$ifndef MSWINDOWS}
+    {$ifdef OSPOSIX}
     AF_UNIX:
       SetString(result, PAnsiChar(@psockaddr_un(@Addr)^.sun_path),
         mormot.core.base.StrLen(@psockaddr_un(@Addr)^.sun_path));
-    {$endif MSWINDOWS}
+    {$endif OSPOSIX}
   end;
 end;
 
@@ -1233,10 +1233,10 @@ begin
     result := nrNoSocket
   else
   begin
-    {$ifdef LINUXNOTBSD}
+    {$ifdef OSLINUX}
     // on Linux close() is enough (e.g. nginx doesn't call shutdown)
     if rdwr then
-    {$endif LINUXNOTBSD}
+    {$endif OSLINUX}
       shutdown(TSocket(@self), SHUT_[rdwr]);
     result := Close;
   end;
@@ -1285,9 +1285,9 @@ begin
     fPollClass := PollSocketClass
   else
     fPollClass := aPollClass;
-  {$ifndef MSWINDOWS}
+  {$ifdef OSPOSIX}
   SetFileOpenLimit(GetFileOpenLimit(true)); // set soft limit to hard value
-  {$endif MSWINDOWS}
+  {$endif OSPOSIX}
 end;
 
 destructor TPollSockets.Destroy;
@@ -1571,7 +1571,7 @@ begin
   Create(aTimeOut);
   if aAddress = '' then
   begin
-    {$ifdef LINUXNOTBSD} // try systemd activation
+    {$ifdef OSLINUX} // try systemd activation
     if not sd.IsAvailable then
       raise ENetSock.Create('Bind('''') but Systemd is not available');
     if sd.listen_fds(0) > 1 then
@@ -1580,7 +1580,7 @@ begin
     aSock := SD_LISTEN_FDS_START + 0;
     {$else}
     raise ENetSock.Create('Bind(''''), i.e. Systemd activation, is not allowed on this platform');
-    {$endif LINUXNOTBSD}
+    {$endif OSLINUX}
   end
   else
   begin
@@ -1590,14 +1590,14 @@ begin
       s := '0.0.0.0';
       p := aAddress;
     end;
-    {$ifndef MSWINDOWS}
+    {$ifdef OSPOSIX}
     if s = 'unix' then
     begin
       aLayer := nlUNIX;
       s := p;
       p := '';
     end;
-    {$endif MSWINDOWS}
+    {$endif OSPOSIX}
   end;
   // next line will raise exception on error
   OpenBind(s{%H-}, p{%H-}, {dobind=}true, {%H-}TNetSocket(aSock), aLayer);
@@ -1623,7 +1623,7 @@ begin
       // allow small number of retries (e.g. XP or BSD during aggressive tests)
       retry := 10
     else
-      retry := {$ifdef BSD}10{$else}2{$endif};
+      retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
     res := NewSocket(aServer, aPort, aLayer, doBind, Timeout, Timeout, Timeout,
       retry, fSock);
     if res <> nrOK then
@@ -1667,7 +1667,7 @@ end;
 
 procedure TCrtSocket.AcceptRequest(aClientSock: TNetSocket; aClientAddr: PNetAddr);
 begin
-  {$ifdef LINUXNOTBSD}
+  {$ifdef OSLINUX}
   // on Linux fd returned from accept() inherits all parent fd options
   // except O_NONBLOCK and O_ASYNC
   fSock := aClientSock;
@@ -1675,7 +1675,7 @@ begin
   // on other OS inheritance is undefined, so call OpenBind to set all fd options
   OpenBind('', '', false, aClientSock, fSocketLayer); // set the ACCEPTed aClientSock
   Linger := 5; // should remain open for 5 seconds after a closesocket() call
-  {$endif LINUXNOTBSD}
+  {$endif OSLINUX}
   if aClientAddr <> nil then
     fRemoteIP := aClientAddr^.IP(RemoteIPLocalHostAsVoidInServers);
 end;
@@ -1878,7 +1878,7 @@ begin
   end;
   if not SockIsDefined then
     exit; // no opened connection, or Close already executed
-  {$ifdef LINUXNOTBSD}
+  {$ifdef OSLINUX}
   if fWasBind and
      (fPort = '') then
   begin
@@ -1886,7 +1886,7 @@ begin
     fSock := TNetSocket(-1);
     exit;
   end;
-  {$endif LINUXNOTBSD}
+  {$endif OSLINUX}
   if fSecure <> nil then
   begin
     fSecure.BeforeDisconnection(fSock);
@@ -1984,7 +1984,7 @@ begin
       cspSocketError:
         result := -1; // indicates broken/closed socket
     end; // cspNoData will leave result=0
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   // under Unix SockReceivePending use poll(fSocket) and if data available
   // ioctl syscall is redundant
   if aPendingAlsoInSocket then
@@ -1992,7 +1992,7 @@ begin
     if (sock.RecvPending(insocket) = nrOK) and
        (insocket > 0) then
       inc(result, insocket);
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 end;
 
 function TCrtSocket.SockConnected: boolean;
@@ -2184,7 +2184,7 @@ begin
   begin
     expected := Length;
     Length := 0;
-    last := {$ifdef MSWINDOWS}mormot.core.os.GetTickCount64{$else}0{$endif};
+    last := {$ifdef OSWINDOWS}mormot.core.os.GetTickCount64{$else}0{$endif};
     repeat
       read := expected - Length;
       if fSecure <> nil then
@@ -2346,7 +2346,7 @@ begin
      (Len <= 0) or
      (P = nil) then
     exit;
-  start := {$ifdef MSWINDOWS}mormot.core.os.GetTickCount64{$else}0{$endif};
+  start := {$ifdef OSWINDOWS}mormot.core.os.GetTickCount64{$else}0{$endif};
   repeat
     sent := Len;
     if fSecure <> nil then
@@ -2549,7 +2549,7 @@ initialization
   assert(SizeOf(sockaddr_in) = 16);
   assert(SizeOf(TNetAddr) = SOCKADDR_SIZE);
   assert(SizeOf(TNetAddr) >=
-    {$ifdef MSWINDOWS} SizeOf(sockaddr_in6) {$else} SizeOf(sockaddr_un) {$endif});
+    {$ifdef OSWINDOWS} SizeOf(sockaddr_in6) {$else} SizeOf(sockaddr_un) {$endif});
   DefaultListenBacklog := SOMAXCONN;
   InitializeUnit; // in mormot.net.sock.windows.inc
 

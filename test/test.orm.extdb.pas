@@ -93,17 +93,17 @@ type
     // - a TOrmHistory table will be used to store record history
     procedure ExternalViaRESTWithChangeTracking;
     {$ifndef CPU64}
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     /// test external DB using the JET engine
     procedure JETDatabase;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     {$endif CPU64}
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     {$ifdef USEZEOS}
     /// test external Firebird embedded engine via Zeos/ZDBC (if available)
     procedure FirebirdEmbeddedViaZDBCOverHTTP;
     {$endif USEZEOS}
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
   end;
 
 type
@@ -161,14 +161,14 @@ type
 implementation
 
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 {$ifdef USEZEOS}
 
 uses
   mormot.db.sql.zeos;
 
 {$endif USEZEOS}
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 type
   // class hooks to force DMBS property for TTestExternalDatabase.AutoAdaptSQL
@@ -407,7 +407,7 @@ begin
   Test(true, true);
 end;
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 {$ifdef USEZEOS}
 
 procedure TTestExternalDatabase.FirebirdEmbeddedViaZDBCOverHTTP;
@@ -520,10 +520,10 @@ begin
 end;
 
 {$endif USEZEOS}
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 {$ifndef CPU64}
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 
 procedure TTestExternalDatabase.JETDatabase;
 var
@@ -595,7 +595,7 @@ begin
   end;
 end;
 
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 {$endif CPU64}
 
 procedure TTestExternalDatabase._SynDBRemote;

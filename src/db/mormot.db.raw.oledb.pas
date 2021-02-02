@@ -21,7 +21,7 @@ interface
 {$I ..\mormot.defines.inc}
 
 
-{$ifdef MSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
+{$ifdef OSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
 
 uses
   sysutils,
@@ -681,9 +681,9 @@ type
     function SetupAccessors(pIAccessorTVP: IAccessor): HRESULT; virtual; abstract;
     destructor Destroy; override;
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-      IID: TGUID; out Obj): TIntQry; {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
-    function _AddRef: TIntCnt;       {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
-    function _Release: TIntCnt;      {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
+      IID: TGUID; out Obj): TIntQry; {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
+    function _AddRef: TIntCnt;       {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
+    function _Release: TIntCnt;      {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
     /// Adds a reference count to an existing row handle
     function AddRefRows(cRows: PtrUInt; rghRows: PPtrUIntArray;
       rgRefCounts, rgRowStatus: PCardinalArray): HRESULT; stdcall;
@@ -739,12 +739,12 @@ function IsJetFile(const FileName: TFileName): boolean;
 /// low-level guess of our SQL Field Type from the OleDB numerical type value
 function OleDBColumnToFieldType(wType: DBTYPE; bScale: byte): TSqlDBFieldType;
 
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 
 implementation
 
-{$ifdef MSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
+{$ifdef OSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
 
 
 { ************ Low-Level OleDB Custom RowSet Processing }
@@ -1033,7 +1033,7 @@ begin
   end;
 end;
 
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 end.
 

@@ -9,14 +9,14 @@ uses
   baseunix,
   termio,
   sockets,
-  {$ifndef BSD}
+  {$ifdef OSLINUX}
   linux, // for epoll
-  {$endif BSD}
+  {$endif OSLINUX}
   initc; // link clib='c' for our socket purpose
 
-{$ifdef BSD}
+{$ifdef OSBSDDARWIN}
   {$define USEPOLL} // epoll API is Linux-specific -> force use poll() on BSD
-{$endif BSD}
+{$endif OSBSDDARWIN}
 
 
 { ******** Sockets Type Definitions }
@@ -33,41 +33,41 @@ const
   WSAETIMEDOUT = ESysETIMEDOUT;
   WSAEMFILE = ESysEMFILE;
 
-  {$ifdef FREEBSD}
+  {$ifdef OSFREEBSD}
   NI_NUMERICHOST = 2;
   NI_NUMERICSERV = 8;
   {$else}
   NI_NUMERICHOST = 1;
   NI_NUMERICSERV = 2;
-  {$endif FREEBSD}
+  {$endif OSFREEBSD}
 
   FIONREAD = termio.FIONREAD;
   FIONBIO  = termio.FIONBIO;
 
-  {$ifdef BSD}
+  {$ifdef OSBSDDARWIN}
 
-    {$ifndef OPENBSD}
-    {$ifdef DARWIN}
+    {$ifndef OSOPENBSD}
+    {$ifdef OSDARWIN}
     SO_NOSIGPIPE = $1022;
     {$else}
     SO_NOSIGPIPE = $800;
-    {$endif DARWIN}
-    {$endif OPENBSD}
+    {$endif OSDARWIN}
+    {$endif OSOPENBSD}
 
-    {$ifndef OPENBSD}
+    {$ifndef OSOPENBSD}
     // Works under MAC OS X and FreeBSD, but is undocumented, so FPC doesn't include it
     MSG_NOSIGNAL  = $20000;  // Do not generate SIGPIPE.
     {$else}
     MSG_NOSIGNAL  = $400;
-    {$endif OPENBSD}
-    {$else}
+    {$endif OSOPENBSD}
+  {$else}
     {$ifdef SUNOS}
     MSG_NOSIGNAL = $20000;  // Do not generate SIGPIPE.
     {$else}
     MSG_NOSIGNAL = sockets.MSG_NOSIGNAL; // Do not generate SIGPIPE
     {$endif SUNOS}
 
-  {$endif BSD}
+  {$endif OSBSDDARWIN}
 
   _ST: array[TNetLayer] of integer = (
     SOCK_STREAM,
@@ -183,7 +183,7 @@ function sendto(s: TSocket; Buf: Pointer; len, flags: integer;
 function getpeername(s: TSocket; name: PSockAddr; var namelen: integer): integer; cdecl;
   external clib name 'getpeername';
 
-{$ifdef DARWIN}
+{$ifdef OSDARWIN}
 // circumvent linking issue on Mac OSX
 function poll(fds: PPollFD; nfds, timeout: integer): integer; inline;
 begin
@@ -192,7 +192,7 @@ end;
 {$else}
 function poll(fds: PPollFD; nfds, timeout: integer): integer; cdecl;
   external clib name 'poll';
-{$endif DARWIN}
+{$endif OSDARWIN}
 
 function sockerrno: integer; inline;
 begin
@@ -313,14 +313,14 @@ begin
   if linger > 0 then
   begin
     v.l_onoff := ord(true);
-    {$ifdef BSD}
+    {$ifdef OSBSDDARWIN}
     SetOpt(SOL_SOCKET, SO_REUSEPORT, @v.l_onoff, SizeOf(v.l_onoff));
-    {$ifndef OpenBSD}
+    {$ifndef OSOPENBSD}
     SetOpt(SOL_SOCKET, SO_NOSIGPIPE, @v.l_onoff, SizeOf(v.l_onoff));
-    {$endif OpenBSD}
+    {$endif OSOPENBSD}
     {$else}
     SetOpt(SOL_SOCKET, SO_REUSEADDR, @v.l_onoff, SizeOf(v.l_onoff));
-    {$endif BSD}
+    {$endif OSBSDDARWIN}
   end;
 end;
 

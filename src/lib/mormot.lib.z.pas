@@ -24,21 +24,21 @@ interface
 
   // select best known choice if not overriden for the whole project
   {$ifdef FPC}
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
       {$define ZLIBSTATIC}   // FPC Win32 Win64: static .o
     {$else}
-      {$ifdef ANDROID}
+      {$ifdef OSANDROID}
         {$define ZLIBPAS}    // FPC Android: paszlib (Alf reported problems)
       {$else}
-        {$define ZLIBEXT}    // FPC other POSIX: system's libz.so
-      {$endif ANDROID}
-    {$endif MSWINDOWS}
+        {$define ZLIBEXT} // FPC other POSIX: system's libz.so
+      {$endif OSANDROID}
+    {$endif OSWINDOWS}
   {$else not FPC}
     {$ifdef WIN32}
-      {$define ZLIBSTATIC}   // Delphi Win32: static .obj
+      {$define ZLIBSTATIC} // Delphi Win32: static .obj
     {$endif WIN32}
     {$ifdef WIN64}
-      {$define ZLIBRTL}      // Delphi Win64: system.zlib.pas from Delphi RTL
+      {$define ZLIBRTL} // Delphi Win64: system.zlib.pas from Delphi RTL
     {$endif WIN64}
   {$endif FPC}
 
@@ -371,7 +371,7 @@ function get_crc_table: pointer; cdecl; external;
 {$ifdef ZLIBEXT}
 
 const
-{$ifdef ANDROID}
+{$ifdef OSANDROID}
   libz = '/usr/lib/libz.so';
 {$else}
   {$ifdef FPC}
@@ -380,7 +380,7 @@ const
   {$else}
   libz = 'libz.so'
   {$endif FPC}
-{$endif ANDROID}
+{$endif OSANDROID}
 
 function deflate(var strm: TZStream; flush: integer): integer; cdecl; external libz;
 function deflateEnd(var strm: TZStream): integer; cdecl; external libz;

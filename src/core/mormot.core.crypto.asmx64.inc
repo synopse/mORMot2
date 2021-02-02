@@ -28,7 +28,7 @@ asm // input: rcx/rdi=TAesContext, rdx/rsi=source, r8/rdx=dest
         push    r12
         push    rbx
         push    rbp
-        {$ifdef MSWINDOWS}
+        {$ifdef WIN64ABI}
         push    rdi
         push    rsi
         mov     r15, r8
@@ -37,7 +37,7 @@ asm // input: rcx/rdi=TAesContext, rdx/rsi=source, r8/rdx=dest
         mov     r15, rdx
         mov     rdx, rsi
         mov     r12, rdi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         movzx   r13, byte ptr [r12].TAesContext.Rounds
         mov     eax, dword ptr [rdx]
         mov     ebx, dword ptr [rdx + 4H]
@@ -174,10 +174,10 @@ asm // input: rcx/rdi=TAesContext, rdx/rsi=source, r8/rdx=dest
         xor     r14d, r8d
         xor     r14d, dword ptr [r12 + 0CH]
         mov     dword ptr [r15 + 0CH], r14d
-        {$ifdef MSWINDOWS}
+        {$ifdef WIN64ABI}
         pop     rsi
         pop     rdi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         pop     rbp
         pop     rbx
         pop     r12
@@ -194,7 +194,7 @@ var
   K256Aligned: pointer; // movaps + paddd do expect 16 bytes alignment
 
 const
-  STACK_SIZE = 32{$ifndef LINUX}+7*16{$endif};
+  STACK_SIZE = 32 {$ifndef SYSVABI} + 7 * 16 {$endif};
 
 procedure sha256_sse4(var input_data; var digest; num_blks: PtrUInt);
 {$ifdef FPC}nostackframe; assembler; asm{$else}
@@ -202,20 +202,20 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         .noframe
 {$endif FPC}
         push    rbx
-        {$ifdef LINUX}
+        {$ifdef SYSVABI}
         mov     r8, rdx
         mov     rcx, rdi
         mov     rdx, rsi
         {$else}
         push    rsi   // Win64 expects those registers to be preserved
         push    rdi
-        {$endif LINUX}
+        {$endif SYSVABI}
         push    rbp
         push    r13
         push    r14
         push    r15
         sub     rsp, STACK_SIZE
-        {$ifndef LINUX}
+        {$ifndef SYSVABI}
         movaps  [rsp + 20H], xmm6    // manual .PUSHNV for FPC compatibility
         movaps  [rsp + 30H], xmm7
         movaps  [rsp + 40H], xmm8
@@ -223,7 +223,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         movaps  [rsp + 60H], xmm10
         movaps  [rsp + 70H], xmm11
         movaps  [rsp + 80H], xmm12
-        {$endif LINUX}
+        {$endif SYSVABI}
         shl     r8, 6
         je      @done
         add     r8, rcx
@@ -1123,7 +1123,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         add     rcx, 64
         cmp     rcx, [rsp]
         jne     @loop0
-@done: {$ifndef LINUX}
+@done: {$ifndef SYSVABI}
         movaps  xmm6, [rsp + 20H]
         movaps  xmm7, [rsp + 30H]
         movaps  xmm8, [rsp + 40H]
@@ -1131,16 +1131,16 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         movaps  xmm10, [rsp + 60H]
         movaps  xmm11, [rsp + 70H]
         movaps  xmm12, [rsp + 80H]
-        {$endif LINUX}
+        {$endif SYSVABI}
         add     rsp, STACK_SIZE
         pop     r15
         pop     r14
         pop     r13
         pop     rbp
-        {$ifndef LINUX}
+        {$ifndef SYSVABI}
         pop     rdi
         pop     rsi
-        {$endif LINUX}
+        {$endif SYSVABI}
         pop     rbx
         ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
@@ -1155,11 +1155,11 @@ end;
 // Synopse's x64 asm, optimized for both in+out-order pipelined CPUs
 procedure KeccakPermutationKernel(B, A, C: Pointer);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        {$ifndef MSWINDOWS}  // input: rcx=B, rdx=A, r8=C (Linux: rdi,rsi,rdx)
+        {$ifndef WIN64ABI}  // input: rcx=B, rdx=A, r8=C (Linux: rdi,rsi,rdx)
         mov     r8, rdx
         mov     rdx, rsi
         mov     rcx, rdi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         push    rbx
         push    r12
         push    r13
@@ -1447,10 +1447,10 @@ procedure Sha256ExpandMessageBlocks(W, Buf: PIntegerArray);
 asm // W=rcx Buf=rdx
   .noframe
 {$endif}
-        {$ifndef MSWINDOWS}
+        {$ifndef WIN64ABI}
         mov     rdx, rsi
         mov     rcx, rdi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         mov     rax, rcx
         push    rsi
         push    rdi
@@ -1601,11 +1601,11 @@ function gf2_multiply(x, y, m, bits: PtrUInt): PtrUInt;
         shr     x, 1
         mov     r10, rax
         xor     r10, y
-        {$ifdef MSWINDOWS}
+        {$ifdef WIN64ABI}
         test    cl, 1
         {$else}
         test    dil, 1
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         cmovne  rax, r10
         dec     bits
         jne     @s
@@ -1633,10 +1633,10 @@ procedure MD5Transform(var buf: TMd5Buf; const in_: TMd5In);
  Taken from https://github.com/maximmasiutin/MD5_Transform-x64
 }
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        {$ifndef MSWINDOWS} // W=rcx Buf=rdx
+        {$ifndef WIN64ABI} // W=rcx Buf=rdx
         mov     rdx, rsi
         mov     rcx, rdi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         push    rbx
         push    rsi
         push    rdi
@@ -2855,11 +2855,11 @@ end;
 
 // optimized asm using SSE4 instructions for x64 64-bit
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
   {$L ..\..\static\delphi\sha512-x64sse4.obj}
 {$else}
   {$L ..\..\static\x86_64-linux\sha512-x64sse4.o}
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 procedure sha512_sse4(data, hash: pointer; blocks: Int64);
   {$ifdef FPC}cdecl;{$endif} external;
@@ -2896,15 +2896,15 @@ procedure sha512_sse4(data, hash: pointer; blocks: Int64);
    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. }
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
   {$L ..\..\static\delphi\crc32c64.obj}
 {$else}
-  {$ifdef LINUXNOTBSD}
+  {$ifdef OSLINUX}
   {$L ..\..\static\x86_64-linux\crc32c64.o}
   {$else}
   {$L crc32c64.o}
-  {$endif LINUXNOTBSD}
-{$endif MSWINDOWS}
+  {$endif OSLINUX}
+{$endif OSWINDOWS}
 
 // defined in mormot.core.crypto.pas, not in mormot.core.base, to avoid
 // .o/.obj dependencies for most basic executables (for which mormot.core.base

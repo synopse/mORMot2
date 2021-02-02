@@ -3277,10 +3277,10 @@ type
     class procedure InternalDefineModel(Props: TOrmProperties); virtual;
     /// trick to get the ID even in case of a oftID published property
     function GetID: TID;
-      {$ifdef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
+      {$ifdef OSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// trick to typecast the ID on 64-bit platform
     function GetIDAsPointer: pointer;
-      {$ifdef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
+      {$ifdef OSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
   public
     /// direct access to the TOrm properties from RTTI
     // - TOrmProperties is faster than e.g. the class function FieldProp()
@@ -17766,7 +17766,7 @@ end;
 
 function TOrm.GetID: TID;
 begin
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   if PtrUInt(self) < PtrUInt(SystemInfo.lpMinimumApplicationAddress) then
     // was called from a TOrm property (oftID type)
     // (will return 0 if current instance is nil)
@@ -17783,12 +17783,12 @@ begin
   except
     result := PtrUInt(self);
   end;
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 end;
 
 function TOrm.GetIDAsPointer: pointer;
 begin
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   if PtrUInt(self) < PtrUInt(SystemInfo.lpMinimumApplicationAddress) then
     // was called from a TOrm property (oftID type)
     // (will return 0 if current instance is nil)
@@ -17811,7 +17811,7 @@ begin
   except
     result := self;
   end;
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 end;
 
 class procedure TOrm.InternalRegisterCustomProperties(Props: TOrmProperties);

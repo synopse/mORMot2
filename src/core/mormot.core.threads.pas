@@ -1217,14 +1217,14 @@ begin
         onmainthreadidle(self);
     end
     else
-    {$ifdef MSWINDOWS} // do process the OnIdle only if UI
+    {$ifdef OSWINDOWS} // do process the OnIdle only if UI
     if Assigned(fOnIdle) then
     begin
       while fCallerEvent.WaitFor(100) = wrTimeout do
         OnIdleProcessNotify(start);
     end
     else
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
       fCallerEvent.WaitFor(INFINITE);
     if fPendingProcessFlag <> flagFinished then
       ESynThread.CreateUtf8('%.WaitForFinished: flagFinished?', [self]);

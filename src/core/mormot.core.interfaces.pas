@@ -2102,9 +2102,9 @@ type
     procedure AArch64FakeStub;
     {$endif CPUAARCH64}
     function FakeQueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-      IID: TGUID; out Obj): TIntQry; {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
-    function Fake_AddRef: TIntCnt;   {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
-    function Fake_Release: TIntCnt;  {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
+      IID: TGUID; out Obj): TIntQry; {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
+    function Fake_AddRef: TIntCnt;   {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
+    function Fake_Release: TIntCnt;  {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
   public
     /// create an instance, using the specified interface and factory
     constructor Create(aFactory: TInterfaceFactory; aServiceFactory: TObject;
@@ -2863,7 +2863,7 @@ const
 
 {$ifdef CPUX64}
   // 64-bit integer param registers
-  {$ifdef LINUX}
+  {$ifdef SYSVABI}
   REGRDI = 1;
   REGRSI = 2;
   REGRDX = 3;
@@ -2879,14 +2879,14 @@ const
   REGR9 = 4;
   PARAMREG_FIRST = REGRCX;
   PARAMREG_RESULT = REGRDX;
-  {$endif LINUX}
+  {$endif SYSVABI}
   PARAMREG_LAST = REGR9;
   // 64-bit floating-point (double) registers
   REGXMM0 = 1;
   REGXMM1 = 2;
   REGXMM2 = 3;
   REGXMM3 = 4;
-  {$ifdef LINUX}
+  {$ifdef SYSVABI}
   REGXMM4 = 5;
   REGXMM5 = 6;
   REGXMM6 = 7;
@@ -2896,7 +2896,7 @@ const
   {$else}
   FPREG_FIRST = REGXMM0;
   FPREG_LAST = REGXMM3;
-  {$endif LINUX}
+  {$endif SYSVABI}
   {$define HAS_FPREG}
 {$endif CPUX64}
 
@@ -2979,18 +2979,18 @@ type
     {$ifdef CPUX86}
     EDX, ECX, MethodIndex, EBP, Ret: cardinal;
     {$else}
-    {$ifdef LINUX}
+    {$ifdef OSPOSIX}
     ParamRegs: packed array[PARAMREG_FIRST..PARAMREG_LAST] of pointer;
-    {$endif LINUX}
+    {$endif OSPOSIX}
     {$ifdef HAS_FPREG}
     FPRegs: packed array[FPREG_FIRST..FPREG_LAST] of double;
     {$endif HAS_FPREG}
     MethodIndex: PtrUInt;
     Frame: pointer;
     Ret: pointer;
-    {$ifndef LINUX}
+    {$ifndef OSPOSIX}
     ParamRegs: packed array[PARAMREG_FIRST..PARAMREG_LAST] of pointer;
-    {$endif LINUX}
+    {$endif OSPOSIX}
     {$endif CPUX86}
     {$ifdef CPUARM}
     // alf: on ARM, there is more on the stack than you will expect
@@ -3533,9 +3533,9 @@ var
   {$ifdef CPUX86}
   offs: integer;
   {$else}
-  {$ifdef LINUX} // not used for Win64
+  {$ifdef OSPOSIX} // not used for Win64
   fpreg: integer;
-  {$endif LINUX}
+  {$endif OSPOSIX}
   {$endif CPUX86}
 begin
   // validate supplied TypeInfo() RTTI input
@@ -3698,9 +3698,9 @@ begin
     // prepare stack and register layout
     reg := PARAMREG_FIRST;
     {$ifdef HAS_FPREG}
-    {$ifdef LINUX}
+    {$ifdef OSPOSIX}
     fpreg := FPREG_FIRST;
-    {$endif LINUX}
+    {$endif OSPOSIX}
     {$endif HAS_FPREG}
     for a := 0 to high(Args) do
     with Args[a] do
@@ -3799,12 +3799,12 @@ begin
         (SizeInStack <> POINTERBYTES) or
         {$endif CPUARM}
         {$ifdef HAS_FPREG}
-        {$ifdef LINUX}  // Linux x64, armhf, aarch64
+        {$ifdef OSPOSIX}  // Linux x64, armhf, aarch64
         ((ValueIsInFPR) and (fpreg > FPREG_LAST)) or
         ((not ValueIsInFPR) and (reg > PARAMREG_LAST))
         {$else}
-        (reg>PARAMREG_LAST) // Win64: XMMs overlap regular registers
-        {$endif LINUX}
+        (reg > PARAMREG_LAST) // Win64: XMMs overlap regular registers
+        {$endif OSPOSIX}
         {$else}
         (reg > PARAMREG_LAST) // Win32, Linux x86, armel
         {$endif HAS_FPREG}
@@ -3837,13 +3837,13 @@ begin
         if ValueIsInFPR then
         begin
           // put in a floating-point register
-          {$ifdef LINUX}
+          {$ifdef OSPOSIX}
           FPRegisterIdent := fpreg;
           inc(fpreg);
           {$else}
           FPRegisterIdent := reg; // Win64 ABI: reg and fpreg do overlap
           inc(reg);
-          {$endif LINUX}
+          {$endif OSPOSIX}
         end
         else
         {$endif HAS_FPREG}
@@ -4181,13 +4181,13 @@ end;
 procedure x64FakeStub;
 var // warning: exact local variables order should match TFakeCallStack
   smetndx,
-  {$ifdef LINUX}
+  {$ifdef OSPOSIX}
   sxmm7, sxmm6, sxmm5, sxmm4,
-  {$endif LINUX}
+  {$endif OSPOSIX}
   sxmm3, sxmm2, sxmm1, sxmm0: double;
-  {$ifdef LINUX}
+  {$ifdef OSPOSIX}
   sr9, sr8, srcx, srdx, srsi, srdi: pointer;
-  {$endif LINUX}
+  {$endif OSPOSIX}
 asm // caller = mov ax,{MethodIndex}; jmp x64FakeStub
         {$ifndef FPC}
         // FakeCall(self: TInterfacedObjectFake; var aCall: TFakeCallStack): Int64
@@ -4201,7 +4201,7 @@ asm // caller = mov ax,{MethodIndex}; jmp x64FakeStub
         movlpd  sxmm1, xmm1
         movlpd  sxmm2, xmm2
         movlpd  sxmm3, xmm3
-        {$ifdef LINUX}
+        {$ifdef OSPOSIX}
         movlpd  sxmm4, xmm4
         movlpd  sxmm5, xmm5
         movlpd  sxmm6, xmm6
@@ -4226,7 +4226,7 @@ asm // caller = mov ax,{MethodIndex}; jmp x64FakeStub
         mov     qword ptr [rbp + $28], r9
         {$endif FPC}
         lea     rdx, sxmm0 // TFakeCallStack address as 2nd parameter
-        {$endif LINUX}
+        {$endif OSPOSIX}
         call    TInterfacedObjectFake.FakeCall
         // FakeCall should set Int64 result in method result,
         // and float in aCall.FPRegs["XMM0"]
@@ -4352,11 +4352,11 @@ begin
           inc(P);
           P^ := $c25dec89;
           inc(P);                 // mov esp,ebp; pop ebp
-          {$ifdef DARWIN}
+          {$ifdef OSDARWIN}
           P^ := $900000;         // ret; nop
           {$else}
           P^ := fMethods[i].ArgsSizeInStack or $900000;  // ret {StackSize}; nop
-          {$endif DARWIN}
+          {$endif OSDARWIN}
           inc(PByte(P), 3);
           {$endif CPUX86}
         end;
@@ -6545,7 +6545,7 @@ asm
         test    ecx, ecx
         jnz     @addstack
         // fill registers and call method
-        {$ifdef LINUX}
+        {$ifdef OSPOSIX}
         // Linux/BSD System V AMD64 ABI
         mov     rdi, [r12 + TCallMethodArgs.ParamRegs + REGRDI * 8 - 8]
         mov     rsi, [r12 + TCallMethodArgs.ParamRegs + REGRSI * 8 - 8]
@@ -6575,7 +6575,7 @@ asm
         sub     rsp, 8 * 4   // reserve shadow-space for RCX,RDX,R8,R9 registers
         call    [r12].TCallMethodArgs.method
         add     rsp, 8 * 4
-        {$endif LINUX}
+        {$endif OSPOSIX}
         // retrieve result
         mov     [r12].TCallMethodArgs.res64, rax
         mov     cl, [r12].TCallMethodArgs.resKind
@@ -6803,10 +6803,10 @@ begin
     {$ifdef CPUX86}
     call.StackAddr := PtrInt(@Stack[0]);
     call.StackSize := ArgsSizeInStack;
-    {$ifndef MSWINDOWS} // ensure always aligned by 16 bytes on POSIX
+    {$ifdef OSPOSIX} // ensure always aligned by 16 bytes on POSIX
     while call.StackSize and 15 <> 0 do
       inc(call.StackSize,POINTERBYTES); // needed for Darwin and Linux i386
-    {$endif MSWINDOWS}
+    {$endif OSPOSIX}
     {$else}
     {$ifdef CPUINTEL}
     call.StackSize := ArgsSizeInStack shr 3;

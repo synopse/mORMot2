@@ -9467,10 +9467,10 @@ begin
   if WaitForEnterKey then
   begin
     writeln(#13#10'Program will now abort');
-    {$ifndef LINUX}
+    {$ifndef OSPOSIX}
     writeln('Press [Enter] to quit');
     ConsoleWaitForEnterKey;
-    {$endif LINUX}
+    {$endif OSPOSIX}
   end;
   ioresult;
 end;
@@ -9703,11 +9703,11 @@ begin
       WR.AddBinToHexDisplayLower(@extcode, SizeOf(extcode));
       for i := 0 to high(extnames) do
       begin
-        {$ifdef MSWINDOWS}
+        {$ifdef OSWINDOWS}
         WR.AddShort(' [.NET/CLR unhandled ');
         {$else}
         WR.AddShort(' [unhandled ');
-        {$endif MSWINDOWS}
+        {$endif OSWINDOWS}
         WR.AddNoJSONEScape(extnames[i]);
         WR.AddShort('Exception]');
       end;

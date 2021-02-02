@@ -558,12 +558,12 @@ procedure TServiceComplexCalculator.EnsureInExpectedThread;
 begin
   case GlobalInterfaceTestMode of
     itmDirect, itmClient, itmMainThread:
-      {$ifndef Android}
+      {$ifndef OSANDROID}
       if GetThreadID <> PtrUInt(MainThreadID) then
       {$else}
       // On Android, processes never run in the mainthread.
       if false then
-      {$endif Android}
+      {$endif OSANDROID}
         raise Exception.Create('Shall be in main thread');
     itmPerInterfaceThread, itmHttp, itmLocked:
       if GetThreadID = PtrUInt(MainThreadID) then
@@ -1533,7 +1533,7 @@ procedure TTestServiceOrientedArchitecture.ClientSideRESTServiceLogToDB;
 var
   Log: TRestServerDB;
 begin
-  {$ifdef DARWIN}
+  {$ifdef OSDARWIN}
   {$ifdef NOSQLITE3STATIC}
   // due to a very strange error during prepare_v2, this does not (yet) work on Darwin.
   // at least on Darwin with system sqlite 3.7.13
@@ -1541,7 +1541,7 @@ begin
   Check(1 = 0, 'Not (yet) supported on Darwin !!');
   exit;
   {$endif}
-  {$endif DARWIN}
+  {$endif OSDARWIN}
   DeleteFile(WorkDir + 'servicelog.db');
   Log := TRestServerDB.CreateWithOwnModel([TOrmServiceLog], WorkDir + 'servicelog.db');
   try
@@ -1714,9 +1714,9 @@ procedure TTestServiceOrientedArchitecture.ClientSideRESTWeakAuthentication;
 begin
   fClient.Server.ServicesRouting := TRestServerRoutingJsonRpc; // back to previous
   fClient.Server.AuthenticationUnregister([
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     TRestServerAuthenticationSSPI,
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     TRestServerAuthenticationDefault]);
   fClient.Server.AuthenticationRegister(TRestServerAuthenticationNone);
   TRestClientAuthenticationNone.ClientSetUser(fClient, 'User', '');
@@ -1733,9 +1733,9 @@ begin
   fClient.Server.AuthenticationUnregister(TRestServerAuthenticationHttpBasic);
   // restore default authentications
   fClient.Server.AuthenticationRegister([
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     TRestServerAuthenticationSSPI,
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     TRestServerAuthenticationDefault]);
   fClient.SetUser('User', 'synopse');
 end;
@@ -1821,10 +1821,10 @@ end;
 
 procedure TTestServiceOrientedArchitecture.ClientSideRESTMainThread;
 begin
-  {$ifdef Android}
+  {$ifdef OSANDROID}
   // Tests on Android do not run in MainThread
   exit;
-  {$endif Android}
+  {$endif OSANDROID}
   with TTestThread.Create(true) do
   try
     Test := self;

@@ -404,7 +404,7 @@ end;
 
 {$endif FPCMM_NOMREMAP}
 
-{$else BSD}
+{$else}
 
   {$define FPCMM_NOMREMAP} // mremap is a Linux-specific syscall
 

@@ -166,7 +166,7 @@ var
   {$else}
   // Under Linux, no windows message loop : URIDll will be used
   Client: TRestClientUri;
-  {$endif MSWINDOWS}
+  {$endif MSWINDOWS2}
   R: TOrmTest;
   Batch: TRestBatch;
   IDs: TIDDynArray;
@@ -211,7 +211,7 @@ begin
       {$else}
       Server.ExportServerGlobalLibraryRequest;
       Client := TRestClientLibraryRequest.Create(Model, LibraryRequest);
-      {$endif MSWINDOWS}
+      {$endif MSWINDOWS2}
       try
         Client.Client.ForceBlobTransfert := true;
         Check(Client.ServerTimestampSynchronize);
@@ -256,7 +256,7 @@ begin
       {$else}
       Server.ExportServerGlobalLibraryRequest;
       Client := TRestClientLibraryRequest.Create(Model, LibraryRequest);
-      {$endif MSWINDOWS}
+      {$endif MSWINDOWS2}
       try
         Client.Client.ForceBlobTransfert := true;
         Check(Client.ServerTimestampSynchronize);

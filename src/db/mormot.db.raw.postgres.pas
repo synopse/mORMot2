@@ -219,21 +219,22 @@ const
     'PQnfields', 'PQntuples', 'PQcmdTuples', 'PQfname', 'PQftype', 'PQgetvalue',
     'PQgetlength', 'PQgetisnull');
 
+
 { TSqlDBPostgresLib }
 
 const
-  {$ifdef MSWINDOWS}
-  LIBNAME = 'libpq.dll';
-  LIBNAME2 = '';
-  {$else}
-    {$ifdef DARWIN}
-    LIBNAME = 'libpq.dylib';
+  {$ifdef OSWINDOWS}
+    LIBNAME = 'libpq.dll';
     LIBNAME2 = '';
+  {$else}
+    {$ifdef OSDARWIN}
+      LIBNAME = 'libpq.dylib';
+      LIBNAME2 = '';
     {$else}
-    LIBNAME = 'libpq.so.5';
-    LIBNAME2 = 'libpq.so.4';
-    {$endif DARWIN}
-  {$endif MSWINDOWS}
+      LIBNAME = 'libpq.so.5';
+      LIBNAME2 = 'libpq.so.4';
+    {$endif OSDARWIN}
+  {$endif OSWINDOWS}
 
 constructor TSqlDBPostgresLib.Create;
 var

@@ -4770,11 +4770,11 @@ procedure TTestCoreCompression._TAlgoCompress;
 begin
   TestAlgo(AlgoSynLZ);
   Check(AlgoSynLZ.AlgoName = 'synlz');
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   if (Lizard = nil) and
      FileExists(ExeVersion.ProgramFilePath + LIZARD_LIB_NAME) then
     Lizard := TSynLizardDynamic.Create;
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
   TestAlgo(AlgoLizard);
   TestAlgo(AlgoLizardFast);
   TestAlgo(AlgoLizardHuffman);

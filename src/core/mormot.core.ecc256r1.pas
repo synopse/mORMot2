@@ -37,17 +37,17 @@ uses
 {$ifdef CPUINTEL}
 
   {$ifdef CPUX86}
-    {$ifndef BSD}
+    {$ifndef OSBSDDARWIN}
       {$define ECC_STATICLIB_AVAILABLE}
       {$define ECC_O2}  // gcc -g -O2 -c ecc.c
-    {$endif BSD}
+    {$endif OSBSDDARWIN}
   {$endif CPUX86}
 
   {$ifdef CPUX64}
-    {$ifndef BSD}
+    {$ifndef OSBSDDARWIN}
       {$define ECC_STATICLIB_AVAILABLE}
       {$define ECC_O2}  // gcc -g -O2 -c ecc.c
-    {$endif BSD}
+    {$endif OSBSDDARWIN}
   {$endif CPUX64}
 
 {$endif CPUINTEL}
@@ -535,7 +535,7 @@ end;
 
 {$ifdef CPUX86}
   {$ifdef FPC}
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
       {$ifdef ECC_O2}
         {$L ..\..\static\i386-win32\eccwin32O2.o}
       {$endif}
@@ -543,7 +543,7 @@ end;
       {$ifdef ECC_O2}
         {$L ..\..\static\i386-linux\ecclin32O2.o}
       {$endif}
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
   {$else}
     {$ifdef ECC_O2}
       {$L ..\..\static\delphi\SynEcc32O2.obj}
@@ -552,7 +552,7 @@ end;
 {$endif CPUX86}
 
 {$ifdef CPUX64}
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
     // same .o format under Win64 for Delphi and FPC :)
     {$ifdef ECC_O2}
       {$ifdef FPC}
@@ -570,7 +570,7 @@ end;
       {$L ..\..\static\x86_64-linux\ecclin64O2.o}
     {$endif}
   {$endif FPC}
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 {$endif CPUX64}
 
 function ecc_make_key; external;

@@ -6591,7 +6591,7 @@ begin
       'version', ExeVersion.Version.DetailedOrVoid,
       'host', ExeVersion.Host,
       'cpu', cpu,
-      {$ifdef MSWINDOWS} 'mem', mem, {$endif}
+      {$ifdef OSWINDOWS} 'mem', mem, {$endif OSWINDOWS}
       'memused', KB(m.AllocatedUsed.Bytes),
       'memfree', free,
       'diskfree', GetDiskPartitionsText({nocache=}false, {withfree=}true, {nospace=}true),

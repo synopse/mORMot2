@@ -56,10 +56,10 @@ type
     procedure _TAesPNRG;
     /// CryptDataForCurrentUser() function
     procedure _CryptDataForCurrentUser;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     /// CryptDataForCurrentUserApi() function
     procedure _CryptDataForCurrentUserApi;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     /// JWT classes
     procedure _JWT;
     /// compute some performance numbers, mostly against regression
@@ -605,11 +605,11 @@ var
 const
   MAX = 1000;
 begin
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   if dpapi then
     func := CryptDataForCurrentUserDPAPI
   else
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
     func := CryptDataForCurrentUser;
   func('warmup', 'appsec', true);
   size := 0;
@@ -642,12 +642,12 @@ begin
   CryptData(false);
 end;
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 procedure TTestCoreCrypto._CryptDataForCurrentUserApi;
 begin
   CryptData(true);
 end;
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 procedure TTestCoreCrypto._JWT;
 
@@ -962,10 +962,10 @@ begin
   end;
 end;
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
   // on Windows: enable Microsoft AES Cryptographic Provider (XP SP3 and up)
   {$define USE_PROV_RSA_AES}
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 const
   TEST_AES_REF: array[0..2, 0..4] of RawByteString =(

@@ -17,7 +17,7 @@ interface
 
 {$I ..\mormot.defines.inc}
 
-{$ifdef MSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
+{$ifdef OSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
 
 uses
   sysutils,
@@ -2501,7 +2501,7 @@ initialization
 
 implementation
 
-{$endif MSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
+{$endif OSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
 
 end.
 

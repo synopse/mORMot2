@@ -54,10 +54,10 @@ type
   protected
     fServer: THttpServerGeneric;
     fConnectionThread: TSynThread;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     fHttpApiRequest: Pointer;
     fFullURL: SynUnicode;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
   public
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric;
@@ -68,11 +68,11 @@ type
     procedure Prepare(const aURL, aMethod, aInHeaders: RawUtf8;
       const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8;
       aUseSSL: boolean = false); override;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     /// input parameter containing the caller Full URL
     property FullURL: SynUnicode
       read fFullURL;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     /// the associated server instance
     // - may be a THttpServer or a THttpApiServer class
     property Server: THttpServerGeneric
@@ -81,12 +81,12 @@ type
     // - depending on the HTTP server used, may not follow ConnectionID
     property ConnectionThread: TSynThread
       read fConnectionThread;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     /// for THttpApiServer, points to a PHTTP_REQUEST structure
     // - not used by now for other kind of servers
     property HttpApiRequest: Pointer
       read fHttpApiRequest;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
   end;
 
   /// abstract class to implement a server thread
@@ -1606,13 +1606,13 @@ begin
   // main server process loop
   try
     fSock := TCrtSocket.Bind(fSockPort); // BIND + LISTEN
-    {$ifdef LINUXNOTBSD}
+    {$ifdef OSLINUX}
     // in case we started by systemd, listening socket is created by another process
     // and do not interrupt while process got a signal. So we need to set a timeout to
     // unblock accept() periodically and check we need terminations
     if fSockPort = '' then // external socket
       fSock.ReceiveTimeout := 1000; // unblock accept every second
-    {$endif LINUXNOTBSD}
+    {$endif OSLINUX}
     fExecuteState := esRunning;
     if not fSock.SockIsDefined then // paranoid (Bind would have raise an exception)
       raise EHttpServer.CreateUtf8('%.Execute: %.Bind failed', [self, fSock]);
