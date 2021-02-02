@@ -139,7 +139,8 @@ function  Unicode_InPlaceLower;       external user32 name 'CharLowerBuffW';
 
 procedure DisplayFatalError(const title, msg: RawUtf8);
 begin
-  MessageBoxA(0, pointer(msg), pointer(title), MB_OK or MB_ICONWARNING);
+  // better than a MessageBox() especially for services
+  raise Exception.CreateFmt('%s in %s - %s', [title, ExeVersion.ProgramName, msg]);
 end;
 
 function GetModuleHandle(lpModuleName: PChar): HMODULE;
