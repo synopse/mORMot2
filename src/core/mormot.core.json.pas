@@ -1370,6 +1370,7 @@ type
     function GetCapacity: integer;
     procedure SetCapacity(const Value: integer);
     function GetTimeOutSeconds: cardinal;
+    procedure SetTimeOutSeconds(Value: cardinal);
   public
     /// initialize the dictionary storage, specifyng dynamic array keys/values
     // - aKeyTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
@@ -1596,8 +1597,9 @@ type
     property TimeOut: TCardinalDynArray
       read fTimeOut;
     /// returns the aTimeOutSeconds parameter value, as specified to Create()
+    // - warning: setting a new timeout will clear all previous content
     property TimeOutSeconds: cardinal
-      read GetTimeOutSeconds;
+      read GetTimeOutSeconds write SetTimeOutSeconds;
     /// the compression algorithm used for binary serialization
     property CompressAlgo: TAlgoCompress
       read fCompressAlgo write fCompressAlgo;
@@ -8827,6 +8829,17 @@ end;
 function TSynDictionary.GetTimeOutSeconds: cardinal;
 begin
   result := fSafe.Padding[DIC_TIMESEC].VInteger;
+end;
+
+procedure TSynDictionary.SetTimeOutSeconds(Value: cardinal);
+begin
+  fSafe.Lock;
+  try
+    DeleteAll;
+    fSafe.Padding[DIC_TIMESEC].VInteger := Value;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 procedure TSynDictionary.SetTimeouts;
