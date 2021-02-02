@@ -671,7 +671,8 @@ end;
 
 procedure InitializeUnit;
 begin
-  SocketAPIVersion := OSVersionShort;
+  SocketAPIVersion := OSVersionShort +
+    {$ifdef USEPOLL} ' poll' {$else} ' epoll' {$endif USEPOLL};
 end;
 
 procedure FinalizeUnit;

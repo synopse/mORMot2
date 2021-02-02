@@ -51,7 +51,7 @@ const
   {$ifdef MSWINDOWS}
   SOCKADDR_SIZE = 28;
   {$else}
-  SOCKADDR_SIZE = 110;
+  SOCKADDR_SIZE = 110; // able to store UNIX domain socket name
   {$endif MSWINDOWS}
 
 var
@@ -108,6 +108,11 @@ type
     nfIP6,
     nfUNIX);
 
+const
+  /// the socket protocol layers over the IP protocol
+  nlIP = [nlTCP, nlUDP];
+
+type
   /// internal mapping of an address, in any supported socket layer
   TNetAddr = object
   private
@@ -121,11 +126,14 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     procedure IPShort(out result: shortstring; withport: boolean = false); overload;
     function Port: cardinal;
+    function SetPort(p: cardinal): TNetResult;
     function Size: integer;
   end;
 
   /// pointer to a socket address mapping
   PNetAddr = ^TNetAddr;
+
+  TNetAddrDynArray = array of TNetAddr;
 
 type
   /// end-user code should use this TNetSocket type to hold a socket reference
@@ -160,6 +168,14 @@ type
   end;
 
 
+  /// used by NewSocket() to cache the host names
+  // - defined in this unit, but implemented in mormot.net.client.pas
+  INewSocketAddressCache = interface
+    function Search(const Host: RawUtf8; out NetAddr: TNetAddr): boolean;
+    procedure Add(const Host: RawUtf8; const NetAddr: TNetAddr);
+  end;
+
+
 /// create a new Socket connected or bound to a given ip:port
 function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
   dobind: boolean; connecttimeout, sendtimeout, recvtimeout, retry: integer;
@@ -169,6 +185,10 @@ function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
 var
   /// contains the raw Socket API version, as returned by the Operating System
   SocketApiVersion: RawUtf8;
+
+  /// used by NewSocket() to cache the host names
+  // - implemented by mormot.net.client unit using a TSynDictionary
+  NewSocketAddressCache: INewSocketAddressCache;
 
   /// Queue length for completely established sockets waiting to be accepted,
   // a backlog parameter for listen() function. If queue overflows client count,
@@ -862,7 +882,7 @@ begin
     {$ifndef MSWINDOWS}
     AF_UNIX:
       result := nfUNIX;
-    {$endif}
+    {$endif MSWINDOWS}
     else
       result := nfUnknown;
   end;
@@ -935,13 +955,26 @@ begin
   end;
 end;
 
-function TNetAddr.port: cardinal;
+function TNetAddr.Port: cardinal;
 begin
   with PSockAddr(@Addr)^ do
     if sa_family in [AF_INET, AF_INET6] then
       result := swap(sin_port)
     else
       result := 0;
+end;
+
+function TNetAddr.SetPort(p: cardinal): TNetResult;
+begin
+  with PSockAddr(@Addr)^ do
+    if (sa_family in [AF_INET, AF_INET6]) and
+       (p <= 65535) then
+    begin
+      sin_port := swap(word(p)); // word() is mandatory
+      result := nrOk;
+    end
+    else
+      result := nrNotFound;
 end;
 
 function TNetAddr.Size: integer;
@@ -959,15 +992,30 @@ end;
 
 { ******** TNetSocket Cross-Platform Wrapper }
 
-function NewSocket(const address, port: RawUtf8; layer: TNetLayer; dobind: boolean;
-  connecttimeout, sendtimeout, recvtimeout, retry: integer;
+function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
+  dobind: boolean; connecttimeout, sendtimeout, recvtimeout, retry: integer;
   out netsocket: TNetSocket; netaddr: PNetAddr): TNetResult;
 var
   addr: TNetAddr;
   sock: TSocket;
+  tobecached: boolean;
+  p: cardinal;
 begin
   netsocket := nil;
-  result := addr.SetFrom(address, port, layer);
+  tobecached := false;
+  if (layer in nlIP) and
+     (not dobind) and
+     Assigned(NewSocketAddressCache) and
+     ToCardinal(port, p, 1) then
+    if NewSocketAddressCache.Search(address, addr) then
+      result := addr.SetPort(p)
+    else
+    begin
+      tobecached := true;
+      result := addr.SetFrom(address, port, layer);
+    end
+  else
+    result := addr.SetFrom(address, port, layer);
   if result <> nrOK then
     exit;
   sock := socket(PSockAddr(@addr)^.sa_family, _ST[layer], _IP[layer]);
@@ -1011,6 +1059,9 @@ begin
     closesocket(sock)
   else
   begin
+    if tobecached then
+      // update cache once we are sure the host actually exists
+      NewSocketAddressCache.Add(address, addr);
     netsocket := TNetSocket(sock);
     netsocket.SetupConnection(layer, sendtimeout, recvtimeout);
     if netaddr <> nil then
