@@ -26,7 +26,8 @@ uses
   {$endif FPCUSEVERSIONINFO}
   errors,
   termio,
-  dl;
+  dl,
+  initc; // we statically link the libc for some raw calls
 
 {$ifdef UNICODE}
   'mORMot assumes no UNICODE on POSIX, i.e. as TFileName = PChar = PUtf8Char'
@@ -447,9 +448,6 @@ end;
 
 {$ifdef DARWIN} // OSX has no clock_gettime() API
 
-const
-  LIBCSO = 'libc.dylib';
-
 type
   TTimebaseInfoData = record
     Numer: cardinal;
@@ -457,10 +455,10 @@ type
   end;
 
 function mach_absolute_time: UInt64;
-  cdecl external LIBCSO name 'mach_absolute_time';
+  cdecl external clib name 'mach_absolute_time';
 
 function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): integer;
-  cdecl external LIBCSO name 'mach_timebase_info';
+  cdecl external clib name 'mach_timebase_info';
 
 var
   mach_timeinfo: TTimebaseInfoData;
@@ -529,11 +527,10 @@ end;
 
 {$else}
 
-const
-  LIBCSO = 'libc.so';
 
 {$ifdef BSD}
 
+const
   // see https://github.com/freebsd/freebsd/blob/master/sys/sys/time.h
   CLOCK_REALTIME = 0;
   CLOCK_MONOTONIC = 4;
@@ -541,13 +538,14 @@ const
   CLOCK_MONOTONIC_COARSE = 12;
 
 function clock_gettime(ID: cardinal; r: ptimespec): integer;
-  cdecl external LIBCSO name 'clock_gettime';
+  cdecl external clib name 'clock_gettime';
 
 function clock_getres(ID: cardinal; r: ptimespec): integer;
-  cdecl external LIBCSO name 'clock_getres';
+  cdecl external clib name 'clock_getres';
 
 {$else}
 
+const
   CLOCK_REALTIME = 0;
   CLOCK_MONOTONIC = 1;
   CLOCK_REALTIME_COARSE = 5; // see http://lwn.net/Articles/347811
@@ -1674,7 +1672,7 @@ begin
       if GetDiskInfo(fn, av, fr, tot) and
          (tot > 1 shl 20) then
       begin
-//writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',av,' fr=',fr,' tot=',tot);
+  //writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',av,' fr=',fr,' tot=',tot);
         SetLength(result, n + 1);
         result[n].name := fs;
         result[n].mounted := fn;
@@ -1686,21 +1684,29 @@ begin
   until p = nil;
 end;
 
-{$ifdef BSDORANDROID}
+{$ifdef BSD}
+  {$define USEMPROTECT}
+{$else}
+  {$ifdef ANDROID}
+    {$define USEMPROTECT}
+  {$endif ANDROID}
+{$endif BSD}
+
+{$ifdef USEMPROTECT}
 function mprotect(Addr: Pointer; Len: size_t; Prot: integer): integer;
-  cdecl; external LIBCSO name 'mprotect';
-{$endif BSDORANDROID}
+  cdecl; external clib name 'mprotect';
+{$endif USEMPROTECT}
 
 function SynMProtect(addr: pointer; size: size_t; prot: integer): integer;
 begin
   result := -1;
   {$ifdef UNIX}
-    {$ifdef BSDORANDROID}
+    {$ifdef USEMPROTECT}
     result := mprotect(addr, size, prot);
     {$else}
     if Do_SysCall(syscall_nr_mprotect, PtrUInt(addr), size, prot) >= 0 then
       result := 0;
-    {$endif BSDORANDROID}
+    {$endif USEMPROTECT}
   {$endif UNIX}
 end;
 
@@ -2105,7 +2111,7 @@ end;
 
 { ****************** Gather Operating System Information }
 
-function getpagesize: integer; cdecl; external 'c';
+function getpagesize: integer; cdecl; external clib;
 
 {$ifndef BSD}
 

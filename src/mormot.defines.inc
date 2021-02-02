@@ -100,7 +100,7 @@
 
   {$define HASINLINE}
   {$define HASSAFEINLINE} // Delphi 2007 has sometimes troubles inlining :(
-  {$define NODELPHIASM} // avoid e.g. low-level System.@LStrFromPCharLen calls
+  {$define NODELPHIASM}   // avoid e.g. low-level System.@LStrFromPCharLen calls
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSHORT_USESTR} // FloatToText uses str() in FPC
@@ -156,13 +156,11 @@
   {$ifdef ANDROID}
     {$define LINUX}      // a Linux-based system
     {$define NOPATCHRTL} // don't mess with asm stuff
-    {$define BSDORANDROID}
   {$endif ANDROID}
 
   {$ifdef BSD}
     // LINUX conditional includes Darwin and BSD family like FreeBSD
     {$define LINUX} // not true, but a POSIX/BSD system - see LINUXNOTBSD
-    {$define BSDORANDROID}
     {$ifdef DARWIN}
       {$ifdef CPUINTEL}
         {$define FPC_PIC} // may have not be defined by the compiler options
