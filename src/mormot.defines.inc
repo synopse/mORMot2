@@ -567,29 +567,3 @@
 {$endif OSPOSIX}
 
 
-// -----------
-// -- HTTP Compression - set globally for Client and Server apps
-
-  //TODO define options set for THttpServer(Generic)
-
-{$ifndef NOCOMPRESSSYNLZ}
-  {$define COMPRESSSYNLZ}
-  // if defined, mormot.rest.http.server will use SynLZ for content compression
-  // - with SynLZ, the 440 KB JSON for TTestClientServerAccess._TRestHttpClient
-  //   is compressed into 106 KB with no speed penalty (it's even a bit faster)
-  //   whereas deflate, even with its level set to 1 (fastest), is 25 % slower
-  // - TRestHttpClientGeneric.Compression shall contain hcSynLZ to handle it
-{$endif NOCOMPRESSSYNLZ}
-
-{$ifndef NOCOMPRESSDEFLATE}
-  {$define COMPRESSDEFLATE}
-  // if defined, mormot.rest.http.server will use gzip for content compression
-  // - deflate/zip is just broken between browsers and client, and should be
-  //   avoided: see http://stackoverflow.com/a/9186091
-  // - when the server is connected an AJAX application (not defined by default)
-  // - if you define both COMPRESSSYNLZ and COMPRESSDEFLATE, the server will
-  //   use SynLZ if available, and deflate if not called from a Delphi client
-  // - TRestHttpClientGeneric.Compression shall contain hcDeflate to handle it
-{$endif NOCOMPRESSDEFLATE}
-
-

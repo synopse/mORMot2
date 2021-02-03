@@ -2573,6 +2573,25 @@ type
     adWeak,
     adSSPI);
 
+  /// customize TRestHttpServer process
+  // - rsoOnlyJsonRequests to force the server to respond only to MIME type
+  // APPLICATION/JSON requests
+  // - rsoRedirectServerRootUriForExactCase to search root URI case-sensitive,
+  // mainly to avoid errors with HTTP cookies, which path is case-sensitive -
+  // when set, such not exact case will be redirected via a HTTP 307 command
+  // - rsoHeadersUnFiltered maps THttpServer.HeadersUnFiltered property
+  // - rsoCompressSynLZ and rsoCompressGZip enable SynLZ and GZip compression
+  // on server side - it should also be enabled for the client
+  TRestHttpServerOption = (
+    rsoOnlyJsonRequests,
+    rsoRedirectServerRootUriForExactCase,
+    rsoHeadersUnFiltered,
+    rsoCompressSynLZ,
+    rsoCompressGZip);
+
+  /// how to customize TRestHttpServer process
+  TRestHttpServerOptions = set of TRestHttpServerOption;
+
   /// parameters supplied to publish a TSqlRestServer via HTTP
   // - used by the overloaded TRestHttpServer.Create(TRestHttpServerDefinition)
   // constructor in mORMotHttpServer.pas, and also in dddInfraSettings.pas
@@ -2580,11 +2599,18 @@ type
   protected
     fBindPort: RawByteString;
     fAuthentication: TRestHttpServerRestAuthentication;
+    fDomainHostRedirect: RawUtf8;
+    fRootRedirectToUri: RawUtf8;
     fEnableCors: RawUtf8;
     fThreadCount: byte;
     fHttps: boolean;
     fHttpSysQueueName: SynUnicode;
     fRemoteIPHeader: RawUtf8;
+    fOptions: TRestHttpServerOptions;
+    fNginxSendFileFrom: TFileName;
+  public
+    /// initialize with the default values
+    constructor Create; override;
   published
     /// defines the port to be used for REST publishing
     // - may include an optional IP address to bind, e.g. '127.0.0.1:8888'
@@ -2593,6 +2619,15 @@ type
     /// which authentication is expected to be published
     property Authentication: TRestHttpServerRestAuthentication
       read fAuthentication write fAuthentication;
+    /// register domain names to be redirected to a some Model.Root
+    // - specified as CSV values of Host=Name pairs, e.g.
+    // ! 'project1.com=root1,project2.com=root2,blog.project2.com=root2/blog'
+    property DomainHostRedirect: RawUtf8
+      read fDomainHostRedirect write fDomainHostRedirect;
+    /// redirect a '/' HTTP or HTTPS request to a given URI via a 307 command
+    // - follow the Https property for the redirection source
+    property RootRedirectToUri: RawUtf8
+      read fRootRedirectToUri write fRootRedirectToUri;
     /// allow Cross-origin resource sharing (CORS) access
     // - set this property to '*' if you want to be able to access the
     // REST methods from an HTML5 application hosted in another location,
@@ -2623,6 +2658,11 @@ type
     // IP value, mostly as 'X-Real-IP' or 'X-Forwarded-For'
     property RemoteIPHeader: RawUtf8
       read fRemoteIPHeader write fRemoteIPHeader;
+    /// enable NGINX X-Accel internal redirection for STATICFILE_CONTENT_TYPE
+    // - supplied value is passed as argument to THttpServer.NginxSendFileFrom()
+    // - used only by the socket-based servers, not http.sys server on Windows
+    property NginxSendFileFrom: TFileName
+      read fNginxSendFileFrom write fNginxSendFileFrom;
     /// if defined, this HTTP server will use WebSockets, and our secure
     // encrypted binary protocol
     // - when stored in the settings JSON file, the password will be safely
@@ -2630,7 +2670,14 @@ type
     // - use the inherited PlainPassword property to set or read its value
     property WebSocketPassword: SpiUtf8
       read fPassWord write fPassWord;
+    /// customize the TRestHttpServer low-level process
+    property Options: TRestHttpServerOptions
+      read fOptions write fOptions;
   end;
+
+const
+  /// default TRestHttpServer processing options
+  HTTPSERVER_DEFAULT_OPTIONS = [rsoCompressGZip, rsoCompressSynLZ];
 
 
 
@@ -7715,6 +7762,18 @@ begin
   pointer(call.OutHead) := nil; // will be released by HeadRespFree()
   pointer(call.OutBody) := nil;
 end;
+
+
+{ ************ TRestHttpServerDefinition Settings for a HTTP Server }
+
+{ TRestHttpServerDefinition }
+
+constructor TRestHttpServerDefinition.Create;
+begin
+  fOptions := HTTPSERVER_DEFAULT_OPTIONS;
+  inherited Create;
+end;
+
 
 
 {$ifndef PUREMORMOT2}
