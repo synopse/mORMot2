@@ -703,13 +703,8 @@ begin
       Props, 'user', 'pass', TSqlDBProxyConnectionProtocol), 'proxy test');
     DoTest(TSqlDBRemoteConnectionPropertiesTest.Create(
       Props, 'user', 'pass', TSqlDBRemoteConnectionProtocol), 'remote test');
-    {$ifdef ONLYUSEHTTPSOCKET}
-    Server := TSqlDBServerSockets.Create(
+    Server := TSqlDBServerRemote.Create(
       Props, 'root', HTTP_DEFAULTPORT, 'user', 'pass');
-    {$else}
-    Server := TSqlDBServerHttpApi.Create(
-      Props, 'root', HTTP_DEFAULTPORT, 'user', 'pass');
-    {$endif ONLYUSEHTTPSOCKET}
     try
       DoTest(TSqlDBSocketConnectionProperties.Create(
         ADDR, 'root', 'user', 'pass'), 'socket');

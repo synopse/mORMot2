@@ -531,36 +531,35 @@
 
 {$ifdef OSWINDOWS}
 
-  {$define USEWININET}         // publish TWinINet/TWinHttp/TWinHttpAPI classes
-  {.$define ONLYUSEHTTPSOCKET} // for testing (no benefit vs http.sys)
-  {.$define USELIBCURL}        // for testing (no benefit vs WinHTTP)
+  {$define USEWININET}   // publish TWinINet/TWinHttp/TWinHttpAPI classes
 
-  {$define USE_WINIOCP} // I/O completion ports API is the best option under Windows
+  {$define USE_WINIOCP}  // I/O completion ports API is the best option under Windows
   // (under Linux/POSIX, we fallback to a classical event-driven pool)
 
-  {$ifndef NOSSPIAUTH}
-    {$define DOMAINRESTAUTH}
-    // enable Windows SSPI authentication in mormot.rest.client/server
+  {$define USEHTTPSYS}   // enable http.sys kernel-mode Web server
+
+  {$ifndef NOSSPIAUTH} // from mormot.lib.sspi
+    {$define DOMAINRESTAUTH} // enable SSPI in mormot.rest.client/server
   {$endif NOSSPIAUTH}
 
 {$endif OSWINDOWS}
 
 {$ifdef OSPOSIX}
-  //TODO rename as USEHTTPSYS in OSWINDOWS section
-  {$define ONLYUSEHTTPSOCKET}  // http.sys server is Windows-specific
-  // cross-platform libcurl for https -> TCurlHttp and TRestHttpClientCurl
-
-  {$define USELIBCURL}
 
   {$ifdef OSANDROID}
+
     // for Android, consider using https://github.com/gcesarmza/curl-android-ios
     // static libraries and force USELIBCURL in the project conditionals
     {$define LIBCURLSTATIC}
+
   {$else}
+
+    {$define USELIBCURL}   // try cross-platform libcurl for https on POSIX
+
     {$ifndef NOGSSAPIAUTH} // mormot.lib.gssapi is not Android compatible
-      {$define DOMAINRESTAUTH}
-      // enable Kerberos authentication via libgss in mormot.rest.client/server
+      {$define DOMAINRESTAUTH}  // enable libgss in mormot.rest.client/server
     {$endif NOGSSAPIAUTH}
+
   {$endif OSANDROID}
 
 {$endif OSPOSIX}

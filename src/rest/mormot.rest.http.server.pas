@@ -85,12 +85,12 @@ type
   // the standard request/answer RESTful mode
   // - the first item should be the preferred one (see HTTP_DEFAULT_MODE)
   TRestHttpServerUse = (
-    {$ifndef ONLYUSEHTTPSOCKET}
+    {$ifdef USEHTTPSYS}
     useHttpApi,
     useHttpApiRegisteringURI,
     useHttpApiOnly,
     useHttpApiRegisteringURIOnly,
-    {$endif ONLYUSEHTTPSOCKET}
+    {$endif USEHTTPSYS}
     useHttpSocket,
     useBidirSocket);
 
@@ -110,16 +110,18 @@ const
 
   /// the kind of HTTP server to be used by default
   // - will define the best available server class, depending on the platform
-  {$ifdef ONLYUSEHTTPSOCKET}
-  HTTP_DEFAULT_MODE = useHttpSocket;
-  {$else}
+  {$ifdef USEHTTPSYS}
   HTTP_DEFAULT_MODE = useHttpApiRegisteringURI;
 
   /// the kind of HTTP server which involves http.sys
   HTTP_API_MODES = [useHttpApi .. useHttpApiRegisteringURIOnly];
+
   /// the http.sys modes which won't have any fallback to the sockets server
   HTTP_API_REGISTERING_MODES = [useHttpApiRegisteringURI, useHttpApiRegisteringURIOnly];
-  {$endif ONLYUSEHTTPSOCKET}
+
+  {$else}
+  HTTP_DEFAULT_MODE = useHttpSocket;
+  {$endif USEHTTPSYS}
 
 
 type
@@ -511,12 +513,12 @@ begin
       if (fDBServers[i].Server.Model.UriMatch(aServer.Model.Root) <> rmNoMatch) and
          (fDBServers[i].Security = aSecurity) then
         exit; // register only once per URI Root address and per protocol
-    {$ifndef ONLYUSEHTTPSOCKET}
+    {$ifdef USEHTTPSYS}
     if fUse in HTTP_API_MODES then
       if HttpApiAddUri(aServer.Model.Root, fDomainName, aSecurity,
           fUse in HTTP_API_REGISTERING_MODES, false) <> '' then
         exit;
-    {$endif ONLYUSEHTTPSOCKET}
+    {$endif USEHTTPSYS}
     SetLength(fDBServers, n + 1);
     SetDBServer(n, aServer, aSecurity, aRestAccessRights);
     fDBServerNames := fDBServerNames + ' ' + aServer.Model.Root;
@@ -561,14 +563,14 @@ begin
     for i := n downto 0 do // may appear several times, with another Security
       if fDBServers[i].Server = aServer then
       begin
-      {$ifndef ONLYUSEHTTPSOCKET}
+      {$ifdef USEHTTPSYS}
         if fHttpServer.InheritsFrom(THttpApiServer) then
           if THttpApiServer(fHttpServer).RemoveUrl(aServer.Model.Root,
              fPublicPort, fDBServers[i].Security = secSSL,
              fDomainName) <> NO_ERROR then
             log.Log(sllLastError, '%.RemoveUrl(%)',
               [self, aServer.Model.Root], self);
-      {$endif ONLYUSEHTTPSOCKET}
+      {$endif USEHTTPSYS}
         for j := i to n - 1 do
           fDBServers[j] := fDBServers[j + 1];
         SetLength(fDBServers, n);
@@ -657,7 +659,7 @@ begin
     for i := 0 to high(aServers) do
       SetDBServer(i, aServers[i], aSecurity, HTTP_DEFAULT_ACCESS_RIGHTS);
   end;
-  {$ifndef ONLYUSEHTTPSOCKET}
+  {$ifdef USEHTTPSYS}
   if aUse in HTTP_API_MODES then
   try
     if PosEx('Wine', OSVersionInfoEx) > 0 then
@@ -684,7 +686,7 @@ begin
         raise;
     end;
   end;
-  {$endif ONLYUSEHTTPSOCKET}
+  {$endif USEHTTPSYS}
   if fHttpServer = nil then
   begin
     // http.sys not running -> create one instance of our pure socket server
@@ -708,12 +710,12 @@ begin
   {$ifdef COMPRESSDEFLATE}
   fHttpServer.RegisterCompress(CompressGZip);
   {$endif COMPRESSDEFLATE}
-  {$ifndef ONLYUSEHTTPSOCKET}
+  {$ifdef USEHTTPSYS}
   if fHttpServer.InheritsFrom(THttpApiServer) then
     // allow fast multi-threaded requests
     if aThreadPoolCount > 1 then
       THttpApiServer(fHttpServer).Clone(aThreadPoolCount - 1);
-  {$endif ONLYUSEHTTPSOCKET}
+  {$endif USEHTTPSYS}
   // last HTTP server handling callbacks would be set for the TRestServer(s)
   if fHttpServer.CanNotifyCallback then
     for i := 0 to high(fDBServers) do
@@ -857,14 +859,14 @@ end;
 function TRestHttpServer.HttpApiAddUri(const aRoot, aDomainName: RawByteString;
   aSecurity: TRestHttpServerSecurity; aRegisterUri,
   aRaiseExceptionOnError: boolean): RawUtf8;
-{$ifndef ONLYUSEHTTPSOCKET}
+{$ifdef USEHTTPSYS}
 var
   err: integer;
   https: boolean;
-{$endif ONLYUSEHTTPSOCKET}
+{$endif USEHTTPSYS}
 begin
   result := ''; // no error
-  {$ifndef ONLYUSEHTTPSOCKET}
+  {$ifdef USEHTTPSYS}
   if not fHttpServer.InheritsFrom(THttpApiServer) then
     exit;
   https := aSecurity = secSSL;
@@ -887,7 +889,7 @@ begin
   fLog.Add.Log(sllLastError, result, self);
   if aRaiseExceptionOnError then
     raise ERestHttpServer.CreateUtf8('%: %', [self, result]);
-  {$endif ONLYUSEHTTPSOCKET}
+  {$endif USEHTTPSYS}
 end;
 
 function TRestHttpServer.Request(Ctxt: THttpServerRequestAbstract): cardinal;
