@@ -507,14 +507,14 @@
 
 
   // -----------
-  // -- enable/disable static-linked SQLite3 engine
+  // -- disable static-linked SQLite3 engine
 
   // -> to be downloaded from https://github.com/synopse/mORMot2/releases
   // -> could be disabled to force external .so/.dll linking
 
 {$ifdef FPC}
   {$if defined(OSOPENBSD) and defined(FPC_CROSSCOMPILING)}
-    {$undef NOSQLITE3STATIC} // OpenBSD problems with fpcupdeluxe libgcc.a
+    {$define NOSQLITE3STATIC} // OpenBSD problems with fpcupdeluxe libgcc.a
   {$ifend}
 {$else}
   // there is a linking bug with Delphi XE4 on Win64
@@ -531,12 +531,12 @@
 
 {$ifdef OSWINDOWS}
 
-  {$define USEWININET}   // publish TWinINet/TWinHttp/TWinHttpAPI classes
-
-  {$define USE_WINIOCP}  // I/O completion ports API is the best option under Windows
-  // (under Linux/POSIX, we fallback to a classical event-driven pool)
-
-  {$define USEHTTPSYS}   // enable http.sys kernel-mode Web server
+  {$ifndef ONLYUSEHTTPSOCKET}
+    {$define USEWININET}   // publish TWinINet/TWinHttp/TWinHttpAPI classes
+    {$define USE_WINIOCP}  // I/O completion ports API is the best option under Windows
+    // (under Linux/POSIX, we fallback to a classical event-driven pool)
+    {$define USEHTTPSYS}   // enable http.sys kernel-mode Web server
+  {$endif ONLYUSEHTTPSOCKET}
 
   {$ifndef NOSSPIAUTH} // from mormot.lib.sspi
     {$define DOMAINRESTAUTH} // enable SSPI in mormot.rest.client/server
@@ -554,7 +554,9 @@
 
   {$else}
 
-    {$define USELIBCURL}   // try cross-platform libcurl for https on POSIX
+    {$ifndef ONLYUSEHTTPSOCKET}
+      {$define USELIBCURL}   // try cross-platform libcurl for https on POSIX
+    {$endif ONLYUSEHTTPSOCKET}
 
     {$ifndef NOGSSAPIAUTH} // mormot.lib.gssapi is not Android compatible
       {$define DOMAINRESTAUTH}  // enable libgss in mormot.rest.client/server
