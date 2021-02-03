@@ -104,6 +104,7 @@ type
     secSSL,
     secSynShaAes);
 
+
 const
   /// the default access rights used by the HTTP server if none is specified
   HTTP_DEFAULT_ACCESS_RIGHTS: POrmAccessRights = @SUPERVISOR_ACCESS_RIGHTS;
@@ -149,7 +150,6 @@ type
   // ! DBServer.NoAjaxJson := false;
   TRestHttpServer = class(TSynPersistentLock)
   protected
-    fOnlyJsonRequests: boolean;
     fShutdownInProgress: boolean;
     fHttpServer: THttpServerGeneric;
     fPort, fDomainName: RawUtf8;
@@ -163,9 +163,9 @@ type
     fAccessControlAllowOriginsMatch: TMatchs;
     fAccessControlAllowCredential: boolean;
     fRootRedirectToURI: array[boolean] of RawUtf8;
-    fRedirectServerRootUriForExactCase: boolean;
     fUse: TRestHttpServerUse;
     fLog: TSynLogClass;
+    fOptions: TRestHttpServerOptions;
     procedure SetAccessControlAllowOrigin(const Value: RawUtf8);
     procedure ComputeAccessControlHeader(Ctxt: THttpServerRequestAbstract);
     // assigned to fHttpServer.OnHttpThreadStart/Terminate e.g. to handle connections
@@ -226,9 +226,9 @@ type
       aUse: TRestHttpServerUse = HTTP_DEFAULT_MODE;
       aThreadPoolCount: Integer = 32;
       aSecurity: TRestHttpServerSecurity = secNone;
-      const aAdditionalUrl: RawUtf8 = '';
-      const aQueueName: SynUnicode = '';
-      aHeadersUnFiltered: boolean = false); reintroduce; overload;
+      const aAdditionalUrl: RawUtf8 = ''; const aQueueName: SynUnicode = '';
+      aOptions: TRestHttpServerOptions = HTTPSERVER_DEFAULT_OPTIONS);
+        reintroduce; overload;
     /// create a Server instance, binded and listening on a TCP port to HTTP requests
     // - raise a ERestHttpServer exception if binding failed
     // - specify one TRestServer server class to be used
@@ -251,7 +251,9 @@ type
       aThreadPoolCount: Integer = 32;
       aSecurity: TRestHttpServerSecurity = secNone;
       const aAdditionalUrl: RawUtf8 = '';
-      const aQueueName: SynUnicode = ''); reintroduce; overload;
+      const aQueueName: SynUnicode = '';
+      aOptions: TRestHttpServerOptions = HTTPSERVER_DEFAULT_OPTIONS);
+        reintroduce; overload;
     /// create a Server instance, binded and listening on a TCP port to HTTP requests
     // - raise a ERestHttpServer exception if binding failed
     // - specify one TRestServer instance to be published, and the associated
@@ -382,12 +384,9 @@ type
     // - note that the same REST server may appear several times in this HTTP
     // server instance, e.g. with diverse security options
     function DBServerFind(aServer: TRestServer): integer;
-    /// set this property to TRUE if the server must only respond to
-    // request of MIME type APPLICATION/JSON
-    // - the default is false, in order to allow direct view of JSON from
-    // any browser
-    property OnlyJsonRequests: boolean
-      read fOnlyJsonRequests write fOnlyJsonRequests;
+    /// allow to customize this TRestHttpServer process
+    property Options: TRestHttpServerOptions
+      read fOptions;
     /// enable cross-origin resource sharing (CORS) for proper AJAX process
     // - see @https://developer.mozilla.org/en-US/docs/HTTP/Access_control_CORS
     // - can be set e.g. to '*' to allow requests from any site/domain; or
@@ -404,18 +403,6 @@ type
     // - see @https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Credentials
     property AccessControlAllowCredential: boolean
       read fAccessControlAllowCredential write fAccessControlAllowCredential;
-    /// enable redirectoin to fix any URI for a case-sensitive match of Model.Root
-    // - by default, TRestServer.Model.Root would be accepted with case
-    // insensitivity; but it may induce errors for HTTP cookies, since they
-    // are bound with '; Path=/ModelRoot', which is case-sensitive on the
-    // browser side
-    // - set this property to TRUE so that only exact case URI would be handled
-    // by TRestServer.Uri(), and any case-sensitive URIs (e.g. /Root/... or
-    // /ROOT/...) would be temporary redirected to Model.Root (e.g. /root/...)
-    // via a HTTP 307 command
-    property RedirectServerRootUriForExactCase: boolean
-      read fRedirectServerRootUriForExactCase
-      write fRedirectServerRootUriForExactCase;
   end;
 
 var
@@ -611,7 +598,7 @@ constructor TRestHttpServer.Create(const aPort: RawUtf8;
   const aServers: array of TRestServer; const aDomainName: RawUtf8;
   aUse: TRestHttpServerUse; aThreadPoolCount: Integer;
   aSecurity: TRestHttpServerSecurity; const aAdditionalUrl: RawUtf8;
-  const aQueueName: SynUnicode; aHeadersUnFiltered: boolean);
+  const aQueueName: SynUnicode; aOptions: TRestHttpServerOptions);
 var
   i, j: PtrInt;
   ErrMsg: RawUtf8;
@@ -623,6 +610,7 @@ begin
     fLog := aServers[0].LogClass;
   log := fLog.Enter('Create % (%) on port %',
     [ToText(aUse)^, ToText(aSecurity)^, aPort], self);
+  fOptions := aOptions;
   inherited Create;
   SetAccessControlAllowOrigin(''); // deny CORS by default
   fHosts.Init(false);
@@ -696,7 +684,7 @@ begin
     else
       fHttpServer := THttpServer.Create(fPort, HttpThreadStart,
         HttpThreadTerminate, fDBServerNames, aThreadPoolCount, 30000,
-        aHeadersUnFiltered);
+        rsoHeadersUnFiltered in fOptions);
     THttpServer(fHttpServer).WaitStarted;
   end;
   fHttpServer.OnRequest := Request;
@@ -704,12 +692,10 @@ begin
   if aSecurity = secSynShaAes then
     fHttpServer.RegisterCompress(CompressShaAes, 0); // CompressMinSize=0
   {$endif PUREMORMOT2}
-  {$ifdef COMPRESSSYNLZ} // SynLZ registered first, since will be prefered
-  fHttpServer.RegisterCompress(CompressSynLZ);
-  {$endif COMPRESSSYNLZ}
-  {$ifdef COMPRESSDEFLATE}
-  fHttpServer.RegisterCompress(CompressGZip);
-  {$endif COMPRESSDEFLATE}
+  if rsoCompressSynLZ in fOptions then // SynLZ registered first, as preferred
+    fHttpServer.RegisterCompress(CompressSynLZ);
+  if rsoCompressGZip in fOptions then
+    fHttpServer.RegisterCompress(CompressGZip);
   {$ifdef USEHTTPSYS}
   if fHttpServer.InheritsFrom(THttpApiServer) then
     // allow fast multi-threaded requests
@@ -727,10 +713,10 @@ constructor TRestHttpServer.Create(const aPort: RawUtf8; aServer: TRestServer;
   const aDomainName: RawUtf8; aUse: TRestHttpServerUse;
   aRestAccessRights: POrmAccessRights; aThreadPoolCount: Integer;
   aSecurity: TRestHttpServerSecurity; const aAdditionalUrl: RawUtf8;
-  const aQueueName: SynUnicode);
+  const aQueueName: SynUnicode; aOptions: TRestHttpServerOptions);
 begin
   Create(aPort, [aServer], aDomainName, aUse, aThreadPoolCount,
-    aSecurity, aAdditionalUrl, aQueueName);
+    aSecurity, aAdditionalUrl, aQueueName, aOptions);
   if aRestAccessRights <> nil then
     DBServerAccessRight[0] := aRestAccessRights;
 end;
@@ -857,8 +843,8 @@ begin
 end;
 
 function TRestHttpServer.HttpApiAddUri(const aRoot, aDomainName: RawByteString;
-  aSecurity: TRestHttpServerSecurity; aRegisterUri,
-  aRaiseExceptionOnError: boolean): RawUtf8;
+  aSecurity: TRestHttpServerSecurity;
+  aRegisterUri, aRaiseExceptionOnError: boolean): RawUtf8;
 {$ifdef USEHTTPSYS}
 var
   err: integer;
@@ -931,7 +917,7 @@ begin
     result := HTTP_NOCONTENT;
   end
   else if (Ctxt.Method = '') or
-          (OnlyJsonRequests and
+          ((rsoOnlyJsonRequests in fOptions) and
            not IdemPChar(pointer(Ctxt.InContentType), JSON_CONTENT_TYPE_UPPER)) then
     // wrong Input parameters or not JSON request: 400 BAD REQUEST
     result := HTTP_BADREQUEST
@@ -1013,7 +999,7 @@ begin
          (serv = nil) then
         exit;
     end;
-    if fRedirectServerRootUriForExactCase and
+    if (rsoRedirectServerRootUriForExactCase in fOptions) and
        (match = rmMatchWithCaseChange) then
     begin
       // force redirection to exact Server.Model.Root case sensitivity
@@ -1231,12 +1217,15 @@ const
     TRestServerAuthenticationHttpBasic,
     TRestServerAuthenticationNone,
     {$ifdef DOMAINRESTAUTH}
+    // use mormot.lib.sspi/gssapi units depending on the OS
     TRestServerAuthenticationSspi
     {$else}
     nil
     {$endif DOMAINRESTAUTH});
 var
   a: TRestHttpServerRestAuthentication;
+  P: PUtf8Char;
+  hostroot, host, root: RawUtf8;
   thrdcnt: integer;
   websock: TWebSocketServerRest;
 begin
@@ -1249,18 +1238,38 @@ begin
   else
     thrdcnt := aDefinition.ThreadCount;
   Create(aDefinition.BindPort, aServer, '+', aForcedUse, nil, thrdcnt,
-    HTTPS_SECURITY[aDefinition.Https], '', aDefinition.HttpSysQueueName);
+    HTTPS_SECURITY[aDefinition.Https], '', aDefinition.HttpSysQueueName,
+    aDefinition.Options);
   if aDefinition.EnableCors <> '' then
   begin
     AccessControlAllowOrigin := aDefinition.EnableCors;
     AccessControlAllowCredential := true;
   end;
+  if aDefinition.RootRedirectToUri <> '' then
+    RootRedirectToUri(
+      aDefinition.RootRedirectToUri, {reguri=}false, {https=}aDefinition.Https);
+  P := pointer(aDefinition.DomainHostRedirect);
+  while P <> nil do
+  begin
+    GetNextItem(P, ',', hostroot);
+    Split(hostroot, '=', host, root);
+    if (host <> '') and
+       (root <> '') then
+      DomainHostRedirect(host, root);
+  end;
   if fHttpServer <> nil then
+  begin
     fHttpServer.RemoteIPHeader := aDefinition.RemoteIPHeader;
+    if fHttpServer.InheritsFrom(THttpServer) then
+    begin
+      if aDefinition.NginxSendFileFrom <> '' then
+        THttpServer(fHttpServer).NginxSendFileFrom(aDefinition.NginxSendFileFrom);
+    end;
+  end;
   a := aDefinition.Authentication;
   if aServer.HandleAuthentication then
     if AUTH[a] = nil then
-      fLog.Add.Log(sllWarning, 'Ignored',
+      fLog.Add.Log(sllWarning, 'Ignored unsupported',
         TypeInfo(TRestHttpServerRestAuthentication), a, self)
     else
     begin

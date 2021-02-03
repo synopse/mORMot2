@@ -497,7 +497,7 @@ type
     fExecuteState: (esNotStarted, esBinding, esRunning, esFinished);
     fStats: array[THttpServerSocketGetRequestResult] of integer;
     fSocketClass: THttpServerSocketClass;
-    fHeadersNotFiltered: boolean;
+    fHeadersUnFiltered: boolean;
     fExecuteMessage: string;
     function GetStat(one: THttpServerSocketGetRequestResult): integer;
     function GetHttpQueueLength: cardinal; override;
@@ -540,7 +540,7 @@ type
     constructor Create(const aPort: RawUtf8;
       const OnStart, OnStop: TOnNotifyThread;
       const ProcessName: RawUtf8; ServerThreadPoolCount: integer = 32;
-      KeepAliveTimeOut: integer = 30000; HeadersUnFiltered: boolean = false;
+      KeepAliveTimeOut: integer = 30000; aHeadersUnFiltered: boolean = false;
       CreateSuspended: boolean = false); reintroduce; virtual;
     /// ensure the HTTP server thread is actually bound to the specified port
     // - TCrtSocket.Bind() occurs in the background in the Execute method: you
@@ -571,8 +571,8 @@ type
     // - for instance, Content-Length, Content-Type and Content-Encoding are
     // stored as fields in this THttpSocket, but not included in its Headers[]
     // - set this property to true to include all incoming headers
-    property HeadersNotFiltered: boolean
-      read fHeadersNotFiltered;
+    property HeadersUnFiltered: boolean
+      read fHeadersUnFiltered;
     /// access to the main server low-level Socket
     // - it's a raw TCrtSocket, which only need a socket to be bound, listening
     // and accept incoming request
@@ -1404,7 +1404,7 @@ end;
 constructor THttpServer.Create(const aPort: RawUtf8;
   const OnStart, OnStop: TOnNotifyThread; const ProcessName: RawUtf8;
   ServerThreadPoolCount, KeepAliveTimeOut: integer;
-  HeadersUnFiltered, CreateSuspended: boolean);
+  aHeadersUnFiltered, CreateSuspended: boolean);
 begin
   fSockPort := aPort;
   fInternalHttpServerRespList := TSynList.Create;
@@ -1424,7 +1424,7 @@ begin
     fThreadPool := TSynThreadPoolTHttpServer.Create(self, ServerThreadPoolCount);
     fHttpQueueLength := 1000;
   end;
-  fHeadersNotFiltered := HeadersUnFiltered;
+  fHeadersUnFiltered := aHeadersUnFiltered;
   inherited Create(CreateSuspended, OnStart, OnStop, ProcessName);
 end;
 
@@ -1951,7 +1951,7 @@ begin
          (fServer = nil) or
          fServer.Terminated then
         exit;
-      noheaderfilter := fServer.HeadersNotFiltered;
+      noheaderfilter := fServer.HeadersUnFiltered;
     end
     else
       noheaderfilter := false;
@@ -1968,13 +1968,12 @@ begin
     Content := '';
     // get headers and content
     GetHeader(noheaderfilter);
-    if fServer <> nil then
+    if fServer <> nil then // = nil e.g. from TRtspOverHttpServer
     begin
-      // nil from TRtspOverHttpServer
       if fServer.fRemoteIPHeaderUpper <> '' then
         // real Internet IP (replace 127.0.0.1 from a proxy)
-        FindNameValue(headers, pointer(fServer.fRemoteIPHeaderUpper), fRemoteIP,
-          {keepnotfound=}true);
+        FindNameValue(headers, pointer(fServer.fRemoteIPHeaderUpper),
+          fRemoteIP, {keepnotfound=}true);
       if fServer.fRemoteConnIDHeaderUpper <> '' then
       begin
         P := FindNameValue(pointer(headers), pointer(fServer.fRemoteConnIDHeaderUpper));
