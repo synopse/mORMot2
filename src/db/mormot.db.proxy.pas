@@ -828,13 +828,13 @@ function TSqlDBRemoteConnectionProtocol.HandleInput(const input: RawByteString):
 begin
   result := input;
   SymmetricEncrypt(REMOTE_MAGIC, result);
-  result := AlgoSynLZ.Decompress(result);
+  result := AlgoSynLZ.Decompress(result); // also check crc32c
 end;
 
 function TSqlDBRemoteConnectionProtocol.HandleOutput(const output: RawByteString):
   RawByteString;
 begin
-  result := AlgoSynLZ.Compress(output);
+  result := AlgoSynLZ.Compress(output); // includes cr32c hashing
   SymmetricEncrypt(REMOTE_MAGIC, result);
 end;
 

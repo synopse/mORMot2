@@ -157,11 +157,11 @@ type
   end;
 
 
-/// naive symmetric encryption scheme using a 32-bit key
-// - used e.g. by TSynPersistentWithPassword and mormot.db.proxy for password or
-// content obfuscation
-// - fast, but not cryptographically secure, since uses crc32ctab[] content as fixed
-// xor table: consider using mormot.core.crypto proven AES-based algorithms instead
+/// simple symmetric obfuscation scheme using a 32-bit key
+// - used e.g. by TSynPersistentWithPassword and mormot.db.proxy to obfuscate
+// password or content - so it is not a real encryption
+// - fast, but not cryptographically secure, since naively xor data bytes with
+// crc32ctab[]: consider using mormot.core.crypto proven algorithms instead
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
 
 
