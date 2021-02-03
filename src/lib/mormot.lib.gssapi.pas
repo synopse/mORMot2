@@ -20,7 +20,7 @@ interface
 
 {$I ..\mormot.defines.inc}
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 
 // do-nothing-unit on non POSIX system
 
@@ -959,7 +959,7 @@ initialization
 finalization
   GssApi.Free;
 
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 end.
 

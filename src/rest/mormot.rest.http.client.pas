@@ -431,40 +431,28 @@ type
   { ************ TRestHttpClient/TRestHttpClients Main Usable Classes }
 
 type
-  {$ifdef ONLYUSEHTTPSOCKET}
+  {$ifdef USEWININET}
 
-  /// HTTP/1.1 RESTful JSON default mORMot Client class
-  // -  maps the raw socket implementation class
+  /// HTTP/1.1 RESTful JSON default mORMot Client class is WinHttp on Windows
+  // - for support of Windows built-in proxy settings for instance
+  TRestHttpClient = TRestHttpClientWinHttp;
+
+  /// HTTP/HTTPS RESTful JSON default mORMot Client class is WinHttp on Windows
+  TRestHttpsClient = TRestHttpClientWinHttp;
+
+  {$else}
+
+  /// HTTP/1.1 RESTful JSON default mORMot Client class uses sockets on POSIX
   TRestHttpClient = TRestHttpClientSocket;
 
   {$ifdef USELIBCURL}
-  /// HTTP/HTTPS RESTful JSON default mORMot Client class
+  /// HTTP/HTTPS RESTful JSON default mORMot Client class is libcurl
   TRestHttpsClient = TRestHttpClientCurl;
   {$else}
-  {$ifdef USEWININET}
-  TRestHttpsClient = TRestHttpClientWinHttp;
-  {$else}
-  TRestHttpsClient = TRestHttpClientSocket; // (Android) fallback to non-TLS class
-  {$endif USEWININET}
+  TRestHttpsClient = TRestHttpClientSocket; // fallback to non-TLS class
   {$endif USELIBCURL}
 
-  {$else ONLYUSEHTTPSOCKET}
-
-  {$ifdef USEWININET}
-  /// HTTP/1.1 RESTful JSON default mORMot Client class
-  // - under Windows, maps the TRestHttpClientWinHttp class
-  TRestHttpClient = TRestHttpClientWinHttp;
-
-  /// HTTP/HTTPS RESTful JSON default mORMot Client class
-  // - under Windows, maps the TRestHttpClientWinHttp class, or TRestHttpClientCurl
-  // under Linux
-  TRestHttpsClient = TRestHttpClientWinHttp;
-  {$else}
-  TRestHttpClient = TRestHttpClientSocket;
-  TRestHttpsClient = TRestHttpClientSocket; // wouls use SChannel if available
   {$endif USEWININET}
-
-  {$endif ONLYUSEHTTPSOCKET}
 
 var
   /// a global hook variable, able to set WebSockets logging to full verbose

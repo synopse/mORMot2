@@ -108,10 +108,10 @@ type
     fWorkFolderName: TFileName;
     fSettings: TSynDaemonSettings;
     function CustomCommandLineSyntax: string; virtual;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     procedure DoStart(Sender: TService);
     procedure DoStop(Sender: TService);
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
   public
     /// initialize the daemon, creating the associated settings
     // - TSynDaemonSettings instance will be owned and freed by the daemon
@@ -218,7 +218,7 @@ begin
   fSettings := aSettingsClass.Create;
   fn := aSettingsFolder;
   if fn = '' then
-    fn := {$ifdef MSWINDOWS}fWorkFolderName{$else}'/etc/'{$endif};
+    fn := {$ifdef OSWINDOWS}fWorkFolderName{$else}'/etc/'{$endif};
   fn :=  EnsureDirectoryExists(fn);
   if aSettingsName = '' then
     fn := fn + Utf8ToString(ExeVersion.ProgramName)
@@ -228,7 +228,7 @@ begin
   if fSettings.LogPath = '' then
     if aLogFolder = '' then
       fSettings.LogPath :=
-        {$ifdef MSWINDOWS}fWorkFolderName{$else}GetSystemPath(spLog){$endif}
+        {$ifdef OSWINDOWS}fWorkFolderName{$else}GetSystemPath(spLog){$endif}
     else
       fSettings.LogPath := EnsureDirectoryExists(aLogFolder);
 end;
@@ -242,7 +242,7 @@ begin
   FreeAndNil(fSettings);
 end;
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 procedure TSynDaemon.DoStart(Sender: TService);
 begin
   Start;
@@ -252,7 +252,7 @@ procedure TSynDaemon.DoStop(Sender: TService);
 begin
   Stop;
 end;
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 function TSynDaemon.CustomCommandLineSyntax: string;
 begin
@@ -289,10 +289,10 @@ var
   param: RawUtf8;
   exe: RawByteString;
   log: TSynLog;
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   service: TServiceSingle;
   ctrl: TServiceController;
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 
   procedure WriteCopyright;
   var
@@ -325,7 +325,7 @@ var
     WriteCopyright;
     writeln('Try with one of the switches:');
     spaces := StringOfChar(' ', length(ExeVersion.ProgramName) + 4);
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     writeln('   ', ExeVersion.ProgramName,
       ' /console -c /verbose /help -h /version');
     writeln(spaces, '/install /uninstall /start /stop /state');
@@ -333,7 +333,7 @@ var
     writeln(' ./', ExeVersion.ProgramName,
       ' --console -c --verbose --help -h --version');
     writeln(spaces, '--run -r --fork -f --kill -k');
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     custom := CustomCommandLineSyntax;
     if custom <> '' then
       writeln(spaces, custom);
@@ -438,7 +438,7 @@ begin
           Stop;
         end;
     end;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     // implement the daemon as a Windows Service
     else if fSettings.ServiceName = '' then
       if cmd = cNone then
@@ -519,7 +519,7 @@ begin
         raise EDaemon.Create('No forked process found to be killed');
     else
       Syntax;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     end;
   except
     on E: Exception do

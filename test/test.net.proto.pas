@@ -161,11 +161,11 @@ end;
 
 procedure TNetworkProtocols.RtspOverHttp;
 const
-  {$ifdef DARWIN}
+  {$ifdef OSDARWIN}
   N = 10;
   {$else}
   N = 100;
-  {$endif DARWIN}
+  {$endif OSDARWIN}
 var
   proxy: TRtspOverHttpServer;
 begin

@@ -561,11 +561,7 @@ type
       aAuthenticate: TSynAuthenticationAbstract = nil); override;
   end;
 
-  {$ifdef ONLYUSEHTTPSOCKET}
-
-  TSqlDBServerRemote = TSqlDBServerSockets;
-
-  {$else}
+  {$ifdef USEHTTPSYS}
 
   /// implements a mormot.db.proxy HTTP server using fast http.sys kernel-mode server
   // - under Windows, this class is faster and more stable than TSqlDBServerSockets
@@ -589,7 +585,11 @@ type
   /// the default mormot.db.proxy HTTP server class on each platform
   TSqlDBServerRemote = TSqlDBServerHttpApi;
 
-  {$endif ONLYUSEHTTPSOCKET}
+  {$else}
+
+  TSqlDBServerRemote = TSqlDBServerSockets;
+
+  {$endif USEHTTPSYS}
 
 
 { ************ HTTP Client Classes for Remote Access }
@@ -828,13 +828,13 @@ function TSqlDBRemoteConnectionProtocol.HandleInput(const input: RawByteString):
 begin
   result := input;
   SymmetricEncrypt(REMOTE_MAGIC, result);
-  result := AlgoSynLZ.Decompress(result);
+  result := AlgoSynLZ.Decompress(result); // also check crc32c
 end;
 
 function TSqlDBRemoteConnectionProtocol.HandleOutput(const output: RawByteString):
   RawByteString;
 begin
-  result := AlgoSynLZ.Compress(output);
+  result := AlgoSynLZ.Compress(output); // includes cr32c hashing
   SymmetricEncrypt(REMOTE_MAGIC, result);
 end;
 
@@ -1841,7 +1841,7 @@ begin
 end;
 
 
-{$ifndef ONLYUSEHTTPSOCKET}
+{$ifdef USEHTTPSYS}
 
 { TSqlDBServerHttpApi }
 
@@ -1870,7 +1870,7 @@ begin
     THttpApiServer(fServer).Clone(fThreadPoolCount - 1);
 end;
 
-{$endif ONLYUSEHTTPSOCKET}
+{$endif USEHTTPSYS}
 
 
 { TSqlDBServerSockets }

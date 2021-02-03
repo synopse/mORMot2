@@ -38,15 +38,15 @@ uses
 
 { ************ Raw SQLite3 API Constants and Functions }
 
-{$ifdef BSD}
+{$ifdef OSBSD}
   {$linklib c}
   {$linklib pthread}
-{$endif}
+{$endif OSBSD}
 
 {$ifdef FPC}
   {$packrecords C}
   {$packenum 4}
-{$endif}
+{$endif FPC}
 
 type
   /// internaly store the SQLite3 database handle
@@ -88,28 +88,26 @@ type
   TSqlite3ValueArray = array[0..63] of TSqlite3Value;
 
 const
-  {$ifdef MSWINDOWS}
-  {$ifdef CPU64}
-  // see https://synopse.info/files/SQLite3-64.7z or static/delphi folder
-  SQLITE_LIBRARY_DEFAULT_NAME = 'sqlite3-64.dll';
-  {$else}
-  SQLITE_LIBRARY_DEFAULT_NAME = 'sqlite3.dll';
-  {$endif CPU64}
-  {$else}
-  {$ifdef Linux}
-    {$ifdef Android}
-    SQLITE_LIBRARY_DEFAULT_NAME = 'libsqlite.so';
+  {$ifdef OSWINDOWS}
+    {$ifdef CPU64}
+      // see https://synopse.info/files/SQLite3-64.7z or static/delphi folder
+      SQLITE_LIBRARY_DEFAULT_NAME = 'sqlite3-64.dll';
     {$else}
-      {$ifdef Darwin}
+      SQLITE_LIBRARY_DEFAULT_NAME = 'sqlite3.dll';
+    {$endif CPU64}
+  {$else}
+  {$ifdef OSPOSIX}
+    {$ifdef OSANDROID}
+      SQLITE_LIBRARY_DEFAULT_NAME = 'libsqlite.so';
+    {$else}
+      {$ifdef OSDARWIN}
       SQLITE_LIBRARY_DEFAULT_NAME = 'libsqlite3.dylib';
       {$else}
       SQLITE_LIBRARY_DEFAULT_NAME = 'libsqlite3.so.0';
-      {$endif Darwin}
-    {$endif Android}
-  {$else}
-  SQLITE_LIBRARY_DEFAULT_NAME = 'libsqlite3.so';
-  {$endif Linux}
-  {$endif MSWINDOWS}
+      {$endif OSDARWIN}
+    {$endif OSANDROID}
+  {$endif OSPOSIX}
+  {$endif OSWINDOWS}
 
   /// internal SQLite3 type as integer
   SQLITE_INTEGER = 1;
@@ -5094,7 +5092,7 @@ begin
      not Assigned(sqlite3.open) then
     raise ESqlite3Exception.Create('DBOpen called with no sqlite3 global');
   StringToUtf8(fFileName, u);
-  {$ifdef LINUX}
+  {$ifdef OSPOSIX}
   // for WAL to work under Linux - see http://www.sqlite.org/vfs.html
   if assigned(sqlite3.open_v2) and
      (fPassword = '') then
@@ -5108,7 +5106,7 @@ begin
   if fOpenV2Flags <> (SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE) then
     result := sqlite3.open_v2(pointer(u), fDB, fOpenV2Flags, nil)
   else
-  {$endif LINUX}
+  {$endif OSPOSIX}
     result := sqlite3.open(pointer(u), fDB);
   if result <> SQLITE_OK then
   begin

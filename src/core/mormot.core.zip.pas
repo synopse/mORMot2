@@ -1051,11 +1051,11 @@ begin
       if RemovePath then
         ZipName := ExtractFileName(aFileName)
       else
-        {$ifdef MSWINDOWS}
+        {$ifdef OSWINDOWS}
         ZipName := aFileName;
         {$else}
         ZipName := StringReplace(aFileName, '/', '\', [rfReplaceAll]);
-        {$endif MSWINDOWS}
+        {$endif OSWINDOWS}
     Size := S.Size;
     if Size64.Hi <> 0 then
       raise ESynZip.CreateFmt('%s file too big for .zip', [aFileName]);

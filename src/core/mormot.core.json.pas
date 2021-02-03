@@ -1370,6 +1370,7 @@ type
     function GetCapacity: integer;
     procedure SetCapacity(const Value: integer);
     function GetTimeOutSeconds: cardinal;
+    procedure SetTimeOutSeconds(Value: cardinal);
   public
     /// initialize the dictionary storage, specifyng dynamic array keys/values
     // - aKeyTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
@@ -1596,8 +1597,9 @@ type
     property TimeOut: TCardinalDynArray
       read fTimeOut;
     /// returns the aTimeOutSeconds parameter value, as specified to Create()
+    // - warning: setting a new timeout will clear all previous content
     property TimeOutSeconds: cardinal
-      read GetTimeOutSeconds;
+      read GetTimeOutSeconds write SetTimeOutSeconds;
     /// the compression algorithm used for binary serialization
     property CompressAlgo: TAlgoCompress
       read fCompressAlgo write fCompressAlgo;
@@ -4177,74 +4179,75 @@ begin
   end;
 end;
 
-procedure RemoveCommentsFromJson(P: PUtf8Char);
+function TryRemoveComment(P: PUtf8Char): PUtf8Char;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := P + 1;
+  case result^ of
+    '/':
+      begin // this is // comment - replace by ' '
+        dec(result);
+        repeat
+          result^ := ' ';
+          inc(result)
+        until result^ in [#0, #10, #13];
+        if result^ <> #0 then
+          inc(result);
+      end;
+    '*':
+      begin // this is /* comment - replace by ' ' but keep CRLF
+        result[-1] := ' ';
+        repeat
+          if not (result^ in [#10, #13]) then
+            result^ := ' '; // keep CRLF for correct line numbering (e.g. for error)
+          inc(result);
+          if PWord(result)^ = ord('*') + ord('/') shl 8 then
+          begin
+            PWord(result)^ := $2020;
+            inc(result, 2);
+            break;
+          end;
+        until result^ = #0;
+      end;
+  end;
+end;
+
+procedure RemoveCommentsFromJSON(P: PUtf8Char);
 var
   PComma: PUtf8Char;
-begin
-  // replace comments by ' ' characters which will be ignored by parser
+begin // replace comments by ' ' characters which will be ignored by parser
   if P <> nil then
     while P^ <> #0 do
-    case P^ of
-      '"':
-        begin
-          // don't search within JSON strings
-          P := GotoEndOfJsonString(P, @JSON_CHARS);
-          if P^ <> '"' then
-            exit;
-          inc(P);
-        end;
-      '/':
-        begin
-          // may be a C or Pascal comment
-          inc(P);
-          case P^ of
-            '/':
-              begin
-                // this is // comment - replace by ' '
-                dec(P);
-                repeat
-                  P^ := ' ';
-                  inc(P)
-                until (P^ = #0) or
-                      (P^ = #10) or
-                      (P^ = #13);
-                if P^ <> #0 then
-                  inc(P);
-              end;
-            '*':
-              begin
-                // this is /* comment - replace by ' ' but keep CRLF
-                P[-1] := ' ';
-                repeat
-                  if (P^ <> #10) and
-                     (P^ <> #13) then
-                    // keep CRLF for correct line numbering (e.g. for error)
-                    P^ := ' ';
-                  inc(P);
-                  if PWord(P)^ = ord('*') + ord('/') shl 8 then
-                  begin
-                    PWord(P)^ := $2020;
-                    inc(P, 2);
-                    break;
-                  end;
-                until P^ = #0;
-              end;
+    begin
+      case P^ of
+        '"':
+          begin
+            P := GotoEndOfJSONString(P);
+            if P^ <> '"' then
+              exit
+            else
+              inc(P);
           end;
-        end;
-      ',':
-        begin
-          // replace trailing comma by space for standard JSON parsers
-          PComma := P;
-          repeat
-            inc(P)
-          until (P^ > ' ') or
-                (P^ = #0);
-          if (P^ = '}') or
-             (P^ = ']') then
-            PComma^ := ' ';
-        end;
+        '/':
+          P := TryRemoveComment(P);
+        ',':
+          begin // replace trailing comma by space for strict JSON parsers
+            PComma := P;
+            repeat
+              inc(P)
+            until (P^ > ' ') or
+                  (P^ = #0);
+            if P^ = '/' then
+              P := TryRemoveComment(P);
+            while (P^ <= ' ') and
+                  (P^ <> #0) do
+              inc(P);
+            if P^ in ['}', ']'] then
+              PComma^ := ' '; // see https://github.com/synopse/mORMot/pull/349
+          end;
       else
         inc(P);
+      end;
     end;
 end;
 
@@ -8827,6 +8830,17 @@ end;
 function TSynDictionary.GetTimeOutSeconds: cardinal;
 begin
   result := fSafe.Padding[DIC_TIMESEC].VInteger;
+end;
+
+procedure TSynDictionary.SetTimeOutSeconds(Value: cardinal);
+begin
+  fSafe.Lock;
+  try
+    DeleteAll;
+    fSafe.Padding[DIC_TIMESEC].VInteger := Value;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 procedure TSynDictionary.SetTimeouts;

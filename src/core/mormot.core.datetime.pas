@@ -1316,7 +1316,7 @@ var
 begin
   with GlobalTime[LocalTime] do
   begin
-    tix := GetTickCount64 {$ifndef MSWINDOWS} shr 3{$endif}; // Linux: 8ms refresh
+    tix := GetTickCount64 {$ifdef OSPOSIX} shr 3 {$endif}; // Linux: 8ms refresh
     if clock <> tix then // Windows: typically in range of 10-16 ms
     begin
       clock := tix;
@@ -1330,11 +1330,11 @@ begin
     else
       Rcu128(time, NewTime);
   end;
-  {$ifndef MSWINDOWS} // two TSystemTime fields are inverted in datih.inc :(
+  {$ifdef OSPOSIX} // two TSystemTime fields are inverted in FPC datih.inc :(
   tix := newtimesys.DayOfWeek;
   NewTime.Day := newtimesys.Day;
   NewTime.DayOfWeek := tix;
-  {$endif MSWINDOWS}
+  {$endif OSPOSIX}
 end;
 
 
@@ -2062,14 +2062,14 @@ end;
 
 procedure TTimeLogBits.From(FileDate: integer);
 begin
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   with PLongRec(@FileDate)^ do
     From(Hi shr 9 + 1980, Hi shr 5 and 15, Hi and 31, Lo shr 11,
       Lo shr 5 and 63, Lo and 31 shl 1);
   {$else}
-  // FileDate depends on the running OS -> use RTL
+  // FileDate depends on the running OS -> use FPC RTL
   From(FileDateToDateTime(FileDate));
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 end;
 
 procedure TTimeLogBits.From(DateTime: TDateTime; DateOnly: boolean);

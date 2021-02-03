@@ -139,7 +139,8 @@ function  Unicode_InPlaceLower;       external user32 name 'CharLowerBuffW';
 
 procedure DisplayFatalError(const title, msg: RawUtf8);
 begin
-  MessageBoxA(0, pointer(msg), pointer(title), MB_OK or MB_ICONWARNING);
+  // better than a MessageBox() especially for services
+  raise Exception.CreateFmt('%s in %s - %s', [title, ExeVersion.ProgramName, msg]);
 end;
 
 function GetModuleHandle(lpModuleName: PChar): HMODULE;
@@ -392,14 +393,12 @@ end;
 procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUtf8);
 var s: AnsiString;
     {$ifndef ISDELPHIXE2}
-    {$ifdef MSWINDOWS}
     info: record
       FType: LongWord;     // must be 0x1000
       FName: PAnsiChar;    // pointer to name (in user address space)
       FThreadID: LongWord; // thread ID (-1 indicates caller thread)
       FFlags: LongWord;    // reserved for future use, must be zero
     end;
-    {$endif MSWINDOWS}
     {$endif ISDELPHIXE2}
 begin
   if not IsDebuggerPresent then

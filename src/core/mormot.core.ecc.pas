@@ -1457,11 +1457,11 @@ var
   _EccKeyFileFolder: TFileName;
 
 const
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   _KEYFILEFOLDER = 'Synopse\Keys\';
   {$else}
   _KEYFILEFOLDER = '.synopse/keys/';
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 
 function EccKeyFileFolder: TFileName;
 begin

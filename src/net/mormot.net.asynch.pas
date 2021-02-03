@@ -1068,7 +1068,7 @@ constructor TAsynchConnections.Create(const OnStart, OnStop: TOnNotifyThread;
   aStreamClass: TAsynchConnectionClass; const ProcessName: RawUtf8;
   aLog: TSynLogClass; aOptions: TAsynchConnectionsOptions; aThreadPoolCount: integer);
 var
-  i: integer;
+  i: PtrInt;
   log: ISynLog;
 begin
   log := aLog.Enter('Create(%,%,%)', [aStreamClass, ProcessName, aThreadPoolCount], self);
@@ -1096,11 +1096,12 @@ end;
 
 destructor TAsynchConnections.Destroy;
 var
-  i: integer;
+  i: PtrInt;
 begin
-  with fClients do
-    fLog.Add.Log(sllDebug, 'Destroy total=% reads=%/% writes=%/%',
-      [Total, ReadCount, KB(ReadBytes), WriteCount, KB(WriteBytes)], self);
+  if fClients <> nil then
+    with fClients do
+      fLog.Add.Log(sllDebug, 'Destroy total=% reads=%/% writes=%/%',
+        [Total, ReadCount, KB(ReadBytes), WriteCount, KB(WriteBytes)], self);
   Terminate;
   for i := 0 to high(fThreads) do
     fThreads[i].Terminate; // stop ProcessRead/ProcessWrite when polling stops
@@ -1356,9 +1357,12 @@ var
   touchandgo: TNetSocket; // paranoid ensure Accept() is released
 begin
   Terminate;
-  fServer.Close; // shutdown the socket to unlock Accept() in Execute
-  if NewSocket('127.0.0.1', fServer.Port, nlTCP, false, 1000, 0, 0, 0, touchandgo) = nrOk then
-    touchandgo.ShutdownAndClose(false);
+  if fServer <> nil then
+  begin
+    fServer.Close; // shutdown the socket to unlock Accept() in Execute
+    if NewSocket('127.0.0.1', fServer.Port, nlTCP, false, 1000, 0, 0, 0, touchandgo) = nrOk then
+      touchandgo.ShutdownAndClose(false);
+  end;
   endtix := mormot.core.os.GetTickCount64 + 10000;
   inherited Destroy;
   while not fExecuteFinished and

@@ -3,6 +3,8 @@
   licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 
   Implements WinSock2 API calls, as used by mormot.net.sock.pas on Windows.
+  Using our own unit makes code easier to maintain between Delphi/FPC versions,
+  and allow to increase FD_SETSIZE for better TPollSocketSelect performance.
 }
 
 uses
@@ -22,7 +24,7 @@ const
   // as stated by Raymond Chen: "you can make FD_SET­SIZE bigger if you need to"
   // https://devblogs.microsoft.com/oldnewthing/20161221-00/?p=94985
   // -> Xitami uses 1024 since 1996
-  // -> safe since our TFDSet is INTERNAl to this unit, and never published :)
+  // -> safe since our TFDSet is INTERNAL to this unit, and never published :)
   FD_SETSIZE = 512;
 
 type
@@ -335,10 +337,10 @@ type
      iMaxSockets: word;
      iMaxUdpDg: word;
      lpVendorInfo: PAnsiChar;
-     szDescription: array[0..WSADESCRIPTION_LEN] of AnsiChar;
+     szDescription:  array[0..WSADESCRIPTION_LEN] of AnsiChar;
      szSystemStatus: array[0..WSASYS_STATUS_LEN] of AnsiChar;
      {$else}
-     szDescription: array[0..WSADESCRIPTION_LEN] of AnsiChar;
+     szDescription:  array[0..WSADESCRIPTION_LEN] of AnsiChar;
      szSystemStatus: array[0..WSASYS_STATUS_LEN] of AnsiChar;
      iMaxSockets: word;
      iMaxUdpDg: word;
@@ -348,8 +350,15 @@ type
   WSAData = TWSAData;
 
 const
-  _ST: array[TNetLayer] of integer = (SOCK_STREAM, SOCK_DGRAM, 0);
-  _IP: array[TNetLayer] of integer = (IPPROTO_TCP, IPPROTO_UDP, 0);
+  _ST: array[TNetLayer] of integer = (
+    SOCK_STREAM,
+    SOCK_DGRAM,
+    0);
+
+  _IP: array[TNetLayer] of integer = (
+    IPPROTO_TCP,
+    IPPROTO_UDP,
+    0);
 
 
 { ******** WinSock2 API calls }
@@ -361,7 +370,7 @@ function WSACleanup: integer; stdcall;
 function sockerrno: integer; stdcall;
   external ws2 name 'WSAGetLastError';
 
-function getaddrinfo(NodeName: PAnsiChar; ServName: PAnsiChar; Hints: PAddrInfo;
+function getaddrinfo(NodeName, ServName: PAnsiChar; Hints: PAddrInfo;
    var Addrinfo: PAddrInfo): integer; stdcall;
   external ws2 name 'getaddrinfo';
 procedure freeaddrinfo(ai: PAddrInfo); stdcall;
@@ -572,7 +581,7 @@ end;
 
 procedure FD_CLR(Socket: TNetSocket; var FDSet: TFDSet);
 var
-  i: integer;
+  i: PtrInt;
 begin
   i := PtrUIntScanIndex(@FDSet.fd_array, FDSet.fd_count, PtrUInt(Socket));
   if i < 0 then
@@ -583,10 +592,9 @@ begin
 end;
 
 procedure FD_SET(Socket: TNetSocket; var FDSet: TFDSet);
+  {$ifdef HASINLINE}inline;{$endif}
 begin
-  if (FDSet.fd_count >= FD_SETSIZE) or
-     PtrUIntScanExists(@FDSet.fd_array, FDSet.fd_count, PtrUInt(Socket)) then
-    exit;
+  // caller should ensure that the Socket is not already part of fd_array[]
   FDSet.fd_array[FDSet.fd_count] := TSocket(Socket);
   inc(FDSet.fd_count);
 end;
@@ -595,7 +603,7 @@ type
   /// socket polling via Windows' Select() API
   // - under Windows, Select() handles up to 64 TSocket by default, but we
   // grow FD_SETSIZE up to 512 for the purpose of this class
-  // - under Linux, select() is very limited, so poll/epoll APIs are to be used
+  // - under POSIX, select() is very limited, so poll/epoll APIs are to be used
   // - in practice, TPollSocketSelect is FASTER than TPollSocketPoll + WSAPoll()
   TPollSocketSelect = class(TPollSocketAbstract)
   protected
@@ -632,7 +640,7 @@ begin
      PtrUIntScanExists(pointer(fTagSocket), fCount, PtrUInt(socket)) then
     exit;
   if pseRead in events then
-    FD_SET(socket, fRead);
+    FD_SET(socket, fRead); // if not in fTagSocket[] -> not in fRead/fWrite
   if pseWrite in events then
     FD_SET(socket, fWrite);
   fTagSocket[fCount] := socket;
@@ -699,7 +707,7 @@ begin
   else
     wrp := nil;
   SetTimeVal(timeoutMS, tv);
-  result := Select(PtrUInt(fHighestSocket) + 1, rdp, wrp, nil, @tv);
+  result := select(PtrUInt(fHighestSocket) + 1, rdp, wrp, nil, @tv);
   if result <= 0 then
     exit;
   result := 0;
@@ -707,7 +715,8 @@ begin
   begin
     byte(ev) := 0;
     sock := fTagSocket[i];
-    if (rdp <> nil) and FD_ISSET(sock, rd{%H-}) then
+    if (rdp <> nil) and
+       FD_ISSET(sock, rd{%H-}) then
     begin
       if (IoctlSocket(TSocket(sock), FIONREAD, @pending) = NO_ERROR) and
          ({%H-}pending = 0) then
@@ -716,7 +725,8 @@ begin
       else
         include(ev, pseRead);
     end;
-    if (wrp <> nil) and FD_ISSET(sock, wr{%H-}) then
+    if (wrp <> nil) and
+       FD_ISSET(sock, wr{%H-}) then
       include(ev, pseWrite);
     if byte(ev) <> 0 then
       with {%H-}tmp[result] do
@@ -937,7 +947,7 @@ type
   THandshakeBuf = record
   {$else}
   THandshakeBuf = object
-  {$endif}
+  {$endif USERECORDWITHMETHODS}
   public
     buf: array[0..2] of TSecBuffer;
     input, output: TSecBufferDesc;
@@ -987,11 +997,12 @@ begin
   DataPos := 0;
   DataCount := 0;
   buf.Init;
-  res := InitializeSecurityContext(@Cred, nil, pointer(aServerAddress), ISC_REQ_FLAGS, 0,
-    SECURITY_NATIVE_DREP, nil, 0, @Ctxt, @buf.output, @f, nil);
+  res := InitializeSecurityContext(@Cred, nil, pointer(aServerAddress),
+    ISC_REQ_FLAGS, 0, SECURITY_NATIVE_DREP, nil, 0, @Ctxt, @buf.output, @f, nil);
   if res <> SEC_I_CONTINUE_NEEDED then
     ESChannelRaiseLastError;
-  CheckSocket(mormot.net.sock.Send(aSocket.Socket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
+  CheckSocket(mormot.net.sock.Send(
+    aSocket.Socket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
   CheckSEC_E_OK(FreeContextBuffer(buf.buf[2].pvBuffer));
   HandshakeLoop(aSocket.Socket);
   CheckSEC_E_OK(QueryContextAttributes(@Ctxt, SECPKG_ATTR_STREAM_SIZES, @Sizes));
@@ -1250,19 +1261,29 @@ var
 procedure InitializeUnit;
 begin
   WSAStartup($0202, WsaDataOnce);
-  SocketAPIVersion := RawUtf8(Format('%s.%d', [WsaDataOnce.szDescription,WsaDataOnce.wVersion]));
+  SocketAPIVersion := RawUtf8(Format(
+    '%s.%d', [WsaDataOnce.szDescription, WsaDataOnce.wVersion]));
   LibSecurHandle := LoadLibrary(DLLSecur32);
   if LibSecurHandle <> 0 then
   begin
-    AcquireCredentialsHandle := GetProcAddress(LibSecurHandle, 'AcquireCredentialsHandleA');
-    FreeCredentialsHandle := GetProcAddress(LibSecurHandle, 'FreeCredentialsHandle');
-    InitializeSecurityContext := GetProcAddress(LibSecurHandle, 'InitializeSecurityContextA');
-    DeleteSecurityContext := GetProcAddress(LibSecurHandle, 'DeleteSecurityContext');
-    ApplyControlToken := GetProcAddress(LibSecurHandle, 'ApplyControlToken');
-    QueryContextAttributes := GetProcAddress(LibSecurHandle, 'QueryContextAttributesA');
-    FreeContextBuffer := GetProcAddress(LibSecurHandle, 'FreeContextBuffer');
-    EncryptMessage := GetProcAddress(LibSecurHandle, 'EncryptMessage');
-    DecryptMessage := GetProcAddress(LibSecurHandle, 'DecryptMessage');
+    AcquireCredentialsHandle := GetProcAddress(LibSecurHandle,
+      'AcquireCredentialsHandleA');
+    FreeCredentialsHandle := GetProcAddress(LibSecurHandle,
+      'FreeCredentialsHandle');
+    InitializeSecurityContext := GetProcAddress(LibSecurHandle,
+      'InitializeSecurityContextA');
+    DeleteSecurityContext := GetProcAddress(LibSecurHandle,
+      'DeleteSecurityContext');
+    ApplyControlToken := GetProcAddress(LibSecurHandle,
+      'ApplyControlToken');
+    QueryContextAttributes := GetProcAddress(LibSecurHandle,
+      'QueryContextAttributesA');
+    FreeContextBuffer := GetProcAddress(LibSecurHandle,
+      'FreeContextBuffer');
+    EncryptMessage := GetProcAddress(LibSecurHandle,
+      'EncryptMessage');
+    DecryptMessage := GetProcAddress(LibSecurHandle,
+     'DecryptMessage');
     if Assigned(AcquireCredentialsHandle) and
        Assigned(InitializeSecurityContext) and
        Assigned(QueryContextAttributes) and

@@ -1326,10 +1326,10 @@ type
     constructor CreateDefault(dummy: integer = 0);
     /// finalize the instance
     destructor Destroy; override;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     /// read time zone information from the Windows registry
     procedure LoadFromRegistry;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     /// read time zone information from a compressed file
     // - if no file name is supplied, a ExecutableName.tz file would be used
     procedure LoadFromFile(const FileName: TFileName = '');
@@ -1392,16 +1392,16 @@ implementation
 procedure TFindFiles.FromSearchRec(const Directory: TFileName; const F: TSearchRec);
 begin
   Name := Directory + F.Name;
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   {$ifdef HASINLINE} // FPC or Delphi 2006+
   Size := F.Size;
   {$else} // F.Size was limited to 32-bit on older Delphi
   PInt64Rec(@Size)^.Lo := F.FindData.nFileSizeLow;
   PInt64Rec(@Size)^.Hi := F.FindData.nFileSizeHigh;
-  {$endif}
+  {$endif HASINLINE}
   {$else}
   Size := F.Size;
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
   Attr := F.Attr;
   Timestamp := SearchRecToDateTime(F);
 end;
@@ -1463,7 +1463,7 @@ begin
   begin
     if SortByName then
       QuickSortRawUtf8(masks, length(masks), nil,
-        {$ifdef MSWINDOWS} @StrIComp {$else} @StrComp {$endif});
+        {$ifdef OSWINDOWS} @StrIComp {$else} @StrComp {$endif});
     for m := 0 to length(masks) - 1 do
     begin
       // masks[] recursion
@@ -5427,13 +5427,13 @@ end;
 constructor TSynTimeZone.CreateDefault;
 begin
   Create;
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   LoadFromRegistry;
   {$else}
   LoadFromFile;
   if fZones.Count = 0 then
     LoadFromResource; // if no .tz file is available, try if bound to executable
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 end;
 
 destructor TSynTimeZone.Destroy;
@@ -5505,7 +5505,7 @@ begin
     LoadFromBuffer(buf);
 end;
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 
 procedure TSynTimeZone.LoadFromRegistry;
 const
@@ -5561,7 +5561,7 @@ begin
   FreeAndNil(fDisplays);
 end;
 
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 function TSynTimeZone.GetDisplay(const TzId: TTimeZoneID): RawUtf8;
 var

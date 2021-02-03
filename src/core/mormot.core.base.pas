@@ -8432,10 +8432,10 @@ begin
   e.i2 := f.i1 xor Random(maxInt);
   e.i3 := f.i0 xor Random(maxInt);
   crcblock(entropy, @e.b);
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   CreateGUID(PGuid(@e)^); // FPC uses Random() on non-Windows -> not needed
   crcblock(entropy, @e.b);
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
   // persist the current entropy state for the next call
   _EntropyGlobal.c := entropy^;
   // final cross-wired xxHash32() round not to rely on crc32c hash only
@@ -9286,32 +9286,32 @@ nextCW:
         h := PWord(src)^;
         inc(src, 2);
         t := (h and 15) + 2;
-        h := h shr 4;
         if t = 2 then
         begin
           t := ord(src^) + (16 + 2);
           inc(src);
         end;
+        h := h shr 4;
         {$ifdef CPU64}
         o := offset[h];
-        if PtrUInt(dst - o) < t then
+        if PtrUInt(dst - o) < t then // overlap -> move byte-by-byte
           MoveSmall(o, dst, t)
         else if t <= 8 then
-          PInt64(dst)^ := PInt64(o)^
+          PInt64(dst)^ := PInt64(o)^ // much faster in practice
         else
-          MoveFast(o^, dst^, t);
+          MoveFast(o^, dst^, t);     // safe since src_endmatch := src_end-(6+5)
         {$else}
         if PtrUInt(dst - offset[h]) < t then
           MoveSmall(offset[h], dst, t)
-        else if t > 8 then // safe since src_endmatch := src_end-(6+5)
+        else if t > 8 then
           MoveFast(offset[h]^, dst^, t)
         else
-          PInt64(dst)^ := PInt64(offset[h])^; // much faster in practice
+          PInt64(dst)^ := PInt64(offset[h])^;
         {$endif CPU64}
         if src >= src_end then
           break;
         if last_hashed < dst then
-          repeat
+          repeat // decompressed bytes should update the hash table
             inc(last_hashed);
             v := PCardinal(last_hashed)^;
             offset[((v shr 12) xor v) and 4095] := last_hashed;
@@ -10236,7 +10236,7 @@ end;
 
 {$ifdef HASINLINE}
 
-{$if defined(BSD) and defined(ARM3264)}
+{$if defined(OSBSDDARWIN) and defined(ARM3264)}
 
 procedure VarClear(var v: variant); // Alfred reported issues with VTYPE_STATIC
 begin

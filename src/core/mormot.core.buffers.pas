@@ -7008,9 +7008,7 @@ begin
         $ffd8ff: // JPEG_CONTENT_TYPE = FF D8 FF DB/E0/E1/E2/E3/E8
           result := true;
       else
-        case PCardinalArray(Content)^[1] of // 4 byte offset
-          1{TAlgoSynLZ.AlgoID}: // crc32 01 00 00 00 crc32 = Compress() header
-            result := PCardinalArray(Content)^[0] <> PCardinalArray(Content)^[2];
+        case PCardinalArray(Content)^[1] of // ignore variable 4 byte offset
           $70797466, // mp4,mov = 66 74 79 70 [33 67 70 35/4D 53 4E 56..]
           $766f6f6d: // mov = 6D 6F 6F 76
             result := true;

@@ -19,10 +19,10 @@ program ecc;
 
 {$I ..\..\mormot.defines.inc}
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
   {$apptype console}
   {$R ..\..\mormot.win.default.manifest.res}
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 uses
   {$I ..\..\mormot.uses.inc}

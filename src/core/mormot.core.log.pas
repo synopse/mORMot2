@@ -507,9 +507,9 @@ type
     fWithInstancePointer: boolean;
     fNoFile: boolean;
     fAutoFlushTimeOut: cardinal;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     fNoEnvironmentVariable: boolean;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     {$ifndef NOEXCEPTIONINTERCEPT}
     fHandleExceptions: boolean;
     fOnBeforeException: TOnBeforeException;
@@ -749,12 +749,12 @@ type
     // period of time (e.g. every 10 seconds)
     property AutoFlushTimeOut: cardinal
       read fAutoFlushTimeOut write fAutoFlushTimeOut;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     /// force no environment variables to be written to the log file
     // - may be usefull if they contain some sensitive information
     property NoEnvironmentVariable: boolean
       read fNoEnvironmentVariable write fNoEnvironmentVariable;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     /// force no log to be written to any file
     // - may be usefull in conjunction e.g. with EchoToConsole or any other
     // third-party logging component
@@ -893,9 +893,9 @@ type
     fInternalFlags: set of (logHeaderWritten, logInitDone);
     fDisableRemoteLog: boolean;
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-      iid: TGUID; out obj): TIntQry; {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
-    function _AddRef: TIntCnt;       {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
-    function _Release: TIntCnt;      {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
+      iid: TGUID; out obj): TIntQry; {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
+    function _AddRef: TIntCnt;       {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
+    function _Release: TIntCnt;      {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
     class function FamilyCreate: TSynLogFamily;
     procedure CreateLogWriter; virtual;
     procedure LogInternalFmt(Level: TSynLogInfo; const TextFmt: RawUtf8;
@@ -2862,7 +2862,7 @@ begin
   if aExeName = '' then
   begin
     // guess the debug information source for the current process
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     ExeFile := GetModuleName(hInstance);
     {$ifdef FPC}
     fDebugFile := ExeFile;
@@ -2874,7 +2874,7 @@ begin
     {$else}
     ExeFile := ExeVersion.InstanceFileName;
     fDebugFile := ExeFile; // exeinfo's ReadDebugLink() would redirect to .dbg
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
   end
   else
     // supplied e.g. 'exec.map', 'exec.dbg' or even plain 'exec'/'exec.exe'
@@ -3490,12 +3490,12 @@ end;
 procedure TSynLogFamily.SetEchoToConsoleUseJournal(aValue: boolean);
 begin
   if self <> nil then
-    {$ifdef LINUXNOTBSD}
+    {$ifdef OSLINUX}
     if aValue and
        sd.IsAvailable then
       fEchoToConsoleUseJournal := true
     else
-    {$endif LINUXNOTBSD}
+    {$endif OSLINUX}
       fEchoToConsoleUseJournal := false;
 end;
 
@@ -4120,13 +4120,13 @@ end;
 
 {$ifndef FPC}
    // FPC has very slow debug info retrieval -> not for Enter/Leave
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
     {$ifdef CPU64}
       {$define USERTLCAPTURESTACKBACKTRACE}
     {$else}
       {$define USEASMX86STACKBACKTRACE}
     {$endif CPU64}
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 {$endif FPC}
 
 function TSynLog._Release: TIntCnt;
@@ -4371,16 +4371,16 @@ end;
 
 function TSynLog.ConsoleEcho(Sender: TBaseWriter; Level: TSynLogInfo;
   const Text: RawUtf8): boolean;
-{$ifdef LINUXNOTBSD}
+{$ifdef OSLINUX}
 var
   tmp, mtmp: RawUtf8;
   jvec: Array[0..1] of TioVec;
-{$endif LINUXNOTBSD}
+{$endif OSLINUX}
 begin
   result := true;
   if not (Level in fFamily.fEchoToConsole) then
     exit;
-  {$ifdef LINUXNOTBSD}
+  {$ifdef OSLINUX}
   if Family.EchoToConsoleUseJournal then
   begin
     if length(Text) < 18 then
@@ -4397,7 +4397,7 @@ begin
     sd.journal_sendv(jvec[0], 2);
     exit;
   end;
-  {$endif LINUXNOTBSD}
+  {$endif OSLINUX}
   ConsoleWrite(Text, LOG_CONSOLE_COLORS[Level]);
   TextColor(ccLightGray);
 end;
@@ -4638,7 +4638,7 @@ begin
   begin
     FormatUtf8(Format, Args, Msg);
     Add.LogInternalText(Level, Msg, nil, maxInt);
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     if IsDebuggerPresent then
       {$ifdef CPU64DELPHI}
       DebugBreak;
@@ -4647,9 +4647,9 @@ begin
         int  3
       end;
       {$endif CPU64DELPHI}
-    {$else not MSWINDOWS}
+    {$else not OSWINDOWS}
     ConsoleWrite('%  ', [Msg], LOG_CONSOLE_COLORS[Level], {noLF=}true);
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
   end;
 end;
 
@@ -4671,11 +4671,11 @@ procedure TSynLog.LogFileHeader;
 var
   WithinEvents: boolean;
   i: PtrInt;
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   Env: PWideChar;
   P: PWideChar;
   L: integer;
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 
   procedure NewLine;
   begin
@@ -4714,7 +4714,7 @@ begin
       for i := 1 to length(CpuInfoText) do
         if not (ord(CpuInfoText[i]) in [1..32, ord(':')]) then
           Add(CpuInfoText[i]);
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     with SystemInfo, OSVersionInfo do
     begin
       Add('*');
@@ -4723,13 +4723,13 @@ begin
       Add(wProcessorLevel);
       Add('-');
       Add(wProcessorRevision);
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     {$ifdef CPUINTEL}
       Add(':');
       AddBinToHex(@CpuFeatures, SizeOf(CpuFeatures));
     {$endif}
       AddShorter(' OS=');
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
       Add(ord(OSVersion));
       Add('.');
       Add(wServicePackMajor);
@@ -4747,21 +4747,21 @@ begin
     Add('-');
     AddTrimSpaces(pointer(SystemInfo.uts.release));
     AddReplace(pointer(SystemInfo.uts.version), ' ', '-');
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     if OSVersionInfoEx <> '' then
     begin
       Add('/');
       AddTrimSpaces(OSVersionInfoEx);
     end;
     AddShorter(' Wow64=');
-    Add({$ifdef MSWINDOWS} integer(IsWow64) {$else} 0 {$endif});
+    Add({$ifdef OSWINDOWS} integer(IsWow64) {$else} 0 {$endif});
     AddShort(' Freq=1000000'); // we use QueryPerformanceMicroSeconds()
     if IsLibrary then
     begin
       AddShort(' Instance=');
       AddNoJsonEscapeString(InstanceFileName);
     end;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     if not fFamily.fNoEnvironmentVariable then
     begin
       NewLine;
@@ -4782,7 +4782,7 @@ begin
       FreeEnvironmentStringsW(Env);
       CancelLastChar(#9);
     end;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     NewLine;
     AddClassName(self.ClassType);
     AddShort(' ' + SYNOPSE_FRAMEWORK_FULLVERSION + ' ');
@@ -5097,7 +5097,7 @@ begin
   if (fFileRotationSize = 0) and
      (fFileRotationNextHour = 0) then
     fFileName := fFileName + ' ' + Ansi7ToString(NowToString(false));
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   if IsLibrary and
      (fFamily.fCustomFileName = '') then
     fFileName := fFileName + ' ' + ExtractFileName(GetModuleName(HInstance));
@@ -5360,7 +5360,7 @@ var
 begin
   if fFamily.StackTraceLevel <= 0 then
     exit;
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   if fFamily.StackTraceUse = stOnlyManual then
     AddStackManual(stack)
   else
@@ -5380,7 +5380,7 @@ begin
       // just ignore any access violation here
     end;
   end;
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 end;
 
 {$endif FPC}
@@ -5665,7 +5665,7 @@ begin
   n[0] := #0;
   for i := 1 to length(name) do
     if name[i] in ['a'..'z', 'A'..'Z', '0'..'9', '.'
-      {$ifdef MSWINDOWS}, ' ', '-'{$endif}] then
+      {$ifdef OSWINDOWS}, ' ', '-'{$endif}] then
     begin
       inc(n[0]);
       n[ord(n[0])] := name[i];
@@ -5674,7 +5674,7 @@ begin
     end;
   if CurrentThreadName = n then
     exit; // already set as such
-  RawSetThreadName(ThreadID, {$ifdef MSWINDOWS} name {$else} n {$endif});
+  RawSetThreadName(ThreadID, {$ifdef OSWINDOWS} name {$else} n {$endif});
   EnterCriticalSection(GlobalThreadLock);
   try
     CurrentThreadName := ''; // for LogThreadName(name) to appear once

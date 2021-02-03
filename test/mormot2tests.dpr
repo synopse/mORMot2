@@ -5,10 +5,10 @@ program mormot2tests;
 
 {$I ..\src\mormot.defines.inc}
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
   {$apptype console}
   {$R ..\src\mormot.win.default.manifest.res}
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 uses
   {$I ..\src\mormot.uses.inc}

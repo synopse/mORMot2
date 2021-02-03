@@ -32,12 +32,12 @@ const
 procedure MoveFast(const src; var dst; cnt: PtrInt);
 {$ifdef FPC}nostackframe; assembler;
 asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
-        {$ifdef MSWINDOWS}
+        {$ifdef WIN64ABI}
         mov     rax, r8
         {$else}
         mov     rax, rdx // rax=r8=cnt
         mov     r8, rdx
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         lea     r10, [rip+@jmptab]
         cmp     src, dst
         je      @equal
@@ -85,7 +85,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         cmp     rax, 2048
         jb      @nofwe
         cld
-@repmov:{$ifdef MSWINDOWS}
+@repmov:{$ifdef WIN64ABI}
         push    rsi
         push    rdi
         mov     rsi, src
@@ -100,7 +100,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         mov     rdi, rax
         mov     rcx, r8
         rep movsb
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         ret
 @nofwe: {$endif WITH_ERMS}
         mov     r9, dst
@@ -263,12 +263,12 @@ procedure FillCharFast(var dst; cnt: PtrInt; value: byte);
 asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         mov     r9, $0101010101010101
         lea     r10, [rip+@jmptab]
-        {$ifdef MSWINDOWS}
+        {$ifdef WIN64ABI}
         movzx   eax, r8b
         {$else}
         movzx   eax, dl
         mov     rdx, rsi // rdx=cnt
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         imul    rax, r9  // broadcast value into all bytes of rax (in 1 cycle)
         cmp     cnt, 32
         ja      @abv32  // >32 or <0
@@ -339,7 +339,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         cmp     rdx, CPUCACHEX64  // non-temporal moves are still faster
         jae     @noerms
         cld
-        {$ifdef MSWINDOWS}
+        {$ifdef WIN64ABI}
         mov     r8, rdi
         mov     rdi, dst
         mov     rcx, cnt
@@ -348,7 +348,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         {$else}
         mov     rcx, cnt
         rep stosb
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         ret
 @noerms:test    r9b, 1 shl cpuAVX
         {$else}
@@ -385,9 +385,9 @@ end;
 
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        {$ifndef MSWINDOWS}
+        {$ifndef WIN64ABI}
         mov     r8d, len
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         mov     eax, crc
         xor     ecx, ecx
         test    buf, buf // buf=rdx/rsi len=r8
@@ -464,10 +464,10 @@ end;
 
 function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        {$ifndef MSWINDOWS}
+        {$ifndef WIN64ABI}
         mov     rcx, rdi
         mov     rdx, rsi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         mov     r10, rdx
         sar     r10, 63         // r10=0 if val>=0 or -1 if val<0
         xor     rdx, r10
@@ -510,10 +510,10 @@ end;
 
 function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        {$ifndef MSWINDOWS}
+        {$ifndef WIN64ABI}
         mov     rcx, rdi
         mov     rdx, rsi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         cmp     rdx, 10
         jb      @3           // direct process of common val<10
         mov     rax, rdx
@@ -599,11 +599,11 @@ end;
 // brute force O(n) indexes fix after deletion (much faster than full ReHash)
 procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-{$ifdef Linux}
+{$ifdef SYSVABI}
         mov     r8, rdx
         mov     rcx, rdi
         mov     rdx, rsi
-{$endif Linux}
+{$endif SYSVABI}
         xor     eax, eax    // reset eax high bits for setg al below
         movq    xmm0, rdx   // xmm0 = 128-bit of quad deleted
         pshufd  xmm0, xmm0, 0
@@ -801,13 +801,13 @@ function Hash32(Data: PCardinalArray; Len: integer): cardinal;
         xor     r9d, r9d
         test    Data, Data
         jz      @z
-        {$ifdef MSWINDOWS}  // rcx/rdi=Data edx/esi=Len
+        {$ifdef WIN64ABI}  // rcx/rdi=Data edx/esi=Len
         mov     r8, rdx
         shr     r8, 4
         {$else}
         mov     edx, esi
         shr     esi, 4
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         jz      @by4
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @by16:  add     eax, dword ptr [Data]
@@ -819,11 +819,11 @@ function Hash32(Data: PCardinalArray; Len: integer): cardinal;
         add     eax, dword ptr [Data+12]
         add     r9d, eax
         add     Data, 16
-        {$ifdef MSWINDOWS}
+        {$ifdef WIN64ABI}
         dec     r8d
         {$else}
         dec     esi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         jnz     @by16
 @by4:   mov     dh, dl
         and     dl, 15
@@ -856,7 +856,7 @@ end;
 
 function xxHash32(crc: cardinal; P: PAnsiChar; len: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe{$endif}
-        {$ifdef LINUX} // crc=rdi P=rsi len=rdx
+        {$ifdef SYSVABI} // crc=rdi P=rsi len=rdx
         mov     r8, rdi
         mov     rcx, rsi
         {$else} // crc=r8 P=rcx len=rdx
@@ -866,7 +866,7 @@ function xxHash32(crc: cardinal; P: PAnsiChar; len: cardinal): cardinal;
         mov     rdx, r10
         push    rsi   // Win64 expects those registers to be preserved
         push    rdi
-        {$endif LINUX}
+        {$endif SYSVABI}
         // P=r8 len=rcx crc=rdx
         push    r12
         push    rbx
@@ -946,10 +946,10 @@ function xxHash32(crc: cardinal; P: PAnsiChar; len: cardinal): cardinal;
         xor     eax, edx
         pop     rbx
         pop     r12
-        {$ifndef LINUX}
+        {$ifndef SYSVABI}
         pop     rdi
         pop     rsi
-        {$endif LINUX}
+        {$endif SYSVABI}
 end;
 
 function GetBitsCountPas(value: PtrInt): PtrInt;
@@ -979,14 +979,14 @@ end;
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // uses built-in 64-bit -> 128-bit multiplication
-        {$ifdef MSWINDOWS}
+        {$ifdef WIN64ABI}
         mov     rax, rcx
         mul     rdx
         {$else}
         mov     r8, rdx
         mov     rax, rdi
         mul     rsi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         mov     qword ptr [r8], rax
         mov     qword ptr [r8+8], rdx
 end;
@@ -1017,7 +1017,7 @@ end;
 function StrLenSSE2(S: pointer): PtrInt;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
-        {$ifdef MSWINDOWS}
+        {$ifdef WIN64ABI}
         mov     rax, rcx             // get pointer to string from rcx
         mov     r8,  rcx             // copy pointer
         test    rcx, rcx
@@ -1025,7 +1025,7 @@ function StrLenSSE2(S: pointer): PtrInt;
         mov     rax, rdi
         mov     ecx, edi
         test    rdi, rdi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         jz      @null                // returns 0 if S=nil
         // rax=s,ecx=32-bit of s
         pxor    xmm0, xmm0           // set to zero
@@ -1051,11 +1051,11 @@ function StrLenSSE2(S: pointer): PtrInt;
         // strings are short, and newer processors have higher priority)
         jz      @L1                  // loop if not found
 @L2:    // Zero-byte found. Compute string length
-        {$ifdef MSWINDOWS}
+        {$ifdef WIN64ABI}
         sub     rax, r8              // subtract start address
         {$else}
         sub     rax, rdi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         add     rax, rdx             // add byte index
 @null:
 end;
@@ -1063,7 +1063,7 @@ end;
 function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         // fast SSE2 version searching for both Chr and #0 over 16 bytes at once
-        {$ifdef MSWINDOWS}
+        {$ifdef WIN64ABI}
         movzx   edx, dl
         mov     rax, rcx             // get pointer to string from rcx
         imul    edx, $01010101
@@ -1073,7 +1073,7 @@ function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char;
         mov     rax, rdi
         mov     ecx, edi
         test    rdi, rdi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         jz      @null                // returns 0 if S=nil
         movd    xmm1, edx
         // rax=Str, ecx=32-bit of Str, xmm1=Chr
@@ -1116,12 +1116,12 @@ end;
 
 function BufferLineLength(Text, TextEnd: PUtf8Char): PtrInt;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        {$ifdef MSWINDOWS} // Win64 ABI to System-V ABI
+        {$ifdef WIN64ABI} // Win64 ABI to System-V ABI
         push    rsi
         push    rdi
         mov     rdi, rcx
         mov     rsi, rdx
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         mov     r8, rsi
         sub     r8, rdi // rdi=Text, rsi=TextEnd, r8=TextLen
         jz      @fail
@@ -1145,10 +1145,10 @@ function BufferLineLength(Text, TextEnd: PUtf8Char): PtrInt;
         sub     rax, rsi
         jae     @fail   // don't exceed TextEnd
         add     rax, r8 // rax = TextFound - TextEnd + (TextEnd - Text) = offset
-        {$ifdef MSWINDOWS}
+        {$ifdef WIN64ABI}
         pop     rdi
         pop     rsi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         ret
 @main:  add     rdi, 16
         sub     rdi, rsi
@@ -1170,27 +1170,27 @@ function BufferLineLength(Text, TextEnd: PUtf8Char): PtrInt;
         add     rdi, 16
         jnc     @by16
 @fail:  mov     rax, r8 // returns TextLen if no CR/LF found
-        {$ifdef MSWINDOWS}
+        {$ifdef WIN64ABI}
         pop     rdi
         pop     rsi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         ret
 @found: bsf     eax, eax
         add     rax, rdi
         jc      @fail
         add     rax, r8
-        {$ifdef MSWINDOWS}
+        {$ifdef WIN64ABI}
         pop     rdi
         pop     rsi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
 end;
 
 function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
 {$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
-        {$ifdef MSWINDOWS}
+        {$ifdef WIN64ABI}
         push    rdi
         mov     rdi, P  // rdi=P
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         xor     r9, r9  // r9=L rax=result
         test    R, R
         jl      @ko
@@ -1200,20 +1200,20 @@ function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
         lea     r10, qword ptr [rax - 1] // branchless loop
         lea     r11, qword ptr [rax + 1]
         movzx   ecx, word ptr [rdi + rax * 2]
-        {$ifdef MSWINDOWS}
+        {$ifdef WIN64ABI}
         cmp     ecx, r8d
         {$else}
         cmp     ecx, edx // 'cmp cx,Value' is silently rejected by Darwin asm
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         je      @ok
         cmovg   R, r10
         cmovl   r9, r11
         cmp     r9, R
         jle     @s
 @ko:    or      rax, -1
-@ok:    {$ifdef MSWINDOWS}
+@ok:    {$ifdef WIN64ABI}
         pop     rdi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
 end;
 
 function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
@@ -1264,11 +1264,11 @@ asm
         popcnt  rax, value
 {$else} // oldest Delphi don't support this opcode
 asm     .noframe
-        {$ifdef MSWINDOWS}
+        {$ifdef WIN64ABI}
         db $f3,$48,$0f,$B8,$c1
         {$else}
         db $f3,$48,$0f,$B8,$c7
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
 {$endif FPC}
 end;
 function crc32cby4sse42(crc, value: cardinal): cardinal;
@@ -1298,13 +1298,13 @@ procedure crcblockssse42(crc128, data128: PBlock128; count: integer);
         test    count, count
         jle     @z
         mov     rax, data128
-        {$ifdef MSWINDOWS}
+        {$ifdef WIN64ABI}
         mov     rdx, rcx
         mov     ecx, r8d
         {$else}
         mov     ecx, edx
         mov     rdx, rdi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         mov     r8d,  dword ptr [rdx] // we can't use qword ptr here
         mov     r9d,  dword ptr [rdx + 4]
         mov     r10d, dword ptr [rdx + 8]
@@ -1372,14 +1372,14 @@ function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var off: TOffsets;
     cache: array[0..4095] of cardinal; // uses 32KB+16KB=48KB on stack
 asm // rcx=src, edx=size, r8=dest
-        {$ifdef MSWINDOWS} // additional registers to preserve
+        {$ifdef WIN64ABI} // additional registers to preserve
         push    rdi
         push    rsi
         {$else} // Linux 64-bit ABI
         mov     r8, rdx
         mov     rdx, rsi
         mov     rcx, rdi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         push    rbx
         push    r12
         push    r13
@@ -1518,23 +1518,23 @@ asm // rcx=src, edx=size, r8=dest
         pop     r13
         pop     r12
         pop     rbx
-        {$ifdef MSWINDOWS} // additional registers to preserve
+        {$ifdef WIN64ABI} // additional registers to preserve
         pop     rsi
         pop     rdi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
 end;
 
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var off: TOffsets;
 asm // rcx=src, edx=size, r8=dest
-        {$ifdef MSWINDOWS} // additional registers to preserve
+        {$ifdef WIN64ABI} // additional registers to preserve
         push    rsi
         push    rdi
         {$else} // Linux 64-bit ABI
         mov     r8, rdx
         mov     rdx, rsi
         mov     rcx, rdi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
         push    rbx
         push    r12
         push    r13
@@ -1651,10 +1651,10 @@ asm // rcx=src, edx=size, r8=dest
         pop     r13
         pop     r12
         pop     rbx
-        {$ifdef MSWINDOWS} // additional registers to preserve
+        {$ifdef WIN64ABI} // additional registers to preserve
         pop     rdi
         pop     rsi
-        {$endif MSWINDOWS}
+        {$endif WIN64ABI}
 end;
 
 function RdRand32: cardinal;

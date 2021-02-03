@@ -34,11 +34,11 @@ uses
 
 
 const
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   HTTP_DEFAULTPORT = '888';
   {$else}
   HTTP_DEFAULTPORT = '8888'; // under Linux, port<1024 needs root user
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 
 
 type
@@ -3207,11 +3207,11 @@ begin
   Test(crc32creference, 'pas');
   Test(crc32cfast, 'fast');
   {$ifdef CPUINTEL}
-  {$ifndef DARWIN}
+  {$ifndef OSDARWIN}
   // Not [yet] working on Darwin
   if cfSSE42 in CpuFeatures then
     Test(crc32csse42, 'sse42');
-  {$endif DARWIN}
+  {$endif OSDARWIN}
   {$ifdef CPUX64}
   if (cfSSE42 in CpuFeatures) and
      (cfAesNi in CpuFeatures) then
@@ -4538,12 +4538,12 @@ begin
       CheckEqual(StringToUtf8(Utf8ToString(U)), U, '1252');
     Up := UpperCaseUnicode(U);
     CheckEqual(Up, UpperCaseUnicode(LowerCaseUnicode(U)), 'upper/lower');
-    {$ifndef MSWINDOWS}
+    {$ifdef OSPOSIX}
     if not Icu.IsAvailable then
       // fallback when only a..z chars are translated
       CheckEqual(UpperCaseReference(LowerCaseUnicode(U)), UpperCaseReference(U), 'UCR')
     else
-    {$endif MSWINDOWS}
+    {$endif OSPOSIX}
     begin
       U2 := UpperCaseReference(U);
       CheckEqual(length(Up), length(U2));
@@ -4633,7 +4633,7 @@ begin
   Check(not IsValidIP4Address(' 12.158.1.01'));
   Check(not IsValidIP4Address('12.158.1.'));
   Check(not IsValidIP4Address('12.158.1'));
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   Check(FindUnicode('  ABCD DEFG', 'ABCD', 4));
   Check(FindUnicode('  ABCD DEFG', 'DEFG', 4));
   Check(FindUnicode('ABCD DEFG ', 'DEFG', 4));
@@ -4657,7 +4657,7 @@ begin
   Check(not FindUnicode('abcd defg ', 'ABC1', 4));
   Check(UpperCaseUnicode('abcdefABCD') = 'ABCDEFABCD');
   Check(LowerCaseUnicode('abcdefABCD') = 'abcdefabcd');
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
   Check(StringReplaceAll('abcabcabc', 'toto', 'toto') = 'abcabcabc');
   Check(StringReplaceAll('abcabcabc', 'toto', 'titi') = 'abcabcabc');
   Check(StringReplaceAll('abcabcabc', 'ab', 'AB') = 'ABcABcABc');
@@ -4903,9 +4903,9 @@ var
   hdl, reload: boolean;
   buf: RawByteString;
   dt: TDateTime;
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   local: TDateTime;
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 
   procedure testBias(year, expected: integer);
   begin
@@ -4979,7 +4979,7 @@ begin
   sleep(200);
   Check(not SameValue(dt, NowUtc),
     'NowUtc should not truncate time to 5 sec resolution');
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   tz := TSynTimeZone.CreateDefault;
   try
     local := tz.UtcToLocal(dt, 'UTC');
@@ -5003,7 +5003,7 @@ begin
   finally
     tz.Free;
   end;
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 end;
 
 {$IFDEF FPC} {$PUSH} {$ENDIF} {$HINTS OFF}
@@ -5495,11 +5495,11 @@ procedure TTestCoreBase._TSynLogFile;
       Check(L.LevelUsed = [sllEnter, sllLeave, sllDebug]);
       Check(L.RunningUser = 'MySelf');
       Check(L.CPU = '2*0-15-1027');
-      {$ifdef MSWINDOWS}
+      {$ifdef OSWINDOWS}
       Check(L.OS = wXP);
       Check(L.ServicePack = 3);
       Check(not L.Wow64);
-      {$endif MSWINDOWS}
+      {$endif OSWINDOWS}
       Check(L.Freq = 0);
       CheckSame(L.StartDateTime, 40640.502882, 1 / SecsPerDay);
       if CheckFailed(L.Count = 3) then

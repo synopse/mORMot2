@@ -10,23 +10,24 @@ uses
   unix,
   unixcp,
   unixtype,
-  {$ifdef BSD}
+  {$ifdef OSBSDDARWIN}
   sysctl,
   {$else}
   linux,
   syscall,
-  {$endif BSD}
+  {$endif OSBSDDARWIN}
   {$ifdef FPCUSEVERSIONINFO} // to be enabled in mormot.defines.inc
     fileinfo,        // FPC 3.0 and up
-    {$ifdef DARWIN}
+    {$ifdef OSDARWIN}
       machoreader,   // MACH-O executables
     {$else}
       elfreader,     // ELF executables
-    {$endif DARWIN}
+    {$endif OSDARWIN}
   {$endif FPCUSEVERSIONINFO}
   errors,
   termio,
-  dl;
+  dl,
+  initc; // we statically link the libc for some raw calls
 
 {$ifdef UNICODE}
   'mORMot assumes no UNICODE on POSIX, i.e. as TFileName = PChar = PUtf8Char'
@@ -105,7 +106,7 @@ const
     'ucnv_fromUChars', 'ucnv_toUChars', 'u_strToUpper', 'u_strToLower',
     'u_strCompare', 'u_strCaseCompare', 'u_getDataDirectory',
     'u_setDataDirectory', 'u_init');
-  {$ifdef ANDROID}
+  {$ifdef OSANDROID}
   // from https://developer.android.com/guide/topics/resources/internationalization
   ICU_VER: array[1..13] of string = (
     '_3_8', '_4_2', '_44', '_46', '_48', '_50', '_51', '_53', '_55',
@@ -113,7 +114,7 @@ const
   SYSDATA: PAnsiChar = '/system/usr/icu';
   {$else}
   SYSDATA: PAnsiChar = '';
-  {$endif ANDROID}
+  {$endif OSANDROID}
 var
   i, j: integer;
   err: SizeInt;
@@ -134,7 +135,8 @@ begin
     end
     else
     begin
-      {$ifdef DARWIN}
+      {$ifdef OSDARWIN}
+      // MachOS has its own ICU set of libraries
       icu := dlopen('libicuuc.dylib', RTLD_LAZY);
       if icu <> nil then
         icui18n := dlopen('libicui18n.dylib', RTLD_LAZY);
@@ -147,7 +149,7 @@ begin
         if icu <> nil then
           icui18n := dlopen('libicui18n.so', RTLD_LAZY);
       end;
-      {$endif DARWIN}
+      {$endif OSDARWIN}
       if icui18n = nil then
       begin
         if not IsProperWideStringManagerInstalled then
@@ -163,7 +165,7 @@ begin
       vers := '_' + Version
     else
     begin
-      {$ifdef ANDROID}
+      {$ifdef OSANDROID}
       for i := high(ICU_VER) downto 1 do
       begin
         if dlsym(icu, pointer(NAMES[0] + ICU_VER[i])) <> nil then
@@ -173,7 +175,7 @@ begin
         end;
       end;
       if vers <> '' then
-      {$endif ANDROID}
+      {$endif OSANDROID}
       if dlsym(icu, 'ucnv_open') = nil then
         for i := 80 downto 44 do
         begin
@@ -445,10 +447,7 @@ begin
   result.Second := epoch - t * SecsPerMin;
 end;
 
-{$ifdef DARWIN} // OSX has no clock_gettime() API
-
-const
-  LIBCSO = 'libc.dylib';
+{$ifdef OSDARWIN} // OSX has no clock_gettime() API
 
 type
   TTimebaseInfoData = record
@@ -457,10 +456,10 @@ type
   end;
 
 function mach_absolute_time: UInt64;
-  cdecl external LIBCSO name 'mach_absolute_time';
+  cdecl external clib name 'mach_absolute_time';
 
 function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): integer;
-  cdecl external LIBCSO name 'mach_timebase_info';
+  cdecl external clib name 'mach_timebase_info';
 
 var
   mach_timeinfo: TTimebaseInfoData;
@@ -529,11 +528,10 @@ end;
 
 {$else}
 
+
+{$ifdef OSBSD}
+
 const
-  LIBCSO = 'libc.so';
-
-{$ifdef BSD}
-
   // see https://github.com/freebsd/freebsd/blob/master/sys/sys/time.h
   CLOCK_REALTIME = 0;
   CLOCK_MONOTONIC = 4;
@@ -541,13 +539,14 @@ const
   CLOCK_MONOTONIC_COARSE = 12;
 
 function clock_gettime(ID: cardinal; r: ptimespec): integer;
-  cdecl external LIBCSO name 'clock_gettime';
+  cdecl external clib name 'clock_gettime';
 
 function clock_getres(ID: cardinal; r: ptimespec): integer;
-  cdecl external LIBCSO name 'clock_getres';
+  cdecl external clib name 'clock_getres';
 
 {$else}
 
+const
   CLOCK_REALTIME = 0;
   CLOCK_MONOTONIC = 1;
   CLOCK_REALTIME_COARSE = 5; // see http://lwn.net/Articles/347811
@@ -563,7 +562,7 @@ function clock_gettime(clk_id : clockid_t; tp: ptimespec): cint;
 function gettimeofday(tp: ptimeval; tzp: ptimezone): cint;
   cdecl; external 'c' name 'gettimeofday';
 
-{$endif BSD}
+{$endif OSBSD}
 
 var
   // contains CLOCK_REALTIME_COARSE since kernel 2.6.32
@@ -622,7 +621,7 @@ begin
   result := PtrUInt(tp.tv_nsec) div MILLION + (tp.tv_sec * THOUSAND);
 end;
 
-{$endif DARWIN}
+{$endif OSDARWIN}
 
 function UnixMSTimeUtcFast: Int64;
 begin
@@ -631,9 +630,9 @@ end;
 
 var
   {%H-}pthread: pointer;
-  {$ifdef LINUXNOTBSD} // see https://stackoverflow.com/a/7989973
+  {$ifdef OSLINUX} // see https://stackoverflow.com/a/7989973
   pthread_setname_np: function(thread: pointer; name: PAnsiChar): integer; cdecl;
-  {$endif LINUXNOTBSD}
+  {$endif OSLINUX}
 
 procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
 var
@@ -665,10 +664,10 @@ begin
   if L = 0 then
     exit;
   trunc[L] := #0;
-  {$ifdef LINUXNOTBSD}
+  {$ifdef OSLINUX}
   if Assigned(pthread_setname_np) then
     pthread_setname_np(pointer(ThreadID), @trunc[0]);
-  {$endif LINUXNOTBSD}
+  {$endif OSLINUX}
 end;
 
 procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUtf8);
@@ -783,11 +782,11 @@ begin
   FileSize := lp.st_size;
   lastreadaccess := lp.st_atime * MSecsPerSec;
   LastWriteAccess := lp.st_mtime * MSecsPerSec;
-  {$ifdef OPENBSD}
+  {$ifdef OSOPENBSD}
   if (lp.st_birthtime <> 0) and
      (lp.st_birthtime < lp.st_ctime) then
     lp.st_ctime := lp.st_birthtime;
-  {$endif OPENBSD}
+  {$endif OSOPENBSD}
   FileCreateDateTime := lp.st_ctime * MSecsPerSec;
   if LastWriteAccess <> 0 then
     if (FileCreateDateTime = 0) or
@@ -965,11 +964,11 @@ end;
 
 function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
 begin
-  {$ifdef LINUXNOTBSD}
+  {$ifdef OSLINUX}
   result := cs.__m_kind <> 0;
   {$else}
   result := not IsZero(@cs, SizeOf(cs));
-  {$endif LINUXNOTBSD}
+  {$endif OSLINUX}
 end;
 
 procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
@@ -977,7 +976,7 @@ begin
   DoneCriticalSection(cs);
 end;
 
-{$ifdef BSD}
+{$ifdef OSBSDDARWIN}
 
 function fpsysctlhwint(hwid: cint): Int64;
 var mib: array[0..1] of cint;
@@ -1005,7 +1004,7 @@ begin
     result := nil;
 end;
 
-{$endif BSD}
+{$endif OSBSDDARWIN}
 
 function GetFileOpenLimit(hard: boolean): integer;
 var
@@ -1041,7 +1040,7 @@ begin
 end;
 
 
-{$ifdef LINUXNOTBSD} { the systemd API is Linux-specific }
+{$ifdef OSLINUX} { the systemd API is Linux-specific }
 
 { TSystemD }
 
@@ -1108,7 +1107,7 @@ begin
   end;
 end;
 
-{$endif LINUXNOTBSD}
+{$endif OSLINUX}
 
 
 // define some raw text functions, to avoid linking mormot.core.text
@@ -1231,10 +1230,10 @@ procedure TextColor(Color: TConsoleColor);
 const
   AnsiTbl: string[8] = '04261537';
 begin
-{$ifdef LINUX}
+{$ifdef OSPOSIX}
   if not stdoutIsTTY then
     exit;
-{$endif LINUX}
+{$endif OSPOSIX}
   if ord(Color) = TextAttr then
     exit;
   TextAttr := ord(Color);
@@ -1440,7 +1439,7 @@ begin
   end;
 end;
 
-{$ifdef BSD}
+{$ifdef OSBSDDARWIN}
 // https://kaashif.co.uk/2015/06/18/how-to-get-a-list-of-processes-on-openbsd-in-c/
 
 function EnumAllProcesses(out Count: cardinal): TCardinalDynArray;
@@ -1528,7 +1527,7 @@ begin
     tryprocexe := false; // no need to try again next time
 end;
 
-{$endif BSD}
+{$endif OSBSDDARWIN}
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 begin
@@ -1579,12 +1578,12 @@ begin
   result := S <> 0;
 end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux }
 
-{$ifdef BSD}
+{$ifdef OSBSDDARWIN}
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 begin
   FillCharFast(info, SizeOf(info), 0);
   info.memtotal := fpsysctlhwint(
-    {$ifdef DARWIN}HW_MEMSIZE{$else}HW_PHYSMEM{$endif});
+    {$ifdef OSDARWIN} HW_MEMSIZE {$else} HW_PHYSMEM {$endif});
   info.memfree := info.memtotal - fpsysctlhwint(HW_USERMEM);
   if info.memtotal <> 0 then
   begin
@@ -1620,7 +1619,7 @@ begin
     info.allocused := GetNextCardinal(P) * SystemInfo.dwPageSize;     // VmRSS
   end;
 end;
-{$endif BSD}
+{$endif OSBSDDARWIN}
 
 function GetDiskInfo(var aDriveFolderOrFile: TFileName;
   out aAvailableBytes, aFreeBytes, aTotalBytes: QWord): boolean;
@@ -1636,11 +1635,11 @@ begin
 end;
 
 const
-  {$ifdef BSD}
+  {$ifdef OSBSDDARWIN}
   POSIXMOUNTPOINTS = '/etc/mtab';
   {$else}
   POSIXMOUNTPOINTS = '/proc/self/mounts';
-  {$endif BSD}
+  {$endif OSBSDDARWIN}
 
 function GetDiskPartitions: TDiskPartitions;
 var
@@ -1674,7 +1673,7 @@ begin
       if GetDiskInfo(fn, av, fr, tot) and
          (tot > 1 shl 20) then
       begin
-//writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',av,' fr=',fr,' tot=',tot);
+  //writeln('fs=',fs,' mnt=',mnt,' typ=',typ, ' av=',av,' fr=',fr,' tot=',tot);
         SetLength(result, n + 1);
         result[n].name := fs;
         result[n].mounted := fn;
@@ -1686,21 +1685,29 @@ begin
   until p = nil;
 end;
 
-{$ifdef BSDORANDROID}
+{$ifdef OSBSDDARWIN}
+  {$define USEMPROTECT}
+{$else}
+  {$ifdef OSANDROID}
+    {$define USEMPROTECT}
+  {$endif OSANDROID}
+{$endif OSBSDDARWIN}
+
+{$ifdef USEMPROTECT}
 function mprotect(Addr: Pointer; Len: size_t; Prot: integer): integer;
-  cdecl; external LIBCSO name 'mprotect';
-{$endif BSDORANDROID}
+  cdecl; external clib name 'mprotect';
+{$endif USEMPROTECT}
 
 function SynMProtect(addr: pointer; size: size_t; prot: integer): integer;
 begin
   result := -1;
   {$ifdef UNIX}
-    {$ifdef BSDORANDROID}
+    {$ifdef USEMPROTECT}
     result := mprotect(addr, size, prot);
     {$else}
     if Do_SysCall(syscall_nr_mprotect, PtrUInt(addr), size, prot) >= 0 then
       result := 0;
-    {$endif BSDORANDROID}
+    {$endif USEMPROTECT}
   {$endif UNIX}
 end;
 
@@ -1993,11 +2000,15 @@ var
   P: PAnsiChar;
   n: PtrInt;
 begin
+  {$ifdef FPC}
   {$if (defined(BSD) or defined(SUNOS)) and defined(FPC_USE_LIBC)}
   pid := FpvFork;
   {$else}
   pid := FpFork;
   {$ifend}
+  {$else}
+  'only FPC is supported yet';
+  {$endif FPC}
   if pid < 0 then
   begin
     // fork failed
@@ -2090,7 +2101,7 @@ begin
     result := RunInternal(a, waitfor, env, envaddexisting)
   else if err * PARSECOMMAND_ERROR <> [] then
     // no system call for clearly invalid command line
-    result := {$ifdef FPCLINUXNOTBSD} -ESysELIBBAD {$else} -80 {$endif}
+    result := -ESysEPERM
   else
   begin
     // execute complex commands via the shell
@@ -2105,9 +2116,9 @@ end;
 
 { ****************** Gather Operating System Information }
 
-function getpagesize: integer; cdecl; external 'c';
+function getpagesize: integer; cdecl; external clib;
 
-{$ifndef BSD}
+{$ifdef OSLINUX}
 
 procedure SetLinuxDistrib(const release: RawUtf8);
 var
@@ -2147,8 +2158,7 @@ begin
   result := gettimeofday(tp, tzp);
 end;
 
-{$endif BSD}
-
+{$endif OSLINUX}
 
 
 procedure InitializeUnit;
@@ -2158,13 +2168,13 @@ var
 var
   modname, beg: PUtf8Char;
   uts: UtsName;
-  {$ifdef BSD}
+  {$ifdef OSBSDDARWIN}
   temp: shortstring;
   {$else}
   cpuinfo: PUtf8Char;
   proccpuinfo, prod, prodver, release, dist: RawUtf8;
   SR: TSearchRec;
-  {$endif BSD}
+  {$endif OSBSDDARWIN}
   c: cardinal;
 begin
   EnumAllProcesses(c);
@@ -2173,7 +2183,7 @@ begin
   modname := nil;
   SystemInfo.dwPageSize := getpagesize; // call libc API
   fpuname(uts);
-  {$ifdef BSD}
+  {$ifdef OSBSDDARWIN}
   SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
   beg := fpsysctlhwstr(HW_MACHINE, temp);
   FastSetString(BiosInfoText, beg, StrLen(beg));
@@ -2181,15 +2191,15 @@ begin
   with uts do
     OSVersionText := sysname + '-' + release + ' ' + version;
   {$else}
-  {$ifndef ANDROID}
+  {$ifndef OSANDROID}
   pthread := dlopen('libpthread.so.0', RTLD_LAZY);
   if pthread <> nil then
   begin
-    {$ifdef LINUXNOTBSD}
+    {$ifdef OSLINUX}
     @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
-    {$endif LINUXNOTBSD}
+    {$endif OSLINUX}
   end;
-  {$endif ANDROID}
+  {$endif OSANDROID}
   prod := TrimU(StringFromFile('/sys/class/dmi/id/product_name', true));
   if prod <> '' then
   begin
@@ -2267,7 +2277,7 @@ begin
       OS_KIND := osRedHat;
   end;
   SystemInfo.release := release;
-  {$endif BSD}
+  {$endif OSBSDDARWIN}
   SystemInfo.uts.release := uts.Release;
   SystemInfo.uts.sysname := uts.Sysname;
   SystemInfo.uts.version := uts.Version;
@@ -2281,9 +2291,9 @@ begin
     OSVersionText := sysname + ' ' + release;
   if SystemInfo.release <> '' then
     OSVersionText := SystemInfo.release + ' - ' + OSVersionText;
-  {$ifdef ANDROID}
+  {$ifdef OSANDROID}
   OSVersionText := 'Android (' + OSVersionText + ')';
-  {$endif ANDROID}
+  {$endif OSANDROID}
   if (SystemInfo.dwNumberOfProcessors > 0) and
      (modname <> nil) then
   begin
@@ -2304,22 +2314,22 @@ begin
   {$ifdef ISFPC27}
   GetACP := GetSystemCodePage;
   {$endif ISFPC27}
-  {$ifdef DARWIN}
+  {$ifdef OSDARWIN}
   mach_timebase_info(mach_timeinfo);
   mach_timecoeff := mach_timeinfo.Numer / mach_timeinfo.Denom;
   mach_timenanosecond := (mach_timeinfo.Numer = 1) and
                          (mach_timeinfo.Denom = 1);
   {$else}
-  {$ifdef LINUX}
+  {$ifdef OSPOSIX}
   // try Linux kernel 2.6.32+ or FreeBSD 8.1+ fastest clocks
   if clock_gettime(CLOCK_REALTIME_COARSE, @tp) = 0 then
     CLOCK_REALTIME_FAST := CLOCK_REALTIME_COARSE;
   if clock_gettime(CLOCK_MONOTONIC_COARSE, @tp) = 0 then
     CLOCK_MONOTONIC_FAST := CLOCK_MONOTONIC_COARSE;
-  {$ifdef LINUXNOTBSD}
+  {$ifdef OSLINUX}
   if clock_gettime(CLOCK_MONOTONIC_RAW, @tp) = 0 then
     CLOCK_MONOTONIC_PRECISE := CLOCK_MONOTONIC_RAW;
-  {$endif LINUXNOTBSD}
+  {$endif OSLINUX}
   if (clock_gettime(CLOCK_REALTIME_FAST, @tp) <> 0) or // paranoid check
      (clock_gettime(CLOCK_MONOTONIC_FAST, @tp) <> 0) or
      (clock_gettime(CLOCK_MONOTONIC_PRECISE, @tp) <> 0) then
@@ -2328,7 +2338,7 @@ begin
       [PAnsiChar(@uts.release), fpgeterrno]);
   // redirect some syscall FPC RTL functions to faster vDSO libc variant
   {$ifdef CPUX64}
-  {$ifdef LINUXNOTBSD}
+  {$ifdef OSLINUX}
   {$ifndef NOPATCHRTL}
   // will avoid syscall e.g. for events timeout in cthreads.pp
   RedirectCode(@Linux.clock_gettime, @clock_gettime_c);
@@ -2336,10 +2346,10 @@ begin
   RedirectCode(@fpgettimeofday, @gettimeofday_c);
   {$endif FPC_USE_LIBC}
   {$endif NOPATCHRTL}
-  {$endif LINUXNOTBSD}
+  {$endif OSLINUX}
   {$endif CPUX64}
-  {$endif LINUX}
-  {$endif DARWIN}
+  {$endif OSPOSIX}
+  {$endif OSDARWIN}
 end;
 
 procedure FinalizeSpecificUnit;
@@ -2347,9 +2357,9 @@ begin
   if pthread <> nil then
     dlclose(pthread);
   icu.Done;
-  {$ifdef LINUXNOTBSD} { the systemd API is Linux-specific }
+  {$ifdef OSLINUX} // systemd API is Linux-specific
   sd.Done;
-  {$endif LINUXNOTBSD}
+  {$endif OSLINUX}
 end;
 
 

@@ -48,11 +48,11 @@ const
   cAnyPort = '0';
   cLocalhost32 = $0100007f;
 
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   SOCKADDR_SIZE = 28;
   {$else}
-  SOCKADDR_SIZE = 110;
-  {$endif MSWINDOWS}
+  SOCKADDR_SIZE = 110; // able to store UNIX domain socket name
+  {$endif OSWINDOWS}
 
 var
   /// global variable containing '127.0.0.1'
@@ -108,6 +108,11 @@ type
     nfIP6,
     nfUNIX);
 
+const
+  /// the socket protocol layers over the IP protocol
+  nlIP = [nlTCP, nlUDP];
+
+type
   /// internal mapping of an address, in any supported socket layer
   TNetAddr = object
   private
@@ -121,11 +126,14 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     procedure IPShort(out result: shortstring; withport: boolean = false); overload;
     function Port: cardinal;
+    function SetPort(p: cardinal): TNetResult;
     function Size: integer;
   end;
 
   /// pointer to a socket address mapping
   PNetAddr = ^TNetAddr;
+
+  TNetAddrDynArray = array of TNetAddr;
 
 type
   /// end-user code should use this TNetSocket type to hold a socket reference
@@ -160,6 +168,20 @@ type
   end;
 
 
+  /// used by NewSocket() to cache the host names via NewSocketAddressCache global
+  // - defined in this unit, but implemented in mormot.net.client.pas
+  INewSocketAddressCache = interface
+    /// method called by NewSocket() to resolve its address
+    function Search(const Host: RawUtf8; out NetAddr: TNetAddr): boolean;
+    /// once resolved, NewSocket() will call this method to cache the TNetAddr
+    procedure Add(const Host: RawUtf8; const NetAddr: TNetAddr);
+    /// called by NewSocket() if connection failed, and force DNS resolution
+    procedure Flush(const Host: RawUtf8);
+    /// you can call this method to change the default timeout of 10 minutes
+    procedure SetTimeOut(aSeconds: integer);
+  end;
+
+
 /// create a new Socket connected or bound to a given ip:port
 function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
   dobind: boolean; connecttimeout, sendtimeout, recvtimeout, retry: integer;
@@ -169,6 +191,11 @@ function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
 var
   /// contains the raw Socket API version, as returned by the Operating System
   SocketApiVersion: RawUtf8;
+
+  /// used by NewSocket() to cache the host names
+  // - implemented by mormot.net.client unit using a TSynDictionary
+  // - you may call its SetTimeOut or Flush methods to tune the caching
+  NewSocketAddressCache: INewSocketAddressCache;
 
   /// Queue length for completely established sockets waiting to be accepted,
   // a backlog parameter for listen() function. If queue overflows client count,
@@ -728,13 +755,13 @@ implementation
 { includes are below inserted just after 'implementation' keyword to allow
   their own private 'uses' clause }
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
   {$I mormot.net.sock.windows.inc}
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
-{$ifdef LINUX}
+{$ifdef OSPOSIX}
   {$I mormot.net.sock.posix.inc}
-{$endif LINUX}
+{$endif OSPOSIX}
 
 const
   // we don't use RTTI to avoid linking mormot.core.rtti.pas
@@ -759,10 +786,10 @@ begin
     Error^ := err;
   if err = NO_ERROR then
     result := nrOK
-  else if {$ifdef MSWINDOWS}
+  else if {$ifdef OSWINDOWS}
           (err <> WSAETIMEDOUT) and
           (err <> WSAEWOULDBLOCK) and
-          {$endif MSWINDOWS}
+          {$endif OSWINDOWS}
           (err <> WSATRY_AGAIN) and
           (err <> WSAEINTR) and
           (err <> AnotherNonFatal) then
@@ -859,10 +886,10 @@ begin
       result := nfIP4;
     AF_INET6:
       result := nfIP6;
-    {$ifndef MSWINDOWS}
+    {$ifdef OSPOSIX}
     AF_UNIX:
       result := nfUNIX;
-    {$endif}
+    {$endif OSPOSIX}
     else
       result := nfUnknown;
   end;
@@ -927,21 +954,34 @@ begin
           end;
         end;
       end;
-    {$ifndef MSWINDOWS}
+    {$ifdef OSPOSIX}
     AF_UNIX:
       SetString(result, PAnsiChar(@psockaddr_un(@Addr)^.sun_path),
         mormot.core.base.StrLen(@psockaddr_un(@Addr)^.sun_path));
-    {$endif MSWINDOWS}
+    {$endif OSPOSIX}
   end;
 end;
 
-function TNetAddr.port: cardinal;
+function TNetAddr.Port: cardinal;
 begin
   with PSockAddr(@Addr)^ do
     if sa_family in [AF_INET, AF_INET6] then
       result := swap(sin_port)
     else
       result := 0;
+end;
+
+function TNetAddr.SetPort(p: cardinal): TNetResult;
+begin
+  with PSockAddr(@Addr)^ do
+    if (sa_family in [AF_INET, AF_INET6]) and
+       (p <= 65535) then
+    begin
+      sin_port := swap(word(p)); // word() is mandatory
+      result := nrOk;
+    end
+    else
+      result := nrNotFound;
 end;
 
 function TNetAddr.Size: integer;
@@ -959,21 +999,43 @@ end;
 
 { ******** TNetSocket Cross-Platform Wrapper }
 
-function NewSocket(const address, port: RawUtf8; layer: TNetLayer; dobind: boolean;
-  connecttimeout, sendtimeout, recvtimeout, retry: integer;
+function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
+  dobind: boolean; connecttimeout, sendtimeout, recvtimeout, retry: integer;
   out netsocket: TNetSocket; netaddr: PNetAddr): TNetResult;
 var
   addr: TNetAddr;
   sock: TSocket;
+  fromcache, tobecached: boolean;
+  p: cardinal;
 begin
   netsocket := nil;
-  result := addr.SetFrom(address, port, layer);
+  fromcache := false;
+  tobecached := false;
+  if (layer in nlIP) and
+     (not dobind) and
+     Assigned(NewSocketAddressCache) and
+     ToCardinal(port, p, 1) then
+    if NewSocketAddressCache.Search(address, addr) then
+    begin
+      fromcache := true;
+      result := addr.SetPort(p);
+    end
+    else
+    begin
+      tobecached := true;
+      result := addr.SetFrom(address, port, layer);
+    end
+  else
+    result := addr.SetFrom(address, port, layer);
   if result <> nrOK then
     exit;
   sock := socket(PSockAddr(@addr)^.sa_family, _ST[layer], _IP[layer]);
   if sock = -1 then
   begin
     result := NetLastError(WSAEADDRNOTAVAIL);
+    if fromcache then
+      // force call the DNS resolver again, perhaps load-balacing is needed
+      NewSocketAddressCache.Flush(address);
     exit;
   end;
   repeat
@@ -1008,9 +1070,16 @@ begin
     SleepHiRes(10);
   until false;
   if result <> nrOK then
-    closesocket(sock)
+  begin
+    closesocket(sock);
+    if fromcache then
+      NewSocketAddressCache.Flush(address);
+  end
   else
   begin
+    if tobecached then
+      // update cache once we are sure the host actually exists
+      NewSocketAddressCache.Add(address, addr);
     netsocket := TNetSocket(sock);
     netsocket.SetupConnection(layer, sendtimeout, recvtimeout);
     if netaddr <> nil then
@@ -1182,10 +1251,10 @@ begin
     result := nrNoSocket
   else
   begin
-    {$ifdef LINUXNOTBSD}
+    {$ifdef OSLINUX}
     // on Linux close() is enough (e.g. nginx doesn't call shutdown)
     if rdwr then
-    {$endif LINUXNOTBSD}
+    {$endif OSLINUX}
       shutdown(TSocket(@self), SHUT_[rdwr]);
     result := Close;
   end;
@@ -1234,9 +1303,9 @@ begin
     fPollClass := PollSocketClass
   else
     fPollClass := aPollClass;
-  {$ifndef MSWINDOWS}
+  {$ifdef OSPOSIX}
   SetFileOpenLimit(GetFileOpenLimit(true)); // set soft limit to hard value
-  {$endif MSWINDOWS}
+  {$endif OSPOSIX}
 end;
 
 destructor TPollSockets.Destroy;
@@ -1520,7 +1589,7 @@ begin
   Create(aTimeOut);
   if aAddress = '' then
   begin
-    {$ifdef LINUXNOTBSD} // try systemd activation
+    {$ifdef OSLINUX} // try systemd activation
     if not sd.IsAvailable then
       raise ENetSock.Create('Bind('''') but Systemd is not available');
     if sd.listen_fds(0) > 1 then
@@ -1529,7 +1598,7 @@ begin
     aSock := SD_LISTEN_FDS_START + 0;
     {$else}
     raise ENetSock.Create('Bind(''''), i.e. Systemd activation, is not allowed on this platform');
-    {$endif LINUXNOTBSD}
+    {$endif OSLINUX}
   end
   else
   begin
@@ -1539,14 +1608,14 @@ begin
       s := '0.0.0.0';
       p := aAddress;
     end;
-    {$ifndef MSWINDOWS}
+    {$ifdef OSPOSIX}
     if s = 'unix' then
     begin
       aLayer := nlUNIX;
       s := p;
       p := '';
     end;
-    {$endif MSWINDOWS}
+    {$endif OSPOSIX}
   end;
   // next line will raise exception on error
   OpenBind(s{%H-}, p{%H-}, {dobind=}true, {%H-}TNetSocket(aSock), aLayer);
@@ -1572,7 +1641,7 @@ begin
       // allow small number of retries (e.g. XP or BSD during aggressive tests)
       retry := 10
     else
-      retry := {$ifdef BSD}10{$else}2{$endif};
+      retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
     res := NewSocket(aServer, aPort, aLayer, doBind, Timeout, Timeout, Timeout,
       retry, fSock);
     if res <> nrOK then
@@ -1616,7 +1685,7 @@ end;
 
 procedure TCrtSocket.AcceptRequest(aClientSock: TNetSocket; aClientAddr: PNetAddr);
 begin
-  {$ifdef LINUXNOTBSD}
+  {$ifdef OSLINUX}
   // on Linux fd returned from accept() inherits all parent fd options
   // except O_NONBLOCK and O_ASYNC
   fSock := aClientSock;
@@ -1624,7 +1693,7 @@ begin
   // on other OS inheritance is undefined, so call OpenBind to set all fd options
   OpenBind('', '', false, aClientSock, fSocketLayer); // set the ACCEPTed aClientSock
   Linger := 5; // should remain open for 5 seconds after a closesocket() call
-  {$endif LINUXNOTBSD}
+  {$endif OSLINUX}
   if aClientAddr <> nil then
     fRemoteIP := aClientAddr^.IP(RemoteIPLocalHostAsVoidInServers);
 end;
@@ -1827,7 +1896,7 @@ begin
   end;
   if not SockIsDefined then
     exit; // no opened connection, or Close already executed
-  {$ifdef LINUXNOTBSD}
+  {$ifdef OSLINUX}
   if fWasBind and
      (fPort = '') then
   begin
@@ -1835,7 +1904,7 @@ begin
     fSock := TNetSocket(-1);
     exit;
   end;
-  {$endif LINUXNOTBSD}
+  {$endif OSLINUX}
   if fSecure <> nil then
   begin
     fSecure.BeforeDisconnection(fSock);
@@ -1933,7 +2002,7 @@ begin
       cspSocketError:
         result := -1; // indicates broken/closed socket
     end; // cspNoData will leave result=0
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   // under Unix SockReceivePending use poll(fSocket) and if data available
   // ioctl syscall is redundant
   if aPendingAlsoInSocket then
@@ -1941,7 +2010,7 @@ begin
     if (sock.RecvPending(insocket) = nrOK) and
        (insocket > 0) then
       inc(result, insocket);
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 end;
 
 function TCrtSocket.SockConnected: boolean;
@@ -2133,7 +2202,7 @@ begin
   begin
     expected := Length;
     Length := 0;
-    last := {$ifdef MSWINDOWS}mormot.core.os.GetTickCount64{$else}0{$endif};
+    last := {$ifdef OSWINDOWS}mormot.core.os.GetTickCount64{$else}0{$endif};
     repeat
       read := expected - Length;
       if fSecure <> nil then
@@ -2295,7 +2364,7 @@ begin
      (Len <= 0) or
      (P = nil) then
     exit;
-  start := {$ifdef MSWINDOWS}mormot.core.os.GetTickCount64{$else}0{$endif};
+  start := {$ifdef OSWINDOWS}mormot.core.os.GetTickCount64{$else}0{$endif};
   repeat
     sent := Len;
     if fSecure <> nil then
@@ -2498,7 +2567,7 @@ initialization
   assert(SizeOf(sockaddr_in) = 16);
   assert(SizeOf(TNetAddr) = SOCKADDR_SIZE);
   assert(SizeOf(TNetAddr) >=
-    {$ifdef MSWINDOWS} SizeOf(sockaddr_in6) {$else} SizeOf(sockaddr_un) {$endif});
+    {$ifdef OSWINDOWS} SizeOf(sockaddr_in6) {$else} SizeOf(sockaddr_un) {$endif});
   DefaultListenBacklog := SOMAXCONN;
   InitializeUnit; // in mormot.net.sock.windows.inc
 

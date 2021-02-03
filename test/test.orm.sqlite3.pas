@@ -373,11 +373,11 @@ begin
   begin
     TempFileName := WorkDir + 'test.db3';
     DeleteFile(TempFileName); // use a temporary file
-    {$ifndef NOSQLITE3ENCRYPT}
+    {$ifndef NOSQLITE3STATIC}
     if ClassType <> TTestSqliteFileMemoryMap then
       // memory map is not compatible with our encryption
       password := 'password1';
-    {$endif NOSQLITE3ENCRYPT}
+    {$endif NOSQLITE3STATIC}
   end;
   EncryptedFile := ({%H-}password <> '');
   Demo := TSqlDataBase.Create(TempFileName, password);
@@ -455,7 +455,7 @@ begin
   JS := Demo.ExecuteJson(Req); // get result in JSON format
   FileFromString(JS, WorkDir + 'Test1.json');
   CheckHash(JS, $40C1649A, 'Expected ExecuteJson result not retrieved');
-  {$ifndef NOSQLITE3ENCRYPT}
+  {$ifndef NOSQLITE3STATIC}
   if password <> '' then
   begin
     // check file encryption password change
@@ -487,7 +487,7 @@ begin
     check(Demo.MemoryMappedMB = 0, 'mmap pragma disallowed');
   end
   else
-  {$endif NOSQLITE3ENCRYPT}
+  {$endif NOSQLITE3STATIC}
   if ClassType = TTestSqliteFileMemoryMap then
   begin
     // force re-open to test reading
@@ -1936,13 +1936,13 @@ begin
     VO.Free;
     FreeAndNil(Demo);
   end;
-  {$ifndef NOSQLITE3ENCRYPT}
+  {$ifndef NOSQLITE3STATIC}
   if EncryptedFile then
   begin
     check(ChangeSQLEncryptTablePassWord(TempFileName, 'NewPass', '')); // uncrypt file
     check(IsSQLite3File(TempFileName));
   end;
-  {$endif NOSQLITE3ENCRYPT}
+  {$endif NOSQLITE3STATIC}
 end;
 
 procedure TTestSQLite3Engine._TOrmTableJson;

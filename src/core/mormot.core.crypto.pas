@@ -55,10 +55,14 @@ type
     {$define USEAESNI64}
     {$define USECLMUL} // gf_mul_pclmulqdq() requires some complex opcodes
   {$endif HASAESNI}
-  {$ifndef BSD}
+  {$ifdef OSWINDOWS}
     {$define CRC32C_X64} // external crc32_iscsi_01 for win64/lin64
     {$define SHA512_X64} // external sha512_sse4 for win64/lin64
-  {$endif BSD}
+  {$endif OSWINDOWS}
+  {$ifdef OSLINUX}
+    {$define CRC32C_X64} // external crc32_iscsi_01 for win64/lin64
+    {$define SHA512_X64} // external sha512_sse4 for win64/lin64
+  {$endif OSLINUX}
 {$endif ASMX64}
 
 {$ifdef ASMX86}
@@ -67,19 +71,22 @@ type
   {$ifdef HASAESNI}
     {$define USECLMUL} // gf_mul_pclmulqdq() requires some complex opcodes
   {$endif HASAESNI}
-  {$ifndef BSD}
-    {$define SHA512_X86} // external sha512-x86 for win32/lin32
-  {$endif BSD}
+  {$ifdef OSWINDOWS}
+  {$define SHA512_X86} // external sha512-x86 for win32/lin32
+  {$endif OSWINDOWS}
+  {$ifdef OSLINUX}
+  {$define SHA512_X86} // external sha512-x86 for win32/lin32
+  {$endif OSLINUX}
 {$endif ASMX86}
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
   // on Windows: enable Microsoft AES Cryptographic Provider (XP SP3 and up)
   // - even if those AES engines are slower and closed source (so should better
   // be avoided), we use it for TAesPrng.GetEntropy, as it can't hurt
   {$define USE_PROV_RSA_AES}
 {$else}
   {$undef USE_PROV_RSA_AES}
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 
 { ****************** Low-Level Memory Buffers Helper Functions }
@@ -5381,16 +5388,16 @@ procedure FillSystemRandom(Buffer: PByteArray; Len: integer;
 var
   fromos: boolean;
   i: integer;
-  {$ifdef LINUX}
+  {$ifdef OSPOSIX}
   dev: integer;
-  {$endif}
-  {$ifdef MSWINDOWS}
+  {$endif OSPOSIX}
+  {$ifdef OSWINDOWS}
   prov: HCRYPTPROV;
-  {$endif}
+  {$endif OSWINDOWS}
   tmp: array[byte] of byte;
 begin
   fromos := false;
-  {$ifdef LINUX}
+  {$ifdef OSPOSIX}
   dev := FileOpen('/dev/urandom', fmOpenRead);
   if (dev <= 0) and
      AllowBlocking then
@@ -5405,8 +5412,8 @@ begin
   finally
     FileClose(dev);
   end;
-  {$endif LINUX}
-  {$ifdef MSWINDOWS}
+  {$endif OSPOSIX}
+  {$ifdef OSWINDOWS}
   // warning: on some Windows versions, this could take up to 30 ms!
   if CryptoApi.Available then
     if CryptoApi.AcquireContextA(prov, nil, nil,
@@ -5415,7 +5422,7 @@ begin
       fromos := CryptoApi.GenRandom(prov, Len, Buffer);
       CryptoApi.ReleaseContext(prov, 0);
     end;
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
   if fromos then
     exit;
   i := Len;
@@ -5924,7 +5931,7 @@ begin
   PBKDF2_HMAC_SHA256(appsec, ExeVersion.User, 100, k256);
   FillZero(appsec);
   appsec := Base64Uri(@k256, 15); // =BinToBase64Uri()
-  fn := FormatString({$ifdef MSWINDOWS}'%_%'{$else}'%.syn-%'{$endif},
+  fn := FormatString({$ifdef OSWINDOWS}'%_%'{$else}'%.syn-%'{$endif},
     [GetSystemPath(spUserData), appsec]);  // .* files are hidden under Linux
   SetString(appsec, PAnsiChar(@k256[15]), 17); // use remaining bytes as key
   Sha256Weak(appsec, k256); // just a way to reduce to 256-bit
@@ -5939,13 +5946,13 @@ begin
         key2 := ''; // handle decryption error
       end;
       FillZero(key);
-      {$ifdef MSWINDOWS}
+      {$ifdef OSWINDOWS}
       // somewhat enhance privacy by using Windows API
       key := CryptDataForCurrentUserDPAPI(key2, appsec, false);
       {$else}
       // chmod 400 + AES-CFB + AFUnSplit is enough for privacy on POSIX 
       key := key2;
-      {$endif MSWINDOWS}
+      {$endif OSWINDOWS}
       if TAesPrng.AFUnsplit(key, __h, SizeOf(__h)) then
         // successfully extracted secret key in __h
         exit;
@@ -5956,14 +5963,14 @@ begin
       FileSetAttributes(fn, {secret=}false);
     TAesPrng.Main.FillRandom(__h);
     key := TAesPrng.Main.AFSplit(__h, SizeOf(__h), 126);
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     // 4KB local file, DPAPI-cyphered but with no DPAPI BLOB layout
     key2 := CryptDataForCurrentUserDPAPI(key, appsec, true);
     FillZero(key);
     {$else}
     // 4KB local chmod 400 hidden .file in $HOME folder under Linux/POSIX
     key2 := key;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     key := TAesCfb.SimpleEncrypt(key2, k256, 256, true, true);
     if not FileFromString(key, fn) then
       ESynCrypto.CreateUtf8('Unable to write %', [fn]);

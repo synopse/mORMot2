@@ -280,7 +280,7 @@ const
    ' % [service] [help]  -> show all methods of a given service'#13#10 +
    ' % [service] [method] help -> show parameters of a given method'#13#10 +
    ' % [options] [service] [method] [parameters] -> call a given method ' +
-   {$ifdef MSWINDOWS}
+   {$ifdef OSWINDOWS}
    'with [parameters] being name=value or name=""value with spaces"" or ' +
    'name:={""some"":""json""}' +
    ' and [options] as /nocolor /pipe /headers /verbose /noexpand /nobody';
@@ -288,7 +288,7 @@ const
    'with [parameters] being name=value or name=''"value with spaces"'' or ' +
    'name:=''{"some":"json"}''' +
    ' and [options] as --nocolor --pipe --headers --verbose --noexpand --nobody';
-   {$endif MSWINDOWS}
+   {$endif OSWINDOWS}
 
 /// command-line SOA remote access to mORMot interface-based services
 // - supports the EXECUTEFROMCOMMANDLINEHELP commands
@@ -2010,7 +2010,7 @@ var
   n, s, i: PtrInt;
 begin
   inherited Create;
-  fExe := {$ifndef MSWINDOWS}'./' + {$endif} ExeVersion.ProgramName;
+  fExe := {$ifdef OSPOSIX} './' + {$endif} ExeVersion.ProgramName;
   n := length(aServices);
   SetLength(fServices, n);
   s := 0;

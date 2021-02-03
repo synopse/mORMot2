@@ -2318,7 +2318,7 @@ end;
 
 {$ifdef SHA512_X86} // optimized asm using SSE3 instructions for x86 32-bit
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
   {$ifdef FPC}
     {$L ..\..\static\i386-win32\sha512-x86.o}
   {$else}
@@ -2326,7 +2326,7 @@ end;
   {$endif FPC}
 {$else}
   {$L ..\..\static\i386-linux\sha512-x86.o}
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 {
   SHA-512 hash in x86 assembly

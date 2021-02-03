@@ -1079,9 +1079,9 @@ procedure TSynTests.CreateSaveToFile;
 begin
   System.Assign(fSaveToFile, '');
   Rewrite(fSaveToFile);
-  {$ifndef MSWINDOWS}
+  {$ifdef OSPOSIX}
   TTextRec(fSaveToFile).LineEnd := #13#10;
-  {$endif MSWINDOWS}
+  {$endif OSPOSIX}
   StdOut := TTextRec(fSaveToFile).Handle;
 end;
 
@@ -1351,14 +1351,14 @@ begin
   finally
     tests.Free;
   end;
-  {$ifndef LINUX}
+  {$ifndef OSPOSIX}
   if ParamCount = 0 then
   begin
     // direct exit if an external file was generated
     WriteLn(#13#10'Done - Press ENTER to Exit');
     ReadLn;
   end;
-  {$endif LINUX}
+  {$endif OSPOSIX}
 end;
 
 

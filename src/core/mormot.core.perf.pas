@@ -1000,7 +1000,7 @@ type
     /// Free of paging file for the system
     property PagingFileFree: TSynMonitorOneSize
       read GetPagingFileFree;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     /// Total of virtual memory for the system
     // - property not defined under Linux, since not applying to this OS
     property VirtualMemoryTotal: TSynMonitorOneSize
@@ -1009,16 +1009,16 @@ type
     // - property not defined under Linux, since not applying to this OS
     property VirtualMemoryFree: TSynMonitorOneSize
       read GetVirtualMemoryFree;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
   end;
 
   /// value object able to gather information about a system drive
   TSynMonitorDisk = class(TSynPersistent)
   protected
     fName: TFileName;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     fVolumeName: SynUnicode;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     fAvailableSize: TSynMonitorOneSize;
     fFreeSize: TSynMonitorOneSize;
     fTotalSize: TSynMonitorOneSize;
@@ -1040,7 +1040,7 @@ type
     /// the disk name
     property Name: TFileName
       read GetName;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     /// the volume name (only available on Windows)
     property VolumeName: SynUnicode
       read fVolumeName write fVolumeName;
@@ -1049,7 +1049,7 @@ type
     // into account under Windows: on POSIX, AvailableSize=FreeSize)
     property AvailableSize: TSynMonitorOneSize
       read GetAvailable;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     /// free space currently available on this disk
     property FreeSize: TSynMonitorOneSize
       read GetFree;
@@ -2405,7 +2405,7 @@ begin
       'os', OSVersionText,
       'cpu', CpuInfoText,
       'bios', BiosInfoText,
-      {$ifdef MSWINDOWS}{$ifndef CPU64}'wow64', IsWow64, {$endif}{$endif MSWINDOWS}
+      {$ifdef OSWINDOWS}{$ifndef CPU64}'wow64', IsWow64, {$endif}{$endif OSWINDOWS}
       {$ifdef CPUINTEL}'cpufeatures', CpuFeaturesText, {$endif}
       'processcpu', cpu,
       'processmem', mem,
@@ -2478,11 +2478,11 @@ begin
   SetLength(fProcess, length(aProcessID));
   for i := 0 to high(aProcessID) do
   begin
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     if aProcessID[i] = 0 then
       fProcess[i].ID := GetCurrentProcessID
     else
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
       fProcess[i].ID := aProcessID[i];
     SetLength(fProcess[i].Data, fHistoryDepth);
   end;
@@ -2499,10 +2499,10 @@ var
 begin
   if self = nil then
     exit;
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   if aProcessID = 0 then
     aProcessID := GetCurrentProcessID;
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
   fSafe.Lock;
   try
     n := length(fProcess);
@@ -2540,10 +2540,10 @@ end;
 function TSystemUse.ProcessIndex(aProcessID: integer): PtrInt;
 begin
   // caller should have made fSafe.Enter
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   if aProcessID = 0 then
     aProcessID := GetCurrentProcessID;
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
   if self <> nil then
     for result := 0 to high(fProcess) do
       if fProcess[result].ID = aProcessID then
@@ -2690,13 +2690,13 @@ begin
   result := '';
   mem := '';
   data := HistoryData(aProcessID, aDepth);
-  {$ifdef LINUXNOTBSD}
+  {$ifdef OSLINUX}
   // bsd: see VM_LOADAVG
   // https://www.retro11.de/ouxr/211bsd/usr/src/lib/libc/gen/getloadavg.c.html
   if data = nil then
     result := StringFromFile('/proc/loadavg', {HasNoSize=}true)
   else
-  {$endif LINUXNOTBSD}
+  {$endif OSLINUX}
     for i := 0 to high(data) do
       with data[i] do
       begin
@@ -2755,10 +2755,10 @@ begin
      nocache then
   begin
     _DiskPartitions := GetDiskPartitions;
-    {$ifndef MSWINDOWS}
+    {$ifdef OSPOSIX}
     DynArray(TypeInfo(TDiskPartitions), _DiskPartitions).
       Sort(SortDynArrayDiskPartitions);
-    {$endif MSWINDOWS}
+    {$endif OSPOSIX}
   end;
   parts := _DiskPartitions;
   if parts = nil then
@@ -2834,10 +2834,10 @@ begin
   try
     RetrieveMemoryInfo;
     FormatUtf8('{Allocated:{reserved:%,used:%},Physical:{total:%,free:%,percent:%},' +
-      {$ifdef MSWINDOWS}'Virtual:{total:%,free:%},' + {$endif}'Paged:{total:%,free:%}}',
+      {$ifdef OSWINDOWS}'Virtual:{total:%,free:%},' + {$endif}'Paged:{total:%,free:%}}',
       [fAllocatedReserved.Bytes shr 10, fAllocatedUsed.Bytes shr 10,
       fPhysicalMemoryTotal.Bytes shr 10, fPhysicalMemoryFree.Bytes shr 10,
-      fMemoryLoadPercent, {$ifdef MSWINDOWS}fVirtualMemoryTotal.Bytes shr 10,
+      fMemoryLoadPercent, {$ifdef OSWINDOWS}fVirtualMemoryTotal.Bytes shr 10,
       fVirtualMemoryFree.Bytes shr 10, {$endif} fPagingFileTotal.Bytes shr 10,
       fPagingFileFree.Bytes shr 10], result);
   finally
@@ -2987,7 +2987,7 @@ begin
   begin
     fLastDiskInfoRetrievedTix := tix;
     GetDiskInfo(fName, PQWord(@fAvailableSize.Bytes)^, PQWord(@fFreeSize.Bytes)^,
-      PQWord(@fTotalSize.Bytes)^ {$ifdef MSWINDOWS}, @fVolumeName{$endif});
+      PQWord(@fTotalSize.Bytes)^ {$ifdef OSWINDOWS}, @fVolumeName{$endif});
   end;
 end;
 

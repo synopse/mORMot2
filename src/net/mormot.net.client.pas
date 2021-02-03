@@ -2279,6 +2279,59 @@ begin
 end;
 
 
+
+{ TNewSocketAddressCache }
+
+type
+  /// thread-safe TSynDictionary-based cache of DNS names for NewSocket()
+  TNewSocketAddressCache = class(TInterfacedObject, INewSocketAddressCache)
+  public
+    Data: TSynDictionary;
+    constructor Create(aTimeOutSeconds: integer);
+    destructor Destroy; override;
+    function Search(const Host: RawUtf8; out NetAddr: TNetAddr): boolean;
+    procedure Add(const Host: RawUtf8; const NetAddr: TNetAddr);
+    procedure Flush(const Host: RawUtf8);
+    procedure SetTimeOut(aSeconds: integer);
+  end;
+
+constructor TNewSocketAddressCache.Create(aTimeOutSeconds: integer);
+begin
+  Data := TSynDictionary.Create(
+    TypeInfo(TRawUtf8DynArray), TypeInfo(TNetAddrDynArray),
+    {caseinsens=}true, aTimeOutSeconds);
+end;
+
+destructor TNewSocketAddressCache.Destroy;
+begin
+  Data.Free;
+  inherited Destroy;
+end;
+
+function TNewSocketAddressCache.Search(const Host: RawUtf8;
+  out NetAddr: TNetAddr): boolean;
+begin
+  result := Data.FindAndCopy(Host, NetAddr);
+end;
+
+procedure TNewSocketAddressCache.Add(const Host: RawUtf8;
+  const NetAddr: TNetAddr);
+begin
+  Data.DeleteDeprecated; // flush cache only when we may need some new space
+  Data.Add(Host, NetAddr); // ignore if already added in another thread
+end;
+
+procedure TNewSocketAddressCache.Flush(const Host: RawUtf8);
+begin
+  Data.Delete(Host);
+end;
+
+procedure TNewSocketAddressCache.SetTimeOut(aSeconds: integer);
+begin
+  Data.TimeOutSeconds := aSeconds; // warning: will clear the cache
+end;
+
+
 { ************** Send Email using the SMTP Protocol }
 
 function TSMTPConnection.FromText(const aText: RawUtf8): boolean;
@@ -2413,6 +2466,13 @@ begin
     result := '=?UTF-8?B?' + BinToBase64(result);
 end;
 
+
+
+initialization
+  NewSocketAddressCache := TNewSocketAddressCache.Create(600); // 10min timeout
+
+finalization
+  NewSocketAddressCache := nil;
 
 end.
 

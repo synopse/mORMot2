@@ -1028,7 +1028,7 @@ function IdemPropNameU(const P1: RawUtf8; P2: PUtf8Char; P2Len: PtrInt): boolean
 // IdemPropNameU(const P1,P2: RawUtf8), which would be slightly faster by
 // using the length stored before the actual text buffer of each RawUtf8
 function IdemPropNameUSameLen(P1, P2: PUtf8Char; P1P2Len: PtrInt): boolean;
-  {$ifndef ANDROID}{$ifdef HASINLINE}inline;{$endif}{$endif}
+  {$ifndef OSANDROID}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// case insensitive comparison of ASCII 7-bit identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)

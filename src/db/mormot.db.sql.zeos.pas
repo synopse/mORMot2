@@ -467,17 +467,17 @@ begin
     //EH: switch off tds support in any kind -> deprecated and our 64bit lib isn't compiled with libiconv support
     //users permanently run into the encoding issues which can't be resolved using the dblib tds-types:
     //tdsNVarchar/tdsNText is defined but will never be used by DBLIB + SQLServer)
-    if {$ifdef MSWINDOWS}
+    if {$ifdef OSWINDOWS}
        (protocol <> 'ado') and
        (protocol <> 'oledb') and
-       {$endif MSWINDOWS}
+       {$endif OSWINDOWS}
        (protocol <> 'odbc_w') and
        (protocol <> 'odbc_a') then
-      {$ifdef MSWINDOWS}
+      {$ifdef OSWINDOWS}
       FURL.Protocol := 'OleDB';
       {$else}
       FURL.Protocol := 'odbc_w'
-      {$endif MSWINDOWS}
+      {$endif OSWINDOWS}
   end;
   {$endif ZEOS73UP}
   inherited Create(StringToUtf8(FURL.HostName), StringToUtf8(FURL.Database),

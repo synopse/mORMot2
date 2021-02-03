@@ -20,7 +20,7 @@ interface
 
 {$I ..\mormot.defines.inc}
 
-{$ifdef LINUX}
+{$ifdef OSPOSIX}
 
 // do-nothing-unit on non Windows system
 
@@ -907,7 +907,7 @@ begin
   ServerForceNTLM(false);
 end;
 
-{$endif MSWINDOWS}
+{$endif OSPOSIX}
 
 end.
 

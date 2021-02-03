@@ -1602,11 +1602,11 @@ begin
 end;
 
 const
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
   LIBNAME = 'oci.dll';
 {$else}
   LIBNAME = 'libclntsh.so';
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 constructor TSqlDBOracleLib.Create;
 var

@@ -537,12 +537,12 @@ type
     fServicesRouting: TRestClientRoutingClass;
     fServicePublishOwnInterfaces: RawUtf8;
     fFakeCallbacks: TRestClientCallbacks;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     fServiceNotificationMethodViaMessages: record
       Wnd: HWND;
       Msg: cardinal;
     end;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     procedure SetRoutingClass(aServicesRouting: TRestClientRoutingClass);
     procedure SetSessionHeartbeatSeconds(timeout: integer);
     function GetOnIdleBackgroundThreadActive: boolean;
@@ -878,7 +878,7 @@ type
     function OrmInstance: TRestOrm;
       {$ifdef HASINLINE}inline;{$endif}
 
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
 
     /// set a HWND/WM_* pair to let interface-based services notification
     // callbacks be processed safely in the main UI thread, via Windows messages
@@ -904,7 +904,7 @@ type
     // several TRestClientUri instances
     class procedure ServiceNotificationMethodExecute(var Msg: TMessage);
 
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
 
     /// set a callback event to be executed in loop during remote blocking
     // process, e.g. to refresh the UI during a somewhat long request
@@ -1941,9 +1941,9 @@ begin
   include(fInternalState, isDestroying);
   if SynLogFileFreeing then // may be owned by a TSynLogFamily
     SetLogClass(nil);
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   fServiceNotificationMethodViaMessages.Wnd := 0; // disable notification
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
   FreeAndNil(fFakeCallbacks);
   try
     // unlock all still locked records by this client
@@ -2017,7 +2017,7 @@ begin
   end;
 end;
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 
 type
   TRestClientUriServiceNotification = class(TInterfaceMethodExecute)
@@ -2058,7 +2058,7 @@ begin
   end;
 end;
 
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 procedure TRestClientUri.InternalNotificationMethodExecute(
   var Ctxt: TRestUriParams);
@@ -2074,12 +2074,12 @@ var
   var
     method: PInterfaceMethod;
     exec: TInterfaceMethodExecute;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     execmsg: TRestClientUriServiceNotification absolute exec;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
   begin
     method := @callback.Factory.Methods[methodIndex];
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     if (fServiceNotificationMethodViaMessages.Wnd <> 0) and
        (method^.ArgsOutputValuesCount = 0) then
     begin
@@ -2096,7 +2096,7 @@ var
     end
     else
     // if PostMessage() failed, or expecting result -> blocking execution
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
       exec := TInterfaceMethodExecute.Create(method);
     try
       ok := exec.ExecuteJson([callback.Instance], pointer(par), res);
