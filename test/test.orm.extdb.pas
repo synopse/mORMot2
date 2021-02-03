@@ -780,13 +780,13 @@ var
       end;
   end;
 
-{$ifdef NOSQLITE3ENCRYPT}
+{$ifdef NOSQLITE3STATIC}
 const
   password = '';
 {$else}
 const
   password = 'pass';
-{$endif NOSQLITE3ENCRYPT}
+{$endif NOSQLITE3STATIC}
 
 begin
   DeleteFile('testpass.db3');
@@ -856,7 +856,7 @@ begin
         Check(IsSQLite3File('testpass.db3'));
         Check(IsSQLite3FileEncrypted('testpass.db3') = (password <> ''), 'encrypt2');
 
-        {$ifndef NOSQLITE3ENCRYPT}
+        {$ifndef NOSQLITE3STATIC}
 
         // now read it after uncypher
         check(ChangeSQLEncryptTablePassWord('testpass.db3', password, ''));
@@ -880,7 +880,7 @@ begin
           Client2.Free;
         end;
 
-        {$endif NOSQLITE3ENCRYPT}
+        {$endif NOSQLITE3STATIC}
       finally
         R.Free;
       end;

@@ -85,11 +85,16 @@
 {.$define NOPOINTEROFFSET}
 // disable TOrmTable offsets on 64-bit if your memory is huge or fragmented
 
+{.$define LIBCURLMULTI}
+// enable the more advanced "multi session" API functions of mormot.lib.curl
+// see https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
+
 
 {$ifdef FPC}
 
 (********************** FPC Conditionals **********************)
 
+  // -----------
   // -- global code generation conditionals
 
   {$WARN 5093 off : function result variable of a managed type does not seem to be initialized }
@@ -108,15 +113,16 @@
   {$define HASINLINE}
   {$define HASSAFEINLINE} // Delphi 2007 has sometimes troubles inlining :(
   {$define NODELPHIASM}   // avoid e.g. low-level System.@LStrFromPCharLen calls
+  {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSHORT_USESTR} // FloatToText uses str() in FPC
   {$define DOUBLETOSHORT_USEGRISU} // fast DoubleToAscii()
   {$define USERECORDWITHMETHODS}  // use "object" only for Delphi 7
   {$define FPC_OR_UNICODE}
-  {$define FPC_ENUMHASINNER}
 
 
+  // -----------
   // -- identify FPC versions
 
   // $if FPC_FULLVERSION>20700 breaks Delphi 6-7 and SynProject :(
@@ -164,6 +170,7 @@
   {$ifend}
 
 
+  // -----------
   // -- identify Operating Systems
 
   // mainly OSWINDOWS or OSPOSIX (OSLINUX, OSBSD, OSDARWIN, OSANDROID)
@@ -171,22 +178,24 @@
   {$ifdef MSWINDOWS}
     // conditionals for Windows
     {$define OSWINDOWS}
+    {$define FPCWINDOWS}
   {$else}
     {$define OSPOSIX} // a POSIX/BSD system
+    {$define FPCPOSIX}
     {$ifdef BSD}
       // conditionals for Darwin and BSD family like OpenBSD/FreeBSD
-      {$define OSBSDDARWIN}
+      {$define OSBSDDARWIN} // OSBSDDARWIN = OSBSD + OSDARWIN
       {$ifdef DARWIN}
         {$define OSDARWIN}
         {$define FPCDARWIN}
         {$ifdef CPUINTEL}
-          {$define FPC_PIC} // may have not be defined by the compiler options
+          {$define FPC_PIC} // may have not be defined in the compiler options
         {$endif CPUINTEL}
       {$else}
         {$define OSBSD}   // OSX has some non-standard API calls
         {$define FPCBSD}
         {$ifdef OPENBSD}
-          {$define OSOPENBSD}
+          {$define OSOPENBSD}  // OSBDS = OSOPENBSD + OSFREEBSD
         {$endif OPENBSD}
         {$ifdef FREEBSD}
           {$define OSFREEBSD}
@@ -196,6 +205,7 @@
       {$ifdef LINUX}
         // conditionals for Linux
         {$define OSLINUX} // e.g. to disable epoll API
+        {$define FPCLINUX}
       {$else}
         'Unsupported Operating System - yet'
       {$endif LINUX}
@@ -209,6 +219,7 @@
   {$endif MSWINDOWS}
 
 
+  // -----------
   // -- identify CPU Architectures
 
   {$ifdef CPU64}
@@ -253,6 +264,7 @@
   {$endif CPU64}
 
 
+  // -----------
   // -- compiler-specific code generation conditionals
 
   {$ifdef ISFPC32}
@@ -268,12 +280,12 @@
     {$define DELPHI_OR_FPC_OLDRTTI}
     {$define FPC_OLDRTTI}
   {$endif}
-  {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
 
   {$ifdef FPC_HAS_CPSTRING}
     // see http://wiki.freepascal.org/FPC_Unicode_support
     {$define HASCODEPAGE} // UNICODE means {$mode delphiunicode}
-  {$endif}
+  {$endif FPC_HAS_CPSTRING}
+
   {$ifdef ISFPC27}
     {$define ISFPC271}
     {$define HASVARUSTRING}
@@ -283,57 +295,7 @@
     // => this will change the TInvokeableVariantType.SetProperty() signature
     {$define FPC_VARIANTSETVAR}
   {$endif ISFPC27}
-  {$ifdef FPC_PROVIDE_ATTR_TABLE}
-    {$define HASALIGNTYPEDATA} // to ignore attributes RTTI table
-  {$endif FPC_PROVIDE_ATTR_TABLE}
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    {$define FPC_ENUMHASINNER}
-    {$define HASALIGNTYPEDATA} // to ensure proper RTTI alignment
-  {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
-
-  // -- FPCSQLITE3STATIC to enable static-linked SQLite3 engine for FPC
-
-  // -> to be downloaded from https://github.com/synopse/mORMot2/releases
-  // -> could be disabled to force external .so/.dll linking
-  {$ifdef OSWINDOWS}
-  {$ifdef CPUX86}
-    {$define FPCSQLITE3STATIC}   // use static\i386-win32\sqlite3.o
-  {$else}
-    {$define FPCSQLITE3STATIC}   // use static\x86_64-win64\sqlite3.o
-  {$endif CPUX86}
-  {$endif OSWINDOWS}
-
-  {$ifdef OSLINUX}
-    {$ifdef CPUX86}
-      {$define FPCSQLITE3STATIC} // use static/i386-linux/sqlite3.o
-    {$endif CPUX86}
-    {$ifdef CPUX64}
-      {$define FPCSQLITE3STATIC} // use static/x86_64-linux/sqlite3.o
-    {$endif CPUX64}
-    {$ifdef CPUARM}
-      {$define FPCSQLITE3STATIC} // use static/arm-linux/sqlite3.o
-    {$endif CPUARM}
-    {$ifdef CPUAARCH64}
-      {$ifdef FPCANDROID}
-        {$define FPCSQLITE3STATIC}
-        // note: problems with current static/aarch64-linux/sqlite3.o
-      {$endif FPCANDROID}
-    {$endif CPUAARCH64}
-  {$endif OSLINUX}
-
-  {$ifdef OSDARWIN}
-    {$define FPCSQLITE3STATIC} // we supply Darwin static libs
-  {$endif OSDARWIN}
-
-  {$ifdef OSBSD}
-    {$define FPCSQLITE3STATIC} // we supply FreeBSD+OpenBSD static libs
-    {$ifdef OSOPENBSD}
-      {$ifdef FPC_CROSSCOMPILING}
-        {$undef FPCSQLITE3STATIC} // OpenBSD problems with fpcupdeluxe libgcc.a
-      {$endif FPC_CROSSCOMPILING}
-    {$endif OSOPENBSD}
-  {$endif OSBSD}
 
 {$else FPC}
 
@@ -503,17 +465,24 @@
 
 (********************** Shared Conditionals **********************)
 
-{$H+} // we use long strings
-{$R-} // disable Range checking in our code
-{$S-} // disable Stack checking in our code
-{$X+} // expect extended syntax
-{$W-} // disable stack frame generation
-{$Q-} // disable overflow checking in our code
-{$B-} // expect short circuit boolean
-{$V-} // disable Var-String Checking
-{$T-} // Typed @ operator
-{$Z1} // enumerators stored as byte by default
-{$P+} // Open string params
+// -----------
+// -- about pascal code expectations
+
+  {$H+} // we use long strings
+  {$R-} // disable Range checking in our code
+  {$S-} // disable Stack checking in our code
+  {$X+} // expect extended syntax
+  {$W-} // disable stack frame generation
+  {$Q-} // disable overflow checking in our code
+  {$B-} // expect short circuit boolean
+  {$V-} // disable Var-String Checking
+  {$T-} // Typed @ operator
+  {$Z1} // enumerators stored as byte by default
+  {$P+} // Open string params
+
+
+// -----------
+// -- CPU specific conditionals
 
 {$ifdef CPUINTEL}
   {$ifdef OSWINDOWS}
@@ -532,10 +501,21 @@
   {$undef HASAESNI} // AES-NI is an Intel-specific feature
 {$endif CPUINTEL}
 
+{$ifdef CPU32}
+  {$define NOPOINTEROFFSET} // 32-bit CPU will always store pointers
+{$endif CPU32}
+
+
+  // -----------
+  // -- enable/disable static-linked SQLite3 engine
+
+  // -> to be downloaded from https://github.com/synopse/mORMot2/releases
+  // -> could be disabled to force external .so/.dll linking
+
 {$ifdef FPC}
-  {$ifndef FPCSQLITE3STATIC} // see above about this FPC-specific conditional
-    {$define NOSQLITE3STATIC}
-  {$endif FPCSQLITE3STATIC}
+  {$if defined(OSOPENBSD) and defined(FPC_CROSSCOMPILING)}
+    {$undef NOSQLITE3STATIC} // OpenBSD problems with fpcupdeluxe libgcc.a
+  {$ifend}
 {$else}
   // there is a linking bug with Delphi XE4 on Win64
   {$ifdef CPUX64}
@@ -545,10 +525,9 @@
   {$endif} // other Win32/Win64 Delphi platforms should work as expected
 {$endif FPC}
 
-{$ifdef NOSQLITE3STATIC}
-  // our proprietary crypto expects a statically linked custom sqlite3.c
-  {$define NOSQLITE3ENCRYPT}
-{$endif NOSQLITE3STATIC}
+
+// -----------
+// -- Per-platform Client-Server abilities
 
 {$ifdef OSWINDOWS}
 
@@ -558,6 +537,7 @@
 
   {$define USE_WINIOCP} // I/O completion ports API is the best option under Windows
   // (under Linux/POSIX, we fallback to a classical event-driven pool)
+
   {$ifndef NOSSPIAUTH}
     {$define DOMAINRESTAUTH}
     // enable Windows SSPI authentication in mormot.rest.client/server
@@ -566,7 +546,7 @@
 {$endif OSWINDOWS}
 
 {$ifdef OSPOSIX}
-
+  //TODO rename as USEHTTPSYS in OSWINDOWS section
   {$define ONLYUSEHTTPSOCKET}  // http.sys server is Windows-specific
   // cross-platform libcurl for https -> TCurlHttp and TRestHttpClientCurl
 
@@ -585,36 +565,30 @@
 
 {$endif OSPOSIX}
 
-{$ifdef USELIBCURL}
-  {.$define LIBCURLMULTI}
-  // enable https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
-{$endif USELIBCURL}
+
+// -----------
+// -- HTTP Compression - set globally for Client and Server apps
+
+  //TODO define options set for THttpServer(Generic)
 
 {$ifndef NOCOMPRESSSYNLZ}
   {$define COMPRESSSYNLZ}
-  { if defined, mormot.rest.http.server will use SynLZ for content compression
-    - SynLZ is much faster than deflate/zip, so is preferred
-    - can be set global for Client and Server applications
-    - with SynLZ, the 440 KB JSON for TTestClientServerAccess._TRestHttpClient
-      is compressed into 106 KB with no speed penalty (it's even a bit faster)
-      whereas deflate, even with its level set to 1 (fastest), is 25 % slower
-    - TRestHttpClientGeneric.Compression shall contain hcSynLZ to handle it }
+  // if defined, mormot.rest.http.server will use SynLZ for content compression
+  // - with SynLZ, the 440 KB JSON for TTestClientServerAccess._TRestHttpClient
+  //   is compressed into 106 KB with no speed penalty (it's even a bit faster)
+  //   whereas deflate, even with its level set to 1 (fastest), is 25 % slower
+  // - TRestHttpClientGeneric.Compression shall contain hcSynLZ to handle it
 {$endif NOCOMPRESSSYNLZ}
 
 {$ifndef NOCOMPRESSDEFLATE}
   {$define COMPRESSDEFLATE}
-  { if defined, mormot.rest.http.server will use gzip for content compression
-    - can be set global for Client and Server applications
-    - deflate/zip is just broken between browsers and client, and should be
-      avoided: see http://stackoverflow.com/a/9186091
-    - SynLZ is faster but only known by Delphi clients: you can enable deflate
-      when the server is connected an AJAX application (not defined by default)
-    - if you define both COMPRESSSYNLZ and COMPRESSDEFLATE, the server will use
-      SynLZ if available, and deflate if not called from a Delphi client
-    - TRestHttpClientGeneric.Compression shall contain hcDeflate to handle it }
+  // if defined, mormot.rest.http.server will use gzip for content compression
+  // - deflate/zip is just broken between browsers and client, and should be
+  //   avoided: see http://stackoverflow.com/a/9186091
+  // - when the server is connected an AJAX application (not defined by default)
+  // - if you define both COMPRESSSYNLZ and COMPRESSDEFLATE, the server will
+  //   use SynLZ if available, and deflate if not called from a Delphi client
+  // - TRestHttpClientGeneric.Compression shall contain hcDeflate to handle it
 {$endif NOCOMPRESSDEFLATE}
 
-{$ifdef CPU32}
-  {$define NOPOINTEROFFSET} // 32-bit CPU will always store pointers
-{$endif CPU32}
 

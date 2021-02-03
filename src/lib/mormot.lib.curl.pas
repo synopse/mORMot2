@@ -745,12 +745,12 @@ begin
         // another common names on MacOS
         , 'libcurl.4.dylib', 'libcurl.3.dylib'
       {$else}
-      {$ifdef OSPOSIX}
+        {$ifdef OSPOSIX}
         // another common names on POSIX
         , 'libcurl.so.4', 'libcurl.so.3'
         // for latest Linux Mint and other similar distros using gnutls
         , 'libcurl-gnutls.so.4', 'libcurl-gnutls.so.3'
-      {$endif OSPOSIX}
+        {$endif OSPOSIX}
       {$endif OSDARWIN}
         ], ECurl);
       P := @@curl.global_init;
