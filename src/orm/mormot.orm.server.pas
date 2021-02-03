@@ -429,7 +429,7 @@ type
   public
     { IRestOrmServer methods }
     /// create an index for the specific FieldName
-    // - will call CreateSqlMultiIndex() internaly
+    // - will call CreateSqlMultiIndex() internally
     function CreateSqlIndex(Table: TOrmClass;
       const FieldName: RawUtf8; Unique: boolean;
       const IndexName: RawUtf8 = ''): boolean; overload;

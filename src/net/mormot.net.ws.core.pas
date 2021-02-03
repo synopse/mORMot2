@@ -1099,7 +1099,7 @@ begin
     Sender.Log(request, 'Ignored answer after NotifyCallback TIMEOUT', sllWarning);
   end
   else
-    Sender.fIncoming.Push(request); // e.g. asynch 'answer'
+    Sender.fIncoming.Push(request); // e.g. async 'answer'
 end;
 
 // by convention, defaults are POST and JSON, to reduce frame size for SOA calls

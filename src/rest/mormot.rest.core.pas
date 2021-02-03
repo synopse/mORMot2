@@ -115,15 +115,15 @@ type
   TRest = class;
   {$M-}
 
-  /// optionally called after TRest.AsynchRedirect background execution
+  /// optionally called after TRest.AsyncRedirect background execution
   // - to retrieve any output result value, as JSON-encoded content
-  // - as used in TRestBackgroundTimer.AsynchBackgroundExecute protected method
-  TOnAsynchRedirectResult = procedure(const aMethod: TInterfaceMethod;
+  // - as used in TRestBackgroundTimer.AsyncBackgroundExecute protected method
+  TOnAsyncRedirectResult = procedure(const aMethod: TInterfaceMethod;
     const aInstance: IInvokable; const aParams, aResult: RawUtf8) of object;
 
   /// TThread able to run one or several tasks at a periodic pace, or do
   // asynchronous interface or batch execution, with proper TRest integration
-  // - used e.g. by TRest.TimerEnable/AsynchRedirect/AsynchBatchStart methods
+  // - used e.g. by TRest.TimerEnable/AsyncRedirect/AsyncBatchStart methods
   // - TRest.BackgroundTimer will define one instance, but you may create
   // other dedicated instances to instantiate separated threads
   TRestBackgroundTimer = class(TSynBackgroundTimer)
@@ -134,16 +134,16 @@ type
     fBackgroundInterningMaxRefCount: integer;
     procedure SystemUseBackgroundExecute(Sender: TSynBackgroundTimer;
       Event: TWaitResult; const Msg: RawUtf8);
-    // used by AsynchRedirect/AsynchBatch/AsynchInterning
-    function AsynchBatchIndex(aTable: TOrmClass): PtrInt;
-    function AsynchBatchLocked(aTable: TOrmClass;
+    // used by AsyncRedirect/AsyncBatch/AsyncInterning
+    function AsyncBatchIndex(aTable: TOrmClass): PtrInt;
+    function AsyncBatchLocked(aTable: TOrmClass;
       out aBatch: TRestBatchLocked): boolean;
-    procedure AsynchBatchUnLock(aBatch: TRestBatchLocked);
-    procedure AsynchBatchExecute(Sender: TSynBackgroundTimer;
+    procedure AsyncBatchUnLock(aBatch: TRestBatchLocked);
+    procedure AsyncBatchExecute(Sender: TSynBackgroundTimer;
       Event: TWaitResult; const Msg: RawUtf8);
-    procedure AsynchBackgroundExecute(Sender: TSynBackgroundTimer;
+    procedure AsyncBackgroundExecute(Sender: TSynBackgroundTimer;
       Event: TWaitResult; const Msg: RawUtf8);
-    procedure AsynchBackgroundInterning(Sender: TSynBackgroundTimer;
+    procedure AsyncBackgroundInterning(Sender: TSynBackgroundTimer;
       Event: TWaitResult; const Msg: RawUtf8);
   public
     /// initialize the thread for a periodic task processing
@@ -168,9 +168,9 @@ type
     // e.g. if a callback is run from a thread, and then the callback code try
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
-    procedure AsynchRedirect(const aGuid: TGUID;
+    procedure AsyncRedirect(const aGuid: TGUID;
       const aDestinationInterface: IInvokable; out aCallbackInterface;
-      const aOnResult: TOnAsynchRedirectResult = nil); overload;
+      const aOnResult: TOnAsyncRedirectResult = nil); overload;
     /// define asynchronous execution of interface methods in a background thread
     // - this method implements any interface via a fake class, which will
     // redirect all methods calls into calls of another interface, but as a FIFO
@@ -188,65 +188,65 @@ type
     // e.g. if a callback is run from a thread, and then the callback code try
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
-    procedure AsynchRedirect(const aGuid: TGUID;
+    procedure AsyncRedirect(const aGuid: TGUID;
       const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
-      const aOnResult: TOnAsynchRedirectResult = nil); overload;
+      const aOnResult: TOnAsyncRedirectResult = nil); overload;
     /// prepare an asynchronous ORM BATCH process, executed in a background thread
     // - will initialize a TRestBatch and call TimerEnable to initialize the
     // background thread, following the given processing period (in seconds),
     // or the TRestBatch.Count threshold to call BatchSend
-    // - actual REST/CRUD commands will take place via AsynchBatchAdd,
-    // AsynchBatchUpdate and AsynchBatchDelete methods
-    // - only a single AsynchBatch() call per Table is allowed at a time, unless
-    // AsynchBatchStop method is used to flush the current asynchronous BATCH
+    // - actual REST/CRUD commands will take place via AsyncBatchAdd,
+    // AsyncBatchUpdate and AsyncBatchDelete methods
+    // - only a single AsyncBatch() call per Table is allowed at a time, unless
+    // AsyncBatchStop method is used to flush the current asynchronous BATCH
     // - using a BATCH in a dedicated thread will allow very fast background
     // asynchronous process of ORM methods, sufficient for most use cases
-    function AsynchBatchStart(Table: TOrmClass;
+    function AsyncBatchStart(Table: TOrmClass;
       SendSeconds: integer; PendingRowThreshold: integer = 500;
       AutomaticTransactionPerRow: integer = 1000;
       Options: TRestBatchOptions = [boExtendedJson]): boolean;
     /// finalize asynchronous ORM BATCH process, executed in a background thread
-    // - should have been preceded by a call to AsynchBatch(), or returns false
+    // - should have been preceded by a call to AsyncBatch(), or returns false
     // - Table=nil will release all existing batch instances
-    function AsynchBatchStop(Table: TOrmClass): boolean;
+    function AsyncBatchStop(Table: TOrmClass): boolean;
     /// create a new ORM member in a BATCH to be written in a background thread
-    // - should have been preceded by a call to AsynchBatchStart(), or returns -1
+    // - should have been preceded by a call to AsyncBatchStart(), or returns -1
     // - is a wrapper around TRestBatch.Add() sent in the Timer thread,
     // so will return the index in the BATCH rows, not the created TID
     // - this method is thread-safe
-    function AsynchBatchAdd(Value: TOrm; SendData: boolean;
+    function AsyncBatchAdd(Value: TOrm; SendData: boolean;
       ForceID: boolean = false; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     /// append some JSON content in a BATCH to be writen in a background thread
-    // - could be used to emulate AsynchBatchAdd() with an already pre-computed
+    // - could be used to emulate AsyncBatchAdd() with an already pre-computed
     // JSON object
     // - is a wrapper around TRestBatch.RawAdd() sent in the Timer thread,
     // so will return the index in the BATCH rows, not the created TID
     // - this method is thread-safe
-    function AsynchBatchRawAdd(Table: TOrmClass; const SentData: RawUtf8): integer;
+    function AsyncBatchRawAdd(Table: TOrmClass; const SentData: RawUtf8): integer;
     /// append some JSON content in a BATCH to be writen in a background thread
-    // - could be used to emulate AsynchBatchAdd() with an already pre-computed
+    // - could be used to emulate AsyncBatchAdd() with an already pre-computed
     // JSON object, as stored in a TTextWriter instance
     // - is a wrapper around TRestBatch.RawAppend.AddNoJsonEscape(SentData)
     // in the Timer thread
     // - this method is thread-safe
-    procedure AsynchBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
+    procedure AsyncBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
     /// update an ORM member in a BATCH to be written in a background thread
-    // - should have been preceded by a call to AsynchBatchStart(), or returns -1
+    // - should have been preceded by a call to AsyncBatchStart(), or returns -1
     // - is a wrapper around the TRestBatch.Update() sent in the Timer thread
     // - this method is thread-safe
-    function AsynchBatchUpdate(Value: TOrm;
+    function AsyncBatchUpdate(Value: TOrm;
       const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     /// delete an ORM member in a BATCH to be written in a background thread
-    // - should have been preceded by a call to AsynchBatchStart(), or returns -1
+    // - should have been preceded by a call to AsyncBatchStart(), or returns -1
     // - is a wrapper around the TRestBatch.Delete() sent in the Timer thread
     // - this method is thread-safe
-    function AsynchBatchDelete(Table: TOrmClass; ID: TID): integer;
+    function AsyncBatchDelete(Table: TOrmClass; ID: TID): integer;
     /// allows background garbage collection of specified RawUtf8 interning
     // - will run Interning.Clean(2) every 5 minutes by default
     // - set InterningMaxRefCount=0 to disable process of the Interning instance
-    procedure AsynchInterning(Interning: TRawUtf8Interning;
+    procedure AsyncInterning(Interning: TRawUtf8Interning;
       InterningMaxRefCount: integer = 2; PeriodMinutes: integer = 5);
     /// direct access to the TRest instance owner
     property Rest: TRest
@@ -350,10 +350,10 @@ type
     // e.g. if a callback is run from a thread, and then the callback code try
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
-    // - is a wrapper around BackgroundTimer.AsynchRedirect()
-    procedure AsynchRedirect(const aGuid: TGUID;
+    // - is a wrapper around BackgroundTimer.AsyncRedirect()
+    procedure AsyncRedirect(const aGuid: TGUID;
       const aDestinationInterface: IInvokable; out aCallbackInterface;
-      const aOnResult: TOnAsynchRedirectResult = nil); overload;
+      const aOnResult: TOnAsyncRedirectResult = nil); overload;
     /// define asynchronous execution of interface methods in a background thread
     // - this class allows to implements any interface via a fake class, which will
     // redirect all methods calls into calls of another interface, but as a FIFO
@@ -363,19 +363,19 @@ type
     // e.g. if a callback is run from a thread, and then the callback code try
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
-    // - is a wrapper around BackgroundTimer.AsynchRedirect()
-    procedure AsynchRedirect(const aGuid: TGUID;
+    // - is a wrapper around BackgroundTimer.AsyncRedirect()
+    procedure AsyncRedirect(const aGuid: TGUID;
       const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
-      const aOnResult: TOnAsynchRedirectResult = nil); overload;
+      const aOnResult: TOnAsyncRedirectResult = nil); overload;
     /// allows background garbage collection of specified RawUtf8 interning
     // - will run Interning.Clean(2) every 5 minutes by default
     // - set InterningMaxRefCount=0 to disable process of the Interning instance
     // - note that InterningMaxRefCount and PeriodMinutes parameters (if not 0),
     // are common for all TRawUtf8Interning instances (the latest value wins)
     // - you may e.g. run the following to clean up TDocVariant interned RawUtf8:
-    // ! aRest.Run.AsynchInterning(DocVariantType.InternNames);
-    // ! aRest.Run.AsynchInterning(DocVariantType.InternValues);
-    procedure AsynchInterning(Interning: TRawUtf8Interning;
+    // ! aRest.Run.AsyncInterning(DocVariantType.InternNames);
+    // ! aRest.Run.AsyncInterning(DocVariantType.InternValues);
+    procedure AsyncInterning(Interning: TRawUtf8Interning;
       InterningMaxRefCount: integer = 2; PeriodMinutes: integer = 5);
     /// define redirection of interface methods calls in one or several instances
     // - this class allows to implements any interface via a fake class, which
@@ -809,18 +809,18 @@ type
     procedure WriteUnLock;
     function BatchSend(Batch: TRestBatch; var Results: TIDDynArray): integer; overload;
     function BatchSend(Batch: TRestBatch): integer; overload;
-    function AsynchBatchStart(Table: TOrmClass; SendSeconds: integer;
+    function AsyncBatchStart(Table: TOrmClass; SendSeconds: integer;
       PendingRowThreshold: integer = 500; AutomaticTransactionPerRow: integer = 1000;
       Options: TRestBatchOptions = [boExtendedJson]): boolean;
-    function AsynchBatchStop(Table: TOrmClass): boolean;
-    function AsynchBatchAdd(Value: TOrm; SendData: boolean;
+    function AsyncBatchStop(Table: TOrmClass): boolean;
+    function AsyncBatchAdd(Value: TOrm; SendData: boolean;
       ForceID: boolean = false; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
-    function AsynchBatchRawAdd(Table: TOrmClass; const SentData: RawUtf8): integer;
-    procedure AsynchBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
-    function AsynchBatchUpdate(Value: TOrm; const CustomFields: TFieldBits = [];
+    function AsyncBatchRawAdd(Table: TOrmClass; const SentData: RawUtf8): integer;
+    procedure AsyncBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
+    function AsyncBatchUpdate(Value: TOrm; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
-    function AsynchBatchDelete(Table: TOrmClass; ID: TID): integer;
+    function AsyncBatchDelete(Table: TOrmClass; ID: TID): integer;
     function Cache: TRestCache;
     function CacheOrNil: TRestCache;
     function CacheWorthItForTable(aTableIndex: cardinal): boolean;
@@ -840,13 +840,13 @@ type
     function EnsureBackgroundTimerExists: TRestBackgroundTimer;
     procedure BeginCurrentThread(Sender: TThread); virtual;
     procedure EndCurrentThread(Sender: TThread); virtual;
-    procedure AsynchRedirect(const aGuid: TGUID;
+    procedure AsyncRedirect(const aGuid: TGUID;
       const aDestinationInterface: IInvokable; out aCallbackInterface;
-      const aOnResult: TOnAsynchRedirectResult = nil); overload;
-    procedure AsynchRedirect(const aGuid: TGUID;
+      const aOnResult: TOnAsyncRedirectResult = nil); overload;
+    procedure AsyncRedirect(const aGuid: TGUID;
       const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
-      const aOnResult: TOnAsynchRedirectResult = nil); overload;
-    procedure AsynchInterning(Interning: TRawUtf8Interning;
+      const aOnResult: TOnAsyncRedirectResult = nil); overload;
+    procedure AsyncInterning(Interning: TRawUtf8Interning;
       InterningMaxRefCount: integer = 2; PeriodMinutes: integer = 5);
     function MultiRedirect(const aGuid: TGUID; out aCallbackInterface;
       aCallBackUnRegisterNeeded: boolean = true): IMultiCallbackRedirect; overload;
@@ -1848,7 +1848,7 @@ begin
   InternalLog('TRest.Destroy %',[fModel.SafeRoot],sllInfo); // self->GPF
   if fOrm <> nil then
     // abort any (unlikely) pending TRestBatch
-    fOrm.AsynchBatchStop(nil);
+    fOrm.AsyncBatchStop(nil);
   FreeAndNil(fRun);
   FreeAndNil(fServices);
   if fOrmInstance <> nil then
@@ -2502,47 +2502,47 @@ begin
   result := fOrm.BatchSend(Batch);
 end;
 
-function TRest.AsynchBatchStart(Table: TOrmClass;
+function TRest.AsyncBatchStart(Table: TOrmClass;
   SendSeconds: integer; PendingRowThreshold: integer;
   AutomaticTransactionPerRow: integer; Options: TRestBatchOptions): boolean;
 begin
-  result := fOrm.AsynchBatchStart(Table, SendSeconds, PendingRowThreshold,
+  result := fOrm.AsyncBatchStart(Table, SendSeconds, PendingRowThreshold,
     AutomaticTransactionPerRow, Options);
 end;
 
-function TRest.AsynchBatchStop(Table: TOrmClass): boolean;
+function TRest.AsyncBatchStop(Table: TOrmClass): boolean;
 begin
-  result := fOrm.AsynchBatchStop(Table);
+  result := fOrm.AsyncBatchStop(Table);
 end;
 
-function TRest.AsynchBatchAdd(Value: TOrm; SendData: boolean;
+function TRest.AsyncBatchAdd(Value: TOrm; SendData: boolean;
   ForceID: boolean; const CustomFields: TFieldBits;
   DoNotAutoComputeFields: boolean): integer;
 begin
-  result := fOrm.AsynchBatchAdd(Value, SendData, ForceID, CustomFields,
+  result := fOrm.AsyncBatchAdd(Value, SendData, ForceID, CustomFields,
     DoNotAutoComputeFields);
 end;
 
-function TRest.AsynchBatchRawAdd(Table: TOrmClass;
+function TRest.AsyncBatchRawAdd(Table: TOrmClass;
   const SentData: RawUtf8): integer;
 begin
-  result := fOrm.AsynchBatchRawAdd(Table, SentData);
+  result := fOrm.AsyncBatchRawAdd(Table, SentData);
 end;
 
-procedure TRest.AsynchBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
+procedure TRest.AsyncBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
 begin
-  fOrm.AsynchBatchRawAppend(Table, SentData);
+  fOrm.AsyncBatchRawAppend(Table, SentData);
 end;
 
-function TRest.AsynchBatchUpdate(Value: TOrm;
+function TRest.AsyncBatchUpdate(Value: TOrm;
   const CustomFields: TFieldBits; DoNotAutoComputeFields: boolean): integer;
 begin
-  result := fOrm.AsynchBatchUpdate(Value, CustomFields, DoNotAutoComputeFields);
+  result := fOrm.AsyncBatchUpdate(Value, CustomFields, DoNotAutoComputeFields);
 end;
 
-function TRest.AsynchBatchDelete(Table: TOrmClass; ID: TID): integer;
+function TRest.AsyncBatchDelete(Table: TOrmClass; ID: TID): integer;
 begin
-  result := fOrm.AsynchBatchDelete(Table, ID);
+  result := fOrm.AsyncBatchDelete(Table, ID);
 end;
 
 function TRest.Cache: TRestCache;
@@ -2638,29 +2638,29 @@ begin
     fRun.EndCurrentThread(Sender);
 end;
 
-procedure TRest.AsynchRedirect(const aGuid: TGUID;
+procedure TRest.AsyncRedirect(const aGuid: TGUID;
   const aDestinationInterface: IInvokable; out aCallbackInterface;
-  const aOnResult: TOnAsynchRedirectResult);
+  const aOnResult: TOnAsyncRedirectResult);
 begin
   if self <> nil then
-    fRun.AsynchRedirect(
+    fRun.AsyncRedirect(
       aGuid, aDestinationInterface, aCallbackInterface, aOnResult);
 end;
 
-procedure TRest.AsynchRedirect(const aGuid: TGUID;
+procedure TRest.AsyncRedirect(const aGuid: TGUID;
   const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
-  const aOnResult: TOnAsynchRedirectResult);
+  const aOnResult: TOnAsyncRedirectResult);
 begin
   if self <> nil then
-    fRun.AsynchRedirect(
+    fRun.AsyncRedirect(
       aGuid, aDestinationInstance, aCallbackInterface, aOnResult);
 end;
 
-procedure TRest.AsynchInterning(Interning: TRawUtf8Interning;
+procedure TRest.AsyncInterning(Interning: TRawUtf8Interning;
   InterningMaxRefCount, PeriodMinutes: integer);
 begin
   if self <> nil then
-    fRun.AsynchInterning(
+    fRun.AsyncInterning(
       Interning, InterningMaxRefCount, PeriodMinutes);
 end;
 
@@ -2692,34 +2692,34 @@ begin
 end;
 
 
-{ TInterfacedObjectAsynch }
+{ TInterfacedObjectAsync }
 
 type
-  TInterfacedObjectAsynch = class(TInterfacedObjectFakeCallback)
+  TInterfacedObjectAsync = class(TInterfacedObjectFakeCallback)
   protected
     fTimer: TRestBackgroundTimer;
     fDest: IInvokable;
-    fOnResult: TOnAsynchRedirectResult;
+    fOnResult: TOnAsyncRedirectResult;
     function FakeInvoke(const aMethod: TInterfaceMethod; const aParams: RawUtf8;
       aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean; override;
   public
     constructor Create(aTimer: TRestBackgroundTimer; aFactory:
       TInterfaceFactory; const aDestinationInterface: IInvokable; out
-      aCallbackInterface; const aOnResult: TOnAsynchRedirectResult);
+      aCallbackInterface; const aOnResult: TOnAsyncRedirectResult);
   end;
 
-  TInterfacedObjectAsynchCall = packed record
+  TInterfacedObjectAsyncCall = packed record
     Method: PInterfaceMethod;
     Instance: pointer; // weak IInvokable reference
     Params: RawUtf8;
     OnOutputParamsCopy: RawUtf8;
-    OnOutput: TOnAsynchRedirectResult;
+    OnOutput: TOnAsyncRedirectResult;
   end;
 
-constructor TInterfacedObjectAsynch.Create(aTimer: TRestBackgroundTimer;
+constructor TInterfacedObjectAsync.Create(aTimer: TRestBackgroundTimer;
   aFactory: TInterfaceFactory; const aDestinationInterface: IInvokable;
-  out aCallbackInterface; const aOnResult: TOnAsynchRedirectResult);
+  out aCallbackInterface; const aOnResult: TOnAsyncRedirectResult);
 begin
   fTimer := aTimer;
   fLogClass := fTimer.fRest.fLogClass;
@@ -2731,12 +2731,12 @@ begin
   Get(aCallbackInterface);
 end;
 
-function TInterfacedObjectAsynch.FakeInvoke(const aMethod: TInterfaceMethod;
+function TInterfacedObjectAsync.FakeInvoke(const aMethod: TInterfaceMethod;
   const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
   aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 var
   msg: RawUtf8;
-  call: TInterfacedObjectAsynchCall;
+  call: TInterfacedObjectAsyncCall;
 begin
   result := inherited FakeInvoke(aMethod, aParams, aResult, aErrorMsg,
     aClientDrivenID, aServiceCustomAnswer);
@@ -2752,8 +2752,8 @@ begin
   end
   else
     call.OnOutput := nil;
-  msg := BinarySave(@call, TypeInfo(TInterfacedObjectAsynchCall), [rkRecord]);
-  result := fTimer.EnQueue(fTimer.AsynchBackgroundExecute, msg, true);
+  msg := BinarySave(@call, TypeInfo(TInterfacedObjectAsyncCall), [rkRecord]);
+  result := fTimer.EnQueue(fTimer.AsyncBackgroundExecute, msg, true);
 end;
 
 
@@ -2779,7 +2779,7 @@ end;
 
 destructor TRestBackgroundTimer.Destroy;
 begin
-  AsynchBatchStop(nil);
+  AsyncBatchStop(nil);
   inherited Destroy;
 end;
 
@@ -2789,7 +2789,7 @@ begin
   TSystemUse.Current({createifnone=}false).OnTimerExecute(Sender);
 end;
 
-function TRestBackgroundTimer.AsynchBatchIndex(aTable: TOrmClass): PtrInt;
+function TRestBackgroundTimer.AsyncBatchIndex(aTable: TOrmClass): PtrInt;
 begin
   if (self = nil) or
      (fBackgroundBatch = nil) then
@@ -2803,12 +2803,12 @@ begin
   end;
 end;
 
-function TRestBackgroundTimer.AsynchBatchLocked(aTable: TOrmClass;
+function TRestBackgroundTimer.AsyncBatchLocked(aTable: TOrmClass;
   out aBatch: TRestBatchLocked): boolean;
 var
   b: PtrInt;
 begin
-  b := AsynchBatchIndex(aTable);
+  b := AsyncBatchIndex(aTable);
   if b >= 0 then
   begin
     aBatch := fBackgroundBatch[b];
@@ -2819,17 +2819,17 @@ begin
     result := false;
 end;
 
-procedure TRestBackgroundTimer.AsynchBatchUnLock(aBatch: TRestBatchLocked);
+procedure TRestBackgroundTimer.AsyncBatchUnLock(aBatch: TRestBatchLocked);
 begin
   try
     if aBatch.Count >= aBatch.Threshold then
-      ExecuteNow(AsynchBatchExecute);
+      ExecuteNow(AsyncBatchExecute);
   finally
     aBatch.Safe.UnLock;
   end;
 end;
 
-procedure TRestBackgroundTimer.AsynchBatchExecute(Sender: TSynBackgroundTimer;
+procedure TRestBackgroundTimer.AsyncBatchExecute(Sender: TSynBackgroundTimer;
   Event: TWaitResult; const Msg: RawUtf8);
 var
   json, tablename: RawUtf8;
@@ -2857,7 +2857,7 @@ begin
         try
           if ({%H-}log = nil) and
              (fRest.fLogClass <> nil) then
-            log := fRest.fLogClass.Enter('AsynchBatchExecute % count=%',
+            log := fRest.fLogClass.Enter('AsyncBatchExecute % count=%',
               [table, count], self);
           batch.PrepareForSending(json);
         finally
@@ -2871,26 +2871,26 @@ begin
       try
         // json layout is '{"Table":["cmd":values,...]}'
         status := fRest.ORM.BatchSend(table, json, res, count); // may take a while
-        fRest.InternalLog('AsynchBatchExecute % EngineBatchSend=%',
+        fRest.InternalLog('AsyncBatchExecute % EngineBatchSend=%',
           [table, status]);
       except
         on E: Exception do
-          fRest.InternalLog('% during AsynchBatchExecute %',
+          fRest.InternalLog('% during AsyncBatchExecute %',
             [E.ClassType, table], sllWarning);
       end;
     end;
   finally
     if IdemPChar(pointer(Msg), 'FREE@') then
     begin
-      // from AsynchBatchStop()
-      fRest.InternalLog('AsynchBatchExecute %', [Msg]);
+      // from AsyncBatchStop()
+      fRest.InternalLog('AsyncBatchExecute %', [Msg]);
       tablename := copy(Msg, 6, 127);
       if tablename = '' then
-        // AsynchBatchStop(nil)
+        // AsyncBatchStop(nil)
         ObjArrayClear(fBackgroundBatch, true)
       else
       begin
-        // AsynchBatchStop(table)
+        // AsyncBatchStop(table)
         b := fRest.Model.GetTableIndex(tablename);
         if b < length(fBackgroundBatch) then
           FreeAndNil(fBackgroundBatch[b]);
@@ -2899,7 +2899,7 @@ begin
   end;
 end;
 
-function TRestBackgroundTimer.AsynchBatchStart(Table: TOrmClass;
+function TRestBackgroundTimer.AsyncBatchStart(Table: TOrmClass;
   SendSeconds, PendingRowThreshold, AutomaticTransactionPerRow: integer;
   Options: TRestBatchOptions): boolean;
 var
@@ -2914,9 +2914,9 @@ begin
      (fBackgroundBatch[b] <> nil) then
     // already defined for this Table
     exit;
-  fRest.InternalLog('AsynchBatchStart(%,%,%)',
+  fRest.InternalLog('AsyncBatchStart(%,%,%)',
     [Table, SendSeconds, PendingRowThreshold], sllDebug);
-  Enable(AsynchBatchExecute, SendSeconds);
+  Enable(AsyncBatchExecute, SendSeconds);
   if fBackgroundBatch = nil then
     SetLength(fBackgroundBatch, fRest.Model.TablesMax + 1);
   fBackgroundBatch[b] := TRestBatchLocked.Create(
@@ -2925,7 +2925,7 @@ begin
   result := true;
 end;
 
-function TRestBackgroundTimer.AsynchBatchStop(Table: TOrmClass): boolean;
+function TRestBackgroundTimer.AsyncBatchStop(Table: TOrmClass): boolean;
 var
   b: PtrInt;
   timeout: Int64;
@@ -2935,25 +2935,25 @@ begin
   if (self = nil) or
      (fBackgroundBatch = nil) then
     exit;
-  log := fRest.fLogClass.Enter('AsynchBatchStop(%)', [Table], self);
+  log := fRest.fLogClass.Enter('AsyncBatchStop(%)', [Table], self);
   timeout := mormot.core.os.GetTickCount64 + 5000;
   if Table = nil then
   begin
     // as called from TRest.Destroy
-    if not EnQueue(AsynchBatchExecute, 'free@', true) then
+    if not EnQueue(AsyncBatchExecute, 'free@', true) then
       exit;
     repeat
       SleepHiRes(1); // wait for all batchs to be released
     until (fBackgroundBatch = nil) or
           (mormot.core.os.GetTickCount64 > timeout);
-    result := Disable(AsynchBatchExecute);
+    result := Disable(AsyncBatchExecute);
   end
   else
   begin
     // wait for regular TRestBatch process
-    b := AsynchBatchIndex(Table);
+    b := AsyncBatchIndex(Table);
     if (b < 0) or
-       not EnQueue(AsynchBatchExecute, 'free@' + Table.SqlTableName, true) then
+       not EnQueue(AsyncBatchExecute, 'free@' + Table.SqlTableName, true) then
       exit;
     repeat
       SleepHiRes(1); // wait for all pending rows to be sent
@@ -2963,14 +2963,14 @@ begin
       result := true
     else
     begin
-      result := Disable(AsynchBatchExecute);
+      result := Disable(AsyncBatchExecute);
       if result then
         ObjArrayClear(fBackgroundBatch, true);
     end;
   end;
 end;
 
-function TRestBackgroundTimer.AsynchBatchAdd(Value: TOrm;
+function TRestBackgroundTimer.AsyncBatchAdd(Value: TOrm;
   SendData, ForceID: boolean; const CustomFields: TFieldBits;
   DoNotAutoComputeFields: boolean): integer;
 var
@@ -2981,16 +2981,16 @@ begin
      (fBackgroundBatch = nil) or
      (Value = nil) then
     exit;
-  fRest.InternalLog('AsynchBatchAdd %', [Value], sllDebug);
-  if AsynchBatchLocked(Value.RecordClass, b) then
+  fRest.InternalLog('AsyncBatchAdd %', [Value], sllDebug);
+  if AsyncBatchLocked(Value.RecordClass, b) then
   try
     result := b.Add(Value, SendData, ForceID, CustomFields, DoNotAutoComputeFields);
   finally
-    AsynchBatchUnLock(b);
+    AsyncBatchUnLock(b);
   end;
 end;
 
-function TRestBackgroundTimer.AsynchBatchRawAdd(Table: TOrmClass;
+function TRestBackgroundTimer.AsyncBatchRawAdd(Table: TOrmClass;
   const SentData: RawUtf8): integer;
 var
   b: TRestBatchLocked;
@@ -3000,16 +3000,16 @@ begin
      (fBackgroundBatch = nil) or
      (Table = nil) then
     exit;
-  fRest.InternalLog('AsynchBatchRawAdd % %', [Table, SentData], sllDebug);
-  if AsynchBatchLocked(Table, b) then
+  fRest.InternalLog('AsyncBatchRawAdd % %', [Table, SentData], sllDebug);
+  if AsyncBatchLocked(Table, b) then
   try
     result := b.RawAdd(SentData);
   finally
-    AsynchBatchUnLock(b);
+    AsyncBatchUnLock(b);
   end;
 end;
 
-procedure TRestBackgroundTimer.AsynchBatchRawAppend(Table: TOrmClass;
+procedure TRestBackgroundTimer.AsyncBatchRawAppend(Table: TOrmClass;
   SentData: TTextWriter);
 var
   b: TRestBatchLocked;
@@ -3019,16 +3019,16 @@ begin
      (Table = nil) or
      (SentData = nil) then
     exit;
-  fRest.InternalLog('AsynchBatchRawAppend %', [Table], sllDebug);
-  if AsynchBatchLocked(Table, b) then
+  fRest.InternalLog('AsyncBatchRawAppend %', [Table], sllDebug);
+  if AsyncBatchLocked(Table, b) then
   try
     b.RawAppend.AddNoJsonEscape(SentData);
   finally
-    AsynchBatchUnLock(b);
+    AsyncBatchUnLock(b);
   end;
 end;
 
-function TRestBackgroundTimer.AsynchBatchUpdate(Value: TOrm;
+function TRestBackgroundTimer.AsyncBatchUpdate(Value: TOrm;
   const CustomFields: TFieldBits; DoNotAutoComputeFields: boolean): integer;
 var
   b: TRestBatchLocked;
@@ -3038,16 +3038,16 @@ begin
      (fBackgroundBatch = nil) or
      (Value = nil) then
     exit;
-  fRest.InternalLog('AsynchBatchUpdate %', [Value], sllDebug);
-  if AsynchBatchLocked(Value.RecordClass, b) then
+  fRest.InternalLog('AsyncBatchUpdate %', [Value], sllDebug);
+  if AsyncBatchLocked(Value.RecordClass, b) then
   try
     result := b.Update(Value, CustomFields, DoNotAutoComputeFields);
   finally
-    AsynchBatchUnLock(b);
+    AsyncBatchUnLock(b);
   end;
 end;
 
-function TRestBackgroundTimer.AsynchBatchDelete(Table: TOrmClass;
+function TRestBackgroundTimer.AsyncBatchDelete(Table: TOrmClass;
   ID: TID): integer;
 var
   b: TRestBatchLocked;
@@ -3056,27 +3056,27 @@ begin
   if (self = nil) or
      (fBackgroundBatch = nil) then
     exit;
-  fRest.InternalLog('AsynchBatchDelete % %', [Table, ID], sllDebug);
-  if AsynchBatchLocked(Table, b) then
+  fRest.InternalLog('AsyncBatchDelete % %', [Table, ID], sllDebug);
+  if AsyncBatchLocked(Table, b) then
   try
     result := b.Delete(Table, ID);
   finally
-    AsynchBatchUnLock(b);
+    AsyncBatchUnLock(b);
   end;
 end;
 
-procedure TRestBackgroundTimer.AsynchBackgroundExecute(
+procedure TRestBackgroundTimer.AsyncBackgroundExecute(
   Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUtf8);
 var
   exec: TInterfaceMethodExecute;
-  call: TInterfacedObjectAsynchCall;
+  call: TInterfacedObjectAsyncCall;
   o: PRawUtf8;
   output: RawUtf8;
   log: ISynLog;
 begin
-  if not RecordLoad(call, Msg, TypeInfo(TInterfacedObjectAsynchCall)) then
+  if not RecordLoad(call, Msg, TypeInfo(TInterfacedObjectAsyncCall)) then
     exit; // invalid message (e.g. periodic execution)
-  log := fRest.fLogClass.Enter('AsynchBackgroundExecute % %',
+  log := fRest.fLogClass.Enter('AsyncBackgroundExecute % %',
     [call.Method^.InterfaceDotMethodName, call.Params], self);
   exec := TInterfaceMethodExecute.Create(call.Method);
   try
@@ -3085,7 +3085,7 @@ begin
     else
       o := nil;
     if not exec.ExecuteJsonCallback(call.Instance, call.Params, o) then
-      fRest.InternalLog('%.AsynchBackgroundExecute %: ExecuteJsonCallback failed',
+      fRest.InternalLog('%.AsyncBackgroundExecute %: ExecuteJsonCallback failed',
         [ClassType, call.Method^.InterfaceDotMethodName], sllWarning)
     else if o <> nil then
       call.OnOutput(call.Method^,
@@ -3095,40 +3095,40 @@ begin
   end;
 end;
 
-procedure TRestBackgroundTimer.AsynchRedirect(const aGuid: TGUID;
+procedure TRestBackgroundTimer.AsyncRedirect(const aGuid: TGUID;
   const aDestinationInterface: IInvokable; out aCallbackInterface;
-  const aOnResult: TOnAsynchRedirectResult);
+  const aOnResult: TOnAsyncRedirectResult);
 var
   factory: TInterfaceFactory;
 begin
   factory := TInterfaceFactory.Get(aGuid);
   if factory = nil then
-    raise EServiceException.CreateUtf8('%.AsynchRedirect: unknown %',
+    raise EServiceException.CreateUtf8('%.AsyncRedirect: unknown %',
       [self, GuidToShort(aGuid)]);
   if aDestinationInterface = nil then
-    raise EServiceException.CreateUtf8('%.AsynchRedirect(nil)', [self]);
-  fRest.InternalLog('AsynchRedirect % to % using %',
+    raise EServiceException.CreateUtf8('%.AsyncRedirect(nil)', [self]);
+  fRest.InternalLog('AsyncRedirect % to % using %',
     [factory.InterfaceName, ObjectFromInterface(aDestinationInterface), self]);
-  Enable(AsynchBackgroundExecute, 3600);
-  TInterfacedObjectAsynch.Create(self, factory, aDestinationInterface,
+  Enable(AsyncBackgroundExecute, 3600);
+  TInterfacedObjectAsync.Create(self, factory, aDestinationInterface,
     aCallbackInterface, aOnResult);
 end;
 
-procedure TRestBackgroundTimer.AsynchRedirect(const aGuid: TGUID;
+procedure TRestBackgroundTimer.AsyncRedirect(const aGuid: TGUID;
   const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
-  const aOnResult: TOnAsynchRedirectResult);
+  const aOnResult: TOnAsyncRedirectResult);
 var
   dest: IInvokable;
 begin
   if aDestinationInstance = nil then
-    raise EServiceException.CreateUtf8('%.AsynchRedirect(nil)', [self]);
+    raise EServiceException.CreateUtf8('%.AsyncRedirect(nil)', [self]);
   if not aDestinationInstance.GetInterface(aGuid, dest) then
-    raise EServiceException.CreateUtf8('%.AsynchRedirect [%]: % is not a %',
+    raise EServiceException.CreateUtf8('%.AsyncRedirect [%]: % is not a %',
       [self, fThreadName, aDestinationInstance, GuidToShort(aGuid)]);
-  AsynchRedirect(aGuid, dest, aCallbackInterface, aOnResult);
+  AsyncRedirect(aGuid, dest, aCallbackInterface, aOnResult);
 end;
 
-procedure TRestBackgroundTimer.AsynchBackgroundInterning(
+procedure TRestBackgroundTimer.AsyncBackgroundInterning(
   Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUtf8);
 var
   i: PtrInt;
@@ -3145,12 +3145,12 @@ begin
   for i := 0 to high(fBackgroundInterning) do
     inc(total, fBackgroundInterning[i].Count);
   fRest.InternalLog(
-    '%.AsynchInterning: Clean(%) claimed %/% strings from % pools in %',
+    '%.AsyncInterning: Clean(%) claimed %/% strings from % pools in %',
     [ClassType, fBackgroundInterningMaxRefCount, claimed, total,
      length(fBackgroundInterning), timer.Stop], sllDebug);
 end;
 
-procedure TRestBackgroundTimer.AsynchInterning(Interning: TRawUtf8Interning;
+procedure TRestBackgroundTimer.AsyncInterning(Interning: TRawUtf8Interning;
   InterningMaxRefCount, PeriodMinutes: integer);
 begin
   if (self = nil) or
@@ -3165,7 +3165,7 @@ begin
     begin
       fBackgroundInterningMaxRefCount := InterningMaxRefCount;
       ObjArrayAddOnce(fBackgroundInterning, Interning);
-      Enable(AsynchBackgroundInterning, PeriodMinutes * 60);
+      Enable(AsyncBackgroundInterning, PeriodMinutes * 60);
     end;
   finally
     fTaskLock.UnLock;
@@ -3635,29 +3635,29 @@ begin
     fOwner.OnEndCurrentThread(sender);
 end;
 
-procedure TRestRunThreads.AsynchRedirect(const aGuid: TGUID;
+procedure TRestRunThreads.AsyncRedirect(const aGuid: TGUID;
   const aDestinationInterface: IInvokable; out aCallbackInterface;
-  const aOnResult: TOnAsynchRedirectResult);
+  const aOnResult: TOnAsyncRedirectResult);
 begin
   if self <> nil then
-    EnsureBackgroundTimerExists.AsynchRedirect(
+    EnsureBackgroundTimerExists.AsyncRedirect(
       aGuid, aDestinationInterface, aCallbackInterface, aOnResult);
 end;
 
-procedure TRestRunThreads.AsynchRedirect(const aGuid: TGUID;
+procedure TRestRunThreads.AsyncRedirect(const aGuid: TGUID;
   const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
-  const aOnResult: TOnAsynchRedirectResult);
+  const aOnResult: TOnAsyncRedirectResult);
 begin
   if self <> nil then
-    EnsureBackgroundTimerExists.AsynchRedirect(
+    EnsureBackgroundTimerExists.AsyncRedirect(
       aGuid, aDestinationInstance, aCallbackInterface, aOnResult);
 end;
 
-procedure TRestRunThreads.AsynchInterning(Interning: TRawUtf8Interning;
+procedure TRestRunThreads.AsyncInterning(Interning: TRawUtf8Interning;
   InterningMaxRefCount, PeriodMinutes: integer);
 begin
   if self <> nil then
-    EnsureBackgroundTimerExists.AsynchInterning(
+    EnsureBackgroundTimerExists.AsyncInterning(
       Interning, InterningMaxRefCount, PeriodMinutes);
 end;
 

@@ -635,7 +635,7 @@ type
     procedure ColumnBlobFromStream(Col: integer; Stream: TStream); overload;
     /// return a Column as a TSqlVar value, first Col is 0
     // - the specified Temp variable will be used for temporary storage of
-    // svtUTF8/svtBlob values
+    // ftUtf8/ftBlob values
     procedure ColumnToSqlVar(Col: integer; var Value: TSqlVar; var Temp: RawByteString);
     /// return a Column as a variant
     // - a ftUtf8 TEXT content will be mapped into a generic WideString variant
@@ -1285,7 +1285,7 @@ type
     // - this method will call the overloaded NewThreadSafeStatementPrepared method
     // - here Args[] array does not refer to bound parameters, but to values
     // to be changed within SqlFormat in place of '%' characters (this method
-    // will call FormatUtf8() internaly); parameters will be bound directly
+    // will call FormatUtf8() internally); parameters will be bound directly
     // on the returned TSqlDBStatement instance
     // - this method should return a prepared statement instance on success
     // - on error, returns nil and you can check Connnection.LastErrorMessage /
@@ -2166,7 +2166,7 @@ type
     /// return a Column date and time value of the current Row, first Col is 0
     function ColumnDateTime(Col: integer): TDateTime; overload; virtual; abstract;
     /// return a column date and time value of the current Row, first Col is 0
-    // - call ColumnDateTime or ColumnUTF8 to convert into TTimeLogBits/Int64 time
+    // - call ColumnDateTime or ColumnUtf8 to convert into TTimeLogBits/Int64 time
     // stamp from a TDateTime or text
     function ColumnTimestamp(Col: integer): TTimeLog; overload;
     /// return a Column currency value of the current Row, first Col is 0
@@ -2174,7 +2174,7 @@ type
     /// return a Column UTF-8 encoded text value of the current Row, first Col is 0
     function ColumnUtf8(Col: integer): RawUtf8; overload; virtual; abstract;
     /// return a Column text value as generic VCL string of the current Row, first Col is 0
-    // - this default implementation will call ColumnUTF8
+    // - this default implementation will call ColumnUtf8
     function ColumnString(Col: integer): string; overload; virtual;
     /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlob(Col: integer): RawByteString; overload; virtual; abstract;
@@ -2207,7 +2207,7 @@ type
     function ColumnToVariant(Col: integer; var Value: Variant): TSqlDBFieldType; virtual;
     /// return a Column as a TSqlVar value, first Col is 0
     // - the specified Temp variable will be used for temporary storage of
-    // svtUTF8/svtBlob values
+    // ftUtf8/ftBlob values
     procedure ColumnToSqlVar(Col: integer; var Value: TSqlVar; var Temp:
       RawByteString); virtual;
     /// return a special CURSOR Column content as a mormot.db.sql result set
@@ -2224,7 +2224,7 @@ type
     /// return a Column date and time value of the current Row, from a supplied column name
     function ColumnDateTime(const ColName: RawUtf8): TDateTime; overload;
     /// return a column date and time value of the current Row, from a supplied column name
-    // - call ColumnDateTime or ColumnUTF8 to convert into TTimeLogBits/Int64 time
+    // - call ColumnDateTime or ColumnUtf8 to convert into TTimeLogBits/Int64 time
     // stamp from a TDateTime or text
     function ColumnTimestamp(const ColName: RawUtf8): TTimeLog; overload;
     /// return a Column currency value of the current Row, from a supplied column name

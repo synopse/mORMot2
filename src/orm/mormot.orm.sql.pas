@@ -78,7 +78,7 @@ type
     fOnEngineAddComputeID: TOnEngineAddComputeID;
     fEngineAddForcedID: TID;
     /// external column layout as retrieved by fProperties
-    // - used internaly to guess e.g. if the column is indexed
+    // - used internally to guess e.g. if the column is indexed
     // - fFieldsExternal[] contains the external table info, and the internal
     // column name is available via fFieldsExternalToInternal[]
     fFieldsExternal: TSqlDBColumnDefineDynArray;
@@ -405,7 +405,7 @@ type
 // - the TSqlDBConnectionProperties instance should be shared by all classes,
 // and released globaly when the ORM is no longer needed
 // - the full table name, as expected by the external database, could be
-// provided here (SqlTableName will be used internaly as table name when
+// provided here (SqlTableName will be used internally as table name when
 // called via the associated SQLite3 Virtual Table) - if no table name is
 // specified (''), will use SqlTableName (e.g. 'Customer' for 'TOrmCustomer')
 // - typical usage is therefore for instance:
@@ -621,7 +621,7 @@ var
 
 begin
   if aServer = nil then
-    raise ERestStorage.CreateUTF8('%.Create(%): aServer=%', [self, aClass, aServer]);
+    raise ERestStorage.CreateUtf8('%.Create(%): aServer=%', [self, aClass, aServer]);
   log := aServer.LogClass.Enter('Create %', [aClass], self);
   inherited Create(aClass, aServer);
   // initialize external DB properties
@@ -728,7 +728,7 @@ begin
         FieldsInternalInit;
       end;
     end;
-  // compute the SQL statements used internaly for external DB requests
+  // compute the SQL statements used internally for external DB requests
   with fStoredClassMapping^ do
   begin
     fSelectOneDirectSQL := FormatUtf8('select % from % where %=?',

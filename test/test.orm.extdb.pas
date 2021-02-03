@@ -1057,7 +1057,7 @@ begin
             Check(RExt.YearOfBirth = RInt.YearOfBirth);
             Check(RExt.YearOfDeath = RInt.YearOfDeath);
             Check(RExt.YearOfBirth <> RExt.YearOfDeath);
-            json := FormatUTF8('["text",%]', [RInt.YearOfDeath]);
+            json := FormatUtf8('["text",%]', [RInt.YearOfDeath]);
             Check(VariantDynArrayToJson(RExt.Value) = json);
           end;
           inc(n);
@@ -1085,7 +1085,7 @@ begin
             Check(RExt.YearOfDeath = RInt.YearOfDeath);
             Check(RExt.YearOfBirth <> RExt.YearOfDeath);
             CheckEqual(VariantDynArrayToJson(RExt.Value),
-              FormatUTF8('["text",%]', [RInt.YearOfDeath]));
+              FormatUtf8('["text",%]', [RInt.YearOfDeath]));
           end;
         end;
         Updated := aExternalClient.GetServerTimestamp;
@@ -1100,7 +1100,7 @@ begin
             Check(RExt.YearOfBirth <> RExt.YearOfDeath);
             Check(RExt.CreatedAt <= Updated);
             CheckEqual(VariantDynArrayToJson(RExt.Value),
-              FormatUTF8('["text",%]', [RExt.YearOfDeath]));
+              FormatUtf8('["text",%]', [RExt.YearOfDeath]));
             RExt.YearOfBirth := RExt.YearOfDeath; // YOB=YOD for 1/100 rows
             if i > 4000 then
             begin
@@ -1125,7 +1125,7 @@ begin
               Check(RExt.CreatedAt <= Updated);
               Check(RExt.LastChange >= Updated);
               CheckEqual(VariantDynArrayToJson(RExt.Value),
-                FormatUTF8('["text",%]', [RExt.YearOfDeath]));
+                FormatUtf8('["text",%]', [RExt.YearOfDeath]));
             end;
           end;
         Check(aExternalClient.Client.BatchSend(BatchIDUpdate) = HTTP_SUCCESS);
@@ -1161,7 +1161,7 @@ begin
           if ok then
           begin
             CheckEqual(VariantDynArrayToJson(RExt.Value),
-              FormatUTF8('["text",%]', [RExt.YearOfDeath]));
+              FormatUtf8('["text",%]', [RExt.YearOfDeath]));
             Check(RExt.CreatedAt >= Start);
             Check(RExt.CreatedAt <= Updated);
             if i mod 100 = 0 then

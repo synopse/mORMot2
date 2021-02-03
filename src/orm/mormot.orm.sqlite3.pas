@@ -60,7 +60,7 @@ type
   /// Execute a SQL statement in the local SQLite3 database engine, and get
   // result in memory
   // - all DATA (even the BLOB fields) is converted into UTF-8 TEXT
-  // - uses a TOrmTableJson internaly: faster than sqlite3_get_table()
+  // - uses a TOrmTableJson internally: faster than sqlite3_get_table()
   // (less memory allocation/fragmentation) and allows efficient caching
   TOrmTableDB = class(TOrmTableJson)
   private
@@ -69,7 +69,7 @@ type
     // - FieldCount=0 if no result is returned
     // - the BLOB data is converted into TEXT: you have to retrieve it with
     //  a special request explicitely (note that JSON format returns BLOB data)
-    // - uses a TOrmTableJson internaly: all currency is transformed to its
+    // - uses a TOrmTableJson internally: all currency is transformed to its
     // floating point TEXT representation, and allows efficient caching
     // - if the SQL statement is in the DB cache, it's retrieved from its
     // cached value: our JSON parsing is a lot faster than SQLite3 engine
@@ -89,7 +89,7 @@ type
   TOrmVirtualTableModuleSQLite3 = class(TOrmVirtualTableModule)
   protected
     fDB: TSqlDataBase;
-    /// used internaly to register the module to the SQLite3 engine
+    /// used internally to register the module to the SQLite3 engine
     fModule: TSqlite3Module;
   public
     /// initialize the module for a given DB connection
@@ -261,12 +261,12 @@ type
     function EngineExecute(const aSql: RawUtf8): boolean; override;
     /// execute one SQL statement
     // - intercept any DB exception and return false on error, true on success
-    // - optional LastInsertedID can be set (if ValueInt/ValueUTF8 are nil) to
+    // - optional LastInsertedID can be set (if ValueInt/ValueUtf8 are nil) to
     // retrieve the proper ID when aSql is an INSERT statement (thread safe)
-    // - optional LastChangeCount can be set (if ValueInt/ValueUTF8 are nil) to
+    // - optional LastChangeCount can be set (if ValueInt/ValueUtf8 are nil) to
     // retrieve the modified row count when aSql is an UPDATE statement (thread safe)
     function InternalExecute(const aSql: RawUtf8; ForceCacheStatement: boolean;
-      ValueInt: PInt64 = nil; ValueUTF8: PRawUtf8 = nil;
+      ValueInt: PInt64 = nil; ValueUtf8: PRawUtf8 = nil;
       ValueInts: PInt64DynArray = nil; LastInsertedID: PInt64 = nil;
       LastChangeCount: PInteger = nil): boolean;
     // overridden method returning TRUE for next calls to EngineAdd
@@ -392,10 +392,10 @@ type
 
 type
   /// REST ORM client with direct access to a SQLite3 database
-  // - a hidden TRestOrmDB class is created and called internaly
+  // - a hidden TRestOrmDB class is created and called internally
   TRestOrmClientDB = class(TRestOrmClientUri)
   private
-    // use internaly a TRestServerDB to access data in the proper JSON format
+    // use internally a TRestServerDB to access data in the proper JSON format
     fServer: TRestOrmServerDB;
     function GetDB: TSqlDataBase;
   public
@@ -1559,7 +1559,7 @@ begin
 end;
 
 function TRestOrmServerDB.InternalExecute(const aSql: RawUtf8;
-  ForceCacheStatement: boolean; ValueInt: PInt64; ValueUTF8: PRawUtf8;
+  ForceCacheStatement: boolean; ValueInt: PInt64; ValueUtf8: PRawUtf8;
   ValueInts: PInt64DynArray; LastInsertedID: PInt64;
   LastChangeCount: PInteger): boolean;
 var
@@ -1590,7 +1590,7 @@ begin
           FormatShort('returned Int64 len=%', [n], msg);
         end
         else if (ValueInt = nil) and
-                (ValueUTF8 = nil) then
+                (ValueUtf8 = nil) then
         begin
           // default execution: loop through all rows
           repeat
@@ -1617,8 +1617,8 @@ begin
         end
         else
         begin
-          ValueUTF8^ := fStatement^.FieldUtf8(0);
-          FormatShort('returned="%"', [ValueUTF8^], msg);
+          ValueUtf8^ := fStatement^.FieldUtf8(0);
+          FormatShort('returned="%"', [ValueUtf8^], msg);
         end;
         GetAndPrepareStatementRelease(nil, msg);
       except

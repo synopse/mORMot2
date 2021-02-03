@@ -2232,7 +2232,7 @@ type
 
   PAesFull = ^TAesFull;
   /// AES and XOR encryption object for easy direct memory or stream access
-  // - calls internaly TAes objet methods, and handle memory and streams for best speed
+  // - calls internally TAes objet methods, and handle memory and streams for best speed
   // - a TAesFullHeader is encrypted at the begining, allowing fast Key validation,
   // but the resulting stream is not compatible with raw TAes object
   // - will use unsafe direct AES-ECB chain mode, so is considered deprecated
@@ -2276,7 +2276,7 @@ type
     // a TMemoryStream or a TFileStream)
     constructor Create(outStream: TStream; const Key; KeySize: cardinal);
     /// finalize the AES encryption stream
-    // - internaly call the Finish method
+    // - internally call the Finish method
     destructor Destroy; override;
     /// read some data is not allowed -> this method will raise an exception on call
     function Read(var Buffer; Count: Longint): Longint; override;

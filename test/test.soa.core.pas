@@ -459,7 +459,7 @@ var
   i: integer;
 begin
   Result := Rec2;
-  Result.Json := StringToUTF8(Rec1.FileExtension);
+  Result.Json := StringToUtf8(Rec1.FileExtension);
   i := length(Str2);
   SetLength(Str2, i + 1);
   Str2[i] := UTF8ToWideString(RawUtf8ArrayToCSV(Strs1));
@@ -580,7 +580,7 @@ begin
   if n.Real = maxInt then
     Result.Content := StringOfChar(AnsiChar('-'), 600)
   else
-    Result.Content := FormatUTF8('%,%', [n.Real, n.Imaginary]);
+    Result.Content := FormatUtf8('%,%', [n.Real, n.Imaginary]);
 end;
 
 function TServiceComplexCalculator.TestVariants(const Text: RawUtf8;
@@ -605,8 +605,8 @@ end;
 
 procedure TServiceComplexCalculator.FillPeople(var People: TOrmPeople);
 begin
-  People.LastName := FormatUTF8('Last %', [People.ID]);
-  People.FirstName := FormatUTF8('First %', [People.ID]);
+  People.LastName := FormatUtf8('Last %', [People.ID]);
+  People.FirstName := FormatUtf8('First %', [People.ID]);
 end;
 
 procedure TServiceComplexCalculator.Collections(Item: TCollTest;
@@ -819,7 +819,7 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
       Check(Rec2.Json = IntegerDynArrayToCSV(pointer(Ints), length(Ints)));
       Check(RecRes.ID = i1);
       Check(RecRes.Timestamp512 = c);
-      Check(RecRes.Json = StringToUTF8(Rec1.FileExtension));
+      Check(RecRes.Json = StringToUtf8(Rec1.FileExtension));
       CheckSame(n1, n2);
       Rec1.FileExtension := ''; // to avoid memory leak
     end;
@@ -831,9 +831,9 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
     Check(Str2[2] = 'GHIJK');
     Check(Str2[3] = 'one,two,three');
     Check(Str2[4] = '');
-    s := StringToUTF8(StringOfChar(#1, 100));
+    s := StringToUtf8(StringOfChar(#1, 100));
     check(I.DirectCall(s) = 100);
-    s := StringToUTF8(StringOfChar('-', 600));
+    s := StringToUtf8(StringOfChar('-', 600));
     t := length(I.RepeatJsonArray(s, 100));
     checkutf8(t = 1 + 100 * 603, 'RawJson %', [KB(t)]);
     t := length(I.RepeatTextArray(s, 100));
@@ -896,7 +896,7 @@ begin
       CheckSame(C3.Imaginary, -27);
       cust := Inst.CC.TestBlob(C3);
       Check(PosEx(TEXT_CONTENT_TYPE_HEADER, cust.Header) > 0);
-      Check(cust.Content = FormatUTF8('%,%', [C3.Real, C3.Imaginary]));
+      Check(cust.Content = FormatUtf8('%,%', [C3.Real, C3.Imaginary]));
       V1 := C3.Real;
       V2 := c;
       case c mod 3 of
@@ -919,8 +919,8 @@ begin
         people.IDValue := c;
         Inst.CC.FillPeople(people);
         Check(people.ID = c);
-        Check(people.LastName = FormatUTF8('Last %', [c]));
-        Check(people.FirstName = FormatUTF8('First %', [c]));
+        Check(people.LastName = FormatUtf8('Last %', [c]));
+        Check(people.FirstName = FormatUtf8('First %', [c]));
       finally
         people.Free;
       end;
@@ -1756,14 +1756,14 @@ class procedure TTestServiceOrientedArchitecture.CustomReader(var Context:
   TJsonParserContext; Data: pointer);
 var
   V: ^TRestCacheEntryValue absolute Data;
-  Values: array[0..2] of TValuePUTF8Char;
+  Values: array[0..2] of TValuePUtf8Char;
 begin
   // {"ID":1786554763,"Timestamp":323618765,"Json":"D:\\TestSQL3.exe"}
   if Context.ParseObject(['ID', 'Timestamp', 'Json'], @Values) then
   begin
     V.ID := GetInt64(Values[0].Value);
     V.Timestamp512 := Values[1].ToCardinal;
-    Values[2].ToUTF8(V.Json);
+    Values[2].ToUtf8(V.Json);
   end;
 end;
 
@@ -2100,7 +2100,7 @@ end;
 procedure TTestServiceOrientedArchitecture.IntSubtractJson(
   Ctxt: TOnInterfaceStubExecuteParamsJson);
 var
-  P: PUTF8Char;
+  P: PUtf8Char;
 begin
   if Ctxt.Sender is TInterfaceMock then
     Ctxt.TestCase.Check(Ctxt.EventParams = 'toto');

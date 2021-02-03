@@ -1114,7 +1114,7 @@ var
     else
       W.Add(',IP:"%"},', [Ctxt.RemoteIP]);
     with Ctxt.ServiceExecution^ do
-      IRestOrm(LogRest).AsynchBatchRawAppend(LogClass, W);
+      IRestOrm(LogRest).AsyncBatchRawAppend(LogClass, W);
   end;
 
 begin
@@ -1385,7 +1385,7 @@ begin
       end;
   if aLogRest <> nil then
     // write every second or after 500 rows in background
-    aLogRest.AsynchBatchStart(aLogClass, 1, 500, 1000); // do nothing if already set
+    aLogRest.AsyncBatchStart(aLogClass, 1, 500, 1000); // do nothing if already set
 end;
 
 function TServiceFactoryServer.SetServiceLog(

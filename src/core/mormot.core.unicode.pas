@@ -221,14 +221,14 @@ function Utf8TruncateToLength(var text: RawUtf8; maxBytes: PtrUInt): boolean;
 // specified bytes count
 // - this function will ensure that the returned content will contain only valid
 // UTF-8 sequence, i.e. will trim the whole trailing UTF-8 sequence
-// - returns maxUTF8 if text was not truncated, or the number of fitting bytes
+// - returns maxBytes if text was not truncated, or the number of fitting bytes
 function Utf8TruncatedLength(const text: RawUtf8; maxBytes: PtrUInt): PtrInt; overload;
 
 /// compute the truncated length of the supplied UTF-8 value if it exceeds the
 // specified bytes count
 // - this function will ensure that the returned content will contain only valid
 // UTF-8 sequence, i.e. will trim the whole trailing UTF-8 sequence
-// - returns maxUTF8 if text was not truncated, or the number of fitting bytes
+// - returns maxBytes if text was not truncated, or the number of fitting bytes
 function Utf8TruncatedLength(text: PAnsiChar;
   textlen, maxBytes: PtrUInt): PtrInt; overload;
 
@@ -293,7 +293,7 @@ type
     // - returns a SynUnicode, i.e. Delphi 2009+ UnicodeString or a WideString
     function AnsiToUnicodeString(const Source: RawByteString): SynUnicode; overload;
     /// convert any Ansi Text into an UTF-8 encoded String
-    // - internaly calls AnsiBufferToUtf8 virtual method
+    // - internally calls AnsiBufferToUtf8 virtual method
     function AnsiToUtf8(const AnsiText: RawByteString): RawUtf8; virtual;
     /// direct conversion of a PAnsiChar buffer into a UTF-8 encoded string
     // - will call AnsiBufferToUnicode() overloaded virtual method
@@ -309,7 +309,7 @@ type
     function UnicodeBufferToAnsi(Source: PWideChar;
       SourceChars: cardinal): RawByteString; overload; virtual;
     /// convert any Unicode-encoded String into Ansi Text
-    // - internaly calls UnicodeBufferToAnsi virtual method
+    // - internally calls UnicodeBufferToAnsi virtual method
     function RawUnicodeToAnsi(const Source: RawUnicode): RawByteString;
     /// direct conversion of an UTF-8 encoded buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars bytes
@@ -317,16 +317,16 @@ type
     function Utf8BufferToAnsi(Dest: PAnsiChar; Source: PUtf8Char;
       SourceChars: cardinal): PAnsiChar; overload; virtual;
     /// convert any UTF-8 encoded buffer into Ansi Text
-    // - internaly calls Utf8BufferToAnsi virtual method
+    // - internally calls Utf8BufferToAnsi virtual method
     function Utf8BufferToAnsi(Source: PUtf8Char;
       SourceChars: cardinal): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// convert any UTF-8 encoded buffer into Ansi Text
-    // - internaly calls Utf8BufferToAnsi virtual method
+    // - internally calls Utf8BufferToAnsi virtual method
     procedure Utf8BufferToAnsi(Source: PUtf8Char;
       SourceChars: cardinal; var result: RawByteString); overload; virtual;
     /// convert any UTF-8 encoded String into Ansi Text
-    // - internaly calls Utf8BufferToAnsi virtual method
+    // - internally calls Utf8BufferToAnsi virtual method
     function Utf8ToAnsi(const u: RawUtf8): RawByteString; virtual;
     /// direct conversion of a UTF-8 encoded string into a WinAnsi buffer
     // - will truncate the destination string to DestSize bytes (including the
@@ -1171,7 +1171,7 @@ function StrIComp(Str1, Str2: pointer): PtrInt;
 // - this function will decode the UTF-8 content before using NormToUpper[]
 // - will return '?' if the UCS4 CodePoint is higher than #255: so use this function
 // only if you need to deal with ASCII characters (e.g. it's used for Soundex
-// and for ContainsUTF8 function)
+// and for ContainsUtf8 function)
 function GetNextUtf8Upper(var U: PUtf8Char): Ucs4CodePoint;
   {$ifdef HASINLINE}inline;{$endif}
 

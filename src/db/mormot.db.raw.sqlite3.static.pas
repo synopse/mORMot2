@@ -328,7 +328,7 @@ end;
 
 function rename(oldname, newname: PUtf8Char): integer; cdecl; { always cdecl }
 begin
-  if RenameFile(UTF8DecodeToString(oldname, StrLen(oldname)),
+  if RenameFile(Utf8DecodeToString(oldname, StrLen(oldname)),
                 Utf8DecodeToString(newname, StrLen(newname))) then
     result := 0
   else

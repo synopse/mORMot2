@@ -258,7 +258,7 @@ type
     class procedure AddRandomTextParagraph(WR: TBaseWriter; WordCount: integer;
       LastPunctuation: AnsiChar = '.'; const RandomInclude: RawUtf8 = '';
       NoLineFeed: boolean = false);
-    /// this method is triggered internaly - e.g. by Check() - when a test failed
+    /// this method is triggered internally - e.g. by Check() - when a test failed
     procedure TestFailed(const msg: string);
     /// will add to the console a message with a speed estimation
     // - speed is computed from the method start
@@ -771,7 +771,7 @@ var
   crc: cardinal;
 begin
   crc := Hash32(data);
-  CheckUTF8(crc = expectedhash32, 'Hash32()=$% expected=$% %',
+  CheckUtf8(crc = expectedhash32, 'Hash32()=$% expected=$% %',
     [CardinalToHexShort(crc), CardinalToHexShort(expectedhash32), msg]);
 end;
 

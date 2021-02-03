@@ -42,7 +42,7 @@ type
   /// common ancestor for tables with digitally signed RawUtf8 content
   // - content is signed according to a specific User Name and the digital
   // signature date and time
-  // - internaly uses the very secure SHA-256 hashing algorithm for performing
+  // - internally uses the very secure SHA-256 hashing algorithm for performing
   // the digital signature
   TOrmSigned = class(TOrm)
   protected
@@ -61,7 +61,7 @@ type
       read fSignatureTime write fSignatureTime;
     /// as the Content of this record is added to the database,
     // its value is hashed and stored as 'UserName/03A35C92....' into this property
-    // - secured SHA-256 hashing is used internaly
+    // - secured SHA-256 hashing is used internally
     // - digital signature is allowed only once: this property is written only once
     // - this property is defined here to allow inherited to just declared the name
     // in its published section:
@@ -71,7 +71,7 @@ type
   public
     /// use this procedure to sign the supplied Content of this record for a
     // specified UserName, with the current Date and Time
-    // - SHA-256 hashing is used internaly
+    // - SHA-256 hashing is used internally
     // - returns true if signed successfully (not already signed)
     function SetAndSignContent(const UserName: RawUtf8; const Content:
       RawByteString; ForcedSignatureTime: Int64 = 0): boolean;

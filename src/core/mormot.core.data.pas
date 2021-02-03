@@ -1965,7 +1965,7 @@ type
     // - expected element layout is to have a RawUtf8 field at first position
     // - the aName is searched (using hashing) to be unique, and if not the case,
     // an ESynException.CreateUtf8() is raised with the supplied arguments
-    // - use internaly FindHashedForAdding method
+    // - use internally FindHashedForAdding method
     // - this version will set the field content with the unique value
     // - returns a pointer to the newly added element (to set other fields)
     function AddUniqueName(const aName: RawUtf8; const ExceptionMsg: RawUtf8;
@@ -1979,7 +1979,7 @@ type
     // - expected element layout is to have a RawUtf8 field at first position
     // - the aName is searched (using hashing) to be unique, and if not the case,
     // some suffix is added to make it unique
-    // - use internaly FindHashedForAdding method
+    // - use internally FindHashedForAdding method
     // - this version will set the field content with the unique value
     // - returns a pointer to the newly added element (to set other fields)
     function AddAndMakeUniqueName(aName: RawUtf8): pointer;
@@ -2220,7 +2220,7 @@ function FindIniEntryInteger(const Content, Section, Name: RawUtf8): integer;
 
 /// find a Name= Value in a [Section] of a .INI file
 // - if Section equals '', find the Name= value before any [Section]
-// - use internaly fast FindIniEntry() function above
+// - use internally fast FindIniEntry() function above
 function FindIniEntryFile(const FileName: TFileName; const Section, Name: RawUtf8): RawUtf8;
 
 /// update a Name= Value in a [Section] of a INI RawUtf8 Content
@@ -2231,7 +2231,7 @@ procedure UpdateIniEntry(var Content: RawUtf8; const Section,Name,Value: RawUtf8
 
 /// update a Name= Value in a [Section] of a .INI file
 // - if Section equals '', update the Name= value before any [Section]
-// - use internaly fast UpdateIniEntry() function above
+// - use internally fast UpdateIniEntry() function above
 procedure UpdateIniEntryFile(const FileName: TFileName; const Section,Name,Value: RawUtf8);
 
 /// find the position of the [SEARCH] section in source
@@ -4699,7 +4699,7 @@ begin
     P := pointer(Map.Buffer);
     if Map.Size <> 0 then
       case Map.TextFileKind of
-      isUTF8:
+      isUtf8:
         // ignore UTF-8 BOM
         SetTextPtr(P + 3, P + Map.Size, #13#10);
       isUnicode:

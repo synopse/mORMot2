@@ -198,7 +198,7 @@ type
     // as FormatUtf8() function, replacing all '%' chars with Args[] values
     // - using inlined parameters via :(...): in SqlWhereFormat is always a good idea
     // - for one TClass, you should better use TRest.MultiFieldValues()
-    // - will call the List virtual method internaly
+    // - will call the List virtual method internally
     function ListFmt(const Tables: array of TOrmClass;
       const SqlSelect, SqlWhereFormat: RawUtf8;
       const Args: array of const): TOrmTable; overload;
@@ -210,7 +210,7 @@ type
     // - example of use:
     // ! Table := ListFmt([TOrm],'Name','ID=?',[],[aID]);
     // - for one TClass, you should better use TRest.MultiFieldValues()
-    // - will call the List virtual method internaly
+    // - will call the List virtual method internally
     function ListFmt(const Tables: array of TOrmClass;
       const SqlSelect, SqlWhereFormat: RawUtf8;
       const Args, Bounds: array of const): TOrmTable; overload;

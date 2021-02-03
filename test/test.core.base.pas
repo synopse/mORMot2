@@ -4260,7 +4260,7 @@ var
   up4: RawUcs4;
   U, U2, res, Up, Up2: RawUtf8;
   arr: TRawUtf8DynArray;
-  P: PUTF8Char;
+  P: PUtf8Char;
   PB: PByte;
   q: RawUtf8;
   Unic: RawUnicode;

@@ -986,7 +986,7 @@ type
     const Item: TSynNameValueItem; Index: PtrInt) of object;
 
   /// pseudo-class used to store Name/Value RawUtf8 pairs
-  // - use internaly a TDynArrayHashed instance for fast retrieval
+  // - use internally a TDynArrayHashed instance for fast retrieval
   // - is therefore faster than TRawUtf8List
   // - is defined as an object, not as a class: you can use this in any
   // class, without the need to destroy the content
@@ -2126,7 +2126,7 @@ function PropertyFromJson(Prop: PRttiCustomProp; Instance: TObject;
 /// decode a specified parameter compatible with URI encoding into its original
 // object contents
 // - ObjectInstance must be an existing TObject instance
-// - will call internaly JsonToObject() function to unserialize its content
+// - will call internally JsonToObject() function to unserialize its content
 // - UrlDecodeExtended('price=20.45&where=LastName%3D%27M%C3%B4net%27','PRICE=',P,@Next)
 // will return Next^='where=...' and P=20.45
 // - if Upper is not found, Value is not modified, and result is FALSE

@@ -390,25 +390,23 @@ function EventArchiveZip(const aOldLogFileName, aDestinationPath: TFileName): bo
 
 
 /// (un)compress a data content using the gzip algorithm
-// - as expected by THttpSocket.RegisterCompress
-// - will use internaly a level compression of 1, i.e. fastest available (content
-// of 4803 bytes is compressed into 700, and time is 440 us instead of 220 us)
+// - as expected by THttpSocket.RegisterCompress for 'Content-Encoding: gzip'
+// - use internally a level compression of 1, i.e. fastest available (content of
+// 4803 bytes is compressed into 700, and request is 440 us instead of 220 us)
 function CompressGZip(var Data: RawByteString; Compress: boolean): RawUtf8;
 
 /// (un)compress a data content using the Deflate algorithm (i.e. "raw deflate")
 // - as expected by THttpSocket.RegisterCompress
-// - will use internaly a level compression of 1, i.e. fastest available (content
-// of 4803 bytes is compressed into 700, and time is 440 us instead of 220 us)
-// - deflate content encoding is pretty inconsistent in practice, so slightly
-// slower CompressGZip() is preferred - http://stackoverflow.com/a/9186091
+// - use internally a level compression of 1, i.e. fastest available
+// - HTTP 'Content-Encoding: deflate' is pretty inconsistent in practice on client
+// side, so use CompressGZip() instead - https://stackoverflow.com/a/5186177
 function CompressDeflate(var Data: RawByteString; Compress: boolean): RawUtf8;
 
 /// (un)compress a data content using the zlib algorithm
 // - as expected by THttpSocket.RegisterCompress
-// - will use internaly a level compression of 1, i.e. fastest available (content
-// of 4803 bytes is compressed into 700, and time is 440 us instead of 220 us)
-// - zlib content encoding is pretty inconsistent in practice, so slightly
-// slower CompressGZip() is preferred - http://stackoverflow.com/a/9186091
+// - use internally a level compression of 1, i.e. fastest available
+// - HTTP 'Content-Encoding: zlib' is pretty inconsistent in practice on client
+// side, so use CompressGZip() instead - https://stackoverflow.com/a/5186177
 function CompressZLib(var Data: RawByteString; Compress: boolean): RawUtf8;
 
 

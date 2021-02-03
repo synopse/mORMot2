@@ -125,7 +125,7 @@ type
 
 type
   /// REST client with direct access to a SQLite3 database
-  // - a hidden TRestServerDB server is created and called internaly
+  // - a hidden TRestServerDB server is created and called internally
   TRestClientDB = class(TRestClientUri)
   protected
     fServer: TRestServerDB;
@@ -142,13 +142,13 @@ type
     procedure InternalClose; override;
   public
     /// initializes the class, and creates an internal TRestServerDB to
-    // internaly answer to the REST queries
+    // internally answer to the REST queries
     // - aServerClass could be TRestServerDB by default
     constructor Create(aClientModel, aServerModel: TOrmModel; aDB: TSqlDataBase;
       aServerClass: TRestServerDBClass;
       aHandleUserAuthentication: boolean = false); reintroduce; overload;
     /// same as above, from a SQLite3 filename specified
-    // - an internal TSqlDataBase will be created internaly and freed on Destroy
+    // - an internal TSqlDataBase will be created internally and freed on Destroy
     // - aServerClass could be TRestServerDB by default
     // - if specified, the password will be used to cypher this file on disk
     // (the main SQLite3 database file is encrypted, not the wal file during run)
