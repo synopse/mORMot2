@@ -5727,6 +5727,9 @@ const
 
 constructor TRestServerAuthenticationSspi.Create(aServer: TRestServer);
 begin
+  // setup mormot.lib.sspi/gssapi unit depending on the OS
+  InitializeDomainAuth;
+  // initialize this authentication scheme
   inherited Create(aServer);
   fSspiAuthContexts.InitSpecific(TypeInfo(TSecContextDynArray),
     fSspiAuthContext, ptInt64, @fSspiAuthContextCount);
@@ -7820,10 +7823,6 @@ initialization
   // should match TPerThreadRunningContext definition in mormot.core.interfaces
   assert(SizeOf(TServiceRunningContext) =
     SizeOf(TObject) + SizeOf(TObject) + SizeOf(TThread));
-  {$ifdef DOMAINRESTAUTH}
-  // setup mormot.lib.sspi/gssapi unit depending on the OS
-  InitializeDomainAuth;
-  {$endif DOMAINRESTAUTH}
 
 end.
 
