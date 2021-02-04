@@ -1450,7 +1450,7 @@ type
       read GetRawUtf8ByName write SetRawUtf8ByName;
     /// direct string access to a dvObject UTF-8 stored property value from its name
     // - just a wrapper around U[] property, to avoid a compilation warning when
-    // using plain string variables (internaly, RawUtf8 will be used for storage)
+    // using plain string variables (internally, RawUtf8 will be used for storage)
     // - slightly faster than the variant-based Value[] default property
     // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
     // - use GetAsRawUtf8() if you want to check the availability of the field

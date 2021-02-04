@@ -697,19 +697,19 @@ begin
     end;
     if (P = nil) or
        HeadersUnFiltered then
-      // store meaningful headers into SockSend() fSndBuf/fSndLen as temp buffer
+      // store meaningful headers into SockSend() fSndBuf/Len as temp buffer
       if {%H-}s = '' then
       begin
         len := StrLen(@line);
         if len > SizeOf(line) - 2 then
           break; // avoid buffer overflow
-        PWord(@line[len])^ := 13 + 10 shl 8; // CR + LF
+        PWord(@line[len])^ := 13 + 10 shl 8; // include CR + LF
         SockSend(@line, len + 2);
       end
       else
         SockSend(s);
   until false;
-  // retrieve meaningful headers from SockSend() fSndBuf/fSndLen temp buffer
+  // retrieve meaningful headers from SockSend() fSndBuf/fSndBufLen temp buffer
   Headers := copy(fSndBuf, 1, fSndBufLen);
   fSndBufLen := 0;
 end;

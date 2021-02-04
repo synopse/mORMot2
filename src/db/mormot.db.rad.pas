@@ -227,7 +227,7 @@ type
       FieldType: TSqlDBFieldType;
     end;
     fTemp64: Int64;
-    fTempUTF8: RawUtf8;
+    fTempUtf8: RawUtf8;
     fTempBlob: RawByteString;
     procedure InternalInitFieldDefs; override;
     function GetRecordCount: integer; override;
@@ -1166,15 +1166,15 @@ begin
                   VariantToDouble(Values[ndx], unaligned(PDouble(@fTemp64)^));
                 ftUtf8:
                   begin
-                    VariantToUtf8(Values[ndx], fTempUTF8, wasString);
-                    result := pointer(fTempUTF8);
-                    ResultLen := length(fTempUTF8);
+                    VariantToUtf8(Values[ndx], fTempUtf8, wasString);
+                    result := pointer(fTempUtf8);
+                    ResultLen := length(fTempUtf8);
                   end;
                 mormot.db.core.ftBlob:
                   begin
-                    VariantToUtf8(Values[ndx], fTempUTF8, wasString);
-                    if Base64MagicCheckAndDecode(pointer(fTempUTF8),
-                        length(fTempUTF8), fTempBlob) then
+                    VariantToUtf8(Values[ndx], fTempUtf8, wasString);
+                    if Base64MagicCheckAndDecode(pointer(fTempUtf8),
+                        length(fTempUtf8), fTempBlob) then
                     begin
                       result := pointer(fTempBlob);
                       ResultLen := length(fTempBlob);

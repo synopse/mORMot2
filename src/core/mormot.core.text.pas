@@ -1209,14 +1209,14 @@ var
 // - any TCollection property will also be serialized as JSON arrays
 // - you can add some custom serializers for ANY class, via mormot.core.json.pas
 // TRttiJson.RegisterCustomSerializer() class method
-// - call internaly TBaseWriter.WriteObject() method from DefaultTextWriterSerializer
+// - call internally TBaseWriter.WriteObject() method from DefaultTextWriterSerializer
 function ObjectToJson(Value: TObject;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUtf8;
 
 /// will serialize set of TObject into its UTF-8 JSON representation
 // - follows ObjectToJson()/TTextWriter.WriterObject() functions output
 // - if Names is not supplied, the corresponding class names would be used
-// - call internaly TBaseWriter.WriteObject() method from DefaultTextWriterSerializer
+// - call internally TBaseWriter.WriteObject() method from DefaultTextWriterSerializer
 function ObjectsToJson(const Names: array of RawUtf8; const Values: array of TObject;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUtf8;
 
@@ -6768,7 +6768,7 @@ begin
 end;
 
 type
-  /// used internaly for faster quick sort
+  /// used internally for faster quick sort
   TQuickSortRawUtf8 = object
     Values: PPointerArray;
     Compare: TUtf8Compare;

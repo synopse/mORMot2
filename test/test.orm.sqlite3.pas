@@ -71,7 +71,7 @@ type
   // TTestSqliteMemory and TTestSqliteMemory children
   TTestSQLite3Engine = class(TSynTestCase)
   protected
-    { these values are used internaly by the published methods below }
+    { these values are used internally by the published methods below }
     BackupProgressStep: TOnSqlDatabaseBackupStep; // should be the first
     TempFileName: TFileName;
     EncryptedFile: boolean;
@@ -1080,7 +1080,7 @@ var
   begin
     ID := V.ID; // ClearProperties do ID := 0;
     V.ClearProperties; // reset values
-    check(Client.Client.Retrieve(ID, V), msg); // internaly call URL()
+    check(Client.Client.Retrieve(ID, V), msg); // internally call URL()
     if Leonard then
       check(V.FirstName = 'Leonard')
     else

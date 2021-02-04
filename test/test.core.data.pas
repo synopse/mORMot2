@@ -2071,7 +2071,7 @@ begin
     '"sendFileLocationRoot": "snake-ukrpatent-local"'#10'}*/'#10'} //eol'#10'}';
   check(not IsValidJSON(J));
   RemoveCommentsFromJSON(UniqueRawUTF8(J));
-  CheckUTF8(IsValidJSON(J), J);
+  CheckUtf8(IsValidJSON(J), J);
   J := JSONReformat(J,jsonCompact);
   CheckEqual(J,'{"httpServer":{"host":"*","port":"8881","serverType":"Socket"}}');
   J :=
@@ -4526,7 +4526,7 @@ begin
     len := length(tmp);
     hash := Hash32(tmp);
     CompressZLib(tmp, true);
-    Check(len div length(tmp) > 2, 'compressible');
+    Check(len div length(tmp) > 2, 'blobloblu should be compressible');
     CompressZLib(tmp, false);
     CheckHash(tmp, hash, 'CompressZLib');
   end;

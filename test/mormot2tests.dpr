@@ -49,7 +49,7 @@ uses
   mormot.net.relay         in '..\src\net\mormot.net.relay.pas',
   mormot.net.client        in '..\src\net\mormot.net.client.pas',
   mormot.net.server        in '..\src\net\mormot.net.server.pas',
-  mormot.net.asynch        in '..\src\net\mormot.net.asynch.pas',
+  mormot.net.async         in '..\src\net\mormot.net.async.pas',
   mormot.net.ws.core       in '..\src\net\mormot.net.ws.core.pas',
   mormot.net.ws.client     in '..\src\net\mormot.net.ws.client.pas',
   mormot.net.ws.server     in '..\src\net\mormot.net.ws.server.pas',
@@ -131,8 +131,8 @@ begin
   //exit;
   AddCase([
   //
-  TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreEcc,
-  TTestCoreCompression, TNetworkProtocols
+    TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreEcc,
+    TTestCoreCompression, TNetworkProtocols
   ]);
 end;
 

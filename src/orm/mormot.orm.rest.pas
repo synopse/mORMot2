@@ -262,9 +262,9 @@ type
       read fTransactionTable;
   public
     // ------- IRestOrm interface implementation methods
-    // calls internaly the "SELECT Count(*) FROM TableName;" SQL statement
+    // calls internally the "SELECT Count(*) FROM TableName;" SQL statement
     function TableRowCount(Table: TOrmClass): Int64; virtual;
-    // calls internaly a "SELECT RowID FROM TableName LIMIT 1" SQL statement,
+    // calls internally a "SELECT RowID FROM TableName LIMIT 1" SQL statement,
     // which is much faster than testing if "SELECT count(*)" equals 0 - see
     // @http://stackoverflow.com/questions/8988915
     function TableHasRows(Table: TOrmClass): boolean; virtual;
@@ -432,18 +432,18 @@ type
     function BatchSend(Batch: TRestBatch): integer; overload;
     function BatchSend(Table: TOrmClass; var Data: RawUtf8;
        var Results: TIDDynArray; ExpectedResultsCount: integer): integer; overload;
-    function AsynchBatchStart(Table: TOrmClass; SendSeconds: integer;
+    function AsyncBatchStart(Table: TOrmClass; SendSeconds: integer;
       PendingRowThreshold: integer = 500; AutomaticTransactionPerRow: integer = 1000;
       Options: TRestBatchOptions = [boExtendedJson]): boolean;
-    function AsynchBatchStop(Table: TOrmClass): boolean;
-    function AsynchBatchAdd(Value: TOrm; SendData: boolean;
+    function AsyncBatchStop(Table: TOrmClass): boolean;
+    function AsyncBatchAdd(Value: TOrm; SendData: boolean;
       ForceID: boolean = false; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
-    function AsynchBatchRawAdd(Table: TOrmClass; const SentData: RawUtf8): integer;
-    procedure AsynchBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
-    function AsynchBatchUpdate(Value: TOrm; const CustomFields: TFieldBits = [];
+    function AsyncBatchRawAdd(Table: TOrmClass; const SentData: RawUtf8): integer;
+    procedure AsyncBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
+    function AsyncBatchUpdate(Value: TOrm; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
-    function AsynchBatchDelete(Table: TOrmClass; ID: TID): integer;
+    function AsyncBatchDelete(Table: TOrmClass; ID: TID): integer;
     function Model: TOrmModel;
       {$ifdef HASINLINE}inline;{$endif}
     function Cache: TRestCache;
@@ -2245,18 +2245,18 @@ begin
   result := EngineBatchSend(Table, Data, Results, ExpectedResultsCount);
 end;
 
-function TRestOrm.AsynchBatchStart(Table: TOrmClass;
+function TRestOrm.AsyncBatchStart(Table: TOrmClass;
   SendSeconds: integer; PendingRowThreshold: integer;
   AutomaticTransactionPerRow: integer; Options: TRestBatchOptions): boolean;
 begin
   if self = nil then
     result := false
   else
-    result := fRest.Run.EnsureBackgroundTimerExists.AsynchBatchStart(Table,
+    result := fRest.Run.EnsureBackgroundTimerExists.AsyncBatchStart(Table,
       SendSeconds, PendingRowThreshold, AutomaticTransactionPerRow, Options);
 end;
 
-function TRestOrm.AsynchBatchStop(Table: TOrmClass): boolean;
+function TRestOrm.AsyncBatchStop(Table: TOrmClass): boolean;
 begin
   if (self = nil) or
      (fRest.Run = nil) or
@@ -2264,10 +2264,10 @@ begin
      (fRest.Run.BackgroundTimer.BackgroundBatch = nil) then
     result := false
   else
-    result := fRest.Run.BackgroundTimer.AsynchBatchStop(Table);
+    result := fRest.Run.BackgroundTimer.AsyncBatchStop(Table);
 end;
 
-function TRestOrm.AsynchBatchAdd(Value: TOrm; SendData: boolean;
+function TRestOrm.AsyncBatchAdd(Value: TOrm; SendData: boolean;
   ForceID: boolean; const CustomFields: TFieldBits;
   DoNotAutoComputeFields: boolean): integer;
 begin
@@ -2276,11 +2276,11 @@ begin
      (fRest.Run.BackgroundTimer.BackgroundBatch = nil) then
     result := -1
   else
-    result := fRest.Run.BackgroundTimer.AsynchBatchAdd(Value, SendData, ForceID,
+    result := fRest.Run.BackgroundTimer.AsyncBatchAdd(Value, SendData, ForceID,
       CustomFields, DoNotAutoComputeFields);
 end;
 
-function TRestOrm.AsynchBatchRawAdd(Table: TOrmClass;
+function TRestOrm.AsyncBatchRawAdd(Table: TOrmClass;
   const SentData: RawUtf8): integer;
 begin
   if (self = nil) or
@@ -2288,19 +2288,19 @@ begin
      (fRest.Run.BackgroundTimer.BackgroundBatch = nil) then
     result := -1
   else
-    result := fRest.Run.BackgroundTimer.AsynchBatchRawAdd(Table, SentData);
+    result := fRest.Run.BackgroundTimer.AsyncBatchRawAdd(Table, SentData);
 end;
 
-procedure TRestOrm.AsynchBatchRawAppend(Table: TOrmClass;
+procedure TRestOrm.AsyncBatchRawAppend(Table: TOrmClass;
   SentData: TTextWriter);
 begin
   if (self <> nil) and
      (fRest.Run.BackgroundTimer <> nil) and
      (fRest.Run.BackgroundTimer.BackgroundBatch <> nil) then
-    fRest.Run.BackgroundTimer.AsynchBatchRawAppend(Table, SentData);
+    fRest.Run.BackgroundTimer.AsyncBatchRawAppend(Table, SentData);
 end;
 
-function TRestOrm.AsynchBatchUpdate(Value: TOrm;
+function TRestOrm.AsyncBatchUpdate(Value: TOrm;
   const CustomFields: TFieldBits; DoNotAutoComputeFields: boolean): integer;
 begin
   if (self = nil) or
@@ -2308,18 +2308,18 @@ begin
      (fRest.Run.BackgroundTimer.BackgroundBatch = nil) then
     result := -1
   else
-    result := fRest.Run.BackgroundTimer.AsynchBatchUpdate(Value, CustomFields,
+    result := fRest.Run.BackgroundTimer.AsyncBatchUpdate(Value, CustomFields,
       DoNotAutoComputeFields);
 end;
 
-function TRestOrm.AsynchBatchDelete(Table: TOrmClass; ID: TID): integer;
+function TRestOrm.AsyncBatchDelete(Table: TOrmClass; ID: TID): integer;
 begin
   if (self = nil) or
      (fRest.Run.BackgroundTimer = nil) or
      (fRest.Run.BackgroundTimer.BackgroundBatch = nil) then
     result := -1
   else
-    result := fRest.Run.BackgroundTimer.AsynchBatchDelete(Table, ID);
+    result := fRest.Run.BackgroundTimer.AsyncBatchDelete(Table, ID);
 end;
 
 function TRestOrm.Cache: TRestCache;

@@ -154,7 +154,7 @@ type
     procedure SetNoDelay(nodelay: boolean);
     function Accept(out clientsocket: TNetSocket; out addr: TNetAddr): TNetResult;
     function GetPeer(out addr: TNetAddr): TNetResult;
-    function MakeAsynch: TNetResult;
+    function MakeAsync: TNetResult;
     function Send(Buf: pointer; var len: integer): TNetResult;
     function Recv(Buf: pointer; var len: integer): TNetResult;
     function SendTo(Buf: pointer; len: integer; out addr: TNetAddr): TNetResult;
@@ -1168,7 +1168,7 @@ begin
   end;
 end;
 
-function TNetSocketWrap.MakeAsynch: TNetResult;
+function TNetSocketWrap.MakeAsync: TNetResult;
 var
   nonblock: cardinal;
 begin
@@ -2213,7 +2213,7 @@ begin
       begin
         // no more to read, or socket issue?
         {$ifdef SYNCRTDEBUGLOW}
-        TSynLog.Add.Log(sllCustom2, 'TrySockRecv: sock=% AsynchRecv=% %',
+        TSynLog.Add.Log(sllCustom2, 'TrySockRecv: sock=% Recv=% %',
           [sock, read, SocketErrorMessage], self);
         {$endif SYNCRTDEBUGLOW}
         if StopBeforeLength and

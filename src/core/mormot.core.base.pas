@@ -282,7 +282,7 @@ type
   /// a simple wrapper to UTF-8 encoded zero-terminated PAnsiChar
   // - PAnsiChar is used only for Win-Ansi encoded text
   // - the Synopse mORMot framework uses mostly this PUtf8Char type,
-  // because all data is internaly stored and expected to be UTF-8 encoded
+  // because all data is internally stored and expected to be UTF-8 encoded
   PUtf8Char = type PAnsiChar;
   PPUtf8Char = ^PUtf8Char;
 

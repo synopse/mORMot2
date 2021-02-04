@@ -2116,7 +2116,7 @@ begin
     exit;
   if url[1] = '/' then
     system.delete(url, 1, 1);
-  // 'root/BidirCallback.AsynchEvent/1' into root/interfmethod/id
+  // 'root/BidirCallback.AsyncEvent/1' into root/interfmethod/id
   Split(Split(url, '/', root), '/', interfmethod, id);
   if not IdemPropNameU(root, fModel.Root) then
     exit;

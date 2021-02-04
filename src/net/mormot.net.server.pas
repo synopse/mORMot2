@@ -471,7 +471,7 @@ type
   // - if the client is also HTTP/1.1 compatible, KeepAlive connection is handled:
   //  multiple requests will use the existing connection and thread;
   //  this is faster and uses less resources, especialy under Windows
-  // - a Thread Pool is used internaly to speed up HTTP/1.0 connections - a
+  // - a Thread Pool is used internally to speed up HTTP/1.0 connections - a
   // typical use, under Linux, is to run this class behind a NGINX frontend,
   // configured as https reverse proxy, leaving default "proxy_http_version 1.0"
   // and "proxy_request_buffering on" options for best performance, and
@@ -1869,14 +1869,16 @@ begin
         '', ClientSock.fTLS);
     try
       cod := DoBeforeRequest(ctxt);
-      {$ifdef SYNCRTDEBUGLOW}
-      TSynLog.Add.Log(sllCustom2, 'DoBeforeRequest=%', [cod], self);
-      {$endif SYNCRTDEBUGLOW}
       if cod > 0 then
+      begin
+        {$ifdef SYNCRTDEBUGLOW}
+        TSynLog.Add.Log(sllCustom2, 'DoBeforeRequest=%', [cod], self);
+        {$endif SYNCRTDEBUGLOW}
         if not SendResponse or
            (cod <> HTTP_ACCEPTED) then
           exit;
-      cod := Request(ctxt);
+      end;
+      cod := Request(ctxt); // this is the main processing callback
       aftercode := DoAfterRequest(ctxt);
       {$ifdef SYNCRTDEBUGLOW}
       TSynLog.Add.Log(sllCustom2, 'Request=% DoAfterRequest=%', [cod, aftercode], self);

@@ -1506,7 +1506,7 @@ type
   /// text file layout, as recognized by TMemoryMap.TextFileKind
   TTextFileKind = (
     isUnicode,
-    isUTF8,
+    isUtf8,
     isAnsi);
 
   /// cross-platform memory mapping of a file content
@@ -3437,7 +3437,7 @@ begin
       result := isUnicode
     else if (PWord(fBuf)^ = $BBEF) and
             (PByteArray(fBuf)[2] = $BF) then
-      result := isUTF8;
+      result := isUtf8;
 end;
 
 

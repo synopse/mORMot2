@@ -922,7 +922,7 @@ type
     fDoubleArray:  array of TDoubleDynArray;
     fCurDynArray:  array of TCurrencyDynArray;
     fDateDynArray: array of TDateTimeDynArray;
-    fUTF8DynArray: array of TRawUtf8DynArray;
+    fUtf8DynArray: array of TRawUtf8DynArray;
     fBlobDynArray: array of TInterfaceDynArray;
     fDynArraySize: array[ftInt64..ftBlob] of integer;
   public
@@ -945,7 +945,7 @@ begin
     SetLength(fDoubleArray, fDynArraySize[ftDouble]);
     SetLength(fCurDynArray, fDynArraySize[ftCurrency]);
     SetLength(fDateDynArray, fDynArraySize[ftDate]);
-    SetLength(fUTF8DynArray, fDynArraySize[ftUtf8]);
+    SetLength(fUtf8DynArray, fDynArraySize[ftUtf8]);
     SetLength(fBlobDynArray, fDynArraySize[ftBlob]);
     FillcharFast(ndx, sizeof(ndx), 0);
     for p := 0 to fParamCount - 1 do
@@ -1011,11 +1011,11 @@ begin
                 end;
               ftUtf8:
                 begin
-                  SetLength(fUTF8DynArray[n], fParamsArrayCount);
+                  SetLength(fUtf8DynArray[n], fParamsArrayCount);
                   for j := 0 to fParamsArrayCount - 1 do
                     if not fNullArray[p][j] then
-                      UnQuoteSqlStringVar(pointer(VArray[j]), fUTF8DynArray[n][j]);
-                  fStatement.SetDataArray(p + FirstDbcIndex, fUTF8DynArray[n],
+                      UnQuoteSqlStringVar(pointer(VArray[j]), fUtf8DynArray[n][j]);
+                  fStatement.SetDataArray(p + FirstDbcIndex, fUtf8DynArray[n],
                     stString, vtUTF8String);
                 end;
               ftBlob:

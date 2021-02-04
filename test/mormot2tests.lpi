@@ -107,6 +107,9 @@
             </Optimizations>
           </CodeGeneration>
           <Linking>
+            <Debugging>
+              <UseExternalDbgSyms Value="True"/>
+            </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
           <Other>
@@ -214,7 +217,9 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
-              <DebugInfoType Value="dsDwarf2Set"/>
+              <DebugInfoType Value="dsDwarf2"/>
+              <UseLineInfoUnit Value="False"/>
+              <UseExternalDbgSyms Value="True"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -745,8 +750,9 @@
         <IsPartOfProject Value="True"/>
       </Unit45>
       <Unit46>
-        <Filename Value="..\src\net\mormot.net.asynch.pas"/>
+        <Filename Value="..\src\net\mormot.net.async.pas"/>
         <IsPartOfProject Value="True"/>
+        <UnitName Value="mormot.net.async"/>
       </Unit46>
       <Unit47>
         <Filename Value="..\src\net\mormot.net.ws.core.pas"/>

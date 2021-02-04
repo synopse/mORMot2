@@ -49,10 +49,10 @@ uses
 {$endif FPC}
 
 type
-  /// internaly store the SQLite3 database handle
+  /// internally store the SQLite3 database handle
   TSqlite3DB = type PtrUInt;
 
-  /// internaly store the SQLite3 statement handle
+  /// internally store the SQLite3 statement handle
   // - This object is variously known as a "prepared statement" or a "compiled
   // SQL statement" or simply as a "statement".
   // - Create the object using sqlite3.prepare_v2() or a related function.
@@ -63,10 +63,10 @@ type
   // - Destroy the object using sqlite3.finalize().
   TSqlite3Statement = type PtrUInt;
 
-  /// internaly store the SQLite3 blob handle
+  /// internally store the SQLite3 blob handle
   TSqlite3Blob = type PtrUInt;
 
-  /// internaly store a SQLite3 Dynamically Typed Value Object
+  /// internally store a SQLite3 Dynamically Typed Value Object
   // - SQLite uses the sqlite3.value object to represent all values that
   // can be stored in a database table, which are mapped to this TSqlite3Value type
   // - SQLite uses dynamic typing for the values it stores
@@ -81,10 +81,10 @@ type
   // application-defined SQL functions, i.e. a TSqlFunctionFunc prototype
   TSqlite3FunctionContext = type PtrUInt;
 
-  /// internaly store a SQLite3 Backup process handle
+  /// internally store a SQLite3 Backup process handle
   TSqlite3Backup = type PtrUInt;
 
-  /// internaly store of SQLite3 values, as used by TSqlFunctionFunc
+  /// internally store of SQLite3 values, as used by TSqlFunctionFunc
   TSqlite3ValueArray = array[0..63] of TSqlite3Value;
 
 const
@@ -538,7 +538,7 @@ type
   // that are common to all module implementations. This structure therefore
   // contains a pInstance field, which will be used to store a class instance
   // handling the virtual table as a pure class: the TOrmVirtualTableModule
-  // class will use it internaly
+  // class will use it internally
   TSqlite3VTab = record
     /// The module for this virtual table
     pModule: PSqlite3Module;
@@ -570,7 +570,7 @@ type
   // common to all implementationsThis structure therefore contains a pInstance
   // field, which will be used to store a class instance handling the virtual
   // table as a pure class: the TOrmVirtualTableModule class will use
-  // it internaly
+  // it internally
   TSqlite3VTabCursor = record
     /// Virtual table of this cursor
     pVtab: PSqlite3VTab;
@@ -2301,8 +2301,8 @@ type
     // - raise an ESqlite3Exception on any error
     procedure ExecuteAll; overload;
     /// Execute all SQL statements in the aSql UTF-8 encoded string
-    // - internaly call Prepare() then Step then PrepareNext until end of aSql
-    // - Close is always called internaly
+    // - internally call Prepare() then Step then PrepareNext until end of aSql
+    // - Close is always called internally
     // - raise an ESqlite3Exception on any error
     procedure ExecuteAll(aDB: TSqlite3DB; const aSql: RawUtf8); overload;
     /// Execute one SQL statement already prepared by a call to Prepare()
@@ -2311,12 +2311,12 @@ type
     procedure Execute; overload;
     /// Execute one SQL statement in the aSql UTF-8 encoded string
     // - Execute the first statement in aSql: call Prepare() then Step once
-    // - Close is always called internaly
+    // - Close is always called internally
     // - raise an ESqlite3Exception on any error
     procedure Execute(aDB: TSqlite3DB; const aSql: RawUtf8); overload;
     /// Execute one SQL statement in the aSql UTF-8 encoded string
     // - Execute the first statement in aSql: call Prepare() then Step once
-    // - Close is always called internaly
+    // - Close is always called internally
     // - returns TRUE on success, and raise no ESqlite3Exception on error, but returns FALSE
     function ExecuteNoException(aDB: TSqlite3DB; const aSql: RawUtf8): boolean;
     /// Execute a SQL statement which return integers from the aSql UTF-8 encoded string
@@ -2366,7 +2366,7 @@ type
     function Execute(aDB: TSqlite3DB; const aSql: RawUtf8; Json: TStream;
       Expand: boolean = false): PtrInt; overload;
     /// Execute one SQL statement which return the results in JSON format
-    // - use internaly Execute() above with a TRawByteStringStream, and return a string
+    // - use internally Execute() above with a TRawByteStringStream, and return a string
     // - BLOB field value is saved as Base64, e.g. '"\uFFF0base64encodedbinary"'
     // - returns the number of data rows added to JSON (excluding the headers)
     // in the integer variable mapped by aResultCount (if any)
@@ -2547,7 +2547,7 @@ type
     function Prepare(const GenericSql: RawUtf8; WasPrepared: PBoolean = nil;
       ExecutionTimer: PPPrecisionTimer = nil;
       ExecutionMonitor: PSynMonitor = nil): PSqlRequest;
-    /// used internaly to release all prepared statements from Cache[]
+    /// used internally to release all prepared statements from Cache[]
     procedure ReleaseAllDBStatements;
     /// could be used e.g. for statistics
     // - will use internally the function StatementCacheTotalTimeCompare()
@@ -5799,7 +5799,7 @@ end;
 
 function TSqlRequest.FieldInt(Col: integer): Int64;
 begin
-  // internaly, SQLite always uses Int64 -> pure integer function is useless
+  // internally, SQLite always uses Int64 -> pure integer function is useless
   if cardinal(Col) >= cardinal(FieldCount) then
     raise ESqlite3Exception.Create(RequestDB, SQLITE_RANGE, 'FieldInt');
   result := sqlite3.column_int64(Request, Col);

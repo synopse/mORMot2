@@ -155,7 +155,7 @@ type
     procedure Resume;
       {$ifdef HASINLINE}inline;{$endif}
     /// resume a paused timer until the method ends
-    // - will internaly create a TInterfaceObject class to let the compiler
+    // - will internally create a TInterfaceObject class to let the compiler
     // generate a try..finally block as expected to call Pause at method ending
     // - is therefore very convenient to have consistent Resume/Pause calls
     // - for proper use, expect TPrecisionTimer to be initialized to 0 before
@@ -1254,7 +1254,7 @@ begin
 end;
 
 type
-  /// a class used internaly by TPrecisionTimer.ProfileMethod
+  /// a class used internally by TPrecisionTimer.ProfileMethod
   TPrecisionTimerProfiler = class(TInterfacedObject)
   protected
     fTimer: PPrecisionTimer;

@@ -68,7 +68,7 @@ type
   // - require the 'test.db3' SQLite3 database file, as created by TTestFileBased
   TTestClientServerAccess = class(TSynTestCase)
   protected
-    { these values are used internaly by the published methods below }
+    { these values are used internally by the published methods below }
     Model: TOrmModel;
     DataBase: TRestServerDB;
     Server: TRestHttpServer;
@@ -189,7 +189,7 @@ begin
     DataBase.DB.LockingMode := lmExclusive;
     Server := TRestHttpServer.Create(HTTP_DEFAULTPORT, [DataBase], '+',
       HTTP_DEFAULT_MODE, 16, secSynShaAes);
-    fRunConsole := fRunConsole + 'using ' + UTF8ToString(Server.HttpServer.APIVersion);
+    fRunConsole := fRunConsole + 'using ' + Utf8ToString(Server.HttpServer.APIVersion);
     Database.NoAjaxJson := true; // expect not expanded JSON from now on
   except
     on E: Exception do

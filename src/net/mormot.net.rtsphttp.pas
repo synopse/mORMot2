@@ -15,7 +15,7 @@ unit mormot.net.rtsphttp;
   Encapsulate a RTSP TCP/IP duplex video stream into two HTTP links,
   one POST for upgoing commands, and one GET for downloaded video.
 
-  Thanks to TAsynchServer, it can handle thousands on concurrent streams,
+  Thanks to TAsyncServer, it can handle thousands on concurrent streams,
   with minimal resources, in a cross-platform way.
 
 }
@@ -41,7 +41,7 @@ uses
   mormot.net.http,
   mormot.net.client,
   mormot.net.server,
-  mormot.net.asynch;
+  mormot.net.async;
 
 
 { ******************** Low-level HTTP and RTSP Connections }
@@ -49,26 +49,26 @@ uses
 type
   /// holds a HTTP POST connection for RTSP proxy
   // - as used by the TRtspOverHttpServer class
-  TPostConnection = class(TAsynchConnection)
+  TPostConnection = class(TAsyncConnection)
   protected
     fRtspTag: TPollSocketTag;
     // redirect the POST base-64 encoded command to the RTSP socket
     function OnRead(
-      Sender: TAsynchConnections): TPollAsynchSocketOnRead; override;
+      Sender: TAsyncConnections): TPollAsyncSocketOnRead; override;
     // will release the associated TRtspConnection instance
-    procedure BeforeDestroy(Sender: TAsynchConnections); override;
+    procedure BeforeDestroy(Sender: TAsyncConnections); override;
   end;
 
   /// holds a RTSP connection for HTTP GET proxy
   // - as used by the TRtspOverHttpServer class
-  TRtspConnection = class(TAsynchConnection)
+  TRtspConnection = class(TAsyncConnection)
   protected
     fGetBlocking: TCrtSocket;
     // redirect the RTSP socket input to the GET content
     function OnRead(
-      Sender: TAsynchConnections): TPollAsynchSocketOnRead; override;
+      Sender: TAsyncConnections): TPollAsyncSocketOnRead; override;
     // will release the associated blocking GET socket
-    procedure BeforeDestroy(Sender: TAsynchConnections); override;
+    procedure BeforeDestroy(Sender: TAsyncConnections); override;
   end;
 
 
@@ -84,19 +84,19 @@ type
   // initiated by the client; the server then binds the connections to form a
   // virtual full-duplex connection - see https://goo.gl/CX6VA3 for reference
   // material about this horrible, but widely accepted, Apple hack
-  TRtspOverHttpServer = class(TAsynchServer)
+  TRtspOverHttpServer = class(TAsyncServer)
   protected
     fRtspServer, fRtspPort: RawUtf8;
     fPendingGet: TRawUtf8List;
     function GetHttpPort: RawUtf8;
     // creates TPostConnection and TRtspConnection instances for a given stream
     function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: RawUtf8;
-      out aConnection: TAsynchConnection): boolean; override;
+      out aConnection: TAsyncConnection): boolean; override;
   public
     /// initialize the proxy HTTP server forwarding specified RTSP server:port
     constructor Create(const aRtspServer, aRtspPort, aHttpPort: RawUtf8;
       aLog: TSynLogClass; const aOnStart, aOnStop: TOnNotifyThread;
-      aOptions: TAsynchConnectionsOptions = []); reintroduce;
+      aOptions: TAsyncConnectionsOptions = []); reintroduce;
     /// shutdown and finalize the server
     destructor Destroy; override;
     /// convert a rtsp://.... URI into a http://... proxy URI
@@ -131,7 +131,7 @@ implementation
 { TRtspConnection }
 
 function TRtspConnection.OnRead(
-  Sender: TAsynchConnections): TPollAsynchSocketOnRead;
+  Sender: TAsyncConnections): TPollAsyncSocketOnRead;
 begin
   if acoVerboseLog in Sender.Options then
     Sender.LogVerbose(self, 'Frame forwarded', fSlot.readbuf);
@@ -151,7 +151,7 @@ begin
   fSlot.readbuf := '';
 end;
 
-procedure TRtspConnection.BeforeDestroy(Sender: TAsynchConnections);
+procedure TRtspConnection.BeforeDestroy(Sender: TAsyncConnections);
 begin
   fGetBlocking.Free;
   inherited BeforeDestroy(Sender);
@@ -161,10 +161,10 @@ end;
 { TPostConnection }
 
 function TPostConnection.OnRead(
-  Sender: TAsynchConnections): TPollAsynchSocketOnRead;
+  Sender: TAsyncConnections): TPollAsyncSocketOnRead;
 var
   decoded: RawByteString;
-  rtsp: TAsynchConnection;
+  rtsp: TAsyncConnection;
 begin
   result := sorContinue;
   decoded := Base64ToBinSafe(TrimControlChars(fSlot.readbuf));
@@ -174,7 +174,7 @@ begin
   rtsp := Sender.ConnectionFindLocked(fRtspTag);
   if rtsp <> nil then
   try
-    Sender.Write(rtsp, decoded); // asynch sending to RTSP server
+    Sender.Write(rtsp, decoded); // async sending to RTSP server
     Sender.Log.Add.Log(sllDebug, 'OnRead % POST forwarded RTSP command [%]',
       [Handle, decoded], self);
   finally
@@ -188,7 +188,7 @@ begin
   end;
 end;
 
-procedure TPostConnection.BeforeDestroy(Sender: TAsynchConnections);
+procedure TPostConnection.BeforeDestroy(Sender: TAsyncConnections);
 begin
   Sender.ConnectionRemove(fRtspTag); // disable associated RTSP and GET sockets
   inherited BeforeDestroy(Sender);
@@ -203,7 +203,7 @@ end;
 
 constructor TRtspOverHttpServer.Create(
   const aRtspServer, aRtspPort, aHttpPort: RawUtf8; aLog: TSynLogClass;
-  const aOnStart, aOnStop: TOnNotifyThread; aOptions: TAsynchConnectionsOptions);
+  const aOnStart, aOnStop: TOnNotifyThread; aOptions: TAsyncConnectionsOptions);
 begin
   fLog := aLog;
   fRtspServer := aRtspServer;
@@ -233,7 +233,7 @@ type
   end;
 
 function TRtspOverHttpServer.ConnectionCreate(aSocket: TNetSocket;
-  const aRemoteIp: RawUtf8; out aConnection: TAsynchConnection): boolean;
+  const aRemoteIp: RawUtf8; out aConnection: TAsyncConnection): boolean;
 var
   log: ISynLog;
   sock, get, old: TProxySocket;

@@ -103,8 +103,8 @@ type
     // Prepare() should ignore this entry
     Column: integer;
     /// The associated expression
-    // - TOrmVirtualTable.Prepare() must set Value.VType to not svtUnknown
-    // (e.g. to svtNull), if an expression is expected at vt_BestIndex() call
+    // - TOrmVirtualTable.Prepare() must set Value.VType to not ftUnknown
+    // (e.g. to ftNull), if an expression is expected at vt_BestIndex() call
     // - TOrmVirtualTableCursor.Search() will receive an expression value,
     // to be retrieved e.g. via sqlite3_value_*() functions
     Value: TSqlVar;
@@ -414,7 +414,7 @@ type
   TOrmVirtualTableCursor = class
   protected
     fTable: TOrmVirtualTable;
-    /// used internaly between two Column() method calls for GetFieldSqlVar()
+    /// used internally between two Column() method calls for GetFieldSqlVar()
     fColumnTemp: RawByteString;
     /// easy set a TSqlVar content for the Column() method
     procedure SetColumn(var aResult: TSqlVar; aValue: Int64); overload;

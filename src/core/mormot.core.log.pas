@@ -315,7 +315,7 @@ function ToCaption(filter: TSynLogFilter): string; overload;
 function ToText(const Event: TMethod): RawUtf8; overload;
 
 var
-  /// low-level variable used internaly by this unit
+  /// low-level variable used internally by this unit
   // - do not access this variable in your code: defined here to allow inlining
   GlobalThreadLock: TRTLCriticalSection;
 
@@ -1163,7 +1163,7 @@ type
 {$ifndef NOEXCEPTIONINTERCEPT}
 
 var
-  /// low-level variable used internaly by this unit
+  /// low-level variable used internally by this unit
   // - do not access this variable in your code: defined here to allow inlining
   GlobalCurrentHandleExceptionSynLog: TSynLog;
 
@@ -5651,6 +5651,7 @@ begin
     'Background', 'Bgd',
     'WebSocket', 'WS',
     'Asynch', 'A',
+    'Async', 'A',
     'Parallel', 'Par',
     'Timer', 'Tmr',
     'Thread', 'Thd',

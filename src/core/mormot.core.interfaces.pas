@@ -262,7 +262,7 @@ type
   public
     /// the method URI, i.e. the method name
     // - as declared in object pascal code, e.g. 'Add' for ICalculator.Add
-    // - this property value is hashed internaly for faster access
+    // - this property value is hashed internally for faster access
     Uri: RawUtf8;
     /// the method default result, formatted as a JSON array
     // - example of content may be '[]' for a procedure or '[0]' for a function
@@ -1146,7 +1146,7 @@ type
     // add or rename)
     // - slightly easier to use Ctxt.U['str'] than ToUtf8(Ctxt.Named['str'])
     property U[const ParamName: RawUtf8]: RawUtf8
-      read GetInUTF8;
+      read GetInUtf8;
   end;
 
   /// parameters used by TInterfaceStub.Executes() events callbacks as JSON
@@ -1219,7 +1219,7 @@ type
     ioGreaterThanOrEqualTo,
     ioTraceMatch);
 
-  /// define a mocking / stubing rule used internaly by TInterfaceStub
+  /// define a mocking / stubing rule used internally by TInterfaceStub
   TInterfaceStubRule = record
     /// optional expected parameters, serialized as a JSON array
     // - if equals '', the rule is not parametrized - i.e. it will be the
@@ -1262,7 +1262,7 @@ type
     ExpectedTraceHash: cardinal;
   end;
 
-  /// define the rules for a given method as used internaly by TInterfaceStub
+  /// define the rules for a given method as used internally by TInterfaceStub
   {$ifdef USERECORDWITHMETHODS}
   TInterfaceStubRules = record
   {$else}
@@ -7027,7 +7027,7 @@ begin
       // call SOA/fake interface? -> bypass all JSON marshalling
       if (output = nil) and
          (fMethod^.ArgsOutputValuesCount > 0) then
-        exit; // ensure a function has a TOnAsynchRedirectResult callback
+        exit; // ensure a function has a TOnAsyncRedirectResult callback
       result := fake.fInvoke(fMethod^, params, output, nil, nil, nil);
       exit;
     end;
@@ -7045,7 +7045,7 @@ begin
     end
     else if fMethod^.ArgsOutputValuesCount > 0 then
       exit
-    else // ensure a function has a TOnAsynchRedirectResult callback
+    else // ensure a function has a TOnAsyncRedirectResult callback
       WR := nil;
     result := ExecuteJson([Instance], tmp.buf, WR);
     if WR <> nil then

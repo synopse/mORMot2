@@ -63,7 +63,7 @@ type
   /// SOA callback definition as expected by TTestBidirectionalRemoteConnection
   IBidirCallback = interface(IInvokable)
     ['{5C5818CC-FFBA-445C-82C1-39F45B84520C}']
-    procedure AsynchEvent(a: integer);
+    procedure AsyncEvent(a: integer);
     function Value: Integer;
   end;
 
@@ -73,7 +73,7 @@ type
     function TestRest(a, b: integer; out c: RawUtf8): variant;
     function TestRestCustom(a: integer): TServiceCustomAnswer;
     function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
-    procedure LaunchAsynchCallback(a: integer);
+    procedure LaunchAsyncCallback(a: integer);
     procedure RemoveCallback;
   end;
 
@@ -84,7 +84,7 @@ type
     function TestRest(a, b: integer; out c: RawUtf8): variant;
     function TestRestCustom(a: integer): TServiceCustomAnswer;
     function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
-    procedure LaunchAsynchCallback(a: integer);
+    procedure LaunchAsyncCallback(a: integer);
     procedure RemoveCallback;
   public
     function LaunchSynchCallback: integer;
@@ -151,7 +151,7 @@ type
     fValue: Integer;
   public
     function Value: Integer;
-    procedure AsynchEvent(a: integer);
+    procedure AsyncEvent(a: integer);
   end;
 
   TBidirCallback = class(TInterfacedCallback, IBidirCallback)
@@ -159,7 +159,7 @@ type
     fValue: Integer;
   public
     function Value: Integer;
-    procedure AsynchEvent(a: integer);
+    procedure AsyncEvent(a: integer);
   end;
 
 
@@ -185,10 +185,10 @@ begin
   result := d <> 0;
 end;
 
-procedure TBidirServer.LaunchAsynchCallback(a: integer);
+procedure TBidirServer.LaunchAsyncCallback(a: integer);
 begin
   if Assigned(fCallback) then
-    fCallback.AsynchEvent(a);
+    fCallback.AsyncEvent(a);
 end;
 
 function TBidirServer.LaunchSynchCallback: integer;
@@ -207,7 +207,7 @@ end;
 
 { TBidirCallbackInterfacedObject }
 
-procedure TBidirCallbackInterfacedObject.AsynchEvent(a: integer);
+procedure TBidirCallbackInterfacedObject.AsyncEvent(a: integer);
 begin
   inc(fValue, a);
 end;
@@ -220,7 +220,7 @@ end;
 
 { TBidirCallback }
 
-procedure TBidirCallback.AsynchEvent(a: integer);
+procedure TBidirCallback.AsyncEvent(a: integer);
 begin
   inc(fValue, a);
 end;
@@ -402,7 +402,7 @@ begin
   for d := -5 to 6 do
   begin
     check(I.TestCallback(d, subscribed) = (d <> 0));
-    I.LaunchAsynchCallback(d);
+    I.LaunchAsyncCallback(d);
   end;
   WaitUntilNotified;
   check(fBidirServer.LaunchSynchCallback = 6);
@@ -411,14 +411,14 @@ begin
   for d := -5 to 6 do
   begin
     check(I.TestCallback(d, subscribed) = (d <> 0));
-    I.LaunchAsynchCallback(d);
+    I.LaunchAsyncCallback(d);
   end;
   WaitUntilNotified;
   subscribed := TBidirCallback.Create(Rest, IBidirCallback);
   for d := -5 to 6 do
   begin
     check(I.TestCallback(d, subscribed) = (d <> 0));
-    I.LaunchAsynchCallback(d);
+    I.LaunchAsyncCallback(d);
     I.RemoveCallback;
   end;
   WaitUntilNotified;

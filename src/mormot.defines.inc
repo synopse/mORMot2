@@ -22,7 +22,7 @@
 
 {.$define PUREMORMOT2}
 // if defined, no mORMot 1.18 compatilibity types nor functions would be enabled
-// - by default, existing projects should compile with mORMot 2
+// - by default, existing projects should (almost) compile with mORMot 2
 // - you should eventually define this conditional to make a perfect code
 // conversion to the new types and methods definitions
 
@@ -395,7 +395,7 @@
       {$define ISDELPHI2010_OR_FPC_NEWRTTI}
       {$define HASTTHREADSTART}
       {$define HASINTERFACEASTOBJECT}
-      {$ifdef NEWRTTINOTUSED} // option reduce EXE size by disabling much RTTI
+      {$ifdef NEWRTTINOTUSED} // option reduce EXE size by disabling some RTTI
         {$WEAKLINKRTTI ON}
         {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
       {$endif NEWRTTINOTUSED}

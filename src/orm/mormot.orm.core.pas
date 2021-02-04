@@ -68,7 +68,7 @@ uses
 
 const
   /// maximum number of Tables in a Database Model
-  // - this constant is used internaly to optimize memory usage in the
+  // - this constant is used internally to optimize memory usage in the
   // generated asm code
   // - you should not change it to a value lower than expected in an existing
   // database (e.g. as expected by TOrmAccessRights or such)
@@ -1846,10 +1846,10 @@ type
     /// get the row count of a specified table
     // - returns -1 on error
     // - returns the row count of the table on success
-    // - calls internaly the "SELECT Count(*) FROM TableName;" SQL statement
+    // - calls internally the "SELECT Count(*) FROM TableName;" SQL statement
     function TableRowCount(Table: TOrmClass): Int64;
     /// check if there is some data rows in a specified table
-    // - calls internaly a "SELECT RowID FROM TableName LIMIT 1" SQL statement,
+    // - calls internally a "SELECT RowID FROM TableName LIMIT 1" SQL statement,
     // which is much faster than testing if "SELECT count(*)" equals 0 - see
     // @http://stackoverflow.com/questions/8988915
     function TableHasRows(Table: TOrmClass): boolean;
@@ -1866,11 +1866,11 @@ type
     // ! aClient.OneFieldValue(TOrm, 'Name', 'ID=?', [aID])
     // which is the same as calling:
     // ! aClient.OneFieldValue(TOrm, 'Name', FormatUtf8('ID=?', [], [23]))
-    // - call internaly ExecuteList() to get the value
+    // - call internally ExecuteList() to get the value
     function OneFieldValue(Table: TOrmClass;
       const FieldName, WhereClause: RawUtf8): RawUtf8; overload;
     /// get the Int64 value of an unique field with a Where Clause
-    // - call internaly ExecuteList() to get the value
+    // - call internally ExecuteList() to get the value
     function OneFieldValueInt64(Table: TOrmClass;
       const FieldName, WhereClause: RawUtf8; Default: Int64 = 0): Int64;
     /// get the UTF-8 encoded value of an unique field with a Where Clause
@@ -1878,7 +1878,7 @@ type
     // from supplied parameters, binding all '?' chars with Args[] values
     // - example of use:
     // ! aClient.OneFieldValue(TOrm, 'Name', 'ID=?', [aID])
-    // - call internaly ExecuteList() to get the value
+    // - call internally ExecuteList() to get the value
     // - note that this method prototype changed with revision 1.17 of the
     // framework: array of const used to be Args and '%' in the FormatSqlWhere
     // statement, whereas it now expects bound parameters as '?'
@@ -1890,7 +1890,7 @@ type
     // chars with Bounds[] (inlining them with :(...): and auto-quoting strings)
     // - example of use:
     // ! OneFieldValue(TOrm,'Name', '%=?', ['ID'], [aID])
-    // - call internaly ExecuteList() to get the value
+    // - call internally ExecuteList() to get the value
     function OneFieldValue(Table: TOrmClass; const FieldName: RawUtf8;
       const WhereClauseFmt: RawUtf8; const Args, Bounds: array of const): RawUtf8; overload;
     /// get one integer value of an unique field with a Where Clause
@@ -1900,7 +1900,7 @@ type
       out Data: Int64): boolean; overload;
     /// get the UTF-8 encoded value of an unique field from its ID
     // - example of use: OneFieldValue(TOrm,'Name',23)
-    // - call internaly ExecuteList() to get the value
+    // - call internally ExecuteList() to get the value
     function OneFieldValue(Table: TOrmClass; const FieldName: RawUtf8;
       WhereID: TID): RawUtf8; overload;
     /// get the UTF-8 encoded value of some fields with a Where Clause
@@ -1908,7 +1908,7 @@ type
     // (using inlined parameters via :(...): is always a good idea)
     // - FieldValue[] will have the same length as FieldName[]
     // - return true on success, false on SQL error or no result
-    // - call internaly ExecuteList() to get the list
+    // - call internally ExecuteList() to get the list
     function MultiFieldValue(Table: TOrmClass;
       const FieldName: array of RawUtf8; var FieldValue: array of RawUtf8;
       const WhereClause: RawUtf8): boolean; overload;
@@ -1916,7 +1916,7 @@ type
     // - example of use: MultiFieldValue(TOrm,['Name'],Name,23)
     // - FieldValue[] will have the same length as FieldName[]
     // - return true on success, false on SQL error or no result
-    // - call internaly ExecuteList() to get the list
+    // - call internally ExecuteList() to get the list
     function MultiFieldValue(Table: TOrmClass;
       const FieldName: array of RawUtf8; var FieldValue: array of RawUtf8;
       WhereID: TID): boolean; overload;
@@ -1924,7 +1924,7 @@ type
     // - example of use: OneFieldValue(TOrm,'FirstName','Name=:("Smith"):',Data)
     // (using inlined parameters via :(...): is always a good idea)
     // - leave WhereClause void to get all records
-    // - call internaly ExecuteList() to get the list
+    // - call internally ExecuteList() to get the list
     // - returns TRUE on success, FALSE if no data was retrieved
     function OneFieldValues(Table: TOrmClass; const FieldName: RawUtf8;
       const WhereClause: RawUtf8; out Data: TRawUtf8DynArray): boolean; overload;
@@ -1932,7 +1932,7 @@ type
     // - example of use: OneFieldValue(TOrmPeople,'ID','Name=:("Smith"):',Data)
     // (using inlined parameters via :(...): is always a good idea)
     // - leave WhereClause void to get all records
-    // - call internaly ExecuteList() to get the list
+    // - call internally ExecuteList() to get the list
     function OneFieldValues(Table: TOrmClass; const FieldName: RawUtf8;
       const WhereClause: RawUtf8; var Data: TInt64DynArray;
       SQL: PRawUtf8 = nil): boolean; overload;
@@ -1940,14 +1940,14 @@ type
     // - example of use: OneFieldValue(TOrm,'FirstName','Name=:("Smith")',Data)
     // (using inlined parameters via :(...): is always a good idea)
     // - leave WhereClause void to get all records
-    // - call internaly ExecuteList() to get the list
+    // - call internally ExecuteList() to get the list
     // - using inlined parameters via :(...): in WhereClause is always a good idea
     function OneFieldValues(Table: TOrmClass; const FieldName: RawUtf8;
       const WhereClause: RawUtf8 = ''; const Separator: RawUtf8 = ','): RawUtf8; overload;
     /// get the string-encoded values of an unique field into some TStrings
     // - Items[] will be filled with string-encoded values of the given field)
     // - Objects[] will be filled with pointer(ID)
-    // - call internaly ExecuteList() to get the list
+    // - call internally ExecuteList() to get the list
     // - returns TRUE on success, FALSE if no data was retrieved
     // - if IDToIndex is set, its value will be replaced with the index in
     // Strings.Objects[] where ID=IDToIndex^
@@ -1959,7 +1959,7 @@ type
     // - FieldNames can be the CSV list of field names to be retrieved
     // - if FieldNames is '', will get all simple fields, excluding BLOBs
     // - if FieldNames is '*', will get ALL fields, including ID and BLOBs
-    // - call internaly ExecuteList() to get the list
+    // - call internally ExecuteList() to get the list
     // - using inlined parameters via :(...): in WhereClause is always a good idea
     function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUtf8;
       const WhereClause: RawUtf8 = ''): TOrmTable; overload;
@@ -2372,7 +2372,7 @@ type
     // - if ForcedID is set to non null, client sends this ID to be used
     // when adding the record (instead of a database-generated ID)
     // - on success, returns the new RowID value; on error, returns 0
-    // - call internaly the Add virtual method above
+    // - call internally the Add virtual method above
     function AddSimple(aTable: TOrmClass;
       const aSimpleFields: array of const; ForcedID: TID = 0): TID;
     /// update a member from Value simple fields content
@@ -2405,7 +2405,7 @@ type
     // order of published properties of the supplied aTable class, excepting the
     // RawBlob and TOrmMany kind (i.e. only so called "simple fields")
     // - return true on success
-    // - call internaly the Update() / EngineUpdate() virtual methods
+    // - call internally the Update() / EngineUpdate() virtual methods
     function Update(aTable: TOrmClass; aID: TID;
       const aSimpleFields: array of const): boolean; overload;
     /// create or update a member, depending if the Value has already an ID
@@ -2418,7 +2418,7 @@ type
     // - only one single field shall be specified in FieldValue, but could
     // be of any kind of value - for BLOBs, you should better use UpdateBlob()
     // - return true on success
-    // - call internaly the EngineUpdateField() abstract method
+    // - call internally the EngineUpdateField() abstract method
     // - note that this method won't update the TModTime properties: you should
     // rather use a classic Retrieve()/FillPrepare() followed by Update(); but
     // it will notify the internal Cache
@@ -2432,7 +2432,7 @@ type
     // be of any kind of value - for security reasons, void WHERE clause will
     // be rejected
     // - return true on success
-    // - call internaly the EngineUpdateField() abstract method
+    // - call internally the EngineUpdateField() abstract method
     // - note that this method won't update the TModTime properties: you should
     // rather use a classic Retrieve()/FillPrepare() followed by Update(); but
     // it will notify the internal Cache
@@ -2444,7 +2444,7 @@ type
     // - any value can be set in FieldValue, but for BLOBs, you should better
     // use UpdateBlob()
     // - return true on success
-    // - call internaly the EngineUpdateField() abstract method
+    // - call internally the EngineUpdateField() abstract method
     // - note that this method won't update the TModTime properties: you should
     // rather use a classic Retrieve()/FillPrepare() followed by Update(); but
     // it will notify the internal Cache
@@ -2457,7 +2457,7 @@ type
     // use UpdateBlob()
     // - for security reasons, void WHERE clause will be rejected
     // - return true on success
-    // - call internaly the EngineUpdateField() abstract method
+    // - call internally the EngineUpdateField() abstract method
     // - note that this method won't update the TModTime properties, nor the
     // internal table Cache: you should rather use a classic Retrieve()/FillPrepare()
     // followed by an Update() of the whole record
@@ -2492,7 +2492,7 @@ type
     /// delete a member
     // - implements REST DELETE collection
     // - return true on success
-    // - call internaly the EngineDelete() abstract method
+    // - call internally the EngineDelete() abstract method
     function Delete(Table: TOrmClass; ID: TID): boolean; overload;
     /// delete a member with a WHERE clause
     // - implements REST DELETE collection
@@ -2535,7 +2535,7 @@ type
     /// update a blob field from its record ID and supplied blob field name
     // - implements REST PUT collection with a supplied member ID and field name
     // - return true on success
-    // - call internaly the EngineUpdateBlob() abstract method
+    // - call internally the EngineUpdateBlob() abstract method
     // - this method expect the Blob data to be supplied as RawBlob, using
     // EngineUpdateBlob()
     function UpdateBlob(Table: TOrmClass;
@@ -2543,7 +2543,7 @@ type
     /// update a blob field from its record ID and blob field name
     // - implements REST PUT collection with a supplied member ID and field name
     // - return true on success
-    // - call internaly the EngineUpdateBlob() abstract method
+    // - call internally the EngineUpdateBlob() abstract method
     // - this method expect the Blob data to be supplied as a TStream: it will
     // send the whole stream content (from its beginning position upto its
     // current size) to the database engine
@@ -2552,7 +2552,7 @@ type
     /// update a blob field from its record ID and blob field name
     // - implements REST PUT collection with a supplied member ID and field name
     // - return true on success
-    // - call internaly the EngineUpdateBlob() abstract method
+    // - call internally the EngineUpdateBlob() abstract method
     // - this method expect the Blob data to be supplied as direct memory pointer
     // and size
     function UpdateBlob(Table: TOrmClass;
@@ -2561,7 +2561,7 @@ type
     /// update all BLOB fields of the supplied Value
     // - call several REST PUT collection (one for each BLOB) for the member
     // - uses the UpdateBlob() method to send the BLOB properties content to the Server
-    // - called internaly by Add and Update methods when ForceBlobTransfert /
+    // - called internally by Add and Update methods when ForceBlobTransfert /
     // ForceBlobTransfertTable[] is set
     // - you can use this method by hand, to avoid several calls to UpdateBlob()
     // - returns TRUE on success (or if there is no BLOB field)
@@ -2569,7 +2569,7 @@ type
     function UpdateBlobFields(Value: TOrm): boolean;
     /// get all BLOB fields of the supplied value from the remote server
     // - call several REST GET collection (one for each BLOB) for the member
-    // - call internaly e.g. by TRestClient.Retrieve method when
+    // - call internally e.g. by TRestClient.Retrieve method when
     // ForceBlobTransfert / ForceBlobTransfertTable[] is set
     function RetrieveBlobFields(Value: TOrm): boolean;
 
@@ -2685,53 +2685,53 @@ type
     // - will initialize a TRestBatch and call TimerEnable to initialize the
     // background thread, following the given processing period (in seconds),
     // or the TRestBatch.Count threshold to call BatchSend
-    // - actual REST/CRUD commands will take place via AsynchBatchAdd,
-    // AsynchBatchUpdate and AsynchBatchDelete methods
-    // - only a single AsynchBatch() call per Table is allowed at a time, unless
-    // AsynchBatchStop method is used to flush the current asynchronous BATCH
+    // - actual REST/CRUD commands will take place via AsyncBatchAdd,
+    // AsyncBatchUpdate and AsyncBatchDelete methods
+    // - only a single AsyncBatch() call per Table is allowed at a time, unless
+    // AsyncBatchStop method is used to flush the current asynchronous BATCH
     // - using a BATCH in a dedicated thread will allow very fast background
     // asynchronous process of ORM methods, sufficient for most use cases
-    // - is a wrapper around BackgroundTimer.AsynchBatchStart()
-    function AsynchBatchStart(Table: TOrmClass; SendSeconds: integer;
+    // - is a wrapper around BackgroundTimer.AsyncBatchStart()
+    function AsyncBatchStart(Table: TOrmClass; SendSeconds: integer;
       PendingRowThreshold: integer = 500; AutomaticTransactionPerRow: integer = 1000;
       Options: TRestBatchOptions = [boExtendedJson]): boolean;
     /// finalize asynchronous ORM BATCH process, executed in a background thread
-    // - should have been preceded by a call to AsynchBatch(), or returns false
+    // - should have been preceded by a call to AsyncBatch(), or returns false
     // - Table=nil will release all existing batch instances
-    // - is a wrapper around BackgroundTimer.AsynchBatchStop()
-    function AsynchBatchStop(Table: TOrmClass): boolean;
+    // - is a wrapper around BackgroundTimer.AsyncBatchStop()
+    function AsyncBatchStop(Table: TOrmClass): boolean;
     /// create a new ORM member in a BATCH to be written in a background thread
-    // - should have been preceded by a call to AsynchBatchStart(), or returns -1
-    // - is a wrapper around BackgroundTimer.AsynchBatchAdd(),
+    // - should have been preceded by a call to AsyncBatchStart(), or returns -1
+    // - is a wrapper around BackgroundTimer.AsyncBatchAdd(),
     // so will return the index in the BATCH rows, not the created TID
     // - this method is thread-safe
-    function AsynchBatchAdd(Value: TOrm; SendData: boolean;
+    function AsyncBatchAdd(Value: TOrm; SendData: boolean;
       ForceID: boolean = false; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     /// append some JSON content in a BATCH to be written in a background thread
-    // - could be used to emulate AsynchBatchAdd() with an already pre-computed
+    // - could be used to emulate AsyncBatchAdd() with an already pre-computed
     // JSON object
-    // - is a wrapper around BackgroundTimer.AsynchBatchRawAdd(),
+    // - is a wrapper around BackgroundTimer.AsyncBatchRawAdd(),
     // so will return the index in the BATCH rows, not the created TID
     // - this method is thread-safe
-    function AsynchBatchRawAdd(Table: TOrmClass; const SentData: RawUtf8): integer;
+    function AsyncBatchRawAdd(Table: TOrmClass; const SentData: RawUtf8): integer;
     /// append some JSON content in a BATCH to be writen in a background thread
-    // - could be used to emulate AsynchBatchAdd() with an already pre-computed
+    // - could be used to emulate AsyncBatchAdd() with an already pre-computed
     // JSON object, as stored in a TTextWriter instance
-    // - is a wrapper around BackgroundTimer.AsynchBatchRawAppend()
+    // - is a wrapper around BackgroundTimer.AsyncBatchRawAppend()
     // - this method is thread-safe
-    procedure AsynchBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
+    procedure AsyncBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
     /// update an ORM member in a BATCH to be written in a background thread
-    // - should have been preceded by a call to AsynchBatchStart(), or returns -1
-    // - is a wrapper around BackgroundTimer.AsynchBatchUpdate()
+    // - should have been preceded by a call to AsyncBatchStart(), or returns -1
+    // - is a wrapper around BackgroundTimer.AsyncBatchUpdate()
     // - this method is thread-safe
-    function AsynchBatchUpdate(Value: TOrm; const CustomFields: TFieldBits = [];
+    function AsyncBatchUpdate(Value: TOrm; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     /// delete an ORM member in a BATCH to be written in a background thread
-    // - should have been preceded by a call to AsynchBatchStart(), or returns -1
+    // - should have been preceded by a call to AsyncBatchStart(), or returns -1
     // - is a wrapper around the TRestBatch.Delete() sent in the Timer thread
     // - this method is thread-safe
-    function AsynchBatchDelete(Table: TOrmClass; ID: TID): integer;
+    function AsyncBatchDelete(Table: TOrmClass; ID: TID): integer;
 
     /// access the Database Model associated with REST Client or Server instance
     function Model: TOrmModel;
@@ -2833,7 +2833,7 @@ type
     // as FormatUtf8() function, replacing all '%' chars with Args[] values
     // - using inlined parameters via :(...): in SqlWhereFormat is always a good idea
     // - for one TClass, you should better use TRest.MultiFieldValues()
-    // - will call the List virtual method internaly
+    // - will call the List virtual method internally
     function ListFmt(const Tables: array of TOrmClass;
       const SqlSelect, SqlWhereFormat: RawUtf8;
       const Args: array of const): TOrmTable; overload;
@@ -2845,7 +2845,7 @@ type
     // - example of use:
     // ! Table := ListFmt([TOrm],'Name','ID=?',[],[aID]);
     // - for one TClass, you should better use TRest.MultiFieldValues()
-    // - will call the List virtual method internaly
+    // - will call the List virtual method internally
     function ListFmt(const Tables: array of TOrmClass;
       const SqlSelect, SqlWhereFormat: RawUtf8;
       const Args, Bounds: array of const): TOrmTable; overload;
@@ -3011,7 +3011,7 @@ type
     procedure CreateMissingTables(user_version: cardinal = 0;
       options: TOrmInitializeTableOptions = []);
     /// create an index for the specific FieldName
-    // - will call CreateSqlMultiIndex() internaly
+    // - will call CreateSqlMultiIndex() internally
     function CreateSqlIndex(Table: TOrmClass; const FieldName: RawUtf8;
       Unique: boolean; const IndexName: RawUtf8 = ''): boolean; overload;
     /// create one or multiple index(es) for the specific FieldName(s)
@@ -5750,7 +5750,7 @@ type
      // - but you can set a value to this property before calling the Add()
      // method, to associate this TOrmFts3 to another TOrm
      // - ID property is read-only, but this DocID property can be written/set
-     // - internaly, we use RowID in the SQL statements, which is compatible
+     // - internally, we use RowID in the SQL statements, which is compatible
      // with both TOrm and TOrmFts3 kind of table
     property DocID: TID read GetID write fID;
   end;
@@ -5822,7 +5822,7 @@ type
   { -------------------- TOrmProperties Definitions }
 
   /// some information about a given TOrm class properties
-  // - used internaly by TOrm, via a global cache handled by this unit:
+  // - used internally by TOrm, via a global cache handled by this unit:
   // you can access to each record's properties via TOrm.OrmProps class
   // - such a global cache saves some memory for each TOrm instance,
   // and allows faster access to most wanted RTTI properties
@@ -7049,7 +7049,7 @@ type
     fCache: TRestCacheEntryDynArray;
   public
     /// create a cache instance
-    // - the associated TOrmModel will be used internaly
+    // - the associated TOrmModel will be used internally
     constructor Create(const aRest: IRestOrm); reintroduce;
     /// release the cache instance
     destructor Destroy; override;
@@ -12966,7 +12966,7 @@ begin
   begin
     dec(Value, PtrUInt(fDataStart));
     if (PtrInt(PtrUInt(Value)) > MaxInt) or (PtrInt(PtrUInt(Value)) < -MaxInt) then
-      raise EOrmTable.CreateUTF8('%.Results[%] overflow: all PUtf8Char ' +
+      raise EOrmTable.CreateUtf8('%.Results[%] overflow: all PUtf8Char ' +
         ' should be in a -2GB..+2GB 32-bit range [%]', [self, Offset, Value]);
     // consider forcing NOPOINTEROFFSET conditional if you get this exception
   end;
@@ -14334,7 +14334,7 @@ end;
 
 var
   /// simple wrapper to UTF-8 compare function for the SQLite3 field datatypes
-  // - used internaly for field sorting (see TOrmTable.SortFields() method)
+  // - used internally for field sorting (see TOrmTable.SortFields() method)
   // and for default User Interface Query (see TRest.QueryIsTrue() method)
   // - some functions do not match exactly the TUtf8Compare signature, so will
   // be set in the initialization section of this unit
