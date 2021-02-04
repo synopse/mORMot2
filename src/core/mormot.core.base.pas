@@ -285,6 +285,7 @@ type
   // because all data is internally stored and expected to be UTF-8 encoded
   PUtf8Char = type PAnsiChar;
   PPUtf8Char = ^PUtf8Char;
+  PPPUtf8Char = ^PPUtf8Char;
 
   /// a Row/Col array of PUtf8Char, for containing sqlite3_get_table() result
   TPUtf8CharArray = array[0 .. MaxInt div SizeOf(PUtf8Char) - 1 ] of PUtf8Char;
@@ -384,6 +385,8 @@ type
   PCollection = ^TCollection;
   PStrings = ^TStrings;
   PPByte = ^PByte;
+  PPPByte = ^PPByte;
+  PPInteger = ^PInteger;
   PPPointer = ^PPointer;
   PByteArray = ^TByteArray;
   TByteArray = array[0 .. MaxInt - 1] of byte; // redefine here with {$R-}
