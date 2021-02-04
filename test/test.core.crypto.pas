@@ -16,6 +16,8 @@ uses
   mormot.core.unicode,
   mormot.core.rtti,
   mormot.core.crypto,
+  mormot.core.crypto.openssl,
+  mormot.lib.openssl11,
   mormot.core.secure,
   mormot.core.perf,
   mormot.core.test,
@@ -27,6 +29,7 @@ type
   TTestCoreCrypto = class(TSynTestCase)
   public
     procedure CryptData(dpapi: boolean);
+    procedure Prng(meta: TAesPrngClass; const name: RawUTF8);
   published
     /// Adler32 hashing functions
     procedure _Adler32;
@@ -66,8 +69,9 @@ type
     procedure Benchmark;
   end;
 
-implementation
 
+
+implementation
 
 
 { TTestCoreCrypto }
@@ -123,13 +127,6 @@ begin
   PBKDF2_HMAC_SHA1('password', 'salt', 4096, Digest);
   s := Sha1DigestToString(Digest);
   CheckEqual(s, '4b007901b765489abead49d926f721d065a429c1');
-  // also test MD5
-  CheckEqual(htdigest('agent007', 'download area', 'secret'),
-    'agent007:download area:8364d0044ef57b3defcfa141e8f77b65');
-  CheckEqual(Md5(''), 'd41d8cd98f00b204e9800998ecf8427e');
-  CheckEqual(Md5('a'), '0cc175b9c0f1b6a831c399e269772661');
-  CheckEqual(Md5('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'),
-    'd174ab98d277d9f5a5611c2c9f419d9f');
 end;
 
 function SingleTest(const s: RawByteString; const TDig: TSha256Digest): boolean; overload;
@@ -306,20 +303,24 @@ var
   temp: RawByteString;
 begin
   // includes SHA-384, which is a truncated SHA-512
-  Check(SHA384('') =
+  Check(mormot.core.crypto.SHA384('') =
     '38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63' +
     'f6e1da274edebfe76f65fbd51ad2f14898b95b');
-  Check(SHA384('abc') =
+  Check(mormot.core.crypto.SHA384('abc') =
     'cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605' +
     'a43ff5bed8086072ba1e7cc2358baeca134c825a7');
-  Check(SHA384('abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmn' +
+  Check(mormot.core.crypto.SHA384(
+    'abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmn' +
     'hijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu') = '09330c33f711' +
     '47e83d192fc782cd1b4753111b173b3b05d22fa08086e3b0f712fcc7c71a557e2db966c3e9fa91746039');
-  Check(Sha512('') = 'cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d' +
+  Check(mormot.core.crypto.Sha512('') =
+    'cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d' +
     '36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e');
-  Check(Sha512(FOX) = '07e547d9586f6a73f73fbac0435ed76951218fb7d0c8d788a309d785' +
+  Check(mormot.core.crypto.Sha512(FOX) =
+    '07e547d9586f6a73f73fbac0435ed76951218fb7d0c8d788a309d785' +
     '436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6');
-  Check(Sha512(FOX + '.') = '91ea1245f20d46ae9a037a989f54f1f790f0a47607eeb8a14d128' +
+  Check(mormot.core.crypto.Sha512(FOX + '.') =
+    '91ea1245f20d46ae9a037a989f54f1f790f0a47607eeb8a14d128' +
     '90cea77a1bbc6c7ed9cf205e67b7f2b8fd4c7dfd3a7a8617e45f3c463d481c7e586c39ac1ed');
   sha.Init;
   for i := 1 to length(FOX) do
@@ -337,7 +338,7 @@ begin
     'b0b9e03e0c88cf90fa634fa7b12b47d77b694de488ace8d9a65967dc96df599727d3292a8d9d447709c97');
   SetLength(temp, 1000);
   FillCharFast(pointer(temp)^, 1000, ord('a'));
-  Check(Sha512(temp) = Sha512DigestToString(dig));
+  Check(mormot.core.crypto.Sha512(temp) = Sha512DigestToString(dig));
   for i := 1 to 1000000 do
     sha.Update(@c, 1);
   sha.Final(dig);
@@ -480,10 +481,20 @@ begin
 end;
 
 procedure TTestCoreCrypto._TAesPNRG;
+begin
+  Prng(TAesPrng, 'mORMot');
+  {$ifdef OSWINDOWS}
+  if FileExists(ExeVersion.ProgramFilePath + LIB_CRYPTO) then
+  {$endif OSWINDOWS}
+    if OpenSslIsAvailable then
+      Prng(TAesPrngOpenSsl, 'OpenSSL');
+end;
+
+procedure TTestCoreCrypto.Prng(meta: TAesPrngClass; const name: RawUTF8);
 var
-  p: TAesPrng;
+  p: TAesPrngAbstract;
   b1, b2: TAesBlock;
-  a1, a2: TAesPrng;
+  a1, a2: TAesPrngAbstract;
   s1, s2, split, big: RawByteString;
   c: cardinal;
   d: double;
@@ -492,7 +503,7 @@ var
   clo, chi, dlo, dhi, elo, ehi: integer;
   timer: TPrecisionTimer;
 begin
-  p := TAesPrng.Main;
+  p := meta.Main;
   p.FillRandom(b1);
   p.FillRandom(b2);
   Check(not IsEqual(b1, b2));
@@ -503,8 +514,8 @@ begin
   dhi := 0;
   elo := 0;
   ehi := 0;
-  a1 := TAesPrng.Create;
-  a2 := TAesPrng.Create;
+  a1 := meta.Create;
+  a2 := meta.Create;
   try
     a1.FillRandom(b1);
     a2.FillRandom(b2);
@@ -584,15 +595,15 @@ begin
   check(PosEx(s1, split) = 0);
   timer.Start;
   Check(p.Random32(0) = 0);
-  for i := 1 to 100000 do
+  for i := 1 to 50000 do
     Check(p.Random32(i) < cardinal(i));
-  for i := 0 to 100000 do
+  for i := 0 to 50000 do
     Check(p.Random32(maxInt - i) < cardinal(maxInt - i));
-  NotifyTestSpeed('Random32', 100000 * 2, 100000 * 8, @timer);
-  SetLength(big, 200000);
+  NotifyTestSpeed('% Random32', [name], 50000 * 2, 50000 * 8, @timer);
+  SetLength(big, 100000);
   timer.Start;
   p.FillRandom(pointer(big), length(big));
-  NotifyTestSpeed('FillRandom', 1, length(big), @timer);
+  NotifyTestSpeed('% FillRandom', [name], 1, length(big), @timer);
 end;
 
 procedure TTestCoreCrypto.CryptData(dpapi: boolean);
@@ -1388,9 +1399,9 @@ var
 begin
   check(htdigest('agent007', 'download area', 'secret') =
     'agent007:download area:8364d0044ef57b3defcfa141e8f77b65');
-  check(Md5('') = 'd41d8cd98f00b204e9800998ecf8427e');
-  check(Md5('a') = '0cc175b9c0f1b6a831c399e269772661');
-  check(Md5('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789') =
+  check(mormot.core.crypto.Md5('') = 'd41d8cd98f00b204e9800998ecf8427e');
+  check(mormot.core.crypto.Md5('a') = '0cc175b9c0f1b6a831c399e269772661');
+  check(mormot.core.crypto.Md5('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789') =
     'd174ab98d277d9f5a5611c2c9f419d9f');
   SetLength(tmp, 256);
   for n := 256 - 80 to 256 do

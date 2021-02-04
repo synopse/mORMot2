@@ -684,6 +684,7 @@ function PEM_read_bio_PrivateKey(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
   u: pointer): PEVP_PKEY; cdecl;
 function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
   u: pointer): PRSA; cdecl;
+function RAND_bytes(buf: PByte; num: integer): integer; cdecl;
 
 
 { ******************** OpenSSL Full API Declaration }
@@ -1041,10 +1042,11 @@ type
     PEM_read_bio_X509: function(bp: PBIO; x: PPX509; cb: Ppem_password_cb; u: pointer): PX509; cdecl;
     PEM_read_bio_PrivateKey: function(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
     PEM_read_bio_RSAPrivateKey: function(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
+    RAND_bytes: function(buf: PByte; num: integer): integer; cdecl;
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..51] of PAnsiChar = (
+  LIBCRYPTO_ENTRIES: array[0..52] of PAnsiChar = (
     'CRYPTO_malloc', 'CRYPTO_free', 'ERR_remove_state', 'ERR_error_string_n',
     'ERR_get_error', 'ERR_remove_thread_state', 'ERR_load_BIO_strings',
     'EVP_MD_CTX_new', 'EVP_MD_CTX_free', 'EVP_sha1', 'EVP_sha224', 'EVP_sha256',
@@ -1057,7 +1059,7 @@ const
     'X509_get_subject_name', 'X509_free', 'X509_NAME_print_ex_fp', 'OPENSSL_sk_pop',
     'OPENSSL_sk_num', 'ASN1_BIT_STRING_get_bit', 'OBJ_nid2sn', 'OBJ_obj2nid',
     'ASN1_STRING_data', 'PEM_read_bio_X509', 'PEM_read_bio_PrivateKey',
-    'PEM_read_bio_RSAPrivateKey');
+    'PEM_read_bio_RSAPrivateKey', 'RAND_bytes');
 
 var
   libcrypto: TLibCrypto;
@@ -1327,6 +1329,11 @@ function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
   u: pointer): PRSA;
 begin
   result := libcrypto.PEM_read_bio_RSAPrivateKey(bp, x, cb, u);
+end;
+
+function RAND_bytes(buf: PByte; num: integer): integer;
+begin
+  result := libcrypto.RAND_bytes(buf, num);
 end;
 
 
@@ -1664,6 +1671,10 @@ function PEM_read_bio_PrivateKey(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; 
 
 function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_bio_RSAPrivateKey';
+
+function RAND_bytes(buf: PByte; num: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'RAND_bytes';
+
 
 procedure OpenSslInitialize(const libcryptoname, libsslname: TFileName);
 begin

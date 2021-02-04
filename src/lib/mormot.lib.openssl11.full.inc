@@ -21718,9 +21718,6 @@ function RAND_set_rand_engine(engine: PENGINE): integer; cdecl;
 function RAND_OpenSSL(): PRAND_METHOD; cdecl;
   external LIB_CRYPTO name _PU + 'RAND_OpenSSL';
 
-function RAND_bytes(buf: PByte; num: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'RAND_bytes';
-
 function RAND_priv_bytes(buf: PByte; num: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'RAND_priv_bytes';
 
