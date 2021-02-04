@@ -1617,15 +1617,15 @@ begin
   if (SynDBOracleOCIpath <> '') and
      DirectoryExists(SynDBOracleOCIpath) then
     l1 := ExtractFilePath(ExpandFileName(SynDBOracleOCIpath + PathDelim)) + LIBNAME;
-  l2 := ExeVersion.ProgramFilePath + LIBNAME;
+  l2 := Executable.ProgramFilePath + LIBNAME;
   if not FileExists(l2) then
   begin
-    l2 := ExeVersion.ProgramFilePath + 'OracleInstantClient';
+    l2 := Executable.ProgramFilePath + 'OracleInstantClient';
     if not DirectoryExists(l2) then
     begin
-      l2 := ExeVersion.ProgramFilePath + 'OCI';
+      l2 := Executable.ProgramFilePath + 'OCI';
       if not DirectoryExists(l2) then
-        l2 := ExeVersion.ProgramFilePath + 'Oracle';
+        l2 := Executable.ProgramFilePath + 'Oracle';
     end;
     l2 := l2 + PathDelim + LIBNAME;
   end;

@@ -155,7 +155,7 @@ begin
   inherited Create;
   fLog := LOG_STACKTRACE + [sllNewRun];
   fLogRotateFileCount := 2;
-  fServiceName := Utf8ToString(ExeVersion.ProgramName);
+  fServiceName := Utf8ToString(Executable.ProgramName);
   fServiceDisplayName := fServiceName;
 end;
 
@@ -164,7 +164,7 @@ var
   versionnumber: string;
 begin
   result := ServiceDisplayName;
-  with ExeVersion.Version do
+  with Executable.Version do
   begin
     versionnumber := DetailedOrVoid;
     if versionnumber <> '' then
@@ -210,7 +210,7 @@ var
 begin
   inherited Create;
   if aWorkFolder = '' then
-    fWorkFolderName := ExeVersion.ProgramFilePath
+    fWorkFolderName := Executable.ProgramFilePath
   else
     fWorkFolderName := EnsureDirectoryExists(aWorkFolder, true);
   if aSettingsClass = nil then
@@ -221,7 +221,7 @@ begin
     fn := {$ifdef OSWINDOWS}fWorkFolderName{$else}'/etc/'{$endif};
   fn :=  EnsureDirectoryExists(fn);
   if aSettingsName = '' then
-    fn := fn + Utf8ToString(ExeVersion.ProgramName)
+    fn := fn + Utf8ToString(Executable.ProgramName)
   else
     fn := fn + aSettingsName;
   fSettings.LoadFromFile(fn + aSettingsExt);
@@ -324,13 +324,13 @@ var
   begin
     WriteCopyright;
     writeln('Try with one of the switches:');
-    spaces := StringOfChar(' ', length(ExeVersion.ProgramName) + 4);
+    spaces := StringOfChar(' ', length(Executable.ProgramName) + 4);
     {$ifdef OSWINDOWS}
-    writeln('   ', ExeVersion.ProgramName,
+    writeln('   ', Executable.ProgramName,
       ' /console -c /verbose /help -h /version');
     writeln(spaces, '/install /uninstall /start /stop /state');
     {$else}
-    writeln(' ./', ExeVersion.ProgramName,
+    writeln(' ./', Executable.ProgramName,
       ' --console -c --verbose --help -h --version');
     writeln(spaces, '--run -r --fork -f --kill -k');
     {$endif OSWINDOWS}
@@ -402,14 +402,14 @@ begin
     cVersion:
       begin
         WriteCopyright;
-        exe := StringFromFile(ExeVersion.ProgramFileName);
+        exe := StringFromFile(Executable.ProgramFileName);
         writeln(' ', fSettings.ServiceName,
           #13#10' Size: ', length(exe), ' bytes (', KB(exe), ')' +
-          #13#10' Build date: ', ExeVersion.Version.BuildDateTimeString,
+          #13#10' Build date: ', Executable.Version.BuildDateTimeString,
           #13#10' MD5: ', Md5(exe),
           #13#10' SHA256: ', Sha256(exe));
-        if ExeVersion.Version.Version32 <> 0 then
-          writeln(' Version: ', ExeVersion.Version.Detailed);
+        if Executable.Version.Version32 <> 0 then
+          writeln(' Version: ', Executable.Version.Detailed);
       end;
     cConsole, cVerbose:
       begin
@@ -425,7 +425,7 @@ begin
         end;
         try
           log.Log(sllNewRun, 'Start % /% %', [fSettings.ServiceName, cmdText,
-            ExeVersion.Version.DetailedOrVoid], self);
+            Executable.Version.DetailedOrVoid], self);
           fConsoleMode := true;
           Start;
           writeln('Press [Enter] to quit');
@@ -513,7 +513,7 @@ begin
       begin
         if cmd <> cSilentKill then
           writeln('Forked process ',
-            ExeVersion.ProgramName, ' killed successfully');
+            Executable.ProgramName, ' killed successfully');
       end
       else
         raise EDaemon.Create('No forked process found to be killed');

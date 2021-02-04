@@ -664,7 +664,7 @@ begin
             end
             else
               authrounds := 0;
-            issuer := sw.AsUtf8('Issuer', ExeVersion.User,
+            issuer := sw.AsUtf8('Issuer', Executable.User,
               'Enter Issuer identifier text.'#13#10'Will be truncated to 15-20 ascii-7 chars.');
             start := sw.AsDate('Start', NowUtc,
               'Enter the YYYY-MM-DD start date of its validity.'#13#10 +
@@ -934,7 +934,7 @@ begin
           end;
         ecCheatInit:
           begin
-            issuer := sw.AsUtf8('Issuer', ExeVersion.User,
+            issuer := sw.AsUtf8('Issuer', Executable.User,
               'Enter Issuer identifier text of the master cheat keys.'#13#10 +
               'Will be truncated to 15-20 ascii-7 chars.');
             repeat

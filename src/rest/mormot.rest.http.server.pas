@@ -621,7 +621,7 @@ begin
   begin
     // you should better set aPort='publicip:port'
     fPublicPort := fPublicAddress;
-    fPublicAddress := ExeVersion.Host;
+    fPublicAddress := Executable.Host;
   end;
   fUse := aUse;
   if high(aServers) >= 0 then

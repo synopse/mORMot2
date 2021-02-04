@@ -310,10 +310,8 @@ const
   {$ifdef CPU64} + ' 64 bit' {$else} + ' 32 bit' {$endif};
 
 {$ifndef PUREMORMOT2}
-
 /// deprecated function: use COMPILER_VERSION constant instead
 function GetDelphiCompilerVersion: RawUtf8; deprecated;
-
 {$endif PUREMORMOT2}
 
 {$ifdef OSWINDOWS}
@@ -393,7 +391,7 @@ type
   // you define the FPCUSEVERSIONINFO conditional and information is
   // extracted from executable resources
   // - you should not have to use this class directly, but via the
-  // ExeVersion global variable
+  // Executable global variable
   TFileVersion = class
   protected
     fDetailed: string;
@@ -440,7 +438,7 @@ type
     // - DefaultVersion32 is used if no information Version was included into
     // the executable resources (on compilation time)
     // - you should not have to use this constructor, but rather access the
-    // ExeVersion global variable
+    // Executable global variable
     constructor Create(const aFileName: TFileName; aMajor: integer = 0;
       aMinor: integer = 0; aRelease: integer = 0; aBuild: integer = 0);
     /// retrieve the version as a 32-bit integer with Major.Minor.Release
@@ -481,7 +479,7 @@ type
 
 type
   /// stores some global information about the current executable and computer
-  TExeVersion = record
+  TExecutable = record
     /// the main executable name, without any path nor extension
     // - e.g. 'Test' for 'c:\pathto\Test.exe'
     ProgramName: RawUtf8;
@@ -507,7 +505,7 @@ type
     /// some hash representation of this information
     // - the very same executable on the very same computer run by the very
     // same user will always have the same Hash value
-    // - is computed from the crc32c of this TExeVersion fields: c0 from
+    // - is computed from the crc32c of this TExecutable fields: c0 from
     // Version32, CpuFeatures and Host, c1 from User, c2 from ProgramFullSpec
     // and c3 from InstanceFileName
     // - may be used as an entropy seed, or to identify a process execution
@@ -518,20 +516,25 @@ var
   /// global information about the current executable and computer
   // - this structure is initialized in this unit's initialization block below
   // - you can call SetExecutableVersion() with a custom version, if needed
-  ExeVersion: TExeVersion;
+  Executable: TExecutable;
 
-/// initialize ExeVersion global variable, supplying a custom version number
+  {$ifndef PUREMORMOT2}
+  /// deprecated global: use Executable variable instead
+  ExeVersion: TExecutable absolute Executable;
+  {$endif PUREMORMOT2}
+
+/// initialize Executable global variable, supplying a custom version number
 // - by default, the version numbers will be retrieved at startup from the
 // executable itself (if it was included at build time)
 // - but you can use this function to set any custom version numbers
 procedure SetExecutableVersion(aMajor,aMinor,aRelease,aBuild: integer); overload;
 
-/// initialize ExeVersion global variable, supplying the version as text
+/// initialize Executable global variable, supplying the version as text
 // - e.g. SetExecutableVersion('7.1.2.512');
 procedure SetExecutableVersion(const aVersionText: RawUtf8); overload;
 
 /// return a function/method location according to the supplied code address
-// - returns the address as hexadecimal by default
+// - returns the address as hexadecimal by default, e.g. '004cb765'
 // - if mormot.core.log.pas is defined in the project, will redirect to
 // TDebugFile.FindLocationShort() method using .map/.dbg/.mab information, and
 // return filename, symbol name and line number (if any) as plain text, e.g.
@@ -3147,7 +3150,7 @@ begin
   retry := 10;
   repeat
     // thread-safe unique file name generation
-    result := Format('%s%s_%x.tmp', [folder, ExeVersion.ProgramName,
+    result := Format('%s%s_%x.tmp', [folder, Executable.ProgramName,
       InterlockedIncrement(_TmpCounter)]);
     if not FileExists(result) then
       exit;
@@ -3667,7 +3670,7 @@ begin
      not result then
   begin
     FreeLib;
-    raise RaiseExceptionOnFailure.CreateFmt('%s.Resolve(%s): not found in %s',
+    raise RaiseExceptionOnFailure.CreateFmt('%s.Resolve(''%s''): not found in %s',
       [ClassNameShort(self)^, ProcName, LibraryPath]);
   end;
 end;
@@ -3696,7 +3699,7 @@ begin
     if nwd <> '' then
     begin
       cwd := GetCurrentDir;
-      SetCurrentDir(nwd); // search for dependencies in the .dll folder
+      SetCurrentDir(nwd); // change the current folder at loading on Windows
     end;
     fHandle := SafeLoadLibrary(lib);
     if nwd <> '' then
@@ -3706,7 +3709,9 @@ begin
     {$endif OSWINDOWS}
     if fHandle <> 0 then
     begin
-      fLibraryPath := lib;
+      fLibraryPath := GetModuleName(fHandle);
+      if length(fLibraryPath) < length(lib) then
+        fLibraryPath := lib;
       result := true;
       exit;
     end;
@@ -3717,8 +3722,8 @@ begin
   end;
   result := false;
   if aRaiseExceptionOnFailure <> nil then
-    raise aRaiseExceptionOnFailure.CreateFmt(
-      '%s.TryLoadLibray failed - searched in %s', [ClassNameShort(self)^, libs]);
+    raise aRaiseExceptionOnFailure.CreateFmt('%s.TryLoadLibray failed' +
+      ' - searched in %s', [ClassNameShort(self)^, libs]);
 end;
 
 destructor TSynLibrary.Destroy;
@@ -3817,7 +3822,7 @@ end;
 
 procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer);
 begin
-  with ExeVersion do
+  with Executable do
   begin
     if Version = nil then
     begin
@@ -4454,7 +4459,7 @@ end;
 procedure FinalizeUnit;
 begin
   ObjArrayClear(CurrentFakeStubBuffers);
-  ExeVersion.Version.Free;
+  Executable.Version.Free;
   DeleteCriticalSection(AutoSlotsLock);
   DeleteCriticalSection(GlobalCriticalSection);
   FinalizeSpecificUnit; // in mormot.core.os.posix/windows.inc files

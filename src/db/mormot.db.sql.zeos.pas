@@ -785,7 +785,7 @@ begin
       result := result + '?LibLocation=';
 
     if aLibraryLocationAppendExePath then
-      result := result + StringToUtf8(ExeVersion.ProgramFilePath);
+      result := result + StringToUtf8(Executable.ProgramFilePath);
     result := result + StringToUtf8(aLibraryLocation);
   end;
 end;

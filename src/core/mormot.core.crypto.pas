@@ -5469,10 +5469,10 @@ begin
     sha3.Init(SHAKE_256); // used in XOF mode for variable-length output
     mormot.core.base.FillRandom(@data, SizeOf(data) shr 2); // gsl_rng_taus2
     sha3update;
-    sha3.Update(ExeVersion.Host);
-    sha3.Update(ExeVersion.User);
-    sha3.Update(ExeVersion.ProgramFullSpec);
-    data.h0 := ExeVersion.Hash.b;
+    sha3.Update(Executable.Host);
+    sha3.Update(Executable.User);
+    sha3.Update(Executable.ProgramFullSpec);
+    data.h0 := Executable.Hash.b;
     sha3update;
     data.i0 := integer(HInstance); // override data.d0d1/h0
     data.i1 := PtrInt(GetCurrentThreadId);
@@ -5506,7 +5506,7 @@ begin
   if not alreadyseeding then
     try
       entropy := GetEntropy(128); // 128 bytes is the HMAC_SHA512 key block size
-      PBKDF2_HMAC_SHA512(entropy, ExeVersion.User, fSeedPbkdf2Round, key.b);
+      PBKDF2_HMAC_SHA512(entropy, Executable.User, fSeedPbkdf2Round, key.b);
       EnterCriticalSection(fSafe);
       try
         fAes.EncryptInit(key.Lo, fAesKeySize);
@@ -5928,7 +5928,7 @@ begin
   __hmac.Init(@CryptProtectDataEntropy, 32);
   // CryptProtectDataEntropy derivated for current user -> fn + k256 
   SetString(appsec, PAnsiChar(@CryptProtectDataEntropy), 32);
-  PBKDF2_HMAC_SHA256(appsec, ExeVersion.User, 100, k256);
+  PBKDF2_HMAC_SHA256(appsec, Executable.User, 100, k256);
   FillZero(appsec);
   appsec := Base64Uri(@k256, 15); // =BinToBase64Uri()
   fn := FormatString({$ifdef OSWINDOWS}'%_%'{$else}'%.syn-%'{$endif},

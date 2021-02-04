@@ -243,9 +243,9 @@ var
   l2: TFileName;
 begin
   if LIBNAME2 <> '' then
-    {%H-}l2 := ExeVersion.ProgramFilePath + LIBNAME2;
+    {%H-}l2 := Executable.ProgramFilePath + LIBNAME2;
   TryLoadLibrary([
-    SynDBPostgresLibrary, ExeVersion.ProgramFilePath + LIBNAME,
+    SynDBPostgresLibrary, Executable.ProgramFilePath + LIBNAME,
     {%H-}l2, LIBNAME, LIBNAME2], ESqlDBPostgres);
   P := @@LibVersion;
   for i := 0 to High(PQ_ENTRIES) do

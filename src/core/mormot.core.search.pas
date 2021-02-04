@@ -5471,7 +5471,7 @@ var
   FN: TFileName;
 begin
   if FileName = '' then
-    FN := ChangeFileExt(ExeVersion.ProgramFileName, '.tz')
+    FN := ChangeFileExt(Executable.ProgramFileName, '.tz')
   else
     FN := FileName;
   FileFromString(SaveToBuffer, FN);
@@ -5490,7 +5490,7 @@ var
   FN: TFileName;
 begin
   if FileName = '' then
-    FN := ChangeFileExt(ExeVersion.ProgramFileName, '.tz')
+    FN := ChangeFileExt(Executable.ProgramFileName, '.tz')
   else
     FN := FileName;
   LoadFromBuffer(StringFromFile(FN));

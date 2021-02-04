@@ -1391,8 +1391,8 @@ begin
           if IsDirectoryWritable('/var/log') then
              // may not be writable by not root on POSIX
             _LogPath := '/var/log/'
-          else if IsDirectoryWritable(ExeVersion.ProgramFilePath) then
-            _LogPath := ExeVersion.ProgramFilePath
+          else if IsDirectoryWritable(Executable.ProgramFilePath) then
+            _LogPath := Executable.ProgramFilePath
           else
             _LogPath := GetSystemPath(spUserData);
         result := _LogPath;
@@ -1408,7 +1408,7 @@ begin
             _UserPath := EnsureDirectoryExists(
               GetSystemPath(spUserDocuments) + '.cache');
           _UserPath := EnsureDirectoryExists(
-            _UserPath + TFileName(ExeVersion.ProgramName));
+            _UserPath + TFileName(Executable.ProgramName));
         end;
         result := _UserPath;
       end;
@@ -1873,7 +1873,7 @@ end;
 function RunUntilSigTerminatedPidFile: TFileName;
 begin
   result := Format('%s.%s.pid',
-     [ExeVersion.ProgramFilePath, ExeVersion.ProgramName]);
+     [Executable.ProgramFilePath, Executable.ProgramName]);
 end;
 
 function RunUntilSigTerminatedForKill(waitseconds: integer): boolean;
@@ -1947,7 +1947,7 @@ begin
          not DeleteFile(pidfilename) then
         raise EOSException.CreateFmt(
           '%s.CommandLine Fork failed: %s is already forked as pid=%d',
-          [daemon.ClassName, ExeVersion.ProgramName, PtrInt(pid)]);
+          [daemon.ClassName, Executable.ProgramName, PtrInt(pid)]);
     pid := fpFork;
     if pid < 0 then
       raise EOSException.CreateFmt(
@@ -1960,7 +1960,7 @@ begin
       raise EOSException.CreateFmt(
         '%s.CommandLine SetSID failed', [daemon.ClassName]);
     CleanAfterFork;
-    // create local .[ExeVersion.ProgramName].pid file
+    // create local .[Executable.ProgramName].pid file
     pid := fpgetpid;
     str(pid, s);
     FileFromString(s, pidfilename);
@@ -1968,7 +1968,7 @@ begin
   try
     if Assigned(onlog) then
       onlog(sllNewRun, 'Start % /% %',
-        [servicename, TXT[dofork], ExeVersion.Version.DetailedOrVoid], nil);
+        [servicename, TXT[dofork], Executable.Version.DetailedOrVoid], nil);
     start;
     while SynDaemonTerminated = 0 do
       fpPause;

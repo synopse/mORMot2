@@ -3827,7 +3827,7 @@ begin
   fLoader := TSynLibrary.Create;
   if LibraryName = SQLITE_LIBRARY_DEFAULT_NAME then
     // first search for the standard library in the executable folder
-    l1 := ExeVersion.ProgramFilePath + LibraryName;
+    l1 := Executable.ProgramFilePath + LibraryName;
   fLoader.TryLoadLibrary([{%H-}l1, LibraryName], ESqlite3Exception);
   P := @@initialize;
   for i := 0 to High(SQLITE3_ENTRIES) do

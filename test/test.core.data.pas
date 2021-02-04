@@ -4367,7 +4367,7 @@ end;
 
 procedure TTestCoreCompression.Setup;
 begin
-  Data := StringFromFile(ExeVersion.ProgramFileName);
+  Data := StringFromFile(Executable.ProgramFileName);
   if length(Data) > 1 shl 20 then
     SetLength(Data, 1 shl 20); // no need to compress more than 1MB
   DataFile := WorkDir + 'exe.1mb';
@@ -4780,7 +4780,7 @@ begin
   Check(AlgoSynLZ.AlgoName = 'synlz');
   {$ifdef OSWINDOWS}
   if (Lizard = nil) and
-     FileExists(ExeVersion.ProgramFilePath + LIZARD_LIB_NAME) then
+     FileExists(Executable.ProgramFilePath + LIZARD_LIB_NAME) then
     Lizard := TSynLizardDynamic.Create;
   {$endif OSWINDOWS}
   TestAlgo(AlgoLizard);

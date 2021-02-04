@@ -802,7 +802,7 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
       Str2[2] := 'GHIJK';
       FillCharFast(Rec1, sizeof(Rec1), 0);
       Rec1.Features := [vtTransaction, vtSavePoint];
-      Rec1.FileExtension := ExeVersion.ProgramFileName;
+      Rec1.FileExtension := Executable.ProgramFileName;
       Rec2.ID := i1;
       Rec2.Timestamp512 := c;
       Rec2.Json := 'abc';
@@ -813,7 +813,7 @@ procedure TTestServiceOrientedArchitecture.Test(const Inst:
       Check(Str2[2] = 'GHIJK');
       Check(Str2[3] = 'one,two,three');
       Check(Rec1.Features = [vtTransaction, vtSavePoint]);
-      Check(Rec1.FileExtension = ExeVersion.ProgramFileName);
+      Check(Rec1.FileExtension = Executable.ProgramFileName);
       Check(Rec2.ID = i1 + 1);
       Check(Rec2.Timestamp512 = c - 1);
       Check(Rec2.Json = IntegerDynArrayToCSV(pointer(Ints), length(Ints)));

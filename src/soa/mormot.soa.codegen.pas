@@ -1176,9 +1176,9 @@ begin
     'time', NowToString,
     'year', CurrentYear,
     'mORMotVersion', SYNOPSE_FRAMEWORK_VERSION,
-    'exeVersion', VarStringOrNull(StringToUtf8(ExeVersion.Version.DetailedOrVoid)),
-    'exeInfo', ExeVersion.Version.VersionInfo,
-    'exeName', ExeVersion.ProgramName,
+    'Executable', VarStringOrNull(StringToUtf8(Executable.Version.DetailedOrVoid)),
+    'exeInfo', Executable.Version.VersionInfo,
+    'exeName', Executable.ProgramName,
     'hasorm', fORM.Count > 0,
     'orm', variant(fORM),
     'soa', fSOA]);
@@ -1463,7 +1463,7 @@ begin
   begin
     // use .exe path
     SetLength(SearchPath, 1);
-    SearchPath[0] := ExeVersion.ProgramFilePath;
+    SearchPath[0] := Executable.ProgramFilePath;
   end
   else
   begin
@@ -1725,8 +1725,8 @@ begin
     _ObjAddProps([
       'filename', FileName,
       'projectname', ProjectName,
-      'exeName', ExeVersion.ProgramName,
-      'User', ExeVersion.User,
+      'exeName', Executable.ProgramName,
+      'User', Executable.User,
       'calltype', CallType,
       'callfunction', CallFunction,
       'exception', ExceptionType,
@@ -1879,7 +1879,7 @@ end;
 
 procedure TServiceClientCommandLine.ShowHelp;
 begin
-  ToConsole('% %'#13#10, [fExe, ExeVersion.Version.DetailedOrVoid], ccLightGreen);
+  ToConsole('% %'#13#10, [fExe, Executable.Version.DetailedOrVoid], ccLightGreen);
   ToConsole(EXECUTEFROMCOMMANDLINEHELP, [fExe, fExe, fExe, fExe]);
 end;
 
@@ -2010,7 +2010,7 @@ var
   n, s, i: PtrInt;
 begin
   inherited Create;
-  fExe := {$ifdef OSPOSIX} './' + {$endif} ExeVersion.ProgramName;
+  fExe := {$ifdef OSPOSIX} './' + {$endif} Executable.ProgramName;
   n := length(aServices);
   SetLength(fServices, n);
   s := 0;

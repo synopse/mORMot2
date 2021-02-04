@@ -795,7 +795,7 @@ begin
         'differs from client''s: expected [%], received % - you may need to ' +
         'upgrade your % client to match % server expectations',
         [self, fInterfaceUri, ContractExpected, RemoteContract,
-         ExeVersion.Version.DetailedOrVoid, TRestClientUri(fClient).Session.Version]);
+         Executable.Version.DetailedOrVoid, TRestClientUri(fClient).Session.Version]);
   end;
 end;
 

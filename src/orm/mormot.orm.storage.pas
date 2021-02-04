@@ -1408,7 +1408,7 @@ function TOrmVirtualTableModule.FileName(const aTableName: RawUtf8): TFileName;
 begin
   result := Utf8ToString(aTableName) + '.' + FileExtension;
   if fFilePath = '' then
-    result := ExeVersion.ProgramFilePath + result
+    result := Executable.ProgramFilePath + result
   else
     result := IncludeTrailingPathDelimiter(fFilePath) + result;
 end;

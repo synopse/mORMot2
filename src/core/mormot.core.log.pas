@@ -2872,7 +2872,7 @@ begin
     fDebugFile := ChangeFileExt(ExeFile, '.map');
     {$endif FPC}
     {$else}
-    ExeFile := ExeVersion.InstanceFileName;
+    ExeFile := Executable.InstanceFileName;
     fDebugFile := ExeFile; // exeinfo's ReadDebugLink() would redirect to .dbg
     {$endif OSWINDOWS}
   end
@@ -3299,7 +3299,7 @@ begin
   if map = nil then
     exit;
   if unitname = '' then
-    name := ExeVersion.ProgramName
+    name := Executable.ProgramName
   else
     name := unitname;
   u := map.FindUnit(name);
@@ -3453,7 +3453,7 @@ threadvar
 procedure TSynLogFamily.SetDestinationPath(const value: TFileName);
 begin
   if value = '' then
-    fDestinationPath := ExeVersion.ProgramFilePath
+    fDestinationPath := Executable.ProgramFilePath
   else
     fDestinationPath := IncludeTrailingPathDelimiter(value);
 end;
@@ -3511,7 +3511,7 @@ constructor TSynLogFamily.Create(aSynLog: TSynLogClass);
 begin
   fSynLogClass := aSynLog;
   fIdent := ObjArrayAdd(SynLogFamily, self);
-  fDestinationPath := ExeVersion.ProgramFilePath; // use .exe path
+  fDestinationPath := Executable.ProgramFilePath; // use .exe path
   fDefaultExtension := '.log';
   fArchivePath := fDestinationPath;
   fArchiveAfterDays := 7;
@@ -4699,7 +4699,7 @@ begin
     fWriter.AddChars('=', 50);
     NewLine;
   end;
-  with ExeVersion, fWriter do
+  with Executable, fWriter do
   begin
     AddString(ProgramFullSpec);
     NewLine;
@@ -5075,9 +5075,9 @@ begin
   fFileName := fFamily.fCustomFileName;
   if fFileName = '' then
   begin
-    fFileName := Utf8ToString(ExeVersion.ProgramName);
+    fFileName := Utf8ToString(Executable.ProgramName);
     if fFamily.IncludeComputerNameInFileName then
-      fFileName := fFileName + ' (' + Utf8ToString(ExeVersion.Host) + ')';
+      fFileName := fFileName + ' (' + Utf8ToString(Executable.Host) + ')';
   end;
   fFileRotationSize := 0;
   if fFamily.fRotateFileCount > 0 then
@@ -7110,7 +7110,7 @@ begin
     true, st.Hour, st.Minute, st.Second, st.MilliSecond, 'T', {withms=}true);
   destbuffer[23] := 'Z';
   inc(destbuffer, 24);
-  with ExeVersion do
+  with Executable do
   begin
     if length(Host) + length(ProgramName) + length(procid) +
        length(msgid) + (destbuffer - start) + 15 > destsize then
