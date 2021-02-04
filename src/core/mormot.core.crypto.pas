@@ -6,7 +6,7 @@ unit mormot.core.crypto;
 {
   *****************************************************************************
 
-   High-Performance Cryptographic features shared by all framework units
+   High-Performance Cryptographic Features shared by all framework units
     - Low-Level Memory Buffers Helper Functions
     - AES Encoding/Decoding with optimized asm and AES-NI support
     - AES-256 Cryptographic Pseudorandom Number Generator (CSPRNG)
@@ -21,13 +21,13 @@ unit mormot.core.crypto;
 
   *****************************************************************************
 
-  Original Copyright Notices of some Open Source implementations:
-  - keccak_mmx: (c) Eric Grange
-  - md5_intel: (c) Maxim Masiutin - Ritlabs, SRL
-  - sha512-x86: (c) Project Nayuki under MIT license
-  - aes_pascal, keccak_pascal: (c) Wolfgang Ehrhardt under zlib license
-  - sha512-x64sse4, sha256-sse4, crc32c64: (c) Intel Corporation w/ OS licence
-  Maybe with (deep) refactoring. Other routines are our own coding.
+   Original Copyright Notices of some Open Source implementations:
+   - aes_pascal, keccak_pascal: (c) Wolfgang Ehrhardt under zlib license
+   - KeccakPermutationKernel MMX/i386: (c) Eric Grange
+   - MD5_386.asm: (c) Maxim Masiutin - Ritlabs, SRL
+   - sha512-x86: (c) Project Nayuki under MIT license
+   - sha512-x64sse4, sha256-sse4, crc32c64: (c) Intel Corporation w/ OS licence
+   Maybe with (deep) refactoring. Other routines are our own coding.
 
 }
 
@@ -1095,47 +1095,28 @@ type
     procedure UnLock;
   end;
 
-  /// cryptographic pseudorandom number generator (CSPRNG) based on AES-256
-  // - use as a shared instance via TAesPrng.Fill() overloaded class methods
-  // - this class is able to generate some random output by encrypting successive
-  // values of a counter with AES-256 and a secret key
-  // - this internal secret key is generated from PBKDF2 derivation of OS-supplied
-  // entropy using HMAC over SHA-512
-  // - by design, such a PRNG is as good as the cypher used - for reference, see
-  // https://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator
-  // - FillRandom() is thread-safe, and its AES process is not blocking: only
-  // the CTR is pre-computed inside a lock
-  // - it would use fast hardware AES-NI opcode, if available
-  TAesPrng = class(TAesLocked)
+  /// abstract parent for TAesPrng* classes
+  // - you should never use this class, but TAesPrng, TAesPrngSystem or
+  // TAesPrngOpenSsl
+  TAesPrngAbstract = class(TAesLocked)
   protected
-    fBytesSinceSeed: PtrUInt;
-    fSeedAfterBytes: PtrUInt;
-    fAesKeySize: integer;
-    fSeedPbkdf2Round: cardinal;
     fTotalBytes: QWord;
-    fSeeding: boolean;
   public
-    /// initialize the internal secret key, using Operating System entropy
-    // - entropy is gathered from the OS, using GetEntropy() method
-    // - you can specify how many PBKDF2_HMAC_SHA512 rounds are applied to the
-    // OS-gathered entropy - the higher, the better, but also the slower
-    // - internal private key would be re-seeded after ReseedAfterBytes
-    // bytes (1MB by default) are generated, using GetEntropy()
-    // - by default, AES-256 will be used, unless AesKeySize is set to 128,
-    // which may be slightly faster (especially if AES-NI is not available)
-    constructor Create(Pbkdf2Round: integer = 16;
-      ReseedAfterBytes: integer = 1024 * 1024;
-      AesKeySize: integer = 256); reintroduce; virtual;
+    /// returns a shared instance of a TAesPrng* instance
+    // - if you need to generate some random content, just call the
+    // TAesPrng*.Main.FillRandom() overloaded methods, or directly
+    // TAesPrng*.Fill() class methods
+    class function Main: TAesPrngAbstract; virtual; abstract;
     /// fill a TAesBlock with some pseudorandom data
     // - could be used e.g. to compute an AES Initialization Vector (IV)
     // - this method is thread-safe
     procedure FillRandom(out Block: TAesBlock); overload; virtual;
     /// fill a 256-bit buffer with some pseudorandom data
     // - this method is thread-safe
-    procedure FillRandom(out Buffer: THash256); overload;
+    procedure FillRandom(out Buffer: THash256); overload; virtual;
     /// fill a binary buffer with some pseudorandom data
-    // - this method is thread-safe, and its AES process is non blocking
-    procedure FillRandom(Buffer: pointer; Len: PtrInt); overload; virtual;
+    // - this method should be thread-safely implemented when overriden
+    procedure FillRandom(Buffer: pointer; Len: PtrInt); overload; virtual; abstract;
     /// returns a binary buffer filled with some pseudorandom data
     // - this method is thread-safe, and its AES process is non blocking
     function FillRandom(Len: integer): RawByteString; overload;
@@ -1146,11 +1127,11 @@ type
     // - this method is thread-safe, and its AES process is non blocking
     function FillRandomHex(Len: integer): RawUtf8;
     /// returns a 32-bit unsigned random number
-    // - is twice slower than Lecuyer's Random32 of mormot.core.bas unit, but
+    // - is twice slower than Lecuyer's Random32 of mormot.core.base unit, but
     // is cryptographic secure
     function Random32: cardinal; overload;
     /// returns a 32-bit unsigned random number, with a maximum value
-    // - is twice slower than Lecuyer's Random32 of mormot.core.bas unit, but
+    // - is twice slower than Lecuyer's Random32 of mormot.core.base unit, but
     // is cryptographic secure
     function Random32(max: cardinal): cardinal; overload;
     /// returns a 64-bit unsigned random number
@@ -1166,8 +1147,120 @@ type
     /// would force the internal generator to re-seed its private key
     // - avoid potential attacks on backward or forward security
     // - would be called by FillRandom() methods, according to SeedAfterBytes
-    // - this method is thread-safe
+    // - this method is thread-safe, and does nothing by default
     procedure Seed; virtual;
+    /// create an anti-forensic representation of a key for safe storage
+    // - a binary buffer will be split into StripesCount items, ready to be
+    // saved on disk; returned length is BufferBytes*(StripesCount+1) bytes
+    // - AFSplit supports secure data destruction crucial for secure on-disk
+    // key management. The key idea is to bloat information and therefore
+    // improve the chance of destroying a single bit of it. The information
+    // is bloated in such a way, that a single missing bit causes the original
+    // information become unrecoverable.
+    // - this implementation uses SHA-256 as diffusion element, and the current
+    // TAesPrngAbstract instance to gather randomness
+    // - for reference, see TKS1 as used for LUKS and defined in
+    // @https://gitlab.com/cryptsetup/cryptsetup/wikis/TKS1-draft.pdf
+    function AFSplit(const Buffer; BufferBytes,
+      StripesCount: integer): RawByteString; overload;
+    /// create an anti-forensic representation of a key for safe storage
+    // - a binary buffer will be split into StripesCount items, ready to be
+    // saved on disk; returned length is BufferBytes*(StripesCount+1) bytes
+    // - just a wrapper around the other overloaded AFSplit() funtion
+    function AFSplit(const Buffer: RawByteString;
+      StripesCount: integer): RawByteString; overload;
+    /// retrieve a key from its anti-forensic representation
+    // - is the reverse function of AFSplit() method
+    // - returns TRUE if the input buffer matches BufferBytes value
+    // - is defined as a class function since is stand-alone
+    class function AFUnsplit(const Split: RawByteString;
+      out Buffer; BufferBytes: integer): boolean; overload;
+    /// retrieve a key from its anti-forensic representation
+    // - is the reverse function of AFSplit() method
+    // - returns the un-splitted binary content
+    // - returns '' if StripesCount is incorrect
+    // - is defined as a class function since is stand-alone
+    class function AFUnsplit(const Split: RawByteString;
+      StripesCount: integer): RawByteString; overload;
+    /// just a wrapper around TAesPrngAbstract.Main.FillRandom() function
+    // - this method is thread-safe, but you may use your own TAesPrng
+    // instance if you need some custom entropy level
+    class procedure Fill(Buffer: pointer; Len: integer); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// just a wrapper around TAesPrngAbstract.Main.FillRandom() function
+    // - this method is thread-safe, but you may use your own TAesPrng instance
+    // if you need some custom entropy level
+    class procedure Fill(out Block: TAesBlock); overload;
+    /// just a wrapper around TAesPrngAbstract.Main.FillRandom() function
+    // - this method is thread-safe, but you may use your own TAesPrng instance
+    // if you need some custom entropy level
+    class procedure Fill(out Block: THash256); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// just a wrapper around TAesPrng.Main.FillRandom() function
+    // - this method is thread-safe, but you may use your own TAesPrng instance
+    // if you need some custom entropy level
+    class function Fill(Len: integer): RawByteString; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// just a wrapper around TAesPrngAbstract.Main.FillRandomBytes() function
+    // - this method is thread-safe, but you may use your own TAesPrng instance
+    // if you need some custom entropy level
+    class function Bytes(Len: integer): TBytes;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// how many bytes this generator did compute
+    property TotalBytes: QWord
+      read fTotalBytes;
+  end;
+
+  /// meta-class for our CSPRNG implementations
+  TAesPrngClass = class of TAesPrngAbstract;
+
+  /// cryptographic pseudorandom number generator (CSPRNG) based on AES-256
+  // - use as a shared instance via TAesPrng.Fill() overloaded class methods
+  // - this class is able to generate some random output by encrypting successive
+  // values of a counter with AES-256 and a secret key
+  // - this internal secret key is generated from PBKDF2 derivation of OS-supplied
+  // entropy using HMAC over SHA-512
+  // - by design, such a PRNG is as good as the cypher used - for reference, see
+  // https://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator
+  // - FillRandom() is thread-safe, and its AES process is not blocking: only
+  // the CTR is pre-computed inside a lock
+  // - it would use fast hardware AES-NI opcode, if available
+  TAesPrng = class(TAesPrngAbstract)
+  protected
+    fBytesSinceSeed: PtrUInt;
+    fSeedAfterBytes: PtrUInt;
+    fAesKeySize: integer;
+    fSeedPbkdf2Round: cardinal;
+    fSeeding: boolean;
+  public
+    /// initialize the internal secret key, using Operating System entropy
+    constructor Create; overload; override;
+    /// initialize the internal secret key, using Operating System entropy
+    // - entropy is gathered from the OS, using GetEntropy() method
+    // - you can specify how many PBKDF2_HMAC_SHA512 rounds are applied to the
+    // OS-gathered entropy - the higher, the better, but also the slower
+    // - internal private key would be re-seeded after ReseedAfterBytes
+    // bytes (1MB by default) are generated, using GetEntropy()
+    // - by default, AES-256 will be used, unless AesKeySize is set to 128,
+    // which may be slightly faster (especially if AES-NI is not available)
+    constructor Create(Pbkdf2Round: integer;
+      ReseedAfterBytes: integer = 1024 * 1024;
+      AesKeySize: integer = 256); reintroduce; overload; virtual;
+    /// fill a TAesBlock with some pseudorandom data
+    // - this method is thread-safe
+    procedure FillRandom(out Block: TAesBlock); override;
+    /// fill a 256-bit buffer with some pseudorandom data
+    // - this method is thread-safe
+    procedure FillRandom(out Buffer: THash256); override;
+    /// fill a binary buffer with some pseudorandom data
+    // - this method is thread-safe
+    // - is just a wrapper around FillSystemRandom()
+    procedure FillRandom(Buffer: pointer; Len: PtrInt); override;
+    /// would force the internal generator to re-seed its private key
+    // - avoid potential attacks on backward or forward security
+    // - would be called by FillRandom() methods, according to SeedAfterBytes
+    // - this method is thread-safe
+    procedure Seed; override;
     /// retrieve some entropy bytes from the Operating System
     // - entropy comes from CryptGenRandom API on Windows, and /dev/urandom or
     // /dev/random on Linux/POSIX
@@ -1183,65 +1276,10 @@ type
     /// returns a shared instance of a TAesPrng instance
     // - if you need to generate some random content, just call the
     // TAesPrng.Main.FillRandom() overloaded methods, or directly TAesPrng.Fill()
-    class function Main: TAesPrng;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// just a wrapper around TAesPrng.Main.FillRandom() function
-    // - this method is thread-safe, but you may use your own TAesPrng instance
-    // if you need some custom entropy level
-    class procedure Fill(Buffer: pointer; Len: integer); overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// just a wrapper around TAesPrng.Main.FillRandom() function
-    // - this method is thread-safe, but you may use your own TAesPrng instance
-    // if you need some custom entropy level
-    class procedure Fill(out Block: TAesBlock); overload;
-    /// just a wrapper around TAesPrng.Main.FillRandom() function
-    // - this method is thread-safe, but you may use your own TAesPrng instance
-    // if you need some custom entropy level
-    class procedure Fill(out Block: THash256); overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// just a wrapper around TAesPrng.Main.FillRandom() function
-    // - this method is thread-safe, but you may use your own TAesPrng instance
-    // if you need some custom entropy level
-    class function Fill(Len: integer): RawByteString; overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// just a wrapper around TAesPrng.Main.FillRandomBytes() function
-    // - this method is thread-safe, but you may use your own TAesPrng instance
-    // if you need some custom entropy level
-    class function Bytes(Len: integer): TBytes;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// create an anti-forensic representation of a key for safe storage
-    // - a binary buffer will be split into StripesCount items, ready to be
-    // saved on disk; returned length is BufferBytes*(StripesCount+1) bytes
-    // - AFSplit supports secure data destruction crucial for secure on-disk
-    // key management. The key idea is to bloat information and therefore
-    // improve the chance of destroying a single bit of it. The information
-    // is bloated in such a way, that a single missing bit causes the original
-    // information become unrecoverable.
-    // - this implementation uses SHA-256 as diffusion element, and the current
-    // TAesPrng instance to gather randomness
-    // - for reference, see TKS1 as used for LUKS and defined in
-    // @https://gitlab.com/cryptsetup/cryptsetup/wikis/TKS1-draft.pdf
-    function AFSplit(const Buffer; BufferBytes,
-      StripesCount: integer): RawByteString; overload;
-    /// create an anti-forensic representation of a key for safe storage
-    // - a binary buffer will be split into StripesCount items, ready to be
-    // saved on disk; returned length is BufferBytes*(StripesCount+1) bytes
-    // - just a wrapper around the other overloaded AFSplit() funtion
-    function AFSplit(const Buffer: RawByteString;
-      StripesCount: integer): RawByteString; overload;
-    /// retrieve a key from its anti-forensic representation
-    // - is the reverse function of AFSplit() method
-    // - returns TRUE if the input buffer matches BufferBytes value
-    class function AFUnsplit(const Split: RawByteString;
-      out Buffer; BufferBytes: integer): boolean; overload;
-    /// retrieve a key from its anti-forensic representation
-    // - is the reverse function of AFSplit() method
-    // - returns the un-splitted binary content
-    // - returns '' if StripesCount is incorrect
-    class function AFUnsplit(const Split: RawByteString;
-      StripesCount: integer): RawByteString; overload;
+    class function Main: TAesPrngAbstract; override;
     /// after how many generated bytes Seed method would be called
     // - default is 1 MB
+    // - if set to 0 - e.g. for TAesPrngSystem - no seeding will occur
     property SeedAfterBytes: PtrUInt
       read fSeedAfterBytes;
     /// how many PBKDF2_HMAC_SHA512 count is applied by Seed to the entropy
@@ -1252,9 +1290,6 @@ type
     /// how many bits (128 or 256 - which is the default) are used for the AES
     property AesKeySize: integer
       read fAesKeySize;
-    /// how many bytes this generator did compute
-    property TotalBytes: QWord
-      read fTotalBytes;
   end;
 
   /// TAesPrng-compatible class using Operating System pseudorandom source
@@ -1265,34 +1300,24 @@ type
   // - from the cryptographic point of view, our TAesPrng class doesn't suffer
   // from the "black-box" approach of Windows, give consistent randomness
   // over all supported cross-platform, and is indubitably faster
-  TAesPrngSystem = class(TAesPrng)
+  TAesPrngSystem = class(TAesPrngAbstract)
   public
-    /// initialize the Operating System PRNG
-    constructor Create; reintroduce; virtual;
-    /// fill a TAesBlock with some pseudorandom data
-    // - this method is thread-safe
-    procedure FillRandom(out Block: TAesBlock); override;
     /// fill a binary buffer with some pseudorandom data
     // - this method is thread-safe
     // - is just a wrapper around FillSystemRandom()
     procedure FillRandom(Buffer: pointer; Len: PtrInt); override;
-    /// called to force the internal generator to re-seed its private key
-    // - won't do anything for the Operating System pseudorandom source
-    procedure Seed; override;
+    /// returns the single system-wide instance of TAesPrngSystem
+    // - if you need to generate some random content, just call the
+    // TAesPrngSystem.Main.FillRandom() overloaded methods, or directly
+    // TAesPrngSystem.Fill() class methods
+    class function Main: TAesPrngAbstract; override;
   end;
 
 var
   /// the shared TAesPrng instance returned by TAesPrng.Main class function
-  // - you may override this to a customized instance, e.g. if you expect
-  // a specific random generator to be used, like TAesPrngSystem
-  // - all TAesPrng.Fill() class functions will use this instance
-  MainAesPrng: TAesPrng;
-
-
-{$ifdef HASINLINE}
-/// defined globally to initialize MainAesPrng from inlined TAesPrng.Main
-function SetMainAesPrng: TAesPrng;
-{$endif HASINLINE}
+  // - you may override this to a customized instance, e.g. for a specific
+  // random generator to be used, like TAesPrngSystem or TAesPrngOpenSsl
+  MainAesPrng: TAesPrngAbstract;
 
 /// low-level function returning some random binary from then available
 // Operating System pseudorandom source
@@ -3769,23 +3794,6 @@ end;
 
 { TAesAbstract }
 
-function SetMainAesPrng: TAesPrng;
-begin
-  GlobalLock;
-  if MainAesPrng = nil then
-    MainAesPrng := TAesPrng.Create;
-  GlobalUnLock;
-  result := MainAesPrng;
-end;
-
-// defined here for proper inlining :)
-class function TAesPrng.Main: TAesPrng;
-begin
-  result := MainAesPrng;
-  if result = nil then
-    result := SetMainAesPrng;
-end;
-
 var
   aesivctr: array[boolean] of TAesLocked;
 
@@ -5346,43 +5354,6 @@ end;
 
 { ************* AES-256 Cryptographic Pseudorandom Number Generator (CSPRNG) }
 
-{ TAesLocked }
-
-constructor TAesLocked.Create;
-begin
-  InitializeCriticalSection(fSafe);
-end;
-
-destructor TAesLocked.Destroy;
-begin
-  inherited Destroy;
-  DeleteCriticalSection(fSafe);
-  fAes.Done; // fill AES buffer with 0 for safety
-end;
-
-procedure TAesLocked.Lock;
-begin
-  EnterCriticalSection(fSafe);
-end;
-
-procedure TAesLocked.UnLock;
-begin
-  LeaveCriticalSection(fSafe);
-end;
-
-{ TAesPrng }
-
-constructor TAesPrng.Create(Pbkdf2Round, ReseedAfterBytes, AesKeySize: integer);
-begin
-  inherited Create;
-  if Pbkdf2Round < 2 then
-    Pbkdf2Round := 2;
-  fSeedPbkdf2Round := Pbkdf2Round;
-  fSeedAfterBytes := ReseedAfterBytes;
-  fAesKeySize := AesKeySize;
-  Seed;
-end;
-
 procedure FillSystemRandom(Buffer: PByteArray; Len: integer;
   AllowBlocking: boolean);
 var
@@ -5437,6 +5408,298 @@ begin
     XorMemoryPtrInt(@Buffer^[Len - i], @tmp, SizeOf(tmp) shr POINTERSHR);
     dec(i, SizeOf(tmp));
   until false;
+end;
+
+procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
+var
+  sha: TSha256;
+  dig: TSha256Digest;
+  last, iv: cardinal;
+  i: integer;
+begin
+  XorMemory(buf, rnd, size);
+  sha.Init;
+  last := size div SizeOf(dig);
+  for i := 0 to last - 1 do
+  begin
+    iv := bswap32(i); // host byte order independent hash IV (as in TKS1/LUKS)
+    sha.Update(@iv, SizeOf(iv));
+    sha.Update(buf, SizeOf(dig));
+    sha.Final(PSha256Digest(buf)^);
+    inc(PByte(buf), SizeOf(dig));
+  end;
+  dec(size, last * SizeOf(dig));
+  if size = 0 then
+    exit;
+  iv := bswap32(last);
+  sha.Update(@iv, SizeOf(iv));
+  sha.Update(buf, size);
+  sha.Final(dig);
+  MoveSmall(@dig, buf, size);
+end;
+
+
+{ TAesLocked }
+
+constructor TAesLocked.Create;
+begin
+  InitializeCriticalSection(fSafe);
+end;
+
+destructor TAesLocked.Destroy;
+begin
+  inherited Destroy;
+  DeleteCriticalSection(fSafe);
+  fAes.Done; // fill AES buffer with 0 for safety
+end;
+
+procedure TAesLocked.Lock;
+begin
+  EnterCriticalSection(fSafe);
+end;
+
+procedure TAesLocked.UnLock;
+begin
+  LeaveCriticalSection(fSafe);
+end;
+
+
+{ TAesPrngAbstract }
+
+procedure TAesPrngAbstract.FillRandom(out Block: TAesBlock);
+begin
+  FillRandom(@Block, SizeOf(Block));
+end;
+
+procedure TAesPrngAbstract.FillRandom(out Buffer: THash256);
+begin
+  FillRandom(@Buffer, SizeOf(Buffer));
+end;
+
+function TAesPrngAbstract.FillRandom(Len: integer): RawByteString;
+begin
+  SetString(result, nil, Len);
+  FillRandom(pointer(result), Len);
+end;
+
+function TAesPrngAbstract.FillRandomBytes(Len: integer): TBytes;
+begin
+  if Len <> length(result) then
+    result := nil;
+  SetLength(result, Len);
+  FillRandom(pointer(result), Len);
+end;
+
+function TAesPrngAbstract.FillRandomHex(Len: integer): RawUtf8;
+var
+  bin: pointer;
+begin
+  FastSetString(result, nil, Len * 2);
+  if Len = 0 then
+    exit;
+  bin := @PByteArray(result)[Len]; // temporary store random bytes at the end
+  FillRandom(bin, Len);
+  BinToHexLower(bin, pointer(result), Len);
+end;
+
+function TAesPrngAbstract.Random32: cardinal;
+var
+  block: THash128Rec;
+begin
+  FillRandom(block.b);
+  result := block.c0; // no need to XOR with c1, c2, c3 for a permutation algo
+end;
+
+function TAesPrngAbstract.Random32(max: cardinal): cardinal;
+var
+  block: THash128Rec;
+begin
+  FillRandom(block.b);
+  result := (QWord(block.c0) * max) shr 32; // no need to XOR with block.H
+end;
+
+function TAesPrngAbstract.Random64: QWord;
+var
+  block: THash128Rec;
+begin
+  FillRandom(block.b);
+  result := block.L; // no need to XOR with block.H
+end;
+
+function TAesPrngAbstract.RandomExt: TSynExtended;
+var
+  block: THash128;
+begin
+  FillRandom(block);
+  result := Hash128ToExt(@block);
+end;
+
+function TAesPrngAbstract.RandomDouble: double;
+var
+  block: THash128;
+begin
+  FillRandom(block);
+  result := Hash128ToDouble(@block);
+end;
+
+function TAesPrngAbstract.RandomPassword(Len: integer): RawUtf8;
+const
+  CHARS: array[0..127] of AnsiChar =
+    'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' +
+    ':bcd.fgh(jklmn)pqrst?vwxyz+BCD%FGH!JKLMN/PQRST@VWX#Z$.:()?%!-+*/@#';
+var
+  i: integer;
+  haspunct: boolean;
+  P: PAnsiChar;
+begin
+  repeat
+    result := FillRandom(Len);
+    haspunct := false;
+    P := pointer(result);
+    for i := 1 to Len do
+    begin
+      P^ := CHARS[ord(P^) mod SizeOf(CHARS)];
+      if not haspunct and
+         not (ord(P^) in [ord('A')..ord('Z'), ord('a')..ord('z'), ord('0')..ord('9')]) then
+        haspunct := true;
+      inc(P);
+    end;
+  until (Len <= 4) or
+        (haspunct and
+         (LowerCase(result) <> result));
+end;
+
+procedure TAesPrngAbstract.Seed;
+begin
+  // do nothing
+end;
+
+function TAesPrngAbstract.AFSplit(const Buffer;
+  BufferBytes, StripesCount: integer): RawByteString;
+var
+  dst: pointer;
+  tmp: TByteDynArray;
+  i: integer;
+begin
+  result := '';
+  if self <> nil then
+    SetLength(result, BufferBytes * (StripesCount + 1));
+  if result = '' then
+    exit;
+  dst := pointer(result);
+  SetLength(tmp, BufferBytes);
+  for i := 1 to StripesCount do
+  begin
+    FillRandom(dst, BufferBytes);
+    AFDiffusion(pointer(tmp), dst, BufferBytes);
+    inc(PByte(dst), BufferBytes);
+  end;
+  XorMemory(dst, @Buffer, pointer(tmp), BufferBytes);
+end;
+
+function TAesPrngAbstract.AFSplit(const Buffer: RawByteString;
+  StripesCount: integer): RawByteString;
+begin
+  result := AFSplit(pointer(Buffer)^, length(Buffer), StripesCount);
+end;
+
+class function TAesPrngAbstract.AFUnsplit(const Split: RawByteString;
+  out Buffer; BufferBytes: integer): boolean;
+var
+  len: cardinal;
+  i: integer;
+  src: pointer;
+  tmp: TByteDynArray;
+begin
+  len := length(Split);
+  result := (len <> 0) and
+            (len mod cardinal(BufferBytes) = 0);
+  if not result then
+    exit;
+  src := pointer(Split);
+  SetLength(tmp, BufferBytes);
+  for i := 2 to len div cardinal(BufferBytes) do
+  begin
+    AFDiffusion(pointer(tmp), src, BufferBytes);
+    inc(PByte(src), BufferBytes);
+  end;
+  XorMemory(@Buffer, src, pointer(tmp), BufferBytes);
+end;
+
+class function TAesPrngAbstract.AFUnsplit(const Split: RawByteString;
+  StripesCount: integer): RawByteString;
+var
+  len: cardinal;
+begin
+  result := '';
+  len := length(Split);
+  if (len = 0) or
+     (len mod cardinal(StripesCount + 1) <> 0) then
+    exit;
+  len := len div cardinal(StripesCount + 1);
+  SetLength(result, len);
+  if not AFUnsplit(Split, pointer(result)^, len) then
+    result := '';
+end;
+
+class procedure TAesPrngAbstract.Fill(Buffer: pointer; Len: integer);
+begin
+  Main.FillRandom(Buffer, Len);
+end;
+
+class procedure TAesPrngAbstract.Fill(out Block: TAesBlock);
+begin
+  Main.FillRandom(Block);
+end;
+
+class procedure TAesPrngAbstract.Fill(out Block: THash256);
+begin
+  Main.FillRandom(Block);
+end;
+
+class function TAesPrngAbstract.Fill(Len: integer): RawByteString;
+begin
+  result := Main.FillRandom(Len);
+end;
+
+class function TAesPrngAbstract.Bytes(Len: integer): TBytes;
+begin
+  result := Main.FillRandomBytes(Len);
+end;
+
+
+{ TAesPrng }
+
+constructor TAesPrng.Create(Pbkdf2Round, ReseedAfterBytes, AesKeySize: integer);
+begin
+  inherited Create;
+  if Pbkdf2Round < 2 then
+    Pbkdf2Round := 2;
+  fSeedPbkdf2Round := Pbkdf2Round;
+  fSeedAfterBytes := ReseedAfterBytes;
+  fAesKeySize := AesKeySize;
+  Seed;
+end;
+
+constructor TAesPrng.Create;
+begin
+  Create({rounds=}16);
+end;
+
+class function TAesPrng.Main: TAesPrngAbstract;
+begin
+  result := MainAesPrng;
+  if result = nil then
+  begin
+    GlobalLock;
+    try
+      if MainAesPrng = nil then
+        MainAesPrng := TAesPrng.Create;
+    finally
+      GlobalUnLock;
+    end;
+    result := MainAesPrng;
+  end;
 end;
 
 class function TAesPrng.GetEntropy(Len: integer; SystemOnly: boolean): RawByteString;
@@ -5499,6 +5762,8 @@ var
   key: THash512Rec;
   entropy: RawByteString;
 begin
+  if fSeedAfterBytes = 0 then
+    exit;
   EnterCriticalSection(fSafe);
   alreadyseeding := fSeeding;
   fSeeding := true;
@@ -5524,7 +5789,8 @@ end;
 
 procedure TAesPrng.FillRandom(out Block: TAesBlock);
 begin
-  if fBytesSinceSeed > fSeedAfterBytes then
+  if (fSeedAfterBytes <> 0) and
+     (fBytesSinceSeed > fSeedAfterBytes) then
     Seed;
   EnterCriticalSection(fSafe);
   with TAesContext(fAes.Context) do
@@ -5541,7 +5807,8 @@ end;
 
 procedure TAesPrng.FillRandom(out Buffer: THash256);
 begin
-  if fBytesSinceSeed > fSeedAfterBytes then
+  if (fSeedAfterBytes <> 0) and
+     (fBytesSinceSeed > fSeedAfterBytes) then
     Seed;
   EnterCriticalSection(fSafe);
   with TAesContext(fAes.Context) do
@@ -5572,7 +5839,8 @@ begin
   remain := Len and AesBlockMod;
   if remain <> 0 then
     inc(main);
-  if fBytesSinceSeed > fSeedAfterBytes then
+  if (fSeedAfterBytes <> 0) and
+     (fBytesSinceSeed > fSeedAfterBytes) then
     Seed;
   EnterCriticalSection(fSafe);
   MoveFast(fAes, aes, SizeOf(aes));
@@ -5619,243 +5887,36 @@ begin
   end;
 end;
 
-function TAesPrng.FillRandom(Len: integer): RawByteString;
-begin
-  SetString(result, nil, Len);
-  FillRandom(pointer(result), Len);
-end;
-
-function TAesPrng.FillRandomBytes(Len: integer): TBytes;
-begin
-  if Len <> length(result) then
-    result := nil;
-  SetLength(result, Len);
-  FillRandom(pointer(result), Len);
-end;
-
-function TAesPrng.FillRandomHex(Len: integer): RawUtf8;
-var
-  bin: pointer;
-begin
-  FastSetString(result, nil, Len * 2);
-  if Len = 0 then
-    exit;
-  bin := @PByteArray(result)[Len]; // temporary store random bytes at the end
-  FillRandom(bin, Len);
-  BinToHexLower(bin, pointer(result), Len);
-end;
-
-function TAesPrng.Random32: cardinal;
-var
-  block: THash128Rec;
-begin
-  FillRandom(block.b);
-  result := block.c0; // no need to XOR with c1, c2, c3 for a permutation algo
-end;
-
-function TAesPrng.Random32(max: cardinal): cardinal;
-var
-  block: THash128Rec;
-begin
-  FillRandom(block.b);
-  result := (QWord(block.c0) * max) shr 32; // no need to XOR with block.H
-end;
-
-function TAesPrng.Random64: QWord;
-var
-  block: THash128Rec;
-begin
-  FillRandom(block.b);
-  result := block.L; // no need to XOR with block.H
-end;
-
-function TAesPrng.RandomExt: TSynExtended;
-var
-  block: THash128;
-begin
-  FillRandom(block);
-  result := Hash128ToExt(@block);
-end;
-
-function TAesPrng.RandomDouble: double;
-var
-  block: THash128;
-begin
-  FillRandom(block);
-  result := Hash128ToDouble(@block);
-end;
-
-function TAesPrng.RandomPassword(Len: integer): RawUtf8;
-const
-  CHARS: array[0..127] of AnsiChar =
-    'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' +
-    ':bcd.fgh(jklmn)pqrst?vwxyz+BCD%FGH!JKLMN/PQRST@VWX#Z$.:()?%!-+*/@#';
-var
-  i: integer;
-  haspunct: boolean;
-  P: PAnsiChar;
-begin
-  repeat
-    result := FillRandom(Len);
-    haspunct := false;
-    P := pointer(result);
-    for i := 1 to Len do
-    begin
-      P^ := CHARS[ord(P^) mod SizeOf(CHARS)];
-      if not haspunct and
-         not (ord(P^) in [ord('A')..ord('Z'), ord('a')..ord('z'), ord('0')..ord('9')]) then
-        haspunct := true;
-      inc(P);
-    end;
-  until (Len <= 4) or
-        (haspunct and
-         (LowerCase(result) <> result));
-end;
-
-procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
-var
-  sha: TSha256;
-  dig: TSha256Digest;
-  last, iv: cardinal;
-  i: integer;
-begin
-  XorMemory(buf, rnd, size);
-  sha.Init;
-  last := size div SizeOf(dig);
-  for i := 0 to last - 1 do
-  begin
-    iv := bswap32(i); // host byte order independent hash IV (as in TKS1/LUKS)
-    sha.Update(@iv, SizeOf(iv));
-    sha.Update(buf, SizeOf(dig));
-    sha.Final(PSha256Digest(buf)^);
-    inc(PByte(buf), SizeOf(dig));
-  end;
-  dec(size, last * SizeOf(dig));
-  if size = 0 then
-    exit;
-  iv := bswap32(last);
-  sha.Update(@iv, SizeOf(iv));
-  sha.Update(buf, size);
-  sha.Final(dig);
-  MoveSmall(@dig, buf, size);
-end;
-
-function TAesPrng.AFSplit(const Buffer;
-  BufferBytes, StripesCount: integer): RawByteString;
-var
-  dst: pointer;
-  tmp: TByteDynArray;
-  i: integer;
-begin
-  result := '';
-  if self <> nil then
-    SetLength(result, BufferBytes * (StripesCount + 1));
-  if result = '' then
-    exit;
-  dst := pointer(result);
-  SetLength(tmp, BufferBytes);
-  for i := 1 to StripesCount do
-  begin
-    FillRandom(dst, BufferBytes);
-    AFDiffusion(pointer(tmp), dst, BufferBytes);
-    inc(PByte(dst), BufferBytes);
-  end;
-  XorMemory(dst, @Buffer, pointer(tmp), BufferBytes);
-end;
-
-function TAesPrng.AFSplit(const Buffer: RawByteString;
-  StripesCount: integer): RawByteString;
-begin
-  result := AFSplit(pointer(Buffer)^, length(Buffer), StripesCount);
-end;
-
-class function TAesPrng.AFUnsplit(const Split: RawByteString;
-  out Buffer; BufferBytes: integer): boolean;
-var
-  len: cardinal;
-  i: integer;
-  src: pointer;
-  tmp: TByteDynArray;
-begin
-  len := length(Split);
-  result := (len <> 0) and
-            (len mod cardinal(BufferBytes) = 0);
-  if not result then
-    exit;
-  src := pointer(Split);
-  SetLength(tmp, BufferBytes);
-  for i := 2 to len div cardinal(BufferBytes) do
-  begin
-    AFDiffusion(pointer(tmp), src, BufferBytes);
-    inc(PByte(src), BufferBytes);
-  end;
-  XorMemory(@Buffer, src, pointer(tmp), BufferBytes);
-end;
-
-class function TAesPrng.AFUnsplit(const Split: RawByteString;
-  StripesCount: integer): RawByteString;
-var
-  len: cardinal;
-begin
-  result := '';
-  len := length(Split);
-  if (len = 0) or
-     (len mod cardinal(StripesCount + 1) <> 0) then
-    exit;
-  len := len div cardinal(StripesCount + 1);
-  SetLength(result, len);
-  if not AFUnsplit(Split, pointer(result)^, len) then
-    result := '';
-end;
-
-class procedure TAesPrng.Fill(Buffer: pointer; Len: integer);
-begin
-  Main.FillRandom(Buffer, Len);
-end;
-
-class procedure TAesPrng.Fill(out Block: TAesBlock);
-begin
-  Main.FillRandom(Block);
-end;
-
-class procedure TAesPrng.Fill(out Block: THash256);
-begin
-  Main.FillRandom(Block);
-end;
-
-class function TAesPrng.Fill(Len: integer): RawByteString;
-begin
-  result := Main.FillRandom(Len);
-end;
-
-class function TAesPrng.Bytes(Len: integer): TBytes;
-begin
-  result := Main.FillRandomBytes(Len);
-end;
-
 
 { TAesPrngSystem }
 
-constructor TAesPrngSystem.Create;
-begin
-  inherited Create(0, 0);
-end;
-
-procedure TAesPrngSystem.FillRandom(out Block: TAesBlock);
-begin
-  FillRandom(@Block, SizeOf(Block));
-end;
-
 procedure TAesPrngSystem.FillRandom(Buffer: pointer; Len: PtrInt);
 begin
+  inc(fTotalBytes, Len);
   FillSystemRandom(Buffer, Len, false);
 end;
 
-procedure TAesPrngSystem.Seed;
+var
+  MainAesPrngSystem: TAesPrngSystem;
+
+class function TAesPrngSystem.Main: TAesPrngAbstract;
 begin
-  // do nothing
+  result := MainAesPrngSystem;
+  if result = nil then
+  begin
+    GlobalLock;
+    try
+      if MainAesPrngSystem = nil then
+        MainAesPrngSystem := TAesPrngSystem.Create;
+    finally
+      GlobalUnLock;
+    end;
+    result := MainAesPrngSystem;
+  end;
 end;
 
+
+{ CryptDataForCurrentUser }
 
 var
   __h: THash256;
@@ -9281,6 +9342,7 @@ begin
   FreeAndNil(aesivctr[false]);
   FreeAndNil(aesivctr[true]);
   FreeAndNil(MainAesPrng);
+  FreeAndNil(MainAesPrngSystem);
   {$ifdef USE_PROV_RSA_AES}
   if (CryptoApiAesProvider <> nil) and
      (CryptoApiAesProvider <> HCRYPTPROV_NOTTESTED) then
