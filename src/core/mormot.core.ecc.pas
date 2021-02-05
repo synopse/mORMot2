@@ -3289,7 +3289,7 @@ var
 destructor TEcdheProtocol.Destroy;
 begin
   if fAes[true] <> fAes[false] then
-    fAes[true].Free; // occurs only for TAesCbc
+    fAes[true].Free; // TAesAbstract.CloneEncryptDecrypt may have set the same
   fAes[false].Free;
   FillZero(fkM[false].b);
   FillZero(fkM[true].b);

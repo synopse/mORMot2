@@ -14418,9 +14418,6 @@ function EVP_CIPHER_CTX_num(ctx: PEVP_CIPHER_CTX): integer; cdecl;
 procedure EVP_CIPHER_CTX_set_num(ctx: PEVP_CIPHER_CTX; num: integer); cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_set_num';
 
-function EVP_CIPHER_CTX_copy(_out: PEVP_CIPHER_CTX; _in: PEVP_CIPHER_CTX): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_copy';
-
 function EVP_CIPHER_CTX_get_app_data(ctx: PEVP_CIPHER_CTX): pointer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_get_app_data';
 

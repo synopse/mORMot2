@@ -12,8 +12,8 @@ unit mormot.core.crypto.openssl;
 
   *****************************************************************************
 
-  Our mormot.core.crypto.pas unit is stand-alone and faster than OpenSSL for
-  most algorithms, but AES-CTR and AES-GCM. For those two, you may try this unit.
+  Our mormot.core.crypto.pas asm is stand-alone and as fast as OpenSSL for most
+  algorithms, but AES-CTR and AES-GCM. For those two, you may try this unit.
 
 }
 
@@ -86,7 +86,12 @@ type
       DoEncrypt: boolean; const method: string);
   public
     /// creates a new instance with the very same values
+    // - directly copy the existing OpenSSL context for efficiency
     function Clone: TAesAbstract; override;
+    /// compute a class instance similar to this one, for performing the
+    // reverse encryption/decryption process
+    // - will return self to avoid creating two instances
+    function CloneEncryptDecrypt: TAesAbstract; override;
     /// release the used instance memory and resources
     destructor Destroy; override;
     /// wrapper around function OpenSslIsAvailable
@@ -208,9 +213,8 @@ begin
   EOpenSslCrypto.CheckAvailable(PClass(self)^, 'Create');
   fCipher := EVP_get_cipherbyname(OpenSslCipherName);
   if fCipher = nil then
-    raise EOpenSslCrypto.CreateFmt(
-      '%s.Create: ''%s'' cipher is unknown',
-        [ClassNameShort(self)^, OpenSslCipherName]);
+    raise EOpenSslCrypto.CreateFmt('%s.Create: unknown ''%s'' cipher',
+      [ClassNameShort(self)^, OpenSslCipherName]);
 end;
 
 destructor TAesAbstractOsl.Destroy;
@@ -227,6 +231,16 @@ begin
   result := OpenSslIsAvailable;
 end;
 
+procedure TAesAbstractOsl.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
+begin
+  CallEvp(BufIn, BufOut, Count, {doencrypt=}true, 'Encrypt');
+end;
+
+procedure TAesAbstractOsl.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
+begin
+  CallEvp(BufIn, BufOut, Count, {doencrypt=}false, 'Decrypt');
+end;
+
 procedure TAesAbstractOsl.CallEvp(BufIn, BufOut: pointer; Count: cardinal;
   DoEncrypt: boolean; const method: string);
 var
@@ -237,47 +251,52 @@ begin
     raise ESynCrypto.CreateUtf8('%.%: Count=% is not a multiple of 16',
       [self, method, Count]);
   ctx := fCtx[DoEncrypt];
-  if ctx <> nil then
-    EOpenSslCrypto.Check(self, method,
-      EVP_CIPHER_CTX_reset(ctx)) // reuse the context
-  else
+  if ctx = nil then
   begin
+    // setup encrypt/decrypt context, with the proper key and no padding
     ctx := EVP_CIPHER_CTX_new;
+    EOpenSslCrypto.Check(self, method,
+      EVP_CipherInit_ex(ctx, fCipher, nil, @fKey, nil, ord(DoEncrypt)));
+    EOpenSslCrypto.Check(self, method,
+      EVP_CIPHER_CTX_set_padding(ctx, 0));
     fCtx[DoEncrypt] := ctx;
   end;
+  // OpenSSL allows to reuse the previous fCtxt[], just setting the (new) IV
   EOpenSslCrypto.Check(self, method,
-    EVP_CipherInit_ex(ctx, fCipher, nil, @fKey, @fIV, ord(DoEncrypt)));
-  EOpenSslCrypto.Check(self, method,
-    EVP_CIPHER_CTX_set_padding(ctx, 0)); // we do the padding internally
+    EVP_CipherInit_ex(ctx, nil, nil, nil, @fIV, ord(DoEncrypt)));
   EOpenSslCrypto.Check(self, method,
     EVP_CipherUpdate(ctx, BufOut, @outl, BufIn, Count));
-  EOpenSslCrypto.Check(self, method,
-    EVP_CipherFinal_ex(ctx, BufOut, @outl));
+  // no need to call EVP_CipherFinal_ex() since we expect no padding
 end;
 
 function TAesAbstractOsl.Clone: TAesAbstract;
+var
+  ctx: PEVP_CIPHER_CTX;
+  enc: boolean;
 begin
   if fIVHistoryDec.Count <> 0 then
     result := inherited Clone
   else
   begin
-    // we can reuse the main parameters
+    // we can copy fKey + fCipher, and clone the fCtxt[]
     result := TAesAbstractOsl(NewInstance);
     TAesAbstractOsl(result).fKeySize := fKeySize;
     TAesAbstractOsl(result).fKeySizeBytes := fKeySizeBytes;
-    MoveFast(fKey, TAesAbstractOsl(result).fKey, fKeySizeBytes);
+    TAesAbstractOsl(result).fKey := fKey;
     TAesAbstractOsl(result).fCipher := fCipher;
+    for enc := false to true do
+      if fCtx[enc] <> nil then
+      begin
+        ctx := EVP_CIPHER_CTX_new;
+        EVP_CIPHER_CTX_copy(ctx, fCtx[enc]);
+        TAesAbstractOsl(result).fCtx[enc] := ctx;
+      end;
   end;
 end;
 
-procedure TAesAbstractOsl.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
+function TAesAbstractOsl.CloneEncryptDecrypt: TAesAbstract;
 begin
-  CallEvp(BufIn, BufOut, Count, {doencrypt=}true, 'Encrypt');
-end;
-
-procedure TAesAbstractOsl.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
-begin
-  CallEvp(BufIn, BufOut, Count, {doencrypt=}false, 'Decrypt');
+  result := self; // there is one fCtx[] for each direction
 end;
 
 

@@ -698,6 +698,7 @@ function EVP_get_digestbyname(name: PUtf8Char): PEVP_MD; cdecl;
 function EVP_CIPHER_CTX_new(): PEVP_CIPHER_CTX; cdecl;
 function EVP_CIPHER_CTX_reset(c: PEVP_CIPHER_CTX): integer; cdecl;
 procedure EVP_CIPHER_CTX_free(c: PEVP_CIPHER_CTX); cdecl;
+function EVP_CIPHER_CTX_copy(_out: PEVP_CIPHER_CTX; _in: PEVP_CIPHER_CTX): integer; cdecl;
 function EVP_CIPHER_CTX_ctrl(ctx: PEVP_CIPHER_CTX; typ: integer;
   arg: integer; ptr: pointer): integer; cdecl;
 function EVP_CipherInit_ex(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER;
@@ -1047,6 +1048,7 @@ type
     EVP_CIPHER_CTX_new: function(): PEVP_CIPHER_CTX; cdecl;
     EVP_CIPHER_CTX_reset: function(c: PEVP_CIPHER_CTX): integer; cdecl;
     EVP_CIPHER_CTX_free: procedure(c: PEVP_CIPHER_CTX); cdecl;
+    EVP_CIPHER_CTX_copy: function(_out: PEVP_CIPHER_CTX; _in: PEVP_CIPHER_CTX): integer; cdecl;
     EVP_CIPHER_CTX_ctrl: function(ctx: PEVP_CIPHER_CTX; typ: integer; arg: integer; ptr: pointer): integer; cdecl;
     EVP_CipherInit_ex: function(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER; impl: PENGINE; key: PByte; iv: PByte; enc: integer): integer; cdecl;
     EVP_CipherUpdate: function(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger; _in: PByte; inl: integer): integer; cdecl;
@@ -1055,7 +1057,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..49] of PAnsiChar = (
+  LIBCRYPTO_ENTRIES: array[0..50] of PAnsiChar = (
     'CRYPTO_malloc', 'CRYPTO_free', 'ERR_remove_state', 'ERR_error_string_n',
     'ERR_get_error', 'ERR_remove_thread_state', 'ERR_load_BIO_strings',
     'EVP_MD_CTX_new', 'EVP_MD_CTX_free',
@@ -1068,8 +1070,9 @@ const
     'ASN1_STRING_data', 'PEM_read_bio_X509', 'PEM_read_bio_PrivateKey',
     'PEM_read_bio_RSAPrivateKey', 'RAND_bytes', 'EVP_get_cipherbyname',
     'EVP_get_digestbyname', 'EVP_CIPHER_CTX_new', 'EVP_CIPHER_CTX_reset',
-    'EVP_CIPHER_CTX_free', 'EVP_CIPHER_CTX_ctrl', 'EVP_CipherInit_ex',
-     'EVP_CipherUpdate', 'EVP_CipherFinal_ex', 'EVP_CIPHER_CTX_set_padding');
+    'EVP_CIPHER_CTX_free', 'EVP_CIPHER_CTX_copy', 'EVP_CIPHER_CTX_ctrl',
+    'EVP_CipherInit_ex', 'EVP_CipherUpdate', 'EVP_CipherFinal_ex',
+    'EVP_CIPHER_CTX_set_padding');
 
 var
   libcrypto: TLibCrypto;
@@ -1304,6 +1307,11 @@ end;
 procedure EVP_CIPHER_CTX_free(c: PEVP_CIPHER_CTX);
 begin
   libcrypto.EVP_CIPHER_CTX_free(c);
+end;
+
+function EVP_CIPHER_CTX_copy(_out: PEVP_CIPHER_CTX; _in: PEVP_CIPHER_CTX): integer;
+begin
+  result := libcrypto.EVP_CIPHER_CTX_copy(_out, _in);
 end;
 
 function EVP_CIPHER_CTX_ctrl(ctx: PEVP_CIPHER_CTX; typ: integer; arg: integer;
@@ -1658,6 +1666,9 @@ function EVP_CIPHER_CTX_reset(c: PEVP_CIPHER_CTX): integer; cdecl;
 
 procedure EVP_CIPHER_CTX_free(c: PEVP_CIPHER_CTX); cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_free';
+
+function EVP_CIPHER_CTX_copy(_out: PEVP_CIPHER_CTX; _in: PEVP_CIPHER_CTX): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_copy';
 
 function EVP_CIPHER_CTX_ctrl(ctx: PEVP_CIPHER_CTX; typ: integer; arg: integer;
   ptr: pointer): integer; cdecl;
