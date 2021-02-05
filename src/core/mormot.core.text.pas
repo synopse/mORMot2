@@ -9679,7 +9679,8 @@ var
 begin
   error := GetLastError;
   FormatUtf8(Format, Args, tmp);
-  CreateUtf8('OSError % [%] %', [error, SysErrorMessage(error), tmp]);
+  CreateUtf8('OSError 0x% [%] %',
+    [CardinalToHexShort(error), StringToUtf8(SysErrorMessage(error)), tmp]);
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}

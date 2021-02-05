@@ -1537,7 +1537,7 @@ constructor EWinINet.Create;
 begin
   // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383884
   fLastError := GetLastError;
-  inherited CreateFmt('%s (%d)', [SysErrorMessageWinInet(fLastError), fLastError]);
+  inherited CreateFmt('%s (%x)', [SysErrorMessageWinInet(fLastError), fLastError]);
 end;
 
 

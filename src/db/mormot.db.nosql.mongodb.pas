@@ -2652,7 +2652,7 @@ constructor EMongoRequestOSException.Create(const aMsg: string;
   aConnection: TMongoConnection; aRequest: TMongoRequest);
 begin
   fSystemLastError := GetLastError;
-  CreateUtf8('%: % (%)', [aMsg, SysErrorMessage(fSystemLastError),
+  CreateUtf8('%: % (%)', [aMsg, ToUtf8(SysErrorMessage(fSystemLastError)),
     fSystemLastError], aConnection, aRequest);
 end;
 
