@@ -4217,53 +4217,56 @@ const
   CRCSIZ = SizeOf(THash256) * 2;
   SIZ = CRCSIZ + SizeOf(cardinal);
 var
-  len: cardinal;
+  len, enclen: cardinal;
   pcd: PCryptData absolute Data;
   rcd: PCryptData absolute result;
-  rec: TCryptData;
+  nonce: THash256;
   P: PByte;
 begin
   result := ''; // e.g. MacSetNonce not supported
-  try
-    if Encrypt then
+  if Encrypt then
+  begin
+    TAesPrng.Main.FillRandom(nonce);
+    if not MacSetNonce(nonce) then
+      // leave ASAP if this class doesn't support AEAD process
+      exit;
+    // inlined EncryptPkcs7() + RecordSave()
+    len := length(Data);
+    enclen := EncryptPkcs7Length(len, {ivatbeg=}true);
+    SetLength(result, SIZ + ToVarUInt32Length(enclen) + enclen);
+    P := ToVarUInt32(enclen, @rcd^.Data);
+    if EncryptPkcs7Buffer(pointer(Data), P, len, enclen, {ivatbeg=}true) and
+       MacGetLast(rcd.mac) then
     begin
-      TAesPrng.Main.FillRandom(rec.nonce);
-      if not MacSetNonce(rec.nonce) then
-        exit;
-      rec.Data := EncryptPkcs7(Data, true);
-      len := length(rec.Data);
-      if not MacGetLast(rec.mac)  then
-        exit;
-      // inlined RecordSave()
-      SetLength(result, SIZ + ToVarUInt32Length(len) + len);
-      rcd.nonce := rec.nonce;
-      rcd.mac := rec.mac;
+      // compute header
+      rcd.nonce := nonce;
       rcd.crc := crc32c(VERSION, @rcd.nonce, CRCSIZ);
-      P := @rcd^.Data;
-      MoveFast(pointer(rec.Data)^, ToVarUInt32(len, P)^, len);
     end
     else
-    begin
-      if (length(Data) <= SIZ) or
-         (pcd^.crc <> crc32c(VERSION, @pcd.nonce, CRCSIZ)) then
-        exit;
-      // inlined RecordLoad() for safety
-      P := @pcd^.Data;
-      len := FromVarUInt32(P);
-      if length(Data) - integer(len) <> PAnsiChar(P) - pointer(Data) then
-        // to avoid buffer overflow
-        exit;
-      if MacSetNonce(pcd^.nonce) then
-        result := DecryptPkcs7Buffer(P, len, true, false);
-      if result <> '' then
-        if not MACEquals(pcd^.mac) then
-        begin
-          FillZero(result);
-          result := '';
-        end;
-    end;
-  finally
-    FillZero(rec.data);
+      result := ''
+  end
+  else
+  begin
+    // validate header
+    enclen := length(Data);
+    if (enclen <= SIZ) or
+       (pcd^.crc <> crc32c(VERSION, @pcd.nonce, CRCSIZ)) then
+      exit;
+    // inlined RecordLoad() for safety
+    P := @pcd^.Data;
+    len := FromVarUInt32(P);
+    if enclen - len <> PtrUInt(PAnsiChar(P) - pointer(Data)) then
+      // to avoid buffer overflow
+      exit;
+    // decrypt and check MAC
+    if MacSetNonce(pcd^.nonce) then
+      result := DecryptPkcs7Buffer(P, len, {ivatbeg=}true, {raiseexc=}false);
+    if result <> '' then
+      if not MACEquals(pcd^.mac) then
+      begin
+        FillZero(result);
+        result := '';
+      end;
   end;
 end;
 
