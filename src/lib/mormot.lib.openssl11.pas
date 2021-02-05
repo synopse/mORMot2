@@ -25,6 +25,7 @@ unit mormot.lib.openssl11;
 // define this conditional to publish the whole (huge) OpenSSL API
 // - by default, only the API features needed by mORMot are published
 // - the full API libraries will be directly/statically linked, not dynamically
+// - full API increases the compilation time of mormot2tests from 1.9 to 2.4s
 
 
 interface
@@ -44,7 +45,17 @@ uses
 
 type
   /// exception class raised by this unit
-  EOpenSsl = class(Exception);
+  EOpenSsl = class(Exception)
+  protected
+    class procedure CheckFailed(caller: TObject; const method: string; res: integer);
+  public
+    /// wrapper around ERR_get_error/ERR_error_string_n if res <> 1
+    class procedure Check(caller: TObject; const method: string; res: integer);
+      {$ifdef HASINLINE} inline; {$endif}
+    /// raise the exception if OpenSslIsAvailable if false
+    class procedure CheckAvailable(caller: TClass; const method: string);
+  end;
+
 
 const
   // some binaries may be retrieved from https://github.com/grijjy/DelphiOpenSsl
@@ -106,7 +117,7 @@ var
 // - will load and initialize it, calling OpenSslInitialize if necessary,
 // catching any exception during the process
 // - return always true if OPENSSLFULLAPI or OPENSSLSTATIC conditionals have
-// been defined, since it is linked at compile or startup time
+// been defined, since they link the library at compile or startup time
 // - you should never call any OpenSSL function if false is returned
 function OpenSslIsAvailable: boolean;
 
@@ -123,6 +134,10 @@ procedure OpenSslInitialize(
 { ******************** OpenSSL Library Constants }
 
 const
+  OPENSSLSUCCESS = 1;
+
+  EVP_CIPH_NO_PADDING = $100;
+
   BIO_FLAGS_READ = $01;
   BIO_FLAGS_WRITE = $02;
   BIO_FLAGS_IO_SPECIAL = $04;
@@ -369,40 +384,46 @@ type
   PSSL = pointer;
   PPSSL = ^PSSL;
 
-  PSSL_METHOD = pointer;
+  PSSL_METHOD = type pointer;
   PPSSL_METHOD = ^PSSL_METHOD;
 
-  PSSL_CIPHER = pointer;
+  PSSL_CIPHER = type pointer;
   PPSSL_CIPHER = ^PSSL_CIPHER;
 
-  PSSL_SESSION = pointer;
+  PSSL_SESSION = type pointer;
   PPSSL_SESSION = ^PSSL_SESSION;
 
-  PSSL_CTX = pointer;
+  PSSL_CTX = type pointer;
   PPSSL_CTX = ^PSSL_CTX;
 
-  PEVP_PKEY = pointer;
+  PEVP_PKEY = type pointer;
   PPEVP_PKEY = ^PEVP_PKEY;
 
-  PRSA = pointer;
-  PPRSA = ^PRSA;
+  PEVP_CIPHER = type pointer;
+  PPEVP_CIPHER = ^PEVP_CIPHER;
 
-  PEVP_MD = pointer;
+  PEVP_CIPHER_CTX = type pointer;
+  PPEVP_CIPHER_CTX = ^PEVP_CIPHER_CTX;
+
+  PEVP_MD = type pointer;
   PPEVP_MD = ^PEVP_MD;
 
-  PEVP_MD_CTX = pointer;
+  PEVP_MD_CTX = type pointer;
   PPEVP_MD_CTX = ^PEVP_MD_CTX;
 
-  PEVP_PKEY_CTX = pointer;
+  PEVP_PKEY_CTX = type pointer;
   PPEVP_PKEY_CTX = ^PEVP_PKEY_CTX;
 
-  PENGINE = pointer;
+  PRSA = type pointer;
+  PPRSA = ^PRSA;
+
+  PENGINE = type pointer;
   PPENGINE = ^PENGINE;
 
-  PBIO_METHOD = pointer;
+  PBIO_METHOD = type pointer;
   PPBIO_METHOD = ^PBIO_METHOD;
 
-  POPENSSL_STACK = pointer;
+  POPENSSL_STACK = type pointer;
   PPOPENSSL_STACK = ^POPENSSL_STACK;
 
   asn1_string_st = record
@@ -415,7 +436,7 @@ type
   ASN1_INTEGER = asn1_string_st;
   PASN1_INTEGER = ^ASN1_INTEGER;
   PPASN1_INTEGER = ^PASN1_INTEGER;
-  PASN1_OBJECT = pointer;
+  PASN1_OBJECT = type pointer;
   PPASN1_OBJECT = ^PASN1_OBJECT;
   ASN1_STRING = asn1_string_st;
   PASN1_STRING = ^ASN1_STRING;
@@ -450,7 +471,7 @@ type
   PASN1_VISIBLESTRING = ^ASN1_VISIBLESTRING;
   ASN1_UTF8STRING = asn1_string_st;
   PASN1_UTF8STRING = ^ASN1_UTF8STRING;
-  PASN1_VALUE = pointer;
+  PASN1_VALUE = type pointer;
   PPASN1_VALUE = ^PASN1_VALUE;
   ASN1_TIME = asn1_string_st;
   PASN1_TIME = ^ASN1_TIME;
@@ -490,31 +511,31 @@ type
   PASN1_TYPE = ^ASN1_TYPE;
   PPASN1_TYPE = ^PASN1_TYPE;
 
-  PX509_ALGORS = pointer;
+  PX509_ALGORS = type pointer;
   PPX509_ALGORS = ^PX509_ALGORS;
 
-  PX509_REQ_INFO = pointer;
+  PX509_REQ_INFO = type pointer;
   PPX509_REQ_INFO = ^PX509_REQ_INFO;
 
-  PX509_REQ = pointer;
+  PX509_REQ = type pointer;
   PPX509_REQ = ^PX509_REQ;
 
-  PX509_CERT_AUX = pointer;
+  PX509_CERT_AUX = type pointer;
   PPX509_CERT_AUX = ^PX509_CERT_AUX;
 
-  PX509_NAME = pointer;
+  PX509_NAME = type pointer;
   PPX509_NAME = ^PX509_NAME;
 
-  PX509_PUBKEY = pointer;
+  PX509_PUBKEY = type pointer;
   PPX509_PUBKEY = ^PX509_PUBKEY;
 
-  PX509_STORE = pointer;
+  PX509_STORE = type pointer;
   PPX509_STORE = ^PX509_STORE;
 
-  PX509_STORE_CTX = pointer;
+  PX509_STORE_CTX = type pointer;
   PPX509_STORE_CTX = ^PX509_STORE_CTX;
 
-  PX509_OBJECT = pointer;
+  PX509_OBJECT = type pointer;
   PPX509_OBJECT = ^PX509_OBJECT;
 
 
@@ -633,19 +654,6 @@ procedure ERR_remove_thread_state(p1: pointer); cdecl;
 function ERR_load_BIO_strings(): integer; cdecl;
 function EVP_MD_CTX_create(): PEVP_MD_CTX; cdecl;
 procedure EVP_MD_CTX_destroy(ctx: PEVP_MD_CTX); cdecl;
-function EVP_sha1(): PEVP_MD; cdecl;
-function EVP_sha224(): PEVP_MD; cdecl;
-function EVP_sha256(): PEVP_MD; cdecl;
-function EVP_sha384(): PEVP_MD; cdecl;
-function EVP_sha512(): PEVP_MD; cdecl;
-function EVP_sha512_224(): PEVP_MD; cdecl;
-function EVP_sha512_256(): PEVP_MD; cdecl;
-function EVP_sha3_224(): PEVP_MD; cdecl;
-function EVP_sha3_256(): PEVP_MD; cdecl;
-function EVP_sha3_384(): PEVP_MD; cdecl;
-function EVP_sha3_512(): PEVP_MD; cdecl;
-function EVP_shake128(): PEVP_MD; cdecl;
-function EVP_shake256(): PEVP_MD; cdecl;
 function EVP_PKEY_size(pkey: PEVP_PKEY): integer; cdecl;
 procedure EVP_PKEY_free(pkey: PEVP_PKEY); cdecl;
 function EVP_DigestSignInit(ctx: PEVP_MD_CTX; pctx: PPEVP_PKEY_CTX; typ: PEVP_MD;
@@ -685,6 +693,19 @@ function PEM_read_bio_PrivateKey(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
 function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
   u: pointer): PRSA; cdecl;
 function RAND_bytes(buf: PByte; num: integer): integer; cdecl;
+function EVP_get_cipherbyname(name: PUtf8Char): PEVP_CIPHER; cdecl;
+function EVP_get_digestbyname(name: PUtf8Char): PEVP_MD; cdecl;
+function EVP_CIPHER_CTX_new(): PEVP_CIPHER_CTX; cdecl;
+function EVP_CIPHER_CTX_reset(c: PEVP_CIPHER_CTX): integer; cdecl;
+procedure EVP_CIPHER_CTX_free(c: PEVP_CIPHER_CTX); cdecl;
+function EVP_CIPHER_CTX_ctrl(ctx: PEVP_CIPHER_CTX; typ: integer;
+  arg: integer; ptr: pointer): integer; cdecl;
+function EVP_CipherInit_ex(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER;
+  impl: PENGINE; key: PByte; iv: PByte; enc: integer): integer; cdecl;
+function EVP_CipherUpdate(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger;
+  _in: PByte; inl: integer): integer; cdecl;
+function EVP_CipherFinal_ex(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): integer; cdecl;
+function EVP_CIPHER_CTX_set_padding(c: PEVP_CIPHER_CTX; pad: integer): integer; cdecl;
 
 
 { ******************** OpenSSL Full API Declaration }
@@ -786,15 +807,6 @@ type
     SSL_set_cipher_list: function(s: PSSL; str: PUtf8Char): integer; cdecl;
     SSL_get0_alpn_selected: procedure(ssl: PSSL; data: PPByte; len: PCardinal); cdecl;
     SSL_clear: function(s: PSSL): integer; cdecl;
-    TLSv1_1_method: function(): PSSL_METHOD; cdecl;
-    TLSv1_1_server_method: function(): PSSL_METHOD; cdecl;
-    TLSv1_1_client_method: function(): PSSL_METHOD; cdecl;
-    TLSv1_2_method: function(): PSSL_METHOD; cdecl;
-    TLSv1_2_server_method: function(): PSSL_METHOD; cdecl;
-    TLSv1_2_client_method: function(): PSSL_METHOD; cdecl;
-    TLSv1_3_method: function(): PSSL_METHOD; cdecl;
-    TLSv1_3_server_method: function(): PSSL_METHOD; cdecl;
-    TLSv1_3_client_method: function(): PSSL_METHOD; cdecl;
   end;
 
 const
@@ -999,19 +1011,6 @@ type
     ERR_load_BIO_strings: function(): integer; cdecl;
     EVP_MD_CTX_create: function(): PEVP_MD_CTX; cdecl;
     EVP_MD_CTX_destroy: procedure(ctx: PEVP_MD_CTX); cdecl;
-    EVP_sha1: function(): PEVP_MD; cdecl;
-    EVP_sha224: function(): PEVP_MD; cdecl;
-    EVP_sha256: function(): PEVP_MD; cdecl;
-    EVP_sha384: function(): PEVP_MD; cdecl;
-    EVP_sha512: function(): PEVP_MD; cdecl;
-    EVP_sha512_224: function(): PEVP_MD; cdecl;
-    EVP_sha512_256: function(): PEVP_MD; cdecl;
-    EVP_sha3_224: function(): PEVP_MD; cdecl;
-    EVP_sha3_256: function(): PEVP_MD; cdecl;
-    EVP_sha3_384: function(): PEVP_MD; cdecl;
-    EVP_sha3_512: function(): PEVP_MD; cdecl;
-    EVP_shake128: function(): PEVP_MD; cdecl;
-    EVP_shake256: function(): PEVP_MD; cdecl;
     EVP_PKEY_size: function(pkey: PEVP_PKEY): integer; cdecl;
     EVP_PKEY_free: procedure(pkey: PEVP_PKEY); cdecl;
     EVP_DigestSignInit: function(ctx: PEVP_MD_CTX; pctx: PPEVP_PKEY_CTX; typ: PEVP_MD; e: PENGINE; pkey: PEVP_PKEY): integer; cdecl;
@@ -1043,15 +1042,23 @@ type
     PEM_read_bio_PrivateKey: function(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
     PEM_read_bio_RSAPrivateKey: function(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
     RAND_bytes: function(buf: PByte; num: integer): integer; cdecl;
+    EVP_get_cipherbyname: function(name: PUtf8Char): PEVP_CIPHER; cdecl;
+    EVP_get_digestbyname: function(name: PUtf8Char): PEVP_MD; cdecl;
+    EVP_CIPHER_CTX_new: function(): PEVP_CIPHER_CTX; cdecl;
+    EVP_CIPHER_CTX_reset: function(c: PEVP_CIPHER_CTX): integer; cdecl;
+    EVP_CIPHER_CTX_free: procedure(c: PEVP_CIPHER_CTX); cdecl;
+    EVP_CIPHER_CTX_ctrl: function(ctx: PEVP_CIPHER_CTX; typ: integer; arg: integer; ptr: pointer): integer; cdecl;
+    EVP_CipherInit_ex: function(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER; impl: PENGINE; key: PByte; iv: PByte; enc: integer): integer; cdecl;
+    EVP_CipherUpdate: function(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger; _in: PByte; inl: integer): integer; cdecl;
+    EVP_CipherFinal_ex: function(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): integer; cdecl;
+    EVP_CIPHER_CTX_set_padding: function(c: PEVP_CIPHER_CTX; pad: integer): integer; cdecl;
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..52] of PAnsiChar = (
+  LIBCRYPTO_ENTRIES: array[0..49] of PAnsiChar = (
     'CRYPTO_malloc', 'CRYPTO_free', 'ERR_remove_state', 'ERR_error_string_n',
     'ERR_get_error', 'ERR_remove_thread_state', 'ERR_load_BIO_strings',
-    'EVP_MD_CTX_new', 'EVP_MD_CTX_free', 'EVP_sha1', 'EVP_sha224', 'EVP_sha256',
-    'EVP_sha384', 'EVP_sha512', 'EVP_sha512_224', 'EVP_sha512_256', 'EVP_sha3_224',
-    'EVP_sha3_256', 'EVP_sha3_384', 'EVP_sha3_512', 'EVP_shake128', 'EVP_shake256',
+    'EVP_MD_CTX_new', 'EVP_MD_CTX_free',
     'EVP_PKEY_size', 'EVP_PKEY_free', 'EVP_DigestSignInit', 'EVP_DigestUpdate',
     'EVP_DigestSignFinal', 'EVP_DigestVerifyInit', 'EVP_DigestVerifyFinal',
     'HMAC', 'BIO_new', 'BIO_free', 'BIO_test_flags', 'BIO_ctrl', 'BIO_new_mem_buf',
@@ -1059,7 +1066,10 @@ const
     'X509_get_subject_name', 'X509_free', 'X509_NAME_print_ex_fp', 'OPENSSL_sk_pop',
     'OPENSSL_sk_num', 'ASN1_BIT_STRING_get_bit', 'OBJ_nid2sn', 'OBJ_obj2nid',
     'ASN1_STRING_data', 'PEM_read_bio_X509', 'PEM_read_bio_PrivateKey',
-    'PEM_read_bio_RSAPrivateKey', 'RAND_bytes');
+    'PEM_read_bio_RSAPrivateKey', 'RAND_bytes', 'EVP_get_cipherbyname',
+    'EVP_get_digestbyname', 'EVP_CIPHER_CTX_new', 'EVP_CIPHER_CTX_reset',
+    'EVP_CIPHER_CTX_free', 'EVP_CIPHER_CTX_ctrl', 'EVP_CipherInit_ex',
+     'EVP_CipherUpdate', 'EVP_CipherFinal_ex', 'EVP_CIPHER_CTX_set_padding');
 
 var
   libcrypto: TLibCrypto;
@@ -1107,71 +1117,6 @@ end;
 procedure EVP_MD_CTX_destroy(ctx: PEVP_MD_CTX);
 begin
   libcrypto.EVP_MD_CTX_destroy(ctx);
-end;
-
-function EVP_sha1(): PEVP_MD;
-begin
-  result := libcrypto.EVP_sha1;
-end;
-
-function EVP_sha224(): PEVP_MD;
-begin
-  result := libcrypto.EVP_sha224;
-end;
-
-function EVP_sha256(): PEVP_MD;
-begin
-  result := libcrypto.EVP_sha256;
-end;
-
-function EVP_sha384(): PEVP_MD;
-begin
-  result := libcrypto.EVP_sha384;
-end;
-
-function EVP_sha512(): PEVP_MD;
-begin
-  result := libcrypto.EVP_sha512;
-end;
-
-function EVP_sha512_224(): PEVP_MD;
-begin
-  result := libcrypto.EVP_sha512_224;
-end;
-
-function EVP_sha512_256(): PEVP_MD;
-begin
-  result := libcrypto.EVP_sha512_256;
-end;
-
-function EVP_sha3_224(): PEVP_MD;
-begin
-  result := libcrypto.EVP_sha3_224;
-end;
-
-function EVP_sha3_256(): PEVP_MD;
-begin
-  result := libcrypto.EVP_sha3_256;
-end;
-
-function EVP_sha3_384(): PEVP_MD;
-begin
-  result := libcrypto.EVP_sha3_384;
-end;
-
-function EVP_sha3_512(): PEVP_MD;
-begin
-  result := libcrypto.EVP_sha3_512;
-end;
-
-function EVP_shake128(): PEVP_MD;
-begin
-  result := libcrypto.EVP_shake128;
-end;
-
-function EVP_shake256(): PEVP_MD;
-begin
-  result := libcrypto.EVP_shake256;
 end;
 
 function EVP_PKEY_size(pkey: PEVP_PKEY): integer;
@@ -1336,6 +1281,59 @@ begin
   result := libcrypto.RAND_bytes(buf, num);
 end;
 
+function EVP_get_cipherbyname(name: PUtf8Char): PEVP_CIPHER;
+begin
+  result := libcrypto.EVP_get_cipherbyname(name);
+end;
+
+function EVP_get_digestbyname(name: PUtf8Char): PEVP_MD;
+begin
+  result := libcrypto.EVP_get_digestbyname(name);
+end;
+
+function EVP_CIPHER_CTX_new(): PEVP_CIPHER_CTX;
+begin
+  result := libcrypto.EVP_CIPHER_CTX_new();
+end;
+
+function EVP_CIPHER_CTX_reset(c: PEVP_CIPHER_CTX): integer;
+begin
+  result := libcrypto.EVP_CIPHER_CTX_reset(c);
+end;
+
+procedure EVP_CIPHER_CTX_free(c: PEVP_CIPHER_CTX);
+begin
+  libcrypto.EVP_CIPHER_CTX_free(c);
+end;
+
+function EVP_CIPHER_CTX_ctrl(ctx: PEVP_CIPHER_CTX; typ: integer; arg: integer;
+  ptr: pointer): integer;
+begin
+  result := libcrypto.EVP_CIPHER_CTX_ctrl(ctx, typ, arg, ptr);
+end;
+
+function EVP_CipherInit_ex(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER;
+  impl: PENGINE; key: PByte; iv: PByte; enc: integer): integer;
+begin
+  result := libcrypto.EVP_CipherInit_ex(ctx, cipher, impl, key, iv, enc);
+end;
+
+function EVP_CipherUpdate(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger;
+  _in: PByte; inl: integer): integer;
+begin
+  result := libcrypto.EVP_CipherUpdate(ctx, _out, outl, _in, inl);
+end;
+
+function EVP_CipherFinal_ex(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): integer;
+begin
+  result := libcrypto.EVP_CipherFinal_ex(ctx, outm, outl);
+end;
+
+function EVP_CIPHER_CTX_set_padding(c: PEVP_CIPHER_CTX; pad: integer): integer;
+begin
+  result := libcrypto.EVP_CIPHER_CTX_set_padding(c, pad);
+end;
+
 
 var
   openssl_initialized: boolean;
@@ -1382,16 +1380,17 @@ begin
       {$endif OSWINDOWS}
         libsslname
       {$ifdef OSPOSIX}
-        , 'libssl.so'  // generic library name on most systems
+        , 'libssl.so'  // generic library name on most UNIX
       {$endif OSPOSIX}
         ], EOpenSsl);
       P := @@libssl.SSL_CTX_new;
       for api := low(LIBSSL_ENTRIES) to high(LIBSSL_ENTRIES) do
         libssl.Resolve(LIBSSL_ENTRIES[api], @P[api], {onfail=}EOpenSsl);
-      // nothing is to be initialized with OpenSSL 1.1
+      // nothing is to be initialized with OpenSSL 1.1.*
       OpenSslVersion := libssl.OpenSSL_version_num;
-      if OpenSslVersion < $10101000 then // paranoid check
-        raise EOpenSsl.CreateFmt('Incorrect OpenSSL version %x', [OpenSslVersion]);
+      if OpenSslVersion and $ffffff00 <> $10101000 then // paranoid check 1.1.1
+        raise EOpenSsl.CreateFmt(
+          'Incorrect OpenSSL version %x - expected 101010xx', [OpenSslVersion]);
     except
       FreeAndNil(libssl);
       FreeAndNil(libcrypto);
@@ -1447,13 +1446,15 @@ function SSL_CTX_use_certificate_file(ctx: PSSL_CTX; _file: PUtf8Char; typ: inte
 function SSL_CTX_get_cert_store(p1: PSSL_CTX): PX509_STORE; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_get_cert_store';
 
-function SSL_CTX_load_verify_locations(ctx: PSSL_CTX; CAfile: PUtf8Char; CApath: PUtf8Char): integer; cdecl;
+function SSL_CTX_load_verify_locations(ctx: PSSL_CTX;
+  CAfile: PUtf8Char; CApath: PUtf8Char): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_load_verify_locations';
 
 function SSL_CTX_use_certificate_chain_file(ctx: PSSL_CTX; _file: PUtf8Char): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_use_certificate_chain_file';
 
-function SSL_CTX_set_alpn_protos(ctx: PSSL_CTX; protos: PByte; protos_len: cardinal): integer; cdecl;
+function SSL_CTX_set_alpn_protos(ctx: PSSL_CTX;
+  protos: PByte; protos_len: cardinal): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_set_alpn_protos';
 
 function SSL_CTX_ctrl(ctx: PSSL_CTX; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
@@ -1543,67 +1544,32 @@ function EVP_MD_CTX_create(): PEVP_MD_CTX; cdecl;
 procedure EVP_MD_CTX_destroy(ctx: PEVP_MD_CTX); cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_CTX_free';
 
-function EVP_sha1(): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_sha1';
-
-function EVP_sha224(): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_sha224';
-
-function EVP_sha256(): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_sha256';
-
-function EVP_sha384(): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_sha384';
-
-function EVP_sha512(): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_sha512';
-
-function EVP_sha512_224(): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_sha512_224';
-
-function EVP_sha512_256(): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_sha512_256';
-
-function EVP_sha3_224(): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_sha3_224';
-
-function EVP_sha3_256(): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_sha3_256';
-
-function EVP_sha3_384(): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_sha3_384';
-
-function EVP_sha3_512(): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_sha3_512';
-
-function EVP_shake128(): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_shake128';
-
-function EVP_shake256(): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_shake256';
-
 function EVP_PKEY_size(pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_size';
 
 procedure EVP_PKEY_free(pkey: PEVP_PKEY); cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_free';
 
-function EVP_DigestSignInit(ctx: PEVP_MD_CTX; pctx: PPEVP_PKEY_CTX; typ: PEVP_MD; e: PENGINE; pkey: PEVP_PKEY): integer; cdecl;
+function EVP_DigestSignInit(ctx: PEVP_MD_CTX; pctx: PPEVP_PKEY_CTX; typ: PEVP_MD;
+  e: PENGINE; pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DigestSignInit';
 
 function EVP_DigestUpdate(ctx: PEVP_MD_CTX; d: pointer; cnt: PtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DigestUpdate';
 
-function EVP_DigestSignFinal(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt): integer; cdecl;
+function EVP_DigestSignFinal(ctx: PEVP_MD_CTX;
+  sigret: PByte; var siglen: PtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DigestSignFinal';
 
-function EVP_DigestVerifyInit(ctx: PEVP_MD_CTX; pctx: PPEVP_PKEY_CTX; typ: PEVP_MD; e: PENGINE; pkey: PEVP_PKEY): integer; cdecl;
+function EVP_DigestVerifyInit(ctx: PEVP_MD_CTX; pctx: PPEVP_PKEY_CTX;
+  typ: PEVP_MD; e: PENGINE; pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DigestVerifyInit';
 
 function EVP_DigestVerifyFinal(ctx: PEVP_MD_CTX; sig: PByte; siglen: PtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DigestVerifyFinal';
 
-function HMAC(evp_md: PEVP_MD; key: pointer; key_len: integer; d: PByte; n: PtrUInt; md: PByte; var md_len: cardinal): PByte; cdecl;
+function HMAC(evp_md: PEVP_MD; key: pointer; key_len: integer;
+  d: PByte; n: PtrUInt; md: PByte; var md_len: cardinal): PByte; cdecl;
   external LIB_CRYPTO name _PU + 'HMAC';
 
 function BIO_new(typ: PBIO_METHOD): PBIO; cdecl;
@@ -1642,7 +1608,8 @@ function X509_get_subject_name(a: PX509): PX509_NAME; cdecl;
 procedure X509_free(a: PX509); cdecl;
   external LIB_CRYPTO name _PU + 'X509_free';
 
-function X509_NAME_print_ex_fp(fp: PPointer; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
+function X509_NAME_print_ex_fp(fp: PPointer; nm: PX509_NAME; indent: integer;
+  flags: cardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_print_ex_fp';
 
 function OPENSSL_sk_pop(st: POPENSSL_STACK): pointer; cdecl;
@@ -1666,14 +1633,49 @@ function ASN1_STRING_data(x: PASN1_STRING): PByte; cdecl;
 function PEM_read_bio_X509(bp: PBIO; x: PPX509; cb: Ppem_password_cb; u: pointer): PX509; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_bio_X509';
 
-function PEM_read_bio_PrivateKey(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
+function PEM_read_bio_PrivateKey(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
+  u: pointer): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_bio_PrivateKey';
 
-function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
+function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
+  u: pointer): PRSA; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_bio_RSAPrivateKey';
 
 function RAND_bytes(buf: PByte; num: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'RAND_bytes';
+
+function EVP_get_cipherbyname(name: PUtf8Char): PEVP_CIPHER; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_get_cipherbyname';
+
+function EVP_get_digestbyname(name: PUtf8Char): PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_get_digestbyname';
+
+function EVP_CIPHER_CTX_new(): PEVP_CIPHER_CTX; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_new';
+
+function EVP_CIPHER_CTX_reset(c: PEVP_CIPHER_CTX): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_reset';
+
+procedure EVP_CIPHER_CTX_free(c: PEVP_CIPHER_CTX); cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_free';
+
+function EVP_CIPHER_CTX_ctrl(ctx: PEVP_CIPHER_CTX; typ: integer; arg: integer;
+  ptr: pointer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_ctrl';
+
+function EVP_CipherInit_ex(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER; impl: PENGINE;
+  key: PByte; iv: PByte; enc: Integer): Integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_CipherInit_ex';
+
+function EVP_CipherUpdate(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger;
+  _in: PByte; inl: Integer): Integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_CipherUpdate';
+
+function EVP_CipherFinal_ex(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): Integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_CipherFinal_ex';
+
+function EVP_CIPHER_CTX_set_padding(c: PEVP_CIPHER_CTX; pad: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_set_padding';
 
 
 procedure OpenSslInitialize(const libcryptoname, libsslname: TFileName);
@@ -1693,50 +1695,42 @@ end;
 
 function BIO_get_flags(b: PBIO): integer;
 begin
-  result := {$ifndef OPENSSLSTATIC}libcrypto.{$endif}
-    BIO_test_flags(b, not 0);
+  result := BIO_test_flags(b, not 0);
 end;
 
 function BIO_should_retry(b: PBIO): boolean;
 begin
-  result := {$ifndef OPENSSLSTATIC}libcrypto.{$endif}
-    BIO_test_flags(b, BIO_FLAGS_SHOULD_RETRY) <> 0;
+  result := BIO_test_flags(b, BIO_FLAGS_SHOULD_RETRY) <> 0;
 end;
 
 function BIO_should_read(b: PBIO): boolean;
 begin
-  result := {$ifndef OPENSSLSTATIC}libcrypto.{$endif}
-    BIO_test_flags(b, BIO_FLAGS_READ) <> 0;
+  result := BIO_test_flags(b, BIO_FLAGS_READ) <> 0;
 end;
 
 function BIO_should_write(b: PBIO): boolean;
 begin
-  result := {$ifndef OPENSSLSTATIC}libcrypto.{$endif}
-    BIO_test_flags(b, BIO_FLAGS_WRITE) <> 0;
+  result := BIO_test_flags(b, BIO_FLAGS_WRITE) <> 0;
 end;
 
 function BIO_should_io_special(b: PBIO): boolean;
 begin
-  result := {$ifndef OPENSSLSTATIC}libcrypto.{$endif}
-    BIO_test_flags(b, BIO_FLAGS_IO_SPECIAL) <> 0;
+  result := BIO_test_flags(b, BIO_FLAGS_IO_SPECIAL) <> 0;
 end;
 
 function BIO_retry_type(b: PBIO): integer;
 begin
-  result := {$ifndef OPENSSLSTATIC}libcrypto.{$endif}
-    BIO_test_flags(b, BIO_FLAGS_RWS);
+  result := BIO_test_flags(b, BIO_FLAGS_RWS);
 end;
 
 function BIO_get_ssl(b: PBIO; s: PSSL): integer;
 begin
-  result := {$ifndef OPENSSLSTATIC}libcrypto.{$endif}
-    BIO_ctrl(b, BIO_C_GET_SSL, 0, s);
+  result := BIO_ctrl(b, BIO_C_GET_SSL, 0, s);
 end;
 
 function BIO_pending(b: PBIO): integer;
 begin
-  result := {$ifndef OPENSSLSTATIC}libcrypto.{$endif}
-    BIO_ctrl(b, _BIO_CTRL_PENDING, 0, nil);
+  result := BIO_ctrl(b, _BIO_CTRL_PENDING, 0, nil);
 end;
 
 function SSL_error(error: integer): RawUtf8;
@@ -1827,6 +1821,30 @@ procedure DTLSv1_handle_timeout(s: PSSL);
 begin
   SSL_ctrl(s, DTLS_CTRL_HANDLE_TIMEOUT, 0, Nil);
 end;
+
+
+{ EOpenSsl }
+
+class procedure EOpenSsl.Check(caller: TObject; const method: string; res: integer);
+begin
+  if res <> OPENSSLSUCCESS then
+    CheckFailed(caller, method, res);
+end;
+
+class procedure EOpenSsl.CheckFailed(caller: TObject; const method: string; res: integer);
+begin
+  res := ERR_get_error;
+  raise CreateFmt('%s.%s: OpenSSL error %d [%s]',
+    [ClassNameShort(caller)^, method, res, SSL_error_short(res)]);
+end;
+
+class procedure EOpenSsl.CheckAvailable(caller: TClass; const method: string);
+begin
+  if not OpenSslIsAvailable then
+    raise CreateFmt('%s.%s: OpenSSL 1.1.1 is not available',
+      [ClassNameShort(caller)^, method]);
+end;
+
 
 
 initialization

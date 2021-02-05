@@ -4015,7 +4015,6 @@ const
   EVP_CIPH_ALWAYS_CALL_INIT = $20;
   EVP_CIPH_CTRL_INIT = $40;
   EVP_CIPH_CUSTOM_KEY_LENGTH = $80;
-  EVP_CIPH_NO_PADDING = $100;
   EVP_CIPH_RAND_KEY = $200;
   EVP_CIPH_CUSTOM_COPY = $400;
   EVP_CIPH_CUSTOM_IV_LENGTH = $800;
@@ -9452,10 +9451,6 @@ type
   PPBN_RECP_CTX = ^PBN_RECP_CTX;
   PBN_GENCB = pointer;
   PPBN_GENCB = ^PBN_GENCB;
-  PEVP_CIPHER = pointer;
-  PPEVP_CIPHER = ^PEVP_CIPHER;
-  PEVP_CIPHER_CTX = pointer;
-  PPEVP_CIPHER_CTX = ^PEVP_CIPHER_CTX;
   PEVP_PKEY_ASN1_METHOD = pointer;
   PPEVP_PKEY_ASN1_METHOD = ^PEVP_PKEY_ASN1_METHOD;
   PEVP_PKEY_METHOD = pointer;
@@ -14513,13 +14508,16 @@ function EVP_CIPHER_CTX_test_flags(ctx: PEVP_CIPHER_CTX; flags: integer): intege
 function EVP_EncryptInit(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER; key: PByte; iv: PByte): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_EncryptInit';
 
-function EVP_EncryptInit_ex(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER; impl: PENGINE; key: PByte; iv: PByte): integer; cdecl;
+function EVP_EncryptInit_ex(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER;
+  impl: PENGINE; key: PByte; iv: PByte): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_EncryptInit_ex';
 
-function EVP_EncryptUpdate(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger; _in: PByte; inl: integer): integer; cdecl;
+function EVP_EncryptUpdate(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger;
+  _in: PByte; inl: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_EncryptUpdate';
 
-function EVP_EncryptFinal_ex(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger): integer; cdecl;
+function EVP_EncryptFinal_ex(ctx: PEVP_CIPHER_CTX;
+  _out: PByte; outl: PInteger): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_EncryptFinal_ex';
 
 function EVP_EncryptFinal(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger): integer; cdecl;
@@ -14543,17 +14541,8 @@ function EVP_DecryptFinal_ex(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger):
 function EVP_CipherInit(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER; key: PByte; iv: PByte; enc: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CipherInit';
 
-function EVP_CipherInit_ex(ctx: PEVP_CIPHER_CTX; cipher: PEVP_CIPHER; impl: PENGINE; key: PByte; iv: PByte; enc: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_CipherInit_ex';
-
-function EVP_CipherUpdate(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger; _in: PByte; inl: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_CipherUpdate';
-
 function EVP_CipherFinal(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CipherFinal';
-
-function EVP_CipherFinal_ex(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_CipherFinal_ex';
 
 function EVP_SignFinal(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal; pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_SignFinal';
@@ -14578,6 +14567,45 @@ function EVP_SealInit(ctx: PEVP_CIPHER_CTX; typ: PEVP_CIPHER; ek: PPByte; ekl: P
 
 function EVP_SealFinal(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_SealFinal';
+
+function EVP_sha1(): PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_sha1';
+
+function EVP_sha224(): PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_sha224';
+
+function EVP_sha256(): PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_sha256';
+
+function EVP_sha384(): PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_sha384';
+
+function EVP_sha512(): PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_sha512';
+
+function EVP_sha512_224(): PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_sha512_224';
+
+function EVP_sha512_256(): PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_sha512_256';
+
+function EVP_sha3_224(): PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_sha3_224';
+
+function EVP_sha3_256(): PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_sha3_256';
+
+function EVP_sha3_384(): PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_sha3_384';
+
+function EVP_sha3_512(): PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_sha3_512';
+
+function EVP_shake128(): PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_shake128';
+
+function EVP_shake256(): PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_shake256';
 
 function EVP_ENCODE_CTX_new(): PEVP_ENCODE_CTX; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_ENCODE_CTX_new';
@@ -14615,23 +14643,8 @@ function EVP_DecodeFinal(ctx: PEVP_ENCODE_CTX; _out: PByte; outl: PInteger): int
 function EVP_DecodeBlock(t: PByte; f: PByte; n: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DecodeBlock';
 
-function EVP_CIPHER_CTX_new(): PEVP_CIPHER_CTX; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_new';
-
-function EVP_CIPHER_CTX_reset(c: PEVP_CIPHER_CTX): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_reset';
-
-procedure EVP_CIPHER_CTX_free(c: PEVP_CIPHER_CTX); cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_free';
-
 function EVP_CIPHER_CTX_set_key_length(x: PEVP_CIPHER_CTX; keylen: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_set_key_length';
-
-function EVP_CIPHER_CTX_set_padding(c: PEVP_CIPHER_CTX; pad: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_set_padding';
-
-function EVP_CIPHER_CTX_ctrl(ctx: PEVP_CIPHER_CTX; typ: integer; arg: integer; ptr: pointer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_ctrl';
 
 function EVP_CIPHER_CTX_rand_key(ctx: PEVP_CIPHER_CTX; key: PByte): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_rand_key';
@@ -15168,12 +15181,6 @@ function EVP_add_cipher(cipher: PEVP_CIPHER): integer; cdecl;
 
 function EVP_add_digest(digest: PEVP_MD): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_add_digest';
-
-function EVP_get_cipherbyname(name: PUtf8Char): PEVP_CIPHER; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_get_cipherbyname';
-
-function EVP_get_digestbyname(name: PUtf8Char): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_get_digestbyname';
 
 procedure EVP_CIPHER_do_all(fn: EVP_CIPHER_do_all_fn; arg: pointer); cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CIPHER_do_all';
