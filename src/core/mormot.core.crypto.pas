@@ -406,7 +406,6 @@ type
     repMandatory);
 
   {$M+}
-
   /// handle AES cypher/uncypher with chaining
   // - use any of the inherited implementation, corresponding to the chaining
   // mode required - TAesEcb, TAesCbc, TAesCfb, TAesOfb and TAesCtr classes to
@@ -419,8 +418,9 @@ type
     fIV: TAesBlock;
     fIVCtr: TAesIVCtr;
     fIVCtrState: (ctrUnknown, ctrUsed, ctrNotused);
-    fIVHistoryDec: THash128History;
     fIVReplayAttackCheck: TAesIVReplayAttackCheck;
+    fIVHistoryDec: THash128History;
+    procedure AfterCreate; virtual; // circumvent Delphi bug about const aKey
     procedure SetIVHistory(aDepth: integer);
     procedure SetIVCtr;
     function DecryptPkcs7Len(var InputLen, ivsize: integer; Input: pointer;
@@ -478,6 +478,10 @@ type
     /// release the used instance memory and resources
     // - also fill the secret fKey buffer with zeros, for safety
     destructor Destroy; override;
+    /// quick check if this cipher is available on the system
+    // - this default implementation returns true
+    // - TAesAbstractOsl.IsAvailable returns false if OpenSSL is not installed
+    class function IsAvailable: boolean; virtual;
 
     /// perform the AES cypher in the corresponding mode
     // - when used in block chaining mode, you should have set the IV property
@@ -683,7 +687,6 @@ type
     property IVHistoryDepth: integer
       read fIVHistoryDec.Depth write SetIVHistory;
   end;
-
   {$M-}
 
   /// handle AES cypher/uncypher with chaining with out own optimized code
@@ -753,10 +756,9 @@ type
 
   /// abstract parent class for chaining modes using only AES encryption
   TAesAbstractEncryptOnly = class(TAesAbstractSyn)
+  protected
+    procedure AfterCreate; override;
   public
-    /// Initialize AES context for cypher
-    // - will pre-generate the encryption key (aKeySize in bits, i.e. 128,192,256)
-    constructor Create(const aKey; aKeySize: cardinal); override;
     /// compute a class instance similar to this one, for performing the
     // reverse encryption/decryption process
     // - will return self to avoid creating two instances
@@ -791,17 +793,15 @@ type
 
   /// handle AES cypher/uncypher with 64-bit Counter mode (CTR)
   // - the CTR will use a counter in bytes 7..0 by default - which is safe
-  // but not standard - call ComposeIV() to change e.g. to NIST behavior
+  // but not standard - use TAesCtrNist class for NIST / OpenSSL behavior
   // - this class will use AES-NI hardware instructions, e.g.
   // ! CTR256: 28.13ms in x86 optimized code, 10.63ms with AES-NI
   // - expect IV to be set before process, or IVAtBeginning=true
   TAesCtr = class(TAesAbstractEncryptOnly)
   protected
     fCTROffset, fCTROffsetMin: PtrInt;
+    procedure AfterCreate; override;
   public
-    /// Initialize AES context for cypher
-    // - will pre-generate the encryption key (aKeySize in bits, i.e. 128,192,256)
-    constructor Create(const aKey; aKeySize: cardinal); override;
     /// defines how the IV is set and updated in CTR mode
     // - default (if you don't call this method) uses a Counter in bytes 7..0
     // - you can specify startup Nonce and Counter, and the Counter position
@@ -817,6 +817,14 @@ type
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
     /// perform the AES un-cypher in the CTR mode
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
+  end;
+
+  /// handle AES cypher/uncypher with 128-bit Counter mode (CTR)
+  // - this class matches the NIST behavior for the CTR, so is compatible
+  // with reference implementations like OpenSSL - see also TAesCtrNistOsl
+  TAesCtrNist = class(TAesCtr)
+  protected
+    procedure AfterCreate; override;
   end;
 
   /// internal 256-bit structure used for TAesAbstractAead MAC storage
@@ -900,11 +908,8 @@ type
   protected
     fAes: TAesGcmEngine;
     fContext: (ctxNone, ctxEncrypt, ctxDecrypt); // used to call AES.Reset()
+    procedure AfterCreate; override;
   public
-    /// Initialize the AES-GCM context for cypher
-    // - first method to call before using this class
-    // - KeySize is in bits, i.e. 128,192,256
-    constructor Create(const aKey; aKeySize: cardinal); override;
     /// creates a new instance with the very same values
     // - by design, our classes will use TAesGcmEngine stateless context, so
     // this method will just copy the current fields to a new instance,
@@ -974,14 +979,11 @@ type
     fKeyHeaderKey: TAesKey; // should be just after fKeyHeader record
     fKeyCryptoApi: pointer;
     fInternalMode: cardinal;
+    procedure AfterCreate; override;
     procedure InternalSetMode; virtual; abstract;
     procedure EncryptDecrypt(BufIn, BufOut: pointer; Count: cardinal;
       DoEncrypt: boolean);
   public
-    /// Initialize AES context for cypher
-    // - first method to call before using this class
-    // - KeySize is in bits, i.e. 128,192,256
-    constructor Create(const aKey; aKeySize: cardinal); override;
     /// release the AES execution context
     destructor Destroy; override;
     /// perform the AES cypher in the ECB mode
@@ -1079,10 +1081,11 @@ function CompressShaAes(var Data: RawByteString; Compress: boolean): RawUtf8;
 { ************* AES-256 Cryptographic Pseudorandom Number Generator (CSPRNG) }
 
 type
+  {$M+}
   /// thread-safe class containing a TAes encryption/decryption engine
   TAesLocked = class
   protected
-    fSafe: TRTLCriticalSection; // no need of TSynLocker padding
+    fSafe: TRTLCriticalSection; // TAes is enough for CS padding
     fAes: TAes;
   public
     /// initialize the instance
@@ -1091,17 +1094,24 @@ type
     destructor Destroy; override;
     /// enter the associated mutex
     procedure Lock;
+      {$ifdef HASINLINE} inline; {$endif}
     /// leave the associated mutex
     procedure UnLock;
+      {$ifdef HASINLINE} inline; {$endif}
   end;
+  {$M-}
 
   /// abstract parent for TAesPrng* classes
   // - you should never use this class, but TAesPrng, TAesPrngSystem or
-  // TAesPrngOpenSsl
+  // TAesPrngOsl
   TAesPrngAbstract = class(TAesLocked)
   protected
     fTotalBytes: QWord;
   public
+    /// quick check if this class PRNG is available on the system
+    // - this default implementation returns true
+    // - TAesPrnOpenSsl.IsAvailable returns false if OpenSSL is not installed
+    class function IsAvailable: boolean; virtual;
     /// returns a shared instance of a TAesPrng* instance
     // - if you need to generate some random content, just call the
     // TAesPrng*.Main.FillRandom() overloaded methods, or directly
@@ -1206,6 +1216,7 @@ type
     // if you need some custom entropy level
     class function Bytes(Len: integer): TBytes;
       {$ifdef HASINLINE}inline;{$endif}
+  published
     /// how many bytes this generator did compute
     property TotalBytes: QWord
       read fTotalBytes;
@@ -1277,6 +1288,7 @@ type
     // - if you need to generate some random content, just call the
     // TAesPrng.Main.FillRandom() overloaded methods, or directly TAesPrng.Fill()
     class function Main: TAesPrngAbstract; override;
+  published
     /// after how many generated bytes Seed method would be called
     // - default is 1 MB
     // - if set to 0 - e.g. for TAesPrngSystem - no seeding will occur
@@ -1316,7 +1328,7 @@ type
 var
   /// the shared TAesPrng instance returned by TAesPrng.Main class function
   // - you may override this to a customized instance, e.g. for a specific
-  // random generator to be used, like TAesPrngSystem or TAesPrngOpenSsl
+  // random generator to be used, like TAesPrngSystem or TAesPrngOsl
   MainAesPrng: TAesPrngAbstract;
 
 /// low-level function returning some random binary from then available
@@ -3494,7 +3506,7 @@ begin
   inc(gcnt.V, ILen);
   if (b_pos = 0) and
      (gcnt.V <> 0) then
-    gf_mul_h(self, ghv);
+    gf_mul_h(self, ghv); // maybe CLMUL
   while (ILen > 0) and
         (b_pos < SizeOf(TAesBlock)) do
   begin
@@ -3505,7 +3517,7 @@ begin
   end;
   while ILen >= SizeOf(TAesBlock) do
   begin
-    gf_mul_h(self, ghv);
+    gf_mul_h(self, ghv); // maybe CLMUL
     XorBlock16(@ghv, pointer(ctp));
     inc(PAesBlock(ctp));
     dec(ILen, SizeOf(TAesBlock));
@@ -3514,7 +3526,7 @@ begin
   begin
     if b_pos = SizeOf(TAesBlock) then
     begin
-      gf_mul_h(self, ghv);
+      gf_mul_h(self, ghv); // maybe CLMUL
       b_pos := 0;
     end;
     ghv[b_pos] := ghv[b_pos] xor ctp^;
@@ -3568,13 +3580,13 @@ begin
       XorBlock16(@TAesContext(actx).iv, pIV);
       inc(PAesBlock(pIV));
       dec(n_pos, SizeOf(TAesBlock));
-      gf_mul_h(self, TAesContext(actx).iv.b);
+      gf_mul_h(self, TAesContext(actx).iv.b); // maybe CLMUL
     end;
     if n_pos > 0 then
     begin
       for i := 0 to n_pos - 1 do
         TAesContext(actx).iv.b[i] := TAesContext(actx).iv.b[i] xor PAesBlock(pIV)^[i];
-      gf_mul_h(self, TAesContext(actx).iv.b);
+      gf_mul_h(self, TAesContext(actx).iv.b); // maybe CLMUL
     end;
     n_pos := IV_len shl 3;
     i := 15;
@@ -3584,7 +3596,7 @@ begin
       n_pos := n_pos shr 8;
       dec(i);
     end;
-    gf_mul_h(self, TAesContext(actx).iv.b);
+    gf_mul_h(self, TAesContext(actx).iv.b); // maybe CLMUL
   end;
   // reset internal state and counters
   y0_val := TAesContext(actx).iv.c3;
@@ -3622,7 +3634,7 @@ begin
         TAesContext(actx).DoBlock(actx, TAesContext(actx).iv,
           TAesContext(actx).buf); // maybe AES-NI
         XorBlock16(ptp, ctp, @TAesContext(actx).buf);
-        gf_mul_h(self, txt_ghv);
+        gf_mul_h(self, txt_ghv);  // maybe CLMUL
         XorBlock16(@txt_ghv, ctp);
         inc(PAesBlock(ptp));
         inc(PAesBlock(ctp));
@@ -3658,7 +3670,7 @@ begin
       ILen := ILen shr AesBlockShift;
       repeat
         // single-pass loop optimized e.g. for PKCS7 padding
-        gf_mul_h(self, txt_ghv);
+        gf_mul_h(self, txt_ghv); // maybe CLMUL
         XorBlock16(@txt_ghv, ctp);
         GCM_IncCtr(TAesContext(actx).iv.b);
         actx.Encrypt(TAesContext(actx).iv.b, TAesContext(actx).buf); // maybe AES-NI
@@ -3718,7 +3730,7 @@ begin
   begin
     include(flags, flagFinalComputed);
     // compute GHASH(H, AAD, ctp)
-    gf_mul_h(self, aad_ghv);
+    gf_mul_h(self, aad_ghv); // maybe CLMUL
     gf_mul_h(self, txt_ghv);
     // compute len(AAD) || len(ctp) with each len as 64-bit big-endian
     ln := (atx_cnt.V + AesBlockMod) shr AesBlockShift;
@@ -3741,7 +3753,7 @@ begin
     TWA4(tbuf)[3] := bswap32((atx_cnt.L shl  3));
     XorBlock16(@tbuf, @txt_ghv);
     XorBlock16(@aad_ghv, @tbuf);
-    gf_mul_h(self, aad_ghv);
+    gf_mul_h(self, aad_ghv); // maybe CLMUL
     // compute E(K,Y0)
     tbuf := TAesContext(actx).iv.b;
     TWA4(tbuf)[3] := y0_val;
@@ -3831,6 +3843,11 @@ begin
   fKeySize := aKeySizeBits;
   fKeySizeBytes := fKeySize shr 3;
   MoveFast(aKey, fKey, fKeySizeBytes);
+  AfterCreate;
+end;
+
+procedure TAesAbstract.AfterCreate;
+begin
 end;
 
 constructor TAesAbstract.Create(const aKey: THash128);
@@ -3886,6 +3903,11 @@ destructor TAesAbstract.Destroy;
 begin
   inherited Destroy;
   FillZero(fKey);
+end;
+
+class function TAesAbstract.IsAvailable: boolean;
+begin
+  result := true;
 end;
 
 procedure TAesAbstract.SetIVCtr;
@@ -4500,9 +4522,8 @@ end;
 
 { TAesAbstractEncryptOnly }
 
-constructor TAesAbstractEncryptOnly.Create(const aKey; aKeySize: cardinal);
+procedure TAesAbstractEncryptOnly.AfterCreate;
 begin
-  inherited Create(aKey, aKeySize);
   EncryptInit; // as expected by overriden Encrypt/Decrypt methods below
 end;
 
@@ -5001,9 +5022,9 @@ end;
 
 { TAesCtr }
 
-constructor TAesCtr.Create(const aKey; aKeySize: cardinal);
+procedure TAesCtr.AfterCreate;
 begin
-  inherited Create(aKey, aKeySize);
+  EncryptInit;
   fCTROffset := 7; // counter is in the lower 64 bits, nonce in the upper 64 bits
 end;
 
@@ -5074,14 +5095,21 @@ begin
 end;
 
 
+{ TAesCtrNist }
+
+procedure TAesCtrNist.AfterCreate;
+begin
+  EncryptInit;
+  fCTROffset := 15; // counter covers 128-bit, as required by NIST specs
+end;
+
 
 { TAesGcm }
 
-constructor TAesGcm.Create(const aKey; aKeySize: cardinal);
+procedure TAesGcm.AfterCreate;
 begin
-  inherited Create(aKey, aKeySize); // set fKey/fKeySize
-  if not fAes.Init(aKey, aKeySize) then
-    raise ESynCrypto.CreateUtf8('%.Create(keysize=%) failed', [self, aKeySize]);
+  if not fAes.Init(fKey, fKeySize) then
+    raise ESynCrypto.CreateUtf8('%.Create(keysize=%) failed', [self, fKeySize]);
 end;
 
 function TAesGcm.Clone: TAesAbstract;
@@ -5190,10 +5218,9 @@ end;
 
 { TAesAbstractApi }
 
-constructor TAesAbstractApi.Create(const aKey; aKeySize: cardinal);
+procedure TAesAbstractApi.AfterCreate;
 begin
   EnsureCryptoApiAesProviderAvailable;
-  inherited Create(aKey, aKeySize); // check and set fKeySize[Bytes]
   InternalSetMode;
   fKeyHeader.bType := PLAINTEXTKEYBLOB;
   fKeyHeader.bVersion := CUR_BLOB_VERSION;
@@ -5280,7 +5307,7 @@ end;
 
 procedure TAesCfbApi.InternalSetMode;
 begin
-  raise ESynCrypto.CreateUtf8('%: CRYPT_MODE_CFB does not work', [self]);
+  raise ESynCrypto.CreateUtf8('%: CRYPT_MODE_CFB is not compliant', [self]);
   fInternalMode := CRYPT_MODE_CFB;
 end;
 
@@ -5288,8 +5315,7 @@ end;
 
 procedure TAesOfbApi.InternalSetMode;
 begin
-  raise ESynCrypto.CreateUtf8('%: CRYPT_MODE_OFB not implemented by PROV_RSA_AES',
-    [self]);
+  raise ESynCrypto.CreateUtf8('%: CRYPT_MODE_OFB not implemented by PROV_RSA_AES', [self]);
   fInternalMode := CRYPT_MODE_OFB;
 end;
 
@@ -5465,6 +5491,11 @@ end;
 
 
 { TAesPrngAbstract }
+
+class function TAesPrngAbstract.IsAvailable: boolean;
+begin
+  result := true;
+end;
 
 procedure TAesPrngAbstract.FillRandom(out Block: TAesBlock);
 begin
