@@ -12,7 +12,7 @@ unit mormot.core.crypto.openssl;
 
   *****************************************************************************
 
-  Our mormot.core.crypto.pas asm is stand-alone and as fast as OpenSSL for most
+  Our mormot.core.crypto.pas asm is stand-alone and faster than OpenSSL for most
   algorithms, but AES-CTR and AES-GCM. For those two, you may try this unit.
 
 }
@@ -70,6 +70,19 @@ type
 { ************** AES Cypher/Uncypher in various Modes }
 
 type
+  /// reusable wrapper around OpenSSL Cipher process
+  TAesOsl = object
+  public
+    Owner: TAesAbstract;
+    Cipher: PEVP_CIPHER; // computed from OpenSslCipherName virtual method
+    Ctx: array[boolean] of PEVP_CIPHER_CTX; // set and reused in CallEvp()
+    procedure Init(aOwner: TAesAbstract; aCipherName: PUtf8Char);
+    procedure Done;
+    procedure SetEvp(DoEncrypt: boolean; const method: string);
+    procedure UpdEvp(DoEncrypt: boolean; BufIn, BufOut: pointer; Count: cardinal);
+    procedure Clone(ToOwner: TAesAbstract; out ToAesOsl: TAesOsl);
+  end;
+
   /// handle AES cypher/uncypher with chaining with OpenSSL 1.1
   // - we abbreviate OpenSsl as Osl for class names for brevity
   // - use any of the inherited implementation, corresponding to the chaining
@@ -79,11 +92,8 @@ type
   // or Decrypt* methods on the same instance several times
   TAesAbstractOsl = class(TAesAbstract)
   protected
-    fCipher: PEVP_CIPHER; // computed from OpenSslCipherName virtual method
-    fCtx: array[boolean] of PEVP_CIPHER_CTX; // set and reused in CallEvp()
+    fAes: TAesOsl;
     procedure AfterCreate; override; // circumvent Delphi bug about const aKey
-    procedure CallEvp(BufIn, BufOut: pointer; Count: cardinal;
-      DoEncrypt: boolean; const method: string);
   public
     /// creates a new instance with the very same values
     // - directly copy the existing OpenSSL context for efficiency
@@ -157,8 +167,111 @@ type
     function OpenSslCipherName: PUtf8Char; override;
   end;
 
+  /// OpenSSL AES-GCM cypher/uncypher
+  // - implements AEAD (authenticated-encryption with associated-data) process
+  // via MacSetNonce/MacEncrypt or AesGcmAad/AesGcmFinal methods
+  TAesGcmOsl = class(TAesGcmAbstract)
+  protected
+    fAes: TAesOsl;
+    function AesGcmInit: boolean; override; // from fKey/fKeySize
+    procedure AesGcmDone; override;
+    procedure AesGcmReset; override; // from fIV/CTR_POS
+    function AesGcmProcess(BufIn, BufOut: pointer; Count: cardinal): boolean; override;
+  public
+    /// creates a new instance with the very same values
+    // - by design, our classes will use TAesGcmEngine stateless context, so
+    // this method will just copy the current fields to a new instance,
+    // by-passing the key creation step
+    function Clone: TAesAbstract; override;
+    /// compute a class instance similar to this one, for performing the
+    // reverse encryption/decryption process
+    // - will return self to avoid creating two instances
+    function CloneEncryptDecrypt: TAesAbstract; override;
+    /// AES-GCM pure alternative to MacSetNonce()
+    // - set the IV as usual (only the first 12 bytes will be used for GCM),
+    // then optionally append any AEAD data with this method before Encrypt()
+    procedure AesGcmAad(Buf: pointer; Len: integer); override;
+    /// AES-GCM pure alternative to MacGetLast()
+    // - after Encrypt, fill tag with the GCM value of the data and return true
+    // - after Decrypt, return true only if the GCM value of the data match tag
+    function AesGcmFinal(var tag: TAesBlock): boolean; override;
+  end;
+
 
 implementation
+
+
+{ TAesOsl }
+
+procedure TAesOsl.Init(aOwner: TAesAbstract; aCipherName: PUtf8Char);
+begin
+  Owner := aOwner;
+  EOpenSslCrypto.CheckAvailable(PClass(Owner)^, 'Create');
+  Cipher := EVP_get_cipherbyname(aCipherName);
+  if Cipher = nil then
+    raise EOpenSslCrypto.CreateFmt('%s.Create: unknown ''%s'' cipher',
+      [ClassNameShort(Owner)^, aCipherName]);
+end;
+
+procedure TAesOsl.Done;
+begin
+  if Ctx[false] <> nil then
+    EVP_CIPHER_CTX_free(Ctx[false]);
+  if Ctx[true] <> nil then
+    EVP_CIPHER_CTX_free(Ctx[true]);
+end;
+
+procedure TAesOsl.SetEvp(DoEncrypt: boolean; const method: string);
+var
+  c: PEVP_CIPHER_CTX;
+begin
+  c := Ctx[DoEncrypt];
+  if c = nil then
+  begin
+    // setup encrypt/decrypt context, with the proper key and no padding
+    c := EVP_CIPHER_CTX_new;
+    EOpenSslCrypto.Check(Owner, method,
+      EVP_CipherInit_ex(c, Cipher, nil,
+        @TAesAbstractOsl(Owner).fKey, nil, ord(DoEncrypt)));
+    EOpenSslCrypto.Check(Owner, method,
+      EVP_CIPHER_CTX_set_padding(c, 0));
+    Ctx[DoEncrypt] := c;
+  end;
+  // OpenSSL allows to reuse the previous Ctxt[], just setting the (new) IV
+  EOpenSslCrypto.Check(Owner, method,
+    EVP_CipherInit_ex(c, nil, nil, nil, @Owner.IV, ord(DoEncrypt)));
+end;
+
+procedure TAesOsl.UpdEvp(DoEncrypt: boolean; BufIn, BufOut: pointer; Count: cardinal);
+var
+  outl: integer;
+begin
+  if (BufOut <> nil) and
+     (Count and AesBlockMod <> 0) then
+    raise ESynCrypto.CreateUtf8('%.%: Count=% is not a multiple of 16',
+      [Owner, 'UpdEvp', Count]);
+  EOpenSslCrypto.Check(Owner, 'UpdEvp',
+    EVP_CipherUpdate(Ctx[DoEncrypt], BufOut, @outl, BufIn, Count));
+  // no need to call EVP_CipherFinal_ex() since we expect no padding
+end;
+
+procedure TAesOsl.Clone(ToOwner: TAesAbstract; out ToAesOsl: TAesOsl);
+var
+  enc: boolean;
+begin
+  TAesAbstractOsl(ToOwner).fKeySize := TAesAbstractOsl(Owner).fKeySize;
+  TAesAbstractOsl(ToOwner).fKeySizeBytes := TAesAbstractOsl(Owner).fKeySizeBytes;
+  TAesAbstractOsl(ToOwner).fKey := TAesAbstractOsl(Owner).fKey;
+  ToAesOsl.Owner := ToOwner;
+  ToAesOsl.Cipher := Cipher;
+  for enc := false to true do
+    if Ctx[enc] <> nil then
+    begin
+      // efficient Ctx[] copy
+      ToAesOsl.Ctx[enc] := EVP_CIPHER_CTX_new;
+      EVP_CIPHER_CTX_copy(ToAesOsl.Ctx[enc], Ctx[enc]);
+    end;
+end;
 
 
 
@@ -210,19 +323,12 @@ end;
 
 procedure TAesAbstractOsl.AfterCreate;
 begin
-  EOpenSslCrypto.CheckAvailable(PClass(self)^, 'Create');
-  fCipher := EVP_get_cipherbyname(OpenSslCipherName);
-  if fCipher = nil then
-    raise EOpenSslCrypto.CreateFmt('%s.Create: unknown ''%s'' cipher',
-      [ClassNameShort(self)^, OpenSslCipherName]);
+  fAes.Init(self, OpenSslCipherName);
 end;
 
 destructor TAesAbstractOsl.Destroy;
 begin
-  if fCtx[false] <> nil then
-    EVP_CIPHER_CTX_free(fCtx[false]);
-  if fCtx[true] <> nil then
-    EVP_CIPHER_CTX_free(fCtx[true]);
+  fAes.Done;
   inherited Destroy;
 end;
 
@@ -233,64 +339,24 @@ end;
 
 procedure TAesAbstractOsl.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 begin
-  CallEvp(BufIn, BufOut, Count, {doencrypt=}true, 'Encrypt');
+  fAes.SetEvp({doencrypt=}true, 'Encrypt');
+  fAes.UpdEvp({doencrypt=}true, BufIn, BufOut, Count);
 end;
 
 procedure TAesAbstractOsl.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 begin
-  CallEvp(BufIn, BufOut, Count, {doencrypt=}false, 'Decrypt');
-end;
-
-procedure TAesAbstractOsl.CallEvp(BufIn, BufOut: pointer; Count: cardinal;
-  DoEncrypt: boolean; const method: string);
-var
-  ctx: PEVP_CIPHER_CTX;
-  outl: integer;
-begin
-  if Count and AesBlockMod <> 0 then
-    raise ESynCrypto.CreateUtf8('%.%: Count=% is not a multiple of 16',
-      [self, method, Count]);
-  ctx := fCtx[DoEncrypt];
-  if ctx = nil then
-  begin
-    // setup encrypt/decrypt context, with the proper key and no padding
-    ctx := EVP_CIPHER_CTX_new;
-    EOpenSslCrypto.Check(self, method,
-      EVP_CipherInit_ex(ctx, fCipher, nil, @fKey, nil, ord(DoEncrypt)));
-    EOpenSslCrypto.Check(self, method,
-      EVP_CIPHER_CTX_set_padding(ctx, 0));
-    fCtx[DoEncrypt] := ctx;
-  end;
-  // OpenSSL allows to reuse the previous fCtxt[], just setting the (new) IV
-  EOpenSslCrypto.Check(self, method,
-    EVP_CipherInit_ex(ctx, nil, nil, nil, @fIV, ord(DoEncrypt)));
-  EOpenSslCrypto.Check(self, method,
-    EVP_CipherUpdate(ctx, BufOut, @outl, BufIn, Count));
-  // no need to call EVP_CipherFinal_ex() since we expect no padding
+  fAes.SetEvp({doencrypt=}false, 'Decrypt');
+  fAes.UpdEvp({doencrypt=}false, BufIn, BufOut, Count);
 end;
 
 function TAesAbstractOsl.Clone: TAesAbstract;
-var
-  ctx: PEVP_CIPHER_CTX;
-  enc: boolean;
 begin
   if fIVHistoryDec.Count <> 0 then
     result := inherited Clone
   else
   begin
-    // we can copy fKey + fCipher, and clone the fCtxt[]
     result := TAesAbstractOsl(NewInstance);
-    TAesAbstractOsl(result).fKeySize := fKeySize;
-    TAesAbstractOsl(result).fKeySizeBytes := fKeySizeBytes;
-    TAesAbstractOsl(result).fKey := fKey;
-    TAesAbstractOsl(result).fCipher := fCipher;
-    for enc := false to true do
-      if fCtx[enc] <> nil then
-      begin
-        ctx := EVP_CIPHER_CTX_new;
-        EVP_CIPHER_CTX_copy(ctx, fCtx[enc]);
-        TAesAbstractOsl(result).fCtx[enc] := ctx;
-      end;
+    fAes.Clone(result, TAesAbstractOsl(result).fAes); // efficient Ctx[] copy
   end;
 end;
 
@@ -371,6 +437,83 @@ begin
   end;
 end;
 
+{ TAesGcmOsl }
+
+function TAesGcmOsl.AesGcmInit: boolean;
+var
+  name: PUtf8Char;
+begin
+  case fKeySize of
+    128:
+      name := 'aes-128-gcm';
+    192:
+      name := 'aes-192-gcm';
+  else
+    name := 'aes-256-gcm';
+  end;
+  fAes.Init(self, name);
+  result := true;
+end;
+
+procedure TAesGcmOsl.AesGcmDone;
+begin
+  fAes.Done;
+end;
+
+procedure TAesGcmOsl.AesGcmReset;
+begin
+  fAes.SetEvp(fStarted = stEnc, 'AesGcmProcess');
+end;
+
+function TAesGcmOsl.AesGcmProcess(BufIn, BufOut: pointer; Count: cardinal): boolean;
+begin
+  fAes.UpdEvp(fStarted = stEnc, BufIn, BufOut, Count);
+  result := true;
+end;
+
+procedure TAesGcmOsl.AesGcmAad(Buf: pointer; Len: integer);
+begin
+  fAes.UpdEvp({encrypt=}true, Buf, nil, Len);
+end;
+
+function TAesGcmOsl.AesGcmFinal(var tag: TAesBlock): boolean;
+var
+  outl: integer;
+  dummy: TAesBlock;
+begin
+  case fStarted of
+    stEnc:
+      begin
+        EOpenSslCrypto.Check(self, 'AesGcmFinal enc',
+          EVP_CipherFinal_ex(fAes.Ctx[true], @dummy, @outl));
+        EOpenSslCrypto.Check(self, 'AesGcmFinal enctag',
+          EVP_CIPHER_CTX_ctrl(fAes.Ctx[true], EVP_CTRL_GCM_GET_TAG, 16, @tag));
+        result := true;
+      end;
+    stDec:
+      begin
+        EOpenSslCrypto.Check(self, 'AesGcmFinal dectag',
+          EVP_CIPHER_CTX_ctrl(fAes.Ctx[false], EVP_CTRL_GCM_SET_TAG, 16, @tag));
+        outl := 16;
+        result := (EVP_CipherFinal_ex(fAes.Ctx[false], @dummy, @outl) > 0) and
+                  (outl = 0);
+      end
+  else
+    result := false;
+  end;
+  fStarted := stNone; // allow reuse of this fAes instance
+end;
+
+function TAesGcmOsl.Clone: TAesAbstract;
+begin
+  result := TAesGcmOsl(NewInstance);
+  fAes.Clone(result, TAesGcmOsl(result).fAes); // efficient Ctx[] copy
+end;
+
+function TAesGcmOsl.CloneEncryptDecrypt: TAesAbstract;
+begin
+  result := self;
+end;
 
 
 initialization
