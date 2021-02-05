@@ -4969,7 +4969,7 @@ var
 begin
   {$ifdef USEAESNI64}
   if Count and AesBlockMod = 0 then
-    fAes.DoBlocksOfb(@fCV, BufIn, BufOut, Count shr AesBlockShift)
+    fAes.DoBlocksOfb(@fIV, BufIn, BufOut, Count shr AesBlockShift)
   else
   {$endif USEAESNI64}
   {$ifdef USEAESNI32}
