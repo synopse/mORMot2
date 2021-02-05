@@ -900,21 +900,20 @@ type
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
   end;
 
-  /// handle AES-GCM cypher/uncypher with built-in authentication
-  // - implements AEAD (authenticated-encryption with associated-data) methods
-  // like MacEncrypt/MacCheckError
-  // - this class will use AES-NI hardware instructions, if available
-  TAesGcm = class(TAesAbstract)
+  /// abstract parent to handle AES-GCM cypher/uncypher with built-in authentication
+  // - implements AEAD (authenticated-encryption with associated-data) process
+  // via MacSetNonce/MacEncrypt or AesGcmAad/AesGcmFinal methods
+  // - don't use this abstract class, but TAesGcm or TAesGcmOsl
+  TAesGcmAbstract = class(TAesAbstract)
   protected
-    fAes: TAesGcmEngine;
-    fContext: (ctxNone, ctxEncrypt, ctxDecrypt); // used to call AES.Reset()
+    fStarted: (stNone, stEnc, stDec); // used to call AES.Reset()
     procedure AfterCreate; override;
+    // abstract methods which should be overriden with the AES-GCM engine
+    function AesGcmInit: boolean; virtual; abstract; // from fKey/fKeySize
+    procedure AesGcmDone; virtual; abstract;
+    procedure AesGcmReset; virtual; abstract; // from fIV/CTR_POS
+    function AesGcmProcess(BufIn, BufOut: pointer; Count: cardinal): boolean; virtual; abstract;
   public
-    /// creates a new instance with the very same values
-    // - by design, our classes will use TAesGcmEngine stateless context, so
-    // this method will just copy the current fields to a new instance,
-    // by-passing the key creation step
-    function Clone: TAesAbstract; override;
     /// release the used instance memory and resources
     // - also fill the internal TAes instance with zeros, for safety
     destructor Destroy; override;
@@ -930,12 +929,53 @@ type
       aAssociatedLen: integer = 0): boolean; override;
     /// returns AEAD (authenticated-encryption with associated-data) MAC
     /// - only the lower 128-bit (THash256.Lo) of aCRC is filled with the GMAC
+    // - warning: by design, you should always call MacGetLast() or AesGcmFinal()
+    // after Encrypt/Decrypt before reusing this instance
     function MacGetLast(out aCRC: THash256): boolean; override;
     /// validate if an encrypted buffer matches the stored AEAD MAC
     // - since AES-GCM is a one pass process, always assume the content is fine
     // and returns true - we don't know the IV at this time
     function MacCheckError(
       aEncrypted: pointer; Count: cardinal): boolean; override;
+    /// AES-GCM pure alternative to MacSetNonce()
+    // - if the MacEncrypt pattern is not convenient for your purpose
+    // - set the IV as usual (only the first 12 bytes will be used for GCM),
+    // then optionally append any AEAD data with this method before Encrypt()
+    procedure AesGcmAad(Buf: pointer; Len: integer); virtual; abstract;
+    /// AES-GCM pure alternative to MacGetLast()
+    // - if the MacEncrypt pattern is not convenient for your purpose
+    // - after Encrypt, fill tag with the GCM value of the data and return true
+    // - after Decrypt, return true only if the GCM value of the data match tag
+    // - warning: by design, you should always call MacGetLast() or AesGcmFinal()
+    // after Encrypt/Decrypt before reusing this instance
+    function AesGcmFinal(var tag: TAesBlock): boolean; virtual; abstract;
+  end;
+
+  /// handle AES-GCM cypher/uncypher using our TAesGcmEngine
+  // - implements AEAD (authenticated-encryption with associated-data) process
+  // via MacSetNonce/MacEncrypt or AesGcmAad/AesGcmFinal methods
+  // - will use AES-NI and CLMUL hardware instructions, if available
+  TAesGcm = class(TAesGcmAbstract)
+  protected
+    fAes: TAesGcmEngine;
+    function AesGcmInit: boolean; override; // from fKey/fKeySize
+    procedure AesGcmDone; override;
+    procedure AesGcmReset; override; // from fIV/CTR_POS
+    function AesGcmProcess(BufIn, BufOut: pointer; Count: cardinal): boolean; override;
+  public
+    /// creates a new instance with the very same values
+    // - by design, our classes will use TAesGcmEngine stateless context, so
+    // this method will just copy the current fields to a new instance,
+    // by-passing the key creation step
+    function Clone: TAesAbstract; override;
+    /// AES-GCM pure alternative to MacSetNonce()
+    // - set the IV as usual (only the first 12 bytes will be used for GCM),
+    // then optionally append any AEAD data with this method before Encrypt()
+    procedure AesGcmAad(Buf: pointer; Len: integer); override;
+    /// AES-GCM pure alternative to MacGetLast()
+    // - after Encrypt, fill tag with the GCM value of the data and return true
+    // - after Decrypt, return true only if the GCM value of the data match tag
+    function AesGcmFinal(var tag: TAesBlock): boolean; override;
   end;
 
 
@@ -5107,13 +5147,82 @@ begin
 end;
 
 
-{ TAesGcm }
+{ TAesGcmAbstract }
 
-procedure TAesGcm.AfterCreate;
+procedure TAesGcmAbstract.AfterCreate;
 begin
-  if not fAes.Init(fKey, fKeySize) then
+  if not AesGcmInit then
     raise ESynCrypto.CreateUtf8('%.Create(keysize=%) failed', [self, fKeySize]);
 end;
+
+destructor TAesGcmAbstract.Destroy;
+begin
+  inherited Destroy;
+  AesGcmDone;
+  FillZero(fIV);
+end;
+
+procedure TAesGcmAbstract.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
+begin
+  if fStarted <> stEnc then
+  begin
+    if fStarted = stDec then
+      raise ESynCrypto.CreateUtf8('Unexpected %.Encrypt', [self]);
+    fStarted := stEnc;
+    AesGcmReset; // caller should have set the IV
+  end;
+  if not AesGcmProcess(BufIn, BufOut, Count) then
+    raise ESynCrypto.CreateUtf8(
+      '%.Encrypt called after GCM final state', [self]);
+end;
+
+procedure TAesGcmAbstract.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
+begin
+  if fStarted <> stDec then
+  begin
+    if fStarted = stEnc then
+      raise ESynCrypto.CreateUtf8('Unexpected %.Decrypt', [self]);
+    fStarted := stDec;
+    AesGcmReset; // caller should have set the IV
+  end;
+  if not AesGcmProcess(BufIn, BufOut, Count) then
+    raise ESynCrypto.CreateUtf8(
+      '%.Decrypt called after GCM final state', [self]);
+end;
+
+function TAesGcmAbstract.MacSetNonce(const aKey: THash256; aAssociated: pointer;
+  aAssociatedLen: integer): boolean;
+begin
+  if fStarted <> stNone then
+  begin
+    result := false; // should be called before Encrypt/Decrypt
+    exit;
+  end;
+  // aKey is ignored since not used during GMAC computation
+  if (aAssociated <> nil) and
+     (aAssociatedLen > 0) then
+    AesGcmAad(aAssociated, aAssociatedLen);
+  result := true;
+end;
+
+function TAesGcmAbstract.MacGetLast(out aCRC: THash256): boolean;
+begin
+  if fStarted = stNone then
+  begin
+    result := false; // should be called after Encrypt/Decrypt
+    exit;
+  end;
+  result := AesGcmFinal(THash256Rec(aCRC).Lo);
+  FillZero(THash256Rec(aCRC).Hi); // upper 128-bit are not used
+end;
+
+function TAesGcmAbstract.MacCheckError(aEncrypted: pointer; Count: cardinal): boolean;
+begin
+  result := true; // AES-GCM requires the IV to be set -> will be checked later
+end;
+
+
+{ TAesGcm }
 
 function TAesGcm.Clone: TAesAbstract;
 begin
@@ -5124,74 +5233,53 @@ begin
   TAesGcm(result).fAes := fAes; // reuse the very same TAesGcmEngine memory
 end;
 
-destructor TAesGcm.Destroy;
+function TAesGcm.AesGcmInit: boolean;
 begin
-  inherited Destroy;
+  result := fAes.Init(fKey, fKeySize);
+end;
+
+procedure TAesGcm.AesGcmDone;
+begin
   fAes.Done;
-  FillZero(fIV);
 end;
 
-procedure TAesGcm.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
+procedure TAesGcm.AesGcmReset;
 begin
-  if fContext <> ctxEncrypt then
-    if fContext = ctxNone then
-    begin
-      fAes.Reset(@fIV, CTR_POS); // caller should have set the IV
-      fContext := ctxEncrypt;
-    end else
-      raise ESynCrypto.CreateUtf8(
-        '%.Encrypt after Decrypt', [self]);
-  if not fAes.Encrypt(BufIn, BufOut, Count) then
-    raise ESynCrypto.CreateUtf8(
-      '%.Encrypt called after GCM final state', [self]);
+  fAes.Reset(@fIV, CTR_POS);
 end;
 
-procedure TAesGcm.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
+function TAesGcm.AesGcmProcess(BufIn, BufOut: pointer; Count: cardinal): boolean;
 begin
-  if fContext <> ctxDecrypt then
-    if fContext = ctxNone then
-    begin
-      fAes.Reset(@fIV, CTR_POS);
-      fContext := ctxDecrypt;
-    end else
-      raise ESynCrypto.CreateUtf8(
-        '%.Decrypt after Encrypt', [self]);
-  if not fAes.Decrypt(BufIn, BufOut, Count) then
-    raise ESynCrypto.CreateUtf8(
-      '%.Decrypt called after GCM final state', [self]);
+  if fStarted = stEnc then
+    result := fAes.Encrypt(BufIn, BufOut, Count)
+  else
+    result := fAes.Decrypt(BufIn, BufOut, Count);
 end;
 
-function TAesGcm.MacSetNonce(const aKey: THash256; aAssociated: pointer;
-  aAssociatedLen: integer): boolean;
+procedure TAesGcm.AesGcmAad(Buf: pointer; Len: integer);
 begin
-  if fContext <> ctxNone then
-  begin
-    result := false; // should be called before Encrypt/Decrypt
-    exit;
+  fAes.Add_AAD(Buf, Len);
+end;
+
+function TAesGcm.AesGcmFinal(var tag: TAesBlock): boolean;
+var
+  decoded: TAesBlock;
+begin
+  case fStarted of
+    stEnc:
+      begin
+        fAes.Final(tag, {andDone=}false);
+        result := true;
+      end;
+    stDec:
+      begin
+        fAes.Final(decoded, {andDone=}false);
+        result := IsEqual(decoded, tag);
+      end;
+  else
+    result := false;
   end;
-  // aKey is ignored since not used during GMAC computation
-  if (aAssociated <> nil) and
-     (aAssociatedLen > 0) then
-    fAes.Add_AAD(aAssociated, aAssociatedLen);
-  result := true;
-end;
-
-function TAesGcm.MacGetLast(out aCRC: THash256): boolean;
-begin
-  if fContext = ctxNone then
-  begin
-    result := false; // should be called after Encrypt/Decrypt
-    exit;
-  end;
-  fAes.Final(THash256Rec(aCRC).Lo, {forreuse:anddone=}false);
-  FillZero(THash256Rec(aCRC).Hi); // upper 128-bit are not used
-  fContext := ctxNone; // allow reuse of this fAes instance
-  result := true;
-end;
-
-function TAesGcm.MacCheckError(aEncrypted: pointer; Count: cardinal): boolean;
-begin
-  result := true; // AES-GCM requires the IV to be set -> will be checked later
+  fStarted := stNone; // allow reuse of this fAes instance
 end;
 
 
