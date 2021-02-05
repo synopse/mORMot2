@@ -267,17 +267,15 @@ var
   GssLib_Heimdal: TFileName = 'libgssapi.so.3';
 
 
-/// Dynamically load GSSAPI library
-// - in multithreaded server application you must call LoadGSSAPI
-// at startup to avoid race condition (if you do not use mormot.rest.server.pas)
+/// dynamically load GSSAPI library
 // - do nothing if the library is already loaded
 procedure LoadGssApi(const LibraryName: TFileName = '');
 
-/// Call this function to check whether GSSAPI library loaded or not
+/// check whether GSSAPI library is loaded or not
 function GssApiLoaded: boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
-/// Call this function to check whether GSSAPI library loaded
-// and raise exception if not
+/// check whether GSSAPI library was loaded and raise exception if not
 procedure RequireGssApi;
 
 
@@ -438,6 +436,7 @@ procedure ServerDomainMapUnRegisterAll;
 // - as called e.g. by mormot.rest.client/server.pas
 // - in this unit, will just call LoadGssApi('')
 procedure InitializeDomainAuth;
+  {$ifdef HASINLINE} inline; {$endif}
 
 
 implementation
@@ -951,13 +950,14 @@ end;
 
 procedure InitializeDomainAuth;
 begin
-  LoadGssApi('');
+  if GssApi = nil then
+    LoadGssApi('');
 end;
 
 initialization
 
 finalization
-  GssApi.Free;
+  FreeAndNil(GssApi);
 
 {$endif OSWINDOWS}
 

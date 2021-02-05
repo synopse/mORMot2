@@ -5342,8 +5342,8 @@ begin
       'logondisplay', DisplayName,
       'logongroup', GroupRights.IDValue,
       'timeout', GroupRights.SessionTimeout,
-      'server', ExeVersion.ProgramName,
-      'version', ExeVersion.Version.DetailedOrVoid]);
+      'server', Executable.ProgramName,
+      'version', Executable.Version.DetailedOrVoid]);
   Ctxt.ReturnsJson(variant(body), HTTP_SUCCESS, false, twJsonEscape, false, header);
 end;
 
@@ -5727,6 +5727,9 @@ const
 
 constructor TRestServerAuthenticationSspi.Create(aServer: TRestServer);
 begin
+  // setup mormot.lib.sspi/gssapi unit depending on the OS
+  InitializeDomainAuth;
+  // initialize this authentication scheme
   inherited Create(aServer);
   fSspiAuthContexts.InitSpecific(TypeInfo(TSecContextDynArray),
     fSspiAuthContext, ptInt64, @fSspiAuthContextCount);
@@ -6634,9 +6637,9 @@ begin
     info.AddNameValuesToObject([
       'nowutc', now.Text(true, ' '),
       'timestamp', now.Value,
-      'exe', ExeVersion.ProgramName,
-      'version', ExeVersion.Version.DetailedOrVoid,
-      'host', ExeVersion.Host,
+      'exe', Executable.ProgramName,
+      'version', Executable.Version.DetailedOrVoid,
+      'host', Executable.Host,
       'cpu', cpu,
       {$ifdef OSWINDOWS} 'mem', mem, {$endif OSWINDOWS}
       'memused', KB(m.AllocatedUsed.Bytes),
@@ -7820,10 +7823,6 @@ initialization
   // should match TPerThreadRunningContext definition in mormot.core.interfaces
   assert(SizeOf(TServiceRunningContext) =
     SizeOf(TObject) + SizeOf(TObject) + SizeOf(TThread));
-  {$ifdef DOMAINRESTAUTH}
-  // setup mormot.lib.sspi/gssapi unit depending on the OS
-  InitializeDomainAuth;
-  {$endif DOMAINRESTAUTH}
 
 end.
 

@@ -113,7 +113,7 @@ type
     property Options: TSynTestOptions
       read fOptions write fOptions;
     /// folder name which can be used to store the temporary data during testing
-    // - equals ExeVersion.ProgramFilePath by default
+    // - equals Executable.ProgramFilePath by default
     // - when set, will ensure it contains a trailing path delimiter (\ or /)
     property WorkDir: TFileName
       read fWorkDir write SetWorkDir;
@@ -514,7 +514,7 @@ begin
       Delete(id, 1, 1);
     fIdent := string(UnCamelCase(id));
   end;
-  fWorkDir := ExeVersion.ProgramFilePath;
+  fWorkDir := Executable.ProgramFilePath;
   for i := 0 to GetPublishedMethods(self, methods) - 1 do
     with methods[i] do
     begin
@@ -566,7 +566,7 @@ end;
 procedure TSynTest.SetWorkDir(const Folder: TFileName);
 begin
   if Folder = '' then
-    fWorkDir := ExeVersion.ProgramFilePath
+    fWorkDir := Executable.ProgramFilePath
   else
     fWorkDir := EnsureDirectoryExists(Folder, {excfail=}true);
 end;
@@ -1222,11 +1222,11 @@ begin
   SetCurrentDir(dir);
   Color(ccLightCyan);
   result := (fFailedCount = 0);
-  if Exeversion.Version.Major <> 0 then
+  if Executable.Version.Major <> 0 then
     Version := FormatUtf8(#13#10'Software version tested: % (%)',
-      [ExeVersion.Version.Detailed, ExeVersion.Version.BuildDateTimeString]);
+      [Executable.Version.Detailed, Executable.Version.BuildDateTimeString]);
   FormatUtf8(#13#10#13#10'Time elapsed for all tests: %'#13#10'Performed % by % on %',
-    [RunTimer.Stop, NowToString, Exeversion.User, Exeversion.Host], Elapsed);
+    [RunTimer.Stop, NowToString, Executable.User, Executable.Host], Elapsed);
   TextLn([#13#10, Version, CustomVersions, #13#10'Generated with: ',
     COMPILER_VERSION, ' compiler', Elapsed]);
   if result then
@@ -1302,7 +1302,7 @@ begin
   else
     FN := DestPath + FileName;
   if ExtractFilePath(FN) = '' then
-    FN := ExeVersion.ProgramFilePath + FN;
+    FN := Executable.ProgramFilePath + FN;
   system.assign(fSaveToFile, FN);
   rewrite(fSaveToFile);
   if IOResult <> 0 then
@@ -1332,7 +1332,7 @@ begin
     PerThreadLog := ptIdentifiedInOnFile;
     HighResolutionTimestamp := true;
     //RotateFileCount := 5; RotateFileSizeKB := 20*1024; // rotate by 20 MB logs
-    //DestinationPath := ExeVersion.ProgramFilePath + 'logs'; // should exist
+    //DestinationPath := Executable.ProgramFilePath + 'logs'; // should exist
   end;
   // testing is performed by some dedicated classes defined in the caller units
   tests := Create(CustomIdent);

@@ -140,7 +140,7 @@ function  Unicode_InPlaceLower;       external user32 name 'CharLowerBuffW';
 procedure DisplayFatalError(const title, msg: RawUtf8);
 begin
   // better than a MessageBox() especially for services
-  raise Exception.CreateFmt('%s in %s - %s', [title, ExeVersion.ProgramName, msg]);
+  raise Exception.CreateFmt('%s in %s - %s', [title, Executable.ProgramName, msg]);
 end;
 
 function GetModuleHandle(lpModuleName: PChar): HMODULE;
@@ -1031,7 +1031,7 @@ var
 begin
   if aDriveFolderOrFile = '' then
     aDriveFolderOrFile := SysUtils.UpperCase(
-      ExtractFileDrive(ExeVersion.ProgramFilePath));
+      ExtractFileDrive(Executable.ProgramFilePath));
   dn := SynUnicode(aDriveFolderOrFile);
   if (dn <> '') and
      (dn[2] = ':') and
@@ -1327,8 +1327,8 @@ begin
   if result <> '' then
     exit;
   if (kind = spLog) and
-     IsDirectoryWritable(ExeVersion.ProgramFilePath) then
-    result := EnsureDirectoryExists(ExeVersion.ProgramFilePath + 'log')
+     IsDirectoryWritable(Executable.ProgramFilePath) then
+    result := EnsureDirectoryExists(Executable.ProgramFilePath + 'log')
   else if (csidl[kind] <> 0) and
           (SHGetFolderPath(0, csidl[kind], 0, 0, @tmp) = S_OK) then
     result := IncludeTrailingPathDelimiter(tmp)
@@ -2346,7 +2346,7 @@ begin
   else
     start := SERVICE_DEMAND_START;
   if ExeName = '' then
-    ExeName := ExeVersion.ProgramFileName;
+    ExeName := Executable.ProgramFileName;
   ctrl := TServiceController.CreateNewService(
     '', '', Name, DisplayName, ExeName, '', Dependencies, '', '',
     SERVICE_ALL_ACCESS, SERVICE_WIN32_OWN_PROCESS, start);
@@ -2376,7 +2376,7 @@ begin
   fStatusRec.dwWin32ExitCode := NO_ERROR;
   if Assigned(ServiceLog) then
     ServiceLog(sllInfo, 'Create: % (%) running as [%]',
-      [ServiceName, aDisplayName, ExeVersion.ProgramFullSpec], self);
+      [ServiceName, aDisplayName, Executable.ProgramFullSpec], self);
 end;
 
 procedure TService.CtrlHandle(Code: cardinal);
@@ -2500,7 +2500,7 @@ begin
   result := false;
   if installed then
     exit;
-  ServicePath := ExeVersion.ProgramFileName;
+  ServicePath := Executable.ProgramFileName;
   if Params <> '' then
     ServicePath := ServicePath + ' ' + Params;
   schSCManager := OpenSCManager(nil, nil, SC_MANAGER_ALL_ACCESS);
@@ -2797,7 +2797,7 @@ begin
   end;
   path := ExtractFilePath(path);
   if path = '' then
-    path := ExeVersion.ProgramFilePath;
+    path := Executable.ProgramFilePath;
   wpath := SynUnicode(path);
   if env <> '' then
   begin

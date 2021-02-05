@@ -1416,6 +1416,7 @@ var
   WithPassword: boolean;
   OutData: RawByteString;
 begin
+  InitializeDomainAuth; // setup mormot.lib.sspi/gssapi unit depending on the OS
   result := '';
   InvalidateSecContext(SecCtx, 0);
   WithPassword := User.LogonName <> '';
@@ -2749,11 +2750,6 @@ end;
 
 
 
-initialization
-  {$ifdef DOMAINRESTAUTH}
-  // setup mormot.lib.sspi/gssapi unit depending on the OS
-  InitializeDomainAuth;
-  {$endif DOMAINRESTAUTH}
 
 end.
 

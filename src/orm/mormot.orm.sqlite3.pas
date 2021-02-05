@@ -1037,7 +1037,7 @@ var
   mask: TFileName;
 begin
   if fShardRootFileName = '' then
-    fShardRootFileName := ExeVersion.ProgramFilePath +
+    fShardRootFileName := Executable.ProgramFilePath +
       Utf8ToString(fStoredClass.SqlTableName);
   mask := DBFileName(0);
   i := Pos('0000', mask);

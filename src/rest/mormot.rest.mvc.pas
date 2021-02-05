@@ -1096,7 +1096,7 @@ begin
   fViewTemplateFileTimestampMonitor :=
     aParameters.FileTimestampMonitorAfterSeconds;
   if aParameters.Folder = '' then
-    ViewTemplateFolder := ExeVersion.ProgramFilePath + 'Views'
+    ViewTemplateFolder := Executable.ProgramFilePath + 'Views'
   else
     ViewTemplateFolder := aParameters.Folder;
   if (aParameters.ExtensionForNotExistingTemplate <> '') and

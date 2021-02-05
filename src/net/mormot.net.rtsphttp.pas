@@ -303,7 +303,7 @@ begin
                 'Cache-Control: no-store'#13#10 +
                 'Pragma: no-cache'#13#10 +
                 'Content-Type: ' + RTSP_MIME + #13#10#13#10,
-                [ExeVersion.ProgramName, ExeVersion.Version.DetailedOrVoid]));
+                [Executable.ProgramName, Executable.Version.DetailedOrVoid]));
               sock.fExpires := now + 60 * 15; // deprecated after 15 minutes
               sock.CloseSockIn; // we won't use it any more
               fPendingGet.AddObject(cookie, sock);

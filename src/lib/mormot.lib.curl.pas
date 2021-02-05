@@ -533,6 +533,7 @@ var
 /// initialize the libcurl API, accessible via the curl global variable
 // - do nothing if the library has already been loaded
 // - will raise ECurl exception on any loading issue
+// - you can specify the libcurl library name to load
 procedure LibCurlInitialize(engines: TCurlGlobalInit = [giAll];
   const dllname: TFileName = LIBCURL_DLL);
 
@@ -559,6 +560,7 @@ implementation
 
 {$ifdef FPC}
 
+  // compiled static library from https://github.com/gcesarmza/curl-android-ios
   {$ifdef OSANDROID}
     {$ifdef CPUAARCH64}
       {$L ..\..\static\aarch64-android\libcurl.a}
@@ -569,6 +571,7 @@ implementation
     {$linklib libz.so}
   {$endif OSANDROID}
 
+  /// initialize the library
   function curl_global_init(flags: TCurlGlobalInit): TCurlResult; cdecl; external;
   /// finalize the library
   procedure curl_global_cleanup cdecl; external;
@@ -668,7 +671,7 @@ procedure LibCurlInitialize(engines: TCurlGlobalInit; const dllname: TFileName);
 
 var
   P: PPointerArray;
-  api: integer;
+  api: PtrInt;
 
 const
   NAMES: array[0 .. {$ifdef LIBCURLMULTI} 26 {$else} 12 {$endif}] of PAnsiChar = (
@@ -737,7 +740,7 @@ begin
       curl.TryLoadLibrary([
       {$ifdef OSWINDOWS}
         // first try the libcurl.dll in the local executable folder
-        ExeVersion.ProgramFilePath + dllname,
+        Executable.ProgramFilePath + dllname,
       {$endif OSWINDOWS}
         // search standard library in path
         dllname
@@ -763,6 +766,7 @@ begin
 
     {$endif LIBCURLSTATIC}
 
+    // if we reached here, the library has been successfully loaded
     curl.global_init(engines);
     curl.info := curl.version_info(cvFour)^;
     curl.infoText := format('%s version %s', [LIBCURL_DLL, curl.info.version]);

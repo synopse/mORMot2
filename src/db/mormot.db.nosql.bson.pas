@@ -241,7 +241,7 @@ type
     // - time is expressed in Coordinated Universal Time (UTC), not local time
     UnixCreateTime: cardinal;
     /// 3-byte machine identifier
-    // - ComputeNew will use a hash of ExeVersion.Host and ExeVersion.User
+    // - ComputeNew will use a hash of Executable.Host and Executable.User
     MachineID: TBson24;
     /// 2-byte process id
     // - ComputeNew will derivate it from MainThreadID
@@ -1897,7 +1897,7 @@ begin
   with GlobalBsonObjectID.Default do
   begin
     Counter := Random32 and COUNTER_MASK;
-    with ExeVersion do
+    with Executable do
       PCardinal(@MachineID)^ := crc32c(crc32c(
         0, pointer(Host), length(Host)), pointer(User), length(User));
     ProcessID := crc32c(0, @MainThreadID, SizeOf(MainThreadID)); // lower 16-bit

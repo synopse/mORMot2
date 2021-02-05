@@ -1243,7 +1243,7 @@ begin
     exit;
   if AppSecret = '' then
     ClassToText(ClassType, AppSecret);
-  usr := ExeVersion.User + ':';
+  usr := Executable.User + ':';
   i := PosEx(usr, fPassword);
   if (i = 1) or
      ((i > 0) and
@@ -1264,7 +1264,7 @@ begin
     if i > 0 then
       raise ESynException.CreateUtf8('%.GetPassWordPlain unable to retrieve the ' +
         'stored value: current user is [%], but password in % was encoded for [%]',
-        [self, ExeVersion.User, AppSecret, copy(fPassword, 1, i - 1)]);
+        [self, Executable.User, AppSecret, copy(fPassword, 1, i - 1)]);
   end;
   if result = '' then
   begin

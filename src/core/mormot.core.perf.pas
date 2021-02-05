@@ -2400,8 +2400,8 @@ begin
     free := TSynMonitorMemory.FreeAsText;
   with SystemInfo do
     result := JsonEncode([
-      'host', ExeVersion.Host,
-      'user', ExeVersion.User,
+      'host', Executable.Host,
+      'user', Executable.User,
       'os', OSVersionText,
       'cpu', CpuInfoText,
       'bios', BiosInfoText,
