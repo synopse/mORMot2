@@ -55,7 +55,7 @@ type
     /// SHA-3 / Keccak hashing functions
     procedure _SHA3;
     /// AES encryption/decryption functions
-    procedure _AES256;
+    procedure _AES;
     /// AES-GCM encryption/decryption with authentication
     procedure _AES_GCM;
     /// RC4 encryption function
@@ -595,9 +595,9 @@ begin
   CheckUtf8((clo >= 900) and
             (clo <= 1100), 'Random32 distribution clo=%', [clo]);
   CheckUtf8((dlo >= 1800) and
-            (dlo <= 2100), 'RandomDouble distribution dlo=%', [dlo]);
+            (dlo <= 2200), 'RandomDouble distribution dlo=%', [dlo]);
   CheckUtf8((elo >= 1800) and
-            (elo <= 2100), 'RandomExt distribution elo=%', [elo]);
+            (elo <= 2200), 'RandomExt distribution elo=%', [elo]);
   s1 := p.FillRandom(100);
   for i := 1 to length(s1) do
     for stripes := 0 to 10 do
@@ -824,33 +824,43 @@ type
     // non cryptographic hashes
     bCRC32c, bXXHash32, bHash32,
     // cryptographic hashes
-    bMD5, bSHA1, bHMACSHA1, bSHA256, bHMACSHA256, bSHA384, bHMACSHA384, bSHA512,
-    bHMACSHA512, bSHA3_256, bSHA3_512,
+    bMD5,
+    bSHA1, bHMACSHA1, bSHA256, bHMACSHA256,
+    bSHA384, bHMACSHA384, bSHA512, bHMACSHA512,
+    bSHA3_256, bSHA3_512,
     // encryption
-    bRC4, bAES128CFB, bAES128OFB, bAES128CTR, bAES128CFBCRC, bAES128OFBCRC, bAES128GCM,
+    bRC4,
+    bAES128CFB, bAES128OFB, bAES128CTR, bAES128CFBCRC, bAES128OFBCRC, bAES128GCM,
     bAES256CFB, bAES256OFB, bAES256CTR, bAES256CFBCRC, bAES256OFBCRC, bAES256GCM,
-    {$ifdef USE_OPENSSL}
+  {$ifdef USE_OPENSSL}
     bAES128CFBOSL, bAES128OFBOSL, bAES128CTROSL,
     bAES256CFBOSL, bAES256OFBOSL, bAES256CTROSL,
-    {$endif USE_OPENSSL}
+  {$endif USE_OPENSSL}
     bSHAKE128, bSHAKE256);
 
 procedure TTestCoreCrypto.Benchmark;
 const
   bAESLAST = {$ifdef USE_OPENSSL} bAES256CTROSL {$else} bAES256GCM {$endif};
   SIZ: array[0..4] of integer = (
-    8, 50, 100, 1000, 10000);
+    8,
+    50,
+    100,
+    1000,
+    10000);
   COUNT = 500;
   AESCLASS: array[bAES128CFB.. bAESLAST] of TAesAbstractClass = (
     TAesCfb, TAesOfb, TAesCtrNist, TAesCfbCrc, TAesOfbCrc, TAesGcm,
     TAesCfb, TAesOfb, TAesCtrNist, TAesCfbCrc, TAesOfbCrc, TAesGcm
-    {$ifdef USE_OPENSSL} , TAesCfbOsl, TAesOfbOsl, TAesCtrNistOsl,
+  {$ifdef USE_OPENSSL} ,
+    TAesCfbOsl, TAesOfbOsl, TAesCtrNistOsl,
     TAesCfbOsl, TAesOfbOsl, TAesCtrNistOsl
-    {$endif USE_OPENSSL});
+  {$endif USE_OPENSSL});
   AESBITS: array[bAES128CFB..bAESLAST] of integer = (
     128, 128, 128, 128, 128, 128,
     256, 256, 256, 256, 256, 256
-    {$ifdef USE_OPENSSL} , 128, 128, 128, 256, 256, 256 {$endif USE_OPENSSL});
+  {$ifdef USE_OPENSSL} ,
+    128, 128, 128, 256, 256, 256
+  {$endif USE_OPENSSL});
 var
   b: TBenchmark;
   s, i, size, n: integer;
@@ -1016,25 +1026,25 @@ const
   // 0..5 = TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtr, TAesCtrNist
   // 128-bit
    ('aS24Jm0RHPz26P_RHqX-pGktuCZtERz89uj_0R6l_qRpLbgmbREc_Pbo_9Eepf6kB7pVFdRAcIoVhoTQPytzTQ',
-    'aS24Jm0RHPz26P_RHqX-pCTLpnA2lH7fAWpovxWR8Voytqn9B_zTt6Zrt1Gjb4J5HUs6E7C9Uf4fV83SxyILCg',
-    '0YRWak2ZiQj-cncKQ3atJtcclNgW9OiQPpY6mLvrfYQc_mORQygR9LFU2z2Prc8I5anMvOABB62Ei5AAWY8M0Q',
-    '0YRWak2ZiQj-cncKQ3atJingGAyjpdvuFAvnZ4vDXweTPTJOFSBVUuqs9SW6vSkAyhtoFM9p-gO3IRZh227twA',
-    '0YRWak2ZiQj-cncKQ3atJjjmhYzJAYmaqNOy9bCBqYa0YYLiSrlUwv9f4JqyVmPQg7w2zQjjdyHSCuYxA-coGQ',
-    '0YRWak2ZiQj-cncKQ3atJobefiteCO182WUxUajfyVbBbNXhm-sbQQ_-U7vIcLRmRFw2I4XFaBhAvPFdGIrTIg'),
+    'i1vnbHBw0VZZdm-nlhq7H3N-C3oMLGfooWnwjI0F_X3QgeV6s-Q8ujVIbgpX5Bwu8tOn1SoUHHP4VS0VK5cOyQ',
+    '9rlcKw63fOzEbXUpoCUDLPqt7TuuSjLGHdlDMneP0nrY4LLFbrc3MrLV6JoXmQM6d4FvmlsQpImuk9LWaf8hXw',
+    '9rlcKw63fOzEbXUpoCUDLHuJV24miApjh5nwI-vJo4ODczlsBPQH-mKdBzlUwKOZ8bEV1IUEF6gVGsT-GOuA3w',
+    '9rlcKw63fOzEbXUpoCUDLDNLyx8M6u_tGBRLx4j5ctLUsP9-TW7sOuOoF4OD4lJAjZleMbc8Z_BdmyuNRuiUtg',
+    '9rlcKw63fOzEbXUpoCUDLPODC-Nwu96PUeytu204bloDoO7QOmLe8SSHM2P0kB5NW3VPROV5QLaVhYfld4uZBA'),
   // 192-bit
    ('3S2QhC78T0eesG3hiqtA2N0tkIQu_E9HnrBt4YqrQNjdLZCELvxPR56wbeGKq0DYJob7gbbvgBaFdm_Bwed4RQ',
-    '3S2QhC78T0eesG3hiqtA2HNVuHHzMsrQOruEy1t6Q-AMQMszIPd_86pnqzIyzdSZut-CCacA9T5O8e8ZJKvZOQ',
-    'a6wXR1K29yQvbGGkawiHN1RcFhrbtbne2w13ziEURY1Btg1oqiL-BqTGtEsu4LH5wLYcGNQJ21CR58LBtRysQg',
-    'a6wXR1K29yQvbGGkawiHN4Cloz_9GlJhlEozeNI4MFjKwihToQP6_FDpDVHz21qUonhk6MZ9_-6vNvnGqbOTcg',
-    'a6wXR1K29yQvbGGkawiHN7koCYngh0WS5R-rsGy5zSaC9txKnyHDavH1tkXlWZuxTjQCNHbiAIIRYK4giZDHzA',
-    'a6wXR1K29yQvbGGkawiHN7cmi4IsRJUOtu4C783jijRSOmLWra5tJqbNaephnHF7-smO0diGn-MYnFMXD6hnzQ'),
+    'yua7dkKtXp0pM5n3VFoZrKhdt1ppikmmhFBKzflv32uY6cm4X3ZDZZnlAujYFBAWYR9fJXvhKmCcPljunWP2Zw',
+    'Lp2JYG5d-d4TZagr2FMfqRxp9GCAHtCNcV5HmNoZpt34jqelBTDnTPagl9ZsIkrKRM_m0i3o0PWyK7hf6h9evg',
+    'Lp2JYG5d-d4TZagr2FMfqcygVkV4gZnunc1EDx63mo2B0WfIDhpjtPSVuiXjXBUlPcEVs_YVJoPmIbJDD_mwpQ',
+    'Lp2JYG5d-d4TZagr2FMfqbBYsYzcSw6Re_OY2Zthq1_MEtRiSeqYNI-Z2s1J_3Gwah3j29AUlU7fDl0w8_sjlA',
+    'Lp2JYG5d-d4TZagr2FMfqc-3Wr2DBpXIPh2l-OjSsqlAcEVs8vH6tbc5_5G59H_wTCxihPcc8yz8f_fyGiDEaQ'),
   // 256-bit
    ('Kw50ybT0hl8MXw1IcBFm5isOdMm09IZfDF8NSHARZuYrDnTJtPSGXwxfDUhwEWbmn9aUUA6_ZwXpKRiFMlXRiw',
-    'Kw50ybT0hl8MXw1IcBFm5iV4ZAxvgHN-4j2F7ch7PWr6yHhbcp0Scqd2WDHZMRygi3thq9H3jKVo34_NPKdK1A',
-    'vf-UrsBFA2NkziMn6szalnw24-wbPmG9lySgx0WLZZpfkTpw2euPIm6ZkFzjFa-lqr4yngOkvW99hPGzYEAjDw',
-    'vf-UrsBFA2NkziMn6szalgQnKyYBxXxLhVI9s8D3cZkYsLsdfSUCTUY8moP2SenmHCWQWwaq_ibRCr4JngSkZQ',
-    'vf-UrsBFA2NkziMn6szalimh8XYdFObdg_TwNyfX8Zy2Dk8YVPSDzzAvZ2Xx6WP_4owC6MIq7kZ2xPZ_d6vZmg',
-    'vf-UrsBFA2NkziMn6szalinXfySE1-qmyPh5FD65M3QNHMveAFv2DQ-rTKSlOCVeGlBTCRu-vx5lsTRjXjrHLQ'));
+    'uSh1TguJYyEhud6DBzk8TZrD01xIULmMHX0gRFAGaf2vDinDfDprSxCm5Fd49HN0a6EoBrK1cCqanTWqyuyM8A',
+    'PYynVHoDmi6SK5qdbNUp5IPwHRadBtT6rf97pdIP3MHk1q1rZHNzquVCOF5_oSMs0rqP7bJ6j6BvWpzTGcvEPQ',
+    'PYynVHoDmi6SK5qdbNUp5IFTsstbPmW8RbyfJ1fh1x2N2vQw5n_5DtDYx-49wgZnu5MEthDAT2h7XPqNIFgfdw',
+    'PYynVHoDmi6SK5qdbNUp5JNCbgI49PtmxVueuHSTBkI6JbFu9smQCMkp8sQEFBAs8F46W4qqNgMiE9QhJUtoAg',
+    'PYynVHoDmi6SK5qdbNUp5NDiW4s3_P_KGDXarkzNgBrxUjjzTUzVJ29q9Uq75xI3eTczo57cI5ibqZ-BvbYRLw'));
 
 function ToAesReference(m: integer): integer;
 begin
@@ -1051,13 +1061,15 @@ begin
 end;
 
 
-procedure TTestCoreCrypto._AES256;
+procedure TTestCoreCrypto._AES;
 var
   A: TAes;
-  st, orig, crypted, s2, s3: RawByteString;
+  st, orig, crypted, s2, s3, s4: RawByteString;
   Key: TSha256Digest;
   s, b, p: TAesBlock;
+  iv: THash128Rec;
   i, k, ks, m, len: integer;
+  one, two: TAesAbstract;
   {$ifndef PUREMORMOT2}
   AES: TAesFull;
   {$endif PUREMORMOT2}
@@ -1094,28 +1106,41 @@ begin
   SetLength(crypted, MAX + 256);
   st := '1234essai';
   PInteger(UniqueRawUtf8(RawUtf8(st)))^ := Random(MaxInt);
+  iv.L := $1234567890abcdef; // synch with TEST_AES_REF
+  iv.H := $0fedcba987654321;
   for noaesni := false to true do
   begin
     {%H-}Timer[noaesni].Init;
     for k := 0 to 2 do
     begin
       ks := 128 + k * 64; // test keysize of 128, 192 and 256 bits
-      for m := 0 to high(MODES) do
+      for m := 3 to high(MODES) do
       begin
         if (MODES[m] = nil) or
            not MODES[m].IsAvailable then
           continue; // OpenSSL may not be available on this platform
-        st := RawUtf8(StringOfChar('x', 50)); // for TEST_AES_REF
-        with MODES[m].Create(pointer(st)^, ks) do
+        st := RawUtf8(StringOfChar('x', 50)); // synch with TEST_AES_REF
+        one := MODES[m].Create(pointer(st)^, ks);
         try
-          s2 := EncryptPkcs7(st, false);
+          one.IV := iv.b;
+          s2 := one.EncryptPkcs7(st, false);
+          s2 := one.EncryptPkcs7(st, false); // twice to check AES ctxt reuse
           s3 := BinToBase64uri(s2);
           i := ToAesReference(m);
-          //writeln(MODES[m].ClassName, ' ', ks);
+          //if TEST_AES_REF[k, i] <> s3 then
+          //  writeln(m, ' ', MODES[m].ClassName, ' ', ks, #13#10' ',s3, #13#10' ', TEST_AES_REF[k, i]);
           CheckUtf8(TEST_AES_REF[k, i] = s3, 'test vector %-% %', [MODES[m], ks, s3]);
-          check(DecryptPkcs7(s2, false) = st);
+          check(one.DecryptPkcs7(s2, false) = st);
+          two := one.Clone;
+          two.IV := iv.b;
+          s2 := one.EncryptPkcs7(st, false);
+          s2 := one.EncryptPkcs7(st, false); // twice to check AES ctxt reuse
+          s4 := BinToBase64uri(s2);
+          CheckEqual(s3, s4);
+          checkEqual(two.DecryptPkcs7(s2, false), st);
+          two.Free;
         finally
-          Free;
+          one.Free;
         end;
       end;
       Sha256Weak(st, Key);
@@ -1171,7 +1196,7 @@ begin
                 else if i < 128 then
                   len := i * 15
                 else
-                  len := i * 31;
+                  len := i * 31; // encrypt buffers from 0 to 7936 bytes
                 s2 := copy(orig, 1, len);
                 Check(DecryptPkcs7(EncryptPkcs7(s2)) = s2, IntToStr(len));
               end;
@@ -1184,7 +1209,7 @@ begin
               end
               else if m > 7 then
               begin
-                // check our AES code against OpenSSL or WinAPI
+                // validate our AES code against OpenSSL or WinAPI
                 i := ToAesReference(m);
                 Check(ValuesOrig[i] = s2);
                 Check(ValuesCrypted[i] = Copy(crypted, 1, len), MODES[m].ClassName);
