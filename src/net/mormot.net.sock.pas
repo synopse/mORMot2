@@ -791,7 +791,6 @@ begin
           (err <> WSAEWOULDBLOCK) and
           {$endif OSWINDOWS}
           (err <> WSATRY_AGAIN) and
-          (err <> WSAEINTR) and
           (err <> AnotherNonFatal) then
     if err = WSAEMFILE then
       result := nrTooManyConnections
