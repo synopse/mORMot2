@@ -966,7 +966,7 @@ begin
             saverounds := sw.AsInt('AuthRounds', CHEAT_ROUNDS,
               'Enter the PassPhrase iteration rounds of the cheat.private file.');
             sw.Text('%', [EccCommandCheat(
-              auth, savepass, saverounds, authpass, authrounds)]);
+              {in:} auth, savepass, saverounds, {out:} authpass, authrounds)]);
             if not sw.NoPrompt then
               WritePassword(auth, authpass, authrounds);
           end;

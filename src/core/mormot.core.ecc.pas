@@ -1010,21 +1010,23 @@ type
   /// the Key Derivation Functions recognized by TEcdheProtocol
   // - used to compute the EF secret and MAC secret from shared ephemeral secret
   // - only HMAC SHA-256 safe algorithm is proposed currently
-  TEcdheKDF = (
+  TEcdheKdf = (
     kdfHmacSha256);
 
   /// the Encryption Functions recognized by TEcdheProtocol
   // - all supported AES chaining blocks have their 128-bit and 256-bit flavours
-  // - default efAesCrc128 will use the dedicated TAesCfbCrc class, i.e.
-  // AES-CFB encryption with on-the-fly 256-bit CRC computation of the plain and
-  // encrypted blocks, and AES-encryption of the CRC to ensure cryptographic
-  // level message authentication and integrity - associated TEcdheMAC
-  // property should be macDuringEF
-  // - other values will define TAesCfb/TAesOfb/TAesCtr/TAesCbc in 128-bit or
-  // 256-bit mode, in conjunction with a TEcdheMAC setting
+  // - default efAesCrc128 (or its 256-bit efAesCrc256) will use the TAesCfbCrc
+  // class, i.e. AES-CFB encryption with on-the-fly 256-bit CRC computation of
+  // the plain and encrypted blocks, and AES-encryption of the CRC to ensure
+  // cryptographic level message authentication and integrity - associated
+  // TEcdheMac property should be macDuringEF
+  // - efAesGcm128/efAesGcm256 will use TAesGcm and macDuringEF
+  // - other values will define TAesCfb/TAesOfb/TAesCtrNist/TAesCbc in
+  // 128-bit or 256-bit mode, in conjunction with a TEcdheMac setting
   // - AES-NI hardware acceleration will be used, if available - under x86-64,
   // efAesOfb128 will potentially give the best performance
   // - of course, weack ECB mode is not available
+  // - adding any new ciphers to this enum needs to keep the existing
   TEcdheEF = (
     efAesCrc128,
     efAesCfb128,
@@ -1035,12 +1037,14 @@ type
     efAesCfb256,
     efAesOfb256,
     efAesCtr256,
-    efAesCbc256);
+    efAesCbc256,
+    efAesGcm128,
+    efAesGcm256);
 
   /// the Message Authentication Codes recognized by TEcdheProtocol
   // - default macDuringEF (680MB/s for efAesCrc128 with SSE4.2 and AES-NI)
   // means that no separated MAC is performed, but done during encryption step:
-  // only supported by efAesCrc128 or efAesCrc256 (may be a future AES-GCM)
+  // only supported by efAesCrc128/efAesCrc256 and efAesGcm128/efAesGcm256
   // - macHmacSha256 is the safest, but slow, especially when used as MAC for
   // AES-NI accellerated encryption (110MB/s with efAesCfb128, to be compared
   // with macDuringEF, which produces a similar level of MAC)
@@ -1051,7 +1055,7 @@ type
   // - macXxHash32 will use the xxhash32() algorithm, fastest without SSE4.2
   // - macNone (800MB/s, which is the speed of AES-NI encryption itself for a
   // random set of small messages) won't check errors, but only replay attacks
-  TEcdheMAC = (
+  TEcdheMac = (
     macDuringEF,
     macHmacSha256,
     macHmacCrc256c,
@@ -1068,11 +1072,11 @@ type
     /// the current Authentication scheme
     auth: TEcdheAuth;
     /// the current Key Derivation Function
-    kdf: TEcdheKDF;
+    kdf: TEcdheKdf;
     /// the current Encryption Function
     ef: TEcdheEF;
     /// the current Message Authentication Code
-    mac: TEcdheMAC;
+    mac: TEcdheMac;
   end;
 
   /// points to one protocol Algorithm recognized by TEcdheProtocol
@@ -1128,9 +1132,9 @@ type
 
 
 function ToText(algo: TEcdheAuth): PShortString; overload;
-function ToText(algo: TEcdheKDF): PShortString; overload;
+function ToText(algo: TEcdheKdf): PShortString; overload;
 function ToText(algo: TEcdheEF): PShortString; overload;
-function ToText(algo: TEcdheMAC): PShortString; overload;
+function ToText(algo: TEcdheMac): PShortString; overload;
 
 type
   /// abstract ECDHE secure protocol with unilateral or mutual authentication
@@ -1170,7 +1174,8 @@ type
     // - aPrivate should always be set for mutual or unilateral authentication
     // - will implement unilateral authentication if aPrivate=nil for this end
     constructor Create(aAuth: TEcdheAuth; aPKI: TEccCertificateChain;
-      aPrivate: TEccCertificateSecret); reintroduce; overload; virtual;
+      aPrivate: TEccCertificateSecret; aEF: TEcdheEF = efAesCrc128);
+        reintroduce; overload; virtual;
     /// will create another instance of this communication protocol
     constructor CreateFrom(aAnother: TEcdheProtocol); virtual;
     /// initialize the communication by exchanging some client/server information
@@ -1203,8 +1208,8 @@ type
     // to enable the TEcdheProtocol safe protocol for transmission
     class function FromKeyCompute(const privkey, privpassword: RawUtf8;
       privrounds: integer = DEFAULT_ECCROUNDS; const pki: RawUtf8 = '';
-      auth: TEcdheAuth = authMutual; kdf: TEcdheKDF = kdfHmacSha256;
-      ef: TEcdheEF = efAesCrc128; mac: TEcdheMAC = macDuringEF;
+      auth: TEcdheAuth = authMutual; kdf: TEcdheKdf = kdfHmacSha256;
+      ef: TEcdheEF = efAesCrc128; mac: TEcdheMac = macDuringEF;
       customkey: cardinal = 0): RawUtf8;
     /// finalize the instance
     // - also erase all temporary secret keys, for safety
@@ -1241,7 +1246,7 @@ type
       read fAlgo.auth;
     /// the current Key Derivation Function
     // - this value should match on both client and server sides
-    property KDF: TEcdheKDF
+    property KDF: TEcdheKdf
       read fAlgo.kdf write fAlgo.kdf;
     /// the current salt, used by the Key Derivation Function KDF to compute the
     // key supplied to the Encryption Function EF
@@ -1261,7 +1266,7 @@ type
       read fMacSalt write fMacSalt;
     /// the current Message Authentication Code
     // - this value should match on both client and server sides
-    property MAC: TEcdheMAC
+    property MAC: TEcdheMac
       read fAlgo.mac write fAlgo.mac;
     /// after handshake, contains the information about the other side
     // public key certificate validity, against the shared PKI
@@ -1279,8 +1284,9 @@ type
   public
     /// initialize the ECDHE protocol on the client side
     // - will check that aAuth is compatible with the supplied aPKI/aPrivate
-    constructor Create(aAuth: TEcdheAuth; aPKI: TEccCertificateChain; aPrivate:
-      TEccCertificateSecret); override;
+    constructor Create(aAuth: TEcdheAuth; aPKI: TEccCertificateChain;
+      aPrivate: TEccCertificateSecret; aEF: TEcdheEF = efAesCrc128);
+        reintroduce; overload; virtual;
     /// generate the authentication frame sent from the client
     procedure ComputeHandshake(out aClient: TEcdheFrameClient);
     /// validate the authentication frame sent back by the server
@@ -1300,7 +1306,8 @@ type
     /// initialize the ECDHE protocol on the client side
     // - will check that aAuth is compatible with the supplied aPKI/aPrivate
     constructor Create(aAuth: TEcdheAuth; aPKI: TEccCertificateChain;
-      aPrivate: TEccCertificateSecret); override;
+      aPrivate: TEccCertificateSecret; aEF: TEcdheEF = efAesCrc128);
+        reintroduce; overload; virtual;
     /// will create another instance of this communication protocol
     constructor CreateFrom(aAnother: TEcdheProtocol); override;
     /// generate the authentication frame corresponding to the client request
@@ -1320,6 +1327,28 @@ type
   end;
 
 
+var
+  /// how TEcdheProtocol.SharedSecret initialize the AES engines
+  // - if you link mormot.core.openssl.pas, CTR and GCM will use its version
+  ECDHEPROT_EF2AES: array[TEcdheEF] of TAesAbstractClass = (
+  // efAesCrc  efAesCfb  efAesOfb efAesCtr efAesCbc
+    TAesCfbCrc, TAesCfb, TAesOfb, TAesCtrNist, TAesCbc, // 128-bit
+    TAesCfbCrc, TAesCfb, TAesOfb, TAesCtrNist, TAesCbc, // 256-bit
+  // cfAesGcm
+    TAesGcm, TAesGcm
+    );
+  /// how TEcdheProtocol.SharedSecret initialize the AES engines
+  ECDHEPROT_EF2BITS: array[TEcdheEF] of integer = (
+    128, 128, 128, 128, 128,
+    256, 256, 256, 256, 256,
+    128, 256);
+
+  /// default MAC used for a given Encryption Function
+  // - for performance - you may force macHmacSha256 for cryptographic level
+  ECDHEPROT_EF2MAC: array[TEcdheEF] of TEcdheMac = (
+    macDuringEF, macHmacCrc32c, macHmacCrc32c, macHmacCrc32c, macHmacCrc32c,
+    macDuringEF, macHmacCrc32c, macHmacCrc32c, macHmacCrc32c, macHmacCrc32c,
+    macDuringEF, macDuringEF);
 
 implementation
 
@@ -1331,13 +1360,13 @@ begin
 end;
 
 const
-  ECIES_AES: array[ecaPBKDF2_HMAC_SHA256_AES256_CFB..
-    ecaPBKDF2_HMAC_SHA256_AES128_CTR] of TAesAbstractClass = (
-    TAesCfb, TAesCbc, TAesOfb, TAesCtr, TAesCfb, TAesCbc, TAesOfb, TAesCtr,
-    TAesCfb, TAesCbc, TAesOfb, TAesCtr, TAesCfb, TAesCbc, TAesOfb, TAesCtr);
+  ecaLAST = ecaPBKDF2_HMAC_SHA256_AES128_CTR;
 
-  ECIES_AESSIZE: array[ecaPBKDF2_HMAC_SHA256_AES256_CFB..
-    ecaPBKDF2_HMAC_SHA256_AES128_CTR] of integer = (
+  ECIES_AES: array[ecaPBKDF2_HMAC_SHA256_AES256_CFB..ecaLAST] of TAesAbstractClass = (
+    TAesCfb, TAesCbc, TAesOfb, TAesCtrNist, TAesCfb, TAesCbc, TAesOfb, TAesCtrNist,
+    TAesCfb, TAesCbc, TAesOfb, TAesCtrNist, TAesCfb, TAesCbc, TAesOfb, TAesCtrNist);
+
+  ECIES_AESSIZE: array[ecaPBKDF2_HMAC_SHA256_AES256_CFB..ecaLAST] of integer = (
       256, 256, 256, 256, 256, 256, 256, 256,
       128, 128, 128, 128, 128, 128, 128, 128);
 
@@ -3236,9 +3265,9 @@ begin
   result := GetEnumName(TypeInfo(TEcdheAuth), ord(algo));
 end;
 
-function ToText(algo: TEcdheKDF): PShortString;
+function ToText(algo: TEcdheKdf): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TEcdheKDF), ord(algo));
+  result := GetEnumName(TypeInfo(TEcdheKdf), ord(algo));
 end;
 
 function ToText(algo: TEcdheEF): PShortString;
@@ -3246,16 +3275,16 @@ begin
   result := GetEnumName(TypeInfo(TEcdheEF), ord(algo));
 end;
 
-function ToText(algo: TEcdheMAC): PShortString;
+function ToText(algo: TEcdheMac): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TEcdheMAC), ord(algo));
+  result := GetEnumName(TypeInfo(TEcdheMac), ord(algo));
 end;
 
 
 { TEcdheProtocol }
 
 constructor TEcdheProtocol.Create(aAuth: TEcdheAuth; aPKI: TEccCertificateChain;
-  aPrivate: TEccCertificateSecret);
+  aPrivate: TEccCertificateSecret; aEF: TEcdheEF);
 var
   res: TEccValidity;
 begin
@@ -3269,6 +3298,8 @@ begin
   end;
   inherited Create;
   fAlgo.auth := aAuth;
+  fAlgo.ef := aEF;
+  fAlgo.mac := ECDHEPROT_EF2MAC[aEF];
   fPKI := aPKI;
   fPrivate := aPrivate;
   fEFSalt := 'ecdhesalt';
@@ -3278,6 +3309,7 @@ end;
 constructor TEcdheProtocol.CreateFrom(aAnother: TEcdheProtocol);
 begin
   Create(aAnother.fAlgo.auth, aAnother.fPKI, aAnother.fPrivate);
+  fAlgo := aAnother.fAlgo; // may have been customized via properties
   fEFSalt := aAnother.fEFSalt;
   fMacSalt := aAnother.fMacSalt;
 end;
@@ -3316,8 +3348,8 @@ begin
   _FromKeySetCA := aPKI;
 end;
 
-class function TEcdheProtocol.FromKey(const aKey: RawUtf8; aServer: boolean):
-  TEcdheProtocol;
+class function TEcdheProtocol.FromKey(const aKey: RawUtf8;
+  aServer: boolean): TEcdheProtocol;
 const
   CL: array[boolean] of TEcdheProtocolClass = (
     TEcdheProtocolServer, TEcdheProtocolClient);
@@ -3338,7 +3370,7 @@ begin
   sw.InitFromCsv(pointer(aKey), '=', ';');
   if not sw.ValueEnum('a', TypeInfo(TEcdheAuth), algo.auth) then
     exit; // mandatory parameter
-  sw.ValueEnum('k', TypeInfo(TEcdheKDF), algo.kdf);
+  sw.ValueEnum('k', TypeInfo(TEcdheKdf), algo.kdf);
   sw.ValueEnum('e', TypeInfo(TEcdheEF), algo.ef);
   sw.ValueEnum('m', TypeInfo(TEcdheEF), algo.mac);
   // compute ca: TEccCertificateChain
@@ -3387,8 +3419,8 @@ end;
 
 class function TEcdheProtocol.FromKeyCompute(
   const privkey, privpassword: RawUtf8; privrounds: integer;
-  const pki: RawUtf8; auth: TEcdheAuth; kdf: TEcdheKDF; ef: TEcdheEF;
-  mac: TEcdheMAC; customkey: cardinal): RawUtf8;
+  const pki: RawUtf8; auth: TEcdheAuth; kdf: TEcdheKdf; ef: TEcdheEF;
+  mac: TEcdheMac; customkey: cardinal): RawUtf8;
 begin
   FormatUtf8('a=%', [ord(auth)], result);
   if kdf <> low(kdf) then
@@ -3421,7 +3453,7 @@ begin
       '%.% with no handshake', [self, ED[aEncrypt]]);
   fAes[aEncrypt].IV := fkM[aEncrypt].Lo; // kM is a CTR -> IV unicity
   if fAlgo.mac = macDuringEF then
-    if not fAes[aEncrypt].MacSetNonce(fkM[aEncrypt].b) then
+    if not fAes[aEncrypt].MacSetNonce(aEncrypt, fkM[aEncrypt].b) then
       raise EECCException.CreateUtf8(
         '%.%: macDuringEF not available in %/%',
         [self, ED[aEncrypt], ToText(fAlgo.ef)^, fAes[aEncrypt]]);
@@ -3433,10 +3465,12 @@ var
   i: PtrInt;
   c: cardinal;
 begin
+  // retrieve or compute the MAC
   case fAlgo.mac of
     macDuringEF:
-      if not fAes[aEncrypt].MacGetLast(aMAC.b) then
-        // computed during EF process
+      if aEncrypt and
+         not fAes[aEncrypt].MacEncryptGetTag(aMAC.b) then
+        // should have been computed during Encryption process
         raise EECCException.CreateUtf8('%.%: macDuringEF not available in %/%',
           [self, ED[aEncrypt], ToText(fAlgo.ef)^, fAes[aEncrypt]]);
     macHmacCrc256c:
@@ -3461,14 +3495,17 @@ begin
     raise EECCException.CreateUtf8(
       '%.%: ComputeMAC %?', [self, ED[aEncrypt], ToText(fAlgo.mac)^]);
   end;
+  // always increase sequence number against replay attacks
   with fkM[aEncrypt] do
     for i := 0 to 3 do
     begin
-      inc(q[i]); // sequence number against replay attacks
+      inc(q[i]);
       if q[i] <> 0 then
         break;
     end;
 end;
+
+type TAesHook = class(TAesAbstract);
 
 procedure TEcdheProtocol.Encrypt(const aPlain: RawByteString;
   out aEncrypted: RawByteString);
@@ -3477,12 +3514,14 @@ var
 begin
   fSafe.Lock;
   try
-    SetKey(true);
+    SetKey({encrypt=}true);
     len := fAes[true].EncryptPkcs7Length(length(aPlain), false);
-    SetString(aEncrypted, nil, len + sizeof(THash256));
+    SetString(aEncrypted, nil, len + sizeof(THash256)); // append a trailing MAC
+    // encrypt the input
     fAes[true].EncryptPkcs7Buffer(
       Pointer(aPlain), pointer(aEncrypted), length(aPlain), len, false);
-    ComputeMac(true, pointer(aEncrypted), len,
+    // compute and store the MAC
+    ComputeMac({encrypt=}true, pointer(aEncrypted), len,
       PHash256Rec(@PByteArray(aEncrypted)[len])^);
   finally
     fSafe.UnLock;
@@ -3497,12 +3536,13 @@ var
   mac: THash256Rec;
 begin
   result := sprInvalidMAC;
-  len := length(aEncrypted) - sizeof(THash256);
+  len := length(aEncrypted) - sizeof(THash256); // there is a trailing MAC
   if len <= 0 then
     exit;
   fSafe.Lock;
   try
-    SetKey(false);
+    SetKey({encrypt=}false);
+    // decrypt the input
     aPlain := fAes[false].DecryptPkcs7Buffer(P, len, false, false);
     if aPlain = '' then
     begin
@@ -3515,8 +3555,15 @@ begin
         end;
       exit;
     end;
-    ComputeMac(false, P, len, mac);
-    if IsEqual(mac.b, PHash256(P + len)^) then
+    // validate with MAC stored after the input
+    ComputeMac({encrypt=}false, P, len, mac); // also increase the CTR
+    if fAlgo.mac = macDuringEF then
+    begin
+      // AES-GCM requires to call a specific decryption method
+      if fAes[false].MacDecryptCheckTag(PHash256(P + len)^) then
+        result := sprSuccess
+    end
+    else if IsEqual(mac.b, PHash256(P + len)^) then
       result := sprSuccess;
   finally
     fSafe.Unlock;
@@ -3532,7 +3579,7 @@ begin
   end;
   fSafe.Lock;
   try
-    SetKey(false);
+    SetKey({encrypt=}false);
     if fAes[false].MacCheckError(pointer(aEncrypted), length(aEncrypted)) then
       result := sprSuccess
     else
@@ -3543,14 +3590,6 @@ begin
 end;
 
 procedure TEcdheProtocol.SharedSecret(sA, sB: PHash256);
-const
-  AES_CLASS: array[TEcdheEF] of TAesAbstractClass = (
-  // efAesCrc, efAesCfb, efAesOfb, efAesCtr, efAesCbc (128-bit then 256-bit)
-    TAesCfbCrc, TAesCfb, TAesOfb, TAesCtr, TAesCbc,
-    TAesCfbCrc, TAesCfb, TAesOfb, TAesCtr, TAesCbc);
-  AES_BITS: array[TEcdheEF] of integer = (
-    128, 128, 128, 128, 128,
-    256, 256, 256, 256, 256);
 var
   secret: THash256;
 
@@ -3575,7 +3614,8 @@ begin
     raise EECCException.CreateUtf8('%.SharedSecret %?', [self, ToText(fAlgo.kdf)^]);
   try
     ComputeSecret(fEFSalt);
-    fAes[false] := AES_CLASS[fAlgo.ef].Create(secret, AES_BITS[fAlgo.ef]);
+    fAes[false] := ECDHEPROT_EF2AES[fAlgo.ef].Create(
+      secret, ECDHEPROT_EF2BITS[fAlgo.ef]);
     fAes[true] := fAes[false].CloneEncryptDecrypt;
     ComputeSecret(fMacSalt);
     fkM[false].b := secret; // first 128-bit also used as AES IV
@@ -3632,7 +3672,7 @@ end;
 { TEcdheProtocolClient }
 
 constructor TEcdheProtocolClient.Create(aAuth: TEcdheAuth;
-  aPKI: TEccCertificateChain; aPrivate: TEccCertificateSecret);
+  aPKI: TEccCertificateChain; aPrivate: TEccCertificateSecret; aEF: TEcdheEF);
 begin
   if (aAuth <> authServer) and
      not aPrivate.CheckCRC then
@@ -3716,8 +3756,8 @@ end;
 
 { TEcdheProtocolServer }
 
-constructor TEcdheProtocolServer.Create(aAuth: TEcdheAuth; aPKI:
-  TEccCertificateChain; aPrivate: TEccCertificateSecret);
+constructor TEcdheProtocolServer.Create(aAuth: TEcdheAuth; aPKI: TEccCertificateChain;
+  aPrivate: TEccCertificateSecret; aEF: TEcdheEF);
 begin
   if (aAuth <> authClient) and
      not aPrivate.CheckCRC then
