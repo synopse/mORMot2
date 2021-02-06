@@ -191,7 +191,7 @@ type
     // - set the IV as usual (only the first 12 bytes will be used for GCM),
     // then optionally append any AEAD data with this method before Encrypt()
     procedure AesGcmAad(Buf: pointer; Len: integer); override;
-    /// AES-GCM pure alternative to MacGetLast()
+    /// AES-GCM pure alternative to MacEncryptGetTag/MacDecryptCheckTag
     // - after Encrypt, fill tag with the GCM value of the data and return true
     // - after Decrypt, return true only if the GCM value of the data match tag
     function AesGcmFinal(var tag: TAesBlock): boolean; override;

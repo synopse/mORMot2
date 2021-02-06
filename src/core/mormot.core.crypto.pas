@@ -565,44 +565,32 @@ type
       IVAtBeginning: boolean; RaiseESynCryptoOnError: boolean = true): RawByteString;
 
     /// initialize AEAD (authenticated-encryption with associated-data) nonce
-    // - i.e. setup 256-bit MAC computation during next Encrypt/Decrypt call
+    // - i.e. setup 256-bit MAC computation before next Encrypt/Decrypt call
     // - may be used e.g. for AES-GCM or our custom AES-CTR modes
     // - default implementation, for a non AEAD protocol, returns false
-    function MacSetNonce(const aKey: THash256; aAssociated: pointer = nil;
-      aAssociatedLen: integer = 0): boolean; virtual;
+    function MacSetNonce(DoEncrypt: boolean; const RandomNonce: THash256;
+      Associated: pointer = nil; AssociatedLen: integer = 0): boolean; virtual;
     /// returns AEAD (authenticated-encryption with associated-data) MAC
-    /// - i.e. optional 256-bit MAC computation during last Encrypt/Decrypt call
-    // - may be used e.g. for AES-GCM or our custom AES-CTR modes
+    // - returns a MAC hash (up to 256-bit), computed during the last Encryption
+    // - may be used e.g. for TAesGcm or our custom TAesOfbCrc/TAesCfbCr modes
     // - default implementation, for a non AEAD protocol, returns false
-    function MacGetLast(out aCRC: THash256): boolean; virtual;
-    /// validate if the computed AEAD MAC matches the expected supplied value
-    // - is just a wrapper around MacGetLast() and IsEqual() functions
-    function MACEquals(const aCRC: THash256): boolean; virtual;
+    function MacEncryptGetTag(out EncryptMac: THash256): boolean; virtual;
+    /// validates an AEAD (authenticated-encryption with associated-data) MAC
+    // - check if the MAC computed during the last Decryption matches DecryptMac
+    // - default implementation, for a non AEAD protocol, returns false
+    function MacDecryptCheckTag(const DecryptMac: THash256): boolean; virtual;
     /// validate if an encrypted buffer matches the stored AEAD MAC
-    // - expects the 256-bit MAC, as returned by MacGetLast, to be stored after
-    // the encrypted data
+    // - called before the decryption process to ensure the input is not corrupted
     // - default implementation, for a non AEAD protocol, returns false
-    function MacCheckError(aEncrypted: pointer; Count: cardinal): boolean; virtual;
+    function MacCheckError(Encrypted: pointer; Count: cardinal): boolean; virtual;
     /// perform one step PKCS7 encryption/decryption and authentication from
     // a given 256-bit key over a small memory block
-    // - returns '' on any (MAC) issue during decryption (Encrypt=false) or if
-    // this class does not support AEAD MAC
-    // - supplied Data is expected to be small (<128 bytes), as used e.g. by
-    // CryptDataForCurrentUser()
-    // - do not use this abstract class method, but inherited TAesCfbCrc/TAesOfbCrc
-    // - will store a header with its own CRC, so detection of most invalid
-    // formats (e.g. from fuzzing input) will occur before any AES/MAC process
+    // - wrapper which creates a TAesAbsract instance and calls MacAndCrypt()
     class function MacEncrypt(const Data: RawByteString; const Key: THash256;
       Encrypt: boolean): RawByteString; overload;
     /// perform one step PKCS7 encryption/decryption and authentication from
     // a given 128-bit key over a small memory block
-    // - returns '' on any (MAC) issue during decryption (Encrypt=false) or if
-    // this class does not support AEAD MAC
-    // - supplied Data is expected to be small (<128 bytes), as used e.g. by
-    // CryptDataForCurrentUser()
-    // - do not use this abstract class method, but inherited TAesCfbCrc/TAesOfbCrc
-    // - will store a header with its own CRC, so detection of most invalid
-    // formats (e.g. from fuzzing input) will occur before any AES/MAC process
+    // - wrapper which creates a TAesAbsract instance and calls MacAndCrypt()
     class function MacEncrypt(const Data: RawByteString; const Key: THash128;
       Encrypt: boolean): RawByteString; overload;
     /// perform one step PKCS7 encryption/decryption and authentication with
@@ -610,10 +598,10 @@ type
     // - returns '' on any (MAC) issue during decryption (Encrypt=false) or if
     // this class does not support AEAD MAC
     // - as used e.g. by CryptDataForCurrentUser()
-    // - do not use this abstract class method, but inherited TAesCfbCrc/TAesOfbCrc
-    // - will store a header with its own CRC, so detection of most invalid
-    // formats (e.g. from fuzzing input) will occur before any AES/MAC process
-    // - AEAD associated Data is expected to be small (up to 100 bytes)
+    // - do not use this abstract class, but TAesGcm/TAesCfbCrc/TAesOfbCrc
+    // - TAesCfbCrc/TAesOfbCrc will store a header with its own CRC, so detection
+    // of most invalid formats (e.g. from fuzzing input) will occur before any
+    // AES/MAC process - for TAesGcm, authentication requires decryption
     function MacAndCrypt(const Data: RawByteString; Encrypt: boolean): RawByteString;
 
     {$ifndef PUREMORMOT2}
@@ -830,12 +818,14 @@ type
   /// internal 256-bit structure used for TAesAbstractAead MAC storage
   TAesMac256 = record
     /// the AES-encrypted MAC of the plain content
-    // - plain text digital signature, to perform message authentication
-    // and integrity
+    // - digital signature of the plain text, to perform message authentication
+    // and integrity after it has been decrypted
+    // - used by TAesAbstractAead.MacDecryptCheckTag()
     plain: THash128;
     /// the plain MAC of the encrypted content
-    // - encrypted text digital signature, to check for errors,
-    // with no compromission of the plain content
+    // - digital signature of the encrypted text, to check e.g. for transmissions
+    // errors or storage corruption, with no compromission of the plain content
+    // - used by TAesAbstractAead.MacCheckError()
     encrypted: THash128;
   end;
 
@@ -855,27 +845,33 @@ type
     destructor Destroy; override;
     /// initialize 256-bit MAC computation for next Encrypt/Decrypt call
     // - initialize the internal fMacKey property, and returns true
-    // - only the plain text crc is seeded from aKey - encrypted message crc
-    // will use -1 as fixed seed, to avoid aKey compromission
+    // - only the plain text crc is seeded from RandomNonce - encrypted message
+    // crc will use -1 as fixed seed, to avoid RandomNonce compromission
     // - should be set with a new MAC key value before each message, to avoid
     // replay attacks (as called from TEcdheProtocol.SetKey)
-    function MacSetNonce(const aKey: THash256; aAssociated: pointer = nil;
-      aAssociatedLen: integer = 0): boolean; override;
-    /// returns 256-bit MAC computed during last Encrypt/Decrypt call
+    function MacSetNonce(DoEncrypt: boolean; const RandomNonce: THash256;
+      Associated: pointer = nil; AssociatedLen: integer = 0): boolean; override;
+    /// returns AEAD (authenticated-encryption with associated-data) MAC
+    // - returns a 256-bit MAC hash, computed during the last Encryption
     // - encrypt the internal fMac property value using the current AES cypher
     // on the plain content and returns true; only the plain content CRC-128 is
     // AES encrypted, to avoid reverse attacks against the known encrypted data
-    function MacGetLast(out aCRC: THash256): boolean; override;
-    /// validate if an encrypted buffer matches the stored MAC
-    // - expects the 256-bit MAC, as returned by MacGetLast, to be stored after
-    // the encrypted data
+    function MacEncryptGetTag(out EncryptMac: THash256): boolean; override;
+    /// validates an AEAD (authenticated-encryption with associated-data) MAC
+    // - check if the MAC computed during the last Decryption matches DecryptMac
+    // - default implementation, for a non AEAD protocol, returns false
+    function MacDecryptCheckTag(const DecryptMac: THash256): boolean; override;
+    /// validate if an encrypted buffer matches the stored AEAD MAC
+    // - called before the decryption process to ensure the input is not corrupted
+    // - expects the 256-bit MAC, as returned after Encrypt() by MacEncryptGetTag,
+    // to be stored after the encrypted data
     // - returns true if the 128-bit CRC of the encrypted text matches the
     // supplied buffer, ignoring the 128-bit CRC of the plain data
     // - since it is easy to forge such 128-bit CRC, it will only indicate
     // that no transmission error occured, but won't be an integrity or
-    // authentication proof (which will need full Decrypt + MacGetLast)
-    // - may use any MacSetNonce() aAssociated value
-    function MacCheckError(aEncrypted: pointer; Count: cardinal): boolean; override;
+    // authentication proof (which will need full Decrypt + MacDecryptCheckTag)
+    // - checked CRC includes any MacSetNonce() Associated value
+    function MacCheckError(Encrypted: pointer; Count: cardinal): boolean; override;
   end;
 
   /// AEAD combination of AES with Cipher feedback (CFB) and 256-bit MAC
@@ -922,33 +918,38 @@ type
     /// perform the AES un-cypher and authentication
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
     /// prepare the AES-GCM process before Encrypt/Decrypt is called
-    // - aKey is not used: AES-GCM has its own nonce setting algorithm, and
-    // the IV will be set from random value by EncryptPkcs7()
+    // - RandomNonce is not used: AES-GCM has its own nonce setting algorithm,
+    // and IV is likely to be randomly set by EncryptPkcs7()
     // - will just include any supplied associated data to the GMAC tag
-    function MacSetNonce(const aKey: THash256; aAssociated: pointer = nil;
-      aAssociatedLen: integer = 0): boolean; override;
-    /// returns AEAD (authenticated-encryption with associated-data) MAC
-    /// - only the lower 128-bit (THash256.Lo) of aCRC is filled with the GMAC
-    // - warning: by design, you should always call MacGetLast() or AesGcmFinal()
-    // after Encrypt/Decrypt before reusing this instance
-    function MacGetLast(out aCRC: THash256): boolean; override;
+    // - see AesGcmAad() method as a "pure AES-GCM" alternative
+    function MacSetNonce(DoEncrypt: boolean; const RandomNonce: THash256;
+      Associated: pointer = nil; AssociatedLen: integer = 0): boolean; override;
+    /// returns the AES-GCM GMAC after Encryption
+    // - returns the 128-bit GMAC into EncryptMac.Lo
+    // - see AesGcmFinal() method as a "pure AES-GCM" alternative
+    // - warning: by design, you should always call MacEncryptGetTag() or
+    // MacDecryptCheckTag() after Encrypt/Decrypt before reusing this instance
+    function MacEncryptGetTag(out EncryptMac: THash256): boolean; override;
+    /// validates the AES-GCM GMAC after Decryption
+    // - the expected 128-bit GMAC should be available in DecryptMac.Lo
+    // - see AesGcmFinal() method as a "pure AES-GCM" alternative
+    function MacDecryptCheckTag(const DecryptMac: THash256): boolean; override;
     /// validate if an encrypted buffer matches the stored AEAD MAC
-    // - since AES-GCM is a one pass process, always assume the content is fine
-    // and returns true - we don't know the IV at this time
-    function MacCheckError(
-      aEncrypted: pointer; Count: cardinal): boolean; override;
+    // - always return true, since AES-GCM is a one pass process, and perform
+    // the authentication during the decryption process
+    function MacCheckError(Encrypted: pointer; Count: cardinal): boolean; override;
     /// AES-GCM pure alternative to MacSetNonce()
     // - if the MacEncrypt pattern is not convenient for your purpose
     // - set the IV as usual (only the first 12 bytes will be used for GCM),
     // then optionally append any AEAD data with this method before Encrypt()
     procedure AesGcmAad(Buf: pointer; Len: integer); virtual; abstract;
-    /// AES-GCM pure alternative to MacGetLast()
+    /// AES-GCM pure alternative to MacEncryptGetTag/MacDecryptCheckTag
     // - if the MacEncrypt pattern is not convenient for your purpose
     // - after Encrypt, fill tag with the GCM value of the data and return true
     // - after Decrypt, return true only if the GCM value of the data match tag
-    // - warning: by design, you should always call MacGetLast() or AesGcmFinal()
-    // after Encrypt/Decrypt before reusing this instance
-    function AesGcmFinal(var tag: TAesBlock): boolean; virtual; abstract;
+    // - warning: by design, you should always call AesGcmFinal() after
+    // Encrypt/Decrypt before reusing this instance
+    function AesGcmFinal(var Tag: TAesBlock): boolean; virtual; abstract;
   end;
 
   /// handle AES-GCM cypher/uncypher using our TAesGcmEngine
@@ -972,10 +973,10 @@ type
     // - set the IV as usual (only the first 12 bytes will be used for GCM),
     // then optionally append any AEAD data with this method before Encrypt()
     procedure AesGcmAad(Buf: pointer; Len: integer); override;
-    /// AES-GCM pure alternative to MacGetLast()
+    /// AES-GCM pure alternative to MacEncryptGetTag/MacDecryptCheckTag
     // - after Encrypt, fill tag with the GCM value of the data and return true
     // - after Decrypt, return true only if the GCM value of the data match tag
-    function AesGcmFinal(var tag: TAesBlock): boolean; override;
+    function AesGcmFinal(var Tag: TAesBlock): boolean; override;
   end;
 
 
@@ -4177,25 +4178,23 @@ begin
     SetLength(result, len - padding); // fast in-place resize
 end;
 
-function TAesAbstract.MacSetNonce(const aKey: THash256; aAssociated: pointer;
-  aAssociatedLen: integer): boolean;
+function TAesAbstract.MacSetNonce(DoEncrypt: boolean; const RandomNonce: THash256;
+  Associated: pointer; AssociatedLen: integer): boolean;
 begin
   result := false;
 end;
 
-function TAesAbstract.MacGetLast(out aCRC: THash256): boolean;
+function TAesAbstract.MacEncryptGetTag(out EncryptMac: THash256): boolean;
 begin
   result := false;
 end;
 
-function TAesAbstract.MACEquals(const aCRC: THash256): boolean;
-var
-  mac: THash256;
+function TAesAbstract.MacDecryptCheckTag(const DecryptMac: THash256): boolean;
 begin
-  result := MacGetLast(mac) and IsEqual(mac, aCRC);
+  result := false;
 end;
 
-function TAesAbstract.MacCheckError(aEncrypted: pointer; Count: cardinal): boolean;
+function TAesAbstract.MacCheckError(Encrypted: pointer; Count: cardinal): boolean;
 begin
   result := false;
 end;
@@ -4267,7 +4266,7 @@ begin
   if Encrypt then
   begin
     TAesPrng.Main.FillRandom(nonce);
-    if not MacSetNonce(nonce) then
+    if not MacSetNonce({encrypt=}true, nonce) then
       // leave ASAP if this class doesn't support AEAD process
       exit;
     // inlined EncryptPkcs7() + RecordSave()
@@ -4276,7 +4275,7 @@ begin
     SetLength(result, SIZ + ToVarUInt32Length(enclen) + enclen);
     P := ToVarUInt32(enclen, @rcd^.Data);
     if EncryptPkcs7Buffer(pointer(Data), P, len, enclen, {ivatbeg=}true) and
-       MacGetLast(rcd.mac) then
+       MacEncryptGetTag(rcd.mac) then
     begin
       // compute header
       rcd.nonce := nonce;
@@ -4299,10 +4298,10 @@ begin
       // to avoid buffer overflow
       exit;
     // decrypt and check MAC
-    if MacSetNonce(pcd^.nonce) then
+    if MacSetNonce({encrypt=}false, pcd^.nonce) then
       result := DecryptPkcs7Buffer(P, len, {ivatbeg=}true, {raiseexc=}false);
     if result <> '' then
-      if not MACEquals(pcd^.mac) then
+      if not MacDecryptCheckTag(pcd^.mac) then
       begin
         FillZero(result);
         result := '';
@@ -4700,36 +4699,40 @@ begin
   FillCharFast(fMac, SizeOf(fMac), 0);
 end;
 
-function TAesAbstractAead.MacSetNonce(const aKey: THash256; aAssociated: pointer;
-  aAssociatedLen: integer): boolean;
-var
-  rec: THash256Rec absolute aKey;
+function TAesAbstractAead.MacSetNonce(DoEncrypt: boolean; const RandomNonce: THash256;
+  Associated: pointer; AssociatedLen: integer): boolean;
 begin
   // safe seed for plain text crc, before AES encryption
   // from TEcdheProtocol.SetKey, aKey is a public nonce to avoid replay attacks
-  fMacKey.plain := rec.Lo;
-  XorBlock16(@fMacKey.plain, @rec.Hi);
+  fMacKey.plain := THash256Rec(RandomNonce).Lo;
+  XorBlock16(@fMacKey.plain, @THash256Rec(RandomNonce).Hi);
   // neutral seed for encrypted crc, to check for errors, with no compromission
-  if (aAssociated <> nil) and
-     (aAssociatedLen > 0) then
-    crc128c(aAssociated, aAssociatedLen, fMacKey.encrypted)
+  if (Associated <> nil) and
+     (AssociatedLen > 0) then
+    crc128c(Associated, AssociatedLen, fMacKey.encrypted)
   else
-    FillcharFast(fMacKey.encrypted, SizeOf(THash128), 255);
+    FillcharFast(fMacKey.encrypted, SizeOf(THash128), 255); // -1 seed
   result := true;
 end;
 
-function TAesAbstractAead.MacGetLast(out aCRC: THash256): boolean;
-var
-  rec: THash256Rec absolute aCRC;
+function TAesAbstractAead.MacEncryptGetTag(out EncryptMac: THash256): boolean;
 begin
   // encrypt the plain text crc, to perform message authentication and integrity
-  fAes.Encrypt(fMac.plain, rec{%H-}.Lo);
+  fAes.Encrypt(fMac.plain, THash256Rec({%H-}EncryptMac).Lo);
   // store the encrypted text crc, to check for errors, with no compromission
-  rec.Hi := fMac.encrypted;
+  THash256Rec(EncryptMac).Hi := fMac.encrypted;
   result := true;
 end;
 
-function TAesAbstractAead.MacCheckError(aEncrypted: pointer; Count: cardinal): boolean;
+function TAesAbstractAead.MacDecryptCheckTag(const DecryptMac: THash256): boolean;
+var
+  expected: THash256;
+begin
+  result := MacEncryptGetTag(expected) and
+            IsEqual(expected, DecryptMac);
+end;
+
+function TAesAbstractAead.MacCheckError(Encrypted: pointer; Count: cardinal): boolean;
 var
   crc: THash128;
 begin
@@ -4738,8 +4741,8 @@ begin
      (Count and AesBlockMod <> 0) then
     exit;
   crc := fMacKey.encrypted;
-  crcblocks(@crc, aEncrypted, Count shr 4 - 2);
-  result := IsEqual(crc, PHash128(@PByteArray(aEncrypted)[Count - SizeOf(crc)])^);
+  crcblocks(@crc, Encrypted, Count shr 4 - 2);
+  result := IsEqual(crc, PHash128(@PByteArray(Encrypted)[Count - SizeOf(crc)])^);
 end;
 
 
@@ -5171,7 +5174,8 @@ begin
     fStarted := stEnc;
     AesGcmReset; // caller should have set the IV
   end;
-  if not AesGcmProcess(BufIn, BufOut, Count) then
+  if (Count <> 0) and
+     not AesGcmProcess(BufIn, BufOut, Count) then
     raise ESynCrypto.CreateUtf8(
       '%.Encrypt called after GCM final state', [self]);
 end;
@@ -5185,40 +5189,58 @@ begin
     fStarted := stDec;
     AesGcmReset; // caller should have set the IV
   end;
-  if not AesGcmProcess(BufIn, BufOut, Count) then
+  if (Count <> 0) and
+     not AesGcmProcess(BufIn, BufOut, Count) then
     raise ESynCrypto.CreateUtf8(
       '%.Decrypt called after GCM final state', [self]);
 end;
 
-function TAesGcmAbstract.MacSetNonce(const aKey: THash256; aAssociated: pointer;
-  aAssociatedLen: integer): boolean;
+function TAesGcmAbstract.MacSetNonce(DoEncrypt: boolean;
+  const RandomNonce: THash256; Associated: pointer; AssociatedLen: integer): boolean;
 begin
   if fStarted <> stNone then
   begin
     result := false; // should be called before Encrypt/Decrypt
     exit;
   end;
-  // aKey is ignored since not used during GMAC computation
-  if (aAssociated <> nil) and
-     (aAssociatedLen > 0) then
-    AesGcmAad(aAssociated, aAssociatedLen);
+  // RandomNonce is ignored since not used during AES-GCM GMAC computation
+  if (Associated <> nil) and
+     (AssociatedLen > 0) then
+  begin
+    // we need to initiate the Encryption/Decryption phase to set the AAD
+    if DoEncrypt then
+      Encrypt(nil, nil, 0)
+    else
+      Decrypt(nil, nil, 0);
+    // now it will call the overriden AES-GCM engine
+    AesGcmAad(Associated, AssociatedLen);
+  end;
   result := true;
 end;
 
-function TAesGcmAbstract.MacGetLast(out aCRC: THash256): boolean;
+function TAesGcmAbstract.MacEncryptGetTag(out EncryptMac: THash256): boolean;
 begin
-  if fStarted = stNone then
+  if fStarted <> stEnc then
+    result := false // should be called after Encrypt
+  else
   begin
-    result := false; // should be called after Encrypt/Decrypt
-    exit;
+    FillZero(THash256Rec(EncryptMac).Hi); // upper 128-bit are not used
+    result := AesGcmFinal(THash256Rec(EncryptMac).Lo); // compute GMAC
   end;
-  result := AesGcmFinal(THash256Rec(aCRC).Lo);
-  FillZero(THash256Rec(aCRC).Hi); // upper 128-bit are not used
 end;
 
-function TAesGcmAbstract.MacCheckError(aEncrypted: pointer; Count: cardinal): boolean;
+function TAesGcmAbstract.MacDecryptCheckTag(const DecryptMac: THash256): boolean;
 begin
-  result := true; // AES-GCM requires the IV to be set -> will be checked later
+  if fStarted <> stDec then
+    result := false // should be called after Decrypt
+  else
+    // validate the GMAX with the supplied lower 128-bit
+    result := AesGcmFinal(PAesBlock(@THash256Rec(DecryptMac).Lo)^);
+end;
+
+function TAesGcmAbstract.MacCheckError(Encrypted: pointer; Count: cardinal): boolean;
+begin
+  result := true; // AES-GCM is a one-pass algorithm -> GMAC is checked later
 end;
 
 
