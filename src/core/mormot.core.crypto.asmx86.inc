@@ -958,13 +958,13 @@ end;
 
 procedure AesNiTrailer; // = TAesAbstractSyn.EncryptTrailer from AES-NI procs
   {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // eax=TAesContext ecx=len xmm7=CV esi=BufIn edi=BufOut
-    call   dword ptr [eax].TAesContext.AesNi32 // = AES.Encrypt(fCV,fCV)
+asm // eax=TAesContext ecx=len xmm7=IV esi=BufIn edi=BufOut
+    call   dword ptr [eax].TAesContext.AesNi32 // = AES.Encrypt(fIV,fIV)
     lea    edx, [eax].TAesContext.buf // used as temporary buffer
     movups [edx], xmm7
     cld
 @s: lodsb
-    xor    al, [edx] // = XorMemory(pointer(fOut),pointer(fIn),@fCV,len);
+    xor    al, [edx] // = XorMemory(pointer(fOut),pointer(fIn),@fIV,len);
     inc    edx
     stosb
     dec    ecx

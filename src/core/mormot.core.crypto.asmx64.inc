@@ -2681,7 +2681,7 @@ procedure AesNiEncryptOfb128(iv, aes, source, dest: pointer; blockcount: PtrUInt
         mov     rax, blockcount  // on Win64 ABI, blockcount is not a register
         test    eax, eax
         jz      @z
-        movups  xmm7, dqword ptr [iv]  // xmm7 = CV
+        movups  xmm7, dqword ptr [iv]  // xmm7 = IV
         movups  xmm0, dqword ptr [aes + 16 * 0]
         movups  xmm1, dqword ptr [aes + 16 * 1]
         movups  xmm2, dqword ptr [aes + 16 * 2]
@@ -2707,11 +2707,12 @@ procedure AesNiEncryptOfb128(iv, aes, source, dest: pointer; blockcount: PtrUInt
         aesenc  xmm7, xmm10
         aesenclast xmm7, xmm11
         pxor    xmm15, xmm7
-        movups  dqword ptr [dest], xmm15  // fOut := fIn xor CV
+        movups  dqword ptr [dest], xmm15  // fOut := fIn xor IV
         add     source, 16
         add     dest, 16
         dec     eax
         jnz     @s
+        movups  dqword ptr [iv], xmm7
 @z:
 end;
 
@@ -2720,7 +2721,7 @@ procedure AesNiEncryptOfb256(iv, aes, source, dest: pointer; blockcount: PtrUInt
         mov     rax, blockcount
         test    eax, eax
         jz      @z
-        movups  xmm7, dqword ptr [iv]  // xmm7 = CV
+        movups  xmm7, dqword ptr [iv]  // xmm7 = IV
         movups  xmm0, dqword ptr [aes + 16 * 0]
         movups  xmm1, dqword ptr [aes + 16 * 1]
         movups  xmm2, dqword ptr [aes + 16 * 2]
@@ -2755,11 +2756,12 @@ procedure AesNiEncryptOfb256(iv, aes, source, dest: pointer; blockcount: PtrUInt
         aesenclast xmm7, xmm15
         movups  xmm15, dqword ptr [source]
         pxor    xmm15, xmm7
-        movups  dqword ptr [dest], xmm15  // fOut := fIn xor fCV
+        movups  dqword ptr [dest], xmm15  // fOut := fIn xor fIV
         add     source, 16
         add     dest, 16
         dec     eax
         jnz     @s
+        movups  dqword ptr [iv], xmm7
 @z:
 end;
 
