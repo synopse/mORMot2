@@ -30,6 +30,7 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.crypto,
+  mormot.core.ecc,
   mormot.lib.openssl11;
 
 
@@ -196,6 +197,11 @@ type
     // - after Decrypt, return true only if the GCM value of the data match tag
     function AesGcmFinal(var tag: TAesBlock): boolean; override;
   end;
+
+
+/// call once at program startup to use OpenSSL when its performance
+// - mainly for AES-GCM and AES-CTR process
+procedure RegisterOpenSsl;
 
 
 implementation
@@ -513,6 +519,18 @@ end;
 function TAesGcmOsl.CloneEncryptDecrypt: TAesAbstract;
 begin
   result := self;
+end;
+
+
+procedure RegisterOpenSsl;
+begin
+  if not OpenSslIsAvailable then
+    exit;
+  // so that mormot.core.ecc.pas' TEcdheProtocol could benefit from OpenSSL
+  ECDHEPROT_EF2AES[efAesCtr128] := TAesCtrNistOsl;
+  ECDHEPROT_EF2AES[efAesCtr256] := TAesCtrNistOsl;
+  ECDHEPROT_EF2AES[efAesGcm128] := TAesGcmOsl;
+  ECDHEPROT_EF2AES[efAesGcm256] := TAesGcmOsl;
 end;
 
 

@@ -10,9 +10,10 @@ interface
 {$ifdef OSWINDOWS}
   // on Windows: enable Microsoft AES Cryptographic Provider (XP SP3 and up)
   {$define USE_PROV_RSA_AES}
-  {.$define USE_OPENSSL} // define at your own risk ;)
+  // define at your own risk, if you have the good libraries ;)
+  {/$define USE_OPENSSL}
 {$else}
-  // don't check OpenSSL on Windows which is a PITA to get the right libraries
+  // try OpenSSL on POSIX systems where it is likely to be unique and maintained
   {$define USE_OPENSSL}
 {$endif OSWINDOWS}
 
@@ -1143,6 +1144,7 @@ begin
             // writeln(one.classname, ks, ' ', AesBlockToShortString(tag1));
             CheckEqual(AesBlockToString(tag1), TEST_AES_TAG[k]);
           end;
+          one.IV := iv.b;
           s2 := one.EncryptPkcs7(st, false); // twice to check AES ctxt reuse
           if gcm then
           begin
@@ -1156,6 +1158,7 @@ begin
           //if TEST_AES_REF[k, i] <> s3 then
           //  writeln(m, ' ', MODES[m].ClassName, ' ', ks, #13#10' ',s3, #13#10' ', TEST_AES_REF[k, i]);
           CheckUtf8(TEST_AES_REF[k, i] = s3, 'test vector %-% %', [MODES[m], ks, s3]);
+          one.IV := iv.b;
           check(one.DecryptPkcs7(s2, false) = st);
           if gcm then
             Check(TAesGcmAbstract(one).AesGcmFinal(tag1));
@@ -1169,6 +1172,7 @@ begin
               Check(TAesGcmAbstract(two).AesGcmFinal(tag1));
               Check(IsEqual(tag1, tag2));
             end;
+            two.IV := iv.b;
             s2 := two.EncryptPkcs7(st, false); // twice to check AES ctxt reuse
             if gcm then
             begin
@@ -1178,6 +1182,7 @@ begin
             end;
             s4 := BinToBase64uri(s2);
             CheckEqual(s3, s4);
+            two.IV := iv.b;
             checkEqual(two.DecryptPkcs7(s2, false), st);
             if gcm then
               Check(TAesGcmAbstract(two).AesGcmFinal(tag1));
@@ -1234,7 +1239,6 @@ begin
               one := MODES[m].Create(Key, ks);
               try
                 gcm := one.InheritsFrom(TAesGcmAbstract);
-                FillCharFast(pointer(@one.IV)^, sizeof(one.IV), 1);
                 //Timer.Start;
                 for i := 0 to 256 do
                 begin
@@ -1245,12 +1249,14 @@ begin
                   else
                     len := i * 31; // encrypt buffers from 0 to 7936 bytes
                   s2 := copy(orig, 1, len);
+                  FillCharFast(pointer(@one.IV)^, sizeof(one.IV), 1);
                   s3 := one.EncryptPkcs7(s2);
                   if gcm then
                   begin
                     FillZero(tag1);
                     TAesGcmAbstract(one).AesGcmFinal(tag1);
                   end;
+                  FillCharFast(pointer(@one.IV)^, sizeof(one.IV), 1);
                   Check(one.DecryptPkcs7(s3) = s2, IntToStr(len));
                   if gcm then
                     Check(TAesGcmAbstract(one).AesGcmFinal(tag1));
@@ -1554,6 +1560,12 @@ begin
     check(CompareMem(@dig, @dig2, sizeof(dig)));
   end;
 end;
+
+initialization
+  {$ifdef USE_OPENSSL}
+  // don't try OpenSSL on Windows which is a PITA to get the right libraries
+  RegisterOpenSsl;
+  {$endif USE_OPENSSL}
 
 end.
 
