@@ -134,9 +134,9 @@ type
   end;
 
   /// OpenSSL AES cypher/uncypher with Cipher feedback (CFB)
-  // - our TAesCfb class is slightly faster than OpenSSL:
-  // $ 2500 aes128cfb in 10.80ms i.e. 231438/s or 492.5 MB/s
-  // $ 2500 aes128cfbosl in 10.96ms i.e. 228039/s or 485.3 MB/s
+  // - our TAesCfb class is faster than OpenSSL:
+  // $ 2500 aes128cfb in 6.98ms i.e. 357807/s or 761.4 MB/s
+  // $ 2500 aes256cfb in 9.41ms i.e. 265646/s or 565.3 MB/s
   // $ 2500 aes256cfb in 13.36ms i.e. 187041/s or 398 MB/s
   // $ 2500 aes256cfbosl in 13.47ms i.e. 185473/s or 394.7 MB/s
   TAesCfbOsl = class(TAesAbstractOsl)

@@ -741,12 +741,13 @@ type
   /// handle AES cypher/uncypher with Cipher feedback (CFB)
   // - this class will use AES-NI hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
-  // - on x86_64, our TAesCfb class is slightly faster than OpenSSL:
-  // $ 2500 aes128cfb in 10.80ms i.e. 231438/s or 492.5 MB/s
-  // $ 2500 aes128cfbosl in 10.96ms i.e. 228039/s or 485.3 MB/s
+  // - on x86_64, our TAesCfb class is really faster than OpenSSL:
+  // $ 2500 aes128cfb in 6.98ms i.e. 357807/s or 761.4 MB/s
+  // $ 2500 aes256cfb in 9.41ms i.e. 265646/s or 565.3 MB/s
   // $ 2500 aes256cfb in 13.36ms i.e. 187041/s or 398 MB/s
   // $ 2500 aes256cfbosl in 13.47ms i.e. 185473/s or 394.7 MB/s
   // - expect IV to be set before process, or IVAtBeginning=true
+  // - is used e.g. by CryptDataForCurrentUser or WebSockets ProtocolAesClass
   TAesCfb = class(TAesAbstractEncryptOnly)
   public
     /// perform the AES cypher in the CFB mode
@@ -758,7 +759,7 @@ type
   /// handle AES cypher/uncypher with Output feedback (OFB)
   // - this class will use AES-NI hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
-  // - on x86_64, our TAesOfb class is noticeably faster than OpenSSL:
+  // - on x86_64, our TAesOfb class is faster than OpenSSL:
   // $ 2500 aes128ofb in 7.07ms i.e. 353207/s or 751.7 MB/s
   // $ 2500 aes128ofbosl in 8.20ms i.e. 304692/s or 648.4 MB/s
   // $ 2500 aes256ofb in 9.64ms i.e. 259201/s or 551.6 MB/s
@@ -4623,6 +4624,7 @@ end;
   {$WARN 7121 off : Check size of memory operand }
 {$endif FPC}
 
+
 { TAesCfb }
 
 procedure TAesCfb.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
@@ -4630,6 +4632,22 @@ var
   i: integer;
   tmp: TAesBlock;
 begin
+  {$ifdef USEAESNI64}
+  if (Count and AesBlockMod = 0) and
+     (cfAESNI in CpuFeatures) then
+    case integer(TAesContext(fAes).KeyBits) of
+      128:
+        begin
+          AesNiDecryptCfb128(BufIn, BufOut, self, Count shr AesBlockShift);
+          exit;
+        end;
+      256:
+        begin
+          AesNiDecryptCfb256(BufIn, BufOut, self, Count shr AesBlockShift);
+          exit;
+        end;
+    end;
+  {$endif USEAESNI64}
   {$ifdef USEAESNI32}
   if Assigned(TAesContext(fAes.Context).AesNi32) then
     asm
@@ -4686,6 +4704,22 @@ procedure TAesCfb.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
   i: integer;
 begin
+  {$ifdef USEAESNI64}
+  if (Count and AesBlockMod = 0) and
+     (cfAESNI in CpuFeatures) then
+    case integer(TAesContext(fAes).KeyBits) of
+      128:
+        begin
+          AesNiEncryptCfb128(BufIn, BufOut, self, Count shr AesBlockShift);
+          exit;
+        end;
+      256:
+        begin
+          AesNiEncryptCfb256(BufIn, BufOut, self, Count shr AesBlockShift);
+          exit;
+        end;
+    end;
+  {$endif USEAESNI64}
   {$ifdef USEAESNI32}
   if Assigned(TAesContext(fAes).AesNi32) then
     asm

@@ -124,10 +124,10 @@ procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSha1Digest)
 { ******************** WebSockets Protocols Implementation }
 
 var
-  /// the raw class used by TWebSocketProtocol.SetEncryptKey/SetEncryptKeyAes
-  // - was TAesCfb on mORMot 1.18, but we switched to TAesOfb with mORMot 2
-  // - you can put back the TAesCfb class here for backward compatibility
-  ProtocolAesClass: TAesAbstractClass = TAesOfb;
+  /// the raw AES class used by TWebSocketProtocol.SetEncryptKey/SetEncryptKeyAes
+  // - you may set TAesCtrFast which is parallelizable, so much faster on x86_64
+  // or if mormot.core.crypto.openssl.pas is part of your project
+  ProtocolAesClass: TAesAbstractClass = TAesCfb;
 
   /// how TWebSocketProtocol.SetEncryptKey derivate its password via PBKDF2_SHA3()
   // - we use PBKDF2 over SHA-3 in 256-bit, for a future-proof derivation
