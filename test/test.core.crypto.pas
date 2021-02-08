@@ -1079,7 +1079,7 @@ var
   iv: THash128Rec;
   i, k, ks, m, len: integer;
   tag1, tag2: TAesBlock;
-  one, two: TAesAbstract;
+  one, two, encdec: TAesAbstract;
   {$ifndef PUREMORMOT2}
   AES: TAesFull;
   {$endif PUREMORMOT2}
@@ -1118,8 +1118,6 @@ begin
   SetLength(crypted, MAX + 256);
   st := '1234essai';
   PInteger(UniqueRawUtf8(RawUtf8(st)))^ := Random(MaxInt);
-  iv.L := $1234567890abcdef; // synch with TEST_AES_REF
-  iv.H := $0fedcba987654321;
   for noaesni := false to true do
   begin
     {%H-}Timer[noaesni].Init;
@@ -1131,6 +1129,8 @@ begin
         if (MODES[m] = nil) or
            not MODES[m].IsAvailable then
           continue; // OpenSSL may not be available on this platform
+        iv.L := $1234567890abcdef; // synch with TEST_AES_REF
+        iv.H := $0fedcba987654321;
         st := RawUtf8(StringOfChar('x', 50)); // synch with TEST_AES_REF
         one := MODES[m].Create(pointer(st)^, ks);
         try
@@ -1182,10 +1182,13 @@ begin
             end;
             s4 := BinToBase64uri(s2);
             CheckEqual(s3, s4);
-            two.IV := iv.b;
-            checkEqual(two.DecryptPkcs7(s2, false), st);
+            encdec := two.CloneEncryptDecrypt;
+            encdec.IV := iv.b;
+            checkEqual(encdec.DecryptPkcs7(s2, false), st);
             if gcm then
-              Check(TAesGcmAbstract(two).AesGcmFinal(tag1));
+              Check(TAesGcmAbstract(encdec).AesGcmFinal(tag1));
+            if encdec <> two then
+              encdec.Free;
           finally
             two.Free;
           end;
@@ -1230,6 +1233,7 @@ begin
         Check(len = MAX);
         Check(CompareMem(AES.outStreamCreated.Memory, pointer(orig), MAX));
       {$endif PUREMORMOT2}
+        iv.c3 := $e0ffffff; // trigger CTR overflow
         if not noaesni then
         begin
           for m := low(MODES) to high(MODES) do
@@ -1249,14 +1253,15 @@ begin
                   else
                     len := i * 31; // encrypt buffers from 0 to 7936 bytes
                   s2 := copy(orig, 1, len);
-                  FillCharFast(pointer(@one.IV)^, sizeof(one.IV), 1);
+                  check(length(s2) = len);
+                  one.iv := iv.b;
                   s3 := one.EncryptPkcs7(s2);
                   if gcm then
                   begin
                     FillZero(tag1);
                     TAesGcmAbstract(one).AesGcmFinal(tag1);
                   end;
-                  FillCharFast(pointer(@one.IV)^, sizeof(one.IV), 1);
+                  one.iv := iv.b;
                   Check(one.DecryptPkcs7(s3) = s2, IntToStr(len));
                   if gcm then
                     Check(TAesGcmAbstract(one).AesGcmFinal(tag1));
