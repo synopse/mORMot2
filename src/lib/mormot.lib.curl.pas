@@ -253,6 +253,26 @@ type
     crTFTPExists,
     crTFTPNoSuchUser);
 
+  /// libcurl share interface result codes
+  CURLSHcode = (
+    CURLSHE_OK,           // all is fine
+    CURLSHE_BAD_OPTION,   // 1
+    CURLSHE_IN_USE,       // 2
+    CURLSHE_INVALID,      // 3
+    CURLSHE_NOMEM,        // 4 out of memory
+    CURLSHE_NOT_BUILT_IN, // 5 feature not present in lib
+    CURLSHE_LAST);        // never use
+
+  /// libcurl share interface options
+  CURLSHoption = (
+    CURLSHOPT_NONE,
+    CURLSHOPT_SHARE,
+    CURLSHOPT_UNSHARE,
+    CURLSHOPT_LOCKFUNC,
+    CURLSHOPT_UNLOCKFUNC,
+    CURLSHOPT_USERDATA,
+    CURLSHOPT_LAST);
+
   /// low-level information enumeration for libcurl library API calls
   TCurlInfo = (
     ciNone,
@@ -385,6 +405,9 @@ type
   PPCurlSListArray = ^PCurlSListArray;
   PCurlSListArray = array[0 .. (MaxInt div SizeOf(PCurlSList)) - 1] of PCurlSList;
 
+  /// low-level access to the libcurl share interface
+  TCurlShare = type pointer;
+
   /// low-level access to the libcurl library instance in "multi" mode
   TCurlMulti = type pointer;
 
@@ -428,6 +451,29 @@ type
   curl_read_callback = function (buffer: PAnsiChar; size,nitems: integer;
     instream: pointer): integer; cdecl;
 
+  curl_lock_data = (
+    CURL_LOCK_DATA_NONE = 0,
+    CURL_LOCK_DATA_SHARE,
+    CURL_LOCK_DATA_COOKIE,
+    CURL_LOCK_DATA_DNS,
+    CURL_LOCK_DATA_SSL_SESSION,
+    CURL_LOCK_DATA_CONNECT,
+    CURL_LOCK_DATA_PSL,
+    CURL_LOCK_DATA_LAST);
+
+  curl_lock_access = (
+    CURL_LOCK_ACCESS_NONE = 0,
+    CURL_LOCK_ACCESS_SHARED = 1,
+    CURL_LOCK_ACCESS_SINGLE = 2,
+    CURL_LOCK_ACCESS_LAST);
+
+  /// lock function signature for CURLSHOPT_LOCKFUNC
+  curl_lock_function = procedure (handle: TCurl; data: curl_lock_data;
+    locktype: curl_lock_access; userptr: pointer); cdecl;
+  /// unlock function signature for CURLSHOPT_UNLOCKFUNC
+  curl_unlock_function = procedure (handle: TCurl; data: curl_lock_data;
+    userptr: pointer); cdecl;
+
 {$Z1}
 
 
@@ -460,6 +506,11 @@ type
   TLibCurl = class(TSynLibrary)
   {$endif LIBCURLSTATIC}
   public
+    // in case CurlEnableShare is called this array holds a
+    // critical section per curl_lock_data
+    share_cs: array[0..Ord(CURL_LOCK_DATA_PSL)] of TRTLCriticalSection;
+    /// global TCurlShare object, created by CurlEnableGlobalShare
+    globalShare: TCurlShare;
     /// initialize the library
     global_init: function(flags: TCurlGlobalInit): TCurlResult; cdecl;
     /// finalize the library
@@ -486,6 +537,14 @@ type
     slist_append: function(list: TCurlSList; s: PAnsiChar): TCurlSList; cdecl;
     /// free an entire slist
     slist_free_all: procedure(list: TCurlSList); cdecl;
+    /// create a shared object
+    share_init: function: pointer; cdecl;
+    /// clean up a shared object
+    share_cleanup: function(share_handle: TCurlShare): CURLSHcode; cdecl;
+    /// set options for a shared object
+    share_setopt: function(share: TCurlShare; option: CURLSHoption): CURLSHcode; cdecl varargs;
+    /// return the text description of an error code
+    share_strerror: function(code: CURLSHcode): PAnsiChar; cdecl;
 
     {$ifdef LIBCURLMULTI}
     /// add an easy handle to a multi session
@@ -522,6 +581,10 @@ type
     info: TCurlVersionInfo;
     /// contains textual information about the initialized libcurl instance
     infoText: string;
+
+    {$ifndef LIBCURLSTATIC}
+    destructor Destroy; override;
+    {$endif LIBCURLSTATIC}
   end;
 
 var
@@ -549,7 +612,6 @@ function CurlIsAvailable: boolean;
 // in practice a RawUtf8 or a RawByteString
 function CurlWriteRawByteString(buffer: PAnsiChar; size,nitems: integer;
   opaque: pointer): integer; cdecl;
-
 
 
 implementation 
@@ -597,6 +659,14 @@ implementation
   function curl_slist_append(list: TCurlSList; s: PAnsiChar): TCurlSList; cdecl; external;
   /// free an entire slist
   procedure curl_slist_free_all(list: TCurlSList); cdecl; external;
+    /// create a shared object
+  function curl_share_init: pointer; cdecl; external
+  /// clean up a shared object
+  function curl_share_cleanup(share_handle: TCurlShare): CURLSHcode; cdecl; external;
+  /// set options for a shared object
+  function curl_share_setopt(share: TCurlShare; option: CURLSHoption): CURLSHcode; cdecl varargs; external;
+  /// return string describing error code
+  function curl_share_strerror(code: CURLSHcode): PAnsiChar;  cdecl; external;
 
   {$ifdef LIBCURLMULTI}
   /// add an easy handle to a multi session
@@ -674,11 +744,12 @@ var
   api: PtrInt;
 
 const
-  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 26 {$else} 12 {$endif}] of PAnsiChar = (
+  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 30 {$else} 16 {$endif}] of PAnsiChar = (
     'curl_global_init', 'curl_global_cleanup', 'curl_version_info',
     'curl_easy_init', 'curl_easy_setopt', 'curl_easy_perform', 'curl_easy_cleanup',
     'curl_easy_getinfo', 'curl_easy_duphandle', 'curl_easy_reset',
-    'curl_easy_strerror', 'curl_slist_append', 'curl_slist_free_all'
+    'curl_easy_strerror', 'curl_slist_append', 'curl_slist_free_all',
+    'share_init', 'share_cleanup','share_setopt', 'share_strerror'
     {$ifdef LIBCURLMULTI},
     'curl_multi_add_handle', 'curl_multi_assign', 'curl_multi_cleanup',
     'curl_multi_fdset', 'curl_multi_info_read', 'curl_multi_init',
@@ -716,6 +787,10 @@ begin
     curl.easy_strerror := @curl_easy_strerror;
     curl.slist_append := @curl_slist_append;
     curl.slist_free_all := @curl_slist_free_all;
+    curl.share_init := @curl_share_init;
+    curl.share_cleanup := @curl_share_cleanup;
+    curl.share_setopt := @curl_share_setopt;
+    curl.strerror := @curl_share_strerror;
     {$ifdef LIBCURLMULTI}
     curl.multi_add_handle := @curl_multi_add_handle;
     curl.multi_assign := @curl_multi_assign;
@@ -772,6 +847,9 @@ begin
     curl.infoText := format('%s version %s', [LIBCURL_DLL, curl.info.version]);
     if curl.info.ssl_version <> nil then
       curl.infoText := format('%s using %s', [curl.infoText, curl.info.ssl_version]);
+
+    curl.globalShare := nil;
+    CurlEnableGlobalShare; // won't hurt, and may benefit even for the OS
     // api := 0; with curl.info do while protocols[api]<>nil do
     // begin write(protocols[api], ' '); inc(api); end; writeln(#13#10,curl.infoText);
   finally
@@ -780,13 +858,74 @@ begin
   end;
 end;
 
+procedure curlShareLock(handle: TCurl; data: curl_lock_data;
+  locktype: curl_lock_access; userptr: pointer); cdecl;
+begin
+  EnterCriticalSection(curl.share_cs[Ord(data)]);
+end;
+
+procedure curlShareUnLock(handle: TCurl; data: curl_lock_data;
+  userptr: pointer); cdecl;
+begin
+  LeaveCriticalSection(curl.share_cs[Ord(data)]);
+end;
+
+function CurlEnableGlobalShare: boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  if not CurlIsAvailable or (curl.globalShare<>nil) then
+    exit; // not available, or already shared
+  curl.globalShare := curl.share_init;
+  if curl.globalShare = nil then
+    exit; // something went wrong (out of memory, etc.) and therefore the share object was not created
+  for i := 0 to Ord(CURL_LOCK_DATA_PSL) do
+    InitializeCriticalSection(curl.share_cs[i]);
+  curl.share_setopt(curl.globalShare,CURLSHOPT_LOCKFUNC,@curlShareLock);
+  curl.share_setopt(curl.globalShare,CURLSHOPT_UNLOCKFUNC,@curlShareUnLock);
+  curl.share_setopt(curl.globalShare,CURLSHOPT_SHARE,CURL_LOCK_DATA_DNS);
+  curl.share_setopt(curl.globalShare,CURLSHOPT_SHARE,CURL_LOCK_DATA_SSL_SESSION);
+  curl.share_setopt(curl.globalShare,CURLSHOPT_SHARE,CURL_LOCK_DATA_CONNECT);
+  result := true;
+end;
+
+function CurlDisableGlobalShare: CURLSHcode;
+var
+  i: PtrInt;
+begin
+  result := CURLSHE_OK;
+  if curl.globalShare = nil then
+    exit; // already disabled
+  result := curl.share_cleanup(curl.globalShare);
+  if result = CURLSHE_OK then
+    curl.globalShare := nil;
+  for i := 0 to Ord(CURL_LOCK_DATA_PSL) do
+    DeleteCriticalSection(curl.share_cs[i]);
+end;
+
+{$ifndef LIBCURLSTATIC}
+destructor TLibCurl.Destroy;
+begin
+  CurlDisableGlobalShare;
+  curl.global_cleanup;
+end;
+{$endif LIBCURLSTATIC}
+
 
 initialization
 
-{$ifndef LIBCURLSTATIC}
 finalization
+  {$ifdef LIBCURLSTATIC}
+  if curl_initialized and
+     (curl <> nil) then
+  begin
+    CurlDisableGlobalShare;
+    curl.global_cleanup;
+  end;
+  {$else}
   curl.Free;
-{$endif LIBCURLSTATIC}
+  {$endif LIBCURLSTATIC}
 
 end.
 
