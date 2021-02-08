@@ -614,6 +614,22 @@ function CurlIsAvailable: boolean;
 function CurlWriteRawByteString(buffer: PAnsiChar; size,nitems: integer;
   opaque: pointer): integer; cdecl;
 
+/// enable libcurl multiple easy handles to share data
+// - is called automatically during libcurl initialization
+// - shared objects are: DNS cache, TLS session cache and connection cache
+// - this way, each single transfer can take advantage of the context of the
+// other transfer(s)
+// - do nothing if the global share has already been enabled
+// - see https://curl.se/libcurl/c/libcurl-share.html for details
+function CurlEnableGlobalShare: boolean;
+
+/// disable a global share for libcurl
+// - is called automatically in finalization section
+// - can be called on purpose, to ensure there is no active HTTP requests
+// and prevent CURLSHE_IN_USE error
+// - you can re-enable the libcurl global share by CurlEnableGlobalShare
+function CurlDisableGlobalShare: CURLSHcode;
+
 
 implementation 
 
