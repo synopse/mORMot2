@@ -3385,6 +3385,356 @@ begin
   until len = 0;
 end;
 
+procedure AesNiEncryptCfbCrc128(src, dest, aes: pointer; blocks: PtrUInt);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        {$ifdef WIN64ABI}
+        push    rsi
+        push    rdi
+        mov     rdi, src     // rcx
+        mov     rsi, dest    // rdx
+        mov     rdx, aes     // r8
+        mov     rcx, blocks  // r9
+        {$endif WIN64ABI}
+        // rdi=src, rsi=dest, rdx=aes, rcx=blocks
+        test    ecx, ecx
+        jz      @z
+        push    r12
+        push    r13
+        push    rbx
+        // only use 32-bit and 128-bit registers within the loop
+        mov     eax, dword ptr [rdx + 0].TAesCfbCrc.fMac.plain
+        mov     ebx, dword ptr [rdx + 4].TAesCfbCrc.fMac.plain
+        mov     r8d, dword ptr [rdx + 8].TAesCfbCrc.fMac.plain
+        mov     r9d, dword ptr [rdx + 12].TAesCfbCrc.fMac.plain
+        mov     r10d, dword ptr [rdx + 0].TAesCfbCrc.fMac.encrypted
+        mov     r11d, dword ptr [rdx + 4].TAesCfbCrc.fMac.encrypted
+        mov     r12d, dword ptr [rdx + 8].TAesCfbCrc.fMac.encrypted
+        mov     r13d, dword ptr [rdx + 12].TAesCfbCrc.fMac.encrypted
+        movups  xmm0, dqword ptr [rdx + 16 * 0].TAesCfbCrc.fAes
+        movups  xmm1, dqword ptr [rdx + 16 * 1].TAesCfbCrc.fAes
+        movups  xmm2, dqword ptr [rdx + 16 * 2].TAesCfbCrc.fAes
+        movups  xmm3, dqword ptr [rdx + 16 * 3].TAesCfbCrc.fAes
+        movups  xmm4, dqword ptr [rdx + 16 * 4].TAesCfbCrc.fAes
+        movups  xmm5, dqword ptr [rdx + 16 * 5].TAesCfbCrc.fAes
+        movups  xmm6, dqword ptr [rdx + 16 * 6].TAesCfbCrc.fAes
+        movups  xmm8, dqword ptr [rdx + 16 * 7].TAesCfbCrc.fAes
+        movups  xmm9, dqword ptr [rdx + 16 * 8].TAesCfbCrc.fAes
+        movups  xmm10, dqword ptr [rdx + 16 * 9].TAesCfbCrc.fAes
+        movups  xmm11, dqword ptr [rdx + 16 * 10].TAesCfbCrc.fAes
+        movups  xmm7, dqword ptr [rdx].TAesCfbCrc.fIV  // xmm7 = IV
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@s:     movups  xmm15, dqword ptr [rdi]
+        crc32   eax, dword ptr [rdi + 0]
+        crc32   ebx, dword ptr [rdi + 4]
+        crc32   r8d, dword ptr [rdi + 8]
+        crc32   r9d, dword ptr [rdi + 12]
+        pxor    xmm7, xmm0
+        aesenc  xmm7, xmm1
+        aesenc  xmm7, xmm2
+        aesenc  xmm7, xmm3
+        aesenc  xmm7, xmm4
+        aesenc  xmm7, xmm5
+        aesenc  xmm7, xmm6
+        aesenc  xmm7, xmm8
+        aesenc  xmm7, xmm9
+        aesenc  xmm7, xmm10
+        aesenclast xmm7, xmm11
+        pxor    xmm15, xmm7
+        movups  dqword ptr [rsi], xmm15  // fOut := fIn xor IV
+        movups  xmm7, xmm15              // fIV := fOut
+        crc32   r10d, dword ptr [rsi + 0]
+        crc32   r11d, dword ptr [rsi + 4]
+        crc32   r12d, dword ptr [rsi + 8]
+        crc32   r13d, dword ptr [rsi + 12]
+        add     rdi, 16
+        add     rsi, 16
+        dec     ecx
+        jnz     @s
+        movups  dqword ptr [rdx].TAesCfbCrc.fIV, xmm7
+        mov     dword ptr [rdx + 0].TAesCfbCrc.fMac.plain, eax
+        mov     dword ptr [rdx + 4].TAesCfbCrc.fMac.plain, ebx
+        mov     dword ptr [rdx + 8].TAesCfbCrc.fMac.plain, r8d
+        mov     dword ptr [rdx + 12].TAesCfbCrc.fMac.plain, r9d
+        mov     dword ptr [rdx + 0].TAesCfbCrc.fMac.encrypted, r10d
+        mov     dword ptr [rdx + 4].TAesCfbCrc.fMac.encrypted, r11d
+        mov     dword ptr [rdx + 8].TAesCfbCrc.fMac.encrypted, r12d
+        mov     dword ptr [rdx + 12].TAesCfbCrc.fMac.encrypted, r13d
+        pop     rbx
+        pop     r13
+        pop     r12
+@z:     {$ifdef WIN64ABI}
+        pop    rdi
+        pop    rsi
+        {$endif WIN64ABI}
+end;
+
+procedure AesNiDecryptCfbCrc128(src, dest, aes: pointer; blocks: PtrUInt);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        {$ifdef WIN64ABI}
+        push    rsi
+        push    rdi
+        mov     rdi, src     // rcx
+        mov     rsi, dest    // rdx
+        mov     rdx, aes     // r8
+        mov     rcx, blocks  // r9
+        {$endif WIN64ABI}
+        // rdi=src, rsi=dest, rdx=aes, rcx=blocks
+        test    ecx, ecx
+        jz      @z
+        push    r12
+        push    r13
+        push    rbx
+        // only use 32-bit and 128-bit registers within the loop
+        mov     eax, dword ptr [rdx + 0].TAesCfbCrc.fMac.plain
+        mov     ebx, dword ptr [rdx + 4].TAesCfbCrc.fMac.plain
+        mov     r8d, dword ptr [rdx + 8].TAesCfbCrc.fMac.plain
+        mov     r9d, dword ptr [rdx + 12].TAesCfbCrc.fMac.plain
+        mov     r10d, dword ptr [rdx + 0].TAesCfbCrc.fMac.encrypted
+        mov     r11d, dword ptr [rdx + 4].TAesCfbCrc.fMac.encrypted
+        mov     r12d, dword ptr [rdx + 8].TAesCfbCrc.fMac.encrypted
+        mov     r13d, dword ptr [rdx + 12].TAesCfbCrc.fMac.encrypted
+        movups  xmm0, dqword ptr [rdx + 16 * 0].TAesCfbCrc.fAes
+        movups  xmm1, dqword ptr [rdx + 16 * 1].TAesCfbCrc.fAes
+        movups  xmm2, dqword ptr [rdx + 16 * 2].TAesCfbCrc.fAes
+        movups  xmm3, dqword ptr [rdx + 16 * 3].TAesCfbCrc.fAes
+        movups  xmm4, dqword ptr [rdx + 16 * 4].TAesCfbCrc.fAes
+        movups  xmm5, dqword ptr [rdx + 16 * 5].TAesCfbCrc.fAes
+        movups  xmm6, dqword ptr [rdx + 16 * 6].TAesCfbCrc.fAes
+        movups  xmm8, dqword ptr [rdx + 16 * 7].TAesCfbCrc.fAes
+        movups  xmm9, dqword ptr [rdx + 16 * 8].TAesCfbCrc.fAes
+        movups  xmm10, dqword ptr [rdx + 16 * 9].TAesCfbCrc.fAes
+        movups  xmm11, dqword ptr [rdx + 16 * 10].TAesCfbCrc.fAes
+        movups  xmm7, dqword ptr [rdx].TAesCfbCrc.fIV  // xmm7 = IV
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@s:     movups  xmm15, dqword ptr [rdi]
+        movups  xmm14, xmm15
+        crc32   r10d, dword ptr [rdi + 0]
+        crc32   r11d, dword ptr [rdi + 4]
+        crc32   r12d, dword ptr [rdi + 8]
+        crc32   r13d, dword ptr [rdi + 12]
+        pxor    xmm7, xmm0
+        aesenc  xmm7, xmm1
+        aesenc  xmm7, xmm2
+        aesenc  xmm7, xmm3
+        aesenc  xmm7, xmm4
+        aesenc  xmm7, xmm5
+        aesenc  xmm7, xmm6
+        aesenc  xmm7, xmm8
+        aesenc  xmm7, xmm9
+        aesenc  xmm7, xmm10
+        aesenclast xmm7, xmm11
+        pxor    xmm15, xmm7
+        movups  dqword ptr [rsi], xmm15  // fOut := fIn xor IV
+        movups  xmm7, xmm14              // fIV := fIn
+        crc32   eax, dword ptr [rsi + 0]
+        crc32   ebx, dword ptr [rsi + 4]
+        crc32   r8d, dword ptr [rsi + 8]
+        crc32   r9d, dword ptr [rsi + 12]
+        add     rdi, 16
+        add     rsi, 16
+        dec     ecx
+        jnz     @s
+        movups  dqword ptr [rdx].TAesCfbCrc.fIV, xmm7
+        mov     dword ptr [rdx + 0].TAesCfbCrc.fMac.plain, eax
+        mov     dword ptr [rdx + 4].TAesCfbCrc.fMac.plain, ebx
+        mov     dword ptr [rdx + 8].TAesCfbCrc.fMac.plain, r8d
+        mov     dword ptr [rdx + 12].TAesCfbCrc.fMac.plain, r9d
+        mov     dword ptr [rdx + 0].TAesCfbCrc.fMac.encrypted, r10d
+        mov     dword ptr [rdx + 4].TAesCfbCrc.fMac.encrypted, r11d
+        mov     dword ptr [rdx + 8].TAesCfbCrc.fMac.encrypted, r12d
+        mov     dword ptr [rdx + 12].TAesCfbCrc.fMac.encrypted, r13d
+        pop     rbx
+        pop     r13
+        pop     r12
+@z:     {$ifdef WIN64ABI}
+        pop    rdi
+        pop    rsi
+        {$endif WIN64ABI}
+end;
+
+procedure AesNiEncryptCfbCrc256(src, dest, aes: pointer; blocks: PtrUInt);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        {$ifdef WIN64ABI}
+        push    rsi
+        push    rdi
+        mov     rdi, src     // rcx
+        mov     rsi, dest    // rdx
+        mov     rdx, aes     // r8
+        mov     rcx, blocks  // r9
+        {$endif WIN64ABI}
+        // rdi=src, rsi=dest, rdx=aes, rcx=blocks
+        test    ecx, ecx
+        jz      @z
+        push    r12
+        push    r13
+        push    rbx
+        // only use 32-bit and (mostly) 128-bit registers within the loop
+        mov     eax, dword ptr [rdx + 0].TAesCfbCrc.fMac.plain
+        mov     ebx, dword ptr [rdx + 4].TAesCfbCrc.fMac.plain
+        mov     r8d, dword ptr [rdx + 8].TAesCfbCrc.fMac.plain
+        mov     r9d, dword ptr [rdx + 12].TAesCfbCrc.fMac.plain
+        mov     r10d, dword ptr [rdx + 0].TAesCfbCrc.fMac.encrypted
+        mov     r11d, dword ptr [rdx + 4].TAesCfbCrc.fMac.encrypted
+        mov     r12d, dword ptr [rdx + 8].TAesCfbCrc.fMac.encrypted
+        mov     r13d, dword ptr [rdx + 12].TAesCfbCrc.fMac.encrypted
+        movups  xmm0, dqword ptr [rdx + 16 * 0].TAesCfbCrc.fAes
+        movups  xmm1, dqword ptr [rdx + 16 * 1].TAesCfbCrc.fAes
+        movups  xmm2, dqword ptr [rdx + 16 * 2].TAesCfbCrc.fAes
+        movups  xmm3, dqword ptr [rdx + 16 * 3].TAesCfbCrc.fAes
+        movups  xmm4, dqword ptr [rdx + 16 * 4].TAesCfbCrc.fAes
+        movups  xmm5, dqword ptr [rdx + 16 * 5].TAesCfbCrc.fAes
+        movups  xmm6, dqword ptr [rdx + 16 * 6].TAesCfbCrc.fAes
+        movups  xmm8, dqword ptr [rdx + 16 * 7].TAesCfbCrc.fAes
+        movups  xmm9, dqword ptr [rdx + 16 * 8].TAesCfbCrc.fAes
+        movups  xmm10, dqword ptr [rdx + 16 * 9].TAesCfbCrc.fAes
+        movups  xmm11, dqword ptr [rdx + 16 * 10].TAesCfbCrc.fAes
+        movups  xmm12, dqword ptr [rdx + 16 * 11].TAesCfbCrc.fAes
+        movups  xmm13, dqword ptr [rdx + 16 * 12].TAesCfbCrc.fAes
+        movups  xmm14, dqword ptr [rdx + 16 * 13].TAesCfbCrc.fAes
+        movups  xmm7, dqword ptr [rdx].TAesCfbCrc.fIV  // xmm7 = IV
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@s:     movups  xmm15, dqword ptr [rdx + 16 * 14].TAesCfbCrc.fAes
+        crc32   eax, dword ptr [rdi + 0]
+        crc32   ebx, dword ptr [rdi + 4]
+        crc32   r8d, dword ptr [rdi + 8]
+        crc32   r9d, dword ptr [rdi + 12]
+        pxor    xmm7, xmm0
+        aesenc  xmm7, xmm1
+        aesenc  xmm7, xmm2
+        aesenc  xmm7, xmm3
+        aesenc  xmm7, xmm4
+        aesenc  xmm7, xmm5
+        aesenc  xmm7, xmm6
+        aesenc  xmm7, xmm8
+        aesenc  xmm7, xmm9
+        aesenc  xmm7, xmm10
+        aesenc  xmm7, xmm11
+        aesenc  xmm7, xmm12
+        aesenc  xmm7, xmm13
+        aesenc  xmm7, xmm14
+        aesenclast xmm7, xmm15
+        movups  xmm15, dqword ptr [rdi]
+        pxor    xmm15, xmm7
+        movups  dqword ptr [rsi], xmm15  // fOut := fIn xor IV
+        movups  xmm7, xmm15              // fIV := fOut
+        crc32   r10d, dword ptr [rsi + 0]
+        crc32   r11d, dword ptr [rsi + 4]
+        crc32   r12d, dword ptr [rsi + 8]
+        crc32   r13d, dword ptr [rsi + 12]
+        add     rdi, 16
+        add     rsi, 16
+        dec     ecx
+        jnz     @s
+        movups  dqword ptr [rdx].TAesCfbCrc.fIV, xmm7
+        mov     dword ptr [rdx + 0].TAesCfbCrc.fMac.plain, eax
+        mov     dword ptr [rdx + 4].TAesCfbCrc.fMac.plain, ebx
+        mov     dword ptr [rdx + 8].TAesCfbCrc.fMac.plain, r8d
+        mov     dword ptr [rdx + 12].TAesCfbCrc.fMac.plain, r9d
+        mov     dword ptr [rdx + 0].TAesCfbCrc.fMac.encrypted, r10d
+        mov     dword ptr [rdx + 4].TAesCfbCrc.fMac.encrypted, r11d
+        mov     dword ptr [rdx + 8].TAesCfbCrc.fMac.encrypted, r12d
+        mov     dword ptr [rdx + 12].TAesCfbCrc.fMac.encrypted, r13d
+        pop     rbx
+        pop     r13
+        pop     r12
+@z:     {$ifdef WIN64ABI}
+        pop    rdi
+        pop    rsi
+        {$endif WIN64ABI}
+end;
+
+procedure AesNiDecryptCfbCrc256(src, dest, aes: pointer; blocks: PtrUInt);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        {$ifdef WIN64ABI}
+        push    rsi
+        push    rdi
+        mov     rdi, src     // rcx
+        mov     rsi, dest    // rdx
+        mov     rdx, aes     // r8
+        mov     rcx, blocks  // r9
+        {$endif WIN64ABI}
+        // rdi=src, rsi=dest, rdx=aes, rcx=blocks
+        test    ecx, ecx
+        jz      @z
+        push    r12
+        push    r13
+        push    rbx
+        // only use 32-bit and (mostly) 128-bit registers within the loop
+        mov     eax, dword ptr [rdx + 0].TAesCfbCrc.fMac.plain
+        mov     ebx, dword ptr [rdx + 4].TAesCfbCrc.fMac.plain
+        mov     r8d, dword ptr [rdx + 8].TAesCfbCrc.fMac.plain
+        mov     r9d, dword ptr [rdx + 12].TAesCfbCrc.fMac.plain
+        mov     r10d, dword ptr [rdx + 0].TAesCfbCrc.fMac.encrypted
+        mov     r11d, dword ptr [rdx + 4].TAesCfbCrc.fMac.encrypted
+        mov     r12d, dword ptr [rdx + 8].TAesCfbCrc.fMac.encrypted
+        mov     r13d, dword ptr [rdx + 12].TAesCfbCrc.fMac.encrypted
+        movups  xmm0, dqword ptr [rdx + 16 * 0].TAesCfbCrc.fAes
+        movups  xmm1, dqword ptr [rdx + 16 * 1].TAesCfbCrc.fAes
+        movups  xmm2, dqword ptr [rdx + 16 * 2].TAesCfbCrc.fAes
+        movups  xmm3, dqword ptr [rdx + 16 * 3].TAesCfbCrc.fAes
+        movups  xmm4, dqword ptr [rdx + 16 * 4].TAesCfbCrc.fAes
+        movups  xmm5, dqword ptr [rdx + 16 * 5].TAesCfbCrc.fAes
+        movups  xmm6, dqword ptr [rdx + 16 * 6].TAesCfbCrc.fAes
+        movups  xmm8, dqword ptr [rdx + 16 * 7].TAesCfbCrc.fAes
+        movups  xmm9, dqword ptr [rdx + 16 * 8].TAesCfbCrc.fAes
+        movups  xmm10, dqword ptr [rdx + 16 * 9].TAesCfbCrc.fAes
+        movups  xmm11, dqword ptr [rdx + 16 * 10].TAesCfbCrc.fAes
+        movups  xmm12, dqword ptr [rdx + 16 * 11].TAesCfbCrc.fAes
+        movups  xmm13, dqword ptr [rdx + 16 * 12].TAesCfbCrc.fAes
+        movups  xmm7, dqword ptr [rdx].TAesCfbCrc.fIV  // xmm7 = IV
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@s:     movups  xmm14, dqword ptr [rdx + 16 * 13].TAesCfbCrc.fAes
+        movups  xmm15, dqword ptr [rdx + 16 * 14].TAesCfbCrc.fAes
+        crc32   r10d, dword ptr [rdi + 0]
+        crc32   r11d, dword ptr [rdi + 4]
+        crc32   r12d, dword ptr [rdi + 8]
+        crc32   r13d, dword ptr [rdi + 12]
+        pxor    xmm7, xmm0
+        aesenc  xmm7, xmm1
+        aesenc  xmm7, xmm2
+        aesenc  xmm7, xmm3
+        aesenc  xmm7, xmm4
+        aesenc  xmm7, xmm5
+        aesenc  xmm7, xmm6
+        aesenc  xmm7, xmm8
+        aesenc  xmm7, xmm9
+        aesenc  xmm7, xmm10
+        aesenc  xmm7, xmm11
+        aesenc  xmm7, xmm12
+        aesenc  xmm7, xmm13
+        aesenc  xmm7, xmm14
+        aesenclast xmm7, xmm15
+        movups  xmm15, dqword ptr [rdi]
+        movups  xmm14, xmm15
+        pxor    xmm15, xmm7
+        movups  dqword ptr [rsi], xmm15  // fOut := fIn xor IV
+        movups  xmm7, xmm14              // fIV := fIn
+        crc32   eax, dword ptr [rsi + 0]
+        crc32   ebx, dword ptr [rsi + 4]
+        crc32   r8d, dword ptr [rsi + 8]
+        crc32   r9d, dword ptr [rsi + 12]
+        add     rdi, 16
+        add     rsi, 16
+        dec     ecx
+        jnz     @s
+        movups  dqword ptr [rdx].TAesCfbCrc.fIV, xmm7
+        mov     dword ptr [rdx + 0].TAesCfbCrc.fMac.plain, eax
+        mov     dword ptr [rdx + 4].TAesCfbCrc.fMac.plain, ebx
+        mov     dword ptr [rdx + 8].TAesCfbCrc.fMac.plain, r8d
+        mov     dword ptr [rdx + 12].TAesCfbCrc.fMac.plain, r9d
+        mov     dword ptr [rdx + 0].TAesCfbCrc.fMac.encrypted, r10d
+        mov     dword ptr [rdx + 4].TAesCfbCrc.fMac.encrypted, r11d
+        mov     dword ptr [rdx + 8].TAesCfbCrc.fMac.encrypted, r12d
+        mov     dword ptr [rdx + 12].TAesCfbCrc.fMac.encrypted, r13d
+        pop     rbx
+        pop     r13
+        pop     r12
+@z:     {$ifdef WIN64ABI}
+        pop    rdi
+        pop    rsi
+        {$endif WIN64ABI}
+end;
+
 
 // compute a := a * b in GF(2^128) using pclmulqdq on WestMere CPUs
 // - three times faster than the pascal version using lookup tables

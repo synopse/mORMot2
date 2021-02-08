@@ -79,15 +79,6 @@ type
   {$endif OSLINUX}
 {$endif ASMX86}
 
-{$ifdef OSWINDOWS}
-  // on Windows: enable Microsoft AES Cryptographic Provider (XP SP3 and up)
-  // - even if those AES engines are slower and closed source (so should better
-  // be avoided), we use it for TAesPrng.GetEntropy, as it can't hurt
-  {$define USE_PROV_RSA_AES}
-{$else}
-  {$undef USE_PROV_RSA_AES}
-{$endif OSWINDOWS}
-
 
 { ****************** Low-Level Memory Buffers Helper Functions }
 
@@ -715,8 +706,7 @@ type
   // - this mode is known to be less secure than the others
   // - IV property should be set to a fixed value to encode the trailing bytes
   // of the buffer by a simple XOR - but you should better use the PKC7 pattern
-  // - this class will use AES-NI hardware instructions, if available, e.g.
-  // ! ECB128: 19.70ms in x86 optimized code, 6.97ms with AES-NI
+  // - this class will use AES-NI hardware instructions, if available
   TAesEcb = class(TAesAbstractSyn)
   public
     /// perform the AES cypher in the ECB mode
@@ -726,8 +716,7 @@ type
   end;
 
   /// handle AES cypher/uncypher with Cipher-block chaining (CBC)
-  // - this class will use AES-NI hardware instructions, if available, e.g.
-  // ! CBC192: 24.91ms in x86 optimized code, 9.75ms with AES-NI
+  // - this class will use AES-NI hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
   TAesCbc = class(TAesAbstractSyn)
   public
@@ -750,8 +739,13 @@ type
   end;
 
   /// handle AES cypher/uncypher with Cipher feedback (CFB)
-  // - this class will use AES-NI hardware instructions, if available, e.g.
-  // ! CFB128: 22.25ms in x86 optimized code, 9.29ms with AES-NI
+  // - this class will use AES-NI hardware instructions, if available
+  // - expect IV to be set before process, or IVAtBeginning=true
+  // - on x86_64, our TAesCfb class is slightly faster than OpenSSL:
+  // $ 2500 aes128cfb in 10.80ms i.e. 231438/s or 492.5 MB/s
+  // $ 2500 aes128cfbosl in 10.96ms i.e. 228039/s or 485.3 MB/s
+  // $ 2500 aes256cfb in 13.36ms i.e. 187041/s or 398 MB/s
+  // $ 2500 aes256cfbosl in 13.47ms i.e. 185473/s or 394.7 MB/s
   // - expect IV to be set before process, or IVAtBeginning=true
   TAesCfb = class(TAesAbstractEncryptOnly)
   public
@@ -762,10 +756,14 @@ type
   end;
 
   /// handle AES cypher/uncypher with Output feedback (OFB)
-  // - this class will use AES-NI hardware instructions, if available, e.g.
-  // ! OFB256: 27.69ms in x86 optimized code, 9.94ms with AES-NI
+  // - this class will use AES-NI hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
-  // - TAesOfb 128/256 have an optimized asm version under x86_64 + AES_NI
+  // - on x86_64, our TAesOfb class is noticeably faster than OpenSSL:
+  // $ 2500 aes128ofb in 7.07ms i.e. 353207/s or 751.7 MB/s
+  // $ 2500 aes128ofbosl in 8.20ms i.e. 304692/s or 648.4 MB/s
+  // $ 2500 aes256ofb in 9.64ms i.e. 259201/s or 551.6 MB/s
+  // $ 2500 aes256ofbosl in 10.71ms i.e. 233383/s or 496.6 MB/s
+  // - expect IV to be set before process, or IVAtBeginning=true
   TAesOfb = class(TAesAbstractEncryptOnly)
   public
     /// perform the AES cypher in the OFB mode
@@ -777,8 +775,7 @@ type
   /// handle AES cypher/uncypher with 64-bit Counter mode (CTR)
   // - the CTR will use a counter in bytes 7..0 by default - which is safe
   // but not standard - use TAesCtrNist class for NIST / OpenSSL behavior
-  // - this class will use AES-NI hardware instructions, e.g.
-  // ! CTR256: 28.13ms in x86 optimized code, 10.63ms with AES-NI
+  // - this class will use AES-NI hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
   TAesCtr = class(TAesAbstractEncryptOnly)
   protected
@@ -895,9 +892,18 @@ type
   end;
 
   /// AEAD combination of AES with Cipher feedback (CFB) and 256-bit MAC
-  // - this class will use AES-NI and CRC32C hardware instructions, if available
+  // - this class will use AES-NI and CRC32C hardware instructions, if available,
+  // and a dedicated x86_64 assembly:
+  // $ 2500 aes128cfbcrc in 7.58ms i.e. 329771/s or 701.8 MB/s
+  // $ 2500 aes256cfbcrc in 9.99ms i.e. 250225/s or 532.5 MB/s
+  // which was actually more tuned than the less useful plain TAesCfb code:
+  // $ 2500 aes128cfb in 10.66ms i.e. 234345/s or 498.7 MB/s
+  // $ 2500 aes256cfb in 13.01ms i.e. 192041/s or 408.7 MB/s
   // - expect IV to be set before process, or IVAtBeginning=true
   TAesCfbCrc = class(TAesAbstractAead)
+  protected
+    fAesNiSse42: boolean;
+    procedure AfterCreate; override;
   public
     /// perform the AES cypher in the CFB mode, and compute a 256-bit MAC
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
@@ -907,6 +913,10 @@ type
 
   /// AEAD combination of AES with Output feedback (OFB) and 256-bit MAC
   // - this class will use AES-NI and CRC32C hardware instructions, if available
+  // $ 2500 aes128ofb in 6.97ms i.e. 358268/s or 762.4 MB/s
+  // $ 2500 aes128ofbcrc in 8.23ms i.e. 303766/s or 646.4 MB/s
+  // $ 2500 aes256ofb in 9.35ms i.e. 267236/s or 568.7 MB/s
+  // $ 2500 aes256ofbcrc in 10.74ms i.e. 232601/s or 495 MB/s
   // - expect IV to be set before process, or IVAtBeginning=true
   TAesOfbCrc = class(TAesAbstractAead)
   public
@@ -961,7 +971,8 @@ type
     /// AES-GCM pure alternative to MacSetNonce()
     // - if the MacEncrypt pattern is not convenient for your purpose
     // - set the IV as usual (only the first 12 bytes will be used for GCM),
-    // then optionally append any AEAD data with this method before Encrypt()
+    // then optionally append any AEAD data with this method; warning: you need
+    // to call Encrypt() once before - perhaps as Encrypt(nil, nil, 0)
     procedure AesGcmAad(Buf: pointer; Len: integer); virtual; abstract;
     /// AES-GCM pure alternative to MacEncryptGetTag/MacDecryptCheckTag
     // - if the MacEncrypt pattern is not convenient for your purpose
@@ -976,6 +987,11 @@ type
   // - implements AEAD (authenticated-encryption with associated-data) process
   // via MacSetNonce/MacEncrypt or AesGcmAad/AesGcmFinal methods
   // - will use AES-NI and CLMUL hardware instructions, if available
+  // - OpenSSL is faster than our TAesGcm class which is not interleaved:
+  // $ 2500 aes128gcm in 14.41ms i.e. 173418/s or 369 MB/s
+  // $ 2500 aes256gcm in 17.37ms i.e. 143918/s or 306.2 MB/s
+  // $ 2500 aes128gcmosl in 3.03ms i.e. 824810/s or 1.7 GB/s
+  // $ 2500 aes256gcmosl in 3.56ms i.e. 701065/s or 1.4 GB/s
   TAesGcm = class(TAesGcmAbstract)
   protected
     fAes: TAesGcmEngine;
@@ -991,7 +1007,8 @@ type
     function Clone: TAesAbstract; override;
     /// AES-GCM pure alternative to MacSetNonce()
     // - set the IV as usual (only the first 12 bytes will be used for GCM),
-    // then optionally append any AEAD data with this method before Encrypt()
+    // then optionally append any AEAD data with this method; warning: you need
+    // to call Encrypt() once before - perhaps as Encrypt(nil, nil, 0)
     procedure AesGcmAad(Buf: pointer; Len: integer); override;
     /// AES-GCM pure alternative to MacEncryptGetTag/MacDecryptCheckTag
     // - after Encrypt, fill tag with the GCM value of the data and return true
@@ -2497,7 +2514,7 @@ type
   TAesContext = packed record
     RK: TKeyArray;   // Key (encr. or decr.)
     iv: THash128Rec; // IV or CTR used e.g. by TAesGcmEngine or TAesPrng
-    buf: TAesBlock;  // Work buffer used e.g. by TAesGcmEngine
+    buf: TAesBlock;  // Work buffer used e.g. by TAesGcmEngine or AesNiTrailer()
     DoBlock: procedure(const ctxt, Source, Dest); // main AES function
     {$ifdef USEAESNI32}
     AesNi32: pointer; // xmm7 AES-NI encoding
@@ -4783,6 +4800,15 @@ end;
 
 { TAesCfbCrc }
 
+procedure TAesCfbCrc.AfterCreate;
+begin
+  inherited;
+  {$ifdef USEAESNI64}
+  fAesNiSse42 := (cfAESNI in CpuFeatures) and
+               (cfSSE42 in CpuFeatures);
+  {$endif USEAESNI64}
+end;
+
 procedure TAesCfbCrc.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
   i: integer;
@@ -4790,8 +4816,23 @@ var
 begin
   if Count = 0 then
     exit;
-  { TODO : x86_64 asm for AES-CFB-CRC with AES-NI + CRC32C on 128-bit }
   fMac := fMacKey; // reuse the same key until next MacSetNonce()
+  {$ifdef USEAESNI64}
+  if (Count and AesBlockMod = 0) and
+     fAesNiSse42 then
+    case integer(TAesContext(fAes).KeyBits) of
+      128:
+        begin
+          AesNiDecryptCfbCrc128(BufIn, BufOut, self, Count shr AesBlockShift);
+          exit;
+        end;
+      256:
+        begin
+          AesNiDecryptCfbCrc256(BufIn, BufOut, self, Count shr AesBlockShift);
+          exit;
+        end;
+    end;
+  {$endif USEAESNI64}
   {$ifdef USEAESNI32}
   if Assigned(TAesContext(fAes).AesNi32) and
      (Count and AesBlockMod = 0) then
@@ -4857,8 +4898,23 @@ var
 begin
   if Count = 0 then
     exit;
-  { TODO : x86_64 asm for AES-CFB-CRC with AES-NI + CRC32C on 128-bit }
   fMac := fMacKey; // reuse the same key until next MacSetNonce()
+  {$ifdef USEAESNI64}
+  if (Count and AesBlockMod = 0) and
+     fAesNiSse42 then
+     case integer(TAesContext(fAes).KeyBits) of
+       128:
+         begin
+          AesNiEncryptCfbCrc128(BufIn, BufOut, self, Count shr AesBlockShift);
+          exit;
+        end;
+       256:
+         begin
+          AesNiEncryptCfbCrc256(BufIn, BufOut, self, Count shr AesBlockShift);
+          exit;
+        end;
+     end;
+  {$endif USEAESNI64}
   {$ifdef USEAESNI32}
   if Assigned(TAesContext(fAes).AesNi32) and
      (Count and AesBlockMod = 0) then
