@@ -516,10 +516,10 @@
 
 
   // -----------
-  // -- disable static-linked SQLite3 engine
+  // -- Libraries linking
 
-  // -> to be downloaded from https://github.com/synopse/mORMot2/releases
-  // -> could be disabled to force external .so/.dll linking
+  // some static linked files are to be downloaded from
+  // https://github.com/synopse/mORMot2/releases
 
 {$ifdef FPC}
   {$if defined(OSOPENBSD) and defined(FPC_CROSSCOMPILING)}
@@ -533,6 +533,20 @@
     {$ifend}
   {$endif} // other Win32/Win64 Delphi platforms should work as expected
 {$endif FPC}
+
+{$ifdef OSWINDOWS}
+  // on Windows: enable Microsoft AES Cryptographic Provider (XP SP3 and up)
+  // - even if those AES engines are slower and closed source (so should better
+  // be avoided), we use it for TAesPrng.GetEntropy, as it can't hurt
+  {$define USE_PROV_RSA_AES}
+  // define at your own risk, if you have the good libraries ;)
+  {.$define USE_OPENSSL}
+{$else}
+  {$ifndef OSANDROID}
+    // try OpenSSL on POSIX systems where it is likely to be unique and maintained
+    {$define USE_OPENSSL}
+  {$endif OSANDROID}
+{$endif OSWINDOWS}
 
 
 // -----------

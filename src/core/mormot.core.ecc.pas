@@ -1011,6 +1011,51 @@ function EccKeyFileFolder: TFileName;
 
 { ***************** IProtocol Implemented using Public Key Cryptography }
 
+{
+  On FPC x86_64, from our regression tests:
+  - ECDHE stream protocol: 54,228 assertions passed  916.75ms
+    100 efAesCrc128 in 1.65ms i.e. 60,422/s, aver. 16us, 1 GB/s
+    100 efAesCfb128 in 3.77ms i.e. 26,511/s, aver. 37us, 488.8 MB/s
+    100 efAesOfb128 in 2.54ms i.e. 39,246/s, aver. 25us, 723.6 MB/s
+    100 efAesCtr128 in 859us i.e. 116,414/s, aver. 8us, 2 GB/s
+    100 efAesCbc128 in 2.77ms i.e. 36,036/s, aver. 27us, 664.4 MB/s
+    100 efAesCrc256 in 2.18ms i.e. 45,724/s, aver. 21us, 843 MB/s
+    100 efAesCfb256 in 4.60ms i.e. 21,734/s, aver. 46us, 400.7 MB/s
+    100 efAesOfb256 in 3.38ms i.e. 29,507/s, aver. 33us, 544 MB/s
+    100 efAesCtr256 in 1.07ms i.e. 93,283/s, aver. 10us, 1.6 GB/s
+    100 efAesCbc256 in 3.29ms i.e. 30,349/s, aver. 32us, 559.5 MB/s
+    100 efAesGcm128 in 4.90ms i.e. 20,383/s, aver. 49us, 375.8 MB/s
+    100 efAesGcm256 in 5.75ms i.e. 17,364/s, aver. 57us, 320.1 MB/s
+  - if mormot.core.openssl is included, AES-GCM is much faster:
+    100 efAesGcm128 in 729us i.e. 137,174/s, aver. 7us, 2.4 GB/s
+    100 efAesGcm256 in 942us i.e. 106,157/s, aver. 9us, 1.9 GB/s
+
+  On FPC i386, from our regression tests:
+    100 efAesCrc128 in 2.34ms i.e. 42,662/s, aver. 23us, 786.6 MB/s
+    100 efAesCfb128 in 2.41ms i.e. 41,373/s, aver. 24us, 762.8 MB/s
+    100 efAesOfb128 in 3.19ms i.e. 31,308/s, aver. 31us, 577.2 MB/s
+    100 efAesCtr128 in 4.17ms i.e. 23,952/s, aver. 41us, 441.6 MB/s
+    100 efAesCbc128 in 5.51ms i.e. 18,129/s, aver. 55us, 334.2 MB/s
+    100 efAesCrc256 in 3.02ms i.e. 33,036/s, aver. 30us, 609.1 MB/s
+    100 efAesCfb256 in 2.97ms i.e. 33,670/s, aver. 29us, 620.8 MB/s
+    100 efAesOfb256 in 4.03ms i.e. 24,758/s, aver. 40us, 456.5 MB/s
+    100 efAesCtr256 in 4.97ms i.e. 20,096/s, aver. 49us, 370.5 MB/s
+    100 efAesCbc256 in 5.97ms i.e. 16,733/s, aver. 59us, 308.5 MB/s
+    100 efAesGcm128 in 5.54ms i.e. 18,040/s, aver. 55us, 332.6 MB/s
+    100 efAesGcm256 in 6.48ms i.e. 15,427/s, aver. 64us, 284.4 MB/s
+  - if mormot.core.openssl is included, AES-CTR and AES-GCM are much faster:
+    100 efAesCtr128 in 1.67ms i.e. 59,630/s, aver. 16us, 1 GB/s
+    100 efAesCtr256 in 1.88ms i.e. 53,134/s, aver. 18us, 0.9 GB/s
+    100 efAesGcm128 in 1.72ms i.e. 57,937/s, aver. 17us, 1 GB/s
+    100 efAesGcm256 in 2.02ms i.e. 49,455/s, aver. 20us, 911.8 MB/s
+
+  Using ECDHEPROT_EF2MAC[] so weak Crc32c but for AesCrc and AesGcm
+  which have their own stronger MAC computation (CRC32C+AES or GMAC).
+
+  -> default efAesCrc128 is safe and fast, but if OpenSSL is available,
+     efAesGcm128/efAesGcm256 would be both stronger and faster.
+}
+
 type
   /// the Authentication schemes recognized by TEcdheProtocol
   // - specifying the authentication allows a safe one-way handshake

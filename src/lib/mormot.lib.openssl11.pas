@@ -32,6 +32,8 @@ interface
 
 {$I ..\mormot.defines.inc}
 
+{$ifdef USE_OPENSSL} // compile as a void unit if USE_OPENSSL is not defined
+
 uses
   sysutils,
   mormot.core.base,
@@ -90,6 +92,11 @@ const
         _PU = '_';
         {$endif CPUX86}
         {$ifdef CPUX64}
+        LIB_CRYPTO = 'libssl-merged-osx64.dylib';
+        LIB_SSL = 'libssl-merged-osx64.dylib';
+        _PU = '_';
+        {$endif CPUX64}
+        {$ifdef CPUX64_static}
         LIB_CRYPTO = 'libcrypto-osx64.a';
         LIB_SSL = 'libssl-osx64.a';
         _PU = '';
@@ -1420,6 +1427,15 @@ end;
 
 { --------- libssl entries }
 
+{$ifdef FPC}
+  {$ifdef CPUX64}
+    {$ifdef OSDARWIN}
+      {$linklib 'libcrypto-osx64.a'}
+      {$linklib 'libssl-osx64.a'}
+    {$endif OSDARWIN}
+  {$endif CPUX64}
+{$endif FPC}
+
 function SSL_CTX_new(meth: PSSL_METHOD): PSSL_CTX; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_new';
 
@@ -1867,5 +1883,12 @@ finalization
   FreeAndNil(libssl);
   FreeAndNil(libcrypto);
   {$endif OPENSSLSTATIC}
+
+{$else}
+
+implementation
+
+{$endif USE_OPENSSL}
+
 
 end.

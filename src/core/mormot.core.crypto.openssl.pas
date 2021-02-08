@@ -21,6 +21,8 @@ interface
 
 {$I ..\mormot.defines.inc}
 
+{$ifdef USE_OPENSSL} // compile as a void unit if USE_OPENSSL is not defined
+
 uses
   classes,
   sysutils,
@@ -195,7 +197,8 @@ type
     function CloneEncryptDecrypt: TAesAbstract; override;
     /// AES-GCM pure alternative to MacSetNonce()
     // - set the IV as usual (only the first 12 bytes will be used for GCM),
-    // then optionally append any AEAD data with this method before Encrypt()
+    // then optionally append any AEAD data with this method; warning: you need
+    // to call Encrypt() once before - perhaps as Encrypt(nil, nil, 0)
     procedure AesGcmAad(Buf: pointer; Len: integer); override;
     /// AES-GCM pure alternative to MacEncryptGetTag/MacDecryptCheckTag
     // - after Encrypt, fill tag with the GCM value of the data and return true
@@ -204,8 +207,9 @@ type
   end;
 
 
-/// call once at program startup to use OpenSSL when its performance
-// - mainly for AES-GCM and AES-CTR process
+/// call once at program startup to use OpenSSL when its performance matters
+// - will redirect AES-GCM (and AES-CTR on i386) to use OpenSSL
+// - favor TEcdheProtocol and TEccCertificate ECIES
 procedure RegisterOpenSsl;
 
 
@@ -556,5 +560,11 @@ initialization
 
 finalization
   FreeAndNil(MainAesPrngOsl);
+
+{$else}
+
+implementation
+
+{$endif USE_OPENSSL}
 
 end.

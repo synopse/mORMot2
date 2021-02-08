@@ -7,17 +7,6 @@ interface
 
 {$I ..\src\mormot.defines.inc}
 
-{$ifdef OSWINDOWS}
-  // on Windows: enable Microsoft AES Cryptographic Provider (XP SP3 and up)
-  {$define USE_PROV_RSA_AES}
-  // define at your own risk, if you have the good libraries ;)
-  {/$define USE_OPENSSL}
-{$else}
-  // try OpenSSL on POSIX systems where it is likely to be unique and maintained
-  {$define USE_OPENSSL}
-{$endif OSWINDOWS}
-
-
 uses
   sysutils,
   mormot.core.base,
@@ -27,9 +16,7 @@ uses
   mormot.core.unicode,
   mormot.core.rtti,
   mormot.core.crypto,
-  {$ifdef USE_OPENSSL}
   mormot.core.crypto.openssl,
-  {$endif USE_OPENSSL}
   mormot.core.secure,
   mormot.core.perf,
   mormot.core.test,
