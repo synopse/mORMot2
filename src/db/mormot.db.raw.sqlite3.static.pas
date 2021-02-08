@@ -93,7 +93,8 @@ type
 // - the OldPassWord must be correct, otherwise the resulting file will be corrupted
 // - any password can be '' to mark no encryption as input or output
 // - the password may be a JSON-serialized TSynSignerParams object, or will use
-// AES-OFB-128 after SHAKE_128 with rounds=1000 and a fixed salt on plain password text
+// AES-OFB-128 (or AES-CTR-128 if ForceSQLite3AESCTR is set) after SHAKE_128 with
+// rounds=1000 and a fixed salt on plain password text
 // - please note that this encryption is compatible only with SQlite3 files made
 // with SynSQLiteStatic.pas unit (not external/official/wxsqlite3 dll)
 // - implementation is NOT compatible with the official SQLite Encryption Extension
@@ -127,6 +128,10 @@ var
   // global constant to use the former implementation (theoritically slightly
   // less resistant to brute force attacks) and convert existing databases
   ForceSQLite3LegacyAES: boolean;
+
+  /// global flag to use AES-CTR instead of AES-OFB encryption
+  // - on x86_64 our optimized asm is 2.5GB/s instead of 770MB/s
+  ForceSQLite3AESCTR: boolean;
 
 
 
@@ -791,7 +796,10 @@ begin
       if encrypt then
       begin
         plain := PInt64(data + 16)^;
-        aes^.DoBlocksOfb(@iv.b, data + 16, data + 16, len - 1);
+        if ForceSQLite3AESCTR then
+          aes^.DoBlocksCtr(@iv.b, data + 16, data + 16, len - 1)
+        else
+          aes^.DoBlocksOfb(@iv.b, data + 16, data + 16, len - 1);
         // 8..15 are encrypted bytes 16..23
         PInt64(data + 8)^ := PInt64(data + 16)^;
         PInt64(data + 16)^ := plain;
@@ -799,7 +807,10 @@ begin
       else
       begin
         PInt64(data + 16)^ := PInt64(data + 8)^;
-        aes^.DoBlocksOfb(@iv.b, data + 16, data + 16, len - 1);
+        if ForceSQLite3AESCTR then
+          aes^.DoBlocksCtr(@iv.b, data + 16, data + 16, len - 1)
+        else
+          aes^.DoBlocksOfb(@iv.b, data + 16, data + 16, len - 1);
         if (data[21] = #64) and
            (data[22] = #32) and
            (data[23] = #32) then
@@ -811,7 +822,10 @@ begin
       FillZero(PHash128(data)^)
   else
     // whole page encryption if not the first one
-    aes^.DoBlocksOfb(@iv.b, data, data, len);
+    if ForceSQLite3AESCTR then
+      aes^.DoBlocksCtr(@iv.b, data, data, len)
+    else
+      aes^.DoBlocksOfb(@iv.b, data, data, len);
 end;
 
 function CodecEncrypt(codec: pointer; page: integer; data: PAnsiChar;
