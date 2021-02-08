@@ -137,7 +137,7 @@ type
   // older compilers will fallback to signed Int64 values
   // - anyway, consider using SortDynArrayQWord() to compare QWord values
   // in a safe and efficient way, under a CPUX86
-  // - you may use UInt64 explicitly in your computation (like in SynEcc.pas),
+  // - use UInt64 explicitly in your computation (like in mormot.core.ecc),
   // if you are sure that Delphi 6-2007 compiler handles your code as expected,
   // but mORMot code will expect to use QWord for its internal process
   // (e.g. ORM/SOA serialization)
@@ -2855,7 +2855,7 @@ procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
 // - apply four crc32c() calls on the 128-bit input chunks, into a 128-bit crc
 // - its output won't match crc128c() value, which works on 8-bit input
 // - will use SSE 4.2 hardware accelerated instruction, if available
-// - is used e.g. by SynEcc's TEcdheProtocol.ComputeMAC for macCrc128c
+// - is used e.g. by mormot.core.ecc's TEcdheProtocol.ComputeMAC for macCrc128c
 var crcblocks: procedure(crc128, data128: PBlock128; count: integer) = crcblocksfast;
 
 /// computation of our 128-bit CRC of a 128-bit binary buffer without SSE4.2

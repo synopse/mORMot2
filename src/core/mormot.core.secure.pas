@@ -652,7 +652,7 @@ type
     sprInvalidMAC);
 
   /// perform safe communication after unilateral or mutual authentication
-  // - see e.g. TProtocolNone or SynEcc's TEcdheProtocolClient and
+  // - see e.g. TProtocolNone or mormot.core.ecc's TEcdheProtocolClient and
   // TEcdheProtocolServer implementation classes
   IProtocol = interface
     ['{91E3CA39-3AE2-44F4-9B8C-673AC37C1D1D}']
