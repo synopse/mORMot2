@@ -32,7 +32,6 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.crypto,
-  mormot.core.ecc,
   mormot.lib.openssl11;
 
 
@@ -208,8 +207,8 @@ type
 
 
 /// call once at program startup to use OpenSSL when its performance matters
-// - will redirect AES-GCM (and AES-CTR on i386) to use OpenSSL
-// - favor TEcdheProtocol and TEccCertificate ECIES
+// - redirects TAesGcmFast (and TAesCtrFast on i386) globals to OpenSSL
+// - calls RegisterEccAes to setup TEcdheProtocol and TEccCertificate ECIES
 procedure RegisterOpenSsl;
 
 
@@ -535,24 +534,14 @@ procedure RegisterOpenSsl;
 begin
   if not OpenSslIsAvailable then
     exit;
-  // so that mormot.core.ecc.pas' TEcdheProtocol could benefit from OpenSSL
+  // for mormot.core.crypto AES classes
+  TAesGcmFast := TAesGcmOsl;
   {$ifndef HASAESNI64}
-  ECDHEPROT_EF2AES[efAesCtr128] := TAesCtrNistOsl;
-  ECDHEPROT_EF2AES[efAesCtr256] := TAesCtrNistOsl;
+  // our AES-CTR x86_64 asm is faster than OpenSSL
+  TAesCtrFast := TAesCtrNistOsl;
   {$endif HASAESNI64}
-  ECDHEPROT_EF2AES[efAesGcm128] := TAesGcmOsl;
-  ECDHEPROT_EF2AES[efAesGcm256] := TAesGcmOsl;
-  // for TEccCertificate.Encrypt and TEccCertificateSecret.Decrypt ECIES
-  {$ifndef HASAESNI64}
-  ECIES_AES[ecaPBKDF2_HMAC_SHA256_AES256_CTR] := TAesCtrNistOsl;
-  ECIES_AES[ecaPBKDF2_HMAC_SHA256_AES128_CTR] := TAesCtrNistOsl;
-  ECIES_AES[ecaPBKDF2_HMAC_SHA256_AES256_CTR_SYNLZ] := TAesCtrNistOsl;
-  ECIES_AES[ecaPBKDF2_HMAC_SHA256_AES128_CTR_SYNLZ] := TAesCtrNistOsl;
-  {$endif HASAESNI64}
-  ECIES_AES[ecaPBKDF2_AES128_GCM] := TAesGcmOsl;
-  ECIES_AES[ecaPBKDF2_AES256_GCM] := TAesGcmOsl;
-  ECIES_AES[ecaPBKDF2_AES128_GCM_SYNLZ] := TAesGcmOsl;
-  ECIES_AES[ecaPBKDF2_AES256_GCM_SYNLZ] := TAesGcmOsl;
+  // register those classes e.g. for mormot.core.ecc.pas
+  CryptoClassesChanged;
 end;
 
 

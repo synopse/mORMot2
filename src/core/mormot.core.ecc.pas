@@ -1014,16 +1014,16 @@ function EccKeyFileFolder: TFileName;
 {
   On FPC x86_64, from our regression tests:
   - ECDHE stream protocol: 54,228 assertions passed  916.75ms
-    100 efAesCrc128 in 1.65ms i.e. 60,422/s, aver. 16us, 1 GB/s
-    100 efAesCfb128 in 3.77ms i.e. 26,511/s, aver. 37us, 488.8 MB/s
-    100 efAesOfb128 in 2.54ms i.e. 39,246/s, aver. 25us, 723.6 MB/s
-    100 efAesCtr128 in 859us i.e. 116,414/s, aver. 8us, 2 GB/s
-    100 efAesCbc128 in 2.77ms i.e. 36,036/s, aver. 27us, 664.4 MB/s
-    100 efAesCrc256 in 2.18ms i.e. 45,724/s, aver. 21us, 843 MB/s
-    100 efAesCfb256 in 4.60ms i.e. 21,734/s, aver. 46us, 400.7 MB/s
-    100 efAesOfb256 in 3.38ms i.e. 29,507/s, aver. 33us, 544 MB/s
-    100 efAesCtr256 in 1.07ms i.e. 93,283/s, aver. 10us, 1.6 GB/s
-    100 efAesCbc256 in 3.29ms i.e. 30,349/s, aver. 32us, 559.5 MB/s
+    100 efAesCrc128 in 1.65ms i.e. 60,313/s, aver. 16us, 1 GB/s
+    100 efAesCfb128 in 1.67ms i.e. 59,594/s, aver. 16us, 1 GB/s
+    100 efAesOfb128 in 2.53ms i.e. 39,447/s, aver. 25us, 727.3 MB/s
+    100 efAesCtr128 in 848us i.e. 117,924/s, aver. 8us, 2.1 GB/s
+    100 efAesCbc128 in 2.70ms i.e. 36,927/s, aver. 27us, 680.8 MB/s
+    100 efAesCrc256 in 2.19ms i.e. 45,578/s, aver. 21us, 840.3 MB/s
+    100 efAesCfb256 in 2.19ms i.e. 45,641/s, aver. 21us, 841.5 MB/s
+    100 efAesOfb256 in 3.41ms i.e. 29,308/s, aver. 34us, 540.3 MB/s
+    100 efAesCtr256 in 1.05ms i.e. 94,428/s, aver. 10us, 1.7 GB/s
+    100 efAesCbc256 in 3.33ms i.e. 30,003/s, aver. 33us, 553.2 MB/s
     100 efAesGcm128 in 4.90ms i.e. 20,383/s, aver. 49us, 375.8 MB/s
     100 efAesGcm256 in 5.75ms i.e. 17,364/s, aver. 57us, 320.1 MB/s
   - if mormot.core.openssl is included, AES-GCM is much faster:
@@ -1052,8 +1052,9 @@ function EccKeyFileFolder: TFileName;
   Using ECDHEPROT_EF2MAC[] so weak Crc32c but for AesCrc and AesGcm
   which have their own stronger MAC computation (CRC32C+AES or GMAC).
 
-  -> default efAesCrc128 is safe and fast, but if OpenSSL is available,
+  -> Default efAesCrc128 is safe and fast, but if OpenSSL is available,
      efAesGcm128/efAesGcm256 would be both stronger and faster.
+     On Win64, efAesCtr128 may be used as fastest native cipher.
 }
 
 type
@@ -1410,6 +1411,7 @@ var
     macDuringEF, macHmacCrc32c, macHmacCrc32c, macHmacCrc32c, macHmacCrc32c,
     macDuringEF, macHmacCrc32c, macHmacCrc32c, macHmacCrc32c, macHmacCrc32c,
     macDuringEF, macDuringEF);
+
 
 
 implementation
@@ -3948,7 +3950,28 @@ begin
     result := sprBadRequest;
 end;
 
+
+procedure RegisterEccAes;
+begin
+  // for TEcdheProtocol
+  ECDHEPROT_EF2AES[efAesGcm128] := TAesGcmFast;
+  ECDHEPROT_EF2AES[efAesGcm256] := TAesGcmFast;
+  ECDHEPROT_EF2AES[efAesCtr128] := TAesCtrFast;
+  ECDHEPROT_EF2AES[efAesCtr256] := TAesCtrFast;
+  // for TEccCertificate.Encrypt and TEccCertificateSecret.Decrypt ECIES
+  ECIES_AES[ecaPBKDF2_AES128_GCM] := TAesGcmFast;
+  ECIES_AES[ecaPBKDF2_AES256_GCM] := TAesGcmFast;
+  ECIES_AES[ecaPBKDF2_AES128_GCM_SYNLZ] := TAesGcmFast;
+  ECIES_AES[ecaPBKDF2_AES256_GCM_SYNLZ] := TAesGcmFast;
+  ECIES_AES[ecaPBKDF2_HMAC_SHA256_AES256_CTR] := TAesCtrFast;
+  ECIES_AES[ecaPBKDF2_HMAC_SHA256_AES128_CTR] := TAesCtrFast;
+  ECIES_AES[ecaPBKDF2_HMAC_SHA256_AES256_CTR_SYNLZ] := TAesCtrFast;
+  ECIES_AES[ecaPBKDF2_HMAC_SHA256_AES128_CTR_SYNLZ] := TAesCtrFast;
+end;
+
+
 initialization
+  CryptoClassesChangedRegister(RegisterEccAes);
   {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArray(TypeInfo(TEccCertificateObjArray), TEccCertificate);
   {$endif HASDYNARRAYTYPE}

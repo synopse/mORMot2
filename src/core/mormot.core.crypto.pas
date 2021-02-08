@@ -984,6 +984,9 @@ type
     function AesGcmFinal(var Tag: TAesBlock): boolean; virtual; abstract;
   end;
 
+  /// meta-class of TAesGcmAbstract types
+  TAesGcmAbstractClass = class of TAesGcmAbstract;
+
   /// handle AES-GCM cypher/uncypher using our TAesGcmEngine
   // - implements AEAD (authenticated-encryption with associated-data) process
   // via MacSetNonce/MacEncrypt or AesGcmAad/AesGcmFinal methods
@@ -1017,6 +1020,21 @@ type
     function AesGcmFinal(var Tag: TAesBlock): boolean; override;
   end;
 
+var
+  /// the fastest NIST-compatible AES-CTR implementation available on the system
+  // - mormot.core.crypto.openssl may register its own TAesCtrNistOsl (if faster)
+  TAesCtrFast: TAesAbstractClass = TAesCtrNist;
+
+  /// the fastest AES-GCM implementation available on the system
+  // - mormot.core.crypto.openssl would register its own TAesGcmOsl here
+  TAesGcmFast: TAesGcmAbstractClass = TAesGcm;
+
+/// to be called when TAesCtrFast/TAesGcmFast have been changed
+// - will execute all CryptoClassesChangedRegister() callbacks
+procedure CryptoClassesChanged;
+
+/// register a callback to be executed by CryptoClassesChanged()
+procedure CryptoClassesChangedRegister(OnChanged: TProcedure);
 
 {$ifdef USE_PROV_RSA_AES}
 
@@ -9620,6 +9638,22 @@ begin
     SHA.Full(p, L, Digest);
 end;
 
+
+var
+  CryptoClasses: array of TProcedure;
+
+procedure CryptoClassesChanged;
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(CryptoClasses) do
+    CryptoClasses[i];
+end;
+
+procedure CryptoClassesChangedRegister(OnChanged: TProcedure);
+begin
+  PtrArrayAdd(CryptoClasses, pointer(@OnChanged));
+end;
 
 
 procedure InitializeUnit;
