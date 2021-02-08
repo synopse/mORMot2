@@ -26,6 +26,8 @@
 # Uncomment this if you are not using external objects (zlib library for example).
 #*.obj
 #
+# static files (can be downloaded form mORMot 2 repositore releases page)
+static/*/
 
 # Delphi compiler-generated binaries (safe to delete)
 *.exe
