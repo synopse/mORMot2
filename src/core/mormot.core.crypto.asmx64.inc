@@ -2853,7 +2853,7 @@ procedure AesNiEncryptCtrNist32(
         mov    dword ptr [rsp + $4c], r10d
         bswap  r9d
         lea    r10, [r8 + $6]
-        dec    al // code below don't include the last aesenclast round
+        dec    al // code below doesn't include the last aesenclast round
         xor    r9d, ebp
         bswap  r10d
         mov    dword ptr [rsp + $5c], r9d
@@ -2872,7 +2872,7 @@ procedure AesNiEncryptCtrNist32(
         sub    rdx, $6
         lea    rcx, [rcx + $80]
         sub    rdx, $2
-        // handle per 8 CTR interleave on newer CPU
+        // main loop, processing 8 interleaved CTR per iteration
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @loop8: add    r8d, $8 // our 32 - bit CTR
         movdqa xmm8, dqword ptr [rsp + $60]
@@ -3083,7 +3083,7 @@ procedure AesNiEncryptCtrNist32(
         add    rdx, $8
         je     @done
         lea    rcx, [rcx - $80]
-        // finalize the process
+        // finalize the process with the 1..7 trailing blocks
 @tail:  lea    rcx, [rcx + $10]
         cmp    rdx, $4
         jb     @loop3
@@ -3105,30 +3105,7 @@ procedure AesNiEncryptCtrNist32(
         movups xmm12, dqword ptr [rdi + $20]
         aesenc xmm7, xmm1
         aesenc xmm8, xmm1
-        call   @sub8l
-        movdqu xmm13, dqword ptr [rdi + $30]
-        pxor   xmm2, xmm10
-        movdqu xmm10, dqword ptr [rdi + $40]
-        pxor   xmm3, xmm11
-        movdqu dqword ptr [rsi], xmm2
-        pxor   xmm4, xmm12
-        movdqu dqword ptr [rsi + $10], xmm3
-        pxor   xmm5, xmm13
-        movdqu dqword ptr [rsi + $20], xmm4
-        pxor   xmm6, xmm10
-        movdqu dqword ptr [rsi + $30], xmm5
-        movdqu dqword ptr [rsi + $40], xmm6
-        cmp    rdx, $6
-        jb     @done
-        movups xmm11, dqword ptr [rdi + $50]
-        xorps  xmm7, xmm11
-        movups dqword ptr [rsi + $50], xmm7
-        je     @done
-        movups xmm12, dqword ptr [rdi + $60]
-        xorps  xmm8, xmm12
-        movups dqword ptr [rsi + $60], xmm8
-        jmp    @done
-        // 8 interleaved AES blocks
+        jmp    @sub8l
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @sub8:  aesenc xmm2, xmm1
         aesenc xmm3, xmm1
@@ -3166,8 +3143,29 @@ procedure AesNiEncryptCtrNist32(
         aesenclast xmm7, xmm0
         aesenclast xmm8, xmm0
         aesenclast xmm9, xmm0
-        ret
-        // 4 interleaved AES blocks
+        movdqu xmm13, dqword ptr [rdi + $30]
+        pxor   xmm2, xmm10
+        movdqu xmm10, dqword ptr [rdi + $40]
+        pxor   xmm3, xmm11
+        movdqu dqword ptr [rsi], xmm2
+        pxor   xmm4, xmm12
+        movdqu dqword ptr [rsi + $10], xmm3
+        pxor   xmm5, xmm13
+        movdqu dqword ptr [rsi + $20], xmm4
+        pxor   xmm6, xmm10
+        movdqu dqword ptr [rsi + $30], xmm5
+        movdqu dqword ptr [rsi + $40], xmm6
+        cmp    rdx, $6
+        jb     @done
+        movups xmm11, dqword ptr [rdi + $50]
+        xorps  xmm7, xmm11
+        movups dqword ptr [rsi + $50], xmm7
+        je     @done
+        movups xmm12, dqword ptr [rdi + $60]
+        xorps  xmm8, xmm12
+        movups dqword ptr [rsi + $60], xmm8
+        jmp    @done
+        // trailing 4 interleaved AES blocks
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @loop4: aesenc xmm2, xmm1
         lea    rcx, [rcx + $10]
@@ -3194,7 +3192,7 @@ procedure AesNiEncryptCtrNist32(
         pxor   xmm5, xmm13
         movdqu dqword ptr [rsi + $30], xmm5
         jmp    @done
-        // 3 interleaved AES blocks
+        // 1..3 interleaved AES blocks
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @loop3: lea    rcx, [rcx + $10]
         aesenc xmm2, xmm1
@@ -3208,16 +3206,16 @@ procedure AesNiEncryptCtrNist32(
         aesenclast xmm4, xmm1
         movups xmm10, dqword ptr [rdi]
         xorps  xmm2, xmm10
-        movups dqword ptr [rsi], xmm2
+        movups dqword ptr [rsi], xmm2 // 1 trailing block
         cmp    rdx, $2
         jb     @done
         movups xmm11, dqword ptr [rdi + $10]
         xorps  xmm3, xmm11
-        movups dqword ptr [rsi + $10], xmm3
+        movups dqword ptr [rsi + $10], xmm3 // 2 trailing blocks
         je     @done
         movups xmm12, dqword ptr [rdi + $20]
         xorps  xmm4, xmm12
-        movups dqword ptr [rsi + $20], xmm4
+        movups dqword ptr [rsi + $20], xmm4 // 3 trailing blocks
         // restore stack
 @done:  mov    rbp, qword ptr [r11 - $8]
       	lea    rsp, [r11]

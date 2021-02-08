@@ -16,6 +16,7 @@ unit mormot.core.crypto;
     - Digest/Hash to Hexadecimal Text Conversion
     - Deprecated MD5 RC4 SHA-1 Algorithms
     - Deprecated Weak AES/SHA Process
+    - General Cryptography Catalog for Encryption and Signatures
 
    Validated against OpenSSL. Faster than OpenSSL on x86_64 (but AES-GCM).
 
@@ -954,22 +955,6 @@ type
     // - after Decrypt, return true only if the GCM value of the data match tag
     function AesGcmFinal(var Tag: TAesBlock): boolean; override;
   end;
-
-var
-  /// the fastest NIST-compatible AES-CTR implementation available on the system
-  // - mormot.core.crypto.openssl may register its own TAesCtrNistOsl (if faster)
-  TAesCtrFast: TAesAbstractClass = TAesCtrNist;
-
-  /// the fastest AES-GCM implementation available on the system
-  // - mormot.core.crypto.openssl would register its own TAesGcmOsl here
-  TAesGcmFast: TAesGcmAbstractClass = TAesGcm;
-
-/// to be called when TAesCtrFast/TAesGcmFast have been changed
-// - will execute all CryptoClassesChangedRegister() callbacks
-procedure CryptoClassesChanged;
-
-/// register a callback to be executed by CryptoClassesChanged()
-procedure CryptoClassesChangedRegister(OnChanged: TProcedure);
 
 {$ifdef USE_PROV_RSA_AES}
 
@@ -2435,6 +2420,29 @@ procedure AESSHA256Full(bIn: pointer; Len: integer; outStream: TStream;
 // is supplied only for backward compatibility of existing code:
 // use PBKDF2_HMAC_SHA256 or similar functions for safer password derivation
 procedure Sha256Weak(const s: RawByteString; out Digest: TSha256Digest);
+
+
+
+{ ************* General Cryptography Catalog for Encryption and Signatures }
+
+var
+  /// the fastest NIST-compatible AES-CTR implementation available on the system
+  // - mormot.core.crypto.openssl may register its own TAesCtrNistOsl (if faster)
+  TAesCtrFast: TAesAbstractClass = TAesCtrNist;
+
+  /// the fastest AES-GCM implementation available on the system
+  // - mormot.core.crypto.openssl would register its own TAesGcmOsl here
+  TAesGcmFast: TAesGcmAbstractClass = TAesGcm;
+
+
+/// to be called when TAesCtrFast/TAesGcmFast have been changed
+// - will execute all CryptoClassesChangedRegister() callbacks
+procedure CryptoClassesChanged;
+
+/// register a callback to be executed by CryptoClassesChanged()
+procedure CryptoClassesChangedRegister(OnChanged: TProcedure);
+
+
 
 
 implementation
@@ -9489,6 +9497,8 @@ begin
     SHA.Full(p, L, Digest);
 end;
 
+
+{ ************* General Cryptography Catalog for Encryption and Signatures }
 
 var
   CryptoClasses: array of TProcedure;

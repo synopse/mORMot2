@@ -9,6 +9,7 @@ unit mormot.core.crypto.openssl;
    High-Performance Cryptographic Features using OpenSSL 1.1.1
     - OpenSSL Cryptographic Pseudorandom Number Generator (CSPRNG)
     - AES Cypher/Uncypher in various Modes
+    - Register OpenSSL to our General Cryptography Catalog
 
   *****************************************************************************
 
@@ -207,6 +208,9 @@ type
     function AesGcmFinal(var tag: TAesBlock): boolean; override;
   end;
 
+
+
+{ ************** Register OpenSSL to our General Cryptography Catalog }
 
 /// call once at program startup to use OpenSSL when its performance matters
 // - redirects TAesGcmFast (and TAesCtrFast on i386) globals to OpenSSL
@@ -526,6 +530,8 @@ begin
   result := self;
 end;
 
+
+{ ************** Register OpenSSL to our General Cryptography Catalog }
 
 procedure RegisterOpenSsl;
 begin

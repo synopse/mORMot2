@@ -583,6 +583,7 @@ type
     infoText: string;
 
     {$ifndef LIBCURLSTATIC}
+    /// finalize the library
     destructor Destroy; override;
     {$endif LIBCURLSTATIC}
   end;
@@ -659,7 +660,7 @@ implementation
   function curl_slist_append(list: TCurlSList; s: PAnsiChar): TCurlSList; cdecl; external;
   /// free an entire slist
   procedure curl_slist_free_all(list: TCurlSList); cdecl; external;
-    /// create a shared object
+  /// create a shared object
   function curl_share_init: pointer; cdecl; external
   /// clean up a shared object
   function curl_share_cleanup(share_handle: TCurlShare): CURLSHcode; cdecl; external;
@@ -875,18 +876,19 @@ var
   i: PtrInt;
 begin
   result := false;
-  if not CurlIsAvailable or (curl.globalShare<>nil) then
+  if not CurlIsAvailable or 
+     (curl.globalShare <> nil) then
     exit; // not available, or already shared
   curl.globalShare := curl.share_init;
   if curl.globalShare = nil then
     exit; // something went wrong (out of memory, etc.) and therefore the share object was not created
-  for i := 0 to Ord(CURL_LOCK_DATA_PSL) do
+  for i := 0 to ord(CURL_LOCK_DATA_PSL) do
     InitializeCriticalSection(curl.share_cs[i]);
-  curl.share_setopt(curl.globalShare,CURLSHOPT_LOCKFUNC,@curlShareLock);
-  curl.share_setopt(curl.globalShare,CURLSHOPT_UNLOCKFUNC,@curlShareUnLock);
-  curl.share_setopt(curl.globalShare,CURLSHOPT_SHARE,CURL_LOCK_DATA_DNS);
-  curl.share_setopt(curl.globalShare,CURLSHOPT_SHARE,CURL_LOCK_DATA_SSL_SESSION);
-  curl.share_setopt(curl.globalShare,CURLSHOPT_SHARE,CURL_LOCK_DATA_CONNECT);
+  curl.share_setopt(curl.globalShare, CURLSHOPT_LOCKFUNC, @curlShareLock);
+  curl.share_setopt(curl.globalShare, CURLSHOPT_UNLOCKFUNC, @curlShareUnLock);
+  curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
+  curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
+  curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
   result := true;
 end;
 
@@ -900,7 +902,7 @@ begin
   result := curl.share_cleanup(curl.globalShare);
   if result = CURLSHE_OK then
     curl.globalShare := nil;
-  for i := 0 to Ord(CURL_LOCK_DATA_PSL) do
+  for i := 0 to ord(CURL_LOCK_DATA_PSL) do
     DeleteCriticalSection(curl.share_cs[i]);
 end;
 
