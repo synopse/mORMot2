@@ -497,6 +497,15 @@
       {$define SYSVABI} // for asm on x86_64
     {$endif CPUX64}
   {$endif OSPOSIX}
+  {$ifdef CPU32}
+    {$ifdef HASAESNI}
+      {$define HASAESNI32}
+    {$endif HASAESNI}
+  {$else}
+    {$ifdef HASAESNI}
+      {$define HASAESNI64}
+    {$endif HASAESNI}
+  {$endif CPU32}
 {$else}
   {$undef HASAESNI} // AES-NI is an Intel-specific feature
 {$endif CPUINTEL}

@@ -12,8 +12,8 @@ unit mormot.core.crypto.openssl;
 
   *****************************************************************************
 
-  Our mormot.core.crypto.pas asm is stand-alone and faster than OpenSSL for most
-  algorithms, but AES-CTR and AES-GCM. For those two, you may try this unit.
+  Note: on x86_64, our mormot.core.crypto.pas asm is stand-alone and faster
+  than OpenSSL for most algorithms, but AES-GCM.
 
 }
 
@@ -157,11 +157,11 @@ type
 
   /// OpenSSL AES cypher/uncypher with 128-bit Counter mode (CTR)
   // - similar to TAesCtrNist, not our proprietary TAesCtr which has 64-bit CTR
-  // - OpenSSL parallelize its process, so is faster than our TAesCrtNist class:
-  // $ 2500 aes128ctr in 9.39ms i.e. 266212/s or 566.5 MB/s
-  // $ 2500 aes128ctrosl in 2.61ms i.e. 956754/s or 1.9 GB/s
-  // $ 2500 aes256ctr in 11.94ms i.e. 209275/s or 445.3 MB/s
-  // $ 2500 aes256ctrosl in 3.29ms i.e. 759878/s or 1.5 GB/s
+  // - our TAesCtrNist class is faster than OpenSSL:
+  // $ 2500 aes128ctr in 2.06ms i.e. 1209482/s or 2.5 GB/s
+  // $ 2500 aes256ctr in 2.68ms i.e. 931792/s or 1.9 GB/s
+  // $ 2500 aes128ctrosl in 2.37ms i.e. 1053518/s or 2.1 GB/s
+  // $ 2500 aes256ctrosl in 3.22ms i.e. 775193/s or 1.6 GB/s
   TAesCtrNistOsl = class(TAesAbstractOsl)
   public
     /// return the OpenSSL EVP Cipher name of this class and key size
@@ -171,6 +171,11 @@ type
   /// OpenSSL AES-GCM cypher/uncypher
   // - implements AEAD (authenticated-encryption with associated-data) process
   // via MacSetNonce/MacEncrypt or AesGcmAad/AesGcmFinal methods
+  // - OpenSSL is faster than our TAesGcm class which is not interleaved:
+  // $ 2500 aes128gcm in 14.41ms i.e. 173418/s or 369 MB/s
+  // $ 2500 aes256gcm in 17.37ms i.e. 143918/s or 306.2 MB/s
+  // $ 2500 aes128gcmosl in 3.03ms i.e. 824810/s or 1.7 GB/s
+  // $ 2500 aes256gcmosl in 3.56ms i.e. 701065/s or 1.4 GB/s
   TAesGcmOsl = class(TAesGcmAbstract)
   protected
     fAes: TAesOsl;
@@ -527,10 +532,23 @@ begin
   if not OpenSslIsAvailable then
     exit;
   // so that mormot.core.ecc.pas' TEcdheProtocol could benefit from OpenSSL
+  {$ifndef HASAESNI64}
   ECDHEPROT_EF2AES[efAesCtr128] := TAesCtrNistOsl;
   ECDHEPROT_EF2AES[efAesCtr256] := TAesCtrNistOsl;
+  {$endif HASAESNI64}
   ECDHEPROT_EF2AES[efAesGcm128] := TAesGcmOsl;
   ECDHEPROT_EF2AES[efAesGcm256] := TAesGcmOsl;
+  // for TEccCertificate.Encrypt and TEccCertificateSecret.Decrypt ECIES
+  {$ifndef HASAESNI64}
+  ECIES_AES[ecaPBKDF2_HMAC_SHA256_AES256_CTR] := TAesCtrNistOsl;
+  ECIES_AES[ecaPBKDF2_HMAC_SHA256_AES128_CTR] := TAesCtrNistOsl;
+  ECIES_AES[ecaPBKDF2_HMAC_SHA256_AES256_CTR_SYNLZ] := TAesCtrNistOsl;
+  ECIES_AES[ecaPBKDF2_HMAC_SHA256_AES128_CTR_SYNLZ] := TAesCtrNistOsl;
+  {$endif HASAESNI64}
+  ECIES_AES[ecaPBKDF2_AES128_GCM] := TAesGcmOsl;
+  ECIES_AES[ecaPBKDF2_AES256_GCM] := TAesGcmOsl;
+  ECIES_AES[ecaPBKDF2_AES128_GCM_SYNLZ] := TAesGcmOsl;
+  ECIES_AES[ecaPBKDF2_AES256_GCM_SYNLZ] := TAesGcmOsl;
 end;
 
 
