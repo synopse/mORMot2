@@ -717,9 +717,8 @@ type
     // - warning: aKey is an untyped constant, i.e. expects a raw set of memory
     // bytes: do NOT use assign it with a string or a TBytes instance: you would
     // use the pointer to the data as key
-    constructor Create(aClass: TAesAbstractClass; const aKey; aKeySize: cardinal;
-      aIVReplayAttackCheck: TAesIVReplayAttackCheck = repCheckedIfAvailable);
-        reintroduce; virtual;
+    constructor Create(aClass: TAesAbstractClass; const aKey; aKeySize: cardinal);
+      reintroduce; virtual;
     /// will create another instance of this communication protocol
     constructor CreateFrom(aAnother: TProtocolAes); reintroduce; virtual;
     /// finalize the encryption
@@ -1898,12 +1897,11 @@ end;
 { TProtocolAes }
 
 constructor TProtocolAes.Create(aClass: TAesAbstractClass;
-  const aKey; aKeySize: cardinal; aIVReplayAttackCheck: TAesIVReplayAttackCheck);
+  const aKey; aKeySize: cardinal);
 begin
   inherited Create;
   InitializeCriticalSection(fSafe);
   fAes[false] := aClass.Create(aKey, aKeySize);
-  fAes[false].IVReplayAttackCheck := aIVReplayAttackCheck;
   fAes[true] := fAes[false].Clone;
 end;
 

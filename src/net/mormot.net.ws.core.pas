@@ -740,12 +740,6 @@ var
   // - it is useless to compress smaller frames, which fits in network MTU
   WebSocketsBinarySynLzThreshold: integer = 450;
 
-  /// how replay attacks will be handled in TWebSocketProtocolBinary encryption
-  // - you may set this global value to repCheckedIfAvailable if you are
-  // really paranoid (but resulting security may be lower, since the IV is
-  // somewhat more predictable than plain random)
-  WebSocketsIVReplayAttackCheck: TAesIVReplayAttackCheck = repNoCheck;
-
   /// the allowed maximum size, in MB, of a WebSockets frame
   WebSocketsMaxFrameMB: cardinal = 256;
 
@@ -828,8 +822,7 @@ end;
 procedure TWebSocketProtocol.SetEncryptKeyAes(const aKey; aKeySize: cardinal);
 begin
   if aKeySize >= 128 then
-    fEncryption := TProtocolAes.Create(ProtocolAesClass, aKey, aKeySize,
-      WebSocketsIVReplayAttackCheck);
+    fEncryption := TProtocolAes.Create(ProtocolAesClass, aKey, aKeySize);
 end;
 
 procedure TWebSocketProtocol.AfterGetFrame(var frame: TWebSocketFrame);

@@ -367,18 +367,13 @@ end;
 
 function TAesAbstractOsl.Clone: TAesAbstract;
 begin
-  if fIVHistoryDec.Count <> 0 then
-    result := inherited Clone
-  else
-  begin
-    result := TAesAbstractOsl(NewInstance);
-    fAes.Clone(result, TAesAbstractOsl(result).fAes); // efficient Ctx[] copy
-  end;
+  result := TAesAbstractOsl(NewInstance);
+  fAes.Clone(result, TAesAbstractOsl(result).fAes); // efficient Ctx[] copy
 end;
 
 function TAesAbstractOsl.CloneEncryptDecrypt: TAesAbstract;
 begin
-  result := self; // there is one fCtx[] for each direction
+  result := self; // there is one Ctx[] for each direction
 end;
 
 
