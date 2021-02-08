@@ -743,8 +743,8 @@ type
   // - expect IV to be set before process, or IVAtBeginning=true
   // - on x86_64, our TAesCfb class is really faster than OpenSSL:
   // $ 2500 aes128cfb in 6.98ms i.e. 357807/s or 761.4 MB/s
+  // $ 2500 aes128cfbosl in 10.96ms i.e. 228039/s or 485.3 MB/s
   // $ 2500 aes256cfb in 9.41ms i.e. 265646/s or 565.3 MB/s
-  // $ 2500 aes256cfb in 13.36ms i.e. 187041/s or 398 MB/s
   // $ 2500 aes256cfbosl in 13.47ms i.e. 185473/s or 394.7 MB/s
   // - expect IV to be set before process, or IVAtBeginning=true
   // - is used e.g. by CryptDataForCurrentUser or WebSockets ProtocolAesClass
@@ -897,9 +897,6 @@ type
   // and a dedicated x86_64 assembly:
   // $ 2500 aes128cfbcrc in 7.58ms i.e. 329771/s or 701.8 MB/s
   // $ 2500 aes256cfbcrc in 9.99ms i.e. 250225/s or 532.5 MB/s
-  // which was actually more tuned than the less useful plain TAesCfb code:
-  // $ 2500 aes128cfb in 10.66ms i.e. 234345/s or 498.7 MB/s
-  // $ 2500 aes256cfb in 13.01ms i.e. 192041/s or 408.7 MB/s
   // - expect IV to be set before process, or IVAtBeginning=true
   TAesCfbCrc = class(TAesAbstractAead)
   protected
