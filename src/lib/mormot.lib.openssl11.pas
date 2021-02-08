@@ -32,7 +32,9 @@ interface
 
 {$I ..\mormot.defines.inc}
 
-{$ifdef USE_OPENSSL} // compile as a void unit if USE_OPENSSL is not defined
+{$ifdef USE_OPENSSL}
+
+// compile as a void unit if USE_OPENSSL is not defined
 
 uses
   sysutils,

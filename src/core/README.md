@@ -186,7 +186,8 @@ High-Performance Cryptographic features shared by all framework units
 - Deprecated MD5 RC4 SHA-1 Algorithms
 - Deprecated Weak AES/SHA Process
 
-Optimized x86_64 or i386 asm stubs, featuring e.g. AES-NI, are included.
+This unit is validated against OpenSSL for correctness.
+It is fully stand-alone, and faster than OpenSSL on x86_64 (but AES-GCM).
 
 ### mormot.core.ecc256r1
 

@@ -2870,165 +2870,8 @@ procedure AesNiEncryptCtrNist32(
         cmp    rdx, $8
         jb     @tail
         sub    rdx, $6
-        cmp    byte ptr [rcx].TAesContext.iv, 1
-        je     @ctr6x // 1 for Atom Silvermont
         lea    rcx, [rcx + $80]
         sub    rdx, $2
-        jmp    @loop8
-        // 6 interleaved CTR/AES blocks on older CPU
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@ctr6x: shl    eax, $4
-        mov    r10d, $30
-        bswap  ebp
-        lea    rcx, [rcx + rax + $20]
-        sub    r10, rax
-        jmp    @loop6
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@loop6: add    r8d, $6
-        movups xmm0, dqword ptr [rcx + r10 - $30]
-        aesenc xmm2, xmm1
-        mov    eax, r8d
-        xor    eax, ebp
-        aesenc xmm3, xmm1
-        // movbe  dword ptr [rsp + $c], eax
-        db $0f,  $38,  $f1,  $44,  $24,  $0c
-        lea    eax, [r8 + $1]
-        aesenc xmm4, xmm1
-        xor    eax, ebp
-        // movbe  dword ptr [rsp + $1c], eax
-        db $0f,  $38,  $f1,  $44,  $24,  $1c
-        aesenc xmm5, xmm1
-        lea    eax, [r8 + $2]
-        xor    eax, ebp
-        aesenc xmm6, xmm1
-        // movbe  dword ptr [rsp + $2c], eax
-        db $0f,  $38,  $f1,  $44,  $24,  $2c
-        lea    eax, [r8 + $3]
-        aesenc xmm7, xmm1
-        movups xmm1, dqword ptr [rcx + r10 - $20]
-        xor    eax, ebp
-        aesenc xmm2, xmm0
-        // movbe  dword ptr [rsp + $3c], eax
-        db $0f,  $38,  $f1,  $44,  $24,  $3c
-        lea    eax, [r8 + $4]
-        aesenc xmm3, xmm0
-        xor    eax, ebp
-        // movbe  dword ptr [rsp + $4c], eax
-        db $0f,  $38,  $f1,  $44,  $24,  $4c
-        aesenc xmm4, xmm0
-        lea    eax, [r8 + $5]
-        xor    eax, ebp
-        aesenc xmm5, xmm0
-        // movbe  dword ptr [rsp + $5c], eax
-        db $0f,  $38,  $f1,  $44,  $24,  $5c
-        mov    rax, r10
-        aesenc xmm6, xmm0
-        aesenc xmm7, xmm0
-        movups xmm0, dqword ptr [rcx + r10 - $10]
-@by6:   aesenc xmm2, xmm1
-        aesenc xmm3, xmm1
-        aesenc xmm4, xmm1
-        aesenc xmm5, xmm1
-        aesenc xmm6, xmm1
-        aesenc xmm7, xmm1
-        movups xmm1, dqword ptr [rcx + rax]
-        add    rax, $20
-        aesenc xmm2, xmm0
-        aesenc xmm3, xmm0
-        aesenc xmm4, xmm0
-        aesenc xmm5, xmm0
-        aesenc xmm6, xmm0
-        aesenc xmm7, xmm0
-        movups xmm0, dqword ptr [rcx + rax - $10]
-        jne    @by6
-        aesenc xmm2, xmm1
-        aesenc xmm3, xmm1
-        aesenc xmm4, xmm1
-        aesenc xmm5, xmm1
-        aesenc xmm6, xmm1
-        aesenc xmm7, xmm1
-        aesenclast xmm2, xmm0
-        aesenclast xmm3, xmm0
-        aesenclast xmm4, xmm0
-        aesenclast xmm5, xmm0
-        aesenclast xmm6, xmm0
-        aesenclast xmm7, xmm0
-        // encrypt 6*128 - bit blocks from src into dest
-        movdqu xmm8, dqword ptr [rdi]
-        movdqu xmm9, dqword ptr [rdi + $10]
-        movdqu xmm10, dqword ptr [rdi + $20]
-        movdqu xmm11, dqword ptr [rdi + $30]
-        movdqu xmm12, dqword ptr [rdi + $40]
-        movdqu xmm13, dqword ptr [rdi + $50]
-        lea    rdi, [rdi + $60]
-        movups xmm1, dqword ptr [rcx + r10 - $40]
-        pxor   xmm8, xmm2
-        movaps xmm2, dqword ptr [rsp]
-        pxor   xmm9, xmm3
-        movaps xmm3, dqword ptr [rsp + $10]
-        pxor   xmm10, xmm4
-        movaps xmm4, dqword ptr [rsp + $20]
-        pxor   xmm11, xmm5
-        movaps xmm5, dqword ptr [rsp + $30]
-        pxor   xmm12, xmm6
-        movaps xmm6, dqword ptr [rsp + $40]
-        pxor   xmm13, xmm7
-        movaps xmm7, dqword ptr [rsp + $50]
-        movdqu dqword ptr [rsi], xmm8
-        movdqu dqword ptr [rsi + $10], xmm9
-        movdqu dqword ptr [rsi + $20], xmm10
-        movdqu dqword ptr [rsi + $30], xmm11
-        movdqu dqword ptr [rsi + $40], xmm12
-        movdqu dqword ptr [rsi + $50], xmm13
-        lea    rsi, [rsi + $60]
-        sub    rdx, $6
-        jae    @loop6
-        add    rdx, $6
-        je     @done
-        lea    rax, [r10 - $30]
-        lea    rcx, [rcx + r10 - $50]
-        neg    eax
-        shr    eax, $4
-        jmp    @tail
-        // optimal 8 interleaved CTR/AES blocks
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@sub8:  aesenc xmm2, xmm1
-        aesenc xmm3, xmm1
-        aesenc xmm4, xmm1
-        aesenc xmm5, xmm1
-        aesenc xmm6, xmm1
-        aesenc xmm7, xmm1
-        aesenc xmm8, xmm1
-        aesenc xmm9, xmm1
-@sub8l: movups xmm1, dqword ptr [rcx + rax]
-        add    rax, $20
-        aesenc xmm2, xmm0
-        aesenc xmm3, xmm0
-        aesenc xmm4, xmm0
-        aesenc xmm5, xmm0
-        aesenc xmm6, xmm0
-        aesenc xmm7, xmm0
-        aesenc xmm8, xmm0
-        aesenc xmm9, xmm0
-        movups xmm0, dqword ptr [rcx + rax - $10]
-        jne    @sub8
-        aesenc xmm2, xmm1
-        aesenc xmm3, xmm1
-        aesenc xmm4, xmm1
-        aesenc xmm5, xmm1
-        aesenc xmm6, xmm1
-        aesenc xmm7, xmm1
-        aesenc xmm8, xmm1
-        aesenc xmm9, xmm1
-        aesenclast xmm2, xmm0
-        aesenclast xmm3, xmm0
-        aesenclast xmm4, xmm0
-        aesenclast xmm5, xmm0
-        aesenclast xmm6, xmm0
-        aesenclast xmm7, xmm0
-        aesenclast xmm8, xmm0
-        aesenclast xmm9, xmm0
-        ret
         // handle per 8 CTR interleave on newer CPU
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @loop8: add    r8d, $8 // our 32 - bit CTR
@@ -3285,6 +3128,46 @@ procedure AesNiEncryptCtrNist32(
         xorps  xmm8, xmm12
         movups dqword ptr [rsi + $60], xmm8
         jmp    @done
+        // 8 interleaved AES blocks
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@sub8:  aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+@sub8l: movups xmm1, dqword ptr [rcx + rax]
+        add    rax, $20
+        aesenc xmm2, xmm0
+        aesenc xmm3, xmm0
+        aesenc xmm4, xmm0
+        aesenc xmm5, xmm0
+        aesenc xmm6, xmm0
+        aesenc xmm7, xmm0
+        aesenc xmm8, xmm0
+        aesenc xmm9, xmm0
+        movups xmm0, dqword ptr [rcx + rax - $10]
+        jne    @sub8
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+        aesenclast xmm2, xmm0
+        aesenclast xmm3, xmm0
+        aesenclast xmm4, xmm0
+        aesenclast xmm5, xmm0
+        aesenclast xmm6, xmm0
+        aesenclast xmm7, xmm0
+        aesenclast xmm8, xmm0
+        aesenclast xmm9, xmm0
+        ret
+        // 4 interleaved AES blocks
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @loop4: aesenc xmm2, xmm1
         lea    rcx, [rcx + $10]
@@ -3311,6 +3194,7 @@ procedure AesNiEncryptCtrNist32(
         pxor   xmm5, xmm13
         movdqu dqword ptr [rsi + $30], xmm5
         jmp    @done
+        // 3 interleaved AES blocks
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @loop3: lea    rcx, [rcx + $10]
         aesenc xmm2, xmm1
@@ -3382,7 +3266,7 @@ begin
     inc(src, blocks);
     inc(dest, blocks);
     dec(len, blocks);
-  until len = 0;
+  until len = 0; // caller ensured len and 15 = 0
 end;
 
 procedure AesNiEncryptCfb128(src, dest, aes: pointer; blocks: PtrUInt);

@@ -21,7 +21,9 @@ interface
 
 {$I ..\mormot.defines.inc}
 
-{$ifdef USE_OPENSSL} // compile as a void unit if USE_OPENSSL is not defined
+{$ifdef USE_OPENSSL}
+
+// compile as a void unit if USE_OPENSSL is not defined
 
 uses
   classes,
@@ -133,7 +135,7 @@ type
   end;
 
   /// OpenSSL AES cypher/uncypher with Cipher feedback (CFB)
-  // - our TAesCfb class is slightly faster than OpenSSL:
+  // - our TAesCfb class is faster than OpenSSL:
   // $ 2500 aes128cfb in 6.98ms i.e. 357807/s or 761.4 MB/s
   // $ 2500 aes128cfbosl in 10.96ms i.e. 228039/s or 485.3 MB/s
   // $ 2500 aes256cfb in 9.41ms i.e. 265646/s or 565.3 MB/s
