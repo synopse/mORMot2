@@ -1422,8 +1422,8 @@ const
 
   /// used by TEccCertificate.Encrypt and TEccCertificateSecret.Decrypt
   ECIES_AES: array[ecaFIRST .. ecaLAST] of TAesMode = (
-    mCfb, mCbc, mOfb, mCtrNist, mCfb, mCbc, mOfb, mCtrNist,
-    mCfb, mCbc, mOfb, mCtrNist, mCfb, mCbc, mOfb, mCtrNist,
+    mCfb, mCbc, mOfb, mCtr, mCfb, mCbc, mOfb, mCtr,
+    mCfb, mCbc, mOfb, mCtr, mCfb, mCbc, mOfb, mCtr,
     mGcm, mGcm, mGcm, mGcm, mCtrCrc, mCtrCrc, mCtrCrc, mCtrCrc);
 
   ECIES_AESSIZE: array[ecaFIRST .. ecaLAST] of integer = (
@@ -3710,8 +3710,8 @@ const
   // - if you link mormot.core.openssl.pas, CTR and GCM will use its version
   ECDHEPROT_EF2AES: array[TEcdheEF] of TAesMode = (
   // efAesCrc  efAesCfb  efAesOfb efAesCtr efAesCbc
-    mCfbCrc, mCfb, mOfb, mCtrNist, mCbc, // 128-bit
-    mCfbCrc, mCfb, mOfb, mCtrNist, mCbc, // 256-bit
+    mCfbCrc, mCfb, mOfb, mCtr, mCbc, // 128-bit
+    mCfbCrc, mCfb, mOfb, mCtr, mCbc, // 256-bit
   // cfAesGcm   cfAesCtc
     mGcm, mGcm, mCtrCrc, mCtrCrc);
 

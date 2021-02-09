@@ -1088,7 +1088,7 @@ type
   // - mEcb is unsafe and should not be used as such
   // - mCtr64, mCfbCrc, mOfbCrc and mCtrCrc are non standard modes
   TAesMode = (
-    mEcb, mCbc, mCfb, mOfb, mCtr64, mCtrNist, mCfbCrc, mOfbCrc, mCtrCrc, mGcm);
+    mEcb, mCbc, mCfb, mOfb, mCtr64, mCtr, mCfbCrc, mOfbCrc, mCtrCrc, mGcm);
 
 var
   /// the fastest AES implementation classes available on the system, per mode
