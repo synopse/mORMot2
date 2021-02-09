@@ -9,6 +9,10 @@
 # TARGET=linux - compile target (win32, win64 etc. in case cross compiler is installed). Default is `linux`
 # ARCH=x86_64 - compile arch(i386, arm etc.). Default is `x86_64`
 # BIN=/tmp/mormot2 - output folder. Default is `/tmp/mormot2`
+#
+# Call example to cross compile from linux to win64:
+# TARGET=win64 ./build_fpc.sh
+
 
 # Used fpc command line switches:
 # -Scgi 	- Support operators like C; Enable LABEL and GOTO(default for -MDelphi); Inlining
@@ -32,7 +36,7 @@ else
   NC=''
 fi
 script_successful(){
-  echo -e "$GREEN Build for $ARCH_TG success. Tests can be executed from\n $BIN/fpc-$ARCH_TG/mormot2tests$NC"
+  echo -e "$GREEN Build for $ARCH_TG success. Tests can be executed from\n $BIN/fpc-$ARCH_TG/$dest_fn$NC"
   exit 0
 }
 script_aborted() {
@@ -46,6 +50,9 @@ err_report() {
 }
 trap 'err_report $LINENO' ERR
 
+# uncomment line below to echo commands to console
+# set -x
+
 # get a mORMot folder name based on this script location
 MORMOT2_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." >/dev/null 2>&1 && pwd )"
 TARGET="${TARGET:-linux}"
@@ -57,23 +64,29 @@ BIN="${BIN:-/tmp/mormot2}"
 STATIC="${STATIC:-$LIB2/static}"
 
 mkdir -p "$BIN/fpc-$ARCH_TG/.dcu"
-rm -rf "$BIN/fpc-$ARCH_TG/.dcu/*"
+rm -f "$BIN"/fpc-"$ARCH_TG"/.dcu/*
 
-if [ -f $LIB2/test/mormot2tests.cfg]; then
-  mv -f $LIB2/test/mormot2tests.cfg  $LIB2/test/mormot2tests.cfg.bak
+if [ -f "$LIB2"/test/mormot2tests.cfg ]; then
+  mv -f "$LIB2/test/mormot2tests.cfg"  "$LIB2/test/mormot2tests.cfg.bak"
 fi
 
-fpc -MDelphi -Sci -Ci -O2 -g -gl -gw2 -Xg -k'-rpath=$ORIGIN' -k-L$BIN \
+dest_fn=mormot2tests
+if [[ $TARGET == win* ]]; then
+  dest_fn="$dest_fn.exe"
+fi
+
+fpc -MDelphi -Sci -Ci -O1 -g -gl -gw2 -Xg -k'-rpath=$ORIGIN' -k-L$BIN \
+  -T$TARGET -P$ARCH \
   -veiq -vw-n-h- \
   -Fi"$BIN/fpc-$ARCH_TG/.dcu" -Fi"$LIB2/src/core" -Fi"$LIB2/src/db" -Fi"$LIB2/src/rest" \
   -Fl"$STATIC/$ARCH-$TARGET" \
   -Fu"$LIB2/src/core" -Fu"$LIB2/src/db" -Fu"$LIB2/src/rest" \
-  -FU"$BIN/fpc-$ARCH_TG/.dcu" -FE"$BIN/fpc-$ARCH_TG" -o"$BIN/fpc-$ARCH_TG/mormot2tests" \
+  -FU"$BIN/fpc-$ARCH_TG/.dcu" -FE"$BIN/fpc-$ARCH_TG" -o"$BIN/fpc-$ARCH_TG/$dest_fn" \
   -dFPC_SYNCMEM -dDOPATCHTRTL -dFPCUSEVERSIONINFO1 \
-  -B -Se1 $LIB2/test/mormot2tests.dpr
+  -B -Se1 "$LIB2/test/mormot2tests.dpr"
 
-if [ -f $LIB2/test/mormot2tests.cfg.bak]; then
-  mv -f $LIB2/test/mormot2tests.cfg.bak  $LIB2/test/mormot2tests.cfg
+if [ -f "$LIB2/test/mormot2tests.cfg.bak" ]; then
+  mv -f "$LIB2/test/mormot2tests.cfg.bak"  "$LIB2/test/mormot2tests.cfg"
 fi
 
 script_successful

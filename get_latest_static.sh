@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Update a static folder contet from the latest [pre]release of mORMot2
+# Update a static folder content from the latest [pre]release of mORMot2
 # Required tools: jq curl wget 7zip. On Ubuntu can be installed by
 # sudo apt install curl wget jq p7zip-full
 
@@ -9,7 +9,7 @@ LATEST_URL=$(curl --silent https://api.github.com/repos/synopse/mORMot2/releases
 
 echo "Downloading from $LATEST_URL ..."
 DOWNLOAD_PATH=/tmp/mormot_static_latest.7z
-wget -q -O $DOWNLOAD_PATH $LATEST_URL
+wget -q -O $DOWNLOAD_PATH "$LATEST_URL"
 
 echo "Unpacking to ./static ..."
 rm -Rf ./static
