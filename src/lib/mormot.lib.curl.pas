@@ -766,7 +766,7 @@ const
     'curl_easy_init', 'curl_easy_setopt', 'curl_easy_perform', 'curl_easy_cleanup',
     'curl_easy_getinfo', 'curl_easy_duphandle', 'curl_easy_reset',
     'curl_easy_strerror', 'curl_slist_append', 'curl_slist_free_all',
-    'share_init', 'share_cleanup','share_setopt', 'share_strerror'
+    'curl_share_init', 'curl_share_cleanup','curl_share_setopt', 'curl_share_strerror'
     {$ifdef LIBCURLMULTI},
     'curl_multi_add_handle', 'curl_multi_assign', 'curl_multi_cleanup',
     'curl_multi_fdset', 'curl_multi_info_read', 'curl_multi_init',
@@ -864,13 +864,13 @@ begin
     curl.infoText := format('%s version %s', [LIBCURL_DLL, curl.info.version]);
     if curl.info.ssl_version <> nil then
       curl.infoText := format('%s using %s', [curl.infoText, curl.info.ssl_version]);
+    curl_initialized := true; // should be set last
 
     curl.globalShare := nil;
     CurlEnableGlobalShare; // won't hurt, and may benefit even for the OS
     // api := 0; with curl.info do while protocols[api]<>nil do
     // begin write(protocols[api], ' '); inc(api); end; writeln(#13#10,curl.infoText);
   finally
-    curl_initialized := true; // should be set last
     GlobalUnLock;
   end;
 end;
