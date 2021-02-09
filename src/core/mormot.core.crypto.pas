@@ -604,7 +604,7 @@ type
       read fIV write fIV;
     /// low-level flag indicating you can call Encrypt/Decrypt several times
     // - i.e. the IV and AEAD MAC are updated after each Encrypt/Decrypt call
-    // - is disabled for external libraries like OpenSSL or for some AEAD MAC
+    // - is disabled for external libraries like OpenSSL
     // - if you call EncryptPkcs7/DecryptPkcs7 you don't have to care about it
     property IVUpdated: boolean
       read fIVUpdated;
@@ -794,7 +794,7 @@ type
   // data integrity, authenticity, and check against transmission errors
   TAesAbstractAead = class(TAesAbstractEncryptOnly)
   protected
-    fMac, fMacKey: TAesMac256;
+    fMac: TAesMac256;
     {$ifdef USEAESNI64}
     fAesNiSse42: boolean;
     {$endif USEAESNI64}
@@ -832,6 +832,12 @@ type
     // authentication proof (which will need full Decrypt + MacDecryptCheckTag)
     // - checked CRC includes any MacSetNonce() Associated value
     function MacCheckError(Encrypted: pointer; Count: cardinal): boolean; override;
+    /// direct access to the low-level 256-bit CRC used for AEAD process
+    // - could be set before Encrypt/Decrypt, as rough alternative to MacSetNonce()
+    // - note that MacEncryptGetTag() uses this value, but finalizes its plain
+    // 128-bit hash by applying the current AES cypher on it
+    property Mac: TAesMac256
+      read fMac write fMac;
   end;
 
   /// AEAD combination of AES with Cipher feedback (CFB) and 256-bit crc32c  MAC
@@ -4037,7 +4043,7 @@ begin
   end;
   if fIVUpdated then
   begin
-    // we know that our classes update the IV so we can call Encrypt() twice
+    // we know that our classes update the IV/MAC so we can call Encrypt() twice
     by16 := InputLen + padding - 16;
     Encrypt(Input, Output, by16); // avoid a huge MoveFast()
     inc(PByte(Input), by16);
@@ -4678,7 +4684,6 @@ end;
 procedure TAesAbstractAead.AfterCreate;
 begin
   inherited;
-  fIVUpdated := false; // Encrypt() will reset fMac from fMacKey
   {$ifdef USEAESNI64}
   fAesNiSse42 := (cfAESNI in CpuFeatures) and
                  (cfSSE42 in CpuFeatures);
@@ -4688,7 +4693,6 @@ end;
 destructor TAesAbstractAead.Destroy;
 begin
   inherited Destroy;
-  FillCharFast(fMacKey, SizeOf(fMacKey), 0);
   FillCharFast(fMac, SizeOf(fMac), 0);
 end;
 
@@ -4697,14 +4701,14 @@ function TAesAbstractAead.MacSetNonce(DoEncrypt: boolean; const RandomNonce: THa
 begin
   // safe seed for plain text crc, before AES encryption
   // from TEcdheProtocol.SetKey, RandomNonce uniqueness will avoid replay attacks
-  fMacKey.plain := THash256Rec(RandomNonce).Lo;
-  XorBlock16(@fMacKey.plain, @THash256Rec(RandomNonce).Hi);
+  fMac.plain := THash256Rec(RandomNonce).Lo;
+  XorBlock16(@fMac.plain, @THash256Rec(RandomNonce).Hi);
   // neutral seed for encrypted crc, to check for errors, with no compromission
   if (Associated <> nil) and
      (AssociatedLen > 0) then
-    crc128c(Associated, AssociatedLen, fMacKey.encrypted)
+    crc128c(Associated, AssociatedLen, fMac.encrypted)
   else
-    FillcharFast(fMacKey.encrypted, SizeOf(THash128), 255); // -1 seed
+    FillcharFast(fMac.encrypted, SizeOf(THash128), 255); // -1 seed
   result := true;
 end;
 
@@ -4733,7 +4737,7 @@ begin
   if (Count < 32) or
      (Count and AesBlockMod <> 0) then
     exit;
-  crc := fMacKey.encrypted;
+  crc := fMac.encrypted;
   crcblocks(@crc, Encrypted, Count shr 4 - 2);
   result := IsEqual(crc, PHash128(@PByteArray(Encrypted)[Count - SizeOf(crc)])^);
 end;
@@ -4748,7 +4752,6 @@ var
 begin
   if Count = 0 then
     exit;
-  fMac := fMacKey; // reuse the same key until next MacSetNonce()
   {$ifdef USEAESNI64}
   if (Count and AesBlockMod = 0) and
      fAesNiSse42 then
@@ -4831,7 +4834,6 @@ var
 begin
   if Count = 0 then
     exit;
-  fMac := fMacKey; // reuse the same key until next MacSetNonce()
   {$ifdef USEAESNI64}
   if (Count and AesBlockMod = 0) and
      fAesNiSse42 then
@@ -4910,18 +4912,17 @@ end;
 
 procedure TAesSymCrc.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
-  tmp: TAesMac256;
+  tmp: THash128;
 begin
   if Count = 0 then
     exit;
-  tmp := fMacKey; // backup
-  fMacKey.plain := tmp.encrypted; // reverse to reuse the Encrypt() code
-  fMacKey.encrypted := tmp.plain;
-  Encrypt(BufIn, BufOut, Count);
-  fMacKey := tmp; // restore
-  tmp.plain := fMac.plain;
+  tmp := fMac.plain; // reverse to reuse the Encrypt() code
   fMac.plain := fMac.encrypted;
-  fMac.encrypted := tmp.plain
+  fMac.encrypted := tmp;
+  Encrypt(BufIn, BufOut, Count);
+  tmp := fMac.plain; // restore
+  fMac.plain := fMac.encrypted;
+  fMac.encrypted := tmp;
 end;
 
 
@@ -4933,7 +4934,6 @@ var
 begin
   if Count = 0 then
     exit;
-  fMac := fMacKey; // reuse the same key until next MacSetNonce()
   {$ifdef USEAESNI32}
   if Assigned(TAesContext(fAes).AesNi32) and
      (Count and AesBlockMod = 0) then
@@ -5001,7 +5001,6 @@ var
 begin
   if Count = 0 then
     exit;
-  fMac := fMacKey; // reuse the same key until next MacSetNonce()
   {$ifdef USEAESNI64} // very fast x86_64 AES-NI asm with 8x interleave factor
   if (Count and AesBlockMod = 0) and
      fAesNiSse42 then
