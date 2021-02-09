@@ -864,7 +864,7 @@ begin
     curl.infoText := format('%s version %s', [LIBCURL_DLL, curl.info.version]);
     if curl.info.ssl_version <> nil then
       curl.infoText := format('%s using %s', [curl.infoText, curl.info.ssl_version]);
-    curl_initialized := true; // should be set last
+    curl_initialized := true; // should be set last but before CurlEnableGlobalShare
 
     curl.globalShare := nil;
     CurlEnableGlobalShare; // won't hurt, and may benefit even for the OS
@@ -897,11 +897,14 @@ begin
     exit; // not available, or already shared
   curl.globalShare := curl.share_init;
   if curl.globalShare = nil then
-    exit; // something went wrong (out of memory, etc.) and therefore the share object was not created
+    // something went wrong (out of memory, etc.) and therefore
+    // the share object was not created
+    exit;
   for i := 0 to ord(CURL_LOCK_DATA_PSL) do
     InitializeCriticalSection(curl.share_cs[i]);
   curl.share_setopt(curl.globalShare, CURLSHOPT_LOCKFUNC, @curlShareLock);
   curl.share_setopt(curl.globalShare, CURLSHOPT_UNLOCKFUNC, @curlShareUnLock);
+  // share and cache DNS + TLS sessions + Connections
   curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
   curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
   curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);

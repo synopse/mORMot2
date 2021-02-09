@@ -1009,23 +1009,23 @@ function EccKeyFileFolder: TFileName;
 {
   On FPC x86_64, from our regression tests:
   - ECDHE stream protocol: 54,228 assertions passed  916.75ms
-    100 efAesCrc128 in 1.65ms i.e. 60,313/s, aver. 16us, 1 GB/s
-    100 efAesCfb128 in 1.67ms i.e. 59,594/s, aver. 16us, 1 GB/s
-    100 efAesOfb128 in 2.53ms i.e. 39,447/s, aver. 25us, 727.3 MB/s
-    100 efAesCtr128 in 848us i.e. 117,924/s, aver. 8us, 2.1 GB/s
-    100 efAesCbc128 in 2.70ms i.e. 36,927/s, aver. 27us, 680.8 MB/s
-    100 efAesCrc256 in 2.19ms i.e. 45,578/s, aver. 21us, 840.3 MB/s
-    100 efAesCfb256 in 2.19ms i.e. 45,641/s, aver. 21us, 841.5 MB/s
-    100 efAesOfb256 in 3.41ms i.e. 29,308/s, aver. 34us, 540.3 MB/s
-    100 efAesCtr256 in 1.05ms i.e. 94,428/s, aver. 10us, 1.7 GB/s
-    100 efAesCbc256 in 3.33ms i.e. 30,003/s, aver. 33us, 553.2 MB/s
+    100 efAesCrc128 in 1.56ms i.e. 63,856/s, aver. 15us, 1.1 GB/s
+    100 efAesCfb128 in 1.65ms i.e. 60,386/s, aver. 16us, 1 GB/s
+    100 efAesOfb128 in 2.51ms i.e. 39,824/s, aver. 25us, 734.2 MB/s
+    100 efAesCtr128 in 853us i.e. 117,233/s, aver. 8us, 2.1 GB/s
+    100 efAesCbc128 in 2.89ms i.e. 34,530/s, aver. 28us, 636.6 MB/s
+    100 efAesCrc256 in 2.11ms i.e. 47,326/s, aver. 21us, 872.6 MB/s
+    100 efAesCfb256 in 2.32ms i.e. 43,084/s, aver. 23us, 794.4 MB/s
+    100 efAesOfb256 in 3.35ms i.e. 29,770/s, aver. 33us, 548.9 MB/s
+    100 efAesCtr256 in 1.06ms i.e. 94,161/s, aver. 10us, 1.6 GB/s
+    100 efAesCbc256 in 3.36ms i.e. 29,717/s, aver. 33us, 547.9 MB/s
     100 efAesGcm128 in 4.90ms i.e. 20,383/s, aver. 49us, 375.8 MB/s
     100 efAesGcm256 in 5.75ms i.e. 17,364/s, aver. 57us, 320.1 MB/s
-    100 efAesCtc128 in 815us i.e. 122,699/s, aver. 8us, 2.2 GB/s
-    100 efAesCtc256 in 1.04ms i.e. 96,153/s, aver. 10us, 1.7 GB/s
+    100 efAesCtc128 in 764us i.e. 130,890/s, aver. 7us, 2.3 GB/s
+    100 efAesCtc256 in 965us i.e. 103,626/s, aver. 9us, 1.8 GB/s
   - if mormot.core.openssl is included, AES-GCM is much faster:
-    100 efAesGcm128 in 729us i.e. 137,174/s, aver. 7us, 2.4 GB/s
-    100 efAesGcm256 in 942us i.e. 106,157/s, aver. 9us, 1.9 GB/s
+    100 efAesGcm128 in 721us i.e. 138,696/s, aver. 7us, 2.4 GB/s
+    100 efAesGcm256 in 924us i.e. 108,225/s, aver. 9us, 1.9 GB/s
 
   On FPC i386, from our regression tests:
     100 efAesCrc128 in 2.31ms i.e. 43,159/s, aver. 23us, 795.7 MB/s
@@ -1055,6 +1055,7 @@ function EccKeyFileFolder: TFileName;
      efAesGcm128/efAesGcm256 would be both stronger and faster.
      On Win64, efAesCtr128 may be used as fastest native cipher.
 }
+
 
 type
   /// the Authentication schemes recognized by TEcdheProtocol

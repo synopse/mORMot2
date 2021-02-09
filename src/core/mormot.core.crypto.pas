@@ -683,9 +683,9 @@ type
   // - this class will use AES-NI hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
   // - on x86_64, our TAesCfb class is really faster than OpenSSL:
-  // $ 2500 aes128cfb in 6.98ms i.e. 357807/s or 761.4 MB/s
+  // $ 2500 aes128cfb in 6.95ms i.e. 359660/s or 765.4 MB/s
   // $ 2500 aes128cfbosl in 10.96ms i.e. 228039/s or 485.3 MB/s
-  // $ 2500 aes256cfb in 9.41ms i.e. 265646/s or 565.3 MB/s
+  // $ 2500 aes256cfb in 9.34ms i.e. 267637/s or 569.5 MB/s
   // $ 2500 aes256cfbosl in 13.47ms i.e. 185473/s or 394.7 MB/s
   // - is used e.g. by CryptDataForCurrentUser or WebSockets ProtocolAesClass
   TAesCfb = class(TAesAbstractEncryptOnly)
@@ -700,9 +700,9 @@ type
   // - this class will use AES-NI hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
   // - on x86_64, our TAesOfb class is faster than OpenSSL:
-  // $ 2500 aes128ofb in 7.07ms i.e. 353207/s or 751.7 MB/s
+  // $ 2500 aes128ofb in 6.87ms i.e. 363901/s or 774.4 MB/s
   // $ 2500 aes128ofbosl in 8.20ms i.e. 304692/s or 648.4 MB/s
-  // $ 2500 aes256ofb in 9.64ms i.e. 259201/s or 551.6 MB/s
+  // $ 2500 aes256ofb in 9.33ms i.e. 267723/s or 569.7 MB/s
   // $ 2500 aes256ofbosl in 10.71ms i.e. 233383/s or 496.6 MB/s
   TAesOfb = class(TAesAbstractEncryptOnly)
   public
@@ -745,15 +745,15 @@ type
   // with reference implementations like OpenSSL - see also TAesCtrNistOsl
   // - on x86_64 we use a 8*128-bit interleaved optimized asm which is faster
   // than OpenSSL 1.1.1 in our benchmarks:
-  // $ 2500 aes128ctr in 2.06ms i.e. 1209482/s or 2.5 GB/s
-  // $ 2500 aes256ctr in 2.68ms i.e. 931792/s or 1.9 GB/s
+  // $ 2500 aes128ctr in 2.05ms i.e. 1218323/s or 2.5 GB/s
+  // $ 2500 aes256ctr in 2.65ms i.e. 942329/s or 1.9 GB/s
   // $ 2500 aes128ctrosl in 2.37ms i.e. 1053518/s or 2.1 GB/s
   // $ 2500 aes256ctrosl in 3.22ms i.e. 775193/s or 1.6 GB/s
   // as reference, optimized but not interleaved OFB asm is 3 times slower:
-  // $  2500 aes128ofb in 6.89ms i.e. 362739/s or 771.9 MB/s
-  // $  2500 aes256ofb in 9.38ms i.e. 266410/s or 566.9 MB/s
-  // $  2500 aes128ofbosl in 7.99ms i.e. 312851/s or 665.8 MB/s
-  // $  2500 aes256ofbosl in 10.90ms i.e. 229294/s or 487.9 MB/s
+  // $ 2500 aes128ofb in 6.87ms i.e. 363901/s or 774.4 MB/s
+  // $ 2500 aes128ofbosl in 8.20ms i.e. 304692/s or 648.4 MB/s
+  // $ 2500 aes256ofb in 9.33ms i.e. 267723/s or 569.7 MB/s
+  // $ 2500 aes256ofbosl in 10.71ms i.e. 233383/s or 496.6 MB/s
   TAesCtrNist = class(TAesCtrAny)
   protected
     procedure AfterCreate; override;
@@ -841,10 +841,10 @@ type
   end;
 
   /// AEAD combination of AES with Cipher feedback (CFB) and 256-bit crc32c  MAC
+  // - expect IV and MAC to be set before process, or IVAtBeginning=true
   // - this class will use AES-NI and CRC32C hardware instructions, if available
-  // $ 2500 aes128cfbcrc in 7.58ms i.e. 329771/s or 701.8 MB/s
-  // $ 2500 aes256cfbcrc in 9.99ms i.e. 250225/s or 532.5 MB/s
-  // - expect IV to be set before process, or IVAtBeginning=true
+  // $ 2500 aes128cfbcrc in 7.22ms i.e. 345829/s or 736 MB/s
+  // $ 2500 aes256cfbcrc in 9.68ms i.e. 258104/s or 549.3 MB/s
   TAesCfbCrc = class(TAesAbstractAead)
   public
     /// perform the AES cypher in the CFB mode, and compute a 256-bit MAC
@@ -862,12 +862,12 @@ type
   end;
 
   /// AEAD combination of AES with Output feedback (OFB) and 256-bit crc32c MAC
+  // - expect IV and MAC to be set before process, or IVAtBeginning=true
   // - this class will use AES-NI and CRC32C hardware instructions, if available
-  // $ 2500 aes128ofb in 6.97ms i.e. 358268/s or 762.4 MB/s
-  // $ 2500 aes128ofbcrc in 8.23ms i.e. 303766/s or 646.4 MB/s
-  // $ 2500 aes256ofb in 9.35ms i.e. 267236/s or 568.7 MB/s
-  // $ 2500 aes256ofbcrc in 10.74ms i.e. 232601/s or 495 MB/s
-  // - expect IV to be set before process, or IVAtBeginning=true
+  // $ 2500 aes128ofb in 6.87ms i.e. 363901/s or 774.4 MB/s
+  // $ 2500 aes128ofbcrc in 7.86ms i.e. 317742/s or 676.2 MB/s
+  // $ 2500 aes256ofb in 9.33ms i.e. 267723/s or 569.7 MB/s
+  // $ 2500 aes256ofbcrc in 10.62ms i.e. 235271/s or 500.7 MB/s
   TAesOfbCrc = class(TAesSymCrc)
   public
     /// perform the AES cypher in the OFB mode, and compute a 256-bit MAC
@@ -876,11 +876,18 @@ type
 
   /// AEAD combination of AES with Counter (CTR) and 256-bit crc32c MAC
   // - this class will use AES-NI and CRC32C hardware instructions, if available
+  // - expect IV and MAC to be set before process, or IVAtBeginning=true
   // - on x86_64 we use a 8*128-bit interleaved optimized asm:
-  // $ 2500 aes128ctrcrc in 2.63ms i.e. 948406/s or 1.9 GB/s
-  // $ 2500 aes256ctrcrc in 3.33ms i.e. 748727/s or 1.5 GB/s
-  // - expect IV to be set before process, or IVAtBeginning=true
-  // - could be used as an alternative to AES-GCM if OpenSSL is not available
+  // $ 2500 aes128ctrcrc in 2.51ms i.e. 994035/s or 2 GB/s
+  // $ 2500 aes256ctrcrc in 3.17ms i.e. 788643/s or 1.6 GB/s
+  // - to be compared with the CTR without 256-bit MAC computation
+  // $ 2500 aes128ctr in 2.05ms i.e. 1218323/s or 2.5 GB/s
+  // $ 2500 aes256ctr in 2.65ms i.e. 942329/s or 1.9 GB/s
+  // - could be used as an alternative to AES-GCM, even if OpenSSL is available:
+  // $ 2500 aes128gcm in 14.41ms i.e. 173418/s or 369 MB/s
+  // $ 2500 aes256gcm in 17.37ms i.e. 143918/s or 306.2 MB/s
+  // $ 2500 aes128gcmosl in 3.03ms i.e. 824810/s or 1.7 GB/s
+  // $ 2500 aes256gcmosl in 3.56ms i.e. 701065/s or 1.4 GB/s
   TAesCtrCrc = class(TAesSymCrc)
   public
     /// perform the AES cypher in the CTR mode, and compute a 256-bit MAC
@@ -951,6 +958,8 @@ type
   // - implements AEAD (authenticated-encryption with associated-data) process
   // via MacSetNonce/MacEncrypt or AesGcmAad/AesGcmFinal methods
   // - will use AES-NI and CLMUL hardware instructions, if available
+  // - expect IV to be set before process, or IVAtBeginning=true
+  // - by design, AES-GCM doesn't expect any MAC to be supplied before processing
   // - OpenSSL is faster than our TAesGcm class which is not interleaved:
   // $ 2500 aes128gcm in 14.41ms i.e. 173418/s or 369 MB/s
   // $ 2500 aes256gcm in 17.37ms i.e. 143918/s or 306.2 MB/s
