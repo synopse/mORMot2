@@ -795,6 +795,9 @@ type
   TAesAbstractAead = class(TAesAbstractEncryptOnly)
   protected
     fMac, fMacKey: TAesMac256;
+    {$ifdef USEAESNI64}
+    fAesNiSse42: boolean;
+    {$endif USEAESNI64}
     procedure AfterCreate; override;
   public
     /// release the used instance memory and resources
@@ -831,16 +834,12 @@ type
     function MacCheckError(Encrypted: pointer; Count: cardinal): boolean; override;
   end;
 
-  /// AEAD combination of AES with Cipher feedback (CFB) and 256-bit MAC
-  // - this class will use AES-NI and CRC32C hardware instructions, if available,
-  // and a dedicated x86_64 assembly:
+  /// AEAD combination of AES with Cipher feedback (CFB) and 256-bit crc32c  MAC
+  // - this class will use AES-NI and CRC32C hardware instructions, if available
   // $ 2500 aes128cfbcrc in 7.58ms i.e. 329771/s or 701.8 MB/s
   // $ 2500 aes256cfbcrc in 9.99ms i.e. 250225/s or 532.5 MB/s
   // - expect IV to be set before process, or IVAtBeginning=true
   TAesCfbCrc = class(TAesAbstractAead)
-  protected
-    fAesNiSse42: boolean;
-    procedure AfterCreate; override;
   public
     /// perform the AES cypher in the CFB mode, and compute a 256-bit MAC
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
@@ -848,19 +847,38 @@ type
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
   end;
 
-  /// AEAD combination of AES with Output feedback (OFB) and 256-bit MAC
+  /// AEAD combination of AES and 256-bit MAC with symetrical Encrypt/Decrypt
+  TAesSymCrc = class(TAesAbstractAead)
+  public
+    /// perform the AES uncypher calling Encrypt()
+    // - will reverse fMac.plain/encrypted before and after Encrypt()
+    procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
+  end;
+
+  /// AEAD combination of AES with Output feedback (OFB) and 256-bit crc32c MAC
   // - this class will use AES-NI and CRC32C hardware instructions, if available
   // $ 2500 aes128ofb in 6.97ms i.e. 358268/s or 762.4 MB/s
   // $ 2500 aes128ofbcrc in 8.23ms i.e. 303766/s or 646.4 MB/s
   // $ 2500 aes256ofb in 9.35ms i.e. 267236/s or 568.7 MB/s
   // $ 2500 aes256ofbcrc in 10.74ms i.e. 232601/s or 495 MB/s
   // - expect IV to be set before process, or IVAtBeginning=true
-  TAesOfbCrc = class(TAesAbstractAead)
+  TAesOfbCrc = class(TAesSymCrc)
   public
     /// perform the AES cypher in the OFB mode, and compute a 256-bit MAC
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
-    /// perform the AES un-cypher in the OFB mode, and compute a 256-bit MAC
-    procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
+  end;
+
+  /// AEAD combination of AES with Counter (CTR) and 256-bit crc32c MAC
+  // - this class will use AES-NI and CRC32C hardware instructions, if available
+  // - on x86_64 we use a 8*128-bit interleaved optimized asm:
+  // $ 2500 aes128ctrcrc in 2.63ms i.e. 948406/s or 1.9 GB/s
+  // $ 2500 aes256ctrcrc in 3.33ms i.e. 748727/s or 1.5 GB/s
+  // - expect IV to be set before process, or IVAtBeginning=true
+  // - could be used as an alternative to AES-GCM if OpenSSL is not available
+  TAesCtrCrc = class(TAesSymCrc)
+  public
+    /// perform the AES cypher in the CTR mode, and compute a 256-bit MAC
+    procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
   end;
 
   /// abstract parent to handle AES-GCM cypher/uncypher with built-in authentication
@@ -2444,7 +2462,6 @@ procedure Sha256Weak(const s: RawByteString; out Digest: TSha256Digest);
 
 
 
-
 implementation
 
 { ****************** Include Tuned INTEL/AMD Assembly }
@@ -3233,7 +3250,7 @@ begin
   cv := iv^;
   if blockcount > 0 then
     repeat
-      TAesContext(Context).DoBlock(Context, cv, cv);
+      TAesContext(Context).DoBlock(Context, cv, cv); // cv=AES(cv)
       XorBlock16(src, dst, pointer(@cv));
       inc(PAesBlock(src));
       inc(PAesBlock(dst));
@@ -3258,7 +3275,7 @@ begin
   cv := iv^;
   if blockcount > 0 then
     repeat
-      TAesContext(Context).DoBlock(Context, cv, tmp{%H-});
+      TAesContext(Context).DoBlock(Context, cv, tmp{%H-}); // tmp=AES(cv)
       offs := 15;
       inc(cv[offs]);
       if cv[offs] = 0 then // manual big-endian increment
@@ -3696,7 +3713,7 @@ begin
         // single-pass loop optimized e.g. for PKCS7 padding
         {%H-}GCM_IncCtr(TAesContext(actx).iv.b);
         TAesContext(actx).DoBlock(actx, TAesContext(actx).iv,
-          TAesContext(actx).buf); // maybe AES-NI
+          TAesContext(actx).buf); // buf=AES(iv) maybe AES-NI
         XorBlock16(ptp, ctp, @TAesContext(actx).buf);
         gf_mul_h(self, txt_ghv);  // maybe CLMUL
         XorBlock16(@txt_ghv, ctp);
@@ -4398,7 +4415,7 @@ procedure TAesAbstractSyn.TrailerBytes(count: cardinal);
 begin
   if fAesInit <> initEncrypt then
     EncryptInit;
-  TAesContext(fAes).DoBlock(fAes, fIV, fIV);
+  TAesContext(fAes).DoBlock(fAes, fIV, fIV); // fIV=AES(fIV)
   XorMemory(pointer(fOut), pointer(fIn), @fIV, count);
 end;
 
@@ -4414,7 +4431,7 @@ begin
     DecryptInit;
   for i := 1 to Count shr AesBlockShift do
   begin
-    TAesContext(fAes).DoBlock(fAes, fIn^, fOut^);
+    TAesContext(fAes).DoBlock(fAes, fIn^, fOut^); // fOut=AES(fIn)
     inc(fIn);
     inc(fOut);
   end;
@@ -4432,7 +4449,7 @@ begin
     EncryptInit;
   for i := 1 to Count shr AesBlockShift do
   begin
-    TAesContext(fAes).DoBlock(fAes, fIn^, fOut^);
+    TAesContext(fAes).DoBlock(fAes, fIn^, fOut^);  // fOut=AES(fIn)
     inc(fIn);
     inc(fOut);
   end;
@@ -4457,7 +4474,7 @@ begin
     for i := 1 to Count shr AesBlockShift do
     begin
       tmp := fIn^;
-      TAesContext(fAes).DoBlock(fAes, fIn^, fOut^);
+      TAesContext(fAes).DoBlock(fAes, fIn^, fOut^); // fOut=AES(fIn)
       XorBlock16(pointer(fOut), pointer(@fIV));
       fIV := tmp;
       inc(fIn);
@@ -4479,7 +4496,7 @@ begin
   for i := 1 to Count shr AesBlockShift do
   begin
     XorBlock16(pointer(fIn), pointer(fOut), pointer(@fIV));
-    TAesContext(fAes).DoBlock(fAes, fOut^, fOut^);
+    TAesContext(fAes).DoBlock(fAes, fOut^, fOut^);  // fOut=AES(fOut)
     fIV := fOut^;
     inc(fIn);
     inc(fOut);
@@ -4546,6 +4563,7 @@ begin
         push    ecx
         shr     ecx, AesBlockShift
         jz      @z
+        {$ifdef FPC} align 16 {$endif}
 @s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         movaps  xmm1, xmm0
@@ -4572,7 +4590,7 @@ begin
     for i := 1 to Count shr AesBlockShift do
     begin
       tmp := fIn^;
-      TAesContext(fAes).DoBlock(fAes, fIV, fIV);
+      TAesContext(fAes).DoBlock(fAes, fIV, fIV);  // fIV=AES(fIV)
       XorBlock16(pointer(fIn), pointer(fOut), pointer(@fIV));
       fIV := tmp;
       inc(fIn);
@@ -4618,6 +4636,7 @@ begin
         push    ecx
         shr     ecx, AesBlockShift
         jz      @z
+        {$ifdef FPC} align 16 {$endif}
 @s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         pxor    xmm7, xmm0
@@ -4641,7 +4660,7 @@ begin
     inherited; // set fIn,fOut
     for i := 1 to Count shr AesBlockShift do
     begin
-      TAesContext(fAes).DoBlock(fAes, fIV, fIV);
+      TAesContext(fAes).DoBlock(fAes, fIV, fIV); // fIV=AES(fIV)
       XorBlock16(pointer(fIn), pointer(fOut), pointer(@fIV));
       fIV := fOut^;
       inc(fIn);
@@ -4659,7 +4678,11 @@ end;
 procedure TAesAbstractAead.AfterCreate;
 begin
   inherited;
-  fIVUpdated := false;
+  fIVUpdated := false; // Encrypt() will reset fMac from fMacKey
+  {$ifdef USEAESNI64}
+  fAesNiSse42 := (cfAESNI in CpuFeatures) and
+                 (cfSSE42 in CpuFeatures);
+  {$endif USEAESNI64}
 end;
 
 destructor TAesAbstractAead.Destroy;
@@ -4673,7 +4696,7 @@ function TAesAbstractAead.MacSetNonce(DoEncrypt: boolean; const RandomNonce: THa
   Associated: pointer; AssociatedLen: integer): boolean;
 begin
   // safe seed for plain text crc, before AES encryption
-  // from TEcdheProtocol.SetKey, aKey is a public nonce to avoid replay attacks
+  // from TEcdheProtocol.SetKey, RandomNonce uniqueness will avoid replay attacks
   fMacKey.plain := THash256Rec(RandomNonce).Lo;
   XorBlock16(@fMacKey.plain, @THash256Rec(RandomNonce).Hi);
   // neutral seed for encrypted crc, to check for errors, with no compromission
@@ -4718,15 +4741,6 @@ end;
 
 { TAesCfbCrc }
 
-procedure TAesCfbCrc.AfterCreate;
-begin
-  inherited;
-  {$ifdef USEAESNI64}
-  fAesNiSse42 := (cfAESNI in CpuFeatures) and
-                 (cfSSE42 in CpuFeatures);
-  {$endif USEAESNI64}
-end;
-
 procedure TAesCfbCrc.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
   i: integer;
@@ -4762,6 +4776,7 @@ begin
         mov     esi, BufIn
         mov     edi, BufOut
         movups  xmm7, dqword ptr [ebx].TAesCfbCrc.fIV
+        {$ifdef FPC} align 16 {$endif}
 @s:     lea     eax, [ebx].TAesCfbCrc.fMac.encrypted
         mov     edx, esi
         call    crcblock // using SSE4.2 or fast tables
@@ -4793,7 +4808,7 @@ begin
     begin
       tmp := fIn^;
       crcblock(@fMac.encrypted, pointer(fIn)); // fIn may be = fOut
-      TAesContext(fAes).DoBlock(fAes, fIV, fIV);
+      TAesContext(fAes).DoBlock(fAes, fIV, fIV); // fIV=AES(fIV)
       XorBlock16(pointer(fIn), pointer(fOut), pointer(@fIV));
       fIV := tmp;
       crcblock(@fMac.plain, pointer(fOut));
@@ -4844,6 +4859,7 @@ begin
         mov     esi, BufIn
         mov     edi, BufOut
         movups  xmm7, dqword ptr [ebx].TAesCfbCrc.fIV
+        {$ifdef FPC} align 16 {$endif}
 @s:     lea     eax, [ebx].TAesCfbCrc.fMac.plain
         mov     edx, esi
         call    crcblock
@@ -4871,7 +4887,7 @@ begin
     inherited; // set fIn,fOut
     for i := 1 to Count shr AesBlockShift do
     begin
-      TAesContext(fAes).DoBlock(fAes, fIV, fIV);
+      TAesContext(fAes).DoBlock(fAes, fIV, fIV); // fIV=AES(fIV)
       crcblock(@fMac.plain, pointer(fIn)); // fOut may be = fIn
       XorBlock16(pointer(fIn), pointer(fOut), pointer(@fIV));
       fIV := fOut^;
@@ -4890,69 +4906,26 @@ begin
 end;
 
 
-{ TAesOfbCrc }
+{ TAesSymCrc }
 
-procedure TAesOfbCrc.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
+procedure TAesSymCrc.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
-  i: integer;
+  tmp: TAesMac256;
 begin
   if Count = 0 then
     exit;
-  fMac := fMacKey; // reuse the same key until next MacSetNonce()
-  {$ifdef USEAESNI32}
-  if Assigned(TAesContext(fAes).AesNi32) and
-     (Count and AesBlockMod = 0) then
-    asm
-        push    ebx
-        push    esi
-        push    edi
-        mov     ebx, self
-        mov     esi, BufIn
-        mov     edi, BufOut
-        movups  xmm7, dqword ptr [ebx].TAesOfbCrc.fIV
-@s:     lea     eax, [ebx].TAesOfbCrc.fMac.encrypted
-        mov     edx, esi
-        call    crcblock
-        lea     eax, [ebx].TAesOfbCrc.fAes
-        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
-        movups  xmm0, dqword ptr [esi]
-        pxor    xmm0, xmm7
-        movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
-        lea     eax, [ebx].TAesOfbCrc.fMac.plain
-        mov     edx, edi
-        call    crcblock
-        add     esi, 16
-        add     edi, 16
-        sub     dword ptr [Count], 16
-        ja      @s
-        movups  dqword ptr [ebx].TAesOfbCrc.fIV, xmm7
-        pop     edi
-        pop     esi
-        pop     ebx
-        pxor    xmm7, xmm7 // for safety
-    end
-  else
-  {$endif USEAESNI32}
-  begin
-    inherited Encrypt(BufIn, BufOut, Count); // set fIn,fOut
-    for i := 1 to Count shr AesBlockShift do
-    begin
-      TAesContext(fAes).DoBlock(fAes, fIV, fIV);
-      crcblock(@fMac.encrypted, pointer(fIn)); // fOut may be = fIn
-      XorBlock16(pointer(fIn), pointer(fOut), pointer(@fIV));
-      crcblock(@fMac.plain, pointer(fOut));
-      inc(fIn);
-      inc(fOut);
-    end;
-    Count := Count and AesBlockMod;
-    if Count <> 0 then
-    begin
-      TrailerBytes(Count);
-      with fMac do // includes trailing bytes to the plain crc
-        PCardinal(@plain)^ := crc32c(PCardinal(@plain)^, pointer(fOut), Count);
-    end;
-  end;
+  tmp := fMacKey; // backup
+  fMacKey.plain := tmp.encrypted; // reverse to reuse the Encrypt() code
+  fMacKey.encrypted := tmp.plain;
+  Encrypt(BufIn, BufOut, Count);
+  fMacKey := tmp; // restore
+  tmp.plain := fMac.plain;
+  fMac.plain := fMac.encrypted;
+  fMac.encrypted := tmp.plain
 end;
+
+
+{ TAesOfbCrc }
 
 procedure TAesOfbCrc.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
@@ -4972,6 +4945,7 @@ begin
         mov     esi, BufIn
         mov     edi, BufOut
         movups  xmm7, dqword ptr [ebx].TAesOfbCrc.fIV
+        {$ifdef FPC} align 16 {$endif}
 @s:     lea     eax, [ebx].TAesOfbCrc.fMac.plain
         mov     edx, esi
         call    crcblock
@@ -4999,13 +4973,104 @@ begin
     inherited Encrypt(BufIn, BufOut, Count); // set fIn,fOut
     for i := 1 to Count shr AesBlockShift do
     begin
-      TAesContext(fAes).DoBlock(fAes, fIV, fIV);
+      TAesContext(fAes).DoBlock(fAes, fIV, fIV); // fIV=AES(fIV)
       crcblock(@fMac.plain, pointer(fIn)); // fOut may be = fIn
       XorBlock16(pointer(fIn), pointer(fOut), pointer(@fIV));
       crcblock(@fMac.encrypted, pointer(fOut));
       inc(fIn);
       inc(fOut);
     end;
+    Count := Count and AesBlockMod;
+    if Count <> 0 then
+    begin
+      with fMac do // includes trailing bytes to the plain crc
+        PCardinal(@plain)^ := crc32c(PCardinal(@plain)^, pointer(fIn), Count);
+      TrailerBytes(Count);
+    end;
+  end;
+end;
+
+
+{ TAesCtrCrc }
+
+procedure TAesCtrCrc.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
+var
+  i: integer;
+  offs: PtrInt;
+  tmp, iv: TAesBlock;
+begin
+  if Count = 0 then
+    exit;
+  fMac := fMacKey; // reuse the same key until next MacSetNonce()
+  {$ifdef USEAESNI64} // very fast x86_64 AES-NI asm with 8x interleave factor
+  if (Count and AesBlockMod = 0) and
+     fAesNiSse42 then
+    AesNiEncryptCtrCrc(BufIn, BufOut, Count, self)
+  else
+  {$endif USEAESNI64}
+  {$ifdef USEAESNI32}
+  if Assigned(TAesContext(fAes).AesNi32) and
+     (Count and AesBlockMod = 0) then
+    asm
+        push    ebx
+        push    esi
+        push    edi
+        mov     ebx, self
+        mov     esi, BufIn
+        mov     edi, BufOut
+        {$ifdef FPC} align 16 {$endif}
+@s:     lea     eax, [ebx].TAesCtrCrc.fMac.plain
+        mov     edx, esi
+        call    crcblock // it is actually slower when inlining the crc32c
+        lea     eax, [ebx].TAesCtrCrc.fAes
+        movups  xmm7, dqword ptr [ebx].TAesCtrCrc.fIV
+        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,tmp)
+        movups  xmm0, dqword ptr [esi]
+        inc     byte ptr [ebx + 15].TAesCtrCrc.fIV
+        jnz     @nov
+        mov     edx, 15
+@cov:   dec     edx
+        inc     byte ptr [ebx + edx].TAesCtrCrc.fIV
+        jnz     @nov
+        test    edx, edx
+        jne     @cov
+@nov:   pxor    xmm0, xmm7
+        movups  dqword ptr [edi], xmm0  // fOut := fIn xor tmp
+        lea     eax, [ebx].TAesCtrCrc.fMac.encrypted
+        mov     edx, edi
+        call    crcblock
+        add     esi, 16
+        add     edi, 16
+        sub     dword ptr [Count], 16
+        ja      @s
+        pop     edi
+        pop     esi
+        pop     ebx
+        pxor    xmm7, xmm7 // for safety
+    end
+  else
+  {$endif USEAESNI32}
+  begin
+    inherited Encrypt(BufIn, BufOut, Count); // set fIn,fOut
+    iv := fIV;
+    for i := 1 to Count shr AesBlockShift do
+    begin
+      crcblock(@fMac.plain, pointer(fIn)); // fOut may be = fIn
+      TAesContext(fAes).DoBlock(fAes, iv, tmp{%H-}); // tmp=AES(fIV)
+      inc(iv[15]);
+      if iv[15] = 0 then // manual big-endian increment
+        for offs := 14 downto 0 do
+        begin
+          inc(iv[offs]);
+          if iv[offs] <> 0 then
+            break;
+        end;
+      XorBlock16(pointer(fIn), pointer(fOut), pointer(@tmp));
+      crcblock(@fMac.encrypted, pointer(fOut));
+      inc(fIn);
+      inc(fOut);
+    end;
+    fIV := iv;
     Count := Count and AesBlockMod;
     if Count <> 0 then
     begin
@@ -5047,6 +5112,7 @@ begin
         push    ecx
         shr     ecx, AesBlockShift
         jz      @z
+        {$ifdef FPC} align 16 {$endif}
 @s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         pxor    xmm0, xmm7
@@ -5070,7 +5136,7 @@ begin
     inherited; // set fIn,fOut
     for i := 1 to Count shr AesBlockShift do
     begin
-      TAesContext(fAes).DoBlock(fAes, fIV, fIV);
+      TAesContext(fAes).DoBlock(fAes, fIV, fIV); // fIV=AES(fIV)
       XorBlock16(pointer(fIn), pointer(fOut), pointer(@fIV));
       inc(fIn);
       inc(fOut);
@@ -5139,12 +5205,13 @@ begin
         shr     ecx, AesBlockShift
         jz      @z
         mov     ebx, eax
-        lea     eax, [eax].TAesCtr.fAes
-@s:     movups  xmm7, dqword ptr [ebx].TAesCtr.fIV
-        mov     edx, dword ptr [ebx].TAesCtr.fCTROffset
+        lea     eax, [eax].TAesCtrAny.fAes
+        {$ifdef FPC} align 16 {$endif}
+@s:     movups  xmm7, dqword ptr [ebx].TAesCtrAny.fIV
+        mov     edx, dword ptr [ebx].TAesCtrAny.fCTROffset
         call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,tmp)
         movups  xmm0, dqword ptr [esi]
-        inc     byte ptr [ebx + edx].TAesCtr.fIV
+        inc     byte ptr [ebx + edx].TAesCtrAny.fIV
         jnz     @nov
 @cov:   dec     edx
         inc     byte ptr [ebx + edx].TAesCtrAny.fIV
@@ -5197,7 +5264,7 @@ begin
   end;
 end;
 
-procedure TAesCtr.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
+procedure TAesCtrAny.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 begin
   Encrypt(BufIn, BufOut, Count); // by definition
 end;
@@ -5214,9 +5281,9 @@ end;
 procedure TAesCtrNist.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 begin
   if Count <> 0 then
-    {$ifdef USEAESNI64}
-    if (aesNi in TAesContext(fAes).Flags) and
-       (Count and AesBlockMod = 0) then
+    {$ifdef USEAESNI64} // very fast x86_64 AES-NI asm with 8x interleave factor
+    if (Count and AesBlockMod = 0) and
+       (aesNi in TAesContext(fAes).Flags) then
       AesNiEncryptCtrNist(BufIn, BufOut, Count, @fAes, @fIV)
     else
     {$endif USEAESNI64}
@@ -6015,7 +6082,7 @@ begin
   EnterCriticalSection(fSafe);
   with TAesContext(fAes.Context) do
   begin
-    DoBlock(rk, iv, Block{%H-});
+    DoBlock(rk, iv, Block{%H-}); // block=AES(iv)
     inc(iv.L);
     if iv.L = 0 then
       inc(iv.H);
@@ -9496,6 +9563,7 @@ begin
   else
     SHA.Full(p, L, Digest);
 end;
+
 
 
 
