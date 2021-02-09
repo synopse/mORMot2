@@ -1380,9 +1380,10 @@ var
   item: RawUtf8;
   i: PtrInt;
   W: TBufferWriter;
+  temp: TTextWriterStackBuffer; // 8KB
 begin
   FrameInit(focBinary, Content, ContentType, frame);
-  W := TBufferWriter.Create(TRawByteStringStream);
+  W := TBufferWriter.Create(temp{%H-});
   try
     W.WriteBinary(Head);
     W.Write1(byte(FRAME_HEAD_SEP));
@@ -1394,8 +1395,7 @@ begin
       end;
     W.Write(ContentType);
     W.WriteBinary(Content);
-    W.Flush;
-    frame.payload := TRawByteStringStream(W.Stream).DataString;
+    frame.payload := W.FlushTo;
   finally
     W.Free;
   end;
