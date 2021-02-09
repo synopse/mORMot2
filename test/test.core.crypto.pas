@@ -1101,6 +1101,7 @@ var
   iv: THash128Rec;
   i, j, k, ks, m, len: integer;
   tag1, tag2: TAesBlock;
+  mac: TAesMac256;
   mac1, mac2: THash256;
   one, two, encdec: TAesAbstract;
   PC: PAnsiChar;
@@ -1133,14 +1134,19 @@ begin
         if (MODES[m] = nil) or
            not MODES[m].IsAvailable then
           continue; // OpenSSL may not be available on this platform
-        iv.L := $1234567890abcdef; // synch with TEST_AES_REF
+        // following values should synch with TEST_AES_REF/MAC/TAG
+        iv.L := $1234567890abcdef;
         iv.H := $0fedcba987654321;
-        st := RawUtf8(StringOfChar('x', 50)); // synch with TEST_AES_REF
+        FillZero(THash256(mac));
+        st := RawUtf8(StringOfChar('x', 50));
+        // create a TAesAbstract instance and validate it
         one := MODES[m].Create(pointer(st)^, ks);
         try
           gcm := one.InheritsFrom(TAesGcmAbstract);
           aead := one.InheritsFrom(TAesAbstractAead);
           one.IV := iv.b;
+          if aead then
+            TAesAbstractAead(one).Mac := mac;
           s2 := one.EncryptPkcs7(st, false);
           if aead then
           begin
@@ -1157,6 +1163,8 @@ begin
             CheckEqual(AesBlockToString(tag1), TEST_AES_TAG[k], 'TEST_AES_TAG');
           end;
           one.IV := iv.b;
+          if aead then
+            TAesAbstractAead(one).Mac := mac;
           s2 := one.EncryptPkcs7(st, false); // twice to check AES ctxt reuse
           if aead then
           begin
@@ -1176,6 +1184,8 @@ begin
           //  writeln(m, ' ', MODES[m].ClassName, ' ', ks, #13#10' ',s3, #13#10' ', TEST_AES_REF[k, i]);
           CheckUtf8(TEST_AES_REF[k, i] = s3, 'test vector %-% %', [MODES[m], ks, s3]);
           one.IV := iv.b;
+          if aead then
+            TAesAbstractAead(one).Mac := mac;
           check(one.DecryptPkcs7(s2, false) = st);
           if aead then
             Check(one.MacDecryptCheckTag(mac1))
@@ -1184,6 +1194,8 @@ begin
           two := one.Clone;
           try
             two.IV := iv.b;
+            if aead then
+              TAesAbstractAead(two).Mac := mac;
             s2 := two.EncryptPkcs7(st, false);
             if aead then
             begin
@@ -1197,6 +1209,8 @@ begin
               Check(IsEqual(tag1, tag2));
             end;
             two.IV := iv.b;
+            if aead then
+              TAesAbstractAead(two).Mac := mac;
             s2 := two.EncryptPkcs7(st, false); // twice to check AES ctxt reuse
             if aead then
             begin
@@ -1213,9 +1227,11 @@ begin
             CheckEqual(s3, s4);
             encdec := two.CloneEncryptDecrypt;
             encdec.IV := iv.b;
+            if aead then
+              TAesAbstractAead(encdec).Mac := mac;
             checkEqual(encdec.DecryptPkcs7(s2, false), st);
             if aead then
-              Check(one.MacDecryptCheckTag(mac1))
+              Check(encdec.MacDecryptCheckTag(mac1))
             else if gcm then
               Check(TAesGcmAbstract(encdec).AesGcmFinal(tag1));
             if encdec <> two then
@@ -1273,12 +1289,14 @@ begin
               s2 := copy(orig, 1, len);
               check(length(s2) = len);
               one.iv := iv.b;
+              if aead then
+                TAesAbstractAead(one).Mac := mac;
               s3 := one.EncryptPkcs7(s2);
               if m <= 9 then
                 if noaesni then
-                  CheckEqual(h32[k, m, i], crc32c(0, pointer(s3), length(s3)))
+                  CheckEqual(h32[k, m, i], DefaultHasher(0, pointer(s3), length(s3)))
                 else
-                  h32[k, m, i] := crc32c(0, pointer(s3), length(s3));
+                  h32[k, m, i] := DefaultHasher(0, pointer(s3), length(s3));
               if aead then
                 if not noaesni then
                   Check(one.MacEncryptGetTag(Tags[k, m, i]))
@@ -1293,6 +1311,8 @@ begin
                 TAesGcmAbstract(one).AesGcmFinal(tag1);
               end;
               one.iv := iv.b;
+              if aead then
+                TAesAbstractAead(one).Mac := mac;
               Check(one.DecryptPkcs7(s3) = s2, IntToStr(len));
               if aead then
                 Check(one.MacDecryptCheckTag(Tags[k, m, i]))
