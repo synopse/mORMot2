@@ -16,7 +16,6 @@ unit mormot.core.crypto;
     - Digest/Hash to Hexadecimal Text Conversion
     - Deprecated MD5 RC4 SHA-1 Algorithms
     - Deprecated Weak AES/SHA Process
-    - General Cryptography Catalog for Encryption and Signatures
 
    Validated against OpenSSL. Faster than OpenSSL on x86_64 (but AES-GCM).
 
@@ -1049,6 +1048,22 @@ type
   end;
 
 {$endif USE_PROV_RSA_AES}
+
+
+type
+  /// the AES chaining modes implemented by this unit
+  // - mEcb is unsafe and should not be used as such
+  // - mCtr64, mCfbCrc, mOfbCrc and mCtrCrc are non standard modes
+  TAesMode = (
+    mEcb, mCbc, mCfb, mOfb, mCtr64, mCtrNist, mCfbCrc, mOfbCrc, mCtrCrc, mGcm);
+
+var
+  /// the fastest AES implementation classes available on the system, per mode
+  // - mormot.core.crypto.openssl may register its own classes, e.g. TAesGcmOsl
+  TAesFast: array[TAesMode] of TAesAbstractClass = (
+    TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtrAny, TAesCtrNist,
+    TAesCfbCrc, TAesOfbCrc, TAesCtrCrc, TAesGcm);
+
 
 // used for paranoid safety by test.core.crypto.pas
 function AesTablesTest: boolean;
@@ -2426,27 +2441,6 @@ procedure AESSHA256Full(bIn: pointer; Len: integer; outStream: TStream;
 // is supplied only for backward compatibility of existing code:
 // use PBKDF2_HMAC_SHA256 or similar functions for safer password derivation
 procedure Sha256Weak(const s: RawByteString; out Digest: TSha256Digest);
-
-
-
-{ ************* General Cryptography Catalog for Encryption and Signatures }
-
-var
-  /// the fastest NIST-compatible AES-CTR implementation available on the system
-  // - mormot.core.crypto.openssl may register its own TAesCtrNistOsl (if faster)
-  TAesCtrFast: TAesAbstractClass = TAesCtrNist;
-
-  /// the fastest AES-GCM implementation available on the system
-  // - mormot.core.crypto.openssl would register its own TAesGcmOsl here
-  TAesGcmFast: TAesGcmAbstractClass = TAesGcm;
-
-
-/// to be called when TAesCtrFast/TAesGcmFast have been changed
-// - will execute all CryptoClassesChangedRegister() callbacks
-procedure CryptoClassesChanged;
-
-/// register a callback to be executed by CryptoClassesChanged()
-procedure CryptoClassesChangedRegister(OnChanged: TProcedure);
 
 
 
@@ -9503,24 +9497,6 @@ begin
     SHA.Full(p, L, Digest);
 end;
 
-
-{ ************* General Cryptography Catalog for Encryption and Signatures }
-
-var
-  CryptoClasses: array of TProcedure;
-
-procedure CryptoClassesChanged;
-var
-  i: PtrInt;
-begin
-  for i := 0 to high(CryptoClasses) do
-    CryptoClasses[i];
-end;
-
-procedure CryptoClassesChangedRegister(OnChanged: TProcedure);
-begin
-  PtrArrayAdd(CryptoClasses, pointer(@OnChanged));
-end;
 
 
 procedure InitializeUnit;

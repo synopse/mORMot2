@@ -160,7 +160,7 @@ type
   end;
 
   /// OpenSSL AES cypher/uncypher with 128-bit Counter mode (CTR)
-  // - similar to TAesCtrNist, not our proprietary TAesCtr which has 64-bit CTR
+  // - similar to TAesCtrNist, not our proprietary TAesCtrAny with a 64-bit CTR
   // - our TAesCtrNist class is faster than OpenSSL:
   // $ 2500 aes128ctr in 2.06ms i.e. 1209482/s or 2.5 GB/s
   // $ 2500 aes256ctr in 2.68ms i.e. 931792/s or 1.9 GB/s
@@ -537,14 +537,22 @@ procedure RegisterOpenSsl;
 begin
   if not OpenSslIsAvailable then
     exit;
-  // for mormot.core.crypto AES classes
-  TAesGcmFast := TAesGcmOsl;
-  {$ifndef HASAESNI64}
-  // our AES-CTR x86_64 asm is faster than OpenSSL
-  TAesCtrFast := TAesCtrNistOsl;
-  {$endif HASAESNI64}
-  // register those classes e.g. for mormot.core.ecc.pas
-  CryptoClassesChanged;
+  TAesFast[mGcm] := TAesGcmOsl;
+  {$ifdef HASAESNI}
+    // all mormot.core.crypto x86_64 and i386 asm is faster than OpenSSL
+    {$ifdef CPUX64}
+    // our AES-CTR x86_64 asm is faster than OpenSSL
+    TAesFast[mCtrNist] := TAesCtrNistOsl;
+    {$endif CPUX64}
+  {$else}
+  // ARM/Aarch64 would rather use OpenSSL than our purepascal port
+  TAesFast[mCtrNist] := TAesCtrNistOsl;
+  TAesFast[mEcb] := TAesEcbOsl;
+  TAesFast[mCbc] := TAesCbcOsl;
+  TAesFast[mCfb] := TAesCfbOsl;
+  TAesFast[mOfb] := TAesOfbOsl;
+  TAesFast[mCtrNist] := TAesCtrNistOsl;
+  {$endif HASAESNI}
 end;
 
 
