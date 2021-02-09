@@ -245,7 +245,7 @@ const
   WSABASEERR              = 10000;
 
   { Windows Sockets definitions of regular Microsoft C error constants }
-  WSAEINTR                = (WSABASEERR+4);
+  WSAEINTR                = (WSABASEERR+4);  // legacy flag
   WSAEBADF                = (WSABASEERR+9);
   WSAEACCES               = (WSABASEERR+13);
   WSAEFAULT               = (WSABASEERR+14);

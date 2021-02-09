@@ -17,7 +17,6 @@ uses
   mormot.core.rtti,
   mormot.core.crypto,
   mormot.core.crypto.openssl,
-  mormot.lib.openssl11,
   mormot.core.secure,
   mormot.core.perf,
   mormot.core.test,
@@ -44,7 +43,7 @@ type
     /// SHA-3 / Keccak hashing functions
     procedure _SHA3;
     /// AES encryption/decryption functions
-    procedure _AES256;
+    procedure _AES;
     /// AES-GCM encryption/decryption with authentication
     procedure _AES_GCM;
     /// RC4 encryption function
@@ -72,6 +71,7 @@ type
 
 
 implementation
+
 
 
 { TTestCoreCrypto }
@@ -303,23 +303,23 @@ var
   temp: RawByteString;
 begin
   // includes SHA-384, which is a truncated SHA-512
-  Check(mormot.core.crypto.SHA384('') =
+  Check(SHA384('') =
     '38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63' +
     'f6e1da274edebfe76f65fbd51ad2f14898b95b');
-  Check(mormot.core.crypto.SHA384('abc') =
+  Check(SHA384('abc') =
     'cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605' +
     'a43ff5bed8086072ba1e7cc2358baeca134c825a7');
-  Check(mormot.core.crypto.SHA384(
+  Check(SHA384(
     'abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmn' +
     'hijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu') = '09330c33f711' +
     '47e83d192fc782cd1b4753111b173b3b05d22fa08086e3b0f712fcc7c71a557e2db966c3e9fa91746039');
-  Check(mormot.core.crypto.Sha512('') =
+  Check(Sha512('') =
     'cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d' +
     '36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e');
-  Check(mormot.core.crypto.Sha512(FOX) =
+  Check(Sha512(FOX) =
     '07e547d9586f6a73f73fbac0435ed76951218fb7d0c8d788a309d785' +
     '436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6');
-  Check(mormot.core.crypto.Sha512(FOX + '.') =
+  Check(Sha512(FOX + '.') =
     '91ea1245f20d46ae9a037a989f54f1f790f0a47607eeb8a14d128' +
     '90cea77a1bbc6c7ed9cf205e67b7f2b8fd4c7dfd3a7a8617e45f3c463d481c7e586c39ac1ed');
   sha.Init;
@@ -338,7 +338,7 @@ begin
     'b0b9e03e0c88cf90fa634fa7b12b47d77b694de488ace8d9a65967dc96df599727d3292a8d9d447709c97');
   SetLength(temp, 1000);
   FillCharFast(pointer(temp)^, 1000, ord('a'));
-  Check(mormot.core.crypto.Sha512(temp) = Sha512DigestToString(dig));
+  Check(Sha512(temp) = Sha512DigestToString(dig));
   for i := 1 to 1000000 do
     sha.Update(@c, 1);
   sha.Final(dig);
@@ -482,12 +482,12 @@ end;
 
 procedure TTestCoreCrypto._TAesPNRG;
 begin
+  check(TAesPrng.IsAvailable);
+  check(TAesPrngSystem.IsAvailable);
   Prng(TAesPrng, 'mORMot');
-  {$ifdef OSWINDOWS}
-  if FileExists(ExeVersion.ProgramFilePath + LIB_CRYPTO) then
-  {$endif OSWINDOWS}
-    if OpenSslIsAvailable then
-      Prng(TAesPrngOpenSsl, 'OpenSSL');
+  {$ifdef USE_OPENSSL}
+  Prng(TAesPrngOsl, 'OpenSSL');
+  {$endif USE_OPENSSL}
 end;
 
 procedure TTestCoreCrypto.Prng(meta: TAesPrngClass; const name: RawUTF8);
@@ -503,6 +503,8 @@ var
   clo, chi, dlo, dhi, elo, ehi: integer;
   timer: TPrecisionTimer;
 begin
+  if not meta.IsAvailable then
+    exit;
   p := meta.Main;
   p.FillRandom(b1);
   p.FillRandom(b2);
@@ -537,6 +539,7 @@ begin
       s1 := a1.FillRandomHex(i);
       check(length(s1) = i * 2);
       check(mormot.core.text.HexToBin(pointer(s1), nil, i));
+      // verify Random32 / RandomDouble / RandomDouble distribution
       c := a1.Random32;
       check(c <> a2.Random32, 'Random32 collision');
       if c < cardinal(maxint) then
@@ -557,13 +560,13 @@ begin
         inc(dlo)
       else
         inc(dhi);
-      e := a1.Randomext;
+      e := a1.RandomExt;
       check((e >= 0) and (e < 1));
       if e < 0.5 then
         inc(elo)
       else
         inc(ehi);
-      e := a2.Randomext;
+      e := a2.RandomExt;
       check((e >= 0) and (e < 1));
       if e < 0.5 then
         inc(elo)
@@ -580,9 +583,9 @@ begin
   CheckUtf8((clo >= 900) and
             (clo <= 1100), 'Random32 distribution clo=%', [clo]);
   CheckUtf8((dlo >= 1800) and
-            (dlo <= 2100), 'RandomDouble distribution dlo=%', [dlo]);
+            (dlo <= 2200), 'RandomDouble distribution dlo=%', [dlo]);
   CheckUtf8((elo >= 1800) and
-            (elo <= 2100), 'RandomExt distribution elo=%', [elo]);
+            (elo <= 2200), 'RandomExt distribution elo=%', [elo]);
   s1 := p.FillRandom(100);
   for i := 1 to length(s1) do
     for stripes := 0 to 10 do
@@ -809,24 +812,43 @@ type
     // non cryptographic hashes
     bCRC32c, bXXHash32, bHash32,
     // cryptographic hashes
-    bMD5, bSHA1, bHMACSHA1, bSHA256, bHMACSHA256, bSHA384, bHMACSHA384, bSHA512,
-    bHMACSHA512, bSHA3_256, bSHA3_512,
+    bMD5,
+    bSHA1, bHMACSHA1, bSHA256, bHMACSHA256,
+    bSHA384, bHMACSHA384, bSHA512, bHMACSHA512,
+    bSHA3_256, bSHA3_512,
     // encryption
-    bRC4, bAES128CFB, bAES128OFB, bAES128CFBCRC, bAES128OFBCRC, bAES128GCM,
-    bAES256CFB, bAES256OFB, bAES256CFBCRC, bAES256OFBCRC, bAES256GCM,
+    bRC4,
+    bAES128CFB, bAES128OFB, bAES128CTR, bAES128CFBCRC, bAES128OFBCRC, bAES128GCM,
+    bAES256CFB, bAES256OFB, bAES256CTR, bAES256CFBCRC, bAES256OFBCRC, bAES256GCM,
+  {$ifdef USE_OPENSSL}
+    bAES128CFBOSL, bAES128OFBOSL, bAES128CTROSL, bAES128GCMOSL,
+    bAES256CFBOSL, bAES256OFBOSL, bAES256CTROSL, bAES256GCMOSL,
+  {$endif USE_OPENSSL}
     bSHAKE128, bSHAKE256);
 
 procedure TTestCoreCrypto.Benchmark;
 const
+  bAESLAST = {$ifdef USE_OPENSSL} bAES256GCMOSL {$else} bAES256GCM {$endif};
   SIZ: array[0..4] of integer = (
-    8, 50, 100, 1000, 10000);
+    8,
+    50,
+    100,
+    1000,
+    10000);
   COUNT = 500;
-  AESCLASS: array[bAES128CFB..bAES256GCM] of TAesAbstractClass = (
-    TAesCfb, TAesOfb, TAesCfbCrc, TAesOfbCrc, TAesGcm,
-    TAesCfb, TAesOfb, TAesCfbCrc, TAesOfbCrc, TAesGcm);
-  AESBITS: array[bAES128CFB..bAES256GCM] of integer = (
-    128, 128, 128, 128, 128,
-    256, 256, 256, 256, 256);
+  AESCLASS: array[bAES128CFB.. bAESLAST] of TAesAbstractClass = (
+    TAesCfb, TAesOfb, TAesCtrNist, TAesCfbCrc, TAesOfbCrc, TAesGcm,
+    TAesCfb, TAesOfb, TAesCtrNist, TAesCfbCrc, TAesOfbCrc, TAesGcm
+  {$ifdef USE_OPENSSL} ,
+    TAesCfbOsl, TAesOfbOsl, TAesCtrNistOsl, TAesGcmOsl,
+    TAesCfbOsl, TAesOfbOsl, TAesCtrNistOsl, TAesGcmOsl
+  {$endif USE_OPENSSL});
+  AESBITS: array[bAES128CFB..bAESLAST] of integer = (
+    128, 128, 128, 128, 128, 128,
+    256, 256, 256, 256, 256, 256
+  {$ifdef USE_OPENSSL} ,
+    128, 128, 128, 128, 256, 256, 256, 256
+  {$endif USE_OPENSSL});
 var
   b: TBenchmark;
   s, i, size, n: integer;
@@ -841,14 +863,17 @@ var
   RC4: TRC4;
   timer: TPrecisionTimer;
   time: array[TBenchmark] of Int64;
-  AES: array[bAES128CFB..bAES256GCM] of TAesAbstract;
+  AES: array[bAES128CFB..bAESLAST] of TAesAbstract;
   TXT: array[TBenchmark] of RawUtf8;
 begin
   GetEnumTrimmedNames(TypeInfo(TBenchmark), @TXT);
   for b := low(b) to high(b) do
     TXT[b] := LowerCase(TXT[b]);
   for b := low(AES) to high(AES) do
-    AES[b] := AESCLASS[b].Create(dig{%H-}, AESBITS[b]);
+    if AESCLASS[b].IsAvailable then
+      AES[b] := AESCLASS[b].Create(dig{%H-}, AESBITS[b])
+    else
+      AES[b] := nil;
   SHAKE128.InitCypher('secret', SHAKE_128);
   SHAKE256.InitCypher('secret', SHAKE_256);
   RC4.InitSha3(dig, SizeOf(dig));
@@ -860,6 +885,9 @@ begin
     data := RandomString(SIZ[s]);
     SetLength(encrypted, SIZ[s]);
     for b := low(b) to high(b) do
+    if (b < low(AES)) or
+       (b > high(AES)) or
+       (AES[b] <> nil) then
     begin
       timer.Start;
       for i := 1 to COUNT do
@@ -897,15 +925,25 @@ begin
             SHA3.Full(pointer(data), SIZ[s], dig.b);
           bRC4:
             RC4.EncryptBuffer(pointer(data), pointer(encrypted), SIZ[s]);
-          bAES128CFB, bAES128OFB, bAES256CFB, bAES256OFB:
+          {$ifdef USE_OPENSSL}
+          bAES128CFBOSL, bAES128OFBOSL, bAES128CTROSL,
+          bAES256CFBOSL, bAES256OFBOSL, bAES256CTROSL,
+          {$endif USE_OPENSSL}
+          bAES128CFB, bAES128OFB, bAES128CTR,
+          bAES256CFB, bAES256OFB, bAES256CTR:
             AES[b].EncryptPkcs7(data, {encrypt=}true);
-          bAES128CFBCRC, bAES128OFBCRC, bAES256CFBCRC, bAES256OFBCRC, bAES128GCM,
-            bAES256GCM:
+          {$ifdef USE_OPENSSL}
+          bAES128GCMOSL, bAES256GCMOSL,
+          {$endif USE_OPENSSL}
+          bAES128CFBCRC, bAES128OFBCRC, bAES128GCM,
+          bAES256CFBCRC, bAES256OFBCRC, bAES256GCM:
             AES[b].MacAndCrypt(data, {encrypt=}true);
           bSHAKE128:
             SHAKE128.Cypher(pointer(data), pointer(encrypted), SIZ[s]);
           bSHAKE256:
             SHAKE256.Cypher(pointer(data), pointer(encrypted), SIZ[s]);
+        else
+          raise ESynCrypto.CreateUtf8('Unexpected %', [TXT[b]]);
         end;
         Check((b >= bRC4) or
               (dig.d0 <> 0) or
@@ -973,55 +1011,91 @@ begin
   end;
 end;
 
-{$ifdef OSWINDOWS}
-  // on Windows: enable Microsoft AES Cryptographic Provider (XP SP3 and up)
-  {$define USE_PROV_RSA_AES}
-{$endif OSWINDOWS}
-
 const
-  TEST_AES_REF: array[0..2, 0..4] of RawByteString =(
-  // 128-bit
-    ('aS24Jm0RHPz26P_RHqX-pGktuCZtERz89uj_0R6l_qRpLbgmbREc_Pbo_9Eepf6kB7pVFdRAcIoVhoTQPytzTQ',
-    'aS24Jm0RHPz26P_RHqX-pCTLpnA2lH7fAWpovxWR8Voytqn9B_zTt6Zrt1Gjb4J5HUs6E7C9Uf4fV83SxyILCg',
-    '0YRWak2ZiQj-cncKQ3atJtcclNgW9OiQPpY6mLvrfYQc_mORQygR9LFU2z2Prc8I5anMvOABB62Ei5AAWY8M0Q',
-    '0YRWak2ZiQj-cncKQ3atJingGAyjpdvuFAvnZ4vDXweTPTJOFSBVUuqs9SW6vSkAyhtoFM9p-gO3IRZh227twA',
-    '0YRWak2ZiQj-cncKQ3atJjjmhYzJAYmaqNOy9bCBqYa0YYLiSrlUwv9f4JqyVmPQg7w2zQjjdyHSCuYxA-coGQ'),
-  // 192-bit
-    ('3S2QhC78T0eesG3hiqtA2N0tkIQu_E9HnrBt4YqrQNjdLZCELvxPR56wbeGKq0DYJob7gbbvgBaFdm_Bwed4RQ',
-    '3S2QhC78T0eesG3hiqtA2HNVuHHzMsrQOruEy1t6Q-AMQMszIPd_86pnqzIyzdSZut-CCacA9T5O8e8ZJKvZOQ',
-    'a6wXR1K29yQvbGGkawiHN1RcFhrbtbne2w13ziEURY1Btg1oqiL-BqTGtEsu4LH5wLYcGNQJ21CR58LBtRysQg',
-    'a6wXR1K29yQvbGGkawiHN4Cloz_9GlJhlEozeNI4MFjKwihToQP6_FDpDVHz21qUonhk6MZ9_-6vNvnGqbOTcg',
-    'a6wXR1K29yQvbGGkawiHN7koCYngh0WS5R-rsGy5zSaC9txKnyHDavH1tkXlWZuxTjQCNHbiAIIRYK4giZDHzA'),
-  // 256-bit
-    ('Kw50ybT0hl8MXw1IcBFm5isOdMm09IZfDF8NSHARZuYrDnTJtPSGXwxfDUhwEWbmn9aUUA6_ZwXpKRiFMlXRiw',
-    'Kw50ybT0hl8MXw1IcBFm5iV4ZAxvgHN-4j2F7ch7PWr6yHhbcp0Scqd2WDHZMRygi3thq9H3jKVo34_NPKdK1A',
-    'vf-UrsBFA2NkziMn6szalnw24-wbPmG9lySgx0WLZZpfkTpw2euPIm6ZkFzjFa-lqr4yngOkvW99hPGzYEAjDw',
-    'vf-UrsBFA2NkziMn6szalgQnKyYBxXxLhVI9s8D3cZkYsLsdfSUCTUY8moP2SenmHCWQWwaq_ibRCr4JngSkZQ',
-    'vf-UrsBFA2NkziMn6szalimh8XYdFObdg_TwNyfX8Zy2Dk8YVPSDzzAvZ2Xx6WP_4owC6MIq7kZ2xPZ_d6vZmg'));
+  // reference vectors for all AES modes - matching OpenSSL implementation
+  TEST_AES_REF: array[0..2, 0..6] of RawByteString = (
+  // 128-bit TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtr, TAesCtrNist, TAesGcm
+   ('aS24Jm0RHPz26P_RHqX-pGktuCZtERz89uj_0R6l_qRpLbgmbREc_Pbo_9Eepf6kB7pVFdRAcIoVhoTQPytzTQ',
+    'i1vnbHBw0VZZdm-nlhq7H3N-C3oMLGfooWnwjI0F_X3QgeV6s-Q8ujVIbgpX5Bwu8tOn1SoUHHP4VS0VK5cOyQ',
+    '9rlcKw63fOzEbXUpoCUDLPqt7TuuSjLGHdlDMneP0nrY4LLFbrc3MrLV6JoXmQM6d4FvmlsQpImuk9LWaf8hXw',
+    '9rlcKw63fOzEbXUpoCUDLHuJV24miApjh5nwI-vJo4ODczlsBPQH-mKdBzlUwKOZ8bEV1IUEF6gVGsT-GOuA3w',
+    '9rlcKw63fOzEbXUpoCUDLDNLyx8M6u_tGBRLx4j5ctLUsP9-TW7sOuOoF4OD4lJAjZleMbc8Z_BdmyuNRuiUtg',
+    '9rlcKw63fOzEbXUpoCUDLPODC-Nwu96PUeytu204bloDoO7QOmLe8SSHM2P0kB5NW3VPROV5QLaVhYfld4uZBA',
+    'gUZBx61sQ4gV3RZ-qpZrkQDnlu88Jb4mGPWorawImGYK4ei1yy3oRPPYBTclVHoRVRwHnHMB1NnGGq3T0qbZmw'),
+  // 192-bit TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtr, TAesCtrNist, TAesGcm
+   ('3S2QhC78T0eesG3hiqtA2N0tkIQu_E9HnrBt4YqrQNjdLZCELvxPR56wbeGKq0DYJob7gbbvgBaFdm_Bwed4RQ',
+    'yua7dkKtXp0pM5n3VFoZrKhdt1ppikmmhFBKzflv32uY6cm4X3ZDZZnlAujYFBAWYR9fJXvhKmCcPljunWP2Zw',
+    'Lp2JYG5d-d4TZagr2FMfqRxp9GCAHtCNcV5HmNoZpt34jqelBTDnTPagl9ZsIkrKRM_m0i3o0PWyK7hf6h9evg',
+    'Lp2JYG5d-d4TZagr2FMfqcygVkV4gZnunc1EDx63mo2B0WfIDhpjtPSVuiXjXBUlPcEVs_YVJoPmIbJDD_mwpQ',
+    'Lp2JYG5d-d4TZagr2FMfqbBYsYzcSw6Re_OY2Zthq1_MEtRiSeqYNI-Z2s1J_3Gwah3j29AUlU7fDl0w8_sjlA',
+    'Lp2JYG5d-d4TZagr2FMfqc-3Wr2DBpXIPh2l-OjSsqlAcEVs8vH6tbc5_5G59H_wTCxihPcc8yz8f_fyGiDEaQ',
+    'hBeEH6I4wWS55pvTLfjz5PxR1nq13tv920aVPw1sMbbraVjQ7Z7vD272rMCOrfMz4b9CFK7SUqh92pR6YIId8A'),
+  // 256-bit TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtr, TAesCtrNist, TAesGcm
+   ('Kw50ybT0hl8MXw1IcBFm5isOdMm09IZfDF8NSHARZuYrDnTJtPSGXwxfDUhwEWbmn9aUUA6_ZwXpKRiFMlXRiw',
+    'uSh1TguJYyEhud6DBzk8TZrD01xIULmMHX0gRFAGaf2vDinDfDprSxCm5Fd49HN0a6EoBrK1cCqanTWqyuyM8A',
+    'PYynVHoDmi6SK5qdbNUp5IPwHRadBtT6rf97pdIP3MHk1q1rZHNzquVCOF5_oSMs0rqP7bJ6j6BvWpzTGcvEPQ',
+    'PYynVHoDmi6SK5qdbNUp5IFTsstbPmW8RbyfJ1fh1x2N2vQw5n_5DtDYx-49wgZnu5MEthDAT2h7XPqNIFgfdw',
+    'PYynVHoDmi6SK5qdbNUp5JNCbgI49PtmxVueuHSTBkI6JbFu9smQCMkp8sQEFBAs8F46W4qqNgMiE9QhJUtoAg',
+    'PYynVHoDmi6SK5qdbNUp5NDiW4s3_P_KGDXarkzNgBrxUjjzTUzVJ29q9Uq75xI3eTczo57cI5ibqZ-BvbYRLw',
+    'rUvWiPrboNKztxCcC6Cq5GWAlbLOk_UO-GddAmNnHCIpbBSz-q6xqXP0aw0REnW9usdCu2DZZ28B2GbaOfydrg'));
+  TEST_AES_TAG: array[0..2] of RawUtf8 = (
+    '7C1DA6408329D2D2E393609DB188129E',  // 128-bit
+    'EFF784967837F6BB0007276CA9C9F936',  // 192-bit
+    '5F3411F163FF157C4A802DB5FF835823'); // 256-bit
 
-procedure TTestCoreCrypto._AES256;
+function ToAesReference(m: integer): integer;
+begin
+  result := m;
+  if result >= 9 then
+    {$ifdef USE_OPENSSL}
+      if result >= 16 then
+        dec(result, 16) // e.g. TAesEcbApi -> TAesEcb
+      else
+    {$endif USE_OPENSSL}
+    dec(result, 9) // e.g. TAesEcbApi / TAesEcbOsl -> TAesEcb
+  else if result >= 7 then
+    dec(result, 5);  // e.g. TAesCfbCrc -> TAesCfb
+end;
+
+procedure TTestCoreCrypto._AES;
 var
   A: TAes;
-  st, orig, crypted, s2, s3: RawByteString;
+  st, orig, crypted, s2, s3, s4: RawByteString;
   Key: TSha256Digest;
   s, b, p: TAesBlock;
-  i, k, ks, m, len: integer;
+  iv: THash128Rec;
+  i, j, k, ks, m, len: integer;
+  tag1, tag2: TAesBlock;
+  one, two, encdec: TAesAbstract;
   {$ifndef PUREMORMOT2}
   AES: TAesFull;
   {$endif PUREMORMOT2}
   PC: PAnsiChar;
-  noaesni: boolean;
+  noaesni, gcm: boolean;
   Timer: array[boolean] of TPrecisionTimer;
-  ValuesCrypted, ValuesOrig: array[0..1] of RawByteString;
+  ValuesCrypted, ValuesOrig: array[0..6] of RawByteString;
   {$ifdef CPUINTEL}
   backup: TIntelCpuFeatures;
   {$endif CPUINTEL}
 const
   MAX = 4096 * 1024;  // test 4 MB data, i.e. multi-threaded AES
-  MODES: array[0..6 {$ifdef USE_PROV_RSA_AES} + 2{$endif}] of TAesAbstractClass =
-    (TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtr, TAesCfbCrc, TAesOfbCrc
-     {$ifdef USE_PROV_RSA_AES}, TAesEcbApi, TAesCbcApi{$endif});
-      // TAesCfbApi and TAesOfbApi just do not work
+  MODES: array[0..8
+     {$ifdef USE_OPENSSL} + 7 {$endif}
+     {$ifdef USE_PROV_RSA_AES} + 2 {$endif}] of TAesAbstractClass = (
+     // 0      1        2        3        4        5            6
+     TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtr, TAesCtrNist, TAesGcm,
+     // 7           8
+     TAesCfbCrc, TAesOfbCrc
+     {$ifdef USE_OPENSSL} ,
+     // 9          10          11         12         13
+     TAesEcbOsl, TAesCbcOsl, TAesCfbOsl, TAesOfbOsl, nil,
+     // 14            15
+     TAesCtrNistOsl, TAesGcmOsl
+     {$endif USE_OPENSSL}
+     {$ifdef USE_PROV_RSA_AES} ,
+     // 9/16       10/17
+     TAesEcbApi, TAesCbcApi
+     {$endif USE_PROV_RSA_AES}); // TAesCfbApi and TAesOfbApi are not compliant
 begin
   {$ifdef CPUINTEL}
   backup := CpuFeatures;
@@ -1037,52 +1111,99 @@ begin
     for k := 0 to 2 do
     begin
       ks := 128 + k * 64; // test keysize of 128, 192 and 256 bits
-      for m := 0 to high(MODES) do
+      for m := 3 to high(MODES) do
       begin
-        st := RawUtf8(StringOfChar('x', 50));
-        with MODES[m].Create(pointer(st)^, ks) do
+        if (MODES[m] = nil) or
+           not MODES[m].IsAvailable then
+          continue; // OpenSSL may not be available on this platform
+        iv.L := $1234567890abcdef; // synch with TEST_AES_REF
+        iv.H := $0fedcba987654321;
+        st := RawUtf8(StringOfChar('x', 50)); // synch with TEST_AES_REF
+        one := MODES[m].Create(pointer(st)^, ks);
         try
-          s2 := EncryptPkcs7(st, false);
+          gcm := one.InheritsFrom(TAesGcmAbstract);
+          one.IV := iv.b;
+          s2 := one.EncryptPkcs7(st, false);
+          if gcm then
+          begin
+            FillRandom(@tag1, 4);
+            Check(TAesGcmAbstract(one).AesGcmFinal(tag1));
+            // writeln(one.classname, ks, ' ', AesBlockToShortString(tag1));
+            CheckEqual(AesBlockToString(tag1), TEST_AES_TAG[k]);
+          end;
+          one.IV := iv.b;
+          s2 := one.EncryptPkcs7(st, false); // twice to check AES ctxt reuse
+          if gcm then
+          begin
+            FillZero(tag2);
+            Check(TAesGcmAbstract(one).AesGcmFinal(tag2));
+            Check(not IsZero(tag2));
+            Check(IsEqual(tag1, tag2));
+          end;
           s3 := BinToBase64uri(s2);
-          i := m;
-          if i >= 7 then // e.g. TAesEcbApi -> TAesEcb
-            dec(i, 7)
-          else if i >= 5 then
-            dec(i, 3);  // e.g. TAesCfbCrc -> TAesCfb
-          CheckUtf8(TEST_AES_REF[k, i] = s3, 'test vector %-%', [MODES[m], ks]);
-          check(DecryptPkcs7(s2, false) = st);
+          i := ToAesReference(m);
+          //if TEST_AES_REF[k, i] <> s3 then
+          //  writeln(m, ' ', MODES[m].ClassName, ' ', ks, #13#10' ',s3, #13#10' ', TEST_AES_REF[k, i]);
+          CheckUtf8(TEST_AES_REF[k, i] = s3, 'test vector %-% %', [MODES[m], ks, s3]);
+          one.IV := iv.b;
+          check(one.DecryptPkcs7(s2, false) = st);
+          if gcm then
+            Check(TAesGcmAbstract(one).AesGcmFinal(tag1));
+          two := one.Clone;
+          try
+            two.IV := iv.b;
+            s2 := two.EncryptPkcs7(st, false);
+            if gcm then
+            begin
+              FillZero(tag1);
+              Check(TAesGcmAbstract(two).AesGcmFinal(tag1));
+              Check(IsEqual(tag1, tag2));
+            end;
+            two.IV := iv.b;
+            s2 := two.EncryptPkcs7(st, false); // twice to check AES ctxt reuse
+            if gcm then
+            begin
+              FillZero(tag2);
+              Check(TAesGcmAbstract(two).AesGcmFinal(tag2));
+              Check(IsEqual(tag1, tag2));
+            end;
+            s4 := BinToBase64uri(s2);
+            CheckEqual(s3, s4);
+            encdec := two.CloneEncryptDecrypt;
+            encdec.IV := iv.b;
+            checkEqual(encdec.DecryptPkcs7(s2, false), st);
+            if gcm then
+              Check(TAesGcmAbstract(encdec).AesGcmFinal(tag1));
+            if encdec <> two then
+              encdec.Free;
+          finally
+            two.Free;
+          end;
         finally
-          Free;
+          one.Free;
         end;
       end;
       Sha256Weak(st, Key);
-      for i := 1 to 100 do
+      for i := 1 to 20 do
       begin
-        move(Key, s, 16);
+        MoveFast(Key, s, 16);
         Timer[noaesni].Resume;
         A.EncryptInit(Key, ks);
-        A.Encrypt(s, b);
+        for j := 1 to 100 do
+          A.Encrypt(s, b);
         A.Done;
         A.DecryptInit(Key, ks);
-        A.Decrypt(b, p);
+        for j := 1 to 100 do
+          A.Decrypt(b, p);
         A.Done;
         Timer[noaesni].Pause;
         Check(CompareMem(@p, @s, sizeof(p)));
         Check(IsEqual(p, s));
-        st := st + RandomString(4);
       end;
-      PC := Pointer(orig);
-      len := MAX;
-      repeat // populate orig with random data
-        if len > length(st) then
-          i := length(st)
-        else
-          i := len;
-        dec(len, i);
-        move(pointer(st)^, PC^, i);
-        inc(PC, i);
-      until len = 0;
-      {$ifndef PUREMORMOT2}
+      {$ifdef PUREMORMOT2}
+      orig := RandomString(8000);
+      {$else}
+      orig := RandomString(MAX);
       len := AES.EncodeDecode(Key, ks, MAX, True, nil, nil, pointer(orig),
         pointer(crypted));
       Check(len < MAX + 256);
@@ -1092,47 +1213,56 @@ begin
         Check(len = MAX);
         Check(CompareMem(AES.outStreamCreated.Memory, pointer(orig), MAX));
       {$endif PUREMORMOT2}
+        iv.c3 := $e0ffffff; // to trigger an explicit CTR overflow
         if not noaesni then
         begin
           for m := low(MODES) to high(MODES) do
-            with MODES[m].Create(Key, ks) do
-            try
-              FillCharFast(pointer(@IV)^, sizeof(TAesBlock), 1);
-              //Timer.Start;
-              for i := 0 to 256 do
-              begin
-                if i < 64 then
-                  len := i
-                else if i < 128 then
-                  len := i * 16
-                else
-                  len := i * 32;
-                {$ifndef PUREMORMOT2}
-                FillCharFast(pointer(crypted)^, len, 0);
-                Encrypt(AES.outStreamCreated.Memory, pointer(crypted), len);
-                FillCharFast(pointer(orig)^, len, 0);
-                Decrypt(pointer(crypted), pointer(orig), len);
-                Check((len = 0) or
-                      (not isZero(pointer(orig), len)) or
-                      isZero(AES.outStreamCreated.Memory, len));
-                Check(CompareMem(AES.outStreamCreated.Memory, pointer(orig), len));
-                {$endif PUREMORMOT2}
-                s2 := copy(orig, 1, len);
-                Check(DecryptPkcs7(EncryptPkcs7(s2)) = s2, IntToStr(len));
-              end;
-//fRunConsole := Format('%s %s%d:%s'#10,[fRunConsole,Copy(MODES[m].ClassName,5,10),ks,Timer.Stop]);
-              if m < length(ValuesCrypted) then
-              begin
-                ValuesCrypted[m] := Copy(crypted, 1, len);
-                ValuesOrig[m] := s2;
+            if (MODES[m] <> nil) and
+               MODES[m].IsAvailable then
+            begin
+              one := MODES[m].Create(Key, ks);
+              try
+                gcm := one.InheritsFrom(TAesGcmAbstract);
+                //Timer.Start;
+                for i := 0 to 256 do
+                begin
+                  if i < 64 then
+                    len := i
+                  else if i < 128 then
+                    len := i * 15
+                  else
+                    len := i * 31; // encrypt buffers from 0 to 7936 bytes
+                  s2 := copy(orig, 1, len);
+                  check(length(s2) = len);
+                  one.iv := iv.b;
+                  s3 := one.EncryptPkcs7(s2);
+                  if gcm then
+                  begin
+                    FillZero(tag1);
+                    TAesGcmAbstract(one).AesGcmFinal(tag1);
+                  end;
+                  one.iv := iv.b;
+                  Check(one.DecryptPkcs7(s3) = s2, IntToStr(len));
+                  if gcm then
+                    Check(TAesGcmAbstract(one).AesGcmFinal(tag1));
+                end;
+  //fRunConsole := Format('%s %s%d:%s'#10,[fRunConsole,Copy(MODES[m].ClassName,5,10),ks,Timer.Stop]);
+                if m < length(ValuesCrypted) then
+                begin
+                  // store the values generated by our AES pascal/asm code
+                  ValuesCrypted[m] := Copy(crypted, 1, len);
+                  ValuesOrig[m] := s2;
+                end
+                else if m > 7 then
+                begin
+                  // validate our AES code against OpenSSL or WinAPI
+                  i := ToAesReference(m);
+                  Check(ValuesOrig[i] = s2);
+                  Check(ValuesCrypted[i] = Copy(crypted, 1, len), one.ClassName);
+                end;
+              finally
+                one.Free;
               end
-              else if m > 6 then
-              begin
-                Check(ValuesOrig[m - 7] = s2);
-                Check(ValuesCrypted[m - 7] = Copy(crypted, 1, len), MODES[m].ClassName);
-              end;
-            finally
-              Free;
             end;
         end;
       {$ifndef PUREMORMOT2}
@@ -1144,8 +1274,8 @@ begin
     {$ifdef CPUINTEL}
     if noaesni then
     begin
-      fRunConsole := format('%s cypher 1..%d bytes with AES-NI: %s, without: %s',
-        [fRunConsole, length(st), Timer[false].Stop, Timer[true].Stop]);
+      fRunConsole := format('%s cypher with AES-NI: %s, without: %s',
+        [fRunConsole, Timer[false].Stop, Timer[true].Stop]);
       Include(CpuFeatures, cfAESNI); // revert Exclude() below from previous loop
     end;
     if A.UsesAesni then
@@ -1399,9 +1529,9 @@ var
 begin
   check(htdigest('agent007', 'download area', 'secret') =
     'agent007:download area:8364d0044ef57b3defcfa141e8f77b65');
-  check(mormot.core.crypto.Md5('') = 'd41d8cd98f00b204e9800998ecf8427e');
-  check(mormot.core.crypto.Md5('a') = '0cc175b9c0f1b6a831c399e269772661');
-  check(mormot.core.crypto.Md5('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789') =
+  check(Md5('') = 'd41d8cd98f00b204e9800998ecf8427e');
+  check(Md5('a') = '0cc175b9c0f1b6a831c399e269772661');
+  check(Md5('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789') =
     'd174ab98d277d9f5a5611c2c9f419d9f');
   SetLength(tmp, 256);
   for n := 256 - 80 to 256 do
@@ -1415,6 +1545,12 @@ begin
     check(CompareMem(@dig, @dig2, sizeof(dig)));
   end;
 end;
+
+initialization
+  {$ifdef USE_OPENSSL}
+  // don't try OpenSSL on Windows which is a PITA to get the right libraries
+  RegisterOpenSsl;
+  {$endif USE_OPENSSL}
 
 end.
 

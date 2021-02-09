@@ -37,7 +37,7 @@ type
   
 implementation
 
-procedure RegressionTests(proxy: TRtspOverHttpServer; test: TSynTestCase;
+procedure RtspRegressionTests(proxy: TRtspOverHttpServer; test: TSynTestCase;
   clientcount, steps: integer);
 type
   TReq = record
@@ -172,7 +172,7 @@ begin
   proxy := TRtspOverHttpServer.Create(
     '127.0.0.1', '3999', '3998', TSynLog, nil, nil);
   try
-    RegressionTests(proxy, self, N, 10);
+    RtspRegressionTests(proxy, self, N, 10);
   finally
     proxy.Free;
   end;

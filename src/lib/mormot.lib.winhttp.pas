@@ -20,7 +20,9 @@ interface
 
 {$I ..\mormot.defines.inc}
 
-{$ifdef USEWININET} // compile as a void unit if USEWININET is not defined
+{$ifdef USEWININET}
+
+// compile as a void unit if USEWININET is not defined
 
 uses
   sysutils,

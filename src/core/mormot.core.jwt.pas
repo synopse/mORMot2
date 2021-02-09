@@ -144,7 +144,7 @@ type
   // - to represent claims securely between two parties, as defined in industry
   // standard @http://tools.ietf.org/html/rfc7519
   // - you should never use this abstract class directly, but e.g. TJwtHS256,
-  // TJwtHS384, TJwtHS512 or TJwtES256 (as defined in SynEcc.pas) inherited classes
+  // TJwtHS384, TJwtHS512 or TJwtES256 inherited classes
   // - for security reasons, one inherited class is implementing a single
   // algorithm, as is very likely to be the case on production: you pickup one
   // "alg", then you stick to it; if your server needs more than one algorithm

@@ -1883,8 +1883,8 @@ procedure TSqlDBOleDBConnection.OleDBCheck(aStmt: TSqlDBStatement; aResult:
       if TSqlDBOleDBBindStatus(aStatus[i]) <> bsOK then
       begin
         if aStatus[i] <= cardinal(high(TSqlDBOleDBBindStatus)) then
-          s := FormatString('% Status[%]="%"', [s, i, GetCaptionFromEnum(TypeInfo
-            (TSqlDBOleDBBindStatus), aStatus[i])])
+          s := FormatString('% Status[%]="%"', [s, i,
+            GetCaptionFromEnum(TypeInfo(TSqlDBOleDBBindStatus), aStatus[i])])
         else
           s := FormatString('% Status[%]=%', [s, i, aStatus[i]]);
 

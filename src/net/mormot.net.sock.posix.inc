@@ -26,7 +26,6 @@ const
   NI_MAXSERV = 32;
 
   NO_ERROR = 0;
-  WSAEINTR = ESysEINTR;
   WSATRY_AGAIN = ESysEAGAIN;
   WSAEADDRNOTAVAIL = ESysEADDRNOTAVAIL;
   WSAECONNABORTED = ESysECONNABORTED;
@@ -344,8 +343,7 @@ begin
   if res < 0 then
   begin
     res := sockerrno;
-    if (res = WSATRY_AGAIN) or
-       (res = WSAEINTR) then
+    if res = WSATRY_AGAIN then
       // timeout, not a true error
       result := [];
     exit;

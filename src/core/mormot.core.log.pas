@@ -2915,7 +2915,11 @@ begin
     begin
       for i := 1 to fSymbolsCount - 1 do
         if fSymbol[i].Start <= fSymbol[i - 1].Stop then
-          raise ESynLogException.CreateUtf8('%.Create(%) ptr', [self, aExeName]);
+        begin
+          fUnits.Clear;
+          fSymbols.Clear;
+          exit;
+        end;
       if MabCreate then // just created from .map/.dbg -> create .mab file
         SaveToFile(MabFile);
       U := 'mormot.core.log';

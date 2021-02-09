@@ -358,8 +358,8 @@ var
     else
     begin
       error := GetLastError;
-      msg := FormatUtf8('Error % [%] occured with',
-        [error, StringToUtf8(SysErrorMessage(error))]);
+      msg := FormatUtf8('Error 0x% [%] occured with',
+        [CardinalToHexShort(error), StringToUtf8(SysErrorMessage(error))]);
       TextColor(ccLightRed);
       ExitCode := 1; // notify error to caller batch
     end;

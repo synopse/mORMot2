@@ -29,6 +29,7 @@ uses
   mormot.core.log          in '..\src\core\mormot.core.log.pas',
   mormot.core.test         in '..\src\core\mormot.core.test.pas',
   mormot.core.crypto       in '..\src\core\mormot.core.crypto.pas',
+  mormot.core.crypto.openssl in '..\src\core\mormot.core.crypto.openssl.pas',
   mormot.core.secure       in '..\src\core\mormot.core.secure.pas',
   mormot.core.ecc256r1     in '..\src\core\mormot.core.ecc256r1.pas',
   mormot.core.ecc          in '..\src\core\mormot.core.ecc.pas',
@@ -44,6 +45,7 @@ uses
   mormot.lib.curl          in '..\src\lib\mormot.lib.curl.pas',
   mormot.lib.sspi          in '..\src\lib\mormot.lib.sspi.pas',
   mormot.lib.gssapi        in '..\src\lib\mormot.lib.gssapi.pas',
+  mormot.lib.openssl11     in '..\src\lib\mormot.lib.openssl11.pas',
   mormot.net.sock          in '..\src\net\mormot.net.sock.pas',
   mormot.net.http          in '..\src\net\mormot.net.http.pas',
   mormot.net.relay         in '..\src\net\mormot.net.relay.pas',
@@ -159,7 +161,7 @@ begin
   TIntegrationTests.RunAsConsole('mORMot2 Regression Tests',
     //LOG_VERBOSE,
     LOG_FILTER[lfExceptions],
-    [], ExeVersion.ProgramFilePath + 'data');
+    [], Executable.ProgramFilePath + 'data');
   {$ifdef FPC_X64MM}
   WriteHeapStatus(' ', 16, 8, {compileflags=}true);
   {$endif FPC_X64MM}

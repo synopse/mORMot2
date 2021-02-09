@@ -1537,7 +1537,7 @@ constructor EWinINet.Create;
 begin
   // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383884
   fLastError := GetLastError;
-  inherited CreateFmt('%s (%d)', [SysErrorMessageWinInet(fLastError), fLastError]);
+  inherited CreateFmt('%s (%x)', [SysErrorMessageWinInet(fLastError), fLastError]);
 end;
 
 
@@ -1818,6 +1818,8 @@ begin
   if not IsAvailable then
     raise ECurlHttp.CreateFmt('No available %s', [LIBCURL_DLL]);
   fHandle := curl.easy_init;
+  if curl.globalShare <> nil then
+    curl.easy_setopt(fHandle, coShare, curl.globalShare);
   ConnectionTimeOut := ConnectionTimeOut div 1000; // curl expects seconds
   if ConnectionTimeOut = 0 then
     ConnectionTimeOut := 1;

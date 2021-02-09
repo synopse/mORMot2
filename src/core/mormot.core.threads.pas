@@ -737,8 +737,8 @@ type
 
   TSynThreadPool = class;
 
-  /// defines the sub-threads used by TSynThreadPool
-  TSynThreadPoolSubThread = class(TSynThread)
+  /// defines the work threads used by TSynThreadPool
+  TSynThreadPoolWorkThread = class(TSynThread)
   protected
     fOwner: TSynThreadPool;
     fThreadNumber: integer;
@@ -757,13 +757,15 @@ type
     procedure Execute; override;
   end;
 
+  TSynThreadPoolWorkThreads = array of TSynThreadPoolWorkThread;
+
   /// a simple Thread Pool, used e.g. for fast handling HTTP requests
   // - implemented over I/O Completion Ports under Windows, or a classical
   // Event-driven approach under Linux/POSIX
   TSynThreadPool = class
   protected
-    fSubThread: array of TSynThreadPoolSubThread;
-    fSubThreadCount: integer;
+    fWorkThread: TSynThreadPoolWorkThreads;
+    fWorkThreadCount: integer;
     fRunningThreads: integer;
     fExceptionsCount: integer;
     fOnThreadTerminate: TOnNotifyThread;
@@ -822,13 +824,16 @@ type
     /// parameter as supplied to Create constructor
     property QueuePendingContext: boolean read fQueuePendingContext;
     {$endif USE_WINIOCP}
+    /// low-level access to the threads defined in this thread pool
+    property WorkThread: TSynThreadPoolWorkThreads
+      read fWorkThread;
   published
     /// how many threads are available in the pool
     // - maps Create() parameter, i.e. 32 by default
-    property SubThreadCount: integer
-      read fSubThreadCount;
+    property WorkThreadCount: integer
+      read fWorkThreadCount;
     /// how many threads are currently processing tasks in this thread pool
-    // - is in the range 0..SubThreadCount
+    // - is in the range 0..WorkThreadCount
     property RunningThreads: integer
       read fRunningThreads;
     /// how many tasks were rejected due to thread pool contention
@@ -867,8 +872,8 @@ type
 
 
 const
-  // allow up to 256 * 2MB = 512MB of RAM for the TSynThreadPoolSubThread stack
-  THREADPOOL_MAXSUBTHREADS = 256;
+  // allow up to 256 * 2MB = 512MB of RAM for the TSynThreadPoolWorkThread stack
+  THREADPOOL_MAXTHREADS = 256;
 
 
 implementation
@@ -2052,8 +2057,8 @@ var
 begin
   if NumberOfThreads = 0 then
     NumberOfThreads := 1
-  else if cardinal(NumberOfThreads) > THREADPOOL_MAXSUBTHREADS then
-    NumberOfThreads := THREADPOOL_MAXSUBTHREADS;
+  else if cardinal(NumberOfThreads) > THREADPOOL_MAXTHREADS then
+    NumberOfThreads := THREADPOOL_MAXTHREADS;
   // create IO completion port to queue the HTTP requests
   {$ifdef USE_WINIOCP}
   fRequestQueue := CreateIoCompletionPort(aOverlapHandle, 0, nil, NumberOfThreads);
@@ -2066,10 +2071,10 @@ begin
   fQueuePendingContext := aQueuePendingContext;
   {$endif USE_WINIOCP}
   // now create the worker threads
-  fSubThreadCount := NumberOfThreads;
-  SetLength(fSubThread, fSubThreadCount);
-  for i := 0 to fSubThreadCount - 1 do
-    fSubThread[i] := TSynThreadPoolSubThread.Create(Self);
+  fWorkThreadCount := NumberOfThreads;
+  SetLength(fWorkThread, fWorkThreadCount);
+  for i := 0 to fWorkThreadCount - 1 do
+    fWorkThread[i] := TSynThreadPoolWorkThread.Create(Self);
 end;
 
 destructor TSynThreadPool.Destroy;
@@ -2077,16 +2082,16 @@ var
   i: PtrInt;
   endtix: Int64;
 begin
-  fTerminated := true; // fSubThread[].Execute will check this flag
+  fTerminated := true; // fWorkThread[].Execute will check this flag
   try
     {$ifdef USE_WINIOCP}
     // notify the threads we are shutting down
-    for i := 0 to fSubThreadCount - 1 do
+    for i := 0 to fWorkThreadCount - 1 do
       PostQueuedCompletionStatus(fRequestQueue, 0, nil, nil);
     {$else}
     // notify the threads we are shutting down using the event
-    for i := 0 to fSubThreadCount - 1 do
-      fSubThread[i].fEvent.SetEvent;
+    for i := 0 to fWorkThreadCount - 1 do
+      fWorkThread[i].fEvent.SetEvent;
     // cleanup now any pending task (e.g. THttpServerSocket instance)
     for i := 0 to fPendingContextCount - 1 do
       TaskAbort(fPendingContext[i]); // not needed with WinIOCP
@@ -2096,8 +2101,8 @@ begin
     while (fRunningThreads > 0) and
           (GetTickCount64 < endtix) do
       SleepHiRes(5);
-    for i := 0 to fSubThreadCount - 1 do
-      fSubThread[i].Free;
+    for i := 0 to fWorkThreadCount - 1 do
+      fWorkThread[i].Free;
   finally
     {$ifdef USE_WINIOCP}
     CloseHandle(fRequestQueue);
@@ -2123,15 +2128,15 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
   function Enqueue: boolean;
   var
     i, n: integer;
-    found: TSynThreadPoolSubThread;
-    thread: ^TSynThreadPoolSubThread;
+    found: TSynThreadPoolWorkThread;
+    thread: ^TSynThreadPoolWorkThread;
   begin
     result := false; // queue is full
     found := nil;
     EnterCriticalsection(fSafe);
     try
-      thread := pointer(fSubThread);
-      for i := 1 to fSubThreadCount do
+      thread := pointer(fWorkThread);
+      for i := 1 to fWorkThreadCount do
         if thread^.fProcessingContext = nil then
         begin
           found := thread^;
@@ -2144,7 +2149,7 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
       if not fQueuePendingContext then
         exit;
       n := fPendingContextCount;
-      if n + fSubThreadCount > QueueLength then
+      if n + fWorkThreadCount > QueueLength then
         exit; // too many connection limit reached (see QueueIsFull)
       if n = length(fPendingContext) then
         SetLength(fPendingContext, n + n shr 3 + 64);
@@ -2218,7 +2223,7 @@ end;
 function TSynThreadPool.QueueIsFull: boolean;
 begin
   result := fQueuePendingContext and
-    (GetPendingContextCount + fSubThreadCount > QueueLength);
+    (GetPendingContextCount + fWorkThreadCount > QueueLength);
 end;
 
 function TSynThreadPool.PopPendingContext: pointer;
@@ -2261,9 +2266,9 @@ begin
 end;
 
 
-{ TSynThreadPoolSubThread }
+{ TSynThreadPoolWorkThread }
 
-constructor TSynThreadPoolSubThread.Create(Owner: TSynThreadPool);
+constructor TSynThreadPoolWorkThread.Create(Owner: TSynThreadPool);
 begin
   fOwner := Owner; // ensure it is set ASAP: on Linux, Execute raises immediately
   fOnThreadTerminate := Owner.fOnThreadTerminate;
@@ -2273,7 +2278,7 @@ begin
   inherited Create({suspended=}false);
 end;
 
-destructor TSynThreadPoolSubThread.Destroy;
+destructor TSynThreadPoolWorkThread.Destroy;
 begin
   inherited Destroy;
   {$ifndef USE_WINIOCP}
@@ -2281,7 +2286,7 @@ begin
   {$endif USE_WINIOCP}
 end;
 
-procedure TSynThreadPoolSubThread.DoTask(Context: pointer);
+procedure TSynThreadPoolWorkThread.DoTask(Context: pointer);
 begin
   try
     fOwner.Task(Self, Context);
@@ -2291,7 +2296,7 @@ begin
   end;
 end;
 
-procedure TSynThreadPoolSubThread.Execute;
+procedure TSynThreadPoolWorkThread.Execute;
 var
   ctxt: pointer;
   {$ifdef USE_WINIOCP}
@@ -2337,7 +2342,7 @@ begin
   end;
 end;
 
-procedure TSynThreadPoolSubThread.NotifyThreadStart(Sender: TSynThread);
+procedure TSynThreadPoolWorkThread.NotifyThreadStart(Sender: TSynThread);
 begin
   if Sender = nil then
     raise ESynThread.CreateUtf8('%.NotifyThreadStart(nil)', [self]);

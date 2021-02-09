@@ -81,6 +81,7 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,      // for TSynLibrary
+  mormot.core.unicode,
   mormot.core.buffers; // for TAlgoCompress
 
 
@@ -419,7 +420,7 @@ begin
   else if not aRaiseNoException then
     raise EAlgoCompress.CreateUtf8('Unable to load % - %/'#13#10 +
       'Please download from https://synopse.info/files/SynLizardLibs.7z',
-      [aLibraryFile, SysErrorMessage(GetLastError)]);
+      [aLibraryFile, ToUtf8(SysErrorMessage(GetLastError))]);
 end;
 
 destructor TSynLizardDynamic.Destroy;

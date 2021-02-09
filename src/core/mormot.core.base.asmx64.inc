@@ -1003,7 +1003,7 @@ function bswap64(const a: QWord): QWord;
         bswap   rax
 end;
 
-procedure bswap64array(a,b: PQWordArray; n: PtrInt);
+procedure bswap64array(a, b: PQWordArray; n: PtrInt);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
 @1:     mov     rax, qword ptr [a]
         bswap   rax

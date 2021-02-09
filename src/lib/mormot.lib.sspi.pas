@@ -640,7 +640,7 @@ var
   error: integer;
 begin
   error := GetLastError;
-  CreateFmt('API Error %d [%s] for ConnectionID=%d',
+  CreateFmt('SSPI API Error %x [%s] for ConnectionID=%d',
     [error, SysErrorMessage(error), aContext.ID]);
 end;
 

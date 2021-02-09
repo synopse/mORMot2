@@ -25,6 +25,7 @@ uses
   mormot.core.jwt,
   mormot.core.ecc256r1,
   mormot.core.ecc,
+  mormot.core.perf,
   mormot.app.console,
   mormot.tools.ecc;
 
@@ -511,9 +512,8 @@ end;
 
 procedure TTestCoreEcc.ECDHEStreamProtocol;
 const
-  MAX = 10000;
+  MAX = 100;
 var
-  //timer: TPrecisionTimer;
   str: TRawByteStringDynArray;
 
   function Test(const prot: IProtocol; const name: string): integer;
@@ -524,7 +524,6 @@ var
   begin
     ref := prot;
     result := 0;
-    //timer.Start;
     for i := 0 to MAX do
     begin
       prot.Encrypt(str[i], enc);
@@ -533,25 +532,26 @@ var
       check(prot.Decrypt(enc, after) = sprSuccess);
       check(after = str[i]);
     end;
-    //fRunConsole := format('%s %s %s',[fRunConsole,name,KB(timer.PerSec(result))]);
   end;
 
 var
   key: THash256;
   a: TEcdheAuth;
+  ef: TEcdheEF;
   c: TEcdheProtocolClient;
   s: TEcdheProtocolServer;
   cs, ss: TEccCertificateSecret;
-  i: integer;
+  i, siz: integer;
   enc, after: RawByteString;
+  timer: TPrecisionTimer;
 
   procedure handshake;
   var
     cf: TEcdheFrameClient;
     sf: TEcdheFrameServer;
   begin
-    c := TEcdheProtocolClient.Create(a, nil, cs);
-    s := TEcdheProtocolServer.Create(a, nil, ss);
+    c := TEcdheProtocolClient.Create(a, nil, cs, ef);
+    s := TEcdheProtocolServer.Create(a, nil, ss, ef);
 {    c.EF := efAesCfb128;
     c.MAC := macHmacCrc32c;
     s.EF := c.EF;
@@ -564,44 +564,49 @@ var
 begin
   SetLength(str, MAX + 1);
   for i := 0 to MAX do
-    str[i] := RandomString(i shr 3 + 1);
+    str[i] := RandomString(i * 191 + 1);
   Test(TProtocolNone.Create, 'none');
   TAesPrng.Main.FillRandom(key);
   Test(TProtocolAes.Create(TAesCfb, key, 128), 'aes');
   cs := TEccCertificateSecret.CreateNew(nil, 'client');
   ss := TEccCertificateSecret.CreateNew(nil, 'server');
-  for a := low(a) to high(a) do
-  begin
-    handshake;
-    for i := 0 to MAX do
+  for ef := low(ef) to high(ef) do
+    for a := low(a) to high(a) do
     begin
-      {%H-}c.Encrypt(str[i], enc);
-      check({%H-}s.CheckError(enc) = sprSuccess);
-      check(s.Decrypt(enc, after) = sprSuccess);
-      check(after = str[i]);
-      if i and 7 = 0 then
-        continue; // check asymmetric communication
-      s.Encrypt(str[i], enc);
-      check(c.CheckError(enc) = sprSuccess);
-      check(c.Decrypt(enc, after) = sprSuccess);
-      check(after = str[i]);
-      if i and 3 = 0 then
-        continue;
-      c.Encrypt(str[i], enc);
-      check(s.CheckError(enc) = sprSuccess);
-      check(s.Decrypt(enc, after) = sprSuccess);
-      check(after = str[i]);
-      c.Encrypt(str[i], enc);
-      inc(enc[2]);
-      check(s.CheckError(enc) = sprInvalidMAC);
-      check(s.Decrypt(enc, after) = sprInvalidMAC);
+      handshake;
+      for i := 0 to MAX do
+      begin
+        {%H-}c.Encrypt(str[i], enc);
+        check({%H-}s.CheckError(enc) <> sprInvalidMAC);
+        check(s.Decrypt(enc, after) = sprSuccess);
+        check(after = str[i]);
+        if i and 7 = 0 then
+          continue; // check asymmetric communication
+        s.Encrypt(str[i], enc);
+        check(c.CheckError(enc) <> sprInvalidMAC);
+        check(c.Decrypt(enc, after) = sprSuccess);
+        check(after = str[i]);
+        if i and 3 = 0 then
+          continue;
+        c.Encrypt(str[i], enc);
+        check(s.CheckError(enc) <> sprInvalidMAC);
+        check(s.Decrypt(enc, after) = sprSuccess);
+        check(after = str[i]);
+        c.Encrypt(str[i], enc);
+        inc(enc[2]); // alter the communication
+        if ef in [efAesCrc128, efAesCrc256]  then
+          check(s.CheckError(enc) = sprInvalidMAC);
+        check(s.Decrypt(enc, after) = sprInvalidMAC);
+      end;
+      c.Free;
+      s.Free;
+      handshake;
+      Test(c, format('c%d', [ord(a)]));
+      timer.Start;
+      siz := Test(s, format('s%d', [ord(a)]));
+      if a = low(a) then
+        NotifyTestSpeed('%', [ToText(ef)^], MAX, siz, @timer);
     end;
-    c.Free;
-    s.Free;
-    handshake;
-    Test(c, format('c%d', [ord(a)]));
-    Test(s, format('s%d', [ord(a)]));
-  end;
   cs.Free;
   ss.Free;
 end;

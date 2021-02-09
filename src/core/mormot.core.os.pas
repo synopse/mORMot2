@@ -2928,7 +2928,7 @@ var
 begin
   LastError := GetLastError;
   if LastError <> 0 then
-    Error := ModuleException.CreateFmt('%s error %d (%s)',
+    Error := ModuleException.CreateFmt('%s error %x (%s)',
       [ModuleName, LastError, SysErrorMessagePerModule(LastError, ModuleName)])
   else
     Error := ModuleException.CreateFmt('Undefined %s error', [ModuleName]);
