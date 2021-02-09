@@ -372,7 +372,7 @@ type
   {$M+}
   /// handle AES cypher/uncypher with chaining
   // - use any of the inherited implementation, corresponding to the chaining
-  // mode required - TAesEcb, TAesCbc, TAesCfb, TAesOfb and TAesCtr classes to
+  // mode required - TAesEcb, TAesCbc, TAesCfb, TAesOfb and TAesCtr* classes to
   // handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7-like padding)
   TAesAbstract = class
   protected
@@ -614,7 +614,7 @@ type
 
   /// handle AES cypher/uncypher with chaining with out own optimized code
   // - use any of the inherited implementation, corresponding to the chaining
-  // mode required - TAesEcb, TAesCbc, TAesCfb, TAesOfb and TAesCtr classes to
+  // mode required - TAesEcb, TAesCbc, TAesCfb, TAesOfb and TAesCtr* classes to
   // handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7-like padding)
   // - this class will use AES-NI hardware instructions, if available
   // - those classes are re-entrant, i.e. that you can call the Encrypt*
@@ -713,12 +713,13 @@ type
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
   end;
 
-  /// handle AES cypher/uncypher with 64-bit Counter mode (CTR)
-  // - the CTR will use a counter in bytes 7..0 by default - which is safe
-  // but not standard - use TAesCtrNist class for NIST / OpenSSL behavior
+  /// handle AES cypher/uncypher with non-standard 64-bit Counter mode (CTR)
+  // - use TAesCtrNist standard class instead - it is also much faster
+  // - the CTR will use a counter in bytes 7..0 - which is not standard, and
+  // can be changed via the ComposeIV() methods
   // - this class will use AES-NI hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
-  TAesCtr = class(TAesAbstractEncryptOnly)
+  TAesCtrAny = class(TAesAbstractEncryptOnly)
   protected
     fCTROffset, fCTROffsetMin: PtrInt;
     procedure AfterCreate; override;
@@ -754,7 +755,7 @@ type
   // $  2500 aes256ofb in 9.38ms i.e. 266410/s or 566.9 MB/s
   // $  2500 aes128ofbosl in 7.99ms i.e. 312851/s or 665.8 MB/s
   // $  2500 aes256ofbosl in 10.90ms i.e. 229294/s or 487.9 MB/s
-  TAesCtrNist = class(TAesCtr)
+  TAesCtrNist = class(TAesCtrAny)
   protected
     procedure AfterCreate; override;
   public
@@ -1055,10 +1056,15 @@ function AesTablesTest: boolean;
 
 {$ifndef PUREMORMOT2}
 
+type
+  /// since our 64-bit CTR is not standard, we hide this confusing TAesCtr class
+  // - use the much faster and standard TAesCtrNist instead
+  TAesCtr = TAesCtrAny;
+
 var
   /// the AES-256 encoding class used by CompressShaAes() global function
   // - use any of the implementation classes, corresponding to the chaining
-  // mode required - TAesEcb, TAesCbc, TAesCfb, TAesOfb and TAesCtr classes to
+  // mode required - TAesEcb, TAesCbc, TAesCfb, TAesOfb and TAesCtr* classes to
   // handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7-like padding)
   // - set to the secure and efficient CFB mode by default
   CompressShaAesClass: TAesAbstractClass = TAesCfb;
@@ -5082,15 +5088,15 @@ begin
 end;
 
 
-{ TAesCtr }
+{ TAesCtrAny }
 
-procedure TAesCtr.AfterCreate;
+procedure TAesCtrAny.AfterCreate;
 begin
   EncryptInit;
   fCTROffset := 7; // counter is in the lower 64 bits, nonce in the upper 64 bits
 end;
 
-function TAesCtr.ComposeIV(Nonce, Counter: PAesBlock;
+function TAesCtrAny.ComposeIV(Nonce, Counter: PAesBlock;
   NonceLen, CounterLen: integer; LSBCounter: boolean): boolean;
 begin
   result := (NonceLen + CounterLen = 16) and
@@ -5112,19 +5118,18 @@ begin
     end;
 end;
 
-function TAesCtr.ComposeIV(const Nonce, Counter: TByteDynArray;
+function TAesCtrAny.ComposeIV(const Nonce, Counter: TByteDynArray;
   LSBCounter: boolean): boolean;
 begin
   result := ComposeIV(pointer(Nonce), pointer(Counter),
     length(Nonce), length(Counter), LSBCounter);
 end;
 
-procedure TAesCtr.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
+procedure TAesCtrAny.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
   i: integer;
   offs: PtrInt;
-  tmp: TAesBlock;
-  iv: PByteArray;
+  tmp, iv: TAesBlock;
 begin
   {$ifdef USEAESNI32}
   if Assigned(TAesContext(fAes).AesNi32) then
@@ -5148,9 +5153,9 @@ begin
         inc     byte ptr [ebx + edx].TAesCtr.fIV
         jnz     @nov
 @cov:   dec     edx
-        inc     byte ptr [ebx + edx].TAesCtr.fIV
+        inc     byte ptr [ebx + edx].TAesCtrAny.fIV
         jnz     @nov
-        cmp     edx, dword ptr [ebx].TAesCtr.fCTROffsetMin
+        cmp     edx, dword ptr [ebx].TAesCtrAny.fCTROffsetMin
         jne     @cov
 @nov:   pxor    xmm0, xmm7
         movups  dqword ptr [edi], xmm0  // fOut := fIn xor tmp
@@ -5161,7 +5166,7 @@ begin
 @z:     pop     ecx
         and     ecx, 15
         jz      @0
-        movups  xmm7, dqword ptr [ebx].TAesCtr.fIV
+        movups  xmm7, dqword ptr [ebx].TAesCtrAny.fIV
         call    AesNiTrailer
 @0:     pop     edi
         pop     esi
@@ -5172,11 +5177,11 @@ begin
   {$endif USEAESNI32}
   begin
     inherited; // set fIn,fOut
+    iv := fIV;
     for i := 1 to Count shr AesBlockShift do
     begin
-      TAesContext(fAes).DoBlock(fAes, fIV, tmp{%H-});
+      TAesContext(fAes).DoBlock(fAes, iv, tmp{%H-}); // tmp=AES(fIV)
       offs := fCTROffset;
-      iv := @fIV;
       inc(iv[offs]);
       if iv[offs] = 0 then // manual big-endian increment
         repeat
@@ -5188,6 +5193,7 @@ begin
       inc(fIn);
       inc(fOut);
     end;
+    fIV := iv;
     Count := Count and AesBlockMod;
     if Count <> 0 then
     begin
@@ -5207,7 +5213,7 @@ end;
 
 procedure TAesCtrNist.AfterCreate;
 begin
-  inherited;
+  EncryptInit;
   fCTROffset := 15; // counter covers 128-bit, as required by NIST specs
 end;
 
