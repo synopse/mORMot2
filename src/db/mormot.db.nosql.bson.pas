@@ -163,7 +163,7 @@ type
     /// convert this Decimal128 value to its TBsonVariant custom variant value
     function ToVariant: variant; overload;
     /// convert this Decimal128 value to its TBsonVariant custom variant value
-    procedure ToVariant(out result: variant); overload;
+    procedure ToVariant(out Result: variant); overload;
     /// converts this Decimal128 value to a floating-point value
     // - by design, some information may be lost during conversion
     // - note that it doesn't make much sense to use this method: you should
@@ -1584,9 +1584,9 @@ begin
   ToVariant(result);
 end;
 
-procedure TDecimal128.ToVariant(out result: variant);
+procedure TDecimal128.ToVariant(out Result: variant);
 begin
-  with TBsonVariantData(result) do
+  with TBsonVariantData(Result) do
   begin
     VType := BsonVariantType.VarType;
     VKind := betDecimal128;

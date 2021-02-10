@@ -1687,7 +1687,7 @@ function _JsonFmt(const Format: RawUtf8; const Args, Params: array of const;
 // - this overload function will set directly a local variant variable,
 // and would be used by inlined _JsonFmt/_JsonFastFmt functions
 procedure _JsonFmt(const Format: RawUtf8; const Args, Params: array of const;
-  Options: TDocVariantOptions; out result: variant); overload;
+  Options: TDocVariantOptions; out Result: variant); overload;
 
 /// initialize a variant instance to store some document-based content
 // from a supplied (extended) JSON content
@@ -6159,13 +6159,13 @@ begin
 end;
 
 procedure _JsonFmt(const Format: RawUtf8; const Args, Params: array of const;
-  Options: TDocVariantOptions; out result: variant);
+  Options: TDocVariantOptions; out Result: variant);
 var
   temp: RawUtf8;
 begin
   temp := FormatUtf8(Format, Args, Params, true);
-  if TDocVariantData(result).InitJsonInPlace(pointer(temp), Options) = nil then
-    TDocVariantData(result).Clear;
+  if TDocVariantData(Result).InitJsonInPlace(pointer(temp), Options) = nil then
+    TDocVariantData(Result).Clear;
 end;
 
 function _JsonFastFmt(const Format: RawUtf8;

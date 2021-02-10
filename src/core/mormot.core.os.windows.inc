@@ -2805,17 +2805,20 @@ begin
     if envaddexisting then
     begin
       GlobalLock;
-      if EnvironmentCache = '' then
-      begin
-        e := GetEnvironmentStringsW;
-        p := e;
-        while p^ <> #0 do
-          inc(p, StrLenW(p) + 1); // go to name=value#0 pairs end
-        SetString(EnvironmentCache, e, (PtrUInt(p) - PtrUInt(e)) shr 1);
-        FreeEnvironmentStringsW(e);
+      try
+        if EnvironmentCache = '' then
+        begin
+          e := GetEnvironmentStringsW;
+          p := e;
+          while p^ <> #0 do
+            inc(p, StrLenW(p) + 1); // go to name=value#0 pairs end
+          SetString(EnvironmentCache, e, (PtrUInt(p) - PtrUInt(e)) shr 1);
+          FreeEnvironmentStringsW(e);
+        end;
+        wenv := EnvironmentCache + wenv;
+      finally
+        GlobalUnLock;
       end;
-      wenv := EnvironmentCache + wenv;
-      GlobalUnLock;
     end
     else
       UniqueString(wenv);

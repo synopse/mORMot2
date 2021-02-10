@@ -16808,8 +16808,9 @@ end;
 function TOrm.GetBinary: RawByteString;
 var
   W: TBufferWriter;
+  temp: TTextWriterStackBuffer; // 8KB
 begin
-  W := TBufferWriter.Create(TRawByteStringStream);
+  W := TBufferWriter.Create(temp{%H-});
   try
     W.WriteVarUInt64(fID);
     GetBinaryValues(W);

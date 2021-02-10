@@ -13,7 +13,7 @@ unit mormot.core.crypto.openssl;
 
   *****************************************************************************
 
-  Note: on x86_64, our mormot.core.crypto.pas asm is stand-alone and faster
+  TL;DR: on x86_64, our mormot.core.crypto.pas asm is stand-alone and faster
   than OpenSSL for most algorithms, but AES-GCM.
 
 }
@@ -35,6 +35,7 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.crypto,
+  mormot.core.secure,
   mormot.lib.openssl11;
 
 
@@ -48,11 +49,12 @@ type
   // - we abbreviate OpenSsl as Osl for class names for brevity
   // - may be used instead of TAesPrng if a "proven" generator is required -
   // you could override MainAesPrng global variable
-  // - mormot.core.crypto TAesPrng is faster, especially for small output:
-  // $ OpenSSL Random32 in 313.10ms i.e. 319,378/s, aver. 3us, 1.2 MB/s
-  // $ OpenSSL FillRandom in 334us, 285.5 MB/s
-  // $ mORMot Random32 in 4.76ms i.e. 21,003,990/s, aver. 0us, 80.1 MB/s
-  // $ mORMot FillRandom in 212us, 449.8 MB/s
+  // - but mormot.core.crypto TAesPrng is faster, especially for small output,
+  // and use a similar and proven 256-bit AES-CTR source of randomness:
+  // $  OpenSSL Random32 in 288.71ms i.e. 346,363/s, aver. 2us, 1.3 MB/s
+  // $  mORMot Random32 in 3.95ms i.e. 25,303,643/s, aver. 0us, 96.5 MB/s
+  // $  OpenSSL FillRandom in 240us, 397.3 MB/s
+  // $  mORMot FillRandom in 46us, 2 GB/s
   TAesPrngOsl = class(TAesPrngAbstract)
   public
     /// initialize the CSPRNG using OpenSSL 1.1.1
@@ -79,7 +81,7 @@ type
   TAesOsl = object
   public
     Owner: TAesAbstract;
-    Cipher: PEVP_CIPHER; // computed from OpenSslCipherName virtual method
+    Cipher: PEVP_CIPHER; // computed from TAesAbstractOsl.AlgoName
     Ctx: array[boolean] of PEVP_CIPHER_CTX; // set and reused in CallEvp()
     procedure Init(aOwner: TAesAbstract; aCipherName: PUtf8Char);
     procedure Done;
@@ -116,70 +118,63 @@ type
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
     /// perform the AES un-cypher in the corresponding mode
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
-    /// return the OpenSSL EVP Cipher name of this class and key size
-    function OpenSslCipherName: PUtf8Char; virtual; abstract;
   end;
 
   /// OpenSSL AES cypher/uncypher without chaining (ECB)
   // - this mode is known to be less secure than the others
   TAesEcbOsl = class(TAesAbstractOsl)
-  public
-    /// return the OpenSSL EVP Cipher name of this class and key size
-    function OpenSslCipherName: PUtf8Char; override;
+  protected
+    procedure AfterCreate; override;
   end;
 
   /// OpenSSL AES cypher/uncypher with Cipher-block chaining (CBC)
   TAesCbcOsl = class(TAesAbstractOsl)
-  public
-    /// return the OpenSSL EVP Cipher name of this class and key size
-    function OpenSslCipherName: PUtf8Char; override;
+  protected
+    procedure AfterCreate; override;
   end;
 
   /// OpenSSL AES cypher/uncypher with Cipher feedback (CFB)
-  // - our TAesCfb class is faster than OpenSSL:
-  // $ 2500 aes128cfb in 6.98ms i.e. 357807/s or 761.4 MB/s
-  // $ 2500 aes128cfbosl in 10.96ms i.e. 228039/s or 485.3 MB/s
-  // $ 2500 aes256cfb in 9.41ms i.e. 265646/s or 565.3 MB/s
-  // $ 2500 aes256cfbosl in 13.47ms i.e. 185473/s or 394.7 MB/s
+  // - our TAesCfb class is faster than OpenSSL on x86_64:
+  // $  mormot aes-128-cfb in 6.95ms i.e. 359247/s or 764.5 MB/s
+  // $  mormot aes-256-cfb in 9.40ms i.e. 265816/s or 565.7 MB/s
+  // $  openssl aes-128-cfb in 10.53ms i.e. 237326/s or 505 MB/s
+  // $  openssl aes-256-cfb in 13.18ms i.e. 189652/s or 403.6 MB/s
   TAesCfbOsl = class(TAesAbstractOsl)
-  public
-    /// return the OpenSSL EVP Cipher name of this class and key size
-    function OpenSslCipherName: PUtf8Char; override;
+  protected
+    procedure AfterCreate; override;
   end;
 
   /// OpenSSL AES cypher/uncypher with Output feedback (OFB)
-  // - our TAesOfb class is faster than OpenSSL:
-  // $ 2500 aes128ofb in 7.07ms i.e. 353207/s or 751.7 MB/s
-  // $ 2500 aes128ofbosl in 8.20ms i.e. 304692/s or 648.4 MB/s
-  // $ 2500 aes256ofb in 9.64ms i.e. 259201/s or 551.6 MB/s
-  // $ 2500 aes256ofbosl in 10.71ms i.e. 233383/s or 496.6 MB/s
+  // - our TAesOfb class is faster than OpenSSL on x86_64:
+  // $  mormot aes-128-ofb in 6.88ms i.e. 363002/s or 772.5 MB/s
+  // $  mormot aes-256-ofb in 9.37ms i.e. 266808/s or 567.8 MB/s
+  // $  openssl aes-128-ofb in 7.82ms i.e. 319693/s or 680.3 MB/s
+  // $  openssl aes-256-ofb in 10.39ms i.e. 240523/s or 511.8 MB/s
   TAesOfbOsl = class(TAesAbstractOsl)
-  public
-    /// return the OpenSSL EVP Cipher name of this class and key size
-    function OpenSslCipherName: PUtf8Char; override;
+  protected
+    procedure AfterCreate; override;
   end;
 
   /// OpenSSL AES cypher/uncypher with 128-bit Counter mode (CTR)
-  // - similar to TAesCtrNist, not our proprietary TAesCtr which has 64-bit CTR
-  // - our TAesCtrNist class is faster than OpenSSL:
-  // $ 2500 aes128ctr in 2.06ms i.e. 1209482/s or 2.5 GB/s
-  // $ 2500 aes256ctr in 2.68ms i.e. 931792/s or 1.9 GB/s
-  // $ 2500 aes128ctrosl in 2.37ms i.e. 1053518/s or 2.1 GB/s
-  // $ 2500 aes256ctrosl in 3.22ms i.e. 775193/s or 1.6 GB/s
+  // - similar to TAesCtrNist, not our proprietary TAesCtrAny with a 64-bit CTR
+  // - our TAesCtrNist class is faster than OpenSSL on x86_64:
+  // $  mormot aes-128-ctr in 1.99ms i.e. 1254390/s or 2.6 GB/s
+  // $  mormot aes-256-ctr in 2.64ms i.e. 945179/s or 1.9 GB/s
+  // $  openssl aes-128-ctr in 2.23ms i.e. 1121076/s or 2.3 GB/s
+  // $  openssl aes-256-ctr in 2.80ms i.e. 891901/s or 1.8 GB/s
   TAesCtrNistOsl = class(TAesAbstractOsl)
-  public
-    /// return the OpenSSL EVP Cipher name of this class and key size
-    function OpenSslCipherName: PUtf8Char; override;
+  protected
+    procedure AfterCreate; override;
   end;
 
   /// OpenSSL AES-GCM cypher/uncypher
   // - implements AEAD (authenticated-encryption with associated-data) process
   // via MacSetNonce/MacEncrypt or AesGcmAad/AesGcmFinal methods
   // - OpenSSL is faster than our TAesGcm class which is not interleaved:
-  // $ 2500 aes128gcm in 14.41ms i.e. 173418/s or 369 MB/s
-  // $ 2500 aes256gcm in 17.37ms i.e. 143918/s or 306.2 MB/s
-  // $ 2500 aes128gcmosl in 3.03ms i.e. 824810/s or 1.7 GB/s
-  // $ 2500 aes256gcmosl in 3.56ms i.e. 701065/s or 1.4 GB/s
+  // $  mormot aes-128-gcm in 14.42ms i.e. 173274/s or 368.7 MB/s
+  // $  mormot aes-256-gcm in 16.98ms i.e. 147206/s or 313.2 MB/s
+  // $  openssl aes-128-gcm in 2.86ms i.e. 874125/s or 1.8 GB/s
+  // $  openssl aes-256-gcm in 3.43ms i.e. 727590/s or 1.5 GB/s
   TAesGcmOsl = class(TAesGcmAbstract)
   protected
     fAes: TAesOsl;
@@ -282,6 +277,7 @@ begin
   TAesAbstractOsl(ToOwner).fKeySize := TAesAbstractOsl(Owner).fKeySize;
   TAesAbstractOsl(ToOwner).fKeySizeBytes := TAesAbstractOsl(Owner).fKeySizeBytes;
   TAesAbstractOsl(ToOwner).fKey := TAesAbstractOsl(Owner).fKey;
+  TAesAbstractOsl(ToOwner).fAlgoMode := TAesAbstractOsl(Owner).fAlgoMode;
   ToAesOsl.Owner := ToOwner;
   ToAesOsl.Cipher := Cipher;
   for enc := false to true do
@@ -342,8 +338,11 @@ end;
 { TAesAbstractOsl }
 
 procedure TAesAbstractOsl.AfterCreate;
+var
+  nam: TShort16;
 begin
-  fAes.Init(self, OpenSslCipherName);
+  AlgoName(nam); // always #0 terminated
+  fAes.Init(self, pointer(@nam[1]));
 end;
 
 destructor TAesAbstractOsl.Destroy;
@@ -383,91 +382,54 @@ end;
 
 { TAesEcbOsl }
 
-function TAesEcbOsl.OpenSslCipherName: PUtf8Char;
+procedure TAesEcbOsl.AfterCreate;
 begin
-  case fKeySize of
-    128:
-      result := 'aes-128-ecb';
-    192:
-      result := 'aes-192-ecb';
-  else
-    result := 'aes-256-ecb';
-  end;
+  fAlgoMode := mEcb;
+  inherited AfterCreate;
 end;
 
 { TAesCbcOsl }
 
-function TAesCbcOsl.OpenSslCipherName: PUtf8Char;
+procedure TAesCbcOsl.AfterCreate;
 begin
-  case fKeySize of
-    128:
-      result := 'aes-128-cbc';
-    192:
-      result := 'aes-192-cbc';
-  else
-    result := 'aes-256-cbc';
-  end;
+  fAlgoMode := mCbc;
+  inherited AfterCreate;
 end;
 
 { TAesCfbOsl }
 
-function TAesCfbOsl.OpenSslCipherName: PUtf8Char;
+procedure TAesCfbOsl.AfterCreate;
 begin
-  case fKeySize of
-    128:
-      result := 'aes-128-cfb';
-    192:
-      result := 'aes-192-cfb';
-  else
-    result := 'aes-256-cfb';
-  end;
+  fAlgoMode := mCfb;
+  inherited AfterCreate;
 end;
 
 
 { TAesOfbOsl }
 
-function TAesOfbOsl.OpenSslCipherName: PUtf8Char;
+procedure TAesOfbOsl.AfterCreate;
 begin
-  case fKeySize of
-    128:
-      result := 'aes-128-ofb';
-    192:
-      result := 'aes-192-ofb';
-  else
-    result := 'aes-256-ofb';
-  end;
+  fAlgoMode := mOfb;
+  inherited AfterCreate;
 end;
 
 { TAesCtrNistOsl }
 
-function TAesCtrNistOsl.OpenSslCipherName: PUtf8Char;
+procedure TAesCtrNistOsl.AfterCreate;
 begin
-  case fKeySize of
-    128:
-      result := 'aes-128-ctr';
-    192:
-      result := 'aes-192-ctr';
-  else
-    result := 'aes-256-ctr';
-  end;
+  fAlgoMode := mCtr;
+  inherited AfterCreate;
 end;
 
 { TAesGcmOsl }
 
 function TAesGcmOsl.AesGcmInit: boolean;
 var
-  name: PUtf8Char;
+  nam: TShort16;
 begin
-  case fKeySize of
-    128:
-      name := 'aes-128-gcm';
-    192:
-      name := 'aes-192-gcm';
-  else
-    name := 'aes-256-gcm';
-  end;
-  fAes.Init(self, name);
-  result := true;
+  AlgoName(nam); // always #0 terminated
+  fAes.Init(self, pointer(@nam[1]));
+  result := nam[0] <> #0;
 end;
 
 procedure TAesGcmOsl.AesGcmDone;
@@ -537,14 +499,22 @@ procedure RegisterOpenSsl;
 begin
   if not OpenSslIsAvailable then
     exit;
-  // for mormot.core.crypto AES classes
-  TAesGcmFast := TAesGcmOsl;
-  {$ifndef HASAESNI64}
-  // our AES-CTR x86_64 asm is faster than OpenSSL
-  TAesCtrFast := TAesCtrNistOsl;
-  {$endif HASAESNI64}
-  // register those classes e.g. for mormot.core.ecc.pas
-  CryptoClassesChanged;
+  // set the fastest AES implementation classes
+  TAesFast[mGcm] := TAesGcmOsl;
+  {$ifdef HASAESNI}
+    // all mormot.core.crypto x86_64 asm is faster than OpenSSL - but GCM
+    {$ifndef CPUX64}
+    // our AES-CTR x86_64 asm is faster than OpenSSL's
+    TAesFast[mCtr] := TAesCtrNistOsl;
+    {$endif CPUX64}
+  {$else}
+  // ARM/Aarch64 would rather use OpenSSL than our purepascal code
+  TAesFast[mEcb] := TAesEcbOsl;
+  TAesFast[mCbc] := TAesCbcOsl;
+  TAesFast[mCfb] := TAesCfbOsl;
+  TAesFast[mOfb] := TAesOfbOsl;
+  TAesFast[mCtr] := TAesCtrNistOsl;
+  {$endif HASAESNI}
 end;
 
 

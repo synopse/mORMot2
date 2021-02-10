@@ -365,7 +365,7 @@ type
     // - returns e.g.
     // ! {"Created":"2016-04-19T15:27:58","Identifier":1,"Counter":1,
     // ! "Value":3137644716930138113,"Hex":"2B8B273F00008001"}
-    procedure ToVariant(out result: variant);
+    procedure ToVariant(out Result: variant);
   end;
   {$A+}
 
@@ -1587,9 +1587,9 @@ begin
   ToVariant(result);
 end;
 
-procedure TSynUniqueIdentifierBits.ToVariant(out result: variant);
+procedure TSynUniqueIdentifierBits.ToVariant(out Result: variant);
 begin
-  TDocVariantData(result).InitObject([
+  TDocVariantData(Result).InitObject([
     'Created', DateTimeToIso8601Text(CreateDateTime),
     'Identifier', ProcessID,
     'Counter', Counter,

@@ -1047,7 +1047,7 @@ end;
 procedure TSystemD.DoLoad;
 var
   p: PPointer;
-  i, j: integer;
+  i, j: PtrInt;
 const
   NAMES: array[0..5] of PAnsiChar = (
     'sd_listen_fds', 'sd_is_socket_unix', 'sd_journal_print',

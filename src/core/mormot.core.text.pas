@@ -914,7 +914,7 @@ type
     /// append an integer Value as a 2 digits text with comma
     procedure Add2(Value: PtrUInt);
     /// append an integer Value as a 3 digits text without any comma
-    procedure Add3(Value: PtrUInt);
+    procedure Add3(Value: cardinal);
     /// append an integer Value as a 4 digits text with comma
     procedure Add4(Value: PtrUInt);
     /// append the current UTC date and time, in our log-friendly format
@@ -5229,26 +5229,16 @@ begin
   inc(B, 3);
 end;
 
-function Value3Digits(V: PtrUInt; P: PUtf8Char; W: PWordArray): PtrUInt;
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  result := V div 100;
-  PWord(P + 1)^ := W[V - result * 100];
-  V := result;
-  result := result div 10;
-  P^ := AnsiChar(V - result * 10 + 48);
-end;
-
-procedure TBaseWriter.Add3(Value: PtrUInt);
+procedure TBaseWriter.Add3(Value: cardinal);
 var
-  V: PtrUInt;
+  V: cardinal;
 begin
   if B >= BEnd then
     FlushToStream;
   if Value > 999 then
-    PCardinal(B + 1)^ := $303030
+    PCardinal(B + 1)^ := $303030 // '000,' if overflow
   else
-  begin// '0000,' if overflow
+  begin
     V := Value div 10;
     PCardinal(B + 1)^ := TwoDigitLookupW[V] + (Value - V * 10 + 48) shl 16;
   end;
@@ -5261,8 +5251,8 @@ begin
   if B >= BEnd then
     FlushToStream;
   if Value > 9999 then
-    PCardinal(B + 1)^ := $30303030
-  else // '0000,' if overflow
+    PCardinal(B + 1)^ := $30303030 // '0000,' if overflow
+  else
     YearToPChar(Value, B + 1);
   inc(B, 5);
   B^ := ',';
@@ -5285,6 +5275,17 @@ begin
     FlushToStream;
   inc(B, time.ToNCSAText(B + 1));
 end;
+
+function Value3Digits(V: cardinal; P: PUtf8Char; W: PWordArray): cardinal;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := V div 100;
+  PWord(P + 1)^ := W[V - result * 100];
+  V := result;
+  result := result div 10;
+  P^ := AnsiChar(V - result * 10 + 48);
+end;
+
 procedure TBaseWriter.AddMicroSec(MS: cardinal);
 var
   W: PWordArray;
@@ -5298,8 +5299,10 @@ begin
   W := @TwoDigitLookupW;
   MS := Value3Digits(Value3Digits(MS, B + 7, W), B + 3, W);
   if MS > 99 then
-    MS := 99;
-  PWord(B)^ := W[MS];
+    MS := $3939
+  else
+    MS := W[MS];
+  PWord(B)^ := MS;
   inc(B, 9);
 end;
 
