@@ -3225,7 +3225,7 @@ procedure AesNiEncryptCtrNist32(
         {$endif WIN64ABI}
 end;
 
-procedure ctr96_inc(ctr: PAesBlock); // not worth inlining
+procedure CtrNistCarry12(ctr: PAesBlock); // not worth inlining
 var
   n: PtrUInt;
   carry: cardinal;
@@ -3260,7 +3260,7 @@ begin
     AesNiEncryptCtrNist32(src, dest, blocks, ctxt, iv); // 32-bit CTR asm
     PCardinal(@iv[12])^ := bswap32(ctr);
     if ctr = 0 then
-      ctr96_inc(iv); // propagate carry
+      CtrNistCarry12(iv); // propagate carry
     blocks := blocks shl 4;
     inc(src, blocks);
     inc(dest, blocks);
@@ -3869,7 +3869,7 @@ begin
     AesNiEncryptCtrCrc32(src, dest, blocks, ctxt); // 32-bit CTR asm
     PCardinal(@ctxt.fIV[12])^ := bswap32(ctr);
     if ctr = 0 then
-      ctr96_inc(@ctxt.fIV); // propagate carry
+      CtrNistCarry12(@ctxt.fIV); // propagate carry
     blocks := blocks shl 4;
     inc(src, blocks);
     inc(dest, blocks);

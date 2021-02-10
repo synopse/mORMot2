@@ -835,6 +835,7 @@ type
 procedure TTestCoreCrypto.Benchmark;
 const
   bAESLAST = {$ifdef USE_OPENSSL} bAES256GCMOSL {$else} bAES256GCM {$endif};
+  bAESOPENSSL = [ {$ifdef USE_OPENSSL} bAES128CFBOSL .. bAES256GCMOSL {$endif} ];
   SIZ: array[0..4] of integer = (
     8,
     50,
@@ -877,7 +878,14 @@ begin
     TXT[b] := LowerCase(TXT[b]);
   for b := low(AES) to high(AES) do
     if AESCLASS[b].IsAvailable then
-      AES[b] := AESCLASS[b].Create(dig{%H-}, AESBITS[b])
+    begin
+      AES[b] := AESCLASS[b].Create(dig{%H-}, AESBITS[b]);
+      ShortStringToAnsi7String(AES[b].AlgoName, TXT[b]);
+      if b in bAESOPENSSL then
+        TXT[b] := 'openssl ' + TXT[b]
+      else
+        TXT[b] := 'mormot ' + TXT[b]
+    end
     else
       AES[b] := nil;
   SHAKE128.InitCypher('secret', SHAKE_128);

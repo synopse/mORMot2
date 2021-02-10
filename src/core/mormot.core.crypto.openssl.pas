@@ -13,7 +13,7 @@ unit mormot.core.crypto.openssl;
 
   *****************************************************************************
 
-  Note: on x86_64, our mormot.core.crypto.pas asm is stand-alone and faster
+  TL;DR: on x86_64, our mormot.core.crypto.pas asm is stand-alone and faster
   than OpenSSL for most algorithms, but AES-GCM.
 
 }
@@ -49,11 +49,12 @@ type
   // - we abbreviate OpenSsl as Osl for class names for brevity
   // - may be used instead of TAesPrng if a "proven" generator is required -
   // you could override MainAesPrng global variable
-  // - mormot.core.crypto TAesPrng is faster, especially for small output:
-  // $ OpenSSL Random32 in 313.10ms i.e. 319,378/s, aver. 3us, 1.2 MB/s
-  // $ OpenSSL FillRandom in 334us, 285.5 MB/s
-  // $ mORMot Random32 in 4.76ms i.e. 21,003,990/s, aver. 0us, 80.1 MB/s
-  // $ mORMot FillRandom in 212us, 449.8 MB/s
+  // - but mormot.core.crypto TAesPrng is faster, especially for small output,
+  // and use a similar and proven 256-bit AES-CTR source of randomness:
+  // $  OpenSSL Random32 in 288.71ms i.e. 346,363/s, aver. 2us, 1.3 MB/s
+  // $  mORMot Random32 in 3.95ms i.e. 25,303,643/s, aver. 0us, 96.5 MB/s
+  // $  OpenSSL FillRandom in 240us, 397.3 MB/s
+  // $  mORMot FillRandom in 46us, 2 GB/s
   TAesPrngOsl = class(TAesPrngAbstract)
   public
     /// initialize the CSPRNG using OpenSSL 1.1.1
@@ -133,22 +134,22 @@ type
   end;
 
   /// OpenSSL AES cypher/uncypher with Cipher feedback (CFB)
-  // - our TAesCfb class is faster than OpenSSL:
-  // $ 2500 aes128cfb in 6.98ms i.e. 357807/s or 761.4 MB/s
-  // $ 2500 aes128cfbosl in 10.96ms i.e. 228039/s or 485.3 MB/s
-  // $ 2500 aes256cfb in 9.41ms i.e. 265646/s or 565.3 MB/s
-  // $ 2500 aes256cfbosl in 13.47ms i.e. 185473/s or 394.7 MB/s
+  // - our TAesCfb class is faster than OpenSSL on x86_64:
+  // $  mormot aes-128-cfb in 6.95ms i.e. 359247/s or 764.5 MB/s
+  // $  mormot aes-256-cfb in 9.40ms i.e. 265816/s or 565.7 MB/s
+  // $  openssl aes-128-cfb in 10.53ms i.e. 237326/s or 505 MB/s
+  // $  openssl aes-256-cfb in 13.18ms i.e. 189652/s or 403.6 MB/s
   TAesCfbOsl = class(TAesAbstractOsl)
   protected
     procedure AfterCreate; override;
   end;
 
   /// OpenSSL AES cypher/uncypher with Output feedback (OFB)
-  // - our TAesOfb class is faster than OpenSSL:
-  // $ 2500 aes128ofb in 7.07ms i.e. 353207/s or 751.7 MB/s
-  // $ 2500 aes128ofbosl in 8.20ms i.e. 304692/s or 648.4 MB/s
-  // $ 2500 aes256ofb in 9.64ms i.e. 259201/s or 551.6 MB/s
-  // $ 2500 aes256ofbosl in 10.71ms i.e. 233383/s or 496.6 MB/s
+  // - our TAesOfb class is faster than OpenSSL on x86_64:
+  // $  mormot aes-128-ofb in 6.88ms i.e. 363002/s or 772.5 MB/s
+  // $  mormot aes-256-ofb in 9.37ms i.e. 266808/s or 567.8 MB/s
+  // $  openssl aes-128-ofb in 7.82ms i.e. 319693/s or 680.3 MB/s
+  // $  openssl aes-256-ofb in 10.39ms i.e. 240523/s or 511.8 MB/s
   TAesOfbOsl = class(TAesAbstractOsl)
   protected
     procedure AfterCreate; override;
@@ -156,11 +157,11 @@ type
 
   /// OpenSSL AES cypher/uncypher with 128-bit Counter mode (CTR)
   // - similar to TAesCtrNist, not our proprietary TAesCtrAny with a 64-bit CTR
-  // - our TAesCtrNist class is faster than OpenSSL:
-  // $ 2500 aes128ctr in 2.06ms i.e. 1209482/s or 2.5 GB/s
-  // $ 2500 aes256ctr in 2.68ms i.e. 931792/s or 1.9 GB/s
-  // $ 2500 aes128ctrosl in 2.37ms i.e. 1053518/s or 2.1 GB/s
-  // $ 2500 aes256ctrosl in 3.22ms i.e. 775193/s or 1.6 GB/s
+  // - our TAesCtrNist class is faster than OpenSSL on x86_64:
+  // $  mormot aes-128-ctr in 1.99ms i.e. 1254390/s or 2.6 GB/s
+  // $  mormot aes-256-ctr in 2.64ms i.e. 945179/s or 1.9 GB/s
+  // $  openssl aes-128-ctr in 2.23ms i.e. 1121076/s or 2.3 GB/s
+  // $  openssl aes-256-ctr in 2.80ms i.e. 891901/s or 1.8 GB/s
   TAesCtrNistOsl = class(TAesAbstractOsl)
   protected
     procedure AfterCreate; override;
@@ -170,10 +171,10 @@ type
   // - implements AEAD (authenticated-encryption with associated-data) process
   // via MacSetNonce/MacEncrypt or AesGcmAad/AesGcmFinal methods
   // - OpenSSL is faster than our TAesGcm class which is not interleaved:
-  // $ 2500 aes128gcm in 14.41ms i.e. 173418/s or 369 MB/s
-  // $ 2500 aes256gcm in 17.37ms i.e. 143918/s or 306.2 MB/s
-  // $ 2500 aes128gcmosl in 3.03ms i.e. 824810/s or 1.7 GB/s
-  // $ 2500 aes256gcmosl in 3.56ms i.e. 701065/s or 1.4 GB/s
+  // $  mormot aes-128-gcm in 14.42ms i.e. 173274/s or 368.7 MB/s
+  // $  mormot aes-256-gcm in 16.98ms i.e. 147206/s or 313.2 MB/s
+  // $  openssl aes-128-gcm in 2.86ms i.e. 874125/s or 1.8 GB/s
+  // $  openssl aes-256-gcm in 3.43ms i.e. 727590/s or 1.5 GB/s
   TAesGcmOsl = class(TAesGcmAbstract)
   protected
     fAes: TAesOsl;

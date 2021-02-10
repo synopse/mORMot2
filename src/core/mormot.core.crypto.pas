@@ -701,10 +701,15 @@ type
   // - this class will use AES-NI hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
   // - on x86_64, our TAesCfb class is really faster than OpenSSL:
-  // $ 2500 aes128cfb in 6.95ms i.e. 359660/s or 765.4 MB/s
-  // $ 2500 aes128cfbosl in 10.96ms i.e. 228039/s or 485.3 MB/s
-  // $ 2500 aes256cfb in 9.34ms i.e. 267637/s or 569.5 MB/s
-  // $ 2500 aes256cfbosl in 13.47ms i.e. 185473/s or 394.7 MB/s
+  // $  mormot aes-128-cfb in 6.95ms i.e. 359247/s or 764.5 MB/s
+  // $  mormot aes-256-cfb in 9.40ms i.e. 265816/s or 565.7 MB/s
+  // $  openssl aes-128-cfb in 10.53ms i.e. 237326/s or 505 MB/s
+  // $  openssl aes-256-cfb in 13.18ms i.e. 189652/s or 403.6 MB/s
+  // - on i386, numbers are similar:
+  // $ mormot aes-128-cfb in 7.15ms i.e. 349259/s or 743.3 MB/s
+  // $ mormot aes-256-cfb in 9.62ms i.e. 259848/s or 553 MB/s
+  // $ openssl aes-128-cfb in 12.01ms i.e. 208142/s or 442.9 MB/s
+  // $ openssl aes-256-cfb in 14.49ms i.e. 172449/s or 367 MB/s
   // - is used e.g. by CryptDataForCurrentUser or WebSockets ProtocolAesClass
   TAesCfb = class(TAesAbstractEncryptOnly)
   protected
@@ -720,10 +725,15 @@ type
   // - this class will use AES-NI hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
   // - on x86_64, our TAesOfb class is faster than OpenSSL:
-  // $ 2500 aes128ofb in 6.87ms i.e. 363901/s or 774.4 MB/s
-  // $ 2500 aes128ofbosl in 8.20ms i.e. 304692/s or 648.4 MB/s
-  // $ 2500 aes256ofb in 9.33ms i.e. 267723/s or 569.7 MB/s
-  // $ 2500 aes256ofbosl in 10.71ms i.e. 233383/s or 496.6 MB/s
+  // $  mormot aes-128-ofb in 6.88ms i.e. 363002/s or 772.5 MB/s
+  // $  mormot aes-256-ofb in 9.37ms i.e. 266808/s or 567.8 MB/s
+  // $  openssl aes-128-ofb in 7.82ms i.e. 319693/s or 680.3 MB/s
+  // $  openssl aes-256-ofb in 10.39ms i.e. 240523/s or 511.8 MB/s
+  // - on i386, numbers are similar:
+  // $ mormot aes-128-ofb in 6.92ms i.e. 360906/s or 768 MB/s
+  // $ mormot aes-256-ofb in 9.59ms i.e. 260552/s or 554.5 MB/s
+  // $ openssl aes-128-ofb in 9.21ms i.e. 271267/s or 577.3 MB/s
+  // $ openssl aes-256-ofb in 11.53ms i.e. 216806/s or 461.4 MB/s
   TAesOfb = class(TAesAbstractEncryptOnly)
   protected
     procedure AfterCreate; override;
@@ -767,15 +777,18 @@ type
   // with reference implementations like OpenSSL - see also TAesCtrNistOsl
   // - on x86_64 we use a 8*128-bit interleaved optimized asm which is faster
   // than OpenSSL 1.1.1 in our benchmarks:
-  // $ 2500 aes128ctr in 2.05ms i.e. 1218323/s or 2.5 GB/s
-  // $ 2500 aes256ctr in 2.65ms i.e. 942329/s or 1.9 GB/s
-  // $ 2500 aes128ctrosl in 2.37ms i.e. 1053518/s or 2.1 GB/s
-  // $ 2500 aes256ctrosl in 3.22ms i.e. 775193/s or 1.6 GB/s
+  // $  mormot aes-128-ctr in 1.99ms i.e. 1254390/s or 2.6 GB/s
+  // $  mormot aes-256-ctr in 2.64ms i.e. 945179/s or 1.9 GB/s
+  // $  openssl aes-128-ctr in 2.23ms i.e. 1121076/s or 2.3 GB/s
+  // $  openssl aes-256-ctr in 2.80ms i.e. 891901/s or 1.8 GB/s
   // as reference, optimized but not interleaved OFB asm is 3 times slower:
-  // $ 2500 aes128ofb in 6.87ms i.e. 363901/s or 774.4 MB/s
-  // $ 2500 aes128ofbosl in 8.20ms i.e. 304692/s or 648.4 MB/s
-  // $ 2500 aes256ofb in 9.33ms i.e. 267723/s or 569.7 MB/s
-  // $ 2500 aes256ofbosl in 10.71ms i.e. 233383/s or 496.6 MB/s
+  // $  mormot aes-128-ofb in 6.88ms i.e. 363002/s or 772.5 MB/s
+  // $  mormot aes-256-ofb in 9.37ms i.e. 266808/s or 567.8 MB/s
+  // - on i386, numbers are slower for our classes, which are not interleaved:
+  // $ mormot aes-128-ctr in 10ms i.e. 249900/s or 531.8 MB/s
+  // $ mormot aes-256-ctr in 12.47ms i.e. 200368/s or 426.4 MB/s
+  // $ openssl aes-128-ctr in 3.01ms i.e. 830288/s or 1.7 GB/s
+  // $ openssl aes-256-ctr in 3.52ms i.e. 709622/s or 1.4 GB/s
   TAesCtrNist = class(TAesCtrAny)
   protected
     procedure AfterCreate; override;
@@ -865,8 +878,14 @@ type
   /// AEAD combination of AES with Cipher feedback (CFB) and 256-bit crc32c  MAC
   // - expect IV and MAC to be set before process, or IVAtBeginning=true
   // - this class will use AES-NI and CRC32C hardware instructions, if available
-  // $ 2500 aes128cfbcrc in 7.22ms i.e. 345829/s or 736 MB/s
-  // $ 2500 aes256cfbcrc in 9.68ms i.e. 258104/s or 549.3 MB/s
+  // $  mormot aes-128-cfc in 7.26ms i.e. 344210/s or 732.5 MB/s
+  // $  mormot aes-256-cfc in 9.72ms i.e. 257201/s or 547.3 MB/s
+  // - so computing the 256-bit crc32c MAC has only a slight impact:
+  // $  mormot aes-128-cfb in 6.95ms i.e. 359247/s or 764.5 MB/s
+  // $  mormot aes-256-cfb in 9.40ms i.e. 265816/s or 565.7 MB/s
+  // - on i386, numbers are similar:
+  // $ mormot aes-128-cfc in 7.49ms i.e. 333422/s or 709.5 MB/s
+  // $ mormot aes-256-cfc in 10ms i.e. 249775/s or 531.5 MB/s
   TAesCfbCrc = class(TAesAbstractAead)
   protected
     procedure AfterCreate; override;
@@ -888,10 +907,14 @@ type
   /// AEAD combination of AES with Output feedback (OFB) and 256-bit crc32c MAC
   // - expect IV and MAC to be set before process, or IVAtBeginning=true
   // - this class will use AES-NI and CRC32C hardware instructions, if available
-  // $ 2500 aes128ofb in 6.87ms i.e. 363901/s or 774.4 MB/s
-  // $ 2500 aes128ofbcrc in 7.86ms i.e. 317742/s or 676.2 MB/s
-  // $ 2500 aes256ofb in 9.33ms i.e. 267723/s or 569.7 MB/s
-  // $ 2500 aes256ofbcrc in 10.62ms i.e. 235271/s or 500.7 MB/s
+  // $  mormot aes-128-ofc in 8.04ms i.e. 310713/s or 661.2 MB/s
+  // $  mormot aes-256-ofc in 10.41ms i.e. 240084/s or 510.9 MB/s
+  // - so computing the 256-bit crc32c MAC has only a slight impact:
+  // $  mormot aes-128-ofb in 6.88ms i.e. 363002/s or 772.5 MB/s
+  // $  mormot aes-256-ofb in 9.37ms i.e. 266808/s or 567.8 MB/s
+  // - on i386, numbers are similar:
+  // $ mormot aes-128-ofc in 7.49ms i.e. 333511/s or 709.7 MB/s
+  // $ mormot aes-256-ofc in 9.93ms i.e. 251635/s or 535.5 MB/s
   TAesOfbCrc = class(TAesSymCrc)
   protected
     procedure AfterCreate; override;
@@ -904,16 +927,19 @@ type
   // - this class will use AES-NI and CRC32C hardware instructions, if available
   // - expect IV and MAC to be set before process, or IVAtBeginning=true
   // - on x86_64 we use a 8*128-bit interleaved optimized asm:
-  // $ 2500 aes128ctrcrc in 2.51ms i.e. 994035/s or 2 GB/s
-  // $ 2500 aes256ctrcrc in 3.17ms i.e. 788643/s or 1.6 GB/s
-  // - to be compared with the CTR without 256-bit MAC computation
-  // $ 2500 aes128ctr in 2.05ms i.e. 1218323/s or 2.5 GB/s
-  // $ 2500 aes256ctr in 2.65ms i.e. 942329/s or 1.9 GB/s
+  // $  mormot aes-128-ctc in 2.58ms i.e. 967492/s or 2 GB/s
+  // $  mormot aes-256-ctc in 3.13ms i.e. 797702/s or 1.6 GB/s
+  // - to be compared with the CTR without 256-bit crc32c MAC computation:
+  // $  mormot aes-128-ctr in 1.99ms i.e. 1254390/s or 2.6 GB/s
+  // $  mormot aes-256-ctr in 2.64ms i.e. 945179/s or 1.9 GB/s
   // - could be used as an alternative to AES-GCM, even if OpenSSL is available:
-  // $ 2500 aes128gcm in 14.41ms i.e. 173418/s or 369 MB/s
-  // $ 2500 aes256gcm in 17.37ms i.e. 143918/s or 306.2 MB/s
-  // $ 2500 aes128gcmosl in 3.03ms i.e. 824810/s or 1.7 GB/s
-  // $ 2500 aes256gcmosl in 3.56ms i.e. 701065/s or 1.4 GB/s
+  // $  mormot aes-128-gcm in 14.42ms i.e. 173274/s or 368.7 MB/s
+  // $  mormot aes-256-gcm in 16.98ms i.e. 147206/s or 313.2 MB/s
+  // $  openssl aes-128-gcm in 2.86ms i.e. 874125/s or 1.8 GB/s
+  // $  openssl aes-256-gcm in 3.43ms i.e. 727590/s or 1.5 GB/s
+  // - on i386, numbers are lower, because they are not interleaved:
+  // $ mormot aes-128-ctc in 9.76ms i.e. 256068/s or 544.9 MB/s
+  // $ mormot aes-256-ctc in 12.14ms i.e. 205930/s or 438.2 MB/s
   TAesCtrCrc = class(TAesSymCrc)
   protected
     procedure AfterCreate; override;
@@ -989,10 +1015,15 @@ type
   // - expect IV to be set before process, or IVAtBeginning=true
   // - by design, AES-GCM doesn't expect any MAC to be supplied before processing
   // - OpenSSL is faster than our TAesGcm class which is not interleaved:
-  // $ 2500 aes128gcm in 14.41ms i.e. 173418/s or 369 MB/s
-  // $ 2500 aes256gcm in 17.37ms i.e. 143918/s or 306.2 MB/s
-  // $ 2500 aes128gcmosl in 3.03ms i.e. 824810/s or 1.7 GB/s
-  // $ 2500 aes256gcmosl in 3.56ms i.e. 701065/s or 1.4 GB/s
+  // $  mormot aes-128-gcm in 14.42ms i.e. 173274/s or 368.7 MB/s
+  // $  mormot aes-256-gcm in 16.98ms i.e. 147206/s or 313.2 MB/s
+  // $  openssl aes-128-gcm in 2.86ms i.e. 874125/s or 1.8 GB/s
+  // $  openssl aes-256-gcm in 3.43ms i.e. 727590/s or 1.5 GB/s
+  // - on i386, numbers are similar:
+  // $ mormot aes-128-gcm in 15.86ms i.e. 157609/s or 335.4 MB/s
+  // $ mormot aes-256-gcm in 18.23ms i.e. 137083/s or 291.7 MB/s
+  // $ openssl aes-128-gcm in 5.49ms i.e. 455290/s or 0.9 GB/s
+  // $ openssl aes-256-gcm in 6.11ms i.e. 408630/s or 869.6 MB/s
   TAesGcm = class(TAesGcmAbstract)
   protected
     fAes: TAesGcmEngine;
@@ -1330,14 +1361,24 @@ type
   /// cryptographic pseudorandom number generator (CSPRNG) based on AES-256
   // - use as a shared instance via TAesPrng.Fill() overloaded class methods
   // - this class is able to generate some random output by encrypting successive
-  // values of a counter with AES-256 and a secret key
-  // - this internal secret key is generated from PBKDF2 derivation of OS-supplied
-  // entropy using HMAC over SHA-512
+  // values of a counter with AES-256-CTR and a secret key
+  // - this internal secret key is generated from PBKDF2 derivation of
+  // OS-supplied entropy using HMAC over SHA-512
   // - by design, such a PRNG is as good as the cypher used - for reference, see
   // https://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator
   // - FillRandom() is thread-safe, and its AES process is not blocking: only
   // the CTR is pre-computed inside a lock
-  // - it would use fast hardware AES-NI opcode, if available
+  // - use fast hardware AES-NI, and our 8X interleaved asm on x86_64 asm:
+  // $  mORMot Random32 in 3.95ms i.e. 25,303,643/s, aver. 0us, 96.5 MB/s
+  // $  mORMot FillRandom in 46us, 2 GB/s
+  // - it is actually much faster than OpenSSL with the same 256-bit safety level:
+  // $  OpenSSL Random32 in 288.71ms i.e. 346,363/s, aver. 2us, 1.3 MB/s
+  // $  OpenSSL FillRandom in 240us, 397.3 MB/s
+  // - on i386, numbers are similar, but for FillRandom which is not interleaved:
+  // $ mORMot Random32 in 5.54ms i.e. 18,044,027/s, aver. 0us, 68.8 MB/s
+  // $ mORMot FillRandom in 203us, 469.7 MB/s
+  // $ OpenSSL Random32 in 364.24ms i.e. 274,540/s, aver. 3us, 1 MB/s
+  // $ OpenSSL FillRandom in 371us, 257 MB/s
   TAesPrng = class(TAesPrngAbstract)
   protected
     fBytesSinceSeed: PtrUInt;
@@ -1353,11 +1394,11 @@ type
     // - you can specify how many PBKDF2_HMAC_SHA512 rounds are applied to the
     // OS-gathered entropy - the higher, the better, but also the slower
     // - internal private key would be re-seeded after ReseedAfterBytes
-    // bytes (1MB by default) are generated, using GetEntropy()
+    // bytes (32MB by default) are generated, using GetEntropy()
     // - by default, AES-256 will be used, unless AesKeySize is set to 128,
     // which may be slightly faster (especially if AES-NI is not available)
     constructor Create(Pbkdf2Round: integer;
-      ReseedAfterBytes: integer = 1024 * 1024;
+      ReseedAfterBytes: integer = 32 * 1024 * 1024;
       AesKeySize: integer = 256); reintroduce; overload; virtual;
     /// fill a TAesBlock with some pseudorandom data
     // - this method is thread-safe
@@ -1392,7 +1433,7 @@ type
     class function Main: TAesPrngAbstract; override;
   published
     /// after how many generated bytes Seed method would be called
-    // - default is 1 MB
+    // - default is 32 MB - which seems paranoid enough for our 128-bit CTR
     // - if set to 0 - e.g. for TAesPrngSystem - no seeding will occur
     property SeedAfterBytes: PtrUInt
       read fSeedAfterBytes;
@@ -3335,7 +3376,7 @@ begin // sub-procedure for better code generation
           if iv[offs] <> 0 then
             break;
         end;
-      XorBlock16(src, dst, pointer(@ctxt.buf));
+      XorBlock16(src, dst, pointer(@ctxt.buf)); // dst := src xor buf
       inc(PAesBlock(src));
       inc(PAesBlock(dst));
       dec(blockcount);
@@ -5987,6 +6028,19 @@ begin
     end;
 end;
 
+procedure CtrNistCarryBigEndian(var iv: TAesBlock); // inlining is not worth it
+var
+  offs: PtrInt;
+begin
+  offs := 14;
+  repeat
+    inc(iv[offs]);
+    if iv[offs] <> 0 then
+      break;
+    dec(offs);
+  until offs = 0;
+end;
+
 procedure TAesPrng.FillRandom(out Block: TAesBlock);
 begin
   if (fSeedAfterBytes <> 0) and
@@ -5996,9 +6050,9 @@ begin
   with TAesContext(fAes.Context) do
   begin
     DoBlock(rk, iv, Block{%H-}); // block=AES(iv)
-    inc(iv.L);
-    if iv.L = 0 then
-      inc(iv.H);
+    inc(iv.b[15]);
+    if iv.b[15] = 0 then
+      CtrNistCarryBigEndian(iv.b);
   end;
   inc(fBytesSinceSeed, 16);
   inc(fTotalBytes, 16);
@@ -6014,13 +6068,13 @@ begin
   with TAesContext(fAes.Context) do
   begin
     DoBlock(rk, iv, THash256Rec({%H-}Buffer).Lo);
-    inc(iv.L);
-    if iv.L = 0 then
-      inc(iv.H);
+    inc(iv.b[15]);
+    if iv.b[15] = 0 then
+      CtrNistCarryBigEndian(iv.b);
     DoBlock(rk, iv, THash256Rec(Buffer).Hi);
-    inc(iv.L);
-    if iv.L = 0 then
-      inc(iv.H);
+    inc(iv.b[15]);
+    if iv.b[15] = 0 then
+      CtrNistCarryBigEndian(iv.b);
   end;
   inc(fBytesSinceSeed, 32);
   inc(fTotalBytes, 32);
@@ -6029,61 +6083,83 @@ end;
 
 procedure TAesPrng.FillRandom(Buffer: pointer; Len: PtrInt);
 var
-  main, remain: PtrUInt;
+  main, remain: cardinal;
   aes: TAesContext; // local copy if Seed is called in another thread
+  H: QWord;
 begin
   // prepare the AES rounds in a thread-safe way
   if Len <= 0 then
     exit;
   main := Len shr AesBlockShift;
   remain := Len and AesBlockMod;
-  if remain <> 0 then
-    inc(main);
   if (fSeedAfterBytes <> 0) and
      (fBytesSinceSeed > fSeedAfterBytes) then
     Seed;
-  EnterCriticalSection(fSafe);
-  MoveFast(fAes, aes, SizeOf(aes));
-  with TAesContext(fAes.Context).iv do
-  begin
-    inc(L, main);
-    if L < aes.iv.L then
-      inc(H);
-  end;
   Len := main shl AesBlockShift;
+  if remain <> 0 then
+    inc(Len, SizeOf(TAesBlock));
+  EnterCriticalSection(fSafe);
   inc(fBytesSinceSeed, Len);
   inc(fTotalBytes, Len);
-  LeaveCriticalSection(fSafe);
+  if main < 8 then
+  begin
+    // small buffers can be set within the lock
+    while main <> 0 do
+    begin
+      TAesContext(fAes.Context).DoBlock(
+        TAesContext(fAes.Context).rk, TAesContext(fAes.Context).iv, Buffer^);
+      inc(TAesContext(fAes.Context).iv.b[15]);
+      if TAesContext(fAes.Context).iv.b[15] = 0 then
+        CtrNistCarryBigEndian(TAesContext(fAes.Context).iv.b);
+      inc(PAesBlock(Buffer));
+      dec(main);
+    end;
+    if remain <> 0 then
+    begin
+      TAesContext(fAes.Context).DoBlock(
+        TAesContext(fAes.Context).rk, TAesContext(fAes.Context).iv, {%H-}aes.iv);
+      MoveSmall(@aes.iv, Buffer, remain);
+      inc(TAesContext(fAes.Context).iv.b[15]);
+      if TAesContext(fAes.Context).iv.b[15] = 0 then
+        CtrNistCarryBigEndian(TAesContext(fAes.Context).iv.b);
+    end;
+    LeaveCriticalSection(fSafe);
+    exit;
+  end;
+  // big buffers will release the lock before processing
+  MoveFast(fAes, aes, SizeOf(aes));
+  H := bswap64(TAesContext(fAes.Context).iv.H);
+  inc(H, main);
   if remain <> 0 then
-    dec(main);
+    inc(H);
+  if H < bswap64(aes.iv.H) then // propagate big-endian 64-bit CTR overflow
+    TAesContext(fAes.Context).iv.L :=
+      bswap64(bswap64(TAesContext(fAes.Context).iv.L) + 1);
+  TAesContext(fAes.Context).iv.H := bswap64(H);
+  LeaveCriticalSection(fSafe);
   // unlocked AES computation
   if main <> 0 then
+    {$ifdef USEAESNI64}
+    if aesNi in aes.Flags then
+    begin
+      main := main shl AesBlockShift;
+      FillCharFast(Buffer^, main, 0); // dst := 0 xor AES(iv) -> PRNG
+      AesNiEncryptCtrNist(Buffer, Buffer, main, @aes, @aes.iv); // 8x interleave
+    end
+    else
+    {$endif USEAESNI64}
     repeat
       aes.DoBlock(aes, aes.iv, Buffer^);
-      {$ifdef CPU64}
-      inc(aes.iv.L);
-      if aes.iv.L = 0 then
-        inc(aes.iv.H);
-      {$else}
-      inc(aes.iv.c0);
-      if aes.iv.c0 = 0 then
-      begin
-        inc(aes.iv.c1);
-        if aes.iv.c1 = 0 then
-        begin
-          inc(aes.iv.c2);
-          if aes.iv.c2 = 0 then
-            inc(aes.iv.c3);
-        end;
-      end;
-      {$endif CPU64}
+      inc(aes.iv.b[15]);
+      if aes.iv.b[15] = 0 then
+        CtrNistCarryBigEndian(aes.iv.b);
       inc(PAesBlock(Buffer));
       dec(main)
     until main = 0;
   if remain <> 0 then
   begin
     aes.DoBlock(aes, aes.iv, aes.iv);
-    MoveFast(aes.iv, Buffer^, remain);
+    MoveSmall(@aes.iv, Buffer, remain);
   end;
 end;
 
