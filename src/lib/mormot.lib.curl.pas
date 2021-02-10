@@ -742,14 +742,10 @@ var
 
 function CurlIsAvailable: boolean;
 begin
-  GlobalLock;
-  try
-    if not curl_initialized then
-      LibCurlInitialize;
-    result := {$ifdef LIBCURLSTATIC} true {$else} curl <> nil {$endif};
-  finally
-    GlobalUnLock;
-  end;
+  if not curl_initialized then
+    // try to initialize with the default library name
+    LibCurlInitialize;
+  result := {$ifdef LIBCURLSTATIC} true {$else} curl <> nil {$endif};
 end;
 
 procedure LibCurlInitialize(engines: TCurlGlobalInit; const dllname: TFileName);
