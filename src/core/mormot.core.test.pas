@@ -1241,7 +1241,10 @@ begin
     TextLn([#13#10'! All tests passed successfully.']);
   end
   else
+  begin
     TextLn([#13#10'! Some tests FAILED: please correct the code.']);
+    ExitCode := 1;
+  end;
   Color(ccLightGray);
 end;
 
