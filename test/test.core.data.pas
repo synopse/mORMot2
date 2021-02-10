@@ -50,7 +50,7 @@ type
   TTestCoreProcess = class(TSynTestCase)
   protected
     procedure MustacheTranslate(var English: string);
-    procedure MustacheHelper(const Value: variant; out result: variant);
+    procedure MustacheHelper(const Value: variant; out Result: variant);
   published
     /// some low-level RTTI access
     // - especially the field type retrieval from published properties
@@ -697,10 +697,10 @@ begin
     English := 'Vous venez de gagner';
 end;
 
-procedure TTestCoreProcess.MustacheHelper(const Value: variant; out result: variant);
+procedure TTestCoreProcess.MustacheHelper(const Value: variant; out Result: variant);
 begin
   with _Safe(Value)^ do
-    result := RawUtf8ToVariant(FormatUtf8('a=%,b=%', [U['a'], i['b']]));
+    RawUtf8ToVariant(FormatUtf8('a=%,b=%', [U['a'], i['b']]), Result);
 end;
 
 

@@ -302,7 +302,7 @@ type
     function RetrieveBlobFields(Value: TOrm): boolean; override;
 
     /// retrieves the per-statement detailed timing, as a TDocVariantData
-    procedure ComputeDBStats(out result: variant); overload;
+    procedure ComputeDBStats(out Result: variant); overload;
     /// retrieves the per-statement detailed timing, as a TDocVariantData
     function ComputeDBStats: variant; overload;
 
@@ -1687,11 +1687,11 @@ begin
   result := InternalExecute(aSql, {forcecache=}false);
 end;
 
-procedure TRestOrmServerDB.ComputeDBStats(out result: variant);
+procedure TRestOrmServerDB.ComputeDBStats(out Result: variant);
 var
   i: PtrInt;
   ndx: TIntegerDynArray;
-  doc: TDocVariantData absolute result;
+  doc: TDocVariantData absolute Result;
 begin
   if self = nil then
     exit;

@@ -537,21 +537,21 @@ procedure RegisterOpenSsl;
 begin
   if not OpenSslIsAvailable then
     exit;
+  // set the fastest AES implementation classes
   TAesFast[mGcm] := TAesGcmOsl;
   {$ifdef HASAESNI}
-    // all mormot.core.crypto x86_64 and i386 asm is faster than OpenSSL
-    {$ifdef CPUX64}
-    // our AES-CTR x86_64 asm is faster than OpenSSL
-    TAesFast[mCtrNist] := TAesCtrNistOsl;
+    // all mormot.core.crypto x86_64 asm is faster than OpenSSL - but GCM
+    {$ifndef CPUX64}
+    // our AES-CTR x86_64 asm is faster than OpenSSL's
+    TAesFast[mCtr] := TAesCtrNistOsl;
     {$endif CPUX64}
   {$else}
-  // ARM/Aarch64 would rather use OpenSSL than our purepascal port
-  TAesFast[mCtrNist] := TAesCtrNistOsl;
+  // ARM/Aarch64 would rather use OpenSSL than our purepascal code
   TAesFast[mEcb] := TAesEcbOsl;
   TAesFast[mCbc] := TAesCbcOsl;
   TAesFast[mCfb] := TAesCfbOsl;
   TAesFast[mOfb] := TAesOfbOsl;
-  TAesFast[mCtrNist] := TAesCtrNistOsl;
+  TAesFast[mCtr] := TAesCtrNistOsl;
   {$endif HASAESNI}
 end;
 
