@@ -485,7 +485,7 @@ end;
 procedure TTestCoreCrypto._TAesPNRG;
 begin
   check(TAesPrng.IsAvailable);
-  check(TAesPrngSystem.IsAvailable);
+  check(TSystemPrng.IsAvailable);
   Prng(TAesPrng, 'mORMot');
   {$ifdef USE_OPENSSL}
   Prng(TAesPrngOsl, 'OpenSSL');
