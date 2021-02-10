@@ -35,6 +35,7 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.crypto,
+  mormot.core.secure,
   mormot.lib.openssl11;
 
 
@@ -79,7 +80,7 @@ type
   TAesOsl = object
   public
     Owner: TAesAbstract;
-    Cipher: PEVP_CIPHER; // computed from OpenSslCipherName virtual method
+    Cipher: PEVP_CIPHER; // computed from TAesAbstractOsl.AlgoName
     Ctx: array[boolean] of PEVP_CIPHER_CTX; // set and reused in CallEvp()
     procedure Init(aOwner: TAesAbstract; aCipherName: PUtf8Char);
     procedure Done;
@@ -116,23 +117,19 @@ type
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
     /// perform the AES un-cypher in the corresponding mode
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
-    /// return the OpenSSL EVP Cipher name of this class and key size
-    function OpenSslCipherName: PUtf8Char; virtual; abstract;
   end;
 
   /// OpenSSL AES cypher/uncypher without chaining (ECB)
   // - this mode is known to be less secure than the others
   TAesEcbOsl = class(TAesAbstractOsl)
-  public
-    /// return the OpenSSL EVP Cipher name of this class and key size
-    function OpenSslCipherName: PUtf8Char; override;
+  protected
+    procedure AfterCreate; override;
   end;
 
   /// OpenSSL AES cypher/uncypher with Cipher-block chaining (CBC)
   TAesCbcOsl = class(TAesAbstractOsl)
-  public
-    /// return the OpenSSL EVP Cipher name of this class and key size
-    function OpenSslCipherName: PUtf8Char; override;
+  protected
+    procedure AfterCreate; override;
   end;
 
   /// OpenSSL AES cypher/uncypher with Cipher feedback (CFB)
@@ -142,9 +139,8 @@ type
   // $ 2500 aes256cfb in 9.41ms i.e. 265646/s or 565.3 MB/s
   // $ 2500 aes256cfbosl in 13.47ms i.e. 185473/s or 394.7 MB/s
   TAesCfbOsl = class(TAesAbstractOsl)
-  public
-    /// return the OpenSSL EVP Cipher name of this class and key size
-    function OpenSslCipherName: PUtf8Char; override;
+  protected
+    procedure AfterCreate; override;
   end;
 
   /// OpenSSL AES cypher/uncypher with Output feedback (OFB)
@@ -154,9 +150,8 @@ type
   // $ 2500 aes256ofb in 9.64ms i.e. 259201/s or 551.6 MB/s
   // $ 2500 aes256ofbosl in 10.71ms i.e. 233383/s or 496.6 MB/s
   TAesOfbOsl = class(TAesAbstractOsl)
-  public
-    /// return the OpenSSL EVP Cipher name of this class and key size
-    function OpenSslCipherName: PUtf8Char; override;
+  protected
+    procedure AfterCreate; override;
   end;
 
   /// OpenSSL AES cypher/uncypher with 128-bit Counter mode (CTR)
@@ -167,9 +162,8 @@ type
   // $ 2500 aes128ctrosl in 2.37ms i.e. 1053518/s or 2.1 GB/s
   // $ 2500 aes256ctrosl in 3.22ms i.e. 775193/s or 1.6 GB/s
   TAesCtrNistOsl = class(TAesAbstractOsl)
-  public
-    /// return the OpenSSL EVP Cipher name of this class and key size
-    function OpenSslCipherName: PUtf8Char; override;
+  protected
+    procedure AfterCreate; override;
   end;
 
   /// OpenSSL AES-GCM cypher/uncypher
@@ -282,6 +276,7 @@ begin
   TAesAbstractOsl(ToOwner).fKeySize := TAesAbstractOsl(Owner).fKeySize;
   TAesAbstractOsl(ToOwner).fKeySizeBytes := TAesAbstractOsl(Owner).fKeySizeBytes;
   TAesAbstractOsl(ToOwner).fKey := TAesAbstractOsl(Owner).fKey;
+  TAesAbstractOsl(ToOwner).fAlgoMode := TAesAbstractOsl(Owner).fAlgoMode;
   ToAesOsl.Owner := ToOwner;
   ToAesOsl.Cipher := Cipher;
   for enc := false to true do
@@ -342,8 +337,11 @@ end;
 { TAesAbstractOsl }
 
 procedure TAesAbstractOsl.AfterCreate;
+var
+  nam: TShort16;
 begin
-  fAes.Init(self, OpenSslCipherName);
+  AlgoName(nam); // always #0 terminated
+  fAes.Init(self, pointer(@nam[1]));
 end;
 
 destructor TAesAbstractOsl.Destroy;
@@ -383,91 +381,54 @@ end;
 
 { TAesEcbOsl }
 
-function TAesEcbOsl.OpenSslCipherName: PUtf8Char;
+procedure TAesEcbOsl.AfterCreate;
 begin
-  case fKeySize of
-    128:
-      result := 'aes-128-ecb';
-    192:
-      result := 'aes-192-ecb';
-  else
-    result := 'aes-256-ecb';
-  end;
+  fAlgoMode := mEcb;
+  inherited AfterCreate;
 end;
 
 { TAesCbcOsl }
 
-function TAesCbcOsl.OpenSslCipherName: PUtf8Char;
+procedure TAesCbcOsl.AfterCreate;
 begin
-  case fKeySize of
-    128:
-      result := 'aes-128-cbc';
-    192:
-      result := 'aes-192-cbc';
-  else
-    result := 'aes-256-cbc';
-  end;
+  fAlgoMode := mCbc;
+  inherited AfterCreate;
 end;
 
 { TAesCfbOsl }
 
-function TAesCfbOsl.OpenSslCipherName: PUtf8Char;
+procedure TAesCfbOsl.AfterCreate;
 begin
-  case fKeySize of
-    128:
-      result := 'aes-128-cfb';
-    192:
-      result := 'aes-192-cfb';
-  else
-    result := 'aes-256-cfb';
-  end;
+  fAlgoMode := mCfb;
+  inherited AfterCreate;
 end;
 
 
 { TAesOfbOsl }
 
-function TAesOfbOsl.OpenSslCipherName: PUtf8Char;
+procedure TAesOfbOsl.AfterCreate;
 begin
-  case fKeySize of
-    128:
-      result := 'aes-128-ofb';
-    192:
-      result := 'aes-192-ofb';
-  else
-    result := 'aes-256-ofb';
-  end;
+  fAlgoMode := mOfb;
+  inherited AfterCreate;
 end;
 
 { TAesCtrNistOsl }
 
-function TAesCtrNistOsl.OpenSslCipherName: PUtf8Char;
+procedure TAesCtrNistOsl.AfterCreate;
 begin
-  case fKeySize of
-    128:
-      result := 'aes-128-ctr';
-    192:
-      result := 'aes-192-ctr';
-  else
-    result := 'aes-256-ctr';
-  end;
+  fAlgoMode := mCtr;
+  inherited AfterCreate;
 end;
 
 { TAesGcmOsl }
 
 function TAesGcmOsl.AesGcmInit: boolean;
 var
-  name: PUtf8Char;
+  nam: TShort16;
 begin
-  case fKeySize of
-    128:
-      name := 'aes-128-gcm';
-    192:
-      name := 'aes-192-gcm';
-  else
-    name := 'aes-256-gcm';
-  end;
-  fAes.Init(self, name);
-  result := true;
+  AlgoName(nam); // always #0 terminated
+  fAes.Init(self, pointer(@nam[1]));
+  result := nam[0] <> #0;
 end;
 
 procedure TAesGcmOsl.AesGcmDone;

@@ -364,6 +364,11 @@ type
       ctp, ptp: Pointer; pLen: PtrInt; ptag: pointer; tLen: PtrInt): boolean;
   end;
 
+  /// the AES chaining modes implemented by this unit
+  // - mEcb is unsafe and should not be used as such
+  // - mCtr64, mCfbCrc, mOfbCrc and mCtrCrc are non standard modes
+  TAesMode = (
+    mEcb, mCbc, mCfb, mOfb, mCtr64, mCtr, mCfbCrc, mOfbCrc, mCtrCrc, mGcm);
 
   /// class-reference type (metaclass) of an AES cypher/uncypher
   TAesAbstractClass = class of TAesAbstract;
@@ -379,6 +384,7 @@ type
     fKeySizeBytes: cardinal;
     fKey: TAesKey;
     fIV: TAesBlock;
+    fAlgoMode: TAesMode;
     fIVUpdated: boolean; // so you can call Encrypt() several times
     procedure AfterCreate; virtual; // circumvent Delphi bug about const aKey
     function DecryptPkcs7Len(var InputLen, ivsize: integer; Input: pointer;
@@ -590,9 +596,19 @@ type
     class function SimpleEncryptFile(const InputFile, Outputfile: TFileName;
       const Key; KeySize: integer; Encrypt: boolean; IVAtBeginning: boolean = false;
       RaiseESynCryptoOnError: boolean = true): boolean; overload;
-    //// returns e.g. 'aes128cfb' or '' if nil
-    function AlgoName: TShort16;
 
+    /// OpenSSL-like Cipher name encoding of this AES engine
+    // - return e.g. 'aes-128-cfb' or 'aes-256-gcm'
+    // - our TAesCtrAny, TAesCfbCrc, TAesOfbCrc, TAesCtrCrc custom algorithms
+    // use non-standard trailing 'c64', 'cfc', 'ofc' and 'ctc' mode names e.g.
+    // as 'aes-256-cfc'
+    function AlgoName: TShort16; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// OpenSSL-like Cipher name encoding of this AES engine
+    procedure AlgoName(out Result: TShort16); overload;
+    /// the chaining mode of this AES engine
+    property AlgoMode: TAesMode
+      read fAlgoMode;
     /// associated Key Size, in bits (i.e. 128,192,256)
     property KeySize: cardinal
       read fKeySize;
@@ -661,6 +677,8 @@ type
   // - this class will use AES-NI hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
   TAesCbc = class(TAesAbstractSyn)
+  protected
+    procedure AfterCreate; override;
   public
     /// perform the AES cypher in the CBC mode
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
@@ -689,6 +707,8 @@ type
   // $ 2500 aes256cfbosl in 13.47ms i.e. 185473/s or 394.7 MB/s
   // - is used e.g. by CryptDataForCurrentUser or WebSockets ProtocolAesClass
   TAesCfb = class(TAesAbstractEncryptOnly)
+  protected
+    procedure AfterCreate; override;
   public
     /// perform the AES cypher in the CFB mode
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
@@ -705,6 +725,8 @@ type
   // $ 2500 aes256ofb in 9.33ms i.e. 267723/s or 569.7 MB/s
   // $ 2500 aes256ofbosl in 10.71ms i.e. 233383/s or 496.6 MB/s
   TAesOfb = class(TAesAbstractEncryptOnly)
+  protected
+    procedure AfterCreate; override;
   public
     /// perform the AES cypher in the OFB mode
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
@@ -846,6 +868,8 @@ type
   // $ 2500 aes128cfbcrc in 7.22ms i.e. 345829/s or 736 MB/s
   // $ 2500 aes256cfbcrc in 9.68ms i.e. 258104/s or 549.3 MB/s
   TAesCfbCrc = class(TAesAbstractAead)
+  protected
+    procedure AfterCreate; override;
   public
     /// perform the AES cypher in the CFB mode, and compute a 256-bit MAC
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
@@ -869,6 +893,8 @@ type
   // $ 2500 aes256ofb in 9.33ms i.e. 267723/s or 569.7 MB/s
   // $ 2500 aes256ofbcrc in 10.62ms i.e. 235271/s or 500.7 MB/s
   TAesOfbCrc = class(TAesSymCrc)
+  protected
+    procedure AfterCreate; override;
   public
     /// perform the AES cypher in the OFB mode, and compute a 256-bit MAC
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
@@ -889,6 +915,8 @@ type
   // $ 2500 aes128gcmosl in 3.03ms i.e. 824810/s or 1.7 GB/s
   // $ 2500 aes256gcmosl in 3.56ms i.e. 701065/s or 1.4 GB/s
   TAesCtrCrc = class(TAesSymCrc)
+  protected
+    procedure AfterCreate; override;
   public
     /// perform the AES cypher in the CTR mode, and compute a 256-bit MAC
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
@@ -1083,19 +1111,34 @@ type
 {$endif USE_PROV_RSA_AES}
 
 
-type
-  /// the AES chaining modes implemented by this unit
-  // - mEcb is unsafe and should not be used as such
-  // - mCtr64, mCfbCrc, mOfbCrc and mCtrCrc are non standard modes
-  TAesMode = (
-    mEcb, mCbc, mCfb, mOfb, mCtr64, mCtr, mCfbCrc, mOfbCrc, mCtrCrc, mGcm);
-
 var
   /// the fastest AES implementation classes available on the system, per mode
   // - mormot.core.crypto.openssl may register its own classes, e.g. TAesGcmOsl
   TAesFast: array[TAesMode] of TAesAbstractClass = (
     TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtrAny, TAesCtrNist,
     TAesCfbCrc, TAesOfbCrc, TAesCtrCrc, TAesGcm);
+
+/// OpenSSL-like Cipher name encoding of mormot.core.crypto AES engines
+// - return e.g. 'aes-128-cfb' or 'aes-256-gcm'
+// - our mCtr64, mCfbCrc, mOfbCrc, mCtrCrc custom algorithms use non-standard
+// trailing 'c64', 'cfc', 'ofc' and 'ctc' mode names e.g. as 'aes-256-cfc'
+function AesAlgoNameEncode(Mode: TAesMode; KeyBits: integer): RawUtf8; overload;
+
+/// OpenSSL-like Cipher name encoding of mormot.core.crypto AES engines
+// - returned TShort16 is #0 ended so @Result[1] can be transtyped to a PUtf8Char
+procedure AesAlgoNameEncode(Mode: TAesMode; KeyBits: integer;
+  out Result: TShort16); overload;
+
+/// OpenSSL-like Cipher name decoding into mormot.core.crypto AES engines
+// - input AesAlgoName length should be already checked as 11
+// - decode e.g. 'aes-128-cfb' into Mode=mCfb and KeyBits=128
+function AesAlgoNameDecode(AesAlgoName: PUtf8Char;
+  out Mode: TAesMode; out KeyBits: integer): boolean; overload;
+
+/// OpenSSL-like Cipher name decoding into a mormot.core.crypto TAesAbstract class
+// - decode e.g. 'aes-128-cfb' into Mode=mCfb and KeyBits=128
+function AesAlgoNameDecode(const AesAlgoName: RawUtf8;
+  out KeyBits: integer): TAesAbstractClass; overload;
 
 
 // used for paranoid safety by test.core.crypto.pas
@@ -3983,28 +4026,16 @@ begin
 end;
 
 function TAesAbstract.AlgoName: TShort16;
-const
-  TXT: array[2..4] of array[0..7] of AnsiChar =
-    (#9'aes128', #9'aes192', #9'aes256');
-var
-  s: PShortString;
 begin
-  if (self = nil) or
-     (KeySize = 0) then
-    result[0] := #0
+  AlgoName(Result);
+end;
+
+procedure TAesAbstract.AlgoName(out Result: TShort16);
+begin
+  if self = nil then
+    PCardinal(@Result)^ := 0
   else
-  begin
-    PInt64(@result)^ := PInt64(@TXT[KeySize shr 6])^;
-    s := ClassNameShort(self);
-    if s^[0] < #7 then
-      result[0] := #6
-    else
-    begin
-      result[7] := NormToLower[s^[5]]; // TAesCbc -> 'aes128cbc'
-      result[8] := NormToLower[s^[6]];
-      result[9] := NormToLower[s^[7]];
-    end;
-  end;
+    AesAlgoNameEncode(fAlgoMode, fKeySize, Result);
 end;
 
 function TAesAbstract.EncryptPkcs7(const Input: RawByteString;
@@ -4504,6 +4535,12 @@ begin
     TrailerBytes(Count);
 end;
 
+procedure TAesCbc.AfterCreate;
+begin
+  inherited AfterCreate;
+  fAlgoMode := mCbc;
+end;
+
 procedure TAesCbc.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
   i: integer;
@@ -4589,6 +4626,12 @@ begin
   end;
 end;
 
+procedure TAesCfb.AfterCreate;
+begin
+  inherited AfterCreate;
+  fAlgoMode := mCfb;
+end;
+
 procedure TAesCfb.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
   i: integer;
@@ -4635,7 +4678,7 @@ end;
 
 procedure TAesAbstractAead.AfterCreate;
 begin
-  inherited;
+  inherited AfterCreate;
   {$ifdef USEAESNI64}
   fAesNiSse42 := (cfAESNI in CpuFeatures) and
                  (cfSSE42 in CpuFeatures);
@@ -4749,6 +4792,12 @@ begin
   end;
 end;
 
+procedure TAesCfbCrc.AfterCreate;
+begin
+  inherited AfterCreate;
+  fAlgoMode := mCfbCrc;
+end;
+
 procedure TAesCfbCrc.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
   i: integer;
@@ -4820,6 +4869,12 @@ end;
 
 { TAesOfbCrc }
 
+procedure TAesOfbCrc.AfterCreate;
+begin
+  inherited AfterCreate;
+  fAlgoMode := mOfbCrc;
+end;
+
 procedure TAesOfbCrc.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
   i: integer;
@@ -4855,6 +4910,12 @@ end;
 
 
 { TAesCtrCrc }
+
+procedure TAesCtrCrc.AfterCreate;
+begin
+  inherited AfterCreate;
+  fAlgoMode := mCtrCrc;
+end;
 
 procedure TAesCtrCrc.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
@@ -4915,6 +4976,12 @@ begin
   Encrypt(BufIn, BufOut, Count); // by definition
 end;
 
+procedure TAesOfb.AfterCreate;
+begin
+  inherited AfterCreate;
+  fAlgoMode := mOfb;
+end;
+
 procedure TAesOfb.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
   i: integer;
@@ -4951,6 +5018,7 @@ procedure TAesCtrAny.AfterCreate;
 begin
   EncryptInit;
   fCTROffset := 7; // counter is in the lower 64 bits, nonce in the upper 64 bits
+  fAlgoMode := mCtr64;
 end;
 
 function TAesCtrAny.ComposeIV(Nonce, Counter: PAesBlock;
@@ -5033,6 +5101,7 @@ procedure TAesCtrNist.AfterCreate;
 begin
   EncryptInit;
   fCTROffset := 15; // counter covers 128-bit, as required by NIST specs
+  fAlgoMode := mCtr;
 end;
 
 procedure TAesCtrNist.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
@@ -5057,6 +5126,7 @@ end;
 procedure TAesGcmAbstract.AfterCreate;
 begin
   fIVUpdated := true;
+  fAlgoMode := mGcm;
   if not AesGcmInit then
     raise ESynCrypto.CreateUtf8('%.Create(keysize=%) failed', [self, fKeySize]);
 end;
@@ -5156,6 +5226,7 @@ begin
   result.fKey := fKey;
   result.fKeySize := fKeySize;
   result.fKeySizeBytes := fKeySizeBytes;
+  result.fAlgoMode := mGcm;
   TAesGcm(result).fAes := fAes; // reuse the very same TAesGcmEngine memory
 end;
 
@@ -5311,6 +5382,7 @@ end;
 procedure TAesEcbApi.InternalSetMode;
 begin
   fInternalMode := CRYPT_MODE_ECB;
+  fAlgoMode := mEcb;
 end;
 
 { TAesCbcApi }
@@ -5318,6 +5390,7 @@ end;
 procedure TAesCbcApi.InternalSetMode;
 begin
   fInternalMode := CRYPT_MODE_CBC;
+  fAlgoMode := mCbc;
 end;
 
 { TAesCfbApi }
@@ -5326,6 +5399,7 @@ procedure TAesCfbApi.InternalSetMode;
 begin
   raise ESynCrypto.CreateUtf8('%: CRYPT_MODE_CFB is not compliant', [self]);
   fInternalMode := CRYPT_MODE_CFB;
+  fAlgoMode := mCfb;
 end;
 
 { TAesOfbApi }
@@ -5334,9 +5408,87 @@ procedure TAesOfbApi.InternalSetMode;
 begin
   raise ESynCrypto.CreateUtf8('%: CRYPT_MODE_OFB not implemented by PROV_RSA_AES', [self]);
   fInternalMode := CRYPT_MODE_OFB;
+  fAlgoMode := mOfb;
 end;
 
 {$endif USE_PROV_RSA_AES}
+
+
+const
+  AESMODESTXT4: PAnsiChar =
+    'ECB'#0'CBC'#0'CFB'#0'OFB'#0'C64'#0'CTR'#0'CFC'#0'OFC'#0'CTC'#0'GCM'#0;
+  AESMODESTXT4LOWER: PAnsiChar =
+    'ecb'#0'cbc'#0'cfb'#0'ofb'#0'c64'#0'ctr'#0'cfc'#0'ofc'#0'ctc'#0'gcm'#0;
+
+procedure AesAlgoNameEncode(Mode: TAesMode; KeyBits: integer;
+  out Result: TShort16);
+begin
+  case KeyBits of
+    128, 192, 256:
+    begin
+      Result[0] := #11;
+      PCardinal(@Result[1])^ :=
+        ord('a') + ord('e') shl 8 + ord('s') shl 16 + ord('-') shl 24;
+      PCardinal(@Result[5])^ := PCardinal(SmallUInt32Utf8[KeyBits])^;
+      Result[8] := '-'; // SmallUInt32Utf8 put a #0 there
+      PCardinal(@Result[9])^ := PCardinalArray(AESMODESTXT4LOWER)[ord(Mode)];
+    end
+  else
+    PCardinal(@Result)^ := 0;
+  end;
+end;
+
+function AesAlgoNameEncode(Mode: TAesMode; KeyBits: integer): RawUtf8;
+var
+  tmp: TShort16;
+begin
+  AesAlgoNameEncode(Mode, KeyBits, tmp);
+  FastSetString(result, @tmp[1], ord(tmp[0]));
+end;
+
+function AesAlgoNameDecode(AesAlgoName: PUtf8Char;
+  out Mode: TAesMode; out KeyBits: integer): boolean;
+var
+  i: integer;
+  tab: PByteArray;
+begin
+  // this code is very efficient
+  result := false;
+  if PCardinal(AesAlgoName)^ and $ffdfdfdf <>
+      ord('A') + ord('E') shl 8 + ord('S') shl 16 + ord('-') shl 24 then
+    exit;
+  case PCardinal(AesAlgoName + 4)^ of
+    ord('1') + ord('2') shl 8 + ord('8') shl 16 + ord('-') shl 24:
+      KeyBits := 128;
+    ord('1') + ord('9') shl 8 + ord('2') shl 16 + ord('-') shl 24:
+      KeyBits := 192;
+    ord('2') + ord('5') shl 8 + ord('6') shl 16 + ord('-') shl 24:
+      KeyBits := 256;
+  else
+    exit;
+  end;
+  tab := @NormToUpperAnsi7Byte;
+  i := IntegerScanIndex(pointer(AESMODESTXT4), succ(ord(high(TAesMode))),
+    cardinal(tab[ord(AesAlgoName[8])]) +
+    cardinal(tab[ord(AesAlgoName[9])]) shl 8 +
+    cardinal(tab[ord(AesAlgoName[10])]) shl 16);
+  if i < 0 then
+    exit;
+  Mode := TAesMode(i);
+  result := true;
+end;
+
+function AesAlgoNameDecode(const AesAlgoName: RawUtf8;
+  out KeyBits: integer): TAesAbstractClass;
+var
+  mode: TAesMode;
+begin
+  if (length(AesAlgoName) <> 11) or
+     not AesAlgoNameDecode(pointer(AesAlgoName), mode, KeyBits) then
+    result := nil
+  else
+    result := TAesFast[mode];
+end;
 
 
 {$ifndef PUREMORMOT2}

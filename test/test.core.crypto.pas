@@ -64,6 +64,8 @@ type
     {$endif OSWINDOWS}
     /// JWT classes
     procedure _JWT;
+    /// Cryptography Catalog
+    procedure Catalog;
     /// compute some performance numbers, mostly against regression
     procedure Benchmark;
   end;
@@ -1609,6 +1611,35 @@ begin
     check(IsEqual(dig, dig2));
     check(CompareMem(@dig, @dig2, sizeof(dig)));
   end;
+end;
+
+procedure TTestCoreCrypto.Catalog;
+var
+  m: TAesMode;
+  k, k2: integer;
+  n: RawUtf8;
+  c: TAesAbstract;
+  key: THash256;
+begin
+  for k := 0 to 2 do
+    for m := low(m) to high(m) do
+    begin
+      n := AesAlgoNameEncode(m, 128 + k * 64);
+      check(length(n) = 11);
+      check(IdemPChar(pointer(n), 'AES-'));
+      CheckUtf8(AesAlgoNameDecode(n, k2) = TAesFast[m], n);
+      UpperCaseSelf(n);
+      CheckUtf8(AesAlgoNameDecode(n, k2) = TAesFast[m], n);
+      c := TAesFast[m].Create(k, 128 + k * 64);
+      try
+        Check(c.AlgoMode = m);
+        Check(IdemPropName(c.AlgoName, pointer(n), length(n)));
+      finally
+        c.Free;
+      end;
+      n[10] := ' ';
+      CheckUtf8(AesAlgoNameDecode(n, k2) = nil, n);
+    end;
 end;
 
 initialization
