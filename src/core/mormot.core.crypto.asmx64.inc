@@ -2785,16 +2785,16 @@ procedure AesNiEncryptCtrNist32(
         // handle single block without allocating any stack frame
       	movups xmm2, dqword ptr [r8]
       	movups xmm3, dqword ptr [rdi]
-      	movzx  edx, byte ptr [rcx].TAesContext.Rounds
+      	mov   al, byte ptr [rcx].TAesContext.Rounds
       	movups xmm0, dqword ptr [rcx]
       	movups xmm1, dqword ptr [rcx + $10]
       	lea    rcx, [rcx + $20]
-        dec    edx
+        dec    al
       	xorps  xmm2, xmm0
 @sml:   aesenc xmm2, xmm1
       	movups xmm1, dqword ptr [rcx]
       	add    rcx, $10
-      	dec    edx
+      	dec    al
       	jne    @sml
       	aesenclast xmm2, xmm1
       	pxor   xmm0, xmm0
@@ -2983,7 +2983,7 @@ procedure AesNiEncryptCtrNist32(
         aesenc xmm8, xmm0
         aesenc xmm9, xmm0
         movups xmm0, dqword ptr [rcx + $20]
-        cmp    eax, $b
+        cmp    al, 11
         jb     @edone      // 128-bit AES
         aesenc xmm2, xmm1
         aesenc xmm3, xmm1
@@ -3173,7 +3173,7 @@ procedure AesNiEncryptCtrNist32(
         aesenc xmm4, xmm1
         aesenc xmm5, xmm1
         movups xmm1, dqword ptr [rcx]
-        dec    eax
+        dec    al
         jne    @loop4
         aesenclast xmm2, xmm1
         aesenclast xmm3, xmm1
@@ -3199,7 +3199,7 @@ procedure AesNiEncryptCtrNist32(
         aesenc xmm3, xmm1
         aesenc xmm4, xmm1
         movups xmm1, dqword ptr [rcx]
-        dec    eax
+        dec    al
         jne    @loop3
         aesenclast xmm2, xmm1
         aesenclast xmm3, xmm1
@@ -3225,24 +3225,24 @@ procedure AesNiEncryptCtrNist32(
         {$endif WIN64ABI}
 end;
 
-procedure ctr96_inc(ctr: PAesBlock);
+procedure ctr96_inc(ctr: PAesBlock); // not worth inlining
 var
   n: PtrUInt;
-  c: cardinal;
+  carry: cardinal;
 begin
   n := 12;
-  c := 1; // carry
+  carry := 1;
   repeat
     dec(n);
-    inc(c, ctr[n]);
-    ctr[n] := byte(c);
-    c := c shr 8;
-  until (c = 0) or
+    inc(carry, ctr[n]);
+    ctr[n] := byte(carry);
+    carry := carry shr 8;
+  until (carry = 0) or
         (n = 0);
 end;
 
 // AesNiEncryptCtrNist32() expects the CTR in lowest 32-bit to never overflow
-procedure AesNiEncryptCtrNist(src, dest: PByte; len: PtrUInt;
+procedure AesNiEncryptCtrNist(src, dest: PByte; len: cardinal;
   ctxt, iv: PAesBlock); inline;
 var
   ctr, blocks: cardinal;
@@ -3319,6 +3319,7 @@ procedure AesNiEncryptCtrCrc32(
         call   @crc
         jmp    @exit
         // inlined crcblocksse42() crc=rbx data=rdi bytes=r10
+        {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @crc:   lea    r9, [rdi + r10]
         neg    r10
         mov    r12d, dword ptr [rbx]
@@ -3513,7 +3514,7 @@ procedure AesNiEncryptCtrCrc32(
         aesenc xmm8, xmm0
         aesenc xmm9, xmm0
         movups xmm0, dqword ptr [rcx + $20]
-        cmp    eax, $b
+        cmp    al, 11
         jb     @edone      // 128-bit AES
         aesenc xmm2, xmm1
         aesenc xmm3, xmm1
@@ -3701,6 +3702,7 @@ procedure AesNiEncryptCtrCrc32(
         cmp    rdx, $4
         jb     @loop3
         je     @loop4
+        // trailing 5..7 interleaved AES blocks
         shl    eax, $4
         movdqa xmm8, dqword ptr [rsp + $60]
         pxor   xmm9, xmm9
@@ -3786,7 +3788,7 @@ procedure AesNiEncryptCtrCrc32(
         aesenc xmm4, xmm1
         aesenc xmm5, xmm1
         movups xmm1, dqword ptr [rcx]
-        dec    eax
+        dec    al
         jne    @loop4
         aesenclast xmm2, xmm1
         aesenclast xmm3, xmm1
@@ -3812,7 +3814,7 @@ procedure AesNiEncryptCtrCrc32(
         aesenc xmm3, xmm1
         aesenc xmm4, xmm1
         movups xmm1, dqword ptr [rcx]
-        dec    eax
+        dec    al
         jne    @loop3
         aesenclast xmm2, xmm1
         aesenclast xmm3, xmm1
@@ -3849,7 +3851,7 @@ procedure AesNiEncryptCtrCrc32(
 end;
 
 // AesNiEncryptCtrCrc32() expects the CTR in lowest 32-bit to never overflow
-procedure AesNiEncryptCtrCrc(src, dest: PByte; len: PtrUInt;
+procedure AesNiEncryptCtrCrc(src, dest: PByte; len: cardinal;
   ctxt: TAesCtrCrc); inline;
 var
   ctr, blocks: cardinal;

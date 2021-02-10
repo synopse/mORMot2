@@ -2489,6 +2489,8 @@ const
 type
   TKeyArray = packed array[0..AesMaxRounds] of TAesBlock;
 
+  TAesContextDoBlock = procedure(const ctxt, Source, Dest);
+
   /// low-level content of TAes.Context (AES_CONTEXT_SIZE bytes)
   // - is defined privately in the implementation section
   // - do NOT change this structure: it is fixed in the asm code
@@ -2496,7 +2498,7 @@ type
     RK: TKeyArray;   // Key (encr. or decr.)
     iv: THash128Rec; // IV or CTR used e.g. by TAesGcmEngine or TAesPrng
     buf: TAesBlock;  // Work buffer used e.g. by TAesGcmEngine or AesNiTrailer()
-    DoBlock: procedure(const ctxt, Source, Dest); // main AES function
+    DoBlock: TAesContextDoBlock; // main AES function
     {$ifdef USEAESNI32}
     AesNi32: pointer; // xmm7 AES-NI encoding
     {$endif USEAESNI32}
@@ -3274,37 +3276,38 @@ begin
   iv^ := cv;
 end;
 
-procedure TAes.DoBlocksCtr(iv: PAesBlock; src, dst: pointer;
-  blockcount: PtrUInt);
+procedure DoBlocksCtrPas(iv: PAesBlock; src, dst: pointer;
+  blockcount: cardinal; const ctxt: TAesContext);
 var
-  cv, tmp: TAesBlock;
   offs: PtrInt;
-begin
-  {$ifdef USEAESNI64}
-  if aesNi in TAesContext(Context).Flags then
-  begin
-    AesNiEncryptCtrNist(src, dst, blockcount shl 4, @Context, iv);
-    exit;
-  end;
-  {$endif USEAESNI64}
-  cv := iv^;
+begin // sub-procedure for better code generation
   if blockcount > 0 then
     repeat
-      TAesContext(Context).DoBlock(Context, cv, tmp{%H-}); // tmp=AES(cv)
-      offs := 15;
-      inc(cv[offs]);
-      if cv[offs] = 0 then // manual big-endian increment
-        repeat
-          dec(offs);
-          inc(cv[offs]);
-        until (cv[offs] <> 0) or
-              (offs = 0);
-      XorBlock16(src, dst, pointer(@tmp));
+      ctxt.DoBlock(ctxt, iv^, ctxt.buf); // tmp=AES(cv)
+      inc(iv[15]);
+      if iv[15] = 0 then // manual big-endian increment
+        for offs := 14 downto 0 do
+        begin
+          inc(iv[offs]);
+          if iv[offs] <> 0 then
+            break;
+        end;
+      XorBlock16(src, dst, pointer(@ctxt.buf));
       inc(PAesBlock(src));
       inc(PAesBlock(dst));
       dec(blockcount);
     until blockcount = 0;
-  iv^ := cv;
+end;
+
+procedure TAes.DoBlocksCtr(iv: PAesBlock; src, dst: pointer;
+  blockcount: PtrUInt);
+begin
+  {$ifdef USEAESNI64}
+  if aesNi in TAesContext(Context).Flags then
+    AesNiEncryptCtrNist(src, dst, blockcount shl 4, @Context, iv)
+  else
+  {$endif USEAESNI64}
+    DoBlocksCtrPas(iv, src, dst, blockcount, TAesContext(Context));
 end;
 
 function TAes.Initialized: boolean;
@@ -4548,6 +4551,11 @@ var
   i: integer;
   tmp: TAesBlock;
 begin
+  {$ifdef USEAESNI32}
+  if Assigned(TAesContext(fAes.Context).AesNi32) then
+    aesnicfbdecrypt(self, BufIn, BufOut, Count)
+  else
+  {$endif USEAESNI32}
   {$ifdef USEAESNI64}
   if (Count and AesBlockMod = 0) and
      (aesNi in TAesContext(fAes).Flags) then
@@ -4564,11 +4572,6 @@ begin
         end;
     end;
   {$endif USEAESNI64}
-  {$ifdef USEAESNI32}
-  if Assigned(TAesContext(fAes.Context).AesNi32) then
-    aesnicfbdecrypt(self, BufIn, BufOut, Count)
-  else
-  {$endif USEAESNI32}
   begin
     inherited; // set fIn,fOut
     for i := 1 to Count shr AesBlockShift do
@@ -4590,6 +4593,11 @@ procedure TAesCfb.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
   i: integer;
 begin
+  {$ifdef USEAESNI32}
+  if Assigned(TAesContext(fAes).AesNi32) then
+    aesnicfbencrypt(self, BufIn, BufOut, Count)
+  else
+  {$endif USEAESNI32}
   {$ifdef USEAESNI64}
   if (Count and AesBlockMod = 0) and
      (aesNi in TAesContext(fAes).Flags) then
@@ -4606,11 +4614,6 @@ begin
         end;
     end;
   {$endif USEAESNI64}
-  {$ifdef USEAESNI32}
-  if Assigned(TAesContext(fAes).AesNi32) then
-    aesnicfbencrypt(self, BufIn, BufOut, Count)
-  else
-  {$endif USEAESNI32}
   begin
     inherited; // set fIn,fOut
     for i := 1 to Count shr AesBlockShift do
@@ -4701,6 +4704,12 @@ var
 begin
   if Count = 0 then
     exit;
+  {$ifdef USEAESNI32}
+  if Assigned(TAesContext(fAes).AesNi32) and
+     (Count and AesBlockMod = 0) then
+    aesnicfbcrcdecrypt(self, BufIn, BufOut, Count)
+  else
+  {$endif USEAESNI32}
   {$ifdef USEAESNI64}
   if (Count and AesBlockMod = 0) and
      fAesNiSse42 then
@@ -4717,12 +4726,6 @@ begin
         end;
     end;
   {$endif USEAESNI64}
-  {$ifdef USEAESNI32}
-  if Assigned(TAesContext(fAes).AesNi32) and
-     (Count and AesBlockMod = 0) then
-    aesnicfbcrcdecrypt(self, BufIn, BufOut, Count)
-  else
-  {$endif USEAESNI32}
   begin
     inherited; // set fIn,fOut
     for i := 1 to Count shr AesBlockShift do
@@ -4752,6 +4755,12 @@ var
 begin
   if Count = 0 then
     exit;
+  {$ifdef USEAESNI32}
+  if Assigned(TAesContext(fAes).AesNi32) and
+     (Count and AesBlockMod = 0) then
+    aesnicfbcrcencrypt(self, BufIn, BufOut, Count)
+  else
+  {$endif USEAESNI32}
   {$ifdef USEAESNI64}
   if (Count and AesBlockMod = 0) and
      fAesNiSse42 then
@@ -4768,12 +4777,6 @@ begin
         end;
      end;
   {$endif USEAESNI64}
-  {$ifdef USEAESNI32}
-  if Assigned(TAesContext(fAes).AesNi32) and
-     (Count and AesBlockMod = 0) then
-    aesnicfbcrcencrypt(self, BufIn, BufOut, Count)
-  else
-  {$endif USEAESNI32}
   begin
     inherited; // set fIn,fOut
     for i := 1 to Count shr AesBlockShift do
@@ -4861,18 +4864,18 @@ var
 begin
   if Count = 0 then
     exit;
-  {$ifdef USEAESNI64} // very fast x86_64 AES-NI asm with 8x interleave factor
-  if (Count and AesBlockMod = 0) and
-     fAesNiSse42 then
-    AesNiEncryptCtrCrc(BufIn, BufOut, Count, self)
-  else
-  {$endif USEAESNI64}
   {$ifdef USEAESNI32}
   if Assigned(TAesContext(fAes).AesNi32) and
      (Count and AesBlockMod = 0) then
     aesnictrcrcencrypt(self, BufIn, BufOut, Count)
   else
   {$endif USEAESNI32}
+  {$ifdef USEAESNI64} // very fast x86_64 AES-NI asm with 8x interleave factor
+  if (Count and AesBlockMod = 0) and
+     fAesNiSse42 then
+    AesNiEncryptCtrCrc(BufIn, BufOut, Count, self)
+  else
+  {$endif USEAESNI64}
   begin
     inherited Encrypt(BufIn, BufOut, Count); // set fIn,fOut
     iv := fIV;
@@ -4916,16 +4919,16 @@ procedure TAesOfb.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
   i: integer;
 begin
-  {$ifdef USEAESNI64}
-  if Count and AesBlockMod = 0 then
-    fAes.DoBlocksOfb(@fIV, BufIn, BufOut, Count shr AesBlockShift)
-  else
-  {$endif USEAESNI64}
   {$ifdef USEAESNI32}
   if Assigned(TAesContext(fAes).AesNi32) then
     aesniofbencrypt(self, BufIn, BufOut, Count)
   else
   {$endif USEAESNI32}
+  {$ifdef USEAESNI64}
+  if Count and AesBlockMod = 0 then
+    fAes.DoBlocksOfb(@fIV, BufIn, BufOut, Count shr AesBlockShift)
+  else
+  {$endif USEAESNI64}
   begin
     inherited; // set fIn,fOut
     for i := 1 to Count shr AesBlockShift do
@@ -5035,12 +5038,16 @@ end;
 procedure TAesCtrNist.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 begin
   if Count <> 0 then
-    {$ifdef USEAESNI64} // very fast x86_64 AES-NI asm with 8x interleave factor
-    if (Count and AesBlockMod = 0) and
-       (aesNi in TAesContext(fAes).Flags) then
-      AesNiEncryptCtrNist(BufIn, BufOut, Count, @fAes, @fIV)
+    if Count and AesBlockMod = 0 then
+      {$ifdef USEAESNI64}
+      // very fast x86_64 AES-NI asm with 8x interleave factor
+      if aesNi in TAesContext(fAes).Flags then
+        AesNiEncryptCtrNist(BufIn, BufOut, Count, @fAes, @fIV)
+      else
+      {$endif USEAESNI64}
+        // dedicated pascal code for NIST CTR
+        DoBlocksCtrPas(@fIV, BufIn, BufOut, Count shr AesBlockShift, TAesContext(fAes))
     else
-    {$endif USEAESNI64}
       inherited Encrypt(BufIn, BufOut, Count);
 end;
 
