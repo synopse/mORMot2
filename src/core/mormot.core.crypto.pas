@@ -4566,38 +4566,7 @@ begin
   {$endif USEAESNI64}
   {$ifdef USEAESNI32}
   if Assigned(TAesContext(fAes.Context).AesNi32) then
-    asm
-        push    esi
-        push    edi
-        mov     eax, self
-        mov     ecx, Count
-        mov     esi, BufIn
-        mov     edi, BufOut
-        movups  xmm7, dqword ptr [eax].TAesCfb.fIV
-        lea     eax, [eax].TAesCfb.fAes
-        push    ecx
-        shr     ecx, AesBlockShift
-        jz      @z
-        {$ifdef FPC} align 16 {$endif}
-@s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
-        movups  xmm0, dqword ptr [esi]
-        movaps  xmm1, xmm0
-        pxor    xmm0, xmm7
-        movaps  xmm7, xmm1              // fIV := fIn
-        movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
-        add     esi, 16
-        add     edi, 16
-        dec     ecx
-        jnz     @s
-        movups  dqword ptr [eax- TAesCfb.fAes].TAesCfb.fIV, xmm7
-@z:     pop     ecx
-        and     ecx, 15
-        jz      @0
-        call    AesNiTrailer
-@0:     pop     edi
-        pop     esi
-        pxor    xmm7, xmm7 // for safety
-    end
+    aesnicfbdecrypt(self, BufIn, BufOut, Count)
   else
   {$endif USEAESNI32}
   begin
@@ -4639,36 +4608,7 @@ begin
   {$endif USEAESNI64}
   {$ifdef USEAESNI32}
   if Assigned(TAesContext(fAes).AesNi32) then
-    asm
-        push    esi
-        push    edi
-        mov     eax, self
-        mov     ecx, Count
-        mov     esi, BufIn
-        mov     edi, BufOut
-        movups  xmm7, dqword ptr [eax].TAesCfb.fIV
-        lea     eax, [eax].TAesCfb.fAes
-        push    ecx
-        shr     ecx, AesBlockShift
-        jz      @z
-        {$ifdef FPC} align 16 {$endif}
-@s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
-        movups  xmm0, dqword ptr [esi]
-        pxor    xmm7, xmm0
-        movups  dqword ptr [edi], xmm7  // fOut := fIn xor fIV
-        add     esi, 16
-        add     edi, 16
-        dec     ecx
-        jnz     @s
-        movups  dqword ptr [eax - TAesCfb.fAes].TAesCfb.fIV, xmm7
-@z:     pop     ecx
-        and     ecx, 15
-        jz      @0
-        call    AesNiTrailer
-@0:     pop     edi
-        pop     esi
-        pxor    xmm7, xmm7 // for safety
-    end
+    aesnicfbencrypt(self, BufIn, BufOut, Count)
   else
   {$endif USEAESNI32}
   begin
@@ -4780,38 +4720,7 @@ begin
   {$ifdef USEAESNI32}
   if Assigned(TAesContext(fAes).AesNi32) and
      (Count and AesBlockMod = 0) then
-    asm
-        push    ebx
-        push    esi
-        push    edi
-        mov     ebx, self
-        mov     esi, BufIn
-        mov     edi, BufOut
-        movups  xmm7, dqword ptr [ebx].TAesCfbCrc.fIV
-        {$ifdef FPC} align 16 {$endif}
-@s:     lea     eax, [ebx].TAesCfbCrc.fMac.encrypted
-        mov     edx, esi
-        call    crcblock // using SSE4.2 or fast tables
-        lea     eax, [ebx].TAesCfbCrc.fAes
-        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
-        movups  xmm0, dqword ptr [esi]
-        movaps  xmm1, xmm0
-        pxor    xmm0, xmm7
-        movaps  xmm7, xmm1              // fIV := fIn
-        movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
-        lea     eax, [ebx].TAesCfbCrc.fMac.plain
-        mov     edx, edi
-        call    crcblock
-        add     esi, 16
-        add     edi, 16
-        sub     dword ptr [Count], 16
-        ja      @s
-        movups  dqword ptr [ebx].TAesCfbCrc.fIV, xmm7
-@z:     pop     edi
-        pop     esi
-        pop     ebx
-        pxor    xmm7, xmm7 // for safety
-    end
+    aesnicfbcrcdecrypt(self, BufIn, BufOut, Count)
   else
   {$endif USEAESNI32}
   begin
@@ -4862,36 +4771,7 @@ begin
   {$ifdef USEAESNI32}
   if Assigned(TAesContext(fAes).AesNi32) and
      (Count and AesBlockMod = 0) then
-    asm
-        push    ebx
-        push    esi
-        push    edi
-        mov     ebx, self
-        mov     esi, BufIn
-        mov     edi, BufOut
-        movups  xmm7, dqword ptr [ebx].TAesCfbCrc.fIV
-        {$ifdef FPC} align 16 {$endif}
-@s:     lea     eax, [ebx].TAesCfbCrc.fMac.plain
-        mov     edx, esi
-        call    crcblock
-        lea     eax, [ebx].TAesCfbCrc.fAes
-        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
-        movups  xmm0, dqword ptr [esi]
-        pxor    xmm7, xmm0
-        movups  dqword ptr [edi], xmm7  // fOut := fIn xor fIV  +  fIV := fOut^
-        lea     eax, [ebx].TAesCfbCrc.fMac.encrypted
-        mov     edx, edi
-        call    crcblock
-        add     esi, 16
-        add     edi, 16
-        sub     dword ptr [Count], 16
-        ja      @s
-        movups  dqword ptr [ebx].TAesCfbCrc.fIV, xmm7
-        pop     edi
-        pop     esi
-        pop     ebx
-        pxor    xmm7, xmm7 // for safety
-    end
+    aesnicfbcrcencrypt(self, BufIn, BufOut, Count)
   else
   {$endif USEAESNI32}
   begin
@@ -4946,36 +4826,7 @@ begin
   {$ifdef USEAESNI32}
   if Assigned(TAesContext(fAes).AesNi32) and
      (Count and AesBlockMod = 0) then
-    asm
-        push    ebx
-        push    esi
-        push    edi
-        mov     ebx, self
-        mov     esi, BufIn
-        mov     edi, BufOut
-        movups  xmm7, dqword ptr [ebx].TAesOfbCrc.fIV
-        {$ifdef FPC} align 16 {$endif}
-@s:     lea     eax, [ebx].TAesOfbCrc.fMac.plain
-        mov     edx, esi
-        call    crcblock
-        lea     eax, [ebx].TAesOfbCrc.fAes
-        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
-        movups  xmm0, dqword ptr [esi]
-        pxor    xmm0, xmm7
-        movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
-        lea     eax, [ebx].TAesOfbCrc.fMac.encrypted
-        mov     edx, edi
-        call    crcblock
-        add     esi, 16
-        add     edi, 16
-        sub     dword ptr [Count], 16
-        ja      @s
-        movups  dqword ptr [ebx].TAesOfbCrc.fIV, xmm7
-        pop     edi
-        pop     esi
-        pop     ebx
-        pxor    xmm7, xmm7 // for safety
-    end
+    aesniofbcrcencrypt(self, BufIn, BufOut, Count)
   else
   {$endif USEAESNI32}
   begin
@@ -5019,43 +4870,7 @@ begin
   {$ifdef USEAESNI32}
   if Assigned(TAesContext(fAes).AesNi32) and
      (Count and AesBlockMod = 0) then
-    asm
-        push    ebx
-        push    esi
-        push    edi
-        mov     ebx, self
-        mov     esi, BufIn
-        mov     edi, BufOut
-        {$ifdef FPC} align 16 {$endif}
-@s:     lea     eax, [ebx].TAesCtrCrc.fMac.plain
-        mov     edx, esi
-        call    crcblock // it is actually slower when inlining the crc32c
-        lea     eax, [ebx].TAesCtrCrc.fAes
-        movups  xmm7, dqword ptr [ebx].TAesCtrCrc.fIV
-        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,tmp)
-        movups  xmm0, dqword ptr [esi]
-        inc     byte ptr [ebx + 15].TAesCtrCrc.fIV
-        jnz     @nov
-        mov     edx, 15
-@cov:   dec     edx
-        inc     byte ptr [ebx + edx].TAesCtrCrc.fIV
-        jnz     @nov
-        test    edx, edx
-        jne     @cov
-@nov:   pxor    xmm0, xmm7
-        movups  dqword ptr [edi], xmm0  // fOut := fIn xor tmp
-        lea     eax, [ebx].TAesCtrCrc.fMac.encrypted
-        mov     edx, edi
-        call    crcblock
-        add     esi, 16
-        add     edi, 16
-        sub     dword ptr [Count], 16
-        ja      @s
-        pop     edi
-        pop     esi
-        pop     ebx
-        pxor    xmm7, xmm7 // for safety
-    end
+    aesnictrcrcencrypt(self, BufIn, BufOut, Count)
   else
   {$endif USEAESNI32}
   begin
@@ -5108,36 +4923,7 @@ begin
   {$endif USEAESNI64}
   {$ifdef USEAESNI32}
   if Assigned(TAesContext(fAes).AesNi32) then
-    asm
-        push    esi
-        push    edi
-        mov     eax, self
-        mov     ecx, Count
-        mov     esi, BufIn
-        mov     edi, BufOut
-        movups  xmm7, dqword ptr [eax].TAesOfb.fIV
-        lea     eax, [eax].TAesOfb.fAes
-        push    ecx
-        shr     ecx, AesBlockShift
-        jz      @z
-        {$ifdef FPC} align 16 {$endif}
-@s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
-        movups  xmm0, dqword ptr [esi]
-        pxor    xmm0, xmm7
-        movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
-        add     esi, 16
-        add     edi, 16
-        dec     ecx
-        jnz     @s
-        movups  dqword ptr [eax - TAesOfb.fAes].TAesOfb.fIV, xmm7
-@z:     pop     ecx
-        and     ecx, 15
-        jz      @0
-        call    AesNiTrailer
-@0:     pop     edi
-        pop     esi
-        pxor    xmm7, xmm7 // for safety
-    end
+    aesniofbencrypt(self, BufIn, BufOut, Count)
   else
   {$endif USEAESNI32}
   begin
@@ -5201,47 +4987,7 @@ var
 begin
   {$ifdef USEAESNI32}
   if Assigned(TAesContext(fAes).AesNi32) then
-    asm
-        push    ebx
-        push    esi
-        push    edi
-        mov     eax, self
-        mov     ecx, Count
-        mov     esi, BufIn
-        mov     edi, BufOut
-        push    ecx
-        shr     ecx, AesBlockShift
-        jz      @z
-        mov     ebx, eax
-        lea     eax, [eax].TAesCtrAny.fAes
-        {$ifdef FPC} align 16 {$endif}
-@s:     movups  xmm7, dqword ptr [ebx].TAesCtrAny.fIV
-        mov     edx, dword ptr [ebx].TAesCtrAny.fCTROffset
-        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,tmp)
-        movups  xmm0, dqword ptr [esi]
-        inc     byte ptr [ebx + edx].TAesCtrAny.fIV
-        jnz     @nov
-@cov:   dec     edx
-        inc     byte ptr [ebx + edx].TAesCtrAny.fIV
-        jnz     @nov
-        cmp     edx, dword ptr [ebx].TAesCtrAny.fCTROffsetMin
-        jne     @cov
-@nov:   pxor    xmm0, xmm7
-        movups  dqword ptr [edi], xmm0  // fOut := fIn xor tmp
-        add     esi, 16
-        add     edi, 16
-        dec     ecx
-        jnz     @s
-@z:     pop     ecx
-        and     ecx, 15
-        jz      @0
-        movups  xmm7, dqword ptr [ebx].TAesCtrAny.fIV
-        call    AesNiTrailer
-@0:     pop     edi
-        pop     esi
-        pop     ebx
-        pxor    xmm7, xmm7 // for safety
-    end
+    aesnictranyencrypt(self, BufIn, BufOut, Count)
   else
   {$endif USEAESNI32}
   begin
