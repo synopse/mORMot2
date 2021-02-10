@@ -75,7 +75,7 @@ if [[ $TARGET == win* ]]; then
   dest_fn="$dest_fn.exe"
 fi
 
-fpc -MDelphi -Sci -Ci -O1 -g -gl -gw2 -Xg -k'-rpath=$ORIGIN' -k-L$BIN \
+fpc -MDelphi -Sci -Ci -O3 -g -gl -gw2 -Xg -k'-rpath=$ORIGIN' -k-L$BIN \
   -T$TARGET -P$ARCH \
   -veiq -vw-n-h- \
   -Fi"$BIN/fpc-$ARCH_TG/.dcu" -Fi"$LIB2/src/core" -Fi"$LIB2/src/db" -Fi"$LIB2/src/rest" \
