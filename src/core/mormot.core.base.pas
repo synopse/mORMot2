@@ -7862,7 +7862,7 @@ begin
     result := 0;    // Str1=Str2
 end;
 
-// from Aleksandr Sharahov's PosEx_Sha_Pas_2() - refactored for cross-platform
+// from A. Sharahov's PosEx_Sha_Pas_2() - refactored for cross-platform/compiler
 function PosExPas(pSub, p: PUtf8Char; Offset: PtrUInt): PtrInt;
 var
   len, lenSub: PtrInt;

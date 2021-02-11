@@ -1151,6 +1151,7 @@ begin
         // create a TAesAbstract instance and validate it
         one := MODES[m].Create(pointer(st)^, ks);
         try
+          // writeln(noaesni, ' ', one.AlgoName, ' k=', k, ' m=', m);
           gcm := one.InheritsFrom(TAesGcmAbstract);
           aead := one.InheritsFrom(TAesAbstractAead);
           one.IV := iv.b;
@@ -1191,7 +1192,7 @@ begin
           s3 := BinToBase64uri(s2);
           i := ToAesReference(m);
           //if TEST_AES_REF[k, i] <> s3 then
-          //  writeln(m, ' ', MODES[m].ClassName, ' ', ks, #13#10' ',s3, #13#10' ', TEST_AES_REF[k, i]);
+          // writeln(m, ' ', MODES[m].ClassName, ' ', ks, #13#10' ',s3, #13#10' ', TEST_AES_REF[k, i]);
           CheckUtf8(TEST_AES_REF[k, i] = s3, 'test vector %-% %', [MODES[m], ks, s3]);
           one.IV := iv.b;
           if aead then

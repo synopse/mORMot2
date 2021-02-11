@@ -50,10 +50,10 @@ type
   ESynCrypto = class(ESynException);
 
 {$ifdef ASMX64}
-  {$ifdef HASAESNI}
+  {$ifdef HASAESNI}  // compiler supports asm with aesenc/aesdec opcodes
     {$define USEAESNI}
     {$define USEAESNI64}
-    {$define USECLMUL}  // gf_mul_pclmulqdq() requires some complex opcodes
+    {$define USECLMUL}  // pclmulqdq opcodes
     {$define USEGCMAVX} // 8x interleaved aesni + pclmulqdq asm for AES-GCM
   {$endif HASAESNI}
   {$ifdef OSWINDOWS}
@@ -61,22 +61,22 @@ type
     {$define SHA512_X64} // external sha512_sse4 for win64/lin64
   {$endif OSWINDOWS}
   {$ifdef OSLINUX}
-    {$define CRC32C_X64} // external crc32_iscsi_01 for win64/lin64
-    {$define SHA512_X64} // external sha512_sse4 for win64/lin64
+    {$define CRC32C_X64} // external crc32_iscsi_01.o for win64/lin64
+    {$define SHA512_X64} // external sha512_sse4.o for win64/lin64
   {$endif OSLINUX}
 {$endif ASMX64}
 
 {$ifdef ASMX86}
   {$define USEAESNI}
   {$define USEAESNI32}
-  {$ifdef HASAESNI}
-    {$define USECLMUL} // gf_mul_pclmulqdq() requires some complex opcodes
+  {$ifdef HASAESNI}    // compiler supports asm with aesenc/aesdec opcodes
+    {$define USECLMUL} // pclmulqdq opcodes
   {$endif HASAESNI}
   {$ifdef OSWINDOWS}
-  {$define SHA512_X86} // external sha512-x86 for win32/lin32
+  {$define SHA512_X86} // external sha512-x86.o for win32/lin32
   {$endif OSWINDOWS}
   {$ifdef OSLINUX}
-  {$define SHA512_X86} // external sha512-x86 for win32/lin32
+  {$define SHA512_X86} // external sha512-x86.o for win32/lin32
   {$endif OSLINUX}
 {$endif ASMX86}
 
@@ -270,7 +270,7 @@ type
   /// low-level AES-GCM processing
   // - implements standard AEAD (authenticated-encryption with associated-data)
   // algorithm, as defined by NIST Special Publication 800-38D
-  // - will use AES-NI and CLMUL Intel/AMD opcodes if available
+  // - will use AES-NI and CLMUL Intel/AMD opcodes if available on x86_64/i386
   TAesGcmEngine = object
   private
     /// standard AES encryption context
@@ -992,7 +992,7 @@ type
   // - OpenSSL is faster since it performs GMAC and AES-CTR in a single pass
   // $  openssl aes-128-gcm in 2.86ms i.e. 874125/s or 1.8 GB/s
   // $  openssl aes-256-gcm in 3.43ms i.e. 727590/s or 1.5 GB/s
-  // - on i386, numbers are much lower, since lacks CLMUL and interleaved asm
+  // - on i386, numbers are much lower, since lacks interleaved asm
   // $  mormot aes-128-gcm in 15.86ms i.e. 157609/s or 335.4 MB/s
   // $  mormot aes-256-gcm in 18.23ms i.e. 137083/s or 291.7 MB/s
   // $  openssl aes-128-gcm in 5.49ms i.e. 455290/s or 0.9 GB/s
@@ -2604,16 +2604,17 @@ const
 
   // used by SHA-256
   K256: array[0..63] of cardinal = (
-    $428a2f98, $71374491, $b5c0fbcf, $e9b5dba5, $3956c25b, $59f111f1, $923f82a4,
-    $ab1c5ed5, $d807aa98, $12835b01, $243185be, $550c7dc3, $72be5d74, $80deb1fe,
-    $9bdc06a7, $c19bf174, $e49b69c1, $efbe4786, $0fc19dc6, $240ca1cc, $2de92c6f,
-    $4a7484aa, $5cb0a9dc, $76f988da, $983e5152, $a831c66d, $b00327c8, $bf597fc7,
-    $c6e00bf3, $d5a79147, $06ca6351, $14292967, $27b70a85, $2e1b2138, $4d2c6dfc,
-    $53380d13, $650a7354, $766a0abb, $81c2c92e, $92722c85, $a2bfe8a1, $a81a664b,
-    $c24b8b70, $c76c51a3, $d192e819, $d6990624, $f40e3585, $106aa070, $19a4c116,
-    $1e376c08, $2748774c, $34b0bcb5, $391c0cb3, $4ed8aa4a, $5b9cca4f, $682e6ff3,
-    $748f82ee, $78a5636f, $84c87814, $8cc70208, $90befffa, $a4506ceb, $bef9a3f7,
-    $c67178f2);
+    $428a2f98, $71374491, $b5c0fbcf, $e9b5dba5, $3956c25b, $59f111f1,
+    $923f82a4, $ab1c5ed5, $d807aa98, $12835b01, $243185be, $550c7dc3,
+    $72be5d74, $80deb1fe, $9bdc06a7, $c19bf174, $e49b69c1, $efbe4786,
+    $0fc19dc6, $240ca1cc, $2de92c6f, $4a7484aa, $5cb0a9dc, $76f988da,
+    $983e5152, $a831c66d, $b00327c8, $bf597fc7, $c6e00bf3, $d5a79147,
+    $06ca6351, $14292967, $27b70a85, $2e1b2138, $4d2c6dfc, $53380d13,
+    $650a7354, $766a0abb, $81c2c92e, $92722c85, $a2bfe8a1, $a81a664b,
+    $c24b8b70, $c76c51a3, $d192e819, $d6990624, $f40e3585, $106aa070,
+    $19a4c116, $1e376c08, $2748774c, $34b0bcb5, $391c0cb3, $4ed8aa4a,
+    $5b9cca4f, $682e6ff3, $748f82ee, $78a5636f, $84c87814, $8cc70208,
+    $90befffa, $a4506ceb, $bef9a3f7, $c67178f2);
 
 var
   // AES computed tables - don't change the order below! (used for weak Xor)
@@ -2704,7 +2705,7 @@ end;
 procedure XorConst(P: PIntegerArray; Count: integer);
 // XorConst: fast Cypher changing by Count value (weak cypher but compression OK)
 var
-  i: integer;
+  i: PtrInt;
   Code: integer;
 begin
   // 1 to 3 bytes may stay unencrypted: not relevant
@@ -3022,7 +3023,7 @@ end;
 
 procedure ShiftPas(KeySize: cardinal; pk: PAWK);
 var
-  i: integer;
+  i: PtrInt;
   temp: cardinal;
   sb: PByteArray;  // faster on PIC
 begin
@@ -3495,16 +3496,16 @@ begin
     gf_mul_pas(a, b);
 end;
 
-procedure gf_mul_h(const eng: TAesGcmEngine; var a: TAesBlock);
+procedure gf_mul_h(const engine: TAesGcmEngine; var a: TAesBlock);
   {$ifdef HASINLINE} inline; {$endif}
 begin
   {$ifdef USECLMUL}
-  if flagCLMUL in eng.flags then
-    gf_mul_pclmulqdq(@a, @eng.ghash_h)
+  if flagCLMUL in engine.flags then
+    gf_mul_pclmulqdq(@a, @engine.ghash_h)
   else
   {$endif USECLMUL}
     // use pure pascal efficient code with 4KB pre-computed table
-    eng.gf_mul_h_pas(a);
+    engine.gf_mul_h_pas(a);
 end;
 
 
@@ -4475,7 +4476,7 @@ end;
 
 procedure TAesEcb.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
-  i: integer;
+  i: cardinal;
 begin
   inherited; // set fIn,fOut
   if fAesInit <> initDecrypt then
@@ -4493,7 +4494,7 @@ end;
 
 procedure TAesEcb.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
-  i: integer;
+  i: cardinal;
 begin
   inherited; // set fIn,fOut
   if fAesInit <> initEncrypt then
@@ -4514,7 +4515,7 @@ end;
 
 procedure TAesCbc.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
-  i: integer;
+  i: cardinal;
   tmp: TAesBlock;
 begin
   inherited; // set fIn,fOut
@@ -4545,7 +4546,7 @@ end;
 
 procedure TAesCbc.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
-  i: integer;
+  i: cardinal;
 begin
   inherited; // set fIn,fOut
   if fAesInit <> initEncrypt then
@@ -4587,7 +4588,7 @@ end;
 
 procedure TAesCfb.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
-  i: integer;
+  i: cardinal;
   tmp: TAesBlock;
 begin
   {$ifdef USEAESNI32}
@@ -4636,7 +4637,7 @@ end;
 
 procedure TAesCfb.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
-  i: integer;
+  i: cardinal;
 begin
   {$ifdef USEAESNI32}
   if Assigned(TAesContext(fAes).AesNi32) then
@@ -4744,7 +4745,7 @@ end;
 
 procedure TAesCfbCrc.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
-  i: integer;
+  i: cardinal;
   tmp: TAesBlock;
 begin
   if Count = 0 then
@@ -4802,7 +4803,7 @@ end;
 
 procedure TAesCfbCrc.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
-  i: integer;
+  i: cardinal;
 begin
   if Count = 0 then
     exit;
@@ -4879,7 +4880,7 @@ end;
 
 procedure TAesOfbCrc.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
-  i: integer;
+  i: cardinal;
 begin
   if Count = 0 then
     exit;
@@ -4921,7 +4922,7 @@ end;
 
 procedure TAesCtrCrc.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
-  i: integer;
+  i: cardinal;
   offs: PtrInt;
   tmp, iv: TAesBlock;
 begin
@@ -4986,7 +4987,7 @@ end;
 
 procedure TAesOfb.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
-  i: integer;
+  i: cardinal;
 begin
   {$ifdef USEAESNI32}
   if Assigned(TAesContext(fAes).AesNi32) then
@@ -5054,7 +5055,7 @@ end;
 
 procedure TAesCtrAny.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
-  i: integer;
+  i: cardinal;
   offs: PtrInt;
   tmp, iv: TAesBlock;
 begin
@@ -5233,10 +5234,11 @@ begin
     result := fGcm.aes.EncryptInit(fKey, fKeySize);
     if result then
       GcmAvxInit(@fGcm.gf_t4k, @fGcm.aes, TAesContext(fGcm.aes).Rounds);
-    exit;
-  end;
+  end
+  else
   {$endif USEGCMAVX}
-  result := fGcm.Init(fKey, fKeySize);
+    // regular TAesGcmEngine
+    result := fGcm.Init(fKey, fKeySize);
 end;
 
 function TAesGcm.Clone: TAesAbstract;
@@ -5282,6 +5284,7 @@ begin
   {$ifdef USEGCMAVX}
   if flagAVX in fGcm.flags then
   begin
+    // 8x interleaved aesni + pclmulqdq x86_64 asm
     result := true;
     if Count and AesBlockMod <> 0 then
       raise ESynCrypto.CreateUtf8('%.Encrypt/Decrypt should use PKCS7', [self]);
@@ -5312,6 +5315,7 @@ begin
   end
   else
   {$endif USEGCMAVX}
+    // regular TAesGcmEngine process
     if fStarted = stEnc then
       result := fGcm.Encrypt(BufIn, BufOut, Count)
     else
@@ -5342,8 +5346,8 @@ begin
   if flagAVX in fGcm.flags then
   begin
     decoded := TAesContext(fGcm.aes).iv;
-    decoded.c3 := fGcm.y0_val; // restore initial counter
-    fGcm.aes.Encrypt(decoded.b);
+    decoded.c3 := fGcm.y0_val; // restore initial counter (always 1 for CTR_POS)
+    fGcm.aes.Encrypt(decoded.b);  // compute E(K,Y0)
     GcmAvxGetTag(@fGcm.gf_t4k, @decoded, @fGcm.txt_ghv, fGcm.atx_cnt.V, fGcm.aad_cnt.V);
     decoded.b := fGcm.txt_ghv;
   end
@@ -5888,8 +5892,7 @@ end;
 class function TAesPrngAbstract.AFUnsplit(const Split: RawByteString;
   out Buffer; BufferBytes: integer): boolean;
 var
-  len: cardinal;
-  i: integer;
+  len, i: cardinal;
   src: pointer;
   tmp: TByteDynArray;
 begin
@@ -6393,7 +6396,7 @@ end;
 
 procedure Sha256ExpandMessageBlocks(W, Buf: PIntegerArray);
 var
-  i: integer;
+  i: PtrInt;
 begin
   // bswap256() instead of "for i := 0 to 15 do W[i]:= bswap32(Buf[i]);"
   bswap256(@Buf[0], @W[0]);
@@ -6655,7 +6658,7 @@ procedure sha512_compresspas(var Hash: TSha512Hash; Data: PQWordArray);
 var
   a, b, c, d, e, f, g, h, temp1, temp2: QWord; // to use registers on CPU64
   w: array[0..79] of QWord;
-  i: integer;
+  i: PtrInt;
 begin
   bswap64array(Data, @w, 16);
   for i := 16 to 79 do
@@ -6932,7 +6935,7 @@ procedure KeccakPermutation(A: PQWordArray);
 var
   B: array[0..24] of QWord;
   C: array[0..4] of QWord;
-  i: integer;
+  i: PtrInt;
 begin
   for i := 0 to 23 do
   begin
@@ -6980,7 +6983,7 @@ procedure KeccakPermutation(A: PQWordArray);
 var
   B: array[0..24] of QWord;
   C0, C1, C2, C3, C4, D0, D1, D2, D3, D4: QWord;
-  i: integer;
+  i: PtrInt;
 begin
   for i := 0 to 23 do
   begin
@@ -7439,7 +7442,7 @@ end;
 
 procedure THMAC_SHA1.Init(key: pointer; keylen: integer);
 var
-  i: integer;
+  i: PtrInt;
   k0, k0xorIpad: THash512Rec;
 begin
   FillZero(k0.b);
@@ -7519,7 +7522,7 @@ end;
 
 procedure THMAC_SHA256.Init(key: pointer; keylen: integer);
 var
-  i: integer;
+  i: PtrInt;
   k0, k0xorIpad: THash512Rec;
 begin
   FillZero(k0.b);
@@ -7614,7 +7617,7 @@ end;
 
 procedure THMAC_SHA384.Init(key: pointer; keylen: integer);
 var
-  i: integer;
+  i: PtrInt;
   k0, k0xorIpad: array[0..31] of cardinal;
 begin
   FillCharFast(k0, SizeOf(k0), 0);
@@ -7694,7 +7697,7 @@ end;
 
 procedure THMAC_SHA512.Init(key: pointer; keylen: integer);
 var
-  i: integer;
+  i: PtrInt;
   k0, k0xorIpad: array[0..31] of cardinal;
 begin
   FillCharFast(k0, SizeOf(k0), 0);
@@ -7795,7 +7798,7 @@ end;
 procedure HMAC_CRC256C(key, msg: pointer; keylen, msglen: integer;
   out result: THash256);
 var
-  i: integer;
+  i: PtrInt;
   h1, h2: cardinal;
   k0, k0xorIpad, step7data: THash512Rec;
 begin
@@ -7840,7 +7843,7 @@ end;
 
 procedure THMAC_CRC32C.Init(key: pointer; keylen: integer);
 var
-  i: integer;
+  i: PtrInt;
   k0, k0xorIpad: THash512Rec;
 begin
   FillCharFast(k0, SizeOf(k0), 0);
@@ -8448,8 +8451,7 @@ end;
 procedure TMd5.Update(const buffer; len: cardinal);
 var
   p: ^TMd5In;
-  t: cardinal;
-  i: integer;
+  t, i: cardinal;
 begin
   p := @buffer;
   // Update byte count
@@ -8510,7 +8512,7 @@ procedure sha1Compress(var Hash: TSHAHash; Data: PByteArray);
 var
   A, B, C, D, E, X: cardinal;
   W: array[0..79] of cardinal;
-  i: integer;
+  i: PtrInt;
 begin
   // init W[] + A..E
   bswap256(@Data[0], @W[0]);

@@ -4415,7 +4415,7 @@ end;
 
 {$ifdef USEGCMAVX}
 
-// prepare the GMAC process for gcmavx_data() and gcmavx_end()
+// prepare the GMAC process for GcmAvxAuth() and GcmAvxGetTag()
 procedure GcmAvxInit(ptab, ks: pointer; rounds: cardinal);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=ptab, rdx/rsi=ks, r8/rdx=kslen
@@ -4477,9 +4477,9 @@ procedure GcmAvxInit(ptab, ks: pointer; rounds: cardinal);
 @init:  movdqu  xmm11, xmm2
         movdqu  xmm12, xmm2
         movdqu  xmm13, xmm3
-        // pclmulqdq xmm11, xmm0, 00H     @ 66 44: 0F 3A 44. D8, 00
-        // pclmulqdq xmm12, xmm0, 11H     @ 66 44: 0F 3A 44. E0, 11
-        // pclmulqdq xmm13, xmm1, 00H     @ 66 44: 0F 3A 44. E9, 00
+        // pclmulqdq xmm11, xmm0, 00H
+        // pclmulqdq xmm12, xmm0, 11H
+        // pclmulqdq xmm13, xmm1, 00H
         db $66, $44, $0F, $3A, $44, $D8, $00
         db $66, $44, $0F, $3A, $44, $E0, $11
         db $66, $44, $0F, $3A, $44, $E9, $00
@@ -4491,12 +4491,12 @@ procedure GcmAvxInit(ptab, ks: pointer; rounds: cardinal);
         pxor    xmm11, xmm4
         pxor    xmm12, xmm13
         movdqu  xmm2, xmm14
-        // pclmulqdq xmm2, xmm11, 01H        @ 66 41: 0F 3A 44. D3, 01
+        // pclmulqdq xmm2, xmm11, 01H
         db $66, $41, $0F, $3A, $44, $D3, $01
         pshufd  xmm11, xmm11, 4EH
         pxor    xmm11, xmm2
         movdqu  xmm2, xmm14
-        // pclmulqdq xmm2, xmm11, 01H        @ 66 41: 0F 3A 44. D3, 01
+        // pclmulqdq xmm2, xmm11, 01H
         db $66, $41, $0F, $3A, $44, $D3, $01
         pshufd  xmm11, xmm11, 4EH
         pxor    xmm2, xmm11
@@ -4554,108 +4554,108 @@ procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
         movdqu  xmm9, xmm8
         pshufd  xmm12, xmm0, 4EH
         pxor    xmm12, xmm0
-        // pclmulqdq xmm8, xmm0, 00H         66 44: 0F 3A 44. C0, 00
-        // pclmulqdq xmm9, xmm0, 11H         66 44: 0F 3A 44. C8, 11
-        // pclmulqdq xmm10, xmm12, 00H       66 45: 0F 3A 44. D4, 00
+        // pclmulqdq xmm8, xmm0, 00H
+        // pclmulqdq xmm9, xmm0, 11H
+        // pclmulqdq xmm10, xmm12, 00H
         db $66, $44, $0F, $3A, $44, $C0, $00
         db $66, $44, $0F, $3A, $44, $C8, $11
         db $66, $45, $0F, $3A, $44, $D4, $00
         movdqu  xmm12, dqword ptr [ptab + 20H]
         movdqu  xmm13, xmm12
-        // pclmulqdq xmm12, xmm1, 00H        66 44: 0F 3A 44. E1, 00
+        // pclmulqdq xmm12, xmm1, 00H
         db $66, $44, $0F, $3A, $44, $E1, $00
         pxor    xmm8, xmm12
-        // pclmulqdq xmm13, xmm1, 11H        66 44: 0F 3A 44. E9, 11
+        // pclmulqdq xmm13, xmm1, 11H
         db $66, $44, $0F, $3A, $44, $E9, $11
         pxor    xmm9, xmm13
         pshufd  xmm12, xmm1, 4EH
         pxor    xmm1, xmm12
         movdqu  xmm12, dqword ptr [ptab + 30H]
-        // pclmulqdq xmm12, xmm1, 00H        66 44: 0F 3A 44. E1, 00
+        // pclmulqdq xmm12, xmm1, 00H
         db $66, $44, $0F, $3A, $44, $E1, $00
         pxor    xmm10, xmm12
         movdqu  xmm12, dqword ptr [ptab + 40H]
         movdqu  xmm13, xmm12
-        // pclmulqdq xmm12, xmm2, 00H        66 44: 0F 3A 44. E2, 00
+        // pclmulqdq xmm12, xmm2, 00H
         db $66, $44, $0F, $3A, $44, $E2, $00
         pxor    xmm8, xmm12
-        // pclmulqdq xmm13, xmm2, 11H        66 44: 0F 3A 44. EA, 11
+        // pclmulqdq xmm13, xmm2, 11H
         db $66, $44, $0F, $3A, $44, $EA, $11
         pxor    xmm9, xmm13
         pshufd  xmm12, xmm2, 4EH
         pxor    xmm2, xmm12
         movdqu  xmm12, dqword ptr [ptab + 50H]
-        // pclmulqdq xmm12, xmm2, 00H        66 44: 0F 3A 44. E2, 00
+        // pclmulqdq xmm12, xmm2, 00H
         db $66, $44, $0F, $3A, $44, $E2, $00
         pxor    xmm10, xmm12
         movdqu  xmm12, dqword ptr [ptab + 60H]
         movdqu  xmm13, xmm12
-        // pclmulqdq xmm12, xmm3, 00H        66 44: 0F 3A 44. E3, 00
+        // pclmulqdq xmm12, xmm3, 00H
         db $66, $44, $0F, $3A, $44, $E3, $00
         pxor    xmm8, xmm12
-        // pclmulqdq xmm13, xmm3, 11H        66 44: 0F 3A 44. EB, 11
+        // pclmulqdq xmm13, xmm3, 11H
         db $66, $44, $0F, $3A, $44, $EB, $11
         pxor    xmm9, xmm13
         pshufd  xmm12, xmm3, 4EH
         pxor    xmm3, xmm12
         movdqu  xmm12, dqword ptr [ptab + 70H]
-        // pclmulqdq xmm12, xmm3, 00H        66 44: 0F 3A 44. E3, 00
+        // pclmulqdq xmm12, xmm3, 00H
         db $66, $44, $0F, $3A, $44, $E3, $00
         pxor    xmm10, xmm12
         movdqu  xmm12, dqword ptr [ptab + 80H]
         movdqu  xmm13, xmm12
-        // pclmulqdq xmm12, xmm4, 00H        66 44: 0F 3A 44. E4, 00
+        // pclmulqdq xmm12, xmm4, 00H
         db $66, $44, $0F, $3A, $44, $E4, $00
         pxor    xmm8, xmm12
-        // pclmulqdq xmm13, xmm4, 11H        66 44: 0F 3A 44. EC, 11
+        // pclmulqdq xmm13, xmm4, 11H
         db $66, $44, $0F, $3A, $44, $EC, $11
         pxor    xmm9, xmm13
         pshufd  xmm12, xmm4, 4EH
         pxor    xmm4, xmm12
         movdqu  xmm12, dqword ptr [ptab + 90H]
-        // pclmulqdq xmm12, xmm4, 00H        66 44: 0F 3A 44. E4, 00
+        // pclmulqdq xmm12, xmm4, 00H
         db $66, $44, $0F, $3A, $44, $E4, $00
         pxor    xmm10, xmm12
         movdqu  xmm12, dqword ptr [ptab + 0A0H]
         movdqu  xmm13, xmm12
-        // pclmulqdq xmm12, xmm5, 00H        66 44: 0F 3A 44. E5, 00
+        // pclmulqdq xmm12, xmm5, 00H
         db $66, $44, $0F, $3A, $44, $E5, $00
         pxor    xmm8, xmm12
-        // pclmulqdq xmm13, xmm5, 11H        66 44: 0F 3A 44. ED, 11
+        // pclmulqdq xmm13, xmm5, 11H
         db $66, $44, $0F, $3A, $44, $ED, $11
         pxor    xmm9, xmm13
         pshufd  xmm12, xmm5, 4EH
         pxor    xmm5, xmm12
         movdqu  xmm12, dqword ptr [ptab + 0B0H]
-        // pclmulqdq xmm12, xmm5, 00H        66 44: 0F 3A 44. E5, 00
+        // pclmulqdq xmm12, xmm5, 00H
         db $66, $44, $0F, $3A, $44, $E5, $00
         pxor    xmm10, xmm12
         movdqu  xmm12, dqword ptr [ptab + 0C0H]
         movdqu  xmm13, xmm12
-        // pclmulqdq xmm12, xmm6, 00H        66 44: 0F 3A 44. E6, 00
+        // pclmulqdq xmm12, xmm6, 00H
         db $66, $44, $0F, $3A, $44, $E6, $00
         pxor    xmm8, xmm12
-        // pclmulqdq xmm13, xmm6, 11H        66 44: 0F 3A 44. EE, 11
+        // pclmulqdq xmm13, xmm6, 11H
         db $66, $44, $0F, $3A, $44, $EE, $11
         pxor    xmm9, xmm13
         pshufd  xmm12, xmm6, 4EH
         pxor    xmm6, xmm12
         movdqu  xmm12, dqword ptr [ptab + 0D0H]
-        // pclmulqdq xmm12, xmm6, 00H        66 44: 0F 3A 44. E6, 00
+        // pclmulqdq xmm12, xmm6, 00H
         db $66, $44, $0F, $3A, $44, $E6, $00
         pxor    xmm10, xmm12
         movdqu  xmm12, dqword ptr [ptab + 0E0H]
         movdqu  xmm13, xmm12
-        // pclmulqdq xmm12, xmm7, 00H        66 44: 0F 3A 44. E7, 00
+        // pclmulqdq xmm12, xmm7, 00H
         db $66, $44, $0F, $3A, $44, $E7, $00
         pxor    xmm8, xmm12
-        // pclmulqdq xmm13, xmm7, 11H        66 44: 0F 3A 44. EF, 11
+        // pclmulqdq xmm13, xmm7, 11H
         db $66, $44, $0F, $3A, $44, $EF, $11
         pxor    xmm9, xmm13
         pshufd  xmm12, xmm7, 4EH
         pxor    xmm7, xmm12
         movdqu  xmm12, dqword ptr [ptab + 0F0H]
-        // pclmulqdq xmm12, xmm7, 00H        66 44: 0F 3A 44. E7, 00
+        // pclmulqdq xmm12, xmm7, 00H
         db $66, $44, $0F, $3A, $44, $E7, $00
         pxor    xmm10, xmm12
         pxor    xmm10, xmm8
@@ -4666,12 +4666,12 @@ procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
         pxor    xmm9, xmm10
         pxor    xmm8, xmm11
         movdqu  xmm11, xmm14
-        // pclmulqdq xmm11, xmm8, 01H        66 45: 0F 3A 44. D8, 01
+        // pclmulqdq xmm11, xmm8, 01H
         db $66, $45, $0F, $3A, $44, $D8, $01
         pshufd  xmm8, xmm8, 4EH
         pxor    xmm8, xmm11
         movdqu  xmm11, xmm14
-        // pclmulqdq xmm11, xmm8, 01H        66 45: 0F 3A 44. D8, 01
+        // pclmulqdq xmm11, xmm8, 01H
         db $66, $45, $0F, $3A, $44, $D8, $01
         pshufd  xmm8, xmm8, 4EH
         pxor    xmm8, xmm11
@@ -4692,9 +4692,9 @@ procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
         movdqu  xmm9, xmm12
         pshufd  xmm11, xmm0, 4EH
         pxor    xmm11, xmm0
-        // pclmulqdq xmm8, xmm0, 00H         66 44: 0F 3A 44. C0, 00
-        // pclmulqdq xmm9, xmm0, 11H         66 44: 0F 3A 44. C8, 11
-        // pclmulqdq xmm10, xmm11, 00H       66 45: 0F 3A 44. D3, 00
+        // pclmulqdq xmm8, xmm0, 00H
+        // pclmulqdq xmm9, xmm0, 11H
+        // pclmulqdq xmm10, xmm11, 00H
         db $66, $44, $0F, $3A, $44, $C0, $00
         db $66, $44, $0F, $3A, $44, $C8, $11
         db $66, $45, $0F, $3A, $44, $D3, $00
@@ -4706,12 +4706,12 @@ procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
         pxor    xmm9, xmm10
         pxor    xmm8, xmm11
         movdqu  xmm11, xmm14
-        // pclmulqdq xmm11, xmm8, 01H        66 45: 0F 3A 44. D8, 01
+        // pclmulqdq xmm11, xmm8, 01H
         db $66, $45, $0F, $3A, $44, $D8, $01
         pshufd  xmm8, xmm8, 4EH
         pxor    xmm8, xmm11
         movdqu  xmm11, xmm14
-        // pclmulqdq xmm11, xmm8, 01H        66 45: 0F 3A 44. D8, 01
+        // pclmulqdq xmm11, xmm8, 01H
         db $66, $45, $0F, $3A, $44, $D8, $01
         pshufd  xmm8, xmm8, 4EH
         pxor    xmm8, xmm11
@@ -4766,13 +4766,13 @@ procedure GcmAvxGetTag(ptab, mask, hash: pointer; plen, dlen: PtrInt);
         movdqu  xmm8, dqword ptr [rdi + 0E0H]
         movdqu  xmm10, dqword ptr [rdi + 0F0H]
         movdqu  xmm9, xmm8
-        // pclmulqdq xmm8, xmm0, 00H         66 44: 0F 3A 44. C0, 00
-        // pclmulqdq xmm9, xmm0, 11H         66 44: 0F 3A 44. C8, 11
+        // pclmulqdq xmm8, xmm0, 00H
+        // pclmulqdq xmm9, xmm0, 11H
         db $66, $44, $0F, $3A, $44, $C0, $00
         db $66, $44, $0F, $3A, $44, $C8, $11
         pshufd  xmm11, xmm0, 4EH
         pxor    xmm11, xmm0
-        // pclmulqdq xmm10, xmm11, 00H       66 45: 0F 3A 44. D3, 00
+        // pclmulqdq xmm10, xmm11, 00H
         db $66, $45, $0F, $3A, $44, $D3, $00
         pxor    xmm10, xmm8
         pxor    xmm10, xmm9
@@ -4782,12 +4782,12 @@ procedure GcmAvxGetTag(ptab, mask, hash: pointer; plen, dlen: PtrInt);
         pxor    xmm9, xmm10
         pxor    xmm8, xmm11
         movdqu  xmm11, xmm14
-        // pclmulqdq xmm11, xmm8, 01H        66 45: 0F 3A 44. D8, 01
+        // pclmulqdq xmm11, xmm8, 01H
         db $66, $45, $0F, $3A, $44, $D8, $01
         pshufd  xmm8, xmm8, 4EH
         pxor    xmm8, xmm11
         movdqu  xmm11, xmm14
-        // pclmulqdq xmm11, xmm8, 01H        66 45: 0F 3A 44. D8, 01
+        // pclmulqdq xmm11, xmm8, 01H
         db $66, $45, $0F, $3A, $44, $D8, $01
         pshufd  xmm8, xmm8, 4EH
         pxor    xmm8, xmm11
@@ -4891,10 +4891,6 @@ procedure gf_mul_pclmulqdq(a, b: pointer);
         pxor    xmm0, xmm2
         pshufb  xmm0, xmm10
         movups  dqword ptr [a], xmm0
-        {$ifdef WIN64ABI}
-        pop    rdi
-        pop    rsi
-        {$endif WIN64ABI}
         ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @swap:  db 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0
