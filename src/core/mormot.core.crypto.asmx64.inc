@@ -3243,13 +3243,13 @@ end;
 
 // AesNiEncryptCtrNist32() expects the CTR in lowest 32-bit to never overflow
 procedure AesNiEncryptCtrNist(src, dest: PByte; len: cardinal;
-  ctxt, iv: PAesBlock); inline;
+  ctxt, iv: PHash128Rec); inline;
 var
   ctr, blocks: cardinal;
 begin
-  ctr := bswap32(PCardinal(@iv[12])^);
+  ctr := bswap32(iv.c3);
   repeat
-    blocks := len shr 4;
+    blocks := len shr AesBlockShift;
     inc(ctr, blocks);
     if ctr < blocks then
     begin
@@ -3258,10 +3258,10 @@ begin
       ctr := 0;
     end;
     AesNiEncryptCtrNist32(src, dest, blocks, ctxt, iv); // 32-bit CTR asm
-    PCardinal(@iv[12])^ := bswap32(ctr);
+    iv.c3 := bswap32(ctr);
     if ctr = 0 then
-      CtrNistCarry12(iv); // propagate carry
-    blocks := blocks shl 4;
+      CtrNistCarry12(@iv.b); // propagate carry
+    blocks := blocks shl AesBlockShift;
     inc(src, blocks);
     inc(dest, blocks);
     dec(len, blocks);
@@ -3858,7 +3858,7 @@ var
 begin
   ctr := bswap32(PCardinal(@ctxt.fIV[12])^);
   repeat
-    blocks := len shr 4;
+    blocks := len shr AesBlockShift;
     inc(ctr, blocks);
     if ctr < blocks then
     begin
@@ -3870,7 +3870,7 @@ begin
     PCardinal(@ctxt.fIV[12])^ := bswap32(ctr);
     if ctr = 0 then
       CtrNistCarry12(@ctxt.fIV); // propagate carry
-    blocks := blocks shl 4;
+    blocks := blocks shl AesBlockShift;
     inc(src, blocks);
     inc(dest, blocks);
     dec(len, blocks);
@@ -4413,6 +4413,403 @@ procedure AesNiDecryptCfbCrc256(src, dest, aes: pointer; blocks: PtrUInt);
         {$endif WIN64ABI}
 end;
 
+{$ifdef USEGCMAVX}
+
+// prepare the GMAC process for gcmavx_data() and gcmavx_end()
+procedure GcmAvxInit(ptab, ks: pointer; rounds: cardinal);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=ptab, rdx/rsi=ks, r8/rdx=kslen
+        movdqa  xmm15, dqword ptr [rip + @bswapMask]
+        movdqa  xmm14, dqword ptr [rip + @gcmPoly]
+        movdqu  xmm0, dqword ptr [ks]
+        movdqu  xmm11, dqword ptr [ks + 10H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 20H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 30H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 40H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 50H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 60H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 70H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 80H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 90H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 0A0H]
+        cmp     rounds, 12
+        jc      @last
+        // end of AES-128
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 0B0H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 0C0H]
+        jz      @last
+        // end of AES-192
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 0D0H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 0E0H]
+        // end of AES-256
+@last:  aesenclast xmm0, xmm11
+        pshufb  xmm0, xmm15
+        pshufd  xmm11, xmm0, 0FFH
+        movdqu  xmm12, xmm0
+        psrad   xmm11, 31
+        pand    xmm11, xmm14
+        psrld   xmm12, 31
+        pslldq  xmm12, 4
+        pslld   xmm0, 1
+        pxor    xmm0, xmm11
+        pxor    xmm0, xmm12
+        movdqu  dqword ptr [ptab + 0E0H], xmm0
+        pshufd  xmm1, xmm0, 4EH
+        pxor    xmm1, xmm0
+        movdqu  dqword ptr [ptab + 0F0H], xmm1
+        movdqu  xmm2, xmm0
+        movdqu  xmm3, xmm1
+        mov     al, 7
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@init:  movdqu  xmm11, xmm2
+        movdqu  xmm12, xmm2
+        movdqu  xmm13, xmm3
+        // pclmulqdq xmm11, xmm0, 00H     @ 66 44: 0F 3A 44. D8, 00
+        // pclmulqdq xmm12, xmm0, 11H     @ 66 44: 0F 3A 44. E0, 11
+        // pclmulqdq xmm13, xmm1, 00H     @ 66 44: 0F 3A 44. E9, 00
+        db $66, $44, $0F, $3A, $44, $D8, $00
+        db $66, $44, $0F, $3A, $44, $E0, $11
+        db $66, $44, $0F, $3A, $44, $E9, $00
+        pxor    xmm13, xmm11
+        pxor    xmm13, xmm12
+        movdqu  xmm4, xmm13
+        pslldq  xmm4, 8
+        psrldq  xmm13, 8
+        pxor    xmm11, xmm4
+        pxor    xmm12, xmm13
+        movdqu  xmm2, xmm14
+        // pclmulqdq xmm2, xmm11, 01H        @ 66 41: 0F 3A 44. D3, 01
+        db $66, $41, $0F, $3A, $44, $D3, $01
+        pshufd  xmm11, xmm11, 4EH
+        pxor    xmm11, xmm2
+        movdqu  xmm2, xmm14
+        // pclmulqdq xmm2, xmm11, 01H        @ 66 41: 0F 3A 44. D3, 01
+        db $66, $41, $0F, $3A, $44, $D3, $01
+        pshufd  xmm11, xmm11, 4EH
+        pxor    xmm2, xmm11
+        pxor    xmm2, xmm12
+        movdqu  dqword ptr [ptab + 0C0H], xmm2
+        pshufd  xmm3, xmm2, 4EH
+        pxor    xmm3, xmm2
+        movdqu  dqword ptr [ptab + 0D0H], xmm3
+        lea     ptab, [ptab - 20H]
+        dec     al
+        jne     @init
+        ret
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@bswapMask:
+        dq $08090A0B0C0D0E0F
+        dq $0001020304050607
+@gcmPoly:
+        dq $0000000000000001
+        dq $C200000000000000
+end;
+
+// compute GMAC with 8x interleaved pclmulqdq opcode
+procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rdi=ptab, rsi=data, rdx=datalen, rcx=hash
+        movdqu  xmm8, dqword ptr [hash]
+        movdqa  xmm15, dqword ptr [rip + @bswapMask]
+        movdqa  xmm14, dqword ptr [rip + @gcmPoly]
+        test    datalen, datalen
+        jz      @done
+        cmp     datalen, 128
+        jc      @by1
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@by8:   sub     datalen, 128
+        movdqu  xmm0, dqword ptr [data]
+        movdqu  xmm1, dqword ptr [data + 10H]
+        movdqu  xmm2, dqword ptr [data + 20H]
+        movdqu  xmm3, dqword ptr [data + 30H]
+        movdqu  xmm4, dqword ptr [data + 40H]
+        movdqu  xmm5, dqword ptr [data + 50H]
+        movdqu  xmm6, dqword ptr [data + 60H]
+        movdqu  xmm7, dqword ptr [data + 70H]
+        lea     data, [data + 80H]
+        pshufb  xmm0, xmm15
+        pshufb  xmm1, xmm15
+        pshufb  xmm2, xmm15
+        pshufb  xmm3, xmm15
+        pshufb  xmm4, xmm15
+        pshufb  xmm5, xmm15
+        pshufb  xmm6, xmm15
+        pshufb  xmm7, xmm15
+        pxor    xmm0, xmm8
+        movdqu  xmm8, dqword ptr [ptab]
+        movdqu  xmm10, dqword ptr [ptab + 10H]
+        movdqu  xmm9, xmm8
+        pshufd  xmm12, xmm0, 4EH
+        pxor    xmm12, xmm0
+        // pclmulqdq xmm8, xmm0, 00H         66 44: 0F 3A 44. C0, 00
+        // pclmulqdq xmm9, xmm0, 11H         66 44: 0F 3A 44. C8, 11
+        // pclmulqdq xmm10, xmm12, 00H       66 45: 0F 3A 44. D4, 00
+        db $66, $44, $0F, $3A, $44, $C0, $00
+        db $66, $44, $0F, $3A, $44, $C8, $11
+        db $66, $45, $0F, $3A, $44, $D4, $00
+        movdqu  xmm12, dqword ptr [ptab + 20H]
+        movdqu  xmm13, xmm12
+        // pclmulqdq xmm12, xmm1, 00H        66 44: 0F 3A 44. E1, 00
+        db $66, $44, $0F, $3A, $44, $E1, $00
+        pxor    xmm8, xmm12
+        // pclmulqdq xmm13, xmm1, 11H        66 44: 0F 3A 44. E9, 11
+        db $66, $44, $0F, $3A, $44, $E9, $11
+        pxor    xmm9, xmm13
+        pshufd  xmm12, xmm1, 4EH
+        pxor    xmm1, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 30H]
+        // pclmulqdq xmm12, xmm1, 00H        66 44: 0F 3A 44. E1, 00
+        db $66, $44, $0F, $3A, $44, $E1, $00
+        pxor    xmm10, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 40H]
+        movdqu  xmm13, xmm12
+        // pclmulqdq xmm12, xmm2, 00H        66 44: 0F 3A 44. E2, 00
+        db $66, $44, $0F, $3A, $44, $E2, $00
+        pxor    xmm8, xmm12
+        // pclmulqdq xmm13, xmm2, 11H        66 44: 0F 3A 44. EA, 11
+        db $66, $44, $0F, $3A, $44, $EA, $11
+        pxor    xmm9, xmm13
+        pshufd  xmm12, xmm2, 4EH
+        pxor    xmm2, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 50H]
+        // pclmulqdq xmm12, xmm2, 00H        66 44: 0F 3A 44. E2, 00
+        db $66, $44, $0F, $3A, $44, $E2, $00
+        pxor    xmm10, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 60H]
+        movdqu  xmm13, xmm12
+        // pclmulqdq xmm12, xmm3, 00H        66 44: 0F 3A 44. E3, 00
+        db $66, $44, $0F, $3A, $44, $E3, $00
+        pxor    xmm8, xmm12
+        // pclmulqdq xmm13, xmm3, 11H        66 44: 0F 3A 44. EB, 11
+        db $66, $44, $0F, $3A, $44, $EB, $11
+        pxor    xmm9, xmm13
+        pshufd  xmm12, xmm3, 4EH
+        pxor    xmm3, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 70H]
+        // pclmulqdq xmm12, xmm3, 00H        66 44: 0F 3A 44. E3, 00
+        db $66, $44, $0F, $3A, $44, $E3, $00
+        pxor    xmm10, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 80H]
+        movdqu  xmm13, xmm12
+        // pclmulqdq xmm12, xmm4, 00H        66 44: 0F 3A 44. E4, 00
+        db $66, $44, $0F, $3A, $44, $E4, $00
+        pxor    xmm8, xmm12
+        // pclmulqdq xmm13, xmm4, 11H        66 44: 0F 3A 44. EC, 11
+        db $66, $44, $0F, $3A, $44, $EC, $11
+        pxor    xmm9, xmm13
+        pshufd  xmm12, xmm4, 4EH
+        pxor    xmm4, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 90H]
+        // pclmulqdq xmm12, xmm4, 00H        66 44: 0F 3A 44. E4, 00
+        db $66, $44, $0F, $3A, $44, $E4, $00
+        pxor    xmm10, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 0A0H]
+        movdqu  xmm13, xmm12
+        // pclmulqdq xmm12, xmm5, 00H        66 44: 0F 3A 44. E5, 00
+        db $66, $44, $0F, $3A, $44, $E5, $00
+        pxor    xmm8, xmm12
+        // pclmulqdq xmm13, xmm5, 11H        66 44: 0F 3A 44. ED, 11
+        db $66, $44, $0F, $3A, $44, $ED, $11
+        pxor    xmm9, xmm13
+        pshufd  xmm12, xmm5, 4EH
+        pxor    xmm5, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 0B0H]
+        // pclmulqdq xmm12, xmm5, 00H        66 44: 0F 3A 44. E5, 00
+        db $66, $44, $0F, $3A, $44, $E5, $00
+        pxor    xmm10, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 0C0H]
+        movdqu  xmm13, xmm12
+        // pclmulqdq xmm12, xmm6, 00H        66 44: 0F 3A 44. E6, 00
+        db $66, $44, $0F, $3A, $44, $E6, $00
+        pxor    xmm8, xmm12
+        // pclmulqdq xmm13, xmm6, 11H        66 44: 0F 3A 44. EE, 11
+        db $66, $44, $0F, $3A, $44, $EE, $11
+        pxor    xmm9, xmm13
+        pshufd  xmm12, xmm6, 4EH
+        pxor    xmm6, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 0D0H]
+        // pclmulqdq xmm12, xmm6, 00H        66 44: 0F 3A 44. E6, 00
+        db $66, $44, $0F, $3A, $44, $E6, $00
+        pxor    xmm10, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 0E0H]
+        movdqu  xmm13, xmm12
+        // pclmulqdq xmm12, xmm7, 00H        66 44: 0F 3A 44. E7, 00
+        db $66, $44, $0F, $3A, $44, $E7, $00
+        pxor    xmm8, xmm12
+        // pclmulqdq xmm13, xmm7, 11H        66 44: 0F 3A 44. EF, 11
+        db $66, $44, $0F, $3A, $44, $EF, $11
+        pxor    xmm9, xmm13
+        pshufd  xmm12, xmm7, 4EH
+        pxor    xmm7, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 0F0H]
+        // pclmulqdq xmm12, xmm7, 00H        66 44: 0F 3A 44. E7, 00
+        db $66, $44, $0F, $3A, $44, $E7, $00
+        pxor    xmm10, xmm12
+        pxor    xmm10, xmm8
+        pxor    xmm10, xmm9
+        movdqu  xmm11, xmm10
+        psrldq  xmm10, 8
+        pslldq  xmm11, 8
+        pxor    xmm9, xmm10
+        pxor    xmm8, xmm11
+        movdqu  xmm11, xmm14
+        // pclmulqdq xmm11, xmm8, 01H        66 45: 0F 3A 44. D8, 01
+        db $66, $45, $0F, $3A, $44, $D8, $01
+        pshufd  xmm8, xmm8, 4EH
+        pxor    xmm8, xmm11
+        movdqu  xmm11, xmm14
+        // pclmulqdq xmm11, xmm8, 01H        66 45: 0F 3A 44. D8, 01
+        db $66, $45, $0F, $3A, $44, $D8, $01
+        pshufd  xmm8, xmm8, 4EH
+        pxor    xmm8, xmm11
+        pxor    xmm8, xmm9
+        cmp     datalen, 128
+        jnc     @by8
+@by1:   movdqu  xmm12, dqword ptr [ptab + 0E0H]
+        movdqu  xmm13, dqword ptr [ptab + 0F0H]
+        cmp     datalen, 16
+        jc      @sml
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@next:  sub     datalen, 16
+        movdqu  xmm0, dqword ptr [data]
+@s:     pshufb  xmm0, xmm15
+        pxor    xmm0, xmm8
+        movdqu  xmm8, xmm12
+        movdqu  xmm10, xmm13
+        movdqu  xmm9, xmm12
+        pshufd  xmm11, xmm0, 4EH
+        pxor    xmm11, xmm0
+        // pclmulqdq xmm8, xmm0, 00H         66 44: 0F 3A 44. C0, 00
+        // pclmulqdq xmm9, xmm0, 11H         66 44: 0F 3A 44. C8, 11
+        // pclmulqdq xmm10, xmm11, 00H       66 45: 0F 3A 44. D3, 00
+        db $66, $44, $0F, $3A, $44, $C0, $00
+        db $66, $44, $0F, $3A, $44, $C8, $11
+        db $66, $45, $0F, $3A, $44, $D3, $00
+        pxor    xmm10, xmm8
+        pxor    xmm10, xmm9
+        movdqu  xmm11, xmm10
+        psrldq  xmm10, 8
+        pslldq  xmm11, 8
+        pxor    xmm9, xmm10
+        pxor    xmm8, xmm11
+        movdqu  xmm11, xmm14
+        // pclmulqdq xmm11, xmm8, 01H        66 45: 0F 3A 44. D8, 01
+        db $66, $45, $0F, $3A, $44, $D8, $01
+        pshufd  xmm8, xmm8, 4EH
+        pxor    xmm8, xmm11
+        movdqu  xmm11, xmm14
+        // pclmulqdq xmm11, xmm8, 01H        66 45: 0F 3A 44. D8, 01
+        db $66, $45, $0F, $3A, $44, $D8, $01
+        pshufd  xmm8, xmm8, 4EH
+        pxor    xmm8, xmm11
+        pxor    xmm8, xmm9
+        lea     data, [data + 10H]
+        cmp     datalen, 16
+        jnc     @next
+@sml:   test    datalen, datalen
+        jz      @done
+        pxor    xmm0, xmm0
+        lea     data, [data + datalen - 1]
+        {$ifdef FPC} align 8 {$else} .align 8 {$endif}
+@ins:   pslldq  xmm0, 1
+        pinsrb  xmm0, byte ptr [data], 00H
+        dec     data
+        dec     datalen
+        jnz     @ins
+        jmp     @s
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@bswapMask:
+        dq $08090A0B0C0D0E0F
+        dq $0001020304050607
+@gcmPoly:
+        dq $0000000000000001
+        dq $C200000000000000
+@done:  movdqu  dqword ptr [hash], xmm8
+end;
+
+procedure GcmAvxGetTag(ptab, mask, hash: pointer; plen, dlen: PtrInt);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rdi=ptab, rsi=mask, rdx=hash, rcx=plen, r8=dlen
+        {$ifdef WIN64ABI}
+        mov     rax, qword ptr [rsp + $28]  // dlen not passed as register
+        push    rsi
+        push    rdi
+        mov     rdi, ptab    // rcx
+        mov     rsi, mask    // rdx
+        mov     rdx, hash    // r8
+        mov     rcx, plen    // r9
+        {$else}
+        mov     rax, r8
+        {$endif WIN64ABI}
+        shl     rcx, 3
+        movdqu  xmm8, dqword ptr [rdx]
+        movdqu  xmm13, dqword ptr [rsi]
+        movdqa  xmm15, dqword ptr [rip + @bswapMask]
+        movdqa  xmm14, dqword ptr [rip + @gcmPoly]
+        shl     rax, 3
+        movq    xmm0, rcx
+        pinsrq  xmm0, rax, 1
+        pxor    xmm0, xmm8
+        movdqu  xmm8, dqword ptr [rdi + 0E0H]
+        movdqu  xmm10, dqword ptr [rdi + 0F0H]
+        movdqu  xmm9, xmm8
+        // pclmulqdq xmm8, xmm0, 00H         66 44: 0F 3A 44. C0, 00
+        // pclmulqdq xmm9, xmm0, 11H         66 44: 0F 3A 44. C8, 11
+        db $66, $44, $0F, $3A, $44, $C0, $00
+        db $66, $44, $0F, $3A, $44, $C8, $11
+        pshufd  xmm11, xmm0, 4EH
+        pxor    xmm11, xmm0
+        // pclmulqdq xmm10, xmm11, 00H       66 45: 0F 3A 44. D3, 00
+        db $66, $45, $0F, $3A, $44, $D3, $00
+        pxor    xmm10, xmm8
+        pxor    xmm10, xmm9
+        movdqu  xmm11, xmm10
+        psrldq  xmm10, 8
+        pslldq  xmm11, 8
+        pxor    xmm9, xmm10
+        pxor    xmm8, xmm11
+        movdqu  xmm11, xmm14
+        // pclmulqdq xmm11, xmm8, 01H        66 45: 0F 3A 44. D8, 01
+        db $66, $45, $0F, $3A, $44, $D8, $01
+        pshufd  xmm8, xmm8, 4EH
+        pxor    xmm8, xmm11
+        movdqu  xmm11, xmm14
+        // pclmulqdq xmm11, xmm8, 01H        66 45: 0F 3A 44. D8, 01
+        db $66, $45, $0F, $3A, $44, $D8, $01
+        pshufd  xmm8, xmm8, 4EH
+        pxor    xmm8, xmm11
+        pxor    xmm8, xmm9
+        pshufb  xmm8, xmm15
+        pxor    xmm8, xmm13
+        movdqu  dqword ptr [rdx], xmm8
+        {$ifdef WIN64ABI}
+        pop    rdi
+        pop    rsi
+        {$endif WIN64ABI}
+        ret
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@bswapMask:
+        dq $08090A0B0C0D0E0F
+        dq $0001020304050607
+@gcmPoly:
+        dq $0000000000000001
+        dq $C200000000000000
+end;
+
+{$endif USEGCMAVX}
 
 // compute a := a * b in GF(2^128) using pclmulqdq on WestMere CPUs
 // - three times faster than the pascal version using lookup tables
@@ -4494,6 +4891,10 @@ procedure gf_mul_pclmulqdq(a, b: pointer);
         pxor    xmm0, xmm2
         pshufb  xmm0, xmm10
         movups  dqword ptr [a], xmm0
+        {$ifdef WIN64ABI}
+        pop    rdi
+        pop    rsi
+        {$endif WIN64ABI}
         ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @swap:  db 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0

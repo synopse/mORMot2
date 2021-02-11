@@ -14,7 +14,7 @@ unit mormot.core.crypto.openssl;
   *****************************************************************************
 
   TL;DR: on x86_64, our mormot.core.crypto.pas asm is stand-alone and faster
-  than OpenSSL for most algorithms, but AES-GCM.
+  than OpenSSL for most algorithms, but AES-GCM (1.8 vs 1.5 GB/s).
 
 }
 
@@ -170,11 +170,11 @@ type
   /// OpenSSL AES-GCM cypher/uncypher
   // - implements AEAD (authenticated-encryption with associated-data) process
   // via MacSetNonce/MacEncrypt or AesGcmAad/AesGcmFinal methods
-  // - OpenSSL is faster than our TAesGcm class which is not interleaved:
-  // $  mormot aes-128-gcm in 14.42ms i.e. 173274/s or 368.7 MB/s
-  // $  mormot aes-256-gcm in 16.98ms i.e. 147206/s or 313.2 MB/s
+  // - OpenSSL is faster than our TAesGcm class, but not so much:
   // $  openssl aes-128-gcm in 2.86ms i.e. 874125/s or 1.8 GB/s
   // $  openssl aes-256-gcm in 3.43ms i.e. 727590/s or 1.5 GB/s
+  // $  mormot aes-128-gcm in 3.45ms i.e. 722752/s or 1.5 GB/s
+  // $  mormot aes-256-gcm in 4.11ms i.e. 607385/s or 1.2 GB/s
   TAesGcmOsl = class(TAesGcmAbstract)
   protected
     fAes: TAesOsl;

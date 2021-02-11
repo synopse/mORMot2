@@ -1114,7 +1114,6 @@ var
   mac: TAesMac256;
   mac1, mac2: THash256;
   one, two, encdec: TAesAbstract;
-  PC: PAnsiChar;
   noaesni, gcm, aead: boolean;
   Timer: array[boolean] of TPrecisionTimer;
   ValuesCrypted, ValuesOrig: array[0..6] of RawByteString;
@@ -1170,7 +1169,8 @@ begin
             FillRandom(@tag1, 4);
             Check(TAesGcmAbstract(one).AesGcmFinal(tag1));
             // writeln(one.classname, ks, ' ', AesBlockToShortString(tag1));
-            CheckEqual(AesBlockToString(tag1), TEST_AES_TAG[k], 'TEST_AES_TAG');
+            CheckEqual(AesBlockToString(tag1), TEST_AES_TAG[k],
+              FormatUtf8('TEST_AES_TAG %', [ks]));
           end;
           one.IV := iv.b;
           if aead then
@@ -1541,6 +1541,12 @@ var
   n: integer;
 begin
   key := PAesBlock(@hex32)^;
+  FillZero(buf);
+  FillZero(tag);
+  check(ctxt.FullEncryptAndAuthenticate(key, 128, @hex32, 12, nil, 0,
+    @buf, @buf, SizeOf(buf), tag));
+  CheckEqual(CardinalToHex(crc32c(0, @buf, SizeOf(buf))), 'AC3DDD17');
+  CheckEqual(Md5DigestToString(tag), '0332c40f9926bd3cdadf33148912c672');
   for n := 1 to 32 do
   begin
     Check(ctxt.Init(key, 128));
@@ -1629,6 +1635,7 @@ var
   c: TAesAbstract;
   key: THash256;
 begin
+  FillZero(key);
   for k := 0 to 2 do
     for m := low(m) to high(m) do
     begin
@@ -1638,7 +1645,7 @@ begin
       CheckUtf8(AesAlgoNameDecode(n, k2) = TAesFast[m], n);
       UpperCaseSelf(n);
       CheckUtf8(AesAlgoNameDecode(n, k2) = TAesFast[m], n);
-      c := TAesFast[m].Create(k, 128 + k * 64);
+      c := TAesFast[m].Create(key, 128 + k * 64);
       try
         Check(c.AlgoMode = m);
         Check(IdemPropName(c.AlgoName, pointer(n), length(n)));
