@@ -662,7 +662,7 @@ function FastNewString(len, codepage: PtrInt): PAnsiChar;
 // is 16-bytes aligned
 // - to be used e.g. for proper SIMD process
 // - you can specify an alternate alignment, but it should be a power of two
-procedure GetMemAligned(var holder: RawByteString; p: pointer; len: PtrUInt;
+procedure GetMemAligned(var holder: RawByteString; fillwith: pointer; len: PtrUInt;
   out aligned: pointer; alignment: PtrUInt = 16);
 
 /// equivalence to @u[1] expression to ensure a RawUtf8 variable is unique
@@ -2784,9 +2784,18 @@ function BufferLineLength(Text, TextEnd: PUtf8Char): PtrInt;
   {$ifndef CPUX64}{$ifdef HASINLINE}inline;{$endif}{$endif}
   
 type
-  /// function prototype to be used for hashing of an element
+  /// function prototype to be used for 32-bit hashing of an element
   // - it must return a cardinal hash, with as less collision as possible
   THasher = function(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+
+  /// function prototype to be used for 64-bit hashing of an element
+  // - it must return a QWord hash, with as less collision as possible
+  THasher64 = function(crc: QWord; buf: PAnsiChar; len: cardinal): QWord;
+
+  /// function prototype to be used for 128-bit hashing of an element
+  // - the input hash buffer is used as seed, and contains the 128-bit result
+  THasher128 = procedure(hash: PHash128; buf: PAnsiChar; len: cardinal);
+
 
 type
   TCrc32tab = array[0..7, byte] of cardinal;
@@ -2823,6 +2832,11 @@ function crc32cinlined(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 // - by design, such combined hashes cannot be cascaded
 function crc64c(buf: PAnsiChar; len: cardinal): Int64;
 
+/// compute two CRC32C checksum on the supplied buffer for 64-bit hashing
+// - will use SSE 4.2 hardware accelerated instruction, if available
+// - is the default implementation of DefaultHasher64
+function crc32cTwice(seed: QWord; buf: PAnsiChar; len: cardinal): QWord;
+
 /// compute CRC63C checksum on the supplied buffer, cascading two crc32c
 // - similar to crc64c, but with 63-bit, so no negative value: may be used
 // safely e.g. as mORMot's TID source
@@ -2850,6 +2864,10 @@ function crc32cBy4fast(crc, value: cardinal): cardinal;
 // - to be used for regression tests only: crcblocks will use the fastest
 // implementation available on the current CPU (e.g. with SSE 4.2 opcodes)
 procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
+
+/// compute a 128-bit CRC of any binary buffers
+// - combine crcblocksfast() with 4 parallel crc32c() for 1..15 trailing bytes
+procedure crc32c128(hash: PHash128; buf: PAnsiChar; len: cardinal);
 
 /// compute a proprietary 128-bit CRC of 128-bit binary buffers
 // - apply four crc32c() calls on the 128-bit input chunks, into a 128-bit crc
@@ -2937,19 +2955,26 @@ function xxHash32Mixup(crc: cardinal): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
 var
-  /// the default hasher used by TDynArrayHashed
+  /// the 32-bit default hasher used by TDynArrayHashed
   // - set to crc32csse42() if SSE4.2 instructions are available on this CPU,
-  // or fallback to xxHash32() which performs better than crc32cfast()
+  // or fallback to xxHash32() which is faster than crc32cfast() e.g. on ARM
+  // - mormot.core.crypto will assign safer and faster AesNiHash32() if available
   DefaultHasher: THasher = xxHash32;
 
-  /// the hash function used by TRawUtf8Interning
+  /// the 32-bit hash function used by TRawUtf8Interning
   // - set to crc32csse42() if SSE4.2 instructions are available on this CPU,
   // or fallback to xxHash32() which performs better than crc32cfast()
+  // - mormot.core.crypto will assign safer and faster AesNiHash32() if available
   InterningHasher: THasher = xxHash32;
 
+  /// a 64-bit hasher function
+  // - crc32cTwice() by default, but mormot.core.crypto will assign AesNiHash64()
+  DefaultHasher64: THasher64 = crc32cTwice;
 
-type
-  TOffsets = array[0..4095] of PAnsiChar; // 16KB/32KB hash table used by SynLZ
+  /// a 128-bit hasher function
+  // - crc32c128() by default, but mormot.core.crypto will assign AesNiHash128()
+  DefaultHasher128: THasher128 = crc32c128;
+
 
 /// get maximum possible (worse) SynLZ compressed size
 function SynLZcompressdestlen(in_len: integer): integer;
@@ -4032,7 +4057,7 @@ begin
   FastAssignNew(s, r);
 end;
 
-procedure GetMemAligned(var holder: RawByteString; p: pointer; len: PtrUInt;
+procedure GetMemAligned(var holder: RawByteString; fillwith: pointer; len: PtrUInt;
   out aligned: pointer; alignment: PtrUInt);
 begin
   dec(alignment); // expected to be a power of two
@@ -4040,8 +4065,8 @@ begin
   aligned := pointer(holder);
   while PtrUInt(aligned) and alignment <> 0 do
     inc(PByte(aligned));
-  if p <> nil then
-    MoveFast(p^, aligned^, len);
+  if fillwith <> nil then
+    MoveFast(fillwith^, aligned^, len);
 end;
 
 // CompareMemSmall/MoveSmall defined now for proper inlining below
@@ -8613,6 +8638,10 @@ begin
 end;
 
 
+type
+  // 16KB/32KB hash table used by SynLZ - as used by the asm .inc files
+  TOffsets = array[0..4095] of PAnsiChar;
+
 {$ifdef CPUINTEL}
 
 // optimized asm for x86 and x86_64 is located in include files
@@ -9793,6 +9822,12 @@ begin
   result := Int64(lo) or (Int64(crc32c(lo, buf, len)) shl 32);
 end;
 
+function crc32cTwice(seed: QWord; buf: PAnsiChar; len: cardinal): QWord;
+begin
+  PQWordRec(@result)^.L := crc32c(PQWordRec(@seed)^.L, buf, len);
+  PQWordRec(@result)^.H := crc32c(PQWordRec(@seed)^.H, buf, len);
+end;
+
 function crc63c(buf: PAnsiChar; len: cardinal): Int64;
 var
   lo: PtrInt;
@@ -9841,6 +9876,26 @@ begin
   h.i6 := h1;
   inc(h1, h2);
   h.i7 := h1;
+end;
+
+procedure crc32c128(hash: PHash128; buf: PAnsiChar; len: cardinal);
+var
+  blocks: cardinal;
+begin
+  blocks := len shr 4;
+  if blocks <> 0 then
+  begin
+    crcblocksfast(pointer(hash), pointer(buf), blocks);
+    blocks := blocks shl 4;
+    inc(buf, blocks);
+    dec(len, blocks);
+  end;
+  if len = 0 then
+    exit;
+  PHash128Rec(hash)^.c0 := crc32c(PHash128Rec(hash)^.c0, buf, len);
+  PHash128Rec(hash)^.c1 := crc32c(PHash128Rec(hash)^.c1, buf, len);
+  PHash128Rec(hash)^.c2 := crc32c(PHash128Rec(hash)^.c2, buf, len);
+  PHash128Rec(hash)^.c3 := crc32c(PHash128Rec(hash)^.c3, buf, len);
 end;
 
 function crc16(Data: PAnsiChar; Len: integer): cardinal;
