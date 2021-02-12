@@ -30,8 +30,8 @@ type
     procedure CryptData(dpapi: boolean);
     procedure Prng(meta: TAesPrngClass; const name: RawUTF8);
   published
-    /// Adler32 hashing functions
-    procedure _Adler32;
+    /// 32-bit, 64-bit and 128-bit hashing functions including AesNiHash variants
+    procedure Hashes;
     /// MD5 hashing functions
     procedure _MD5;
     /// SHA-1 hashing functions
@@ -64,10 +64,10 @@ type
     {$endif OSWINDOWS}
     /// JWT classes
     procedure _JWT;
-    /// Cryptography Catalog
-    procedure Catalog;
     /// compute some performance numbers, mostly against regression
     procedure Benchmark;
+    /// Cryptography Catalog
+    procedure Catalog;
   end;
 
 
@@ -814,7 +814,7 @@ end;
 type
   TBenchmark = (
     // non cryptographic hashes
-    bCRC32c, bXXHash32, bHash32,
+    bCRC32c, bXXHash32, bHash32, bAesniHash,
     // cryptographic hashes
     bMD5,
     bSHA1, bHMACSHA1, bSHA256, bHMACSHA256,
@@ -881,9 +881,11 @@ begin
     begin
       AES[b] := AESCLASS[b].Create(dig{%H-}, AESBITS[b]);
       ShortStringToAnsi7String(AES[b].AlgoName, TXT[b]);
+      {$ifdef USE_OPENSSL}
       if b in bAESOPENSSL then
         TXT[b] := 'openssl ' + TXT[b]
       else
+      {$endif USE_OPENSSL}
         TXT[b] := 'mormot ' + TXT[b]
     end
     else
@@ -903,6 +905,9 @@ begin
        (b > high(AES)) or
        (AES[b] <> nil) then
     begin
+      if (b = bAesniHash) and
+         not Assigned(AesNiHash32) then
+        continue;
       timer.Start;
       for i := 1 to COUNT do
       begin
@@ -913,6 +918,8 @@ begin
             dig.d0 := xxHash32(0, pointer(data), SIZ[s]);
           bHash32:
             dig.d0 := Hash32(pointer(data), SIZ[s]);
+          bAesniHash:
+            dig.d0 := AesNiHash64(0, pointer(data), SIZ[s]);
           bCRC32c:
             dig.d0 := crc32c(0, pointer(data), SIZ[s]);
           bMD5:
@@ -971,16 +978,106 @@ begin
     inc(n, COUNT);
   end;
   for b := low(b) to high(b) do
-    AddConsole(format('%d %s in %s i.e. %d/s or %s/s', [n, TXT[b],
-      MicroSecToString(time[b]), (Int64(n) * 1000000) div time[b],
-      KB((Int64(size) * 1000000) div time[b])]));
+    if time[b] <> 0 then
+      AddConsole(format('%d %s in %s i.e. %d/s or %s/s', [n, TXT[b],
+        MicroSecToString(time[b]), (Int64(n) * 1000000) div time[b],
+        KB((Int64(size) * 1000000) div time[b])]));
   for b := low(AES) to high(AES) do
     AES[b].Free;
 end;
 
-procedure TTestCoreCrypto._Adler32;
+const
+  HASHESMAX = 512;
+
+function Hash32Test(buf: PAnsiChar; hash: THasher): boolean;
+var
+  L, modif: PtrInt;
+  c: cardinal;
+begin
+  result := false;
+  for L := 0 to HASHESMAX do
+  begin
+    c := hash(0, buf, L);
+    for modif := 0 to L - 1 do
+    begin
+//  writeln(L,' ',modif);
+      inc(buf[modif]);
+      if hash(0, buf, L) = c then
+        exit; // should detect one modified bit at any position
+      dec(buf[modif]);
+    end;
+    if hash(0, buf, L) <> c then
+      exit; // should return the same value for the same data
+  end;
+  result := true;
+end;
+
+function Hash64Test(buf: PAnsiChar; hash: THasher64): boolean;
+var
+  L, modif: PtrInt;
+  c: QWord;
+begin
+  result := false;
+  for L := 0 to HASHESMAX do
+  begin
+    c := hash(0, buf, L);
+    for modif := 0 to L - 1 do
+    begin
+      inc(buf[modif]);
+      if hash(0, buf, L) = c then
+        exit; // should detect one modified bit at any position
+      dec(buf[modif]);
+    end;
+    if hash(0, buf, L) <> c then
+      exit; // should return the same value for the same data
+  end;
+  result := true;
+end;
+
+function Hash128Test(buf: PAnsiChar; hash: THasher128): boolean;
+var
+  L, modif: PtrInt;
+  c, c2: THash128;
+begin
+  result := false;
+  for L := 0 to HASHESMAX do
+  begin
+    FillZero(c);
+    hash(@c, buf, L);
+    for modif := 0 to L - 1 do
+    begin
+      inc(buf[modif]);
+      FillZero(c2);
+      hash(@c2, buf, L);
+      if IsEqual(c, c2) then
+        exit; // should detect one modified bit at any position
+      dec(buf[modif]);
+    end;
+    FillZero(c2);
+    hash(@c2, buf, L);
+    if not IsEqual(c, c2) then
+      exit; // should return the same value for the same data
+  end;
+  result := true;
+end;
+
+procedure TTestCoreCrypto.Hashes;
+var
+  buf: array[0 .. HASHESMAX - 1] of AnsiChar;
 begin
   Check(Adler32SelfTest);
+  FillIncreasing(@buf, $12345670, SizeOf(buf) shr 2);
+{  Check(Hash32Test(@buf, @crc32cfast));
+  Check(Hash32Test(@buf, @crc32c));
+  Check(Hash32Test(@buf, @xxHash32));}
+  if Assigned(AesNiHash32) then
+    Check(Hash32Test(@buf, @AesNiHash32));
+  Check(Hash64Test(@buf, @crc32cTwice));
+  if Assigned(AesNiHash64) then
+    Check(Hash64Test(@buf, @AesNiHash64));
+  Check(Hash128Test(@buf, @crc32c128));
+  if Assigned(AesNiHash128) then
+    Check(Hash128Test(@buf, @AesNiHash128));
 end;
 
 procedure TTestCoreCrypto._Base64;
@@ -1171,7 +1268,7 @@ begin
             Check(TAesGcmAbstract(one).AesGcmFinal(tag1));
             // writeln(one.classname, ks, ' ', AesBlockToShortString(tag1));
             CheckEqual(AesBlockToString(tag1), TEST_AES_TAG[k],
-              FormatUtf8('TEST_AES_TAG %', [ks]));
+              FormatUtf8('TEST_AES_TAG % %', [ks, one.AlgoName]));
           end;
           one.IV := iv.b;
           if aead then
@@ -1305,9 +1402,9 @@ begin
               s3 := one.EncryptPkcs7(s2);
               if m <= 9 then
                 if noaesni then
-                  CheckEqual(h32[k, m, i], DefaultHasher(0, pointer(s3), length(s3)))
+                  CheckEqual(h32[k, m, i], cardinal(DefaultHasher(0, pointer(s3), length(s3))))
                 else
-                  h32[k, m, i] := DefaultHasher(0, pointer(s3), length(s3));
+                  h32[k, m, i] := cardinal(DefaultHasher(0, pointer(s3), length(s3)));
               if aead then
                 if not noaesni then
                   Check(one.MacEncryptGetTag(Tags[k, m, i]))
