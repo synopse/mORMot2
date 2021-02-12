@@ -2645,17 +2645,17 @@ procedure _AesNiHashXmm0;
 asm
         // xmm0=seed, edx=data, ecx=len - returns in xmm0 and eax
         test    ecx, ecx
-        jz      @0
+        jz      @0 // _AesNiHash32 left eax=seed
         pinsrw  xmm0, ecx, 4
         mov     eax, dword ptr [AESNIHASHKEYSCHED]
         pshufhw xmm0, xmm0, 00H
         movdqa  xmm1, xmm0
         pxor    xmm0, dqword ptr [eax]
         aesenc  xmm0, xmm0
-        cmp     ecx, 16
+        cmp     ecx, 16 // 1..16 bytes have no branch
         ja      @17up
-        jz      @16
-        movdqu  xmm1, dqword ptr [edx + ecx - 16] // never after end of page
+        je      @16
+        movdqu  xmm1, dqword ptr [edx + ecx - 16] // no read after end of page
         shl     ecx, 4
         movdqu  xmm2, dqword ptr [@shifts + ecx] // Delphi bug about .align 16
         pshufb  xmm1, xmm2
@@ -2663,22 +2663,13 @@ asm
         aesenc  xmm1, xmm1
         aesenc  xmm1, xmm1
         movdqa  xmm0, xmm1
-        movd    eax, xmm0
+        movd    eax, xmm0 // when jumped from _AesNiHash32
 @0:     ret
 @16:    movdqu  xmm1, dqword ptr [edx]
         jmp     @end1
 @17up:  cmp     ecx, 32
-        jbe     @17_32
-        cmp     ecx, 64
-        jbe     @33_64
-        jmp     @65up
-        // force reading within 16-bytes boundaries to avoid GPF at end of page
-@eopag: movdqu  xmm1, dqword ptr [edx + ecx - 32]
-        shl     ecx, 4
-        movdqu  xmm2, dqword ptr [@shifts + ecx]
-        pshufb  xmm1, xmm2
-        jmp     @end1
-@17_32: pxor    xmm1, dqword ptr [eax + 16]
+        ja      @33up
+        pxor    xmm1, dqword ptr [eax + 16] // 17..32
         aesenc  xmm1, xmm1
         movdqu  xmm2, dqword ptr [edx]
         movdqu  xmm3, dqword ptr [edx + ecx - 10H] // may overlap
@@ -2692,7 +2683,9 @@ asm
         movdqa  xmm0, xmm2
         movd    eax, xmm2
         ret
-@33_64: movdqa  xmm2, xmm1
+@33up:  cmp     ecx, 64
+        ja      @65up
+        movdqa  xmm2, xmm1 // 33..64
         movdqa  xmm3, xmm1
         pxor    xmm1, dqword ptr [eax + 16]
         pxor    xmm2, dqword ptr [eax + 32]
@@ -2741,7 +2734,7 @@ asm
         dd $0a090807,$06050403, $ffffff0f,$0e0d0c0b
         dd $09080706,$05040302, $ffff0f0e,$0d0c0b0a
         dd $08070605,$04030201, $ff0f0e0d,$0c0b0a09
-@65up:  movdqa  xmm2, xmm1
+@65up:  movdqa  xmm2, xmm1 // 65 and up
         movdqa  xmm3, xmm1
         pxor    xmm1, dqword ptr [eax + 16]
         pxor    xmm2, dqword ptr [eax + 32]

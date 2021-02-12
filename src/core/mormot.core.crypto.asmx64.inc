@@ -4944,10 +4944,10 @@ procedure _AesNiHashXmm0(seedplaceholder: QWord; data: pointer; len: PtrUInt);
         movdqa  xmm1, xmm0
         pxor    xmm0, dqword ptr [rax]
         aesenc  xmm0, xmm0
-        cmp     len, 16
+        cmp     len, 16 // 1..16 bytes have no branch
         ja      @17up
-        jz      @16
-        movdqu  xmm1, dqword ptr [data + len - 16] // never after end of page
+        je      @16
+        movdqu  xmm1, dqword ptr [data + len - 16] // no read after end of page
         shl     len, 4
         lea     rax, [rip + @shifts]
         pshufb  xmm1, dqword ptr [rax + len]
@@ -4956,26 +4956,15 @@ procedure _AesNiHashXmm0(seedplaceholder: QWord; data: pointer; len: PtrUInt);
         aesenc  xmm1, xmm1
         aesenc  xmm1, xmm1
         movdqa  xmm0, xmm1
-        movd    eax, xmm1
+        movd    eax, xmm1 // when jumped from _AesNiHash32
         ret
 @0:     movd     eax, xmm0
         ret
 @16:    movdqu  xmm1, dqword ptr [data]
         jmp     @end1
 @17up:  cmp     len, 32
-        jbe     @17_32
-        cmp     len, 64
-        jbe     @33_64
-        cmp     len, 128
-        jbe     @65_128
-        jmp     @129up
-        // force reading within 16-bytes boundaries to avoid GPF at end of page
-@eopag: movdqu  xmm1, dqword ptr [data + len - 20H]
-        shl     len, 4
-        lea     rax, [rip + @shifts]
-        pshufb  xmm1, dqword ptr [rax + len]
-        jmp     @end1
-@17_32: pxor    xmm1, dqword ptr [rax + 16]
+        ja      @33up
+        pxor    xmm1, dqword ptr [rax + 16] // 17..32
         aesenc  xmm1, xmm1
         movdqu  xmm2, dqword ptr [data]
         movdqu  xmm3, dqword ptr [data + len - 10H] // may overlap
@@ -4991,7 +4980,9 @@ procedure _AesNiHashXmm0(seedplaceholder: QWord; data: pointer; len: PtrUInt);
         movdqa  xmm0, xmm2
         movd    eax, xmm2
         ret
-@33_64: movdqa  xmm2, xmm1
+@33up:  cmp     len, 64
+        ja      @65up
+        movdqa  xmm2, xmm1  // 33..64
         movdqa  xmm3, xmm1
         pxor    xmm1, dqword ptr [rax + 16]
         pxor    xmm2, dqword ptr [rax + 32]
@@ -5025,7 +5016,9 @@ procedure _AesNiHashXmm0(seedplaceholder: QWord; data: pointer; len: PtrUInt);
         movdqa  xmm0, xmm4
         movd    eax, xmm4
         ret
-@65_128:movdqa  xmm2, xmm1
+@65up:  cmp     len, 128
+        ja     @129up
+        movdqa  xmm2, xmm1 // 65..128
         movdqa  xmm3, xmm1
         movdqa  xmm4, xmm1
         movdqa  xmm5, xmm1
@@ -5114,7 +5107,7 @@ procedure _AesNiHashXmm0(seedplaceholder: QWord; data: pointer; len: PtrUInt);
         dq $0a09080706050403, $ffffff0f0e0d0c0b
         dq $0908070605040302, $ffff0f0e0d0c0b0a
         dq $0807060504030201, $ff0f0e0d0c0b0a09
-@129up: movdqa  xmm2, xmm1
+@129up: movdqa  xmm2, xmm1 // 129 and up
         movdqa  xmm3, xmm1
         movdqa  xmm4, xmm1
         movdqa  xmm5, xmm1
