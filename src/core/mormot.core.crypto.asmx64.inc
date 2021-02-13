@@ -4906,7 +4906,7 @@ var
   AESNIHASHKEYSCHED: pointer;
   AESNIHASHKEYSCHED_: RawByteString;
 
-procedure _AesNiHashXmm0(seedplaceholder: QWord; data: pointer; len: PtrUInt); forward;
+procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt); forward;
 
 function _AesNiHash64(seed: QWord; data: pointer; len: PtrUInt): QWord;
   {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
@@ -4932,7 +4932,7 @@ function _AesNiHash32(seed: cardinal; data: pointer; len: PtrUInt): cardinal;
 end;
 
 // 128-bit aeshash as implemented in Go runtime, using aesni/sse4.1 opcodes
-procedure _AesNiHashXmm0(seedplaceholder: QWord; data: pointer; len: PtrUInt);
+procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // xmm0=seed, rdx/rsi=data, r8/rdx=len, returns in xmm0 and eax
         mov     rax, len
@@ -4948,7 +4948,7 @@ procedure _AesNiHashXmm0(seedplaceholder: QWord; data: pointer; len: PtrUInt);
         ja      @17up
         je      @16
         movdqu  xmm1, dqword ptr [data + len - 16] // no read after end of page
-        shl     len, 4
+        shl     len, 4           // (and heap has header so no read before EOP)
         lea     rax, [rip + @shifts]
         pshufb  xmm1, dqword ptr [rax + len]
 @end1:  pxor    xmm1, xmm0
@@ -4958,13 +4958,13 @@ procedure _AesNiHashXmm0(seedplaceholder: QWord; data: pointer; len: PtrUInt);
         movdqa  xmm0, xmm1
         movd    eax, xmm1 // when jumped from _AesNiHash32
         ret
-@0:     movd     eax, xmm0
+@0:     mov     eax, seedfromhash32 // _AesNiHash32 left seed in first param reg
         ret
 @16:    movdqu  xmm1, dqword ptr [data]
         jmp     @end1
 @17up:  cmp     len, 32
         ja      @33up
-        pxor    xmm1, dqword ptr [rax + 16] // 17..32
+        pxor    xmm1, dqword ptr [rax + 16] // 17..32 bytes
         aesenc  xmm1, xmm1
         movdqu  xmm2, dqword ptr [data]
         movdqu  xmm3, dqword ptr [data + len - 10H] // may overlap
@@ -4982,7 +4982,7 @@ procedure _AesNiHashXmm0(seedplaceholder: QWord; data: pointer; len: PtrUInt);
         ret
 @33up:  cmp     len, 64
         ja      @65up
-        movdqa  xmm2, xmm1  // 33..64
+        movdqa  xmm2, xmm1  // 33..64 bytes
         movdqa  xmm3, xmm1
         pxor    xmm1, dqword ptr [rax + 16]
         pxor    xmm2, dqword ptr [rax + 32]
@@ -5018,7 +5018,7 @@ procedure _AesNiHashXmm0(seedplaceholder: QWord; data: pointer; len: PtrUInt);
         ret
 @65up:  cmp     len, 128
         ja     @129up
-        movdqa  xmm2, xmm1 // 65..128
+        movdqa  xmm2, xmm1 // 65..128 bytes
         movdqa  xmm3, xmm1
         movdqa  xmm4, xmm1
         movdqa  xmm5, xmm1
@@ -5107,7 +5107,7 @@ procedure _AesNiHashXmm0(seedplaceholder: QWord; data: pointer; len: PtrUInt);
         dq $0a09080706050403, $ffffff0f0e0d0c0b
         dq $0908070605040302, $ffff0f0e0d0c0b0a
         dq $0807060504030201, $ff0f0e0d0c0b0a09
-@129up: movdqa  xmm2, xmm1 // 129 and up
+@129up: movdqa  xmm2, xmm1 // 129 bytes and up
         movdqa  xmm3, xmm1
         movdqa  xmm4, xmm1
         movdqa  xmm5, xmm1

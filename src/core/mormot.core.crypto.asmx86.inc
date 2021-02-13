@@ -2656,7 +2656,7 @@ asm
         ja      @17up
         je      @16
         movdqu  xmm1, dqword ptr [edx + ecx - 16] // no read after end of page
-        shl     ecx, 4
+        shl     ecx, 4          // (and heap has header so no read before EOP)
         movdqu  xmm2, dqword ptr [@shifts + ecx] // Delphi bug about .align 16
         pshufb  xmm1, xmm2
 @end1:  aesenc  xmm1, xmm0
@@ -2669,7 +2669,7 @@ asm
         jmp     @end1
 @17up:  cmp     ecx, 32
         ja      @33up
-        pxor    xmm1, dqword ptr [eax + 16] // 17..32
+        pxor    xmm1, dqword ptr [eax + 16] // 17..32 bytes
         aesenc  xmm1, xmm1
         movdqu  xmm2, dqword ptr [edx]
         movdqu  xmm3, dqword ptr [edx + ecx - 10H] // may overlap
@@ -2685,7 +2685,7 @@ asm
         ret
 @33up:  cmp     ecx, 64
         ja      @65up
-        movdqa  xmm2, xmm1 // 33..64
+        movdqa  xmm2, xmm1 // 33..64 bytes
         movdqa  xmm3, xmm1
         pxor    xmm1, dqword ptr [eax + 16]
         pxor    xmm2, dqword ptr [eax + 32]
@@ -2717,7 +2717,7 @@ asm
         ret
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
         // pshufb arguments to move edx down from the high bytes of the register
-        // to the low bytes of the register  -  index is how many bytes to move
+        // to the low bytes of the register - index is how many bytes to move
 @shifts:dd $00000000,$00000000, $00000000,$00000000
         dd $ffffffff,$ffffff0f, $ffffffff,$ffffffff
         dd $ffffffff,$ffff0f0e, $ffffffff,$ffffffff
@@ -2734,7 +2734,7 @@ asm
         dd $0a090807,$06050403, $ffffff0f,$0e0d0c0b
         dd $09080706,$05040302, $ffff0f0e,$0d0c0b0a
         dd $08070605,$04030201, $ff0f0e0d,$0c0b0a09
-@65up:  movdqa  xmm2, xmm1 // 65 and up
+@65up:  movdqa  xmm2, xmm1 // 65 bytes and up
         movdqa  xmm3, xmm1
         pxor    xmm1, dqword ptr [eax + 16]
         pxor    xmm2, dqword ptr [eax + 32]

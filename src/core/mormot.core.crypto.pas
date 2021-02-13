@@ -6206,13 +6206,12 @@ begin
   end;
   // big buffers will release the lock before processing
   MoveFast(fAes, aes, SizeOf(aes));
-  H := bswap64(TAesContext(fAes.Context).iv.H);
+  H := bswap64(aes.iv.H);
   inc(H, main);
   if remain <> 0 then
     inc(H);
   if H < bswap64(aes.iv.H) then // propagate big-endian 64-bit CTR overflow
-    TAesContext(fAes.Context).iv.L :=
-      bswap64(bswap64(TAesContext(fAes.Context).iv.L) + 1);
+    TAesContext(fAes.Context).iv.L := bswap64(bswap64(aes.iv.L) + 1);
   TAesContext(fAes.Context).iv.H := bswap64(H);
   LeaveCriticalSection(fSafe);
   // unlocked AES computation
