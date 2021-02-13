@@ -993,9 +993,7 @@ function Hash32Test(buf: PAnsiChar; hash: THasher): boolean;
 var
   L, modif: PtrInt;
   c, s: cardinal;
-  timer: TPrecisionTimer;
 begin
-  timer.Start;
   result := false;
   s := 0;
   for L := 0 to HASHESMAX do
@@ -1013,7 +1011,7 @@ begin
     if hash(0, buf, L) <> c then
       exit; // should return the same value for the same data
     inc(s, L);
-  end;
+  end; // at the end: s = 45133056
   //writeln(GetExecutableLocation(@hash) + ' ' + KB(timer.PerSec(s)) + '/s');
   result := true;
 end;

@@ -2865,21 +2865,14 @@ function crc32cBy4fast(crc, value: cardinal): cardinal;
 // implementation available on the current CPU (e.g. with SSE 4.2 opcodes)
 procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
 
-/// compute a 128-bit CRC of any binary buffers
-// - combine crcblocksfast() with 4 parallel crc32c() for 1..15 trailing bytes
-procedure crc32c128(hash: PHash128; buf: PAnsiChar; len: cardinal);
-
-/// compute a proprietary 128-bit CRC of 128-bit binary buffers
-// - apply four crc32c() calls on the 128-bit input chunks, into a 128-bit crc
-// - its output won't match crc128c() value, which works on 8-bit input
-// - will use SSE 4.2 hardware accelerated instruction, if available
-// - is used e.g. by mormot.core.ecc's TEcdheProtocol.ComputeMAC for macCrc128c
-var crcblocks: procedure(crc128, data128: PBlock128; count: integer) = crcblocksfast;
-
 /// computation of our 128-bit CRC of a 128-bit binary buffer without SSE4.2
 // - to be used for regression tests only: crcblock will use the fastest
 // implementation available on the current CPU
 procedure crcblockfast(crc128, data128: PBlock128);
+
+/// compute a 128-bit CRC of any binary buffers
+// - combine crcblocksfast() with 4 parallel crc32c() for 1..15 trailing bytes
+procedure crc32c128(hash: PHash128; buf: PAnsiChar; len: cardinal);
 
 var
   /// compute CRC32C checksum on the supplied buffer
@@ -2903,6 +2896,13 @@ var
   // - will use SSE 4.2 hardware accelerated instruction, if available
   // - is used e.g. by mormot.core.crypto's TAesCfbCrc to check for data integrity
   crcblock: procedure(crc128, data128: PBlock128)  = crcblockfast;
+
+  /// compute a proprietary 128-bit CRC of 128-bit binary buffers
+  // - apply four crc32c() calls on the 128-bit input chunks, into a 128-bit crc
+  // - its output won't match crc128c() value, which works on 8-bit input
+  // - will use SSE 4.2 hardware accelerated instruction, if available
+  // - is used e.g. by mormot.core.ecc's TEcdheProtocol.ComputeMAC for macCrc128c
+  crcblocks: procedure(crc128, data128: PBlock128; count: integer) = crcblocksfast;
 
 /// compute CRC16-CCITT checkum on the supplied buffer
 // - i.e. 16-bit CRC-CCITT, with polynomial x^16 + x^12 + x^5 + 1 ($1021)
@@ -9824,8 +9824,8 @@ end;
 
 function crc32cTwice(seed: QWord; buf: PAnsiChar; len: cardinal): QWord;
 begin
-  PQWordRec(@result)^.L := crc32c(PQWordRec(@seed)^.L, buf, len);
-  PQWordRec(@result)^.H := crc32c(PQWordRec(@seed)^.H, buf, len);
+  result := QWord(crc32c(cardinal(seed), buf, len)) +
+            QWord(crc32c(seed shr 32, buf, len)) shl 32;
 end;
 
 function crc63c(buf: PAnsiChar; len: cardinal): Int64;
