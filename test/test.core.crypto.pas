@@ -992,23 +992,29 @@ const
 function Hash32Test(buf: PAnsiChar; hash: THasher): boolean;
 var
   L, modif: PtrInt;
-  c: cardinal;
+  c, s: cardinal;
+  timer: TPrecisionTimer;
 begin
+  timer.Start;
   result := false;
+  s := 0;
   for L := 0 to HASHESMAX do
   begin
     c := hash(0, buf, L);
+    inc(s, L);
     for modif := 0 to L - 1 do
     begin
-//  writeln(L,' ',modif);
       inc(buf[modif]);
       if hash(0, buf, L) = c then
         exit; // should detect one modified bit at any position
+      inc(s, L);
       dec(buf[modif]);
     end;
     if hash(0, buf, L) <> c then
       exit; // should return the same value for the same data
+    inc(s, L);
   end;
+  //writeln(GetExecutableLocation(@hash) + ' ' + KB(timer.PerSec(s)) + '/s');
   result := true;
 end;
 
@@ -1067,9 +1073,9 @@ var
 begin
   Check(Adler32SelfTest);
   FillIncreasing(@buf, $12345670, SizeOf(buf) shr 2);
-{  Check(Hash32Test(@buf, @crc32cfast));
+  Check(Hash32Test(@buf, @crc32cfast));
   Check(Hash32Test(@buf, @crc32c));
-  Check(Hash32Test(@buf, @xxHash32));}
+  Check(Hash32Test(@buf, @xxHash32));
   if Assigned(AesNiHash32) then
     Check(Hash32Test(@buf, @AesNiHash32));
   Check(Hash64Test(@buf, @crc32cTwice));
