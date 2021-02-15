@@ -3413,7 +3413,7 @@ end;
 
 procedure TBsonWriter.BsonWrite(const name: RawUtf8; const value: TVarRec);
 var
-  tmp: RawUtf8;
+  tmp: TTempUtf8;
 begin
   case value.VType of
     vtBoolean:
@@ -3431,8 +3431,10 @@ begin
     vtString, vtAnsiString, {$ifdef HASVARUSTRING}vtUnicodeString, {$endif}
     vtPChar, vtChar, vtWideChar, vtWideString:
       begin
-        VarRecToUtf8(value, tmp);
-        BsonWrite(name, tmp);
+        VarRecToTempUtf8(value, tmp);
+        BsonWriteString(name, tmp.Text, tmp.Len);
+        if tmp.TempRawUtf8 <> nil then
+          RawUtf8(tmp.TempRawUtf8) := '';
       end;
   else
     raise EBsonException.CreateUtf8('%.BsonWrite(TVarRec.VType=%)', [self, value.VType]);
@@ -4273,7 +4275,7 @@ end;
 function Bson(const Format: RawUtf8; const Args, Params: array of const;
   kind: PBsonElementType): TBsonDocument;
 var
-  Json: RawUtf8; // since we use FormatUtf8(), TSynTempBuffer is useless here
+  json: RawUtf8; // since we use FormatUtf8(), TSynTempBuffer is useless here
   v: variant;
   k: TBsonElementType;
 begin
@@ -4292,9 +4294,9 @@ begin
       exit;
     end;
   end;
-  Json := FormatUtf8(Format, Args, Params, true);
-  UniqueRawUtf8(Json); // ensure Format is untouched if Args=[]
-  k := JsonBufferToBsonDocument(pointer(Json), result);
+  json := FormatUtf8(Format, Args, Params, {json=}true);
+  UniqueRawUtf8(json); // ensure Format is untouched if Args=[]
+  k := JsonBufferToBsonDocument(pointer(json), result);
   if kind <> nil then
     kind^ := k;
 end;

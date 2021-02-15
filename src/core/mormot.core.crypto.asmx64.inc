@@ -4902,7 +4902,7 @@ end;
 
 var
   /// set to random at startup so hash collisions will be harder to engineer
-  // - defined as a pointer from GetMemAligned() which is mandatory on Delphi
+  // - set by GetMemAligned() - mandatory on Delphi which doesn't align properly
   AESNIHASHKEYSCHED: pointer;
   AESNIHASHKEYSCHED_: RawByteString;
 
@@ -4913,7 +4913,7 @@ function _AesNiHash64(seed: QWord; data: pointer; len: PtrUInt): QWord;
         // rcx/rdi=seed, rdx/rsi=data, r8/rdx=len
         movq    xmm0, seed
         call    _AesNiHashXmm0
-        movq    rax, xmm0
+        movq    rax, xmm0 // made 3 AES permutations -> 32/64-bit trunc is good
 end;
 
 procedure _AesNiHash128(hash: PHash128; data: pointer; len: PtrUInt);
@@ -4935,28 +4935,28 @@ end;
 procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // xmm0=seed, rdx/rsi=data, r8/rdx=len, returns in xmm0 and eax
-        mov     rax, len
+        mov     r10, len
         test    len, len
         jz      @0
-        pinsrw  xmm0, eax, 4
+        pinsrw  xmm0, r10d, 4
         mov     rax, qword ptr [rip + AESNIHASHKEYSCHED]
         pshufhw xmm0, xmm0, 00H
+        shl     r10, 4
         movdqa  xmm1, xmm0
         pxor    xmm0, dqword ptr [rax]
+        movdqu  xmm2, dqword ptr [data + len - 16] // no read after end of page
+        lea     r11, [rip + @shifts] // (heap has header so no read before EOP)
         aesenc  xmm0, xmm0
         cmp     len, 16 // 1..16 bytes have no branch
         ja      @17up
         je      @16
-        movdqu  xmm1, dqword ptr [data + len - 16] // no read after end of page
-        shl     len, 4           // (and heap has header so no read before EOP)
-        lea     rax, [rip + @shifts]
-        pshufb  xmm1, dqword ptr [rax + len]
-@end1:  pxor    xmm1, xmm0
-        aesenc  xmm1, xmm1
-        aesenc  xmm1, xmm1
-        aesenc  xmm1, xmm1
-        movdqa  xmm0, xmm1
-        movd    eax, xmm1 // when jumped from _AesNiHash32
+        pshufb  xmm2, dqword ptr [r11 + r10]
+@end1:  pxor    xmm2, xmm0
+        aesenc  xmm2, xmm2
+        aesenc  xmm2, xmm2
+        aesenc  xmm2, xmm2
+        movdqa  xmm0, xmm2
+        movd    eax, xmm2 // when jumped from _AesNiHash32
         ret
 @0:     mov     eax, seedfromhash32 // _AesNiHash32 left seed in first param reg
         ret

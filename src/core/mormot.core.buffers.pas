@@ -834,7 +834,11 @@ type
     /// append some content (may be text or binary) prefixed by its encoded length
     // - will write DataLen as VarUInt32, then the Data content, as expected
     // by FromVarString/FromVarBlob functions
-    procedure WriteVar(Data: pointer; DataLen: PtrInt);
+    procedure WriteVar(Data: pointer; DataLen: PtrInt); overload;
+    /// append some TTempUtf8 text content prefixed by its encoded length
+    // - will also release any memory stored in Item.TempRawUtf8
+    procedure WriteVar(var Item: TTempUtf8); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 encoded text at the current position
     // - will write the string length (as VarUInt32), then the string content
     // - is just a wrapper around WriteVar()
@@ -3566,9 +3570,20 @@ wr:   MoveFast(Data^, fBuffer^[fPos], DataLen);
     fPos := PtrUInt(ToVarUInt32(DataLen, @fBuffer^[fPos])) - PtrUInt(fBuffer);
     goto wr;
   end;
-  // Data wouldn't fit in memory buffer -> direct write
+  // Data wouldn't fit in memory buffer -> write as two explicit calls
   WriteVarUInt32(DataLen);
   Write(Data, DataLen);
+end;
+
+procedure TBufferWriter.WriteVar(var Item: TTempUtf8);
+begin
+  WriteVar(Item.Text, Item.Len);
+  if Item.TempRawUtf8 <> nil then
+    {$ifdef FPC}
+    FastAssignNew(Item.TempRawUtf8);
+    {$else}
+    RawUtf8(Item.TempRawUtf8) := '';
+    {$endif FPC}
 end;
 
 procedure TBufferWriter.Write(const Text: RawByteString);
@@ -6329,6 +6344,7 @@ function UrlEncode(const NameValuePairs: array of const): RawUtf8;
 var
   a, n: PtrInt;
   name, value: RawUtf8;
+  p: PVarRec;
 begin
   result := '';
   n := high(NameValuePairs);
@@ -6340,11 +6356,11 @@ begin
       VarRecToUtf8(NameValuePairs[a * 2], name);
       if not IsUrlValid(pointer(name)) then
         continue; // just skip invalid names
-      with NameValuePairs[a * 2 + 1] do
-        if VType = vtObject then
-          value := ObjectToJson(VObject, [])
-        else
-          VarRecToUtf8(NameValuePairs[a * 2 + 1], value);
+      p := @NameValuePairs[a * 2 + 1];
+      if p^.VType = vtObject then
+        value := ObjectToJson(p^.VObject, [])
+      else
+        VarRecToUtf8(p^, value);
       result := result + '&' + name + '=' + UrlEncode(value);
     end;
     result[1] := '?';

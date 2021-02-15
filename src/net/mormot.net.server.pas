@@ -336,7 +336,6 @@ type
   {$M-}
 
   /// Socket API based HTTP/1.1 server class used by THttpServer Threads
-
   THttpServerSocket = class(THttpSocket)
   protected
     fMethod: RawUtf8;

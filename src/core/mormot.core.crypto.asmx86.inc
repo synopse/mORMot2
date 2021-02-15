@@ -2612,6 +2612,7 @@ asm
         mov     ecx, len // we need to adjust the parameters
         mov     edx, data
         call    _AesNiHashXmm0
+        // _AesNiHashXmm0 made 3 AES permutations -> 32/64-bit trunc is good
         movq    seed, xmm0 // copy to stack for returning as eax/edx pair
         mov     eax, dword ptr [seed]
         mov     edx, dword ptr [seed + 4]

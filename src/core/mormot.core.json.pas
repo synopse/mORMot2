@@ -664,7 +664,7 @@ function QuotedStrJson(const aText: RawUtf8): RawUtf8; overload;
 // - will inline Params[] for every ? in Format, handling special "inlined"
 // parameters, as exected by our ORM or DB units, i.e. :(1234): for numerical
 // values, and :('quoted '' string'): for textual values
-// - if optional JSONFormat parameter is TRUE, ? parameters will be written
+// - if optional JsonFormat parameter is TRUE, ? parameters will be written
 // as JSON escaped strings, without :(...): tokens, e.g. "quoted \" string"
 // - resulting string has no length limit and uses fast concatenation
 // - note that, due to a Delphi compiler limitation, cardinal values should be
@@ -672,7 +672,7 @@ function QuotedStrJson(const aText: RawUtf8): RawUtf8; overload;
 // - any supplied TObject instance will be written as their class name
 function FormatUtf8(const Format: RawUtf8;
   const Args, Params: array of const;
-  JSONFormat: boolean = false): RawUtf8; overload;
+  JsonFormat: boolean = false): RawUtf8; overload;
 
 
 { ********** TTextWriter class with proper JSON escaping and WriteObject() support }
@@ -4687,7 +4687,7 @@ end;
 
 
 function FormatUtf8(const Format: RawUtf8; const Args, Params: array of const;
-  JSONFormat: boolean): RawUtf8;
+  JsonFormat: boolean): RawUtf8;
 var
   i, tmpN, L, A, P, len: PtrInt;
   isParam: AnsiChar;
@@ -4774,19 +4774,19 @@ Txt:  len := F - FDeb;
       // handle ? substitution
       if tmpN = length(tmp) then
         SetLength(tmp, tmpN + 8);
-      if JSONFormat and
+      if JsonFormat and
          (Params[P].VType = vtVariant) then
         VariantSaveJson(Params[P].VVariant^, twJsonEscape, tmp[tmpN])
       else
       begin
         VarRecToUtf8(Params[P], tmp[tmpN]);
-        WasString := not (Params[P].VType in NOTTOQUOTE[JSONFormat]);
+        WasString := not (Params[P].VType in NOTTOQUOTE[JsonFormat]);
         if WasString then
-          if JSONFormat then
+          if JsonFormat then
             QuotedStrJson(tmp[tmpN], tmp[tmpN])
           else
             tmp[tmpN] := QuotedStr(tmp[tmpN], '''');
-        if not JSONFormat then
+        if not JsonFormat then
         begin
           inc(L, 4); // space for :():
           include(inlin, tmpN);
@@ -4808,7 +4808,7 @@ Txt:  len := F - FDeb;
   end;
   if L = 0 then
     exit;
-  if not JSONFormat and
+  if not JsonFormat and
      (tmpN > SizeOf(inlin) shl 3) then
     raise EJSONException.CreateUtf8(
       'Too many parameters for FormatUtf8(): %>%', [tmpN, SizeOf(inlin) shl 3]);

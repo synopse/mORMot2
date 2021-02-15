@@ -1661,7 +1661,7 @@ function _Json(const Json: RawUtf8;
 
 /// initialize a variant instance to store some document-based content
 // from a supplied (extended) JSON content, with parameters formating
-// - wrapper around the _Json(FormatUtf8(...,JSONFormat=true)) function,
+// - wrapper around the _Json(FormatUtf8(...,JsonFormat=true)) function,
 // i.e. every Args[] will be inserted for each % and Params[] for each ?,
 // with proper JSON escaping of string values, and writing nested _Obj() /
 // _Arr() instances as expected JSON objects / arrays

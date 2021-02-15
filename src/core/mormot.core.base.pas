@@ -2453,9 +2453,9 @@ function Trim(const S: RawUtf8): RawUtf8;
 // - in mORMot 1.18, there was a Trim() function but it was confusing
 function TrimU(const S: RawUtf8): RawUtf8;
 
-// single-allocation (therefore faster) alternative to Trim(copy())
+/// single-allocation (therefore faster) alternative to Trim(copy())
 procedure TrimCopy(const S: RawUtf8; start, count: PtrInt;
-  out result: RawUtf8);
+  var result: RawUtf8);
 
 /// returns the left part of a RawUtf8 string, according to SepStr separator
 // - if SepStr is found, returns Str first chars until (and excluding) SepStr
@@ -2605,7 +2605,7 @@ function bswap64({$ifdef FPC_X86}constref{$else}const{$endif} a: QWord): QWord;
 /// convert the endianness of an array of unsigned 64-bit integer into BigEndian
 // - n is required to be > 0
 // - warning: on x86, a should be <> b
-procedure bswap64array(a,b: PQWordArray; n: PtrInt);
+procedure bswap64array(a, b: PQWordArray; n: PtrInt);
 
 
 /// low-level wrapper to add a callback to a dynamic list of events
@@ -2802,7 +2802,7 @@ type
   PCrc32tab = ^TCrc32tab;
 
 var
-  /// tables used by crc32cfast() function
+  /// 8KB tables used by crc32cfast() function
   // - created with a polynom diverse from zlib's crc32() algorithm, but
   // compatible with SSE 4.2 crc32 instruction
   // - tables content is created from code in initialization section below
@@ -8167,32 +8167,37 @@ end;
 {$endif PUREMORMOT2}
 
 procedure TrimCopy(const S: RawUtf8; start, count: PtrInt;
-  out result: RawUtf8); // faster alternative to Trim(copy())
+  var result: RawUtf8); // faster alternative to Trim(copy())
 var
   L: PtrInt;
 begin
-  if count <= 0 then
-    exit;
-  if start <= 0 then
-    start := 1;
-  L := Length(S);
-  while (start <= L) and
-        (S[start] <= ' ') do
+  if count > 0 then
   begin
-    inc(start);
-    dec(count);
+    if start <= 0 then
+      start := 1;
+    L := Length(S);
+    while (start <= L) and
+          (S[start] <= ' ') do
+    begin
+      inc(start);
+      dec(count);
+    end;
+    dec(start);
+    dec(L,start);
+    if count < L then
+      L := count;
+    while L>0 do
+      if S[start + L] <= ' ' then
+        dec(L)
+      else
+        break;
+    if L > 0 then
+    begin
+      FastSetString(result, @PByteArray(S)[start], L);
+      exit;
+    end;
   end;
-  dec(start);
-  dec(L,start);
-  if count < L then
-    L := count;
-  while L>0 do
-    if S[start + L] <= ' ' then
-      dec(L)
-    else
-      break;
-  if L > 0 then
-    FastSetString(result, @PByteArray(S)[start], L);
+  result := '';
 end;
 
 function Split(const Str, SepStr: RawUtf8; StartPos: integer): RawUtf8;

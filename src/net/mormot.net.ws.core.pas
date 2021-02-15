@@ -1384,7 +1384,7 @@ procedure TWebSocketProtocolBinary.FrameCompress(const Head: RawUtf8;
   const Values: array of const; const Content, ContentType: RawByteString;
   var frame: TWebSocketFrame);
 var
-  item: RawUtf8;
+  item: TTempUtf8;
   i: PtrInt;
   W: TBufferWriter;
   temp: TTextWriterStackBuffer; // 8KB
@@ -1397,8 +1397,8 @@ begin
     for i := 0 to high(Values) do
       with Values[i] do
       begin
-        VarRecToUtf8(Values[i], item);
-        W.Write(item);
+        VarRecToTempUtf8(Values[i], item);
+        W.WriteVar(item);
       end;
     W.Write(ContentType);
     W.WriteBinary(Content);

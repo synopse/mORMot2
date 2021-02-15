@@ -550,13 +550,6 @@ begin
         exit;
       inc(c);
       dec(n);
-      if n = 0 then
-        break;
-      result := c^;
-      if result.ConnectionID = id then
-        exit;
-      inc(c);
-      dec(n);
     until n = 0;
   result := nil;
 end;
