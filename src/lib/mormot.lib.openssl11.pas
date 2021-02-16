@@ -149,6 +149,14 @@ const
   EVP_CTRL_GCM_GET_TAG = $10;
   EVP_CTRL_GCM_SET_TAG = $11;
 
+  EVP_MD_FLAG_ONESHOT = $0001;
+  EVP_MD_FLAG_XOF = $0002;
+  EVP_MD_FLAG_DIGALGID_MASK = $0018;
+  EVP_MD_FLAG_DIGALGID_NULL = $0000;
+  EVP_MD_FLAG_DIGALGID_ABSENT = $0008;
+  EVP_MD_FLAG_DIGALGID_CUSTOM = $0018;
+  EVP_MD_FLAG_FIPS = $0400;
+
   BIO_FLAGS_READ = $01;
   BIO_FLAGS_WRITE = $02;
   BIO_FLAGS_IO_SPECIAL = $04;
@@ -424,6 +432,9 @@ type
 
   PEVP_PKEY_CTX = type pointer;
   PPEVP_PKEY_CTX = ^PEVP_PKEY_CTX;
+
+  PHMAC_CTX = pointer;
+  PPHMAC_CTX = ^PHMAC_CTX;
 
   PRSA = type pointer;
   PPRSA = ^PRSA;
@@ -701,6 +712,8 @@ function PEM_read_bio_X509(bp: PBIO; x: PPX509; cb: Ppem_password_cb;
   u: pointer): PX509; cdecl;
 function PEM_read_bio_PrivateKey(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
   u: pointer): PEVP_PKEY; cdecl;
+function PEM_read_bio_PUBKEY(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
+  u: pointer): PEVP_PKEY; cdecl;
 function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
   u: pointer): PRSA; cdecl;
 function RAND_bytes(buf: PByte; num: integer): integer; cdecl;
@@ -718,6 +731,20 @@ function EVP_CipherUpdate(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger;
   _in: PByte; inl: integer): integer; cdecl;
 function EVP_CipherFinal_ex(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): integer; cdecl;
 function EVP_CIPHER_CTX_set_padding(c: PEVP_CIPHER_CTX; pad: integer): integer; cdecl;
+function EVP_MD_CTX_new(): PEVP_MD_CTX; cdecl;
+procedure EVP_MD_CTX_free(ctx: PEVP_MD_CTX); cdecl;
+function EVP_MD_CTX_md(ctx: PEVP_MD_CTX): PEVP_MD; cdecl;
+function EVP_MD_flags(md: PEVP_MD): cardinal; cdecl;
+function EVP_MD_size(md: PEVP_MD): integer; cdecl;
+function EVP_DigestInit_ex(ctx: PEVP_MD_CTX; typ: PEVP_MD; impl: PENGINE): integer; cdecl;
+function EVP_DigestFinal_ex(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal): integer; cdecl;
+function EVP_DigestFinalXOF(ctx: PEVP_MD_CTX; md: PByte; len: PtrUInt): integer; cdecl;
+function HMAC_CTX_new(): PHMAC_CTX; cdecl;
+procedure HMAC_CTX_free(ctx: PHMAC_CTX); cdecl;
+function HMAC_Init_ex(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD; impl: PENGINE): integer; cdecl;
+function HMAC_Update(ctx: PHMAC_CTX; data: PByte; len: PtrUInt): integer; cdecl;
+function HMAC_Final(ctx: PHMAC_CTX; md: PByte; len: PCardinal): integer; cdecl;
+function EVP_sha256: PEVP_MD; cdecl;
 
 
 { ******************** OpenSSL Full API Declaration }
@@ -769,6 +796,8 @@ function SSL_set_tlsext_host_name(const s: PSSL; const name: RawUtf8): integer;
   {$ifdef HASINLINE} inline; {$endif}
 function SSL_set_mode(s: PSSL; version: integer): integer;
 function SSL_get_mode(s: PSSL): integer;
+
+function EVP_MD_CTX_size(ctx: PEVP_MD_CTX): integer;
 
 function DTLSv1_get_timeout(s: PSSL; timeval: PTimeVal): time_t;
 procedure DTLSv1_handle_timeout(s: PSSL);
@@ -1052,6 +1081,7 @@ type
     ASN1_STRING_data: function(x: PASN1_STRING): PByte; cdecl;
     PEM_read_bio_X509: function(bp: PBIO; x: PPX509; cb: Ppem_password_cb; u: pointer): PX509; cdecl;
     PEM_read_bio_PrivateKey: function(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
+    PEM_read_bio_PUBKEY: function(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
     PEM_read_bio_RSAPrivateKey: function(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
     RAND_bytes: function(buf: PByte; num: integer): integer; cdecl;
     EVP_get_cipherbyname: function(name: PUtf8Char): PEVP_CIPHER; cdecl;
@@ -1065,10 +1095,24 @@ type
     EVP_CipherUpdate: function(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger; _in: PByte; inl: integer): integer; cdecl;
     EVP_CipherFinal_ex: function(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): integer; cdecl;
     EVP_CIPHER_CTX_set_padding: function(c: PEVP_CIPHER_CTX; pad: integer): integer; cdecl;
+    EVP_MD_CTX_new: function: PEVP_MD_CTX; cdecl;
+    EVP_MD_CTX_free: procedure(ctx: PEVP_MD_CTX); cdecl;
+    EVP_MD_CTX_md: function(ctx: PEVP_MD_CTX): PEVP_MD; cdecl;
+    EVP_MD_flags: function(md: PEVP_MD): cardinal; cdecl;
+    EVP_MD_size: function(md: PEVP_MD): integer; cdecl;
+    EVP_DigestInit_ex: function(ctx: PEVP_MD_CTX; typ: PEVP_MD; impl: PENGINE): integer; cdecl;
+    EVP_DigestFinal_ex: function(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal): integer; cdecl;
+    EVP_DigestFinalXOF: function(ctx: PEVP_MD_CTX; md: PByte; len: PtrUInt): integer; cdecl;
+    HMAC_CTX_new: function: PHMAC_CTX; cdecl;
+    HMAC_CTX_free: procedure(ctx: PHMAC_CTX); cdecl;
+    HMAC_Init_ex: function(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD; impl: PENGINE): integer; cdecl;
+    HMAC_Update: function(ctx: PHMAC_CTX; data: PByte; len: PtrUInt): integer; cdecl;
+    HMAC_Final: function(ctx: PHMAC_CTX; md: PByte; len: PCardinal): integer; cdecl;
+    EVP_sha256: function: PEVP_MD; cdecl;
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..50] of PAnsiChar = (
+  LIBCRYPTO_ENTRIES: array[0..65] of PAnsiChar = (
     'CRYPTO_malloc', 'CRYPTO_free', 'ERR_remove_state', 'ERR_error_string_n',
     'ERR_get_error', 'ERR_remove_thread_state', 'ERR_load_BIO_strings',
     'EVP_MD_CTX_new', 'EVP_MD_CTX_free',
@@ -1078,12 +1122,15 @@ const
     'BIO_s_mem', 'BIO_read', 'BIO_write', 'BIO_new_socket', 'X509_get_issuer_name',
     'X509_get_subject_name', 'X509_free', 'X509_NAME_print_ex_fp', 'OPENSSL_sk_pop',
     'OPENSSL_sk_num', 'ASN1_BIT_STRING_get_bit', 'OBJ_nid2sn', 'OBJ_obj2nid',
-    'ASN1_STRING_data', 'PEM_read_bio_X509', 'PEM_read_bio_PrivateKey',
+    'ASN1_STRING_data', 'PEM_read_bio_X509', 'PEM_read_bio_PrivateKey', 'PEM_read_bio_PUBKEY',
     'PEM_read_bio_RSAPrivateKey', 'RAND_bytes', 'EVP_get_cipherbyname',
     'EVP_get_digestbyname', 'EVP_CIPHER_CTX_new', 'EVP_CIPHER_CTX_reset',
     'EVP_CIPHER_CTX_free', 'EVP_CIPHER_CTX_copy', 'EVP_CIPHER_CTX_ctrl',
     'EVP_CipherInit_ex', 'EVP_CipherUpdate', 'EVP_CipherFinal_ex',
-    'EVP_CIPHER_CTX_set_padding');
+    'EVP_CIPHER_CTX_set_padding', 'EVP_MD_CTX_new', 'EVP_MD_CTX_free',
+    'EVP_MD_CTX_md', 'EVP_MD_flags', 'EVP_MD_size', 'EVP_DigestInit_ex',
+    'EVP_DigestFinal_ex', 'EVP_DigestFinalXOF', 'HMAC_CTX_new', 'HMAC_CTX_free',
+    'HMAC_Init_ex', 'HMAC_Update', 'HMAC_Final', 'EVP_sha256');
 
 var
   libcrypto: TLibCrypto;
@@ -1284,6 +1331,11 @@ begin
   result := libcrypto.PEM_read_bio_PrivateKey(bp, x, cb, u);
 end;
 
+function PEM_read_bio_PUBKEY(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY;
+begin
+  result := libcrypto.PEM_read_bio_PUBKEY(bp, x, cb, u);
+end;
+
 function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
   u: pointer): PRSA;
 begin
@@ -1351,6 +1403,76 @@ end;
 function EVP_CIPHER_CTX_set_padding(c: PEVP_CIPHER_CTX; pad: integer): integer;
 begin
   result := libcrypto.EVP_CIPHER_CTX_set_padding(c, pad);
+end;
+
+function EVP_MD_CTX_new: PEVP_MD_CTX;
+begin
+  result := libcrypto.EVP_MD_CTX_new;
+end;
+
+procedure EVP_MD_CTX_free(ctx: PEVP_MD_CTX);
+begin
+  libcrypto.EVP_MD_CTX_free(ctx);
+end;
+
+function EVP_MD_CTX_md(ctx: PEVP_MD_CTX): PEVP_MD;
+begin
+  result := libcrypto.EVP_MD_CTX_md(ctx);
+end;
+
+function EVP_MD_flags(md: PEVP_MD): cardinal;
+begin
+  result := libcrypto.EVP_MD_flags(md);
+end;
+
+function EVP_MD_size(md: PEVP_MD): integer;
+begin
+  result := libcrypto.EVP_MD_size(md);
+end;
+
+function EVP_DigestInit_ex(ctx: PEVP_MD_CTX; typ: PEVP_MD; impl: PENGINE): integer;
+begin
+  result := libcrypto.EVP_DigestInit_ex(ctx, typ, impl);
+end;
+
+function EVP_DigestFinal_ex(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal): integer;
+begin
+  result := libcrypto.EVP_DigestFinal_ex(ctx, md, s);
+end;
+
+function EVP_DigestFinalXOF(ctx: PEVP_MD_CTX; md: PByte; len: PtrUInt): integer;
+begin
+  result := libcrypto.EVP_DigestFinalXOF(ctx, md, len);
+end;
+
+function HMAC_CTX_new: PHMAC_CTX;
+begin
+  result := libcrypto.HMAC_CTX_new;
+end;
+
+procedure HMAC_CTX_free(ctx: PHMAC_CTX);
+begin
+  libcrypto.HMAC_CTX_free(ctx);
+end;
+
+function HMAC_Init_ex(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD; impl: PENGINE): integer;
+begin
+  result := libcrypto.HMAC_Init_ex(ctx, key, len, md, impl);
+end;
+
+function HMAC_Update(ctx: PHMAC_CTX; data: PByte; len: PtrUInt): integer;
+begin
+  result := libcrypto.HMAC_Update(ctx, data, len);
+end;
+
+function HMAC_Final(ctx: PHMAC_CTX; md: PByte; len: PCardinal): integer;
+begin
+  result := libcrypto.HMAC_Final(ctx, md, len);
+end;
+
+function EVP_sha256: PEVP_MD;
+begin
+  result := libcrypto.EVP_sha256;
 end;
 
 
@@ -1665,6 +1787,9 @@ function PEM_read_bio_PrivateKey(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
   u: pointer): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_bio_PrivateKey';
 
+function PEM_read_bio_PUBKEY(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
+  external LIB_CRYPTO name _PU + 'PEM_read_bio_PUBKEY';
+
 function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
   u: pointer): PRSA; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_bio_RSAPrivateKey';
@@ -1707,6 +1832,48 @@ function EVP_CipherFinal_ex(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): 
 
 function EVP_CIPHER_CTX_set_padding(c: PEVP_CIPHER_CTX; pad: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_set_padding';
+
+function EVP_MD_CTX_new(): PEVP_MD_CTX; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_new';
+
+procedure EVP_MD_CTX_free(ctx: PEVP_MD_CTX); cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_free';
+
+function EVP_MD_CTX_md(ctx: PEVP_MD_CTX): PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_md';
+
+function EVP_MD_flags(md: PEVP_MD): cardinal; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_MD_flags';
+
+function EVP_MD_size(md: PEVP_MD): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_MD_size';
+
+function EVP_DigestInit_ex(ctx: PEVP_MD_CTX; typ: PEVP_MD; impl: PENGINE): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_DigestInit_ex';
+
+function EVP_DigestFinal_ex(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_DigestFinal_ex';
+
+function EVP_DigestFinalXOF(ctx: PEVP_MD_CTX; md: PByte; len: PtrUInt): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_DigestFinalXOF';
+
+function HMAC_CTX_new(): PHMAC_CTX; cdecl;
+  external LIB_CRYPTO name _PU + 'HMAC_CTX_new';
+
+procedure HMAC_CTX_free(ctx: PHMAC_CTX); cdecl;
+  external LIB_CRYPTO name _PU + 'HMAC_CTX_free';
+
+function HMAC_Init_ex(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD; impl: PENGINE): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'HMAC_Init_ex';
+
+function HMAC_Update(ctx: PHMAC_CTX; data: PByte; len: PtrUInt): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'HMAC_Update';
+
+function HMAC_Final(ctx: PHMAC_CTX; md: PByte; len: PCardinal): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'HMAC_Final';
+
+function EVP_sha256: PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_sha256';
 
 
 procedure OpenSslInitialize(const libcryptoname, libsslname: TFileName);
@@ -1841,6 +2008,11 @@ end;
 function SSL_get_mode(s: PSSL): integer;
 begin
   result := SSL_ctrl(s, SSL_CTRL_MODE, 0, Nil);
+end;
+
+function EVP_MD_CTX_size(ctx: PEVP_MD_CTX): integer;
+begin
+  result := EVP_MD_size(EVP_MD_CTX_md(ctx))
 end;
 
 function DTLSv1_get_timeout(s: PSSL; timeval: PTimeVal): time_t;

@@ -9,12 +9,13 @@ unit mormot.core.crypto.openssl;
    High-Performance Cryptographic Features using OpenSSL 1.1.1
     - OpenSSL Cryptographic Pseudorandom Number Generator (CSPRNG)
     - AES Cypher/Uncypher in various Modes
+    - Hashers and Signers OpenSSL Wrappers
     - Register OpenSSL to our General Cryptography Catalog
 
   *****************************************************************************
 
   TL;DR: on x86_64, our mormot.core.crypto.pas asm is stand-alone and faster
-  than OpenSSL for most algorithms, but AES-GCM (1.8 vs 1.5 GB/s).
+  than OpenSSL for most algorithms, and only 20% slower for AES-GCM.
 
 }
 
@@ -42,7 +43,7 @@ uses
 { ************** OpenSSL Cryptographic Pseudorandom Number Generator (CSPRNG) }
 
 type
-  /// exception class raised by this unit
+  /// exception class raised by the AES classes of this unit
   EOpenSslCrypto = class(EOpenSsl);
 
   /// TAesPrng-compatible class using OpenSSL 1.1.1
@@ -204,6 +205,109 @@ type
   end;
 
 
+{ ************** Hashers and Signers OpenSSL Wrappers }
+
+type
+  /// exception class raised by the hashing classes of this unit
+  EOpenSslHash = class(EOpenSsl);
+
+  /// abstract parent multi-algorithm hashing/HMAC wrapper for OpenSSL
+  TOpenSslDigestAbstract = class
+  private
+    fDigestSize: cardinal;
+    fDigestValue: THash512Rec;
+  public
+    /// call this method for each continuous message block
+    // - iterate over all message blocks, then call Digest to retrieve the HMAC
+    procedure Update(Data: pointer; DataLength: integer); overload; virtual; abstract;
+    /// call this method for each continuous message block
+    procedure Update(const Data: RawByteString); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// computes the hash of all supplied messages
+    // - store it internally the DigestValue buffer, or copy it into Dest buffer
+    // which is typically a THash256 or THash512 variable
+    // - returns actual DigestValue/Dest buffer length, i.e. DigestSize
+    function Digest(Dest: pointer = nil): cardinal; virtual; abstract;
+    /// computes the Hash/HMAC of all supplied message as lowercase hexa chars
+    function DigestHex: RawUtf8;
+    /// raw access to the final Message Digest, after a call to the Digest method
+    // - if HashSize as supplied to Create() is bigger than 64, first bytes will
+    // be truncated in this field - you should specify a buffer to Digest() call
+    property DigestValue: THash512Rec
+      read fDigestValue;
+    /// how many bytes have been stored in DigestValues, after a call to Digest
+    property DigestSize: cardinal
+      read fDigestSize;
+  end;
+
+  /// convenient multi-algorithm wrapper for OpenSSL Hash algorithms
+  TOpenSslHash = class(TOpenSslDigestAbstract)
+  private
+    fCtx: PEVP_MD_CTX;
+    fXof: boolean;
+  public
+    /// initialize the internal hashing structure for a specific algorithm
+    // - Algorithm is one of `openssl list -digest-algorithms`
+    // - for XOF hash functions such as 'shake256', the hashSize option
+    // can be used to specify the desired output length in bytes
+    // - raise an EOpenSslHash exception on unknown/unsupported algorithm
+    constructor Create(const Algorithm: RawUtf8; HashSize: cardinal = 0);
+    /// call this method for each continuous message block
+    // - iterate over all message blocks, then call Digest to retrieve the Hash
+    procedure Update(Data: pointer; DataLength: integer); override;
+    /// computes the hash of all supplied messages
+    // - store it internally the DigestValue buffer, or copy it into Dest buffer
+    // which is typically a THash256 or THash512 variable
+    // - returns actual DigestValue/Dest buffer length, i.e. DigestSize
+    function Digest(Dest: pointer = nil): cardinal; override;
+    /// compute the message authentication code using `Algorithm` as hash function
+    class function Hash(const Algorithm: RawUtf8; const Data: RawByteString;
+      HashSize: cardinal = 0): RawUtf8;
+    /// release the digest context
+    destructor Destroy; override;
+  end;
+
+  /// convenient multi-algorithm wrapper for OpenSSL HMAC algorithms
+  TOpenSslHmac = class(TOpenSslDigestAbstract)
+  private
+    fCtx: PHMAC_CTX;
+  public
+    /// initialize the internal HMAC structure for a specific algorithm and Key
+    // - Algorithm is one of `openssl list -digest-algorithms`
+    // - Key/KeyLen define the HMAC associated salt
+    // - raise an EOpenSslHash exception on unknown/unsupported algorithm
+    constructor Create(const Algorithm: RawUtf8; Key: pointer; KeyLength: cardinal);
+    /// call this method for each continuous message block
+    // - iterate over all message blocks, then call Digest to retrieve the Hash
+    procedure Update(Data: pointer; DataLength: integer); override;
+    /// computes the HMAC of all supplied messages
+    // - store it internally the DigestValue buffer, or copy it into Dest buffer
+    // which is typically a THash256 or THash512 variable
+    // - returns actual DigestValue/Dest buffer length, i.e. DigestSize
+    function Digest(Dest: pointer = nil): cardinal; override;
+    /// compute the HMAC using `algorithm` as hash function
+    class function Hmac(const Algorithm: RawUtf8; const Data: RawByteString;
+      Key: pointer; KeyLength: cardinal): RawUtf8;
+    /// release the digest context
+    destructor Destroy; override;
+  end;
+
+/// asymetric digital signature of some Message using a given PrivateKey
+// - if Algorithm is not specified, EVP_sha256 will be used
+// - returns 0 on error, or the result Signature size in bytes
+function OpenSslSign(const Algorithm: RawUtf8;
+  Message, PrivateKey: pointer; MessageLen, PrivateKeyLen: integer;
+  const Password: RawUtf8; out Signature: THash512Rec): cardinal;
+
+
+/// asymetric digital verification of some Message using a given PublicKey
+// - if Algorithm is not specified, EVP_sha256 will be used
+// - returns 0 on error, or the result Signature size in bytes
+function OpenSslVerify(const Algorithm, Password: RawUtf8;
+  Message, PublicKey, Signature: pointer;
+  MessageLen, PublicKeyLen, SignatureLen: integer): boolean;
+
+
 
 { ************** Register OpenSSL to our General Cryptography Catalog }
 
@@ -214,7 +318,6 @@ procedure RegisterOpenSsl;
 
 
 implementation
-
 
 { TAesOsl }
 
@@ -493,6 +596,235 @@ begin
 end;
 
 
+{ ************** Hashers and Signers OpenSSL Wrappers }
+
+{ TOpenSslDigestAbstract }
+
+procedure TOpenSslDigestAbstract.Update(const Data: RawByteString);
+begin
+  Update(pointer(Data), length(Data));
+end;
+
+function TOpenSslDigestAbstract.DigestHex: RawUtf8;
+begin
+  BinToHexLower(@fDigestValue, Digest(nil), result);
+end;
+
+
+{ TOpenSslHash }
+
+constructor TOpenSslHash.Create(const Algorithm: RawUtf8; HashSize: cardinal);
+var
+  md: PEVP_MD;
+begin
+  EOpenSslHash.CheckAvailable(PClass(self)^, 'Create');
+  md := EVP_get_digestbyname(pointer(Algorithm));
+  if md = nil then
+    raise EOpenSslHash.CreateFmt(
+      'TOpenSslHash.Create(''%s''): Unknown algorithm', [Algorithm]);
+  fCtx := EVP_MD_CTX_new;
+  EOpenSslHash.Check(self, 'Create',
+    EVP_DigestInit_ex(fCtx, md, nil));
+  fDigestSize := EVP_MD_size(md);
+  fXof := EVP_MD_flags(md) and EVP_MD_FLAG_XOF <> 0;
+  if (hashSize <> 0)  and
+     (fDigestSize <> HashSize) then
+    if fXof then
+      // custom size in XOF mode
+      fDigestSize := hashSize
+    else
+      raise EOpenSslHash.CreateFmt('TOpenSslHash.Create: Incorrect hashSize ' +
+        'option passed to a non-XOF hash function "%s"', [Algorithm]);
+end;
+
+procedure TOpenSslHash.Update(Data: pointer; DataLength: integer);
+begin
+  EOpenSslHash.Check(self, 'Update',
+    EVP_DigestUpdate(fCtx, Data, DataLength));
+end;
+
+function TOpenSslHash.Digest(Dest: pointer): cardinal;
+begin
+  result := EVP_MD_CTX_size(fCtx);
+  if Dest = nil then
+    if result > SizeOf(fDigestValue) then
+      raise EOpenSslHash.CreateFmt(
+        'TOpenSslHash.Digest(nil): size=%d overflow', [result])
+    else
+      Dest := @fDigestValue;
+  if fXof then
+    EOpenSslHash.Check(self, 'DigestXof',
+      EVP_DigestFinalXOF(fCtx, Dest, fDigestSize))
+  else
+    EOpenSslHash.Check(self, 'Digest',
+      EVP_DigestFinal_ex(fCtx, Dest, @fDigestSize));
+  if Dest <> @fDigestValue then
+  begin
+    if fDigestSize > SizeOf(fDigestValue) then
+      result := SizeOf(fDigestValue) // truncate to local copy in fXof mode
+    else
+      result := fDigestSize;
+    MoveFast(Dest^, fDigestValue, result);
+  end;
+  result := fDigestSize;
+end;
+
+destructor TOpenSslHash.Destroy;
+begin
+   if fCtx <> nil then
+     EVP_MD_CTX_free(fCtx);
+  inherited Destroy;
+end;
+
+class function TOpenSslHash.Hash(const Algorithm: RawUtf8;
+  const Data: RawByteString; HashSize: cardinal): RawUtf8;
+begin
+  with Create(Algorithm, HashSize) do
+    try
+      Update(Data);
+      result := DigestHex;
+    finally
+      Free;
+    end;
+end;
+
+
+{ TOpenSslHmac }
+
+constructor TOpenSslHmac.Create(const Algorithm: RawUtf8;
+  Key: pointer; KeyLength: cardinal);
+var
+  md: PEVP_MD;
+begin
+  EOpenSslHash.CheckAvailable(PClass(self)^, 'Create');
+  md := EVP_get_digestbyname(pointer(Algorithm));
+  if md = nil then
+    raise EOpenSslHash.CreateFmt(
+      'TOpenSslHmac.Create(''%s''): Unknown algorithm', [Algorithm]);
+  fCtx := HMAC_CTX_new;
+  EOpenSslHash.Check(self, 'Create',
+    HMAC_Init_ex(fCtx, Key, KeyLength, md, nil));
+  fDigestSize := EVP_MD_size(md);
+end;
+
+procedure TOpenSslHmac.Update(Data: pointer; DataLength: integer);
+begin
+  EOpenSslHash.Check(self, 'Update',
+    HMAC_Update(fCtx, Data, DataLength));
+end;
+
+function TOpenSslHmac.Digest(Dest: pointer): cardinal;
+begin
+  EOpenSslHash.Check(self, 'Digest',
+    HMAC_Final(fCtx, @fDigestValue, @fDigestSize));
+  if Dest <> nil then
+    MoveFast(fDigestValue, Dest^, fDigestSize);
+  result := fDigestSize;
+end;
+
+class function TOpenSslHmac.Hmac(const Algorithm: RawUtf8;
+  const Data: RawByteString; Key: pointer; KeyLength: cardinal): RawUtf8;
+begin
+  with Create(Algorithm, Key, KeyLength) do
+    try
+      Update(Data);
+      result := DigestHex;
+    finally
+      Free;
+    end;
+end;
+
+destructor TOpenSslHmac.Destroy;
+begin
+  if fCtx <> nil then
+    HMAC_CTX_free(fCtx);
+  inherited Destroy;
+end;
+
+
+function OpenSslSign(const Algorithm: RawUtf8;
+  Message, PrivateKey: pointer; MessageLen, PrivateKeyLen: integer;
+  const Password: RawUtf8; out Signature: THash512Rec): cardinal;
+var
+  md: PEVP_MD;
+  priv: PBIO;
+  pkey: PEVP_PKEY;
+  ctx: PEVP_MD_CTX;
+  size: PtrUInt;
+begin
+  result := 0;
+  if not OpenSslIsAvailable then
+    exit;
+  if Algorithm = '' then
+    md := EVP_sha256
+  else
+    md := EVP_get_digestbyname(pointer(Algorithm));
+  if md = nil then
+    exit;
+  if (PrivateKey = nil) or
+     (PrivateKeyLen = 0) then begin
+    priv := nil;
+    pkey := nil;
+  end
+  else
+  begin
+    priv := BIO_new_mem_buf(PrivateKey, PrivateKeyLen);
+    pkey := PEM_read_bio_PrivateKey(priv, nil, nil, pointer(Password));
+  end;
+  ctx := EVP_MD_CTX_new;
+  try
+    if (EVP_DigestSignInit(ctx, nil, md, nil, pkey) = OPENSSLSUCCESS) and
+       (EVP_DigestUpdate(ctx, Message, MessageLen) = OPENSSLSUCCESS) and
+       (EVP_DigestSignFinal(ctx, nil, size) = OPENSSLSUCCESS) and
+       (size = SizeOf(Signature)) and
+       (EVP_DigestSignFinal(ctx, @Signature, size) = OPENSSLSUCCESS) then
+      result := size; // success
+  finally
+    EVP_MD_CTX_free(ctx);
+    if pkey <> nil then
+      EVP_PKEY_free(pkey);
+    if priv <> nil then
+      BIO_free(priv);
+  end;
+end;
+
+function OpenSslVerify(const Algorithm, Password: RawUtf8;
+  Message, PublicKey, Signature: pointer;
+  MessageLen, PublicKeyLen, SignatureLen: integer): boolean;
+var
+  md: PEVP_MD;
+  pub: PBIO;
+  pkey: PEVP_PKEY;
+  ctx: PEVP_MD_CTX;
+begin
+  result := false;
+  if not OpenSslIsAvailable then
+    exit;
+  if Algorithm = '' then
+    md := EVP_sha256
+  else
+    md := EVP_get_digestbyname(pointer(Algorithm));
+  if (md = nil) or
+     (PublicKey = nil) or
+     (PublicKeyLen <= 0) or
+     (SignatureLen <= 0)  then
+    exit;
+  pub := BIO_new_mem_buf(PublicKey, PublicKeyLen);
+  pkey := PEM_read_bio_PUBKEY(pub, nil, nil, pointer(Password));
+  ctx := EVP_MD_CTX_new;
+  try
+    if (EVP_DigestVerifyInit(ctx, nil, md, nil, pkey) = OPENSSLSUCCESS) and
+       (EVP_DigestUpdate(ctx, Message, MessageLen) = OPENSSLSUCCESS) and
+       (EVP_DigestVerifyFinal(ctx, Signature, SignatureLen) = OPENSSLSUCCESS) then
+      result := true;
+  finally
+    EVP_MD_CTX_free(ctx);
+    EVP_PKEY_free(pkey);
+    BIO_free(pub);
+  end;
+end;
+
+
 { ************** Register OpenSSL to our General Cryptography Catalog }
 
 procedure RegisterOpenSsl;
@@ -516,6 +848,8 @@ begin
   TAesFast[mCtr] := TAesCtrNistOsl;
   {$endif HASAESNI}
 end;
+
+
 
 
 initialization

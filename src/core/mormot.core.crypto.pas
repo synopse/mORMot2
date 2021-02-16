@@ -3472,7 +3472,7 @@ begin
   a.c3 := ((y[3] shr 1) and MASK_7F) or
           (((y[3] shl 15) or (y[2] shr 17)) and MASK_80);
   a.c2 := ((y[2] shr 1) and MASK_7F) or
-                (((y[2] shl 15) or (y[1] shr 17)) and MASK_80);
+          (((y[2] shl 15) or (y[1] shr 17)) and MASK_80);
   a.c1 := ((y[1] shr 1) and MASK_7F) or
           (((y[1] shl 15) or (y[0] shr 17)) and MASK_80);
   a.c0 := (((y[0] shr 1) and MASK_7F) or
@@ -4288,7 +4288,7 @@ function TAesAbstract.MacAndCrypt(const Data: RawByteString;
   Encrypt: boolean): RawByteString;
 const
   VERSION = 1;
-  CRCSIZ = SizeOf(THash256) * 2;
+  CRCSIZ = SizeOf(THash256) * 2; // nonce+mac hashes
   SIZ = CRCSIZ + SizeOf(cardinal);
 var
   len, enclen: cardinal;
@@ -4611,10 +4611,6 @@ begin
   result := self;
 end;
 
-
-{$ifdef FPC} // disable some paranoid warning with FPC about inlined asm blocks
-  {$WARN 7121 off : Check size of memory operand }
-{$endif FPC}
 
 
 { TAesCfb }

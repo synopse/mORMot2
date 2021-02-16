@@ -3976,13 +3976,6 @@ const
   EVP_PKEY_MO_ENCRYPT = $0004;
   EVP_PKEY_MO_DECRYPT = $0008;
   
-  EVP_MD_FLAG_ONESHOT = $0001;
-  EVP_MD_FLAG_XOF = $0002;
-  EVP_MD_FLAG_DIGALGID_MASK = $0018;
-  EVP_MD_FLAG_DIGALGID_NULL = $0000;
-  EVP_MD_FLAG_DIGALGID_ABSENT = $0008;
-  EVP_MD_FLAG_DIGALGID_CUSTOM = $0018;
-  EVP_MD_FLAG_FIPS = $0400;
   EVP_MD_CTRL_DIGALGID = $1;
   EVP_MD_CTRL_MICALG = $2;
   EVP_MD_CTRL_XOF_LEN = $3;
@@ -9455,8 +9448,6 @@ type
   PPEVP_PKEY_METHOD = ^PEVP_PKEY_METHOD;
   PEVP_ENCODE_CTX = pointer;
   PPEVP_ENCODE_CTX = ^PEVP_ENCODE_CTX;
-  PHMAC_CTX = pointer;
-  PPHMAC_CTX = ^PHMAC_CTX;
   PDH = pointer;
   PPDH = ^PDH;
   PDH_METHOD = pointer;
@@ -14335,17 +14326,8 @@ function EVP_MD_type(md: PEVP_MD): integer; cdecl;
 function EVP_MD_pkey_type(md: PEVP_MD): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_pkey_type';
 
-function EVP_MD_size(md: PEVP_MD): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_MD_size';
-
 function EVP_MD_block_size(md: PEVP_MD): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_block_size';
-
-function EVP_MD_flags(md: PEVP_MD): cardinal; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_MD_flags';
-
-function EVP_MD_CTX_md(ctx: PEVP_MD_CTX): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_md';
 
 //function EVP_MD_CTX_update_fn(ctx: PEVP_MD_CTXdata: Pointercount: PtrUIntctx: PEVP_MD_CTX): integer { TODO : Cannot convert original type "int (*)(EVP_MD_CTX *, const void *, size_t)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_update_fn';
@@ -14434,14 +14416,8 @@ function EVP_Cipher(c: PEVP_CIPHER_CTX; _out: PByte; _in: PByte; inl: cardinal):
 function EVP_MD_CTX_ctrl(ctx: PEVP_MD_CTX; cmd: integer; p1: integer; p2: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_CTX_ctrl';
 
-function EVP_MD_CTX_new(): PEVP_MD_CTX; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_new';
-
 function EVP_MD_CTX_reset(ctx: PEVP_MD_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_CTX_reset';
-
-procedure EVP_MD_CTX_free(ctx: PEVP_MD_CTX); cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_free';
 
 function EVP_MD_CTX_copy_ex(_out: PEVP_MD_CTX; _in: PEVP_MD_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_CTX_copy_ex';
@@ -14455,12 +14431,6 @@ procedure EVP_MD_CTX_clear_flags(ctx: PEVP_MD_CTX; flags: integer); cdecl;
 function EVP_MD_CTX_test_flags(ctx: PEVP_MD_CTX; flags: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_CTX_test_flags';
 
-function EVP_DigestInit_ex(ctx: PEVP_MD_CTX; typ: PEVP_MD; impl: PENGINE): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_DigestInit_ex';
-
-function EVP_DigestFinal_ex(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_DigestFinal_ex';
-
 function EVP_Digest(data: pointer; count: PtrUInt; md: PByte; size: PCardinal; typ: PEVP_MD; impl: PENGINE): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_Digest';
 
@@ -14472,9 +14442,6 @@ function EVP_DigestInit(ctx: PEVP_MD_CTX; typ: PEVP_MD): integer; cdecl;
 
 function EVP_DigestFinal(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DigestFinal';
-
-function EVP_DigestFinalXOF(ctx: PEVP_MD_CTX; md: PByte; len: PtrUInt): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_DigestFinalXOF';
 
 function EVP_read_pw_string(buf: PUtf8Char; length: integer; prompt: PUtf8Char; verify: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_read_pw_string';
@@ -14568,9 +14535,6 @@ function EVP_sha1(): PEVP_MD; cdecl;
 
 function EVP_sha224(): PEVP_MD; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_sha224';
-
-function EVP_sha256(): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_sha256';
 
 function EVP_sha384(): PEVP_MD; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_sha384';
@@ -22050,9 +22014,6 @@ function PEM_write_bio_PrivateKey(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr
 function PEM_write_PrivateKey(fp: PPointer; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_PrivateKey';
 
-function PEM_read_bio_PUBKEY(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
-  external LIB_CRYPTO name _PU + 'PEM_read_bio_PUBKEY';
-
 function PEM_read_PUBKEY(fp: PPointer; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_PUBKEY';
 
@@ -22770,26 +22731,11 @@ function ENGINE_get_static_state(): pointer; cdecl;
 function HMAC_size(e: PHMAC_CTX): PtrUInt; cdecl;
   external LIB_CRYPTO name _PU + 'HMAC_size';
 
-function HMAC_CTX_new(): PHMAC_CTX; cdecl;
-  external LIB_CRYPTO name _PU + 'HMAC_CTX_new';
-
 function HMAC_CTX_reset(ctx: PHMAC_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'HMAC_CTX_reset';
 
-procedure HMAC_CTX_free(ctx: PHMAC_CTX); cdecl;
-  external LIB_CRYPTO name _PU + 'HMAC_CTX_free';
-
 function HMAC_Init(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD): integer; cdecl;
   external LIB_CRYPTO name _PU + 'HMAC_Init';
-
-function HMAC_Init_ex(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD; impl: PENGINE): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'HMAC_Init_ex';
-
-function HMAC_Update(ctx: PHMAC_CTX; data: PByte; len: PtrUInt): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'HMAC_Update';
-
-function HMAC_Final(ctx: PHMAC_CTX; md: PByte; len: PCardinal): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'HMAC_Final';
 
 function HMAC_CTX_copy(dctx: PHMAC_CTX; sctx: PHMAC_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'HMAC_CTX_copy';

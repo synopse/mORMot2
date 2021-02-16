@@ -2453,7 +2453,7 @@ begin
           enc := c.MacEncrypt(dec, aeskey.b, false);
       end;
       if length(enc) < SizeOf(TMacAndCryptData) then
-        // MacDecryptCheckTag() failed
+        // MacDecryptCheckTag() failed within MacEncrypt() above
         exit;
     end
     else
