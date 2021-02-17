@@ -2713,34 +2713,13 @@ begin
 end;
 
 function TEccSignatureCertified.SaveToDERBinary: RawByteString;
-const
-  DER_SEQUENCE = $30;
-  DER_INTEGER = $02;
 var
-  RPrefix, SPrefix: integer;
-  P: PByteArray;
+  der: TEccSignatureDer;
 begin
   if not Check then
-  begin
-    result := '';
-    exit;
-  end;
-  RPrefix := fContent.Signature[0] shr 7; // DER_INTEGER are two's complement
-  SPrefix := fContent.Signature[ECC_BYTES] shr 7;
-  SetLength(result, RPrefix + SPrefix + (ECC_BYTES * 2 + 6));
-  P := pointer(result);
-  P[0] := DER_SEQUENCE;
-  P[1] := RPrefix + SPrefix + (ECC_BYTES * 2 + 4);
-  P[2] := DER_INTEGER;
-  P[3] := ECC_BYTES + RPrefix;
-  P[4] := $00; // prepend 0 for negative number (if RPrefix=1)
-  inc(PByte(P), 4 + RPrefix);
-  MoveFast(fContent.Signature[0], P[0], ECC_BYTES);
-  inc(PByte(P), ECC_BYTES);
-  P[0] := DER_INTEGER;
-  P[1] := ECC_BYTES + SPrefix;
-  P[2] := $00;
-  MoveFast(fContent.Signature[ECC_BYTES], P[2 + SPrefix], ECC_BYTES);
+    result := ''
+  else
+    SetString(result, PAnsiChar(@der), EccSignToDer(fContent.Signature, der));
 end;
 
 function TEccSignatureCertified.SaveToDERFile(const FileName: TFileName): boolean;
