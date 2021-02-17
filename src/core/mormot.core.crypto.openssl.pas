@@ -16,6 +16,7 @@ unit mormot.core.crypto.openssl;
 
   TL;DR: on x86_64, our mormot.core.crypto.pas asm is stand-alone and faster
   than OpenSSL for most algorithms, and only 20% slower for AES-GCM.
+  For asymetric cryptography, OpenSSL is much faster than mormot.core.ecc256r1.
 
 }
 
@@ -36,7 +37,7 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.crypto,
-  mormot.core.secure,
+  mormot.core.ecc256r1,
   mormot.lib.openssl11;
 
 
@@ -217,6 +218,8 @@ type
     fDigestSize: cardinal;
     fDigestValue: THash512Rec;
   public
+    /// wrapper around function OpenSslIsAvailable
+    class function IsAvailable: boolean;
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Digest to retrieve the HMAC
     procedure Update(Data: pointer; DataLength: integer); overload; virtual; abstract;
@@ -248,6 +251,7 @@ type
   public
     /// initialize the internal hashing structure for a specific algorithm
     // - Algorithm is one of `openssl list -digest-algorithms`
+    // - if Algorithm is not specified, EVP_sha256 will be used
     // - for XOF hash functions such as 'shake256', the hashSize option
     // can be used to specify the desired output length in bytes
     // - raise an EOpenSslHash exception on unknown/unsupported algorithm
@@ -272,11 +276,16 @@ type
   private
     fCtx: PHMAC_CTX;
   public
-    /// initialize the internal HMAC structure for a specific algorithm and Key
+    /// initialize the internal HMAC structure for a specific Algorithm and Key
     // - Algorithm is one of `openssl list -digest-algorithms`
+    // - if Algorithm is not specified, EVP_sha256 will be used
     // - Key/KeyLen define the HMAC associated salt
     // - raise an EOpenSslHash exception on unknown/unsupported algorithm
-    constructor Create(const Algorithm: RawUtf8; Key: pointer; KeyLength: cardinal);
+    constructor Create(const Algorithm: RawUtf8;
+      Key: pointer; KeyLength: cardinal); overload;
+    /// initialize the internal HMAC structure for a specific Algorithm and Key
+    constructor Create(const Algorithm: RawUtf8;
+      const Key: RawByteString); overload;
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Digest to retrieve the Hash
     procedure Update(Data: pointer; DataLength: integer); override;
@@ -287,7 +296,10 @@ type
     function Digest(Dest: pointer = nil): cardinal; override;
     /// compute the HMAC using `algorithm` as hash function
     class function Hmac(const Algorithm: RawUtf8; const Data: RawByteString;
-      Key: pointer; KeyLength: cardinal): RawUtf8;
+      Key: pointer; KeyLength: cardinal): RawUtf8; overload;
+    /// compute the HMAC using `algorithm` as hash function
+    class function Hmac(const Algorithm: RawUtf8;
+      const Data, Key: RawByteString): RawUtf8; overload;
     /// release the digest context
     destructor Destroy; override;
   end;
@@ -297,23 +309,27 @@ type
 // - returns 0 on error, or the result Signature size in bytes
 function OpenSslSign(const Algorithm: RawUtf8;
   Message, PrivateKey: pointer; MessageLen, PrivateKeyLen: integer;
-  const Password: RawUtf8; out Signature: THash512Rec): cardinal;
+  const PrivateKeyPassword: RawUtf8; out Signature: THash512Rec): cardinal;
 
 
 /// asymetric digital verification of some Message using a given PublicKey
 // - if Algorithm is not specified, EVP_sha256 will be used
 // - returns 0 on error, or the result Signature size in bytes
-function OpenSslVerify(const Algorithm, Password: RawUtf8;
+function OpenSslVerify(const Algorithm, PublicKeyPassword: RawUtf8;
   Message, PublicKey, Signature: pointer;
   MessageLen, PublicKeyLen, SignatureLen: integer): boolean;
 
+/// mormot.core.ecc256r1 compatible function for asymetric digital verification
+function ecdsa_verify_osl(const PublicKey: TEccPublicKey; const Hash: TEccHash;
+  const Signature: TEccSignature): boolean;
 
 
 { ************** Register OpenSSL to our General Cryptography Catalog }
 
 /// call once at program startup to use OpenSSL when its performance matters
 // - redirects TAesGcmFast (and TAesCtrFast on i386) globals to OpenSSL
-// - calls RegisterEccAes to setup TEcdheProtocol and TEccCertificate ECIES
+// - redirects raw mormot.core.ecc256r1 functions to use OpenSSL which is much
+// faster even than the easy-gcc C version
 procedure RegisterOpenSsl;
 
 
@@ -600,6 +616,11 @@ end;
 
 { TOpenSslDigestAbstract }
 
+class function TOpenSslDigestAbstract.IsAvailable: boolean;
+begin
+  result := OpenSslIsAvailable;
+end;
+
 procedure TOpenSslDigestAbstract.Update(const Data: RawByteString);
 begin
   Update(pointer(Data), length(Data));
@@ -618,7 +639,10 @@ var
   md: PEVP_MD;
 begin
   EOpenSslHash.CheckAvailable(PClass(self)^, 'Create');
-  md := EVP_get_digestbyname(pointer(Algorithm));
+  if Algorithm = '' then
+    md := EVP_sha256
+  else
+    md := EVP_get_digestbyname(pointer(Algorithm));
   if md = nil then
     raise EOpenSslHash.CreateFmt(
       'TOpenSslHash.Create(''%s''): Unknown algorithm', [Algorithm]);
@@ -697,14 +721,23 @@ var
   md: PEVP_MD;
 begin
   EOpenSslHash.CheckAvailable(PClass(self)^, 'Create');
-  md := EVP_get_digestbyname(pointer(Algorithm));
+   if Algorithm = '' then
+     md := EVP_sha256
+   else
+     md := EVP_get_digestbyname(pointer(Algorithm));
   if md = nil then
     raise EOpenSslHash.CreateFmt(
       'TOpenSslHmac.Create(''%s''): Unknown algorithm', [Algorithm]);
+  fDigestSize := EVP_MD_size(md);
   fCtx := HMAC_CTX_new;
   EOpenSslHash.Check(self, 'Create',
     HMAC_Init_ex(fCtx, Key, KeyLength, md, nil));
-  fDigestSize := EVP_MD_size(md);
+end;
+
+constructor TOpenSslHmac.Create(const Algorithm: RawUtf8;
+  const Key: RawByteString);
+begin
+  Create(Algorithm, pointer(Key), length(Key));
 end;
 
 procedure TOpenSslHmac.Update(Data: pointer; DataLength: integer);
@@ -734,6 +767,12 @@ begin
     end;
 end;
 
+class function TOpenSslHmac.Hmac(const Algorithm: RawUtf8;
+  const Data, Key: RawByteString): RawUtf8;
+begin
+  result := HMac(Algorithm, Data, pointer(Key), length(Key));
+end;
+
 destructor TOpenSslHmac.Destroy;
 begin
   if fCtx <> nil then
@@ -744,7 +783,7 @@ end;
 
 function OpenSslSign(const Algorithm: RawUtf8;
   Message, PrivateKey: pointer; MessageLen, PrivateKeyLen: integer;
-  const Password: RawUtf8; out Signature: THash512Rec): cardinal;
+  const PrivateKeyPassword: RawUtf8; out Signature: THash512Rec): cardinal;
 var
   md: PEVP_MD;
   priv: PBIO;
@@ -769,7 +808,7 @@ begin
   else
   begin
     priv := BIO_new_mem_buf(PrivateKey, PrivateKeyLen);
-    pkey := PEM_read_bio_PrivateKey(priv, nil, nil, pointer(Password));
+    pkey := PEM_read_bio_PrivateKey(priv, nil, nil, pointer(PrivateKeyPassword));
   end;
   ctx := EVP_MD_CTX_new;
   try
@@ -788,7 +827,7 @@ begin
   end;
 end;
 
-function OpenSslVerify(const Algorithm, Password: RawUtf8;
+function OpenSslVerify(const Algorithm, PublicKeyPassword: RawUtf8;
   Message, PublicKey, Signature: pointer;
   MessageLen, PublicKeyLen, SignatureLen: integer): boolean;
 var
@@ -810,7 +849,7 @@ begin
      (SignatureLen <= 0)  then
     exit;
   pub := BIO_new_mem_buf(PublicKey, PublicKeyLen);
-  pkey := PEM_read_bio_PUBKEY(pub, nil, nil, pointer(Password));
+  pkey := PEM_read_bio_PUBKEY(pub, nil, nil, pointer(PublicKeyPassword));
   ctx := EVP_MD_CTX_new;
   try
     if (EVP_DigestVerifyInit(ctx, nil, md, nil, pkey) = OPENSSLSUCCESS) and
@@ -822,6 +861,43 @@ begin
     EVP_PKEY_free(pkey);
     BIO_free(pub);
   end;
+end;
+
+//writeln(SSL_error_short(ERR_get_error));
+
+function ecdsa_verify_osl(const PublicKey: TEccPublicKey; const Hash: TEccHash;
+  const Signature: TEccSignature): boolean;
+var
+  grp: PEC_GROUP;
+  key: PEC_KEY;
+  bn: PBIGNUM;
+  pt: PEC_POINT;
+  res, derlen: integer;
+  der: TEccSignatureDer;
+begin
+  result := false;
+  if not OpenSslIsAvailable then
+    exit;
+  grp := EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
+  if grp = nil then
+    exit;
+  key := EC_KEY_new;
+  if EC_KEY_set_group(key, grp) = OPENSSLSUCCESS then
+  begin
+    bn := BN_bin2bn(@PublicKey, SizeOf(PublicKey), nil);
+    pt := EC_POINT_bn2point(grp, bn, nil, nil);
+    if (pt <> nil) and
+       (EC_KEY_set_public_key(key, pt) = OPENSSLSUCCESS) then
+    begin
+      derlen := EccSignToDer(Signature, der);
+      res := ECDSA_verify(0, @Hash, SizeOf(Hash), @der, derlen, key);
+      result := res = OPENSSLSUCCESS;
+    end;
+    EC_POINT_free(pt);
+    BN_free(bn);
+  end;
+  EC_KEY_free(key);
+  EC_GROUP_free(grp);
 end;
 
 
@@ -847,6 +923,8 @@ begin
   TAesFast[mOfb] := TAesOfbOsl;
   TAesFast[mCtr] := TAesCtrNistOsl;
   {$endif HASAESNI}
+  // redirects raw mormot.core.ecc256r1 functions to use the much faster OpenSSL
+  @Ecc256r1Verify := @ecdsa_verify_osl;
 end;
 
 
