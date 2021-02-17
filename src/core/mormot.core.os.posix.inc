@@ -557,10 +557,10 @@ const
 //   GetTickCount64 fpc    2 494 563 op/sec
 //   GetTickCount64 libc 119 919 893 op/sec
 function clock_gettime(clk_id : clockid_t; tp: ptimespec): cint;
-  cdecl; external 'c' name 'clock_gettime';
+  cdecl; external clib name 'clock_gettime';
 
 function gettimeofday(tp: ptimeval; tzp: ptimezone): cint;
-  cdecl; external 'c' name 'gettimeofday';
+  cdecl; external clib name 'gettimeofday';
 
 {$endif OSBSD}
 

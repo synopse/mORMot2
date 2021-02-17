@@ -1243,7 +1243,7 @@ begin
   if length(signature) <> sizeof(TEccSignature) then
     exit;
   sha.Full(pointer(headpayload), length(headpayload), hash);
-  if ecdsa_verify(fCertificate.Content.Signed.PublicKey, hash, PEccSignature(signature)^) then
+  if Ecc256r1Verify(fCertificate.Content.Signed.PublicKey, hash, PEccSignature(signature)^) then
     JWT.result := jwtValid;
 end;
 
@@ -1258,7 +1258,7 @@ begin
     raise EECCException.CreateUtf8('%.ComputeSignature expects % (%) to hold ' +
       'a private key', [self, fCertificate, fCertificate.Serial]);
   sha.Full(pointer(headpayload), length(headpayload), hash);
-  if not ecdsa_sign(TEccCertificateSecret(fCertificate).PrivateKey, hash, sign) then
+  if not Ecc256r1Sign(TEccCertificateSecret(fCertificate).PrivateKey, hash, sign) then
     raise EECCException.CreateUtf8('%.ComputeSignature: ecdsa_sign?', [self]);
   result := BinToBase64Uri(@sign, sizeof(sign));
 end;

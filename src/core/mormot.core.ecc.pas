@@ -1850,11 +1850,11 @@ begin
     end
     else
       FillcharFast(head.sign, sizeof(head.sign), 255); // Version=255=not signed
-    if not ecc_make_key(head.rndpub, rndpriv) then
-      raise EECCException.CreateUtf8('%.Encrypt: ecc_make_key?', [self]);
+    if not Ecc256r1MakeKey(head.rndpub, rndpriv) then
+      raise EECCException.CreateUtf8('%.Encrypt: MakeKey?', [self]);
     SetLength(secret, sizeof(TEccSecretKey));
-    if not ecdh_shared_secret(fContent.Signed.PublicKey, rndpriv, PEccSecretKey(secret)^) then
-      raise EECCException.CreateUtf8('%.Encrypt: ecdh_shared_secret?', [self]);
+    if not Ecc256r1SharedSecret(fContent.Signed.PublicKey, rndpriv, PEccSecretKey(secret)^) then
+      raise EECCException.CreateUtf8('%.Encrypt: SharedSecret?', [self]);
     PBKDF2_HMAC_SHA256(secret, KDFSalt, KDFRounds, aeskey.b, 'salt');
     if Algo in ECIES_SYNLZ then
     begin
@@ -2009,8 +2009,8 @@ begin
       EccIssuer(IssuerText, Issuer);
     for retry := false to true do
     begin
-      if not ecc_make_key(PublicKey, fPrivateKey) then
-        raise EECCException.CreateUtf8('%.CreateNew: ecc_make_key?', [self]);
+      if not Ecc256r1MakeKey(PublicKey, fPrivateKey) then
+        raise EECCException.CreateUtf8('%.CreateNew: MakeKey?', [self]);
       if Authority = nil then
       begin
         AuthoritySerial := Serial;
@@ -2025,18 +2025,18 @@ begin
         priv := @Authority.fPrivateKey;
         pub := @Authority.fContent.Signed.PublicKey;
         if ParanoidVerify then // check below will be on Authority keys
-          if not ecdsa_sign(fPrivateKey, hash{%H-}, temp) or
-             not ecdsa_verify(PublicKey, hash, temp) then
+          if not Ecc256r1Sign(fPrivateKey, hash{%H-}, temp) or
+             not Ecc256r1Verify(PublicKey, hash, temp) then
             if retry then
               raise EECCException.CreateUtf8('%.CreateNew: ParanoidVerify1?', [self])
             else
               continue;
       end;
       sha.Full(@fContent.Signed, sizeof(TEccCertificateSigned), hash);
-      if not ecdsa_sign(priv^, hash, fContent.Signature) then
+      if not Ecc256r1Sign(priv^, hash, fContent.Signature) then
         raise EECCException.CreateUtf8('%.CreateNew: ecdsa_sign?', [self]);
       if not ParanoidVerify or
-         ecdsa_verify(pub^, hash, fContent.Signature) then
+         Ecc256r1Verify(pub^, hash, fContent.Signature) then
         break
       else if retry then
         raise EECCException.CreateUtf8('%.CreateNew: ParanoidVerify2?', [self]);
@@ -2437,7 +2437,7 @@ begin
       exit;
     end;
     SetLength(secret, sizeof(TEccSecretKey));
-    if not ecdh_shared_secret(
+    if not Ecc256r1SharedSecret(
         head.rndpub, fPrivateKey, PEccSecretKey(secret)^) then
       exit;
     result := ecdInvalidMAC;
@@ -2636,7 +2636,7 @@ begin
   fContent.Date := NowEccDate;
   fContent.AuthoritySerial := Authority.Content.Signed.Serial;
   fContent.AuthorityIssuer := Authority.Content.Signed.Issuer;
-  if not ecdsa_sign(Authority.fPrivateKey, Hash, fContent.Signature) then
+  if not Ecc256r1Sign(Authority.fPrivateKey, Hash, fContent.Signature) then
     raise EECCException.CreateUtf8('%.CreateNew: ecdsa_sign?', [self]);
 end;
 
@@ -2880,7 +2880,7 @@ begin
     exit;
   end;
   sha.Full(@content.Signed, sizeof(content.Signed), hash);
-  if ecdsa_verify(auth.Signed.PublicKey, hash, content.Signature) then
+  if Ecc256r1Verify(auth.Signed.PublicKey, hash, content.Signature) then
   begin
     fSafe.Lock;
     try
@@ -3749,7 +3749,7 @@ begin
   dec(len, sizeof(TEccSignature)); // Sign at the latest position
   sha.Full(frame, len, hash);
   res := sprInvalidSignature;
-  if not ecdsa_verify(QC.Signed.PublicKey, hash, PEccSignature(@frame[len])^) then
+  if not Ecc256r1Verify(QC.Signed.PublicKey, hash, PEccSignature(@frame[len])^) then
     exit;
   res := sprSuccess;
   result := true;
@@ -3764,7 +3764,7 @@ begin
   QC := fPrivate.fContent;
   dec(len, sizeof(TEccSignature)); // Sign at the latest position
   sha.Full(frame, len, hash);
-  if not ecdsa_sign(fPrivate.fPrivateKey, hash, PEccSignature(@frame[len])^) then
+  if not Ecc256r1Sign(fPrivate.fPrivateKey, hash, PEccSignature(@frame[len])^) then
     raise EECCException.CreateUtf8('%.Sign: ecdsa_sign?', [self]);
 end;
 
@@ -3797,9 +3797,9 @@ begin
   TAesPrng.Main.FillRandom(fRndA);
   aClient.RndA := fRndA;
   if fAlgo.auth <> authClient then
-    if not ecc_make_key(aClient.QE, fdE) then
+    if not Ecc256r1MakeKey(aClient.QE, fdE) then
       raise EECCException.CreateUtf8(
-        '%.ComputeHandshake: ecc_make_key?', [self]);
+        '%.ComputeHandshake: MakeKey?', [self]);
   if fAlgo.auth <> authServer then
     sign(@aClient, sizeof(aClient), aClient.QCA);
 end;
@@ -3825,11 +3825,11 @@ begin
   try
     result := sprInvalidEphemeralKey;
     if fAlgo.auth <> authServer then
-      if not ecdh_shared_secret(aServer.QF, fPrivate.fPrivateKey, sA) then
+      if not Ecc256r1SharedSecret(aServer.QF, fPrivate.fPrivateKey, sA) then
         exit;
     result := sprInvalidPublicKey;
     if fAlgo.auth <> authClient then
-      if not ecdh_shared_secret(aServer.QCB.Signed.PublicKey, fdE, sB) then
+      if not Ecc256r1SharedSecret(aServer.QCB.Signed.PublicKey, fdE, sB) then
         exit;
     SharedSecret(@sA, @sB);
   finally
@@ -3910,17 +3910,17 @@ begin
   TAesPrng.Main.FillRandom(fRndB);
   aServer.RndB := fRndB;
   if fAlgo.auth <> authServer then
-    if not ecc_make_key(aServer.QF, dF) then
+    if not Ecc256r1MakeKey(aServer.QF, dF) then
       raise EECCException.CreateUtf8(
-        '%.ComputeHandshake: ecc_make_key?', [self]);
+        '%.ComputeHandshake: MakeKey?', [self]);
   try
     result := sprInvalidPublicKey;
     if fAlgo.auth <> authServer then
-      if not ecdh_shared_secret(aClient.QCA.Signed.PublicKey, dF, sA) then
+      if not Ecc256r1SharedSecret(aClient.QCA.Signed.PublicKey, dF, sA) then
         exit;
     result := sprInvalidEphemeralKey;
     if fAlgo.auth <> authClient then
-      if not ecdh_shared_secret(aClient.QE, fPrivate.fPrivateKey, sB) then
+      if not Ecc256r1SharedSecret(aClient.QE, fPrivate.fPrivateKey, sB) then
         exit;
     SharedSecret(@sA, @sB);
   finally

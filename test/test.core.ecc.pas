@@ -109,14 +109,14 @@ begin
   Check(mormot.core.text.HexToBin(PAnsiChar(
     '51A0C8018EC725F9B9F821D826FEEC4CAE8843066685522F1961D25935EAA39E'),
     @s1, sizeof(s1)));
-  Check(ecdsa_verify(pu1, h1, si1));
-  Check(ecdsa_verify(pu2, h2, si2));
+  Check(Ecc256r1Verify(pu1, h1, si1));
+  Check(Ecc256r1Verify(pu2, h2, si2));
   FillZero(s2);
-  Check(ecdh_shared_secret(pu1, pr2, s2));
+  Check(Ecc256r1SharedSecret(pu1, pr2, s2));
   Check(IsEqual(s1, s2));
   Check(CompareMem(@s1, @s2, sizeof(s1)));
   FillZero(s3);
-  Check(ecdh_shared_secret(pu2, pr1, s3));
+  Check(Ecc256r1SharedSecret(pu2, pr1, s3));
   Check(IsEqual(s1, s3));
   Check(CompareMem(@s1, @s3, sizeof(s1)));
   Check(ecdsa_verify_pas(pu1, h1, si1));
@@ -134,7 +134,7 @@ var
   i: integer;
 begin
   for i := 0 to ECC_COUNT - 1 do
-    Check(ecc_make_key(pub[i], priv[i]));
+    Check(Ecc256r1MakeKey(pub[i], priv[i]));
 end;
 
 procedure TTestCoreEcc._ecdsa_sign;
@@ -142,7 +142,7 @@ var
   i: integer;
 begin
   for i := 0 to ECC_COUNT - 1 do
-    Check(ecdsa_sign(priv[i], hash, sign[i]));
+    Check(Ecc256r1Sign(priv[i], hash, sign[i]));
 end;
 
 procedure TTestCoreEcc._ecdsa_verify;
@@ -150,7 +150,7 @@ var
   i: integer;
 begin
   for i := 0 to ECC_COUNT - 1 do
-    check(ecdsa_verify(pub[i], hash, sign[i]));
+    check(Ecc256r1Verify(pub[i], hash, sign[i]));
 end;
 
 procedure TTestCoreEcc._ecdh_shared_secret;
@@ -160,8 +160,8 @@ var
 begin
   for i := 0 to ECC_COUNT - 2 do
   begin
-    check(ecdh_shared_secret(pub[i], priv[i + 1], sec1));
-    check(ecdh_shared_secret(pub[i + 1], priv[i], sec2));
+    check(Ecc256r1SharedSecret(pub[i], priv[i + 1], sec1));
+    check(Ecc256r1SharedSecret(pub[i + 1], priv[i], sec2));
     check(IsEqual(sec1, sec2));
   end;
 end;
