@@ -131,26 +131,32 @@ begin
   CheckEqual(s, '4b007901b765489abead49d926f721d065a429c1');
 end;
 
-function SingleTest(const s: RawByteString; const TDig: TSha256Digest): boolean; overload;
-var
-  SHA: TSha256;
-  Digest: TSha256Digest;
-  i: integer;
-begin
-  // 1. Hash complete RawByteString
-  SHA.Full(pointer(s), length(s), Digest);
-  result := IsEqual(Digest, TDig);
-  if not result then
-    exit;
-  // 2. one update call for all chars
-  SHA.Init;
-  for i := 1 to length(s) do
-    SHA.Update(@s[i], 1);
-  SHA.Final(Digest);
-  result := IsEqual(Digest, TDig);
-end;
 
 procedure TTestCoreCrypto._SHA256;
+
+  procedure SingleTest(const s: RawByteString; const TDig: TSha256Digest);
+  var
+    SHA: TSha256;
+    Digest: TSha256Digest;
+    i: integer;
+  begin
+    // 1. Hash complete RawByteString
+    SHA.Full(pointer(s), length(s), Digest);
+    Check(IsEqual(Digest, TDig));
+    // 2. one update call for all chars
+    SHA.Init;
+    for i := 1 to length(s) do
+      SHA.Update(@s[i], 1);
+    SHA.Final(Digest);
+    Check(IsEqual(Digest, TDig));
+    {$ifdef USE_OPENSSL}
+    if TOpenSslHash.IsAvailable then
+    begin
+      CheckEqual(TOpenSslHash.Hash('sha256', s), Sha256DigestToString(TDig));
+      CheckEqual(TOpenSslHash.Hash('', s), Sha256DigestToString(TDig));
+    end;
+    {$endif USE_OPENSSL}
+  end;
 
   procedure DoTest;
   const
@@ -172,10 +178,15 @@ procedure TTestCoreCrypto._SHA256;
     i: integer;
     sha: TSha256;
   begin
-    Check(SingleTest('abc', D1));
-    Check(SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq', D2));
+    SingleTest('abc', D1);
+    SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq', D2);
     {%H-}Sha256Weak('lagrangehommage', Digest.Lo); // test with len=256>64
     Check(IsEqual(Digest.Lo, D3));
+    {$ifdef USE_OPENSSL}
+    if TOpenSslHmac.IsAvailable then
+      CheckEqual(TOpenSslHmac.Hmac('', 'what do ya want for nothing?', 'Jefe'),
+        '5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843');
+    {$endif USE_OPENSSL}
     PBKDF2_HMAC_SHA256('password', 'salt', 1, Digest.Lo);
     check(Sha256DigestToString(Digest.Lo) =
       '120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b');
@@ -284,6 +295,12 @@ procedure TTestCoreCrypto._SHA512;
       sign.Init(saSha512, password);
       sign.Update(secret);
       Check(sign.final = expected);
+      {$ifdef USE_OPENSSL}
+      if TOpenSslHmac.IsAvailable and
+         (password <> '') then
+        CheckEqual(TOpenSslHmac.Hmac(
+          'sha512', secret, pointer(password), length(password)), expected);
+      {$endif USE_OPENSSL}
     end
     else
     begin
@@ -298,7 +315,7 @@ procedure TTestCoreCrypto._SHA512;
 const
   FOX: RawByteString = 'The quick brown fox jumps over the lazy dog';
 var
-  dig: TSha512Digest;
+  dig: THash512Rec;
   i: integer;
   sha: TSha512;
   c: AnsiChar;
@@ -327,24 +344,33 @@ begin
   sha.Init;
   for i := 1 to length(FOX) do
     sha.Update(@FOX[i], 1);
-  sha.Final(dig);
-  Check(Sha512DigestToString(dig) = '07e547d9586f6a73f73fbac0435ed76951218fb7d0c' +
+  sha.Final(dig.b);
+  Check(Sha512DigestToString(dig.b) = '07e547d9586f6a73f73fbac0435ed76951218fb7d0c' +
     '8d788a309d785436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6');
+  {$ifdef USE_OPENSSL}
+  if TOpenSslHash.IsAvailable then
+    CheckEqual(TOpenSslHash.Hash('sha512', ''),
+      'cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d' +
+      '36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e');
+    CheckEqual(TOpenSslHash.Hash('sha512', FOX),
+      '07e547d9586f6a73f73fbac0435ed76951218fb7d0c8d788a309d785' +
+      '436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6');
+  {$endif USE_OPENSSL}
   c := 'a';
   sha.Init;
   for i := 1 to 1000 do
     sha.Update(@c, 1);
-  sha.Final(dig);
-  Check(Sha512DigestToString(dig) =
+  sha.Final(dig.b);
+  Check(Sha512DigestToString(dig.b) =
     '67ba5535a46e3f86dbfbed8cbbaf0125c76ed549ff8' +
     'b0b9e03e0c88cf90fa634fa7b12b47d77b694de488ace8d9a65967dc96df599727d3292a8d9d447709c97');
   SetLength(temp, 1000);
   FillCharFast(pointer(temp)^, 1000, ord('a'));
-  Check(Sha512(temp) = Sha512DigestToString(dig));
+  Check(Sha512(temp) = Sha512DigestToString(dig.b));
   for i := 1 to 1000000 do
     sha.Update(@c, 1);
-  sha.Final(dig);
-  Check(Sha512DigestToString(dig) =
+  sha.Final(dig.b);
+  Check(Sha512DigestToString(dig.b) =
     'e718483d0ce769644e2e42c7bc15b4638e1f98b13b2' +
     '044285632a803afa973ebde0ff244877ea60a4cb0432ce577c31beb009c5c2c49aa2e4eadb217ad8cc09b');
   Test('', '', 'b936cee86c9f87aa5d3c6f2e84cb5a4239a5fe50480a' +
@@ -360,21 +386,21 @@ begin
     'd513554e1c8cf252c02d470a285a0501bad999bfe943c08f050235d7d68b1da55e63f73b60a57fce', 1);
   Test('password', 'salt', 'd197b1b33db0143e018b12f3d1d1479e6cdebdcc97c5c0f87' +
     'f6902e072f457b5143f30602641b3d55cd335988cb36b84376060ecd532e039b742a239434af2d5', 4096);
-  HMAC_SHA256('Jefe', 'what do ya want for nothing?', PHash256(@dig)^);
-  Check(Sha256DigestToString(PHash256(@dig)^) = '5bdcc146bf60754e6a042426089575c' +
-    '75a003f089d2739839dec58b964ec3843');
-  HMAC_SHA384('Jefe', 'what do ya want for nothing?', PHash384(@dig)^);
-  Check(Sha384DigestToString(PHash384(@dig)^) = 'af45d2e376484031617f78d2b58a6b1' +
+  HMAC_SHA256('Jefe', 'what do ya want for nothing?', dig.Lo);
+  CheckEqual(Sha256DigestToString(dig.Lo),
+    '5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843');
+  HMAC_SHA384('Jefe', 'what do ya want for nothing?', dig.b384);
+  Check(Sha384DigestToString(dig.b384) = 'af45d2e376484031617f78d2b58a6b1' +
     'b9c7ef464f5a01b47e42ec3736322445e8e2240ca5e69e2c78b3239ecfab21649');
-  PBKDF2_HMAC_SHA384('password', 'salt', 4096, PHash384(@dig)^);
-  Check(Sha384DigestToString(PHash384(@dig)^) = '559726be38db125bc85ed7895f6e3cf574c7a01c' +
+  PBKDF2_HMAC_SHA384('password', 'salt', 4096, dig.b384);
+  Check(Sha384DigestToString(dig.b384) = '559726be38db125bc85ed7895f6e3cf574c7a01c' +
     '080c3447db1e8a76764deb3c307b94853fbe424f6488c5f4f1289626');
-  PBKDF2_HMAC_SHA512('passDATAb00AB7YxDTT', 'saltKEYbcTcXHCBxtjD', 1, dig);
-  Check(Sha512DigestToString(dig) = 'cbe6088ad4359af42e603c2a33760ef9d4017a7b2aad10af46' +
+  PBKDF2_HMAC_SHA512('passDATAb00AB7YxDTT', 'saltKEYbcTcXHCBxtjD', 1, dig.b);
+  Check(Sha512DigestToString(dig.b) = 'cbe6088ad4359af42e603c2a33760ef9d4017a7b2aad10af46' +
     'f992c660a0b461ecb0dc2a79c2570941bea6a08d15d6887e79f32b132e1c134e9525eeddd744fa');
   PBKDF2_HMAC_SHA384('passDATAb00AB7YxDTTlRH2dqxDx19GDxDV1zFMz7E6QVqK',
-    'saltKEYbcTcXHCBxtjD2PnBh44AIQ6XUOCESOhXpEp3HrcG', 1, PHash384(@dig)^);
-  Check(Sha384DigestToString(PHash384(@dig)^) =
+    'saltKEYbcTcXHCBxtjD2PnBh44AIQ6XUOCESOhXpEp3HrcG', 1, dig.b384);
+  Check(Sha384DigestToString(dig.b384) =
     '0644a3489b088ad85a0e42be3e7f82500ec189366' +
     '99151a2c90497151bac7bb69300386a5e798795be3cef0a3c803227');
   { // rounds=100000 is slow, so not tested by default
