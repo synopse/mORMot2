@@ -10,6 +10,7 @@ unit mormot.core.crypto.openssl;
     - OpenSSL Cryptographic Pseudorandom Number Generator (CSPRNG)
     - AES Cypher/Uncypher in various Modes
     - Hashers and Signers OpenSSL Wrappers
+    - OpenSSL Asymetric Cryptography
     - Register OpenSSL to our General Cryptography Catalog
 
   *****************************************************************************
@@ -304,13 +305,15 @@ type
     destructor Destroy; override;
   end;
 
+
+{ ************** OpenSSL Asymetric Cryptography }
+
 /// asymetric digital signature of some Message using a given PrivateKey
 // - if Algorithm is not specified, EVP_sha256 will be used
 // - returns 0 on error, or the result Signature size in bytes
 function OpenSslSign(const Algorithm: RawUtf8;
   Message, PrivateKey: pointer; MessageLen, PrivateKeyLen: integer;
   const PrivateKeyPassword: RawUtf8; out Signature: THash512Rec): cardinal;
-
 
 /// asymetric digital verification of some Message using a given PublicKey
 // - if Algorithm is not specified, EVP_sha256 will be used
@@ -319,9 +322,22 @@ function OpenSslVerify(const Algorithm, PublicKeyPassword: RawUtf8;
   Message, PublicKey, Signature: pointer;
   MessageLen, PublicKeyLen, SignatureLen: integer): boolean;
 
-/// mormot.core.ecc256r1 compatible function for asymetric digital verification
+
+/// mormot.core.ecc256r1 compatible function for asymetric key generation
+function ecc_make_key_osl(out PublicKey: TEccPublicKey;
+  out PrivateKey: TEccPrivateKey): boolean;
+
+/// mormot.core.ecc256r1 compatible function for asymetric key signature
+function ecdsa_sign_osl(const PrivateKey: TEccPrivateKey; const Hash: TEccHash;
+  out Signature: TEccSignature): boolean;
+
+/// mormot.core.ecc256r1 compatible function for asymetric key verification
 function ecdsa_verify_osl(const PublicKey: TEccPublicKey; const Hash: TEccHash;
   const Signature: TEccSignature): boolean;
+
+/// mormot.core.ecc256r1 compatible function for ECDH shared secret computation
+function ecdh_shared_secret_osl(const PublicKey: TEccPublicKey;
+  const PrivateKey: TEccPrivateKey; out Secret: TEccSecretKey): boolean;
 
 
 { ************** Register OpenSSL to our General Cryptography Catalog }
@@ -781,6 +797,8 @@ begin
 end;
 
 
+{ ************** OpenSSL Asymetric Cryptography }
+
 function OpenSslSign(const Algorithm: RawUtf8;
   Message, PrivateKey: pointer; MessageLen, PrivateKeyLen: integer;
   const PrivateKeyPassword: RawUtf8; out Signature: THash512Rec): cardinal;
@@ -799,9 +817,10 @@ begin
   else
     md := EVP_get_digestbyname(pointer(Algorithm));
   if md = nil then
-    exit;
+    raise EOpenSslHash.CreateFmt('OpenSslSign: unknown [%] algorithm', [Algorithm]);
   if (PrivateKey = nil) or
-     (PrivateKeyLen = 0) then begin
+     (PrivateKeyLen = 0) then
+  begin
     priv := nil;
     pkey := nil;
   end
@@ -815,7 +834,7 @@ begin
     if (EVP_DigestSignInit(ctx, nil, md, nil, pkey) = OPENSSLSUCCESS) and
        (EVP_DigestUpdate(ctx, Message, MessageLen) = OPENSSLSUCCESS) and
        (EVP_DigestSignFinal(ctx, nil, size) = OPENSSLSUCCESS) and
-       (size = SizeOf(Signature)) and
+       (size <= SizeOf(Signature)) and
        (EVP_DigestSignFinal(ctx, @Signature, size) = OPENSSLSUCCESS) then
       result := size; // success
   finally
@@ -863,41 +882,147 @@ begin
   end;
 end;
 
-//writeln(SSL_error_short(ERR_get_error));
+var
+  prime256v1grp: PEC_GROUP;
+
+function NewPrime256v1Key: PEC_KEY;
+begin
+  if prime256v1grp = nil then
+    if OpenSslIsAvailable then
+    begin
+      GlobalLock;
+      try
+        if prime256v1grp = nil then
+        begin
+          prime256v1grp := EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
+          if prime256v1grp = nil then
+            prime256v1grp := pointer(1);
+        end;
+      finally
+        GlobalUnLock;
+      end;
+    end
+    else
+      prime256v1grp := pointer(1);
+  if prime256v1grp <> pointer(1) then
+  begin
+    result := EC_KEY_new;
+    if EC_KEY_set_group(result, prime256v1grp) <> OPENSSLSUCCESS then
+    begin
+      EC_GROUP_free(prime256v1grp);
+      prime256v1grp := pointer(1);
+      EC_KEY_free(result);
+      result := nil;
+    end;
+  end
+  else
+    result := nil;
+end;
+
+function ecc_make_key_osl(out PublicKey: TEccPublicKey;
+  out PrivateKey: TEccPrivateKey): boolean;
+var
+  key: PEC_KEY;
+  pub: PPByte;
+  priv: PBIGNUM;
+  publen, privlen: integer;
+begin
+  result := false;
+  key := NewPrime256v1Key;
+  if key = nil then
+    exit;
+  if EC_KEY_generate_key(key) = OPENSSLSUCCESS then
+  begin
+    priv := EC_KEY_get0_private_key(key);
+    privlen := BN_num_bytes(priv);
+    pub := nil;
+    publen := EC_POINT_point2buf(prime256v1grp,
+      EC_KEY_get0_public_key(key), POINT_CONVERSION_COMPRESSED, @pub, nil);
+    if (publen = SizeOf(PublicKey)) and
+       (privlen <= SizeOf(PrivateKey)) then
+    begin
+      FillZero(PrivateKey); // may be padded with zeros
+      BN_bn2bin(priv, @PrivateKey[SizeOf(PrivateKey) - privlen]);
+      MoveFast(pub^, PublicKey, publen);
+      result := true;
+    end;
+    OPENSSL_free(pub);
+  end;
+  EC_KEY_free(key);
+end;
+
+function ecdsa_sign_osl(const PrivateKey: TEccPrivateKey; const Hash: TEccHash;
+  out Signature: TEccSignature): boolean;
+var
+  key: PEC_KEY;
+  bn: PBIGNUM;
+  derlen: cardinal;
+  der: TEccSignatureDer;
+begin
+  result := false;
+  key := NewPrime256v1Key;
+  if (key = nil) or
+     (ECDSA_size(key) > SizeOf(der)) then
+    exit;
+  bn := BN_bin2bn(@PrivateKey, SizeOf(PrivateKey), nil);
+  derlen := 0;
+  if (EC_KEY_set_private_key(key, bn) = OPENSSLSUCCESS) and
+     (ECDSA_Sign(0, @Hash, SizeOf(Hash), @der, @derlen, key) = OPENSSLSUCCESS) then
+    result := DerToEccSign(der, Signature);
+  BN_free(bn);
+  EC_KEY_free(key);
+end;
+
+function PublicKeyToPoint(const PublicKey: TEccPublicKey; out pt: PEC_POINT): boolean;
+begin
+  pt := EC_POINT_new(prime256v1grp);
+  result := EC_POINT_oct2point(prime256v1grp,
+    pt, @PublicKey, SizeOf(PublicKey), nil) = OPENSSLSUCCESS;
+end;
 
 function ecdsa_verify_osl(const PublicKey: TEccPublicKey; const Hash: TEccHash;
   const Signature: TEccSignature): boolean;
 var
-  grp: PEC_GROUP;
   key: PEC_KEY;
-  bn: PBIGNUM;
   pt: PEC_POINT;
   res, derlen: integer;
   der: TEccSignatureDer;
 begin
   result := false;
-  if not OpenSslIsAvailable then
+  key := NewPrime256v1Key;
+  if key = nil then
     exit;
-  grp := EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
-  if grp = nil then
-    exit;
-  key := EC_KEY_new;
-  if EC_KEY_set_group(key, grp) = OPENSSLSUCCESS then
+  if PublicKeyToPoint(PublicKey, pt) and
+     (EC_KEY_set_public_key(key, pt) = OPENSSLSUCCESS) then
   begin
-    bn := BN_bin2bn(@PublicKey, SizeOf(PublicKey), nil);
-    pt := EC_POINT_bn2point(grp, bn, nil, nil);
-    if (pt <> nil) and
-       (EC_KEY_set_public_key(key, pt) = OPENSSLSUCCESS) then
-    begin
-      derlen := EccSignToDer(Signature, der);
-      res := ECDSA_verify(0, @Hash, SizeOf(Hash), @der, derlen, key);
-      result := res = OPENSSLSUCCESS;
-    end;
-    EC_POINT_free(pt);
-    BN_free(bn);
+    derlen := EccSignToDer(Signature, der);
+    res := ECDSA_verify(0, @Hash, SizeOf(Hash), @der, derlen, key);
+    result := res = OPENSSLSUCCESS;
   end;
+  EC_POINT_free(pt);
   EC_KEY_free(key);
-  EC_GROUP_free(grp);
+end;
+
+function ecdh_shared_secret_osl(const PublicKey: TEccPublicKey;
+  const PrivateKey: TEccPrivateKey; out Secret: TEccSecretKey): boolean;
+var
+  key: PEC_KEY;
+  pub: PEC_POINT;
+  priv: PBIGNUM;
+begin
+  FillZero(Secret);
+  result := false;
+  key := NewPrime256v1Key;
+  if key = nil then
+    exit;
+  priv := BN_bin2bn(@PrivateKey, SizeOf(PrivateKey), nil);
+  if PublicKeyToPoint(PublicKey, pub) and
+     (EC_KEY_set_private_key(key, priv) = OPENSSLSUCCESS) and
+     (ECDH_compute_key(@Secret, SizeOf(Secret), pub, key, nil) = SizeOf(Secret)) then
+    result := true;
+  BN_free(priv);
+  EC_POINT_free(pub);
+  EC_KEY_free(key);
 end;
 
 
@@ -910,7 +1035,7 @@ begin
   // set the fastest AES implementation classes
   TAesFast[mGcm] := TAesGcmOsl;
   {$ifdef HASAESNI}
-    // all mormot.core.crypto x86_64 asm is faster than OpenSSL - but GCM
+    // mormot.core.crypto x86_64 asm is faster than OpenSSL - but GCM
     {$ifndef CPUX64}
     // our AES-CTR x86_64 asm is faster than OpenSSL's
     TAesFast[mCtr] := TAesCtrNistOsl;
@@ -923,17 +1048,28 @@ begin
   TAesFast[mOfb] := TAesOfbOsl;
   TAesFast[mCtr] := TAesCtrNistOsl;
   {$endif HASAESNI}
-  // redirects raw mormot.core.ecc256r1 functions to use the much faster OpenSSL
+  // redirects raw mormot.core.ecc256r1 functions to the much faster OpenSSL
+  @Ecc256r1MakeKey := @ecc_make_key_osl;
+  @Ecc256r1Sign := @ecdsa_sign_osl;
   @Ecc256r1Verify := @ecdsa_verify_osl;
+  @Ecc256r1SharedSecret := @ecdh_shared_secret_osl;
 end;
 
 
+
+procedure FinalizeUnit;
+begin
+  FreeAndNil(MainAesPrngOsl);
+  if (prime256v1grp <> nil) and
+     (prime256v1grp <> pointer(1)) then
+    EC_GROUP_free(prime256v1grp);
+end;
 
 
 initialization
 
 finalization
-  FreeAndNil(MainAesPrngOsl);
+  FinalizeUnit;
 
 {$else}
 

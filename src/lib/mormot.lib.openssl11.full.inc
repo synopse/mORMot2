@@ -1171,8 +1171,6 @@ const
   NID_X9_62_prime239v2 = 413;
   SN_X9_62_prime239v3 = 'prime239v3';
   NID_X9_62_prime239v3 = 414;
-  SN_X9_62_prime256v1 = 'prime256v1';
-  NID_X9_62_prime256v1 = 415;
   SN_ecdsa_with_SHA1 = 'ecdsa-with-SHA1';
   NID_ecdsa_with_SHA1 = 416;
   SN_ecdsa_with_Recommended = 'ecdsa-with-Recommended';
@@ -9430,10 +9428,6 @@ type
   sk_OPENSSL_BLOCK_freefunc = procedure(a: pointer); cdecl;
   sk_OPENSSL_BLOCK_copyfunc = function(a: pointer): pointer; cdecl;
 
-  PBIGNUM = pointer;
-  PPBIGNUM = ^PBIGNUM;
-  PBN_CTX = pointer;
-  PPBN_CTX = ^PBN_CTX;
   PBN_BLINDING = pointer;
   PPBN_BLINDING = ^PBN_BLINDING;
   PBN_MONT_CTX = pointer;
@@ -9458,8 +9452,6 @@ type
   PPDSA_METHOD = ^PDSA_METHOD;
   PRSA_METHOD = pointer;
   PPRSA_METHOD = ^PRSA_METHOD;
-  PEC_KEY = pointer;
-  PPEC_KEY = ^PEC_KEY;
   PEC_KEY_METHOD = pointer;
   PPEC_KEY_METHOD = ^PEC_KEY_METHOD;
   PSSL_DANE = pointer;
@@ -9867,24 +9859,8 @@ type
   PCMAC_CTX = pointer;
   PPCMAC_CTX = ^PCMAC_CTX;
 
-  (** Enum for the point conversion form as defined in X9.62 (ECDSA)
-   *  for the encoding of a elliptic curve point (x,y) *)
-  point_conversion_form_t = (
-    (** the point is encoded as z||x, where the octet z specifies
-     *  which solution of the quadratic equation y is  *)
-    POINT_CONVERSION_COMPRESSED = 2,
-    (** the point is encoded as z||x||y, where z is the octet 0x04  *)
-    POINT_CONVERSION_UNCOMPRESSED = 4,
-    (** the point is encoded as z||x||y, where the octet z specifies
-     *  which solution of the quadratic equation y is  *)
-    POINT_CONVERSION_HYBRID = 6);
-  Ppoint_conversion_form_t = ^point_conversion_form_t;
   PEC_METHOD = pointer;
   PPEC_METHOD = ^PEC_METHOD;
-  PEC_GROUP = pointer;
-  PPEC_GROUP = ^PEC_GROUP;
-  PEC_POINT = pointer;
-  PPEC_POINT = ^PEC_POINT;
   PECPKPARAMETERS = pointer;
   PPECPKPARAMETERS = ^PECPKPARAMETERS;
   PECPARAMETERS = pointer;
@@ -11627,8 +11603,6 @@ type
   EVP_PKEY_meth_set_param_check_check = function(pkey: PEVP_PKEY): integer; cdecl;
   EVP_PKEY_meth_set_digest_custom_digest_custom = function(ctx: PEVP_PKEY_CTX; mctx: PEVP_MD_CTX): integer; cdecl;
 
-  ECDH_compute_key_KDF = function(_in: pointer; inlen: PtrUInt; _out: pointer; outlen: PPtrUInt): pointer; cdecl;
-
   EC_KEY_METHOD_set_init_init = function(key: PEC_KEY): integer; cdecl;
   EC_KEY_METHOD_set_init_finish = procedure(key: PEC_KEY); cdecl;
   EC_KEY_METHOD_set_init_copy = function(dest: PEC_KEY; src: PEC_KEY): integer; cdecl;
@@ -12623,9 +12597,6 @@ function BN_pseudo_rand(rnd: PBIGNUM; bits: integer; top: integer; bottom: integ
 function BN_pseudo_rand_range(rnd: PBIGNUM; range: PBIGNUM): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BN_pseudo_rand_range';
 
-function BN_num_bits(a: PBIGNUM): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'BN_num_bits';
-
 function BN_num_bits_word(l: cardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BN_num_bits_word';
 
@@ -12646,12 +12617,6 @@ function BN_copy(a: PBIGNUM; b: PBIGNUM): PBIGNUM; cdecl;
 
 procedure BN_swap(a: PBIGNUM; b: PBIGNUM); cdecl;
   external LIB_CRYPTO name _PU + 'BN_swap';
-
-function BN_bin2bn(s: pointer; len: integer; ret: PBIGNUM): PBIGNUM; cdecl;
-  external LIB_CRYPTO name _PU + 'BN_bin2bn';
-
-function BN_bn2bin(a: PBIGNUM; _to: pointer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'BN_bn2bin';
 
 function BN_bn2binpad(a: PBIGNUM; _to: pointer; tolen: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BN_bn2binpad';
@@ -12759,9 +12724,6 @@ function BN_get_word(a: PBIGNUM): cardinal; cdecl;
 
 function BN_cmp(a: PBIGNUM; b: PBIGNUM): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BN_cmp';
-
-procedure BN_free(a: PBIGNUM); cdecl;
-  external LIB_CRYPTO name _PU + 'BN_free';
 
 function BN_is_bit_set(a: PBIGNUM; n: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BN_is_bit_set';
@@ -15762,9 +15724,6 @@ function EC_GF2m_simple_method(): PEC_METHOD; cdecl;
 function EC_GROUP_new(meth: PEC_METHOD): PEC_GROUP; cdecl;
   external LIB_CRYPTO name _PU + 'EC_GROUP_new';
 
-procedure EC_GROUP_free(group: PEC_GROUP); cdecl;
-  external LIB_CRYPTO name _PU + 'EC_GROUP_free';
-
 procedure EC_GROUP_clear_free(group: PEC_GROUP); cdecl;
   external LIB_CRYPTO name _PU + 'EC_GROUP_clear_free';
 
@@ -15867,9 +15826,6 @@ function EC_GROUP_new_curve_GFp(p: PBIGNUM; a: PBIGNUM; b: PBIGNUM; ctx: PBN_CTX
 function EC_GROUP_new_curve_GF2m(p: PBIGNUM; a: PBIGNUM; b: PBIGNUM; ctx: PBN_CTX): PEC_GROUP; cdecl;
   external LIB_CRYPTO name _PU + 'EC_GROUP_new_curve_GF2m';
 
-function EC_GROUP_new_by_curve_name(nid: integer): PEC_GROUP; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_GROUP_new_by_curve_name';
-
 function EC_GROUP_new_from_ecparameters(params: PECPARAMETERS): PEC_GROUP; cdecl;
   external LIB_CRYPTO name _PU + 'EC_GROUP_new_from_ecparameters';
 
@@ -15890,12 +15846,6 @@ function EC_curve_nid2nist(nid: integer): PUtf8Char; cdecl;
 
 function EC_curve_nist2nid(name: PUtf8Char): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_curve_nist2nid';
-
-function EC_POINT_new(group: PEC_GROUP): PEC_POINT; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_POINT_new';
-
-procedure EC_POINT_free(point: PEC_POINT); cdecl;
-  external LIB_CRYPTO name _PU + 'EC_POINT_free';
 
 procedure EC_POINT_clear_free(point: PEC_POINT); cdecl;
   external LIB_CRYPTO name _PU + 'EC_POINT_clear_free';
@@ -15948,17 +15898,8 @@ function EC_POINT_set_compressed_coordinates_GF2m(group: PEC_GROUP; p: PEC_POINT
 function EC_POINT_point2oct(group: PEC_GROUP; p: PEC_POINT; form: point_conversion_form_t; buf: PByte; len: PtrUInt; ctx: PBN_CTX): PtrUInt; cdecl;
   external LIB_CRYPTO name _PU + 'EC_POINT_point2oct';
 
-function EC_POINT_oct2point(group: PEC_GROUP; p: PEC_POINT; buf: PByte; len: PtrUInt; ctx: PBN_CTX): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_POINT_oct2point';
-
-function EC_POINT_point2buf(group: PEC_GROUP; point: PEC_POINT; form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_POINT_point2buf';
-
 function EC_POINT_point2bn(p1: PEC_GROUP; p2: PEC_POINT; form: point_conversion_form_t; p4: PBIGNUM; p5: PBN_CTX): PBIGNUM; cdecl;
   external LIB_CRYPTO name _PU + 'EC_POINT_point2bn';
-
-function EC_POINT_bn2point(p1: PEC_GROUP; p2: PBIGNUM; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_POINT_bn2point';
 
 function EC_POINT_point2hex(p1: PEC_GROUP; p2: PEC_POINT; form: point_conversion_form_t; p4: PBN_CTX): PUtf8Char; cdecl;
   external LIB_CRYPTO name _PU + 'EC_POINT_point2hex';
@@ -16041,9 +15982,6 @@ function ECPKParameters_print(bp: PBIO; x: PEC_GROUP; off: integer): integer; cd
 function ECPKParameters_print_fp(fp: PPointer; x: PEC_GROUP; off: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ECPKParameters_print_fp';
 
-function EC_KEY_new(): PEC_KEY; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_new';
-
 function EC_KEY_get_flags(key: PEC_KEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_get_flags';
 
@@ -16055,9 +15993,6 @@ procedure EC_KEY_clear_flags(key: PEC_KEY; flags: integer); cdecl;
 
 function EC_KEY_new_by_curve_name(nid: integer): PEC_KEY; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_new_by_curve_name';
-
-procedure EC_KEY_free(key: PEC_KEY); cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_free';
 
 function EC_KEY_copy(dst: PEC_KEY; src: PEC_KEY): PEC_KEY; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_copy';
@@ -16073,21 +16008,6 @@ function EC_KEY_get0_engine(eckey: PEC_KEY): PENGINE; cdecl;
 
 function EC_KEY_get0_group(key: PEC_KEY): PEC_GROUP; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_get0_group';
-
-function EC_KEY_set_group(key: PEC_KEY; group: PEC_GROUP): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_set_group';
-
-function EC_KEY_get0_private_key(key: PEC_KEY): PBIGNUM; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_get0_private_key';
-
-function EC_KEY_set_private_key(key: PEC_KEY; prv: PBIGNUM): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_set_private_key';
-
-function EC_KEY_get0_public_key(key: PEC_KEY): PEC_POINT; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_get0_public_key';
-
-function EC_KEY_set_public_key(key: PEC_KEY; pub: PEC_POINT): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_set_public_key';
 
 function EC_KEY_get_enc_flags(key: PEC_KEY): cardinal; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_get_enc_flags';
@@ -16112,9 +16032,6 @@ procedure EC_KEY_set_asn1_flag(eckey: PEC_KEY; asn1_flag: integer); cdecl;
 
 function EC_KEY_precompute_mult(key: PEC_KEY; ctx: PBN_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_precompute_mult';
-
-function EC_KEY_generate_key(key: PEC_KEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_generate_key';
 
 function EC_KEY_check_key(key: PEC_KEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_check_key';
@@ -16191,9 +16108,6 @@ function EC_KEY_new_method(engine: PENGINE): PEC_KEY; cdecl;
 function ECDH_KDF_X9_62(_out: PByte; outlen: PtrUInt; Z: PByte; Zlen: PtrUInt; sinfo: PByte; sinfolen: PtrUInt; md: PEVP_MD): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ECDH_KDF_X9_62';
 
-function ECDH_compute_key(_out: pointer; outlen: PtrUInt; pub_key: PEC_POINT; ecdh: PEC_KEY; KDF: ECDH_compute_key_KDF): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'ECDH_compute_key';
-
 function ECDSA_SIG_new(): PECDSA_SIG; cdecl;
   external LIB_CRYPTO name _PU + 'ECDSA_SIG_new';
 
@@ -16230,17 +16144,8 @@ function ECDSA_do_verify(dgst: PByte; dgst_len: integer; sig: PECDSA_SIG; eckey:
 function ECDSA_sign_setup(eckey: PEC_KEY; ctx: PBN_CTX; kinv: PPBIGNUM; rp: PPBIGNUM): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ECDSA_sign_setup';
 
-function ECDSA_sign(typ: integer; dgst: PByte; dgstlen: integer; sig: PByte; siglen: PCardinal; eckey: PEC_KEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'ECDSA_sign';
-
 function ECDSA_sign_ex(typ: integer; dgst: PByte; dgstlen: integer; sig: PByte; siglen: PCardinal; kinv: PBIGNUM; rp: PBIGNUM; eckey: PEC_KEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ECDSA_sign_ex';
-
-function ECDSA_verify(typ: integer; dgst: PByte; dgstlen: integer; sig: PByte; siglen: integer; eckey: PEC_KEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'ECDSA_verify';
-
-function ECDSA_size(eckey: PEC_KEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'ECDSA_size';
 
 function EC_KEY_METHOD_new(meth: PEC_KEY_METHOD): PEC_KEY_METHOD; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_METHOD_new';

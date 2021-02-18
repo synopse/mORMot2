@@ -496,6 +496,7 @@ type
   // - as defined in http://tools.ietf.org/html/rfc7518 paragraph 3.4
   // - since ECDSA signature and verification is CPU consumming (under x86, it
   // takes 2.5 ms, but only 0.3 ms on x64) you may enable CacheTimeoutSeconds
+  // - will use the OpenSSL library if available (much faster than our unit)
   TJwtES256 = class(TJwtAbstract)
   protected
     fCertificate: TEccCertificate;

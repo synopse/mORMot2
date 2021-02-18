@@ -149,14 +149,14 @@ function ecc_make_key_pas(out PublicKey: TEccPublicKey;
 // and someone else's public key (in compressed format)
 // - used only on targets (e.g. ARM/PPC) when the static .o version is not available
 function ecdh_shared_secret_pas(const PublicKey: TEccPublicKey;
-  const PrivateKey: TEccPrivateKey; out Secret: TEccSecretKey): boolean; overload;
+  const PrivateKey: TEccPrivateKey; out Secret: TEccSecretKey): boolean;
 
 /// pascal function to compute a secp256r1 shared secret given your secret key
 // and someone else's public key (in uncompressed/flat format)
 // - this overloaded function is slightly faster than the one using TEccPublicKey,
 // since public key doesn't need to be uncompressed
-function ecdh_shared_secret_pas(const PublicPoint: TEccPublicKeyUncompressed;
-  const PrivateKey: TEccPrivateKey; out Secret: TEccSecretKey): boolean; overload;
+function ecdh_shared_secret_uncompressed_pas(const PublicPoint: TEccPublicKeyUncompressed;
+  const PrivateKey: TEccPrivateKey; out Secret: TEccSecretKey): boolean;
 
 /// pascal function to generate an ECDSA secp256r1 signature for a given hash value
 // - used only on targets (e.g. ARM/PPC) when the static .o version is not available
@@ -411,6 +411,9 @@ function EccSign(const base64: RawUtf8;
 /// convert a raw signature into a DER compatible content
 // - returns the number of bytes encoded into der[] buffer
 function EccSignToDer(const sign: TEccSignature; out der: TEccSignatureDer): integer;
+
+/// convert a DER compatible content into a raw signature
+function DerToEccSign(const der: TEccSignatureDer; out sign: TEccSignature): boolean;
 
 /// convert a supplied TEccSignatureCertifiedContent binary buffer into proper text
 // - returns base-64 encoded text, or '' if the signature was filled with zeros
@@ -1615,7 +1618,7 @@ begin
   _clear(PublicPoint.y);
 end;
 
-function ecdh_shared_secret_pas(const PublicPoint: TEccPublicKeyUncompressed;
+function ecdh_shared_secret_uncompressed_pas(const PublicPoint: TEccPublicKeyUncompressed;
   const PrivateKey: TEccPrivateKey; out Secret: TEccSecretKey): boolean;
 var
   PrivateK: TVLI;
@@ -1645,7 +1648,7 @@ var
   PublicPoint: TEccPublicKeyUncompressed;
 begin
   EccPointDecompress(TEccPoint(PublicPoint), @PublicKey);
-  result := ecdh_shared_secret_pas(PublicPoint, PrivateKey, Secret);
+  result := ecdh_shared_secret_uncompressed_pas(PublicPoint, PrivateKey, Secret);
 end;
 
 // computes result = (Left * Right) mod Modulo
@@ -2052,38 +2055,71 @@ begin
     length(base64), sizeof(content), false);
 end;
 
-function EccSignToDer(const sign: TEccSignature; out der: TEccSignatureDer): integer;
 const
   DER_SEQUENCE = $30;
-  DER_INTEGER  = $02;
+  DER_INTEGER  = #$02;
+
+function DerAppend(P: PAnsiChar; vli: PByteArray): PAnsiChar;
 var
-  RPrefix, SPrefix, pos: PtrInt;
-  P: PByte;
+  pos, prefix: PtrUInt;
 begin
   pos := 0;
-  while sign[pos] = 0 do
+  while vli[pos] = 0 do
+    // ignore trailing zeros
     inc(pos);
-  RPrefix := sign[pos] shr 7; // DER_INTEGER are two's complement
-  P := @der;
-  P[0] := DER_SEQUENCE;
-  P[2] := DER_INTEGER;
-  P[3] := ECC_BYTES - pos + RPrefix;
-  P[4] := $00; // prepend 0 for negative number (if RPrefix=1)
-  inc(P, 4 + RPrefix);
-  MoveSmall(@sign[pos], P, ECC_BYTES - pos);
-  inc(P, ECC_BYTES - pos);
-  pos := 0;
-  while sign[pos + ECC_BYTES] = 0 do
-    inc(pos);
-  SPrefix := sign[pos + ECC_BYTES] shr 7;
+  prefix := vli[pos] shr 7; // two's complement?
   P[0] := DER_INTEGER;
-  P[1] := ECC_BYTES - pos + SPrefix;
-  P[2] := $00;
-  inc(P, 2 + SPrefix);
-  MoveSmall(@sign[pos + ECC_BYTES], P, ECC_BYTES - pos);
-  inc(P, ECC_BYTES - pos);
-  result := PAnsiChar(P) - PAnsiChar(@der);
-  der[1] := result - 2;
+  P[1] := AnsiChar(ECC_BYTES - pos + prefix);
+  P[2] := #$00; // prepend 0 for negative number (if prefix=1)
+  inc(P, 2 + prefix);
+  MoveSmall(@vli[pos], P, ECC_BYTES - pos);
+  result := P + ECC_BYTES - pos;
+end;
+
+function EccSignToDer(const sign: TEccSignature; out der: TEccSignatureDer): integer;
+begin
+  if _isZero(PVLI(@sign[0])^) or
+     _isZero(PVLI(@sign[ECC_BYTES])^) then
+    result := 0
+  else
+  begin
+    result := DerAppend(DerAppend(
+      @der[2], @sign[0]), @sign[ECC_BYTES]) - PAnsiChar(@der);
+    der[0] := DER_SEQUENCE;
+    der[1] := result - 2;
+  end;
+end;
+
+function DerParse(P: PAnsiChar; sig: PByteArray): PAnsiChar;
+var
+  pos: PtrUInt;
+begin
+  result := nil;
+  _clear(PVLI(sig)^);
+  if (P = nil) or
+     (P[0] <> DER_INTEGER) then
+    exit;
+  pos := ECC_BYTES - ord(P[1]);
+  inc(P, 2);
+  if P^ = #0 then
+  begin
+    inc(P); // negative number appended
+    inc(pos);
+  end;
+  if pos > ECC_BYTES then
+    exit;
+  MoveSmall(P, @sig[pos], ECC_BYTES - pos);
+  result := P + ECC_BYTES - pos;
+end;
+
+function DerToEccSign(const der: TEccSignatureDer; out sign: TEccSignature): boolean;
+begin
+  if (der[0] <> DER_SEQUENCE) or
+     (der[1] < 50) then
+    result := false
+  else
+    result := DerParse(DerParse(@der[2], @sign[0]), @sign[ECC_BYTES]) =
+      PAnsiChar(@der[der[1] + 2]);
 end;
 
 function EccText(const sign: TEccSignatureCertifiedContent): RawUtf8;
