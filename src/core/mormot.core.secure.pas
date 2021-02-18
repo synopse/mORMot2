@@ -610,9 +610,16 @@ type
     procedure Update(const aBuffer: RawByteString); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns the resulting hash as lowercase hexadecimal string
-    function Final: RawUtf8;
+    function Final: RawUtf8; overload;
+    /// returns the resulting hash as a binary buffer
+    function Final(out aDigest: THash512Rec): integer; overload;
     /// one-step hash computation of a buffer as lowercase hexadecimal string
-    function Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8;
+    function Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8; overload;
+    /// one-step hash computation of a buffer as a binary buffer
+    function Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer;
+      out aDigest: THash512Rec): integer; overload;
+    /// returns the number of bytes of the hash of the current Algo
+    function HashSize: integer;
     /// the hash algorithm used by this instance
     property Algo: THashAlgo
       read fAlgo;
@@ -804,23 +811,42 @@ begin
 end;
 
 function TSynHasher.Final: RawUtf8;
+var
+  dig: THash512Rec;
+begin
+  BinToHexLower(@dig, Final(dig), result);
+end;
+
+const
+  HASH_SIZE: array[THashAlgo] of integer = (
+    SizeOf(TMd5Digest), SizeOf(TSHA1Digest), SizeOf(TSHA256Digest),
+    SizeOf(TSHA384Digest), SizeOf(TSHA512Digest), SizeOf(THash256),
+    SizeOf(THash512));
+
+function TSynHasher.HashSize: integer;
+begin
+  result := HASH_SIZE[fAlgo];
+end;
+
+function TSynHasher.Final(out aDigest: THash512Rec): integer;
 begin
   case fAlgo of
     hfMD5:
-      result := Md5DigestToString(PMd5(@ctxt)^.Final);
+      PMd5(@ctxt)^.Final(aDigest.h0);
     hfSHA1:
-      result := Sha1DigestToString(PSha1(@ctxt)^.Final);
+      PSha1(@ctxt)^.Final(aDigest.b160);
     hfSHA256:
-      result := Sha256DigestToString(PSha256(@ctxt)^.Final);
+      PSha256(@ctxt)^.Final(aDigest.Lo);
     hfSHA384:
-      result := Sha384DigestToString(PSha384(@ctxt)^.Final);
+      PSha384(@ctxt)^.Final(aDigest.b384);
     hfSHA512:
-      result := Sha512DigestToString(PSha512(@ctxt)^.Final);
+      PSha512(@ctxt)^.Final(aDigest.b);
     hfSHA3_256:
-      result := Sha256DigestToString(PSha3(@ctxt)^.Final256);
+      PSha3(@ctxt)^.Final(aDigest.Lo);
     hfSHA3_512:
-      result := Sha512DigestToString(PSha3(@ctxt)^.Final512);
+      PSha3(@ctxt)^.Final(aDigest.b);
   end;
+  result := HASH_SIZE[fAlgo];
 end;
 
 function TSynHasher.Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8;
@@ -828,6 +854,14 @@ begin
   Init(aAlgo);
   Update(aBuffer, aLen);
   result := Final;
+end;
+
+function TSynHasher.Full(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer;
+  out aDigest: THash512Rec): integer;
+begin
+  Init(aAlgo);
+  Update(aBuffer, aLen);
+  result := Final(aDigest);
 end;
 
 function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8;
