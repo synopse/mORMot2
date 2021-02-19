@@ -740,31 +740,43 @@ procedure TTestCoreCrypto._JWT;
     one.Free;
   end;
 
-  procedure Benchmark(algo: TSignAlgo);
+  procedure Benchmark(J: TJwtAbstract; N: integer = 1000);
   var
     i: integer;
     tok: RawUtf8;
-    j: TJwtAbstract;
     jwt: TJwtContent;
     tim: TPrecisionTimer;
   begin
-    j := JWT_CLASS[algo].Create('secret', 0, [jrcIssuer, jrcExpirationTime], []);
     try
-      tok := j.Compute([], 'myself');
+      tok := J.Compute([], 'myself');
       tim.Start;
-      for i := 1 to 1000 do
+      for i := 2 to N do
       begin
         jwt.result := jwtWrongFormat;
-        j.Verify(tok, jwt);
+        J.Verify(tok, jwt);
         check(jwt.result = jwtValid);
         check(jwt.reg[jrcIssuer] = 'myself');
       end;
-      NotifyTestSpeed('%', [JWT_TEXT[algo]], 1000, 0, @tim);
+      inc(tok[length(tok) - 5]);
+      jwt.result := jwtWrongFormat;
+      J.Verify(tok, jwt);
+      check(jwt.result = jwtInvalidSignature, 'detection');
+      NotifyTestSpeed('%', [J.Algorithm], N, 0, @tim);
     finally
-      j.Free;
+      J.Free;
     end;
   end;
 
+{$ifdef USE_OPENSSL}
+const
+  OSSL_JWT: array[0..10] of TJwtAbstractOslClass = (
+    TJwtRS256Osl, TJwtRS384Osl, TJwtRS512Osl,
+    TJwtPS256Osl, TJwtPS384Osl, TJwtPS512Osl,
+    TJwtES256Osl, TJwtES384Osl, TJwtES512Osl, TJwtES256KOsl,
+    TJwtEdDSAOsl);
+var
+  priv, pub: RawByteString;
+{$endif USE_OPENSSL}
 var
   i: integer;
   j: TJwtAbstract;
@@ -774,14 +786,20 @@ var
   tim: TPrecisionTimer;
   a: TSignAlgo;
 begin
-  test(TJwtNone.Create([jrcIssuer, jrcExpirationTime], [], 60));
-  test(TJwtNone.Create([jrcIssuer, jrcExpirationTime, jrcIssuedAt], [], 60));
-  test(TJwtNone.Create([jrcIssuer, jrcExpirationTime, jrcIssuedAt, jrcJWTID], [], 60));
-  test(TJwtHS256.Create('sec', 100, [jrcIssuer, jrcExpirationTime], [], 60));
-  test(TJwtHS256.Create('sec', 200, [jrcIssuer, jrcExpirationTime, jrcIssuedAt], [], 60));
-  test(TJwtHS256.Create('sec', 10, [jrcIssuer, jrcExpirationTime, jrcIssuedAt,
-    jrcJWTID], [], 60));
-  j := TJwtHS256.Create('secret', 0, [jrcSubject], []);
+  test(TJwtNone.Create(
+    [jrcIssuer, jrcExpirationTime], [], 60));
+  test(TJwtNone.Create(
+    [jrcIssuer, jrcExpirationTime, jrcIssuedAt], [], 60));
+  test(TJwtNone.Create(
+    [jrcIssuer, jrcExpirationTime, jrcIssuedAt, jrcJWTID], [], 60));
+  test(TJwtHS256.Create(
+    'sec', 100, [jrcIssuer, jrcExpirationTime], [], 60));
+  test(TJwtHS256.Create(
+    'sec', 200, [jrcIssuer, jrcExpirationTime, jrcIssuedAt], [], 60));
+  test(TJwtHS256.Create(
+    'sec', 10, [jrcIssuer, jrcExpirationTime, jrcIssuedAt, jrcJWTID], [], 60));
+  j := TJwtHS256.Create(
+    'secret', 0, [jrcSubject], []);
   try
     jwt.result := jwtWrongFormat;
     j.Verify(
@@ -817,24 +835,25 @@ begin
     secret.Free;
   end;
   for a := saSha256 to high(a) do
-    Benchmark(a);
+    Benchmark(JWT_CLASS[a].Create(
+      'secret', 0, [jrcIssuer, jrcExpirationTime], []));
   secret := TEccCertificateSecret.CreateNew(nil);
-  j := TJwtES256.Create(secret, [jrcIssuer, jrcExpirationTime], [], 60);
   try
-    tok := j.Compute([], 'myself');
-    tim.Start;
-    for i := 1 to 100 do
-    begin
-      jwt.result := jwtWrongFormat;
-      j.Verify(tok, jwt);
-      check(jwt.result = jwtValid);
-      check(jwt.reg[jrcIssuer] = 'myself');
-    end;
-    NotifyTestSpeed('ES256', 100, 0, @tim);
+    Benchmark(TJwtES256.Create(
+      secret, [jrcIssuer, jrcExpirationTime], [], 60), 100);
   finally
-    j.Free;
     secret.Free;
   end;
+  {$ifdef USE_OPENSSL}
+  for i := 0 to high(OSSL_JWT) do
+    if OSSL_JWT[i].IsAvailable then
+    begin
+      // RSA is very slow at key computing and signing, but fast to verify
+      OSSL_JWT[i].GenerateKeys(priv, pub);
+      Benchmark(OSSL_JWT[i].Create(
+        priv, pub, '', '', [jrcIssuer, jrcExpirationTime], [], 60), 100);
+    end;
+  {$endif USE_OPENSSL}
 end;
 
 type

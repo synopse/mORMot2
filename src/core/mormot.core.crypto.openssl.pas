@@ -11,6 +11,7 @@ unit mormot.core.crypto.openssl;
     - AES Cypher/Uncypher in various Modes
     - Hashers and Signers OpenSSL Wrappers
     - OpenSSL Asymetric Cryptography
+    - JWT Implementation using any OpenSSL Algorithm
     - Register OpenSSL to our General Cryptography Catalog
 
   *****************************************************************************
@@ -37,8 +38,11 @@ uses
   mormot.core.rtti,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.buffers,
   mormot.core.crypto,
   mormot.core.ecc256r1,
+  mormot.core.secure,
+  mormot.core.jwt,
   mormot.lib.openssl11;
 
 
@@ -383,6 +387,145 @@ function ecdsa_verify_osl(const PublicKey: TEccPublicKey; const Hash: TEccHash;
 // $ mORMot:  598 Ecc256r1SharedSecret in 537.95ms i.e. 1,111/s, aver. 899us
 function ecdh_shared_secret_osl(const PublicKey: TEccPublicKey;
   const PrivateKey: TEccPrivateKey; out Secret: TEccSecretKey): boolean;
+
+
+
+{ ************** JWT Implementation using any OpenSSL Algorithm }
+
+type
+  /// implements JSON Web Tokens using OpenSSL Algorithms
+  TJwtOpenSsl = class(TJwtAbstract)
+  protected
+    fPrivateKey, fPublicKey: RawByteString;
+    fPrivateKeyPassword, fPublicKeyPassword: RawUtf8;
+    fHashAlgorithm: RawUtf8;
+    fGenEvpType: integer;
+    fGenBitsOrCurve: integer;
+    function ComputeSignature(const headpayload: RawUtf8): RawUtf8; override;
+    procedure CheckSignature(const headpayload: RawUtf8; const signature: RawByteString;
+      var JWT: TJwtContent); override;
+  public
+    /// initialize the JWT processing instance using any supported OpenSSL algorithm
+    constructor Create(const aJwtAlgorithm, aHashAlgorithm: RawUtf8;
+      aGenEvpType, aGenBitsOrCurve: integer;
+      const aPrivateKey, aPublicKey: RawByteString;
+      const aPrivateKeyPassword, aPublicKeyPassword: RawUtf8;
+      aClaims: TJwtClaims; const aAudience: array of RawUtf8;
+      aExpirationMinutes: integer = 0; aIDIdentifier: TSynUniqueIdentifierProcess = 0;
+      aIDObfuscationKey: RawUtf8 = ''; aIDObfuscationKeyNewKdf: integer = 0);
+      reintroduce;
+    /// finalize the instance
+    destructor Destroy; override;
+    /// wrapper around function OpenSslIsAvailable
+    class function IsAvailable: boolean;
+    /// the OpenSSL hash algorithm, as supplied to the constructor
+    property HashAlgorithm: RawUtf8
+      read fHashAlgorithm;
+  end;
+
+  /// abstract parent for OpenSSL JWT algorithms - never use this plain class!
+  // - inherited classes implement all official algorithms from https://jwt.io
+  // - some numbers from our regresssion tests for JWT validation:
+  // $ 100 RS256 in 5.11ms i.e. 19,550/s, aver. 51us
+  // $ 100 RS384 in 5.09ms i.e. 19,642/s, aver. 50us
+  // $ 100 RS512 in 5.12ms i.e. 19,508/s, aver. 51us
+  // $ 100 PS256 in 5.41ms i.e. 18,474/s, aver. 54us
+  // $ 100 PS384 in 5.38ms i.e. 18,563/s, aver. 53us
+  // $ 100 PS512 in 5.33ms i.e. 18,740/s, aver. 53us
+  // $ 100 ES256 in 13.75ms i.e. 7,270/s, aver. 137us
+  // $ 100 ES384 in 118.64ms i.e. 842/s, aver. 1.18ms
+  // $ 100 ES512 in 93.95ms i.e. 1,064/s, aver. 939us
+  // $ 100 ES256K in 62.19ms i.e. 1,607/s, aver. 621us
+  // $ 100 EdDSA in 18.08ms i.e. 5,529/s, aver. 180us
+  TJwtAbstractOsl = class(TJwtOpenSsl)
+  protected
+    procedure SetAlgorithms; virtual; abstract; // set fHashAlgo+fHashAlgorithm
+  public
+    /// initialize the JWT processing instance calling SetAlgorithms abstract method
+    // - the supplied set of claims are expected to be defined in the JWT payload
+    // - aAudience are the allowed values for the jrcAudience claim
+    // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
+    // - aIDIdentifier and aIDObfuscationKey/aIDObfuscationKeyNewKdf are passed
+    // to a TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
+    constructor Create(
+      const aPrivateKey, aPublicKey: RawByteString;
+      const aPrivateKeyPassword, aPublicKeyPassword: RawUtf8;
+      aClaims: TJwtClaims; const aAudience: array of RawUtf8;
+      aExpirationMinutes: integer = 0; aIDIdentifier: TSynUniqueIdentifierProcess = 0;
+      aIDObfuscationKey: RawUtf8 = ''; aIDObfuscationKeyNewKdf: integer = 0);
+      reintroduce;
+    /// generate a private/public keys pair for this algorithm in PEM text format
+    class procedure GenerateKeys(out PrivateKey, PublicKey: RawByteString);
+  end;
+
+  /// meta-class of all OpenSSL JWT algorithms
+  TJwtAbstractOslClass = class of TJwtAbstractOsl;
+
+  /// implements 'ES256' secp256r1 ECC algorithm over SHA-256 using OpenSSL
+  TJwtES256Osl = class(TJwtAbstractOsl)
+  protected
+    procedure SetAlgorithms; override;
+  end;
+
+  /// implements 'ES384' secp384r1 ECC algorithm over SHA-384 using OpenSSL
+  TJwtES384Osl = class(TJwtAbstractOsl)
+  protected
+    procedure SetAlgorithms; override;
+  end;
+
+  /// implements 'ES512' ecp521r1 ECC algorithm over SHA-512 using OpenSSL
+  TJwtES512Osl = class(TJwtAbstractOsl)
+  protected
+    procedure SetAlgorithms; override;
+  end;
+
+  /// implements 'ES256K' secp256k1 ECC algorithm using OpenSSL
+  TJwtES256KOsl = class(TJwtAbstractOsl)
+  protected
+    procedure SetAlgorithms; override;
+  end;
+
+  /// implements 'RS256' RSA 2048-bit algorithm over SHA-256 using OpenSSL
+  TJwtRS256Osl = class(TJwtAbstractOsl)
+  protected
+    procedure SetAlgorithms; override;
+  end;
+
+  /// implements 'RS384' RSA 2048-bit algorithm over SHA-384 using OpenSSL
+  TJwtRS384Osl = class(TJwtAbstractOsl)
+  protected
+    procedure SetAlgorithms; override;
+  end;
+
+  /// implements 'RS512' RSA 2048-bit algorithm over SHA-512 using OpenSSL
+  TJwtRS512Osl = class(TJwtAbstractOsl)
+  protected
+    procedure SetAlgorithms; override;
+  end;
+
+  /// implements 'PS256' RSA-PSS 2048-bit algorithm over SHA-256 using OpenSSL
+  TJwtPS256Osl = class(TJwtAbstractOsl)
+  protected
+    procedure SetAlgorithms; override;
+  end;
+
+  /// implements 'PS384' RSA-PSS 2048-bit algorithm over SHA-384 using OpenSSL
+  TJwtPS384Osl = class(TJwtAbstractOsl)
+  protected
+    procedure SetAlgorithms; override;
+  end;
+
+  /// implements 'PS512' RSA-PSS 2048-bit algorithm over SHA-512 using OpenSSL
+  TJwtPS512Osl = class(TJwtAbstractOsl)
+  protected
+    procedure SetAlgorithms; override;
+  end;
+
+  /// implements 'EdDSA' Ed25519 algorithm using OpenSSL
+  TJwtEdDSAOsl = class(TJwtAbstractOsl)
+  protected
+    procedure SetAlgorithms; override;
+  end;
 
 
 { ************** Register OpenSSL to our General Cryptography Catalog }
@@ -1179,6 +1322,207 @@ begin
   BN_free(priv);
   EC_POINT_free(pub);
   EC_KEY_free(key);
+end;
+
+
+{ ************** JWT Implementation using any OpenSSL Algorithm }
+
+{ TJwtOpenSsl }
+
+constructor TJwtOpenSsl.Create(const aJwtAlgorithm, aHashAlgorithm: RawUtf8;
+  aGenEvpType, aGenBitsOrCurve: integer;
+  const aPrivateKey, aPublicKey: RawByteString;
+  const aPrivateKeyPassword, aPublicKeyPassword: RawUtf8;
+  aClaims: TJwtClaims; const aAudience: array of RawUtf8;
+  aExpirationMinutes: integer; aIDIdentifier: TSynUniqueIdentifierProcess;
+  aIDObfuscationKey: RawUtf8; aIDObfuscationKeyNewKdf: integer);
+begin
+  EOpenSsl.CheckAvailable(PClass(self)^, 'Create');
+  fHashAlgorithm := aHashAlgorithm;
+  fGenEvpType := aGenEvpType;
+  fGenBitsOrCurve := aGenBitsOrCurve;
+  fPrivateKey := aPrivateKey;
+  fPrivateKeyPassword := aPrivateKeyPassword;
+  fPublicKey := aPublicKey;
+  fPublicKeyPassword := aPublicKeyPassword;
+  inherited Create(aJwtAlgorithm, aClaims, aAudience, aExpirationMinutes,
+    aIDIdentifier, aIDObfuscationKey, aIDObfuscationKeyNewKdf);
+end;
+
+destructor TJwtOpenSsl.Destroy;
+begin
+  FillZero(fPrivateKey);
+  FillZero(fPrivateKeyPassword);
+  FillZero(fPublicKey);
+  FillZero(fPublicKeyPassword);
+  inherited Destroy;
+end;
+
+class function TJwtOpenSsl.IsAvailable: boolean;
+begin
+  result := OpenSslIsAvailable;
+end;
+
+function TJwtOpenSsl.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
+var
+  sign: RawByteString;
+  signlen: integer;
+begin
+  signlen := OpenSslSign(fHashAlgorithm,
+    pointer(headpayload), pointer(fPrivateKey),
+    length(headpayload), length(fPrivateKey), sign, fPrivateKeyPassword);
+  if signlen = 0 then
+    raise EJwtException.CreateUtf8('%.ComputeSignature: OpenSslSign failed [%]',
+      [self, SSL_error_short(ERR_get_error)]);
+  result := BinToBase64Uri(sign);
+end;
+
+procedure TJwtOpenSsl.CheckSignature(const headpayload: RawUtf8;
+  const signature: RawByteString; var JWT: TJwtContent);
+begin
+  if OpenSslVerify(fHashAlgorithm, fPublicKeyPassword,
+       pointer(headpayload), pointer(fPublicKey), pointer(signature),
+       length(headpayload), length(fPublicKey), length(signature)) then
+    JWT.result := jwtValid
+  else
+    JWT.result := jwtInvalidSignature;
+end;
+
+
+{ TJwtAbstractOsl }
+
+constructor TJwtAbstractOsl.Create(const aPrivateKey, aPublicKey: RawByteString;
+  const aPrivateKeyPassword, aPublicKeyPassword: RawUtf8; aClaims: TJwtClaims;
+  const aAudience: array of RawUtf8; aExpirationMinutes: integer;
+  aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUtf8;
+  aIDObfuscationKeyNewKdf: integer);
+begin
+  SetAlgorithms;
+  inherited Create(fAlgorithm, fHashAlgorithm, fGenEvpType, fGenBitsOrCurve,
+    aPrivateKey, aPublicKey, aPrivateKeyPassword, aPublicKeyPassword,
+    aClaims, aAudience, aExpirationMinutes, aIDIdentifier,
+    aIDObfuscationKey, aIDObfuscationKeyNewKdf);
+end;
+
+class procedure TJwtAbstractOsl.GenerateKeys(out PrivateKey, PublicKey: RawByteString);
+begin
+  with TJwtAbstractOsl(NewInstance) do // no need to call Create
+    try
+      SetAlgorithms;
+      OpenSslGenerateKeys(fGenEvpType, fGenBitsOrCurve, PrivateKey, PublicKey);
+    finally
+      Free;
+    end;
+end;
+
+
+{ TJwtES256Osl }
+
+procedure TJwtES256Osl.SetAlgorithms;
+begin
+  fAlgorithm := 'ES256';
+  fHashAlgorithm := ''; // sha256
+  fGenEvpType := EVP_PKEY_EC;
+  fGenBitsOrCurve := NID_X9_62_prime256v1; // = secp256r1
+end;
+
+{ TJwtES384Osl }
+
+procedure TJwtES384Osl.SetAlgorithms;
+begin
+  fAlgorithm := 'ES384';
+  fHashAlgorithm := 'SHA384';
+  fGenEvpType := EVP_PKEY_EC;
+  fGenBitsOrCurve := NID_secp384r1;
+end;
+
+{ TJwtES512Osl }
+
+procedure TJwtES512Osl.SetAlgorithms;
+begin
+  fAlgorithm := 'ES512';
+  fHashAlgorithm := 'SHA512';
+  fGenEvpType := EVP_PKEY_EC;
+  fGenBitsOrCurve := NID_secp521r1;
+end;
+
+{ TJwtES256KOsl }
+
+procedure TJwtES256KOsl.SetAlgorithms;
+begin
+  fAlgorithm := 'ES256K';
+  fHashAlgorithm := ''; // sha256
+  fGenEvpType := EVP_PKEY_EC;
+  fGenBitsOrCurve := NID_secp256k1;
+end;
+
+{ TJwtRS256Osl }
+
+procedure TJwtRS256Osl.SetAlgorithms;
+begin
+  fAlgorithm := 'RS256';
+  fHashAlgorithm := ''; // sha256
+  fGenEvpType := EVP_PKEY_RSA;
+  fGenBitsOrCurve := 2048;
+end;
+
+{ TJwtRS384Osl }
+
+procedure TJwtRS384Osl.SetAlgorithms;
+begin
+  fAlgorithm := 'RS384';
+  fHashAlgorithm := 'SHA384';
+  fGenEvpType := EVP_PKEY_RSA;
+  fGenBitsOrCurve := 2048;
+end;
+
+{ TJwtRS512Osl }
+
+procedure TJwtRS512Osl.SetAlgorithms;
+begin
+  fAlgorithm := 'RS512';
+  fHashAlgorithm := 'SHA512';
+  fGenEvpType := EVP_PKEY_RSA;
+  fGenBitsOrCurve := 2048;
+end;
+
+{ TJwtPS256Osl }
+
+procedure TJwtPS256Osl.SetAlgorithms;
+begin
+  fAlgorithm := 'PS256';
+  fHashAlgorithm := ''; // sha256
+  fGenEvpType := EVP_PKEY_RSA_PSS;
+  fGenBitsOrCurve := 2048;
+end;
+
+{ TJwtPS384Osl }
+
+procedure TJwtPS384Osl.SetAlgorithms;
+begin
+  fAlgorithm := 'PS384';
+  fHashAlgorithm := 'SHA384';
+  fGenEvpType := EVP_PKEY_RSA_PSS;
+  fGenBitsOrCurve := 2048;
+end;
+
+{ TJwtPS512Osl }
+
+procedure TJwtPS512Osl.SetAlgorithms;
+begin
+  fAlgorithm := 'PS512';
+  fHashAlgorithm := 'SHA512';
+  fGenEvpType := EVP_PKEY_RSA_PSS;
+  fGenBitsOrCurve := 2048;
+end;
+
+{ TJwtEdDSAOsl }
+
+procedure TJwtEdDSAOsl.SetAlgorithms;
+begin
+  fAlgorithm := 'EdDSA';
+  fHashAlgorithm := 'null'; // Ed25519 includes its own SHA-512
+  fGenEvpType := EVP_PKEY_ED25519;
 end;
 
 

@@ -120,12 +120,12 @@ type
     /// match the jrcJwtID "jti" claim desobfuscated value
     id: TSynUniqueIdentifierBits;
   end;
-  /// pointer to a JWT decoded content, as processed by TJwtAbstract
 
+  /// pointer to a JWT decoded content, as processed by TJwtAbstract
   PJwtContent = ^TJwtContent;
+
   /// used to store a list of JWT decoded content
   // - as used e.g. by TJwtAbstract cache
-
   TJwtContentDynArray = array of TJwtContent;
 
   /// available options for TJwtAbstract process
