@@ -125,6 +125,10 @@ var
   // - equals e.g. $1010106f
   OpenSslVersion: cardinal;
 
+  /// internal flag used by OpenSslIsAvailable function
+  openssl_initialized: (osslUnTested, osslAvailable, osslNotAvailable);
+
+
 /// return TRUE if OpenSSL 1.1.1 library can be used
 // - will load and initialize it, calling OpenSslInitialize if necessary,
 // catching any exception during the process
@@ -132,15 +136,16 @@ var
 // been defined, since they link the library at compile or startup time
 // - you should never call any OpenSSL function if false is returned
 function OpenSslIsAvailable: boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// initialize the OpenSSL 1.1.1 API, accessible via the global functions
 // - will raise EOpenSsl exception on any loading issue
 // - you can force the library names to load
 // - do nothing if the library has already been loaded or if
 // OPENSSLFULLAPI or OPENSSLSTATIC conditionals have been defined
-procedure OpenSslInitialize(
+function OpenSslInitialize(
    const libcryptoname: TFileName = LIB_CRYPTO;
-   const libsslname: TFileName = LIB_SSL);
+   const libsslname: TFileName = LIB_SSL): boolean;
 
 
 { ******************** OpenSSL Library Constants }
@@ -173,7 +178,7 @@ const
   SN_X9_62_prime239v3 = 'prime239v3';
   NID_X9_62_prime239v3 = 414;
   SN_X9_62_prime256v1 = 'prime256v1';
-  NID_X9_62_prime256v1 = 415;
+  NID_X9_62_prime256v1 = 415; // = secp256r1
   SN_secp112r1 = 'secp112r1';
   NID_secp112r1 = 704;
   SN_secp112r2 = 'secp112r2';
@@ -1911,25 +1916,28 @@ begin
   result := libcrypto.PEM_write_bio_PUBKEY(bp, x);
 end;
 
-var
-  openssl_initialized: boolean;
 
 function OpenSslIsAvailable: boolean;
 begin
-  if not openssl_initialized then
-    OpenSslInitialize;
-  result := libssl <> nil;
+  case openssl_initialized of
+    osslUnTested:
+      result := OpenSslInitialize;
+    osslAvailable:
+      result := true;
+  else
+    result := false;
+  end;
 end;
 
-procedure OpenSslInitialize(const libcryptoname, libsslname: TFileName);
+function OpenSslInitialize(const libcryptoname, libsslname: TFileName): boolean;
 var
   P: PPointerArray;
   api: PtrInt;
 begin
   GlobalLock;
   try
-    if openssl_initialized and
-       (libssl <> nil) then // set it once, but allow to retry given libnames
+    if openssl_initialized = osslAvailable then
+      // set it once, but allow to retry given libnames
       exit;
     libcrypto := TLibCrypto.Create;
     libssl := TLibSsl.Create;
@@ -1974,8 +1982,12 @@ begin
       FreeAndNil(libcrypto);
     end;
   finally
-    openssl_initialized := true; // should be done the last
+    if libssl = nil then // flag should be set the last
+      openssl_initialized := osslNotAvailable
+    else
+      openssl_initialized := osslAvailable;
     GlobalUnLock;
+    result := libssl <> nil;
   end;
 end;
 
