@@ -3469,12 +3469,13 @@ begin
   begin
     temp.Buf := nil;
     temp.len := BufLen;
-    result := Buf;
+    result := PUtf8Char(Buf);
   end
   else
   begin
     temp.Init(BufLen * 3);
-    Buf := TSynAnsiConvert.Engine(CodePage).AnsiBufferToUtf8(temp.Buf, Buf, BufLen);
+    Buf := pointer(TSynAnsiConvert.Engine(CodePage).
+      AnsiBufferToUtf8(temp.Buf, Buf, BufLen));
     temp.len := Buf - PAnsiChar(temp.Buf);
     result := temp.Buf;
   end;

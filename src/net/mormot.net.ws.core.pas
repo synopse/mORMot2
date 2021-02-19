@@ -126,7 +126,7 @@ procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSha1Digest)
 var
   /// the raw AES class used by TWebSocketProtocol.SetEncryptKey/SetEncryptKeyAes
   // - if left to its default nil, TAesFast[mCtr] will be used, since it much
-  // faster on x86_64 or if mormot.core.crypto.openssl.pas is part of your project
+  // faster on x86_64 or if mormot.core.crypto.openssl.RegisterOpenSsl is called
   // - for compatibility, you may set TAesCfb as used for mORMot 1.18
   ProtocolAesClass: TAesAbstractClass = nil;
 

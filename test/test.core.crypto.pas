@@ -783,7 +783,6 @@ var
   jwt: TJwtContent;
   secret: TEccCertificateSecret;
   tok: RawUtf8;
-  tim: TPrecisionTimer;
   a: TSignAlgo;
 begin
   test(TJwtNone.Create(
