@@ -26,6 +26,10 @@ uses
   mormot.core.ecc256r1,
   mormot.core.ecc,
   mormot.core.perf,
+  mormot.core.crypto.openssl,
+  {$ifdef USE_OPENSSL}
+  mormot.lib.openssl11,
+  {$endif USE_OPENSSL}
   mormot.app.console,
   mormot.tools.ecc;
 
@@ -41,20 +45,17 @@ type
   published
     /// avoid regression among platforms and compilers
     procedure ReferenceVectors;
-    /// ECC private/public keys generation
-    procedure _ecc_make_key;
-    /// ECDSA signature computation
-    procedure _ecdsa_sign;
-    /// ECDSA signature verification
-    procedure _ecdsa_verify;
-    /// ECDH key derivation
-    procedure _ecdh_shared_secret;
+    /// ECC private/public keys generation, signature, verifiaction and secret
+    procedure ECC;
     /// ECDSA certificates chains and digital signatures
     procedure CertificatesAndSignatures;
     /// run most commands of the ECC tool
     procedure EccCommandLineTool;
     /// ECDHE stream protocol
     procedure ECDHEStreamProtocol;
+    {$ifdef USE_OPENSSL}
+    procedure _OpenSSL;
+    {$endif USE_OPENSSL}
   end;
 
 
@@ -65,9 +66,9 @@ implementation
 
 const
   {$ifdef CPU64}
-  ECC_COUNT = 200;
+  ECC_COUNT = 301;
   {$else}
-  ECC_COUNT = 50;
+  ECC_COUNT = 51;
   {$endif CPU64}
 
 procedure TTestCoreEcc.ReferenceVectors;
@@ -129,41 +130,36 @@ begin
   Check(IsEqual(s1, s3));
 end;
 
-procedure TTestCoreEcc._ecc_make_key;
+procedure TTestCoreEcc.ECC;
 var
   i: integer;
-begin
-  for i := 0 to ECC_COUNT - 1 do
-    Check(Ecc256r1MakeKey(pub[i], priv[i]));
-end;
-
-procedure TTestCoreEcc._ecdsa_sign;
-var
-  i: integer;
-begin
-  for i := 0 to ECC_COUNT - 1 do
-    Check(Ecc256r1Sign(priv[i], hash, sign[i]));
-end;
-
-procedure TTestCoreEcc._ecdsa_verify;
-var
-  i: integer;
-begin
-  for i := 0 to ECC_COUNT - 1 do
-    check(Ecc256r1Verify(pub[i], hash, sign[i]));
-end;
-
-procedure TTestCoreEcc._ecdh_shared_secret;
-var
+  timer: TPrecisionTimer;
   sec1, sec2: TEccSecretKey;
-  i: integer;
 begin
+  Check(ecc_make_key_pas(pub[0], priv[0])); // also validate our pascal code
+  timer.Start;
+  for i := 1 to ECC_COUNT - 1 do
+    Check(Ecc256r1MakeKey(pub[i], priv[i]));
+  NotifyTestSpeed('Ecc256r1MakeKey', ECC_COUNT - 1, 0, @timer);
+  timer.Start;
+  for i := 0 to ECC_COUNT - 2 do
+    Check(Ecc256r1Sign(priv[i], hash, sign[i]));
+  NotifyTestSpeed('Ecc256r1Sign', ECC_COUNT - 1, 0, @timer);
+  Check(ecdsa_sign_pas(priv[ECC_COUNT - 1], hash, sign[ECC_COUNT - 1]));
+  Check(ecdsa_verify_pas(pub[7], hash, sign[7]));
+  timer.Start;
+  for i := 0 to ECC_COUNT - 1 do
+    if i <> 7 then
+      check(Ecc256r1Verify(pub[i], hash, sign[i]));
+  NotifyTestSpeed('Ecc256r1Verify', ECC_COUNT - 1, 0, @timer);
+  timer.Start;
   for i := 0 to ECC_COUNT - 2 do
   begin
     check(Ecc256r1SharedSecret(pub[i], priv[i + 1], sec1));
     check(Ecc256r1SharedSecret(pub[i + 1], priv[i], sec2));
     check(IsEqual(sec1, sec2));
   end;
+  NotifyTestSpeed('Ecc256r1SharedSecret', (ECC_COUNT - 2) * 2, 0, @timer);
 end;
 
 procedure TTestCoreEcc.CertificatesAndSignatures;
@@ -610,6 +606,52 @@ begin
   cs.Free;
   ss.Free;
 end;
+
+
+{$ifdef USE_OPENSSL}
+
+procedure TTestCoreEcc._OpenSSL;
+
+  procedure Test(EvpType, BitsOrCurve, Count: integer; const Digest, Name: RawUtf8);
+  var
+    timer: TPrecisionTimer;
+    priv, pub, msg, sig: RawByteString;
+    i: integer;
+  begin
+    timer.Start;
+    for i := 1 to Count do
+      OpenSslGenerateKeys(EvpType, BitsOrCurve, priv, pub);
+    Check({%H-}priv <> '');
+    Check({%H-}pub <> '');
+    NotifyTestSpeed('% Generation', [Name], Count, 0, @timer);
+    msg := RandomString(100);
+    if IdemPChar(pointer(Name), 'RSA') then
+      Count := Count * 10;
+    timer.Start;
+    for i := 1 to Count do
+      CheckUtf8(OpenSslSign(Digest, pointer(msg), pointer(priv),
+        length(msg), length(priv), sig) <> 0, 'sign %', [Name]);
+    NotifyTestSpeed('% Sign', [Name], Count, 0, @timer);
+    timer.Start;
+    for i := 1 to Count do
+      CheckUtf8(OpenSslVerify(Digest, '', pointer(msg), pointer(pub), pointer({%H-}sig),
+        length(msg), length(pub), length({%H-}sig)), 'verify %', [Name]);
+    NotifyTestSpeed('% Verify', [Name], Count, 0, @timer);
+    inc(msg[10]);
+    CheckUtf8(not OpenSslVerify(Digest, '', pointer(msg), pointer(pub), pointer(sig),
+      length(msg), length(pub), length(sig)), 'detect %', [Name]);
+  end;
+
+begin
+  if not OpenSslIsAvailable then
+    exit;
+  Test(EVP_PKEY_RSA, 2048, 3, '', 'RSA 2048');
+  Test(EVP_PKEY_RSA_PSS, 2048, 3, '', 'RSA-PSS 2048');
+  Test(EVP_PKEY_EC, NID_X9_62_prime256v1, 100, '', 'prime256v1');
+  Test(EVP_PKEY_ED25519, 0, 100, 'null', 'ed25519');
+end;
+
+{$endif USE_OPENSSL}
 
 end.
 
