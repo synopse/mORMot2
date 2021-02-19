@@ -53,7 +53,7 @@ type
   EOpenSslCrypto = class(EOpenSsl);
 
   /// TAesPrng-compatible class using OpenSSL 1.1.1
-  // - we abbreviate OpenSsl as Osl for class names for brevity
+  // - we abbreviate OpenSsl as Osl in class names for brevity
   // - may be used instead of TAesPrng if a "proven" generator is required -
   // you could override MainAesPrng global variable
   // - but mormot.core.crypto TAesPrng is faster, especially for small output,
@@ -98,7 +98,7 @@ type
   end;
 
   /// handle AES cypher/uncypher with chaining with OpenSSL 1.1
-  // - we abbreviate OpenSsl as Osl for class names for brevity
+  // - we abbreviate OpenSsl as Osl in class names for brevity
   // - use any of the inherited implementation, corresponding to the chaining
   // mode required - TAesEcbOsl, TAesCbcOsl, TAesCfbOsl, TAesOfbOsl and TAesCtrOsl
   // classes to handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7-like padding)
@@ -425,7 +425,8 @@ type
 
   /// abstract parent for OpenSSL JWT algorithms - never use this plain class!
   // - inherited classes implement all official algorithms from https://jwt.io
-  // - some numbers from our regresssion tests for JWT validation:
+  // - we abbreviate OpenSsl as Osl in class names for brevity
+  // - some numbers from our regresssion tests on Linux x86_64 for JWT validation:
   // $ 100 RS256 in 5.11ms i.e. 19,550/s, aver. 51us
   // $ 100 RS384 in 5.09ms i.e. 19,642/s, aver. 50us
   // $ 100 RS512 in 5.12ms i.e. 19,508/s, aver. 51us
@@ -1530,7 +1531,8 @@ end;
 
 procedure RegisterOpenSsl;
 begin
-  if not OpenSslIsAvailable then
+  if (TAesFast[mGcm] = TAesGcmOsl) or
+     not OpenSslIsAvailable then
     exit;
   // set the fastest AES implementation classes
   TAesFast[mGcm] := TAesGcmOsl;

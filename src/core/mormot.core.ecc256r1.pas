@@ -11,7 +11,7 @@ unit mormot.core.ecc256r1;
     - Middle-Level Certificate-based Public Key Cryptography
 
    Pascal and optimized gcc static binaries are included.
-   If mormot.core.crypto.openssl is linked, use faster OpenSSL implementation.
+   If mormot.core.crypto.openssl.RegisterOpenSsl is called, use faster OpenSSL.
 
   *****************************************************************************
 }
@@ -514,8 +514,8 @@ end;
      x64 is 4 times faster than x86 for such arithmetic tasks :)
 
 
-  Note that mormot.core.crypto.openssl will replace those functions by the
-  much faster OpenSSL implementation (numbers on Linux x86_64):
+  Note that mormot.core.crypto.openssl.RegisterOpenSsl replaces those functions
+  by the much faster OpenSSL implementation (numbers on Linux x86_64):
 
   - OpenSSL: 300 Ecc256r1MakeKey in 7.75ms i.e. 38,664/s, aver. 25us
   - mORMot:  300 Ecc256r1MakeKey in 255ms i.e. 1,176/s, aver. 850us

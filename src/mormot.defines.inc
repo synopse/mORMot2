@@ -534,7 +534,7 @@
   {.$define USE_OPENSSL}
 {$else}
   {$ifndef OSANDROID}
-    // try OpenSSL on POSIX systems where it is likely to be unique and maintained
+    // try OpenSSL on POSIX systems where likely to be unique and maintained
     {$define USE_OPENSSL}
   {$endif OSANDROID}
 {$endif OSWINDOWS}
