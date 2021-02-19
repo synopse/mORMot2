@@ -1097,8 +1097,6 @@ const
   SN_sm_scheme = 'sm-scheme';
   NID_sm_scheme = 1142;
   SN_dsa = 'DSA';
-  LN_dsa = 'dsaEncryption';
-  NID_dsa = 116;
   SN_dsaWithSHA1 = 'DSA-SHA1';
   LN_dsaWithSHA1 = 'dsaWithSHA1';
   NID_dsaWithSHA1 = 113;
@@ -1117,8 +1115,6 @@ const
   NID_X9_62_tpBasis = 682;
   SN_X9_62_ppBasis = 'ppBasis';
   NID_X9_62_ppBasis = 683;
-  SN_X9_62_id_ecPublicKey = 'id-ecPublicKey';
-  NID_X9_62_id_ecPublicKey = 408;
   SN_X9_62_c2pnb163v1 = 'c2pnb163v1';
   NID_X9_62_c2pnb163v1 = 684;
   SN_X9_62_c2pnb163v2 = 'c2pnb163v2';
@@ -1159,18 +1155,6 @@ const
   NID_X9_62_c2pnb368w1 = 702;
   SN_X9_62_c2tnb431r1 = 'c2tnb431r1';
   NID_X9_62_c2tnb431r1 = 703;
-  SN_X9_62_prime192v1 = 'prime192v1';
-  NID_X9_62_prime192v1 = 409;
-  SN_X9_62_prime192v2 = 'prime192v2';
-  NID_X9_62_prime192v2 = 410;
-  SN_X9_62_prime192v3 = 'prime192v3';
-  NID_X9_62_prime192v3 = 411;
-  SN_X9_62_prime239v1 = 'prime239v1';
-  NID_X9_62_prime239v1 = 412;
-  SN_X9_62_prime239v2 = 'prime239v2';
-  NID_X9_62_prime239v2 = 413;
-  SN_X9_62_prime239v3 = 'prime239v3';
-  NID_X9_62_prime239v3 = 414;
   SN_ecdsa_with_SHA1 = 'ecdsa-with-SHA1';
   NID_ecdsa_with_SHA1 = 416;
   SN_ecdsa_with_Recommended = 'ecdsa-with-Recommended';
@@ -1185,68 +1169,6 @@ const
   NID_ecdsa_with_SHA384 = 795;
   SN_ecdsa_with_SHA512 = 'ecdsa-with-SHA512';
   NID_ecdsa_with_SHA512 = 796;
-  SN_secp112r1 = 'secp112r1';
-  NID_secp112r1 = 704;
-  SN_secp112r2 = 'secp112r2';
-  NID_secp112r2 = 705;
-  SN_secp128r1 = 'secp128r1';
-  NID_secp128r1 = 706;
-  SN_secp128r2 = 'secp128r2';
-  NID_secp128r2 = 707;
-  SN_secp160k1 = 'secp160k1';
-  NID_secp160k1 = 708;
-  SN_secp160r1 = 'secp160r1';
-  NID_secp160r1 = 709;
-  SN_secp160r2 = 'secp160r2';
-  NID_secp160r2 = 710;
-  SN_secp192k1 = 'secp192k1';
-  NID_secp192k1 = 711;
-  SN_secp224k1 = 'secp224k1';
-  NID_secp224k1 = 712;
-  SN_secp224r1 = 'secp224r1';
-  NID_secp224r1 = 713;
-  SN_secp256k1 = 'secp256k1';
-  NID_secp256k1 = 714;
-  SN_secp384r1 = 'secp384r1';
-  NID_secp384r1 = 715;
-  SN_secp521r1 = 'secp521r1';
-  NID_secp521r1 = 716;
-  SN_sect113r1 = 'sect113r1';
-  NID_sect113r1 = 717;
-  SN_sect113r2 = 'sect113r2';
-  NID_sect113r2 = 718;
-  SN_sect131r1 = 'sect131r1';
-  NID_sect131r1 = 719;
-  SN_sect131r2 = 'sect131r2';
-  NID_sect131r2 = 720;
-  SN_sect163k1 = 'sect163k1';
-  NID_sect163k1 = 721;
-  SN_sect163r1 = 'sect163r1';
-  NID_sect163r1 = 722;
-  SN_sect163r2 = 'sect163r2';
-  NID_sect163r2 = 723;
-  SN_sect193r1 = 'sect193r1';
-  NID_sect193r1 = 724;
-  SN_sect193r2 = 'sect193r2';
-  NID_sect193r2 = 725;
-  SN_sect233k1 = 'sect233k1';
-  NID_sect233k1 = 726;
-  SN_sect233r1 = 'sect233r1';
-  NID_sect233r1 = 727;
-  SN_sect239k1 = 'sect239k1';
-  NID_sect239k1 = 728;
-  SN_sect283k1 = 'sect283k1';
-  NID_sect283k1 = 729;
-  SN_sect283r1 = 'sect283r1';
-  NID_sect283r1 = 730;
-  SN_sect409k1 = 'sect409k1';
-  NID_sect409k1 = 731;
-  SN_sect409r1 = 'sect409r1';
-  NID_sect409r1 = 732;
-  SN_sect571k1 = 'sect571k1';
-  NID_sect571k1 = 733;
-  SN_sect571r1 = 'sect571r1';
-  NID_sect571r1 = 734;
   SN_wap_wsg_idm_ecid_wtls1 = 'wap-wsg-idm-ecid-wtls1';
   NID_wap_wsg_idm_ecid_wtls1 = 735;
   SN_wap_wsg_idm_ecid_wtls3 = 'wap-wsg-idm-ecid-wtls3';
@@ -1297,8 +1219,6 @@ const
   NID_pkcs = 2;
   SN_pkcs1 = 'pkcs1';
   NID_pkcs1 = 186;
-  LN_rsaEncryption = 'rsaEncryption';
-  NID_rsaEncryption = 6;
   SN_md2WithRSAEncryption = 'RSA-MD2';
   LN_md2WithRSAEncryption = 'md2WithRSAEncryption';
   NID_md2WithRSAEncryption = 7;
@@ -1321,8 +1241,6 @@ const
   LN_pSpecified = 'pSpecified';
   NID_pSpecified = 935;
   SN_rsassaPss = 'RSASSA-PSS';
-  LN_rsassaPss = 'rsassaPss';
-  NID_rsassaPss = 912;
   SN_sha256WithRSAEncryption = 'RSA-SHA256';
   LN_sha256WithRSAEncryption = 'sha256WithRSAEncryption';
   NID_sha256WithRSAEncryption = 668;
@@ -1343,8 +1261,6 @@ const
   NID_sha512_256WithRSAEncryption = 1146;
   SN_pkcs3 = 'pkcs3';
   NID_pkcs3 = 27;
-  LN_dhKeyAgreement = 'dhKeyAgreement';
-  NID_dhKeyAgreement = 28;
   SN_pkcs5 = 'pkcs5';
   NID_pkcs5 = 187;
   SN_pbeWithMD2AndDES_CBC = 'PBE-MD2-DES';
@@ -3771,8 +3687,6 @@ const
   NID_X25519 = 1034;
   SN_X448 = 'X448';
   NID_X448 = 1035;
-  SN_ED25519 = 'ED25519';
-  NID_ED25519 = 1087;
   SN_ED448 = 'ED448';
   NID_ED448 = 1088;
   SN_kx_rsa = 'KxRSA';
@@ -3832,9 +3746,6 @@ const
   SN_auth_any = 'AuthANY';
   LN_auth_any = 'auth-any';
   NID_auth_any = 1064;
-  SN_poly1305 = 'Poly1305';
-  LN_poly1305 = 'poly1305';
-  NID_poly1305 = 1061;
   SN_siphash = 'SipHash';
   LN_siphash = 'siphash';
   NID_siphash = 1062;
@@ -3944,29 +3855,22 @@ const
   EVP_PKS_RSA = $0100;
   EVP_PKS_DSA = $0200;
   EVP_PKS_EC = $0400;
-  
+
   EVP_PKEY_NONE = NID_undef;
-  EVP_PKEY_RSA = NID_rsaEncryption;
   EVP_PKEY_RSA2 = NID_rsa;
-  EVP_PKEY_RSA_PSS = NID_rsassaPss;
-  EVP_PKEY_DSA = NID_dsa;
   EVP_PKEY_DSA1 = NID_dsa_2;
   EVP_PKEY_DSA2 = NID_dsaWithSHA;
   EVP_PKEY_DSA3 = NID_dsaWithSHA1;
   EVP_PKEY_DSA4 = NID_dsaWithSHA1_2;
-  EVP_PKEY_DH = NID_dhKeyAgreement;
   EVP_PKEY_DHX = NID_dhpublicnumber;
-  EVP_PKEY_EC = NID_X9_62_id_ecPublicKey;
   EVP_PKEY_SM2 = NID_sm2;
   EVP_PKEY_HMAC = NID_hmac;
   EVP_PKEY_CMAC = NID_cmac;
   EVP_PKEY_SCRYPT = NID_id_scrypt;
   EVP_PKEY_TLS1_PRF = NID_tls1_prf;
   EVP_PKEY_HKDF = NID_hkdf;
-  EVP_PKEY_POLY1305 = NID_poly1305;
   EVP_PKEY_SIPHASH = NID_siphash;
   EVP_PKEY_X25519 = NID_X25519;
-  EVP_PKEY_ED25519 = NID_ED25519;
   EVP_PKEY_X448 = NID_X448;
   EVP_PKEY_ED448 = NID_ED448;
   EVP_PKEY_MO_SIGN = $0001;
@@ -4091,8 +3995,6 @@ const
   ASN1_PKEY_CTRL_GET1_TLS_ENCPT = $a;
   
   EVP_PKEY_OP_UNDEFINED = 0;
-  EVP_PKEY_OP_PARAMGEN = 1 shl 1;
-  EVP_PKEY_OP_KEYGEN = 1 shl 2;
   EVP_PKEY_OP_SIGN = 1 shl 3;
   EVP_PKEY_OP_VERIFY = 1 shl 4;
   EVP_PKEY_OP_VERIFYRECOVER = 1 shl 5;
@@ -4128,7 +4030,6 @@ const
   EVP_PKEY_CTRL_CIPHER = 12;
   EVP_PKEY_CTRL_GET_MD = 13;
   EVP_PKEY_CTRL_SET_DIGEST_SIZE = 14;
-  EVP_PKEY_ALG_CTRL = $1000;
   EVP_PKEY_FLAG_AUTOARGLEN = 2;
   EVP_PKEY_FLAG_SIGCTX_CUSTOM = 4;
   
@@ -4388,7 +4289,6 @@ const
   EC_FLAG_FIPS_CHECKED = $2;
   EC_FLAG_COFACTOR_ECDH = $1000;
   
-  EVP_PKEY_CTRL_EC_PARAMGEN_CURVE_NID = EVP_PKEY_ALG_CTRL + 1;
   EVP_PKEY_CTRL_EC_PARAM_ENC = EVP_PKEY_ALG_CTRL + 2;
   EVP_PKEY_CTRL_EC_ECDH_COFACTOR = EVP_PKEY_ALG_CTRL + 3;
   EVP_PKEY_CTRL_EC_KDF_TYPE = EVP_PKEY_ALG_CTRL + 4;
@@ -4570,7 +4470,6 @@ const
   
   EVP_PKEY_CTRL_RSA_PADDING = EVP_PKEY_ALG_CTRL + 1;
   EVP_PKEY_CTRL_RSA_PSS_SALTLEN = EVP_PKEY_ALG_CTRL + 2;
-  EVP_PKEY_CTRL_RSA_KEYGEN_BITS = EVP_PKEY_ALG_CTRL + 3;
   EVP_PKEY_CTRL_RSA_KEYGEN_PUBEXP = EVP_PKEY_ALG_CTRL + 4;
   EVP_PKEY_CTRL_RSA_MGF1_MD = EVP_PKEY_ALG_CTRL + 5;
   EVP_PKEY_CTRL_GET_RSA_PADDING = EVP_PKEY_ALG_CTRL + 6;
@@ -4735,7 +4634,6 @@ const
   DSA_FLAG_FIPS_CHECKED = $0800;
   DSS_prime_checks = 64;
   
-  EVP_PKEY_CTRL_DSA_PARAMGEN_BITS = EVP_PKEY_ALG_CTRL + 1;
   EVP_PKEY_CTRL_DSA_PARAMGEN_Q_BITS = EVP_PKEY_ALG_CTRL + 2;
   EVP_PKEY_CTRL_DSA_PARAMGEN_MD = EVP_PKEY_ALG_CTRL + 3;
   
@@ -9793,16 +9691,6 @@ type
   BF_KEY = bf_key_st;
   PBF_KEY = ^BF_KEY;
 
-  buf_mem_st = record
-    length: PtrUInt;
-    data: PUtf8Char;
-    max: PtrUInt;
-    flags: cardinal;
-  end;
-
-  BUF_MEM = buf_mem_st;
-  PBUF_MEM = ^BUF_MEM;
-
   KEY_TABLE_TYPE = array [0..67] of cardinal;
 
   _anonymous_type_2 = record
@@ -14471,14 +14359,8 @@ function EVP_CipherFinal(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): int
 function EVP_SignFinal(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal; pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_SignFinal';
 
-function EVP_DigestSign(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_DigestSign';
-
 function EVP_VerifyFinal(ctx: PEVP_MD_CTX; sigbuf: PByte; siglen: cardinal; pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_VerifyFinal';
-
-function EVP_DigestVerify(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_DigestVerify';
 
 function EVP_OpenInit(ctx: PEVP_CIPHER_CTX; typ: PEVP_CIPHER; ek: PByte; ekl: integer; iv: PByte; priv: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_OpenInit';
@@ -15415,20 +15297,8 @@ function EVP_PKEY_meth_get_count(): PtrUInt; cdecl;
 function EVP_PKEY_meth_get0(idx: PtrUInt): PEVP_PKEY_METHOD; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_meth_get0';
 
-function EVP_PKEY_CTX_new(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_new';
-
-function EVP_PKEY_CTX_new_id(id: integer; e: PENGINE): PEVP_PKEY_CTX; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_new_id';
-
 function EVP_PKEY_CTX_dup(ctx: PEVP_PKEY_CTX): PEVP_PKEY_CTX; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_dup';
-
-procedure EVP_PKEY_CTX_free(ctx: PEVP_PKEY_CTX); cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_free';
-
-function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer; cmd: integer; p1: integer; p2: pointer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_ctrl';
 
 function EVP_PKEY_CTX_ctrl_str(ctx: PEVP_PKEY_CTX; typ: PUtf8Char; value: PUtf8Char): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_ctrl_str';
@@ -15525,18 +15395,6 @@ function EVP_PKEY_derive_set_peer(ctx: PEVP_PKEY_CTX; peer: PEVP_PKEY): integer;
 
 function EVP_PKEY_derive(ctx: PEVP_PKEY_CTX; key: PByte; keylen: PPtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_derive';
-
-function EVP_PKEY_paramgen_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_paramgen_init';
-
-function EVP_PKEY_paramgen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_paramgen';
-
-function EVP_PKEY_keygen_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_keygen_init';
-
-function EVP_PKEY_keygen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_keygen';
 
 function EVP_PKEY_check(ctx: PEVP_PKEY_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_check';
@@ -21796,9 +21654,6 @@ function PEM_write_bio_RSAPrivateKey(bp: PBIO; x: PRSA; enc: PEVP_CIPHER; kstr: 
 function PEM_write_RSAPrivateKey(fp: PPointer; x: PRSA; enc: PEVP_CIPHER; kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_RSAPrivateKey';
 
-function PEM_read_bio_RSAPublicKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
-  external LIB_CRYPTO name _PU + 'PEM_read_bio_RSAPublicKey';
-
 function PEM_read_RSAPublicKey(fp: PPointer; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_RSAPublicKey';
 
@@ -21913,17 +21768,11 @@ function PEM_write_DHxparams(fp: PPointer; x: PDH): integer; cdecl;
 function PEM_read_PrivateKey(fp: PPointer; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_PrivateKey';
 
-function PEM_write_bio_PrivateKey(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'PEM_write_bio_PrivateKey';
-
 function PEM_write_PrivateKey(fp: PPointer; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_PrivateKey';
 
 function PEM_read_PUBKEY(fp: PPointer; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_PUBKEY';
-
-function PEM_write_bio_PUBKEY(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'PEM_write_bio_PUBKEY';
 
 function PEM_write_PUBKEY(fp: PPointer; x: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_PUBKEY';

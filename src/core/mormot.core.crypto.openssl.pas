@@ -15,9 +15,9 @@ unit mormot.core.crypto.openssl;
 
   *****************************************************************************
 
-  TL;DR: on x86_64, our mormot.core.crypto.pas asm is stand-alone and faster
-  than OpenSSL for most algorithms, and only 20% slower for AES-GCM.
-  For asymetric cryptography, OpenSSL is much faster than mormot.core.ecc256r1.
+  TL;DR: On x86_64, our mormot.core.crypto.pas asm is stand-alone and faster
+         than OpenSSL for most algorithms, and only 20% slower for AES-GCM.
+         For ECC, our mormot.core.ecc256r1 is noticeably slower than OpenSSL.
 
 }
 
@@ -308,34 +308,79 @@ type
 
 { ************** OpenSSL Asymetric Cryptography }
 
+type
+  /// exception class raised by the sign/verify classes of this unit
+  EOpenSslAsymetric = class(EOpenSsl);
+
 /// asymetric digital signature of some Message using a given PrivateKey
-// - if Algorithm is not specified, EVP_sha256 will be used
+// - if Algorithm is '', EVP_sha256 will be used as message Digest
+// - if Algorithm is 'null', no Digest is done before signature - which is
+// mandatory e.g. for ed25519 which uses internally SHA-512
 // - returns 0 on error, or the result Signature size in bytes
 function OpenSslSign(const Algorithm: RawUtf8;
   Message, PrivateKey: pointer; MessageLen, PrivateKeyLen: integer;
-  const PrivateKeyPassword: RawUtf8; out Signature: THash512Rec): cardinal;
+  out Signature: RawByteString; const PrivateKeyPassword: RawUtf8 = ''): cardinal;
 
 /// asymetric digital verification of some Message using a given PublicKey
-// - if Algorithm is not specified, EVP_sha256 will be used
-// - returns 0 on error, or the result Signature size in bytes
+// - if Algorithm is '', EVP_sha256 will be used as message Digest
+// - if Algorithm is 'null', no Digest is done before signature - which is
+// mandatory e.g. for ed25519 which uses internally SHA-512
+// - returns false on error, or true if the Message has been authenticated
 function OpenSslVerify(const Algorithm, PublicKeyPassword: RawUtf8;
   Message, PublicKey, Signature: pointer;
   MessageLen, PublicKeyLen, SignatureLen: integer): boolean;
 
+/// generate a public/private pair of keys
+// - if EvpType is EVP_PKEY_DSA, EVP_PKEY_DH or EVP_PKEY_RSA or EVP_PKEY_RSA_PSS,
+// BitsOrCurve is the number of bits of the key
+// - if EvpType is EVP_PKEY_EC, BitsOrCurve is the curve NID (e.g.
+// NID_X9_62_prime256v1)
+// - if EvpType is EVP_PKEY_ED25519, BitsOrCurve is ignored
+// - caller should EVP_PKEY_free() the result
+function OpenSslGenerateKeys(EvpType, BitsOrCurve: integer): PEVP_PKEY; overload;
+
+/// persist a public/private pair of keys
+procedure OpenSslSaveKeys(Keys: PEVP_PKEY;
+  out PrivateKey, PublicKey: RawByteString);
+
+/// generate a public/private pair of keys in PEM text format
+// - if EvpType is EVP_PKEY_DSA, EVP_PKEY_DH or EVP_PKEY_RSA or EVP_PKEY_RSA_PSS,
+// BitsOrCurve is the number of bits of the key
+// - if EvpType is EVP_PKEY_EC, BitsOrCurve is the Elliptic curve NID (e.g.
+// NID_X9_62_prime256v1)
+// - if EvpType is EVP_PKEY_ED25519, BitsOrCurve is ignored
+procedure OpenSslGenerateKeys(EvpType, BitsOrCurve: integer;
+  out PrivateKey, PublicKey: RawByteString); overload;
+
 
 /// mormot.core.ecc256r1 compatible function for asymetric key generation
+// - this OpenSSL-powered function will replace our slower mormot.core.ecc256r1
+// $ OpenSSL: 300 Ecc256r1MakeKey in 7.75ms i.e. 38,664/s, aver. 25us
+// $ mORMot:  300 Ecc256r1MakeKey in 255ms i.e. 1,176/s, aver. 850us
+// - directly access OpenSSL prime256v1, so faster than OpenSslGenerateKeys()
 function ecc_make_key_osl(out PublicKey: TEccPublicKey;
   out PrivateKey: TEccPrivateKey): boolean;
 
 /// mormot.core.ecc256r1 compatible function for asymetric key signature
+// - this OpenSSL-powered function will replace our slower pascal/c code
+// $ OpenSSL: 300 Ecc256r1Sign in 11.66ms i.e. 25,711/s, aver. 38us
+// $ mORMot:  300 Ecc256r1Sign in 262.72ms i.e. 1,141/s, aver. 875us
+// - directly access OpenSSL prime256v1, so faster than OpenSslSign()
 function ecdsa_sign_osl(const PrivateKey: TEccPrivateKey; const Hash: TEccHash;
   out Signature: TEccSignature): boolean;
 
 /// mormot.core.ecc256r1 compatible function for asymetric key verification
+// - this OpenSSL-powered function will replace our slower pascal/c code
+// $ OpenSSL: 300 Ecc256r1Verify in 41.32ms i.e. 7,260/s, aver. 137us
+// $ mORMot:  300 Ecc256r1Verify in 319.32ms i.e. 939/s, aver. 1.06ms
+// - directly access OpenSSL prime256v1, so faster than OpenSslVerify()
 function ecdsa_verify_osl(const PublicKey: TEccPublicKey; const Hash: TEccHash;
   const Signature: TEccSignature): boolean;
 
 /// mormot.core.ecc256r1 compatible function for ECDH shared secret computation
+// - this OpenSSL-powered function will replace our slower pascal/c code
+// $ OpenSSL: 598 Ecc256r1SharedSecret in 67.98ms i.e. 8,796/s, aver. 113us
+// $ mORMot:  598 Ecc256r1SharedSecret in 537.95ms i.e. 1,111/s, aver. 899us
 function ecdh_shared_secret_osl(const PublicKey: TEccPublicKey;
   const PrivateKey: TEccPrivateKey; out Secret: TEccSecretKey): boolean;
 
@@ -345,11 +390,12 @@ function ecdh_shared_secret_osl(const PublicKey: TEccPublicKey;
 /// call once at program startup to use OpenSSL when its performance matters
 // - redirects TAesGcmFast (and TAesCtrFast on i386) globals to OpenSSL
 // - redirects raw mormot.core.ecc256r1 functions to use OpenSSL which is much
-// faster even than the easy-gcc C version
+// faster than our stand-alone C/pascal version
 procedure RegisterOpenSsl;
 
 
 implementation
+
 
 { TAesOsl }
 
@@ -799,9 +845,26 @@ end;
 
 { ************** OpenSSL Asymetric Cryptography }
 
+function GetMd(const Algorithm, Caller: RawUtf8): PEVP_MD;
+begin
+  EOpenSslAsymetric.CheckAvailable(nil, Caller);
+  if Algorithm = 'null' then
+    result := nil // e.g. for ed25519
+  else
+    begin
+      if Algorithm = '' then
+        result := EVP_sha256
+      else
+        result := EVP_get_digestbyname(pointer(Algorithm));
+      if result = nil then
+        raise EOpenSslAsymetric.CreateFmt(
+          '%: unknown [%] algorithm', [Caller, Algorithm]);
+    end;
+end;
+
 function OpenSslSign(const Algorithm: RawUtf8;
   Message, PrivateKey: pointer; MessageLen, PrivateKeyLen: integer;
-  const PrivateKeyPassword: RawUtf8; out Signature: THash512Rec): cardinal;
+  out Signature: RawByteString; const PrivateKeyPassword: RawUtf8): cardinal;
 var
   md: PEVP_MD;
   priv: PBIO;
@@ -810,14 +873,7 @@ var
   size: PtrUInt;
 begin
   result := 0;
-  if not OpenSslIsAvailable then
-    exit;
-  if Algorithm = '' then
-    md := EVP_sha256
-  else
-    md := EVP_get_digestbyname(pointer(Algorithm));
-  if md = nil then
-    raise EOpenSslHash.CreateFmt('OpenSslSign: unknown [%] algorithm', [Algorithm]);
+  md := GetMd(Algorithm, 'OpenSslSign');
   if (PrivateKey = nil) or
      (PrivateKeyLen = 0) then
   begin
@@ -831,12 +887,21 @@ begin
   end;
   ctx := EVP_MD_CTX_new;
   try
+    // note: ED25519 requires single-pass EVP_DigestSign()
     if (EVP_DigestSignInit(ctx, nil, md, nil, pkey) = OPENSSLSUCCESS) and
-       (EVP_DigestUpdate(ctx, Message, MessageLen) = OPENSSLSUCCESS) and
-       (EVP_DigestSignFinal(ctx, nil, size) = OPENSSLSUCCESS) and
-       (size <= SizeOf(Signature)) and
-       (EVP_DigestSignFinal(ctx, @Signature, size) = OPENSSLSUCCESS) then
-      result := size; // success
+       (EVP_DigestSign(ctx, nil, size, Message, MessageLen) = OPENSSLSUCCESS) then
+    begin
+      SetLength(Signature, size); // here size is maximum size
+      if EVP_DigestSign(ctx, pointer(Signature), size,
+           Message, MessageLen) = OPENSSLSUCCESS then
+      begin
+        if size <> length(Signature) then
+          SetLength(Signature, size); // leading zeros may trim the size
+        result := size;
+      end
+      else
+        Signature := '';
+    end {else WritelnSSL_error};
   finally
     EVP_MD_CTX_free(ctx);
     if pkey <> nil then
@@ -856,24 +921,22 @@ var
   ctx: PEVP_MD_CTX;
 begin
   result := false;
-  if not OpenSslIsAvailable then
-    exit;
-  if Algorithm = '' then
-    md := EVP_sha256
-  else
-    md := EVP_get_digestbyname(pointer(Algorithm));
-  if (md = nil) or
-     (PublicKey = nil) or
+  md := GetMd(Algorithm, 'OpenSslSign');
+  if (PublicKey = nil) or
      (PublicKeyLen <= 0) or
      (SignatureLen <= 0)  then
     exit;
   pub := BIO_new_mem_buf(PublicKey, PublicKeyLen);
-  pkey := PEM_read_bio_PUBKEY(pub, nil, nil, pointer(PublicKeyPassword));
+  if IdemPChar(PublicKey, '-----BEGIN RSA PUBLIC KEY-----') then
+    pkey := PEM_read_bio_RSAPublicKey(pub, nil, nil, pointer(PublicKeyPassword))
+  else
+    pkey := PEM_read_bio_PUBKEY(pub, nil, nil, pointer(PublicKeyPassword));
   ctx := EVP_MD_CTX_new;
   try
+    // note: ED25519 requires single-pass EVP_DigestVerify()
     if (EVP_DigestVerifyInit(ctx, nil, md, nil, pkey) = OPENSSLSUCCESS) and
-       (EVP_DigestUpdate(ctx, Message, MessageLen) = OPENSSLSUCCESS) and
-       (EVP_DigestVerifyFinal(ctx, Signature, SignatureLen) = OPENSSLSUCCESS) then
+       (EVP_DigestVerify(ctx, Signature, SignatureLen,
+          Message, MessageLen) = OPENSSLSUCCESS) then
       result := true;
   finally
     EVP_MD_CTX_free(ctx);
@@ -881,6 +944,99 @@ begin
     BIO_free(pub);
   end;
 end;
+
+function OpenSslGenerateKeys(EvpType, BitsOrCurve: integer): PEVP_PKEY;
+var
+  ctx, kctx: PEVP_PKEY_CTX;
+  par: PEVP_PKEY;
+  ctrl: integer;
+begin
+  result := nil;
+  EOpenSslAsymetric.CheckAvailable(nil, 'OpenSslGenerateKeys');
+  ctx := EVP_PKEY_CTX_new_id(EvpType, nil);
+  if ctx <> nil then
+  try
+    // see https://wiki.openssl.org/index.php/EVP_Key_and_Parameter_Generation
+    case EvpType of
+      EVP_PKEY_EC, EVP_PKEY_DSA, EVP_PKEY_DH:
+        begin
+          EOpenSsl.Check(EVP_PKEY_paramgen_init(ctx));
+          case EvpType of
+            EVP_PKEY_EC:
+              ctrl := EVP_PKEY_CTRL_EC_PARAMGEN_CURVE_NID;
+            EVP_PKEY_DSA, EVP_PKEY_DH:
+              ctrl := EVP_PKEY_CTRL_DSA_PARAMGEN_BITS;
+          end;
+          EOpenSsl.Check(EVP_PKEY_CTX_ctrl(
+            ctx, EvpType, EVP_PKEY_OP_PARAMGEN, ctrl, BitsOrCurve, nil));
+          par := nil;
+          EOpenSsl.Check(EVP_PKEY_paramgen(ctx, @par));
+          kctx := EVP_PKEY_CTX_new(par, nil);
+          if kctx = nil then
+            EOpenSsl.Check(-1);
+          try
+            EOpenSsl.Check(EVP_PKEY_keygen_init(kctx));
+            EOpenSsl.Check(EVP_PKEY_keygen(kctx, @result));
+          finally
+            EVP_PKEY_CTX_free(kctx);
+          end;
+        end;
+      EVP_PKEY_RSA, EVP_PKEY_RSA_PSS, EVP_PKEY_ED25519:
+        begin
+          EOpenSsl.Check(EVP_PKEY_keygen_init(ctx));
+          case EvpType of
+            EVP_PKEY_RSA, EVP_PKEY_RSA_PSS:
+              EOpenSsl.Check(EVP_PKEY_CTX_ctrl(ctx, EvpType, EVP_PKEY_OP_KEYGEN,
+                EVP_PKEY_CTRL_RSA_KEYGEN_BITS, BitsOrCurve, nil));
+          end;
+          EOpenSsl.Check(EVP_PKEY_keygen(ctx, @result));
+        end
+      else
+        exit; // unsupported type
+    end;
+  finally
+    EVP_PKEY_CTX_free(ctx);
+  end;
+end;
+
+procedure OpenSslSaveKeys(Keys: PEVP_PKEY;
+  out PrivateKey, PublicKey: RawByteString);
+var
+  bio: PBIO;
+  mem: BUF_MEM;
+begin
+  if (Keys = nil) or
+     not OpenSslIsAvailable then
+    exit;
+  bio := BIO_new(BIO_s_mem);
+  try
+    EOpenSsl.Check(PEM_write_bio_PrivateKey(bio, Keys, nil, nil, 0, nil, nil));
+    BIO_ToString(bio, PrivateKey);
+    BIO_free(bio);
+    bio := BIO_new(BIO_s_mem);
+    EOpenSsl.Check(PEM_write_bio_PUBKEY(bio, Keys));
+    BIO_ToString(bio, PublicKey);
+  finally
+    BIO_free(bio);
+  end;
+end;
+
+procedure OpenSslGenerateKeys(EvpType, BitsOrCurve: integer;
+  out PrivateKey, PublicKey: RawByteString);
+var
+  keys: PEVP_PKEY;
+begin
+  keys := OpenSslGenerateKeys(EvpType, BitsOrCurve);
+  if keys = nil then
+    raise EOpenSslHash.CreateFmt(
+      'OpenSslGenerateKeys(%d,%d) failed', [EvpType, BitsOrCurve]);
+  try
+    OpenSslSaveKeys(keys, PrivateKey, PublicKey);
+  finally
+    EVP_PKEY_free(keys);
+  end;
+end;
+
 
 var
   prime256v1grp: PEC_GROUP;

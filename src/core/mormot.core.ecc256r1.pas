@@ -11,6 +11,7 @@ unit mormot.core.ecc256r1;
     - Middle-Level Certificate-based Public Key Cryptography
 
    Pascal and optimized gcc static binaries are included.
+   If mormot.core.crypto.openssl is linked, use faster OpenSSL implementation.
 
   *****************************************************************************
 }
@@ -440,32 +441,7 @@ implementation
 
 {
   Using secp256r1 curve from "simple and secure ECDH and ECDSA library"
-  Copyright (c) 2013, Kenneth MacKay - BSD 2-clause license
-  https://github.com/esxgx/easy-ecc
-
-  *** BEGIN LICENSE BLOCK *****
-  Copyright (c) 2013, Kenneth MacKay
-  All rights reserved.
-
-  Redistribution and use in source and binary forms, with or without modification,
-  are permitted provided that the following conditions are met:
-   * Redistributions of source code must retain the above copyright notice, this
-     list of conditions and the following disclaimer.
-   * Redistributions in binary form must reproduce the above copyright notice,
-     this list of conditions and the following disclaimer in the documentation
-     and/or other materials provided with the distribution.
-
-  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
-  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-  ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-  ***** END LICENSE BLOCK *****
+  https://github.com/esxgx/easy-ecc - now offline, possibly from CN regulation
 }
 
 function getRandomNumber(out dest: THash256): integer;
@@ -535,7 +511,20 @@ end;
 
   -> conclusion: under Win64, ECC_O2 is used
      time is around 0.5-0.6 ms for each operation (i.e. 2000/sec)
-     x64 is four time faster than x86 for such arithmetic tasks :)
+     x64 is 4 times faster than x86 for such arithmetic tasks :)
+
+
+  Note that mormot.core.crypto.openssl will replace those functions by the
+  much faster OpenSSL implementation (numbers on Linux x86_64):
+
+  - OpenSSL: 300 Ecc256r1MakeKey in 7.75ms i.e. 38,664/s, aver. 25us
+  - mORMot:  300 Ecc256r1MakeKey in 255ms i.e. 1,176/s, aver. 850us
+  - OpenSSL: 300 Ecc256r1Sign in 11.66ms i.e. 25,711/s, aver. 38us
+  - mORMot:  300 Ecc256r1Sign in 262.72ms i.e. 1,141/s, aver. 875us
+  - OpenSSL: 300 Ecc256r1Verify in 41.32ms i.e. 7,260/s, aver. 137us
+  - mORMot:  300 Ecc256r1Verify in 319.32ms i.e. 939/s, aver. 1.06ms
+  - OpenSSL: 598 Ecc256r1SharedSecret in 67.98ms i.e. 8,796/s, aver. 113us
+  - mORMot:  598 Ecc256r1SharedSecret in 537.95ms i.e. 1,111/s, aver. 899us
 
 }
 

@@ -160,8 +160,111 @@ const
   EVP_MD_FLAG_DIGALGID_CUSTOM = $0018;
   EVP_MD_FLAG_FIPS = $0400;
 
+  SN_X9_62_prime192v1 = 'prime192v1';
+  NID_X9_62_prime192v1 = 409;
+  SN_X9_62_prime192v2 = 'prime192v2';
+  NID_X9_62_prime192v2 = 410;
+  SN_X9_62_prime192v3 = 'prime192v3';
+  NID_X9_62_prime192v3 = 411;
+  SN_X9_62_prime239v1 = 'prime239v1';
+  NID_X9_62_prime239v1 = 412;
+  SN_X9_62_prime239v2 = 'prime239v2';
+  NID_X9_62_prime239v2 = 413;
+  SN_X9_62_prime239v3 = 'prime239v3';
+  NID_X9_62_prime239v3 = 414;
   SN_X9_62_prime256v1 = 'prime256v1';
   NID_X9_62_prime256v1 = 415;
+  SN_secp112r1 = 'secp112r1';
+  NID_secp112r1 = 704;
+  SN_secp112r2 = 'secp112r2';
+  NID_secp112r2 = 705;
+  SN_secp128r1 = 'secp128r1';
+  NID_secp128r1 = 706;
+  SN_secp128r2 = 'secp128r2';
+  NID_secp128r2 = 707;
+  SN_secp160k1 = 'secp160k1';
+  NID_secp160k1 = 708;
+  SN_secp160r1 = 'secp160r1';
+  NID_secp160r1 = 709;
+  SN_secp160r2 = 'secp160r2';
+  NID_secp160r2 = 710;
+  SN_secp192k1 = 'secp192k1';
+  NID_secp192k1 = 711;
+  SN_secp224k1 = 'secp224k1';
+  NID_secp224k1 = 712;
+  SN_secp224r1 = 'secp224r1';
+  NID_secp224r1 = 713;
+  SN_secp256k1 = 'secp256k1';
+  NID_secp256k1 = 714;
+  SN_secp384r1 = 'secp384r1';
+  NID_secp384r1 = 715;
+  SN_secp521r1 = 'secp521r1';
+  NID_secp521r1 = 716;
+  SN_sect113r1 = 'sect113r1';
+  NID_sect113r1 = 717;
+  SN_sect113r2 = 'sect113r2';
+  NID_sect113r2 = 718;
+  SN_sect131r1 = 'sect131r1';
+  NID_sect131r1 = 719;
+  SN_sect131r2 = 'sect131r2';
+  NID_sect131r2 = 720;
+  SN_sect163k1 = 'sect163k1';
+  NID_sect163k1 = 721;
+  SN_sect163r1 = 'sect163r1';
+  NID_sect163r1 = 722;
+  SN_sect163r2 = 'sect163r2';
+  NID_sect163r2 = 723;
+  SN_sect193r1 = 'sect193r1';
+  NID_sect193r1 = 724;
+  SN_sect193r2 = 'sect193r2';
+  NID_sect193r2 = 725;
+  SN_sect233k1 = 'sect233k1';
+  NID_sect233k1 = 726;
+  SN_sect233r1 = 'sect233r1';
+  NID_sect233r1 = 727;
+  SN_sect239k1 = 'sect239k1';
+  NID_sect239k1 = 728;
+  SN_sect283k1 = 'sect283k1';
+  NID_sect283k1 = 729;
+  SN_sect283r1 = 'sect283r1';
+  NID_sect283r1 = 730;
+  SN_sect409k1 = 'sect409k1';
+  NID_sect409k1 = 731;
+  SN_sect409r1 = 'sect409r1';
+  NID_sect409r1 = 732;
+  SN_sect571k1 = 'sect571k1';
+  NID_sect571k1 = 733;
+  SN_sect571r1 = 'sect571r1';
+  NID_sect571r1 = 734;
+  SN_ED25519 = 'ED25519';
+  NID_ED25519 = 1087;
+  SN_poly1305 = 'Poly1305';
+  LN_poly1305 = 'poly1305';
+  NID_poly1305 = 1061;
+  LN_rsaEncryption = 'rsaEncryption';
+  NID_rsaEncryption = 6;
+  LN_rsassaPss = 'rsassaPss';
+  NID_rsassaPss = 912;
+  LN_dsa = 'dsaEncryption';
+  NID_dsa = 116;
+  LN_dhKeyAgreement = 'dhKeyAgreement';
+  NID_dhKeyAgreement = 28;
+  SN_X9_62_id_ecPublicKey = 'id-ecPublicKey';
+  NID_X9_62_id_ecPublicKey = 408;
+
+  EVP_PKEY_RSA = NID_rsaEncryption;
+  EVP_PKEY_DSA = NID_dsa;
+  EVP_PKEY_RSA_PSS = NID_rsassaPss;
+  EVP_PKEY_DH = NID_dhKeyAgreement;
+  EVP_PKEY_EC = NID_X9_62_id_ecPublicKey;
+  EVP_PKEY_ED25519 = NID_ED25519;
+  EVP_PKEY_POLY1305 = NID_poly1305;
+  EVP_PKEY_OP_PARAMGEN = 1 shl 1;
+  EVP_PKEY_OP_KEYGEN = 1 shl 2;
+  EVP_PKEY_ALG_CTRL = $1000;
+  EVP_PKEY_CTRL_EC_PARAMGEN_CURVE_NID = EVP_PKEY_ALG_CTRL + 1;
+  EVP_PKEY_CTRL_DSA_PARAMGEN_BITS = EVP_PKEY_ALG_CTRL + 1;
+  EVP_PKEY_CTRL_RSA_KEYGEN_BITS = EVP_PKEY_ALG_CTRL + 3;
 
   BIO_FLAGS_READ = $01;
   BIO_FLAGS_WRITE = $02;
@@ -482,6 +585,16 @@ type
     POINT_CONVERSION_HYBRID = 6);
   Ppoint_conversion_form_t = ^point_conversion_form_t;
 
+  buf_mem_st = record
+    length: PtrUInt;
+    data: PUtf8Char;
+    max: PtrUInt;
+    flags: cardinal;
+  end;
+
+  BUF_MEM = buf_mem_st;
+  PBUF_MEM = ^BUF_MEM;
+
   asn1_string_st = record
     length: integer;
     asn1type: integer;
@@ -721,6 +834,8 @@ function EVP_DigestSignFinal(ctx: PEVP_MD_CTX;
 function EVP_DigestVerifyInit(ctx: PEVP_MD_CTX; pctx: PPEVP_PKEY_CTX; typ: PEVP_MD;
   e: PENGINE; pkey: PEVP_PKEY): integer; cdecl;
 function EVP_DigestVerifyFinal(ctx: PEVP_MD_CTX; sig: PByte; siglen: PtrUInt): integer; cdecl;
+function EVP_DigestSign(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
+function EVP_DigestVerify(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
 function HMAC(evp_md: PEVP_MD; key: pointer; key_len: integer;
   d: PByte; n: PtrUInt; md: PByte; var md_len: cardinal): PByte; cdecl;
 function BIO_new(typ: PBIO_METHOD): PBIO; cdecl;
@@ -749,6 +864,8 @@ function PEM_read_bio_PrivateKey(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
   u: pointer): PEVP_PKEY; cdecl;
 function PEM_read_bio_PUBKEY(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
   u: pointer): PEVP_PKEY; cdecl;
+function PEM_read_bio_RSAPublicKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
+  u: pointer): PRSA; cdecl;
 function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
   u: pointer): PRSA; cdecl;
 function RAND_bytes(buf: PByte; num: integer): integer; cdecl;
@@ -809,6 +926,18 @@ function EC_POINT_oct2point(group: PEC_GROUP; p: PEC_POINT;
   buf: PByte; len: PtrUInt; ctx: PBN_CTX): integer; cdecl;
 function ECDH_compute_key(_out: pointer; outlen: PtrUInt; pub_key: PEC_POINT;
   ecdh: PEC_KEY; KDF: ECDH_compute_key_KDF): integer; cdecl;
+function EVP_PKEY_CTX_new_id(id: integer; e: PENGINE): PEVP_PKEY_CTX; cdecl;
+function EVP_PKEY_paramgen_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
+function EVP_PKEY_paramgen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
+function EVP_PKEY_keygen_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
+function EVP_PKEY_keygen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
+function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer;
+  cmd: integer; p1: integer; p2: pointer): integer; cdecl;
+function EVP_PKEY_CTX_new(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX; cdecl;
+procedure EVP_PKEY_CTX_free(ctx: PEVP_PKEY_CTX); cdecl;
+function PEM_write_bio_PrivateKey(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER;
+  kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
+function PEM_write_bio_PUBKEY(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
 
 
 { ******************** OpenSSL Full API Declaration }
@@ -837,6 +966,7 @@ function BIO_retry_type(b: PBIO): integer;
   {$ifdef HASINLINE} inline; {$endif}
 function BIO_get_ssl(b: PBIO; s: PSSL): integer;
 function BIO_pending(b: PBIO): integer;
+procedure BIO_ToString(b: PBIO; var data: RawByteString);
 
 procedure OpenSSL_Free(ptr: pointer);
 function SSL_error(error: integer): RawUtf8;
@@ -1125,6 +1255,8 @@ type
     EVP_DigestSignFinal: function(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt): integer; cdecl;
     EVP_DigestVerifyInit: function(ctx: PEVP_MD_CTX; pctx: PPEVP_PKEY_CTX; typ: PEVP_MD; e: PENGINE; pkey: PEVP_PKEY): integer; cdecl;
     EVP_DigestVerifyFinal: function(ctx: PEVP_MD_CTX; sig: PByte; siglen: PtrUInt): integer; cdecl;
+    EVP_DigestSign: function(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
+    EVP_DigestVerify: function(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
     HMAC: function(evp_md: PEVP_MD; key: pointer; key_len: integer; d: PByte; n: PtrUInt; md: PByte; var md_len: cardinal): PByte; cdecl;
     BIO_new: function(typ: PBIO_METHOD): PBIO; cdecl;
     BIO_free: function(a: PBIO): integer; cdecl;
@@ -1148,6 +1280,7 @@ type
     PEM_read_bio_X509: function(bp: PBIO; x: PPX509; cb: Ppem_password_cb; u: pointer): PX509; cdecl;
     PEM_read_bio_PrivateKey: function(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
     PEM_read_bio_PUBKEY: function(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
+    PEM_read_bio_RSAPublicKey: function(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
     PEM_read_bio_RSAPrivateKey: function(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
     RAND_bytes: function(buf: PByte; num: integer): integer; cdecl;
     EVP_get_cipherbyname: function(name: PUtf8Char): PEVP_CIPHER; cdecl;
@@ -1198,20 +1331,32 @@ type
     EC_POINT_new: function(group: PEC_GROUP): PEC_POINT; cdecl;
     EC_POINT_oct2point: function(group: PEC_GROUP; p: PEC_POINT; buf: PByte; len: PtrUInt; ctx: PBN_CTX): integer; cdecl;
     ECDH_compute_key: function(_out: pointer; outlen: PtrUInt; pub_key: PEC_POINT; ecdh: PEC_KEY; KDF: ECDH_compute_key_KDF): integer; cdecl;
+    EVP_PKEY_CTX_new_id: function(id: integer; e: PENGINE): PEVP_PKEY_CTX; cdecl;
+    EVP_PKEY_paramgen_init: function(ctx: PEVP_PKEY_CTX): integer; cdecl;
+    EVP_PKEY_paramgen: function(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
+    EVP_PKEY_keygen_init: function(ctx: PEVP_PKEY_CTX): integer; cdecl;
+    EVP_PKEY_keygen: function(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
+    EVP_PKEY_CTX_ctrl: function(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer; cmd: integer; p1: integer; p2: pointer): integer; cdecl;
+    EVP_PKEY_CTX_new: function(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX; cdecl;
+    EVP_PKEY_CTX_free: procedure(ctx: PEVP_PKEY_CTX); cdecl;
+    PEM_write_bio_PrivateKey: function(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
+    PEM_write_bio_PUBKEY: function(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..88] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..101] of RawUtf8 = (
     'CRYPTO_malloc', 'CRYPTO_free', 'ERR_remove_state', 'ERR_error_string_n',
     'ERR_get_error', 'ERR_remove_thread_state', 'ERR_load_BIO_strings',
     'EVP_MD_CTX_new', 'EVP_MD_CTX_free',
     'EVP_PKEY_size', 'EVP_PKEY_free', 'EVP_DigestSignInit', 'EVP_DigestUpdate',
     'EVP_DigestSignFinal', 'EVP_DigestVerifyInit', 'EVP_DigestVerifyFinal',
+    'EVP_DigestSign', 'EVP_DigestVerify',
     'HMAC', 'BIO_new', 'BIO_free', 'BIO_test_flags', 'BIO_ctrl', 'BIO_new_mem_buf',
     'BIO_s_mem', 'BIO_read', 'BIO_write', 'BIO_new_socket', 'X509_get_issuer_name',
     'X509_get_subject_name', 'X509_free', 'X509_NAME_print_ex_fp', 'OPENSSL_sk_pop',
     'OPENSSL_sk_num', 'ASN1_BIT_STRING_get_bit', 'OBJ_nid2sn', 'OBJ_obj2nid',
-    'ASN1_STRING_data', 'PEM_read_bio_X509', 'PEM_read_bio_PrivateKey', 'PEM_read_bio_PUBKEY',
+    'ASN1_STRING_data', 'PEM_read_bio_X509', 'PEM_read_bio_PrivateKey',
+    'PEM_read_bio_PUBKEY', 'PEM_read_bio_RSAPublicKey',
     'PEM_read_bio_RSAPrivateKey', 'RAND_bytes', 'EVP_get_cipherbyname',
     'EVP_get_digestbyname', 'EVP_CIPHER_CTX_new', 'EVP_CIPHER_CTX_reset',
     'EVP_CIPHER_CTX_free', 'EVP_CIPHER_CTX_copy', 'EVP_CIPHER_CTX_ctrl',
@@ -1225,7 +1370,11 @@ const
     'EC_POINT_free', 'BN_free', 'BN_num_bits', 'EC_KEY_free', 'EC_GROUP_free',
     'EC_KEY_generate_key', 'EC_KEY_get0_private_key', 'EC_KEY_set_private_key',
     'EC_KEY_get0_public_key', 'EC_POINT_point2buf', 'BN_bn2bin', 'ECDSA_size',
-    'ECDSA_sign', 'EC_POINT_new', 'EC_POINT_oct2point', 'ECDH_compute_key');
+    'ECDSA_sign', 'EC_POINT_new', 'EC_POINT_oct2point', 'ECDH_compute_key',
+    'EVP_PKEY_CTX_new_id', 'EVP_PKEY_paramgen_init', 'EVP_PKEY_paramgen',
+    'EVP_PKEY_keygen_init', 'EVP_PKEY_keygen', 'EVP_PKEY_CTX_ctrl',
+    'EVP_PKEY_CTX_new', 'EVP_PKEY_CTX_free', 'PEM_write_bio_PrivateKey',
+    'PEM_write_bio_PUBKEY');
 
 var
   libcrypto: TLibCrypto;
@@ -1310,6 +1459,18 @@ end;
 function EVP_DigestVerifyFinal(ctx: PEVP_MD_CTX; sig: PByte; siglen: PtrUInt): integer;
 begin
   result := libcrypto.EVP_DigestVerifyFinal(ctx, sig, siglen);
+end;
+
+function EVP_DigestSign(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt;
+   tbs: PByte; tbslen: PtrUInt): integer;
+begin
+  result := libcrypto.EVP_DigestSign(ctx, sigret, siglen, tbs, tbslen);
+end;
+
+function EVP_DigestVerify(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt;
+   tbs: PByte; tbslen: PtrUInt): integer;
+begin
+  result := libcrypto.EVP_DigestVerify(ctx, sigret, siglen, tbs, tbslen);
 end;
 
 function HMAC(evp_md: PEVP_MD; key: pointer; key_len: integer; d: PByte; n: PtrUInt;
@@ -1426,9 +1587,16 @@ begin
   result := libcrypto.PEM_read_bio_PrivateKey(bp, x, cb, u);
 end;
 
-function PEM_read_bio_PUBKEY(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY;
+function PEM_read_bio_PUBKEY(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
+  u: pointer): PEVP_PKEY;
 begin
   result := libcrypto.PEM_read_bio_PUBKEY(bp, x, cb, u);
+end;
+
+function PEM_read_bio_RSAPublicKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
+  u: pointer): PRSA;
+begin
+  result := libcrypto.PEM_read_bio_RSAPublicKey(bp, x, cb, u);
 end;
 
 function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
@@ -1691,6 +1859,58 @@ begin
   result := libcrypto.ECDH_compute_key(_out, outlen, pub_key, ecdh, kdf);
 end;
 
+function EVP_PKEY_CTX_new_id(id: integer; e: PENGINE): PEVP_PKEY_CTX;
+begin
+  result := libcrypto.EVP_PKEY_CTX_new_id(id, e);
+end;
+
+function EVP_PKEY_paramgen_init(ctx: PEVP_PKEY_CTX): integer;
+begin
+  result := libcrypto.EVP_PKEY_paramgen_init(ctx);
+end;
+
+function EVP_PKEY_paramgen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer;
+begin
+  result := libcrypto.EVP_PKEY_paramgen(ctx, ppkey);
+end;
+
+function EVP_PKEY_keygen_init(ctx: PEVP_PKEY_CTX): integer;
+begin
+  result := libcrypto.EVP_PKEY_keygen_init(ctx);
+end;
+
+function EVP_PKEY_keygen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer;
+begin
+  result := libcrypto.EVP_PKEY_keygen(ctx, ppkey);
+end;
+
+function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer;
+  cmd: integer; p1: integer; p2: pointer): integer;
+begin
+  result := libcrypto.EVP_PKEY_CTX_ctrl(ctx, keytype, optype, cmd, p1, p2);
+end;
+
+function EVP_PKEY_CTX_new(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX;
+begin
+  result := libcrypto.EVP_PKEY_CTX_new(pkey, e);
+end;
+
+procedure EVP_PKEY_CTX_free(ctx: PEVP_PKEY_CTX);
+begin
+  libcrypto.EVP_PKEY_CTX_free(ctx);
+end;
+
+function PEM_write_bio_PrivateKey(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER;
+  kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer;
+begin
+  result := libcrypto.PEM_write_bio_PrivateKey(bp, x, enc, kstr, klen, cb, u);
+end;
+
+function PEM_write_bio_PUBKEY(bp: PBIO; x: PEVP_PKEY): integer;
+begin
+  result := libcrypto.PEM_write_bio_PUBKEY(bp, x);
+end;
+
 var
   openssl_initialized: boolean;
 
@@ -1935,6 +2155,12 @@ function EVP_DigestVerifyInit(ctx: PEVP_MD_CTX; pctx: PPEVP_PKEY_CTX;
 function EVP_DigestVerifyFinal(ctx: PEVP_MD_CTX; sig: PByte; siglen: PtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DigestVerifyFinal';
 
+function EVP_DigestSign(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_DigestSign';
+
+function EVP_DigestVerify(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_DigestVerify';
+
 function HMAC(evp_md: PEVP_MD; key: pointer; key_len: integer;
   d: PByte; n: PtrUInt; md: PByte; var md_len: cardinal): PByte; cdecl;
   external LIB_CRYPTO name _PU + 'HMAC';
@@ -2007,8 +2233,10 @@ function PEM_read_bio_PrivateKey(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
 function PEM_read_bio_PUBKEY(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_bio_PUBKEY';
 
-function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
-  u: pointer): PRSA; cdecl;
+function PEM_read_bio_RSAPublicKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
+  external LIB_CRYPTO name _PU + 'PEM_read_bio_RSAPublicKey';
+
+function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_bio_RSAPrivateKey';
 
 function RAND_bytes(buf: PByte; num: integer): integer; cdecl;
@@ -2161,6 +2389,35 @@ function EC_POINT_oct2point(group: PEC_GROUP; p: PEC_POINT; buf: PByte; len: Ptr
 function ECDH_compute_key(_out: pointer; outlen: PtrUInt; pub_key: PEC_POINT; ecdh: PEC_KEY; KDF: ECDH_compute_key_KDF): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ECDH_compute_key';
 
+function EVP_PKEY_CTX_new_id(id: integer; e: PENGINE): PEVP_PKEY_CTX; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_new_id';
+
+function EVP_PKEY_paramgen_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_paramgen_init';
+
+function EVP_PKEY_paramgen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_paramgen';
+
+function EVP_PKEY_keygen_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_keygen_init';
+
+function EVP_PKEY_keygen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_keygen';
+
+function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer; cmd: integer; p1: integer; p2: pointer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_ctrl';
+
+function EVP_PKEY_CTX_new(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_new';
+
+procedure EVP_PKEY_CTX_free(ctx: PEVP_PKEY_CTX); cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_free';
+
+function PEM_write_bio_PrivateKey(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'PEM_write_bio_PrivateKey';
+
+function PEM_write_bio_PUBKEY(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'PEM_write_bio_PUBKEY';
 
 procedure OpenSslInitialize(const libcryptoname, libsslname: TFileName);
 begin
@@ -2215,6 +2472,17 @@ end;
 function BIO_pending(b: PBIO): integer;
 begin
   result := BIO_ctrl(b, _BIO_CTRL_PENDING, 0, nil);
+end;
+
+procedure BIO_ToString(b: PBIO; var data: RawByteString);
+var
+  mem: PBUF_MEM;
+begin
+  if (b = nil) or
+     (BIO_ctrl(b, BIO_C_GET_BUF_MEM_PTR, 0, @mem) <> OPENSSLSUCCESS) then
+    data := ''
+  else
+    SetString(data, pointer(mem.data), mem.length);
 end;
 
 procedure OpenSSL_Free(ptr: pointer);
@@ -2358,7 +2626,7 @@ begin
   res := ERR_get_error;
   ERR_error_string_n(res, @tmp, SizeOf(tmp));
   if caller = nil then
-    raise CreateFmt('OpenSSL error %d [%s]', [res, @tmp])
+    raise CreateFmt('OpenSSL error %d [%s]', [res, PAnsiChar(@tmp)])
   else
     raise CreateFmt('%s.%s: OpenSSL error %d [%s]',
       [ClassNameShort(caller)^, method, res, @tmp]);
@@ -2367,8 +2635,12 @@ end;
 class procedure EOpenSsl.CheckAvailable(caller: TClass; const method: string);
 begin
   if not OpenSslIsAvailable then
-    raise CreateFmt('%s.%s: OpenSSL 1.1.1 is not available',
-      [ClassNameShort(caller)^, method]);
+    if caller = nil then
+      raise CreateFmt('%s: OpenSSL 1.1.1 is not available',
+        [method])
+    else
+      raise CreateFmt('%s.%s: OpenSSL 1.1.1 is not available',
+        [ClassNameShort(caller)^, method]);
 end;
 
 
