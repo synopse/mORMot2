@@ -768,11 +768,17 @@ function ToUtf8(const Text: string): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any generic VCL Text into an UTF-8 encoded TSynTempBuffer
-// - returns the number of UTF-8 bytes available in u.buf
+// - returns the number of UTF-8 bytes available in Temp.buf
 // - this overloaded function use a TSynTempBuffer for the result to avoid any
 // memory allocation for the shorter content
-// - caller should call u.Done to release any heap-allocated memory
+// - caller should call Temp.Done to release any heap-allocated memory
 function StringToUtf8(const Text: string; var Temp: TSynTempBuffer): integer; overload;
+
+/// convert any Ansi memory buffer into UTF-8, using a TSynTempBuffer if needed
+// - caller should release any memory by calling Temp.Done
+// - returns a pointer to the UTF-8 converted buffer - which may be buf
+function AnsiBufferToTempUtf8(var Temp: TSynTempBuffer;
+  Buf: PAnsiChar; BufLen, CodePage: cardinal): PUtf8Char;
 
 /// convert any UTF-8 encoded shortstring Text into an UTF-8 encoded String
 // - expects the supplied content to be already ASCII-7 or UTF-8 encoded, e.g.
@@ -3453,6 +3459,26 @@ begin
   result := Dest + Utf8ToWideChar(PWideChar(Dest), Source, SourceChars, true);
 end;
 
+function AnsiBufferToTempUtf8(var temp: TSynTempBuffer;
+  Buf: PAnsiChar; BufLen, CodePage: cardinal): PUtf8Char;
+begin
+  if (BufLen = 0) or
+     (CodePage = CP_UTF8) or
+     (CodePage >= CP_RAWBLOB) or
+     IsAnsiCompatible(Buf, BufLen) then
+  begin
+    temp.Buf := nil;
+    temp.len := BufLen;
+    result := Buf;
+  end
+  else
+  begin
+    temp.Init(BufLen * 3);
+    Buf := TSynAnsiConvert.Engine(CodePage).AnsiBufferToUtf8(temp.Buf, Buf, BufLen);
+    temp.len := Buf - PAnsiChar(temp.Buf);
+    result := temp.Buf;
+  end;
+end;
 
 
 { *************** Low-Level String Conversion Functions }
