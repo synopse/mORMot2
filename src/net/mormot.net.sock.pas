@@ -1949,18 +1949,15 @@ begin
   end;
   if not SockIsDefined then
     exit; // no opened connection, or Close already executed
-  {$ifdef OSLINUX}
-  if fWasBind and
-     (fPort = '') then
-  begin
-    // binded on external socket
-    fSock := TNetSocket(-1);
-    exit;
-  end;
-  {$endif OSLINUX}
   fSecure := nil; // will release the TLS context
-  fSock.ShutdownAndClose({rdwr=}fWasBind);
-  fSock := TNetSocket(-1); // don't change Server or Port, since may try to reconnect
+  {$ifdef OSLINUX}
+  if not fWasBind or
+     (fPort <> '') then // no explicit shutdown necessary on Linux server side
+  {$endif OSLINUX}
+    fSock.ShutdownAndClose({rdwr=}fWasBind);
+  fSock := TNetSocket(-1);
+  // don't reset fServer/fPort/fTls/fWasBind: caller may use them to reconnect
+  // (see e.g. THttpClientSocket.Request)
 end;
 
 destructor TCrtSocket.Destroy;
