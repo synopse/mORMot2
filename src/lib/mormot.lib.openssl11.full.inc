@@ -4753,10 +4753,7 @@ const
   
   X509_SIG_INFO_VALID = $1;
   X509_SIG_INFO_TLS = $2;
-  X509_FILETYPE_PEM = 1;
-  X509_FILETYPE_ASN1 = 2;
-  X509_FILETYPE_DEFAULT = 3;
-  
+
   X509v3_KU_DIGITAL_SIGNATURE = $0080;
   X509v3_KU_NON_REPUDIATION = $0040;
   X509v3_KU_KEY_ENCIPHERMENT = $0020;
@@ -4834,31 +4831,6 @@ const
   X509_L_FILE_LOAD = 1;
   X509_L_ADD_DIR = 2;
   
-  X509_V_OK = 0;
-  X509_V_ERR_UNSPECIFIED = 1;
-  X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT = 2;
-  X509_V_ERR_UNABLE_TO_GET_CRL = 3;
-  X509_V_ERR_UNABLE_TO_DECRYPT_CERT_SIGNATURE = 4;
-  X509_V_ERR_UNABLE_TO_DECRYPT_CRL_SIGNATURE = 5;
-  X509_V_ERR_UNABLE_TO_DECODE_ISSUER_PUBLIC_KEY = 6;
-  X509_V_ERR_CERT_SIGNATURE_FAILURE = 7;
-  X509_V_ERR_CRL_SIGNATURE_FAILURE = 8;
-  X509_V_ERR_CERT_NOT_YET_VALID = 9;
-  X509_V_ERR_CERT_HAS_EXPIRED = 10;
-  X509_V_ERR_CRL_NOT_YET_VALID = 11;
-  X509_V_ERR_CRL_HAS_EXPIRED = 12;
-  X509_V_ERR_ERROR_IN_CERT_NOT_BEFORE_FIELD = 13;
-  X509_V_ERR_ERROR_IN_CERT_NOT_AFTER_FIELD = 14;
-  X509_V_ERR_ERROR_IN_CRL_LAST_UPDATE_FIELD = 15;
-  X509_V_ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD = 16;
-  X509_V_ERR_OUT_OF_MEM = 17;
-  X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT = 18;
-  X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN = 19;
-  X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY = 20;
-  X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE = 21;
-  X509_V_ERR_CERT_CHAIN_TOO_LONG = 22;
-  X509_V_ERR_CERT_REVOKED = 23;
-  X509_V_ERR_INVALID_CA = 24;
   X509_V_ERR_PATH_LENGTH_EXCEEDED = 25;
   X509_V_ERR_INVALID_PURPOSE = 26;
   X509_V_ERR_CERT_UNTRUSTED = 27;
@@ -7180,9 +7152,6 @@ const
   SSL_SENT_SHUTDOWN = 1;
   SSL_RECEIVED_SHUTDOWN = 2;
   
-  SSL_FILETYPE_ASN1 = X509_FILETYPE_ASN1;
-  SSL_FILETYPE_PEM = X509_FILETYPE_PEM;
-  
   SSL_EXT_TLS_ONLY = $0001;
   SSL_EXT_DTLS_ONLY = $0002;
   SSL_EXT_TLS_IMPLEMENTATION_ONLY = $0004;
@@ -7532,13 +7501,7 @@ const
   SSL3_CHANGE_CIPHER_SERVER_WRITE = SSL3_CC_SERVER or SSL3_CC_WRITE;
   
   OPENSSL_TLS_SECURITY_LEVEL = 1;
-  TLS1_VERSION = $0301;
-  TLS1_1_VERSION = $0302;
-  TLS1_2_VERSION = $0303;
-  TLS1_3_VERSION = $0304;
-  TLS_MAX_VERSION = TLS1_3_VERSION;
-  TLS_ANY_VERSION = $10000;
-  
+
   TLS1_VERSION_MAJOR = $03;
   TLS1_VERSION_MINOR = $01;
   TLS1_1_VERSION_MAJOR = $03;
@@ -8361,12 +8324,6 @@ const
   SSL_ST_READ_HEADER = $F0;
   SSL_ST_READ_BODY = $F1;
   SSL_ST_READ_DONE = $F2;
-  
-  SSL_VERIFY_NONE = $00;
-  SSL_VERIFY_PEER = $01;
-  SSL_VERIFY_FAIL_IF_NO_PEER_CERT = $02;
-  SSL_VERIFY_CLIENT_ONCE = $04;
-  SSL_VERIFY_POST_HANDSHAKE = $08;
   
   SSL_AD_REASON_OFFSET = 1000;
   SSL_AD_CLOSE_NOTIFY = SSL3_AD_CLOSE_NOTIFY;
@@ -19087,9 +19044,6 @@ function X509_aux_print(_out: PBIO; x: PX509; indent: integer): integer; cdecl;
 function X509_print_ex_fp(bp: PPointer; x: PX509; nmflag: cardinal; cflag: cardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_print_ex_fp';
 
-function X509_print_fp(bp: PPointer; x: PX509): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_print_fp';
-
 function X509_CRL_print_fp(bp: PPointer; x: PX509_CRL): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_print_fp';
 
@@ -19105,8 +19059,8 @@ function X509_NAME_print_ex(_out: PBIO; nm: PX509_NAME; indent: integer; flags: 
 function X509_print_ex(bp: PBIO; x: PX509; nmflag: cardinal; cflag: cardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_print_ex';
 
-function X509_print(bp: PBIO; x: PX509): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_print';
+function X509_print_fp(bp: PPointer; x: PX509): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_print_fp';
 
 function X509_ocspid_print(bp: PBIO; x: PX509): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_ocspid_print';
@@ -24679,9 +24633,6 @@ function SSL_CTX_use_cert_and_key(ctx: PSSL_CTX; x509: PX509; privatekey: PEVP_P
 procedure SSL_CTX_set_default_passwd_cb(ctx: PSSL_CTX; cb: Ppem_password_cb); cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_set_default_passwd_cb';
 
-procedure SSL_CTX_set_default_passwd_cb_userdata(ctx: PSSL_CTX; u: pointer); cdecl;
-  external LIB_SSL name _PU + 'SSL_CTX_set_default_passwd_cb_userdata';
-
 function SSL_CTX_get_default_passwd_cb(ctx: PSSL_CTX): Ppem_password_cb; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_get_default_passwd_cb';
 
@@ -24991,9 +24942,6 @@ function SSL_CTX_add_client_CA(ctx: PSSL_CTX; x: PX509): integer; cdecl;
 function SSL_get_default_timeout(s: PSSL): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_get_default_timeout';
 
-function SSL_CIPHER_description(p1: PSSL_CIPHER; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
-  external LIB_SSL name _PU + 'SSL_CIPHER_description';
-
 function SSL_dup_CA_list(sk: Pstack_st_X509_NAME): Pstack_st_X509_NAME; cdecl;
   external LIB_SSL name _PU + 'SSL_dup_CA_list';
 
@@ -25036,9 +24984,6 @@ function SSL_version(ssl: PSSL): integer; cdecl;
 function SSL_client_version(s: PSSL): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_client_version';
 
-function SSL_CTX_set_default_verify_paths(ctx: PSSL_CTX): integer; cdecl;
-  external LIB_SSL name _PU + 'SSL_CTX_set_default_verify_paths';
-
 function SSL_CTX_set_default_verify_dir(ctx: PSSL_CTX): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_set_default_verify_dir';
 
@@ -25068,9 +25013,6 @@ procedure SSL_set_info_callback(ssl: PSSL; cb: SSL_set_info_callback_cb); cdecl;
 
 procedure SSL_set_verify_result(ssl: PSSL; v: integer); cdecl;
   external LIB_SSL name _PU + 'SSL_set_verify_result';
-
-function SSL_get_verify_result(ssl: PSSL): integer; cdecl;
-  external LIB_SSL name _PU + 'SSL_get_verify_result';
 
 function SSL_get0_verified_chain(s: PSSL): Pstack_st_X509; cdecl;
   external LIB_SSL name _PU + 'SSL_get0_verified_chain';
@@ -25588,9 +25530,6 @@ function SSL_get_finished(s: PSSL; buf: pointer; count: PtrUInt): PtrUInt; cdecl
 function SSL_get_peer_finished(s: PSSL; buf: pointer; count: PtrUInt): PtrUInt; cdecl;
   external LIB_SSL name _PU + 'SSL_get_peer_finished';
 
-function SSL_CTX_set_cipher_list(p1: PSSL_CTX; str: PUtf8Char): integer; cdecl;
-  external LIB_SSL name _PU + 'SSL_CTX_set_cipher_list';
-
 function SSL_CTX_up_ref(ctx: PSSL_CTX): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_up_ref';
 
@@ -25605,9 +25544,6 @@ function SSL_want(s: PSSL): integer; cdecl;
 
 procedure SSL_CTX_flush_sessions(ctx: PSSL_CTX; tm: integer); cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_flush_sessions';
-
-function SSL_get_current_cipher(s: PSSL): PSSL_CIPHER; cdecl;
-  external LIB_SSL name _PU + 'SSL_get_current_cipher';
 
 function SSL_get_pending_cipher(s: PSSL): PSSL_CIPHER; cdecl;
   external LIB_SSL name _PU + 'SSL_get_pending_cipher';
@@ -25662,9 +25598,6 @@ function SSL_get_read_ahead(s: PSSL): integer; cdecl;
 
 function SSL_has_pending(s: PSSL): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_has_pending';
-
-function SSL_set_fd(s: PSSL; fd: integer): integer; cdecl;
-  external LIB_SSL name _PU + 'SSL_set_fd';
 
 function SSL_set_rfd(s: PSSL; fd: integer): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_set_rfd';
@@ -25749,9 +25682,6 @@ function SSL_use_PrivateKey_file(ssl: PSSL; _file: PUtf8Char; typ: integer): int
 
 function SSL_use_certificate_file(ssl: PSSL; _file: PUtf8Char; typ: integer): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_use_certificate_file';
-
-function SSL_CTX_use_PrivateKey_file(ctx: PSSL_CTX; _file: PUtf8Char; typ: integer): integer; cdecl;
-  external LIB_SSL name _PU + 'SSL_CTX_use_PrivateKey_file';
 
 function SSL_use_certificate_chain_file(ssl: PSSL; _file: PUtf8Char): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_use_certificate_chain_file';
@@ -25920,9 +25850,6 @@ function TLS_server_method(): PSSL_METHOD; cdecl;
 
 function SSLv23_server_method(): PSSL_METHOD; cdecl;
   external LIB_SSL name _PU + 'TLS_server_method';
-
-function TLS_client_method(): PSSL_METHOD; cdecl;
-  external LIB_SSL name _PU + 'TLS_client_method';
 
 function SSLv23_client_method(): PSSL_METHOD; cdecl;
   external LIB_SSL name _PU + 'TLS_client_method';
