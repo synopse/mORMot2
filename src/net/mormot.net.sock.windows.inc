@@ -1036,9 +1036,9 @@ begin
   len := 0;
   SetLength(tmp, 65536);
   res := SEC_I_CONTINUE_NEEDED;
-  { TODO : fix SEC_E_INVALID_TOKEN error from time to time during SChannel
-    handshake - but I didn't find anything wrong with this code
-    - no answer to similar problems https://github.com/jeroen/curl/issues/127 }
+  { TODO : fix random SEC_E_INVALID_TOKEN during SChannel handshake on Win10
+    I didn't find anything wrong with this code, nor any solution to
+    similar problems like https://github.com/jeroen/curl/issues/127 }
   while (res = SEC_I_CONTINUE_NEEDED) or
         (res = SEC_E_INCOMPLETE_MESSAGE) do
   begin
@@ -1047,13 +1047,13 @@ begin
     inc(len, CheckSocket(
       Recv(fSocket.Socket, @PByteArray(tmp)[len], length(tmp) - len, 0)));
     HandshakeBufInit(buf);
-    writeln('recv len=',len);
+    //writeln('recv len=',len);
     buf.buf[0].cbBuffer := len;
     buf.buf[0].BufferType := SECBUFFER_TOKEN;
     buf.buf[0].pvBuffer := pointer(tmp);
     res := InitializeSecurityContext(@fCred, @fCtxt, nil, ISC_REQ_FLAGS, 0,
       SECURITY_NATIVE_DREP, @buf.input, 0, @fCtxt, @buf.output, @f, nil);
-    writeln(IntToHex(res, 8), ' tosend=',buf.buf[2].cbBuffer);
+    //writeln(IntToHex(res, 8), ' tosend=',buf.buf[2].cbBuffer);
     if res = SEC_I_INCOMPLETE_CREDENTIALS then
       // check https://stackoverflow.com/a/47479968/458259
       res := InitializeSecurityContext(@fCred, @fCtxt, nil, ISC_REQ_FLAGS, 0,
@@ -1065,13 +1065,13 @@ begin
          (buf.buf[2].pvBuffer <> nil) then
       begin
         // need to send back something to the server
-        writeln('send len=',buf.buf[2].cbBuffer);
+        //writeln('send len=',buf.buf[2].cbBuffer);
         CheckSocket(mormot.net.sock.Send(
           fSocket.Socket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
         CheckSEC_E_OK(FreeContextBuffer(buf.buf[2].pvBuffer));
       end;
   end;
-  writeln(IntToHex(res, 8));
+  //writeln(IntToHex(res, 8));
   // see https://github.com/curl/curl/blob/master/lib/vtls/schannel.c
   CheckSEC_E_OK(res);
   if buf.buf[1].BufferType = SECBUFFER_EXTRA then
