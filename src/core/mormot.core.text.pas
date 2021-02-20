@@ -62,6 +62,12 @@ function TrimLeft(const S: RawUtf8): RawUtf8;
 // newline, space, and tab characters
 function TrimRight(const S: RawUtf8): RawUtf8;
 
+/// trims leading whitespaces of every lines of the UTF-8 text
+// - also delete void lines
+// - could be used e.g. before FindNameValue() call
+// - modification is made in-place so S will be modified
+procedure TrimLeftLines(var S: RawUtf8);
+
 /// split a RawUtf8 string into two strings, according to SepStr separator
 // - if SepStr is not found, LeftStr=Str and RightStr=''
 // - if ToUpperCase is TRUE, then LeftStr and RightStr will be made uppercase
@@ -233,6 +239,7 @@ function FindNameValue(P: PUtf8Char; UpperName: PAnsiChar): PUtf8Char; overload;
 // Value untouched if KeepNotFoundValue is true)
 // - could be used e.g. to efficently extract a value from HTTP headers, whereas
 // FindIniNameValue() is tuned for [section]-oriented INI files
+// - do TrimLeftLines(NameValuePairs) first if the lines start with spaces/tabs
 function FindNameValue(const NameValuePairs: RawUtf8; UpperName: PAnsiChar;
   var Value: RawUtf8; KeepNotFoundValue: boolean = false;
   UpperNameSeparator: AnsiChar = #0): boolean; overload;
@@ -2534,6 +2541,33 @@ begin
         (S[i] <= ' ') do
     Dec(i);
   FastSetString(result, pointer(S), i);
+end;
+
+procedure TrimLeftLines(var S: RawUtf8);
+var
+  P, D: PUtf8Char;
+begin
+  if S = '' then
+    exit;
+  P := UniqueRawUtf8(S);
+  D := P; // in-place process
+  repeat
+    P := GotoNextNotSpace(P);
+    while not (P^ in [#0, #10, #13]) do
+    begin
+      D^ := P^;
+      inc(P);
+      inc(D);
+    end;
+    if P^ = #0 then
+      break;
+    D^ := #10;
+    inc(D);
+  until false;
+  if D = pointer(S) then
+    S := ''
+  else
+    PStrLen(PtrUInt(S) - _STRLEN)^ := D - pointer(S); // no SetLength needed
 end;
 
 function SplitRight(const Str: RawUtf8; SepChar: AnsiChar; LeftStr: PRawUtf8): RawUtf8;
