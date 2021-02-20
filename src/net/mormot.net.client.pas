@@ -858,24 +858,24 @@ begin
 end;
 
 function THttpClientSocket.Request(const url, method: RawUtf8; KeepAlive:
-  cardinal; const header: RawUtf8; const Data: RawByteString; const DataType:
-  RawUtf8; retry: boolean): integer;
+  cardinal; const header: RawUtf8; const Data: RawByteString;
+  const DataType: RawUtf8; retry: boolean): integer;
 
   procedure DoRetry(Error: integer; const msg: RawUtf8);
   begin
-    HeaderFlags := []; // reset state
     {$ifdef SYNCRTDEBUGLOW}
     TSynLog.Add.Log(sllCustom2,
       'Request: % socket=% DoRetry(%) retry=%',
       [msg, Sock, Error, BOOL_STR[retry]], self);
     {$endif SYNCRTDEBUGLOW}
-    if retry then // retry once -> return error only if failed after retrial
+    if retry then // retry once -> return error only if failed twice
       result := Error
     else
     begin
       Close; // close this connection
       try
         OpenBind(Server, Port, {bind=}false, fTLS); // retry with a new socket
+        HttpStateReset;
         result := Request(url, method, KeepAlive, header, Data, DataType, true);
       except
         on Exception do
@@ -913,7 +913,7 @@ begin
           SockSend(fCompressAcceptEncoding);
         SockSendCRLF;
         SockSendFlush(aData); // flush all pending data to network
-        // get headers
+        // retrieve HTTP command line response
         if SockReceivePending(1000) = cspSocketError then
         begin
           DoRetry(HTTP_NOTFOUND, 'cspSocketError waiting for headers');
@@ -931,14 +931,16 @@ begin
           end;
           while result = 100 do
           begin
-            repeat // 100 CONTINUE is just to be ignored client side
+            repeat
+              // 100 CONTINUE is just to be ignored on client side
               SockRecvLn(Command);
               P := pointer(Command);
             until IdemPChar(P, 'HTTP/1.');  // ignore up to next command
             result := GetCardinal(P + 9);
           end;
           if P[7] = '0' then
-            KeepAlive := 0; // HTTP/1.0 -> force connection close
+            // HTTP/1.0 -> force connection close
+            KeepAlive := 0;
         end
         else
         begin
@@ -946,10 +948,12 @@ begin
           DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, Command); // 505=wrong format
           exit;
         end;
-        GetHeader(false); // read all other headers
+        // retrieve all HTTP headers
+        GetHeader({unfiltered=}false);
+        // retrieve Body content (if any)
         if (result <> HTTP_NOCONTENT) and
            (IdemPCharArray(pointer(method), ['HEAD', 'OPTIONS']) < 0) then
-          GetBody; // get content if necessary (not HEAD/OPTIONS methods)
+          GetBody;
       except
         on Exception do
           DoRetry(HTTP_NOTFOUND, 'Exception');

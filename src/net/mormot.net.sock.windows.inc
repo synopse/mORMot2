@@ -1028,10 +1028,34 @@ end;
 
 procedure TSChannelClient.HandshakeLoop;
 var
-  buf: THandshakeBuf;
   len: integer;
-  tmp: AnsiString;
-  res, f: cardinal;
+  tmp: RawByteString;
+  f, res: cardinal;
+  buf: THandshakeBuf;
+
+  procedure Answer;
+  begin
+    HandshakeBufInit(buf);
+    buf.buf[0].cbBuffer := len;
+    buf.buf[0].BufferType := SECBUFFER_TOKEN;
+    buf.buf[0].pvBuffer := pointer(tmp);
+    f := 0;
+    res := InitializeSecurityContext(@fCred, @fCtxt, nil, ISC_REQ_FLAGS, 0,
+      SECURITY_NATIVE_DREP, @buf.input, 0, @fCtxt, @buf.output, @f, nil);
+    if (res = SEC_E_OK) or
+       (res = SEC_I_CONTINUE_NEEDED) or
+       ((f and ISC_REQ_EXTENDED_ERROR) <> 0) then
+      if (buf.buf[2].cbBuffer <> 0) and
+         (buf.buf[2].pvBuffer <> nil) then
+      begin
+        // need to send back something to the server
+        //writeln('send len=',buf.buf[2].cbBuffer);
+        CheckSocket(mormot.net.sock.Send(
+          fSocket.Socket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
+        CheckSEC_E_OK(FreeContextBuffer(buf.buf[2].pvBuffer));
+      end;
+  end;
+
 begin
   len := 0;
   SetLength(tmp, 65536);
@@ -1046,35 +1070,17 @@ begin
       len := 0;
     inc(len, CheckSocket(
       Recv(fSocket.Socket, @PByteArray(tmp)[len], length(tmp) - len, 0)));
-    HandshakeBufInit(buf);
     //writeln('recv len=',len);
-    buf.buf[0].cbBuffer := len;
-    buf.buf[0].BufferType := SECBUFFER_TOKEN;
-    buf.buf[0].pvBuffer := pointer(tmp);
-    res := InitializeSecurityContext(@fCred, @fCtxt, nil, ISC_REQ_FLAGS, 0,
-      SECURITY_NATIVE_DREP, @buf.input, 0, @fCtxt, @buf.output, @f, nil);
+    Answer;
     //writeln(IntToHex(res, 8), ' tosend=',buf.buf[2].cbBuffer);
     if res = SEC_I_INCOMPLETE_CREDENTIALS then
       // check https://stackoverflow.com/a/47479968/458259
-      res := InitializeSecurityContext(@fCred, @fCtxt, nil, ISC_REQ_FLAGS, 0,
-        SECURITY_NATIVE_DREP, @buf.input, 0, @fCtxt, @buf.output, @f, nil);
-    if (res = SEC_E_OK) or
-       (res = SEC_I_CONTINUE_NEEDED) or
-       ((f and ISC_REQ_EXTENDED_ERROR) <> 0) then
-      if (buf.buf[2].cbBuffer <> 0) and
-         (buf.buf[2].pvBuffer <> nil) then
-      begin
-        // need to send back something to the server
-        //writeln('send len=',buf.buf[2].cbBuffer);
-        CheckSocket(mormot.net.sock.Send(
-          fSocket.Socket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
-        CheckSEC_E_OK(FreeContextBuffer(buf.buf[2].pvBuffer));
-      end;
+      Answer; // call it twice seems to pass the handshake
   end;
   //writeln(IntToHex(res, 8));
   // see https://github.com/curl/curl/blob/master/lib/vtls/schannel.c
   CheckSEC_E_OK(res);
-  if buf.buf[1].BufferType = SECBUFFER_EXTRA then
+  if {%H-}buf.buf[1].BufferType = SECBUFFER_EXTRA then
     AppendData(buf.buf[1]);
 end;
 

@@ -135,6 +135,8 @@ type
     fContentCompress: integer;
     /// to call GetBody only once
     fBodyRetrieved: boolean;
+    /// fill the internal state and flags to their default/void values
+    procedure HttpStateReset;
     /// compress the data, adding corresponding headers via SockSend()
     // - always add a 'Content-Length: ' header entry (even if length=0)
     // - e.g. 'Content-Encoding: synlz' header if compressed using synlz
@@ -581,13 +583,7 @@ begin
     SockSend(['Content-Type: ', OutContentType]);
 end;
 
-procedure THttpSocket.GetHeader(HeadersUnFiltered: boolean);
-var
-  s, c: RawUtf8;
-  i, len: PtrInt;
-  err: integer;
-  P: PUtf8Char;
-  line: array[0..4095] of AnsiChar; // avoid most memory allocation
+procedure THttpSocket.HttpStateReset;
 begin
   HeaderFlags := [];
   fBodyRetrieved := false;
@@ -596,7 +592,19 @@ begin
   ContentType := '';
   Upgrade := '';
   ContentLength := -1;
+  Content := '';
   ServerInternalState := 0;
+end;
+
+procedure THttpSocket.GetHeader(HeadersUnFiltered: boolean);
+var
+  s, c: RawUtf8;
+  i, len: PtrInt;
+  err: integer;
+  P: PUtf8Char;
+  line: array[0..4095] of AnsiChar; // avoid most memory allocation
+begin
+  HttpStateReset;
   fSndBufLen := 0; // SockSend() used as headers temp buffer to avoid getmem
   repeat
     P := @line;
@@ -810,7 +818,8 @@ begin
     Headers := Headers + aValue + #13#10;
 end;
 
-procedure THttpSocket.HeaderSetText(const aText, aForcedContentType: RawUtf8);
+procedure THttpSocket.HeaderSetText(const aText: RawUtf8;
+  const aForcedContentType: RawUtf8);
 begin
   if aText = '' then
     Headers := ''
