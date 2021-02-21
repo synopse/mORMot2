@@ -512,6 +512,8 @@ type
     // - depending on the actual INetTLS implementation, some fields may not
     // be used nor populated - currently only supported by mormot.lib.openssl11
     TLS: TNetTLSContext;
+    /// can be assigned from TSynLog.DoLog class method for low-level logging
+    OnLog: TSynLogProc;
     /// common initialization of all constructors
     // - do not call directly, but use Open / Bind constructors instead
     constructor Create(aTimeOut: PtrInt = 10000); reintroduce; virtual;
@@ -683,19 +685,23 @@ type
     // is required - so it expects buffering before calling Write() or SndLow()
     // - you can set false here to enable the Nagle algorithm, if needed
     // - see http://www.unixguide.net/network/socketfaq/2.16.shtml
-    property TCPNoDelay: boolean write SetTCPNoDelay;
+    property TCPNoDelay: boolean
+      write SetTCPNoDelay;
     /// set the SO_SNDTIMEO option for the connection
     // - i.e. the timeout, in milliseconds, for blocking send calls
     // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ms740476
-    property SendTimeout: integer write SetSendTimeout;
+    property SendTimeout: integer
+      write SetSendTimeout;
     /// set the SO_RCVTIMEO option for the connection
     // - i.e. the timeout, in milliseconds, for blocking receive calls
     // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ms740476
-    property ReceiveTimeout: integer write SetReceiveTimeout;
+    property ReceiveTimeout: integer
+      write SetReceiveTimeout;
     /// set the SO_KEEPALIVE option for the connection
     // - 1 (true) will enable keep-alive packets for the connection
     // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ee470551
-    property KeepAlive: boolean write SetKeepAlive;
+    property KeepAlive: boolean
+      write SetKeepAlive;
     /// set the SO_LINGER option for the connection, to control its shutdown
     // - by default (or Linger<0), Close will return immediately to the caller,
     // and any pending data will be delivered if possible
@@ -704,7 +710,8 @@ type
     // Darwin, set SO_NOSIGPIPE
     // - Linger = 0 causes the connection to be aborted and any pending data
     // is immediately discarded at Close
-    property Linger: integer write SetLinger;
+    property Linger: integer
+      write SetLinger;
     /// low-level socket handle, initialized after Open() with socket
     property Sock: TNetSocket
       read fSock write fSock;
@@ -1732,10 +1739,9 @@ begin
           [aServer, port, BINDTXT[doBind], ClassNameShort(E)^, E.Message]);
       end;
     end;
-  {$ifdef SYNCRTDEBUGLOW}
-  TSynLog.Add.Log(sllCustom2, 'OpenBind(%:%) % sock=% (accept=%) ',
-    [fServer, fPort, BINDTXT[doBind], fSock, aSock], self);
-  {$endif SYNCRTDEBUGLOW}
+  if Assigned(OnLog) then
+    OnLog(sllTrace, '%(%:%) sock=% %', [BINDTXT[doBind], fServer, fPort,
+      fSock.Socket, TLS.CipherName], self);
 end;
 
 procedure TCrtSocket.AcceptRequest(aClientSock: TNetSocket; aClientAddr: PNetAddr);
@@ -1752,6 +1758,11 @@ begin
   {$endif OSLINUX}
   if aClientAddr <> nil then
     fRemoteIP := aClientAddr^.IP(RemoteIPLocalHostAsVoidInServers);
+  {$ifdef OSLINUX}
+  if Assigned(OnLog) then
+    OnLog(sllTrace, 'Accept(%:%) sock=% %',
+      [fServer, fPort, fSock.Socket, fRemoteIP], self);
+  {$endif OSLINUX}
 end;
 
 const
@@ -2156,11 +2167,14 @@ begin
     body := 0;
   end;
   {$ifdef SYNCRTDEBUGLOW}
-  TSynLog.Add.Log(sllCustom2, 'SockSend sock=% flush len=% body=% %', [fSock,
-    fSndBufLen, Length(aBody), LogEscapeFull(pointer(fSndBuf), fSndBufLen)], self);
-  if body > 0 then
-    TSynLog.Add.Log(sllCustom2, 'SockSend sock=% body len=% %', [fSock, body,
-      LogEscapeFull(pointer(aBody), body)], self);
+  if Assigned(OnLog) then
+  begin
+    OnLog(sllCustom2, 'SockSend sock=% flush len=% body=% %', [fSock.Socket, fSndBufLen,
+      Length(aBody), LogEscapeFull(pointer(fSndBuf), fSndBufLen)], self);
+    if body > 0 then
+      OnLog(sllCustom2, 'SockSend sock=% body len=% %', [fSock.Socket, body,
+        LogEscapeFull(pointer(aBody), body)], self);
+  end;
   {$endif SYNCRTDEBUGLOW}
   if fSndBufLen > 0 then
     if TrySndLow(pointer(fSndBuf), fSndBufLen) then
@@ -2259,8 +2273,9 @@ begin
       begin
         // no more to read, or socket issue?
         {$ifdef SYNCRTDEBUGLOW}
-        TSynLog.Add.Log(sllCustom2, 'TrySockRecv: sock=% Recv=% %',
-          [sock, read, SocketErrorMessage], self);
+        if Assigned(OnLog) then
+          OnLog(sllCustom2, 'TrySockRecv: sock=% Recv=% %',
+            [fSock.Socket, read, SocketErrorMessage], self);
         {$endif SYNCRTDEBUGLOW}
         if StopBeforeLength and
            (res = nrRetry) then
@@ -2286,10 +2301,9 @@ begin
         diff := now - last;
         if diff >= TimeOut then
         begin
-          {$ifdef SYNCRTDEBUGLOW}
-          TSynLog.Add.Log(sllCustom2, 'TrySockRecv: timeout (diff=%>%)',
-            [diff, TimeOut], self);
-          {$endif SYNCRTDEBUGLOW}
+          if Assigned(OnLog) then
+            OnLog(sllTrace, 'TrySockRecv: timeout (diff=%>%)',
+              [diff, TimeOut], self);
           exit; // identify read timeout as error
         end;
         if diff < 100 then
