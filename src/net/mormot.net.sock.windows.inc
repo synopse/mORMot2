@@ -1026,7 +1026,7 @@ begin
   if Context.IgnoreCertificateErrors then
     // prevent SEC_E_UNTRUSTED_ROOT result in HandshakeLoop
     fFlags := fFlags or ISC_REQ_MANUAL_CRED_VALIDATION;
-  // initiate a ClientHello TLS message
+  // initiate a ClientHello TLS message and a new fCtxt
   HandshakeBufInit(buf);
   res := InitializeSecurityContext(@fCred, nil, pointer(ServerAddress),
     fFlags, 0, 0, nil, 0, @fCtxt, @buf.output, @f, nil);
@@ -1034,7 +1034,7 @@ begin
     ESChannelRaiseLastError(res);
   if (buf.buf[2].cbBuffer = 0) or
      (buf.buf[2].pvBuffer = nil) then
-    raise ESChannel.Create('Void Hello answer');
+    raise ESChannel.CreateFmt('Void Hello answer to %s', [ServerAddress]);
   CheckSocket(mormot.net.sock.Send(
     fSocket.Socket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
   CheckSEC_E_OK(FreeContextBuffer(buf.buf[2].pvBuffer));
@@ -1044,14 +1044,15 @@ begin
   CheckSEC_E_OK(QueryContextAttributes(@fCtxt, SECPKG_ATTR_STREAM_SIZES, @fSizes));
   fInputSize := fSizes.cbHeader + fSizes.cbMaximumMessage + fSizes.cbTrailer;
   if fInputSize > TLSRECMAXSIZE then
-    raise ESChannel.CreateFmt('InputSize=%d>%d', [fInputSize, TLSRECMAXSIZE]);
+    raise ESChannel.CreateFmt('InputSize=%d>%d on %s',
+      [fInputSize, TLSRECMAXSIZE, ServerAddress]);
   SetLength(fInput, fInputSize);
   fInputCount := 0;
 end;
 
 procedure TSChannelClient.HandshakeLoop;
 
-  function Answer: cardinal;
+  function ComputeAndSendAnswer: cardinal;
   var
     f: cardinal;
     buf: THandshakeBuf;
@@ -1078,7 +1079,7 @@ procedure TSChannelClient.HandshakeLoop;
        (buf.buf[1].cbBuffer <> 0) then
     begin
       // reuse pending bytes - avoid unexpected SEC_E_INVALID_TOKEN
-      //writeln('SECBUFFER_EXTRA=',buf.buf[1].cbBuffer);
+      //writeln('SECBUFFER_EXTRA=',buf.buf[1].cbBuffer,' / ',fDataCount);
       MoveFast(PByteArray(fData)[cardinal(fDataCount) - buf.buf[1].cbBuffer],
                PByteArray(fData)[0], buf.buf[1].cbBuffer);
       fDataCount := buf.buf[1].cbBuffer;
@@ -1090,20 +1091,18 @@ procedure TSChannelClient.HandshakeLoop;
 var
   res: cardinal;
 begin
-  res := SEC_I_CONTINUE_NEEDED;
-  while (res = SEC_I_CONTINUE_NEEDED) or
-        (res = SEC_E_INCOMPLETE_MESSAGE) do
-  begin
+  repeat
     inc(fDataCount, CheckSocket(
       Recv(fSocket.Socket, @PByteArray(fData)[fDataCount], length(fData) - fDataCount,
         MSG_NOSIGNAL)));
-    res := Answer;
+    res := ComputeAndSendAnswer;
     if res = SEC_I_INCOMPLETE_CREDENTIALS then
       // check https://stackoverflow.com/a/47479968/458259
-      res := Answer; // call again InitializeSecurityContext() to pass the handshake
-  end;
+      res := ComputeAndSendAnswer; // run twice to let the handshake pass
+  until (res <> SEC_I_CONTINUE_NEEDED) and
+        (res <> SEC_E_INCOMPLETE_MESSAGE);
   CheckSEC_E_OK(res);
-  // note: fDataCount trailing data may come from SECBUFFER_EXTRA bytes
+  // note: fDataCount trailing content may come from SECBUFFER_EXTRA bytes
 end;
 
 destructor TSChannelClient.Destroy;

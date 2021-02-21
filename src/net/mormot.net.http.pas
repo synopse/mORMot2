@@ -586,6 +586,7 @@ end;
 procedure THttpSocket.HttpStateReset;
 begin
   HeaderFlags := [];
+  Headers := '';
   fBodyRetrieved := false;
   fContentCompress := -1;
   integer(fCompressAcceptHeader) := 0;

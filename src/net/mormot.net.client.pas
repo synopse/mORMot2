@@ -857,12 +857,13 @@ begin
   fUserAgent := DefaultUserAgent(self);
 end;
 
-function THttpClientSocket.Request(const url, method: RawUtf8; KeepAlive:
-  cardinal; const header: RawUtf8; const Data: RawByteString;
+function THttpClientSocket.Request(const url, method: RawUtf8;
+  KeepAlive: cardinal; const header: RawUtf8; const Data: RawByteString;
   const DataType: RawUtf8; retry: boolean): integer;
 
   procedure DoRetry(Error: integer; const msg: RawUtf8);
   begin
+    //writeln('DoRetry ',retry, ' ', Error, ' / ', msg);
     {$ifdef SYNCRTDEBUGLOW}
     TSynLog.Add.Log(sllCustom2,
       'Request: % socket=% DoRetry(%) retry=%',
@@ -874,7 +875,7 @@ function THttpClientSocket.Request(const url, method: RawUtf8; KeepAlive:
     begin
       Close; // close this connection
       try
-        OpenBind(Server, Port, {bind=}false, fTLS); // retry with a new socket
+        OpenBind(fServer, fPort, {bind=}false, fTLS); // retry with a new socket
         HttpStateReset;
         result := Request(url, method, KeepAlive, header, Data, DataType, true);
       except
@@ -893,8 +894,7 @@ begin
   Content := '';
   if (hfConnectionClose in HeaderFlags) or
      (SockReceivePending(0) = cspSocketError) then
-    DoRetry(HTTP_NOTFOUND,
-      'connection closed/broken (keepalive timeout or too many request)')
+    DoRetry(HTTP_NOTFOUND, 'connection closed/broken (keepalive or maxrequest)')
   else
     try
       try
@@ -944,8 +944,11 @@ begin
         end
         else
         begin
-          // error on reading answer
-          DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, Command); // 505=wrong format
+          // error on reading answer -> 505=wrong format
+          if Command = '' then
+            DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, 'Broken Link')
+          else
+            DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, Command);
           exit;
         end;
         // retrieve all HTTP headers

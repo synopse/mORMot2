@@ -1781,7 +1781,6 @@ function InputSock(var F: TTextRec): integer;
 var
   size: integer;
   sock: TCrtSocket;
-  addr: TNetAddr;
 begin
   F.BufEnd := 0;
   F.BufPos := 0;
@@ -1796,8 +1795,9 @@ begin
     exit; // already reached error below
   size := F.BufSize;
   if sock.SocketLayer = nlUDP then
-    size := sock.Sock.RecvFrom(F.BufPtr, size, addr)
-  else // nlTCP/nlUNIX
+    size := sock.Sock.RecvFrom(F.BufPtr, size, sock.fPeerAddr)
+  else
+    // nlTCP/nlUNIX
     if not sock.TrySockRecv(F.BufPtr, size, {StopBeforeLength=}true) then
       size := -1; // fatal socket error
   // TrySockRecv() may return size=0 if no data is pending, but no TCP/IP error
@@ -1935,24 +1935,21 @@ begin
   if self = nil then
     exit;
   fSndBufLen := 0; // always reset (e.g. in case of further Open)
-  if (SockIn <> nil) or
-     (SockOut <> nil) then
+  fSockInEofError := 0;
+  ioresult; // reset readln/writeln value
+  if SockIn <> nil then
   begin
-    ioresult; // reset ioresult value if SockIn/SockOut were used
-    if SockIn <> nil then
-    begin
-      PTextRec(SockIn)^.BufPos := 0;  // reset input buffer
-      PTextRec(SockIn)^.BufEnd := 0;
-    end;
-    if SockOut <> nil then
-    begin
-      PTextRec(SockOut)^.BufPos := 0; // reset output buffer
-      PTextRec(SockOut)^.BufEnd := 0;
-    end;
+    PTextRec(SockIn)^.BufPos := 0;  // reset input buffer
+    PTextRec(SockIn)^.BufEnd := 0;
+  end;
+  if SockOut <> nil then
+  begin
+    PTextRec(SockOut)^.BufPos := 0; // reset output buffer
+    PTextRec(SockOut)^.BufEnd := 0;
   end;
   if not SockIsDefined then
     exit; // no opened connection, or Close already executed
-  fSecure := nil; // perform the TLS shutdown round and release its context
+  fSecure := nil; // perform the TLS shutdown round and release the TLS context
   {$ifdef OSLINUX}
   if not fWasBind or
      (fPort <> '') then // no explicit shutdown necessary on Linux server side
