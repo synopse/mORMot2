@@ -114,7 +114,8 @@ type
     wTen_64,
     wServer2016,
     wServer2016_64,
-    wServer2019_64);
+    wServer2019_64,
+    wServer2022_64);
 
   /// the running Operating System, encoded as a 32-bit integer
   TOperatingSystemVersion = packed record
@@ -136,7 +137,8 @@ const
     '7', '7 64bit', 'Server 2008 R2', 'Server 2008 R2 64bit',
     '8', '8 64bit', 'Server 2012', 'Server 2012 64bit',
     '8.1', '8.1 64bit', 'Server 2012 R2', 'Server 2012 R2 64bit',
-    '10', '10 64bit', 'Server 2016', 'Server 2016 64bit', 'Server 2019 64bit');
+    '10', '10 64bit', 'Server 2016', 'Server 2016 64bit',
+    'Server 2019 64bit', 'Server 2022 64bit');
 
   /// the recognized Windows versions which are 32-bit
   WINDOWS_32 = [

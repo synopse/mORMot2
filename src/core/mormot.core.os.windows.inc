@@ -2984,10 +2984,14 @@ begin
     begin
       // Server edition
       inc(Vers, 2); // e.g. wEight -> wServer2012
-      if (Vers = wServer2016) and
-         (OSVersionInfo.dwBuildNumber >= 17763) then
-        // https://stackoverflow.com/q/53393150
-        Vers := wServer2019_64;
+      if Vers = wServer2016 then
+        if OSVersionInfo.dwBuildNumber >= 17763 then
+          if OSVersionInfo.dwBuildNumber >= 20285 then
+            // https://shorturl.at/asCQ2
+            Vers := wServer2022_64
+          else
+            // https://stackoverflow.com/q/53393150
+            Vers := wServer2019_64;
     end;
     if (SystemInfo.wProcessorArchitecture = PROCESSOR_ARCHITECTURE_AMD64) and
        (Vers < wServer2019_64) then
