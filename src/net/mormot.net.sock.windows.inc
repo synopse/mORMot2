@@ -813,11 +813,16 @@ type
   TSChannelClient = class(TInterfacedObject, INetTLS)
   private
     fSocket: TNetSocket;
+    fContext: PNetTLSContext;
+    fServerAddress: RawUtf8;
     fCred: TCredHandle;
     fCtxt: TCtxtHandle;
+    fFlags: cardinal;
     fSizes: TSecPkgContextStreamSizes;
     fData, fInput: AnsiString;
     fInputSize, fDataPos, fDataCount, fInputCount: integer;
+    procedure ESChannelRaiseLastError(res: cardinal);
+    function CheckSEC_E_OK(res: integer): cardinal;
     procedure HandshakeLoop;
     procedure AppendData(const Buffer: TSecBuffer);
   public
@@ -889,9 +894,7 @@ const
   ISC_REQ_FLAGS =
     ISC_REQ_SEQUENCE_DETECT or ISC_REQ_REPLAY_DETECT or
     ISC_REQ_CONFIDENTIALITY or ISC_REQ_EXTENDED_ERROR or
-    ISC_REQ_ALLOCATE_MEMORY or ISC_REQ_STREAM or
-    // this last one to prevent SEC_E_UNTRUSTED_ROOT result in HandshakeLoop
-    ISC_REQ_MANUAL_CRED_VALIDATION;
+    ISC_REQ_ALLOCATE_MEMORY or ISC_REQ_STREAM;
 
   SECBUFFER_VERSION = 0;
   SECBUFFER_EMPTY = 0;
@@ -900,6 +903,7 @@ const
   SECBUFFER_EXTRA = 5;
   SECBUFFER_STREAM_TRAILER = 6;
   SECBUFFER_STREAM_HEADER = 7;
+  SECBUFFER_ALERT = 17;
 
   SEC_E_OK = 0;
   SEC_I_CONTINUE_NEEDED = $00090312;
@@ -908,44 +912,49 @@ const
   SEC_I_RENEGOTIATE = $00090321;
   SEC_E_INCOMPLETE_MESSAGE = $80090318;
   SEC_E_INVALID_TOKEN = $80090308;
+  SEC_E_ILLEGAL_MESSAGE = $80090326;
 
   DLLSecur32: PChar = 'secur32.dll';
   UNISP_NAME = 'Microsoft Unified Security Protocol Provider';
   SECPKG_ATTR_STREAM_SIZES = 4;
-  SECURITY_NATIVE_DREP = $10;
   SCHANNEL_SHUTDOWN = 1;
 
-{ TSChannel }
+{ TSChannelClient }
 
-procedure ESChannelRaiseLastError(res: cardinal);
-var
-  LastError: integer;
-  restxt: string;
+function ResToText(res: cardinal): string;
 begin
   case res of
     SEC_E_OK:
-      restxt := 'SEC_E_OK';
+      result := 'SEC_E_OK';
     SEC_I_CONTINUE_NEEDED:
-      restxt := 'SEC_I_CONTINUE_NEEDED';
+      result := 'SEC_I_CONTINUE_NEEDED';
     SEC_I_CONTEXT_EXPIRED:
-      restxt := 'SEC_I_CONTEXT_EXPIRED';
+      result := 'SEC_I_CONTEXT_EXPIRED';
     SEC_I_INCOMPLETE_CREDENTIALS:
-      restxt := 'SEC_I_INCOMPLETE_CREDENTIALS';
+      result := 'SEC_I_INCOMPLETE_CREDENTIALS';
     SEC_I_RENEGOTIATE:
-      restxt := 'SEC_I_RENEGOTIATE';
+      result := 'SEC_I_RENEGOTIATE';
     SEC_E_INCOMPLETE_MESSAGE:
-      restxt := 'SEC_E_INCOMPLETE_MESSAGE';
+      result := 'SEC_E_INCOMPLETE_MESSAGE';
     SEC_E_INVALID_TOKEN:
-      restxt := 'SEC_E_INVALID_TOKEN';
+      result := 'SEC_E_INVALID_TOKEN';
+    SEC_E_ILLEGAL_MESSAGE:
+      result := 'SEC_E_ILLEGAL_MESSAGE';
   else
-    str(res, restxt);
+    result := IntToStr(res);
   end;
-  LastError := GetLastError;
-  raise ESChannel.CreateFmt('Result %x [%s], System Error %d [%s]',
-    [res, restxt, LastError, SysErrorMessage(LastError)]);
 end;
 
-function CheckSEC_E_OK(res: integer): cardinal;
+procedure TSChannelClient.ESChannelRaiseLastError(res: cardinal);
+var
+  LastError: integer;
+begin
+  LastError := GetLastError;
+  raise ESChannel.CreateFmt('<%s>: Result %x [%s], System Error %d ''%s''',
+    [fServerAddress, res, ResToText(res), LastError, SysErrorMessage(LastError)]);
+end;
+
+function TSChannelClient.CheckSEC_E_OK(res: integer): cardinal;
 begin
   if res <> SEC_E_OK then
     ESChannelRaiseLastError(res);
@@ -966,7 +975,7 @@ const
 
 type
   THandshakeBuf = record
-    buf: array[0..2] of TSecBuffer;
+    buf: array[0..4] of TSecBuffer;
     input, output: TSecBufferDesc;
   end;
 
@@ -979,9 +988,11 @@ begin
   buf.buf[0].BufferType := SECBUFFER_TOKEN;
   buf.buf[1].BufferType := SECBUFFER_EMPTY;
   buf.output.ulVersion := SECBUFFER_VERSION;
-  buf.output.cBuffers := 1;
+  buf.output.cBuffers := 3;
   buf.output.pBuffers := @buf.buf[2];
   buf.buf[2].BufferType := SECBUFFER_TOKEN;
+  buf.buf[3].BufferType := SECBUFFER_ALERT;
+  buf.buf[4].BufferType := SECBUFFER_EMPTY;
 end;
 
 procedure TSChannelClient.AppendData(const Buffer: TSecBuffer);
@@ -1001,24 +1012,36 @@ var
   buf: THandshakeBuf;
   res, f: cardinal;
 begin
+  // prepare execution context
   fSocket := Socket;
+  fContext := @Context;
+  fServerAddress := ServerAddress;
   if not Assigned(AcquireCredentialsHandle) then
     raise ESChannel.Create('SChannel API not available');
   CheckSEC_E_OK(AcquireCredentialsHandle(nil, UNISP_NAME, SECPKG_CRED_OUTBOUND,
     nil, nil, nil, nil, @fCred, nil));
   fDataPos := 0;
   fDataCount := 0;
+  fFlags := ISC_REQ_FLAGS;
+  if Context.IgnoreCertificateErrors then
+    // prevent SEC_E_UNTRUSTED_ROOT result in HandshakeLoop
+    fFlags := fFlags or ISC_REQ_MANUAL_CRED_VALIDATION;
+  // initiate a ClientHello TLS message
   HandshakeBufInit(buf);
   res := InitializeSecurityContext(@fCred, nil, pointer(ServerAddress),
-    ISC_REQ_FLAGS, 0, SECURITY_NATIVE_DREP, nil, 0, @fCtxt, @buf.output, @f, nil);
+    fFlags, 0, 0, nil, 0, @fCtxt, @buf.output, @f, nil);
   if res <> SEC_I_CONTINUE_NEEDED then
     ESChannelRaiseLastError(res);
+  if (buf.buf[2].cbBuffer = 0) or
+     (buf.buf[2].pvBuffer = nil) then
+    raise ESChannel.Create('Void Hello answer');
   CheckSocket(mormot.net.sock.Send(
     fSocket.Socket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
   CheckSEC_E_OK(FreeContextBuffer(buf.buf[2].pvBuffer));
+  // make TLS handshake and prepare for process
+  SetLength(fData, TLSRECMAXSIZE);
   HandshakeLoop;
   CheckSEC_E_OK(QueryContextAttributes(@fCtxt, SECPKG_ATTR_STREAM_SIZES, @fSizes));
-  SetLength(fData, fSizes.cbMaximumMessage);
   fInputSize := fSizes.cbHeader + fSizes.cbMaximumMessage + fSizes.cbTrailer;
   if fInputSize > TLSRECMAXSIZE then
     raise ESChannel.CreateFmt('InputSize=%d>%d', [fInputSize, TLSRECMAXSIZE]);
@@ -1027,61 +1050,60 @@ begin
 end;
 
 procedure TSChannelClient.HandshakeLoop;
-var
-  len: integer;
-  tmp: RawByteString;
-  f, res: cardinal;
-  buf: THandshakeBuf;
 
-  procedure Answer;
+  function Answer: cardinal;
+  var
+    f: cardinal;
+    buf: THandshakeBuf;
   begin
     HandshakeBufInit(buf);
-    buf.buf[0].cbBuffer := len;
-    buf.buf[0].BufferType := SECBUFFER_TOKEN;
-    buf.buf[0].pvBuffer := pointer(tmp);
+    buf.buf[0].cbBuffer := fDataCount;
+    buf.buf[0].pvBuffer := pointer(fData);
     f := 0;
-    res := InitializeSecurityContext(@fCred, @fCtxt, nil, ISC_REQ_FLAGS, 0,
-      SECURITY_NATIVE_DREP, @buf.input, 0, @fCtxt, @buf.output, @f, nil);
-    if (res = SEC_E_OK) or
-       (res = SEC_I_CONTINUE_NEEDED) or
+    result := InitializeSecurityContext(@fCred, @fCtxt, pointer(fServerAddress),
+      fFlags, 0, 0, @buf.input, 0, nil, @buf.output, @f, nil);
+    //writeln(IntToHex(result, 8),' [',ResToText(result),'] tosend=',buf.buf[2].cbBuffer);
+    if (result = SEC_E_OK) or
+       (result = SEC_I_CONTINUE_NEEDED) or
        ((f and ISC_REQ_EXTENDED_ERROR) <> 0) then
       if (buf.buf[2].cbBuffer <> 0) and
          (buf.buf[2].pvBuffer <> nil) then
       begin
         // need to send back something to the server
-        //writeln('send len=',buf.buf[2].cbBuffer);
         CheckSocket(mormot.net.sock.Send(
           fSocket.Socket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0));
         CheckSEC_E_OK(FreeContextBuffer(buf.buf[2].pvBuffer));
       end;
+    if (buf.buf[1].BufferType = SECBUFFER_EXTRA) and
+       (buf.buf[1].cbBuffer <> 0) then
+    begin
+      // reuse pending bytes - avoid unexpected SEC_E_INVALID_TOKEN
+      //writeln('SECBUFFER_EXTRA=',buf.buf[1].cbBuffer);
+      MoveFast(PByteArray(fData)[cardinal(fDataCount) - buf.buf[1].cbBuffer],
+               PByteArray(fData)[0], buf.buf[1].cbBuffer);
+      fDataCount := buf.buf[1].cbBuffer;
+    end
+    else if result <> SEC_E_INCOMPLETE_MESSAGE then
+      fDataCount := 0;
   end;
 
+var
+  res: cardinal;
 begin
-  len := 0;
-  SetLength(tmp, 65536);
   res := SEC_I_CONTINUE_NEEDED;
-  { TODO : fix random SEC_E_INVALID_TOKEN during SChannel handshake on Win10
-    I didn't find anything wrong with this code, nor any solution to
-    similar problems like https://github.com/jeroen/curl/issues/127 }
   while (res = SEC_I_CONTINUE_NEEDED) or
         (res = SEC_E_INCOMPLETE_MESSAGE) do
   begin
-    if res <> SEC_E_INCOMPLETE_MESSAGE then
-      len := 0;
-    inc(len, CheckSocket(
-      Recv(fSocket.Socket, @PByteArray(tmp)[len], length(tmp) - len, 0)));
-    //writeln('recv len=',len);
-    Answer;
-    //writeln(IntToHex(res, 8), ' tosend=',buf.buf[2].cbBuffer);
+    inc(fDataCount, CheckSocket(
+      Recv(fSocket.Socket, @PByteArray(fData)[fDataCount], length(fData) - fDataCount,
+        MSG_NOSIGNAL)));
+    res := Answer;
     if res = SEC_I_INCOMPLETE_CREDENTIALS then
       // check https://stackoverflow.com/a/47479968/458259
-      Answer; // call it twice seems to pass the handshake
+      res := Answer; // call again InitializeSecurityContext() to pass the handshake
   end;
-  //writeln(IntToHex(res, 8));
-  // see https://github.com/curl/curl/blob/master/lib/vtls/schannel.c
   CheckSEC_E_OK(res);
-  if {%H-}buf.buf[1].BufferType = SECBUFFER_EXTRA then
-    AppendData(buf.buf[1]);
+  // note: fDataCount trailing data may come from SECBUFFER_EXTRA bytes
 end;
 
 destructor TSChannelClient.Destroy;
@@ -1105,8 +1127,8 @@ begin
         buf.cbBuffer := 0;
         buf.BufferType := SECBUFFER_TOKEN;
         buf.pvBuffer := nil;
-        if InitializeSecurityContext(@fCred, @fCtxt, nil, ISC_REQ_FLAGS, 0,
-           SECURITY_NATIVE_DREP, nil, 0, @fCtxt, @desc, @f, nil) = SEC_E_OK then
+        if InitializeSecurityContext(@fCred, @fCtxt, nil, fFlags, 0,
+           0, nil, 0, @fCtxt, @desc, @f, nil) = SEC_E_OK then
         begin
           mormot.net.sock.Send(fSocket.Socket, buf.pvBuffer, buf.cbBuffer, 0);
           FreeContextBuffer(buf.pvBuffer);

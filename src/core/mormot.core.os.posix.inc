@@ -136,7 +136,7 @@ begin
     else
     begin
       {$ifdef OSDARWIN}
-      // MachOS has its own ICU set of libraries
+      // Mach OS has its own ICU set of libraries
       icu := dlopen('libicuuc.dylib', RTLD_LAZY);
       if icu <> nil then
         icui18n := dlopen('libicui18n.dylib', RTLD_LAZY);

@@ -2971,7 +2971,8 @@ begin
   end
   else
     // use ICU or cwstring/RTL for accurate conversion
-    res[0] := AnsiChar(Unicode_WideToAnsi(W, PAnsiChar(@res[1]), LW, 255, CodePage));
+    res[0] := AnsiChar(
+      Unicode_WideToAnsi(W, PAnsiChar(@res[1]), LW, 255, CodePage));
 end;
 
 function NowUtc: TDateTime;

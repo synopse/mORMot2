@@ -1715,10 +1715,13 @@ begin
        not doBind and
        ({%H-}PtrInt(aSock) <= 0) then
     try
-      if Assigned(NewNetTLS) then
-        fSecure := NewNetTLS;
+      if not Assigned(NewNetTLS) then
+        raise ENetSock.Create('TLS is not available - try including ' +
+          'mormot.lib.openssl11 and installing OpenSSL 1.1.1');
+      fSecure := NewNetTLS;
       if fSecure = nil then
-        raise ENetSock.Create('TLS is unsupported on this system');
+        raise ENetSock.Create('TLS is not available on this system - ' +
+          'try installing OpenSSL 1.1.1');
       fSecure.AfterConnection(fSock, TLS, aServer);
       fTLS := true;
     except
@@ -1949,7 +1952,7 @@ begin
   end;
   if not SockIsDefined then
     exit; // no opened connection, or Close already executed
-  fSecure := nil; // will release the TLS context
+  fSecure := nil; // perform the TLS shutdown round and release its context
   {$ifdef OSLINUX}
   if not fWasBind or
      (fPort <> '') then // no explicit shutdown necessary on Linux server side
@@ -2015,8 +2018,8 @@ begin
             ({%H-}PtrInt(fSock) > 0);
 end;
 
-function TCrtSocket.SockInPending(aTimeOutMS: integer; aPendingAlsoInSocket:
-  boolean): integer;
+function TCrtSocket.SockInPending(aTimeOutMS: integer;
+  aPendingAlsoInSocket: boolean): integer;
 var
   backup: PtrInt;
   insocket: integer;

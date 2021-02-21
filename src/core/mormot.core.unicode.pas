@@ -5864,7 +5864,7 @@ type
     IndexLo: array[0..8, 0..31] of byte;
     // branchless Unicode 10.0 uppercase folding using our internal tables
     function Ucs4Upper(c: Ucs4CodePoint): Ucs4CodePoint;
-      {$ifdef HASINLINE} inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
   end;
   PUnicodeUpperTable = ^TUnicodeUpperTable;
 
