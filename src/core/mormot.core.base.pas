@@ -3639,6 +3639,13 @@ type
   /// a dynamic array of logging event levels
   TSynLogInfoDynArray = array of TSynLogInfo;
 
+  /// callback definition used to abstractly log some events
+  // - defined as TMethod to avoid dependency with the mormot.core.log unit
+  // - match class procedure TSynLog.DoLog
+  // - used e.g. by global variables like WindowsServiceLog in mormot.core.os
+  TSynLogProc = procedure(Level: TSynLogInfo; const Fmt: RawUtf8;
+     const Args: array of const; Instance: TObject = nil) of object;
+
 
 type
   /// fast bit-encoded date and time value

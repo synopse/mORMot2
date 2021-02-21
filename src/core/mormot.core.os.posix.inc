@@ -1814,7 +1814,7 @@ end;
 
 var
   SynDaemonIntercepted: boolean;
-  SynDaemonInterceptLog: TOnDaemonLog;
+  SynDaemonInterceptLog: TSynLogProc;
 
 procedure DoShutDown(Sig: integer; Info: PSigInfo; Context: PSigContext); cdecl;
 var
@@ -1853,7 +1853,7 @@ begin
   SynDaemonTerminated := Sig;
 end;
 
-procedure SynDaemonIntercept(const onlog: TOnDaemonLog);
+procedure SynDaemonIntercept(const onlog: TSynLogProc);
 var
   saOld, saNew: SigactionRec;
 begin
@@ -1928,7 +1928,7 @@ begin
 end;
 
 procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
-  const start, stop: TThreadMethod; const onlog: TOnDaemonLog;
+  const start, stop: TThreadMethod; const onlog: TSynLogProc;
   const servicename: string);
 var
   pid, sid: TPID;

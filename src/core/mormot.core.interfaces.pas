@@ -1857,7 +1857,7 @@ type
   // creation of a per-interface dedicated thread
   // - if optInterceptInputOutput is set, TServiceFactoryServer.AddInterceptor()
   // events will have their Sender.Input/Output values defined
-  // - if optNoLogInput/optNoLogOutput is set, TSynLog and ServiceLog() database
+  // - if optNoLogInput/optNoLogOutput is set, TSynLog and SetServiceLog database
   // won't log any parameter values at input/output - this may be useful for
   // regulatory/safety purposes, e.g. to ensure that no sensitive information
   // (like a credit card number or a password), is logged during process -

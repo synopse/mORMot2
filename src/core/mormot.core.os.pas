@@ -2184,13 +2184,6 @@ procedure GlobalUnLock;
 
 { ****************** Unix Daemon and Windows Service Support }
 
-type
-  /// callback definition used to log some event
-  // - defined as TMethod to avoid dependency with the mormot.core.log unit
-  // - could be assigned from TSynLog.DoLog class procedure
-  TOnDaemonLog = procedure(Level: TSynLogInfo; const Fmt: RawUtf8;
-    const Args: array of const; Instance: TObject = nil) of object;
-
 {$ifdef OSWINDOWS}
 
 { *** some minimal Windows API definitions, replacing WinSvc.pas missing for FPC }
@@ -2329,11 +2322,11 @@ function StartServiceCtrlDispatcher(
 { *** high level classes to define and manage Windows Services }
 
 var
-  /// you can set this global variable to TSynLog or TSqlLog to enable logging
+  /// can be assigned from TSynLog.DoLog class method for
+  // TServiceController/TService logging
   // - default is nil, i.e. disabling logging, since it may interfere with the
-  // logging process of the service itself
-  // - can be assigned from TSynLog.DoLog class method for proper logging
-  ServiceLog: TOnDaemonLog;
+  // logging process of the Windows Service itself
+  WindowsServiceLog: TSynLogProc;
 
 type
   /// all possible states of the service
@@ -2670,7 +2663,7 @@ function KillProcess(pid: cardinal; waitseconds: integer = 30): boolean;
 // - fork will create a local /run/[ProgramName]-[ProgramPathHash].pid file name
 // - onLog can be assigned from TSynLog.DoLog for proper logging
 procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
-  const start, stop: TThreadMethod; const onlog: TOnDaemonLog = nil;
+  const start, stop: TThreadMethod; const onlog: TSynLogProc = nil;
   const servicename: string = '');
 
 /// kill a process previously created by RunUntilSigTerminated(dofork=true)
@@ -2695,7 +2688,7 @@ var
 // - as called e.g. by RunUntilSigTerminated()
 // - you can call this method several times with no issue
 // - onLog can be assigned from TSynLog.DoLog for proper logging
-procedure SynDaemonIntercept(const onlog: TOnDaemonLog = nil);
+procedure SynDaemonIntercept(const onlog: TSynLogProc = nil);
 
 {$endif OSWINDOWS}
 
