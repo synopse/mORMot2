@@ -808,6 +808,18 @@ type
   end;
   PSecPkgContextStreamSizes = ^TSecPkgContextStreamSizes;
 
+  ALG_ID = Cardinal;
+  TSecPkgConnectionInfo = record
+    dwProtocol: cardinal;
+    aiCipher: ALG_ID;
+    dwCipherStrength: cardinal;
+    aiHash: ALG_ID;
+    dwHashStrength: cardinal;
+    aiExch: ALG_ID;
+    dwExchStrength: cardinal;
+   end;
+  PSecPkgConnectionInfo = ^TSecPkgConnectionInfo;
+
   ESChannel = class(Exception);
 
   TSChannelClient = class(TInterfacedObject, INetTLS)
@@ -865,6 +877,9 @@ const
   SP_PROT_TLS1_2 = $C00;
   SP_PROT_TLS1_2_SERVER = $400;
   SP_PROT_TLS1_2_CLIENT = $800;
+  SP_PROT_TLS1_3 = $3000; // Windows Server 2022 ;)
+  SP_PROT_TLS1_3_SERVER = $1000;
+  SP_PROT_TLS1_3_CLIENT = $2000 ;
 
   SECPKG_CRED_INBOUND = 1;
   SECPKG_CRED_OUTBOUND = 2;
@@ -917,6 +932,8 @@ const
   DLLSecur32: PChar = 'secur32.dll';
   UNISP_NAME = 'Microsoft Unified Security Protocol Provider';
   SECPKG_ATTR_STREAM_SIZES = 4;
+  SECPKG_ATTR_CONNECTION_INFO = $5a;
+
   SCHANNEL_SHUTDOWN = 1;
 
 { TSChannelClient }
@@ -1050,6 +1067,62 @@ begin
   fInputCount := 0;
 end;
 
+procedure ProtoToText(var nfo: TSecPkgConnectionInfo; out text: RawUtf8);
+var
+  alg, hsh, xch: string[5];
+begin
+  if nfo.dwProtocol and SP_PROT_TLS1 <> 0 then
+    nfo.dwProtocol := 0
+  else if nfo.dwProtocol and SP_PROT_TLS1_1 <> 0 then
+    nfo.dwProtocol := 1
+  else if nfo.dwProtocol and SP_PROT_TLS1_2 <> 0 then
+    nfo.dwProtocol := 2
+  else if nfo.dwProtocol and SP_PROT_TLS1_3 <> 0 then
+    nfo.dwProtocol := 3;
+  if nfo.aiCipher and $1f in [14..17] then
+    alg := 'AES'
+  else
+    str(nfo.aiCipher and $1f, alg);
+  case nfo.aiHash and $1f of
+    1..3:
+      hsh := 'MD';
+    4, 12..14:
+      begin
+        hsh := 'SHA';
+        if nfo.dwHashStrength = 0 then
+          case nfo.aiHash and $1f of
+            4:
+              nfo.dwHashStrength := 1;
+            12:
+              nfo.dwHashStrength := 256;
+            13:
+              nfo.dwHashStrength := 384;
+            14:
+              nfo.dwHashStrength := 512;
+          end;
+      end;
+    9:
+      hsh := 'HMAC';
+  else
+    str(nfo.aiHash and $1f, hsh);
+  end;
+  if nfo.aiExch = $a400 then
+    xch := 'RSA'
+  else if nfo.aiExch = $aa02 then
+    xch := 'DH'
+  else if nfo.aiExch = $aa05 then
+    xch := 'ECDH'
+  else if nfo.aiExch = $ae06 then
+    xch := 'ECDHE'
+  else if nfo.aiExch = $2203 then
+    xch := 'ECDSA'
+  else
+    str(nfo.aiExch, xch);
+  text := RawUtf8(format('TLS 1.%d %s_%d-%s_%d-%s_%d', [nfo.dwProtocol,
+    xch, nfo.dwExchStrength, alg, nfo.dwCipherStrength, hsh, nfo.dwHashStrength]));
+end;
+
+
 procedure TSChannelClient.HandshakeLoop;
 
   function ComputeAndSendAnswer: cardinal;
@@ -1090,6 +1163,7 @@ procedure TSChannelClient.HandshakeLoop;
 
 var
   res: cardinal;
+  nfo: TSecPkgConnectionInfo;
 begin
   repeat
     inc(fDataCount, CheckSocket(
@@ -1103,6 +1177,8 @@ begin
         (res <> SEC_E_INCOMPLETE_MESSAGE);
   CheckSEC_E_OK(res);
   // note: fDataCount trailing content may come from SECBUFFER_EXTRA bytes
+  if QueryContextAttributes(@fCtxt, SECPKG_ATTR_CONNECTION_INFO, @nfo) = SEC_E_OK then
+    ProtoToText(nfo, fContext.CipherName);
 end;
 
 destructor TSChannelClient.Destroy;
@@ -1308,24 +1384,24 @@ begin
   LibSecurHandle := LoadLibrary(DLLSecur32);
   if LibSecurHandle <> 0 then
   begin
-    AcquireCredentialsHandle := GetProcAddress(LibSecurHandle,
-      'AcquireCredentialsHandleA');
-    FreeCredentialsHandle := GetProcAddress(LibSecurHandle,
-      'FreeCredentialsHandle');
-    InitializeSecurityContext := GetProcAddress(LibSecurHandle,
-      'InitializeSecurityContextA');
-    DeleteSecurityContext := GetProcAddress(LibSecurHandle,
-      'DeleteSecurityContext');
-    ApplyControlToken := GetProcAddress(LibSecurHandle,
-      'ApplyControlToken');
-    QueryContextAttributes := GetProcAddress(LibSecurHandle,
-      'QueryContextAttributesA');
-    FreeContextBuffer := GetProcAddress(LibSecurHandle,
-      'FreeContextBuffer');
-    EncryptMessage := GetProcAddress(LibSecurHandle,
-      'EncryptMessage');
-    DecryptMessage := GetProcAddress(LibSecurHandle,
-     'DecryptMessage');
+    AcquireCredentialsHandle :=
+      GetProcAddress(LibSecurHandle, 'AcquireCredentialsHandleA');
+    FreeCredentialsHandle :=
+      GetProcAddress(LibSecurHandle, 'FreeCredentialsHandle');
+    InitializeSecurityContext :=
+      GetProcAddress(LibSecurHandle, 'InitializeSecurityContextA');
+    DeleteSecurityContext :=
+      GetProcAddress(LibSecurHandle, 'DeleteSecurityContext');
+    ApplyControlToken :=
+      GetProcAddress(LibSecurHandle, 'ApplyControlToken');
+    QueryContextAttributes :=
+      GetProcAddress(LibSecurHandle, 'QueryContextAttributesA');
+    FreeContextBuffer :=
+      GetProcAddress(LibSecurHandle, 'FreeContextBuffer');
+    EncryptMessage :=
+      GetProcAddress(LibSecurHandle, 'EncryptMessage');
+    DecryptMessage :=
+      GetProcAddress(LibSecurHandle, 'DecryptMessage');
     if Assigned(AcquireCredentialsHandle) and
        Assigned(InitializeSecurityContext) and
        Assigned(QueryContextAttributes) and
