@@ -221,7 +221,8 @@ function ToText(res: TNetResult): PShortString; overload;
 
 type
   /// TLS Options and Information for a given TCrtSocket/INetTLS connection
-  // - currently only properly implemented by mormot.lib.openssl11
+  // - currently only properly implemented by mormot.lib.openssl11 - SChannel
+  // on Windows only recognizes IgnoreCertificateErrors and sets CipherName
   // - typical usage is the following:
   // $ with THttpClientSocket.Create do
   // $ try
@@ -232,7 +233,7 @@ type
   // $   writeln(TLS.PeerInfo);
   // $   writeln(TLS.CipherName);
   // $   writeln(Get('/forum/', 1000), ' len=', ContentLength);
-  // $   writeln(Get('/fossil/wiki/Synopse+OpenSource', 1000), ' len=', ContentLength);
+  // $   writeln(Get('/fossil/wiki/Synopse+OpenSource', 1000));
   // $ finally
   // $   Free;
   // $ end;

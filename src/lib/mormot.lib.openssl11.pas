@@ -1081,6 +1081,11 @@ type
 
 
 /// OpenSSL TLS layer communication factory - as expected by mormot.net.sock.pas
+// - on non-Windows systems, this unit initialization will register OpenSSL for TLS
+// - on Windows systems, SChannel will be kept as default so you would need
+// to explicitely register OpenSSL for TLS if needed (for better cipher coverage,
+// enhanced performance and full TNetTLSContext options support):
+// ! @NewNetTLS := @OpenSslNewNetTLS;
 function OpenSslNewNetTLS: INetTLS;
 
 
@@ -3045,8 +3050,9 @@ end;
 
 
 initialization
-  // always register the OpenSSL TLS layer factory for TCrtSocket
-  @NewNetTLS := @OpenSslNewNetTLS;
+  // register the OpenSSL TLS layer factory for TCrtSocket if no SChannel set
+  if not Assigned(NewNetTLS) then
+    @NewNetTLS := @OpenSslNewNetTLS;
 
 finalization
   {$ifndef OPENSSLSTATIC}

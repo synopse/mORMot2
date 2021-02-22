@@ -132,6 +132,8 @@ var
 
   /// how TWebSocketProtocol.SetEncryptKey derivate its password via PBKDF2_SHA3()
   // - we use PBKDF2 over SHA-3 in 256-bit, for a future-proof derivation
+  // - default 1024 value takes around 0.5 millisecond to compute, so is safe
+  // against most brute-force attacks
   // - if you set 0, it will use the mORMot 1.18 deprecated Sha256Weak() function
   ProtocolAesRounds: integer = 1024;
 
@@ -1349,8 +1351,8 @@ begin
   SetEncryptKeyAes(aKey, aKeySize);
 end;
 
-constructor TWebSocketProtocolBinary.Create(const aUri: RawUtf8; aServer:
-  boolean; const aKey: RawUtf8; aCompressed: boolean);
+constructor TWebSocketProtocolBinary.Create(const aUri: RawUtf8;
+  aServer: boolean; const aKey: RawUtf8; aCompressed: boolean);
 begin
   Create(aUri, aCompressed);
   SetEncryptKey(aServer, aKey);
