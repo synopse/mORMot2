@@ -4206,7 +4206,10 @@ end;
 
 function ClassNameShort(Instance: TObject): PShortString;
 begin
-  result := PPointer(PPtrInt(Instance)^ + vmtClassName)^;
+  if Instance = nil then
+    result := @NULCHAR // avoid GPF
+  else
+    result := PPointer(PPtrInt(Instance)^ + vmtClassName)^;
 end;
 
 procedure ClassToText(C: TClass; var result: RawUtf8);
@@ -4214,7 +4217,7 @@ var
   P: PShortString;
 begin
   if C = nil then
-    result := ''
+    result := '' // avoid GPF
   else
   begin
     P := PPointer(PtrInt(PtrUInt(C)) + vmtClassName)^;

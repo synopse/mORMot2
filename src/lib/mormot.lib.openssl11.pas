@@ -3050,7 +3050,7 @@ end;
 
 
 initialization
-  // register the OpenSSL TLS layer factory for TCrtSocket if no SChannel set
+  // register the OpenSSL TLS layer factory for TCrtSocket (if no SChannel set)
   if not Assigned(NewNetTLS) then
     @NewNetTLS := @OpenSslNewNetTLS;
 

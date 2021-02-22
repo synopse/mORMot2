@@ -680,7 +680,7 @@ function FormatUtf8(const Format: RawUtf8;
 type
   /// JSON-capable TBaseWriter inherited class
   // - in addition to TBaseWriter, will handle JSON serialization of any
-  // kind of value, including objects
+  // kind of value, including classes
   TTextWriter = class(TBaseWriter)
   protected
     // used by AddCRAndIndent for enums, sets and T*ObjArray comment of values
@@ -4688,145 +4688,104 @@ end;
 function FormatUtf8(const Format: RawUtf8; const Args, Params: array of const;
   JsonFormat: boolean): RawUtf8;
 var
-  i, tmpN, L, A, P, len: PtrInt;
-  isParam: AnsiChar;
-  tmp: TRawUtf8DynArray;
-  inlin: set of 0..255;
+  A, P: PtrInt;
   F, FDeb: PUtf8Char;
-  WasString: boolean;
+  notString: boolean;
+  isParam: AnsiChar;
+  toquote: TTempUtf8;
+  temp: TTextWriterStackBuffer;
 const
   NOTTOQUOTE: array[boolean] of set of 0..31 = (
     [vtBoolean, vtInteger, vtInt64 {$ifdef FPC} , vtQWord {$endif},
      vtCurrency, vtExtended],
     [vtBoolean, vtInteger, vtInt64 {$ifdef FPC} , vtQWord {$endif},
      vtCurrency, vtExtended, vtVariant]);
-label
-  Txt;
 begin
   if (Format = '') or
      ((high(Args) < 0) and
       (high(Params) < 0)) then
-  begin
     // no formatting to process, but may be a const
     // -> make unique since e.g. _JsonFmt() will parse it in-place
-    FastSetString(result, pointer(Format), length(Format));
-    exit;
-  end;
-  if high(Params) < 0 then
-  begin
+    FastSetString(result, pointer(Format), length(Format))
+  else if high(Params) < 0 then
     // faster function with no ?
-    FormatUtf8(Format, Args, result);
-    exit;
-  end;
-  if Format = '%' then
-  begin
+    FormatUtf8(Format, Args, result)
+  else if Format = '%' then
     // optimize raw conversion
-    VarRecToUtf8(Args[0], result);
-    exit;
-  end;
-  tmpN := (length(Args) + length(Params)) * 2 + 1;
-  i := (tmpN shr 3) + 1;
-  if i <= SizeOf(inlin) then
-    FillCharFast(inlin, i, 0)
+    VarRecToUtf8(Args[0], result)
   else
-    raise EJSONException.Create('Too many parameters for FormatUtf8');
-  SetLength(tmp, tmpN);
-  tmpN := 0;
-  L := 0;
-  A := 0;
-  P := 0;
-  F := pointer(Format);
-  while F^ <> #0 do
-  begin
-    if (F^ <> '%') and
-       (F^ <> '?') then
-    begin
-      // handle plain text betweeb % ? markers
-      FDeb := F;
-      while not (F^ in [#0, '%', '?']) do
-        inc(F);
-Txt:  len := F - FDeb;
-      if len > 0 then
+    // handle any number of parameters with minimal memory allocations
+    with TTextWriter.CreateOwnedStream(temp) do
+    try
+      A := 0;
+      P := 0;
+      F := pointer(Format);
+      while F^ <> #0 do
       begin
-        inc(L, len);
-        FastSetString(tmp[tmpN], FDeb, len); // add inbetween text
-        inc(tmpN);
-      end;
-    end;
-    if F^ = #0 then
-      break;
-    isParam := F^;
-    inc(F); // jump '%' or '?'
-    if (isParam = '%') and
-       (A <= high(Args)) then
-    begin
-      // handle % substitution
-      VarRecToUtf8(Args[A], tmp[tmpN]);
-      inc(A);
-      if tmp[tmpN] <> '' then
-      begin
-        inc(L, length(tmp[tmpN]));
-        inc(tmpN);
-      end;
-    end
-    else if (isParam = '?') and
-            (P <= high(Params)) then
-    begin
-      // handle ? substitution
-      if JsonFormat and
-         (Params[P].VType = vtVariant) then
-        VariantSaveJson(Params[P].VVariant^, twJsonEscape, tmp[tmpN])
-      else
-      begin
-        VarRecToUtf8(Params[P], tmp[tmpN]);
-        WasString := not (Params[P].VType in NOTTOQUOTE[JsonFormat]);
-        if WasString then
-          if JsonFormat then
-            QuotedStrJson(tmp[tmpN], tmp[tmpN])
-          else
-            tmp[tmpN] := QuotedStr(tmp[tmpN], '''');
-        if not JsonFormat then
+        if (F^ <> '%') and
+           (F^ <> '?') then
         begin
-          inc(L, 4); // space for :():
-          include(inlin, tmpN);
+          // handle plain text between % ? markers
+          FDeb := F;
+          repeat
+            inc(F);
+          until F^ in [#0, '%', '?'];
+          AddNoJsonEscape(FDeb, F - FDeb);
+          if F^ = #0 then
+            break;
+        end;
+        isParam := F^;
+        inc(F); // jump '%' or '?'
+        if (isParam = '%') and
+           (A <= high(Args)) then
+        begin
+          // handle % substitution
+          if Args[A].VType = vtObject then
+            AddShort(ClassNameShort(Args[A].VObject)^)
+          else
+            Add(Args[A]);
+          inc(A);
+        end
+        else if (isParam = '?') and
+                (P <= high(Params)) then
+        begin
+          // handle ? substitution
+          notString := Params[P].VType in NOTTOQUOTE[JsonFormat];
+          if JsonFormat then
+            if notString then
+              Add(Params[P], twJsonEscape) // twJsonEscape needed for variant
+            else
+            begin
+              Add('"');
+              Add(Params[P], twJsonEscape);
+              Add('"');
+            end
+          else
+          begin
+            Add(':', '('); // markup for SQL parameter binding
+            if notString then
+              Add(Params[P])
+            else
+            begin
+              VarRecToTempUtf8(Params[P], toquote);
+              AddQuotedStr(toquote.Text, ''''); // SQL double quotes
+              if toquote.TempRawUtf8 <> nil then
+                RawUtf8(toquote.TempRawUtf8) := ''; // release temp memory
+            end;
+            Add(')', ':');
+          end;
+          inc(P);
+        end
+        else
+        begin
+          // no more available Args or Params -> add all remaining text
+          AddNoJsonEscape(F, StrLen(F));
+          break;
         end;
       end;
-      inc(P);
-      inc(L, length(tmp[tmpN]));
-      inc(tmpN);
-    end
-    else if F^ <> #0 then
-    begin
-      // no more available Args -> add all remaining text
-      FDeb := F;
-      repeat
-        inc(F)
-      until F^ = #0;
-      goto Txt;
-    end;
-  end;
-  if L = 0 then
-    exit;
-  if tmpN > length(tmp) then
-    raise EJSONException.Create('FormatUtf8 tmpN?'); // paranoid
-  FastSetString(result, nil, L);
-  F := pointer(result);
-  for i := 0 to tmpN - 1 do
-    if tmp[i] <> '' then
-    begin
-      if byte(i) in inlin then
-      begin
-        PWord(F)^ := ord(':') + ord('(') shl 8;
-        inc(F, 2);
-      end;
-      L := PStrLen(PAnsiChar(pointer(tmp[i])) - _STRLEN)^;
-      MoveFast(pointer(tmp[i])^, F^, L);
-      inc(F, L);
-      if byte(i) in inlin then
-      begin
-        PWord(F)^ := ord(')') + ord(':') shl 8;
-        inc(F, 2);
-      end;
+      SetText(result);
+    finally
+      Free;
     end;
 end;
 
