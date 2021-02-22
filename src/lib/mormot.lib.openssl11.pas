@@ -2923,10 +2923,10 @@ begin
       fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
   end;
   if Context.CipherList = '' then
-    SSL_CTX_set_cipher_list(fCtx, SAFE_CIPHERLIST[ cfAESNI in CpuFeatures ])
-  else
-    EOpenSslClient.Check(self, 'AfterConnection',
-      SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)));
+    Context.CipherList := SAFE_CIPHERLIST[
+      {$ifdef CPUINTEL} cfAESNI in CpuFeatures {$else} false {$endif} ];
+  EOpenSslClient.Check(self, 'AfterConnection',
+    SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)));
   SSL_CTX_set_min_proto_version(fCtx, TLS1_2_VERSION); // no SSL3 TLS1 TLS1.1
   fSsl := SSL_new(fCtx);
   SSL_set_tlsext_host_name(fSsl, ServerAddress); // SNI field

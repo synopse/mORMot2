@@ -1807,7 +1807,7 @@ begin
   until false;
   // return generic SQL statement, with ? place-holders and params in Values[]
   Gen^ := #0; // as SetLength(), but with no memory realloc
-  PStrLen(PAnsiChar(PtrUInt(result)) - _STRLEN)^ := Gen - pointer(result);
+  PStrLen(PAnsiChar(pointer(result)) - _STRLEN)^ := Gen - pointer(result);
   inc(maxParam);
 end;
 

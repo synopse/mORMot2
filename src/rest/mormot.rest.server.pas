@@ -2782,7 +2782,7 @@ begin
   j := length(Server.fModel.Root);
   if (i + j > length(Call^.Url)) or
      not (P[i + j] in [#0, '/', '?']) or
-     not IdemPropNameUSameLen(P + i, pointer(Server.fModel.Root), j) then
+     not IdemPropNameUSameLenNotNull(P + i, pointer(Server.fModel.Root), j) then
   begin
     // URI do not start with Model.Root -> caller can try another TRestServer
     result := False;

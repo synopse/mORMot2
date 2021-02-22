@@ -3397,20 +3397,15 @@ end;
 
 function IdemPropNameUSmallNotVoid(P1, P2, P1P2Len: PtrInt): boolean;
   {$ifdef HASINLINE}inline;{$endif}
-label
-  zero;
 begin
   inc(P1P2Len, P1);
   dec(P2, P1);
   repeat
-    if (PByte(P1)^ xor ord(PAnsiChar(P1)[P2])) and $df <> 0 then
-      goto zero;
+    result := (PByte(P1)^ xor ord(PAnsiChar(P1)[P2])) and $df = 0;
+    if not result then
+      exit;
     inc(P1);
   until P1 >= P1P2Len;
-  result := true;
-  exit;
-zero:
-  result := false;
 end;
 
 function FindShortStringListExact(List: PShortString; MaxValue: integer;
@@ -6438,7 +6433,7 @@ begin
     for result := 0 to ValuesCount do
       if (PtrUInt(Values^) <> 0) and
          (PStrLen(PtrUInt(Values^) - _STRLEN)^ = ValueLen) and
-         IdemPropNameUSameLen(pointer(Values^), pointer(Value), ValueLen) then
+         IdemPropNameUSameLenNotNull(pointer(Values^), pointer(Value), ValueLen) then
         exit
       else
         inc(Values);

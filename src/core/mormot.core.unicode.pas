@@ -1033,8 +1033,8 @@ function IdemPropNameU(const P1: RawUtf8; P2: PUtf8Char; P2Len: PtrInt): boolean
 // - if P1 and P2 are RawUtf8, you should better call overloaded function
 // IdemPropNameU(const P1,P2: RawUtf8), which would be slightly faster by
 // using the length stored before the actual text buffer of each RawUtf8
-function IdemPropNameUSameLen(P1, P2: PUtf8Char; P1P2Len: PtrInt): boolean;
-  {$ifndef OSANDROID}{$ifdef HASINLINE}inline;{$endif}{$endif}
+function IdemPropNameUSameLenNotNull(P1, P2: PUtf8Char; P1P2Len: PtrInt): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// case insensitive comparison of ASCII 7-bit identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
@@ -4108,30 +4108,16 @@ end;
 
 { **************** Text Case-(in)sensitive Conversion and Comparison }
 
-function IdemPropNameUSameLen(P1, P2: PUtf8Char; P1P2Len: PtrInt): boolean;
-label
-  zero;
+function IdemPropNameUSameLenNotNull(P1, P2: PUtf8Char; P1P2Len: PtrInt): boolean;
 begin
-  P1P2Len := PtrInt(@PAnsiChar(P1)[P1P2Len - SizeOf(cardinal)]);
-  if P1P2Len >= PtrInt(PtrUInt(P1)) then
-    repeat // case-insensitive compare 4 bytes per loop
-      if (PCardinal(P1)^ xor PCardinal(P2)^) and $dfdfdfdf <> 0 then
-        goto zero;
-      inc(P1, SizeOf(cardinal));
-      inc(P2, SizeOf(cardinal));
-    until P1P2Len < PtrInt(PtrUInt(P1));
-  inc(P1P2Len, SizeOf(cardinal));
+  inc(PtrUInt(P1P2Len), PtrUInt(P1));
   dec(PtrUInt(P2), PtrUInt(P1));
-  if PtrInt(PtrUInt(P1)) < P1P2Len then
-    repeat
-      if (ord(P1^) xor ord(P2[PtrUInt(P1)])) and $df <> 0 then
-        goto zero;
-      inc(P1);
-    until PtrInt(PtrUInt(P1)) >= P1P2Len;
-  result := true;
-  exit;
-zero:
-  result := false;
+  repeat
+    result := (ord(P1^) xor ord(P2[PtrUInt(P1)])) and $df = 0;
+    if not result then
+      exit;
+    inc(P1);
+  until PtrInt(PtrUInt(P1)) >= P1P2Len;
 end;
 
 function PropNameValid(P: PUtf8Char): boolean;
@@ -4169,34 +4155,47 @@ end;
 
 function IdemPropName(const P1, P2: shortstring): boolean;
 begin
-  if P1[0] = P2[0] then
-    result := IdemPropNameUSameLen(@P1[1], @P2[1], ord(P2[0]))
-  else
-    result := false;
+  result := (P1[0] = P2[0]) and
+            ((P1[0] = #0) or
+             IdemPropNameUSameLenNotNull(@P1[1], @P2[1], ord(P2[0])));
 end;
 
 function IdemPropName(const P1: shortstring; P2: PUtf8Char; P2Len: PtrInt): boolean;
 begin
-  if ord(P1[0]) = P2Len then
-    result := IdemPropNameUSameLen(@P1[1], P2, P2Len)
-  else
-    result := false;
+  result := (ord(P1[0]) = P2Len) and
+            ((P2Len = 0) or
+             IdemPropNameUSameLenNotNull(@P1[1], P2, P2Len));
 end;
 
 function IdemPropName(P1, P2: PUtf8Char; P1Len, P2Len: PtrInt): boolean;
 begin
-  if P1Len = P2Len then
-    result := IdemPropNameUSameLen(P1, P2, P2Len)
-  else
-    result := false;
+  result := (P1Len = P2Len) and
+            ((P2Len = 0) or
+             IdemPropNameUSameLenNotNull(P1, P2, P2Len));
 end;
 
 function IdemPropNameU(const P1: RawUtf8; P2: PUtf8Char; P2Len: PtrInt): boolean;
 begin
-  if length(P1) = P2Len then
-    result := IdemPropNameUSameLen(pointer(P1), P2, P2Len)
+  if PtrUInt(P1) <> 0 then
+    result := (PStrLen(PAnsiChar(pointer(P1)) - _STRLEN)^ = P2Len) and
+              IdemPropNameUSameLenNotNull(pointer(P1), pointer(P2), P2Len)
   else
-    result := false;
+    result := P2Len = 0;
+end;
+
+function IdemPropNameU(const P1, P2: RawUtf8): boolean;
+var
+  L: PtrInt;
+begin
+  if (PtrUInt(P1) <> 0) and
+     (PtrUInt(P2) <> 0) then
+  begin
+    L := PStrLen(PAnsiChar(pointer(P1)) - _STRLEN)^;
+    result := (PStrLen(PAnsiChar(pointer(P2)) - _STRLEN)^ = L) and
+      IdemPropNameUSameLenNotNull(pointer(P1), pointer(P2), L);
+  end
+  else
+    result := pointer(P1) = pointer(P2);
 end;
 
 function IdemPChar(p: PUtf8Char; up: PAnsiChar): boolean;
@@ -5469,22 +5468,11 @@ Next: // find beginning of next word
   until U = nil;
 end;
 
-function IdemPropNameU(const P1, P2: RawUtf8): boolean;
-var
-  L: PtrInt;
-begin
-  L := length(P1);
-  if length(P2) = L then
-    result := IdemPropNameUSameLen(pointer(P1), pointer(P2), L)
-  else
-    result := false;
-end;
-
 function UpperCopy255(dest: PAnsiChar; const source: RawUtf8): PAnsiChar;
 begin
   if source <> '' then
-    result := UpperCopy255Buf(dest, pointer(source),
-      PStrLen(PAnsiChar(pointer(source)) - _STRLEN)^)
+    result := UpperCopy255Buf(
+      dest, pointer(source), PStrLen(PAnsiChar(pointer(source)) - _STRLEN)^)
   else
     result := dest;
 end;

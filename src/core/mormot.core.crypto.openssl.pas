@@ -834,7 +834,7 @@ end;
 
 function TOpenSslDigestAbstract.DigestHex: RawUtf8;
 begin
-  BinToHexLower(@fDigestValue, Digest(nil), result);
+  BinToHexLower(@fDigestValue, Digest(nil), result{%H-});
 end;
 
 
@@ -1081,7 +1081,7 @@ begin
     if (EVP_DigestVerifyInit(ctx, nil, md, nil, pkey) = OPENSSLSUCCESS) and
        (EVP_DigestVerify(ctx, Signature, SignatureLen,
           Message, MessageLen) = OPENSSLSUCCESS) then
-      result := true;
+      result := true {else WritelnSSL_error};
   finally
     EVP_MD_CTX_free(ctx);
     EVP_PKEY_free(pkey);

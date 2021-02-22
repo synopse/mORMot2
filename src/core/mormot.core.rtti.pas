@@ -476,9 +476,6 @@ type
     /// store an enumeration value from its ordinal representation
     procedure SetEnumFromOrdinal(out Value; Ordinal: PtrUInt);
       {$ifdef HASINLINE}inline;{$endif}
-    /// retrieve the ordinal representation of an enumeration Value pointer
-    function GetOrdinalFromEnum(Value: pointer): PtrUInt;
-      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// RTTI of a record/object type definition (managed) field
@@ -2836,11 +2833,6 @@ begin
   ToRttiOrd(RttiOrd, @Value, Ordinal);
 end;
 
-function TRttiEnumType.GetOrdinalFromEnum(Value: pointer): PtrUInt;
-begin
-  result := 0;
-  ToRttiOrd(RttiOrd, @result, PPtrInt(Value)^); // no need to handle sign
-end;
 
 
 { TRttiInterfaceTypeData }
@@ -6352,7 +6344,7 @@ end;
 { TRttiCustom }
 
 type
-  EHook = class(Exception)
+  EHook = class(Exception) // to access @Message pointe
   public
     function MessageOffset: PtrInt; // for Delphi
   end;
@@ -6974,7 +6966,7 @@ nxt:  Pairs := @Pairs[2]; // PRttiInfo/TRttiCustom pairs
       if PAnsiChar(Pairs) >= PEnd then
         break;
     end
-    else if not IdemPropNameUSameLen(Name, @s^.RawName[1], NameLen) then
+    else if not IdemPropNameUSameLenNotNull(Name, @s^.RawName[1], NameLen) then
       goto nxt
     else
     begin

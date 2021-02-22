@@ -1965,7 +1965,7 @@ end;
 function TProtocolAes.Decrypt(const aEncrypted: RawByteString;
   out aPlain: RawByteString): TProtocolResult;
 begin
-  EnterCriticalSection(fSafe);;
+  EnterCriticalSection(fSafe);
   try
     try
       aPlain := fAes[false].DecryptPkcs7(aEncrypted, {iv=}true, {raise=}false);

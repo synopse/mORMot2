@@ -171,7 +171,7 @@ uses
 {$endif OSWINDOWS}
 
 type
-  // class hooks to force DMBS property for TTestExternalDatabase.AutoAdaptSQL
+  // class hooks to access DMBS property for TTestExternalDatabase.AutoAdaptSQL
   TSqlDBConnectionPropertiesHook = class(TSqlDBConnectionProperties);
   TRestStorageExternalHook = class(TRestStorageExternal);
 

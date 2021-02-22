@@ -5082,7 +5082,7 @@ function FindNonVoidRawUtf8I(n: PPtrInt; name: PUtf8Char; len: TStrLen;
 begin
   for result := 0 to count - 1 do
     if (PStrLen(n^ - _STRLEN)^ = len) and
-       IdemPropNameUSameLen(pointer(n^), name, len) then
+       IdemPropNameUSameLenNotNull(pointer(n^), name, len) then
       exit
     else
       inc(n);

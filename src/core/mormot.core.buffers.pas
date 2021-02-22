@@ -7443,7 +7443,7 @@ begin
   if sourcelen = 0 then
     exit;
   sourcelen := EscapeBuffer(source, pointer(result), sourcelen, sourcelen * 3) - pointer(result);
-  // don't call the MM which may move the data: just adjust length()
+  // don't call the MM which may move the data -> just adjust length()
   PStrLen(PAnsiChar(pointer(result)) - _STRLEN)^ := sourcelen;
 end;
 

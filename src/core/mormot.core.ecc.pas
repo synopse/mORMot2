@@ -1219,10 +1219,12 @@ type
     fOwned: set of (ownPKI, ownPrivate);
     fCertificateValidity: TEccValidity;
     fRndA, fRndB: THash128;
+    // RX/TX AES encryption engines
     fAes: array[boolean] of TAesAbstract;
+    // RX/TX sequence numbers against replay attack
     fkM: array[boolean] of THash256Rec;
-    // contains inc(PInt64(@aKey)^) to maintain RX/TX sequence number
-    procedure SetKey(aEncrypt: boolean);
+    procedure SetIVAndMacNonce(aEncrypt: boolean);
+    procedure IncKM(aEncrypt: boolean); {$ifdef HASINLINE} inline; {$endif}
     procedure ComputeMAC(aEncrypt: boolean; aEncrypted: pointer; aLen: integer;
       out aMAC: THash256Rec);
     // raw ECDHE functions used by ProcessHandshake
@@ -3541,7 +3543,7 @@ const
   ED: array[boolean] of string[7] = (
     'Decrypt', 'Encrypt');
 
-procedure TEcdheProtocol.SetKey(aEncrypt: boolean);
+procedure TEcdheProtocol.SetIVAndMacNonce(aEncrypt: boolean);
 begin
   if fAes[aEncrypt] = nil then
     raise EECCException.CreateUtf8(
@@ -3552,6 +3554,22 @@ begin
       raise EECCException.CreateUtf8(
         '%.%: macDuringEF not available in %/%',
         [self, ED[aEncrypt], ToText(fAlgo.ef)^, fAes[aEncrypt]]);
+end;
+
+procedure TEcdheProtocol.IncKM(aEncrypt: boolean);
+begin
+  with fkM[aEncrypt] do
+  begin
+    inc(q[0]);
+    if q[0] <> 0 then
+      exit;
+    inc(q[1]);
+    if q[1] <> 0 then
+      exit;
+    inc(q[2]);
+    if q[2] = 0 then
+      inc(q[3]);
+  end;
 end;
 
 procedure TEcdheProtocol.ComputeMAC(aEncrypt: boolean;
@@ -3591,16 +3609,8 @@ begin
       '%.%: ComputeMAC %?', [self, ED[aEncrypt], ToText(fAlgo.mac)^]);
   end;
   // always increase sequence number against replay attacks
-  with fkM[aEncrypt] do
-    for i := 0 to 3 do
-    begin
-      inc(q[i]);
-      if q[i] <> 0 then
-        break;
-    end;
+  IncKM(aEncrypt);
 end;
-
-type TAesHook = class(TAesAbstract);
 
 procedure TEcdheProtocol.Encrypt(const aPlain: RawByteString;
   out aEncrypted: RawByteString);
@@ -3609,13 +3619,13 @@ var
 begin
   fSafe.Lock;
   try
-    SetKey({encrypt=}true);
+    SetIVAndMacNonce({encrypt=}true);
     len := fAes[true].EncryptPkcs7Length(length(aPlain), false);
     SetString(aEncrypted, nil, len + sizeof(THash256)); // append a trailing MAC
     // encrypt the input
     fAes[true].EncryptPkcs7Buffer(
       Pointer(aPlain), pointer(aEncrypted), length(aPlain), len, false);
-    // compute and store the MAC
+    // compute and store the MAC, calling IncKM(true)
     ComputeMac({encrypt=}true, pointer(aEncrypted), len,
       PHash256Rec(@PByteArray(aEncrypted)[len])^);
   finally
@@ -3627,7 +3637,7 @@ function TEcdheProtocol.Decrypt(const aEncrypted: RawByteString;
   out aPlain: RawByteString): TProtocolResult;
 var
   P: PAnsiChar absolute aEncrypted;
-  len, i: PtrInt;
+  len: PtrInt;
   mac: THash256Rec;
 begin
   result := sprInvalidMAC;
@@ -3636,22 +3646,16 @@ begin
     exit;
   fSafe.Lock;
   try
-    SetKey({encrypt=}false);
+    SetIVAndMacNonce({encrypt=}false);
     // decrypt the input
     aPlain := fAes[false].DecryptPkcs7Buffer(P, len, false, false);
     if aPlain = '' then
     begin
-      with fkM[false] do
-        for i := 0 to 3 do
-        begin
-          inc(q[i]); // don't compute MAC, but increase sequence
-          if q[i] <> 0 then
-            break;
-        end;
+      IncKM(false); // no MAC, but increase sequence on void/invalid message
       exit;
     end;
-    // validate with MAC stored after the input
-    ComputeMac({encrypt=}false, P, len, mac); // also increase the CTR
+    // validate with the MAC stored after the input, calling IncKM(false)
+    ComputeMac({encrypt=}false, P, len, mac);
     if fAlgo.mac = macDuringEF then
     begin
       // AES-GCM requires to call a specific decryption method
@@ -3674,7 +3678,7 @@ begin
   end;
   fSafe.Lock;
   try
-    SetKey({encrypt=}false);
+    SetIVAndMacNonce({encrypt=}false);
     if fAes[false].MacCheckError(pointer(aEncrypted), length(aEncrypted)) then
       result := sprSuccess
     else

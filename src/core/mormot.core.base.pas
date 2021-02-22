@@ -4194,7 +4194,7 @@ end;
 procedure AppendShortAnsi7String(const buf: RawByteString; var dest: shortstring);
 begin
   if buf <> '' then
-    AppendShortBuffer(pointer(buf), PStrLen(PAnsiChar(pointer(buf)) - _STRLEN)^, dest);
+    AppendShortBuffer(pointer(buf), PStrLen(PtrUInt(buf) - _STRLEN)^, dest);
 end;
 
 function ClassNameShort(C: TClass): PShortString;

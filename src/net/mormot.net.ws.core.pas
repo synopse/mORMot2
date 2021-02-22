@@ -1338,7 +1338,8 @@ end;
 
 { TWebSocketProtocolBinary }
 
-constructor TWebSocketProtocolBinary.Create(const aUri: RawUtf8; aCompressed: boolean);
+constructor TWebSocketProtocolBinary.Create(
+  const aUri: RawUtf8; aCompressed: boolean);
 begin
   inherited Create('synopsebin', aUri);
   fCompressed := aCompressed;
@@ -1358,9 +1359,11 @@ begin
   SetEncryptKey(aServer, aKey);
 end;
 
-function TWebSocketProtocolBinary.Clone(const aClientUri: RawUtf8): TWebSocketProtocol;
+function TWebSocketProtocolBinary.Clone(
+  const aClientUri: RawUtf8): TWebSocketProtocol;
 begin
-  result := TWebSocketProtocolBinary.Create(fUri, {dummykey=}self, 0, fCompressed);
+  result := TWebSocketProtocolBinary.Create(
+    fUri, {dummykey=}self, 0, fCompressed);
   TWebSocketProtocolBinary(result).fSequencing := fSequencing;
   if fEncryption <> nil then
     result.fEncryption := fEncryption.Clone;

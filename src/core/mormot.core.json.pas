@@ -1069,7 +1069,7 @@ type
     // matched an aEnumTypeInfo item
     // - returns false if no match was found
     function ValueEnum(const aName: RawUtf8; aEnumTypeInfo: PRttiInfo;
-      out aEnum; aEnumDefault: byte = 0): boolean; overload;
+      out aEnum; aEnumDefault: PtrUInt = 0): boolean; overload;
     /// returns all values, as CSV or INI content
     function AsCsv(const KeySeparator: RawUtf8 = '=';
       const ValueSeparator: RawUtf8 = #13#10; const IgnoreKey: RawUtf8 = ''): RawUtf8;
@@ -3152,10 +3152,9 @@ end;
 
 function TValuePUtf8Char.Idem(const Text: RawUtf8): boolean;
 begin
-  if length(Text) = ValueLen then
-    result := IdemPropNameUSameLen(pointer(Text), Value, ValueLen)
-  else
-    result := false;
+  result := (length(Text) = ValueLen) and
+            ((ValueLen = 0) or
+             IdemPropNameUSameLenNotNull(pointer(Text), Value, ValueLen));
 end;
 
 
@@ -4725,8 +4724,14 @@ begin
     VarRecToUtf8(Args[0], result);
     exit;
   end;
+  tmpN := (length(Args) + length(Params)) * 2 + 1;
+  i := (tmpN shr 3) + 1;
+  if i <= SizeOf(inlin) then
+    FillCharFast(inlin, i, 0)
+  else
+    raise EJSONException.Create('Too many parameters for FormatUtf8');
+  SetLength(tmp, tmpN);
   tmpN := 0;
-  FillCharFast(inlin, SizeOf(inlin), 0);
   L := 0;
   A := 0;
   P := 0;
@@ -4744,8 +4749,6 @@ Txt:  len := F - FDeb;
       if len > 0 then
       begin
         inc(L, len);
-        if tmpN = length({%H-}tmp) then
-          SetLength(tmp, tmpN + 8);
         FastSetString(tmp[tmpN], FDeb, len); // add inbetween text
         inc(tmpN);
       end;
@@ -4758,8 +4761,6 @@ Txt:  len := F - FDeb;
        (A <= high(Args)) then
     begin
       // handle % substitution
-      if tmpN = length(tmp) then
-        SetLength(tmp, tmpN + 8);
       VarRecToUtf8(Args[A], tmp[tmpN]);
       inc(A);
       if tmp[tmpN] <> '' then
@@ -4772,8 +4773,6 @@ Txt:  len := F - FDeb;
             (P <= high(Params)) then
     begin
       // handle ? substitution
-      if tmpN = length(tmp) then
-        SetLength(tmp, tmpN + 8);
       if JsonFormat and
          (Params[P].VType = vtVariant) then
         VariantSaveJson(Params[P].VVariant^, twJsonEscape, tmp[tmpN])
@@ -4808,10 +4807,8 @@ Txt:  len := F - FDeb;
   end;
   if L = 0 then
     exit;
-  if not JsonFormat and
-     (tmpN > SizeOf(inlin) shl 3) then
-    raise EJSONException.CreateUtf8(
-      'Too many parameters for FormatUtf8(): %>%', [tmpN, SizeOf(inlin) shl 3]);
+  if tmpN > length(tmp) then
+    raise EJSONException.Create('FormatUtf8 tmpN?'); // paranoid
   FastSetString(result, nil, L);
   F := pointer(result);
   for i := 0 to tmpN - 1 do
@@ -8071,11 +8068,12 @@ begin
 end;
 
 function TSynNameValue.ValueEnum(const aName: RawUtf8; aEnumTypeInfo: PRttiInfo;
-  out aEnum; aEnumDefault: byte): boolean;
+  out aEnum; aEnumDefault: PtrUInt): boolean;
 var
   rtti: PRttiEnumType;
   v: RawUtf8;
-  err, i: integer;
+  err: integer;
+  i: PtrInt;
 begin
   result := false;
   rtti := aEnumTypeInfo.EnumBaseType;
@@ -8087,7 +8085,7 @@ begin
     exit;
   i := GetInteger(pointer(v), err);
   if (err <> 0) or
-     (i < 0) then
+     (PtrUInt(i) > PtrUInt(rtti.MaxValue)) then
     i := rtti.GetEnumNameValue(pointer(v), length(v), {alsotrimleft=}true);
   if i >= 0 then
   begin
