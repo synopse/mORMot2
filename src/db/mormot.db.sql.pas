@@ -5943,9 +5943,10 @@ var
   ft: TSqlDBFieldType;
   ColTypes: TSqlDBFieldTypeDynArray;
   Null: TByteDynArray;
+  tmp: TTextWriterStackBuffer;
 begin
   result := 0;
-  W := TBufferWriter.Create(Dest);
+  W := TBufferWriter.Create(Dest, @tmp, SizeOf(tmp));
   try
     W.WriteVarUInt32(FETCHALLTOBINARY_MAGIC);
     FMax := ColumnCount;

@@ -288,10 +288,10 @@ implementation
   -----------------------------------
 
   The allocator handles the following families of memory blocks:
-  - TINY   <= 128 B (or <= 256 B for FPCMM_BOOST) - not existing in FastMM4
+  - TINY <= 128 B (or <= 256 B for FPCMM_BOOST) - not existing in FastMM4
     Round-robin distribution into several arenas, fed from medium blocks
     (fair scaling from multi-threaded calls, with no threadvar nor GC involved)
-  - SMALL  <= 2600 B
+  - SMALL <= 2600 B
     Single arena per block size, fed from medium blocks
   - MEDIUM <= 256 KB
     Pool of bitmap-marked chunks, fed from 1MB of OS mmap/virtualalloc
@@ -570,9 +570,10 @@ const
   DropMediumAndLargeFlagsMask = -16;
   ExtractMediumAndLargeFlagsMask = 15;
 
-  // use pause before ReleaseCore API call when spinning locks
-  // pause is 140 cycles since SkylakeX - see http://tiny.cc/010ioz -> use rdtsc
-  // which has 30 cycles latency; ring3 to ring 0 transition is 1000 cycles
+  // FPCMM_PAUSE uses "pause" opcode before ReleaseCore API call when spinning locks
+  // - pause is 140 cycles since SkylakeX - see http://tiny.cc/010ioz
+  // - ring3 to ring 0 transition is 1000 cycles
+  // -> default is to use rdtsc which has 30 cycles latency - enough for waiting
   {$ifdef FPCMM_PAUSE}
   SpinSmallGetmemLockTSC = 1000;
   SpinSmallFreememLockTSC = 1000; // _freemem has more collisions

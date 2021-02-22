@@ -1531,7 +1531,7 @@ begin
         if (s = '') or
            (ByContent and
             (length(s) = fdst.Size) and
-           (DefaultHasher(0, pointer(s), fdst.Size) = HashFile(dst + fdst.Name))) then
+           (cardinal(DefaultHasher(0, pointer(s), fdst.Size)) = HashFile(dst + fdst.Name))) then
           continue;
         FileFromString(s, dst + fdst.Name, false, reftime);
         inc(result);

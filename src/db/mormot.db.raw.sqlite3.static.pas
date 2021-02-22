@@ -127,11 +127,11 @@ var
   // - IV derivation was hardened in revision 1.18.4607 - set TRUE to this
   // global constant to use the former implementation (theoritically slightly
   // less resistant to brute force attacks) and convert existing databases
-  ForceSQLite3LegacyAES: boolean;
+  ForceSQLite3LegacyAes: boolean;
 
   /// global flag to use AES-CTR instead of AES-OFB encryption
   // - on x86_64 our optimized asm is 2.5GB/s instead of 770MB/s
-  ForceSQLite3AESCTR: boolean;
+  ForceSQLite3AesCtr: boolean;
 
 
 
@@ -784,7 +784,7 @@ begin
   iv.c1 := page * 2654435761;
   iv.c2 := page * 2246822519;
   iv.c3 := page * 3266489917;
-  if not ForceSQLite3LegacyAES then
+  if not ForceSQLite3LegacyAes then
     aes^.Encrypt(iv.b); // avoid potential brute force attack
   len := len shr AesBlockShift;
   if page = 1 then
@@ -796,7 +796,7 @@ begin
       if encrypt then
       begin
         plain := PInt64(data + 16)^;
-        if ForceSQLite3AESCTR then
+        if ForceSQLite3AesCtr then
           aes^.DoBlocksCtr(@iv.b, data + 16, data + 16, len - 1)
         else
           aes^.DoBlocksOfb(@iv.b, data + 16, data + 16, len - 1);
@@ -807,7 +807,7 @@ begin
       else
       begin
         PInt64(data + 16)^ := PInt64(data + 8)^;
-        if ForceSQLite3AESCTR then
+        if ForceSQLite3AesCtr then
           aes^.DoBlocksCtr(@iv.b, data + 16, data + 16, len - 1)
         else
           aes^.DoBlocksOfb(@iv.b, data + 16, data + 16, len - 1);
@@ -822,7 +822,7 @@ begin
       FillZero(PHash128(data)^)
   else
     // whole page encryption if not the first one
-    if ForceSQLite3AESCTR then
+    if ForceSQLite3AesCtr then
       aes^.DoBlocksCtr(@iv.b, data, data, len)
     else
       aes^.DoBlocksOfb(@iv.b, data, data, len);

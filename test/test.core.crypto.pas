@@ -30,8 +30,6 @@ type
     procedure CryptData(dpapi: boolean);
     procedure Prng(meta: TAesPrngClass; const name: RawUTF8);
   published
-    /// Adler32 hashing functions
-    procedure _Adler32;
     /// MD5 hashing functions
     procedure _MD5;
     /// SHA-1 hashing functions
@@ -42,12 +40,14 @@ type
     procedure _SHA512;
     /// SHA-3 / Keccak hashing functions
     procedure _SHA3;
-    /// AES encryption/decryption functions
+    /// AES encryption/decryption functions with proper test vectors and OpenSSL
     procedure _AES;
     /// AES-GCM encryption/decryption with authentication
     procedure _AES_GCM;
     /// RC4 encryption function
     procedure _RC4;
+    /// 32-bit, 64-bit and 128-bit hashing functions including AesNiHash variants
+    procedure Hashes;
     /// Base-64 encoding/decoding functions
     procedure _Base64;
     {$ifndef PUREMORMOT2}
@@ -66,6 +66,8 @@ type
     procedure _JWT;
     /// compute some performance numbers, mostly against regression
     procedure Benchmark;
+    /// Cryptography Catalog
+    procedure Catalog;
   end;
 
 
@@ -129,26 +131,32 @@ begin
   CheckEqual(s, '4b007901b765489abead49d926f721d065a429c1');
 end;
 
-function SingleTest(const s: RawByteString; const TDig: TSha256Digest): boolean; overload;
-var
-  SHA: TSha256;
-  Digest: TSha256Digest;
-  i: integer;
-begin
-  // 1. Hash complete RawByteString
-  SHA.Full(pointer(s), length(s), Digest);
-  result := IsEqual(Digest, TDig);
-  if not result then
-    exit;
-  // 2. one update call for all chars
-  SHA.Init;
-  for i := 1 to length(s) do
-    SHA.Update(@s[i], 1);
-  SHA.Final(Digest);
-  result := IsEqual(Digest, TDig);
-end;
 
 procedure TTestCoreCrypto._SHA256;
+
+  procedure SingleTest(const s: RawByteString; const TDig: TSha256Digest);
+  var
+    SHA: TSha256;
+    Digest: TSha256Digest;
+    i: integer;
+  begin
+    // 1. Hash complete RawByteString
+    SHA.Full(pointer(s), length(s), Digest);
+    Check(IsEqual(Digest, TDig));
+    // 2. one update call for all chars
+    SHA.Init;
+    for i := 1 to length(s) do
+      SHA.Update(@s[i], 1);
+    SHA.Final(Digest);
+    Check(IsEqual(Digest, TDig));
+    {$ifdef USE_OPENSSL}
+    if TOpenSslHash.IsAvailable then
+    begin
+      CheckEqual(TOpenSslHash.Hash('sha256', s), Sha256DigestToString(TDig));
+      CheckEqual(TOpenSslHash.Hash('', s), Sha256DigestToString(TDig));
+    end;
+    {$endif USE_OPENSSL}
+  end;
 
   procedure DoTest;
   const
@@ -170,10 +178,15 @@ procedure TTestCoreCrypto._SHA256;
     i: integer;
     sha: TSha256;
   begin
-    Check(SingleTest('abc', D1));
-    Check(SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq', D2));
+    SingleTest('abc', D1);
+    SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq', D2);
     {%H-}Sha256Weak('lagrangehommage', Digest.Lo); // test with len=256>64
     Check(IsEqual(Digest.Lo, D3));
+    {$ifdef USE_OPENSSL}
+    if TOpenSslHmac.IsAvailable then
+      CheckEqual(TOpenSslHmac.Hmac('', 'what do ya want for nothing?', 'Jefe'),
+        '5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843');
+    {$endif USE_OPENSSL}
     PBKDF2_HMAC_SHA256('password', 'salt', 1, Digest.Lo);
     check(Sha256DigestToString(Digest.Lo) =
       '120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b');
@@ -282,6 +295,12 @@ procedure TTestCoreCrypto._SHA512;
       sign.Init(saSha512, password);
       sign.Update(secret);
       Check(sign.final = expected);
+      {$ifdef USE_OPENSSL}
+      if TOpenSslHmac.IsAvailable and
+         (password <> '') then
+        CheckEqual(TOpenSslHmac.Hmac(
+          'sha512', secret, pointer(password), length(password)), expected);
+      {$endif USE_OPENSSL}
     end
     else
     begin
@@ -296,7 +315,7 @@ procedure TTestCoreCrypto._SHA512;
 const
   FOX: RawByteString = 'The quick brown fox jumps over the lazy dog';
 var
-  dig: TSha512Digest;
+  dig: THash512Rec;
   i: integer;
   sha: TSha512;
   c: AnsiChar;
@@ -325,24 +344,33 @@ begin
   sha.Init;
   for i := 1 to length(FOX) do
     sha.Update(@FOX[i], 1);
-  sha.Final(dig);
-  Check(Sha512DigestToString(dig) = '07e547d9586f6a73f73fbac0435ed76951218fb7d0c' +
+  sha.Final(dig.b);
+  Check(Sha512DigestToString(dig.b) = '07e547d9586f6a73f73fbac0435ed76951218fb7d0c' +
     '8d788a309d785436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6');
+  {$ifdef USE_OPENSSL}
+  if TOpenSslHash.IsAvailable then
+    CheckEqual(TOpenSslHash.Hash('sha512', ''),
+      'cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d' +
+      '36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e');
+    CheckEqual(TOpenSslHash.Hash('sha512', FOX),
+      '07e547d9586f6a73f73fbac0435ed76951218fb7d0c8d788a309d785' +
+      '436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6');
+  {$endif USE_OPENSSL}
   c := 'a';
   sha.Init;
   for i := 1 to 1000 do
     sha.Update(@c, 1);
-  sha.Final(dig);
-  Check(Sha512DigestToString(dig) =
+  sha.Final(dig.b);
+  Check(Sha512DigestToString(dig.b) =
     '67ba5535a46e3f86dbfbed8cbbaf0125c76ed549ff8' +
     'b0b9e03e0c88cf90fa634fa7b12b47d77b694de488ace8d9a65967dc96df599727d3292a8d9d447709c97');
   SetLength(temp, 1000);
   FillCharFast(pointer(temp)^, 1000, ord('a'));
-  Check(Sha512(temp) = Sha512DigestToString(dig));
+  Check(Sha512(temp) = Sha512DigestToString(dig.b));
   for i := 1 to 1000000 do
     sha.Update(@c, 1);
-  sha.Final(dig);
-  Check(Sha512DigestToString(dig) =
+  sha.Final(dig.b);
+  Check(Sha512DigestToString(dig.b) =
     'e718483d0ce769644e2e42c7bc15b4638e1f98b13b2' +
     '044285632a803afa973ebde0ff244877ea60a4cb0432ce577c31beb009c5c2c49aa2e4eadb217ad8cc09b');
   Test('', '', 'b936cee86c9f87aa5d3c6f2e84cb5a4239a5fe50480a' +
@@ -358,21 +386,21 @@ begin
     'd513554e1c8cf252c02d470a285a0501bad999bfe943c08f050235d7d68b1da55e63f73b60a57fce', 1);
   Test('password', 'salt', 'd197b1b33db0143e018b12f3d1d1479e6cdebdcc97c5c0f87' +
     'f6902e072f457b5143f30602641b3d55cd335988cb36b84376060ecd532e039b742a239434af2d5', 4096);
-  HMAC_SHA256('Jefe', 'what do ya want for nothing?', PHash256(@dig)^);
-  Check(Sha256DigestToString(PHash256(@dig)^) = '5bdcc146bf60754e6a042426089575c' +
-    '75a003f089d2739839dec58b964ec3843');
-  HMAC_SHA384('Jefe', 'what do ya want for nothing?', PHash384(@dig)^);
-  Check(Sha384DigestToString(PHash384(@dig)^) = 'af45d2e376484031617f78d2b58a6b1' +
+  HMAC_SHA256('Jefe', 'what do ya want for nothing?', dig.Lo);
+  CheckEqual(Sha256DigestToString(dig.Lo),
+    '5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843');
+  HMAC_SHA384('Jefe', 'what do ya want for nothing?', dig.b384);
+  Check(Sha384DigestToString(dig.b384) = 'af45d2e376484031617f78d2b58a6b1' +
     'b9c7ef464f5a01b47e42ec3736322445e8e2240ca5e69e2c78b3239ecfab21649');
-  PBKDF2_HMAC_SHA384('password', 'salt', 4096, PHash384(@dig)^);
-  Check(Sha384DigestToString(PHash384(@dig)^) = '559726be38db125bc85ed7895f6e3cf574c7a01c' +
+  PBKDF2_HMAC_SHA384('password', 'salt', 4096, dig.b384);
+  Check(Sha384DigestToString(dig.b384) = '559726be38db125bc85ed7895f6e3cf574c7a01c' +
     '080c3447db1e8a76764deb3c307b94853fbe424f6488c5f4f1289626');
-  PBKDF2_HMAC_SHA512('passDATAb00AB7YxDTT', 'saltKEYbcTcXHCBxtjD', 1, dig);
-  Check(Sha512DigestToString(dig) = 'cbe6088ad4359af42e603c2a33760ef9d4017a7b2aad10af46' +
+  PBKDF2_HMAC_SHA512('passDATAb00AB7YxDTT', 'saltKEYbcTcXHCBxtjD', 1, dig.b);
+  Check(Sha512DigestToString(dig.b) = 'cbe6088ad4359af42e603c2a33760ef9d4017a7b2aad10af46' +
     'f992c660a0b461ecb0dc2a79c2570941bea6a08d15d6887e79f32b132e1c134e9525eeddd744fa');
   PBKDF2_HMAC_SHA384('passDATAb00AB7YxDTTlRH2dqxDx19GDxDV1zFMz7E6QVqK',
-    'saltKEYbcTcXHCBxtjD2PnBh44AIQ6XUOCESOhXpEp3HrcG', 1, PHash384(@dig)^);
-  Check(Sha384DigestToString(PHash384(@dig)^) =
+    'saltKEYbcTcXHCBxtjD2PnBh44AIQ6XUOCESOhXpEp3HrcG', 1, dig.b384);
+  Check(Sha384DigestToString(dig.b384) =
     '0644a3489b088ad85a0e42be3e7f82500ec189366' +
     '99151a2c90497151bac7bb69300386a5e798795be3cef0a3c803227');
   { // rounds=100000 is slow, so not tested by default
@@ -483,7 +511,7 @@ end;
 procedure TTestCoreCrypto._TAesPNRG;
 begin
   check(TAesPrng.IsAvailable);
-  check(TAesPrngSystem.IsAvailable);
+  check(TSystemPrng.IsAvailable);
   Prng(TAesPrng, 'mORMot');
   {$ifdef USE_OPENSSL}
   Prng(TAesPrngOsl, 'OpenSSL');
@@ -712,60 +740,79 @@ procedure TTestCoreCrypto._JWT;
     one.Free;
   end;
 
-  procedure Benchmark(algo: TSignAlgo);
+  procedure Benchmark(J: TJwtAbstract; N: integer = 1000);
   var
     i: integer;
     tok: RawUtf8;
-    j: TJwtAbstract;
     jwt: TJwtContent;
     tim: TPrecisionTimer;
   begin
-    j := JWT_CLASS[algo].Create('secret', 0, [jrcIssuer, jrcExpirationTime], []);
     try
-      tok := j.Compute([], 'myself');
+      tok := J.Compute([], 'myself');
       tim.Start;
-      for i := 1 to 1000 do
+      for i := 2 to N do
       begin
         jwt.result := jwtWrongFormat;
-        j.Verify(tok, jwt);
+        J.Verify(tok, jwt);
         check(jwt.result = jwtValid);
         check(jwt.reg[jrcIssuer] = 'myself');
       end;
-      NotifyTestSpeed('%', [JWT_TEXT[algo]], 1000, 0, @tim);
+      inc(tok[length(tok) - 5]);
+      jwt.result := jwtWrongFormat;
+      J.Verify(tok, jwt);
+      check(jwt.result = jwtInvalidSignature, 'detection');
+      NotifyTestSpeed('%', [J.Algorithm], N, 0, @tim);
     finally
-      j.Free;
+      J.Free;
     end;
   end;
 
+{$ifdef USE_OPENSSL}
+const
+  OSSL_JWT: array[0..10] of TJwtAbstractOslClass = (
+    TJwtRS256Osl, TJwtRS384Osl, TJwtRS512Osl,
+    TJwtPS256Osl, TJwtPS384Osl, TJwtPS512Osl,
+    TJwtES256Osl, TJwtES384Osl, TJwtES512Osl, TJwtES256KOsl,
+    TJwtEdDSAOsl);
+var
+  priv, pub: RawByteString;
+{$endif USE_OPENSSL}
 var
   i: integer;
   j: TJwtAbstract;
   jwt: TJwtContent;
   secret: TEccCertificateSecret;
   tok: RawUtf8;
-  tim: TPrecisionTimer;
   a: TSignAlgo;
 begin
-  test(TJwtNone.Create([jrcIssuer, jrcExpirationTime], [], 60));
-  test(TJwtNone.Create([jrcIssuer, jrcExpirationTime, jrcIssuedAt], [], 60));
-  test(TJwtNone.Create([jrcIssuer, jrcExpirationTime, jrcIssuedAt, jrcJWTID], [], 60));
-  test(TJwtHS256.Create('sec', 100, [jrcIssuer, jrcExpirationTime], [], 60));
-  test(TJwtHS256.Create('sec', 200, [jrcIssuer, jrcExpirationTime, jrcIssuedAt], [], 60));
-  test(TJwtHS256.Create('sec', 10, [jrcIssuer, jrcExpirationTime, jrcIssuedAt,
-    jrcJWTID], [], 60));
-  j := TJwtHS256.Create('secret', 0, [jrcSubject], []);
+  test(TJwtNone.Create(
+    [jrcIssuer, jrcExpirationTime], [], 60));
+  test(TJwtNone.Create(
+    [jrcIssuer, jrcExpirationTime, jrcIssuedAt], [], 60));
+  test(TJwtNone.Create(
+    [jrcIssuer, jrcExpirationTime, jrcIssuedAt, jrcJWTID], [], 60));
+  test(TJwtHS256.Create(
+    'sec', 100, [jrcIssuer, jrcExpirationTime], [], 60));
+  test(TJwtHS256.Create(
+    'sec', 200, [jrcIssuer, jrcExpirationTime, jrcIssuedAt], [], 60));
+  test(TJwtHS256.Create(
+    'sec', 10, [jrcIssuer, jrcExpirationTime, jrcIssuedAt, jrcJWTID], [], 60));
+  j := TJwtHS256.Create(
+    'secret', 0, [jrcSubject], []);
   try
     jwt.result := jwtWrongFormat;
-    j.Verify('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibm'
-      + 'FtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeF'
-      + 'ONFh7HgQ', jwt); // reference from jwt.io
+    j.Verify(
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibm' +
+      'FtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeF' +
+      'ONFh7HgQ', jwt); // reference from jwt.io
     check(jwt.result = jwtValid);
     check(jwt.reg[jrcSubject] = '1234567890');
     check(jwt.data.U['name'] = 'John Doe');
     check(jwt.data.B['admin']);
-    j.Verify('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibm'
-      + 'FtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeF'
-      + 'ONFh7hgQ', jwt); // altered one char in signature
+    j.Verify(
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibm' +
+      'FtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeF' +
+      'ONFh7hgQ', jwt); // altered one char in signature
     check(jwt.result = jwtInvalidSignature);
     tok := j.Compute(['uid', '{1CCA336D-A78F-4EB6-B701-1DB8E749BD1F}'], '', 'subject');
     j.Verify(tok, jwt);
@@ -787,30 +834,31 @@ begin
     secret.Free;
   end;
   for a := saSha256 to high(a) do
-    Benchmark(a);
+    Benchmark(JWT_CLASS[a].Create(
+      'secret', 0, [jrcIssuer, jrcExpirationTime], []));
   secret := TEccCertificateSecret.CreateNew(nil);
-  j := TJwtES256.Create(secret, [jrcIssuer, jrcExpirationTime], [], 60);
   try
-    tok := j.Compute([], 'myself');
-    tim.Start;
-    for i := 1 to 100 do
-    begin
-      jwt.result := jwtWrongFormat;
-      j.Verify(tok, jwt);
-      check(jwt.result = jwtValid);
-      check(jwt.reg[jrcIssuer] = 'myself');
-    end;
-    NotifyTestSpeed('ES256', 100, 0, @tim);
+    Benchmark(TJwtES256.Create(
+      secret, [jrcIssuer, jrcExpirationTime], [], 60), 100);
   finally
-    j.Free;
     secret.Free;
   end;
+  {$ifdef USE_OPENSSL}
+  for i := 0 to high(OSSL_JWT) do
+    if OSSL_JWT[i].IsAvailable then
+    begin
+      // RSA is very slow at key computing and signing, but fast to verify
+      OSSL_JWT[i].GenerateKeys(priv, pub);
+      Benchmark(OSSL_JWT[i].Create(
+        priv, pub, '', '', [jrcIssuer, jrcExpirationTime], [], 60), 100);
+    end;
+  {$endif USE_OPENSSL}
 end;
 
 type
   TBenchmark = (
     // non cryptographic hashes
-    bCRC32c, bXXHash32, bHash32,
+    bCRC32c, bXXHash32, bHash32, bAesniHash,
     // cryptographic hashes
     bMD5,
     bSHA1, bHMACSHA1, bSHA256, bHMACSHA256,
@@ -818,8 +866,10 @@ type
     bSHA3_256, bSHA3_512,
     // encryption
     bRC4,
-    bAES128CFB, bAES128OFB, bAES128CTR, bAES128CFBCRC, bAES128OFBCRC, bAES128GCM,
-    bAES256CFB, bAES256OFB, bAES256CTR, bAES256CFBCRC, bAES256OFBCRC, bAES256GCM,
+    bAES128CFB, bAES128OFB, bAES128CTR,
+    bAES128CFBCRC, bAES128OFBCRC, bAES128CTRCRC, bAES128GCM,
+    bAES256CFB, bAES256OFB,
+    bAES256CTR, bAES256CFBCRC, bAES256OFBCRC, bAES256CTRCRC, bAES256GCM,
   {$ifdef USE_OPENSSL}
     bAES128CFBOSL, bAES128OFBOSL, bAES128CTROSL, bAES128GCMOSL,
     bAES256CFBOSL, bAES256OFBOSL, bAES256CTROSL, bAES256GCMOSL,
@@ -829,6 +879,7 @@ type
 procedure TTestCoreCrypto.Benchmark;
 const
   bAESLAST = {$ifdef USE_OPENSSL} bAES256GCMOSL {$else} bAES256GCM {$endif};
+  bAESOPENSSL = [ {$ifdef USE_OPENSSL} bAES128CFBOSL .. bAES256GCMOSL {$endif} ];
   SIZ: array[0..4] of integer = (
     8,
     50,
@@ -837,15 +888,15 @@ const
     10000);
   COUNT = 500;
   AESCLASS: array[bAES128CFB.. bAESLAST] of TAesAbstractClass = (
-    TAesCfb, TAesOfb, TAesCtrNist, TAesCfbCrc, TAesOfbCrc, TAesGcm,
-    TAesCfb, TAesOfb, TAesCtrNist, TAesCfbCrc, TAesOfbCrc, TAesGcm
+    TAesCfb, TAesOfb, TAesCtrNist, TAesCfbCrc, TAesOfbCrc, TAesCtrCrc, TAesGcm,
+    TAesCfb, TAesOfb, TAesCtrNist, TAesCfbCrc, TAesOfbCrc, TAesCtrCrc, TAesGcm
   {$ifdef USE_OPENSSL} ,
     TAesCfbOsl, TAesOfbOsl, TAesCtrNistOsl, TAesGcmOsl,
     TAesCfbOsl, TAesOfbOsl, TAesCtrNistOsl, TAesGcmOsl
   {$endif USE_OPENSSL});
   AESBITS: array[bAES128CFB..bAESLAST] of integer = (
-    128, 128, 128, 128, 128, 128,
-    256, 256, 256, 256, 256, 256
+    128, 128, 128, 128, 128, 128, 128,
+    256, 256, 256, 256, 256, 256, 256
   {$ifdef USE_OPENSSL} ,
     128, 128, 128, 128, 256, 256, 256, 256
   {$endif USE_OPENSSL});
@@ -871,7 +922,16 @@ begin
     TXT[b] := LowerCase(TXT[b]);
   for b := low(AES) to high(AES) do
     if AESCLASS[b].IsAvailable then
-      AES[b] := AESCLASS[b].Create(dig{%H-}, AESBITS[b])
+    begin
+      AES[b] := AESCLASS[b].Create(dig{%H-}, AESBITS[b]);
+      ShortStringToAnsi7String(AES[b].AlgoName, TXT[b]);
+      {$ifdef USE_OPENSSL}
+      if b in bAESOPENSSL then
+        TXT[b] := 'openssl ' + TXT[b]
+      else
+      {$endif USE_OPENSSL}
+        TXT[b] := 'mormot ' + TXT[b]
+    end
     else
       AES[b] := nil;
   SHAKE128.InitCypher('secret', SHAKE_128);
@@ -889,6 +949,9 @@ begin
        (b > high(AES)) or
        (AES[b] <> nil) then
     begin
+      if (b = bAesniHash) and
+         not Assigned(AesNiHash32) then
+        continue;
       timer.Start;
       for i := 1 to COUNT do
       begin
@@ -899,6 +962,8 @@ begin
             dig.d0 := xxHash32(0, pointer(data), SIZ[s]);
           bHash32:
             dig.d0 := Hash32(pointer(data), SIZ[s]);
+          bAesniHash:
+            dig.d0 := AesNiHash64(0, pointer(data), SIZ[s]);
           bCRC32c:
             dig.d0 := crc32c(0, pointer(data), SIZ[s]);
           bMD5:
@@ -935,8 +1000,8 @@ begin
           {$ifdef USE_OPENSSL}
           bAES128GCMOSL, bAES256GCMOSL,
           {$endif USE_OPENSSL}
-          bAES128CFBCRC, bAES128OFBCRC, bAES128GCM,
-          bAES256CFBCRC, bAES256OFBCRC, bAES256GCM:
+          bAES128CFBCRC, bAES128OFBCRC, bAES128CTRCRC, bAES128GCM,
+          bAES256CFBCRC, bAES256OFBCRC, bAES256CTRCRC, bAES256GCM:
             AES[b].MacAndCrypt(data, {encrypt=}true);
           bSHAKE128:
             SHAKE128.Cypher(pointer(data), pointer(encrypted), SIZ[s]);
@@ -957,16 +1022,219 @@ begin
     inc(n, COUNT);
   end;
   for b := low(b) to high(b) do
-    AddConsole(format('%d %s in %s i.e. %d/s or %s/s', [n, TXT[b],
-      MicroSecToString(time[b]), (Int64(n) * 1000000) div time[b],
-      KB((Int64(size) * 1000000) div time[b])]));
+    if time[b] <> 0 then
+      AddConsole(format('%d %s in %s i.e. %d/s or %s/s', [n, TXT[b],
+        MicroSecToString(time[b]), (Int64(n) * 1000000) div time[b],
+        KB((Int64(size) * 1000000) div time[b])]));
   for b := low(AES) to high(AES) do
     AES[b].Free;
 end;
 
-procedure TTestCoreCrypto._Adler32;
+const
+  HASHESMAX = 512;
+
+function Hash32Test(buf: PAnsiChar; hash: THasher): boolean;
+var
+  L, modif: PtrInt;
+  c {, s}: cardinal;
+begin
+  result := false;
+  for L := 0 to HASHESMAX do
+  begin
+    c := hash(0, buf, L);
+    //s := 0;
+    for modif := 0 to L - 1 do
+    begin
+      inc(buf[modif]);
+      if hash(0, buf, L) = c then
+        exit; // should detect one modified bit at any position
+      //inc(s, L);
+      dec(buf[modif]);
+    end;
+    if hash(0, buf, L) <> c then
+      exit; // should return the same value for the same data
+    //inc(s, L);
+    // timer.Stop; write(L, '=', GetExecutableLocation(@hash), ' ',
+    // KBNoSpace(timer.PerSec(s)), '/s ');
+  end; // at the end: s = 45133056 (45MB) for HASHESMAX=512
+  {
+  Some results for our 32-bit hashes (typical TSynDictionary use):
+
+  On x86_64, for each value of L (0..256):
+  4317d0 ../src/core/mormot.core.base.asmx64.inc crc32cfast (389)
+    0=0B/s 4=436.5MB/s 8=555.2MB/s 12=499.5MB/s 16=827.8MB/s 20=675.3MB/s
+    24=1GB/s 28=812.8MB/s 32=1.1GB/s 36=0.9GB/s 40=1.1GB/s 44=1GB/s 48=1.2GB/s
+    52=1.1GB/s 56=1GB/s 60=0.9GB/s 64=1.3GB/s 68=1GB/s 72=1.3GB/s 76=1.2GB/s
+    80=1.2GB/s 84=1.2GB/s 88=1.3GB/s 92=1.2GB/s 96=1.2GB/s 100=1.2GB/s
+    104=1.2GB/s 108=1.2GB/s 112=1.3GB/s 116=1.2GB/s 120=1.2GB/s 124=1.2GB/s
+    128=1.1GB/s 132=1.2GB/s 136=1.3GB/s 140=1.2GB/s 144=1.2GB/s 148=1.2GB/s
+    152=1.3GB/s 156=1.3GB/s 160=1.3GB/s 164=1.2GB/s 168=1.3GB/s 172=1.2GB/s
+    176=1.3GB/s 180=1.3GB/s 184=1.3GB/s 188=1.3GB/s 192=1.3GB/s 196=1.3GB/s
+    200=1.3GB/s 204=1.3GB/s 208=1.2GB/s 212=1.3GB/s 216=1.3GB/s 220=1.3GB/s
+    224=1.3GB/s 228=1.2GB/s 232=1.3GB/s 236=1.2GB/s 240=1.3GB/s 244=1.3GB/s
+    248=1.3GB/s 252=1.3GB/s 256=1.3GB/s
+  4d5610 ../src/core/mormot.core.crypto.asmx64.inc crc32c_sse42_aesni (5279)
+    0=0B/s 4=381.9MB/s 8=763.4MB/s 12=1.1GB/s 16=1.4GB/s 20=1.7GB/s
+    24=2GB/s 28=2.2GB/s 32=2.5GB/s 36=2.7GB/s 40=3GB/s 44=3.2GB/s 48=3.4GB/s
+    52=3.6GB/s 56=3.7GB/s 60=3.9GB/s 64=4.2GB/s 68=3.1GB/s 72=3.3GB/s 76=3.7GB/s
+    80=4.8GB/s 84=4.1GB/s 88=4.7GB/s 92=5GB/s 96=5.2GB/s 100=5.3GB/s
+    104=5.6GB/s 108=5.5GB/s 112=5.8GB/s 116=5.4GB/s 120=6GB/s 124=5.7GB/s
+    128=5.8GB/s 132=5.7GB/s 136=6.2GB/s 140=6.2GB/s 144=6.5GB/s 148=5.9GB/s
+    152=6.6GB/s 156=6.2GB/s 160=6.7GB/s 164=6.6GB/s 168=6.5GB/s 172=6.7GB/s
+    176=6.9GB/s 180=6.7GB/s 184=6.1GB/s 188=6.3GB/s 192=7.1GB/s 196=6.9GB/s
+    200=9GB/s 204=8.3GB/s 208=8.8GB/s 212=8.6GB/s 216=7GB/s 220=8.4GB/s
+    224=9.7GB/s 228=9.4GB/s 232=9.5GB/s 236=9.4GB/s 240=10.2GB/s 244=7.8GB/s
+    248=5.8GB/s 252=1.9GB/s 256=10.1GB/s
+  431ce0 ../src/core/mormot.core.base.asmx64.inc xxhash32 (860)
+    0=0B/s 4=235MB/s 8=436.2MB/s 12=624.4MB/s 16=842.1MB/s 20=0.9GB/s
+    24=1GB/s 28=1.1GB/s 32=1.5GB/s 36=1.6GB/s 40=1.6GB/s 44=1.7GB/s 48=2.1GB/s
+    52=2.1GB/s 56=2GB/s 60=1.9GB/s 64=2.7GB/s 68=2.6GB/s 72=2.3GB/s 76=2.3GB/s
+    80=2.9GB/s 84=2.9GB/s 88=2.8GB/s 92=2.8GB/s 96=2.8GB/s 100=3.1GB/s
+    104=3.1GB/s 108=3GB/s 112=2.6GB/s 116=2.9GB/s 120=3.1GB/s 124=2.7GB/s
+    128=3.1GB/s 132=3GB/s 136=2.9GB/s 140=2.5GB/s 144=3GB/s 148=3GB/s
+    152=3.1GB/s 156=3.2GB/s 160=3.2GB/s 164=2.4GB/s 168=3.3GB/s 172=3.2GB/s
+    176=3.4GB/s 180=3.3GB/s 184=3.1GB/s 188=3.3GB/s 192=3.4GB/s 196=2.8GB/s
+    200=3.4GB/s 204=3.3GB/s 208=3.5GB/s 212=3.1GB/s 216=3.4GB/s 220=3.4GB/s
+    224=3.4GB/s 228=3.4GB/s 232=3.5GB/s 236=3.5GB/s 240=3.6GB/s 244=3GB/s
+    248=3.6GB/s 252=3.6GB/s 256=3.7GB/s
+  4d4fe0 ../src/core/mormot.core.crypto.asmx64.inc _aesnihash32 (4930)
+    0=0B/s 4=235MB/s 8=488.5MB/s 12=723MB/s 16=0.9GB/s 20=1.1GB/s
+    24=1.3GB/s 28=1.6GB/s 32=1.8GB/ s 36=2GB/s 40=2.2GB/s 44=2.4GB/s 48=2.7GB/s
+    52=2.9GB/s 56=3.1GB/s 60=3.4GB/s 64=3.7GB/s 68=3.3GB/s 72=3.5GB/s 76=4GB/s
+    80=4.2GB/s 84=4.2GB/s 88=4.7GB/s 92=4.9GB/s 96=5.3GB/s 100=5.5GB/s
+    104=5.7GB/s 108=5.7GB/s 112=6GB/s 116=6.4GB/s 120=6.2GB/s 124=6.4GB/s
+    128=7GB/s 132=5.5GB/s 136=5.9GB/s 140=6.1GB/s 144=6.2GB/s 148=6.2GB/s
+    152=6.5GB/s 156=6.7GB/s 160=6.6GB/s 164=7GB/s 168=5.2GB/s 172=6.6GB/s
+    176=7.6GB/s 180=7.7GB/s 184=7.8GB/s 188=8GB/s 192=8GB/s 196=8.2GB/s
+    200=8.5GB/s 204=8.7GB/s 208=8.6GB/s 212=7.2GB/s 216=9.4GB/s 220=9.3GB/s
+    224=9.5GB/s 228=9.7GB/s 232=9.7GB/s 236=6.8GB/s 240=10.2GB/s 244=8.3GB/s
+    248=10.5GB/s 252=10.6GB/s 256=10.2GB/s
+
+  On i386 (Linux/FPC):
+  080792b0 ../src/core/mormot.core.base.asmx86.inc crc32cfast (252)
+    4=381.9MB/s 8=488.5MB/s 12=528.4MB/s 16=921.5MB/s 20=726.7MB/s 24=1.1GB/s
+    28=906.4MB/s 32=1.3GB/s 36=1GB/s 40=1.4GB/s 44=1.1GB/s 48=1.5GB/s
+    52=1.2GB/s 56=1.5GB/s 60=1.3GB/s 64=1.6GB/s 68=1.3GB/s 72=1.6GB/s
+    76=1.4GB/s 80=1.4GB/s 84=1.3GB/s 88=1.6GB/s 92=1.4GB/s 96=1.6GB/s
+    100=1.5GB/s 104=1.7GB/s 108=1.5GB/s 112=1.6GB/s 116=1.4GB/s 120=1.6GB/s
+    124=1.5GB/s 128=1.5GB/s 132=1.5GB/s 136=1.6GB/s 140=1.5GB/s 144=1.6GB/s
+    148=1.6GB/s 152=1.6GB/s 156=1.6GB/s 160=1.6GB/s 164=1.6GB/s 168=1.6GB/s
+    172=1.4GB/s 176=1.6GB/s 180=1.5GB/s 184=1.6GB/s 188=1.6GB/s 192=1.6GB/s
+    196=1.5GB/s 200=1.6GB/s 204=1.5GB/s 208=1.6GB/s 212=1.5GB/s 216=1.6GB/s
+    220=1.5GB/s 224=1.6GB/s 228=1.5GB/s 232=1.6GB/s 236=1.5GB/s 240=1.6GB/s
+    244=1.5GB/s 248=1.6GB/s 252=1.5GB/s 256=1.6GB/s
+  08079d80 ../src/core/mormot.core.base.asmx86.inc crc32csse42 (1445)
+    4=436.5MB/s 8=642.8MB/s 12=0.9GB/s 16=1.2GB/s 20=1.3GB/s 24=1.6GB/s
+    28=1.9GB/s 32=2GB/s 36=2.3GB/s 40=2.3GB/s 44=2.5GB/s 48=2.5GB/s
+    52=2.8GB/s 56=2.7GB/s 60=3GB/s 64=2.9GB/s 68=3.2GB/s 72=3.1GB/s
+    76=3GB/s 80=3.2GB/s 84=3.4GB/s 88=3GB/s 92=3.4GB/s 96=3.4GB/s
+    100=3.6GB/s 104=3.4GB/s 108=3.4GB/s 112=3.5GB/s 116=3.6GB/s 120=3.6GB/s
+    124=3.7GB/s 128=3.6GB/s 132=3.7GB/s 136=3.7GB/s 140=3.8GB/s 144=3.8GB/s
+    148=3.8GB/s 152=3.7GB/s 156=3.9GB/s 160=3.8GB/s 164=3.8GB/s 168=3.9GB/s
+    172=4GB/s 176=3.8GB/s 180=3.9GB/s 184=3.8GB/s 188=3.9GB/s 192=3.8GB/s
+    196=3.9GB/s 200=3.8GB/s 204=3.9GB/s 208=3.8GB/s 212=3.8GB/s 216=3.7GB/s
+    220=3.9GB/s 224=3.8GB/s 228=1.9GB/s 232=3.8GB/s 236=3.9GB/s 240=3.8GB/s
+    244=3.8GB/s 248=3.9GB/s 252=3.7GB/s 256=3.7GB/s
+  08079830 ../src/core/mormot.core.base.asmx86.inc xxhash32 (806)
+    4=235MB/s 8=436.2MB/s 12=610.6MB/s 16=842.1MB/s 20=0.9GB/s 24=1GB/s
+    28=1.1GB/s 32=1.5GB/s 36=1.6GB/s 40=1.6GB/s 44=1.7GB/s 48=2.2GB/s
+    52=2.1GB/s 56=2GB/s 60=1.6GB/s 64=2.6GB/s 68=2.5GB/s 72=2.4GB/s
+    76=2.5GB/s 80=2.9GB/s 84=2.9GB/s 88=2.2GB/s 92=2.1GB/s 96=3.2GB/s
+    100=2.9GB/s 104=2.7GB/s 108=2.9GB/s 112=3.2GB/s 116=3.2GB/s 120=2.9GB/s
+    124=3GB/s 128=2.9GB/s 132=3.2GB/s 136=3GB/s 140=3.1GB/s 144=3.5GB/s
+    148=3.3GB/s 152=3.2GB/s 156=3GB/s 160=3.4GB/s 164=3.5GB/s 168=3.3GB/s
+    172=3.3GB/s 176=2.4GB/s 180=2.9GB/s 184=3.2GB/s 188=3.4GB/s 192=3.6GB/s
+    196=3.5GB/s 200=3.4GB/s 204=3.5GB/s 208=3.6GB/s 212=3.6GB/s 216=3.4GB/s
+    220=3.5GB/s 224=3.6GB/s 228=3.5GB/s 232=3.5GB/s 236=3.6GB/s 240=3.6GB/s
+    244=3.4GB/s 248=3.1GB/s 252=3.6GB/s 256=3.7GB/s
+  0810edd0 ../src/core/mormot.core.crypto.asmx86.inc _aesnihash32 (2638)
+    4=235MB/s 8=508.9MB/s 12=785MB/s 16=1GB/s 20=1.2GB/s 24=1.4GB/s
+    28=1.7GB/s 32=1.9GB/s 36=2GB/s 40=2.3GB/s 44=2.4GB/s 48=2.8GB/s
+    52=3.1GB/s 56=3.3GB/s 60=3.6GB/s 64=3.8GB/s 68=3.3GB/s 72=3.5GB/s
+    76=3.7GB/s 80=3.9GB/s 84=4.1GB/s 88=4.3GB/s 92=4.6GB/s 96=4.3GB/s
+    100=5.1GB/s 104=5.3GB/s 108=5.4GB/s 112=5.7GB/s 116=5.8GB/s 120=6.1GB/s
+    124=6.3GB/s 128=5.6GB/s 132=4.7GB/s 136=5.8GB/s 140=6.1GB/s 144=6.3GB/s
+    148=6.1GB/s 152=6.5GB/s 156=7GB/s 160=7.2GB/s 164=7.2GB/s 168=7.6GB/s
+    172=7.6GB/s 176=7.6GB/s 180=7.6GB/s 184=8.3GB/s 188=8.6GB/s 192=8.8GB/s
+    196=7.7GB/s 200=7.9GB/s 204=7.5GB/s 208=8.3GB/s 212=8.4GB/s 216=8.7GB/s
+    220=7.4GB/s 224=8GB/s 228=9.4GB/s 232=9.5GB/s 236=9.7GB/s 240=9.8GB/s
+    244=10.1GB/s 248=8.2GB/s 252=10.3GB/s 256=10.5GB/s
+
+  -> aesnihash32 is faster or as fast as very optimized Intel's crc32c+SSE4.2
+     on x86_64, blow away everything on i386, and with much better output quality
+     - see smhasher report about crc32c: insecure, 100% bias, collisions, distrib,
+     BIC, and xxHash32: LongNeighbors, 4bit collisions, MomentChi2 220 - whereas
+     https://github.com/tkaitchuck/aHash (same algorithm) passes all tests
+  }
+  result := true;
+end;
+
+function Hash64Test(buf: PAnsiChar; hash: THasher64): boolean;
+var
+  L, modif: PtrInt;
+  c: QWord;
+begin
+  result := false;
+  for L := 0 to HASHESMAX do
+  begin
+    c := hash(0, buf, L);
+    for modif := 0 to L - 1 do
+    begin
+      inc(buf[modif]);
+      if hash(0, buf, L) = c then
+        exit; // should detect one modified bit at any position
+      dec(buf[modif]);
+    end;
+    if hash(0, buf, L) <> c then
+      exit; // should return the same value for the same data
+  end;
+  result := true;
+end;
+
+function Hash128Test(buf: PAnsiChar; hash: THasher128): boolean;
+var
+  L, modif: PtrInt;
+  c, c2: THash128;
+begin
+  result := false;
+  for L := 0 to HASHESMAX do
+  begin
+    FillZero(c);
+    hash(@c, buf, L);
+    for modif := 0 to L - 1 do
+    begin
+      inc(buf[modif]);
+      FillZero(c2);
+      hash(@c2, buf, L);
+      if IsEqual(c, c2) then
+        exit; // should detect one modified bit at any position
+      dec(buf[modif]);
+    end;
+    FillZero(c2);
+    hash(@c2, buf, L);
+    if not IsEqual(c, c2) then
+      exit; // should return the same value for the same data
+  end;
+  result := true;
+end;
+
+procedure TTestCoreCrypto.Hashes;
+var
+  buf: array[0 .. HASHESMAX - 1] of AnsiChar;
 begin
   Check(Adler32SelfTest);
+  FillIncreasing(@buf, $12345670, SizeOf(buf) shr 2);
+  Check(Hash32Test(@buf, @crc32cfast));
+  Check(Hash32Test(@buf, @crc32c));
+  Check(Hash32Test(@buf, @xxHash32));
+  if Assigned(AesNiHash32) then
+    Check(Hash32Test(@buf, @AesNiHash32));
+  Check(Hash64Test(@buf, @crc32cTwice));
+  if Assigned(AesNiHash64) then
+    Check(Hash64Test(@buf, @AesNiHash64));
+  Check(Hash128Test(@buf, @crc32c128));
+  if Assigned(AesNiHash128) then
+    Check(Hash128Test(@buf, @AesNiHash128));
 end;
 
 procedure TTestCoreCrypto._Base64;
@@ -1014,7 +1282,7 @@ end;
 const
   // reference vectors for all AES modes - matching OpenSSL implementation
   TEST_AES_REF: array[0..2, 0..6] of RawByteString = (
-  // 128-bit TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtr, TAesCtrNist, TAesGcm
+  // 128-bit TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtrAny, TAesCtrNist, TAesGcm
    ('aS24Jm0RHPz26P_RHqX-pGktuCZtERz89uj_0R6l_qRpLbgmbREc_Pbo_9Eepf6kB7pVFdRAcIoVhoTQPytzTQ',
     'i1vnbHBw0VZZdm-nlhq7H3N-C3oMLGfooWnwjI0F_X3QgeV6s-Q8ujVIbgpX5Bwu8tOn1SoUHHP4VS0VK5cOyQ',
     '9rlcKw63fOzEbXUpoCUDLPqt7TuuSjLGHdlDMneP0nrY4LLFbrc3MrLV6JoXmQM6d4FvmlsQpImuk9LWaf8hXw',
@@ -1022,7 +1290,7 @@ const
     '9rlcKw63fOzEbXUpoCUDLDNLyx8M6u_tGBRLx4j5ctLUsP9-TW7sOuOoF4OD4lJAjZleMbc8Z_BdmyuNRuiUtg',
     '9rlcKw63fOzEbXUpoCUDLPODC-Nwu96PUeytu204bloDoO7QOmLe8SSHM2P0kB5NW3VPROV5QLaVhYfld4uZBA',
     'gUZBx61sQ4gV3RZ-qpZrkQDnlu88Jb4mGPWorawImGYK4ei1yy3oRPPYBTclVHoRVRwHnHMB1NnGGq3T0qbZmw'),
-  // 192-bit TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtr, TAesCtrNist, TAesGcm
+  // 192-bit TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtrAny, TAesCtrNist, TAesGcm
    ('3S2QhC78T0eesG3hiqtA2N0tkIQu_E9HnrBt4YqrQNjdLZCELvxPR56wbeGKq0DYJob7gbbvgBaFdm_Bwed4RQ',
     'yua7dkKtXp0pM5n3VFoZrKhdt1ppikmmhFBKzflv32uY6cm4X3ZDZZnlAujYFBAWYR9fJXvhKmCcPljunWP2Zw',
     'Lp2JYG5d-d4TZagr2FMfqRxp9GCAHtCNcV5HmNoZpt34jqelBTDnTPagl9ZsIkrKRM_m0i3o0PWyK7hf6h9evg',
@@ -1030,7 +1298,7 @@ const
     'Lp2JYG5d-d4TZagr2FMfqbBYsYzcSw6Re_OY2Zthq1_MEtRiSeqYNI-Z2s1J_3Gwah3j29AUlU7fDl0w8_sjlA',
     'Lp2JYG5d-d4TZagr2FMfqc-3Wr2DBpXIPh2l-OjSsqlAcEVs8vH6tbc5_5G59H_wTCxihPcc8yz8f_fyGiDEaQ',
     'hBeEH6I4wWS55pvTLfjz5PxR1nq13tv920aVPw1sMbbraVjQ7Z7vD272rMCOrfMz4b9CFK7SUqh92pR6YIId8A'),
-  // 256-bit TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtr, TAesCtrNist, TAesGcm
+  // 256-bit TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtrAny, TAesCtrNist, TAesGcm
    ('Kw50ybT0hl8MXw1IcBFm5isOdMm09IZfDF8NSHARZuYrDnTJtPSGXwxfDUhwEWbmn9aUUA6_ZwXpKRiFMlXRiw',
     'uSh1TguJYyEhud6DBzk8TZrD01xIULmMHX0gRFAGaf2vDinDfDprSxCm5Fd49HN0a6EoBrK1cCqanTWqyuyM8A',
     'PYynVHoDmi6SK5qdbNUp5IPwHRadBtT6rf97pdIP3MHk1q1rZHNzquVCOF5_oSMs0rqP7bJ6j6BvWpzTGcvEPQ',
@@ -1042,22 +1310,53 @@ const
     '7C1DA6408329D2D2E393609DB188129E',  // 128-bit
     'EFF784967837F6BB0007276CA9C9F936',  // 192-bit
     '5F3411F163FF157C4A802DB5FF835823'); // 256-bit
+  TEST_AES_MAC: array[7..9, 0..2] of RawUtf8 = (
+    ('a6353d1260ec249aa1da751d9e888978258194e4454a0d719b39152b39d7b7a9', // TAesCfbCrc
+     '80f2ef4b22b48b4a0bcca7a9c509a2467b620569597d0791b9b56243fe03af1b',
+     'c13dc3e510b02ecd5eec947dfd934fc256b308318dcbc16bc9aabf7b616fffb5'),
+    ('a6353d1260ec249aa1da751d9e8889785716e5bac7e28577164eee94cc2cdaeb', // TAesOfbCrc
+     '80f2ef4b22b48b4a0bcca7a9c509a2462be402ff0ceb734b81feafb7bbb32d35',
+     'c13dc3e510b02ecd5eec947dfd934fc261e76a48caa8808ed4a5979e30fa1fa5'),
+     ('a6353d1260ec249aa1da751d9e888978d591cb79c5f2e77e2e15bd507aa11b04', // TAesCtrCrc
+      '80f2ef4b22b48b4a0bcca7a9c509a246041058e5b7e63e90fdb865dc0d8dc216',
+      'c13dc3e510b02ecd5eec947dfd934fc27a9bada0c582df6d441b67a8455a1711'));
 
 function ToAesReference(m: integer): integer;
 begin
   result := m;
-  if result >= 9 then
+  if result >= 10 then
     {$ifdef USE_OPENSSL}
-      if result >= 16 then
-        dec(result, 16) // e.g. TAesEcbApi -> TAesEcb
+      if result >= 17 then
+        dec(result, 17) // e.g. TAesEcbApi -> TAesEcb
       else
     {$endif USE_OPENSSL}
-    dec(result, 9) // e.g. TAesEcbApi / TAesEcbOsl -> TAesEcb
+    dec(result, 10) // e.g. TAesEcbApi / TAesEcbOsl -> TAesEcb
+  else if result = 9 then
+    result := 5 // TAesCtrCrc -> TAesCtrNist
   else if result >= 7 then
     dec(result, 5);  // e.g. TAesCfbCrc -> TAesCfb
 end;
 
 procedure TTestCoreCrypto._AES;
+const
+  MAX = 4096 * 1024;  // test 4 MB data, i.e. multi-threaded AES
+  MODES: array[0..9
+     {$ifdef USE_OPENSSL} + 7 {$endif}
+     {$ifdef USE_PROV_RSA_AES} + 2 {$endif}] of TAesAbstractClass = (
+     // 0      1        2        3        4          5            6
+     TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtrAny, TAesCtrNist, TAesGcm,
+     // 7           8         9
+     TAesCfbCrc, TAesOfbCrc, TAesCtrCrc
+     {$ifdef USE_OPENSSL} ,
+     // 10          11         12         13         14
+     TAesEcbOsl, TAesCbcOsl, TAesCfbOsl, TAesOfbOsl, nil,
+     // 15            16
+     TAesCtrNistOsl, TAesGcmOsl
+     {$endif USE_OPENSSL}
+     {$ifdef USE_PROV_RSA_AES} ,
+     // 10/17     11/18
+     TAesEcbApi, TAesCbcApi
+     {$endif USE_PROV_RSA_AES}); // TAesCfbApi and TAesOfbApi are not compliant
 var
   A: TAes;
   st, orig, crypted, s2, s3, s4: RawByteString;
@@ -1066,36 +1365,17 @@ var
   iv: THash128Rec;
   i, j, k, ks, m, len: integer;
   tag1, tag2: TAesBlock;
+  mac: TAesMac256;
+  mac1, mac2: THash256;
   one, two, encdec: TAesAbstract;
-  {$ifndef PUREMORMOT2}
-  AES: TAesFull;
-  {$endif PUREMORMOT2}
-  PC: PAnsiChar;
-  noaesni, gcm: boolean;
+  noaesni, gcm, aead: boolean;
   Timer: array[boolean] of TPrecisionTimer;
   ValuesCrypted, ValuesOrig: array[0..6] of RawByteString;
+  Tags: array[0..2, 7..9] of THash256DynArray; // Tags[k,m]
+  h32: array[0..2, 0..9] of TCardinalDynArray;
   {$ifdef CPUINTEL}
   backup: TIntelCpuFeatures;
   {$endif CPUINTEL}
-const
-  MAX = 4096 * 1024;  // test 4 MB data, i.e. multi-threaded AES
-  MODES: array[0..8
-     {$ifdef USE_OPENSSL} + 7 {$endif}
-     {$ifdef USE_PROV_RSA_AES} + 2 {$endif}] of TAesAbstractClass = (
-     // 0      1        2        3        4        5            6
-     TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtr, TAesCtrNist, TAesGcm,
-     // 7           8
-     TAesCfbCrc, TAesOfbCrc
-     {$ifdef USE_OPENSSL} ,
-     // 9          10          11         12         13
-     TAesEcbOsl, TAesCbcOsl, TAesCfbOsl, TAesOfbOsl, nil,
-     // 14            15
-     TAesCtrNistOsl, TAesGcmOsl
-     {$endif USE_OPENSSL}
-     {$ifdef USE_PROV_RSA_AES} ,
-     // 9/16       10/17
-     TAesEcbApi, TAesCbcApi
-     {$endif USE_PROV_RSA_AES}); // TAesCfbApi and TAesOfbApi are not compliant
 begin
   {$ifdef CPUINTEL}
   backup := CpuFeatures;
@@ -1104,7 +1384,8 @@ begin
   SetLength(orig, MAX);
   SetLength(crypted, MAX + 256);
   st := '1234essai';
-  PInteger(UniqueRawUtf8(RawUtf8(st)))^ := Random(MaxInt);
+  orig := RandomString(8000);
+  PInteger(UniqueRawUtf8(RawUtf8(st)))^ := Random32;
   for noaesni := false to true do
   begin
     {%H-}Timer[noaesni].Init;
@@ -1116,24 +1397,46 @@ begin
         if (MODES[m] = nil) or
            not MODES[m].IsAvailable then
           continue; // OpenSSL may not be available on this platform
-        iv.L := $1234567890abcdef; // synch with TEST_AES_REF
+        // following values should synch with TEST_AES_REF/MAC/TAG
+        iv.L := $1234567890abcdef;
         iv.H := $0fedcba987654321;
-        st := RawUtf8(StringOfChar('x', 50)); // synch with TEST_AES_REF
+        FillZero(THash256(mac));
+        st := RawUtf8(StringOfChar('x', 50));
+        // create a TAesAbstract instance and validate it
         one := MODES[m].Create(pointer(st)^, ks);
         try
+          // writeln(noaesni, ' ', one.AlgoName, ' k=', k, ' m=', m);
           gcm := one.InheritsFrom(TAesGcmAbstract);
+          aead := one.InheritsFrom(TAesAbstractAead);
           one.IV := iv.b;
+          if aead then
+            TAesAbstractAead(one).Mac := mac;
           s2 := one.EncryptPkcs7(st, false);
-          if gcm then
+          if aead then
+          begin
+            FillRandom(@mac1, 4);
+            Check(one.MacEncryptGetTag(mac1));
+            Check(m in [low(TEST_AES_MAC) .. high(TEST_AES_MAC)]);
+            //writeln(m,' ',k,' ',Sha256DigestToString(mac1)); writeln(TEST_AES_MAC[m, k]);
+            //CheckEqual(Sha256DigestToString(mac1), TEST_AES_MAC[m, k], 'TEST_AES_MAC');
+          end else if gcm then
           begin
             FillRandom(@tag1, 4);
             Check(TAesGcmAbstract(one).AesGcmFinal(tag1));
             // writeln(one.classname, ks, ' ', AesBlockToShortString(tag1));
-            CheckEqual(AesBlockToString(tag1), TEST_AES_TAG[k]);
+            CheckEqual(AesBlockToString(tag1), TEST_AES_TAG[k],
+              FormatUtf8('TEST_AES_TAG % %', [ks, one.AlgoName]));
           end;
           one.IV := iv.b;
+          if aead then
+            TAesAbstractAead(one).Mac := mac;
           s2 := one.EncryptPkcs7(st, false); // twice to check AES ctxt reuse
-          if gcm then
+          if aead then
+          begin
+            FillRandom(@mac2, 4);
+            Check(one.MacEncryptGetTag(mac2));
+            Check(IsEqual(mac2, mac1));
+          end else if gcm then
           begin
             FillZero(tag2);
             Check(TAesGcmAbstract(one).AesGcmFinal(tag2));
@@ -1143,25 +1446,43 @@ begin
           s3 := BinToBase64uri(s2);
           i := ToAesReference(m);
           //if TEST_AES_REF[k, i] <> s3 then
-          //  writeln(m, ' ', MODES[m].ClassName, ' ', ks, #13#10' ',s3, #13#10' ', TEST_AES_REF[k, i]);
+          // writeln(m, ' ', MODES[m].ClassName, ' ', ks, #13#10' ',s3, #13#10' ', TEST_AES_REF[k, i]);
           CheckUtf8(TEST_AES_REF[k, i] = s3, 'test vector %-% %', [MODES[m], ks, s3]);
           one.IV := iv.b;
+          if aead then
+            TAesAbstractAead(one).Mac := mac;
           check(one.DecryptPkcs7(s2, false) = st);
-          if gcm then
+          if aead then
+            Check(one.MacDecryptCheckTag(mac1))
+          else if gcm then
             Check(TAesGcmAbstract(one).AesGcmFinal(tag1));
           two := one.Clone;
           try
             two.IV := iv.b;
+            if aead then
+              TAesAbstractAead(two).Mac := mac;
             s2 := two.EncryptPkcs7(st, false);
-            if gcm then
+            if aead then
+            begin
+              FillZero(mac1);
+              Check(two.MacEncryptGetTag(mac1));
+              Check(IsEqual(mac2, mac1));
+            end else if gcm then
             begin
               FillZero(tag1);
               Check(TAesGcmAbstract(two).AesGcmFinal(tag1));
               Check(IsEqual(tag1, tag2));
             end;
             two.IV := iv.b;
+            if aead then
+              TAesAbstractAead(two).Mac := mac;
             s2 := two.EncryptPkcs7(st, false); // twice to check AES ctxt reuse
-            if gcm then
+            if aead then
+            begin
+              FillZero(mac2);
+              Check(one.MacEncryptGetTag(mac2));
+              Check(IsEqual(mac2, mac1));
+            end else if gcm then
             begin
               FillZero(tag2);
               Check(TAesGcmAbstract(two).AesGcmFinal(tag2));
@@ -1171,8 +1492,12 @@ begin
             CheckEqual(s3, s4);
             encdec := two.CloneEncryptDecrypt;
             encdec.IV := iv.b;
+            if aead then
+              TAesAbstractAead(encdec).Mac := mac;
             checkEqual(encdec.DecryptPkcs7(s2, false), st);
-            if gcm then
+            if aead then
+              Check(encdec.MacDecryptCheckTag(mac1))
+            else if gcm then
               Check(TAesGcmAbstract(encdec).AesGcmFinal(tag1));
             if encdec <> two then
               encdec.Free;
@@ -1183,7 +1508,7 @@ begin
           one.Free;
         end;
       end;
-      Sha256Weak(st, Key);
+      Sha256Weak('test', Key);
       for i := 1 to 20 do
       begin
         MoveFast(Key, s, 16);
@@ -1200,77 +1525,84 @@ begin
         Check(CompareMem(@p, @s, sizeof(p)));
         Check(IsEqual(p, s));
       end;
-      {$ifdef PUREMORMOT2}
-      orig := RandomString(8000);
-      {$else}
-      orig := RandomString(MAX);
-      len := AES.EncodeDecode(Key, ks, MAX, True, nil, nil, pointer(orig),
-        pointer(crypted));
-      Check(len < MAX + 256);
-      Check(len >= MAX);
-      len := AES.EncodeDecode(Key, ks, len, False, nil, nil, pointer(crypted), nil);
-      try
-        Check(len = MAX);
-        Check(CompareMem(AES.outStreamCreated.Memory, pointer(orig), MAX));
-      {$endif PUREMORMOT2}
-        iv.c3 := $e0ffffff; // to trigger an explicit CTR overflow
-        if not noaesni then
+      iv.c3 := $e0ffffff; // to trigger an explicit CTR overflow
+      for m := low(MODES) to high(MODES) do
+        if (MODES[m] <> nil) and
+           MODES[m].IsAvailable then
         begin
-          for m := low(MODES) to high(MODES) do
-            if (MODES[m] <> nil) and
-               MODES[m].IsAvailable then
+          one := MODES[m].Create(Key, ks);
+          try
+            gcm := one.InheritsFrom(TAesGcmAbstract);
+            aead := one.InheritsFrom(TAesAbstractAead);
+            if m <= 9 then
+              SetLength(h32[k, m], 257);
+            if aead then
             begin
-              one := MODES[m].Create(Key, ks);
-              try
-                gcm := one.InheritsFrom(TAesGcmAbstract);
-                //Timer.Start;
-                for i := 0 to 256 do
-                begin
-                  if i < 64 then
-                    len := i
-                  else if i < 128 then
-                    len := i * 15
-                  else
-                    len := i * 31; // encrypt buffers from 0 to 7936 bytes
-                  s2 := copy(orig, 1, len);
-                  check(length(s2) = len);
-                  one.iv := iv.b;
-                  s3 := one.EncryptPkcs7(s2);
-                  if gcm then
-                  begin
-                    FillZero(tag1);
-                    TAesGcmAbstract(one).AesGcmFinal(tag1);
-                  end;
-                  one.iv := iv.b;
-                  Check(one.DecryptPkcs7(s3) = s2, IntToStr(len));
-                  if gcm then
-                    Check(TAesGcmAbstract(one).AesGcmFinal(tag1));
-                end;
-  //fRunConsole := Format('%s %s%d:%s'#10,[fRunConsole,Copy(MODES[m].ClassName,5,10),ks,Timer.Stop]);
-                if m < length(ValuesCrypted) then
-                begin
-                  // store the values generated by our AES pascal/asm code
-                  ValuesCrypted[m] := Copy(crypted, 1, len);
-                  ValuesOrig[m] := s2;
-                end
-                else if m > 7 then
-                begin
-                  // validate our AES code against OpenSSL or WinAPI
-                  i := ToAesReference(m);
-                  Check(ValuesOrig[i] = s2);
-                  Check(ValuesCrypted[i] = Copy(crypted, 1, len), one.ClassName);
-                end;
-              finally
-                one.Free;
-              end
+              Check(k in [0..2]);
+              Check(m in [7..9]);
+              SetLength(Tags[k, m], 257);
             end;
+            //Timer.Start;
+            for i := 0 to 256 do
+            begin
+              if i < 64 then
+                len := i
+              else if i < 128 then
+                len := i * 15
+              else
+                len := i * 31; // encrypt buffers from 0 to 7936 bytes
+              s2 := copy(orig, 1, len);
+              check(length(s2) = len);
+              one.iv := iv.b;
+              if aead then
+                TAesAbstractAead(one).Mac := mac;
+              s3 := one.EncryptPkcs7(s2);
+              if m <= 9 then
+                if noaesni then
+                  CheckEqual(h32[k, m, i], cardinal(DefaultHasher(0, pointer(s3), length(s3))))
+                else
+                  h32[k, m, i] := cardinal(DefaultHasher(0, pointer(s3), length(s3)));
+              if aead then
+                if not noaesni then
+                  Check(one.MacEncryptGetTag(Tags[k, m, i]))
+                else
+                begin
+                  Check(one.MacEncryptGetTag(mac1));
+                  Check(IsEqual(Tags[k, m, i], mac1));
+                end
+              else if gcm then
+              begin
+                FillZero(tag1);
+                TAesGcmAbstract(one).AesGcmFinal(tag1);
+              end;
+              one.iv := iv.b;
+              if aead then
+                TAesAbstractAead(one).Mac := mac;
+              Check(one.DecryptPkcs7(s3) = s2, IntToStr(len));
+              if aead then
+                Check(one.MacDecryptCheckTag(Tags[k, m, i]))
+              else if gcm then
+                Check(TAesGcmAbstract(one).AesGcmFinal(tag1));
+            end;
+//fRunConsole := Format('%s %s%d:%s'#10,[fRunConsole,Copy(MODES[m].ClassName,5,10),ks,Timer.Stop]);
+            if m < length(ValuesCrypted) then
+            begin
+              // store the values generated by our AES pascal/asm code
+              ValuesCrypted[m] := Copy(crypted, 1, len);
+              ValuesOrig[m] := s2;
+            end
+            else if m > 7 then
+            begin
+              // validate our AES code against OpenSSL or WinAPI
+              i := ToAesReference(m);
+              Check(ValuesOrig[i] = s2);
+              Check(ValuesCrypted[i] = Copy(crypted, 1, len), one.ClassName);
+            end;
+          finally
+            one.Free;
+          end
         end;
-      {$ifndef PUREMORMOT2}
-      finally
-        AES.outStreamCreated.Free;
       end;
-      {$endif PUREMORMOT2}
-    end;
     {$ifdef CPUINTEL}
     if noaesni then
     begin
@@ -1279,10 +1611,8 @@ begin
       Include(CpuFeatures, cfAESNI); // revert Exclude() below from previous loop
     end;
     if A.UsesAesni then
-      Exclude(CpuFeatures, cfAESNI)
-    else
+      Exclude(CpuFeatures, cfAESNI);
     {$endif CPUINTEL}
-      break;
   end;
   {$ifdef CPUINTEL}
   CpuFeatures := backup;
@@ -1466,6 +1796,12 @@ var
   n: integer;
 begin
   key := PAesBlock(@hex32)^;
+  FillZero(buf);
+  FillZero(tag);
+  check(ctxt.FullEncryptAndAuthenticate(key, 128, @hex32, 12, nil, 0,
+    @buf, @buf, SizeOf(buf), tag));
+  CheckEqual(CardinalToHex(crc32c(0, @buf, SizeOf(buf))), 'AC3DDD17');
+  CheckEqual(Md5DigestToString(tag), '0332c40f9926bd3cdadf33148912c672');
   for n := 1 to 32 do
   begin
     Check(ctxt.Init(key, 128));
@@ -1544,6 +1880,36 @@ begin
     check(IsEqual(dig, dig2));
     check(CompareMem(@dig, @dig2, sizeof(dig)));
   end;
+end;
+
+procedure TTestCoreCrypto.Catalog;
+var
+  m: TAesMode;
+  k, k2: integer;
+  n: RawUtf8;
+  c: TAesAbstract;
+  key: THash256;
+begin
+  FillZero(key);
+  for k := 0 to 2 do
+    for m := low(m) to high(m) do
+    begin
+      n := AesAlgoNameEncode(m, 128 + k * 64);
+      check(length(n) = 11);
+      check(IdemPChar(pointer(n), 'AES-'));
+      CheckUtf8(AesAlgoNameDecode(n, k2) = TAesFast[m], n);
+      UpperCaseSelf(n);
+      CheckUtf8(AesAlgoNameDecode(n, k2) = TAesFast[m], n);
+      c := TAesFast[m].Create(key, 128 + k * 64);
+      try
+        Check(c.AlgoMode = m);
+        Check(IdemPropName(c.AlgoName, pointer(n), length(n)));
+      finally
+        c.Free;
+      end;
+      n[10] := ' ';
+      CheckUtf8(AesAlgoNameDecode(n, k2) = nil, n);
+    end;
 end;
 
 initialization

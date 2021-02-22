@@ -12,9 +12,10 @@ unit mormot.lib.openssl11;
    - OpenSSL Library Types and Structures
    - OpenSSL Library Functions
    - OpenSSL Helpers
+   - TLS / HTTPS Encryption Layer using OpenSSL for mormot.net.sock / TCrtSocket
 
-    In respect to OpenSSL 1.0.x, the new API hide most structures behind
-   getter/setter functions, and don't require complex initialization.
+    In respect to OpenSSL 1.0.x, the new 1.1.1 API hides most structures
+   behind getter/setter functions, and doesn't require complex initialization.
     OpenSSL 1.1.1 features TLS 1.3, and is a LTS revision (until 2023-09-11).
 
   *****************************************************************************
@@ -25,7 +26,7 @@ unit mormot.lib.openssl11;
 // define this conditional to publish the whole (huge) OpenSSL API
 // - by default, only the API features needed by mORMot are published
 // - the full API libraries will be directly/statically linked, not dynamically
-// - full API increases the compilation time of mormot2tests from 1.9 to 2.4s
+// - full API increases compilation time, but is kept as reference
 
 
 interface
@@ -42,7 +43,8 @@ uses
   {$ifdef OSPOSIX}
   unixtype,
   {$endif OSPOSIX}
-  mormot.core.os;
+  mormot.core.os,
+  mormot.net.sock; // for INetTLS
 
 
 { ******************** Dynamic or Static OpenSSL Library Loading }
@@ -54,7 +56,10 @@ type
     class procedure CheckFailed(caller: TObject; const method: string; res: integer);
   public
     /// wrapper around ERR_get_error/ERR_error_string_n if res <> 1
-    class procedure Check(caller: TObject; const method: string; res: integer);
+    class procedure Check(caller: TObject; const method: string; res: integer); overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// wrapper around ERR_get_error/ERR_error_string_n if res <> 1
+    class procedure Check(res: integer); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// raise the exception if OpenSslIsAvailable if false
     class procedure CheckAvailable(caller: TClass; const method: string);
@@ -122,6 +127,15 @@ var
   // - equals e.g. $1010106f
   OpenSslVersion: cardinal;
 
+{$ifndef OPENSSLSTATIC}
+  /// internal flag used by OpenSslIsAvailable function for dynamic loading
+  openssl_initialized: (
+    osslUnTested,
+    osslAvailable,
+    osslNotAvailable);
+{$endif OPENSSLSTATIC}
+
+
 /// return TRUE if OpenSSL 1.1.1 library can be used
 // - will load and initialize it, calling OpenSslInitialize if necessary,
 // catching any exception during the process
@@ -129,15 +143,16 @@ var
 // been defined, since they link the library at compile or startup time
 // - you should never call any OpenSSL function if false is returned
 function OpenSslIsAvailable: boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// initialize the OpenSSL 1.1.1 API, accessible via the global functions
 // - will raise EOpenSsl exception on any loading issue
 // - you can force the library names to load
 // - do nothing if the library has already been loaded or if
 // OPENSSLFULLAPI or OPENSSLSTATIC conditionals have been defined
-procedure OpenSslInitialize(
+function OpenSslInitialize(
    const libcryptoname: TFileName = LIB_CRYPTO;
-   const libsslname: TFileName = LIB_SSL);
+   const libsslname: TFileName = LIB_SSL): boolean;
 
 
 { ******************** OpenSSL Library Constants }
@@ -148,6 +163,120 @@ const
   EVP_CIPH_NO_PADDING = $100;
   EVP_CTRL_GCM_GET_TAG = $10;
   EVP_CTRL_GCM_SET_TAG = $11;
+
+  EVP_MD_FLAG_ONESHOT = $0001;
+  EVP_MD_FLAG_XOF = $0002;
+  EVP_MD_FLAG_DIGALGID_MASK = $0018;
+  EVP_MD_FLAG_DIGALGID_NULL = $0000;
+  EVP_MD_FLAG_DIGALGID_ABSENT = $0008;
+  EVP_MD_FLAG_DIGALGID_CUSTOM = $0018;
+  EVP_MD_FLAG_FIPS = $0400;
+
+  SN_X9_62_prime192v1 = 'prime192v1';
+  NID_X9_62_prime192v1 = 409;
+  SN_X9_62_prime192v2 = 'prime192v2';
+  NID_X9_62_prime192v2 = 410;
+  SN_X9_62_prime192v3 = 'prime192v3';
+  NID_X9_62_prime192v3 = 411;
+  SN_X9_62_prime239v1 = 'prime239v1';
+  NID_X9_62_prime239v1 = 412;
+  SN_X9_62_prime239v2 = 'prime239v2';
+  NID_X9_62_prime239v2 = 413;
+  SN_X9_62_prime239v3 = 'prime239v3';
+  NID_X9_62_prime239v3 = 414;
+  SN_X9_62_prime256v1 = 'prime256v1';
+  NID_X9_62_prime256v1 = 415; // = secp256r1
+  SN_secp112r1 = 'secp112r1';
+  NID_secp112r1 = 704;
+  SN_secp112r2 = 'secp112r2';
+  NID_secp112r2 = 705;
+  SN_secp128r1 = 'secp128r1';
+  NID_secp128r1 = 706;
+  SN_secp128r2 = 'secp128r2';
+  NID_secp128r2 = 707;
+  SN_secp160k1 = 'secp160k1';
+  NID_secp160k1 = 708;
+  SN_secp160r1 = 'secp160r1';
+  NID_secp160r1 = 709;
+  SN_secp160r2 = 'secp160r2';
+  NID_secp160r2 = 710;
+  SN_secp192k1 = 'secp192k1';
+  NID_secp192k1 = 711;
+  SN_secp224k1 = 'secp224k1';
+  NID_secp224k1 = 712;
+  SN_secp224r1 = 'secp224r1';
+  NID_secp224r1 = 713;
+  SN_secp256k1 = 'secp256k1';
+  NID_secp256k1 = 714;
+  SN_secp384r1 = 'secp384r1';
+  NID_secp384r1 = 715;
+  SN_secp521r1 = 'secp521r1';
+  NID_secp521r1 = 716;
+  SN_sect113r1 = 'sect113r1';
+  NID_sect113r1 = 717;
+  SN_sect113r2 = 'sect113r2';
+  NID_sect113r2 = 718;
+  SN_sect131r1 = 'sect131r1';
+  NID_sect131r1 = 719;
+  SN_sect131r2 = 'sect131r2';
+  NID_sect131r2 = 720;
+  SN_sect163k1 = 'sect163k1';
+  NID_sect163k1 = 721;
+  SN_sect163r1 = 'sect163r1';
+  NID_sect163r1 = 722;
+  SN_sect163r2 = 'sect163r2';
+  NID_sect163r2 = 723;
+  SN_sect193r1 = 'sect193r1';
+  NID_sect193r1 = 724;
+  SN_sect193r2 = 'sect193r2';
+  NID_sect193r2 = 725;
+  SN_sect233k1 = 'sect233k1';
+  NID_sect233k1 = 726;
+  SN_sect233r1 = 'sect233r1';
+  NID_sect233r1 = 727;
+  SN_sect239k1 = 'sect239k1';
+  NID_sect239k1 = 728;
+  SN_sect283k1 = 'sect283k1';
+  NID_sect283k1 = 729;
+  SN_sect283r1 = 'sect283r1';
+  NID_sect283r1 = 730;
+  SN_sect409k1 = 'sect409k1';
+  NID_sect409k1 = 731;
+  SN_sect409r1 = 'sect409r1';
+  NID_sect409r1 = 732;
+  SN_sect571k1 = 'sect571k1';
+  NID_sect571k1 = 733;
+  SN_sect571r1 = 'sect571r1';
+  NID_sect571r1 = 734;
+  SN_ED25519 = 'ED25519';
+  NID_ED25519 = 1087;
+  SN_poly1305 = 'Poly1305';
+  LN_poly1305 = 'poly1305';
+  NID_poly1305 = 1061;
+  LN_rsaEncryption = 'rsaEncryption';
+  NID_rsaEncryption = 6;
+  LN_rsassaPss = 'rsassaPss';
+  NID_rsassaPss = 912;
+  LN_dsa = 'dsaEncryption';
+  NID_dsa = 116;
+  LN_dhKeyAgreement = 'dhKeyAgreement';
+  NID_dhKeyAgreement = 28;
+  SN_X9_62_id_ecPublicKey = 'id-ecPublicKey';
+  NID_X9_62_id_ecPublicKey = 408;
+
+  EVP_PKEY_RSA = NID_rsaEncryption;
+  EVP_PKEY_DSA = NID_dsa;
+  EVP_PKEY_RSA_PSS = NID_rsassaPss;
+  EVP_PKEY_DH = NID_dhKeyAgreement;
+  EVP_PKEY_EC = NID_X9_62_id_ecPublicKey;
+  EVP_PKEY_ED25519 = NID_ED25519;
+  EVP_PKEY_POLY1305 = NID_poly1305;
+  EVP_PKEY_OP_PARAMGEN = 1 shl 1;
+  EVP_PKEY_OP_KEYGEN = 1 shl 2;
+  EVP_PKEY_ALG_CTRL = $1000;
+  EVP_PKEY_CTRL_EC_PARAMGEN_CURVE_NID = EVP_PKEY_ALG_CTRL + 1;
+  EVP_PKEY_CTRL_DSA_PARAMGEN_BITS = EVP_PKEY_ALG_CTRL + 1;
+  EVP_PKEY_CTRL_RSA_KEYGEN_BITS = EVP_PKEY_ALG_CTRL + 3;
 
   BIO_FLAGS_READ = $01;
   BIO_FLAGS_WRITE = $02;
@@ -329,6 +458,52 @@ const
   TLSEXT_NAMETYPE_host_name = 0;
   TLSEXT_STATUSTYPE_ocsp = 1;
 
+  TLS1_VERSION = $0301;
+  TLS1_1_VERSION = $0302;
+  TLS1_2_VERSION = $0303;
+  TLS1_3_VERSION = $0304;
+  TLS_MAX_VERSION = TLS1_3_VERSION;
+  TLS_ANY_VERSION = $10000;
+
+  X509_FILETYPE_PEM = 1;
+  X509_FILETYPE_ASN1 = 2;
+  X509_FILETYPE_DEFAULT = 3;
+  SSL_FILETYPE_ASN1 = X509_FILETYPE_ASN1;
+  SSL_FILETYPE_PEM = X509_FILETYPE_PEM;
+
+  SSL_VERIFY_NONE = $00;
+  SSL_VERIFY_PEER = $01;
+  SSL_VERIFY_FAIL_IF_NO_PEER_CERT = $02;
+  SSL_VERIFY_CLIENT_ONCE = $04;
+  SSL_VERIFY_POST_HANDSHAKE = $08;
+
+  X509_V_OK = 0;
+  X509_V_ERR_UNSPECIFIED = 1;
+  X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT = 2;
+  X509_V_ERR_UNABLE_TO_GET_CRL = 3;
+  X509_V_ERR_UNABLE_TO_DECRYPT_CERT_SIGNATURE = 4;
+  X509_V_ERR_UNABLE_TO_DECRYPT_CRL_SIGNATURE = 5;
+  X509_V_ERR_UNABLE_TO_DECODE_ISSUER_PUBLIC_KEY = 6;
+  X509_V_ERR_CERT_SIGNATURE_FAILURE = 7;
+  X509_V_ERR_CRL_SIGNATURE_FAILURE = 8;
+  X509_V_ERR_CERT_NOT_YET_VALID = 9;
+  X509_V_ERR_CERT_HAS_EXPIRED = 10;
+  X509_V_ERR_CRL_NOT_YET_VALID = 11;
+  X509_V_ERR_CRL_HAS_EXPIRED = 12;
+  X509_V_ERR_ERROR_IN_CERT_NOT_BEFORE_FIELD = 13;
+  X509_V_ERR_ERROR_IN_CERT_NOT_AFTER_FIELD = 14;
+  X509_V_ERR_ERROR_IN_CRL_LAST_UPDATE_FIELD = 15;
+  X509_V_ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD = 16;
+  X509_V_ERR_OUT_OF_MEM = 17;
+  X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT = 18;
+  X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN = 19;
+  X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY = 20;
+  X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE = 21;
+  X509_V_ERR_CERT_CHAIN_TOO_LONG = 22;
+  X509_V_ERR_CERT_REVOKED = 23;
+  X509_V_ERR_INVALID_CA = 24;
+
+
 type
   OSSL_HANDSHAKE_STATE = (
     TLS_ST_BEFORE = 0,
@@ -425,6 +600,9 @@ type
   PEVP_PKEY_CTX = type pointer;
   PPEVP_PKEY_CTX = ^PEVP_PKEY_CTX;
 
+  PHMAC_CTX = type pointer;
+  PPHMAC_CTX = ^PHMAC_CTX;
+
   PRSA = type pointer;
   PPRSA = ^PRSA;
 
@@ -436,6 +614,44 @@ type
 
   POPENSSL_STACK = type pointer;
   PPOPENSSL_STACK = ^POPENSSL_STACK;
+
+  PBIGNUM = type pointer;
+  PPBIGNUM = ^PBIGNUM;
+
+  PBN_CTX = type pointer;
+  PPBN_CTX = ^PBN_CTX;
+
+  PEC_KEY = type pointer;
+  PPEC_KEY = ^PEC_KEY;
+
+  PEC_GROUP = type pointer;
+  PPEC_GROUP = ^PEC_GROUP;
+
+  PEC_POINT = type pointer;
+  PPEC_POINT = ^PEC_POINT;
+
+  (** Enum for the point conversion form as defined in X9.62 (ECDSA)
+   *  for the encoding of a elliptic curve point (x,y) *)
+  point_conversion_form_t = (
+    (** the point is encoded as z||x, where the octet z specifies
+     *  which solution of the quadratic equation y is  *)
+    POINT_CONVERSION_COMPRESSED = 2,
+    (** the point is encoded as z||x||y, where z is the octet 0x04  *)
+    POINT_CONVERSION_UNCOMPRESSED = 4,
+    (** the point is encoded as z||x||y, where the octet z specifies
+     *  which solution of the quadratic equation y is  *)
+    POINT_CONVERSION_HYBRID = 6);
+  Ppoint_conversion_form_t = ^point_conversion_form_t;
+
+  buf_mem_st = record
+    length: PtrUInt;
+    data: PUtf8Char;
+    max: PtrUInt;
+    flags: cardinal;
+  end;
+
+  BUF_MEM = buf_mem_st;
+  PBUF_MEM = ^BUF_MEM;
 
   asn1_string_st = record
     length: integer;
@@ -607,6 +823,7 @@ type
 
   SSL_verify_cb = function(preverify_ok: integer; x509_ctx: PX509_STORE_CTX): integer; cdecl;
   Ppem_password_cb = function(buf: PUtf8Char; size, rwflag: integer; userdata: pointer): integer; cdecl;
+  ECDH_compute_key_KDF = function(_in: pointer; inlen: PtrUInt; _out: pointer; outlen: PPtrUInt): pointer; cdecl;
 
 
 
@@ -653,6 +870,20 @@ function SSL_pending(s: PSSL): integer; cdecl;
 function SSL_set_cipher_list(s: PSSL; str: PUtf8Char): integer; cdecl;
 procedure SSL_get0_alpn_selected(ssl: PSSL; data: PPByte; len: PCardinal); cdecl;
 function SSL_clear(s: PSSL): integer; cdecl;
+function TLS_client_method(): PSSL_METHOD; cdecl;
+function SSL_CTX_set_default_verify_paths(ctx: PSSL_CTX): integer; cdecl;
+procedure SSL_CTX_set_default_passwd_cb_userdata(ctx: PSSL_CTX; u: pointer); cdecl;
+function SSL_CTX_use_PrivateKey_file(ctx: PSSL_CTX; _file: PUtf8Char;
+   typ: integer): integer; cdecl;
+function SSL_CTX_set_cipher_list(p1: PSSL_CTX; str: PUtf8Char): integer; cdecl;
+function SSL_set_fd(s: PSSL; fd: integer): integer; cdecl;
+function SSL_get_current_cipher(s: PSSL): PSSL_CIPHER; cdecl;
+function SSL_CIPHER_description(p1: PSSL_CIPHER;
+   buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
+function SSL_get_verify_result(ssl: PSSL): integer; cdecl;
+function X509_print(bp: PBIO; x: PX509): integer; cdecl;
+
+
 
 { --------- libcrypto entries }
 
@@ -675,6 +906,8 @@ function EVP_DigestSignFinal(ctx: PEVP_MD_CTX;
 function EVP_DigestVerifyInit(ctx: PEVP_MD_CTX; pctx: PPEVP_PKEY_CTX; typ: PEVP_MD;
   e: PENGINE; pkey: PEVP_PKEY): integer; cdecl;
 function EVP_DigestVerifyFinal(ctx: PEVP_MD_CTX; sig: PByte; siglen: PtrUInt): integer; cdecl;
+function EVP_DigestSign(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
+function EVP_DigestVerify(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
 function HMAC(evp_md: PEVP_MD; key: pointer; key_len: integer;
   d: PByte; n: PtrUInt; md: PByte; var md_len: cardinal): PByte; cdecl;
 function BIO_new(typ: PBIO_METHOD): PBIO; cdecl;
@@ -701,6 +934,10 @@ function PEM_read_bio_X509(bp: PBIO; x: PPX509; cb: Ppem_password_cb;
   u: pointer): PX509; cdecl;
 function PEM_read_bio_PrivateKey(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
   u: pointer): PEVP_PKEY; cdecl;
+function PEM_read_bio_PUBKEY(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
+  u: pointer): PEVP_PKEY; cdecl;
+function PEM_read_bio_RSAPublicKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
+  u: pointer): PRSA; cdecl;
 function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
   u: pointer): PRSA; cdecl;
 function RAND_bytes(buf: PByte; num: integer): integer; cdecl;
@@ -718,6 +955,61 @@ function EVP_CipherUpdate(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger;
   _in: PByte; inl: integer): integer; cdecl;
 function EVP_CipherFinal_ex(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): integer; cdecl;
 function EVP_CIPHER_CTX_set_padding(c: PEVP_CIPHER_CTX; pad: integer): integer; cdecl;
+function EVP_MD_CTX_new(): PEVP_MD_CTX; cdecl;
+procedure EVP_MD_CTX_free(ctx: PEVP_MD_CTX); cdecl;
+function EVP_MD_CTX_md(ctx: PEVP_MD_CTX): PEVP_MD; cdecl;
+function EVP_MD_flags(md: PEVP_MD): cardinal; cdecl;
+function EVP_MD_size(md: PEVP_MD): integer; cdecl;
+function EVP_DigestInit_ex(ctx: PEVP_MD_CTX; typ: PEVP_MD; impl: PENGINE): integer; cdecl;
+function EVP_DigestFinal_ex(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal): integer; cdecl;
+function EVP_DigestFinalXOF(ctx: PEVP_MD_CTX; md: PByte; len: PtrUInt): integer; cdecl;
+function HMAC_CTX_new(): PHMAC_CTX; cdecl;
+procedure HMAC_CTX_free(ctx: PHMAC_CTX); cdecl;
+function HMAC_Init_ex(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD;
+  impl: PENGINE): integer; cdecl;
+function HMAC_Update(ctx: PHMAC_CTX; data: PByte; len: PtrUInt): integer; cdecl;
+function HMAC_Final(ctx: PHMAC_CTX; md: PByte; len: PCardinal): integer; cdecl;
+function EVP_sha256: PEVP_MD; cdecl;
+function EC_GROUP_new_by_curve_name(nid: integer): PEC_GROUP; cdecl;
+function EC_KEY_new(): PEC_KEY; cdecl;
+function EC_KEY_set_group(key: PEC_KEY; group: PEC_GROUP): integer; cdecl;
+function BN_bin2bn(s: pointer; len: integer; ret: PBIGNUM): PBIGNUM; cdecl;
+function EC_POINT_bn2point(p1: PEC_GROUP; p2: PBIGNUM; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT; cdecl;
+function EC_KEY_set_public_key(key: PEC_KEY; pub: PEC_POINT): integer; cdecl;
+function ECDSA_verify(typ: integer; dgst: PByte; dgstlen: integer;
+  sig: PByte; siglen: integer; eckey: PEC_KEY): integer; cdecl;
+procedure EC_POINT_free(point: PEC_POINT); cdecl;
+procedure BN_free(a: PBIGNUM); cdecl;
+function BN_num_bits(a: PBIGNUM): integer; cdecl;
+procedure EC_KEY_free(key: PEC_KEY); cdecl;
+procedure EC_GROUP_free(group: PEC_GROUP); cdecl;
+function EC_KEY_generate_key(key: PEC_KEY): integer; cdecl;
+function EC_KEY_get0_private_key(key: PEC_KEY): PBIGNUM; cdecl;
+function EC_KEY_set_private_key(key: PEC_KEY; prv: PBIGNUM): integer; cdecl;
+function EC_KEY_get0_public_key(key: PEC_KEY): PEC_POINT; cdecl;
+function EC_POINT_point2buf(group: PEC_GROUP; point: PEC_POINT;
+  form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
+function BN_bn2bin(a: PBIGNUM; _to: pointer): integer; cdecl;
+function ECDSA_size(eckey: PEC_KEY): integer; cdecl;
+function ECDSA_sign(typ: integer; dgst: PByte; dgstlen: integer;
+  sig: PByte; siglen: PCardinal; eckey: PEC_KEY): integer; cdecl;
+function EC_POINT_new(group: PEC_GROUP): PEC_POINT; cdecl;
+function EC_POINT_oct2point(group: PEC_GROUP; p: PEC_POINT;
+  buf: PByte; len: PtrUInt; ctx: PBN_CTX): integer; cdecl;
+function ECDH_compute_key(_out: pointer; outlen: PtrUInt; pub_key: PEC_POINT;
+  ecdh: PEC_KEY; KDF: ECDH_compute_key_KDF): integer; cdecl;
+function EVP_PKEY_CTX_new_id(id: integer; e: PENGINE): PEVP_PKEY_CTX; cdecl;
+function EVP_PKEY_paramgen_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
+function EVP_PKEY_paramgen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
+function EVP_PKEY_keygen_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
+function EVP_PKEY_keygen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
+function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer;
+  cmd: integer; p1: integer; p2: pointer): integer; cdecl;
+function EVP_PKEY_CTX_new(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX; cdecl;
+procedure EVP_PKEY_CTX_free(ctx: PEVP_PKEY_CTX); cdecl;
+function PEM_write_bio_PrivateKey(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER;
+  kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
+function PEM_write_bio_PUBKEY(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
 
 
 { ******************** OpenSSL Full API Declaration }
@@ -746,10 +1038,15 @@ function BIO_retry_type(b: PBIO): integer;
   {$ifdef HASINLINE} inline; {$endif}
 function BIO_get_ssl(b: PBIO; s: PSSL): integer;
 function BIO_pending(b: PBIO): integer;
+procedure BIO_ToString(b: PBIO; var data: RawByteString); overload;
+function BIO_ToString(b: PBIO; andfree: boolean = false): RawUtf8; overload;
 
-function SSL_error(error: integer): RawUtf8;
+procedure OpenSSL_Free(ptr: pointer);
+function SSL_error(error: integer): RawUtf8; overload;
+procedure SSL_error(error: integer; var result: RawUtf8); overload;
 function SSL_error_short(error: integer): shortstring;
 function SSL_is_fatal_error(error: integer): boolean;
+procedure WritelnSSL_error; // very useful when debugging
 
 function SSL_CTX_set_session_cache_mode(ctx: PSSL_CTX; mode: integer): integer;
   {$ifdef HASINLINE} inline; {$endif}
@@ -770,8 +1067,22 @@ function SSL_set_tlsext_host_name(const s: PSSL; const name: RawUtf8): integer;
 function SSL_set_mode(s: PSSL; version: integer): integer;
 function SSL_get_mode(s: PSSL): integer;
 
+function EVP_MD_CTX_size(ctx: PEVP_MD_CTX): integer;
+function BN_num_bytes(bn: PBIGNUM): integer;
 function DTLSv1_get_timeout(s: PSSL; timeval: PTimeVal): time_t;
 procedure DTLSv1_handle_timeout(s: PSSL);
+
+
+{ ************** TLS / HTTPS Encryption Layer using OpenSSL for TCrtSocket }
+
+type
+  /// exception class raised by OpenSslNewNetTLS implementation class
+  EOpenSslClient = class(EOpenSsl);
+
+
+/// OpenSSL TLS layer communication factory - as expected by mormot.net.sock.pas
+function OpenSslNewNetTLS: INetTLS;
+
 
 
 implementation
@@ -819,10 +1130,20 @@ type
     SSL_set_cipher_list: function(s: PSSL; str: PUtf8Char): integer; cdecl;
     SSL_get0_alpn_selected: procedure(ssl: PSSL; data: PPByte; len: PCardinal); cdecl;
     SSL_clear: function(s: PSSL): integer; cdecl;
+    TLS_client_method: function(): PSSL_METHOD; cdecl;
+    SSL_CTX_set_default_verify_paths: function(ctx: PSSL_CTX): integer; cdecl;
+    SSL_CTX_set_default_passwd_cb_userdata: procedure(ctx: PSSL_CTX; u: pointer); cdecl;
+    SSL_CTX_use_PrivateKey_file: function(ctx: PSSL_CTX; _file: PUtf8Char; typ: integer): integer; cdecl;
+    SSL_CTX_set_cipher_list: function(p1: PSSL_CTX; str: PUtf8Char): integer; cdecl;
+    SSL_set_fd: function(s: PSSL; fd: integer): integer; cdecl;
+    SSL_get_current_cipher: function(s: PSSL): PSSL_CIPHER; cdecl;
+    SSL_CIPHER_description: function(p1: PSSL_CIPHER; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
+    SSL_get_verify_result: function(ssl: PSSL): integer; cdecl;
+    X509_print: function(bp: PBIO; x: PX509): integer; cdecl;
   end;
 
 const
-  LIBSSL_ENTRIES: array[0..33] of PAnsiChar = (
+  LIBSSL_ENTRIES: array[0..43] of RawUtf8 = (
     'SSL_CTX_new', 'SSL_CTX_free', 'SSL_CTX_set_timeout', 'SSL_CTX_get_timeout',
     'SSL_CTX_set_verify', 'SSL_CTX_use_PrivateKey', 'SSL_CTX_use_RSAPrivateKey',
     'SSL_CTX_use_RSAPrivateKey_file', 'SSL_CTX_use_certificate',
@@ -833,7 +1154,11 @@ const
     'SSL_ctrl', 'SSL_set_bio', 'SSL_get_peer_certificate', 'SSL_free',
     'SSL_connect', 'SSL_set_connect_state', 'SSL_set_accept_state',
     'SSL_read', 'SSL_write', 'SSL_get_state', 'SSL_pending', 'SSL_set_cipher_list',
-    'SSL_get0_alpn_selected', 'SSL_clear');
+    'SSL_get0_alpn_selected', 'SSL_clear', 'TLS_client_method',
+    'SSL_CTX_set_default_verify_paths', 'SSL_CTX_set_default_passwd_cb_userdata',
+    'SSL_CTX_use_PrivateKey_file', 'SSL_CTX_set_cipher_list', 'SSL_set_fd',
+    'SSL_get_current_cipher', 'SSL_CIPHER_description', 'SSL_get_verify_result',
+    'X509_print');
 
 var
   libssl: TLibSsl;
@@ -1008,6 +1333,56 @@ begin
   result := libssl.SSL_clear(s);
 end;
 
+function TLS_client_method(): PSSL_METHOD;
+begin
+  result := libssl.TLS_client_method;
+end;
+
+function SSL_CTX_set_default_verify_paths(ctx: PSSL_CTX): integer;
+begin
+  result := libssl.SSL_CTX_set_default_verify_paths(ctx);
+end;
+
+procedure SSL_CTX_set_default_passwd_cb_userdata(ctx: PSSL_CTX; u: pointer);
+begin
+  libssl.SSL_CTX_set_default_passwd_cb_userdata(ctx, u);
+end;
+
+function SSL_CTX_use_PrivateKey_file(ctx: PSSL_CTX; _file: PUtf8Char; typ: integer): integer;
+begin
+  result := libssl.SSL_CTX_use_PrivateKey_file(ctx, _file, typ);
+end;
+
+function SSL_CTX_set_cipher_list(p1: PSSL_CTX; str: PUtf8Char): integer;
+begin
+  result := libssl.SSL_CTX_set_cipher_list(p1, str);
+end;
+
+function SSL_set_fd(s: PSSL; fd: integer): integer;
+begin
+  result := libssl.SSL_set_fd(s, fd);
+end;
+
+function SSL_get_current_cipher(s: PSSL): PSSL_CIPHER;
+begin
+  result := libssl.SSL_get_current_cipher(s);
+end;
+
+function SSL_CIPHER_description(p1: PSSL_CIPHER; buf: PUtf8Char; size: integer): PUtf8Char;
+begin
+  result := libssl.SSL_CIPHER_description(p1, buf, size);
+end;
+
+function SSL_get_verify_result(ssl: PSSL): integer;
+begin
+  result := libssl.SSL_get_verify_result(ssl);
+end;
+
+function X509_print(bp: PBIO; x: PX509): integer;
+begin
+  result := libssl.X509_print(bp, x);
+end;
+
 
 { --------- libcrypto entries }
 
@@ -1030,6 +1405,8 @@ type
     EVP_DigestSignFinal: function(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt): integer; cdecl;
     EVP_DigestVerifyInit: function(ctx: PEVP_MD_CTX; pctx: PPEVP_PKEY_CTX; typ: PEVP_MD; e: PENGINE; pkey: PEVP_PKEY): integer; cdecl;
     EVP_DigestVerifyFinal: function(ctx: PEVP_MD_CTX; sig: PByte; siglen: PtrUInt): integer; cdecl;
+    EVP_DigestSign: function(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
+    EVP_DigestVerify: function(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
     HMAC: function(evp_md: PEVP_MD; key: pointer; key_len: integer; d: PByte; n: PtrUInt; md: PByte; var md_len: cardinal): PByte; cdecl;
     BIO_new: function(typ: PBIO_METHOD): PBIO; cdecl;
     BIO_free: function(a: PBIO): integer; cdecl;
@@ -1052,6 +1429,8 @@ type
     ASN1_STRING_data: function(x: PASN1_STRING): PByte; cdecl;
     PEM_read_bio_X509: function(bp: PBIO; x: PPX509; cb: Ppem_password_cb; u: pointer): PX509; cdecl;
     PEM_read_bio_PrivateKey: function(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
+    PEM_read_bio_PUBKEY: function(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
+    PEM_read_bio_RSAPublicKey: function(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
     PEM_read_bio_RSAPrivateKey: function(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
     RAND_bytes: function(buf: PByte; num: integer): integer; cdecl;
     EVP_get_cipherbyname: function(name: PUtf8Char): PEVP_CIPHER; cdecl;
@@ -1065,25 +1444,87 @@ type
     EVP_CipherUpdate: function(ctx: PEVP_CIPHER_CTX; _out: PByte; outl: PInteger; _in: PByte; inl: integer): integer; cdecl;
     EVP_CipherFinal_ex: function(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): integer; cdecl;
     EVP_CIPHER_CTX_set_padding: function(c: PEVP_CIPHER_CTX; pad: integer): integer; cdecl;
+    EVP_MD_CTX_new: function: PEVP_MD_CTX; cdecl;
+    EVP_MD_CTX_free: procedure(ctx: PEVP_MD_CTX); cdecl;
+    EVP_MD_CTX_md: function(ctx: PEVP_MD_CTX): PEVP_MD; cdecl;
+    EVP_MD_flags: function(md: PEVP_MD): cardinal; cdecl;
+    EVP_MD_size: function(md: PEVP_MD): integer; cdecl;
+    EVP_DigestInit_ex: function(ctx: PEVP_MD_CTX; typ: PEVP_MD; impl: PENGINE): integer; cdecl;
+    EVP_DigestFinal_ex: function(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal): integer; cdecl;
+    EVP_DigestFinalXOF: function(ctx: PEVP_MD_CTX; md: PByte; len: PtrUInt): integer; cdecl;
+    HMAC_CTX_new: function: PHMAC_CTX; cdecl;
+    HMAC_CTX_free: procedure(ctx: PHMAC_CTX); cdecl;
+    HMAC_Init_ex: function(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD; impl: PENGINE): integer; cdecl;
+    HMAC_Update: function(ctx: PHMAC_CTX; data: PByte; len: PtrUInt): integer; cdecl;
+    HMAC_Final: function(ctx: PHMAC_CTX; md: PByte; len: PCardinal): integer; cdecl;
+    EVP_sha256: function: PEVP_MD; cdecl;
+    EC_GROUP_new_by_curve_name: function(nid: integer): PEC_GROUP; cdecl;
+    EC_KEY_new: function(): PEC_KEY; cdecl;
+    EC_KEY_set_group: function(key: PEC_KEY; group: PEC_GROUP): integer; cdecl;
+    BN_bin2bn: function(s: pointer; len: integer; ret: PBIGNUM): PBIGNUM; cdecl;
+    EC_POINT_bn2point: function(p1: PEC_GROUP; p2: PBIGNUM; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT; cdecl;
+    EC_KEY_set_public_key: function(key: PEC_KEY; pub: PEC_POINT): integer; cdecl;
+    ECDSA_verify: function(typ: integer; dgst: PByte; dgstlen: integer; sig: PByte; siglen: integer; eckey: PEC_KEY): integer; cdecl;
+    EC_POINT_free: procedure(point: PEC_POINT); cdecl;
+    BN_free: procedure(a: PBIGNUM); cdecl;
+    BN_num_bits: function(a: PBIGNUM): integer; cdecl;
+    EC_KEY_free: procedure(key: PEC_KEY); cdecl;
+    EC_GROUP_free: procedure(group: PEC_GROUP); cdecl;
+    EC_KEY_generate_key: function(key: PEC_KEY): integer; cdecl;
+    EC_KEY_get0_private_key: function(key: PEC_KEY): PBIGNUM; cdecl;
+    EC_KEY_set_private_key: function(key: PEC_KEY; prv: PBIGNUM): integer; cdecl;
+    EC_KEY_get0_public_key: function(key: PEC_KEY): PEC_POINT; cdecl;
+    EC_POINT_point2buf: function(group: PEC_GROUP; point: PEC_POINT; form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
+    BN_bn2bin: function(a: PBIGNUM; _to: pointer): integer; cdecl;
+    ECDSA_size: function(eckey: PEC_KEY): integer; cdecl;
+    ECDSA_sign: function(typ: integer; dgst: PByte; dgstlen: integer; sig: PByte; siglen: PCardinal; eckey: PEC_KEY): integer; cdecl;
+    EC_POINT_new: function(group: PEC_GROUP): PEC_POINT; cdecl;
+    EC_POINT_oct2point: function(group: PEC_GROUP; p: PEC_POINT; buf: PByte; len: PtrUInt; ctx: PBN_CTX): integer; cdecl;
+    ECDH_compute_key: function(_out: pointer; outlen: PtrUInt; pub_key: PEC_POINT; ecdh: PEC_KEY; KDF: ECDH_compute_key_KDF): integer; cdecl;
+    EVP_PKEY_CTX_new_id: function(id: integer; e: PENGINE): PEVP_PKEY_CTX; cdecl;
+    EVP_PKEY_paramgen_init: function(ctx: PEVP_PKEY_CTX): integer; cdecl;
+    EVP_PKEY_paramgen: function(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
+    EVP_PKEY_keygen_init: function(ctx: PEVP_PKEY_CTX): integer; cdecl;
+    EVP_PKEY_keygen: function(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
+    EVP_PKEY_CTX_ctrl: function(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer; cmd: integer; p1: integer; p2: pointer): integer; cdecl;
+    EVP_PKEY_CTX_new: function(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX; cdecl;
+    EVP_PKEY_CTX_free: procedure(ctx: PEVP_PKEY_CTX); cdecl;
+    PEM_write_bio_PrivateKey: function(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
+    PEM_write_bio_PUBKEY: function(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..50] of PAnsiChar = (
+  LIBCRYPTO_ENTRIES: array[0..101] of RawUtf8 = (
     'CRYPTO_malloc', 'CRYPTO_free', 'ERR_remove_state', 'ERR_error_string_n',
     'ERR_get_error', 'ERR_remove_thread_state', 'ERR_load_BIO_strings',
     'EVP_MD_CTX_new', 'EVP_MD_CTX_free',
     'EVP_PKEY_size', 'EVP_PKEY_free', 'EVP_DigestSignInit', 'EVP_DigestUpdate',
     'EVP_DigestSignFinal', 'EVP_DigestVerifyInit', 'EVP_DigestVerifyFinal',
+    'EVP_DigestSign', 'EVP_DigestVerify',
     'HMAC', 'BIO_new', 'BIO_free', 'BIO_test_flags', 'BIO_ctrl', 'BIO_new_mem_buf',
     'BIO_s_mem', 'BIO_read', 'BIO_write', 'BIO_new_socket', 'X509_get_issuer_name',
     'X509_get_subject_name', 'X509_free', 'X509_NAME_print_ex_fp', 'OPENSSL_sk_pop',
     'OPENSSL_sk_num', 'ASN1_BIT_STRING_get_bit', 'OBJ_nid2sn', 'OBJ_obj2nid',
     'ASN1_STRING_data', 'PEM_read_bio_X509', 'PEM_read_bio_PrivateKey',
+    'PEM_read_bio_PUBKEY', 'PEM_read_bio_RSAPublicKey',
     'PEM_read_bio_RSAPrivateKey', 'RAND_bytes', 'EVP_get_cipherbyname',
     'EVP_get_digestbyname', 'EVP_CIPHER_CTX_new', 'EVP_CIPHER_CTX_reset',
     'EVP_CIPHER_CTX_free', 'EVP_CIPHER_CTX_copy', 'EVP_CIPHER_CTX_ctrl',
     'EVP_CipherInit_ex', 'EVP_CipherUpdate', 'EVP_CipherFinal_ex',
-    'EVP_CIPHER_CTX_set_padding');
+    'EVP_CIPHER_CTX_set_padding', 'EVP_MD_CTX_new', 'EVP_MD_CTX_free',
+    'EVP_MD_CTX_md', 'EVP_MD_flags', 'EVP_MD_size', 'EVP_DigestInit_ex',
+    'EVP_DigestFinal_ex', 'EVP_DigestFinalXOF', 'HMAC_CTX_new', 'HMAC_CTX_free',
+    'HMAC_Init_ex', 'HMAC_Update', 'HMAC_Final', 'EVP_sha256',
+    'EC_GROUP_new_by_curve_name', 'EC_KEY_new', 'EC_KEY_set_group',
+    'BN_bin2bn', 'EC_POINT_bn2point', 'EC_KEY_set_public_key', 'ECDSA_verify',
+    'EC_POINT_free', 'BN_free', 'BN_num_bits', 'EC_KEY_free', 'EC_GROUP_free',
+    'EC_KEY_generate_key', 'EC_KEY_get0_private_key', 'EC_KEY_set_private_key',
+    'EC_KEY_get0_public_key', 'EC_POINT_point2buf', 'BN_bn2bin', 'ECDSA_size',
+    'ECDSA_sign', 'EC_POINT_new', 'EC_POINT_oct2point', 'ECDH_compute_key',
+    'EVP_PKEY_CTX_new_id', 'EVP_PKEY_paramgen_init', 'EVP_PKEY_paramgen',
+    'EVP_PKEY_keygen_init', 'EVP_PKEY_keygen', 'EVP_PKEY_CTX_ctrl',
+    'EVP_PKEY_CTX_new', 'EVP_PKEY_CTX_free', 'PEM_write_bio_PrivateKey',
+    'PEM_write_bio_PUBKEY');
 
 var
   libcrypto: TLibCrypto;
@@ -1168,6 +1609,18 @@ end;
 function EVP_DigestVerifyFinal(ctx: PEVP_MD_CTX; sig: PByte; siglen: PtrUInt): integer;
 begin
   result := libcrypto.EVP_DigestVerifyFinal(ctx, sig, siglen);
+end;
+
+function EVP_DigestSign(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt;
+   tbs: PByte; tbslen: PtrUInt): integer;
+begin
+  result := libcrypto.EVP_DigestSign(ctx, sigret, siglen, tbs, tbslen);
+end;
+
+function EVP_DigestVerify(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt;
+   tbs: PByte; tbslen: PtrUInt): integer;
+begin
+  result := libcrypto.EVP_DigestVerify(ctx, sigret, siglen, tbs, tbslen);
 end;
 
 function HMAC(evp_md: PEVP_MD; key: pointer; key_len: integer; d: PByte; n: PtrUInt;
@@ -1284,6 +1737,18 @@ begin
   result := libcrypto.PEM_read_bio_PrivateKey(bp, x, cb, u);
 end;
 
+function PEM_read_bio_PUBKEY(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
+  u: pointer): PEVP_PKEY;
+begin
+  result := libcrypto.PEM_read_bio_PUBKEY(bp, x, cb, u);
+end;
+
+function PEM_read_bio_RSAPublicKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
+  u: pointer): PRSA;
+begin
+  result := libcrypto.PEM_read_bio_RSAPublicKey(bp, x, cb, u);
+end;
+
 function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
   u: pointer): PRSA;
 begin
@@ -1353,26 +1818,271 @@ begin
   result := libcrypto.EVP_CIPHER_CTX_set_padding(c, pad);
 end;
 
+function EVP_MD_CTX_new: PEVP_MD_CTX;
+begin
+  result := libcrypto.EVP_MD_CTX_new;
+end;
 
-var
-  openssl_initialized: boolean;
+procedure EVP_MD_CTX_free(ctx: PEVP_MD_CTX);
+begin
+  libcrypto.EVP_MD_CTX_free(ctx);
+end;
+
+function EVP_MD_CTX_md(ctx: PEVP_MD_CTX): PEVP_MD;
+begin
+  result := libcrypto.EVP_MD_CTX_md(ctx);
+end;
+
+function EVP_MD_flags(md: PEVP_MD): cardinal;
+begin
+  result := libcrypto.EVP_MD_flags(md);
+end;
+
+function EVP_MD_size(md: PEVP_MD): integer;
+begin
+  result := libcrypto.EVP_MD_size(md);
+end;
+
+function EVP_DigestInit_ex(ctx: PEVP_MD_CTX; typ: PEVP_MD; impl: PENGINE): integer;
+begin
+  result := libcrypto.EVP_DigestInit_ex(ctx, typ, impl);
+end;
+
+function EVP_DigestFinal_ex(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal): integer;
+begin
+  result := libcrypto.EVP_DigestFinal_ex(ctx, md, s);
+end;
+
+function EVP_DigestFinalXOF(ctx: PEVP_MD_CTX; md: PByte; len: PtrUInt): integer;
+begin
+  result := libcrypto.EVP_DigestFinalXOF(ctx, md, len);
+end;
+
+function HMAC_CTX_new: PHMAC_CTX;
+begin
+  result := libcrypto.HMAC_CTX_new;
+end;
+
+procedure HMAC_CTX_free(ctx: PHMAC_CTX);
+begin
+  libcrypto.HMAC_CTX_free(ctx);
+end;
+
+function HMAC_Init_ex(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD;
+  impl: PENGINE): integer;
+begin
+  result := libcrypto.HMAC_Init_ex(ctx, key, len, md, impl);
+end;
+
+function HMAC_Update(ctx: PHMAC_CTX; data: PByte; len: PtrUInt): integer;
+begin
+  result := libcrypto.HMAC_Update(ctx, data, len);
+end;
+
+function HMAC_Final(ctx: PHMAC_CTX; md: PByte; len: PCardinal): integer;
+begin
+  result := libcrypto.HMAC_Final(ctx, md, len);
+end;
+
+function EVP_sha256: PEVP_MD;
+begin
+  result := libcrypto.EVP_sha256;
+end;
+
+function EC_GROUP_new_by_curve_name(nid: integer): PEC_GROUP;
+begin
+  result := libcrypto.EC_GROUP_new_by_curve_name(nid);
+end;
+
+function EC_KEY_new(): PEC_KEY;
+begin
+  result := libcrypto.EC_KEY_new;
+end;
+
+function EC_KEY_set_group(key: PEC_KEY; group: PEC_GROUP): integer;
+begin
+  result := libcrypto.EC_KEY_set_group(key, group);
+end;
+
+function BN_bin2bn(s: pointer; len: integer; ret: PBIGNUM): PBIGNUM;
+begin
+  result := libcrypto.BN_bin2bn(s, len, ret);
+end;
+
+function EC_POINT_bn2point(p1: PEC_GROUP; p2: PBIGNUM; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT;
+begin
+  result := libcrypto.EC_POINT_bn2point(p1, p2, p3, p4);
+end;
+
+function EC_KEY_set_public_key(key: PEC_KEY; pub: PEC_POINT): integer;
+begin
+  result := libcrypto.EC_KEY_set_public_key(key, pub);
+end;
+
+function ECDSA_verify(typ: integer; dgst: PByte; dgstlen: integer;
+  sig: PByte; siglen: integer; eckey: PEC_KEY): integer;
+begin
+  result := libcrypto.ECDSA_verify(typ, dgst, dgstlen, sig, siglen, eckey);
+end;
+
+procedure EC_POINT_free(point: PEC_POINT);
+begin
+  libcrypto.EC_POINT_free(point);
+end;
+
+procedure BN_free(a: PBIGNUM);
+begin
+  libcrypto.BN_free(a);
+end;
+
+function BN_num_bits(a: PBIGNUM): integer;
+begin
+  result := libcrypto.BN_num_bits(a);
+end;
+
+procedure EC_KEY_free(key: PEC_KEY);
+begin
+  libcrypto.EC_KEY_free(key);
+end;
+
+procedure EC_GROUP_free(group: PEC_GROUP);
+begin
+  libcrypto.EC_GROUP_free(group);
+end;
+
+function EC_KEY_generate_key(key: PEC_KEY): integer;
+begin
+  result := libcrypto.EC_KEY_generate_key(key);
+end;
+
+function EC_KEY_get0_private_key(key: PEC_KEY): PBIGNUM;
+begin
+  result := libcrypto.EC_KEY_get0_private_key(key);
+end;
+
+function EC_KEY_set_private_key(key: PEC_KEY; prv: PBIGNUM): integer;
+begin
+  result := libcrypto.EC_KEY_set_private_key(key, prv);
+end;
+
+function EC_KEY_get0_public_key(key: PEC_KEY): PEC_POINT;
+begin
+  result := libcrypto.EC_KEY_get0_public_key(key);
+end;
+
+function EC_POINT_point2buf(group: PEC_GROUP; point: PEC_POINT;
+  form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt;
+begin
+  result := libcrypto.EC_POINT_point2buf(group, point, form, pbuf, ctx);
+end;
+
+function BN_bn2bin(a: PBIGNUM; _to: pointer): integer;
+begin
+  result := libcrypto.BN_bn2bin(a, _to);
+end;
+
+function ECDSA_size(eckey: PEC_KEY): integer;
+begin
+  result := libcrypto.ECDSA_size(eckey);
+end;
+
+function ECDSA_sign(typ: integer; dgst: PByte; dgstlen: integer;
+  sig: PByte; siglen: PCardinal; eckey: PEC_KEY): integer;
+begin
+  result := libcrypto.ECDSA_sign(typ, dgst, dgstlen, sig, siglen, eckey);
+end;
+
+function EC_POINT_new(group: PEC_GROUP): PEC_POINT;
+begin
+  result := libcrypto.EC_POINT_new(group);
+end;
+
+function EC_POINT_oct2point(group: PEC_GROUP; p: PEC_POINT;
+  buf: PByte; len: PtrUInt; ctx: PBN_CTX): integer;
+begin
+  result := libcrypto.EC_POINT_oct2point(group, p, buf, len, ctx);
+end;
+
+function ECDH_compute_key(_out: pointer; outlen: PtrUInt; pub_key: PEC_POINT;
+  ecdh: PEC_KEY; KDF: ECDH_compute_key_KDF): integer;
+begin
+  result := libcrypto.ECDH_compute_key(_out, outlen, pub_key, ecdh, kdf);
+end;
+
+function EVP_PKEY_CTX_new_id(id: integer; e: PENGINE): PEVP_PKEY_CTX;
+begin
+  result := libcrypto.EVP_PKEY_CTX_new_id(id, e);
+end;
+
+function EVP_PKEY_paramgen_init(ctx: PEVP_PKEY_CTX): integer;
+begin
+  result := libcrypto.EVP_PKEY_paramgen_init(ctx);
+end;
+
+function EVP_PKEY_paramgen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer;
+begin
+  result := libcrypto.EVP_PKEY_paramgen(ctx, ppkey);
+end;
+
+function EVP_PKEY_keygen_init(ctx: PEVP_PKEY_CTX): integer;
+begin
+  result := libcrypto.EVP_PKEY_keygen_init(ctx);
+end;
+
+function EVP_PKEY_keygen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer;
+begin
+  result := libcrypto.EVP_PKEY_keygen(ctx, ppkey);
+end;
+
+function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer;
+  cmd: integer; p1: integer; p2: pointer): integer;
+begin
+  result := libcrypto.EVP_PKEY_CTX_ctrl(ctx, keytype, optype, cmd, p1, p2);
+end;
+
+function EVP_PKEY_CTX_new(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX;
+begin
+  result := libcrypto.EVP_PKEY_CTX_new(pkey, e);
+end;
+
+procedure EVP_PKEY_CTX_free(ctx: PEVP_PKEY_CTX);
+begin
+  libcrypto.EVP_PKEY_CTX_free(ctx);
+end;
+
+function PEM_write_bio_PrivateKey(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER;
+  kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer;
+begin
+  result := libcrypto.PEM_write_bio_PrivateKey(bp, x, enc, kstr, klen, cb, u);
+end;
+
+function PEM_write_bio_PUBKEY(bp: PBIO; x: PEVP_PKEY): integer;
+begin
+  result := libcrypto.PEM_write_bio_PUBKEY(bp, x);
+end;
+
 
 function OpenSslIsAvailable: boolean;
 begin
-  if not openssl_initialized then
-    OpenSslInitialize;
-  result := libssl <> nil;
+  case openssl_initialized of
+    osslUnTested:
+      result := OpenSslInitialize;
+    osslAvailable:
+      result := true;
+  else
+    result := false;
+  end;
 end;
 
-procedure OpenSslInitialize(const libcryptoname, libsslname: TFileName);
+function OpenSslInitialize(const libcryptoname, libsslname: TFileName): boolean;
 var
   P: PPointerArray;
   api: PtrInt;
 begin
   GlobalLock;
   try
-    if openssl_initialized and
-       (libssl <> nil) then // set it once, but allow to retry given libnames
+    if openssl_initialized = osslAvailable then
+      // set it once, but allow to retry given libnames
       exit;
     libcrypto := TLibCrypto.Create;
     libssl := TLibSsl.Create;
@@ -1390,7 +2100,8 @@ begin
         ], EOpenSsl);
       P := @@libcrypto.CRYPTO_malloc;
       for api := low(LIBCRYPTO_ENTRIES) to high(LIBCRYPTO_ENTRIES) do
-        libcrypto.Resolve(LIBCRYPTO_ENTRIES[api], @P[api], {onfail=}EOpenSsl);
+        libcrypto.Resolve(pointer(_PU + LIBCRYPTO_ENTRIES[api]),
+          @P[api], {onfail=}EOpenSsl);
       // attempt to load libssl
       libssl.TryLoadLibrary([
       {$ifdef OSWINDOWS}
@@ -1404,7 +2115,8 @@ begin
         ], EOpenSsl);
       P := @@libssl.SSL_CTX_new;
       for api := low(LIBSSL_ENTRIES) to high(LIBSSL_ENTRIES) do
-        libssl.Resolve(LIBSSL_ENTRIES[api], @P[api], {onfail=}EOpenSsl);
+        libssl.Resolve(pointer(_PU + LIBSSL_ENTRIES[api]),
+          @P[api], {onfail=}EOpenSsl);
       // nothing is to be initialized with OpenSSL 1.1.*
       OpenSslVersion := libssl.OpenSSL_version_num;
       if OpenSslVersion and $ffffff00 <> $10101000 then // paranoid check 1.1.1
@@ -1415,8 +2127,12 @@ begin
       FreeAndNil(libcrypto);
     end;
   finally
-    openssl_initialized := true; // should be done the last
+    if libssl = nil then // flag should be set the last
+      openssl_initialized := osslNotAvailable
+    else
+      openssl_initialized := osslAvailable;
     GlobalUnLock;
+    result := libssl <> nil;
   end;
 end;
 
@@ -1542,6 +2258,36 @@ procedure SSL_get0_alpn_selected(ssl: PSSL; data: PPByte; len: PCardinal); cdecl
 function SSL_clear(s: PSSL): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_clear';
 
+function TLS_client_method(): PSSL_METHOD; cdecl;
+  external LIB_SSL name _PU + 'TLS_client_method';
+
+function SSL_CTX_set_default_verify_paths(ctx: PSSL_CTX): integer; cdecl;
+  external LIB_SSL name _PU + 'SSL_CTX_set_default_verify_paths';
+
+procedure SSL_CTX_set_default_passwd_cb_userdata(ctx: PSSL_CTX; u: pointer); cdecl;
+  external LIB_SSL name _PU + 'SSL_CTX_set_default_passwd_cb_userdata';
+
+function SSL_CTX_use_PrivateKey_file(ctx: PSSL_CTX; _file: PUtf8Char; typ: integer): integer; cdecl;
+  external LIB_SSL name _PU + 'SSL_CTX_use_PrivateKey_file';
+
+function SSL_CTX_set_cipher_list(p1: PSSL_CTX; str: PUtf8Char): integer; cdecl;
+  external LIB_SSL name _PU + 'SSL_CTX_set_cipher_list';
+
+function SSL_set_fd(s: PSSL; fd: integer): integer; cdecl;
+  external LIB_SSL name _PU + 'SSL_set_fd';
+
+function SSL_get_current_cipher(s: PSSL): PSSL_CIPHER; cdecl;
+  external LIB_SSL name _PU + 'SSL_get_current_cipher';
+
+function SSL_CIPHER_description(p1: PSSL_CIPHER; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
+  external LIB_SSL name _PU + 'SSL_CIPHER_description';
+
+function SSL_get_verify_result(ssl: PSSL): integer; cdecl;
+  external LIB_SSL name _PU + 'SSL_get_verify_result';
+
+function X509_print(bp: PBIO; x: PX509): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_print';
+
 
 { --------- libcrypto entries }
 
@@ -1595,6 +2341,12 @@ function EVP_DigestVerifyInit(ctx: PEVP_MD_CTX; pctx: PPEVP_PKEY_CTX;
 
 function EVP_DigestVerifyFinal(ctx: PEVP_MD_CTX; sig: PByte; siglen: PtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DigestVerifyFinal';
+
+function EVP_DigestSign(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_DigestSign';
+
+function EVP_DigestVerify(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_DigestVerify';
 
 function HMAC(evp_md: PEVP_MD; key: pointer; key_len: integer;
   d: PByte; n: PtrUInt; md: PByte; var md_len: cardinal): PByte; cdecl;
@@ -1665,8 +2417,13 @@ function PEM_read_bio_PrivateKey(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb;
   u: pointer): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_bio_PrivateKey';
 
-function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb;
-  u: pointer): PRSA; cdecl;
+function PEM_read_bio_PUBKEY(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
+  external LIB_CRYPTO name _PU + 'PEM_read_bio_PUBKEY';
+
+function PEM_read_bio_RSAPublicKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
+  external LIB_CRYPTO name _PU + 'PEM_read_bio_RSAPublicKey';
+
+function PEM_read_bio_RSAPrivateKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_bio_RSAPrivateKey';
 
 function RAND_bytes(buf: PByte; num: integer): integer; cdecl;
@@ -1708,10 +2465,151 @@ function EVP_CipherFinal_ex(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): 
 function EVP_CIPHER_CTX_set_padding(c: PEVP_CIPHER_CTX; pad: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_set_padding';
 
+function EVP_MD_CTX_new(): PEVP_MD_CTX; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_new';
 
-procedure OpenSslInitialize(const libcryptoname, libsslname: TFileName);
+procedure EVP_MD_CTX_free(ctx: PEVP_MD_CTX); cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_free';
+
+function EVP_MD_CTX_md(ctx: PEVP_MD_CTX): PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_md';
+
+function EVP_MD_flags(md: PEVP_MD): cardinal; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_MD_flags';
+
+function EVP_MD_size(md: PEVP_MD): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_MD_size';
+
+function EVP_DigestInit_ex(ctx: PEVP_MD_CTX; typ: PEVP_MD; impl: PENGINE): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_DigestInit_ex';
+
+function EVP_DigestFinal_ex(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_DigestFinal_ex';
+
+function EVP_DigestFinalXOF(ctx: PEVP_MD_CTX; md: PByte; len: PtrUInt): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_DigestFinalXOF';
+
+function HMAC_CTX_new(): PHMAC_CTX; cdecl;
+  external LIB_CRYPTO name _PU + 'HMAC_CTX_new';
+
+procedure HMAC_CTX_free(ctx: PHMAC_CTX); cdecl;
+  external LIB_CRYPTO name _PU + 'HMAC_CTX_free';
+
+function HMAC_Init_ex(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD; impl: PENGINE): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'HMAC_Init_ex';
+
+function HMAC_Update(ctx: PHMAC_CTX; data: PByte; len: PtrUInt): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'HMAC_Update';
+
+function HMAC_Final(ctx: PHMAC_CTX; md: PByte; len: PCardinal): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'HMAC_Final';
+
+function EVP_sha256: PEVP_MD; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_sha256';
+
+function EC_GROUP_new_by_curve_name(nid: integer): PEC_GROUP; cdecl;
+  external LIB_CRYPTO name _PU + 'EC_GROUP_new_by_curve_name';
+
+function EC_KEY_new(): PEC_KEY; cdecl;
+  external LIB_CRYPTO name _PU + 'EC_KEY_new';
+
+function EC_KEY_set_group(key: PEC_KEY; group: PEC_GROUP): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EC_KEY_set_group';
+
+function BN_bin2bn(s: pointer; len: integer; ret: PBIGNUM): PBIGNUM; cdecl;
+  external LIB_CRYPTO name _PU + 'BN_bin2bn';
+
+function EC_POINT_bn2point(p1: PEC_GROUP; p2: PBIGNUM; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT; cdecl;
+  external LIB_CRYPTO name _PU + 'EC_POINT_bn2point';
+
+function EC_KEY_set_public_key(key: PEC_KEY; pub: PEC_POINT): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EC_KEY_set_public_key';
+
+function ECDSA_verify(typ: integer; dgst: PByte; dgstlen: integer; sig: PByte; siglen: integer; eckey: PEC_KEY): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'ECDSA_verify';
+
+procedure EC_POINT_free(point: PEC_POINT); cdecl;
+  external LIB_CRYPTO name _PU + 'EC_POINT_free';
+
+procedure BN_free(a: PBIGNUM); cdecl;
+  external LIB_CRYPTO name _PU + 'BN_free';
+
+function BN_num_bits(a: PBIGNUM): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'BN_num_bits';
+
+procedure EC_KEY_free(key: PEC_KEY); cdecl;
+  external LIB_CRYPTO name _PU + 'EC_KEY_free';
+
+procedure EC_GROUP_free(group: PEC_GROUP); cdecl;
+  external LIB_CRYPTO name _PU + 'EC_GROUP_free';
+
+function EC_KEY_generate_key(key: PEC_KEY): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EC_KEY_generate_key';
+
+function EC_KEY_get0_private_key(key: PEC_KEY): PBIGNUM; cdecl;
+  external LIB_CRYPTO name _PU + 'EC_KEY_get0_private_key';
+
+function EC_KEY_set_private_key(key: PEC_KEY; prv: PBIGNUM): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EC_KEY_set_private_key';
+
+function EC_KEY_get0_public_key(key: PEC_KEY): PEC_POINT; cdecl;
+  external LIB_CRYPTO name _PU + 'EC_KEY_get0_public_key';
+
+function EC_POINT_point2buf(group: PEC_GROUP; point: PEC_POINT; form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
+  external LIB_CRYPTO name _PU + 'EC_POINT_point2buf';
+
+function BN_bn2bin(a: PBIGNUM; _to: pointer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'BN_bn2bin';
+
+function ECDSA_size(eckey: PEC_KEY): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'ECDSA_size';
+
+function ECDSA_sign(typ: integer; dgst: PByte; dgstlen: integer; sig: PByte; siglen: PCardinal; eckey: PEC_KEY): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'ECDSA_sign';
+
+function EC_POINT_new(group: PEC_GROUP): PEC_POINT; cdecl;
+  external LIB_CRYPTO name _PU + 'EC_POINT_new';
+
+function EC_POINT_oct2point(group: PEC_GROUP; p: PEC_POINT; buf: PByte; len: PtrUInt; ctx: PBN_CTX): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EC_POINT_oct2point';
+
+function ECDH_compute_key(_out: pointer; outlen: PtrUInt; pub_key: PEC_POINT; ecdh: PEC_KEY; KDF: ECDH_compute_key_KDF): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'ECDH_compute_key';
+
+function EVP_PKEY_CTX_new_id(id: integer; e: PENGINE): PEVP_PKEY_CTX; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_new_id';
+
+function EVP_PKEY_paramgen_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_paramgen_init';
+
+function EVP_PKEY_paramgen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_paramgen';
+
+function EVP_PKEY_keygen_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_keygen_init';
+
+function EVP_PKEY_keygen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_keygen';
+
+function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer; cmd: integer; p1: integer; p2: pointer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_ctrl';
+
+function EVP_PKEY_CTX_new(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX; cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_new';
+
+procedure EVP_PKEY_CTX_free(ctx: PEVP_PKEY_CTX); cdecl;
+  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_free';
+
+function PEM_write_bio_PrivateKey(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'PEM_write_bio_PrivateKey';
+
+function PEM_write_bio_PUBKEY(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'PEM_write_bio_PUBKEY';
+
+function OpenSslInitialize(const libcryptoname, libsslname: TFileName): boolean;
 begin
   OpenSslVersion := OpenSSL_version_num;
+  result := true;
 end;
 
 function OpenSslIsAvailable: boolean;
@@ -1764,7 +2662,35 @@ begin
   result := BIO_ctrl(b, _BIO_CTRL_PENDING, 0, nil);
 end;
 
+procedure BIO_ToString(b: PBIO; var data: RawByteString);
+var
+  mem: PBUF_MEM;
+begin
+  if (b = nil) or
+     (BIO_ctrl(b, BIO_C_GET_BUF_MEM_PTR, 0, @mem) <> OPENSSLSUCCESS) then
+    data := ''
+  else
+    SetString(data, pointer(mem.data), mem.length);
+end;
+
+function BIO_ToString(b: PBIO; andfree: boolean): RawUtf8;
+begin
+  BIO_ToString(b, RawByteString(result));
+  if andfree then
+    BIO_free(b);
+end;
+
+procedure OpenSSL_Free(ptr: pointer);
+begin
+  CRYPTO_free(ptr, 'mormot', 0);
+end;
+
 function SSL_error(error: integer): RawUtf8;
+begin
+  SSL_error(error, result);
+end;
+
+procedure SSL_error(error: integer; var result: RawUtf8);
 var
   tmp: array[0..1023] of AnsiChar;
 begin
@@ -1791,6 +2717,21 @@ begin
     result := true;
   end;
 end;
+
+{$I-}
+procedure WritelnSSL_error;
+var
+  err: integer;
+  tmp: array[0..1023] of AnsiChar;
+begin
+  err := ERR_get_error;
+  if err = 0 then
+    exit;
+  ERR_error_string_n(err, @tmp, SizeOf(tmp));
+  writeln(stderr, tmp);
+  ioresult;
+end;
+{$I+}
 
 function SSL_CTX_set_session_cache_mode(ctx: PSSL_CTX; mode: integer): integer;
 begin
@@ -1819,12 +2760,12 @@ end;
 
 function SSL_CTX_set_min_proto_version(ctx: PSSL_CTX; version: integer): integer;
 begin
-  result := SSL_CTX_ctrl(ctx, SSL_CTRL_SET_MIN_PROTO_VERSION, version, Nil);
+  result := SSL_CTX_ctrl(ctx, SSL_CTRL_SET_MIN_PROTO_VERSION, version, nil);
 end;
 
 function SSL_CTX_set_max_proto_version(ctx: PSSL_CTX; version: integer): integer;
 begin
-  result := SSL_CTX_ctrl(ctx, SSL_CTRL_SET_MAX_PROTO_VERSION, version, Nil);
+  result := SSL_CTX_ctrl(ctx, SSL_CTRL_SET_MAX_PROTO_VERSION, version, nil);
 end;
 
 function SSL_set_tlsext_host_name(const s: PSSL; const name: RawUtf8): integer;
@@ -1835,12 +2776,22 @@ end;
 
 function SSL_set_mode(s: PSSL; version: integer): integer;
 begin
-  result := SSL_ctrl(s, SSL_CTRL_MODE, version, Nil);
+  result := SSL_ctrl(s, SSL_CTRL_MODE, version, nil);
 end;
 
 function SSL_get_mode(s: PSSL): integer;
 begin
-  result := SSL_ctrl(s, SSL_CTRL_MODE, 0, Nil);
+  result := SSL_ctrl(s, SSL_CTRL_MODE, 0, nil);
+end;
+
+function EVP_MD_CTX_size(ctx: PEVP_MD_CTX): integer;
+begin
+  result := EVP_MD_size(EVP_MD_CTX_md(ctx))
+end;
+
+function BN_num_bytes(bn: PBIGNUM): integer;
+begin
+  result := (BN_num_bits(bn) + 7) shr 3;
 end;
 
 function DTLSv1_get_timeout(s: PSSL; timeval: PTimeVal): time_t;
@@ -1850,7 +2801,7 @@ end;
 
 procedure DTLSv1_handle_timeout(s: PSSL);
 begin
-  SSL_ctrl(s, DTLS_CTRL_HANDLE_TIMEOUT, 0, Nil);
+  SSL_ctrl(s, DTLS_CTRL_HANDLE_TIMEOUT, 0, nil);
 end;
 
 
@@ -1862,23 +2813,240 @@ begin
     CheckFailed(caller, method, res);
 end;
 
+class procedure EOpenSsl.Check(res: integer);
+begin
+  if res <> OPENSSLSUCCESS then
+    CheckFailed(nil, '', res);
+end;
+
 class procedure EOpenSsl.CheckFailed(caller: TObject; const method: string; res: integer);
+var
+  tmp: array[0..1023] of AnsiChar;
 begin
   res := ERR_get_error;
-  raise CreateFmt('%s.%s: OpenSSL error %d [%s]',
-    [ClassNameShort(caller)^, method, res, SSL_error_short(res)]);
+  if res = 0 then
+    tmp[0] := #0
+  else
+    ERR_error_string_n(res, @tmp, SizeOf(tmp));
+  if caller = nil then
+    raise CreateFmt('OpenSSL error %d [%s]', [res, PAnsiChar(@tmp)])
+  else
+    raise CreateFmt('%s.%s: OpenSSL error %d [%s]',
+      [ClassNameShort(caller)^, method, res, PAnsiChar(@tmp)]);
 end;
 
 class procedure EOpenSsl.CheckAvailable(caller: TClass; const method: string);
 begin
   if not OpenSslIsAvailable then
-    raise CreateFmt('%s.%s: OpenSSL 1.1.1 is not available',
-      [ClassNameShort(caller)^, method]);
+    if caller = nil then
+      raise CreateFmt('%s: OpenSSL 1.1.1 is not available',
+        [method])
+    else
+      raise CreateFmt('%s.%s: OpenSSL 1.1.1 is not available',
+        [ClassNameShort(caller)^, method]);
+end;
+
+
+
+{ ************** TLS / HTTPS Encryption Layer using OpenSSL for TCrtSocket }
+
+{ TOpenSslClient }
+
+type
+  /// OpenSSL TLS layer communication
+  TOpenSslClient = class(TInterfacedObject, INetTLS)
+  private
+    fContext: PNetTLSContext;
+    fCtx: PSSL_CTX;
+    fSsl: PSSL;
+    fDoSslShutdown: boolean;
+  public
+    destructor Destroy; override;
+    // INetTLS methods
+    procedure AfterConnection(Socket: TNetSocket; var Context: TNetTLSContext;
+      const ServerAddress: RawUtf8);
+    function Receive(Buffer: pointer; var Length: integer): TNetResult;
+    function Send(Buffer: pointer; var Length: integer): TNetResult;
+  end;
+
+const
+  // list taken on 2021-02-19 from https://ssl-config.mozilla.org/
+  // - prefer CHACHA20-POLY1305 if no AES acceleration is available
+  SAFE_CIPHERLIST: array[ {aes=} boolean ] of PUtf8Char = (
+    'ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:' +
+    'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:' +
+    'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:' +
+    'DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384',
+    'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:' +
+    'ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:' +
+    'ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:' +
+    'DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384');
+
+// see https://www.ibm.com/support/knowledgecenter/SSB23S_1.1.0.2020/gtps7/s5sple2.html
+
+procedure TOpenSslClient.AfterConnection(Socket: TNetSocket;
+  var Context: TNetTLSContext; const ServerAddress: RawUtf8);
+var
+  res: integer;
+  peer: PX509;
+  bio: PBIO;
+  ciph: PSSL_CIPHER;
+  cipher: array[byte] of AnsiChar;
+begin
+  fContext := @Context;
+  // prepare TLS connection properties
+  fCtx := SSL_CTX_new(TLS_client_method);
+  if Context.IgnoreCertificateErrors then
+    SSL_CTX_set_verify(fCtx, SSL_VERIFY_NONE, nil)
+  else
+  begin
+    SSL_CTX_set_verify(fCtx, SSL_VERIFY_PEER, nil);
+    if FileExists(TFileName(Context.CACertificatesFile)) then
+      SSL_CTX_load_verify_locations(
+        fCtx, pointer(Context.CACertificatesFile), nil)
+    else
+      SSL_CTX_set_default_verify_paths(fCtx);
+  end;
+  if FileExists(TFileName(Context.CertificateFile)) then
+     SSL_CTX_use_certificate_file(
+       fCtx, pointer(Context.CertificateFile), SSL_FILETYPE_PEM);
+  if FileExists(TFileName(Context.PrivateKeyFile)) then
+  begin
+    if Context.PrivatePassword <> '' then
+      SSL_CTX_set_default_passwd_cb_userdata(fCtx, pointer(Context.PrivatePassword));
+    SSL_CTX_use_PrivateKey_file(
+      fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
+  end;
+  if Context.CipherList = '' then
+    SSL_CTX_set_cipher_list(fCtx, SAFE_CIPHERLIST[ cfAESNI in CpuFeatures ])
+  else
+    EOpenSslClient.Check(self, 'AfterConnection',
+      SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)));
+  SSL_CTX_set_min_proto_version(fCtx, TLS1_2_VERSION); // no SSL3 TLS1 TLS1.1
+  fSsl := SSL_new(fCtx);
+  SSL_set_tlsext_host_name(fSsl, ServerAddress); // SNI field
+  EOpenSslClient.Check(self, 'AfterConnection',
+    SSL_set_fd(fSsl, Socket.Socket));
+  // client TLS negotiation with server
+  EOpenSslClient.Check(self, 'AfterConnection',
+    SSL_connect(fSsl));
+  fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
+  ciph := SSL_get_current_cipher(fSsl);
+  if (ciph <> nil) and
+     (SSL_CIPHER_description(ciph, @cipher, SizeOf(cipher)) <> nil) then
+    FastSetString(Context.CipherName, @cipher, StrLen(@cipher));
+  // peer validation
+  peer := SSL_get_peer_certificate(fSsl);
+  if (peer = nil) and
+     not Context.IgnoreCertificateErrors then
+    EOpenSslClient.Check(self, 'AfterConnection', 0);
+  try
+    res := SSL_get_verify_result(fSsl);
+    if (peer <> nil) and
+       (Context.WithPeerInfo or
+        (not Context.IgnoreCertificateErrors and
+        (res <> X509_V_OK))) then // include peer info on failure
+    begin
+      bio := BIO_new(BIO_s_mem());
+      X509_print(bio, peer);
+      Context.PeerInfo := BIO_ToString(bio, {andfree=}true);
+    end;
+    if not Context.IgnoreCertificateErrors and
+       (res <> X509_V_OK) then
+    begin
+      str(res, Context.LastError);
+      EOpenSslClient.Check(self, 'AfterConnection', 0);
+    end;
+  finally
+    X509_free(peer);
+  end;
+end;
+
+destructor TOpenSslClient.Destroy;
+begin
+  if fCtx <> nil then
+  begin
+    if fDoSslShutdown then
+      SSL_shutdown(fSsl);
+    SSL_free(fSsl);
+    SSL_CTX_free(fCtx);
+  end;
+  inherited Destroy;
+end;
+
+function TOpenSslClient.Receive(Buffer: pointer; var Length: integer): TNetResult;
+var
+  read, err: integer;
+begin
+  read := SSL_read(fSsl, Buffer, Length);
+  if read < 0 then
+  begin
+    err := SSL_get_error(fSsl, read);
+    case err of
+      SSL_ERROR_WANT_READ:
+        result := nrRetry;
+      SSL_ERROR_ZERO_RETURN:
+        // peer issued an SSL_shutdown -> keep fDoSslShutdown=true
+        result := nrFatalError;
+      else
+        begin
+          result := nrFatalError;
+          fDoSslShutdown := false;
+        end;
+    end;
+    if result <> nrRetry then
+      SSL_error(err, fContext^.LastError);
+  end
+  else
+  begin
+    Length := read;
+    result := nrOK;
+  end;
+end;
+
+function TOpenSslClient.Send(Buffer: pointer; var Length: integer): TNetResult;
+var
+  sent, err: integer;
+begin
+  sent := SSL_write(fSsl, Buffer, Length);
+  if sent < 0 then
+  begin
+    err := SSL_get_error(fSsl, sent);
+    case err of
+      SSL_ERROR_WANT_WRITE:
+        result := nrRetry;
+      SSL_ERROR_ZERO_RETURN:
+        // peer issued an SSL_shutdown -> keep fDoSslShutdown=true
+        result := nrFatalError;
+      else
+        begin
+          result := nrFatalError;
+          fDoSslShutdown := false;
+        end;
+    end;
+    if result <> nrRetry then
+      SSL_error(err, fContext^.LastError);
+  end
+  else
+  begin
+    Length := sent;
+    result := nrOK;
+  end;
+end;
+
+function OpenSslNewNetTLS: INetTLS;
+begin
+  if OpenSslIsAvailable then
+    result := TOpenSslClient.Create
+  else
+    result := nil;
 end;
 
 
 
 initialization
+  // always register the OpenSSL TLS layer factory for TCrtSocket
+  @NewNetTLS := @OpenSslNewNetTLS;
 
 finalization
   {$ifndef OPENSSLSTATIC}

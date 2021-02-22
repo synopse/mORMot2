@@ -662,7 +662,7 @@ function FastNewString(len, codepage: PtrInt): PAnsiChar;
 // is 16-bytes aligned
 // - to be used e.g. for proper SIMD process
 // - you can specify an alternate alignment, but it should be a power of two
-procedure GetMemAligned(var holder: RawByteString; p: pointer; len: PtrUInt;
+procedure GetMemAligned(var holder: RawByteString; fillwith: pointer; len: PtrUInt;
   out aligned: pointer; alignment: PtrUInt = 16);
 
 /// equivalence to @u[1] expression to ensure a RawUtf8 variable is unique
@@ -2453,9 +2453,9 @@ function Trim(const S: RawUtf8): RawUtf8;
 // - in mORMot 1.18, there was a Trim() function but it was confusing
 function TrimU(const S: RawUtf8): RawUtf8;
 
-// single-allocation (therefore faster) alternative to Trim(copy())
+/// single-allocation (therefore faster) alternative to Trim(copy())
 procedure TrimCopy(const S: RawUtf8; start, count: PtrInt;
-  out result: RawUtf8);
+  var result: RawUtf8);
 
 /// returns the left part of a RawUtf8 string, according to SepStr separator
 // - if SepStr is found, returns Str first chars until (and excluding) SepStr
@@ -2605,7 +2605,7 @@ function bswap64({$ifdef FPC_X86}constref{$else}const{$endif} a: QWord): QWord;
 /// convert the endianness of an array of unsigned 64-bit integer into BigEndian
 // - n is required to be > 0
 // - warning: on x86, a should be <> b
-procedure bswap64array(a,b: PQWordArray; n: PtrInt);
+procedure bswap64array(a, b: PQWordArray; n: PtrInt);
 
 
 /// low-level wrapper to add a callback to a dynamic list of events
@@ -2784,16 +2784,25 @@ function BufferLineLength(Text, TextEnd: PUtf8Char): PtrInt;
   {$ifndef CPUX64}{$ifdef HASINLINE}inline;{$endif}{$endif}
   
 type
-  /// function prototype to be used for hashing of an element
+  /// function prototype to be used for 32-bit hashing of an element
   // - it must return a cardinal hash, with as less collision as possible
   THasher = function(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+
+  /// function prototype to be used for 64-bit hashing of an element
+  // - it must return a QWord hash, with as less collision as possible
+  THasher64 = function(crc: QWord; buf: PAnsiChar; len: cardinal): QWord;
+
+  /// function prototype to be used for 128-bit hashing of an element
+  // - the input hash buffer is used as seed, and contains the 128-bit result
+  THasher128 = procedure(hash: PHash128; buf: PAnsiChar; len: cardinal);
+
 
 type
   TCrc32tab = array[0..7, byte] of cardinal;
   PCrc32tab = ^TCrc32tab;
 
 var
-  /// tables used by crc32cfast() function
+  /// 8KB tables used by crc32cfast() function
   // - created with a polynom diverse from zlib's crc32() algorithm, but
   // compatible with SSE 4.2 crc32 instruction
   // - tables content is created from code in initialization section below
@@ -2823,6 +2832,11 @@ function crc32cinlined(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 // - by design, such combined hashes cannot be cascaded
 function crc64c(buf: PAnsiChar; len: cardinal): Int64;
 
+/// compute two CRC32C checksum on the supplied buffer for 64-bit hashing
+// - will use SSE 4.2 hardware accelerated instruction, if available
+// - is the default implementation of DefaultHasher64
+function crc32cTwice(seed: QWord; buf: PAnsiChar; len: cardinal): QWord;
+
 /// compute CRC63C checksum on the supplied buffer, cascading two crc32c
 // - similar to crc64c, but with 63-bit, so no negative value: may be used
 // safely e.g. as mORMot's TID source
@@ -2851,17 +2865,14 @@ function crc32cBy4fast(crc, value: cardinal): cardinal;
 // implementation available on the current CPU (e.g. with SSE 4.2 opcodes)
 procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
 
-/// compute a proprietary 128-bit CRC of 128-bit binary buffers
-// - apply four crc32c() calls on the 128-bit input chunks, into a 128-bit crc
-// - its output won't match crc128c() value, which works on 8-bit input
-// - will use SSE 4.2 hardware accelerated instruction, if available
-// - is used e.g. by mormot.core.ecc's TEcdheProtocol.ComputeMAC for macCrc128c
-var crcblocks: procedure(crc128, data128: PBlock128; count: integer) = crcblocksfast;
-
 /// computation of our 128-bit CRC of a 128-bit binary buffer without SSE4.2
 // - to be used for regression tests only: crcblock will use the fastest
 // implementation available on the current CPU
 procedure crcblockfast(crc128, data128: PBlock128);
+
+/// compute a 128-bit CRC of any binary buffers
+// - combine crcblocksfast() with 4 parallel crc32c() for 1..15 trailing bytes
+procedure crc32c128(hash: PHash128; buf: PAnsiChar; len: cardinal);
 
 var
   /// compute CRC32C checksum on the supplied buffer
@@ -2885,6 +2896,13 @@ var
   // - will use SSE 4.2 hardware accelerated instruction, if available
   // - is used e.g. by mormot.core.crypto's TAesCfbCrc to check for data integrity
   crcblock: procedure(crc128, data128: PBlock128)  = crcblockfast;
+
+  /// compute a proprietary 128-bit CRC of 128-bit binary buffers
+  // - apply four crc32c() calls on the 128-bit input chunks, into a 128-bit crc
+  // - its output won't match crc128c() value, which works on 8-bit input
+  // - will use SSE 4.2 hardware accelerated instruction, if available
+  // - is used e.g. by mormot.core.ecc's TEcdheProtocol.ComputeMAC for macCrc128c
+  crcblocks: procedure(crc128, data128: PBlock128; count: integer) = crcblocksfast;
 
 /// compute CRC16-CCITT checkum on the supplied buffer
 // - i.e. 16-bit CRC-CCITT, with polynomial x^16 + x^12 + x^5 + 1 ($1021)
@@ -2937,19 +2955,26 @@ function xxHash32Mixup(crc: cardinal): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
 var
-  /// the default hasher used by TDynArrayHashed
+  /// the 32-bit default hasher used by TDynArrayHashed
   // - set to crc32csse42() if SSE4.2 instructions are available on this CPU,
-  // or fallback to xxHash32() which performs better than crc32cfast()
+  // or fallback to xxHash32() which is faster than crc32cfast() e.g. on ARM
+  // - mormot.core.crypto will assign safer and faster AesNiHash32() if available
   DefaultHasher: THasher = xxHash32;
 
-  /// the hash function used by TRawUtf8Interning
+  /// the 32-bit hash function used by TRawUtf8Interning
   // - set to crc32csse42() if SSE4.2 instructions are available on this CPU,
   // or fallback to xxHash32() which performs better than crc32cfast()
+  // - mormot.core.crypto will assign safer and faster AesNiHash32() if available
   InterningHasher: THasher = xxHash32;
 
+  /// a 64-bit hasher function
+  // - crc32cTwice() by default, but mormot.core.crypto will assign AesNiHash64()
+  DefaultHasher64: THasher64 = crc32cTwice;
 
-type
-  TOffsets = array[0..4095] of PAnsiChar; // 16KB/32KB hash table used by SynLZ
+  /// a 128-bit hasher function
+  // - crc32c128() by default, but mormot.core.crypto will assign AesNiHash128()
+  DefaultHasher128: THasher128 = crc32c128;
+
 
 /// get maximum possible (worse) SynLZ compressed size
 function SynLZcompressdestlen(in_len: integer): integer;
@@ -3614,6 +3639,13 @@ type
   /// a dynamic array of logging event levels
   TSynLogInfoDynArray = array of TSynLogInfo;
 
+  /// callback definition used to abstractly log some events
+  // - defined as TMethod to avoid dependency with the mormot.core.log unit
+  // - match class procedure TSynLog.DoLog
+  // - used e.g. by global variables like WindowsServiceLog in mormot.core.os
+  TSynLogProc = procedure(Level: TSynLogInfo; const Fmt: RawUtf8;
+     const Args: array of const; Instance: TObject = nil) of object;
+
 
 type
   /// fast bit-encoded date and time value
@@ -4032,7 +4064,7 @@ begin
   FastAssignNew(s, r);
 end;
 
-procedure GetMemAligned(var holder: RawByteString; p: pointer; len: PtrUInt;
+procedure GetMemAligned(var holder: RawByteString; fillwith: pointer; len: PtrUInt;
   out aligned: pointer; alignment: PtrUInt);
 begin
   dec(alignment); // expected to be a power of two
@@ -4040,8 +4072,8 @@ begin
   aligned := pointer(holder);
   while PtrUInt(aligned) and alignment <> 0 do
     inc(PByte(aligned));
-  if p <> nil then
-    MoveFast(p^, aligned^, len);
+  if fillwith <> nil then
+    MoveFast(fillwith^, aligned^, len);
 end;
 
 // CompareMemSmall/MoveSmall defined now for proper inlining below
@@ -7862,7 +7894,7 @@ begin
     result := 0;    // Str1=Str2
 end;
 
-// from Aleksandr Sharahov's PosEx_Sha_Pas_2() - refactored for cross-platform
+// from A. Sharahov's PosEx_Sha_Pas_2() - refactored for cross-platform/compiler
 function PosExPas(pSub, p: PUtf8Char; Offset: PtrUInt): PtrInt;
 var
   len, lenSub: PtrInt;
@@ -8142,32 +8174,37 @@ end;
 {$endif PUREMORMOT2}
 
 procedure TrimCopy(const S: RawUtf8; start, count: PtrInt;
-  out result: RawUtf8); // faster alternative to Trim(copy())
+  var result: RawUtf8); // faster alternative to Trim(copy())
 var
   L: PtrInt;
 begin
-  if count <= 0 then
-    exit;
-  if start <= 0 then
-    start := 1;
-  L := Length(S);
-  while (start <= L) and
-        (S[start] <= ' ') do
+  if count > 0 then
   begin
-    inc(start);
-    dec(count);
+    if start <= 0 then
+      start := 1;
+    L := Length(S);
+    while (start <= L) and
+          (S[start] <= ' ') do
+    begin
+      inc(start);
+      dec(count);
+    end;
+    dec(start);
+    dec(L,start);
+    if count < L then
+      L := count;
+    while L>0 do
+      if S[start + L] <= ' ' then
+        dec(L)
+      else
+        break;
+    if L > 0 then
+    begin
+      FastSetString(result, @PByteArray(S)[start], L);
+      exit;
+    end;
   end;
-  dec(start);
-  dec(L,start);
-  if count < L then
-    L := count;
-  while L>0 do
-    if S[start + L] <= ' ' then
-      dec(L)
-    else
-      break;
-  if L > 0 then
-    FastSetString(result, @PByteArray(S)[start], L);
+  result := '';
 end;
 
 function Split(const Str, SepStr: RawUtf8; StartPos: integer): RawUtf8;
@@ -8612,6 +8649,10 @@ begin
             (A.Data = B.Data);
 end;
 
+
+type
+  // 16KB/32KB hash table used by SynLZ - as used by the asm .inc files
+  TOffsets = array[0..4095] of PAnsiChar;
 
 {$ifdef CPUINTEL}
 
@@ -9793,6 +9834,12 @@ begin
   result := Int64(lo) or (Int64(crc32c(lo, buf, len)) shl 32);
 end;
 
+function crc32cTwice(seed: QWord; buf: PAnsiChar; len: cardinal): QWord;
+begin
+  result := QWord(crc32c(cardinal(seed), buf, len)) +
+            QWord(crc32c(seed shr 32, buf, len)) shl 32;
+end;
+
 function crc63c(buf: PAnsiChar; len: cardinal): Int64;
 var
   lo: PtrInt;
@@ -9841,6 +9888,26 @@ begin
   h.i6 := h1;
   inc(h1, h2);
   h.i7 := h1;
+end;
+
+procedure crc32c128(hash: PHash128; buf: PAnsiChar; len: cardinal);
+var
+  blocks: cardinal;
+begin
+  blocks := len shr 4;
+  if blocks <> 0 then
+  begin
+    crcblocksfast(pointer(hash), pointer(buf), blocks);
+    blocks := blocks shl 4;
+    inc(buf, blocks);
+    dec(len, blocks);
+  end;
+  if len = 0 then
+    exit;
+  PHash128Rec(hash)^.c0 := crc32c(PHash128Rec(hash)^.c0, buf, len);
+  PHash128Rec(hash)^.c1 := crc32c(PHash128Rec(hash)^.c1, buf, len);
+  PHash128Rec(hash)^.c2 := crc32c(PHash128Rec(hash)^.c2, buf, len);
+  PHash128Rec(hash)^.c3 := crc32c(PHash128Rec(hash)^.c3, buf, len);
 end;
 
 function crc16(Data: PAnsiChar; Len: integer): cardinal;

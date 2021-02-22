@@ -1610,7 +1610,7 @@ type
     fTable: TClass; // TOrmClass
     fOptions: TOrmPropInfoListOptions;
     fOrderedByName: TIntegerDynArray;
-    function GetItem(aIndex: integer): TOrmPropInfo;
+    function GetItem(aIndex: PtrInt): TOrmPropInfo;
     procedure QuickSortByName(L, R: PtrInt);
     procedure InternalAddParentsFirst(aClassType: TClass); overload;
     procedure InternalAddParentsFirst(aClassType: TClass;
@@ -1668,7 +1668,7 @@ type
     property List: TOrmPropInfoObjArray read fList;
     /// read-only retrieval of a TOrmPropInfo item
     // - will raise an exception if out of range
-    property Items[aIndex: integer]: TOrmPropInfo read GetItem;
+    property Items[aIndex: PtrInt]: TOrmPropInfo read GetItem;
   end;
 
   /// information about a TOrm class property
@@ -4494,8 +4494,8 @@ type
   // - will be implemented as TOrmTableJson holding JSON content
   TOrmTable = class
   protected
-    fRowCount: integer;
-    fFieldCount: integer;
+    fRowCount: PtrInt;
+    fFieldCount: PtrInt;
     fData: TOrmTableDataArray;
     {$ifndef NOPOINTEROFFSET} // reduce memory consumption by half on 64-bit CPU
     fDataStart: PUtf8Char;
@@ -4525,7 +4525,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetResultsSafe(Offset: PtrInt; Value: PUtf8Char);
       {$ifdef HASINLINE}{$ifdef NOPOINTEROFFSET}inline;{$endif}{$endif}
-    function GetRowCount: integer; // avoid GPF when TOrmTable is nil
+    function GetRowCount: PtrInt; // avoid GPF when TOrmTable is nil
       {$ifdef HASINLINE}inline;{$endif}
     procedure InitFieldTypes; // fill fFieldType[] from QueryTables[]/Data[]
     procedure InitFieldNames; // fill fFieldNames[] from first row
@@ -4771,10 +4771,10 @@ type
     // of the returned data (by default, all rows are retrieved)
     // - IDBinarySize will force the ID field to be stored as hexadecimal text
     procedure GetJsonValues(W: TJsonWriter;
-      RowFirst: integer = 0; RowLast: integer = 0; IDBinarySize: integer = 0); overload;
+      RowFirst: PtrInt = 0; RowLast: PtrInt= 0; IDBinarySize: integer = 0); overload;
     /// same as the overloaded method, but appending an array to a TStream
     procedure GetJsonValues(Json: TStream; Expand: boolean;
-      RowFirst: integer = 0; RowLast: integer = 0; IDBinarySize: integer = 0); overload;
+      RowFirst: PtrInt = 0; RowLast: PtrInt = 0; IDBinarySize: integer = 0); overload;
     /// same as the overloaded method, but returning result into a RawUtf8
     function GetJsonValues(Expand: boolean; IDBinarySize: integer = 0;
       BufferSize: integer = 0): RawUtf8; overload;
@@ -4785,7 +4785,7 @@ type
     // country use ',' as decimal separator, for instance our "douce France")
     // - AddBOM will add a UTF-8 byte Order Mark at the beginning of the content
     procedure GetCsvValues(Dest: TStream; Tab: boolean; CommaSep: AnsiChar = ',';
-      AddBOM: boolean = false; RowFirst: integer = 0; RowLast: integer = 0); overload;
+      AddBOM: boolean = false; RowFirst: PtrInt = 0; RowLast: PtrInt = 0); overload;
     /// save the table as CSV format, into a string variable
     // - if Tab=TRUE, will use TAB instead of ',' between columns
     // - you can customize the ',' separator - use e.g. the global ListSeparator
@@ -4793,11 +4793,11 @@ type
     // country use ',' as decimal separator, for instance our "douce France")
     // - AddBOM will add a UTF-8 byte Order Mark at the beginning of the content
     function GetCsvValues(Tab: boolean; CommaSep: AnsiChar = ',';
-      AddBOM: boolean = false; RowFirst: integer = 0; RowLast: integer = 0): RawUtf8; overload;
+      AddBOM: boolean = false; RowFirst: PtrInt = 0; RowLast: PtrInt = 0): RawUtf8; overload;
     /// save the table in 'schemas-microsoft-com:rowset' XML format
     // - this format is used by ADODB.recordset, easily consumed by MS apps
     // - see @https://synopse.info/forum/viewtopic.php?pid=11691#p11691
-    procedure GetMSRowSetValues(Dest: TStream; RowFirst, RowLast: integer); overload;
+    procedure GetMSRowSetValues(Dest: TStream; RowFirst, RowLast: PtrInt); overload;
     /// save the table in 'schemas-microsoft-com:rowset' XML format
     // - this format is used by ADODB.recordset, easily consumed by MS apps
     // - see @https://synopse.info/forum/viewtopic.php?pid=11691#p11691
@@ -4887,7 +4887,7 @@ type
     // - oftBlob is returned if the field is encoded as SQLite3 BLOB literals
     // (X'53514C697465' e.g.)
     // - since TOrmTable data is PUtf8Char, string type is oftUtf8Text only
-    function FieldType(Field: integer): TOrmFieldType; overload;
+    function FieldType(Field: PtrInt): TOrmFieldType; overload;
     /// guess the field type from first non null data row
     // - if QueryTables[] are set, exact field type and (enumerate) TypeInfo() is
     // retrieved from the Delphi RTTI; otherwise, get from the cells content
@@ -4911,16 +4911,16 @@ type
     // - the character length is for the first line of text only (stop counting
     // at every newline character, i.e. #10 or #13 char)
     // - very fast: calculated only once for all fields
-    function FieldLengthMean(Field: integer): cardinal;
+    function FieldLengthMean(Field: PtrInt): cardinal;
     /// get the sum of all mean of characters length of all fields
     // - very fast: calculated only once for all fields
     function FieldLengthMeanSum: cardinal;
     /// get the maximum number of characters of this field
-    function FieldLengthMax(Field: integer; NeverReturnsZero: boolean = false): cardinal;
+    function FieldLengthMax(Field: PtrInt; NeverReturnsZero: boolean = false): cardinal;
     /// get the record class (i.e. the table) associated to a field
     // - is nil if this table has no QueryTables property
     // - very fast: calculated only once for all fields
-    function FieldTable(Field: integer): TOrmClass;
+    function FieldTable(Field: PtrInt): TOrmClass;
     /// force the mean of characters length for every field
     // - expect as many parameters as fields in this table
     // - override internal fFieldLengthMean[] and fFieldLengthMeanSum values
@@ -4934,7 +4934,7 @@ type
     // ! aTable.SetFieldType(0, oftEnumerate, TypeInfo(TEnumSample));
     // ! aTable.SetFieldType(1, oftSet, TypeInfo(TSetSamples));
     // or for dynamic arrays
-    procedure SetFieldType(Field: integer; FieldType: TOrmFieldType;
+    procedure SetFieldType(Field: PtrInt; FieldType: TOrmFieldType;
       FieldTypeInfo: PRttiInfo = nil; FieldSize: integer = -1;
       FieldTableIndex: integer = -1); overload;
     /// set the exact type of a given field
@@ -4952,7 +4952,7 @@ type
     /// increase a particular Field Length Mean value
     // - to be used to customize the field appareance (e.g. for adding of left
     // checkbox for Marked[] fields)
-    procedure FieldLengthMeanIncrease(aField, aIncrease: integer);
+    procedure FieldLengthMeanIncrease(aField, aIncrease: PtrInt);
 
     /// copy the parameters of a TOrmTable into this instance
     // - the Results[] remain in the source TOrmTable: source TOrmTable has not
@@ -4974,9 +4974,10 @@ type
     // - if UnicodeComparison is left to FALSE, UTF-8 decoding will be done only
     // if necessary: it will work only with standard western-occidental alphabet
     // (i.e. WinAnsi - code page 1252), but it will be very fast
-    function SearchValue(const UpperValue: RawUtf8; StartRow, FieldIndex:
-      integer; const Client: IRestOrm; Lang: TSynSoundExPronunciation = sndxNone;
-      UnicodeComparison: boolean = false): integer; overload;
+    function SearchValue(const UpperValue: RawUtf8;
+      StartRow, FieldIndex: PtrInt; const Client: IRestOrm;
+      Lang: TSynSoundExPronunciation = sndxNone;
+      UnicodeComparison: boolean = false): PtrInt; overload;
     /// search a text value inside the table data in all fields
     // - the text value must already be uppercased 7-bits ANSI encoded
     // - return the Row on success, 0 on error
@@ -4993,35 +4994,35 @@ type
     // if necessary: it will work only with standard western-occidental alphabet
     // (i.e. WinAnsi - code page 1252), but it will be very fast
     function SearchValue(const UpperValue: RawUtf8;
-      StartRow: integer; FieldIndex: PInteger; const Client: IRestOrm;
+      StartRow: PtrInt; FieldIndex: PInteger; const Client: IRestOrm;
       Lang: TSynSoundExPronunciation = sndxNone;
-      UnicodeComparison: boolean = false): integer; overload;
+      UnicodeComparison: boolean = false): PtrInt; overload;
     /// search for a value inside the raw table data, using Utf8IComp/StrComp()
     // - returns 0 if not found, or the matching Row number otherwise
-    function SearchFieldEquals(const Value: RawUtf8; FieldIndex: integer;
-      StartRow: integer = 1; CaseSensitive: boolean = false): integer; overload;
+    function SearchFieldEquals(const Value: RawUtf8; FieldIndex: PtrInt;
+      StartRow: PtrInt = 1; CaseSensitive: boolean = false): PtrInt; overload;
     /// search for a value inside the raw table data, using Utf8IComp/StrComp()
     // - returns 0 if not found, or the matching Row number otherwise
-    function SearchFieldEquals(Value: PUtf8Char; FieldIndex: integer;
-      StartRow: integer = 1; CaseSensitive: boolean = false): integer; overload;
+    function SearchFieldEquals(Value: PUtf8Char; FieldIndex: PtrInt;
+      StartRow: PtrInt = 1; CaseSensitive: boolean = false): PtrInt; overload;
     /// search for a value inside the raw table data, using IdemPChar()
     // - returns 0 if not found, or the matching Row number otherwise
-    function SearchFieldIdemPChar(const Value: RawUtf8; FieldIndex: integer;
-      StartRow: integer = 1): integer;
+    function SearchFieldIdemPChar(const Value: RawUtf8; FieldIndex: PtrInt;
+      StartRow: PtrInt = 1): PtrInt;
     /// search for a value using O(log(n)) binary search of a sorted field
     // - here the content should have been previously sorted via Sort(),
     // or CustomCompare should be defined, otherwise the SearchFieldEquals()
     // slower O(n) method is called
     // - returns 0 if not found, or the matching Row number otherwise
-    function SearchFieldSorted(const Value: RawUtf8; FieldIndex: integer;
-      CustomCompare: TUtf8Compare = nil): integer; overload;
+    function SearchFieldSorted(const Value: RawUtf8; FieldIndex: PtrInt;
+      CustomCompare: TUtf8Compare = nil): PtrInt; overload;
     /// search for a value using O(log(n)) binary search of a sorted field
     // - here the content should have been previously sorted via Sort(),
     // or CustomCompare should be defined, otherwise the SearchFieldEquals()
     // slower O(n) method is called
     // - returns 0 if not found, or the matching Row number otherwise
-    function SearchFieldSorted(Value: PUtf8Char; FieldIndex: integer;
-      CustomCompare: TUtf8Compare = nil): integer; overload;
+    function SearchFieldSorted(Value: PUtf8Char; FieldIndex: PtrInt;
+      CustomCompare: TUtf8Compare = nil): PtrInt; overload;
 
     /// get all IDs where individual bit in Bits are set
     procedure IDArrayFromBits(const Bits; out IDs: TIDDynArray);
@@ -5033,15 +5034,15 @@ type
     // - return RowCount (last row index) if this ID was not found or no
     // ID field is available, unless aNotFoundMinusOne is set, and then -1 is
     // returned
-    function RowFromID(aID: TID; aNotFoundMinusOne: boolean = false): integer;
+    function RowFromID(aID: TID; aNotFoundMinusOne: boolean = false): PtrInt;
 
     /// delete the specified data Row from the Table
     // - only overwrite the internal Results[] pointers, don't free any memory,
     // nor modify the internal DataSet
-    function DeleteRow(Row: integer): boolean;
+    function DeleteRow(Row: PtrInt): boolean;
     /// delete the specified Column text from the Table
     // - don't delete the Column: only delete UTF-8 text in all rows for this field
-    function DeleteColumnValues(Field: integer): boolean;
+    function DeleteColumnValues(Field: PtrInt): boolean;
 
     /// retrieve QueryTables[0], if existing
     function QueryRecordType: TOrmClass;
@@ -5101,7 +5102,7 @@ type
     /// read-only access to a particular field value, as UTF-8 encoded buffer
     // - raise an EOrmTable if called outside valid Step() sequence
     // - similar to Get() method, but for the current Step
-    function FieldBuffer(FieldIndex: integer): PUtf8Char; overload;
+    function FieldBuffer(FieldIndex: PtrInt): PUtf8Char; overload;
     /// read-only access to a particular field value, as UTF-8 encoded buffer
     // - raise an EOrmTable if called outside valid Step() sequence
     // - similar to Get() method, but for the current Step
@@ -5109,7 +5110,7 @@ type
     /// read-only access to a particular field value, as integer
     // - raise an EOrmTable if called outside valid Step() sequence
     // - similar to GetAsInteger() method, but for the current Step
-    function FieldAsInteger(FieldIndex: integer): Int64; overload;
+    function FieldAsInteger(FieldIndex: PtrInt): Int64; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as integer
     // - raise an EOrmTable if called outside valid Step() sequence
@@ -5119,7 +5120,7 @@ type
     /// read-only access to a particular field value, as floating-point value
     // - raise an EOrmTable if called outside valid Step() sequence
     // - similar to GetAsFloat() method, but for the current Step
-    function FieldAsFloat(FieldIndex: integer): TSynExtended; overload;
+    function FieldAsFloat(FieldIndex: PtrInt): TSynExtended; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as floating-point value
     // - raise an EOrmTable if called outside valid Step() sequence
@@ -5129,7 +5130,7 @@ type
     /// read-only access to a particular field value, as RawUtf8
     // - raise an EOrmTable if called outside valid Step() sequence
     // - similar to GetU() method, but for the current Step
-    function FieldAsRawUtf8(FieldIndex: integer): RawUtf8; overload;
+    function FieldAsRawUtf8(FieldIndex: PtrInt): RawUtf8; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as RawUtf8
     // - raise an EOrmTable if called outside valid Step() sequence
@@ -5139,7 +5140,7 @@ type
     /// read-only access to a particular field value, as VCL String
     // - raise an EOrmTable if called outside valid Step() sequence
     // - similar to GetString() method, but for the current Step
-    function FieldAsString(FieldIndex: integer): string; overload;
+    function FieldAsString(FieldIndex: PtrInt): string; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as VCL String
     // - raise an EOrmTable if called outside valid Step() sequence
@@ -5149,7 +5150,7 @@ type
     /// read-only access to a particular field value, as a variant
     // - raise an EOrmTable if called outside valid Step() sequence
     // - will call GetVariant() method for appropriate data conversion
-    function Field(FieldIndex: integer): variant; overload;
+    function Field(FieldIndex: PtrInt): variant; overload;
     /// read-only access to a particular field value, as a variant
     // - raise an EOrmTable if called outside valid Step() sequence
     // - will call GetVariant() method for appropriate data conversion
@@ -5165,9 +5166,9 @@ type
     // - first row contains field name
     // - then 1..RowCount rows contain the data itself
     // - safely returns 0 if the TOrmTable instance is nil
-    property RowCount: integer read GetRowCount;
+    property RowCount: PtrInt read GetRowCount;
     /// read-only access to the number of fields for each Row in this table
-    property FieldCount: integer read fFieldCount;
+    property FieldCount: PtrInt read fFieldCount;
     /// raw access to the data values memory pointers
     // - you should rather use the Get*() methods
     property Results[Offset: PtrInt]: PUtf8Char read GetResults write SetResultsSafe;
@@ -9031,7 +9032,7 @@ begin
 end;
 
 function IsNotExpandedBuffer(var P: PUtf8Char; PEnd: PUtf8Char;
-  var FieldCount, RowCount: integer): boolean;
+  var FieldCount, RowCount: PtrInt): boolean;
 
   procedure GetRowCountNotExpanded(P: PUtf8Char);
   begin
@@ -12495,9 +12496,9 @@ begin
   fOrderedByName := nil; // force recompute sorted name array
 end;
 
-function TOrmPropInfoList.GetItem(aIndex: integer): TOrmPropInfo;
+function TOrmPropInfoList.GetItem(aIndex: PtrInt): TOrmPropInfo;
 begin
-  if cardinal(aIndex) >= cardinal(fCount) then
+  if PtrUInt(aIndex) >= PtrUInt(fCount) then
     raise EOrmException.Create('Invalid TOrmPropInfoList index');
   result := fList[aIndex];
 end;
@@ -12939,7 +12940,7 @@ begin
   {$ifdef NOPOINTEROFFSET}
   result := fData[Offset];
   {$else}
-  {%H-}PtrInt(result) := fData[Offset];
+  result := PUtf8Char(PtrInt(fData[Offset]));
   Offset := PtrUInt(fDataStart); // in two steps for better code generation
   if result <> nil then
     inc(result, Offset);
@@ -13123,10 +13124,10 @@ begin
   end;
 end;
 
-function TOrmTable.RowFromID(aID: TID; aNotFoundMinusOne: boolean): integer;
+function TOrmTable.RowFromID(aID: TID; aNotFoundMinusOne: boolean): PtrInt;
 var
   id: RawUtf8;
-  f: integer;
+  f: PtrInt;
 begin
   if (self <> nil) and (fRowCount > 0) and (aID > 0) and (fFieldIndexID >= 0) then
   begin
@@ -13144,7 +13145,7 @@ begin
     result := fRowCount; // not found -> return last row index
 end;
 
-function TOrmTable.DeleteRow(Row: integer): boolean;
+function TOrmTable.DeleteRow(Row: PtrInt): boolean;
 begin
   if (self = nil) or (Row < 1) or (Row > fRowCount) then
   begin
@@ -13298,11 +13299,11 @@ begin
   TDocVariantData(docarray).InitArrayFromVariants(Values, JSON_OPTIONS_FAST);
 end;
 
-function TOrmTable.DeleteColumnValues(Field: integer): boolean;
+function TOrmTable.DeleteColumnValues(Field: PtrInt): boolean;
 var
   i: integer;
 begin
-  if cardinal(Field) >= cardinal(fFieldCount) then
+  if PtrUInt(Field) >= PtrUInt(fFieldCount) then
     result := false
   else
   begin
@@ -13396,10 +13397,10 @@ begin
   end;
 end;
 
-procedure TOrmTable.SetFieldType(Field: integer; FieldType: TOrmFieldType;
+procedure TOrmTable.SetFieldType(Field: PtrInt; FieldType: TOrmFieldType;
   FieldTypeInfo: PRttiInfo; FieldSize, FieldTableIndex: integer);
 begin
-  if (self = nil) or (cardinal(Field) >= cardinal(fFieldCount)) then
+  if (self = nil) or (PtrUInt(Field) >= PtrUInt(fFieldCount)) then
     exit;
   if fFieldType = nil then
     InitFieldTypes
@@ -13458,7 +13459,7 @@ begin
     SetFieldType(f, DBTOFIELDTYPE[DBTypes[f]]);
 end;
 
-function TOrmTable.GetRowCount: integer;
+function TOrmTable.GetRowCount: PtrInt;
 begin
   if self = nil then
     result := 0
@@ -13468,7 +13469,7 @@ end;
 
 procedure TOrmTable.InitFieldTypes;
 var
-  field, f, r, len: integer;
+  field, f, r, len: PtrInt;
   oft: TOrmFieldType;
   info: PRttiInfo;
   prop: TOrmPropInfo;
@@ -13560,9 +13561,9 @@ begin
   end;
 end;
 
-function TOrmTable.FieldType(Field: integer): TOrmFieldType;
+function TOrmTable.FieldType(Field: PtrInt): TOrmFieldType;
 begin
-  if (self <> nil) and (cardinal(Field) < cardinal(fFieldCount)) then
+  if (self <> nil) and (PtrUInt(Field) < PtrUInt(fFieldCount)) then
   begin
     if fFieldType = nil then
       InitFieldTypes;
@@ -13575,7 +13576,7 @@ end;
 function TOrmTable.FieldType(Field: integer;
   out FieldTypeInfo: POrmTableFieldType): TOrmFieldType;
 begin
-  if (self <> nil) and (cardinal(Field) < cardinal(fFieldCount)) then
+  if (self <> nil) and (PtrUInt(Field) < PtrUInt(fFieldCount)) then
   begin
     if fFieldType = nil then
       InitFieldTypes;
@@ -13606,10 +13607,11 @@ begin
     result := nil
   else
   begin
+    Row := Row * fFieldCount + Field;
     {$ifdef NOPOINTEROFFSET} // inlined GetResults() for Delphi 7
-    result := fData[Row * fFieldCount + Field];
+    result := fData[Row];
     {$else}
-    {%H-}PtrInt(result) := fData[Row * fFieldCount + Field];
+    result := PUtf8Char(PtrInt(fData[Row]));
     if result <> nil then
       inc(result, PtrUInt(fDataStart));
     {$endif NOPOINTEROFFSET}
@@ -13871,7 +13873,7 @@ begin
   tmp.Done;
 end;
 
-procedure TOrmTable.GetJsonValues(W: TJsonWriter; RowFirst, RowLast,
+procedure TOrmTable.GetJsonValues(W: TJsonWriter; RowFirst, RowLast: PtrInt;
   IDBinarySize: integer);
 var
   U: PUtf8Char;
@@ -13959,7 +13961,7 @@ str:          W.Add('"');
 end;
 
 procedure TOrmTable.GetJsonValues(Json: TStream; Expand: boolean;
-  RowFirst, RowLast, IDBinarySize: integer);
+  RowFirst, RowLast: PtrInt; IDBinarySize: integer);
 var
   W: TJsonWriter;
   tmp: TTextWriterStackBuffer;
@@ -13993,10 +13995,10 @@ begin
 end;
 
 procedure TOrmTable.GetCsvValues(Dest: TStream; Tab: boolean; CommaSep: AnsiChar;
-  AddBOM: boolean; RowFirst, RowLast: integer);
+  AddBOM: boolean; RowFirst, RowLast: PtrInt);
 var
   U: PUtf8Char;
-  F, R, FMax: integer;
+  F, R, FMax: PtrInt;
   o: PtrInt;
   W: TTextWriter;
   temp: TTextWriterStackBuffer;
@@ -14045,7 +14047,7 @@ begin
 end;
 
 function TOrmTable.GetCsvValues(Tab: boolean; CommaSep: AnsiChar;
-  AddBOM: boolean; RowFirst, RowLast: integer): RawUtf8;
+  AddBOM: boolean; RowFirst, RowLast: PtrInt): RawUtf8;
 var
   MS: TRawByteStringStream;
 begin
@@ -14058,7 +14060,7 @@ begin
   end;
 end;
 
-procedure TOrmTable.GetMSRowSetValues(Dest: TStream; RowFirst, RowLast: integer);
+procedure TOrmTable.GetMSRowSetValues(Dest: TStream; RowFirst, RowLast: PtrInt);
 const
   FIELDTYPE_TOXML: array[TSqlDBFieldType] of RawUtf8 = (
   // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency,
@@ -14068,7 +14070,7 @@ const
     ' dt:type="dateTime"', ' dt:type="string"', ' dt:type="bin.hex"');
 var
   W: TTextWriter;
-  f, r: integer;
+  f, r: PtrInt;
   o: PtrInt;
   U: PUtf8Char;
 begin
@@ -14267,7 +14269,7 @@ end;
 
 procedure TOrmTable.GetHtmlTable(Dest: TTextWriter);
 var
-  r, f, o: integer;
+  r, f, o: PtrInt;
 begin
   Dest.AddShort('<table>'#10);
   o := 0;
@@ -14390,8 +14392,8 @@ type
     PP: PUtf8Char;
     OI, OJ, OField2ID, i, j: integer;
     function Get(Offset: PtrInt): PUtf8Char; {$ifdef HASINLINE}inline;{$endif}
-    function CompI: integer;                  {$ifdef HASINLINE}inline;{$endif}
-    function CompJ: integer;                  {$ifdef HASINLINE}inline;{$endif}
+    function CompI: integer;                 {$ifdef HASINLINE}inline;{$endif}
+    function CompJ: integer;                 {$ifdef HASINLINE}inline;{$endif}
     procedure SetPivot(aP: PtrInt);
     procedure Sort(L, R: integer); // main method
   end;
@@ -14401,7 +14403,7 @@ begin
   {$ifdef NOPOINTEROFFSET}
   result := Data[Offset];
   {$else}
-  {%H-}PtrInt(result) := Data[Offset];
+  result := PUtf8Char(PtrInt(Data[Offset]));
   if result <> nil then
     inc(result, PtrUInt(DataStart));
   {$endif NOPOINTEROFFSET}
@@ -14558,7 +14560,7 @@ procedure TOrmTable.SortFields(Field: integer; Asc: boolean;
 var
   quicksort: TUtf8QuickSort; // fast static object for sorting
 begin
-  if (FieldCount = 0) or (cardinal(Field) >= cardinal(FieldCount)) then
+  if (FieldCount = 0) or (PtrUInt(Field) >= PtrUInt(fFieldCount)) then
     exit;
   if FieldType = oftUnknown then // guess the field type from first row
     FieldType := self.FieldType(Field);
@@ -14595,19 +14597,19 @@ begin
     PCurrentRow^ := quicksort.CurrentRow;
 end;
 
-function TOrmTable.SearchFieldSorted(const Value: RawUtf8; FieldIndex: integer;
-  CustomCompare: TUtf8Compare): integer;
+function TOrmTable.SearchFieldSorted(const Value: RawUtf8; FieldIndex: PtrInt;
+  CustomCompare: TUtf8Compare): PtrInt;
 begin
   result := SearchFieldSorted(pointer(Value), FieldIndex, CustomCompare);
 end;
 
-function TOrmTable.SearchFieldSorted(Value: PUtf8Char; FieldIndex: integer;
-  CustomCompare: TUtf8Compare): integer;
+function TOrmTable.SearchFieldSorted(Value: PUtf8Char; FieldIndex: PtrInt;
+  CustomCompare: TUtf8Compare): PtrInt;
 var
-  L, R, cmp: integer;
+  L, R, cmp: PtrInt;
 begin
   if (self <> nil) and (Value <> nil) and (fRowCount > 0) and
-     (cardinal(FieldIndex) < cardinal(fFieldCount)) then
+     (PtrUInt(FieldIndex) < PtrUInt(fFieldCount)) then
   begin
     if not Assigned(CustomCompare) then
       CustomCompare := fSortParams.Comp;
@@ -14658,7 +14660,7 @@ begin
   {$ifdef NOPOINTEROFFSET}
   result := Data[Offset];
   {$else}
-  {%H-}PtrInt(result) := Data[Offset];
+  result := PUtf8Char(PtrInt(Data[Offset]));
   if result <> nil then
     inc(result, PtrUInt(DataStart));
   {$endif NOPOINTEROFFSET}
@@ -14975,9 +14977,9 @@ begin
   POrmTableRowVariantData(RowVariant)^.VRow := -1; // follow fStepRow
 end;
 
-function TOrmTable.FieldBuffer(FieldIndex: integer): PUtf8Char;
+function TOrmTable.FieldBuffer(FieldIndex: PtrInt): PUtf8Char;
 begin
-  if (self = nil) or (cardinal(FieldIndex) >= cardinal(fFieldCount)) then
+  if (self = nil) or (PtrUInt(FieldIndex) >= PtrUInt(fFieldCount)) then
     raise EOrmTable.CreateUtf8('%.FieldBuffer(%): invalid index',
       [self, FieldIndex]);
   if (fStepRow = 0) or (fStepRow > fRowCount) then
@@ -15000,7 +15002,7 @@ begin
   result := Results[fStepRow * FieldCount + i];
 end;
 
-function TOrmTable.FieldAsInteger(FieldIndex: integer): Int64;
+function TOrmTable.FieldAsInteger(FieldIndex: PtrInt): Int64;
 begin
   SetInt64(FieldBuffer(FieldIndex), result{%H-});
 end;
@@ -15010,7 +15012,7 @@ begin
   SetInt64(FieldBuffer(FieldName), result{%H-});
 end;
 
-function TOrmTable.FieldAsFloat(FieldIndex: integer): TSynExtended;
+function TOrmTable.FieldAsFloat(FieldIndex: PtrInt): TSynExtended;
 begin
   result := GetExtended(FieldBuffer(FieldIndex));
 end;
@@ -15020,7 +15022,7 @@ begin
   result := GetExtended(FieldBuffer(FieldName));
 end;
 
-function TOrmTable.FieldAsRawUtf8(FieldIndex: integer): RawUtf8;
+function TOrmTable.FieldAsRawUtf8(FieldIndex: PtrInt): RawUtf8;
 var
   buf: PUtf8Char;
 begin
@@ -15036,7 +15038,7 @@ begin
   FastSetString(result, buf, StrLen(buf));
 end;
 
-function TOrmTable.FieldAsString(FieldIndex: integer): string;
+function TOrmTable.FieldAsString(FieldIndex: PtrInt): string;
 var
   buf: PUtf8Char;
 begin
@@ -15052,9 +15054,9 @@ begin
   Utf8DecodeToString(buf, StrLen(buf), result);
 end;
 
-function TOrmTable.Field(FieldIndex: integer): variant;
+function TOrmTable.Field(FieldIndex: PtrInt): variant;
 begin
-  if (self = nil) or (cardinal(FieldIndex) >= cardinal(fFieldCount)) then
+  if (self = nil) or (PtrUInt(FieldIndex) >= PtrUInt(fFieldCount)) then
     raise EOrmTable.CreateUtf8('%.Field(%): invalid index', [self, FieldIndex]);
   if (fStepRow = 0) or (fStepRow > fRowCount) then
     raise EOrmTable.CreateUtf8('%.Field(%): no previous Step',
@@ -15064,7 +15066,7 @@ end;
 
 function TOrmTable.Field(const FieldName: RawUtf8): variant;
 var
-  i: integer;
+  i: PtrInt;
 begin
   i := FieldIndex(FieldName);
   if i < 0 then
@@ -15103,8 +15105,8 @@ function TOrmTable.CalculateFieldLengthMean(var aResult: TIntegerDynArray;
   end;
 
 var
-  R, F, n: integer;
-  Tot: cardinal;
+  R, F: PtrInt;
+  n, Tot: cardinal;
 begin
   SetLength(aResult, FieldCount);
   if FromDisplay and (length(fFieldLengthMean) = FieldCount) then
@@ -15154,9 +15156,9 @@ begin
   end;
 end;
 
-function TOrmTable.FieldLengthMean(Field: integer): cardinal;
+function TOrmTable.FieldLengthMean(Field: PtrInt): cardinal;
 begin
-  if (self = nil) or (cardinal(Field) >= cardinal(FieldCount)) or (fData = nil) then
+  if (self = nil) or (PtrUInt(Field) >= PtrUInt(fFieldCount)) or (fData = nil) then
     result := 0
   else
   begin
@@ -15179,13 +15181,13 @@ begin
   end;
 end;
 
-function TOrmTable.FieldLengthMax(Field: integer; NeverReturnsZero: boolean): cardinal;
+function TOrmTable.FieldLengthMax(Field: PtrInt; NeverReturnsZero: boolean): cardinal;
 var
   i, o: PtrInt;
   len: cardinal;
 begin
   result := 0;
-  if (self <> nil) and (cardinal(Field) < cardinal(fFieldCount)) then
+  if (self <> nil) and (PtrUInt(Field) < PtrUInt(fFieldCount)) then
   begin
     if fFieldType = nil then
       InitFieldTypes;
@@ -15224,9 +15226,9 @@ begin
     result := 1; // minimal not null length
 end;
 
-function TOrmTable.FieldTable(Field: integer): TOrmClass;
+function TOrmTable.FieldTable(Field: PtrInt): TOrmClass;
 begin
-  if (self = nil) or (cardinal(Field) >= cardinal(FieldCount)) or
+  if (self = nil) or (PtrUInt(Field) >= PtrUInt(fFieldCount)) or
      (fQueryTables = nil) then
     result := nil
   else
@@ -15243,15 +15245,15 @@ end;
 
 procedure TOrmTable.SetFieldLengthMean(const Lengths: array of cardinal);
 var
-  F: integer;
+  F: PtrInt;
   n: cardinal;
 begin
-  if (self = nil) or (length(Lengths) <> FieldCount) then
+  if (self = nil) or (length(Lengths) <> fFieldCount) then
     exit;
   if fFieldLengthMean = nil then // if not already calculated, allocate array
     SetLength(fFieldLengthMean, FieldCount);
   fFieldLengthMeanSum := 0;
-  for F := 0 to FieldCount - 1 do
+  for F := 0 to fFieldCount - 1 do
   begin
     n := Lengths[F];
     if n = 0 then
@@ -15261,9 +15263,9 @@ begin
   end;
 end;
 
-procedure TOrmTable.FieldLengthMeanIncrease(aField, aIncrease: integer);
+procedure TOrmTable.FieldLengthMeanIncrease(aField, aIncrease: PtrInt);
 begin
-  if (self = nil) or (cardinal(aField) >= cardinal(FieldCount)) then
+  if (self = nil) or (PtrUInt(aField) >= PtrUInt(fFieldCount)) then
     exit; // avoid GPF
   if fFieldLengthMean = nil then
     FieldLengthMean(0); // initialize fFieldLengthMean[] and fFieldLengthMeanSum
@@ -15272,8 +15274,8 @@ begin
 end;
 
 function TOrmTable.SearchValue(const UpperValue: RawUtf8;
-  StartRow, FieldIndex: integer; const Client: IRestOrm;
-  Lang: TSynSoundExPronunciation; UnicodeComparison: boolean): integer;
+  StartRow, FieldIndex: PtrInt; const Client: IRestOrm;
+  Lang: TSynSoundExPronunciation; UnicodeComparison: boolean): PtrInt;
 var
   Kind: TOrmFieldType;
   Search: PAnsiChar;
@@ -15282,7 +15284,8 @@ var
   info: POrmTableFieldType;
   Val64: Int64;
   ValTimeLog: TTimelogBits absolute Val64;
-  o, i, err: integer;
+  o, i: PtrInt;
+  err: integer;
   EnumValue: RawUtf8;
   s: string;
   P: PShortString;
@@ -15293,7 +15296,7 @@ var
 begin
   result := 0;
   if (self = nil) or (StartRow <= 0) or (StartRow > fRowCount) or
-     (UpperValue = '') or (cardinal(FieldIndex) >= cardinal(fFieldCount)) then
+     (UpperValue = '') or (PtrUInt(FieldIndex) >= PtrUInt(fFieldCount)) then
     exit;
   Search := pointer(UpperValue);
   if Search^ = '%' then
@@ -15336,7 +15339,7 @@ begin
     end;
     // then search directly from the INTEGER value
     if Int64(EnumValues) <> 0 then
-      while cardinal(result) <= cardinal(fRowCount) do
+      while PtrUInt(result) <= PtrUInt(fRowCount) do
       begin
         i := GetInteger(GetResults(o), err);
         if (err = 0) and (i in EnumValues) then
@@ -15349,7 +15352,7 @@ begin
   end;
   // special cases: conversion from INTEGER to text before search
   if Kind in [oftTimeLog, oftModTime, oftCreateTime, oftUnixTime, oftUnixMSTime] then
-    while cardinal(result) <= cardinal(fRowCount) do
+    while PtrUInt(result) <= PtrUInt(fRowCount) do
     begin
       SetInt64(GetResults(o), Val64{%H-});
       if Val64 <> 0 then
@@ -15371,7 +15374,7 @@ begin
           (Client <> nil) and (Client.Model <> nil)) then
   begin
     M := Client.Model;
-    while cardinal(result) <= cardinal(fRowCount) do
+    while PtrUInt(result) <= PtrUInt(fRowCount) do
     begin
       SetInt64(GetResults(o), Val64);
       if Val64 <> 0 then
@@ -15395,7 +15398,7 @@ begin
   else // by default, search as UTF-8 encoded text
   if Lang <> sndxNone then
   begin
-    while cardinal(result) <= cardinal(fRowCount) do
+    while PtrUInt(result) <= PtrUInt(fRowCount) do
       if Soundex.Utf8(GetResults(o)) then
         exit
       else
@@ -15408,7 +15411,7 @@ begin
   begin
     // slowest but always accurate Unicode comparison
     UpperUnicode := Utf8DecodeToRawUnicodeUI(RawUtf8(Search), @UpperUnicodeLen);
-    while cardinal(result) <= cardinal(fRowCount) do
+    while PtrUInt(result) <= PtrUInt(fRowCount) do
       if FindUnicode(pointer(Utf8DecodeToRawUnicode(GetResults(o), 0)),
           pointer(UpperUnicode), UpperUnicodeLen) then
         exit
@@ -15419,7 +15422,7 @@ begin
       end
   end
   else // default fast Win1252 search
-    while cardinal(result) <= cardinal(fRowCount) do
+    while PtrUInt(result) <= PtrUInt(fRowCount) do
       if FindUtf8(GetResults(o), Search) then
         exit
       else
@@ -15430,11 +15433,11 @@ begin
   result := 0; // not found
 end;
 
-function TOrmTable.SearchValue(const UpperValue: RawUtf8; StartRow: integer;
+function TOrmTable.SearchValue(const UpperValue: RawUtf8; StartRow: PtrInt;
   FieldIndex: PInteger; const Client: IRestOrm; Lang: TSynSoundExPronunciation;
-  UnicodeComparison: boolean): integer;
+  UnicodeComparison: boolean): PtrInt;
 var
-  F, Row: integer;
+  F, Row: PtrInt;
 begin
   result := 0;
   if (self = nil) or (StartRow <= 0) or (StartRow > fRowCount) or (UpperValue = '') then
@@ -15453,18 +15456,18 @@ begin
 end;
 
 function TOrmTable.SearchFieldEquals(const Value: RawUtf8;
-  FieldIndex, StartRow: integer; CaseSensitive: boolean): integer;
+  FieldIndex, StartRow: PtrInt; CaseSensitive: boolean): PtrInt;
 begin
   result := SearchFieldEquals(pointer(Value), FieldIndex, StartRow, CaseSensitive);
 end;
 
 function TOrmTable.SearchFieldEquals(Value: PUtf8Char;
-  FieldIndex, StartRow: integer; CaseSensitive: boolean): integer;
+  FieldIndex, StartRow: PtrInt; CaseSensitive: boolean): PtrInt;
 var
-  o: integer;
+  o: PtrInt;
 begin
   if (self <> nil) and (Value <> nil) and
-     (cardinal(FieldIndex) < cardinal(fFieldCount)) then
+     (PtrUInt(FieldIndex) < PtrUInt(fFieldCount)) then
   begin
     o := fFieldCount * StartRow + FieldIndex;
     if CaseSensitive then
@@ -15484,13 +15487,13 @@ begin
 end;
 
 function TOrmTable.SearchFieldIdemPChar(const Value: RawUtf8;
-  FieldIndex, StartRow: integer): integer;
+  FieldIndex, StartRow: PtrInt): PtrInt;
 var
-  o: integer;
+  o: PtrInt;
   up: RawUtf8;
 begin
   if (self <> nil) and (Value <> '') and
-     (cardinal(FieldIndex) < cardinal(fFieldCount)) then
+     (PtrUInt(FieldIndex) < PtrUInt(fFieldCount)) then
   begin
     UpperCaseCopy(Value, up);
     o := fFieldCount * StartRow + FieldIndex;
@@ -15527,7 +15530,7 @@ end;
 function TOrmTable.GetValue(const aLookupFieldName, aLookupValue,
   aValueFieldName: RawUtf8): variant;
 var
-  f, r, v: integer;
+  f, r, v: PtrInt;
 begin
   SetVariantNull(result);
   f := FieldIndex(aLookupFieldName);
@@ -16808,8 +16811,9 @@ end;
 function TOrm.GetBinary: RawByteString;
 var
   W: TBufferWriter;
+  temp: TTextWriterStackBuffer; // 8KB
 begin
-  W := TBufferWriter.Create(TRawByteStringStream);
+  W := TBufferWriter.Create(temp{%H-});
   try
     W.WriteVarUInt64(fID);
     GetBinaryValues(W);

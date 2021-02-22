@@ -125,9 +125,10 @@ procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSha1Digest)
 
 var
   /// the raw AES class used by TWebSocketProtocol.SetEncryptKey/SetEncryptKeyAes
-  // - you may set TAesCtrFast which is parallelizable, so much faster on x86_64
-  // or if mormot.core.crypto.openssl.pas is part of your project
-  ProtocolAesClass: TAesAbstractClass = TAesCfb;
+  // - if left to its default nil, TAesFast[mCtr] will be used, since it much
+  // faster on x86_64 or if mormot.core.crypto.openssl.RegisterOpenSsl is called
+  // - for compatibility, you may set TAesCfb as used for mORMot 1.18
+  ProtocolAesClass: TAesAbstractClass = nil;
 
   /// how TWebSocketProtocol.SetEncryptKey derivate its password via PBKDF2_SHA3()
   // - we use PBKDF2 over SHA-3 in 256-bit, for a future-proof derivation
@@ -820,9 +821,15 @@ begin
 end;
 
 procedure TWebSocketProtocol.SetEncryptKeyAes(const aKey; aKeySize: cardinal);
+var
+  c: TAesAbstractClass;
 begin
-  if aKeySize >= 128 then
-    fEncryption := TProtocolAes.Create(ProtocolAesClass, aKey, aKeySize);
+  if aKeySize < 128 then
+    exit;
+  c := ProtocolAesClass;
+  if c = nil then
+    c := TAesFast[mCtr]; // fastest on x86_64 or OpenSSL - server friendly
+  fEncryption := TProtocolAes.Create(c, aKey, aKeySize);
 end;
 
 procedure TWebSocketProtocol.AfterGetFrame(var frame: TWebSocketFrame);
@@ -1377,25 +1384,25 @@ procedure TWebSocketProtocolBinary.FrameCompress(const Head: RawUtf8;
   const Values: array of const; const Content, ContentType: RawByteString;
   var frame: TWebSocketFrame);
 var
-  item: RawUtf8;
+  item: TTempUtf8;
   i: PtrInt;
   W: TBufferWriter;
+  temp: TTextWriterStackBuffer; // 8KB
 begin
   FrameInit(focBinary, Content, ContentType, frame);
-  W := TBufferWriter.Create(TRawByteStringStream);
+  W := TBufferWriter.Create(temp{%H-});
   try
     W.WriteBinary(Head);
     W.Write1(byte(FRAME_HEAD_SEP));
     for i := 0 to high(Values) do
       with Values[i] do
       begin
-        VarRecToUtf8(Values[i], item);
-        W.Write(item);
+        VarRecToTempUtf8(Values[i], item);
+        W.WriteVar(item);
       end;
     W.Write(ContentType);
     W.WriteBinary(Content);
-    W.Flush;
-    frame.payload := TRawByteStringStream(W.Stream).DataString;
+    frame.payload := W.FlushTo;
   finally
     W.Free;
   end;

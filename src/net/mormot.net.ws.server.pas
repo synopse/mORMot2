@@ -406,8 +406,9 @@ begin
     if extout <> '' then
       extout := 'Sec-WebSocket-Extensions: ' + extout + #13#10;
     FormatUtf8('HTTP/1.1 101 Switching Protocols'#13#10 +
-      'Upgrade: websocket'#13#10'Connection: Upgrade'#13#10 +
-      'Sec-WebSocket-Protocol: %'#13#10'%Sec-WebSocket-Accept: %'#13#10#13#10,
+               'Upgrade: websocket'#13#10'Connection: Upgrade'#13#10 +
+               'Sec-WebSocket-Protocol: %'#13#10 +
+               '%Sec-WebSocket-Accept: %'#13#10#13#10,
       [Protocol.Name, extout, BinToBase64Short(@Digest, sizeof(Digest))], header);
     if not ClientSock.TrySndLow(pointer(header), length(header)) then
     begin
@@ -421,7 +422,7 @@ begin
     begin
       // notify upgrade failure to client
       FormatUtf8('HTTP/1.0 % WebSocket Upgrade Error'#13#10 +
-        'Connection: Close'#13#10#13#10, [result], header);
+                 'Connection: Close'#13#10#13#10, [result], header);
       ClientSock.TrySndLow(pointer(header), length(header));
       ClientSock.KeepAliveClient := false;
     end;
@@ -545,13 +546,6 @@ begin
   // speedup brute force check in case of high number of connections
   if n > 0 then
     repeat
-      result := c^;
-      if result.ConnectionID = id then
-        exit;
-      inc(c);
-      dec(n);
-      if n = 0 then
-        break;
       result := c^;
       if result.ConnectionID = id then
         exit;

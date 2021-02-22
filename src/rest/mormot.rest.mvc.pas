@@ -191,10 +191,10 @@ type
     procedure Render(methodIndex: Integer; const Context: variant;
       var View: TMvcView); override;
     // some helpers defined here to avoid mormot.core.crypto link
-    class procedure md5(const Value: variant; out result: variant);
-    class procedure sha1(const Value: variant; out result: variant);
-    class procedure sha256(const Value: variant; out result: variant);
-    class procedure sha512(const Value: variant; out result: variant);
+    class procedure md5(const Value: variant; out Result: variant);
+    class procedure sha1(const Value: variant; out Result: variant);
+    class procedure sha256(const Value: variant; out Result: variant);
+    class procedure sha512(const Value: variant; out Result: variant);
   public
     /// create an instance of this ViewModel implementation class
     // - define the associated REST instance, the interface definition and the
@@ -866,8 +866,8 @@ type
     constructor Create(aRest: TRest; aTable: TOrmClass;
       var aHelpers: TSynMustacheHelpers;
       aHtmlTableStyle: TExpressionHtmlTableStyleClass);
-    procedure ExpressionGet(const Value: variant; out result: variant);
-    procedure ExpressionHtmlTable(const Value: variant; out result: variant);
+    procedure ExpressionGet(const Value: variant; out Result: variant);
+    procedure ExpressionHtmlTable(const Value: variant; out Result: variant);
   end;
 
 
@@ -893,7 +893,7 @@ begin
 end;
 
 procedure TExpressionHelperForTable.ExpressionHtmlTable(const Value: variant;
-  out result: variant);
+  out Result: variant);
 var
   Rec: PDocVariantData;
   f, i, j: PtrInt;
@@ -982,29 +982,29 @@ begin
         HtmlTableStyle.AfterValue(W);
       end;
       HtmlTableStyle.EndTable(W);
-      RawUtf8ToVariant(W.Text, result);
+      RawUtf8ToVariant(W.Text, Result);
     finally
       W.Free;
     end;
   end
   else
     // not an object -> return input value as is
-    result := Value;
+    Result := Value;
 end;
 
 procedure TExpressionHelperForTable.ExpressionGet(const Value: variant;
-  out result: variant);
+  out Result: variant);
 var
   Rec: TOrm;
   ID: integer;
 begin
-  SetVariantNull(result);
+  SetVariantNull(Result);
   if not VariantToInteger(Value, ID) then
     exit;
   Rec := Table.Create;
   try
     if Rest.ORM.Retrieve(ID, Rec) then
-      result := Rec.GetSimpleFieldsAsDocVariant(true);
+      Result := Rec.GetSimpleFieldsAsDocVariant(true);
   finally
     Rec.Free;
   end;
@@ -1229,27 +1229,27 @@ begin
 end;
 
 class procedure TMvcViewsMustache.md5(const Value: variant;
-  out result: variant);
+  out Result: variant);
 begin
-  RawUtf8ToVariant(mormot.core.crypto.Md5(ToUtf8(Value)), result);
+  RawUtf8ToVariant(mormot.core.crypto.Md5(ToUtf8(Value)), Result);
 end;
 
 class procedure TMvcViewsMustache.sha1(const Value: variant;
-  out result: variant);
+  out Result: variant);
 begin
-  RawUtf8ToVariant(mormot.core.crypto.Sha1(ToUtf8(Value)), result);
+  RawUtf8ToVariant(mormot.core.crypto.Sha1(ToUtf8(Value)), Result);
 end;
 
 class procedure TMvcViewsMustache.sha256(const Value: variant;
-  out result: variant);
+  out Result: variant);
 begin
-  RawUtf8ToVariant(mormot.core.crypto.Sha256(ToUtf8(Value)), result);
+  RawUtf8ToVariant(mormot.core.crypto.Sha256(ToUtf8(Value)), Result);
 end;
 
 class procedure TMvcViewsMustache.sha512(const Value: variant;
-  out result: variant);
+  out Result: variant);
 begin
-  RawUtf8ToVariant(mormot.core.crypto.Sha512(ToUtf8(Value)), result);
+  RawUtf8ToVariant(mormot.core.crypto.Sha512(ToUtf8(Value)), Result);
 end;
 
 function TMvcViewsMustache.GetRenderer(methodIndex: integer;

@@ -135,6 +135,8 @@ type
     fContentCompress: integer;
     /// to call GetBody only once
     fBodyRetrieved: boolean;
+    /// fill the internal state and flags to their default/void values
+    procedure HttpStateReset;
     /// compress the data, adding corresponding headers via SockSend()
     // - always add a 'Content-Length: ' header entry (even if length=0)
     // - e.g. 'Content-Encoding: synlz' header if compressed using synlz
@@ -166,19 +168,29 @@ type
     /// map the presence of some HTTP headers, but retrieved during Request
     HeaderFlags: THttpSocketHeaderFlags;
     /// retrieve the HTTP headers into Headers[] and fill most properties below
-    // - only relevant headers are retrieved, unless HeadersUnFiltered is set
+    // - with default HeadersUnFiltered=false, only relevant headers are retrieved:
+    // use directly the ContentLength/ContentType/ServerInternalState/Upgrade
+    // and HeaderFlags fields since HeaderGetValue() would return ''
+    // - force HeadersUnFiltered=true to store all headers including the
+    // connection-related fields, but increase memory and reduce performance
     procedure GetHeader(HeadersUnFiltered: boolean = false);
     /// retrieve the HTTP body (after uncompression if necessary) into Content
     procedure GetBody;
     /// add an header 'name: value' entry
     procedure HeaderAdd(const aValue: RawUtf8);
     /// set all Header values at once, from CRLF delimited text
+    // - won't parse the ContentLength/ContentType/ServerInternalState/Upgrade
+    // and HeaderFlags fields
     procedure HeaderSetText(const aText: RawUtf8; const aForcedContentType: RawUtf8 = '');
     /// get all Header values at once, as CRLF delimited text
     // - you can optionally specify a value to be added as 'RemoteIP: ' header
+    // - default GetHeader(HeadersUnFiltered=false) won't include the connection
+    // related headers like ContentLength/ContentType/ServerInternalState/Upgrade
     function HeaderGetText(const aRemoteIP: RawUtf8 = ''): RawUtf8;
     /// HeaderGetValue('CONTENT-TYPE')='text/html', e.g.
     // - supplied aUpperName should be already uppercased
+    // - note that GetHeader(HeadersUnFiltered=false) will set ContentType field
+    // but let HeaderGetValue('CONTENT-TYPE') return ''
     function HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
@@ -571,6 +583,20 @@ begin
     SockSend(['Content-Type: ', OutContentType]);
 end;
 
+procedure THttpSocket.HttpStateReset;
+begin
+  HeaderFlags := [];
+  Headers := '';
+  fBodyRetrieved := false;
+  fContentCompress := -1;
+  integer(fCompressAcceptHeader) := 0;
+  ContentType := '';
+  Upgrade := '';
+  ContentLength := -1;
+  Content := '';
+  ServerInternalState := 0;
+end;
+
 procedure THttpSocket.GetHeader(HeadersUnFiltered: boolean);
 var
   s, c: RawUtf8;
@@ -579,14 +605,7 @@ var
   P: PUtf8Char;
   line: array[0..4095] of AnsiChar; // avoid most memory allocation
 begin
-  HeaderFlags := [];
-  fBodyRetrieved := false;
-  fContentCompress := -1;
-  integer(fCompressAcceptHeader) := 0;
-  ContentType := '';
-  Upgrade := '';
-  ContentLength := -1;
-  ServerInternalState := 0;
+  HttpStateReset;
   fSndBufLen := 0; // SockSend() used as headers temp buffer to avoid getmem
   repeat
     P := @line;
@@ -800,7 +819,8 @@ begin
     Headers := Headers + aValue + #13#10;
 end;
 
-procedure THttpSocket.HeaderSetText(const aText, aForcedContentType: RawUtf8);
+procedure THttpSocket.HeaderSetText(const aText: RawUtf8;
+  const aForcedContentType: RawUtf8);
 begin
   if aText = '' then
     Headers := ''

@@ -136,7 +136,7 @@ begin
     else
     begin
       {$ifdef OSDARWIN}
-      // MachOS has its own ICU set of libraries
+      // Mach OS has its own ICU set of libraries
       icu := dlopen('libicuuc.dylib', RTLD_LAZY);
       if icu <> nil then
         icui18n := dlopen('libicui18n.dylib', RTLD_LAZY);
@@ -557,10 +557,10 @@ const
 //   GetTickCount64 fpc    2 494 563 op/sec
 //   GetTickCount64 libc 119 919 893 op/sec
 function clock_gettime(clk_id : clockid_t; tp: ptimespec): cint;
-  cdecl; external 'c' name 'clock_gettime';
+  cdecl; external clib name 'clock_gettime';
 
 function gettimeofday(tp: ptimeval; tzp: ptimezone): cint;
-  cdecl; external 'c' name 'gettimeofday';
+  cdecl; external clib name 'gettimeofday';
 
 {$endif OSBSD}
 
@@ -1047,7 +1047,7 @@ end;
 procedure TSystemD.DoLoad;
 var
   p: PPointer;
-  i, j: integer;
+  i, j: PtrInt;
 const
   NAMES: array[0..5] of PAnsiChar = (
     'sd_listen_fds', 'sd_is_socket_unix', 'sd_journal_print',
@@ -1814,7 +1814,7 @@ end;
 
 var
   SynDaemonIntercepted: boolean;
-  SynDaemonInterceptLog: TOnDaemonLog;
+  SynDaemonInterceptLog: TSynLogProc;
 
 procedure DoShutDown(Sig: integer; Info: PSigInfo; Context: PSigContext); cdecl;
 var
@@ -1853,7 +1853,7 @@ begin
   SynDaemonTerminated := Sig;
 end;
 
-procedure SynDaemonIntercept(const onlog: TOnDaemonLog);
+procedure SynDaemonIntercept(const onlog: TSynLogProc);
 var
   saOld, saNew: SigactionRec;
 begin
@@ -1928,7 +1928,7 @@ begin
 end;
 
 procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
-  const start, stop: TThreadMethod; const onlog: TOnDaemonLog;
+  const start, stop: TThreadMethod; const onlog: TSynLogProc;
   const servicename: string);
 var
   pid, sid: TPID;

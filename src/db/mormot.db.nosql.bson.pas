@@ -163,7 +163,7 @@ type
     /// convert this Decimal128 value to its TBsonVariant custom variant value
     function ToVariant: variant; overload;
     /// convert this Decimal128 value to its TBsonVariant custom variant value
-    procedure ToVariant(out result: variant); overload;
+    procedure ToVariant(out Result: variant); overload;
     /// converts this Decimal128 value to a floating-point value
     // - by design, some information may be lost during conversion
     // - note that it doesn't make much sense to use this method: you should
@@ -1584,9 +1584,9 @@ begin
   ToVariant(result);
 end;
 
-procedure TDecimal128.ToVariant(out result: variant);
+procedure TDecimal128.ToVariant(out Result: variant);
 begin
-  with TBsonVariantData(result) do
+  with TBsonVariantData(Result) do
   begin
     VType := BsonVariantType.VarType;
     VKind := betDecimal128;
@@ -3413,7 +3413,7 @@ end;
 
 procedure TBsonWriter.BsonWrite(const name: RawUtf8; const value: TVarRec);
 var
-  tmp: RawUtf8;
+  tmp: TTempUtf8;
 begin
   case value.VType of
     vtBoolean:
@@ -3431,8 +3431,10 @@ begin
     vtString, vtAnsiString, {$ifdef HASVARUSTRING}vtUnicodeString, {$endif}
     vtPChar, vtChar, vtWideChar, vtWideString:
       begin
-        VarRecToUtf8(value, tmp);
-        BsonWrite(name, tmp);
+        VarRecToTempUtf8(value, tmp);
+        BsonWriteString(name, tmp.Text, tmp.Len);
+        if tmp.TempRawUtf8 <> nil then
+          RawUtf8(tmp.TempRawUtf8) := '';
       end;
   else
     raise EBsonException.CreateUtf8('%.BsonWrite(TVarRec.VType=%)', [self, value.VType]);
@@ -4273,7 +4275,7 @@ end;
 function Bson(const Format: RawUtf8; const Args, Params: array of const;
   kind: PBsonElementType): TBsonDocument;
 var
-  Json: RawUtf8; // since we use FormatUtf8(), TSynTempBuffer is useless here
+  json: RawUtf8; // since we use FormatUtf8(), TSynTempBuffer is useless here
   v: variant;
   k: TBsonElementType;
 begin
@@ -4292,9 +4294,9 @@ begin
       exit;
     end;
   end;
-  Json := FormatUtf8(Format, Args, Params, true);
-  UniqueRawUtf8(Json); // ensure Format is untouched if Args=[]
-  k := JsonBufferToBsonDocument(pointer(Json), result);
+  json := FormatUtf8(Format, Args, Params, {json=}true);
+  UniqueRawUtf8(json); // ensure Format is untouched if Args=[]
+  k := JsonBufferToBsonDocument(pointer(json), result);
   if kind <> nil then
     kind^ := k;
 end;

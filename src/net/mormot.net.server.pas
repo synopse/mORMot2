@@ -29,6 +29,7 @@ uses
   mormot.core.threads,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.rtti,
   mormot.net.sock,
   mormot.net.http,
   {$ifdef USEWININET}
@@ -336,7 +337,6 @@ type
   {$M-}
 
   /// Socket API based HTTP/1.1 server class used by THttpServer Threads
-
   THttpServerSocket = class(THttpSocket)
   protected
     fMethod: RawUtf8;
@@ -650,6 +650,8 @@ const
   /// if HTTP body length is bigger than 16 MB, creates a dedicated THttpServerResp
   // - is the default value to TSynThreadPoolTHttpServer.BigBodySize
   THREADPOOL_BIGBODYSIZE = 16 * 1024 * 1024;
+
+function ToText(res: THttpServerSocketGetRequestResult): PShortString; overload;
 
 
 {$ifdef USEWININET}
@@ -1785,8 +1787,8 @@ var
     if not result then
       exit;
     {$ifdef SYNCRTDEBUGLOW}
-    TSynLog.Add.Log(sllCustom2, 'SendResponse respsent=% cod=%', [respsent,
-      cod], self);
+    TSynLog.Add.Log(sllCustom2, 'SendResponse respsent=% cod=%',
+      [respsent, cod], self);
     {$endif SYNCRTDEBUGLOW}
     respsent := true;
     // handle case of direct sending of static file (as with http.sys)
@@ -1916,6 +1918,7 @@ begin
     ctxt.Free;
   end;
 end;
+
 
 
 { THttpServerSocket }
@@ -2106,12 +2109,22 @@ procedure THttpServerResp.Execute;
           {$endif SYNCRTDEBUGLOW}
           case pending of
             cspSocketError:
-              exit; // socket error -> disconnect the client
+              begin
+                if Assigned(fServer.Sock.OnLog) then
+                  fServer.Sock.OnLog(sllTrace, 'Execute: Socket error from %',
+                    [fServerSock.RemoteIP], self);
+                exit; // disconnect the client
+              end;
             cspNoData:
               begin
                 tix := mormot.core.os.GetTickCount64;
                 if tix >= keepaliveendtix then
+                begin
+                  if Assigned(fServer.Sock.OnLog) then
+                    fServer.Sock.OnLog(sllTrace, 'Execute: % KeepAlive=% timeout',
+                      [fServerSock.RemoteIP, keepaliveendtix - tix], self);
                   exit; // reached keep alive time out -> close connection
+                end;
                 if tix - beforetix < 40 then
                 begin
                   {$ifdef SYNCRTDEBUGLOW}
@@ -2159,8 +2172,13 @@ procedure THttpServerResp.Execute;
                       exit;
                     end;
                 else
-                  // fServerSock connection was down or headers are not correct
-                  exit;
+                  begin
+                    if Assigned(fServer.Sock.OnLog) then
+                      fServer.Sock.OnLog(sllTrace,
+                        'Execute: close after GetRequest=% from %',
+                        [ToText(res)^, fServerSock.RemoteIP], self);
+                    exit;
+                  end;
                 end;
               end;
           end;
@@ -2300,7 +2318,10 @@ begin
       grOwned:
         // e.g. for asynchrounous WebSockets
         srvsock := nil; // to ignore FreeAndNil(srvsock) below
-    end; // errors will close the connection
+      else if Assigned(fServer.Sock.OnLog) then
+        fServer.Sock.OnLog(sllTrace, 'Task: close after GetRequest=% from %',
+            [ToText(res)^, srvsock.RemoteIP], self);
+    end;
   finally
     srvsock.Free;
   end;
@@ -2309,6 +2330,12 @@ end;
 procedure TSynThreadPoolTHttpServer.TaskAbort(aContext: Pointer);
 begin
   THttpServerSocket(aContext).Free;
+end;
+
+
+function ToText(res: THttpServerSocketGetRequestResult): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THttpServerSocketGetRequestResult), ord(res));
 end;
 
 

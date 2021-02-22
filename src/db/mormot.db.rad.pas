@@ -1004,7 +1004,7 @@ begin
                   W.AddDateTime(AsDateTime);
                   W.Add('"');
                 end;
-              ftString, ftFixedChar, ftMemo:
+              ftString, ftFixedChar, ftMemo, ftGuid:
                 begin
                   W.Add('"');
                   {$ifdef UNICODE}

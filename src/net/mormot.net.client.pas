@@ -131,7 +131,8 @@ function OpenHttp(const aUri: RawUtf8;
 // something able to use your computer proxy, take a look at TWinINet.Get()
 // and the overloaded HttpGet() functions
 function OpenHttpGet(const server, port, url, inHeaders: RawUtf8;
-  outHeaders: PRawUtf8 = nil; aLayer: TNetLayer = nlTCP): RawByteString; overload;
+  outHeaders: PRawUtf8 = nil; aLayer: TNetLayer = nlTCP;
+  aTLS: boolean = false): RawByteString; overload;
 
 
 
@@ -856,24 +857,24 @@ begin
   fUserAgent := DefaultUserAgent(self);
 end;
 
-function THttpClientSocket.Request(const url, method: RawUtf8; KeepAlive:
-  cardinal; const header: RawUtf8; const Data: RawByteString; const DataType:
-  RawUtf8; retry: boolean): integer;
+function THttpClientSocket.Request(const url, method: RawUtf8;
+  KeepAlive: cardinal; const header: RawUtf8; const Data: RawByteString;
+  const DataType: RawUtf8; retry: boolean): integer;
 
   procedure DoRetry(Error: integer; const msg: RawUtf8);
   begin
-    {$ifdef SYNCRTDEBUGLOW}
-    TSynLog.Add.Log(sllCustom2,
-      'Request: % socket=% DoRetry(%) retry=%',
-      [msg, Sock, Error, BOOL_STR[retry]], self);
-    {$endif SYNCRTDEBUGLOW}
-    if retry then // retry once -> return error only if failed after retrial
+    //writeln('DoRetry ',retry, ' ', Error, ' / ', msg);
+    if Assigned(OnLog) then
+       OnLog(sllTrace, 'Request(% %): % socket=% DoRetry(%) retry=%',
+         [method, url, msg, fSock.Socket, Error, BOOL_STR[retry]], self);
+    if retry then // retry once -> return error only if failed twice
       result := Error
     else
     begin
       Close; // close this connection
       try
-        OpenBind(Server, Port, false); // retry this request with a new socket
+        OpenBind(fServer, fPort, {bind=}false, fTLS); // retry with a new socket
+        HttpStateReset;
         result := Request(url, method, KeepAlive, header, Data, DataType, true);
       except
         on Exception do
@@ -889,73 +890,79 @@ begin
   if SockIn = nil then // done once
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   Content := '';
-  if SockReceivePending(0) = cspSocketError then
-  begin
-    DoRetry(HTTP_NOTFOUND, 'connection broken (keepalive timeout?)');
-    exit;
-  end;
-  try
+  if (hfConnectionClose in HeaderFlags) or
+     (SockReceivePending(0) = cspSocketError) then
+    DoRetry(HTTP_NOTFOUND, 'connection closed/broken (keepalive or maxrequest)')
+  else
     try
-      // send request - we use SockSend because writeln() is calling flush()
-      // -> all headers will be sent at once
-      RequestSendHeader(url, method);
-      if KeepAlive > 0 then
-        SockSend(['Keep-Alive: ', KeepAlive, #13#10'Connection: Keep-Alive'])
-      else
-        SockSend('Connection: Close');
-      aData := Data; // local var copy for Data to be compressed in-place
-      CompressDataAndWriteHeaders(DataType, aData);
-      if header <> '' then
-        SockSend(header);
-      if fCompressAcceptEncoding <> '' then
-        SockSend(fCompressAcceptEncoding);
-      SockSendCRLF;
-      SockSendFlush(aData); // flush all pending data to network
-      // get headers
-      if SockReceivePending(1000) = cspSocketError then
-      begin
-        DoRetry(HTTP_NOTFOUND, 'cspSocketError waiting for headers');
-        exit;
-      end;
-      SockRecvLn(Command); // will raise ENetSock on any error
-      P := pointer(Command);
-      if IdemPChar(P, 'HTTP/1.') then
-      begin
-        result := GetCardinal(P + 9); // get http numeric status code (200,404...)
-        if result = 0 then
+      try
+        // send request - we use SockSend because writeln() is calling flush()
+        // -> all headers will be sent at once
+        RequestSendHeader(url, method);
+        if KeepAlive > 0 then
+          SockSend(['Keep-Alive: ', KeepAlive, #13#10'Connection: Keep-Alive'])
+        else
+          SockSend('Connection: Close');
+        aData := Data; // local var copy for Data to be compressed in-place
+        CompressDataAndWriteHeaders(DataType, aData);
+        if header <> '' then
+          SockSend(header);
+        if fCompressAcceptEncoding <> '' then
+          SockSend(fCompressAcceptEncoding);
+        SockSendCRLF;
+        SockSendFlush(aData); // flush all pending data to network
+        // retrieve HTTP command line response
+        if SockReceivePending(1000) = cspSocketError then
         begin
-          result := HTTP_HTTPVERSIONNONSUPPORTED;
+          DoRetry(HTTP_NOTFOUND, 'cspSocketError waiting for headers');
           exit;
         end;
-        while result = 100 do
+        SockRecvLn(Command); // will raise ENetSock on any error
+        P := pointer(Command);
+        if IdemPChar(P, 'HTTP/1.') then
         begin
-          repeat // 100 CONTINUE is just to be ignored client side
-            SockRecvLn(Command);
-            P := pointer(Command);
-          until IdemPChar(P, 'HTTP/1.');  // ignore up to next command
-          result := GetCardinal(P + 9);
+          result := GetCardinal(P + 9); // get http numeric status code (200,404...)
+          if result = 0 then
+          begin
+            result := HTTP_HTTPVERSIONNONSUPPORTED;
+            exit;
+          end;
+          while result = 100 do
+          begin
+            repeat
+              // 100 CONTINUE is just to be ignored on client side
+              SockRecvLn(Command);
+              P := pointer(Command);
+            until IdemPChar(P, 'HTTP/1.');  // ignore up to next command
+            result := GetCardinal(P + 9);
+          end;
+          if P[7] = '0' then
+            // HTTP/1.0 -> force connection close
+            KeepAlive := 0;
+        end
+        else
+        begin
+          // error on reading answer -> 505=wrong format
+          if Command = '' then
+            DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, 'Broken Link')
+          else
+            DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, Command);
+          exit;
         end;
-        if P[7] = '0' then
-          KeepAlive := 0; // HTTP/1.0 -> force connection close
-      end
-      else
-      begin
-        // error on reading answer
-        DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, Command); // 505=wrong format
-        exit;
+        // retrieve all HTTP headers
+        GetHeader({unfiltered=}false);
+        // retrieve Body content (if any)
+        if (result <> HTTP_NOCONTENT) and
+           (IdemPCharArray(pointer(method), ['HEAD', 'OPTIONS']) < 0) then
+          GetBody;
+      except
+        on Exception do
+          DoRetry(HTTP_NOTFOUND, 'Exception');
       end;
-      GetHeader(false); // read all other headers
-      if (result <> HTTP_NOCONTENT) and
-         (IdemPCharArray(pointer(method), ['HEAD', 'OPTIONS']) < 0) then
-        GetBody; // get content if necessary (not HEAD/OPTIONS methods)
-    except
-      on Exception do
-        DoRetry(HTTP_NOTFOUND, 'Exception');
+    finally
+      if KeepAlive = 0 then
+        Close;
     end;
-  finally
-    if KeepAlive = 0 then
-      Close;
-  end;
 end;
 
 function THttpClientSocket.Get(const url: RawUtf8; KeepAlive: cardinal;
@@ -1000,33 +1007,32 @@ function OpenHttp(const aServer, aPort: RawUtf8; aTLS: boolean;
 begin
   try
     result := THttpClientSocket.Open(
-      aServer,aPort, aLayer, 0, aTLS); // HTTP_DEFAULT_RECEIVETIMEOUT
+      aServer, aPort, aLayer, 0, aTLS); // HTTP_DEFAULT_RECEIVETIMEOUT
   except
     on ENetSock do
       result := nil;
   end;
 end;
 
-function OpenHttp(const aUri: RawUtf8;
-  aAddress: PRawUtf8): THttpClientSocket;
+function OpenHttp(const aUri: RawUtf8; aAddress: PRawUtf8): THttpClientSocket;
 var
   URI: TUri;
 begin
   result := nil;
   if URI.From(aUri) then
   begin
-    result := OpenHttp(URI.Server,URI.Port,URI.Https,URI.Layer);
+    result := OpenHttp(URI.Server, URI.Port, URI.Https, URI.Layer);
     if aAddress <> nil then
       aAddress^ := URI.Address;
   end;
 end;
 
 function OpenHttpGet(const server, port, url, inHeaders: RawUtf8;
-  outHeaders: PRawUtf8; aLayer: TNetLayer): RawByteString;
+  outHeaders: PRawUtf8; aLayer: TNetLayer; aTLS: boolean): RawByteString;
 var Http: THttpClientSocket;
 begin
   result := '';
-  Http := OpenHttp(server, port, false, aLayer);
+  Http := OpenHttp(server, port, aTLS, aLayer);
   if Http <> nil then
   try
     if Http.Get(url, 0, inHeaders) in

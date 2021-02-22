@@ -1097,8 +1097,6 @@ const
   SN_sm_scheme = 'sm-scheme';
   NID_sm_scheme = 1142;
   SN_dsa = 'DSA';
-  LN_dsa = 'dsaEncryption';
-  NID_dsa = 116;
   SN_dsaWithSHA1 = 'DSA-SHA1';
   LN_dsaWithSHA1 = 'dsaWithSHA1';
   NID_dsaWithSHA1 = 113;
@@ -1117,8 +1115,6 @@ const
   NID_X9_62_tpBasis = 682;
   SN_X9_62_ppBasis = 'ppBasis';
   NID_X9_62_ppBasis = 683;
-  SN_X9_62_id_ecPublicKey = 'id-ecPublicKey';
-  NID_X9_62_id_ecPublicKey = 408;
   SN_X9_62_c2pnb163v1 = 'c2pnb163v1';
   NID_X9_62_c2pnb163v1 = 684;
   SN_X9_62_c2pnb163v2 = 'c2pnb163v2';
@@ -1159,20 +1155,6 @@ const
   NID_X9_62_c2pnb368w1 = 702;
   SN_X9_62_c2tnb431r1 = 'c2tnb431r1';
   NID_X9_62_c2tnb431r1 = 703;
-  SN_X9_62_prime192v1 = 'prime192v1';
-  NID_X9_62_prime192v1 = 409;
-  SN_X9_62_prime192v2 = 'prime192v2';
-  NID_X9_62_prime192v2 = 410;
-  SN_X9_62_prime192v3 = 'prime192v3';
-  NID_X9_62_prime192v3 = 411;
-  SN_X9_62_prime239v1 = 'prime239v1';
-  NID_X9_62_prime239v1 = 412;
-  SN_X9_62_prime239v2 = 'prime239v2';
-  NID_X9_62_prime239v2 = 413;
-  SN_X9_62_prime239v3 = 'prime239v3';
-  NID_X9_62_prime239v3 = 414;
-  SN_X9_62_prime256v1 = 'prime256v1';
-  NID_X9_62_prime256v1 = 415;
   SN_ecdsa_with_SHA1 = 'ecdsa-with-SHA1';
   NID_ecdsa_with_SHA1 = 416;
   SN_ecdsa_with_Recommended = 'ecdsa-with-Recommended';
@@ -1187,68 +1169,6 @@ const
   NID_ecdsa_with_SHA384 = 795;
   SN_ecdsa_with_SHA512 = 'ecdsa-with-SHA512';
   NID_ecdsa_with_SHA512 = 796;
-  SN_secp112r1 = 'secp112r1';
-  NID_secp112r1 = 704;
-  SN_secp112r2 = 'secp112r2';
-  NID_secp112r2 = 705;
-  SN_secp128r1 = 'secp128r1';
-  NID_secp128r1 = 706;
-  SN_secp128r2 = 'secp128r2';
-  NID_secp128r2 = 707;
-  SN_secp160k1 = 'secp160k1';
-  NID_secp160k1 = 708;
-  SN_secp160r1 = 'secp160r1';
-  NID_secp160r1 = 709;
-  SN_secp160r2 = 'secp160r2';
-  NID_secp160r2 = 710;
-  SN_secp192k1 = 'secp192k1';
-  NID_secp192k1 = 711;
-  SN_secp224k1 = 'secp224k1';
-  NID_secp224k1 = 712;
-  SN_secp224r1 = 'secp224r1';
-  NID_secp224r1 = 713;
-  SN_secp256k1 = 'secp256k1';
-  NID_secp256k1 = 714;
-  SN_secp384r1 = 'secp384r1';
-  NID_secp384r1 = 715;
-  SN_secp521r1 = 'secp521r1';
-  NID_secp521r1 = 716;
-  SN_sect113r1 = 'sect113r1';
-  NID_sect113r1 = 717;
-  SN_sect113r2 = 'sect113r2';
-  NID_sect113r2 = 718;
-  SN_sect131r1 = 'sect131r1';
-  NID_sect131r1 = 719;
-  SN_sect131r2 = 'sect131r2';
-  NID_sect131r2 = 720;
-  SN_sect163k1 = 'sect163k1';
-  NID_sect163k1 = 721;
-  SN_sect163r1 = 'sect163r1';
-  NID_sect163r1 = 722;
-  SN_sect163r2 = 'sect163r2';
-  NID_sect163r2 = 723;
-  SN_sect193r1 = 'sect193r1';
-  NID_sect193r1 = 724;
-  SN_sect193r2 = 'sect193r2';
-  NID_sect193r2 = 725;
-  SN_sect233k1 = 'sect233k1';
-  NID_sect233k1 = 726;
-  SN_sect233r1 = 'sect233r1';
-  NID_sect233r1 = 727;
-  SN_sect239k1 = 'sect239k1';
-  NID_sect239k1 = 728;
-  SN_sect283k1 = 'sect283k1';
-  NID_sect283k1 = 729;
-  SN_sect283r1 = 'sect283r1';
-  NID_sect283r1 = 730;
-  SN_sect409k1 = 'sect409k1';
-  NID_sect409k1 = 731;
-  SN_sect409r1 = 'sect409r1';
-  NID_sect409r1 = 732;
-  SN_sect571k1 = 'sect571k1';
-  NID_sect571k1 = 733;
-  SN_sect571r1 = 'sect571r1';
-  NID_sect571r1 = 734;
   SN_wap_wsg_idm_ecid_wtls1 = 'wap-wsg-idm-ecid-wtls1';
   NID_wap_wsg_idm_ecid_wtls1 = 735;
   SN_wap_wsg_idm_ecid_wtls3 = 'wap-wsg-idm-ecid-wtls3';
@@ -1299,8 +1219,6 @@ const
   NID_pkcs = 2;
   SN_pkcs1 = 'pkcs1';
   NID_pkcs1 = 186;
-  LN_rsaEncryption = 'rsaEncryption';
-  NID_rsaEncryption = 6;
   SN_md2WithRSAEncryption = 'RSA-MD2';
   LN_md2WithRSAEncryption = 'md2WithRSAEncryption';
   NID_md2WithRSAEncryption = 7;
@@ -1323,8 +1241,6 @@ const
   LN_pSpecified = 'pSpecified';
   NID_pSpecified = 935;
   SN_rsassaPss = 'RSASSA-PSS';
-  LN_rsassaPss = 'rsassaPss';
-  NID_rsassaPss = 912;
   SN_sha256WithRSAEncryption = 'RSA-SHA256';
   LN_sha256WithRSAEncryption = 'sha256WithRSAEncryption';
   NID_sha256WithRSAEncryption = 668;
@@ -1345,8 +1261,6 @@ const
   NID_sha512_256WithRSAEncryption = 1146;
   SN_pkcs3 = 'pkcs3';
   NID_pkcs3 = 27;
-  LN_dhKeyAgreement = 'dhKeyAgreement';
-  NID_dhKeyAgreement = 28;
   SN_pkcs5 = 'pkcs5';
   NID_pkcs5 = 187;
   SN_pbeWithMD2AndDES_CBC = 'PBE-MD2-DES';
@@ -3773,8 +3687,6 @@ const
   NID_X25519 = 1034;
   SN_X448 = 'X448';
   NID_X448 = 1035;
-  SN_ED25519 = 'ED25519';
-  NID_ED25519 = 1087;
   SN_ED448 = 'ED448';
   NID_ED448 = 1088;
   SN_kx_rsa = 'KxRSA';
@@ -3834,9 +3746,6 @@ const
   SN_auth_any = 'AuthANY';
   LN_auth_any = 'auth-any';
   NID_auth_any = 1064;
-  SN_poly1305 = 'Poly1305';
-  LN_poly1305 = 'poly1305';
-  NID_poly1305 = 1061;
   SN_siphash = 'SipHash';
   LN_siphash = 'siphash';
   NID_siphash = 1062;
@@ -3946,29 +3855,22 @@ const
   EVP_PKS_RSA = $0100;
   EVP_PKS_DSA = $0200;
   EVP_PKS_EC = $0400;
-  
+
   EVP_PKEY_NONE = NID_undef;
-  EVP_PKEY_RSA = NID_rsaEncryption;
   EVP_PKEY_RSA2 = NID_rsa;
-  EVP_PKEY_RSA_PSS = NID_rsassaPss;
-  EVP_PKEY_DSA = NID_dsa;
   EVP_PKEY_DSA1 = NID_dsa_2;
   EVP_PKEY_DSA2 = NID_dsaWithSHA;
   EVP_PKEY_DSA3 = NID_dsaWithSHA1;
   EVP_PKEY_DSA4 = NID_dsaWithSHA1_2;
-  EVP_PKEY_DH = NID_dhKeyAgreement;
   EVP_PKEY_DHX = NID_dhpublicnumber;
-  EVP_PKEY_EC = NID_X9_62_id_ecPublicKey;
   EVP_PKEY_SM2 = NID_sm2;
   EVP_PKEY_HMAC = NID_hmac;
   EVP_PKEY_CMAC = NID_cmac;
   EVP_PKEY_SCRYPT = NID_id_scrypt;
   EVP_PKEY_TLS1_PRF = NID_tls1_prf;
   EVP_PKEY_HKDF = NID_hkdf;
-  EVP_PKEY_POLY1305 = NID_poly1305;
   EVP_PKEY_SIPHASH = NID_siphash;
   EVP_PKEY_X25519 = NID_X25519;
-  EVP_PKEY_ED25519 = NID_ED25519;
   EVP_PKEY_X448 = NID_X448;
   EVP_PKEY_ED448 = NID_ED448;
   EVP_PKEY_MO_SIGN = $0001;
@@ -3976,13 +3878,6 @@ const
   EVP_PKEY_MO_ENCRYPT = $0004;
   EVP_PKEY_MO_DECRYPT = $0008;
   
-  EVP_MD_FLAG_ONESHOT = $0001;
-  EVP_MD_FLAG_XOF = $0002;
-  EVP_MD_FLAG_DIGALGID_MASK = $0018;
-  EVP_MD_FLAG_DIGALGID_NULL = $0000;
-  EVP_MD_FLAG_DIGALGID_ABSENT = $0008;
-  EVP_MD_FLAG_DIGALGID_CUSTOM = $0018;
-  EVP_MD_FLAG_FIPS = $0400;
   EVP_MD_CTRL_DIGALGID = $1;
   EVP_MD_CTRL_MICALG = $2;
   EVP_MD_CTRL_XOF_LEN = $3;
@@ -4100,8 +3995,6 @@ const
   ASN1_PKEY_CTRL_GET1_TLS_ENCPT = $a;
   
   EVP_PKEY_OP_UNDEFINED = 0;
-  EVP_PKEY_OP_PARAMGEN = 1 shl 1;
-  EVP_PKEY_OP_KEYGEN = 1 shl 2;
   EVP_PKEY_OP_SIGN = 1 shl 3;
   EVP_PKEY_OP_VERIFY = 1 shl 4;
   EVP_PKEY_OP_VERIFYRECOVER = 1 shl 5;
@@ -4137,7 +4030,6 @@ const
   EVP_PKEY_CTRL_CIPHER = 12;
   EVP_PKEY_CTRL_GET_MD = 13;
   EVP_PKEY_CTRL_SET_DIGEST_SIZE = 14;
-  EVP_PKEY_ALG_CTRL = $1000;
   EVP_PKEY_FLAG_AUTOARGLEN = 2;
   EVP_PKEY_FLAG_SIGCTX_CUSTOM = 4;
   
@@ -4397,7 +4289,6 @@ const
   EC_FLAG_FIPS_CHECKED = $2;
   EC_FLAG_COFACTOR_ECDH = $1000;
   
-  EVP_PKEY_CTRL_EC_PARAMGEN_CURVE_NID = EVP_PKEY_ALG_CTRL + 1;
   EVP_PKEY_CTRL_EC_PARAM_ENC = EVP_PKEY_ALG_CTRL + 2;
   EVP_PKEY_CTRL_EC_ECDH_COFACTOR = EVP_PKEY_ALG_CTRL + 3;
   EVP_PKEY_CTRL_EC_KDF_TYPE = EVP_PKEY_ALG_CTRL + 4;
@@ -4579,7 +4470,6 @@ const
   
   EVP_PKEY_CTRL_RSA_PADDING = EVP_PKEY_ALG_CTRL + 1;
   EVP_PKEY_CTRL_RSA_PSS_SALTLEN = EVP_PKEY_ALG_CTRL + 2;
-  EVP_PKEY_CTRL_RSA_KEYGEN_BITS = EVP_PKEY_ALG_CTRL + 3;
   EVP_PKEY_CTRL_RSA_KEYGEN_PUBEXP = EVP_PKEY_ALG_CTRL + 4;
   EVP_PKEY_CTRL_RSA_MGF1_MD = EVP_PKEY_ALG_CTRL + 5;
   EVP_PKEY_CTRL_GET_RSA_PADDING = EVP_PKEY_ALG_CTRL + 6;
@@ -4744,7 +4634,6 @@ const
   DSA_FLAG_FIPS_CHECKED = $0800;
   DSS_prime_checks = 64;
   
-  EVP_PKEY_CTRL_DSA_PARAMGEN_BITS = EVP_PKEY_ALG_CTRL + 1;
   EVP_PKEY_CTRL_DSA_PARAMGEN_Q_BITS = EVP_PKEY_ALG_CTRL + 2;
   EVP_PKEY_CTRL_DSA_PARAMGEN_MD = EVP_PKEY_ALG_CTRL + 3;
   
@@ -4864,10 +4753,7 @@ const
   
   X509_SIG_INFO_VALID = $1;
   X509_SIG_INFO_TLS = $2;
-  X509_FILETYPE_PEM = 1;
-  X509_FILETYPE_ASN1 = 2;
-  X509_FILETYPE_DEFAULT = 3;
-  
+
   X509v3_KU_DIGITAL_SIGNATURE = $0080;
   X509v3_KU_NON_REPUDIATION = $0040;
   X509v3_KU_KEY_ENCIPHERMENT = $0020;
@@ -4945,31 +4831,6 @@ const
   X509_L_FILE_LOAD = 1;
   X509_L_ADD_DIR = 2;
   
-  X509_V_OK = 0;
-  X509_V_ERR_UNSPECIFIED = 1;
-  X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT = 2;
-  X509_V_ERR_UNABLE_TO_GET_CRL = 3;
-  X509_V_ERR_UNABLE_TO_DECRYPT_CERT_SIGNATURE = 4;
-  X509_V_ERR_UNABLE_TO_DECRYPT_CRL_SIGNATURE = 5;
-  X509_V_ERR_UNABLE_TO_DECODE_ISSUER_PUBLIC_KEY = 6;
-  X509_V_ERR_CERT_SIGNATURE_FAILURE = 7;
-  X509_V_ERR_CRL_SIGNATURE_FAILURE = 8;
-  X509_V_ERR_CERT_NOT_YET_VALID = 9;
-  X509_V_ERR_CERT_HAS_EXPIRED = 10;
-  X509_V_ERR_CRL_NOT_YET_VALID = 11;
-  X509_V_ERR_CRL_HAS_EXPIRED = 12;
-  X509_V_ERR_ERROR_IN_CERT_NOT_BEFORE_FIELD = 13;
-  X509_V_ERR_ERROR_IN_CERT_NOT_AFTER_FIELD = 14;
-  X509_V_ERR_ERROR_IN_CRL_LAST_UPDATE_FIELD = 15;
-  X509_V_ERR_ERROR_IN_CRL_NEXT_UPDATE_FIELD = 16;
-  X509_V_ERR_OUT_OF_MEM = 17;
-  X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT = 18;
-  X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN = 19;
-  X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY = 20;
-  X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE = 21;
-  X509_V_ERR_CERT_CHAIN_TOO_LONG = 22;
-  X509_V_ERR_CERT_REVOKED = 23;
-  X509_V_ERR_INVALID_CA = 24;
   X509_V_ERR_PATH_LENGTH_EXCEEDED = 25;
   X509_V_ERR_INVALID_PURPOSE = 26;
   X509_V_ERR_CERT_UNTRUSTED = 27;
@@ -7291,9 +7152,6 @@ const
   SSL_SENT_SHUTDOWN = 1;
   SSL_RECEIVED_SHUTDOWN = 2;
   
-  SSL_FILETYPE_ASN1 = X509_FILETYPE_ASN1;
-  SSL_FILETYPE_PEM = X509_FILETYPE_PEM;
-  
   SSL_EXT_TLS_ONLY = $0001;
   SSL_EXT_DTLS_ONLY = $0002;
   SSL_EXT_TLS_IMPLEMENTATION_ONLY = $0004;
@@ -7643,13 +7501,7 @@ const
   SSL3_CHANGE_CIPHER_SERVER_WRITE = SSL3_CC_SERVER or SSL3_CC_WRITE;
   
   OPENSSL_TLS_SECURITY_LEVEL = 1;
-  TLS1_VERSION = $0301;
-  TLS1_1_VERSION = $0302;
-  TLS1_2_VERSION = $0303;
-  TLS1_3_VERSION = $0304;
-  TLS_MAX_VERSION = TLS1_3_VERSION;
-  TLS_ANY_VERSION = $10000;
-  
+
   TLS1_VERSION_MAJOR = $03;
   TLS1_VERSION_MINOR = $01;
   TLS1_1_VERSION_MAJOR = $03;
@@ -8472,12 +8324,6 @@ const
   SSL_ST_READ_HEADER = $F0;
   SSL_ST_READ_BODY = $F1;
   SSL_ST_READ_DONE = $F2;
-  
-  SSL_VERIFY_NONE = $00;
-  SSL_VERIFY_PEER = $01;
-  SSL_VERIFY_FAIL_IF_NO_PEER_CERT = $02;
-  SSL_VERIFY_CLIENT_ONCE = $04;
-  SSL_VERIFY_POST_HANDSHAKE = $08;
   
   SSL_AD_REASON_OFFSET = 1000;
   SSL_AD_CLOSE_NOTIFY = SSL3_AD_CLOSE_NOTIFY;
@@ -9437,10 +9283,6 @@ type
   sk_OPENSSL_BLOCK_freefunc = procedure(a: pointer); cdecl;
   sk_OPENSSL_BLOCK_copyfunc = function(a: pointer): pointer; cdecl;
 
-  PBIGNUM = pointer;
-  PPBIGNUM = ^PBIGNUM;
-  PBN_CTX = pointer;
-  PPBN_CTX = ^PBN_CTX;
   PBN_BLINDING = pointer;
   PPBN_BLINDING = ^PBN_BLINDING;
   PBN_MONT_CTX = pointer;
@@ -9455,8 +9297,6 @@ type
   PPEVP_PKEY_METHOD = ^PEVP_PKEY_METHOD;
   PEVP_ENCODE_CTX = pointer;
   PPEVP_ENCODE_CTX = ^PEVP_ENCODE_CTX;
-  PHMAC_CTX = pointer;
-  PPHMAC_CTX = ^PHMAC_CTX;
   PDH = pointer;
   PPDH = ^PDH;
   PDH_METHOD = pointer;
@@ -9467,8 +9307,6 @@ type
   PPDSA_METHOD = ^PDSA_METHOD;
   PRSA_METHOD = pointer;
   PPRSA_METHOD = ^PRSA_METHOD;
-  PEC_KEY = pointer;
-  PPEC_KEY = ^PEC_KEY;
   PEC_KEY_METHOD = pointer;
   PPEC_KEY_METHOD = ^PEC_KEY_METHOD;
   PSSL_DANE = pointer;
@@ -9810,16 +9648,6 @@ type
   BF_KEY = bf_key_st;
   PBF_KEY = ^BF_KEY;
 
-  buf_mem_st = record
-    length: PtrUInt;
-    data: PUtf8Char;
-    max: PtrUInt;
-    flags: cardinal;
-  end;
-
-  BUF_MEM = buf_mem_st;
-  PBUF_MEM = ^BUF_MEM;
-
   KEY_TABLE_TYPE = array [0..67] of cardinal;
 
   _anonymous_type_2 = record
@@ -9876,24 +9704,8 @@ type
   PCMAC_CTX = pointer;
   PPCMAC_CTX = ^PCMAC_CTX;
 
-  (** Enum for the point conversion form as defined in X9.62 (ECDSA)
-   *  for the encoding of a elliptic curve point (x,y) *)
-  point_conversion_form_t = (
-    (** the point is encoded as z||x, where the octet z specifies
-     *  which solution of the quadratic equation y is  *)
-    POINT_CONVERSION_COMPRESSED = 2,
-    (** the point is encoded as z||x||y, where z is the octet 0x04  *)
-    POINT_CONVERSION_UNCOMPRESSED = 4,
-    (** the point is encoded as z||x||y, where the octet z specifies
-     *  which solution of the quadratic equation y is  *)
-    POINT_CONVERSION_HYBRID = 6);
-  Ppoint_conversion_form_t = ^point_conversion_form_t;
   PEC_METHOD = pointer;
   PPEC_METHOD = ^PEC_METHOD;
-  PEC_GROUP = pointer;
-  PPEC_GROUP = ^PEC_GROUP;
-  PEC_POINT = pointer;
-  PPEC_POINT = ^PEC_POINT;
   PECPKPARAMETERS = pointer;
   PPECPKPARAMETERS = ^PECPKPARAMETERS;
   PECPARAMETERS = pointer;
@@ -11636,8 +11448,6 @@ type
   EVP_PKEY_meth_set_param_check_check = function(pkey: PEVP_PKEY): integer; cdecl;
   EVP_PKEY_meth_set_digest_custom_digest_custom = function(ctx: PEVP_PKEY_CTX; mctx: PEVP_MD_CTX): integer; cdecl;
 
-  ECDH_compute_key_KDF = function(_in: pointer; inlen: PtrUInt; _out: pointer; outlen: PPtrUInt): pointer; cdecl;
-
   EC_KEY_METHOD_set_init_init = function(key: PEC_KEY): integer; cdecl;
   EC_KEY_METHOD_set_init_finish = procedure(key: PEC_KEY); cdecl;
   EC_KEY_METHOD_set_init_copy = function(dest: PEC_KEY; src: PEC_KEY): integer; cdecl;
@@ -12632,9 +12442,6 @@ function BN_pseudo_rand(rnd: PBIGNUM; bits: integer; top: integer; bottom: integ
 function BN_pseudo_rand_range(rnd: PBIGNUM; range: PBIGNUM): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BN_pseudo_rand_range';
 
-function BN_num_bits(a: PBIGNUM): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'BN_num_bits';
-
 function BN_num_bits_word(l: cardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BN_num_bits_word';
 
@@ -12655,12 +12462,6 @@ function BN_copy(a: PBIGNUM; b: PBIGNUM): PBIGNUM; cdecl;
 
 procedure BN_swap(a: PBIGNUM; b: PBIGNUM); cdecl;
   external LIB_CRYPTO name _PU + 'BN_swap';
-
-function BN_bin2bn(s: pointer; len: integer; ret: PBIGNUM): PBIGNUM; cdecl;
-  external LIB_CRYPTO name _PU + 'BN_bin2bn';
-
-function BN_bn2bin(a: PBIGNUM; _to: pointer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'BN_bn2bin';
 
 function BN_bn2binpad(a: PBIGNUM; _to: pointer; tolen: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BN_bn2binpad';
@@ -12768,9 +12569,6 @@ function BN_get_word(a: PBIGNUM): cardinal; cdecl;
 
 function BN_cmp(a: PBIGNUM; b: PBIGNUM): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BN_cmp';
-
-procedure BN_free(a: PBIGNUM); cdecl;
-  external LIB_CRYPTO name _PU + 'BN_free';
 
 function BN_is_bit_set(a: PBIGNUM; n: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'BN_is_bit_set';
@@ -14335,17 +14133,8 @@ function EVP_MD_type(md: PEVP_MD): integer; cdecl;
 function EVP_MD_pkey_type(md: PEVP_MD): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_pkey_type';
 
-function EVP_MD_size(md: PEVP_MD): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_MD_size';
-
 function EVP_MD_block_size(md: PEVP_MD): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_block_size';
-
-function EVP_MD_flags(md: PEVP_MD): cardinal; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_MD_flags';
-
-function EVP_MD_CTX_md(ctx: PEVP_MD_CTX): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_md';
 
 //function EVP_MD_CTX_update_fn(ctx: PEVP_MD_CTXdata: Pointercount: PtrUIntctx: PEVP_MD_CTX): integer { TODO : Cannot convert original type "int (*)(EVP_MD_CTX *, const void *, size_t)" }; cdecl;
 //  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_update_fn';
@@ -14434,14 +14223,8 @@ function EVP_Cipher(c: PEVP_CIPHER_CTX; _out: PByte; _in: PByte; inl: cardinal):
 function EVP_MD_CTX_ctrl(ctx: PEVP_MD_CTX; cmd: integer; p1: integer; p2: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_CTX_ctrl';
 
-function EVP_MD_CTX_new(): PEVP_MD_CTX; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_new';
-
 function EVP_MD_CTX_reset(ctx: PEVP_MD_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_CTX_reset';
-
-procedure EVP_MD_CTX_free(ctx: PEVP_MD_CTX); cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_free';
 
 function EVP_MD_CTX_copy_ex(_out: PEVP_MD_CTX; _in: PEVP_MD_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_CTX_copy_ex';
@@ -14455,12 +14238,6 @@ procedure EVP_MD_CTX_clear_flags(ctx: PEVP_MD_CTX; flags: integer); cdecl;
 function EVP_MD_CTX_test_flags(ctx: PEVP_MD_CTX; flags: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_CTX_test_flags';
 
-function EVP_DigestInit_ex(ctx: PEVP_MD_CTX; typ: PEVP_MD; impl: PENGINE): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_DigestInit_ex';
-
-function EVP_DigestFinal_ex(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_DigestFinal_ex';
-
 function EVP_Digest(data: pointer; count: PtrUInt; md: PByte; size: PCardinal; typ: PEVP_MD; impl: PENGINE): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_Digest';
 
@@ -14472,9 +14249,6 @@ function EVP_DigestInit(ctx: PEVP_MD_CTX; typ: PEVP_MD): integer; cdecl;
 
 function EVP_DigestFinal(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_DigestFinal';
-
-function EVP_DigestFinalXOF(ctx: PEVP_MD_CTX; md: PByte; len: PtrUInt): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_DigestFinalXOF';
 
 function EVP_read_pw_string(buf: PUtf8Char; length: integer; prompt: PUtf8Char; verify: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_read_pw_string';
@@ -14542,14 +14316,8 @@ function EVP_CipherFinal(ctx: PEVP_CIPHER_CTX; outm: PByte; outl: PInteger): int
 function EVP_SignFinal(ctx: PEVP_MD_CTX; md: PByte; s: PCardinal; pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_SignFinal';
 
-function EVP_DigestSign(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_DigestSign';
-
 function EVP_VerifyFinal(ctx: PEVP_MD_CTX; sigbuf: PByte; siglen: cardinal; pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_VerifyFinal';
-
-function EVP_DigestVerify(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt; tbs: PByte; tbslen: PtrUInt): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_DigestVerify';
 
 function EVP_OpenInit(ctx: PEVP_CIPHER_CTX; typ: PEVP_CIPHER; ek: PByte; ekl: integer; iv: PByte; priv: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_OpenInit';
@@ -14568,9 +14336,6 @@ function EVP_sha1(): PEVP_MD; cdecl;
 
 function EVP_sha224(): PEVP_MD; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_sha224';
-
-function EVP_sha256(): PEVP_MD; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_sha256';
 
 function EVP_sha384(): PEVP_MD; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_sha384';
@@ -15489,20 +15254,8 @@ function EVP_PKEY_meth_get_count(): PtrUInt; cdecl;
 function EVP_PKEY_meth_get0(idx: PtrUInt): PEVP_PKEY_METHOD; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_meth_get0';
 
-function EVP_PKEY_CTX_new(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_new';
-
-function EVP_PKEY_CTX_new_id(id: integer; e: PENGINE): PEVP_PKEY_CTX; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_new_id';
-
 function EVP_PKEY_CTX_dup(ctx: PEVP_PKEY_CTX): PEVP_PKEY_CTX; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_dup';
-
-procedure EVP_PKEY_CTX_free(ctx: PEVP_PKEY_CTX); cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_free';
-
-function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer; cmd: integer; p1: integer; p2: pointer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_ctrl';
 
 function EVP_PKEY_CTX_ctrl_str(ctx: PEVP_PKEY_CTX; typ: PUtf8Char; value: PUtf8Char): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_ctrl_str';
@@ -15599,18 +15352,6 @@ function EVP_PKEY_derive_set_peer(ctx: PEVP_PKEY_CTX; peer: PEVP_PKEY): integer;
 
 function EVP_PKEY_derive(ctx: PEVP_PKEY_CTX; key: PByte; keylen: PPtrUInt): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_derive';
-
-function EVP_PKEY_paramgen_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_paramgen_init';
-
-function EVP_PKEY_paramgen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_paramgen';
-
-function EVP_PKEY_keygen_init(ctx: PEVP_PKEY_CTX): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_keygen_init';
-
-function EVP_PKEY_keygen(ctx: PEVP_PKEY_CTX; ppkey: PPEVP_PKEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_keygen';
 
 function EVP_PKEY_check(ctx: PEVP_PKEY_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_check';
@@ -15798,9 +15539,6 @@ function EC_GF2m_simple_method(): PEC_METHOD; cdecl;
 function EC_GROUP_new(meth: PEC_METHOD): PEC_GROUP; cdecl;
   external LIB_CRYPTO name _PU + 'EC_GROUP_new';
 
-procedure EC_GROUP_free(group: PEC_GROUP); cdecl;
-  external LIB_CRYPTO name _PU + 'EC_GROUP_free';
-
 procedure EC_GROUP_clear_free(group: PEC_GROUP); cdecl;
   external LIB_CRYPTO name _PU + 'EC_GROUP_clear_free';
 
@@ -15903,9 +15641,6 @@ function EC_GROUP_new_curve_GFp(p: PBIGNUM; a: PBIGNUM; b: PBIGNUM; ctx: PBN_CTX
 function EC_GROUP_new_curve_GF2m(p: PBIGNUM; a: PBIGNUM; b: PBIGNUM; ctx: PBN_CTX): PEC_GROUP; cdecl;
   external LIB_CRYPTO name _PU + 'EC_GROUP_new_curve_GF2m';
 
-function EC_GROUP_new_by_curve_name(nid: integer): PEC_GROUP; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_GROUP_new_by_curve_name';
-
 function EC_GROUP_new_from_ecparameters(params: PECPARAMETERS): PEC_GROUP; cdecl;
   external LIB_CRYPTO name _PU + 'EC_GROUP_new_from_ecparameters';
 
@@ -15926,12 +15661,6 @@ function EC_curve_nid2nist(nid: integer): PUtf8Char; cdecl;
 
 function EC_curve_nist2nid(name: PUtf8Char): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_curve_nist2nid';
-
-function EC_POINT_new(group: PEC_GROUP): PEC_POINT; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_POINT_new';
-
-procedure EC_POINT_free(point: PEC_POINT); cdecl;
-  external LIB_CRYPTO name _PU + 'EC_POINT_free';
 
 procedure EC_POINT_clear_free(point: PEC_POINT); cdecl;
   external LIB_CRYPTO name _PU + 'EC_POINT_clear_free';
@@ -15984,17 +15713,8 @@ function EC_POINT_set_compressed_coordinates_GF2m(group: PEC_GROUP; p: PEC_POINT
 function EC_POINT_point2oct(group: PEC_GROUP; p: PEC_POINT; form: point_conversion_form_t; buf: PByte; len: PtrUInt; ctx: PBN_CTX): PtrUInt; cdecl;
   external LIB_CRYPTO name _PU + 'EC_POINT_point2oct';
 
-function EC_POINT_oct2point(group: PEC_GROUP; p: PEC_POINT; buf: PByte; len: PtrUInt; ctx: PBN_CTX): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_POINT_oct2point';
-
-function EC_POINT_point2buf(group: PEC_GROUP; point: PEC_POINT; form: point_conversion_form_t; pbuf: PPByte; ctx: PBN_CTX): PtrUInt; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_POINT_point2buf';
-
 function EC_POINT_point2bn(p1: PEC_GROUP; p2: PEC_POINT; form: point_conversion_form_t; p4: PBIGNUM; p5: PBN_CTX): PBIGNUM; cdecl;
   external LIB_CRYPTO name _PU + 'EC_POINT_point2bn';
-
-function EC_POINT_bn2point(p1: PEC_GROUP; p2: PBIGNUM; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_POINT_bn2point';
 
 function EC_POINT_point2hex(p1: PEC_GROUP; p2: PEC_POINT; form: point_conversion_form_t; p4: PBN_CTX): PUtf8Char; cdecl;
   external LIB_CRYPTO name _PU + 'EC_POINT_point2hex';
@@ -16077,9 +15797,6 @@ function ECPKParameters_print(bp: PBIO; x: PEC_GROUP; off: integer): integer; cd
 function ECPKParameters_print_fp(fp: PPointer; x: PEC_GROUP; off: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ECPKParameters_print_fp';
 
-function EC_KEY_new(): PEC_KEY; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_new';
-
 function EC_KEY_get_flags(key: PEC_KEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_get_flags';
 
@@ -16091,9 +15808,6 @@ procedure EC_KEY_clear_flags(key: PEC_KEY; flags: integer); cdecl;
 
 function EC_KEY_new_by_curve_name(nid: integer): PEC_KEY; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_new_by_curve_name';
-
-procedure EC_KEY_free(key: PEC_KEY); cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_free';
 
 function EC_KEY_copy(dst: PEC_KEY; src: PEC_KEY): PEC_KEY; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_copy';
@@ -16109,21 +15823,6 @@ function EC_KEY_get0_engine(eckey: PEC_KEY): PENGINE; cdecl;
 
 function EC_KEY_get0_group(key: PEC_KEY): PEC_GROUP; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_get0_group';
-
-function EC_KEY_set_group(key: PEC_KEY; group: PEC_GROUP): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_set_group';
-
-function EC_KEY_get0_private_key(key: PEC_KEY): PBIGNUM; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_get0_private_key';
-
-function EC_KEY_set_private_key(key: PEC_KEY; prv: PBIGNUM): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_set_private_key';
-
-function EC_KEY_get0_public_key(key: PEC_KEY): PEC_POINT; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_get0_public_key';
-
-function EC_KEY_set_public_key(key: PEC_KEY; pub: PEC_POINT): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_set_public_key';
 
 function EC_KEY_get_enc_flags(key: PEC_KEY): cardinal; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_get_enc_flags';
@@ -16148,9 +15847,6 @@ procedure EC_KEY_set_asn1_flag(eckey: PEC_KEY; asn1_flag: integer); cdecl;
 
 function EC_KEY_precompute_mult(key: PEC_KEY; ctx: PBN_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_precompute_mult';
-
-function EC_KEY_generate_key(key: PEC_KEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EC_KEY_generate_key';
 
 function EC_KEY_check_key(key: PEC_KEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_check_key';
@@ -16227,9 +15923,6 @@ function EC_KEY_new_method(engine: PENGINE): PEC_KEY; cdecl;
 function ECDH_KDF_X9_62(_out: PByte; outlen: PtrUInt; Z: PByte; Zlen: PtrUInt; sinfo: PByte; sinfolen: PtrUInt; md: PEVP_MD): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ECDH_KDF_X9_62';
 
-function ECDH_compute_key(_out: pointer; outlen: PtrUInt; pub_key: PEC_POINT; ecdh: PEC_KEY; KDF: ECDH_compute_key_KDF): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'ECDH_compute_key';
-
 function ECDSA_SIG_new(): PECDSA_SIG; cdecl;
   external LIB_CRYPTO name _PU + 'ECDSA_SIG_new';
 
@@ -16266,17 +15959,8 @@ function ECDSA_do_verify(dgst: PByte; dgst_len: integer; sig: PECDSA_SIG; eckey:
 function ECDSA_sign_setup(eckey: PEC_KEY; ctx: PBN_CTX; kinv: PPBIGNUM; rp: PPBIGNUM): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ECDSA_sign_setup';
 
-function ECDSA_sign(typ: integer; dgst: PByte; dgstlen: integer; sig: PByte; siglen: PCardinal; eckey: PEC_KEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'ECDSA_sign';
-
 function ECDSA_sign_ex(typ: integer; dgst: PByte; dgstlen: integer; sig: PByte; siglen: PCardinal; kinv: PBIGNUM; rp: PBIGNUM; eckey: PEC_KEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ECDSA_sign_ex';
-
-function ECDSA_verify(typ: integer; dgst: PByte; dgstlen: integer; sig: PByte; siglen: integer; eckey: PEC_KEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'ECDSA_verify';
-
-function ECDSA_size(eckey: PEC_KEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'ECDSA_size';
 
 function EC_KEY_METHOD_new(meth: PEC_KEY_METHOD): PEC_KEY_METHOD; cdecl;
   external LIB_CRYPTO name _PU + 'EC_KEY_METHOD_new';
@@ -19360,9 +19044,6 @@ function X509_aux_print(_out: PBIO; x: PX509; indent: integer): integer; cdecl;
 function X509_print_ex_fp(bp: PPointer; x: PX509; nmflag: cardinal; cflag: cardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_print_ex_fp';
 
-function X509_print_fp(bp: PPointer; x: PX509): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_print_fp';
-
 function X509_CRL_print_fp(bp: PPointer; x: PX509_CRL): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_print_fp';
 
@@ -19378,8 +19059,8 @@ function X509_NAME_print_ex(_out: PBIO; nm: PX509_NAME; indent: integer; flags: 
 function X509_print_ex(bp: PBIO; x: PX509; nmflag: cardinal; cflag: cardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_print_ex';
 
-function X509_print(bp: PBIO; x: PX509): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_print';
+function X509_print_fp(bp: PPointer; x: PX509): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_print_fp';
 
 function X509_ocspid_print(bp: PBIO; x: PX509): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_ocspid_print';
@@ -21927,9 +21608,6 @@ function PEM_write_bio_RSAPrivateKey(bp: PBIO; x: PRSA; enc: PEVP_CIPHER; kstr: 
 function PEM_write_RSAPrivateKey(fp: PPointer; x: PRSA; enc: PEVP_CIPHER; kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_RSAPrivateKey';
 
-function PEM_read_bio_RSAPublicKey(bp: PBIO; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
-  external LIB_CRYPTO name _PU + 'PEM_read_bio_RSAPublicKey';
-
 function PEM_read_RSAPublicKey(fp: PPointer; x: PPRSA; cb: Ppem_password_cb; u: pointer): PRSA; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_RSAPublicKey';
 
@@ -22044,20 +21722,11 @@ function PEM_write_DHxparams(fp: PPointer; x: PDH): integer; cdecl;
 function PEM_read_PrivateKey(fp: PPointer; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_PrivateKey';
 
-function PEM_write_bio_PrivateKey(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'PEM_write_bio_PrivateKey';
-
 function PEM_write_PrivateKey(fp: PPointer; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_PrivateKey';
 
-function PEM_read_bio_PUBKEY(bp: PBIO; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
-  external LIB_CRYPTO name _PU + 'PEM_read_bio_PUBKEY';
-
 function PEM_read_PUBKEY(fp: PPointer; x: PPEVP_PKEY; cb: Ppem_password_cb; u: pointer): PEVP_PKEY; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_read_PUBKEY';
-
-function PEM_write_bio_PUBKEY(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'PEM_write_bio_PUBKEY';
 
 function PEM_write_PUBKEY(fp: PPointer; x: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_PUBKEY';
@@ -22770,26 +22439,11 @@ function ENGINE_get_static_state(): pointer; cdecl;
 function HMAC_size(e: PHMAC_CTX): PtrUInt; cdecl;
   external LIB_CRYPTO name _PU + 'HMAC_size';
 
-function HMAC_CTX_new(): PHMAC_CTX; cdecl;
-  external LIB_CRYPTO name _PU + 'HMAC_CTX_new';
-
 function HMAC_CTX_reset(ctx: PHMAC_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'HMAC_CTX_reset';
 
-procedure HMAC_CTX_free(ctx: PHMAC_CTX); cdecl;
-  external LIB_CRYPTO name _PU + 'HMAC_CTX_free';
-
 function HMAC_Init(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD): integer; cdecl;
   external LIB_CRYPTO name _PU + 'HMAC_Init';
-
-function HMAC_Init_ex(ctx: PHMAC_CTX; key: pointer; len: integer; md: PEVP_MD; impl: PENGINE): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'HMAC_Init_ex';
-
-function HMAC_Update(ctx: PHMAC_CTX; data: PByte; len: PtrUInt): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'HMAC_Update';
-
-function HMAC_Final(ctx: PHMAC_CTX; md: PByte; len: PCardinal): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'HMAC_Final';
 
 function HMAC_CTX_copy(dctx: PHMAC_CTX; sctx: PHMAC_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'HMAC_CTX_copy';
@@ -24979,9 +24633,6 @@ function SSL_CTX_use_cert_and_key(ctx: PSSL_CTX; x509: PX509; privatekey: PEVP_P
 procedure SSL_CTX_set_default_passwd_cb(ctx: PSSL_CTX; cb: Ppem_password_cb); cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_set_default_passwd_cb';
 
-procedure SSL_CTX_set_default_passwd_cb_userdata(ctx: PSSL_CTX; u: pointer); cdecl;
-  external LIB_SSL name _PU + 'SSL_CTX_set_default_passwd_cb_userdata';
-
 function SSL_CTX_get_default_passwd_cb(ctx: PSSL_CTX): Ppem_password_cb; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_get_default_passwd_cb';
 
@@ -25291,9 +24942,6 @@ function SSL_CTX_add_client_CA(ctx: PSSL_CTX; x: PX509): integer; cdecl;
 function SSL_get_default_timeout(s: PSSL): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_get_default_timeout';
 
-function SSL_CIPHER_description(p1: PSSL_CIPHER; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
-  external LIB_SSL name _PU + 'SSL_CIPHER_description';
-
 function SSL_dup_CA_list(sk: Pstack_st_X509_NAME): Pstack_st_X509_NAME; cdecl;
   external LIB_SSL name _PU + 'SSL_dup_CA_list';
 
@@ -25336,9 +24984,6 @@ function SSL_version(ssl: PSSL): integer; cdecl;
 function SSL_client_version(s: PSSL): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_client_version';
 
-function SSL_CTX_set_default_verify_paths(ctx: PSSL_CTX): integer; cdecl;
-  external LIB_SSL name _PU + 'SSL_CTX_set_default_verify_paths';
-
 function SSL_CTX_set_default_verify_dir(ctx: PSSL_CTX): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_set_default_verify_dir';
 
@@ -25368,9 +25013,6 @@ procedure SSL_set_info_callback(ssl: PSSL; cb: SSL_set_info_callback_cb); cdecl;
 
 procedure SSL_set_verify_result(ssl: PSSL; v: integer); cdecl;
   external LIB_SSL name _PU + 'SSL_set_verify_result';
-
-function SSL_get_verify_result(ssl: PSSL): integer; cdecl;
-  external LIB_SSL name _PU + 'SSL_get_verify_result';
 
 function SSL_get0_verified_chain(s: PSSL): Pstack_st_X509; cdecl;
   external LIB_SSL name _PU + 'SSL_get0_verified_chain';
@@ -25888,9 +25530,6 @@ function SSL_get_finished(s: PSSL; buf: pointer; count: PtrUInt): PtrUInt; cdecl
 function SSL_get_peer_finished(s: PSSL; buf: pointer; count: PtrUInt): PtrUInt; cdecl;
   external LIB_SSL name _PU + 'SSL_get_peer_finished';
 
-function SSL_CTX_set_cipher_list(p1: PSSL_CTX; str: PUtf8Char): integer; cdecl;
-  external LIB_SSL name _PU + 'SSL_CTX_set_cipher_list';
-
 function SSL_CTX_up_ref(ctx: PSSL_CTX): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_up_ref';
 
@@ -25905,9 +25544,6 @@ function SSL_want(s: PSSL): integer; cdecl;
 
 procedure SSL_CTX_flush_sessions(ctx: PSSL_CTX; tm: integer); cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_flush_sessions';
-
-function SSL_get_current_cipher(s: PSSL): PSSL_CIPHER; cdecl;
-  external LIB_SSL name _PU + 'SSL_get_current_cipher';
 
 function SSL_get_pending_cipher(s: PSSL): PSSL_CIPHER; cdecl;
   external LIB_SSL name _PU + 'SSL_get_pending_cipher';
@@ -25962,9 +25598,6 @@ function SSL_get_read_ahead(s: PSSL): integer; cdecl;
 
 function SSL_has_pending(s: PSSL): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_has_pending';
-
-function SSL_set_fd(s: PSSL; fd: integer): integer; cdecl;
-  external LIB_SSL name _PU + 'SSL_set_fd';
 
 function SSL_set_rfd(s: PSSL; fd: integer): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_set_rfd';
@@ -26049,9 +25682,6 @@ function SSL_use_PrivateKey_file(ssl: PSSL; _file: PUtf8Char; typ: integer): int
 
 function SSL_use_certificate_file(ssl: PSSL; _file: PUtf8Char; typ: integer): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_use_certificate_file';
-
-function SSL_CTX_use_PrivateKey_file(ctx: PSSL_CTX; _file: PUtf8Char; typ: integer): integer; cdecl;
-  external LIB_SSL name _PU + 'SSL_CTX_use_PrivateKey_file';
 
 function SSL_use_certificate_chain_file(ssl: PSSL; _file: PUtf8Char): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_use_certificate_chain_file';
@@ -26220,9 +25850,6 @@ function TLS_server_method(): PSSL_METHOD; cdecl;
 
 function SSLv23_server_method(): PSSL_METHOD; cdecl;
   external LIB_SSL name _PU + 'TLS_server_method';
-
-function TLS_client_method(): PSSL_METHOD; cdecl;
-  external LIB_SSL name _PU + 'TLS_client_method';
 
 function SSLv23_client_method(): PSSL_METHOD; cdecl;
   external LIB_SSL name _PU + 'TLS_client_method';

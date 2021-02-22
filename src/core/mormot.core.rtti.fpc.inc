@@ -693,8 +693,8 @@ end;
 
 { note: fpc_ansistr_compare/_equal do check the codepage and make a UTF-8
   conversion if necessary, whereas Delphi _LStrCmp/_LStrEqual don't;
-  involving codepage is safer, but paranoid, and 1. is (much) slower,
-  and 2. is not Delphi compatible -> we rather follow the Delphi's way }
+  involving codepage is safer, but paranoid, and 1. is (much) slower, and
+  2. is not Delphi compatible -> we rather follow the Delphi's way }
 
 function _ansistr_compare(s1, s2: pointer): SizeInt; nostackframe; assembler;
 asm
@@ -858,35 +858,15 @@ asm
 end;
 {$endif FPC_X64MM}
 
-function ToTempUtf8(var temp: TSynTempBuffer; p: pointer; len, cp: cardinal): pointer;
-begin
-  if (len = 0) or
-     (cp = CP_UTF8) or
-     (cp >= CP_RAWBLOB) or
-     IsAnsiCompatible(p, len) then
-  begin
-    temp.buf := nil;
-    temp.len := len;
-    result := p;
-  end
-  else
-  begin
-    temp.Init(len * 3);
-    p := TSynAnsiConvert.Engine(cp).AnsiBufferToUtf8(temp.buf, p, len);
-    temp.len := PAnsiChar(p) - PAnsiChar(temp.buf);
-    result := temp.buf;
-  end;
-end;
-
 procedure _ansistr_concat_convert(var dest: RawByteString;
   const s1, s2: RawByteString; cp, cp1, cp2: cardinal);
 var
-  t1, t2, t: TSynTempBuffer; // avoid most memory allocation
+  t1, t2, t: TSynTempBuffer; // avoid most memory allocations
   p1, p2, p: PAnsiChar;
   eng: TSynAnsiConvert;
 begin
-  p1 := ToTempUtf8(t1, pointer(s1), length(s1), cp1);
-  p2 := ToTempUtf8(t2, pointer(s2), length(s2), cp2);
+  p1 := AnsiBufferToTempUtf8(t1, pointer(s1), length(s1), cp1);
+  p2 := AnsiBufferToTempUtf8(t2, pointer(s2), length(s2), cp2);
   if (cp = CP_UTF8) or
      (cp >= CP_RAWBLOB) or
      ((t1.buf = nil) and

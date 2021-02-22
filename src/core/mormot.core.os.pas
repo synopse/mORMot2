@@ -114,7 +114,8 @@ type
     wTen_64,
     wServer2016,
     wServer2016_64,
-    wServer2019_64);
+    wServer2019_64,
+    wServer2022_64);
 
   /// the running Operating System, encoded as a 32-bit integer
   TOperatingSystemVersion = packed record
@@ -136,7 +137,8 @@ const
     '7', '7 64bit', 'Server 2008 R2', 'Server 2008 R2 64bit',
     '8', '8 64bit', 'Server 2012', 'Server 2012 64bit',
     '8.1', '8.1 64bit', 'Server 2012 R2', 'Server 2012 R2 64bit',
-    '10', '10 64bit', 'Server 2016', 'Server 2016 64bit', 'Server 2019 64bit');
+    '10', '10 64bit', 'Server 2016', 'Server 2016 64bit',
+    'Server 2019 64bit', 'Server 2022 64bit');
 
   /// the recognized Windows versions which are 32-bit
   WINDOWS_32 = [
@@ -2184,13 +2186,6 @@ procedure GlobalUnLock;
 
 { ****************** Unix Daemon and Windows Service Support }
 
-type
-  /// callback definition used to log some event
-  // - defined as TMethod to avoid dependency with the mormot.core.log unit
-  // - could be assigned from TSynLog.DoLog class procedure
-  TOnDaemonLog = procedure(Level: TSynLogInfo; const Fmt: RawUtf8;
-    const Args: array of const; Instance: TObject = nil) of object;
-
 {$ifdef OSWINDOWS}
 
 { *** some minimal Windows API definitions, replacing WinSvc.pas missing for FPC }
@@ -2329,11 +2324,11 @@ function StartServiceCtrlDispatcher(
 { *** high level classes to define and manage Windows Services }
 
 var
-  /// you can set this global variable to TSynLog or TSqlLog to enable logging
+  /// can be assigned from TSynLog.DoLog class method for
+  // TServiceController/TService logging
   // - default is nil, i.e. disabling logging, since it may interfere with the
-  // logging process of the service itself
-  // - can be assigned from TSynLog.DoLog class method for proper logging
-  ServiceLog: TOnDaemonLog;
+  // logging process of the Windows Service itself
+  WindowsServiceLog: TSynLogProc;
 
 type
   /// all possible states of the service
@@ -2670,7 +2665,7 @@ function KillProcess(pid: cardinal; waitseconds: integer = 30): boolean;
 // - fork will create a local /run/[ProgramName]-[ProgramPathHash].pid file name
 // - onLog can be assigned from TSynLog.DoLog for proper logging
 procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
-  const start, stop: TThreadMethod; const onlog: TOnDaemonLog = nil;
+  const start, stop: TThreadMethod; const onlog: TSynLogProc = nil;
   const servicename: string = '');
 
 /// kill a process previously created by RunUntilSigTerminated(dofork=true)
@@ -2695,7 +2690,7 @@ var
 // - as called e.g. by RunUntilSigTerminated()
 // - you can call this method several times with no issue
 // - onLog can be assigned from TSynLog.DoLog for proper logging
-procedure SynDaemonIntercept(const onlog: TOnDaemonLog = nil);
+procedure SynDaemonIntercept(const onlog: TSynLogProc = nil);
 
 {$endif OSWINDOWS}
 
@@ -2971,7 +2966,8 @@ begin
   end
   else
     // use ICU or cwstring/RTL for accurate conversion
-    res[0] := AnsiChar(Unicode_WideToAnsi(W, PAnsiChar(@res[1]), LW, 255, CodePage));
+    res[0] := AnsiChar(
+      Unicode_WideToAnsi(W, PAnsiChar(@res[1]), LW, 255, CodePage));
 end;
 
 function NowUtc: TDateTime;

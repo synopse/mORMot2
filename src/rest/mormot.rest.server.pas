@@ -3111,7 +3111,8 @@ end;
 
 procedure TRestServerUriContext.OutHeadFromCookie;
 begin
-  Call.OutHead := TrimU(Call.OutHead + #13#10'Set-Cookie: ' + OutSetCookie);
+  Call.OutHead := TrimU(Call.OutHead + #13#10 +
+                        'Set-Cookie: ' + OutSetCookie);
   if rsoCookieIncludeRootPath in Server.fOptions then
     // case-sensitive Path=/ModelRoot
     Call.OutHead := Call.OutHead + '; Path=/';
@@ -4552,7 +4553,7 @@ begin
     result := Utf8ToString(StringReplaceAll(UriBlobFieldName, '/', PathDelim));
 end;
 
-procedure TRestServerUriContext.Returns(const result: RawUtf8;
+procedure TRestServerUriContext.Returns(const Result: RawUtf8;
   Status: integer; const CustomHeader: RawUtf8;
   Handle304NotModified, HandleErrorAsRegularResult: boolean;
   CacheControlMaxAge: integer; ServerHash: RawUtf8);
@@ -4562,24 +4563,25 @@ begin
   if HandleErrorAsRegularResult or StatusCodeIsSuccess(Status) then
   begin
     Call.OutStatus := Status;
-    Call.OutBody := result;
+    Call.OutBody := Result;
     if CustomHeader <> '' then
       Call.OutHead := CustomHeader
     else if Call.OutHead = '' then
       Call.OutHead := JSON_CONTENT_TYPE_HEADER_VAR;
     if CacheControlMaxAge > 0 then
-      Call.OutHead := Call.OutHead + #13#10'Cache-Control: max-age=' +
-        UInt32ToUtf8(CacheControlMaxAge);
+      Call.OutHead := Call.OutHead + #13#10 +
+        'Cache-Control: max-age=' + UInt32ToUtf8(CacheControlMaxAge);
     if Handle304NotModified and
        (Status = HTTP_SUCCESS) and
-       (Length(result) > 64) then
+       (Length(Result) > 64) then
     begin
       FindNameValue(Call.InHead, 'IF-NONE-MATCH: ', clienthash);
       if ServerHash = '' then
-        ServerHash := crc32cUtf8ToHex(result);
+        ServerHash := crc32cUtf8ToHex(Result);
       ServerHash := '"' + ServerHash + '"';
       if clienthash <> ServerHash then
-        Call.OutHead := Call.OutHead + #13#10'ETag: ' + ServerHash
+        Call.OutHead := Call.OutHead + #13#10 +
+          'ETag: ' + ServerHash
       else
       begin
         // save bandwidth by returning "304 Not Modified"
@@ -4589,7 +4591,7 @@ begin
     end;
   end
   else
-    Error(result, Status);
+    Error(Result, Status);
 end;
 
 procedure TRestServerUriContext.Returns(Value: TObject; Status: integer;

@@ -2117,8 +2117,8 @@ begin
   inherited Create;
   if Path = '' then
   begin
-    if Assigned(ServiceLog) then
-      ServiceLog(sllError,
+    if Assigned(WindowsServiceLog) then
+      WindowsServiceLog(sllError,
         'CreateNewService("%","%") with Path=""', [Name, DisplayName], self);
     exit;
   end;
@@ -2129,8 +2129,8 @@ begin
       if (copy(Exe, 1, 12) <> '\\localhost\') or
          (Exe[14] <> '$') then
       begin
-        if Assigned(ServiceLog) then
-          ServiceLog(sllError,
+        if Assigned(WindowsServiceLog) then
+          WindowsServiceLog(sllError,
             'CreateNewService("%","%") on remote drive: Path="%" is %',
             [Name, DisplayName, Path, Exe], self);
         exit;
@@ -2146,8 +2146,8 @@ begin
   if fSCHandle = 0 then
   begin
     backupError := GetLastError;
-    if Assigned(ServiceLog) then
-      ServiceLog(sllLastError, 'OpenSCManager(''%'',''%'') for [%]',
+    if Assigned(WindowsServiceLog) then
+      WindowsServiceLog(sllLastError, 'OpenSCManager(''%'',''%'') for [%]',
         [TargetComputer, DatabaseName, fName], self);
     SetLastError(backupError);
     exit;
@@ -2159,8 +2159,8 @@ begin
   if fHandle = 0 then
   begin
     backupError := GetLastError;
-    if Assigned(ServiceLog) then
-      ServiceLog(sllLastError,
+    if Assigned(WindowsServiceLog) then
+      WindowsServiceLog(sllLastError,
         'CreateService("%","%","%")', [Name, DisplayName, Path], self);
     SetLastError(backupError);
   end;
@@ -2178,8 +2178,8 @@ begin
   if fSCHandle = 0 then
   begin
     backupError := GetLastError;
-    if Assigned(ServiceLog) then
-      ServiceLog(sllLastError, 'OpenSCManager(''%'',''%'') for [%]',
+    if Assigned(WindowsServiceLog) then
+      WindowsServiceLog(sllLastError, 'OpenSCManager(''%'',''%'') for [%]',
         [TargetComputer, DataBaseName, fName], self);
     SetLastError(backupError);
     exit;
@@ -2188,8 +2188,8 @@ begin
   if fHandle = 0 then
   begin
     backupError := GetLastError;
-    if Assigned(ServiceLog) then
-      ServiceLog(sllLastError, 'OpenService("%")', [Name], self);
+    if Assigned(WindowsServiceLog) then
+      WindowsServiceLog(sllLastError, 'OpenService("%")', [Name], self);
     SetLastError(backupError);
   end;
 end;
@@ -2203,8 +2203,8 @@ begin
       Result := CloseServiceHandle(fHandle);
       fHandle := 0;
     end
-    else if Assigned(ServiceLog) then
-      ServiceLog(sllLastError, 'DeleteService("%")', [fName], self);
+    else if Assigned(WindowsServiceLog) then
+      WindowsServiceLog(sllLastError, 'DeleteService("%")', [fName], self);
 end;
 
 destructor TServiceController.Destroy;
@@ -2224,8 +2224,8 @@ begin
     result := ssNotInstalled
   else
     result := CurrentStateToServiceState(Status.dwCurrentState);
-  if Assigned(ServiceLog) then
-    ServiceLog(sllTrace, 'GetState(%)=%', [fName, _SERVICESTATE[result]], self);
+  if Assigned(WindowsServiceLog) then
+    WindowsServiceLog(sllTrace, 'GetState(%)=%', [fName, _SERVICESTATE[result]], self);
 end;
 
 function TServiceController.GetStatus: TServiceStatus;
@@ -2286,8 +2286,8 @@ var
 
   procedure ShowError(const Msg: RawUtf8);
   begin
-    if Assigned(ServiceLog) then
-      ServiceLog(sllLastError, 'During % for %', [Msg, param]);
+    if Assigned(WindowsServiceLog) then
+      WindowsServiceLog(sllLastError, 'During % for %', [Msg, param]);
     if not IsConsole then
       exit;
     {$I-} // ignore if no console has been allocated
@@ -2300,8 +2300,8 @@ begin
   for i := 1 to ParamCount do
   begin
     param := SysUtils.LowerCase(paramstr(i));
-    if Assigned(ServiceLog) then
-      ServiceLog(sllInfo,
+    if Assigned(WindowsServiceLog) then
+      WindowsServiceLog(sllInfo,
         'Controling % with command [%]', [ServiceName, param]);
     if param = '/install' then
       TServiceController.Install(
@@ -2374,8 +2374,8 @@ begin
   fStatusRec.dwCurrentState := SERVICE_STOPPED;
   fStatusRec.dwControlsAccepted := 31;
   fStatusRec.dwWin32ExitCode := NO_ERROR;
-  if Assigned(ServiceLog) then
-    ServiceLog(sllInfo, 'Create: % (%) running as [%]',
+  if Assigned(WindowsServiceLog) then
+    WindowsServiceLog(sllInfo, 'Create: % (%) running as [%]',
       [ServiceName, aDisplayName, Executable.ProgramFullSpec], self);
 end;
 
@@ -2386,8 +2386,8 @@ end;
 
 procedure TService.DoCtrlHandle(Code: cardinal);
 begin
-  if Assigned(ServiceLog) then
-    ServiceLog(sllInfo, '%: command % received from OS', [ServiceName, Code], self);
+  if Assigned(WindowsServiceLog) then
+    WindowsServiceLog(sllInfo, '%: command % received from OS', [ServiceName, Code], self);
   try
     case Code of
       SERVICE_CONTROL_STOP:
@@ -2440,8 +2440,8 @@ begin
       fOnControl(Self, Code);
   except
   end;
-  if Assigned(ServiceLog) then
-    ServiceLog(sllInfo, '%: command % finished', [ServiceName, Code], self);
+  if Assigned(WindowsServiceLog) then
+    WindowsServiceLog(sllInfo, '%: command % finished', [ServiceName, Code], self);
 end;
 
 procedure TService.Execute;
@@ -2475,8 +2475,8 @@ function TService.GetControlHandler: TServiceControlHandler;
 begin
   Result := fControlHandler;
   if not Assigned(Result) then
-    if Assigned(ServiceLog) then
-      ServiceLog(sllError, '%.GetControlHandler with ControlHandler=nil: ' +
+    if Assigned(WindowsServiceLog) then
+      WindowsServiceLog(sllError, '%.GetControlHandler with ControlHandler=nil: ' +
         'use TServiceSingle or assign a custom ControlHandler', [self], self);
 end;
 
@@ -2536,8 +2536,8 @@ var
   status: string;
 begin
   status := ServiceStateText(CurrentStateToServiceState(dwState));
-  if Assigned(ServiceLog) then
-    ServiceLog(sllInfo, '% ReportStatus(%,%,%)', 
+  if Assigned(WindowsServiceLog) then
+    WindowsServiceLog(sllInfo, '% ReportStatus(%,%,%)', 
       [ServiceName, status, dwExitCode, dwWait], self);
   if dwState = SERVICE_START_PENDING then
     fStatusRec.dwControlsAccepted := 0
@@ -2553,8 +2553,8 @@ begin
     inc(fStatusRec.dwCheckPoint);
   result := SetServiceStatus(fStatusHandle, fStatusRec);
   if not result then
-    if Assigned(ServiceLog) then
-      ServiceLog(sllLastError, '% ReportStatus(%,%,%)',
+    if Assigned(WindowsServiceLog) then
+      WindowsServiceLog(sllLastError, '% ReportStatus(%,%,%)',
         [ServiceName, status, dwExitCode, dwWait], self);
 end;
 
@@ -2640,8 +2640,8 @@ begin
       if QueryServiceStatusEx(svc, SC_STATUS_PROCESS_INFO,
           @ssp, SizeOf(TServiceStatusProcess), size) then
         result := ssp.dwProcessId
-      else if Assigned(ServiceLog) then
-        ServiceLog(sllLastError, 'GetServicePid(%)', [aServiceName]);
+      else if Assigned(WindowsServiceLog) then
+        WindowsServiceLog(sllLastError, 'GetServicePid(%)', [aServiceName]);
     finally
       CloseServiceHandle(svc);
     end;
@@ -2805,17 +2805,20 @@ begin
     if envaddexisting then
     begin
       GlobalLock;
-      if EnvironmentCache = '' then
-      begin
-        e := GetEnvironmentStringsW;
-        p := e;
-        while p^ <> #0 do
-          inc(p, StrLenW(p) + 1); // go to name=value#0 pairs end
-        SetString(EnvironmentCache, e, (PtrUInt(p) - PtrUInt(e)) shr 1);
-        FreeEnvironmentStringsW(e);
+      try
+        if EnvironmentCache = '' then
+        begin
+          e := GetEnvironmentStringsW;
+          p := e;
+          while p^ <> #0 do
+            inc(p, StrLenW(p) + 1); // go to name=value#0 pairs end
+          SetString(EnvironmentCache, e, (PtrUInt(p) - PtrUInt(e)) shr 1);
+          FreeEnvironmentStringsW(e);
+        end;
+        wenv := EnvironmentCache + wenv;
+      finally
+        GlobalUnLock;
       end;
-      wenv := EnvironmentCache + wenv;
-      GlobalUnLock;
     end
     else
       UniqueString(wenv);
@@ -2981,10 +2984,14 @@ begin
     begin
       // Server edition
       inc(Vers, 2); // e.g. wEight -> wServer2012
-      if (Vers = wServer2016) and
-         (OSVersionInfo.dwBuildNumber >= 17763) then
-        // https://stackoverflow.com/q/53393150
-        Vers := wServer2019_64;
+      if Vers = wServer2016 then
+        if OSVersionInfo.dwBuildNumber >= 17763 then
+          if OSVersionInfo.dwBuildNumber >= 20285 then
+            // https://shorturl.at/asCQ2
+            Vers := wServer2022_64
+          else
+            // https://stackoverflow.com/q/53393150
+            Vers := wServer2019_64;
     end;
     if (SystemInfo.wProcessorArchitecture = PROCESSOR_ARCHITECTURE_AMD64) and
        (Vers < wServer2019_64) then

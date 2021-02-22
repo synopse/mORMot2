@@ -401,10 +401,12 @@ begin
       RequestSendHeader(aWebSocketsURI, 'GET');
       TAesPrng.Main.FillRandom(key);
       bin1 := BinToBase64(@key, sizeof(key));
-      SockSend(['Content-Length: 0'#13#10'Connection: Upgrade'#13#10 +
-        'Upgrade: websocket'#13#10'Sec-WebSocket-Key: ', bin1, #13#10 +
-        'Sec-WebSocket-Protocol: ', aProtocol.GetSubprotocols, #13#10 +
-        'Sec-WebSocket-Version: 13']);
+      SockSend(['Content-Length: 0'#13#10 +
+                'Connection: Upgrade'#13#10 +
+                'Upgrade: websocket'#13#10 +
+                'Sec-WebSocket-Key: ', bin1, #13#10 +
+                'Sec-WebSocket-Protocol: ', aProtocol.GetSubprotocols, #13#10 +
+                'Sec-WebSocket-Version: 13']);
       if aProtocol.ProcessHandshake(nil, extout, nil) and
          (extout <> '') then
         SockSend(['Sec-WebSocket-Extensions: ', extout]);

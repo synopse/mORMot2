@@ -120,12 +120,12 @@ type
     /// match the jrcJwtID "jti" claim desobfuscated value
     id: TSynUniqueIdentifierBits;
   end;
-  /// pointer to a JWT decoded content, as processed by TJwtAbstract
 
+  /// pointer to a JWT decoded content, as processed by TJwtAbstract
   PJwtContent = ^TJwtContent;
+
   /// used to store a list of JWT decoded content
   // - as used e.g. by TJwtAbstract cache
-
   TJwtContentDynArray = array of TJwtContent;
 
   /// available options for TJwtAbstract process
@@ -496,6 +496,7 @@ type
   // - as defined in http://tools.ietf.org/html/rfc7518 paragraph 3.4
   // - since ECDSA signature and verification is CPU consumming (under x86, it
   // takes 2.5 ms, but only 0.3 ms on x64) you may enable CacheTimeoutSeconds
+  // - will use the OpenSSL library if available (much faster than our unit)
   TJwtES256 = class(TJwtAbstract)
   protected
     fCertificate: TEccCertificate;
@@ -1243,7 +1244,7 @@ begin
   if length(signature) <> sizeof(TEccSignature) then
     exit;
   sha.Full(pointer(headpayload), length(headpayload), hash);
-  if ecdsa_verify(fCertificate.Content.Signed.PublicKey, hash, PEccSignature(signature)^) then
+  if Ecc256r1Verify(fCertificate.Content.Signed.PublicKey, hash, PEccSignature(signature)^) then
     JWT.result := jwtValid;
 end;
 
@@ -1258,7 +1259,7 @@ begin
     raise EECCException.CreateUtf8('%.ComputeSignature expects % (%) to hold ' +
       'a private key', [self, fCertificate, fCertificate.Serial]);
   sha.Full(pointer(headpayload), length(headpayload), hash);
-  if not ecdsa_sign(TEccCertificateSecret(fCertificate).PrivateKey, hash, sign) then
+  if not Ecc256r1Sign(TEccCertificateSecret(fCertificate).PrivateKey, hash, sign) then
     raise EECCException.CreateUtf8('%.ComputeSignature: ecdsa_sign?', [self]);
   result := BinToBase64Uri(@sign, sizeof(sign));
 end;

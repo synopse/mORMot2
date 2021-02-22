@@ -220,29 +220,76 @@ function ToText(res: TNetResult): PShortString; overload;
 { ******************** TLS / HTTPS Encryption Abstract Layer }
 
 type
+  /// TLS Options and Information for a given TCrtSocket/INetTLS connection
+  // - currently only properly implemented by mormot.lib.openssl11
+  // - typical usage is the following:
+  // $ with THttpClientSocket.Create do
+  // $ try
+  // $   TLS.WithPeerInfo := true;
+  // $   TLS.IgnoreCertificateErrors := true;
+  // $   TLS.CipherList := 'ECDHE-RSA-AES256-GCM-SHA384';
+  // $   OpenBind('synopse.info', '443', {bind=}false, {tls=}true);
+  // $   writeln(TLS.PeerInfo);
+  // $   writeln(TLS.CipherName);
+  // $   writeln(Get('/forum/', 1000), ' len=', ContentLength);
+  // $   writeln(Get('/fossil/wiki/Synopse+OpenSource', 1000), ' len=', ContentLength);
+  // $ finally
+  // $   Free;
+  // $ end;
+  TNetTLSContext = record
+    /// input: let HTTPS be less paranoid about TLS certificates
+    IgnoreCertificateErrors: boolean;
+    /// input: if PeerInfo field should be retrieved once connected
+    WithPeerInfo: boolean;
+    /// input: PEM file name containing a certificate to be loaded
+    // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
+    CertificateFile: RawUtf8;
+    /// input: PEM file name containing a private key to be loaded
+    // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
+    PrivateKeyFile: RawUtf8;
+    /// input: optional password to load the PrivateKey file
+    PrivatePassword: RawUtf8;
+    /// input: file containing a specific set of CA certificates chain
+    // - e.g. entrust_2048_ca.cer from https://web.entrust.com
+    // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
+    CACertificatesFile: RawUtf8;
+    /// input: preferred Cipher List
+    CipherList: RawUtf8;
+    /// output: some information about the connected Peer
+    // - stored in the native format of the TLS library, e.g. X509_print()
+    PeerInfo: RawUtf8;
+    /// output: the cipher description, as used for the current connection
+    // - e.g. 'ECDHE-RSA-AES128-GCM-SHA256 TLSv1.2 Kx=ECDH Au=RSA Enc=AESGCM(128) Mac=AEAD'
+    CipherName: RawUtf8;
+    /// output: low-level details about the last error at TLS level
+    LastError: RawUtf8;
+  end;
+
+  /// pointer to TLS Options and Information for a given TCrtSocket connection
+  PNetTLSContext = ^TNetTLSContext;
+
   /// abstract definition of the TLS encrypted layer
   // - is implemented e.g. by the SChannel API on Windows, or OpenSSL on POSIX
+  // if you include mormot.lib.openssl11 to your project
   INetTLS = interface
     /// this method is called once to attach the underlying socket
     // - should make the proper initial TLS handshake to create a session
     // - should raise an exception on error
-    procedure AfterConnection(aSocket: TNetSocket; const aServerAddress: RawUtf8);
-    /// this method is called once to release the underlying socket
-    // - should finalize the TLS session, before socket disconnection
-    procedure BeforeDisconnection(aSocket: TNetSocket);
+    procedure AfterConnection(Socket: TNetSocket; var Context: TNetTLSContext;
+      const ServerAddress: RawUtf8);
     /// receive some data from the TLS layer
-    function Receive(aSocket: TNetSocket; aBuffer: pointer; var aLength: integer): TNetResult;
+    function Receive(Buffer: pointer; var Length: integer): TNetResult;
     /// send some data from the TLS layer
-    function Send(aSocket: TNetSocket; aBuffer: pointer; var aLength: integer): TNetResult;
+    function Send(Buffer: pointer; var Length: integer): TNetResult;
   end;
 
   /// signature of a factory for a new TLS encrypted layer
   TOnNewNetTLS = function: INetTLS;
 
 var
-  /// global factory for a new TLS encrypted layer
+  /// global factory for a new TLS encrypted layer for TCrtSocket
   // - is set to use the SChannel API on Windows; on other targets, may be nil
-  // if the OpenSSL library has not been used
+  // unless the mormot.lib.openssl11.pas unit is included with your project
   NewNetTLS: TOnNewNetTLS;
 
 
@@ -461,14 +508,20 @@ type
     procedure SetTCPNoDelay(aTCPNoDelay: boolean); virtual;
     function GetRawSocket: PtrInt;
   public
+    /// direct access to the low-level TLS Options and Information
+    // - depending on the actual INetTLS implementation, some fields may not
+    // be used nor populated - currently only supported by mormot.lib.openssl11
+    TLS: TNetTLSContext;
+    /// can be assigned from TSynLog.DoLog class method for low-level logging
+    OnLog: TSynLogProc;
     /// common initialization of all constructors
     // - do not call directly, but use Open / Bind constructors instead
     constructor Create(aTimeOut: PtrInt = 10000); reintroduce; virtual;
     /// connect to aServer:aPort
-    // - you may ask for a TLS secured client connection (only available under
-    // Windows by now, using the SChannel API)
-    constructor Open(const aServer, aPort: RawUtf8; aLayer: TNetLayer= nlTCP;
-      aTimeOut: cardinal = 10000; aTLS: boolean = false);
+    // - optionaly via TLS (using the SChannel API on Windows, or by including
+    // mormot.lib.openssl11 unit to your project) - with custom input options
+    constructor Open(const aServer, aPort: RawUtf8; aLayer: TNetLayer = nlTCP;
+      aTimeOut: cardinal = 10000; aTLS: boolean = false; aTLSContext: PNetTLSContext = nil);
     /// bind to an address
     // - aAddr='1234' - bind to a port on all interfaces, the same as '0.0.0.0:1234'
     // - aAddr='IP:port' - bind to specified interface only, e.g. '1.2.3.4:1234'
@@ -479,11 +532,11 @@ type
       aTimeOut: integer = 10000);
     /// low-level internal method called by Open() and Bind() constructors
     // - raise an ENetSock exception on error
-    // - you may ask for a TLS secured client connection (only available under
-    // Windows by now, using the SChannel API)
+    // - optionaly via TLS (using the SChannel API on Windows, or by including
+    // mormot.lib.openssl11 unit) - with custom input options in the TLS fields
     procedure OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
-      aSock: TNetSocket = TNetSocket(-1); aLayer: TNetLayer = nlTCP;
-      aTLS: boolean = false);
+      aTLS: boolean = false; aLayer: TNetLayer = nlTCP;
+      aSock: TNetSocket = TNetSocket(-1));
     /// initialize the instance with the supplied accepted socket
     // - is called from a bound TCP Server, just after Accept()
     procedure AcceptRequest(aClientSock: TNetSocket; aClientAddr: PNetAddr);
@@ -632,19 +685,23 @@ type
     // is required - so it expects buffering before calling Write() or SndLow()
     // - you can set false here to enable the Nagle algorithm, if needed
     // - see http://www.unixguide.net/network/socketfaq/2.16.shtml
-    property TCPNoDelay: boolean write SetTCPNoDelay;
+    property TCPNoDelay: boolean
+      write SetTCPNoDelay;
     /// set the SO_SNDTIMEO option for the connection
     // - i.e. the timeout, in milliseconds, for blocking send calls
     // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ms740476
-    property SendTimeout: integer write SetSendTimeout;
+    property SendTimeout: integer
+      write SetSendTimeout;
     /// set the SO_RCVTIMEO option for the connection
     // - i.e. the timeout, in milliseconds, for blocking receive calls
     // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ms740476
-    property ReceiveTimeout: integer write SetReceiveTimeout;
+    property ReceiveTimeout: integer
+      write SetReceiveTimeout;
     /// set the SO_KEEPALIVE option for the connection
     // - 1 (true) will enable keep-alive packets for the connection
     // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ee470551
-    property KeepAlive: boolean write SetKeepAlive;
+    property KeepAlive: boolean
+      write SetKeepAlive;
     /// set the SO_LINGER option for the connection, to control its shutdown
     // - by default (or Linger<0), Close will return immediately to the caller,
     // and any pending data will be delivered if possible
@@ -653,7 +710,8 @@ type
     // Darwin, set SO_NOSIGPIPE
     // - Linger = 0 causes the connection to be aborted and any pending data
     // is immediately discarded at Close
-    property Linger: integer write SetLinger;
+    property Linger: integer
+      write SetLinger;
     /// low-level socket handle, initialized after Open() with socket
     property Sock: TNetSocket
       read fSock write fSock;
@@ -1548,12 +1606,14 @@ begin
   fTimeOut := aTimeOut;
 end;
 
-constructor TCrtSocket.Open(const aServer, aPort: RawUtf8; aLayer:
-  TNetLayer; aTimeOut: cardinal; aTLS: boolean);
+constructor TCrtSocket.Open(const aServer, aPort: RawUtf8;
+  aLayer: TNetLayer; aTimeOut: cardinal; aTLS: boolean; aTLSContext: PNetTLSContext);
 begin
   Create(aTimeOut); // default read timeout is 10 seconds
+  if aTLSContext <> nil then
+    TLS := aTLSContext^; // copy the input parameters before OpenBind()
   // raise exception on error
-  OpenBind(aServer, aPort, {dobind=}false, TNetSocket(-1), aLayer, aTLS);
+  OpenBind(aServer, aPort, {dobind=}false, aTLS, aLayer);
 end;
 
 function SplitFromRight(const Text: RawUtf8; Sep: AnsiChar;
@@ -1617,11 +1677,11 @@ begin
     {$endif OSPOSIX}
   end;
   // next line will raise exception on error
-  OpenBind(s{%H-}, p{%H-}, {dobind=}true, {%H-}TNetSocket(aSock), aLayer);
+  OpenBind(s{%H-}, p{%H-}, {dobind=}true, {tls=}false, aLayer, {%H-}TNetSocket(aSock));
 end;
 
 procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8;
-  doBind: boolean; aSock: TNetSocket; aLayer: TNetLayer; aTLS: boolean);
+  doBind, aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket);
 var
   retry: integer;
   res: TNetResult;
@@ -1662,11 +1722,14 @@ begin
        not doBind and
        ({%H-}PtrInt(aSock) <= 0) then
     try
-      if Assigned(NewNetTLS) then
-        fSecure := NewNetTLS;
+      if not Assigned(NewNetTLS) then
+        raise ENetSock.Create('TLS is not available - try including ' +
+          'mormot.lib.openssl11 and installing OpenSSL 1.1.1');
+      fSecure := NewNetTLS;
       if fSecure = nil then
-        raise ENetSock.Create('TLS is unsupported on this system');
-      fSecure.AfterConnection(fSock, aServer);
+        raise ENetSock.Create('TLS is not available on this system - ' +
+          'try installing OpenSSL 1.1.1');
+      fSecure.AfterConnection(fSock, TLS, aServer);
       fTLS := true;
     except
       on E: Exception do
@@ -1676,10 +1739,9 @@ begin
           [aServer, port, BINDTXT[doBind], ClassNameShort(E)^, E.Message]);
       end;
     end;
-  {$ifdef SYNCRTDEBUGLOW}
-  TSynLog.Add.Log(sllCustom2, 'OpenBind(%:%) % sock=% (accept=%) ',
-    [fServer, fPort, BINDTXT[doBind], fSock, aSock], self);
-  {$endif SYNCRTDEBUGLOW}
+  if Assigned(OnLog) then
+    OnLog(sllTrace, '%(%:%) sock=% %', [BINDTXT[doBind], fServer, fPort,
+      fSock.Socket, TLS.CipherName], self);
 end;
 
 procedure TCrtSocket.AcceptRequest(aClientSock: TNetSocket; aClientAddr: PNetAddr);
@@ -1690,11 +1752,17 @@ begin
   fSock := aClientSock;
   {$else}
   // on other OS inheritance is undefined, so call OpenBind to set all fd options
-  OpenBind('', '', false, aClientSock, fSocketLayer); // set the ACCEPTed aClientSock
+  OpenBind('', '', {bind=}false, {tls=}false, fSocketLayer, aClientSock);
+  // assign the ACCEPTed aClientSock to this TCrtSocket instance
   Linger := 5; // should remain open for 5 seconds after a closesocket() call
   {$endif OSLINUX}
   if aClientAddr <> nil then
     fRemoteIP := aClientAddr^.IP(RemoteIPLocalHostAsVoidInServers);
+  {$ifdef OSLINUX}
+  if Assigned(OnLog) then
+    OnLog(sllTrace, 'Accept(%:%) sock=% %',
+      [fServer, fPort, fSock.Socket, fRemoteIP], self);
+  {$endif OSLINUX}
 end;
 
 const
@@ -1724,7 +1792,6 @@ function InputSock(var F: TTextRec): integer;
 var
   size: integer;
   sock: TCrtSocket;
-  addr: TNetAddr;
 begin
   F.BufEnd := 0;
   F.BufPos := 0;
@@ -1739,8 +1806,9 @@ begin
     exit; // already reached error below
   size := F.BufSize;
   if sock.SocketLayer = nlUDP then
-    size := sock.Sock.RecvFrom(F.BufPtr, size, addr)
-  else // nlTCP/nlUNIX
+    size := sock.Sock.RecvFrom(F.BufPtr, size, sock.fPeerAddr)
+  else
+    // nlTCP/nlUNIX
     if not sock.TrySockRecv(F.BufPtr, size, {StopBeforeLength=}true) then
       size := -1; // fatal socket error
   // TrySockRecv() may return size=0 if no data is pending, but no TCP/IP error
@@ -1878,39 +1946,29 @@ begin
   if self = nil then
     exit;
   fSndBufLen := 0; // always reset (e.g. in case of further Open)
-  if (SockIn <> nil) or
-     (SockOut <> nil) then
+  fSockInEofError := 0;
+  ioresult; // reset readln/writeln value
+  if SockIn <> nil then
   begin
-    ioresult; // reset ioresult value if SockIn/SockOut were used
-    if SockIn <> nil then
-    begin
-      PTextRec(SockIn)^.BufPos := 0;  // reset input buffer
-      PTextRec(SockIn)^.BufEnd := 0;
-    end;
-    if SockOut <> nil then
-    begin
-      PTextRec(SockOut)^.BufPos := 0; // reset output buffer
-      PTextRec(SockOut)^.BufEnd := 0;
-    end;
+    PTextRec(SockIn)^.BufPos := 0;  // reset input buffer
+    PTextRec(SockIn)^.BufEnd := 0;
+  end;
+  if SockOut <> nil then
+  begin
+    PTextRec(SockOut)^.BufPos := 0; // reset output buffer
+    PTextRec(SockOut)^.BufEnd := 0;
   end;
   if not SockIsDefined then
     exit; // no opened connection, or Close already executed
+  fSecure := nil; // perform the TLS shutdown round and release the TLS context
   {$ifdef OSLINUX}
-  if fWasBind and
-     (fPort = '') then
-  begin
-    // binded on external socket
-    fSock := TNetSocket(-1);
-    exit;
-  end;
+  if not fWasBind or
+     (fPort <> '') then // no explicit shutdown necessary on Linux server side
   {$endif OSLINUX}
-  if fSecure <> nil then
-  begin
-    fSecure.BeforeDisconnection(fSock);
-    fSecure := nil;
-  end;
-  fSock.ShutdownAndClose({rdwr=}fWasBind);
-  fSock := TNetSocket(-1); // don't change Server or Port, since may try to reconnect
+    fSock.ShutdownAndClose({rdwr=}fWasBind);
+  fSock := TNetSocket(-1);
+  // don't reset fServer/fPort/fTls/fWasBind: caller may use them to reconnect
+  // (see e.g. THttpClientSocket.Request)
 end;
 
 destructor TCrtSocket.Destroy;
@@ -1968,8 +2026,8 @@ begin
             ({%H-}PtrInt(fSock) > 0);
 end;
 
-function TCrtSocket.SockInPending(aTimeOutMS: integer; aPendingAlsoInSocket:
-  boolean): integer;
+function TCrtSocket.SockInPending(aTimeOutMS: integer;
+  aPendingAlsoInSocket: boolean): integer;
 var
   backup: PtrInt;
   insocket: integer;
@@ -2109,11 +2167,14 @@ begin
     body := 0;
   end;
   {$ifdef SYNCRTDEBUGLOW}
-  TSynLog.Add.Log(sllCustom2, 'SockSend sock=% flush len=% body=% %', [fSock,
-    fSndBufLen, Length(aBody), LogEscapeFull(pointer(fSndBuf), fSndBufLen)], self);
-  if body > 0 then
-    TSynLog.Add.Log(sllCustom2, 'SockSend sock=% body len=% %', [fSock, body,
-      LogEscapeFull(pointer(aBody), body)], self);
+  if Assigned(OnLog) then
+  begin
+    OnLog(sllCustom2, 'SockSend sock=% flush len=% body=% %', [fSock.Socket, fSndBufLen,
+      Length(aBody), LogEscapeFull(pointer(fSndBuf), fSndBufLen)], self);
+    if body > 0 then
+      OnLog(sllCustom2, 'SockSend sock=% body len=% %', [fSock.Socket, body,
+        LogEscapeFull(pointer(aBody), body)], self);
+  end;
   {$endif SYNCRTDEBUGLOW}
   if fSndBufLen > 0 then
     if TrySndLow(pointer(fSndBuf), fSndBufLen) then
@@ -2205,15 +2266,16 @@ begin
     repeat
       read := expected - Length;
       if fSecure <> nil then
-        res := fSecure.Receive(fSock, Buffer, read)
+        res := fSecure.Receive(Buffer, read)
       else
         res := fSock.Recv(Buffer, read);
       if res <> nrOK then
       begin
         // no more to read, or socket issue?
         {$ifdef SYNCRTDEBUGLOW}
-        TSynLog.Add.Log(sllCustom2, 'TrySockRecv: sock=% Recv=% %',
-          [sock, read, SocketErrorMessage], self);
+        if Assigned(OnLog) then
+          OnLog(sllCustom2, 'TrySockRecv: sock=% Recv=% %',
+            [fSock.Socket, read, SocketErrorMessage], self);
         {$endif SYNCRTDEBUGLOW}
         if StopBeforeLength and
            (res = nrRetry) then
@@ -2239,10 +2301,9 @@ begin
         diff := now - last;
         if diff >= TimeOut then
         begin
-          {$ifdef SYNCRTDEBUGLOW}
-          TSynLog.Add.Log(sllCustom2, 'TrySockRecv: timeout (diff=%>%)',
-            [diff, TimeOut], self);
-          {$endif SYNCRTDEBUGLOW}
+          if Assigned(OnLog) then
+            OnLog(sllTrace, 'TrySockRecv: timeout (diff=%>%)',
+              [diff, TimeOut], self);
           exit; // identify read timeout as error
         end;
         if diff < 100 then
@@ -2367,7 +2428,7 @@ begin
   repeat
     sent := Len;
     if fSecure <> nil then
-      res := fSecure.Send(fSock, P, Len)
+      res := fSecure.Send(P, Len)
     else
       res := fSock.Send(P, sent);
     if sent > 0 then

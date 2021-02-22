@@ -1121,8 +1121,8 @@ type
     /// the associated TSynLog class
     function LogClass: TSynLogClass;
       {$ifdef HASINLINE}inline;{$endif}
-    /// class method which can be assigned to mormot.core.os' TOnDaemonLog
-    // event handler, or used instead of Add.Log
+    /// low-level class method which can be assigned to TSynLogProc callback
+    // signature, or used instead of Add.Log
     // - will flush the content to disk and avoid any memory reallocation
     // if Level is sllExceptionOS, e.g. on SIGABRT/SIGQUIT/SIGINT
     class procedure DoLog(Level: TSynLogInfo; const Fmt: RawUtf8;
