@@ -689,7 +689,7 @@ begin
   begin
     v := @fLogSQLValues[Param];
     if v^.vtype = varString then
-      Dest.AddQuotedStr(v^.VAny, '''', MaxCharCount)
+      Dest.AddQuotedStr(v^.VAny, length(RawUtf8(v^.VAny)), '''', MaxCharCount)
     else
       Dest.AddVariant(PVariant(v)^);
   end;

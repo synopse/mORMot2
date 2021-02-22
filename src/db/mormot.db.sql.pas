@@ -6310,7 +6310,7 @@ procedure TSqlDBStatement.AddParamValueAsText(Param: integer; Dest: TTextWriter;
     tmp.Init(WLen);
     try
       RawUnicodeToUtf8(tmp.buf, tmp.Len, W, WLen, [ccfNoTrailingZero]);
-      Dest.AddQuotedStr(tmp.buf, '''', MaxCharCount);
+      Dest.AddQuotedStr(tmp.buf, tmp.Len, '''', MaxCharCount);
     finally
       tmp.Done;
     end;
@@ -6327,7 +6327,7 @@ begin
         if ft = ftBlob then
           Dest.AddU(length(RawByteString(VString)))
         else
-          Dest.AddQuotedStr(VString, '''', MaxCharCount);
+          Dest.AddQuotedStr(VString, length(RawByteString(VString)), '''', MaxCharCount);
       varOleStr:
         AppendUnicode(VString, length(WideString(VString)));
       {$ifdef HASVARUSTRING}
@@ -7204,7 +7204,8 @@ begin
           ftDate:
             Dest.AddDateTime(PDateTime(@VInt64), ' ', '''');
           ftUtf8:
-            Dest.AddQuotedStr(pointer(VData), '''', MaxCharCount);
+            Dest.AddQuotedStr(pointer(VData), length(RawUtf8(VData)), '''',
+              MaxCharCount);
           ftBlob:
             Dest.AddU(length(VData));
         else

@@ -4768,7 +4768,7 @@ begin
             else
             begin
               VarRecToTempUtf8(Params[P], toquote);
-              AddQuotedStr(toquote.Text, ''''); // SQL double quotes
+              AddQuotedStr(toquote.Text, toquote.Len, ''''); // SQL double quote
               if toquote.TempRawUtf8 <> nil then
                 RawUtf8(toquote.TempRawUtf8) := ''; // release temp memory
             end;
