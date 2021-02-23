@@ -275,7 +275,7 @@ type
     fStatCache: RawJson;
     fStatTix: integer;
     function OnServerBeforeBody(
-      var aURL,aMethod,aInHeaders, aInContentType, aRemoteIP: RawUtf8;
+      var aURL, aMethod, aInHeaders, aInContentType, aRemoteIP, aBearerToken: RawUtf8;
       aContentLength: integer; aFlags: THttpServerRequestFlags): cardinal;
     function OnServerRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     function OnClientsRequest(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -938,10 +938,9 @@ begin
 end;
 
 function TPublicRelay.OnServerBeforeBody(
-  var aURL, aMethod, aInHeaders, aInContentType, aRemoteIP: RawUtf8;
+  var aURL, aMethod, aInHeaders, aInContentType, aRemoteIP, aBearerToken: RawUtf8;
   aContentLength: integer; aFlags: THttpServerRequestFlags): cardinal;
 var
-  bearer: RawUtf8;
   res: TJwtResult;
 begin
   if IdemPChar(pointer(aURL), '/STAT') then
@@ -949,8 +948,7 @@ begin
     result := HTTP_SUCCESS;
     exit;
   end;
-  FindNameValue(aInHeaders, HEADER_BEARER_UPPER, bearer);
-  res := fServerJWT.Verify(bearer);
+  res := fServerJWT.Verify(aBearerToken);
   if res = jwtValid then
     if fServerConnected <> nil then
     begin

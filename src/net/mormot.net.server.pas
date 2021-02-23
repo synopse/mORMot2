@@ -2021,7 +2021,7 @@ begin
       begin
         allheaders := HeaderGetText(fRemoteIP);
         status := fServer.OnBeforeBody(fURL, fMethod, allheaders, ContentType,
-          fRemoteIP, ContentLength, HTTPREMOTEFLAGS[TLS.Enabled]);
+          fRemoteIP, BearerToken, ContentLength, HTTPREMOTEFLAGS[TLS.Enabled]);
         {$ifdef SYNCRTDEBUGLOW}
         TSynLog.Add.Log(sllCustom2,
           'GetRequest sock=% OnBeforeBody=% Command=% Headers=%', [fSock, status,
@@ -2636,7 +2636,7 @@ var
   req: PHTTP_REQUEST;
   reqid: HTTP_REQUEST_ID;
   reqbuf, respbuf: RawByteString;
-  remoteip, remoteconn: RawUtf8;
+  remoteip, remoteconn, token: RawUtf8;
   i, L: PtrInt;
   P: PHTTP_UNKNOWN_HEADER;
   flags, bytesread, bytessent: cardinal;
@@ -2802,7 +2802,7 @@ var
         with reps^.headers.KnownHeaders[reqContentEncoding] do
           if RawValueLength = 0 then
           begin
-          // no previous encoding -> try if any compression
+            // no previous encoding -> try if any compression
             outcontenc := CompressDataAndGetHeaders(compressset,
               fCompress, ctxt.OutContentType, ctxt.fOutContent);
             pRawValue := pointer(outcontenc);
@@ -2920,8 +2920,14 @@ begin
             end;
             if Assigned(OnBeforeBody) then
             begin
+              with req^.Headers.KnownHeaders[reqAuthorization] do
+                if (RawValueLength > 7) and
+                   IdemPChar(pointer(pRawValue), 'BEARER ') then
+                  FastSetString(token, pRawValue + 7, RawValueLength - 7)
+                else
+                  token := '';
               err := OnBeforeBody(ctxt.fURL, ctxt.fMethod, ctxt.fInHeaders,
-                ctxt.fInContentType, remoteip, incontlen, ctxt.ConnectionFlags);
+                ctxt.fInContentType, remoteip, token, incontlen, ctxt.ConnectionFlags);
               if err <> HTTP_SUCCESS then
               begin
                 SendError(err, 'Rejected');
@@ -4095,9 +4101,9 @@ begin
   for j := 1 to req^.headers.UnknownHeaderCount do
   begin
     if (p.NameLength = Length(sProtocolHeader)) and
-       IdemPChar(p.pName, Pointer(sProtocolHeader)) then
+       IdemPChar(p.pName, pointer(sProtocolHeader)) then
     begin
-      protofound := True;
+      protofound := true;
       for i := 0 to Length(fRegisteredProtocols^) - 1 do
       begin
         ch := p.pRawValue;

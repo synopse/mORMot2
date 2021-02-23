@@ -276,7 +276,8 @@ type
   HTTP_UNKNOWN_HEADERS = array of HTTP_UNKNOWN_HEADER;
 
   HTTP_KNOWN_HEADER = record
-    RawValueLength: word;     // in bytes not including the #0
+    // warning: don't assume pRawValue is #0 terminated - use RawValueLength
+    RawValueLength: word;
     pRawValue: PAnsiChar;
   end;
 
@@ -305,6 +306,7 @@ type
     // Reserved, must be nil
     pTrailers: pointer;
     // Known headers
+    // - warning: don't assume pRawValue is #0 terminated - use RawValueLength
     KnownHeaders: array[low(THttpHeader)..reqUserAgent] of HTTP_KNOWN_HEADER;
   end;
 

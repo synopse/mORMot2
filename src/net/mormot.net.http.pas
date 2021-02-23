@@ -163,6 +163,10 @@ type
     ContentType: RawUtf8;
     /// same as HeaderGetValue('UPGRADE'), but retrieved during Request
     Upgrade: RawUtf8;
+    /// same as FindNameValue(aInHeaders, HEADER_BEARER_UPPER, ...),
+    // but retrieved during Request
+    // - is the raw Token, excluding trailing 'Authorization: Bearer ' chars
+    BearerToken: RawUtf8;
     /// same as HeaderGetValue('X-POWERED-BY'), but retrieved during Request
     XPoweredBy: RawUtf8;
     /// map the presence of some HTTP headers, but retrieved during Request
@@ -285,7 +289,7 @@ type
   // error code (e.g. HTTP_FORBIDDEN or HTTP_PAYLOADTOOLARGE) to reject
   // the request
   TOnHttpServerBeforeBody = function(var aURL, aMethod, aInHeaders,
-    aInContentType, aRemoteIP: RawUtf8; aContentLength: integer;
+    aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: integer;
     aFlags: THttpServerRequestFlags): cardinal of object;
 
   /// abstract generic input/output structure used for HTTP server requests
@@ -608,6 +612,7 @@ begin
   ContentLength := -1;
   Content := '';
   ServerInternalState := 0;
+  BearerToken := '';
 end;
 
 procedure THttpSocket.GetHeader(HeadersUnFiltered: boolean);
@@ -645,7 +650,7 @@ begin
     // note: set P=nil below to store in Headers[]
     case IdemPCharArray(P, ['CONTENT-', 'TRANSFER-ENCODING: CHUNKED',
       'CONNECTION: ', 'ACCEPT-ENCODING:', 'UPGRADE:', 'SERVER-INTERNALSTATE:',
-      'X-POWERED-BY:']) of
+      'X-POWERED-BY:', HEADER_BEARER_UPPER]) of
       0:
         // 'CONTENT-'
         case IdemPCharArray(P + 8, ['LENGTH:', 'TYPE:', 'ENCODING:']) of
@@ -723,6 +728,14 @@ begin
       6:
         // 'X-POWERED-BY:'
         GetTrimmed(P + 13, XPoweredBy);
+      7:
+        // 'AUTHORIZATION: BEARER '
+        begin
+          GetTrimmed(P + 22, BearerToken);
+          if BearerToken <> '' then
+            // allows FindNameValue(..., HEADER_BEARER_UPPER, ...) search
+            P := nil;
+        end
     else
       // unrecognized name should be stored in Headers
       P := nil;
