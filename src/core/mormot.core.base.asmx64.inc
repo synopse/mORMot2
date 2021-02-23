@@ -1688,19 +1688,15 @@ end;
 
 function InterlockedIncrement(var I: integer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        mov     rax, I
-        mov     edx, 1
-        xchg    rax, rdx
-   lock xadd    dword ptr [rdx], eax
+        mov     eax, 1
+   lock xadd    dword ptr [I], eax // atomic eax=[I] + [I]:=[I]+eax
         inc     eax
 end;
 
 function InterlockedDecrement(var I: integer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        mov     rax, I
-        mov     edx, -1
-        xchg    rax, rdx
-   lock xadd    dword ptr [rdx], eax
+        mov     eax, -1
+   lock xadd    dword ptr [I], eax // atomic eax=[I] + [I]:=[I]+eax
         dec     eax
 end;
 
