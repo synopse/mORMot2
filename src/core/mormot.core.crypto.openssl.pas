@@ -1187,8 +1187,9 @@ end;
 var
   prime256v1grp: PEC_GROUP;
 
-function NewPrime256v1Key: PEC_KEY;
+function NewPrime256v1Key(out key: PEC_KEY): boolean;
 begin
+  result := false;
   if prime256v1grp = nil then
     if OpenSslIsAvailable then
     begin
@@ -1208,17 +1209,16 @@ begin
       prime256v1grp := pointer(1);
   if prime256v1grp <> pointer(1) then
   begin
-    result := EC_KEY_new;
-    if EC_KEY_set_group(result, prime256v1grp) <> OPENSSLSUCCESS then
+    key := EC_KEY_new;
+    if EC_KEY_set_group(key, prime256v1grp) = OPENSSLSUCCESS then
+      result := true
+    else
     begin
       EC_GROUP_free(prime256v1grp);
       prime256v1grp := pointer(1);
-      EC_KEY_free(result);
-      result := nil;
+      EC_KEY_free(key);
     end;
-  end
-  else
-    result := nil;
+  end;
 end;
 
 function ecc_make_key_osl(out PublicKey: TEccPublicKey;
@@ -1230,8 +1230,7 @@ var
   publen, privlen: integer;
 begin
   result := false;
-  key := NewPrime256v1Key;
-  if key = nil then
+  if not NewPrime256v1Key(key) then
     exit;
   if EC_KEY_generate_key(key) = OPENSSLSUCCESS then
   begin
@@ -1262,13 +1261,12 @@ var
   der: TEccSignatureDer;
 begin
   result := false;
-  key := NewPrime256v1Key;
-  if (key = nil) or
-     (ECDSA_size(key) > SizeOf(der)) then
+  if not NewPrime256v1Key(key) then
     exit;
   bn := BN_bin2bn(@PrivateKey, SizeOf(PrivateKey), nil);
   derlen := 0;
-  if (EC_KEY_set_private_key(key, bn) = OPENSSLSUCCESS) and
+  if (ECDSA_size(key) <= SizeOf(der)) and
+     (EC_KEY_set_private_key(key, bn) = OPENSSLSUCCESS) and
      (ECDSA_Sign(0, @Hash, SizeOf(Hash), @der, @derlen, key) = OPENSSLSUCCESS) then
     result := DerToEccSign(der, Signature);
   BN_free(bn);
@@ -1287,19 +1285,17 @@ function ecdsa_verify_osl(const PublicKey: TEccPublicKey; const Hash: TEccHash;
 var
   key: PEC_KEY;
   pt: PEC_POINT;
-  res, derlen: integer;
+  derlen: integer;
   der: TEccSignatureDer;
 begin
   result := false;
-  key := NewPrime256v1Key;
-  if key = nil then
+  if not NewPrime256v1Key(key) then
     exit;
   if PublicKeyToPoint(PublicKey, pt) and
      (EC_KEY_set_public_key(key, pt) = OPENSSLSUCCESS) then
   begin
     derlen := EccSignToDer(Signature, der);
-    res := ECDSA_verify(0, @Hash, SizeOf(Hash), @der, derlen, key);
-    result := res = OPENSSLSUCCESS;
+    result := ECDSA_verify(0, @Hash, SizeOf(Hash), @der, derlen, key) = OPENSSLSUCCESS;
   end;
   EC_POINT_free(pt);
   EC_KEY_free(key);
@@ -1314,8 +1310,7 @@ var
 begin
   FillZero(Secret);
   result := false;
-  key := NewPrime256v1Key;
-  if key = nil then
+  if not NewPrime256v1Key(key) then
     exit;
   priv := BN_bin2bn(@PrivateKey, SizeOf(PrivateKey), nil);
   if PublicKeyToPoint(PublicKey, pub) and
@@ -1407,7 +1402,8 @@ begin
     aIDObfuscationKey, aIDObfuscationKeyNewKdf);
 end;
 
-class procedure TJwtAbstractOsl.GenerateKeys(out PrivateKey, PublicKey: RawByteString);
+class procedure TJwtAbstractOsl.GenerateKeys(
+  out PrivateKey, PublicKey: RawByteString);
 begin
   with TJwtAbstractOsl(NewInstance) do // no need to call Create
     try

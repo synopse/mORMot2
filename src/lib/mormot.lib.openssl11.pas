@@ -22,7 +22,7 @@ unit mormot.lib.openssl11;
 
 }
 
-{$define OPENSSLFULLAPI}
+{.$define OPENSSLFULLAPI}
 // define this conditional to publish the whole (huge) OpenSSL API
 // - by default, only the API features needed by mORMot are published
 // - the full API libraries will be directly/statically linked, not dynamically
