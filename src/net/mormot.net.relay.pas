@@ -274,8 +274,9 @@ type
     fServerConnectedToLocalHost: boolean;
     fStatCache: RawJson;
     fStatTix: integer;
-    function OnServerBeforeBody(var aURL,aMethod,aInHeaders, aInContentType,
-      aRemoteIP: RawUtf8; aContentLength: integer; aUseSSL: boolean): cardinal;
+    function OnServerBeforeBody(
+      var aURL,aMethod,aInHeaders, aInContentType, aRemoteIP: RawUtf8;
+      aContentLength: integer; aFlags: THttpServerRequestFlags): cardinal;
     function OnServerRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     function OnClientsRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     function GetStats: RawJson;
@@ -938,7 +939,7 @@ end;
 
 function TPublicRelay.OnServerBeforeBody(
   var aURL, aMethod, aInHeaders, aInContentType, aRemoteIP: RawUtf8;
-  aContentLength: integer; aUseSSL: boolean): cardinal;
+  aContentLength: integer; aFlags: THttpServerRequestFlags): cardinal;
 var
   bearer: RawUtf8;
   res: TJwtResult;

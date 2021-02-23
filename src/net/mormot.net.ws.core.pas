@@ -187,6 +187,7 @@ type
     fFramesOutBytes: QWord;
     fOnBeforeIncomingFrame: TOnWebSocketProtocolIncomingFrame;
     fRemoteLocalhost: boolean;
+    fConnectionFlags: THttpServerRequestFlags;
     fRemoteIP: RawUtf8;
     fUpgradeUri: RawUtf8;
     fLastError: string;
@@ -217,11 +218,12 @@ type
     function GetSubprotocols: RawUtf8; virtual;
     /// specify the recognized sub-protocols, e.g. 'synopsebin, synopsebinary'
     function SetSubprotocol(const aProtocolName: RawUtf8): boolean; virtual;
-    /// set the fEncryption: IProtocol according to the supplied key
+    /// create the internal Encryption: IProtocol according to the supplied key
     // - any asymmetric algorithm needs to know which side (client/server) to work on
     // - try TEcdheProtocol.FromKey(aKey) and fallback to TProtocolAes.Create(TAesOfb)
     // using the deprecated Sha256Weak(aKey) - consider using a safer hasher
     // and SetEncryptKeyAes() with a safer derivated key
+    // - you can disable encryption by setting aKey=''
     procedure SetEncryptKey(aServer: boolean; const aKey: RawUtf8);
     /// set the fEncryption: IProtocol as TProtocolAes.Create(TAesOfb)
     procedure SetEncryptKeyAes(const aKey; aKeySize: cardinal);
@@ -236,6 +238,9 @@ type
     /// access low-level frame encryption
     property Encryption: IProtocol
       read fEncryption;
+    /// contains either [hsrSecured, hsrWebsockets] or [hsrWebsockets]
+    property ConnectionFlags: THttpServerRequestFlags
+      read fConnectionFlags;
     /// if the associated 'Remote-IP' HTTP header value maps the local host
     property RemoteLocalhost: boolean
       read fRemoteLocalhost write fRemoteLocalhost;
@@ -795,6 +800,7 @@ constructor TWebSocketProtocol.Create(const aName, aUri: RawUtf8);
 begin
   fName := aName;
   fUri := aUri;
+  fConnectionFlags := [hsrWebsockets];
 end;
 
 procedure TWebSocketProtocol.SetEncryptKey(aServer: boolean; const aKey: RawUtf8);
@@ -802,19 +808,25 @@ var
   key: TSha256Digest;
 begin
   if aKey = '' then
-    fEncryption := nil
+  begin
+    // disable encryption
+    fEncryption := nil;
+    fConnectionFlags := [hsrWebsockets];
+  end
   else
   begin
     // first try asymetric ES-256 ephemeral secret key and mutual authentication
     fEncryption := TEcdheProtocol.FromKey(aKey, aServer);
-    if fEncryption = nil then
+    if fEncryption <> nil then
+      fConnectionFlags := [hsrSecured, hsrWebsockets]
+    else
     begin
       // use symetric TProtocolAes algorithm
       if ProtocolAesRounds = 0 then
         // mORMot 1.18 deprecated password derivation
         Sha256Weak(aKey, key)
       else
-        // new safer password derivation algorithm
+        // new safer password derivation algorithm (rounds=1000 -> 1ms)
         PBKDF2_SHA3(SHA3_256, aKey, ProtocolAesSalt, ProtocolAesRounds,
           @key, SizeOf(key));
       SetEncryptKeyAes(key, 256);
@@ -832,6 +844,7 @@ begin
   if c = nil then
     c := TAesFast[mCtr]; // fastest on x86_64 or OpenSSL - server friendly
   fEncryption := TProtocolAes.Create(c, aKey, aKeySize);
+  fConnectionFlags := [hsrSecured, hsrWebsockets]
 end;
 
 procedure TWebSocketProtocol.AfterGetFrame(var frame: TWebSocketFrame);
@@ -1149,7 +1162,7 @@ begin
       InContentType := JSON_CONTENT_TYPE_VAR;
     if Method = '' then
       Method := 'POST';
-    Ctxt.Prepare(URL, Method, InHeaders, InContent, InContentType, fRemoteIP, Ctxt.UseSSL);
+    Ctxt.Prepare(URL, Method, InHeaders, InContent, InContentType, fRemoteIP);
     aNoAnswer := NoAnswer = '1';
   end;
 end;
@@ -1163,9 +1176,11 @@ begin
      not IdemPropNameU(Ctxt.OutContentType, JSON_CONTENT_TYPE) then
     OutContentType := Ctxt.OutContentType;
   if NormToUpperAnsi7[outhead[3]] = 'Q' then
+    // 'request' -> 'answer'
     outhead := 'answer'
-  else // 'request' -> 'answer'
-    outhead[1] := 'a';       // 'r000001' -> 'a000001'
+  else
+    // 'r000001' -> 'a000001'
+    outhead[1] := 'a';
   FrameCompress(outhead, [Status, Ctxt.OutCustomHeaders], Ctxt.OutContent,
     OutContentType{%H-}, answer);
 end;
@@ -1468,7 +1483,8 @@ begin
         threshold := maxInt
       else
         threshold := WebSocketsBinarySynLzThreshold;
-      value := AlgoSynLZ.Compress(pointer(frame.payload), length(frame.payload), threshold);
+      value := AlgoSynLZ.Compress(
+        pointer(frame.payload), length(frame.payload), threshold);
     end
     else
       value := frame.payload;

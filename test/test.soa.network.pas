@@ -265,13 +265,13 @@ procedure TTestBidirectionalRemoteConnection.WebsocketsLowLevel(
     noAnswer1, noAnswer2: boolean;
     i: integer;
   begin
-    C1 := THttpServerRequest.Create(nil, 0, nil);
-    C2 := THttpServerRequest.Create(nil, 0, nil);
+    C1 := THttpServerRequest.Create(nil, 0, nil, []);
+    C2 := THttpServerRequest.Create(nil, 0, nil, []);
     P2 := protocol.Clone('');
     try
       for i := 1 to 100 do
       begin
-        C1.Prepare('url', 'POST', 'headers', content, contentType, '', false);
+        C1.Prepare('url', 'POST', 'headers', content, contentType, '');
         noAnswer1 := opcode = focBinary;
         noAnswer2 := not noAnswer1;
         TWebSocketProtocolRestHook(protocol).InputToFrame(C1, noAnswer1, frame, head);
@@ -312,7 +312,7 @@ begin
     TestOne('"content"', JSON_CONTENT_TYPE);
     TestOne('["json",2]', JSON_CONTENT_TYPE);
     TestOne('binary'#0'data', BINARY_CONTENT_TYPE);
-    NotifyTestSpeed('%%', [protocol.Name, name], 100 * 5, 0, @timer);
+    // NotifyTestSpeed('%%', [protocol.Name, name], 100 * 5, 0, @timer);
   finally
     protocol.Free;
   end;

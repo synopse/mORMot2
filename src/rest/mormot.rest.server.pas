@@ -2892,13 +2892,13 @@ begin
     Session := CONST_AUTHENTICATION_SESSION_NOT_STARTED;
     if // /auth + /timestamp are e.g. allowed methods without signature
        ((MethodIndex >= 0) and
-       Server.fPublishedMethod[MethodIndex].ByPassAuthentication) or
+        Server.fPublishedMethod[MethodIndex].ByPassAuthentication) or
        // you can allow a service to be called directly
        ((Service <> nil) and
-       TServiceFactoryServerAbstract(Service).ByPassAuthentication) or
+        TServiceFactoryServerAbstract(Service).ByPassAuthentication) or
        // allow by-pass for a set of HTTP verbs (e.g. mGET)
        ((Table <> nil) and
-       (Method in Server.BypassOrmAuthentication)) then
+        (Method in Server.BypassOrmAuthentication)) then
       // no need to check the sessions
       exit;
     Server.fSessions.Safe.Lock;
@@ -2914,8 +2914,8 @@ begin
             if (Log <> nil) and
                (s.RemoteIP <> '') and
                (s.RemoteIP <> '127.0.0.1') then
-              Log.Log(sllUserAuth, '%/% %', [s.User.LogonName,
-                s.ID, s.RemoteIP], self);
+              Log.Log(sllUserAuth, '%/% %',
+                [s.User.LogonName, s.ID, s.RemoteIP], self);
             exit;
           end;
           inc(a);
@@ -4101,7 +4101,7 @@ var
 begin
   value := GetInputUtf8OrVoid(ParamName);
   if (length(value) <> 8) or
-     not HexDisplayToCardinal(Pointer(value), result) then
+     not HexDisplayToBin(Pointer(value), @result, SizeOf(result)) then
     result := 0;
 end;
 
@@ -4521,7 +4521,7 @@ begin
       agent := GetUserAgent;
       if (agent = '') or
          (PosEx('mORMot', agent) > 0) then
-        // 'mORMot' set e.g. from XPOWEREDPROGRAM value in SynCrtSock
+        // 'mORMot' set e.g. from DefaultUserAgent() in mormot.net.http
         fClientKind := ckFramework
       else
         fClientKind := ckAjax;
@@ -5428,15 +5428,15 @@ begin
   len := Ctxt.UriSessionSignaturePos - 1;
   P := @Ctxt.Call^.Url[len + (20 + 8)]; // points to Hexa8(Timestamp)
   minticks := result.fLastTimestamp - fTimestampCoherencyTicks;
-  if HexDisplayToCardinal(P, ts) and
+  if HexDisplayToBin(P, @ts, SizeOf(ts)) and
      (fNoTimestampCoherencyCheck or
       (integer(minticks) < 0) or // <0 just after login
-      (ts >= minticks)) then
+      ({%H-}ts >= minticks)) then
   begin
     expectedsign := fComputeSignature(result.fPrivateSaltHash,
       P, pointer(Ctxt.Call^.Url), len);
-    if HexDisplayToCardinal(P + 8, sign) and
-       (sign = expectedsign) then
+    if HexDisplayToBin(P + 8, @sign, SizeOf(sign)) and
+       ({%H-}sign = expectedsign) then
     begin
       if ts > result.fLastTimestamp then
         result.fLastTimestamp := ts;
@@ -5495,7 +5495,7 @@ begin
   end;
   hash := ServerNonceHash; // thread-safe SHA-3 sponge reuse
   hash.Update(@ticks, SizeOf(ticks));
-  hash.final(res, true);
+  hash.Final(res, true);
   result := BinToHexLower(@res, SizeOf(res));
   with ServerNonceCache[Previous] do
   begin
@@ -7399,7 +7399,7 @@ begin
       // 2. handle security
       if (rsoSecureConnectionRequired in fOptions) and
          (ctxt.MethodIndex <> fPublishedMethodTimestampIndex) and
-         not (llfSecured in Call.LowLevelFlags) then
+         not (llfSecured in Call.LowLevelConnectionFlags) then
         ctxt.AuthenticationFailed(afSecureConnectionRequired)
       else if not ctxt.Authenticate then
         ctxt.AuthenticationFailed(afInvalidSignature)
@@ -7413,9 +7413,9 @@ begin
       else if (ctxt.Session <> CONST_AUTHENTICATION_NOT_USED) or
               (fJwtForUnauthenticatedRequest = nil) or
               (ctxt.MethodIndex = fPublishedMethodTimestampIndex) or
-              ((llfSecured in Call.LowLevelFlags) and
-               // HTTPS does not authenticate by itself
-               not (llfHttps in Call.LowLevelFlags)) or
+              ((llfSecured in Call.LowLevelConnectionFlags) and
+               // HTTPS does not authenticate by itself, WebSockets does
+               not (llfHttps in Call.LowLevelConnectionFlags)) or
               ctxt.AuthenticationCheck(fJwtForUnauthenticatedRequest) then
       // 3. call appropriate ORM / SOA commands in fAcquireExecution[] context
       try
@@ -7747,7 +7747,7 @@ begin
   LibraryRequestString(call.Url, Url, UrlLen);
   LibraryRequestString(call.Method, Method, MethodLen);
   call.LowLevelConnectionID := PtrInt(GlobalLibraryRequestServer);
-  call.LowLevelFlags := [llfSecured]; // in-process communication is safe
+  call.LowLevelConnectionFlags := [llfSecured]; // in-process call
   call.InHead := 'RemoteIP: 127.0.0.1';
   if (Head <> nil) and
      (HeadLen <> 0) then

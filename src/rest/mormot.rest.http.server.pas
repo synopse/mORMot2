@@ -881,6 +881,7 @@ end;
 function TRestHttpServer.Request(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   call: TRestUriParams;
+  tls: boolean;
   i, hostlen: PtrInt;
   P: PUtf8Char;
   headers, hostroot, redirect: RawUtf8;
@@ -888,6 +889,7 @@ var
   serv: TRestServer;
   c: THttpServerRequest absolute Ctxt;
 begin
+  tls := hsrHttps in Ctxt.ConnectionFlags;
   if (self = nil) or
      (pointer(fDBServers) = nil) or
      fShutdownInProgress then
@@ -896,9 +898,9 @@ begin
            (PWord(Ctxt.Url)^ = ord('/'))) and
           (Ctxt.Method = 'GET') then
     // RootRedirectToUri() to redirect ip:port root URI to a given sub-URI
-    if fRootRedirectToUri[Ctxt.UseSSL] <> '' then
+    if fRootRedirectToUri[tls] <> '' then
     begin
-      Ctxt.OutCustomHeaders := 'Location: ' + fRootRedirectToUri[Ctxt.UseSSL];
+      Ctxt.OutCustomHeaders := 'Location: ' + fRootRedirectToUri[tls];
       result := HTTP_TEMPORARYREDIRECT;
     end
     else
@@ -926,15 +928,7 @@ begin
     // compute URI, handling any virtual host domain
     call.Init;
     call.LowLevelConnectionID := Ctxt.ConnectionID;
-    if Ctxt.UseSSL then
-      call.LowLevelFlags := call.LowLevelFlags + [llfHttps, llfSecured];
-    if c.ConnectionThread <> nil then
-      if PClass(c.ConnectionThread)^ = TWebSocketServerResp then
-      begin
-        include(call.LowLevelFlags, llfWebsockets);
-        if TWebSocketServerResp(c.ConnectionThread).WebSocketProtocol.Encrypted then
-          include(call.LowLevelFlags, llfSecured);
-      end;
+    call.LowLevelConnectionFlags := TRestUriParamsLowLevelFlags(Ctxt.ConnectionFlags);
     if fHosts.Count > 0 then
     begin
       FindNameValue(Ctxt.InHeaders, 'HOST: ', hostroot);
@@ -966,7 +960,7 @@ begin
       // optimized for the most common case of a single DB server
       with fDBSingleServer^ do
       begin
-        if Ctxt.UseSSL = (Security = secSSL) then
+        if (Security = secSSL) = tls then
         begin
           match := Server.Model.UriMatch(call.Url);
           if match = rmNoMatch then
@@ -982,7 +976,7 @@ begin
       try
         for i := 0 to length(fDBServers) - 1 do
           with fDBServers[i] do
-            if Ctxt.UseSSL = (Security = secSSL) then
+            if (Security = secSSL) = tls then
             begin
               // registered for http or https
               match := Server.Model.UriMatch(call.Url);
@@ -1175,11 +1169,12 @@ begin
     begin
       // aConnection.InheritsFrom(TSynThread) may raise an exception
       // -> checked in WebSocketsCallback/IsActiveWebSocket
-      ctxt := THttpServerRequest.Create(nil, aConnectionID, nil);
+      ctxt := THttpServerRequest.Create(nil, aConnectionID, nil, []);
       try
         ctxt.Prepare(FormatUtf8('%/%/%', [aSender.Model.Root,
           aInterfaceDotMethodName, aFakeCallID]), 'POST', '',
-            '[' + aParams + ']', '', '', {ssl=}false);
+          '[' + aParams + ']', '', '');
+        // fHttpServer.Callback() raises EHttpServer but for TWebSocketServerRest
         status := fHttpServer.Callback(ctxt, aResult = nil);
         if status = HTTP_SUCCESS then
         begin

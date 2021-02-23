@@ -238,6 +238,8 @@ type
   // $   Free;
   // $ end;
   TNetTLSContext = record
+    /// set if the TLS flag was set to TCrtSocket.OpenBind() method
+    Enabled: boolean;
     /// input: let HTTPS be less paranoid about TLS certificates
     IgnoreCertificateErrors: boolean;
     /// input: if PeerInfo field should be retrieved once connected
@@ -493,7 +495,7 @@ type
     fBytesOut: Int64;
     fSocketLayer: TNetLayer;
     fSockInEofError: integer;
-    fTLS, fWasBind: boolean;
+    fWasBind: boolean;
     // updated by every SockSend() call
     fSndBuf: RawByteString;
     fSndBufLen: integer;
@@ -1731,7 +1733,7 @@ begin
         raise ENetSock.Create('TLS is not available on this system - ' +
           'try installing OpenSSL 1.1.1');
       fSecure.AfterConnection(fSock, TLS, aServer);
-      fTLS := true;
+      TLS.Enabled := true;
     except
       on E: Exception do
       begin
@@ -2575,7 +2577,7 @@ begin
     port := DEFAULT_PORT[Https];
   if S^ <> #0 then // ':' or '/'
     inc(S);
-  address := S;
+  Address := S;
   if Server <> '' then
     result := true;
 end;

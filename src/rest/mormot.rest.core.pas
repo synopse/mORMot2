@@ -1078,8 +1078,9 @@ type
   /// flags which may be set by the caller to notify low-level context
   // - llfHttps will indicates that the communication was made over HTTPS
   // - llfSecured is set if the transmission is encrypted or in-process,
-  // using e.g. HTTPS/SSL/TLS or our proprietary AES/ECDHE algorithms
+  // using e.g. HTTPS/TLS or our proprietary AES/ECDHE algorithms
   // - llfWebsockets communication was made using WebSockets
+  // - match THttpServerRequestFlag from mormot.net.http.pas
   TRestUriParamsLowLevelFlag = (
     llfHttps,
     llfSecured,
@@ -1131,16 +1132,16 @@ type
     // rights management) - making access rights a parameter allows this method
     // to be handled as pure stateless, thread-safe and session-free
     RestAccessRights: POrmAccessRights;
-    /// opaque reference to the protocol context which made this request
+    /// opaque reference to the connection which made this request
     // - may point e.g. to a THttpServerResp, a TWebSocketServerResp,
     // a THttpApiServer, a TRestClientUri, a TFastCGIServer or a
     // TRestServerNamedPipeResponse instance
-    // - stores SynCrtSock's THttpServerConnectionID, i.e. a Int64 as expected
-    // by http.sys, or an incremental rolling sequence of 31-bit integers for
+    // - stores mormot.net.http's THttpServerConnectionID, e.g. a http.sys
+    // 64-bit ID, or an incremental rolling sequence of 31-bit integers for
     // THttpServer/TWebSocketServer, or maybe a raw PtrInt(self/THandle)
     LowLevelConnectionID: Int64;
-    /// low-level properties of the current protocol context
-    LowLevelFlags: TRestUriParamsLowLevelFlags;
+    /// low-level properties of the current connection
+    LowLevelConnectionFlags: TRestUriParamsLowLevelFlags;
     /// initialize the non RawUtf8 values
     procedure Init; overload;
     /// initialize the input values
@@ -3332,7 +3333,7 @@ begin
   OutInternalState := 0;
   RestAccessRights := nil;
   LowLevelConnectionID := 0;
-  byte(LowLevelFlags) := 0;
+  byte(LowLevelConnectionFlags) := 0;
 end;
 
 procedure TRestUriParams.Init(const aUri, aMethod, aInHead, aInBody: RawUtf8);

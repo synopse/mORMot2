@@ -331,7 +331,8 @@ function TWebSocketProcessServer.ComputeContext(
   out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract;
 begin
   result := THttpServerRequest.Create(
-    (fOwnerThread as TWebSocketServerResp).fServer, fOwnerConnection, fOwnerThread);
+    (fOwnerThread as TWebSocketServerResp).fServer, fOwnerConnection,
+    fOwnerThread, fProtocol.ConnectionFlags);
   RequestProcess := TWebSocketServerResp(fOwnerThread).Server.Request;
 end;
 
@@ -618,57 +619,6 @@ begin
   end;
 end;
 
-{ TWebSocketServerRest }
-
-constructor TWebSocketServerRest.Create(const aPort: RawUtf8;
-  const OnStart, OnStop: TOnNotifyThread; const aProcessName, aWebSocketsURI,
-  aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean);
-begin
-  Create(aPort, OnStart, OnStop, aProcessName);
-  WebSocketsEnable(aWebSocketsURI, aWebSocketsEncryptionKey, aWebSocketsAjax);
-end;
-
-procedure TWebSocketServerRest.WebSocketsEnable(const aWebSocketsURI,
-  aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax, aWebSocketsCompressed: boolean);
-begin
-  if self = nil then
-    exit;
-  fProtocols.AddOnce(TWebSocketProtocolBinary.Create(aWebSocketsURI, true,
-    aWebSocketsEncryptionKey, aWebSocketsCompressed));
-  if aWebSocketsAjax then
-    fProtocols.AddOnce(TWebSocketProtocolJson.Create(aWebSocketsURI));
-end;
-
-function TWebSocketServerRest.Callback(Ctxt: THttpServerRequest;
-  aNonBlocking: boolean): cardinal;
-var
-  connection: TWebSocketServerResp;
-  mode: TWebSocketProcessNotifyCallback;
-begin
-  if Ctxt = nil then
-    connection := nil
-  else
-  begin
-    WebSocketLog.Add.Log(sllTrace, 'Callback(%) on socket=%',
-      [Ctxt.Url, Ctxt.ConnectionID], self);
-    connection := IsActiveWebSocket(Ctxt.ConnectionID);
-  end;
-  if connection <> nil then
-  begin
-    //  this request is a websocket, on a non broken connection
-    if aNonBlocking then // see TInterfacedObjectFakeServer.CallbackInvoke
-      mode := wscNonBlockWithoutAnswer
-    else
-      mode := wscBlockWithAnswer;
-    result := connection.NotifyCallback(Ctxt, mode);
-  end
-  else
-  begin
-    WebSocketLog.Add.Log(sllError, 'Callback() on inactive socket', self);
-    result := HTTP_NOTFOUND;
-  end;
-end;
-
 
 { TWebSocketServerResp }
 
@@ -719,6 +669,58 @@ begin
      IdemPropNameU(Method, 'GET') and
      IdemPropNameU(Upgrade, 'websocket') then
     result := grOwned; }
+end;
+
+{ TWebSocketServerRest }
+
+constructor TWebSocketServerRest.Create(const aPort: RawUtf8;
+  const OnStart, OnStop: TOnNotifyThread; const aProcessName, aWebSocketsURI,
+  aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean);
+begin
+  Create(aPort, OnStart, OnStop, aProcessName);
+  WebSocketsEnable(aWebSocketsURI, aWebSocketsEncryptionKey, aWebSocketsAjax);
+end;
+
+procedure TWebSocketServerRest.WebSocketsEnable(const aWebSocketsURI,
+  aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax, aWebSocketsCompressed: boolean);
+begin
+  if self = nil then
+    exit;
+  fProtocols.AddOnce(TWebSocketProtocolBinary.Create(aWebSocketsURI, true,
+    aWebSocketsEncryptionKey, aWebSocketsCompressed));
+  if aWebSocketsAjax then
+    fProtocols.AddOnce(TWebSocketProtocolJson.Create(aWebSocketsURI));
+end;
+
+function TWebSocketServerRest.Callback(Ctxt: THttpServerRequest;
+  aNonBlocking: boolean): cardinal;
+var
+  connection: TWebSocketServerResp;
+  mode: TWebSocketProcessNotifyCallback;
+begin
+  if Ctxt = nil then
+    connection := nil
+  else
+  begin
+    WebSocketLog.Add.Log(sllTrace, 'Callback(%) on ConnectionID=%',
+      [Ctxt.Url, Ctxt.ConnectionID], self);
+    connection := IsActiveWebSocket(Ctxt.ConnectionID);
+  end;
+  if connection <> nil then
+  begin
+    //  this request is a websocket, on a non broken connection
+    if aNonBlocking then // see TInterfacedObjectFakeServer.CallbackInvoke
+      mode := wscNonBlockWithoutAnswer
+    else
+      mode := wscBlockWithAnswer;
+    result := connection.NotifyCallback(Ctxt, mode);
+  end
+  else
+  begin
+    WebSocketLog.Add.Log(sllError, 'Callback(%) on inactive ConnectionID=%',
+      [Ctxt.Url, Ctxt.ConnectionID], self);
+    result := HTTP_NOTFOUND;
+  end;
 end;
 
 

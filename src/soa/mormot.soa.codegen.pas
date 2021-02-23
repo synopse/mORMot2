@@ -1283,7 +1283,7 @@ begin
   try
     context := ContextFromModel(Ctxt.Server, SourcePath, Descriptions);
     context.uri := Ctxt.UriWithoutSignature;
-    if llfHttps in Ctxt.Call^.LowLevelFlags then
+    if llfHttps in Ctxt.Call^.LowLevelConnectionFlags then
       _ObjAddProps(['protocol', 'https',
                     'https', true], context)
     else

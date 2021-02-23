@@ -62,13 +62,14 @@ type
   public
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric;
-      aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread); virtual;
+      aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
+      aConnectionFlags: THttpServerRequestFlags); virtual;
     /// prepare an incoming request
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
     procedure Prepare(const aURL, aMethod, aInHeaders: RawUtf8;
-      const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8;
-      aUseSSL: boolean = false); override;
+      const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8);
+        override;
     {$ifdef OSWINDOWS}
     /// input parameter containing the caller Full URL
     property FullURL: SynUnicode
@@ -167,12 +168,11 @@ type
     function Request(Ctxt: THttpServerRequestAbstract): cardinal; virtual;
     /// server can send a request back to the client, when the connection has
     // been upgraded e.g. to WebSockets
-    // - InURL/InMethod/InContent properties are input parameters (InContentType
-    // is ignored)
+    // - InURL/InMethod/InContent properties are input parameters
+    // (InContentType is ignored)
     // - OutContent/OutContentType/OutCustomHeader are output parameters
-    // - CallingThread should be set to the client's Ctxt.CallingThread
-    // value, so that the method could know which connnection is to be used -
-    // it will return HTTP_NOTFOUND (404) if the connection is unknown
+    // - Ctxt.ConnectionID should be set, so that the method could know
+    // which connnection is to be used - returns HTTP_NOTFOUND (404) if unknown
     // - result of the function is the HTTP error code (200 if OK, e.g.)
     // - warning: this void implementation will raise an EHttpServer exception -
     // inherited classes should override it, e.g. as in TWebSocketServerRest
@@ -1196,20 +1196,22 @@ implementation
 { THttpServerRequest }
 
 constructor THttpServerRequest.Create(aServer: THttpServerGeneric;
-  aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread);
+  aConnectionID: THttpServerConnectionID; aConnectionThread: TSynThread;
+  aConnectionFlags: THttpServerRequestFlags);
 begin
   inherited Create;
   fServer := aServer;
   fConnectionID := aConnectionID;
   fConnectionThread := aConnectionThread;
+  fConnectionFlags := aConnectionFlags;
 end;
 
 var
+  // global request counter if no THttpServer is defined
   GlobalRequestID: integer;
 
 procedure THttpServerRequest.Prepare(const aURL, aMethod, aInHeaders: RawUtf8;
-  const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8;
-  aUseSSL: boolean);
+  const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8);
 var
   id: PInteger;
 begin
@@ -1220,7 +1222,6 @@ begin
   fRequestID := InterLockedIncrement(id^);
   if fRequestID = maxInt - 2048 then // ensure no overflow (31-bit range)
     id^ := 0;
-  fUseSSL := aUseSSL;
   fURL := aURL;
   fMethod := aMethod;
   fRemoteIP := aRemoteIP;
@@ -1749,6 +1750,13 @@ begin
   until false;
 end;
 
+const
+  // accessed only in the HTTP context over Sockets, not WebSockets
+  // - currently, THttpServerSocket.TLS.Enabled is never set
+  // - Windows http.sys will directly set the flags
+  HTTPREMOTEFLAGS: array[{tls=}boolean] of THttpServerRequestFlags = (
+    [], [hsrHttps, hsrSecured]);
+
 procedure THttpServer.Process(ClientSock: THttpServerSocket;
   ConnectionID: THttpServerConnectionID; ConnectionThread: TSynThread);
 var
@@ -1863,12 +1871,12 @@ begin
     exit; // -> send will probably fail -> nothing to send back
   if Terminated then
     exit;
-  ctxt := THttpServerRequest.Create(self, ConnectionID, ConnectionThread);
+  ctxt := THttpServerRequest.Create(
+    self, ConnectionID, ConnectionThread, HTTPREMOTEFLAGS[ClientSock.TLS.Enabled]);
   try
     respsent := false;
     with ClientSock do
-      ctxt.Prepare(URL, Method, HeaderGetText(fRemoteIP), Content, ContentType,
-        '', ClientSock.fTLS);
+      ctxt.Prepare(URL, Method, HeaderGetText(fRemoteIP), Content, ContentType, '');
     try
       cod := DoBeforeRequest(ctxt);
       if cod > 0 then
@@ -2013,7 +2021,7 @@ begin
       begin
         allheaders := HeaderGetText(fRemoteIP);
         status := fServer.OnBeforeBody(fURL, fMethod, allheaders, ContentType,
-          fRemoteIP, ContentLength, false);
+          fRemoteIP, ContentLength, HTTPREMOTEFLAGS[TLS.Enabled]);
         {$ifdef SYNCRTDEBUGLOW}
         TSynLog.Add.Log(sllCustom2,
           'GetRequest sock=% OnBeforeBody=% Command=% Headers=%', [fSock, status,
@@ -2022,6 +2030,9 @@ begin
         if status <> HTTP_SUCCESS then
         begin
           StatusCodeToReason(status, reason);
+          if Assigned(OnLog) then
+            OnLog(sllTrace, 'GetRequest: rejected by OnBeforeBody=% %',
+              [status, reason], self);
           SockSend(['HTTP/1.0 ', status, ' ', reason, #13#10#13#10,
             reason, ' ', status]);
           SockSendFlush('');
@@ -2821,12 +2832,13 @@ begin
     req := pointer(reqbuf);
     logdata := pointer(fLogDataStorage);
     vervs := VERB_TEXT;
-    ctxt := THttpServerRequest.Create(self, 0, self);
+    ctxt := THttpServerRequest.Create(self, 0, self, []);
     // main loop reusing a single ctxt instance for this thread
     reqid := 0;
     ctxt.fServer := self;
     repeat
-      ctxt.fInContent := ''; // release input/output body buffers ASAP
+      // release input/output body buffers ASAP
+      ctxt.fInContent := '';
       ctxt.fOutContent := '';
       // reset authentication status & user between requests
       ctxt.fAuthenticationStatus := hraNone;
@@ -2854,7 +2866,8 @@ begin
             with req^.headers.KnownHeaders[reqAcceptEncoding] do
               FastSetString(inaccept, pRawValue, RawValueLength);
             compressset := ComputeContentEncoding(fCompress, pointer(inaccept));
-            ctxt.fUseSSL := req^.pSslInfo <> nil;
+            if req^.pSslInfo <> nil then
+              ctxt.ConnectionFlags := [hsrHttps, hsrSecured];
             ctxt.fInHeaders := RetrieveHeaders(req^, fRemoteIPHeaderUpper, remoteip);
             // compute remote connection ID
             L := length(fRemoteConnIDHeaderUpper);
@@ -2908,7 +2921,7 @@ begin
             if Assigned(OnBeforeBody) then
             begin
               err := OnBeforeBody(ctxt.fURL, ctxt.fMethod, ctxt.fInHeaders,
-                ctxt.fInContentType, remoteip, incontlen, ctxt.fUseSSL);
+                ctxt.fInContentType, remoteip, incontlen, ctxt.ConnectionFlags);
               if err <> HTTP_SUCCESS then
               begin
                 SendError(err, 'Rejected');

@@ -245,7 +245,7 @@ type
 
 { ************ TRestHttpClientSocket REST Client Class over Sockets }
 
-  /// HTTP/1.1 RESTful JSON mORMot Client class using SynCrtSock's Sockets
+  /// HTTP/1.1 RESTful JSON mORMot Client class using mormot.net.client socket
   // - will give the best performance on a local computer, but has been found
   // out to be slower over a network
   // - is not able to use secure HTTPS protocol
@@ -379,8 +379,8 @@ type
 {$ifdef USEWININET}
 
   /// HTTP/1.1 RESTful JSON mORMot Client class using WinINet API
-  // - this class is 15/20 times slower than TRestHttpClient using SynCrtSock
-  // on a local machine, but was found to be faster throughout local networks
+  // - this class is 15/20 times slower than TRestHttpClient using
+  // mormot.net.client socket on a local machine
   // - this class is able to connect via the secure HTTPS protocol
   // - it will retrieve by default the Internet Explorer proxy settings, and
   // display some error messages or authentification dialog on screen
@@ -393,8 +393,8 @@ type
   end;
 
   /// HTTP/1.1 RESTful JSON Client class using WinHttp API
-  // - has a common behavior as THttpClientSocket() but seems to be faster
-  // over a network and is able to retrieve the current proxy settings
+  // - has a common behavior as THttpClientSocket() but is sometimes faster over
+  // a real network and is able to retrieve the current proxy settings
   // (if available) and handle secure HTTPS connection - so it seems to be used
   // in your client programs: TRestHttpClient will therefore map to this class
   // - WinHttp does not share directly any proxy settings with Internet Explorer.

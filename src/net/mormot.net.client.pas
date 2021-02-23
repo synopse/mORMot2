@@ -116,6 +116,10 @@ type
   // mormot.net.websock unit)
   THttpClientSocketClass = class of THttpClientSocket;
 
+/// returns the HTTP User-Agent header value of a mORMot client including
+// the Instance class name
+function DefaultUserAgent(Instance: TObject): RawUtf8;
+
 /// create a THttpClientSocket, returning nil on error
 // - useful to easily catch socket error exception ENetSock
 function OpenHttp(const aServer, aPort: RawUtf8; aTLS: boolean = false;
@@ -132,7 +136,7 @@ function OpenHttp(const aUri: RawUtf8;
 // and the overloaded HttpGet() functions
 function OpenHttpGet(const server, port, url, inHeaders: RawUtf8;
   outHeaders: PRawUtf8 = nil; aLayer: TNetLayer = nlTCP;
-  aTLS: boolean = false): RawByteString; overload;
+  aTLS: boolean = false; outStatus: PInteger = nil): RawByteString; overload;
 
 
 
@@ -829,6 +833,7 @@ begin
     SYNOPSE_FRAMEWORK_VERSION + ' %)', [Instance], result);
 end;
 
+
 { THttpClientSocket }
 
 procedure THttpClientSocket.RequestSendHeader(const url, method: RawUtf8);
@@ -842,7 +847,7 @@ begin
     SockSend([method, ' /', url, ' HTTP/1.1'])
   else
     SockSend([method, ' ', url, ' HTTP/1.1']);
-  if Port = DEFAULT_PORT[fTLS] then
+  if Port = DEFAULT_PORT[TLS.Enabled] then
     SockSend(['Host: ', Server])
   else
     SockSend(['Host: ', Server, ':', Port]);
@@ -873,7 +878,8 @@ function THttpClientSocket.Request(const url, method: RawUtf8;
     begin
       Close; // close this connection
       try
-        OpenBind(fServer, fPort, {bind=}false, fTLS); // retry with a new socket
+        // retry with a new socket
+        OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
         HttpStateReset;
         result := Request(url, method, KeepAlive, header, Data, DataType, true);
       except
@@ -1028,15 +1034,20 @@ begin
 end;
 
 function OpenHttpGet(const server, port, url, inHeaders: RawUtf8;
-  outHeaders: PRawUtf8; aLayer: TNetLayer; aTLS: boolean): RawByteString;
-var Http: THttpClientSocket;
+  outHeaders: PRawUtf8; aLayer: TNetLayer; aTLS: boolean;
+  outStatus: PInteger): RawByteString;
+var
+  Http: THttpClientSocket;
+  status: integer;
 begin
   result := '';
   Http := OpenHttp(server, port, aTLS, aLayer);
   if Http <> nil then
   try
-    if Http.Get(url, 0, inHeaders) in
-         [HTTP_SUCCESS..HTTP_PARTIALCONTENT] then
+    status := Http.Get(url, 0, inHeaders);
+    if outStatus <> nil then
+      outStatus^ := status;
+    if status in [HTTP_SUCCESS..HTTP_PARTIALCONTENT] then
     begin
       result := Http.Content;
       if outHeaders <> nil then
@@ -2268,16 +2279,19 @@ begin
       result := TWinHttp.Get(
         aUri, inHeaders, {weakCA=}true, outHeaders, outStatus)
       {$else}
-      {$ifdef USELIBCURL}
-      result := TCurlHttp.Get(
-        aUri, inHeaders, {weakCA=}true, outHeaders, outStatus)
-      {$else}
-      raise EHttpSocket.CreateFmt('https is not supported by HttpGet(%s)', [aUri])
+      {$ifdef USELIBCURL2}
+      if TCurlHttp.IsAvailable then
+        result := TCurlHttp.Get(
+          aUri, inHeaders, {weakCA=}true, outHeaders, outStatus)
+      else
       {$endif USELIBCURL}
+        // fallback to SChannel/OpenSSL if libcurl is not installed
+        result := OpenHttpGet(uri.Server, uri.Port, uri.Address,
+          inHeaders, outHeaders, uri.Layer, uri.Https, outStatus)
       {$endif USEWININET}
     else
-      result := OpenHttpGet(
-        uri.Server, uri.Port, uri.Address, inHeaders, outHeaders, uri.Layer)
+      result := OpenHttpGet(uri.Server, uri.Port, uri.Address,
+        inHeaders, outHeaders, uri.Layer, uri.Https, outStatus)
     else
       result := '';
   {$ifdef LINUX_RAWDEBUGVOIDHTTPGET}

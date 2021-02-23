@@ -215,10 +215,14 @@ end;
 
 function TWebSocketProcessClient.ComputeContext(
   out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract;
+var
+  ws: THttpClientWebSockets;
 begin
-  RequestProcess := (fSocket as THttpClientWebSockets).fOnCallbackRequestProcess;
+  ws := fSocket as THttpClientWebSockets;
+  RequestProcess := ws.fOnCallbackRequestProcess;
   if Assigned(RequestProcess) then
-    result := THttpServerRequest.Create(nil, 0, fOwnerThread)
+    result := THttpServerRequest.Create(nil, 0, fOwnerThread,
+      ws.fProcess.Protocol.ConnectionFlags)
   else
     result := nil;
 end;
@@ -325,10 +329,11 @@ begin
       result := HTTP_NOTIMPLEMENTED
     else
     begin
-      // send the REST request over WebSockets
-      Ctxt := THttpServerRequest.Create(nil, fProcess.fOwnerConnection, fProcess.fOwnerThread);
+      // send the REST request over WebSockets - both ends use NotifyCallback()
+      Ctxt := THttpServerRequest.Create(nil, fProcess.fOwnerConnection,
+        fProcess.fOwnerThread, fProcess.Protocol.ConnectionFlags);
       try
-        Ctxt.Prepare(url, method, header, Data, DataType, '', fTLS);
+        Ctxt.Prepare(url, method, header, Data, DataType, '');
         FindNameValue(header, 'SEC-WEBSOCKET-REST:', resthead);
         if resthead = 'NonBlocking' then
           block := wscNonBlockWithoutAnswer

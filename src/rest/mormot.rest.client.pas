@@ -2728,7 +2728,7 @@ begin
   hl := length(call.InHead);
   r := nil;
   rl := 0;
-  Call.LowLevelFlags := [llfSecured]; // direct library execution seems safe
+  Call.LowLevelConnectionFlags := [llfSecured]; // in-process execution
   Call.OutStatus := fRequest(
     pointer(Call.Url), pointer(Call.Method), pointer(call.InBody),
     length(Call.Url), length(Call.Method), length(call.InBody),
