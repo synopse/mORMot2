@@ -2655,19 +2655,17 @@ asm
         aesenc  xmm0, xmm0
         cmp     ecx, 16 // 1..16 bytes have no branch
         ja      @17up
-        je      @16
         movdqu  xmm1, dqword ptr [edx + ecx - 16] // no read after end of page
+        je      @16
         shl     ecx, 4          // (and heap has header so no read before EOP)
         movdqu  xmm2, dqword ptr [@shifts + ecx] // Delphi bug about .align 16
         pshufb  xmm1, xmm2
-@end1:  aesenc  xmm1, xmm0
+@16:    aesenc  xmm1, xmm0
         aesenc  xmm1, xmm1
         aesenc  xmm1, xmm1
         movdqa  xmm0, xmm1
         movd    eax, xmm0 // when jumped from _AesNiHash32
 @0:     ret
-@16:    movdqu  xmm1, dqword ptr [edx]
-        jmp     @end1
 @17up:  cmp     ecx, 32
         ja      @33up
         pxor    xmm1, dqword ptr [eax + 16] // 17..32 bytes

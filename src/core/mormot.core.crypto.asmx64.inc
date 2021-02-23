@@ -2808,7 +2808,7 @@ procedure AesNiEncryptCtrNist32(
         pop    rsi
         {$endif WIN64ABI}
       	ret
-        // optimized AES - CTR process
+        // optimized AES-CTR process
 @big:   lea    r11, [rsp]
         push   rbp
         sub    rsp, $80
@@ -3022,7 +3022,7 @@ procedure AesNiEncryptCtrNist32(
         aesenc xmm8, xmm0
         aesenc xmm9, xmm0
         movups xmm0, dqword ptr [rcx + $60] // 256-bit AES
-        // encrypt 8*128 - bit blocks from src into dest
+        // encrypt 8 * 128-bit blocks (128 bytes) from src into dest
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @edone: movdqu xmm11, dqword ptr [rdi + $10]
         pxor   xmm10, xmm0
@@ -3294,7 +3294,7 @@ procedure AesNiEncryptCtrCrc32(
         lea    rcx, [rcx].TAesCtrCrc.fAes
       	movups xmm3, dqword ptr [rdi]
         mov    r10d, 16
-        call   @crc
+        call   @crc // MAC plain block
       	mov    al, byte ptr [rcx].TAesContext.Rounds
       	movups xmm0, dqword ptr [rcx]
       	movups xmm1, dqword ptr [rcx + $10]
@@ -3316,7 +3316,7 @@ procedure AesNiEncryptCtrCrc32(
         lea    rbx, [rbx + TAesMac256.encrypted]
         mov    rdi, rsi
         mov    r10d, 16
-        call   @crc
+        call   @crc // MAC encrypted block
         jmp    @exit
         // inlined crcblocksse42() crc=rbx data=rdi bytes=r10
         {$ifdef FPC} align 8 {$else} .align 8 {$endif}
@@ -3338,14 +3338,14 @@ procedure AesNiEncryptCtrCrc32(
         mov    dword ptr [rbx + 8], r14d
         mov    dword ptr [rbx + 12], r15d
         ret
-        // optimized AES - CTR process
+        // optimized AES-CTR process
 @big:   lea    r11, [rsp]
         push   rbp
         sub    rsp, $80
         and    rsp, $fffffffffffffff0
         // precompute the next 8 counters on the stack
         movdqu xmm2, dqword ptr [rcx].TAesCtrCrc.fIV
-        mov    r8d, dword ptr [rcx + $c].TAesCtrCrc.fIV // get 32-bit counter
+        mov    r8d, dword ptr [rcx + 12].TAesCtrCrc.fIV // get 32-bit counter
         lea    rcx, [rcx].TAesCtrCrc.fAes
         movdqu xmm0, dqword ptr [rcx]
         pxor   xmm2, xmm0
@@ -3553,9 +3553,10 @@ procedure AesNiEncryptCtrCrc32(
         aesenc xmm8, xmm0
         aesenc xmm9, xmm0
         movups xmm0, dqword ptr [rcx + $60] // 256-bit AES
-        // encrypt 8*128 - bit blocks from src into dest
+        // encrypt + MAC 8 * 128-bit blocks (128 bytes) from src into dest
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@edone: mov    r12d, dword ptr [rbx]
+@edone: // MAC plain
+        mov    r12d, dword ptr [rbx]
         mov    r13d, dword ptr [rbx + 4]
         mov    r14d, dword ptr [rbx + 8]
         mov    r15d, dword ptr [rbx + 12]
@@ -3591,6 +3592,7 @@ procedure AesNiEncryptCtrCrc32(
         crc32  r13d, dword ptr [rdi + $74]
         crc32  r14d, dword ptr [rdi + $78]
         crc32  r15d, dword ptr [rdi + $7c]
+        // encrypt
         movdqu xmm11, dqword ptr [rdi + $10]
         pxor   xmm10, xmm0
         movdqu xmm12, dqword ptr [rdi + $20]
@@ -3648,6 +3650,7 @@ procedure AesNiEncryptCtrCrc32(
         movdqa xmm7, xmm0
         movups dqword ptr [rsi + $60], xmm8
         movups dqword ptr [rsi + $70], xmm9
+        // MAC encrypted
         mov    r12d, dword ptr [rbx].TAesMac256.encrypted
         mov    r13d, dword ptr [rbx + 4].TAesMac256.encrypted
         mov    r14d, dword ptr [rbx + 8].TAesMac256.encrypted
@@ -3698,7 +3701,7 @@ procedure AesNiEncryptCtrCrc32(
 @tail:  lea    rcx, [rcx + $10]
         mov    r10d, edx
         shl    r10d, 4
-        call   @crc
+        call   @crc // MAC plain
         cmp    rdx, $4
         jb     @loop3
         je     @loop4
@@ -3835,7 +3838,7 @@ procedure AesNiEncryptCtrCrc32(
         mov    rdi, rsi
         mov    r10d, edx
         shl    r10d, 4
-        call   @crc
+        call   @crc // MAC encrypted
         // restore stack
 @done:  mov    rbp, qword ptr [r11 - $8]
       	lea    rsp, [r11]
@@ -4901,7 +4904,7 @@ end;
 {$ifdef USEAESNIHASH}
 
 var
-  /// set to random at startup so hash collisions will be harder to engineer
+  /// filled with random at startup so collisions will be harder to engineer
   // - set by GetMemAligned() - mandatory on Delphi which doesn't align properly
   AESNIHASHKEYSCHED: pointer;
   AESNIHASHKEYSCHED_: RawByteString;
@@ -4951,7 +4954,7 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         ja      @17up
         je      @16
         pshufb  xmm2, dqword ptr [r11 + r10]
-@end1:  pxor    xmm2, xmm0
+@16:    pxor    xmm2, xmm0
         aesenc  xmm2, xmm2
         aesenc  xmm2, xmm2
         aesenc  xmm2, xmm2
@@ -4960,8 +4963,6 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         ret
 @0:     mov     eax, seedfromhash32 // _AesNiHash32 left seed in first param reg
         ret
-@16:    movdqu  xmm1, dqword ptr [data]
-        jmp     @end1
 @17up:  cmp     len, 32
         ja      @33up
         pxor    xmm1, dqword ptr [rax + 16] // 17..32 bytes

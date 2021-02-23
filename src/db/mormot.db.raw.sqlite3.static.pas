@@ -149,7 +149,7 @@ uses
 
 // ---------------- link raw .o .obj files
 
-{$ifdef FPC}  // FPC expects .o linking, and only one version including FTS
+{$ifdef FPC}  // FPC expects .o linking
 
   {$ifdef OSWINDOWS}
     {$ifdef CPU64}
@@ -302,7 +302,7 @@ end;
 {$endif}
 {$endif OSANDROID}
 
-{$else FPC}
+{$else FPC} // Delphi static linking has diverse expectations
 
   // Delphi has a diverse linking strategy, since $linklib doesn't exist :(
   {$ifdef OSWINDOWS}
@@ -455,7 +455,7 @@ begin
   result := mormot.core.base.StrLen(pointer(p));
 end;
 
-function strcmp(p1,p2: PAnsiChar): integer; cdecl; { always cdecl }
+function strcmp(p1, p2: PAnsiChar): integer; cdecl; { always cdecl }
   {$ifdef FPC}public name{$ifdef CPU64}'strcmp'{$else}'_strcmp'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
@@ -463,11 +463,11 @@ begin
   result := mormot.core.base.StrComp(p1, p2);
 end;
 
-function strcspn(str,reject: PAnsiChar): integer; cdecl;
+function strcspn(str, reject: PAnsiChar): integer; cdecl;
   {$ifdef FPC}public name{$ifdef CPU64}'strcspn'{$else}'_strcspn'{$endif};{$endif}
 begin
   // called e.g. during LIKE process
-  result := mormot.core.unicode.strcspn(str, reject); // use SSE4.2 if available
+  result := mormot.core.unicode.strcspn(str, reject);
 end;
 
 function strrchr(s: PAnsiChar; c: AnsiChar): PAnsiChar; cdecl;
@@ -484,13 +484,6 @@ begin
     end;
 end;
 
-{$ifdef FPC}
-function memcmp(p1, p2: pByte; Size: integer): integer; cdecl; { always cdecl }
-  public name{$ifdef CPU64}'memcmp'{$else}'_memcmp'{$endif};
-begin
-  result := CompareByte(p1, p2, Size); // use FPC RTL
-end;
-{$else}
 function memcmp(p1, p2: pByte; Size: integer): integer; cdecl; { always cdecl }
 begin
   // full pascal version of the standard C library function
@@ -522,7 +515,6 @@ begin
   else
     result := 0;
 end;
-{$endif FPC}
 
 function strncmp(p1, p2: PByte; Size: integer): integer; cdecl; { always cdecl }
   {$ifdef FPC}public name{$ifdef CPU64}'strncmp'{$else}'_strncmp'{$endif};{$endif}
@@ -547,7 +539,8 @@ type
   // this function type is defined for calling termDataCmp() in sqlite3.c
   qsort_compare_func = function(P1, P2: pointer): integer; cdecl; { always cdecl }
 
-procedure QuickSortPtr(base: PPointerArray; L, R: integer; comparF: qsort_compare_func);
+procedure QuickSortPtr(base: PPointerArray; L, R: integer;
+  comparF: qsort_compare_func);
 var
   I, J, P: integer;
   PP, C: PAnsiChar;
@@ -748,6 +741,7 @@ var
   s: TSynSigner;
   k: THash512Rec;
 begin
+  // userPassword may be TSynSignerParams JSON content
   s.Pbkdf2(userPassword, passwordLength, k, _CODEC_PBKDF2_SALT);
   s.AssignTo(k, aes, {encrypt=}true);
 end;
@@ -779,7 +773,7 @@ begin
      (len <= 0) or
      (integer(page) <= 0) then
     raise ESqlite3Exception.CreateUtf8(
-      'CodecAESProcess(page=%,len=%)', [page, len]);
+      'Unexpected CodecAESProcess(page=%,len=%)', [page, len]);
   iv.c0 := page xor 668265263; // prime-based initialization
   iv.c1 := page * 2654435761;
   iv.c2 := page * 2246822519;
@@ -823,7 +817,7 @@ begin
   else
     // whole page encryption if not the first one
     if ForceSQLite3AesCtr then
-      aes^.DoBlocksCtr(@iv.b, data, data, len)
+      aes^.DoBlocksCtr(@iv.b, data, data, len) // faster on x86_64 SSE4.1
     else
       aes^.DoBlocksOfb(@iv.b, data, data, len);
 end;
@@ -962,9 +956,8 @@ const
 
   procedure CreateSqlEncryptTableBytes(const PassWord: RawUtf8; Table: PByteArray);
   // very fast table (private key) computation from a given password
-  // - use a simple prime-based random generator, strong enough for common use
   // - execution speed and code size was the goal here: can be easily broken
-  // - SynCrypto proposes SHA-256 and AES-256 for more secure encryption
+  // - the new encryption scheme is both safer and more performant
   var
     i, j, k, L: integer;
   begin

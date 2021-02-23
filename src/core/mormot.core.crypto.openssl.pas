@@ -323,7 +323,8 @@ type
 // - returns 0 on error, or the result Signature size in bytes
 function OpenSslSign(const Algorithm: RawUtf8;
   Message, PrivateKey: pointer; MessageLen, PrivateKeyLen: integer;
-  out Signature: RawByteString; const PrivateKeyPassword: RawUtf8 = ''): cardinal;
+  out Signature: RawByteString; const PrivateKeyPassword: RawUtf8 = '';
+  const Engine: RawUtf8 = ''): cardinal;
 
 /// asymetric digital verification of some Message using a given PublicKey
 // - if Algorithm is '', EVP_sha256 will be used as message Digest
@@ -332,7 +333,8 @@ function OpenSslSign(const Algorithm: RawUtf8;
 // - returns false on error, or true if the Message has been authenticated
 function OpenSslVerify(const Algorithm, PublicKeyPassword: RawUtf8;
   Message, PublicKey, Signature: pointer;
-  MessageLen, PublicKeyLen, SignatureLen: integer): boolean;
+  MessageLen, PublicKeyLen, SignatureLen: integer;
+  const Engine: RawUtf8 = ''): boolean;
 
 /// generate a public/private pair of keys
 // - if EvpType is EVP_PKEY_DSA, EVP_PKEY_DH or EVP_PKEY_RSA or EVP_PKEY_RSA_PSS,
@@ -1008,7 +1010,7 @@ end;
 
 function OpenSslSign(const Algorithm: RawUtf8;
   Message, PrivateKey: pointer; MessageLen, PrivateKeyLen: integer;
-  out Signature: RawByteString; const PrivateKeyPassword: RawUtf8): cardinal;
+  out Signature: RawByteString; const PrivateKeyPassword, Engine: RawUtf8): cardinal;
 var
   md: PEVP_MD;
   priv: PBIO;
@@ -1057,7 +1059,7 @@ end;
 
 function OpenSslVerify(const Algorithm, PublicKeyPassword: RawUtf8;
   Message, PublicKey, Signature: pointer;
-  MessageLen, PublicKeyLen, SignatureLen: integer): boolean;
+  MessageLen, PublicKeyLen, SignatureLen: integer; const Engine: RawUtf8): boolean;
 var
   md: PEVP_MD;
   pub: PBIO;

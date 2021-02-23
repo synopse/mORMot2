@@ -5999,12 +5999,9 @@ var
   Q: PUtf8Char;
 begin
   Add(Quote);
-  if (TextMaxLen > 0) and
+  if (TextMaxLen > 5) and
      (TextLen > PtrUInt(TextMaxLen)) then
-    if TextLen > 5 then
-      TextLen := TextMaxLen - 5
-    else
-      TextLen := TextMaxLen
+    TextLen := TextMaxLen - 5
   else
     TextMaxLen := 0;
   inc(TextLen, PtrUInt(Text)); // PUtf8Char(TextLen)=TextEnd
@@ -6019,8 +6016,8 @@ begin
       end;
       inc(Q); // include first Quote
       AddNoJsonEscape(Text, Q - Text);
-      Add(Quote); // double Quote
       Text := Q;
+      Add(Quote); // double Quote
     until false;
     if TextMaxLen <> 0 then
       AddShorter('...');

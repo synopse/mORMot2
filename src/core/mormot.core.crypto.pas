@@ -3363,6 +3363,7 @@ procedure TAes.DoBlocksCtr(iv: PAesBlock; src, dst: pointer;
 begin
   {$ifdef USEAESNI64}
   if aesNiSse41 in TAesContext(Context).Flags then
+    // x86_64 AES-NI + SSE 4.1 asm with 8x interleave factor (128 bytes loop)
     AesNiEncryptCtrNist(src, dst, blockcount shl 4, @Context, pointer(iv))
   else
   {$endif USEAESNI64}
@@ -5141,7 +5142,7 @@ begin
   if Count <> 0 then
     if Count and AesBlockMod = 0 then
       {$ifdef USEAESNI64}
-      // very fast x86_64 AES-NI asm with 8x interleave factor
+      // x86_64 AES-NI + SSE 4.1 asm with 8x interleave factor (128 bytes loop)
       if aesNiSse41 in TAesContext(fAes).Flags then
         AesNiEncryptCtrNist(BufIn, BufOut, Count, @fAes, @fIV)
       else
@@ -5327,7 +5328,7 @@ begin
       // GMAC done before decryption
       if fStarted = stDec then
         GcmAvxAuth(@fGcm.gf_t4k, BufIn, onepass, @fGcm.txt_ghv);
-      // AES-CTR with 32-bit counter
+      // AES-CTR using AES-NI and SSE4.1 over a 32-bit counter
       blocks := onepass shr AesBlockShift;
       ctr := bswap32(TAesContext(fGcm.aes).iv.c3) + blocks;
       GCM_IncCtr(TAesContext(fGcm.aes).iv.b); // should be done before
@@ -6215,9 +6216,10 @@ begin
     {$ifdef USEAESNI64}
     if aesNiSse41 in aes.Flags then
     begin
+      // x86_64 AES-NI + SSE 4.1 asm with 8x interleave factor (128 bytes loop)
       main := main shl AesBlockShift;
       FillCharFast(Buffer^, main, 0); // dst := 0 xor AES(iv) -> PRNG
-      AesNiEncryptCtrNist(Buffer, Buffer, main, @aes, @aes.iv); // 8x interleave
+      AesNiEncryptCtrNist(Buffer, Buffer, main, @aes, @aes.iv);
     end
     else
     {$endif USEAESNI64}
