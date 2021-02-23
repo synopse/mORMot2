@@ -2660,7 +2660,7 @@ end;
 function TEccSignatureCertified.FromBase64(const base64: RawUtf8): boolean;
 begin
   result := (self <> nil) and
-    Base64ToBin(pointer(base64), @fContent, length(base64), sizeof(fContent), false) and
+    Base64ToBin(pointer(base64), @fContent, length(base64), sizeof(fContent)) and
     EccCheck(fContent);
 end;
 
@@ -3855,7 +3855,7 @@ begin
     MsgOut := BinToBase64(@out1, SizeOf(out1));
     result := sprSuccess;
   end
-  else if Base64ToBin(Pointer(MsgIn), @in2, length(MsgIn), sizeof(in2), false) then
+  else if Base64ToBin(Pointer(MsgIn), @in2, length(MsgIn), sizeof(in2)) then
     result := ValidateHandshake(in2)
   else
     result := sprBadRequest;
@@ -3941,7 +3941,7 @@ var
   in1: TEcdheFrameClient;
   out1: TEcdheFrameServer;
 begin
-  if Base64ToBin(Pointer(MsgIn), @in1, length(MsgIn), sizeof(in1), false) then
+  if Base64ToBin(Pointer(MsgIn), @in1, length(MsgIn), sizeof(in1)) then
   begin
     result := ComputeHandshake(in1, out1);
     MsgOut := BinToBase64(@out1, SizeOf(out1));

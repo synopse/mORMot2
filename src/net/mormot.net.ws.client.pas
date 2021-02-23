@@ -433,7 +433,7 @@ begin
       result := 'Invalid HTTP Upgrade Accept Challenge';
       ComputeChallenge(bin1, digest1);
       bin2 := HeaderGetValue('SEC-WEBSOCKET-ACCEPT');
-      if not Base64ToBin(pointer(bin2), @digest2, length(bin2), sizeof(digest2), false) or
+      if not Base64ToBin(pointer(bin2), @digest2, length(bin2), sizeof(digest2)) or
          not IsEqual(digest1, digest2) then
         exit;
       if extout <> '' then

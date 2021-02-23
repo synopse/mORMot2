@@ -1078,7 +1078,7 @@ type
   /// flags which may be set by the caller to notify low-level context
   // - llfHttps will indicates that the communication was made over HTTPS
   // - llfSecured is set if the transmission is encrypted or in-process,
-  // using e.g. HTTPS/TLS or our proprietary AES/ECDHE algorithms
+  // using e.g. HTTPS/TLS or our proprietary AES/ECDHE WebSockets algorithms
   // - llfWebsockets communication was made using WebSockets
   // - match THttpServerRequestFlag from mormot.net.http.pas
   TRestUriParamsLowLevelFlag = (

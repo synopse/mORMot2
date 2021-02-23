@@ -2037,11 +2037,11 @@ begin
             not IsZero(@content.Signature, sizeof(content.Signature));
 end;
 
-function EccSign(const base64: RawUtf8; out content:
-  TEccSignatureCertifiedContent): boolean;
+function EccSign(const base64: RawUtf8;
+  out content: TEccSignatureCertifiedContent): boolean;
 begin
-  result := Base64ToBin(pointer(base64), @content,
-    length(base64), sizeof(content), false);
+  result := Base64ToBin(
+    pointer(base64), @content, length(base64), sizeof(content));
 end;
 
 const
@@ -2065,7 +2065,8 @@ begin
   result := P + ECC_BYTES - pos;
 end;
 
-function EccSignToDer(const sign: TEccSignature; out der: TEccSignatureDer): integer;
+function EccSignToDer(const sign: TEccSignature;
+  out der: TEccSignatureDer): integer;
 begin
   if _isZero(PVLI(@sign[0])^) or
      _isZero(PVLI(@sign[ECC_BYTES])^) then
