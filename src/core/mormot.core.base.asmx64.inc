@@ -1711,7 +1711,7 @@ function RefCntDecFree(var refcnt: TRefCnt): boolean;
         lock dec dword ptr [refcnt]  // TRefCnt=longint on Delphi Win64
 {$endif FPC}
         setbe   al
-end; // we don't check for ismultithread global since lock is cheap on new CPUs
+end; // don't check for ismultithread global since lock is cheaper on new CPUs
 
 {$ifndef FPC}
 

@@ -8023,8 +8023,8 @@ function PosExChar(Chr: AnsiChar; const Str: RawUtf8): PtrInt;
 begin
   if Str <> '' then
   {$ifdef FPC} // will use fast FPC SSE version
-    result := IndexByte(pointer(Str)^, PStrLen(PtrUInt(Str) - _STRLEN)^,
-      byte(Chr)) + 1
+    result := IndexByte(
+      pointer(Str)^, PStrLen(PtrUInt(Str) - _STRLEN)^, byte(Chr)) + 1
   else
   {$else}
     for result := 1 to PInteger(PtrInt(Str) - sizeof(integer))^ do

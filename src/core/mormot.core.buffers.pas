@@ -4076,7 +4076,7 @@ end;
 
 function TBufferWriter.FlushTo: RawByteString;
 begin
-  Flush;
+  InternalFlush;
   result := (fStream as TRawByteStringStream).DataString;
 end;
 

@@ -4690,16 +4690,9 @@ function FormatUtf8(const Format: RawUtf8; const Args, Params: array of const;
 var
   A, P: PtrInt;
   F, FDeb: PUtf8Char;
-  notString: boolean;
   isParam: AnsiChar;
   toquote: TTempUtf8;
   temp: TTextWriterStackBuffer;
-const
-  NOTTOQUOTE: array[boolean] of set of 0..31 = (
-    [vtBoolean, vtInteger, vtInt64 {$ifdef FPC} , vtQWord {$endif},
-     vtCurrency, vtExtended],
-    [vtBoolean, vtInteger, vtInt64 {$ifdef FPC} , vtQWord {$endif},
-     vtCurrency, vtExtended, vtVariant]);
 begin
   if (Format = '') or
      ((high(Args) < 0) and
@@ -4749,22 +4742,15 @@ begin
         else if (isParam = '?') and
                 (P <= high(Params)) then
         begin
-          // handle ? substitution
-          notString := Params[P].VType in NOTTOQUOTE[JsonFormat];
+          // handle ? substitution as JSON or SQL
           if JsonFormat then
-            if notString then
-              Add(Params[P], twJsonEscape) // twJsonEscape needed for variant
-            else
-            begin
-              Add('"');
-              Add(Params[P], twJsonEscape);
-              Add('"');
-            end
+            AddJsonEscape(Params[P]) // does the JSON magic including "quotes"
           else
           begin
             Add(':', '('); // markup for SQL parameter binding
-            if notString then
-              Add(Params[P])
+            if Params[P].VType in [vtBoolean, vtInteger, vtInt64
+                {$ifdef FPC} , vtQWord {$endif}, vtCurrency, vtExtended] then
+              Add(Params[P]) // numbers or boolean
             else
             begin
               VarRecToTempUtf8(Params[P], toquote);
@@ -4779,7 +4765,7 @@ begin
         else
         begin
           // no more available Args or Params -> add all remaining text
-          AddNoJsonEscape(F, StrLen(F));
+          AddNoJsonEscape(F, length(Format) - (F - pointer(Format)));
           break;
         end;
       end;
@@ -6692,10 +6678,10 @@ begin
       vtInteger:
         Add(VInteger);
       vtBoolean:
-        if VBoolean then
+        if VBoolean then // normalize
           Add('1')
         else
-          Add('0'); // normalize
+          Add('0');
       vtChar:
         Add(@VChar, 1, Escape);
       vtExtended:

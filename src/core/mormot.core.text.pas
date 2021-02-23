@@ -6016,8 +6016,8 @@ begin
       end;
       inc(Q); // include first Quote
       AddNoJsonEscape(Text, Q - Text);
-      Text := Q;
       Add(Quote); // double Quote
+      Text := Q;  // continue
     until false;
     if TextMaxLen <> 0 then
       AddShorter('...');

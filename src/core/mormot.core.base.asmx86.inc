@@ -1848,7 +1848,7 @@ function RefCntDecFree(var refcnt: TRefCnt): boolean;
 asm
         lock dec dword ptr [refcnt]  // TRefCnt=longint on Delphi and FPC 32-bit
         setbe   al
-end; // we don't check for ismultithread global since lock is cheap on new CPUs
+        end; // don't check for ismultithread global since lock is cheaper on new CPUs
 
 function IsXmmYmmOSEnabled: boolean;
 {$ifdef FPC}nostackframe; assembler;{$endif}
