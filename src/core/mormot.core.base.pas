@@ -2585,13 +2585,12 @@ procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
 procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
 
 /// retrieve 128-bit of entropy, from system time and current execution state
-// - entropy is gathered using 4 crc32c 32-bit hashes, via crcblock(), and
-// 4 final xxHash32() 32-bit hashes
-// - calls RTL Now(), Random(), CreateGUID(), GetCurrentThreadID() and
-// current gsl_rng_taus2 Lecuyer state
-// - will also use RdRand32 and Rdtsc low-level sources, on Intel/AMD CPUs
+// - entropy is gathered using DefaultHasher128() - which may be AesNiHash128 -
+// over several sources like RTL Now(), Random(), CreateGUID(), current
+// gsl_rng_taus2 Lecuyer state, and RdRand32/Rdtsc low-level Intel opcodes
 // - execution is fast, but not good as unique seed for a cryptographic PRNG:
-// TAesPrng.GetEntropy will call it several times as one of the entropy sources
+// TAesPrng.GetEntropy will call it several times as one of its entropy sources,
+// in addition to system-retrieved randomness
 procedure XorEntropy(entropy: PBlock128);
 
 /// convert the endianness of a given unsigned 32-bit integer into BigEndian
@@ -2871,7 +2870,7 @@ procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
 procedure crcblockfast(crc128, data128: PBlock128);
 
 /// compute a 128-bit CRC of any binary buffers
-// - combine crcblocksfast() with 4 parallel crc32c() for 1..15 trailing bytes
+// - combine crcblocks() with 4 parallel crc32c() for 1..15 trailing bytes
 procedure crc32c128(hash: PHash128; buf: PAnsiChar; len: cardinal);
 
 var
@@ -8440,53 +8439,55 @@ var
 
 procedure XorEntropy(entropy: PBlock128);
 var
-  e, f: THash128Rec;
+  e: THash512Rec; // including some garbage bytes from stack
+  lec: ^TLecuyer;
+  {$ifdef OSWINDOWS}
+  guid: array[0..1] of TGUID;
+  {$endif OSWINDOWS}
 begin
-  e := _EntropyGlobal;
+  e.i0 := _EntropyGlobal.i0 xor Random(maxInt); // some randomness from RTL
+  e.i1 := _EntropyGlobal.i1 xor Random(maxInt);
+  e.i2 := _EntropyGlobal.i2 xor Random(maxInt);
+  e.i3 := _EntropyGlobal.i3 xor Random(maxInt);
+  lec := @_Lecuyer;
+  e.c[4] := e.c[4] xor lec^.rs1; // perfect forward security
+  e.c[5] := e.c[5] xor lec^.rs2;
+  e.c[6] := e.c[6] xor lec^.rs3;
+  e.c[7] := e.c[7] xor lec^.seedcount;
   // no mormot.core.os yet, so we can't use QueryPerformanceMicroSeconds()
+  unaligned(PDouble(@e.d4)^) := Now * 2123923447; // cross-platform time
   {$ifdef CPUINTEL}
-  e.Hi := e.Hi xor Rdtsc;
-  {$else}
-  e.Hi := e.Hi xor GetTickCount64; // FPC always defines this function
-  {$endif CPUINTEL}
-  crcblock(entropy, @e.b);       // includes on-stack undeterministic values
-  crcblock(entropy, @_Lecuyer); // perfect forward security
-  unaligned(PDouble(@e.L)^) := Now * 2123923447; // cross-platform time
-  // xor with some fast and simple sources of entropy
-  e.c2 := e.c2 xor e.c1 xor PtrUInt(entropy);
-  e.c3 := e.c3 xor e.c0 {$ifdef FPC} xor PtrUInt(GetCurrentThreadID) {$endif};
-  crcblock(entropy, @e.b);
-  {$ifdef CPUINTEL}
+  e.d2 := e.d2 xor Rdtsc;
   if cfRAND in CpuFeatures then
   begin
-    // won't hurt
-    f := e;
-    e.c0 := f.c3 xor RdRand32;
-    e.c1 := f.c2 xor RdRand32;
-    e.c2 := f.c1 xor RdRand32;
-    e.c3 := f.c0 xor RdRand32;
-    crcblock(entropy, @e.b);
+    e.c[8] := e.c[8] xor RdRand32;
+    e.c[9] := e.c[9] xor RdRand32;
+    e.c[10] := e.c[10] xor RdRand32;
+    e.c[11] := e.c[11] xor RdRand32;
   end;
-  e.Lo := e.Lo xor Rdtsc; // has changed in-between
+  DefaultHasher128(pointer(entropy), @CpuFeatures, SizeOf(CpuFeatures));
+  e.d3 := e.d3 xor Rdtsc; // has changed in-between
+  {$else}
+  e.d3 := e.d3 xor GetTickCount64; // FPC always defines this function
   {$endif CPUINTEL}
-  f := e;
-  e.i0 := f.i3 xor Random(maxInt); // some randomness from RTL
-  e.i1 := f.i2 xor Random(maxInt);
-  e.i2 := f.i1 xor Random(maxInt);
-  e.i3 := f.i0 xor Random(maxInt);
-  crcblock(entropy, @e.b);
+  e.d6 := e.d6 xor PtrUInt(entropy);
+  e.d7 := e.d7 xor PtrUInt(lec);
+  DefaultHasher128(pointer(entropy), @e, SizeOf(e)); // may be AesNiHash128()
   {$ifdef OSWINDOWS}
-  CreateGUID(PGuid(@e)^); // FPC uses Random() on non-Windows -> not needed
-  crcblock(entropy, @e.b);
+  CreateGUID(guid[0]); // FPC non Windows = Random -> not worth integrating
+  CreateGUID(guid[1]);
+  DefaultHasher128(pointer(entropy), @guid, SizeOf(guid));
   {$endif OSWINDOWS}
   // persist the current entropy state for the next call
   _EntropyGlobal.c := entropy^;
-  // final cross-wired xxHash32() round not to rely on crc32c hash only
-  e.c0 := e.c0 xor xxHash32(e.c3, @e, SizeOf(e));
-  e.c1 := e.c1 xor xxHash32(e.c2, @e, SizeOf(e));
-  e.c2 := e.c2 xor xxHash32(e.c1, @e, SizeOf(e));
-  e.c3 := e.c3 xor xxHash32(e.c0, @e, SizeOf(e));
-  crcblock(entropy, @e.b);
+  if @DefaultHasher128 = @crc32c128 then
+  begin
+    // final xxHash32() round not to rely on crc32c only
+    entropy[0] := entropy[0] xor xxHash32(e.c[8], @e, SizeOf(e));
+    entropy[1] := entropy[1] xor xxHash32(e.c[9], @e, SizeOf(e));
+    entropy[2] := entropy[2] xor xxHash32(e.c[10], @e, SizeOf(e));
+    entropy[3] := entropy[3] xor xxHash32(e.c[11], @e, SizeOf(e));
+  end;
 end;
 
 procedure TLecuyer.Seed(entropy: PByteArray; entropylen: PtrInt);
@@ -9900,17 +9901,19 @@ begin
   blocks := len shr 4;
   if blocks <> 0 then
   begin
-    crcblocksfast(pointer(hash), pointer(buf), blocks);
+    crcblocks(pointer(hash), pointer(buf), blocks);
     blocks := blocks shl 4;
     inc(buf, blocks);
     dec(len, blocks);
   end;
-  if len = 0 then
-    exit;
-  PHash128Rec(hash)^.c0 := crc32c(PHash128Rec(hash)^.c0, buf, len);
-  PHash128Rec(hash)^.c1 := crc32c(PHash128Rec(hash)^.c1, buf, len);
-  PHash128Rec(hash)^.c2 := crc32c(PHash128Rec(hash)^.c2, buf, len);
-  PHash128Rec(hash)^.c3 := crc32c(PHash128Rec(hash)^.c3, buf, len);
+  if len <> 0 then
+    with PHash128Rec(hash)^ do
+    begin
+      c0 := crc32c(c0, buf, len);
+      c1 := crc32c(c1, buf, len);
+      c2 := crc32c(c2, buf, len);
+      c3 := crc32c(c3, buf, len);
+    end;
 end;
 
 function crc16(Data: PAnsiChar; Len: integer): cardinal;

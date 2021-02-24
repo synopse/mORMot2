@@ -6026,13 +6026,16 @@ var
   data: THash512Rec;
   fromos: RawByteString;
   sha3: TSha3;
+  aes: TAes;
 
   procedure sha3update;
   begin
     QueryPerformanceMicroSeconds(data.d2); // set data.h1 low 64-bit
-    XorEntropy(@data.h2); // RdRand32+Rdtsc+Now+Random+CreateGUID
+    aes.Encrypt(data.h0);
+    XorEntropy(@data.h2); // DefaultHasher128(RdRand32+Rdtsc+Now+Random+CreateGUID)
     XorEntropy(@data.h3);
     QueryPerformanceMicroSeconds(data.d3); // set data.h1 high 64-bit
+    aes.Encrypt(data.h1);
     sha3.Update(@data, SizeOf(data));
   end;
 
@@ -6050,6 +6053,7 @@ begin
     // xor some explicit entropy - it won't hurt
     sha3.Init(SHAKE_256); // used in XOF mode for variable-length output
     mormot.core.base.FillRandom(@data, SizeOf(data) shr 2); // gsl_rng_taus2
+    aes.EncryptInit(data, 128);
     sha3update;
     sha3.Update(Executable.Host);
     sha3.Update(Executable.User);
@@ -9676,6 +9680,7 @@ begin
     InterningHasher := @_AesNiHash32;
     DefaultHasher64 := @_AesNiHash64;
     DefaultHasher128 := @_AesNiHash128;
+    Random32Seed; // re-seed main FillRandom() with AesNiHash128 as hasher
   end;
   {$endif USEAESNIHASH}
   assert(SizeOf(TMd5Buf) = SizeOf(TMd5Digest));
