@@ -29,6 +29,9 @@ unit mormot.core.crypto;
    - sha512-x64sse4, sha256-sse4, crc32c64: (c) Intel Corporation w/ OS licence
    Maybe with (deep) refactoring. Other routines are our own coding.
 
+   Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
+   to any restriction about the use of cryptographic software in your country.
+
 }
 
 interface

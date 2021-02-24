@@ -20,6 +20,8 @@ unit mormot.core.crypto.openssl;
          than OpenSSL for most algorithms, and only 20% slower for AES-GCM.
          For ECC, our mormot.core.ecc256r1 is noticeably slower than OpenSSL.
 
+   Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
+   to any restriction about the use of cryptographic software in your country.
 }
 
 interface

@@ -14,6 +14,9 @@ unit mormot.core.ecc256r1;
    If mormot.core.crypto.openssl.RegisterOpenSsl is called, use faster OpenSSL.
 
   *****************************************************************************
+
+   Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
+   to any restriction about the use of cryptographic software in your country.
 }
 
 interface

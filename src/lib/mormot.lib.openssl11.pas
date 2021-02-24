@@ -20,6 +20,8 @@ unit mormot.lib.openssl11;
 
   *****************************************************************************
 
+   Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
+   to any restriction about the use of cryptographic software in your country.
 }
 
 {.$define OPENSSLFULLAPI}
