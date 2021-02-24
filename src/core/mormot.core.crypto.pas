@@ -6026,9 +6026,9 @@ var
   data: THash512Rec;
   fromos: RawByteString;
   sha3: TSha3;
-  aes: TAes;
+  aes: TAes; // used for entropy obfuscation
 
-  procedure sha3update;
+  procedure sha3update; // keep incoming data.i0i1i2i3/d0d1/h0 content
   begin
     QueryPerformanceMicroSeconds(data.d2); // set data.h1 low 64-bit
     aes.Encrypt(data.h0);
@@ -6053,14 +6053,14 @@ begin
     // xor some explicit entropy - it won't hurt
     sha3.Init(SHAKE_256); // used in XOF mode for variable-length output
     mormot.core.base.FillRandom(@data, SizeOf(data) shr 2); // gsl_rng_taus2
-    aes.EncryptInit(data, 128);
+    aes.EncryptInit(data.h3, 128);
     sha3update;
     sha3.Update(Executable.Host);
     sha3.Update(Executable.User);
     sha3.Update(Executable.ProgramFullSpec);
     data.h0 := Executable.Hash.b;
     sha3update;
-    data.i0 := integer(HInstance); // override data.d0d1/h0
+    data.i0 := integer(HInstance);
     data.i1 := PtrInt(GetCurrentThreadId);
     data.i2 := PtrInt(MainThreadID);
     data.i3 := integer(UnixMSTimeUtcFast);

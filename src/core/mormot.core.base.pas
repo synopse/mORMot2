@@ -2531,6 +2531,7 @@ type
   // - cross-compiler and cross-platform efficient randomness generator, very
   // fast with a much better distribution than Delphi system's Random() function
   // - as used by Random32 overloaded functions - via a threadvar for thread safety
+  // - see https://www.gnu.org/software/gsl/doc/html/rng.html#c.gsl_rng_taus2
   // - L'Ecuyer's algorithm is also much faster (and safer) than RDRAND HW opcode
   // as reported by https://en.wikipedia.org/wiki/RdRand#Performance
   TLecuyer = object
@@ -2541,10 +2542,10 @@ type
     // - calls XorEntropy(), so RdRand32/Rdtsc opcodes on Intel/AMD CPUs
     procedure Seed(entropy: PByteArray; entropylen: PtrInt);
     /// compute the next 32-bit generated value
-    // - will automatically reseed after around 65,000 generated values
+    // - will automatically reseed after around 2^20 generated values, which is
+    // very conservative since this generator has a period of 2^88
     function Next: cardinal; overload;
     /// compute the next 32-bit generated value, in range [0..max-1]
-    // - will automatically reseed after around 65,000 generated values
     function Next(max: cardinal): cardinal; overload;
   end;
 
@@ -2567,8 +2568,8 @@ function Random32(max: cardinal): cardinal; overload;
 function Random64: QWord;
 
 /// seed the gsl_rng_taus2 Random32 generator
-// - by default, gsl_rng_taus2 generator is re-seeded every 256KB, much more
-// often than the Pierre L'Ecuyer's algorithm period of 2^88
+// - by default, gsl_rng_taus2 generator is re-seeded every 2^20 values, which
+// is very conservative against the Pierre L'Ecuyer's algorithm period of 2^88
 // - you can specify some additional entropy buffer; note that calling this
 // function with the same entropy again WON'T seed the generator with the same
 // sequence (as with RTL's RandomSeed function), but initiate a new one
@@ -8439,54 +8440,51 @@ var
 
 procedure XorEntropy(entropy: PBlock128);
 var
-  e: THash512Rec; // including some garbage bytes from stack
+  e: array[0..7] of THash128Rec; // including some garbage bytes from stack
   lec: ^TLecuyer;
-  {$ifdef OSWINDOWS}
-  guid: array[0..1] of TGUID;
-  {$endif OSWINDOWS}
 begin
-  e.i0 := _EntropyGlobal.i0 xor Random(maxInt); // some randomness from RTL
-  e.i1 := _EntropyGlobal.i1 xor Random(maxInt);
-  e.i2 := _EntropyGlobal.i2 xor Random(maxInt);
-  e.i3 := _EntropyGlobal.i3 xor Random(maxInt);
+  e[0].c0 := _EntropyGlobal.i0 xor Random(maxInt); // some randomness from RTL
+  e[0].c1 := _EntropyGlobal.i1 xor Random(maxInt);
+  e[0].c2 := _EntropyGlobal.i2 xor Random(maxInt);
+  e[0].c3 := _EntropyGlobal.i3 xor Random(maxInt);
   lec := @_Lecuyer;
-  e.c[4] := e.c[4] xor lec^.rs1; // perfect forward security
-  e.c[5] := e.c[5] xor lec^.rs2;
-  e.c[6] := e.c[6] xor lec^.rs3;
-  e.c[7] := e.c[7] xor lec^.seedcount;
+  e[1].c0 := e[1].c0 xor lec^.rs1; // perfect forward security
+  e[1].c1 := e[1].c1 xor lec^.rs2;
+  e[1].c2 := e[1].c2 xor lec^.rs3;
+  e[1].c3 := e[1].c3 xor lec^.seedcount;
+  e[2].c0 := e[2].c0 xor PtrUInt(lec); // a threadvar pointer is thread-specific
+  e[2].c1 := e[2].c1 xor PtrUInt(entropy);
   // no mormot.core.os yet, so we can't use QueryPerformanceMicroSeconds()
-  unaligned(PDouble(@e.d4)^) := Now * 2123923447; // cross-platform time
+  unaligned(PDouble(@e[3].Lo)^) := Now * 2123923447; // cross-platform time
   {$ifdef CPUINTEL}
-  e.d2 := e.d2 xor Rdtsc;
+  e[3].Hi := e[3].Hi xor Rdtsc;
   if cfRAND in CpuFeatures then
   begin
-    e.c[8] := e.c[8] xor RdRand32;
-    e.c[9] := e.c[9] xor RdRand32;
-    e.c[10] := e.c[10] xor RdRand32;
-    e.c[11] := e.c[11] xor RdRand32;
+    e[4].c0 := e[4].c0 xor RdRand32;
+    e[4].c1 := e[4].c1 xor RdRand32;
+    e[4].c2 := e[4].c2 xor RdRand32;
+    e[4].c3 := e[4].c3 xor RdRand32;
   end;
-  DefaultHasher128(pointer(entropy), @CpuFeatures, SizeOf(CpuFeatures));
-  e.d3 := e.d3 xor Rdtsc; // has changed in-between
+  e[5].Lo := e[5].Lo xor Rdtsc; // has changed in-between
   {$else}
-  e.d3 := e.d3 xor GetTickCount64; // FPC always defines this function
+  e[3].Hi := e[3].Hi xor GetTickCount64; // FPC always defines this function
   {$endif CPUINTEL}
-  e.d6 := e.d6 xor PtrUInt(entropy);
-  e.d7 := e.d7 xor PtrUInt(lec);
-  DefaultHasher128(pointer(entropy), @e, SizeOf(e)); // may be AesNiHash128()
   {$ifdef OSWINDOWS}
-  CreateGUID(guid[0]); // FPC non Windows = Random -> not worth integrating
-  CreateGUID(guid[1]);
-  DefaultHasher128(pointer(entropy), @guid, SizeOf(guid));
+  CreateGUID(TGuid(e[6])); // FPC non Windows = Random -> not worth integrating
+  CreateGUID(TGuid(e[7])); // CoCreateGuid() is fast enough on Windows (<1us)
+  {$else}
+  GetLocalTime(TSystemTime(e[6]));
   {$endif OSWINDOWS}
+  DefaultHasher128(pointer(entropy), @e, SizeOf(e)); // may be AesNiHash128()
   // persist the current entropy state for the next call
   _EntropyGlobal.c := entropy^;
   if @DefaultHasher128 = @crc32c128 then
   begin
     // final xxHash32() round not to rely on crc32c only
-    entropy[0] := entropy[0] xor xxHash32(e.c[8], @e, SizeOf(e));
-    entropy[1] := entropy[1] xor xxHash32(e.c[9], @e, SizeOf(e));
-    entropy[2] := entropy[2] xor xxHash32(e.c[10], @e, SizeOf(e));
-    entropy[3] := entropy[3] xor xxHash32(e.c[11], @e, SizeOf(e));
+    entropy[0] := entropy[0] xor xxHash32(e[0].c0, @e, SizeOf(e));
+    entropy[1] := entropy[1] xor xxHash32(e[0].c1, @e, SizeOf(e));
+    entropy[2] := entropy[2] xor xxHash32(e[0].c2, @e, SizeOf(e));
+    entropy[3] := entropy[3] xor xxHash32(e[0].c3, @e, SizeOf(e));
   end;
 end;
 
@@ -8516,8 +8514,8 @@ end;
 
 function TLecuyer.Next: cardinal;
 begin
-  if word(seedcount) = 0 then
-    Seed(nil, 0) // reseed at startup, and after 256KB of output
+  if (seedcount and $fffff) = 0 then
+    Seed(nil, 0) // seed at startup, and after 2^20 output values (4MB of data)
   else
     inc(seedcount);
   result := rs1;
