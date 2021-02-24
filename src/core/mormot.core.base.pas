@@ -1345,6 +1345,7 @@ procedure CopyAndSortInt64(Values: PInt64Array; ValuesCount: integer;
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
 // - return index of P^[result]=Value
 // - return -1 if Value was not found
+// - use branchless asm on x86_64
 function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt; overload;
 
 /// fast O(log(n)) binary search of an integer value in a sorted integer array
@@ -1354,12 +1355,14 @@ function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): 
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast O(log(n)) binary search of a 16-bit unsigned integer value in a sorted array
+// - use branchless asm on x86_64
 function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
 
 /// fast O(log(n)) binary search of a 64-bit signed integer value in a sorted array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
 // - return index of P^[result]=Value
 // - return -1 if Value was not found
+// - use branchless asm on x86_64
 function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt; overload;
 
 /// fast O(log(n)) binary search of a 64-bit unsigned integer value in a sorted array
@@ -2530,15 +2533,13 @@ type
   /// low-level object implementing a 32-bit Pierre L'Ecuyer software generator
   // - cross-compiler and cross-platform efficient randomness generator, very
   // fast with a much better distribution than Delphi system's Random() function
-  // - as used by Random32 overloaded functions - via a threadvar for thread safety
-  // - see https://www.gnu.org/software/gsl/doc/html/rng.html#c.gsl_rng_taus2
-  // - L'Ecuyer's algorithm is also much faster (and safer) than RDRAND HW opcode
-  // as reported by https://en.wikipedia.org/wiki/RdRand#Performance
+  // see https://www.gnu.org/software/gsl/doc/html/rng.html#c.gsl_rng_taus2
+  // - used by thread-safe Random32/FillRandom, using only 16 bytes per thread
   TLecuyer = object
   public
     rs1, rs2, rs3, seedcount: cardinal;
     /// force an immediate seed of the generator from current system state
-    // - should be executed before any call to the Next method
+    // - as executed by the Next method at thread startup, and after 2^20 values
     // - calls XorEntropy(), so RdRand32/Rdtsc opcodes on Intel/AMD CPUs
     procedure Seed(entropy: PByteArray; entropylen: PtrInt);
     /// compute the next 32-bit generated value
@@ -2555,17 +2556,26 @@ type
 // is used for seeding anyway)
 // - consider using TAesPrng.Main.Random32(), which offers cryptographic-level
 // randomness, but is twice slower (even with AES-NI)
-// - thread-safe function: each thread will maintain its own TLecuyer table
+// - thread-safe and non-blocking function: each thread will maintain its own
+// TLecuyer table (note that RTL's system.Random function is not thread-safe)
 function Random32: cardinal; overload;
 
 /// fast compute of bounded 32-bit random value, using the gsl_rng_taus2 generator
 // - calls internally the overloaded Random32 function
 // - consider using TAesPrng.Main.Random32(), which offers cryptographic-level
 // randomness, but is twice slower (even with AES-NI)
+// - thread-safe and non-blocking function using a per-thread TLecuyer engine
 function Random32(max: cardinal): cardinal; overload;
 
 /// fast compute of a 64-bit random value, using the gsl_rng_taus2 generator
+// - thread-safe function: each thread will maintain its own TLecuyer table
 function Random64: QWord;
+
+/// fill some memory buffer with random values from the gsl_rng_taus2 generator
+// - the destination buffer is expected to be allocated as 32-bit items
+// - see the more secure TAesPrng.Main.FillRandom() from mormot.core.crypto unit
+// - thread-safe and non-blocking function using a per-thread TLecuyer engine
+procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
 
 /// seed the gsl_rng_taus2 Random32 generator
 // - by default, gsl_rng_taus2 generator is re-seeded every 2^20 values, which
@@ -2574,22 +2584,14 @@ function Random64: QWord;
 // function with the same entropy again WON'T seed the generator with the same
 // sequence (as with RTL's RandomSeed function), but initiate a new one
 // - calls XorEntropy(), so RdRand32/Rdtsc opcodes on Intel/AMD CPUs
-// - thread-specific function: each thread will maintain its own seed table
+// - thread-safe and non-blocking function using a per-thread TLecuyer engine
 procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
-
-/// fill some memory buffer with random values
-// - the destination buffer is expected to be allocated as 32-bit items
-// - use internally crc32c() with some rough entropy source, and Random32
-// gsl_rng_taus2 generator
-// - consider using instead the cryptographic secure TAesPrng.Main.FillRandom()
-// method from the mormot.core.crypto unit
-procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
 
 /// retrieve 128-bit of entropy, from system time and current execution state
 // - entropy is gathered using DefaultHasher128() - which may be AesNiHash128 -
 // over several sources like RTL Now(), Random(), CreateGUID(), current
 // gsl_rng_taus2 Lecuyer state, and RdRand32/Rdtsc low-level Intel opcodes
-// - execution is fast, but not good as unique seed for a cryptographic PRNG:
+// - execution is fast, but not enough as unique seed for a cryptographic PRNG:
 // TAesPrng.GetEntropy will call it several times as one of its entropy sources,
 // in addition to system-retrieved randomness
 procedure XorEntropy(entropy: PBlock128);
@@ -2711,8 +2713,7 @@ type
     // - also set len to the internal buffer size
     // - could be used e.g. for an API call, first trying with plain temp.Init
     // and using temp.buf and temp.len safely in the call, only calling
-    // temp.Init(expectedsize) if the API returned an error about insufficient
-    // buffer space
+    // temp.Init(expectedsize) if the API returns an insufficient buffer error
     function Init: integer; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize a new temporary buffer of a given number of random bytes
@@ -8447,7 +8448,7 @@ begin
   e[0].c1 := _EntropyGlobal.i1 xor Random(maxInt);
   e[0].c2 := _EntropyGlobal.i2 xor Random(maxInt);
   e[0].c3 := _EntropyGlobal.i3 xor Random(maxInt);
-  lec := @_Lecuyer;
+  lec := @_Lecuyer; // contains 0 at thread startup, but won't hurt
   e[1].c0 := e[1].c0 xor lec^.rs1; // perfect forward security
   e[1].c1 := e[1].c1 xor lec^.rs2;
   e[1].c2 := e[1].c2 xor lec^.rs3;

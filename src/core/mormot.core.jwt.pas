@@ -65,6 +65,7 @@ type
   // - jrcJwtID provides a unique identifier for the JWT, to prevent any replay;
   // TJwtAbstract.Compute will set an obfuscated TSynUniqueIdentifierGenerator
   // hexadecimal value stored as "jti" payload field
+  // - jrcData is set when TJwtContent.data has been filled
   TJwtClaim = (
     jrcIssuer,
     jrcSubject,
@@ -72,7 +73,8 @@ type
     jrcExpirationTime,
     jrcNotBefore,
     jrcIssuedAt,
-    jrcJwtID);
+    jrcJwtID,
+    jrcData);
 
   /// set of JWT Registered Claims, as in TJwtAbstract.Claims
   TJwtClaims = set of TJwtClaim;
@@ -111,7 +113,8 @@ type
     /// known/registered claims UTF-8 values, as stored in the JWT payload
     // - e.g. reg[jrcSubject]='1234567890' and reg[jrcIssuer]='' for
     // $ {"sub": "1234567890","name": "John Doe","admin": true}
-    reg: array[TJwtClaim] of RawUtf8;
+    // - jrcData claim is stored in the data TDocVariant field
+    reg: array[low(TJwtClaim)..jrcJwtID] of RawUtf8;
     /// custom/unregistered claim values, as stored in the JWT payload
     // - registered claims will be available from reg[], not in this field
     // - e.g. data.U['name']='John Doe' and data.B['admin']=true for
@@ -165,7 +168,7 @@ type
     fIDGen: TSynUniqueIdentifierGenerator;
     fCacheTimeoutSeconds: integer;
     fCacheResults: TJwtResults;
-    fCache: TSynDictionary;
+    fCache: TSynDictionary; // TRawUtf8DynArray/TJwtContentDynArray
     procedure SetCacheTimeoutSeconds(value: integer); virtual;
     function PayloadToJson(const DataNameValue: array of const;
       const Issuer, Subject, Audience: RawUtf8; NotBefore: TDateTime;
@@ -220,7 +223,7 @@ type
       ExpirationMinutes: integer = 0): RawUtf8;
     /// check a JWT value, and its signature
     // - will validate all expected Claims (minus ExcludedClaims optional
-    // parameter), and the associated signature
+    // parameter, jrcData being for JWT.data), and the associated signature
     // - verification state is returned in JWT.result (jwtValid for a valid JWT),
     // together with all parsed payload information
     // - supplied JWT is transmitted e.g. in HTTP header:
@@ -326,7 +329,7 @@ const
   // - see TJwtClaim enumeration and TJwtClaims set
   // - RFC standard expects those to be case-sensitive
   JWT_CLAIMS_TEXT: array[TJwtClaim] of RawUtf8 = (
-    'iss', 'sub', 'aud', 'exp', 'nbf', 'iat', 'jti');
+    'iss', 'sub', 'aud', 'exp', 'nbf', 'iat', 'jti', 'data');
 
 function ToText(res: TJwtResult): PShortString; overload;
 function ToCaption(res: TJwtResult): string; overload;
@@ -539,6 +542,31 @@ implementation
 
 { **************** Abstract JWT Parsing and Computation }
 
+var
+  _TJwtResult: array[TJwtResult] of PShortString;
+  _TJwtClaim: array[TJwtClaim] of PShortString;
+
+function ToText(res: TJwtResult): PShortString;
+begin
+  result := _TJwtResult[res];
+end;
+
+function ToCaption(res: TJwtResult): string;
+begin
+  GetCaptionFromTrimmed(_TJwtResult[res], result);
+end;
+
+function ToText(claim: TJwtClaim): PShortString;
+begin
+  result := _TJwtClaim[claim];
+end;
+
+function ToText(claims: TJwtClaims): ShortString;
+begin
+  GetSetNameShort(TypeInfo(TJwtClaims), claims, result);
+end;
+
+
 { TJwtAbstract }
 
 constructor TJwtAbstract.Create(const aAlgorithm: RawUtf8; aClaims: TJwtClaims;
@@ -620,7 +648,8 @@ function TJwtAbstract.PayloadToJson(const DataNameValue: array of const;
 
   procedure RaiseMissing(c: TJwtClaim);
   begin
-    raise EJwtException.CreateUtf8('%.PayloadToJson: missing %', [self, ToText(c)^]);
+    raise EJwtException.CreateUtf8('%.PayloadToJson: missing % (''%'')',
+      [self, _TJwtClaim[c]^, JWT_CLAIMS_TEXT[c]]);
   end;
 
 var
@@ -719,7 +748,7 @@ function TJwtAbstract.Verify(const Token: RawUtf8): TJwtResult;
 var
   jwt: TJwtContent;
 begin
-  Verify(Token, jwt);
+  Verify(Token, jwt, [jrcData]); // we won't use jwt.data for sure
   result := jwt.result;
 end;
 
@@ -779,7 +808,7 @@ begin
   byte(JWT.claims) := 0;
   word(JWT.audience) := 0;
   Finalize(JWT.reg);
-  JWT.data.InitFast(0, dvObject); // custom claims
+  JWT.data.InitFast; // custom claims
   JWT.id.Value := 0;
   toklen := length(Token);
   if (toklen = 0) or
@@ -849,7 +878,7 @@ begin
         if Nlen = 3 then
         begin
           c := PInteger(N)^;
-          for claim := low(claim) to high(claim) do
+          for claim := low(JWT.reg) to high(JWT.reg) do
             if PInteger(JWT_CLAIMS_TEXT[claim])^ = c then
             begin
               if V^ = #0 then
@@ -912,6 +941,9 @@ begin
           if Nlen = 0 then
             continue;
         end;
+        if jrcData in excluded then
+          continue; // caller didn't want to fill JWT.data
+        include(JWT.claims, jrcData);
         GetVariantFromJson(V, wasString, value, @JSON_OPTIONS[true],
           joDoubleInData in fOptions, VLen);
         if JWT.data.Count = 0 then
@@ -933,7 +965,7 @@ end;
 function TJwtAbstract.VerifyAuthorizationHeader(
   const HttpAuthorizationHeader: RawUtf8; out JWT: TJwtContent): boolean;
 begin
-  if (cardinal(length(HttpAuthorizationHeader) - 10) > 4096) or
+  if (cardinal(length(HttpAuthorizationHeader) - 10) > JWT_MAXSIZE) or
      not IdemPChar(pointer(HttpAuthorizationHeader), 'BEARER ') then
     JWT.result := jwtWrongFormat
   else
@@ -1058,31 +1090,6 @@ end;
 function TJwtNone.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
 begin
   result := '';
-end;
-
-
-var
-  _TJwtResult: array[TJwtResult] of PShortString;
-  _TJwtClaim: array[TJwtClaim] of PShortString;
-
-function ToText(res: TJwtResult): PShortString;
-begin
-  result := _TJwtResult[res];
-end;
-
-function ToCaption(res: TJwtResult): string;
-begin
-  GetCaptionFromTrimmed(_TJwtResult[res], result);
-end;
-
-function ToText(claim: TJwtClaim): PShortString;
-begin
-  result := _TJwtClaim[claim];
-end;
-
-function ToText(claims: TJwtClaims): ShortString;
-begin
-  GetSetNameShort(TypeInfo(TJwtClaims), claims, result);
 end;
 
 
