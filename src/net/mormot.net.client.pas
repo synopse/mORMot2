@@ -2389,8 +2389,7 @@ begin
   result := SendEmail(
     Server.Host, From, CsvDest, Subject, Text, Headers,
     Server.User, Server.Pass, Server.Port, TextCharSet,
-    (Server.Port = '465') or
-    (Server.Port = '587'));
+    aTLS or (Server.Port = '465') or (Server.Port = '587'));
 end;
 
 {$I-}
@@ -2430,7 +2429,7 @@ begin
   P := pointer(CsvDest);
   if P = nil then
     exit;
-  TCP := Open(Server, Port, aTLS);
+  TCP := SocketOpen(Server, Port, aTLS);
   if TCP <> nil then
   try
     TCP.CreateSockIn; // we use SockIn and SockOut here

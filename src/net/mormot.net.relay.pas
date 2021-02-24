@@ -405,6 +405,23 @@ end;
 
 { TRelayServerProtocol }
 
+constructor TRelayServerProtocol.Create(aOwner: TPublicRelay;
+  const aServerKey: RawUtf8);
+begin
+  fOwner := aOwner;
+  inherited Create('synopserelay', '');
+  if aServerKey <> '' then
+    SetEncryptKey({aServer=}true, aServerKey);
+end;
+
+function TRelayServerProtocol.Clone(
+  const aClientUri: RawUtf8): TWebSocketProtocol;
+begin
+  result := TRelayServerProtocol.Create(fOwner, '');
+  if fEncryption <> nil then
+    TRelayServerProtocol(result).fEncryption := fEncryption.Clone;
+end;
+
 procedure TRelayServerProtocol.ProcessIncomingFrame(Sender: TWebSocketProcess;
   var Frame: TWebSocketFrame; const info: RawUtf8);
 var
@@ -412,7 +429,7 @@ var
   connection: THttpServerConnectionID;
   sent: boolean;
   rest: TRelayFrameRestPayload;
-  client: TWebSocketServerResp;
+  client: TWebSocketProcessServer;
   i: PtrInt;
   p: ^THttpServerRequest;
 begin
@@ -491,9 +508,9 @@ begin
             else
             begin
               // redirect the frame to the final client
-              sent := client.WebSocketProcess.SendFrame(Frame);
+              sent := client.SendFrame(Frame);
               log.Log(LOG_DEBUGERROR[not sent], 'ProcessIncomingFrame % #% % %',
-                [ToText(Frame.opcode)^, connection, client.WebSocketProcess.RemoteIP,
+                [ToText(Frame.opcode)^, connection, client.RemoteIP,
                  KBNoSpace(length(Frame.payload))], self);
             end;
           end;
@@ -505,23 +522,6 @@ begin
   finally
     fOwner.Safe.UnLock;
   end;
-end;
-
-constructor TRelayServerProtocol.Create(aOwner: TPublicRelay;
-  const aServerKey: RawUtf8);
-begin
-  fOwner := aOwner;
-  inherited Create('synopserelay', '');
-  if aServerKey <> '' then
-    SetEncryptKey({aServer=}true, aServerKey);
-end;
-
-function TRelayServerProtocol.Clone(
-  const aClientUri: RawUtf8): TWebSocketProtocol;
-begin
-  result := TRelayServerProtocol.Create(fOwner, '');
-  if fEncryption <> nil then
-    TRelayServerProtocol(result).fEncryption := fEncryption.Clone;
 end;
 
 

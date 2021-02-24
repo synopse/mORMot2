@@ -523,6 +523,7 @@ type
     /// connect to aServer:aPort
     // - optionaly via TLS (using the SChannel API on Windows, or by including
     // mormot.lib.openssl11 unit to your project) - with custom input options
+    // - see also SocketOpen() for a wrapper catching any connection exception
     constructor Open(const aServer, aPort: RawUtf8; aLayer: TNetLayer = nlTCP;
       aTimeOut: cardinal = 10000; aTLS: boolean = false; aTLSContext: PNetTLSContext = nil);
     /// bind to an address
@@ -803,10 +804,10 @@ const
     '80', '443');
 
 
-/// create a TCrtSocket, returning nil on error
-// (useful to easily catch socket error exception ENetSock)
-function Open(const aServer, aPort: RawUtf8;
-  aTLS: boolean = false): TCrtSocket;
+/// create a TCrtSocket instance, returning nil on error
+// - useful to easily catch any exception, and provide a custom TNetTLSContext
+function SocketOpen(const aServer, aPort: RawUtf8;
+  aTLS: boolean = false; aTLSContext: PNetTLSContext = nil): TCrtSocket;
 
 
 implementation
@@ -2613,10 +2614,11 @@ begin
     Root := copy(address, 1, i - 1);
 end;
 
-function Open(const aServer, aPort: RawUtf8; aTLS: boolean): TCrtSocket;
+function SocketOpen(const aServer, aPort: RawUtf8; aTLS: boolean;
+  aTLSContext: PNetTLSContext): TCrtSocket;
 begin
   try
-    result := TCrtSocket.Open(aServer, aPort, nlTCP, 10000, aTLS);
+    result := TCrtSocket.Open(aServer, aPort, nlTCP, 10000, aTLS, aTLSContext);
   except
     result := nil;
   end;

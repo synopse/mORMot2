@@ -1441,7 +1441,7 @@ var
   endtix: Int64;
   i: PtrInt;
   resp: THttpServerResp;
-  callback: TNetSocket;
+  callback: TNetSocket; // touch-and-go to the server to release main Accept()
 begin
   Terminate; // set Terminated := true for THttpServerResp.Execute
   if fThreadPool <> nil then
@@ -1940,6 +1940,8 @@ begin
     fCompress := aServer.fCompress;
     fCompressAcceptEncoding := aServer.fCompressAcceptEncoding;
     fSocketLayer := aServer.Sock.SocketLayer;
+    TLS.Enabled := aServer.Sock.TLS.Enabled; // not implemented yet
+    OnLog := aServer.Sock.OnLog;
   end;
 end;
 

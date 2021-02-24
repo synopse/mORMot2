@@ -50,7 +50,8 @@ type
   // the connection will be upgraded to WebSockets
   // - then any incoming focText/focBinary events will trigger this callback
   // - eventually, a focConnectionClose will notify the connection ending
-  TOnWebSocketProtocolChatIncomingFrame = procedure(Sender: THttpServerResp;
+  TOnWebSocketProtocolChatIncomingFrame = procedure(
+    Sender: TWebCrtSocketProcess;
     const Frame: TWebSocketFrame) of object;
 
   /// simple chatting protocol, allowing to receive and send WebSocket frames
@@ -71,12 +72,14 @@ type
     /// on the server side, allows to send a message over the wire to a
     // specified client connection
     // - a temporary copy of the Frame content will be made for safety
-    function SendFrame(Sender: THttpServerResp; const Frame: TWebSocketFrame): boolean;
+    function SendFrame(Sender: TWebCrtSocketProcess;
+       const Frame: TWebSocketFrame): boolean;
     /// on the server side, allows to send a JSON message over the wire to a
     // specified client connection
     // - the supplied JSON content is supplied as "var", since it may be
     // modified during execution, e.g. XORed for frame masking
-    function SendFrameJson(Sender: THttpServerResp; var Json: RawUtf8): boolean;
+    function SendFrameJson(Sender: TWebCrtSocketProcess;
+       var Json: RawUtf8): boolean;
     /// you can assign an event to this property to be notified of incoming messages
     property OnIncomingFrame: TOnWebSocketProtocolChatIncomingFrame
       read fOnIncomingFrame write fOnIncomingFrame;
@@ -113,7 +116,7 @@ type
     /// initialize the context, associated to a HTTP/WebSockets server instance
     constructor Create(aServerSock: THttpServerSocket; aServer: THttpServer); override;
     /// push a notification to the client
-    function NotifyCallback(Ctxt: THttpServerRequest;
+    function _NotifyCallback(Ctxt: THttpServerRequest;
       aMode: TWebSocketProcessNotifyCallback): cardinal; virtual;
     /// the Sec-WebSocket-Protocol application protocol currently involved
     // - TWebSocketProtocolJson or TWebSocketProtocolBinary in the mORMot context
@@ -167,17 +170,13 @@ type
     procedure WebSocketBroadcast(const aFrame: TWebSocketFrame); overload;
     /// will send a given frame to clients matching the supplied connection IDs
     // - expect aFrame.opcode to be either focText or focBinary
+    // - WebSocketBroadcast(nil) will broadcast to all running websockets
     // - will call TWebSocketProcess.Outgoing.Push for asynchronous sending
     procedure WebSocketBroadcast(const aFrame: TWebSocketFrame;
       const aClientsConnectionID: THttpServerConnectionIDDynArray); overload;
-    /// give access to the underlying connection from its ID
-    // - also identifies an incoming THttpServerResp as a valid TWebSocketServerResp
+    /// give access to the underlying WebSockets connection from its ID
     function IsActiveWebSocket(
-      ConnectionID: THttpServerConnectionID): TWebSocketServerResp;
-    /// give access to the underlying connection from its connection thread
-    // - also identifies an incoming THttpServerResp as a valid TWebSocketServerResp
-    function IsActiveWebSocketThread(
-      ConnectionThread: TSynThread): TWebSocketServerResp;
+      ConnectionID: THttpServerConnectionID): TWebSocketProcessServer;
     /// the settings to be used for WebSockets process
     // - note that those parameters won't be propagated to existing connections
     // - defined as a pointer so that you may be able to change the values
@@ -276,8 +275,8 @@ procedure TWebSocketProtocolChat.ProcessIncomingFrame(Sender: TWebSocketProcess;
 begin
   if Assigned(OnInComingFrame) then
   try
-    if Sender.InheritsFrom(TWebSocketProcessServer) then
-      OnIncomingFrame(TWebSocketProcessServer(Sender).fServerResp, request)
+    if Sender.InheritsFrom(TWebCrtSocketProcess) then
+      OnIncomingFrame(TWebCrtSocketProcess(Sender), request)
     else
       OnIncomingFrame(nil, request);
   except
@@ -285,7 +284,7 @@ begin
   end;
 end;
 
-function TWebSocketProtocolChat.SendFrame(Sender: THttpServerResp;
+function TWebSocketProtocolChat.SendFrame(Sender: TWebCrtSocketProcess;
   const frame: TWebSocketFrame): boolean;
 var
   tmp: TWebSocketFrame; // SendFrame() may change frame content (e.g. mask)
@@ -293,18 +292,16 @@ begin
   result := false;
   if (self = nil) or
      (Sender = nil) or
-     Sender.Terminated or
-     not (frame.opcode in [focText, focBinary]) or
-     ((Sender.Server as TWebSocketServer).
-       IsActiveWebSocketThread(Sender) <> Sender) then
+     (Sender.State <> wpsRun) or
+     not (frame.opcode in [focText, focBinary])  then
     exit;
   tmp.opcode := frame.opcode;
   tmp.content := frame.content;
   SetString(tmp.payload, PAnsiChar(Pointer(frame.payload)), length(frame.payload));
-  result := (Sender as TWebSocketServerResp).fProcess.SendFrame(tmp)
+  result := Sender.SendFrame(tmp)
 end;
 
-function TWebSocketProtocolChat.SendFrameJson(Sender: THttpServerResp;
+function TWebSocketProtocolChat.SendFrameJson(Sender: TWebCrtSocketProcess;
   var Json: RawUtf8): boolean;
 var
   frame: TWebSocketFrame;
@@ -312,14 +309,12 @@ begin
   result := false;
   if (self = nil) or
      (Sender = nil) or
-     Sender.Terminated or
-     ((Sender.Server as TWebSocketServer).
-       IsActiveWebSocketThread(Sender) <> Sender) then
+     (Sender.State <> wpsRun) then
     exit;
   frame.opcode := focText;
   frame.content := [];
   frame.payload := Json;
-  result := (Sender as TWebSocketServerResp).fProcess.SendFrame(frame)
+  result := Sender.SendFrame(frame)
 end;
 
 
@@ -414,7 +409,7 @@ begin
     if not ClientSock.TrySndLow(pointer(header), length(header)) then
     begin
       Protocol.Free;
-      result := HTTP_WEBSOCKETCLOSED;
+      result := HTTP_BADREQUEST;
       exit;
     end;
     result := HTTP_SUCCESS; // connection upgraded: never back to HTTP/1.1
@@ -512,35 +507,6 @@ end;
 type
   PWebSocketServerResp = ^TWebSocketServerResp;
 
-function TWebSocketServer.IsActiveWebSocketThread(
-  ConnectionThread: TSynThread): TWebSocketServerResp;
-var
-  i: integer;
-  c: PWebSocketServerResp;
-begin
-  // no need to optimize with a hash table (not called often)
-  result := nil;
-  if Terminated or
-     (ConnectionThread = nil) or
-     not ConnectionThread.InheritsFrom(TWebSocketServerResp) then
-    exit;
-  fWebSocketConnections.Safe.Lock;
-  try
-    c := pointer(fWebSocketConnections.List);
-    for i := 1 to fWebSocketConnections.Count do
-      if c^ = ConnectionThread then
-      begin
-        if c^.fProcess.State = wpsRun then
-          result := c^;
-        exit;
-      end
-      else
-        inc(c);
-  finally
-    fWebSocketConnections.Safe.UnLock;
-  end;
-end;
-
 function FastFindConnection(c: PWebSocketServerResp; n: integer;
   id: THttpServerConnectionID): TWebSocketServerResp;
 begin
@@ -557,7 +523,9 @@ begin
 end;
 
 function TWebSocketServer.IsActiveWebSocket(
-  ConnectionID: THttpServerConnectionID): TWebSocketServerResp;
+  ConnectionID: THttpServerConnectionID): TWebSocketProcessServer;
+var
+  thread: TWebSocketServerResp;
 begin
   result := nil;
   if Terminated or
@@ -565,11 +533,15 @@ begin
     exit;
   fWebSocketConnections.Safe.Lock;
   try
-    result := FastFindConnection(pointer(fWebSocketConnections.List),
+    thread := FastFindConnection(pointer(fWebSocketConnections.List),
       fWebSocketConnections.Count, ConnectionID);
   finally
     fWebSocketConnections.Safe.UnLock;
   end;
+  if (thread <> nil) and
+     (thread.fProcess <> nil) and
+     (thread.fProcess.State = wpsRun) then
+    result := thread.fProcess;
 end;
 
 procedure TWebSocketServer.WebSocketBroadcast(const aFrame: TWebSocketFrame);
@@ -592,9 +564,9 @@ begin
   if ids > 0 then
   begin
     sorted.Init(pointer(aClientsConnectionID), ids * 8);
-    QuickSortInt64(sorted.buf, 0, ids - 1); // faster O(log(n)) binary search
+    QuickSortInt64(sorted.buf, 0, ids - 1); // branchless O(log(n)) asm on x86_64
   end;
-  dec(ids); // WebSocketBroadcast(nil) -> ids<0
+  dec(ids); // WebSocketBroadcast(nil) -> ids<0 -> broadcast all
   temp.opcode := aFrame.opcode;
   temp.content := aFrame.content;
   len := length(aFrame.payload);
@@ -630,21 +602,13 @@ begin
   inherited Create(aServerSock, aServer);
 end;
 
-function TWebSocketServerResp.NotifyCallback(Ctxt: THttpServerRequest;
+function TWebSocketServerResp._NotifyCallback(Ctxt: THttpServerRequest;
   aMode: TWebSocketProcessNotifyCallback): cardinal;
 begin
   if fProcess = nil then
     result := HTTP_NOTFOUND
   else
-  begin
     result := fProcess.NotifyCallback(Ctxt, aMode);
-    if result = HTTP_WEBSOCKETCLOSED then
-    begin
-      WebSocketLog.Add.Log(sllError, 'NotifyCallback on closed connection', self);
-      ServerSock.KeepAliveClient := false; // force close the connection
-      result := HTTP_NOTFOUND;
-    end;
-  end;
 end;
 
 function TWebSocketServerResp.WebSocketProtocol: TWebSocketProtocol;
@@ -695,26 +659,24 @@ end;
 function TWebSocketServerRest.Callback(Ctxt: THttpServerRequest;
   aNonBlocking: boolean): cardinal;
 var
-  connection: TWebSocketServerResp;
+  connection: TWebSocketProcessServer;
   mode: TWebSocketProcessNotifyCallback;
 begin
+  if aNonBlocking then // see TInterfacedObjectFakeServer.CallbackInvoke
+    mode := wscNonBlockWithoutAnswer
+  else
+    mode := wscBlockWithAnswer;
   if Ctxt = nil then
     connection := nil
   else
   begin
-    WebSocketLog.Add.Log(sllTrace, 'Callback(%) on ConnectionID=%',
-      [Ctxt.Url, Ctxt.ConnectionID], self);
+    WebSocketLog.Add.Log(sllTrace, 'Callback(%) % on ConnectionID=%',
+      [Ctxt.Url, ToText(mode)^, Ctxt.ConnectionID], self);
     connection := IsActiveWebSocket(Ctxt.ConnectionID);
   end;
   if connection <> nil then
-  begin
-    //  this request is a websocket, on a non broken connection
-    if aNonBlocking then // see TInterfacedObjectFakeServer.CallbackInvoke
-      mode := wscNonBlockWithoutAnswer
-    else
-      mode := wscBlockWithAnswer;
-    result := connection.NotifyCallback(Ctxt, mode);
-  end
+    // this request is a websocket, on a non broken connection
+    result := connection.NotifyCallback(Ctxt, mode)
   else
   begin
     WebSocketLog.Add.Log(sllError, 'Callback(%) on inactive ConnectionID=%',

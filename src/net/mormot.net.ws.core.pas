@@ -103,10 +103,6 @@ const
   FRAME_LEN_2BYTES = 126;
   FRAME_LEN_8BYTES = 127;
 
-const
-  /// tht HTTP status code returned when a WebSockets
-  HTTP_WEBSOCKETCLOSED = 0;
-
 
 /// used to return the text corresponding to a specified WebSockets frame type
 function ToText(opcode: TWebSocketFrameOpCode): PShortString; overload;
@@ -663,6 +659,7 @@ type
     /// the associated 'Remote-IP' HTTP header value
     // - returns '' if Protocol=nil or Protocol.RemoteLocalhost=true
     function RemoteIP: RawUtf8;
+      {$ifdef HASINLINE}inline;{$endif}
     /// direct access to the low-level incoming frame stack
     property Incoming: TWebSocketFrameList
       read fIncoming;
@@ -781,6 +778,7 @@ end;
 
 procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSha1Digest);
 const
+  // see https://tools.ietf.org/html/rfc6455
   SALT: string[36] = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 var
   SHA: TSha1;
@@ -2161,7 +2159,8 @@ begin
           HiResDelay(start);
           if fState in [wpsDestroy, wpsClose] then
           begin
-            result := HTTP_WEBSOCKETCLOSED;
+            WebSocketLog.Add.Log(sllError,
+              'NotifyCallback on closed connection', self);
             exit;
           end;
           if fIncoming.AnswerToIgnore = 0 then
@@ -2200,7 +2199,8 @@ begin
     while not fIncoming.Pop(fProtocol, head, answer) do
       if fState in [wpsDestroy, wpsClose] then
       begin
-        result := HTTP_WEBSOCKETCLOSED;
+        WebSocketLog.Add.Log(sllError,
+          'NotifyCallback on closed connection', self);
         exit;
       end
       else if GetTickCount64 > max then
