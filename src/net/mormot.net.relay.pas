@@ -274,9 +274,9 @@ type
     fServerConnectedToLocalHost: boolean;
     fStatCache: RawJson;
     fStatTix: integer;
-    function OnServerBeforeBody(
-      var aURL, aMethod, aInHeaders, aInContentType, aRemoteIP, aBearerToken: RawUtf8;
-      aContentLength: integer; aFlags: THttpServerRequestFlags): cardinal;
+    function OnServerBeforeBody(var aURL, aMethod, aInHeaders, aInContentType,
+      aRemoteIP, aBearerToken: RawUtf8; aContentLength: integer;
+      aFlags: THttpServerRequestFlags): cardinal;
     function OnServerRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     function OnClientsRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     function GetStats: RawJson;
@@ -948,7 +948,10 @@ begin
     result := HTTP_SUCCESS;
     exit;
   end;
-  res := fServerJWT.Verify(aBearerToken);
+  if aBearerToken = '' then
+    res := jwtNoToken
+  else
+    res := fServerJWT.Verify(aBearerToken);
   if res = jwtValid then
     if fServerConnected <> nil then
     begin
@@ -957,7 +960,7 @@ begin
       result := HTTP_NOTACCEPTABLE;
     end
     else
-      result := HTTP_SUCCESS
+      result := HTTP_SUCCESS // valid bearer -> continue the request
   else
   begin
     inc(fRejected);

@@ -2003,7 +2003,13 @@ begin
     check(CompareMem(pointer(RB), pointer(U), length(U)));
     Base64MagicToBlob(@J[4], K);
     RB := BlobToRawBlob(pointer(K));
-    check(length(RB) = length(U)); // RB=U is buggy under FPC :(
+    check(length(RB) = length(U));
+    check(CompareMem(pointer(RB), pointer(U), length(U)));
+    BlobToRawBlob(pointer(K), RB, length(K));
+    check(length(RB) = length(U));
+    check(CompareMem(pointer(RB), pointer(U), length(U)));
+    RB := BlobToRawBlob(K);
+    check(length(RB) = length(U));
     check(CompareMem(pointer(RB), pointer(U), length(U)));
 {    J := TRestServer.JsonEncodeResult([r]);
     Check(SameValue(GetExtended(pointer(JsonDecode(J)),err),r)); }

@@ -12,6 +12,7 @@ unit mormot.core.jwt;
     - JWT Implementation of ES256 Asymmetric Algorithm
 
    Uses optimized mormot.core.crypto.pas and mormot.core.ecc for its process.
+   See mormot.core.crypto.openssl.pas to support all other JWT algorithms.
 
   *****************************************************************************
 }
@@ -690,6 +691,8 @@ var
   fromcache: boolean;
 begin
   JWT.result := jwtNoToken;
+  if Token = '' then
+    exit;
   if (self = nil) or
      (fCache = nil) then
     fromcache := false
@@ -758,7 +761,7 @@ end;
 procedure TJwtAbstract.Parse(const Token: RawUtf8; var JWT: TJwtContent;
   out headpayload: RawUtf8; out signature: RawByteString; excluded: TJwtClaims);
 var
-  payloadend, j, toklen, c, cap, headerlen, len, a: integer;
+  payloadend, j, toklen, c, cap, headerlen, Nlen, VLen, a: integer;
   P: PUtf8Char;
   N, V: PUtf8Char;
   wasString: boolean;
@@ -825,7 +828,7 @@ begin
   try
     if not Base64UriToBin(tok + headerlen, payloadend - headerlen - 1, temp) then
       exit;
-    // 3. decode the payload into JWT.reg[]/JWT.claims (known) and JWT.data (custom)
+    // 3. decode payload into JWT.reg[]/JWT.claims (known) and JWT.data (custom)
     P := GotoNextNotSpace(temp.buf);
     if P^ <> '{' then
       exit;
@@ -836,14 +839,14 @@ begin
     requiredclaims := fClaims - excluded;
     if cap > 0 then
       repeat
-        N := GetJsonPropName(P);
+        N := GetJsonPropName(P, @Nlen);
         if N = nil then
           exit;
-        V := GetJsonFieldOrObjectOrArray(P, @wasString, @EndOfObject, true);
+        V := GetJsonFieldOrObjectOrArray(
+          P, @wasString, @EndOfObject, true, true, @Vlen);
         if V = nil then
           exit;
-        len := StrLen(N);
-        if len = 3 then
+        if Nlen = 3 then
         begin
           c := PInteger(N)^;
           for claim := low(claim) to high(claim) do
@@ -858,7 +861,7 @@ begin
                 JWT.result := jwtUnexpectedClaim;
                 exit;
               end;
-              FastSetString(JWT.reg[claim], V, StrLen(V));
+              FastSetString(JWT.reg[claim], V, VLen);
               if claim in requiredclaims then
                 case claim of
                   jrcJwtID:
@@ -902,21 +905,19 @@ begin
                         include(JWT.audience, a);
                     end;
                 end;
-              len := 0; // don't add to JWT.data
+              Nlen := 0; // don't add to JWT.data
               dec(cap);
               break;
             end;
-          if len = 0 then
+          if Nlen = 0 then
             continue;
         end;
         GetVariantFromJson(V, wasString, value, @JSON_OPTIONS[true],
-          joDoubleInData in fOptions);
+          joDoubleInData in fOptions, VLen);
         if JWT.data.Count = 0 then
           JWT.data.Capacity := cap;
-        JWT.data.AddValue(N, len, value)
+        JWT.data.AddValue(N, Nlen, value)
       until EndOfObject = '}';
-    if JWT.data.Count > 0 then
-      JWT.data.Capacity := JWT.data.Count;
     if requiredclaims - JWT.claims <> [] then
       JWT.result := jwtMissingClaim
     else

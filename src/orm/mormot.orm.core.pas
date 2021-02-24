@@ -433,7 +433,7 @@ function BlobToRawBlob(P: PUtf8Char): RawBlob; overload;
 /// fill a RawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
 // or Base-64 encoded content ('\uFFF0base64encodedbinary') or plain TEXT
-procedure BlobToRawBlob(P: PUtf8Char; var result: RawBlob); overload;
+procedure BlobToRawBlob(P: PUtf8Char; var result: RawBlob; Len: integer = 0); overload;
 
 /// fill a RawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
@@ -7993,15 +7993,16 @@ end;
 
 function BlobToRawBlob(P: PUtf8Char): RawBlob;
 begin
-  BlobToRawBlob(P, result);
+  BlobToRawBlob(P, result, 0);
 end;
 
-procedure BlobToRawBlob(P: PUtf8Char; var result: RawBlob);
+procedure BlobToRawBlob(P: PUtf8Char; var result: RawBlob; Len: integer);
 var
-  Len, LenHex: integer;
+  LenHex: integer;
 begin
   result := '';
-  Len := StrLen(P);
+  if Len = 0 then
+    Len := StrLen(P);
   if Len = 0 then
     exit;
   if Len >= 3 then
@@ -9501,16 +9502,26 @@ const
   procedure Complex;
   var
     tmp: TSynTempBuffer;
+    da: RawJson;
   begin
-    if (fieldType = oftBlobDynArray) and (typeInfo <> nil) and (Value <> nil) and
-       (Value^ <> '[') and Base64MagicCheckAndDecode(Value, tmp) then
-      Value := pointer(DynArrayBlobSaveJson(typeInfo, tmp.buf))
-    else if createValueTempCopy then
-      Value := tmp.Init(Value)
-    else
-      tmp.buf := nil;
-    GetVariantFromJson(Value, false, variant(result), @options);
-    tmp.Done;
+    tmp.buf := nil;
+    try
+      if (fieldType = oftBlobDynArray) and (typeInfo <> nil) and (Value <> nil) and
+         (Value^ <> '[') and Base64MagicCheckAndDecode(Value, tmp) then
+      begin
+        da := DynArrayBlobSaveJson(typeInfo, tmp.buf);
+        Value := pointer(da);
+        ValueLen := length(da);
+      end
+      else if createValueTempCopy then
+      begin
+        tmp.Init(Value, ValueLen);
+        Value := tmp.buf;
+      end;
+      GetVariantFromJson(Value, false, variant(result), @options, false, ValueLen);
+    finally
+      tmp.Done;
+    end;
   end;
 
 var
@@ -9534,9 +9545,8 @@ begin
     oftDateTime, oftDateTimeMS:
       Iso8601ToDateTimePUtf8CharVar(Value, 0, result.VDate);
     oftBoolean:
-      result.VBoolean := not ((Value = nil) or
-                         (PWord(Value)^ = ord('0')) or
-                         (PInteger(Value)^ = FALSE_LOW));
+      result.VBoolean := not ((Value = nil) or (PWord(Value)^ = ord('0')) or
+                              (PInteger(Value)^ = FALSE_LOW));
     oftEnumerate:
       result.VInteger := GetInteger(Value);
     oftInteger, oftID, oftTID, oftRecord, oftSet, oftRecordVersion,
@@ -9546,7 +9556,7 @@ begin
     oftAnsiText, oftUtf8Text:
       FastSetString(RawUtf8(result.VAny), Value, ValueLen);
     oftBlobCustom, oftBlob:
-      BlobToRawBlob(Value, RawBlob(result.VAny));
+      BlobToRawBlob(Value, RawBlob(result.VAny), ValueLen);
     oftVariant, oftNullable, oftBlobDynArray, oftObject, oftUtf8Custom:
       Complex;
   end;
@@ -11948,12 +11958,12 @@ begin
           TVarData(V).VDate := Iso8601ToDateTimePUtf8Char(Value, ValueLen);
         end
         else
-          GetVariantFromJson(tmp.buf, wasString, V, nil)
+          GetVariantFromJson(tmp.buf, wasString, V, nil, false, ValueLen)
       else
       begin
         if wasString and (GotoNextNotSpace(Value)^ in ['{', '[']) then
           wasString := false; // allow to create a TDocVariant stored as DB text
-        GetVariantFromJson(tmp.buf, wasString, V, @DocVariantOptions);
+        GetVariantFromJson(tmp.buf, wasString, V, @DocVariantOptions,false, ValueLen);
       end;
       fPropInfo.SetVariantProp(Instance, V);
     finally

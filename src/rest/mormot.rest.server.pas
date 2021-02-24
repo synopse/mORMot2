@@ -168,6 +168,7 @@ type
     fInput: TRawUtf8DynArray; // even items are parameter names, odd are values
     fInputPostContentType: RawUtf8;
     fInputCookiesRetrieved: boolean;
+    fInputAllowDouble: boolean;
     fInputCookies: array of record
       Name, Value: RawUtf8; // only computed if InCookie[] is used
     end;
@@ -501,6 +502,9 @@ type
     // but you should convert its value to AnsiString using Utf8ToString()
     function InputOrError(const ParamName: RawUtf8; out Value: variant;
       const ErrorMessageForMissingParameter: string): boolean;
+    /// if Input[] InputOrVoid[] InputOrError() variants could be double
+    property InputAllowDouble: boolean
+      read fInputAllowDouble write fInputAllowDouble;
     /// retrieve all input parameters from URI as a variant JSON object
     // - returns Unassigned if no parameter was defined
     // - returns a JSON object with input parameters encoded as
@@ -1660,7 +1664,7 @@ type
   // header unless rsoAuthenticationUriDisable is set (for security reasons)
   // - you can switch off root/timestamp/info URI via rsoTimestampInfoUriDisable
   // - Uri() header output will be sanitized for any EOL injection, unless
-  // rsoHttpHeaderCheckDisable is defined (to gain a few cycles?)
+  // rsoHttpHeaderCheckDisable is defined (to gain a few cycles)
   // - by default, TAuthUser.Data blob is retrieved from the database,
   // unless rsoGetUserRetrieveNoBlobData is defined
   // - rsoNoInternalState could be state to avoid transmitting the
@@ -2942,8 +2946,7 @@ begin
   if Log <> nil then
     Log.Log(sllUserAuth, 'AuthenticationFailed(%) for % (session=%)',
       [txt^, Call^.Url, Session], self);
-  // 401 Unauthorized response MUST include a WWW-Authenticate header,
-  // which is not what we used, so here we won't send 401 error code but 403
+  // 401 HTTP_UNAUTHORIZED must include a WWW-Authenticate header, so return 403
   Call.OutStatus := HTTP_FORBIDDEN;
   FormatUtf8('Authentication Failed: % (%)',
     [UnCamelCase(TrimLeftLowerCaseShort(txt)), ord(Reason)], CustomErrorMsg);
@@ -3293,7 +3296,8 @@ procedure TRestServerUriContext.InternalExecuteSoaByInterface;
         // {"method":"_free_", "params":[], "id":1234}
         if not (Service.InstanceCreation in [sicClientDriven..sicPerThread]) then
         begin
-          Error('_free_ is not compatible with %', [ToText(Service.InstanceCreation)^]);
+          Error('_free_ is not compatible with %',
+            [ToText(Service.InstanceCreation)^]);
           exit;
         end;
       ord(imContract):
@@ -4252,12 +4256,17 @@ var
   v: RawUtf8;
 begin
   GetInputByName(ParamName, '', v);
-  GetVariantFromJson(pointer(v), false, result{%H-});
+  GetVariantFromJson(pointer(v), false, result{%H-}, nil,
+    fInputAllowDouble, length(v));
 end;
 
 function TRestServerUriContext.GetInputOrVoid(const ParamName: RawUtf8): variant;
+var
+  v: RawUtf8;
 begin
-  GetVariantFromJson(pointer(GetInputUtf8OrVoid(ParamName)), false, result{%H-});
+  v := GetInputUtf8OrVoid(ParamName);
+  GetVariantFromJson(pointer(v), false, result{%H-}, nil,
+    fInputAllowDouble, length(v));
 end;
 
 function TRestServerUriContext.InputOrError(const ParamName: RawUtf8;
@@ -4267,7 +4276,8 @@ var
 begin
   result := InputUtf8OrError(ParamName, v, ErrorMessageForMissingParameter);
   if result then
-    GetVariantFromJson(pointer(v), false, Value);
+    GetVariantFromJson(pointer(v), false, Value, nil,
+      fInputAllowDouble, length(v));
 end;
 
 function TRestServerUriContext.GetInputAsTDocVariant(
@@ -4297,7 +4307,8 @@ begin
       end
       else
         forcestring := false;
-      GetVariantFromJson(pointer(fInput[ndx * 2 + 1]), forcestring, v, @Options);
+      GetVariantFromJson(pointer(fInput[ndx * 2 + 1]), forcestring, v,
+        @Options, fInputAllowDouble, length(fInput[ndx * 2 + 1]));
       res.AddValue(name, v);
     end;
   end
@@ -6865,7 +6876,7 @@ begin
   if Assigned(OnSessionCreate) then
     if OnSessionCreate(self, Session, Ctxt) then
     begin
-      // TRUE aborts session creation
+      // callback returning TRUE aborts session creation
       InternalLog('Session aborted by OnSessionCreate() callback ' +
         'for User.LogonName=% (connected from %/%) - clients=%, sessions=%',
         [User.LogonName, Session.RemoteIP, Ctxt.Call^.LowLevelConnectionID,
@@ -7350,7 +7361,7 @@ const
 var
   ctxt: TRestServerUriContext;
   msstart, msstop: Int64;
-  elapsed, len: cardinal;
+  elapsed: cardinal;
   outcomingfile: boolean;
   log: ISynLog;
 begin
@@ -7450,12 +7461,11 @@ begin
     begin
       outcomingfile := false;
       if Call.OutBody <> '' then
-      begin
-        len := length(Call.OutHead);
-        outcomingfile := (len >= 25) and
+        // detect 'Content-type: !STATICFILE' as first header
+        outcomingfile := (length(Call.OutHead) >= 25) and
                          (Call.OutHead[15] = '!') and
-          IdemPChar(pointer(Call.OutHead), STATICFILE_CONTENT_TYPE_HEADER_UPPPER);
-      end
+                         IdemPChar(pointer(Call.OutHead),
+                           STATICFILE_CONTENT_TYPE_HEADER_UPPPER)
       else
         // handle Call.OutBody=''
         if (Call.OutStatus = HTTP_SUCCESS) and
@@ -7484,8 +7494,10 @@ begin
     else
       // database state may have changed above
       Call.OutInternalState := TRestOrmServer(fOrmInstance).InternalState;
+    // set any outgoing cookie
     if ctxt.OutSetCookie <> '' then
       ctxt.OutHeadFromCookie;
+    // paranoid check of the supplied output headers
     if not (rsoHttpHeaderCheckDisable in fOptions) and
        IsInvalidHttpHeader(pointer(Call.OutHead), length(Call.OutHead)) then
       ctxt.Error('Unsafe HTTP header rejected [%]',

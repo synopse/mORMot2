@@ -165,7 +165,7 @@ type
     Upgrade: RawUtf8;
     /// same as FindNameValue(aInHeaders, HEADER_BEARER_UPPER, ...),
     // but retrieved during Request
-    // - is the raw Token, excluding trailing 'Authorization: Bearer ' chars
+    // - is the raw Token, excluding 'Authorization: Bearer ' trailing chars
     BearerToken: RawUtf8;
     /// same as HeaderGetValue('X-POWERED-BY'), but retrieved during Request
     XPoweredBy: RawUtf8;

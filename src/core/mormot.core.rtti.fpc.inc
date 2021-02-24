@@ -153,12 +153,12 @@ begin
         result := @PByteArray(result)^[ord(result^[0]) + 1];
         dec(n);
       until n = 0;
-    n := Value and 3; // last 1..3 moves
-    if n <> 0 then
+    Value := Value and 3; // last 1..3 moves
+    if Value <> 0 then
       repeat
         result := @PByteArray(result)^[ord(result^[0]) + 1];
-        dec(n);
-      until n = 0;
+        dec(Value);
+      until Value = 0;
   end
   else
     result := @NULCHAR;
