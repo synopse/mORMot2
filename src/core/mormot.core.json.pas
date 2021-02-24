@@ -141,18 +141,19 @@ procedure IgnoreComma(var P: PUtf8Char);
 function JsonPropNameValid(P: PUtf8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// decode a JSON field in-place from an UTF-8 encoded text buffer
+/// decode a JSON field value in-place from an UTF-8 encoded text buffer
 // - this function decodes in the P^ buffer memory itself (no memory allocation
 // or copy), for faster process - so take care that P^ is not shared
-// - PDest points to the next field to be decoded, or nil when end is reached
+// - works for both field names or values (e.g. '"FieldName":' or 'Value,')
 // - EndOfObject (if not nil) is set to the JSON value char (',' ':' or '}' e.g.)
 // - optional WasString is set to true if the JSON value was a JSON "string"
+// - returns a PUtf8Char to the decoded value, with its optional length in Len^
 // - '"strings"' are decoded as 'strings', with WasString=true, properly JSON
 // unescaped (e.g. any \u0123 pattern would be converted into UTF-8 content)
 // - null is decoded as nil, with WasString=false
 // - true/false boolean values are returned as 'true'/'false', with WasString=false
 // - any number value is returned as its ascii representation, with WasString=false
-// - works for both field names or values (e.g. '"FieldName":' or 'Value,')
+// - PDest points to the next field to be decoded, or nil on JSON parsing error
 function GetJsonField(P: PUtf8Char; out PDest: PUtf8Char;
   WasString: PBoolean = nil; EndOfObject: PUtf8Char = nil;
   Len: PInteger = nil): PUtf8Char;
@@ -2623,6 +2624,9 @@ begin
   if WasString <> nil then
     // not a string by default
     WasString^ := false;
+  if Len <> nil then
+    // ensure returns Len=0 on invalid input (PDest=nil)
+    Len^ := 0;
   PDest := nil; // PDest=nil indicates error or unexpected end (#0)
   result := nil;
   if P = nil then
@@ -3411,7 +3415,8 @@ begin
     result := GetJsonField(P, P, @wStr, EndOfObject, Len);
     if WasString <> nil then
       WasString^ := wStr;
-    if not wStr and NormalizeBoolean and
+    if not wStr and
+       NormalizeBoolean and
        (result <> nil) then
     begin
       if PInteger(result)^ = TRUE_LOW then
