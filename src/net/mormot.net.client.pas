@@ -934,13 +934,13 @@ begin
             result := HTTP_HTTPVERSIONNONSUPPORTED;
             exit;
           end;
-          while result = 100 do
+          while result = HTTP_CONTINUE do
           begin
             repeat
               // 100 CONTINUE is just to be ignored on client side
               SockRecvLn(Command);
               P := pointer(Command);
-            until IdemPChar(P, 'HTTP/1.');  // ignore up to next command
+            until IdemPChar(P, 'HTTP/1.'); // ignore up to next command
             result := GetCardinal(P + 9);
           end;
           if P[7] = '0' then
@@ -959,8 +959,11 @@ begin
         // retrieve all HTTP headers
         GetHeader({unfiltered=}false);
         // retrieve Body content (if any)
-        if (result <> HTTP_NOCONTENT) and
+        if (result >= HTTP_SUCCESS) and
+           (result <> HTTP_NOCONTENT) and
+           (result <> HTTP_NOTMODIFIED) and
            (IdemPCharArray(pointer(method), ['HEAD', 'OPTIONS']) < 0) then
+          // HEAD or status 100..109,204,304 -> no body (RFC 2616 section 4.3)
           GetBody;
       except
         on Exception do

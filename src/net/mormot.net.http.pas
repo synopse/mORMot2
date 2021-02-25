@@ -804,10 +804,11 @@ begin
     SetLength(Content, ContentLength); // not chuncked: direct read
     SockInRead(pointer(Content), ContentLength); // works with SockIn=nil or not
   end
-  else if ContentLength < 0 then // ContentLength=-1 if no Content-Length
+  else if (ContentLength < 0) and
+          IdemPChar(pointer(Command), 'HTTP/1.0 200') then
   begin
-    // no Content-Length nor Chunked header -> read until eof()
-    if SockIn <> nil then
+    // body = either Content-Length or Transfer-Encoding (HTTP/1.1 RFC2616 4.3)
+    if SockIn <> nil then // client loop for compatibility with old servers
       while not eof(SockIn^) do
       begin
         readln(SockIn^, Line);
