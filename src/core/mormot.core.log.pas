@@ -294,6 +294,10 @@ const
   LOG_TRACEWARNING: array[boolean] of TSynLogInfo = (
     sllTrace, sllWarning);
 
+  /// may be used to log as Trace or Error event, depending on an Error: boolean
+  LOG_TRACEERROR: array[boolean] of TSynLogInfo = (
+    sllTrace, sllError);
+
   /// may be used to log as Info or Warning event, depending on an Error: boolean
   LOG_INFOWARNING: array[boolean] of TSynLogInfo = (
     sllInfo, sllWarning);
