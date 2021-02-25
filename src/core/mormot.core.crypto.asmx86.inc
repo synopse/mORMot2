@@ -1525,26 +1525,26 @@ asm
         mov     ebx, self
         mov     esi, BufIn
         mov     edi, BufOut
-        movups  xmm7, dqword ptr [ebx].TAesCfbCrc.fIV
+        movups  xmm7, dqword ptr [ebx].TAesCfc.fIV
         {$ifdef FPC} align 16 {$endif}
-@s:     lea     eax, [ebx].TAesCfbCrc.fMac.encrypted
+@s:     lea     eax, [ebx].TAesCfc.fMac.encrypted
         mov     edx, esi
         call    crcblock // using SSE4.2 or fast tables
-        lea     eax, [ebx].TAesCfbCrc.fAes
+        lea     eax, [ebx].TAesCfc.fAes
         call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         movaps  xmm1, xmm0
         pxor    xmm0, xmm7
         movaps  xmm7, xmm1              // fIV := fIn
         movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
-        lea     eax, [ebx].TAesCfbCrc.fMac.plain
+        lea     eax, [ebx].TAesCfc.fMac.plain
         mov     edx, edi
         call    crcblock
         add     esi, 16
         add     edi, 16
         sub     dword ptr [Count], 16
         ja      @s
-        movups  dqword ptr [ebx].TAesCfbCrc.fIV, xmm7
+        movups  dqword ptr [ebx].TAesCfc.fIV, xmm7
 @z:     pop     edi
         pop     esi
         pop     ebx
@@ -1559,24 +1559,24 @@ asm
         mov     ebx, self
         mov     esi, BufIn
         mov     edi, BufOut
-        movups  xmm7, dqword ptr [ebx].TAesCfbCrc.fIV
+        movups  xmm7, dqword ptr [ebx].TAesCfc.fIV
         {$ifdef FPC} align 16 {$endif}
-@s:     lea     eax, [ebx].TAesCfbCrc.fMac.plain
+@s:     lea     eax, [ebx].TAesCfc.fMac.plain
         mov     edx, esi
         call    crcblock
-        lea     eax, [ebx].TAesCfbCrc.fAes
+        lea     eax, [ebx].TAesCfc.fAes
         call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         pxor    xmm7, xmm0
         movups  dqword ptr [edi], xmm7  // fOut := fIn xor fIV  +  fIV := fOut^
-        lea     eax, [ebx].TAesCfbCrc.fMac.encrypted
+        lea     eax, [ebx].TAesCfc.fMac.encrypted
         mov     edx, edi
         call    crcblock
         add     esi, 16
         add     edi, 16
         sub     dword ptr [Count], 16
         ja      @s
-        movups  dqword ptr [ebx].TAesCfbCrc.fIV, xmm7
+        movups  dqword ptr [ebx].TAesCfc.fIV, xmm7
         pop     edi
         pop     esi
         pop     ebx
@@ -1591,24 +1591,24 @@ asm
         mov     ebx, self
         mov     esi, BufIn
         mov     edi, BufOut
-        movups  xmm7, dqword ptr [ebx].TAesOfbCrc.fIV
+        movups  xmm7, dqword ptr [ebx].TAesOfc.fIV
         {$ifdef FPC} align 16 {$endif}
-@s:     lea     eax, [ebx].TAesOfbCrc.fMac.plain
+@s:     lea     eax, [ebx].TAesOfc.fMac.plain
         mov     edx, esi
         call    crcblock
-        lea     eax, [ebx].TAesOfbCrc.fAes
+        lea     eax, [ebx].TAesOfc.fAes
         call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         pxor    xmm0, xmm7
         movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
-        lea     eax, [ebx].TAesOfbCrc.fMac.encrypted
+        lea     eax, [ebx].TAesOfc.fMac.encrypted
         mov     edx, edi
         call    crcblock
         add     esi, 16
         add     edi, 16
         sub     dword ptr [Count], 16
         ja      @s
-        movups  dqword ptr [ebx].TAesOfbCrc.fIV, xmm7
+        movups  dqword ptr [ebx].TAesOfc.fIV, xmm7
         pop     edi
         pop     esi
         pop     ebx
@@ -1624,24 +1624,24 @@ asm
         mov     esi, BufIn
         mov     edi, BufOut
         {$ifdef FPC} align 16 {$endif}
-@s:     lea     eax, [ebx].TAesCtrCrc.fMac.plain
+@s:     lea     eax, [ebx].TAesCtc.fMac.plain
         mov     edx, esi
         call    crcblock // it is actually slower when inlining the crc32c
-        lea     eax, [ebx].TAesCtrCrc.fAes
-        movups  xmm7, dqword ptr [ebx].TAesCtrCrc.fIV
+        lea     eax, [ebx].TAesCtc.fAes
+        movups  xmm7, dqword ptr [ebx].TAesCtc.fIV
         call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,tmp)
         movups  xmm0, dqword ptr [esi]
-        inc     byte ptr [ebx + 15].TAesCtrCrc.fIV
+        inc     byte ptr [ebx + 15].TAesCtc.fIV
         jnz     @nov
         mov     edx, 15
 @cov:   dec     edx
-        inc     byte ptr [ebx + edx].TAesCtrCrc.fIV
+        inc     byte ptr [ebx + edx].TAesCtc.fIV
         jnz     @nov
         test    edx, edx
         jne     @cov
 @nov:   pxor    xmm0, xmm7
         movups  dqword ptr [edi], xmm0  // fOut := fIn xor tmp
-        lea     eax, [ebx].TAesCtrCrc.fMac.encrypted
+        lea     eax, [ebx].TAesCtc.fMac.encrypted
         mov     edx, edi
         call    crcblock
         add     esi, 16
@@ -1697,18 +1697,18 @@ asm
         shr     ecx, AesBlockShift
         jz      @z
         mov     ebx, eax
-        lea     eax, [eax].TAesCtrAny.fAes
+        lea     eax, [eax].TAesC64.fAes
         {$ifdef FPC} align 16 {$endif}
-@s:     movups  xmm7, dqword ptr [ebx].TAesCtrAny.fIV
-        mov     edx, dword ptr [ebx].TAesCtrAny.fCTROffset
+@s:     movups  xmm7, dqword ptr [ebx].TAesC64.fIV
+        mov     edx, dword ptr [ebx].TAesC64.fCTROffset
         call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,tmp)
         movups  xmm0, dqword ptr [esi]
-        inc     byte ptr [ebx + edx].TAesCtrAny.fIV
+        inc     byte ptr [ebx + edx].TAesC64.fIV
         jnz     @nov
 @cov:   dec     edx
-        inc     byte ptr [ebx + edx].TAesCtrAny.fIV
+        inc     byte ptr [ebx + edx].TAesC64.fIV
         jnz     @nov
-        cmp     edx, dword ptr [ebx].TAesCtrAny.fCTROffsetMin
+        cmp     edx, dword ptr [ebx].TAesC64.fCTROffsetMin
         jne     @cov
 @nov:   pxor    xmm0, xmm7
         movups  dqword ptr [edi], xmm0  // fOut := fIn xor tmp
@@ -1719,7 +1719,7 @@ asm
 @z:     pop     ecx
         and     ecx, 15
         jz      @0
-        movups  xmm7, dqword ptr [ebx].TAesCtrAny.fIV
+        movups  xmm7, dqword ptr [ebx].TAesC64.fIV
         call    AesNiTrailer
 @0:     pop     edi
         pop     esi

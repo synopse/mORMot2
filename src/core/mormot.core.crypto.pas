@@ -281,7 +281,7 @@ type
     procedure DoBlocksOfb(iv: PAesBlock; src, dst: pointer;
       blockcount: PtrUInt);
     /// performs AES-CTR NIST encryption and decryption on whole blocks
-    // - may be called instead of TAesCtrNist when only a raw TAes is available
+    // - may be called instead of TAesCtr when only a raw TAes is available
     // - as used e.g. by mormot.db.raw.sqlite3.static.pas for its DB encryption
     // - this method is thread-safe, and is optimized for AES-NI on x86_64
     procedure DoBlocksCtr(iv: PAesBlock; src, dst: pointer;
@@ -372,9 +372,11 @@ type
 
   /// the AES chaining modes implemented by this unit
   // - mEcb is unsafe and should not be used as such
-  // - mCtr64, mCfbCrc, mOfbCrc and mCtrCrc are non standard modes
+  // - mC64 is a non standard AES-CTR mode with 64-bit CRC - use mCtr for NIST
+  // - mCfc, mOfc and mCtc are non standard AEAD modes with 256-bit crc32c
+  // - matching algo names are e.g. 'aes-128-cfb', 'aes-256-ctc' or 'aes-256-gcm'
   TAesMode = (
-    mEcb, mCbc, mCfb, mOfb, mCtr64, mCtr, mCfbCrc, mOfbCrc, mCtrCrc, mGcm);
+    mEcb, mCbc, mCfb, mOfb, mC64, mCtr, mCfc, mOfc, mCtc, mGcm);
 
   /// class-reference type (metaclass) of an AES cypher/uncypher
   TAesAbstractClass = class of TAesAbstract;
@@ -382,7 +384,7 @@ type
   {$M+}
   /// handle AES cypher/uncypher with chaining
   // - use any of the inherited implementation, corresponding to the chaining
-  // mode required - TAesEcb, TAesCbc, TAesCfb, TAesOfb and TAesCtr* classes to
+  // mode required - TAesEcb, TAesCbc, TAesCfb, TAesOfb and TAesCtr classes to
   // handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7-like padding)
   TAesAbstract = class
   protected
@@ -531,7 +533,7 @@ type
       Associated: pointer = nil; AssociatedLen: integer = 0): boolean; virtual;
     /// returns AEAD (authenticated-encryption with associated-data) MAC
     // - returns a MAC hash (up to 256-bit), computed during the last Encryption
-    // - may be used e.g. for TAesGcm or our custom TAesOfbCrc/TAesCfbCr modes
+    // - may be used e.g. for TAesGcm or our custom TAesOfc/TAesCfbCr modes
     // - default implementation, for a non AEAD protocol, returns false
     function MacEncryptGetTag(out EncryptMac: THash256): boolean; virtual;
     /// validates an AEAD (authenticated-encryption with associated-data) MAC
@@ -557,8 +559,8 @@ type
     // - returns '' on any (MAC) issue during decryption (Encrypt=false) or if
     // this class does not support AEAD MAC
     // - as used e.g. by CryptDataForCurrentUser()
-    // - do not use this abstract class, but TAesGcm/TAesCfbCrc/TAesOfbCrc
-    // - TAesCfbCrc/TAesOfbCrc will store a header with its own CRC, so detection
+    // - do not use this abstract class, but TAesGcm/TAesCfc/TAesOfc
+    // - TAesCfc/TAesOfc will store a header with its own CRC, so detection
     // of most invalid formats (e.g. from fuzzing input) will occur before any
     // AES/MAC process - for TAesGcm, authentication requires decryption
     function MacAndCrypt(const Data: RawByteString; Encrypt: boolean): RawByteString;
@@ -605,7 +607,7 @@ type
 
     /// OpenSSL-like Cipher name encoding of this AES engine
     // - return e.g. 'aes-128-cfb' or 'aes-256-gcm'
-    // - our TAesCtrAny, TAesCfbCrc, TAesOfbCrc, TAesCtrCrc custom algorithms
+    // - our TAesC64, TAesCfc, TAesOfc, TAesCtc custom algorithms
     // use non-standard trailing 'c64', 'cfc', 'ofc' and 'ctc' mode names e.g.
     // as 'aes-256-cfc'
     function AlgoName: TShort16; overload;
@@ -635,7 +637,7 @@ type
 
   /// handle AES cypher/uncypher with chaining with out own optimized code
   // - use any of the inherited implementation, corresponding to the chaining
-  // mode required - TAesEcb, TAesCbc, TAesCfb, TAesOfb and TAesCtr* classes to
+  // mode required - TAesEcb, TAesCbc, TAesCfb, TAesOfb and TAesCtr classes to
   // handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7-like padding)
   // - this class will use AES-NI hardware instructions, if available
   // - those classes are re-entrant, i.e. that you can call the Encrypt*
@@ -751,12 +753,14 @@ type
   end;
 
   /// handle AES cypher/uncypher with non-standard 64-bit Counter mode (CTR)
-  // - use TAesCtrNist standard class instead - it is also much faster
+  // - WARNING: BREAKING CHANGE since mORMot 1.18 in which it was named TAESCTR:
+  // use TAesCtr NIST class instead - it is also much faster - or continue
+  // to use this TAesC64 class which behaves the same as the old TAESCTR
   // - the CTR will use a counter in bytes 7..0 - which is not standard, and
   // can be changed via the ComposeIV() methods
   // - this class will use AES-NI hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
-  TAesCtrAny = class(TAesAbstractEncryptOnly)
+  TAesC64 = class(TAesAbstractEncryptOnly)
   protected
     fCTROffset, fCTROffsetMin: PtrInt;
     procedure AfterCreate; override;
@@ -780,7 +784,8 @@ type
 
   /// handle AES cypher/uncypher with 128-bit Counter mode (CTR)
   // - this class matches the NIST behavior for the CTR, so is compatible
-  // with reference implementations like OpenSSL - see also TAesCtrNistOsl
+  // with reference implementations like OpenSSL - see also TAesCtrOsl
+  // - WARNING: BREAKING CHANGE mORMot 1.18 SynCrypto's TAESCTR is TAesC64
   // - on x86_64 we use a 8*128-bit interleaved optimized asm which is faster
   // than OpenSSL 1.1.1 in our benchmarks:
   // $  mormot aes-128-ctr in 1.99ms i.e. 1254390/s or 2.6 GB/s
@@ -795,7 +800,7 @@ type
   // $ mormot aes-256-ctr in 12.47ms i.e. 200368/s or 426.4 MB/s
   // $ openssl aes-128-ctr in 3.01ms i.e. 830288/s or 1.7 GB/s
   // $ openssl aes-256-ctr in 3.52ms i.e. 709622/s or 1.4 GB/s
-  TAesCtrNist = class(TAesCtrAny)
+  TAesCtr = class(TAesC64)
   protected
     procedure AfterCreate; override;
   public
@@ -881,7 +886,7 @@ type
       read fMac write fMac;
   end;
 
-  /// AEAD combination of AES with Cipher feedback (CFB) and 256-bit crc32c  MAC
+  /// AEAD combination of AES with Cipher feedback (CFB) and 256-bit crc32c MAC
   // - expect IV and MAC to be set before process, or IVAtBeginning=true
   // - this class will use AES-NI and CRC32C hardware instructions, if available
   // $  mormot aes-128-cfc in 7.26ms i.e. 344210/s or 732.5 MB/s
@@ -892,7 +897,7 @@ type
   // - on i386, numbers are similar:
   // $ mormot aes-128-cfc in 7.49ms i.e. 333422/s or 709.5 MB/s
   // $ mormot aes-256-cfc in 10ms i.e. 249775/s or 531.5 MB/s
-  TAesCfbCrc = class(TAesAbstractAead)
+  TAesCfc = class(TAesAbstractAead)
   protected
     procedure AfterCreate; override;
   public
@@ -921,7 +926,7 @@ type
   // - on i386, numbers are similar:
   // $ mormot aes-128-ofc in 7.49ms i.e. 333511/s or 709.7 MB/s
   // $ mormot aes-256-ofc in 9.93ms i.e. 251635/s or 535.5 MB/s
-  TAesOfbCrc = class(TAesSymCrc)
+  TAesOfc = class(TAesSymCrc)
   protected
     procedure AfterCreate; override;
   public
@@ -946,7 +951,7 @@ type
   // - on i386, numbers are lower, because they are not interleaved:
   // $ mormot aes-128-ctc in 9.76ms i.e. 256068/s or 544.9 MB/s
   // $ mormot aes-256-ctc in 12.14ms i.e. 205930/s or 438.2 MB/s
-  TAesCtrCrc = class(TAesSymCrc)
+  TAesCtc = class(TAesSymCrc)
   protected
     procedure AfterCreate; override;
   public
@@ -1153,12 +1158,12 @@ var
   /// the fastest AES implementation classes available on the system, per mode
   // - mormot.core.crypto.openssl may register its own classes, e.g. TAesGcmOsl
   TAesFast: array[TAesMode] of TAesAbstractClass = (
-    TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtrAny, TAesCtrNist,
-    TAesCfbCrc, TAesOfbCrc, TAesCtrCrc, TAesGcm);
+    TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesC64, TAesCtr,
+    TAesCfc, TAesOfc, TAesCtc, TAesGcm);
 
 /// OpenSSL-like Cipher name encoding of mormot.core.crypto AES engines
 // - return e.g. 'aes-128-cfb' or 'aes-256-gcm'
-// - our mCtr64, mCfbCrc, mOfbCrc, mCtrCrc custom algorithms use non-standard
+// - our mC64, mCfc, mOfc, mCtc custom algorithms use non-standard
 // trailing 'c64', 'cfc', 'ofc' and 'ctc' mode names e.g. as 'aes-256-cfc'
 function AesAlgoNameEncode(Mode: TAesMode; KeyBits: integer): RawUtf8; overload;
 
@@ -1186,9 +1191,15 @@ function AesTablesTest: boolean;
 {$ifndef PUREMORMOT2}
 
 type
-  /// since our 64-bit CTR is not standard, we hide this confusing TAesCtr class
-  // - use the much faster and standard TAesCtrNist instead
-  TAesCtr = TAesCtrAny;
+  TAesCfbCrc = TAesCfc;
+  TAesOfbCrc = TAesOfc;
+  TAesCtrCrc = TAesCtc;
+  /// BREAKING CHANGE since mORMOt 1.18: our 64-bit CTR was not standard, so
+  // SynCrypto.pas' TAESCTR class was wrongly named and TAesCtr in this unit
+  // refers to the standard NIST implementation (also much faster on x86_64)
+  // - so you need to renamed any TAESCTR class as TAesC64
+  TAesCtrAny = TAesC64;
+  TAesCtrNist = TAesCtr;
 
 
 var
@@ -4774,9 +4785,9 @@ begin
 end;
 
 
-{ TAesCfbCrc }
+{ TAesCfc }
 
-procedure TAesCfbCrc.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
+procedure TAesCfc.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
   i: cardinal;
   tmp: TAesBlock;
@@ -4828,13 +4839,13 @@ begin
   end;
 end;
 
-procedure TAesCfbCrc.AfterCreate;
+procedure TAesCfc.AfterCreate;
 begin
   inherited AfterCreate;
-  fAlgoMode := mCfbCrc;
+  fAlgoMode := mCfc;
 end;
 
-procedure TAesCfbCrc.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
+procedure TAesCfc.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
   i: cardinal;
 begin
@@ -4903,15 +4914,15 @@ begin
 end;
 
 
-{ TAesOfbCrc }
+{ TAesOfc }
 
-procedure TAesOfbCrc.AfterCreate;
+procedure TAesOfc.AfterCreate;
 begin
   inherited AfterCreate;
-  fAlgoMode := mOfbCrc;
+  fAlgoMode := mOfc;
 end;
 
-procedure TAesOfbCrc.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
+procedure TAesOfc.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
   i: cardinal;
 begin
@@ -4945,15 +4956,15 @@ begin
 end;
 
 
-{ TAesCtrCrc }
+{ TAesCtc }
 
-procedure TAesCtrCrc.AfterCreate;
+procedure TAesCtc.AfterCreate;
 begin
   inherited AfterCreate;
-  fAlgoMode := mCtrCrc;
+  fAlgoMode := mCtc;
 end;
 
-procedure TAesCtrCrc.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
+procedure TAesCtc.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
   i: cardinal;
   offs: PtrInt;
@@ -5048,16 +5059,16 @@ begin
 end;
 
 
-{ TAesCtrAny }
+{ TAesC64 }
 
-procedure TAesCtrAny.AfterCreate;
+procedure TAesC64.AfterCreate;
 begin
   EncryptInit;
   fCTROffset := 7; // counter is in the lower 64 bits, nonce in the upper 64 bits
-  fAlgoMode := mCtr64;
+  fAlgoMode := mC64;
 end;
 
-function TAesCtrAny.ComposeIV(Nonce, Counter: PAesBlock;
+function TAesC64.ComposeIV(Nonce, Counter: PAesBlock;
   NonceLen, CounterLen: integer; LSBCounter: boolean): boolean;
 begin
   result := (NonceLen + CounterLen = 16) and
@@ -5079,14 +5090,14 @@ begin
     end;
 end;
 
-function TAesCtrAny.ComposeIV(const Nonce, Counter: TByteDynArray;
+function TAesC64.ComposeIV(const Nonce, Counter: TByteDynArray;
   LSBCounter: boolean): boolean;
 begin
   result := ComposeIV(pointer(Nonce), pointer(Counter),
     length(Nonce), length(Counter), LSBCounter);
 end;
 
-procedure TAesCtrAny.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
+procedure TAesC64.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var
   i: cardinal;
   offs: PtrInt;
@@ -5125,22 +5136,22 @@ begin
   end;
 end;
 
-procedure TAesCtrAny.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
+procedure TAesC64.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 begin
   Encrypt(BufIn, BufOut, Count); // by definition
 end;
 
 
-{ TAesCtrNist }
+{ TAesCtr }
 
-procedure TAesCtrNist.AfterCreate;
+procedure TAesCtr.AfterCreate;
 begin
   EncryptInit;
   fCTROffset := 15; // counter covers 128-bit, as required by NIST specs
   fAlgoMode := mCtr;
 end;
 
-procedure TAesCtrNist.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
+procedure TAesCtr.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 begin
   if Count <> 0 then
     if Count and AesBlockMod = 0 then
@@ -6418,7 +6429,7 @@ begin
     hmac.Update(AppSecret);
     hmac.Update(__h);
     hmac.Done(secret);
-    result := TAesCfbCrc.MacEncrypt(Data, secret, Encrypt);
+    result := TAesCfc.MacEncrypt(Data, secret, Encrypt);
   finally
     FillZero(secret);
   end;

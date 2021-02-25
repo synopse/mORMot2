@@ -171,7 +171,7 @@ type
   // $  mormot aes-256-ctr in 2.64ms i.e. 945179/s or 1.9 GB/s
   // $  openssl aes-128-ctr in 2.23ms i.e. 1121076/s or 2.3 GB/s
   // $  openssl aes-256-ctr in 2.80ms i.e. 891901/s or 1.8 GB/s
-  TAesCtrNistOsl = class(TAesAbstractOsl)
+  TAesCtrOsl = class(TAesAbstractOsl)
   protected
     procedure AfterCreate; override;
   end;
@@ -742,9 +742,9 @@ begin
   inherited AfterCreate;
 end;
 
-{ TAesCtrNistOsl }
+{ TAesCtrOsl }
 
-procedure TAesCtrNistOsl.AfterCreate;
+procedure TAesCtrOsl.AfterCreate;
 begin
   fAlgoMode := mCtr;
   inherited AfterCreate;
@@ -1540,7 +1540,7 @@ begin
     // mormot.core.crypto x86_64 asm is faster than OpenSSL - but GCM
     {$ifndef CPUX64}
     // our AES-CTR x86_64 asm is faster than OpenSSL's
-    TAesFast[mCtr] := TAesCtrNistOsl;
+    TAesFast[mCtr] := TAesCtrOsl;
     {$endif CPUX64}
   {$else}
   // ARM/Aarch64 would rather use OpenSSL than our purepascal code
@@ -1548,7 +1548,7 @@ begin
   TAesFast[mCbc] := TAesCbcOsl;
   TAesFast[mCfb] := TAesCfbOsl;
   TAesFast[mOfb] := TAesOfbOsl;
-  TAesFast[mCtr] := TAesCtrNistOsl;
+  TAesFast[mCtr] := TAesCtrOsl;
   {$endif HASAESNI}
   // redirects raw mormot.core.ecc256r1 functions to the much faster OpenSSL
   @Ecc256r1MakeKey := @ecc_make_key_osl;

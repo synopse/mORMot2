@@ -866,20 +866,20 @@ type
     bSHA3_256, bSHA3_512,
     // encryption
     bRC4,
-    bAES128CFB, bAES128OFB, bAES128CTR,
-    bAES128CFBCRC, bAES128OFBCRC, bAES128CTRCRC, bAES128GCM,
-    bAES256CFB, bAES256OFB,
-    bAES256CTR, bAES256CFBCRC, bAES256OFBCRC, bAES256CTRCRC, bAES256GCM,
+    bAES128CFB, bAES128OFB, bAES128C64, bAES128CTR,
+    bAES128CFC, bAES128OFC, bAES128CTC, bAES128GCM,
+    bAES256CFB, bAES256OFB, bAES256C64, bAES256CTR,
+    bAES256CFC, bAES256OFC, bAES256CTC, bAES256GCM,
   {$ifdef USE_OPENSSL}
-    bAES128CFBOSL, bAES128OFBOSL, bAES128CTROSL, bAES128GCMOSL,
-    bAES256CFBOSL, bAES256OFBOSL, bAES256CTROSL, bAES256GCMOSL,
+    bAES128CFBO, bAES128OFBO, bAES128CTRO, bAES128GCMO,
+    bAES256CFBO, bAES256OFBO, bAES256CTRO, bAES256GCMO,
   {$endif USE_OPENSSL}
     bSHAKE128, bSHAKE256);
 
 procedure TTestCoreCrypto.Benchmark;
 const
-  bAESLAST = {$ifdef USE_OPENSSL} bAES256GCMOSL {$else} bAES256GCM {$endif};
-  bAESOPENSSL = [ {$ifdef USE_OPENSSL} bAES128CFBOSL .. bAES256GCMOSL {$endif} ];
+  bAESLAST = {$ifdef USE_OPENSSL} bAES256GCMO {$else} bAES256GCM {$endif};
+  bAESOPENSSL = [ {$ifdef USE_OPENSSL} bAES128CFBO .. bAES256GCMO {$endif} ];
   SIZ: array[0..4] of integer = (
     8,
     50,
@@ -888,15 +888,15 @@ const
     10000);
   COUNT = 500;
   AESCLASS: array[bAES128CFB.. bAESLAST] of TAesAbstractClass = (
-    TAesCfb, TAesOfb, TAesCtrNist, TAesCfbCrc, TAesOfbCrc, TAesCtrCrc, TAesGcm,
-    TAesCfb, TAesOfb, TAesCtrNist, TAesCfbCrc, TAesOfbCrc, TAesCtrCrc, TAesGcm
+    TAesCfb, TAesOfb, TAesC64, TAesCtr, TAesCfc, TAesOfc, TAesCtc, TAesGcm,
+    TAesCfb, TAesOfb, TAesC64, TAesCtr, TAesCfc, TAesOfc, TAesCtc, TAesGcm
   {$ifdef USE_OPENSSL} ,
-    TAesCfbOsl, TAesOfbOsl, TAesCtrNistOsl, TAesGcmOsl,
-    TAesCfbOsl, TAesOfbOsl, TAesCtrNistOsl, TAesGcmOsl
+    TAesCfbOsl, TAesOfbOsl, TAesCtrOsl, TAesGcmOsl,
+    TAesCfbOsl, TAesOfbOsl, TAesCtrOsl, TAesGcmOsl
   {$endif USE_OPENSSL});
   AESBITS: array[bAES128CFB..bAESLAST] of integer = (
-    128, 128, 128, 128, 128, 128, 128,
-    256, 256, 256, 256, 256, 256, 256
+    128, 128, 128, 128, 128, 128, 128, 128,
+    256, 256, 256, 256, 256, 256, 256, 256
   {$ifdef USE_OPENSSL} ,
     128, 128, 128, 128, 256, 256, 256, 256
   {$endif USE_OPENSSL});
@@ -991,17 +991,17 @@ begin
           bRC4:
             RC4.EncryptBuffer(pointer(data), pointer(encrypted), SIZ[s]);
           {$ifdef USE_OPENSSL}
-          bAES128CFBOSL, bAES128OFBOSL, bAES128CTROSL,
-          bAES256CFBOSL, bAES256OFBOSL, bAES256CTROSL,
+          bAES128CFBO, bAES128OFBO, bAES128CTRO,
+          bAES256CFBO, bAES256OFBO, bAES256CTRO,
           {$endif USE_OPENSSL}
-          bAES128CFB, bAES128OFB, bAES128CTR,
-          bAES256CFB, bAES256OFB, bAES256CTR:
+          bAES128CFB, bAES128OFB, bAES128C64, bAES128CTR,
+          bAES256CFB, bAES256OFB, bAES256C64, bAES256CTR:
             AES[b].EncryptPkcs7(data, {encrypt=}true);
           {$ifdef USE_OPENSSL}
-          bAES128GCMOSL, bAES256GCMOSL,
+          bAES128GCMO, bAES256GCMO,
           {$endif USE_OPENSSL}
-          bAES128CFBCRC, bAES128OFBCRC, bAES128CTRCRC, bAES128GCM,
-          bAES256CFBCRC, bAES256OFBCRC, bAES256CTRCRC, bAES256GCM:
+          bAES128CFC, bAES128OFC, bAES128CTC, bAES128GCM,
+          bAES256CFC, bAES256OFC, bAES256CTC, bAES256GCM:
             AES[b].MacAndCrypt(data, {encrypt=}true);
           bSHAKE128:
             SHAKE128.Cypher(pointer(data), pointer(encrypted), SIZ[s]);
@@ -1282,7 +1282,7 @@ end;
 const
   // reference vectors for all AES modes - matching OpenSSL implementation
   TEST_AES_REF: array[0..2, 0..6] of RawByteString = (
-  // 128-bit TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtrAny, TAesCtrNist, TAesGcm
+  // 128-bit TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesC64, TAesCtr, TAesGcm
    ('aS24Jm0RHPz26P_RHqX-pGktuCZtERz89uj_0R6l_qRpLbgmbREc_Pbo_9Eepf6kB7pVFdRAcIoVhoTQPytzTQ',
     'i1vnbHBw0VZZdm-nlhq7H3N-C3oMLGfooWnwjI0F_X3QgeV6s-Q8ujVIbgpX5Bwu8tOn1SoUHHP4VS0VK5cOyQ',
     '9rlcKw63fOzEbXUpoCUDLPqt7TuuSjLGHdlDMneP0nrY4LLFbrc3MrLV6JoXmQM6d4FvmlsQpImuk9LWaf8hXw',
@@ -1290,7 +1290,7 @@ const
     '9rlcKw63fOzEbXUpoCUDLDNLyx8M6u_tGBRLx4j5ctLUsP9-TW7sOuOoF4OD4lJAjZleMbc8Z_BdmyuNRuiUtg',
     '9rlcKw63fOzEbXUpoCUDLPODC-Nwu96PUeytu204bloDoO7QOmLe8SSHM2P0kB5NW3VPROV5QLaVhYfld4uZBA',
     'gUZBx61sQ4gV3RZ-qpZrkQDnlu88Jb4mGPWorawImGYK4ei1yy3oRPPYBTclVHoRVRwHnHMB1NnGGq3T0qbZmw'),
-  // 192-bit TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtrAny, TAesCtrNist, TAesGcm
+  // 192-bit TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesC64, TAesCtr, TAesGcm
    ('3S2QhC78T0eesG3hiqtA2N0tkIQu_E9HnrBt4YqrQNjdLZCELvxPR56wbeGKq0DYJob7gbbvgBaFdm_Bwed4RQ',
     'yua7dkKtXp0pM5n3VFoZrKhdt1ppikmmhFBKzflv32uY6cm4X3ZDZZnlAujYFBAWYR9fJXvhKmCcPljunWP2Zw',
     'Lp2JYG5d-d4TZagr2FMfqRxp9GCAHtCNcV5HmNoZpt34jqelBTDnTPagl9ZsIkrKRM_m0i3o0PWyK7hf6h9evg',
@@ -1298,7 +1298,7 @@ const
     'Lp2JYG5d-d4TZagr2FMfqbBYsYzcSw6Re_OY2Zthq1_MEtRiSeqYNI-Z2s1J_3Gwah3j29AUlU7fDl0w8_sjlA',
     'Lp2JYG5d-d4TZagr2FMfqc-3Wr2DBpXIPh2l-OjSsqlAcEVs8vH6tbc5_5G59H_wTCxihPcc8yz8f_fyGiDEaQ',
     'hBeEH6I4wWS55pvTLfjz5PxR1nq13tv920aVPw1sMbbraVjQ7Z7vD272rMCOrfMz4b9CFK7SUqh92pR6YIId8A'),
-  // 256-bit TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtrAny, TAesCtrNist, TAesGcm
+  // 256-bit TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesC64, TAesCtr, TAesGcm
    ('Kw50ybT0hl8MXw1IcBFm5isOdMm09IZfDF8NSHARZuYrDnTJtPSGXwxfDUhwEWbmn9aUUA6_ZwXpKRiFMlXRiw',
     'uSh1TguJYyEhud6DBzk8TZrD01xIULmMHX0gRFAGaf2vDinDfDprSxCm5Fd49HN0a6EoBrK1cCqanTWqyuyM8A',
     'PYynVHoDmi6SK5qdbNUp5IPwHRadBtT6rf97pdIP3MHk1q1rZHNzquVCOF5_oSMs0rqP7bJ6j6BvWpzTGcvEPQ',
@@ -1311,13 +1311,13 @@ const
     'EFF784967837F6BB0007276CA9C9F936',  // 192-bit
     '5F3411F163FF157C4A802DB5FF835823'); // 256-bit
   TEST_AES_MAC: array[7..9, 0..2] of RawUtf8 = (
-    ('a6353d1260ec249aa1da751d9e888978258194e4454a0d719b39152b39d7b7a9', // TAesCfbCrc
+    ('a6353d1260ec249aa1da751d9e888978258194e4454a0d719b39152b39d7b7a9', // TAesCfc
      '80f2ef4b22b48b4a0bcca7a9c509a2467b620569597d0791b9b56243fe03af1b',
      'c13dc3e510b02ecd5eec947dfd934fc256b308318dcbc16bc9aabf7b616fffb5'),
-    ('a6353d1260ec249aa1da751d9e8889785716e5bac7e28577164eee94cc2cdaeb', // TAesOfbCrc
+    ('a6353d1260ec249aa1da751d9e8889785716e5bac7e28577164eee94cc2cdaeb', // TAesOfc
      '80f2ef4b22b48b4a0bcca7a9c509a2462be402ff0ceb734b81feafb7bbb32d35',
      'c13dc3e510b02ecd5eec947dfd934fc261e76a48caa8808ed4a5979e30fa1fa5'),
-     ('a6353d1260ec249aa1da751d9e888978d591cb79c5f2e77e2e15bd507aa11b04', // TAesCtrCrc
+     ('a6353d1260ec249aa1da751d9e888978d591cb79c5f2e77e2e15bd507aa11b04', // TAesCtc
       '80f2ef4b22b48b4a0bcca7a9c509a246041058e5b7e63e90fdb865dc0d8dc216',
       'c13dc3e510b02ecd5eec947dfd934fc27a9bada0c582df6d441b67a8455a1711'));
 
@@ -1332,9 +1332,9 @@ begin
     {$endif USE_OPENSSL}
     dec(result, 10) // e.g. TAesEcbApi / TAesEcbOsl -> TAesEcb
   else if result = 9 then
-    result := 5 // TAesCtrCrc -> TAesCtrNist
+    result := 5 // TAesCtc -> TAesCtr
   else if result >= 7 then
-    dec(result, 5);  // e.g. TAesCfbCrc -> TAesCfb
+    dec(result, 5);  // e.g. TAesCfc -> TAesCfb
 end;
 
 procedure TTestCoreCrypto._AES;
@@ -1344,14 +1344,14 @@ const
      {$ifdef USE_OPENSSL} + 7 {$endif}
      {$ifdef USE_PROV_RSA_AES} + 2 {$endif}] of TAesAbstractClass = (
      // 0      1        2        3        4          5            6
-     TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesCtrAny, TAesCtrNist, TAesGcm,
+     TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesC64, TAesCtr, TAesGcm,
      // 7           8         9
-     TAesCfbCrc, TAesOfbCrc, TAesCtrCrc
+     TAesCfc, TAesOfc, TAesCtc
      {$ifdef USE_OPENSSL} ,
      // 10          11         12         13         14
      TAesEcbOsl, TAesCbcOsl, TAesCfbOsl, TAesOfbOsl, nil,
      // 15            16
-     TAesCtrNistOsl, TAesGcmOsl
+     TAesCtrOsl, TAesGcmOsl
      {$endif USE_OPENSSL}
      {$ifdef USE_PROV_RSA_AES} ,
      // 10/17     11/18
