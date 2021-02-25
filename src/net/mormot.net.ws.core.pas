@@ -121,9 +121,10 @@ procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSha1Digest)
 
 var
   /// the raw AES class used by TWebSocketProtocol.SetEncryptKey/SetEncryptKeyAes
-  // - if left to its default nil, TAesFast[mCtr] will be used, since it much
+  // - if left to its default nil, TAesFast[mCtr] will be used, since it is much
   // faster on x86_64 or if mormot.core.crypto.openssl.RegisterOpenSsl is called
-  // - for compatibility, you may set TAesCfb as used for mORMot 1.18
+  // - for compatibility, you may set TAesCfb as used with mORMot 1.18
+  // - WebSockets compression makes crc32c() so AES-GCM or AES-CTC are unneeded
   ProtocolAesClass: TAesAbstractClass = nil;
 
   /// how TWebSocketProtocol.SetEncryptKey derivate its password via PBKDF2_SHA3()
@@ -215,14 +216,19 @@ type
     /// specify the recognized sub-protocols, e.g. 'synopsebin, synopsebinary'
     function SetSubprotocol(const aProtocolName: RawUtf8): boolean; virtual;
     /// create the internal Encryption: IProtocol according to the supplied key
-    // - any asymmetric algorithm needs to know which side (client/server) to work on
-    // - try TEcdheProtocol.FromKey(aKey) and fallback to TProtocolAes.Create(TAesOfb)
-    // using the deprecated Sha256Weak(aKey) - consider using a safer hasher
-    // and SetEncryptKeyAes() with a safer derivated key
+    // - any asymmetric algorithm needs to know its side, i.e. client or server
+    // - try 'password#xxxxxx.private' TEcdheProtocol.FromPasswordSecureFile(aKey)
+    // with efAesCtc128, then TEcdheProtocol.FromKey(aKey), then SetEncryptKeyAes()
+    // with PBKDF2_SHA3 over ProtocolAesSalt/ProtocolAesRounds/ProtocolAesClass
     // - you can disable encryption by setting aKey=''
     procedure SetEncryptKey(aServer: boolean; const aKey: RawUtf8);
-    /// set the fEncryption: IProtocol as TProtocolAes.Create(TAesOfb)
+    /// set the fEncryption: IProtocol as TProtocolAes.Create(TAesCtr)
     procedure SetEncryptKeyAes(const aKey; aKeySize: cardinal);
+    /// set the fEncryption: IProtocol as TEcdheProtocol.Create()
+    // - as default, we use efAesCtc128 which is faster on x86_64 (2.4GB/s)
+    procedure SetEncryptKeyEcdhe(aAuth: TEcdheAuth; aPKI: TEccCertificateChain;
+      aPrivate: TEccCertificateSecret; aServer: boolean;
+      aEF: TEcdheEF = efAesCtc128; aPrivateOwned: boolean = false);
     /// redirect to Encryption.ProcessHandshake, if defined
     function ProcessHandshake(const ExtIn: TRawUtf8DynArray;
       out ExtOut: RawUtf8; ErrorMsg: PRawUtf8): boolean; virtual;
@@ -805,30 +811,30 @@ procedure TWebSocketProtocol.SetEncryptKey(aServer: boolean; const aKey: RawUtf8
 var
   key: TSha256Digest;
 begin
+  // always first disable any previous encryption
+  fEncryption := nil;
+  fConnectionFlags := [hsrWebsockets];
   if aKey = '' then
-  begin
-    // disable encryption
-    fEncryption := nil;
-    fConnectionFlags := [hsrWebsockets];
-  end
+    exit;
+  // 1. try asymetric ES-256 ephemeral secret key and mutual authentication
+  // check human-friendly format 'password#*.private' key file name
+  fEncryption := TEcdheProtocol.FromPasswordSecureFile(aKey, aServer, efAesCtc128);
+  if fEncryption = nil then
+    // check 'a=mutual;e=aesctc128;p=34a2;pw=password;ca=..' full format
+    fEncryption := TEcdheProtocol.FromKey(aKey, aServer);
+  if fEncryption <> nil then
+    include(fConnectionFlags, hsrSecured)
   else
   begin
-    // first try asymetric ES-256 ephemeral secret key and mutual authentication
-    fEncryption := TEcdheProtocol.FromKey(aKey, aServer);
-    if fEncryption <> nil then
-      fConnectionFlags := [hsrSecured, hsrWebsockets]
+    // 2. aKey no 'a=...'/'pw#xx.private' layout -> use symetric TProtocolAes
+    if ProtocolAesRounds = 0 then
+      // mORMot 1.18 deprecated password derivation
+      Sha256Weak(aKey, key)
     else
-    begin
-      // use symetric TProtocolAes algorithm
-      if ProtocolAesRounds = 0 then
-        // mORMot 1.18 deprecated password derivation
-        Sha256Weak(aKey, key)
-      else
-        // new safer password derivation algorithm (rounds=1000 -> 1ms)
-        PBKDF2_SHA3(SHA3_256, aKey, ProtocolAesSalt, ProtocolAesRounds,
-          @key, SizeOf(key));
-      SetEncryptKeyAes(key, 256);
-    end;
+      // new safer password derivation algorithm (rounds=1000 -> 1ms)
+      PBKDF2_SHA3(SHA3_256, aKey, ProtocolAesSalt, ProtocolAesRounds,
+        @key, SizeOf(key));
+    SetEncryptKeyAes(key, 256);
   end;
 end;
 
@@ -836,13 +842,26 @@ procedure TWebSocketProtocol.SetEncryptKeyAes(const aKey; aKeySize: cardinal);
 var
   c: TAesAbstractClass;
 begin
+  fEncryption := nil;
+  fConnectionFlags := [hsrWebsockets];
   if aKeySize < 128 then
     exit;
   c := ProtocolAesClass;
   if c = nil then
     c := TAesFast[mCtr]; // fastest on x86_64 or OpenSSL - server friendly
   fEncryption := TProtocolAes.Create(c, aKey, aKeySize);
-  fConnectionFlags := [hsrSecured, hsrWebsockets]
+  include(fConnectionFlags, hsrSecured)
+end;
+
+procedure TWebSocketProtocol.SetEncryptKeyEcdhe(aAuth: TEcdheAuth;
+  aPKI: TEccCertificateChain; aPrivate: TEccCertificateSecret; aServer: boolean;
+  aEF: TEcdheEF; aPrivateOwned: boolean);
+begin
+  fEncryption := nil;
+  fConnectionFlags := [hsrWebsockets];
+  fEncryption := ECDHEPROT_CLASS[aServer].Create(
+    aAuth, aPKI, aPrivate, aEF, aPrivateOwned);
+  include(fConnectionFlags, hsrSecured)
 end;
 
 procedure TWebSocketProtocol.AfterGetFrame(var frame: TWebSocketFrame);
@@ -910,8 +929,8 @@ begin
         exit;
       end;
   end;
-  WebSocketLog.Add.Log(sllWarning, 'ProcessHandshake=% In=[%]', [ToText(res)^,
-    msgin], self);
+  WebSocketLog.Add.Log(sllWarning, 'ProcessHandshake=% In=[%]',
+    [ToText(res)^, msgin], self);
   if ErrorMsg <> nil then
     ErrorMsg^ := FormatUtf8('%: %', [ErrorMsg^,
       GetCaptionFromEnum(TypeInfo(TProtocolResult), ord(res))]);

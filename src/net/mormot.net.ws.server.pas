@@ -635,6 +635,7 @@ begin
     result := grOwned; }
 end;
 
+
 { TWebSocketServerRest }
 
 constructor TWebSocketServerRest.Create(const aPort: RawUtf8;
@@ -650,8 +651,8 @@ procedure TWebSocketServerRest.WebSocketsEnable(const aWebSocketsURI,
 begin
   if self = nil then
     exit;
-  fProtocols.AddOnce(TWebSocketProtocolBinary.Create(aWebSocketsURI, true,
-    aWebSocketsEncryptionKey, aWebSocketsCompressed));
+  fProtocols.AddOnce(TWebSocketProtocolBinary.Create(aWebSocketsURI,
+    {server=}true, aWebSocketsEncryptionKey, aWebSocketsCompressed));
   if aWebSocketsAjax then
     fProtocols.AddOnce(TWebSocketProtocolJson.Create(aWebSocketsURI));
 end;
@@ -670,19 +671,16 @@ begin
     connection := nil
   else
   begin
-    WebSocketLog.Add.Log(sllTrace, 'Callback(%) % on ConnectionID=%',
-      [Ctxt.Url, ToText(mode)^, Ctxt.ConnectionID], self);
     connection := IsActiveWebSocket(Ctxt.ConnectionID);
+    WebSocketLog.Add.Log(LOG_TRACEERROR[connection = nil],
+      'Callback(%) % on ConnectionID=%',
+      [Ctxt.Url, ToText(mode)^, Ctxt.ConnectionID], self);
   end;
   if connection <> nil then
     // this request is a websocket, on a non broken connection
     result := connection.NotifyCallback(Ctxt, mode)
   else
-  begin
-    WebSocketLog.Add.Log(sllError, 'Callback(%) on inactive ConnectionID=%',
-      [Ctxt.Url, Ctxt.ConnectionID], self);
     result := HTTP_NOTFOUND;
-  end;
 end;
 
 
