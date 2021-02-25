@@ -1208,7 +1208,7 @@ type
   /// abstract ECDHE secure protocol with unilateral or mutual authentication
   // - inherited TEcdheProtocolClient and TEcdheProtocolServer
   // classes will implement a secure client/server transmission, with a one-way
-  // handshake and asymmetric encryption
+  // handshake and asymmetric encryption via public/private key pairs
   // - will validate ECDSA signatures using certificates of the associated PKI
   // - will create an ephemeral ECC key pair for perfect forward security
   // - will use ECDH to compute a shared ephemeral session on both sides,
@@ -1278,11 +1278,12 @@ type
     /// creates a new TEcdheProtocolClient or TEcdheProtocolServer from
     // 'password#xxxx.private' or 'password#/path/to/xxxxxxxxxxxx.private' input
     // - human-friendly alternative to FromKey() powerful/complex layout
-    // - returns nil if aPasswordSecureFile did not allow to load the file
+    // - returns nil if aPasswordSecureFile was not able to load the file
     // - uses DEFAULT_ECCROUNDS + authMutual + efAesCrc128 as parameters
     // - note: FromKeySetCA() should have been called to set the global PKI
     class function FromPasswordSecureFile(const aPasswordSecureFile: RawUtf8;
-      aServer: boolean; aEF: TEcdheEF = efAesCrc128): TEcdheProtocol;
+      aServer: boolean; aAuth: TEcdheAuth = authMutual; aEF: TEcdheEF = efAesCrc128;
+      aRounds: integer = DEFAULT_ECCROUNDS): TEcdheProtocol;
     /// defines the global/default trusted PKI Chain to be used by FromKey
     // - used if the ca=... property is not set in the aKey value
     class procedure FromKeySetCA(aPKI: TEccCertificateChain);
@@ -3573,7 +3574,7 @@ end;
 
 class function TEcdheProtocol.FromPasswordSecureFile(
   const aPasswordSecureFile: RawUtf8; aServer: boolean;
-  aEF: TEcdheEF): TEcdheProtocol;
+  aAuth: TEcdheAuth; aEF: TEcdheEF; aRounds: integer): TEcdheProtocol;
 var
   i: integer;
   fn: TFileName;
@@ -3594,11 +3595,11 @@ begin
         // try to load the 'xxxx.private' secret key
         priv := nil;
         try
-          priv := TEccCertificateSecret.CreateFromSecureFile(
-            fn, {password=}copy(aPasswordSecureFile, 1, i - 1));
           // note: TEcdheProtocol.FromKeySetCA() should have set the global CA
+          priv := TEccCertificateSecret.CreateFromSecureFile(
+            fn, {password=}copy(aPasswordSecureFile, 1, i - 1), aRounds);
           result := ECDHEPROT_CLASS[aServer].Create(
-            authMutual, nil, priv, aEF, {privowned=}true);
+            aAuth, nil, priv, aEF, {privowned=}true);
         except
           // error loading the private key file
           priv.Free;

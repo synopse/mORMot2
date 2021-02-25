@@ -711,10 +711,11 @@ type
     function Clone: IProtocol;
   end;
 
-  /// implements a secure protocol using AES encryption
+  /// implements a secure protocol using symetric AES encryption
   // - as used e.g. by 'synopsebinary' WebSockets protocol
+  // - a secret password is shared between client and server
   // - this class will maintain two TAesAbstract instances, one for encryption
-  // and another one for decryption, with PKCS7 padding and no MAC validation
+  // and another for decryption, with PKCS7 padding and no MAC/AEAD validation
   TProtocolAes = class(TInterfacedObject, IProtocol)
   protected
     fSafe: TRTLCriticalSection; // no need of TSynLocker padding
@@ -722,8 +723,9 @@ type
   public
     /// initialize this encryption protocol with the given AES settings
     // - warning: aKey is an untyped constant, i.e. expects a raw set of memory
-    // bytes: do NOT use assign it with a string or a TBytes instance: you would
-    // use the pointer to the data as key
+    // bytes: do NOT use assign it with a string or a TBytes instance
+    // - if aClass is nil, TAesFast[mCtr] will be used as default
+    // - AEAD Cfc,mOfc,mCtc,mGcm modes will be rejected since unsupported
     constructor Create(aClass: TAesAbstractClass; const aKey; aKeySize: cardinal);
       reintroduce; virtual;
     /// will create another instance of this communication protocol
@@ -735,11 +737,11 @@ type
     function ProcessHandshake(const MsgIn: RawUtf8;
       out MsgOut: RawUtf8): TProtocolResult;
     /// encrypt a message on one side, ready to be transmitted to the other side
-    // - this method uses AES encryption and PKCS7 padding
+    // - wrapper around fAes[true].EncryptPkcs7(), so does not support AEAD yet
     procedure Encrypt(const aPlain: RawByteString;
       out aEncrypted: RawByteString);
     /// decrypt a message on one side, as transmitted from the other side
-    // - this method uses AES decryption and PKCS7 padding
+    // - wrapper around fAes[false].DecryptPkcs7(), so does not support AEAD yet
     function Decrypt(const aEncrypted: RawByteString;
       out aPlain: RawByteString): TProtocolResult;
     /// will create another instance of this communication protocol
@@ -1935,7 +1937,12 @@ constructor TProtocolAes.Create(aClass: TAesAbstractClass;
 begin
   inherited Create;
   InitializeCriticalSection(fSafe);
+  if aClass = nil then
+    aClass := TAesFast[mCtr]; // fastest on x86_64 or OpenSSL - server friendly
   fAes[false] := aClass.Create(aKey, aKeySize);
+  if fAes[false].AlgoMode in [mCfc, mOfc, mCtc, mGcm] then
+    raise ESynCrypto.CreateUtf8('%.Create: incompatible % AEAD mode',
+      [self, fAes[false].AlgoName]);
   fAes[true] := fAes[false].CloneEncryptDecrypt;
 end;
 

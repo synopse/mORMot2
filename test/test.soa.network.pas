@@ -232,20 +232,24 @@ const
   WEBSOCKETS_KEY = 'key';
 
 procedure TTestBidirectionalRemoteConnection.WebsocketsProtocols;
+var
+  Settings: TWebSocketProcessSettings;
 begin
+  Settings.SetDefaults;
   WebsocketsLowLevel(
     TWebSocketProtocolJson.Create(''), focText, '');
   WebsocketsLowLevel(
-    TWebSocketProtocolBinary.Create('', false, '', false), focBinary, '');
+    TWebSocketProtocolBinary.Create('', false, '', @Settings, false),
+    focBinary, '');
   WebsocketsLowLevel(
-    TWebSocketProtocolBinary.Create('', false, 'pass', false), focBinary,
-      ' encrypted');
+    TWebSocketProtocolBinary.Create('', false, 'pass', @Settings, false),
+    focBinary, ' encrypted');
   WebsocketsLowLevel(
-    TWebSocketProtocolBinary.Create('', false, '', true), focBinary,
-      ' compressed');
+    TWebSocketProtocolBinary.Create('', false, '', @Settings, true),
+    focBinary, ' compressed');
   WebsocketsLowLevel(
-    TWebSocketProtocolBinary.Create('', false, 'pass', true), focBinary,
-      ' encrypted compressed');
+    TWebSocketProtocolBinary.Create('', false, 'pass', @Settings, true),
+      focBinary, ' encrypted compressed');
 end;
 
 

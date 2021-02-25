@@ -237,6 +237,7 @@ type
     fRestFrame: array of THttpServerRequest;
     fRestFrameCount: integer;
     fRestPending, fRestTimeoutMS: integer;
+    fSettings: TWebSocketProcessSettings;
     function EncapsulateAndSend(Process: TWebSocketProcess; const IP: RawUtf8;
       const Frame: TWebSocketFrame; Connection: THttpServerConnectionID): boolean;
     function Decapsulate(Protocol: TWebSocketProtocol;
@@ -411,7 +412,7 @@ begin
   fOwner := aOwner;
   inherited Create('synopserelay', '');
   if aServerKey <> '' then
-    SetEncryptKey({aServer=}true, aServerKey);
+    SetEncryptKey({aServer=}true, aServerKey, @aOwner.fSettings);
 end;
 
 function TRelayServerProtocol.Clone(
@@ -594,7 +595,7 @@ constructor TRelayClientProtocol.Create(aOwner: TPrivateRelay;
 begin
   fOwner := aOwner;
   inherited Create('synopserelay', '');
-  SetEncryptKey({aServer=}false, aRelayKey);
+  SetEncryptKey({aServer=}false, aRelayKey, @aOwner.fSettings);
 end;
 
 function TRelayClientProtocol.Clone(
@@ -795,6 +796,7 @@ begin
   else
     fLog := aLog;
   fRestTimeoutMS := 10000; // wait 10 seconds for the REST request to be relayed
+  fSettings.SetDefaults;
 end;
 
 destructor TAbstractRelay.Destroy;
