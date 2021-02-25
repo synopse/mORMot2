@@ -287,6 +287,15 @@ function CertFindCertificateInStore(hCertStore: HCERTSTORE;
 
 { ****************** Middle-Level SSPI Wrappers }
 
+
+type
+  /// exception class raised during SSPI process
+  ESynSspi = class(Exception)
+  public
+    constructor CreateLastOSError(const aContext: TSecContext);
+  end;
+
+
 /// set aSecHandle fields to empty state for a given connection ID
 procedure InvalidateSecContext(var aSecContext: TSecContext;
   aConnectionID: Int64);
@@ -310,53 +319,6 @@ function SecEncrypt(var aSecContext: TSecContext;
 function SecDecrypt(var aSecContext: TSecContext;
   const aEncrypted: RawByteString): RawByteString;
 
-
-type
-  /// exception class raised during SSPI/SChannel process
-  ESynSspi = class(Exception)
-  public
-    constructor CreateLastOSError(const aContext: TSecContext);
-  end;
-
-  /// the supported TLS modes
-  // - unsafe deprecated modes (e.g. SSL) are not defined at all
-  TSynSspiMode = (
-    tls10,
-    tls11,
-    tls12);
-
-  /// set of supported TLS modes
-  TSynSspiModes = set of TSynSspiMode;
-
-  /// used for low-level logging
-  TSynSspiLog =
-    procedure(const Fmt: RawByteString; const Args: array of const) of object;
-
-  /// abstract parent class for SSPI / SChannel process
-  TSynSspiAbstract = class
-  protected
-    fNewConversation: boolean;
-    fTLS: TSynSspiModes;
-    fContext: TSecContext;
-    fStreamSizes: TSecPkgContext_StreamSizes;
-    procedure DeleteContext;
-    procedure EnsureStreamSizes;
-  public
-    /// initialize the process
-    constructor Create(aConnectionID: Int64); virtual;
-    /// read-only access to the associated connection ID, as provided to Create
-    property ConnectionID: Int64
-      read fContext.ID;
-    /// the TLS modes supported by this instance
-    // - only TLS 1.2 is suppported by default, for security reasons
-    property TLS: TSynSspiModes
-      read fTLS write fTLS;
-  end;
-
-  TSynSspiClient = class(TSynSspiAbstract)
-  protected
-  public
-  end;
 
 
 { ****************** High-Level Client and Server Authentication using SSPI }
@@ -503,6 +465,19 @@ end;
 
 { ****************** Middle-Level SSPI Wrappers }
 
+
+{ ESynSspi }
+
+constructor ESynSspi.CreateLastOSError(const aContext: TSecContext);
+var
+  error: integer;
+begin
+  error := GetLastError;
+  CreateFmt('SSPI API Error %x [%s] for ConnectionID=%d',
+    [error, SysErrorMessage(error), aContext.ID]);
+end;
+
+
 procedure InvalidateSecContext(var aSecContext: TSecContext;
   aConnectionID: Int64);
 begin
@@ -633,47 +608,11 @@ begin
 end;
 
 
-{ ESynSspi }
-
-constructor ESynSspi.CreateLastOSError(const aContext: TSecContext);
-var
-  error: integer;
-begin
-  error := GetLastError;
-  CreateFmt('SSPI API Error %x [%s] for ConnectionID=%d',
-    [error, SysErrorMessage(error), aContext.ID]);
-end;
-
-
-{ TSynSspiAbstract }
-
-constructor TSynSspiAbstract.Create(aConnectionID: Int64);
-begin
-  inherited Create;
-  fNewConversation := true;
-  InvalidateSecContext(fContext, aConnectionID);
-  fTLS := [tls12];
-end;
-
-procedure TSynSspiAbstract.EnsureStreamSizes;
-begin
-  if fStreamSizes.cbHeader = 0 then
-    if QueryContextAttributesW(
-        @fContext.CtxHandle, SECPKG_ATTR_STREAM_SIZES, @fStreamSizes) <> 0 then
-      raise ESynSspi.CreateLastOSError(fContext);
-end;
-
-procedure TSynSspiAbstract.DeleteContext;
-begin
-  FreeSecurityContext(fContext.CtxHandle);
-  FreeCredentialsContext(fContext.CredHandle);
-end;
-
 
 { ****************** High-Level Client and Server Authentication using SSPI }
 
 var
-  ForceSecKerberosSPN: WideString;
+  ForceSecKerberosSPN: SynUnicode;
 
 function ClientSspiAuthWorker(var aSecContext: TSecContext;
   const aInData: RawByteString; pszTargetName: PWideChar;
@@ -774,14 +713,14 @@ begin
   if UserPos = 0 then
   begin
     Domain := '';
-    User := Utf8ToSynUnicode(aUserName);
+    Utf8ToSynUnicode(aUserName, User);
   end
   else
   begin
-    Domain := Utf8ToSynUnicode(Copy(aUserName, 1, UserPos - 1));
-    User := Utf8ToSynUnicode(Copy(aUserName, UserPos + 1, MaxInt));
+    Utf8ToSynUnicode(Copy(aUserName, 1, UserPos - 1), Domain);
+    Utf8ToSynUnicode(Copy(aUserName, UserPos + 1, MaxInt), User);
   end;
-  Password := Utf8ToSynUnicode(aPassword);
+  Utf8ToSynUnicode(aPassword, PassWord);
   AuthIdentity.Domain := pointer(Domain);
   AuthIdentity.DomainLength := Length(Domain);
   AuthIdentity.User := pointer(User);
@@ -885,7 +824,7 @@ end;
 
 procedure ClientForceSPN(const aSecKerberosSPN: RawUtf8);
 begin
-  ForceSecKerberosSPN := Utf8ToSynUnicode(aSecKerberosSPN);
+  Utf8ToSynUnicode(aSecKerberosSPN, ForceSecKerberosSPN);
 end;
 
 procedure ServerForceNTLM(ForceNTLM: boolean);
