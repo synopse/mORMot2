@@ -2024,11 +2024,11 @@ begin
   endSourceBy4 := endSource - 4;
   if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(source) and 3 = 0) and{$endif}
      (source <= endSourceBy4) then
-    repeat // handle 7-bit ASCII chars, by quad (Sha optimization)
-by4:  c := PCardinal(source)^;
+    repeat // handle 7-bit ASCII chars, by quad
+      c := PCardinal(source)^;
       if c and $80808080 <> 0 then
         goto by1; // break on first non ASCII quad
-      inc(source, 4);
+by4:  inc(source, 4);
       PCardinal(dest)^ := (c shl 8 or (c and $FF)) and $00ff00ff;
       c := c shr 16;
       PCardinal(dest + 2)^ := (c shl 8 or c) and $00ff00ff;
@@ -2044,7 +2044,12 @@ by1:  c := byte(source^);
         inc(dest);
         if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(source) and 3 = 0) and{$endif}
            (source <= endSourceBy4) then
-          goto by4;
+        begin
+          c := PCardinal(source)^;
+          if c and $80808080 = 0 then
+            goto by4;
+          continue;
+        end;
         if source < endSource then
           continue
         else
@@ -2074,7 +2079,12 @@ by1:  c := byte(source^);
         inc(dest);
         if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(source) and 3 = 0) and{$endif}
            (source <= endSourceBy4) then
-          goto by4;
+        begin
+          c := PCardinal(source)^;
+          if c and $80808080 = 0 then
+            goto by4;
+          continue;
+        end;
         if source < endSource then
           continue
         else
@@ -2086,7 +2096,12 @@ by1:  c := byte(source^);
       inc(dest, 2);
       if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(source) and 3 = 0) and{$endif}
          (source <= endSourceBy4) then
-        goto by4;
+      begin
+        c := PCardinal(source)^;
+        if c and $80808080 = 0 then
+          goto by4;
+        continue;
+      end;
       if source >= endSource then
         break;
     until false;
@@ -2887,16 +2902,16 @@ begin
   else if (Source <> nil) and
           (SourceChars > 0) then
   begin
-    // handle 7-bit ASCII WideChars, by quads (Sha optimization)
+    // handle 7-bit ASCII WideChars, by quads
     EndSource := Source + SourceChars;
     EndSourceBy4 := EndSource - 4;
     if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
        (Source <= EndSourceBy4) then
       repeat
-by4:    c := PCardinal(Source)^;
+        c := PCardinal(Source)^;
         if c and $80808080 <> 0 then
           goto by1; // break on first non ASCII quad
-        inc(Source, 4);
+by4:    inc(Source, 4);
         PCardinal(Dest)^ := c;
         inc(Dest, 4);
       until Source > EndSourceBy4;
@@ -2911,7 +2926,12 @@ by1:    c := byte(Source^);
           Inc(Dest);
           if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
              (Source <= EndSourceBy4) then
-            goto by4;
+         begin
+           c := PCardinal(Source)^;
+           if c and $80808080 = 0 then
+             goto by4;
+           continue;
+         end;
           if Source < EndSource then
             continue
           else
@@ -2929,7 +2949,12 @@ by1:    c := byte(Source^);
             Inc(Dest, 3);
             if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
                (Source <= EndSourceBy4) then
-              goto by4;
+            begin
+              c := PCardinal(Source)^;
+              if c and $80808080 = 0 then
+                goto by4;
+              continue;
+            end;
             if Source < EndSource then
               continue
             else
@@ -2942,7 +2967,12 @@ by1:    c := byte(Source^);
             Inc(Dest, 2);
             if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
                (Source < EndSourceBy4) then
-              goto by4;
+            begin
+              c := PCardinal(Source)^;
+              if c and $80808080 = 0 then
+                goto by4;
+              continue;
+            end;
             if Source < EndSource then
               continue
             else
@@ -3235,10 +3265,10 @@ begin
   if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
      (Source <= endSourceBy4) then
     repeat
-by4:  c := PCardinal(Source)^;
+      c := PCardinal(Source)^;
       if c and $80808080 <> 0 then
         goto by1; // break on first non ASCII quad
-      PCardinal(Dest)^ := c;
+by4:  PCardinal(Dest)^ := c;
       inc(Source, 4);
       inc(Dest, 4);
     until Source > endSourceBy4;
@@ -3254,7 +3284,12 @@ by1:  c := byte(Source^);
         inc(Dest);
         if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
            (Source <= endSourceBy4) then
-          goto by4;
+        begin
+          c := PCardinal(Source)^;
+          if c and $80808080 = 0 then
+            goto by4;
+          continue;
+        end;
         if Source < endSource then
           continue
         else
@@ -3282,7 +3317,12 @@ by1:  c := byte(Source^);
         inc(Dest);
         if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
            (Source <= endSourceBy4) then
-          goto by4;
+        begin
+          c := PCardinal(Source)^;
+          if c and $80808080 = 0 then
+            goto by4;
+          continue;
+        end;
         if Source < endSource then
           continue
         else
@@ -5563,10 +5603,10 @@ begin
     if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
        (Source <= endSourceBy4) then
       repeat
-by4:    c := PCardinal(Source)^;
+        c := PCardinal(Source)^;
         if c and $80808080 <> 0 then
           goto by1; // break on first non ASCII quad
-        inc(Source, 4);
+by4:    inc(Source, 4);
         Dest[0] := up[ToByte(c)];
         Dest[1] := up[ToByte(c shr 8)];
         Dest[2] := up[ToByte(c shr 16)];
@@ -5583,8 +5623,13 @@ by1:    c := byte(Source^);
           Dest^ := up[c];
 set1:     inc(Dest);
           if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
-             (Source < endSourceBy4) then
-            goto by4
+             (Source <= endSourceBy4) then
+          begin
+            c := PCardinal(Source)^;
+            if c and $80808080 = 0 then
+              goto by4;
+            continue;
+          end
           else if Source < endSource then
             continue
           else
@@ -6226,9 +6271,9 @@ begin
     if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(S) and 3 = 0) and {$endif}
        (S <= endSBy4) then
       repeat
-by4:    if PCardinal(S)^ and $80808080 <> 0 then
+        if PCardinal(S)^ and $80808080 <> 0 then
           goto by1; // break on first non ASCII quad
-        i := byte(S[0]);
+by4:    i := byte(S[0]);
         inc(i, tab.Block[0, i]); // branchless a..z -> A..Z
         D[0] := AnsiChar(i);
         i := byte(S[1]);
@@ -6254,8 +6299,11 @@ by1:    c := byte(S^);
           D^ := AnsiChar(c);
           inc(D);
           if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(S) and 3 = 0) and{$endif}
-             (S < endSBy4) then
-            goto By4
+             (S <= endSBy4) then
+            if PCardinal(S)^ and $80808080 = 0 then
+              goto By4
+            else
+              continue
           else if S < PUtf8Char(SLen) then
             continue
           else

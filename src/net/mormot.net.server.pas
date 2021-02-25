@@ -2509,7 +2509,7 @@ begin
     EHttpApiServer.RaiseOnError(hCreateUrlGroup,
       Http.CreateUrlGroup(fServerSessionID, fUrlGroupID));
     if QueueName = '' then
-      QueueName := Utf8ToSynUnicode(Int64ToUtf8(fServerSessionID));
+      Utf8ToSynUnicode(Int64ToUtf8(fServerSessionID), QueueName);
     EHttpApiServer.RaiseOnError(hCreateRequestQueue,
       Http.CreateRequestQueue(Http.Version, pointer(QueueName), nil, 0, fReqQueue));
     binding.Flags := 1;

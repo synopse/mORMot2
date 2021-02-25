@@ -1721,7 +1721,7 @@ begin
   else
     aRoot := '/'; // allow for instance 'http://*:2869/'
   aRoot := Prefix[Https] + aDomainName + ':' + aPort + aRoot;
-  result := Utf8ToSynUnicode(aRoot);
+  Utf8ToSynUnicode(aRoot, result);
 end;
 
 const

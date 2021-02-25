@@ -4596,7 +4596,7 @@ begin
   U[2] := #$A8;
   U[3] := #$B3;
   U[4] := #$92;
-  SU := Utf8ToSynUnicode(U);
+  Utf8ToSynUnicode(U, SU);
   if not CheckFailed(length(SU) = 2) then
     Check(PCardinal(SU)^ = $DCD2D863);
   Check(Utf8ToUnicodeLength(Pointer(U)) = 2);
