@@ -170,6 +170,7 @@ type
 
   /// used by NewSocket() to cache the host names via NewSocketAddressCache global
   // - defined in this unit, but implemented in mormot.net.client.pas
+  // - the implementation should be thread-safe
   INewSocketAddressCache = interface
     /// method called by NewSocket() to resolve its address
     function Search(const Host: RawUtf8; out NetAddr: TNetAddr): boolean;
@@ -1072,6 +1073,7 @@ begin
   netsocket := nil;
   fromcache := false;
   tobecached := false;
+  // resolve the TNetAddr of the address:port layer - maybe from cache
   if (layer in nlIP) and
      (not dobind) and
      Assigned(NewSocketAddressCache) and
@@ -1090,6 +1092,7 @@ begin
     result := addr.SetFrom(address, port, layer);
   if result <> nrOK then
     exit;
+  // create the raw Socket instance
   sock := socket(PSockAddr(@addr)^.sa_family, _ST[layer], _IP[layer]);
   if sock = -1 then
   begin
@@ -1099,11 +1102,13 @@ begin
       NewSocketAddressCache.Flush(address);
     exit;
   end;
+  // bind or connect to this Socket
   repeat
     if dobind then
     begin
-      // Socket should remain open for 5 seconds after a closesocket() call
+      // bound Socket should remain open for 5 seconds after a closesocket()
       TNetSocket(sock).SetLinger(5);
+      // Server-side binding/listening of the socket to the address:port
       if (bind(sock, @addr, addr.Size)  <> NO_ERROR) or
          ((layer <> nlUDP) and
           (listen(sock, DefaultListenBacklog)  <> NO_ERROR)) then
@@ -1114,6 +1119,7 @@ begin
       // open Client connection
       if connecttimeout > 0 then
       begin
+        // set timeouts before connect()
         TNetSocket(sock).SetReceiveTimeout(connecttimeout);
         if recvtimeout = connecttimeout then
           recvtimeout := 0; // call SetReceiveTimeout() once
@@ -1132,12 +1138,15 @@ begin
   until false;
   if result <> nrOK then
   begin
+    // this address:port seems invalid or already bound
     closesocket(sock);
     if fromcache then
+      // ensure the cache won't contain this faulty address any more
       NewSocketAddressCache.Flush(address);
   end
   else
   begin
+    // Socket is successfully connected -> setup the connection
     if tobecached then
       // update cache once we are sure the host actually exists
       NewSocketAddressCache.Add(address, addr);
@@ -1231,14 +1240,14 @@ end;
 
 function TNetSocketWrap.MakeAsync: TNetResult;
 var
-  nonblock: cardinal;
+  nonblocking: cardinal;
 begin
   if @self = nil then
     result := nrNoSocket
   else
   begin
-    nonblock := 1;
-    result := NetCheck(ioctlsocket(TSocket(@self), FIONBIO, @nonblock));
+    nonblocking := 1;
+    result := NetCheck(ioctlsocket(TSocket(@self), FIONBIO, @nonblocking));
   end;
 end;
 
@@ -1705,8 +1714,8 @@ begin
       retry := 10
     else
       retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
-    res := NewSocket(aServer, aPort, aLayer, doBind, Timeout, Timeout, Timeout,
-      retry, fSock);
+    res := NewSocket(aServer, aPort, aLayer, doBind,
+      Timeout, Timeout, Timeout, retry, fSock);
     if res <> nrOK then
       raise ENetSock.CreateFmt('OpenBind(%s:%s,%s) failed as ''%s'': %s',
         [aServer, fPort, BINDTXT[doBind], _NR[res], BINDMSG[doBind]]);

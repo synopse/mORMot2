@@ -2598,7 +2598,7 @@ type
 
   /// parameters supplied to publish a TSqlRestServer via HTTP
   // - used by the overloaded TRestHttpServer.Create(TRestHttpServerDefinition)
-  // constructor in mORMotHttpServer.pas, and also in dddInfraSettings.pas
+  // constructor in mormot.rest.http.server.pas, and also in dddInfraSettings.pas
   TRestHttpServerDefinition = class(TSynPersistentWithPassword)
   protected
     fBindPort: RawByteString;
