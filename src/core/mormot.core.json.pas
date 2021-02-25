@@ -8029,7 +8029,7 @@ begin
   rtti := aEnumTypeInfo.EnumBaseType;
   if rtti = nil then
     exit;
-  ToRttiOrd(rtti.RttiOrd, @aEnum, aEnumDefault);
+  ToRttiOrd(rtti.RttiOrd, @aEnum, aEnumDefault); // always set the default value
   v := TrimU(Value(aName, ''));
   if v = '' then
     exit;
@@ -8039,7 +8039,7 @@ begin
     i := rtti.GetEnumNameValue(pointer(v), length(v), {alsotrimleft=}true);
   if i >= 0 then
   begin
-    ToRttiOrd(rtti.RttiOrd, @aEnum, i);
+    ToRttiOrd(rtti.RttiOrd, @aEnum, i); // we found a proper value
     result := true;
   end;
 end;
