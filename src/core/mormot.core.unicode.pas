@@ -5890,7 +5890,7 @@ end;
 //  https://github.com/BeRo1985/pucu  (C)2016-2020 Benjamin Rosseaux
 
 type
-  // 20016 bytes for full Unicode 10.0 case folding branchless conversion :)
+  // 20,016 bytes for full Unicode 10.0 case folding branchless conversion :)
   TUnicodeUpperTable = object
     Block: array[0..37, 0..127] of integer;
     IndexHi: array[0..271] of byte;
@@ -6705,6 +6705,7 @@ nxt:u0 := U;
     until false;
   until false;
 end;
+
 
 procedure InitializeUnit;
 var

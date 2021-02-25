@@ -953,6 +953,10 @@ function SetFileOpenLimit(max: integer; hard: boolean = false): integer;
 
 type
   /// Low-level access to the ICU library installed on this system
+  // - "International Components for Unicode" (ICU) is an open-source set of
+  // libraries for Unicode support, internationalization and globalization
+  // - used by Unicode_CompareString, Unicode_AnsiToWide, Unicode_WideToAnsi,
+  // Unicode_InPlaceUpper and Unicode_InPlaceLower function from this unit
   TIcuLibrary = packed object
   protected
     icu, icudata, icui18n: pointer;
@@ -997,6 +1001,7 @@ type
     /// initialize the ICU library
     u_init: procedure(var status: SizeInt); cdecl;
     /// try to initialize a specific version of the ICU library
+    // - first finalize any existing loaded instance
     // - returns true if was successfully loaded and setup
     function ForceLoad(const LibName: TFileName; const Version: string): boolean;
     /// returns TRUE if a ICU library is available on this system
@@ -1004,12 +1009,17 @@ type
     function IsAvailable: boolean; inline;
     /// Initialize an ICU text converter for a given codepage
     // - returns nil if ICU is not available on this system
+    // - wrapper around ucnv_open/ucnv_setSubstChars/ucnv_setFallback calls
+    // - caller should make ucnv_close() once done with the returned instance
     function ucnv(codepage: cardinal): pointer;
   end;
 
 var
-  /// late-binding of the ICU library
+  /// low-level late-binding access to any installed ICU library
+  // - typical use is to check icu.IsAvailable then the proper icu.*() functions
+  // - this unit will make icu.Done in its finalization section
   icu: TIcuLibrary;
+
 
 {$ifdef OSLINUX} { the systemd API is Linux-specific }
 
@@ -1062,7 +1072,7 @@ type
     // - if result > 0 then usec contains the notification interval (app should
     // notify every usec/2)
     watchdog_enabled: function(unset_environment: integer; usec: Puint64): integer; cdecl;
-    /// returns true in case process is started by systemd
+    /// returns true in case the current process was started by systemd
     // - For systemd v232+
     function ProcessIsStartedBySystemd: boolean;
     /// returns TRUE if a systemd library is available
@@ -1073,7 +1083,9 @@ type
   end;
 
 var
-  /// late-binding of the systemd library
+  /// low-level late-binding of the systemd library
+  // - typical use is to check sd.IsAvailable then the proper sd.*() functions
+  // - this unit will make sd.Done in its finalization section
   sd: TSystemD;
 
 {$endif OSLINUX}
@@ -1473,7 +1485,8 @@ function FileStreamSequentialRead(const FileName: string): THandleStream;
 // - wil use GetFileSize() API by default, unless HasNoSize is defined,
 // and read will be done using a buffer (required e.g. for char files under Linux)
 // - uses RawByteString for byte storage, whatever the codepage is
-function StringFromFile(const FileName: TFileName; HasNoSize: boolean = false): RawByteString;
+function StringFromFile(const FileName: TFileName;
+  HasNoSize: boolean = false): RawByteString;
 
 /// create a File from a string content
 // - uses RawByteString for byte storage, whatever the codepage is
