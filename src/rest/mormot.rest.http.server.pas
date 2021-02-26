@@ -664,7 +664,7 @@ begin
         [ToText(aUse)^, OSVersionInfoEx], self);
     // first try to use fastest http.sys
     fHttpServer := THttpApiServer.Create(false, aQueueName, HttpThreadStart,
-      HttpThreadTerminate, fDBServerNames);
+      HttpThreadTerminate, TrimU(fDBServerNames));
     for i := 0 to high(aServers) do
       HttpApiAddUri(aServers[i].Model.Root, fDomainName, aSecurity,
         fUse in HTTP_API_REGISTERING_MODES, true);
@@ -688,10 +688,10 @@ begin
     // http.sys not running -> create one instance of our pure socket server
     if aUse = useBidirSocket then
       fHttpServer := TWebSocketServerRest.Create(fPort, HttpThreadStart,
-        HttpThreadTerminate, fDBServerNames)
+        HttpThreadTerminate, TrimU(fDBServerNames))
     else
       fHttpServer := THttpServer.Create(fPort, HttpThreadStart,
-        HttpThreadTerminate, fDBServerNames, aThreadPoolCount, 30000,
+        HttpThreadTerminate, TrimU(fDBServerNames), aThreadPoolCount, 30000,
         rsoHeadersUnFiltered in fOptions);
     THttpServer(fHttpServer).WaitStarted;
   end;

@@ -1422,6 +1422,7 @@ begin
     fThreadRespClass := THttpServerResp;
   if fSocketClass = nil then
     fSocketClass := THttpServerSocket;
+  fProcessName := ProcessName; // TSynThreadPoolTHttpServer needs it now
   if ServerThreadPoolCount > 0 then
   begin
     fThreadPool := TSynThreadPoolTHttpServer.Create(self, ServerThreadPoolCount);
@@ -2271,7 +2272,9 @@ begin
   fOnThreadTerminate := fServer.fOnThreadTerminate;
   fBigBodySize := THREADPOOL_BIGBODYSIZE;
   fMaxBodyThreadCount := THREADPOOL_MAXWORKTHREADS;
-  inherited Create(NumberOfThreads {$ifndef USE_WINIOCP}, {queuepending=}true{$endif});
+  inherited Create(NumberOfThreads,
+    {$ifdef USE_WINIOCP} INVALID_HANDLE_VALUE {$else} {queuepending=}true{$endif},
+    Server.ProcessName);
 end;
 
 {$ifndef USE_WINIOCP}
