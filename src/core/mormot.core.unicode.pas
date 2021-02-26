@@ -3577,7 +3577,8 @@ begin
   begin
     if L >= DestLen then
       L := DestLen - 1; // truncate to avoid buffer overflow
-    WinAnsiConvert.AnsiBufferToUnicode(PWideChar(Dest), pointer(S), L); // include last #0
+    WinAnsiConvert.AnsiBufferToUnicode(PWideChar(Dest), pointer(S), L);
+    // including last #0
   end
   else
     Dest^[0] := 0;

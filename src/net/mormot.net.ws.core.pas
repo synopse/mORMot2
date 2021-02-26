@@ -181,7 +181,8 @@ type
     // - default is some fixed value - you may customize it for a project
     AesSalt: RawUtf8;
     /// TWebSocketProtocol.SetEncryptKey PBKDF2-SHA-3 rounds for TProtocolAes
-    // - default is 1024 which makes around 0.5 ms to compute
+    // - default is 1024 which takes around 0.5 ms to compute
+    // - 0 would use Sha256Weak() derivation function, as mORMot 1.18
     AesRounds: integer;
     /// TWebSocketProtocol.SetEncryptKey AES class for TProtocolAes
     // - default is TAesFast[mCtr]
@@ -191,7 +192,7 @@ type
     // - for mORMot 1.18 compatibility, set for your custom settings:
     // $ AesClass := TAesCfb;
     // $ AesBits := 256;
-    // $ AesRounds := 0; // Sha256Weak() derivation function
+    // $ AesRounds := 0; // Sha256Weak() deprecated function
     AesBits: integer;
     /// TWebSocketProtocol.SetEncryptKey 'password#xxxxxx.private' ECDHE algo
     // - default is efAesCtr128 as set to TEcdheProtocol.FromPasswordSecureFile
