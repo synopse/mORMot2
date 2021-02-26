@@ -3,7 +3,6 @@ program Project05HttpDaemon;
 {$APPTYPE CONSOLE}
 
 {$I mormot.defines.inc}
-{$define PUREMORMOT2}
 uses
   {$I mormot.uses.inc}
   SysUtils,
