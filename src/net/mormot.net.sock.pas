@@ -529,9 +529,11 @@ type
       aTimeOut: cardinal = 10000; aTLS: boolean = false; aTLSContext: PNetTLSContext = nil);
     /// bind to an address
     // - aAddr='1234' - bind to a port on all interfaces, the same as '0.0.0.0:1234'
-    // - aAddr='IP:port' - bind to specified interface only, e.g. '1.2.3.4:1234'
-    // - aAddr='unix:/path/to/file' - bind to unix domain socket, e.g. 'unix:/run/mormot.sock'
-    // - aAddr='' - bind to systemd descriptor on linux. See
+    // - aAddr='IP:port' - bind to specified interface only, e.g.
+    // '1.2.3.4:1234'
+    // - aAddr='unix:/path/to/file' - bind to unix domain socket, e.g.
+    // 'unix:/run/mormot.sock'
+    // - aAddr='' - bind to systemd descriptor on linux - see
     // http://0pointer.de/blog/projects/socket-activation.html
     constructor Bind(const aAddress: RawUtf8; aLayer: TNetLayer = nlTCP;
       aTimeOut: integer = 10000);
@@ -1078,7 +1080,11 @@ begin
      (not dobind) and
      Assigned(NewSocketAddressCache) and
      ToCardinal(port, p, 1) then
-    if NewSocketAddressCache.Search(address, addr) then
+    if (address = '') or
+       (address = cLocalhost) or
+       (address = cAnyHost) then // for client: '0.0.0.0'->'127.0.0.1'
+      result := addr.SetFrom(cLocalhost, port, layer)
+    else if NewSocketAddressCache.Search(address, addr) then
     begin
       fromcache := true;
       result := addr.SetPort(p);
@@ -1215,7 +1221,11 @@ begin
     len := SizeOf(addr);
     sock := mormot.net.sock.accept(TSocket(@self), @addr, len);
     if sock = -1 then
-      result := NetLastError
+    begin
+      result := NetLastError;
+      if result = nrOk then
+        result := nrNotImplemented;
+    end
     else
     begin
       clientsocket := TNetSocket(sock);
@@ -1582,6 +1592,32 @@ end;
 const
   UNIX_LOW = ord('u') + ord('n') shl 8 + ord('i') shl 16 + ord('x') shl 24;
 
+function StartWith(p, up: PUtf8Char): boolean;
+// to avoid linking mormot.core.text for IdemPChar()
+var
+  c, u: AnsiChar;
+begin
+  result := false;
+  if (p = nil) or
+     (up = nil) then
+    exit;
+  repeat
+    u := up^;
+    if u = #0 then
+      break;
+    inc(up);
+    c := p^;
+    inc(p);
+    if (c >= 'a') and
+       (c <= 'z') then
+      dec(c, 32);
+    if c <> u then
+      exit;
+  until false;
+  result := true;
+end;
+
+
 { TCrtSocket }
 
 function TCrtSocket.GetRawSocket: PtrInt;
@@ -1625,8 +1661,17 @@ begin
   Create(aTimeOut); // default read timeout is 10 seconds
   if aTLSContext <> nil then
     TLS := aTLSContext^; // copy the input parameters before OpenBind()
-  // raise exception on error
-  OpenBind(aServer, aPort, {dobind=}false, aTLS, aLayer);
+  // OpenBind() raise an exception on error
+  {$ifdef OSPOSIX}
+  if StartWith(pointer(aServer), 'UNIX:') then
+  begin
+    // aServer='unix:/path/to/myapp.socket'
+    OpenBind(copy(aServer, 6, 200), '', {dobind=}false, aTLS, nlUNIX);
+    fServer := aServer; // keep the full server name if reused
+  end
+  else
+  {$endif OSPOSIX}
+    OpenBind(aServer, aPort, {dobind=}false, aTLS, aLayer);
 end;
 
 function SplitFromRight(const Text: RawUtf8; Sep: AnsiChar;
@@ -1683,9 +1728,10 @@ begin
     {$ifdef OSPOSIX}
     if s = 'unix' then
     begin
-      aLayer := nlUNIX;
-      s := p;
-      p := '';
+      // aAddress='unix:/path/to/myapp.socket'
+      FpUnlink(pointer(p)); // previous bind may have left the .socket file
+      OpenBind(p, '', {dobind=}true, {tls=}false, nlUnix, {%H-}TNetSocket(aSock));
+      exit;
     end;
     {$endif OSPOSIX}
   end;
@@ -1982,6 +2028,10 @@ begin
   fSock := TNetSocket(-1);
   // don't reset fServer/fPort/fTls/fWasBind: caller may use them to reconnect
   // (see e.g. THttpClientSocket.Request)
+  {$ifdef OSPOSIX}
+  if fSocketLayer = nlUnix then
+    FpUnlink(pointer(fServer)); // 'unix:/path/to/myapp.socket' -> delete file
+  {$endif OSPOSIX}
 end;
 
 destructor TCrtSocket.Destroy;
@@ -2506,31 +2556,6 @@ end;
 
 
 { TUri }
-
-function StartWith(p, up: PUtf8Char): boolean;
-// to avoid linking mormot.core.text for IdemPChar()
-var
-  c, u: AnsiChar;
-begin
-  result := false;
-  if (p = nil) or
-     (up = nil) then
-    exit;
-  repeat
-    u := up^;
-    if u = #0 then
-      break;
-    inc(up);
-    c := p^;
-    inc(p);
-    if (c >= 'a') and
-       (c <= 'z') then
-      dec(c, 32);
-    if c <> u then
-      exit;
-  until false;
-  result := true;
-end;
 
 procedure TUri.Clear;
 begin

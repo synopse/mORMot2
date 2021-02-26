@@ -115,10 +115,12 @@ const
   HTTP_DEFAULT_MODE = useHttpApiRegisteringURI;
 
   /// the kind of HTTP server which involves http.sys
-  HTTP_API_MODES = [useHttpApi .. useHttpApiRegisteringURIOnly];
+  HTTP_API_MODES =
+    [useHttpApi .. useHttpApiRegisteringURIOnly];
 
   /// the http.sys modes which won't have any fallback to the sockets server
-  HTTP_API_REGISTERING_MODES = [useHttpApiRegisteringURI, useHttpApiRegisteringURIOnly];
+  HTTP_API_REGISTERING_MODES =
+    [useHttpApiRegisteringURI, useHttpApiRegisteringURIOnly];
 
   {$else}
   HTTP_DEFAULT_MODE = useHttpSocket;
@@ -615,11 +617,17 @@ begin
   SetAccessControlAllowOrigin(''); // deny CORS by default
   fHosts.Init(false);
   fDomainName := aDomainName;
+  // aPort='publicip:port' or 'unix:/path/to/myapp.socket' or 'port'
   fPort := aPort;
   Split(RawUtf8(fPort), ':', fPublicAddress, fPublicPort);
-  if fPublicPort = '' then
+  if fPublicAddress = 'unix' then
   begin
-    // you should better set aPort='publicip:port'
+    // 'unix:/path/to/myapp.socket'
+    fPublicPort := fPort; // to be recognized by TCrtSocket.Bind()
+    fPublicAddress := '0.0.0.0';
+  end else if fPublicPort = '' then
+  begin
+    // no publicip supplied -> bind to HostName
     fPublicPort := fPublicAddress;
     fPublicAddress := Executable.Host;
   end;

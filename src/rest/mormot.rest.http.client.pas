@@ -126,6 +126,7 @@ type
     // you left the 0 default parameters, it would use global
     // HTTP_DEFAULT_CONNECTTIMEOUT, HTTP_DEFAULT_SENDTIMEOUT and
     // HTTP_DEFAULT_RECEIVETIMEOUT variable values
+    // - TRestHttpClientSocket handles aServer='unix:/run/mormotapp.sock' on POSIX
     constructor Create(const aServer, aPort: RawUtf8; aModel: TOrmModel;
       aHttps: boolean = false; const aProxyName: RawUtf8 = '';
       const aProxyByPass: RawUtf8 = ''; aSendTimeout: cardinal = 0;
@@ -246,9 +247,8 @@ type
 { ************ TRestHttpClientSocket REST Client Class over Sockets }
 
   /// HTTP/1.1 RESTful JSON mORMot Client class using mormot.net.client socket
-  // - will give the best performance on a local computer, but has been found
-  // out to be slower over a network
-  // - is not able to use secure HTTPS protocol
+  // - can use regular HTTP/HTTPS connection, or Unix Domain Sockets supplying
+  // aServer='unix:/run/mormotapp.sock' to is Create() constructor
   // - note that, in its current implementation, this class is not thread-safe:
   // you need either to lock its access via a critical section, or initialize
   // one client instance per thread
@@ -701,7 +701,8 @@ begin
           on E: Exception do
           begin
             FreeAndNil(fSocket);
-            if started = 0 then
+            if (started = 0) or
+               (isDestroying in fInternalState) then
               exit;
             elapsed := GetTickCount64 - started;
             if elapsed >= fConnectRetrySeconds shl 10 then
@@ -710,7 +711,7 @@ begin
             if elapsed < 500 then
               wait := 100
             else
-              wait := 1000; // checking every second is enough
+              wait := 1000; // every second retry is enough
             fLogClass.Add.Log(sllTrace, 'InternalCheckOpen: % on %:% after %' +
               ' -> wait % and retry #% up to % seconds',
               [E.ClassType, fServer, fPort, MicroSecToString(elapsed * 1000),
@@ -725,9 +726,11 @@ begin
         fSocket.UserAgent := fExtendedOptions.UserAgent;
       if fModel <> nil then
         fSocket.ProcessName := FormatUtf8('%/%', [fPort, fModel.Root]);
-      if fSendTimeout > 0 then
+      if (fSendTimeout > 0) and
+         (fConnectTimeout <> fSendTimeout) then
         fSocket.SendTimeout := fSendTimeout;
-      if fReceiveTimeout > 0 then
+      if (fReceiveTimeout > 0) and
+         (fConnectTimeout <> fReceiveTimeout) then
         fSocket.ReceiveTimeout := fReceiveTimeout;
       // note that first registered algo will be the prefered one
       {$ifndef PUREMORMOT2}
