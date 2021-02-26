@@ -75,6 +75,8 @@ type
     fTestClass: TRestClass;
     fThreads: TSynObjectList;
     fRunningThreadCount: integer;
+    fPendingThreadCount: integer;
+    fPendingThreadFinished: TEvent;
     fHttpServer: TRestHttpServer;
     fMinThreads: integer;
     fMaxThreads: integer;
@@ -161,8 +163,33 @@ type
 
 implementation
 
+{
+  Some Numbers taken on a Core i3 CPU with 2 Cores / 4 Threads:
+  - Create thread pool: 1 assertion passed  1.40ms
+  - TRestServerDB: 36,099 assertions passed  609.10ms
+     1=44533/s  2=30999/s  5=30040/s  10=30020/s  30=28552/s  50=29021/s
+  - TRestClientDB: 36,096 assertions passed  577.87ms
+     1=37165/s  2=34651/s  5=33116/s  10=31843/s  30=31150/s  50=30860/s
+  - TCP sockets: 36,096 assertions passed  1.20s
+     1=11723/s  2=14664/s  5=16084/s  10=16829/s  30=18424/s  50=18773/s
+  - Unix domain sockets: 36,096 assertions passed  1.12s
+     1=13010/s  2=14695/s  5=18749/s  10=19516/s  30=19672/s  50=20016/s
+  - Websockets: 36,066 assertions passed  1.93s
+     1=7167/s  2=9307/s  5=11994/s  10=12631/s  30=10480/s  50=8136/s
+  - libcurl: 36,085 assertions passed  2.73s
+     1=7436/s  2=9375/s  5=12693/s  10=6428/s  30=6072/s  50=5616/s
+  - Locked: 36,099 assertions passed  630.72ms
+     1=23917/s  2=33646/s  5=34147/s  10=32964/s  30=30246/s  50=28532/s
+  - Unlocked: 36,098 assertions passed  603.85ms
+     1=37165/s  2=31870/s  5=30653/s  10=30333/s  30=29932/s  50=29802/s
+  - Main thread: 36,091 assertions passed  617.19ms
+     1=27418/s  2=31227/s  5=32229/s  10=31799/s  30=30926/s  50=31010/s
+  - Background thread: 36,095 assertions passed  934.39ms
+     1=27845/s  2=27359/s  5=24503/s  10=21665/s  30=15350/s  50=13504/s
+}
 
 { TTestMultiThreadProcessThread }
+
 type
   TTestMultiThreadProcessThread = class(TSynThread)
   protected
@@ -260,6 +287,8 @@ begin
                 if Rest[i] <> fTest.fDatabase then
                   FreeAndNil(Rest[i]);
               fProcessFinished := true;
+              if InterlockedDecrement(fTest.fPendingThreadCount) = 0 then
+                fTest.fPendingThreadFinished.SetEvent;
             end;
           except
             on E: Exception do
@@ -268,8 +297,8 @@ begin
       end;
   finally
     Rec.Free;
+    fProcessFinished := true;
   end;
-  fProcessFinished := true;
 end;
 
 procedure TTestMultiThreadProcessThread.LaunchProcess;
@@ -277,7 +306,6 @@ begin
   fProcessFinished := false;
   fIterationCount := fTest.fOperationCount div fTest.fRunningThreadCount;
   fEvent.SetEvent;
-  Sleep(0); // is expected for proper process
 end;
 
 
@@ -288,6 +316,7 @@ begin
   DatabaseClose;
   FreeAndNil(fModel);
   FreeAndNil(fThreads);
+  FreeAndNil(fPendingThreadFinished);
 end;
 
 constructor TTestMultiThreadProcess.Create(
@@ -296,8 +325,9 @@ begin
   inherited;
   fMinThreads := 1;
   fMaxThreads := 50;
-  fOperationCount := 200;
+  fOperationCount := 300;
   fClientPerThread := 1;
+  fPendingThreadFinished := TEvent.Create(nil, false, false, '');
 end;
 
 function TTestMultiThreadProcess.CreateClient: TRest;
@@ -337,7 +367,6 @@ begin
     result := TRestHttpClientGenericClass(fTestClass).Create(
       ClientIP, ClientPort, fModel);
     TRestHttpClientGeneric(result).ServerTimestampSynchronize;
-    TRestHttpClientGeneric(result).CallBackGetResult('timestamp', []);
     if fTestClass = TRestHttpClientWebsockets then
       with (result as TRestHttpClientWebsockets) do
       begin
@@ -429,12 +458,11 @@ begin
        (fDatabase <> nil) then
       fDatabase.DB.Execute('delete from people');
     // 2.2. Launch the background client threads
+    fPendingThreadFinished.ResetEvent;
+    fPendingThreadCount := fRunningThreadCount;
     fTimer.Start;
     for n := 0 to fRunningThreadCount - 1 do
-    begin
       TTestMultiThreadProcessThread(fThreads[n]).LaunchProcess;
-      sleep(10); // ensure thread process is actually started
-    end;
     // 2.3. Wait for the background client threads process to be finished
     repeat
       {$ifdef HAS_MESSAGES}
@@ -448,8 +476,9 @@ begin
       {$endif HAS_MESSAGES}
       if (fDatabase <> nil) and
          (fDatabase.AcquireWriteMode = amMainThread) then
-        CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif};
-      SleepHiRes(0);
+        CheckSynchronize{$ifndef DELPHI6OROLDER}(1){$endif}
+      else
+        fPendingThreadFinished.WaitFor(INFINITE);
       allFinished := true;
       for n := 0 to fRunningThreadCount - 1 do
         if not TTestMultiThreadProcessThread(fThreads.List[n]).fProcessFinished then
@@ -507,26 +536,21 @@ end;
 
 procedure TTestMultiThreadProcess.Locked;
 begin
-  // 1=7310/s  2=8689/s  5=7693/s  10=3893/s  30=1295/s  50=777/s
-  // (numbers are taken from a Xeon Phi 2 @ 1.5GHz with 288 cores)
   Test(TRestClientDB, HTTP_DEFAULT_MODE, amLocked);
 end;
 
 procedure TTestMultiThreadProcess.Unlocked;
 begin
-  // 1=7342/s  2=9400/s  5=7693/s  10=3894/s  30=1295/s  50=777/s
   Test(TRestClientDB, HTTP_DEFAULT_MODE, amUnlocked);
 end;
 
 procedure TTestMultiThreadProcess.BackgroundThread;
 begin
-  // 1=6173/s  2=7299/s  5=7244/s  10=3912/s  30=1301/s  50=777/s
   Test(TRestClientDB, HTTP_DEFAULT_MODE, amBackgroundThread);
 end;
 
 procedure TTestMultiThreadProcess.MainThread;
 begin
-  // 1=5000/s  2=5911/s  5=4260/s  10=2663/s  30=1126/s  50=707/s
   Test(TRestClientDB, HTTP_DEFAULT_MODE, amMainThread);
 end;
 
@@ -541,7 +565,6 @@ end;
 
 procedure TTestMultiThreadProcess.TCPSockets;
 begin
-  // 1=2470/s  2=3866/s  5=3608/s  10=3556/s  30=1303/s  50=780/s
   Test(TRestHttpClientSocket, useHttpSocket);
 end;
 
@@ -555,21 +578,18 @@ end;
 
 procedure TTestMultiThreadProcess.Websockets;
 begin
-  // 1=2433/s  2=3389/s  5=3208/s  10=3354/s  30=1303/s  50=778/s
   Test(TRestHttpClientWebsockets, useBidirSocket);
 end;
 
 {$ifdef USELIBCURL}
 procedure TTestMultiThreadProcess._libcurl;
 begin
-  // 1=48/s  2=95/s  5=234/s  10=433/s  30=729/s  50=594/s
   Test(TRestHttpClientCurl, useHttpSocket);
 end;
 {$endif USELIBCURL}
 
 procedure TTestMultiThreadProcess._TRestClientDB;
 begin
-  // 1=7347/s  2=8100/s  5=7654/s  10=3898/s  30=1295/s  50=777/s
   Test(TRestClientDB);
 end;
 
@@ -590,7 +610,6 @@ end;
 
 procedure TTestMultiThreadProcess._TRestServerDB;
 begin
-  // 1=9332/s  2=9300/s  5=7826/s  10=3891/s  30=1295/s  50=777/s
   Test(TRestServerDB);
 end;
 

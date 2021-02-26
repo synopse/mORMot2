@@ -775,6 +775,7 @@ type
     fContentionTime: Int64;
     fContentionCount: cardinal;
     fContentionAbortDelay: integer;
+    fName: RawUtf8;
     {$ifdef USE_WINIOCP}
     fRequestQueue: THandle; // IOCP has its own internal queue
     {$else}
@@ -782,7 +783,6 @@ type
     fPendingContext: array of pointer;
     fPendingContextCount: integer;
     fSafe: TRTLCriticalSection;
-    fName: RawUtf8;
     function GetPendingContextCount: integer;
     function PopPendingContext: pointer;
     function QueueLength: integer; virtual;
