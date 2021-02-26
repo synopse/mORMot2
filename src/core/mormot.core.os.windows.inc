@@ -2910,7 +2910,6 @@ begin
   QueryPerformanceFrequency(PInt64(@_QueryPerformanceFrequency)^);
   if _QueryPerformanceFrequency = 0 then
     raise Exception.Create('QueryPerformanceFrequency=0'); // paranoid
-  writeln('_QueryPerformanceFrequency=',_QueryPerformanceFrequency);
   IsWow64Process := GetProcAddress(h, 'IsWow64Process');
   Res := false;
   IsWow64 := Assigned(IsWow64Process) and
