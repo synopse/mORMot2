@@ -113,6 +113,7 @@ uses
   test.orm.core            in '.\test.orm.core.pas',
   test.orm.sqlite3         in '.\test.orm.sqlite3.pas',
   test.orm.extdb           in '.\test.orm.extdb.pas',
+  test.orm.threads         in '.\test.orm.threads.pas',
   test.orm.network         in '.\test.orm.network.pas',
   test.soa.core            in '.\test.soa.core.pas',
   test.soa.network         in '.\test.soa.network.pas';
@@ -144,7 +145,7 @@ begin
   AddCase([
     //
     TTestOrmCore, TTestSqliteFile, TTestSqliteFileWAL, TTestSqliteFileMemoryMap,
-    TTestSqliteMemory, TTestExternalDatabase, TTestClientServerAccess
+    TTestSqliteMemory, TTestExternalDatabase, TTestClientServerAccess, TTestMultiThreadProcess
   ]);
 end;
 
