@@ -56,10 +56,10 @@ procedure TSampleDaemon.Start;
 begin
   SQLite3Log.Enter(self);
   Model := CreateSampleModel;
-  SampleServer := TSampleServer.Create(Model, ChangeFileExt(ExeVersion.ProgramFileName,'.db'));
+  SampleServer := TSampleServer.Create(Model, ChangeFileExt(Executable.ProgramFileName,'.db'));
   SampleServer.DB.Synchronous := smOff;
   SampleServer.DB.LockingMode := lmExclusive;
-  SampleServer.CreateMissingTables;
+  SampleServer.Server.CreateMissingTables;
   HttpServer := TRestHttpServer.Create(HttpPort,[SampleServer],'+',HTTP_DEFAULT_MODE);
   HttpServer.AccessControlAllowOrigin := '*';
   SQLite3Log.Add.Log(sllInfo, 'HttpServer started at Port: ' + HttpPort);
@@ -91,7 +91,7 @@ begin
   LogFamily.Level := LOG_VERBOSE;
   LogFamily.PerThreadLog := ptIdentifiedInOnFile;
   LogFamily.EchoToConsole := LOG_VERBOSE;
-  SampleDaemon := TSampleDaemon.Create(TSampleDaemonSettings, ExeVersion.ProgramFilePath, '', '');
+  SampleDaemon := TSampleDaemon.Create(TSampleDaemonSettings, Executable.ProgramFilePath, '', '');
   SQLite3Log.Add.Log(sllInfo, 'Daemon started, listening on port '  + HttpPort);
   try
     SampleDaemon.CommandLine;

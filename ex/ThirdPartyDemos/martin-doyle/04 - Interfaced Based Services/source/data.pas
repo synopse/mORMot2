@@ -2,8 +2,8 @@ unit data;
 
 interface
 
+{$I mormot.defines.inc}
 uses
-  {$I mormot.uses.inc}
   mormot.core.base,
   mormot.core.data,
   mormot.core.json,

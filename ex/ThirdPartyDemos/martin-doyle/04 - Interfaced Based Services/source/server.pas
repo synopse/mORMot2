@@ -1,8 +1,9 @@
 unit server;
 
 interface
-  uses
-  {$I mormot.uses.inc}
+
+{$I mormot.defines.inc}
+uses
   SysUtils,
   mormot.core.base,
   mormot.core.data,
@@ -86,7 +87,7 @@ end;
 constructor TSampleServer.Create(aModel: TOrmModel; const aDBFileName:
     TFileName);
 begin
-  inherited Create(aModel, aDBFileName);
+  inherited Create(AModel, ADBFileName);
   ServiceDefine(TExampleService, [IExample], sicShared);
 end;
 

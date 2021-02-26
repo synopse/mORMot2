@@ -2,8 +2,8 @@ unit main;
 
 interface
 
+{$I mormot.defines.inc}
 uses
-  {$I mormot.uses.inc}
   {$ifdef MSWINDOWS}
   Windows,
   {$endif MSWINDOWS}
@@ -50,7 +50,7 @@ begin
   try
     Rec.Name := StringToUTF8(NameEdit.Text);
     Rec.Question := StringToUTF8(QuestionMemo.Text);
-    if HttpClient.Add(Rec,true)=0 then
+    if HttpClient.Orm.Add(Rec,true)=0 then
       ShowMessage('Error adding the data') else begin
       NameEdit.Text := '';
       QuestionMemo.Text := '';
@@ -93,7 +93,6 @@ begin
 end;
 
 end.
-
 
 
 

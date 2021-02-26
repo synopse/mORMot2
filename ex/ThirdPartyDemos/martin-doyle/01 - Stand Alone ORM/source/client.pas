@@ -1,8 +1,9 @@
 unit client;
 
 interface
+
+{$I mormot.defines.inc}
 uses
-  {$I mormot.uses.inc}
   mormot.rest.sqlite3;
 
 type

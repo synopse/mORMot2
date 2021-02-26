@@ -27,11 +27,11 @@ begin
   LogFamily.EchoToConsole := LOG_VERBOSE;
   Model := CreateSampleModel;
   try
-    SampleServer := TSampleServer.Create(Model, ChangeFileExt(ExeVersion.ProgramFileName, '.db'));
+    SampleServer := TSampleServer.Create(Model, ChangeFileExt(Executable.ProgramFileName, '.db'));
     try
       SampleServer.DB.Synchronous := smOff;
       SampleServer.DB.LockingMode := lmExclusive;
-      SampleServer.CreateMissingTables;
+      SampleServer.Server.CreateMissingTables;
       HttpServer := TRestHttpServer.Create(HttpPort, [SampleServer], '+', HTTP_DEFAULT_MODE);
       HttpServer.AccessControlAllowOrigin := '*';
       try

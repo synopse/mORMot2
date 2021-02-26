@@ -1,8 +1,9 @@
 unit server;
 
 interface
-  uses
-  {$I mormot.uses.inc}
+
+{$I mormot.defines.inc}
+uses
   mormot.core.base,
   mormot.core.data,
   mormot.core.unicode,
@@ -16,7 +17,7 @@ interface
 type
   TSampleServer = class(TRestServerDB)
   published
-    procedure example(Ctxt: TRestServerUriContext);
+    procedure Example(Ctxt: TRestServerUriContext);
   end;
 
 implementation
@@ -24,7 +25,7 @@ implementation
 {
 ******************************** TSampleServer *********************************
 }
-procedure TSampleServer.example(Ctxt: TRestServerUriContext);
+procedure TSampleServer.Example(Ctxt: TRestServerUriContext);
 var
   OrmSample: TOrmSample;
   Sample: TSample;
@@ -33,7 +34,7 @@ begin
   case Ctxt.Method of
   mGET:
     begin
-      OrmSample := TOrmSample.Create(self.Orm,'Name=?',[Ctxt['Name']]);
+      OrmSample := TOrmSample.Create(Self.Orm,'Name=?',[Ctxt['Name']]);
       try
       if OrmSample.ID=0 then
       begin
@@ -57,7 +58,7 @@ begin
         RecordLoad(Sample, Ctxt.Call.InBody, TypeInfo(TSample));
         OrmSample.Name := Sample.Name;
         OrmSample.Question := Sample.Question;
-        if self.Orm.Add(OrmSample, true) > 0 then
+        if Self.Orm.Add(OrmSample, true) > 0 then
         begin
           Writeln('Record created OK');
           Ctxt.Success(HTTP_CREATED);

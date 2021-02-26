@@ -2,8 +2,8 @@ unit main;
 
 interface
 
+{$I mormot.defines.inc}
 uses
-  {$I mormot.uses.inc}
   {$ifdef MSWINDOWS}
   Windows,
   {$endif MSWINDOWS}
@@ -98,6 +98,7 @@ begin
 end;
 
 end.
+
 
 
 

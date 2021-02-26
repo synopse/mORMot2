@@ -1,8 +1,9 @@
 unit server;
 
 interface
-  uses
-  {$I mormot.uses.inc}
+
+{$I mormot.defines.inc}
+uses
   mormot.core.base,
   mormot.orm.core,
   mormot.rest.sqlite3,

@@ -1,9 +1,5 @@
 program Project05HttpClient;
 
-{$IFDEF FPC}
-  {$MODE Delphi}
-{$ENDIF}
-
 {$I mormot.defines.inc}
 uses
   {$I mormot.uses.inc}
@@ -21,5 +17,7 @@ begin
   Application.CreateForm(TMainForm, MainForm);
   Application.Run;
 end.
+
+
 
 

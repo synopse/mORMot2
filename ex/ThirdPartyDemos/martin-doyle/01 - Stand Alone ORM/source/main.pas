@@ -2,8 +2,8 @@ unit main;
 
 interface
 
+{$I mormot.defines.inc}
 uses
-  {$I mormot.uses.inc}
   {$ifdef MSWINDOWS}
   Windows,
   {$endif MSWINDOWS}
@@ -48,7 +48,7 @@ begin
   try
     Rec.Name := StringToUTF8(NameEdit.Text);
     Rec.Question := StringToUTF8(QuestionMemo.Text);
-    if Client.Add(Rec,true)=0 then
+    if Client.Orm.Add(Rec,true)=0 then
       ShowMessage('Error adding the data') else begin
       NameEdit.Text := '';
       QuestionMemo.Text := '';
@@ -81,8 +81,8 @@ end;
 procedure TMainForm.FormCreate(Sender: TObject);
 begin
   Model := CreateSampleModel;
-  Client := TSampleClient.Create(Model, nil, ChangeFileExt(ExeVersion.ProgramFileName,'.db'), TRestServerDB, false, '');
-  Client.Server.CreateMissingTables;
+  Client := TSampleClient.Create(Model, nil, ChangeFileExt(Executable.ProgramFileName,'.db'), TRestServerDB, false, '');
+  Client.Server.Server.CreateMissingTables;
 end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);
@@ -92,6 +92,7 @@ begin
 end;
 
 end.
+
 
 
 
