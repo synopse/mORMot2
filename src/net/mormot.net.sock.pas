@@ -1608,10 +1608,16 @@ begin
     inc(up);
     c := p^;
     inc(p);
+    if c = u  then
+      continue;
     if (c >= 'a') and
        (c <= 'z') then
+    begin
       dec(c, 32);
-    if c <> u then
+      if c <> u then
+        exit;
+    end
+    else
       exit;
   until false;
   result := true;

@@ -239,7 +239,7 @@ begin
   try
     Rec.LastName := 'Thread ' + CardinalToHex(PtrUInt(GetCurrentThreadId));
     while not Terminated do
-      case fEvent.WaitFor(INFINITE) of
+      case fEvent.WaitFor(INFINITE) of // triggered from LaunchProcess
         wrSignaled:
           if Terminated or
              fProcessFinished then // from Destroy
@@ -288,7 +288,7 @@ begin
                   FreeAndNil(Rest[i]);
               fProcessFinished := true;
               if InterlockedDecrement(fTest.fPendingThreadCount) = 0 then
-                fTest.fPendingThreadFinished.SetEvent;
+                fTest.fPendingThreadFinished.SetEvent; // notify all finished
             end;
           except
             on E: Exception do
@@ -305,7 +305,7 @@ procedure TTestMultiThreadProcessThread.LaunchProcess;
 begin
   fProcessFinished := false;
   fIterationCount := fTest.fOperationCount div fTest.fRunningThreadCount;
-  fEvent.SetEvent;
+  fEvent.SetEvent; // launch work in Execute loop
 end;
 
 
@@ -365,7 +365,7 @@ begin
   begin
     //writeln('New Client: ',ClientIP,':',ClientPort);
     result := TRestHttpClientGenericClass(fTestClass).Create(
-      ClientIP, ClientPort, fModel);
+      ClientIP, ClientPort{%H-}, fModel);
     TRestHttpClientGeneric(result).ServerTimestampSynchronize;
     if fTestClass = TRestHttpClientWebsockets then
       with (result as TRestHttpClientWebsockets) do

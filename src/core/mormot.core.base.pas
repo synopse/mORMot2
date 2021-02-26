@@ -2299,6 +2299,13 @@ procedure LockedDec32(int32: PInteger);
 /// slightly faster than InterlockedIncrement64()
 procedure LockedInc64(int64: PInt64);
 
+/// low-level string/dynarray reference counter unprocess
+// - caller should have tested that refcnt>=0
+// - returns true if the managed variable should be released (i.e. refcnt was 1)
+// - FPC uses PtrInt/SizeInt for refcnt, Delphi uses longint even on CPU64
+function RefCntDecFree(var refcnt: TRefCnt): boolean;
+  {$ifndef CPUINTEL}inline;{$endif}
+
 // defined here for mormot.test.base only
 function GetBitsCountSSE42(value: PtrInt): PtrInt;
 
@@ -2317,14 +2324,11 @@ procedure LockedDec32(int32: PInteger); inline;
 /// redirect to FPC InterlockedIncrement64() on non Intel CPU
 procedure LockedInc64(int64: PInt64); inline;
 
-{$endif CPUINTEL}
-
-/// low-level string/dynarray reference counter unprocess
-// - caller should have tested that refcnt>=0
-// - returns true if the managed variable should be released (i.e. refcnt was 1)
+/// redirect to FPC InterlockedDecrement() on non Intel CPU
 // - FPC uses PtrInt/SizeInt for refcnt, Delphi uses longint even on CPU64
-function RefCntDecFree(var refcnt: TRefCnt): boolean;
-  {$ifndef CPUINTEL}inline;{$endif}
+function RefCntDecFree(var refcnt: TRefCnt): boolean; inline;
+
+{$endif CPUINTEL}
 
 {$ifndef FPC}
 
