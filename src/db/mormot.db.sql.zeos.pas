@@ -342,14 +342,15 @@ procedure SetZEOSProtocols;
 implementation
 
 const
-  FirstDbcIndex = 1;
-  TableNameIndex = 3;
-  ColumnNameIndex = 4;
-  TableColColumnTypeIndex = 5;
-  TableColColumnTypeNameIndex = 6;
-  TableColColumnSizeIndex = 7;
-  TableColColumnDecimalDigitsIndex = 9;
-  IndexInfoColColumnNameIndex = 9;
+  ZeoIndex = {$ifdef GENERIC_INDEX} 0 {$else} 1 {$endif};
+  FirstDbcIndex = ZeoIndex;
+  TableNameIndex = 2 + ZeoIndex;
+  ColumnNameIndex = 3 + ZeoIndex;
+  TableColColumnTypeIndex = 4 + ZeoIndex;
+  TableColColumnTypeNameIndex = 5 + ZeoIndex;
+  TableColColumnSizeIndex = 6 + ZeoIndex;
+  TableColColumnDecimalDigitsIndex = 8 + ZeoIndex;
+  IndexInfoColColumnNameIndex = 8 + ZeoIndex;
 
 
 { ************  TSqlDBZeosConnection* and TSqlDBZeosStatement Classes }
