@@ -6019,17 +6019,16 @@ end;
 class function TAesPrng.Main: TAesPrngAbstract;
 begin
   result := MainAesPrng;
-  if result = nil then
-  begin
-    GlobalLock;
-    try
-      if MainAesPrng = nil then
-        MainAesPrng := TAesPrng.Create;
-    finally
-      GlobalUnLock;
-    end;
-    result := MainAesPrng;
+  if result <> nil then
+    exit;
+  GlobalLock;
+  try
+    if MainAesPrng = nil then
+      MainAesPrng := TAesPrng.Create;
+  finally
+    GlobalUnLock;
   end;
+  result := MainAesPrng;
 end;
 
 class function TAesPrng.GetEntropy(Len: integer; SystemOnly: boolean): RawByteString;

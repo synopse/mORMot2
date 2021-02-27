@@ -647,18 +647,17 @@ var
 class function TAesPrngOsl.Main: TAesPrngAbstract;
 begin
   result := MainAesPrngOsl;
-  if result = nil then
-  begin
-    EOpenSslCrypto.CheckAvailable(self, 'Main');
-    GlobalLock;
-    try
-      if MainAesPrngOsl = nil then
-        MainAesPrngOsl := TAesPrngOsl.Create;
-    finally
-      GlobalUnLock;
-    end;
-    result := MainAesPrngOsl;
+  if result <> nil then
+    exit;
+  EOpenSslCrypto.CheckAvailable(self, 'Main');
+  GlobalLock;
+  try
+    if MainAesPrngOsl = nil then
+      MainAesPrngOsl := TAesPrngOsl.Create;
+  finally
+    GlobalUnLock;
   end;
+  result := MainAesPrngOsl;
 end;
 
 

@@ -904,7 +904,7 @@ type
     UseLobChunks: boolean;
     /// load the oci.dll library
     // - and retrieve all Oci*() addresses for OCI_ENTRIES[] items
-    constructor Create;
+    constructor Create(LibraryFileName: TFileName = '');
     /// retrieve the client version as 'oci.dll rev. 11.2.0.1'
     function ClientRevision: RawUtf8;
     /// retrieve the OCI charset ID from a Windows Code Page
@@ -957,6 +957,7 @@ procedure Int64ToSqlT_VNU(Value: Int64; OutData: PSqlT_VNU);
 
 var
   /// global variable used to access the Oracle Client Library once loaded
+  // - call first OracleLibraryInitialize to load the library if needd
   OCI: TSqlDBOracleLib = nil;
 
   /// optional folder where the Oracle Client Library is to be searched
@@ -964,6 +965,12 @@ var
   // in %ORACLE_HOME%\bin
   // - you can specify here a folder name in which the oci.dll is to be found
   SynDBOracleOCIpath: TFileName;
+
+/// try to load the Oracle Client Library
+// - raise a ESqlDBOracle exception if loading failed
+// - you could then use the raw API functions via the OCI global variable
+procedure OracleLibraryInitialize(const LibraryFileName: TFileName = '');
+
 
 const
   // defined here for overriding OCI_CHARSET_UTF8/OCI_CHARSET_WIN1252 if needed
@@ -1608,16 +1615,19 @@ const
   LIBNAME = 'libclntsh.so';
 {$endif OSWINDOWS}
 
-constructor TSqlDBOracleLib.Create;
+constructor TSqlDBOracleLib.Create(LibraryFileName: TFileName);
 var
   P: PPointerArray;
   i: PtrInt;
   l1, l2, l3: TFileName;
 begin
+  if LibraryFileName = '' then
+    LibraryFileName := LIBNAME;
   if (SynDBOracleOCIpath <> '') and
      DirectoryExists(SynDBOracleOCIpath) then
-    l1 := ExtractFilePath(ExpandFileName(SynDBOracleOCIpath + PathDelim)) + LIBNAME;
-  l2 := Executable.ProgramFilePath + LIBNAME;
+    l1 := ExtractFilePath(ExpandFileName(
+      SynDBOracleOCIpath + PathDelim)) + LibraryFileName;
+  l2 := Executable.ProgramFilePath + LibraryFileName;
   if not FileExists(l2) then
   begin
     l2 := Executable.ProgramFilePath + 'OracleInstantClient';
@@ -1627,16 +1637,18 @@ begin
       if not DirectoryExists(l2) then
         l2 := Executable.ProgramFilePath + 'Oracle';
     end;
-    l2 := l2 + PathDelim + LIBNAME;
+    l2 := l2 + PathDelim + LibraryFileName;
   end;
   l3 := GetEnvironmentVariable('ORACLE_HOME');
   if l3 <> '' then
-    l3 := IncludeTrailingPathDelimiter(l3) + 'bin' + PathDelim + LIBNAME;
-  TryLoadLibrary([{%H-}l1, l2, l3, LIBNAME], ESqlDBOracle);
+    l3 := IncludeTrailingPathDelimiter(l3) +
+            'bin' + PathDelim + LibraryFileName;
+  TryLoadLibrary([{%H-}l1, l2, l3, LibraryFileName, LIBNAME], ESqlDBOracle);
   P := @@ClientVersion;
   for i := 0 to High(OCI_ENTRIES) do
     Resolve(OCI_ENTRIES[i], @P[i], {raiseonfailure=}ESqlDBOracle);
-  ClientVersion(major_version, minor_version, update_num, patch_num, port_update_num);
+  ClientVersion(
+    major_version, minor_version, update_num, patch_num, port_update_num);
   SupportsInt64Params := (major_version > 11) or
                          ((major_version = 11) and
                           (minor_version > 1));
@@ -1742,6 +1754,18 @@ begin
   result := Unicode_CodePage; // return the default OS code page if not found
 end;
 
+procedure OracleLibraryInitialize(const LibraryFileName: TFileName);
+begin
+  if OCI <> nil then
+    exit;
+  GlobalLock;
+  try
+    if OCI = nil then
+      OCI := TSqlDBOracleLib.Create(LibraryFileName);
+  finally
+    GlobalUnLock;
+  end;
+end;
 
 
 initialization
