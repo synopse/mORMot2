@@ -47,6 +47,33 @@ uses
 
 { ************** THttpClientSocket Implementing HTTP client over plain sockets }
 
+var
+  /// THttpRequest timeout default value for DNS resolution
+  // - only used by TWinHttp class - other clients will ignore it
+  // - leaving to 0 will let system default value be used
+  HTTP_DEFAULT_RESOLVETIMEOUT: integer = 0;
+  /// THttpRequest timeout default value for remote connection
+  // - default is 30 seconds
+  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
+  HTTP_DEFAULT_CONNECTTIMEOUT: integer = 30000;
+  /// THttpRequest timeout default value for data sending
+  // - default is 30 seconds
+  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
+  // - you can override this value by setting the corresponding parameter in
+  // THttpRequest.Create() constructor
+  HTTP_DEFAULT_SENDTIMEOUT: integer = 30000;
+  /// THttpRequest timeout default value for data receiving
+  // - default is 30 seconds
+  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
+  // - you can override this value by setting the corresponding parameter in
+  // THttpRequest.Create() constructor
+  HTTP_DEFAULT_RECEIVETIMEOUT: integer = 30000;
+
+const
+  /// standard text used to identify the WebSockets protocol
+  HTTP_WEBSOCKET_PROTOCOL: RawUtf8 = 'SEC-WEBSOCKET-PROTOCOL';
+
+
 type
   /// Socket API based REST and HTTP/1.1 compatible client class
   // - this component is HTTP/1.1 compatible, according to RFC 2068 document

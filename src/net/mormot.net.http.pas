@@ -31,56 +31,7 @@ uses
 
 { ******************** Shared HTTP Constants and Functions }
 
-var
-  /// THttpRequest timeout default value for DNS resolution
-  // - leaving to 0 will let system default value be used
-  HTTP_DEFAULT_RESOLVETIMEOUT: integer = 0;
-  /// THttpRequest timeout default value for remote connection
-  // - default is 60 seconds
-  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
-  HTTP_DEFAULT_CONNECTTIMEOUT: integer = 60000;
-  /// THttpRequest timeout default value for data sending
-  // - default is 30 seconds
-  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
-  // - you can override this value by setting the corresponding parameter in
-  // THttpRequest.Create() constructor
-  HTTP_DEFAULT_SENDTIMEOUT: integer = 30000;
-  /// THttpRequest timeout default value for data receiving
-  // - default is 30 seconds
-  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
-  // - you can override this value by setting the corresponding parameter in
-  // THttpRequest.Create() constructor
-  HTTP_DEFAULT_RECEIVETIMEOUT: integer = 30000;
-
-const
-  /// standard text used to identify the WebSockets protocol
-  HTTP_WEBSOCKET_PROTOCOL: RawUtf8 = 'SEC-WEBSOCKET-PROTOCOL';
-
-
-/// compute the 'Authorization: Bearer ####' HTTP header of a given token value
-function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
-
-/// will remove most usual HTTP headers which are to be recomputed on sending
-function PurgeHeaders(P: PUtf8Char): RawUtf8;
-
-
-{$ifndef NOXPOWEREDNAME}
-const
-  /// pseudo-header containing the current Synopse mORMot framework version
-  XPOWEREDNAME = 'X-Powered-By';
-  /// the full text of the current Synopse mORMot framework version
-  // - we don't supply full version number with build revision
-  // (as SYNOPSE_FRAMEWORK_VERSION), to reduce potential attack surface
-  XPOWEREDVALUE = SYNOPSE_FRAMEWORK_NAME + ' 2 synopse.info';
-{$endif NOXPOWEREDNAME}
-
-
-{ ******************** THttpSocket Implementing HTTP over plain sockets }
-
 type
-  /// exception class raised during HTTP process
-  EHttpSocket = class(ENetSock);
-
   /// event used to compress or uncompress some data during HTTP protocol
   // - should always return the protocol name for ACCEPT-ENCODING: header
   // e.g. 'gzip' or 'deflate' for standard HTTP format, but you can add
@@ -108,6 +59,48 @@ type
   /// identify some items in a list of known compression algorithms
   // - filled from ACCEPT-ENCODING: header value
   THttpSocketCompressSet = set of 0..31;
+
+
+/// adjust HTTP body compression according to the supplied 'CONTENT-TYPE'
+// - will detect most used compressible content (like 'text/*' or
+// 'application/json') from OutContentType
+function CompressDataAndGetHeaders(Accepted: THttpSocketCompressSet;
+  const Handled: THttpSocketCompressRecDynArray; const OutContentType: RawUtf8;
+  var OutContent: RawByteString): RawUtf8;
+
+/// enable a give compression function for a HTTP link
+function RegisterCompressFunc(var Compress: THttpSocketCompressRecDynArray;
+  aFunction: THttpSocketCompress; var aAcceptEncoding: RawUtf8;
+  aCompressMinSize: integer): RawUtf8;
+
+/// decode 'CONTENT-ENCODING: ' parameter from registered compression list
+function ComputeContentEncoding(const Compress: THttpSocketCompressRecDynArray;
+  P: PUtf8Char): THttpSocketCompressSet;
+
+
+/// compute the 'Authorization: Bearer ####' HTTP header of a given token value
+function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
+
+/// will remove most usual HTTP headers which are to be recomputed on sending
+function PurgeHeaders(P: PUtf8Char): RawUtf8;
+
+
+{$ifndef NOXPOWEREDNAME}
+const
+  /// pseudo-header containing the current Synopse mORMot framework version
+  XPOWEREDNAME = 'X-Powered-By';
+  /// the full text of the current Synopse mORMot framework version
+  // - we don't supply full version number with build revision
+  // (as SYNOPSE_FRAMEWORK_VERSION), to reduce potential attacker knowledge
+  XPOWEREDVALUE = SYNOPSE_FRAMEWORK_NAME + ' 2 synopse.info';
+{$endif NOXPOWEREDNAME}
+
+
+{ ******************** THttpSocket Implementing HTTP over plain sockets }
+
+type
+  /// exception class raised during HTTP process
+  EHttpSocket = class(ENetSock);
 
   /// map the presence of some HTTP headers for THttpSocket.HeaderFlags
   THttpSocketHeaderFlags = set of (
@@ -208,20 +201,6 @@ type
       aCompressMinSize: integer = 1024): boolean;
   end;
 
-
-/// adjust HTTP body compression according to the supplied 'CONTENT-TYPE'
-function CompressDataAndGetHeaders(Accepted: THttpSocketCompressSet;
-  const Handled: THttpSocketCompressRecDynArray; const OutContentType: RawUtf8;
-  var OutContent: RawByteString): RawUtf8;
-
-/// enable a give compression function for a HTTP link
-function RegisterCompressFunc(var Compress: THttpSocketCompressRecDynArray;
-  aFunction: THttpSocketCompress; var aAcceptEncoding: RawUtf8;
-  aCompressMinSize: integer): RawUtf8;
-
-/// decode 'CONTENT-ENCODING: ' parameter from registered compression list
-function ComputeContentEncoding(const Compress: THttpSocketCompressRecDynArray;
-  P: PUtf8Char): THttpSocketCompressSet;
 
 
 { ******************** Abstract Server-Side Types used e.g. for Client-Server Protocol }
@@ -804,7 +783,7 @@ begin
     SetLength(Content, ContentLength); // not chuncked: direct read
     SockInRead(pointer(Content), ContentLength); // works with SockIn=nil or not
   end
-  else if (ContentLength < 0) and
+  else if (ContentLength < 0) and // -1 means no Content-Length header
           IdemPChar(pointer(Command), 'HTTP/1.0 200') then
   begin
     // body = either Content-Length or Transfer-Encoding (HTTP/1.1 RFC2616 4.3)
@@ -824,7 +803,8 @@ begin
   if cardinal(fContentCompress) < cardinal(length(fCompress)) then
     if fCompress[fContentCompress].Func(Content, false) = '' then
       // invalid content
-      raise EHttpSocket.CreateFmt('%s uncompress', [fCompress[fContentCompress].Name]);
+      raise EHttpSocket.CreateFmt(
+        '%s uncompress', [fCompress[fContentCompress].Name]);
   ContentLength := length(Content); // update Content-Length
   {$ifdef SYNCRTDEBUGLOW}
   TSynLog.Add.Log(sllCustom2, 'GetBody sock=% pending=% sockin=% len=% %',

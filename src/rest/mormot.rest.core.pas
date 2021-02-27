@@ -1852,6 +1852,8 @@ begin
     fOrm.AsyncBatchStop(nil);
   FreeAndNil(fRun);
   FreeAndNil(fServices);
+  for cmd := Low(cmd) to high(cmd) do
+    FreeAndNil(fAcquireExecution[cmd]); // calls fOrmInstance.OnEndThread
   if fOrmInstance <> nil then
     if (fOrm = nil) or
        (fOrmInstance.RefCount <> 1) then
@@ -1865,8 +1867,6 @@ begin
      (fModel.Owner = self) then
     // make sure we are the Owner (TRestStorage has fModel<>nil e.g.)
     FreeAndNil(fModel);
-  for cmd := Low(cmd) to high(cmd) do
-    FreeAndNil(fAcquireExecution[cmd]);
   // fPrivateGarbageCollector should be released in last position
   if fPrivateGarbageCollector <> nil then
   begin

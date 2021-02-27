@@ -775,6 +775,7 @@ type
     fContentionTime: Int64;
     fContentionCount: cardinal;
     fContentionAbortDelay: integer;
+    fName: RawUtf8;
     {$ifdef USE_WINIOCP}
     fRequestQueue: THandle; // IOCP has its own internal queue
     {$else}
@@ -801,10 +802,10 @@ type
     // an internal queue, so that Push() always returns true
     {$ifdef USE_WINIOCP}
     constructor Create(NumberOfThreads: integer = 32;
-      aOverlapHandle: THandle = INVALID_HANDLE_VALUE);
+      aOverlapHandle: THandle = INVALID_HANDLE_VALUE; const aName: RawUtf8 = '');
     {$else}
     constructor Create(NumberOfThreads: integer = 32;
-      aQueuePendingContext: boolean = false);
+      aQueuePendingContext: boolean = false; const aName: RawUtf8 = '');
     {$endif USE_WINIOCP}
     /// shut down the Thread pool, releasing all associated threads
     destructor Destroy; override;
@@ -2048,9 +2049,11 @@ end;
 { TSynThreadPool }
 
 {$ifdef USE_WINIOCP}
-constructor TSynThreadPool.Create(NumberOfThreads: integer; aOverlapHandle: THandle);
+constructor TSynThreadPool.Create(NumberOfThreads: integer;
+  aOverlapHandle: THandle; const aName: RawUtf8);
 {$else}
-constructor TSynThreadPool.Create(NumberOfThreads: integer; aQueuePendingContext: boolean);
+constructor TSynThreadPool.Create(NumberOfThreads: integer;
+  aQueuePendingContext: boolean; const aName: RawUtf8);
 {$endif USE_WINIOCP}
 var
   i: PtrInt;
@@ -2059,6 +2062,10 @@ begin
     NumberOfThreads := 1
   else if cardinal(NumberOfThreads) > THREADPOOL_MAXTHREADS then
     NumberOfThreads := THREADPOOL_MAXTHREADS;
+  fName := aName;
+  if fName = '' then
+    fName := StringReplaceAll(StringReplaceAll(ToText(ClassType),
+      'Pool', ''), 'Thread', '');
   // create IO completion port to queue the HTTP requests
   {$ifdef USE_WINIOCP}
   fRequestQueue := CreateIoCompletionPort(aOverlapHandle, 0, nil, NumberOfThreads);
@@ -2353,8 +2360,7 @@ begin
     Sender.fStartNotified := self;
   end;
   if CurrentThreadName[0] = #0 then
-    SetCurrentThreadName('Pool%-%',
-      [fThreadNumber, PointerToHexShort(fOwner)]);
+    SetCurrentThreadName('Pool%-%', [fThreadNumber, fOwner.fName]);
 end;
 
 

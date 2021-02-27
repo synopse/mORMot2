@@ -524,8 +524,8 @@ type
     // - this constructor will raise a EHttpServer exception if binding failed
     // - expects the port to be specified as string, e.g. '1234'; you can
     // optionally specify a server address to bind to, e.g. '1.2.3.4:1234'
-    // - can listed on UDS in case port is specified with 'unix:' prefix, e.g.
-    // 'unix:/run/myapp.sock'
+    // - can listed to local Unix Domain Sockets file in case port is prefixed
+    // with 'unix:', e.g. 'unix:/run/myapp.sock' - faster and safer than TCP
     // - on Linux in case aPort is empty string will check if external fd
     // is passed by systemd and use it (so called systemd socked activation)
     // - you can specify a number of threads to be initialized to handle
@@ -1422,6 +1422,7 @@ begin
     fThreadRespClass := THttpServerResp;
   if fSocketClass = nil then
     fSocketClass := THttpServerSocket;
+  fProcessName := ProcessName; // TSynThreadPoolTHttpServer needs it now
   if ServerThreadPoolCount > 0 then
   begin
     fThreadPool := TSynThreadPoolTHttpServer.Create(self, ServerThreadPoolCount);
@@ -1449,9 +1450,14 @@ begin
   if (fExecuteState = esRunning) and
      (Sock <> nil) then
   begin
-    Sock.Close; // shutdown the socket to unlock Accept() in Execute
-    if NewSocket('127.0.0.1', Sock.Port, nlTCP, false, 1, 1, 1, 0, callback) = nrOK then
+    if Sock.SocketLayer <> nlUNIX then
+      Sock.Close; // shutdown TCP/UDP socket to unlock Accept() in Execute
+    if NewSocket(Sock.Server, Sock.Port, Sock.SocketLayer,
+       {dobind=}false, 10, 10, 10, 0, callback) = nrOK then
+      // Windows TCP/UDP socket may not release Accept() until connected
       callback.ShutdownAndClose({rdwr=}false);
+    if Sock.SockIsDefined then
+      Sock.Close; // nlUNIX expects shutdown after accept() returned
   end;
   endtix := mormot.core.os.GetTickCount64 + 20000;
   EnterCriticalSection(fProcessCS);
@@ -1469,7 +1475,7 @@ begin
            (fExecuteState <> esRunning) then
           break;
         LeaveCriticalSection(fProcessCS);
-        SleepHiRes(100);
+        SleepHiRes(10);
         EnterCriticalSection(fProcessCS);
       until mormot.core.os.GetTickCount64 > endtix;
       FreeAndNil(fInternalHttpServerRespList);
@@ -1610,9 +1616,9 @@ begin
   try
     fSock := TCrtSocket.Bind(fSockPort); // BIND + LISTEN
     {$ifdef OSLINUX}
-    // in case we started by systemd, listening socket is created by another process
-    // and do not interrupt while process got a signal. So we need to set a timeout to
-    // unblock accept() periodically and check we need terminations
+    // in case was started by systemd, listening socket is created by another
+    // process and do not interrupt while process got a signal. So we need to
+    // set a timeout to unlock accept() periodically and check for termination
     if fSockPort = '' then // external socket
       fSock.ReceiveTimeout := 1000; // unblock accept every second
     {$endif OSLINUX}
@@ -2266,7 +2272,9 @@ begin
   fOnThreadTerminate := fServer.fOnThreadTerminate;
   fBigBodySize := THREADPOOL_BIGBODYSIZE;
   fMaxBodyThreadCount := THREADPOOL_MAXWORKTHREADS;
-  inherited Create(NumberOfThreads {$ifndef USE_WINIOCP}, {queuepending=}true{$endif});
+  inherited Create(NumberOfThreads,
+    {$ifdef USE_WINIOCP} INVALID_HANDLE_VALUE {$else} {queuepending=}true{$endif},
+    Server.ProcessName);
 end;
 
 {$ifndef USE_WINIOCP}
@@ -2331,9 +2339,9 @@ begin
       grOwned:
         // e.g. for asynchrounous WebSockets
         srvsock := nil; // to ignore FreeAndNil(srvsock) below
-      else if Assigned(fServer.Sock.OnLog) then
-        fServer.Sock.OnLog(sllTrace, 'Task: close after GetRequest=% from %',
-            [ToText(res)^, srvsock.RemoteIP], self);
+    else if Assigned(fServer.Sock.OnLog) then
+      fServer.Sock.OnLog(sllTrace, 'Task: close after GetRequest=% from %',
+          [ToText(res)^, srvsock.RemoteIP], self);
     end;
   finally
     srvsock.Free;
