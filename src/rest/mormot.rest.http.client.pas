@@ -289,13 +289,13 @@ type
     fWebSocketParams: record
       AutoUpgrade: boolean;
       Key: RawUtf8;
-      Compression: boolean;
+      BinaryOptions: TWebSocketProtocolBinaryOptions;
       Ajax: boolean;
     end;
     fOnWebSocketsUpgraded: TOnClientNotify;
     fOnWebSocketsClosed: TNotifyEvent;
     fWebSocketLoopDelay: integer;
-    fDefaultWebSocketProcessSettings: TWebSocketProcessSettings;
+    fWebSocketProcessSettings: TWebSocketProcessSettings;
     function InternalCheckOpen: boolean; override;
     function CallbackRequest(
       Ctxt: THttpServerRequestAbstract): cardinal; virtual;
@@ -313,8 +313,8 @@ type
     // if the encryption key text is not '' and optional SynLZ compression
     // - if aWebSocketsAjax is TRUE, it will register the slower and less secure
     // 'synopsejson' mode, i.e. TWebSocketProtocolJson (to be used for AJAX
-    // debugging/test purposes only)
-    // and aWebSocketsEncryptionKey/aWebSocketsCompression parameters won't be used
+    // debugging/test purposes only) and aWebSocketsEncryptionKey /
+    // aWebSocketsBinaryOptions parameters will be ignored
     // - once upgraded, the client would automatically re-upgrade any new
     // HTTP client link on automatic reconnection, so that use of this class
     // should be not tied to a particular TCP/IP socket - use OnWebsocketsUpgraded
@@ -323,13 +323,15 @@ type
     // - will return '' on success, or an error message on failure
     function WebSocketsUpgrade(const aWebSocketsEncryptionKey: RawUtf8;
       aWebSocketsAjax: boolean = false;
-      aWebSocketsCompression: boolean = true): RawUtf8;
+      aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions =
+        [pboSynLzCompress]): RawUtf8;
     /// connect using a specified WebSockets protocol
     // - this method would call WebSocketsUpgrade, then ServerTimestampSynchronize
     // - it therefore expects SetUser() to have been previously called
     function WebSocketsConnect(const aWebSocketsEncryptionKey: RawUtf8;
       aWebSocketsAjax: boolean = false;
-      aWebSocketsCompression: boolean = true): RawUtf8;
+      aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions =
+        [pboSynLzCompress]): RawUtf8;
     /// internal HTTP/1.1 and WebSockets compatible client
     // - you could use its properties after upgrading the connection to WebSockets
     function WebSockets: THttpClientWebSockets;
@@ -366,8 +368,9 @@ type
     // - will override LoopDelay from DefaultWebSocketProcessSettings
     property WebSocketLoopDelay: integer
       read fWebSocketLoopDelay write fWebSocketLoopDelay;
-    /// returns a reference to default settings for every new WebSocket process
-    function DefaultWebSocketProcessSettings: PWebSocketProcessSettings;
+    /// allow to customize the WebSockets processing
+    // - apply to all protocols on this client instance
+    function Settings: PWebSocketProcessSettings;
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
@@ -884,7 +887,7 @@ begin
         include(fInternalState, isOpened);
         with fWebSocketParams do
           if AutoUpgrade then
-            result := WebSocketsUpgrade(Key, Ajax, Compression) = '';
+            result := WebSocketsUpgrade(Key, Ajax, BinaryOptions) = '';
       end;
     except
       result := false;
@@ -955,16 +958,15 @@ constructor TRestHttpClientWebsockets.Create(const aServer, aPort: RawUtf8;
   aSendTimeout, aReceiveTimeout, aConnectTimeout: cardinal);
 begin
   inherited;
-  fDefaultWebSocketProcessSettings.SetDefaults;
+  fWebSocketProcessSettings.SetDefaults;
 end;
 
-function TRestHttpClientWebsockets.
-  DefaultWebSocketProcessSettings: PWebSocketProcessSettings;
+function TRestHttpClientWebsockets.Settings: PWebSocketProcessSettings;
 begin
   if self = nil then
     result := nil
   else
-    result := @fDefaultWebSocketProcessSettings;
+    result := @fWebSocketProcessSettings;
 end;
 
 function TRestHttpClientWebsockets.WebSocketsConnected: boolean;
@@ -994,12 +996,12 @@ begin
     result.OnCallbackRequestProcess := CallbackRequest;
   if not Assigned(result.OnWebSocketsClosed) then
     result.OnWebSocketsClosed := OnWebSocketsClosed;
-  result.Settings^ := fDefaultWebSocketProcessSettings;
+  result.Settings^ := fWebSocketProcessSettings;
 end;
 
 function TRestHttpClientWebsockets.WebSocketsUpgrade(
   const aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean;
-  aWebSocketsCompression: boolean): RawUtf8;
+  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions): RawUtf8;
 var
   sockets: THttpClientWebSockets;
   log: ISynLog;
@@ -1012,8 +1014,9 @@ begin
   begin
     if fWebSocketLoopDelay > 0 then
       sockets.Settings^.LoopDelay := fWebSocketLoopDelay;
-    result := sockets.WebSocketsUpgrade(Model.Root, aWebSocketsEncryptionKey,
-      aWebSocketsAjax, aWebSocketsCompression);
+    result := sockets.WebSocketsUpgrade(
+      Model.Root, aWebSocketsEncryptionKey,
+      aWebSocketsAjax, aWebSocketsBinaryOptions);
     if result = '' then
       // no error message = success
       with fWebSocketParams do
@@ -1021,7 +1024,7 @@ begin
         // store parameters for auto-reconnection
         AutoUpgrade := true;
         Key := aWebSocketsEncryptionKey;
-        Compression := aWebSocketsCompression;
+        BinaryOptions := aWebSocketsBinaryOptions;
         Ajax := aWebSocketsAjax;
         if Assigned(fOnWebSocketsUpgraded) then
           fOnWebSocketsUpgraded(self);
@@ -1037,7 +1040,7 @@ end;
 
 function TRestHttpClientWebsockets.WebSocketsConnect(
   const aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean;
-  aWebSocketsCompression: boolean): RawUtf8;
+  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions): RawUtf8;
 begin
   if WebSockets = nil then
     result := 'WebSockets=nil'
@@ -1045,8 +1048,8 @@ begin
   begin
     if HttpClientFullWebSocketsLog then
       WebSockets.Settings.SetFullLog;
-    result := WebSocketsUpgrade(aWebSocketsEncryptionKey, aWebSocketsAjax,
-      aWebSocketsCompression);
+    result := WebSocketsUpgrade(
+      aWebSocketsEncryptionKey, aWebSocketsAjax, aWebSocketsBinaryOptions);
     if result = '' then
       if not ServerTimestampSynchronize then
         result := 'ServerTimestampSynchronize';

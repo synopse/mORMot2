@@ -330,6 +330,12 @@ begin
   fPendingThreadFinished := TEvent.Create(nil, false, false, '');
 end;
 
+const
+  WS_FULLLOG = false;
+  WS_KEY = 'wbsecpwd';
+  WS_JSON = false;
+  WS_BIN = [pboNoLocalHostEncrypt];
+
 function TTestMultiThreadProcess.CreateClient: TRest;
 var
   ClientIP, ClientPort: RawUtf8;
@@ -370,8 +376,9 @@ begin
     if fTestClass = TRestHttpClientWebsockets then
       with (result as TRestHttpClientWebsockets) do
       begin
-        WebSockets.Settings.SetFullLog;
-        WebSocketsUpgrade('wskey');
+        if WS_FULLLOG then
+          {%H-}WebSockets.Settings.SetFullLog;
+        WebSocketsUpgrade(WS_KEY, WS_JSON, WS_BIN);
       end;
   end
   else
@@ -445,9 +452,11 @@ begin
     {$endif HAS_MESSAGES}
     if fTestClass.InheritsFrom(TRestHttpClientGeneric) then
     begin
+      WebSocketLog := TSynLog;
       fHttpServer := TRestHttpServer.Create(aPort, [fDataBase], '+', aHttp);
       if aHttp = useBidirSocket then
-        fHttpServer.WebSocketsEnable(fDatabase, 'wskey').Settings.SetFullLog;
+        fHttpServer.WebSocketsEnable(fDatabase, WS_KEY, WS_JSON, WS_BIN).
+          Settings.SetFullLog;
     end;
   end;
   // 2. Perform the tests

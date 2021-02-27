@@ -178,6 +178,7 @@ type
     function IsActiveWebSocket(
       ConnectionID: THttpServerConnectionID): TWebSocketProcessServer;
     /// allow to customize the WebSockets processing
+    // - apply to all protocols on this server instance
     // - those parameters are accessed by reference from existing connections,
     // so you should better not modify them once the server started
     function Settings: PWebSocketProcessSettings;
@@ -230,8 +231,10 @@ type
     // - aWebSocketsEncryptionKey format follows TWebSocketProtocol.SetEncryptKey
     // - if aWebSocketsAjax is TRUE, it will also register TWebSocketProtocolJson
     // so that AJAX applications would be able to connect to this server
-    procedure WebSocketsEnable(const aWebSocketsURI, aWebSocketsEncryptionKey:
-      RawUtf8; aWebSocketsAjax: boolean = false; aWebSocketsCompressed: boolean = true);
+    procedure WebSocketsEnable(
+      const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
+      aWebSocketsAjax: boolean = false;
+      aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions = [pboSynLzCompress]);
     /// server can send a request back to the client, when the connection has
     // been upgraded to WebSocket
     // - InURL/InMethod/InContent properties are input parameters (InContentType
@@ -379,8 +382,14 @@ begin
     Protocol.UpgradeUri := uri;
     Protocol.RemoteIP := ClientSock.HeaderGetValue('SEC-WEBSOCKET-REMOTEIP');
     if Protocol.RemoteIP = '' then
+    begin
       Protocol.RemoteIP := ClientSock.RemoteIP;
-    Protocol.RemoteLocalhost := Protocol.RemoteIP = '127.0.0.1';
+      Protocol.RemoteLocalhost := (ClientSock.RemoteIP = '127.0.0.1') or
+                                   (RemoteIPLocalHostAsVoidInServers and
+                                    (ClientSock.RemoteIP = ''));
+    end
+    else
+      Protocol.RemoteLocalhost := Protocol.RemoteIP = '127.0.0.1';
     extin := ClientSock.HeaderGetValue('SEC-WEBSOCKET-EXTENSIONS');
     if extin <> '' then
     begin
@@ -646,13 +655,16 @@ begin
   WebSocketsEnable(aWebSocketsURI, aWebSocketsEncryptionKey, aWebSocketsAjax);
 end;
 
-procedure TWebSocketServerRest.WebSocketsEnable(const aWebSocketsURI,
-  aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax, aWebSocketsCompressed: boolean);
+procedure TWebSocketServerRest.WebSocketsEnable(
+  const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
+  aWebSocketsAjax: boolean;
+  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions);
 begin
   if self = nil then
     exit;
-  fProtocols.AddOnce(TWebSocketProtocolBinary.Create(aWebSocketsURI,
-    {server=}true, aWebSocketsEncryptionKey, @fSettings, aWebSocketsCompressed));
+  fProtocols.AddOnce(TWebSocketProtocolBinary.Create(
+    aWebSocketsURI, {server=}true, aWebSocketsEncryptionKey,
+    @fSettings, aWebSocketsBinaryOptions));
   if aWebSocketsAjax then
     fProtocols.AddOnce(TWebSocketProtocolJson.Create(aWebSocketsURI));
 end;

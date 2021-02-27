@@ -513,7 +513,7 @@ begin
     until P^ = #0;
 end;
 
-procedure GetTrimmed(P: PUtf8Char; out result: RawUtf8);
+procedure GetTrimmed(P: PUtf8Char; var result: RawUtf8);
 var
   B: PUtf8Char;
 begin
@@ -627,9 +627,14 @@ begin
       P := pointer(s);
     end;
     // note: set P=nil below to store in Headers[]
-    case IdemPCharArray(P, ['CONTENT-', 'TRANSFER-ENCODING: CHUNKED',
-      'CONNECTION: ', 'ACCEPT-ENCODING:', 'UPGRADE:', 'SERVER-INTERNALSTATE:',
-      'X-POWERED-BY:', HEADER_BEARER_UPPER]) of
+    case IdemPCharArray(P, [
+        'CONTENT-',
+        'TRANSFER-ENCODING: CHUNKED',
+        'CONNECTION: ',
+        'ACCEPT-ENCODING:',
+        'UPGRADE:',
+        'SERVER-INTERNALSTATE:',
+        'X-POWERED-BY:', HEADER_BEARER_UPPER]) of
       0:
         // 'CONTENT-'
         case IdemPCharArray(P + 8, ['LENGTH:', 'TYPE:', 'ENCODING:']) of

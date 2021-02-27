@@ -239,16 +239,16 @@ begin
   WebsocketsLowLevel(
     TWebSocketProtocolJson.Create(''), focText, '');
   WebsocketsLowLevel(
-    TWebSocketProtocolBinary.Create('', false, '', @Settings, false),
+    TWebSocketProtocolBinary.Create('', false, '', @Settings, []),
     focBinary, '');
   WebsocketsLowLevel(
-    TWebSocketProtocolBinary.Create('', false, 'pass', @Settings, false),
+    TWebSocketProtocolBinary.Create('', false, 'pass', @Settings, []),
     focBinary, ' encrypted');
   WebsocketsLowLevel(
-    TWebSocketProtocolBinary.Create('', false, '', @Settings, true),
+    TWebSocketProtocolBinary.Create('', false, '', @Settings, [pboSynLzCompress]),
     focBinary, ' compressed');
   WebsocketsLowLevel(
-    TWebSocketProtocolBinary.Create('', false, 'pass', @Settings, true),
+    TWebSocketProtocolBinary.Create('', false, 'pass', @Settings, [pboSynLzCompress]),
       focBinary, ' encrypted compressed');
 end;
 
@@ -461,12 +461,12 @@ begin
     ServiceDefine(c1, '1');
     TestRest(c1);
     // check WebSockets communication
-    CheckEqual(c1.WebSocketsUpgrade(WEBSOCKETS_KEY, Ajax, true), '',
+    CheckEqual(c1.WebSocketsUpgrade(WEBSOCKETS_KEY, Ajax, [pboSynLzCompress]), '',
       'WebSocketsUpgrade1');
     TestCallback(c1);
     c2 := NewClient(port);
     try
-      CheckEqual(c2.WebSocketsUpgrade(WEBSOCKETS_KEY, Ajax, true), '',
+      CheckEqual(c2.WebSocketsUpgrade(WEBSOCKETS_KEY, Ajax, [pboSynLzCompress]), '',
         'WebSocketsUpgrade2');
       ServiceDefine(c2, '2');
       TestCallback(c2);

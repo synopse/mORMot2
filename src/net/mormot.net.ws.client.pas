@@ -126,11 +126,12 @@ type
     // - aWebSocketsEncryptionKey format follows TWebSocketProtocol.SetEncryptKey,
     // so could be e.g. 'password#xxxxxx.private' or 'a=mutual;e=aesctc128;p=34a2..'
     // to use TEcdheProtocol, or a plain password for TProtocolAes
-    // - alternatively, you can specify your own custom TWebSocketProtocol instance
-    // (owned by this method and immediately released on error)
+    // - alternatively, you can specify your own custom TWebSocketProtocol
+    // instance (owned by this method and immediately released on error)
     // - will return '' on success, or an error message on failure
     function WebSocketsUpgrade(const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
-      aWebSocketsAjax: boolean = false; aWebSocketsCompression: boolean = true;
+      aWebSocketsAjax: boolean = false;
+      aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions = [pboSynLzCompress];
       aProtocol: TWebSocketProtocol = nil; const aCustomHeaders: RawUtf8 = ''): RawUtf8;
     /// allow to customize the WebSockets processing
     // - those parameters are accessed by reference to the existing connections
@@ -290,7 +291,8 @@ begin
     raise EWebSockets.CreateUtf8('%.WebSocketsConnect(nil)', [self]);
   try
     result := Open(aHost, aPort); // constructor
-    error := result.WebSocketsUpgrade(aUri, '', false, false, aProtocol, aCustomHeaders);
+    error := result.WebSocketsUpgrade(
+      aUri, '', false, [], aProtocol, aCustomHeaders);
     if error <> '' then
       FreeAndNil(result);
   except
@@ -376,9 +378,10 @@ end;
 {$endif ISDELPHI20062007}
 
 function THttpClientWebSockets.WebSocketsUpgrade(
-  const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean;
-  aWebSocketsCompression: boolean; aProtocol: TWebSocketProtocol;
-  const aCustomHeaders: RawUtf8): RawUtf8;
+  const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
+  aWebSocketsAjax: boolean;
+  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions;
+  aProtocol: TWebSocketProtocol; const aCustomHeaders: RawUtf8): RawUtf8;
 var
   key: TAESBlock;
   bin1, bin2: RawByteString;
@@ -404,7 +407,7 @@ begin
           aProtocol := TWebSocketProtocolJson.Create(aWebSocketsURI)
         else
           aProtocol := TWebSocketProtocolBinary.Create(aWebSocketsURI, false,
-            aWebSocketsEncryptionKey, @fSettings, aWebSocketsCompression);
+            aWebSocketsEncryptionKey, @fSettings, aWebSocketsBinaryOptions);
       aProtocol.OnBeforeIncomingFrame := fOnBeforeIncomingFrame;
       RequestSendHeader(aWebSocketsURI, 'GET');
       TAesPrng.Main.FillRandom(key);

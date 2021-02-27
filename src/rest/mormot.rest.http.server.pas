@@ -340,14 +340,16 @@ type
     function WebSocketsEnable(
       const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
       aWebSocketsAjax: boolean = false;
-      aWebSocketsCompressed: boolean = true): TWebSocketServerRest; overload;
+      aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions =
+        [pboSynLzCompress]): TWebSocketServerRest; overload;
     /// defines the useBidirSocket WebSockets protocol to be used for a REST server
     // - same as the overloaded WebSocketsEnable() method, but the URI will be
     // forced to match the aServer.Model.Root value, as expected on the client
     // side by TRestHttpClientWebsockets.WebSocketsUpgrade()
     function WebSocketsEnable(aServer: TRestServer;
       const aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean = false;
-      aWebSocketsCompressed: boolean = true): TWebSocketServerRest; overload;
+      aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions =
+        [pboSynLzCompress]): TWebSocketServerRest; overload;
     /// the associated running HTTP server instance
     // - either THttpApiServer (available only under Windows), THttpServer or
     // TWebSocketServerRest (on any system)
@@ -1137,13 +1139,14 @@ end;
 
 function TRestHttpServer.WebSocketsEnable(
   const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
-  aWebSocketsAjax, aWebSocketsCompressed: boolean): TWebSocketServerRest;
+  aWebSocketsAjax: boolean;
+  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions): TWebSocketServerRest;
 begin
   if fHttpServer.InheritsFrom(TWebSocketServerRest) then
   begin
     result := TWebSocketServerRest(fHttpServer);
     result.WebSocketsEnable(aWebSocketsURI, aWebSocketsEncryptionKey,
-      aWebSocketsAjax, aWebSocketsCompressed);
+      aWebSocketsAjax, aWebSocketsBinaryOptions);
   end
   else
     raise EWebSockets.CreateUtf8(
@@ -1151,14 +1154,15 @@ begin
 end;
 
 function TRestHttpServer.WebSocketsEnable(aServer: TRestServer;
-  const aWebSocketsEncryptionKey: RawUtf8;
-  aWebSocketsAjax, aWebSocketsCompressed: boolean): TWebSocketServerRest;
+  const aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean;
+  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions): TWebSocketServerRest;
 begin
   if (aServer = nil) or
      (DBServerFind(aServer) < 0) then
-    raise EWebSockets.CreateUtf8('%.WebSocketEnable(aServer=%?)', [self, aServer]);
+    raise EWebSockets.CreateUtf8(
+      '%.WebSocketEnable(aServer=%?)', [self, aServer]);
   result := WebSocketsEnable(aServer.Model.Root, aWebSocketsEncryptionKey,
-    aWebSocketsAjax, aWebSocketsCompressed);
+    aWebSocketsAjax, aWebSocketsBinaryOptions);
 end;
 
 function TRestHttpServer.NotifyCallback(aSender: TRestServer;

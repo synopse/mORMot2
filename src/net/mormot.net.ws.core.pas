@@ -131,6 +131,8 @@ type
     logBinaryFrameContent);
 
   /// parameters to be used for WebSockets processing
+  // - those settings are used by all protocols running on a given
+  // TWebSocketServer or a THttpClientWebSockets
   {$ifdef USERECORDWITHMETHODS}
   TWebSocketProcessSettings = record
   {$else}
@@ -424,6 +426,20 @@ type
     function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
   end;
 
+  /// tune the 'synopsebin' protocol
+  // - pboCompress will compress all frames payload using SynLZ
+  // - pboNoLocalHostCompress won't compress frames on the loopback (127.0.0.1)
+  // - pboNoLocalHostEncrypt won't encrypt frames on the loopback (127.0.0.1)
+  TWebSocketProtocolBinaryOption = (
+    pboSynLzCompress,
+    pboNoLocalHostCompress,
+    pboNoLocalHostEncrypt);
+
+  /// how TWebSocketProtocolBinary implements the 'synopsebin' protocol
+  // - should match on both client and server ends
+  TWebSocketProtocolBinaryOptions = set of TWebSocketProtocolBinaryOption;
+
+
   /// handle a REST application-level WebSockets protocol using compressed and
   // optionally AES-CTR encrypted binary
   // - this class will implement then following application-level protocol:
@@ -434,9 +450,9 @@ type
   // headers matching 'a000001','a000002',... instead of 'request'/'answer'
   TWebSocketProtocolBinary = class(TWebSocketProtocolRest)
   protected
-    fCompressed: boolean;
     fFramesInBytesSocket: QWord;
     fFramesOutBytesSocket: QWord;
+    fOptions: TWebSocketProtocolBinaryOptions;
     procedure FrameCompress(const Head: RawUtf8;
       const Values: array of const; const Content, ContentType: RawByteString;
       var frame: TWebSocketFrame); override;
@@ -459,17 +475,19 @@ type
     /// initialize the WebSockets binary protocol with no encryption
     // - if aUri is '', any URI would potentially upgrade to this protocol; you
     // can specify an URI to limit the protocol upgrade to a single resource
-    // - SynLZ compression is enabled by default, unless aCompressed is false
-    constructor Create(const aUri: RawUtf8; aCompressed: boolean = true);
+    // - SynLZ compression is enabled by default, for all frames
+    constructor Create(const aUri: RawUtf8;
+      aOptions: TWebSocketProtocolBinaryOptions = [pboSynLzCompress]);
       reintroduce; overload; virtual;
     /// initialize the WebSockets binary protocol with a symmetric AES key
     // - if aUri is '', any URI would potentially upgrade to this protocol; you
     // can specify an URI to limit the protocol upgrade to a single resource
     // - if aKeySize if 128, 192 or 256, TProtocolAes (i.e. AES-CTR encryption)
     //  will be used to secure the transmission
-    // - SynLZ compression is enabled by default, unless aCompressed is false
+    // - SynLZ compression is enabled by default, before encryption
     constructor Create(const aUri: RawUtf8; const aKey; aKeySize: cardinal;
-      aCompressed: boolean = true; aCipher: TAesAbstractClass = nil);
+      aOptions: TWebSocketProtocolBinaryOptions = [pboSynLzCompress];
+      aCipher: TAesAbstractClass = nil);
         reintroduce; overload;
     /// initialize the WebSockets binary protocol from a textual key
     // - if aUri is '', any URI would potentially upgrade to this protocol; you
@@ -480,7 +498,8 @@ type
     // - SynLZ compression is enabled by default, unless aCompressed is false
     constructor Create(const aUri: RawUtf8; aServer: boolean;
       const aKey: RawUtf8; aSettings: PWebSocketProcessSettings;
-      aCompressed: boolean = true); reintroduce; overload;
+      aOptions: TWebSocketProtocolBinaryOptions = [pboSynLzCompress]);
+        reintroduce; overload;
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
     /// returns Name by default, but could be e.g. 'synopsebin, synopsebinary'
@@ -488,10 +507,10 @@ type
     /// specify the recognized sub-protocols, e.g. 'synopsebin, synopsebinary'
     function SetSubprotocol(const aProtocolName: RawUtf8): boolean; override;
   published
-    /// defines if SynLZ compression is enabled during the transmission
-    // - is set to TRUE by default
-    property Compressed: boolean
-      read fCompressed write fCompressed;
+    /// how compression / encryption is implemented during the transmission
+    // - is set to [pboSynLzCompress] by default
+    property Options: TWebSocketProtocolBinaryOptions
+      read fOptions write fOptions;
     /// how many bytes have been received by this instance from the wire
     property FramesInBytesSocket: QWord
       read fFramesInBytesSocket;
@@ -766,7 +785,7 @@ var
 
   /// number of bytes above which SynLZ compression may be done
   // - when working with TWebSocketProtocolBinary
-  // - it is useless to compress smaller frames, which fits in network MTU
+  // - it is useless to compress smallest frames, which fits in network MTU
   WebSocketsBinarySynLzThreshold: integer = 450;
 
   /// the allowed maximum size, in MB, of a WebSockets frame
@@ -1338,7 +1357,7 @@ var
     txtlen: integer;
   begin
     txt := GetJsonField(P, P, nil, nil, @txtlen);
-    SetString(content, txt, txtlen);
+    FastSetString(RawUtf8(content), txt, txtlen);
   end;
 
 begin
@@ -1389,24 +1408,25 @@ end;
 { TWebSocketProtocolBinary }
 
 constructor TWebSocketProtocolBinary.Create(
-  const aUri: RawUtf8; aCompressed: boolean);
+  const aUri: RawUtf8; aOptions: TWebSocketProtocolBinaryOptions);
 begin
   inherited Create('synopsebin', aUri);
-  fCompressed := aCompressed;
+  fOptions := aOptions;
 end;
 
 constructor TWebSocketProtocolBinary.Create(const aUri: RawUtf8;
-  const aKey; aKeySize: cardinal; aCompressed: boolean;
+  const aKey; aKeySize: cardinal; aOptions: TWebSocketProtocolBinaryOptions;
   aCipher: TAesAbstractClass);
 begin
-  Create(aUri, aCompressed);
+  Create(aUri, aOptions);
   SetEncryptKeyAes(aCipher, aKey, aKeySize);
 end;
 
-constructor TWebSocketProtocolBinary.Create(const aUri: RawUtf8; aServer: boolean;
-  const aKey: RawUtf8; aSettings: PWebSocketProcessSettings; aCompressed: boolean);
+constructor TWebSocketProtocolBinary.Create(const aUri: RawUtf8;
+  aServer: boolean; const aKey: RawUtf8; aSettings: PWebSocketProcessSettings;
+  aOptions: TWebSocketProtocolBinaryOptions);
 begin
-  Create(aUri, aCompressed);
+  Create(aUri, aOptions);
   SetEncryptKey(aServer, aKey, aSettings);
 end;
 
@@ -1414,7 +1434,7 @@ function TWebSocketProtocolBinary.Clone(
   const aClientUri: RawUtf8): TWebSocketProtocol;
 begin
   result := TWebSocketProtocolBinary.Create(
-    fUri, {dummykey=}self, 0, fCompressed);
+    fUri, {dummykey=}self, 0, fOptions);
   TWebSocketProtocolBinary(result).fSequencing := fSequencing;
   if fEncryption <> nil then
     result.fEncryption := fEncryption.Clone;
@@ -1511,10 +1531,11 @@ begin
   inherited BeforeSendFrame(frame);
   if frame.opcode = focBinary then
   begin
-    if fCompressed then
+    if pboSynLzCompress in fOptions then
     begin
-      if fRemoteLocalhost or
-         (fopAlreadyCompressed in frame.content) then
+      if (fopAlreadyCompressed in frame.content) or
+         (fRemoteLocalhost and
+          (pboNoLocalHostCompress in fOptions)) then
         // localhost or compressed -> no SynLZ
         threshold := maxInt
       else
@@ -1524,7 +1545,9 @@ begin
     end
     else
       value := frame.payload;
-    if fEncryption <> nil then
+    if (fEncryption <> nil) and
+       not (fRemoteLocalhost and
+            (pboNoLocalHostEncrypt in fOptions)) then
       fEncryption.Encrypt(value, frame.payload)
     else
       frame.payload := value;
@@ -1540,7 +1563,9 @@ begin
   inc(fFramesInBytesSocket, length(frame.payload) + 2);
   if frame.opcode = focBinary then
   begin
-    if fEncryption <> nil then
+    if (fEncryption <> nil) and
+       not (fRemoteLocalhost and
+            (pboNoLocalHostEncrypt in fOptions)) then
     begin
       res := fEncryption.Decrypt(frame.payload, value);
       if res <> sprSuccess then
@@ -1549,7 +1574,7 @@ begin
     end
     else
       value := frame.payload;
-    if fCompressed then
+    if pboSynLzCompress in fOptions then
       AlgoSynLZ.Decompress(pointer(value), length(value), frame.payload)
     else
       frame.payload := value;
@@ -1569,8 +1594,8 @@ begin
   if P = nil then
     exit;
   for i := 0 to high(values) do
-    values[i]^ := FromVarString(P);
-  contentType := FromVarString(P);
+    FromVarString(P, values[i]^ ,CP_UTF8);
+  FromVarString(P, contentType, CP_UTF8);
   i := length(frame.payload) - (PAnsiChar(P) - pointer(frame.payload));
   if i < 0 then
     exit;
@@ -1584,7 +1609,7 @@ const
   JUMBO_HEADER: array[0..6] of AnsiChar = 'frames' + FRAME_HEAD_SEP;
 var
   jumboFrame: TWebSocketFrame;
-  i, len: integer;
+  i, len: PtrInt;
   P: PByte;
 begin
   if (FramesCount = 0) or
@@ -1661,8 +1686,8 @@ begin
   if (self = nil) or
      (fFramesInBytes = 0) then
     result := 100
-  else if not fCompressed or
-          (fFramesInBytesSocket < fFramesInBytes) then
+  else if (fFramesInBytesSocket < fFramesInBytes) or
+          not (pboSynLzCompress in fOptions) then
     result := 0
   else
     result := 100 - (fFramesInBytesSocket * 100) div fFramesInBytes;
@@ -1673,8 +1698,8 @@ begin
   if (self = nil) or
      (fFramesOutBytes = 0) then
     result := 100
-  else if not fCompressed or
-          (fFramesOutBytesSocket <= fFramesOutBytes) then
+  else if (fFramesOutBytesSocket <= fFramesOutBytes) or
+          not (pboSynLzCompress in fOptions) then
     result := 0
   else
     result := 100 - (fFramesOutBytesSocket * 100) div fFramesOutBytes;
