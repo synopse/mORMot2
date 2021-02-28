@@ -22,8 +22,9 @@ implementation // compile a void unit if NOSYNDBZEOS conditional is set
 {$else}
 
 {$I Zeos.inc} // define conditionals like ZEOS72UP and ENABLE_*
+
 // for best performance: tune your project options or Zeos.inc
-// to define USE_SYNCOMMONS and leverage best of mORMot and ZEOS !
+// by defining MORMOT2 and leverage best of mORMot and ZEOS !
 
 {$I ..\mormot.defines.inc}
 
@@ -33,7 +34,7 @@ uses
   classes,
   variants,
 
-  // load physical providers as defined by ENABLE_* in Zeos.inc
+  // load ZDBC physical providers as defined by ENABLE_* in Zeos.inc
   // -> you can patch your local Zeos.inc and comment these defines to
   // exclude database engines you don't need
   // or (since 7.2) you simply add the ZEOS_DISABLE_XXX defines to your
@@ -53,6 +54,9 @@ uses
   {$if defined(ENABLE_INTERBASE) and not defined(ZEOS_DISABLE_INTERBASE)}
   ZDbcInterbase6,
   {$ifend}
+  {$if defined(ENABLE_FIREBIRD) and not defined(ZEOS_DISABLE_FIREBIRD)}
+  ZDbcFirebird,
+  {$ifend}
   {$if defined(ENABLE_SQLITE) and not defined(ZEOS_DISABLE_SQLITE)}
   ZDbcSqLite,
   {$ifend}
@@ -68,15 +72,17 @@ uses
   {$if defined(ENABLE_OLEDB) and not defined(ZEOS_DISABLE_OLEDB)}
   ZDbcOleDB,
   {$ifend}
-  {$if defined(ENABLE_Zeos) and not defined(ZEOS_DISABLE_Zeos)}
-  ZDbcZeosCon,
+  {$if defined(ENABLE_ODBC) and not defined(ZEOS_DISABLE_ODBC)}
+  ZDbcODBCCon,
   {$ifend}
+
   // main ZDBC units
   ZCompatibility,
   ZVariant,
   ZURL,
   ZDbcIntfs,
   ZDbcResultSet,
+  ZDbcMetadata,
   
   // mORMot units after ZDBC due to some name conflicts (e.g. Utf8ToString)
   mormot.core.base,
@@ -242,11 +248,11 @@ type
     fStatement: IZPreparedStatement;
     fResultSet: IZResultSet;
     fResultInfo: IZResultSetMetaData;
-    {$if defined(ZEOS73UP) and defined(USE_SYNCOMMONS)}
+    {$if defined(ZEOS73UP) and defined(MORMOT2)}
     fJSONComposeOptions: TZJSONComposeOptions;
     {$ifend}
   public
-    {$if defined(ZEOS73UP) and defined(USE_SYNCOMMONS)}
+    {$if defined(ZEOS73UP) and defined(MORMOT2)}
     procedure AfterConstruction; override;
     {$ifend}
     /// Prepare an UTF-8 encoded SQL statement
@@ -254,7 +260,8 @@ type
     // - if ExpectResults is TRUE, then Step() and Column*() methods are available
     // to retrieve the data rows
     // - raise an ESqlDBZeos on any error
-    procedure Prepare(const aSQL: RawUtf8; ExpectResults: boolean = false); overload; override;
+    procedure Prepare(const aSQL: RawUtf8;
+      ExpectResults: boolean = false); overload; override;
     /// Execute a prepared SQL statement
     // - parameters marked as ? should have been already bound with Bind*() functions
     // - this implementation will also handle bound array of values (if any),
@@ -300,7 +307,7 @@ type
     function ColumnUtf8(Col: integer): RawUtf8; override;
     /// return a Column as a blob value of the current Row, first Col is 0
     function ColumnBlob(Col: integer): RawByteString; override;
-  {$if defined(ZEOS73UP) and defined(USE_SYNCOMMONS)}
+  {$if defined(ZEOS73UP) and defined(MORMOT2)}
   public
     /// the ColumnsToJson options provided by ZDBC
     // - jcoEndJsonObject:
@@ -340,17 +347,6 @@ procedure SetZEOSProtocols;
 
 
 implementation
-
-const
-  ZeoIndex = {$ifdef GENERIC_INDEX} 0 {$else} 1 {$endif};
-  FirstDbcIndex = ZeoIndex;
-  TableNameIndex = 2 + ZeoIndex;
-  ColumnNameIndex = 3 + ZeoIndex;
-  TableColColumnTypeIndex = 4 + ZeoIndex;
-  TableColColumnTypeNameIndex = 5 + ZeoIndex;
-  TableColColumnSizeIndex = 6 + ZeoIndex;
-  TableColColumnDecimalDigitsIndex = 8 + ZeoIndex;
-  IndexInfoColColumnNameIndex = 8 + ZeoIndex;
 
 
 { ************  TSqlDBZeosConnection* and TSqlDBZeosStatement Classes }
@@ -730,8 +726,8 @@ begin
   end;
 end;
 
-function TSqlDBZEOSConnectionProperties.TZSQLTypeToTSqlDBFieldType(aNativeType:
-  TZSQLType): TSqlDBFieldType;
+function TSqlDBZEOSConnectionProperties.TZSQLTypeToTSqlDBFieldType(
+  aNativeType: TZSQLType): TSqlDBFieldType;
 begin
   case aNativeType of
     stBoolean, stByte, stShort, stInteger, stLong
@@ -1209,7 +1205,7 @@ begin
   end;
 end;
 
-{$if defined(ZEOS73UP) and defined(USE_SYNCOMMONS)}
+{$if defined(ZEOS73UP) and defined(MORMOT2)}
 procedure TSqlDBZEOSStatement.AfterConstruction;
 begin
   inherited;
@@ -1310,7 +1306,7 @@ end;
 
 procedure TSqlDBZEOSStatement.ColumnsToJson(WR: TJsonWriter);
 
-{$if not (defined(ZEOS73UP) and defined(USE_SYNCOMMONS))}
+{$if not (defined(ZEOS73UP) and defined(MORMOT2))}
 var
   col: integer;
   P: PAnsiChar;
@@ -1329,7 +1325,7 @@ var
 
 begin
   // take care of the layout of internal ZDBC buffers for each provider
-  {$if defined(ZEOS73UP) and defined(USE_SYNCOMMONS)}
+  {$if defined(ZEOS73UP) and defined(MORMOT2)}
   fResultSet.ColumnsToJson(WR, fJSONComposeOptions);
   {$else}
   if WR.Expand then
