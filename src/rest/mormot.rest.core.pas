@@ -1852,8 +1852,8 @@ begin
     fOrm.AsyncBatchStop(nil);
   for cmd := Low(cmd) to high(cmd) do
     FreeAndNil(fAcquireExecution[cmd]); // calls fOrmInstance.OnEndThread
-  FreeAndNil(fRun);
   FreeAndNil(fServices);
+  FreeAndNil(fRun); // after fAcquireExecution+fServices
   if fOrmInstance <> nil then
     if (fOrm = nil) or
        (fOrmInstance.RefCount <> 1) then
