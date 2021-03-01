@@ -437,8 +437,8 @@ begin
     R := TOrmPeople.Create;
     try
       DeleteFile('test.fdb'); // will be re-created at first connection
-      Props := TSqlDBZEOSConnectionProperties.Create(
-        TSqlDBZEOSConnectionProperties.URI(
+      Props := TSqlDBZeosConnectionProperties.Create(
+        TSqlDBZeosConnectionProperties.URI(
           dFirebird, '', FIREBIRDEMBEDDEDDLL, False), 'test.fdb', '', '');
       try
         VirtualTableExternalMap(Model, TOrmPeople, Props, 'peopleext').

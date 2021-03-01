@@ -79,7 +79,9 @@ uses
   // main ZDBC units
   ZCompatibility,
   ZVariant,
+  {$ifndef ZEOS80UP}
   ZURL,
+  {$endif ZEOS80UP}
   ZDbcIntfs,
   ZDbcResultSet,
   ZDbcMetadata,
@@ -102,10 +104,10 @@ uses
 
 type
   /// Exception type associated to the ZEOS database components
-  ESqlDBZEOS = class(ESqlDBException);
+  ESqlDBZeos = class(ESqlDBException);
 
   /// implement properties shared by ZEOS connections
-  TSqlDBZEOSConnectionProperties = class(TSqlDBConnectionPropertiesThreadSafe)
+  TSqlDBZeosConnectionProperties = class(TSqlDBConnectionPropertiesThreadSafe)
   protected
     fURL: TZURL;
     fStatementParams: TStrings;
@@ -125,7 +127,7 @@ type
     // i.e. '[zdbc:]PROTOCOL://HOST:PORT[/DATABASE][?paramname=value]'
     // - you can define the TZConnection.LibraryLocation property by setting a
     // '?LibLocation=...' parameter within the aServerName URL value
-    // - or simply use TSqlDBZEOSConnectionProperties.URI() class method
+    // - or simply use TSqlDBZeosConnectionProperties.URI() class method
     // - aDatabaseName, aUserID, aPassword are used if not already set as URI
     // in aServerName value
     // - you can use Protocols property to retrieve all available protocol names
@@ -149,7 +151,7 @@ type
     destructor Destroy; override;
     /// create a new connection
     // - caller is responsible of freeing this instance
-    // - this overridden method will create an TSqlDBZEOSConnection instance
+    // - this overridden method will create an TSqlDBZeosConnection instance
     function NewConnection: TSqlDBConnection; override;
 
     /// retrieve the column/field layout of a specified table
@@ -171,14 +173,14 @@ type
     // - you can set an optional full path to the client library name,
     // to be completed on the left side with the executable path
     // - possible use may be:
-    // ! PropsOracle := TSqlDBZEOSConnectionProperties.Create(
-    // !   TSqlDBZEOSConnectionProperties.URI(dOracle,'','oci64\oci.dll'),
+    // ! PropsOracle := TSqlDBZeosConnectionProperties.Create(
+    // !   TSqlDBZeosConnectionProperties.URI(dOracle,'','oci64\oci.dll'),
     // !   'tnsname','user',pass');
-    // ! PropsFirebird := TSqlDBZEOSConnectionProperties.Create(
-    // !   TSqlDBZEOSConnectionProperties.URI(dFirebird,'','Firebird\fbembed.dll'),
+    // ! PropsFirebird := TSqlDBZeosConnectionProperties.Create(
+    // !   TSqlDBZeosConnectionProperties.URI(dFirebird,'','Firebird\fbembed.dll'),
     // !   'databasefilename','',');
-    // ! PropsFirebird := TSqlDBZEOSConnectionProperties.Create(
-    // !   TSqlDBZEOSConnectionProperties.URI(dFirebird,'192.168.1.10:3055',
+    // ! PropsFirebird := TSqlDBZeosConnectionProperties.Create(
+    // !   TSqlDBZeosConnectionProperties.URI(dFirebird,'192.168.1.10:3055',
     // !     'c:\Firebird_2_5\bin\fbclient.dll',false),
     // !  '3camadas', 'sysdba', 'masterkey');
     class function URI(aServer: TSqlDBDefinition;
@@ -213,17 +215,17 @@ type
 
 
   /// implements a connection via the ZEOS access layer
-  TSqlDBZEOSConnection = class(TSqlDBConnectionThreadSafe)
+  TSqlDBZeosConnection = class(TSqlDBConnectionThreadSafe)
   protected
     fDatabase: IZConnection;
   public
     /// prepare a connection to a specified ZEOS database server
     constructor Create(aProperties: TSqlDBConnectionProperties); override;
     /// connect to the specified ZEOS server
-    // - should raise an ESqlDBZEOS on error
+    // - should raise an ESqlDBZeos on error
     procedure Connect; override;
     /// stop connection to the specified ZEOS database server
-    // - should raise an ESqlDBZEOS on error
+    // - should raise an ESqlDBZeos on error
     procedure Disconnect; override;
     /// return TRUE if Connect has been already successfully called
     function IsConnected: boolean; override;
@@ -243,7 +245,7 @@ type
   end;
 
   /// implements a statement via a ZEOS database connection
-  TSqlDBZEOSStatement = class(TSqlDBStatementWithParamsAndColumns)
+  TSqlDBZeosStatement = class(TSqlDBStatementWithParamsAndColumns)
   protected
     fStatement: IZPreparedStatement;
     fResultSet: IZResultSet;
@@ -339,7 +341,7 @@ var
   /// list of all available ZEOS protocols
   // - you have to call SetZEOSProtocols before using it, to update this
   // global list with all initialized ZPlain*Driver units
-  // - to be used e.g. within ZEOS URI, as TSqlDBZEOSConnectionProperties.ServerName
+  // - to be used e.g. within ZEOS URI, as TSqlDBZeosConnectionProperties.ServerName
   ZEOSProtocols: TRawUtf8DynArray;
 
 /// to be called in order to populate the global ZEOSProtocols list
@@ -351,9 +353,9 @@ implementation
 
 { ************  TSqlDBZeosConnection* and TSqlDBZeosStatement Classes }
 
-{ TSqlDBZEOSConnectionProperties }
+{ TSqlDBZeosConnectionProperties }
 
-constructor TSqlDBZEOSConnectionProperties.Create(const aServerName,
+constructor TSqlDBZeosConnectionProperties.Create(const aServerName,
   aDatabaseName, aUserID, aPassWord: RawUtf8);
 const
   PCHARS: array[0..8] of PAnsiChar = ('ORACLE', 'FREETDS_MSSQL', 'MSSQL',
@@ -395,17 +397,17 @@ begin
   CreateWithZURL(fURL, TYPES[IdemPCharArray(pointer(fDBMSName), PCHARS)], true);
 end;
 
-procedure TSqlDBZEOSConnectionProperties.GetForeignKeys;
+procedure TSqlDBZeosConnectionProperties.GetForeignKeys;
 begin
   { TODO : get FOREIGN KEYS from ZEOS metadata ? }
 end;
 
-function TSqlDBZEOSConnectionProperties.NewConnection: TSqlDBConnection;
+function TSqlDBZeosConnectionProperties.NewConnection: TSqlDBConnection;
 begin
-  result := TSqlDBZEOSConnection.Create(self);
+  result := TSqlDBZeosConnection.Create(self);
 end;
 
-constructor TSqlDBZEOSConnectionProperties.CreateWithZURL(const aURL: TZURL;
+constructor TSqlDBZeosConnectionProperties.CreateWithZURL(const aURL: TZURL;
   aDBMS: TSqlDBDefinition; aOwnsURL: boolean);
 {$ifdef ZEOS73UP}
 var
@@ -583,7 +585,7 @@ begin
   end;
 end;
 
-destructor TSqlDBZEOSConnectionProperties.Destroy;
+destructor TSqlDBZeosConnectionProperties.Destroy;
 begin
   FreeAndNil(fURL);
   FreeAndNil(fStatementParams);
@@ -612,12 +614,12 @@ begin
   end;
 end;
 
-function TSqlDBZEOSConnectionProperties.GetDatabaseMetadata(out meta:
+function TSqlDBZeosConnectionProperties.GetDatabaseMetadata(out meta:
   IZDatabaseMetadata): boolean;
 var
   conn: IZConnection;
 begin
-  conn := (MainConnection as TSqlDBZEOSConnection).fDatabase;
+  conn := (MainConnection as TSqlDBZeosConnection).fDatabase;
   result := conn.UseMetadata;
   meta := conn.GetMetadata;
   if result then
@@ -637,7 +639,7 @@ begin
   {$endif ZEOS72UP}
 end;
 
-procedure TSqlDBZEOSConnectionProperties.GetTableNames(out Tables: TRawUtf8DynArray);
+procedure TSqlDBZeosConnectionProperties.GetTableNames(out Tables: TRawUtf8DynArray);
 var
   meta: IZDatabaseMetadata;
   res: IZResultSet;
@@ -664,7 +666,7 @@ begin
     inherited;
 end;
 
-procedure TSqlDBZEOSConnectionProperties.GetFields(const aTableName: RawUtf8;
+procedure TSqlDBZeosConnectionProperties.GetFields(const aTableName: RawUtf8;
   out Fields: TSqlDBColumnDefineDynArray);
 var
   meta: IZDatabaseMetadata;
@@ -681,7 +683,11 @@ begin
     sSchema := Utf8ToString(Schema);
     { mormot does not create the Tables casesensitive but gives mixed cased strings as tablename
       so we normalize the identifiers to database defaults : }
-    sTableName := meta.GetIdentifierConvertor.ExtractQuote(Utf8ToString(TableName));
+    sTableName :=  {$ifdef ZEOS80UP}
+                   meta.GetIdentifierConverter
+                   {$else}
+                   meta.GetIdentifierConvertor
+                   {$endif}.ExtractQuote(Utf8ToString(TableName));
     sTableName := meta.AddEscapeCharToWildcards(sTableName);
     //do not use "like" search patterns ['_','%'] so they need to be escaped
     res := meta.GetColumns('', sSchema, sTableName, '');
@@ -726,7 +732,7 @@ begin
   end;
 end;
 
-function TSqlDBZEOSConnectionProperties.TZSQLTypeToTSqlDBFieldType(
+function TSqlDBZeosConnectionProperties.TZSQLTypeToTSqlDBFieldType(
   aNativeType: TZSQLType): TSqlDBFieldType;
 begin
   case aNativeType of
@@ -746,12 +752,12 @@ begin
     stBytes, stBinaryStream:
       result := ftBlob;
   else
-    raise ESqlDBZEOS.CreateUtf8('%: unexpected TZSQLType "%"', [self,
+    raise ESqlDBZeos.CreateUtf8('%: unexpected TZSQLType "%"', [self,
       GetEnumName(Typeinfo(TZSQLType), ord(aNativeType))^]);
   end;
 end;
 
-class function TSqlDBZEOSConnectionProperties.URI(aServer: TSqlDBDefinition;
+class function TSqlDBZeosConnectionProperties.URI(aServer: TSqlDBDefinition;
   const aServerName: RawUtf8; const aLibraryLocation: TFileName;
   aLibraryLocationAppendExePath: boolean): RawUtf8;
 const
@@ -763,7 +769,7 @@ begin
     aLibraryLocationAppendExePath);
 end;
 
-class function TSqlDBZEOSConnectionProperties.URI(const aProtocol, aServerName:
+class function TSqlDBZeosConnectionProperties.URI(const aProtocol, aServerName:
   RawUtf8; const aLibraryLocation: TFileName; aLibraryLocationAppendExePath:
   boolean): RawUtf8;
 begin
@@ -788,14 +794,14 @@ begin
 end;
 
 
-{ TSqlDBZEOSConnection }
+{ TSqlDBZeosConnection }
 
-constructor TSqlDBZEOSConnection.Create(aProperties: TSqlDBConnectionProperties);
+constructor TSqlDBZeosConnection.Create(aProperties: TSqlDBConnectionProperties);
 var
   url: TZURL;
 begin
   inherited Create(aProperties);
-  url := (fProperties as TSqlDBZEOSConnectionProperties).fURL;
+  url := (fProperties as TSqlDBZeosConnectionProperties).fURL;
   fDatabase := DriverManager.GetConnectionWithParams(url.URL, url.Properties);
   // EG: setup the connection transaction behavior now, not once Opened in Connect
   //fDatabase.SetReadOnly(false); // is default
@@ -804,16 +810,16 @@ begin
   fDatabase.SetTransactionIsolation(tiReadCommitted); // will be swapped to tiSerialiable for SQLite
 end;
 
-procedure TSqlDBZEOSConnection.Connect;
+procedure TSqlDBZeosConnection.Connect;
 var
   log: ISynLog;
 begin
   if fDatabase = nil then
-    raise ESqlDBZEOS.CreateUtf8('%.Connect() on % failed: Database=nil', [self,
+    raise ESqlDBZeos.CreateUtf8('%.Connect() on % failed: Database=nil', [self,
       fProperties.ServerName]);
   log := SynDBLog.Enter(self, 'Connect');
   if log <> nil then
-    with (fProperties as TSqlDBZEOSConnectionProperties).fURL do
+    with (fProperties as TSqlDBZeosConnectionProperties).fURL do
       log.Log(sllTrace, 'Connect to % % for % at %:%', [Protocol, Database,
         HostName, Port]);
   try
@@ -830,7 +836,7 @@ begin
     end;
   end;
 end;
-procedure TSqlDBZEOSConnection.Disconnect;
+procedure TSqlDBZeosConnection.Disconnect;
 begin
   try
     inherited Disconnect; // flush any cached statement
@@ -841,20 +847,20 @@ begin
   end;
 end;
 
-function TSqlDBZEOSConnection.IsConnected: boolean;
+function TSqlDBZeosConnection.IsConnected: boolean;
 begin
   result := Assigned(fDatabase) and
             not fDatabase.IsClosed;
 end;
 
-function TSqlDBZEOSConnection.NewStatement: TSqlDBStatement;
+function TSqlDBZeosConnection.NewStatement: TSqlDBStatement;
 begin
   if not IsConnected then
     Connect;
-  result := TSqlDBZEOSStatement.Create(self);
+  result := TSqlDBZeosStatement.Create(self);
 end;
 
-procedure TSqlDBZEOSConnection.StartTransaction;
+procedure TSqlDBZeosConnection.StartTransaction;
 var
   log: ISynLog;
 begin
@@ -866,7 +872,7 @@ begin
   fDatabase.SetAutoCommit(false);
   {$endif ZEOS73UP}
 end;
-procedure TSqlDBZEOSConnection.Commit;
+procedure TSqlDBZeosConnection.Commit;
 begin
   inherited Commit;
   try
@@ -880,7 +886,7 @@ begin
   {$endif ZEOS73UP}
 end;
 
-procedure TSqlDBZEOSConnection.Rollback;
+procedure TSqlDBZeosConnection.Rollback;
 begin
   inherited Rollback;
   fDatabase.Rollback;
@@ -890,19 +896,19 @@ begin
 end;
 
 
-{ TSqlDBZEOSStatement }
+{ TSqlDBZeosStatement }
 
-procedure TSqlDBZEOSStatement.Prepare(const aSQL: RawUtf8; ExpectResults: boolean);
+procedure TSqlDBZeosStatement.Prepare(const aSQL: RawUtf8; ExpectResults: boolean);
 begin
   SQLLogBegin(sllDB);
   if (fStatement <> nil) or
      (fResultSet <> nil) then
-    raise ESqlDBZEOS.CreateUtf8('%.Prepare() shall be called once', [self]);
+    raise ESqlDBZeos.CreateUtf8('%.Prepare() shall be called once', [self]);
   inherited Prepare(aSQL, ExpectResults); // connect if necessary
-  fStatement := (fConnection as TSqlDBZEOSConnection).fDatabase.
+  fStatement := (fConnection as TSqlDBZeosConnection).fDatabase.
     PrepareStatementWithParams(
       {$ifdef UNICODE}Utf8ToString(fSQL){$else}fSQL{$endif}, // see controls_cp=CP_UTF8
-      (fConnection.Properties as TSqlDBZEOSConnectionProperties).fStatementParams);
+      (fConnection.Properties as TSqlDBZeosConnectionProperties).fStatementParams);
   SQLLogEnd;
 end;
 
@@ -923,10 +929,10 @@ type
     fBlobDynArray: array of TInterfaceDynArray;
     fDynArraySize: array[ftInt64..ftBlob] of integer;
   public
-    constructor Create(aStatement: TSqlDBZEOSStatement);
+    constructor Create(aStatement: TSqlDBZeosStatement);
   end;
 
-constructor TZeosArrayBinding.Create(aStatement: TSqlDBZEOSStatement);
+constructor TZeosArrayBinding.Create(aStatement: TSqlDBZeosStatement);
 var
   p, j, n: integer;
   ndx: array[ftInt64 .. ftBlob] of integer;
@@ -948,7 +954,7 @@ begin
     for p := 0 to fParamCount - 1 do
     begin
       if fParams[p].VInt64 <> fParamsArrayCount then
-        raise ESqlDBZEOS.CreateUtf8(
+        raise ESqlDBZeos.CreateUtf8(
           '%.ExecutePrepared: #% parameter expected array count %, got %',
           [aStatement, p, fParamsArrayCount, fParams[p].VInt64]);
       SetLength(fNullArray[p], fParamsArrayCount);
@@ -956,7 +962,7 @@ begin
       begin
         case VType of
           ftUnknown:
-            raise ESqlDBZEOS.CreateUtf8(
+            raise ESqlDBZeos.CreateUtf8(
               '%.ExecutePrepared: Unknown type array parameter #%',
               [aStatement, p + FirstDbcIndex]);
           ftNull:
@@ -1039,10 +1045,10 @@ end;
 
 {$endif ZEOS72UP}
 
-procedure TSqlDBZEOSStatement.ExecutePrepared;
+procedure TSqlDBZeosStatement.ExecutePrepared;
 var
   i, n: integer;
-  Props: TSqlDBZEOSConnectionProperties;
+  Props: TSqlDBZeosConnectionProperties;
   name: string;
   {$ifdef ZEOS72UP}
   arrayBinding: TZeosArrayBinding;
@@ -1051,28 +1057,28 @@ begin
   SQLLogBegin(sllSQL);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   if fStatement = nil then
-    raise ESqlDBZEOS.CreateUtf8('%.ExecutePrepared() invalid call', [self]);
+    raise ESqlDBZeos.CreateUtf8('%.ExecutePrepared() invalid call', [self]);
   {$ifndef ZEOS72UP}
   //commenting this makes it possible to seek cursor pos to 0 and use the interface again -> e.g. ReadOneByOneRate
   if fResultSet <> nil then
-    raise ESqlDBZEOS.CreateUtf8('%.ExecutePrepared() miss a Reset', [self]);
+    raise ESqlDBZeos.CreateUtf8('%.ExecutePrepared() miss a Reset', [self]);
   {$endif ZEOS72UP}
   // 1. bind parameters in fParams[] to fQuery.Params
   {$ifdef ZEOS72UP}
   arrayBinding := nil;
   if fParamsArrayCount > 0 then
-    with fConnection.Properties as TSqlDBZEOSConnectionProperties do
+    with fConnection.Properties as TSqlDBZeosConnectionProperties do
       if fSupportsArrayBindings then
         arrayBinding := TZeosArrayBinding.Create(self)
       else if not fExpectResults then
-        raise ESqlDBZEOS.CreateUtf8(
+        raise ESqlDBZeos.CreateUtf8(
           '%.BindArray() not supported by % provider', [self, DBMSName]);
   try
     if arrayBinding=nil then
   {$else}
   if (fParamsArrayCount>0) and
      not fExpectResults then
-    raise ESqlDBZEOS.CreateUtf8('%.BindArray() not supported', [self])
+    raise ESqlDBZeos.CreateUtf8('%.BindArray() not supported', [self])
   else
   {$endif ZEOS72UP}
     for i := fParamCount-1 downto 0 do // EG: downto minimize memallocs
@@ -1084,7 +1090,7 @@ begin
         if VType in [ftInt64, ftCurrency, ftDouble, ftUtf8] then
           VData := BoundArrayToJsonArray(VArray)
         else
-          raise ESqlDBZEOS.CreateUtf8('%.ExecutePrepared: Invalid array type % ' +
+          raise ESqlDBZeos.CreateUtf8('%.ExecutePrepared: Invalid array type % ' +
             'on bound parameter #%', [self, ToText(VType)^, i]);
         VType := ftUtf8;
       end;
@@ -1118,7 +1124,7 @@ begin
             TZAbstractBlob.CreateWithData(Pointer(VData), length(VData)
             {$ifndef ZEOS72UP} ,fStatement.GetConnection{$endif ZEOS72UP}));
       else
-        raise ESqlDBZEOS.CreateUtf8(
+        raise ESqlDBZeos.CreateUtf8(
           '%.ExecutePrepared: Invalid type parameter #%', [self, i]);
       end;
     end;
@@ -1137,7 +1143,7 @@ begin
       end
       else
       begin
-        Props := fConnection.Properties as TSqlDBZEOSConnectionProperties;
+        Props := fConnection.Properties as TSqlDBZeosConnectionProperties;
         fResultInfo := fResultSet.GetMetadata;
         n := fResultInfo.GetColumnCount;
         fColumn.Capacity := n;
@@ -1168,7 +1174,7 @@ begin
   SQLLogEnd;
 end;
 
-procedure TSqlDBZEOSStatement.Reset;
+procedure TSqlDBZeosStatement.Reset;
 begin
   ReleaseRows;
   if fStatement <> nil then
@@ -1176,19 +1182,19 @@ begin
   inherited Reset;
 end;
 
-procedure TSqlDBZEOSStatement.ReleaseRows;
+procedure TSqlDBZeosStatement.ReleaseRows;
 begin
   if fResultSet <> nil then
     fResultSet.ResetCursor;
   inherited ReleaseRows;
 end;
 
-function TSqlDBZEOSStatement.Step(SeekFirst: boolean): boolean;
+function TSqlDBZeosStatement.Step(SeekFirst: boolean): boolean;
 begin
   if fColumnCount = 0 then // no row returned
     result := false
   else if fResultSet = nil then
-    raise ESqlDBZEOS.CreateUtf8('%.Step() invalid self', [self])
+    raise ESqlDBZeos.CreateUtf8('%.Step() invalid self', [self])
   else if SeekFirst then
   begin
     result := fResultSet.First;
@@ -1206,20 +1212,20 @@ begin
 end;
 
 {$if defined(ZEOS73UP) and defined(MORMOT2)}
-procedure TSqlDBZEOSStatement.AfterConstruction;
+procedure TSqlDBZeosStatement.AfterConstruction;
 begin
   inherited;
   fJSONComposeOptions := [jcoEndJsonObject];
 end;
 {$ifend}
 
-function TSqlDBZEOSStatement.ColumnBlob(Col: integer): RawByteString;
+function TSqlDBZeosStatement.ColumnBlob(Col: integer): RawByteString;
 var
   blob: IZBlob;
 begin
   if (fResultSet = nil) or
      (cardinal(Col) >= cardinal(fColumnCount)) then
-    raise ESqlDBZEOS.CreateUtf8('%.ColumnBlob(%) ResultSet=%',
+    raise ESqlDBZeos.CreateUtf8('%.ColumnBlob(%) ResultSet=%',
       [self, Col, fResultSet]);
   blob := fResultSet.GetBlob(Col + FirstDbcIndex);
   if (blob = nil) or
@@ -1229,11 +1235,11 @@ begin
     result := blob.GetString; // ZAnsiString = RawByteString
 end;
 
-function TSqlDBZEOSStatement.ColumnCurrency(Col: integer): currency;
+function TSqlDBZeosStatement.ColumnCurrency(Col: integer): currency;
 begin
   if (fResultSet = nil) or
      (cardinal(Col) >= cardinal(fColumnCount)) then
-    raise ESqlDBZEOS.CreateUtf8('%.ColumnCurrency(%) ResultSet=%',
+    raise ESqlDBZeos.CreateUtf8('%.ColumnCurrency(%) ResultSet=%',
       [self, Col, fResultSet]);
   {$ifdef ZEOS72UP}
   result := fResultSet.GetCurrency(Col + FirstDbcIndex);
@@ -1242,46 +1248,46 @@ begin
   {$endif ZEOS72UP}
 end;
 
-function TSqlDBZEOSStatement.ColumnDateTime(Col: integer): TDateTime;
+function TSqlDBZeosStatement.ColumnDateTime(Col: integer): TDateTime;
 begin
   if (fResultSet = nil) or
      (cardinal(Col) >= cardinal(fColumnCount)) then
-    raise ESqlDBZEOS.CreateUtf8('%.ColumnDateTime(%) ResultSet=%',
+    raise ESqlDBZeos.CreateUtf8('%.ColumnDateTime(%) ResultSet=%',
       [self, Col, fResultSet]);
   result := fResultSet.GetTimestamp(Col + FirstDbcIndex);
 end;
 
-function TSqlDBZEOSStatement.ColumnDouble(Col: integer): double;
+function TSqlDBZeosStatement.ColumnDouble(Col: integer): double;
 begin
   if (fResultSet = nil) or
      (cardinal(Col) >= cardinal(fColumnCount)) then
-    raise ESqlDBZEOS.CreateUtf8('%.ColumnDouble(%) ResultSet=%',
+    raise ESqlDBZeos.CreateUtf8('%.ColumnDouble(%) ResultSet=%',
       [self, Col, fResultSet]);
   result := fResultSet.GetDouble(Col + FirstDbcIndex);
 end;
 
-function TSqlDBZEOSStatement.ColumnInt(Col: integer): Int64;
+function TSqlDBZeosStatement.ColumnInt(Col: integer): Int64;
 begin
   if (fResultSet = nil) or
      (cardinal(Col) >= cardinal(fColumnCount)) then
-    raise ESqlDBZEOS.CreateUtf8('%.ColumnInt(%) ResultSet=%',
+    raise ESqlDBZeos.CreateUtf8('%.ColumnInt(%) ResultSet=%',
       [self, Col, fResultSet]);
   result := fResultSet.GetLong(Col + FirstDbcIndex);
 end;
 
-function TSqlDBZEOSStatement.ColumnNull(Col: integer): boolean;
+function TSqlDBZeosStatement.ColumnNull(Col: integer): boolean;
 begin
   if (fResultSet = nil) or
      (cardinal(Col) >= cardinal(fColumnCount)) then
-    raise ESqlDBZEOS.CreateUtf8('%.ColumnNull(%) ResultSet=%', [self, Col, fResultSet]);
+    raise ESqlDBZeos.CreateUtf8('%.ColumnNull(%) ResultSet=%', [self, Col, fResultSet]);
   result := fResultSet.IsNull(Col + FirstDbcIndex);
 end;
 
-function TSqlDBZEOSStatement.ColumnUtf8(Col: integer): RawUtf8;
+function TSqlDBZeosStatement.ColumnUtf8(Col: integer): RawUtf8;
 begin
   if (fResultSet = nil) or
      (cardinal(Col) >= cardinal(fColumnCount)) then
-    raise ESqlDBZEOS.CreateUtf8('%.ColumnUtf8(%) ResultSet=%',
+    raise ESqlDBZeos.CreateUtf8('%.ColumnUtf8(%) ResultSet=%',
       [self, Col, fResultSet]);
   {$ifdef ZEOS72UP}
   result := fResultSet.GetUTF8String(Col + FirstDbcIndex);
@@ -1294,7 +1300,7 @@ begin
   {$endif ZEOS72UP}
 end;
 
-function TSqlDBZEOSStatement.UpdateCount: integer;
+function TSqlDBZeosStatement.UpdateCount: integer;
 begin
   if fStatement <> nil then
     result := fStatement.GetUpdateCount
@@ -1304,7 +1310,7 @@ end;
 
 {$ifdef ZEOS72UP}
 
-procedure TSqlDBZEOSStatement.ColumnsToJson(WR: TJsonWriter);
+procedure TSqlDBZeosStatement.ColumnsToJson(WR: TJsonWriter);
 
 {$if not (defined(ZEOS73UP) and defined(MORMOT2))}
 var
@@ -1411,7 +1417,7 @@ end;
 {$endif ZEOS72UP}
 
 initialization
-  TSqlDBZEOSConnectionProperties.RegisterClassNameForDefinition;
+  TSqlDBZeosConnectionProperties.RegisterClassNameForDefinition;
 
 {$endif NOSYNDBZEOS}
 // defined in mormot_base.lpk Lazarus package > Custom Options > Defines
