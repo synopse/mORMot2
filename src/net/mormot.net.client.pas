@@ -275,7 +275,7 @@ type
     // THttpRequest.Get() but either TWinHttp.Get(), TWinINet.Get() or
     // TCurlHttp.Get() methods
     class function Get(const aUri: RawUtf8; const aHeader: RawUtf8 = '';
-      aIgnoreSSLCertificateErrors: boolean = true; outHeaders: PRawUtf8 = nil;
+      aIgnoreSSLCertificateErrors: boolean = false; outHeaders: PRawUtf8 = nil;
       outStatus: PInteger = nil): RawByteString;
     /// wrapper method to create a resource via an HTTP POST
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
@@ -287,7 +287,7 @@ type
     // THttpRequest.Post() but either TWinHttp.Post(), TWinINet.Post() or
     // TCurlHttp.Post() methods
     class function Post(const aUri: RawUtf8; const aData: RawByteString;
-      const aHeader: RawUtf8 = ''; aIgnoreSSLCertificateErrors: boolean = true;
+      const aHeader: RawUtf8 = ''; aIgnoreSSLCertificateErrors: boolean = false;
       outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil): RawByteString;
     /// wrapper method to update a resource via an HTTP PUT
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
@@ -299,7 +299,7 @@ type
     // THttpRequest.Put() but either TWinHttp.Put(), TWinINet.Put() or
     // TCurlHttp.Put() methods
     class function Put(const aUri: RawUtf8; const aData: RawByteString;
-      const aHeader: RawUtf8 = ''; aIgnoreSSLCertificateErrors: boolean = true;
+      const aHeader: RawUtf8 = ''; aIgnoreSSLCertificateErrors: boolean = false;
       outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil): RawByteString;
     /// wrapper method to delete a resource via an HTTP DELETE
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
@@ -309,7 +309,7 @@ type
     // THttpRequest.Delete() but either TWinHttp.Delete(), TWinINet.Delete() or
     // TCurlHttp.Delete() methods
     class function Delete(const aUri: RawUtf8; const aHeader: RawUtf8 = '';
-      aIgnoreSSLCertificateErrors: boolean = true; outHeaders: PRawUtf8 = nil;
+      aIgnoreSSLCertificateErrors: boolean = false; outHeaders: PRawUtf8 = nil;
       outStatus: PInteger = nil): RawByteString;
 
     /// will register a compression algorithm
@@ -1497,7 +1497,8 @@ begin
          winAuth, pointer(AuthUserName), pointer(AuthPassword), nil) then
         RaiseLastModuleError(winhttpdll, EWinHttp);
     end;
-  if fHTTPS and IgnoreSSLCertificateErrors then
+  if fHTTPS and
+     IgnoreSSLCertificateErrors then
     if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
        @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
       RaiseLastModuleError(winhttpdll, EWinHttp);
