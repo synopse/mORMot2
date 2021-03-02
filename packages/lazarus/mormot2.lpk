@@ -1,17 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CONFIG>
   <Package Version="4">
-    <PathDelim Value="/"/>
     <Name Value="mormot2"/>
     <Type Value="RunTimeOnly"/>
     <Author Value="A. Bouchez, Synopse"/>
     <CompilerOptions>
       <Version Value="11"/>
-      <PathDelim Value="/"/>
       <SearchPaths>
-        <Libraries Value="../static/$(TargetCPU)-$(TargetOS)"/>
         <OtherUnitFiles Value="../../src/app;../../src/core;../../src/db;../../src/lib;../../src/net;../../src/orm;../../src/rest;../../src/soa;../../src/tools/ecc"/>
-        <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)/"/>
+        <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
       <Other>
         <CustomOptions Value="-dNOSYNDBZEOS"/>
@@ -378,8 +375,7 @@
     </RequiredPkgs>
     <UsageOptions>
       <IncludePath Value="$(PkgIncPath)"/>
-      <LibraryPath Value="$(PkgDir)/../static/$(TargetCPU)-$(TargetOS)"/>
-      <ObjectPath Value="$(PkgDir)/.."/>
+      <ObjectPath Value="$(PkgDir)/../../static/$(TargetCPU)-$(TargetOS)"/>
       <UnitPath Value="$(PkgOutDir)"/>
     </UsageOptions>
     <PublishOptions>
