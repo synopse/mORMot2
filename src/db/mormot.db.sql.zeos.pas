@@ -66,6 +66,9 @@ uses
   {$if defined(ENABLE_ASA) and not defined(ZEOS_DISABLE_ASA)}
   ZDbcASA,
   {$ifend}
+  {$if defined(ENABLE_SQLANY) and not defined(ZEOS_DISABLE_SQLANY)}
+  ZDbcSQLAnywhere,
+  {$ifend}
   {$if defined(ENABLE_POOLED) and not defined(ZEOS_DISABLE_POOLED)}
   ZDbcPooled,
   {$ifend}
@@ -820,8 +823,8 @@ begin
   log := SynDBLog.Enter(self, 'Connect');
   if log <> nil then
     with (fProperties as TSqlDBZeosConnectionProperties).fURL do
-      log.Log(sllTrace, 'Connect to % % for % at %:%', [Protocol, Database,
-        HostName, Port]);
+      log.Log(sllTrace, 'Connect to % % for % at %:%',
+        [Protocol, Database, HostName, Port]);
   try
     fDatabase.Open;
     if log <> nil then
