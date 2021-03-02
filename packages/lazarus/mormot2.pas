@@ -2,7 +2,7 @@
   This source is only used to compile and install the package.
  }
 
-unit mormot;
+unit mormot2;
 
 {$warn 5023 off : no warning about unused units}
 interface

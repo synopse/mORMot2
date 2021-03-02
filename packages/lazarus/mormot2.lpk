@@ -2,9 +2,9 @@
 <CONFIG>
   <Package Version="4">
     <PathDelim Value="\"/>
-    <Name Value="mormot"/>
+    <Name Value="mormot2"/>
     <Type Value="RunTimeOnly"/>
-    <Author Value="Arnaud Bouchez"/>
+    <Author Value="A. Bouchez, Synopse"/>
     <CompilerOptions>
       <Version Value="11"/>
       <PathDelim Value="\"/>
