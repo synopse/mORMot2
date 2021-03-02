@@ -1,0 +1,23 @@
+#------------------------------------------------------------------------------
+VERSION = BWS.01
+#------------------------------------------------------------------------------
+!ifndef ROOT
+ROOT = $(MAKEDIR)\..
+!endif
+#------------------------------------------------------------------------------
+MAKE = $(ROOT)\bin\make.exe -$(MAKEFLAGS) -f$**
+DCC = $(ROOT)\bin\dcc32.exe $**
+BRCC = $(ROOT)\bin\brcc32.exe $**
+#------------------------------------------------------------------------------
+PROJECTS = Project03MethodBasedServer.exe Project03MethodBasedClient.exe
+#------------------------------------------------------------------------------
+default: $(PROJECTS)
+#------------------------------------------------------------------------------
+
+Project03MethodBasedServer.exe: Project03MethodBasedServer.dpr
+  $(DCC)
+
+Project03MethodBasedClient.exe: Project03MethodBasedClient.dpr
+  $(DCC)
+
+
