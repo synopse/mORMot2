@@ -12,7 +12,7 @@
       </Flags>
       <SessionStorage Value="InProjectDir"/>
       <MainUnit Value="0"/>
-      <Title Value="Project03MethodBasedServer"/>
+      <Title Value="Project01"/>
       <UseAppBundle Value="False"/>
       <ResourceType Value="res"/>
     </General>
@@ -32,30 +32,35 @@
         <PackageName Value="LCL"/>
       </Item1>
     </RequiredPackages>
-    <Units Count="3">
+    <Units Count="4">
       <Unit0>
-        <Filename Value="Project03MethodBasedServer.dpr"/>
+        <Filename Value="Project01.dpr"/>
         <IsPartOfProject Value="True"/>
       </Unit0>
       <Unit1>
-        <Filename Value="data.pas"/>
+        <Filename Value="main.pas"/>
         <IsPartOfProject Value="True"/>
+        <HasResources Value="True"/>
       </Unit1>
       <Unit2>
-        <Filename Value="server.pas"/>
+        <Filename Value="data.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit2>
+      <Unit3>
+        <Filename Value="client.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit3>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
     <Version Value="11"/>
     <PathDelim Value="\"/>
     <Target>
-      <Filename Value="../bin/fpc/$(TargetCPU)-$(TargetOS)/Project03Server"/>
+      <Filename Value="..\bin\fpc\$(TargetCPU)-$(TargetOS)\Project01"/>
     </Target>
     <SearchPaths>
       <IncludeFiles Value="..\..\..\..\..\src;..\..\..\..\..\src\core;$(ProjOutDir)"/>
-      <Libraries Value="..\..\..\..\..\static"/>
+      <Libraries Value="..\..\..\..\..\static\$(TargetCPU)-$(TargetOS)"/>
       <OtherUnitFiles Value="..\..\..\..\..\src;..\..\..\..\..\src\app;..\..\..\..\..\src\core;..\..\..\..\..\src\db;..\..\..\..\..\src\lib;..\..\..\..\..\src\net;..\..\..\..\..\src\orm;..\..\..\..\..\src\rest;..\..\..\..\..\src\soa"/>
       <UnitOutputDirectory Value="..\lib\fpc\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
@@ -75,6 +80,11 @@
         <GenerateDebugInfo Value="False"/>
       </Debugging>
       <LinkSmart Value="True"/>
+      <Options>
+        <Win32>
+          <GraphicApplication Value="True"/>
+        </Win32>
+      </Options>
     </Linking>
     <Other>
       <CustomOptions Value="-dBorland

@@ -55,7 +55,7 @@
     </Target>
     <SearchPaths>
       <IncludeFiles Value="..\..\..\..\..\src;..\..\..\..\..\src\core;$(ProjOutDir)"/>
-      <Libraries Value="..\..\..\..\..\static"/>
+      <Libraries Value="..\..\..\..\..\static\$(TargetCPU)-$(TargetOS)"/>
       <OtherUnitFiles Value="..\..\..\..\..\src;..\..\..\..\..\src\app;..\..\..\..\..\src\core;..\..\..\..\..\src\db;..\..\..\..\..\src\lib;..\..\..\..\..\src\net;..\..\..\..\..\src\orm;..\..\..\..\..\src\rest;..\..\..\..\..\src\soa"/>
       <UnitOutputDirectory Value="..\lib\fpc\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>

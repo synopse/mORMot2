@@ -12,7 +12,7 @@
       </Flags>
       <SessionStorage Value="InProjectDir"/>
       <MainUnit Value="0"/>
-      <Title Value="Project03MethodBasedClient"/>
+      <Title Value="Project04InterfaceBasedClient"/>
       <UseAppBundle Value="False"/>
       <ResourceType Value="res"/>
     </General>
@@ -34,13 +34,15 @@
     </RequiredPackages>
     <Units Count="3">
       <Unit0>
-        <Filename Value="Project03MethodBasedClient.dpr"/>
+        <Filename Value="Project04InterfaceBasedClient.dpr"/>
         <IsPartOfProject Value="True"/>
       </Unit0>
       <Unit1>
         <Filename Value="main.pas"/>
         <IsPartOfProject Value="True"/>
+        <ComponentName Value="MainForm"/>
         <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
       </Unit1>
       <Unit2>
         <Filename Value="data.pas"/>
@@ -52,11 +54,11 @@
     <Version Value="11"/>
     <PathDelim Value="\"/>
     <Target>
-      <Filename Value="../bin/fpc/$(TargetCPU)-$(TargetOS)/Project03Client"/>
+      <Filename Value="../bin/fpc/$(TargetCPU)-$(TargetOS)/Project04Client"/>
     </Target>
     <SearchPaths>
       <IncludeFiles Value="..\..\..\..\..\src;..\..\..\..\..\src\core;$(ProjOutDir)"/>
-      <Libraries Value="..\..\..\..\..\static"/>
+      <Libraries Value="..\..\..\..\..\static\$(TargetCPU)-$(TargetOS)"/>
       <OtherUnitFiles Value="..\..\..\..\..\src;..\..\..\..\..\src\app;..\..\..\..\..\src\core;..\..\..\..\..\src\db;..\..\..\..\..\src\lib;..\..\..\..\..\src\net;..\..\..\..\..\src\orm;..\..\..\..\..\src\rest;..\..\..\..\..\src\soa"/>
       <UnitOutputDirectory Value="..\lib\fpc\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>

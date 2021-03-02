@@ -12,7 +12,7 @@
       </Flags>
       <SessionStorage Value="InProjectDir"/>
       <MainUnit Value="0"/>
-      <Title Value="Project02Client"/>
+      <Title Value="Project02Server"/>
       <UseAppBundle Value="False"/>
       <ResourceType Value="res"/>
     </General>
@@ -34,16 +34,15 @@
     </RequiredPackages>
     <Units Count="3">
       <Unit0>
-        <Filename Value="Project02Client.dpr"/>
+        <Filename Value="Project02Server.dpr"/>
         <IsPartOfProject Value="True"/>
       </Unit0>
       <Unit1>
-        <Filename Value="main.pas"/>
+        <Filename Value="data.pas"/>
         <IsPartOfProject Value="True"/>
-        <HasResources Value="True"/>
       </Unit1>
       <Unit2>
-        <Filename Value="data.pas"/>
+        <Filename Value="server.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit2>
     </Units>
@@ -52,11 +51,11 @@
     <Version Value="11"/>
     <PathDelim Value="\"/>
     <Target>
-      <Filename Value="../bin/fpc/$(TargetCPU)-$(TargetOS)/Project02Client"/>
+      <Filename Value="../bin/fpc/$(TargetCPU)-$(TargetOS)/Project02Server"/>
     </Target>
     <SearchPaths>
       <IncludeFiles Value="..\..\..\..\..\src;..\..\..\..\..\src\core;$(ProjOutDir)"/>
-      <Libraries Value="..\..\..\..\..\static"/>
+      <Libraries Value="..\..\..\..\..\static\$(TargetCPU)-$(TargetOS)"/>
       <OtherUnitFiles Value="..\..\..\..\..\src;..\..\..\..\..\src\app;..\..\..\..\..\src\core;..\..\..\..\..\src\db;..\..\..\..\..\src\lib;..\..\..\..\..\src\net;..\..\..\..\..\src\orm;..\..\..\..\..\src\rest;..\..\..\..\..\src\soa"/>
       <UnitOutputDirectory Value="..\lib\fpc\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
@@ -70,17 +69,12 @@
       <Optimizations>
         <OptimizationLevel Value="3"/>
       </Optimizations>
-      <SmallerCode Value="True"/>
     </CodeGeneration>
     <Linking>
       <Debugging>
         <GenerateDebugInfo Value="False"/>
       </Debugging>
-      <Options>
-        <Win32>
-          <GraphicApplication Value="True"/>
-        </Win32>
-      </Options>
+      <LinkSmart Value="True"/>
     </Linking>
     <Other>
       <CustomOptions Value="-dBorland
