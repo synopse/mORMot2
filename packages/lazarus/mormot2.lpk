@@ -13,6 +13,10 @@
         <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
       <Other>
+        <Verbosity>
+          <ShowNotes Value="False"/>
+          <ShowHints Value="False"/>
+        </Verbosity>
         <CustomOptions Value="-dNOSYNDBZEOS"/>
         <OtherDefines Count="1">
           <Define0 Value="NOSYNDBZEOS"/>
