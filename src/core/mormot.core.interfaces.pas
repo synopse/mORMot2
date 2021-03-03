@@ -902,12 +902,14 @@ type
     // - you shall have registered the interface TGUID by a previous call to
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator),...])
     // - returns TRUE and set the Obj variable with a matching instance
+    // - returns FALSE (or raise aRaiseIfNotFound) if aGuid is not available
     // - can be used as such to resolve an ICalculator interface:
     // ! var calc: ICalculator;
     // ! begin
     // !   if ServiceContainer.Resolve(ICalculator,cal) then
     // !   ... use calc methods
-    function Resolve(const aGuid: TGUID; out Obj): boolean; overload;
+    function Resolve(const aGuid: TGUID; out Obj;
+      aRaiseIfNotFound: EInterfaceResolver = nil): boolean; overload;
     /// can be used to perform several DI/IoC for a given set of interfaces
     // - here interfaces and instances are provided as TypeInfo,@Instance pairs
     // - raise an EServiceException if any interface can't be resolved, unless
@@ -4961,7 +4963,8 @@ begin
     result := TryResolve(aInterface, Obj);
 end;
 
-function TInterfaceResolverInjected.Resolve(const aGuid: TGUID; out Obj): boolean;
+function TInterfaceResolverInjected.Resolve(const aGuid: TGUID; out Obj;
+  aRaiseIfNotFound: EInterfaceResolver): boolean;
 var
   known: TInterfaceFactory;
 begin
@@ -4975,6 +4978,10 @@ begin
     else
       result := false;
   end;
+  if (aRaiseIfNotFound <> nil) and
+     not result then
+    raise aRaiseIfNotFound.CreateUtf8('%.Resolve(%) unsatisfied',
+      [self, GuidToShort(aGUID)]);
 end;
 
 procedure TInterfaceResolverInjected.ResolveByPair(
