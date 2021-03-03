@@ -98,7 +98,7 @@ type
     fKeepAliveMS: cardinal;
     fCompression: TRestHttpCompressions;
     fUriPrefix: RawUtf8;
-    fAuthenticationBearer: RawUtf8;
+    fCustomHeader: RawUtf8;
     /// connection parameters as set by Create()
     fServer, fPort: RawUtf8;
     fHttps: boolean;
@@ -174,10 +174,11 @@ type
     // but a per-URI redirection to the actual mormot server
     property UriPrefix: RawUtf8
       read fUriPrefix write fUriPrefix;
-    /// optional "Authentication: Bearer xxxxxxxxxx" token transmitted with
-    // each REST client request
-    property AuthenticationBearer: RawUtf8
-      read fAuthenticationBearer write fAuthenticationBearer;
+    /// optional header transmitted with each REST client request
+    // - can be used e.g. to add "Authentication: Bearer xxxxxxxxxx" token
+    // using AuthorizationBearer() from mormot.net.http.pas
+    property CustomHeader: RawUtf8
+      read fCustomHeader write fCustomHeader;
     /// the Server IP port
     property Port: RawUtf8
       read fPort;
@@ -538,11 +539,11 @@ begin
         pointer(Content), Length(Content), ContentType);
     if fUriPrefix <> '' then
       Call.Url := fUriPrefix + Call.Url;
-    if fAuthenticationBearer <> '' then
+    if fCustomHeader <> '' then
       if Call.InHead = '' then
-        Call.InHead := fAuthenticationBearer
+        Call.InHead := fCustomHeader
       else
-        Call.InHead := Call.InHead + #13#10 + fAuthenticationBearer;
+        Call.InHead := Call.InHead + #13#10 + fCustomHeader;
     fSafe.Enter;
     try
       res := InternalRequest(Call.Url, Call.Method, Head, Content, ContentType);
