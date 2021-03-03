@@ -98,6 +98,7 @@ type
     fKeepAliveMS: cardinal;
     fCompression: TRestHttpCompressions;
     fUriPrefix: RawUtf8;
+    fAuthenticationBearer: RawUtf8;
     /// connection parameters as set by Create()
     fServer, fPort: RawUtf8;
     fHttps: boolean;
@@ -173,6 +174,10 @@ type
     // but a per-URI redirection to the actual mormot server
     property UriPrefix: RawUtf8
       read fUriPrefix write fUriPrefix;
+    /// optional "Authentication: Bearer xxxxxxxxxx" token transmitted with
+    // each REST client request
+    property AuthenticationBearer: RawUtf8
+      read fAuthenticationBearer write fAuthenticationBearer;
     /// the Server IP port
     property Port: RawUtf8
       read fPort;
@@ -297,9 +302,9 @@ type
   protected
     fWebSocketParams: record
       AutoUpgrade: boolean;
-      Key: RawUtf8;
-      BinaryOptions: TWebSocketProtocolBinaryOptions;
       Ajax: boolean;
+      BinaryOptions: TWebSocketProtocolBinaryOptions;
+      Key: RawUtf8;
     end;
     fOnWebSocketsUpgraded: TOnClientNotify;
     fOnWebSocketsClosed: TNotifyEvent;
@@ -533,6 +538,11 @@ begin
         pointer(Content), Length(Content), ContentType);
     if fUriPrefix <> '' then
       Call.Url := fUriPrefix + Call.Url;
+    if fAuthenticationBearer <> '' then
+      if Call.InHead = '' then
+        Call.InHead := fAuthenticationBearer
+      else
+        Call.InHead := Call.InHead + #13#10 + fAuthenticationBearer;
     fSafe.Enter;
     try
       res := InternalRequest(Call.Url, Call.Method, Head, Content, ContentType);
