@@ -196,7 +196,7 @@ type
       aTimeOutSec: cardinal; aSharedInstance: TInterfacedObject); reintroduce;
     /// release all used memory
     // - e.g. any internal TServiceFactoryServerInstance instances (any shared
-    // instance, and all still living instances in sicClientDrive mode)
+    // instance, and all still living instances in sicClientDriven mode)
     destructor Destroy; override;
 
     /// you can define here an event to allow/deny execution of any method
@@ -254,7 +254,7 @@ type
     function RunOnAllInstances(const aEvent: TOnServiceFactoryServerOne;
       var aOpaque): integer;
     /// get an implementation Inst.Instance for the given Inst.InstanceID
-    // - is called by ExecuteMethod() in sicClientDrive mode
+    // - is called by ExecuteMethod() in sicClientDriven mode
     // - returns -1 on error, or aMethodIndex for successfull execution,
     // e.g. 0 after {"method":"_free_".. call
     // - otherwise, fill Inst.Instance with the matching implementation (or nil)

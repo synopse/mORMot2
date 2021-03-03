@@ -97,6 +97,7 @@ type
   protected
     fKeepAliveMS: cardinal;
     fCompression: TRestHttpCompressions;
+    fUriPrefix: RawUtf8;
     /// connection parameters as set by Create()
     fServer, fPort: RawUtf8;
     fHttps: boolean;
@@ -164,6 +165,14 @@ type
     /// the Server IP address
     property Server: RawUtf8
       read fServer;
+    /// optional URI prefix appended to the REST computed URI
+    // - is set from the Server parameter to the Create constructor, e.g.
+    // 'hostname/sub/proxy/uri/' will set Server='hostname' and UriPrefix=
+    // 'sub/proxy/uri/' which will make 'sub/proxy/uri/root/table/1' call e.g.
+    // - could be used e.g. when a reverse proxy is setup with no DNS sub-domain
+    // but a per-URI redirection to the actual mormot server
+    property UriPrefix: RawUtf8
+      read fUriPrefix write fUriPrefix;
     /// the Server IP port
     property Port: RawUtf8
       read fPort;
@@ -522,6 +531,8 @@ begin
     if Content <> '' then // always favor content type from binary
       ContentType := GetMimeContentTypeFromBuffer(
         pointer(Content), Length(Content), ContentType);
+    if fUriPrefix <> '' then
+      Call.Url := fUriPrefix + Call.Url;
     fSafe.Enter;
     try
       res := InternalRequest(Call.Url, Call.Method, Head, Content, ContentType);
@@ -558,7 +569,7 @@ constructor TRestHttpClientGeneric.Create(const aServer, aPort: RawUtf8;
   aSendTimeout, aReceiveTimeout, aConnectTimeout: cardinal);
 begin
   inherited Create(aModel);
-  fServer := aServer;
+  Split(Server, '/', fServer, fUriPrefix);
   fPort := aPort;
   fHttps := aHttps;
   fKeepAliveMS := 20000; // 20 seconds connection keep alive by default
