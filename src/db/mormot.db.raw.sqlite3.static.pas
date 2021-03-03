@@ -1053,6 +1053,7 @@ function sqlite3_create_collation(DB: TSqlite3DB; CollationName: PUtf8Char;
 function sqlite3_libversion: PUtf8Char; cdecl; external;
 function sqlite3_libversion_number: integer; cdecl; external;
 function sqlite3_sourceid: PUtf8Char; cdecl; external;
+function sqlite3_threadsafe: integer; cdecl; external;
 function sqlite3_errcode(DB: TSqlite3DB): integer; cdecl; external;
 function sqlite3_extended_errcode(DB: TSqlite3DB): integer; cdecl; external;
 function sqlite3_errmsg(DB: TSqlite3DB): PUtf8Char; cdecl; external;
@@ -1100,7 +1101,7 @@ function sqlite3_sql(S: TSqlite3Statement): PUtf8Char; cdecl; external;
 function sqlite3_expanded_sql(S: TSqlite3Statement): PUtf8Char; cdecl; external;
 function sqlite3_normalized_sql(S: TSqlite3Statement): PUtf8Char; cdecl; external;
 function sqlite3_step(S: TSqlite3Statement): integer; cdecl; external;
-function table_column_metadata(DB: TSqlite3DB; zDbName, zTableName, zColumnName: PUtf8Char;
+function sqlite3_table_column_metadata(DB: TSqlite3DB; zDbName, zTableName, zColumnName: PUtf8Char;
   var pzDataType, pzCollSeq: PUtf8Char;
   var pNotNull, pPrimaryKey, pAutoinc: PInteger): integer; cdecl; external;
 function sqlite3_column_count(S: TSqlite3Statement): integer; cdecl; external;
@@ -1241,6 +1242,7 @@ function sqlite3_snapshot_open(DB: TSqlite3DB; zSchema: PUtf8Char;
 function sqlite3_snapshot_recover(DB: TSqlite3DB; zDB: PUtf8Char): integer; cdecl; external;
 function sqlite3_snapshot_cmp(DB: TSqlite3DB; P1, P2: PSqlite3Snapshot): integer; cdecl; external;
 function sqlite3_snapshot_free(DB: TSqlite3DB; Snapshot: PSqlite3Snapshot): integer; cdecl; external;
+function sqlite3_soft_heap_limit64(N: Int64): Int64; cdecl; external;
 function sqlite3_config(operation: integer): integer; cdecl varargs; external;
 function sqlite3_db_config(DB: TSqlite3DB; operation: integer): integer; cdecl varargs; external;
 function sqlite3_trace_v2(DB: TSqlite3DB; Mask: integer; Callback: TSqlTraceCallback;
@@ -1273,6 +1275,7 @@ begin
   libversion             := @sqlite3_libversion;
   libversion_number      := @sqlite3_libversion_number;
   sourceid               := @sqlite3_sourceid;
+  threadsafe             := @sqlite3_threadsafe;
   errcode                := @sqlite3_errcode;
   extended_errcode       := @sqlite3_extended_errcode;
   errmsg                 := @sqlite3_errmsg;
@@ -1315,6 +1318,7 @@ begin
   expanded_sql           := @sqlite3_expanded_sql;
   normalized_sql         := @sqlite3_normalized_sql;
   step                   := @sqlite3_step;
+  table_column_metadata  := @sqlite3_table_column_metadata;
   column_count           := @sqlite3_column_count;
   column_type            := @sqlite3_column_type;
   column_decltype        := @sqlite3_column_decltype;
@@ -1430,6 +1434,7 @@ begin
   snapshot_recover       := @sqlite3_snapshot_recover;
   snapshot_cmp           := @sqlite3_snapshot_cmp;
   snapshot_free          := @sqlite3_snapshot_free;
+  soft_heap_limit64      := @sqlite3_soft_heap_limit64;
   config                 := @sqlite3_config;
   db_config              := @sqlite3_db_config;
 
@@ -1473,4 +1478,3 @@ initialization
 {$endif NOSQLITE3STATIC} // conditional defined -> auto-load local .dll/.so
 
 end.
-
