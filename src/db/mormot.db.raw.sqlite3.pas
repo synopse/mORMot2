@@ -5362,7 +5362,7 @@ end;
 { TSqlite3LibraryDynamic }
 
 const
-  SQLITE3_ENTRIES: array[0..171] of PUtf8Char = (
+  SQLITE3_ENTRIES: array[0..171] of PAnsiChar = (
     'sqlite3_initialize',
     'sqlite3_shutdown',
     'sqlite3_open',
@@ -7749,7 +7749,7 @@ begin
         if DoNotFetchBlobs then
           WR.AddShort('null')
         else
-          WR.WrBase64(sqlite3.column_blob(Request, i),
+          WR.WrBase64(pointer(sqlite3.column_blob(Request, i)),
             sqlite3.column_bytes(Request, i), {withMagic=}true);
       SQLITE_NULL:
         WR.AddShort('null'); // returned also for ""
@@ -7876,7 +7876,7 @@ end;
 procedure InternalSQLFunctionDynArrayBlob(Context: TSqlite3FunctionContext;
   argc: integer; var argv: TSqlite3ValueArray); cdecl;
 var
-  P, item: PUtf8Char;
+  P, item: PAnsiChar;
   PLen, itemLen: PtrInt;
   caller: TSqlDataBaseSQLFunctionDynArray;
 begin

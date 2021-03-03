@@ -653,7 +653,7 @@ begin
 end;
 
 function vt_Filter(var pVtabCursor: TSqlite3VTabCursor; idxNum: integer;
-  const idxStr: PAnsiChar; argc: integer;
+  const idxStr: PUtf8Char; argc: integer;
   var argv: TSqlite3ValueArray): integer; cdecl;
 var
   prepared: POrmVirtualTablePrepared absolute idxStr; // idxNum is not used
@@ -865,7 +865,7 @@ begin
   result := InternalTrans(pVTab, vttRollBackTo, iSavepoint);
 end;
 
-function vt_Rename(var pVTab: TSqlite3VTab; const zNew: PAnsiChar): integer; cdecl;
+function vt_Rename(var pVTab: TSqlite3VTab; const zNew: PUtf8Char): integer; cdecl;
 begin
   if TOrmVirtualTable(pVTab.pInstance).Rename(RawUtf8(zNew)) then
     result := SQLITE_OK
