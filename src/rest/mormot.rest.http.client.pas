@@ -333,7 +333,7 @@ type
     function WebSocketsUpgrade(const aWebSocketsEncryptionKey: RawUtf8;
       aWebSocketsAjax: boolean = false;
       aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions =
-        [pboSynLzCompress]): RawUtf8;
+        [pboSynLzCompress]; aRaiseExceptionOnFailure: ESynExceptionClass = nil): RawUtf8;
     /// connect using a specified WebSockets protocol
     // - this method would call WebSocketsUpgrade, then ServerTimestampSynchronize
     // - it therefore expects SetUser() to have been previously called
@@ -1012,7 +1012,8 @@ end;
 
 function TRestHttpClientWebsockets.WebSocketsUpgrade(
   const aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean;
-  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions): RawUtf8;
+  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions;
+  aRaiseExceptionOnFailure: ESynExceptionClass): RawUtf8;
 var
   sockets: THttpClientWebSockets;
   log: ISynLog;
@@ -1047,6 +1048,10 @@ begin
     else
       log.Log(sllHTTP, 'HTTP link upgraded to WebSockets using %',
         [sockets], self);
+  if (aRaiseExceptionOnFailure <> nil) and
+     (result <> '') then
+    raise aRaiseExceptionOnFailure.CreateUtf8('%.WebSocketsUpgrade failed: [%]',
+      [self, result]);
 end;
 
 function TRestHttpClientWebsockets.WebSocketsConnect(
