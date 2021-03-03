@@ -3563,7 +3563,8 @@ begin
   AddMethodsFromTypeInfo(aInterface); // from RTTI or generated code
   if fMethodsCount = 0 then
     raise EInterfaceFactory.CreateUtf8('%.Create(%): interface has ' +
-      'no RTTI - should inherit from IInvokable', [self, fInterfaceName]);
+      'no RTTI - should inherit from IInvokable or add some methods',
+      [self, fInterfaceName]);
   if MethodsCount > MAX_METHOD_COUNT then
     raise EInterfaceFactory.CreateUtf8(
       '%.Create(%): interface has too many methods (%), so breaks the ' +
