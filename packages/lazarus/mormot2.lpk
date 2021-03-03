@@ -7,6 +7,8 @@
     <CompilerOptions>
       <Version Value="11"/>
       <SearchPaths>
+        <IncludeFiles Value="../../src"/>
+        <Libraries Value="../../static/$(TargetCPU)-$(TargetOS)"/>
         <OtherUnitFiles Value="../../src/app;../../src/core;../../src/db;../../src/lib;../../src/net;../../src/orm;../../src/rest;../../src/soa;../../src/tools/ecc"/>
         <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
@@ -375,6 +377,7 @@
     </RequiredPkgs>
     <UsageOptions>
       <IncludePath Value="$(PkgIncPath)"/>
+      <LibraryPath Value="$(PkgDir)/../../static/$(TargetCPU)-$(TargetOS)"/>
       <ObjectPath Value="$(PkgDir)/../../static/$(TargetCPU)-$(TargetOS)"/>
       <UnitPath Value="$(PkgOutDir)"/>
     </UsageOptions>
