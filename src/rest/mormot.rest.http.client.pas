@@ -1039,7 +1039,7 @@ begin
       sockets.Settings^.LoopDelay := fWebSocketLoopDelay;
     result := sockets.WebSocketsUpgrade(
       Model.Root, aWebSocketsEncryptionKey,
-      aWebSocketsAjax, aWebSocketsBinaryOptions);
+      aWebSocketsAjax, aWebSocketsBinaryOptions, nil, fCustomHeader);
     if result = '' then
       // no error message = success
       with fWebSocketParams do
