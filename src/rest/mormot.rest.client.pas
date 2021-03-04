@@ -11,6 +11,7 @@ unit mormot.rest.client;
     - TRestClientRoutingRest/TRestClientRoutingJsonRpc Routing Schemes
     - TRestClientUri Base Class for Actual Clients
     - TRestClientLibraryRequest after TRestServer.ExportServerGlobalLibraryRequest
+    - TInterfacedCallback/TBlockingCallback Classes
 
   *****************************************************************************
 }
@@ -1046,6 +1047,82 @@ type
   TSqlRestClientUriDll = TRestClientLibraryRequest;
 
 {$endif PUREMORMOT2}
+
+
+{ ************ TInterfacedCallback/TBlockingCallback Classes }
+
+  /// TInterfacedObject class which will notify a REST server when it is released
+  // - could be used when implementing event callbacks as interfaces, so that
+  // the other side instance will be notified when it is destroyed
+  TInterfacedCallback = class(TInterfacedObjectLocked)
+  protected
+    fRest: TRest;
+    fInterface: TGUID;
+  public
+    /// initialize the instance for a given REST client and callback interface
+    constructor Create(aRest: TRest; const aGuid: TGUID); reintroduce;
+    /// notify the associated TRestServer that the callback is disconnnected
+    // - i.e. will call TRestServer's TServiceContainer.CallBackUnRegister()
+    // - this method will process the unsubscription only once
+    procedure CallbackRestUnregister; virtual;
+    /// finalize the instance, and notify the TRestServer that the callback
+    // is now unreachable
+    // - i.e. will call CallbackRestUnregister
+    destructor Destroy; override;
+    /// the associated TRestServer instance, which will be notified
+    // when the callback is released
+    property Rest: TRest
+      read fRest;
+    /// the interface type, implemented by this callback class
+    property RestInterface: TGUID
+      read fInterface write fInterface;
+  end;
+
+  /// asynchrounous callback to emulate a synchronous/blocking process
+  // - once created, process will block via a WaitFor call, which will be
+  // released when CallbackFinished() is called by the process background thread
+  TBlockingCallback = class(TInterfacedCallback)
+  protected
+    fProcess: TBlockingProcess;
+    function GetEvent: TBlockingEvent;
+  public
+    /// initialize the callback instance
+    // - specify a time out millliseconds period after which blocking execution
+    // should be handled as failure (if 0 is set, default 3000 will be used)
+    // - you can optionally set a REST and callback interface for automatic
+    // notification when this TInterfacedCallback will be released
+    constructor Create(aTimeOutMs: integer;
+      aRest: TRest; const aGuid: TGUID); reintroduce;
+    /// finalize the callback instance
+    destructor Destroy; override;
+    /// called to wait for the callback to be processed, or trigger timeout
+    // - will block until CallbackFinished() is called by the processing thread
+    // - returns the final state of the process, i.e. beRaised or beTimeOut
+    function WaitFor: TBlockingEvent; virtual;
+    /// should be called by the callback when the process is finished
+    // - the caller will then let its WaitFor method return
+    // - if aServerUnregister is TRUE, will also call CallbackRestUnregister to
+    // notify the server that the callback is no longer needed
+    // - will optionally log all published properties values to the log class
+    // of the supplied REST instance
+    procedure CallbackFinished(aRestForLog: TRestOrm;
+      aServerUnregister: boolean = false); virtual;
+    /// just a wrapper to reset the internal Event state to evNone
+    // - may be used to re-use the same TBlockingCallback instance, after
+    // a successfull WaitFor/CallbackFinished process
+    // - returns TRUE on success (i.e. status was not beWaiting)
+    // - if there is a WaitFor currently in progress, returns FALSE
+    function Reset: boolean; virtual;
+    /// the associated blocking process instance
+    property Process: TBlockingProcess
+      read fProcess;
+  published
+    /// the current state of process
+    // - just a wrapper around Process.Event
+    // - use Reset method to re-use this instance after a WaitFor process
+    property Event: TBlockingEvent
+      read GetEvent;
+  end;
 
 
 implementation
@@ -2747,6 +2824,84 @@ end;
 procedure TRestClientLibraryRequest.InternalClose;
 begin
 end;
+
+
+{ ************ TInterfacedCallback/TBlockingCallback Classes }
+
+{ TInterfacedCallback }
+
+constructor TInterfacedCallback.Create(aRest: TRest; const aGuid: TGUID);
+begin
+  inherited Create;
+  fRest := aRest;
+  fInterface := aGuid;
+end;
+
+procedure TInterfacedCallback.CallbackRestUnregister;
+var
+  obj: pointer; // not IInvokable to avoid unexpected (recursive) Destroy call
+begin
+  if (fRest <> nil) and
+     (fRest.Services <> nil) and
+     not IsNullGuid(fInterface) then
+    if GetInterface(fInterface, obj) then
+    begin
+      fRest.Services.CallBackUnRegister(IInvokable(obj));
+      dec(fRefCount); // GetInterface() did increase the refcount
+      fRest := nil; // notify once
+    end;
+end;
+
+destructor TInterfacedCallback.Destroy;
+begin
+  CallbackRestUnregister;
+  inherited Destroy;
+end;
+
+
+{ TBlockingCallback }
+
+constructor TBlockingCallback.Create(aTimeOutMs: integer; aRest: TRest;
+  const aGuid: TGUID);
+begin
+  inherited Create(aRest, aGuid);
+  fProcess := TBlockingProcess.Create(aTimeOutMs, fSafe);
+end;
+
+destructor TBlockingCallback.Destroy;
+begin
+  FreeAndNil(fProcess);
+  inherited Destroy;
+end;
+
+procedure TBlockingCallback.CallbackFinished(aRestForLog: TRestOrm;
+  aServerUnregister: boolean);
+begin
+  if fProcess.NotifyFinished then
+  begin
+    if aRestForLog <> nil then
+      aRestForLog.LogClass.Add.Log(sllTrace, self);
+    if aServerUnregister then
+      CallbackRestUnregister;
+  end;
+end;
+
+function TBlockingCallback.WaitFor: TBlockingEvent;
+begin
+  result := fProcess.WaitFor;
+end;
+
+function TBlockingCallback.Reset: boolean;
+begin
+  result := fProcess.Reset;
+end;
+
+function TBlockingCallback.GetEvent: TBlockingEvent;
+begin
+  result := fProcess.Event;
+end;
+
+
 
 
 
