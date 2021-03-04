@@ -324,6 +324,8 @@ type
     // - should have been registered by a previous call to TimerEnable() method
     // - returns true on success, false if the supplied task was not registered
     function TimerDisable(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+    /// execute once a task in the background, without waiting for it
+    function Once(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
     /// will gather CPU and RAM information in a background thread
     // - you can specify the update frequency, in seconds
     // - access to the information via the returned instance, which maps
@@ -3605,6 +3607,11 @@ begin
     result := false
   else
     result := fBackgroundTimer.Disable(aOnProcess);
+end;
+
+function TRestRunThreads.Once(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+begin
+  result := EnsureBackgroundTimerExists.ExecuteOnce(aOnProcess);
 end;
 
 function TRestRunThreads.SystemUseTrack(periodSec: integer): TSystemUse;
