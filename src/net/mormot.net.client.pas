@@ -2221,7 +2221,7 @@ function THttpRequestCached.Get(const aAddress: RawUtf8; aModified: PBoolean;
   aStatus: PInteger): RawByteString;
 var
   cache: THttpRequestCache;
-  headin, headout: RawUtf8;
+  headin: RawUtf8;
   status: integer;
   modified: boolean;
 begin

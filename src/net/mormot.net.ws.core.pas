@@ -173,8 +173,8 @@ type
     /// callback run when a WebSockets client is just disconnected
     // - triggerred by TWebSocketProcess.ProcessStop
     OnClientDisconnected: TNotifyEvent;
-    /// if the WebSockets should be upgraded after socket reconnection
-    AutoUpgrade: boolean;
+    /// if the WebSockets Client should be upgraded after socket reconnection
+    ClientAutoUpgrade: boolean;
     /// by default, contains [] to minimize the logged information
     // - set logHeartbeat if you want the ping/pong frames to be logged
     // - set logTextFrameContent if you want the text frame content to be logged
@@ -1883,7 +1883,7 @@ begin
   LogDetails := [];
   OnClientConnected := nil;
   OnClientDisconnected := nil;
-  AutoUpgrade := true;
+  ClientAutoUpgrade := true;
   AesSalt := 'E750ACCA-2C6F-4B0E-999B-D31C9A14EFAB';
   AesRounds := 1024;
   AesCipher := TAesFast[mCtr];
@@ -1934,7 +1934,6 @@ begin
       log.Log(sllTrace, 'Destroy: notify focConnectionClose', self);
     LockedInc32(@fProcessCount);
     try
-      fState := wpsDestroy;
       if fOutgoing.Count > 0 then
         SendPendingOutgoingFrames;
       frame.opcode := focConnectionClose;
@@ -1944,6 +1943,7 @@ begin
          not GetFrame(frame, @dummyerror) then
         if log <> nil then // expects an answer from peer
           log.Log(sllWarning, 'Destroy: no focConnectionClose ACK %', [dummyerror], self);
+      fState := wpsDestroy;
     finally
       LockedDec32(@fProcessCount);
     end;
@@ -2135,7 +2135,8 @@ begin
       fState := wpsRun;
       while (fOwnerThread = nil) or
             not fOwnerThread.Terminated do
-        if ProcessLoopStepReceive and ProcessLoopStepSend then
+        if ProcessLoopStepReceive and
+           ProcessLoopStepSend then
           HiResDelay(fLastSocketTicks)
         else
           break; // connection ended

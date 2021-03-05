@@ -530,7 +530,7 @@ type
     fConnectRetrySeconds: integer; // used by IsOpen
     fMaximumAuthentificationRetry: integer;
     fRetryOnceOnTimeout: boolean;
-    fInternalState: set of (isOpened, isDestroying, isInAuth);
+    fInternalState: set of (isDestroying, isInAuth, isNotImplemented);
     fLastErrorCode: integer;
     fLastErrorMessage: RawUtf8;
     fLastErrorException: ExceptClass;
@@ -1849,16 +1849,16 @@ begin
      not (isDestroying in fInternalState) then
   begin
     if (Call^.OutStatus = HTTP_NOTIMPLEMENTED) and
-       (isOpened in fInternalState) then
+       not (isNotImplemented in fInternalState) then
     begin
       InternalClose; // force recreate connection
-      Exclude(fInternalState, isOpened);
+      Include(fInternalState, isNotImplemented);
       if (Sender = nil) or
          OnIdleBackgroundThreadActive then
         InternalUri(Call^); // try request again
     end;
     if Call^.OutStatus <> HTTP_NOTIMPLEMENTED then
-      Include(fInternalState, isOpened);
+      Exclude(fInternalState, isNotImplemented);
   end;
 end;
 

@@ -812,14 +812,10 @@ end;
 { TRestHttpClientWebsockets }
 
 procedure TRestHttpClientWebsockets.InternalOpen;
-var
-  err: RawUtf8;
 begin
   if fSocketClass = nil then
     fSocketClass := THttpClientWebSockets;
-  exclude(fInternalState, isOpened);
   inherited InternalOpen;
-  include(fInternalState, isOpened);
 end;
 
 function TRestHttpClientWebsockets.IsOpen: boolean;
@@ -977,7 +973,7 @@ begin
       with fWebSocketParams do
       begin
         // store parameters for auto-reconnection
-        AutoUpgrade := sockets.Settings^.AutoUpgrade;
+        AutoUpgrade := sockets.Settings^.ClientAutoUpgrade;
         Key := aWebSocketsEncryptionKey;
         BinaryOptions := aWebSocketsBinaryOptions;
         Ajax := aWebSocketsAjax;
