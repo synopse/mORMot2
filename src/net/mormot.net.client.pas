@@ -854,11 +854,23 @@ implementation
 { ************** THttpClientSocket Implementing HTTP client over plain sockets }
 
 function DefaultUserAgent(Instance: TObject): RawUtf8;
+var
+  i: integer;
+  P: PShortString;
+  name: ShortString;
 begin
+  // instance class THttpClientSocket -> 'HCS'
+  P := ClassNameShort(Instance);
+  name[0] := #0;
+  for i := 2 to ord(P^[0]) do
+    if P^[i] in ['A'..'Z'] then
+      AppendShortChar(P^[i], name);
+  if name[0] <> #0 then
+    P := @name;
   // note: the framework would identify 'mORMot' pattern in the user-agent
   // header to enable advanced behavior e.g. about JSON transmission
   FormatUtf8('Mozilla/5.0 (' + OS_TEXT + '; mORMot ' +
-    SYNOPSE_FRAMEWORK_VERSION + ' %)', [Instance], result);
+    SYNOPSE_FRAMEWORK_VERSION + ' %)', [P^], result);
 end;
 
 
