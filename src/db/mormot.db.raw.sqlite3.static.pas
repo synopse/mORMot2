@@ -1100,7 +1100,7 @@ function sqlite3_sql(S: TSqlite3Statement): PUtf8Char; cdecl; external;
 function sqlite3_expanded_sql(S: TSqlite3Statement): PUtf8Char; cdecl; external;
 function sqlite3_normalized_sql(S: TSqlite3Statement): PUtf8Char; cdecl; external;
 function sqlite3_step(S: TSqlite3Statement): integer; cdecl; external;
-function table_column_metadata(DB: TSqlite3DB; zDbName, zTableName, zColumnName: PUtf8Char;
+function sqlite3_table_column_metadata(DB: TSqlite3DB; zDbName, zTableName, zColumnName: PUtf8Char;
   var pzDataType, pzCollSeq: PUtf8Char;
   var pNotNull, pPrimaryKey, pAutoinc: PInteger): integer; cdecl; external;
 function sqlite3_column_count(S: TSqlite3Statement): integer; cdecl; external;
