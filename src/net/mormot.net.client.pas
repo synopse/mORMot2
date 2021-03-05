@@ -666,9 +666,11 @@ type
     fHttps: THttpRequest;
     fProxy, fHeaders, fUserAgent: RawUtf8;
     fBody: RawByteString;
-    fOnlyUseClientSocket, fIgnoreSSLCertificateErrors: boolean;
+    fSocketTLS: TNetTLSContext;
+    fOnlyUseClientSocket: boolean;
   public
     /// initialize the instance
+    // - aOnlyUseClientSocket=true will use THttpClientSocket even for HTTPS
     constructor Create(aOnlyUseClientSocket: boolean = false); reintroduce;
     /// finalize the connection
     destructor Destroy; override;
@@ -681,10 +683,13 @@ type
     function Request(const uri: RawUtf8; const method: RawUtf8 = 'GET';
       const header: RawUtf8 = ''; const data: RawByteString = '';
       const datatype: RawUtf8 = ''; keepalive: cardinal = 10000): integer; overload;
+    /// access to the raw TLS settings for THttpClientSocket
+    function SocketTLS: PNetTLSContext;
+      {$ifdef HASINLINE} inline; {$endif}
     /// returns the HTTP body as returnsd by a previous call to Request()
     property Body: RawByteString
       read fBody;
-    /// returns the HTTP headers as returnsd by a previous call to Request()
+    /// returns the HTTP headers as returned by a previous call to Request()
     property Headers: RawUtf8
       read fHeaders;
     /// allows to customize the user-agent header
@@ -692,7 +697,7 @@ type
       read fUserAgent write fUserAgent;
     /// allows to customize HTTPS connection and allow weak certificates
     property IgnoreSSLCertificateErrors: boolean
-      read fIgnoreSSLCertificateErrors write fIgnoreSSLCertificateErrors;
+      read fSocketTLS.IgnoreCertificateErrors write fSocketTLS.IgnoreCertificateErrors;
     /// alows to customize the connection using a proxy
     property Proxy: RawUtf8
       read fProxy write fProxy;
@@ -726,8 +731,7 @@ type
   THttpRequestCached = class(TSynPersistent)
   protected
     fUri: TUri;
-    fHttp: THttpRequest; // either fHttp or fSocket is used
-    fSocket: THttpClientSocket;
+    fClient: TSimpleHttpClient;
     fKeepAlive: integer;
     fTokenHeader: RawUtf8;
     fCache: TSynDictionary;
@@ -744,17 +748,14 @@ type
     // another class
     constructor Create(const aUri: RawUtf8; aKeepAliveSeconds: integer = 30;
       aTimeoutSeconds: integer = 15*60; const aToken: RawUtf8 = '';
-      aHttpClass: THttpRequestClass = nil); reintroduce;
+      aOnlyUseClientSocket: boolean = false); reintroduce;
     /// finalize the current connnection and flush its in-memory cache
     // - you may use LoadFromUri() to connect to a new server
     procedure Clear;
     /// connect to a new server
     // - aToken is an optional token which will be transmitted as HTTP header:
     // $ Authorization: Bearer <aToken>
-    // - TWinHttp will be used by default under Windows, unless you specify
-    // another class
-    function LoadFromUri(const aUri: RawUtf8; const aToken: RawUtf8 = '';
-      aHttpClass: THttpRequestClass = nil): boolean;
+    function LoadFromUri(const aUri: RawUtf8; const aToken: RawUtf8 = ''): boolean;
     /// finalize the cache
     destructor Destroy; override;
     /// retrieve a resource from the server, or internal cache
@@ -767,6 +768,9 @@ type
     /// read-only access to the connected server
     property URI: TUri
       read fUri;
+    /// access to the underlying HTTP client connection class
+    property Client: TSimpleHttpClient
+      read fClient;
   end;
 
 
@@ -2092,7 +2096,7 @@ begin
       FreeAndNil(fHttps); // need a new HTTPS connection
       fHttps := MainHttpClass.Create(
         Uri.Server, Uri.Port, Uri.Https, Proxy, '', 5000, 5000, 5000);
-      fHttps.IgnoreSSLCertificateErrors := fIgnoreSSLCertificateErrors;
+      fHttps.IgnoreSSLCertificateErrors := fSocketTLS.IgnoreCertificateErrors;
       if fUserAgent <> '' then
         fHttps.UserAgent := fUserAgent;
     end;
@@ -2100,21 +2104,20 @@ begin
       Uri.Address, Method, KeepAlive, Header, Data, DataType, fHeaders, fBody);
     if KeepAlive = 0 then
       FreeAndNil(fHttps);
+    exit;
   except
     FreeAndNil(fHttps);
-  end
-  else
+  end;
+  // if we reached here, plain http or fOnlyUseClientSocket or fHttps failed
   try
     if (fHttp = nil) or
        (fHttp.Server <> Uri.Server) or
-       (fHttp.Port <> Uri.Port) or
-       // server may close after a few requests (e.g. nginx keepalive_requests)
-       (hfConnectionClose in fHttp.HeaderFlags) then
+       (fHttp.Port <> Uri.Port) then
     begin
       FreeAndNil(fHttps);
       FreeAndNil(fHttp); // need a new HTTP connection
       fHttp := THttpClientSocket.Open(
-        Uri.Server, Uri.Port, nlTCP, 5000, Uri.Https);
+        Uri.Server, Uri.Port, nlTCP, 5000, Uri.Https, @fSocketTLS);
       if fUserAgent <> '' then
         fHttp.UserAgent := fUserAgent;
     end;
@@ -2132,8 +2135,9 @@ begin
   end;
 end;
 
-function TSimpleHttpClient.Request(const uri, method, header: RawUtf8;
-  const data: RawByteString; const datatype: RawUtf8; keepalive: cardinal): integer;
+function TSimpleHttpClient.Request(const uri: RawUtf8; const method: RawUtf8;
+  const header: RawUtf8; const data: RawByteString; const datatype: RawUtf8;
+  keepalive: cardinal): integer;
 var
   u: TUri;
 begin
@@ -2141,6 +2145,14 @@ begin
     result := RawRequest(u, method, header, data, datatype, keepalive)
   else
     result := HTTP_NOTFOUND;
+end;
+
+function TSimpleHttpClient.SocketTLS: PNetTLSContext;
+begin
+  if self = nil then
+    result := nil
+  else
+    result := @fSocketTLS;
 end;
 
 
@@ -2176,21 +2188,22 @@ end;
 { THttpRequestCached }
 
 constructor THttpRequestCached.Create(const aUri: RawUtf8; aKeepAliveSeconds,
-  aTimeoutSeconds: integer; const aToken: RawUtf8; aHttpClass: THttpRequestClass);
+  aTimeoutSeconds: integer; const aToken: RawUtf8; aOnlyUseClientSocket: boolean);
 begin
   inherited Create;
   fKeepAlive := aKeepAliveSeconds * 1000;
   if aTimeoutSeconds > 0 then // 0 means no cache
     fCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
       TypeInfo(THttpRequestCacheDynArray), true, aTimeoutSeconds);
-  if not LoadFromUri(aUri, aToken, aHttpClass) then
-    raise ESynException.CreateUtf8('%.Create: invalid aUri=%', [self, aUri]);
+  fClient := fClient.Create(aOnlyUseClientSocket);
+  if aUri <> '' then
+    if not LoadFromUri(aUri, aToken) then
+      raise ESynException.CreateUtf8('%.Create: invalid aUri=%', [self, aUri]);
 end;
 
 procedure THttpRequestCached.Clear;
 begin
-  FreeAndNil(fHttp); // either fHttp or fSocket is used
-  FreeAndNil(fSocket);
+  FreeAndNil(fClient);
   if fCache <> nil then
     fCache.DeleteAll;
   fUri.Clear;
@@ -2200,8 +2213,7 @@ end;
 destructor THttpRequestCached.Destroy;
 begin
   fCache.Free;
-  fHttp.Free;
-  fSocket.Free;
+  fClient.Free;
   inherited Destroy;
 end;
 
@@ -2214,8 +2226,7 @@ var
   modified: boolean;
 begin
   result := '';
-  if (fHttp = nil) and
-     (fSocket = nil) then // either fHttp or fSocket is used
+  if fClient = nil then // either fHttp or fSocket is used
     exit;
   if (fCache <> nil) and
      fCache.FindAndCopy(aAddress, cache) then
@@ -2226,28 +2237,13 @@ begin
       headin := headin + #13#10;
     headin := headin + fTokenHeader;
   end;
-  if fSocket <> nil then
-  begin
-    if hfConnectionClose in fSocket.HeaderFlags then
-    begin
-      // server may close after a few requests (e.g. nginx keepalive_requests)
-      FreeAndNil(fSocket);
-      fSocket := THttpClientSocket.Open(fUri.Server, fUri.Port)
-    end;
-    status := fSocket.Get(aAddress, fKeepAlive, headin);
-    result := fSocket.Content;
-  end
-  else
-    status := fHttp.Request(aAddress, 'GET', fKeepAlive, headin, '', '', headout, result);
+  status := fClient.RawRequest(fUri, 'GET', headin, '', '', fKeepAlive);
   modified := true;
   case status of
     HTTP_SUCCESS:
       if fCache <> nil then
       begin
-        if fHttp <> nil then
-          FindNameValue(headout{%H-}, 'ETAG:', cache.Tag)
-        else
-          cache.Tag := fSocket.HeaderGetValue('ETAG');
+        FindNameValue(fClient.Headers, 'ETAG:', cache.Tag);
         if cache.Tag <> '' then
         begin
           cache.Content := result;
@@ -2266,31 +2262,14 @@ begin
     aStatus^ := status;
 end;
 
-function THttpRequestCached.LoadFromUri(const aUri, aToken: RawUtf8;
-  aHttpClass: THttpRequestClass): boolean;
+function THttpRequestCached.LoadFromUri(const aUri, aToken: RawUtf8): boolean;
 begin
   result := false;
   if (self = nil) or
-     (fHttp <> nil) or
-     (fSocket <> nil) or
+     (fClient = nil) or
      not fUri.From(aUri) then
     exit;
   fTokenHeader := AuthorizationBearer(aToken);
-  if aHttpClass = nil then
-  begin
-    {$ifdef USEWININET}
-    aHttpClass := TWinHttp;
-    {$else}
-    {$ifdef USELIBCURL}
-    if fUri.Https then
-      aHttpClass := TCurlHttp;
-    {$endif USELIBCURL}
-    {$endif USEWININET}
-  end;
-  if aHttpClass = nil then
-    fSocket := THttpClientSocket.Open(fUri.Server, fUri.Port)
-  else
-    fHttp := aHttpClass.Create(fUri.Server, fUri.Port, fUri.Https);
   result := true;
 end;
 
