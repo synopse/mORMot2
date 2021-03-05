@@ -576,11 +576,6 @@ type
     /// overridden protected method shall force the connection to be closed,
     // - a next call to IsOpen method shall re-open the connection
     procedure InternalClose; virtual; abstract;
-    /// convenient wrapper around InternalIsOpen and InternalOpen virtual methods
-    // - return TRUE on success, FALSE on any connection error
-    // - follows ConnectRetrySeconds property for optional retrial
-    // - calls OnConnected/OnConnectionFailed events if set
-    function IsOpen: boolean;
   {$ifndef PUREMORMOT2}
     // backward compatibility redirections to the homonymous IRestOrmClient methods
     // see IRestOrmClient documentation for the proper use information
@@ -624,6 +619,12 @@ type
     // - CreateFrom() will expect Definition.UserName/Password to store the
     // credentials which will be used by SetUser()
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
+    /// check if connected to the server, or try to (re)create the connection
+    // - convenient wrapper around InternalIsOpen and InternalOpen virtual methods
+    // - return TRUE on success, FALSE on any connection error
+    // - follows ConnectRetrySeconds property for optional retrial
+    // - calls OnConnected/OnConnectionFailed events if set
+    function IsOpen: boolean; virtual;
     /// main method calling the remote Server via a RESTful command
     // - redirect to the InternalUri() abstract method, which should be
     // overridden for local, pipe, HTTP/1.1 or WebSockets actual communication

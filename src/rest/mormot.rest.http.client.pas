@@ -313,6 +313,8 @@ type
       aHttps: boolean = false; const aProxyName: RawUtf8 = '';
       const aProxyByPass: RawUtf8 = ''; aSendTimeout: cardinal = 0;
       aReceiveTimeout: cardinal = 0; aConnectTimeout: cardinal = 0); override;
+    /// overriden method which will auto-upgrade the WebSockets if needed
+    function IsOpen: boolean; override;
     /// upgrade the HTTP client connection to a specified WebSockets protocol
     // - the Model.Root URI will be used for upgrade
     // - if aWebSocketsAjax equals default FALSE, it will use 'synopsebinary'
@@ -818,20 +820,35 @@ begin
   exclude(fInternalState, isOpened);
   inherited InternalOpen;
   include(fInternalState, isOpened);
-  with fWebSocketParams do
-    if AutoUpgrade then
-    begin
-      err := WebSocketsUpgrade(Key, Ajax, BinaryOptions);
-      if err <> '' then
+end;
+
+function TRestHttpClientWebsockets.IsOpen: boolean;
+
+  function NeedConnect: boolean;
+  var
+    err: RawUtf8;
+  begin
+    result := inherited IsOpen; // connect and call OnConnected
+    if not result then
+      exit;
+    with fWebSocketParams do
+      if AutoUpgrade then
       begin
-        if Assigned(fOnConnectionFailed) then
-          fOnConnectionFailed(self, nil, nil);
-        raise ERestHttpClient.CreateUtf8(
-          '%.InternalOpen: WebSocketsUpgrade failed - %', [self, err]);
+        err := WebSocketsUpgrade(Key, Ajax, BinaryOptions);
+        if err <> '' then
+        begin
+          if Assigned(fOnConnectionFailed) then
+            fOnConnectionFailed(self, nil, nil);
+          raise ERestHttpClient.CreateUtf8(
+            '%.InternalOpen: WebSocketsUpgrade failed - %', [self, err]);
+        end;
+        if Assigned(fOnWebSocketsUpgraded) then
+          fOnWebSocketsUpgraded(self);
       end;
-      if Assigned(fOnWebSocketsUpgraded) then
-        fOnWebSocketsUpgraded(self);
-    end;
+  end;
+
+begin
+  result := InternalIsOpen or NeedConnect;
 end;
 
 function TRestHttpClientWebsockets.FakeCallbackRegister(Sender: TServiceFactory;
