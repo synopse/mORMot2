@@ -2063,7 +2063,7 @@ begin
         wait := 1000
       else
         wait := 5000;
-      inc(wait, Random32(wait)); // randomness to reduce server
+      inc(wait, Random32(wait)); // randomness to reduce server load
       if elapsed + wait > max then
       begin
         wait := max - elapsed;

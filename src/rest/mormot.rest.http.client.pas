@@ -928,7 +928,7 @@ begin
   result := (self <> nil) and
             (fSocket <> nil) and
             fSocket.InheritsFrom(THttpClientWebSockets) and
-            (THttpClientWebSockets(fSocket).WebSockets.State <= wpsRun);
+            (THttpClientWebSockets(fSocket).WebSockets.State = wpsRun);
 end;
 
 procedure TRestHttpClientWebsockets.CallbackNonBlockingSetHeader(
