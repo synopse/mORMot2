@@ -2044,7 +2044,10 @@ begin
              (isDestroying in fInternalState) then
             exit;
           if Assigned(fOnConnectionFailed) then
-            fOnConnectionFailed(self, E, nil);
+            try
+              fOnConnectionFailed(self, E, nil);
+            except
+            end;
           exc := PPointer(E)^;
         end;
       end;
@@ -2078,7 +2081,11 @@ begin
     fSafe.Leave;
   end;
   if Assigned(fOnConnected) then
-    fOnConnected(self);
+    try
+      with fLogClass.Enter(self, 'IsOpen: call OnConnected') do
+        fOnConnected(self);
+    except
+    end;
   result := true;
 end;
 
