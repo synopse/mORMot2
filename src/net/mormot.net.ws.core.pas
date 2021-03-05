@@ -173,6 +173,8 @@ type
     /// callback run when a WebSockets client is just disconnected
     // - triggerred by TWebSocketProcess.ProcessStop
     OnClientDisconnected: TNotifyEvent;
+    /// if the WebSockets should be upgraded after socket reconnection
+    AutoUpgrade: boolean;
     /// by default, contains [] to minimize the logged information
     // - set logHeartbeat if you want the ping/pong frames to be logged
     // - set logTextFrameContent if you want the text frame content to be logged
@@ -1881,6 +1883,7 @@ begin
   LogDetails := [];
   OnClientConnected := nil;
   OnClientDisconnected := nil;
+  AutoUpgrade := true;
   AesSalt := 'E750ACCA-2C6F-4B0E-999B-D31C9A14EFAB';
   AesRounds := 1024;
   AesCipher := TAesFast[mCtr];

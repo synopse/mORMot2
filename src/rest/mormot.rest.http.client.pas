@@ -977,7 +977,7 @@ begin
       with fWebSocketParams do
       begin
         // store parameters for auto-reconnection
-        AutoUpgrade := true;
+        AutoUpgrade := sockets.Settings^.AutoUpgrade;
         Key := aWebSocketsEncryptionKey;
         BinaryOptions := aWebSocketsBinaryOptions;
         Ajax := aWebSocketsAjax;
