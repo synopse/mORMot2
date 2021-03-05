@@ -1478,11 +1478,11 @@ begin
           begin
             // schedule for next time
             t^.NextTix := tix + ((t^.Secs * 1000) - TIXPRECISION);
-            inc(i);
+            dec(i);
           end;
         end
         else
-          inc(i);
+          dec(i);
       end;
     finally
       fTaskLock.UnLock;
