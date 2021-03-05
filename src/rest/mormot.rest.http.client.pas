@@ -580,7 +580,7 @@ constructor TRestHttpClientGeneric.Create(const aServer, aPort: RawUtf8;
   aSendTimeout, aReceiveTimeout, aConnectTimeout: cardinal);
 begin
   inherited Create(aModel);
-  Split(Server, '/', fServer, fUriPrefix);
+  Split(aServer, '/', fServer, fUriPrefix);
   fPort := aPort;
   fHttps := aHttps;
   fKeepAliveMS := 20000; // 20 seconds connection keep alive by default
