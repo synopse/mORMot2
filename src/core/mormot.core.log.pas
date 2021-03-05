@@ -2392,8 +2392,9 @@ begin
           if (typname <> '') and
              (typname[ord(typname[0])] <> '.') then
             AppendShortChar('.', typname);
-          // DWARF symbols are emitted as UPPER by FPC -> lower for esthetics
-          ShortStringToAnsi7String(lowercase(typname + name), s^.name);
+          // DWARF2 symbols are emitted as UPPER by FPC -> lower for esthetics
+          if header64.version < 3 then
+            ShortStringToAnsi7String(lowercase(typname + name), s^.name);
           s^.Start := low_pc;
           s^.Stop := high_pc - 1;
           if debugtoconsole then
@@ -7162,7 +7163,8 @@ begin
   SetCurrentThreadName('MainThread');
   GetExecutableLocation := _GetExecutableLocation; // use FindLocationShort()
   //writeln(BacktraceStrFpc(Get_pc_addr));
-  //writeln(GetInstanceDebugFile.FindLocationShort(PtrUInt(@TDynArray.InitFrom)));
+  //
+  writeln(GetInstanceDebugFile.FindLocationShort(PtrUInt(@TDynArray.InitFrom)));
   //GetInstanceDebugFile.SaveToJson(DateTimeToFileShort(Now)+'.json',jsonUnquotedPropName);
 end;
 
