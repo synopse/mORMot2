@@ -20,7 +20,9 @@ interface
 
 {$I ..\mormot.defines.inc}
 
-{$ifdef USEWININET} // compile as a void unit if USEWININET is not defined
+{$ifdef USEWININET}
+
+// compile as a void unit if USEWININET is not defined
 
 uses
   sysutils,
@@ -39,7 +41,7 @@ uses
 function SysErrorMessageWinInet(error: integer): string;
 
 /// low-level retrieval of a Domain User from a transmitted Token
-procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUTF8);
+procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUtf8);
 
 
 { ************  http.sys / HTTP Server API low-level direct access }
@@ -91,7 +93,7 @@ type
   // - used to alter the default logging behavior
   // - hlfLocalTimeRollover would force the log file rollovers by local time,
   // instead of the default GMT time
-  // - hlfUseUTF8Conversion will use UTF-8 instead of default local code page
+  // - hlfUseUtf8Conversion will use UTF-8 instead of default local code page
   // - only one of hlfLogErrorsOnly and hlfLogSuccessOnly flag could be set
   // at a time: if neither of them are present, both errors and success will
   // be logged, otherwise mutually exclusive flags could be set to force only
@@ -99,7 +101,7 @@ type
   // - match low-level HTTP_LOGGING_FLAG_* constants as defined in HTTP 2.0 API
   THttpApiLoggingFlags = set of (
     hlfLocalTimeRollover,
-    hlfUseUTF8Conversion,
+    hlfUseUtf8Conversion,
     hlfLogErrorsOnly,
     hlfLogSuccessOnly);
 
@@ -114,8 +116,8 @@ type
     hlfComputerName,
     hlfServerIP,
     hlfMethod,
-    hlfURIStem,
-    hlfURIQuery,
+    hlfUriStem,
+    hlfUriQuery,
     hlfStatus,
     hlfWIN32Status,
     hlfBytesSent,
@@ -265,8 +267,8 @@ type
   HTTP_UNKNOWN_HEADER = record
     NameLength: word;          // in bytes not including the #0
     RawValueLength: word;      // in bytes not including the n#0
-    pName: PUTF8Char;          // The header name (minus the ':' character)
-    pRawValue: PUTF8Char;      // The header value
+    pName: PUtf8Char;          // The header name (minus the ':' character)
+    pRawValue: PUtf8Char;      // The header value
   end;
 
   PHTTP_UNKNOWN_HEADER = ^HTTP_UNKNOWN_HEADER;
@@ -274,7 +276,8 @@ type
   HTTP_UNKNOWN_HEADERS = array of HTTP_UNKNOWN_HEADER;
 
   HTTP_KNOWN_HEADER = record
-    RawValueLength: word;     // in bytes not including the #0
+    // warning: don't assume pRawValue is #0 terminated - use RawValueLength
+    RawValueLength: word;
     pRawValue: PAnsiChar;
   end;
 
@@ -303,6 +306,7 @@ type
     // Reserved, must be nil
     pTrailers: pointer;
     // Known headers
+    // - warning: don't assume pRawValue is #0 terminated - use RawValueLength
     KnownHeaders: array[low(THttpHeader)..reqUserAgent] of HTTP_KNOWN_HEADER;
   end;
 
@@ -511,7 +515,7 @@ type
     ReasonLength: word;
     // The HTTP reason (e.g., "OK"). This MUST not contain non-ASCII characters
     // (i.e., all chars must be in range 0x20-0x7E).
-    pReason: PUTF8Char;
+    pReason: PUtf8Char;
     // The response headers
     Headers: HTTP_RESPONSE_HEADERS;
     // number of elements in pEntityChunks[] array
@@ -525,19 +529,19 @@ type
     // will set both StatusCode and Reason
     // - OutStatus is a temporary variable which will be field with the
     // corresponding text
-    procedure SetStatus(code: integer; var OutStatus: RawUTF8);
+    procedure SetStatus(code: integer; var OutStatus: RawUtf8);
     // will set the content of the reponse, and ContentType header
     procedure SetContent(var DataChunk: HTTP_DATA_CHUNK_INMEMORY; const Content:
-      RawByteString; const ContentType: RawUTF8 = 'text/html');
+      RawByteString; const ContentType: RawUtf8 = 'text/html');
     /// will set all header values from lines
     // - Content-Type/Content-Encoding/Location will be set in KnownHeaders[]
     // - all other headers will be set in temp UnknownHeaders[]
-    procedure SetHeaders(P: PUTF8Char; var UnknownHeaders: HTTP_UNKNOWN_HEADERS);
+    procedure SetHeaders(P: PUtf8Char; var UnknownHeaders: HTTP_UNKNOWN_HEADERS);
     /// add one header value to the internal headers
     // - SetHeaders() method should have been called before to initialize the
     // internal UnknownHeaders[] array
-    function AddCustomHeader(P: PUTF8Char; var UnknownHeaders:
-      HTTP_UNKNOWN_HEADERS; ForceCustomHeader: boolean): PUTF8Char;
+    function AddCustomHeader(P: PUtf8Char; var UnknownHeaders:
+      HTTP_UNKNOWN_HEADERS; ForceCustomHeader: boolean): PUtf8Char;
   end;
 
   PHTTP_RESPONSE = ^HTTP_RESPONSE;
@@ -752,7 +756,7 @@ const
   HTTP_LOGGING_FLAG_LOCAL_TIME_ROLLOVER = 1;
 
   // HTTP_LOGGING_FLAG_USE_UTF8_CONVERSION - When set the unicode fields
-  //      will be converted to UTF8 multibytes when writting to the log
+  //      will be converted to UTF-8 multibytes when writting to the log
   //      files. When this flag is not present, the local code page
   //      conversion happens.
   HTTP_LOGGING_FLAG_USE_UTF8_CONVERSION = 2;
@@ -967,7 +971,7 @@ type
     );
 
   /// direct late-binding access to the HTTP API server 1.0 or 2.0
-  THttpAPI = packed record
+  THttpApi = packed record
     /// access to the httpapi.dll loaded library
     Module: THandle;
     /// will be either 1.0 or 2.0, depending on the published .dll functions
@@ -1110,10 +1114,10 @@ type
   end;
 
 var
-  Http: THttpAPI;
+  Http: THttpApi;
 
 type
-  THttpAPIs = (
+  THttpApis = (
     hInitialize, hTerminate, hCreateHttpHandle, hAddUrl, hRemoveUrl,
     hReceiveHttpRequest, hSendHttpResponse, hReceiveRequestEntityBody,
     hResponseEntityBody, hSetServiceConfiguration, hDeleteServiceConfiguration,
@@ -1125,7 +1129,7 @@ type
 
 const
   hHttpApi2First = hCancelHttpRequest;
-  HttpNames: array[THttpAPIs] of PChar = (
+  HttpNames: array[THttpApis] of PChar = (
     'HttpInitialize', 'HttpTerminate',
     'HttpCreateHttpHandle', 'HttpAddUrl', 'HttpRemoveUrl',
     'HttpReceiveHttpRequest', 'HttpSendHttpResponse',
@@ -1145,18 +1149,18 @@ type
   EHttpApiServer = class(ENetSock)
   protected
     fLastError: integer;
-    fLastApi: THttpAPIs;
+    fLastApi: THttpApis;
   public
     /// raise an EHttpApiServer if the http.sys API result code is an error
-    class procedure RaiseOnError(api: THttpAPIs; Error: integer);
+    class procedure RaiseOnError(api: THttpApis; Error: integer);
     /// initialize a new EHttpApiServer instance
-    constructor Create(api: THttpAPIs; Error: integer); reintroduce;
+    constructor Create(api: THttpApis; Error: integer); reintroduce;
   published
     /// the error code of this exception
     property LastError: integer
       read fLastError;
     /// the execution context of this exception
-    property LastApi: THttpAPIs
+    property LastApi: THttpApis
       read fLastApi;
   end;
 
@@ -1170,12 +1174,12 @@ const
 procedure HttpApiInitialize;
 
 /// compute a http.sys compatible URI from https://root:port fields
-function RegURL(aRoot, aPort: RawUTF8; Https: boolean;
-  aDomainName: RawUTF8): SynUnicode;
+function RegURL(aRoot, aPort: RawUtf8; Https: boolean;
+  aDomainName: RawUtf8): SynUnicode;
 
 /// low-level adjustement of the HTTP_REQUEST headers
 function RetrieveHeaders(const Request: HTTP_REQUEST;
-  const RemoteIPHeadUp: RawUTF8; out RemoteIP: RawUTF8): RawUTF8;
+  const RemoteIPHeadUp: RawUtf8; out RemoteIP: RawUtf8): RawUtf8;
 
 
 { ******************** winhttp.dll Windows API Definitions }
@@ -1351,17 +1355,17 @@ type
 
   PWINHTTP_STATUS_CALLBACK = ^WINHTTP_STATUS_CALLBACK;
 
-  /// direct late-binding access to the WinHTTP API
+  /// direct late-binding access to the WinHttp API
   // - note: WebSocket* API calls require Windows 8 and later
-  TWinHTTPBinding = packed record
+  TWinHttpBinding = packed record
     /// access to the winhttp.dll loaded library
     LibraryHandle: THandle;
     /// depends on the published .dll functions
     WebSocketEnabled: boolean;
-    /// Initializes an application's use of the WinHTTP functions.
+    /// Initializes an application's use of the WinHttp functions.
     Open: function(pwszUserAgent: PWideChar; dwAccessType: DWORD; pwszProxyName,
       pwszProxyBypass: PWideChar; dwFlags: DWORD): HINTERNET; stdcall;
-    /// Sets up a callback function that WinHTTP can call as progress is made during an operation.
+    /// Sets up a callback function that WinHttp can call as progress is made during an operation.
     SetStatusCallback: function(hSession: HINTERNET;
       lpfnInternetCallback: WINHTTP_STATUS_CALLBACK; dwNotificationFlags: DWORD;
       dwReserved: PDWORD): WINHTTP_STATUS_CALLBACK; stdcall;
@@ -1427,10 +1431,10 @@ type
   end;
 
 var
-  WinHttpAPI: TWinHTTPBinding;
+  WinHttpApi: TWinHttpBinding;
 
 type
-  TWinHttpAPIs = (
+  TWinHttpApis = (
     hOpen, hSetStatusCallback, hConnect, hOpenRequest, hCloseHandle,
     hAddRequestHeaders, hSendRequest, hReceiveResponse, hQueryHeaders,
     hQueryDataAvailable, hReadData, hSetTimeouts, hSetOption, hSetCredentials,
@@ -1441,7 +1445,7 @@ const
   hWebSocketApiFirst = hWebSocketCompleteUpgrade;
 
 const
-  WinHttpNames: array[TWinHttpAPIs] of PChar = (
+  WinHttpNames: array[TWinHttpApis] of PChar = (
     'WinHttpOpen', 'WinHttpSetStatusCallback', 'WinHttpConnect',
     'WinHttpOpenRequest', 'WinHttpCloseHandle', 'WinHttpAddRequestHeaders',
     'WinHttpSendRequest', 'WinHttpReceiveResponse', 'WinHttpQueryHeaders',
@@ -1452,10 +1456,10 @@ const
 
 
 /// low-level thread-safe initialization of the WinHtpp API
-procedure WinHttpAPIInitialize;
+procedure WinHttpApiInitialize;
 
-/// a callback raising a EWinHTTP on error
-procedure WinHTTPSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
+/// a callback raising a EWinHttp on error
+procedure WinHttpSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
   dwInternetStatus: cardinal; lpvStatusInformation: pointer;
   dwStatusInformationLength: cardinal); stdcall;
 
@@ -1517,7 +1521,7 @@ type
   end;
 
   /// direct late-binding access to the WebSocket Protocol Component API functions
-  TWebSocketAPI = packed record
+  TWebSocketApi = packed record
     /// acces to the loaded library handle
     LibraryHandle: THandle;
     /// depends on Windows version
@@ -1574,8 +1578,8 @@ type
       WEB_SOCKET_BUFFER_TYPE; pBuffer, Context: Pointer): HRESULT; stdcall;
   end;
 
-  /// identify each TWebSocketAPI late-binding API function
-  TWebSocketAPIs = (
+  /// identify each TWebSocketApi late-binding API function
+  TWebSocketApis = (
     hAbortHandle, hBeginClientHandshake, hBeginServerHandshake,
     hCompleteAction, hCreateClientHandle, hCreateServerHandle, hDeleteHandle,
     hEndClientHandshake, hEndServerHandshake, hGetAction, hGetGlobalProperty,
@@ -1585,24 +1589,24 @@ type
   EWebSocketApi = class(ENetSock)
   protected
     fLastError: integer;
-    fLastApi: TWebSocketAPIs;
+    fLastApi: TWebSocketApis;
   public
     /// raise an EWebSocketApi if the http.sys API result code is an error
-    class procedure RaiseOnError(api: TWebSocketAPIs; Error: integer);
+    class procedure RaiseOnError(api: TWebSocketApis; Error: integer);
     /// initialize a new EWebSocketApi instance
-    constructor Create(api: TWebSocketAPIs; Error: integer); reintroduce; overload;
+    constructor Create(api: TWebSocketApis; Error: integer); reintroduce; overload;
   published
     /// the error code of this exception
     property LastError: integer
       read fLastError;
     /// the execution context of this exception
-    property LastApi: TWebSocketAPIs
+    property LastApi: TWebSocketApis
       read fLastApi;
   end;
 
 const
   WEBSOCKET_DLL = 'websocket.dll';
-  WebSocketNames: array[TWebSocketAPIs] of PChar = (
+  WebSocketNames: array[TWebSocketApis] of PChar = (
     'WebSocketAbortHandle', 'WebSocketBeginClientHandshake',
     'WebSocketBeginServerHandshake', 'WebSocketCompleteAction',
     'WebSocketCreateClientHandle', 'WebSocketCreateServerHandle',
@@ -1617,9 +1621,9 @@ const
   /// context ID of WebSocket URI group
   WEB_SOCKET_URL_CONTEXT = 1;
 
-  /// the buffer contains the last, and possibly only, part of a UTF8 message
+  /// the buffer contains the last, and possibly only, part of a UTF-8 message
   WEB_SOCKET_UTF8_MESSAGE_BUFFER_TYPE: WEB_SOCKET_BUFFER_TYPE = $80000000;
-  /// the buffer contains part of a UTF8 message
+  /// the buffer contains part of a UTF-8 message
   WEB_SOCKET_UTF8_FRAGMENT_BUFFER_TYPE: WEB_SOCKET_BUFFER_TYPE = $80000001;
   /// the buffer contains the last, and possibly only, part of a binary message
   WEB_SOCKET_BINARY_MESSAGE_BUFFER_TYPE: WEB_SOCKET_BUFFER_TYPE = $80000002;
@@ -1663,23 +1667,23 @@ const
   WEB_SOCKET_SECURE_HANDSHAKE_ERROR_CLOSE_STATUS: WEB_SOCKET_CLOSE_STATUS = 1015;
 
 var
-  WebSocketAPI: TWebSocketAPI;
+  WebSocketApi: TWebSocketApi;
 
 /// is HTTP.SYS web socket API available on the target system Windows 8 and UP
-function WinHTTP_WebSocketEnabled: boolean;
+function WinHttp_WebSocketEnabled: boolean;
 
 /// low-level loading of the WebSockets API
 procedure WebSocketApiInitialize;
 
 const
-  sProtocolHeader: RawUTF8 = 'SEC-WEBSOCKET-PROTOCOL';
+  sProtocolHeader: RawUtf8 = 'SEC-WEBSOCKET-PROTOCOL';
 
 /// retrieve an array of headers from WebSockets low-level information
 function HttpSys2ToWebSocketHeaders(const aHttpHeaders: HTTP_REQUEST_HEADERS): WEB_SOCKET_HTTP_HEADER_ARR;
 
 /// retrieve the linefeed separated text from WebSockets array of headers
 function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER;
-  const aHeadersCount: integer): RawUTF8;
+  const aHeadersCount: integer): RawUtf8;
 
 {$endif USEWININET}
 
@@ -1693,9 +1697,9 @@ uses
 
 { ************  http.sys / HTTP Server API low-level direct access }
 
-function RegURL(aRoot, aPort: RawUTF8; Https: boolean; aDomainName: RawUTF8): SynUnicode;
+function RegURL(aRoot, aPort: RawUtf8; Https: boolean; aDomainName: RawUtf8): SynUnicode;
 const
-  Prefix: array[boolean] of RawUTF8 = (
+  Prefix: array[boolean] of RawUtf8 = (
     'http://', 'https://');
 begin
   if aPort = '' then
@@ -1717,7 +1721,7 @@ begin
   else
     aRoot := '/'; // allow for instance 'http://*:2869/'
   aRoot := Prefix[Https] + aDomainName + ':' + aPort + aRoot;
-  result := UTF8ToSynUnicode(aRoot);
+  Utf8ToSynUnicode(aRoot, result);
 end;
 
 const
@@ -1725,7 +1729,7 @@ const
   REMOTEIP_HEADER: string[REMOTEIP_HEADERLEN] = 'RemoteIP: ';
 
 function RetrieveHeaders(const Request: HTTP_REQUEST;
-  const RemoteIPHeadUp: RawUTF8; out RemoteIP: RawUTF8): RawUTF8;
+  const RemoteIPHeadUp: RawUtf8; out RemoteIP: RawUtf8): RawUtf8;
 var
   i, L, Lip: integer;
   H: THttpHeader;
@@ -1812,14 +1816,14 @@ end;
 
 procedure HttpApiInitialize;
 var
-  api: THttpAPIs;
+  api: THttpApis;
   P: PPointer;
 begin
   if Http.Module <> 0 then
     exit; // already loaded
   mormot.core.os.GlobalLock;
   try
-    if Http.Module <> 0 then
+    if Http.Module = 0 then
     try
       Http.Module := LoadLibrary(HTTPAPI_DLL);
       Http.Version.MajorVersion := 2; // API 2.0 if all functions are available
@@ -1857,13 +1861,13 @@ end;
 
 { EHttpApiServer }
 
-class procedure EHttpApiServer.RaiseOnError(api: THttpAPIs; Error: integer);
+class procedure EHttpApiServer.RaiseOnError(api: THttpApis; Error: integer);
 begin
   if Error <> NO_ERROR then
     raise self.Create(api, Error);
 end;
 
-constructor EHttpApiServer.Create(api: THttpAPIs; Error: integer);
+constructor EHttpApiServer.Create(api: THttpApis; Error: integer);
 begin
   fLastError := Error;
   fLastApi := api;
@@ -1875,16 +1879,16 @@ end;
 
 { HTTP_RESPONSE }
 
-procedure HTTP_RESPONSE.SetStatus(code: integer; var OutStatus: RawUTF8);
+procedure HTTP_RESPONSE.SetStatus(code: integer; var OutStatus: RawUtf8);
 begin
   StatusCode := code;
-  OutStatus := StatusCodeToReason(code);
+  StatusCodeToReason(code, OutStatus);
   ReasonLength := length(OutStatus);
   pReason := pointer(OutStatus);
 end;
 
 procedure HTTP_RESPONSE.SetContent(var DataChunk: HTTP_DATA_CHUNK_INMEMORY;
-  const Content: RawByteString; const ContentType: RawUTF8);
+  const Content: RawByteString; const ContentType: RawUtf8);
 begin
   FillcharFast(DataChunk, sizeof(DataChunk), 0);
   if ContentType <> '' then
@@ -1903,11 +1907,11 @@ end;
 
 {$ifndef NOXPOWEREDNAME}
 const
-  XPN: PUTF8Char = XPOWEREDNAME;
-  XPV: PUTF8Char = XPOWEREDVALUE;
+  XPN: PUtf8Char = XPOWEREDNAME;
+  XPV: PUtf8Char = XPOWEREDVALUE;
 {$endif NOXPOWEREDNAME}
 
-procedure HTTP_RESPONSE.SetHeaders(P: PUTF8Char;
+procedure HTTP_RESPONSE.SetHeaders(P: PUtf8Char;
   var UnknownHeaders: HTTP_UNKNOWN_HEADERS);
 begin
   Headers.pUnknownHeaders := pointer(UnknownHeaders);
@@ -1933,9 +1937,9 @@ begin
     until false;
 end;
 
-function HTTP_RESPONSE.AddCustomHeader(P: PUTF8Char;
+function HTTP_RESPONSE.AddCustomHeader(P: PUtf8Char;
   var UnknownHeaders: HTTP_UNKNOWN_HEADERS;
-  ForceCustomHeader: boolean): PUTF8Char;
+  ForceCustomHeader: boolean): PUtf8Char;
 const
   KNOWNHEADERS: array[reqCacheControl..respWwwAuthenticate] of PAnsiChar = (
     'CACHE-CONTROL:', 'CONNECTION:', 'DATE:', 'KEEP-ALIVE:', 'PRAGMA:',
@@ -1946,7 +1950,7 @@ const
     'PROXY-AUTHENTICATE:', 'RETRY-AFTER:', 'SERVER:', 'SET-COOKIE:', 'VARY:',
     'WWW-AUTHENTICATE:');
 var
-  UnknownName: PUTF8Char;
+  UnknownName: PUtf8Char;
   i: integer;
 begin
   if ForceCustomHeader then
@@ -2021,7 +2025,7 @@ begin
   end;
 end;
 
-procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUTF8);
+procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUtf8);
 var
   Buffer: array[0..511] of byte;
   BufferSize, UserSize, DomainSize: DWORD;
@@ -2053,52 +2057,52 @@ end;
 
 { ******************** winhttp.dll Windows API Definitions }
 
-procedure WinHTTPSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
+procedure WinHttpSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
   dwInternetStatus: cardinal; lpvStatusInformation: pointer;
   dwStatusInformationLength: cardinal); stdcall;
 begin
   // in case lpvStatusInformation^=-2147483648 this is attempt to connect to
   // non-https socket wrong port - perhaps must be 443?
-  raise EHttpSocket.CreateFmt('WinHTTP security error. Status %d, statusInfo: %d',
+  raise EHttpSocket.CreateFmt('WinHttp security error. Status %d, statusInfo: %d',
     [dwInternetStatus, PDWORD(lpvStatusInformation)^]);
 end;
 
-procedure WinHttpAPIInitialize;
+procedure WinHttpApiInitialize;
 var
-  api: TWinHttpAPIs;
+  api: TWinHttpApis;
   P: PPointer;
 begin
-  if WinHttpAPI.LibraryHandle <> 0 then
+  if WinHttpApi.LibraryHandle <> 0 then
     exit; // already loaded
   mormot.core.os.GlobalLock;
   try
-    if WinHttpAPI.LibraryHandle <> 0 then
+    if WinHttpApi.LibraryHandle <> 0 then
       exit; // thread-safe test
-    WinHttpAPI.LibraryHandle := SafeLoadLibrary(winhttpdll);
-    WinHttpAPI.WebSocketEnabled := true; // WebSocketEnabled if all functions are available
-    if WinHttpAPI.LibraryHandle = 0 then
+    WinHttpApi.LibraryHandle := SafeLoadLibrary(winhttpdll);
+    WinHttpApi.WebSocketEnabled := true; // WebSocketEnabled if all functions are available
+    if WinHttpApi.LibraryHandle = 0 then
       raise EHttpSocket.CreateFmt('Unable to load library %s', [winhttpdll]);
-    P := @@WinHttpAPI.Open;
+    P := @@WinHttpApi.Open;
     for api := low(api) to high(api) do
     begin
-      P^ := GetProcAddress(WinHttpAPI.LibraryHandle, WinHttpNames[api]);
+      P^ := GetProcAddress(WinHttpApi.LibraryHandle, WinHttpNames[api]);
       if P^ = nil then
         if api < hWebSocketApiFirst then
         begin
-          FreeLibrary(WinHttpAPI.LibraryHandle);
-          WinHttpAPI.LibraryHandle := 0;
+          FreeLibrary(WinHttpApi.LibraryHandle);
+          WinHttpApi.LibraryHandle := 0;
           raise EHttpSocket.CreateFmt('Unable to find %s() export in %s',
             [WinHttpNames[api], winhttpdll]);
         end
         else
           // e.g. system older than Windows 8
-          WinHttpAPI.WebSocketEnabled := false;
+          WinHttpApi.WebSocketEnabled := false;
       inc(P);
     end;
-    if WinHttpAPI.WebSocketEnabled then
+    if WinHttpApi.WebSocketEnabled then
       WebSocketApiInitialize
     else
-      WebSocketAPI.WebSocketEnabled := false;
+      WebSocketApi.WebSocketEnabled := false;
   finally
     mormot.core.os.GlobalUnlock;
   end;
@@ -2110,33 +2114,33 @@ end;
 
 procedure WebSocketApiInitialize;
 var
-  api: TWebSocketAPIs;
+  api: TWebSocketApis;
   P: PPointer;
 begin
-  if WebSocketAPI.LibraryHandle <> 0 then
+  if WebSocketApi.LibraryHandle <> 0 then
     exit; // already loaded
-  WebSocketAPI.WebSocketEnabled := false;
-  WebSocketAPI.LibraryHandle := SafeLoadLibrary(WEBSOCKET_DLL);
-  if WebSocketAPI.LibraryHandle = 0 then
+  WebSocketApi.WebSocketEnabled := false;
+  WebSocketApi.LibraryHandle := SafeLoadLibrary(WEBSOCKET_DLL);
+  if WebSocketApi.LibraryHandle = 0 then
     exit;
-  P := @@WebSocketAPI.AbortHandle;
+  P := @@WebSocketApi.AbortHandle;
   for api := low(api) to high(api) do
   begin
-    P^ := GetProcAddress(WebSocketAPI.LibraryHandle, WebSocketNames[api]);
+    P^ := GetProcAddress(WebSocketApi.LibraryHandle, WebSocketNames[api]);
     if P^ = nil then
     begin
-      FreeLibrary(WebSocketAPI.LibraryHandle);
-      WebSocketAPI.LibraryHandle := 0;
+      FreeLibrary(WebSocketApi.LibraryHandle);
+      WebSocketApi.LibraryHandle := 0;
       exit;
     end;
     inc(P);
   end;
-  WebSocketAPI.WebSocketEnabled := true;
+  WebSocketApi.WebSocketEnabled := true;
 end;
 
-function WinHTTP_WebSocketEnabled: boolean;
+function WinHttp_WebSocketEnabled: boolean;
 begin
-  result := WebSocketAPI.WebSocketEnabled;
+  result := WebSocketApi.WebSocketEnabled;
 end;
 
 function HttpSys2ToWebSocketHeaders(
@@ -2181,7 +2185,7 @@ begin
 end;
 
 function WebSocketHeadersToText(const aHeaders: PWEB_SOCKET_HTTP_HEADER; const
-  aHeadersCount: integer): RawUTF8;
+  aHeadersCount: integer): RawUtf8;
 var
   i: integer;
   h: PWEB_SOCKET_HTTP_HEADER;
@@ -2220,13 +2224,13 @@ end;
 
 { EWebSocketApi }
 
-class procedure EWebSocketApi.RaiseOnError(api: TWebSocketAPIs; Error: integer);
+class procedure EWebSocketApi.RaiseOnError(api: TWebSocketApis; Error: integer);
 begin
   if Error <> NO_ERROR then
     raise self.Create(api, Error);
 end;
 
-constructor EWebSocketApi.Create(api: TWebSocketAPIs; Error: integer);
+constructor EWebSocketApi.Create(api: TWebSocketApis; Error: integer);
 begin
   fLastError := Error;
   fLastApi := api;
@@ -2264,7 +2268,7 @@ initialization
     (sizeof(THttpHeader) = 4) and
     (integer(HTTP_LOG_FIELD_TEST_SUB_STATUS) = HTTP_LOG_FIELD_SUB_STATUS)
   );
-  WinHttpAPIInitialize;
+  WinHttpApiInitialize;
 
 {$endif USEWININET}
 

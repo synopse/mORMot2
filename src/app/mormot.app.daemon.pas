@@ -108,10 +108,10 @@ type
     fWorkFolderName: TFileName;
     fSettings: TSynDaemonSettings;
     function CustomCommandLineSyntax: string; virtual;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     procedure DoStart(Sender: TService);
     procedure DoStop(Sender: TService);
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
   public
     /// initialize the daemon, creating the associated settings
     // - TSynDaemonSettings instance will be owned and freed by the daemon
@@ -155,11 +155,8 @@ begin
   inherited Create;
   fLog := LOG_STACKTRACE + [sllNewRun];
   fLogRotateFileCount := 2;
-  fServiceName := UTF8ToString(ExeVersion.ProgramName);
+  fServiceName := Utf8ToString(Executable.ProgramName);
   fServiceDisplayName := fServiceName;
-  {$ifndef MSWINDOWS}
-  fLogPath := GetSystemPath(spLog); // /var/log or $home
-  {$endif MSWINDOWS}
 end;
 
 function TSynDaemonSettings.ServiceDescription: string;
@@ -167,7 +164,7 @@ var
   versionnumber: string;
 begin
   result := ServiceDisplayName;
-  with ExeVersion.Version do
+  with Executable.Version do
   begin
     versionnumber := DetailedOrVoid;
     if versionnumber <> '' then
@@ -213,7 +210,7 @@ var
 begin
   inherited Create;
   if aWorkFolder = '' then
-    fWorkFolderName := ExeVersion.ProgramFilePath
+    fWorkFolderName := Executable.ProgramFilePath
   else
     fWorkFolderName := EnsureDirectoryExists(aWorkFolder, true);
   if aSettingsClass = nil then
@@ -221,17 +218,17 @@ begin
   fSettings := aSettingsClass.Create;
   fn := aSettingsFolder;
   if fn = '' then
-    fn := {$ifdef MSWINDOWS}fWorkFolderName{$else}'/etc/'{$endif};
+    fn := {$ifdef OSWINDOWS}fWorkFolderName{$else}'/etc/'{$endif};
   fn :=  EnsureDirectoryExists(fn);
   if aSettingsName = '' then
-    fn := fn + UTF8ToString(ExeVersion.ProgramName)
+    fn := fn + Utf8ToString(Executable.ProgramName)
   else
     fn := fn + aSettingsName;
   fSettings.LoadFromFile(fn + aSettingsExt);
   if fSettings.LogPath = '' then
     if aLogFolder = '' then
       fSettings.LogPath :=
-        {$ifdef MSWINDOWS}fWorkFolderName{$else}GetSystemPath(spLog){$endif}
+        {$ifdef OSWINDOWS}fWorkFolderName{$else}GetSystemPath(spLog){$endif}
     else
       fSettings.LogPath := EnsureDirectoryExists(aLogFolder);
 end;
@@ -245,7 +242,7 @@ begin
   FreeAndNil(fSettings);
 end;
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 procedure TSynDaemon.DoStart(Sender: TService);
 begin
   Start;
@@ -255,7 +252,7 @@ procedure TSynDaemon.DoStop(Sender: TService);
 begin
   Stop;
 end;
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 function TSynDaemon.CustomCommandLineSyntax: string;
 begin
@@ -287,15 +284,15 @@ const
     'H', 'I', 'R', 'F', 'U', 'C', 'K');
 var
   cmd, c: TExecuteCommandLineCmd;
-  p: PUTF8Char;
+  p: PUtf8Char;
   ch: AnsiChar;
-  param: RawUTF8;
+  param: RawUtf8;
   exe: RawByteString;
   log: TSynLog;
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   service: TServiceSingle;
   ctrl: TServiceController;
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 
   procedure WriteCopyright;
   var
@@ -327,29 +324,29 @@ var
   begin
     WriteCopyright;
     writeln('Try with one of the switches:');
-    spaces := StringOfChar(' ', length(ExeVersion.ProgramName) + 4);
-    {$ifdef MSWINDOWS}
-    writeln('   ', ExeVersion.ProgramName,
+    spaces := StringOfChar(' ', length(Executable.ProgramName) + 4);
+    {$ifdef OSWINDOWS}
+    writeln('   ', Executable.ProgramName,
       ' /console -c /verbose /help -h /version');
     writeln(spaces, '/install /uninstall /start /stop /state');
     {$else}
-    writeln(' ./', ExeVersion.ProgramName,
+    writeln(' ./', Executable.ProgramName,
       ' --console -c --verbose --help -h --version');
     writeln(spaces, '--run -r --fork -f --kill -k');
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     custom := CustomCommandLineSyntax;
     if custom <> '' then
       writeln(spaces, custom);
   end;
 
-  function cmdText: RawUTF8;
+  function cmdText: RawUtf8;
   begin
     result := GetEnumNameTrimed(TypeInfo(TExecuteCommandLineCmd), ord(cmd));
   end;
 
   procedure Show(Success: boolean);
   var
-    msg: RawUTF8;
+    msg: RawUtf8;
     error: integer;
   begin
     WriteCopyright;
@@ -361,14 +358,14 @@ var
     else
     begin
       error := GetLastError;
-      msg := FormatUTF8('Error % [%] occured with',
-        [error, StringToUTF8(SysErrorMessage(error))]);
+      msg := FormatUtf8('Error 0x% [%] occured with',
+        [CardinalToHexShort(error), StringToUtf8(SysErrorMessage(error))]);
       TextColor(ccLightRed);
       ExitCode := 1; // notify error to caller batch
     end;
-    msg := FormatUTF8('% [%] (%) on Service ''%''',
+    msg := FormatUtf8('% [%] (%) on Service ''%''',
       [msg, param, cmdText, fSettings.ServiceName]);
-    writeln(UTF8ToConsole(msg));
+    writeln(Utf8ToConsole(msg));
     TextColor(ccLightGray);
     log.Log(sllDebug, 'CommandLine: %', [msg], self);
   end;
@@ -378,7 +375,7 @@ begin
      (fSettings = nil) then
     exit;
   log := nil;
-  param := TrimU(StringToUTF8(paramstr(1)));
+  param := TrimU(StringToUtf8(paramstr(1)));
   cmd := cNone;
   if (param <> '') and
      (param[1] in ['/', '-']) then
@@ -405,14 +402,14 @@ begin
     cVersion:
       begin
         WriteCopyright;
-        exe := StringFromFile(ExeVersion.ProgramFileName);
+        exe := StringFromFile(Executable.ProgramFileName);
         writeln(' ', fSettings.ServiceName,
           #13#10' Size: ', length(exe), ' bytes (', KB(exe), ')' +
-          #13#10' Build date: ', ExeVersion.Version.BuildDateTimeString,
-          #13#10' MD5: ', MD5(exe),
-          #13#10' SHA256: ', SHA256(exe));
-        if ExeVersion.Version.Version32 <> 0 then
-          writeln(' Version: ', ExeVersion.Version.Detailed);
+          #13#10' Build date: ', Executable.Version.BuildDateTimeString,
+          #13#10' MD5: ', Md5(exe),
+          #13#10' SHA256: ', Sha256(exe));
+        if Executable.Version.Version32 <> 0 then
+          writeln(' Version: ', Executable.Version.Detailed);
       end;
     cConsole, cVerbose:
       begin
@@ -428,7 +425,7 @@ begin
         end;
         try
           log.Log(sllNewRun, 'Start % /% %', [fSettings.ServiceName, cmdText,
-            ExeVersion.Version.DetailedOrVoid], self);
+            Executable.Version.DetailedOrVoid], self);
           fConsoleMode := true;
           Start;
           writeln('Press [Enter] to quit');
@@ -441,7 +438,7 @@ begin
           Stop;
         end;
     end;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     // implement the daemon as a Windows Service
     else if fSettings.ServiceName = '' then
       if cmd = cNone then
@@ -516,13 +513,13 @@ begin
       begin
         if cmd <> cSilentKill then
           writeln('Forked process ',
-            ExeVersion.ProgramName, ' killed successfully');
+            Executable.ProgramName, ' killed successfully');
       end
       else
         raise EDaemon.Create('No forked process found to be killed');
     else
       Syntax;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     end;
   except
     on E: Exception do

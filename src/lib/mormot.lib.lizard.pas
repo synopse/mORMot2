@@ -60,10 +60,12 @@ interface
 
 {$ifdef FPC}
   {$ifdef CPUINTEL}
-    {$ifdef BSD}
-      // no static .o outside Windows/Linux yet
-      {$define LIZARD_EXTERNALONLY}
-    {$endif BSD}
+    {$ifndef OSWINDOWS}
+      {$ifndef OSLINUX}
+         // no static .o outside Windows/Linux yet
+         {$define LIZARD_EXTERNALONLY}
+       {$endif OSLINUX}
+    {$endif OSWINDOWS}
   {$else}
     // no static .o outside Intel x86/x64 yet
     {$define LIZARD_EXTERNALONLY}
@@ -79,6 +81,7 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,      // for TSynLibrary
+  mormot.core.unicode,
   mormot.core.buffers; // for TAlgoCompress
 
 
@@ -110,9 +113,9 @@ const
   {$ifdef Win64}
   LIZARD_LIB_NAME = 'Lizard1-64.dll';
   {$endif Win64}
-  {$ifdef Linux}
+  {$ifdef OSPOSIX}
   LIZARD_LIB_NAME = 'liblizard.so.1';
-  {$endif Linux}
+  {$endif OSPOSIX}
 
 type
   /// Lizard (formerly LZ5) lossless compression algorithm
@@ -293,7 +296,7 @@ function Lizard_decompress_safe_usingDict(src, dst: pointer;
 
 {$ifdef CPUX64}
   {$ifdef FPC}
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
 
     // --- FPC x86_64 Win64 Static Linking
     // note: gcc .o files don't work under Win64 for Delphi :(
@@ -306,7 +309,7 @@ function Lizard_decompress_safe_usingDict(src, dst: pointer;
     {$L ..\..\static\x86_64-win64\entropy_common.o}
     {$linklib ..\..\static\x86_64-win64\libgcc.a}
     {$linklib ..\..\static\x86_64-win64\libmsvcrt.a}
-    {$else MSWINDOWS}
+    {$else OSWINDOWS}
 
     // --- FPC x86_64 Linux Static Linking
     {$L ../../static/x86_64-linux/lizard_compress.o}
@@ -319,13 +322,13 @@ function Lizard_decompress_safe_usingDict(src, dst: pointer;
     {$ifdef FPC_CROSSCOMPILING}
       {$linklib ./../../static/x86_64-linux/libgcc.a}
     {$endif}
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
   {$endif FPC}
 {$endif CPUX64}
 
 {$ifdef CPUX86}
   {$ifdef FPC}
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
 
     // --- FPC i386 Win32 Static Linking
     {$L ..\..\static\i386-win32\lizard_compress.o}
@@ -337,7 +340,7 @@ function Lizard_decompress_safe_usingDict(src, dst: pointer;
     {$L ..\..\static\i386-win32\entropy_common.o}
     {$linklib ..\..\static\i386-win32\libgcc.a}
     {$linklib ..\..\static\i386-win32\libmsvcrt.a}
-    {$else MSWINDOWS}
+    {$else OSWINDOWS}
 
     // --- FPC i386 Linux Static Linking
     {$L ../../static/i386-linux/lizard_compress.o}
@@ -348,7 +351,7 @@ function Lizard_decompress_safe_usingDict(src, dst: pointer;
     {$L ../../static/i386-linux/fse_decompress.o}
     {$L ../../static/i386-linux/entropy_common.o}
     {$linklib ../../static/i386-linux\libgcc.a}
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
   {$endif FPC}
 {$endif CPUX86}
 
@@ -407,7 +410,7 @@ begin
       if aRaiseNoException then
         exit
       else
-        raise EAlgoCompress.CreateUTF8('% has unexpected versionNumber=%',
+        raise EAlgoCompress.CreateUtf8('% has unexpected versionNumber=%',
           [fLibrary.LibraryPath, versionNumber]);
     // register TAlgoLizard/TAlgoLizardFast/TAlgoLizardHuffman
     inherited Create;
@@ -415,9 +418,9 @@ begin
     fLoaded := true;
   end
   else if not aRaiseNoException then
-    raise EAlgoCompress.CreateUTF8('Unable to load % - %/'#13#10 +
+    raise EAlgoCompress.CreateUtf8('Unable to load % - %/'#13#10 +
       'Please download from https://synopse.info/files/SynLizardLibs.7z',
-      [aLibraryFile, SysErrorMessage(GetLastError)]);
+      [aLibraryFile, ToUtf8(SysErrorMessage(GetLastError))]);
 end;
 
 destructor TSynLizardDynamic.Destroy;

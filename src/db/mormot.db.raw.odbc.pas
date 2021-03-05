@@ -233,7 +233,7 @@ const
   // GetTypeInfo() request for all data types
   SQL_ALL_TYPES = 0;
 
-  // Default conversion code for SQLBindCol(), SQLBindParam() and SQLGetData()
+  // Default conversion code for SQLBindCol(), SQLBindParam() and SqlGetData()
   SQL_DEFAULT = 99;
 
   // SQLSQLLEN GetData() code indicating that the application row descriptor
@@ -255,11 +255,11 @@ const
   SQL_NO_NULLS = 0;
   SQL_NULLABLE = 1;
 
-  // Value returned by SQLGetTypeInfo() to denote that it is
+  // Value returned by SqlGetTypeInfo() to denote that it is
   // not known whether or not a data type supports null values.
   SQL_NULLABLE_UNKNOWN = 2;
 
-  // Values returned by SQLGetTypeInfo() to show WHERE clause supported
+  // Values returned by SqlGetTypeInfo() to show WHERE clause supported
   SQL_PRED_NONE = 0;
   SQL_PRED_CHAR = 1;
   SQL_PRED_BASIC = 2;
@@ -301,7 +301,7 @@ const
   // null handle used in place of parent handle when allocating HENV
   SQL_NULL_HANDLE = nil;
 
-  // Information requested by SQLGetInfo()
+  // Information requested by SqlGetInfo()
   SQL_MAX_DRIVER_CONNECTIONS = 0;
   SQL_MAXIMUM_DRIVER_CONNECTIONS = SQL_MAX_DRIVER_CONNECTIONS;
   SQL_MAX_CONCURRENT_ACTIVITIES = 1;
@@ -373,7 +373,7 @@ const
   // Statement attributes
   SQL_SOPT_SS_BASE                      = 1225;
   SQL_SOPT_SS_TEXTPTR_LOGGING           = SQL_SOPT_SS_BASE + 0; // Text pointer logging
-  SQL_SOPT_SS_CURRENT_COMMAND           = SQL_SOPT_SS_BASE + 1; // dbcurcmd SQLGetStmtOption only
+  SQL_SOPT_SS_CURRENT_COMMAND           = SQL_SOPT_SS_BASE + 1; // dbcurcmd SqlGetStmtOption only
   SQL_SOPT_SS_HIDDEN_COLUMNS            = SQL_SOPT_SS_BASE + 2; // Expose FOR BROWSE hidden columns
   SQL_SOPT_SS_NOBROWSETABLE             = SQL_SOPT_SS_BASE + 3; // Set NOBROWSETABLE option
   SQL_SOPT_SS_REGIONALIZE               = SQL_SOPT_SS_BASE + 4; // Regionalize output character conversions
@@ -457,7 +457,7 @@ type
     // - depending on the column data type specified, it will return either an
     // ISO-8601 date (for SQL_TYPE_DATE), either a time (for SQL_TYPE_TIME),
     // either a full date + time ISO-8601 content (for SQL_TYPE_TIMESTAMP)
-    function ToIso8601(Dest: PUTF8Char; DataType: SqlSmallint;
+    function ToIso8601(Dest: PUtf8Char; DataType: SqlSmallint;
       WithMS: boolean = false): integer;
     /// convert a TDateTime into ODBC date or timestamp
     // - returns the corresponding C type, i.e. either SQL_C_TYPE_DATE,
@@ -465,7 +465,7 @@ type
     function From(DateTime: TDateTime; var ColumnSize: SqlLen): SqlSmallint;
   end;
 
-  PSQL_TIMESTAMP_STRUCT = ^SQL_TIMESTAMP_STRUCT;
+  PSql_TIMESTAMP_STRUCT = ^SQL_TIMESTAMP_STRUCT;
 
   SQL_TIME_STRUCT = record
     Hour:     SqlUSmallint;
@@ -486,226 +486,226 @@ type
 
 type
   /// generic Exception type, generated for ODBC connection
-  EODBCException = class(ESQLDBException);
+  EOdbcException = class(ESqlDBException);
 
   /// direct access to the ODBC library
   // - this wrapper will initialize both Ansi and Wide versions of the ODBC
   // driver functions, and will work with 32 bit and 64 bit version of the
   // interfaces, on Windows or POSIX platforms
   // - within this unit, we will only use Wide version, and UTF-8 conversion
-  TODBCLib = class(TSynLibrary)
+  TOdbcLib = class(TSynLibrary)
   public
     AllocEnv: function (var EnvironmentHandle: SqlHEnv): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     AllocHandle: function(HandleType: SqlSmallint; InputHandle: SqlHandle;
       var OutputHandle: SqlHandle): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     AllocStmt: function(ConnectionHandle: SqlHDbc; var StatementHandle: SqlHStmt): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     BindCol: function(StatementHandle: SqlHStmt; ColumnNumber: SqlUSmallint;
       TargetType: SqlSmallint; TargetValue: SqlPointer;
       BufferLength: SqlLen; StrLen_or_Ind: PSqlLen): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     BindParameter: function (StatementHandle: SqlHStmt; ParameterNumber: SqlUSmallint;
       InputOutputType, ValueType, ParameterType: SqlSmallint; ColumnSize: SqlULen;
       DecimalDigits: SqlSmallint; ParameterValue: SqlPointer; BufferLength: SqlLen;
       var StrLen_or_Ind: SqlLen): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     Cancel: function(StatementHandle: SqlHStmt): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     CloseCursor: function(StatementHandle: SqlHStmt): SqlReturn;
-     {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+     {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     ColAttributeA: function(StatementHandle: SqlHStmt; ColumnNumber: SqlUSmallint;
       FieldIdentifier: SqlUSmallint; CharacterAttribute: PAnsiChar;
       BufferLength: SqlSmallint; StringLength: PSqlSmallint; NumericAttributePtr: PSqlLen): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     ColAttributeW: function(StatementHandle: SqlHStmt; ColumnNumber: SqlUSmallint;
       FieldIdentifier: SqlUSmallint; CharacterAttribute: PWideChar;
       BufferLength: SqlSmallint; StringLength: PSqlSmallint; NumericAttributePtr: PSqlLen): SqlReturn;
-       {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+       {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     ColumnsA: function(StatementHandle: SqlHStmt;
       CatalogName: PAnsiChar; NameLength1: SqlSmallint;
       SchemaName: PAnsiChar;  NameLength2: SqlSmallint;
       TableName: PAnsiChar;   NameLength3: SqlSmallint;
       ColumnName: PAnsiChar;  NameLength4: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     ColumnsW: function(StatementHandle: SqlHStmt;
       CatalogName: PWideChar; NameLength1: SqlSmallint;
       SchemaName: PWideChar;  NameLength2: SqlSmallint;
       TableName: PWideChar;   NameLength3: SqlSmallint;
       ColumnName: PWideChar;  NameLength4: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     StatisticsA: function(StatementHandle: SqlHStmt;
       CatalogName: PAnsiChar; NameLength1: SqlSmallint;
       SchemaName: PAnsiChar;  NameLength2: SqlSmallint;
       TableName: PAnsiChar;   NameLength3: SqlSmallint;
       Unique, Reserved: SqlUSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     StatisticsW: function(StatementHandle: SqlHStmt;
       CatalogName: PWideChar; NameLength1: SqlSmallint;
       SchemaName: PWideChar;  NameLength2: SqlSmallint;
       TableName: PWideChar;   NameLength3: SqlSmallint;
       Unique, Reserved: SqlUSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     ConnectA: function(ConnectionHandle: SqlHDbc;
       ServerName: PAnsiChar; NameLength1: SqlSmallint;
       UserName: PAnsiChar; NameLength2: SqlSmallint;
       Authentication: PAnsiChar; NameLength3: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     ConnectW: function(ConnectionHandle: SqlHDbc;
       ServerName: PWideChar; NameLength1: SqlSmallint;
       UserName: PWideChar; NameLength2: SqlSmallint;
       Authentication: PWideChar; NameLength3: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     CopyDesc: function(SourceDescHandle, TargetDescHandle: SqlHDesc): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     DataSourcesA: function(EnvironmentHandle: SqlHEnv; Direction: SqlUSmallint;
       ServerName: PAnsiChar;  BufferLength1: SqlSmallint; var NameLength1: SqlSmallint;
       Description: PAnsiChar; BufferLength2: SqlSmallint; var NameLength2: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     DataSourcesW: function(EnvironmentHandle: SqlHEnv; Direction: SqlUSmallint;
       ServerName: PWideChar;  BufferLength1: SqlSmallint; var NameLength1: SqlSmallint;
       Description: PWideChar; BufferLength2: SqlSmallint; var NameLength2: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     DescribeColA: function(StatementHandle: SqlHStmt; ColumnNumber: SqlUSmallint;
       ColumnName: PAnsiChar; BufferLength: SqlSmallint; var NameLength: SqlSmallint;
       var DataType: SqlSmallint; var ColumnSize: SqlULen; var DecimalDigits: SqlSmallint;
       var Nullable: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     DescribeColW: function(StatementHandle: SqlHStmt; ColumnNumber: SqlUSmallint;
       ColumnName: PWideChar; BufferLength: SqlSmallint; var NameLength: SqlSmallint;
       var DataType: SqlSmallint; var ColumnSize: SqlULen; var DecimalDigits: SqlSmallint;
       var Nullable: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     Disconnect: function(ConnectionHandle: SqlHDbc): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     EndTran: function(HandleType: SqlSmallint; Handle: SqlHandle;
       CompletionType: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     ErrorA: function(EnvironmentHandle: SqlHEnv; ConnectionHandle: SqlHDbc; StatementHandle: SqlHStmt;
       Sqlstate: PAnsiChar; var NativeError: SqlInteger;
       MessageText: PAnsiChar; BufferLength: SqlSmallint; var TextLength: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     ErrorW: function(EnvironmentHandle: SqlHEnv; ConnectionHandle: SqlHDbc; StatementHandle: SqlHStmt;
       Sqlstate: PWideChar; var NativeError: SqlInteger;
       MessageText: PWideChar; BufferLength: SqlSmallint; var TextLength: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     ExecDirectA: function(StatementHandle: SqlHStmt;
       StatementText: PAnsiChar; TextLength: SqlInteger): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     ExecDirectW: function(StatementHandle: SqlHStmt;
       StatementText: PWideChar; TextLength: SqlInteger): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     Execute: function(StatementHandle: SqlHStmt): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     Fetch: function(StatementHandle: SqlHStmt): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     FetchScroll: function(StatementHandle: SqlHStmt;
       FetchOrientation: SqlSmallint; FetchOffset: SqlLen): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     FreeConnect: function(ConnectionHandle: SqlHDbc): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     FreeEnv: function(EnvironmentHandle: SqlHEnv): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     FreeHandle: function(HandleType: SqlSmallint; Handle: SqlHandle): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     FreeStmt: function(StatementHandle: SqlHStmt; Option: SqlUSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     GetConnectAttrA: function(ConnectionHandle: SqlHDbc; Attribute: SqlInteger;
       ValuePtr: SqlPointer; BufferLength: SqlInteger; pStringLength: pSqlInteger): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     GetConnectAttrW: function(ConnectionHandle: SqlHDbc; Attribute: SqlInteger;
       ValuePtr: SqlPointer; BufferLength: SqlInteger; pStringLength: pSqlInteger): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     GetCursorNameA: function(StatementHandle: SqlHStmt;
       CursorName: PAnsiChar; BufferLength: SqlSmallint; var NameLength: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     GetCursorNameW: function(StatementHandle: SqlHStmt;
       CursorName: PWideChar; BufferLength: SqlSmallint; var NameLength: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     GetData: function(StatementHandle: SqlHStmt; ColumnNumber: SqlUSmallint;
       TargetType: SqlSmallint; TargetValue: SqlPointer; BufferLength: SqlLen;
       StrLen_or_Ind: PSqlLen): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     GetDescFieldA: function(DescriptorHandle: SqlHDesc; RecNumber: SqlSmallint;
       FieldIdentifier: SqlSmallint; Value: SqlPointer; BufferLength: SqlInteger;
       var StringLength: SqlInteger): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     GetDescFieldW: function(DescriptorHandle: SqlHDesc; RecNumber: SqlSmallint;
       FieldIdentifier: SqlSmallint; Value: SqlPointer; BufferLength: SqlInteger;
       var StringLength: SqlInteger): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     GetDescRecA: function(DescriptorHandle: SqlHDesc; RecNumber: SqlSmallint;
       Name: PAnsiChar; BufferLength: SqlSmallint; var StringLength: SqlSmallint;
       var _Type, SubType: SqlSmallint; var Length: SqlLen;
       var Precision, Scale, Nullable: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     GetDescRecW: function(DescriptorHandle: SqlHDesc; RecNumber: SqlSmallint;
       Name: PWideChar; BufferLength: SqlSmallint; var StringLength: SqlSmallint;
       var _Type, SubType: SqlSmallint; var Length: SqlLen;
       var Precision, Scale, Nullable: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     GetDiagFieldA: function(HandleType: SqlSmallint; Handle: SqlHandle;
       RecNumber, DiagIdentifier: SqlSmallint;
       DiagInfo: SqlPointer; BufferLength: SqlSmallint; var StringLength: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     GetDiagFieldW: function(HandleType: SqlSmallint; Handle: SqlHandle;
       RecNumber, DiagIdentifier: SqlSmallint;
       DiagInfo: SqlPointer; BufferLength: SqlSmallint; var StringLength: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     GetDiagRecA: function(HandleType: SqlSmallint; Handle: SqlHandle; RecNumber: SqlSmallint;
       Sqlstate: PAnsiChar; var NativeError: SqlInteger;
       MessageText: PAnsiChar; BufferLength: SqlSmallint; var TextLength: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     GetDiagRecW: function(HandleType: SqlSmallint; Handle: SqlHandle; RecNumber: SqlSmallint;
       Sqlstate: PWideChar; var NativeError: SqlInteger;
       MessageText: PWideChar; BufferLength: SqlSmallint; var TextLength: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     MoreResults: function(StatementHandle: SqlHStmt): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     PrepareA: function(StatementHandle: SqlHStmt;
       StatementText: PAnsiChar; TextLength: SqlInteger): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     PrepareW: function(StatementHandle: SqlHStmt;
       StatementText: PWideChar; TextLength: SqlInteger): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     RowCount: function(StatementHandle: SqlHStmt; var RowCount: SqlLen): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     NumResultCols: function(StatementHandle: SqlHStmt; var ColumnCount: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     GetInfoA: function(ConnectionHandle: SqlHDbc; InfoType: SqlUSmallint;
       InfoValuePtr: SqlPointer; BufferLength: SqlSmallint; StringLengthPtr: PSqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     GetInfoW: function(ConnectionHandle: SqlHDbc; InfoType: SqlUSmallint;
       InfoValuePtr: SqlPointer; BufferLength: SqlSmallint; StringLengthPtr: PSqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     SetStmtAttrA: function(StatementHandle: SqlHStmt; Attribute: SqlInteger;
       Value: SqlPointer; StringLength: SqlInteger): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     SetStmtAttrW: function(StatementHandle: SqlHStmt; Attribute: SqlInteger;
       Value: SqlPointer; StringLength: SqlInteger): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     SetEnvAttr: function(EnvironmentHandle: SqlHEnv; Attribute: SqlInteger;
       ValuePtr: SqlPointer; StringLength: SqlInteger): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     SetConnectAttrA: function(ConnectionHandle: SqlHDbc; Attribute: SqlInteger;
       ValuePtr: SqlPointer; StringLength: SqlInteger): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     SetConnectAttrW: function(ConnectionHandle: SqlHDbc; Attribute: SqlInteger;
       ValuePtr: SqlPointer; StringLength: SqlInteger): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     TablesA: function(StatementHandle: SqlHStmt;
       CatalogName: PAnsiChar; NameLength1: SqlSmallint;
       SchemaName: PAnsiChar; NameLength2: SqlSmallint;
       TableName: PAnsiChar; NameLength3: SqlSmallint;
       TableType: PAnsiChar; NameLength4: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     TablesW: function(StatementHandle: SqlHStmt;
       CatalogName: PWideChar; NameLength1: SqlSmallint;
       SchemaName: PWideChar; NameLength2: SqlSmallint;
       TableName: PWideChar; NameLength3: SqlSmallint;
       TableType: PWideChar; NameLength4: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     ForeignKeysA: function(StatementHandle: SqlHStmt;
       PKCatalogName: PAnsiChar; NameLength1: SqlSmallint;
       PKSchemaName: PAnsiChar; NameLength2: SqlSmallint;
@@ -713,7 +713,7 @@ type
       FKCatalogName: PAnsiChar; NameLength4: SqlSmallint;
       FKSchemaName: PAnsiChar; NameLength5: SqlSmallint;
       FKTableName: PAnsiChar; NameLength6: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     ForeignKeysW: function(StatementHandle: SqlHStmt;
       PKCatalogName: PWideChar; NameLength1: SqlSmallint;
       PKSchemaName: PWideChar; NameLength2: SqlSmallint;
@@ -721,59 +721,59 @@ type
       FKCatalogName: PWideChar; NameLength4: SqlSmallint;
       FKSchemaName: PWideChar; NameLength5: SqlSmallint;
       FKTableName: PWideChar; NameLength6: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     SQLDriverConnectA: function(ConnectionHandle: SqlHDbc; WindowHandle: SQLHWnd;
       InConnectionString: PAnsiChar; StringLength1: SqlSmallint;
       OutConnectionString: PAnsiChar; BufferLength: SqlSmallint;
       var StringLength2Ptr: SqlSmallint; DriverCompletion: SqlUSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
     SQLDriverConnectW: function(ConnectionHandle: SqlHDbc; WindowHandle: SQLHWnd;
       InConnectionString: PWideChar; StringLength1: SqlSmallint;
       OutConnectionString: PWideChar; BufferLength: SqlSmallint;
       var StringLength2Ptr: SqlSmallint; DriverCompletion: SqlUSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
-    SQLProcedureColumnsA: function(StatementHandle: SqlHStmt;
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
+    SqlProcedureColumnsA: function(StatementHandle: SqlHStmt;
       CatalogName: PAnsiChar; NameLength1: SqlSmallint;
       SchemaName: PAnsiChar;  NameLength2: SqlSmallint;
       ProcName: PAnsiChar;   NameLength3: SqlSmallint;
       ColumnName: PAnsiChar;  NameLength4: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
-    SQLProcedureColumnsW: function(StatementHandle: SqlHStmt;
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
+    SqlProcedureColumnsW: function(StatementHandle: SqlHStmt;
       CatalogName: PWideChar; NameLength1: SqlSmallint;
       SchemaName: PWideChar;  NameLength2: SqlSmallint;
       ProcName: PWideChar;   NameLength3: SqlSmallint;
       ColumnName: PWideChar;  NameLength4: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
-    SQLProcedures: function(StatementHandle: SqlHStmt;
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
+    SqlProcedures: function(StatementHandle: SqlHStmt;
       CatalogName: PWideChar; NameLength1: SqlSmallint;
       SchemaName: PWideChar;  NameLength2: SqlSmallint;
       ProcName: PWideChar;   NameLength3: SqlSmallint): SqlReturn;
-      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+      {$ifdef OSWINDOWS} stdcall {$else} cdecl {$endif};
   public
     /// load the ODBC library
     // - and retrieve all SQL*() addresses for ODBC_ENTRIES[] items
     constructor Create;
     /// raise an exception on error
-    procedure Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement; Status: SqlReturn;
+    procedure Check(Conn: TSqlDBConnection; Stmt: TSqlDBStatement; Status: SqlReturn;
       HandleType: SqlSmallint; Handle: SqlHandle; InfoRaiseException: boolean = false;
       LogLevelNoRaise: TSynLogInfo = sllNone);
       {$ifdef HASINLINE}inline;{$endif}
     /// generic process of error handle
-    procedure HandleError(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
+    procedure HandleError(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
       Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
       InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
-    /// wrapper around SQLGetDiagField() API call
-    function GetDiagField(StatementHandle: SqlHStmt): RawUTF8;
+    /// wrapper around SqlGetDiagField() API call
+    function GetDiagField(StatementHandle: SqlHStmt): RawUtf8;
     /// wrapper around GetInfo() API call
     procedure GetInfoString(ConnectionHandle: SqlHDbc; InfoType: SqlUSmallint;
-      var Dest: RawUTF8);
+      var Dest: RawUtf8);
   end;
 
 var
-  ODBC: TODBCLib = nil;
+  ODBC: TOdbcLib = nil;
 
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 
 /// List all ODBC drivers installed, by reading the Windows Registry
 // - aDrivers is the output driver list container, which should be either nil (to
@@ -782,23 +782,24 @@ var
 // in aDrivers (somewhat slower)
 function ODBCInstalledDriversList(const aIncludeVersion: boolean; var aDrivers: TStrings): boolean;
 
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 
 implementation
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 uses
   Windows,
   Registry; // for ODBCInstalledDriversList
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 
 { ************ Native ODBC Memory Structures }
 
 { SQL_TIMESTAMP_STRUCT }
 
-function SQL_TIMESTAMP_STRUCT.From(DateTime: TDateTime; var ColumnSize: SqlLen): SqlSmallint;
+function SQL_TIMESTAMP_STRUCT.From(DateTime: TDateTime;
+  var ColumnSize: SqlLen): SqlSmallint;
 var
   Y, MS: word;
 begin
@@ -840,7 +841,7 @@ begin
     result := result  +  time;
 end;
 
-function SQL_TIMESTAMP_STRUCT.ToIso8601(Dest: PUTF8Char; DataType: SqlSmallint;
+function SQL_TIMESTAMP_STRUCT.ToIso8601(Dest: PUtf8Char; DataType: SqlSmallint;
   WithMS: boolean): integer;
 begin
   Dest^ := '"';
@@ -855,7 +856,8 @@ begin
      (Hour < 24) and
      (Minute < 60) and
      (Second < 60) then
-  begin // we use 'T' as TTextWriter.AddDateTime
+  begin
+    // we use 'T' as TTextWriter.AddDateTime
     TimeToIso8601PChar(Dest, true, Hour, Minute, Second, Fraction div 1000000,
       'T', WithMS);
     if WithMS then
@@ -878,11 +880,11 @@ end;
 { ************ ODBC Library Loading }
 
 const
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   ODBC_LIB = 'odbc32.dll';
   {$else}
   ODBC_LIB = 'libodbc.so.1';
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
 
   ODBC_ENTRIES: array[0..66] of PAnsiChar = (
     'SQLAllocEnv', 'SQLAllocHandle', 'SQLAllocStmt',
@@ -904,7 +906,7 @@ const
     'SQLProcedureColumnsA', 'SQLProcedureColumnsW', 'SQLProcedures');
 
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 function ODBCInstalledDriversList(const aIncludeVersion: boolean;
   var aDrivers: TStrings): boolean;
 
@@ -951,12 +953,12 @@ begin
 end;
 {$else}
 // TODO: ODBCInstalledDriversList for Linux
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 
-{ TODBCLib }
+{ TOdbcLib }
 
-procedure TODBCLib.Check(Conn: TSQLDBConnection; Stmt: TSQLDBStatement; Status:
+procedure TOdbcLib.Check(Conn: TSqlDBConnection; Stmt: TSqlDBStatement; Status:
   SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
   InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 begin
@@ -965,18 +967,18 @@ begin
       LogLevelNoRaise);
 end;
 
-constructor TODBCLib.Create;
+constructor TOdbcLib.Create;
 var
   P: PPointerArray;
   i: PtrInt;
 begin
-  TryLoadLibrary([ODBC_LIB], EODBCException);
+  TryLoadLibrary([ODBC_LIB], EOdbcException);
   P := @@AllocEnv;
   for i := 0 to High(ODBC_ENTRIES) do
-    Resolve(ODBC_ENTRIES[i], @P[i], EODBCException); // raise EODBCException on error
+    Resolve(ODBC_ENTRIES[i], @P[i], {raiseonfailure=}EOdbcException);
 end;
 
-function TODBCLib.GetDiagField(StatementHandle: SqlHStmt): RawUTF8;
+function TOdbcLib.GetDiagField(StatementHandle: SqlHStmt): RawUtf8;
 var
   Status: array[0..7] of AnsiChar;
   StringLength: SqlSmallint;
@@ -988,8 +990,8 @@ begin
     result := '';
 end;
 
-procedure TODBCLib.GetInfoString(ConnectionHandle: SqlHDbc;
-  InfoType: SqlUSmallint; var Dest: RawUTF8);
+procedure TOdbcLib.GetInfoString(ConnectionHandle: SqlHDbc;
+  InfoType: SqlUSmallint; var Dest: RawUtf8);
 var
   Len: SqlSmallint;
   Info: array[byte] of WideChar;
@@ -997,21 +999,21 @@ begin
   Len := 0;
   Check(nil, nil,
     GetInfoW(ConnectionHandle, InfoType, @Info, SizeOf(Info) shr 1, @Len),
-    SQL_HANDLE_DBC, ConnectionHandle);
+      SQL_HANDLE_DBC, ConnectionHandle);
   Dest := RawUnicodeToUtf8(Info, Len shr 1);
 end;
 
-procedure TODBCLib.HandleError(Conn: TSQLDBConnection; Stmt: TSQLDBStatement;
+procedure TOdbcLib.HandleError(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
   Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
   InfoRaiseException: boolean; LogLevelNoRaise: TSynLogInfo);
 const
-  FMT: PUTF8Char = '%[%] % (%)'#13#10;
+  FMT: PUtf8Char = '%[%] % (%)'#13#10;
 var
   Sqlstate: array[0..6] of WideChar;
   MessageText: array[0..1023] of WideChar;
   RecNum, NativeError: SqlInteger;
   TextLength: SqlSmallint;
-  msg: RawUTF8;
+  msg: RawUtf8;
 begin
   if (Handle = nil) or
      (Status = SQL_INVALID_HANDLE) then
@@ -1028,7 +1030,7 @@ begin
         dec(TextLength);
         MessageText[TextLength] := #0; // trim #13/#10 right of MessageText
       end;
-      msg := FormatUTF8(FMT, [{%H-}msg, Sqlstate, MessageText, NativeError]);
+      msg := FormatUtf8(FMT, [{%H-}msg, Sqlstate, MessageText, NativeError]);
       inc(RecNum);
     end;
     if msg = '' then
@@ -1049,9 +1051,9 @@ begin
   if LogLevelNoRaise <> sllNone then
     SynDBLog.Add.Log(LogLevelNoRaise, msg)
   else if Stmt = nil then
-    raise EODBCException.CreateUTF8('% error: %', [self, msg])
+    raise EOdbcException.CreateUtf8('% error: %', [self, msg])
   else
-    raise EODBCException.CreateUTF8('% - % error: %', [Stmt, self, msg]);
+    raise EOdbcException.CreateUtf8('% - % error: %', [Stmt, self, msg]);
 end;
 
 

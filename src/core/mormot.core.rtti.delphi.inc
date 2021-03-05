@@ -26,7 +26,7 @@ end;
 function GetTypeData(TypeInfo: pointer): PTypeData;
 asm
         // faster code for oldest Delphi
-        movzx   edx, byte ptr[eax].TTypeInfo.Name
+        movzx   edx, byte ptr [eax].TTypeInfo.Name
         lea     eax, [eax + edx].TTypeInfo.Name[1]
 end;
 
@@ -63,7 +63,8 @@ end;
 function GetRttiProps(RttiClass: TClass): PRttiProps;
 var
   p: PTypeInfo;
-begin // code is a bit abstract, but compiles very well
+begin
+  // code is a bit abstract, but compiles very well
   p := PPointer(PtrInt(RttiClass) + vmtTypeInfo)^;
   if p <> nil then // avoid GPF if no RTTI available for this class
     with PTypeData(@p^.Name[ord(p^.Name[0]) + 1])^ do
@@ -139,12 +140,12 @@ function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
 asm // eax=aTypeInfo edx=aIndex
         test    eax, eax
         jz      @0
-        cmp     byte ptr[eax], tkEnumeration
+        cmp     byte ptr [eax], tkEnumeration
         jnz     @0
-        movzx   ecx, byte ptr[eax + TTypeInfo.Name]
+        movzx   ecx, byte ptr [eax + TTypeInfo.Name]
         mov     eax, [eax + ecx + TTypeData.BaseType + 2]
         mov     eax, [eax]
-        movzx   ecx, byte ptr[eax + TTypeInfo.Name]
+        movzx   ecx, byte ptr [eax + TTypeInfo.Name]
         cmp     edx, [eax + ecx + TTypeData.MaxValue + 2]
         ja      @0
         lea     eax, [eax + ecx + TTypeData.NameList + 2]
@@ -154,13 +155,13 @@ asm // eax=aTypeInfo edx=aIndex
         shr     edx, 2 // fast by-four scanning
         jz      @1
 @4:     dec     edx
-        movzx   ecx, byte ptr[eax]
+        movzx   ecx, byte ptr [eax]
         lea     eax, [eax + ecx + 1]
-        movzx   ecx, byte ptr[eax]
+        movzx   ecx, byte ptr [eax]
         lea     eax, [eax + ecx + 1]
-        movzx   ecx, byte ptr[eax]
+        movzx   ecx, byte ptr [eax]
         lea     eax, [eax + ecx + 1]
-        movzx   ecx, byte ptr[eax]
+        movzx   ecx, byte ptr [eax]
         lea     eax, [eax + ecx + 1]
         jnz     @4
         pop     edx
@@ -168,7 +169,7 @@ asm // eax=aTypeInfo edx=aIndex
         jnz     @s
         ret
 @1:     pop     edx
-@s:     movzx   ecx, byte ptr[eax]
+@s:     movzx   ecx, byte ptr [eax]
         lea     eax, [eax + ecx + 1] // last 1..3 iterations
         dec     edx
         jnz     @s
@@ -586,7 +587,7 @@ type
         ManagedCount8: integer);
   end;
 const
-  _TGUID: TFakeTypeInfo = (    // stored in PT_INFO[ptGUID]
+  _TGUID: TFakeTypeInfo = (    // stored in PT_INFO[ptGuid]
     Kind: tkRecord;
     Name5: 'TGUID';
     RecSize5: SizeOf(TGUID);
@@ -627,7 +628,7 @@ var
   pi: PTypeData absolute p;
   ps: PShortString absolute p;
 
-  procedure AddArgFromRTTI;
+  procedure AddArgFromRtti;
   var
     pp: ^PPRttiInfo absolute p;
   begin
@@ -653,7 +654,7 @@ begin
   begin
     ShortStringToAnsi7String(aInterface^.Name, Definition.Name);
     ShortStringToAnsi7String(pi^.IntfUnit, Definition.UnitName);
-    Definition.GUID := pi^.Guid;
+    Definition.Guid := pi^.Guid;
   end;
   ancestor := pi^.IntfParent^;
   if ancestor <> nil then
@@ -687,7 +688,7 @@ begin
       inc(p, SizeOf(flags^));
       name := ps;
       ps := @ps^[ord(ps^[0]) + 1];
-      AddArgFromRTTI;
+      AddArgFromRtti;
       {$ifdef ISDELPHIXE}
       inc(p, pw^); // skip custom attributes
       {$endif ISDELPHIXE}
@@ -695,7 +696,7 @@ begin
     end;
     name := nil;
     if kind = mkFunction then
-      AddArgFromRTTI;
+      AddArgFromRtti;
     {$ifdef ISDELPHIXE}
     inc(p, pw^); // skip custom attributes
     {$endif ISDELPHIXE}

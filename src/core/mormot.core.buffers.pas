@@ -10,7 +10,7 @@ unit mormot.core.buffers;
    - Variable Length integer Encoding / Decoding
    - TAlgoCompress Compression/Decompression Classes - with AlgoSynLZ
    - TFastReader / TBufferWriter Binary Streams
-   - Base64, Base64URI and Baudot Encoding / Decoding
+   - Base64, Base64Uri and Baudot Encoding / Decoding
    - URI-Encoded Text Buffer Process
    - Basic MIME Content Types Support
    - Text Memory Buffers and Files
@@ -133,19 +133,19 @@ function FromVarInt64Value(Source: PByte): Int64;
 function GotoNextVarInt(Source: PByte): pointer;
  {$ifdef HASINLINE}inline;{$endif}
 
-/// convert a RawUTF8 into an UTF-8 encoded variable-length buffer
-function ToVarString(const Value: RawUTF8; Dest: PByte): PByte;
+/// convert a RawUtf8 into an UTF-8 encoded variable-length buffer
+function ToVarString(const Value: RawUtf8; Dest: PByte): PByte;
 
 /// jump a value in variable-length text buffer
 function GotoNextVarString(Source: PByte): pointer;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// retrieve a variable-length UTF-8 encoded text buffer in a newly allocation RawUTF8
-function FromVarString(var Source: PByte): RawUTF8; overload;
+/// retrieve a variable-length UTF-8 encoded text buffer in a newly allocation RawUtf8
+function FromVarString(var Source: PByte): RawUtf8; overload;
 
-/// safe retrieve a variable-length UTF-8 encoded text buffer in a newly allocation RawUTF8
+/// safe retrieve a variable-length UTF-8 encoded text buffer in a newly allocation RawUtf8
 // - supplied SourceMax value will avoid any potential buffer overflow
-function FromVarString(var Source: PByte; SourceMax: PByte): RawUTF8; overload;
+function FromVarString(var Source: PByte; SourceMax: PByte): RawUtf8; overload;
 
 /// retrieve a variable-length text buffer
 // - this overloaded function will set the supplied code page to the AnsiString
@@ -162,7 +162,7 @@ function FromVarString(var Source: PByte; SourceMax: PByte;
 /// retrieve a variable-length UTF-8 encoded text buffer in a temporary buffer
 // - caller should call Value.Done after use of the Value.buf memory
 // - this overloaded function would include a trailing #0, so Value.buf could
-// be parsed as a valid PUTF8Char buffer (e.g. containing JSON)
+// be parsed as a valid PUtf8Char buffer (e.g. containing JSON)
 procedure FromVarString(var Source: PByte; var Value: TSynTempBuffer); overload;
 
 /// retrieve a variable-length UTF-8 encoded text buffer in a temporary buffer
@@ -201,13 +201,14 @@ type
 
   /// abstract low-level parent class for generic compression/decompression algorithms
   // - will encapsulate the compression algorithm with crc32c hashing
-  // - all Algo* abtract methods should be overriden by inherited classes
+  // - all Algo* abstract methods should be overriden by inherited classes
   // - don't inherit from TSynPersistent since we don't need any of it
   TAlgoCompress = class
   public
     /// should return a genuine byte identifier
     // - 0 is reserved for stored, 1 for TAlgoSynLz, 2/3 for TAlgoDeflate/Fast
-    // (in mORMot.pas), 4/5/6 for TAlgoLizard/Fast/Huffman (in SynLizard.pas)
+    // (in mormot.core.zip.pas), 4/5/6 for TAlgoLizard/Fast/Huffman
+    // (in mormot.lib.lizard.pas)
     function AlgoID: byte; virtual; abstract;
     /// computes by default the crc32c() digital signature of the buffer
     function AlgoHash(Previous: cardinal;
@@ -590,7 +591,7 @@ type
   TOnFastReaderErrorOverflow = procedure of object;
 
   /// event signature to customize TFastReader.ErrorData notification
-  TOnFastReaderErrorData = procedure(const fmt: RawUTF8;
+  TOnFastReaderErrorData = procedure(const fmt: RawUtf8;
     const args: array of const) of object;
 
   /// safe decoding of a TBufferWriter content from an in-memory buffer
@@ -624,7 +625,7 @@ type
     /// raise a EFastReader with "Reached End of Input" error message
     procedure ErrorOverflow;
     /// raise a EFastReader with "Incorrect Data: ...." error message
-    procedure ErrorData(const fmt: RawUTF8; const args: array of const);
+    procedure ErrorData(const fmt: RawUtf8; const args: array of const);
     /// read the next 32-bit signed value from the buffer
     function VarInt32: integer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -646,17 +647,20 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// read the next 64-bit unsigned value from the buffer
     function VarUInt64: QWord;
-    /// read the next RawUTF8 value from the buffer
-    function VarUTF8: RawUTF8; overload;
+    /// read the next RawUtf8 value from the buffer
+    function VarUtf8: RawUtf8; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// read the next RawUTF8 value from the buffer
-    procedure VarUTF8(out result: RawUTF8); overload;
-    /// read the next RawUTF8 value from the buffer
+    /// read the next RawUtf8 value from the buffer
+    procedure VarUtf8(out result: RawUtf8); overload;
+    /// read the next RawUtf8 value from the buffer
     // - this version won't call ErrorOverflow, but return false on error
     // - returns true on read success
-    function VarUTF8Safe(out Value: RawUTF8): boolean;
+    function VarUtf8Safe(out Value: RawUtf8): boolean;
     /// read the next RawByteString value from the buffer
-    function VarString: RawByteString;
+    function VarString: RawByteString; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read the next RawByteString value from the buffer
+    function VarString(CodePage: integer): RawByteString; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// read the next pointer and length value from the buffer
     procedure VarBlob(out result: TValueResult); overload;
@@ -681,6 +685,9 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// read the next byte from the buffer, checking
     function NextByteSafe(dest: pointer): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read the next 2 bytes from the buffer as a 16-bit unsigned value
+    function Next2: cardinal;
       {$ifdef HASINLINE}inline;{$endif}
     /// read the next 4 bytes from the buffer as a 32-bit unsigned value
     function Next4: cardinal;
@@ -713,9 +720,9 @@ type
     // - Values[] will be resized only if it is not long enough, to spare heap
     // - returns decoded count in Values[], which may not be length(Values)
     function ReadVarUInt64Array(var Values: TInt64DynArray): PtrInt;
-    /// retrieved RawUTF8 values encoded with TFileBufferWriter.WriteRawUTF8DynArray
+    /// retrieved RawUtf8 values encoded with TFileBufferWriter.WriteRawUtf8DynArray
     // - returns the number of items read into Values[] (may differ from length(Values))
-    function ReadVarRawUTF8DynArray(var Values: TRawUTF8DynArray): PtrInt;
+    function ReadVarRawUtf8DynArray(var Values: TRawUtf8DynArray): PtrInt;
     /// retrieve some TAlgoCompress buffer, appended via Write()
     // - BufferOffset could be set to reserve some bytes before the uncompressed buffer
     function ReadCompressed(Load: TAlgoCompressLoad = aclNormal;
@@ -740,7 +747,7 @@ type
   // case of a difference of similar value (e.g. 1) between two values - note
   // that this encoding is efficient only if the difference is mainly < 253
   // - wkOffsetU and wkOffsetI will write the difference between two successive
-  // values, with detection of any constant difference (Unsigned or integer)
+  // values, with detection of any constant difference (unsigned or signed)
   // - wkFakeMarker won't be used by WriteVarUInt32Array, but to notify a
   // custom encoding
   TBufferWriterKind = (
@@ -754,7 +761,7 @@ type
 
   /// this class can be used to speed up writing to a file or a stream
   // - big speed up if data is written in small blocks
-  // - also handle optimized storage of any integer/Int64/RawUTF8 values
+  // - also handle optimized storage of any integer/Int64/RawUtf8 values
   // - use TFileBufferReader or TFastReader for decoding of the stored binary
   TBufferWriter = class
   private
@@ -828,7 +835,11 @@ type
     /// append some content (may be text or binary) prefixed by its encoded length
     // - will write DataLen as VarUInt32, then the Data content, as expected
     // by FromVarString/FromVarBlob functions
-    procedure WriteVar(Data: pointer; DataLen: PtrInt);
+    procedure WriteVar(Data: pointer; DataLen: PtrInt); overload;
+    /// append some TTempUtf8 text content prefixed by its encoded length
+    // - will also release any memory stored in Item.TempRawUtf8
+    procedure WriteVar(var Item: TTempUtf8); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 encoded text at the current position
     // - will write the string length (as VarUInt32), then the string content
     // - is just a wrapper around WriteVar()
@@ -879,12 +890,12 @@ type
     // - could be decoded later on via TFastReader.ReadVarUInt64Array
     procedure WriteVarUInt64DynArray(const Values: TInt64DynArray;
       ValuesCount: integer; Offset: boolean);
-    /// append the RawUTF8 dynamic array
+    /// append the RawUtf8 dynamic array
     // - handled the fixed size strings array case in a very efficient way
-    procedure WriteRawUTF8DynArray(const Values: TRawUTF8DynArray; ValuesCount: integer);
-    /// append a RawUTF8 array of values, from its low-level memory pointer
+    procedure WriteRawUtf8DynArray(const Values: TRawUtf8DynArray; ValuesCount: integer);
+    /// append a RawUtf8 array of values, from its low-level memory pointer
     // - handled the fixed size strings array case in a very efficient way
-    procedure WriteRawUTF8Array(Values: PPtrUIntArray; ValuesCount: integer);
+    procedure WriteRawUtf8Array(Values: PPtrUIntArray; ValuesCount: integer);
     /// append a TStream content
     // - is StreamSize is left as -1, the Stream.Size is used
     // - the size of the content is stored in the resulting stream
@@ -944,20 +955,20 @@ const
 {$endif PUREMORMOT2}
 
 
-{ ************ Base64, Base64URI and Baudot Encoding / Decoding }
+{ ************ Base64, Base64Uri and Baudot Encoding / Decoding }
 
 const
   /// UTF-8 encoded \uFFF0 special code to mark Base64 binary content in JSON
   // - Unicode special char U+FFF0 is UTF-8 encoded as EF BF B0 bytes
   // - as generated by BinToBase64WithMagic() functions, and expected by
-  // SQLParamContent() and ExtractInlineParameters() functions
+  // SqlParamContent() and ExtractInlineParameters() functions
   // - used e.g. when transmitting TDynArray.SaveTo() content
   JSON_BASE64_MAGIC_C = $b0bfef;
 
   /// UTF-8 encoded \uFFF0 special code to mark Base64 binary content in JSON
   // - Unicode special char U+FFF0 is UTF-8 encoded as EF BF B0 bytes
   // - as generated by BinToBase64WithMagic() functions, and expected by
-  // SQLParamContent() and ExtractInlineParameters() functions
+  // SqlParamContent() and ExtractInlineParameters() functions
   // - used e.g. when transmitting TDynArray.SaveTo() content
   JSON_BASE64_MAGIC_S: string[3] = #$ef#$bf#$b0;
 
@@ -972,29 +983,29 @@ const
 /// just a wrapper around Base64ToBin() for in-place decode of JSON_BASE64_MAGIC_C
 // '\uFFF0base64encodedbinary' content into binary
 // - input ParamValue shall have been checked to match the expected pattern
-procedure Base64MagicDecode(var ParamValue: RawUTF8);
+procedure Base64MagicDecode(var ParamValue: RawUtf8);
 
 /// check and decode '\uFFF0base64encodedbinary' content into binary
 // - this method will check the supplied value to match the expected
 // JSON_BASE64_MAGIC_C pattern, decode and set Blob and return TRUE
-function Base64MagicCheckAndDecode(Value: PUTF8Char; var Blob: RawByteString): boolean; overload;
+function Base64MagicCheckAndDecode(Value: PUtf8Char; var Blob: RawByteString): boolean; overload;
 
 /// check and decode '\uFFF0base64encodedbinary' content into binary
 // - this method will check the supplied value to match the expected
 // JSON_BASE64_MAGIC_C pattern, decode and set Blob and return TRUE
-function Base64MagicCheckAndDecode(Value: PUTF8Char; ValueLen: integer;
+function Base64MagicCheckAndDecode(Value: PUtf8Char; ValueLen: integer;
   var Blob: RawByteString): boolean; overload;
 
 /// check and decode '\uFFF0base64encodedbinary' content into binary
 // - this method will check the supplied value to match the expected
 // JSON_BASE64_MAGIC_C pattern, decode and set Blob and return TRUE
-function Base64MagicCheckAndDecode(Value: PUTF8Char; var Blob: TSynTempBuffer): boolean; overload;
+function Base64MagicCheckAndDecode(Value: PUtf8Char; var Blob: TSynTempBuffer): boolean; overload;
 
 /// fast conversion from binary data into Base64 encoded UTF-8 text
-function BinToBase64(const s: RawByteString): RawUTF8; overload;
+function BinToBase64(const s: RawByteString): RawUtf8; overload;
 
 /// fast conversion from binary data into Base64 encoded UTF-8 text
-function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
+function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawUtf8; overload;
 
 /// fast conversion from a small binary data into Base64 encoded UTF-8 text
 function BinToBase64Short(const s: RawByteString): shortstring; overload;
@@ -1004,15 +1015,15 @@ function BinToBase64Short(Bin: PAnsiChar; BinBytes: integer): shortstring; overl
 
 /// fast conversion from binary data into prefixed/suffixed Base64 encoded UTF-8 text
 // - with optional JSON_BASE64_MAGIC_C prefix (UTF-8 encoded \uFFF0 special code)
-function BinToBase64(const data, Prefix, Suffix: RawByteString; WithMagic: boolean): RawUTF8; overload;
+function BinToBase64(const data, Prefix, Suffix: RawByteString; WithMagic: boolean): RawUtf8; overload;
 
 /// fast conversion from binary data into Base64 encoded UTF-8 text
 // with JSON_BASE64_MAGIC_C prefix (UTF-8 encoded \uFFF0 special code)
-function BinToBase64WithMagic(const data: RawByteString): RawUTF8; overload;
+function BinToBase64WithMagic(const data: RawByteString): RawUtf8; overload;
 
 /// fast conversion from binary data into Base64 encoded UTF-8 text
 // with JSON_BASE64_MAGIC_C prefix (UTF-8 encoded \uFFF0 special code)
-function BinToBase64WithMagic(Data: pointer; DataLen: integer): RawUTF8; overload;
+function BinToBase64WithMagic(Data: pointer; DataLen: integer): RawUtf8; overload;
 
 /// raw function for efficient binary to Base64 encoding of the main block
 // - don't use this function, but rather the BinToBase64() overloaded functions
@@ -1049,15 +1060,15 @@ function Base64ToBin(sp: PAnsiChar; len: PtrInt; var Blob: TSynTempBuffer): bool
 // - returns TRUE on success, FALSE if base64 does not match binlen
 // - nofullcheck is deprecated and not used any more, since nofullcheck=false
 // is now processed with no performance cost
-function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt;
-  nofullcheck: boolean=true): boolean; overload;
+function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt
+  {$ifndef PUREMORMOT2} ; nofullcheck: boolean = true {$endif}): boolean; overload;
 
 /// fast conversion from Base64 encoded text into binary data
 // - returns TRUE on success, FALSE if base64 does not match binlen
 // - nofullcheck is deprecated and not used any more, since nofullcheck=false
 // is now processed with no performance cost
-function Base64ToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt;
-  nofullcheck: boolean=true): boolean; overload;
+function Base64ToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt
+  {$ifndef PUREMORMOT2} ; nofullcheck: boolean = true {$endif}): boolean; overload;
 
 /// fast conversion from Base64 encoded text into binary data
 // - will check supplied text is a valid Base64 encoded stream
@@ -1100,12 +1111,12 @@ function Base64Decode(sp,rp: PAnsiChar; len: PtrInt): boolean;
 /// fast conversion from binary data into Base64-like URI-compatible encoded text
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
-function BinToBase64uri(const s: RawByteString): RawUTF8; overload;
+function BinToBase64uri(const s: RawByteString): RawUtf8; overload;
 
 /// fast conversion from a binary buffer into Base64-like URI-compatible encoded text
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
-function BinToBase64uri(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
+function BinToBase64uri(Bin: PAnsiChar; BinBytes: integer): RawUtf8; overload;
 
 /// fast conversion from a binary buffer into Base64-like URI-compatible encoded shortstring
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
@@ -1117,7 +1128,7 @@ function BinToBase64uriShort(Bin: PAnsiChar; BinBytes: integer): shortstring;
 // - warning: will modify the supplied base64 string in-place
 // - in comparison to Base64 standard encoding, will trim any right-sided '='
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
-procedure Base64ToURI(var base64: RawUTF8);
+procedure Base64ToUri(var base64: RawUtf8);
 
 /// low-level conversion from a binary buffer into Base64-like URI-compatible encoded text
 // - you should rather use the overloaded BinToBase64uri() functions
@@ -1186,10 +1197,10 @@ function Base64uriDecode(sp, rp: PAnsiChar; len: PtrInt): boolean;
 type
   /// used by MultiPartFormDataDecode() to return one item of its data
   TMultiPart = record
-    Name: RawUTF8;
-    FileName: RawUTF8;
-    ContentType: RawUTF8;
-    Encoding: RawUTF8;
+    Name: RawUtf8;
+    FileName: RawUtf8;
+    ContentType: RawUtf8;
+    Encoding: RawUtf8;
     Content: RawByteString;
   end;
   /// used by MultiPartFormDataDecode() to return all its data items
@@ -1197,7 +1208,7 @@ type
 
 /// decode multipart/form-data POST request content
 // - following RFC1867
-function MultiPartFormDataDecode(const MimeType,Body: RawUTF8;
+function MultiPartFormDataDecode(const MimeType,Body: RawUtf8;
   var MultiPart: TMultiPartDynArray): boolean;
 
 /// encode multipart fields and files
@@ -1210,20 +1221,20 @@ function MultiPartFormDataDecode(const MimeType,Body: RawUTF8;
 // where xxx is the first generated boundary
 // - MultiPartContent: generated multipart content
 function MultiPartFormDataEncode(const MultiPart: TMultiPartDynArray;
-  var MultiPartContentType, MultiPartContent: RawUTF8): boolean;
+  var MultiPartContentType, MultiPartContent: RawUtf8): boolean;
 
 /// encode a file in a multipart array
 // - FileName: file to encode
 // - Multipart: where the part is added
 // - Name: name of the part, is empty the name 'File###' is generated
 function MultiPartFormDataAddFile(const FileName: TFileName;
-  var MultiPart: TMultiPartDynArray; const Name: RawUTF8 = ''): boolean;
+  var MultiPart: TMultiPartDynArray; const Name: RawUtf8 = ''): boolean;
 
 /// encode a field in a multipart array
 // - FieldName: field name of the part
 // - FieldValue: value of the field
 // - Multipart: where the part is added
-function MultiPartFormDataAddField(const FieldName, FieldValue: RawUTF8;
+function MultiPartFormDataAddField(const FieldName, FieldValue: RawUtf8;
   var MultiPart: TMultiPartDynArray): boolean;
 
 
@@ -1245,31 +1256,31 @@ function AsciiToBaudot(P: PAnsiChar; len: PtrInt): RawByteString; overload;
 // - resulting binary will consume 5 (or 10) bits per character
 // - reverse of the BaudotToAscii() function
 // - the "baud" symbol rate measurement comes from Emile's name ;)
-function AsciiToBaudot(const Text: RawUTF8): RawByteString; overload;
+function AsciiToBaudot(const Text: RawUtf8): RawByteString; overload;
 
 /// convert some Baudot code binary, into ASCII-7 text
 // - reverse of the AsciiToBaudot() function
 // - any uppercase character would be decoded as lowercase - and some characters
 // may have disapeared
 // - the "baud" symbol rate measurement comes from Emile's name ;)
-function BaudotToAscii(Baudot: PByteArray; len: PtrInt): RawUTF8; overload;
+function BaudotToAscii(Baudot: PByteArray; len: PtrInt): RawUtf8; overload;
 
 /// convert some Baudot code binary, into ASCII-7 text
 // - reverse of the AsciiToBaudot() function
 // - any uppercase character would be decoded as lowercase - and some characters
 // may have disapeared
 // - the "baud" symbol rate measurement comes from Emile's name ;)
-function BaudotToAscii(const Baudot: RawByteString): RawUTF8; overload;
+function BaudotToAscii(const Baudot: RawByteString): RawUtf8; overload;
 
 
 
 { ***************** URI-Encoded Text Buffer Process }
 
 /// encode a string to be compatible with URI encoding
-function UrlEncode(const svar: RawUTF8): RawUTF8; overload;
+function UrlEncode(const svar: RawUtf8): RawUtf8; overload;
 
 /// encode a string to be compatible with URI encoding
-function UrlEncode(Text: PUTF8Char): RawUTF8; overload;
+function UrlEncode(Text: PUtf8Char): RawUtf8; overload;
 
 /// encode supplied parameters to be compatible with URI encoding
 // - parameters must be supplied two by two, as Name,Value pairs, e.g.
@@ -1277,16 +1288,16 @@ function UrlEncode(Text: PUTF8Char): RawUTF8; overload;
 // - parameters names should be plain ASCII-7 RFC compatible identifiers
 // (0..9a..zA..Z_.~), otherwise their values are skipped
 // - parameters values can be either textual, integer or extended, or any TObject
-// - TObject serialization into UTF-8 will be processed by the ObjectToJSON()
+// - TObject serialization into UTF-8 will be processed by the ObjectToJson()
 // function
-function UrlEncode(const NameValuePairs: array of const): RawUTF8; overload;
+function UrlEncode(const NameValuePairs: array of const): RawUtf8; overload;
 
 /// decode a string compatible with URI encoding into its original value
 // - you can specify the decoding range (as in copy(s,i,len) function)
-function UrlDecode(const s: RawUTF8; i: PtrInt = 1; len: PtrInt = -1): RawUTF8; overload;
+function UrlDecode(const s: RawUtf8; i: PtrInt = 1; len: PtrInt = -1): RawUtf8; overload;
 
 /// decode a string compatible with URI encoding into its original value
-function UrlDecode(U: PUTF8Char): RawUTF8; overload;
+function UrlDecode(U: PUtf8Char): RawUtf8; overload;
 
 /// decode a specified parameter compatible with URI encoding into its original
 // textual value
@@ -1294,8 +1305,8 @@ function UrlDecode(U: PUTF8Char): RawUTF8; overload;
 // will return Next^='where=...' and V='*'
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeValue(U: PUTF8Char; const Upper: RawUTF8;
-  var Value: RawUTF8; Next: PPUTF8Char = nil): boolean;
+function UrlDecodeValue(U: PUtf8Char; const Upper: RawUtf8;
+  var Value: RawUtf8; Next: PPUtf8Char = nil): boolean;
 
 /// decode a specified parameter compatible with URI encoding into its original
 // integer numerical value
@@ -1303,8 +1314,8 @@ function UrlDecodeValue(U: PUTF8Char; const Upper: RawUTF8;
 // will return Next^='where=...' and O=20
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeInteger(U: PUTF8Char; const Upper: RawUTF8;
-  var Value: integer; Next: PPUTF8Char = nil): boolean;
+function UrlDecodeInteger(U: PUtf8Char; const Upper: RawUtf8;
+  var Value: integer; Next: PPUtf8Char = nil): boolean;
 
 /// decode a specified parameter compatible with URI encoding into its original
 // cardinal numerical value
@@ -1312,8 +1323,8 @@ function UrlDecodeInteger(U: PUTF8Char; const Upper: RawUTF8;
 // will return Next^='where=...' and O=20
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeCardinal(U: PUTF8Char; const Upper: RawUTF8;
-  var Value: cardinal; Next: PPUTF8Char = nil): boolean;
+function UrlDecodeCardinal(U: PUtf8Char; const Upper: RawUtf8;
+  var Value: cardinal; Next: PPUtf8Char = nil): boolean;
 
 /// decode a specified parameter compatible with URI encoding into its original
 // Int64 numerical value
@@ -1321,8 +1332,8 @@ function UrlDecodeCardinal(U: PUTF8Char; const Upper: RawUTF8;
 // will return Next^='where=...' and O=20
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeInt64(U: PUTF8Char; const Upper: RawUTF8;
-  var Value: Int64; Next: PPUTF8Char = nil): boolean;
+function UrlDecodeInt64(U: PUtf8Char; const Upper: RawUtf8;
+  var Value: Int64; Next: PPUtf8Char = nil): boolean;
 
 /// decode a specified parameter compatible with URI encoding into its original
 // floating-point value
@@ -1330,8 +1341,8 @@ function UrlDecodeInt64(U: PUTF8Char; const Upper: RawUTF8;
 // will return Next^='where=...' and P=20.45
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeExtended(U: PUTF8Char; const Upper: RawUTF8;
-  var Value: TSynExtended; Next: PPUTF8Char = nil): boolean;
+function UrlDecodeExtended(U: PUtf8Char; const Upper: RawUtf8;
+  var Value: TSynExtended; Next: PPUtf8Char = nil): boolean;
 
 /// decode a specified parameter compatible with URI encoding into its original
 // floating-point value
@@ -1339,48 +1350,48 @@ function UrlDecodeExtended(U: PUTF8Char; const Upper: RawUTF8;
 // will return Next^='where=...' and P=20.45
 // - if Upper is not found, Value is not modified, and result is FALSE
 // - if Upper is found, Value is modified with the supplied content, and result is TRUE
-function UrlDecodeDouble(U: PUTF8Char; const Upper: RawUTF8;
-  var Value: double; Next: PPUTF8Char = nil): boolean;
+function UrlDecodeDouble(U: PUtf8Char; const Upper: RawUtf8;
+  var Value: double; Next: PPUtf8Char = nil): boolean;
 
 /// returns TRUE if all supplied parameters do exist in the URI encoded text
-// - CSVNames parameter shall provide as a CSV list of names
+// - CsvNames parameter shall provide as a CSV list of names
 // - e.g. UrlDecodeNeedParameters('price=20.45&where=LastName%3D','price,where')
 // will return TRUE
-function UrlDecodeNeedParameters(U, CSVNames: PUTF8Char): boolean;
+function UrlDecodeNeedParameters(U, CsvNames: PUtf8Char): boolean;
 
 /// decode the next Name=Value&.... pair from input URI
-// - Name is returned directly (should be plain ASCII 7 bit text)
+// - Name is returned directly (should be plain ASCII 7-bit text)
 // - Value is returned after URI decoding (from %.. patterns)
-// - if a pair is decoded, return a PUTF8Char pointer to the next pair in
+// - if a pair is decoded, return a PUtf8Char pointer to the next pair in
 // the input buffer, or points to #0 if all content has been processed
 // - if a pair is not decoded, return nil
-function UrlDecodeNextNameValue(U: PUTF8Char;
-  var Name,Value: RawUTF8): PUTF8Char;
+function UrlDecodeNextNameValue(U: PUtf8Char;
+  var Name,Value: RawUtf8): PUtf8Char;
 
 /// decode a URI-encoded Value from an input buffer
 // - decoded value is set in Value out variable
 // - returns a pointer just after the decoded value (may points e.g. to
 // #0 or '&') - it is up to the caller to continue the process or not
-function UrlDecodeNextValue(U: PUTF8Char; out Value: RawUTF8): PUTF8Char;
+function UrlDecodeNextValue(U: PUtf8Char; out Value: RawUtf8): PUtf8Char;
 
 /// decode a URI-encoded Name from an input buffer
 // - decoded value is set in Name out variable
 // - returns a pointer just after the decoded name, after the '='
 // - returns nil if there was no name=... pattern in U
-function UrlDecodeNextName(U: PUTF8Char; out Name: RawUTF8): PUTF8Char;
+function UrlDecodeNextName(U: PUtf8Char; out Name: RawUtf8): PUtf8Char;
 
 /// checks if the supplied UTF-8 text don't need URI encoding
 // - returns TRUE if all its chars are non-void plain ASCII-7 RFC compatible
 // identifiers (0..9a..zA..Z-_.~)
-function IsUrlValid(P: PUTF8Char): boolean;
+function IsUrlValid(P: PUtf8Char): boolean;
 
 /// checks if the supplied UTF-8 text values don't need URI encoding
 // - returns TRUE if all its chars of all strings are non-void plain ASCII-7 RFC
 // compatible identifiers (0..9a..zA..Z-_.~)
-function AreUrlValid(const Url: array of RawUTF8): boolean;
+function AreUrlValid(const Url: array of RawUtf8): boolean;
 
 /// ensure the supplied URI contains a trailing '/' charater
-function IncludeTrailingURIDelimiter(const URI: RawByteString): RawByteString;
+function IncludeTrailingUriDelimiter(const URI: RawByteString): RawByteString;
 
 
 { *********** Basic MIME Content Types Support }
@@ -1390,7 +1401,7 @@ function IncludeTrailingURIDelimiter(const URI: RawByteString): RawByteString;
 // - return the MIME type, ready to be appended to a 'Content-Type: ' HTTP header
 // - returns DefaultContentType if the binary buffer has an unknown layout
 function GetMimeContentTypeFromBuffer(Content: Pointer; Len: PtrInt;
-  const DefaultContentType: RawUTF8): RawUTF8;
+  const DefaultContentType: RawUtf8): RawUtf8;
 
 /// retrieve the MIME content type from its file name or a supplied binary buffer
 // - will first check for known file extensions, then inspect the binary content
@@ -1399,14 +1410,14 @@ function GetMimeContentTypeFromBuffer(Content: Pointer; Len: PtrInt;
 // 'application/fileextension' if FileName was specified
 // - see @http://en.wikipedia.org/wiki/Internet_media_type for most common values
 function GetMimeContentType(Content: Pointer; Len: PtrInt;
-  const FileName: TFileName = ''): RawUTF8;
+  const FileName: TFileName = ''): RawUtf8;
 
 /// retrieve the HTTP header for MIME content type from a supplied binary buffer
 // - just append HEADER_CONTENT_TYPE and GetMimeContentType() result
 // - can be used as such:
 // !  Call.OutHead := GetMimeContentTypeHeader(Call.OutBody,aFileName);
 function GetMimeContentTypeHeader(const Content: RawByteString;
-  const FileName: TFileName = ''): RawUTF8;
+  const FileName: TFileName = ''): RawUtf8;
 
 /// retrieve if some content is compressed, from a supplied binary buffer
 // - returns TRUE, if the header in binary buffer "may" be compressed (this method
@@ -1437,12 +1448,12 @@ type
     fLines: PPointerArray;
     fLinesMax: integer;
     fCount: integer;
-    fMapEnd: PUTF8Char;
+    fMapEnd: PUtf8Char;
     fMap: TMemoryMap;
     fFileName: TFileName;
-    fAppendedLines: TRawUTF8DynArray;
+    fAppendedLines: TRawUtf8DynArray;
     fAppendedLinesCount: integer;
-    function GetLine(aIndex: integer): RawUTF8;
+    function GetLine(aIndex: integer): RawUtf8;
       {$ifdef HASINLINE}inline;{$endif}
     function GetString(aIndex: integer): string;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1452,7 +1463,7 @@ type
     // - default implementation will set  fLines[fCount] := LineBeg;
     // - override this method to add some per-line process at loading: it will
     // avoid reading the entire file more than once
-    procedure ProcessOneLine(LineBeg, LineEnd: PUTF8Char); virtual;
+    procedure ProcessOneLine(LineBeg, LineEnd: PUtf8Char); virtual;
   public
     /// initialize the memory mapped text file
     // - this default implementation just do nothing but is called by overloaded
@@ -1465,20 +1476,20 @@ type
     // - every line beginning is stored into LinePointers[]
     // - this overloaded constructor accept an existing memory buffer (some
     // uncompressed data e.g.)
-    constructor Create(aFileContent: PUTF8Char; aFileSize: integer); overload;
+    constructor Create(aFileContent: PUtf8Char; aFileSize: integer); overload;
     /// release the memory map and internal LinePointers[]
     destructor Destroy; override;
     /// save the whole content into a specified stream
     // - including any runtime appended values via AddInMemoryLine()
-    procedure SaveToStream(Dest: TStream; const Header: RawUTF8);
+    procedure SaveToStream(Dest: TStream; const Header: RawUtf8);
     /// save the whole content into a specified file
     // - including any runtime appended values via AddInMemoryLine()
     // - an optional header text can be added to the beginning of the file
-    procedure SaveToFile(FileName: TFileName; const Header: RawUTF8 = '');
+    procedure SaveToFile(FileName: TFileName; const Header: RawUtf8 = '');
     /// add a new line to the already parsed content
     // - this line won't be stored in the memory mapped file, but stay in memory
     // and appended to the existing lines, until this instance is released
-    procedure AddInMemoryLine(const aNewLine: RawUTF8); virtual;
+    procedure AddInMemoryLine(const aNewLine: RawUtf8); virtual;
     /// clear all in-memory appended rows
     procedure AddInMemoryLinesClear; virtual;
     /// retrieve the number of UTF-8 chars of the given line
@@ -1490,11 +1501,11 @@ type
     function LineSizeSmallerThan(aIndex, aMinimalCount: integer): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns TRUE if the supplied text is contained in the corresponding line
-    function LineContains(const aUpperSearch: RawUTF8; aIndex: integer): boolean; virtual;
+    function LineContains(const aUpperSearch: RawUtf8; aIndex: integer): boolean; virtual;
     /// retrieve a line content as UTF-8
     // - a temporary UTF-8 string is created
     // - will return '' if aIndex is out of range
-    property Lines[aIndex: integer]: RawUTF8
+    property Lines[aIndex: integer]: RawUtf8
       read GetLine;
     /// retrieve a line content as generic VCL string type
     // - a temporary VCL string is created (after conversion for UNICODE Delphi)
@@ -1521,39 +1532,39 @@ type
   {$M-}
 
 
-/// fast add some characters to a RawUTF8 string
+/// fast add some characters to a RawUtf8 string
 // - faster than SetString(tmp,Buffer,BufferLen); Text := Text+tmp;
-procedure AppendBufferToRawUTF8(var Text: RawUTF8; Buffer: pointer; BufferLen: PtrInt);
+procedure AppendBufferToRawUtf8(var Text: RawUtf8; Buffer: pointer; BufferLen: PtrInt);
 
-/// fast add one character to a RawUTF8 string
+/// fast add one character to a RawUtf8 string
 // - faster than Text := Text + ch;
-procedure AppendCharToRawUTF8(var Text: RawUTF8; Ch: AnsiChar);
+procedure AppendCharToRawUtf8(var Text: RawUtf8; Ch: AnsiChar);
 
-/// fast add some characters to a RawUTF8 string
-// - faster than Text := Text+RawUTF8(Buffers[0])+RawUTF8(Buffers[0])+...
-procedure AppendBuffersToRawUTF8(var Text: RawUTF8; const Buffers: array of PUTF8Char);
+/// fast add some characters to a RawUtf8 string
+// - faster than Text := Text+RawUtf8(Buffers[0])+RawUtf8(Buffers[0])+...
+procedure AppendBuffersToRawUtf8(var Text: RawUtf8; const Buffers: array of PUtf8Char);
 
-/// fast add some characters from a RawUTF8 string into a given buffer
+/// fast add some characters from a RawUtf8 string into a given buffer
 // - warning: the Buffer should contain enough space to store the Text, otherwise
 // you may encounter buffer overflows and random memory errors
-function AppendRawUTF8ToBuffer(Buffer: PUTF8Char; const Text: RawUTF8): PUTF8Char;
+function AppendRawUtf8ToBuffer(Buffer: PUtf8Char; const Text: RawUtf8): PUtf8Char;
 
 /// fast add text conversion of a 32-bit signed integer value into a given buffer
 // - warning: the Buffer should contain enough space to store the text, otherwise
 // you may encounter buffer overflows and random memory errors
-function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: PtrUInt): PUTF8Char;
+function AppendUInt32ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
 
 /// fast add text conversion of 0-999 integer value into a given buffer
 // - warning: it won't check that Value is in 0-999 range
 // - up to 4 bytes may be written to the buffer (including trailing #0)
-function Append999ToBuffer(Buffer: PUTF8Char; Value: PtrUInt): PUTF8Char;
+function Append999ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
 const
   /// can be used to append to most English nouns to form a plural
   // - as used by the Plural() function
-  PLURAL_FORM: array[boolean] of RawUTF8 = (
-    '','s');
+  PLURAL_FORM: array[boolean] of RawUtf8 = (
+    '', 's');
 
 /// write count number and append 's' (if needed) to form a plural English noun
 // - for instance, Plural('row',100) returns '100 rows' with no heap allocation
@@ -1588,11 +1599,11 @@ function LogEscape(source: PAnsiChar; sourcelen: integer; var temp: TLogEscape;
 
 /// returns a text buffer with the (hexadecimal) chars of the input binary
 // - is much slower than LogEscape/EscapeToShort, but has no size limitation
-function LogEscapeFull(source: PAnsiChar; sourcelen: integer): RawUTF8; overload;
+function LogEscapeFull(source: PAnsiChar; sourcelen: integer): RawUtf8; overload;
 
 /// returns a text buffer with the (hexadecimal) chars of the input binary
 // - is much slower than LogEscape/EscapeToShort, but has no size limitation
-function LogEscapeFull(const source: RawByteString): RawUTF8; overload;
+function LogEscapeFull(const source: RawByteString): RawUtf8; overload;
 
 /// fill a shortstring with the (hexadecimal) chars of the input text/binary
 function EscapeToShort(source: PAnsiChar; sourcelen: integer): shortstring; overload;
@@ -1601,28 +1612,28 @@ function EscapeToShort(source: PAnsiChar; sourcelen: integer): shortstring; over
 function EscapeToShort(const source: RawByteString): shortstring; overload;
 
 
-/// get text File contents (even Unicode or UTF8) and convert it into a
+/// get text File contents (even UTF-16 or UTF-8) and convert it into a
 // Charset-compatible AnsiString (for Delphi 7) or an UnicodeString (for Delphi
 // 2009 and up) according to any BOM marker at the beginning of the file
 // - before Delphi 2009, the current string code page is used (i.e. CurrentAnsiConvert)
 function AnyTextFileToString(const FileName: TFileName;
-  ForceUTF8: boolean = false): string;
+  ForceUtf8: boolean = false): string;
 
-/// get text file contents (even Unicode or UTF8) and convert it into an
+/// get text file contents (even UTF-16 or UTF-8) and convert it into an
 // Unicode string according to any BOM marker at the beginning of the file
 // - any file without any BOM marker will be interpreted as plain ASCII: in this
 // case, the current string code page is used (i.e. CurrentAnsiConvert class)
 function AnyTextFileToSynUnicode(const FileName: TFileName;
-  ForceUTF8: boolean = false): SynUnicode;
+  ForceUtf8: boolean = false): SynUnicode;
 
-/// get text file contents (even Unicode or UTF8) and convert it into an
+/// get text file contents (even UTF-16 or UTF-8) and convert it into an
 // UTF-8 string according to any BOM marker at the beginning of the file
-// - if AssumeUTF8IfNoBOM is FALSE, the current string code page is used (i.e.
+// - if AssumeUtf8IfNoBom is FALSE, the current string code page is used (i.e.
 // CurrentAnsiConvert class) for conversion from ANSI into UTF-8
-// - if AssumeUTF8IfNoBOM is TRUE, any file without any BOM marker will be
+// - if AssumeUtf8IfNoBom is TRUE, any file without any BOM marker will be
 // interpreted as UTF-8
-function AnyTextFileToRawUTF8(const FileName: TFileName;
-  AssumeUTF8IfNoBOM: boolean = false): RawUTF8;
+function AnyTextFileToRawUtf8(const FileName: TFileName;
+  AssumeUtf8IfNoBom: boolean = false): RawUtf8;
 
 /// compute the 32-bit default hash of a file content
 // - you can specify your own hashing function if DefaultHasher is not what you expect
@@ -1635,7 +1646,7 @@ function HashFile(const FileName: TFileName; Hasher: THasher = nil): cardinal;
 // !   // Comment
 // !   ConstName: array[0..2] of byte = (
 // !     $01,$02,$03);
-procedure BinToSource(Dest: TBaseWriter; const ConstName, Comment: RawUTF8;
+procedure BinToSource(Dest: TBaseWriter; const ConstName, Comment: RawUtf8;
   Data: pointer; Len: integer; PerLine: integer = 16); overload;
 
 /// generate some pascal source code holding some data binary as constant
@@ -1645,8 +1656,8 @@ procedure BinToSource(Dest: TBaseWriter; const ConstName, Comment: RawUTF8;
 // !   // Comment
 // !   ConstName: array[0..2] of byte = (
 // !     $01,$02,$03);
-function BinToSource(const ConstName, Comment: RawUTF8; Data: pointer;
-  Len: integer; PerLine: integer = 16; const Suffix: RawUTF8 = ''): RawUTF8; overload;
+function BinToSource(const ConstName, Comment: RawUtf8; Data: pointer;
+  Len: integer; PerLine: integer = 16; const Suffix: RawUtf8 = ''): RawUtf8; overload;
 
 
 
@@ -1655,19 +1666,19 @@ function BinToSource(const ConstName, Comment: RawUTF8; Data: pointer;
 type
   /// tune AddHtmlEscapeWiki/AddHtmlEscapeMarkdown wrapper functions process
   // - heHtmlEscape will escape any HTML special chars, e.g. & into &amp;
-  // - heEmojiToUTF8 will convert any Emoji text into UTF-8 Unicode character,
+  // - heEmojiToUtf8 will convert any Emoji text into UTF-8 Unicode character,
   // recognizing e.g. :joy: or :) in the text
   TTextWriterHTMLEscape = set of (
     heHtmlEscape,
-    heEmojiToUTF8);
+    heEmojiToUtf8);
 
 /// convert some wiki-like text into proper HTML
 // - convert all #13#10 into <p>...</p>, *..* into <em>..</em>, +..+ into
 // <strong>..</strong>, `..` into <code>..</code>, and http://... as
 // <a href=http://...>
 // - escape any HTML special chars, and Emoji tags as specified with esc
-procedure AddHtmlEscapeWiki(W: TBaseWriter; P: PUTF8Char;
-  esc: TTextWriterHTMLEscape = [heHtmlEscape, heEmojiToUTF8]);
+procedure AddHtmlEscapeWiki(W: TBaseWriter; P: PUtf8Char;
+  esc: TTextWriterHTMLEscape = [heHtmlEscape, heEmojiToUtf8]);
 
 /// convert minimal Markdown text into proper HTML
 // - see https://enterprise.github.com/downloads/en/markdown-cheatsheet.pdf
@@ -1681,18 +1692,18 @@ procedure AddHtmlEscapeWiki(W: TBaseWriter; P: PUTF8Char;
 // write plain HTML in the supplied text) unless esc is set otherwise
 // - only inline-style links and images are supported yet (not reference-style);
 // tables aren't supported either
-procedure AddHtmlEscapeMarkdown(W: TBaseWriter; P: PUTF8Char;
-  esc: TTextWriterHTMLEscape = [heEmojiToUTF8]);
+procedure AddHtmlEscapeMarkdown(W: TBaseWriter; P: PUtf8Char;
+  esc: TTextWriterHTMLEscape = [heEmojiToUtf8]);
 
 /// escape some wiki-marked text into HTML
 // - just a wrapper around AddHtmlEscapeWiki() process
-function HtmlEscapeWiki(const wiki: RawUTF8;
-  esc: TTextWriterHTMLEscape = [heHtmlEscape, heEmojiToUTF8]): RawUTF8;
+function HtmlEscapeWiki(const wiki: RawUtf8;
+  esc: TTextWriterHTMLEscape = [heHtmlEscape, heEmojiToUtf8]): RawUtf8;
 
 /// escape some Markdown-marked text into HTML
 // - just a wrapper around AddHtmlEscapeMarkdown() process
-function HtmlEscapeMarkdown(const md: RawUTF8;
-  esc: TTextWriterHTMLEscape = [heEmojiToUTF8]): RawUTF8;
+function HtmlEscapeMarkdown(const md: RawUtf8;
+  esc: TTextWriterHTMLEscape = [heEmojiToUtf8]): RawUtf8;
 
 type
   /// map the first Unicode page of Emojis, from U+1F600 to U+1F64F
@@ -1783,14 +1794,14 @@ type
 var
   /// github/Markdown compatible text of Emojis
   // - e.g. 'grinning' or 'person_with_pouting_face'
-  EMOJI_TEXT: array[TEmoji] of RawUTF8;
+  EMOJI_TEXT: array[TEmoji] of RawUtf8;
 
   /// github/Markdown compatible tag of Emojis, including trailing and ending :
   // - e.g. ':grinning:' or ':person_with_pouting_face:'
-  EMOJI_TAG: array[TEmoji] of RawUTF8;
+  EMOJI_TAG: array[TEmoji] of RawUtf8;
 
   /// the Unicode character matching a given Emoji, after UTF-8 encoding
-  EMOJI_UTF8: array[TEmoji] of RawUTF8;
+  EMOJI_UTF8: array[TEmoji] of RawUtf8;
 
   /// low-level access to TEmoji RTTI - used when inlining EmojiFromText()
   EMOJI_RTTI: PShortString;
@@ -1801,7 +1812,7 @@ var
 /// recognize github/Markdown compatible text of Emojis
 // - for instance 'sunglasses' text buffer will return eSunglasses
 // - returns eNone if no case-insensitive match was found
-function EmojiFromText(P: PUTF8Char; len: PtrInt): TEmoji;
+function EmojiFromText(P: PUtf8Char; len: PtrInt): TEmoji;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// low-level parser of github/Markdown compatible text of Emojis
@@ -1810,19 +1821,19 @@ function EmojiFromText(P: PUTF8Char; len: PtrInt): TEmoji;
 // - will append ':' if no Emoji text is recognized, and return eNone
 // - will try both EMOJI_AFTERDOTS[] and EMOJI_RTTI[] reference set
 // - if W is nil, won't append anything, but just return the recognized TEmoji
-function EmojiParseDots(var P: PUTF8Char; W: TBaseWriter = nil): TEmoji;
+function EmojiParseDots(var P: PUtf8Char; W: TBaseWriter = nil): TEmoji;
 
 /// low-level conversion of UTF-8 Emoji sequences into github/Markdown :identifiers:
-procedure EmojiToDots(P: PUTF8Char; W: TBaseWriter); overload;
+procedure EmojiToDots(P: PUtf8Char; W: TBaseWriter); overload;
 
 /// conversion of UTF-8 Emoji sequences into github/Markdown :identifiers:
-function EmojiToDots(const text: RawUTF8): RawUTF8; overload;
+function EmojiToDots(const text: RawUtf8): RawUtf8; overload;
 
 /// low-level conversion of github/Markdown :identifiers: into UTF-8 Emoji sequences
-procedure EmojiFromDots(P: PUTF8Char; W: TBaseWriter); overload;
+procedure EmojiFromDots(P: PUtf8Char; W: TBaseWriter); overload;
 
 /// conversion of github/Markdown :identifiers: into UTF-8 Emoji sequences
-function EmojiFromDots(const text: RawUTF8): RawUTF8; overload;
+function EmojiFromDots(const text: RawUtf8): RawUtf8; overload;
 
 
 
@@ -1832,7 +1843,8 @@ implementation
 { ************ Variable Length integer Encoding / Decoding }
 
 function ToVarInt32(Value: PtrInt; Dest: PByte): PByte;
-begin // 0=0,1=1,2=-1,3=2,4=-2...
+begin
+  // 0=0,1=1,2=-1,3=2,4=-2...
   if Value < 0 then
     // -1->2, -2->4..
     Value := (-Value) shl 1
@@ -1918,19 +1930,22 @@ begin
   result := p^;
   inc(p);
   if result > $7f then
-  begin // Values between 128 and 16256
+  begin
+    // Values between 128 and 16256
     c := p^;
     c := c shl 7;
     result := result and $7F or c;
     inc(p);
     if c > $7f shl 7 then
-    begin // Values between 16257 and 2080768
+    begin
+      // Values between 16257 and 2080768
       c := p^;
       c := c shl 14;
       inc(p);
       result := result and $3FFF or c;
       if c > $7f shl 14 then
-      begin // Values between 2080769 and 266338304
+      begin
+        // Values between 2080769 and 266338304
         c := p^;
         c := c shl 21;
         inc(p);
@@ -1952,12 +1967,14 @@ function FromVarUInt32Up128(var Source: PByte): cardinal;
 var
   c: cardinal;
   p: PByte;
-begin // Values above 128
+begin
+  // Values above 128
   p := Source;
   result := p^ shl 7;
   inc(p);
   if result > $7f shl 7 then
-  begin // Values above 16257
+  begin
+    // Values above 16257
     c := p^;
     c := c shl 14;
     inc(p);
@@ -2006,7 +2023,8 @@ begin
   inc(Source);
   Value := c;
   if c > $7f then
-  begin // Values between 128 and 16256
+  begin
+    // Values between 128 and 16256
     if PAnsiChar(Source) >= PAnsiChar(SourceMax) then
       exit;
     c := Source^;
@@ -2014,7 +2032,8 @@ begin
     Value := Value and $7F or c;
     inc(Source);
     if c > $7f shl 7 then
-    begin // Values between 16257 and 2080768
+    begin
+      // Values between 16257 and 2080768
       if PAnsiChar(Source) >= PAnsiChar(SourceMax) then
         exit;
       c := Source^;
@@ -2022,7 +2041,8 @@ begin
       inc(Source);
       Value := Value and $3FFF or c;
       if c > $7f shl 14 then
-      begin // Values between 2080769 and 266338304
+      begin
+        // Values between 2080769 and 266338304
         if PAnsiChar(Source) >= PAnsiChar(SourceMax) then
           exit;
         c := Source^;
@@ -2118,7 +2138,8 @@ begin
 end;
 
 function ToVarInt64(Value: Int64; Dest: PByte): PByte;
-begin // 0=0,1=1,2=-1,3=2,4=-2...
+begin
+  // 0=0,1=1,2=-1,3=2,4=-2...
 {$ifdef CPU32}
   if Value <= 0 then
     // 0->0, -1->2, -2->4..
@@ -2265,7 +2286,8 @@ end;
 function FromVarInt64(var Source: PByte): Int64;
 var
   c, n: PtrUInt;
-begin // 0=0,1=1,2=-1,3=2,4=-2...
+begin
+  // 0=0,1=1,2=-1,3=2,4=-2...
 {$ifdef CPU64}
   result := Source^;
   if result > $7f then
@@ -2330,7 +2352,8 @@ end;
 function FromVarInt64Value(Source: PByte): Int64;
 var
   c, n: PtrUInt;
-begin // 0=0,1=1,2=-1,3=2,4=-2...
+begin
+// 0=0,1=1,2=-1,3=2,4=-2...
   c := Source^;
   if c > $7f then
   begin
@@ -2381,7 +2404,7 @@ begin
 end;
 
 
-function ToVarString(const Value: RawUTF8; Dest: PByte): PByte;
+function ToVarString(const Value: RawUtf8; Dest: PByte): PByte;
 var
   Len: integer;
 begin
@@ -2401,7 +2424,7 @@ begin
   result := Pointer(PtrUInt(Source) + FromVarUInt32(Source));
 end;
 
-function FromVarString(var Source: PByte): RawUTF8;
+function FromVarString(var Source: PByte): RawUtf8;
 var
   len: PtrUInt;
 begin
@@ -2410,7 +2433,7 @@ begin
   inc(Source, len);
 end;
 
-function FromVarString(var Source: PByte; SourceMax: PByte): RawUTF8;
+function FromVarString(var Source: PByte; SourceMax: PByte): RawUtf8;
 var
   len: cardinal;
 begin
@@ -2521,12 +2544,12 @@ begin
     raise EFastReader.Create('Reached End of Input');
 end;
 
-procedure TFastReader.ErrorData(const fmt: RawUTF8; const args: array of const);
+procedure TFastReader.ErrorData(const fmt: RawUtf8; const args: array of const);
 begin
   if Assigned(OnErrorData) then
     OnErrorData(fmt, args)
   else
-    raise EFastReader.CreateUTF8('Incorrect Data: ' + fmt, args);
+    raise EFastReader.CreateUtf8('Incorrect Data: ' + fmt, args);
 end;
 
 function TFastReader.EOF: boolean;
@@ -2557,6 +2580,14 @@ begin
     inc(P);
     result := true;
   end;
+end;
+
+function TFastReader.Next2: cardinal;
+begin
+  if P + 1 >= Last then
+    ErrorOverflow;
+  result := PWord(P)^;
+  inc(P, 2);
 end;
 
 function TFastReader.Next4: cardinal;
@@ -2958,7 +2989,13 @@ begin
     SetString(result, Ptr, Len);
 end;
 
-procedure TFastReader.VarUTF8(out result: RawUTF8);
+function TFastReader.VarString(CodePage: integer): RawByteString;
+begin
+  with VarBlob do
+    FastSetStringCP(result, Ptr, Len, CodePage)
+end;
+
+procedure TFastReader.VarUtf8(out result: RawUtf8);
 var
   len: PtrUInt;
 label
@@ -2980,9 +3017,9 @@ begin
 e:  ErrorOverflow;
 end;
 
-function TFastReader.VarUTF8: RawUTF8;
+function TFastReader.VarUtf8: RawUtf8;
 begin
-  VarUTF8(result);
+  VarUtf8(result);
 end;
 
 function TFastReader.VarShortString: shortstring;
@@ -3015,7 +3052,7 @@ r:  P := s;
 e:ErrorOverflow;
 end;
 
-function TFastReader.VarUTF8Safe(out Value: RawUTF8): boolean;
+function TFastReader.VarUtf8Safe(out Value: RawUtf8): boolean;
 var
   len: cardinal;
 begin
@@ -3077,7 +3114,7 @@ begin
         #255:
           begin
             // B:255 B:byOne
-            for n := 1 to pByte(p + 1)^ do
+            for n := 1 to PByte(p + 1)^ do
             begin
               inc(i);
               V^ := i;
@@ -3255,11 +3292,11 @@ begin
   until n = 0;
 end;
 
-function TFastReader.ReadVarRawUTF8DynArray(var Values: TRawUTF8DynArray): PtrInt;
+function TFastReader.ReadVarRawUtf8DynArray(var Values: TRawUtf8DynArray): PtrInt;
 var
   count, len: integer;
   fixedsize, chunk, chunkend: PtrUInt;
-  PI: PRawUTF8;
+  PI: PRawUtf8;
 begin
   result := VarUInt32;
   if result = 0 then
@@ -3347,7 +3384,7 @@ begin
   if BufLen > 1 shl 22 then
     fBufLen := 1 shl 22 // 4 MB sounds right enough
   else if BufLen < 128 then
-    raise ESynException.CreateUTF8('%.Create(BufLen=%)', [self, BufLen]);
+    raise ESynException.CreateUtf8('%.Create(BufLen=%)', [self, BufLen]);
   fBufLen := BufLen;
   fBufLen16 := fBufLen - 16;
   fStream := aStream;
@@ -3534,9 +3571,20 @@ wr:   MoveFast(Data^, fBuffer^[fPos], DataLen);
     fPos := PtrUInt(ToVarUInt32(DataLen, @fBuffer^[fPos])) - PtrUInt(fBuffer);
     goto wr;
   end;
-  // Data wouldn't fit in memory buffer -> direct write
+  // Data wouldn't fit in memory buffer -> write as two explicit calls
   WriteVarUInt32(DataLen);
   Write(Data, DataLen);
+end;
+
+procedure TBufferWriter.WriteVar(var Item: TTempUtf8);
+begin
+  WriteVar(Item.Text, Item.Len);
+  if Item.TempRawUtf8 <> nil then
+    {$ifdef FPC}
+    FastAssignNew(Item.TempRawUtf8);
+    {$else}
+    RawUtf8(Item.TempRawUtf8) := '';
+    {$endif FPC}
 end;
 
 procedure TBufferWriter.Write(const Text: RawByteString);
@@ -3608,13 +3656,13 @@ begin
   end;
 end;
 
-procedure TBufferWriter.WriteRawUTF8DynArray(const Values: TRawUTF8DynArray;
+procedure TBufferWriter.WriteRawUtf8DynArray(const Values: TRawUtf8DynArray;
   ValuesCount: integer);
 begin
-  WriteRawUTF8Array(pointer(Values), ValuesCount);
+  WriteRawUtf8Array(pointer(Values), ValuesCount);
 end;
 
-procedure TBufferWriter.WriteRawUTF8Array(Values: PPtrUIntArray;
+procedure TBufferWriter.WriteRawUtf8Array(Values: PPtrUIntArray;
   ValuesCount: integer);
 var
   n, i: integer;
@@ -3937,8 +3985,8 @@ begin
             PBeg := PAnsiChar(P) + 4; // leave space for chunk size
             P := PByte(CleverStoreInteger(pointer(Values), PBeg, PEnd, ValuesCount, n));
             if P = nil then
-              raise ESynException.CreateUTF8('%.WriteVarUInt32Array: data not sorted',
-                [self]);
+              raise ESynException.CreateUtf8(
+                '%.WriteVarUInt32Array: data not sorted', [self]);
             PInteger(PBeg - 4)^ := PAnsiChar(P) - PBeg; // format: Isize+cleverStorage
           end;
       end;
@@ -4029,7 +4077,7 @@ end;
 
 function TBufferWriter.FlushTo: RawByteString;
 begin
-  Flush;
+  InternalFlush;
   result := (fStream as TRawByteStringStream).DataString;
 end;
 
@@ -4076,7 +4124,7 @@ const
   COMPRESS_SYNLZ = 1;
 
 var
-  // don't use TObjectList before mormot.core.json registered TRttiJSON
+  // don't use TObjectList before mormot.core.json registered TRttiJson
   SynCompressAlgos: array of TAlgoCompress;
 
 constructor TAlgoCompress.Create;
@@ -4086,7 +4134,7 @@ begin
   inherited Create;
   existing := Algo(AlgoID);
   if existing <> nil then
-    raise EAlgoCompress.CreateUTF8('%.Create: AlgoID=% already registered by %',
+    raise EAlgoCompress.CreateUtf8('%.Create: AlgoID=% already registered by %',
       [self, AlgoID, existing]);
   ObjArrayAdd(SynCompressAlgos, self);
 end;
@@ -5120,7 +5168,7 @@ end;
 {$endif PUREMORMOT2}
 
 
-{ ************ Base64, Base64URI, URL and Baudot Encoding / Decoding }
+{ ************ Base64, Base64Uri, URL and Baudot Encoding / Decoding }
 
 type
   TBase64Enc = array[0..63] of AnsiChar;
@@ -5131,14 +5179,14 @@ type
 const
   b64enc: TBase64Enc =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  b64URIenc: TBase64Enc =
+  b64Urienc: TBase64Enc =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 
 var
   /// a conversion table from Base64 text into binary data
   // - used by Base64ToBin/IsBase64 functions
   // - contains -1 for invalid char, -2 for '=', 0..63 for b64enc[] chars
-  ConvertBase64ToBin, ConvertBase64URIToBin: TBase64Dec;
+  ConvertBase64ToBin, ConvertBase64UriToBin: TBase64Dec;
 
 
 { --------- Base64 encoding/decoding }
@@ -5242,7 +5290,7 @@ asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
         // edi=b64enc[] ebx=sp esi=rp ebp=len div 3
         xor     eax, eax
         @1:     // read 3 bytes from sp
-        movzx   edx, byte ptr[ebx]
+        movzx   edx, byte ptr [ebx]
         shl     edx, 16
         mov     al, [ebx + 2]
         mov     ah, [ebx + 1]
@@ -5340,7 +5388,7 @@ begin
   result := ((len + 2) div 3) * 4;
 end;
 
-function BinToBase64(const s: RawByteString): RawUTF8;
+function BinToBase64(const s: RawByteString): RawUtf8;
 var
   len: integer;
 begin
@@ -5371,7 +5419,7 @@ begin
   result := BinToBase64Short(pointer(s), length(s));
 end;
 
-function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
+function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawUtf8;
 begin
   result := '';
   if BinBytes = 0 then
@@ -5380,7 +5428,7 @@ begin
   Base64Encode(pointer(result), Bin, BinBytes);
 end;
 
-function BinToBase64(const data, Prefix, Suffix: RawByteString; WithMagic: boolean): RawUTF8;
+function BinToBase64(const data, Prefix, Suffix: RawByteString; WithMagic: boolean): RawUtf8;
 var
   lendata, lenprefix, lensuffix, len: integer;
   res: PByteArray absolute result;
@@ -5407,7 +5455,7 @@ begin
     MoveSmall(pointer(Suffix), @res[len - lensuffix], lensuffix);
 end;
 
-function BinToBase64WithMagic(const data: RawByteString): RawUTF8;
+function BinToBase64WithMagic(const data: RawByteString): RawUtf8;
 var
   len: integer;
 begin
@@ -5420,7 +5468,7 @@ begin
   Base64Encode(PAnsiChar(pointer(result)) + 3, pointer(data), len);
 end;
 
-function BinToBase64WithMagic(Data: pointer; DataLen: integer): RawUTF8;
+function BinToBase64WithMagic(Data: pointer; DataLen: integer): RawUtf8;
 begin
   result := '';
   if DataLen <= 0 then
@@ -5557,18 +5605,19 @@ begin
             Base64Decode(sp, blob.buf, len shr 2);
 end;
 
-function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt;
-  nofullcheck: boolean): boolean;
-begin // nofullcheck is just ignored and deprecated
+function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt
+  {$ifndef PUREMORMOT2} ; nofullcheck: boolean {$endif}): boolean;
+begin
+  // nofullcheck is just ignored and deprecated
   result := (bin <> nil) and
             (Base64ToBinLength(base64, base64len) = binlen) and
             Base64Decode(base64, bin, base64len shr 2);
 end;
 
-function Base64ToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt;
-  nofullcheck: boolean): boolean;
+function Base64ToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt
+  {$ifndef PUREMORMOT2} ; nofullcheck: boolean {$endif}): boolean;
 begin
-  result := Base64ToBin(pointer(base64), bin, length(base64), binlen, nofullcheck);
+  result := Base64ToBin(pointer(base64), bin, length(base64), binlen);
 end;
 
 { --------- Base64 URI encoding/decoding }
@@ -5597,7 +5646,7 @@ asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
         // edi=b64urienc[] ebx=sp esi=rp ebp=len div 3
         xor     eax, eax
 @1:    // read 3 bytes from sp
-        movzx   edx, byte ptr[ebx]
+        movzx   edx, byte ptr [ebx]
         shl     edx, 16
         mov     al, [ebx + 2]
         mov     ah, [ebx + 1]
@@ -5669,7 +5718,7 @@ var
   main, c: cardinal;
   enc: PBase64Enc; // faster especially on x86_64 and PIC
 begin
-  enc := @b64URIenc;
+  enc := @b64Urienc;
   main := len div 3;
   if main <> 0 then
   begin
@@ -5715,7 +5764,7 @@ begin
   end;
 end;
 
-function BinToBase64uri(const s: RawByteString): RawUTF8;
+function BinToBase64uri(const s: RawByteString): RawUtf8;
 var
   len: integer;
 begin
@@ -5727,7 +5776,7 @@ begin
   Base64uriEncode(pointer(result), pointer(s), len);
 end;
 
-function BinToBase64uri(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
+function BinToBase64uri(Bin: PAnsiChar; BinBytes: integer): RawUtf8;
 begin
   result := '';
   if BinBytes <= 0 then
@@ -5770,7 +5819,7 @@ end;
 
 function Base64uriDecode(sp, rp: PAnsiChar; len: PtrInt): boolean;
 begin
-  result := Base64AnyDecode(ConvertBase64URIToBin, sp, rp, len);
+  result := Base64AnyDecode(ConvertBase64UriToBin, sp, rp, len);
 end;
 
 function Base64uriToBin(sp: PAnsiChar; len: PtrInt): RawByteString;
@@ -5791,7 +5840,7 @@ begin
   if resultLen <> 0 then
   begin
     SetString(result, nil, resultLen);
-    if Base64AnyDecode(ConvertBase64URIToBin, sp, pointer(result), len) then
+    if Base64AnyDecode(ConvertBase64UriToBin, sp, pointer(result), len) then
       exit;
   end;
   result := '';
@@ -5801,7 +5850,7 @@ function Base64uriToBin(sp: PAnsiChar; len: PtrInt; var temp: TSynTempBuffer): b
 begin
   temp.Init(Base64uriToBinLength(len));
   result := (temp.len > 0) and
-            Base64AnyDecode(ConvertBase64URIToBin, sp, temp.buf, len);
+            Base64AnyDecode(ConvertBase64UriToBin, sp, temp.buf, len);
 end;
 
 function Base64uriToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt): boolean;
@@ -5815,14 +5864,14 @@ var
 begin
   resultLen := Base64uriToBinLength(base64len);
   result := (resultLen = binlen) and
-            Base64AnyDecode(ConvertBase64URIToBin, base64, bin, base64len);
+            Base64AnyDecode(ConvertBase64UriToBin, base64, bin, base64len);
 end;
 
-procedure Base64ToURI(var base64: RawUTF8);
+procedure Base64ToUri(var base64: RawUtf8);
 var
-  P: PUTF8Char;
+  P: PUtf8Char;
 begin
-  P := UniqueRawUTF8(base64);
+  P := UniqueRawUtf8(base64);
   if P <> nil then
     repeat
       case P^ of
@@ -5833,7 +5882,8 @@ begin
         '/':
           P^ := '_';
         '=':
-          begin // trim unsignificant trailing '=' characters
+          begin
+            // trim unsignificant trailing '=' characters
             SetLength(base64, P - pointer(base64));
             break;
           end;
@@ -5842,9 +5892,9 @@ begin
     until false;
 end;
 
-procedure Base64MagicDecode(var ParamValue: RawUTF8);
+procedure Base64MagicDecode(var ParamValue: RawUtf8);
 var
-  tmp: RawUTF8;
+  tmp: RawUtf8;
 begin
   tmp := ParamValue;
   if not Base64ToBinSafe(PAnsiChar(pointer(tmp)) + 3, length(tmp) - 3,
@@ -5852,7 +5902,7 @@ begin
     ParamValue := '';
 end;
 
-function Base64MagicCheckAndDecode(Value: PUTF8Char; var Blob: RawByteString): boolean;
+function Base64MagicCheckAndDecode(Value: PUtf8Char; var Blob: RawByteString): boolean;
 var
   ValueLen: integer;
 begin
@@ -5872,7 +5922,7 @@ begin
   end;
 end;
 
-function Base64MagicCheckAndDecode(Value: PUTF8Char; var Blob: TSynTempBuffer): boolean;
+function Base64MagicCheckAndDecode(Value: PUtf8Char; var Blob: TSynTempBuffer): boolean;
 var
   ValueLen: integer;
 begin
@@ -5892,7 +5942,7 @@ begin
   end;
 end;
 
-function Base64MagicCheckAndDecode(Value: PUTF8Char; ValueLen: integer;
+function Base64MagicCheckAndDecode(Value: PUtf8Char; ValueLen: integer;
   var Blob: RawByteString): boolean;
 begin
   if (ValueLen < 4) or
@@ -5902,12 +5952,12 @@ begin
     result := Base64ToBinSafe(PAnsiChar(Value) + 3, ValueLen - 3, Blob);
 end;
 
-function MultiPartFormDataDecode(const MimeType, Body: RawUTF8;
+function MultiPartFormDataDecode(const MimeType, Body: RawUtf8;
   var MultiPart: TMultiPartDynArray): boolean;
 var
-  boundary, endBoundary: RawUTF8;
+  boundary, endBoundary: RawUtf8;
   i, j: integer;
-  P: PUTF8Char;
+  P: PUtf8Char;
   part: TMultiPart;
 begin
   result := false;
@@ -5928,7 +5978,7 @@ begin
       inc(i, length(boundary));
       if i = length(Body) then
         exit; // reached the end
-      P := PUTF8Char(Pointer(Body)) + i - 1;
+      P := PUtf8Char(Pointer(Body)) + i - 1;
       Finalize(part);
       repeat
         if IdemPChar(P, 'CONTENT-DISPOSITION: ') then
@@ -5945,7 +5995,7 @@ begin
         if P = nil then
           exit;
       until PWord(P)^ = 13 + 10 shl 8;
-      i := P - PUTF8Char(Pointer(Body)) + 3; // i = just after header
+      i := P - PUtf8Char(Pointer(Body)) + 3; // i = just after header
       j := PosEx(boundary, Body, i);
       if j = 0 then
       begin
@@ -5973,11 +6023,11 @@ begin
 end;
 
 function MultiPartFormDataEncode(const MultiPart: TMultiPartDynArray;
-  var MultiPartContentType, MultiPartContent: RawUTF8): boolean;
+  var MultiPartContentType, MultiPartContent: RawUtf8): boolean;
 var
   len, boundcount, filescount, i: integer;
-  boundaries: array of RawUTF8;
-  bound: RawUTF8;
+  boundaries: array of RawUtf8;
+  bound: RawUtf8;
   W: TBaseWriter;
   temp: TTextWriterStackBuffer;
 
@@ -6042,7 +6092,7 @@ begin
 end;
 
 function MultiPartFormDataAddFile(const FileName: TFileName;
-  var MultiPart: TMultiPartDynArray; const Name: RawUTF8): boolean;
+  var MultiPart: TMultiPartDynArray; const Name: RawUtf8): boolean;
 var
   part: TMultiPart;
   newlen: integer;
@@ -6054,10 +6104,10 @@ begin
     exit;
   newlen := length(MultiPart) + 1;
   if Name = '' then
-    FormatUTF8('File%', [newlen], part.Name)
+    FormatUtf8('File%', [newlen], part.Name)
   else
     part.Name := Name;
-  part.FileName := StringToUTF8(ExtractFileName(FileName));
+  part.FileName := StringToUtf8(ExtractFileName(FileName));
   part.ContentType := GetMimeContentType(pointer(content), length(content), FileName);
   part.Encoding := 'base64';
   part.Content := BinToBase64(content);
@@ -6066,7 +6116,7 @@ begin
   result := true;
 end;
 
-function MultiPartFormDataAddField(const FieldName, FieldValue: RawUTF8;
+function MultiPartFormDataAddField(const FieldName, FieldValue: RawUtf8;
   var MultiPart: TMultiPartDynArray): boolean;
 var
   part: TMultiPart;
@@ -6096,7 +6146,7 @@ const
 var
   Char2Baudot: array[AnsiChar] of byte;
 
-function AsciiToBaudot(const Text: RawUTF8): RawByteString;
+function AsciiToBaudot(const Text: RawUtf8): RawByteString;
 begin
   result := AsciiToBaudot(pointer(Text), length(Text));
 end;
@@ -6159,12 +6209,12 @@ begin
   tmp.Done;
 end;
 
-function BaudotToAscii(const Baudot: RawByteString): RawUTF8;
+function BaudotToAscii(const Baudot: RawByteString): RawUtf8;
 begin
   result := BaudotToAscii(pointer(Baudot), length(Baudot));
 end;
 
-function BaudotToAscii(Baudot: PByteArray; len: PtrInt): RawUTF8;
+function BaudotToAscii(Baudot: PByteArray; len: PtrInt): RawUtf8;
 var
   i: PtrInt;
   c, b, bits, shift: integer;
@@ -6222,10 +6272,12 @@ end;
 
 { ***************** URI-Encoded Text Buffer Process }
 
-function UrlEncode(const svar: RawUTF8): RawUTF8;
+function UrlEncode(const svar: RawUtf8): RawUtf8;
 begin
   result := UrlEncode(pointer(svar));
 end;
+
+// two sub-functions for better code generation of UrlEncode()
 
 procedure _UrlEncode_Write(s, p: PByte; tab: PTextByteSet);
 var
@@ -6236,8 +6288,9 @@ begin
   repeat
     c := s^;
     inc(s);
-    if tcURIUnreserved in tab[c] then
-    begin // was ['_', '-', '.', '~', '0'..'9', 'a'..'z', 'A'..'Z']
+    if tcUriUnreserved in tab[c] then
+    begin
+      // was ['_', '-', '.', '~', '0'..'9', 'a'..'z', 'A'..'Z']
       p^ := c;
       inc(p);
     end
@@ -6266,7 +6319,7 @@ begin
   repeat
     c := s^;
     inc(s);
-    if (tcURIUnreserved in tab[c]) or
+    if (tcUriUnreserved in tab[c]) or
        (c = 32) then
     begin
       inc(result);
@@ -6278,7 +6331,7 @@ begin
   until false;
 end;
 
-function UrlEncode(Text: PUTF8Char): RawUTF8;
+function UrlEncode(Text: PUtf8Char): RawUtf8;
 begin
   result := '';
   if Text = nil then
@@ -6287,34 +6340,35 @@ begin
   _UrlEncode_Write(pointer(Text), pointer(result), @TEXT_BYTES);
 end;
 
-function UrlEncode(const NameValuePairs: array of const): RawUTF8;
+function UrlEncode(const NameValuePairs: array of const): RawUtf8;
 // (['select','*','where','ID=12','offset',23,'object',aObject]);
 var
-  A, n: PtrInt;
-  name, value: RawUTF8;
+  a, n: PtrInt;
+  name, value: RawUtf8;
+  p: PVarRec;
 begin
   result := '';
   n := high(NameValuePairs);
   if (n > 0) and
      (n and 1 = 1) then
   begin
-    for A := 0 to n shr 1 do
+    for a := 0 to n shr 1 do
     begin
-      VarRecToUTF8(NameValuePairs[A * 2], name);
+      VarRecToUtf8(NameValuePairs[a * 2], name);
       if not IsUrlValid(pointer(name)) then
         continue; // just skip invalid names
-      with NameValuePairs[A * 2 + 1] do
-        if VType = vtObject then
-          value := ObjectToJSON(VObject, [])
-        else
-          VarRecToUTF8(NameValuePairs[A * 2 + 1], value);
+      p := @NameValuePairs[a * 2 + 1];
+      if p^.VType = vtObject then
+        value := ObjectToJson(p^.VObject, [])
+      else
+        VarRecToUtf8(p^, value);
       result := result + '&' + name + '=' + UrlEncode(value);
     end;
     result[1] := '?';
   end;
 end;
 
-function IsUrlValid(P: PUTF8Char): boolean;
+function IsUrlValid(P: PUtf8Char): boolean;
 var
   tab: PTextCharSet;
 begin
@@ -6323,7 +6377,7 @@ begin
     exit;
   tab := @TEXT_CHARS;
   repeat
-    if tcURIUnreserved in tab[P^] then
+    if tcUriUnreserved in tab[P^] then
       inc(P) // was  ['_', '-', '.', '~', '0'..'9', 'a'..'z', 'A'..'Z']
     else
       exit;
@@ -6331,7 +6385,7 @@ begin
   result := true;
 end;
 
-function AreUrlValid(const Url: array of RawUTF8): boolean;
+function AreUrlValid(const Url: array of RawUtf8): boolean;
 var
   i: integer;
 begin
@@ -6342,19 +6396,19 @@ begin
   result := true;
 end;
 
-function IncludeTrailingURIDelimiter(const URI: RawByteString): RawByteString;
+function IncludeTrailingUriDelimiter(const URI: RawByteString): RawByteString;
 begin
   if (URI <> '') and
-     (URI[length(URI)] <> '/') then
+     (Uri[length(URI)] <> '/') then
     result := URI + '/'
   else
     result := URI;
 end;
 
-function UrlDecode(const s: RawUTF8; i, len: PtrInt): RawUTF8;
+function UrlDecode(const s: RawUtf8; i, len: PtrInt): RawUtf8;
 var
   L: PtrInt;
-  P: PUTF8Char;
+  P: PUtf8Char;
   tmp: TSynTempBuffer;
 begin
   result := '';
@@ -6391,9 +6445,9 @@ begin
   tmp.Done(P, result);
 end;
 
-function UrlDecode(U: PUTF8Char): RawUTF8;
+function UrlDecode(U: PUtf8Char): RawUtf8;
 var
-  P: PUTF8Char;
+  P: PUtf8Char;
   L: integer;
   tmp: TSynTempBuffer;
 begin
@@ -6422,9 +6476,9 @@ begin
   tmp.Done(P, result);
 end;
 
-function UrlDecodeNextValue(U: PUTF8Char; out Value: RawUTF8): PUTF8Char;
+function UrlDecodeNextValue(U: PUtf8Char; out Value: RawUtf8): PUtf8Char;
 var
-  Beg, V: PUTF8Char;
+  Beg, V: PUtf8Char;
   len: PtrInt;
 begin
   if U <> nil then
@@ -6471,9 +6525,9 @@ begin
   result := U;
 end;
 
-function UrlDecodeNextName(U: PUTF8Char; out Name: RawUTF8): PUTF8Char;
+function UrlDecodeNextName(U: PUtf8Char; out Name: RawUtf8): PUtf8Char;
 var
-  Beg, V: PUTF8Char;
+  Beg, V: PUtf8Char;
   len: PtrInt;
 begin
   result := nil;
@@ -6533,7 +6587,7 @@ begin
   until len = 0;
 end;
 
-function UrlDecodeNextNameValue(U: PUTF8Char; var Name, Value: RawUTF8): PUTF8Char;
+function UrlDecodeNextNameValue(U: PUtf8Char; var Name, Value: RawUtf8): PUtf8Char;
 begin
   result := nil;
   if U = nil then
@@ -6548,8 +6602,8 @@ begin
     result := U + 1; // jump '&' to let decode the next name=value pair
 end;
 
-function UrlDecodeValue(U: PUTF8Char; const Upper: RawUTF8;
-  var Value: RawUTF8; Next: PPUTF8Char): boolean;
+function UrlDecodeValue(U: PUtf8Char; const Upper: RawUtf8;
+  var Value: RawUtf8; Next: PPUtf8Char): boolean;
 begin
   // UrlDecodeValue('select=%2A&where=LastName%3D%27M%C3%B4net%27','SELECT=',V,@U)
   // -> U^='where=...' and V='*'
@@ -6576,8 +6630,8 @@ begin
     Next^ := U + 1; // jump '&'
 end;
 
-function UrlDecodeInteger(U: PUTF8Char; const Upper: RawUTF8;
-  var Value: integer; Next: PPUTF8Char): boolean;
+function UrlDecodeInteger(U: PUtf8Char; const Upper: RawUtf8;
+  var Value: integer; Next: PPUtf8Char): boolean;
 var
   V: PtrInt;
   SignNeg: boolean;
@@ -6625,8 +6679,8 @@ begin
     Next^ := U + 1; // jump '&'
 end;
 
-function UrlDecodeCardinal(U: PUTF8Char; const Upper: RawUTF8;
-  var Value: cardinal; Next: PPUTF8Char): boolean;
+function UrlDecodeCardinal(U: PUtf8Char; const Upper: RawUtf8;
+  var Value: cardinal; Next: PPUtf8Char): boolean;
 var
   V: PtrInt;
 begin
@@ -6663,20 +6717,20 @@ begin
     Next^ := U + 1; // jump '&'
 end;
 
-function UrlDecodeInt64(U: PUTF8Char; const Upper: RawUTF8;
-  var Value: Int64; Next: PPUTF8Char): boolean;
+function UrlDecodeInt64(U: PUtf8Char; const Upper: RawUtf8;
+  var Value: Int64; Next: PPUtf8Char): boolean;
 var
-  tmp: RawUTF8;
+  tmp: RawUtf8;
 begin
   result := UrlDecodeValue(U, Upper, tmp, Next);
   if result then
     SetInt64(pointer(tmp), Value);
 end;
 
-function UrlDecodeExtended(U: PUTF8Char; const Upper: RawUTF8;
-  var Value: TSynExtended; Next: PPUTF8Char): boolean;
+function UrlDecodeExtended(U: PUtf8Char; const Upper: RawUtf8;
+  var Value: TSynExtended; Next: PPUtf8Char): boolean;
 var
-  tmp: RawUTF8;
+  tmp: RawUtf8;
   err: integer;
 begin
   result := UrlDecodeValue(U, Upper, tmp, Next);
@@ -6688,10 +6742,10 @@ begin
   end;
 end;
 
-function UrlDecodeDouble(U: PUTF8Char; const Upper: RawUTF8;
-  var Value: double; Next: PPUTF8Char): boolean;
+function UrlDecodeDouble(U: PUtf8Char; const Upper: RawUtf8;
+  var Value: double; Next: PPUtf8Char): boolean;
 var
-  tmp: RawUTF8;
+  tmp: RawUtf8;
   err: integer;
 begin
   result := UrlDecodeValue(U, Upper, tmp, Next);
@@ -6703,30 +6757,30 @@ begin
   end;
 end;
 
-function UrlDecodeNeedParameters(U, CSVNames: PUTF8Char): boolean;
+function UrlDecodeNeedParameters(U, CsvNames: PUtf8Char): boolean;
 var
   tmp: array[byte] of AnsiChar;
   L: integer;
-  Beg: PUTF8Char;
+  Beg: PUtf8Char;
 // UrlDecodeNeedParameters('price=20.45&where=LastName%3D','price,where') will
 // return TRUE
 begin
-  result := (CSVNames = nil);
+  result := (CsvNames = nil);
   if result then
     exit; // no parameter to check -> success
   if U = nil then
     exit; // no input data -> error
   repeat
     L := 0;
-    while (CSVNames^ <> #0) and
-          (CSVNames^ <> ',') do
+    while (CsvNames^ <> #0) and
+          (CsvNames^ <> ',') do
     begin
-      tmp[L] := NormToUpper[CSVNames^];
+      tmp[L] := NormToUpper[CsvNames^];
       if L = high(tmp) then
         exit
       else // invalid CSV parameter
         inc(L);
-      inc(CSVNames);
+      inc(CsvNames);
     end;
     if L = 0 then
       exit; // invalid CSV parameter
@@ -6743,10 +6797,10 @@ begin
         inc(U); // Jump &
     until false;
     U := Beg;
-    if CSVNames^ = #0 then
+    if CsvNames^ = #0 then
       Break
     else // no more parameter to check
-      inc(CSVNames); // jump &
+      inc(CsvNames); // jump &
   until false;
   result := true; // all parameters found
 end;
@@ -6755,8 +6809,9 @@ end;
 { *********** Basic MIME Content Types Support }
 
 function GetMimeContentTypeFromBuffer(Content: Pointer; Len: PtrInt;
-  const DefaultContentType: RawUTF8): RawUTF8;
-begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
+  const DefaultContentType: RawUtf8): RawUtf8;
+begin
+  // see http://www.garykessler.net/library/file_sigs.html for magic numbers
   result := DefaultContentType;
   if (Content <> nil) and
      (Len > 4) then
@@ -6843,11 +6898,12 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
 end;
 
 function GetMimeContentType(Content: Pointer; Len: PtrInt;
-  const FileName: TFileName): RawUTF8;
+  const FileName: TFileName): RawUtf8;
 begin
   if FileName <> '' then
-  begin // file extension is more precise -> check first
-    result := LowerCase(RawUTF8(ExtractFileExt(FileName)));
+  begin
+    // file extension is more precise -> check first
+    result := LowerCase(RawUtf8(ExtractFileExt(FileName)));
     case PosEx(copy(result, 2, 4),
       'png,gif,tiff,jpg,jpeg,bmp,doc,htm,html,css,js,ico,wof,txt,svg,' +
       // 1   5   9    14  18   23  27  31  35   40  44 47  51  55  59
@@ -6918,14 +6974,15 @@ begin
 end;
 
 function GetMimeContentTypeHeader(const Content: RawByteString;
-  const FileName: TFileName): RawUTF8;
+  const FileName: TFileName): RawUtf8;
 begin
   result := HEADER_CONTENT_TYPE +
     GetMimeContentType(Pointer(Content), length(Content), FileName);
 end;
 
 function IsContentCompressed(Content: Pointer; Len: PtrInt): boolean;
-begin // see http://www.garykessler.net/library/file_sigs.html
+begin
+  // see http://www.garykessler.net/library/file_sigs.html
   result := false;
   if (Content <> nil) and
      (Len > 8) then
@@ -6968,9 +7025,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html
         $ffd8ff: // JPEG_CONTENT_TYPE = FF D8 FF DB/E0/E1/E2/E3/E8
           result := true;
       else
-        case PCardinalArray(Content)^[1] of // 4 byte offset
-          1{TAlgoSynLZ.AlgoID}: // crc32 01 00 00 00 crc32 = Compress() header
-            result := PCardinalArray(Content)^[0] <> PCardinalArray(Content)^[2];
+        case PCardinalArray(Content)^[1] of // ignore variable 4 byte offset
           $70797466, // mp4,mov = 66 74 79 70 [33 67 70 35/4D 53 4E 56..]
           $766f6f6d: // mov = 6D 6F 6F 76
             result := true;
@@ -6982,13 +7037,14 @@ end;
 function GetJpegSize(jpeg: PAnsiChar; len: PtrInt; out Height, Width: integer): boolean;
 var
   je: PAnsiChar;
-begin // see https://en.wikipedia.org/wiki/JPEG#Syntax_and_structure
+begin
+  // see https://en.wikipedia.org/wiki/JPEG#Syntax_and_structure
   result := false;
   if (jpeg = nil) or
      (len < 100) or
      (PWord(jpeg)^ <> $d8ff) then // SOI
     exit;
-  je := jpeg + len - 1;
+  je := jpeg + len - 8;
   inc(jpeg, 2);
   while jpeg < je do
   begin
@@ -7027,7 +7083,7 @@ constructor TMemoryMapText.Create;
 begin
 end;
 
-constructor TMemoryMapText.Create(aFileContent: PUTF8Char; aFileSize: integer);
+constructor TMemoryMapText.Create(aFileContent: PUtf8Char; aFileSize: integer);
 begin
   Create;
   fMap.Map(aFileContent, aFileSize);
@@ -7049,7 +7105,7 @@ begin
   inherited;
 end;
 
-procedure TMemoryMapText.SaveToStream(Dest: TStream; const Header: RawUTF8);
+procedure TMemoryMapText.SaveToStream(Dest: TStream; const Header: RawUtf8);
 var
   i: PtrInt;
   W: TBaseWriter;
@@ -7078,7 +7134,7 @@ begin
   end;
 end;
 
-procedure TMemoryMapText.SaveToFile(FileName: TFileName; const Header: RawUTF8);
+procedure TMemoryMapText.SaveToFile(FileName: TFileName; const Header: RawUtf8);
 var
   FS: TFileStream;
 begin
@@ -7090,7 +7146,7 @@ begin
   end;
 end;
 
-function TMemoryMapText.GetLine(aIndex: integer): RawUTF8;
+function TMemoryMapText.GetLine(aIndex: integer): RawUtf8;
 begin
   if (self = nil) or
      (cardinal(aIndex) >= cardinal(fCount)) then
@@ -7105,10 +7161,10 @@ begin
      (cardinal(aIndex) >= cardinal(fCount)) then
     result := ''
   else
-    UTF8DecodeToString(fLines[aIndex], GetLineSize(fLines[aIndex], fMapEnd), result);
+    Utf8DecodeToString(fLines[aIndex], GetLineSize(fLines[aIndex], fMapEnd), result);
 end;
 
-function TMemoryMapText.LineContains(const aUpperSearch: RawUTF8;
+function TMemoryMapText.LineContains(const aUpperSearch: RawUtf8;
   aIndex: integer): boolean;
 begin
   if (self = nil) or
@@ -7129,7 +7185,7 @@ begin
   result := GetLineSizeSmallerThan(fLines[aIndex], fMapEnd, aMinimalCount);
 end;
 
-procedure TMemoryMapText.ProcessOneLine(LineBeg, LineEnd: PUTF8Char);
+procedure TMemoryMapText.ProcessOneLine(LineBeg, LineEnd: PUtf8Char);
 begin
   if fCount = fLinesMax then
   begin
@@ -7140,10 +7196,11 @@ begin
   inc(fCount);
 end;
 
-procedure ParseLines(P, PEnd: PUTF8Char; Map: TMemoryMapText);
+procedure ParseLines(P, PEnd: PUtf8Char; Map: TMemoryMapText);
 var
-  PBeg: PUTF8Char;
-begin // generated asm is much better with a local proc
+  PBeg: PUtf8Char;
+begin
+  // generated asm is much better with a local proc
   if P < PEnd then
   repeat
     PBeg := P;
@@ -7175,26 +7232,26 @@ end;
 
 procedure TMemoryMapText.LoadFromMap(AverageLineLength: integer = 32);
 var
-  P: PUTF8Char;
+  P: PUtf8Char;
 begin
   fLinesMax := fMap.FileSize div AverageLineLength + 8;
   GetMem(fLines, fLinesMax * SizeOf(pointer));
   P := pointer(fMap.Buffer);
   fMapEnd := P + fMap.Size;
-  if Map.TextFileKind = isUTF8 then
+  if Map.TextFileKind = isUtf8 then
     inc(PByte(P), 3); // ignore UTF-8 BOM
   ParseLines(P, fMapEnd, self);
   if fLinesMax > fCount + 16384 then
     Reallocmem(fLines, fCount * SizeOf(pointer)); // size down only if worth it
 end;
 
-procedure TMemoryMapText.AddInMemoryLine(const aNewLine: RawUTF8);
+procedure TMemoryMapText.AddInMemoryLine(const aNewLine: RawUtf8);
 var
-  P: PUTF8Char;
+  P: PUtf8Char;
 begin
   if aNewLine = '' then
     exit;
-  AddRawUTF8(fAppendedLines, fAppendedLinesCount, aNewLine);
+  AddRawUtf8(fAppendedLines, fAppendedLinesCount, aNewLine);
   P := pointer(fAppendedLines[fAppendedLinesCount - 1]);
   ProcessOneLine(P, P + StrLen(P));
 end;
@@ -7207,7 +7264,7 @@ begin
 end;
 
 
-procedure AppendCharToRawUTF8(var Text: RawUTF8; Ch: AnsiChar);
+procedure AppendCharToRawUtf8(var Text: RawUtf8; Ch: AnsiChar);
 var
   L: PtrInt;
 begin
@@ -7216,7 +7273,7 @@ begin
   PByteArray(Text)[L] := ord(Ch);
 end;
 
-procedure AppendBufferToRawUTF8(var Text: RawUTF8; Buffer: pointer; BufferLen: PtrInt);
+procedure AppendBufferToRawUtf8(var Text: RawUtf8; Buffer: pointer; BufferLen: PtrInt);
 var
   L: PtrInt;
 begin
@@ -7227,14 +7284,14 @@ begin
   MoveFast(Buffer^, pointer(PtrInt(Text) + L)^, BufferLen);
 end;
 
-procedure AppendBuffersToRawUTF8(var Text: RawUTF8; const Buffers: array of PUTF8Char);
+procedure AppendBuffersToRawUtf8(var Text: RawUtf8; const Buffers: array of PUtf8Char);
 var
   i, len, TextLen: PtrInt;
   lens: array[0..63] of integer;
-  P: PUTF8Char;
+  P: PUtf8Char;
 begin
   if high(Buffers) > high(lens) then
-    raise ESynException.Create('Too many params in AppendBuffersToRawUTF8()');
+    raise ESynException.Create('Too many params in AppendBuffersToRawUtf8()');
   len := 0;
   for i := 0 to high(Buffers) do
   begin
@@ -7253,7 +7310,7 @@ begin
     end;
 end;
 
-function AppendRawUTF8ToBuffer(Buffer: PUTF8Char; const Text: RawUTF8): PUTF8Char;
+function AppendRawUtf8ToBuffer(Buffer: PUtf8Char; const Text: RawUtf8): PUtf8Char;
 var
   L: PtrInt;
 begin
@@ -7266,59 +7323,51 @@ begin
   result := Buffer;
 end;
 
-function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: PtrUInt): PUTF8Char;
+function Append999ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
+var
+  L: integer;
+  P: PAnsiChar;
+  c: cardinal;
+begin
+  P := pointer(SmallUInt32Utf8[Value]);
+  L := PStrLen(P - _STRLEN)^;
+  c := PCardinal(P)^;
+  repeat // PCardinal() write = FastMM4 FullDebugMode errors
+    Buffer^ := AnsiChar(c);
+    inc(Buffer);
+    c := c shr 8;
+    dec(L);
+  until L = 0;
+  result := pointer(Buffer);
+end;
+
+function AppendUInt32ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
 var
   L: PtrInt;
   P: PAnsiChar;
   tmp: array[0..23] of AnsiChar;
 begin
-  if Value <= high(SmallUInt32UTF8) then
-  begin
-    P := pointer(SmallUInt32UTF8[Value]);
-    L := PStrLen(P - _STRLEN)^;
-  end
+  if Value <= high(SmallUInt32Utf8) then
+    result := Append999ToBuffer(Buffer, Value)
   else
   begin
     P := StrUInt32(@tmp[23], Value);
     L := @tmp[23] - P;
+    MoveSmall(P, Buffer, L);
+    result := Buffer + L;
   end;
-  MoveSmall(P, Buffer, L);
-  result := Buffer + L;
-end;
-
-function Append999ToBuffer(Buffer: PUTF8Char; Value: PtrUInt): PUTF8Char;
-var
-  L: PtrInt;
-  P: PAnsiChar;
-  c: cardinal;
-begin
-  P := pointer(SmallUInt32UTF8[Value]);
-  L := PStrLen(P - _STRLEN)^;
-  c := PCardinal(P)^;
-  Buffer[0] := AnsiChar(c); // PCardinal() write = FastMM4 FullDebugMode errors
-  inc(Buffer);
-  if L > 1 then
-  begin
-    Buffer^ := AnsiChar(c shr 8);
-    inc(Buffer);
-    if L > 2 then
-    begin
-      Buffer^ := AnsiChar(c shr 16);
-      inc(Buffer);
-    end;
-  end;
-  result := pointer(Buffer);
 end;
 
 function Plural(const itemname: shortstring; itemcount: cardinal): shortstring;
 var
   len, L: PtrInt;
 begin
-  len := (AppendUInt32ToBuffer(@result[1], itemcount) - PUTF8Char(@result[1])) + 1;
+  len := (AppendUInt32ToBuffer(@result[1], itemcount) - PUtf8Char(@result[1])) + 1;
   result[len] := ' ';
   L := ord(itemname[0]);
   if L in [1..240] then
-  begin // avoid buffer overflow
+  begin
+    // avoid buffer overflow
     MoveSmall(@itemname[1], @result[len + 1], L);
     inc(len, L);
     if itemcount > 1 then
@@ -7384,18 +7433,18 @@ begin
   result := @temp;
 end;
 
-function LogEscapeFull(const source: RawByteString): RawUTF8;
+function LogEscapeFull(const source: RawByteString): RawUtf8;
 begin
   result := LogEscapeFull(pointer(source), length(source));
 end;
 
-function LogEscapeFull(source: PAnsiChar; sourcelen: integer): RawUTF8;
+function LogEscapeFull(source: PAnsiChar; sourcelen: integer): RawUtf8;
 begin
   FastSetString(result, nil, sourcelen * 3); // worse case
   if sourcelen = 0 then
     exit;
   sourcelen := EscapeBuffer(source, pointer(result), sourcelen, sourcelen * 3) - pointer(result);
-  // don't call the MM which may move the data: just adjust length()
+  // don't call the MM which may move the data -> just adjust length()
   PStrLen(PAnsiChar(pointer(result)) - _STRLEN)^ := sourcelen;
 end;
 
@@ -7411,22 +7460,22 @@ begin
     @result[1], length(source), 80) - @result[1]);
 end;
 
-function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUTF8: boolean): SynUnicode;
+function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUtf8: boolean): SynUnicode;
 var
   Map: TMemoryMap;
 begin
   result := '';
   if Map.Map(FileName) then
   try
-    if ForceUTF8 then
-      UTF8ToSynUnicode(PUTF8Char(Map.Buffer), Map.Size, result)
+    if ForceUtf8 then
+      Utf8ToSynUnicode(PUtf8Char(Map.Buffer), Map.Size, result)
     else
       case Map.TextFileKind of
         isUnicode:
           SetString(result, PWideChar(PtrUInt(Map.Buffer) + 2),
             (Map.Size - 2) shr 1);
-        isUTF8:
-          UTF8ToSynUnicode(PUTF8Char(pointer(PtrUInt(Map.Buffer) + 3)),
+        isUtf8:
+          Utf8ToSynUnicode(PUtf8Char(pointer(PtrUInt(Map.Buffer) + 3)),
             Map.Size - 3, result);
         isAnsi:
           result := CurrentAnsiConvert.AnsiToUnicodeString(Map.Buffer,
@@ -7437,7 +7486,7 @@ begin
   end;
 end;
 
-function AnyTextFileToRawUTF8(const FileName: TFileName; AssumeUTF8IfNoBOM: boolean): RawUTF8;
+function AnyTextFileToRawUtf8(const FileName: TFileName; AssumeUtf8IfNoBom: boolean): RawUtf8;
 var
   Map: TMemoryMap;
 begin
@@ -7448,20 +7497,20 @@ begin
       isUnicode:
         RawUnicodeToUtf8(PWideChar(PtrUInt(Map.Buffer) + 2),
           (Map.Size - 2) shr 1, result);
-      isUTF8:
+      isUtf8:
         FastSetString(result, pointer(PtrUInt(Map.Buffer) + 3), Map.Size - 3);
       isAnsi:
-        if AssumeUTF8IfNoBOM then
+        if AssumeUtf8IfNoBom then
           FastSetString(result, Map.Buffer, Map.Size)
         else
-          result := CurrentAnsiConvert.AnsiBufferToRawUTF8(Map.Buffer, Map.Size);
+          result := CurrentAnsiConvert.AnsiBufferToRawUtf8(Map.Buffer, Map.Size);
     end;
   finally
     Map.UnMap;
   end;
 end;
 
-function AnyTextFileToString(const FileName: TFileName; ForceUTF8: boolean): string;
+function AnyTextFileToString(const FileName: TFileName; ForceUtf8: boolean): string;
 var
   Map: TMemoryMap;
 begin
@@ -7469,31 +7518,31 @@ begin
   if Map.Map(FileName) then
   try
     {$ifdef UNICODE}
-    if ForceUTF8 then
-      UTF8DecodeToString(PUTF8Char(Map.Buffer), Map.Size, result)
+    if ForceUtf8 then
+      Utf8DecodeToString(PUtf8Char(Map.Buffer), Map.Size, result)
     else
       case Map.TextFileKind of
         isUnicode:
           SetString(result,
             PWideChar(PtrUInt(Map.Buffer) + 2), (Map.Size - 2) shr 1);
-        isUTF8:
-          UTF8DecodeToString(
+        isUtf8:
+          Utf8DecodeToString(
             pointer(PtrUInt(Map.Buffer) + 3), Map.Size - 3, result);
         isAnsi:
           result := CurrentAnsiConvert.AnsiToUnicodeString(
             Map.Buffer, Map.Size);
       end;
     {$else}
-    if ForceUTF8 then
-      result := CurrentAnsiConvert.UTF8BufferToAnsi(
-        PUTF8Char(Map.Buffer), Map.Size)
+    if ForceUtf8 then
+      result := CurrentAnsiConvert.Utf8BufferToAnsi(
+        PUtf8Char(Map.Buffer), Map.Size)
     else
       case Map.TextFileKind of
         isUnicode:
           result := CurrentAnsiConvert.UnicodeBufferToAnsi(
             PWideChar(PtrUInt(Map.Buffer) + 2), (Map.Size - 2) shr 1);
-        isUTF8:
-          result := CurrentAnsiConvert.UTF8BufferToAnsi(
+        isUtf8:
+          result := CurrentAnsiConvert.Utf8BufferToAnsi(
             pointer(PtrUInt(Map.Buffer) + 3), Map.Size - 3);
         isAnsi:
           SetString(result, PAnsiChar(Map.Buffer), Map.Size);
@@ -7514,7 +7563,7 @@ begin
     Hasher := DefaultHasher;
   result := 0;
   f := FileOpenSequentialRead(FileName);
-  if PtrInt(f) >= 0 then
+  if ValidHandle(f) then
   begin
     repeat
       read := FileRead(f, buf, SizeOf(buf));
@@ -7526,8 +7575,8 @@ begin
   end;
 end;
 
-function BinToSource(const ConstName, Comment: RawUTF8;
-  Data: pointer; Len, PerLine: integer; const Suffix: RawUTF8): RawUTF8;
+function BinToSource(const ConstName, Comment: RawUtf8;
+  Data: pointer; Len, PerLine: integer; const Suffix: RawUtf8): RawUtf8;
 var
   W: TBaseWriter;
   temp: TTextWriterStackBuffer;
@@ -7554,7 +7603,7 @@ begin
   end;
 end;
 
-procedure BinToSource(Dest: TBaseWriter; const ConstName, Comment: RawUTF8;
+procedure BinToSource(Dest: TBaseWriter; const ConstName, Comment: RawUtf8;
   Data: pointer; Len, PerLine: integer);
 var
   line, i: integer;
@@ -7581,7 +7630,7 @@ begin
       Dest.Add('$');
       Dest.AddByteToHex(P^);
       inc(P);
-      Dest.Add(',');
+      Dest.AddComma;
     end;
     dec(Len,line);
   until Len = 0;
@@ -7603,13 +7652,13 @@ type
     twlCode4, twlCode3);
 
   TTextWriterEscape = object
-    P, B, P2, B2: PUTF8Char;
+    P, B, P2, B2: PUtf8Char;
     W: TBaseWriter;
     st: set of TTextWriterEscapeStyle;
     fmt: TTextWriterHTMLFormat;
     esc: TTextWriterHTMLEscape;
     lst: TTextWriterEscapeLineStyle;
-    procedure Start(dest: TBaseWriter; src: PUTF8Char; escape: TTextWriterHTMLEscape);
+    procedure Start(dest: TBaseWriter; src: PUtf8Char; escape: TTextWriterHTMLEscape);
     function ProcessText(const stopchars: TSynByteSet): AnsiChar;
     procedure ProcessHRef;
     function ProcessLink: boolean;
@@ -7619,13 +7668,13 @@ type
     procedure SetLine(style: TTextWriterEscapeLineStyle);
     procedure EndOfParagraph;
     procedure NewMarkdownLine;
-    procedure AddHtmlEscapeWiki(dest: TBaseWriter; src: PUTF8Char;
+    procedure AddHtmlEscapeWiki(dest: TBaseWriter; src: PUtf8Char;
       escape: TTextWriterHTMLEscape);
-    procedure AddHtmlEscapeMarkdown(dest: TBaseWriter; src: PUTF8Char;
+    procedure AddHtmlEscapeMarkdown(dest: TBaseWriter; src: PUtf8Char;
       escape: TTextWriterHTMLEscape);
   end;
 
-procedure TTextWriterEscape.Start(dest: TBaseWriter; src: PUTF8Char;
+procedure TTextWriterEscape.Start(dest: TBaseWriter; src: PUtf8Char;
   escape: TTextWriterHTMLEscape);
 begin
   P := src;
@@ -7639,7 +7688,7 @@ begin
   lst := twlNone;
 end;
 
-function IsHttpOrHttps(P: PUTF8Char): boolean;
+function IsHttpOrHttps(P: PUtf8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 begin
   result := (PCardinal(P)^ =
@@ -7691,7 +7740,8 @@ begin
     while not (P^ in [#0, ')']) do
       inc(P);
     if P^ = ')' then
-    begin // [GitHub](https://github.com)
+    begin
+      // [GitHub](https://github.com)
       result := true;
       exit;
     end;
@@ -7702,7 +7752,7 @@ end;
 
 procedure TTextWriterEscape.ProcessEmoji;
 begin
-  if heEmojiToUTF8 in esc then
+  if heEmojiToUtf8 in esc then
     EmojiParseDots(P, W)
   else
   begin
@@ -7816,7 +7866,8 @@ begin
       else
         goto none;
     '1'..'9':
-      begin // first should be 1. then any ##. number to continue
+      begin
+        // first should be 1. then any ##. number to continue
         B := P;
         repeat
           inc(P)
@@ -7857,7 +7908,7 @@ none:     if lst = twlParagraph then
 end;
 
 procedure TTextWriterEscape.AddHtmlEscapeWiki(dest: TBaseWriter;
-  src: PUTF8Char; escape: TTextWriterHTMLEscape);
+  src: PUtf8Char; escape: TTextWriterHTMLEscape);
 begin
   Start(dest, src, escape);
   SetLine(twlParagraph);
@@ -7904,7 +7955,7 @@ begin
 end;
 
 procedure TTextWriterEscape.AddHtmlEscapeMarkdown(dest: TBaseWriter;
-  src: PUTF8Char; escape: TTextWriterHTMLEscape);
+  src: PUtf8Char; escape: TTextWriterHTMLEscape);
 begin
   Start(dest, src, escape);
   NewMarkDownLine;
@@ -7982,7 +8033,7 @@ begin
                 W.AddShort('<img alt="');
                 W.AddHtmlEscape(B2, P2 - B2, hfWithinAttributes);
                 W.AddShorter('" src="');
-                W.AddNoJSONEscape(B, P - B);
+                W.AddNoJsonEscape(B, P - B);
                 W.AddShorter('">');
                 inc(P);
                 continue;
@@ -8008,7 +8059,7 @@ begin
   SetLine(twlNone);
 end;
 
-function HtmlEscapeWiki(const wiki: RawUTF8; esc: TTextWriterHTMLEscape): RawUTF8;
+function HtmlEscapeWiki(const wiki: RawUtf8; esc: TTextWriterHTMLEscape): RawUtf8;
 var
   temp: TTextWriterStackBuffer;
   W: TBaseWriter;
@@ -8022,7 +8073,7 @@ begin
   end;
 end;
 
-function HtmlEscapeMarkdown(const md: RawUTF8; esc: TTextWriterHTMLEscape): RawUTF8;
+function HtmlEscapeMarkdown(const md: RawUtf8; esc: TTextWriterHTMLEscape): RawUtf8;
 var
   temp: TTextWriterStackBuffer;
   W: TBaseWriter;
@@ -8036,29 +8087,31 @@ begin
   end;
 end;
 
-procedure AddHtmlEscapeWiki(W: TBaseWriter; P: PUTF8Char; esc: TTextWriterHTMLEscape);
+procedure AddHtmlEscapeWiki(W: TBaseWriter; P: PUtf8Char; esc: TTextWriterHTMLEscape);
 var
   doesc: TTextWriterEscape;
 begin
   doesc.AddHtmlEscapeWiki(W, P, esc);
 end;
 
-procedure AddHtmlEscapeMarkdown(W: TBaseWriter; P: PUTF8Char; esc: TTextWriterHTMLEscape);
+procedure AddHtmlEscapeMarkdown(W: TBaseWriter; P: PUtf8Char; esc: TTextWriterHTMLEscape);
 var
   doesc: TTextWriterEscape;
 begin
   doesc.AddHtmlEscapeMarkdown(W, P, esc);
 end;
 
-function EmojiFromText(P: PUTF8Char; len: PtrInt): TEmoji;
-begin // RTTI has shortstrings in adjacent L1 cache lines -> faster than EMOJI_TEXT[]
+function EmojiFromText(P: PUtf8Char; len: PtrInt): TEmoji;
+begin
+  // RTTI has shortstrings in adjacent L1 cache lines -> faster than EMOJI_TEXT[]
   result := TEmoji(FindShortStringListTrimLowerCase(
     EMOJI_RTTI, ord(high(TEmoji)) - 1, P, len) + 1);
+  // note: we may enhance performance by using FastFindPUtf8CharSorted()
 end;
 
-function EmojiParseDots(var P: PUTF8Char; W: TBaseWriter): TEmoji;
+function EmojiParseDots(var P: PUtf8Char; W: TBaseWriter): TEmoji;
 var
-  c: PUTF8Char;
+  c: PUtf8Char;
 begin
   result := eNone;
   inc(P); // ignore trailing ':'
@@ -8080,7 +8133,7 @@ begin
     begin
       P := c + 1; // continue parsing after the Emoji text
       if W <> nil then
-        W.AddNoJSONEscape(pointer(EMOJI_UTF8[result]), 4);
+        W.AddNoJsonEscape(pointer(EMOJI_UTF8[result]), 4);
       exit;
     end;
   end;
@@ -8088,9 +8141,9 @@ begin
     W.Add(':');
 end;
 
-procedure EmojiToDots(P: PUTF8Char; W: TBaseWriter);
+procedure EmojiToDots(P: PUtf8Char; W: TBaseWriter);
 var
-  B: PUTF8Char;
+  B: PUtf8Char;
   c: cardinal;
 begin
   if (P <> nil) and
@@ -8100,19 +8153,19 @@ begin
       while (P^ <> #0) and
             (PWord(P)^ <> $9ff0) do
         inc(P);
-      W.AddNoJSONEscape(B, P - B);
+      W.AddNoJsonEscape(B, P - B);
       if P^ = #0 then
         break;
       B := P;
-      c := NextUTF8UCS4(P) - $1f5ff;
+      c := NextUtf8Ucs4(P) - $1f5ff;
       if c <= cardinal(high(TEmoji)) then
-        W.AddNoJSONEscapeUTF8(EMOJI_TAG[TEmoji(c)])
+        W.AddNoJsonEscapeUtf8(EMOJI_TAG[TEmoji(c)])
       else
-        W.AddNoJSONEscape(B, P - B);
+        W.AddNoJsonEscape(B, P - B);
     until P^ = #0;
 end;
 
-function EmojiToDots(const text: RawUTF8): RawUTF8;
+function EmojiToDots(const text: RawUtf8): RawUtf8;
 var
   W: TBaseWriter;
   tmp: TTextWriterStackBuffer;
@@ -8131,9 +8184,9 @@ begin
   end;
 end;
 
-procedure EmojiFromDots(P: PUTF8Char; W: TBaseWriter);
+procedure EmojiFromDots(P: PUtf8Char; W: TBaseWriter);
 var
-  B: PUTF8Char;
+  B: PUtf8Char;
 begin
   if (P <> nil) and
      (W <> nil) then
@@ -8141,14 +8194,14 @@ begin
       B := P;
       while not (P^ in [#0, ':']) do
         inc(P);
-      W.AddNoJSONEscape(B, P - B);
+      W.AddNoJsonEscape(B, P - B);
       if P^ = #0 then
         break;
       EmojiParseDots(P, W);
     until P^ = #0;
 end;
 
-function EmojiFromDots(const text: RawUTF8): RawUTF8;
+function EmojiFromDots(const text: RawUtf8): RawUtf8;
 var
   W: TBaseWriter;
   tmp: TTextWriterStackBuffer;
@@ -8166,10 +8219,9 @@ end;
 procedure InitializeUnit;
 var
   i: PtrInt;
-var
   e: TEmoji;
 begin
-  // initialize Base64/Base64URI encoding/decoding tables
+  // initialize Base64/Base64Uri encoding/decoding tables
   FillcharFast(ConvertBase64ToBin, SizeOf(ConvertBase64ToBin), 255); // -1 = invalid
   for i := 0 to high(b64enc) do
     ConvertBase64ToBin[b64enc[i]] := i;
@@ -8191,7 +8243,7 @@ begin
     LowerCaseSelf(EMOJI_TEXT[e]);
     EMOJI_TAG[e] := ':' + EMOJI_TEXT[e] + ':';
     SetLength(EMOJI_UTF8[e], 4);
-    UCS4ToUTF8(ord(e) + $1f5ff, pointer(EMOJI_UTF8[e]));
+    Ucs4ToUtf8(ord(e) + $1f5ff, pointer(EMOJI_UTF8[e]));
   end;
   EMOJI_AFTERDOTS[')'] := eSmiley;
   EMOJI_AFTERDOTS['('] := eFrowning;

@@ -21,7 +21,7 @@ interface
 {$I ..\mormot.defines.inc}
 
 
-{$ifdef MSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
+{$ifdef OSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
 
 uses
   sysutils,
@@ -169,7 +169,7 @@ type
   // is to be used as the value of the column or parameter
   // - see http://msdn.microsoft.com/en-us/library/ms722617
   // and http://msdn.microsoft.com/en-us/library/windows/desktop/ms716934
-  TSQLDBOleDBStatus = (
+  TSqlDBOleDBStatus = (
     stOK,
     stBadAccessor,
     stCanNotConvertValue,
@@ -202,7 +202,7 @@ type
   /// binding status of a given column
   // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ms720969
   // and http://msdn.microsoft.com/en-us/library/windows/desktop/ms716934
-  TSQLDBOleDBBindStatus = (
+  TSqlDBOleDBBindStatus = (
     bsOK, bsBadOrdinal,
     bsUnsupportedConversion,
     bsBadBindInfo,
@@ -681,9 +681,9 @@ type
     function SetupAccessors(pIAccessorTVP: IAccessor): HRESULT; virtual; abstract;
     destructor Destroy; override;
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-      IID: TGUID; out Obj): TIntQry; {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
-    function _AddRef: TIntCnt;       {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
-    function _Release: TIntCnt;      {$ifdef MSWINDOWS}stdcall{$else}cdecl{$endif};
+      IID: TGUID; out Obj): TIntQry; {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
+    function _AddRef: TIntCnt;       {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
+    function _Release: TIntCnt;      {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
     /// Adds a reference count to an existing row handle
     function AddRefRows(cRows: PtrUInt; rghRows: PPtrUIntArray;
       rgRefCounts, rgRowStatus: PCardinalArray): HRESULT; stdcall;
@@ -712,10 +712,10 @@ type
 
   TIDListRowset = class(TBaseAggregatingRowset)
   private
-    farr: TRawUTF8DynArray;
-    fType: TSQLDBFieldType;
+    farr: TRawUtf8DynArray;
+    fType: TSqlDBFieldType;
   public
-    constructor Create(arr: TRawUTF8DynArray; aType: TSQLDBFieldType);
+    constructor Create(arr: TRawUtf8DynArray; aType: TSqlDBFieldType);
 
     function Initialize(pIOpenRowset: IOpenRowset): HRESULT;
     function GetData(HROW: HROW; HACCESSOR: HACCESSOR; pData: Pointer): HRESULT; override; stdcall;
@@ -730,21 +730,21 @@ type
 
 type
   /// generic Exception type, generated for OleDB connection
-  EOleDBException = class(ESQLDBException);
+  EOleDBException = class(ESqlDBException);
 
 
 /// check from the file beginning if sounds like a valid Jet / MSAccess file
 function IsJetFile(const FileName: TFileName): boolean;
 
 /// low-level guess of our SQL Field Type from the OleDB numerical type value
-function OleDBColumnToFieldType(wType: DBTYPE; bScale: byte): TSQLDBFieldType;
+function OleDBColumnToFieldType(wType: DBTYPE; bScale: byte): TSqlDBFieldType;
 
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 
 implementation
 
-{$ifdef MSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
+{$ifdef OSWINDOWS} // compiles as void unit for non-Windows - allow Lazarus package
 
 
 { ************ Low-Level OleDB Custom RowSet Processing }
@@ -811,7 +811,7 @@ function TBaseAggregatingRowset.QueryInterface(
   {$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} IID: TGUID;
   out Obj): TIntQry;
 begin
-  if IsEqualGUID(@IID, @IID_IUnknown) then
+  if IsEqualGuid(@IID, @IID_IUnknown) then
     IUnknown(Obj) := Self
   else
   begin
@@ -821,7 +821,7 @@ begin
       result := E_NOINTERFACE;
       Exit;
     end;
-    if IsEqualGUID(@IID, @IID_IRowset) then
+    if IsEqualGuid(@IID, @IID_IRowset) then
       IUnknown(Obj) := self
     else
     begin
@@ -866,7 +866,7 @@ end;
 
 { TIDListRowset }
 
-constructor TIDListRowset.Create(arr: TRawUTF8DynArray; aType: TSQLDBFieldType);
+constructor TIDListRowset.Create(arr: TRawUtf8DynArray; aType: TSqlDBFieldType);
 begin
   farr := arr;
   fType := aType;
@@ -894,7 +894,7 @@ begin
         pBindingsList[0].obValue := PAnsiChar(@rec.IDVal) - pointer(@rec);
         pBindingsList[0].wType := DBTYPE_I8;
       end;
-    ftUTF8:
+    ftUtf8:
       begin
         pBindingsList[0].cbMaxLen := sizeof(PWideChar); //Check bind ''
         for i := 0 to Length(farr) - 1 do
@@ -911,7 +911,7 @@ end;
 procedure TIDListRowset.FillRowData(pCurrentRec: PIDListRec);
 var
   curInd: integer;
-  tmp: RawUTF8;
+  tmp: RawUtf8;
 begin
   curInd := fidxRow - 2;
   if farr[curInd] = 'null' then
@@ -927,11 +927,11 @@ begin
           SetInt64(pointer(farr[curInd]), pCurrentRec.IDVal);
           pCurrentRec.IDLen := SizeOf(Int64);
         end;
-      ftUTF8:
+      ftUtf8:
         begin
-          tmp := UnQuoteSQLString(farr[curInd]);
+          tmp := UnQuoteSqlString(farr[curInd]);
           pCurrentRec.IDLen := (Length(tmp) + 1) * SizeOf(WideChar);
-          pCurrentRec.StrVal := Pointer(UTF8ToWideString(tmp));
+          pCurrentRec.StrVal := Pointer(Utf8ToWideString(tmp));
         end
     else
       raise EOleDBException.Create('Unsupported array parameter type');
@@ -959,7 +959,7 @@ begin
   case fType of
     ftInt64:
       dbidID.uName.pwszName := pointer(IDList_type);
-    ftUTF8:
+    ftUtf8:
       dbidID.uName.pwszName := pointer(StrList_type);
   end;
   OleCheck(pIOpenRowset.OpenRowset(self, @dbidID, nil, IID_IUnknown,
@@ -991,7 +991,7 @@ var
   Header: array[0..31] of AnsiChar;
 begin
   F := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
-  if F = INVALID_HANDLE_VALUE then
+  if not ValidHandle(F) then
     result := false
   else
   begin
@@ -1001,7 +1001,7 @@ begin
   end;
 end;
 
-function OleDBColumnToFieldType(wType: DBTYPE; bScale: byte): TSQLDBFieldType;
+function OleDBColumnToFieldType(wType: DBTYPE; bScale: byte): TSqlDBFieldType;
 begin
   case wType of
     DBTYPE_EMPTY:
@@ -1033,7 +1033,7 @@ begin
   end;
 end;
 
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 end.
 

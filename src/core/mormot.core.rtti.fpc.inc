@@ -31,7 +31,8 @@ end;
 // use complex AlignTypeData() inlined function from typinfo.pp
 // = AlignToQword() as defined in system.inc and used in rtti.inc
 function GetTypeData(TypeInfo: pointer): PTypeData;
-begin // qword aligned jump over Kind+Name - compiles as 2 x86_64 asm opcodes
+begin
+  // qword aligned jump over Kind+Name - compiles as 2 asm opcodes on x86_64
   result := AlignTypeData(@PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2]);
 end;
 
@@ -41,7 +42,8 @@ type
   AlignToPtr = pointer;
 
 function GetTypeData(TypeInfo: pointer): PTypeData;
-begin // jump over Kind+Name - compiles as 2 x86_64 asm opcodes
+begin
+  // jump over Kind+Name - compiles as 2 asm opcodes on x86_64
   result := @PByteArray(TypeInfo)[PByte(TypeInfo + 1)^ + 2];
 end;
 
@@ -49,7 +51,6 @@ end;
 
 type
   PRecordInfo = PTypeData; // oldest Delphi PTypeData doesn't have RecordSize
-
 
 function TRttiInfo.RttiClass: PRttiClass; // for proper inlining below
 begin
@@ -68,12 +69,8 @@ function TRttiClass.RttiProps: PRttiProps;
 begin
   result := @self;
   if result <> nil then
-    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    result := pointer(PClassData(result)^.PropertyTable)
-    {$else}
     with PTypeData(result)^ do
-      result := @UnitName[ord(UnitName[0]) + 1];
-    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+      result := AlignToPtr(@UnitName[ord(UnitName[0]) + 1]);
 end;
 
 function TRttiClass.PropCount: integer;
@@ -94,7 +91,8 @@ begin
 end;
 
 function TRttiProps.PropList: PRttiProp;
-begin // see TPropData.GetProp(0)
+begin
+  // see TPropData.GetProp(0)
   result := AlignToPtr(@PPropData(@self)^.PropList);
 end;
 
@@ -105,7 +103,8 @@ begin
   begin
     CP := GetRttiProps(C);
     if CP <> nil then
-    begin // no more RTTI information available
+    begin
+      // no more RTTI information available
       PropInfo := CP^.PropList;
       exit(CP^.PropCount);
     end;
@@ -134,10 +133,14 @@ begin
     result := pointer(GetTypeData(base));
 end;
 
+const
+  NULCHAR: AnsiChar = #0; // local to use RIP and not REL
+
 function TRttiEnumType.GetEnumNameOrd(Value: cardinal): PShortString;
 var
   n: integer;
-begin // this code is very aggressively inlined on FPC
+begin
+  // this code is very aggressively inlined on FPC
   if Value <= cardinal(PTypeData(@self).MaxValue) then
   begin
     result := @PTypeData(@self).NameList;
@@ -150,12 +153,12 @@ begin // this code is very aggressively inlined on FPC
         result := @PByteArray(result)^[ord(result^[0]) + 1];
         dec(n);
       until n = 0;
-    n := Value and 3; // last 1..3 moves
-    if n <> 0 then
+    Value := Value and 3; // last 1..3 moves
+    if Value <> 0 then
       repeat
         result := @PByteArray(result)^[ord(result^[0]) + 1];
-        dec(n);
-      until n = 0;
+        dec(Value);
+      until Value = 0;
   end
   else
     result := @NULCHAR;
@@ -250,8 +253,10 @@ begin
   begin
     if GetProc = nil then
       // no 'read' was defined -> try from 'write' field
-      if (SetProc <> nil) and ((integer(PropProcs) shr 2) and 3 = ptField) then
-      begin // bits 2..3 = SetProc
+      if (SetProc <> nil) and
+         ((integer(PropProcs) shr 2) and 3 = ptField) then
+      begin
+        // bits 2..3 = SetProc
         Call.Data := pointer(PtrUInt(Instance) + PtrUInt(SetProc));
         exit(rpcField);
       end
@@ -290,7 +295,8 @@ begin
       // no 'write' was defined -> try from 'read' field
       if (GetProc <> nil) and
          (integer(PropProcs) and 3 = ptField) then
-      begin // bits 0..1 = GetProc
+      begin
+        // bits 0..1 = GetProc
         Call.Data := pointer(PtrUInt(Instance) + PtrUInt(GetProc));
         exit(rpcField);
       end
@@ -372,8 +378,7 @@ begin
   if Assigned(info^.RecInitInfo) then // see RTTIRecordOp() in rtti.inc
     d := pointer(GetTypeData(info^.RecInitInfo));
   Fields.Count := d^.ManagedFieldCount;
-  inc(d); // ManagedFields[] just follow TRecInitData/TRecordInfoInit
-  Fields.Fields := AlignToPtr(d);
+  Fields.Fields := AlignToPtr(Pointer(@d^.ManagedFieldCount) + SizeOf(d^.ManagedFieldCount));
 end;
 
 function TRttiInfo.RecordManagedFieldsCount: integer;
@@ -545,7 +550,7 @@ begin
   begin
     ShortStringToAnsi7String(aInterface^.Name, Definition.Name);
     ShortStringToAnsi7String(info^.UnitName, Definition.UnitName);
-    Definition.GUID := info^.GUID;
+    Definition.Guid := info^.GUID;
   end;
   ancestor := DeRef(info^.Parent);
   if ancestor <> nil then
@@ -597,44 +602,28 @@ end;
 
 {$ifdef FPC_CPUX64}
 
-procedure RedirectCode(Func, RedirectFunc: Pointer);
-var
-  NewJump: packed record
-    Code: byte;        // $e9 = jmp {relative}
-    Distance: integer; // relative jump is 32-bit even on CPU64
-  end;
-begin
-  if (Func = nil) or
-     (RedirectFunc = nil) or
-     (Func = RedirectFunc) then
-    exit; // nothing to redirect to
-  NewJump.Code := $e9;
-  NewJump.Distance := integer(PtrUInt(RedirectFunc) - PtrUInt(Func) - SizeOf(NewJump));
-  PatchCode(Func, @NewJump, SizeOf(NewJump));
-  assert(PByte(Func)^ = $e9);
-end;
-
-procedure fpc_ansistr_decr_ref; external name 'FPC_ANSISTR_DECR_REF';
-procedure fpc_ansistr_incr_ref; external name 'FPC_ANSISTR_INCR_REF';
-procedure fpc_ansistr_assign; external name 'FPC_ANSISTR_ASSIGN';
-procedure fpc_ansistr_setlength; external name 'FPC_ANSISTR_SETLENGTH';
-procedure fpc_ansistr_compare; external name 'FPC_ANSISTR_COMPARE';
+// access to lowest level FPC RTL functions by their raw linking name
+procedure fpc_ansistr_decr_ref;      external name 'FPC_ANSISTR_DECR_REF';
+procedure fpc_ansistr_incr_ref;      external name 'FPC_ANSISTR_INCR_REF';
+procedure fpc_ansistr_assign;        external name 'FPC_ANSISTR_ASSIGN';
+procedure fpc_ansistr_setlength;     external name 'FPC_ANSISTR_SETLENGTH';
+procedure fpc_ansistr_compare;       external name 'FPC_ANSISTR_COMPARE';
 procedure fpc_ansistr_compare_equal; external name 'FPC_ANSISTR_COMPARE_EQUAL';
-procedure fpc_unicodestr_decr_ref; external name 'FPC_UNICODESTR_DECR_REF';
-procedure fpc_unicodestr_incr_ref; external name 'FPC_UNICODESTR_INCR_REF';
-procedure fpc_unicodestr_assign; external name 'FPC_UNICODESTR_ASSIGN';
-procedure fpc_dynarray_incr_ref; external name 'FPC_DYNARRAY_INCR_REF';
-procedure fpc_dynarray_decr_ref; external name 'FPC_DYNARRAY_DECR_REF';
-procedure fpc_dynarray_clear; external name 'FPC_DYNARRAY_CLEAR';
+procedure fpc_unicodestr_decr_ref;   external name 'FPC_UNICODESTR_DECR_REF';
+procedure fpc_unicodestr_incr_ref;   external name 'FPC_UNICODESTR_INCR_REF';
+procedure fpc_unicodestr_assign;     external name 'FPC_UNICODESTR_ASSIGN';
+procedure fpc_dynarray_incr_ref;     external name 'FPC_DYNARRAY_INCR_REF';
+procedure fpc_dynarray_decr_ref;     external name 'FPC_DYNARRAY_DECR_REF';
+procedure fpc_dynarray_clear;        external name 'FPC_DYNARRAY_CLEAR';
 {$ifdef FPC_X64MM}
-procedure fpc_getmem; external name 'FPC_GETMEM';
-procedure fpc_freemem; external name 'FPC_FREEMEM';
+procedure fpc_getmem;                external name 'FPC_GETMEM';
+procedure fpc_freemem;               external name 'FPC_FREEMEM';
 {$else}
-procedure _Getmem; external name 'FPC_GETMEM';
-procedure _Freemem(p: pointer); external name 'FPC_FREEMEM';
+procedure _Getmem;                   external name 'FPC_GETMEM';
+procedure _Freemem(p: pointer);      external name 'FPC_FREEMEM';
 {$endif FPC_X64MM}
 
-procedure PatchJmp(old, new: PByteArray; size: PtrInt; jmp: PtrUInt=0);
+procedure PatchJmp(old, new: PByteArray; size: PtrInt; jmp: PtrUInt = 0);
 var
   rel: PCardinal;
 begin
@@ -653,15 +642,15 @@ end;
 
 procedure _ansistr_decr_ref(var p: Pointer); nostackframe; assembler;
 asm
-        mov     rax, qword ptr[p]
+        mov     rax, qword ptr [p]
         xor     edx, edx
         test    rax, rax
         jz      @z
-        mov     qword ptr[p], rdx
+        mov     qword ptr [p], rdx
         mov     p, rax
-        cmp     qword ptr[rax - _STRREFCNT], rdx
+        cmp     qword ptr [rax - _STRREFCNT], rdx
         jl      @z
-lock    dec     qword ptr[rax - _STRREFCNT]
+lock    dec     qword ptr [rax - _STRREFCNT]
         jbe     @free
 @z:     ret
 @free:  sub     p, _STRRECSIZE
@@ -672,30 +661,30 @@ procedure _ansistr_incr_ref(p: pointer); nostackframe; assembler;
 asm
         test    p, p
         jz      @z
-        cmp     qword ptr[p - _STRREFCNT], 0
+        cmp     qword ptr [p - _STRREFCNT], 0
         jl      @z
-lock    inc     qword ptr[p - _STRREFCNT]
+lock    inc     qword ptr [p - _STRREFCNT]
 @z:
 end;
 
 procedure _ansistr_assign(var d: pointer; s: pointer); nostackframe; assembler;
 asm
-        mov     rax, qword ptr[d]
+        mov     rax, qword ptr [d]
         cmp     rax, s
         jz      @eq
         test    s, s
         jz      @ns
-        cmp     qword ptr[s - _STRREFCNT], 0
+        cmp     qword ptr [s - _STRREFCNT], 0
         jl      @ns
-lock    inc     qword ptr[s - _STRREFCNT]
-@ns:    mov     qword ptr[d], s
+lock    inc     qword ptr [s - _STRREFCNT]
+@ns:    mov     qword ptr [d], s
         test    rax, rax
         jnz     @z
 @eq:    ret
 @z:     mov     d, rax
-        cmp     qword ptr[rax - _STRREFCNT], 0
+        cmp     qword ptr [rax - _STRREFCNT], 0
         jl      @n
- lock   dec     qword ptr[rax - _STRREFCNT]
+ lock   dec     qword ptr [rax - _STRREFCNT]
         ja      @n
 @free:  sub     d, _STRRECSIZE
         jmp     _Freemem
@@ -704,8 +693,8 @@ end;
 
 { note: fpc_ansistr_compare/_equal do check the codepage and make a UTF-8
   conversion if necessary, whereas Delphi _LStrCmp/_LStrEqual don't;
-  involving codepage is safer, but paranoid, and 1. is (much) slower,
-  and 2. is not Delphi compatible -> we rather follow the Delphi's way }
+  involving codepage is safer, but paranoid, and 1. is (much) slower, and
+  2. is not Delphi compatible -> we rather follow the Delphi's way }
 
 function _ansistr_compare(s1, s2: pointer): SizeInt; nostackframe; assembler;
 asm
@@ -714,20 +703,20 @@ asm
         je      @0
         test    s1, s2
         jz      @maybe0
-@first: mov     al, byte ptr[s1] // we can check the first char (for quicksort)
-        sub     al, byte ptr[s2]
+@first: mov     al, byte ptr [s1] // we can check the first char (for quicksort)
+        sub     al, byte ptr [s2]
         jne     @ne
-        mov     r8, qword ptr[s1 - _STRLEN]
+        mov     r8, qword ptr [s1 - _STRLEN]
         mov     r11, r8
-        sub     r8, qword ptr[s2 - _STRLEN] // r8 = length(s1)-length(s2)
+        sub     r8, qword ptr [s2 - _STRLEN] // r8 = length(s1)-length(s2)
         adc     rax, -1
         and     rax, r8  // rax = -min(length(s1),length(s2))
         sub     rax, r11
         sub     s1, rax
         sub     s2, rax
         align   16
-@s:     mov     r10, qword ptr[s1 + rax] // compare by 8 bytes (may include len)
-        xor     r10, qword ptr[s2 + rax]
+@s:     mov     r10, qword ptr [s1 + rax] // compare by 8 bytes (may include len)
+        xor     r10, qword ptr [s2 + rax]
         jnz     @d
         add     rax, 8
         js      @s
@@ -739,8 +728,8 @@ asm
         shr     r10, 3
         add     rax, r10
         jns     @e
-        movzx   edx, byte ptr[s2 + rax]
-        movzx   eax, byte ptr[s1 + rax]
+        movzx   edx, byte ptr [s2 + rax]
+        movzx   eax, byte ptr [s1 + rax]
         sub     rax, rdx
         ret
 @maybe0:test    s2, s2
@@ -759,20 +748,20 @@ asm
         je      @q
         test    s1, s2
         jz      @maybe0
-@ok:    mov     rax, qword ptr[s1 - _STRLEN] // len must match
-        cmp     rax, qword ptr[s2 - _STRLEN]
+@ok:    mov     rax, qword ptr [s1 - _STRLEN] // len must match
+        cmp     rax, qword ptr [s2 - _STRLEN]
         jne     @q
-        lea     s1, qword ptr[s1 + rax - 8]
-        lea     s2, qword ptr[s2 + rax - 8]
+        lea     s1, qword ptr [s1 + rax - 8]
+        lea     s2, qword ptr [s2 + rax - 8]
         neg     rax
-        mov     r8, qword ptr[s1] // compare last 8 bytes (may include len)
-        cmp     r8, qword ptr[s2]
+        mov     r8, qword ptr [s1] // compare last 8 bytes (may include len)
+        cmp     r8, qword ptr [s2]
         jne     @q
         align 16
 @s:     add     rax, 8 // compare remaining 8 bytes per iteration
         jns     @0
-        mov     r8, qword ptr[s1 + rax]
-        cmp     r8, qword ptr[s2 + rax]
+        mov     r8, qword ptr [s1 + rax]
+        cmp     r8, qword ptr [s2 + rax]
         je      @s
         mov     eax, 1
         ret
@@ -789,9 +778,9 @@ procedure _dynarray_incr_ref(p: pointer); nostackframe; assembler;
 asm
         test    p, p
         jz      @z
-        cmp     qword ptr[p - _DAREFCNT], 0
+        cmp     qword ptr [p - _DAREFCNT], 0
         jle     @z
-lock    inc     qword ptr[p - _DAREFCNT]
+lock    inc     qword ptr [p - _DAREFCNT]
 @z:
 end;
 
@@ -809,15 +798,15 @@ end;
 
 procedure _dynarray_decr_ref(var p: Pointer; info: pointer); nostackframe; assembler;
 asm
-        mov     rax, qword ptr[p]
+        mov     rax, qword ptr [p]
         test    rax, rax
         jz      @z
-        mov     qword ptr[p], 0
+        mov     qword ptr [p], 0
         mov     p, rax
         sub     p, SizeOf(TDynArrayRec)
-        cmp     qword ptr[rax - _DAREFCNT], 0
+        cmp     qword ptr [rax - _DAREFCNT], 0
         jle     @z
-lock    dec     qword ptr[p]
+lock    dec     qword ptr [p]
         jbe     @free
 @z:     ret
 @free:  jmp     _dynarray_decr_ref_free
@@ -849,55 +838,35 @@ end;
 procedure _ansistr_setlength(var s: RawByteString; len: PtrInt; cp: cardinal);
   nostackframe; assembler;
 asm
-        mov     rax, qword ptr[s]
+        mov     rax, qword ptr [s]
         test    len, len
         jle     _ansistr_decr_ref
         test    rax, rax
         jz      _ansistr_setlength_new
-        cmp     qword ptr[rax - _STRREFCNT], 1
+        cmp     qword ptr [rax - _STRREFCNT], 1
         jne     _ansistr_setlength_new
         push    len
         push    s
-        sub     qword ptr[s], _STRRECSIZE
+        sub     qword ptr [s], _STRRECSIZE
         add     len, _STRRECSIZE + 1
         call    _reallocmem // rely on MM in-place detection
         pop     s
         pop     len
-        add     qword ptr[s], _STRRECSIZE
-        mov     qword ptr[rax].TStrRec.length, len
-        mov     byte ptr[rax + len + _STRRECSIZE], 0
+        add     qword ptr [s], _STRRECSIZE
+        mov     qword ptr [rax].TStrRec.length, len
+        mov     byte ptr [rax + len + _STRRECSIZE], 0
 end;
 {$endif FPC_X64MM}
-
-function ToTempUTF8(var temp: TSynTempBuffer; p: pointer; len, cp: cardinal): pointer;
-begin
-  if (len = 0) or
-     (cp = CP_UTF8) or
-     (cp >= CP_RAWBLOB) or
-     IsAnsiCompatible(p, len) then
-  begin
-    temp.buf := nil;
-    temp.len := len;
-    result := p;
-  end
-  else
-  begin
-    temp.Init(len * 3);
-    p := TSynAnsiConvert.Engine(cp).AnsiBufferToUTF8(temp.buf, p, len);
-    temp.len := PAnsiChar(p) - PAnsiChar(temp.buf);
-    result := temp.buf;
-  end;
-end;
 
 procedure _ansistr_concat_convert(var dest: RawByteString;
   const s1, s2: RawByteString; cp, cp1, cp2: cardinal);
 var
-  t1, t2, t: TSynTempBuffer; // avoid most memory allocation
+  t1, t2, t: TSynTempBuffer; // avoid most memory allocations
   p1, p2, p: PAnsiChar;
   eng: TSynAnsiConvert;
 begin
-  p1 := ToTempUTF8(t1, pointer(s1), length(s1), cp1);
-  p2 := ToTempUTF8(t2, pointer(s2), length(s2), cp2);
+  p1 := AnsiBufferToTempUtf8(t1, pointer(s1), length(s1), cp1);
+  p2 := AnsiBufferToTempUtf8(t2, pointer(s2), length(s2), cp2);
   if (cp = CP_UTF8) or
      (cp >= CP_RAWBLOB) or
      ((t1.buf = nil) and
@@ -912,7 +881,7 @@ begin
   begin
     eng := TSynAnsiConvert.Engine(cp);
     t.Init((t1.len + t2.len) shl eng.AnsiCharShift);
-    p := eng.UTF8BufferToAnsi(eng.UTF8BufferToAnsi(t.buf, p1, t1.len), p2, t2.len);
+    p := eng.Utf8BufferToAnsi(eng.Utf8BufferToAnsi(t.buf, p1, t1.len), p2, t2.len);
     FastSetStringCP(dest, t.buf, p - t.buf, cp);
     t.Done;
   end;
@@ -956,9 +925,11 @@ begin
           ((cp2 <> cp) and
            (cp2 < CP_RAWBLOB)) then
   begin
+    // we need to ensure that codepage handling is performed as expected
     _ansistr_concat_convert(dest, s1, s2, cp, cp1, cp2);
     exit;
   end;
+  // we can safely concatenate the input with no conversion
   if s1 = '' then
     dest := s2
   else if s2 = '' then
@@ -967,7 +938,8 @@ begin
   begin
     l1 := _lstrlen(s1);
     if pointer(s1) = pointer(dest) then
-    begin // dest := dest+s2 -> self-resize dest
+    begin
+      // dest := dest+s2 -> self-resize dest
       SetLength(dest, l1 + _lstrlen(s2));
       PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codepage := cp;
       MoveFast(pointer(s2)^, PByteArray(dest)[l1], _lstrlen(s2));
@@ -988,7 +960,7 @@ var
   t: TBaseWriter;
   i: PtrInt;
   p: pointer;
-  u: RawUTF8;
+  u: RawUtf8;
   tmp: TTextWriterStackBuffer;
 begin
   t := TBaseWriter.CreateOwnedStream(tmp);
@@ -998,7 +970,7 @@ begin
       p := pointer(s[i]);
       if p <> nil then
         // use mormot.core.unicode efficient conversion
-        t.AddNoJSONEscape(p, _lstrlen(RawByteString(p)), _lstrcp(RawByteString(p), cp));
+        t.AddNoJsonEscape(p, _lstrlen(RawByteString(p)), _lstrcp(RawByteString(p), cp));
     end;
     t.SetText(u);
   finally
@@ -1008,7 +980,7 @@ begin
      (cp >= CP_RAWBLOB) then
     dest := u
   else
-    TSynAnsiConvert.Engine(cp).UTF8BufferToAnsi(pointer(u), length(u), dest);
+    TSynAnsiConvert.Engine(cp).Utf8BufferToAnsi(pointer(u), length(u), dest);
 end;
 
 procedure _ansistr_concat_multi_utf8(var dest: RawByteString;
@@ -1057,13 +1029,16 @@ begin
       end;
     end;
   if cpf = 0 then
+    // we need to ensure that codepage handling is performed as expected
     _ansistr_concat_multi_convert(dest, s, cp)
   else
   begin
+    // we can safely concatenate the input with no conversion
     p := pointer(s[first]);
     l := _lstrlen(RawByteString(p));
     if p = pointer(dest) then
-    begin // dest := dest+s... -> self-resize
+    begin
+      // dest := dest+s... -> self-resize
       SetLength(dest, len);
       new := pointer(dest);
       PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codepage := cp;
@@ -1088,18 +1063,19 @@ begin
   end;
 end;
 
-procedure _fpc_ansistr_concat(var a: RawUTF8);
+procedure _fpc_ansistr_concat(var a: RawUtf8);
 begin
   a := a + a; // to generate "call fpc_ansistr_concat" opcode
 end;
 
-procedure _fpc_ansistr_concat_multi(var a: RawUTF8);
+procedure _fpc_ansistr_concat_multi(var a: RawUtf8);
 begin
   a := a + a + a; // to generate "call fpc_ansistr_concat_multi" opcode
 end;
 
 procedure RedirectRtl(dummy, dest: PByteArray);
 begin
+  // POSIX only ABI: Windows is never natively UTF-8
   repeat
     if (dummy[0] = $b9) and
        (PCardinal(@dummy[1])^ = CP_UTF8) then

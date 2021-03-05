@@ -54,12 +54,13 @@ Efficient Unicode Conversion Classes shared by all framework units
 - UTF-8 / UTF-16 / Ansi Conversion Classes
 - Low-Level String Conversion Functions
 - Text Case-(in)sensitive Conversion and Comparison
+- Operating-System Independent Unicode Process
 
 ### mormot.core.text
 
 Text Processing functions shared by all framework units
 - UTF-8 String Manipulation Functions
-- `TRawUTF8DynArray` Processing Functions
+- `TRawUtf8DynArray` Processing Functions
 - CSV-like Iterations over Text Buffers
 - `TBaseWriter` parent class for Text Generation
 - Numbers (integers or floats) and Variants to Text Conversion
@@ -113,7 +114,7 @@ Low-Level Data Processing Functions shared by all framework units
 - INI Files and In-memory Access
 - Efficient RTTI Values Binary Serialization and Comparison
 - `TDynArray`, `TDynArrayHashed` and `TSynQueue` Wrappers
-- `RawUTF8` String Values Interning and `TRawUTF8List`
+- `RawUtf8` String Values Interning and `TRawUtf8List`
 
 ### mormot.core.json
 
@@ -138,7 +139,7 @@ JSON functions shared by all framework units
 
 Several Indexing and Search Engines, as used by other parts of the framework
 - Files Search in Folders
-- ScanUTF8, GLOB and SOUNDEX Text Search
+- ScanUtf8, GLOB and SOUNDEX Text Search
 - Versatile Expression Search Engine
 - *Bloom Filter* Probabilistic Index
 - Binary Buffers Delta Compression
@@ -149,7 +150,7 @@ Several Indexing and Search Engines, as used by other parts of the framework
 ### mormot.core.log
 
 Logging functions shared by all framework units
-- Executable Symbols Processing
+- Debug Symbols Processing from Delphi .map or FPC/GDB DWARF
 - Logging via `TSynLogFamily` `TSynLog` `ISynLog`
 - High-Level Logs and Exception Related Features
 - Efficient `.log` File Access via `TSynLogFile`
@@ -176,7 +177,7 @@ High-Level Multi-Threading features shared by all framework units
 
 High-Performance Cryptographic features shared by all framework units
 - Low-Level Memory Buffers Helper Functions
-- AES Encoding/Decoding with optimized asm and AES-NI support
+- AES Encoding/Decoding with optimized asm and AES-NI/CLMUL support
 - AES-256 Cryptographic Pseudorandom Number Generator (CSPRNG)
 - SHA-2 SHA-3 Secure Hashing
 - HMAC Authentication over SHA and CRC32C
@@ -185,7 +186,10 @@ High-Performance Cryptographic features shared by all framework units
 - Deprecated MD5 RC4 SHA-1 Algorithms
 - Deprecated Weak AES/SHA Process
 
-Optimized x86_64 or i386 asm stubs, featuring e.g. AES-NI, are included.
+This unit is validated against OpenSSL for correctness.
+It is fully stand-alone, and faster than OpenSSL on x86_64 (but AES-GCM).
+
+Legal Notice: as stated by [our licensing terms](../../LICENCE.md), make sure that you comply to any restriction about the use of cryptographic software in your country.
 
 ### mormot.core.ecc256r1
 
@@ -194,6 +198,7 @@ High-Performance *secp256r1/NISTP-256/prime256v1* Elliptic-Curve Cryptography
 - Middle-Level Certificate-based Public Key Cryptography
 
 Pascal and optimized gcc static binaries are included.
+If `mormot.core.crypto.openssl.RegisterOpenSsl` is called, faster *OpenSSL* library will be used.
 
 ### mormot.core.ecc
 
@@ -207,6 +212,19 @@ JSON Web Tokens (JWT) Implementation - see RFC 7797
 - Abstract JWT Parsing and Computation
 - JWT Implementation of `HS*` and `S3*` Symmetric Algorithms
 - JWT Implementation of `ES256` Asymmetric Algorithm
+
+### mormot.core.crypto.openssl
+
+High-Performance Cryptographic Features using *OpenSSL* 1.1.1
+- *OpenSSL* Cryptographic Pseudorandom Number Generator (CSPRNG)
+- AES Cypher/Uncypher in various Modes
+- Hashers and Signers OpenSSL Wrappers
+- *OpenSSL* Asymetric Cryptography
+- JWT Implementation using any OpenSSL Algorithm
+- Register *OpenSSL* to our General Cryptography Catalog
+
+TL;DR: On x86_64, our `mormot.core.crypto.pas` asm is stand-alone and faster than *OpenSSL* for most algorithms, and only 20% slower for `AES-GCM`.
+For `ECC`, our `mormot.core.ecc256r1` unit is noticeably slower than *OpenSSL*.
 
 ### mormot.core.secure
 
@@ -239,6 +257,7 @@ Implements SOLID Process via Interface types
 - `TInterfaceResolver` `TInjectableObject` for IoC / Dependency Injection
 - `TInterfaceStub` `TInterfaceMock` for Dependency Mocking
 - `TInterfaceMethodExecute` for Method Execution from JSON
+- `SetWeak` and `SetWeakZero` Weak Interface Reference Functions
 
 ### mormot.core.test
 

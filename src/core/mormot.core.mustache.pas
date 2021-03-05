@@ -76,7 +76,7 @@ type
     /// points to the mtText buffer start
     // - main template's text is not allocated as a separate string during
     // parsing, but will rather be copied directly from the template memory
-    TextStart: PUTF8Char;
+    TextStart: PUtf8Char;
     /// stores the mtText buffer length
     TextLen: integer;
     /// the index in Tags[] of the other end of this section
@@ -85,7 +85,7 @@ type
     SectionOppositeIndex: integer;
     /// the tag content, excluding trailing {{ }} and corresponding symbol
     // - is not set for mtText nor mtSetDelimiter
-    Value: RawUTF8;
+    Value: RawUtf8;
   end;
 
   /// store all {{mustache}} tags of a given template
@@ -108,12 +108,12 @@ type
   // - i.e. {{helperName value}} tags
   // - returned value will be used to process as replacement of a single {{tag}}
   TSynMustacheHelperEvent =
-    procedure(const Value: variant; out result: variant) of object;
+    procedure(const Value: variant; out Result: variant) of object;
 
   /// used to store a registered Expression Helper implementation
   TSynMustacheHelper = record
     /// the Expression Helper name
-    Name: RawUTF8;
+    Name: RawUtf8;
     /// the corresponding callback to process the tag
     Event: TSynMustacheHelperEvent;
   end;
@@ -135,11 +135,11 @@ type
     fEscapeInvert: boolean;
     fHelpers: TSynMustacheHelpers;
     fOnStringTranslate: TOnStringTranslate;
-    procedure TranslateBlock(Text: PUTF8Char; TextLen: Integer); virtual;
+    procedure TranslateBlock(Text: PUtf8Char; TextLen: Integer); virtual;
     procedure PopContext; virtual; abstract;
-    procedure AppendValue(const ValueName: RawUTF8; UnEscape: boolean);
+    procedure AppendValue(const ValueName: RawUtf8; UnEscape: boolean);
       virtual; abstract;
-    function AppendSection(const ValueName: RawUTF8): TSynMustacheSectionType;
+    function AppendSection(const ValueName: RawUtf8): TSynMustacheSectionType;
       virtual; abstract;
     function GotoNextListItem: boolean;
       virtual; abstract;
@@ -181,15 +181,15 @@ type
     fTempGetValueFromContextHelper: TVariantDynArray;
     procedure PushContext(aDoc: TVarData);
     procedure PopContext; override;
-    procedure AppendValue(const ValueName: RawUTF8; UnEscape: boolean);
+    procedure AppendValue(const ValueName: RawUtf8; UnEscape: boolean);
       override;
-    function AppendSection(const ValueName: RawUTF8): TSynMustacheSectionType;
+    function AppendSection(const ValueName: RawUtf8): TSynMustacheSectionType;
       override;
     function GotoNextListItem: boolean; override;
     function GetDocumentType(const aDoc: TVarData): TSynInvokeableVariantType;
-    function GetValueFromContext(const ValueName: RawUTF8;
+    function GetValueFromContext(const ValueName: RawUtf8;
       var Value: TVarData): TSynMustacheSectionType;
-    function GetValueCopyFromContext(const ValueName: RawUTF8): variant;
+    function GetValueCopyFromContext(const ValueName: RawUtf8): variant;
     procedure AppendVariant(const Value: variant; UnEscape: boolean);
   public
     /// initialize the context from a custom variant document
@@ -209,9 +209,9 @@ type
   // - you may also define "internal" partials, e.g. {{<foo}}This is foo{{/foo}}
   TSynMustachePartials = class
   protected
-    fList: TRawUTF8List;
+    fList: TRawUtf8List;
     fOwned: boolean;
-    function GetPartial(const PartialName: RawUTF8): TSynMustache;
+    function GetPartial(const PartialName: RawUtf8): TSynMustache;
   public
     /// initialize the template partials storage
     // - after creation, the partials should be registered via the Add() method
@@ -222,7 +222,7 @@ type
     // - this instance can be supplied as parameter to the TSynMustache.Render()
     // method, which will free the instances as soon as it finishes
     constructor CreateOwned(
-      const NameTemplatePairs: array of RawUTF8); overload;
+      const NameTemplatePairs: array of RawUtf8); overload;
     /// initialize a template partials storage with the supplied templates
     // - partials list is expected to be supplied as a dvObject TDocVariant,
     // each member being the name/template string pairs
@@ -233,17 +233,17 @@ type
       const Partials: variant): TSynMustachePartials; overload;
     /// register a {{>partialName}} template
     // - returns the parsed template
-    function Add(const aName,aTemplate: RawUTF8): TSynMustache; overload;
+    function Add(const aName,aTemplate: RawUtf8): TSynMustache; overload;
     /// register a {{>partialName}} template
     // - returns the parsed template
-    function Add(const aName: RawUTF8;
-      aTemplateStart, aTemplateEnd: PUTF8Char): TSynMustache; overload;
+    function Add(const aName: RawUtf8;
+      aTemplateStart, aTemplateEnd: PUtf8Char): TSynMustache; overload;
     /// search some text withing the {{mustache}} partial
-    function FoundInTemplate(const text: RawUTF8): PtrInt;
+    function FoundInTemplate(const text: RawUtf8): PtrInt;
     /// delete the partials
     destructor Destroy; override;
     /// low-level access to the internal partials list
-    property List: TRawUTF8List
+    property List: TRawUtf8List
       read fList;
   end;
 
@@ -275,30 +275,31 @@ type
   // TSynMustache instance can be used by several threads at once)
   TSynMustache = class
   protected
-    fTemplate: RawUTF8;
+    fTemplate: RawUtf8;
     fTags: TSynMustacheTagDynArray;
     fInternalPartials: TSynMustachePartials;
     fSectionMaxCount: Integer;
-    class procedure DateTimeToText(const Value: variant; out result: variant);
-    class procedure DateToText(const Value: variant; out result: variant);
-    class procedure DateFmt(const Value: variant; out result: variant);
-    class procedure TimeLogToText(const Value: variant; out result: variant);
-    class procedure BlobToBase64(const Value: variant; out result: variant);
-    class procedure ToJSON(const Value: variant; out result: variant);
-    class procedure JSONQuote(const Value: variant; out result: variant);
-    class procedure JSONQuoteURI(const Value: variant; out result: variant);
-    class procedure WikiToHtml(const Value: variant; out result: variant);
-    class procedure MarkdownToHtml(const Value: variant; out result: variant);
-    class procedure SimpleToHtml(const Value: variant; out result: variant);
-    class procedure Lower(const Value: variant; out result: variant);
-    class procedure Upper(const Value: variant; out result: variant);
-    class procedure EnumTrim(const Value: variant; out result: variant);
-    class procedure EnumTrimRight(const Value: variant; out result: variant);
-    class procedure PowerOfTwo(const Value: variant; out result: variant);
-    class procedure Equals_(const Value: variant; out result: variant);
-    class procedure If_(const Value: variant; out result: variant);
-    class procedure NewGUID(const Value: variant; out result: variant);
-    class procedure ExtractFileName(const Value: variant; out result: variant);
+    // standard helpers implementation
+    class procedure DateTimeToText(const Value: variant; out Result: variant);
+    class procedure DateToText(const Value: variant; out Result: variant);
+    class procedure DateFmt(const Value: variant; out Result: variant);
+    class procedure TimeLogToText(const Value: variant; out Result: variant);
+    class procedure BlobToBase64(const Value: variant; out Result: variant);
+    class procedure ToJson(const Value: variant; out Result: variant);
+    class procedure JsonQuote(const Value: variant; out Result: variant);
+    class procedure JsonQuoteUri(const Value: variant; out Result: variant);
+    class procedure WikiToHtml(const Value: variant; out Result: variant);
+    class procedure MarkdownToHtml(const Value: variant; out Result: variant);
+    class procedure SimpleToHtml(const Value: variant; out Result: variant);
+    class procedure Lower(const Value: variant; out Result: variant);
+    class procedure Upper(const Value: variant; out Result: variant);
+    class procedure EnumTrim(const Value: variant; out Result: variant);
+    class procedure EnumTrimRight(const Value: variant; out Result: variant);
+    class procedure PowerOfTwo(const Value: variant; out Result: variant);
+    class procedure Equals_(const Value: variant; out Result: variant);
+    class procedure If_(const Value: variant; out Result: variant);
+    class procedure NewGuid(const Value: variant; out Result: variant);
+    class procedure ExtractFileName(const Value: variant; out Result: variant);
   public
     /// parse a {{mustache}} template, and returns the corresponding
     // TSynMustache instance
@@ -306,27 +307,27 @@ type
     // - this implementation is thread-safe and re-entrant: i.e. the same
     // TSynMustache returned instance can be used by several threads at once
     // - will raise an ESynMustache exception on error
-    class function Parse(const aTemplate: RawUTF8): TSynMustache;
+    class function Parse(const aTemplate: RawUtf8): TSynMustache;
     /// remove the specified {{mustache}} template from the internal cache
     // - returns TRUE on success, or FALSE if the template was not cached
     // by a previous call to Parse() class function
-    class function UnParse(const aTemplate: RawUTF8): boolean;
+    class function UnParse(const aTemplate: RawUtf8): boolean;
     /// parse and render a {{mustache}} template over the supplied JSON
     // - an internal templates cache is maintained by this class function
     // - returns TRUE and set aContent the rendered content on success
     // - returns FALSE if the template is not correct
-    class function TryRenderJson(const aTemplate,aJSON: RawUTF8;
-      out aContent: RawUTF8): boolean;
+    class function TryRenderJson(const aTemplate,aJson: RawUtf8;
+      out aContent: RawUtf8): boolean;
   public
     /// initialize and parse a pre-rendered {{mustache}} template
     // - you should better use the Parse() class function instead, which
     // features an internal thread-safe cache
-    constructor Create(const aTemplate: RawUTF8); overload;
+    constructor Create(const aTemplate: RawUtf8); overload;
     /// initialize and parse a pre-rendered {{mustache}} template
     // - you should better use the Parse() class function instead, which
     // features an internal thread-safe cache
     constructor Create(
-      aTemplate: PUTF8Char; aTemplateLen: integer); overload; virtual;
+      aTemplate: PUtf8Char; aTemplateLen: integer); overload; virtual;
     /// finalize internal memory
     destructor Destroy; override;
     /// register one Expression Helper callback for a given list of helpers
@@ -334,22 +335,22 @@ type
     // - the supplied name will be checked against the current list, and replace
     // any existing entry
     class procedure HelperAdd(var Helpers: TSynMustacheHelpers;
-      const aName: RawUTF8; aEvent: TSynMustacheHelperEvent); overload;
+      const aName: RawUtf8; aEvent: TSynMustacheHelperEvent); overload;
     /// register several Expression Helper callbacks for a given list of helpers
     // - the supplied names will be checked against the current list, and replace
     // any existing entry
     class procedure HelperAdd(var Helpers: TSynMustacheHelpers;
-      const aNames: array of RawUTF8;
+      const aNames: array of RawUtf8;
       const aEvents: array of TSynMustacheHelperEvent); overload;
     /// unregister one Expression Helper callback for a given list of helpers
     class procedure HelperDelete(var Helpers: TSynMustacheHelpers;
-      const aName: RawUTF8);
+      const aName: RawUtf8);
     /// search for one Expression Helper event by name
     class function HelperFind(const Helpers: TSynMustacheHelpers;
-      aName: PUTF8Char; aNameLen: integer): integer;
+      aName: PUtf8Char; aNameLen: TStrLen): PtrInt;
     /// returns a list of most used static Expression Helpers
     // - registered helpers are DateTimeToText, DateToText, DateFmt, TimeLogToText,
-    // BlobToBase64, JSONQuote, JSONQuoteURI, ToJSON, EnumTrim, EnumTrimRight,
+    // BlobToBase64, JsonQuote, JsonQuoteUri, ToJson, EnumTrim, EnumTrimRight,
     // Lower, Upper, PowerOfTwo, Equals (expecting two parameters), MarkdownToHtml,
     // SimpleToHtml (Markdown with no HTML pass-through) and WikiToHtml
     // (following TTextWriter.AddHtmlEscapeWiki syntax)
@@ -362,7 +363,7 @@ type
     /// returns a list of most used static Expression Helpers, adding some
     // custom callbacks
     // - is just a wrapper around HelpersGetStandardList and HelperAdd()
-    class function HelpersGetStandardList(const aNames: array of RawUTF8;
+    class function HelpersGetStandardList(const aNames: array of RawUtf8;
       const aEvents: array of TSynMustacheHelperEvent): TSynMustacheHelpers; overload;
 
     /// renders the {{mustache}} template into a destination text buffer
@@ -381,7 +382,7 @@ type
     // - can be used e.g. via a TDocVariant:
     // !var mustache := TSynMustache;
     // !    doc: variant;
-    // !    html: RawUTF8;
+    // !    html: RawUtf8;
     // !begin
     // !  mustache := TSynMustache.Parse(
     // !    'Hello {{name}}'#13#10'You have just won {{value}} dollars!');
@@ -390,51 +391,51 @@ type
     // !  doc.value := 10000;
     // !  html := mustache.Render(doc);
     // !  // here html='Hello Chris'#13#10'You have just won 10000 dollars!'
-    // - you can also retrieve the context from an ORM query of mORMot.pas:
+    // - you can also retrieve the context from an ORM query:
     // ! dummy := TSynMustache.Parse(
     // !   '{{#items}}'#13#10'{{Int}}={{Test}}'#13#10'{{/items}}').Render(
-    // !   aClient.RetrieveDocVariantArray(TSQLRecordTest,'items','Int,Test'));
+    // !   aClient.RetrieveDocVariantArray(TOrmTest, 'items', 'Int,Test'));
     // - set EscapeInvert = true to force {{value}} NOT to escape HTML chars
     // and {{{value}} escaping chars (may be useful e.g. for code generation)
     function Render(const Context: variant;
       Partials: TSynMustachePartials = nil;
       Helpers: TSynMustacheHelpers = nil;
       const OnTranslate: TOnStringTranslate = nil;
-      EscapeInvert: boolean = false): RawUTF8;
+      EscapeInvert: boolean = false): RawUtf8;
     /// renders the {{mustache}} template from JSON defined context
     // - the context is given via a JSON object, defined from UTF-8 buffer
     // - you can specify a list of partials via TSynMustachePartials.CreateOwned,
     // a list of Expression Helpers, or a custom {{"English text}} callback
     // - is just a wrapper around Render(_JsonFast())
     // - you can write e.g. with the extended JSON syntax:
-    // ! html := mustache.RenderJSON('{things:["one", "two", "three"]}');
+    // ! html := mustache.RenderJson('{things:["one", "two", "three"]}');
     // - set EscapeInvert = true to force {{value}} NOT to escape HTML chars
     // and {{{value}} escaping chars (may be useful e.g. for code generation)
-    function RenderJSON(const JSON: RawUTF8;
+    function RenderJson(const Json: RawUtf8;
       Partials: TSynMustachePartials = nil;
       Helpers: TSynMustacheHelpers = nil;
       const OnTranslate: TOnStringTranslate = nil;
-      EscapeInvert: boolean = false): RawUTF8; overload;
+      EscapeInvert: boolean = false): RawUtf8; overload;
     /// renders the {{mustache}} template from JSON defined context
     // - the context is given via a JSON object, defined with parameters
     // - you can specify a list of partials via TSynMustachePartials.CreateOwned,
     // a list of Expression Helpers, or a custom {{"English text}} callback
     // - is just a wrapper around Render(_JsonFastFmt())
     // - you can write e.g. with the extended JSON syntax:
-    // !   html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000]);
+    // !   html := mustache.RenderJson('{name:?,value:?}',[],['Chris',10000]);
     // - set EscapeInvert = true to force {{value}} NOT to escape HTML chars
     // and {{{value}} escaping chars (may be useful e.g. for code generation)
-    function RenderJSON(const JSON: RawUTF8;
+    function RenderJson(const Json: RawUtf8;
       const Args, Params: array of const;
       Partials: TSynMustachePartials = nil;
       Helpers: TSynMustacheHelpers = nil;
       const OnTranslate: TOnStringTranslate = nil;
-      EscapeInvert: boolean = false): RawUTF8; overload;
+      EscapeInvert: boolean = false): RawUtf8; overload;
     /// search some text within the {{mustache}} template text
-    function FoundInTemplate(const text: RawUTF8): boolean;
+    function FoundInTemplate(const text: RawUtf8): boolean;
 
     /// read-only access to the raw {{mustache}} template content
-    property Template: RawUTF8
+    property Template: RawUtf8
       read fTemplate;
     /// the maximum possible number of nested contexts
     property SectionMaxCount: Integer
@@ -446,16 +447,16 @@ const
   /// Mustache-friendly JSON Serialization Options
   // - as used e.g. from mormot.rest.mvc Data Context from Cookies
   TEXTWRITEROPTIONS_MUSTACHE =
-     [twoForceJSONExtended,
+     [twoForceJsonExtended,
       twoEnumSetsAsBooleanInRecord,
       twoTrimLeftEnumSets];
 
   /// this constant can be used to define as JSON a tag value
-  NULL_OR_TRUE: array[boolean] of RawUTF8 = (
+  NULL_OR_TRUE: array[boolean] of RawUtf8 = (
     'null', 'true');
 
   /// this constant can be used to define as JSON a tag value as separator
-  NULL_OR_COMMA: array[boolean] of RawUTF8 = (
+  NULL_OR_COMMA: array[boolean] of RawUtf8 = (
     'null', '","');
 
 
@@ -473,18 +474,18 @@ begin
   fWriter := WR;
 end;
 
-procedure TSynMustacheContext.TranslateBlock(Text: PUTF8Char; TextLen: Integer);
+procedure TSynMustacheContext.TranslateBlock(Text: PUtf8Char; TextLen: Integer);
 var
   s: string;
 begin
   if Assigned(OnStringTranslate) then
   begin
-    UTF8DecodeToString(Text, TextLen, s);
+    Utf8DecodeToString(Text, TextLen, s);
     OnStringTranslate(s);
-    fWriter.AddNoJSONEscapeString(s);
+    fWriter.AddNoJsonEscapeString(s);
   end
   else
-    fWriter.AddNoJSONEscape(Text, TextLen);
+    fWriter.AddNoJsonEscape(Text, TextLen);
 end;
 
 
@@ -538,7 +539,7 @@ begin
 end;
 
 function TSynMustacheContextVariant.GetValueCopyFromContext(
-  const ValueName: RawUTF8): variant;
+  const ValueName: RawUtf8): variant;
 var
   tmp: TVarData;
 begin
@@ -547,7 +548,7 @@ begin
      (ValueName = 'true') or
      (ValueName = 'false') or
      (ValueName = 'null') then
-    VariantLoadJSON(result, ValueName, @JSON_OPTIONS[true])
+    VariantLoadJson(result, ValueName, @JSON_OPTIONS[true])
   else
   begin
     GetValueFromContext(ValueName, tmp);
@@ -556,17 +557,17 @@ begin
 end;
 
 function TSynMustacheContextVariant.GetValueFromContext(
-  const ValueName: RawUTF8; var Value: TVarData): TSynMustacheSectionType;
+  const ValueName: RawUtf8; var Value: TVarData): TSynMustacheSectionType;
 var
   i, space, helper: PtrInt;
 
   procedure ProcessHelper;
   var
-    valnam: RawUTF8;
+    valnam: RawUtf8;
     val: TVarData;
     valArr: TDocVariantData absolute val;
     valFree: boolean;
-    names: TRawUTF8DynArray;
+    names: TRawUtf8DynArray;
     res: PVarData;
     j, k, n: integer;
   begin
@@ -597,7 +598,7 @@ var
             ',':
               begin
                 // {{helper value,123,"constant"}}
-                CSVToRawUTF8DynArray(Pointer(valnam), names, ',', true);
+                CsvToRawUtf8DynArray(Pointer(valnam), names, ',', true);
                 // TODO: handle 123,"a,b,c"
                 valArr.InitFast;
                 for k := 0 to High(names) do
@@ -658,8 +659,8 @@ begin
     end;
     // if helper not found, will return the unprocessed value
   end;
+  // recursive search of {{value}}
   for i := fContextCount - 1 downto 0 do
-    // recursive search of {{value}}
     with fContext[i] do
       if DocumentType <> nil then
         if ListCount < 0 then
@@ -687,9 +688,9 @@ begin
           if Value.VType >= varNull then
             exit;
         end;
+  // no matching {{value}} -> try if was not {{helper}}
   if space = 0 then
   begin
-    // {{helper}}
     space := length(ValueName);
     helper := TSynMustache.HelperFind(Helpers, pointer(ValueName), space);
     if helper >= 0 then
@@ -697,7 +698,7 @@ begin
   end;
 end;
 
-procedure TSynMustacheContextVariant.AppendValue(const ValueName: RawUTF8;
+procedure TSynMustacheContextVariant.AppendValue(const ValueName: RawUtf8;
   UnEscape: boolean);
 var
   Value: TVarData;
@@ -709,26 +710,26 @@ end;
 procedure TSynMustacheContextVariant.AppendVariant(const Value: variant;
   UnEscape: boolean);
 var
-  ValueText: RawUTF8;
+  ValueText: RawUtf8;
   wasString: boolean;
 begin
   if TVarData(Value).VType > varNull then
     if VarIsNumeric(Value) then
-      // avoid RawUTF8 conversion for plain numbers
+      // avoid RawUtf8 conversion for plain numbers
       fWriter.AddVariant(Value, twNone)
     else
     begin
       if fEscapeInvert then
         UnEscape := not UnEscape;
-      VariantToUTF8(Value, ValueText, wasString);
+      VariantToUtf8(Value, ValueText, wasString);
       if UnEscape then
-        fWriter.AddNoJSONEscape(pointer(ValueText), length(ValueText))
+        fWriter.AddNoJsonEscape(pointer(ValueText), length(ValueText))
       else
         fWriter.AddHtmlEscape(pointer(ValueText));
     end;
 end;
 
-function TSynMustacheContextVariant.AppendSection(const ValueName: RawUTF8):
+function TSynMustacheContextVariant.AppendSection(const ValueName: RawUtf8):
   TSynMustacheSectionType;
 var
   Value: TVarData;
@@ -798,11 +799,11 @@ end;
 
 constructor TSynMustachePartials.Create;
 begin
-  fList := TRawUTF8List.Create([fNoDuplicate, fCaseSensitive]);
+  fList := TRawUtf8List.Create([fNoDuplicate, fCaseSensitive]);
 end;
 
 constructor TSynMustachePartials.CreateOwned(
-  const NameTemplatePairs: array of RawUTF8);
+  const NameTemplatePairs: array of RawUtf8);
 var
   A: PtrInt;
 begin
@@ -812,24 +813,24 @@ begin
     Add(NameTemplatePairs[A * 2], NameTemplatePairs[A * 2 + 1]);
 end;
 
-function TSynMustachePartials.Add(const aName, aTemplate: RawUTF8): TSynMustache;
+function TSynMustachePartials.Add(const aName, aTemplate: RawUtf8): TSynMustache;
 begin
   result := TSynMustache.Parse(aTemplate);
   if (result <> nil) and
      (fList.AddObject(aName, result) < 0) then
-    raise ESynMustache.CreateUTF8('%.Add(%) duplicated name', [self, aName]);
+    raise ESynMustache.CreateUtf8('%.Add(%) duplicated name', [self, aName]);
 end;
 
-function TSynMustachePartials.Add(const aName: RawUTF8;
-  aTemplateStart, aTemplateEnd: PUTF8Char): TSynMustache;
+function TSynMustachePartials.Add(const aName: RawUtf8;
+  aTemplateStart, aTemplateEnd: PUtf8Char): TSynMustache;
 var
-  aTemplate: RawUTF8;
+  aTemplate: RawUtf8;
 begin
   FastSetString(aTemplate, aTemplateStart, aTemplateEnd - aTemplateStart);
   result := Add(aName, aTemplate);
 end;
 
-function TSynMustachePartials.FoundInTemplate(const text: RawUTF8): PtrInt;
+function TSynMustachePartials.FoundInTemplate(const text: RawUtf8): PtrInt;
 begin
   if self <> nil then
     result := fList.Contains(text)
@@ -851,7 +852,7 @@ begin
         result := TSynMustachePartials.Create;
         result.fOwned := true;
         for p := 0 to Count - 1 do
-          result.Add(names[p], VariantToUTF8(Values[p]));
+          result.Add(names[p], VariantToUtf8(Values[p]));
       end;
 end;
 
@@ -862,7 +863,7 @@ begin
 end;
 
 function TSynMustachePartials.GetPartial(
-  const PartialName: RawUTF8): TSynMustache;
+  const PartialName: RawUtf8): TSynMustache;
 var
   i: PtrInt;
 begin
@@ -891,23 +892,23 @@ type
   TSynMustacheParser = class
   protected
     fTagStart, fTagStop: word;
-    fPos, fPosMin, fPosMax, fPosTagStart: PUTF8Char;
+    fPos, fPosMin, fPosMax, fPosTagStart: PUtf8Char;
     fTagCount: integer;
     fTemplate: TSynMustache;
-    fScanStart, fScanEnd: PUTF8Char;
+    fScanStart, fScanEnd: PUtf8Char;
     function Scan(ExpectedTag: Word): boolean;
     procedure AddTag(aKind: TSynMustacheTagKind;
-      aStart: PUTF8Char = nil; aEnd: PUTF8Char = nil);
+      aStart: PUtf8Char = nil; aEnd: PUtf8Char = nil);
   public
     constructor Create(Template: TSynMustache;
-      const DelimiterStart, DelimiterStop: RawUTF8);
-    procedure Parse(p, PEnd: PUTF8Char);
+      const DelimiterStart, DelimiterStop: RawUtf8);
+    procedure Parse(p, PEnd: PUtf8Char);
   end;
 
-  TSynMustacheCache = class(TRawUTF8List)
+  TSynMustacheCache = class(TRawUtf8List)
   public
-    function Parse(const aTemplate: RawUTF8): TSynMustache;
-    function UnParse(const aTemplate: RawUTF8): boolean;
+    function Parse(const aTemplate: RawUtf8): TSynMustache;
+    function UnParse(const aTemplate: RawUtf8): boolean;
   end;
 
 var
@@ -917,9 +918,9 @@ var
 { TSynMustacheParser }
 
 procedure TSynMustacheParser.AddTag(aKind: TSynMustacheTagKind;
-  aStart, aEnd: PUTF8Char);
+  aStart, aEnd: PUtf8Char);
 var
-  P: PUTF8Char;
+  P: PUtf8Char;
 begin
   if (aStart = nil) or
      (aEnd = nil) then
@@ -968,13 +969,13 @@ begin
             P := GotoNextNotSpaceSameLine(P + 1);
             if P^ in ['{', '['] then
             begin
-              P := GotoNextJSONObjectOrArray(P);
+              P := GotoNextJsonObjectOrArray(P);
               if P <> nil then
               begin
                 aEnd := P;
                 fPos := P;
                 if not Scan(fTagStop) then
-                  raise ESynMustache.CreateUTF8('Unfinished {{%', [aStart]);
+                  raise ESynMustache.CreateUtf8('Unfinished {{%', [aStart]);
                 if (aKind = mtVariableUnescape) and
                    (fTagStop = $7d7d) and
                    (PWord(fPos - 1)^ = $7d7d) then
@@ -1012,7 +1013,7 @@ begin
               (aEnd[-1] <= ' ') do
           dec(aEnd);
         if aEnd = aStart then
-          raise ESynMustache.CreateUTF8(
+          raise ESynMustache.CreateUtf8(
             'Void % identifier', [KindToText(aKind)^]);
         FastSetString(Value, aStart, aEnd - aStart);
       end;
@@ -1022,18 +1023,18 @@ begin
 end;
 
 constructor TSynMustacheParser.Create(Template: TSynMustache;
-  const DelimiterStart, DelimiterStop: RawUTF8);
+  const DelimiterStart, DelimiterStop: RawUtf8);
 begin
   fTemplate := Template;
   if length(DelimiterStart) <> 2 then
-    raise ESynMustache.CreateUTF8('DelimiterStart="%"', [DelimiterStart]);
+    raise ESynMustache.CreateUtf8('DelimiterStart="%"', [DelimiterStart]);
   if length(DelimiterStop) <> 2 then
-    raise ESynMustache.CreateUTF8('DelimiterStop="%"', [DelimiterStop]);
+    raise ESynMustache.CreateUtf8('DelimiterStop="%"', [DelimiterStop]);
   fTagStart := PWord(DelimiterStart)^;
   fTagStop := PWord(DelimiterStop)^;
 end;
 
-function GotoNextTag(P, PMax: PUTF8Char; ExpectedTag: Word): PUTF8Char;
+function GotoNextTag(P, PMax: PUtf8Char; ExpectedTag: Word): PUtf8Char;
 begin
   if P < PMax then
     repeat
@@ -1052,7 +1053,7 @@ end;
 
 function TSynMustacheParser.Scan(ExpectedTag: Word): boolean;
 var
-  P: PUTF8Char;
+  P: PUtf8Char;
 begin
   P := GotoNextTag(fPos, fPosMax, ExpectedTag);
   if P = nil then
@@ -1066,7 +1067,7 @@ begin
   end;
 end;
 
-function SectionNameMatch(const start, finish: RawUTF8): boolean;
+function SectionNameMatch(const start, finish: RawUtf8): boolean;
 var
   i: integer;
 begin
@@ -1080,7 +1081,7 @@ begin
   end;
 end;
 
-procedure TSynMustacheParser.Parse(P, PEnd: PUTF8Char);
+procedure TSynMustacheParser.Parse(P, PEnd: PUtf8Char);
 var
   Kind: TSynMustacheTagKind;
   Symbol: AnsiChar;
@@ -1127,7 +1128,7 @@ begin
     if Kind <> mtVariable then
       inc(fPos);
     if not Scan(fTagStop) then
-      raise ESynMustache.CreateUTF8('Unfinished {{tag [%]', [fPos]);
+      raise ESynMustache.CreateUtf8('Unfinished {{tag [%]', [fPos]);
     case Kind of
       mtSetDelimiter:
         begin
@@ -1182,20 +1183,20 @@ begin
                         break;
                       end
                       else
-                        raise ESynMustache.CreateUTF8(
+                        raise ESynMustache.CreateUtf8(
                           'Got {{/%}}, expected {{/%}}',
                           [Value, fTemplate.fTags[j].Value]);
                   end;
               end;
             if SectionOppositeIndex < 0 then
-              raise ESynMustache.CreateUTF8(
+              raise ESynMustache.CreateUtf8(
                 'Missing section end {{/%}}', [Value]);
           end;
         mtSectionEnd:
           begin
             dec(secCount);
             if SectionOppositeIndex < 0 then
-              raise ESynMustache.CreateUTF8(
+              raise ESynMustache.CreateUtf8(
                 'Unexpected section end {{/%}}', [Value]);
           end;
       end;
@@ -1205,7 +1206,7 @@ end;
 
 { TSynMustacheCache }
 
-function TSynMustacheCache.Parse(const aTemplate: RawUTF8): TSynMustache;
+function TSynMustacheCache.Parse(const aTemplate: RawUtf8): TSynMustache;
 begin
   result := GetObjectFrom(aTemplate);
   if result = nil then
@@ -1215,7 +1216,7 @@ begin
   end;
 end;
 
-function TSynMustacheCache.UnParse(const aTemplate: RawUTF8): boolean;
+function TSynMustacheCache.UnParse(const aTemplate: RawUtf8): boolean;
 begin
   result := Delete(aTemplate) >= 0;
 end;
@@ -1223,7 +1224,7 @@ end;
 
 { TSynMustache }
 
-class function TSynMustache.Parse(const aTemplate: RawUTF8): TSynMustache;
+class function TSynMustache.Parse(const aTemplate: RawUtf8): TSynMustache;
 begin
   if SynMustacheCache = nil then
   begin
@@ -1239,20 +1240,20 @@ begin
   result := SynMustacheCache.Parse(aTemplate);
 end;
 
-class function TSynMustache.UnParse(const aTemplate: RawUTF8): boolean;
+class function TSynMustache.UnParse(const aTemplate: RawUtf8): boolean;
 begin
   result := SynMustacheCache.UnParse(aTemplate);
 end;
 
-class function TSynMustache.TryRenderJson(const aTemplate, aJSON: RawUTF8;
-  out aContent: RawUTF8): boolean;
+class function TSynMustache.TryRenderJson(const aTemplate, aJson: RawUtf8;
+  out aContent: RawUtf8): boolean;
 var
   mus: TSynMustache;
 begin
   if aTemplate <> '' then
   try
     mus := Parse(aTemplate);
-    aContent := mus.RenderJSON(aJSON);
+    aContent := mus.RenderJson(aJson);
     result := true;
   except
     result := false;
@@ -1261,12 +1262,12 @@ begin
     result := false;
 end;
 
-constructor TSynMustache.Create(const aTemplate: RawUTF8);
+constructor TSynMustache.Create(const aTemplate: RawUtf8);
 begin
   Create(pointer(aTemplate), length(aTemplate));
 end;
 
-constructor TSynMustache.Create(aTemplate: PUTF8Char; aTemplateLen: integer);
+constructor TSynMustache.Create(aTemplate: PUtf8Char; aTemplateLen: integer);
 begin
   inherited Create;
   fTemplate := aTemplate;
@@ -1295,7 +1296,7 @@ begin
           mtText:
             if TextLen <> 0 then
               // may be 0 e.g. for standalone without previous Line
-              Context.fWriter.AddNoJSONEscape(TextStart, TextLen);
+              Context.fWriter.AddNoJsonEscape(TextStart, TextLen);
           mtVariable:
             Context.AppendValue(Value, false);
           mtVariableUnescape, mtVariableUnescapeAmp:
@@ -1356,7 +1357,7 @@ begin
             if TextLen <> 0 then
               Context.TranslateBlock(TextStart, TextLen);
         else
-          raise ESynMustache.CreateUTF8('Kind=% not implemented yet',
+          raise ESynMustache.CreateUtf8('Kind=% not implemented yet',
             [KindToText(fTags[TagStart].Kind)^]);
         end;
       inc(TagStart);
@@ -1371,7 +1372,7 @@ end;
 
 function TSynMustache.Render(const Context: variant;
   Partials: TSynMustachePartials; Helpers: TSynMustacheHelpers;
-  const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUTF8;
+  const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUtf8;
 var
   W: TTextWriter;
   Ctxt: TSynMustacheContext;
@@ -1394,24 +1395,24 @@ begin
   end;
 end;
 
-function TSynMustache.RenderJSON(const JSON: RawUTF8;
+function TSynMustache.RenderJson(const Json: RawUtf8;
   Partials: TSynMustachePartials; Helpers: TSynMustacheHelpers;
-  const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUTF8;
+  const OnTranslate: TOnStringTranslate; EscapeInvert: boolean): RawUtf8;
 var
   context: variant;
 begin
-  _Json(JSON, context{%H-}, JSON_OPTIONS[true]);
+  _Json(Json, context{%H-}, JSON_OPTIONS[true]);
   result := Render(context, Partials, Helpers, OnTranslate, EscapeInvert);
 end;
 
-function TSynMustache.RenderJSON(const JSON: RawUTF8;
+function TSynMustache.RenderJson(const Json: RawUtf8;
   const Args, Params: array of const; Partials: TSynMustachePartials;
   Helpers: TSynMustacheHelpers; const OnTranslate: TOnStringTranslate;
-  EscapeInvert: boolean): RawUTF8;
+  EscapeInvert: boolean): RawUtf8;
 var
   context: variant;
 begin
-  _Json(FormatUTF8(JSON, Args, Params, true), context{%H-}, JSON_OPTIONS[true]);
+  _Json(FormatUtf8(Json, Args, Params, true), context{%H-}, JSON_OPTIONS[true]);
   result := Render(context, Partials, Helpers, OnTranslate, EscapeInvert);
 end;
 
@@ -1421,7 +1422,7 @@ begin
   inherited;
 end;
 
-function TSynMustache.FoundInTemplate(const text: RawUTF8): boolean;
+function TSynMustache.FoundInTemplate(const text: RawUtf8): boolean;
 begin
   // internal partials are part of fTemplate
   result := (self <> nil) and
@@ -1430,7 +1431,7 @@ begin
 end;
 
 class procedure TSynMustache.HelperAdd(var Helpers: TSynMustacheHelpers;
-  const aName: RawUTF8; aEvent: TSynMustacheHelperEvent);
+  const aName: RawUtf8; aEvent: TSynMustacheHelperEvent);
 var
   n, i: PtrInt;
 begin
@@ -1447,7 +1448,7 @@ begin
 end;
 
 class procedure TSynMustache.HelperAdd(var Helpers: TSynMustacheHelpers;
-  const aNames: array of RawUTF8;
+  const aNames: array of RawUtf8;
   const aEvents: array of TSynMustacheHelperEvent);
 var
   n, i: PtrInt;
@@ -1459,7 +1460,7 @@ begin
 end;
 
 class procedure TSynMustache.HelperDelete(var Helpers: TSynMustacheHelpers;
-  const aName: RawUTF8);
+  const aName: RawUtf8);
 var
   n, i, j: PtrInt;
 begin
@@ -1475,11 +1476,28 @@ begin
 end;
 
 class function TSynMustache.HelperFind(const Helpers: TSynMustacheHelpers;
-  aName: PUTF8Char; aNameLen: integer): integer;
+  aName: PUtf8Char; aNameLen: TStrLen): PtrInt;
+var
+  h: ^TSynMustacheHelper;
+  p: PUtf8Char;
+  n: integer;
 begin
-  for result := 0 to length(Helpers) - 1 do
-    if IdemPropNameU(Helpers[result].Name, aName, aNameLen) then
-      exit;
+  h := pointer(Helpers);
+  if (h <> nil) and
+     (aNameLen > 0) then
+  begin
+    result := 0;
+    n := PDALen(PAnsiChar(h) - _DALEN)^ + _DAOFF;
+    repeat
+      P := pointer(h^.Name);
+      if (PStrLen(P - _STRLEN)^ = aNameLen) and
+         IdemPropNameUSameLenNotNull(P, aName, aNameLen) then
+        exit;
+      inc(h);
+      inc(result);
+      dec(n);
+    until n = 0;
+  end;
   result := -1;
 end;
 
@@ -1490,19 +1508,19 @@ class function TSynMustache.HelpersGetStandardList: TSynMustacheHelpers;
 begin
   if HelpersStandardList = nil then
     HelperAdd(HelpersStandardList, [
-      'DateTimeToText', 'DateToText', 'DateFmt', 'TimeLogToText', 'JSONQuote',
-      'JSONQuoteURI', 'ToJSON', 'MarkdownToHtml', 'SimpleToHtml', 'WikiToHtml',
+      'DateTimeToText', 'DateToText', 'DateFmt', 'TimeLogToText', 'JsonQuote',
+      'JsonQuoteUri', 'ToJson', 'MarkdownToHtml', 'SimpleToHtml', 'WikiToHtml',
       'BlobToBase64', 'EnumTrim', 'EnumTrimRight', 'PowerOfTwo', 'Equals',
-      'If', 'NewGUID', 'ExtractFileName', 'Lower', 'Upper'], [
-      DateTimeToText, DateToText, DateFmt, TimeLogToText, JSONQuote,
-      JSONQuoteURI, ToJSON, MarkdownToHtml, SimpleToHtml, WikiToHtml,
+      'If', 'NewGuid', 'ExtractFileName', 'Lower', 'Upper'], [
+      DateTimeToText, DateToText, DateFmt, TimeLogToText, JsonQuote,
+      JsonQuoteUri, ToJson, MarkdownToHtml, SimpleToHtml, WikiToHtml,
       BlobToBase64, EnumTrim, EnumTrimRight, PowerOfTwo, Equals_,
-      If_, NewGUID, ExtractFileName, Lower, Upper]);
+      If_, NewGuid, ExtractFileName, Lower, Upper]);
   result := HelpersStandardList;
 end;
 
 class function TSynMustache.HelpersGetStandardList(
-  const aNames: array of RawUTF8;
+  const aNames: array of RawUtf8;
   const aEvents: array of TSynMustacheHelperEvent): TSynMustacheHelpers;
 begin
   // make first a copy to not change/affect global HelpersStandardList
@@ -1511,7 +1529,7 @@ begin
 end;
 
 class procedure TSynMustache.DateTimeToText(
-  const Value: variant; out result: variant);
+  const Value: variant; out Result: variant);
 var
   Time: TTimeLogBits;
   dt: TDateTime;
@@ -1519,14 +1537,14 @@ begin
   if VariantToDateTime(Value, dt) then
   begin
     Time.From(dt, false);
-    result := Time.i18nText;
+    Result := Time.i18nText;
   end
   else
-    SetVariantNull(result{%H-});
+    SetVariantNull(Result{%H-});
 end;
 
 class procedure TSynMustache.DateToText(const Value: variant;
-  out result: variant);
+  out Result: variant);
 var
   Time: TTimeLogBits;
   dt: TDateTime;
@@ -1534,14 +1552,14 @@ begin
   if VariantToDateTime(Value, dt) then
   begin
     Time.From(dt, true);
-    result := Time.i18nText;
+    Result := Time.i18nText;
   end
   else
-    SetVariantNull(result{%H-});
+    SetVariantNull(Result{%H-});
 end;
 
 class procedure TSynMustache.DateFmt(const Value: variant;
-  out result: variant);
+  out Result: variant);
 var
   dt: TDateTime;
 begin
@@ -1550,55 +1568,55 @@ begin
     if (Kind = dvArray) and
        (Count = 2) and
        VariantToDateTime(Values[0], dt) then
-      result := FormatDateTime(Values[1], dt)
+      Result := FormatDateTime(Values[1], dt)
     else
-      SetVariantNull(result{%H-});
+      SetVariantNull(Result{%H-});
 end;
 
 class procedure TSynMustache.TimeLogToText(const Value: variant;
-  out result: variant);
+  out Result: variant);
 var
   Time: TTimeLogBits;
 begin
   if VariantToInt64(Value, Time.Value) then
-    result := Time.i18nText
+    Result := Time.i18nText
   else
-    SetVariantNull(result{%H-});
+    SetVariantNull(Result{%H-});
 end;
 
-class procedure TSynMustache.ToJSON(const Value: variant;
-  out result: variant);
+class procedure TSynMustache.ToJson(const Value: variant;
+  out Result: variant);
 begin
   if not VarIsEmptyOrNull(Value) then
-    RawUTF8ToVariant(JSONReformat(VariantToUTF8(Value)), result);
+    RawUtf8ToVariant(JsonReformat(VariantToUtf8(Value)), Result);
 end;
 
-class procedure TSynMustache.JSONQuote(const Value: variant;
-  out result: variant);
+class procedure TSynMustache.JsonQuote(const Value: variant;
+  out Result: variant);
 var
-  json: RawUTF8;
+  json: RawUtf8;
 begin
   if not VarIsEmptyOrNull(Value) then
     // avoid to return "null"
-    VariantToUTF8(Value, json);
-  RawUTF8ToVariant(QuotedStrJSON(json), result);
+    VariantToUtf8(Value, json);
+  RawUtf8ToVariant(QuotedStrJson(json), Result);
 end;
 
-class procedure TSynMustache.JSONQuoteURI(const Value: variant;
-  out result: variant);
+class procedure TSynMustache.JsonQuoteUri(const Value: variant;
+  out Result: variant);
 var
-  json: RawUTF8;
+  json: RawUtf8;
 begin
   if not VarIsEmptyOrNull(Value) then
     // avoid to return "null"
-    VariantToUTF8(Value, json);
-  RawUTF8ToVariant(UrlEncode(QuotedStrJSON(json)), result);
+    VariantToUtf8(Value, json);
+  RawUtf8ToVariant(UrlEncode(QuotedStrJson(json)), Result);
 end;
 
-procedure ToHtml(const Value: variant; var result: variant;
+procedure ToHtml(const Value: variant; var Result: variant;
   fmt: TTextWriterHTMLEscape; wiki: boolean = false);
 var
-  txt: RawUTF8;
+  txt: RawUtf8;
   d: PDocVariantData;
 begin
   // {{{SimpleToHtml content,browserhasnoemoji,nohtmlescape}}}
@@ -1608,9 +1626,9 @@ begin
   begin
     if VarIsEmptyOrNull(d^.Values[0]) then
       exit; // don't append 'null' text
-    VariantToUTF8(d^.Values[0], txt);
+    VariantToUtf8(d^.Values[0], txt);
     if not VarIsVoid(d^.Values[1]) then
-      exclude(fmt, heEmojiToUTF8);
+      exclude(fmt, heEmojiToUtf8);
     if (d^.Count >= 3) and
        not VarIsVoid(d^.Values[2]) then
       exclude(fmt, heHtmlEscape);
@@ -1620,74 +1638,74 @@ begin
     if VarIsEmptyOrNull(Value) then
       exit
     else
-      VariantToUTF8(Value, txt);
+      VariantToUtf8(Value, txt);
   if txt <> '' then
     if wiki then
       txt := HtmlEscapeWiki(txt, fmt)
     else
       txt := HtmlEscapeMarkdown(txt, fmt);
-  RawUTF8ToVariant(txt, result);
+  RawUtf8ToVariant(txt, Result);
 end;
 
 class procedure TSynMustache.WikiToHtml(const Value: variant;
-  out result: variant);
+  out Result: variant);
 begin
-  ToHtml(Value, result, [heHtmlEscape, heEmojiToUTF8], {wiki=}true);
+  ToHtml(Value, Result, [heHtmlEscape, heEmojiToUtf8], {wiki=}true);
 end;
 
 class procedure TSynMustache.MarkdownToHtml(const Value: variant;
-  out result: variant);
+  out Result: variant);
 begin
   // default Markdown is to allow HTML tags
-  ToHtml(Value, result, [heEmojiToUTF8]);
+  ToHtml(Value, Result, [heEmojiToUtf8]);
 end;
 
 class procedure TSynMustache.SimpleToHtml(const Value: variant;
-  out result: variant);
+  out Result: variant);
 begin
-  ToHtml(Value, result, [heHtmlEscape, heEmojiToUTF8]);
+  ToHtml(Value, Result, [heHtmlEscape, heEmojiToUtf8]);
 end;
 
 class procedure TSynMustache.BlobToBase64(const Value: variant;
-  out result: variant);
+  out Result: variant);
 var
-  tmp: RawUTF8;
+  tmp: RawUtf8;
   wasString: boolean;
 begin
-  VariantToUTF8(Value, tmp, wasString);
+  VariantToUtf8(Value, tmp, wasString);
   if wasString and
      (pointer(tmp) <> nil) then
   begin
     if PInteger(tmp)^ and $00ffffff = JSON_BASE64_MAGIC_C then
       delete(tmp, 1, 3);
-    RawUTF8ToVariant(tmp, result);
+    RawUtf8ToVariant(tmp, Result);
   end
   else
-    result := Value;
+    Result := Value;
 end;
 
 class procedure TSynMustache.EnumTrim(const Value: variant;
-  out result: variant);
+  out Result: variant);
 var
-  tmp: RawUTF8;
+  tmp: RawUtf8;
   wasString: boolean;
-  short: PUTF8Char;
+  short: PUtf8Char;
 begin
-  VariantToUTF8(Value, tmp, wasString);
+  VariantToUtf8(Value, tmp, wasString);
   if not wasString then
     exit;
   short := TrimLeftLowerCase(tmp);
-  RawUTF8ToVariant(short, StrLen(short), result);
+  RawUtf8ToVariant(short, StrLen(short), Result);
 end;
 
 class procedure TSynMustache.EnumTrimRight(const Value: variant;
-  out result: variant);
+  out Result: variant);
 var
-  tmp: RawUTF8;
+  tmp: RawUtf8;
   wasString: boolean;
   i, L: integer;
 begin
-  VariantToUTF8(Value, tmp, wasString);
+  VariantToUtf8(Value, tmp, wasString);
   if not wasString then
     exit;
   L := length(tmp);
@@ -1697,21 +1715,21 @@ begin
       L := i - 1;
       break;
     end;
-  RawUTF8ToVariant(Pointer(tmp), L, result);
+  RawUtf8ToVariant(Pointer(tmp), L, Result);
 end;
 
 class procedure TSynMustache.PowerOfTwo(const Value: variant;
-  out result: variant);
+  out Result: variant);
 var
   V: Int64;
 begin
   if TVarData(Value).VType > varNull then
     if VariantToInt64(Value, V) then
-      result := Int64(1) shl V;
+      Result := Int64(1) shl V;
 end;
 
 class procedure TSynMustache.Equals_(const Value: variant;
-  out result: variant);
+  out Result: variant);
 begin
   // {{#Equals .,12}}
   with _Safe(Value)^ do
@@ -1719,24 +1737,24 @@ begin
        (Count = 2) and
        (SortDynArrayVariantComp(
          TVarData(Values[0]), TVarData(Values[1]), false) = 0) then
-      result := true
+      Result := true
     else
-      SetVariantNull(result{%H-});
+      SetVariantNull(Result{%H-});
 end;
 
-class procedure TSynMustache.If_(const Value: variant; out result: variant);
+class procedure TSynMustache.If_(const Value: variant; out Result: variant);
 var
   cmp: integer;
-  oper: RawUTF8;
+  oper: RawUtf8;
   wasString: boolean;
 begin
   // {{#if .<>""}} or {{#if .,"=",123}}
-  SetVariantNull(result{%H-});
+  SetVariantNull(Result{%H-});
   with _Safe(Value)^ do
     if (Kind = dvArray) and
        (Count = 3) then
     begin
-      VariantToUTF8(Values[1], oper, wasString);
+      VariantToUtf8(Values[1], oper, wasString);
       if wasString and
          (oper <> '') then
       begin
@@ -1745,52 +1763,52 @@ begin
         case PWord(oper)^ of
           ord('='):
             if cmp = 0 then
-              result := True;
+              Result := True;
           ord('>'):
             if cmp > 0 then
-              result := True;
+              Result := True;
           ord('<'):
             if cmp < 0 then
-              result := True;
+              Result := True;
           ord('>') + ord('=') shl 8:
             if cmp >= 0 then
-              result := True;
+              Result := True;
           ord('<') + ord('=') shl 8:
             if cmp <= 0 then
-              result := True;
+              Result := True;
           ord('<') + ord('>') shl 8:
             if cmp <> 0 then
-              result := True;
+              Result := True;
         end;
       end;
     end;
 end;
 
-class procedure TSynMustache.NewGUID(const Value: variant;
-  out result: variant);
+class procedure TSynMustache.NewGuid(const Value: variant;
+  out Result: variant);
 var
   g: TGUID;
 begin
   CreateGUID(g);
-  RawUTF8ToVariant(GUIDToRawUTF8(g), result);
+  RawUtf8ToVariant(GuidToRawUtf8(g), Result);
 end;
 
 class procedure TSynMustache.ExtractFileName(const Value: variant;
-  out result: variant);
+  out Result: variant);
 begin
-  result := SysUtils.ExtractFileName(Value);
+  Result := SysUtils.ExtractFileName(Value);
 end;
 
 class procedure TSynMustache.Lower(const Value: variant;
-  out result: variant);
+  out Result: variant);
 begin
-  result := SysUtils.LowerCase(Value);
+  Result := SysUtils.LowerCase(Value);
 end;
 
 class procedure TSynMustache.Upper(const Value: variant;
-  out result: variant);
+  out Result: variant);
 begin
-  result := SysUtils.UpperCase(Value);
+  Result := SysUtils.UpperCase(Value);
 end;
 
 

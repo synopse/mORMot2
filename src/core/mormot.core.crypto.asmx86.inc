@@ -10,6 +10,9 @@
   // disabled some FPC paranoid warnings
   {$WARN 7102 off : Use of +offset(%ebp) for parameters invalid here }
   {$WARN 7104 off : Use of -offset(%ebp) is not recommended for local variable access }
+  {$WARN 7121 off : Check size of memory operand }
+  {$WARN 7122 off : Check size of memory operand }
+  {$WARN 7123 off : Check offset of memory operand is negative }
 {$endif FPC}
 
 
@@ -17,7 +20,7 @@
 
 // those functions use global variables, so are not PIC-compatible
 
-procedure aesencryptasm(const ctxt: TAESContext; bi, bo: PWA4);
+procedure AesEncryptAsm(const ctxt: TAesContext; bi, bo: PWA4);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // rolled optimized encryption asm version by A. Bouchez
         push    ebx
@@ -27,7 +30,7 @@ asm // rolled optimized encryption asm version by A. Bouchez
         add     esp,  - 24
         mov     [esp + 4], ecx
         mov     ecx, eax // ecx=pk
-        movzx   eax, byte ptr[eax].TAESContext.Rounds
+        movzx   eax, byte ptr [eax].TAesContext.Rounds
         dec     eax
         mov     [esp + 20], eax
         mov     ebx, [edx]
@@ -41,54 +44,54 @@ asm // rolled optimized encryption asm version by A. Bouchez
         lea     ecx, [ecx + 16]
 @1:     // pk=ecx s0=ebx s1=esi s2=eax s3=edx
         movzx   edi, bl
-        mov     edi, dword ptr[4 * edi + Te0]
+        mov     edi, dword ptr [4 * edi + Te0]
         movzx   ebp, si
         shr     ebp, $08
-        xor     edi, dword ptr[4 * ebp + Te1]
+        xor     edi, dword ptr [4 * ebp + Te1]
         mov     ebp, eax
         shr     ebp, $10
         and     ebp, $ff
-        xor     edi, dword ptr[4 * ebp + Te2]
+        xor     edi, dword ptr [4 * ebp + Te2]
         mov     ebp, edx
         shr     ebp, $18
-        xor     edi, dword ptr[4 * ebp + Te3]
+        xor     edi, dword ptr [4 * ebp + Te3]
         mov     [esp + 8], edi
         mov     edi, esi
         and     edi, 255
-        mov     edi, dword ptr[4 * edi + Te0]
+        mov     edi, dword ptr [4 * edi + Te0]
         movzx   ebp, ax
         shr     ebp, $08
-        xor     edi, dword ptr[4 * ebp + Te1]
+        xor     edi, dword ptr [4 * ebp + Te1]
         mov     ebp, edx
         shr     ebp, $10
         and     ebp, 255
-        xor     edi, dword ptr[4 * ebp + Te2]
+        xor     edi, dword ptr [4 * ebp + Te2]
         mov     ebp, ebx
         shr     ebp, $18
-        xor     edi, dword ptr[4 * ebp + Te3]
+        xor     edi, dword ptr [4 * ebp + Te3]
         mov     [esp + 12], edi
         movzx   edi, al
-        mov     edi, dword ptr[4 * edi + Te0]
+        mov     edi, dword ptr [4 * edi + Te0]
         movzx   ebp, dh
-        xor     edi, dword ptr[4 * ebp + Te1]
+        xor     edi, dword ptr [4 * ebp + Te1]
         mov     ebp, ebx
         shr     ebp, $10
         and     ebp, 255
-        xor     edi, dword ptr[4 * ebp + Te2]
+        xor     edi, dword ptr [4 * ebp + Te2]
         mov     ebp, esi
         shr     ebp, $18
-        xor     edi, dword ptr[4 * ebp + Te3]
+        xor     edi, dword ptr [4 * ebp + Te3]
         mov     [esp + 16], edi
         and     edx, 255
-        mov     edx, dword ptr[4 * edx + Te0]
+        mov     edx, dword ptr [4 * edx + Te0]
         shr     ebx, $08
         and     ebx, 255
-        xor     edx, dword ptr[4 * ebx + Te1]
+        xor     edx, dword ptr [4 * ebx + Te1]
         shr     esi, $10
         and     esi, 255
-        xor     edx, dword ptr[4 * esi + Te2]
+        xor     edx, dword ptr [4 * esi + Te2]
         shr     eax, $18
-        xor     edx, dword ptr[4 * eax + Te3]
+        xor     edx, dword ptr [4 * eax + Te3]
         mov     ebx, [ecx]
         xor     ebx, [esp + 8]
         mov     esi, [ecx + 4]
@@ -97,26 +100,26 @@ asm // rolled optimized encryption asm version by A. Bouchez
         xor     eax, [esp + 16]
         xor     edx, [ecx + 12]
         lea     ecx, [ecx + 16]
-        dec     byte ptr[esp + 20]
+        dec     byte ptr [esp + 20]
         jne     @1
         mov     ebp, ecx // ebp=pk
         movzx   ecx, bl
         mov     edi, esi
-        movzx   ecx, byte ptr[ecx + SBox]
+        movzx   ecx, byte ptr [ecx + SBox]
         shr     edi, $08
         and     edi, 255
-        movzx   edi, byte ptr[edi + SBox]
+        movzx   edi, byte ptr [edi + SBox]
         shl     edi, $08
         xor     ecx, edi
         mov     edi, eax
         shr     edi, $10
         and     edi, 255
-        movzx   edi, byte ptr[edi + SBox]
+        movzx   edi, byte ptr [edi + SBox]
         shl     edi, $10
         xor     ecx, edi
         mov     edi, edx
         shr     edi, $18
-        movzx   edi, byte ptr[edi + SBox]
+        movzx   edi, byte ptr [edi + SBox]
         shl     edi, $18
         xor     ecx, edi
         xor     ecx, [ebp]
@@ -124,20 +127,20 @@ asm // rolled optimized encryption asm version by A. Bouchez
         mov     [edi], ecx
         mov     ecx, esi
         and     ecx, 255
-        movzx   ecx, byte ptr[ecx + SBox]
+        movzx   ecx, byte ptr [ecx + SBox]
         movzx   edi, ah
-        movzx   edi, byte ptr[edi + SBox]
+        movzx   edi, byte ptr [edi + SBox]
         shl     edi, $08
         xor     ecx, edi
         mov     edi, edx
         shr     edi, $10
         and     edi, 255
-        movzx   edi, byte ptr[edi + SBox]
+        movzx   edi, byte ptr [edi + SBox]
         shl     edi, $10
         xor     ecx, edi
         mov     edi, ebx
         shr     edi, $18
-        movzx   edi, byte ptr[edi + SBox]
+        movzx   edi, byte ptr [edi + SBox]
         shl     edi, $18
         xor     ecx, edi
         xor     ecx, [ebp + 4]
@@ -145,41 +148,41 @@ asm // rolled optimized encryption asm version by A. Bouchez
         mov     [edi + 4], ecx
         mov     ecx, eax
         and     ecx, 255
-        movzx   ecx, byte ptr[ecx + SBox]
+        movzx   ecx, byte ptr [ecx + SBox]
         movzx   edi, dh
-        movzx   edi, byte ptr[edi + SBox]
+        movzx   edi, byte ptr [edi + SBox]
         shl     edi, $08
         xor     ecx, edi
         mov     edi, ebx
         shr     edi, $10
         and     edi, 255
-        movzx   edi, byte ptr[edi + SBox]
+        movzx   edi, byte ptr [edi + SBox]
         shl     edi, $10
         xor     ecx, edi
         mov     edi, esi
         shr     edi, $18
-        movzx   edi, byte ptr[edi + SBox]
+        movzx   edi, byte ptr [edi + SBox]
         shl     edi, $18
         xor     ecx, edi
         xor     ecx, [ebp + 8]
         mov     edi, [esp + 4]
         mov     [edi + 8], ecx
         and     edx, 255
-        movzx   edx, byte ptr[edx + SBox]
+        movzx   edx, byte ptr [edx + SBox]
         shr     ebx, $08
         and     ebx, 255
         xor     ecx, ecx
-        mov     cl, byte ptr[ebx + SBox]
+        mov     cl, byte ptr [ebx + SBox]
         shl     ecx, $08
         xor     edx, ecx
         shr     esi, $10
         and     esi, 255
         xor     ecx, ecx
-        mov     cl, byte ptr[esi + SBox]
+        mov     cl, byte ptr [esi + SBox]
         shl     ecx, $10
         xor     edx, ecx
         shr     eax, $18
-        movzx   eax, byte ptr[eax + SBox]
+        movzx   eax, byte ptr [eax + SBox]
         shl     eax, $18
         xor     edx, eax
         xor     edx, [ebp + 12]
@@ -192,7 +195,7 @@ asm // rolled optimized encryption asm version by A. Bouchez
         pop     ebx
 end;
 
-procedure aesdecrypt386(const ctxt: TAESContext; bi, bo: PWA4);
+procedure aesdecrypt386(const ctxt: TAesContext; bi, bo: PWA4);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    ebx
@@ -201,7 +204,7 @@ asm
         push    ebp
         add     esp,  - 20
         mov     [esp], ecx
-        movzx   ecx, byte ptr[eax].taescontext.rounds
+        movzx   ecx, byte ptr [eax].taescontext.rounds
         lea     esi, [4 * ecx]
         lea     ecx, [ecx - 1]
         lea     eax, [eax + 4 * esi] // eax=@ctx.rk[ctx.rounds]=pk
@@ -217,52 +220,52 @@ asm
         lea     eax, [eax - 16]
 @1:     // pk=eax s0=ebx s1=esi s2=ecx s3=edx
         movzx   edi, bl
-        mov     edi, dword ptr[4 * edi + Td0]
+        mov     edi, dword ptr [4 * edi + Td0]
         movzx   ebp, dh
-        xor     edi, dword ptr[4 * ebp + Td1]
+        xor     edi, dword ptr [4 * ebp + Td1]
         mov     ebp, ecx
         shr     ebp, $10
         and     ebp, 255
-        xor     edi, dword ptr[4 * ebp + Td2]
+        xor     edi, dword ptr [4 * ebp + Td2]
         mov     ebp, esi
         shr     ebp, $18
-        xor     edi, dword ptr[4 * ebp + Td3]
+        xor     edi, dword ptr [4 * ebp + Td3]
         mov     [esp + 4], edi
         mov     edi, esi
         and     edi, 255
-        mov     edi, dword ptr[4 * edi + Td0]
+        mov     edi, dword ptr [4 * edi + Td0]
         movzx   ebp, bh
-        xor     edi, dword ptr[4 * ebp + Td1]
+        xor     edi, dword ptr [4 * ebp + Td1]
         mov     ebp, edx
         shr     ebp, $10
         and     ebp, 255
-        xor     edi, dword ptr[4 * ebp + Td2]
+        xor     edi, dword ptr [4 * ebp + Td2]
         mov     ebp, ecx
         shr     ebp, $18
-        xor     edi, dword ptr[4 * ebp + Td3]
+        xor     edi, dword ptr [4 * ebp + Td3]
         mov     [esp + 8], edi
         movzx   edi, cl
-        mov     edi, dword ptr[4 * edi + Td0]
+        mov     edi, dword ptr [4 * edi + Td0]
         movzx   ebp, si
         shr     ebp, $08
-        xor     edi, dword ptr[4 * ebp + Td1]
+        xor     edi, dword ptr [4 * ebp + Td1]
         mov     ebp, ebx
         shr     ebp, $10
         and     ebp, 255
-        xor     edi, dword ptr[4 * ebp + Td2]
+        xor     edi, dword ptr [4 * ebp + Td2]
         mov     ebp, edx
         shr     ebp, $18
-        xor     edi, dword ptr[4 * ebp + Td3]
+        xor     edi, dword ptr [4 * ebp + Td3]
         mov     [esp + 12], edi
         and     edx, 255
-        mov     edx, dword ptr[4 * edx + Td0]
+        mov     edx, dword ptr [4 * edx + Td0]
         movzx   ecx, ch
-        xor     edx, dword ptr[4 * ecx + Td1]
+        xor     edx, dword ptr [4 * ecx + Td1]
         shr     esi, $10
         and     esi, 255
-        xor     edx, dword ptr[4 * esi + Td2]
+        xor     edx, dword ptr [4 * esi + Td2]
         shr     ebx, $18
-        xor     edx, dword ptr[4 * ebx + Td3]
+        xor     edx, dword ptr [4 * ebx + Td3]
         xor     edx, [eax + 12]
         mov     ebx, [eax]
         xor     ebx, [esp + 4]
@@ -271,24 +274,24 @@ asm
         mov     ecx, [eax + 8]
         xor     ecx, [esp + 12]
         lea     eax, [eax - 16]
-        dec     byte ptr[esp + 16]
+        dec     byte ptr [esp + 16]
         jnz     @1
         mov     ebp, eax
         movzx   eax, bl
-        movzx   eax, byte ptr[eax + InvSBox]
+        movzx   eax, byte ptr [eax + InvSBox]
         movzx   edi, dh
-        movzx   edi, byte ptr[edi + InvSBox]
+        movzx   edi, byte ptr [edi + InvSBox]
         shl     edi, $08
         xor     eax, edi
         mov     edi, ecx
         shr     edi, $10
         and     edi, 255
-        movzx   edi, byte ptr[edi + InvSBox]
+        movzx   edi, byte ptr [edi + InvSBox]
         shl     edi, $10
         xor     eax, edi
         mov     edi, esi
         shr     edi, $18
-        movzx   edi, byte ptr[edi + InvSBox]
+        movzx   edi, byte ptr [edi + InvSBox]
         shl     edi, $18
         xor     eax, edi
         xor     eax, [ebp]
@@ -296,60 +299,60 @@ asm
         mov     [edi], eax
         mov     eax, esi
         and     eax, 255
-        movzx   eax, byte ptr[eax + InvSBox]
+        movzx   eax, byte ptr [eax + InvSBox]
         movzx   edi, bh
-        movzx   edi, byte ptr[edi + InvSBox]
+        movzx   edi, byte ptr [edi + InvSBox]
         shl     edi, $08
         xor     eax, edi
         mov     edi, edx
         shr     edi, $10
         and     edi, 255
-        movzx   edi, byte ptr[edi + InvSBox]
+        movzx   edi, byte ptr [edi + InvSBox]
         shl     edi, $10
         xor     eax, edi
         mov     edi, ecx
         shr     edi, $18
-        movzx   edi, byte ptr[edi + InvSBox]
+        movzx   edi, byte ptr [edi + InvSBox]
         shl     edi, $18
         xor     eax, edi
         xor     eax, [ebp + 4]
         mov     edi, [esp]
         mov     [edi + 4], eax
         movzx   eax, cl
-        movzx   eax, byte ptr[eax + InvSBox]
+        movzx   eax, byte ptr [eax + InvSBox]
         movzx   edi, si
         shr     edi, $08
-        movzx   edi, byte ptr[edi + InvSBox]
+        movzx   edi, byte ptr [edi + InvSBox]
         shl     edi, $08
         xor     eax, edi
         mov     edi, ebx
         shr     edi, $10
         and     edi, 255
-        movzx   edi, byte ptr[edi + InvSBox]
+        movzx   edi, byte ptr [edi + InvSBox]
         shl     edi, $10
         xor     eax, edi
         mov     edi, edx
         shr     edi, $18
-        movzx   edi, byte ptr[edi + InvSBox]
+        movzx   edi, byte ptr [edi + InvSBox]
         shl     edi, $18
         xor     eax, edi
         xor     eax, [ebp + 8]
         mov     edi, [esp]
         mov     [edi + 8], eax
         and     edx, 255
-        movzx   eax, byte ptr[edx + InvSBox]
+        movzx   eax, byte ptr [edx + InvSBox]
         shr     ecx, $08
         and     ecx, 255
-        movzx   edx, byte ptr[ecx + InvSBox]
+        movzx   edx, byte ptr [ecx + InvSBox]
         shl     edx, $08
         xor     eax, edx
         shr     esi, $10
         and     esi, 255
-        movzx   edx, byte ptr[esi + InvSBox]
+        movzx   edx, byte ptr [esi + InvSBox]
         shl     edx, $10
         xor     eax, edx
         shr     ebx, $18
-        movzx   edx, byte ptr[ebx + InvSBox]
+        movzx   edx, byte ptr [ebx + InvSBox]
         shl     edx, $18
         xor     eax, edx
         xor     eax, [ebp + 12]
@@ -956,19 +959,19 @@ end;
 
 {$ifdef USEAESNI}
 
-procedure AesNiTrailer; // = TAESAbstractSyn.EncryptTrailer from AES-NI procs
+procedure AesNiTrailer; // = TAesAbstractSyn.EncryptTrailer from AES-NI procs
   {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // eax=TAESContext ecx=len xmm7=CV esi=BufIn edi=BufOut
-    call   dword ptr [eax].TAESContext.AesNi32 // = AES.Encrypt(fCV,fCV)
-    lea    edx, [eax].TAESContext.buf // used as temporary buffer
-    movups [edx], xmm7
-    cld
-@s: lodsb
-    xor    al, [edx] // = XorMemory(pointer(fOut),pointer(fIn),@fCV,len);
-    inc    edx
-    stosb
-    dec    ecx
-    jnz    @s
+asm // eax=TAesContext ecx=len xmm7=IV esi=BufIn edi=BufOut
+        call   dword ptr [eax].TAesContext.AesNi32 // = AES.Encrypt(fIV,fIV)
+        lea    edx, [eax].TAesContext.buf // used as temporary buffer
+        movups [edx], xmm7
+        cld
+@s:     lodsb
+        xor    al, [edx] // = XorMemory(pointer(fOut),pointer(fIn),@fIV,len);
+        inc    edx
+        stosb
+        dec    ecx
+        jnz    @s
 end;
 
 procedure MakeDecrKeyAesNi(Rounds: integer; RK: Pointer);
@@ -1001,7 +1004,7 @@ asm // eax=Rounds edx=RK
         db      $66, $0F, $38, $DB, $ED
         db      $66, $0F, $38, $DB, $F6
         db      $66, $0F, $38, $DB, $FF
-        {$endif}
+        {$endif HASAESNI}
         movups  [edx + $10], xmm0
         movups  [edx + $20], xmm1
         movups  [edx + $30], xmm2
@@ -1023,7 +1026,7 @@ procedure ShiftAesNi(KeySize: cardinal; pk: pointer);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=KeySize edx=pk
         movups  xmm1, [edx]
-        movups  xmm5, dqword ptr[@mask]
+        movups  xmm5, dqword ptr [@mask]
         cmp     al, 128
         je      @128
         cmp     al, 192
@@ -1120,7 +1123,7 @@ end;
 
 procedure AesNiEncryptXmm7_128;
   {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
+asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
         movups  xmm0, [eax + 16 * 0]
         movups  xmm1, [eax + 16 * 1]
         movups  xmm2, [eax + 16 * 2]
@@ -1143,7 +1146,7 @@ asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
         db      $66, $0F, $38, $DC, $FC
         db      $66, $0F, $38, $DC, $FD
         db      $66, $0F, $38, $DC, $FE
-        {$endif}
+        {$endif HASAESNI}
         movups  xmm0, [eax + 16 * 7]
         movups  xmm1, [eax + 16 * 8]
         movups  xmm2, [eax + 16 * 9]
@@ -1158,10 +1161,10 @@ asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
         db      $66, $0F, $38, $DC, $F9
         db      $66, $0F, $38, $DC, $FA
         db      $66, $0F, $38, $DD, $FB
-        {$endif}
+        {$endif HASAESNI}
 end;
 
-procedure aesniencrypt128(const ctxt, source, dest);
+procedure AesNiEncrypt128(const ctxt, source, dest);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=ctxt edx=source ecx=dest
         movups  xmm7, [edx]
@@ -1172,7 +1175,7 @@ end;
 
 procedure AesNiEncryptXmm7_192;
   {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
+asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
         movups  xmm0, [eax + 16 * 0]
         movups  xmm1, [eax + 16 * 1]
         movups  xmm2, [eax + 16 * 2]
@@ -1195,7 +1198,7 @@ asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
         db      $66, $0F, $38, $DC, $FC
         db      $66, $0F, $38, $DC, $FD
         db      $66, $0F, $38, $DC, $FE
-        {$endif}
+        {$endif HASAESNI}
         movups  xmm0, [eax + 16 * 7]
         movups  xmm1, [eax + 16 * 8]
         movups  xmm2, [eax + 16 * 9]
@@ -1216,10 +1219,10 @@ asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
         db      $66, $0F, $38, $DC, $FB
         db      $66, $0F, $38, $DC, $FC
         db      $66, $0F, $38, $DD, $FD
-        {$endif}
+        {$endif HASAESNI}
 end;
 
-procedure aesniencrypt192(const ctxt, source, dest);
+procedure AesNiEncrypt192(const ctxt, source, dest);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=ctxt edx=source ecx=dest
         movups  xmm7, [edx]
@@ -1230,7 +1233,7 @@ end;
 
 procedure AesNiEncryptXmm7_256;
   {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
+asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
         movups  xmm0, [eax + 16 * 0]
         movups  xmm1, [eax + 16 * 1]
         movups  xmm2, [eax + 16 * 2]
@@ -1253,7 +1256,7 @@ asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
         db      $66, $0F, $38, $DC, $FC
         db      $66, $0F, $38, $DC, $FD
         db      $66, $0F, $38, $DC, $FE
-        {$endif}
+        {$endif HASAESNI}
         movups  xmm0, [eax + 16 * 7]
         movups  xmm1, [eax + 16 * 8]
         movups  xmm2, [eax + 16 * 9]
@@ -1264,29 +1267,27 @@ asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
         {$ifdef HASAESNI}
         aesenc  xmm7, xmm0
         aesenc  xmm7, xmm1
+        movups  xmm1, [eax + 16 * 14]
         aesenc  xmm7, xmm2
         aesenc  xmm7, xmm3
         aesenc  xmm7, xmm4
         aesenc  xmm7, xmm5
         aesenc  xmm7, xmm6
+        aesenclast xmm7, xmm1
         {$else}
         db      $66, $0F, $38, $DC, $F8
         db      $66, $0F, $38, $DC, $F9
+        movups  xmm1, [eax + 16 * 14]
         db      $66, $0F, $38, $DC, $FA
         db      $66, $0F, $38, $DC, $FB
         db      $66, $0F, $38, $DC, $FC
         db      $66, $0F, $38, $DC, $FD
         db      $66, $0F, $38, $DC, $FE
-        {$endif}
-        movups  xmm1, [eax + 16 * 14]
-        {$ifdef HASAESNI}
-        aesenclast xmm7, xmm1
-        {$else}
         db      $66, $0F, $38, $DD, $F9
-        {$endif}
+        {$endif HASAESNI}
 end;
 
-procedure aesniencrypt256(const ctxt, source, dest);
+procedure AesNiEncrypt256(const ctxt, source, dest);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // eax=ctxt edx=source ecx=dest
         movups  xmm7, [edx]
@@ -1295,7 +1296,7 @@ asm // eax=ctxt edx=source ecx=dest
         pxor    xmm7, xmm7 // for safety
 end;
 
-procedure aesnidecrypt128(const ctxt, source, dest);
+procedure AesNiDecrypt128(const ctxt, source, dest);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         movups  xmm7, [edx]
@@ -1336,12 +1337,12 @@ asm
         db      $66, $0F, $38, $DE, $F9
         db      $66, $0F, $38, $DE, $FA
         db      $66, $0F, $38, $DF, $FB
-        {$endif}
+        {$endif HASAESNI}
         movups  [ecx], xmm7
         pxor    xmm7, xmm7
 end;
 
-procedure aesnidecrypt192(const ctxt, source, dest);
+procedure AesNiDecrypt192(const ctxt, source, dest);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         movups  xmm7, [edx]
@@ -1367,7 +1368,7 @@ asm
         db      $66, $0F, $38, $DE, $FC
         db      $66, $0F, $38, $DE, $FD
         db      $66, $0F, $38, $DE, $FE
-        {$endif}
+        {$endif HASAESNI}
         movups  xmm0, [eax + 16 * 5]
         movups  xmm1, [eax + 16 * 4]
         movups  xmm2, [eax + 16 * 3]
@@ -1388,12 +1389,12 @@ asm
         db      $66, $0F, $38, $DE, $FB
         db      $66, $0F, $38, $DE, $FC
         db      $66, $0F, $38, $DF, $FD
-        {$endif}
+        {$endif HASAESNI}
         movups  [ecx], xmm7
         pxor    xmm7, xmm7
 end;
 
-procedure aesnidecrypt256(const ctxt, source, dest);
+procedure AesNiDecrypt256(const ctxt, source, dest);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         movups  xmm7, [edx]
@@ -1419,7 +1420,7 @@ asm
         db      $66, $0F, $38, $DE, $FC
         db      $66, $0F, $38, $DE, $FD
         db      $66, $0F, $38, $DE, $FE
-        {$endif}
+        {$endif HASAESNI}
         movups  xmm0, [eax + 16 * 7]
         movups  xmm1, [eax + 16 * 6]
         movups  xmm2, [eax + 16 * 5]
@@ -1429,30 +1430,303 @@ asm
         movups  xmm6, [eax + 16 * 1]
         {$ifdef HASAESNI}
         aesdec  xmm7, xmm0
+        movups  xmm0, [eax + 16 * 0]
         aesdec  xmm7, xmm1
         aesdec  xmm7, xmm2
         aesdec  xmm7, xmm3
         aesdec  xmm7, xmm4
         aesdec  xmm7, xmm5
         aesdec  xmm7, xmm6
+        aesdeclast xmm7, xmm0
         {$else}
         db      $66, $0F, $38, $DE, $F8
+        movups  xmm0, [eax + 16 * 0]
         db      $66, $0F, $38, $DE, $F9
         db      $66, $0F, $38, $DE, $FA
         db      $66, $0F, $38, $DE, $FB
         db      $66, $0F, $38, $DE, $FC
         db      $66, $0F, $38, $DE, $FD
         db      $66, $0F, $38, $DE, $FE
-        {$endif}
-        movups  xmm0, [eax + 16 * 0]
-        {$ifdef HASAESNI}
-        aesdeclast xmm7, xmm0
-        {$else}
         db      $66, $0F, $38, $DF, $F8
-        {$endif}
+        {$endif HASAESNI}
         movups  [ecx], xmm7
         pxor    xmm7, xmm7
 end;
+
+procedure AesNiCfbDecrypt(self, BufIn, BufOut: pointer; Count: cardinal);
+asm
+        push    esi
+        push    edi
+        mov     esi, BufIn
+        mov     edi, BufOut
+        mov     ecx, Count
+        movups  xmm7, dqword ptr [eax].TAesCfb.fIV
+        lea     eax, [eax].TAesCfb.fAes
+        push    ecx
+        shr     ecx, AesBlockShift
+        jz      @z
+        {$ifdef FPC} align 16 {$endif}
+@s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
+        movups  xmm0, dqword ptr [esi]
+        movaps  xmm1, xmm0
+        pxor    xmm0, xmm7
+        movaps  xmm7, xmm1              // fIV := fIn
+        movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
+        add     esi, 16
+        add     edi, 16
+        dec     ecx
+        jnz     @s
+        movups  dqword ptr [eax- TAesCfb.fAes].TAesCfb.fIV, xmm7
+@z:     pop     ecx
+        and     ecx, 15
+        jz      @0
+        call    AesNiTrailer
+@0:     pop     edi
+        pop     esi
+        pxor    xmm7, xmm7 // for safety
+end;
+
+procedure AesNiCfbEncrypt(self, BufIn, BufOut: pointer; Count: cardinal);
+asm
+        push    esi
+        push    edi
+        mov     esi, BufIn
+        mov     edi, BufOut
+        mov     ecx, Count
+        movups  xmm7, dqword ptr [eax].TAesCfb.fIV
+        lea     eax, [eax].TAesCfb.fAes
+        push    ecx
+        shr     ecx, AesBlockShift
+        jz      @z
+        {$ifdef FPC} align 16 {$endif}
+@s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
+        movups  xmm0, dqword ptr [esi]
+        pxor    xmm7, xmm0
+        movups  dqword ptr [edi], xmm7  // fOut := fIn xor fIV
+        add     esi, 16
+        add     edi, 16
+        dec     ecx
+        jnz     @s
+        movups  dqword ptr [eax - TAesCfb.fAes].TAesCfb.fIV, xmm7
+@z:     pop     ecx
+        and     ecx, 15
+        jz      @0
+        call    AesNiTrailer
+@0:     pop     edi
+        pop     esi
+        pxor    xmm7, xmm7 // for safety
+end;
+
+procedure AesNiCfbCrcDecrypt(self, BufIn, BufOut: pointer; Count: cardinal);
+asm
+        push    ebx
+        push    esi
+        push    edi
+        mov     ebx, self
+        mov     esi, BufIn
+        mov     edi, BufOut
+        movups  xmm7, dqword ptr [ebx].TAesCfc.fIV
+        {$ifdef FPC} align 16 {$endif}
+@s:     lea     eax, [ebx].TAesCfc.fMac.encrypted
+        mov     edx, esi
+        call    crcblock // using SSE4.2 or fast tables
+        lea     eax, [ebx].TAesCfc.fAes
+        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
+        movups  xmm0, dqword ptr [esi]
+        movaps  xmm1, xmm0
+        pxor    xmm0, xmm7
+        movaps  xmm7, xmm1              // fIV := fIn
+        movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
+        lea     eax, [ebx].TAesCfc.fMac.plain
+        mov     edx, edi
+        call    crcblock
+        add     esi, 16
+        add     edi, 16
+        sub     dword ptr [Count], 16
+        ja      @s
+        movups  dqword ptr [ebx].TAesCfc.fIV, xmm7
+@z:     pop     edi
+        pop     esi
+        pop     ebx
+        pxor    xmm7, xmm7 // for safety
+end;
+
+procedure AesNiCfbCrcEncrypt(self, BufIn, BufOut: pointer; Count: cardinal);
+asm
+        push    ebx
+        push    esi
+        push    edi
+        mov     ebx, self
+        mov     esi, BufIn
+        mov     edi, BufOut
+        movups  xmm7, dqword ptr [ebx].TAesCfc.fIV
+        {$ifdef FPC} align 16 {$endif}
+@s:     lea     eax, [ebx].TAesCfc.fMac.plain
+        mov     edx, esi
+        call    crcblock
+        lea     eax, [ebx].TAesCfc.fAes
+        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
+        movups  xmm0, dqword ptr [esi]
+        pxor    xmm7, xmm0
+        movups  dqword ptr [edi], xmm7  // fOut := fIn xor fIV  +  fIV := fOut^
+        lea     eax, [ebx].TAesCfc.fMac.encrypted
+        mov     edx, edi
+        call    crcblock
+        add     esi, 16
+        add     edi, 16
+        sub     dword ptr [Count], 16
+        ja      @s
+        movups  dqword ptr [ebx].TAesCfc.fIV, xmm7
+        pop     edi
+        pop     esi
+        pop     ebx
+        pxor    xmm7, xmm7 // for safety
+end;
+
+procedure AesNiOfbCrcEncrypt(self, BufIn, BufOut: pointer; Count: cardinal);
+asm
+        push    ebx
+        push    esi
+        push    edi
+        mov     ebx, self
+        mov     esi, BufIn
+        mov     edi, BufOut
+        movups  xmm7, dqword ptr [ebx].TAesOfc.fIV
+        {$ifdef FPC} align 16 {$endif}
+@s:     lea     eax, [ebx].TAesOfc.fMac.plain
+        mov     edx, esi
+        call    crcblock
+        lea     eax, [ebx].TAesOfc.fAes
+        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
+        movups  xmm0, dqword ptr [esi]
+        pxor    xmm0, xmm7
+        movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
+        lea     eax, [ebx].TAesOfc.fMac.encrypted
+        mov     edx, edi
+        call    crcblock
+        add     esi, 16
+        add     edi, 16
+        sub     dword ptr [Count], 16
+        ja      @s
+        movups  dqword ptr [ebx].TAesOfc.fIV, xmm7
+        pop     edi
+        pop     esi
+        pop     ebx
+        pxor    xmm7, xmm7 // for safety
+end;
+
+procedure AesNiCtrCrcEncrypt(self, BufIn, BufOut: pointer; Count: cardinal);
+asm
+        push    ebx
+        push    esi
+        push    edi
+        mov     ebx, self
+        mov     esi, BufIn
+        mov     edi, BufOut
+        {$ifdef FPC} align 16 {$endif}
+@s:     lea     eax, [ebx].TAesCtc.fMac.plain
+        mov     edx, esi
+        call    crcblock // it is actually slower when inlining the crc32c
+        lea     eax, [ebx].TAesCtc.fAes
+        movups  xmm7, dqword ptr [ebx].TAesCtc.fIV
+        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,tmp)
+        movups  xmm0, dqword ptr [esi]
+        inc     byte ptr [ebx + 15].TAesCtc.fIV
+        jnz     @nov
+        mov     edx, 15
+@cov:   dec     edx
+        inc     byte ptr [ebx + edx].TAesCtc.fIV
+        jnz     @nov
+        test    edx, edx
+        jne     @cov
+@nov:   pxor    xmm0, xmm7
+        movups  dqword ptr [edi], xmm0  // fOut := fIn xor tmp
+        lea     eax, [ebx].TAesCtc.fMac.encrypted
+        mov     edx, edi
+        call    crcblock
+        add     esi, 16
+        add     edi, 16
+        sub     dword ptr [Count], 16
+        ja      @s
+        pop     edi
+        pop     esi
+        pop     ebx
+        pxor    xmm7, xmm7 // for safety
+end;
+
+procedure AesNiOfbEncrypt(self, BufIn, BufOut: pointer; Count: cardinal);
+asm
+        push    esi
+        push    edi
+        mov     esi, BufIn
+        mov     edi, BufOut
+        mov     ecx, Count
+        movups  xmm7, dqword ptr [eax].TAesOfb.fIV
+        lea     eax, [eax].TAesOfb.fAes
+        push    ecx
+        shr     ecx, AesBlockShift
+        jz      @z
+        {$ifdef FPC} align 16 {$endif}
+@s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
+        movups  xmm0, dqword ptr [esi]
+        pxor    xmm0, xmm7
+        movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
+        add     esi, 16
+        add     edi, 16
+        dec     ecx
+        jnz     @s
+        movups  dqword ptr [eax - TAesOfb.fAes].TAesOfb.fIV, xmm7
+@z:     pop     ecx
+        and     ecx, 15
+        jz      @0
+        call    AesNiTrailer
+@0:     pop     edi
+        pop     esi
+        pxor    xmm7, xmm7 // for safety
+end;
+
+procedure AesNiCtrAnyEncrypt(self, BufIn, BufOut: pointer; Count: cardinal);
+asm
+        push    ebx
+        push    esi
+        push    edi
+        mov     esi, BufIn
+        mov     edi, BufOut
+        mov     ecx, Count
+        push    ecx
+        shr     ecx, AesBlockShift
+        jz      @z
+        mov     ebx, eax
+        lea     eax, [eax].TAesC64.fAes
+        {$ifdef FPC} align 16 {$endif}
+@s:     movups  xmm7, dqword ptr [ebx].TAesC64.fIV
+        mov     edx, dword ptr [ebx].TAesC64.fCTROffset
+        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,tmp)
+        movups  xmm0, dqword ptr [esi]
+        inc     byte ptr [ebx + edx].TAesC64.fIV
+        jnz     @nov
+@cov:   dec     edx
+        inc     byte ptr [ebx + edx].TAesC64.fIV
+        jnz     @nov
+        cmp     edx, dword ptr [ebx].TAesC64.fCTROffsetMin
+        jne     @cov
+@nov:   pxor    xmm0, xmm7
+        movups  dqword ptr [edi], xmm0  // fOut := fIn xor tmp
+        add     esi, 16
+        add     edi, 16
+        dec     ecx
+        jnz     @s
+@z:     pop     ecx
+        and     ecx, 15
+        jz      @0
+        movups  xmm7, dqword ptr [ebx].TAesC64.fIV
+        call    AesNiTrailer
+@0:     pop     edi
+        pop     esi
+        pop     ebx
+        pxor    xmm7, xmm7 // for safety
+end;
+
 
 {$ifdef HASAESNI} // oldest Delphi don't handle some opcode used below
 
@@ -1461,9 +1735,9 @@ end;
 procedure gf_mul_pclmulqdq(a, b: pointer);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
-        movups  xmm0, dqword ptr[a]
-        movups  xmm1, dqword ptr[b]
-        movdqu  xmm2, dqword ptr[@swap]
+        movups  xmm0, dqword ptr [a]
+        movups  xmm1, dqword ptr [b]
+        movdqu  xmm2, dqword ptr [@swap]
         pshufb  xmm0, xmm2
         pshufb  xmm1, xmm2
         movdqa  xmm5, xmm0
@@ -1526,7 +1800,7 @@ asm
         psllq   xmm3, 57
         por     xmm4, xmm7
         psrlq   xmm0, 7
-        movdqu  xmm7, dqword ptr[@swap]
+        movdqu  xmm7, dqword ptr [@swap]
         por     xmm0, xmm3
         psllq   xmm5, 62
         pxor    xmm1, xmm0
@@ -1537,7 +1811,7 @@ asm
         pxor    xmm0, xmm1
         pxor    xmm0, xmm2
         pshufb  xmm0, xmm7
-        movups  dqword ptr[a], xmm0
+        movups  dqword ptr [a], xmm0
         ret
 @swap:  db 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0
 end;
@@ -1628,7 +1902,7 @@ asm
         jge     @39
 @38:    test    eax, eax
         je      @42
-@43:    movzx   edx, byte ptr[esi]
+@43:    movzx   edx, byte ptr [esi]
         add     ebx, edx
         dec     eax
         lea     esi, [esi + 1]
@@ -1666,10 +1940,10 @@ end;
    MD5 algorithm from RSA Data Security, Inc.
    Taken from https://github.com/maximmasiutin/MD5_Transform-x64
 }
-procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
+procedure MD5Transform(var buf: TMd5Buf; const in_: TMd5In);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 // see https://synopse.info/forum/viewtopic.php?id=4369 for asm numbers
-asm // eax=buf:TMD5Buf edx=in_:TMD5In
+asm // eax=buf:TMd5Buf edx=in_:TMd5In
         push    ebx
         push    esi
         push    edi
@@ -2316,9 +2590,206 @@ asm // eax=buf:TMD5Buf edx=in_:TMD5In
 end;
 
 
+{$ifdef USEAESNIHASH}
+
+var
+  /// set to random at startup so hash collisions will be harder to engineer
+  // - defined as a pointer from GetMemAligned() which is mandatory on Delphi
+  AESNIHASHKEYSCHED: pointer;
+  AESNIHASHKEYSCHED_: RawByteString;
+
+procedure _AesNiHashXmm0; forward;
+
+function _AesNiHash64(const seed: QWord; data: pointer; len: PtrUInt): QWord;
+  {$ifdef FPC} nostackframe; assembler; {$endif}
+asm
+        // eax=@seed, edx=data, ecx=len
+        {$ifdef FPC}
+        push    ebp
+        mov     ebp, esp
+        {$endif FPC}
+        movq    xmm0, seed
+        mov     ecx, len // we need to adjust the parameters
+        mov     edx, data
+        call    _AesNiHashXmm0
+        // _AesNiHashXmm0 made 3 AES permutations -> 32/64-bit trunc is good
+        movq    seed, xmm0 // copy to stack for returning as eax/edx pair
+        mov     eax, dword ptr [seed]
+        mov     edx, dword ptr [seed + 4]
+        {$ifdef FPC}
+        pop     ebp
+        {$endif FPC}
+end;
+
+procedure _AesNiHash128(hash: PHash128; data: pointer; len: PtrUInt);
+  {$ifdef FPC} nostackframe; assembler; {$endif}
+asm
+        // eax=@seed&result, edx=data, ecx=len
+        movdqu  xmm0, dqword ptr [eax]
+        push    eax
+        call    _AesNiHashXmm0
+        pop     eax
+        movdqu  dqword ptr [eax], xmm0
+end;
+
+function _AesNiHash32(seed: cardinal; data: pointer; len: PtrUInt): cardinal;
+  {$ifdef FPC} nostackframe; assembler; {$endif}
+asm
+        // eax=seed, edx=data, ecx=len
+        movd    xmm0, seed // explicitly zeroing high bits for consistency
+        jmp     _AesNiHashXmm0 // returns in both xmm0 and eax
+end;
+
+// 128-bit aeshash as implemented in Go runtime, using aesni/sse4.1 opcodes
+procedure _AesNiHashXmm0;
+  {$ifdef FPC} nostackframe; assembler; {$endif}
+asm
+        // xmm0=seed, edx=data, ecx=len - returns in xmm0 and eax
+        test    ecx, ecx
+        jz      @0 // _AesNiHash32 left eax=seed
+        pinsrw  xmm0, ecx, 4
+        mov     eax, dword ptr [AESNIHASHKEYSCHED]
+        pshufhw xmm0, xmm0, 00H
+        movdqa  xmm1, xmm0
+        pxor    xmm0, dqword ptr [eax]
+        aesenc  xmm0, xmm0
+        cmp     ecx, 16 // 1..16 bytes have no branch
+        ja      @17up
+        movdqu  xmm1, dqword ptr [edx + ecx - 16] // no read after end of page
+        je      @16
+        shl     ecx, 4          // (and heap has header so no read before EOP)
+        movdqu  xmm2, dqword ptr [@shifts + ecx] // Delphi bug about .align 16
+        pshufb  xmm1, xmm2
+@16:    aesenc  xmm1, xmm0
+        aesenc  xmm1, xmm1
+        aesenc  xmm1, xmm1
+        movdqa  xmm0, xmm1
+        movd    eax, xmm0 // when jumped from _AesNiHash32
+@0:     ret
+@17up:  cmp     ecx, 32
+        ja      @33up
+        pxor    xmm1, dqword ptr [eax + 16] // 17..32 bytes
+        aesenc  xmm1, xmm1
+        movdqu  xmm2, dqword ptr [edx]
+        movdqu  xmm3, dqword ptr [edx + ecx - 10H] // may overlap
+        aesenc  xmm2, xmm0
+        aesenc  xmm3, xmm1
+        aesenc  xmm2, xmm2
+        aesenc  xmm3, xmm3
+        aesenc  xmm2, xmm2
+        aesenc  xmm3, xmm3
+        pxor    xmm2, xmm3
+        movdqa  xmm0, xmm2
+        movd    eax, xmm2
+        ret
+@33up:  cmp     ecx, 64
+        ja      @65up
+        movdqa  xmm2, xmm1 // 33..64 bytes
+        movdqa  xmm3, xmm1
+        pxor    xmm1, dqword ptr [eax + 16]
+        pxor    xmm2, dqword ptr [eax + 32]
+        pxor    xmm3, dqword ptr [eax + 48]
+        aesenc  xmm1, xmm1
+        aesenc  xmm2, xmm2
+        aesenc  xmm3, xmm3
+        movdqu  xmm4, dqword ptr [edx]
+        movdqu  xmm5, dqword ptr [edx + 10H]
+        movdqu  xmm6, dqword ptr [edx + ecx - 20H] // may overlap
+        movdqu  xmm7, dqword ptr [edx + ecx - 10H]
+        aesenc  xmm4, xmm0
+        aesenc  xmm5, xmm1
+        aesenc  xmm6, xmm2
+        aesenc  xmm7, xmm3
+        aesenc  xmm4, xmm4
+        aesenc  xmm5, xmm5
+        aesenc  xmm6, xmm6
+        aesenc  xmm7, xmm7
+        aesenc  xmm4, xmm4
+        aesenc  xmm5, xmm5
+        aesenc  xmm6, xmm6
+        aesenc  xmm7, xmm7
+        pxor    xmm4, xmm6
+        pxor    xmm5, xmm7
+        pxor    xmm4, xmm5
+        movdqa  xmm0, xmm4
+        movd    eax, xmm4
+        ret
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+        // pshufb arguments to move edx down from the high bytes of the register
+        // to the low bytes of the register - index is how many bytes to move
+@shifts:dd $00000000,$00000000, $00000000,$00000000
+        dd $ffffffff,$ffffff0f, $ffffffff,$ffffffff
+        dd $ffffffff,$ffff0f0e, $ffffffff,$ffffffff
+        dd $ffffffff,$ff0f0e0d, $ffffffff,$ffffffff
+        dd $ffffffff,$0f0e0d0c, $ffffffff,$ffffffff
+        dd $ffffff0f,$0e0d0c0b, $ffffffff,$ffffffff
+        dd $ffff0f0e,$0d0c0b0a, $ffffffff,$ffffffff
+        dd $ff0f0e0d,$0c0b0a09, $ffffffff,$ffffffff
+        dd $0f0e0d0c,$0b0a0908, $ffffffff,$ffffffff
+        dd $0e0d0c0b,$0a090807, $ffffffff,$ffffff0f
+        dd $0d0c0b0a,$09080706, $ffffffff,$ffff0f0e
+        dd $0c0b0a09,$08070605, $ffffffff,$ff0f0e0d
+        dd $0b0a0908,$07060504, $ffffffff,$0f0e0d0c
+        dd $0a090807,$06050403, $ffffff0f,$0e0d0c0b
+        dd $09080706,$05040302, $ffff0f0e,$0d0c0b0a
+        dd $08070605,$04030201, $ff0f0e0d,$0c0b0a09
+@65up:  movdqa  xmm2, xmm1 // 65 bytes and up
+        movdqa  xmm3, xmm1
+        pxor    xmm1, dqword ptr [eax + 16]
+        pxor    xmm2, dqword ptr [eax + 32]
+        pxor    xmm3, dqword ptr [eax + 48]
+        aesenc  xmm1, xmm1
+        aesenc  xmm2, xmm2
+        aesenc  xmm3, xmm3
+        movdqu  xmm4, dqword ptr [edx + ecx - 40H] // may overlap
+        movdqu  xmm5, dqword ptr [edx + ecx - 30H]
+        movdqu  xmm6, dqword ptr [edx + ecx - 20H]
+        movdqu  xmm7, dqword ptr [edx + ecx - 10H]
+        aesenc  xmm4, xmm0
+        aesenc  xmm5, xmm1
+        aesenc  xmm6, xmm2
+        aesenc  xmm7, xmm3
+        dec     ecx
+        shr     ecx, 6
+        // process 64 bytes per iteration
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@loop:  movdqu  xmm0, dqword ptr [edx]
+        movdqu  xmm1, dqword ptr [edx + 10H]
+        movdqu  xmm2, dqword ptr [edx + 20H]
+        movdqu  xmm3, dqword ptr [edx + 30H]
+        aesenc  xmm4, xmm0
+        aesenc  xmm5, xmm1
+        aesenc  xmm6, xmm2
+        aesenc  xmm7, xmm3
+        aesenc  xmm4, xmm4
+        aesenc  xmm5, xmm5
+        aesenc  xmm6, xmm6
+        aesenc  xmm7, xmm7
+        add     edx, 64
+        dec     ecx
+        jne     @loop
+        aesenc  xmm4, xmm4
+        aesenc  xmm5, xmm5
+        aesenc  xmm6, xmm6
+        aesenc  xmm7, xmm7
+        aesenc  xmm4, xmm4
+        aesenc  xmm5, xmm5
+        aesenc  xmm6, xmm6
+        aesenc  xmm7, xmm7
+        pxor    xmm4, xmm6
+        pxor    xmm5, xmm7
+        pxor    xmm4, xmm5
+        movdqa  xmm0, xmm4
+        movd    eax, xmm4
+end;
+
+{$endif USEAESNIHASH}
+
+
+
 {$ifdef SHA512_X86} // optimized asm using SSE3 instructions for x86 32-bit
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
   {$ifdef FPC}
     {$L ..\..\static\i386-win32\sha512-x86.o}
   {$else}
@@ -2326,7 +2797,7 @@ end;
   {$endif FPC}
 {$else}
   {$L ..\..\static\i386-linux\sha512-x86.o}
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 {
   SHA-512 hash in x86 assembly

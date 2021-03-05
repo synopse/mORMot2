@@ -20,7 +20,7 @@ interface
 
 {$I ..\mormot.defines.inc}
 
-{$ifdef LINUX}
+{$ifdef OSPOSIX}
 
 // do-nothing-unit on non Windows system
 
@@ -58,7 +58,7 @@ type
   PSecContext = ^TSecContext;
 
   /// dynamic array of SSPI contexts
-  // - used to hold information between calls to ServerSSPIAuth
+  // - used to hold information between calls to ServerSspiAuth
   TSecContextDynArray = array of TSecContext;
 
   /// defines a SSPI buffer
@@ -287,6 +287,15 @@ function CertFindCertificateInStore(hCertStore: HCERTSTORE;
 
 { ****************** Middle-Level SSPI Wrappers }
 
+
+type
+  /// exception class raised during SSPI process
+  ESynSspi = class(Exception)
+  public
+    constructor CreateLastOSError(const aContext: TSecContext);
+  end;
+
+
 /// set aSecHandle fields to empty state for a given connection ID
 procedure InvalidateSecContext(var aSecContext: TSecContext;
   aConnectionID: Int64);
@@ -295,68 +304,21 @@ procedure InvalidateSecContext(var aSecContext: TSecContext;
 procedure FreeSecContext(var aSecContext: TSecContext);
 
 /// encrypt a message
-// - aSecContext must be set e.g. from previous success call to ServerSSPIAuth
-// or ClientSSPIAuth
+// - aSecContext must be set e.g. from previous success call to ServerSspiAuth
+// or ClientSspiAuth
 // - aPlain contains data that must be encrypted
 // - returns encrypted message
 function SecEncrypt(var aSecContext: TSecContext;
   const aPlain: RawByteString): RawByteString;
 
 /// decrypt a message
-// - aSecContext must be set e.g. from previous success call to ServerSSPIAuth
-// or ClientSSPIAuth
+// - aSecContext must be set e.g. from previous success call to ServerSspiAuth
+// or ClientSspiAuth
 // - aEncrypted contains data that must be decrypted
 // - returns decrypted message
 function SecDecrypt(var aSecContext: TSecContext;
   const aEncrypted: RawByteString): RawByteString;
 
-
-type
-  /// exception class raised during SSPI/SChannel process
-  ESynSSPI = class(Exception)
-  public
-    constructor CreateLastOSError(const aContext: TSecContext);
-  end;
-
-  /// the supported TLS modes
-  // - unsafe deprecated modes (e.g. SSL) are not defined at all
-  TSynSSPIMode = (
-    tls10,
-    tls11,
-    tls12);
-
-  /// set of supported TLS modes
-  TSynSSPIModes = set of TSynSSPIMode;
-
-  /// used for low-level logging
-  TSynSSPILog =
-    procedure(const Fmt: RawByteString; const Args: array of const) of object;
-
-  /// abstract parent class for SSPI / SChannel process
-  TSynSSPIAbstract = class
-  protected
-    fNewConversation: boolean;
-    fTLS: TSynSSPIModes;
-    fContext: TSecContext;
-    fStreamSizes: TSecPkgContext_StreamSizes;
-    procedure DeleteContext;
-    procedure EnsureStreamSizes;
-  public
-    /// initialize the process
-    constructor Create(aConnectionID: Int64); virtual;
-    /// read-only access to the associated connection ID, as provided to Create
-    property ConnectionID: Int64
-      read fContext.ID;
-    /// the TLS modes supported by this instance
-    // - only TLS 1.2 is suppported by default, for security reasons
-    property TLS: TSynSSPIModes
-      read fTLS write fTLS;
-  end;
-
-  TSynSSPIClient = class(TSynSSPIAbstract)
-  protected
-  public
-  end;
 
 
 { ****************** High-Level Client and Server Authentication using SSPI }
@@ -369,8 +331,8 @@ type
 // - aOutData contains data that must be sent to server
 // - if function returns True, client must send aOutData to server
 // and call function again width data, returned from servsr
-function ClientSSPIAuth(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
+function ClientSspiAuth(var aSecContext: TSecContext;
+  const aInData: RawByteString; const aSecKerberosSPN: RawUtf8;
   out aOutData: RawByteString): boolean;
 
 /// client-side authentication procedure with clear text password
@@ -384,9 +346,9 @@ function ClientSSPIAuth(var aSecContext: TSecContext;
 // - aOutData contains data that must be sent to server
 // - if function returns True, client must send aOutData to server
 // and call function again width data, returned from server
-function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aUserName: RawUTF8;
-  const aPassword: RawUTF8; out aOutData: RawByteString): boolean;
+function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
+  const aInData: RawByteString; const aUserName: RawUtf8;
+  const aPassword: RawUtf8; out aOutData: RawByteString): boolean;
 
 /// server-side authentication procedure
 // - aSecContext holds information between function calls
@@ -394,26 +356,26 @@ function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
 // - aOutData contains data that must be sent to client
 // - if this function returns True, server must send aOutData to client
 // and call function again width data, returned from client
-function ServerSSPIAuth(var aSecContext: TSecContext;
+function ServerSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; out aOutData: RawByteString): boolean;
 
 /// Server-side function that returns authenticated user name
 // - aSecContext must be received from a previous successful call to
-// ServerSSPIAuth()
+// ServerSspiAuth()
 // - aUserName contains authenticated user name
-procedure ServerSSPIAuthUser(var aSecContext: TSecContext;
-  out aUserName: RawUTF8);
+procedure ServerSspiAuthUser(var aSecContext: TSecContext;
+  out aUserName: RawUtf8);
 
 /// return the name of the security package that has been used
 // during the negotiation process
 // - aSecContext must be received from previous successful call to
-// ServerSSPIAuth() or ClientSSPIAuth()
-function SecPackageName(var aSecContext: TSecContext): RawUTF8;
+// ServerSspiAuth() or ClientSspiAuth()
+function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 
 /// force using aSecKerberosSPN for server identification
 // - aSecKerberosSPN is the Service Principal Name, as registered in domain,
 // e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
-procedure ClientForceSPN(const aSecKerberosSPN: RawUTF8);
+procedure ClientForceSPN(const aSecKerberosSPN: RawUtf8);
 
 /// force/unforce NTLM authentication instead of Negotiate for browser authenticaton
 // - use case: SPNs not configured properly in domain
@@ -439,7 +401,7 @@ var
   /// HTTP header to be set for SSPI authentication
   // - call ServerForceNTLM() to specialize this value to either
   // 'WWW-Authenticate: NTLM' or 'WWW-Authenticate: Negotiate';
-  SECPKGNAMEHTTPWWWAUTHENTICATE: RawUTF8;
+  SECPKGNAMEHTTPWWWAUTHENTICATE: RawUtf8;
 
   /// HTTP header pattern received for SSPI authentication
   // - call ServerForceNTLM() to specialize this value to either
@@ -503,6 +465,19 @@ end;
 
 { ****************** Middle-Level SSPI Wrappers }
 
+
+{ ESynSspi }
+
+constructor ESynSspi.CreateLastOSError(const aContext: TSecContext);
+var
+  error: integer;
+begin
+  error := GetLastError;
+  CreateFmt('SSPI API Error %x [%s] for ConnectionID=%d',
+    [error, SysErrorMessage(error), aContext.ID]);
+end;
+
+
 procedure InvalidateSecContext(var aSecContext: TSecContext;
   aConnectionID: Int64);
 begin
@@ -558,7 +533,7 @@ begin
   // Sizes.cbSecurityTrailer is size of the trailer (signature + padding) block
   if QueryContextAttributesW(
        @aSecContext.CtxHandle, SECPKG_ATTR_SIZES, @Sizes) <> 0 then
-    raise ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSspi.CreateLastOSError(aSecContext);
   // Encrypted data buffer structure:
   //
   // SSPI/Kerberos Interoperability with GSSAPI
@@ -583,7 +558,7 @@ begin
   InDesc.Init(SECBUFFER_VERSION, @InBuf, 3);
   Status := EncryptMessage(@aSecContext.CtxHandle, 0, @InDesc, 0);
   if Status < 0 then
-    raise ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSspi.CreateLastOSError(aSecContext);
   EncLen := InBuf[0].cbBuffer + InBuf[1].cbBuffer + InBuf[2].cbBuffer;
   SetLength(result, EncLen);
   BufPtr := PByte(result);
@@ -609,7 +584,7 @@ begin
   if EncLen < SizeOf(cardinal) then
   begin
     SetLastError(ERROR_INVALID_PARAMETER);
-    raise ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSspi.CreateLastOSError(aSecContext);
   end;
   // Hack for compatibility with previous versions.
   // Should be removed in future.
@@ -627,55 +602,19 @@ begin
   InDesc.Init(SECBUFFER_VERSION, @InBuf, 2);
   Status := DecryptMessage(@aSecContext.CtxHandle, @InDesc, 0, QOP);
   if Status < 0 then
-    raise ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSspi.CreateLastOSError(aSecContext);
   SetString(result, PAnsiChar(InBuf[1].pvBuffer), InBuf[1].cbBuffer);
   FreeContextBuffer(InBuf[1].pvBuffer);
 end;
 
 
-{ ESynSSPI }
-
-constructor ESynSSPI.CreateLastOSError(const aContext: TSecContext);
-var
-  error: integer;
-begin
-  error := GetLastError;
-  CreateFmt('API Error %d [%s] for ConnectionID=%d',
-    [error, SysErrorMessage(error), aContext.ID]);
-end;
-
-
-{ TSynSSPIAbstract }
-
-constructor TSynSSPIAbstract.Create(aConnectionID: Int64);
-begin
-  inherited Create;
-  fNewConversation := true;
-  InvalidateSecContext(fContext, aConnectionID);
-  fTLS := [tls12];
-end;
-
-procedure TSynSSPIAbstract.EnsureStreamSizes;
-begin
-  if fStreamSizes.cbHeader = 0 then
-    if QueryContextAttributesW(
-        @fContext.CtxHandle, SECPKG_ATTR_STREAM_SIZES, @fStreamSizes) <> 0 then
-      raise ESynSSPI.CreateLastOSError(fContext);
-end;
-
-procedure TSynSSPIAbstract.DeleteContext;
-begin
-  FreeSecurityContext(fContext.CtxHandle);
-  FreeCredentialsContext(fContext.CredHandle);
-end;
-
 
 { ****************** High-Level Client and Server Authentication using SSPI }
 
 var
-  ForceSecKerberosSPN: WideString;
+  ForceSecKerberosSPN: SynUnicode;
 
-function ClientSSPIAuthWorker(var aSecContext: TSecContext;
+function ClientSspiAuthWorker(var aSecContext: TSecContext;
   const aInData: RawByteString; pszTargetName: PWideChar;
   pAuthData: PSecWinntAuthIdentityW;
   out aOutData: RawByteString): boolean;
@@ -700,11 +639,11 @@ begin
   begin
     aSecContext.CreatedTick64 := GetTickCount64;
     if QuerySecurityPackageInfoW(SECPKGNAMENEGOTIATE, SecPkgInfo) <> 0 then
-      raise ESynSSPI.CreateLastOSError(aSecContext);
+      raise ESynSspi.CreateLastOSError(aSecContext);
     try
       if AcquireCredentialsHandleW(nil, SecPkgInfo^.Name, SECPKG_CRED_OUTBOUND,
           nil, pAuthData, nil, nil, @aSecContext.CredHandle, Expiry) <> 0 then
-        raise ESynSSPI.CreateLastOSError(aSecContext);
+        raise ESynSspi.CreateLastOSError(aSecContext);
     finally
       FreeContextBuffer(SecPkgInfo);
     end;
@@ -737,19 +676,19 @@ begin
      (Status = SEC_I_COMPLETE_AND_CONTINUE) then
     Status := CompleteAuthToken(@aSecContext.CtxHandle, @OutDesc);
   if Status < 0 then
-    raise ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSspi.CreateLastOSError(aSecContext);
   SetString(aOutData, PAnsiChar(OutBuf.pvBuffer), OutBuf.cbBuffer);
   FreeContextBuffer(OutBuf.pvBuffer);
 end;
 
-function ClientSSPIAuth(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aSecKerberosSPN: RawUTF8;
+function ClientSspiAuth(var aSecContext: TSecContext;
+  const aInData: RawByteString; const aSecKerberosSPN: RawUtf8;
   out aOutData: RawByteString): boolean;
 var
   TargetName: PWideChar;
 begin
   if aSecKerberosSPN <> '' then
-    TargetName := pointer(UTF8ToSynUnicode(aSecKerberosSPN))
+    TargetName := pointer(Utf8ToSynUnicode(aSecKerberosSPN))
   else
   begin
     if ForceSecKerberosSPN <> '' then
@@ -757,13 +696,13 @@ begin
     else
       TargetName := nil;
   end;
-  Result := ClientSSPIAuthWorker(
+  Result := ClientSspiAuthWorker(
     aSecContext, aInData, TargetName, nil, aOutData);
 end;
 
-function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aUserName: RawUTF8;
-  const aPassword: RawUTF8; out aOutData: RawByteString): boolean;
+function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
+  const aInData: RawByteString; const aUserName: RawUtf8;
+  const aPassword: RawUtf8; out aOutData: RawByteString): boolean;
 var
   UserPos: Integer;
   Domain, User, Password: SynUnicode;
@@ -774,14 +713,14 @@ begin
   if UserPos = 0 then
   begin
     Domain := '';
-    User := UTF8ToSynUnicode(aUserName);
+    Utf8ToSynUnicode(aUserName, User);
   end
   else
   begin
-    Domain := UTF8ToSynUnicode(Copy(aUserName, 1, UserPos - 1));
-    User := UTF8ToSynUnicode(Copy(aUserName, UserPos + 1, MaxInt));
+    Utf8ToSynUnicode(Copy(aUserName, 1, UserPos - 1), Domain);
+    Utf8ToSynUnicode(Copy(aUserName, UserPos + 1, MaxInt), User);
   end;
-  Password := UTF8ToSynUnicode(aPassword);
+  Utf8ToSynUnicode(aPassword, PassWord);
   AuthIdentity.Domain := pointer(Domain);
   AuthIdentity.DomainLength := Length(Domain);
   AuthIdentity.User := pointer(User);
@@ -793,11 +732,11 @@ begin
     TargetName := pointer(ForceSecKerberosSPN)
   else
     TargetName := nil;
-  Result := ClientSSPIAuthWorker(
+  Result := ClientSspiAuthWorker(
     aSecContext, aInData, TargetName, @AuthIdentity, aOutData);
 end;
 
-function ServerSSPIAuth(var aSecContext: TSecContext;
+function ServerSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; out aOutData: RawByteString): boolean;
 var
   InBuf: TSecBuffer;
@@ -823,15 +762,15 @@ begin
     if IdemPChar(Pointer(aInData), 'NTLMSSP') then
     begin
       if QuerySecurityPackageInfoW(SECPKGNAMENTLM, SecPkgInfo) <> 0 then
-        raise ESynSSPI.CreateLastOSError(aSecContext);
+        raise ESynSspi.CreateLastOSError(aSecContext);
     end
     else
       if QuerySecurityPackageInfoW(SECPKGNAMENEGOTIATE, SecPkgInfo) <> 0 then
-        raise ESynSSPI.CreateLastOSError(aSecContext);
+        raise ESynSspi.CreateLastOSError(aSecContext);
     try
       if AcquireCredentialsHandleW(nil, SecPkgInfo^.Name, SECPKG_CRED_INBOUND,
           nil, nil, nil, nil, @aSecContext.CredHandle, Expiry) <> 0 then
-        raise ESynSSPI.CreateLastOSError(aSecContext);
+        raise ESynSspi.CreateLastOSError(aSecContext);
     finally
       FreeContextBuffer(SecPkgInfo);
     end;
@@ -854,38 +793,38 @@ begin
      (Status = SEC_I_COMPLETE_AND_CONTINUE) then
     Status := CompleteAuthToken(@aSecContext.CtxHandle, @OutDesc);
   if Status < 0 then
-      raise ESynSSPI.CreateLastOSError(aSecContext);
+      raise ESynSspi.CreateLastOSError(aSecContext);
   SetString(aOutData, PAnsiChar(OutBuf.pvBuffer), OutBuf.cbBuffer);
   FreeContextBuffer(OutBuf.pvBuffer);
 end;
 
-procedure ServerSSPIAuthUser(var aSecContext: TSecContext;
-  out aUserName: RawUTF8);
+procedure ServerSspiAuthUser(var aSecContext: TSecContext;
+  out aUserName: RawUtf8);
 var
   Names: SecPkgContext_NamesW;
 begin
   if QueryContextAttributesW(@aSecContext.CtxHandle,
        SECPKG_ATTR_NAMES, @Names) <> 0 then
-    raise ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSspi.CreateLastOSError(aSecContext);
   aUserName := RawUnicodeToUtf8(Names.sUserName, StrLenW(Names.sUserName));
   FreeContextBuffer(Names.sUserName);
 end;
 
-function SecPackageName(var aSecContext: TSecContext): RawUTF8;
+function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 var
   NegotiationInfo: TSecPkgContext_NegotiationInfo;
 begin
   if QueryContextAttributesW(@aSecContext.CtxHandle,
        SECPKG_ATTR_NEGOTIATION_INFO, @NegotiationInfo) <> 0 then
-    raise ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSspi.CreateLastOSError(aSecContext);
   Result := RawUnicodeToUtf8(NegotiationInfo.PackageInfo^.Name,
               StrLenW(NegotiationInfo.PackageInfo^.Name));
   FreeContextBuffer(NegotiationInfo.PackageInfo);
 end;
 
-procedure ClientForceSPN(const aSecKerberosSPN: RawUTF8);
+procedure ClientForceSPN(const aSecKerberosSPN: RawUtf8);
 begin
-  ForceSecKerberosSPN := UTF8ToSynUnicode(aSecKerberosSPN);
+  Utf8ToSynUnicode(aSecKerberosSPN, ForceSecKerberosSPN);
 end;
 
 procedure ServerForceNTLM(ForceNTLM: boolean);
@@ -907,7 +846,7 @@ begin
   ServerForceNTLM(false);
 end;
 
-{$endif MSWINDOWS}
+{$endif OSPOSIX}
 
 end.
 

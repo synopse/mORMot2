@@ -72,41 +72,41 @@ type
     function GetStorage(aTable: TOrmClass): TRestStorageInMemory;
     /// overridden methods which will call fStaticData[TableModelIndex] directly
     // without the TRestOrmServer overhead
-    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; override;
-    function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
+    function EngineAdd(TableModelIndex: integer; const SentData: RawUtf8): TID; override;
+    function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8; override;
     function EngineUpdate(TableModelIndex: integer; ID: TID;
-      const SentData: RawUTF8): boolean; override;
+      const SentData: RawUtf8): boolean; override;
     function EngineDelete(TableModelIndex: integer; ID: TID): boolean; override;
-    function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
+    function EngineDeleteWhere(TableModelIndex: integer; const SqlWhere: RawUtf8;
       const IDs: TIDDynArray): boolean; override;
     function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PRttiProp; out BlobData: RawBlob): boolean; override;
     function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
       BlobField: PRttiProp; const BlobData: RawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
-      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
+      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUtf8): boolean; override;
     function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
-      const FieldName: RawUTF8; Increment: Int64): boolean; override;
+      const FieldName: RawUtf8; Increment: Int64): boolean; override;
     /// overridden methods which will return error (no main DB in our context)
-    function MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; override;
-    function MainEngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
-    function MainEngineList(const SQL: RawUTF8; ForceAJAX: boolean;
-      ReturnedRowCount: PPtrInt): RawUTF8; override;
+    function MainEngineAdd(TableModelIndex: integer; const SentData: RawUtf8): TID; override;
+    function MainEngineRetrieve(TableModelIndex: integer; ID: TID): RawUtf8; override;
+    function MainEngineList(const SQL: RawUtf8; ForceAjax: boolean;
+      ReturnedRowCount: PPtrInt): RawUtf8; override;
     function MainEngineUpdate(TableModelIndex: integer; aID: TID;
-      const SentData: RawUTF8): boolean; override;
+      const SentData: RawUtf8): boolean; override;
     function MainEngineDelete(TableModelIndex: integer; ID: TID): boolean; override;
-    function MainEngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
+    function MainEngineDeleteWhere(TableModelIndex: integer; const SqlWhere: RawUtf8;
       const IDs: TIDDynArray): boolean; override;
     function MainEngineRetrieveBlob(TableModelIndex: integer; aID: TID;
       BlobField: PRttiProp; out BlobData: RawBlob): boolean; override;
     function MainEngineUpdateBlob(TableModelIndex: integer; aID: TID;
       BlobField: PRttiProp; const BlobData: RawBlob): boolean; override;
     function MainEngineUpdateField(TableModelIndex: integer;
-      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
+      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUtf8): boolean; override;
     function MainEngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
-      const FieldName: RawUTF8; Increment: Int64): boolean; override;
+      const FieldName: RawUtf8; Increment: Int64): boolean; override;
     // method not implemented: always return false
-    function EngineExecute(const aSQL: RawUTF8): boolean; override;
+    function EngineExecute(const aSql: RawUtf8): boolean; override;
   public
     /// initialize an in-memory REST server with no database file
     constructor Create(aRest: TRest); overload; override;
@@ -146,8 +146,8 @@ type
     property FileName: TFileName
       read fFileName write fFileName;
     /// set if the file content is to be compressed binary, or standard JSON
-    // - it will use TRestStorageInMemory LoadFromJSON/LoadFromBinary
-    // SaveToJSON/SaveToBinary methods for optimized storage
+    // - it will use TRestStorageInMemory LoadFromJson/LoadFromBinary
+    // SaveToJson/SaveToBinary methods for optimized storage
     property BinaryFile: boolean
       read fBinaryFile write fBinaryFile;
   end;
@@ -188,8 +188,8 @@ type
     property FileName: TFileName
       read GetFileName;
     /// set if the file content is to be compressed binary, or standard JSON
-    // - it will use TRestStorageInMemory LoadFromJSON/LoadFromBinary
-    // SaveToJSON/SaveToBinary methods for optimized storage
+    // - it will use TRestStorageInMemory LoadFromJson/LoadFromBinary
+    // SaveToJson/SaveToBinary methods for optimized storage
     property BinaryFile: boolean
       read GetBinaryFile;
   published
@@ -200,11 +200,12 @@ type
     // - can be used from a remote client to ensure that any Add/Update/Delete
     // will be stored to disk, via
     // ! aClient.CallBackPut('Flush','',dummy)
-    procedure Flush(Ctxt: TRestServerURIContext);
+    procedure Flush(Ctxt: TRestServerUriContext);
   end;
 
 
 /// create an external static in-memory database for a specific class
+// - aServer is expected to be a TRestOrmServer, e.g. from TRestServer.OrmInstance
 // - call it after TRestServer.Create, before IRestOrmServer.CreateMissingTables;
 // warning: if you don't call this method before CreateMissingTable method
 // is called, the table will be created as a regular table by the main
@@ -216,12 +217,12 @@ type
 // - this data handles basic REST commands, since no complete SQL interpreter
 // can be implemented by TRestStorage; to provide full SQL process,
 // you should better use a Virtual Table class, inheriting e.g. from
-// TOrmVirtualTableAutoID associated with TOrmVirtualTableJSON/Binary
+// TOrmVirtualTableAutoID associated with TOrmVirtualTableJson/Binary
 // via a Model.VirtualTableRegister() call before TRestServer.Create
 // - you can use this method to change the filename of an existing storage
 // - return nil on any error, or an EModelException if the class is not in
 // the aServer database model
-function StaticDataCreate(aServer: TRestOrmServer; aClass: TOrmClass;
+function StaticDataCreate(aServer: TRestOrm; aClass: TOrmClass;
   const aFileName: TFileName = ''; aBinaryFile: boolean = false;
   aStorageClass: TRestStorageInMemoryClass = nil): TRestStorageInMemory;
 
@@ -240,7 +241,7 @@ function CreateInMemoryServerForAllVirtualTables(aModel: TOrmModel;
 
 type
   // should be a proper type for RegisterClassNameForDefinition
-  TSQLRestServerFullMemory = TRestServerFullMemory;
+  TSqlRestServerFullMemory = TRestServerFullMemory;
 
 {$endif PUREMORMOT2}
 
@@ -256,7 +257,7 @@ constructor TRestOrmServerFullMemory.Create(aRest: TRest);
 var
   t: PtrInt;
 begin
-  inherited Create(aRest);
+  inherited Create(aRest); // calls fRest.SetOrmInstance(self)
   // pre-allocate all TRestStorageInMemory instances
   fStaticDataCount := length(fModel.Tables);
   for t := 0 to fStaticDataCount - 1 do
@@ -290,7 +291,7 @@ begin
   for t := 0 to fStaticDataCount - 1 do
     with TRestStorageInMemory(fStaticData[t]) do
       if Count = 0 then
-        // emulates TSQLRestServerDB.CreateMissingTables
+        // emulates TSqlRestServerDB.CreateMissingTables
         StoredClass.InitializeTable(self, '', Options);
 end;
 
@@ -310,8 +311,8 @@ end;
 
 procedure TRestOrmServerFullMemory.LoadFromStream(aStream: TStream);
 var
-  JSON: RawUTF8;
-  P, TableName, Data: PUTF8Char;
+  magic, json: RawUtf8;
+  P, TableName, Data: PUtf8Char;
   t: PtrInt;
   wasString: boolean;
 begin
@@ -320,7 +321,9 @@ begin
   if fBinaryFile then
   begin
     // optimized binary content with SynLZ + variable-length record storage
-    if ReadStringFromStream(aStream) = ToText(ClassType) + '00' then
+    magic := ReadStringFromStream(aStream);
+    if PosEx('ServerFullMemory00', magic) > 0 then
+      // compatible with mORMot 1.18 'TSQLRestServerFullMemory00'
       repeat
         t := Model.GetTableIndex(ReadStringFromStream(aStream));
         if t < 0 then
@@ -330,10 +333,10 @@ begin
   else
   begin
     // [{"AuthUser":[{....},{...}]},{"AuthGroup":[{...},{...}]}]
-    JSON := StreamToRawByteString(aStream); // assume UTF-8 content
-    if JSON = '' then
+    json := StreamToRawByteString(aStream); // assume UTF-8 content
+    if json = '' then
       exit;
-    P := pointer(JSON);
+    P := pointer(json);
     while P^ <> '[' do
       if P^ = #0 then
         exit
@@ -350,7 +353,7 @@ begin
       if P^ = ']' then
         break;
       inc(P);
-      TableName := GetJSONField(P, P, @wasString);
+      TableName := GetJsonField(P, P, @wasString);
       if not wasString or
          (P = nil) then
         exit;
@@ -358,10 +361,10 @@ begin
       if t < 0 then
         exit;
       Data := P;
-      P := GotoNextJSONObjectOrArray(P);
+      P := GotoNextJsonObjectOrArray(P);
       if P = nil then
         break;
-      TRestStorageInMemory(fStaticData[t]).LoadFromJSON(Data, P - Data);
+      TRestStorageInMemory(fStaticData[t]).LoadFromJson(Data, P - Data);
     until false;
   end;
 end;
@@ -405,7 +408,7 @@ begin
   if not Modified then
     exit;
   timer.Start;
-  S := TFileStream.Create(FileName, fmCreate);
+  S := TFileStream.Create(fFileName, fmCreate);
   try
     if fBinaryFile then
     begin
@@ -415,7 +418,7 @@ begin
         with TRestStorageInMemory(fStaticData[t]) do
         begin
           // each TOrmClass is stored as SynLZ-compressed binary
-          WriteStringToStream(S, StoredClassRecordProps.SQLTableName);
+          WriteStringToStream(S, StoredClassRecordProps.SqlTableName);
           SaveToBinary(S);
         end;
     end
@@ -428,9 +431,9 @@ begin
         begin
           S.WriteBuffer(CHARS[1], 2);
           with StoredClassRecordProps do
-            S.WriteBuffer(pointer(SQLTableName)^, length(SQLTableName));
+            S.WriteBuffer(pointer(SqlTableName)^, length(SqlTableName));
           S.WriteBuffer(CHARS[2], 2);
-          SaveToJSON(S, true);
+          SaveToJson(S, true);
           S.WriteBuffer(CHARS[5], 1);
           if t < integer(fStaticDataCount - 1) then
             S.WriteBuffer(CHARS[4], 1);
@@ -440,10 +443,10 @@ begin
   finally
     S.Free;
   end;
-  InternalLog('UpdateToFile done in %', [timer.Stop], sllDB);
+  InternalLog('UpdateToFile % done in %', [fFileName, timer.Stop], sllDB);
 end;
 
-function TRestOrmServerFullMemory.EngineExecute(const aSQL: RawUTF8): boolean;
+function TRestOrmServerFullMemory.EngineExecute(const aSql: RawUtf8): boolean;
 begin
   result := false; // not implemented in this basic REST server class
 end;
@@ -463,20 +466,20 @@ end;
 // Engine*() methods will have direct access to static fStorage[])
 
 function TRestOrmServerFullMemory.EngineAdd(TableModelIndex: integer;
-  const SentData: RawUTF8): TID;
+  const SentData: RawUtf8): TID;
 begin
   result := fStaticData[TableModelIndex].EngineAdd(TableModelIndex, SentData);
   inc(InternalState);
 end;
 
 function TRestOrmServerFullMemory.EngineRetrieve(TableModelIndex: integer;
-  ID: TID): RawUTF8;
+  ID: TID): RawUtf8;
 begin
   result := fStaticData[TableModelIndex].EngineRetrieve(TableModelIndex, ID);
 end;
 
 function TRestOrmServerFullMemory.EngineUpdate(TableModelIndex: integer; ID: TID;
-  const SentData: RawUTF8): boolean;
+  const SentData: RawUtf8): boolean;
 begin
   result := fStaticData[TableModelIndex].EngineUpdate(TableModelIndex, ID, SentData);
 end;
@@ -488,10 +491,10 @@ begin
 end;
 
 function TRestOrmServerFullMemory.EngineDeleteWhere(TableModelIndex: integer;
-  const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean;
+  const SqlWhere: RawUtf8; const IDs: TIDDynArray): boolean;
 begin
   result := fStaticData[TableModelIndex].EngineDeleteWhere(TableModelIndex,
-    SQLWhere, IDs);
+    SqlWhere, IDs);
 end;
 
 function TRestOrmServerFullMemory.EngineRetrieveBlob(TableModelIndex: integer;
@@ -509,14 +512,14 @@ begin
 end;
 
 function TRestOrmServerFullMemory.EngineUpdateField(TableModelIndex: integer;
-  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
+  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUtf8): boolean;
 begin
   result := fStaticData[TableModelIndex].EngineUpdateField(TableModelIndex,
     SetFieldName, SetValue, WhereFieldName, WhereValue);
 end;
 
 function TRestOrmServerFullMemory.EngineUpdateFieldIncrement(
-  TableModelIndex: integer; ID: TID; const FieldName: RawUTF8;
+  TableModelIndex: integer; ID: TID; const FieldName: RawUtf8;
   Increment: Int64): boolean;
 begin
   result := fStaticData[TableModelIndex].EngineUpdateFieldIncrement(
@@ -526,25 +529,25 @@ end;
 // MainEngine*() methods should return error (only access via static fStaticData[])
 
 function TRestOrmServerFullMemory.MainEngineAdd(TableModelIndex: integer;
-  const SentData: RawUTF8): TID;
+  const SentData: RawUtf8): TID;
 begin
   result := 0;
 end;
 
 function TRestOrmServerFullMemory.MainEngineRetrieve(TableModelIndex: integer;
-  ID: TID): RawUTF8;
+  ID: TID): RawUtf8;
 begin
   result := '';
 end;
 
-function TRestOrmServerFullMemory.MainEngineList(const SQL: RawUTF8;
-  ForceAJAX: boolean; ReturnedRowCount: PPtrInt): RawUTF8;
+function TRestOrmServerFullMemory.MainEngineList(const SQL: RawUtf8;
+  ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawUtf8;
 begin
   result := '';
 end;
 
 function TRestOrmServerFullMemory.MainEngineUpdate(
-  TableModelIndex: integer; aID: TID; const SentData: RawUTF8): boolean;
+  TableModelIndex: integer; aID: TID; const SentData: RawUtf8): boolean;
 begin
   result := false;
 end;
@@ -556,7 +559,7 @@ begin
 end;
 
 function TRestOrmServerFullMemory.MainEngineDeleteWhere(
-  TableModelIndex: integer; const SQLWhere: RawUTF8;
+  TableModelIndex: integer; const SqlWhere: RawUtf8;
   const IDs: TIDDynArray): boolean;
 begin
   result := false;
@@ -578,13 +581,13 @@ end;
 
 function TRestOrmServerFullMemory.MainEngineUpdateField(
   TableModelIndex: integer;
-  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
+  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUtf8): boolean;
 begin
   result := false;
 end;
 
 function TRestOrmServerFullMemory.MainEngineUpdateFieldIncrement(
-  TableModelIndex: integer; ID: TID; const FieldName: RawUTF8;
+  TableModelIndex: integer; ID: TID; const FieldName: RawUtf8;
   Increment: Int64): boolean;
 begin
   result := false;
@@ -593,26 +596,28 @@ end;
 
 { ************ TRestServerFullMemory Standalone REST Server }
 
-function StaticDataCreate(aServer: TRestOrmServer; aClass: TOrmClass;
+function StaticDataCreate(aServer: TRestOrm; aClass: TOrmClass;
   const aFileName: TFileName; aBinaryFile: boolean;
   aStorageClass: TRestStorageInMemoryClass): TRestStorageInMemory;
 var
   t: PtrInt;
+  s: TRestOrmServer;
 begin
+  s := aServer as TRestOrmServer;
   if aStorageClass = nil then
     // default in-memory engine
     aStorageClass := TRestStorageInMemory;
   t := aServer.Model.GetTableIndexExisting(aClass);
-  result := TRestStorageInMemory(aServer.GetStaticTableIndex(t));
+  result := TRestStorageInMemory(s.GetStaticTableIndex(t));
   if result <> nil then
     // class already registered -> check aStorageClass, and update file name
     (result as aStorageClass).FileName := aFileName
   else
   begin
     // class not already registered -> create and register now
-    result := aStorageClass.Create(aClass, aServer, aFileName, aBinaryFile);
+    result := aStorageClass.Create(aClass, s, aFileName, aBinaryFile);
     result.StorageLockShouldIncreaseOwnerInternalState := true;
-    aServer.StaticTableSetup(t, result, sStaticDataTable);
+    s.StaticTableSetup(t, result, sStaticDataTable);
   end;
 end;
 
@@ -630,7 +635,7 @@ begin
     if (c = nil) or
        not c.InheritsFrom(TRestServer) then
     begin
-      fake.Kind := 'TSQLRestServerDB';
+      fake.Kind := 'TSqlRestServerDB';
       c := TRest.ClassFrom(fake);
     end;
     if (c = nil) or
@@ -682,7 +687,7 @@ begin
     result := (fOrmInstance as TRestOrmServerFullMemory).FileName;
 end;
 
-procedure TRestServerFullMemory.Flush(Ctxt: TRestServerURIContext);
+procedure TRestServerFullMemory.Flush(Ctxt: TRestServerUriContext);
 begin
   if Ctxt.Method = mPUT then
   begin
@@ -695,7 +700,7 @@ end;
 initialization
   TRestServerFullMemory.RegisterClassNameForDefinition;
   {$ifndef PUREMORMOT2}
-  TSQLRestServerFullMemory.RegisterClassNameForDefinition;
+  TSqlRestServerFullMemory.RegisterClassNameForDefinition;
   {$endif PUREMORMOT2}
 
 end.

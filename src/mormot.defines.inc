@@ -2,7 +2,7 @@
   This file is a part of the Open Source Synopse mORMot framework 2,
   licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 
-  Define a Centralized Set of Conditional Defines, included in all our
+  Define a centralized set of conditional defines, included in all our
   framework units, and could be used also for your own private units.
 }
 
@@ -22,7 +22,7 @@
 
 {.$define PUREMORMOT2}
 // if defined, no mORMot 1.18 compatilibity types nor functions would be enabled
-// - by default, existing projects should compile with mORMot 2
+// - by default, existing projects should (almost) compile with mORMot 2
 // - you should eventually define this conditional to make a perfect code
 // conversion to the new types and methods definitions
 
@@ -31,6 +31,10 @@
 // the executable: resulting file size will be much smaller, and mORMot won't
 // be affected (unless you use the enhanced RTTI for record/dynamic array JSON
 // serialization) - left undefined by default to ensure minimal impact
+
+{.$define FPCUSEVERSIONINFO}
+// link low-level fileinfo/machoreader/elfreader for TFileVersion/TExeVersion
+// from mormot.core.os.pas => disabled by default, to preserve code size
 
 {.$define NOSETTHREADNAME}
 // if defined, SetThreadName() would not raise the exception used to set the
@@ -78,16 +82,26 @@
 {.$define NOGSSAPIAUTH}
 // disable Posix mormot.lib.gsssapi support in mormot.rest.client/server units
 
+{.$define NOPOINTEROFFSET}
+// disable TOrmTable offsets on 64-bit if your memory is huge or fragmented
+
+{.$define LIBCURLMULTI}
+// enable the more advanced "multi session" API functions of mormot.lib.curl
+// see https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
+
 
 {$ifdef FPC}
 
 (********************** FPC Conditionals **********************)
 
+  // -----------
+  // -- global code generation conditionals
+
   {$WARN 5093 off : function result variable of a managed type does not seem to be initialized }
 
   {$ifndef FPC_DELPHI}
     {$MODE DELPHI} // e.g. for asm syntax - disabled for FPC 2.6 compatibility
-  {$endif}
+  {$endif FPC_DELPHI}
 
   {$INLINE ON}
   {$MINENUMSIZE 1}
@@ -97,90 +111,116 @@
   {$CODEPAGE UTF8} // otherwise unexpected behavior occurs in most cases
 
   {$define HASINLINE}
-  {$define NODELPHIASM} // avoid e.g. low-level System.@LStrFromPCharLen calls
+  {$define HASSAFEINLINE} // Delphi 2007 has sometimes troubles inlining :(
+  {$define NODELPHIASM}   // avoid e.g. low-level System.@LStrFromPCharLen calls
+  {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSHORT_USESTR} // FloatToText uses str() in FPC
   {$define DOUBLETOSHORT_USEGRISU} // fast DoubleToAscii()
-  {$define FPC_OR_UNICODE}
   {$define USERECORDWITHMETHODS}  // use "object" only for Delphi 7
-  {$define FPC_ENUMHASINNER}
+  {$define FPC_OR_UNICODE}
+
+
+  // -----------
+  // -- identify FPC versions
 
   // $if FPC_FULLVERSION>20700 breaks Delphi 6-7 and SynProject :(
   {$ifdef VER2_7}
     {$define ISFPC27}
-  {$endif}
+  {$endif VER2_7}
   {$ifdef VER3_0}
     {$define ISFPC27}
     {$define ISFPC30}
     {$define HASDIRECTTYPEINFO}
     // PTypeInfo would be stored with no pointer de-reference
     // => Delphi and newer FPC uses a pointer reference to ease exe linking
-  {$endif}
+  {$endif VER3_0}
   {$ifdef VER3_1} // trunk before 3.2
     {$define ISFPC27}
     {$define ISFPC30}
     {.$define HASDIRECTTYPEINFO}
     // define this for trunk revisions older than June 2016 - see
     // http://wiki.freepascal.org/User_Changes_Trunk#RTTI_Binary_format_change
-  {$endif}
+  {$endif VER3_1}
   {$ifdef VER3_1_1}
     {$define ISFPC32}
-  {$endif}
+  {$endif VER3_1_1}
   {$ifdef VER3_2}
     {$define ISFPC27}
     {$define ISFPC30}
     {$define ISFPC32}
-  {$endif}
+  {$endif VER3_2}
   {$ifdef VER3_3} // trunk before 3.4
     {$define ISFPC27}
     {$define ISFPC30}
     {$define ISFPC32}
-  {$endif}
+  {$endif VER3_3}
   {$ifdef VER3_4}
     {$define ISFPC27}
     {$define ISFPC30}
     {$define ISFPC32}
     {$define ISFPC34}
     {$define FPC_PROVIDE_ATTR_TABLE} // introducing TTypeData.AttributeTable
-  {$endif}
+  {$endif VER3_4}
   {$if not defined(VER3_0) and not defined(VER3_2) and not defined(VER2)}
     {.$define FPC_PROVIDE_ATTR_TABLE} // to be defined since SVN 42356-42411
     // on compilation error in mormot.core.Rtti, undefine the above conditional
     // see https://lists.freepascal.org/pipermail/fpc-announce/2019-July/000612.html
   {$ifend}
 
-  {$ifdef ANDROID}
-    {$define LINUX} // a Linux-based system
-  {$endif}
 
-  {$ifdef BSD}
-    // LINUX conditional includes Darwin and BSD family like FreeBSD
-    {$define LINUX} // not true, but a POSIX/BSD system - see LINUXNOTBSD
-    {$ifdef DARWIN}
-      {$ifdef CPUINTEL}
-        {$define FPC_PIC} // may have not be defined by the compiler options
-      {$endif}
-    {$else}
-      {$define BSDNOTDARWIN}   // OSX has some non-standard API calls
-    {$endif}
-   {$define FPCSQLITE3STATIC} // we supply Darwin+FreeBSD+OpenBSD static libs
-    {$ifdef OPENBSD}
-      {$ifdef FPC_CROSSCOMPILING}
-      // OpenBSD has linking problems with fpcupdeluxe libgcc.a
-      {$undef FPCSQLITE3STATIC}
-      {$endif FPC_CROSSCOMPILING}
-    {$endif OPENBSD}
+  // -----------
+  // -- identify Operating Systems
+
+  // mainly OSWINDOWS or OSPOSIX (OSLINUX, OSBSD, OSDARWIN, OSANDROID)
+
+  {$ifdef MSWINDOWS}
+    // conditionals for Windows
+    {$define OSWINDOWS}
+    {$define FPCWINDOWS}
   {$else}
-    {$ifdef LINUX}
-      {$define LINUXNOTBSD} // e.g. to disable epoll API
-      {$define FPCLINUXNOTBSD}
-    {$endif LINUX}
-  {$endif BSD}
+    {$define OSPOSIX} // a POSIX/BSD system
+    {$define FPCPOSIX}
+    {$ifdef BSD}
+      // conditionals for Darwin and BSD family like OpenBSD/FreeBSD
+      {$define OSBSDDARWIN} // OSBSDDARWIN = OSBSD + OSDARWIN
+      {$ifdef DARWIN}
+        {$define OSDARWIN}
+        {$define FPCDARWIN}
+        {$ifdef CPUINTEL}
+          {$define FPC_PIC} // may have not be defined in the compiler options
+        {$endif CPUINTEL}
+      {$else}
+        {$define OSBSD}   // OSX has some non-standard API calls
+        {$define FPCBSD}
+        {$ifdef OPENBSD}
+          {$define OSOPENBSD}  // OSBDS = OSOPENBSD + OSFREEBSD
+        {$endif OPENBSD}
+        {$ifdef FREEBSD}
+          {$define OSFREEBSD}
+        {$endif FREEBSD}
+      {$endif DARWIN}
+    {$else}
+      {$ifdef LINUX}
+        // conditionals for Linux
+        {$define OSLINUX} // e.g. to disable epoll API
+        {$define FPCLINUX}
+      {$else}
+        'Unsupported Operating System - yet'
+      {$endif LINUX}
+    {$endif BSD}
+    {$ifdef ANDROID}
+      // conditionals for Android
+      {$define OSANDROID}
+      {$define FPCANDROID}
+      {$define NOPATCHRTL} // don't mess with asm stuff
+    {$endif ANDROID}
+  {$endif MSWINDOWS}
 
-  {$ifdef LINUX}
-     {$define FPCLINUX}
-  {$endif LINUX}
+
+  // -----------
+  // -- identify CPU Architectures
 
   {$ifdef CPU64}
     {$define FPC_64}
@@ -189,17 +229,14 @@
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
       {$define FPC_CPUX64}
-      {$ifndef DARWIN}
+      {$ifndef OSDARWIN}  // MachOS has troubles with our asm
         {$define FPC_ASMX64}
         {$define ASMX64}     // supports asm with globals
         {$define ASMINTEL}   // either ASMX86 or ASMX64
         {$define ASMX64AVX}  // supports AVX/AVX2/AVX512
         {$define CPUX64ASM}  // FPC has no problem (not Delphi prior XE7)
         {$define HASAESNI}   // mormot.core.crypto rejected by Darwin asm
-        {$ifdef LINUX}
-          {$define ASMX64LINUX}  // e.g. for tuned server-side asm
-        {$endif LINUX}
-      {$endif DARWIN}
+      {$endif OSDARWIN}
     {$endif CPUX64}
     {$ifdef CPUAARCH64}
       {$define CPUARM3264}
@@ -211,14 +248,14 @@
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
       {$define FPC_X86}
-      {$ifndef DARWIN}
-        {$ifndef OPENBSD}
+      {$ifndef OSDARWIN}  // MachOS requires PIC code on i386
+        {$ifndef OSOPENBSD}   // OPENBSD requires PIC code on i386
           {$define ASMX86}       // supports asm with globals
           {$define ASMINTEL}     // either ASMX86 or ASMX64
           {$define CPUX86NOTPIC} // use "absolute" instead of local register
           {$define HASAESNI}
-        {$endif OPENBSD}
-      {$endif DARWIN}
+        {$endif OSOPENBSD}
+      {$endif OSDARWIN}
       {$define TSYNEXTENDED80} // only 32-bit has a true x87 extended type
     {$endif CPUX86}
     {$ifdef CPUARM}
@@ -226,14 +263,9 @@
     {$endif CPUARM}
   {$endif CPU64}
 
-  {$ifdef ISFPC30}
-    {$ifndef MSWINDOWS}
-      // define FPCUSEVERSIONINFO to link low-level executable file information
-      // retrieval for ExeVersion from mormot.core.os.pas
-      // => disabled by default, to reduce the executable overhead
-      {.$define FPCUSEVERSIONINFO}
-    {$endif MSWINDOWS}
-  {$endif ISFPC30}
+
+  // -----------
+  // -- compiler-specific code generation conditionals
 
   {$ifdef ISFPC32}
     // FPC has its own RTTI layout only since late 3.x
@@ -248,12 +280,12 @@
     {$define DELPHI_OR_FPC_OLDRTTI}
     {$define FPC_OLDRTTI}
   {$endif}
-  {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
 
   {$ifdef FPC_HAS_CPSTRING}
     // see http://wiki.freepascal.org/FPC_Unicode_support
     {$define HASCODEPAGE} // UNICODE means {$mode delphiunicode}
-  {$endif}
+  {$endif FPC_HAS_CPSTRING}
+
   {$ifdef ISFPC27}
     {$define ISFPC271}
     {$define HASVARUSTRING}
@@ -263,41 +295,7 @@
     // => this will change the TInvokeableVariantType.SetProperty() signature
     {$define FPC_VARIANTSETVAR}
   {$endif ISFPC27}
-  {$ifdef FPC_PROVIDE_ATTR_TABLE}
-    {$define HASALIGNTYPEDATA} // to ignore attributes RTTI table
-  {$endif FPC_PROVIDE_ATTR_TABLE}
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    {$define FPC_ENUMHASINNER}
-    {$define HASALIGNTYPEDATA} // to ensure proper RTTI alignment
-  {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 
-  // define FPCSQLITE3STATIC to enable static-linked SQLite3 engine for FPC
-  // -> to be downloaded from https://github.com/synopse/mORMot2/releases
-  // -> could be disabled to force external .so/.dll linking
-  {$ifdef MSWINDOWS}
-  {$ifdef CPUX86}
-    {$define FPCSQLITE3STATIC}   // use static\i386-win32\sqlite3.o
-  {$else}
-    {$define FPCSQLITE3STATIC}   // use static\x86_64-win64\sqlite3.o
-  {$endif}
-  {$endif}
-  {$ifdef LINUXNOTBSD}
-    {$ifdef CPUX86}
-      {$define FPCSQLITE3STATIC} // use static/i386-linux/sqlite3.o
-    {$endif}
-    {$ifdef CPUX64}
-      {$define FPCSQLITE3STATIC} // use static/x86_64-linux/sqlite3.o
-    {$endif}
-    {$ifdef CPUARM}
-      {$define FPCSQLITE3STATIC} // use static/arm-linux/sqlite3.o
-    {$endif}
-    {$ifdef CPUAARCH64}
-      {$ifdef ANDROID}
-        {$define FPCSQLITE3STATIC}
-        // note: problems with current static/aarch64-linux/sqlite3.o
-      {$endif}
-    {$endif}
-  {$endif}
 
 {$else FPC}
 
@@ -307,14 +305,17 @@
   'Kylix or Delphi for MacOS/Linux/Mobile are unsupported'
   '-> we recommend using FPC for POSIX platforms'
   {$endif MSWINDOWS}
+
+  {$define OSWINDOWS}
+
   {$IFNDEF CONDITIONALEXPRESSIONS}
   'Delphi 2-5 are not supported'
   {$ENDIF CONDITIONALEXPRESSIONS}
   {$ifdef VER140}
   'Delphi 6 is not supported'
-  {$endif}
+  {$endif VER140}
 
-  {$A+} // force normal alignment
+  {$A+} // force normal alignment, as expected by our units
 
   {$ifdef UNICODE}
     {$define HASVARUSTRING}
@@ -388,12 +389,13 @@
       {$define ISDELPHI20092010} //specific compilation issues
     {$ifend}
     {$if CompilerVersion >= 21.0}
+      {$define HASSAFEINLINE} // Delphi 2007 has sometimes troubles inlining :(
       {$define ISDELPHI2010}
       {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
       {$define ISDELPHI2010_OR_FPC_NEWRTTI}
       {$define HASTTHREADSTART}
       {$define HASINTERFACEASTOBJECT}
-      {$ifdef NEWRTTINOTUSED} // option reduce EXE size by disabling much RTTI
+      {$ifdef NEWRTTINOTUSED} // option reduce EXE size by disabling some RTTI
         {$WEAKLINKRTTI ON}
         {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
       {$endif NEWRTTINOTUSED}
@@ -463,32 +465,57 @@
 
 (********************** Shared Conditionals **********************)
 
-{$H+} // we use long strings
-{$R-} // disable Range checking in our code
-{$S-} // disable Stack checking in our code
-{$X+} // expect extended syntax
-{$W-} // disable stack frame generation
-{$Q-} // disable overflow checking in our code
-{$B-} // expect short circuit boolean
-{$V-} // disable Var-String Checking
-{$T-} // Typed @ operator
-{$Z1} // enumerators stored as byte by default
-{$P+} // Open string params
+// -----------
+// -- about pascal code expectations
+
+  {$H+} // we use long strings
+  {$R-} // disable Range checking in our code
+  {$S-} // disable Stack checking in our code
+  {$X+} // expect extended syntax
+  {$W-} // disable stack frame generation
+  {$Q-} // disable overflow checking in our code
+  {$B-} // expect short circuit boolean
+  {$V-} // disable Var-String Checking
+  {$T-} // Typed @ operator
+  {$Z1} // enumerators stored as byte by default
+  {$P+} // Open string params
+
+
+// -----------
+// -- CPU specific conditionals
 
 {$ifdef CPUINTEL}
-  {$ifdef MSWINDOWS}
-  {$ifdef CPUX86} // safest to reset x87 exceptions on Win32
-    {$define RESETFPUEXCEPTION}
-  {$endif CPUX86}
-  {$endif MSWINDOWS}
+  {$ifdef OSWINDOWS}
+    {$ifdef CPUX86} // safest to reset x87 exceptions on Win32
+      {$define RESETFPUEXCEPTION}
+    {$else}
+      {$define WIN64ABI} // for asm on x86_64
+    {$endif CPUX86}
+  {$endif OSWINDOWS}
+  {$ifdef OSPOSIX}
+    {$ifdef CPUX64}
+      {$define SYSVABI} // for asm on x86_64
+    {$endif CPUX64}
+  {$endif OSPOSIX}
 {$else}
   {$undef HASAESNI} // AES-NI is an Intel-specific feature
 {$endif CPUINTEL}
 
+{$ifdef CPU32}
+  {$define NOPOINTEROFFSET} // 32-bit CPU will always store pointers
+{$endif CPU32}
+
+
+  // -----------
+  // -- Libraries linking
+
+  // some static linked files are to be downloaded from
+  // https://github.com/synopse/mORMot2/releases
+
 {$ifdef FPC}
-  {$ifndef FPCSQLITE3STATIC} // see above about this FPC-specific conditional
-    {$define NOSQLITE3STATIC}
-  {$endif}
+  {$if defined(OSOPENBSD) and defined(FPC_CROSSCOMPILING)}
+    {$define NOSQLITE3STATIC} // OpenBSD problems with fpcupdeluxe libgcc.a
+  {$ifend}
 {$else}
   // there is a linking bug with Delphi XE4 on Win64
   {$ifdef CPUX64}
@@ -498,44 +525,59 @@
   {$endif} // other Win32/Win64 Delphi platforms should work as expected
 {$endif FPC}
 
-{$ifdef NOSQLITE3STATIC}
-  // our proprietary crypto expects a statically linked custom sqlite3.c
-  {$define NOSQLITE3ENCRYPT}
-{$endif NOSQLITE3STATIC}
+{$ifdef OSWINDOWS}
+  // on Windows: enable Microsoft AES Cryptographic Provider (XP SP3 and up)
+  // - even if those AES engines are slower and closed source (so should better
+  // be avoided), we use it for TAesPrng.GetEntropy, as it can't hurt
+  {$define USE_PROV_RSA_AES}
+  // define at your own risk, if you have the good libraries ;)
+  {.$define USE_OPENSSL}
+{$else}
+  {$ifndef OSANDROID}
+    // try OpenSSL on POSIX systems where likely to be unique and maintained
+    {$define USE_OPENSSL}
+  {$endif OSANDROID}
+{$endif OSWINDOWS}
 
-{$ifdef MSWINDOWS}
 
-  {$define USEWININET}         // publish TWinINet/TWinHttp/TWinHttpAPI classes
-  {.$define ONLYUSEHTTPSOCKET} // for testing (no benefit vs http.sys)
-  {.$define USELIBCURL}        // for testing (no benefit vs WinHTTP)
+// -----------
+// -- Per-platform Client-Server abilities
 
-  {$define USE_WINIOCP} // I/O completion ports API is the best option under Windows
-  // (under Linux/POSIX, we fallback to a classical event-driven pool)
-  {$ifndef NOSSPIAUTH}
-    {$define DOMAINRESTAUTH}
-    // enable Windows SSPI authentication in mormot.rest.client/server
+{$ifdef OSWINDOWS}
+
+  {$ifndef ONLYUSEHTTPSOCKET}
+    {$define USEWININET}   // publish TWinINet/TWinHttp/TWinHttpAPI classes
+    {$define USE_WINIOCP}  // I/O completion ports API is the best option under Windows
+    // (under Linux/POSIX, we fallback to a classical event-driven pool)
+    {$define USEHTTPSYS}   // enable http.sys kernel-mode Web server
+  {$endif ONLYUSEHTTPSOCKET}
+
+  {$ifndef NOSSPIAUTH} // from mormot.lib.sspi
+    {$define DOMAINRESTAUTH} // enable SSPI in mormot.rest.client/server
   {$endif NOSSPIAUTH}
 
-{$else}
+{$endif OSWINDOWS}
 
-  {$define ONLYUSEHTTPSOCKET}  // http.sys server is Windows-specific
-  // cross-platform libcurl for https -> TCurlHttp and TRestHttpClientCurl
-  {$define USELIBCURL}
-  {$ifdef ANDROID}
+{$ifdef OSPOSIX}
+
+  {$ifdef OSANDROID}
+
     // for Android, consider using https://github.com/gcesarmza/curl-android-ios
     // static libraries and force USELIBCURL in the project conditionals
     {$define LIBCURLSTATIC}
+
   {$else}
+
+    {$ifndef ONLYUSEHTTPSOCKET}
+      {$define USELIBCURL}   // try cross-platform libcurl for https on POSIX
+    {$endif ONLYUSEHTTPSOCKET}
+
     {$ifndef NOGSSAPIAUTH} // mormot.lib.gssapi is not Android compatible
-      {$define DOMAINRESTAUTH}
-      // enable Kerberos authentication via libgss in mormot.rest.client/server
+      {$define DOMAINRESTAUTH}  // enable libgss in mormot.rest.client/server
     {$endif NOGSSAPIAUTH}
-  {$endif ANDROID}
 
-{$endif MSWINDOWS}
+  {$endif OSANDROID}
 
-{$ifdef USELIBCURL}
-  {.$define LIBCURLMULTI}
-  // enable https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
-{$endif USELIBCURL}
+{$endif OSPOSIX}
+
 

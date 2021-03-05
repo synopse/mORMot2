@@ -60,7 +60,7 @@ type
   public
     /// initialize the client process for a given THttpClientWebSockets
     constructor Create(aSender: THttpClientWebSockets;
-      aProtocol: TWebSocketProtocol; const aProcessName: RawUTF8); reintroduce; virtual;
+      aProtocol: TWebSocketProtocol; const aProcessName: RawUtf8); reintroduce; virtual;
     /// finalize the process
     destructor Destroy; override;
   end;
@@ -100,10 +100,10 @@ type
     /// low-level initialization of a client WebSockets connection
     // - calls Open() then WebSocketsUpgrade() for a given protocol
     // - with proper error interception and optional logging, returning nil
-    class function WebSocketsConnect(const aHost, aPort: RawUTF8;
+    class function WebSocketsConnect(const aHost, aPort: RawUtf8;
       aProtocol: TWebSocketProtocol; aLog: TSynLogClass = nil;
-      const aLogContext: RawUTF8 = ''; const aURI: RawUTF8 = '';
-      const aCustomHeaders: RawUTF8 = ''): THttpClientWebSockets;
+      const aLogContext: RawUtf8 = ''; const aUri: RawUtf8 = '';
+      const aCustomHeaders: RawUtf8 = ''): THttpClientWebSockets;
     /// common initialization of all constructors
     // - this overridden method will set the UserAgent with some default value
     constructor Create(aTimeOut: PtrInt = 10000); override;
@@ -111,27 +111,31 @@ type
     destructor Destroy; override;
     /// process low-level REST request, either on HTTP/1.1 or via WebSockets
     // - after WebSocketsUpgrade() call, will use WebSockets for the communication
-    function Request(const url, method: RawUTF8; KeepAlive: cardinal;
-      const header: RawUTF8; const Data: RawByteString; const DataType: RawUTF8;
+    function Request(const url, method: RawUtf8; KeepAlive: cardinal;
+      const header: RawUtf8; const Data: RawByteString; const DataType: RawUtf8;
       retry: boolean): integer; override;
     /// upgrade the HTTP client connection to a specified WebSockets protocol
     // - i.e. 'synopsebin' and optionally 'synopsejson' modes
     // - you may specify an URI to as expected by the server for upgrade
-    // - if aWebSocketsAJAX equals default FALSE, it will register the
+    // - if aWebSocketsAjax equals default FALSE, it will register the
     // TWebSocketProtocolBinaryprotocol, with AES-CFB 256 bits encryption
     // if the encryption key text is not '' and optional SynLZ compression
-    // - if aWebSocketsAJAX is TRUE, it will register the slower and less secure
-    // TWebSocketProtocolJSON (to be used for AJAX debugging/test purposes only)
+    // - if aWebSocketsAjax is TRUE, it will register the slower and less secure
+    // TWebSocketProtocolJson (to be used for AJAX debugging/test purposes only)
     // and aWebSocketsEncryptionKey/aWebSocketsCompression parameters won't be used
-    // - alternatively, you can specify your own custom TWebSocketProtocol instance
-    // (owned by this method and immediately released on error)
+    // - aWebSocketsEncryptionKey format follows TWebSocketProtocol.SetEncryptKey,
+    // so could be e.g. 'password#xxxxxx.private' or 'a=mutual;e=aesctc128;p=34a2..'
+    // to use TEcdheProtocol, or a plain password for TProtocolAes
+    // - alternatively, you can specify your own custom TWebSocketProtocol
+    // instance (owned by this method and immediately released on error)
     // - will return '' on success, or an error message on failure
-    function WebSocketsUpgrade(const aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8;
-      aWebSocketsAJAX: boolean = false; aWebSocketsCompression: boolean = true;
-      aProtocol: TWebSocketProtocol = nil; const aCustomHeaders: RawUTF8 = ''): RawUTF8;
-    /// the settings to be used for WebSockets process
-    // - note that those parameters won't be propagated to existing connections
-    // - defined as a pointer so that you may be able to change the values
+    function WebSocketsUpgrade(const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
+      aWebSocketsAjax: boolean = false;
+      aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions = [pboSynLzCompress];
+      aProtocol: TWebSocketProtocol = nil; const aCustomHeaders: RawUtf8 = ''): RawUtf8;
+    /// allow to customize the WebSockets processing
+    // - those parameters are accessed by reference to the existing connections
+    // so you should better not modify them once the client is upgraded
     function Settings: PWebSocketProcessSettings;
       {$ifdef HASINLINE}inline;{$endif}
     /// this event handler will be executed for any incoming push notification
@@ -172,20 +176,15 @@ begin
 end;
 
 
-{$ifdef ISDELPHI20062007}
-  {$warnings on} // avoid paranoid Delphi 2007 warning
-{$endif ISDELPHI20062007}
-
-
 { TWebSocketProcessClient }
 
 constructor TWebSocketProcessClient.Create(aSender: THttpClientWebSockets;
-  aProtocol: TWebSocketProtocol; const aProcessName: RawUTF8);
+  aProtocol: TWebSocketProtocol; const aProcessName: RawUtf8);
 var
   endtix: Int64;
 begin
   fMaskSentFrames := FRAME_LEN_MASK; // https://tools.ietf.org/html/rfc6455#section-10.3
-  inherited Create(aSender, aProtocol, 0, nil, aSender.fSettings, aProcessName);
+  inherited Create(aSender, aProtocol, 0, nil, @aSender.fSettings, aProcessName);
   // initialize the thread after everything is set (Execute may be instant)
   fClientThread := TWebSocketProcessClientThread.Create(self);
   endtix := GetTickCount64 + 5000;
@@ -199,9 +198,10 @@ end;
 destructor TWebSocketProcessClient.Destroy;
 var
   tix: Int64;
+  log: ISynLog;
 begin
-  with WebSocketLog.Enter('Destroy: ThreadState=%',
-    [ToText(fClientThread.fThreadState)^], self) do
+  log := WebSocketLog.Enter('Destroy: ThreadState=%',
+    [ToText(fClientThread.fThreadState)^], self);
   try
     // focConnectionClose would be handled in this thread -> close client thread
     fClientThread.Terminate;
@@ -219,10 +219,14 @@ end;
 
 function TWebSocketProcessClient.ComputeContext(
   out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract;
+var
+  ws: THttpClientWebSockets;
 begin
-  RequestProcess := (fSocket as THttpClientWebSockets).fOnCallbackRequestProcess;
+  ws := fSocket as THttpClientWebSockets;
+  RequestProcess := ws.fOnCallbackRequestProcess;
   if Assigned(RequestProcess) then
-    result := THttpServerRequest.Create(nil, 0, fOwnerThread)
+    result := THttpServerRequest.Create(nil, 0, fOwnerThread,
+      ws.fProcess.Protocol.ConnectionFlags)
   else
     result := nil;
 end;
@@ -276,18 +280,19 @@ begin
 end;
 
 class function THttpClientWebSockets.WebSocketsConnect(
-  const aHost, aPort: RawUTF8; aProtocol: TWebSocketProtocol; aLog: TSynLogClass;
-  const aLogContext, aURI, aCustomHeaders: RawUTF8): THttpClientWebSockets;
+  const aHost, aPort: RawUtf8; aProtocol: TWebSocketProtocol; aLog: TSynLogClass;
+  const aLogContext, aUri, aCustomHeaders: RawUtf8): THttpClientWebSockets;
 var
-  error: RawUTF8;
+  error: RawUtf8;
 begin
   result := nil;
   if (aProtocol = nil) or
      (aHost = '') then
-    raise EWebSockets.CreateUTF8('%.WebSocketsConnect(nil)', [self]);
+    raise EWebSockets.CreateUtf8('%.WebSocketsConnect(nil)', [self]);
   try
     result := Open(aHost, aPort); // constructor
-    error := result.WebSocketsUpgrade(aURI, '', false, false, aProtocol, aCustomHeaders);
+    error := result.WebSocketsUpgrade(
+      aUri, '', false, [], aProtocol, aCustomHeaders);
     if error <> '' then
       FreeAndNil(result);
   except
@@ -295,7 +300,7 @@ begin
     begin
       aProtocol.Free; // as done in WebSocketsUpgrade()
       FreeAndNil(result);
-      FormatUTF8('% %', [E, E.Message], error);
+      FormatUtf8('% %', [E, E.Message], error);
     end;
   end;
   if aLog <> nil then
@@ -312,13 +317,13 @@ begin
   inherited;
 end;
 
-function THttpClientWebSockets.Request(const url, method: RawUTF8;
-  KeepAlive: cardinal; const header: RawUTF8; const Data: RawByteString;
-  const DataType: RawUTF8; retry: boolean): integer;
+function THttpClientWebSockets.Request(const url, method: RawUtf8;
+  KeepAlive: cardinal; const header: RawUtf8; const Data: RawByteString;
+  const DataType: RawUtf8; retry: boolean): integer;
 var
   Ctxt: THttpServerRequest;
   block: TWebSocketProcessNotifyCallback;
-  resthead: RawUTF8;
+  resthead: RawUtf8;
 begin
   if fProcess <> nil then
   begin
@@ -329,10 +334,11 @@ begin
       result := HTTP_NOTIMPLEMENTED
     else
     begin
-      // send the REST request over WebSockets
-      Ctxt := THttpServerRequest.Create(nil, fProcess.fOwnerConnection, fProcess.fOwnerThread);
+      // send the REST request over WebSockets - both ends use NotifyCallback()
+      Ctxt := THttpServerRequest.Create(nil, fProcess.fOwnerConnection,
+        fProcess.fOwnerThread, fProcess.Protocol.ConnectionFlags);
       try
-        Ctxt.Prepare(url, method, header, Data, DataType, '', fTLS);
+        Ctxt.Prepare(url, method, header, Data, DataType, '');
         FindNameValue(header, 'SEC-WEBSOCKET-REST:', resthead);
         if resthead = 'NonBlocking' then
           block := wscNonBlockWithoutAnswer
@@ -372,49 +378,52 @@ end;
 {$endif ISDELPHI20062007}
 
 function THttpClientWebSockets.WebSocketsUpgrade(
-  const aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean;
-  aWebSocketsCompression: boolean; aProtocol: TWebSocketProtocol;
-  const aCustomHeaders: RawUTF8): RawUTF8;
+  const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
+  aWebSocketsAjax: boolean;
+  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions;
+  aProtocol: TWebSocketProtocol; const aCustomHeaders: RawUtf8): RawUtf8;
 var
   key: TAESBlock;
   bin1, bin2: RawByteString;
-  extin, extout, prot: RawUTF8;
-  extins: TRawUTF8DynArray;
-  cmd: RawUTF8;
-  digest1, digest2: TSHA1Digest;
+  extin, extout, prot: RawUtf8;
+  extins: TRawUtf8DynArray;
+  cmd: RawUtf8;
+  digest1, digest2: TSha1Digest;
 begin
   try
     if fProcess <> nil then
     begin
       result := 'Already upgraded to WebSockets';
-      if IdemPropNameU(fProcess.Protocol.URI, aWebSocketsURI) then
+      if IdemPropNameU(fProcess.Protocol.Uri, aWebSocketsURI) then
         result := result + ' on this URI'
       else
-        result := FormatUTF8('% with URI=[%] but requested [%]',
-          [result, fProcess.Protocol.URI, aWebSocketsURI]);
+        result := FormatUtf8('% with URI=[%] but requested [%]',
+          [result, fProcess.Protocol.Uri, aWebSocketsURI]);
       exit;
     end;
     try
       if aProtocol = nil then
-        if aWebSocketsAJAX then
-          aProtocol := TWebSocketProtocolJSON.Create(aWebSocketsURI)
+        if aWebSocketsAjax then
+          aProtocol := TWebSocketProtocolJson.Create(aWebSocketsURI)
         else
           aProtocol := TWebSocketProtocolBinary.Create(aWebSocketsURI, false,
-            aWebSocketsEncryptionKey, aWebSocketsCompression);
+            aWebSocketsEncryptionKey, @fSettings, aWebSocketsBinaryOptions);
       aProtocol.OnBeforeIncomingFrame := fOnBeforeIncomingFrame;
       RequestSendHeader(aWebSocketsURI, 'GET');
-      TAESPRNG.Main.FillRandom(key);
+      TAesPrng.Main.FillRandom(key);
       bin1 := BinToBase64(@key, sizeof(key));
-      SockSend(['Content-Length: 0'#13#10'Connection: Upgrade'#13#10 +
-        'Upgrade: websocket'#13#10'Sec-WebSocket-Key: ', bin1, #13#10 +
-        'Sec-WebSocket-Protocol: ', aProtocol.GetSubprotocols, #13#10 +
-        'Sec-WebSocket-Version: 13']);
+      SockSend(['Content-Length: 0'#13#10 +
+                'Connection: Upgrade'#13#10 +
+                'Upgrade: websocket'#13#10 +
+                'Sec-WebSocket-Key: ', bin1, #13#10 +
+                'Sec-WebSocket-Protocol: ', aProtocol.GetSubprotocols, #13#10 +
+                'Sec-WebSocket-Version: 13']);
       if aProtocol.ProcessHandshake(nil, extout, nil) and
          (extout <> '') then
         SockSend(['Sec-WebSocket-Extensions: ', extout]);
       if aCustomHeaders <> '' then
         SockSend(aCustomHeaders);
-      SockSend; // CRLF
+      SockSendCRLF;
       SockSendFlush('');
       SockRecvLn(cmd);
       GetHeader(false);
@@ -430,14 +439,14 @@ begin
       result := 'Invalid HTTP Upgrade Accept Challenge';
       ComputeChallenge(bin1, digest1);
       bin2 := HeaderGetValue('SEC-WEBSOCKET-ACCEPT');
-      if not Base64ToBin(pointer(bin2), @digest2, length(bin2), sizeof(digest2), false) or
+      if not Base64ToBin(pointer(bin2), @digest2, length(bin2), sizeof(digest2)) or
          not IsEqual(digest1, digest2) then
         exit;
       if extout <> '' then
       begin
         result := 'Invalid HTTP Upgrade ProcessHandshake';
         extin := HeaderGetValue('SEC-WEBSOCKET-EXTENSIONS');
-        CSVToRawUTF8DynArray(pointer(extin), extins, ';', true);
+        CsvToRawUtf8DynArray(pointer(extin), extins, ';', true);
         if (extins = nil) or
            not aProtocol.ProcessHandshake(extins, extout, @result) then
           exit;
@@ -458,13 +467,17 @@ begin
       on E: Exception do
       begin
         FreeAndNil(fProcess);
-        FormatUTF8('%: %', [E, E.Message], result);
+        FormatUtf8('%: %', [E, E.Message], result);
       end;
     end;
   finally
     aProtocol.Free;
   end;
 end;
+
+{$ifdef ISDELPHI20062007}
+  {$warnings on}
+{$endif ISDELPHI20062007}
 
 
 end.

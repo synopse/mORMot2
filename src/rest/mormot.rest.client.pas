@@ -8,9 +8,10 @@ unit mormot.rest.client;
 
    Client-Side REST Process
     - Client Authentication and Authorization Logic
-    - TRestClientRoutingREST/TRestClientRoutingJSON_RPC Routing Schemes
-    - TRestClientURI Base Class for Actual Clients
+    - TRestClientRoutingRest/TRestClientRoutingJsonRpc Routing Schemes
+    - TRestClientUri Base Class for Actual Clients
     - TRestClientLibraryRequest after TRestServer.ExportServerGlobalLibraryRequest
+    - TInterfacedCallback/TBlockingCallback Classes
 
   *****************************************************************************
 }
@@ -57,9 +58,9 @@ uses
 { ************ Client Authentication and Authorization Logic }
 
 type
-  TRestClientURI = class;
+  TRestClientUri = class;
 
-  /// used by TRestClientURI.URI() to let the client ask for an User name
+  /// used by TRestClientUri.Uri() to let the client ask for an User name
   // and password, in order to retry authentication to the server
   // - should return TRUE if aUserName and aPassword both contain some entered
   // values to be sent for remote secure authentication
@@ -76,15 +77,15 @@ type
   // - passClear means that the password is not encrypted, e.g. as entered
   // by the user in the login screen
   // - passHashed means that the passwod is already hashed as in
-  // TAuthUser.PasswordHashHexa i.e. SHA256('salt'+Value)
+  // TAuthUser.PasswordHashHexa i.e. Sha256('salt'+Value)
   // - passKerberosSPN indicates that the password is the Kerberos SPN domain
   TRestClientSetUserPassword = (
     passClear,
     passHashed,
     passKerberosSPN);
 
-  /// algorithms known by TRestClientAuthenticationSignedURI and
-  // TRestServerAuthenticationSignedURI to digitaly compute the
+  /// algorithms known by TRestClientAuthenticationSignedUri and
+  // TRestServerAuthenticationSignedUri to digitaly compute the
   // session_signature parameter value for a given URI
   // - by default, suaCRC32 will compute fast but not cryptographically secure
   // ! crc32(crc32(privatesalt, timestamp, 8), url, urllen)
@@ -99,7 +100,7 @@ type
   // since the hash is reduced to 32-bit resolution, those may not provide
   // higher security than suaMD5
   // - note that SynCrossPlatformRest clients only implements suaCRC32 yet
-  TRestAuthenticationSignedURIAlgo = (
+  TRestAuthenticationSignedUriAlgo = (
     suaCRC32,
     suaCRC32C,
     suaXXHASH,
@@ -108,10 +109,10 @@ type
     suaSHA256,
     suaSHA512);
 
-  /// function prototype for TRestClientAuthenticationSignedURI and
-  // TRestServerAuthenticationSignedURI computation of the session_signature
+  /// function prototype for TRestClientAuthenticationSignedUri and
+  // TRestServerAuthenticationSignedUri computation of the session_signature
   // parameter value
-  TOnRestAuthenticationSignedURIComputeSignature = function(
+  TOnRestAuthenticationSignedUriComputeSignature = function(
     privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal of object;
 
   /// abstract class used to implement client-side authentication
@@ -123,46 +124,46 @@ type
     // - at call, a TAuthUser instance will be supplied, with LogonName set
     // with aUserName and PasswordHashHexa with a SHA-256 hash of aPassword
     // - override with the expected method, returning the session key on success
-    class function ClientComputeSessionKey(Sender: TRestClientURI;
-      User: TAuthUser): RawUTF8; virtual; abstract;
+    class function ClientComputeSessionKey(Sender: TRestClientUri;
+      User: TAuthUser): RawUtf8; virtual; abstract;
     /// is called by ClientComputeSessionKey() overriden method to execute the
     // root/Auth service with the supplied parameters, then retrieve and
     // decode the "result": session key and any other values (e.g. "version")
-    class function ClientGetSessionKey(Sender: TRestClientURI; User: TAuthUser;
-      const aNameValueParameters: array of const): RawUTF8; virtual;
+    class function ClientGetSessionKey(Sender: TRestClientUri; User: TAuthUser;
+      const aNameValueParameters: array of const): RawUtf8; virtual;
   public
     /// class method to be used on client side to create a remote session
-    // - call this method instead of TRestClientURI.SetUser() if you need
+    // - call this method instead of TRestClientUri.SetUser() if you need
     // a custom authentication class
     // - if saoUserByLogonOrID is defined in the server Options, aUserName may
     // be a TAuthUser.ID and not a TAuthUser.LogonName
     // - if passClear is used, you may specify aHashSalt and aHashRound,
-    // to enable PBKDF2_HMAC_SHA256() use instead of plain SHA256(), and increase
+    // to enable PBKDF2_HMAC_SHA256() use instead of plain Sha256(), and increase
     // security on storage side (reducing brute force attack via rainbow tables)
     // - will call the ModelRoot/Auth service, i.e. call TRestServer.Auth()
     // published method to create a session for this user
     // - returns true on success
-    class function ClientSetUser(Sender: TRestClientURI;
-      const aUserName, aPassword: RawUTF8;
+    class function ClientSetUser(Sender: TRestClientUri;
+      const aUserName, aPassword: RawUtf8;
       aPasswordKind: TRestClientSetUserPassword = passClear;
-      const aHashSalt: RawUTF8 = ''; aHashRound: integer = 20000): boolean; virtual;
+      const aHashSalt: RawUtf8 = ''; aHashRound: integer = 20000): boolean; virtual;
     /// class method to be called on client side to sign an URI
-    // - used by TRestClientURI.URI()
+    // - used by TRestClientUri.Uri()
     // - shall match the method as expected by RetrieveSession() virtual method
-    class procedure ClientSessionSign(Sender: TRestClientURI;
-      var Call: TRestURIParams); virtual; abstract;
+    class procedure ClientSessionSign(Sender: TRestClientUri;
+      var Call: TRestUriParams); virtual; abstract;
   end;
 
   /// class-reference type (metaclass) used to define an authentication scheme
   TRestClientAuthenticationClass = class of TRestClientAuthentication;
 
   /// weak authentication scheme using URL-level parameter
-  TRestClientAuthenticationURI = class(TRestClientAuthentication)
+  TRestClientAuthenticationUri = class(TRestClientAuthentication)
   public
     /// class method to be called on client side to add the SessionID to the URI
     // - append '&session_signature=SessionID' to the url
-    class procedure ClientSessionSign(Sender: TRestClientURI;
-      var Call: TRestURIParams); override;
+    class procedure ClientSessionSign(Sender: TRestClientUri;
+      var Call: TRestUriParams); override;
   end;
 
   /// secure authentication scheme using URL-level digital signature
@@ -171,64 +172,64 @@ type
   // !Hexa8(Timestamp)+
   // !Hexa8(crc32('SessionID+HexaSessionPrivateKey'+Sha256('salt'+PassWord)+
   // !            Hexa8(Timestamp)+url))
-  TRestClientAuthenticationSignedURI = class(TRestClientAuthenticationURI)
+  TRestClientAuthenticationSignedUri = class(TRestClientAuthenticationUri)
   protected
-    // class functions implementing TRestAuthenticationSignedURIAlgo
+    // class functions implementing TRestAuthenticationSignedUriAlgo
     class function ComputeSignatureCrc32(privatesalt: cardinal;
       timestamp, url: PAnsiChar; urllen: integer): cardinal;
     class function ComputeSignatureCrc32c(privatesalt: cardinal;
       timestamp, url: PAnsiChar; urllen: integer): cardinal;
     class function ComputeSignaturexxHash(privatesalt: cardinal;
       timestamp, url: PAnsiChar; urllen: integer): cardinal;
-    class function ComputeSignatureMD5(privatesalt: cardinal;
+    class function ComputeSignatureMd5(privatesalt: cardinal;
       timestamp, url: PAnsiChar; urllen: integer): cardinal;
-    class function ComputeSignatureSHA1(privatesalt: cardinal;
+    class function ComputeSignatureSha1(privatesalt: cardinal;
       timestamp, url: PAnsiChar; urllen: integer): cardinal;
-    class function ComputeSignatureSHA256(privatesalt: cardinal;
+    class function ComputeSignatureSha256(privatesalt: cardinal;
       timestamp, url: PAnsiChar; urllen: integer): cardinal;
-    class function ComputeSignatureSHA512(privatesalt: cardinal;
+    class function ComputeSignatureSha512(privatesalt: cardinal;
       timestamp, url: PAnsiChar; urllen: integer): cardinal;
   public
     /// retrieve the method to compute the session_signature=.... value
     class function GetComputeSignature(
-      algo: TRestAuthenticationSignedURIAlgo): TOnRestAuthenticationSignedURIComputeSignature;
+      algo: TRestAuthenticationSignedUriAlgo): TOnRestAuthenticationSignedUriComputeSignature;
     /// class method to be called on client side to sign an URI
     // - generate the digital signature as expected by overridden RetrieveSession()
     // - timestamp resolution is about 256 ms in the current implementation
-    class procedure ClientSessionSign(Sender: TRestClientURI;
-      var Call: TRestURIParams); override;
+    class procedure ClientSessionSign(Sender: TRestClientUri;
+      var Call: TRestUriParams); override;
   end;
 
   /// mORMot secure RESTful authentication scheme
   // - match TRestServerAuthenticationDefault class on server side
   // - this scheme will use a password stored via safe SHA-256 hashing in the
   // TAuthUser ORM table
-  TRestClientAuthenticationDefault = class(TRestClientAuthenticationSignedURI)
+  TRestClientAuthenticationDefault = class(TRestClientAuthenticationSignedUri)
   protected
     /// class method used on client side to create a remote session
     // - will call the ModelRoot/Auth service, i.e. call TRestServer.Auth()
     // published method to create a session for this user: so
     // TRestServerAuthenticationDefault should be registered on server side
     // - User.LogonName and User.PasswordHashHexa will be checked
-    class function ClientComputeSessionKey(Sender: TRestClientURI;
-      User: TAuthUser): RawUTF8; override;
+    class function ClientComputeSessionKey(Sender: TRestClientUri;
+      User: TAuthUser): RawUtf8; override;
   end;
 
   /// mORMot weak RESTful authentication scheme
   // - this method will authenticate with a given username, but no signature
   // - match TRestServerAuthenticationNone class on server side
-  // - on client side, this scheme is not called by TRestClientURI.SetUser()
+  // - on client side, this scheme is not called by TRestClientUri.SetUser()
   // method - so you have to write:
   // ! TRestClientAuthenticationNone.ClientSetUser(Client,'User','');
-  TRestClientAuthenticationNone = class(TRestClientAuthenticationURI)
+  TRestClientAuthenticationNone = class(TRestClientAuthenticationUri)
   protected
     /// class method used on client side to create a remote session
     // - will call the ModelRoot/Auth service, i.e. call TRestClient.Auth()
     // published method to create a session for this user: so
     // TRestServerAuthenticationNone should be registered on server side
     // - will check User.LogonName, but User.PasswordHashHexa will be ignored
-    class function ClientComputeSessionKey(Sender: TRestClientURI;
-      User: TAuthUser): RawUTF8; override;
+    class function ClientComputeSessionKey(Sender: TRestClientUri;
+      User: TAuthUser): RawUtf8; override;
   end;
 
   /// abstract class for implementing HTTP authentication
@@ -239,22 +240,22 @@ type
   protected
     /// should be overriden according to the HTTP authentication scheme
     class function ComputeAuthenticateHeader(
-      const aUserName,aPasswordClear: RawUTF8): RawUTF8; virtual; abstract;
+      const aUserName,aPasswordClear: RawUtf8): RawUtf8; virtual; abstract;
   public
     /// class method to be called on client side to sign an URI in Auth Basic
     // resolution is about 256 ms in the current implementation
     // - set "Cookie: mORMot_session_signature=..." HTTP header
-    class procedure ClientSessionSign(Sender: TRestClientURI;
-      var Call: TRestURIParams); override;
+    class procedure ClientSessionSign(Sender: TRestClientUri;
+      var Call: TRestUriParams); override;
     /// class method to be used on client side to create a remote session
     // - call TRestClientAuthenticationHttpBasic.ClientSetUser() instead of
-    // TRestClientURI.SetUser(), and never the method of this abstract class
+    // TRestClientUri.SetUser(), and never the method of this abstract class
     // - needs the plain aPassword, so aPasswordKind should be passClear
     // - returns true on success
-    class function ClientSetUser(Sender: TRestClientURI;
-      const aUserName, aPassword: RawUTF8;
+    class function ClientSetUser(Sender: TRestClientUri;
+      const aUserName, aPassword: RawUtf8;
       aPasswordKind: TRestClientSetUserPassword = passClear;
-      const aHashSalt: RawUTF8 = ''; aHashRound: integer = 20000): boolean; override;
+      const aHashSalt: RawUtf8 = ''; aHashRound: integer = 20000): boolean; override;
     /// class method to be used on client side to force the HTTP header for
     // the corresponding HTTP authentication, without creating any remote session
     // - call virtual protected method ComputeAuthenticateHeader()
@@ -266,8 +267,8 @@ type
     // - this method is also called by the ClientSetUser() method of this class
     // for a full client + server authentication via HTTP
     // TRestClientAuthenticationHttp*.ClientSetUser()
-    class procedure ClientSetUserHttpOnly(Sender: TRestClientURI;
-      const aUserName, aPasswordClear: RawUTF8); virtual;
+    class procedure ClientSetUserHttpOnly(Sender: TRestClientUri;
+      const aUserName, aPasswordClear: RawUtf8); virtual;
   end;
 
   /// authentication using HTTP Basic scheme
@@ -275,7 +276,7 @@ type
   // so should only be used over SSL / HTTPS, or for compatibility reasons
   // - match TRestServerAuthenticationHttpBasic class on server side
   // - will rely on TRestClientAuthenticationNone for authorization
-  // - on client side, this scheme is not called by TRestClientURI.SetUser()
+  // - on client side, this scheme is not called by TRestClientUri.SetUser()
   // method - so you have to write:
   // ! TRestClientAuthenticationHttpBasic.ClientSetUser(Client,'User','password');
   // - for a remote proxy-only authentication (without creating any mORMot
@@ -285,7 +286,7 @@ type
   protected
     /// this overriden method returns "Authorization: Basic ...." HTTP header
     class function ComputeAuthenticateHeader(
-      const aUserName,aPasswordClear: RawUTF8): RawUTF8; override;
+      const aUserName,aPasswordClear: RawUtf8): RawUtf8; override;
   end;
 
   {$ifdef DOMAINRESTAUTH}
@@ -297,7 +298,7 @@ type
   // using either NTLM (Windows only) or Kerberos - it will allow to safely
   // authenticate on a mORMot server without prompting the user to enter its
   // password
-  // - match TRestServerAuthenticationSSPI class on server side
+  // - match TRestServerAuthenticationSspi class on server side
   // - if ClientSetUser() receives aUserName as '', aPassword should be either
   // '' if you expect NTLM authentication to take place, or contain the SPN
   // registration (e.g. 'mymormotservice/myserver.mydomain.tld') for Kerberos
@@ -305,20 +306,20 @@ type
   // - if ClientSetUser() receives aUserName as 'DomainName\UserName', then
   // authentication will take place on the specified domain, with aPassword
   // as plain password value
-  TRestClientAuthenticationSSPI = class(TRestClientAuthenticationSignedURI)
+  TRestClientAuthenticationSspi = class(TRestClientAuthenticationSignedUri)
   protected
-    class function ClientComputeSessionKey(Sender: TRestClientURI;
-      User: TAuthUser): RawUTF8; override;
+    class function ClientComputeSessionKey(Sender: TRestClientUri;
+      User: TAuthUser): RawUtf8; override;
   end;
 
   {$endif DOMAINRESTAUTH}
 
   /// store the information about the current session
-  // - as set after a sucessfull TRestClientURI.SetUser() method
+  // - as set after a sucessfull TRestClientUri.SetUser() method
   TRestClientSession = record
     // for internal use
     Authentication: TRestClientAuthenticationClass;
-    IDHexa8: RawUTF8;
+    IDHexa8: RawUtf8;
     PrivateKey: cardinal;
     Data: RawByteString;
     LastTick64: Int64;
@@ -339,11 +340,11 @@ type
     // - you can force here your own header, e.g. a JWT as authentication bearer
     // or as in TRestClientAuthenticationHttpAbstract.ClientSetUserHttpOnlyUser
     // - used e.g. by TRestClientAuthenticationHttpBasic
-    HttpHeader: RawUTF8;
+    HttpHeader: RawUtf8;
     /// the remote server executable name, as retrieved after a SetUser() success
-    Server: RawUTF8;
+    Server: RawUtf8;
     /// the remote server version, as retrieved after a SetUser() success
-    Version: RawUTF8;
+    Version: RawUtf8;
     /// the remote server session tiemout in minutes, as retrieved after
     // a SetUser() success
     // - will be used to set SessionHeartbeatSeconds default
@@ -362,10 +363,10 @@ type
 {$ifndef PUREMORMOT2}
 // backward compatibility types redirections
 
-  TSQLRestServerAuthenticationClientSetUserPassword = TRestClientSetUserPassword;
-  TSQLRestServerAuthenticationSignedURIAlgo = TRestAuthenticationSignedURIAlgo;
-  TSQLRestServerAuthenticationSignedURIComputeSignature  =
-    TOnRestAuthenticationSignedURIComputeSignature;
+  TSqlRestServerAuthenticationClientSetUserPassword = TRestClientSetUserPassword;
+  TSqlRestServerAuthenticationSignedUriAlgo = TRestAuthenticationSignedUriAlgo;
+  TSqlRestServerAuthenticationSignedUriComputeSignature  =
+    TOnRestAuthenticationSignedUriComputeSignature;
   // TRestServerAuthentication* classes have client-side only corresponding
   // types named as TRestClientAuthentication*
 
@@ -373,16 +374,16 @@ type
 
 
 
-{ ************ TRestClientRoutingREST/TRestClientRoutingJSON_RPC Routing Schemes }
+{ ************ TRestClientRoutingRest/TRestClientRoutingJsonRpc Routing Schemes }
 
   //// used to customize TRestClientRouting.ClientSideInvoke process
   TRestClientSideInvoke = set of (
     csiAsOctetStream);
 
   /// abstract Client side service routing
-  // - match TRestServerURIContext reciprocal class
-  // - never use this abstract class, but rather TRestRoutingREST or
-  // TRestRoutingJSON_RPC classes
+  // - match TRestServerUriContext reciprocal class
+  // - never use this abstract class, but rather TRestClientRoutingRest or
+  // TRestClientRoutingJsonRpc classes
   TRestClientRouting = class
   public
     /// at Client Side, compute URI and BODY according to the routing scheme
@@ -391,58 +392,61 @@ type
     // params should contain the incoming parameters as JSON CSV (without []),
     // and clientDriven ID should contain the optional Client ID value
     // - at output, should update the HTTP uri corresponding to the proper
-    // routing, and should return the corresponding HTTP body within sent
-    class procedure ClientSideInvoke(var uri: RawUTF8;
+    // routing, and should return the corresponding HTTP body/headers within
+    // sent/head parameters
+    class procedure ClientSideInvoke(var uri: RawUtf8;
       ctxt: TRestClientSideInvoke;
-      const method, params, clientDrivenID: RawUTF8;
-      out sent, head: RawUTF8); virtual; abstract;
+      const method, params, clientDrivenID: RawUtf8;
+      out sent, head: RawUtf8); virtual; abstract;
   end;
 
   /// class used to define the Client side expected routing
-  // - match TRestServerURIContextClass reciprocal meta-class
+  // - match TRestServerUriContextClass reciprocal meta-class
   // - most of the internal methods are declared as virtual, so it allows any
   // kind of custom routing or execution scheme
-  // - TRestRoutingREST and TRestRoutingJSON_RPC classes are provided
-  // in this unit, to allow RESTful and JSON/RPC protocols
+  // - TRestClientRoutingRest and TRestClientRoutingJsonRpc classes are provided
+  // in this unit, to allow RESTful and JSON/RPC protocols on Client side
+  // - you can retrieve the client class from the reciprocal server-side class
+  // using TRestServerUriContext.ClientRouting class method
   TRestClientRoutingClass = class of TRestClientRouting;
 
   /// client calling context using simple REST for interface-based services
-  // - match TRestServerRoutingREST reciprocal class
-  TRestClientRoutingREST = class(TRestClientRouting)
+  // - match TRestServerRoutingRest reciprocal class
+  TRestClientRoutingRest = class(TRestClientRouting)
     /// at Client Side, compute URI and BODY according to RESTful routing scheme
     // - e.g. on input uri='root/Calculator', method='Add', params='1,2' and
     // clientDrivenID='1234' -> on output uri='root/Calculator.Add/1234' and
     // sent='[1,2]'
-    class procedure ClientSideInvoke(var uri: RawUTF8;
+    class procedure ClientSideInvoke(var uri: RawUtf8;
       ctxt: TRestClientSideInvoke;
-      const method, params, clientDrivenID: RawUTF8;
-      out sent, head: RawUTF8); override;
+      const method, params, clientDrivenID: RawUtf8;
+      out sent, head: RawUtf8); override;
   end;
 
   /// client calling context using simple REST for interface-based services
-  // - match TRestServerRoutingJSON_RPC reciprocal class
-  TRestClientRoutingJSON_RPC = class(TRestClientRouting)
+  // - match TRestServerRoutingJsonRpc reciprocal class
+  TRestClientRoutingJsonRpc = class(TRestClientRouting)
      /// at Client Side, compute URI and BODY according to JSON/RPC routing scheme
     // - e.g. on input uri='root/Calculator', method='Add', params='1,2' and
     // clientDrivenID='1234' -> on output uri='root/Calculator' and
     // sent={"method":"Add","params":[1,2],"id":1234}
-    class procedure ClientSideInvoke(var uri: RawUTF8;
+    class procedure ClientSideInvoke(var uri: RawUtf8;
       ctxt: TRestClientSideInvoke;
-      const method, params, clientDrivenID: RawUTF8;
-      out sent, head: RawUTF8); override;
+      const method, params, clientDrivenID: RawUtf8;
+      out sent, head: RawUtf8); override;
   end;
 
 {$ifndef PUREMORMOT2}
 // backward compatibility types redirections
 
-  TSQLRestServerURIContextClientInvoke = TRestClientSideInvoke;
+  TSqlRestServerUriContextClientInvoke = TRestClientSideInvoke;
 
 {$endif PUREMORMOT2}
 
 
-{ ************ TRestClientURI Base Class for Actual Clients }
+{ ************ TRestClientUri Base Class for Actual Clients }
 
-  /// called by TRestClientURI.URI() when an error occurred
+  /// called by TRestClientUri.Uri() when an error occurred
   // - so that you may have a single entry point for all client-side issues
   // - information will be available in Sender's LastErrorCode and
   // LastErrorMessage properties
@@ -450,13 +454,13 @@ type
   // - the REST context (if any) will be supplied within the Call parameter,
   // and in this case Call^.OutStatus=HTTP_NOTIMPLEMENTED indicates a broken
   // connection
-  TOnClientFailed = procedure(Sender: TRestClientURI; E: Exception;
-    Call: PRestURIParams) of object;
+  TOnClientFailed = procedure(Sender: TRestClientUri; E: Exception;
+    Call: PRestUriParams) of object;
 
   /// store information about registered interface callbacks
   TRestClientCallbackItem = record
     /// the identifier of the callback, as sent to the server side
-    // - computed from TRestClientURICallbacks.fCurrentID counter
+    // - computed from TRestClientUriCallbacks.fCurrentID counter
     ID: integer;
     /// weak pointer typecast to the associated IInvokable variable
     Instance: pointer;
@@ -476,13 +480,13 @@ type
     function UnRegisterByIndex(index: integer): boolean;
   public
     /// the associated REST instance
-    Owner: TRestClientURI;
+    Owner: TRestClientUri;
     /// how many callbacks are registered
     Count: integer;
     /// list of registered interface callbacks
     List: array of TRestClientCallbackItem;
     /// initialize the storage list
-    constructor Create(aOwner: TRestClientURI); reintroduce;
+    constructor Create(aOwner: TRestClientUri); reintroduce;
     /// register a callback event interface instance from a new computed ID
     function DoRegister(aInstance: pointer; aFactory: TInterfaceFactory): integer; overload;
     /// register a callback event interface instance from its supplied ID
@@ -503,63 +507,65 @@ type
     function FindAndRelease(aID: integer): boolean;
   end;
 
-  /// signature e.g. of the TRestClientURI.OnSetUser event handler
-  TOnRestClientNotify = procedure(Sender: TRestClientURI) of object;
+  /// signature e.g. of the TRestClientUri.OnSetUser event handler
+  TOnClientNotify = procedure(Sender: TRestClientUri) of object;
 
   /// a generic REpresentational State Transfer (REST) client with URI
   // - URI are standard Collection/Member implemented as ModelRoot/TableName/TableID
   // - handle RESTful commands GET POST PUT DELETE LOCK UNLOCK
-  TRestClientURI = class(TRest)
+  // - never call this abstract class, but inherit and override the
+  // InternalUri/InternalCheckOpen/InternalClose virtual abstract methods
+  TRestClientUri = class(TRest)
   protected
     fClient: IRestOrmClient;
     fSession: TRestClientSession;
-    fComputeSignature: TOnRestAuthenticationSignedURIComputeSignature;
+    fComputeSignature: TOnRestAuthenticationSignedUriComputeSignature;
     fOnIdle: TOnIdleSynBackgroundThread;
     fOnFailed: TOnClientFailed;
     fOnAuthentificationFailed: TOnAuthentificationFailed;
-    fOnSetUser: TOnRestClientNotify;
+    fOnSetUser: TOnClientNotify;
     fBackgroundThread: TSynBackgroundThreadEvent;
     fMaximumAuthentificationRetry: integer;
     fRetryOnceOnTimeout: boolean;
     fInternalState: set of (isOpened, isDestroying, isInAuth);
     fLastErrorCode: integer;
-    fLastErrorMessage: RawUTF8;
+    fLastErrorMessage: RawUtf8;
     fLastErrorException: ExceptClass;
-    fSafe: IAutoLocker; // to make the URI() method thread-safe
+    fSafe: IAutoLocker; // to make the Uri() method thread-safe
     fRemoteLogClass: TSynLog;
     fRemoteLogThread: TObject; // private TRemoteLogThread
     fRemoteLogOwnedByFamily: boolean;
     fServicesRouting: TRestClientRoutingClass;
-    fServicePublishOwnInterfaces: RawUTF8;
+    fServicePublishOwnInterfaces: RawUtf8;
     fFakeCallbacks: TRestClientCallbacks;
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     fServiceNotificationMethodViaMessages: record
       Wnd: HWND;
       Msg: cardinal;
     end;
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
     procedure SetRoutingClass(aServicesRouting: TRestClientRoutingClass);
     procedure SetSessionHeartbeatSeconds(timeout: integer);
     function GetOnIdleBackgroundThreadActive: boolean;
     procedure OnBackgroundProcess(Sender: TSynBackgroundThreadEvent;
       ProcessOpaqueParam: pointer);
     procedure SetLastException(E: Exception = nil; ErrorCode: integer = HTTP_BADREQUEST;
-      Call: PRestURIParams = nil);
-    function InternalRemoteLogSend(const aText: RawUTF8): boolean;
-    procedure InternalNotificationMethodExecute(var Ctxt: TRestURIParams); virtual;
+      Call: PRestUriParams = nil);
+    function InternalRemoteLogSend(const aText: RawUtf8): boolean;
+    procedure InternalNotificationMethodExecute(var Ctxt: TRestUriParams); virtual;
     /// will call timestamp/info if the session has currently not been retrieved
-    function GetSessionVersion: RawUTF8;
-    // register the user session to the TRestClientURI instance
+    function GetSessionVersion: RawUtf8;
+    // register the user session to the TRestClientUri instance
     function SessionCreate(aAuth: TRestClientAuthenticationClass;
-      var aUser: TAuthUser; const aSessionKey: RawUTF8): boolean;
+      var aUser: TAuthUser; const aSessionKey: RawUtf8): boolean;
     // call each fSession.HeartbeatSeconds delay
     procedure SessionRenewEvent(Sender: TSynBackgroundTimer; Event: TWaitResult;
-      const Msg: RawUTF8);
+      const Msg: RawUtf8);
     /// abstract methods to be implemented with a local, piped or HTTP/1.1 provider
     // - you can specify some POST/PUT data in Call.OutBody (leave '' otherwise)
     // - return the execution result in Call.OutStatus
     // - for clients, RestAccessRights is never used
-    procedure InternalURI(var Call: TRestURIParams); virtual; abstract;
+    procedure InternalUri(var Call: TRestUriParams); virtual; abstract;
     /// overridden protected method shall check if not connected to reopen it
     // - shall return TRUE on success, FALSE on any connection error
     function InternalCheckOpen: boolean; virtual; abstract;
@@ -571,12 +577,12 @@ type
     // see IRestOrmClient documentation for the proper use information
   public
     function Refresh(aID: TID; Value: TOrm; var Refreshed: boolean): boolean;
-    function List(const Tables: array of TOrmClass; const SQLSelect: RawUTF8 = 'RowID';
-      const SQLWhere: RawUTF8 = ''): TOrmTable;
+    function List(const Tables: array of TOrmClass; const SqlSelect: RawUtf8 = 'RowID';
+      const SqlWhere: RawUtf8 = ''): TOrmTable;
     function ListFmt(const Tables: array of TOrmClass;
-      const SQLSelect, SQLWhereFormat: RawUTF8; const Args: array of const): TOrmTable; overload;
+      const SqlSelect, SqlWhereFormat: RawUtf8; const Args: array of const): TOrmTable; overload;
     function ListFmt(const Tables: array of TOrmClass;
-      const SQLSelect, SQLWhereFormat: RawUTF8; const Args, Bounds: array of const): TOrmTable; overload;
+      const SqlSelect, SqlWhereFormat: RawUtf8; const Args, Bounds: array of const): TOrmTable; overload;
     function TransactionBeginRetry(aTable: TOrmClass; Retries: integer = 10): boolean;
     function BatchStart(aTable: TOrmClass;
       AutomaticTransactionPerRow: cardinal = 0;
@@ -605,55 +611,56 @@ type
     destructor Destroy; override;
     /// called by TRestOrm.Create overriden constructor to set fOrm from IRestOrm
     procedure SetOrmInstance(aORM: TInterfacedObject); override;
-    /// save the TSQLRestClientURI properties into a persistent storage object
+    /// save the TSqlRestClientUri properties into a persistent storage object
     // - CreateFrom() will expect Definition.UserName/Password to store the
     // credentials which will be used by SetUser()
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
     /// main method calling the remote Server via a RESTful command
-    // - redirect to the InternalURI() abstract method, which should be
+    // - redirect to the InternalUri() abstract method, which should be
     // overridden for local, pipe, HTTP/1.1 or WebSockets actual communication
     // - this method will sign the url with the appropriate digital signature
     // according to the current SessionUser property
     // - this method will retry the connection in case of authentication failure
     // (i.e. if the session was closed by the remote server, for any reason -
     // mostly a time out) if the OnAuthentificationFailed event handler is set
-    function URI(const url, method: RawUTF8; Resp: PRawUTF8 = nil;
-      Head: PRawUTF8 = nil; SendData: PRawUTF8 = nil): Int64Rec;
+    function Uri(const url, method: RawUtf8; Resp: PRawUtf8 = nil;
+      Head: PRawUtf8 = nil; SendData: PRawUtf8 = nil;
+      OutInternalState: PCardinal = nil): integer;
     /// wrapper to the protected URI method to call a method on the server, using
     // a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
     // - returns the HTTP error code (e.g. 200/HTTP_SUCCESS on success)
     // - this version will use a GET with supplied parameters (which will be encoded
     // with the URL)
-    function CallBackGet(const aMethodName: RawUTF8;
+    function CallBackGet(const aMethodName: RawUtf8;
       const aNameValueParameters: array of const;
-      out aResponse: RawUTF8; aTable: TOrmClass = nil; aID: TID = 0;
-      aResponseHead: PRawUTF8 = nil): integer;
+      out aResponse: RawUtf8; aTable: TOrmClass = nil; aID: TID = 0;
+      aResponseHead: PRawUtf8 = nil): integer;
     /// wrapper to the protected URI method to call a method on the server, using
     // a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
     // - returns the UTF-8 decoded JSON result (server must reply with one
     // "result":"value" JSON object)
     // - this version will use a GET with supplied parameters (which will be encoded
     // with the URL)
-    function CallBackGetResult(const aMethodName: RawUTF8;
+    function CallBackGetResult(const aMethodName: RawUtf8;
       const aNameValueParameters: array of const;
-      aTable: TOrmClass = nil; aID: TID = 0): RawUTF8;
+      aTable: TOrmClass = nil; aID: TID = 0): RawUtf8;
     /// wrapper to the protected URI method to call a method on the server, using
     //  a ModelRoot/[TableName/[ID/]]MethodName RESTful PUT request
     // - returns the HTTP error code (e.g. 200/HTTP_SUCCESS on success)
     // - this version will use a PUT with the supplied raw UTF-8 data
-    function CallBackPut(const aMethodName, aSentData: RawUTF8;
-      out aResponse: RawUTF8; aTable: TOrmClass = nil; aID: TID = 0;
-      aResponseHead: PRawUTF8 = nil): integer;
+    function CallBackPut(const aMethodName, aSentData: RawUtf8;
+      out aResponse: RawUtf8; aTable: TOrmClass = nil; aID: TID = 0;
+      aResponseHead: PRawUtf8 = nil): integer;
     /// wrapper to the protected URI method to call a method on the server, using
     //  a ModelRoot/[TableName/[ID/]]MethodName RESTful with any kind of request
     // - returns the HTTP error code (e.g. 200/HTTP_SUCCESS on success)
     // - for GET/PUT methods, you should better use CallBackGet/CallBackPut
-    function CallBack(method: TURIMethod; const aMethodName,aSentData: RawUTF8;
-      out aResponse: RawUTF8; aTable: TOrmClass = nil; aID: TID = 0;
-      aResponseHead: PRawUTF8 = nil): integer;
+    function CallBack(method: TUriMethod; const aMethodName,aSentData: RawUtf8;
+      out aResponse: RawUtf8; aTable: TOrmClass = nil; aID: TID = 0;
+      aResponseHead: PRawUtf8 = nil): integer;
     /// to be called before CallBack() if the client could ignore the answer
     // - do nothing by default, but overriden e.g. in TRestHttpClientWebsockets
-    procedure CallbackNonBlockingSetHeader(out Header: RawUTF8); virtual;
+    procedure CallbackNonBlockingSetHeader(out Header: RawUtf8); virtual;
 
     /// access or initialize the internal IoC resolver, used for interface-based
     // remote services, and more generaly any Services.Resolve() call
@@ -675,7 +682,7 @@ type
     // - you can specify an optional custom contract for the first interface
     function ServiceRegister(const aInterfaces: array of PRttiInfo;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
-      const aContractExpected: RawUTF8 = ''): boolean; overload; virtual;
+      const aContractExpected: RawUtf8 = ''): boolean; overload; virtual;
     /// register a Service on the client side via its interface
     // - this methods expects one interface to be registered to the client, as
     // ! Client.ServiceRegister(TypeInfo(IMyInterface),sicShared);
@@ -688,43 +695,43 @@ type
     // - you can specify an optional custom contract for the first interface
     function ServiceRegister(aInterface: PRttiInfo;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
-      const aContractExpected: RawUTF8 = '';
+      const aContractExpected: RawUtf8 = '';
       aIgnoreAnyException: boolean = true): TServiceFactory; overload;
     /// register and retrieve the sicClientDriven Service instance
     // - will return TRUE on success, filling Obj output variable with the
     // corresponding interface instance
     // - will return FALSE on error
     function ServiceRegisterClientDriven(aInterface: PRttiInfo; out Obj;
-      const aContractExpected: RawUTF8 = ''): boolean; overload;
+      const aContractExpected: RawUtf8 = ''): boolean; overload;
     /// register one or several Services on the client side via their interfaces
     // - this method expects the interface(s) to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     function ServiceDefine(const aInterfaces: array of TGUID;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
-      const aContractExpected: RawUTF8 = ''): boolean; overload;
+      const aContractExpected: RawUtf8 = ''): boolean; overload;
     /// register a Service on the client side via its interface
     // - this method expects the interface to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     function ServiceDefine(const aInterface: TGUID;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
-      const aContractExpected: RawUTF8 = '';
+      const aContractExpected: RawUtf8 = '';
       aIgnoreAnyException: boolean = true): TServiceFactoryClient; overload;
     /// register and retrieve the sicClientDriven Service instance
     // - this method expects the interface to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     function ServiceDefineClientDriven(const aInterface: TGUID; out Obj;
-      const aContractExpected: RawUTF8 = ''): boolean;
+      const aContractExpected: RawUtf8 = ''): boolean;
     /// register a sicShared Service instance communicating via JSON objects
-    // - will force SERVICE_CONTRACT_NONE_EXPECTED, ParamsAsJSONObject=true and
-    // ResultAsJSONObjectWithoutResult=true
+    // - will force SERVICE_CONTRACT_NONE_EXPECTED, ParamsAsJsonObject=true and
+    // ResultAsJsonObjectWithoutResult=true
     // - may be used e.g. for accessing a sessionless public REST/JSON API, i.e.
-    // ! TRestServer.ServiceDefine(...).ResultAsJSONObjectWithoutResult := true
+    // ! TRestServer.ServiceDefine(...).ResultAsJsonObjectWithoutResult := true
     // - this method expects the interface to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     // - aIgnoreAnyException may be set to TRUE if the server is likely
     // to not propose this service, and any exception is to be catched
-    function ServiceDefineSharedAPI(const aInterface: TGUID;
-      const aContractExpected: RawUTF8 = SERVICE_CONTRACT_NONE_EXPECTED;
+    function ServiceDefineSharedApi(const aInterface: TGUID;
+      const aContractExpected: RawUtf8 = SERVICE_CONTRACT_NONE_EXPECTED;
       aIgnoreAnyException: boolean = false): TServiceFactoryClient;
     /// allow to notify a server the services this client may be actually capable
     // - when this client will connect to a remote server to access its services,
@@ -734,14 +741,32 @@ type
     // without the need of an actual centralized SOA catalog service: any
     // client could retrieve an associated REST server for a given service,
     // via the ServiceRetrieveAssociated method
-    property ServicePublishOwnInterfaces: RawUTF8
+    property ServicePublishOwnInterfaces: RawUtf8
       read fServicePublishOwnInterfaces write fServicePublishOwnInterfaces;
+    /// return all REST server URI associated to this client, for a given
+    // service name, the latest registered in first position
+    // - will lookup for the Interface name without the initial 'I', e.g.
+    // 'Calculator' for ICalculator - warning: research is case-sensitive
+    // - this methods is the reverse from ServicePublishOwnInterfaces: it allows
+    // to guess an associated REST server which may implement a given service
+    function ServiceRetrieveAssociated(const aServiceName: RawUtf8;
+      out URI: TRestServerURIDynArray): boolean; overload;
+    /// return all REST server URI associated to this client, for a given service
+    // - here the service is specified as its TGUID, e.g. IMyInterface
+    // - this method expects the interface to have been registered previously:
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
+    // - the URI[] output array contains the matching server URIs, the latest
+    // registered in first position
+    // - this methods is the reverse from ServicePublishOwnInterfaces: it allows
+    // to guess an associated REST server which may implement a given service
+    function ServiceRetrieveAssociated(const aInterface: TGUID;
+      out URI: TRestServerUriDynArray): boolean; overload;
     /// the routing class of the service remote request on client side
-    // - by default, contains TRestClientRoutingREST, i.e. an URI-based
+    // - by default, contains TRestClientRoutingRest, i.e. an URI-based
     // layout which is secure (since will use our RESTful authentication scheme),
     // and also very fast
-    // - but TRestClientRoutingJSON_RPC can e.g. be set (with
-    // TRestServerRoutingJSON_RPC on server sides), if the client will rather
+    // - but TRestClientRoutingJsonRpc can e.g. be set (with
+    // TRestServerRoutingJsonRpc on server sides), if the client will rather
     // use JSON/RPC alternative pattern
     // - NEVER set the abstract TRestClientRouting class on this property
     property ServicesRouting: TRestClientRoutingClass
@@ -769,25 +794,25 @@ type
     // blocking the main program execution, gathering log rows in chunks in case
     // of high activity
     // - map TOnTextWriterEcho signature, so that you will be able to set e.g.:
-    // ! TSQLLog.Family.EchoCustom := aClient.ServerRemoteLog;
+    // ! TSqlLog.Family.EchoCustom := aClient.ServerRemoteLog;
     function ServerRemoteLog(Sender: TBaseWriter; Level: TSynLogInfo;
-      const Text: RawUTF8): boolean; overload; virtual;
+      const Text: RawUtf8): boolean; overload; virtual;
     /// internal method able to emulate a call to TSynLog.Add.Log()
     // - will compute timestamp and event text, than call the overloaded
     // ServerRemoteLog() method
-    function ServerRemoteLog(Level: TSynLogInfo; const FormatMsg: RawUTF8;
+    function ServerRemoteLog(Level: TSynLogInfo; const FormatMsg: RawUtf8;
       const Args: array of const): boolean; overload;
     /// start to send all logs to the server 'RemoteLog' method-based service
     // - will associate the EchoCustom callback of the running log class to the
     // ServerRemoteLog() method
-    // - if aClientOwnedByFamily is TRUE, this TRestClientURI instance
+    // - if aClientOwnedByFamily is TRUE, this TRestClientUri instance
     // lifetime will be managed by TSynLogFamily - which is mostly wished
     // - if aClientOwnedByFamily is FALSE, you should manage this instance
     // life time, and may call ServerRemoteLogStop to stop remote logging
     // - warning: current implementation will disable all logging for this
-    // TRestClientURI instance, to avoid any potential concern (e.g. for
+    // TRestClientUri instance, to avoid any potential concern (e.g. for
     // multi-threaded process, or in case of communication error): you should
-    // therefore use this TRestClientURI connection only for the remote log
+    // therefore use this TRestClientUri connection only for the remote log
     // server, e.g. via TRestHttpClientGeneric.CreateForRemoteLogging() - do
     // not call ServerRemoteLogStart() from a high-level business client!
     procedure ServerRemoteLogStart(aLogClass: TSynLogClass;
@@ -808,18 +833,18 @@ type
     // server side
     // - if aHashedPassword is TRUE, the aPassword parameter is expected to
     // contain the already-hashed value, just as stored in PasswordHashHexa
-    // (i.e. SHA256('salt'+Value) as in TAuthUser.SetPasswordPlain method)
+    // (i.e. Sha256('salt'+Value) as in TAuthUser.SetPasswordPlain method)
     // - if SSPIAUTH conditional is defined, and aUserName='', a Windows
-    // authentication will be performed via TRestClientAuthenticationSSPI -
+    // authentication will be performed via TRestClientAuthenticationSspi -
     // in this case, aPassword will contain the SPN domain for Kerberos
     // (otherwise NTLM will be used), and table TAuthUser shall contain
     // an entry for the logged Windows user, with the LoginName in form
     // 'DomainName\UserName'
     // - you can directly create the class method ClientSetUser() of a given
     // TRestClientAuthentication inherited class, if neither
-    // TRestClientAuthenticationDefault nor TRestClientAuthenticationSSPI
+    // TRestClientAuthenticationDefault nor TRestClientAuthenticationSspi
     // match your need
-    function SetUser(const aUserName, aPassword: RawUTF8;
+    function SetUser(const aUserName, aPassword: RawUtf8;
       aHashedPassword: boolean = false): boolean;
     /// clear session and call the /auth service on the server to notify shutdown
     // - is called by Destroy and SetUser/ClientSetUser methods, so you should
@@ -828,10 +853,10 @@ type
     /// internal method to retrieve the current Session TAuthUser.ID
     function GetCurrentSessionUserID: TID; override;
     /// customize the session_signature signing algorithm with a specific function
-    // - will be used by TRestServerAuthenticationSignedURI classes,
+    // - will be used by TRestServerAuthenticationSignedUri classes,
     // e.g. TRestServerAuthenticationDefault instead of the algorithm
     // specified by the server at session handshake
-    property ComputeSignature: TOnRestAuthenticationSignedURIComputeSignature
+    property ComputeSignature: TOnRestAuthenticationSignedUriComputeSignature
       read fComputeSignature write fComputeSignature;
     /// the current session information as set by a successfull SetUser() call
     property Session: TRestClientSession
@@ -843,13 +868,18 @@ type
     /// access to the low-level HTTP header used for authentication
     // - you can force here your own header, e.g. a JWT as authentication bearer
     // or as in TRestClientAuthenticationHttpAbstract.ClientSetUserHttpOnlyUser
-    property SessionHttpHeader: RawUTF8
+    property SessionHttpHeader: RawUtf8
       read fSession.HttpHeader write fSession.HttpHeader;
     /// main access to the IRestOrmClient methods of this instance
     property Client: IRestOrmClient
       read fClient;
+    /// main access to the class implementing IRestOrm methods for this instance
+    // - used internally to avoid ORM: IRestOrm reference counting and
+    // enable inlining of most simple methods, if possible
+    function OrmInstance: TRestOrm;
+      {$ifdef HASINLINE}inline;{$endif}
 
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
 
     /// set a HWND/WM_* pair to let interface-based services notification
     // callbacks be processed safely in the main UI thread, via Windows messages
@@ -870,12 +900,12 @@ type
     // - message will be sent for any interface-based service method callback
     // which expects no result (i.e. no out parameter nor function result),
     // so is safely handled as asynchronous notification
-    // - is defines as a class procedure, since the underlying TRestClientURI
+    // - is defines as a class procedure, since the underlying TRestClientUri
     // instance has no impact here: a single WM_* handler is enough for
-    // several TRestClientURI instances
+    // several TRestClientUri instances
     class procedure ServiceNotificationMethodExecute(var Msg: TMessage);
 
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
 
     /// set a callback event to be executed in loop during remote blocking
     // process, e.g. to refresh the UI during a somewhat long request
@@ -895,40 +925,40 @@ type
       read GetOnIdleBackgroundThreadActive;
     /// this Event is called in case of remote authentication failure
     // - client software can ask the user to enter a password and user name
-    // - if no event is specified, the URI() method will return directly
+    // - if no event is specified, the Uri() method will return directly
     // an HTTP_FORBIDDEN "403 Forbidden" error code
     property OnAuthentificationFailed: TOnAuthentificationFailed
       read fOnAuthentificationFailed write fOnAuthentificationFailed;
-    /// this Event is called if URI() was not successfull
+    /// this Event is called if Uri() was not successfull
     // - the callback will have all needed information
     // - e.g. Call^.OutStatus=HTTP_NOTIMPLEMENTED indicates a broken connection
     property OnFailed: TOnClientFailed
       read fOnFailed write fOnFailed;
     /// this Event is called when a user is authenticated
-    // - is called always, on each TRestClientURI.SetUser call
+    // - is called always, on each TRestClientUri.SetUser call
     // - you can check the Sender.SessionUser property pointing to the current
     // authenticated user, or nil if authentication failed
     // - could be used to refresh the User Interface layout according to
     // current authenticated user rights, or to subscribe to some services
     // via callbacks
-    property OnSetUser: TOnRestClientNotify
+    property OnSetUser: TOnClientNotify
       read fOnSetUser write fOnSetUser;
   published
     /// low-level error code, as returned by server
     // - check this value about HTTP_* constants
     // - HTTP_SUCCESS or HTTP_CREATED mean no error
     // - otherwise, check LastErrorMessage property for additional information
-    // - this property value will record status codes returned by URI() method
+    // - this property value will record status codes returned by Uri() method
     property LastErrorCode: integer
       read fLastErrorCode;
     /// low-level error message, as returned by server
-    // - this property value will record content returned by URI() method in
+    // - this property value will record content returned by Uri() method in
     // case of an error, or '' if LastErrorCode is HTTP_SUCCESS or HTTP_CREATED
-    property LastErrorMessage: RawUTF8
+    property LastErrorMessage: RawUtf8
       read fLastErrorMessage;
     /// low-level exception class, if any
-    // - will record any Exception class raised within URI() method
-    // - contains nil if URI() execution did not raise any exception (which
+    // - will record any Exception class raised within Uri() method
+    // - contains nil if Uri() execution did not raise any exception (which
     // is the most expected behavior, since server-side errors are trapped
     // into LastErrorCode/LastErrorMessage properties
     property LastErrorException: ExceptClass
@@ -949,10 +979,10 @@ type
     property SessionID: cardinal
       read fSession.ID;
     /// the remote server executable name, as retrieved after a SetUser() success
-    property SessionServer: RawUTF8
+    property SessionServer: RawUtf8
       read fSession.Server;
     /// the remote server version, as retrieved after a SetUser() success
-    property SessionVersion: RawUTF8
+    property SessionVersion: RawUtf8
       read fSession.Version;
     /// the remote server session tiemout in minutes, as retrieved after
     // a SetUser() success
@@ -974,7 +1004,7 @@ const
   REST_COOKIE_SESSION = 'mORMot_session_signature';
 
 
-function ToText(a: TRestAuthenticationSignedURIAlgo): PShortString; overload;
+function ToText(a: TRestAuthenticationSignedUriAlgo): PShortString; overload;
 
 
 
@@ -984,14 +1014,14 @@ type
   /// REST client with direct access to a server logic through a .dll/.so library
   // - use only one TLibraryRequest function for the whole communication
   // - the data is stored in Global system memory, and freed by GlobalFree()
-  TRestClientLibraryRequest = class(TRestClientURI)
+  TRestClientLibraryRequest = class(TRestClientUri)
   protected
     fRequest: TLibraryRequest;
     /// used by Create(from dll) constructor
     fLibraryHandle: TLibHandle;
     /// method calling the RESTful server through a DLL or executable, using
     // direct memory
-    procedure InternalURI(var Call: TRestURIParams); override;
+    procedure InternalUri(var Call: TRestUriParams); override;
     /// overridden protected method do nothing (direct DLL access has no connection)
     function InternalCheckOpen: boolean; override;
     /// overridden protected method do nothing (direct DLL access has no connection)
@@ -1013,71 +1043,147 @@ type
 // backward compatibility types redirections
 
 type
-  TSQLRestClientURI = TRestClientURI;
-  TSQLRestClientURIDll = TRestClientLibraryRequest;
+  TSqlRestClientUri = TRestClientUri;
+  TSqlRestClientUriDll = TRestClientLibraryRequest;
 
 {$endif PUREMORMOT2}
+
+
+{ ************ TInterfacedCallback/TBlockingCallback Classes }
+
+  /// TInterfacedObject class which will notify a REST server when it is released
+  // - could be used when implementing event callbacks as interfaces, so that
+  // the other side instance will be notified when it is destroyed
+  TInterfacedCallback = class(TInterfacedObjectLocked)
+  protected
+    fRest: TRest;
+    fInterface: TGUID;
+  public
+    /// initialize the instance for a given REST client and callback interface
+    constructor Create(aRest: TRest; const aGuid: TGUID); reintroduce;
+    /// notify the associated TRestServer that the callback is disconnnected
+    // - i.e. will call TRestServer's TServiceContainer.CallBackUnRegister()
+    // - this method will process the unsubscription only once
+    procedure CallbackRestUnregister; virtual;
+    /// finalize the instance, and notify the TRestServer that the callback
+    // is now unreachable
+    // - i.e. will call CallbackRestUnregister
+    destructor Destroy; override;
+    /// the associated TRestServer instance, which will be notified
+    // when the callback is released
+    property Rest: TRest
+      read fRest;
+    /// the interface type, implemented by this callback class
+    property RestInterface: TGUID
+      read fInterface write fInterface;
+  end;
+
+  /// asynchrounous callback to emulate a synchronous/blocking process
+  // - once created, process will block via a WaitFor call, which will be
+  // released when CallbackFinished() is called by the process background thread
+  TBlockingCallback = class(TInterfacedCallback)
+  protected
+    fProcess: TBlockingProcess;
+    function GetEvent: TBlockingEvent;
+  public
+    /// initialize the callback instance
+    // - specify a time out millliseconds period after which blocking execution
+    // should be handled as failure (if 0 is set, default 3000 will be used)
+    // - you can optionally set a REST and callback interface for automatic
+    // notification when this TInterfacedCallback will be released
+    constructor Create(aTimeOutMs: integer;
+      aRest: TRest; const aGuid: TGUID); reintroduce;
+    /// finalize the callback instance
+    destructor Destroy; override;
+    /// called to wait for the callback to be processed, or trigger timeout
+    // - will block until CallbackFinished() is called by the processing thread
+    // - returns the final state of the process, i.e. beRaised or beTimeOut
+    function WaitFor: TBlockingEvent; virtual;
+    /// should be called by the callback when the process is finished
+    // - the caller will then let its WaitFor method return
+    // - if aServerUnregister is TRUE, will also call CallbackRestUnregister to
+    // notify the server that the callback is no longer needed
+    // - will optionally log all published properties values to the log class
+    // of the supplied REST instance
+    procedure CallbackFinished(aRestForLog: TRestOrm;
+      aServerUnregister: boolean = false); virtual;
+    /// just a wrapper to reset the internal Event state to evNone
+    // - may be used to re-use the same TBlockingCallback instance, after
+    // a successfull WaitFor/CallbackFinished process
+    // - returns TRUE on success (i.e. status was not beWaiting)
+    // - if there is a WaitFor currently in progress, returns FALSE
+    function Reset: boolean; virtual;
+    /// the associated blocking process instance
+    property Process: TBlockingProcess
+      read fProcess;
+  published
+    /// the current state of process
+    // - just a wrapper around Process.Event
+    // - use Reset method to re-use this instance after a WaitFor process
+    property Event: TBlockingEvent
+      read GetEvent;
+  end;
 
 
 implementation
 
 uses
-  mormot.orm.client; // for injection of TRestOrmClientURI.URI field
+  mormot.orm.client; // for injection of TRestOrmClientUri.Uri field
 
 
 { ************ Client Authentication and Authorization Logic }
 
-function ToText(a: TRestAuthenticationSignedURIAlgo): PShortString;
+function ToText(a: TRestAuthenticationSignedUriAlgo): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TRestAuthenticationSignedURIAlgo), ord(a));
+  result := GetEnumName(TypeInfo(TRestAuthenticationSignedUriAlgo), ord(a));
 end;
 
 
 { TRestClientAuthentication }
 
 class function TRestClientAuthentication.ClientGetSessionKey(
-  Sender: TRestClientURI; User: TAuthUser;
-  const aNameValueParameters: array of const): RawUTF8;
+  Sender: TRestClientUri; User: TAuthUser;
+  const aNameValueParameters: array of const): RawUtf8;
 var
-  resp: RawUTF8;
-  values: array[0..9] of TValuePUTF8Char;
+  resp: RawUtf8;
+  values: array[0..9] of TValuePUtf8Char;
   a: integer;
-  algo: TRestAuthenticationSignedURIAlgo absolute a;
+  algo: TRestAuthenticationSignedUriAlgo absolute a;
 begin
   result := '';
-  if (Sender.CallBackGet('Auth', aNameValueParameters, resp) <> HTTP_SUCCESS) or
-     (JSONDecode(pointer({%H-}resp),
+  if (Sender.CallBackGet('auth', aNameValueParameters, resp) <> HTTP_SUCCESS) or
+     (JsonDecode(pointer({%H-}resp),
       ['result', 'data', 'server', 'version', 'logonid', 'logonname',
        'logondisplay', 'logongroup', 'timeout', 'algo'], @values) = nil) then
     Sender.fSession.Data := '' // reset temporary 'data' field
   else
   begin
-    values[0].ToUTF8(result);
+    values[0].ToUtf8(result);
     Base64ToBin(PAnsiChar(values[1].Value), values[1].ValueLen, Sender.fSession.Data);
-    values[2].ToUTF8(Sender.fSession.Server);
-    values[3].ToUTF8(Sender.fSession.Version);
+    values[2].ToUtf8(Sender.fSession.Server);
+    values[3].ToUtf8(Sender.fSession.Version);
     User.IDValue := GetInt64(values[4].Value);
-    User.LogonName := values[5].ToUTF8; // set/fix using values from server
-    User.DisplayName := values[6].ToUTF8;
+    User.LogonName := values[5].ToUtf8; // set/fix using values from server
+    User.DisplayName := values[6].ToUtf8;
     User.GroupRights := pointer(values[7].ToInteger);
     Sender.fSession.ServerTimeout := values[8].ToInteger;
     if Sender.fSession.ServerTimeout <= 0 then
       Sender.fSession.ServerTimeout := 60; // default 1 hour if not suppplied
-    a := GetEnumNameValueTrimmed(TypeInfo(TRestAuthenticationSignedURIAlgo),
+    a := GetEnumNameValueTrimmed(TypeInfo(TRestAuthenticationSignedUriAlgo),
       values[9].Value, values[9].ValueLen);
     if a >= 0 then
       Sender.fComputeSignature :=
-        TRestClientAuthenticationSignedURI.GetComputeSignature(algo);
+        TRestClientAuthenticationSignedUri.GetComputeSignature(algo);
   end;
 end;
 
 class function TRestClientAuthentication.ClientSetUser(
-  Sender: TRestClientURI; const aUserName, aPassword: RawUTF8;
-  aPasswordKind: TRestClientSetUserPassword; const aHashSalt: RawUTF8;
+  Sender: TRestClientUri; const aUserName, aPassword: RawUtf8;
+  aPasswordKind: TRestClientSetUserPassword; const aHashSalt: RawUtf8;
   aHashRound: integer): boolean;
 var
   U: TAuthUser;
-  key: RawUTF8;
+  key: RawUtf8;
 begin
   result := false;
   if Sender = nil then
@@ -1093,7 +1199,7 @@ begin
       else if aHashSalt = '' then
         U.PasswordPlain := aPassword
       else
-        // compute SHA256('salt'+aPassword)
+        // compute Sha256() or proper PBKDF2_HMAC_SHA256()
         U.SetPassword(aPassword, aHashSalt, aHashRound);
       key := ClientComputeSessionKey(Sender, U);
       result := Sender.SessionCreate(self, U, key);
@@ -1111,28 +1217,28 @@ end;
 { TRestClientAuthenticationDefault }
 
 class function TRestClientAuthenticationDefault.ClientComputeSessionKey(
-  Sender: TRestClientURI; User: TAuthUser): RawUTF8;
+  Sender: TRestClientUri; User: TAuthUser): RawUtf8;
 var
-  aServerNonce, aClientNonce: RawUTF8;
+  aServerNonce, aClientNonce: RawUtf8;
   rnd: THash256;
 begin
   result := '';
   if User.LogonName = '' then
     exit;
-  aServerNonce := Sender.CallBackGetResult('Auth', ['UserName', User.LogonName]);
+  aServerNonce := Sender.CallBackGetResult('auth', ['username', User.LogonName]);
   if aServerNonce = '' then
     exit;
-  TAESPRNG.Main.FillRandom(@rnd, SizeOf(rnd));
+  TAesPrng.Main.FillRandom(@rnd, SizeOf(rnd));
   aClientNonce := BinToHexLower(@rnd, SizeOf(rnd));
   result := ClientGetSessionKey(Sender, User, [
-    'UserName', User.LogonName,
-    'Password', Sha256(Sender.fModel.Root + aServerNonce + aClientNonce +
+    'username', User.LogonName,
+    'password', Sha256(Sender.fModel.Root + aServerNonce + aClientNonce +
                        User.LogonName + User.PasswordHashHexa),
-    'ClientNonce', aClientNonce]);
+    'clientnonce', aClientNonce]);
 end;
 
 
-{ TRestClientAuthenticationSignedURI }
+{ TRestClientAuthenticationSignedUri }
 
 { Some Numbers - Indicative only!
   - Client side REST sign with crc32: 794,759 assertions passed  730.86ms
@@ -1143,32 +1249,32 @@ end;
   - Client side REST sign with sha512: 794,753 assertions passed  800.34ms
 }
 
-class function TRestClientAuthenticationSignedURI.ComputeSignatureCrc32(
+class function TRestClientAuthenticationSignedUri.ComputeSignatureCrc32(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
 begin
   // historical algorithm, from zlib crc32 polynom
   result := crc32(crc32(privatesalt, timestamp, 8), url, urllen);
 end;
 
-class function TRestClientAuthenticationSignedURI.ComputeSignatureCrc32c(
+class function TRestClientAuthenticationSignedUri.ComputeSignatureCrc32c(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
 begin
   // faster on SSE4.2 CPU, and slightly more secure if not cascaded
   result := crc32c(privatesalt, timestamp, 8) xor crc32c(privatesalt, url, urllen);
 end;
 
-class function TRestClientAuthenticationSignedURI.ComputeSignaturexxHash(
+class function TRestClientAuthenticationSignedUri.ComputeSignaturexxHash(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
 begin
   // xxHash32 has no immediate reverse function, but is really weak
   result := xxHash32(privatesalt, timestamp, 8) xor xxHash32(privatesalt, url, urllen);
 end;
 
-class function TRestClientAuthenticationSignedURI.ComputeSignatureMD5(
+class function TRestClientAuthenticationSignedUri.ComputeSignatureMd5(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
 var
   digest: THash128Rec;
-  MD5: TMD5;
+  MD5: TMd5;
   i: PtrInt;
 begin
   MD5.Init;
@@ -1182,29 +1288,29 @@ begin
     result := result xor digest.c[i];
 end;
 
-class function TRestClientAuthenticationSignedURI.ComputeSignatureSHA1(
+class function TRestClientAuthenticationSignedUri.ComputeSignatureSha1(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
 var
-  digest: array[0..(SizeOf(TSHA1Digest) div 4) - 1] of cardinal;
-  SHA1: TSHA1;
+  digest: array[0..(SizeOf(TSha1Digest) div 4) - 1] of cardinal;
+  SHA1: TSha1;
   i: PtrInt;
 begin
   SHA1.Init;
   SHA1.Update(@privatesalt, 4);
   SHA1.Update(timestamp, 8);
   SHA1.Update(url, urllen);
-  SHA1.Final(TSHA1Digest(digest));
+  SHA1.Final(TSha1Digest(digest));
   result := digest[0];
   for i := 1 to high(digest) do
     // we may have used the first 32-bit of the digest, but cascaded xor is fine
     result := result xor digest[i];
 end;
 
-class function TRestClientAuthenticationSignedURI.ComputeSignatureSHA256(
+class function TRestClientAuthenticationSignedUri.ComputeSignatureSha256(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
 var
   digest: THash256Rec;
-  SHA256: TSHA256;
+  SHA256: TSha256;
   i: PtrInt;
 begin
   SHA256.Init;
@@ -1218,11 +1324,11 @@ begin
     result := result xor digest.c[i];
 end;
 
-class function TRestClientAuthenticationSignedURI.ComputeSignatureSHA512(
+class function TRestClientAuthenticationSignedUri.ComputeSignatureSha512(
   privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
 var
   digest: THash512Rec;
-  SHA512: TSHA512;
+  SHA512: TSha512;
   i: PtrInt;
 begin
   SHA512.Init;
@@ -1236,8 +1342,8 @@ begin
     result := result xor digest.c[i];
 end;
 
-class function TRestClientAuthenticationSignedURI.GetComputeSignature(
-  algo: TRestAuthenticationSignedURIAlgo): TOnRestAuthenticationSignedURIComputeSignature;
+class function TRestClientAuthenticationSignedUri.GetComputeSignature(
+  algo: TRestAuthenticationSignedUriAlgo): TOnRestAuthenticationSignedUriComputeSignature;
 begin
   // FPC doesn't allow to use constants for procedure of object
   case algo of
@@ -1246,22 +1352,22 @@ begin
     suaXXHASH:
       result := ComputeSignaturexxHash;
     suaMD5:
-      result := ComputeSignatureMD5;
+      result := ComputeSignatureMd5;
     suaSHA1:
-      result := ComputeSignatureSHA1;
+      result := ComputeSignatureSha1;
     suaSHA256:
-      result := ComputeSignatureSHA256;
+      result := ComputeSignatureSha256;
     suaSHA512:
-      result := ComputeSignatureSHA512;
+      result := ComputeSignatureSha512;
   else
     result := ComputeSignatureCrc32; // default/legacy/fallback
   end;
 end;
 
-class procedure TRestClientAuthenticationSignedURI.ClientSessionSign(
-  Sender: TRestClientURI; var Call: TRestURIParams);
+class procedure TRestClientAuthenticationSignedUri.ClientSessionSign(
+  Sender: TRestClientUri; var Call: TRestUriParams);
 var
-  nonce, blankURI: RawUTF8;
+  nonce, blankURI: RawUtf8;
 begin
   if (Sender = nil) or
      (Sender.Session.ID = 0) or
@@ -1283,10 +1389,10 @@ begin
 end;
 
 
-{ TRestClientAuthenticationURI }
+{ TRestClientAuthenticationUri }
 
-class procedure TRestClientAuthenticationURI.ClientSessionSign(
-  Sender: TRestClientURI; var Call: TRestURIParams);
+class procedure TRestClientAuthenticationUri.ClientSessionSign(
+  Sender: TRestClientUri; var Call: TRestUriParams);
 begin
   if (Sender <> nil) and
      (Sender.Session.ID <> 0) and
@@ -1301,17 +1407,17 @@ end;
 { TRestClientAuthenticationNone }
 
 class function TRestClientAuthenticationNone.ClientComputeSessionKey(
-  Sender: TRestClientURI; User: TAuthUser): RawUTF8;
+  Sender: TRestClientUri; User: TAuthUser): RawUtf8;
 begin
   result := ClientGetSessionKey(Sender, User, [
-    'UserName', User.LogonName]);
+    'userName', User.LogonName]);
 end;
 
 
 { TRestClientAuthenticationHttpAbstract }
 
 class procedure TRestClientAuthenticationHttpAbstract.ClientSessionSign(
-  Sender: TRestClientURI; var Call: TRestURIParams);
+  Sender: TRestClientUri; var Call: TRestUriParams);
 begin
   if (Sender <> nil) and
      (Sender.Session.ID <> 0) and
@@ -1321,11 +1427,11 @@ begin
 end;
 
 class function TRestClientAuthenticationHttpAbstract.ClientSetUser(
-  Sender: TRestClientURI; const aUserName, aPassword: RawUTF8;
+  Sender: TRestClientUri; const aUserName, aPassword: RawUtf8;
   aPasswordKind: TRestClientSetUserPassword;
-  const aHashSalt: RawUTF8; aHashRound: integer): boolean;
+  const aHashSalt: RawUtf8; aHashRound: integer): boolean;
 var
-  res: RawUTF8;
+  res: RawUtf8;
   U: TAuthUser;
 begin
   result := false;
@@ -1333,7 +1439,7 @@ begin
      (Sender = nil) then
     exit;
   if aPasswordKind <> passClear then
-    raise ERestException.CreateUTF8(
+    raise ERestException.CreateUtf8(
       '%.ClientSetUser(%) expects passClear', [self, Sender]);
   Sender.SessionClose; // ensure Sender.SessionUser=nil
   try
@@ -1362,7 +1468,7 @@ begin
 end;
 
 class procedure TRestClientAuthenticationHttpAbstract.ClientSetUserHttpOnly(
-  Sender: TRestClientURI; const aUserName, aPasswordClear: RawUTF8);
+  Sender: TRestClientUri; const aUserName, aPasswordClear: RawUtf8);
 begin
   Sender.fSession.HttpHeader := ComputeAuthenticateHeader(aUserName, aPasswordClear);
 end;
@@ -1371,7 +1477,7 @@ end;
 { TRestClientAuthenticationHttpBasic }
 
 class function TRestClientAuthenticationHttpBasic.ComputeAuthenticateHeader(
-  const aUserName, aPasswordClear: RawUTF8): RawUTF8;
+  const aUserName, aPasswordClear: RawUtf8): RawUtf8;
 begin
   result := 'Authorization: Basic ' + BinToBase64(aUserName + ':' + aPasswordClear);
 end;
@@ -1380,13 +1486,14 @@ end;
 {$ifdef DOMAINRESTAUTH}
 { will use mormot.lib.sspi/gssapi units depending on the OS }
 
-class function TRestClientAuthenticationSSPI.ClientComputeSessionKey(
-  Sender: TRestClientURI; User: TAuthUser): RawUTF8;
+class function TRestClientAuthenticationSspi.ClientComputeSessionKey(
+  Sender: TRestClientUri; User: TAuthUser): RawUtf8;
 var
   SecCtx: TSecContext;
   WithPassword: boolean;
   OutData: RawByteString;
 begin
+  InitializeDomainAuth; // setup mormot.lib.sspi/gssapi unit depending on the OS
   result := '';
   InvalidateSecContext(SecCtx, 0);
   WithPassword := User.LogonName <> '';
@@ -1394,10 +1501,10 @@ begin
   try
     repeat
       if WithPassword then
-        ClientSSPIAuthWithPassword(SecCtx,
+        ClientSspiAuthWithPassword(SecCtx,
           Sender.fSession.Data, User.LogonName, User.PasswordHashHexa, OutData)
       else
-        ClientSSPIAuth(SecCtx,
+        ClientSspiAuth(SecCtx,
           Sender.fSession.Data, User.PasswordHashHexa, OutData);
       if OutData = '' then
         break;
@@ -1405,7 +1512,7 @@ begin
         break; // 2nd pass
       // 1st call will return data, 2nd call SessionKey
       result := ClientGetSessionKey(Sender, User,
-        ['UserName', '',
+        ['username', '',
          'data', BinToBase64(OutData)]);
     until Sender.fSession.Data = '';
     if result <> '' then
@@ -1421,13 +1528,13 @@ end;
 {$endif DOMAINRESTAUTH}
 
 
-{ ************ TRestClientRoutingREST/TRestClientRoutingJSON_RPC Routing Schemes }
+{ ************ TRestClientRoutingRest/TRestClientRoutingJsonRpc Routing Schemes }
 
-{ TRestClientRoutingREST }
+{ TRestClientRoutingRest }
 
-class procedure TRestClientRoutingREST.ClientSideInvoke(var uri: RawUTF8;
-  ctxt: TRestClientSideInvoke; const method, params, clientDrivenID: RawUTF8;
-  out sent, head: RawUTF8);
+class procedure TRestClientRoutingRest.ClientSideInvoke(var uri: RawUtf8;
+  ctxt: TRestClientSideInvoke; const method, params, clientDrivenID: RawUtf8;
+  out sent, head: RawUtf8);
 begin
   if clientDrivenID <> '' then
     uri := uri + '.' + method + '/' + clientDrivenID
@@ -1448,11 +1555,11 @@ begin
 end;
 
 
-{ TRestClientRoutingJSON_RPC }
+{ TRestClientRoutingJsonRpc }
 
-class procedure TRestClientRoutingJSON_RPC.ClientSideInvoke(var uri: RawUTF8;
-  ctxt: TRestClientSideInvoke; const method, params, clientDrivenID: RawUTF8;
-  out sent, head: RawUTF8);
+class procedure TRestClientRoutingJsonRpc.ClientSideInvoke(var uri: RawUtf8;
+  ctxt: TRestClientSideInvoke; const method, params, clientDrivenID: RawUtf8;
+  out sent, head: RawUtf8);
 begin
   sent := '{"method":"' + method + '","params":[' + params;
   if clientDrivenID = '' then
@@ -1463,11 +1570,11 @@ end;
 
 
 
-{ ************ TRestClientURI Base Class for Actual Clients }
+{ ************ TRestClientUri Base Class for Actual Clients }
 
 { TRestClientCallbacks }
 
-constructor TRestClientCallbacks.Create(aOwner: TRestClientURI);
+constructor TRestClientCallbacks.Create(aOwner: TRestClientUri);
 begin
   inherited Create;
   Owner := aOwner;
@@ -1603,16 +1710,16 @@ end;
 type
   TRemoteLogThread = class(TRestThread)
   protected
-    fClient: TRestClientURI;
-    fPendingRows: RawUTF8;
+    fClient: TRestClientUri;
+    fPendingRows: RawUtf8;
     procedure InternalExecute; override;
   public
-    constructor Create(aClient: TRestClientURI); reintroduce;
+    constructor Create(aClient: TRestClientUri); reintroduce;
     destructor Destroy; override;
-    procedure AddRow(const aText: RawUTF8);
+    procedure AddRow(const aText: RawUtf8);
   end;
 
-constructor TRemoteLogThread.Create(aClient: TRestClientURI);
+constructor TRemoteLogThread.Create(aClient: TRestClientUri);
 begin
   fClient := aClient;
   inherited Create(aClient, false, false);
@@ -1635,11 +1742,11 @@ begin
   inherited Destroy;
 end;
 
-procedure TRemoteLogThread.AddRow(const aText: RawUTF8);
+procedure TRemoteLogThread.AddRow(const aText: RawUtf8);
 begin
   fSafe.Lock;
   try
-    AddToCSV(aText, fPendingRows, #13#10);
+    AddToCsv(aText, fPendingRows, #13#10);
   finally
     fSafe.UnLock;
   end;
@@ -1648,7 +1755,7 @@ end;
 
 procedure TRemoteLogThread.InternalExecute;
 var
-  aText: RawUTF8;
+  aText: RawUtf8;
 begin
   while not Terminated do
     if fEvent.WaitFor(INFINITE) = wrSignaled then
@@ -1679,21 +1786,21 @@ begin
 end;
 
 
-{ TRestClientURI }
+{ TRestClientUri }
 
-procedure TRestClientURI.SetRoutingClass(aServicesRouting: TRestClientRoutingClass);
+procedure TRestClientUri.SetRoutingClass(aServicesRouting: TRestClientRoutingClass);
 begin
   if self <> nil then
     if aServicesRouting <> fServicesRouting then
       if (aServicesRouting = nil) or
          (aServicesRouting = TRestClientRouting) then
-         raise EServiceException.CreateUTF8('Unexpected %.SetRoutingClass(%)',
+         raise EServiceException.CreateUtf8('Unexpected %.SetRoutingClass(%)',
            [self, aServicesRouting])
       else
          fServicesRouting := aServicesRouting;
 end;
 
-procedure TRestClientURI.SetSessionHeartbeatSeconds(timeout: integer);
+procedure TRestClientUri.SetSessionHeartbeatSeconds(timeout: integer);
 begin
   if (timeout < 0) or
      (timeout = fSession.HeartbeatSeconds) then
@@ -1702,21 +1809,21 @@ begin
   fRun.TimerEnable(SessionRenewEvent, timeout);
 end;
 
-function TRestClientURI.GetOnIdleBackgroundThreadActive: boolean;
+function TRestClientUri.GetOnIdleBackgroundThreadActive: boolean;
 begin
   result := (self <> nil) and
             Assigned(fOnIdle) and
             fBackgroundThread.OnIdleBackgroundThreadActive;
 end;
 
-procedure TRestClientURI.OnBackgroundProcess(
+procedure TRestClientUri.OnBackgroundProcess(
   Sender: TSynBackgroundThreadEvent; ProcessOpaqueParam: pointer);
 var
-  Call: ^TRestURIParams absolute ProcessOpaqueParam;
+  Call: ^TRestUriParams absolute ProcessOpaqueParam;
 begin
   if Call = nil then
     exit;
-  InternalURI(Call^);
+  InternalUri(Call^);
   if ((Sender = nil) or OnIdleBackgroundThreadActive) and
      not (isDestroying in fInternalState) then
   begin
@@ -1727,15 +1834,15 @@ begin
       Exclude(fInternalState, isOpened);
       if (Sender = nil) or
          OnIdleBackgroundThreadActive then
-        InternalURI(Call^); // try request again
+        InternalUri(Call^); // try request again
     end;
     if Call^.OutStatus <> HTTP_NOTIMPLEMENTED then
       Include(fInternalState, isOpened);
   end;
 end;
 
-procedure TRestClientURI.SetLastException(E: Exception; ErrorCode: integer;
-  Call: PRestURIParams);
+procedure TRestClientUri.SetLastException(E: Exception; ErrorCode: integer;
+  Call: PRestUriParams);
 begin
   fLastErrorCode := ErrorCode;
   if E = nil then
@@ -1744,37 +1851,37 @@ begin
     if StatusCodeIsSuccess(ErrorCode) then
       fLastErrorMessage := ''
     else
-      fLastErrorMessage := StatusCodeToReason(ErrorCode);
+      StatusCodeToReason(ErrorCode, fLastErrorMessage);
   end
   else
   begin
     fLastErrorException := PPointer(E)^;
-    fLastErrorMessage := ObjectToJSONDebug(E);
+    fLastErrorMessage := ObjectToJsonDebug(E);
   end;
   if Assigned(fOnFailed) then
     fOnFailed(self, E, Call);
 end;
 
-function TRestClientURI.InternalRemoteLogSend(const aText: RawUTF8): boolean;
+function TRestClientUri.InternalRemoteLogSend(const aText: RawUtf8): boolean;
 begin
-  result := URI(fModel.GetURICallBack('RemoteLog', nil, 0), 'PUT', nil, nil, @aText).
-    Lo in [HTTP_SUCCESS, HTTP_NOCONTENT];
+  result := Uri(fModel.GetUriCallBack('RemoteLog', nil, 0),
+    'PUT', nil, nil, @aText) in [HTTP_SUCCESS, HTTP_NOCONTENT];
 end;
 
-function TRestClientURI.{%H-}FakeCallbackRegister(Sender: TServiceFactory;
+function TRestClientUri.{%H-}FakeCallbackRegister(Sender: TServiceFactory;
   const Method: TInterfaceMethod; const ParamInfo: TInterfaceMethodArgument;
   ParamValue: Pointer): integer;
 begin
-  raise EServiceException.CreateUTF8('% does not support interface parameters ' +
+  raise EServiceException.CreateUtf8('% does not support interface parameters ' +
     'for %.%(%: %): consider using another kind of client',
-    [self, Sender.InterfaceFactory.InterfaceName, Method.URI,
+    [self, Sender.InterfaceFactory.InterfaceName, Method.Uri,
      ParamInfo.ParamName^, ParamInfo.ArgTypeName^]);
 end;
 
-function TRestClientURI.{%H-}FakeCallbackUnregister(
+function TRestClientUri.{%H-}FakeCallbackUnregister(
   Factory: TInterfaceFactory; FakeCallbackID: integer; Instance: pointer): boolean;
 begin
-  raise EServiceException.CreateUTF8(
+  raise EServiceException.CreateUtf8(
     '% does not support % callbacks: consider using another kind of client',
     [self, Factory.InterfaceName]);
 end;
@@ -1782,7 +1889,7 @@ end;
 const
   SSPI_DEFINITION_USERNAME = '***SSPI***';
 
-constructor TRestClientURI.RegisteredClassCreateFrom(aModel: TOrmModel;
+constructor TRestClientUri.RegisteredClassCreateFrom(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean);
 begin
   if fModel = nil then // if not already created with a reintroduced constructor
@@ -1800,7 +1907,7 @@ begin
   end;
 end;
 
-procedure TRestClientURI.DefinitionTo(Definition: TSynConnectionDefinition);
+procedure TRestClientUri.DefinitionTo(Definition: TSynConnectionDefinition);
 begin
   if Definition = nil then
     exit;
@@ -1809,7 +1916,7 @@ begin
      (fSession.User <> nil) then
   begin
     {$ifdef DOMAINRESTAUTH}
-    if fSession.Authentication.InheritsFrom(TRestClientAuthenticationSSPI) then
+    if fSession.Authentication.InheritsFrom(TRestClientAuthenticationSspi) then
       Definition.User := SSPI_DEFINITION_USERNAME
     else
     {$endif DOMAINRESTAUTH}
@@ -1818,7 +1925,7 @@ begin
   end;
 end;
 
-function TRestClientURI.GetCurrentSessionUserID: TID;
+function TRestClientUri.GetCurrentSessionUserID: TID;
 begin
   if fSession.User = nil then
     result := 0
@@ -1826,9 +1933,9 @@ begin
     result := fSession.User.IDValue;
 end;
 
-function TRestClientURI.GetSessionVersion: RawUTF8;
+function TRestClientUri.GetSessionVersion: RawUtf8;
 var
-  resp: RawUTF8;
+  resp: RawUtf8;
 begin
   if self = nil then
     result := ''
@@ -1837,13 +1944,13 @@ begin
     if fSession.Version = '' then
       // no session (e.g. API public URI) -> ask
       if CallBackGet('timestamp/info', [], resp) = HTTP_SUCCESS then
-        fSession.Version := JSONDecode(resp, 'version');
+        fSession.Version := JsonDecode(resp, 'version');
     result := fSession.Version;
   end;
 end;
 
-function TRestClientURI.SessionCreate(aAuth: TRestClientAuthenticationClass;
-  var aUser: TAuthUser; const aSessionKey: RawUTF8): boolean;
+function TRestClientUri.SessionCreate(aAuth: TRestClientAuthenticationClass;
+  var aUser: TAuthUser; const aSessionKey: RawUtf8): boolean;
 var
   period: integer;
 begin
@@ -1870,23 +1977,28 @@ begin
   result := true;
 end;
 
-procedure TRestClientURI.SessionRenewEvent(Sender: TSynBackgroundTimer;
-  Event: TWaitResult; const Msg: RawUTF8);
+procedure TRestClientUri.SessionRenewEvent(Sender: TSynBackgroundTimer;
+  Event: TWaitResult; const Msg: RawUtf8);
 var
-  resp: RawUTF8;
+  resp: RawUtf8;
   status: integer;
 begin
   status := CallBack(mPOST, 'CacheFlush/_ping_', '', resp);
   InternalLog('SessionRenewEvent(%) received status=% count=% from % % (timeout=% min)',
-    [fModel.Root, status, JSONDecode(resp, 'count'), fSession.Server,
+    [fModel.Root, status, JsonDecode(resp, 'count'), fSession.Server,
      fSession.Version, fSession.ServerTimeout], sllUserAuth);
 end;
 
-constructor TRestClientURI.Create(aModel: TOrmModel);
+function TRestClientUri.OrmInstance: TRestOrm;
+begin
+  result := TRestOrm(fOrmInstance);
+end;
+
+constructor TRestClientUri.Create(aModel: TOrmModel);
 begin
   inherited Create(aModel);
   fMaximumAuthentificationRetry := 1;
-  fComputeSignature := TRestClientAuthenticationSignedURI.ComputeSignatureCrc32;
+  fComputeSignature := TRestClientAuthenticationSignedUri.ComputeSignatureCrc32;
   fSession.ID := CONST_AUTHENTICATION_NOT_USED;
   fFakeCallbacks := TRestClientCallbacks.Create(self);
   {$ifdef USELOCKERDEBUG}
@@ -1894,9 +2006,11 @@ begin
   {$else}
   fSafe := TAutoLocker.Create;
   {$endif USELOCKERDEBUG}
+  fServicesRouting := TRestClientRoutingRest;
+  TRestOrmClientUri.Create(self); // asssign the URI-based ORM kernel
 end;
 
-destructor TRestClientURI.Destroy;
+destructor TRestClientUri.Destroy;
 var
   t, i: PtrInt;
   aID: TID;
@@ -1905,9 +2019,9 @@ begin
   include(fInternalState, isDestroying);
   if SynLogFileFreeing then // may be owned by a TSynLogFamily
     SetLogClass(nil);
-  {$ifdef MSWINDOWS}
+  {$ifdef OSWINDOWS}
   fServiceNotificationMethodViaMessages.Wnd := 0; // disable notification
-  {$endif MSWINDOWS}
+  {$endif OSWINDOWS}
   FreeAndNil(fFakeCallbacks);
   try
     // unlock all still locked records by this client
@@ -1925,6 +2039,7 @@ begin
       end;
     SessionClose; // if not already notified
   finally
+    fClient := nil; // for proper RefCnt in inherited Destroy
     // release memory and associated classes
     if fRemoteLogClass <> nil then
     begin
@@ -1942,18 +2057,18 @@ begin
   end;
 end;
 
-procedure TRestClientURI.SetOrmInstance(aORM: TInterfacedObject);
+procedure TRestClientUri.SetOrmInstance(aORM: TInterfacedObject);
 begin
   inherited SetOrmInstance(aORM); // set fOrm
   if not fOrmInstance.GetInterface(IRestOrmClient, fClient) then
-    raise ERestException.CreateUTF8('%.Create with invalid %', [self, fOrmInstance]);
-  // enable redirection of URI() from IRestOrm/IRestOrmClient into this class
-  (fOrmInstance as TRestOrmClientURI).URI := URI;
+    raise ERestException.CreateUtf8('%.Create with invalid %', [self, fOrmInstance]);
+  // enable redirection of Uri() from IRestOrm/IRestOrmClient into this class
+  (fOrmInstance as TRestOrmClientUri).Uri := URI;
 end;
 
-procedure TRestClientURI.SessionClose;
+procedure TRestClientUri.SessionClose;
 var
-  tmp: RawUTF8;
+  tmp: RawUtf8;
 begin
   if (self <> nil) and
      (fSession.User <> nil) and
@@ -1961,9 +2076,9 @@ begin
   try
     fRun.TimerDisable(SessionRenewEvent);
     InternalLog('SessionClose: notify server', sllTrace);
-    CallBackGet('Auth', [
-      'UserName', fSession.User.LogonName,
-      'Session', fSession.ID], tmp);
+    CallBackGet('auth', [
+      'userName', fSession.User.LogonName,
+      'session', fSession.ID], tmp);
   finally
     // back to no session, with default values
     fSession.ID := CONST_AUTHENTICATION_SESSION_NOT_STARTED;
@@ -1976,22 +2091,22 @@ begin
     fSession.Data := '';
     fSession.ServerTimeout := 0;
     FreeAndNil(fSession.User);
-    fComputeSignature := TRestClientAuthenticationSignedURI.ComputeSignatureCrc32;
+    fComputeSignature := TRestClientAuthenticationSignedUri.ComputeSignatureCrc32;
   end;
 end;
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
 
 type
-  TRestClientURIServiceNotification = class(TInterfaceMethodExecute)
+  TRestClientUriServiceNotification = class(TInterfaceMethodExecute)
   protected
-    /// parameters set by TRestClientURI.InternalNotificationMethodExecute
-    fOwner: TRestClientURI;
+    /// parameters set by TRestClientUri.InternalNotificationMethodExecute
+    fOwner: TRestClientUri;
     fInstance: pointer; // weak IInvokable reference
-    fPar: RawUTF8;
+    fPar: RawUtf8;
   end;
 
-procedure TRestClientURI.ServiceNotificationMethodViaMessages(
+procedure TRestClientUri.ServiceNotificationMethodViaMessages(
   hWnd: HWND; Msg: cardinal);
 begin
   if Msg = 0 then
@@ -2000,16 +2115,16 @@ begin
   fServiceNotificationMethodViaMessages.Msg := Msg;
 end;
 
-class procedure TRestClientURI.ServiceNotificationMethodExecute(
+class procedure TRestClientUri.ServiceNotificationMethodExecute(
   var Msg: TMessage);
 var
-  exec: TRestClientURIServiceNotification;
+  exec: TRestClientUriServiceNotification;
 begin
   exec := pointer(Msg.LParam);
   if exec <> nil then
   try
     try
-      if exec.InheritsFrom(TRestClientURIServiceNotification) and
+      if exec.InheritsFrom(TRestClientUriServiceNotification) and
          (HWND(Msg.WParam) = exec.fOwner.fServiceNotificationMethodViaMessages.Wnd) then
         // run asynchronous notification callback in the main UI thread context
         exec.ExecuteJson([exec.fInstance], pointer(exec.fPar), nil);
@@ -2021,34 +2136,34 @@ begin
   end;
 end;
 
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
-procedure TRestClientURI.InternalNotificationMethodExecute(
-  var Ctxt: TRestURIParams);
+procedure TRestClientUri.InternalNotificationMethodExecute(
+  var Ctxt: TRestUriParams);
 var
-  url, root, interfmethod, interf, id, method, frames: RawUTF8;
+  url, root, interfmethod, interf, id, method, frames: RawUtf8;
   callback: TRestClientCallbackItem;
   methodIndex: integer;
   WR: TTextWriter;
   temp: TTextWriterStackBuffer;
   ok: boolean;
 
-  procedure Call(methodIndex: integer; const par: RawUTF8; res: TTextWriter);
+  procedure Call(methodIndex: integer; const par: RawUtf8; res: TTextWriter);
   var
     method: PInterfaceMethod;
     exec: TInterfaceMethodExecute;
-    {$ifdef MSWINDOWS}
-    execmsg: TRestClientURIServiceNotification absolute exec;
-    {$endif MSWINDOWS}
+    {$ifdef OSWINDOWS}
+    execmsg: TRestClientUriServiceNotification absolute exec;
+    {$endif OSWINDOWS}
   begin
     method := @callback.Factory.Methods[methodIndex];
-    {$ifdef MSWINDOWS}
+    {$ifdef OSWINDOWS}
     if (fServiceNotificationMethodViaMessages.Wnd <> 0) and
        (method^.ArgsOutputValuesCount = 0) then
     begin
       // expects no result -> asynchronous non blocking notification in UI thread
       Ctxt.OutStatus := 0;
-      execmsg := TRestClientURIServiceNotification.Create(method);
+      execmsg := TRestClientUriServiceNotification.Create(method);
       execmsg.fOwner := self;
       execmsg.fInstance := callback.Instance;
       execmsg.fPar := par;
@@ -2059,7 +2174,7 @@ var
     end
     else
     // if PostMessage() failed, or expecting result -> blocking execution
-    {$endif MSWINDOWS}
+    {$endif OSWINDOWS}
       exec := TInterfaceMethodExecute.Create(method);
     try
       ok := exec.ExecuteJson([callback.Instance], pointer(par), res);
@@ -2079,7 +2194,7 @@ begin
     exit;
   if url[1] = '/' then
     system.delete(url, 1, 1);
-  // 'root/BidirCallback.AsynchEvent/1' into root/interfmethod/id
+  // 'root/BidirCallback.AsyncEvent/1' into root/interfmethod/id
   Split(Split(url, '/', root), '/', interfmethod, id);
   if not IdemPropNameU(root, fModel.Root) then
     exit;
@@ -2136,22 +2251,22 @@ begin
     on E: Exception do
     begin
       Ctxt.OutHead := '';
-      Ctxt.OutBody := ObjectToJSONDebug(E);
+      Ctxt.OutBody := ObjectToJsonDebug(E);
       Ctxt.OutStatus := HTTP_SERVERERROR;
     end;
   end;
 end;
 
-function TRestClientURI.URI(const url, method: RawUTF8; Resp: PRawUTF8;
-  Head: PRawUTF8; SendData: PRawUTF8): Int64Rec;
+function TRestClientUri.Uri(const url, method: RawUtf8; Resp: PRawUtf8;
+  Head: PRawUtf8; SendData: PRawUtf8; OutInternalState: PCardinal): integer;
 var
   retry: integer;
   aUserName, aPassword: string;
-  StatusMsg: RawUTF8;
-  Call: TRestURIParams;
+  StatusMsg: RawUtf8;
+  Call: TRestUriParams;
   aPasswordHashed: boolean;
 
-  procedure CallInternalURI;
+  procedure CallInternalUri;
   begin
     Call.Url := url; // reset to allow proper re-sign
     if fSession.Authentication <> nil then
@@ -2163,14 +2278,15 @@ var
     begin
       if fBackgroundThread = nil then
         fBackgroundThread := TSynBackgroundThreadEvent.Create(OnBackgroundProcess,
-          OnIdle, FormatUTF8('% % background', [self, fModel.Root]));
+          OnIdle, FormatUtf8('% % background', [self, fModel.Root]));
       if not fBackgroundThread.RunAndWait(@Call) then
         Call.OutStatus := HTTP_UNAVAILABLE;
     end
     else
       OnBackgroundProcess({SenderThread=}nil, @Call);
-    result.Lo := Call.OutStatus;
-    result.Hi := Call.OutInternalState;
+    result := Call.OutStatus;
+    if OutInternalState <> nil then
+      OutInternalState ^ := Call.OutInternalState;
     if Head <> nil then
       Head^ := Call.OutHead;
     if Resp <> nil then
@@ -2181,7 +2297,7 @@ var
 begin
   if self = nil then
   begin
-    Int64(result) := HTTP_UNAVAILABLE;
+    result := HTTP_UNAVAILABLE;
     SetLastException(nil, HTTP_UNAVAILABLE);
     exit;
   end;
@@ -2191,7 +2307,7 @@ begin
   begin
     if not ServerTimestampSynchronize then
     begin
-      Int64(result) := HTTP_UNAVAILABLE;
+      result := HTTP_UNAVAILABLE;
       exit; // if Timestamp is not available, server is down!
     end;
   end;
@@ -2202,12 +2318,12 @@ begin
   if fSession.HttpHeader <> '' then
     Call.InHead := TrimU(Call.InHead + #13#10 + fSession.HttpHeader);
   try
-    CallInternalURI;
+    CallInternalUri;
     if (Call.OutStatus = HTTP_TIMEOUT) and
        RetryOnceOnTimeout then
     begin
       InternalLog('% % returned "408 Request Timeout" -> RETRY', [method, url], sllError);
-      CallInternalURI;
+      CallInternalUri;
     end
     else if (Call.OutStatus = HTTP_FORBIDDEN) and
             (MaximumAuthentificationRetry > 0) and
@@ -2220,9 +2336,9 @@ begin
       begin
         // "403 Forbidden" in case of authentication failure -> try relog
         if OnAuthentificationFailed(retry, aUserName, aPassword, aPasswordHashed) and
-           SetUser(StringToUTF8(aUserName), StringToUTF8(aPassword), aPasswordHashed) then
+           SetUser(StringToUtf8(aUserName), StringToUtf8(aPassword), aPasswordHashed) then
         begin
-          CallInternalURI;
+          CallInternalUri;
           break;
         end;
         Inc(retry);
@@ -2232,7 +2348,7 @@ begin
     end;
     if not StatusCodeIsSuccess(Call.OutStatus) then
     begin
-      StatusMsg := StatusCodeToReason(Call.OutStatus);
+      StatusCodeToReason(Call.OutStatus, StatusMsg);
       if Call.OutBody = '' then
         fLastErrorMessage := StatusMsg
       else
@@ -2245,29 +2361,29 @@ begin
   except
     on E: Exception do
     begin
-      Int64(result) := HTTP_NOTIMPLEMENTED; // 501
+      result := HTTP_NOTIMPLEMENTED; // 501
       SetLastException(E, HTTP_NOTIMPLEMENTED, @Call);
       exit;
     end;
   end;
 end;
 
-function TRestClientURI.CallBackGet(const aMethodName: RawUTF8;
-  const aNameValueParameters: array of const; out aResponse: RawUTF8;
-  aTable: TOrmClass; aID: TID; aResponseHead: PRawUTF8): integer;
+function TRestClientUri.CallBackGet(const aMethodName: RawUtf8;
+  const aNameValueParameters: array of const; out aResponse: RawUtf8;
+  aTable: TOrmClass; aID: TID; aResponseHead: PRawUtf8): integer;
 var
-  url, header: RawUTF8;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  url, header: RawUtf8;
+  log: ISynLog; // for Enter auto-leave to work with FPC / Delphi 10.4+
 begin
   if self = nil then
     result := HTTP_UNAVAILABLE
   else
   begin
-    url := fModel.GetURICallBack(aMethodName, aTable, aID);
+    url := fModel.GetUriCallBack(aMethodName, aTable, aID);
     if high(aNameValueParameters) > 0 then
       url := url + UrlEncode(aNameValueParameters);
     log := fLogClass.Enter('CallBackGet %', [url], self);
-    result := URI(url, 'GET', @aResponse, @header).Lo;
+    result := Uri(url, 'GET', @aResponse, @header);
     if aResponseHead <> nil then
       aResponseHead^ := header;
     if (log <> nil) and
@@ -2280,61 +2396,61 @@ begin
   end;
 end;
 
-function TRestClientURI.CallBackGetResult(const aMethodName: RawUTF8;
+function TRestClientUri.CallBackGetResult(const aMethodName: RawUtf8;
   const aNameValueParameters: array of const; aTable: TOrmClass;
-  aID: TID): RawUTF8;
+  aID: TID): RawUtf8;
 var
-  resp: RawUTF8;
+  resp: RawUtf8;
 begin
   if CallBackGet(aMethodName, aNameValueParameters, resp, aTable, aID) = HTTP_SUCCESS then
-    result := JSONDecode(resp)
+    result := JsonDecode(resp)
   else
     result := '';
 end;
 
-function TRestClientURI.CallBackPut(const aMethodName, aSentData: RawUTF8;
-  out aResponse: RawUTF8; aTable: TOrmClass; aID: TID;
-  aResponseHead: PRawUTF8): integer;
+function TRestClientUri.CallBackPut(const aMethodName, aSentData: RawUtf8;
+  out aResponse: RawUtf8; aTable: TOrmClass; aID: TID;
+  aResponseHead: PRawUtf8): integer;
 begin
   result := callback(mPUT, aMethodName, aSentData, aResponse, aTable, aID, aResponseHead);
 end;
 
-function TRestClientURI.CallBack(method: TURIMethod; const aMethodName,
-  aSentData: RawUTF8; out aResponse: RawUTF8; aTable: TOrmClass;
-  aID: TID; aResponseHead: PRawUTF8): integer;
+function TRestClientUri.CallBack(method: TUriMethod; const aMethodName,
+  aSentData: RawUtf8; out aResponse: RawUtf8; aTable: TOrmClass;
+  aID: TID; aResponseHead: PRawUtf8): integer;
 var
-  u, m: RawUTF8;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  u, m: RawUtf8;
+  log: ISynLog;
 begin
   if (self = nil) or
      (method = mNone) then
     result := HTTP_UNAVAILABLE
   else
   begin
-    u := fModel.GetURICallBack(aMethodName, aTable, aID);
+    u := fModel.GetUriCallBack(aMethodName, aTable, aID);
     log := fLogClass.Enter('Callback %', [u], self);
-    m := TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TURIMethod), ord(method)));
-    result := URI(u, m, @aResponse, aResponseHead, @aSentData).Lo;
+    m := TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TUriMethod), ord(method)));
+    result := Uri(u, m, @aResponse, aResponseHead, @aSentData);
     InternalLog('% result=% resplen=%',
       [m, result, length(aResponse)], sllServiceReturn);
   end;
 end;
 
-procedure TRestClientURI.CallbackNonBlockingSetHeader(out Header: RawUTF8);
+procedure TRestClientUri.CallbackNonBlockingSetHeader(out Header: RawUtf8);
 begin
   // nothing to do by default (plain REST/HTTP works in blocking mode)
 end;
 
-function TRestClientURI.ServiceContainer: TServiceContainer;
+function TRestClientUri.ServiceContainer: TServiceContainer;
 begin
   if fServices = nil then
     fServices := TServiceContainerClient.Create(self);
   result := fServices;
 end;
 
-function TRestClientURI.ServiceRegister(const aInterfaces: array of PRttiInfo;
+function TRestClientUri.ServiceRegister(const aInterfaces: array of PRttiInfo;
   aInstanceCreation: TServiceInstanceImplementation;
-  const aContractExpected: RawUTF8): boolean;
+  const aContractExpected: RawUtf8): boolean;
 begin
   result := False;
   if (self = nil) or
@@ -2344,9 +2460,9 @@ begin
     aInterfaces, aInstanceCreation, aContractExpected);
 end;
 
-function TRestClientURI.ServiceRegister(aInterface: PRttiInfo;
+function TRestClientUri.ServiceRegister(aInterface: PRttiInfo;
   aInstanceCreation: TServiceInstanceImplementation;
-  const aContractExpected: RawUTF8; aIgnoreAnyException: boolean): TServiceFactory;
+  const aContractExpected: RawUtf8; aIgnoreAnyException: boolean): TServiceFactory;
 begin
   result := nil;
   if (self = nil) or
@@ -2367,8 +2483,8 @@ begin
     end;
 end;
 
-function TRestClientURI.ServiceRegisterClientDriven(aInterface: PRttiInfo;
-  out Obj; const aContractExpected: RawUTF8): boolean;
+function TRestClientUri.ServiceRegisterClientDriven(aInterface: PRttiInfo;
+  out Obj; const aContractExpected: RawUtf8): boolean;
 var
   Factory: TServiceFactory;
 begin
@@ -2382,43 +2498,43 @@ begin
     result := false;
 end;
 
-function TRestClientURI.ServiceDefine(const aInterfaces: array of TGUID;
+function TRestClientUri.ServiceDefine(const aInterfaces: array of TGUID;
   aInstanceCreation: TServiceInstanceImplementation;
-  const aContractExpected: RawUTF8): boolean;
+  const aContractExpected: RawUtf8): boolean;
 begin
   if self <> nil then
-    result := ServiceRegister(TInterfaceFactory.GUID2TypeInfo(aInterfaces),
+    result := ServiceRegister(TInterfaceFactory.Guid2TypeInfo(aInterfaces),
       aInstanceCreation, aContractExpected)
   else
     result := false;
 end;
 
-function TRestClientURI.ServiceDefine(const aInterface: TGUID;
+function TRestClientUri.ServiceDefine(const aInterface: TGUID;
   aInstanceCreation: TServiceInstanceImplementation;
-  const aContractExpected: RawUTF8; aIgnoreAnyException: boolean): TServiceFactoryClient;
+  const aContractExpected: RawUtf8; aIgnoreAnyException: boolean): TServiceFactoryClient;
 begin
   result := TServiceFactoryClient(
-    ServiceRegister(TInterfaceFactory.GUID2TypeInfo(aInterface),
+    ServiceRegister(TInterfaceFactory.Guid2TypeInfo(aInterface),
      aInstanceCreation, aContractExpected, aIgnoreAnyException));
 end;
 
-function TRestClientURI.ServiceDefineClientDriven(const aInterface: TGUID;
-  out Obj; const aContractExpected: RawUTF8): boolean;
+function TRestClientUri.ServiceDefineClientDriven(const aInterface: TGUID;
+  out Obj; const aContractExpected: RawUtf8): boolean;
 begin
   result := ServiceRegisterClientDriven(
-    TInterfaceFactory.GUID2TypeInfo(aInterface), Obj, aContractExpected);
+    TInterfaceFactory.Guid2TypeInfo(aInterface), Obj, aContractExpected);
 end;
 
-function TRestClientURI.ServiceDefineSharedAPI(const aInterface: TGUID;
-  const aContractExpected: RawUTF8; aIgnoreAnyException: boolean): TServiceFactoryClient;
+function TRestClientUri.ServiceDefineSharedApi(const aInterface: TGUID;
+  const aContractExpected: RawUtf8; aIgnoreAnyException: boolean): TServiceFactoryClient;
 begin
   try
     result := ServiceDefine(
       aInterface, sicShared, aContractExpected, aIgnoreAnyException);
     if result <> nil then
     begin
-      result.ParamsAsJSONObject := true; // no contract -> explicit parameters
-      result.ResultAsJSONObjectWithoutResult := true;
+      result.ParamsAsJsonObject := true; // no contract -> explicit parameters
+      result.ResultAsJsonObjectWithoutResult := true;
     end;
   except
     if aIgnoreAnyException then
@@ -2428,10 +2544,31 @@ begin
   end;
 end;
 
-function TRestClientURI.ServerTimestampSynchronize: boolean;
+function TRestClientUri.ServiceRetrieveAssociated(const aServiceName: RawUtf8;
+  out URI: TRestServerUriDynArray): boolean;
+var
+  json: RawUtf8;
+begin
+  result := (CallBackGet('stat', ['findservice', aServiceName], json) = HTTP_SUCCESS) and
+    (DynArrayLoadJson(URI, pointer({%H-}json), TypeInfo(TRestServerUriDynArray)) <> nil);
+end;
+
+function TRestClientUri.ServiceRetrieveAssociated(const aInterface: TGUID;
+  out URI: TRestServerUriDynArray): boolean;
+var
+  fact: TInterfaceFactory;
+begin
+  fact := TInterfaceFactory.Get(aInterface);
+  if fact = nil then
+    result := false
+  else
+    result := ServiceRetrieveAssociated(copy(fact.InterfaceName, 2, maxInt), URI);
+end;
+
+function TRestClientUri.ServerTimestampSynchronize: boolean;
 var
   status: integer;
-  resp: RawUTF8;
+  resp: RawUtf8;
 begin
   if self = nil then
   begin
@@ -2439,7 +2576,7 @@ begin
     exit;
   end;
   fServerTimestamp.Offset := 0.0001; // avoid endless recursive call
-  status := CallBackGet('Timestamp', [], resp);
+  status := CallBackGet('timestamp', [], resp);
   result := (status = HTTP_SUCCESS) and
             (resp <> '');
   if result then
@@ -2451,8 +2588,8 @@ begin
   end;
 end;
 
-function TRestClientURI.ServerRemoteLog(Sender: TBaseWriter;
-  Level: TSynLogInfo; const Text: RawUTF8): boolean;
+function TRestClientUri.ServerRemoteLog(Sender: TBaseWriter;
+  Level: TSynLogInfo; const Text: RawUtf8): boolean;
 begin
   if fRemoteLogThread = nil then
     result := InternalRemoteLogSend(Text)
@@ -2463,14 +2600,14 @@ begin
   end;
 end;
 
-function TRestClientURI.ServerRemoteLog(Level: TSynLogInfo;
-  const FormatMsg: RawUTF8; const Args: array of const): boolean;
+function TRestClientUri.ServerRemoteLog(Level: TSynLogInfo;
+  const FormatMsg: RawUtf8; const Args: array of const): boolean;
 begin
-  result := ServerRemoteLog(nil, Level, FormatUTF8('%00%    %',
-    [NowToString(false), LOG_LEVEL_TEXT[Level], FormatUTF8(FormatMsg, Args)]));
+  result := ServerRemoteLog(nil, Level, FormatUtf8('%00%    %',
+    [NowToString(false), LOG_LEVEL_TEXT[Level], FormatUtf8(FormatMsg, Args)]));
 end;
 
-procedure TRestClientURI.ServerRemoteLogStart(aLogClass: TSynLogClass;
+procedure TRestClientUri.ServerRemoteLogStart(aLogClass: TSynLogClass;
   aClientOwnedByFamily: boolean);
 begin
   if (fRemoteLogClass <> nil) or
@@ -2479,17 +2616,17 @@ begin
   SetLogClass(TSynLog.Void); // this client won't log anything
   if not ServerRemoteLog(sllClient, 'Remote Client % Connected', [self]) then
     // first test server without threading
-    raise ERestException.CreateUTF8('%.ServerRemoteLogStart: Connection ' +
+    raise ERestException.CreateUtf8('%.ServerRemoteLogStart: Connection ' +
       'to RemoteLog server impossible'#13#10'%', [LastErrorMessage]);
   if fRemoteLogThread <> nil then
-    raise ERestException.CreateUTF8('%.ServerRemoteLogStart twice', [self]);
+    raise ERestException.CreateUtf8('%.ServerRemoteLogStart twice', [self]);
   fRemoteLogThread := TRemoteLogThread.Create(self);
   fRemoteLogClass := aLogClass.Add;
   aLogClass.Family.EchoRemoteStart(self, ServerRemoteLog, aClientOwnedByFamily);
   fRemoteLogOwnedByFamily := aClientOwnedByFamily;
 end;
 
-procedure TRestClientURI.ServerRemoteLogStop;
+procedure TRestClientUri.ServerRemoteLogStop;
 begin
   if fRemoteLogClass = nil then
     exit;
@@ -2501,7 +2638,7 @@ begin
   fRemoteLogClass := nil;
 end;
 
-function TRestClientURI.SetUser(const aUserName, aPassword: RawUTF8;
+function TRestClientUri.SetUser(const aUserName, aPassword: RawUtf8;
   aHashedPassword: boolean): boolean;
 const
   HASH: array[boolean] of TRestClientSetUserPassword = (
@@ -2517,91 +2654,91 @@ begin
   result := true;
   if ((TrimU(aUserName) = '') or
       (PosExChar(SSPI_USER_CHAR, aUserName) > 0)) and
-     TRestClientAuthenticationSSPI.ClientSetUser(
+     TRestClientAuthenticationSspi.ClientSetUser(
        self, aUserName, aPassword, passKerberosSPN) then
     exit;
   {$endif DOMAINRESTAUTH}
-  result := TRestClientAuthentication.ClientSetUser(self, aUserName,
+  result := TRestClientAuthenticationDefault.ClientSetUser(self, aUserName,
     aPassword, HASH[aHashedPassword]);
 end;
 
 {$ifndef PUREMORMOT2}
 
-function TRestClientURI.Refresh(aID: TID; Value: TOrm;
+function TRestClientUri.Refresh(aID: TID; Value: TOrm;
   var Refreshed: boolean): boolean;
 begin
   result := fClient.Refresh(aID, Value, Refreshed);
 end;
 
-function TRestClientURI.List(const Tables: array of TOrmClass;
-  const SQLSelect: RawUTF8; const SQLWhere: RawUTF8): TOrmTable;
+function TRestClientUri.List(const Tables: array of TOrmClass;
+  const SqlSelect: RawUtf8; const SqlWhere: RawUtf8): TOrmTable;
 begin
-  result := fClient.List(Tables, SQLSelect, SQLWhere);
+  result := fClient.List(Tables, SqlSelect, SqlWhere);
 end;
 
-function TRestClientURI.ListFmt(const Tables: array of TOrmClass;
-  const SQLSelect, SQLWhereFormat: RawUTF8; const Args: array of const): TOrmTable;
+function TRestClientUri.ListFmt(const Tables: array of TOrmClass;
+  const SqlSelect, SqlWhereFormat: RawUtf8; const Args: array of const): TOrmTable;
 begin
-  result := fClient.ListFmt(Tables, SQLSelect, SQLWhereFormat, Args);
+  result := fClient.ListFmt(Tables, SqlSelect, SqlWhereFormat, Args);
 end;
 
-function TRestClientURI.ListFmt(const Tables: array of TOrmClass;
-  const SQLSelect, SQLWhereFormat: RawUTF8; const Args, Bounds: array of const): TOrmTable;
+function TRestClientUri.ListFmt(const Tables: array of TOrmClass;
+  const SqlSelect, SqlWhereFormat: RawUtf8; const Args, Bounds: array of const): TOrmTable;
 begin
-  result := fClient.ListFmt(Tables, SQLSelect, SQLWhereFormat, Args, Bounds);
+  result := fClient.ListFmt(Tables, SqlSelect, SqlWhereFormat, Args, Bounds);
 end;
 
-function TRestClientURI.TransactionBeginRetry(aTable: TOrmClass;
+function TRestClientUri.TransactionBeginRetry(aTable: TOrmClass;
   Retries: integer): boolean;
 begin
   result := fClient.TransactionBeginRetry(aTable, Retries);
 end;
 
-function TRestClientURI.BatchStart(aTable: TOrmClass;
+function TRestClientUri.BatchStart(aTable: TOrmClass;
   AutomaticTransactionPerRow: cardinal; Options: TRestBatchOptions): boolean;
 begin
   result := fClient.BatchStart(aTable, AutomaticTransactionPerRow, Options);
 end;
 
-function TRestClientURI.BatchStartAny(AutomaticTransactionPerRow: cardinal;
+function TRestClientUri.BatchStartAny(AutomaticTransactionPerRow: cardinal;
   Options: TRestBatchOptions): boolean;
 begin
   result := fClient.BatchStartAny(AutomaticTransactionPerRow, Options);
 end;
 
-function TRestClientURI.BatchAdd(Value: TOrm; SendData: boolean;
+function TRestClientUri.BatchAdd(Value: TOrm; SendData: boolean;
   ForceID: boolean; const CustomFields: TFieldBits): integer;
 begin
   result := fClient.BatchAdd(Value, SendData, ForceID, CustomFields);
 end;
 
-function TRestClientURI.BatchUpdate(Value: TOrm;
+function TRestClientUri.BatchUpdate(Value: TOrm;
   const CustomFields: TFieldBits; DoNotAutoComputeFields: boolean): integer;
 begin
   result := fClient.BatchUpdate(Value, CustomFields, DoNotAutoComputeFields);
 end;
 
-function TRestClientURI.BatchDelete(ID: TID): integer;
+function TRestClientUri.BatchDelete(ID: TID): integer;
 begin
   result := fClient.BatchDelete(ID);
 end;
 
-function TRestClientURI.BatchDelete(Table: TOrmClass; ID: TID): integer;
+function TRestClientUri.BatchDelete(Table: TOrmClass; ID: TID): integer;
 begin
   result := fClient.BatchDelete(Table, ID);
 end;
 
-function TRestClientURI.BatchCount: integer;
+function TRestClientUri.BatchCount: integer;
 begin
   result := fClient.BatchCount;
 end;
 
-function TRestClientURI.BatchSend(var Results: TIDDynArray): integer;
+function TRestClientUri.BatchSend(var Results: TIDDynArray): integer;
 begin
   result := fClient.BatchSend(Results);
 end;
 
-procedure TRestClientURI.BatchAbort;
+procedure TRestClientUri.BatchAbort;
 begin
   fClient.BatchAbort;
 end;
@@ -2616,21 +2753,21 @@ end;
 constructor TRestClientLibraryRequest.Create(aModel: TOrmModel;
   const LibraryName: TFileName);
 var
-  call: TRestURIParams;
+  call: TRestUriParams;
   h: TLibHandle;
 begin
   h := LibraryOpen(LibraryName);
   if h = 0 then
-    raise ERestException.CreateUTF8('%.Create: LoadLibrary(%) failed',
+    raise ERestException.CreateUtf8('%.Create: LoadLibrary(%) failed',
       [self, LibraryName]);
   fRequest := LibraryResolve(h, 'LibraryRequest');
   call.Init;
-  InternalURI(call);
+  InternalUri(call);
   if call.OutStatus <> HTTP_NOTFOUND then
   begin
     @fRequest := nil;
     LibraryClose(h);
-    raise ERestException.CreateUTF8(
+    raise ERestException.CreateUtf8(
       '%.Create: % doesn''t export a valid LibraryRequest() function (ret=%)',
       [self, LibraryName, call.OutStatus]);
   end;
@@ -2647,15 +2784,15 @@ end;
 
 destructor TRestClientLibraryRequest.Destroy;
 begin
+  inherited Destroy;
   if fLibraryHandle<>0 then
     LibraryClose(fLibraryHandle);
-  inherited;
 end;
 
-procedure TRestClientLibraryRequest.InternalURI(var Call: TRestURIParams);
+procedure TRestClientLibraryRequest.InternalUri(var Call: TRestUriParams);
 var
   f: TLibraryRequestFree;
-  h, r: PUTF8Char;
+  h, r: PUtf8Char;
   hl, rl: cardinal;
 begin
   if @fRequest = nil then
@@ -2668,6 +2805,7 @@ begin
   hl := length(call.InHead);
   r := nil;
   rl := 0;
+  Call.LowLevelConnectionFlags := [llfSecured]; // in-process execution
   Call.OutStatus := fRequest(
     pointer(Call.Url), pointer(Call.Method), pointer(call.InBody),
     length(Call.Url), length(Call.Method), length(call.InBody),
@@ -2676,7 +2814,6 @@ begin
   FastSetString(Call.OutBody, r, rl);
   f(h);
   f(r);
-  Call.LowLevelFlags := [llfSecured]; // direct library execution seems safe
 end;
 
 function TRestClientLibraryRequest.InternalCheckOpen: boolean;
@@ -2689,12 +2826,85 @@ begin
 end;
 
 
+{ ************ TInterfacedCallback/TBlockingCallback Classes }
 
-initialization
-  {$ifdef DOMAINRESTAUTH}
-  // setup mormot.lib.sspi/gssapi unit depending on the OS
-  InitializeDomainAuth;
-  {$endif DOMAINRESTAUTH}
+{ TInterfacedCallback }
+
+constructor TInterfacedCallback.Create(aRest: TRest; const aGuid: TGUID);
+begin
+  inherited Create;
+  fRest := aRest;
+  fInterface := aGuid;
+end;
+
+procedure TInterfacedCallback.CallbackRestUnregister;
+var
+  obj: pointer; // not IInvokable to avoid unexpected (recursive) Destroy call
+begin
+  if (fRest <> nil) and
+     (fRest.Services <> nil) and
+     not IsNullGuid(fInterface) then
+    if GetInterface(fInterface, obj) then
+    begin
+      fRest.Services.CallBackUnRegister(IInvokable(obj));
+      dec(fRefCount); // GetInterface() did increase the refcount
+      fRest := nil; // notify once
+    end;
+end;
+
+destructor TInterfacedCallback.Destroy;
+begin
+  CallbackRestUnregister;
+  inherited Destroy;
+end;
+
+
+{ TBlockingCallback }
+
+constructor TBlockingCallback.Create(aTimeOutMs: integer; aRest: TRest;
+  const aGuid: TGUID);
+begin
+  inherited Create(aRest, aGuid);
+  fProcess := TBlockingProcess.Create(aTimeOutMs, fSafe);
+end;
+
+destructor TBlockingCallback.Destroy;
+begin
+  FreeAndNil(fProcess);
+  inherited Destroy;
+end;
+
+procedure TBlockingCallback.CallbackFinished(aRestForLog: TRestOrm;
+  aServerUnregister: boolean);
+begin
+  if fProcess.NotifyFinished then
+  begin
+    if aRestForLog <> nil then
+      aRestForLog.LogClass.Add.Log(sllTrace, self);
+    if aServerUnregister then
+      CallbackRestUnregister;
+  end;
+end;
+
+function TBlockingCallback.WaitFor: TBlockingEvent;
+begin
+  result := fProcess.WaitFor;
+end;
+
+function TBlockingCallback.Reset: boolean;
+begin
+  result := fProcess.Reset;
+end;
+
+function TBlockingCallback.GetEvent: TBlockingEvent;
+begin
+  result := fProcess.Event;
+end;
+
+
+
+
+
 
 end.
 

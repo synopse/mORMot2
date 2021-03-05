@@ -9,11 +9,14 @@ uses
   baseunix,
   termio,
   sockets,
+  {$ifdef OSLINUX}
+  linux, // for epoll
+  {$endif OSLINUX}
   initc; // link clib='c' for our socket purpose
 
-{$ifdef BSD}
+{$ifdef OSBSDDARWIN}
   {$define USEPOLL} // epoll API is Linux-specific -> force use poll() on BSD
-{$endif BSD}
+{$endif OSBSDDARWIN}
 
 
 { ******** Sockets Type Definitions }
@@ -23,48 +26,47 @@ const
   NI_MAXSERV = 32;
 
   NO_ERROR = 0;
-  WSAEINTR = ESysEINTR;
   WSATRY_AGAIN = ESysEAGAIN;
   WSAEADDRNOTAVAIL = ESysEADDRNOTAVAIL;
   WSAECONNABORTED = ESysECONNABORTED;
   WSAETIMEDOUT = ESysETIMEDOUT;
   WSAEMFILE = ESysEMFILE;
 
-  {$ifdef FREEBSD}
+  {$ifdef OSFREEBSD}
   NI_NUMERICHOST = 2;
   NI_NUMERICSERV = 8;
   {$else}
   NI_NUMERICHOST = 1;
   NI_NUMERICSERV = 2;
-  {$endif FREEBSD}
+  {$endif OSFREEBSD}
 
   FIONREAD = termio.FIONREAD;
   FIONBIO  = termio.FIONBIO;
 
-  {$ifdef BSD}
+  {$ifdef OSBSDDARWIN}
 
-    {$ifndef OPENBSD}
-    {$ifdef DARWIN}
+    {$ifndef OSOPENBSD}
+    {$ifdef OSDARWIN}
     SO_NOSIGPIPE = $1022;
     {$else}
     SO_NOSIGPIPE = $800;
-    {$endif DARWIN}
-    {$endif OPENBSD}
+    {$endif OSDARWIN}
+    {$endif OSOPENBSD}
 
-    {$ifndef OPENBSD}
+    {$ifndef OSOPENBSD}
     // Works under MAC OS X and FreeBSD, but is undocumented, so FPC doesn't include it
     MSG_NOSIGNAL  = $20000;  // Do not generate SIGPIPE.
     {$else}
     MSG_NOSIGNAL  = $400;
-    {$endif OPENBSD}
-    {$else}
+    {$endif OSOPENBSD}
+  {$else}
     {$ifdef SUNOS}
     MSG_NOSIGNAL = $20000;  // Do not generate SIGPIPE.
     {$else}
     MSG_NOSIGNAL = sockets.MSG_NOSIGNAL; // Do not generate SIGPIPE
     {$endif SUNOS}
 
-  {$endif BSD}
+  {$endif OSBSDDARWIN}
 
   _ST: array[TNetLayer] of integer = (
     SOCK_STREAM,
@@ -136,120 +138,60 @@ type
   PPollFD = ^TPollFD;
   TPollFDDynArray = array of TPollFD;
 
-{$ifndef USEPOLL}
-
-const
-  // associated file is available for read operations
-  EPOLLIN  = $01;
-  // urgent data available for read operations
-  EPOLLPRI = $02;
-  // associated file is available for write operations
-  EPOLLOUT = $04;
-  // error condition happened on the associated file descriptor
-  EPOLLERR = $08;
-  // hang up happened on the associated file descriptor
-  EPOLLHUP = $10;
-  // sets the One-Shot behaviour for the associated file descriptor
-  // - i.e. after an event is pulled out, the file descriptor is disabled
-  EPOLLONESHOT = $40000000;
-  // sets the Edge-Triggered (ET) behaviour  for  the  associated file descriptor
-  EPOLLET = $80000000;
-
-  EPOLL_CTL_ADD = 1;
-  EPOLL_CTL_DEL = 2;
-  EPOLL_CTL_MOD = 3;
-
-type
-  /// application-level data structure for epoll
-  TEPollData = record
-    case integer of
-      0: (
-         ptr: pointer);
-      1: (
-         fd: integer);
-      2: (
-         u32: cardinal);
-      3: (
-         u64: Int64);
-      4: (
-         obj: TObject);
-  end;
-  PEPollData = ^TEPollData;
-
-  /// epoll descriptor data structure
-  TEPollEvent = packed record
-    events: cardinal;
-    data: TEpollData;
-  end;
-  PEPollEvent = ^TEPollEvent;
-  TEPollEventDynArray = array of TEPollEvent;
-
-{$endif USEPOLL}
 
 
 { ******** Sockets API calls via the libc }
 
 function gethostbyname(name: PAnsiChar): PHostEnt; cdecl;
   external clib name 'gethostbyname';
-function socket(af, struct, protocol: integer): TSocket; cdecl;
+function socket(af, struct, protocol: integer): integer; cdecl;
   external clib name 'socket';
-function setsockopt(s: TSocket; level, optname: integer;
+function setsockopt(s: integer; level, optname: integer;
    optval: pointer; optlen: integer): integer; cdecl;
   external clib name 'setsockopt';
-function ioctlsocket(s: TSocket; cmd: cardinal; arg: PCardinal): integer; cdecl;
+function ioctlsocket(s: integer; cmd: cardinal; arg: PCardinal): integer; cdecl;
   external clib name 'ioctl';
-function shutdown(s: TSocket; how: integer): integer; cdecl;
+function shutdown(s: integer; how: integer): integer; cdecl;
   external clib name 'shutdown';
-function closesocket(s: TSocket): integer; cdecl;
+function closesocket(s: integer): integer; cdecl;
   external clib name 'close';
 function getnameinfo(addr: PSockAddr; namelen: integer; host: PAnsiChar;
    hostlen: DWORD; serv: PAnsiChar; servlen: DWORD; flags: integer): integer; cdecl;
   external clib name 'getnameinfo';
-function bind(s: TSocket; addr: PSockAddr; namelen: integer): integer; cdecl;
+function bind(s: integer; addr: PSockAddr; namelen: integer): integer; cdecl;
   external clib name 'bind';
-function listen(s: TSocket; backlog: integer): integer; cdecl;
+function listen(s: integer; backlog: integer): integer; cdecl;
   external clib name 'listen';
-function accept(s: TSocket; addr: PSockAddr; var addrlen: integer): TSocket; cdecl;
+function accept(s: integer; addr: PSockAddr; var addrlen: integer): integer; cdecl;
   external clib name 'accept';
-function connect(s: TSocket; name: PSockAddr; namelen: integer): integer; cdecl;
+function connect(s: integer; name: PSockAddr; namelen: integer): integer; cdecl;
   external clib name 'connect';
 function select(nfds: integer; readfds, writefds, exceptfds: PFDSet;
    timeout: PTimeVal): integer; cdecl;
   external clib name 'select';
-function recv(s: TSocket; Buf: Pointer; len, flags: integer): integer; cdecl;
+function recv(s: integer; Buf: Pointer; len, flags: integer): integer; cdecl;
   external clib name 'recv';
-function recvfrom(s: TSocket; Buf: Pointer; len, flags: integer;
+function recvfrom(s: integer; Buf: Pointer; len, flags: integer;
    from: PSockAddr; fromlen: Pinteger): integer; cdecl;
   external clib name 'recvfrom';
-function send(s: TSocket; Buf: Pointer; len, flags: integer): integer; cdecl;
+function send(s: integer; Buf: Pointer; len, flags: integer): integer; cdecl;
   external clib name 'send';
-function sendto(s: TSocket; Buf: Pointer; len, flags: integer;
+function sendto(s: integer; Buf: Pointer; len, flags: integer;
    addrto: PSockAddr; tolen: integer): integer; cdecl;
   external clib name 'sendto';
-function getpeername(s: TSocket; name: PSockAddr; var namelen: integer): integer; cdecl;
+function getpeername(s: integer; name: PSockAddr; var namelen: integer): integer; cdecl;
   external clib name 'getpeername';
 
-{$ifdef DARWIN}
-function poll(fds: PPollFD; nfds, timeout: integer): integer;
-begin // circumvent linking issue on Mac OSX
+{$ifdef OSDARWIN}
+// circumvent linking issue on Mac OSX
+function poll(fds: PPollFD; nfds, timeout: integer): integer; inline;
+begin
   result := fppoll(pointer(fds), nfds, timeout);
 end;
 {$else}
 function poll(fds: PPollFD; nfds, timeout: integer): integer; cdecl;
   external clib name 'poll';
-{$endif DARWIN}
-
-{$ifndef USEPOLL}
-// epoll is Linux-Specific
-function epoll_create(size: integer): integer;
-  external clib name 'epoll_create';
-function epoll_ctl(epfd, op, fd: integer; event: PEPollEvent): integer;
-  external clib name 'epoll_ctl';
-function epoll_wait(epfd: integer; events: PEPollEvent; maxevents, timeout: integer): integer;
-  external clib name 'epoll_wait';
-function epoll_close(epfd: integer): integer;
-  external clib name 'close';
-{$endif USEPOLL}
+{$endif OSDARWIN}
 
 function sockerrno: integer; inline;
 begin
@@ -261,7 +203,7 @@ end;
 
 { TNetAddr }
 
-function TNetAddr.SetFrom(const address, addrport: RawUTF8;
+function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
 var
   h: PHostEnt;
@@ -370,14 +312,14 @@ begin
   if linger > 0 then
   begin
     v.l_onoff := ord(true);
-    {$ifdef BSD}
+    {$ifdef OSBSDDARWIN}
     SetOpt(SOL_SOCKET, SO_REUSEPORT, @v.l_onoff, SizeOf(v.l_onoff));
-    {$ifndef OpenBSD}
+    {$ifndef OSOPENBSD}
     SetOpt(SOL_SOCKET, SO_NOSIGPIPE, @v.l_onoff, SizeOf(v.l_onoff));
-    {$endif OpenBSD}
+    {$endif OSOPENBSD}
     {$else}
     SetOpt(SOL_SOCKET, SO_REUSEADDR, @v.l_onoff, SizeOf(v.l_onoff));
-    {$endif BSD}
+    {$endif OSBSDDARWIN}
   end;
 end;
 
@@ -401,8 +343,7 @@ begin
   if res < 0 then
   begin
     res := sockerrno;
-    if (res = WSATRY_AGAIN) or
-       (res = WSAEINTR) then
+    if res = WSATRY_AGAIN then
       // timeout, not a true error
       result := [];
     exit;
@@ -606,7 +547,7 @@ type
   TPollSocketEpoll = class(TPollSocketAbstract)
   protected
     fEPFD: integer;
-    fResults: TEPollEventDynArray;
+    fResults: array of EPoll_Event;
   public
     constructor Create; override;
     destructor Destroy; override;
@@ -632,14 +573,14 @@ end;
 
 destructor TPollSocketEpoll.Destroy;
 begin
-  epoll_close(fEPFD);
+  fpClose(fEPFD);
   inherited;
 end;
 
 function TPollSocketEpoll.Subscribe(socket: TNetSocket; events: TPollSocketEvents;
   tag: TPollSocketTag): boolean;
 var
-  e: TEPollEvent;
+  e: EPoll_Event;
 begin
   result := false;
   if (self = nil) or
@@ -648,22 +589,22 @@ begin
      (byte(events) = 0) or
      (fCount = fMaxSockets) then
     exit;
-  e.data.u64 := tag;
+  e.data.ptr := pointer(tag); // don't use data.u64
   if pseRead in events then
     e.events := EPOLLIN
   else
     e.events := 0;
   if pseWrite in events then
     e.events := e.events or EPOLLOUT;
-  // EPOLLERR and EPOLLHUP are always implicitly defined
-  result := epoll_ctl(fEPFD,EPOLL_CTL_ADD, TSocket(socket), @e) = NO_ERROR;
+  // EPOLLERR and EPOLLHUP are always implicitly tracked
+  result := epoll_ctl(fEPFD, EPOLL_CTL_ADD, TSocket(socket), @e) = NO_ERROR;
   if result then
     inc(fCount);
 end;
 
 function TPollSocketEpoll.Unsubscribe(socket: TNetSocket): boolean;
 var
-  e: TEPollEvent; // should be there even if not used
+  e: EPoll_Event; // should be there even if not used
 begin
   if (self = nil) or
      (socket = nil) or
@@ -728,7 +669,8 @@ end;
 
 procedure InitializeUnit;
 begin
-  SocketAPIVersion := OSVersionShort;
+  SocketAPIVersion := OSVersionShort +
+    {$ifdef USEPOLL} ' poll' {$else} ' epoll' {$endif USEPOLL};
 end;
 
 procedure FinalizeUnit;

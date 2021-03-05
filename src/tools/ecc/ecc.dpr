@@ -19,10 +19,10 @@ program ecc;
 
 {$I ..\..\mormot.defines.inc}
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
   {$apptype console}
   {$R ..\..\mormot.win.default.manifest.res}
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 uses
   {$I ..\..\mormot.uses.inc}
@@ -51,20 +51,20 @@ uses
 
 {$R *.res}
 
-function ProcessCommandLine: TECCCommandError;
+function ProcessCommandLine: TEccCommandError;
 var
-  cmd: RawUTF8;
-  main: TECCCommand;
+  cmd: RawUtf8;
+  main: TEccCommand;
   sw: ICommandLine;
 begin
-  cmd := StringToUTF8(ParamStr(1));
-  main := TECCCommand(
-    GetEnumNameValueTrimmed(TypeInfo(TECCCommand), pointer(cmd), length(cmd)));
+  cmd := StringToUtf8(ParamStr(1));
+  main := TEccCommand(
+    GetEnumNameValueTrimmed(TypeInfo(TEccCommand), pointer(cmd), length(cmd)));
   if main = ecChain then
     sw := TCommandLine.CreateAsArray({firstparam=}2)
   else
     sw := TCommandLine.Create;
-  result := ECCCommand(main, sw);
+  result := EccCommand(main, sw);
   if result = eccUnknownCommand then
   begin
     TextColor(ccLightGreen);
@@ -73,45 +73,45 @@ begin
     TextColor(ccGreen);
     writeln('Using mormot.core.ecc '  + SYNOPSE_FRAMEWORK_VERSION +  #13#10);
     TextColor(ccLightGray);
-    writeln(ExeVersion.ProgramName,
+    writeln(Executable.ProgramName,
       ' help');
-    writeln(ExeVersion.ProgramName,
+    writeln(Executable.ProgramName,
       ' new -auth key.private -authpass authP@ssW0rd -authrounds 60000'#13#10 + 
       '      -issuer toto@toto.com -start 2016-10-30 -days 30'#13#10 + 
       '      -newpass P@ssw0RD@ -newrounds 60000'); // -splitfiles 1');
-    writeln(ExeVersion.ProgramName,
+    writeln(Executable.ProgramName,
       ' rekey -auth key.private -authpass P@ssW0rd -authrounds 60000'#13#10 + 
       '      -newpass newP@ssw0RD@ -newrounds 60000');
-    writeln(ExeVersion.ProgramName,
+    writeln(Executable.ProgramName,
       ' sign -file some.doc -auth key.private -pass P@ssW0rd -rounds 60000');
-    writeln(ExeVersion.ProgramName,
+    writeln(Executable.ProgramName,
       ' verify -file some.doc -auth key.public');
-    writeln(ExeVersion.ProgramName,
+    writeln(Executable.ProgramName,
       ' source -auth key.private -pass P@ssW0rd -rounds 60000'#13#10 + 
       '      -const MY_PRIVKEY -comment "My Private Key"');
-    writeln(ExeVersion.ProgramName,
+    writeln(Executable.ProgramName,
       ' infopriv -auth key.private -pass P@ssW0rd -rounds 60000 [-json key.json]');
-    writeln(ExeVersion.ProgramName,
+    writeln(Executable.ProgramName,
       ' chain file1.public file2.public file3.public ...');
-    writeln(ExeVersion.ProgramName,
+    writeln(Executable.ProgramName,
       ' chainall');
-    writeln(ExeVersion.ProgramName,
+    writeln(Executable.ProgramName,
       ' crypt -file some.doc -out some.doc.synecc -auth key.public'#13#10 + 
       '      -saltpass salt -saltrounds 60000 [-algo 0]');
-    writeln(ExeVersion.ProgramName,
+    writeln(Executable.ProgramName,
       ' decrypt -file some.doc.synecc -out some.doc -auth key.private'#13#10 + 
       '      -authpass P@ssW0rd -authrounds 60000 -saltpass salt -saltrounds 60000');
-    writeln(ExeVersion.ProgramName,
+    writeln(Executable.ProgramName,
       ' infocrypt -file some.doc.synecc [-rawfile some.raw][-json some.json]');
-    writeln(ExeVersion.ProgramName,
+    writeln(Executable.ProgramName,
       ' aeadcrypt -file some.doc -out some.doc.synaead -pass P@ssW0rd -salt salt'#13#10 + 
       '       -rounds 60000');
-    writeln(ExeVersion.ProgramName,
+    writeln(Executable.ProgramName,
       ' aeaddecrypt -file some.doc -out some.doc.synaead -pass P@ssW0rd -salt salt'#13#10 + 
       '       -rounds 60000');
-    writeln(ExeVersion.ProgramName,
+    writeln(Executable.ProgramName,
       ' cheatinit -newpass MasterP@ssw0RD@ -newrounds 100000');
-    writeln(ExeVersion.ProgramName,
+    writeln(Executable.ProgramName,
       ' cheat -auth key.private -authpass MasterP@ssw0RD@ -authrounds 100000');
     writeln(#10'Note that you can add the -noprompt switch for no console interactivity.');
   end;

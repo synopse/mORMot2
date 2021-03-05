@@ -1,6 +1,6 @@
 # mORMot Framework Licencing Terms
 
-**The mORMot framework. Copyright (C) 2020 Arnaud Bouchez**
+**The mORMot framework. Copyright (C) 2021 Arnaud Bouchez**
 
 **Synopse Informatique - https://synopse.info**
 
@@ -27,6 +27,14 @@ In short:
 
 Note that the documentation is under GPL 3.0 license only, as stated in its introduction.
 
+
+## Legal Notice
+
+There are countries that restrict the use, import, export of cryptographic software. Before keeping, using, or distributing the software, make sure that you comply to these restrictions. If (for any reason) you are unable to do so, you are not allowed to download, use, distribute the software.
+
+If you are residing in a country that allows software patents you must verify that no part of the software is covered by a patent in your country. If (for any reason) you are unable to do so, you are not allowed to use or distribute the software.
+
+
 ## Publish modifications and credit for the library
 
 In all cases, any modification made to this source code **should** be published by any mean (e.g. a download link), even in case of MPL. If you need any additional feature, use the forums and we may introduce a patch to the main framework trunk.
@@ -39,7 +47,7 @@ For instance, if you select the MPL license, here are the requirements:
 - You accept the license terms with no restriction - see http://www.mozilla.org/MPL/2.0/FAQ.html for additional information;
 - You have to publish any modified unit in a public web site (e.g. http://SoftwareCompany.com/MPL), with a description of applied modifications, and no removal of the original license header in source code;
 - You make appear some notice available in the program (About box, documentation, online help), stating e.g.
-*This software uses some third-party code of the Synopse mORMot framework (C) 2020 Arnaud Bouchez - https://synopse.info - under Mozilla Public License 1.1; modified source code is available at http://SoftwareCompany.com/MPL*
+*This software uses some third-party code of the Synopse mORMot framework (C) 2021 Arnaud Bouchez - https://synopse.info - under Mozilla Public License 1.1; modified source code is available at http://SoftwareCompany.com/MPL*
 
 
 ## Derivate Open Source Works
@@ -56,7 +64,7 @@ If you want to include part of the framework source code in your own open-source
       Sample based on official mORMot's sample
       "SQLite3\Samples\09 - HttpApi web server\HttpApiServer.dpr"
 
-      Synopse mORMot framework. Copyright (C) 2020 Arnaud Bouchez
+      Synopse mORMot framework. Copyright (C) 2021 Arnaud Bouchez
         Synopse Informatique - https://synopse.info
       Original tri-license: MPL 1.1/GPL 2.0/LGPL 2.1
     }

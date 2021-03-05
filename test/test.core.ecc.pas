@@ -25,6 +25,11 @@ uses
   mormot.core.jwt,
   mormot.core.ecc256r1,
   mormot.core.ecc,
+  mormot.core.perf,
+  mormot.core.crypto.openssl,
+  {$ifdef USE_OPENSSL}
+  mormot.lib.openssl11,
+  {$endif USE_OPENSSL}
   mormot.app.console,
   mormot.tools.ecc;
 
@@ -33,27 +38,24 @@ type
   // in the mormot.core.ecc and mormot.core.ecc256r1 unit
   TTestCoreEcc = class(TSynTestCase)
   protected
-    pub: array of TECCPublicKey;
-    priv: array of TECCPrivateKey;
-    sign: array of TECCSignature;
-    hash: TECCHash;
+    pub: array of TEccPublicKey;
+    priv: array of TEccPrivateKey;
+    sign: array of TEccSignature;
+    hash: TEccHash;
   published
     /// avoid regression among platforms and compilers
     procedure ReferenceVectors;
-    /// ECC private/public keys generation
-    procedure _ecc_make_key;
-    /// ECDSA signature computation
-    procedure _ecdsa_sign;
-    /// ECDSA signature verification
-    procedure _ecdsa_verify;
-    /// ECDH key derivation
-    procedure _ecdh_shared_secret;
+    /// ECC private/public keys generation, signature, verifiaction and secret
+    procedure ECC;
     /// ECDSA certificates chains and digital signatures
     procedure CertificatesAndSignatures;
     /// run most commands of the ECC tool
-    procedure ECCCommandLineTool;
+    procedure EccCommandLineTool;
     /// ECDHE stream protocol
     procedure ECDHEStreamProtocol;
+    {$ifdef USE_OPENSSL}
+    procedure _OpenSSL;
+    {$endif USE_OPENSSL}
   end;
 
 
@@ -64,23 +66,23 @@ implementation
 
 const
   {$ifdef CPU64}
-  ECC_COUNT = 200;
+  ECC_COUNT = 301;
   {$else}
-  ECC_COUNT = 50;
+  ECC_COUNT = 51;
   {$endif CPU64}
 
 procedure TTestCoreEcc.ReferenceVectors;
 var
-  pr1, pr2: TECCPrivateKey;
-  pu1, pu2: TECCPublicKey;
-  h1, h2: TECCHash;
-  si1, si2: TECCSignature;
-  s1, s2, s3: TECCSecretKey;
+  pr1, pr2: TEccPrivateKey;
+  pu1, pu2: TEccPublicKey;
+  h1, h2: TEccHash;
+  si1, si2: TEccSignature;
+  s1, s2, s3: TEccSecretKey;
 begin
   SetLength(pub, ECC_COUNT);
   SetLength(priv, ECC_COUNT);
   SetLength(sign, ECC_COUNT);
-  TAESPRNG.Main.FillRandom(@hash, sizeof(hash));
+  TAesPrng.Main.FillRandom(@hash, sizeof(hash));
   Check(mormot.core.text.HexToBin(PAnsiChar(
     'DC5B79BD481E536DD8075D06C18D42B25B557B4671017BA2A26102B69FD9B70A'),
     @pr1, sizeof(pr1)));
@@ -108,14 +110,14 @@ begin
   Check(mormot.core.text.HexToBin(PAnsiChar(
     '51A0C8018EC725F9B9F821D826FEEC4CAE8843066685522F1961D25935EAA39E'),
     @s1, sizeof(s1)));
-  Check(ecdsa_verify(pu1, h1, si1));
-  Check(ecdsa_verify(pu2, h2, si2));
+  Check(Ecc256r1Verify(pu1, h1, si1));
+  Check(Ecc256r1Verify(pu2, h2, si2));
   FillZero(s2);
-  Check(ecdh_shared_secret(pu1, pr2, s2));
+  Check(Ecc256r1SharedSecret(pu1, pr2, s2));
   Check(IsEqual(s1, s2));
   Check(CompareMem(@s1, @s2, sizeof(s1)));
   FillZero(s3);
-  Check(ecdh_shared_secret(pu2, pr1, s3));
+  Check(Ecc256r1SharedSecret(pu2, pr1, s3));
   Check(IsEqual(s1, s3));
   Check(CompareMem(@s1, @s3, sizeof(s1)));
   Check(ecdsa_verify_pas(pu1, h1, si1));
@@ -128,51 +130,46 @@ begin
   Check(IsEqual(s1, s3));
 end;
 
-procedure TTestCoreEcc._ecc_make_key;
+procedure TTestCoreEcc.ECC;
 var
   i: integer;
+  timer: TPrecisionTimer;
+  sec1, sec2: TEccSecretKey;
 begin
+  Check(ecc_make_key_pas(pub[0], priv[0])); // also validate our pascal code
+  timer.Start;
+  for i := 1 to ECC_COUNT - 1 do
+    Check(Ecc256r1MakeKey(pub[i], priv[i]));
+  NotifyTestSpeed('Ecc256r1MakeKey', ECC_COUNT - 1, 0, @timer);
+  timer.Start;
+  for i := 0 to ECC_COUNT - 2 do
+    Check(Ecc256r1Sign(priv[i], hash, sign[i]));
+  NotifyTestSpeed('Ecc256r1Sign', ECC_COUNT - 1, 0, @timer);
+  Check(ecdsa_sign_pas(priv[ECC_COUNT - 1], hash, sign[ECC_COUNT - 1]));
+  Check(ecdsa_verify_pas(pub[7], hash, sign[7]));
+  timer.Start;
   for i := 0 to ECC_COUNT - 1 do
-    Check(ecc_make_key(pub[i], priv[i]));
-end;
-
-procedure TTestCoreEcc._ecdsa_sign;
-var
-  i: integer;
-begin
-  for i := 0 to ECC_COUNT - 1 do
-    Check(ecdsa_sign(priv[i], hash, sign[i]));
-end;
-
-procedure TTestCoreEcc._ecdsa_verify;
-var
-  i: integer;
-begin
-  for i := 0 to ECC_COUNT - 1 do
-    check(ecdsa_verify(pub[i], hash, sign[i]));
-end;
-
-procedure TTestCoreEcc._ecdh_shared_secret;
-var
-  sec1, sec2: TECCSecretKey;
-  i: integer;
-begin
+    if i <> 7 then
+      check(Ecc256r1Verify(pub[i], hash, sign[i]));
+  NotifyTestSpeed('Ecc256r1Verify', ECC_COUNT - 1, 0, @timer);
+  timer.Start;
   for i := 0 to ECC_COUNT - 2 do
   begin
-    check(ecdh_shared_secret(pub[i], priv[i + 1], sec1));
-    check(ecdh_shared_secret(pub[i + 1], priv[i], sec2));
+    check(Ecc256r1SharedSecret(pub[i], priv[i + 1], sec1));
+    check(Ecc256r1SharedSecret(pub[i + 1], priv[i], sec2));
     check(IsEqual(sec1, sec2));
   end;
+  NotifyTestSpeed('Ecc256r1SharedSecret', (ECC_COUNT - 2) * 2, 0, @timer);
 end;
 
 procedure TTestCoreEcc.CertificatesAndSignatures;
 const
-  PUBPRIV64: RawUTF8 =
+  PUBPRIV64: RawUtf8 =
     'AQAKAAoAFAAp49cdwmwTSgk7ocIs+iWCLVmLFDvnzMbgAAAAAAAAACnj1x3CbBN' +
     'KCTuhwiz6JYItWYsUO+fMxuAAAAAAAAAAAgm92LeP/SogOQAmFAKppFHFPPn1vRERJ1dwk5y8' +
     'AloD66iKgas4FCX8yprik12Unvk3K45kS1tIkga7U273SBAoDj5WP1ENURn7znVgPm5UPrMZO' +
     'vaZNdUuDPlCy1uzNJeQTIkgAAAAnddux+slXpcupBr3m2g/2skZyPIT0Y2mk9As06J2mMY=';
-  PUBPRIVJSON: RawUTF8 =
+  PUBPRIVJSON: RawUtf8 =
     '{"Version":1,"Serial":"29E3D71DC26C134A093BA1C22CFA2582",' +
      '"Issuer":"synopse.info","IssueDate":"2016-08-11","ValidityStart":' +
      '"2016-08-11","ValidityEnd":"2016-08-21","AuthoritySerial":' +
@@ -203,19 +200,19 @@ const
   MYPRIVKEY_PASS = '123456';
   MYPRIVKEY_CYPH = '4e/QgInP';
 var
-  selfsignedroot, secret: TECCCertificateSecret;
-  cert: TECCCertificate;
-  sav, json, serial: RawUTF8;
+  selfsignedroot, secret: TEccCertificateSecret;
+  cert: TEccCertificate;
+  sav, json, serial: RawUtf8;
   bin: RawByteString;
-  json1, json2, jsonchain: RawUTF8;
-  chain: TECCCertificateChain;
-  sign: TECCSignatureCertified;
-  signcontent: TECCSignatureCertifiedContent;
+  json1, json2, jsonchain: RawUtf8;
+  chain: TEccCertificateChain;
+  sign: TEccSignatureCertified;
+  signcontent: TEccSignatureCertifiedContent;
 begin
-  chain := TECCCertificateChain.Create;
+  chain := TEccCertificateChain.Create;
   try
     check(chain.Count = 0);
-    selfsignedroot := TECCCertificateSecret.CreateNew(nil, 'synopse.info', 10);
+    selfsignedroot := TEccCertificateSecret.CreateNew(nil, 'synopse.info', 10);
     check(selfsignedroot.IsSelfSigned);
     check(selfsignedroot.HasSecret);
     check(chain.IsValid(nil) = ecvBadParameter);
@@ -227,7 +224,7 @@ begin
     check(chain.Count = 1);
     check(not chain.IsValidCached);
     chain.IsValidCached := true;
-    selfsignedroot := TECCCertificateSecret.CreateNew(nil, 'mORMot.net', 0);
+    selfsignedroot := TEccCertificateSecret.CreateNew(nil, 'mORMot.net', 0);
     serial := selfsignedroot.Serial;
     check(length(serial) = 32);
     check(selfsignedroot.IsSelfSigned);
@@ -239,14 +236,14 @@ begin
     check(chain.Count = 1);
     check(chain.AddSelfSigned(selfsignedroot) = 1);
     check(chain.Count = 2);
-    secret := TECCCertificateSecret.CreateNew(selfsignedroot, 'google.fr');
+    secret := TEccCertificateSecret.CreateNew(selfsignedroot, 'google.fr');
     check(chain.Count = 2);
     check(secret.HasSecret);
     check(not secret.IsSelfSigned);
     check(chain.IsValid(secret) = ecvValidSigned);
     json1 := ObjectToJson(secret);
     sav := secret.PublicToBase64;
-    cert := TECCCertificate.CreateFromBase64(sav);
+    cert := TEccCertificate.CreateFromBase64(sav);
     check(cert.Serial = secret.Serial);
     check(not cert.IsSelfSigned);
     check(chain.IsValid(cert) = ecvValidSigned);
@@ -259,10 +256,10 @@ begin
     CheckEqual(json1, json2, 'serialization trim private key');
     secret.Free;
     inc(sav[10]); // corrupt
-    cert := TECCCertificate.Create;
+    cert := TEccCertificate.Create;
     check(not cert.FromBase64(sav));
     check(chain.IsValid(cert) = ecvCorrupted);
-    secret := TECCCertificateSecret.CreateFromBase64(PUBPRIV64);
+    secret := TEccCertificateSecret.CreateFromBase64(PUBPRIV64);
     check(secret.HasSecret);
     check(secret.IsSelfSigned);
     check(chain.IsValid(secret.Content, true) = ecvValidSelfSigned);
@@ -281,13 +278,13 @@ begin
     secret.Free;
     cert.Free;
     check(selfsignedroot.SaveToSecureFile('pass', '.', 64, 1000));
-    secret := TECCCertificateSecret.CreateNew(selfsignedroot, 'toto.com');
+    secret := TEccCertificateSecret.CreateNew(selfsignedroot, 'toto.com');
     check(chain.Count = 3);
     check(chain.IsValid(secret) = ecvValidSigned);
     json := chain.SaveToJson;
     check(length(json) = 718, 'certificates have fixed len');
     chain.Free; // will release selfsignedroot
-    chain := TECCCertificateChain.Create;
+    chain := TEccCertificateChain.Create;
     check(chain.IsValid(secret) = ecvUnknownAuthority);
     check(chain.LoadFromJson(json));
     check(chain.SaveToJson = json);
@@ -299,21 +296,21 @@ begin
     bin := secret.SaveToSecureBinary('toto', 64, 1000);
     check(length(bin) = 2320);
     secret.Free;
-    secret := TECCCertificateSecret.CreateFromSecureBinary(@MYPRIVKEY,
+    secret := TEccCertificateSecret.CreateFromSecureBinary(@MYPRIVKEY,
       MYPRIVKEY_LEN, MYPRIVKEY_PASS, MYPRIVKEY_ROUNDS);
     check(secret.Serial = '29E3D71DC26C134A093BA1C22CFA2582');
     check(chain.IsValid(secret.Content, true) = ecvValidSelfSigned);
     json2 := ObjectToJson(secret);
     check(json1 = json2);
     secret.Free;
-    secret := TECCCertificateSecret.Create;
+    secret := TEccCertificateSecret.Create;
     check(chain.IsValid(secret) = ecvCorrupted);
     check(not secret.LoadFromSecureBinary(bin, 'titi', 1000));
     check(secret.LoadFromSecureBinary(bin, 'toto', 1000));
     check(chain.IsValid(secret) = ecvValidSigned);
     chain.Add(secret);
     check(chain.Count = 4);
-    sign := TECCSignatureCertified.CreateNew(secret, pointer(json), length(json));
+    sign := TEccSignatureCertified.CreateNew(secret, pointer(json), length(json));
     check(sign.Check);
     check(sign.AuthoritySerial = secret.Serial);
     check(sign.AuthorityIssuer = secret.Issuer);
@@ -321,10 +318,10 @@ begin
     bin := sign.SaveToDERBinary;
     check(length(bin) >= ECC_BYTES * 2 + 6);
     sign.Free;
-    sign := TECCSignatureCertified.CreateFromBase64(sav);
+    sign := TEccSignatureCertified.CreateFromBase64(sav);
     check(sign.Check);
     check(sign.Version = 1);
-    check(sign.Date = ECCText(NowECCDate));
+    check(sign.Date = EccText(NowEccDate));
     check(sign.AuthoritySerial = secret.Serial);
     check(sign.AuthorityIssuer = 'toto.com');
     check(sign.SaveToDERBinary = bin);
@@ -345,13 +342,13 @@ begin
     check(chain.Count = 0);
     check(chain.IsSigned(sign, pointer(json), length(json)) = ecvUnknownAuthority);
     sign.Free;
-    selfsignedroot := TECCCertificateSecret.CreateFromSecureFile(
+    selfsignedroot := TEccCertificateSecret.CreateFromSecureFile(
        '.', serial, 'pass', 1000);
     check(chain.LoadFromFile('test'));
     check(chain.Count = 3);
     check(chain.IsValid(selfsignedroot) = ecvValidSelfSigned);
-    check(selfsignedroot.IssueDate = ECCText(NowECCDate));
-    check(selfsignedroot.Content.Signed.IssueDate = NowECCDate);
+    check(selfsignedroot.IssueDate = EccText(NowEccDate));
+    check(selfsignedroot.Content.Signed.IssueDate = NowEccDate);
     check(chain.GetBySerial(serial) <> nil);
     chain.IsValidCached := true;
     check(ObjectToJson(chain) = jsonchain);
@@ -362,28 +359,28 @@ begin
   end;
 end;
 
-procedure TTestCoreEcc.ECCCommandLineTool;
+procedure TTestCoreEcc.EccCommandLineTool;
 var
   sw: ICommandLine;
   ctxt: TCommandLine;
   i: PtrInt;
-  previd, prevpass: RawUTF8;
+  previd, prevpass: RawUtf8;
   plainfn, rawfn: TFileName;
   keys: array of record
     priv, pub, test, crypt: TFileName;
-    id, issuer, pass, text: RawUTF8;
+    id, issuer, pass, text: RawUtf8;
     rounds: integer;
   end;
   exectemp: variant;
 
-  function Exec(const nv: array of const; cmd: TECCCommand): PDocVariantData;
+  function Exec(const nv: array of const; cmd: TEccCommand): PDocVariantData;
   var
     sw: ICommandLine;
     ctxt: TCommandLine;
   begin
     ctxt := TCommandLine.Create(nv);
     sw := ctxt;
-    {%H-}check(ECCCommand(cmd, sw) = eccSuccess);
+    {%H-}check(EccCommand(cmd, sw) = eccSuccess);
     if CheckFailed(ctxt.ConsoleLines <> nil) then
       result := @DocVariantDataFake
     else
@@ -404,8 +401,8 @@ begin
     for i := 0 to high(keys) do
       with keys[i] do
       begin
-        formatUTF8('name%', [i], issuer);
-        formatUTF8('pass%', [i], pass);
+        formatUtf8('name%', [i], issuer);
+        formatUtf8('pass%', [i], pass);
         rounds := 1000 + i;
         ctxt := TCommandLine.Create([
           'auth', {%H-}previd,
@@ -416,10 +413,10 @@ begin
           'newpass', pass,
           'newrounds', rounds]);
         sw := ctxt;
-        check(ECCCommand(ecNew, sw) = eccSuccess);
+        check(EccCommand(ecNew, sw) = eccSuccess);
         if CheckFailed(ctxt.ConsoleLines <> nil) then
           exit;
-        id := Trim(split(ctxt.ConsoleLines[high(ctxt.ConsoleLines)], '.'));
+        id := TrimU(split(ctxt.ConsoleLines[high(ctxt.ConsoleLines)], '.'));
         priv := format('%s.private', [id]);
         pub := format('%s.public', [id]);
         previd := id;
@@ -434,7 +431,7 @@ begin
               'saltrounds', i + 10], ecCrypt);
       end;
     sw := TCommandLine.Create([]);
-    check(ECCCommand(ecChainAll, sw) = eccSuccess);
+    check(EccCommand(ecChainAll, sw) = eccSuccess);
     for i := 0 to high(keys) do
       with keys[i] do
       begin
@@ -452,7 +449,7 @@ begin
           check(I['Size'] = length(text));
           check(U['recipient'] = issuer);
           check(U['Recipientserial'] = id);
-          check(length(U['RandomPublicKey']) = sizeof(TECCPublicKey) * 2);
+          check(length(U['RandomPublicKey']) = sizeof(TEccPublicKey) * 2);
           check(U['Algorithm'] = ShortStringToAnsi7String(
             ToText(ecaPBKDF2_HMAC_SHA256_AES256_CFB_SYNLZ)^));
           check(O['Signature']^.VarType = varNull, 'not signed');
@@ -487,14 +484,14 @@ begin
           check(I['Size'] = length(text));
           check(U['recipient'] = issuer);
           check(U['Recipientserial'] = id);
-          check(length(U['RandomPublicKey']) = sizeof(TECCPublicKey) * 2);
+          check(length(U['RandomPublicKey']) = sizeof(TEccPublicKey) * 2);
           check(U['Algorithm'] = 'ecaPBKDF2_HMAC_SHA256_AES128_CTR');
           check(O['Signature']^.I['Version'] = 1, 'signed');
           check(O['Signature']^.U['AuthoritySerial'] = id, 'serial');
           check(B['Meta']);
         end;
         check(PosEx(StringFromFile(rawfn), StringFromFile(crypt)) =
-                sizeof(TECIESHeader) + 1);
+                sizeof(TEciesHeader) + 1);
         DeleteFile(plainfn);
         Exec([
           'file', crypt,
@@ -511,20 +508,18 @@ end;
 
 procedure TTestCoreEcc.ECDHEStreamProtocol;
 const
-  MAX = 10000;
+  MAX = 100;
 var
-  //timer: TPrecisionTimer;
   str: TRawByteStringDynArray;
 
   function Test(const prot: IProtocol; const name: string): integer;
   var
     i: integer;
     enc, after: RawByteString;
-    ref: IProtocol; // to release memory
+    ref: IProtocol; // to properly release memory
   begin
     ref := prot;
     result := 0;
-    //timer.Start;
     for i := 0 to MAX do
     begin
       prot.Encrypt(str[i], enc);
@@ -533,25 +528,26 @@ var
       check(prot.Decrypt(enc, after) = sprSuccess);
       check(after = str[i]);
     end;
-    //fRunConsole := format('%s %s %s',[fRunConsole,name,KB(timer.PerSec(result))]);
   end;
 
 var
   key: THash256;
-  a: TECDHEAuth;
-  c: TECDHEProtocolClient;
-  s: TECDHEProtocolServer;
-  cs, ss: TECCCertificateSecret;
-  i: integer;
+  a: TEcdheAuth;
+  ef: TEcdheEF;
+  c: TEcdheProtocolClient;
+  s: TEcdheProtocolServer;
+  cs, ss: TEccCertificateSecret;
+  i, siz: integer;
   enc, after: RawByteString;
+  timer: TPrecisionTimer;
 
   procedure handshake;
   var
-    cf: TECDHEFrameClient;
-    sf: TECDHEFrameServer;
+    cf: TEcdheFrameClient;
+    sf: TEcdheFrameServer;
   begin
-    c := TECDHEProtocolClient.Create(a, nil, cs);
-    s := TECDHEProtocolServer.Create(a, nil, ss);
+    c := TEcdheProtocolClient.Create(a, nil, cs, ef);
+    s := TEcdheProtocolServer.Create(a, nil, ss, ef);
 {    c.EF := efAesCfb128;
     c.MAC := macHmacCrc32c;
     s.EF := c.EF;
@@ -564,47 +560,99 @@ var
 begin
   SetLength(str, MAX + 1);
   for i := 0 to MAX do
-    str[i] := RandomString(i shr 3 + 1);
+    str[i] := RandomString(i * 191 + 1);
   Test(TProtocolNone.Create, 'none');
-  TAESPRNG.Main.FillRandom(key);
-  Test(TProtocolAES.Create(TAESCFB, key, 128), 'aes');
-  cs := TECCCertificateSecret.CreateNew(nil, 'client');
-  ss := TECCCertificateSecret.CreateNew(nil, 'server');
-  for a := low(a) to high(a) do
-  begin
-    handshake;
-    for i := 0 to MAX do
+  TAesPrng.Main.FillRandom(key);
+  Test(TProtocolAes.Create(TAesCfb, key, 128), 'aes');
+  Test(TProtocolAes.Create(TAesCtr, key, 128), 'aes');
+  cs := TEccCertificateSecret.CreateNew(nil, 'client');
+  ss := TEccCertificateSecret.CreateNew(nil, 'server');
+  for ef := low(ef) to high(ef) do
+    for a := low(a) to high(a) do
     begin
-      {%H-}c.Encrypt(str[i], enc);
-      check({%H-}s.CheckError(enc) = sprSuccess);
-      check(s.Decrypt(enc, after) = sprSuccess);
-      check(after = str[i]);
-      if i and 7 = 0 then
-        continue; // check asymmetric communication
-      s.Encrypt(str[i], enc);
-      check(c.CheckError(enc) = sprSuccess);
-      check(c.Decrypt(enc, after) = sprSuccess);
-      check(after = str[i]);
-      if i and 3 = 0 then
-        continue;
-      c.Encrypt(str[i], enc);
-      check(s.CheckError(enc) = sprSuccess);
-      check(s.Decrypt(enc, after) = sprSuccess);
-      check(after = str[i]);
-      c.Encrypt(str[i], enc);
-      inc(enc[2]);
-      check(s.CheckError(enc) = sprInvalidMAC);
-      check(s.Decrypt(enc, after) = sprInvalidMAC);
+      handshake;
+      for i := 0 to MAX do
+      begin
+        {%H-}c.Encrypt(str[i], enc);
+        check({%H-}s.CheckError(enc) <> sprInvalidMAC);
+        check(s.Decrypt(enc, after) = sprSuccess);
+        check(after = str[i]);
+        if i and 7 = 0 then
+          continue; // check asymmetric communication
+        s.Encrypt(str[i], enc);
+        check(c.CheckError(enc) <> sprInvalidMAC);
+        check(c.Decrypt(enc, after) = sprSuccess);
+        check(after = str[i]);
+        if i and 3 = 0 then
+          continue;
+        c.Encrypt(str[i], enc);
+        check(s.CheckError(enc) <> sprInvalidMAC);
+        check(s.Decrypt(enc, after) = sprSuccess);
+        check(after = str[i]);
+        c.Encrypt(str[i], enc);
+        inc(enc[2]); // alter the communication
+        if ef in [efAesCrc128, efAesCrc256]  then
+          check(s.CheckError(enc) = sprInvalidMAC);
+        check(s.Decrypt(enc, after) = sprInvalidMAC);
+      end;
+      c.Free;
+      s.Free;
+      handshake;
+      Test(c, format('c%d', [ord(a)]));
+      timer.Start;
+      siz := Test(s, format('s%d', [ord(a)]));
+      if a = low(a) then
+        NotifyTestSpeed('%', [ToText(ef)^], MAX, siz, @timer);
     end;
-    c.Free;
-    s.Free;
-    handshake;
-    Test(c, format('c%d', [ord(a)]));
-    Test(s, format('s%d', [ord(a)]));
-  end;
   cs.Free;
   ss.Free;
 end;
+
+
+{$ifdef USE_OPENSSL}
+
+procedure TTestCoreEcc._OpenSSL;
+
+  procedure Test(EvpType, BitsOrCurve, Count: integer; const Digest, Name: RawUtf8);
+  var
+    timer: TPrecisionTimer;
+    priv, pub, msg, sig: RawByteString;
+    i: integer;
+  begin
+    timer.Start;
+    for i := 1 to Count do
+      OpenSslGenerateKeys(EvpType, BitsOrCurve, priv, pub);
+    Check({%H-}priv <> '');
+    Check({%H-}pub <> '');
+    NotifyTestSpeed('% Generation', [Name], Count, 0, @timer);
+    msg := RandomString(100);
+    if IdemPChar(pointer(Name), 'RSA') then
+      Count := Count * 10;
+    timer.Start;
+    for i := 1 to Count do
+      CheckUtf8(OpenSslSign(Digest, pointer(msg), pointer(priv),
+        length(msg), length(priv), sig) <> 0, 'sign %', [Name]);
+    NotifyTestSpeed('% Sign', [Name], Count, 0, @timer);
+    timer.Start;
+    for i := 1 to Count do
+      CheckUtf8(OpenSslVerify(Digest, '', pointer(msg), pointer(pub), pointer({%H-}sig),
+        length(msg), length(pub), length({%H-}sig)), 'verify %', [Name]);
+    NotifyTestSpeed('% Verify', [Name], Count, 0, @timer);
+    inc(msg[10]);
+    CheckUtf8(not OpenSslVerify(Digest, '', pointer(msg), pointer(pub), pointer(sig),
+      length(msg), length(pub), length(sig)), 'detect %', [Name]);
+  end;
+
+begin
+  if not OpenSslIsAvailable then
+    exit;
+  Test(EVP_PKEY_RSA, 2048, 3, '', 'RSA 2048');
+  Test(EVP_PKEY_RSA_PSS, 2048, 3, '', 'RSA-PSS 2048');
+  Test(EVP_PKEY_EC, NID_X9_62_prime256v1, 100, '', 'prime256v1');
+  Test(EVP_PKEY_ED25519, 0, 100, 'null', 'ed25519');
+end;
+
+{$endif USE_OPENSSL}
 
 end.
 

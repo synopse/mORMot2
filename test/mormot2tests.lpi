@@ -107,6 +107,9 @@
             </Optimizations>
           </CodeGeneration>
           <Linking>
+            <Debugging>
+              <UseExternalDbgSyms Value="True"/>
+            </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
           <Other>
@@ -114,13 +117,13 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-dFPC_X64MM"/>
-            <OtherDefines Count="5">
+            <OtherDefines Count="6">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
               <Define2 Value="FPCMM_DEBUG"/>
               <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
               <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -159,7 +162,6 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
-              <GenerateDebugInfo Value="False"/>
               <DebugInfoType Value="dsDwarf2Set"/>
               <UseExternalDbgSyms Value="True"/>
             </Debugging>
@@ -170,12 +172,13 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <OtherDefines Count="5">
+            <OtherDefines Count="6">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
               <Define2 Value="FPCMM_DEBUG"/>
               <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
               <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -214,7 +217,9 @@
           </CodeGeneration>
           <Linking>
             <Debugging>
-              <DebugInfoType Value="dsDwarf2Set"/>
+              <DebugInfoType Value="dsDwarf2"/>
+              <UseLineInfoUnit Value="False"/>
+              <UseExternalDbgSyms Value="True"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -288,6 +293,14 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
+            <OtherDefines Count="6">
+              <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+              <Define1 Value="FPC_X64MM"/>
+              <Define2 Value="FPCMM_DEBUG"/>
+              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+              <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
+            </OtherDefines>
           </Other>
         </CompilerOptions>
       </Item6>
@@ -551,7 +564,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="83">
+    <Units Count="90">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -737,8 +750,9 @@
         <IsPartOfProject Value="True"/>
       </Unit45>
       <Unit46>
-        <Filename Value="..\src\net\mormot.net.asynch.pas"/>
+        <Filename Value="..\src\net\mormot.net.async.pas"/>
         <IsPartOfProject Value="True"/>
+        <UnitName Value="mormot.net.async"/>
       </Unit46>
       <Unit47>
         <Filename Value="..\src\net\mormot.net.ws.core.pas"/>
@@ -884,6 +898,34 @@
         <Filename Value="..\src\tools\ecc\mormot.tools.ecc.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit82>
+      <Unit83>
+        <Filename Value="test.net.proto.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit83>
+      <Unit84>
+        <Filename Value="test.orm.core.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit84>
+      <Unit85>
+        <Filename Value="test.orm.sqlite3.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit85>
+      <Unit86>
+        <Filename Value="test.soa.network.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit86>
+      <Unit87>
+        <Filename Value="test.orm.extdb.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit87>
+      <Unit88>
+        <Filename Value="test.orm.network.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit88>
+      <Unit89>
+        <Filename Value="test.soa.core.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit89>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -927,7 +969,7 @@
     </Other>
   </CompilerOptions>
   <Debugging>
-    <Exceptions Count="8">
+    <Exceptions Count="10">
       <Item1>
         <Name Value="EAbort"/>
       </Item1>
@@ -952,6 +994,12 @@
       <Item8>
         <Name Value="RunError(216)"/>
       </Item8>
+      <Item9>
+        <Name Value="ENetSock"/>
+      </Item9>
+      <Item10>
+        <Name Value="EThreadError"/>
+      </Item10>
     </Exceptions>
   </Debugging>
 </CONFIG>

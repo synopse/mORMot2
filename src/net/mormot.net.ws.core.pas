@@ -103,10 +103,6 @@ const
   FRAME_LEN_2BYTES = 126;
   FRAME_LEN_8BYTES = 127;
 
-const
-  /// tht HTTP status code returned when a WebSockets
-  HTTP_WEBSOCKETCLOSED = 0;
-
 
 /// used to return the text corresponding to a specified WebSockets frame type
 function ToText(opcode: TWebSocketFrameOpCode): PShortString; overload;
@@ -117,7 +113,7 @@ procedure FrameInit(opcode: TWebSocketFrameOpCode;
   const Content, ContentType: RawByteString; out frame: TWebSocketFrame);
 
 /// compute the SHA-1 signature of the given challenge
-procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSHA1Digest);
+procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSha1Digest);
 
 
 
@@ -128,360 +124,15 @@ type
   TWebSocketProcess = class;
   {$M-}
 
-  /// callback event triggered by TWebSocketProtocol for any incoming message
-  // - called before TWebSocketProtocol.ProcessIncomingFrame for incoming
-  // focText/focBinary frames
-  // - should return true if the frame has been handled, or false if the
-  // regular processing should take place
-  TOnWebSocketProtocolIncomingFrame = function(Sender: TWebSocketProcess;
-    var Frame: TWebSocketFrame): boolean of object;
-
-  /// one instance implementing application-level WebSockets protocol
-  // - shared by TWebSocketServer and TWebSocketClient classes
-  // - once upgraded to WebSockets, a HTTP link could be used e.g. to transmit our
-  // proprietary 'synopsejson' or 'synopsebin' application content, as stated
-  // by this typical handshake:
-  // $ GET /myservice HTTP/1.1
-  // $ Host: server.example.com
-  // $ Upgrade: websocket
-  // $ Connection: Upgrade
-  // $ Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==
-  // $ Sec-WebSocket-Protocol: synopsejson
-  // $ Sec-WebSocket-Version: 13
-  // $ Origin: http://example.com
-  // $
-  // $ HTTP/1.1 101 Switching Protocols
-  // $ Upgrade: websocket
-  // $ Connection: Upgrade
-  // $ Sec-WebSocket-Accept: HSmrc0sMlYUkAGmm5OPpG2HaGWk=
-  // $ Sec-WebSocket-Protocol: synopsejson
-  // - the TWebSocketProtocolJSON inherited class will implement
-  // $ Sec-WebSocket-Protocol: synopsejson
-  // - the TWebSocketProtocolBinary inherited class will implement
-  // $ Sec-WebSocket-Protocol: synopsebin
-  TWebSocketProtocol = class(TSynPersistent)
-  protected
-    fName: RawUTF8;
-    fURI: RawUTF8;
-    fFramesInCount: integer;
-    fFramesOutCount: integer;
-    fFramesInBytes: QWord;
-    fFramesOutBytes: QWord;
-    fOnBeforeIncomingFrame: TOnWebSocketProtocolIncomingFrame;
-    fRemoteLocalhost: boolean;
-    fRemoteIP: RawUTF8;
-    fUpgradeURI: RawUTF8;
-    fLastError: string;
-    fEncryption: IProtocol;
-    // focText/focBinary or focContinuation/focConnectionClose from ProcessStart/ProcessStop
-    procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-      var request: TWebSocketFrame; const info: RawUTF8); virtual; abstract;
-    function SendFrames(Owner: TWebSocketProcess;
-      var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean; virtual;
-    procedure AfterGetFrame(var frame: TWebSocketFrame); virtual;
-    procedure BeforeSendFrame(var frame: TWebSocketFrame); virtual;
-    function FrameData(const frame: TWebSocketFrame; const Head: RawUTF8;
-      HeadFound: PRawUTF8 = nil): pointer; virtual;
-    function FrameType(const frame: TWebSocketFrame): RawUTF8; virtual;
-    function GetRemoteIP: RawUTF8;
-    function GetEncrypted: boolean;
-  public
-    /// abstract constructor to initialize the protocol
-    // - the protocol should be named, so that the client may be able to request
-    // for a given protocol
-    // - if aURI is '', any URI would potentially upgrade to this protocol; you can
-    // specify an URI to limit the protocol upgrade to a single resource
-    constructor Create(const aName, aURI: RawUTF8); reintroduce;
-    /// compute a new instance of the WebSockets protocol, with same parameters
-    function Clone(const aClientURI: RawUTF8): TWebSocketProtocol; virtual; abstract;
-    /// returns Name by default, but could be e.g. 'synopsebin, synopsebinary'
-    function GetSubprotocols: RawUTF8; virtual;
-    /// specify the recognized sub-protocols, e.g. 'synopsebin, synopsebinary'
-    function SetSubprotocol(const aProtocolName: RawUTF8): boolean; virtual;
-    /// set the fEncryption: IProtocol according to the supplied key
-    // - any asymmetric algorithm needs to know which side (client/server) to work on
-    // - try TECDHEProtocol.FromKey(aKey) and fallback to TProtocolAES.Create(TAESCFB)
-    // using the deprecated SHA256Weak(aKey) - consider using a safer hasher
-    // and SetEncryptKeyAES() with a safer derivated key
-    procedure SetEncryptKey(aServer: boolean; const aKey: RawUTF8);
-    /// set the fEncryption: IProtocol as TProtocolAES.Create(TAESCFB)
-    procedure SetEncryptKeyAES(const aKey; aKeySize: cardinal);
-    /// redirect to Encryption.ProcessHandshake, if defined
-    function ProcessHandshake(const ExtIn: TRawUTF8DynArray;
-      out ExtOut: RawUTF8; ErrorMsg: PRawUTF8): boolean; virtual;
-    /// called e.g. for authentication during the WebSockets handshake
-    function ProcessHandshakeURI(const aClientURI: RawUTF8): boolean; virtual;
-    /// allow low-level interception before ProcessIncomingFrame is done
-    property OnBeforeIncomingFrame: TOnWebSocketProtocolIncomingFrame
-      read fOnBeforeIncomingFrame write fOnBeforeIncomingFrame;
-    /// access low-level frame encryption
-    property Encryption: IProtocol
-      read fEncryption;
-    /// if the associated 'Remote-IP' HTTP header value maps the local host
-    property RemoteLocalhost: boolean
-      read fRemoteLocalhost write fRemoteLocalhost;
-  published
-    /// the Sec-WebSocket-Protocol application name currently involved
-    // - e.g. 'synopsejson', 'synopsebin' or 'synopsebinary'
-    property Name: RawUTF8
-      read fName write fName;
-    /// the optional URI on which this protocol would be enabled
-    // - leave to '' if any URI should match
-    property URI: RawUTF8
-      read fURI;
-    /// the associated 'Remote-IP' HTTP header value
-    // - returns '' if self=nil or RemoteLocalhost=true
-    property RemoteIP: RawUTF8
-      read GetRemoteIP write fRemoteIP;
-    /// the URI on which this protocol has been upgraded
-    property UpgradeURI: RawUTF8
-      read fUpgradeURI write fUpgradeURI;
-    /// the last error message, during frame processing
-    property LastError: string
-      read fLastError;
-    /// returns TRUE if encryption is enabled during the transmission
-    // - is currently only available for TWebSocketProtocolBinary
-    property Encrypted: boolean
-      read GetEncrypted;
-    /// how many frames have been received by this instance
-    property FramesInCount: integer
-      read fFramesInCount;
-    /// how many frames have been sent by this instance
-    property FramesOutCount: integer
-      read fFramesOutCount;
-    /// how many (uncompressed) bytes have been received by this instance
-    property FramesInBytes: QWord
-      read fFramesInBytes;
-    /// how many (uncompressed) bytes have been sent by this instance
-    property FramesOutBytes: QWord
-      read fFramesOutBytes;
-  end;
-
-
-  /// handle a REST application-level bi-directional WebSockets protocol
-  // - will emulate a bi-directional REST process, using THttpServerRequest to
-  // store and handle the request parameters: clients would be able to send
-  // regular REST requests to the server, but the server could use the same
-  // communication channel to push REST requests to the client
-  // - a local THttpServerRequest will be used on both client and server sides,
-  // to store REST parameters and compute the corresponding WebSockets frames
-  TWebSocketProtocolRest = class(TWebSocketProtocol)
-  protected
-    fSequencing: boolean;
-    fSequence: integer;
-    procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-       var request: TWebSocketFrame; const info: RawUTF8); override;
-    procedure FrameCompress(const Head: RawUTF8; const Values: array of const;
-      const Content, ContentType: RawByteString; var frame: TWebSocketFrame);
-        virtual; abstract;
-    function FrameDecompress(const frame: TWebSocketFrame;
-      const Head: RawUTF8; const values: array of PRawByteString;
-      var contentType, content: RawByteString): boolean; virtual; abstract;
-    /// convert the input information of REST request to a WebSocket frame
-    procedure InputToFrame(Ctxt: THttpServerRequestAbstract; aNoAnswer: boolean;
-      out request: TWebSocketFrame; out head: RawUTF8); virtual;
-    /// convert a WebSocket frame to the input information of a REST request
-    function FrameToInput(var request: TWebSocketFrame; out aNoAnswer: boolean;
-      Ctxt: THttpServerRequestAbstract): boolean; virtual;
-    /// convert a WebSocket frame to the output information of a REST request
-    function FrameToOutput(var answer: TWebSocketFrame;
-      Ctxt: THttpServerRequestAbstract): cardinal; virtual;
-    /// convert the output information of REST request to a WebSocket frame
-    procedure OutputToFrame(Ctxt: THttpServerRequestAbstract; Status: cardinal;
-      var outhead: RawUTF8; out answer: TWebSocketFrame); virtual;
-  end;
-
-  /// used to store the class of a TWebSocketProtocol type
-  TWebSocketProtocolClass = class of TWebSocketProtocol;
-
-  /// handle a REST application-level WebSockets protocol using JSON for transmission
-  // - could be used e.g. for AJAX or non Delphi remote access
-  // - this class will implement then following application-level protocol:
-  // $ Sec-WebSocket-Protocol: synopsejson
-  TWebSocketProtocolJSON = class(TWebSocketProtocolRest)
-  protected
-    procedure FrameCompress(const Head: RawUTF8; const Values: array of const;
-      const Content, ContentType: RawByteString; var frame: TWebSocketFrame); override;
-    function FrameDecompress(const frame: TWebSocketFrame; const Head: RawUTF8;
-      const values: array of PRawByteString;
-      var contentType, content: RawByteString): boolean; override;
-    function FrameData(const frame: TWebSocketFrame; const Head: RawUTF8;
-      HeadFound: PRawUTF8 = nil): pointer; override;
-    function FrameType(const frame: TWebSocketFrame): RawUTF8; override;
-  public
-    /// initialize the WebSockets JSON protocol
-    // - if aURI is '', any URI would potentially upgrade to this protocol; you can
-    // specify an URI to limit the protocol upgrade to a single resource
-    constructor Create(const aURI: RawUTF8); reintroduce;
-    /// compute a new instance of the WebSockets protocol, with same parameters
-    function Clone(const aClientURI: RawUTF8): TWebSocketProtocol; override;
-  end;
-
-  /// handle a REST application-level WebSockets protocol using compressed and
-  // optionally AES-CFB encrypted binary
-  // - this class will implement then following application-level protocol:
-  // $ Sec-WebSocket-Protocol: synopsebin
-  // or fallback to the previous subprotocol
-  // $ Sec-WebSocket-Protocol: synopsebinary
-  // - 'synopsebin' will expect requests sequenced as 'r000001','r000002',...
-  // headers matching 'a000001','a000002',... instead of 'request'/'answer'
-  TWebSocketProtocolBinary = class(TWebSocketProtocolRest)
-  protected
-    fCompressed: boolean;
-    fFramesInBytesSocket: QWord;
-    fFramesOutBytesSocket: QWord;
-    procedure FrameCompress(const Head: RawUTF8;
-      const Values: array of const; const Content, ContentType: RawByteString;
-      var frame: TWebSocketFrame); override;
-    function FrameDecompress(const frame: TWebSocketFrame;
-      const Head: RawUTF8; const values: array of PRawByteString;
-      var contentType, content: RawByteString): boolean; override;
-    procedure AfterGetFrame(var frame: TWebSocketFrame); override;
-    procedure BeforeSendFrame(var frame: TWebSocketFrame); override;
-    function FrameData(const frame: TWebSocketFrame; const Head: RawUTF8;
-      HeadFound: PRawUTF8 = nil): pointer; override;
-    function FrameType(const frame: TWebSocketFrame): RawUTF8; override;
-    function SendFrames(Owner: TWebSocketProcess;
-      var Frames: TWebSocketFrameDynArray;
-      var FramesCount: integer): boolean; override;
-    procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
-      var request: TWebSocketFrame; const info: RawUTF8); override;
-    function GetFramesInCompression: integer;
-    function GetFramesOutCompression: integer;
-  public
-    /// initialize the WebSockets binary protocol with no encryption
-    // - if aURI is '', any URI would potentially upgrade to this protocol; you
-    // can specify an URI to limit the protocol upgrade to a single resource
-    // - SynLZ compression is enabled by default, unless aCompressed is false
-    constructor Create(const aURI: RawUTF8; aCompressed: boolean = true);
-      reintroduce; overload; virtual;
-    /// initialize the WebSockets binary protocol with a symmetric AES key
-    // - if aURI is '', any URI would potentially upgrade to this protocol; you
-    // can specify an URI to limit the protocol upgrade to a single resource
-    // - if aKeySize if 128, 192 or 256, TProtocolAES (i.e. AES-CFB encryption)
-    //  will be used to secure the transmission
-    // - SynLZ compression is enabled by default, unless aCompressed is false
-    constructor Create(const aURI: RawUTF8; const aKey; aKeySize: cardinal;
-      aCompressed: boolean = true); reintroduce; overload;
-    /// initialize the WebSockets binary protocol from a textual key
-    // - if aURI is '', any URI would potentially upgrade to this protocol; you
-    // can specify an URI to limit the protocol upgrade to a single resource
-    // - will create a TProtocolAES or TECDHEProtocol instance, corresponding to
-    // the supplied aKey and aServer values, to secure the transmission using
-    // a symmetric or assymetric algorithm
-    // - SynLZ compression is enabled by default, unless aCompressed is false
-    constructor Create(const aURI: RawUTF8; aServer: boolean;
-      const aKey: RawUTF8; aCompressed: boolean = true); reintroduce; overload;
-    /// compute a new instance of the WebSockets protocol, with same parameters
-    function Clone(const aClientURI: RawUTF8): TWebSocketProtocol; override;
-    /// returns Name by default, but could be e.g. 'synopsebin, synopsebinary'
-    function GetSubprotocols: RawUTF8; override;
-    /// specify the recognized sub-protocols, e.g. 'synopsebin, synopsebinary'
-    function SetSubprotocol(const aProtocolName: RawUTF8): boolean; override;
-  published
-    /// defines if SynLZ compression is enabled during the transmission
-    // - is set to TRUE by default
-    property Compressed: boolean
-      read fCompressed write fCompressed;
-    /// how many bytes have been received by this instance from the wire
-    property FramesInBytesSocket: QWord
-      read fFramesInBytesSocket;
-    /// how many bytes have been sent by this instance to the wire
-    property FramesOutBytesSocket: QWord
-      read fFramesOutBytesSocket;
-    /// compression ratio of frames received by this instance
-    property FramesInCompression: integer
-      read GetFramesInCompression;
-    /// compression ratio of frames Sent by this instance
-    property FramesOutCompression: integer
-      read GetFramesOutCompression;
-  end;
-
-  /// used to maintain a list of websocket protocols (for the server side)
-  TWebSocketProtocolList = class(TSynPersistentLock)
-  protected
-    fProtocols: array of TWebSocketProtocol;
-    // caller should make fSafe.Lock/UnLock
-    function FindIndex(const aName, aURI: RawUTF8): integer;
-  public
-    /// add a protocol to the internal list
-    // - returns TRUE on success
-    // - if this protocol is already existing for this given name and URI,
-    // returns FALSE: it is up to the caller to release aProtocol if needed
-    function Add(aProtocol: TWebSocketProtocol): boolean;
-    /// add once a protocol to the internal list
-    // - if this protocol is already existing for this given name and URI, any
-    // previous one will be released - so it may be confusing on a running server
-    // - returns TRUE if the protocol was added for the first time, or FALSE
-    // if the protocol has been replaced or is invalid (e.g. aProtocol=nil)
-    function AddOnce(aProtocol: TWebSocketProtocol): boolean;
-    /// erase a protocol from the internal list, specified by its name
-    function Remove(const aProtocolName, aURI: RawUTF8): boolean;
-    /// finalize the list storage
-    destructor Destroy; override;
-    /// create a new protocol instance, from the internal list
-    function CloneByName(const aProtocolName, aClientURI: RawUTF8): TWebSocketProtocol;
-    /// create a new protocol instance, from the internal list
-    function CloneByURI(const aClientURI: RawUTF8): TWebSocketProtocol;
-    /// how many protocols are stored
-    function Count: integer;
-  end;
-
-  /// indicates which kind of process did occur in the main WebSockets loop
-  TWebSocketProcessOne = (
-    wspNone,
-    wspPing,
-    wspDone,
-    wspAnswer,
-    wspError,
-    wspClosed);
-
-  /// indicates how TWebSocketProcess.NotifyCallback() will work
-  TWebSocketProcessNotifyCallback = (
-    wscBlockWithAnswer,
-    wscBlockWithoutAnswer,
-    wscNonBlockWithoutAnswer);
-
-  /// used to manage a thread-safe list of WebSockets frames
-  TWebSocketFrameList = class(TSynPersistentLock)
-  protected
-    fTimeoutSec: PtrInt;
-    procedure Delete(i: integer);
-  public
-    /// low-level access to the WebSocket frames list
-    List: TWebSocketFrameDynArray;
-    /// current number of WebSocket frames in the list
-    Count: integer;
-    /// initialize the list
-    constructor Create(timeoutsec: integer); reintroduce;
-    /// add a WebSocket frame in the list
-    // - this method is thread-safe
-    procedure Push(const frame: TWebSocketFrame);
-    /// add a void WebSocket frame in the list
-    // - this method is thread-safe
-    procedure PushVoidFrame(opcode: TWebSocketFrameOpCode);
-    /// retrieve a WebSocket frame from the list, oldest first
-    // - you should specify a frame type to search for, according to the
-    // specified WebSockets protocl
-    // - this method is thread-safe
-    function Pop(protocol: TWebSocketProtocol; const head: RawUTF8;
-      out frame: TWebSocketFrame): boolean;
-    /// how many 'answer' frames are to be ignored
-    // - this method is thread-safe
-    function AnswerToIgnore(incr: integer = 0): integer;
-  end;
-
-
-
-{ ******************** WebSockets Client and Server Shared Process }
-
   /// used by TWebSocketProcessSettings for WebSockets process logging settings
   TWebSocketProcessSettingsLogDetails = set of (
     logHeartbeat,
     logTextFrameContent,
     logBinaryFrameContent);
 
-  /// parameters to be used for WebSockets process
+  /// parameters to be used for WebSockets processing
+  // - those settings are used by all protocols running on a given
+  // TWebSocketServer or a THttpClientWebSockets
   {$ifdef USERECORDWITHMETHODS}
   TWebSocketProcessSettings = record
   {$else}
@@ -528,6 +179,32 @@ type
     // - set logBinaryFrameContent if you want the binary frame content to be logged
     // - used only if WebSocketLog global variable is set to a TSynLog class
     LogDetails: TWebSocketProcessSettingsLogDetails;
+    /// TWebSocketProtocol.SetEncryptKey PBKDF2-SHA-3 salt for TProtocolAes
+    // - default is some fixed value - you may customize it for a project
+    AesSalt: RawUtf8;
+    /// TWebSocketProtocol.SetEncryptKey PBKDF2-SHA-3 rounds for TProtocolAes
+    // - default is 1024 which takes around 0.5 ms to compute
+    // - 0 would use Sha256Weak() derivation function, as mORMot 1.18
+    AesRounds: integer;
+    /// TWebSocketProtocol.SetEncryptKey AES class for TProtocolAes
+    // - default is TAesFast[mCtr]
+    AesCipher: TAesAbstractClass;
+    /// TWebSocketProtocol.SetEncryptKey AES key size in bits, for TProtocolAes
+    // - default is 128 for efficient 'aes-128-ctr' at 2.5GB/s
+    // - for mORMot 1.18 compatibility, set for your custom settings:
+    // $ AesClass := TAesCfb;
+    // $ AesBits := 256;
+    // $ AesRounds := 0; // Sha256Weak() deprecated function
+    AesBits: integer;
+    /// TWebSocketProtocol.SetEncryptKey 'password#xxxxxx.private' ECDHE algo
+    // - default is efAesCtr128 as set to TEcdheProtocol.FromPasswordSecureFile
+    EcdheCipher: TEcdheEF;
+    /// TWebSocketProtocol.SetEncryptKey 'password#xxxxxx.private' ECDHE auth
+    // - default is the safest authMutual
+    EcdheAuth: TEcdheAuth;
+    /// TWebSocketProtocol.SetEncryptKey 'password#xxxxxx.private' password rounds
+    // - default is 60000, i.e. DEFAULT_ECCROUNDS
+    EcdheRounds: integer;
     /// will set the default values
     procedure SetDefaults;
     /// will set LogDetails to its highest level of verbosity
@@ -540,6 +217,391 @@ type
   // any TWebSocketProcess.Settings, TWebSocketServer.Settings or
   // THttpClientWebSockets.Settings property
   PWebSocketProcessSettings = ^TWebSocketProcessSettings;
+
+  /// callback event triggered by TWebSocketProtocol for any incoming message
+  // - called before TWebSocketProtocol.ProcessIncomingFrame for incoming
+  // focText/focBinary frames
+  // - should return true if the frame has been handled, or false if the
+  // regular processing should take place
+  TOnWebSocketProtocolIncomingFrame = function(Sender: TWebSocketProcess;
+    var Frame: TWebSocketFrame): boolean of object;
+
+  /// one instance implementing application-level WebSockets protocol
+  // - shared by TWebSocketServer and TWebSocketClient classes
+  // - once upgraded to WebSockets, a HTTP link could be used e.g. to transmit our
+  // proprietary 'synopsejson' or 'synopsebin' application content, as stated
+  // by this typical handshake:
+  // $ GET /myservice HTTP/1.1
+  // $ Host: server.example.com
+  // $ Upgrade: websocket
+  // $ Connection: Upgrade
+  // $ Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==
+  // $ Sec-WebSocket-Protocol: synopsejson
+  // $ Sec-WebSocket-Version: 13
+  // $ Origin: http://example.com
+  // $
+  // $ HTTP/1.1 101 Switching Protocols
+  // $ Upgrade: websocket
+  // $ Connection: Upgrade
+  // $ Sec-WebSocket-Accept: HSmrc0sMlYUkAGmm5OPpG2HaGWk=
+  // $ Sec-WebSocket-Protocol: synopsejson
+  // - the TWebSocketProtocolJson inherited class will implement
+  // $ Sec-WebSocket-Protocol: synopsejson
+  // - the TWebSocketProtocolBinary inherited class will implement
+  // $ Sec-WebSocket-Protocol: synopsebin
+  TWebSocketProtocol = class(TSynPersistent)
+  protected
+    fName: RawUtf8;
+    fUri: RawUtf8;
+    fFramesInCount: integer;
+    fFramesOutCount: integer;
+    fFramesInBytes: QWord;
+    fFramesOutBytes: QWord;
+    fOnBeforeIncomingFrame: TOnWebSocketProtocolIncomingFrame;
+    fRemoteLocalhost: boolean;
+    fConnectionFlags: THttpServerRequestFlags;
+    fRemoteIP: RawUtf8;
+    fUpgradeUri: RawUtf8;
+    fLastError: string;
+    fEncryption: IProtocol;
+    // focText/focBinary or focContinuation/focConnectionClose from ProcessStart/ProcessStop
+    procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
+      var request: TWebSocketFrame; const info: RawUtf8); virtual; abstract;
+    function SendFrames(Owner: TWebSocketProcess;
+      var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean; virtual;
+    procedure AfterGetFrame(var frame: TWebSocketFrame); virtual;
+    procedure BeforeSendFrame(var frame: TWebSocketFrame); virtual;
+    function FrameData(const frame: TWebSocketFrame; const Head: RawUtf8;
+      HeadFound: PRawUtf8 = nil): pointer; virtual;
+    function FrameType(const frame: TWebSocketFrame): RawUtf8; virtual;
+    function GetRemoteIP: RawUtf8;
+    function GetEncrypted: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+  public
+    /// abstract constructor to initialize the protocol
+    // - the protocol should be named, so that the client may be able to request
+    // for a given protocol
+    // - if aUri is '', any URI would potentially upgrade to this protocol; you can
+    // specify an URI to limit the protocol upgrade to a single resource
+    constructor Create(const aName, aUri: RawUtf8); reintroduce;
+    /// compute a new instance of the WebSockets protocol, with same parameters
+    function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; virtual; abstract;
+    /// returns Name by default, but could be e.g. 'synopsebin, synopsebinary'
+    function GetSubprotocols: RawUtf8; virtual;
+    /// specify the recognized sub-protocols, e.g. 'synopsebin, synopsebinary'
+    function SetSubprotocol(const aProtocolName: RawUtf8): boolean; virtual;
+    /// create the internal Encryption: IProtocol according to the supplied key
+    // - any asymmetric algorithm needs to know its side, i.e. client or server
+    // - use aKey='password#xxxxxx.private' for efAesCtr128 calling
+    // TEcdheProtocol.FromPasswordSecureFile() - FromKeySetCA() should have been
+    // called to set the global PKI
+    // - use aKey='a=mutual;e=aesctc128;p=34a2;pw=password;ca=..' full
+    // TEcdheProtocol.FromKey(aKey) format
+    // - or aKey will be derivated using aSettings to call
+    // SetEncryptKeyAes - default as 1024 PBKDF2-SHA-3 rounds into aes-128-ctr
+    // - you can disable encryption by setting aKey=''
+    procedure SetEncryptKey(aServer: boolean; const aKey: RawUtf8;
+      aSettings: PWebSocketProcessSettings);
+    /// set the fEncryption: IProtocol from TProtocolAes.Create()
+    // - if aClass is nil, TAesFast[mCtr] will be used as default
+    // - AEAD Cfc,mOfc,mCtc,mGcm modes will be rejected since unsupported
+    procedure SetEncryptKeyAes(aCipher: TAesAbstractClass;
+      const aKey; aKeySize: cardinal);
+    /// set the fEncryption: IProtocol from TEcdheProtocol.Create()
+    // - as default, we use efAesCtr128 which is the fastest on x86_64 (2.5GB/s)
+    procedure SetEncryptKeyEcdhe(aAuth: TEcdheAuth; aPKI: TEccCertificateChain;
+      aPrivate: TEccCertificateSecret; aServer: boolean;
+      aEF: TEcdheEF = efAesCtr128; aPrivateOwned: boolean = false);
+    /// redirect to Encryption.ProcessHandshake, if defined
+    function ProcessHandshake(const ExtIn: TRawUtf8DynArray;
+      out ExtOut: RawUtf8; ErrorMsg: PRawUtf8): boolean; virtual;
+    /// called e.g. for authentication during the WebSockets handshake
+    function ProcessHandshakeUri(const aClientUri: RawUtf8): boolean; virtual;
+    /// allow low-level interception before ProcessIncomingFrame is done
+    property OnBeforeIncomingFrame: TOnWebSocketProtocolIncomingFrame
+      read fOnBeforeIncomingFrame write fOnBeforeIncomingFrame;
+    /// access low-level frame encryption
+    property Encryption: IProtocol
+      read fEncryption;
+    /// contains either [hsrSecured, hsrWebsockets] or [hsrWebsockets]
+    property ConnectionFlags: THttpServerRequestFlags
+      read fConnectionFlags;
+    /// if the associated 'Remote-IP' HTTP header value maps the local host
+    property RemoteLocalhost: boolean
+      read fRemoteLocalhost write fRemoteLocalhost;
+  published
+    /// the Sec-WebSocket-Protocol application name currently involved
+    // - e.g. 'synopsejson', 'synopsebin' or 'synopsebinary'
+    property Name: RawUtf8
+      read fName write fName;
+    /// the optional URI on which this protocol would be enabled
+    // - leave to '' if any URI should match
+    property URI: RawUtf8
+      read fUri;
+    /// the associated 'Remote-IP' HTTP header value
+    // - returns '' if self=nil or RemoteLocalhost=true
+    property RemoteIP: RawUtf8
+      read GetRemoteIP write fRemoteIP;
+    /// the URI on which this protocol has been upgraded
+    property UpgradeUri: RawUtf8
+      read fUpgradeUri write fUpgradeUri;
+    /// the last error message, during frame processing
+    property LastError: string
+      read fLastError;
+    /// returns TRUE if encryption is enabled during the transmission
+    // - is currently only available for TWebSocketProtocolBinary
+    property Encrypted: boolean
+      read GetEncrypted;
+    /// how many frames have been received by this instance
+    property FramesInCount: integer
+      read fFramesInCount;
+    /// how many frames have been sent by this instance
+    property FramesOutCount: integer
+      read fFramesOutCount;
+    /// how many (uncompressed) bytes have been received by this instance
+    property FramesInBytes: QWord
+      read fFramesInBytes;
+    /// how many (uncompressed) bytes have been sent by this instance
+    property FramesOutBytes: QWord
+      read fFramesOutBytes;
+  end;
+
+
+  /// handle a REST application-level bi-directional WebSockets protocol
+  // - will emulate a bi-directional REST process, using THttpServerRequest to
+  // store and handle the request parameters: clients would be able to send
+  // regular REST requests to the server, but the server could use the same
+  // communication channel to push REST requests to the client
+  // - a local THttpServerRequest will be used on both client and server sides,
+  // to store REST parameters and compute the corresponding WebSockets frames
+  TWebSocketProtocolRest = class(TWebSocketProtocol)
+  protected
+    fSequencing: boolean;
+    fSequence: integer;
+    procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
+       var request: TWebSocketFrame; const info: RawUtf8); override;
+    procedure FrameCompress(const Head: RawUtf8; const Values: array of const;
+      const Content, ContentType: RawByteString; var frame: TWebSocketFrame);
+        virtual; abstract;
+    function FrameDecompress(const frame: TWebSocketFrame;
+      const Head: RawUtf8; const values: array of PRawByteString;
+      var contentType, content: RawByteString): boolean; virtual; abstract;
+    /// convert the input information of REST request to a WebSocket frame
+    procedure InputToFrame(Ctxt: THttpServerRequestAbstract; aNoAnswer: boolean;
+      out request: TWebSocketFrame; out head: RawUtf8); virtual;
+    /// convert a WebSocket frame to the input information of a REST request
+    function FrameToInput(var request: TWebSocketFrame; out aNoAnswer: boolean;
+      Ctxt: THttpServerRequestAbstract): boolean; virtual;
+    /// convert a WebSocket frame to the output information of a REST request
+    function FrameToOutput(var answer: TWebSocketFrame;
+      Ctxt: THttpServerRequestAbstract): cardinal; virtual;
+    /// convert the output information of REST request to a WebSocket frame
+    procedure OutputToFrame(Ctxt: THttpServerRequestAbstract; Status: cardinal;
+      var outhead: RawUtf8; out answer: TWebSocketFrame); virtual;
+  end;
+
+  /// used to store the class of a TWebSocketProtocol type
+  TWebSocketProtocolClass = class of TWebSocketProtocol;
+
+  /// handle a REST application-level WebSockets protocol using JSON for transmission
+  // - could be used e.g. for AJAX or non Delphi remote access
+  // - this class will implement then following application-level protocol:
+  // $ Sec-WebSocket-Protocol: synopsejson
+  TWebSocketProtocolJson = class(TWebSocketProtocolRest)
+  protected
+    procedure FrameCompress(const Head: RawUtf8; const Values: array of const;
+      const Content, ContentType: RawByteString; var frame: TWebSocketFrame); override;
+    function FrameDecompress(const frame: TWebSocketFrame; const Head: RawUtf8;
+      const values: array of PRawByteString;
+      var contentType, content: RawByteString): boolean; override;
+    function FrameData(const frame: TWebSocketFrame; const Head: RawUtf8;
+      HeadFound: PRawUtf8 = nil): pointer; override;
+    function FrameType(const frame: TWebSocketFrame): RawUtf8; override;
+  public
+    /// initialize the WebSockets JSON protocol
+    // - if aUri is '', any URI would potentially upgrade to this protocol; you can
+    // specify an URI to limit the protocol upgrade to a single resource
+    constructor Create(const aUri: RawUtf8); reintroduce;
+    /// compute a new instance of the WebSockets protocol, with same parameters
+    function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
+  end;
+
+  /// tune the 'synopsebin' protocol
+  // - pboCompress will compress all frames payload using SynLZ
+  // - pboNoLocalHostCompress won't compress frames on the loopback (127.0.0.1)
+  // - pboNoLocalHostEncrypt won't encrypt frames on the loopback (127.0.0.1)
+  TWebSocketProtocolBinaryOption = (
+    pboSynLzCompress,
+    pboNoLocalHostCompress,
+    pboNoLocalHostEncrypt);
+
+  /// how TWebSocketProtocolBinary implements the 'synopsebin' protocol
+  // - should match on both client and server ends
+  TWebSocketProtocolBinaryOptions = set of TWebSocketProtocolBinaryOption;
+
+
+  /// handle a REST application-level WebSockets protocol using compressed and
+  // optionally AES-CTR encrypted binary
+  // - this class will implement then following application-level protocol:
+  // $ Sec-WebSocket-Protocol: synopsebin
+  // or fallback to the previous subprotocol
+  // $ Sec-WebSocket-Protocol: synopsebinary
+  // - 'synopsebin' will expect requests sequenced as 'r000001','r000002',...
+  // headers matching 'a000001','a000002',... instead of 'request'/'answer'
+  TWebSocketProtocolBinary = class(TWebSocketProtocolRest)
+  protected
+    fFramesInBytesSocket: QWord;
+    fFramesOutBytesSocket: QWord;
+    fOptions: TWebSocketProtocolBinaryOptions;
+    procedure FrameCompress(const Head: RawUtf8;
+      const Values: array of const; const Content, ContentType: RawByteString;
+      var frame: TWebSocketFrame); override;
+    function FrameDecompress(const frame: TWebSocketFrame;
+      const Head: RawUtf8; const values: array of PRawByteString;
+      var contentType, content: RawByteString): boolean; override;
+    procedure AfterGetFrame(var frame: TWebSocketFrame); override;
+    procedure BeforeSendFrame(var frame: TWebSocketFrame); override;
+    function FrameData(const frame: TWebSocketFrame; const Head: RawUtf8;
+      HeadFound: PRawUtf8 = nil): pointer; override;
+    function FrameType(const frame: TWebSocketFrame): RawUtf8; override;
+    function SendFrames(Owner: TWebSocketProcess;
+      var Frames: TWebSocketFrameDynArray;
+      var FramesCount: integer): boolean; override;
+    procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
+      var request: TWebSocketFrame; const info: RawUtf8); override;
+    function GetFramesInCompression: integer;
+    function GetFramesOutCompression: integer;
+  public
+    /// initialize the WebSockets binary protocol with no encryption
+    // - if aUri is '', any URI would potentially upgrade to this protocol; you
+    // can specify an URI to limit the protocol upgrade to a single resource
+    // - SynLZ compression is enabled by default, for all frames
+    constructor Create(const aUri: RawUtf8;
+      aOptions: TWebSocketProtocolBinaryOptions = [pboSynLzCompress]);
+      reintroduce; overload; virtual;
+    /// initialize the WebSockets binary protocol with a symmetric AES key
+    // - if aUri is '', any URI would potentially upgrade to this protocol; you
+    // can specify an URI to limit the protocol upgrade to a single resource
+    // - if aKeySize if 128, 192 or 256, TProtocolAes (i.e. AES-CTR encryption)
+    //  will be used to secure the transmission
+    // - SynLZ compression is enabled by default, before encryption
+    constructor Create(const aUri: RawUtf8; const aKey; aKeySize: cardinal;
+      aOptions: TWebSocketProtocolBinaryOptions = [pboSynLzCompress];
+      aCipher: TAesAbstractClass = nil);
+        reintroduce; overload;
+    /// initialize the WebSockets binary protocol from a textual key
+    // - if aUri is '', any URI would potentially upgrade to this protocol; you
+    // can specify an URI to limit the protocol upgrade to a single resource
+    // - will create a TProtocolAes or TEcdheProtocol instance, corresponding to
+    // the supplied aKey and aServer values, to secure the transmission using
+    // a symmetric or assymetric algorithm
+    // - SynLZ compression is enabled by default, unless aCompressed is false
+    constructor Create(const aUri: RawUtf8; aServer: boolean;
+      const aKey: RawUtf8; aSettings: PWebSocketProcessSettings;
+      aOptions: TWebSocketProtocolBinaryOptions = [pboSynLzCompress]);
+        reintroduce; overload;
+    /// compute a new instance of the WebSockets protocol, with same parameters
+    function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
+    /// returns Name by default, but could be e.g. 'synopsebin, synopsebinary'
+    function GetSubprotocols: RawUtf8; override;
+    /// specify the recognized sub-protocols, e.g. 'synopsebin, synopsebinary'
+    function SetSubprotocol(const aProtocolName: RawUtf8): boolean; override;
+  published
+    /// how compression / encryption is implemented during the transmission
+    // - is set to [pboSynLzCompress] by default
+    property Options: TWebSocketProtocolBinaryOptions
+      read fOptions write fOptions;
+    /// how many bytes have been received by this instance from the wire
+    property FramesInBytesSocket: QWord
+      read fFramesInBytesSocket;
+    /// how many bytes have been sent by this instance to the wire
+    property FramesOutBytesSocket: QWord
+      read fFramesOutBytesSocket;
+    /// compression ratio of frames received by this instance
+    property FramesInCompression: integer
+      read GetFramesInCompression;
+    /// compression ratio of frames Sent by this instance
+    property FramesOutCompression: integer
+      read GetFramesOutCompression;
+  end;
+
+  /// used to maintain a list of websocket protocols (for the server side)
+  TWebSocketProtocolList = class(TSynPersistentLock)
+  protected
+    fProtocols: array of TWebSocketProtocol;
+    // caller should make fSafe.Lock/UnLock
+    function FindIndex(const aName, aUri: RawUtf8): integer;
+  public
+    /// add a protocol to the internal list
+    // - returns TRUE on success
+    // - if this protocol is already existing for this given name and URI,
+    // returns FALSE: it is up to the caller to release aProtocol if needed
+    function Add(aProtocol: TWebSocketProtocol): boolean;
+    /// add once a protocol to the internal list
+    // - if this protocol is already existing for this given name and URI, any
+    // previous one will be released - so it may be confusing on a running server
+    // - returns TRUE if the protocol was added for the first time, or FALSE
+    // if the protocol has been replaced or is invalid (e.g. aProtocol=nil)
+    function AddOnce(aProtocol: TWebSocketProtocol): boolean;
+    /// erase a protocol from the internal list, specified by its name
+    function Remove(const aProtocolName, aUri: RawUtf8): boolean;
+    /// finalize the list storage
+    destructor Destroy; override;
+    /// create a new protocol instance, from the internal list
+    function CloneByName(const aProtocolName, aClientUri: RawUtf8): TWebSocketProtocol;
+    /// create a new protocol instance, from the internal list
+    function CloneByUri(const aClientUri: RawUtf8): TWebSocketProtocol;
+    /// how many protocols are stored
+    function Count: integer;
+  end;
+
+  /// indicates which kind of process did occur in the main WebSockets loop
+  TWebSocketProcessOne = (
+    wspNone,
+    wspPing,
+    wspDone,
+    wspAnswer,
+    wspError,
+    wspClosed);
+
+  /// indicates how TWebSocketProcess.NotifyCallback() will work
+  TWebSocketProcessNotifyCallback = (
+    wscBlockWithAnswer,
+    wscBlockWithoutAnswer,
+    wscNonBlockWithoutAnswer);
+
+  /// used to manage a thread-safe list of WebSockets frames
+  TWebSocketFrameList = class(TSynPersistentLock)
+  protected
+    fTimeoutSec: PtrInt;
+    procedure Delete(i: integer);
+  public
+    /// low-level access to the WebSocket frames list
+    List: TWebSocketFrameDynArray;
+    /// current number of WebSocket frames in the list
+    Count: integer;
+    /// initialize the list
+    constructor Create(timeoutsec: integer); reintroduce;
+    /// add a WebSocket frame in the list
+    // - this method is thread-safe
+    procedure Push(const frame: TWebSocketFrame);
+    /// add a void WebSocket frame in the list
+    // - this method is thread-safe
+    procedure PushVoidFrame(opcode: TWebSocketFrameOpCode);
+    /// retrieve a WebSocket frame from the list, oldest first
+    // - you should specify a frame type to search for, according to the
+    // specified WebSockets protocl
+    // - this method is thread-safe
+    function Pop(protocol: TWebSocketProtocol; const head: RawUtf8;
+      out frame: TWebSocketFrame): boolean;
+    /// how many 'answer' frames are to be ignored
+    // - this method is thread-safe
+    function AnswerToIgnore(incr: integer = 0): integer;
+  end;
+
+
+
+{ ******************** WebSockets Client and Server Shared Process }
 
   /// the current state of the WebSockets process
   TWebSocketProcessState = (
@@ -554,7 +616,7 @@ type
   // updated from the actual processing thread (e.g. as in TWebCrtSocketProcess)
   TWebSocketProcess = class(TSynPersistent)
   protected
-    fProcessName: RawUTF8;
+    fProcessName: RawUtf8;
     fIncoming: TWebSocketFrameList;
     fOutgoing: TWebSocketFrameList;
     fOwnerThread: TSynThread;
@@ -565,7 +627,7 @@ type
     fProcessEnded: boolean;
     fNoConnectionCloseAtDestroy: boolean;
     fProcessCount: integer;
-    fSettings: TWebSocketProcessSettings;
+    fSettings: PWebSocketProcessSettings;
     fSafeIn, fSafeOut: PSynLocker;
     fInvalidPingSendCount: cardinal;
     fSafePing: PSynLocker;
@@ -587,7 +649,7 @@ type
        out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract;
       virtual; abstract;
     procedure HiResDelay(const start: Int64);
-    procedure Log(const frame: TWebSocketFrame; const aMethodName: RawUTF8;
+    procedure Log(const frame: TWebSocketFrame; const aMethodName: RawUtf8;
       aEvent: TSynLogInfo = sllTrace; DisableRemoteLog: boolean = false); virtual;
     function SendPendingOutgoingFrames: boolean;
   public
@@ -596,7 +658,7 @@ type
     // - other parameters should reflect the client or server expectations
     constructor Create(aProtocol: TWebSocketProtocol;
       aOwnerConnection: THttpServerConnectionID; aOwnerThread: TSynThread;
-      const aSettings: TWebSocketProcessSettings; const aProcessName: RawUTF8); reintroduce;
+      aSettings: PWebSocketProcessSettings; const aProcessName: RawUtf8); reintroduce;
     /// finalize the context
     // - if needed, will notify the other end with a focConnectionClose frame
     // - will release the TWebSocketProtocol associated instance
@@ -630,15 +692,17 @@ type
     // - returns the HTTP Status code (e.g. HTTP_SUCCESS=200 for success)
     function NotifyCallback(aRequest: THttpServerRequestAbstract;
       aMode: TWebSocketProcessNotifyCallback): cardinal; virtual;
-    /// the settings currently used during the WebSockets process
-    // - defined as a pointer so that you may be able to change the values
-    function Settings: PWebSocketProcessSettings;
-      {$ifdef HASINLINE}inline;{$endif}
     /// returns the current state of the underlying connection
     function State: TWebSocketProcessState;
     /// the associated 'Remote-IP' HTTP header value
     // - returns '' if Protocol=nil or Protocol.RemoteLocalhost=true
-    function RemoteIP: RawUTF8;
+    function RemoteIP: RawUtf8;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// the settings currently used during the WebSockets process
+    // - points to the owner instance, e.g. TWebSocketServer.Settings or
+    // THttpClientWebSockets.Settings field
+    property Settings: PWebSocketProcessSettings
+      read fSettings;
     /// direct access to the low-level incoming frame stack
     property Incoming: TWebSocketFrameList
       read fIncoming;
@@ -661,12 +725,12 @@ type
       read fNoConnectionCloseAtDestroy write fNoConnectionCloseAtDestroy;
   published
     /// the Sec-WebSocket-Protocol application protocol currently involved
-    // - TWebSocketProtocolJSON or TWebSocketProtocolBinary in the mORMot context
+    // - TWebSocketProtocolJson or TWebSocketProtocolBinary in the mORMot context
     // - could be nil if the connection is in standard HTTP/1.1 mode
     property Protocol: TWebSocketProtocol
       read fProtocol;
     /// the associated process name
-    property ProcessName: RawUTF8
+    property ProcessName: RawUtf8
       read fProcessName write fProcessName;
     /// how many invalid heartbeat frames have been sent
     // - a non 0 value indicates a connection problem
@@ -685,7 +749,7 @@ type
     // - other parameters should reflect the client or server expectations
     constructor Create(aSocket: TCrtSocket; aProtocol: TWebSocketProtocol;
       aOwnerConnection: THttpServerConnectionID; aOwnerThread: TSynThread;
-      const aSettings: TWebSocketProcessSettings; const aProcessName: RawUTF8);
+      aSettings: PWebSocketProcessSettings; const aProcessName: RawUtf8);
        reintroduce; virtual;
     /// first step of the low level incoming WebSockets framing protocol over TCrtSocket
     // - in practice, just call fSocket.SockInPending to check for pending data
@@ -721,14 +785,8 @@ var
 
   /// number of bytes above which SynLZ compression may be done
   // - when working with TWebSocketProtocolBinary
-  // - it is useless to compress smaller frames, which fits in network MTU
+  // - it is useless to compress smallest frames, which fits in network MTU
   WebSocketsBinarySynLzThreshold: integer = 450;
-
-  /// how replay attacks will be handled in TWebSocketProtocolBinary encryption
-  // - you may set this global value to repCheckedIfAvailable if you are
-  // really paranoid (but resulting security may be lower, since the IV is
-  // somewhat more predictable than plain random)
-  WebSocketsIVReplayAttackCheck: TAESIVReplayAttackCheck = repNoCheck;
 
   /// the allowed maximum size, in MB, of a WebSockets frame
   WebSocketsMaxFrameMB: cardinal = 256;
@@ -761,11 +819,12 @@ begin
   result := GetEnumName(TypeInfo(TWebSocketProcessState), ord(st));
 end;
 
-procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSHA1Digest);
+procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSha1Digest);
 const
+  // see https://tools.ietf.org/html/rfc6455
   SALT: string[36] = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 var
-  SHA: TSHA1;
+  SHA: TSha1;
 begin
   SHA.Init;
   SHA.Update(pointer(Base64), length(Base64));
@@ -778,34 +837,68 @@ end;
 
 { TWebSocketProtocol }
 
-constructor TWebSocketProtocol.Create(const aName, aURI: RawUTF8);
+constructor TWebSocketProtocol.Create(const aName, aUri: RawUtf8);
 begin
   fName := aName;
-  fURI := aURI;
+  fUri := aUri;
+  fConnectionFlags := [hsrWebsockets];
 end;
 
-procedure TWebSocketProtocol.SetEncryptKey(aServer: boolean; const aKey: RawUTF8);
+procedure TWebSocketProtocol.SetEncryptKey(aServer: boolean; const aKey: RawUtf8;
+  aSettings: PWebSocketProcessSettings);
 var
-  key: TSHA256Digest;
+  key: THash256Rec;
 begin
-  if aKey = '' then
-    fEncryption := nil
+  // always first disable any previous encryption
+  fEncryption := nil;
+  fConnectionFlags := [hsrWebsockets];
+  if (aKey = '') or
+     (aSettings = nil) then
+    exit;
+  // 1. try asymetric ES-256 ephemeral secret key and mutual authentication
+  // check human-friendly format 'password#*.private' key file name
+  with aSettings^ do
+    fEncryption := TEcdheProtocol.FromPasswordSecureFile(
+      aKey, aServer, EcdheAuth, EcdheCipher, EcdheRounds);
+  if fEncryption = nil then
+    // check 'a=mutual;e=aesctc128;p=34a2;pw=password;ca=..' full format
+    fEncryption := TEcdheProtocol.FromKey(aKey, aServer);
+  if fEncryption <> nil then
+    include(fConnectionFlags, hsrSecured)
   else
   begin
-    fEncryption := TECDHEProtocol.FromKey(aKey, aServer);
-    if fEncryption = nil then
-    begin
-      SHA256Weak(aKey, key); // fallback to deprecated TProtocolAES/TAESCFB
-      SetEncryptKeyAES(key, 256);
-    end;
+    // 2. aKey no 'a=...'/'pw#xx.private' layout -> use symetric TProtocolAes
+    if aSettings.AesRounds = 0 then
+      // mORMot 1.18 deprecated password derivation
+      Sha256Weak(aKey, key.b)
+    else
+      // new safer password derivation algorithm (rounds=1000 -> 1ms)
+      PBKDF2_SHA3(SHA3_256, aKey, aSettings.AesSalt, aSettings.AesRounds,
+        @key, SizeOf(key));
+    SetEncryptKeyAes(aSettings.AesCipher, key, aSettings.AesBits);
   end;
 end;
 
-procedure TWebSocketProtocol.SetEncryptKeyAES(const aKey; aKeySize: cardinal);
+procedure TWebSocketProtocol.SetEncryptKeyAes(aCipher: TAesAbstractClass;
+  const aKey; aKeySize: cardinal);
 begin
-  if aKeySize >= 128 then
-    fEncryption := TProtocolAES.Create(TAESCFB, aKey, aKeySize,
-      WebSocketsIVReplayAttackCheck);
+  fEncryption := nil;
+  fConnectionFlags := [hsrWebsockets];
+  if aKeySize < 128 then
+    exit;
+  fEncryption := TProtocolAes.Create(aCipher, aKey, aKeySize);
+  include(fConnectionFlags, hsrSecured)
+end;
+
+procedure TWebSocketProtocol.SetEncryptKeyEcdhe(aAuth: TEcdheAuth;
+  aPKI: TEccCertificateChain; aPrivate: TEccCertificateSecret; aServer: boolean;
+  aEF: TEcdheEF; aPrivateOwned: boolean);
+begin
+  fEncryption := nil;
+  fConnectionFlags := [hsrWebsockets];
+  fEncryption := ECDHEPROT_CLASS[aServer].Create(
+    aAuth, aPKI, aPrivate, aEF, aPrivateOwned);
+  include(fConnectionFlags, hsrSecured)
 end;
 
 procedure TWebSocketProtocol.AfterGetFrame(var frame: TWebSocketFrame);
@@ -821,21 +914,21 @@ begin
 end;
 
 function TWebSocketProtocol.FrameData(const frame: TWebSocketFrame;
-  const Head: RawUTF8; HeadFound: PRawUTF8): pointer;
+  const Head: RawUtf8; HeadFound: PRawUtf8): pointer;
 begin
   result := nil; // no frame type by default
 end;
 
-function TWebSocketProtocol.FrameType(const frame: TWebSocketFrame): RawUTF8;
+function TWebSocketProtocol.FrameType(const frame: TWebSocketFrame): RawUtf8;
 begin
   result := '*'; // no frame URI by default
 end;
 
-function TWebSocketProtocol.ProcessHandshake(const ExtIn: TRawUTF8DynArray;
-  out ExtOut: RawUTF8; ErrorMsg: PRawUTF8): boolean;
+function TWebSocketProtocol.ProcessHandshake(const ExtIn: TRawUtf8DynArray;
+  out ExtOut: RawUtf8; ErrorMsg: PRawUtf8): boolean;
 var
   res: TProtocolResult;
-  msgin, msgout: RawUTF8;
+  msgin, msgout: RawUtf8;
   synhk: boolean;
   i: integer;
 begin
@@ -862,7 +955,7 @@ begin
   case res of
     sprSuccess:
       begin
-        AddToCSV('synhk; hk=' + msgout, ExtOut{%H-}, '; ');
+        AddToCsv('synhk; hk=' + msgout, ExtOut{%H-}, '; ');
         result := true;
         exit;
       end;
@@ -873,14 +966,14 @@ begin
         exit;
       end;
   end;
-  WebSocketLog.Add.Log(sllWarning, 'ProcessHandshake=% In=[%]', [ToText(res)^,
-    msgin], self);
+  WebSocketLog.Add.Log(sllWarning, 'ProcessHandshake=% In=[%]',
+    [ToText(res)^, msgin], self);
   if ErrorMsg <> nil then
-    ErrorMsg^ := FormatUTF8('%: %', [ErrorMsg^,
+    ErrorMsg^ := FormatUtf8('%: %', [ErrorMsg^,
       GetCaptionFromEnum(TypeInfo(TProtocolResult), ord(res))]);
 end;
 
-function TWebSocketProtocol.ProcessHandshakeURI(const aClientURI: RawUTF8): boolean;
+function TWebSocketProtocol.ProcessHandshakeUri(const aClientUri: RawUtf8): boolean;
 begin
   result := true; // override and return false to return HTTP_UNAUTHORIZED
 end;
@@ -889,7 +982,8 @@ function TWebSocketProtocol.SendFrames(Owner: TWebSocketProcess;
   var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean;
 var
   i, n: PtrInt;
-begin // this default implementation will send all frames one by one
+begin
+  // this default implementation will send all frames one by one
   n := FramesCount;
   if (n > 0) and
      (Owner <> nil) then
@@ -911,17 +1005,17 @@ begin
             (fEncryption <> nil);
 end;
 
-function TWebSocketProtocol.GetSubprotocols: RawUTF8;
+function TWebSocketProtocol.GetSubprotocols: RawUtf8;
 begin
   result := fName;
 end;
 
-function TWebSocketProtocol.SetSubprotocol(const aProtocolName: RawUTF8): boolean;
+function TWebSocketProtocol.SetSubprotocol(const aProtocolName: RawUtf8): boolean;
 begin
   result := IdemPropNameU(aProtocolName, fName);
 end;
 
-function TWebSocketProtocol.GetRemoteIP: RawUTF8;
+function TWebSocketProtocol.GetRemoteIP: RawUtf8;
 begin
   if (self = nil) or
      fRemoteLocalhost then
@@ -949,7 +1043,7 @@ begin
 end;
 
 function TWebSocketFrameList.Pop(protocol: TWebSocketProtocol;
-  const head: RawUTF8; out frame: TWebSocketFrame): boolean;
+  const head: RawUtf8; out frame: TWebSocketFrame): boolean;
 var
   i: PtrInt;
   tix: cardinal;
@@ -1013,7 +1107,8 @@ begin
 end;
 
 procedure TWebSocketFrameList.Delete(i: integer);
-begin // slightly faster than a TDynArray which would release the memory
+begin
+  // slightly faster than a TDynArray which would release the memory
   List[i].payload := '';
   dec(Count);
   if i < Count then
@@ -1028,14 +1123,14 @@ end;
 { TWebSocketProtocolRest }
 
 procedure TWebSocketProtocolRest.ProcessIncomingFrame(Sender: TWebSocketProcess;
-  var request: TWebSocketFrame; const info: RawUTF8);
+  var request: TWebSocketFrame; const info: RawUtf8);
 var
   Ctxt: THttpServerRequestAbstract;
   onRequest: TOnHttpServerRequest;
   status: cardinal;
   noAnswer: boolean;
   answer: TWebSocketFrame;
-  head: RawUTF8;
+  head: RawUtf8;
 begin
   if not (request.opcode in [focText, focBinary]) then
     exit; // ignore e.g. from TWebSocketServerResp.ProcessStart/ProcessStop
@@ -1045,10 +1140,10 @@ begin
     try
       if (Ctxt = nil) or
          not Assigned(onRequest) then
-        raise EWebSockets.CreateUTF8('%.ProcessOne: onRequest=nil', [self]);
+        raise EWebSockets.CreateUtf8('%.ProcessOne: onRequest=nil', [self]);
       if (head = '') or
          not FrameToInput(request, noAnswer, Ctxt) then
-        raise EWebSockets.CreateUTF8('%.ProcessOne: invalid frame', [self]);
+        raise EWebSockets.CreateUtf8('%.ProcessOne: invalid frame', [self]);
       request.payload := ''; // release memory ASAP
       if info <> '' then
         Ctxt.AddInHeader(info);
@@ -1058,7 +1153,7 @@ begin
         exit;
       OutputToFrame(Ctxt, status, head, answer);
       if not Sender.SendFrame(answer) then
-        fLastError := UTF8ToString(FormatUTF8('SendFrame error %', [Sender]));
+        fLastError := Utf8ToString(FormatUtf8('SendFrame error %', [Sender]));
     finally
       Ctxt.Free;
     end;
@@ -1073,13 +1168,13 @@ begin
     Sender.Log(request, 'Ignored answer after NotifyCallback TIMEOUT', sllWarning);
   end
   else
-    Sender.fIncoming.Push(request); // e.g. asynch 'answer'
+    Sender.fIncoming.Push(request); // e.g. async 'answer'
 end;
 
 // by convention, defaults are POST and JSON, to reduce frame size for SOA calls
 
 procedure TWebSocketProtocolRest.InputToFrame(Ctxt: THttpServerRequestAbstract;
-  aNoAnswer: boolean; out request: TWebSocketFrame; out head: RawUTF8);
+  aNoAnswer: boolean; out request: TWebSocketFrame; out head: RawUtf8);
 var
   Method, InContentType: RawByteString;
   seq: integer;
@@ -1099,7 +1194,7 @@ begin
   end
   else
     head := 'request';
-  FrameCompress(head, [{%H-}Method, Ctxt.URL, Ctxt.InHeaders, ord(aNoAnswer)],
+  FrameCompress(head, [{%H-}Method, Ctxt.Url, Ctxt.InHeaders, ord(aNoAnswer)],
     Ctxt.InContent, InContentType{%H-}, request);
   if fSequencing then
     head[1] := 'a'
@@ -1112,8 +1207,8 @@ function TWebSocketProtocolRest.FrameToInput(var request: TWebSocketFrame;
 var
   URL, Method, InHeaders, NoAnswer, InContentType, InContent: RawByteString;
 begin
-  result := FrameDecompress(request, 'r', [@Method, @URL, @InHeaders, @NoAnswer],
-    InContentType, InContent);
+  result := FrameDecompress(request, 'r',
+    [@Method, @URL, @InHeaders, @NoAnswer], InContentType, InContent);
   if result then
   begin
     if (InContentType = '') and
@@ -1121,13 +1216,13 @@ begin
       InContentType := JSON_CONTENT_TYPE_VAR;
     if Method = '' then
       Method := 'POST';
-    Ctxt.Prepare(URL, Method, InHeaders, InContent, InContentType, fRemoteIP, Ctxt.UseSSL);
+    Ctxt.Prepare(URL, Method, InHeaders, InContent, InContentType, fRemoteIP);
     aNoAnswer := NoAnswer = '1';
   end;
 end;
 
 procedure TWebSocketProtocolRest.OutputToFrame(Ctxt: THttpServerRequestAbstract;
-  Status: cardinal; var outhead: RawUTF8; out answer: TWebSocketFrame);
+  Status: cardinal; var outhead: RawUtf8; out answer: TWebSocketFrame);
 var
   OutContentType: RawByteString;
 begin
@@ -1135,9 +1230,11 @@ begin
      not IdemPropNameU(Ctxt.OutContentType, JSON_CONTENT_TYPE) then
     OutContentType := Ctxt.OutContentType;
   if NormToUpperAnsi7[outhead[3]] = 'Q' then
+    // 'request' -> 'answer'
     outhead := 'answer'
-  else // 'request' -> 'answer'
-    outhead[1] := 'a';       // 'r000001' -> 'a000001'
+  else
+    // 'r000001' -> 'a000001'
+    outhead[1] := 'a';
   FrameCompress(outhead, [Status, Ctxt.OutCustomHeaders], Ctxt.OutContent,
     OutContentType{%H-}, answer);
 end;
@@ -1162,19 +1259,19 @@ begin
 end;
 
 
-{ TWebSocketProtocolJSON }
+{ TWebSocketProtocolJson }
 
-constructor TWebSocketProtocolJSON.Create(const aURI: RawUTF8);
+constructor TWebSocketProtocolJson.Create(const aUri: RawUtf8);
 begin
-  inherited Create('synopsejson', aURI);
+  inherited Create('synopsejson', aUri);
 end;
 
-function TWebSocketProtocolJSON.Clone(const aClientURI: RawUTF8): TWebSocketProtocol;
+function TWebSocketProtocolJson.Clone(const aClientUri: RawUtf8): TWebSocketProtocol;
 begin
-  result := TWebSocketProtocolJSON.Create(fURI);
+  result := TWebSocketProtocolJson.Create(fUri);
 end;
 
-procedure TWebSocketProtocolJSON.FrameCompress(const Head: RawUTF8;
+procedure TWebSocketProtocolJson.FrameCompress(const Head: RawUtf8;
   const Values: array of const; const Content, ContentType: RawByteString;
   var frame: TWebSocketFrame);
 var
@@ -1191,8 +1288,8 @@ begin
     WR.Add('[');
     for i := 0 to High(Values) do
     begin
-      WR.AddJSONEscape(Values[i]);
-      WR.Add(',');
+      WR.AddJsonEscape(Values[i]);
+      WR.AddComma;
     end;
     WR.Add('"');
     WR.AddString(ContentType);
@@ -1201,22 +1298,22 @@ begin
       WR.Add('"', '"')
     else if (ContentType = '') or
             IdemPropNameU(ContentType, JSON_CONTENT_TYPE) then
-      WR.AddNoJSONEscape(pointer(Content), length(Content))
+      WR.AddNoJsonEscape(pointer(Content), length(Content))
     else if IdemPChar(pointer(ContentType), 'TEXT/') then
-      WR.AddCSVUTF8([Content])
+      WR.AddCsvUtf8([Content])
     else
       WR.WrBase64(pointer(Content), length(Content), true);
     WR.Add(']', '}');
-    WR.SetText(RawUTF8(frame.payload));
+    WR.SetText(RawUtf8(frame.payload));
   finally
     WR.Free;
   end;
 end;
 
-function TWebSocketProtocolJSON.FrameData(const frame: TWebSocketFrame;
-  const Head: RawUTF8; HeadFound: PRawUTF8): pointer;
+function TWebSocketProtocolJson.FrameData(const frame: TWebSocketFrame;
+  const Head: RawUtf8; HeadFound: PRawUtf8): pointer;
 var
-  P, txt: PUTF8Char;
+  P, txt: PUtf8Char;
   len: integer;
 begin
   result := nil;
@@ -1233,7 +1330,7 @@ begin
       exit;
   end;
   txt := P + 1;
-  P := GotoEndOfJSONString(P); // here P^ should be '"'
+  P := GotoEndOfJsonString(P); // here P^ should be '"'
   len := length(Head);
   if (P^ <> #0) and
      (P - txt >= len) and
@@ -1241,26 +1338,26 @@ begin
   begin
     result := P + 1;
     if HeadFound <> nil then
-      SetString(HeadFound^, txt, P - txt);
+      FastSetString(HeadFound^, txt, P - txt);
   end;
 end;
 
-function TWebSocketProtocolJSON.FrameDecompress(const frame: TWebSocketFrame;
-  const Head: RawUTF8; const values: array of PRawByteString;
+function TWebSocketProtocolJson.FrameDecompress(const frame: TWebSocketFrame;
+  const Head: RawUtf8; const values: array of PRawByteString;
   var contentType, content: RawByteString): boolean;
 var
-  i: integer;
-  P: PUTF8Char;
-  b64: PUTF8Char;
+  i: PtrInt;
+  P: PUtf8Char;
+  b64: PUtf8Char;
   b64len: integer;
 
   procedure GetNext(var content: RawByteString);
   var
-    txt: PUTF8Char;
+    txt: PUtf8Char;
     txtlen: integer;
   begin
-    txt := GetJSONField(P, P, nil, nil, @txtlen);
-    SetString(content, txt, txtlen);
+    txt := GetJsonField(P, P, nil, nil, @txtlen);
+    FastSetString(RawUtf8(content), txt, txtlen);
   end;
 
 begin
@@ -1278,21 +1375,21 @@ begin
     exit;
   if (contentType = '') or
      IdemPropNameU(contentType, JSON_CONTENT_TYPE) then
-    GetJSONItemAsRawJSON(P, RawJSON(content))
+    GetJsonItemAsRawJson(P, RawJson(content))
   else if IdemPChar(pointer(contentType), 'TEXT/') then
     GetNext(content)
   else
   begin
-    b64 := GetJSONField(P, P, nil, nil, @b64len);
+    b64 := GetJsonField(P, P, nil, nil, @b64len);
     if not Base64MagicCheckAndDecode(b64, b64len, content) then
       exit;
   end;
   result := true;
 end;
 
-function TWebSocketProtocolJSON.FrameType(const frame: TWebSocketFrame): RawUTF8;
+function TWebSocketProtocolJson.FrameType(const frame: TWebSocketFrame): RawUtf8;
 var
-  P, txt: PUTF8Char;
+  P, txt: PUtf8Char;
 begin
   result := '*';
   if (length(frame.payload) < 10) or
@@ -1303,36 +1400,41 @@ begin
      not NextNotSpaceCharIs(P, '"') then
     exit;
   txt := P;
-  P := GotoEndOfJSONString(P);
-  SetString(result, txt, P - txt);
+  P := GotoEndOfJsonString(P);
+  FastSetString(result, txt, P - txt);
 end;
 
 
 { TWebSocketProtocolBinary }
 
-constructor TWebSocketProtocolBinary.Create(const aURI: RawUTF8; aCompressed: boolean);
+constructor TWebSocketProtocolBinary.Create(
+  const aUri: RawUtf8; aOptions: TWebSocketProtocolBinaryOptions);
 begin
-  inherited Create('synopsebin', aURI);
-  fCompressed := aCompressed;
+  inherited Create('synopsebin', aUri);
+  fOptions := aOptions;
 end;
 
-constructor TWebSocketProtocolBinary.Create(const aURI: RawUTF8;
-  const aKey; aKeySize: cardinal; aCompressed: boolean);
+constructor TWebSocketProtocolBinary.Create(const aUri: RawUtf8;
+  const aKey; aKeySize: cardinal; aOptions: TWebSocketProtocolBinaryOptions;
+  aCipher: TAesAbstractClass);
 begin
-  Create(aURI, aCompressed);
-  SetEncryptKeyAES(aKey, aKeySize);
+  Create(aUri, aOptions);
+  SetEncryptKeyAes(aCipher, aKey, aKeySize);
 end;
 
-constructor TWebSocketProtocolBinary.Create(const aURI: RawUTF8; aServer:
-  boolean; const aKey: RawUTF8; aCompressed: boolean);
+constructor TWebSocketProtocolBinary.Create(const aUri: RawUtf8;
+  aServer: boolean; const aKey: RawUtf8; aSettings: PWebSocketProcessSettings;
+  aOptions: TWebSocketProtocolBinaryOptions);
 begin
-  Create(aURI, aCompressed);
-  SetEncryptKey(aServer, aKey);
+  Create(aUri, aOptions);
+  SetEncryptKey(aServer, aKey, aSettings);
 end;
 
-function TWebSocketProtocolBinary.Clone(const aClientURI: RawUTF8): TWebSocketProtocol;
+function TWebSocketProtocolBinary.Clone(
+  const aClientUri: RawUtf8): TWebSocketProtocol;
 begin
-  result := TWebSocketProtocolBinary.Create(fURI, {dummykey=}self, 0, fCompressed);
+  result := TWebSocketProtocolBinary.Create(
+    fUri, {dummykey=}self, 0, fOptions);
   TWebSocketProtocolBinary(result).fSequencing := fSequencing;
   if fEncryption <> nil then
     result.fEncryption := fEncryption.Clone;
@@ -1354,39 +1456,39 @@ begin
     frame.content := [];
 end;
 
-procedure TWebSocketProtocolBinary.FrameCompress(const Head: RawUTF8;
+procedure TWebSocketProtocolBinary.FrameCompress(const Head: RawUtf8;
   const Values: array of const; const Content, ContentType: RawByteString;
   var frame: TWebSocketFrame);
 var
-  item: RawUTF8;
+  item: TTempUtf8;
   i: PtrInt;
   W: TBufferWriter;
+  temp: TTextWriterStackBuffer; // 8KB
 begin
   FrameInit(focBinary, Content, ContentType, frame);
-  W := TBufferWriter.Create(TRawByteStringStream);
+  W := TBufferWriter.Create(temp{%H-});
   try
     W.WriteBinary(Head);
     W.Write1(byte(FRAME_HEAD_SEP));
     for i := 0 to high(Values) do
       with Values[i] do
       begin
-        VarRecToUTF8(Values[i], item);
-        W.Write(item);
+        VarRecToTempUtf8(Values[i], item);
+        W.WriteVar(item);
       end;
     W.Write(ContentType);
     W.WriteBinary(Content);
-    W.Flush;
-    frame.payload := TRawByteStringStream(W.Stream).DataString;
+    frame.payload := W.FlushTo;
   finally
     W.Free;
   end;
 end;
 
 function TWebSocketProtocolBinary.FrameData(const frame: TWebSocketFrame;
-  const Head: RawUTF8; HeadFound: PRawUTF8): pointer;
+  const Head: RawUtf8; HeadFound: PRawUtf8): pointer;
 var
   len: PtrInt;
-  P: PAnsiChar;
+  P: PUtf8Char;
 begin
   P := pointer(frame.payload);
   len := length(Head);
@@ -1394,11 +1496,11 @@ begin
      (length(frame.payload) >= len + 6) and
      CompareMemSmall(pointer(Head), P, len) then
   begin
-    result := PosChar(PUTF8Char(P) + len, FRAME_HEAD_SEP);
+    result := PosChar(P + len, FRAME_HEAD_SEP);
     if result <> nil then
     begin
       if HeadFound <> nil then
-        SetString(HeadFound^, P, PAnsiChar(result) - P);
+        FastSetString(HeadFound^, P, PAnsiChar(result) - P);
       inc(PByte(result));
     end;
   end
@@ -1406,9 +1508,9 @@ begin
     result := nil;
 end;
 
-function TWebSocketProtocolBinary.FrameType(const frame: TWebSocketFrame): RawUTF8;
+function TWebSocketProtocolBinary.FrameType(const frame: TWebSocketFrame): RawUtf8;
 var
-  i: integer;
+  i: PtrInt;
 begin
   if (length(frame.payload) < 10) or
      (frame.opcode <> focBinary) then
@@ -1418,7 +1520,7 @@ begin
   if i = 0 then
     result := '*'
   else
-    result := copy(frame.payload, 1, i - 1);
+    FastSetString(result, pointer(frame.payload), i - 1);
 end;
 
 procedure TWebSocketProtocolBinary.BeforeSendFrame(var frame: TWebSocketFrame);
@@ -1429,19 +1531,23 @@ begin
   inherited BeforeSendFrame(frame);
   if frame.opcode = focBinary then
   begin
-    if fCompressed then
+    if pboSynLzCompress in fOptions then
     begin
-      if fRemoteLocalhost or
-         (fopAlreadyCompressed in frame.content) then
+      if (fopAlreadyCompressed in frame.content) or
+         (fRemoteLocalhost and
+          (pboNoLocalHostCompress in fOptions)) then
         // localhost or compressed -> no SynLZ
         threshold := maxInt
       else
         threshold := WebSocketsBinarySynLzThreshold;
-      value := AlgoSynLZ.Compress(pointer(frame.payload), length(frame.payload), threshold);
+      value := AlgoSynLZ.Compress(
+        pointer(frame.payload), length(frame.payload), threshold);
     end
     else
       value := frame.payload;
-    if fEncryption <> nil then
+    if (fEncryption <> nil) and
+       not (fRemoteLocalhost and
+            (pboNoLocalHostEncrypt in fOptions)) then
       fEncryption.Encrypt(value, frame.payload)
     else
       frame.payload := value;
@@ -1457,16 +1563,18 @@ begin
   inc(fFramesInBytesSocket, length(frame.payload) + 2);
   if frame.opcode = focBinary then
   begin
-    if fEncryption <> nil then
+    if (fEncryption <> nil) and
+       not (fRemoteLocalhost and
+            (pboNoLocalHostEncrypt in fOptions)) then
     begin
       res := fEncryption.Decrypt(frame.payload, value);
       if res <> sprSuccess then
-        raise EWebSockets.CreateUTF8('%.AfterGetFrame: encryption error %',
+        raise EWebSockets.CreateUtf8('%.AfterGetFrame: encryption error %',
           [self, ToText(res)^]);
     end
     else
       value := frame.payload;
-    if fCompressed then
+    if pboSynLzCompress in fOptions then
       AlgoSynLZ.Decompress(pointer(value), length(value), frame.payload)
     else
       frame.payload := value;
@@ -1475,10 +1583,10 @@ begin
 end;
 
 function TWebSocketProtocolBinary.FrameDecompress(const frame: TWebSocketFrame;
-  const Head: RawUTF8; const values: array of PRawByteString;
+  const Head: RawUtf8; const values: array of PRawByteString;
   var contentType, content: RawByteString): boolean;
 var
-  i: integer;
+  i: PtrInt;
   P: PByte;
 begin
   result := false;
@@ -1486,8 +1594,8 @@ begin
   if P = nil then
     exit;
   for i := 0 to high(values) do
-    values[i]^ := FromVarString(P);
-  contentType := FromVarString(P);
+    FromVarString(P, values[i]^ ,CP_UTF8);
+  FromVarString(P, contentType, CP_UTF8);
   i := length(frame.payload) - (PAnsiChar(P) - pointer(frame.payload));
   if i < 0 then
     exit;
@@ -1501,7 +1609,7 @@ const
   JUMBO_HEADER: array[0..6] of AnsiChar = 'frames' + FRAME_HEAD_SEP;
 var
   jumboFrame: TWebSocketFrame;
-  i, len: integer;
+  i, len: PtrInt;
   P: PByte;
 begin
   if (FramesCount = 0) or
@@ -1523,7 +1631,7 @@ begin
     if Frames[i].opcode = focBinary then
       inc(len, ToVarUInt32LengthWithData(length(Frames[i].payload)))
     else
-      raise EWebSockets.CreateUTF8('%.SendFrames[%]: Unexpected opcode=%',
+      raise EWebSockets.CreateUtf8('%.SendFrames[%]: Unexpected opcode=%',
         [self, i, ord(Frames[i].opcode)]);
   SetString(jumboFrame.payload, nil, len);
   P := pointer(jumboFrame.payload);
@@ -1543,7 +1651,7 @@ begin
 end;
 
 procedure TWebSocketProtocolBinary.ProcessIncomingFrame(
-  Sender: TWebSocketProcess; var request: TWebSocketFrame; const info: RawUTF8);
+  Sender: TWebSocketProcess; var request: TWebSocketFrame; const info: RawUtf8);
 var
   jumboInfo: RawByteString;
   n, i: integer;
@@ -1565,7 +1673,7 @@ begin
       frame.opcode := focBinary;
       frame.content := [];
       frame.payload := FromVarString(P);
-      Sender.Log(frame, FormatUTF8('GetSubFrame(%/%)', [i + 1, n + 1]));
+      Sender.Log(frame, FormatUtf8('GetSubFrame(%/%)', [i + 1, n + 1]));
       inherited ProcessIncomingFrame(Sender, frame, jumboInfo);
     end;
   end
@@ -1578,8 +1686,8 @@ begin
   if (self = nil) or
      (fFramesInBytes = 0) then
     result := 100
-  else if not fCompressed or
-          (fFramesInBytesSocket < fFramesInBytes) then
+  else if (fFramesInBytesSocket < fFramesInBytes) or
+          not (pboSynLzCompress in fOptions) then
     result := 0
   else
     result := 100 - (fFramesInBytesSocket * 100) div fFramesInBytes;
@@ -1590,19 +1698,19 @@ begin
   if (self = nil) or
      (fFramesOutBytes = 0) then
     result := 100
-  else if not fCompressed or
-          (fFramesOutBytesSocket <= fFramesOutBytes) then
+  else if (fFramesOutBytesSocket <= fFramesOutBytes) or
+          not (pboSynLzCompress in fOptions) then
     result := 0
   else
     result := 100 - (fFramesOutBytesSocket * 100) div fFramesOutBytes;
 end;
 
-function TWebSocketProtocolBinary.GetSubprotocols: RawUTF8;
+function TWebSocketProtocolBinary.GetSubprotocols: RawUtf8;
 begin
   result := 'synopsebin, synopsebinary';
 end;
 
-function TWebSocketProtocolBinary.SetSubprotocol(const aProtocolName: RawUTF8): boolean;
+function TWebSocketProtocolBinary.SetSubprotocol(const aProtocolName: RawUtf8): boolean;
 begin
   case FindPropName(['synopsebin', 'synopsebinary'], aProtocolName) of
     0:
@@ -1622,9 +1730,9 @@ end;
 { TWebSocketProtocolList }
 
 function TWebSocketProtocolList.CloneByName(const aProtocolName,
-  aClientURI: RawUTF8): TWebSocketProtocol;
+  aClientUri: RawUtf8): TWebSocketProtocol;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := nil;
   if self = nil then
@@ -1633,11 +1741,11 @@ begin
   try
     for i := 0 to length(fProtocols) - 1 do
       with fProtocols[i] do
-        if ((fURI = '') or
-            IdemPropNameU(fURI, aClientURI)) and
+        if ((fUri = '') or
+            IdemPropNameU(fUri, aClientUri)) and
            SetSubprotocol(aProtocolName) then
         begin
-          result := fProtocols[i].Clone(aClientURI);
+          result := fProtocols[i].Clone(aClientUri);
           result.fName := aProtocolName;
           exit;
         end;
@@ -1646,20 +1754,20 @@ begin
   end;
 end;
 
-function TWebSocketProtocolList.CloneByURI(const aClientURI: RawUTF8): TWebSocketProtocol;
+function TWebSocketProtocolList.CloneByUri(const aClientUri: RawUtf8): TWebSocketProtocol;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := nil;
   if (self = nil) or
-     (aClientURI = '') then
+     (aClientUri = '') then
     exit;
   fSafe.Lock;
   try
     for i := 0 to length(fProtocols) - 1 do
-      if IdemPropNameU(fProtocols[i].fURI, aClientURI) then
+      if IdemPropNameU(fProtocols[i].fUri, aClientUri) then
       begin
-        result := fProtocols[i].Clone(aClientURI);
+        result := fProtocols[i].Clone(aClientUri);
         exit;
       end;
   finally
@@ -1681,28 +1789,28 @@ begin
   inherited;
 end;
 
-function TWebSocketProtocolList.FindIndex(const aName, aURI: RawUTF8): integer;
+function TWebSocketProtocolList.FindIndex(const aName, aUri: RawUtf8): integer;
 begin
   if aName <> '' then
     for result := 0 to high(fProtocols) do
       with fProtocols[result] do
         if IdemPropNameU(fName, aName) and
-           ((fURI = '') or
-            IdemPropNameU(fURI, aURI)) then
+           ((fUri = '') or
+            IdemPropNameU(fUri, aUri)) then
           exit;
   result := -1;
 end;
 
 function TWebSocketProtocolList.Add(aProtocol: TWebSocketProtocol): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := false;
   if aProtocol = nil then
     exit;
   fSafe.Lock;
   try
-    i := FindIndex(aProtocol.Name, aProtocol.URI);
+    i := FindIndex(aProtocol.Name, aProtocol.Uri);
     if i < 0 then
     begin
       ObjArrayAdd(fProtocols, aProtocol);
@@ -1715,14 +1823,14 @@ end;
 
 function TWebSocketProtocolList.AddOnce(aProtocol: TWebSocketProtocol): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := false;
   if aProtocol = nil then
     exit;
   fSafe.Lock;
   try
-    i := FindIndex(aProtocol.Name, aProtocol.URI);
+    i := FindIndex(aProtocol.Name, aProtocol.Uri);
     if i < 0 then
     begin
       ObjArrayAdd(fProtocols, aProtocol);
@@ -1738,13 +1846,13 @@ begin
   end;
 end;
 
-function TWebSocketProtocolList.Remove(const aProtocolName, aURI: RawUTF8): boolean;
+function TWebSocketProtocolList.Remove(const aProtocolName, aUri: RawUtf8): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   fSafe.Lock;
   try
-    i := FindIndex(aProtocolName, aURI);
+    i := FindIndex(aProtocolName, aUri);
     if i >= 0 then
     begin
       ObjArrayDelete(fProtocols, i);
@@ -1773,6 +1881,13 @@ begin
   LogDetails := [];
   OnClientConnected := nil;
   OnClientDisconnected := nil;
+  AesSalt := 'E750ACCA-2C6F-4B0E-999B-D31C9A14EFAB';
+  AesRounds := 1024;
+  AesCipher := TAesFast[mCtr];
+  AesBits := 128;
+  EcdheCipher := efAesCtr128;
+  EcdheAuth := authMutual;
+  EcdheRounds := DEFAULT_ECCROUNDS;
 end;
 
 procedure TWebSocketProcessSettings.SetFullLog;
@@ -1785,7 +1900,7 @@ end;
 
 constructor TWebSocketProcess.Create(aProtocol: TWebSocketProtocol;
   aOwnerConnection: THttpServerConnectionID; aOwnerThread: TSynThread;
-  const aSettings: TWebSocketProcessSettings; const aProcessName: RawUTF8);
+  aSettings: PWebSocketProcessSettings; const aProcessName: RawUtf8);
 begin
   inherited Create;
   fProcessName := aProcessName;
@@ -1814,7 +1929,7 @@ begin
   begin
     if log <> nil then
       log.Log(sllTrace, 'Destroy: notify focConnectionClose', self);
-    InterlockedIncrement(fProcessCount);
+    LockedInc32(@fProcessCount);
     try
       fState := wpsDestroy;
       if fOutgoing.Count > 0 then
@@ -1827,7 +1942,7 @@ begin
         if log <> nil then // expects an answer from peer
           log.Log(sllWarning, 'Destroy: no focConnectionClose ACK %', [dummyerror], self);
     finally
-      InterlockedDecrement(fProcessCount);
+      LockedDec32(@fProcessCount);
     end;
   end;
   fState := wpsDestroy;
@@ -1930,7 +2045,7 @@ var
 begin
   if fState = wpsRun then
   begin
-    InterlockedIncrement(fProcessCount); // flag currently processing
+    LockedInc32(@fProcessCount); // flag currently processing
     try
       if CanGetFrame({timeout=}1, @sockerror) and
          GetFrame(request, @sockerror) then
@@ -1967,7 +2082,7 @@ begin
         fState := wpsClose;
       end;
     finally
-      InterlockedDecrement(fProcessCount); // release flag
+      LockedDec32(@fProcessCount); // release flag
     end;
   end;
   result := (fState = wpsRun);
@@ -1980,7 +2095,7 @@ var
 begin
   if fState = wpsRun then
   begin
-    InterlockedIncrement(fProcessCount); // flag currently processing
+    LockedInc32(@fProcessCount); // flag currently processing
     try
       elapsed := LastPingDelay;
       if elapsed > fSettings.SendDelay then
@@ -2000,7 +2115,7 @@ begin
               SetLastPingTicks(true); // mark invalid, and avoid immediate retry
         end;
     finally
-      InterlockedDecrement(fProcessCount); // release flag
+      LockedDec32(@fProcessCount); // release flag
     end;
   end;
   result := (fState = wpsRun);
@@ -2053,11 +2168,6 @@ begin
   SleepHiRes(delay);
 end;
 
-function TWebSocketProcess.Settings: PWebSocketProcessSettings;
-begin
-  result := @fSettings;
-end;
-
 function TWebSocketProcess.State: TWebSocketProcessState;
 begin
   if self = nil then
@@ -2066,7 +2176,7 @@ begin
     result := fState;
 end;
 
-function TWebSocketProcess.RemoteIP: RawUTF8;
+function TWebSocketProcess.RemoteIP: RawUtf8;
 begin
   if (self = nil) or
      (fProtocol = nil) or
@@ -2082,7 +2192,7 @@ var
   request, answer: TWebSocketFrame;
   i: integer;
   start, max: Int64;
-  head: RawUTF8;
+  head: RawUtf8;
 begin
   result := HTTP_NOTFOUND;
   if (fProtocol = nil) or
@@ -2091,7 +2201,7 @@ begin
     exit;
   if WebSocketLog <> nil then
     WebSocketLog.Add.Log(sllTrace, 'NotifyCallback(%,%)',
-      [aRequest.URL, _TWebSocketProcessNotifyCallback[aMode]^], self);
+      [aRequest.Url, _TWebSocketProcessNotifyCallback[aMode]^], self);
   TWebSocketProtocolRest(fProtocol).InputToFrame(aRequest,
     aMode in [wscBlockWithoutAnswer, wscNonBlockWithoutAnswer], request, head);
   case aMode of
@@ -2114,7 +2224,8 @@ begin
           HiResDelay(start);
           if fState in [wpsDestroy, wpsClose] then
           begin
-            result := HTTP_WEBSOCKETCLOSED;
+            WebSocketLog.Add.Log(sllError,
+              'NotifyCallback on closed connection', self);
             exit;
           end;
           if fIncoming.AnswerToIgnore = 0 then
@@ -2153,7 +2264,8 @@ begin
     while not fIncoming.Pop(fProtocol, head, answer) do
       if fState in [wpsDestroy, wpsClose] then
       begin
-        result := HTTP_WEBSOCKETCLOSED;
+        WebSocketLog.Add.Log(sllError,
+          'NotifyCallback on closed connection', self);
         exit;
       end
       else if GetTickCount64 > max then
@@ -2166,7 +2278,7 @@ begin
       else
         HiResDelay(start);
   finally
-    InterlockedDecrement(fProcessCount);
+    LockedDec32(@fProcessCount);
   end;
   result := TWebSocketProtocolRest(fProtocol).FrameToOutput(answer, aRequest);
 end;
@@ -2186,7 +2298,7 @@ begin
 end;
 
 procedure TWebSocketProcess.log(const frame: TWebSocketFrame;
-  const aMethodName: RawUTF8; aEvent: TSynLogInfo; DisableRemoteLog: boolean);
+  const aMethodName: RawUtf8; aEvent: TSynLogInfo; DisableRemoteLog: boolean);
 var
   tmp: TLogEscape;
   log: TSynLog;
@@ -2270,7 +2382,8 @@ type
   end;
 
 function TWebProcessInFrame.GetBytes(P: PAnsiChar; count: integer): boolean;
-begin // SockInRead() below raise a ENetSock error on failure
+begin
+  // SockInRead() below raise a ENetSock error on failure
   inc(len, process.ReceiveBytes(P + len, count - len));
   result := len = count;
 end;
@@ -2306,14 +2419,14 @@ begin
     else
       hdr.len32 := bswap32(hdr.len64);
     if hdr.len32 > WebSocketsMaxFrameMB shl 20 then
-      raise EWebSockets.CreateUTF8('%.GetFrame: length should be < % MB', [process,
+      raise EWebSockets.CreateUtf8('%.GetFrame: length should be < % MB', [process,
         WebSocketsMaxFrameMB]);
   end;
   if masked then
   begin
     len := 0; // not appended to hdr
     if not GetBytes(@hdr.mask, 4) then
-      raise EWebSockets.CreateUTF8('%.GetFrame: truncated mask', [process]);
+      raise EWebSockets.CreateUtf8('%.GetFrame: truncated mask', [process]);
   end;
   len := 0; // prepare upcoming GetData
   result := true;
@@ -2370,7 +2483,7 @@ begin
               ErrorWithoutException^ := maxInt;
             end
             else
-              raise EWebSockets.CreateUTF8('%.GetFrame: received %, expected %',
+              raise EWebSockets.CreateUtf8('%.GetFrame: received %, expected %',
                 [process, _TWebSocketFrameOpCode[opcode]^,
                 _TWebSocketFrameOpCode[outputframe.opcode]^]);
           end
@@ -2501,8 +2614,8 @@ end;
 
 constructor TWebCrtSocketProcess.Create(aSocket: TCrtSocket; aProtocol:
   TWebSocketProtocol; aOwnerConnection: THttpServerConnectionID;
-  aOwnerThread: TSynThread; const aSettings: TWebSocketProcessSettings;
-  const aProcessName: RawUTF8);
+  aOwnerThread: TSynThread; aSettings: PWebSocketProcessSettings;
+  const aProcessName: RawUtf8);
 begin
   inherited Create(aProtocol, aOwnerConnection, aOwnerThread, aSettings, aProcessName);
   fSocket := aSocket;
@@ -2524,7 +2637,7 @@ begin
       exit;
     end
     else
-      raise EWebSockets.CreateUTF8('SockInPending() Error % on %:% - from %',
+      raise EWebSockets.CreateUtf8('SockInPending() Error % on %:% - from %',
         [fSocket.LastLowSocketError, fSocket.Server, fSocket.Port, fProtocol.fRemoteIP]);
   result := (pending >= 2);
 end;

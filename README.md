@@ -2,7 +2,7 @@
 
 An Open Source Client-Server ORM/SOA framework, version 2
 
-(c) 2008-2020 Synopse Informatique - Arnaud Bouchez
+(c) 2008-2021 Synopse Informatique - Arnaud Bouchez
 
 https://synopse.info  - http://mORMot.net
 
@@ -103,6 +103,17 @@ Licensed under a disjunctive three-license giving you the choice of one of the t
 This allows the use of our code in as wide a variety of software projects as possible, while still maintaining copy-left on code we wrote.
 
 See [the full licensing terms](LICENCE.md).
+
+## Sub-Folders
+
+The mORMOt 2 repository content is split into the following sub-folders:
+
+- [`src`](src) is the main source code folder, where you should find the actual framework;
+- [`res`](res) to compile some resources used within `src`;
+- [`static`](static) contains raw library `.o`/`.obj` files needed for FPC and Delphi static linking;
+- [`test`](test) defines the regression tests of all framework features;
+- [`doc`](doc) holds the documentation of the framework;
+- [`ex`](ex) contains various samples.
 
 ## Links
 

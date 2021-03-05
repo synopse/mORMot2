@@ -9,9 +9,11 @@ unit mormot.net.client;
    HTTP Client Classes
    - THttpClientSocket Implementing HTTP client over plain sockets
    - THttpRequest Abstract HTTP client class
-   - TWinHttp TWinINet TWinHttpWebSocketClient TCurlHTTP
+   - TWinHttp TWinINet TWinHttpWebSocketClient TCurlHttp
+   - TSimpleHttpClient Wrapper Class
    - Cached HTTP Connection to a Remote Server
    - Send Email using the SMTP Protocol
+   - DNS Resolution Cache for mormot.net.sock NewSocket()
 
   *****************************************************************************
 
@@ -45,6 +47,33 @@ uses
 
 { ************** THttpClientSocket Implementing HTTP client over plain sockets }
 
+var
+  /// THttpRequest timeout default value for DNS resolution
+  // - only used by TWinHttp class - other clients will ignore it
+  // - leaving to 0 will let system default value be used
+  HTTP_DEFAULT_RESOLVETIMEOUT: integer = 0;
+  /// THttpRequest timeout default value for remote connection
+  // - default is 30 seconds
+  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
+  HTTP_DEFAULT_CONNECTTIMEOUT: integer = 30000;
+  /// THttpRequest timeout default value for data sending
+  // - default is 30 seconds
+  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
+  // - you can override this value by setting the corresponding parameter in
+  // THttpRequest.Create() constructor
+  HTTP_DEFAULT_SENDTIMEOUT: integer = 30000;
+  /// THttpRequest timeout default value for data receiving
+  // - default is 30 seconds
+  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
+  // - you can override this value by setting the corresponding parameter in
+  // THttpRequest.Create() constructor
+  HTTP_DEFAULT_RECEIVETIMEOUT: integer = 30000;
+
+const
+  /// standard text used to identify the WebSockets protocol
+  HTTP_WEBSOCKET_PROTOCOL: RawUtf8 = 'SEC-WEBSOCKET-PROTOCOL';
+
+
 type
   /// Socket API based REST and HTTP/1.1 compatible client class
   // - this component is HTTP/1.1 compatible, according to RFC 2068 document
@@ -59,9 +88,9 @@ type
   // - don't forget to use Free procedure when you are finished
   THttpClientSocket = class(THttpSocket)
   protected
-    fUserAgent: RawUTF8;
-    fProcessName: RawUTF8;
-    procedure RequestSendHeader(const url, method: RawUTF8); virtual;
+    fUserAgent: RawUtf8;
+    fProcessName: RawUtf8;
+    procedure RequestSendHeader(const url, method: RawUtf8); virtual;
   public
     /// common initialization of all constructors
     // - this overridden method will set the UserAgent with some default value
@@ -73,40 +102,40 @@ type
     // - called by all Get/Head/Post/Put/Delete REST methods
     // - after an Open(server,port), return 200,202,204 if OK, http status error otherwise
     // - retry is false by caller, and will be recursively called with true to retry once
-    function Request(const url, method: RawUTF8; KeepAlive: cardinal;
-      const header: RawUTF8; const Data: RawByteString; const DataType: RawUTF8;
+    function Request(const url, method: RawUtf8; KeepAlive: cardinal;
+      const header: RawUtf8; const Data: RawByteString; const DataType: RawUtf8;
       retry: boolean): integer; virtual;
     /// after an Open(server,port), return 200 if OK, http status error otherwise
     // - get the page data in Content
-    function Get(const url: RawUTF8; KeepAlive: cardinal = 0;
-      const header: RawUTF8 = ''): integer;
+    function Get(const url: RawUtf8; KeepAlive: cardinal = 0;
+      const header: RawUtf8 = ''): integer;
     /// after an Open(server,port), return 200 if OK, http status error otherwise
     // - get the page data in Content
     // - if AuthToken<>'', will add an header with 'Authorization: Bearer '+AuthToken
-    function GetAuth(const url, AuthToken: RawUTF8; KeepAlive: cardinal = 0): integer;
+    function GetAuth(const url, AuthToken: RawUtf8; KeepAlive: cardinal = 0): integer;
     /// after an Open(server,port), return 200 if OK, http status error otherwise - only
     // header is read from server: Content is always '', but Headers are set
-    function Head(const url: RawUTF8; KeepAlive: cardinal = 0;
-      const header: RawUTF8 = ''): integer;
+    function Head(const url: RawUtf8; KeepAlive: cardinal = 0;
+      const header: RawUtf8 = ''): integer;
     /// after an Open(server,port), return 200,201,204 if OK, http status error otherwise
-    function Post(const url: RawUTF8; const Data: RawByteString;
-      const DataType: RawUTF8; KeepAlive: cardinal = 0;
-      const header: RawUTF8 = ''): integer;
+    function Post(const url: RawUtf8; const Data: RawByteString;
+      const DataType: RawUtf8; KeepAlive: cardinal = 0;
+      const header: RawUtf8 = ''): integer;
     /// after an Open(server,port), return 200,201,204 if OK, http status error otherwise
-    function Put(const url: RawUTF8; const Data: RawByteString;
-      const DataType: RawUTF8; KeepAlive: cardinal = 0;
-      const header: RawUTF8 = ''): integer;
+    function Put(const url: RawUtf8; const Data: RawByteString;
+      const DataType: RawUtf8; KeepAlive: cardinal = 0;
+      const header: RawUtf8 = ''): integer;
     /// after an Open(server,port), return 200,202,204 if OK, http status error otherwise
-    function Delete(const url: RawUTF8; KeepAlive: cardinal = 0;
-      const header: RawUTF8 = ''): integer;
+    function Delete(const url: RawUtf8; KeepAlive: cardinal = 0;
+      const header: RawUtf8 = ''): integer;
 
     /// by default, the client is identified as IE 5.5, which is very
     // friendly welcome by most servers :(
     // - you can specify a custom value here
-    property UserAgent: RawUTF8
+    property UserAgent: RawUtf8
       read fUserAgent write fUserAgent;
     /// the associated process name
-    property ProcessName: RawUTF8
+    property ProcessName: RawUtf8
       read fProcessName write fProcessName;
   end;
 
@@ -115,22 +144,27 @@ type
   // mormot.net.websock unit)
   THttpClientSocketClass = class of THttpClientSocket;
 
+/// returns the HTTP User-Agent header value of a mORMot client including
+// the Instance class name
+function DefaultUserAgent(Instance: TObject): RawUtf8;
+
 /// create a THttpClientSocket, returning nil on error
 // - useful to easily catch socket error exception ENetSock
-function OpenHttp(const aServer, aPort: RawUTF8; aTLS: boolean = false;
+function OpenHttp(const aServer, aPort: RawUtf8; aTLS: boolean = false;
   aLayer: TNetLayer = nlTCP): THttpClientSocket; overload;
 
 /// create a THttpClientSocket, returning nil on error
 // - useful to easily catch socket error exception ENetSock
-function OpenHttp(const aURI: RawUTF8;
-  aAddress: PRawUTF8 = nil): THttpClientSocket; overload;
+function OpenHttp(const aUri: RawUtf8;
+  aAddress: PRawUtf8 = nil): THttpClientSocket; overload;
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket: if you want
 // something able to use your computer proxy, take a look at TWinINet.Get()
 // and the overloaded HttpGet() functions
-function OpenHttpGet(const server, port, url, inHeaders: RawUTF8;
-  outHeaders: PRawUTF8 = nil; aLayer: TNetLayer = nlTCP): RawByteString; overload;
+function OpenHttpGet(const server, port, url, inHeaders: RawUtf8;
+  outHeaders: PRawUtf8 = nil; aLayer: TNetLayer = nlTCP;
+  aTLS: boolean = false; outStatus: PInteger = nil): RawByteString; overload;
 
 
 
@@ -138,7 +172,7 @@ function OpenHttpGet(const server, port, url, inHeaders: RawUTF8;
 
 type
   /// the supported authentication schemes which may be used by HTTP clients
-  // - supported only by TWinHTTP class yet
+  // - supported only by TWinHttp class yet
   THttpRequestAuthentication = (
     wraNone,
     wraBasic,
@@ -150,7 +184,7 @@ type
   // the actual mormot.net.http's THttpRequest implementation class
   THttpRequestExtendedOptions = record
     /// let HTTPS be less paranoid about SSL certificates
-    // - IgnoreSSLCertificateErrors is handled by TWinHttp and TCurlHTTP
+    // - IgnoreSSLCertificateErrors is handled by TWinHttp and TCurlHttp
     IgnoreSSLCertificateErrors: boolean;
     /// allow HTTP authentication to take place at connection
     // - Auth.Scheme and UserName/Password properties are handled
@@ -161,17 +195,17 @@ type
       Scheme: THttpRequestAuthentication;
     end;
     /// allow to customize the User-Agent header
-    UserAgent: RawUTF8;
+    UserAgent: RawUtf8;
   end;
 
   {$M+} // to have existing RTTI for published properties
   /// abstract class to handle HTTP/1.1 request
-  // - never instantiate this class, but inherited TWinHTTP, TWinINet or TCurlHTTP
+  // - never instantiate this class, but inherited TWinHttp, TWinINet or TCurlHttp
   THttpRequest = class
   protected
-    fServer: RawUTF8;
-    fProxyName: RawUTF8;
-    fProxyByPass: RawUTF8;
+    fServer: RawUtf8;
+    fProxyName: RawUtf8;
+    fProxyByPass: RawUtf8;
     fPort: cardinal;
     fHttps: boolean;
     fLayer: TNetLayer;
@@ -180,22 +214,22 @@ type
     /// used by RegisterCompress method
     fCompress: THttpSocketCompressRecDynArray;
     /// set by RegisterCompress method
-    fCompressAcceptEncoding: RawUTF8;
+    fCompressAcceptEncoding: RawUtf8;
     /// set index of protocol in fCompress[], from ACCEPT-ENCODING: header
     fCompressAcceptHeader: THttpSocketCompressSet;
     fTag: PtrInt;
-    class function InternalREST(const url, method: RawUTF8; const data:
-      RawByteString; const header: RawUTF8; aIgnoreSSLCertificateErrors: boolean;
-      outHeaders: PRawUTF8 = nil; outStatus: PInteger = nil): RawByteString;
+    class function InternalREST(const url, method: RawUtf8; const data:
+      RawByteString; const header: RawUtf8; aIgnoreSSLCertificateErrors: boolean;
+      outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil): RawByteString;
     // inherited class should override those abstract methods
     procedure InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); virtual; abstract;
-    procedure InternalCreateRequest(const aMethod, aURL: RawUTF8); virtual; abstract;
-    procedure InternalSendRequest(const aMethod: RawUTF8; const aData:
+    procedure InternalCreateRequest(const aMethod, aURL: RawUtf8); virtual; abstract;
+    procedure InternalSendRequest(const aMethod: RawUtf8; const aData:
       RawByteString); virtual; abstract;
-    function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding: RawUTF8;
+    function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding: RawUtf8;
       var Data: RawByteString): integer; virtual; abstract;
     procedure InternalCloseRequest; virtual; abstract;
-    procedure InternalAddHeader(const hdr: RawUTF8); virtual; abstract;
+    procedure InternalAddHeader(const hdr: RawUtf8); virtual; abstract;
   public
     /// returns TRUE if the class is actually supported on this system
     class function IsAvailable: boolean; virtual; abstract;
@@ -203,7 +237,7 @@ type
     // - optional aProxyName may contain the name of the proxy server to use,
     // and aProxyByPass an optional semicolon delimited list of host names or
     // IP addresses, or both, that should not be routed through the proxy:
-    // aProxyName/aProxyByPass will be recognized by TWinHTTP and TWinINet,
+    // aProxyName/aProxyByPass will be recognized by TWinHttp and TWinINet,
     // and aProxyName will set the CURLOPT_PROXY option to TCurlHttp
     // (see https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html as reference)
     // - you can customize the default client timeouts by setting appropriate
@@ -214,14 +248,14 @@ type
     // would use global HTTP_DEFAULT_CONNECTTIMEOUT, HTTP_DEFAULT_SENDTIMEOUT
     // and HTTP_DEFAULT_RECEIVETIMEOUT variable values
     // - *TimeOut parameters are currently ignored by TCurlHttp
-    constructor Create(const aServer, aPort: RawUTF8; aHttps: boolean;
-      const aProxyName: RawUTF8 = ''; const aProxyByPass: RawUTF8 = '';
+    constructor Create(const aServer, aPort: RawUtf8; aHttps: boolean;
+      const aProxyName: RawUtf8 = ''; const aProxyByPass: RawUtf8 = '';
       ConnectionTimeOut: cardinal = 0; SendTimeout: cardinal = 0;
       ReceiveTimeout: cardinal = 0; aLayer: TNetLayer = nlTCP); overload; virtual;
     /// connect to the supplied URI
-    // - is just a wrapper around TURI and the overloaded Create() constructor
-    constructor Create(const aURI: RawUTF8; const aProxyName: RawUTF8 = '';
-      const aProxyByPass: RawUTF8 = ''; ConnectionTimeOut: cardinal = 0;
+    // - is just a wrapper around TUri and the overloaded Create() constructor
+    constructor Create(const aUri: RawUtf8; const aProxyName: RawUtf8 = '';
+      const aProxyByPass: RawUtf8 = ''; ConnectionTimeOut: cardinal = 0;
       SendTimeout: cardinal = 0; ReceiveTimeout: cardinal = 0;
       aIgnoreSSLCertificateErrors: boolean = false); overload;
 
@@ -229,19 +263,19 @@ type
     // - after an Create(server,port), return 200,202,204 if OK,
     // http status error otherwise
     // - KeepAlive is in milliseconds, 0 for "Connection: Close" HTTP/1.0 requests
-    function Request(const url, method: RawUTF8; KeepAlive: cardinal;
-      const InHeader: RawUTF8; const InData: RawByteString; const InDataType: RawUTF8;
-      out OutHeader: RawUTF8; out OutData: RawByteString): integer; virtual;
+    function Request(const url, method: RawUtf8; KeepAlive: cardinal;
+      const InHeader: RawUtf8; const InData: RawByteString; const InDataType: RawUtf8;
+      out OutHeader: RawUtf8; out OutData: RawByteString): integer; virtual;
 
     /// wrapper method to retrieve a resource via an HTTP GET
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
     // - aIgnoreSSLCerticateErrors will ignore the error when using untrusted certificates
     // - it will internally create a THttpRequest inherited instance: do not use
-    // THttpRequest.Get() but either TWinHTTP.Get(), TWinINet.Get() or
-    // TCurlHTTP.Get() methods
-    class function Get(const aURI: RawUTF8; const aHeader: RawUTF8 = '';
-      aIgnoreSSLCertificateErrors: boolean = true; outHeaders: PRawUTF8 = nil;
+    // THttpRequest.Get() but either TWinHttp.Get(), TWinINet.Get() or
+    // TCurlHttp.Get() methods
+    class function Get(const aUri: RawUtf8; const aHeader: RawUtf8 = '';
+      aIgnoreSSLCertificateErrors: boolean = false; outHeaders: PRawUtf8 = nil;
       outStatus: PInteger = nil): RawByteString;
     /// wrapper method to create a resource via an HTTP POST
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
@@ -250,11 +284,11 @@ type
     // - the supplied aData content is POSTed to the server, with an optional
     // aHeader content
     // - it will internally create a THttpRequest inherited instance: do not use
-    // THttpRequest.Post() but either TWinHTTP.Post(), TWinINet.Post() or
-    // TCurlHTTP.Post() methods
-    class function Post(const aURI: RawUTF8; const aData: RawByteString;
-      const aHeader: RawUTF8 = ''; aIgnoreSSLCertificateErrors: boolean = true;
-      outHeaders: PRawUTF8 = nil; outStatus: PInteger = nil): RawByteString;
+    // THttpRequest.Post() but either TWinHttp.Post(), TWinINet.Post() or
+    // TCurlHttp.Post() methods
+    class function Post(const aUri: RawUtf8; const aData: RawByteString;
+      const aHeader: RawUtf8 = ''; aIgnoreSSLCertificateErrors: boolean = false;
+      outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil): RawByteString;
     /// wrapper method to update a resource via an HTTP PUT
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
@@ -262,20 +296,20 @@ type
     // - the supplied aData content is PUT to the server, with an optional
     // aHeader content
     // - it will internally create a THttpRequest inherited instance: do not use
-    // THttpRequest.Put() but either TWinHTTP.Put(), TWinINet.Put() or
-    // TCurlHTTP.Put() methods
-    class function Put(const aURI: RawUTF8; const aData: RawByteString;
-      const aHeader: RawUTF8 = ''; aIgnoreSSLCertificateErrors: boolean = true;
-      outHeaders: PRawUTF8 = nil; outStatus: PInteger = nil): RawByteString;
+    // THttpRequest.Put() but either TWinHttp.Put(), TWinINet.Put() or
+    // TCurlHttp.Put() methods
+    class function Put(const aUri: RawUtf8; const aData: RawByteString;
+      const aHeader: RawUtf8 = ''; aIgnoreSSLCertificateErrors: boolean = false;
+      outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil): RawByteString;
     /// wrapper method to delete a resource via an HTTP DELETE
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
     // - aIgnoreSSLCerticateErrors will ignore the error when using untrusted certificates
     // - it will internally create a THttpRequest inherited instance: do not use
-    // THttpRequest.Delete() but either TWinHTTP.Delete(), TWinINet.Delete() or
-    // TCurlHTTP.Delete() methods
-    class function Delete(const aURI: RawUTF8; const aHeader: RawUTF8 = '';
-      aIgnoreSSLCertificateErrors: boolean = true; outHeaders: PRawUTF8 = nil;
+    // THttpRequest.Delete() but either TWinHttp.Delete(), TWinINet.Delete() or
+    // TCurlHttp.Delete() methods
+    class function Delete(const aUri: RawUtf8; const aHeader: RawUtf8 = '';
+      aIgnoreSSLCertificateErrors: boolean = false; outHeaders: PRawUtf8 = nil;
       outStatus: PInteger = nil): RawByteString;
 
     /// will register a compression algorithm
@@ -306,7 +340,7 @@ type
       read fExtendedOptions.Auth.Password
       write fExtendedOptions.Auth.Password;
     /// custom HTTP "User Agent:" header value
-    property UserAgent: RawUTF8
+    property UserAgent: RawUtf8
       read fExtendedOptions.UserAgent
       write fExtendedOptions.UserAgent;
     /// internal structure used to store extended options
@@ -319,7 +353,7 @@ type
       read fTag write fTag;
   published
     /// the remote server host name, as stated specified to the class constructor
-    property Server: RawUTF8
+    property Server: RawUtf8
       read fServer;
     /// the remote server port number, as specified to the class constructor
     property Port: cardinal
@@ -328,17 +362,17 @@ type
     property Https: boolean
       read fHttps;
     /// the remote server optional proxy, as specified to the class constructor
-    property ProxyName: RawUTF8
+    property ProxyName: RawUtf8
       read fProxyName;
     /// the remote server optional proxy by-pass list, as specified to the class
     // constructor
-    property ProxyByPass: RawUTF8
+    property ProxyByPass: RawUtf8
       read fProxyByPass;
   end;
   {$M-}
 
   /// store the actual class of a HTTP/1.1 client instance
-  // - may be used to define at runtime which API to be used (e.g. WinHTTP,
+  // - may be used to define at runtime which API to be used (e.g. WinHttp,
   // WinINet or LibCurl), following the Liskov substitution principle
 
   THttpRequestClass = class of THttpRequest;
@@ -349,40 +383,40 @@ type
 { ******************** TWinHttp TWinINet TWinHttpWebSocketClient }
 
 type
-  TWinHttpAPI = class;
+  TWinHttpApi = class;
 
   /// event callback to track download progress, e.g. in the UI
-  // - used in TWinHttpAPI.OnProgress property
+  // - used in TWinHttpApi.OnProgress property
   // - CurrentSize is the current total number of downloaded bytes
   // - ContentLength is retrieved from HTTP headers, but may be 0 if not set
-  TOnWinHttpProgress = procedure(Sender: TWinHttpAPI;
+  TOnWinHttpProgress = procedure(Sender: TWinHttpApi;
     CurrentSize, ContentLength: cardinal) of object;
 
   /// event callback to process the download by chunks, not in memory
-  // - used in TWinHttpAPI.OnDownload property
+  // - used in TWinHttpApi.OnDownload property
   // - CurrentSize is the current total number of downloaded bytes
   // - ContentLength is retrieved from HTTP headers, but may be 0 if not set
   // - ChunkSize is the size of the latest downloaded chunk, available in
   // the untyped ChunkData memory buffer
   // - implementation should return TRUE to continue the download, or FALSE
   // to abort the download process
-  TWinHttpDownload = function(Sender: TWinHttpAPI; CurrentSize, ContentLength,
+  TWinHttpDownload = function(Sender: TWinHttpApi; CurrentSize, ContentLength,
     ChunkSize: cardinal; const ChunkData): boolean of object;
 
   /// event callback to track upload progress, e.g. in the UI
-  // - used in TWinHttpAPI.OnUpload property
+  // - used in TWinHttpApi.OnUpload property
   // - CurrentSize is the current total number of uploaded bytes
   // - ContentLength is the size of content
   // - implementation should return TRUE to continue the upload, or FALSE
   // to abort the upload process
-  TWinHttpUpload = function(Sender: TWinHttpAPI;
+  TWinHttpUpload = function(Sender: TWinHttpApi;
     CurrentSize, ContentLength: cardinal): boolean of object;
 
-  /// a class to handle HTTP/1.1 request using either WinINet or WinHTTP API
+  /// a class to handle HTTP/1.1 request using either WinINet or WinHttp API
   // - both APIs have a common logic, which is encapsulated by this parent class
   // - this abstract class defined some abstract methods which will be
   // implemented by TWinINet or TWinHttp with the proper API calls
-  TWinHttpAPI = class(THttpRequest)
+  TWinHttpApi = class(THttpRequest)
   protected
     fOnProgress: TOnWinHttpProgress;
     fOnDownload: TWinHttpDownload;
@@ -392,12 +426,12 @@ type
     fSession, fConnection, fRequest: HINTERNET;
     /// do not add "Accept: */*" HTTP header by default
     fNoAllAccept: boolean;
-    function InternalGetInfo(Info: cardinal): RawUTF8; virtual; abstract;
+    function InternalGetInfo(Info: cardinal): RawUtf8; virtual; abstract;
     function InternalGetInfo32(Info: cardinal): cardinal; virtual; abstract;
     function InternalQueryDataAvailable: cardinal; virtual; abstract;
     function InternalReadData(var Data: RawByteString; Read: integer;
       Size: cardinal): cardinal; virtual; abstract;
-    function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding: RawUTF8;
+    function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding: RawUtf8;
       var Data: RawByteString): integer; override;
   public
     /// returns TRUE if the class is actually supported on this system
@@ -435,17 +469,17 @@ type
   // - note: WinINet is MUCH slower than THttpClientSocket or TWinHttp: do not
   // use this, only if you find some configuration benefit on some old networks
   // (e.g. to diaplay the dialup popup window for a GUI client application)
-  TWinINet = class(TWinHttpAPI)
+  TWinINet = class(TWinHttpApi)
   protected
     // those internal methods will raise an EWinINet exception on error
     procedure InternalConnect(ConnectionTimeOut, SendTimeout,
       ReceiveTimeout: cardinal); override;
-    procedure InternalCreateRequest(const aMethod, aURL: RawUTF8); override;
+    procedure InternalCreateRequest(const aMethod, aURL: RawUtf8); override;
     procedure InternalCloseRequest; override;
-    procedure InternalAddHeader(const hdr: RawUTF8); override;
-    procedure InternalSendRequest(const aMethod: RawUTF8;
+    procedure InternalAddHeader(const hdr: RawUtf8); override;
+    procedure InternalSendRequest(const aMethod: RawUtf8;
       const aData: RawByteString); override;
-    function InternalGetInfo(Info: cardinal): RawUTF8; override;
+    function InternalGetInfo(Info: cardinal): RawUtf8; override;
     function InternalGetInfo32(Info: cardinal): cardinal; override;
     function InternalQueryDataAvailable: cardinal; override;
     function InternalReadData(var Data: RawByteString; Read: integer;
@@ -468,13 +502,13 @@ type
       read fLastError;
   end;
 
-  /// a class to handle HTTP/1.1 request using the WinHTTP API
+  /// a class to handle HTTP/1.1 request using the WinHttp API
   // - has a common behavior as THttpClientSocket() but seems to be faster
   // over a network and is able to retrieve the current proxy settings
   // (if available) and handle secure https connection - so it seems to be the
   // class to use in your client programs
-  // - WinHTTP does not share any proxy settings with Internet Explorer.
-  // The WinHTTP proxy configuration is set by either
+  // - WinHttp does not share any proxy settings with Internet Explorer.
+  // The WinHttp proxy configuration is set by either
   // $ proxycfg.exe
   // on Windows XP and Windows Server 2003 or earlier, either
   // $ netsh.exe
@@ -485,19 +519,19 @@ type
   // to use the current user's proxy settings for Internet Explorer (under 64-bit
   // Vista/Seven, to configure applications using the 32 bit WinHttp settings,
   // call netsh or proxycfg bits from %SystemRoot%\SysWOW64 folder explicitely)
-  // - Microsoft Windows HTTP Services (WinHTTP) is targeted at middle-tier and
+  // - Microsoft Windows HTTP Services (WinHttp) is targeted at middle-tier and
   // back-end server applications that require access to an HTTP client stack
-  TWinHTTP = class(TWinHttpAPI)
+  TWinHttp = class(TWinHttpApi)
   protected
     // those internal methods will raise an EOSError exception on error
     procedure InternalConnect(ConnectionTimeOut, SendTimeout,
       ReceiveTimeout: cardinal); override;
-    procedure InternalCreateRequest(const aMethod, aURL: RawUTF8); override;
+    procedure InternalCreateRequest(const aMethod, aURL: RawUtf8); override;
     procedure InternalCloseRequest; override;
-    procedure InternalAddHeader(const hdr: RawUTF8); override;
-    procedure InternalSendRequest(const aMethod: RawUTF8;
+    procedure InternalAddHeader(const hdr: RawUtf8); override;
+    procedure InternalSendRequest(const aMethod: RawUtf8;
       const aData: RawByteString); override;
-    function InternalGetInfo(Info: cardinal): RawUTF8; override;
+    function InternalGetInfo(Info: cardinal): RawUtf8; override;
     function InternalGetInfo32(Info: cardinal): cardinal; override;
     function InternalQueryDataAvailable: cardinal; override;
     function InternalReadData(var Data: RawByteString; Read: integer;
@@ -507,39 +541,39 @@ type
     destructor Destroy; override;
   end;
 
-  /// WinHTTP exception type
-  EWinHTTP = class(Exception);
+  /// WinHttp exception type
+  EWinHttp = class(Exception);
 
   /// establish a client connection to a WebSocket server using the Windows API
   // - used by TWinWebSocketClient class
-  TWinHTTPUpgradeable = class(TWinHTTP)
+  TWinHttpUpgradeable = class(TWinHttp)
   private
     fSocket: HINTERNET;
   protected
     function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding:
-      RawUTF8; var Data: RawByteString): integer; override;
-    procedure InternalSendRequest(const aMethod: RawUTF8;
+      RawUtf8; var Data: RawByteString): integer; override;
+    procedure InternalSendRequest(const aMethod: RawUtf8;
       const aData: RawByteString); override;
   public
     /// initialize the instance
-    constructor Create(const aServer, aPort: RawUTF8; aHttps: boolean;
-      const aProxyName: RawUTF8 = ''; const aProxyByPass: RawUTF8 = '';
+    constructor Create(const aServer, aPort: RawUtf8; aHttps: boolean;
+      const aProxyName: RawUtf8 = ''; const aProxyByPass: RawUtf8 = '';
       ConnectionTimeOut: cardinal = 0; SendTimeout: cardinal = 0;
       ReceiveTimeout: cardinal = 0; aLayer: TNetLayer = nlTCP); override;
   end;
 
   /// WebSocket client implementation
-  TWinHTTPWebSocketClient = class
+  TWinHttpWebSocketClient = class
   protected
     fSocket: HINTERNET;
     function CheckSocket: boolean;
   public
     /// initialize the instance
-    // - all parameters do match TWinHTTP.Create except url: address of WebSocketServer
+    // - all parameters do match TWinHttp.Create except url: address of WebSocketServer
     // for sending upgrade request
-    constructor Create(const aServer, aPort: RawUTF8; aHttps: boolean;
-      const url: RawUTF8; const aSubProtocol: RawUTF8 = ''; const aProxyName: RawUTF8 = '';
-      const aProxyByPass: RawUTF8 = ''; ConnectionTimeOut: cardinal = 0;
+    constructor Create(const aServer, aPort: RawUtf8; aHttps: boolean;
+      const url: RawUtf8; const aSubProtocol: RawUtf8 = ''; const aProxyName: RawUtf8 = '';
+      const aProxyByPass: RawUtf8 = ''; ConnectionTimeOut: cardinal = 0;
       SendTimeout: cardinal = 0; ReceiveTimeout: cardinal = 0);
     /// send buffer
     function Send(aBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE; aBuffer: pointer;
@@ -548,7 +582,7 @@ type
     function Receive(aBuffer: pointer; aBufferLength: cardinal;
       out aBytesRead: cardinal; out aBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE): cardinal;
     /// close current connection
-    function CloseConnection(const aCloseReason: RawUTF8): cardinal;
+    function CloseConnection(const aCloseReason: RawUtf8): cardinal;
     /// finalize the instance
     destructor Destroy; override;
   end;
@@ -559,7 +593,7 @@ type
 
 type
   /// libcurl exception type
-  ECurlHTTP = class(Exception);
+  ECurlHttp = class(Exception);
 
   /// a class to handle HTTP/1.1 request using the libcurl library
   // - libcurl is a free and easy-to-use cross-platform URL transfer library,
@@ -573,50 +607,106 @@ type
   // $ sudo apt-get install libcurl3:i386
   // - will use in fact libcurl.so, so either libcurl.so.3 or libcurl.so.4,
   // depending on the default version available on the system
-  TCurlHTTP = class(THttpRequest)
+  TCurlHttp = class(THttpRequest)
   protected
     fHandle: pointer;
-    fRootURL: RawUTF8;
+    fRootURL: RawUtf8;
     fIn: record
       Headers: pointer;
       DataOffset: integer;
-      URL, Method: RawUTF8;
+      URL, Method: RawUtf8;
       Data: RawByteString;
     end;
     fOut: record
-      Header, Encoding, AcceptEncoding: RawUTF8;
+      Header, Encoding, AcceptEncoding: RawUtf8;
       Data: RawByteString;
     end;
     fSSL: record
-      CertFile, CACertFile, KeyName, PassPhrase: RawUTF8;
+      CertFile, CACertFile, KeyName, PassPhrase: RawUtf8;
     end;
-    procedure InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); override;
-    procedure InternalCreateRequest(const aMethod, aURL: RawUTF8); override;
-    procedure InternalSendRequest(const aMethod: RawUTF8;
+    procedure InternalConnect(
+      ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); override;
+    procedure InternalCreateRequest(const aMethod, aURL: RawUtf8); override;
+    procedure InternalSendRequest(const aMethod: RawUtf8;
       const aData: RawByteString); override;
-    function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding: RawUTF8;
+    function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding: RawUtf8;
       var Data: RawByteString): integer; override;
     procedure InternalCloseRequest; override;
-    procedure InternalAddHeader(const hdr: RawUTF8); override;
-    function GetCACertFile: RawUTF8;
-    procedure SetCACertFile(const aCertFile: RawUTF8);
+    procedure InternalAddHeader(const hdr: RawUtf8); override;
+    function GetCACertFile: RawUtf8;
+    procedure SetCACertFile(const aCertFile: RawUtf8);
   public
     /// returns TRUE if the class is actually supported on this system
     class function IsAvailable: boolean; override;
     /// release the connection
     destructor Destroy; override;
     /// allow to set a CA certification file without touching the client certification
-    property CACertFile: RawUTF8
+    property CACertFile: RawUtf8
       read GetCACertFile write SetCACertFile;
     /// set the client SSL certification details
     // - see CACertFile if you don't want to change the whole client cert info
     // - used e.g. as
     // ! UseClientCertificate('testcert.pem','cacert.pem','testkey.pem','pass');
     procedure UseClientCertificate(
-      const aCertFile, aCACertFile, aKeyName, aPassPhrase: RawUTF8);
+      const aCertFile, aCACertFile, aKeyName, aPassPhrase: RawUtf8);
   end;
 
 {$endif USELIBCURL}
+
+
+{ ******************** TSimpleHttpClient Wrapper Class }
+
+type
+  /// simple wrapper around THttpClientSocket/THttpRequest instances
+  // - this class will reuse the previous connection if possible, and select the
+  // best connection class available on this platform for a given URI
+  TSimpleHttpClient = class
+  protected
+    fHttp: THttpClientSocket;
+    fHttps: THttpRequest;
+    fProxy, fHeaders, fUserAgent: RawUtf8;
+    fBody: RawByteString;
+    fOnlyUseClientSocket, fIgnoreSSLCertificateErrors: boolean;
+  public
+    /// initialize the instance
+    constructor Create(aOnlyUseClientSocket: boolean = false); reintroduce;
+    /// finalize the connection
+    destructor Destroy; override;
+    /// low-level entry point of this instance
+    function RawRequest(const Uri: TUri; const Method, Header: RawUtf8;
+     const Data: RawByteString; const DataType: RawUtf8;
+      KeepAlive: cardinal): integer; overload;
+    /// simple-to-use entry point of this instance
+    // - use Body and Headers properties to retrieve the HTTP body and headers
+    function Request(const uri: RawUtf8; const method: RawUtf8 = 'GET';
+      const header: RawUtf8 = ''; const data: RawByteString = '';
+      const datatype: RawUtf8 = ''; keepalive: cardinal = 10000): integer; overload;
+    /// returns the HTTP body as returnsd by a previous call to Request()
+    property Body: RawByteString
+      read fBody;
+    /// returns the HTTP headers as returnsd by a previous call to Request()
+    property Headers: RawUtf8
+      read fHeaders;
+    /// allows to customize the user-agent header
+    property UserAgent: RawUtf8
+      read fUserAgent write fUserAgent;
+    /// allows to customize HTTPS connection and allow weak certificates
+    property IgnoreSSLCertificateErrors: boolean
+      read fIgnoreSSLCertificateErrors write fIgnoreSSLCertificateErrors;
+    /// alows to customize the connection using a proxy
+    property Proxy: RawUtf8
+      read fProxy write fProxy;
+  end;
+
+/// returns the best THttpRequest class, depending on the system it runs on
+// - e.g. TWinHttp or TCurlHttp
+// - consider using TSimpleHttpClient if you just need a simple connection
+function MainHttpClass: THttpRequestClass;
+
+/// low-level forcing of another THttpRequest class
+// - could be used if we found out that the current MainHttpClass failed (which
+// could easily happen with TCurlHttp if the library is missing or deprecated)
+procedure ReplaceMainHttpClass(aClass: THttpRequestClass);
 
 
 { ************** Cached HTTP Connection to a Remote Server }
@@ -624,7 +714,7 @@ type
 type
   /// in-memory storage of one THttpRequestCached entry
   THttpRequestCache = record
-    Tag: RawUTF8;
+    Tag: RawUtf8;
     Content: RawByteString;
   end;
   /// in-memory storage of all THttpRequestCached entries
@@ -635,11 +725,11 @@ type
   // for an already known ETAG header value
   THttpRequestCached = class(TSynPersistent)
   protected
-    fURI: TURI;
+    fUri: TUri;
     fHttp: THttpRequest; // either fHttp or fSocket is used
     fSocket: THttpClientSocket;
     fKeepAlive: integer;
-    fTokenHeader: RawUTF8;
+    fTokenHeader: RawUtf8;
     fCache: TSynDictionary;
   public
     /// initialize the cache for a given server
@@ -652,45 +742,46 @@ type
     // $ Authorization: Bearer <aToken>
     // - TWinHttp will be used by default under Windows, unless you specify
     // another class
-    constructor Create(const aURI: RawUTF8; aKeepAliveSeconds: integer = 30;
-      aTimeoutSeconds: integer = 15*60; const aToken: RawUTF8 = '';
+    constructor Create(const aUri: RawUtf8; aKeepAliveSeconds: integer = 30;
+      aTimeoutSeconds: integer = 15*60; const aToken: RawUtf8 = '';
       aHttpClass: THttpRequestClass = nil); reintroduce;
     /// finalize the current connnection and flush its in-memory cache
-    // - you may use LoadFromURI() to connect to a new server
+    // - you may use LoadFromUri() to connect to a new server
     procedure Clear;
     /// connect to a new server
     // - aToken is an optional token which will be transmitted as HTTP header:
     // $ Authorization: Bearer <aToken>
     // - TWinHttp will be used by default under Windows, unless you specify
     // another class
-    function LoadFromURI(const aURI: RawUTF8; const aToken: RawUTF8 = '';
+    function LoadFromUri(const aUri: RawUtf8; const aToken: RawUtf8 = '';
       aHttpClass: THttpRequestClass = nil): boolean;
     /// finalize the cache
     destructor Destroy; override;
     /// retrieve a resource from the server, or internal cache
     // - aModified^ = true if server returned a HTTP_SUCCESS (200) with some new
     // content, or aModified^ = false if HTTP_NOTMODIFIED (304) was returned
-    function Get(const aAddress: RawUTF8; aModified: PBoolean = nil;
+    function Get(const aAddress: RawUtf8; aModified: PBoolean = nil;
       aStatus: PInteger = nil): RawByteString;
     /// erase one resource from internal cache
-    function Flush(const aAddress: RawUTF8): boolean;
+    function Flush(const aAddress: RawUtf8): boolean;
     /// read-only access to the connected server
-    property URI: TURI
-      read fURI;
+    property URI: TUri
+      read fUri;
   end;
 
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket for plain http URI,
-// or TWinHTTP/TCurlHTTP for any https URI, or if forceNotSocket is set to true
-function HttpGet(const aURI: RawUTF8; outHeaders: PRawUTF8 = nil;
+// or TWinHttp/TCurlHttp for any https URI, or if forceNotSocket is set to true
+// - see also OpenHttpGet() for direct THttpClientSock call
+function HttpGet(const aUri: RawUtf8; outHeaders: PRawUtf8 = nil;
   forceNotSocket: boolean = false; outStatus: PInteger = nil): RawByteString; overload;
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket for plain http URI,
-// or TWinHTTP/TCurlHTTP for any https URI
-function HttpGet(const aURI: RawUTF8; const inHeaders: RawUTF8;
-  outHeaders: PRawUTF8 = nil; forceNotSocket: boolean = false;
+// or TWinHttp/TCurlHttp for any https URI
+function HttpGet(const aUri: RawUtf8; const inHeaders: RawUtf8;
+  outHeaders: PRawUtf8 = nil; forceNotSocket: boolean = false;
   outStatus: PInteger = nil): RawByteString; overload;
 
 
@@ -711,18 +802,18 @@ type
   {$endif USERECORDWITHMETHODS}
   public
     /// the SMTP server IP or host name
-    Host: RawUTF8;
+    Host: RawUtf8;
     /// the SMTP server port (25 by default)
-    Port: RawUTF8;
+    Port: RawUtf8;
     /// the SMTP user login (if any)
-    User: RawUTF8;
+    User: RawUtf8;
     /// the SMTP user password (if any)
-    Pass: RawUTF8;
+    Pass: RawUtf8;
     /// fill the STMP server information from a single text field
     // - expects 'user:password@smtpserver:port' format
     // - if aText equals SMTP_DEFAULT ('user:password@smtpserver:port'),
     // does nothing
-    function FromText(const aText: RawUTF8): boolean;
+    function FromText(const aText: RawUtf8): boolean;
   end;
 
   /// exception class raised by SendEmail() on raw SMTP process
@@ -730,28 +821,28 @@ type
 
 /// send an email using the SMTP protocol
 // - retry true on success
-// - the Subject is expected to be in plain 7 bit ASCII, so you could use
+// - the Subject is expected to be in plain 7-bit ASCII, so you could use
 // SendEmailSubject() to encode it as Unicode, if needed
 // - you can optionally set the encoding charset to be used for the Text body
-function SendEmail(const Server, From, CSVDest, Subject, Text: RawUTF8;
-  const Headers: RawUTF8 = ''; const User: RawUTF8 = ''; const Pass: RawUTF8 = '';
-  const Port: RawUTF8 = '25'; const TextCharSet: RawUTF8  =  'ISO-8859-1';
+function SendEmail(const Server, From, CsvDest, Subject, Text: RawUtf8;
+  const Headers: RawUtf8 = ''; const User: RawUtf8 = ''; const Pass: RawUtf8 = '';
+  const Port: RawUtf8 = '25'; const TextCharSet: RawUtf8  =  'ISO-8859-1';
   aTLS: boolean = false): boolean; overload;
 
 /// send an email using the SMTP protocol
 // - retry true on success
-// - the Subject is expected to be in plain 7 bit ASCII, so you could use
+// - the Subject is expected to be in plain 7-bit ASCII, so you could use
 // SendEmailSubject() to encode it as Unicode, if needed
 // - you can optionally set the encoding charset to be used for the Text body
 function SendEmail(const Server: TSMTPConnection;
-  const From, CSVDest, Subject, Text: RawUTF8; const Headers: RawUTF8 = '';
-  const TextCharSet: RawUTF8  =  'ISO-8859-1'; aTLS: boolean = false): boolean; overload;
+  const From, CsvDest, Subject, Text: RawUtf8; const Headers: RawUtf8 = '';
+  const TextCharSet: RawUtf8  =  'ISO-8859-1'; aTLS: boolean = false): boolean; overload;
 
 /// convert a supplied subject text into an Unicode encoding
 // - will convert the text into UTF-8 and append '=?UTF-8?B?'
 // - for pre-Unicode versions of Delphi, Text is expected to be already UTF-8
 // encoded - since Delphi 2010, it will be converted from UnicodeString
-function SendEmailSubject(const Text: string): RawUTF8;
+function SendEmailSubject(const Text: string): RawUtf8;
 
 
 
@@ -762,30 +853,29 @@ implementation
 
 { ************** THttpClientSocket Implementing HTTP client over plain sockets }
 
-function DefaultUserAgent(Instance: TObject): RawUTF8;
+function DefaultUserAgent(Instance: TObject): RawUtf8;
 begin
   // note: the framework would identify 'mORMot' pattern in the user-agent
   // header to enable advanced behavior e.g. about JSON transmission
-  FormatUTF8('Mozilla/5.0 (' + OS_TEXT + '; mORMot ' +
+  FormatUtf8('Mozilla/5.0 (' + OS_TEXT + '; mORMot ' +
     SYNOPSE_FRAMEWORK_VERSION + ' %)', [Instance], result);
 end;
 
+
 { THttpClientSocket }
 
-procedure THttpClientSocket.RequestSendHeader(const url, method: RawUTF8);
+procedure THttpClientSocket.RequestSendHeader(const url, method: RawUtf8);
 begin
   if not SockIsDefined then
     exit;
   if SockIn = nil then // done once
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
-  if TCPPrefix <> '' then
-    SockSend(TCPPrefix);
   if (url = '') or
      (url[1] <> '/') then
     SockSend([method, ' /', url, ' HTTP/1.1'])
   else
     SockSend([method, ' ', url, ' HTTP/1.1']);
-  if Port = DEFAULT_PORT[fTLS] then
+  if Port = DEFAULT_PORT[TLS.Enabled] then
     SockSend(['Host: ', Server])
   else
     SockSend(['Host: ', Server, ':', Port]);
@@ -800,24 +890,25 @@ begin
   fUserAgent := DefaultUserAgent(self);
 end;
 
-function THttpClientSocket.Request(const url, method: RawUTF8; KeepAlive:
-  cardinal; const header: RawUTF8; const Data: RawByteString; const DataType:
-  RawUTF8; retry: boolean): integer;
+function THttpClientSocket.Request(const url, method: RawUtf8;
+  KeepAlive: cardinal; const header: RawUtf8; const Data: RawByteString;
+  const DataType: RawUtf8; retry: boolean): integer;
 
-  procedure DoRetry(Error: integer; const msg: RawUTF8);
+  procedure DoRetry(Error: integer; const msg: RawUtf8);
   begin
-    {$ifdef SYNCRTDEBUGLOW}
-    TSynLog.Add.Log(sllCustom2,
-      'Request: % socket=% DoRetry(%) retry=%',
-      [msg, Sock, Error, BOOL_STR[retry]], self);
-    {$endif SYNCRTDEBUGLOW}
-    if retry then // retry once -> return error only if failed after retrial
+    //writeln('DoRetry ',retry, ' ', Error, ' / ', msg);
+    if Assigned(OnLog) then
+       OnLog(sllTrace, 'Request(% %): % socket=% DoRetry(%) retry=%',
+         [method, url, msg, fSock.Socket, Error, BOOL_STR[retry]], self);
+    if retry then // retry once -> return error only if failed twice
       result := Error
     else
     begin
       Close; // close this connection
       try
-        OpenBind(Server, Port, false); // retry this request with a new socket
+        // retry with a new socket
+        OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
+        HttpStateReset;
         result := Request(url, method, KeepAlive, header, Data, DataType, true);
       except
         on Exception do
@@ -827,161 +918,167 @@ function THttpClientSocket.Request(const url, method: RawUTF8; KeepAlive:
   end;
 
 var
-  P: PUTF8Char;
+  P: PUtf8Char;
   aData: RawByteString;
 begin
   if SockIn = nil then // done once
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   Content := '';
-  if SockReceivePending(0) = cspSocketError then
-  begin
-    DoRetry(HTTP_NOTFOUND, 'connection broken (keepalive timeout?)');
-    exit;
-  end;
-  try
+  if (hfConnectionClose in HeaderFlags) or
+     (SockReceivePending(0) = cspSocketError) then
+    DoRetry(HTTP_NOTFOUND, 'connection closed/broken (keepalive or maxrequest)')
+  else
     try
-      // send request - we use SockSend because writeln() is calling flush()
-      // -> all headers will be sent at once
-      RequestSendHeader(url, method);
-      if KeepAlive > 0 then
-        SockSend(['Keep-Alive: ', KeepAlive, #13#10'Connection: Keep-Alive'])
-      else
-        SockSend('Connection: Close');
-      aData := Data; // local var copy for Data to be compressed in-place
-      CompressDataAndWriteHeaders(DataType, aData);
-      if header <> '' then
-        SockSend(header);
-      if fCompressAcceptEncoding <> '' then
-        SockSend(fCompressAcceptEncoding);
-      SockSend; // send CRLF
-      SockSendFlush(aData); // flush all pending data to network
-      // get headers
-      if SockReceivePending(1000) = cspSocketError then
-      begin
-        DoRetry(HTTP_NOTFOUND, 'cspSocketError waiting for headers');
-        exit;
-      end;
-      SockRecvLn(Command); // will raise ENetSock on any error
-      if TCPPrefix <> '' then
-        if Command <> TCPPrefix then
+      try
+        // send request - we use SockSend because writeln() is calling flush()
+        // -> all headers will be sent at once
+        RequestSendHeader(url, method);
+        if KeepAlive > 0 then
+          SockSend(['Keep-Alive: ', KeepAlive, #13#10'Connection: Keep-Alive'])
+        else
+          SockSend('Connection: Close');
+        aData := Data; // local var copy for Data to be compressed in-place
+        CompressDataAndWriteHeaders(DataType, aData);
+        if header <> '' then
+          SockSend(header);
+        if fCompressAcceptEncoding <> '' then
+          SockSend(fCompressAcceptEncoding);
+        SockSendCRLF;
+        SockSendFlush(aData); // flush all pending data to network
+        // retrieve HTTP command line response
+        if SockReceivePending(1000) = cspSocketError then
         begin
-          result := HTTP_HTTPVERSIONNONSUPPORTED; // 505
+          DoRetry(HTTP_NOTFOUND, 'cspSocketError waiting for headers');
           exit;
+        end;
+        SockRecvLn(Command); // will raise ENetSock on any error
+        P := pointer(Command);
+        if IdemPChar(P, 'HTTP/1.') then
+        begin
+          result := GetCardinal(P + 9); // get http numeric status code (200,404...)
+          if result = 0 then
+          begin
+            result := HTTP_HTTPVERSIONNONSUPPORTED;
+            exit;
+          end;
+          while result = HTTP_CONTINUE do
+          begin
+            repeat
+              // 100 CONTINUE is just to be ignored on client side
+              SockRecvLn(Command);
+              P := pointer(Command);
+            until IdemPChar(P, 'HTTP/1.'); // ignore up to next command
+            result := GetCardinal(P + 9);
+          end;
+          if P[7] = '0' then
+            // HTTP/1.0 -> force connection close
+            KeepAlive := 0;
         end
         else
-          SockRecvLn(Command);
-      P := pointer(Command);
-      if IdemPChar(P, 'HTTP/1.') then
-      begin
-        result := GetCardinal(P + 9); // get http numeric status code (200,404...)
-        if result = 0 then
         begin
-          result := HTTP_HTTPVERSIONNONSUPPORTED;
+          // error on reading answer -> 505=wrong format
+          if Command = '' then
+            DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, 'Broken Link')
+          else
+            DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, Command);
           exit;
         end;
-        while result = 100 do
-        begin
-          repeat // 100 CONTINUE is just to be ignored client side
-            SockRecvLn(Command);
-            P := pointer(Command);
-          until IdemPChar(P, 'HTTP/1.');  // ignore up to next command
-          result := GetCardinal(P + 9);
-        end;
-        if P[7] = '0' then
-          KeepAlive := 0; // HTTP/1.0 -> force connection close
-      end
-      else
-      begin // error on reading answer
-        DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, Command); // 505=wrong format
-        exit;
+        // retrieve all HTTP headers
+        GetHeader({unfiltered=}false);
+        // retrieve Body content (if any)
+        if (result >= HTTP_SUCCESS) and
+           (result <> HTTP_NOCONTENT) and
+           (result <> HTTP_NOTMODIFIED) and
+           (IdemPCharArray(pointer(method), ['HEAD', 'OPTIONS']) < 0) then
+          // HEAD or status 100..109,204,304 -> no body (RFC 2616 section 4.3)
+          GetBody;
+      except
+        on Exception do
+          DoRetry(HTTP_NOTFOUND, 'Exception');
       end;
-      GetHeader(false); // read all other headers
-      if (result <> HTTP_NOCONTENT) and
-         (IdemPCharArray(pointer(method), ['HEAD', 'OPTIONS']) < 0) then
-        GetBody; // get content if necessary (not HEAD/OPTIONS methods)
-    except
-      on Exception do
-        DoRetry(HTTP_NOTFOUND, 'Exception');
+    finally
+      if KeepAlive = 0 then
+        Close;
     end;
-  finally
-    if KeepAlive = 0 then
-      Close;
-  end;
 end;
 
-function THttpClientSocket.Get(const url: RawUTF8; KeepAlive: cardinal;
-  const header: RawUTF8): integer;
+function THttpClientSocket.Get(const url: RawUtf8; KeepAlive: cardinal;
+  const header: RawUtf8): integer;
 begin
   result := Request(url, 'GET', KeepAlive, header, '', '', false);
 end;
 
-function THttpClientSocket.GetAuth(const url, AuthToken: RawUTF8;
+function THttpClientSocket.GetAuth(const url, AuthToken: RawUtf8;
   KeepAlive: cardinal): integer;
 begin
   result := Get(url, KeepAlive, AuthorizationBearer(AuthToken));
 end;
 
-function THttpClientSocket.Head(const url: RawUTF8; KeepAlive: cardinal;
-  const header: RawUTF8): integer;
+function THttpClientSocket.Head(const url: RawUtf8; KeepAlive: cardinal;
+  const header: RawUtf8): integer;
 begin
   result := Request(url, 'HEAD', KeepAlive, header, '', '', false);
 end;
 
-function THttpClientSocket.Post(const url: RawUTF8; const Data: RawByteString;
-  const DataType: RawUTF8; KeepAlive: cardinal; const header: RawUTF8): integer;
+function THttpClientSocket.Post(const url: RawUtf8; const Data: RawByteString;
+  const DataType: RawUtf8; KeepAlive: cardinal; const header: RawUtf8): integer;
 begin
   result := Request(url, 'POST', KeepAlive, header, Data, DataType, false);
 end;
 
-function THttpClientSocket.Put(const url: RawUTF8; const Data: RawByteString;
-  const DataType: RawUTF8; KeepAlive: cardinal; const header: RawUTF8): integer;
+function THttpClientSocket.Put(const url: RawUtf8; const Data: RawByteString;
+  const DataType: RawUtf8; KeepAlive: cardinal; const header: RawUtf8): integer;
 begin
   result := Request(url, 'PUT', KeepAlive, header, Data, DataType, false);
 end;
 
-function THttpClientSocket.Delete(const url: RawUTF8; KeepAlive: cardinal;
-  const header: RawUTF8): integer;
+function THttpClientSocket.Delete(const url: RawUtf8; KeepAlive: cardinal;
+  const header: RawUtf8): integer;
 begin
   result := Request(url, 'DELETE', KeepAlive, header, '', '', false);
 end;
 
 
-function OpenHttp(const aServer, aPort: RawUTF8; aTLS: boolean;
+function OpenHttp(const aServer, aPort: RawUtf8; aTLS: boolean;
   aLayer: TNetLayer): THttpClientSocket;
 begin
   try
     result := THttpClientSocket.Open(
-      aServer,aPort, aLayer, 0, aTLS); // HTTP_DEFAULT_RECEIVETIMEOUT
+      aServer, aPort, aLayer, 0, aTLS); // HTTP_DEFAULT_RECEIVETIMEOUT
   except
     on ENetSock do
       result := nil;
   end;
 end;
 
-function OpenHttp(const aURI: RawUTF8;
-  aAddress: PRawUTF8): THttpClientSocket;
+function OpenHttp(const aUri: RawUtf8; aAddress: PRawUtf8): THttpClientSocket;
 var
-  URI: TURI;
+  URI: TUri;
 begin
   result := nil;
-  if URI.From(aURI) then
+  if URI.From(aUri) then
   begin
-    result := OpenHttp(URI.Server,URI.Port,URI.Https,URI.Layer);
+    result := OpenHttp(URI.Server, URI.Port, URI.Https, URI.Layer);
     if aAddress <> nil then
       aAddress^ := URI.Address;
   end;
 end;
 
-function OpenHttpGet(const server, port, url, inHeaders: RawUTF8;
-  outHeaders: PRawUTF8; aLayer: TNetLayer): RawByteString;
-var Http: THttpClientSocket;
+function OpenHttpGet(const server, port, url, inHeaders: RawUtf8;
+  outHeaders: PRawUtf8; aLayer: TNetLayer; aTLS: boolean;
+  outStatus: PInteger): RawByteString;
+var
+  Http: THttpClientSocket;
+  status: integer;
 begin
   result := '';
-  Http := OpenHttp(server, port, false, aLayer);
+  Http := OpenHttp(server, port, aTLS, aLayer);
   if Http <> nil then
   try
-    if Http.Get(url, 0, inHeaders) in
-         [HTTP_SUCCESS..HTTP_PARTIALCONTENT] then
+    status := Http.Get(url, 0, inHeaders);
+    if outStatus <> nil then
+      outStatus^ := status;
+    if status in [HTTP_SUCCESS..HTTP_PARTIALCONTENT] then
     begin
       result := Http.Content;
       if outHeaders <> nil then
@@ -997,16 +1094,16 @@ end;
 
 { THttpRequest }
 
-class function THttpRequest.InternalREST(const url, method: RawUTF8;
-  const data: RawByteString; const header: RawUTF8; aIgnoreSSLCertificateErrors: boolean;
-  outHeaders: PRawUTF8; outStatus: PInteger): RawByteString;
+class function THttpRequest.InternalREST(const url, method: RawUtf8;
+  const data: RawByteString; const header: RawUtf8; aIgnoreSSLCertificateErrors: boolean;
+  outHeaders: PRawUtf8; outStatus: PInteger): RawByteString;
 var
-  URI: TURI;
-  outh: RawUTF8;
+  uri: TUri;
+  outh: RawUtf8;
   status: integer;
 begin
   result := '';
-  with URI do
+  with uri do
     if From(url) then
     try
       with self.Create(Server, Port, Https, '', '', 0, 0, 0, Layer) do
@@ -1025,8 +1122,8 @@ begin
     end;
 end;
 
-constructor THttpRequest.Create(const aServer, aPort: RawUTF8; aHttps: boolean;
-  const aProxyName: RawUTF8; const aProxyByPass: RawUTF8; ConnectionTimeOut,
+constructor THttpRequest.Create(const aServer, aPort: RawUtf8; aHttps: boolean;
+  const aProxyName: RawUtf8; const aProxyByPass: RawUtf8; ConnectionTimeOut,
   SendTimeout, ReceiveTimeout: cardinal; aLayer: TNetLayer);
 begin
   fLayer := aLayer;
@@ -1053,26 +1150,26 @@ begin
   InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout); // raise an exception on error
 end;
 
-constructor THttpRequest.Create(const aURI: RawUTF8; const aProxyName: RawUTF8;
-  const aProxyByPass: RawUTF8; ConnectionTimeOut: cardinal; SendTimeout: cardinal;
+constructor THttpRequest.Create(const aUri: RawUtf8; const aProxyName: RawUtf8;
+  const aProxyByPass: RawUtf8; ConnectionTimeOut: cardinal; SendTimeout: cardinal;
   ReceiveTimeout: cardinal; aIgnoreSSLCertificateErrors: boolean);
 var
-  URI: TURI;
+  uri: TUri;
 begin
-  if not URI.From(aURI) then
+  if not uri.From(aUri) then
     raise EHttpSocket.CreateFmt('%.Create: invalid url=%',
-      [ClassNameShort(self)^, aURI]);
+      [ClassNameShort(self)^, aUri]);
   IgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
-  Create(URI.Server, URI.Port, URI.Https, aProxyName, aProxyByPass,
-    ConnectionTimeOut, SendTimeout, ReceiveTimeout, URI.Layer);
+  Create(uri.Server, uri.Port, uri.Https, aProxyName, aProxyByPass,
+    ConnectionTimeOut, SendTimeout, ReceiveTimeout, uri.Layer);
 end;
 
-function THttpRequest.Request(const url, method: RawUTF8; KeepAlive: cardinal;
-  const InHeader: RawUTF8; const InData: RawByteString; const InDataType: RawUTF8;
-  out OutHeader: RawUTF8; out OutData: RawByteString): integer;
+function THttpRequest.Request(const url, method: RawUtf8; KeepAlive: cardinal;
+  const InHeader: RawUtf8; const InData: RawByteString; const InDataType: RawUtf8;
+  out OutHeader: RawUtf8; out OutData: RawByteString): integer;
 var
   aData: RawByteString;
-  aDataEncoding, aAcceptEncoding, aURL: RawUTF8;
+  aDataEncoding, aAcceptEncoding, aURL: RawUtf8;
   i: integer;
 begin
   if (url = '') or
@@ -1086,7 +1183,7 @@ begin
     // common headers
     InternalAddHeader(InHeader);
     if InDataType <> '' then
-      InternalAddHeader(RawUTF8('Content-Type: ') + InDataType);
+      InternalAddHeader(RawUtf8('Content-Type: ') + InDataType);
     // handle custom compression
     aData := InData;
     if integer(fCompressAcceptHeader) <> 0 then
@@ -1094,7 +1191,7 @@ begin
       aDataEncoding := CompressDataAndGetHeaders(fCompressAcceptHeader,
         fCompress, InDataType, aData);
       if aDataEncoding <> '' then
-        InternalAddHeader(RawUTF8('Content-Encoding: ') + aDataEncoding);
+        InternalAddHeader(RawUtf8('Content-Encoding: ') + aDataEncoding);
     end;
     if fCompressAcceptEncoding <> '' then
       InternalAddHeader(fCompressAcceptEncoding);
@@ -1121,34 +1218,34 @@ begin
   end;
 end;
 
-class function THttpRequest.Get(const aURI: RawUTF8; const aHeader: RawUTF8;
-  aIgnoreSSLCertificateErrors: boolean; outHeaders: PRawUTF8; outStatus: PInteger): RawByteString;
+class function THttpRequest.Get(const aUri: RawUtf8; const aHeader: RawUtf8;
+  aIgnoreSSLCertificateErrors: boolean; outHeaders: PRawUtf8; outStatus: PInteger): RawByteString;
 begin
-  result := InternalREST(aURI, 'GET', '', aHeader, aIgnoreSSLCertificateErrors,
+  result := InternalREST(aUri, 'GET', '', aHeader, aIgnoreSSLCertificateErrors,
     outHeaders, outStatus);
 end;
 
-class function THttpRequest.Post(const aURI: RawUTF8; const aData: RawByteString;
-  const aHeader: RawUTF8; aIgnoreSSLCertificateErrors: boolean; outHeaders: PRawUTF8;
+class function THttpRequest.Post(const aUri: RawUtf8; const aData: RawByteString;
+  const aHeader: RawUtf8; aIgnoreSSLCertificateErrors: boolean; outHeaders: PRawUtf8;
   outStatus: PInteger): RawByteString;
 begin
-  result := InternalREST(aURI, 'POST', aData, aHeader,
+  result := InternalREST(aUri, 'POST', aData, aHeader,
     aIgnoreSSLCertificateErrors, outHeaders, outStatus);
 end;
 
-class function THttpRequest.Put(const aURI: RawUTF8; const aData: RawByteString;
-  const aHeader: RawUTF8; aIgnoreSSLCertificateErrors: boolean; outHeaders:
-  PRawUTF8; outStatus: PInteger): RawByteString;
+class function THttpRequest.Put(const aUri: RawUtf8; const aData: RawByteString;
+  const aHeader: RawUtf8; aIgnoreSSLCertificateErrors: boolean; outHeaders:
+  PRawUtf8; outStatus: PInteger): RawByteString;
 begin
-  result := InternalREST(aURI, 'PUT', aData, aHeader,
+  result := InternalREST(aUri, 'PUT', aData, aHeader,
     aIgnoreSSLCertificateErrors, outHeaders, outStatus);
 end;
 
-class function THttpRequest.Delete(const aURI: RawUTF8; const aHeader: RawUTF8;
-  aIgnoreSSLCertificateErrors: boolean; outHeaders: PRawUTF8;
+class function THttpRequest.Delete(const aUri: RawUtf8; const aHeader: RawUtf8;
+  aIgnoreSSLCertificateErrors: boolean; outHeaders: PRawUtf8;
   outStatus: PInteger): RawByteString;
 begin
-  result := InternalREST(aURI, 'DELETE', '', aHeader,
+  result := InternalREST(aUri, 'DELETE', '', aHeader,
     aIgnoreSSLCertificateErrors, outHeaders, outStatus);
 end;
 
@@ -1165,14 +1262,15 @@ end;
 
 { ******************** TWinHttp TWinINet TWinHttpWebSocketClient }
 
-{ TWinHttpAPI }
+{ TWinHttpApi }
 
-function TWinHttpAPI.InternalRetrieveAnswer(var Header, Encoding,
-  AcceptEncoding: RawUTF8; var Data: RawByteString): integer;
+function TWinHttpApi.InternalRetrieveAnswer(var Header, Encoding,
+  AcceptEncoding: RawUtf8; var Data: RawByteString): integer;
 var
   ChunkSize, Bytes, ContentLength, Read: cardinal;
   tmp: RawByteString;
-begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHTTP
+begin
+  // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHttp
   result := InternalGetInfo32(HTTP_QUERY_STATUS_CODE);
   Header := InternalGetInfo(HTTP_QUERY_RAW_HEADERS_CRLF);
   Encoding := InternalGetInfo(HTTP_QUERY_CONTENT_ENCODING);
@@ -1245,17 +1343,17 @@ begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHTT
   end;
 end;
 
-class function TWinHttpAPI.IsAvailable: boolean;
+class function TWinHttpApi.IsAvailable: boolean;
 begin
-  result := true; // both WinINet and WinHTTP are statically linked
+  result := true; // both WinINet and WinHttp are statically linked
 end;
 
 
 
 
-{ TWinHTTP }
+{ TWinHttp }
 
-procedure TWinHTTP.InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal);
+procedure TWinHttp.InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal);
 var
   OpenType: integer;
   Callback: WINHTTP_STATUS_CALLBACK;
@@ -1272,14 +1370,14 @@ begin
       OpenType := WINHTTP_ACCESS_TYPE_NO_PROXY
   else
     OpenType := WINHTTP_ACCESS_TYPE_NAMED_PROXY;
-  fSession := WinHttpAPI.Open(pointer(UTF8ToSynUnicode(fExtendedOptions.UserAgent)),
-    OpenType, pointer(UTF8ToSynUnicode(fProxyName)), pointer(UTF8ToSynUnicode(fProxyByPass)), 0);
+  fSession := WinHttpApi.Open(pointer(Utf8ToSynUnicode(fExtendedOptions.UserAgent)),
+    OpenType, pointer(Utf8ToSynUnicode(fProxyName)), pointer(Utf8ToSynUnicode(fProxyByPass)), 0);
   if fSession = nil then
-    RaiseLastModuleError(winhttpdll, EWinHTTP);
+    RaiseLastModuleError(winhttpdll, EWinHttp);
   // cf. http://msdn.microsoft.com/en-us/library/windows/desktop/aa384116
-  if not WinHttpAPI.SetTimeouts(fSession, HTTP_DEFAULT_RESOLVETIMEOUT,
+  if not WinHttpApi.SetTimeouts(fSession, HTTP_DEFAULT_RESOLVETIMEOUT,
     ConnectionTimeOut, SendTimeout, ReceiveTimeout) then
-    RaiseLastModuleError(winhttpdll, EWinHTTP);
+    RaiseLastModuleError(winhttpdll, EWinHttp);
   if fHTTPS then
   begin
     protocols := WINHTTP_FLAG_SECURE_PROTOCOL_SSL3 or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1;
@@ -1287,21 +1385,21 @@ begin
     if OSVersion >= wSeven then
       protocols := protocols or
         (WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1 or WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2);
-    if not WinHttpAPI.SetOption(fSession, WINHTTP_OPTION_SECURE_PROTOCOLS,
+    if not WinHttpApi.SetOption(fSession, WINHTTP_OPTION_SECURE_PROTOCOLS,
         @protocols, SizeOf(protocols)) then
-      RaiseLastModuleError(winhttpdll, EWinHTTP);
-    Callback := WinHttpAPI.SetStatusCallback(fSession,
-      WinHTTPSecurityErrorCallback, WINHTTP_CALLBACK_FLAG_SECURE_FAILURE, nil);
+      RaiseLastModuleError(winhttpdll, EWinHttp);
+    Callback := WinHttpApi.SetStatusCallback(fSession,
+      WinHttpSecurityErrorCallback, WINHTTP_CALLBACK_FLAG_SECURE_FAILURE, nil);
     if CallbackRes = WINHTTP_INVALID_STATUS_CALLBACK then
-      RaiseLastModuleError(winhttpdll, EWinHTTP);
+      RaiseLastModuleError(winhttpdll, EWinHttp);
   end;
-  fConnection := WinHttpAPI.Connect(fSession, pointer(UTF8ToSynUnicode(fServer)),
+  fConnection := WinHttpApi.Connect(fSession, pointer(Utf8ToSynUnicode(fServer)),
     fPort, 0);
   if fConnection = nil then
-    RaiseLastModuleError(winhttpdll, EWinHTTP);
+    RaiseLastModuleError(winhttpdll, EWinHttp);
 end;
 
-procedure TWinHTTP.InternalCreateRequest(const aMethod, aURL: RawUTF8);
+procedure TWinHttp.InternalCreateRequest(const aMethod, aURL: RawUtf8);
 const
   ALL_ACCEPT: array[0..1] of PWideChar = (
     '*/*', nil);
@@ -1313,37 +1411,37 @@ begin
   Flags := WINHTTP_FLAG_REFRESH; // options for a true RESTful request
   if fHttps then
     Flags := Flags or WINHTTP_FLAG_SECURE;
-  fRequest := WinHttpAPI.OpenRequest(fConnection, pointer(UTF8ToSynUnicode(aMethod)),
-    pointer(UTF8ToSynUnicode(aURL)), nil, nil, ACCEPT_TYPES[fNoAllAccept], Flags);
+  fRequest := WinHttpApi.OpenRequest(fConnection, pointer(Utf8ToSynUnicode(aMethod)),
+    pointer(Utf8ToSynUnicode(aURL)), nil, nil, ACCEPT_TYPES[fNoAllAccept], Flags);
   if fRequest = nil then
-    RaiseLastModuleError(winhttpdll, EWinHTTP);
+    RaiseLastModuleError(winhttpdll, EWinHttp);
   if fKeepAlive = 0 then
   begin
     Flags := WINHTTP_DISABLE_KEEP_ALIVE;
-    if not WinHttpAPI.SetOption(fRequest, WINHTTP_OPTION_DISABLE_FEATURE, @Flags,
+    if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_DISABLE_FEATURE, @Flags,
       sizeOf(Flags)) then
-      RaiseLastModuleError(winhttpdll, EWinHTTP);
+      RaiseLastModuleError(winhttpdll, EWinHttp);
   end;
 end;
 
-procedure TWinHTTP.InternalCloseRequest;
+procedure TWinHttp.InternalCloseRequest;
 begin
   if fRequest <> nil then
   begin
-    WinHttpAPI.CloseHandle(fRequest);
+    WinHttpApi.CloseHandle(fRequest);
     FRequest := nil;
   end;
 end;
 
-procedure TWinHTTP.InternalAddHeader(const hdr: RawUTF8);
+procedure TWinHttp.InternalAddHeader(const hdr: RawUtf8);
 begin
   if (hdr <> '') and
-     not WinHttpAPI.AddRequestHeaders(FRequest,
-    Pointer(UTF8ToSynUnicode(hdr)), length(hdr), WINHTTP_ADDREQ_FLAG_COALESCE) then
-    RaiseLastModuleError(winhttpdll, EWinHTTP);
+     not WinHttpApi.AddRequestHeaders(FRequest,
+    Pointer(Utf8ToSynUnicode(hdr)), length(hdr), WINHTTP_ADDREQ_FLAG_COALESCE) then
+    RaiseLastModuleError(winhttpdll, EWinHttp);
 end;
 
-procedure TWinHTTP.InternalSendRequest(const aMethod: RawUTF8;
+procedure TWinHttp.InternalSendRequest(const aMethod: RawUtf8;
   const aData: RawByteString);
 
   function _SendRequest(L: cardinal): boolean;
@@ -1353,7 +1451,7 @@ procedure TWinHTTP.InternalSendRequest(const aMethod: RawUTF8;
     if Assigned(fOnUpload) and
        (IdemPropNameU(aMethod, 'POST') or IdemPropNameU(aMethod, 'PUT')) then
     begin
-      result := WinHttpAPI.SendRequest(fRequest, nil, 0, nil, 0, L, 0);
+      result := WinHttpApi.SendRequest(fRequest, nil, 0, nil, 0, L, 0);
       if result then
       begin
         Current := 0;
@@ -1365,17 +1463,17 @@ procedure TWinHTTP.InternalSendRequest(const aMethod: RawUTF8;
           Max := L - Current;
           if Bytes > Max then
             Bytes := Max;
-          if not WinHttpAPI.WriteData(fRequest, @PByteArray(aData)[Current],
+          if not WinHttpApi.WriteData(fRequest, @PByteArray(aData)[Current],
              Bytes, BytesWritten) then
-            RaiseLastModuleError(winhttpdll, EWinHTTP);
+            RaiseLastModuleError(winhttpdll, EWinHttp);
           inc(Current, BytesWritten);
           if not fOnUpload(Self, Current, L) then
-            raise EWinHTTP.CreateFmt('OnUpload Canceled %s', [aMethod]);
+            raise EWinHttp.CreateFmt('OnUpload Canceled %s', [aMethod]);
         end;
       end;
     end
     else
-      result := WinHttpAPI.SendRequest(fRequest, nil, 0, pointer(aData), L, L, 0);
+      result := WinHttpApi.SendRequest(fRequest, nil, 0, pointer(aData), L, L, 0);
   end;
 
 var
@@ -1393,37 +1491,38 @@ begin
         wraNegotiate:
           winAuth := WINHTTP_AUTH_SCHEME_NEGOTIATE;
       else
-        raise EWinHTTP.CreateFmt('Unsupported AuthScheme=%d', [ord(AuthScheme)]);
+        raise EWinHttp.CreateFmt('Unsupported AuthScheme=%d', [ord(AuthScheme)]);
       end;
-      if not WinHttpAPI.SetCredentials(fRequest, WINHTTP_AUTH_TARGET_SERVER,
+      if not WinHttpApi.SetCredentials(fRequest, WINHTTP_AUTH_TARGET_SERVER,
          winAuth, pointer(AuthUserName), pointer(AuthPassword), nil) then
-        RaiseLastModuleError(winhttpdll, EWinHTTP);
+        RaiseLastModuleError(winhttpdll, EWinHttp);
     end;
-  if fHTTPS and IgnoreSSLCertificateErrors then
-    if not WinHttpAPI.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
+  if fHTTPS and
+     IgnoreSSLCertificateErrors then
+    if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
        @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
-      RaiseLastModuleError(winhttpdll, EWinHTTP);
+      RaiseLastModuleError(winhttpdll, EWinHttp);
   L := length(aData);
-  if not _SendRequest(L) or not WinHttpAPI.ReceiveResponse(fRequest, nil) then
+  if not _SendRequest(L) or not WinHttpApi.ReceiveResponse(fRequest, nil) then
   begin
     if not fHTTPS then
-      RaiseLastModuleError(winhttpdll, EWinHTTP);
+      RaiseLastModuleError(winhttpdll, EWinHttp);
     if (GetLastError = ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED) and
       IgnoreSSLCertificateErrors then
     begin
-      if not WinHttpAPI.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
+      if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
          @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
-        RaiseLastModuleError(winhttpdll, EWinHTTP);
-      if not WinHttpAPI.SetOption(fRequest, WINHTTP_OPTION_CLIENT_CERT_CONTEXT,
+        RaiseLastModuleError(winhttpdll, EWinHttp);
+      if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_CLIENT_CERT_CONTEXT,
          pointer(WINHTTP_NO_CLIENT_CERT_CONTEXT), 0) then
-        RaiseLastModuleError(winhttpdll, EWinHTTP);
-      if not _SendRequest(L) or not WinHttpAPI.ReceiveResponse(fRequest, nil) then
-        RaiseLastModuleError(winhttpdll, EWinHTTP);
+        RaiseLastModuleError(winhttpdll, EWinHttp);
+      if not _SendRequest(L) or not WinHttpApi.ReceiveResponse(fRequest, nil) then
+        RaiseLastModuleError(winhttpdll, EWinHttp);
     end;
   end;
 end;
 
-function TWinHTTP.InternalGetInfo(Info: cardinal): RawUTF8;
+function TWinHttp.InternalGetInfo(Info: cardinal): RawUtf8;
 var
   dwSize, dwIndex: cardinal;
   tmp: TSynTempBuffer;
@@ -1432,51 +1531,51 @@ begin
   result := '';
   dwSize := 0;
   dwIndex := 0;
-  if not WinHttpAPI.QueryHeaders(fRequest, Info, nil, nil, dwSize, dwIndex) and
+  if not WinHttpApi.QueryHeaders(fRequest, Info, nil, nil, dwSize, dwIndex) and
      (GetLastError = ERROR_INSUFFICIENT_BUFFER) then
   begin
     tmp.Init(dwSize);
-    if WinHttpAPI.QueryHeaders(fRequest, Info, nil, tmp.buf, dwSize, dwIndex) then
+    if WinHttpApi.QueryHeaders(fRequest, Info, nil, tmp.buf, dwSize, dwIndex) then
     begin
       dwSize := dwSize shr 1;
       SetLength(result, dwSize);
-      for i := 0 to dwSize - 1 do // fast ANSI 7 bit conversion
+      for i := 0 to dwSize - 1 do // fast ANSI 7-bit conversion
         PByteArray(result)^[i] := PWordArray(tmp.buf)^[i];
     end;
     tmp.Done;
   end;
 end;
 
-function TWinHTTP.InternalGetInfo32(Info: cardinal): cardinal;
+function TWinHttp.InternalGetInfo32(Info: cardinal): cardinal;
 var
   dwSize, dwIndex: cardinal;
 begin
   dwSize := sizeof(result);
   dwIndex := 0;
   Info := Info or WINHTTP_QUERY_FLAG_NUMBER;
-  if not WinHttpAPI.QueryHeaders(fRequest, Info, nil, @result, dwSize, dwIndex) then
+  if not WinHttpApi.QueryHeaders(fRequest, Info, nil, @result, dwSize, dwIndex) then
     result := 0;
 end;
 
-function TWinHTTP.InternalQueryDataAvailable: cardinal;
+function TWinHttp.InternalQueryDataAvailable: cardinal;
 begin
-  if not WinHttpAPI.QueryDataAvailable(fRequest, result) then
-    RaiseLastModuleError(winhttpdll, EWinHTTP);
+  if not WinHttpApi.QueryDataAvailable(fRequest, result) then
+    RaiseLastModuleError(winhttpdll, EWinHttp);
 end;
 
-function TWinHTTP.InternalReadData(var Data: RawByteString; Read: integer;
+function TWinHttp.InternalReadData(var Data: RawByteString; Read: integer;
   Size: cardinal): cardinal;
 begin
-  if not WinHttpAPI.ReadData(fRequest, @PByteArray(Data)[Read], Size, result) then
-    RaiseLastModuleError(winhttpdll, EWinHTTP);
+  if not WinHttpApi.ReadData(fRequest, @PByteArray(Data)[Read], Size, result) then
+    RaiseLastModuleError(winhttpdll, EWinHttp);
 end;
 
-destructor TWinHTTP.Destroy;
+destructor TWinHttp.Destroy;
 begin
   if fConnection <> nil then
-    WinHttpAPI.CloseHandle(fConnection);
+    WinHttpApi.CloseHandle(fConnection);
   if fSession <> nil then
-    WinHttpAPI.CloseHandle(fSession);
+    WinHttpApi.CloseHandle(fSession);
   inherited Destroy;
 end;
 
@@ -1484,9 +1583,10 @@ end;
 { EWinINet }
 
 constructor EWinINet.Create;
-begin // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383884
+begin
+  // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383884
   fLastError := GetLastError;
-  inherited CreateFmt('%s (%d)', [SysErrorMessageWinInet(fLastError), fLastError]);
+  inherited CreateFmt('%s (%x)', [SysErrorMessageWinInet(fLastError), fLastError]);
 end;
 
 
@@ -1516,7 +1616,7 @@ begin
     raise EWinINet.Create;
 end;
 
-procedure TWinINet.InternalCreateRequest(const aMethod, aURL: RawUTF8);
+procedure TWinINet.InternalCreateRequest(const aMethod, aURL: RawUtf8);
 const
   ALL_ACCEPT: array[0..1] of PAnsiChar = (
     '*/*', nil);
@@ -1546,7 +1646,7 @@ begin
   end;
 end;
 
-procedure TWinINet.InternalAddHeader(const hdr: RawUTF8);
+procedure TWinINet.InternalAddHeader(const hdr: RawUtf8);
 begin
   if (hdr <> '') and
      not HttpAddRequestHeadersA(fRequest, Pointer(hdr), length(hdr),
@@ -1554,7 +1654,7 @@ begin
     raise EWinINet.Create;
 end;
 
-procedure TWinINet.InternalSendRequest(const aMethod: RawUTF8; const aData:
+procedure TWinINet.InternalSendRequest(const aMethod: RawUtf8; const aData:
   RawByteString);
 var
   buff: TInternetBuffersA;
@@ -1593,7 +1693,7 @@ if not HttpSendRequestA(fRequest, nil, 0, pointer(aData), length(aData)) then
     raise EWinINet.Create;
 end;
 
-function TWinINet.InternalGetInfo(Info: cardinal): RawUTF8;
+function TWinINet.InternalGetInfo(Info: cardinal): RawUtf8;
 var
   dwSize, dwIndex: cardinal;
 begin
@@ -1643,22 +1743,22 @@ begin
 end;
 
 
-{ TWinHTTPUpgradeable }
+{ TWinHttpUpgradeable }
 
-function TWinHTTPUpgradeable.InternalRetrieveAnswer(var Header, Encoding,
-  AcceptEncoding: RawUTF8; var Data: RawByteString): integer;
+function TWinHttpUpgradeable.InternalRetrieveAnswer(var Header, Encoding,
+  AcceptEncoding: RawUtf8; var Data: RawByteString): integer;
 begin
   result := inherited InternalRetrieveAnswer(Header, Encoding, AcceptEncoding, Data);
 end;
 
-procedure TWinHTTPUpgradeable.InternalSendRequest(const aMethod: RawUTF8; const
+procedure TWinHttpUpgradeable.InternalSendRequest(const aMethod: RawUtf8; const
   aData: RawByteString);
 begin
   inherited InternalSendRequest(aMethod, aData);
 end;
 
-constructor TWinHTTPUpgradeable.Create(const aServer, aPort: RawUTF8; aHttps:
-  boolean; const aProxyName: RawUTF8; const aProxyByPass: RawUTF8;
+constructor TWinHttpUpgradeable.Create(const aServer, aPort: RawUtf8; aHttps:
+  boolean; const aProxyName: RawUtf8; const aProxyByPass: RawUtf8;
   ConnectionTimeOut: cardinal; SendTimeout: cardinal; ReceiveTimeout: cardinal; aLayer: TNetLayer);
 begin
   inherited Create(aServer, aPort, aHttps, aProxyName, aProxyByPass,
@@ -1666,27 +1766,27 @@ begin
 end;
 
 
-{ TWinHTTPWebSocketClient }
+{ TWinHttpWebSocketClient }
 
-function TWinHTTPWebSocketClient.CheckSocket: boolean;
+function TWinHttpWebSocketClient.CheckSocket: boolean;
 begin
   result := fSocket <> nil;
 end;
 
-constructor TWinHTTPWebSocketClient.Create(const aServer, aPort: RawUTF8; aHttps:
-  boolean; const url: RawUTF8; const aSubProtocol: RawUTF8; const aProxyName:
-  RawUTF8; const aProxyByPass: RawUTF8; ConnectionTimeOut: cardinal; SendTimeout:
+constructor TWinHttpWebSocketClient.Create(const aServer, aPort: RawUtf8; aHttps:
+  boolean; const url: RawUtf8; const aSubProtocol: RawUtf8; const aProxyName:
+  RawUtf8; const aProxyByPass: RawUtf8; ConnectionTimeOut: cardinal; SendTimeout:
   cardinal; ReceiveTimeout: cardinal);
 var
-  _http: TWinHTTPUpgradeable;
-  inH, outH: RawUTF8;
+  _http: TWinHttpUpgradeable;
+  inH, outH: RawUtf8;
   outD: RawByteString;
 begin
   fSocket := nil;
-  _http := TWinHTTPUpgradeable.Create(aServer, aPort, aHttps, aProxyName,
+  _http := TWinHttpUpgradeable.Create(aServer, aPort, aHttps, aProxyName,
     aProxyByPass, ConnectionTimeOut, SendTimeout, ReceiveTimeout);
   try
-    // WebSocketAPI.BeginClientHandshake()
+    // WebSocketApi.BeginClientHandshake()
     if aSubProtocol <> '' then
       inH := HTTP_WEBSOCKET_PROTOCOL + ': ' + aSubProtocol
     else
@@ -1694,58 +1794,59 @@ begin
     if _http.Request(url, 'GET', 0, inH, '', '', outH, outD) = 101 then
       fSocket := _http.fSocket
     else
-      raise EWinHTTP.Create('WebSocketClient creation fail');
+      raise EWinHttp.Create('WebSocketClient creation fail');
   finally
     _http.Free;
   end;
 end;
 
-function TWinHTTPWebSocketClient.Send(aBufferType:
+function TWinHttpWebSocketClient.Send(aBufferType:
   WINHTTP_WEB_SOCKET_BUFFER_TYPE; aBuffer: pointer; aBufferLength: cardinal): cardinal;
 begin
   if not CheckSocket then
     result := ERROR_INVALID_HANDLE
   else
-    result := WinHttpAPI.WebSocketSend(fSocket, aBufferType, aBuffer, aBufferLength);
+    result := WinHttpApi.WebSocketSend(fSocket, aBufferType, aBuffer, aBufferLength);
 end;
 
-function TWinHTTPWebSocketClient.Receive(aBuffer: pointer; aBufferLength: cardinal;
+function TWinHttpWebSocketClient.Receive(aBuffer: pointer; aBufferLength: cardinal;
   out aBytesRead: cardinal; out aBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE): cardinal;
 begin
   if not CheckSocket then
     result := ERROR_INVALID_HANDLE
   else
-    result := WinHttpAPI.WebSocketReceive(fSocket, aBuffer, aBufferLength,
+    result := WinHttpApi.WebSocketReceive(fSocket, aBuffer, aBufferLength,
       aBytesRead, aBufferType);
 end;
 
-function TWinHTTPWebSocketClient.CloseConnection(const aCloseReason: RawUTF8): cardinal;
+function TWinHttpWebSocketClient.CloseConnection(const aCloseReason: RawUtf8): cardinal;
 begin
   if not CheckSocket then
     result := ERROR_INVALID_HANDLE
   else
-    result := WinHttpAPI.WebSocketClose(fSocket, WEB_SOCKET_SUCCESS_CLOSE_STATUS,
+    result := WinHttpApi.WebSocketClose(fSocket, WEB_SOCKET_SUCCESS_CLOSE_STATUS,
       Pointer(aCloseReason), Length(aCloseReason));
   if result = 0 then
     fSocket := nil;
 end;
 
-destructor TWinHTTPWebSocketClient.Destroy;
+destructor TWinHttpWebSocketClient.Destroy;
 const
   CloseReason: PAnsiChar = 'object is destroyed';
 var
   status: Word;
-  reason: RawUTF8;
+  reason: RawUtf8;
   reasonLength: cardinal;
 begin
   if CheckSocket then
-  begin // todo: check result
-    WinHttpAPI.WebSocketClose(fSocket, WEB_SOCKET_ABORTED_CLOSE_STATUS, Pointer(CloseReason),
+  begin
+    // todo: check result
+    WinHttpApi.WebSocketClose(fSocket, WEB_SOCKET_ABORTED_CLOSE_STATUS, Pointer(CloseReason),
       Length(CloseReason));
     SetLength(reason, WEB_SOCKET_MAX_CLOSE_REASON_LENGTH);
-    WinHttpAPI.WebSocketQueryCloseStatus(fSocket, status, Pointer(reason),
+    WinHttpApi.WebSocketQueryCloseStatus(fSocket, status, Pointer(reason),
       WEB_SOCKET_MAX_CLOSE_REASON_LENGTH, reasonLength);
-    WinHttpAPI.CloseHandle(fSocket);
+    WinHttpApi.CloseHandle(fSocket);
   end;
   inherited Destroy;
 end;
@@ -1755,17 +1856,19 @@ end;
 
 {$ifdef USELIBCURL}
 
-{ TCurlHTTP }
+{ TCurlHttp }
 
-procedure TCurlHTTP.InternalConnect(ConnectionTimeOut, SendTimeout,
+procedure TCurlHttp.InternalConnect(ConnectionTimeOut, SendTimeout,
   ReceiveTimeout: cardinal);
 const
   HTTPS: array[boolean] of string[1] = (
     '', 's');
 begin
   if not IsAvailable then
-    raise ENetSock.CreateFmt('No available %s', [LIBCURL_DLL]);
+    raise ECurlHttp.CreateFmt('No available %s', [LIBCURL_DLL]);
   fHandle := curl.easy_init;
+  if curl.globalShare <> nil then
+    curl.easy_setopt(fHandle, coShare, curl.globalShare);
   ConnectionTimeOut := ConnectionTimeOut div 1000; // curl expects seconds
   if ConnectionTimeOut = 0 then
     ConnectionTimeOut := 1;
@@ -1775,28 +1878,28 @@ begin
     // see CURLOPT_UNIX_SOCKET_PATH doc
     fRootURL := 'http://localhost'
   else
-    FormatUTF8('http%://%:%', [HTTPS[fHttps], fServer, fPort], fRootURL);
+    FormatUtf8('http%://%:%', [HTTPS[fHttps], fServer, fPort], fRootURL);
 end;
 
-destructor TCurlHTTP.Destroy;
+destructor TCurlHttp.Destroy;
 begin
   if fHandle <> nil then
     curl.easy_cleanup(fHandle);
   inherited;
 end;
 
-function TCurlHTTP.GetCACertFile: RawUTF8;
+function TCurlHttp.GetCACertFile: RawUtf8;
 begin
   result := fSSL.CACertFile;
 end;
 
-procedure TCurlHTTP.SetCACertFile(const aCertFile: RawUTF8);
+procedure TCurlHttp.SetCACertFile(const aCertFile: RawUtf8);
 begin
   fSSL.CACertFile := aCertFile;
 end;
 
-procedure TCurlHTTP.UseClientCertificate(const aCertFile, aCACertFile, aKeyName,
-  aPassPhrase: RawUTF8);
+procedure TCurlHttp.UseClientCertificate(const aCertFile, aCACertFile, aKeyName,
+  aPassPhrase: RawUtf8);
 begin
   fSSL.CertFile := aCertFile;
   fSSL.CACertFile := aCACertFile;
@@ -1804,12 +1907,12 @@ begin
   fSSL.PassPhrase := aPassPhrase;
 end;
 
-procedure TCurlHTTP.InternalCreateRequest(const aMethod, aURL: RawUTF8);
+procedure TCurlHttp.InternalCreateRequest(const aMethod, aURL: RawUtf8);
 const
-  CERT_PEM: RawUTF8 = 'PEM';
+  CERT_PEM: RawUtf8 = 'PEM';
 begin
   fIn.URL := fRootURL + aURL;
-  curl.easy_setopt(fHandle, coFollowLocation, 1); // url redirection (as TWinHTTP)
+  curl.easy_setopt(fHandle, coFollowLocation, 1); // url redirection (as TWinHttp)
   //curl.easy_setopt(fHandle,coTCPNoDelay,0); // disable Nagle
   if fLayer = nlUNIX then
     curl.easy_setopt(fHandle, coUnixSocketPath, pointer(fServer));
@@ -1854,10 +1957,10 @@ begin
   Finalize(fOut);
 end;
 
-procedure TCurlHTTP.InternalAddHeader(const hdr: RawUTF8);
+procedure TCurlHttp.InternalAddHeader(const hdr: RawUtf8);
 var
-  P: PUTF8Char;
-  s: RawUTF8;
+  P: PUtf8Char;
+  s: RawUtf8;
 begin
   P := pointer(hdr);
   while P <> nil do
@@ -1868,14 +1971,15 @@ begin
   end;
 end;
 
-class function TCurlHTTP.IsAvailable: boolean;
+class function TCurlHttp.IsAvailable: boolean;
 begin
   result := CurlIsAvailable;
 end;
 
-procedure TCurlHTTP.InternalSendRequest(const aMethod: RawUTF8; const aData:
-  RawByteString);
-begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
+procedure TCurlHttp.InternalSendRequest(const aMethod: RawUtf8;
+  const aData: RawByteString);
+begin
+  // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
   if fIn.Method = 'HEAD' then // the only verb what do not expect body in answer is HEAD
     curl.easy_setopt(fHandle, coNoBody, 1)
   else
@@ -1883,23 +1987,23 @@ begin // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
   curl.easy_setopt(fHandle, coCustomRequest, pointer(fIn.Method));
   curl.easy_setopt(fHandle, coPostFields, pointer(aData));
   curl.easy_setopt(fHandle, coPostFieldSize, length(aData));
-  curl.easy_setopt(fHandle, coHTTPHeader, fIn.Headers);
+  curl.easy_setopt(fHandle, coHttpHeader, fIn.Headers);
   curl.easy_setopt(fHandle, coFile, @fOut.Data);
   curl.easy_setopt(fHandle, coWriteHeader, @fOut.Header);
 end;
 
-function TCurlHTTP.InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding:
-  RawUTF8; var Data: RawByteString): integer;
+function TCurlHttp.InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding:
+  RawUtf8; var Data: RawByteString): integer;
 var
   res: TCurlResult;
-  P: PUTF8Char;
-  s: RawUTF8;
+  P: PUtf8Char;
+  s: RawUtf8;
   i: integer;
   rc: PtrInt; // needed on Linux x86-64
 begin
   res := curl.easy_perform(fHandle);
   if res <> crOK then
-    raise ECurlHTTP.CreateFmt('libcurl error %d (%s) on %s %s', [ord(res), curl.easy_strerror
+    raise ECurlHttp.CreateFmt('libcurl error %d (%s) on %s %s', [ord(res), curl.easy_strerror
       (res), fIn.Method, fIn.URL]);
   rc := 0;
   curl.easy_getinfo(fHandle, ciResponseCode, rc);
@@ -1926,7 +2030,7 @@ begin
   Data := fOut.Data;
 end;
 
-procedure TCurlHTTP.InternalCloseRequest;
+procedure TCurlHttp.InternalCloseRequest;
 begin
   if fIn.Headers <> nil then
   begin
@@ -1941,20 +2045,134 @@ end;
 {$endif USELIBCURL}
 
 
+{ ******************** TSimpleHttpClient Wrapper Class }
+
+
+{ TSimpleHttpClient }
+
+constructor TSimpleHttpClient.Create(aOnlyUseClientSocket: boolean);
+begin
+  fOnlyUseClientSocket := aOnlyUseClientSocket;
+  inherited Create;
+end;
+
+destructor TSimpleHttpClient.Destroy;
+begin
+  FreeAndNil(fHttp);
+  FreeAndNil(fHttps);
+  inherited Destroy;
+end;
+
+function TSimpleHttpClient.RawRequest(const Uri: TUri;
+  const Method, Header: RawUtf8; const Data: RawByteString;
+  const DataType: RawUtf8; KeepAlive: cardinal): integer;
+begin
+  result := 0;
+  if (Uri.Https or
+      (Proxy <> '')) and
+     not fOnlyUseClientSocket then
+  try
+    if (fHttps = nil) or
+       (fHttps.Server <> Uri.Server) or
+       (integer(fHttps.Port) <> Uri.PortInt) then
+    begin
+      FreeAndNil(fHttp);
+      FreeAndNil(fHttps); // need a new HTTPS connection
+      fHttps := MainHttpClass.Create(
+        Uri.Server, Uri.Port, Uri.Https, Proxy, '', 5000, 5000, 5000);
+      fHttps.IgnoreSSLCertificateErrors := fIgnoreSSLCertificateErrors;
+      if fUserAgent <> '' then
+        fHttps.UserAgent := fUserAgent;
+    end;
+    result := fHttps.Request(
+      Uri.Address, Method, KeepAlive, Header, Data, DataType, fHeaders, fBody);
+    if KeepAlive = 0 then
+      FreeAndNil(fHttps);
+  except
+    FreeAndNil(fHttps);
+  end
+  else
+  try
+    if (fHttp = nil) or
+       (fHttp.Server <> Uri.Server) or
+       (fHttp.Port <> Uri.Port) or
+       // server may close after a few requests (e.g. nginx keepalive_requests)
+       (hfConnectionClose in fHttp.HeaderFlags) then
+    begin
+      FreeAndNil(fHttps);
+      FreeAndNil(fHttp); // need a new HTTP connection
+      fHttp := THttpClientSocket.Open(
+        Uri.Server, Uri.Port, nlTCP, 5000, Uri.Https);
+      if fUserAgent <> '' then
+        fHttp.UserAgent := fUserAgent;
+    end;
+    if not fHttp.SockConnected then
+      exit
+    else
+      result := fHttp.Request(
+        Uri.Address, Method, KeepAlive, Header, Data, DataType, true);
+    fBody := fHttp.Content;
+    fHeaders := fHttp.HeaderGetText;
+    if KeepAlive = 0 then
+      FreeAndNil(fHttp);
+  except
+    FreeAndNil(fHttp);
+  end;
+end;
+
+function TSimpleHttpClient.Request(const uri, method, header: RawUtf8;
+  const data: RawByteString; const datatype: RawUtf8; keepalive: cardinal): integer;
+var
+  u: TUri;
+begin
+  if u.From(uri) then
+    result := RawRequest(u, method, header, data, datatype, keepalive)
+  else
+    result := HTTP_NOTFOUND;
+end;
+
+
+var
+  _MainHttpClass: THttpRequestClass;
+
+function MainHttpClass: THttpRequestClass;
+begin
+  if _MainHttpClass = nil then
+  begin
+    {$ifdef USEWININET}
+    _MainHttpClass := TWinHttp;
+    {$else}
+    {$ifdef USELIBCURL}
+    _MainHttpClass := TCurlHttp
+    {$else}
+    raise EHttpSocket.Create('No THttpRequest class known!');
+    {$endif USELIBCURL}
+    {$endif USEWININET}
+  end;
+  result := _MainHttpClass;
+end;
+
+procedure ReplaceMainHttpClass(aClass: THttpRequestClass);
+begin
+  _MainHttpClass := aClass;
+end;
+
+
+
 { ************** Cached HTTP Connection to a Remote Server }
 
 { THttpRequestCached }
 
-constructor THttpRequestCached.Create(const aURI: RawUTF8; aKeepAliveSeconds,
-  aTimeoutSeconds: integer; const aToken: RawUTF8; aHttpClass: THttpRequestClass);
+constructor THttpRequestCached.Create(const aUri: RawUtf8; aKeepAliveSeconds,
+  aTimeoutSeconds: integer; const aToken: RawUtf8; aHttpClass: THttpRequestClass);
 begin
   inherited Create;
   fKeepAlive := aKeepAliveSeconds * 1000;
   if aTimeoutSeconds > 0 then // 0 means no cache
-    fCache := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray),
+    fCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
       TypeInfo(THttpRequestCacheDynArray), true, aTimeoutSeconds);
-  if not LoadFromURI(aURI, aToken, aHttpClass) then
-    raise ESynException.CreateUTF8('%.Create: invalid aURI=%', [self, aURI]);
+  if not LoadFromUri(aUri, aToken, aHttpClass) then
+    raise ESynException.CreateUtf8('%.Create: invalid aUri=%', [self, aUri]);
 end;
 
 procedure THttpRequestCached.Clear;
@@ -1963,7 +2181,7 @@ begin
   FreeAndNil(fSocket);
   if fCache <> nil then
     fCache.DeleteAll;
-  fURI.Clear;
+  fUri.Clear;
   fTokenHeader := '';
 end;
 
@@ -1975,11 +2193,11 @@ begin
   inherited Destroy;
 end;
 
-function THttpRequestCached.Get(const aAddress: RawUTF8; aModified: PBoolean;
+function THttpRequestCached.Get(const aAddress: RawUtf8; aModified: PBoolean;
   aStatus: PInteger): RawByteString;
 var
   cache: THttpRequestCache;
-  headin, headout: RawUTF8;
+  headin, headout: RawUtf8;
   status: integer;
   modified: boolean;
 begin
@@ -1989,7 +2207,7 @@ begin
     exit;
   if (fCache <> nil) and
      fCache.FindAndCopy(aAddress, cache) then
-    FormatUTF8('If-None-Match: %', [cache.Tag], headin);
+    FormatUtf8('If-None-Match: %', [cache.Tag], headin);
   if fTokenHeader <> '' then
   begin
     if {%H-}headin <> '' then
@@ -1998,6 +2216,12 @@ begin
   end;
   if fSocket <> nil then
   begin
+    if hfConnectionClose in fSocket.HeaderFlags then
+    begin
+      // server may close after a few requests (e.g. nginx keepalive_requests)
+      FreeAndNil(fSocket);
+      fSocket := THttpClientSocket.Open(fUri.Server, fUri.Port)
+    end;
     status := fSocket.Get(aAddress, fKeepAlive, headin);
     result := fSocket.Content;
   end
@@ -2030,35 +2254,35 @@ begin
     aStatus^ := status;
 end;
 
-function THttpRequestCached.LoadFromURI(const aURI, aToken: RawUTF8;
+function THttpRequestCached.LoadFromUri(const aUri, aToken: RawUtf8;
   aHttpClass: THttpRequestClass): boolean;
 begin
   result := false;
   if (self = nil) or
      (fHttp <> nil) or
      (fSocket <> nil) or
-     not fURI.From(aURI) then
+     not fUri.From(aUri) then
     exit;
   fTokenHeader := AuthorizationBearer(aToken);
   if aHttpClass = nil then
   begin
     {$ifdef USEWININET}
-    aHttpClass := TWinHTTP;
+    aHttpClass := TWinHttp;
     {$else}
     {$ifdef USELIBCURL}
-    if fURI.Https then
-      aHttpClass := TCurlHTTP;
+    if fUri.Https then
+      aHttpClass := TCurlHttp;
     {$endif USELIBCURL}
     {$endif USEWININET}
   end;
   if aHttpClass = nil then
-    fSocket := THttpClientSocket.Open(fURI.Server, fURI.Port)
+    fSocket := THttpClientSocket.Open(fUri.Server, fUri.Port)
   else
-    fHttp := aHttpClass.Create(fURI.Server, fURI.Port, fURI.Https);
+    fHttp := aHttpClass.Create(fUri.Server, fUri.Port, fUri.Https);
   result := true;
 end;
 
-function THttpRequestCached.Flush(const aAddress: RawUTF8): boolean;
+function THttpRequestCached.Flush(const aAddress: RawUtf8): boolean;
 begin
   if fCache <> nil then
     result := fCache.Delete(aAddress) >= 0
@@ -2068,49 +2292,53 @@ end;
 
 
 
-function HttpGet(const aURI: RawUTF8; outHeaders: PRawUTF8;
+function HttpGet(const aUri: RawUtf8; outHeaders: PRawUtf8;
   forceNotSocket: boolean; outStatus: PInteger): RawByteString;
 begin
-  result := HttpGet(aURI, '', outHeaders, forceNotSocket, outStatus);
+  result := HttpGet(aUri, '', outHeaders, forceNotSocket, outStatus);
 end;
 
-function HttpGet(const aURI: RawUTF8; const inHeaders: RawUTF8;
-  outHeaders: PRawUTF8; forceNotSocket: boolean;
+function HttpGet(const aUri: RawUtf8; const inHeaders: RawUtf8;
+  outHeaders: PRawUtf8; forceNotSocket: boolean;
   outStatus: PInteger): RawByteString;
 var
-  URI: TURI;
+  uri: TUri;
 begin
-  if URI.From(aURI) then
-    if URI.Https or
+  if uri.From(aUri) then
+    if uri.Https or
        forceNotSocket then
       {$ifdef USEWININET}
-      result := TWinHTTP.Get(
-        aURI, inHeaders, {weakCA=}true, outHeaders, outStatus)
+      result := TWinHttp.Get(
+        aUri, inHeaders, {weakCA=}true, outHeaders, outStatus)
       {$else}
-      {$ifdef USELIBCURL}
-      result := TCurlHTTP.Get(
-        aURI, inHeaders, {weakCA=}true, outHeaders, outStatus)
-      {$else}
-      raise EHttpSocket.CreateFmt('https is not supported by HttpGet(%s)', [aURI])
+      {$ifdef USELIBCURL2}
+      if TCurlHttp.IsAvailable then
+        result := TCurlHttp.Get(
+          aUri, inHeaders, {weakCA=}true, outHeaders, outStatus)
+      else
       {$endif USELIBCURL}
+        // fallback to SChannel/OpenSSL if libcurl is not installed
+        result := OpenHttpGet(uri.Server, uri.Port, uri.Address,
+          inHeaders, outHeaders, uri.Layer, uri.Https, outStatus)
       {$endif USEWININET}
     else
-      result := OpenHttpGet(
-        URI.Server, URI.Port, URI.Address, inHeaders, outHeaders, URI.Layer)
+      result := OpenHttpGet(uri.Server, uri.Port, uri.Address,
+        inHeaders, outHeaders, uri.Layer, uri.Https, outStatus)
     else
       result := '';
   {$ifdef LINUX_RAWDEBUGVOIDHTTPGET}
   if result = '' then
-    writeln('HttpGet returned VOID for ',URI.server,':',URI.Port,' ',URI.Address);
+    writeln('HttpGet returned VOID for ',uri.server,':',uri.Port,' ',uri.Address);
   {$endif LINUX_RAWDEBUGVOIDHTTPGET}
 end;
 
 
+
 { ************** Send Email using the SMTP Protocol }
 
-function TSMTPConnection.FromText(const aText: RawUTF8): boolean;
+function TSMTPConnection.FromText(const aText: RawUtf8): boolean;
 var
-  u, h: RawUTF8;
+  u, h: RawUtf8;
 begin
   if aText = SMTP_DEFAULT then
   begin
@@ -2135,54 +2363,53 @@ begin
   result := Host <> '';
 end;
 
-function SendEmail(const Server: TSMTPConnection; const From, CSVDest, Subject,
-  Text, Headers, TextCharSet: RawUTF8; aTLS: boolean): boolean;
+function SendEmail(const Server: TSMTPConnection; const From, CsvDest, Subject,
+  Text, Headers, TextCharSet: RawUtf8; aTLS: boolean): boolean;
 begin
   result := SendEmail(
-    Server.Host, From, CSVDest, Subject, Text, Headers,
+    Server.Host, From, CsvDest, Subject, Text, Headers,
     Server.User, Server.Pass, Server.Port, TextCharSet,
-    (Server.Port = '465') or
-    (Server.Port = '587'));
+    aTLS or (Server.Port = '465') or (Server.Port = '587'));
 end;
 
 {$I-}
 
-function SendEmail(const Server, From, CSVDest, Subject, Text, Headers, User,
-  Pass, Port, TextCharSet: RawUTF8; aTLS: boolean): boolean;
+function SendEmail(const Server, From, CsvDest, Subject, Text, Headers, User,
+  Pass, Port, TextCharSet: RawUtf8; aTLS: boolean): boolean;
 var
   TCP: TCrtSocket;
 
-  procedure Expect(const Answer: RawUTF8);
+  procedure Expect(const Answer: RawUtf8);
   var
-    Res: RawUTF8;
+    Res: RawUtf8;
   begin
     repeat
       readln(TCP.SockIn^, Res);
       if ioresult <> 0 then
-        raise ESendEmail.CreateUTF8('read error for %', [Res]);
+        raise ESendEmail.CreateUtf8('read error for %', [Res]);
     until (Length(Res) < 4) or
           (Res[4] <> '-');
     if not IdemPChar(pointer(Res), pointer(Answer)) then
-      raise ESendEmail.CreateUTF8('%', [Res]);
+      raise ESendEmail.CreateUtf8('%', [Res]);
   end;
 
-  procedure Exec(const Command, Answer: RawUTF8);
+  procedure Exec(const Command, Answer: RawUtf8);
   begin
     writeln(TCP.SockOut^, Command);
     if ioresult <> 0 then
-      raise ESendEmail.CreateUTF8('write error for %s', [Command]);
+      raise ESendEmail.CreateUtf8('write error for %s', [Command]);
     Expect(Answer)
   end;
 
 var
-  P: PUTF8Char;
-  rec, ToList, head: RawUTF8;
+  P: PUtf8Char;
+  rec, ToList, head: RawUtf8;
 begin
   result := false;
-  P := pointer(CSVDest);
+  P := pointer(CsvDest);
   if P = nil then
     exit;
-  TCP := Open(Server, Port, aTLS);
+  TCP := SocketOpen(Server, Port, aTLS);
   if TCP <> nil then
   try
     TCP.CreateSockIn; // we use SockIn and SockOut here
@@ -2233,13 +2460,76 @@ end;
 
 {$I+}
 
-function SendEmailSubject(const Text: string): RawUTF8;
+function SendEmailSubject(const Text: string): RawUtf8;
 begin
-  StringToUTF8(Text, result);
+  StringToUtf8(Text, result);
   if not IsAnsiCompatible(result) then
     result := '=?UTF-8?B?' + BinToBase64(result);
 end;
 
+
+{ ************** DNS Resolution Cache for mormot.net.sock NewSocket() }
+
+{ TNewSocketAddressCache }
+
+type
+  /// thread-safe TSynDictionary-based cache of DNS names for NewSocket()
+  TNewSocketAddressCache = class(TInterfacedObject, INewSocketAddressCache)
+  protected
+    fData: TSynDictionary;
+  public
+    constructor Create(aTimeOutSeconds: integer);
+    destructor Destroy; override;
+    // INewSocketAddressCache methods
+    function Search(const Host: RawUtf8; out NetAddr: TNetAddr): boolean;
+    procedure Add(const Host: RawUtf8; const NetAddr: TNetAddr);
+    procedure Flush(const Host: RawUtf8);
+    procedure SetTimeOut(aSeconds: integer);
+  end;
+
+constructor TNewSocketAddressCache.Create(aTimeOutSeconds: integer);
+begin
+  fData := TSynDictionary.Create(
+    TypeInfo(TRawUtf8DynArray), TypeInfo(TNetAddrDynArray),
+    {caseinsens=}true, aTimeOutSeconds);
+end;
+
+destructor TNewSocketAddressCache.Destroy;
+begin
+  fData.Free;
+  inherited Destroy;
+end;
+
+function TNewSocketAddressCache.Search(const Host: RawUtf8;
+  out NetAddr: TNetAddr): boolean;
+begin
+  result := fData.FindAndCopy(Host, NetAddr);
+end;
+
+procedure TNewSocketAddressCache.Add(const Host: RawUtf8;
+  const NetAddr: TNetAddr);
+begin
+  fData.DeleteDeprecated; // flush cache only when we may need some new space
+  fData.Add(Host, NetAddr); // do nothing if already added in another thread
+end;
+
+procedure TNewSocketAddressCache.Flush(const Host: RawUtf8);
+begin
+  fData.Delete(Host);
+end;
+
+procedure TNewSocketAddressCache.SetTimeOut(aSeconds: integer);
+begin
+  fData.TimeOutSeconds := aSeconds; // warning: will clear the cache
+end;
+
+
+
+initialization
+  NewSocketAddressCache := TNewSocketAddressCache.Create(600); // 10min timeout
+
+finalization
+  NewSocketAddressCache := nil;
 
 end.
 

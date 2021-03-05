@@ -5,10 +5,10 @@ program mormot2tests;
 
 {$I ..\src\mormot.defines.inc}
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
   {$apptype console}
   {$R ..\src\mormot.win.default.manifest.res}
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 uses
   {$I ..\src\mormot.uses.inc}
@@ -29,6 +29,7 @@ uses
   mormot.core.log          in '..\src\core\mormot.core.log.pas',
   mormot.core.test         in '..\src\core\mormot.core.test.pas',
   mormot.core.crypto       in '..\src\core\mormot.core.crypto.pas',
+  mormot.core.crypto.openssl in '..\src\core\mormot.core.crypto.openssl.pas',
   mormot.core.secure       in '..\src\core\mormot.core.secure.pas',
   mormot.core.ecc256r1     in '..\src\core\mormot.core.ecc256r1.pas',
   mormot.core.ecc          in '..\src\core\mormot.core.ecc.pas',
@@ -44,12 +45,13 @@ uses
   mormot.lib.curl          in '..\src\lib\mormot.lib.curl.pas',
   mormot.lib.sspi          in '..\src\lib\mormot.lib.sspi.pas',
   mormot.lib.gssapi        in '..\src\lib\mormot.lib.gssapi.pas',
+  mormot.lib.openssl11     in '..\src\lib\mormot.lib.openssl11.pas',
   mormot.net.sock          in '..\src\net\mormot.net.sock.pas',
   mormot.net.http          in '..\src\net\mormot.net.http.pas',
   mormot.net.relay         in '..\src\net\mormot.net.relay.pas',
   mormot.net.client        in '..\src\net\mormot.net.client.pas',
   mormot.net.server        in '..\src\net\mormot.net.server.pas',
-  mormot.net.asynch        in '..\src\net\mormot.net.asynch.pas',
+  mormot.net.async         in '..\src\net\mormot.net.async.pas',
   mormot.net.ws.core       in '..\src\net\mormot.net.ws.core.pas',
   mormot.net.ws.client     in '..\src\net\mormot.net.ws.client.pas',
   mormot.net.ws.server     in '..\src\net\mormot.net.ws.server.pas',
@@ -107,7 +109,14 @@ uses
   test.core.data           in '.\test.core.data.pas',
   test.core.crypto         in '.\test.core.crypto.pas',
   test.core.ecc            in '.\test.core.ecc.pas',
-  test.net.proto           in '.\test.net.proto.pas';
+  test.net.proto           in '.\test.net.proto.pas',
+  test.orm.core            in '.\test.orm.core.pas',
+  test.orm.sqlite3         in '.\test.orm.sqlite3.pas',
+  test.orm.extdb           in '.\test.orm.extdb.pas',
+  test.orm.threads         in '.\test.orm.threads.pas',
+  test.orm.network         in '.\test.orm.network.pas',
+  test.soa.core            in '.\test.soa.core.pas',
+  test.soa.network         in '.\test.soa.network.pas';
 
 
 { TIntegrationTests }
@@ -116,20 +125,44 @@ type
   TIntegrationTests = class(TSynTestsLogged)
   published
     procedure CoreUnits;
+    procedure ORM;
+    procedure SOA;
   end;
 
 procedure TIntegrationTests.CoreUnits;
 begin
-  AddCase([// 
+  //exit;
+  AddCase([
   //
-  TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreEcc, TTestCoreCompress, TNetworkProtocols
+    TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreEcc,
+    TTestCoreCompression, TNetworkProtocols
   ]);
 end;
 
+procedure TIntegrationTests.ORM;
+begin
+  //exit;
+  AddCase([
+    //
+    TTestOrmCore, TTestSqliteFile, TTestSqliteFileWAL, TTestSqliteFileMemoryMap,
+    TTestSqliteMemory, TTestExternalDatabase, TTestClientServerAccess, TTestMultiThreadProcess
+  ]);
+end;
 
+procedure TIntegrationTests.SOA;
+begin
+  //exit;
+  AddCase([
+    //
+    TTestServiceOrientedArchitecture, TTestBidirectionalRemoteConnection
+  ]);
+end;
 
 begin
-  TIntegrationTests.RunAsConsole('mORMot2 Regression Tests', LOG_VERBOSE);
+  TIntegrationTests.RunAsConsole('mORMot2 Regression Tests',
+    //LOG_VERBOSE,
+    LOG_FILTER[lfExceptions],
+    [], Executable.ProgramFilePath + 'data');
   {$ifdef FPC_X64MM}
   WriteHeapStatus(' ', 16, 8, {compileflags=}true);
   {$endif FPC_X64MM}

@@ -12,7 +12,7 @@ unit mormot.rest.core;
     - TRestRunThreads Multi-Threading Process of a REST instance
     - TRest Abstract Parent Class
     - RESTful Authentication Support
-    - TRestURIParams REST URI Definitions
+    - TRestUriParams REST URI Definitions
     - TRestThread Background Process of a REST instance
     - TOrmHistory/TOrmTableDeleted Modifications Tracked Persistence
 
@@ -56,16 +56,16 @@ uses
 { ************ Customize REST Execution }
 
 type
-  /// all commands which may be executed by TRestServer.URI() method
-  // - execSOAByMethod for method-based services
-  // - execSOAByInterface for interface-based services
+  /// all commands which may be executed by TRestServer.Uri() method
+  // - execSoaByMethod for method-based services
+  // - execSoaByInterface for interface-based services
   // - execOrmGet for ORM reads i.e. Retrieve*() methods
   // - execOrmWrite for ORM writes i.e. Add Update Delete TransactionBegin
   // Commit Rollback methods
-  TRestServerURIContextCommand = (
+  TRestServerUriContextCommand = (
     execNone,
-    execSOAByMethod,
-    execSOAByInterface,
+    execSoaByMethod,
+    execSoaByInterface,
     execOrmGet,
     execOrmWrite);
 
@@ -94,7 +94,7 @@ type
 
   /// define how a TRest class may execute its ORM and SOA operations
   TRestAcquireExecutions =
-    array[TRestServerURIContextCommand] of TRestAcquireExecution;
+    array[TRestServerUriContextCommand] of TRestAcquireExecution;
 
 
 const
@@ -115,39 +115,39 @@ type
   TRest = class;
   {$M-}
 
-  /// optionally called after TRest.AsynchRedirect background execution
+  /// optionally called after TRest.AsyncRedirect background execution
   // - to retrieve any output result value, as JSON-encoded content
-  // - as used in TRestBackgroundTimer.AsynchBackgroundExecute protected method
-  TOnAsynchRedirectResult = procedure(const aMethod: TInterfaceMethod;
-    const aInstance: IInvokable; const aParams, aResult: RawUTF8) of object;
+  // - as used in TRestBackgroundTimer.AsyncBackgroundExecute protected method
+  TOnAsyncRedirectResult = procedure(const aMethod: TInterfaceMethod;
+    const aInstance: IInvokable; const aParams, aResult: RawUtf8) of object;
 
   /// TThread able to run one or several tasks at a periodic pace, or do
   // asynchronous interface or batch execution, with proper TRest integration
-  // - used e.g. by TRest.TimerEnable/AsynchRedirect/AsynchBatchStart methods
+  // - used e.g. by TRest.TimerEnable/AsyncRedirect/AsyncBatchStart methods
   // - TRest.BackgroundTimer will define one instance, but you may create
   // other dedicated instances to instantiate separated threads
   TRestBackgroundTimer = class(TSynBackgroundTimer)
   protected
     fRest: TRest;
     fBackgroundBatch: TRestBatchLockedDynArray;
-    fBackgroundInterning: array of TRawUTF8Interning;
+    fBackgroundInterning: array of TRawUtf8Interning;
     fBackgroundInterningMaxRefCount: integer;
     procedure SystemUseBackgroundExecute(Sender: TSynBackgroundTimer;
-      Event: TWaitResult; const Msg: RawUTF8);
-    // used by AsynchRedirect/AsynchBatch/AsynchInterning
-    function AsynchBatchIndex(aTable: TOrmClass): PtrInt;
-    function AsynchBatchLocked(aTable: TOrmClass;
+      Event: TWaitResult; const Msg: RawUtf8);
+    // used by AsyncRedirect/AsyncBatch/AsyncInterning
+    function AsyncBatchIndex(aTable: TOrmClass): PtrInt;
+    function AsyncBatchLocked(aTable: TOrmClass;
       out aBatch: TRestBatchLocked): boolean;
-    procedure AsynchBatchUnLock(aBatch: TRestBatchLocked);
-    procedure AsynchBatchExecute(Sender: TSynBackgroundTimer;
-      Event: TWaitResult; const Msg: RawUTF8);
-    procedure AsynchBackgroundExecute(Sender: TSynBackgroundTimer;
-      Event: TWaitResult; const Msg: RawUTF8);
-    procedure AsynchBackgroundInterning(Sender: TSynBackgroundTimer;
-      Event: TWaitResult; const Msg: RawUTF8);
+    procedure AsyncBatchUnLock(aBatch: TRestBatchLocked);
+    procedure AsyncBatchExecute(Sender: TSynBackgroundTimer;
+      Event: TWaitResult; const Msg: RawUtf8);
+    procedure AsyncBackgroundExecute(Sender: TSynBackgroundTimer;
+      Event: TWaitResult; const Msg: RawUtf8);
+    procedure AsyncBackgroundInterning(Sender: TSynBackgroundTimer;
+      Event: TWaitResult; const Msg: RawUtf8);
   public
     /// initialize the thread for a periodic task processing
-    constructor Create(aRest: TRest; const aThreadName: RawUTF8 = '';
+    constructor Create(aRest: TRest; const aThreadName: RawUtf8 = '';
       aStats: TSynMonitorClass = nil); reintroduce; virtual;
     /// finalize the thread
     destructor Destroy; override;
@@ -168,9 +168,9 @@ type
     // e.g. if a callback is run from a thread, and then the callback code try
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
-    procedure AsynchRedirect(const aGUID: TGUID;
+    procedure AsyncRedirect(const aGuid: TGUID;
       const aDestinationInterface: IInvokable; out aCallbackInterface;
-      const aOnResult: TOnAsynchRedirectResult = nil); overload;
+      const aOnResult: TOnAsyncRedirectResult = nil); overload;
     /// define asynchronous execution of interface methods in a background thread
     // - this method implements any interface via a fake class, which will
     // redirect all methods calls into calls of another interface, but as a FIFO
@@ -188,65 +188,65 @@ type
     // e.g. if a callback is run from a thread, and then the callback code try
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
-    procedure AsynchRedirect(const aGUID: TGUID;
+    procedure AsyncRedirect(const aGuid: TGUID;
       const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
-      const aOnResult: TOnAsynchRedirectResult = nil); overload;
+      const aOnResult: TOnAsyncRedirectResult = nil); overload;
     /// prepare an asynchronous ORM BATCH process, executed in a background thread
     // - will initialize a TRestBatch and call TimerEnable to initialize the
     // background thread, following the given processing period (in seconds),
     // or the TRestBatch.Count threshold to call BatchSend
-    // - actual REST/CRUD commands will take place via AsynchBatchAdd,
-    // AsynchBatchUpdate and AsynchBatchDelete methods
-    // - only a single AsynchBatch() call per Table is allowed at a time, unless
-    // AsynchBatchStop method is used to flush the current asynchronous BATCH
+    // - actual REST/CRUD commands will take place via AsyncBatchAdd,
+    // AsyncBatchUpdate and AsyncBatchDelete methods
+    // - only a single AsyncBatch() call per Table is allowed at a time, unless
+    // AsyncBatchStop method is used to flush the current asynchronous BATCH
     // - using a BATCH in a dedicated thread will allow very fast background
     // asynchronous process of ORM methods, sufficient for most use cases
-    function AsynchBatchStart(Table: TOrmClass;
+    function AsyncBatchStart(Table: TOrmClass;
       SendSeconds: integer; PendingRowThreshold: integer = 500;
       AutomaticTransactionPerRow: integer = 1000;
-      Options: TRestBatchOptions = [boExtendedJSON]): boolean;
+      Options: TRestBatchOptions = [boExtendedJson]): boolean;
     /// finalize asynchronous ORM BATCH process, executed in a background thread
-    // - should have been preceded by a call to AsynchBatch(), or returns false
+    // - should have been preceded by a call to AsyncBatch(), or returns false
     // - Table=nil will release all existing batch instances
-    function AsynchBatchStop(Table: TOrmClass): boolean;
+    function AsyncBatchStop(Table: TOrmClass): boolean;
     /// create a new ORM member in a BATCH to be written in a background thread
-    // - should have been preceded by a call to AsynchBatchStart(), or returns -1
+    // - should have been preceded by a call to AsyncBatchStart(), or returns -1
     // - is a wrapper around TRestBatch.Add() sent in the Timer thread,
     // so will return the index in the BATCH rows, not the created TID
     // - this method is thread-safe
-    function AsynchBatchAdd(Value: TOrm; SendData: boolean;
+    function AsyncBatchAdd(Value: TOrm; SendData: boolean;
       ForceID: boolean = false; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     /// append some JSON content in a BATCH to be writen in a background thread
-    // - could be used to emulate AsynchBatchAdd() with an already pre-computed
+    // - could be used to emulate AsyncBatchAdd() with an already pre-computed
     // JSON object
     // - is a wrapper around TRestBatch.RawAdd() sent in the Timer thread,
     // so will return the index in the BATCH rows, not the created TID
     // - this method is thread-safe
-    function AsynchBatchRawAdd(Table: TOrmClass; const SentData: RawUTF8): integer;
+    function AsyncBatchRawAdd(Table: TOrmClass; const SentData: RawUtf8): integer;
     /// append some JSON content in a BATCH to be writen in a background thread
-    // - could be used to emulate AsynchBatchAdd() with an already pre-computed
+    // - could be used to emulate AsyncBatchAdd() with an already pre-computed
     // JSON object, as stored in a TTextWriter instance
-    // - is a wrapper around TRestBatch.RawAppend.AddNoJSONEscape(SentData)
+    // - is a wrapper around TRestBatch.RawAppend.AddNoJsonEscape(SentData)
     // in the Timer thread
     // - this method is thread-safe
-    procedure AsynchBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
+    procedure AsyncBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
     /// update an ORM member in a BATCH to be written in a background thread
-    // - should have been preceded by a call to AsynchBatchStart(), or returns -1
+    // - should have been preceded by a call to AsyncBatchStart(), or returns -1
     // - is a wrapper around the TRestBatch.Update() sent in the Timer thread
     // - this method is thread-safe
-    function AsynchBatchUpdate(Value: TOrm;
+    function AsyncBatchUpdate(Value: TOrm;
       const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
     /// delete an ORM member in a BATCH to be written in a background thread
-    // - should have been preceded by a call to AsynchBatchStart(), or returns -1
+    // - should have been preceded by a call to AsyncBatchStart(), or returns -1
     // - is a wrapper around the TRestBatch.Delete() sent in the Timer thread
     // - this method is thread-safe
-    function AsynchBatchDelete(Table: TOrmClass; ID: TID): integer;
-    /// allows background garbage collection of specified RawUTF8 interning
+    function AsyncBatchDelete(Table: TOrmClass; ID: TID): integer;
+    /// allows background garbage collection of specified RawUtf8 interning
     // - will run Interning.Clean(2) every 5 minutes by default
     // - set InterningMaxRefCount=0 to disable process of the Interning instance
-    procedure AsynchInterning(Interning: TRawUTF8Interning;
+    procedure AsyncInterning(Interning: TRawUtf8Interning;
       InterningMaxRefCount: integer = 2; PeriodMinutes: integer = 5);
     /// direct access to the TRest instance owner
     property Rest: TRest
@@ -256,7 +256,7 @@ type
       read fBackgroundBatch;
   published
     /// the identifier of the thread, as logged
-    property Name: RawUTF8
+    property Name: RawUtf8
       read fThreadName;
   end;
 
@@ -264,10 +264,10 @@ type
 {$ifndef PUREMORMOT2}
 // backward compatibility types redirections
 
-  TSQLRestServerURIContextCommand = TRestServerURIContextCommand;
-  TSQLRestServerAcquireMode = TRestServerAcquireMode;
-  TSQLRestAcquireExecution = TRestAcquireExecution;
-  TSQLRestBackgroundTimer = TRestBackgroundTimer;
+  TSqlRestServerUriContextCommand = TRestServerUriContextCommand;
+  TSqlRestServerAcquireMode = TRestServerAcquireMode;
+  TSqlRestAcquireExecution = TRestAcquireExecution;
+  TSqlRestBackgroundTimer = TRestBackgroundTimer;
 
 {$endif PUREMORMOT2}
 
@@ -290,7 +290,7 @@ type
     // - will properly call BeginCurrentThread/EndCurrentThread methods
     // - you should supply some runtime information to name the thread, for
     // proper debugging
-    function NewBackgroundThreadMethod(const Format: RawUTF8;
+    function NewBackgroundThreadMethod(const Format: RawUtf8;
       const Args: array of const): TSynBackgroundThreadMethod;
     /// allows to safely execute a process at a given pace
     // - returns a TSynBackgroundThreadProcess instance, ready to execute the
@@ -300,7 +300,7 @@ type
     // proper debugging
     function NewBackgroundThreadProcess(
       const aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
-      const Format: RawUTF8; const Args: array of const;
+      const Format: RawUtf8; const Args: array of const;
       aStats: TSynMonitorClass=nil): TSynBackgroundThreadProcess;
     /// allows to safely execute a process in parallel
     // - returns a TSynParallelProcess instance, ready to execute any task
@@ -308,7 +308,7 @@ type
     // - will properly call BeginCurrentThread/EndCurrentThread methods
     // - you should supply some runtime information to name the thread, for
     // proper debugging
-    function NewParallelProcess(ThreadCount: integer; const Format: RawUTF8;
+    function NewParallelProcess(ThreadCount: integer; const Format: RawUtf8;
       const Args: array of const): TSynParallelProcess;
     /// define a task running on a periodic number of seconds in a background thread
     // - could be used to run background maintenance or monitoring tasks on
@@ -324,6 +324,8 @@ type
     // - should have been registered by a previous call to TimerEnable() method
     // - returns true on success, false if the supplied task was not registered
     function TimerDisable(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+    /// execute once a task in the background, without waiting for it
+    function Once(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
     /// will gather CPU and RAM information in a background thread
     // - you can specify the update frequency, in seconds
     // - access to the information via the returned instance, which maps
@@ -350,10 +352,10 @@ type
     // e.g. if a callback is run from a thread, and then the callback code try
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
-    // - is a wrapper around BackgroundTimer.AsynchRedirect()
-    procedure AsynchRedirect(const aGUID: TGUID;
+    // - is a wrapper around BackgroundTimer.AsyncRedirect()
+    procedure AsyncRedirect(const aGuid: TGUID;
       const aDestinationInterface: IInvokable; out aCallbackInterface;
-      const aOnResult: TOnAsynchRedirectResult = nil); overload;
+      const aOnResult: TOnAsyncRedirectResult = nil); overload;
     /// define asynchronous execution of interface methods in a background thread
     // - this class allows to implements any interface via a fake class, which will
     // redirect all methods calls into calls of another interface, but as a FIFO
@@ -363,25 +365,25 @@ type
     // e.g. if a callback is run from a thread, and then the callback code try
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
-    // - is a wrapper around BackgroundTimer.AsynchRedirect()
-    procedure AsynchRedirect(const aGUID: TGUID;
+    // - is a wrapper around BackgroundTimer.AsyncRedirect()
+    procedure AsyncRedirect(const aGuid: TGUID;
       const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
-      const aOnResult: TOnAsynchRedirectResult = nil); overload;
-    /// allows background garbage collection of specified RawUTF8 interning
+      const aOnResult: TOnAsyncRedirectResult = nil); overload;
+    /// allows background garbage collection of specified RawUtf8 interning
     // - will run Interning.Clean(2) every 5 minutes by default
     // - set InterningMaxRefCount=0 to disable process of the Interning instance
     // - note that InterningMaxRefCount and PeriodMinutes parameters (if not 0),
-    // are common for all TRawUTF8Interning instances (the latest value wins)
-    // - you may e.g. run the following to clean up TDocVariant interned RawUTF8:
-    // ! aRest.Run.AsynchInterning(DocVariantType.InternNames);
-    // ! aRest.Run.AsynchInterning(DocVariantType.InternValues);
-    procedure AsynchInterning(Interning: TRawUTF8Interning;
+    // are common for all TRawUtf8Interning instances (the latest value wins)
+    // - you may e.g. run the following to clean up TDocVariant interned RawUtf8:
+    // ! aRest.Run.AsyncInterning(DocVariantType.InternNames);
+    // ! aRest.Run.AsyncInterning(DocVariantType.InternValues);
+    procedure AsyncInterning(Interning: TRawUtf8Interning;
       InterningMaxRefCount: integer = 2; PeriodMinutes: integer = 5);
     /// define redirection of interface methods calls in one or several instances
     // - this class allows to implements any interface via a fake class, which
     // will redirect all methods calls to one or several other interfaces
     // - returned aCallbackInterface will redirect all its methods (identified
-    // by aGUID) into an internal list handled by IMultiCallbackRedirect.Redirect
+    // by aGuid) into an internal list handled by IMultiCallbackRedirect.Redirect
     // - typical use is thefore:
     // ! fSharedCallback: IMyService;
     // ! fSharedCallbacks: IMultiCallbackRedirect;
@@ -397,7 +399,7 @@ type
     // ! ...
     // !   fSharedCallbacks := nil; // will stop redirection
     // !                            // and unregister callbacks, if needed
-    function MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
+    function MultiRedirect(const aGuid: TGUID; out aCallbackInterface;
       aCallBackUnRegisterNeeded: boolean = true): IMultiCallbackRedirect; overload;
     /// low-level access to the associated timer
     // - may contain nil if EnsureBackgroundTimerExists has not yet been called
@@ -425,7 +427,7 @@ type
   TRest = class(TInterfaceResolver)
   protected
     fOrm: IRestOrm;
-    fOrmInstance: TInterfacedObject; // is a TRestOrm
+    fOrmInstance: TInterfacedObject; // is a TRestOrm from mormot.orm.rest.pas
     fModel: TOrmModel;
     fServices: TServiceContainer;
     fRun: TRestRunThreads;
@@ -445,13 +447,13 @@ type
     procedure SetServerTimestamp(const Value: TTimeLog);
     /// wrapper methods to access fAcquireExecution[]
     function GetAcquireExecutionMode(
-      Cmd: TRestServerURIContextCommand): TRestServerAcquireMode;
+      Cmd: TRestServerUriContextCommand): TRestServerAcquireMode;
     procedure SetAcquireExecutionMode(
-      Cmd: TRestServerURIContextCommand; Value: TRestServerAcquireMode);
+      Cmd: TRestServerUriContextCommand; Value: TRestServerAcquireMode);
     function GetAcquireExecutionLockedTimeOut(
-      Cmd: TRestServerURIContextCommand): cardinal;
+      Cmd: TRestServerUriContextCommand): cardinal;
     procedure SetAcquireExecutionLockedTimeOut(
-      Cmd: TRestServerURIContextCommand; Value: cardinal);
+      Cmd: TRestServerUriContextCommand; Value: cardinal);
     /// any overriden TRest class should call it in the initialization section
     class procedure RegisterClassNameForDefinition;
     /// ensure the thread will be taken into account during process
@@ -479,24 +481,24 @@ type
     // to initiate the very same instance
     procedure DefinitionTo(Definition: TSynConnectionDefinition); virtual;
     /// save the properties into a JSON file
-    // - you can then use TRest.CreateFromJSON() to re-instantiate it
+    // - you can then use TRest.CreateFromJson() to re-instantiate it
     // - you can specify a custom Key, if the default is not enough for you
-    function DefinitionToJSON(Key: cardinal = 0): RawUTF8;
+    function DefinitionToJson(Key: cardinal = 0): RawUtf8;
     /// save the properties into a JSON file
     // - you can then use TRest.CreateFromFile() to re-instantiate it
     // - you can specify a custom Key, if the default is not enough for you
-    procedure DefinitionToFile(const aJSONFile: TFileName; aKey: cardinal = 0);
+    procedure DefinitionToFile(const aJsonFile: TFileName; aKey: cardinal = 0);
     /// create a new TRest instance from its Model and stored values
     // - aDefinition.Kind will define the actual class which will be
     // instantiated: currently TRestServerFullMemory, TRestServerDB,
-    // TRestClientURINamedPipe, TRestClientURIMessage,
-    // TRestHttpClientWinSock, TRestHttpClientWinINet, TRestHttpClientWinHTTP,
+    // TRestClientUriNamedPipe, TRestClientUriMessage,
+    // TRestHttpClientSocket, TRestHttpClientWinINet, TRestHttpClientWinHttp,
     // and TRestHttpClientCurl classes are recognized by this method
     // - then other aDefinition fields will be used to refine the instance:
     // please refer to each overriden DefinitionTo() method documentation
     // - use TRestMongoDBCreate() and/or TRestExternalDBCreate() instead
     // to create a TRest instance will all tables defined as external when
-    // aDefinition.Kind is 'MongoDB' or a TSQLDBConnectionProperties class
+    // aDefinition.Kind is 'MongoDB' or a TSqlDBConnectionProperties class
     // - will raise an exception if the supplied definition are not valid
     class function CreateFrom(aModel: TOrmModel;
       aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean): TRest;
@@ -509,31 +511,31 @@ type
     /// create a new TRest instance from its Model and JSON stored values
     // - aDefinition.Kind will define the actual class which will be instantiated
     // - you can specify a custom Key, if the default is not safe enough for you
-    class function CreateFromJSON(aModel: TOrmModel;
-      const aJSONDefinition: RawUTF8; aServerHandleAuthentication: boolean;
+    class function CreateFromJson(aModel: TOrmModel;
+      const aJsonDefinition: RawUtf8; aServerHandleAuthentication: boolean;
       aKey: cardinal = 0): TRest;
     /// create a new TRest instance from its Model and a JSON file
     // - aDefinition.Kind will define the actual class which will be instantiated
     // - you can specify a custom Key, if the default is not safe enough for you
     class function CreateFromFile(aModel: TOrmModel;
-      const aJSONFile: TFileName; aServerHandleAuthentication: boolean;
+      const aJsonFile: TFileName; aServerHandleAuthentication: boolean;
       aKey: cardinal = 0): TRest;
     /// retrieve the registered class from the aDefinition.Kind string
     class function ClassFrom(aDefinition: TSynConnectionDefinition): TRestClass;
 
     /// ease logging of some text in the context of the current TRest
-    procedure InternalLog(const Text: RawUTF8; Level: TSynLogInfo); overload;
+    procedure InternalLog(const Text: RawUtf8; Level: TSynLogInfo); overload;
     /// ease logging of some text in the context of the current TRest
-    procedure InternalLog(const Format: RawUTF8; const Args: array of const;
+    procedure InternalLog(const Format: RawUtf8; const Args: array of const;
       Level: TSynLogInfo = sllTrace); overload;
     /// ease logging of method enter/leave in the context of the current TRest
-    function Enter(const TextFmt: RawUTF8; const TextArgs: array of const;
+    function Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
       aInstance: TObject = nil): ISynLog;
     /// internal method to retrieve the current Session TAuthUser.ID
     function GetCurrentSessionUserID: TID; virtual; abstract;
     /// retrieve the server time stamp
     // - default implementation will use an internal Offset to compute
-    // the value from PC time (i.e. NowUTC+Offset as TTimeLog)
+    // the value from PC time (i.e. NowUtc+Offset as TTimeLog)
     // - inherited classes may override this method, or set the appropriate
     // value in Offset field
     function GetServerTimestamp: TTimeLog; virtual;
@@ -574,27 +576,27 @@ type
       read fRun;
 
     /// how this class execute its internal commands
-    // - by default, TRestServer.URI() will lock for Write ORM according to
+    // - by default, TRestServer.Uri() will lock for Write ORM according to
     // AcquireWriteMode (i.e. AcquireExecutionMode[execOrmWrite]=amLocked) and
     // other operations won't be protected (for better scaling)
     // - you can tune this behavior by setting this property to the expected
     // execution mode, e.g. execute all method-based services in a dedicated
     // thread via
-    // ! aServer.AcquireExecutionMode[execSOAByMethod] := amBackgroundThread;
+    // ! aServer.AcquireExecutionMode[execSoaByMethod] := amBackgroundThread;
     // - if you use external DB and a custom ConnectionTimeOutMinutes value,
     // both read and write access should be locked, so you should set:
     // ! aServer.AcquireExecutionMode[execOrmGet] := am***;
     // ! aServer.AcquireExecutionMode[execOrmWrite] := am***;
     // here, safe blocking am*** modes are any mode but amUnlocked, i.e. either
     // amLocked, amBackgroundThread, amBackgroundORMSharedThread or amMainThread
-    property AcquireExecutionMode[Cmd: TRestServerURIContextCommand]: TRestServerAcquireMode
+    property AcquireExecutionMode[Cmd: TRestServerUriContextCommand]: TRestServerAcquireMode
       read GetAcquireExecutionMode write SetAcquireExecutionMode;
     /// the time (in mili seconds) to try locking internal commands of this class
     // - this value is used only for AcquireExecutionMode[*]=amLocked
-    // - by default, TRestServer.URI() will lock for Write ORM according to
+    // - by default, TRestServer.Uri() will lock for Write ORM according to
     // AcquireWriteTimeOut  (i.e. AcquireExecutionLockedTimeOut[execOrmWrite])
     // and other operations won't be locked nor have any time out set
-    property AcquireExecutionLockedTimeOut[Cmd: TRestServerURIContextCommand]: cardinal
+    property AcquireExecutionLockedTimeOut[Cmd: TRestServerUriContextCommand]: cardinal
       read GetAcquireExecutionLockedTimeOut write SetAcquireExecutionLockedTimeOut;
     /// how this class will handle write access to the database
     // - is a common wrapper to AcquireExecutionMode[execOrmWrite] property
@@ -605,7 +607,7 @@ type
     // external database transaction process)
     // - amBackgroundORMSharedThread will execute all ORM methods in a queue, in
     // a dedicated unique thread, shared for both execOrmWrite and execOrmGet,
-    // but still dedicated for execSOAByMethod and execSOAByInterface
+    // but still dedicated for execSoaByMethod and execSoaByInterface
     // - a slower alternative to amBackgroundThread may be amMainThread
     // - you can set amUnlocked for a concurrent write access, but be aware
     // that it may lead into multi-thread race condition issues, depending on
@@ -618,7 +620,7 @@ type
     // - in order to handle safe transactions and multi-thread safe writing, the
     // server will identify transactions using the client Session ID: this
     // property will set the time out wait period
-    // - default value is 5000, i.e. TRestServer.URI will wait up to 5 seconds
+    // - default value is 5000, i.e. TRestServer.Uri will wait up to 5 seconds
     // in order to acquire the right to write on the database before returning
     // a "408 Request Time-out" status error
     property AcquireWriteTimeOut: cardinal index execOrmWrite
@@ -647,114 +649,114 @@ type
     function TableMaxID(Table: TOrmClass): TID;
     function MemberExists(Table: TOrmClass; ID: TID): boolean;
     function OneFieldValue(Table: TOrmClass;
-      const FieldName, WhereClause: RawUTF8): RawUTF8; overload;
+      const FieldName, WhereClause: RawUtf8): RawUtf8; overload;
     function OneFieldValueInt64(Table: TOrmClass;
-      const FieldName, WhereClause: RawUTF8; Default: Int64 = 0): Int64;
-    function OneFieldValue(Table: TOrmClass; const FieldName: RawUTF8;
-      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): RawUTF8; overload;
-    function OneFieldValue(Table: TOrmClass; const FieldName: RawUTF8;
-      const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const): RawUTF8; overload;
-    function OneFieldValue(Table: TOrmClass; const FieldName: RawUTF8;
-      const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const;
+      const FieldName, WhereClause: RawUtf8; Default: Int64 = 0): Int64;
+    function OneFieldValue(Table: TOrmClass; const FieldName: RawUtf8;
+      const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const): RawUtf8; overload;
+    function OneFieldValue(Table: TOrmClass; const FieldName: RawUtf8;
+      const WhereClauseFmt: RawUtf8; const Args, Bounds: array of const): RawUtf8; overload;
+    function OneFieldValue(Table: TOrmClass; const FieldName: RawUtf8;
+      const WhereClauseFmt: RawUtf8; const Args, Bounds: array of const;
       out Data: Int64): boolean; overload;
-    function OneFieldValue(Table: TOrmClass; const FieldName: RawUTF8;
-      WhereID: TID): RawUTF8; overload;
+    function OneFieldValue(Table: TOrmClass; const FieldName: RawUtf8;
+      WhereID: TID): RawUtf8; overload;
     function MultiFieldValue(Table: TOrmClass;
-      const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
-      const WhereClause: RawUTF8): boolean; overload;
+      const FieldName: array of RawUtf8; var FieldValue: array of RawUtf8;
+      const WhereClause: RawUtf8): boolean; overload;
     function MultiFieldValue(Table: TOrmClass;
-      const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
+      const FieldName: array of RawUtf8; var FieldValue: array of RawUtf8;
       WhereID: TID): boolean; overload;
-    function OneFieldValues(Table: TOrmClass; const FieldName: RawUTF8;
-      const WhereClause: RawUTF8; out Data: TRawUTF8DynArray): boolean; overload;
-    function OneFieldValues(Table: TOrmClass; const FieldName: RawUTF8;
-      const WhereClause: RawUTF8; var Data: TInt64DynArray;
-      SQL: PRawUTF8 = nil): boolean; overload;
-    function OneFieldValues(Table: TOrmClass; const FieldName: RawUTF8;
-      const WhereClause: RawUTF8 = ''; const Separator: RawUTF8 = ','): RawUTF8; overload;
+    function OneFieldValues(Table: TOrmClass; const FieldName: RawUtf8;
+      const WhereClause: RawUtf8; out Data: TRawUtf8DynArray): boolean; overload;
+    function OneFieldValues(Table: TOrmClass; const FieldName: RawUtf8;
+      const WhereClause: RawUtf8; var Data: TInt64DynArray;
+      SQL: PRawUtf8 = nil): boolean; overload;
+    function OneFieldValues(Table: TOrmClass; const FieldName: RawUtf8;
+      const WhereClause: RawUtf8 = ''; const Separator: RawUtf8 = ','): RawUtf8; overload;
     function OneFieldValues(Table: TOrmClass; const FieldName, WhereClause:
-      RawUTF8; Strings: TStrings; IDToIndex: PID = nil): boolean; overload;
-    function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUTF8;
-      const WhereClause: RawUTF8 = ''): TOrmTable; overload;
-    function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUTF8;
-      const WhereClauseFormat: RawUTF8; const BoundsSQLWhere: array of const): TOrmTable; overload;
-    function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUTF8;
-      const WhereClauseFormat: RawUTF8; const Args, Bounds: array of const): TOrmTable; overload;
-    function FTSMatch(Table: TOrmFts3Class; const WhereClause: RawUTF8;
+      RawUtf8; Strings: TStrings; IDToIndex: PID = nil): boolean; overload;
+    function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUtf8;
+      const WhereClause: RawUtf8 = ''): TOrmTable; overload;
+    function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUtf8;
+      const WhereClauseFormat: RawUtf8; const BoundsSqlWhere: array of const): TOrmTable; overload;
+    function MultiFieldValues(Table: TOrmClass; const FieldNames: RawUtf8;
+      const WhereClauseFormat: RawUtf8; const Args, Bounds: array of const): TOrmTable; overload;
+    function FTSMatch(Table: TOrmFts3Class; const WhereClause: RawUtf8;
       var DocID: TIDDynArray): boolean; overload;
-    function FTSMatch(Table: TOrmFts3Class; const MatchClause: RawUTF8;
+    function FTSMatch(Table: TOrmFts3Class; const MatchClause: RawUtf8;
       var DocID: TIDDynArray; const PerFieldWeight: array of double;
       limit: integer = 0; offset: integer = 0): boolean; overload;
     function MainFieldValue(Table: TOrmClass; ID: TID;
-      ReturnFirstIfNoUnique: boolean = false): RawUTF8;
-    function MainFieldID(Table: TOrmClass; const Value: RawUTF8): TID;
-    function MainFieldIDs(Table: TOrmClass; const Values: array of RawUTF8;
+      ReturnFirstIfNoUnique: boolean = false): RawUtf8;
+    function MainFieldID(Table: TOrmClass; const Value: RawUtf8): TID;
+    function MainFieldIDs(Table: TOrmClass; const Values: array of RawUtf8;
       out IDs: TIDDynArray): boolean;
-    function Retrieve(const SQLWhere: RawUTF8; Value: TOrm;
-      const aCustomFieldsCSV: RawUTF8 = ''): boolean; overload;
-    function Retrieve(const WhereClauseFmt: RawUTF8;
+    function Retrieve(const SqlWhere: RawUtf8; Value: TOrm;
+      const aCustomFieldsCsv: RawUtf8 = ''): boolean; overload;
+    function Retrieve(const WhereClauseFmt: RawUtf8;
       const Args, Bounds: array of const; Value: TOrm;
-      const aCustomFieldsCSV: RawUTF8 = ''): boolean; overload;
+      const aCustomFieldsCsv: RawUtf8 = ''): boolean; overload;
     function Retrieve(aID: TID; Value: TOrm;
       ForUpdate: boolean = false): boolean; overload;
     function Retrieve(Reference: TRecordReference;
       ForUpdate: boolean = false): TOrm; overload;
     function Retrieve(aPublishedRecord, aValue: TOrm): boolean; overload;
     function RetrieveList(Table: TOrmClass;
-      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
-      const aCustomFieldsCSV: RawUTF8 = ''): TObjectList; overload;
+      const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
+      const aCustomFieldsCsv: RawUtf8 = ''): TObjectList; overload;
     {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
     function RetrieveList<T: TOrm>(
-      const aCustomFieldsCSV: RawUTF8 = ''): TObjectList<T>; overload;
+      const aCustomFieldsCsv: RawUtf8 = ''): TObjectList<T>; overload;
        {$ifdef HASINLINE}inline;{$endif}
-    function RetrieveList<T: TOrm>(const FormatSQLWhere: RawUTF8;
-      const BoundsSQLWhere: array of const;
-      const aCustomFieldsCSV: RawUTF8 = ''): TObjectList<T>; overload;
+    function RetrieveList<T: TOrm>(const FormatSqlWhere: RawUtf8;
+      const BoundsSqlWhere: array of const;
+      const aCustomFieldsCsv: RawUtf8 = ''): TObjectList<T>; overload;
     {$endif ISDELPHI2010}
-    function RetrieveListJSON(Table: TOrmClass;
-      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
-      const aCustomFieldsCSV: RawUTF8 = ''; aForceAJAX: boolean = false): RawJSON; overload;
-    function RetrieveListJSON(Table: TOrmClass;
-      const SQLWhere: RawUTF8; const aCustomFieldsCSV: RawUTF8 = '';
-      aForceAJAX: boolean = false): RawJSON; overload;
+    function RetrieveListJson(Table: TOrmClass;
+      const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
+      const aCustomFieldsCsv: RawUtf8 = ''; aForceAjax: boolean = false): RawJson; overload;
+    function RetrieveListJson(Table: TOrmClass;
+      const SqlWhere: RawUtf8; const aCustomFieldsCsv: RawUtf8 = '';
+      aForceAjax: boolean = false): RawJson; overload;
     function RetrieveDocVariantArray(Table: TOrmClass;
-      const ObjectName, CustomFieldsCSV: RawUTF8;
+      const ObjectName, CustomFieldsCsv: RawUtf8;
       FirstRecordID: PID = nil; LastRecordID: PID = nil): variant; overload;
     function RetrieveDocVariantArray(Table: TOrmClass;
-      const ObjectName: RawUTF8; const FormatSQLWhere: RawUTF8;
-      const BoundsSQLWhere: array of const; const CustomFieldsCSV: RawUTF8;
+      const ObjectName: RawUtf8; const FormatSqlWhere: RawUtf8;
+      const BoundsSqlWhere: array of const; const CustomFieldsCsv: RawUtf8;
       FirstRecordID: PID = nil; LastRecordID: PID = nil): variant; overload;
     function RetrieveOneFieldDocVariantArray(Table: TOrmClass;
-      const FieldName, FormatSQLWhere: RawUTF8;
-      const BoundsSQLWhere: array of const): variant;
+      const FieldName, FormatSqlWhere: RawUtf8;
+      const BoundsSqlWhere: array of const): variant;
     function RetrieveDocVariant(Table: TOrmClass;
-      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
-      const CustomFieldsCSV: RawUTF8): variant;
+      const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
+      const CustomFieldsCsv: RawUtf8): variant;
     function RetrieveListObjArray(var ObjArray; Table: TOrmClass;
-      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
-      const aCustomFieldsCSV: RawUTF8 = ''): boolean;
+      const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
+      const aCustomFieldsCsv: RawUtf8 = ''): boolean;
     procedure AppendListAsJsonArray(Table: TOrmClass;
-      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
-      const OutputFieldName: RawUTF8; W: TJSONSerializer;
-      const CustomFieldsCSV: RawUTF8 = '');
+      const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
+      const OutputFieldName: RawUtf8; W: TJsonSerializer;
+      const CustomFieldsCsv: RawUtf8 = '');
     function RTreeMatch(DataTable: TOrmClass;
-      const DataTableBlobFieldName: RawUTF8; RTreeTable: TOrmRTreeClass;
+      const DataTableBlobFieldName: RawUtf8; RTreeTable: TOrmRTreeClass;
       const DataTableBlobField: RawByteString; var DataID: TIDDynArray): boolean;
     function ExecuteList(const Tables: array of TOrmClass;
-      const SQL: RawUTF8): TOrmTable;
+      const SQL: RawUtf8): TOrmTable;
     function ExecuteJson(const Tables: array of TOrmClass;
-      const SQL: RawUTF8; ForceAJAX: boolean = false;
-      ReturnedRowCount: PPtrInt = nil): RawJSON;
-    function Execute(const aSQL: RawUTF8): boolean;
-    function ExecuteFmt(const SQLFormat: RawUTF8;
+      const SQL: RawUtf8; ForceAjax: boolean = false;
+      ReturnedRowCount: PPtrInt = nil): RawJson;
+    function Execute(const aSql: RawUtf8): boolean;
+    function ExecuteFmt(const SqlFormat: RawUtf8;
       const Args: array of const): boolean; overload;
-    function ExecuteFmt(const SQLFormat: RawUTF8;
+    function ExecuteFmt(const SqlFormat: RawUtf8;
       const Args, Bounds: array of const): boolean; overload;
     function UnLock(Table: TOrmClass; aID: TID): boolean; overload;
     function UnLock(Rec: TOrm): boolean; overload;
     function Add(Value: TOrm; SendData: boolean;
       ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID; overload;
-    function Add(Value: TOrm; const CustomCSVFields: RawUTF8;
+    function Add(Value: TOrm; const CustomCsvFields: RawUtf8;
       ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID; overload;
     function Add(Value: TOrm; const CustomFields: TFieldBits;
       ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID; overload;
@@ -764,41 +766,41 @@ type
       const aSimpleFields: array of const; ForcedID: TID = 0): TID;
     function Update(Value: TOrm; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): boolean; overload;
-    function Update(Value: TOrm; const CustomCSVFields: RawUTF8;
+    function Update(Value: TOrm; const CustomCsvFields: RawUtf8;
       DoNotAutoComputeFields: boolean = false): boolean; overload;
     function Update(aTable: TOrmClass; aID: TID;
       const aSimpleFields: array of const): boolean; overload;
     function AddOrUpdate(Value: TOrm; ForceID: boolean = false): TID;
     function UpdateField(Table: TOrmClass; ID: TID;
-      const FieldName: RawUTF8; const FieldValue: array of const): boolean; overload;
-    function UpdateField(Table: TOrmClass; const WhereFieldName: RawUTF8;
-      const WhereFieldValue: array of const; const FieldName: RawUTF8;
+      const FieldName: RawUtf8; const FieldValue: array of const): boolean; overload;
+    function UpdateField(Table: TOrmClass; const WhereFieldName: RawUtf8;
+      const WhereFieldValue: array of const; const FieldName: RawUtf8;
       const FieldValue: array of const): boolean; overload;
     function UpdateField(Table: TOrmClass; ID: TID;
-      const FieldName: RawUTF8; const FieldValue: variant): boolean; overload;
+      const FieldName: RawUtf8; const FieldValue: variant): boolean; overload;
     function UpdateField(Table: TOrmClass;
-      const WhereFieldName: RawUTF8; const WhereFieldValue: variant;
-      const FieldName: RawUTF8; const FieldValue: variant): boolean; overload;
+      const WhereFieldName: RawUtf8; const WhereFieldValue: variant;
+      const FieldName: RawUtf8; const FieldValue: variant): boolean; overload;
     function UpdateField(Table: TOrmClass; const IDs: array of Int64;
-      const FieldName: RawUTF8; const FieldValue: variant): boolean; overload;
+      const FieldName: RawUtf8; const FieldValue: variant): boolean; overload;
     function UpdateFieldIncrement(Table: TOrmClass; ID: TID;
-      const FieldName: RawUTF8; Increment: Int64 = 1): boolean;
+      const FieldName: RawUtf8; Increment: Int64 = 1): boolean;
     function RecordCanBeUpdated(Table: TOrmClass; ID: TID;
-      Action: TOrmEvent; ErrorMsg: PRawUTF8 = nil): boolean;
+      Action: TOrmEvent; ErrorMsg: PRawUtf8 = nil): boolean;
     function Delete(Table: TOrmClass; ID: TID): boolean; overload;
-    function Delete(Table: TOrmClass; const SQLWhere: RawUTF8): boolean; overload;
-    function Delete(Table: TOrmClass; const FormatSQLWhere: RawUTF8;
-      const BoundsSQLWhere: array of const): boolean; overload;
-    function RetrieveBlob(Table: TOrmClass; aID: TID; const BlobFieldName: RawUTF8;
+    function Delete(Table: TOrmClass; const SqlWhere: RawUtf8): boolean; overload;
+    function Delete(Table: TOrmClass; const FormatSqlWhere: RawUtf8;
+      const BoundsSqlWhere: array of const): boolean; overload;
+    function RetrieveBlob(Table: TOrmClass; aID: TID; const BlobFieldName: RawUtf8;
       out BlobData: RawBlob): boolean; overload;
-    function RetrieveBlob(Table: TOrmClass; aID: TID; const BlobFieldName: RawUTF8;
+    function RetrieveBlob(Table: TOrmClass; aID: TID; const BlobFieldName: RawUtf8;
       out BlobStream: TCustomMemoryStream): boolean; overload;
     function UpdateBlob(Table: TOrmClass; aID: TID;
-      const BlobFieldName: RawUTF8; const BlobData: RawBlob): boolean; overload;
+      const BlobFieldName: RawUtf8; const BlobData: RawBlob): boolean; overload;
     function UpdateBlob(Table: TOrmClass; aID: TID;
-      const BlobFieldName: RawUTF8; BlobData: TStream): boolean; overload;
+      const BlobFieldName: RawUtf8; BlobData: TStream): boolean; overload;
     function UpdateBlob(Table: TOrmClass; aID: TID;
-      const BlobFieldName: RawUTF8; BlobData: pointer; BlobSize: integer): boolean; overload;
+      const BlobFieldName: RawUtf8; BlobData: pointer; BlobSize: integer): boolean; overload;
     function UpdateBlobFields(Value: TOrm): boolean;
     function RetrieveBlobFields(Value: TOrm): boolean;
     function TransactionBegin(aTable: TOrmClass; SessionID: cardinal): boolean;
@@ -809,29 +811,29 @@ type
     procedure WriteUnLock;
     function BatchSend(Batch: TRestBatch; var Results: TIDDynArray): integer; overload;
     function BatchSend(Batch: TRestBatch): integer; overload;
-    function AsynchBatchStart(Table: TOrmClass; SendSeconds: integer;
+    function AsyncBatchStart(Table: TOrmClass; SendSeconds: integer;
       PendingRowThreshold: integer = 500; AutomaticTransactionPerRow: integer = 1000;
-      Options: TRestBatchOptions = [boExtendedJSON]): boolean;
-    function AsynchBatchStop(Table: TOrmClass): boolean;
-    function AsynchBatchAdd(Value: TOrm; SendData: boolean;
+      Options: TRestBatchOptions = [boExtendedJson]): boolean;
+    function AsyncBatchStop(Table: TOrmClass): boolean;
+    function AsyncBatchAdd(Value: TOrm; SendData: boolean;
       ForceID: boolean = false; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
-    function AsynchBatchRawAdd(Table: TOrmClass; const SentData: RawUTF8): integer;
-    procedure AsynchBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
-    function AsynchBatchUpdate(Value: TOrm; const CustomFields: TFieldBits = [];
+    function AsyncBatchRawAdd(Table: TOrmClass; const SentData: RawUtf8): integer;
+    procedure AsyncBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
+    function AsyncBatchUpdate(Value: TOrm; const CustomFields: TFieldBits = [];
       DoNotAutoComputeFields: boolean = false): integer;
-    function AsynchBatchDelete(Table: TOrmClass; ID: TID): integer;
+    function AsyncBatchDelete(Table: TOrmClass; ID: TID): integer;
     function Cache: TRestCache;
     function CacheOrNil: TRestCache;
     function CacheWorthItForTable(aTableIndex: cardinal): boolean;
   public
     // TRestRunThreads compatibility methods
-    function NewBackgroundThreadMethod(const Format: RawUTF8;
+    function NewBackgroundThreadMethod(const Format: RawUtf8;
       const Args: array of const): TSynBackgroundThreadMethod;
     function NewBackgroundThreadProcess(const aOnProcess: TOnSynBackgroundThreadProcess;
-      aOnProcessMS: cardinal; const Format: RawUTF8; const Args: array of const;
+      aOnProcessMS: cardinal; const Format: RawUtf8; const Args: array of const;
       aStats: TSynMonitorClass=nil): TSynBackgroundThreadProcess;
-    function NewParallelProcess(ThreadCount: integer; const Format: RawUTF8;
+    function NewParallelProcess(ThreadCount: integer; const Format: RawUtf8;
       const Args: array of const): TSynParallelProcess;
     function TimerEnable(const aOnProcess: TOnSynBackgroundTimerProcess;
       aOnProcessSecs: cardinal): TRestBackgroundTimer;
@@ -840,15 +842,15 @@ type
     function EnsureBackgroundTimerExists: TRestBackgroundTimer;
     procedure BeginCurrentThread(Sender: TThread); virtual;
     procedure EndCurrentThread(Sender: TThread); virtual;
-    procedure AsynchRedirect(const aGUID: TGUID;
+    procedure AsyncRedirect(const aGuid: TGUID;
       const aDestinationInterface: IInvokable; out aCallbackInterface;
-      const aOnResult: TOnAsynchRedirectResult = nil); overload;
-    procedure AsynchRedirect(const aGUID: TGUID;
+      const aOnResult: TOnAsyncRedirectResult = nil); overload;
+    procedure AsyncRedirect(const aGuid: TGUID;
       const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
-      const aOnResult: TOnAsynchRedirectResult = nil); overload;
-    procedure AsynchInterning(Interning: TRawUTF8Interning;
+      const aOnResult: TOnAsyncRedirectResult = nil); overload;
+    procedure AsyncInterning(Interning: TRawUtf8Interning;
       InterningMaxRefCount: integer = 2; PeriodMinutes: integer = 5);
-    function MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
+    function MultiRedirect(const aGuid: TGUID; out aCallbackInterface;
       aCallBackUnRegisterNeeded: boolean = true): IMultiCallbackRedirect; overload;
     function BackgroundTimer: TRestBackgroundTimer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -859,18 +861,18 @@ type
 // backward compatibility types redirections
 
 type
-  TSQLRest = TRest;
-  TSQLRestClass = TRestClass;
-  TSQLRestDynArray = TRestDynArray;
+  TSqlRest = TRest;
+  TSqlRestClass = TRestClass;
+  TSqlRestDynArray = TRestDynArray;
 
 {$endif PUREMORMOT2}
 
-function ToText(cmd: TRestServerURIContextCommand): PShortString; overload;
+function ToText(cmd: TRestServerUriContextCommand): PShortString; overload;
 
 const
   /// custom contract value to ignore contract validation from client side
   // - you could set the aContractExpected parameter to this value for
-  // TRestClientURI.ServiceDefine or TRestClientURI.ServiceRegister
+  // TRestClientUri.ServiceDefine or TRestClientUri.ServiceRegister
   // so that the contract won't be checked with the server
   // - it will be used e.g. if the remote server is not a mORMot server,
   // but a plain REST/HTTP server - e.g. for public API notifications
@@ -906,13 +908,13 @@ var
 
   /// default hashed password set by TAuthGroup.InitializeTable for 'Admin' user
   // - you can override this value to follow your own application expectations
-  AuthAdminDefaultPassword: RawUTF8 = DEFAULT_HASH_SYNOPSE;
+  AuthAdminDefaultPassword: RawUtf8 = DEFAULT_HASH_SYNOPSE;
   /// default hashed password set by TAuthGroup.InitializeTable for 'Supervisor' user
   // - you can override this value to follow your own application expectations
-  AuthSupervisorDefaultPassword: RawUTF8 = DEFAULT_HASH_SYNOPSE;
+  AuthSupervisorDefaultPassword: RawUtf8 = DEFAULT_HASH_SYNOPSE;
   /// default hashed password set by TAuthGroup.InitializeTable for 'User' user
   // - you can override this value to follow your own application expectations
-  AuthUserDefaultPassword: RawUTF8 = DEFAULT_HASH_SYNOPSE;
+  AuthUserDefaultPassword: RawUtf8 = DEFAULT_HASH_SYNOPSE;
 
 
 type
@@ -925,9 +927,9 @@ type
   // - by default, it won't be accessible remotely by anyone
   TAuthGroup = class(TOrm)
   private
-    fIdent: RawUTF8;
+    fIdent: RawUtf8;
     fSessionTimeOut: integer;
-    fAccessRights: RawUTF8;
+    fAccessRights: RawUtf8;
     function GetOrmAccessRights: TOrmAccessRights;
     procedure SetOrmAccessRights(const Value: TOrmAccessRights);
   public
@@ -947,8 +949,8 @@ type
     // modify the Auth tables (i.e. AuthUser and AuthGroup)
     // - 'Admin' and 'Supervisor' will allow any SELECT SQL statements to be
     // executed, even if the table can't be retrieved and checked (corresponding
-    // to the reSQLSelectWithoutTable flag)
-    // - 'User' won't have the reSQLSelectWithoutTable flag, nor the right
+    // to the reSqlSelectWithoutTable flag)
+    // - 'User' won't have the reSqlSelectWithoutTable flag, nor the right
     // to retrieve the Auth tables data for other users
     // - 'Guest' won't have access to the interface-based remote JSON-RPC service
     // (no reService flag), nor perform any modification to a table: in short,
@@ -960,12 +962,12 @@ type
     // AuthUser tables, but only 'Admin' group users will be able to remotely
     // modify the content of those two tables
     class procedure InitializeTable(const Server: IRestOrmServer;
-      const FieldName: RawUTF8; Options: TOrmInitializeTableOptions); override;
+      const FieldName: RawUtf8; Options: TOrmInitializeTableOptions); override;
     /// corresponding TOrmAccessRights for this authentication group
     // - content is converted into/from text format via AccessRight DB property
     // (so it will be not fixed e.g. by the binary TOrmFieldTables layout, i.e.
     // the MAX_TABLES constant value)
-    property SQLAccessRights: TOrmAccessRights
+    property SqlAccessRights: TOrmAccessRights
       read GetOrmAccessRights write SetOrmAccessRights;
   published
     /// the access right identifier, ready to be displayed
@@ -973,13 +975,13 @@ type
     // unique via a "stored AS_UNIQUE" (i.e. "stored false") attribute)
     // - so you can retrieve a TAuthGroup ID from its identifier, as such:
     // ! UserGroupID := fClient.MainFieldID(TAuthGroup,'User');
-    property Ident: RawUTF8 index 50
+    property Ident: RawUtf8 index 50
       read fIdent write fIdent stored AS_UNIQUE;
     /// the number of minutes a session is kept alive
     property SessionTimeout: integer
       read fSessionTimeOut write fSessionTimeOut;
     /// a textual representation of a TOrmAccessRights buffer
-    property AccessRights: RawUTF8 index 1600
+    property AccessRights: RawUtf8 index 1600
       read fAccessRights write fAccessRights;
   end;
 
@@ -993,39 +995,39 @@ type
   // you could use the TSynValidatePassWord filter to this table
   TAuthUser = class(TOrm)
   protected
-    fLogonName: RawUTF8;
-    fPasswordHashHexa: RawUTF8;
-    fDisplayName: RawUTF8;
+    fLogonName: RawUtf8;
+    fPasswordHashHexa: RawUtf8;
+    fDisplayName: RawUtf8;
     fGroupRights: TAuthGroup;
     fData: RawBlob;
-    procedure SetPasswordPlain(const Value: RawUTF8);
+    procedure SetPasswordPlain(const Value: RawUtf8);
   public
     /// static function allowing to compute a hashed password
     // - as expected by this class
     // - defined as virtual so that you may use your own hashing class
     // - you may specify your own values in aHashSalt/aHashRound, to enable
-    // PBKDF2_HMAC_SHA256() use instead of plain SHA256(): it will increase
+    // PBKDF2_HMAC_SHA256() use instead of plain Sha256(): it will increase
     // security on storage side (reducing brute force attack via rainbow tables)
-    class function ComputeHashedPassword(const aPasswordPlain: RawUTF8;
-      const aHashSalt: RawUTF8 = ''; aHashRound: integer = 20000): RawUTF8; virtual;
+    class function ComputeHashedPassword(const aPasswordPlain: RawUtf8;
+      const aHashSalt: RawUtf8 = ''; aHashRound: integer = 20000): RawUtf8; virtual;
     /// able to set the PasswordHashHexa field from a plain password content
-    // - in fact, PasswordHashHexa := SHA256('salt'+PasswordPlain) in UTF-8
+    // - in fact, PasswordHashHexa := Sha256('salt'+PasswordPlain) in UTF-8
     // - use SetPassword() method if you want to customize the hash salt value
     // and use the much safer PBKDF2_HMAC_SHA256 algorithm
-    property PasswordPlain: RawUTF8 write SetPasswordPlain;
+    property PasswordPlain: RawUtf8 write SetPasswordPlain;
     /// set the PasswordHashHexa field from a plain password content and salt
     // - use this method to specify aHashSalt/aHashRound values, enabling
-    // PBKDF2_HMAC_SHA256() use instead of plain SHA256(): it will increase
+    // PBKDF2_HMAC_SHA256() use instead of plain Sha256(): it will increase
     // security on storage side (reducing brute force attack via rainbow tables)
     // - you may use an application specific fixed salt, and/or append the
     // user LogonName to make the challenge unique for each TAuthUser
     // - the default aHashRound=20000 is slow but secure - since the hashing
     // process is expected to be done on client side, you may specify your
     // own higher/slower value, depending on the security level you expect
-    procedure SetPassword(const aPasswordPlain, aHashSalt: RawUTF8;
+    procedure SetPassword(const aPasswordPlain, aHashSalt: RawUtf8;
       aHashRound: integer = 20000);
     /// check if the user can authenticate in its current state
-    // - Ctxt is a TRestServerURIContext instance
+    // - Ctxt is a TRestServerUriContext instance
     // - called by TRestServerAuthentication.GetUser() method
     // - this default implementation will return TRUE, i.e. allow the user
     // to log on
@@ -1037,20 +1039,20 @@ type
     // - the same identifier can be used only once (this column is marked as
     // unique via a "stored AS_UNIQUE" - i.e. "stored false" - attribute), and
     // therefore indexed in the database (e.g. hashed in TRestStorageInMemory)
-    property LogonName: RawUTF8
+    property LogonName: RawUtf8
       index 20 read fLogonName write fLogonName stored AS_UNIQUE;
     /// the User Name, as may be displayed or printed
-    property DisplayName: RawUTF8
+    property DisplayName: RawUtf8
       index 50 read fDisplayName write fDisplayName;
     /// the hexa encoded associated SHA-256 hash of the password
     // - see TAuthUser.ComputeHashedPassword() or SetPassword() methods
     // - store the SHA-256 32 bytes as 64 hexa chars
-    property PasswordHashHexa: RawUTF8
+    property PasswordHashHexa: RawUtf8
       index 64 read fPasswordHashHexa write fPasswordHashHexa;
     /// the associated access rights of this user
     // - access rights are managed by group
     // - in TAuthSession.User instance, GroupRights property will contain a
-    // REAL TAuthGroup instance for fast retrieval in TRestServer.URI
+    // REAL TAuthGroup instance for fast retrieval in TRestServer.Uri
     // - note that 'Group' field name is not allowed by SQLite
     property GroupRights: TAuthGroup
       read fGroupRights write fGroupRights;
@@ -1072,53 +1074,54 @@ type
   TAuthGroupClass = class of TAuthGroup;
 
 
-{ ************ TRestURIParams REST URI Definitions }
+{ ************ TRestUriParams REST URI Definitions }
 
 type
   /// flags which may be set by the caller to notify low-level context
   // - llfHttps will indicates that the communication was made over HTTPS
   // - llfSecured is set if the transmission is encrypted or in-process,
-  // using e.g. HTTPS/SSL/TLS or our proprietary AES/ECDHE algorithms
+  // using e.g. HTTPS/TLS or our proprietary AES/ECDHE WebSockets algorithms
   // - llfWebsockets communication was made using WebSockets
-  TRestURIParamsLowLevelFlag = (
+  // - match THttpServerRequestFlag from mormot.net.http.pas
+  TRestUriParamsLowLevelFlag = (
     llfHttps,
     llfSecured,
     llfWebsockets);
 
   /// some flags set by the caller to notify low-level context
-  TRestURIParamsLowLevelFlags = set of TRestURIParamsLowLevelFlag;
+  TRestUriParamsLowLevelFlags = set of TRestUriParamsLowLevelFlag;
 
   /// store all parameters for a Client or Server method call
-  // - as used by TRestServer.URI or TRestClientURI.InternalURI
+  // - as used by TRestServer.Uri or TRestClientUri.InternalUri
   {$ifdef USERECORDWITHMETHODS}
-  TRestURIParams = record
+  TRestUriParams = record
   {$else}
-  TRestURIParams = object
+  TRestUriParams = object
   {$endif USERECORDWITHMETHODS}
   public
     /// input parameter containing the caller URI
-    Url: RawUTF8;
+    Url: RawUtf8;
     /// input parameter containing the caller method
     // - handle enhanced REST codes: LOCK/UNLOCK/BEGIN/END/ABORT
-    Method: RawUTF8;
+    Method: RawUtf8;
     /// input parameter containing the caller message headers
     // - you can use e.g. to retrieve the remote IP:
     // ! Call.Header(HEADER_REMOTEIP_UPPER)
     // ! or FindNameValue(Call.InHead,HEADER_REMOTEIP_UPPER)
-    // but consider rather using TRestServerURIContext.RemoteIP
-    InHead: RawUTF8;
+    // but consider rather using TRestServerUriContext.RemoteIP
+    InHead: RawUtf8;
     /// input parameter containing the caller message body
     // - e.g. some GET/POST/PUT JSON data can be specified here
-    InBody: RawUTF8;
+    InBody: RawUtf8;
     /// output parameter to be set to the response message header
     // - it is the right place to set the returned message body content type,
     // e.g. TEXT_CONTENT_TYPE_HEADER or HTTP_CONTENT_TYPE_HEADER: if not set,
     // the default JSON_CONTENT_TYPE_HEADER will be returned to the client,
     // meaning that the message is JSON
     // - you can use OutBodyType() function to retrieve the stored content-type
-    OutHead: RawUTF8;
+    OutHead: RawUtf8;
     /// output parameter to be set to the response message body
-    OutBody: RawUTF8;
+    OutBody: RawUtf8;
     /// output parameter to be set to the HTTP status integer code
     // - HTTP_NOTFOUND=404 e.g. if the url doesn't start with Model.Root (caller
     // can try another TRestServer)
@@ -1131,45 +1134,46 @@ type
     // rights management) - making access rights a parameter allows this method
     // to be handled as pure stateless, thread-safe and session-free
     RestAccessRights: POrmAccessRights;
-    /// opaque reference to the protocol context which made this request
+    /// opaque reference to the connection which made this request
     // - may point e.g. to a THttpServerResp, a TWebSocketServerResp,
-    // a THttpApiServer, a TRestClientURI, a TFastCGIServer or a
+    // a THttpApiServer, a TRestClientUri, a TFastCGIServer or a
     // TRestServerNamedPipeResponse instance
-    // - stores SynCrtSock's THttpServerConnectionID, i.e. a Int64 as expected
-    // by http.sys, or an incremental rolling sequence of 31-bit integers for
+    // - stores mormot.net.http's THttpServerConnectionID, e.g. a http.sys
+    // 64-bit ID, or an incremental rolling sequence of 31-bit integers for
     // THttpServer/TWebSocketServer, or maybe a raw PtrInt(self/THandle)
     LowLevelConnectionID: Int64;
-    /// low-level properties of the current protocol context
-    LowLevelFlags: TRestURIParamsLowLevelFlags;
-    /// initialize the non RawUTF8 values
+    /// low-level properties of the current connection
+    LowLevelConnectionFlags: TRestUriParamsLowLevelFlags;
+    /// initialize the non RawUtf8 values
     procedure Init; overload;
     /// initialize the input values
-    procedure Init(const aURI,aMethod,aInHead,aInBody: RawUTF8); overload;
+    procedure Init(const aUri, aMethod, aInHead, aInBody: RawUtf8); overload;
     /// retrieve the "Content-Type" value from InHead
-    // - if GuessJSONIfNoneSet is TRUE, returns JSON if none was set in headers
-    function InBodyType(GuessJSONIfNoneSet: boolean = True): RawUTF8;
+    // - if GuessJsonIfNoneSet is TRUE, returns JSON if none was set in headers
+    procedure InBodyType(out ContentType: RawUtf8;
+      GuessJsonIfNoneSet: boolean = True);
     /// check if the "Content-Type" value from InHead is JSON
-    // - if GuessJSONIfNoneSet is TRUE, assume JSON is used
-    function InBodyTypeIsJson(GuessJSONIfNoneSet: boolean = True): boolean;
+    // - if GuessJsonIfNoneSet is TRUE, assume JSON is used
+    function InBodyTypeIsJson(GuessJsonIfNoneSet: boolean = True): boolean;
     /// retrieve the "Content-Type" value from OutHead
-    // - if GuessJSONIfNoneSet is TRUE, returns JSON if none was set in headers
-    function OutBodyType(GuessJSONIfNoneSet: boolean = True): RawUTF8;
+    // - if GuessJsonIfNoneSet is TRUE, returns JSON if none was set in headers
+    function OutBodyType(GuessJsonIfNoneSet: boolean = True): RawUtf8;
     /// check if the "Content-Type" value from OutHead is JSON
-    // - if GuessJSONIfNoneSet is TRUE, assume JSON is used
-    function OutBodyTypeIsJson(GuessJSONIfNoneSet: boolean = True): boolean;
+    // - if GuessJsonIfNoneSet is TRUE, assume JSON is used
+    function OutBodyTypeIsJson(GuessJsonIfNoneSet: boolean = True): boolean;
     /// just a wrapper around FindNameValue(InHead,UpperName)
     // - use e.g. as
     // ! Call.Header(HEADER_REMOTEIP_UPPER) or Call.Header(HEADER_BEARER_UPPER)
-    // - consider rather using TRestServerURIContext.InHeader[] or even
-    // dedicated TRestServerURIContext.RemoteIP/AuthenticationBearerToken
-    function Header(UpperName: PAnsiChar): RawUTF8;
+    // - consider rather using TRestServerUriContext.InHeader[] or even
+    // dedicated TRestServerUriContext.RemoteIP/AuthenticationBearerToken
+    function Header(UpperName: PAnsiChar): RawUtf8;
       {$ifdef HASINLINE}inline;{$endif}
     /// wrap FindNameValue(InHead,UpperName) with a cache store
-    function HeaderOnce(var Store: RawUTF8; UpperName: PAnsiChar): RawUTF8;
+    function HeaderOnce(var Store: RawUtf8; UpperName: PAnsiChar): RawUtf8;
   end;
 
   /// used to map set of parameters for a Client or Server method call
-  PRestURIParams = ^TRestURIParams;
+  PRestUriParams = ^TRestUriParams;
 
   /// how a TLibraryRequest function will release its Head and Resp returned values
   TLibraryRequestFree = procedure(Data: pointer); cdecl;
@@ -1178,22 +1182,22 @@ type
   // - as exported by TRestServer.ExportServerGlobalLibraryRequest
   // - and as consummed by TRestClientLibraryRequest on client side
   TLibraryRequest = function(
-    Url, Method, SendData: PUTF8Char; UrlLen, MethodLen, SendDataLen: cardinal;
-    out HeadRespFree: TLibraryRequestFree; var Head: PUTF8Char; var HeadLen: cardinal;
-    out Resp: PUTF8Char; out RespLen, State: cardinal): cardinal; cdecl;
+    Url, Method, SendData: PUtf8Char; UrlLen, MethodLen, SendDataLen: cardinal;
+    out HeadRespFree: TLibraryRequestFree; var Head: PUtf8Char; var HeadLen: cardinal;
+    out Resp: PUtf8Char; out RespLen, State: cardinal): cardinal; cdecl;
 
 {$ifndef PUREMORMOT2}
 // backward compatibility types redirections
 
 type
-  TSQLAuthUser = TAuthUser;
-  TSQLAuthGroup = TAuthGroup;
-  TSQLAuthUserClass = TAuthUserClass;
-  TSQLAuthGroupClass = TAuthGroupClass;
-  TSQLRestURIParamsLowLevelFlag = TRestURIParamsLowLevelFlag;
-  TSQLRestURIParamsLowLevelFlags = TRestURIParamsLowLevelFlags;
-  TSQLRestURIParams = TRestURIParams;
-  PSQLRestURIParams = PRestURIParams;
+  TSqlAuthUser = TAuthUser;
+  TSqlAuthGroup = TAuthGroup;
+  TSqlAuthUserClass = TAuthUserClass;
+  TSqlAuthGroupClass = TAuthGroupClass;
+  TSqlRestUriParamsLowLevelFlag = TRestUriParamsLowLevelFlag;
+  TSqlRestUriParamsLowLevelFlags = TRestUriParamsLowLevelFlags;
+  TSqlRestUriParams = TRestUriParams;
+  PSqlRestUriParams = PRestUriParams;
 
 {$endif PUREMORMOT2}
 
@@ -1215,7 +1219,7 @@ type
     fEvent: TEvent;
     fExecuting: boolean;
     /// allows customization in overriden Create (before Execute)
-    fThreadName: RawUTF8;
+    fThreadName: RawUtf8;
     /// will call BeginCurrentThread/EndCurrentThread and catch exceptions
     procedure Execute; override;
     /// you should override this method with the proper process
@@ -1309,7 +1313,7 @@ type
       read fModifiedRecord write fModifiedRecord;
     /// when the modification was recorded
     // - even if in most cases, this timestamp may be synchronized over TRest
-    // instances (thanks to TRestClientURI.ServerTimestampSynchronize), it
+    // instances (thanks to TRestClientUri.ServerTimestampSynchronize), it
     // is not safe to use this field as absolute: you should rather rely on
     // pure monotonic ID/RowID increasing values (see e.g. TOrmVersion)
     property Timestamp: TModTime
@@ -1319,13 +1323,13 @@ type
   /// common ancestor for tracking changes on TOrm tables
   // - used by TRestServer.TrackChanges() method for simple fields history
   // - TRestServer.InternalUpdateEvent will use this table to store individual
-  // row changes as SentDataJSON, then will compress them in History BLOB
+  // row changes as SentDataJson, then will compress them in History BLOB
   // - note that any layout change of the tracked TOrm table (e.g. adding
   // a new property) will break the internal data format, so will void the table
   TOrmHistory = class(TOrmModification)
   protected
     fEvent: TOrmHistoryEvent;
-    fSentData: RawUTF8;
+    fSentData: RawUtf8;
     fHistory: RawBlob;
     // BLOB storage layout is: RTTIheader + offsets + recordsdata
     fHistoryModel: TOrmModel;
@@ -1347,11 +1351,11 @@ type
     destructor Destroy; override;
     /// override this to customize fields intialization
     class procedure InitializeFields(const Fields: array of const;
-      var JSON: RawUTF8); virtual;
+      var Json: RawUtf8); virtual;
     /// called when the associated table is created in the database
     // - create index on History(ModifiedRecord,Event) for process speed-up
     class procedure InitializeTable(const Server: IRestOrmServer;
-      const FieldName: RawUTF8; Options: TOrmInitializeTableOptions); override;
+      const FieldName: RawUtf8; Options: TOrmInitializeTableOptions); override;
   public
     /// prepare to access the History BLOB content
     // - ModifiedRecord should have been set to a proper value
@@ -1412,14 +1416,14 @@ type
   published
     /// the kind of modification stored
     // - is heArchiveBlob when this record stores the compress BLOB in History
-    // - otherwise, SentDataJSON may contain the latest values as JSON
+    // - otherwise, SentDataJson may contain the latest values as JSON
     property Event: TOrmHistoryEvent
       read fEvent write fEvent;
     /// for heAdd/heUpdate, the data is stored as JSON
     // - note that we defined a default maximum size of 4KB for this column,
     // to avoid using a CLOB here - perhaps it may not be enough for huge
     // records - feedback is welcome...
-    property SentDataJSON: RawUTF8
+    property SentDataJson: RawUtf8
       index 4000 read fSentData write fSentData;
     /// after some events are written as individual SentData content, they
     // will be gathered and compressed within one BLOB field
@@ -1467,7 +1471,7 @@ type
 // backward compatibility types redirections
 
 type
-  TSQLRestThread = TRestThread;
+  TSqlRestThread = TRestThread;
 
 {$endif PUREMORMOT2}
 
@@ -1475,7 +1479,7 @@ type
 implementation
 
 uses
-  mormot.orm.rest;
+  mormot.orm.rest; // avoid circular references
 
 
 { ************ Customize REST Execution }
@@ -1507,9 +1511,9 @@ type
     fDests: TDynArray;
     fFakeCallback: TInterfacedObjectMulti;
     procedure Redirect(const aCallback: IInvokable;
-      const aMethodsNames: array of RawUTF8; aSubscribe: boolean); overload;
+      const aMethodsNames: array of RawUtf8; aSubscribe: boolean); overload;
     procedure Redirect(const aCallback: TInterfacedObject;
-      const aMethodsNames: array of RawUTF8; aSubscribe: boolean); overload;
+      const aMethodsNames: array of RawUtf8; aSubscribe: boolean); overload;
     procedure CallBackUnRegister;
     function GetInstances(aMethod: integer; var aInstances: TPointerDynArray): integer;
   public
@@ -1522,8 +1526,8 @@ type
     fRest: TRest;
     fList: TInterfacedObjectMultiList;
     fCallBackUnRegisterNeeded: boolean;
-    function FakeInvoke(const aMethod: TInterfaceMethod; const aParams: RawUTF8;
-      aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
+    function FakeInvoke(const aMethod: TInterfaceMethod; const aParams: RawUtf8;
+      aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean; override;
   public
     constructor Create(aRest: TRest; aFactory: TInterfaceFactory;
@@ -1543,7 +1547,7 @@ begin
 end;
 
 procedure TInterfacedObjectMultiList.Redirect(const aCallback: IInvokable;
-  const aMethodsNames: array of RawUTF8; aSubscribe: boolean);
+  const aMethodsNames: array of RawUtf8; aSubscribe: boolean);
 var
   ndx: integer;
   new: TInterfacedObjectMultiDest;
@@ -1574,7 +1578,7 @@ begin
 end;
 
 procedure TInterfacedObjectMultiList.Redirect(const aCallback: TInterfacedObject;
-  const aMethodsNames: array of RawUTF8; aSubscribe: boolean);
+  const aMethodsNames: array of RawUtf8; aSubscribe: boolean);
 var
   dest: IInvokable;
 begin
@@ -1582,9 +1586,9 @@ begin
      (fFakeCallback = nil) then
     exit;
   if aCallback = nil then
-    raise EServiceException.CreateUTF8('%.Redirect(nil)', [self]);
+    raise EServiceException.CreateUtf8('%.Redirect(nil)', [self]);
   if not aCallback.GetInterface(fFakeCallback.Factory.InterfaceIID, dest) then
-    raise EServiceException.CreateUTF8('%.Redirect [%]: % is not a %',
+    raise EServiceException.CreateUtf8('%.Redirect [%]: % is not a %',
       [self, fFakeCallback.fName, aCallback, fFakeCallback.Factory.InterfaceName]);
   Redirect(dest, aMethodsNames, aSubscribe);
 end;
@@ -1653,14 +1657,14 @@ constructor TInterfacedObjectMulti.Create(aRest: TRest;
   out aCallbackInterface);
 begin
   if aRest = nil then
-    raise EServiceException.CreateUTF8('%.Create(aRest=nil)', [self]);
+    raise EServiceException.CreateUtf8('%.Create(aRest=nil)', [self]);
   fRest := aRest;
   fLogClass := fRest.fLogClass;
   fName := fRest.Model.Root; // some context about the TRest running it
   fCallBackUnRegisterNeeded := aCallBackUnRegisterNeeded;
   fList := TInterfacedObjectMultiList.Create;
   fList.fFakeCallback := self;
-  inherited Create(aFactory, nil, [ifoJsonAsExtended, ifoDontStoreVoidJSON],
+  inherited Create(aFactory, nil, [ifoJsonAsExtended, ifoDontStoreVoidJson],
     FakeInvoke, nil);
   Get(aCallbackInterface);
 end;
@@ -1672,7 +1676,7 @@ begin
 end;
 
 function TInterfacedObjectMulti.FakeInvoke(const aMethod: TInterfaceMethod;
-  const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
+  const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
   aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 var
   i: Ptrint;
@@ -1738,7 +1742,7 @@ begin
     result := fLogClass;
 end;
 
-procedure TRest.InternalLog(const Text: RawUTF8; Level: TSynLogInfo);
+procedure TRest.InternalLog(const Text: RawUtf8; Level: TSynLogInfo);
 begin
   if (self <> nil) and
      (fLogFamily <> nil) and
@@ -1746,7 +1750,7 @@ begin
     fLogFamily.SynLog.Log(Level, Text, self);
 end;
 
-procedure TRest.InternalLog(const Format: RawUTF8; const Args: array of const;
+procedure TRest.InternalLog(const Format: RawUtf8; const Args: array of const;
   Level: TSynLogInfo);
 begin
   if (self <> nil) and
@@ -1755,7 +1759,7 @@ begin
     fLogFamily.SynLog.Log(Level, Format, Args, self);
 end;
 
-function TRest.Enter(const TextFmt: RawUTF8; const TextArgs: array of const;
+function TRest.Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
   aInstance: TObject): ISynLog;
 begin
   if aInstance = nil then
@@ -1779,45 +1783,45 @@ begin
     else
     begin
       CacheTix := tix;
-      CacheValue.From(NowUTC + offset);
+      CacheValue.From(NowUtc + offset);
       result := CacheValue.Value;
     end;
 end;
 
 procedure TRest.SetServerTimestamp(const Value: TTimeLog);
 begin
-  fServerTimestamp.Offset := PTimeLogBits(@Value)^.ToDateTime - NowUTC;
+  fServerTimestamp.Offset := PTimeLogBits(@Value)^.ToDateTime - NowUtc;
   if fServerTimestamp.Offset = 0 then
     fServerTimestamp.Offset := 0.000001; // retrieve server date/time only once
 end;
 
 function TRest.GetAcquireExecutionMode(
-  Cmd: TRestServerURIContextCommand): TRestServerAcquireMode;
+  Cmd: TRestServerUriContextCommand): TRestServerAcquireMode;
 begin
   result := fAcquireExecution[Cmd].Mode;
 end;
 
 procedure TRest.SetAcquireExecutionMode(
-  Cmd: TRestServerURIContextCommand; Value: TRestServerAcquireMode);
+  Cmd: TRestServerUriContextCommand; Value: TRestServerAcquireMode);
 begin
   fAcquireExecution[Cmd].Mode := Value;
 end;
 
 function TRest.GetAcquireExecutionLockedTimeOut(
-  Cmd: TRestServerURIContextCommand): cardinal;
+  Cmd: TRestServerUriContextCommand): cardinal;
 begin
   result := fAcquireExecution[Cmd].LockedTimeOut;
 end;
 
 procedure TRest.SetAcquireExecutionLockedTimeOut(
-  Cmd: TRestServerURIContextCommand; Value: cardinal);
+  Cmd: TRestServerUriContextCommand; Value: cardinal);
 begin
   fAcquireExecution[Cmd].LockedTimeOut := Value;
 end;
 
 constructor TRest.Create(aModel: TOrmModel);
 var
-  cmd: TRestServerURIContextCommand;
+  cmd: TRestServerUriContextCommand;
 begin
   fPrivateGarbageCollector := TSynObjectList.Create;
   fModel := aModel;
@@ -1832,40 +1836,39 @@ end;
 procedure TRest.SetOrmInstance(aORM: TInterfacedObject);
 begin
   if fOrmInstance <> nil then
-    raise ERestException.CreateUTF8('%.SetOrmInstance twice', [self]);
+    raise ERestException.CreateUtf8('%.SetOrmInstance twice', [self]);
   if (aORM = nil) or
      not aORM.GetInterface(IRestOrm, fOrm) then
-    raise ERestException.CreateUTF8(
+    raise ERestException.CreateUtf8(
       '%.SetOrmInstance(%) is not an IRestOrm', [self, aORM]);
   fOrmInstance := aORM;
-  if not fOrmInstance.GetInterface(IRestOrm, fOrm) then
-    raise ERestException.CreateUTF8(
-      '%.Create with invalid %', [self, fOrmInstance]);
 end;
 
 destructor TRest.Destroy;
 var
-  cmd: TRestServerURIContextCommand;
+  cmd: TRestServerUriContextCommand;
 begin
   InternalLog('TRest.Destroy %',[fModel.SafeRoot],sllInfo); // self->GPF
   if fOrm <> nil then
-    fOrm.AsynchBatchStop(nil); // abort any pending TRestBatch
-  FreeAndNil(fRun);
+    // abort any (unlikely) pending TRestBatch
+    fOrm.AsyncBatchStop(nil);
+  for cmd := Low(cmd) to high(cmd) do
+    FreeAndNil(fAcquireExecution[cmd]); // calls fOrmInstance.OnEndThread
   FreeAndNil(fServices);
+  FreeAndNil(fRun); // after fAcquireExecution+fServices
   if fOrmInstance <> nil then
     if (fOrm = nil) or
        (fOrmInstance.RefCount <> 1) then
-      raise ERestException.CreateUTF8('%.Destroy: RefCount=%',
-        [self, fOrmInstance.RefCount])
+      raise ERestException.CreateUtf8('%.Destroy: %.RefCount=%',
+        [self, fOrmInstance, fOrmInstance.RefCount])
     else
-      fOrmInstance := nil; // avoid dubious GPF
+      // avoid dubious GPF
+      fOrmInstance := nil;
   fOrm := nil;
   if (fModel <> nil) and
      (fModel.Owner = self) then
     // make sure we are the Owner (TRestStorage has fModel<>nil e.g.)
     FreeAndNil(fModel);
-  for cmd := Low(cmd) to high(cmd) do
-    FreeAndNil(fAcquireExecution[cmd]);
   // fPrivateGarbageCollector should be released in last position
   if fPrivateGarbageCollector <> nil then
   begin
@@ -1903,7 +1906,7 @@ begin
     Definition.Kind := ClassName;
 end;
 
-function TRest.DefinitionToJSON(Key: cardinal): RawUTF8;
+function TRest.DefinitionToJson(Key: cardinal): RawUtf8;
 var
   Definition: TSynConnectionDefinition;
 begin
@@ -1911,15 +1914,15 @@ begin
   try
     Definition.Key := Key;
     DefinitionTo(Definition);
-    result := Definition.SaveToJSON;
+    result := Definition.SaveToJson;
   finally
     Definition.Free;
   end;
 end;
 
-procedure TRest.DefinitionToFile(const aJSONFile: TFileName; aKey: cardinal);
+procedure TRest.DefinitionToFile(const aJsonFile: TFileName; aKey: cardinal);
 begin
-  FileFromString(JSONReformat(DefinitionToJSON(aKey)), aJSONFile);
+  FileFromString(JsonReformat(DefinitionToJson(aKey)), aJsonFile);
 end;
 
 class function TRest.ClassFrom(aDefinition: TSynConnectionDefinition): TRestClass;
@@ -1948,7 +1951,7 @@ var
 begin
   C := ClassFrom(aDefinition);
   if C = nil then
-    raise ERestException.CreateUTF8('%.CreateFrom: unknown % class - please ' +
+    raise ERestException.CreateUtf8('%.CreateFrom: unknown % class - please ' +
       'add a reference to its implementation unit', [self, aDefinition.Kind]);
   result := C.RegisteredClassCreateFrom(aModel, aDefinition, aServerHandleAuthentication);
 end;
@@ -1966,13 +1969,13 @@ begin
       aServerHandleAuthentication);
 end;
 
-class function TRest.CreateFromJSON(aModel: TOrmModel;
-  const aJSONDefinition: RawUTF8; aServerHandleAuthentication: boolean;
+class function TRest.CreateFromJson(aModel: TOrmModel;
+  const aJsonDefinition: RawUtf8; aServerHandleAuthentication: boolean;
   aKey: cardinal): TRest;
 var
   Definition: TSynConnectionDefinition;
 begin
-  Definition := TSynConnectionDefinition.CreateFromJSON(aJSONDefinition, aKey);
+  Definition := TSynConnectionDefinition.CreateFromJson(aJsonDefinition, aKey);
   try
     result := CreateFrom(aModel, Definition, aServerHandleAuthentication);
   finally
@@ -1981,10 +1984,10 @@ begin
 end;
 
 class function TRest.CreateFromFile(aModel: TOrmModel;
-  const aJSONFile: TFileName; aServerHandleAuthentication: boolean;
+  const aJsonFile: TFileName; aServerHandleAuthentication: boolean;
   aKey: cardinal): TRest;
 begin
-  result := CreateFromJSON(aModel, AnyTextFileToRawUTF8(aJSONFile, true),
+  result := CreateFromJson(aModel, AnyTextFileToRawUtf8(aJsonFile, true),
     aServerHandleAuthentication, aKey);
 end;
 
@@ -2022,142 +2025,142 @@ begin
 end;
 
 function TRest.OneFieldValue(Table: TOrmClass; const FieldName,
-  WhereClause: RawUTF8): RawUTF8;
+  WhereClause: RawUtf8): RawUtf8;
 begin
   result := fOrm.OneFieldValue(Table, FieldName, WhereClause);
 end;
 
 function TRest.OneFieldValueInt64(Table: TOrmClass; const FieldName,
-  WhereClause: RawUTF8; Default: Int64): Int64;
+  WhereClause: RawUtf8; Default: Int64): Int64;
 begin
   result := fOrm.OneFieldValueInt64(Table, FieldName, WhereClause, Default);
 end;
 
-function TRest.OneFieldValue(Table: TOrmClass; const FieldName: RawUTF8;
-  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): RawUTF8;
+function TRest.OneFieldValue(Table: TOrmClass; const FieldName: RawUtf8;
+  const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const): RawUtf8;
 begin
-  result := fOrm.OneFieldValue(Table, FieldName, FormatSQLWhere, BoundsSQLWhere);
+  result := fOrm.OneFieldValue(Table, FieldName, FormatSqlWhere, BoundsSqlWhere);
 end;
 
-function TRest.OneFieldValue(Table: TOrmClass; const FieldName: RawUTF8;
-  const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const): RawUTF8;
+function TRest.OneFieldValue(Table: TOrmClass; const FieldName: RawUtf8;
+  const WhereClauseFmt: RawUtf8; const Args, Bounds: array of const): RawUtf8;
 begin
   result := fOrm.OneFieldValue(Table, FieldName, WhereClauseFmt);
 end;
 
-function TRest.OneFieldValue(Table: TOrmClass; const FieldName: RawUTF8;
-  const WhereClauseFmt: RawUTF8; const Args, Bounds: array of const;
+function TRest.OneFieldValue(Table: TOrmClass; const FieldName: RawUtf8;
+  const WhereClauseFmt: RawUtf8; const Args, Bounds: array of const;
   out Data: Int64): boolean;
 begin
   result := fOrm.OneFieldValue(Table, FieldName, WhereClauseFmt, Args, Bounds, Data);
 end;
 
-function TRest.OneFieldValue(Table: TOrmClass; const FieldName: RawUTF8;
-  WhereID: TID): RawUTF8;
+function TRest.OneFieldValue(Table: TOrmClass; const FieldName: RawUtf8;
+  WhereID: TID): RawUtf8;
 begin
   result := fOrm.OneFieldValue(Table, FieldName, WhereID);
 end;
 
 function TRest.MultiFieldValue(Table: TOrmClass;
-  const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
-  const WhereClause: RawUTF8): boolean;
+  const FieldName: array of RawUtf8; var FieldValue: array of RawUtf8;
+  const WhereClause: RawUtf8): boolean;
 begin
   result := fOrm.MultiFieldValue(Table, FieldName, FieldValue, WhereClause);
 end;
 
 function TRest.MultiFieldValue(Table: TOrmClass;
-  const FieldName: array of RawUTF8; var FieldValue: array of RawUTF8;
+  const FieldName: array of RawUtf8; var FieldValue: array of RawUtf8;
   WhereID: TID): boolean;
 begin
   result := fOrm.MultiFieldValue(Table, FieldName, FieldValue, WhereID);
 end;
 
 function TRest.OneFieldValues(Table: TOrmClass;
-  const FieldName: RawUTF8; const WhereClause: RawUTF8; out Data: TRawUTF8DynArray): boolean;
+  const FieldName: RawUtf8; const WhereClause: RawUtf8; out Data: TRawUtf8DynArray): boolean;
 begin
   result := fOrm.OneFieldValues(Table, FieldName, WhereClause, Data);
 end;
 
 function TRest.OneFieldValues(Table: TOrmClass;
-  const FieldName: RawUTF8; const WhereClause: RawUTF8; var Data: TInt64DynArray;
-  SQL: PRawUTF8): boolean;
+  const FieldName: RawUtf8; const WhereClause: RawUtf8; var Data: TInt64DynArray;
+  SQL: PRawUtf8): boolean;
 begin
   result := fOrm.OneFieldValues(Table, FieldName, WhereClause, Data, SQL);
 end;
 
 function TRest.OneFieldValues(Table: TOrmClass;
-  const FieldName: RawUTF8; const WhereClause: RawUTF8; const Separator: RawUTF8): RawUTF8;
+  const FieldName: RawUtf8; const WhereClause: RawUtf8; const Separator: RawUtf8): RawUtf8;
 begin
   result := fOrm.OneFieldValues(Table, FieldName, WhereClause, Separator);
 end;
 
 function TRest.OneFieldValues(Table: TOrmClass;
-  const FieldName, WhereClause: RawUTF8; Strings: TStrings; IDToIndex: PID): boolean;
+  const FieldName, WhereClause: RawUtf8; Strings: TStrings; IDToIndex: PID): boolean;
 begin
   result := fOrm.OneFieldValues(Table, FieldName, WhereClause, Strings, IDToIndex);
 end;
 
 function TRest.MultiFieldValues(Table: TOrmClass;
-  const FieldNames: RawUTF8; const WhereClause: RawUTF8): TOrmTable;
+  const FieldNames: RawUtf8; const WhereClause: RawUtf8): TOrmTable;
 begin
   result := fOrm.MultiFieldValues(Table, FieldNames, WhereClause);
 end;
 
 function TRest.MultiFieldValues(Table: TOrmClass;
-  const FieldNames: RawUTF8; const WhereClauseFormat: RawUTF8;
-  const BoundsSQLWhere: array of const): TOrmTable;
+  const FieldNames: RawUtf8; const WhereClauseFormat: RawUtf8;
+  const BoundsSqlWhere: array of const): TOrmTable;
 begin
-  result := fOrm.MultiFieldValues(Table, FieldNames, WhereClauseFormat, BoundsSQLWhere);
+  result := fOrm.MultiFieldValues(Table, FieldNames, WhereClauseFormat, BoundsSqlWhere);
 end;
 
 function TRest.MultiFieldValues(Table: TOrmClass;
-  const FieldNames: RawUTF8; const WhereClauseFormat: RawUTF8;
+  const FieldNames: RawUtf8; const WhereClauseFormat: RawUtf8;
   const Args, Bounds: array of const): TOrmTable;
 begin
   result := fOrm.MultiFieldValues(Table, FieldNames, WhereClauseFormat, Args, Bounds);
 end;
 
 function TRest.FTSMatch(Table: TOrmFts3Class;
-  const WhereClause: RawUTF8; var DocID: TIDDynArray): boolean;
+  const WhereClause: RawUtf8; var DocID: TIDDynArray): boolean;
 begin
   result := fOrm.FTSMatch(Table, WhereClause, DocID);
 end;
 
 function TRest.FTSMatch(Table: TOrmFts3Class;
-  const MatchClause: RawUTF8; var DocID: TIDDynArray;
+  const MatchClause: RawUtf8; var DocID: TIDDynArray;
   const PerFieldWeight: array of double; limit, offset: integer): boolean;
 begin
   result := fOrm.FTSMatch(Table, MatchClause, DocID, PerFieldWeight, limit, offset);
 end;
 
 function TRest.MainFieldValue(Table: TOrmClass; ID: TID;
-  ReturnFirstIfNoUnique: boolean): RawUTF8;
+  ReturnFirstIfNoUnique: boolean): RawUtf8;
 begin
   result := fOrm.MainFieldValue(Table, ID, ReturnFirstIfNoUnique);
 end;
 
-function TRest.MainFieldID(Table: TOrmClass; const Value: RawUTF8): TID;
+function TRest.MainFieldID(Table: TOrmClass; const Value: RawUtf8): TID;
 begin
   result := fOrm.MainFieldID(Table, Value);
 end;
 
 function TRest.MainFieldIDs(Table: TOrmClass;
-  const Values: array of RawUTF8; out IDs: TIDDynArray): boolean;
+  const Values: array of RawUtf8; out IDs: TIDDynArray): boolean;
 begin
   result := fOrm.MainFieldIDs(Table, Values, IDs);
 end;
 
-function TRest.Retrieve(const SQLWhere: RawUTF8; Value: TOrm;
-  const aCustomFieldsCSV: RawUTF8): boolean;
+function TRest.Retrieve(const SqlWhere: RawUtf8; Value: TOrm;
+  const aCustomFieldsCsv: RawUtf8): boolean;
 begin
-  result := fOrm.Retrieve(SQLWhere, Value, aCustomFieldsCSV);
+  result := fOrm.Retrieve(SqlWhere, Value, aCustomFieldsCsv);
 end;
 
-function TRest.Retrieve(const WhereClauseFmt: RawUTF8;
+function TRest.Retrieve(const WhereClauseFmt: RawUtf8;
   const Args, Bounds: array of const; Value: TOrm;
-  const aCustomFieldsCSV: RawUTF8): boolean;
+  const aCustomFieldsCsv: RawUtf8): boolean;
 begin
-  result := fOrm.Retrieve(WhereClauseFmt, Args, Bounds, Value, aCustomFieldsCSV);
+  result := fOrm.Retrieve(WhereClauseFmt, Args, Bounds, Value, aCustomFieldsCsv);
 end;
 
 function TRest.Retrieve(aID: TID; Value: TOrm; ForUpdate: boolean): boolean;
@@ -2176,92 +2179,92 @@ begin
 end;
 
 function TRest.RetrieveList(Table: TOrmClass;
-  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
-  const aCustomFieldsCSV: RawUTF8): TObjectList;
+  const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
+  const aCustomFieldsCsv: RawUtf8): TObjectList;
 begin
-  result := fOrm.RetrieveList(Table, FormatSQLWhere, BoundsSQLWhere, aCustomFieldsCSV);
+  result := fOrm.RetrieveList(Table, FormatSqlWhere, BoundsSqlWhere, aCustomFieldsCsv);
 end;
 
 {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
 
-function TRest.RetrieveList<T>(const aCustomFieldsCSV: RawUTF8): TObjectList<T>;
+function TRest.RetrieveList<T>(const aCustomFieldsCsv: RawUtf8): TObjectList<T>;
 begin
-  result := fOrm.Generics.RetrieveList<T>(aCustomFieldsCSV);
+  result := fOrm.Generics.RetrieveList<T>(aCustomFieldsCsv);
 end;
 
-function TRest.RetrieveList<T>(const FormatSQLWhere: RawUTF8;
-  const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8): TObjectList<T>;
+function TRest.RetrieveList<T>(const FormatSqlWhere: RawUtf8;
+  const BoundsSqlWhere: array of const; const aCustomFieldsCsv: RawUtf8): TObjectList<T>;
 begin
-  result := fOrm.Generics.RetrieveList<T>(FormatSQLWhere, BoundsSQLWhere, aCustomFieldsCSV);
+  result := fOrm.Generics.RetrieveList<T>(FormatSqlWhere, BoundsSqlWhere, aCustomFieldsCsv);
 end;
 
 {$endif ISDELPHI2010}
 
-function TRest.RetrieveListJSON(Table: TOrmClass;
-  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
-  const aCustomFieldsCSV: RawUTF8; aForceAJAX: boolean): RawJSON;
+function TRest.RetrieveListJson(Table: TOrmClass;
+  const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
+  const aCustomFieldsCsv: RawUtf8; aForceAjax: boolean): RawJson;
 begin
-  result := fOrm.RetrieveListJSON(Table, FormatSQLWhere, BoundsSQLWhere,
-    aCustomFieldsCSV, aForceAJAX);
+  result := fOrm.RetrieveListJson(Table, FormatSqlWhere, BoundsSqlWhere,
+    aCustomFieldsCsv, aForceAjax);
 end;
 
-function TRest.RetrieveListJSON(Table: TOrmClass;
-  const SQLWhere: RawUTF8; const aCustomFieldsCSV: RawUTF8;
-  aForceAJAX: boolean): RawJSON;
+function TRest.RetrieveListJson(Table: TOrmClass;
+  const SqlWhere: RawUtf8; const aCustomFieldsCsv: RawUtf8;
+  aForceAjax: boolean): RawJson;
 begin
-  result := fOrm.RetrieveListJSON(Table, SQLWhere, aCustomFieldsCSV, aForceAJAX);
+  result := fOrm.RetrieveListJson(Table, SqlWhere, aCustomFieldsCsv, aForceAjax);
 end;
 
 function TRest.RetrieveDocVariantArray(Table: TOrmClass;
-  const ObjectName, CustomFieldsCSV: RawUTF8;
+  const ObjectName, CustomFieldsCsv: RawUtf8;
   FirstRecordID: PID; LastRecordID: PID): variant;
 begin
-  result := fOrm.RetrieveDocVariantArray(Table, ObjectName, CustomFieldsCSV,
+  result := fOrm.RetrieveDocVariantArray(Table, ObjectName, CustomFieldsCsv,
     FirstRecordID, LastRecordID);
 end;
 
 function TRest.RetrieveDocVariantArray(Table: TOrmClass;
-  const ObjectName: RawUTF8; const FormatSQLWhere: RawUTF8; const BoundsSQLWhere:
-  array of const; const CustomFieldsCSV: RawUTF8; FirstRecordID: PID;
+  const ObjectName: RawUtf8; const FormatSqlWhere: RawUtf8; const BoundsSqlWhere:
+  array of const; const CustomFieldsCsv: RawUtf8; FirstRecordID: PID;
   LastRecordID: PID): variant;
 begin
-  result := fOrm.RetrieveDocVariantArray(Table, ObjectName, FormatSQLWhere,
-    BoundsSQLWhere, CustomFieldsCSV, FirstRecordID, LastRecordID);
+  result := fOrm.RetrieveDocVariantArray(Table, ObjectName, FormatSqlWhere,
+    BoundsSqlWhere, CustomFieldsCsv, FirstRecordID, LastRecordID);
 end;
 
 function TRest.RetrieveOneFieldDocVariantArray(Table: TOrmClass;
-  const FieldName, FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): variant;
+  const FieldName, FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const): variant;
 begin
   result := fOrm.RetrieveOneFieldDocVariantArray(Table, FieldName,
-    FormatSQLWhere, BoundsSQLWhere);
+    FormatSqlWhere, BoundsSqlWhere);
 end;
 
 function TRest.RetrieveDocVariant(Table: TOrmClass;
-  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
-  const CustomFieldsCSV: RawUTF8): variant;
+  const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
+  const CustomFieldsCsv: RawUtf8): variant;
 begin
-  result := fOrm.RetrieveDocVariant(Table, FormatSQLWhere, BoundsSQLWhere,
-    CustomFieldsCSV);
+  result := fOrm.RetrieveDocVariant(Table, FormatSqlWhere, BoundsSqlWhere,
+    CustomFieldsCsv);
 end;
 
 function TRest.RetrieveListObjArray(var ObjArray; Table: TOrmClass;
-  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
-  const aCustomFieldsCSV: RawUTF8): boolean;
+  const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
+  const aCustomFieldsCsv: RawUtf8): boolean;
 begin
-  result := fOrm.RetrieveListObjArray(ObjArray, Table, FormatSQLWhere,
-    BoundsSQLWhere, aCustomFieldsCSV);
+  result := fOrm.RetrieveListObjArray(ObjArray, Table, FormatSqlWhere,
+    BoundsSqlWhere, aCustomFieldsCsv);
 end;
 
 procedure TRest.AppendListAsJsonArray(Table: TOrmClass;
-  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
-  const OutputFieldName: RawUTF8; W: TJSONSerializer; const CustomFieldsCSV: RawUTF8);
+  const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const;
+  const OutputFieldName: RawUtf8; W: TJsonSerializer; const CustomFieldsCsv: RawUtf8);
 begin
-  fOrm.AppendListAsJsonArray(Table, FormatSQLWhere, BoundsSQLWhere,
-    OutputFieldName, W, CustomFieldsCSV);
+  fOrm.AppendListAsJsonArray(Table, FormatSqlWhere, BoundsSqlWhere,
+    OutputFieldName, W, CustomFieldsCsv);
 end;
 
 function TRest.RTreeMatch(DataTable: TOrmClass;
-  const DataTableBlobFieldName: RawUTF8; RTreeTable: TOrmRTreeClass;
+  const DataTableBlobFieldName: RawUtf8; RTreeTable: TOrmRTreeClass;
   const DataTableBlobField: RawByteString; var DataID: TIDDynArray): boolean;
 begin
   result := fOrm.RTreeMatch(DataTable, DataTableBlobFieldName, RTreeTable,
@@ -2269,32 +2272,32 @@ begin
 end;
 
 function TRest.ExecuteList(const Tables: array of TOrmClass;
-  const SQL: RawUTF8): TOrmTable;
+  const SQL: RawUtf8): TOrmTable;
 begin
   result := fOrm.ExecuteList(Tables, SQL);
 end;
 
 function TRest.ExecuteJson(const Tables: array of TOrmClass;
-  const SQL: RawUTF8; ForceAJAX: boolean; ReturnedRowCount: PPtrInt): RawJSON;
+  const SQL: RawUtf8; ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawJson;
 begin
-  result := fOrm.ExecuteJson(Tables, SQL, ForceAJAX, ReturnedRowCount);
+  result := fOrm.ExecuteJson(Tables, SQL, ForceAjax, ReturnedRowCount);
 end;
 
-function TRest.Execute(const aSQL: RawUTF8): boolean;
+function TRest.Execute(const aSql: RawUtf8): boolean;
 begin
-  result := fOrm.Execute(aSQL);
+  result := fOrm.Execute(aSql);
 end;
 
-function TRest.ExecuteFmt(const SQLFormat: RawUTF8;
+function TRest.ExecuteFmt(const SqlFormat: RawUtf8;
   const Args: array of const): boolean;
 begin
-  result := fOrm.ExecuteFmt(SQLFormat, Args);
+  result := fOrm.ExecuteFmt(SqlFormat, Args);
 end;
 
-function TRest.ExecuteFmt(const SQLFormat: RawUTF8;
+function TRest.ExecuteFmt(const SqlFormat: RawUtf8;
   const Args, Bounds: array of const): boolean;
 begin
-  result := fOrm.ExecuteFmt(SQLFormat, Args, Bounds);
+  result := fOrm.ExecuteFmt(SqlFormat, Args, Bounds);
 end;
 
 function TRest.UnLock(Table: TOrmClass; aID: TID): boolean;
@@ -2313,10 +2316,10 @@ begin
   result := fOrm.Add(Value, SendData, ForceID, DoNotAutoComputeFields);
 end;
 
-function TRest.Add(Value: TOrm; const CustomCSVFields: RawUTF8;
+function TRest.Add(Value: TOrm; const CustomCsvFields: RawUtf8;
   ForceID: boolean; DoNotAutoComputeFields: boolean): TID;
 begin
-  result := fOrm.Add(Value, CustomCSVFields, ForceID, DoNotAutoComputeFields);
+  result := fOrm.Add(Value, CustomCsvFields, ForceID, DoNotAutoComputeFields);
 end;
 
 function TRest.Add(Value: TOrm; const CustomFields: TFieldBits;
@@ -2343,10 +2346,10 @@ begin
   result := fOrm.Update(Value, CustomFields, DoNotAutoComputeFields);
 end;
 
-function TRest.Update(Value: TOrm; const CustomCSVFields: RawUTF8;
+function TRest.Update(Value: TOrm; const CustomCsvFields: RawUtf8;
   DoNotAutoComputeFields: boolean): boolean;
 begin
-  result := fOrm.Update(Value, CustomCSVFields, DoNotAutoComputeFields);
+  result := fOrm.Update(Value, CustomCsvFields, DoNotAutoComputeFields);
 end;
 
 function TRest.Update(aTable: TOrmClass; aID: TID;
@@ -2361,47 +2364,47 @@ begin
 end;
 
 function TRest.UpdateField(Table: TOrmClass; ID: TID;
-  const FieldName: RawUTF8; const FieldValue: array of const): boolean;
+  const FieldName: RawUtf8; const FieldValue: array of const): boolean;
 begin
   result := fOrm.UpdateField(Table, ID, FieldName, FieldValue);
 end;
 
 function TRest.UpdateField(Table: TOrmClass;
-  const WhereFieldName: RawUTF8; const WhereFieldValue: array of const;
-  const FieldName: RawUTF8; const FieldValue: array of const): boolean;
+  const WhereFieldName: RawUtf8; const WhereFieldValue: array of const;
+  const FieldName: RawUtf8; const FieldValue: array of const): boolean;
 begin
   result := fOrm.UpdateField(Table, WhereFieldName, WhereFieldValue, FieldName,
     FieldValue);
 end;
 
 function TRest.UpdateField(Table: TOrmClass; ID: TID;
-  const FieldName: RawUTF8; const FieldValue: variant): boolean;
+  const FieldName: RawUtf8; const FieldValue: variant): boolean;
 begin
   result := fOrm.UpdateField(Table, ID, FieldName, FieldValue);
 end;
 
 function TRest.UpdateField(Table: TOrmClass;
-  const WhereFieldName: RawUTF8; const WhereFieldValue: variant;
-  const FieldName: RawUTF8; const FieldValue: variant): boolean;
+  const WhereFieldName: RawUtf8; const WhereFieldValue: variant;
+  const FieldName: RawUtf8; const FieldValue: variant): boolean;
 begin
   result := fOrm.UpdateField(Table, WhereFieldName, WhereFieldValue, FieldName,
     FieldValue);
 end;
 
 function TRest.UpdateField(Table: TOrmClass; const IDs: array of Int64;
-  const FieldName: RawUTF8; const FieldValue: variant): boolean;
+  const FieldName: RawUtf8; const FieldValue: variant): boolean;
 begin
   result := fOrm.UpdateField(Table, IDs, FieldName, FieldValue);
 end;
 
 function TRest.UpdateFieldIncrement(Table: TOrmClass; ID: TID;
-  const FieldName: RawUTF8; Increment: Int64): boolean;
+  const FieldName: RawUtf8; Increment: Int64): boolean;
 begin
   result := fOrm.UpdateFieldIncrement(Table, ID, FieldName, Increment);
 end;
 
 function TRest.RecordCanBeUpdated(Table: TOrmClass; ID: TID;
-  Action: TOrmEvent; ErrorMsg: PRawUTF8): boolean;
+  Action: TOrmEvent; ErrorMsg: PRawUtf8): boolean;
 begin
   result := fOrm.RecordCanBeUpdated(Table, ID, Action, ErrorMsg);
 end;
@@ -2411,43 +2414,43 @@ begin
   result := fOrm.Delete(Table, ID);
 end;
 
-function TRest.Delete(Table: TOrmClass; const SQLWhere: RawUTF8): boolean;
+function TRest.Delete(Table: TOrmClass; const SqlWhere: RawUtf8): boolean;
 begin
-  result := fOrm.Delete(Table, SQLWhere);
+  result := fOrm.Delete(Table, SqlWhere);
 end;
 
-function TRest.Delete(Table: TOrmClass; const FormatSQLWhere: RawUTF8;
-  const BoundsSQLWhere: array of const): boolean;
+function TRest.Delete(Table: TOrmClass; const FormatSqlWhere: RawUtf8;
+  const BoundsSqlWhere: array of const): boolean;
 begin
-  result := fOrm.Delete(Table, FormatSQLWhere, BoundsSQLWhere);
+  result := fOrm.Delete(Table, FormatSqlWhere, BoundsSqlWhere);
 end;
 
 function TRest.RetrieveBlob(Table: TOrmClass; aID: TID;
-  const BlobFieldName: RawUTF8; out BlobData: RawBlob): boolean;
+  const BlobFieldName: RawUtf8; out BlobData: RawBlob): boolean;
 begin
   result := fOrm.RetrieveBlob(Table, aID, BlobFieldName, BlobData);
 end;
 
 function TRest.RetrieveBlob(Table: TOrmClass; aID: TID;
-  const BlobFieldName: RawUTF8; out BlobStream: TCustomMemoryStream): boolean;
+  const BlobFieldName: RawUtf8; out BlobStream: TCustomMemoryStream): boolean;
 begin
   result := fOrm.RetrieveBlob(Table, aID, BlobFieldName, BlobStream);
 end;
 
 function TRest.UpdateBlob(Table: TOrmClass; aID: TID;
-  const BlobFieldName: RawUTF8; const BlobData: RawBlob): boolean;
+  const BlobFieldName: RawUtf8; const BlobData: RawBlob): boolean;
 begin
   result := fOrm.UpdateBlob(Table, aID, BlobFieldName, BlobData);
 end;
 
 function TRest.UpdateBlob(Table: TOrmClass; aID: TID;
-  const BlobFieldName: RawUTF8; BlobData: TStream): boolean;
+  const BlobFieldName: RawUtf8; BlobData: TStream): boolean;
 begin
   result := fOrm.UpdateBlob(Table, aID, BlobFieldName, BlobData);
 end;
 
 function TRest.UpdateBlob(Table: TOrmClass; aID: TID;
-  const BlobFieldName: RawUTF8; BlobData: pointer; BlobSize: integer): boolean;
+  const BlobFieldName: RawUtf8; BlobData: pointer; BlobSize: integer): boolean;
 begin
   result := fOrm.UpdateBlob(Table, aID, BlobFieldName, BlobData, BlobSize);
 end;
@@ -2502,47 +2505,47 @@ begin
   result := fOrm.BatchSend(Batch);
 end;
 
-function TRest.AsynchBatchStart(Table: TOrmClass;
+function TRest.AsyncBatchStart(Table: TOrmClass;
   SendSeconds: integer; PendingRowThreshold: integer;
   AutomaticTransactionPerRow: integer; Options: TRestBatchOptions): boolean;
 begin
-  result := fOrm.AsynchBatchStart(Table, SendSeconds, PendingRowThreshold,
+  result := fOrm.AsyncBatchStart(Table, SendSeconds, PendingRowThreshold,
     AutomaticTransactionPerRow, Options);
 end;
 
-function TRest.AsynchBatchStop(Table: TOrmClass): boolean;
+function TRest.AsyncBatchStop(Table: TOrmClass): boolean;
 begin
-  result := fOrm.AsynchBatchStop(Table);
+  result := fOrm.AsyncBatchStop(Table);
 end;
 
-function TRest.AsynchBatchAdd(Value: TOrm; SendData: boolean;
+function TRest.AsyncBatchAdd(Value: TOrm; SendData: boolean;
   ForceID: boolean; const CustomFields: TFieldBits;
   DoNotAutoComputeFields: boolean): integer;
 begin
-  result := fOrm.AsynchBatchAdd(Value, SendData, ForceID, CustomFields,
+  result := fOrm.AsyncBatchAdd(Value, SendData, ForceID, CustomFields,
     DoNotAutoComputeFields);
 end;
 
-function TRest.AsynchBatchRawAdd(Table: TOrmClass;
-  const SentData: RawUTF8): integer;
+function TRest.AsyncBatchRawAdd(Table: TOrmClass;
+  const SentData: RawUtf8): integer;
 begin
-  result := fOrm.AsynchBatchRawAdd(Table, SentData);
+  result := fOrm.AsyncBatchRawAdd(Table, SentData);
 end;
 
-procedure TRest.AsynchBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
+procedure TRest.AsyncBatchRawAppend(Table: TOrmClass; SentData: TTextWriter);
 begin
-  fOrm.AsynchBatchRawAppend(Table, SentData);
+  fOrm.AsyncBatchRawAppend(Table, SentData);
 end;
 
-function TRest.AsynchBatchUpdate(Value: TOrm;
+function TRest.AsyncBatchUpdate(Value: TOrm;
   const CustomFields: TFieldBits; DoNotAutoComputeFields: boolean): integer;
 begin
-  result := fOrm.AsynchBatchUpdate(Value, CustomFields, DoNotAutoComputeFields);
+  result := fOrm.AsyncBatchUpdate(Value, CustomFields, DoNotAutoComputeFields);
 end;
 
-function TRest.AsynchBatchDelete(Table: TOrmClass; ID: TID): integer;
+function TRest.AsyncBatchDelete(Table: TOrmClass; ID: TID): integer;
 begin
-  result := fOrm.AsynchBatchDelete(Table, ID);
+  result := fOrm.AsyncBatchDelete(Table, ID);
 end;
 
 function TRest.Cache: TRestCache;
@@ -2571,7 +2574,7 @@ begin
     result := fRun.EnsureBackgroundTimerExists;
 end;
 
-function TRest.NewBackgroundThreadMethod(const Format: RawUTF8;
+function TRest.NewBackgroundThreadMethod(const Format: RawUtf8;
    const Args: array of const): TSynBackgroundThreadMethod;
 begin
   if self = nil then
@@ -2580,7 +2583,7 @@ begin
     result := fRun.NewBackgroundThreadMethod(Format, Args);
 end;
 
-function TRest.NewParallelProcess(ThreadCount: integer; const Format: RawUTF8;
+function TRest.NewParallelProcess(ThreadCount: integer; const Format: RawUtf8;
   const Args: array of const): TSynParallelProcess;
 begin
   if self = nil then
@@ -2591,7 +2594,7 @@ end;
 
 function TRest.NewBackgroundThreadProcess(
   const aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
-  const Format: RawUTF8; const Args: array of const;
+  const Format: RawUtf8; const Args: array of const;
   aStats: TSynMonitorClass): TSynBackgroundThreadProcess;
 begin
   if self = nil then
@@ -2638,39 +2641,39 @@ begin
     fRun.EndCurrentThread(Sender);
 end;
 
-procedure TRest.AsynchRedirect(const aGUID: TGUID;
+procedure TRest.AsyncRedirect(const aGuid: TGUID;
   const aDestinationInterface: IInvokable; out aCallbackInterface;
-  const aOnResult: TOnAsynchRedirectResult);
+  const aOnResult: TOnAsyncRedirectResult);
 begin
   if self <> nil then
-    fRun.AsynchRedirect(
-      aGUID, aDestinationInterface, aCallbackInterface, aOnResult);
+    fRun.AsyncRedirect(
+      aGuid, aDestinationInterface, aCallbackInterface, aOnResult);
 end;
 
-procedure TRest.AsynchRedirect(const aGUID: TGUID;
+procedure TRest.AsyncRedirect(const aGuid: TGUID;
   const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
-  const aOnResult: TOnAsynchRedirectResult);
+  const aOnResult: TOnAsyncRedirectResult);
 begin
   if self <> nil then
-    fRun.AsynchRedirect(
-      aGUID, aDestinationInstance, aCallbackInterface, aOnResult);
+    fRun.AsyncRedirect(
+      aGuid, aDestinationInstance, aCallbackInterface, aOnResult);
 end;
 
-procedure TRest.AsynchInterning(Interning: TRawUTF8Interning;
+procedure TRest.AsyncInterning(Interning: TRawUtf8Interning;
   InterningMaxRefCount, PeriodMinutes: integer);
 begin
   if self <> nil then
-    fRun.AsynchInterning(
+    fRun.AsyncInterning(
       Interning, InterningMaxRefCount, PeriodMinutes);
 end;
 
-function TRest.MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
+function TRest.MultiRedirect(const aGuid: TGUID; out aCallbackInterface;
   aCallBackUnRegisterNeeded: boolean): IMultiCallbackRedirect;
 begin
   if self = nil then
     result := nil
   else
-    result := fRun.MultiRedirect(aGUID, aCallbackInterface,
+    result := fRun.MultiRedirect(aGuid, aCallbackInterface,
       aCallBackUnRegisterNeeded);
 end;
 
@@ -2686,57 +2689,57 @@ end;
 {$endif PUREMORMOT2}
 
 
-function ToText(cmd: TRestServerURIContextCommand): PShortString;
+function ToText(cmd: TRestServerUriContextCommand): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TRestServerURIContextCommand), ord(cmd));
+  result := GetEnumName(TypeInfo(TRestServerUriContextCommand), ord(cmd));
 end;
 
 
-{ TInterfacedObjectAsynch }
+{ TInterfacedObjectAsync }
 
 type
-  TInterfacedObjectAsynch = class(TInterfacedObjectFakeCallback)
+  TInterfacedObjectAsync = class(TInterfacedObjectFakeCallback)
   protected
     fTimer: TRestBackgroundTimer;
     fDest: IInvokable;
-    fOnResult: TOnAsynchRedirectResult;
-    function FakeInvoke(const aMethod: TInterfaceMethod; const aParams: RawUTF8;
-      aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
+    fOnResult: TOnAsyncRedirectResult;
+    function FakeInvoke(const aMethod: TInterfaceMethod; const aParams: RawUtf8;
+      aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean; override;
   public
     constructor Create(aTimer: TRestBackgroundTimer; aFactory:
       TInterfaceFactory; const aDestinationInterface: IInvokable; out
-      aCallbackInterface; const aOnResult: TOnAsynchRedirectResult);
+      aCallbackInterface; const aOnResult: TOnAsyncRedirectResult);
   end;
 
-  TInterfacedObjectAsynchCall = packed record
+  TInterfacedObjectAsyncCall = packed record
     Method: PInterfaceMethod;
     Instance: pointer; // weak IInvokable reference
-    Params: RawUTF8;
-    OnOutputParamsCopy: RawUTF8;
-    OnOutput: TOnAsynchRedirectResult;
+    Params: RawUtf8;
+    OnOutputParamsCopy: RawUtf8;
+    OnOutput: TOnAsyncRedirectResult;
   end;
 
-constructor TInterfacedObjectAsynch.Create(aTimer: TRestBackgroundTimer;
+constructor TInterfacedObjectAsync.Create(aTimer: TRestBackgroundTimer;
   aFactory: TInterfaceFactory; const aDestinationInterface: IInvokable;
-  out aCallbackInterface; const aOnResult: TOnAsynchRedirectResult);
+  out aCallbackInterface; const aOnResult: TOnAsyncRedirectResult);
 begin
   fTimer := aTimer;
   fLogClass := fTimer.fRest.fLogClass;
   fName := fTimer.fThreadName;
   fDest := aDestinationInterface;
   fOnResult := aOnResult;
-  inherited Create(aFactory, nil, [ifoJsonAsExtended, ifoDontStoreVoidJSON],
+  inherited Create(aFactory, nil, [ifoJsonAsExtended, ifoDontStoreVoidJson],
     FakeInvoke, nil);
   Get(aCallbackInterface);
 end;
 
-function TInterfacedObjectAsynch.FakeInvoke(const aMethod: TInterfaceMethod;
-  const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
+function TInterfacedObjectAsync.FakeInvoke(const aMethod: TInterfaceMethod;
+  const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
   aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 var
-  msg: RawUTF8;
-  call: TInterfacedObjectAsynchCall;
+  msg: RawUtf8;
+  call: TInterfacedObjectAsyncCall;
 begin
   result := inherited FakeInvoke(aMethod, aParams, aResult, aErrorMsg,
     aClientDrivenID, aServiceCustomAnswer);
@@ -2752,8 +2755,8 @@ begin
   end
   else
     call.OnOutput := nil;
-  msg := BinarySave(@call, TypeInfo(TInterfacedObjectAsynchCall), [rkRecord]);
-  result := fTimer.EnQueue(fTimer.AsynchBackgroundExecute, msg, true);
+  msg := BinarySave(@call, TypeInfo(TInterfacedObjectAsyncCall), [rkRecord]);
+  result := fTimer.EnQueue(fTimer.AsyncBackgroundExecute, msg, true);
 end;
 
 
@@ -2762,34 +2765,34 @@ end;
 { TRestBackgroundTimer }
 
 constructor TRestBackgroundTimer.Create(aRest: TRest;
-  const aThreadName: RawUTF8; aStats: TSynMonitorClass);
+  const aThreadName: RawUtf8; aStats: TSynMonitorClass);
 var
-  aName: RawUTF8;
+  aName: RawUtf8;
 begin
   if aRest = nil then
-    raise ERestException.CreateUTF8('%.Create(aRest=nil,"%")', [self, aThreadName]);
+    raise ERestException.CreateUtf8('%.Create(aRest=nil,"%")', [self, aThreadName]);
   fRest := aRest;
   if aThreadName <> '' then
     aName := aThreadName
   else
-    FormatUTF8('% %', [fRest.Model.Root, ClassType], aName);
+    FormatUtf8('% %', [fRest.Model.Root, ClassType], aName);
   inherited Create(aName,
     fRest.fRun.BeginCurrentThread, fRest.fRun.EndCurrentThread, aStats);
 end;
 
 destructor TRestBackgroundTimer.Destroy;
 begin
-  AsynchBatchStop(nil);
+  AsyncBatchStop(nil);
   inherited Destroy;
 end;
 
 procedure TRestBackgroundTimer.SystemUseBackgroundExecute(
-  Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUTF8);
+  Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUtf8);
 begin
   TSystemUse.Current({createifnone=}false).OnTimerExecute(Sender);
 end;
 
-function TRestBackgroundTimer.AsynchBatchIndex(aTable: TOrmClass): PtrInt;
+function TRestBackgroundTimer.AsyncBatchIndex(aTable: TOrmClass): PtrInt;
 begin
   if (self = nil) or
      (fBackgroundBatch = nil) then
@@ -2803,12 +2806,12 @@ begin
   end;
 end;
 
-function TRestBackgroundTimer.AsynchBatchLocked(aTable: TOrmClass;
+function TRestBackgroundTimer.AsyncBatchLocked(aTable: TOrmClass;
   out aBatch: TRestBatchLocked): boolean;
 var
   b: PtrInt;
 begin
-  b := AsynchBatchIndex(aTable);
+  b := AsyncBatchIndex(aTable);
   if b >= 0 then
   begin
     aBatch := fBackgroundBatch[b];
@@ -2819,26 +2822,26 @@ begin
     result := false;
 end;
 
-procedure TRestBackgroundTimer.AsynchBatchUnLock(aBatch: TRestBatchLocked);
+procedure TRestBackgroundTimer.AsyncBatchUnLock(aBatch: TRestBatchLocked);
 begin
   try
     if aBatch.Count >= aBatch.Threshold then
-      ExecuteNow(AsynchBatchExecute);
+      ExecuteNow(AsyncBatchExecute);
   finally
     aBatch.Safe.UnLock;
   end;
 end;
 
-procedure TRestBackgroundTimer.AsynchBatchExecute(Sender: TSynBackgroundTimer;
-  Event: TWaitResult; const Msg: RawUTF8);
+procedure TRestBackgroundTimer.AsyncBatchExecute(Sender: TSynBackgroundTimer;
+  Event: TWaitResult; const Msg: RawUtf8);
 var
-  json, tablename: RawUTF8;
+  json, tablename: RawUtf8;
   batch: TRestBatchLocked;
   table: TOrmClass;
   b: PtrInt;
   count, status: integer;
   res: TIDDynArray;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  log: ISynLog; // for Enter auto-leave to work with FPC /Delphi 10.4+
 begin
   try
     // send any pending json
@@ -2857,7 +2860,7 @@ begin
         try
           if ({%H-}log = nil) and
              (fRest.fLogClass <> nil) then
-            log := fRest.fLogClass.Enter('AsynchBatchExecute % count=%',
+            log := fRest.fLogClass.Enter('AsyncBatchExecute % count=%',
               [table, count], self);
           batch.PrepareForSending(json);
         finally
@@ -2871,26 +2874,26 @@ begin
       try
         // json layout is '{"Table":["cmd":values,...]}'
         status := fRest.ORM.BatchSend(table, json, res, count); // may take a while
-        fRest.InternalLog('AsynchBatchExecute % EngineBatchSend=%',
+        fRest.InternalLog('AsyncBatchExecute % EngineBatchSend=%',
           [table, status]);
       except
         on E: Exception do
-          fRest.InternalLog('% during AsynchBatchExecute %',
+          fRest.InternalLog('% during AsyncBatchExecute %',
             [E.ClassType, table], sllWarning);
       end;
     end;
   finally
     if IdemPChar(pointer(Msg), 'FREE@') then
     begin
-      // from AsynchBatchStop()
-      fRest.InternalLog('AsynchBatchExecute %', [Msg]);
+      // from AsyncBatchStop()
+      fRest.InternalLog('AsyncBatchExecute %', [Msg]);
       tablename := copy(Msg, 6, 127);
       if tablename = '' then
-        // AsynchBatchStop(nil)
+        // AsyncBatchStop(nil)
         ObjArrayClear(fBackgroundBatch, true)
       else
       begin
-        // AsynchBatchStop(table)
+        // AsyncBatchStop(table)
         b := fRest.Model.GetTableIndex(tablename);
         if b < length(fBackgroundBatch) then
           FreeAndNil(fBackgroundBatch[b]);
@@ -2899,7 +2902,7 @@ begin
   end;
 end;
 
-function TRestBackgroundTimer.AsynchBatchStart(Table: TOrmClass;
+function TRestBackgroundTimer.AsyncBatchStart(Table: TOrmClass;
   SendSeconds, PendingRowThreshold, AutomaticTransactionPerRow: integer;
   Options: TRestBatchOptions): boolean;
 var
@@ -2914,9 +2917,9 @@ begin
      (fBackgroundBatch[b] <> nil) then
     // already defined for this Table
     exit;
-  fRest.InternalLog('AsynchBatchStart(%,%,%)',
+  fRest.InternalLog('AsyncBatchStart(%,%,%)',
     [Table, SendSeconds, PendingRowThreshold], sllDebug);
-  Enable(AsynchBatchExecute, SendSeconds);
+  Enable(AsyncBatchExecute, SendSeconds);
   if fBackgroundBatch = nil then
     SetLength(fBackgroundBatch, fRest.Model.TablesMax + 1);
   fBackgroundBatch[b] := TRestBatchLocked.Create(
@@ -2925,35 +2928,35 @@ begin
   result := true;
 end;
 
-function TRestBackgroundTimer.AsynchBatchStop(Table: TOrmClass): boolean;
+function TRestBackgroundTimer.AsyncBatchStop(Table: TOrmClass): boolean;
 var
   b: PtrInt;
   timeout: Int64;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  log: ISynLog;
 begin
   result := false;
   if (self = nil) or
      (fBackgroundBatch = nil) then
     exit;
-  log := fRest.fLogClass.Enter('AsynchBatchStop(%)', [Table], self);
+  log := fRest.fLogClass.Enter('AsyncBatchStop(%)', [Table], self);
   timeout := mormot.core.os.GetTickCount64 + 5000;
   if Table = nil then
   begin
     // as called from TRest.Destroy
-    if not EnQueue(AsynchBatchExecute, 'free@', true) then
+    if not EnQueue(AsyncBatchExecute, 'free@', true) then
       exit;
     repeat
       SleepHiRes(1); // wait for all batchs to be released
     until (fBackgroundBatch = nil) or
           (mormot.core.os.GetTickCount64 > timeout);
-    result := Disable(AsynchBatchExecute);
+    result := Disable(AsyncBatchExecute);
   end
   else
   begin
     // wait for regular TRestBatch process
-    b := AsynchBatchIndex(Table);
+    b := AsyncBatchIndex(Table);
     if (b < 0) or
-       not EnQueue(AsynchBatchExecute, 'free@' + Table.SQLTableName, true) then
+       not EnQueue(AsyncBatchExecute, 'free@' + Table.SqlTableName, true) then
       exit;
     repeat
       SleepHiRes(1); // wait for all pending rows to be sent
@@ -2963,14 +2966,14 @@ begin
       result := true
     else
     begin
-      result := Disable(AsynchBatchExecute);
+      result := Disable(AsyncBatchExecute);
       if result then
         ObjArrayClear(fBackgroundBatch, true);
     end;
   end;
 end;
 
-function TRestBackgroundTimer.AsynchBatchAdd(Value: TOrm;
+function TRestBackgroundTimer.AsyncBatchAdd(Value: TOrm;
   SendData, ForceID: boolean; const CustomFields: TFieldBits;
   DoNotAutoComputeFields: boolean): integer;
 var
@@ -2981,17 +2984,17 @@ begin
      (fBackgroundBatch = nil) or
      (Value = nil) then
     exit;
-  fRest.InternalLog('AsynchBatchAdd %', [Value], sllDebug);
-  if AsynchBatchLocked(Value.RecordClass, b) then
+  fRest.InternalLog('AsyncBatchAdd %', [Value], sllDebug);
+  if AsyncBatchLocked(Value.RecordClass, b) then
   try
     result := b.Add(Value, SendData, ForceID, CustomFields, DoNotAutoComputeFields);
   finally
-    AsynchBatchUnLock(b);
+    AsyncBatchUnLock(b);
   end;
 end;
 
-function TRestBackgroundTimer.AsynchBatchRawAdd(Table: TOrmClass;
-  const SentData: RawUTF8): integer;
+function TRestBackgroundTimer.AsyncBatchRawAdd(Table: TOrmClass;
+  const SentData: RawUtf8): integer;
 var
   b: TRestBatchLocked;
 begin
@@ -3000,16 +3003,16 @@ begin
      (fBackgroundBatch = nil) or
      (Table = nil) then
     exit;
-  fRest.InternalLog('AsynchBatchRawAdd % %', [Table, SentData], sllDebug);
-  if AsynchBatchLocked(Table, b) then
+  fRest.InternalLog('AsyncBatchRawAdd % %', [Table, SentData], sllDebug);
+  if AsyncBatchLocked(Table, b) then
   try
     result := b.RawAdd(SentData);
   finally
-    AsynchBatchUnLock(b);
+    AsyncBatchUnLock(b);
   end;
 end;
 
-procedure TRestBackgroundTimer.AsynchBatchRawAppend(Table: TOrmClass;
+procedure TRestBackgroundTimer.AsyncBatchRawAppend(Table: TOrmClass;
   SentData: TTextWriter);
 var
   b: TRestBatchLocked;
@@ -3019,16 +3022,16 @@ begin
      (Table = nil) or
      (SentData = nil) then
     exit;
-  fRest.InternalLog('AsynchBatchRawAppend %', [Table], sllDebug);
-  if AsynchBatchLocked(Table, b) then
+  fRest.InternalLog('AsyncBatchRawAppend %', [Table], sllDebug);
+  if AsyncBatchLocked(Table, b) then
   try
-    b.RawAppend.AddNoJSONEscape(SentData);
+    b.RawAppend.AddNoJsonEscape(SentData);
   finally
-    AsynchBatchUnLock(b);
+    AsyncBatchUnLock(b);
   end;
 end;
 
-function TRestBackgroundTimer.AsynchBatchUpdate(Value: TOrm;
+function TRestBackgroundTimer.AsyncBatchUpdate(Value: TOrm;
   const CustomFields: TFieldBits; DoNotAutoComputeFields: boolean): integer;
 var
   b: TRestBatchLocked;
@@ -3038,16 +3041,16 @@ begin
      (fBackgroundBatch = nil) or
      (Value = nil) then
     exit;
-  fRest.InternalLog('AsynchBatchUpdate %', [Value], sllDebug);
-  if AsynchBatchLocked(Value.RecordClass, b) then
+  fRest.InternalLog('AsyncBatchUpdate %', [Value], sllDebug);
+  if AsyncBatchLocked(Value.RecordClass, b) then
   try
     result := b.Update(Value, CustomFields, DoNotAutoComputeFields);
   finally
-    AsynchBatchUnLock(b);
+    AsyncBatchUnLock(b);
   end;
 end;
 
-function TRestBackgroundTimer.AsynchBatchDelete(Table: TOrmClass;
+function TRestBackgroundTimer.AsyncBatchDelete(Table: TOrmClass;
   ID: TID): integer;
 var
   b: TRestBatchLocked;
@@ -3056,27 +3059,27 @@ begin
   if (self = nil) or
      (fBackgroundBatch = nil) then
     exit;
-  fRest.InternalLog('AsynchBatchDelete % %', [Table, ID], sllDebug);
-  if AsynchBatchLocked(Table, b) then
+  fRest.InternalLog('AsyncBatchDelete % %', [Table, ID], sllDebug);
+  if AsyncBatchLocked(Table, b) then
   try
     result := b.Delete(Table, ID);
   finally
-    AsynchBatchUnLock(b);
+    AsyncBatchUnLock(b);
   end;
 end;
 
-procedure TRestBackgroundTimer.AsynchBackgroundExecute(
-  Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUTF8);
+procedure TRestBackgroundTimer.AsyncBackgroundExecute(
+  Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUtf8);
 var
   exec: TInterfaceMethodExecute;
-  call: TInterfacedObjectAsynchCall;
-  o: PRawUTF8;
-  output: RawUTF8;
-  log: ISynLog; // for Enter auto-leave to work with FPC
+  call: TInterfacedObjectAsyncCall;
+  o: PRawUtf8;
+  output: RawUtf8;
+  log: ISynLog;
 begin
-  if not RecordLoad(call, Msg, TypeInfo(TInterfacedObjectAsynchCall)) then
+  if not RecordLoad(call, Msg, TypeInfo(TInterfacedObjectAsyncCall)) then
     exit; // invalid message (e.g. periodic execution)
-  log := fRest.fLogClass.Enter('AsynchBackgroundExecute % %',
+  log := fRest.fLogClass.Enter('AsyncBackgroundExecute % %',
     [call.Method^.InterfaceDotMethodName, call.Params], self);
   exec := TInterfaceMethodExecute.Create(call.Method);
   try
@@ -3085,7 +3088,7 @@ begin
     else
       o := nil;
     if not exec.ExecuteJsonCallback(call.Instance, call.Params, o) then
-      fRest.InternalLog('%.AsynchBackgroundExecute %: ExecuteJsonCallback failed',
+      fRest.InternalLog('%.AsyncBackgroundExecute %: ExecuteJsonCallback failed',
         [ClassType, call.Method^.InterfaceDotMethodName], sllWarning)
     else if o <> nil then
       call.OnOutput(call.Method^,
@@ -3095,41 +3098,41 @@ begin
   end;
 end;
 
-procedure TRestBackgroundTimer.AsynchRedirect(const aGUID: TGUID;
+procedure TRestBackgroundTimer.AsyncRedirect(const aGuid: TGUID;
   const aDestinationInterface: IInvokable; out aCallbackInterface;
-  const aOnResult: TOnAsynchRedirectResult);
+  const aOnResult: TOnAsyncRedirectResult);
 var
   factory: TInterfaceFactory;
 begin
-  factory := TInterfaceFactory.Get(aGUID);
+  factory := TInterfaceFactory.Get(aGuid);
   if factory = nil then
-    raise EServiceException.CreateUTF8('%.AsynchRedirect: unknown %',
-      [self, GUIDToShort(aGUID)]);
+    raise EServiceException.CreateUtf8('%.AsyncRedirect: unknown %',
+      [self, GuidToShort(aGuid)]);
   if aDestinationInterface = nil then
-    raise EServiceException.CreateUTF8('%.AsynchRedirect(nil)', [self]);
-  fRest.InternalLog('AsynchRedirect % to % using %',
+    raise EServiceException.CreateUtf8('%.AsyncRedirect(nil)', [self]);
+  fRest.InternalLog('AsyncRedirect % to % using %',
     [factory.InterfaceName, ObjectFromInterface(aDestinationInterface), self]);
-  Enable(AsynchBackgroundExecute, 3600);
-  TInterfacedObjectAsynch.Create(self, factory, aDestinationInterface,
+  Enable(AsyncBackgroundExecute, 3600);
+  TInterfacedObjectAsync.Create(self, factory, aDestinationInterface,
     aCallbackInterface, aOnResult);
 end;
 
-procedure TRestBackgroundTimer.AsynchRedirect(const aGUID: TGUID;
+procedure TRestBackgroundTimer.AsyncRedirect(const aGuid: TGUID;
   const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
-  const aOnResult: TOnAsynchRedirectResult);
+  const aOnResult: TOnAsyncRedirectResult);
 var
   dest: IInvokable;
 begin
   if aDestinationInstance = nil then
-    raise EServiceException.CreateUTF8('%.AsynchRedirect(nil)', [self]);
-  if not aDestinationInstance.GetInterface(aGUID, dest) then
-    raise EServiceException.CreateUTF8('%.AsynchRedirect [%]: % is not a %',
-      [self, fThreadName, aDestinationInstance, GUIDToShort(aGUID)]);
-  AsynchRedirect(aGUID, dest, aCallbackInterface, aOnResult);
+    raise EServiceException.CreateUtf8('%.AsyncRedirect(nil)', [self]);
+  if not aDestinationInstance.GetInterface(aGuid, dest) then
+    raise EServiceException.CreateUtf8('%.AsyncRedirect [%]: % is not a %',
+      [self, fThreadName, aDestinationInstance, GuidToShort(aGuid)]);
+  AsyncRedirect(aGuid, dest, aCallbackInterface, aOnResult);
 end;
 
-procedure TRestBackgroundTimer.AsynchBackgroundInterning(
-  Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUTF8);
+procedure TRestBackgroundTimer.AsyncBackgroundInterning(
+  Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUtf8);
 var
   i: PtrInt;
   claimed, total: integer;
@@ -3145,12 +3148,12 @@ begin
   for i := 0 to high(fBackgroundInterning) do
     inc(total, fBackgroundInterning[i].Count);
   fRest.InternalLog(
-    '%.AsynchInterning: Clean(%) claimed %/% strings from % pools in %',
+    '%.AsyncInterning: Clean(%) claimed %/% strings from % pools in %',
     [ClassType, fBackgroundInterningMaxRefCount, claimed, total,
      length(fBackgroundInterning), timer.Stop], sllDebug);
 end;
 
-procedure TRestBackgroundTimer.AsynchInterning(Interning: TRawUTF8Interning;
+procedure TRestBackgroundTimer.AsyncInterning(Interning: TRawUtf8Interning;
   InterningMaxRefCount, PeriodMinutes: integer);
 begin
   if (self = nil) or
@@ -3165,7 +3168,7 @@ begin
     begin
       fBackgroundInterningMaxRefCount := InterningMaxRefCount;
       ObjArrayAddOnce(fBackgroundInterning, Interning);
-      Enable(AsynchBackgroundInterning, PeriodMinutes * 60);
+      Enable(AsyncBackgroundInterning, PeriodMinutes * 60);
     end;
   finally
     fTaskLock.UnLock;
@@ -3187,7 +3190,7 @@ begin
 end;
 
 class procedure TAuthGroup.InitializeTable(const Server: IRestOrmServer;
-  const FieldName: RawUTF8; Options: TOrmInitializeTableOptions);
+  const FieldName: RawUtf8; Options: TOrmInitializeTableOptions);
 var
   UC: TAuthUserClass;
   G: TAuthGroup;
@@ -3206,7 +3209,7 @@ begin
     AuthUserIndex := Server.Model.GetTableIndexInheritsFrom(TAuthUser);
     if (AuthGroupIndex < 0) or
        (AuthUserIndex < 0) then
-      raise EModelException.CreateUTF8(
+      raise EModelException.CreateUtf8(
         '%.InitializeTable: Model has missing % or TAuthUser',
         [self, self]);
     UC := pointer(Server.Model.Tables[AuthUserIndex]);
@@ -3221,21 +3224,21 @@ begin
         // Guest        No      No        No     No    No     Yes    No
         A := FULL_ACCESS_RIGHTS;
         G.Ident := 'Admin';
-        G.SQLAccessRights := A;
+        G.SqlAccessRights := A;
         G.SessionTimeout := AuthAdminGroupDefaultTimeout;
         AdminID := Server.Add(G, true);
         G.Ident := 'Supervisor';
         A.AllowRemoteExecute := SUPERVISOR_ACCESS_RIGHTS.AllowRemoteExecute;
         A.Edit(AuthUserIndex, [ooSelect]); // AuthUser  R/O
         A.Edit(AuthGroupIndex, [ooSelect]); // AuthGroup R/O
-        G.SQLAccessRights := A;
+        G.SqlAccessRights := A;
         G.SessionTimeout := AuthSupervisorGroupDefaultTimeout;
         SupervisorID := Server.Add(G, true);
         G.Ident := 'User';
-        Exclude(A.AllowRemoteExecute, reSQLSelectWithoutTable);
+        Exclude(A.AllowRemoteExecute, reSqlSelectWithoutTable);
         Exclude(A.GET, AuthUserIndex); // no Auth R
         Exclude(A.GET, AuthGroupIndex);
-        G.SQLAccessRights := A;
+        G.SqlAccessRights := A;
         G.SessionTimeout := AuthUserGroupDefaultTimeout;
         UserID := Server.Add(G, true);
         G.Ident := 'Guest';
@@ -3243,7 +3246,7 @@ begin
         FillcharFast(A.POST, SizeOf(TOrmFieldTables), 0); // R/O access
         FillcharFast(A.PUT, SizeOf(TOrmFieldTables), 0);
         FillcharFast(A.DELETE, SizeOf(TOrmFieldTables), 0);
-        G.SQLAccessRights := A;
+        G.SqlAccessRights := A;
         G.SessionTimeout := AuthGuestGroupDefaultTimeout;
         Server.Add(G, true);
       finally
@@ -3287,29 +3290,29 @@ end;
 { TAuthUser }
 
 class function TAuthUser.ComputeHashedPassword(const aPasswordPlain,
-  aHashSalt: RawUTF8; aHashRound: integer): RawUTF8;
+  aHashSalt: RawUtf8; aHashRound: integer): RawUtf8;
 const
-  TAuthUser_SALT = 'salt';
+  DEPRECATED_SALT = 'salt';
 var
-  dig: TSHA256Digest;
+  dig: TSha256Digest;
 begin
   if aHashSalt = '' then
-    result := SHA256(TAuthUser_SALT + aPasswordPlain)
+    result := Sha256(DEPRECATED_SALT + aPasswordPlain)
   else
   begin
     PBKDF2_HMAC_SHA256(aPasswordPlain, aHashSalt, aHashRound, dig);
-    result := SHA256DigestToString(dig);
+    result := Sha256DigestToString(dig);
     FillCharFast(dig, SizeOf(dig), 0);
   end;
 end;
 
-procedure TAuthUser.SetPasswordPlain(const Value: RawUTF8);
+procedure TAuthUser.SetPasswordPlain(const Value: RawUtf8);
 begin
   if self <> nil then
     PasswordHashHexa := ComputeHashedPassword(Value);
 end;
 
-procedure TAuthUser.SetPassword(const aPasswordPlain, aHashSalt: RawUTF8;
+procedure TAuthUser.SetPassword(const aPasswordPlain, aHashSalt: RawUtf8;
   aHashRound: integer);
 begin
   if self <> nil then
@@ -3322,60 +3325,63 @@ begin
 end;
 
 
-{ ************ TRestURIParams REST URI Definitions }
+{ ************ TRestUriParams REST URI Definitions }
 
-{ TRestURIParams }
+{ TRestUriParams }
 
-procedure TRestURIParams.Init;
+procedure TRestUriParams.Init;
 begin
   OutStatus := 0;
   OutInternalState := 0;
   RestAccessRights := nil;
   LowLevelConnectionID := 0;
-  byte(LowLevelFlags) := 0;
+  byte(LowLevelConnectionFlags) := 0;
 end;
 
-procedure TRestURIParams.Init(const aURI, aMethod, aInHead, aInBody: RawUTF8);
+procedure TRestUriParams.Init(const aUri, aMethod, aInHead, aInBody: RawUtf8);
 begin
   Init;
-  Url := aURI;
+  Url := aUri;
   Method := aMethod;
   InHead := aInHead;
   InBody := aInBody;
 end;
 
-function TRestURIParams.InBodyType(GuessJSONIfNoneSet: boolean): RawUTF8;
+procedure TRestUriParams.InBodyType(out ContentType: RawUtf8; GuessJsonIfNoneSet: boolean);
 begin
-  FindNameValue(InHead, HEADER_CONTENT_TYPE_UPPER, result);
-  if GuessJSONIfNoneSet and
-     (result = '') then
-    result := JSON_CONTENT_TYPE_VAR;
+  FindNameValue(InHead, HEADER_CONTENT_TYPE_UPPER, ContentType);
+  if GuessJsonIfNoneSet and
+     (ContentType = '') then
+    ContentType := JSON_CONTENT_TYPE_VAR;
 end;
 
-function TRestURIParams.InBodyTypeIsJson(GuessJSONIfNoneSet: boolean): boolean;
+function TRestUriParams.InBodyTypeIsJson(GuessJsonIfNoneSet: boolean): boolean;
+var
+  contenttype: RawUtf8;
 begin
-  result := IdemPChar(pointer(InBodyType(GuessJSONIfNoneSet)), JSON_CONTENT_TYPE_UPPER);
+  InBodyType(contenttype, GuessJsonIfNoneSet);
+  result := IdemPChar(pointer(contenttype), JSON_CONTENT_TYPE_UPPER);
 end;
 
-function TRestURIParams.OutBodyType(GuessJSONIfNoneSet: boolean): RawUTF8;
+function TRestUriParams.OutBodyType(GuessJsonIfNoneSet: boolean): RawUtf8;
 begin
   FindNameValue(OutHead, HEADER_CONTENT_TYPE_UPPER, result);
-  if GuessJSONIfNoneSet and
+  if GuessJsonIfNoneSet and
      (result = '') then
     result := JSON_CONTENT_TYPE_VAR;
 end;
 
-function TRestURIParams.OutBodyTypeIsJson(GuessJSONIfNoneSet: boolean): boolean;
+function TRestUriParams.OutBodyTypeIsJson(GuessJsonIfNoneSet: boolean): boolean;
 begin
-  result := IdemPChar(pointer(OutBodyType(GuessJSONIfNoneSet)), JSON_CONTENT_TYPE_UPPER);
+  result := IdemPChar(pointer(OutBodyType(GuessJsonIfNoneSet)), JSON_CONTENT_TYPE_UPPER);
 end;
 
-function TRestURIParams.Header(UpperName: PAnsiChar): RawUTF8;
+function TRestUriParams.Header(UpperName: PAnsiChar): RawUtf8;
 begin
   FindNameValue(InHead, UpperName, result);
 end;
 
-function TRestURIParams.HeaderOnce(var Store: RawUTF8; UpperName: PAnsiChar): RawUTF8;
+function TRestUriParams.HeaderOnce(var Store: RawUtf8; UpperName: PAnsiChar): RawUtf8;
 begin
   if (Store = '') and
      (@self <> nil) then
@@ -3400,13 +3406,13 @@ end;
 constructor TRestThread.Create(aRest: TRest; aOwnRest, aCreateSuspended: boolean);
 begin
   if aRest = nil then
-    raise EOrmException.CreateUTF8('%.Create(aRest=nil)', [self]);
+    raise EOrmException.CreateUtf8('%.Create(aRest=nil)', [self]);
   fSafe.Init;
   fRest := aRest;
   fOwnRest := aOwnRest;
   if fThreadName = '' then
     // if thread name has not been set by the overriden constructor
-    FormatUTF8('% %', [self, fRest.Model.Root], fThreadName);
+    FormatUtf8('% %', [self, fRest.Model.Root], fThreadName);
   fEvent := TEvent.Create(nil, false, false, '');
   inherited Create(aCreateSuspended);
 end;
@@ -3541,34 +3547,34 @@ begin
   end;
 end;
 
-function TRestRunThreads.NewBackgroundThreadMethod(const Format: RawUTF8;
+function TRestRunThreads.NewBackgroundThreadMethod(const Format: RawUtf8;
    const Args: array of const): TSynBackgroundThreadMethod;
 begin
   if self = nil then
     result := nil
   else
-    result := TSynBackgroundThreadMethod.Create(nil, FormatUTF8(Format, Args),
+    result := TSynBackgroundThreadMethod.Create(nil, FormatUtf8(Format, Args),
       BeginCurrentThread, EndCurrentThread);
 end;
 
-function TRestRunThreads.NewParallelProcess(ThreadCount: integer; const Format: RawUTF8;
+function TRestRunThreads.NewParallelProcess(ThreadCount: integer; const Format: RawUtf8;
   const Args: array of const): TSynParallelProcess;
 begin
   if self = nil then
     result := nil
   else
-    result := TSynParallelProcess.Create(ThreadCount, FormatUTF8(Format, Args),
+    result := TSynParallelProcess.Create(ThreadCount, FormatUtf8(Format, Args),
       BeginCurrentThread, EndCurrentThread);
 end;
 
 function TRestRunThreads.NewBackgroundThreadProcess(
   const aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
-  const Format: RawUTF8; const Args: array of const;
+  const Format: RawUtf8; const Args: array of const;
   aStats: TSynMonitorClass): TSynBackgroundThreadProcess;
 var
-  name: RawUTF8;
+  name: RawUtf8;
 begin
-  FormatUTF8(Format, Args, name);
+  FormatUtf8(Format, Args, name);
   if self = nil then
     result := TSynBackgroundThreadProcess.Create(name, aOnProcess, aOnProcessMS,
       nil, nil, aStats)
@@ -3603,6 +3609,11 @@ begin
     result := fBackgroundTimer.Disable(aOnProcess);
 end;
 
+function TRestRunThreads.Once(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+begin
+  result := EnsureBackgroundTimerExists.ExecuteOnce(aOnProcess);
+end;
+
 function TRestRunThreads.SystemUseTrack(periodSec: integer): TSystemUse;
 begin
   result := nil;
@@ -3632,33 +3643,33 @@ begin
     fOwner.OnEndCurrentThread(sender);
 end;
 
-procedure TRestRunThreads.AsynchRedirect(const aGUID: TGUID;
+procedure TRestRunThreads.AsyncRedirect(const aGuid: TGUID;
   const aDestinationInterface: IInvokable; out aCallbackInterface;
-  const aOnResult: TOnAsynchRedirectResult);
+  const aOnResult: TOnAsyncRedirectResult);
 begin
   if self <> nil then
-    EnsureBackgroundTimerExists.AsynchRedirect(
-      aGUID, aDestinationInterface, aCallbackInterface, aOnResult);
+    EnsureBackgroundTimerExists.AsyncRedirect(
+      aGuid, aDestinationInterface, aCallbackInterface, aOnResult);
 end;
 
-procedure TRestRunThreads.AsynchRedirect(const aGUID: TGUID;
+procedure TRestRunThreads.AsyncRedirect(const aGuid: TGUID;
   const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
-  const aOnResult: TOnAsynchRedirectResult);
+  const aOnResult: TOnAsyncRedirectResult);
 begin
   if self <> nil then
-    EnsureBackgroundTimerExists.AsynchRedirect(
-      aGUID, aDestinationInstance, aCallbackInterface, aOnResult);
+    EnsureBackgroundTimerExists.AsyncRedirect(
+      aGuid, aDestinationInstance, aCallbackInterface, aOnResult);
 end;
 
-procedure TRestRunThreads.AsynchInterning(Interning: TRawUTF8Interning;
+procedure TRestRunThreads.AsyncInterning(Interning: TRawUtf8Interning;
   InterningMaxRefCount, PeriodMinutes: integer);
 begin
   if self <> nil then
-    EnsureBackgroundTimerExists.AsynchInterning(
+    EnsureBackgroundTimerExists.AsyncInterning(
       Interning, InterningMaxRefCount, PeriodMinutes);
 end;
 
-function TRestRunThreads.MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
+function TRestRunThreads.MultiRedirect(const aGuid: TGUID; out aCallbackInterface;
   aCallBackUnRegisterNeeded: boolean): IMultiCallbackRedirect;
 var factory: TInterfaceFactory;
 begin
@@ -3666,10 +3677,10 @@ begin
     result := nil
   else
   begin
-    factory := TInterfaceFactory.Get(aGUID);
+    factory := TInterfaceFactory.Get(aGuid);
     if factory = nil then
-      raise EServiceException.CreateUTF8('%.MultiRedirect: unknown %',
-        [self, GUIDToShort(aGUID)]);
+      raise EServiceException.CreateUtf8('%.MultiRedirect: unknown %',
+        [self, GuidToShort(aGuid)]);
      result := TInterfacedObjectMulti.Create(fOwner, factory,
        aCallBackUnRegisterNeeded, aCallbackInterface).fList;
   end;
@@ -3710,11 +3721,11 @@ end;
 { TOrmHistory }
 
 class procedure TOrmHistory.InitializeTable(const Server: IRestOrmServer;
-  const FieldName: RawUTF8; Options: TOrmInitializeTableOptions);
+  const FieldName: RawUtf8; Options: TOrmInitializeTableOptions);
 begin
   inherited InitializeTable(Server, FieldName, Options);
   if FieldName = '' then
-    Server.CreateSQLMultiIndex(self, ['ModifiedRecord', 'Event'], false);
+    Server.CreateSqlMultiIndex(self, ['ModifiedRecord', 'Event'], false);
 end;
 
 destructor TOrmHistory.Destroy;
@@ -3732,7 +3743,7 @@ var
 begin
   if (aClient = nil) or
      (aID <= 0) then
-    raise EOrmException.CreateUTF8('Invalid %.CreateHistory(%,%,%) call',
+    raise EOrmException.CreateUtf8('Invalid %.CreateHistory(%,%,%) call',
       [self, aClient, aTable, aID]);
   // read BLOB changes
   ref.From(aClient.Model, aTable, aID);
@@ -3743,7 +3754,7 @@ begin
   if fID <> 0 then
     aClient.RetrieveBlobFields(self); // load former fHistory field
   if not HistoryOpen(aClient.Model) then
-    raise EOrmException.CreateUTF8('HistoryOpen in %.CreateHistory(%,%,%)',
+    raise EOrmException.CreateUtf8('HistoryOpen in %.CreateHistory(%,%,%)',
       [self, aClient, aTable, aID]);
   // append JSON changes
   hist := RecordClass.CreateAndFillPrepare(aClient,
@@ -3757,7 +3768,7 @@ begin
     try
       while hist.FillOne do
       begin
-        rec.FillFrom(pointer(hist.SentDataJSON));
+        rec.FillFrom(pointer(hist.SentDataJson));
         HistoryAdd(rec, hist);
       end;
       HistorySave(nil); // update internal fHistory field
@@ -3772,10 +3783,10 @@ begin
 end;
 
 class procedure TOrmHistory.InitializeFields(const Fields: array of const;
-  var JSON: RawUTF8);
+  var Json: RawUtf8);
 begin
   // you may use a TDocVariant to add some custom fields in your own class
-  JSON := JSONEncode(Fields);
+  Json := JsonEncode(Fields);
 end;
 
 function TOrmHistory.HistoryOpen(Model: TOrmModel): boolean;
@@ -3798,11 +3809,10 @@ begin
   if len > 4 then
   begin
     R.Init(pointer(tmp), len);
-    if not fHistoryTable.RecordProps.CheckBinaryHeader(R) then
+    if not fHistoryTable.OrmProps.CheckBinaryHeader(R) then
       // invalid content: TOrm layout may have changed
       exit;
-    R.ReadVarUInt32Array(fHistoryUncompressedOffset);
-    fHistoryUncompressedCount := length(fHistoryUncompressedOffset);
+    fHistoryUncompressedCount := R.ReadVarUInt32Array(fHistoryUncompressedOffset);
     start := R.P - PAnsiChar(pointer(tmp));
     for i := 0 to fHistoryUncompressedCount - 1 do
       inc(fHistoryUncompressedOffset[i], start);
@@ -3824,31 +3834,25 @@ function TOrmHistory.HistoryGet(Index: integer;
   out Event: TOrmHistoryEvent; out Timestamp: TModTime;
   Rec: TOrm): boolean;
 var
-  P, PEnd: PAnsiChar;
+  read: TFastReader;
 begin
-  result := false;
   if cardinal(Index) >= cardinal(HistoryCount) then
+  begin
+    result := false;
     exit;
-  P := pointer(fHistoryUncompressed);
-  PEnd := P + length(fHistoryUncompressed);
-  inc(P, fHistoryUncompressedOffset[Index]);
-  if P >= PEnd then
-    exit;
-  Event := TOrmHistoryEvent(P^);
-  inc(P);
-  P := pointer(FromVarUInt64Safe(pointer(P), pointer(PEnd), PQWord(@Timestamp)^));
-  if P = nil then
-    exit;
+  end;
+  read.Init(fHistoryUncompressed);
+  read.Next(fHistoryUncompressedOffset[Index]);
+  Event := TOrmHistoryEvent(read.NextByte);
+  Timestamp := read.VarUInt64;
   if (Rec <> nil) and
      (Rec.RecordClass = fHistoryTable) then
   begin
     if Event = heDelete then
       Rec.ClearProperties
     else
-      Rec.SetBinaryValuesSimpleFields(P, PEnd);
+      Rec.SetBinaryValuesSimpleFields(read);
     Rec.IDValue := ModifiedID;
-    if P = nil then
-      exit;
   end;
   result := true;
 end;
@@ -3992,7 +3996,7 @@ begin
         newOffset[firstNewIndex + i] :=
           fHistoryAddOffset[i] + firstNewOffset;
       // write header
-      fHistoryTable.RecordProps.SaveBinaryHeader(W);
+      fHistoryTable.OrmProps.SaveBinaryHeader(W);
       W.WriteVarUInt32Array(newOffset, length(newOffset), wkOffsetU);
       // write data
       W.Write(@PByteArray(fHistoryUncompressed)[firstOldOffset], firstNewOffset);
@@ -4003,10 +4007,9 @@ begin
          (fID <> 0) then
       begin
         Server.UpdateField(RecordClass,
-          'Timestamp', Int64ToUTF8(Server.GetServerTimestamp),
+          'Timestamp', Int64ToUtf8(Server.GetServerTimestamp),
           'RowID', Int64ToUtf8(fID));
-        Server.UpdateBlob(RecordClass, fID,
-          RecordProps.BlobFields[0].Name, fHistory);
+        Server.UpdateBlob(RecordClass, fID, Orm.BlobFields[0].Name, fHistory);
       end;
       result := true;
     finally

@@ -16,9 +16,9 @@
 
 {$ifdef ASMX64}
 
-procedure aesencryptasm(const ctxt: TAESContext; bi, bo: PWA4);
+procedure AesEncryptAsm(const ctxt: TAesContext; bi, bo: PWA4);
 {$ifdef FPC}nostackframe; assembler; asm{$else}
-asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
+asm // input: rcx/rdi=TAesContext, rdx/rsi=source, r8/rdx=dest
         .noframe
 {$endif}
         // rolled optimized encryption asm version by A. Bouchez
@@ -28,7 +28,7 @@ asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
         push    r12
         push    rbx
         push    rbp
-        {$ifdef win64}
+        {$ifdef WIN64ABI}
         push    rdi
         push    rsi
         mov     r15, r8
@@ -37,8 +37,8 @@ asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
         mov     r15, rdx
         mov     rdx, rsi
         mov     r12, rdi
-        {$endif win64}
-        movzx   r13, byte ptr [r12].TAESContext.Rounds
+        {$endif WIN64ABI}
+        movzx   r13, byte ptr [r12].TAesContext.Rounds
         mov     eax, dword ptr [rdx]
         mov     ebx, dword ptr [rdx + 4H]
         mov     ecx, dword ptr [rdx + 8H]
@@ -174,10 +174,10 @@ asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
         xor     r14d, r8d
         xor     r14d, dword ptr [r12 + 0CH]
         mov     dword ptr [r15 + 0CH], r14d
-        {$ifdef win64}
+        {$ifdef WIN64ABI}
         pop     rsi
         pop     rdi
-        {$endif win64}
+        {$endif WIN64ABI}
         pop     rbp
         pop     rbx
         pop     r12
@@ -187,35 +187,35 @@ asm // input: rcx/rdi=TAESContext, rdx/rsi=source, r8/rdx=dest
 end;
 
 
-// optimized unrolled version from Intel's sha256_sse4.asm
+// optimized unrolled version from Intel's Sha256Sse4.asm
 //  Original code is released as Copyright (c) 2012, Intel Corporation
 var
   K256AlignedStore: RawByteString;
   K256Aligned: pointer; // movaps + paddd do expect 16 bytes alignment
 
 const
-  STACK_SIZE = 32{$ifndef LINUX}+7*16{$endif};
+  STACK_SIZE = 32 {$ifndef SYSVABI} + 7 * 16 {$endif};
 
-procedure sha256_sse4(var input_data; var digest; num_blks: PtrUInt);
+procedure Sha256Sse4(var input_data; var digest; num_blks: PtrUInt);
 {$ifdef FPC}nostackframe; assembler; asm{$else}
 asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         .noframe
 {$endif FPC}
         push    rbx
-        {$ifdef LINUX}
+        {$ifdef SYSVABI}
         mov     r8, rdx
         mov     rcx, rdi
         mov     rdx, rsi
         {$else}
         push    rsi   // Win64 expects those registers to be preserved
         push    rdi
-        {$endif LINUX}
+        {$endif SYSVABI}
         push    rbp
         push    r13
         push    r14
         push    r15
         sub     rsp, STACK_SIZE
-        {$ifndef LINUX}
+        {$ifndef SYSVABI}
         movaps  [rsp + 20H], xmm6    // manual .PUSHNV for FPC compatibility
         movaps  [rsp + 30H], xmm7
         movaps  [rsp + 40H], xmm8
@@ -223,7 +223,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         movaps  [rsp + 60H], xmm10
         movaps  [rsp + 70H], xmm11
         movaps  [rsp + 80H], xmm12
-        {$endif LINUX}
+        {$endif SYSVABI}
         shl     r8, 6
         je      @done
         add     r8, rcx
@@ -1123,7 +1123,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         add     rcx, 64
         cmp     rcx, [rsp]
         jne     @loop0
-@done: {$ifndef LINUX}
+@done: {$ifndef SYSVABI}
         movaps  xmm6, [rsp + 20H]
         movaps  xmm7, [rsp + 30H]
         movaps  xmm8, [rsp + 40H]
@@ -1131,16 +1131,16 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         movaps  xmm10, [rsp + 60H]
         movaps  xmm11, [rsp + 70H]
         movaps  xmm12, [rsp + 80H]
-        {$endif LINUX}
+        {$endif SYSVABI}
         add     rsp, STACK_SIZE
         pop     r15
         pop     r14
         pop     r13
         pop     rbp
-        {$ifndef LINUX}
+        {$ifndef SYSVABI}
         pop     rdi
         pop     rsi
-        {$endif LINUX}
+        {$endif SYSVABI}
         pop     rbx
         ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
@@ -1155,11 +1155,11 @@ end;
 // Synopse's x64 asm, optimized for both in+out-order pipelined CPUs
 procedure KeccakPermutationKernel(B, A, C: Pointer);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        {$ifndef win64}  // input: rcx=B, rdx=A, r8=C (Linux: rdi,rsi,rdx)
+        {$ifndef WIN64ABI}  // input: rcx=B, rdx=A, r8=C (Linux: rdi,rsi,rdx)
         mov     r8, rdx
         mov     rdx, rsi
         mov     rcx, rdi
-        {$endif win64}
+        {$endif WIN64ABI}
         push    rbx
         push    r12
         push    r13
@@ -1447,10 +1447,10 @@ procedure Sha256ExpandMessageBlocks(W, Buf: PIntegerArray);
 asm // W=rcx Buf=rdx
   .noframe
 {$endif}
-        {$ifndef win64}
+        {$ifndef WIN64ABI}
         mov     rdx, rsi
         mov     rcx, rdi
-        {$endif win64}
+        {$endif WIN64ABI}
         mov     rax, rcx
         push    rsi
         push    rdi
@@ -1537,56 +1537,56 @@ asm // W=rcx Buf=rdx
         pop     rsi
 end;
 
-procedure bswap256(s,d: PIntegerArray);
+procedure bswap256(s, d: PIntegerArray);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        mov     eax, dword ptr[s]
-        mov     r8d, dword ptr[s + 4]
-        mov     r9d, dword ptr[s + 8]
-        mov     r10d, dword ptr[s + 12]
+        mov     eax, dword ptr [s]
+        mov     r8d, dword ptr [s + 4]
+        mov     r9d, dword ptr [s + 8]
+        mov     r10d, dword ptr [s + 12]
         bswap   eax
         bswap   r8d
         bswap   r9d
         bswap   r10d
-        mov     dword ptr[d], eax
-        mov     dword ptr[d + 4], r8d
-        mov     dword ptr[d + 8], r9d
-        mov     dword ptr[d + 12], r10d
-        mov     eax, dword ptr[s + 16]
-        mov     r8d, dword ptr[s + 20]
-        mov     r9d, dword ptr[s + 24]
-        mov     r10d, dword ptr[s + 28]
+        mov     dword ptr [d], eax
+        mov     dword ptr [d + 4], r8d
+        mov     dword ptr [d + 8], r9d
+        mov     dword ptr [d + 12], r10d
+        mov     eax, dword ptr [s + 16]
+        mov     r8d, dword ptr [s + 20]
+        mov     r9d, dword ptr [s + 24]
+        mov     r10d, dword ptr [s + 28]
         bswap   eax
         bswap   r8d
         bswap   r9d
         bswap   r10d
-        mov     dword ptr[d + 16], eax
-        mov     dword ptr[d + 20], r8d
-        mov     dword ptr[d + 24], r9d
-        mov     dword ptr[d + 28], r10d
+        mov     dword ptr [d + 16], eax
+        mov     dword ptr [d + 20], r8d
+        mov     dword ptr [d + 24], r9d
+        mov     dword ptr [d + 28], r10d
 end;
 
-procedure bswap160(s,d: PIntegerArray);
+procedure bswap160(s, d: PIntegerArray);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        mov     eax, dword ptr[s]
-        mov     r8d, dword ptr[s + 4]
-        mov     r9d, dword ptr[s + 8]
-        mov     r10d, dword ptr[s + 12]
+        mov     eax, dword ptr [s]
+        mov     r8d, dword ptr [s + 4]
+        mov     r9d, dword ptr [s + 8]
+        mov     r10d, dword ptr [s + 12]
         bswap   eax
         bswap   r8d
         bswap   r9d
         bswap   r10d
-        mov     dword ptr[d], eax
-        mov     dword ptr[d + 4], r8d
-        mov     dword ptr[d + 8], r9d
-        mov     dword ptr[d + 12], r10d
-        mov     eax, dword ptr[s + 16]
+        mov     dword ptr [d], eax
+        mov     dword ptr [d + 4], r8d
+        mov     dword ptr [d + 8], r9d
+        mov     dword ptr [d + 12], r10d
+        mov     eax, dword ptr [s + 16]
         bswap   eax
-        mov     dword ptr[d + 16], eax
+        mov     dword ptr [d + 16], eax
 end;
 
 // see http://nicst.de/crc.pdf
 
-function gf2_multiply(x,y,m,bits: PtrUInt): PtrUInt;
+function gf2_multiply(x, y, m, bits: PtrUInt): PtrUInt;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         mov     rax, x
         and     rax, 1
@@ -1601,17 +1601,17 @@ function gf2_multiply(x,y,m,bits: PtrUInt): PtrUInt;
         shr     x, 1
         mov     r10, rax
         xor     r10, y
-        {$ifdef win64}
+        {$ifdef WIN64ABI}
         test    cl, 1
         {$else}
         test    dil, 1
-        {$endif}
+        {$endif WIN64ABI}
         cmovne  rax, r10
         dec     bits
         jne     @s
 end;
 
-procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
+procedure MD5Transform(var buf: TMd5Buf; const in_: TMd5In);
 // see https://synopse.info/forum/viewtopic.php?id=4369 for asm numbers
 {
  MD5_Transform-x64
@@ -1633,10 +1633,10 @@ procedure MD5Transform(var buf: TMD5Buf; const in_: TMD5In);
  Taken from https://github.com/maximmasiutin/MD5_Transform-x64
 }
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        {$ifndef win64} // W=rcx Buf=rdx
+        {$ifndef WIN64ABI} // W=rcx Buf=rdx
         mov     rdx, rsi
         mov     rcx, rdi
-        {$endif win64}
+        {$endif WIN64ABI}
         push    rbx
         push    rsi
         push    rdi
@@ -2342,20 +2342,20 @@ end;
 
 {$ifdef USEAESNI}
 
-procedure aesniencrypt128(const ctxt, source, dest);
+procedure AesNiEncrypt128(const ctxt, source, dest);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        movups  xmm7, dqword ptr[source]
-        movups  xmm0, dqword ptr[ctxt + 16 * 0]
-        movups  xmm1, dqword ptr[ctxt + 16 * 1]
-        movups  xmm2, dqword ptr[ctxt + 16 * 2]
-        movups  xmm3, dqword ptr[ctxt + 16 * 3]
-        movups  xmm4, dqword ptr[ctxt + 16 * 4]
-        movups  xmm5, dqword ptr[ctxt + 16 * 5]
-        movups  xmm6, dqword ptr[ctxt + 16 * 6]
-        movups  xmm8, dqword ptr[ctxt + 16 * 7]
-        movups  xmm9, dqword ptr[ctxt + 16 * 8]
-        movups  xmm10, dqword ptr[ctxt + 16 * 9]
-        movups  xmm11, dqword ptr[ctxt + 16 * 10]
+        movups  xmm7, dqword ptr [source]
+        movups  xmm0, dqword ptr [ctxt + 16 * 0]
+        movups  xmm1, dqword ptr [ctxt + 16 * 1]
+        movups  xmm2, dqword ptr [ctxt + 16 * 2]
+        movups  xmm3, dqword ptr [ctxt + 16 * 3]
+        movups  xmm4, dqword ptr [ctxt + 16 * 4]
+        movups  xmm5, dqword ptr [ctxt + 16 * 5]
+        movups  xmm6, dqword ptr [ctxt + 16 * 6]
+        movups  xmm8, dqword ptr [ctxt + 16 * 7]
+        movups  xmm9, dqword ptr [ctxt + 16 * 8]
+        movups  xmm10, dqword ptr [ctxt + 16 * 9]
+        movups  xmm11, dqword ptr [ctxt + 16 * 10]
         pxor    xmm7, xmm0
         aesenc  xmm7, xmm1
         aesenc  xmm7, xmm2
@@ -2367,26 +2367,26 @@ procedure aesniencrypt128(const ctxt, source, dest);
         aesenc  xmm7, xmm9
         aesenc  xmm7, xmm10
         aesenclast xmm7, xmm11
-        movups  dqword ptr[dest], xmm7
+        movups  dqword ptr [dest], xmm7
         pxor    xmm7, xmm7 // for safety
 end;
 
-procedure aesniencrypt192(const ctxt, source, dest);
+procedure AesNiEncrypt192(const ctxt, source, dest);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        movups  xmm7, dqword ptr[source]
-        movups  xmm0, dqword ptr[ctxt + 16 * 0]
-        movups  xmm1, dqword ptr[ctxt + 16 * 1]
-        movups  xmm2, dqword ptr[ctxt + 16 * 2]
-        movups  xmm3, dqword ptr[ctxt + 16 * 3]
-        movups  xmm4, dqword ptr[ctxt + 16 * 4]
-        movups  xmm5, dqword ptr[ctxt + 16 * 5]
-        movups  xmm6, dqword ptr[ctxt + 16 * 6]
-        movups  xmm8, dqword ptr[ctxt + 16 * 7]
-        movups  xmm9, dqword ptr[ctxt + 16 * 8]
-        movups  xmm10, dqword ptr[ctxt + 16 * 9]
-        movups  xmm11, dqword ptr[ctxt + 16 * 10]
-        movups  xmm12, dqword ptr[ctxt + 16 * 11]
-        movups  xmm13, dqword ptr[ctxt + 16 * 12]
+        movups  xmm7, dqword ptr [source]
+        movups  xmm0, dqword ptr [ctxt + 16 * 0]
+        movups  xmm1, dqword ptr [ctxt + 16 * 1]
+        movups  xmm2, dqword ptr [ctxt + 16 * 2]
+        movups  xmm3, dqword ptr [ctxt + 16 * 3]
+        movups  xmm4, dqword ptr [ctxt + 16 * 4]
+        movups  xmm5, dqword ptr [ctxt + 16 * 5]
+        movups  xmm6, dqword ptr [ctxt + 16 * 6]
+        movups  xmm8, dqword ptr [ctxt + 16 * 7]
+        movups  xmm9, dqword ptr [ctxt + 16 * 8]
+        movups  xmm10, dqword ptr [ctxt + 16 * 9]
+        movups  xmm11, dqword ptr [ctxt + 16 * 10]
+        movups  xmm12, dqword ptr [ctxt + 16 * 11]
+        movups  xmm13, dqword ptr [ctxt + 16 * 12]
         pxor    xmm7, xmm0
         aesenc  xmm7, xmm1
         aesenc  xmm7, xmm2
@@ -2400,28 +2400,28 @@ procedure aesniencrypt192(const ctxt, source, dest);
         aesenc  xmm7, xmm11
         aesenc  xmm7, xmm12
         aesenclast xmm7, xmm13
-        movups  dqword ptr[dest], xmm7
+        movups  dqword ptr [dest], xmm7
         pxor    xmm7, xmm7 // for safety
 end;
 
-procedure aesniencrypt256(const ctxt, source, dest);
+procedure AesNiEncrypt256(const ctxt, source, dest);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        movups  xmm7, dqword ptr[source]
-        movups  xmm0, dqword ptr[ctxt + 16 * 0]
-        movups  xmm1, dqword ptr[ctxt + 16 * 1]
-        movups  xmm2, dqword ptr[ctxt + 16 * 2]
-        movups  xmm3, dqword ptr[ctxt + 16 * 3]
-        movups  xmm4, dqword ptr[ctxt + 16 * 4]
-        movups  xmm5, dqword ptr[ctxt + 16 * 5]
-        movups  xmm6, dqword ptr[ctxt + 16 * 6]
-        movups  xmm8, dqword ptr[ctxt + 16 * 7]
-        movups  xmm9, dqword ptr[ctxt + 16 * 8]
-        movups  xmm10, dqword ptr[ctxt + 16 * 9]
-        movups  xmm11, dqword ptr[ctxt + 16 * 10]
-        movups  xmm12, dqword ptr[ctxt + 16 * 11]
-        movups  xmm13, dqword ptr[ctxt + 16 * 12]
-        movups  xmm14, dqword ptr[ctxt + 16 * 13]
-        movups  xmm15, dqword ptr[ctxt + 16 * 14]
+        movups  xmm7, dqword ptr [source]
+        movups  xmm0, dqword ptr [ctxt + 16 * 0]
+        movups  xmm1, dqword ptr [ctxt + 16 * 1]
+        movups  xmm2, dqword ptr [ctxt + 16 * 2]
+        movups  xmm3, dqword ptr [ctxt + 16 * 3]
+        movups  xmm4, dqword ptr [ctxt + 16 * 4]
+        movups  xmm5, dqword ptr [ctxt + 16 * 5]
+        movups  xmm6, dqword ptr [ctxt + 16 * 6]
+        movups  xmm8, dqword ptr [ctxt + 16 * 7]
+        movups  xmm9, dqword ptr [ctxt + 16 * 8]
+        movups  xmm10, dqword ptr [ctxt + 16 * 9]
+        movups  xmm11, dqword ptr [ctxt + 16 * 10]
+        movups  xmm12, dqword ptr [ctxt + 16 * 11]
+        movups  xmm13, dqword ptr [ctxt + 16 * 12]
+        movups  xmm14, dqword ptr [ctxt + 16 * 13]
+        movups  xmm15, dqword ptr [ctxt + 16 * 14]
         pxor    xmm7, xmm0
         aesenc  xmm7, xmm1
         aesenc  xmm7, xmm2
@@ -2437,24 +2437,24 @@ procedure aesniencrypt256(const ctxt, source, dest);
         aesenc  xmm7, xmm13
         aesenc  xmm7, xmm14
         aesenclast xmm7, xmm15
-        movups  dqword ptr[dest], xmm7
+        movups  dqword ptr [dest], xmm7
         pxor    xmm7, xmm7 // for safety
 end;
 
-procedure aesnidecrypt128(const ctxt, source, dest);
+procedure AesNiDecrypt128(const ctxt, source, dest);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        movups  xmm7, dqword ptr[source]
-        movups  xmm0, dqword ptr[ctxt + 16 * 10]
-        movups  xmm1, dqword ptr[ctxt + 16 * 9]
-        movups  xmm2, dqword ptr[ctxt + 16 * 8]
-        movups  xmm3, dqword ptr[ctxt + 16 * 7]
-        movups  xmm4, dqword ptr[ctxt + 16 * 6]
-        movups  xmm5, dqword ptr[ctxt + 16 * 5]
-        movups  xmm6, dqword ptr[ctxt + 16 * 4]
-        movups  xmm8, dqword ptr[ctxt + 16 * 3]
-        movups  xmm9, dqword ptr[ctxt + 16 * 2]
-        movups  xmm10, dqword ptr[ctxt + 16 * 1]
-        movups  xmm11, dqword ptr[ctxt + 16 * 0]
+        movups  xmm7, dqword ptr [source]
+        movups  xmm0, dqword ptr [ctxt + 16 * 10]
+        movups  xmm1, dqword ptr [ctxt + 16 * 9]
+        movups  xmm2, dqword ptr [ctxt + 16 * 8]
+        movups  xmm3, dqword ptr [ctxt + 16 * 7]
+        movups  xmm4, dqword ptr [ctxt + 16 * 6]
+        movups  xmm5, dqword ptr [ctxt + 16 * 5]
+        movups  xmm6, dqword ptr [ctxt + 16 * 4]
+        movups  xmm8, dqword ptr [ctxt + 16 * 3]
+        movups  xmm9, dqword ptr [ctxt + 16 * 2]
+        movups  xmm10, dqword ptr [ctxt + 16 * 1]
+        movups  xmm11, dqword ptr [ctxt + 16 * 0]
         pxor    xmm7, xmm0
         aesdec  xmm7, xmm1
         aesdec  xmm7, xmm2
@@ -2466,26 +2466,26 @@ procedure aesnidecrypt128(const ctxt, source, dest);
         aesdec  xmm7, xmm9
         aesdec  xmm7, xmm10
         aesdeclast xmm7, xmm11
-        movups  dqword ptr[dest], xmm7
+        movups  dqword ptr [dest], xmm7
         pxor    xmm7, xmm7 // for safety
 end;
 
-procedure aesnidecrypt192(const ctxt, source, dest);
+procedure AesNiDecrypt192(const ctxt, source, dest);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        movups  xmm7, dqword ptr[source]
-        movups  xmm0, dqword ptr[ctxt + 16 * 12]
-        movups  xmm1, dqword ptr[ctxt + 16 * 11]
-        movups  xmm2, dqword ptr[ctxt + 16 * 10]
-        movups  xmm3, dqword ptr[ctxt + 16 * 9]
-        movups  xmm4, dqword ptr[ctxt + 16 * 8]
-        movups  xmm5, dqword ptr[ctxt + 16 * 7]
-        movups  xmm6, dqword ptr[ctxt + 16 * 6]
-        movups  xmm8, dqword ptr[ctxt + 16 * 5]
-        movups  xmm9, dqword ptr[ctxt + 16 * 4]
-        movups  xmm10, dqword ptr[ctxt + 16 * 3]
-        movups  xmm11, dqword ptr[ctxt + 16 * 2]
-        movups  xmm12, dqword ptr[ctxt + 16 * 1]
-        movups  xmm13, dqword ptr[ctxt + 16 * 0]
+        movups  xmm7, dqword ptr [source]
+        movups  xmm0, dqword ptr [ctxt + 16 * 12]
+        movups  xmm1, dqword ptr [ctxt + 16 * 11]
+        movups  xmm2, dqword ptr [ctxt + 16 * 10]
+        movups  xmm3, dqword ptr [ctxt + 16 * 9]
+        movups  xmm4, dqword ptr [ctxt + 16 * 8]
+        movups  xmm5, dqword ptr [ctxt + 16 * 7]
+        movups  xmm6, dqword ptr [ctxt + 16 * 6]
+        movups  xmm8, dqword ptr [ctxt + 16 * 5]
+        movups  xmm9, dqword ptr [ctxt + 16 * 4]
+        movups  xmm10, dqword ptr [ctxt + 16 * 3]
+        movups  xmm11, dqword ptr [ctxt + 16 * 2]
+        movups  xmm12, dqword ptr [ctxt + 16 * 1]
+        movups  xmm13, dqword ptr [ctxt + 16 * 0]
         pxor    xmm7, xmm0
         aesdec  xmm7, xmm1
         aesdec  xmm7, xmm2
@@ -2499,28 +2499,28 @@ procedure aesnidecrypt192(const ctxt, source, dest);
         aesdec  xmm7, xmm11
         aesdec  xmm7, xmm12
         aesdeclast xmm7, xmm13
-        movups  dqword ptr[dest], xmm7
+        movups  dqword ptr [dest], xmm7
         pxor    xmm7, xmm7 // for safety
 end;
 
-procedure aesnidecrypt256(const ctxt, source, dest);
+procedure AesNiDecrypt256(const ctxt, source, dest);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        movups  xmm7, dqword ptr[source]
-        movups  xmm0, dqword ptr[ctxt + 16 * 14]
-        movups  xmm1, dqword ptr[ctxt + 16 * 13]
-        movups  xmm2, dqword ptr[ctxt + 16 * 12]
-        movups  xmm3, dqword ptr[ctxt + 16 * 11]
-        movups  xmm4, dqword ptr[ctxt + 16 * 10]
-        movups  xmm5, dqword ptr[ctxt + 16 * 9]
-        movups  xmm6, dqword ptr[ctxt + 16 * 8]
-        movups  xmm8, dqword ptr[ctxt + 16 * 7]
-        movups  xmm9, dqword ptr[ctxt + 16 * 6]
-        movups  xmm10, dqword ptr[ctxt + 16 * 5]
-        movups  xmm11, dqword ptr[ctxt + 16 * 4]
-        movups  xmm12, dqword ptr[ctxt + 16 * 3]
-        movups  xmm13, dqword ptr[ctxt + 16 * 2]
-        movups  xmm14, dqword ptr[ctxt + 16 * 1]
-        movups  xmm15, dqword ptr[ctxt + 16 * 0]
+        movups  xmm7, dqword ptr [source]
+        movups  xmm0, dqword ptr [ctxt + 16 * 14]
+        movups  xmm1, dqword ptr [ctxt + 16 * 13]
+        movups  xmm2, dqword ptr [ctxt + 16 * 12]
+        movups  xmm3, dqword ptr [ctxt + 16 * 11]
+        movups  xmm4, dqword ptr [ctxt + 16 * 10]
+        movups  xmm5, dqword ptr [ctxt + 16 * 9]
+        movups  xmm6, dqword ptr [ctxt + 16 * 8]
+        movups  xmm8, dqword ptr [ctxt + 16 * 7]
+        movups  xmm9, dqword ptr [ctxt + 16 * 6]
+        movups  xmm10, dqword ptr [ctxt + 16 * 5]
+        movups  xmm11, dqword ptr [ctxt + 16 * 4]
+        movups  xmm12, dqword ptr [ctxt + 16 * 3]
+        movups  xmm13, dqword ptr [ctxt + 16 * 2]
+        movups  xmm14, dqword ptr [ctxt + 16 * 1]
+        movups  xmm15, dqword ptr [ctxt + 16 * 0]
         pxor    xmm7, xmm0
         aesdec  xmm7, xmm1
         aesdec  xmm7, xmm2
@@ -2536,20 +2536,20 @@ procedure aesnidecrypt256(const ctxt, source, dest);
         aesdec  xmm7, xmm13
         aesdec  xmm7, xmm14
         aesdeclast xmm7, xmm15
-        movups  dqword ptr[dest], xmm7
+        movups  dqword ptr [dest], xmm7
         pxor    xmm7, xmm7 // for safety
 end;
 
 procedure ShiftAesNi(KeySize: cardinal; pk: pointer);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         mov     eax, keysize
-        movups  xmm1, dqword ptr[pk]
-        movaps  xmm5, dqword ptr[rip + @mask]
+        movups  xmm1, dqword ptr [pk]
+        movaps  xmm5, dqword ptr [rip + @mask]
         cmp     al, 128
         je      @128
         cmp     al, 192
         je      @e // 192 bits is very complicated -> skip by now (128+256)
-@256:   movups  xmm3, dqword ptr[pk + 16]
+@256:   movups  xmm3, dqword ptr [pk + 16]
         add     pk, 32
         aeskeygenassist xmm2, xmm3, 1
         call    @exp256
@@ -2573,7 +2573,7 @@ procedure ShiftAesNi(KeySize: cardinal; pk: pointer);
         pshufb  xmm4, xmm5
         pxor    xmm1, xmm4
         pxor    xmm1, xmm2
-        movups  dqword ptr[pk], xmm1
+        movups  dqword ptr [pk], xmm1
         jmp     @e
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @mask:  dd      $ffffffff
@@ -2589,7 +2589,7 @@ procedure ShiftAesNi(KeySize: cardinal; pk: pointer);
         pshufb  xmm4, xmm5
         pxor    xmm1, xmm4
         pxor    xmm1, xmm2
-        movups  dqword ptr[pk], xmm1
+        movups  dqword ptr [pk], xmm1
         add     pk, $10
         aeskeygenassist xmm4, xmm1, 0
         pshufd  xmm2, xmm4, $AA
@@ -2601,7 +2601,7 @@ procedure ShiftAesNi(KeySize: cardinal; pk: pointer);
         pshufb  xmm4, xmm5
         pxor    xmm3, xmm4
         pxor    xmm3, xmm2
-        movups  dqword ptr[pk], xmm3
+        movups  dqword ptr [pk], xmm3
         add     pk, $10
 @e:     ret
 @exp128:pshufd  xmm2, xmm2, $FF
@@ -2613,7 +2613,7 @@ procedure ShiftAesNi(KeySize: cardinal; pk: pointer);
         pshufb  xmm3, xmm5
         pxor    xmm1, xmm3
         pxor    xmm1, xmm2
-        movups  dqword ptr[pk], xmm1
+        movups  dqword ptr [pk], xmm1
         add     pk, $10
         ret
 @128:   add     pk, 16
@@ -2643,14 +2643,14 @@ procedure MakeDecrKeyAesNi(Rounds: integer; RK: Pointer);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         mov     eax, Rounds
         sub     eax, 9
-        movups  xmm0, dqword ptr[RK + $10]
-        movups  xmm1, dqword ptr[RK + $20]
-        movups  xmm2, dqword ptr[RK + $30]
-        movups  xmm3, dqword ptr[RK + $40]
-        movups  xmm4, dqword ptr[RK + $50]
-        movups  xmm5, dqword ptr[RK + $60]
-        movups  xmm6, dqword ptr[RK + $70]
-        movups  xmm7, dqword ptr[RK + $80]
+        movups  xmm0, dqword ptr [RK + $10]
+        movups  xmm1, dqword ptr [RK + $20]
+        movups  xmm2, dqword ptr [RK + $30]
+        movups  xmm3, dqword ptr [RK + $40]
+        movups  xmm4, dqword ptr [RK + $50]
+        movups  xmm5, dqword ptr [RK + $60]
+        movups  xmm6, dqword ptr [RK + $70]
+        movups  xmm7, dqword ptr [RK + $80]
         aesimc  xmm0, xmm0
         aesimc  xmm1, xmm1
         aesimc  xmm2, xmm2
@@ -2659,42 +2659,42 @@ procedure MakeDecrKeyAesNi(Rounds: integer; RK: Pointer);
         aesimc  xmm5, xmm5
         aesimc  xmm6, xmm6
         aesimc  xmm7, xmm7
-        movups  dqword ptr[RK + $10], xmm0
-        movups  dqword ptr[RK + $20], xmm1
-        movups  dqword ptr[RK + $30], xmm2
-        movups  dqword ptr[RK + $40], xmm3
-        movups  dqword ptr[RK + $50], xmm4
-        movups  dqword ptr[RK + $60], xmm5
-        movups  dqword ptr[RK + $70], xmm6
-        movups  dqword ptr[RK + $80], xmm7
+        movups  dqword ptr [RK + $10], xmm0
+        movups  dqword ptr [RK + $20], xmm1
+        movups  dqword ptr [RK + $30], xmm2
+        movups  dqword ptr [RK + $40], xmm3
+        movups  dqword ptr [RK + $50], xmm4
+        movups  dqword ptr [RK + $60], xmm5
+        movups  dqword ptr [RK + $70], xmm6
+        movups  dqword ptr [RK + $80], xmm7
         lea     RK, [RK + $90]
-@loop:  movups  xmm0, dqword ptr[RK]
+@loop:  movups  xmm0, dqword ptr [RK]
         aesimc  xmm0, xmm0
-        movups  dqword ptr[RK], xmm0
+        movups  dqword ptr [RK], xmm0
+        add     RK, 16
         dec     eax
-        lea     RK, [RK + 16]
         jnz     @loop
 end;
 
-procedure AesNiEncryptOFB_128(iv, aes, source, dest: pointer; blockcount: PtrUInt);
+procedure AesNiEncryptOfb128(iv, aes, source, dest: pointer; blockcount: PtrUInt);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         mov     rax, blockcount  // on Win64 ABI, blockcount is not a register
         test    eax, eax
         jz      @z
-        movups  xmm7, dqword ptr[iv]  // xmm7 = CV
-        movups  xmm0, dqword ptr[aes + 16 * 0]
-        movups  xmm1, dqword ptr[aes + 16 * 1]
-        movups  xmm2, dqword ptr[aes + 16 * 2]
-        movups  xmm3, dqword ptr[aes + 16 * 3]
-        movups  xmm4, dqword ptr[aes + 16 * 4]
-        movups  xmm5, dqword ptr[aes + 16 * 5]
-        movups  xmm6, dqword ptr[aes + 16 * 6]
-        movups  xmm8, dqword ptr[aes + 16 * 7]
-        movups  xmm9, dqword ptr[aes + 16 * 8]
-        movups  xmm10, dqword ptr[aes + 16 * 9]
-        movups  xmm11, dqword ptr[aes + 16 * 10]
+        movups  xmm7, dqword ptr [iv]  // xmm7 = IV
+        movups  xmm0, dqword ptr [aes + 16 * 0]
+        movups  xmm1, dqword ptr [aes + 16 * 1]
+        movups  xmm2, dqword ptr [aes + 16 * 2]
+        movups  xmm3, dqword ptr [aes + 16 * 3]
+        movups  xmm4, dqword ptr [aes + 16 * 4]
+        movups  xmm5, dqword ptr [aes + 16 * 5]
+        movups  xmm6, dqword ptr [aes + 16 * 6]
+        movups  xmm8, dqword ptr [aes + 16 * 7]
+        movups  xmm9, dqword ptr [aes + 16 * 8]
+        movups  xmm10, dqword ptr [aes + 16 * 9]
+        movups  xmm11, dqword ptr [aes + 16 * 10]
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@s:     movups  xmm15, dqword ptr[source]
+@s:     movups  xmm15, dqword ptr [source]
         pxor    xmm7, xmm0
         aesenc  xmm7, xmm1
         aesenc  xmm7, xmm2
@@ -2707,37 +2707,38 @@ procedure AesNiEncryptOFB_128(iv, aes, source, dest: pointer; blockcount: PtrUIn
         aesenc  xmm7, xmm10
         aesenclast xmm7, xmm11
         pxor    xmm15, xmm7
-        movups  dqword ptr[dest], xmm15  // fOut := fIn xor CV
+        movups  dqword ptr [dest], xmm15  // fOut := fIn xor IV
         add     source, 16
         add     dest, 16
         dec     eax
         jnz     @s
+        movups  dqword ptr [iv], xmm7
 @z:
 end;
 
-procedure AesNiEncryptOFB_256(iv, aes, source, dest: pointer; blockcount: PtrUInt);
+procedure AesNiEncryptOfb256(iv, aes, source, dest: pointer; blockcount: PtrUInt);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         mov     rax, blockcount
         test    eax, eax
         jz      @z
-        movups  xmm7, dqword ptr[iv]  // xmm7 = CV
-        movups  xmm0, dqword ptr[aes + 16 * 0]
-        movups  xmm1, dqword ptr[aes + 16 * 1]
-        movups  xmm2, dqword ptr[aes + 16 * 2]
-        movups  xmm3, dqword ptr[aes + 16 * 3]
-        movups  xmm4, dqword ptr[aes + 16 * 4]
-        movups  xmm5, dqword ptr[aes + 16 * 5]
-        movups  xmm6, dqword ptr[aes + 16 * 6]
-        movups  xmm8, dqword ptr[aes + 16 * 7]
-        movups  xmm9, dqword ptr[aes + 16 * 8]
-        movups  xmm10, dqword ptr[aes + 16 * 9]
-        movups  xmm11, dqword ptr[aes + 16 * 10]
-        movups  xmm12, dqword ptr[aes + 16 * 11]
-        movups  xmm13, dqword ptr[aes + 16 * 12]
-        movups  xmm14, dqword ptr[aes + 16 * 13]
+        movups  xmm7, dqword ptr [iv]  // xmm7 = IV
+        movups  xmm0, dqword ptr [aes + 16 * 0]
+        movups  xmm1, dqword ptr [aes + 16 * 1]
+        movups  xmm2, dqword ptr [aes + 16 * 2]
+        movups  xmm3, dqword ptr [aes + 16 * 3]
+        movups  xmm4, dqword ptr [aes + 16 * 4]
+        movups  xmm5, dqword ptr [aes + 16 * 5]
+        movups  xmm6, dqword ptr [aes + 16 * 6]
+        movups  xmm8, dqword ptr [aes + 16 * 7]
+        movups  xmm9, dqword ptr [aes + 16 * 8]
+        movups  xmm10, dqword ptr [aes + 16 * 9]
+        movups  xmm11, dqword ptr [aes + 16 * 10]
+        movups  xmm12, dqword ptr [aes + 16 * 11]
+        movups  xmm13, dqword ptr [aes + 16 * 12]
+        movups  xmm14, dqword ptr [aes + 16 * 13]
         add     aes,  16 * 14  // aes = last key
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@s:     movups  xmm15, dqword ptr[aes]
+@s:     movups  xmm15, dqword ptr [aes]
         pxor    xmm7, xmm0
         aesenc  xmm7, xmm1
         aesenc  xmm7, xmm2
@@ -2753,23 +2754,2073 @@ procedure AesNiEncryptOFB_256(iv, aes, source, dest: pointer; blockcount: PtrUIn
         aesenc  xmm7, xmm13
         aesenc  xmm7, xmm14
         aesenclast xmm7, xmm15
-        movups  xmm15, dqword ptr[source]
+        movups  xmm15, dqword ptr [source]
         pxor    xmm15, xmm7
-        movups  dqword ptr[dest], xmm15  // fOut := fIn xor fCV
+        movups  dqword ptr [dest], xmm15  // fOut := fIn xor fIV
         add     source, 16
         add     dest, 16
         dec     eax
         jnz     @s
+        movups  dqword ptr [iv], xmm7
 @z:
 end;
+
+// AES-CTR with 8x AES-NI interleave factor over a 32-bit counter
+procedure AesNiEncryptCtrNist32(
+  src, dest: pointer; blocks: PtrUInt; ctxt, iv: pointer);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        {$ifdef WIN64ABI}
+        mov     rax, qword ptr [rsp + $28]  // not passed as register
+        push    rsi
+        push    rdi
+        mov     rdi, src    // rcx
+        mov     rsi, dest   // rdx
+        mov     rdx, blocks // r8
+        mov     rcx, ctxt   // r9
+        mov     r8, rax     // iv on stack
+        {$endif WIN64ABI}
+        // rdi=src, rsi=dest, rdx=blocks, rcx=ctxt, r8=iv
+      	cmp    rdx, $1
+      	jne    @big
+        // handle single block without allocating any stack frame
+      	movups xmm2, dqword ptr [r8]
+      	movups xmm3, dqword ptr [rdi]
+      	mov   al, byte ptr [rcx].TAesContext.Rounds
+      	movups xmm0, dqword ptr [rcx]
+      	movups xmm1, dqword ptr [rcx + $10]
+      	lea    rcx, [rcx + $20]
+        dec    al
+      	xorps  xmm2, xmm0
+@sml:   aesenc xmm2, xmm1
+      	movups xmm1, dqword ptr [rcx]
+      	add    rcx, $10
+      	dec    al
+      	jne    @sml
+      	aesenclast xmm2, xmm1
+      	pxor   xmm0, xmm0
+      	pxor   xmm1, xmm1
+      	xorps  xmm2, xmm3
+      	pxor   xmm3, xmm3
+      	movups dqword ptr [rsi], xmm2
+      	xorps  xmm2, xmm2
+        {$ifdef WIN64ABI}
+        pop    rdi
+        pop    rsi
+        {$endif WIN64ABI}
+      	ret
+        // optimized AES-CTR process
+@big:   lea    r11, [rsp]
+        push   rbp
+        sub    rsp, $80
+        and    rsp, $fffffffffffffff0
+        // precompute the next 8 counters on the stack
+        movdqu xmm2, dqword ptr [r8]
+        movdqu xmm0, dqword ptr [rcx]
+        mov    r8d, dword ptr [r8 + $c] // get 32-bit counter
+        pxor   xmm2, xmm0
+        mov    ebp, dword ptr [rcx + $c]
+        movdqa dqword ptr [rsp], xmm2
+        bswap  r8d
+        movdqa xmm3, xmm2
+        movdqa xmm4, xmm2
+        movdqa xmm5, xmm2
+        movdqa dqword ptr [rsp + $40], xmm2
+        movdqa dqword ptr [rsp + $50], xmm2
+        movdqa dqword ptr [rsp + $60], xmm2
+        mov    r10, rdx
+        movdqa dqword ptr [rsp + $70], xmm2
+        lea    rax, [r8 + $1]
+        lea    rdx, [r8 + $2]
+        bswap  eax
+        bswap  edx
+        xor    eax, ebp
+        xor    edx, ebp
+        pinsrd xmm3, eax, $3
+        lea    rax, [r8 + $3]
+        movdqa dqword ptr [rsp + $10], xmm3
+        pinsrd xmm4, edx, $3
+        bswap  eax
+        mov    rdx, r10
+        lea    r10, [r8 + $4]
+        movdqa dqword ptr [rsp + $20], xmm4
+        xor    eax, ebp
+        bswap  r10d
+        pinsrd xmm5, eax, $3
+        movzx  eax, byte ptr [rcx].TAesContext.Rounds
+        xor    r10d, ebp
+        movdqa dqword ptr [rsp + $30], xmm5
+        lea    r9, [r8 + $5]
+        mov    dword ptr [rsp + $4c], r10d
+        bswap  r9d
+        lea    r10, [r8 + $6]
+        dec    al // code below doesn't include the last aesenclast round
+        xor    r9d, ebp
+        bswap  r10d
+        mov    dword ptr [rsp + $5c], r9d
+        xor    r10d, ebp
+        lea    r9, [r8 + $7]
+        mov    dword ptr [rsp + $6c], r10d
+        bswap  r9d
+        xor    r9d, ebp
+        mov    dword ptr [rsp + $7c], r9d
+        // start interleaved process
+        movups xmm1, dqword ptr [rcx + $10]
+        movdqa xmm6, dqword ptr [rsp + $40]
+        movdqa xmm7, dqword ptr [rsp + $50]
+        cmp    rdx, $8
+        jb     @tail
+        sub    rdx, $6
+        lea    rcx, [rcx + $80]
+        sub    rdx, $2
+        // main loop, processing 8 interleaved CTR per iteration
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@loop8: add    r8d, $8 // our 32-bit CTR
+        movdqa xmm8, dqword ptr [rsp + $60]
+        aesenc xmm2, xmm1
+        mov    r9d, r8d
+        movdqa xmm9, dqword ptr [rsp + $70]
+        aesenc xmm3, xmm1
+        bswap  r9d
+        movups xmm0, dqword ptr [rcx - $60]
+        aesenc xmm4, xmm1
+        xor    r9d, ebp
+        aesenc xmm5, xmm1
+        mov    dword ptr [rsp + $c], r9d
+        lea    r9, [r8 + $1]
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+        movups xmm1, dqword ptr [rcx - $50]
+        bswap  r9d
+        aesenc xmm2, xmm0
+        aesenc xmm3, xmm0
+        xor    r9d, ebp
+        aesenc xmm4, xmm0
+        aesenc xmm5, xmm0
+        mov    dword ptr [rsp + $1c], r9d
+        lea    r9, [r8 + $2]
+        aesenc xmm6, xmm0
+        aesenc xmm7, xmm0
+        aesenc xmm8, xmm0
+        aesenc xmm9, xmm0
+        movups xmm0, dqword ptr [rcx - $40]
+        bswap  r9d
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        xor    r9d, ebp
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        mov    dword ptr [rsp + $2c], r9d
+        lea    r9, [r8 + $3]
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+        movups xmm1, dqword ptr [rcx - $30]
+        bswap  r9d
+        aesenc xmm2, xmm0
+        aesenc xmm3, xmm0
+        xor    r9d, ebp
+        aesenc xmm4, xmm0
+        aesenc xmm5, xmm0
+        mov    dword ptr [rsp + $3c], r9d
+        lea    r9, [r8 + $4]
+        aesenc xmm6, xmm0
+        aesenc xmm7, xmm0
+        aesenc xmm8, xmm0
+        aesenc xmm9, xmm0
+        movups xmm0, dqword ptr [rcx - $20]
+        bswap  r9d
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        xor    r9d, ebp
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        mov    dword ptr [rsp + $4c], r9d
+        lea    r9, [r8 + $5]
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+        movups xmm1, dqword ptr [rcx - $10]
+        bswap  r9d
+        aesenc xmm2, xmm0
+        aesenc xmm3, xmm0
+        xor    r9d, ebp
+        aesenc xmm4, xmm0
+        aesenc xmm5, xmm0
+        mov    dword ptr [rsp + $5c], r9d
+        lea    r9, [r8 + $6]
+        aesenc xmm6, xmm0
+        aesenc xmm7, xmm0
+        aesenc xmm8, xmm0
+        aesenc xmm9, xmm0
+        movups xmm0, dqword ptr [rcx]
+        bswap  r9d
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        xor    r9d, ebp
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        mov    dword ptr [rsp + $6c], r9d
+        lea    r9, [r8 + $7]
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+        movups xmm1, dqword ptr [rcx + $10]
+        bswap  r9d
+        aesenc xmm2, xmm0
+        aesenc xmm3, xmm0
+        aesenc xmm4, xmm0
+        xor    r9d, ebp
+        movdqu xmm10, dqword ptr [rdi]
+        aesenc xmm5, xmm0
+        mov    dword ptr [rsp + $7c], r9d
+        aesenc xmm6, xmm0
+        aesenc xmm7, xmm0
+        aesenc xmm8, xmm0
+        aesenc xmm9, xmm0
+        movups xmm0, dqword ptr [rcx + $20]
+        cmp    al, 11
+        jb     @edone      // 128-bit AES
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+        movups xmm1, dqword ptr [rcx + $30]
+        aesenc xmm2, xmm0
+        aesenc xmm3, xmm0
+        aesenc xmm4, xmm0
+        aesenc xmm5, xmm0
+        aesenc xmm6, xmm0
+        aesenc xmm7, xmm0
+        aesenc xmm8, xmm0
+        aesenc xmm9, xmm0
+        movups xmm0, dqword ptr [rcx + $40]
+        je     @edone       // 192-bit AES
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+        movups xmm1, dqword ptr [rcx + $50]
+        aesenc xmm2, xmm0
+        aesenc xmm3, xmm0
+        aesenc xmm4, xmm0
+        aesenc xmm5, xmm0
+        aesenc xmm6, xmm0
+        aesenc xmm7, xmm0
+        aesenc xmm8, xmm0
+        aesenc xmm9, xmm0
+        movups xmm0, dqword ptr [rcx + $60] // 256-bit AES
+        // encrypt 8 * 128-bit blocks (128 bytes) from src into dest
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@edone: movdqu xmm11, dqword ptr [rdi + $10]
+        pxor   xmm10, xmm0
+        movdqu xmm12, dqword ptr [rdi + $20]
+        pxor   xmm11, xmm0
+        movdqu xmm13, dqword ptr [rdi + $30]
+        pxor   xmm12, xmm0
+        movdqu xmm14, dqword ptr [rdi + $40]
+        pxor   xmm13, xmm0
+        movdqu xmm15, dqword ptr [rdi + $50]
+        pxor   xmm14, xmm0
+        pxor   xmm15, xmm0
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+        movdqu xmm1, dqword ptr [rdi + $60]
+        lea    rdi, [rdi + $80]
+        aesenclast xmm2, xmm10
+        pxor   xmm1, xmm0
+        movdqu xmm10, dqword ptr [rdi - $10]
+        aesenclast xmm3, xmm11
+        pxor   xmm10, xmm0
+        movdqa xmm11, dqword ptr [rsp]
+        aesenclast xmm4, xmm12
+        aesenclast xmm5, xmm13
+        movdqa xmm12, dqword ptr [rsp + $10]
+        movdqa xmm13, dqword ptr [rsp + $20]
+        aesenclast xmm6, xmm14
+        aesenclast xmm7, xmm15
+        movdqa xmm14, dqword ptr [rsp + $30]
+        movdqa xmm15, dqword ptr [rsp + $40]
+        aesenclast xmm8, xmm1
+        movdqa xmm0, dqword ptr [rsp + $50]
+        movups xmm1, dqword ptr [rcx - $70]
+        aesenclast xmm9, xmm10
+        movups dqword ptr [rsi], xmm2
+        movdqa xmm2, xmm11
+        movups dqword ptr [rsi + $10], xmm3
+        movdqa xmm3, xmm12
+        movups dqword ptr [rsi + $20], xmm4
+        movdqa xmm4, xmm13
+        movups dqword ptr [rsi + $30], xmm5
+        movdqa xmm5, xmm14
+        movups dqword ptr [rsi + $40], xmm6
+        movdqa xmm6, xmm15
+        movups dqword ptr [rsi + $50], xmm7
+        movdqa xmm7, xmm0
+        movups dqword ptr [rsi + $60], xmm8
+        movups dqword ptr [rsi + $70], xmm9
+        lea    rsi, [rsi + $80]
+        sub    rdx, $8
+        jae    @loop8
+        add    rdx, $8
+        je     @done
+        lea    rcx, [rcx - $80]
+        // finalize the process with the 1..7 trailing blocks
+@tail:  lea    rcx, [rcx + $10]
+        cmp    rdx, $4
+        jb     @loop3
+        je     @loop4
+        shl    eax, $4
+        movdqa xmm8, dqword ptr [rsp + $60]
+        pxor   xmm9, xmm9
+        movups xmm0, dqword ptr [rcx + $10]
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        lea    rcx, [rcx + rax + $10]
+        neg    rax
+        aesenc xmm4, xmm1
+        add    rax, $10
+        movups xmm10, dqword ptr [rdi]
+        aesenc xmm5, xmm1
+        aesenc xmm6, xmm1
+        movups xmm11, dqword ptr [rdi + $10]
+        movups xmm12, dqword ptr [rdi + $20]
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        jmp    @sub8l
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@sub8:  aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+@sub8l: movups xmm1, dqword ptr [rcx + rax]
+        add    rax, $20
+        aesenc xmm2, xmm0
+        aesenc xmm3, xmm0
+        aesenc xmm4, xmm0
+        aesenc xmm5, xmm0
+        aesenc xmm6, xmm0
+        aesenc xmm7, xmm0
+        aesenc xmm8, xmm0
+        aesenc xmm9, xmm0
+        movups xmm0, dqword ptr [rcx + rax - $10]
+        jne    @sub8
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+        aesenclast xmm2, xmm0
+        aesenclast xmm3, xmm0
+        aesenclast xmm4, xmm0
+        aesenclast xmm5, xmm0
+        aesenclast xmm6, xmm0
+        aesenclast xmm7, xmm0
+        aesenclast xmm8, xmm0
+        aesenclast xmm9, xmm0
+        movdqu xmm13, dqword ptr [rdi + $30]
+        pxor   xmm2, xmm10
+        movdqu xmm10, dqword ptr [rdi + $40]
+        pxor   xmm3, xmm11
+        movdqu dqword ptr [rsi], xmm2
+        pxor   xmm4, xmm12
+        movdqu dqword ptr [rsi + $10], xmm3
+        pxor   xmm5, xmm13
+        movdqu dqword ptr [rsi + $20], xmm4
+        pxor   xmm6, xmm10
+        movdqu dqword ptr [rsi + $30], xmm5
+        movdqu dqword ptr [rsi + $40], xmm6
+        cmp    rdx, $6
+        jb     @done
+        movups xmm11, dqword ptr [rdi + $50]
+        xorps  xmm7, xmm11
+        movups dqword ptr [rsi + $50], xmm7
+        je     @done
+        movups xmm12, dqword ptr [rdi + $60]
+        xorps  xmm8, xmm12
+        movups dqword ptr [rsi + $60], xmm8
+        jmp    @done
+        // trailing 4 interleaved AES blocks
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@loop4: aesenc xmm2, xmm1
+        lea    rcx, [rcx + $10]
+        aesenc xmm3, xmm1
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        movups xmm1, dqword ptr [rcx]
+        dec    al
+        jne    @loop4
+        aesenclast xmm2, xmm1
+        aesenclast xmm3, xmm1
+        movups xmm10, dqword ptr [rdi]
+        movups xmm11, dqword ptr [rdi + $10]
+        aesenclast xmm4, xmm1
+        aesenclast xmm5, xmm1
+        movups xmm12, dqword ptr [rdi + $20]
+        movups xmm13, dqword ptr [rdi + $30]
+        xorps  xmm2, xmm10
+        movups dqword ptr [rsi], xmm2
+        xorps  xmm3, xmm11
+        movups dqword ptr [rsi + $10], xmm3
+        pxor   xmm4, xmm12
+        movdqu dqword ptr [rsi + $20], xmm4
+        pxor   xmm5, xmm13
+        movdqu dqword ptr [rsi + $30], xmm5
+        jmp    @done
+        // 1..3 interleaved AES blocks
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@loop3: lea    rcx, [rcx + $10]
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        aesenc xmm4, xmm1
+        movups xmm1, dqword ptr [rcx]
+        dec    al
+        jne    @loop3
+        aesenclast xmm2, xmm1
+        aesenclast xmm3, xmm1
+        aesenclast xmm4, xmm1
+        movups xmm10, dqword ptr [rdi]
+        xorps  xmm2, xmm10
+        movups dqword ptr [rsi], xmm2 // 1 trailing block
+        cmp    rdx, $2
+        jb     @done
+        movups xmm11, dqword ptr [rdi + $10]
+        xorps  xmm3, xmm11
+        movups dqword ptr [rsi + $10], xmm3 // 2 trailing blocks
+        je     @done
+        movups xmm12, dqword ptr [rdi + $20]
+        xorps  xmm4, xmm12
+        movups dqword ptr [rsi + $20], xmm4 // 3 trailing blocks
+        // restore stack
+@done:  mov    rbp, qword ptr [r11 - $8]
+      	lea    rsp, [r11]
+        {$ifdef WIN64ABI}
+        pop    rdi
+        pop    rsi
+        {$endif WIN64ABI}
+end;
+
+procedure CtrNistCarry12(ctr: PAesBlock); // not worth inlining
+var
+  n: PtrUInt;
+  carry: cardinal;
+begin
+  n := 12;
+  carry := 1;
+  repeat
+    dec(n);
+    inc(carry, ctr[n]);
+    ctr[n] := byte(carry);
+    carry := carry shr 8;
+  until (carry = 0) or
+        (n = 0);
+end;
+
+// AesNiEncryptCtrNist32() expects the CTR in lowest 32-bit to never overflow
+procedure AesNiEncryptCtrNist(src, dest: PByte; len: cardinal;
+  ctxt, iv: PHash128Rec); inline;
+var
+  ctr, blocks: cardinal;
+begin
+  ctr := bswap32(iv.c3);
+  repeat
+    blocks := len shr AesBlockShift;
+    inc(ctr, blocks);
+    if ctr < blocks then
+    begin
+      // 32-bit counter overflow -> will loop until all processed
+      dec(blocks, ctr);
+      ctr := 0;
+    end;
+    AesNiEncryptCtrNist32(src, dest, blocks, ctxt, iv); // 32-bit CTR asm
+    iv.c3 := bswap32(ctr);
+    if ctr = 0 then
+      CtrNistCarry12(@iv.b); // propagate carry
+    blocks := blocks shl AesBlockShift;
+    inc(src, blocks);
+    inc(dest, blocks);
+    dec(len, blocks);
+  until len = 0; // caller ensured len and 15 = 0
+end;
+
+// AES-CTR and 256-bit crc32c with 8x AES-NI interleave over a 32-bit counter
+procedure AesNiEncryptCtrCrc32(
+  src, dest: pointer; blocks: PtrUInt; ctxt: TAesCtc);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        {$ifdef WIN64ABI}
+        push    rsi
+        push    rdi
+        mov     rdi, src    // rcx
+        mov     rsi, dest   // rdx
+        mov     rdx, blocks // r8
+        mov     rcx, ctxt   // r9
+        {$endif WIN64ABI}
+        // rdi=src, rsi=dest, rdx=blocks, rcx=TAesCtc
+        push   r12
+        push   r13
+        push   r14
+        push   r15
+        push   rbx
+        lea    rbx, [rcx].TAesCtc.fMac  // rbx=plain rbx+16=encrypted
+      	cmp    rdx, $1
+      	jne    @big
+        // handle single block without allocating any stack frame
+      	movups xmm2, dqword ptr [rcx].TAesCtc.fIV
+        lea    rcx, [rcx].TAesCtc.fAes
+      	movups xmm3, dqword ptr [rdi]
+        mov    r10d, 16
+        call   @crc // MAC plain block
+      	mov    al, byte ptr [rcx].TAesContext.Rounds
+      	movups xmm0, dqword ptr [rcx]
+      	movups xmm1, dqword ptr [rcx + $10]
+      	lea    rcx, [rcx + $20]
+        dec    al
+      	xorps  xmm2, xmm0
+@sml:   aesenc xmm2, xmm1
+      	movups xmm1, dqword ptr [rcx]
+      	add    rcx, $10
+      	dec    al
+      	jne    @sml
+      	aesenclast xmm2, xmm1
+      	pxor   xmm0, xmm0
+      	pxor   xmm1, xmm1
+      	xorps  xmm2, xmm3
+      	pxor   xmm3, xmm3
+      	movups dqword ptr [rsi], xmm2
+      	xorps  xmm2, xmm2
+        lea    rbx, [rbx + TAesMac256.encrypted]
+        mov    rdi, rsi
+        mov    r10d, 16
+        call   @crc // MAC encrypted block
+        jmp    @exit
+        // inlined crcblocksse42() crc=rbx data=rdi bytes=r10
+        {$ifdef FPC} align 8 {$else} .align 8 {$endif}
+@crc:   lea    r9, [rdi + r10]
+        neg    r10
+        mov    r12d, dword ptr [rbx]
+        mov    r13d, dword ptr [rbx + 4]
+        mov    r14d, dword ptr [rbx + 8]
+        mov    r15d, dword ptr [rbx + 12]
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@crcl:  crc32  r12d, dword ptr [r9 + r10]
+        crc32  r13d, dword ptr [r9 + r10 + 4]
+        crc32  r14d, dword ptr [r9 + r10 + 8]
+        crc32  r15d, dword ptr [r9 + r10 + 12]
+        add    r10, 16
+        jnz    @crcl
+        mov    dword ptr [rbx], r12d
+        mov    dword ptr [rbx + 4], r13d
+        mov    dword ptr [rbx + 8], r14d
+        mov    dword ptr [rbx + 12], r15d
+        ret
+        // optimized AES-CTR process
+@big:   lea    r11, [rsp]
+        push   rbp
+        sub    rsp, $80
+        and    rsp, $fffffffffffffff0
+        // precompute the next 8 counters on the stack
+        movdqu xmm2, dqword ptr [rcx].TAesCtc.fIV
+        mov    r8d, dword ptr [rcx + 12].TAesCtc.fIV // get 32-bit counter
+        lea    rcx, [rcx].TAesCtc.fAes
+        movdqu xmm0, dqword ptr [rcx]
+        pxor   xmm2, xmm0
+        mov    ebp, dword ptr [rcx + $c]
+        movdqa dqword ptr [rsp], xmm2
+        bswap  r8d
+        movdqa xmm3, xmm2
+        movdqa xmm4, xmm2
+        movdqa xmm5, xmm2
+        movdqa dqword ptr [rsp + $40], xmm2
+        movdqa dqword ptr [rsp + $50], xmm2
+        movdqa dqword ptr [rsp + $60], xmm2
+        mov    r10, rdx
+        movdqa dqword ptr [rsp + $70], xmm2
+        lea    rax, [r8 + $1]
+        lea    rdx, [r8 + $2]
+        bswap  eax
+        bswap  edx
+        xor    eax, ebp
+        xor    edx, ebp
+        pinsrd xmm3, eax, $3
+        lea    rax, [r8 + $3]
+        movdqa dqword ptr [rsp + $10], xmm3
+        pinsrd xmm4, edx, $3
+        bswap  eax
+        mov    rdx, r10
+        lea    r10, [r8 + $4]
+        movdqa dqword ptr [rsp + $20], xmm4
+        xor    eax, ebp
+        bswap  r10d
+        pinsrd xmm5, eax, $3
+        movzx  eax, byte ptr [rcx].TAesContext.Rounds
+        xor    r10d, ebp
+        movdqa dqword ptr [rsp + $30], xmm5
+        lea    r9, [r8 + $5]
+        mov    dword ptr [rsp + $4c], r10d
+        bswap  r9d
+        lea    r10, [r8 + $6]
+        dec    al // code below doesn't include the last aesenclast round
+        xor    r9d, ebp
+        bswap  r10d
+        mov    dword ptr [rsp + $5c], r9d
+        xor    r10d, ebp
+        lea    r9, [r8 + $7]
+        mov    dword ptr [rsp + $6c], r10d
+        bswap  r9d
+        xor    r9d, ebp
+        mov    dword ptr [rsp + $7c], r9d
+        // start interleaved process
+        movups xmm1, dqword ptr [rcx + $10]
+        movdqa xmm6, dqword ptr [rsp + $40]
+        movdqa xmm7, dqword ptr [rsp + $50]
+        cmp    rdx, $8
+        jb     @tail
+        sub    rdx, $6
+        lea    rcx, [rcx + $80]
+        sub    rdx, $2
+        // main loop, processing 8 interleaved CTR per iteration
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@loop8: add    r8d, $8 // our 32-bit CTR
+        movdqa xmm8, dqword ptr [rsp + $60]
+        aesenc xmm2, xmm1
+        mov    r9d, r8d
+        movdqa xmm9, dqword ptr [rsp + $70]
+        aesenc xmm3, xmm1
+        bswap  r9d
+        movups xmm0, dqword ptr [rcx - $60]
+        aesenc xmm4, xmm1
+        xor    r9d, ebp
+        aesenc xmm5, xmm1
+        mov    dword ptr [rsp + $c], r9d
+        lea    r9, [r8 + $1]
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+        movups xmm1, dqword ptr [rcx - $50]
+        bswap  r9d
+        aesenc xmm2, xmm0
+        aesenc xmm3, xmm0
+        xor    r9d, ebp
+        aesenc xmm4, xmm0
+        aesenc xmm5, xmm0
+        mov    dword ptr [rsp + $1c], r9d
+        lea    r9, [r8 + $2]
+        aesenc xmm6, xmm0
+        aesenc xmm7, xmm0
+        aesenc xmm8, xmm0
+        aesenc xmm9, xmm0
+        movups xmm0, dqword ptr [rcx - $40]
+        bswap  r9d
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        xor    r9d, ebp
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        mov    dword ptr [rsp + $2c], r9d
+        lea    r9, [r8 + $3]
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+        movups xmm1, dqword ptr [rcx - $30]
+        bswap  r9d
+        aesenc xmm2, xmm0
+        aesenc xmm3, xmm0
+        xor    r9d, ebp
+        aesenc xmm4, xmm0
+        aesenc xmm5, xmm0
+        mov    dword ptr [rsp + $3c], r9d
+        lea    r9, [r8 + $4]
+        aesenc xmm6, xmm0
+        aesenc xmm7, xmm0
+        aesenc xmm8, xmm0
+        aesenc xmm9, xmm0
+        movups xmm0, dqword ptr [rcx - $20]
+        bswap  r9d
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        xor    r9d, ebp
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        mov    dword ptr [rsp + $4c], r9d
+        lea    r9, [r8 + $5]
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+        movups xmm1, dqword ptr [rcx - $10]
+        bswap  r9d
+        aesenc xmm2, xmm0
+        aesenc xmm3, xmm0
+        xor    r9d, ebp
+        aesenc xmm4, xmm0
+        aesenc xmm5, xmm0
+        mov    dword ptr [rsp + $5c], r9d
+        lea    r9, [r8 + $6]
+        aesenc xmm6, xmm0
+        aesenc xmm7, xmm0
+        aesenc xmm8, xmm0
+        aesenc xmm9, xmm0
+        movups xmm0, dqword ptr [rcx]
+        bswap  r9d
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        xor    r9d, ebp
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        mov    dword ptr [rsp + $6c], r9d
+        lea    r9, [r8 + $7]
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+        movups xmm1, dqword ptr [rcx + $10]
+        bswap  r9d
+        aesenc xmm2, xmm0
+        aesenc xmm3, xmm0
+        aesenc xmm4, xmm0
+        xor    r9d, ebp
+        movdqu xmm10, dqword ptr [rdi]
+        aesenc xmm5, xmm0
+        mov    dword ptr [rsp + $7c], r9d
+        aesenc xmm6, xmm0
+        aesenc xmm7, xmm0
+        aesenc xmm8, xmm0
+        aesenc xmm9, xmm0
+        movups xmm0, dqword ptr [rcx + $20]
+        cmp    al, 11
+        jb     @edone      // 128-bit AES
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+        movups xmm1, dqword ptr [rcx + $30]
+        aesenc xmm2, xmm0
+        aesenc xmm3, xmm0
+        aesenc xmm4, xmm0
+        aesenc xmm5, xmm0
+        aesenc xmm6, xmm0
+        aesenc xmm7, xmm0
+        aesenc xmm8, xmm0
+        aesenc xmm9, xmm0
+        movups xmm0, dqword ptr [rcx + $40]
+        je     @edone       // 192-bit AES
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+        movups xmm1, dqword ptr [rcx + $50]
+        aesenc xmm2, xmm0
+        aesenc xmm3, xmm0
+        aesenc xmm4, xmm0
+        aesenc xmm5, xmm0
+        aesenc xmm6, xmm0
+        aesenc xmm7, xmm0
+        aesenc xmm8, xmm0
+        aesenc xmm9, xmm0
+        movups xmm0, dqword ptr [rcx + $60] // 256-bit AES
+        // encrypt + MAC 8 * 128-bit blocks (128 bytes) from src into dest
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@edone: // MAC plain
+        mov    r12d, dword ptr [rbx]
+        mov    r13d, dword ptr [rbx + 4]
+        mov    r14d, dword ptr [rbx + 8]
+        mov    r15d, dword ptr [rbx + 12]
+        crc32  r12d, dword ptr [rdi]
+        crc32  r13d, dword ptr [rdi + $04]
+        crc32  r14d, dword ptr [rdi + $08]
+        crc32  r15d, dword ptr [rdi + $0c]
+        crc32  r12d, dword ptr [rdi + $10]
+        crc32  r13d, dword ptr [rdi + $14]
+        crc32  r14d, dword ptr [rdi + $18]
+        crc32  r15d, dword ptr [rdi + $1c]
+        crc32  r12d, dword ptr [rdi + $20]
+        crc32  r13d, dword ptr [rdi + $24]
+        crc32  r14d, dword ptr [rdi + $28]
+        crc32  r15d, dword ptr [rdi + $2c]
+        crc32  r12d, dword ptr [rdi + $30]
+        crc32  r13d, dword ptr [rdi + $34]
+        crc32  r14d, dword ptr [rdi + $38]
+        crc32  r15d, dword ptr [rdi + $3c]
+        crc32  r12d, dword ptr [rdi + $40]
+        crc32  r13d, dword ptr [rdi + $44]
+        crc32  r14d, dword ptr [rdi + $48]
+        crc32  r15d, dword ptr [rdi + $4c]
+        crc32  r12d, dword ptr [rdi + $50]
+        crc32  r13d, dword ptr [rdi + $54]
+        crc32  r14d, dword ptr [rdi + $58]
+        crc32  r15d, dword ptr [rdi + $5c]
+        crc32  r12d, dword ptr [rdi + $60]
+        crc32  r13d, dword ptr [rdi + $64]
+        crc32  r14d, dword ptr [rdi + $68]
+        crc32  r15d, dword ptr [rdi + $6c]
+        crc32  r12d, dword ptr [rdi + $70]
+        crc32  r13d, dword ptr [rdi + $74]
+        crc32  r14d, dword ptr [rdi + $78]
+        crc32  r15d, dword ptr [rdi + $7c]
+        // encrypt
+        movdqu xmm11, dqword ptr [rdi + $10]
+        pxor   xmm10, xmm0
+        movdqu xmm12, dqword ptr [rdi + $20]
+        pxor   xmm11, xmm0
+        movdqu xmm13, dqword ptr [rdi + $30]
+        pxor   xmm12, xmm0
+        movdqu xmm14, dqword ptr [rdi + $40]
+        pxor   xmm13, xmm0
+        movdqu xmm15, dqword ptr [rdi + $50]
+        pxor   xmm14, xmm0
+        pxor   xmm15, xmm0
+        mov    dword ptr [rbx], r12d
+        mov    dword ptr [rbx + 4], r13d
+        mov    dword ptr [rbx + 8], r14d
+        mov    dword ptr [rbx + 12], r15d
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+        movdqu xmm1, dqword ptr [rdi + $60]
+        lea    rdi, [rdi + $80]
+        aesenclast xmm2, xmm10
+        pxor   xmm1, xmm0
+        movdqu xmm10, dqword ptr [rdi - $10]
+        aesenclast xmm3, xmm11
+        pxor   xmm10, xmm0
+        movdqa xmm11, dqword ptr [rsp]
+        aesenclast xmm4, xmm12
+        aesenclast xmm5, xmm13
+        movdqa xmm12, dqword ptr [rsp + $10]
+        movdqa xmm13, dqword ptr [rsp + $20]
+        aesenclast xmm6, xmm14
+        aesenclast xmm7, xmm15
+        movdqa xmm14, dqword ptr [rsp + $30]
+        movdqa xmm15, dqword ptr [rsp + $40]
+        aesenclast xmm8, xmm1
+        movdqa xmm0, dqword ptr [rsp + $50]
+        movups xmm1, dqword ptr [rcx - $70]
+        aesenclast xmm9, xmm10
+        movups dqword ptr [rsi], xmm2
+        movdqa xmm2, xmm11
+        movups dqword ptr [rsi + $10], xmm3
+        movdqa xmm3, xmm12
+        movups dqword ptr [rsi + $20], xmm4
+        movdqa xmm4, xmm13
+        movups dqword ptr [rsi + $30], xmm5
+        movdqa xmm5, xmm14
+        movups dqword ptr [rsi + $40], xmm6
+        movdqa xmm6, xmm15
+        movups dqword ptr [rsi + $50], xmm7
+        movdqa xmm7, xmm0
+        movups dqword ptr [rsi + $60], xmm8
+        movups dqword ptr [rsi + $70], xmm9
+        // MAC encrypted
+        mov    r12d, dword ptr [rbx].TAesMac256.encrypted
+        mov    r13d, dword ptr [rbx + 4].TAesMac256.encrypted
+        mov    r14d, dword ptr [rbx + 8].TAesMac256.encrypted
+        mov    r15d, dword ptr [rbx + 12].TAesMac256.encrypted
+        crc32  r12d, dword ptr [rsi]
+        crc32  r13d, dword ptr [rsi + $04]
+        crc32  r14d, dword ptr [rsi + $08]
+        crc32  r15d, dword ptr [rsi + $0c]
+        crc32  r12d, dword ptr [rsi + $10]
+        crc32  r13d, dword ptr [rsi + $14]
+        crc32  r14d, dword ptr [rsi + $18]
+        crc32  r15d, dword ptr [rsi + $1c]
+        crc32  r12d, dword ptr [rsi + $20]
+        crc32  r13d, dword ptr [rsi + $24]
+        crc32  r14d, dword ptr [rsi + $28]
+        crc32  r15d, dword ptr [rsi + $2c]
+        crc32  r12d, dword ptr [rsi + $30]
+        crc32  r13d, dword ptr [rsi + $34]
+        crc32  r14d, dword ptr [rsi + $38]
+        crc32  r15d, dword ptr [rsi + $3c]
+        crc32  r12d, dword ptr [rsi + $40]
+        crc32  r13d, dword ptr [rsi + $44]
+        crc32  r14d, dword ptr [rsi + $48]
+        crc32  r15d, dword ptr [rsi + $4c]
+        crc32  r12d, dword ptr [rsi + $50]
+        crc32  r13d, dword ptr [rsi + $54]
+        crc32  r14d, dword ptr [rsi + $58]
+        crc32  r15d, dword ptr [rsi + $5c]
+        crc32  r12d, dword ptr [rsi + $60]
+        crc32  r13d, dword ptr [rsi + $64]
+        crc32  r14d, dword ptr [rsi + $68]
+        crc32  r15d, dword ptr [rsi + $6c]
+        crc32  r12d, dword ptr [rsi + $70]
+        crc32  r13d, dword ptr [rsi + $74]
+        crc32  r14d, dword ptr [rsi + $78]
+        crc32  r15d, dword ptr [rsi + $7c]
+        lea    rsi, [rsi + $80]
+        mov    dword ptr [rbx].TAesMac256.encrypted, r12d
+        mov    dword ptr [rbx + 4].TAesMac256.encrypted, r13d
+        mov    dword ptr [rbx + 8].TAesMac256.encrypted, r14d
+        mov    dword ptr [rbx + 12].TAesMac256.encrypted, r15d
+        sub    rdx, $8
+        jae    @loop8
+        add    rdx, $8
+        je     @done
+        lea    rcx, [rcx - $80]
+        // finalize the process with the edx=1..7 trailing blocks
+@tail:  lea    rcx, [rcx + $10]
+        mov    r10d, edx
+        shl    r10d, 4
+        call   @crc // MAC plain
+        cmp    rdx, $4
+        jb     @loop3
+        je     @loop4
+        // trailing 5..7 interleaved AES blocks
+        shl    eax, $4
+        movdqa xmm8, dqword ptr [rsp + $60]
+        pxor   xmm9, xmm9
+        movups xmm0, dqword ptr [rcx + $10]
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        lea    rcx, [rcx + rax + $10]
+        neg    rax
+        aesenc xmm4, xmm1
+        add    rax, $10
+        movups xmm10, dqword ptr [rdi]
+        aesenc xmm5, xmm1
+        aesenc xmm6, xmm1
+        movups xmm11, dqword ptr [rdi + $10]
+        movups xmm12, dqword ptr [rdi + $20]
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        jmp    @sub8l
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@sub8:  aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+@sub8l: movups xmm1, dqword ptr [rcx + rax]
+        add    rax, $20
+        aesenc xmm2, xmm0
+        aesenc xmm3, xmm0
+        aesenc xmm4, xmm0
+        aesenc xmm5, xmm0
+        aesenc xmm6, xmm0
+        aesenc xmm7, xmm0
+        aesenc xmm8, xmm0
+        aesenc xmm9, xmm0
+        movups xmm0, dqword ptr [rcx + rax - $10]
+        jne    @sub8
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        aesenc xmm6, xmm1
+        aesenc xmm7, xmm1
+        aesenc xmm8, xmm1
+        aesenc xmm9, xmm1
+        aesenclast xmm2, xmm0
+        aesenclast xmm3, xmm0
+        aesenclast xmm4, xmm0
+        aesenclast xmm5, xmm0
+        aesenclast xmm6, xmm0
+        aesenclast xmm7, xmm0
+        aesenclast xmm8, xmm0
+        aesenclast xmm9, xmm0
+        movdqu xmm13, dqword ptr [rdi + $30]
+        pxor   xmm2, xmm10
+        movdqu xmm10, dqword ptr [rdi + $40]
+        pxor   xmm3, xmm11
+        movdqu dqword ptr [rsi], xmm2
+        pxor   xmm4, xmm12
+        movdqu dqword ptr [rsi + $10], xmm3
+        pxor   xmm5, xmm13
+        movdqu dqword ptr [rsi + $20], xmm4
+        pxor   xmm6, xmm10
+        movdqu dqword ptr [rsi + $30], xmm5
+        movdqu dqword ptr [rsi + $40], xmm6
+        cmp    rdx, $6
+        jb     @donec
+        movups xmm11, dqword ptr [rdi + $50]
+        xorps  xmm7, xmm11
+        movups dqword ptr [rsi + $50], xmm7
+        je     @donec
+        movups xmm12, dqword ptr [rdi + $60]
+        xorps  xmm8, xmm12
+        movups dqword ptr [rsi + $60], xmm8
+        jmp    @donec
+        // trailing 4 interleaved AES blocks
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@loop4: aesenc xmm2, xmm1
+        lea    rcx, [rcx + $10]
+        aesenc xmm3, xmm1
+        aesenc xmm4, xmm1
+        aesenc xmm5, xmm1
+        movups xmm1, dqword ptr [rcx]
+        dec    al
+        jne    @loop4
+        aesenclast xmm2, xmm1
+        aesenclast xmm3, xmm1
+        movups xmm10, dqword ptr [rdi]
+        movups xmm11, dqword ptr [rdi + $10]
+        aesenclast xmm4, xmm1
+        aesenclast xmm5, xmm1
+        movups xmm12, dqword ptr [rdi + $20]
+        movups xmm13, dqword ptr [rdi + $30]
+        xorps  xmm2, xmm10
+        movups dqword ptr [rsi], xmm2
+        xorps  xmm3, xmm11
+        movups dqword ptr [rsi + $10], xmm3
+        pxor   xmm4, xmm12
+        movdqu dqword ptr [rsi + $20], xmm4
+        pxor   xmm5, xmm13
+        movdqu dqword ptr [rsi + $30], xmm5
+        jmp    @donec
+        // 1..3 interleaved AES blocks
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@loop3: lea    rcx, [rcx + $10]
+        aesenc xmm2, xmm1
+        aesenc xmm3, xmm1
+        aesenc xmm4, xmm1
+        movups xmm1, dqword ptr [rcx]
+        dec    al
+        jne    @loop3
+        aesenclast xmm2, xmm1
+        aesenclast xmm3, xmm1
+        aesenclast xmm4, xmm1
+        movups xmm10, dqword ptr [rdi]
+        xorps  xmm2, xmm10
+        movups dqword ptr [rsi], xmm2 // 1 trailing block
+        cmp    rdx, $2
+        jb     @donec
+        movups xmm11, dqword ptr [rdi + $10]
+        xorps  xmm3, xmm11
+        movups dqword ptr [rsi + $10], xmm3 // 2 trailing blocks
+        je     @donec
+        movups xmm12, dqword ptr [rdi + $20]
+        xorps  xmm4, xmm12
+        movups dqword ptr [rsi + $20], xmm4 // 3 trailing blocks
+@donec: lea    rbx, [rbx + TAesMac256.encrypted]
+        mov    rdi, rsi
+        mov    r10d, edx
+        shl    r10d, 4
+        call   @crc // MAC encrypted
+        // restore stack
+@done:  mov    rbp, qword ptr [r11 - $8]
+      	lea    rsp, [r11]
+@exit:  pop    rbx
+        pop    r15
+        pop    r14
+        pop    r13
+        pop    r12
+        {$ifdef WIN64ABI}
+        pop    rdi
+        pop    rsi
+        {$endif WIN64ABI}
+end;
+
+// AesNiEncryptCtrCrc32() expects the CTR in lowest 32-bit to never overflow
+procedure AesNiEncryptCtrCrc(src, dest: PByte; len: cardinal;
+  ctxt: TAesCtc); inline;
+var
+  ctr, blocks: cardinal;
+begin
+  ctr := bswap32(PCardinal(@ctxt.fIV[12])^);
+  repeat
+    blocks := len shr AesBlockShift;
+    inc(ctr, blocks);
+    if ctr < blocks then
+    begin
+      // 32-bit counter overflow -> will loop until all processed
+      dec(blocks, ctr);
+      ctr := 0;
+    end;
+    AesNiEncryptCtrCrc32(src, dest, blocks, ctxt); // 32-bit CTR asm
+    PCardinal(@ctxt.fIV[12])^ := bswap32(ctr);
+    if ctr = 0 then
+      CtrNistCarry12(@ctxt.fIV); // propagate carry
+    blocks := blocks shl AesBlockShift;
+    inc(src, blocks);
+    inc(dest, blocks);
+    dec(len, blocks);
+  until len = 0; // caller ensured len and 15 = 0
+end;
+
+procedure AesNiEncryptCfb128(src, dest, aes: pointer; blocks: PtrUInt);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=src, rdx/rsi=dest, r8/rdx=aes, r9/rcx=blocks
+        test    blocks, blocks
+        jz      @z
+        // only use 128-bit registers within the loop
+        movups  xmm0, dqword ptr [aes + 16 * 0].TAesCfc.fAes
+        movups  xmm1, dqword ptr [aes + 16 * 1].TAesCfc.fAes
+        movups  xmm2, dqword ptr [aes + 16 * 2].TAesCfc.fAes
+        movups  xmm3, dqword ptr [aes + 16 * 3].TAesCfc.fAes
+        movups  xmm4, dqword ptr [aes + 16 * 4].TAesCfc.fAes
+        movups  xmm5, dqword ptr [aes + 16 * 5].TAesCfc.fAes
+        movups  xmm6, dqword ptr [aes + 16 * 6].TAesCfc.fAes
+        movups  xmm8, dqword ptr [aes + 16 * 7].TAesCfc.fAes
+        movups  xmm9, dqword ptr [aes + 16 * 8].TAesCfc.fAes
+        movups  xmm10, dqword ptr [aes + 16 * 9].TAesCfc.fAes
+        movups  xmm11, dqword ptr [aes + 16 * 10].TAesCfc.fAes
+        movups  xmm7, dqword ptr [aes].TAesCfc.fIV  // xmm7 = IV
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@s:     movups  xmm15, dqword ptr [src]
+        pxor    xmm7, xmm0
+        aesenc  xmm7, xmm1
+        aesenc  xmm7, xmm2
+        aesenc  xmm7, xmm3
+        aesenc  xmm7, xmm4
+        aesenc  xmm7, xmm5
+        aesenc  xmm7, xmm6
+        aesenc  xmm7, xmm8
+        aesenc  xmm7, xmm9
+        aesenc  xmm7, xmm10
+        aesenclast xmm7, xmm11
+        pxor    xmm15, xmm7
+        movups  dqword ptr [dest], xmm15  // fOut := fIn xor IV
+        movups  xmm7, xmm15              // fIV := fOut
+        add     src, 16
+        add     dest, 16
+        dec     blocks
+        jnz     @s
+        movups  dqword ptr [aes].TAesCfc.fIV, xmm7
+@z:
+end;
+
+procedure AesNiDecryptCfb128(src, dest, aes: pointer; blocks: PtrUInt);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=src, rdx/rsi=dest, r8/rdx=aes, r9/rcx=blocks
+        test    blocks, blocks
+        jz      @z
+        // only use 128-bit registers within the loop
+        movups  xmm0, dqword ptr [aes + 16 * 0].TAesCfc.fAes
+        movups  xmm1, dqword ptr [aes + 16 * 1].TAesCfc.fAes
+        movups  xmm2, dqword ptr [aes + 16 * 2].TAesCfc.fAes
+        movups  xmm3, dqword ptr [aes + 16 * 3].TAesCfc.fAes
+        movups  xmm4, dqword ptr [aes + 16 * 4].TAesCfc.fAes
+        movups  xmm5, dqword ptr [aes + 16 * 5].TAesCfc.fAes
+        movups  xmm6, dqword ptr [aes + 16 * 6].TAesCfc.fAes
+        movups  xmm8, dqword ptr [aes + 16 * 7].TAesCfc.fAes
+        movups  xmm9, dqword ptr [aes + 16 * 8].TAesCfc.fAes
+        movups  xmm10, dqword ptr [aes + 16 * 9].TAesCfc.fAes
+        movups  xmm11, dqword ptr [aes + 16 * 10].TAesCfc.fAes
+        movups  xmm7, dqword ptr [aes].TAesCfc.fIV  // xmm7 = IV
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@s:     movups  xmm15, dqword ptr [src]
+        movups  xmm14, xmm15
+        pxor    xmm7, xmm0
+        aesenc  xmm7, xmm1
+        aesenc  xmm7, xmm2
+        aesenc  xmm7, xmm3
+        aesenc  xmm7, xmm4
+        aesenc  xmm7, xmm5
+        aesenc  xmm7, xmm6
+        aesenc  xmm7, xmm8
+        aesenc  xmm7, xmm9
+        aesenc  xmm7, xmm10
+        aesenclast xmm7, xmm11
+        pxor    xmm15, xmm7
+        movups  dqword ptr [dest], xmm15  // fOut := fIn xor IV
+        movups  xmm7, xmm14               // fIV := fIn
+        add     src, 16
+        add     dest, 16
+        dec     blocks
+        jnz     @s
+        movups  dqword ptr [aes].TAesCfc.fIV, xmm7
+@z:
+end;
+
+procedure AesNiEncryptCfb256(src, dest, aes: pointer; blocks: PtrUInt);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=src, rdx/rsi=dest, r8/rdx=aes, r9/rcx=blocks
+        test    blocks, blocks
+        jz      @z
+        // use (mostly) 128-bit registers within the loop
+        movups  xmm0, dqword ptr [aes + 16 * 0].TAesCfc.fAes
+        movups  xmm1, dqword ptr [aes + 16 * 1].TAesCfc.fAes
+        movups  xmm2, dqword ptr [aes + 16 * 2].TAesCfc.fAes
+        movups  xmm3, dqword ptr [aes + 16 * 3].TAesCfc.fAes
+        movups  xmm4, dqword ptr [aes + 16 * 4].TAesCfc.fAes
+        movups  xmm5, dqword ptr [aes + 16 * 5].TAesCfc.fAes
+        movups  xmm6, dqword ptr [aes + 16 * 6].TAesCfc.fAes
+        movups  xmm8, dqword ptr [aes + 16 * 7].TAesCfc.fAes
+        movups  xmm9, dqword ptr [aes + 16 * 8].TAesCfc.fAes
+        movups  xmm10, dqword ptr [aes + 16 * 9].TAesCfc.fAes
+        movups  xmm11, dqword ptr [aes + 16 * 10].TAesCfc.fAes
+        movups  xmm12, dqword ptr [aes + 16 * 11].TAesCfc.fAes
+        movups  xmm13, dqword ptr [aes + 16 * 12].TAesCfc.fAes
+        movups  xmm14, dqword ptr [aes + 16 * 13].TAesCfc.fAes
+        movups  xmm7, dqword ptr [aes].TAesCfc.fIV  // xmm7 = IV
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@s:     movups  xmm15, dqword ptr [aes + 16 * 14].TAesCfc.fAes
+        pxor    xmm7, xmm0
+        aesenc  xmm7, xmm1
+        aesenc  xmm7, xmm2
+        aesenc  xmm7, xmm3
+        aesenc  xmm7, xmm4
+        aesenc  xmm7, xmm5
+        aesenc  xmm7, xmm6
+        aesenc  xmm7, xmm8
+        aesenc  xmm7, xmm9
+        aesenc  xmm7, xmm10
+        aesenc  xmm7, xmm11
+        aesenc  xmm7, xmm12
+        aesenc  xmm7, xmm13
+        aesenc  xmm7, xmm14
+        aesenclast xmm7, xmm15
+        movups  xmm15, dqword ptr [src]
+        pxor    xmm15, xmm7
+        movups  dqword ptr [dest], xmm15  // fOut := fIn xor IV
+        movups  xmm7, xmm15              // fIV := fOut
+        add     src, 16
+        add     dest, 16
+        dec     blocks
+        jnz     @s
+        movups  dqword ptr [aes].TAesCfc.fIV, xmm7
+@z:
+end;
+
+procedure AesNiDecryptCfb256(src, dest, aes: pointer; blocks: PtrUInt);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=src, rdx/rsi=dest, r8/rdx=aes, r9/rcx=blocks
+        test    blocks, blocks
+        jz      @z
+        // only use 128-bit registers within the loop
+        movups  xmm0, dqword ptr [aes + 16 * 0].TAesCfc.fAes
+        movups  xmm1, dqword ptr [aes + 16 * 1].TAesCfc.fAes
+        movups  xmm2, dqword ptr [aes + 16 * 2].TAesCfc.fAes
+        movups  xmm3, dqword ptr [aes + 16 * 3].TAesCfc.fAes
+        movups  xmm4, dqword ptr [aes + 16 * 4].TAesCfc.fAes
+        movups  xmm5, dqword ptr [aes + 16 * 5].TAesCfc.fAes
+        movups  xmm6, dqword ptr [aes + 16 * 6].TAesCfc.fAes
+        movups  xmm8, dqword ptr [aes + 16 * 7].TAesCfc.fAes
+        movups  xmm9, dqword ptr [aes + 16 * 8].TAesCfc.fAes
+        movups  xmm10, dqword ptr [aes + 16 * 9].TAesCfc.fAes
+        movups  xmm11, dqword ptr [aes + 16 * 10].TAesCfc.fAes
+        movups  xmm12, dqword ptr [aes + 16 * 11].TAesCfc.fAes
+        movups  xmm13, dqword ptr [aes + 16 * 12].TAesCfc.fAes
+        movups  xmm7, dqword ptr [aes].TAesCfc.fIV  // xmm7 = IV
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@s:     movups  xmm14, dqword ptr [aes + 16 * 13].TAesCfc.fAes
+        movups  xmm15, dqword ptr [aes + 16 * 14].TAesCfc.fAes
+        pxor    xmm7, xmm0
+        aesenc  xmm7, xmm1
+        aesenc  xmm7, xmm2
+        aesenc  xmm7, xmm3
+        aesenc  xmm7, xmm4
+        aesenc  xmm7, xmm5
+        aesenc  xmm7, xmm6
+        aesenc  xmm7, xmm8
+        aesenc  xmm7, xmm9
+        aesenc  xmm7, xmm10
+        aesenc  xmm7, xmm11
+        aesenc  xmm7, xmm12
+        aesenc  xmm7, xmm13
+        aesenc  xmm7, xmm14
+        aesenclast xmm7, xmm15
+        movups  xmm15, dqword ptr [src]
+        movups  xmm14, xmm15
+        pxor    xmm15, xmm7
+        movups  dqword ptr [dest], xmm15  // fOut := fIn xor IV
+        movups  xmm7, xmm14               // fIV := fIn
+        add     src, 16
+        add     dest, 16
+        dec     blocks
+        jnz     @s
+        movups  dqword ptr [aes].TAesCfc.fIV, xmm7
+@z:
+end;
+
+procedure AesNiEncryptCfbCrc128(src, dest, aes: pointer; blocks: PtrUInt);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        {$ifdef WIN64ABI}
+        push    rsi
+        push    rdi
+        mov     rdi, src     // rcx
+        mov     rsi, dest    // rdx
+        mov     rdx, aes     // r8
+        mov     rcx, blocks  // r9
+        {$endif WIN64ABI}
+        // rdi=src, rsi=dest, rdx=aes, rcx=blocks
+        test    ecx, ecx
+        jz      @z
+        push    r12
+        push    r13
+        push    rbx
+        // only use 32-bit and 128-bit registers within the loop
+        mov     eax, dword ptr [rdx + 0].TAesCfc.fMac.plain
+        mov     ebx, dword ptr [rdx + 4].TAesCfc.fMac.plain
+        mov     r8d, dword ptr [rdx + 8].TAesCfc.fMac.plain
+        mov     r9d, dword ptr [rdx + 12].TAesCfc.fMac.plain
+        mov     r10d, dword ptr [rdx + 0].TAesCfc.fMac.encrypted
+        mov     r11d, dword ptr [rdx + 4].TAesCfc.fMac.encrypted
+        mov     r12d, dword ptr [rdx + 8].TAesCfc.fMac.encrypted
+        mov     r13d, dword ptr [rdx + 12].TAesCfc.fMac.encrypted
+        movups  xmm0, dqword ptr [rdx + 16 * 0].TAesCfc.fAes
+        movups  xmm1, dqword ptr [rdx + 16 * 1].TAesCfc.fAes
+        movups  xmm2, dqword ptr [rdx + 16 * 2].TAesCfc.fAes
+        movups  xmm3, dqword ptr [rdx + 16 * 3].TAesCfc.fAes
+        movups  xmm4, dqword ptr [rdx + 16 * 4].TAesCfc.fAes
+        movups  xmm5, dqword ptr [rdx + 16 * 5].TAesCfc.fAes
+        movups  xmm6, dqword ptr [rdx + 16 * 6].TAesCfc.fAes
+        movups  xmm8, dqword ptr [rdx + 16 * 7].TAesCfc.fAes
+        movups  xmm9, dqword ptr [rdx + 16 * 8].TAesCfc.fAes
+        movups  xmm10, dqword ptr [rdx + 16 * 9].TAesCfc.fAes
+        movups  xmm11, dqword ptr [rdx + 16 * 10].TAesCfc.fAes
+        movups  xmm7, dqword ptr [rdx].TAesCfc.fIV  // xmm7 = IV
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@s:     movups  xmm15, dqword ptr [rdi]
+        crc32   eax, dword ptr [rdi + 0]
+        crc32   ebx, dword ptr [rdi + 4]
+        crc32   r8d, dword ptr [rdi + 8]
+        crc32   r9d, dword ptr [rdi + 12]
+        pxor    xmm7, xmm0
+        aesenc  xmm7, xmm1
+        aesenc  xmm7, xmm2
+        aesenc  xmm7, xmm3
+        aesenc  xmm7, xmm4
+        aesenc  xmm7, xmm5
+        aesenc  xmm7, xmm6
+        aesenc  xmm7, xmm8
+        aesenc  xmm7, xmm9
+        aesenc  xmm7, xmm10
+        aesenclast xmm7, xmm11
+        pxor    xmm15, xmm7
+        movups  dqword ptr [rsi], xmm15  // fOut := fIn xor IV
+        movups  xmm7, xmm15              // fIV := fOut
+        crc32   r10d, dword ptr [rsi + 0]
+        crc32   r11d, dword ptr [rsi + 4]
+        crc32   r12d, dword ptr [rsi + 8]
+        crc32   r13d, dword ptr [rsi + 12]
+        add     rdi, 16
+        add     rsi, 16
+        dec     ecx
+        jnz     @s
+        movups  dqword ptr [rdx].TAesCfc.fIV, xmm7
+        mov     dword ptr [rdx + 0].TAesCfc.fMac.plain, eax
+        mov     dword ptr [rdx + 4].TAesCfc.fMac.plain, ebx
+        mov     dword ptr [rdx + 8].TAesCfc.fMac.plain, r8d
+        mov     dword ptr [rdx + 12].TAesCfc.fMac.plain, r9d
+        mov     dword ptr [rdx + 0].TAesCfc.fMac.encrypted, r10d
+        mov     dword ptr [rdx + 4].TAesCfc.fMac.encrypted, r11d
+        mov     dword ptr [rdx + 8].TAesCfc.fMac.encrypted, r12d
+        mov     dword ptr [rdx + 12].TAesCfc.fMac.encrypted, r13d
+        pop     rbx
+        pop     r13
+        pop     r12
+@z:     {$ifdef WIN64ABI}
+        pop    rdi
+        pop    rsi
+        {$endif WIN64ABI}
+end;
+
+procedure AesNiDecryptCfbCrc128(src, dest, aes: pointer; blocks: PtrUInt);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        {$ifdef WIN64ABI}
+        push    rsi
+        push    rdi
+        mov     rdi, src     // rcx
+        mov     rsi, dest    // rdx
+        mov     rdx, aes     // r8
+        mov     rcx, blocks  // r9
+        {$endif WIN64ABI}
+        // rdi=src, rsi=dest, rdx=aes, rcx=blocks
+        test    ecx, ecx
+        jz      @z
+        push    r12
+        push    r13
+        push    rbx
+        // only use 32-bit and 128-bit registers within the loop
+        mov     eax, dword ptr [rdx + 0].TAesCfc.fMac.plain
+        mov     ebx, dword ptr [rdx + 4].TAesCfc.fMac.plain
+        mov     r8d, dword ptr [rdx + 8].TAesCfc.fMac.plain
+        mov     r9d, dword ptr [rdx + 12].TAesCfc.fMac.plain
+        mov     r10d, dword ptr [rdx + 0].TAesCfc.fMac.encrypted
+        mov     r11d, dword ptr [rdx + 4].TAesCfc.fMac.encrypted
+        mov     r12d, dword ptr [rdx + 8].TAesCfc.fMac.encrypted
+        mov     r13d, dword ptr [rdx + 12].TAesCfc.fMac.encrypted
+        movups  xmm0, dqword ptr [rdx + 16 * 0].TAesCfc.fAes
+        movups  xmm1, dqword ptr [rdx + 16 * 1].TAesCfc.fAes
+        movups  xmm2, dqword ptr [rdx + 16 * 2].TAesCfc.fAes
+        movups  xmm3, dqword ptr [rdx + 16 * 3].TAesCfc.fAes
+        movups  xmm4, dqword ptr [rdx + 16 * 4].TAesCfc.fAes
+        movups  xmm5, dqword ptr [rdx + 16 * 5].TAesCfc.fAes
+        movups  xmm6, dqword ptr [rdx + 16 * 6].TAesCfc.fAes
+        movups  xmm8, dqword ptr [rdx + 16 * 7].TAesCfc.fAes
+        movups  xmm9, dqword ptr [rdx + 16 * 8].TAesCfc.fAes
+        movups  xmm10, dqword ptr [rdx + 16 * 9].TAesCfc.fAes
+        movups  xmm11, dqword ptr [rdx + 16 * 10].TAesCfc.fAes
+        movups  xmm7, dqword ptr [rdx].TAesCfc.fIV  // xmm7 = IV
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@s:     movups  xmm15, dqword ptr [rdi]
+        movups  xmm14, xmm15
+        crc32   r10d, dword ptr [rdi + 0]
+        crc32   r11d, dword ptr [rdi + 4]
+        crc32   r12d, dword ptr [rdi + 8]
+        crc32   r13d, dword ptr [rdi + 12]
+        pxor    xmm7, xmm0
+        aesenc  xmm7, xmm1
+        aesenc  xmm7, xmm2
+        aesenc  xmm7, xmm3
+        aesenc  xmm7, xmm4
+        aesenc  xmm7, xmm5
+        aesenc  xmm7, xmm6
+        aesenc  xmm7, xmm8
+        aesenc  xmm7, xmm9
+        aesenc  xmm7, xmm10
+        aesenclast xmm7, xmm11
+        pxor    xmm15, xmm7
+        movups  dqword ptr [rsi], xmm15  // fOut := fIn xor IV
+        movups  xmm7, xmm14              // fIV := fIn
+        crc32   eax, dword ptr [rsi + 0]
+        crc32   ebx, dword ptr [rsi + 4]
+        crc32   r8d, dword ptr [rsi + 8]
+        crc32   r9d, dword ptr [rsi + 12]
+        add     rdi, 16
+        add     rsi, 16
+        dec     ecx
+        jnz     @s
+        movups  dqword ptr [rdx].TAesCfc.fIV, xmm7
+        mov     dword ptr [rdx + 0].TAesCfc.fMac.plain, eax
+        mov     dword ptr [rdx + 4].TAesCfc.fMac.plain, ebx
+        mov     dword ptr [rdx + 8].TAesCfc.fMac.plain, r8d
+        mov     dword ptr [rdx + 12].TAesCfc.fMac.plain, r9d
+        mov     dword ptr [rdx + 0].TAesCfc.fMac.encrypted, r10d
+        mov     dword ptr [rdx + 4].TAesCfc.fMac.encrypted, r11d
+        mov     dword ptr [rdx + 8].TAesCfc.fMac.encrypted, r12d
+        mov     dword ptr [rdx + 12].TAesCfc.fMac.encrypted, r13d
+        pop     rbx
+        pop     r13
+        pop     r12
+@z:     {$ifdef WIN64ABI}
+        pop    rdi
+        pop    rsi
+        {$endif WIN64ABI}
+end;
+
+procedure AesNiEncryptCfbCrc256(src, dest, aes: pointer; blocks: PtrUInt);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        {$ifdef WIN64ABI}
+        push    rsi
+        push    rdi
+        mov     rdi, src     // rcx
+        mov     rsi, dest    // rdx
+        mov     rdx, aes     // r8
+        mov     rcx, blocks  // r9
+        {$endif WIN64ABI}
+        // rdi=src, rsi=dest, rdx=aes, rcx=blocks
+        test    ecx, ecx
+        jz      @z
+        push    r12
+        push    r13
+        push    rbx
+        // only use 32-bit and (mostly) 128-bit registers within the loop
+        mov     eax, dword ptr [rdx + 0].TAesCfc.fMac.plain
+        mov     ebx, dword ptr [rdx + 4].TAesCfc.fMac.plain
+        mov     r8d, dword ptr [rdx + 8].TAesCfc.fMac.plain
+        mov     r9d, dword ptr [rdx + 12].TAesCfc.fMac.plain
+        mov     r10d, dword ptr [rdx + 0].TAesCfc.fMac.encrypted
+        mov     r11d, dword ptr [rdx + 4].TAesCfc.fMac.encrypted
+        mov     r12d, dword ptr [rdx + 8].TAesCfc.fMac.encrypted
+        mov     r13d, dword ptr [rdx + 12].TAesCfc.fMac.encrypted
+        movups  xmm0, dqword ptr [rdx + 16 * 0].TAesCfc.fAes
+        movups  xmm1, dqword ptr [rdx + 16 * 1].TAesCfc.fAes
+        movups  xmm2, dqword ptr [rdx + 16 * 2].TAesCfc.fAes
+        movups  xmm3, dqword ptr [rdx + 16 * 3].TAesCfc.fAes
+        movups  xmm4, dqword ptr [rdx + 16 * 4].TAesCfc.fAes
+        movups  xmm5, dqword ptr [rdx + 16 * 5].TAesCfc.fAes
+        movups  xmm6, dqword ptr [rdx + 16 * 6].TAesCfc.fAes
+        movups  xmm8, dqword ptr [rdx + 16 * 7].TAesCfc.fAes
+        movups  xmm9, dqword ptr [rdx + 16 * 8].TAesCfc.fAes
+        movups  xmm10, dqword ptr [rdx + 16 * 9].TAesCfc.fAes
+        movups  xmm11, dqword ptr [rdx + 16 * 10].TAesCfc.fAes
+        movups  xmm12, dqword ptr [rdx + 16 * 11].TAesCfc.fAes
+        movups  xmm13, dqword ptr [rdx + 16 * 12].TAesCfc.fAes
+        movups  xmm14, dqword ptr [rdx + 16 * 13].TAesCfc.fAes
+        movups  xmm7, dqword ptr [rdx].TAesCfc.fIV  // xmm7 = IV
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@s:     movups  xmm15, dqword ptr [rdx + 16 * 14].TAesCfc.fAes
+        crc32   eax, dword ptr [rdi + 0]
+        crc32   ebx, dword ptr [rdi + 4]
+        crc32   r8d, dword ptr [rdi + 8]
+        crc32   r9d, dword ptr [rdi + 12]
+        pxor    xmm7, xmm0
+        aesenc  xmm7, xmm1
+        aesenc  xmm7, xmm2
+        aesenc  xmm7, xmm3
+        aesenc  xmm7, xmm4
+        aesenc  xmm7, xmm5
+        aesenc  xmm7, xmm6
+        aesenc  xmm7, xmm8
+        aesenc  xmm7, xmm9
+        aesenc  xmm7, xmm10
+        aesenc  xmm7, xmm11
+        aesenc  xmm7, xmm12
+        aesenc  xmm7, xmm13
+        aesenc  xmm7, xmm14
+        aesenclast xmm7, xmm15
+        movups  xmm15, dqword ptr [rdi]
+        pxor    xmm15, xmm7
+        movups  dqword ptr [rsi], xmm15  // fOut := fIn xor IV
+        movups  xmm7, xmm15              // fIV := fOut
+        crc32   r10d, dword ptr [rsi + 0]
+        crc32   r11d, dword ptr [rsi + 4]
+        crc32   r12d, dword ptr [rsi + 8]
+        crc32   r13d, dword ptr [rsi + 12]
+        add     rdi, 16
+        add     rsi, 16
+        dec     ecx
+        jnz     @s
+        movups  dqword ptr [rdx].TAesCfc.fIV, xmm7
+        mov     dword ptr [rdx + 0].TAesCfc.fMac.plain, eax
+        mov     dword ptr [rdx + 4].TAesCfc.fMac.plain, ebx
+        mov     dword ptr [rdx + 8].TAesCfc.fMac.plain, r8d
+        mov     dword ptr [rdx + 12].TAesCfc.fMac.plain, r9d
+        mov     dword ptr [rdx + 0].TAesCfc.fMac.encrypted, r10d
+        mov     dword ptr [rdx + 4].TAesCfc.fMac.encrypted, r11d
+        mov     dword ptr [rdx + 8].TAesCfc.fMac.encrypted, r12d
+        mov     dword ptr [rdx + 12].TAesCfc.fMac.encrypted, r13d
+        pop     rbx
+        pop     r13
+        pop     r12
+@z:     {$ifdef WIN64ABI}
+        pop    rdi
+        pop    rsi
+        {$endif WIN64ABI}
+end;
+
+procedure AesNiDecryptCfbCrc256(src, dest, aes: pointer; blocks: PtrUInt);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        {$ifdef WIN64ABI}
+        push    rsi
+        push    rdi
+        mov     rdi, src     // rcx
+        mov     rsi, dest    // rdx
+        mov     rdx, aes     // r8
+        mov     rcx, blocks  // r9
+        {$endif WIN64ABI}
+        // rdi=src, rsi=dest, rdx=aes, rcx=blocks
+        test    ecx, ecx
+        jz      @z
+        push    r12
+        push    r13
+        push    rbx
+        // only use 32-bit and (mostly) 128-bit registers within the loop
+        mov     eax, dword ptr [rdx + 0].TAesCfc.fMac.plain
+        mov     ebx, dword ptr [rdx + 4].TAesCfc.fMac.plain
+        mov     r8d, dword ptr [rdx + 8].TAesCfc.fMac.plain
+        mov     r9d, dword ptr [rdx + 12].TAesCfc.fMac.plain
+        mov     r10d, dword ptr [rdx + 0].TAesCfc.fMac.encrypted
+        mov     r11d, dword ptr [rdx + 4].TAesCfc.fMac.encrypted
+        mov     r12d, dword ptr [rdx + 8].TAesCfc.fMac.encrypted
+        mov     r13d, dword ptr [rdx + 12].TAesCfc.fMac.encrypted
+        movups  xmm0, dqword ptr [rdx + 16 * 0].TAesCfc.fAes
+        movups  xmm1, dqword ptr [rdx + 16 * 1].TAesCfc.fAes
+        movups  xmm2, dqword ptr [rdx + 16 * 2].TAesCfc.fAes
+        movups  xmm3, dqword ptr [rdx + 16 * 3].TAesCfc.fAes
+        movups  xmm4, dqword ptr [rdx + 16 * 4].TAesCfc.fAes
+        movups  xmm5, dqword ptr [rdx + 16 * 5].TAesCfc.fAes
+        movups  xmm6, dqword ptr [rdx + 16 * 6].TAesCfc.fAes
+        movups  xmm8, dqword ptr [rdx + 16 * 7].TAesCfc.fAes
+        movups  xmm9, dqword ptr [rdx + 16 * 8].TAesCfc.fAes
+        movups  xmm10, dqword ptr [rdx + 16 * 9].TAesCfc.fAes
+        movups  xmm11, dqword ptr [rdx + 16 * 10].TAesCfc.fAes
+        movups  xmm12, dqword ptr [rdx + 16 * 11].TAesCfc.fAes
+        movups  xmm13, dqword ptr [rdx + 16 * 12].TAesCfc.fAes
+        movups  xmm7, dqword ptr [rdx].TAesCfc.fIV  // xmm7 = IV
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@s:     movups  xmm14, dqword ptr [rdx + 16 * 13].TAesCfc.fAes
+        movups  xmm15, dqword ptr [rdx + 16 * 14].TAesCfc.fAes
+        crc32   r10d, dword ptr [rdi + 0]
+        crc32   r11d, dword ptr [rdi + 4]
+        crc32   r12d, dword ptr [rdi + 8]
+        crc32   r13d, dword ptr [rdi + 12]
+        pxor    xmm7, xmm0
+        aesenc  xmm7, xmm1
+        aesenc  xmm7, xmm2
+        aesenc  xmm7, xmm3
+        aesenc  xmm7, xmm4
+        aesenc  xmm7, xmm5
+        aesenc  xmm7, xmm6
+        aesenc  xmm7, xmm8
+        aesenc  xmm7, xmm9
+        aesenc  xmm7, xmm10
+        aesenc  xmm7, xmm11
+        aesenc  xmm7, xmm12
+        aesenc  xmm7, xmm13
+        aesenc  xmm7, xmm14
+        aesenclast xmm7, xmm15
+        movups  xmm15, dqword ptr [rdi]
+        movups  xmm14, xmm15
+        pxor    xmm15, xmm7
+        movups  dqword ptr [rsi], xmm15  // fOut := fIn xor IV
+        movups  xmm7, xmm14              // fIV := fIn
+        crc32   eax, dword ptr [rsi + 0]
+        crc32   ebx, dword ptr [rsi + 4]
+        crc32   r8d, dword ptr [rsi + 8]
+        crc32   r9d, dword ptr [rsi + 12]
+        add     rdi, 16
+        add     rsi, 16
+        dec     ecx
+        jnz     @s
+        movups  dqword ptr [rdx].TAesCfc.fIV, xmm7
+        mov     dword ptr [rdx + 0].TAesCfc.fMac.plain, eax
+        mov     dword ptr [rdx + 4].TAesCfc.fMac.plain, ebx
+        mov     dword ptr [rdx + 8].TAesCfc.fMac.plain, r8d
+        mov     dword ptr [rdx + 12].TAesCfc.fMac.plain, r9d
+        mov     dword ptr [rdx + 0].TAesCfc.fMac.encrypted, r10d
+        mov     dword ptr [rdx + 4].TAesCfc.fMac.encrypted, r11d
+        mov     dword ptr [rdx + 8].TAesCfc.fMac.encrypted, r12d
+        mov     dword ptr [rdx + 12].TAesCfc.fMac.encrypted, r13d
+        pop     rbx
+        pop     r13
+        pop     r12
+@z:     {$ifdef WIN64ABI}
+        pop    rdi
+        pop    rsi
+        {$endif WIN64ABI}
+end;
+
+{$ifdef USEGCMAVX}
+
+// prepare the GMAC process for GcmAvxAuth() and GcmAvxGetTag()
+procedure GcmAvxInit(ptab, ks: pointer; rounds: cardinal);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=ptab, rdx/rsi=ks, r8/rdx=kslen
+        movdqa  xmm15, dqword ptr [rip + @bswapMask]
+        movdqa  xmm14, dqword ptr [rip + @gcmPoly]
+        movdqu  xmm0, dqword ptr [ks]
+        movdqu  xmm11, dqword ptr [ks + 10H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 20H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 30H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 40H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 50H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 60H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 70H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 80H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 90H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 0A0H]
+        cmp     rounds, 12
+        jc      @last
+        // end of AES-128
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 0B0H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 0C0H]
+        jz      @last
+        // end of AES-192
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 0D0H]
+        aesenc  xmm0, xmm11
+        movdqu  xmm11, dqword ptr [ks + 0E0H]
+        // end of AES-256
+@last:  aesenclast xmm0, xmm11
+        pshufb  xmm0, xmm15
+        pshufd  xmm11, xmm0, 0FFH
+        movdqu  xmm12, xmm0
+        psrad   xmm11, 31
+        pand    xmm11, xmm14
+        psrld   xmm12, 31
+        pslldq  xmm12, 4
+        pslld   xmm0, 1
+        pxor    xmm0, xmm11
+        pxor    xmm0, xmm12
+        movdqu  dqword ptr [ptab + 0E0H], xmm0
+        pshufd  xmm1, xmm0, 4EH
+        pxor    xmm1, xmm0
+        movdqu  dqword ptr [ptab + 0F0H], xmm1
+        movdqu  xmm2, xmm0
+        movdqu  xmm3, xmm1
+        mov     al, 7
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@init:  movdqu  xmm11, xmm2
+        movdqu  xmm12, xmm2
+        movdqu  xmm13, xmm3
+        // pclmulqdq xmm11, xmm0, 00H
+        // pclmulqdq xmm12, xmm0, 11H
+        // pclmulqdq xmm13, xmm1, 00H
+        db $66, $44, $0F, $3A, $44, $D8, $00
+        db $66, $44, $0F, $3A, $44, $E0, $11
+        db $66, $44, $0F, $3A, $44, $E9, $00
+        pxor    xmm13, xmm11
+        pxor    xmm13, xmm12
+        movdqu  xmm4, xmm13
+        pslldq  xmm4, 8
+        psrldq  xmm13, 8
+        pxor    xmm11, xmm4
+        pxor    xmm12, xmm13
+        movdqu  xmm2, xmm14
+        // pclmulqdq xmm2, xmm11, 01H
+        db $66, $41, $0F, $3A, $44, $D3, $01
+        pshufd  xmm11, xmm11, 4EH
+        pxor    xmm11, xmm2
+        movdqu  xmm2, xmm14
+        // pclmulqdq xmm2, xmm11, 01H
+        db $66, $41, $0F, $3A, $44, $D3, $01
+        pshufd  xmm11, xmm11, 4EH
+        pxor    xmm2, xmm11
+        pxor    xmm2, xmm12
+        movdqu  dqword ptr [ptab + 0C0H], xmm2
+        pshufd  xmm3, xmm2, 4EH
+        pxor    xmm3, xmm2
+        movdqu  dqword ptr [ptab + 0D0H], xmm3
+        lea     ptab, [ptab - 20H]
+        dec     al
+        jne     @init
+        ret
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@bswapMask:
+        dq $08090A0B0C0D0E0F
+        dq $0001020304050607
+@gcmPoly:
+        dq $0000000000000001
+        dq $C200000000000000
+end;
+
+// compute GMAC with 8x interleaved pclmulqdq opcode
+procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rdi=ptab, rsi=data, rdx=datalen, rcx=hash
+        movdqu  xmm8, dqword ptr [hash]
+        movdqa  xmm15, dqword ptr [rip + @bswapMask]
+        movdqa  xmm14, dqword ptr [rip + @gcmPoly]
+        test    datalen, datalen
+        jz      @done
+        cmp     datalen, 128
+        jc      @by1
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@by8:   sub     datalen, 128
+        movdqu  xmm0, dqword ptr [data]
+        movdqu  xmm1, dqword ptr [data + 10H]
+        movdqu  xmm2, dqword ptr [data + 20H]
+        movdqu  xmm3, dqword ptr [data + 30H]
+        movdqu  xmm4, dqword ptr [data + 40H]
+        movdqu  xmm5, dqword ptr [data + 50H]
+        movdqu  xmm6, dqword ptr [data + 60H]
+        movdqu  xmm7, dqword ptr [data + 70H]
+        lea     data, [data + 80H]
+        pshufb  xmm0, xmm15
+        pshufb  xmm1, xmm15
+        pshufb  xmm2, xmm15
+        pshufb  xmm3, xmm15
+        pshufb  xmm4, xmm15
+        pshufb  xmm5, xmm15
+        pshufb  xmm6, xmm15
+        pshufb  xmm7, xmm15
+        pxor    xmm0, xmm8
+        movdqu  xmm8, dqword ptr [ptab]
+        movdqu  xmm10, dqword ptr [ptab + 10H]
+        movdqu  xmm9, xmm8
+        pshufd  xmm12, xmm0, 4EH
+        pxor    xmm12, xmm0
+        // pclmulqdq xmm8, xmm0, 00H
+        // pclmulqdq xmm9, xmm0, 11H
+        // pclmulqdq xmm10, xmm12, 00H
+        db $66, $44, $0F, $3A, $44, $C0, $00
+        db $66, $44, $0F, $3A, $44, $C8, $11
+        db $66, $45, $0F, $3A, $44, $D4, $00
+        movdqu  xmm12, dqword ptr [ptab + 20H]
+        movdqu  xmm13, xmm12
+        // pclmulqdq xmm12, xmm1, 00H
+        db $66, $44, $0F, $3A, $44, $E1, $00
+        pxor    xmm8, xmm12
+        // pclmulqdq xmm13, xmm1, 11H
+        db $66, $44, $0F, $3A, $44, $E9, $11
+        pxor    xmm9, xmm13
+        pshufd  xmm12, xmm1, 4EH
+        pxor    xmm1, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 30H]
+        // pclmulqdq xmm12, xmm1, 00H
+        db $66, $44, $0F, $3A, $44, $E1, $00
+        pxor    xmm10, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 40H]
+        movdqu  xmm13, xmm12
+        // pclmulqdq xmm12, xmm2, 00H
+        db $66, $44, $0F, $3A, $44, $E2, $00
+        pxor    xmm8, xmm12
+        // pclmulqdq xmm13, xmm2, 11H
+        db $66, $44, $0F, $3A, $44, $EA, $11
+        pxor    xmm9, xmm13
+        pshufd  xmm12, xmm2, 4EH
+        pxor    xmm2, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 50H]
+        // pclmulqdq xmm12, xmm2, 00H
+        db $66, $44, $0F, $3A, $44, $E2, $00
+        pxor    xmm10, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 60H]
+        movdqu  xmm13, xmm12
+        // pclmulqdq xmm12, xmm3, 00H
+        db $66, $44, $0F, $3A, $44, $E3, $00
+        pxor    xmm8, xmm12
+        // pclmulqdq xmm13, xmm3, 11H
+        db $66, $44, $0F, $3A, $44, $EB, $11
+        pxor    xmm9, xmm13
+        pshufd  xmm12, xmm3, 4EH
+        pxor    xmm3, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 70H]
+        // pclmulqdq xmm12, xmm3, 00H
+        db $66, $44, $0F, $3A, $44, $E3, $00
+        pxor    xmm10, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 80H]
+        movdqu  xmm13, xmm12
+        // pclmulqdq xmm12, xmm4, 00H
+        db $66, $44, $0F, $3A, $44, $E4, $00
+        pxor    xmm8, xmm12
+        // pclmulqdq xmm13, xmm4, 11H
+        db $66, $44, $0F, $3A, $44, $EC, $11
+        pxor    xmm9, xmm13
+        pshufd  xmm12, xmm4, 4EH
+        pxor    xmm4, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 90H]
+        // pclmulqdq xmm12, xmm4, 00H
+        db $66, $44, $0F, $3A, $44, $E4, $00
+        pxor    xmm10, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 0A0H]
+        movdqu  xmm13, xmm12
+        // pclmulqdq xmm12, xmm5, 00H
+        db $66, $44, $0F, $3A, $44, $E5, $00
+        pxor    xmm8, xmm12
+        // pclmulqdq xmm13, xmm5, 11H
+        db $66, $44, $0F, $3A, $44, $ED, $11
+        pxor    xmm9, xmm13
+        pshufd  xmm12, xmm5, 4EH
+        pxor    xmm5, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 0B0H]
+        // pclmulqdq xmm12, xmm5, 00H
+        db $66, $44, $0F, $3A, $44, $E5, $00
+        pxor    xmm10, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 0C0H]
+        movdqu  xmm13, xmm12
+        // pclmulqdq xmm12, xmm6, 00H
+        db $66, $44, $0F, $3A, $44, $E6, $00
+        pxor    xmm8, xmm12
+        // pclmulqdq xmm13, xmm6, 11H
+        db $66, $44, $0F, $3A, $44, $EE, $11
+        pxor    xmm9, xmm13
+        pshufd  xmm12, xmm6, 4EH
+        pxor    xmm6, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 0D0H]
+        // pclmulqdq xmm12, xmm6, 00H
+        db $66, $44, $0F, $3A, $44, $E6, $00
+        pxor    xmm10, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 0E0H]
+        movdqu  xmm13, xmm12
+        // pclmulqdq xmm12, xmm7, 00H
+        db $66, $44, $0F, $3A, $44, $E7, $00
+        pxor    xmm8, xmm12
+        // pclmulqdq xmm13, xmm7, 11H
+        db $66, $44, $0F, $3A, $44, $EF, $11
+        pxor    xmm9, xmm13
+        pshufd  xmm12, xmm7, 4EH
+        pxor    xmm7, xmm12
+        movdqu  xmm12, dqword ptr [ptab + 0F0H]
+        // pclmulqdq xmm12, xmm7, 00H
+        db $66, $44, $0F, $3A, $44, $E7, $00
+        pxor    xmm10, xmm12
+        pxor    xmm10, xmm8
+        pxor    xmm10, xmm9
+        movdqu  xmm11, xmm10
+        psrldq  xmm10, 8
+        pslldq  xmm11, 8
+        pxor    xmm9, xmm10
+        pxor    xmm8, xmm11
+        movdqu  xmm11, xmm14
+        // pclmulqdq xmm11, xmm8, 01H
+        db $66, $45, $0F, $3A, $44, $D8, $01
+        pshufd  xmm8, xmm8, 4EH
+        pxor    xmm8, xmm11
+        movdqu  xmm11, xmm14
+        // pclmulqdq xmm11, xmm8, 01H
+        db $66, $45, $0F, $3A, $44, $D8, $01
+        pshufd  xmm8, xmm8, 4EH
+        pxor    xmm8, xmm11
+        pxor    xmm8, xmm9
+        cmp     datalen, 128
+        jnc     @by8
+@by1:   movdqu  xmm12, dqword ptr [ptab + 0E0H]
+        movdqu  xmm13, dqword ptr [ptab + 0F0H]
+        cmp     datalen, 16
+        jc      @sml
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@next:  sub     datalen, 16
+        movdqu  xmm0, dqword ptr [data]
+@s:     pshufb  xmm0, xmm15
+        pxor    xmm0, xmm8
+        movdqu  xmm8, xmm12
+        movdqu  xmm10, xmm13
+        movdqu  xmm9, xmm12
+        pshufd  xmm11, xmm0, 4EH
+        pxor    xmm11, xmm0
+        // pclmulqdq xmm8, xmm0, 00H
+        // pclmulqdq xmm9, xmm0, 11H
+        // pclmulqdq xmm10, xmm11, 00H
+        db $66, $44, $0F, $3A, $44, $C0, $00
+        db $66, $44, $0F, $3A, $44, $C8, $11
+        db $66, $45, $0F, $3A, $44, $D3, $00
+        pxor    xmm10, xmm8
+        pxor    xmm10, xmm9
+        movdqu  xmm11, xmm10
+        psrldq  xmm10, 8
+        pslldq  xmm11, 8
+        pxor    xmm9, xmm10
+        pxor    xmm8, xmm11
+        movdqu  xmm11, xmm14
+        // pclmulqdq xmm11, xmm8, 01H
+        db $66, $45, $0F, $3A, $44, $D8, $01
+        pshufd  xmm8, xmm8, 4EH
+        pxor    xmm8, xmm11
+        movdqu  xmm11, xmm14
+        // pclmulqdq xmm11, xmm8, 01H
+        db $66, $45, $0F, $3A, $44, $D8, $01
+        pshufd  xmm8, xmm8, 4EH
+        pxor    xmm8, xmm11
+        pxor    xmm8, xmm9
+        lea     data, [data + 10H]
+        cmp     datalen, 16
+        jnc     @next
+@sml:   test    datalen, datalen
+        jz      @done
+        pxor    xmm0, xmm0
+        lea     data, [data + datalen - 1]
+        {$ifdef FPC} align 8 {$else} .align 8 {$endif}
+@ins:   pslldq  xmm0, 1
+        pinsrb  xmm0, byte ptr [data], 00H
+        dec     data
+        dec     datalen
+        jnz     @ins
+        jmp     @s
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@bswapMask:
+        dq $08090A0B0C0D0E0F
+        dq $0001020304050607
+@gcmPoly:
+        dq $0000000000000001
+        dq $C200000000000000
+@done:  movdqu  dqword ptr [hash], xmm8
+end;
+
+procedure GcmAvxGetTag(ptab, mask, hash: pointer; plen, dlen: PtrInt);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rdi=ptab, rsi=mask, rdx=hash, rcx=plen, r8=dlen
+        {$ifdef WIN64ABI}
+        mov     rax, qword ptr [rsp + $28]  // dlen not passed as register
+        push    rsi
+        push    rdi
+        mov     rdi, ptab    // rcx
+        mov     rsi, mask    // rdx
+        mov     rdx, hash    // r8
+        mov     rcx, plen    // r9
+        {$else}
+        mov     rax, r8
+        {$endif WIN64ABI}
+        shl     rcx, 3
+        movdqu  xmm8, dqword ptr [rdx]
+        movdqu  xmm13, dqword ptr [rsi]
+        movdqa  xmm15, dqword ptr [rip + @bswapMask]
+        movdqa  xmm14, dqword ptr [rip + @gcmPoly]
+        shl     rax, 3
+        movq    xmm0, rcx
+        pinsrq  xmm0, rax, 1
+        pxor    xmm0, xmm8
+        movdqu  xmm8, dqword ptr [rdi + 0E0H]
+        movdqu  xmm10, dqword ptr [rdi + 0F0H]
+        movdqu  xmm9, xmm8
+        // pclmulqdq xmm8, xmm0, 00H
+        // pclmulqdq xmm9, xmm0, 11H
+        db $66, $44, $0F, $3A, $44, $C0, $00
+        db $66, $44, $0F, $3A, $44, $C8, $11
+        pshufd  xmm11, xmm0, 4EH
+        pxor    xmm11, xmm0
+        // pclmulqdq xmm10, xmm11, 00H
+        db $66, $45, $0F, $3A, $44, $D3, $00
+        pxor    xmm10, xmm8
+        pxor    xmm10, xmm9
+        movdqu  xmm11, xmm10
+        psrldq  xmm10, 8
+        pslldq  xmm11, 8
+        pxor    xmm9, xmm10
+        pxor    xmm8, xmm11
+        movdqu  xmm11, xmm14
+        // pclmulqdq xmm11, xmm8, 01H
+        db $66, $45, $0F, $3A, $44, $D8, $01
+        pshufd  xmm8, xmm8, 4EH
+        pxor    xmm8, xmm11
+        movdqu  xmm11, xmm14
+        // pclmulqdq xmm11, xmm8, 01H
+        db $66, $45, $0F, $3A, $44, $D8, $01
+        pshufd  xmm8, xmm8, 4EH
+        pxor    xmm8, xmm11
+        pxor    xmm8, xmm9
+        pshufb  xmm8, xmm15
+        pxor    xmm8, xmm13
+        movdqu  dqword ptr [rdx], xmm8
+        {$ifdef WIN64ABI}
+        pop    rdi
+        pop    rsi
+        {$endif WIN64ABI}
+        ret
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@bswapMask:
+        dq $08090A0B0C0D0E0F
+        dq $0001020304050607
+@gcmPoly:
+        dq $0000000000000001
+        dq $C200000000000000
+end;
+
+{$endif USEGCMAVX}
 
 // compute a := a * b in GF(2^128) using pclmulqdq on WestMere CPUs
 // - three times faster than the pascal version using lookup tables
 procedure gf_mul_pclmulqdq(a, b: pointer);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        movups  xmm0, dqword ptr[a]
-        movups  xmm1, dqword ptr[b]
-        movdqa  xmm10, dqword ptr[rip + @swap]
+        movups  xmm0, dqword ptr [a]
+        movups  xmm1, dqword ptr [b]
+        movdqa  xmm10, dqword ptr [rip + @swap]
         pshufb  xmm0, xmm10
         pshufb  xmm1, xmm10
         movdqa  xmm5, xmm0
@@ -2842,7 +4893,7 @@ procedure gf_mul_pclmulqdq(a, b: pointer);
         pxor    xmm0, xmm1
         pxor    xmm0, xmm2
         pshufb  xmm0, xmm10
-        movups  dqword ptr[a], xmm0
+        movups  dqword ptr [a], xmm0
         ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @swap:  db 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0
@@ -2850,16 +4901,328 @@ end;
 
 {$endif USEAESNI}
 
+{$ifdef USEAESNIHASH}
+
+var
+  /// filled with random at startup so collisions will be harder to engineer
+  // - set by GetMemAligned() - mandatory on Delphi which doesn't align properly
+  AESNIHASHKEYSCHED: pointer;
+  AESNIHASHKEYSCHED_: RawByteString;
+
+procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt); forward;
+
+function _AesNiHash64(seed: QWord; data: pointer; len: PtrUInt): QWord;
+  {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=seed, rdx/rsi=data, r8/rdx=len
+        movq    xmm0, seed
+        call    _AesNiHashXmm0
+        movq    rax, xmm0 // made 3 AES permutations -> 32/64-bit trunc is good
+end;
+
+procedure _AesNiHash128(hash: PHash128; data: pointer; len: PtrUInt);
+  {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // rcx/rdi=seed&result, rdx/rsi=data, r8/rdx=len
+        movdqu  xmm0, dqword ptr [hash]
+        call    _AesNiHashXmm0
+        movdqu  dqword ptr [hash], xmm0
+end;
+
+function _AesNiHash32(seed: cardinal; data: pointer; len: PtrUInt): cardinal;
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // ecx/edi=seed, rdx/rsi=data, r8/rdx=len
+        movd    xmm0, seed // explicitly zeroing high bits for consistency
+        jmp     _AesNiHashXmm0 // returns in both xmm0 and eax
+end;
+
+// 128-bit aeshash as implemented in Go runtime, using aesni/sse4.1 opcodes
+procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // xmm0=seed, rdx/rsi=data, r8/rdx=len, returns in xmm0 and eax
+        mov     r10, len
+        test    len, len
+        jz      @0
+        pinsrw  xmm0, r10d, 4
+        mov     rax, qword ptr [rip + AESNIHASHKEYSCHED]
+        pshufhw xmm0, xmm0, 00H
+        shl     r10, 4
+        movdqa  xmm1, xmm0
+        pxor    xmm0, dqword ptr [rax]
+        movdqu  xmm2, dqword ptr [data + len - 16] // no read after end of page
+        lea     r11, [rip + @shifts] // (heap has header so no read before EOP)
+        aesenc  xmm0, xmm0
+        cmp     len, 16 // 1..16 bytes have no branch
+        ja      @17up
+        je      @16
+        pshufb  xmm2, dqword ptr [r11 + r10]
+@16:    pxor    xmm2, xmm0
+        aesenc  xmm2, xmm2
+        aesenc  xmm2, xmm2
+        aesenc  xmm2, xmm2
+        movdqa  xmm0, xmm2
+        movd    eax, xmm2 // when jumped from _AesNiHash32
+        ret
+@0:     mov     eax, seedfromhash32 // _AesNiHash32 left seed in first param reg
+        ret
+@17up:  cmp     len, 32
+        ja      @33up
+        pxor    xmm1, dqword ptr [rax + 16] // 17..32 bytes
+        aesenc  xmm1, xmm1
+        movdqu  xmm2, dqword ptr [data]
+        movdqu  xmm3, dqword ptr [data + len - 10H] // may overlap
+        pxor    xmm2, xmm0
+        pxor    xmm3, xmm1
+        aesenc  xmm2, xmm2
+        aesenc  xmm3, xmm3
+        aesenc  xmm2, xmm2
+        aesenc  xmm3, xmm3
+        aesenc  xmm2, xmm2
+        aesenc  xmm3, xmm3
+        pxor    xmm2, xmm3
+        movdqa  xmm0, xmm2
+        movd    eax, xmm2
+        ret
+@33up:  cmp     len, 64
+        ja      @65up
+        movdqa  xmm2, xmm1  // 33..64 bytes
+        movdqa  xmm3, xmm1
+        pxor    xmm1, dqword ptr [rax + 16]
+        pxor    xmm2, dqword ptr [rax + 32]
+        pxor    xmm3, dqword ptr [rax + 48]
+        aesenc  xmm1, xmm1
+        aesenc  xmm2, xmm2
+        aesenc  xmm3, xmm3
+        movdqu  xmm4, dqword ptr [data]
+        movdqu  xmm5, dqword ptr [data + 10H]
+        movdqu  xmm6, dqword ptr [data + len - 20H] // may overlap
+        movdqu  xmm7, dqword ptr [data + len - 10H]
+        pxor    xmm4, xmm0
+        pxor    xmm5, xmm1
+        pxor    xmm6, xmm2
+        pxor    xmm7, xmm3
+        aesenc  xmm4, xmm4
+        aesenc  xmm5, xmm5
+        aesenc  xmm6, xmm6
+        aesenc  xmm7, xmm7
+        aesenc  xmm4, xmm4
+        aesenc  xmm5, xmm5
+        aesenc  xmm6, xmm6
+        aesenc  xmm7, xmm7
+        aesenc  xmm4, xmm4
+        aesenc  xmm5, xmm5
+        aesenc  xmm6, xmm6
+        aesenc  xmm7, xmm7
+        pxor    xmm4, xmm6
+        pxor    xmm5, xmm7
+        pxor    xmm4, xmm5
+        movdqa  xmm0, xmm4
+        movd    eax, xmm4
+        ret
+@65up:  cmp     len, 128
+        ja     @129up
+        movdqa  xmm2, xmm1 // 65..128 bytes
+        movdqa  xmm3, xmm1
+        movdqa  xmm4, xmm1
+        movdqa  xmm5, xmm1
+        movdqa  xmm6, xmm1
+        movdqa  xmm7, xmm1
+        pxor    xmm1, dqword ptr [rax + 16]
+        pxor    xmm2, dqword ptr [rax + 32]
+        pxor    xmm3, dqword ptr [rax + 48]
+        pxor    xmm4, dqword ptr [rax + 64]
+        pxor    xmm5, dqword ptr [rax + 80]
+        pxor    xmm6, dqword ptr [rax + 96]
+        pxor    xmm7, dqword ptr [rax + 112]
+        aesenc  xmm1, xmm1
+        aesenc  xmm2, xmm2
+        aesenc  xmm3, xmm3
+        aesenc  xmm4, xmm4
+        aesenc  xmm5, xmm5
+        aesenc  xmm6, xmm6
+        aesenc  xmm7, xmm7
+        movdqu  xmm8, dqword ptr [data]
+        movdqu  xmm9, dqword ptr [data + 10H]
+        movdqu  xmm10, dqword ptr [data + 20H]
+        movdqu  xmm11, dqword ptr [data + 30H]
+        movdqu  xmm12, dqword ptr [data + len - 40H] // may overlap
+        movdqu  xmm13, dqword ptr [data + len - 30H]
+        movdqu  xmm14, dqword ptr [data + len - 20H]
+        movdqu  xmm15, dqword ptr [data + len - 10H]
+        pxor    xmm8, xmm0
+        pxor    xmm9, xmm1
+        pxor    xmm10, xmm2
+        pxor    xmm11, xmm3
+        pxor    xmm12, xmm4
+        pxor    xmm13, xmm5
+        pxor    xmm14, xmm6
+        pxor    xmm15, xmm7
+        aesenc  xmm8, xmm8
+        aesenc  xmm9, xmm9
+        aesenc  xmm10, xmm10
+        aesenc  xmm11, xmm11
+        aesenc  xmm12, xmm12
+        aesenc  xmm13, xmm13
+        aesenc  xmm14, xmm14
+        aesenc  xmm15, xmm15
+        aesenc  xmm8, xmm8
+        aesenc  xmm9, xmm9
+        aesenc  xmm10, xmm10
+        aesenc  xmm11, xmm11
+        aesenc  xmm12, xmm12
+        aesenc  xmm13, xmm13
+        aesenc  xmm14, xmm14
+        aesenc  xmm15, xmm15
+        aesenc  xmm8, xmm8
+        aesenc  xmm9, xmm9
+        aesenc  xmm10, xmm10
+        aesenc  xmm11, xmm11
+        aesenc  xmm12, xmm12
+        aesenc  xmm13, xmm13
+        aesenc  xmm14, xmm14
+        aesenc  xmm15, xmm15
+        pxor    xmm8, xmm12
+        pxor    xmm9, xmm13
+        pxor    xmm10, xmm14
+        pxor    xmm11, xmm15
+        pxor    xmm8, xmm10
+        pxor    xmm9, xmm11
+        pxor    xmm8, xmm9
+        movdqa  xmm0, xmm8
+        movd    eax, xmm8
+        ret
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+        // pshufb arguments to move data down from the high bytes of the register
+        // to the low bytes of the register  -  index is how many bytes to move
+@shifts:dq $0000000000000000, $0000000000000000
+        dq $ffffffffffffff0f, $ffffffffffffffff
+        dq $ffffffffffff0f0e, $ffffffffffffffff
+        dq $ffffffffff0f0e0d, $ffffffffffffffff
+        dq $ffffffff0f0e0d0c, $ffffffffffffffff
+        dq $ffffff0f0e0d0c0b, $ffffffffffffffff
+        dq $ffff0f0e0d0c0b0a, $ffffffffffffffff
+        dq $ff0f0e0d0c0b0a09, $ffffffffffffffff
+        dq $0f0e0d0c0b0a0908, $ffffffffffffffff
+        dq $0e0d0c0b0a090807, $ffffffffffffff0f
+        dq $0d0c0b0a09080706, $ffffffffffff0f0e
+        dq $0c0b0a0908070605, $ffffffffff0f0e0d
+        dq $0b0a090807060504, $ffffffff0f0e0d0c
+        dq $0a09080706050403, $ffffff0f0e0d0c0b
+        dq $0908070605040302, $ffff0f0e0d0c0b0a
+        dq $0807060504030201, $ff0f0e0d0c0b0a09
+@129up: movdqa  xmm2, xmm1 // 129 bytes and up
+        movdqa  xmm3, xmm1
+        movdqa  xmm4, xmm1
+        movdqa  xmm5, xmm1
+        movdqa  xmm6, xmm1
+        movdqa  xmm7, xmm1
+        pxor    xmm1, dqword ptr [rax + 16]
+        pxor    xmm2, dqword ptr [rax + 32]
+        pxor    xmm3, dqword ptr [rax + 48]
+        pxor    xmm4, dqword ptr [rax + 64]
+        pxor    xmm5, dqword ptr [rax + 80]
+        pxor    xmm6, dqword ptr [rax + 96]
+        pxor    xmm7, dqword ptr [rax + 112]
+        aesenc  xmm1, xmm1
+        aesenc  xmm2, xmm2
+        aesenc  xmm3, xmm3
+        aesenc  xmm4, xmm4
+        aesenc  xmm5, xmm5
+        aesenc  xmm6, xmm6
+        aesenc  xmm7, xmm7
+        movdqu  xmm8, dqword ptr [data + len - 80H] // may overlap
+        movdqu  xmm9, dqword ptr [data + len - 70H]
+        movdqu  xmm10, dqword ptr [data + len - 60H]
+        movdqu  xmm11, dqword ptr [data + len - 50H]
+        movdqu  xmm12, dqword ptr [data + len - 40H]
+        movdqu  xmm13, dqword ptr [data + len - 30H]
+        movdqu  xmm14, dqword ptr [data + len - 20H]
+        movdqu  xmm15, dqword ptr [data + len - 10H]
+        pxor    xmm8, xmm0
+        pxor    xmm9, xmm1
+        pxor    xmm10, xmm2
+        pxor    xmm11, xmm3
+        pxor    xmm12, xmm4
+        pxor    xmm13, xmm5
+        pxor    xmm14, xmm6
+        pxor    xmm15, xmm7
+        dec     len
+        shr     len, 7
+        and     data, -16 // 16-byte aligned reads in main loop
+        // process 128 bytes per iteration
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@loop:  aesenc  xmm8, xmm8
+        aesenc  xmm9, xmm9
+        aesenc  xmm10, xmm10
+        aesenc  xmm11, xmm11
+        aesenc  xmm12, xmm12
+        aesenc  xmm13, xmm13
+        aesenc  xmm14, xmm14
+        aesenc  xmm15, xmm15
+        movdqa  xmm0, dqword ptr [data]
+        movdqa  xmm1, dqword ptr [data + 10H]
+        movdqa  xmm2, dqword ptr [data + 20H]
+        movdqa  xmm3, dqword ptr [data + 30H]
+        aesenc  xmm8, xmm0
+        aesenc  xmm9, xmm1
+        aesenc  xmm10, xmm2
+        aesenc  xmm11, xmm3
+        movdqa  xmm4, dqword ptr [data + 40H]
+        movdqa  xmm5, dqword ptr [data + 50H]
+        movdqa  xmm6, dqword ptr [data + 60H]
+        movdqa  xmm7, dqword ptr [data + 70H]
+        aesenc  xmm12, xmm4
+        aesenc  xmm13, xmm5
+        aesenc  xmm14, xmm6
+        aesenc  xmm15, xmm7
+        add     data, 128
+        dec     len
+        jne     @loop
+        aesenc  xmm8, xmm8
+        aesenc  xmm9, xmm9
+        aesenc  xmm10, xmm10
+        aesenc  xmm11, xmm11
+        aesenc  xmm12, xmm12
+        aesenc  xmm13, xmm13
+        aesenc  xmm14, xmm14
+        aesenc  xmm15, xmm15
+        aesenc  xmm8, xmm8
+        aesenc  xmm9, xmm9
+        aesenc  xmm10, xmm10
+        aesenc  xmm11, xmm11
+        aesenc  xmm12, xmm12
+        aesenc  xmm13, xmm13
+        aesenc  xmm14, xmm14
+        aesenc  xmm15, xmm15
+        aesenc  xmm8, xmm8
+        aesenc  xmm9, xmm9
+        aesenc  xmm10, xmm10
+        aesenc  xmm11, xmm11
+        aesenc  xmm12, xmm12
+        aesenc  xmm13, xmm13
+        aesenc  xmm14, xmm14
+        aesenc  xmm15, xmm15
+        pxor    xmm8, xmm12
+        pxor    xmm9, xmm13
+        pxor    xmm10, xmm14
+        pxor    xmm11, xmm15
+        pxor    xmm8, xmm10
+        pxor    xmm9, xmm11
+        pxor    xmm8, xmm9
+        movq    xmm0, xmm8
+        movd    eax, xmm8
+end;
+
+{$endif USEAESNIHASH}
+
 
 {$ifdef SHA512_X64}
 
 // optimized asm using SSE4 instructions for x64 64-bit
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
   {$L ..\..\static\delphi\sha512-x64sse4.obj}
 {$else}
   {$L ..\..\static\x86_64-linux\sha512-x64sse4.o}
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 procedure sha512_sse4(data, hash: pointer; blocks: Int64);
   {$ifdef FPC}cdecl;{$endif} external;
@@ -2896,15 +5259,15 @@ procedure sha512_sse4(data, hash: pointer; blocks: Int64);
    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. }
 
-{$ifdef MSWINDOWS}
+{$ifdef OSWINDOWS}
   {$L ..\..\static\delphi\crc32c64.obj}
 {$else}
-  {$ifdef LINUXNOTBSD}
+  {$ifdef OSLINUX}
   {$L ..\..\static\x86_64-linux\crc32c64.o}
   {$else}
   {$L crc32c64.o}
-  {$endif LINUXNOTBSD}
-{$endif MSWINDOWS}
+  {$endif OSLINUX}
+{$endif OSWINDOWS}
 
 // defined in mormot.core.crypto.pas, not in mormot.core.base, to avoid
 // .o/.obj dependencies for most basic executables (for which mormot.core.base
@@ -2924,28 +5287,29 @@ function crc32c_sse42_aesni(crc: PtrUInt; buf: PAnsiChar; len: PtrUInt): cardina
         // it is faster to use a direct 8-bytes loop for blocks < 64 bytes
         shr     len, 3
         jz      @2
-{$ifdef FPC}
+        {$ifdef FPC}
         align   16
         // hash 8 bytes per loop
-        @s:     crc32   rax, qword [buf]
-{$else} .align  16
+@s:     crc32   rax, qword [buf]
+        {$else}
+        .align  16
         // circumvent Delphi inline asm compiler bug
-        @s:     db $F2,$48,$0F,$38,$F1,$02
-{$endif FPC}
+@s:     db $F2, $48, $0F, $38, $F1, $02
+        {$endif FPC}
         add     buf, 8
         dec     len
         jnz     @s
 @2:     test    cl, 4
         jz      @3
-        crc32   eax, dword ptr[buf]
+        crc32   eax, dword ptr [buf]
         add     buf, 4
 @3:     test    cl, 2
         jz      @1
-        crc32   eax, word ptr[buf]
+        crc32   eax, word ptr [buf]
         add     buf, 2
 @1:     test    cl, 1
         jz      @0
-        crc32   eax, byte ptr[buf]
+        crc32   eax, byte ptr [buf]
 @0:     not     eax
         ret
 @big:   // our  call: rcx/rdi=crc rdx/rsi=buf r8/rdx=len
