@@ -104,7 +104,6 @@ type
     fHttps: boolean;
     fProxyName, fProxyByPass: RawUtf8;
     fSendTimeout, fReceiveTimeout, fConnectTimeout: cardinal;
-    fConnectRetrySeconds: integer; // used by InternalCheckOpen
     fExtendedOptions: THttpRequestExtendedOptions;
     procedure SetCompression(Value: TRestHttpCompressions);
     procedure SetKeepAliveMS(Value: cardinal);
@@ -201,13 +200,6 @@ type
     // clients, and hcSynLZ if you expect to have mORMot client(s)
     property Compression: TRestHttpCompressions
       read fCompression write SetCompression;
-    /// how many seconds the client may try to connect after open socket failure
-    // - is disabled to 0 by default, but you may set some seconds here e.g. to
-    // let the server start properly, and let the client handle exceptions to
-    // wait and retry until the specified timeout is reached
-    // - this property is used only once at startup, then flushed to 0 once connected
-    property ConnectRetrySeconds: integer
-      read fConnectRetrySeconds write fConnectRetrySeconds;
   end;
 
   TRestHttpClientGenericClass = class of TRestHttpClientGeneric;
@@ -224,10 +216,10 @@ type
     /// call fWinAPI.Request()
     function InternalRequest(const url, method: RawUtf8;
       var Header, Data, DataType: RawUtf8): Int64Rec; override;
-    /// overridden protected method to close HTTP connection
-    procedure InternalClose; override;
     /// overridden protected method to handle HTTP connection
-    function InternalCheckOpen: boolean; override;
+    function InternalIsOpen: boolean; override;
+    procedure InternalOpen; override;
+    procedure InternalClose; override;
     /// set the fWinAPI class
     // - the overridden implementation should set the expected fWinAPIClass
     procedure InternalSetClass; virtual; abstract;
@@ -277,8 +269,8 @@ type
     function InternalRequest(const url, method: RawUtf8;
       var Header, Data, DataType: RawUtf8): Int64Rec; override;
     /// overridden protected method to handle HTTP connection
-    function InternalCheckOpen: boolean; override;
-    /// overridden protected method to close HTTP connection
+    function InternalIsOpen: boolean; override;
+    procedure InternalOpen; override;
     procedure InternalClose; override;
   published
     /// internal HTTP/1.1 compatible client
@@ -311,9 +303,9 @@ type
     fOnWebSocketsClosed: TNotifyEvent;
     fWebSocketLoopDelay: integer;
     fWebSocketProcessSettings: TWebSocketProcessSettings;
-    function InternalCheckOpen: boolean; override;
     function CallbackRequest(
       Ctxt: THttpServerRequestAbstract): cardinal; virtual;
+    procedure InternalOpen; override;
   public
     /// connect to TRestHttpServer on aServer:aPort
     // - this overriden method will handle properly WebSockets settings
@@ -512,7 +504,7 @@ var
   log: ISynLog;
 begin
   log := fLogClass.Enter('InternalUri %', [Call.Method], self);
-  if InternalCheckOpen then
+  if IsOpen then
   begin
     Head := Call.InHead;
     Content := Call.InBody;
@@ -580,7 +572,10 @@ constructor TRestHttpClientGeneric.Create(const aServer, aPort: RawUtf8;
   aSendTimeout, aReceiveTimeout, aConnectTimeout: cardinal);
 begin
   inherited Create(aModel);
-  Split(aServer, '/', fServer, fUriPrefix);
+  if IdemPChar(pointer(aServer), 'UNIX:/') then
+    fServer := aServer
+  else
+    Split(aServer, '/', fServer, fUriPrefix);
   fPort := aPort;
   fHttps := aHttps;
   fKeepAliveMS := 20000; // 20 seconds connection keep alive by default
@@ -698,82 +693,29 @@ end;
 
 { TRestHttpClientSocket }
 
-function TRestHttpClientSocket.InternalCheckOpen: boolean;
-var
-  started, elapsed: Int64;
-  wait, retry: integer;
+function TRestHttpClientSocket.InternalIsOpen: boolean;
 begin
   result := fSocket <> nil;
-  if result or
-     (isDestroying in fInternalState) then
-    exit;
-  fSafe.Enter;
-  try
-    if fSocket = nil then
-    begin
-      if fSocketClass = nil then
-        fSocketClass := THttpClientSocket;
-      retry := 0;
-      if fConnectRetrySeconds = 0 then
-        started := 0
-      else
-        started := GetTickCount64;
-      repeat
-        try
-          fSocket := fSocketClass.Open(
-            fServer, fPort, nlTCP, fConnectTimeout, fHttps);
-        except
-          on E: Exception do
-          begin
-            FreeAndNil(fSocket);
-            if (started = 0) or
-               (isDestroying in fInternalState) then
-              exit;
-            elapsed := GetTickCount64 - started;
-            if elapsed >= fConnectRetrySeconds shl 10 then
-              exit;
-            inc(retry);
-            if elapsed < 500 then
-              wait := 100
-            else
-              wait := 1000; // every second retry is enough
-            fLogClass.Add.Log(sllTrace, 'InternalCheckOpen: % on %:% after %' +
-              ' -> wait % and retry #% up to % seconds',
-              [E.ClassType, fServer, fPort, MicroSecToString(elapsed * 1000),
-               MicroSecToString(wait * 1000), retry, fConnectRetrySeconds],
-              self);
-            SleepHiRes(wait);
-          end;
-        end;
-      until fSocket <> nil;
-      fConnectRetrySeconds := 0; // retry done once at startup
-      if fExtendedOptions.UserAgent <> '' then
-        fSocket.UserAgent := fExtendedOptions.UserAgent;
-      if fModel <> nil then
-        fSocket.ProcessName := FormatUtf8('%/%', [fPort, fModel.Root]);
-      if (fSendTimeout > 0) and
-         (fConnectTimeout <> fSendTimeout) then
-        fSocket.SendTimeout := fSendTimeout;
-      if (fReceiveTimeout > 0) and
-         (fConnectTimeout <> fReceiveTimeout) then
-        fSocket.ReceiveTimeout := fReceiveTimeout;
-      // note that first registered algo will be the prefered one
-      {$ifndef PUREMORMOT2}
-      if hcSynShaAes in Compression then
-        // global SHA-256 / AES-256-CFB encryption + SynLZ compression
-        fSocket.RegisterCompress(CompressShaAes, {CompressMinSize=}0);
-      {$endif PUREMORMOT2}
-      if hcSynLz in Compression then
-        // SynLZ is very fast and efficient, perfect for a Delphi Client
-        fSocket.RegisterCompress(CompressSynLZ);
-      if hcDeflate in Compression then
-        // standard (slower) AJAX/HTTP gzip compression
-        fSocket.RegisterCompress(CompressGZip);
-    end;
-    result := true;
-  finally
-    fSafe.Leave;
-  end;
+end;
+
+procedure TRestHttpClientSocket.InternalOpen;
+begin
+  if fSocketClass = nil then
+    fSocketClass := THttpClientSocket;
+  fSocket := fSocketClass.Open(
+    fServer, fPort, nlTCP, fConnectTimeout, fHttps);
+  // note that first registered algo will be the prefered one
+  {$ifndef PUREMORMOT2}
+  if hcSynShaAes in Compression then
+    // global SHA-256 / AES-256-CFB encryption + SynLZ compression
+    fSocket.RegisterCompress(CompressShaAes, {CompressMinSize=}0);
+  {$endif PUREMORMOT2}
+  if hcSynLz in Compression then
+    // SynLZ is very fast and efficient, perfect for a Delphi Client
+    fSocket.RegisterCompress(CompressSynLZ);
+  if hcDeflate in Compression then
+    // standard (slower) AJAX/HTTP gzip compression
+    fSocket.RegisterCompress(CompressGZip);
 end;
 
 procedure TRestHttpClientSocket.InternalClose;
@@ -805,62 +747,39 @@ end;
 
 { TRestHttpClientRequest }
 
-function TRestHttpClientRequest.InternalCheckOpen: boolean;
-var
-  timeout: Int64;
+function TRestHttpClientRequest.InternalIsOpen: boolean;
 begin
   result := fRequest <> nil;
-  if result or
-     (isDestroying in fInternalState) then
-    exit;
-  fSafe.Enter;
-  try
-    if fRequest = nil then
-    begin
-      InternalSetClass;
-      if fRequestClass = nil then
-        raise ERestHttpClient.CreateUtf8('fRequestClass=nil for %', [self]);
-      timeout := GetTickCount64 + fConnectRetrySeconds shl 10;
-      repeat
-        try
-          fRequest := fRequestClass.Create(fServer, fPort, fHttps, fProxyName,
-            fProxyByPass, fConnectTimeout, fSendTimeout, fReceiveTimeout);
-        except
-          on E: Exception do
-          begin
-            FreeAndNil(fRequest);
-            if GetTickCount64 >= timeout then
-              exit;
-            fLogClass.Add.Log(sllTrace,
-              'InternalCheckOpen: % on %:% -> wait and retry up to % seconds',
-              [E.ClassType, fServer, fPort, fConnectRetrySeconds], self);
-            SleepHiRes(250);
-          end;
-        end;
-      until fRequest <> nil;
-      fRequest.ExtendedOptions := fExtendedOptions;
-      // note that first registered algo will be the prefered one
-      {$ifndef PUREMORMOT2}
-      if hcSynShaAes in Compression then
-        // global SHA-256 / AES-256-CFB encryption + SynLZ compression
-        fRequest.RegisterCompress(CompressShaAes, 0); // CompressMinSize=0
-      {$endif PUREMORMOT2}
-      if hcSynLz in Compression then
-        // SynLZ is very fast and efficient, perfect for a Delphi Client
-        fRequest.RegisterCompress(CompressSynLZ);
-      if hcDeflate in Compression then
-        // standard (slower) AJAX/HTTP zip/deflate compression
-        fRequest.RegisterCompress(CompressGZip);
-    end;
-    result := true;
-  finally
-    fSafe.Leave;
-  end;
+end;
+
+procedure TRestHttpClientRequest.InternalOpen;
+begin
+  InternalSetClass;
+  if fRequestClass = nil then
+    raise ERestHttpClient.CreateUtf8('fRequestClass=nil for %', [self]);
+  fRequest := fRequestClass.Create(fServer, fPort, fHttps, fProxyName,
+    fProxyByPass, fConnectTimeout, fSendTimeout, fReceiveTimeout);
+  fRequest.ExtendedOptions := fExtendedOptions;
+  // note that first registered algo will be the prefered one
+  {$ifndef PUREMORMOT2}
+  if hcSynShaAes in Compression then
+    // global SHA-256 / AES-256-CFB encryption + SynLZ compression
+    fRequest.RegisterCompress(CompressShaAes, 0); // CompressMinSize=0
+  {$endif PUREMORMOT2}
+  if hcSynLz in Compression then
+    // SynLZ is very fast and efficient, perfect for a Delphi Client
+    fRequest.RegisterCompress(CompressSynLZ);
+  if hcDeflate in Compression then
+    // standard (slower) AJAX/HTTP zip/deflate compression
+    fRequest.RegisterCompress(CompressGZip);
 end;
 
 procedure TRestHttpClientRequest.InternalClose;
 begin
-  FreeAndNil(fRequest);
+  try
+    FreeAndNil(fRequest);
+  except
+  end;
 end;
 
 function TRestHttpClientRequest.InternalRequest(const url, method: RawUtf8;
@@ -890,33 +809,29 @@ end;
 
 { TRestHttpClientWebsockets }
 
-function TRestHttpClientWebsockets.InternalCheckOpen: boolean;
+procedure TRestHttpClientWebsockets.InternalOpen;
+var
+  err: RawUtf8;
 begin
-  result := WebSocketsConnected;
-  if result or
-     (isDestroying in fInternalState) then
-    exit; // already connected
-  fSafe.Enter;
-  try
-    if fSocket = nil then
-    try
-      if fSocketClass = nil then
-        fSocketClass := THttpClientWebSockets;
-      InternalLog('InternalCheckOpen: calling %.Open', [fSocketClass]);
-      result := inherited InternalCheckOpen;
-      if result then
+  if fSocketClass = nil then
+    fSocketClass := THttpClientWebSockets;
+  exclude(fInternalState, isOpened);
+  inherited InternalOpen;
+  include(fInternalState, isOpened);
+  with fWebSocketParams do
+    if AutoUpgrade then
+    begin
+      err := WebSocketsUpgrade(Key, Ajax, BinaryOptions);
+      if err <> '' then
       begin
-        include(fInternalState, isOpened);
-        with fWebSocketParams do
-          if AutoUpgrade then
-            result := WebSocketsUpgrade(Key, Ajax, BinaryOptions) = '';
+        if Assigned(fOnConnectionFailed) then
+          fOnConnectionFailed(self, nil, nil);
+        raise ERestHttpClient.CreateUtf8(
+          '%.InternalOpen: WebSocketsUpgrade failed - %', [self, err]);
       end;
-    except
-      result := false;
+      if Assigned(fOnWebSocketsUpgraded) then
+        fOnWebSocketsUpgraded(self);
     end;
-  finally
-    fSafe.Leave;
-  end;
 end;
 
 function TRestHttpClientWebsockets.FakeCallbackRegister(Sender: TServiceFactory;
@@ -1008,7 +923,7 @@ end;
 function TRestHttpClientWebsockets.WebSockets: THttpClientWebSockets;
 begin
   if fSocket = nil then
-    if not InternalCheckOpen then
+    if not IsOpen then
     begin
       result := nil;
       exit;
