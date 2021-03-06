@@ -1936,6 +1936,7 @@ begin
     try
       if fOutgoing.Count > 0 then
         SendPendingOutgoingFrames;
+      fState := wpsDestroy;
       frame.opcode := focConnectionClose;
       dummyerror := 0;
       if not SendFrame(frame) or
@@ -1943,7 +1944,6 @@ begin
          not GetFrame(frame, @dummyerror) then
         if log <> nil then // expects an answer from peer
           log.Log(sllWarning, 'Destroy: no focConnectionClose ACK %', [dummyerror], self);
-      fState := wpsDestroy;
     finally
       LockedDec32(@fProcessCount);
     end;
