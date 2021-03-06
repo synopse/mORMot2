@@ -400,6 +400,9 @@ type
     // - this version will handle KeepAlive, for such an incoming request
     constructor Create(aServerSock: THttpServerSocket; aServer: THttpServer);
       reintroduce; overload; virtual;
+    /// called by THttpServer.Destroy on existing connections
+    // - set Terminate and close the socket
+    procedure Shutdown; virtual;
     /// the associated socket to communicate with the client
     property ServerSock: THttpServerSocket
       read fServerSock;
@@ -1441,7 +1444,6 @@ destructor THttpServer.Destroy;
 var
   endtix: Int64;
   i: PtrInt;
-  resp: THttpServerResp;
   callback: TNetSocket; // touch-and-go to the server to release main Accept()
 begin
   Terminate; // set Terminated := true for THttpServerResp.Execute
@@ -1465,12 +1467,9 @@ begin
     if fInternalHttpServerRespList <> nil then
     begin
       for i := 0 to fInternalHttpServerRespList.Count - 1 do
-      begin
-        resp := fInternalHttpServerRespList.List[i];
-        resp.Terminate;
-        resp.fServerSock.Sock.ShutdownAndClose({rdwr=}true);
-      end;
-      repeat // wait for all THttpServerResp.Execute to be finished
+        THttpServerResp(fInternalHttpServerRespList.List[i]).Shutdown;
+      repeat
+        // wait for all THttpServerResp.Execute to be finished
         if (fInternalHttpServerRespList.Count = 0) and
            (fExecuteState <> esRunning) then
           break;
@@ -2093,6 +2092,12 @@ begin
     fConnectionID := fServer.NextConnectionID; // fallback to 31-bit sequence
   FreeOnTerminate := true;
   inherited Create(false);
+end;
+
+procedure THttpServerResp.Shutdown;
+begin
+  Terminate;
+  fServerSock.Sock.ShutdownAndClose({rdwr=}true);
 end;
 
 procedure THttpServerResp.Execute;

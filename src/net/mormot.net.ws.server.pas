@@ -115,6 +115,9 @@ type
   public
     /// initialize the context, associated to a HTTP/WebSockets server instance
     constructor Create(aServerSock: THttpServerSocket; aServer: THttpServer); override;
+    /// called by THttpServer.Destroy on existing connections
+    // - send focConnectionClose before killing the socket
+    procedure Shutdown; override;
     /// push a notification to the client
     function _NotifyCallback(Ctxt: THttpServerRequest;
       aMode: TWebSocketProcessNotifyCallback): cardinal; virtual;
@@ -609,6 +612,16 @@ begin
   if not aServer.InheritsFrom(TWebSocketServer) then
     raise EWebSockets.CreateUtf8('%.Create(%: TWebSocketServer?)', [self, aServer]);
   inherited Create(aServerSock, aServer);
+end;
+
+procedure TWebSocketServerResp.Shutdown;
+begin
+  if not fProcess.ConnectionCloseWasSent then
+  begin
+    WebSocketLog.Add.Log(sllTrace, 'Shutdown: send focConnectionClose', self);
+    fProcess.Shutdown; // notify client with focConnectionClose
+  end;
+  inherited Shutdown;
 end;
 
 function TWebSocketServerResp._NotifyCallback(Ctxt: THttpServerRequest;
