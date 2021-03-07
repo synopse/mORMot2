@@ -776,12 +776,6 @@ type
     /// append some values at once
     // - text values (e.g. RawUtf8) will be escaped as JSON
     procedure Add(const Values: array of const); overload;
-    /// append a TDateTime value, expanded as Iso-8601 text with milliseconds
-    // and Time Zone designator
-    // - i.e. 'YYYY-MM-DDThh:mm:ss.sssZ' format
-    // - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
-    procedure AddDateTimeMS(const Value: TDateTime; Expanded: boolean = true;
-      FirstTimeChar: AnsiChar = 'T'; const TZD: RawUtf8 = 'Z');
     /// append an array of integers as CSV
     procedure AddCsvInteger(const Integers: array of integer); overload;
     /// append an array of doubles as CSV
@@ -796,6 +790,41 @@ type
     // - as used e.g. by TJsonObjectDecoder.EncodeAsJson method and
     // JsonEncodeNameSQLValue() function
     procedure AddQuotedStringAsJson(const QuotedString: RawUtf8);
+    /// append a TTimeLog value, expanded as Iso-8601 encoded text
+    procedure AddTimeLog(Value: PInt64; QuoteChar: AnsiChar = #0);
+    /// append a TUnixTime value, expanded as Iso-8601 encoded text
+    procedure AddUnixTime(Value: PInt64; QuoteChar: AnsiChar = #0);
+    /// append a TUnixMSTime value, expanded as Iso-8601 encoded text
+    procedure AddUnixMSTime(Value: PInt64; WithMS: boolean = false;
+      QuoteChar: AnsiChar = #0);
+    /// append a TDateTime value, expanded as Iso-8601 encoded text
+    // - use 'YYYY-MM-DDThh:mm:ss' format (with FirstChar='T')
+    // - if WithMS is TRUE, will append '.sss' for milliseconds resolution
+    // - if QuoteChar is not #0, it will be written before and after the date
+    procedure AddDateTime(Value: PDateTime; FirstChar: AnsiChar = 'T';
+      QuoteChar: AnsiChar = #0; WithMS: boolean = false;
+      AlwaysDateAndTime: boolean = false); overload;
+    /// append a TDateTime value, expanded as Iso-8601 encoded text
+    // - use 'YYYY-MM-DDThh:mm:ss' format
+    // - append nothing if Value=0
+    // - if WithMS is TRUE, will append '.sss' for milliseconds resolution
+    procedure AddDateTime(const Value: TDateTime; WithMS: boolean = false); overload;
+    /// append a TDateTime value, expanded as Iso-8601 text with milliseconds
+    // and Time Zone designator
+    // - i.e. 'YYYY-MM-DDThh:mm:ss.sssZ' format
+    // - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
+    procedure AddDateTimeMS(const Value: TDateTime; Expanded: boolean = true;
+      FirstTimeChar: AnsiChar = 'T'; const TZD: RawUtf8 = 'Z');
+    /// append the current UTC date and time, in our log-friendly format
+    // - e.g. append '20110325 19241502' - with no trailing space nor tab
+    // - you may set LocalTime=TRUE to write the local date and time instead
+    // - this method is very fast, and avoid most calculation or API calls
+    procedure AddCurrentLogTime(LocalTime: boolean);
+    /// append the current UTC date and time, in our log-friendly format
+    // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
+    // - you may set LocalTime=TRUE to write the local date and time instead
+    // - this method is very fast, and avoid most calculation or API calls
+    procedure AddCurrentNCSALogTime(LocalTime: boolean);
 
     /// append strings or integers with a specified format
     // - this overriden version will properly handle JSON escape
@@ -5934,6 +5963,86 @@ begin
   until false;
 end;
 
+procedure TTextWriter.AddTimeLog(Value: PInt64; QuoteChar: AnsiChar);
+begin
+  if BEnd - B <= 31 then
+    FlushToStream;
+  B := PTimeLogBits(Value)^.Text(B + 1, true, 'T', QuoteChar) - 1;
+end;
+
+procedure TTextWriter.AddUnixTime(Value: PInt64; QuoteChar: AnsiChar);
+var
+  DT: TDateTime;
+begin
+  // inlined UnixTimeToDateTime()
+  DT := Value^ / SecsPerDay + UnixDateDelta;
+  AddDateTime(@DT, 'T', QuoteChar, {withms=}false, {dateandtime=}true);
+end;
+
+procedure TTextWriter.AddUnixMSTime(Value: PInt64; WithMS: boolean;
+  QuoteChar: AnsiChar);
+var
+  DT: TDateTime;
+begin
+  // inlined UnixMSTimeToDateTime()
+  DT := Value^ / MSecsPerDay + UnixDateDelta;
+  AddDateTime(@DT, 'T', QuoteChar, WithMS, {dateandtime=}true);
+end;
+
+procedure TTextWriter.AddDateTime(Value: PDateTime; FirstChar: AnsiChar;
+  QuoteChar: AnsiChar; WithMS: boolean; AlwaysDateAndTime: boolean);
+var
+  T: TSynSystemTime;
+begin
+  if (Value^ = 0) and
+     (QuoteChar = #0) then
+    exit;
+  if BEnd - B <= 25 then
+    FlushToStream;
+  inc(B);
+  if QuoteChar <> #0 then
+    B^ := QuoteChar
+  else
+    dec(B);
+  if Value^ <> 0 then
+  begin
+    inc(B);
+    if AlwaysDateAndTime or
+       (trunc(Value^) <> 0) then
+    begin
+      T.FromDate(Value^);
+      B := DateToIso8601PChar(B, true, T.Year, T.Month, T.Day);
+    end;
+    if AlwaysDateAndTime or
+       (frac(Value^) <> 0) then
+    begin
+      T.FromTime(Value^);
+      B := TimeToIso8601PChar(B, true, T.Hour, T.Minute, T.Second,
+        T.MilliSecond, FirstChar, WithMS);
+    end;
+    dec(B);
+  end;
+  if QuoteChar <> #0 then
+  begin
+    inc(B);
+    B^ := QuoteChar;
+  end;
+end;
+
+procedure TTextWriter.AddDateTime(const Value: TDateTime; WithMS: boolean);
+begin
+  if Value = 0 then
+    exit;
+  if BEnd - B <= 23 then
+    FlushToStream;
+  inc(B);
+  if trunc(Value) <> 0 then
+    B := DateToIso8601PChar(Value, B, true);
+  if frac(Value) <> 0 then
+    B := TimeToIso8601PChar(Value, B, true, 'T', WithMS);
+  dec(B);
+end;
+
 procedure TTextWriter.AddDateTimeMS(const Value: TDateTime; Expanded: boolean;
   FirstTimeChar: AnsiChar; const TZD: RawUtf8);
 var
@@ -5948,6 +6057,23 @@ begin
     UInt3DigitsToShort(T.MilliSecond), TZD]);
 end;
 
+procedure TTextWriter.AddCurrentLogTime(LocalTime: boolean);
+var
+  time: TSynSystemTime;
+begin
+  time.FromNow(LocalTime);
+  time.AddLogTime(self);
+end;
+
+procedure TTextWriter.AddCurrentNCSALogTime(LocalTime: boolean);
+var
+  time: TSynSystemTime;
+begin
+  time.FromNow(LocalTime);
+  if BEnd - B <= 21 then
+    FlushToStream;
+  inc(B, time.ToNCSAText(B + 1));
+end;
 
 procedure TTextWriter.AddCsvInteger(const Integers: array of integer);
 var
@@ -10328,6 +10454,7 @@ begin
       'Rtti.Count=% at mormot.core.json start', [Rtti.Count]);
   Rtti.GlobalClass := TRttiJson;
   GetDataFromJson := _GetDataFromJson;
+  _VariantToUtf8DateTimeToIso8601 := DateTimeToIso8601TextVar;
 end;
 
 

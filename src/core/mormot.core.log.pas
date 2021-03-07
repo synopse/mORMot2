@@ -872,7 +872,7 @@ type
   // note: don't inherit from TSynInterfacedObject to avoid a method call
   protected
     fFamily: TSynLogFamily;
-    fWriter: TBaseWriter;
+    fWriter: TTextWriter;
     fWriterEcho: TEchoWriter;
     fWriterClass: TBaseWriterClass;
     fWriterStream: TStream;
@@ -1134,7 +1134,7 @@ type
     procedure ForceRotation;
     /// direct access to the low-level writing content
     // - should usually not be used directly, unless you ensure it is safe
-    property Writer: TBaseWriter
+    property Writer: TTextWriter
       read fWriter;
   published
     /// the associated file name containing the log
@@ -5160,11 +5160,11 @@ begin
       fWriterStream.Seek(0, soFromEnd); // in rotation mode, append at the end
   end;
   if fWriterClass = nil then
-    // use TTextWriter or TJsonSerializer if mormot.core.json.pas is linked
+    // use TTextWriter since mormot.core.json.pas is linked
     fWriterClass := DefaultTextWriterSerializer;
   if fWriter = nil then
   begin
-    fWriter := fWriterClass.Create(fWriterStream, fFamily.BufferSize);
+    fWriter := fWriterClass.Create(fWriterStream, fFamily.BufferSize) as TTextWriter;
     fWriter.CustomOptions := fWriter.CustomOptions +
       [twoEnumSetsAsTextInRecord, twoFullSetsAsStar, twoForceJsonExtended];
     fWriterEcho := TEchoWriter.Create(fWriter);
