@@ -13,6 +13,7 @@ unit mormot.net.client;
    - TSimpleHttpClient Wrapper Class
    - Cached HTTP Connection to a Remote Server
    - Send Email using the SMTP Protocol
+   - DNS Resolution Cache for mormot.net.sock NewSocket()
 
   *****************************************************************************
 
@@ -45,6 +46,33 @@ uses
 
 
 { ************** THttpClientSocket Implementing HTTP client over plain sockets }
+
+var
+  /// THttpRequest timeout default value for DNS resolution
+  // - only used by TWinHttp class - other clients will ignore it
+  // - leaving to 0 will let system default value be used
+  HTTP_DEFAULT_RESOLVETIMEOUT: integer = 0;
+  /// THttpRequest timeout default value for remote connection
+  // - default is 30 seconds
+  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
+  HTTP_DEFAULT_CONNECTTIMEOUT: integer = 30000;
+  /// THttpRequest timeout default value for data sending
+  // - default is 30 seconds
+  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
+  // - you can override this value by setting the corresponding parameter in
+  // THttpRequest.Create() constructor
+  HTTP_DEFAULT_SENDTIMEOUT: integer = 30000;
+  /// THttpRequest timeout default value for data receiving
+  // - default is 30 seconds
+  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
+  // - you can override this value by setting the corresponding parameter in
+  // THttpRequest.Create() constructor
+  HTTP_DEFAULT_RECEIVETIMEOUT: integer = 30000;
+
+const
+  /// standard text used to identify the WebSockets protocol
+  HTTP_WEBSOCKET_PROTOCOL: RawUtf8 = 'SEC-WEBSOCKET-PROTOCOL';
+
 
 type
   /// Socket API based REST and HTTP/1.1 compatible client class
@@ -116,6 +144,10 @@ type
   // mormot.net.websock unit)
   THttpClientSocketClass = class of THttpClientSocket;
 
+/// returns the HTTP User-Agent header value of a mORMot client including
+// the Instance class name
+function DefaultUserAgent(Instance: TObject): RawUtf8;
+
 /// create a THttpClientSocket, returning nil on error
 // - useful to easily catch socket error exception ENetSock
 function OpenHttp(const aServer, aPort: RawUtf8; aTLS: boolean = false;
@@ -132,7 +164,7 @@ function OpenHttp(const aUri: RawUtf8;
 // and the overloaded HttpGet() functions
 function OpenHttpGet(const server, port, url, inHeaders: RawUtf8;
   outHeaders: PRawUtf8 = nil; aLayer: TNetLayer = nlTCP;
-  aTLS: boolean = false): RawByteString; overload;
+  aTLS: boolean = false; outStatus: PInteger = nil): RawByteString; overload;
 
 
 
@@ -243,7 +275,7 @@ type
     // THttpRequest.Get() but either TWinHttp.Get(), TWinINet.Get() or
     // TCurlHttp.Get() methods
     class function Get(const aUri: RawUtf8; const aHeader: RawUtf8 = '';
-      aIgnoreSSLCertificateErrors: boolean = true; outHeaders: PRawUtf8 = nil;
+      aIgnoreSSLCertificateErrors: boolean = false; outHeaders: PRawUtf8 = nil;
       outStatus: PInteger = nil): RawByteString;
     /// wrapper method to create a resource via an HTTP POST
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
@@ -255,7 +287,7 @@ type
     // THttpRequest.Post() but either TWinHttp.Post(), TWinINet.Post() or
     // TCurlHttp.Post() methods
     class function Post(const aUri: RawUtf8; const aData: RawByteString;
-      const aHeader: RawUtf8 = ''; aIgnoreSSLCertificateErrors: boolean = true;
+      const aHeader: RawUtf8 = ''; aIgnoreSSLCertificateErrors: boolean = false;
       outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil): RawByteString;
     /// wrapper method to update a resource via an HTTP PUT
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
@@ -267,7 +299,7 @@ type
     // THttpRequest.Put() but either TWinHttp.Put(), TWinINet.Put() or
     // TCurlHttp.Put() methods
     class function Put(const aUri: RawUtf8; const aData: RawByteString;
-      const aHeader: RawUtf8 = ''; aIgnoreSSLCertificateErrors: boolean = true;
+      const aHeader: RawUtf8 = ''; aIgnoreSSLCertificateErrors: boolean = false;
       outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil): RawByteString;
     /// wrapper method to delete a resource via an HTTP DELETE
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
@@ -277,7 +309,7 @@ type
     // THttpRequest.Delete() but either TWinHttp.Delete(), TWinINet.Delete() or
     // TCurlHttp.Delete() methods
     class function Delete(const aUri: RawUtf8; const aHeader: RawUtf8 = '';
-      aIgnoreSSLCertificateErrors: boolean = true; outHeaders: PRawUtf8 = nil;
+      aIgnoreSSLCertificateErrors: boolean = false; outHeaders: PRawUtf8 = nil;
       outStatus: PInteger = nil): RawByteString;
 
     /// will register a compression algorithm
@@ -634,9 +666,11 @@ type
     fHttps: THttpRequest;
     fProxy, fHeaders, fUserAgent: RawUtf8;
     fBody: RawByteString;
-    fOnlyUseClientSocket, fIgnoreSSLCertificateErrors: boolean;
+    fSocketTLS: TNetTLSContext;
+    fOnlyUseClientSocket: boolean;
   public
     /// initialize the instance
+    // - aOnlyUseClientSocket=true will use THttpClientSocket even for HTTPS
     constructor Create(aOnlyUseClientSocket: boolean = false); reintroduce;
     /// finalize the connection
     destructor Destroy; override;
@@ -649,10 +683,13 @@ type
     function Request(const uri: RawUtf8; const method: RawUtf8 = 'GET';
       const header: RawUtf8 = ''; const data: RawByteString = '';
       const datatype: RawUtf8 = ''; keepalive: cardinal = 10000): integer; overload;
+    /// access to the raw TLS settings for THttpClientSocket
+    function SocketTLS: PNetTLSContext;
+      {$ifdef HASINLINE} inline; {$endif}
     /// returns the HTTP body as returnsd by a previous call to Request()
     property Body: RawByteString
       read fBody;
-    /// returns the HTTP headers as returnsd by a previous call to Request()
+    /// returns the HTTP headers as returned by a previous call to Request()
     property Headers: RawUtf8
       read fHeaders;
     /// allows to customize the user-agent header
@@ -660,7 +697,7 @@ type
       read fUserAgent write fUserAgent;
     /// allows to customize HTTPS connection and allow weak certificates
     property IgnoreSSLCertificateErrors: boolean
-      read fIgnoreSSLCertificateErrors write fIgnoreSSLCertificateErrors;
+      read fSocketTLS.IgnoreCertificateErrors write fSocketTLS.IgnoreCertificateErrors;
     /// alows to customize the connection using a proxy
     property Proxy: RawUtf8
       read fProxy write fProxy;
@@ -694,8 +731,7 @@ type
   THttpRequestCached = class(TSynPersistent)
   protected
     fUri: TUri;
-    fHttp: THttpRequest; // either fHttp or fSocket is used
-    fSocket: THttpClientSocket;
+    fClient: TSimpleHttpClient;
     fKeepAlive: integer;
     fTokenHeader: RawUtf8;
     fCache: TSynDictionary;
@@ -712,17 +748,14 @@ type
     // another class
     constructor Create(const aUri: RawUtf8; aKeepAliveSeconds: integer = 30;
       aTimeoutSeconds: integer = 15*60; const aToken: RawUtf8 = '';
-      aHttpClass: THttpRequestClass = nil); reintroduce;
+      aOnlyUseClientSocket: boolean = false); reintroduce;
     /// finalize the current connnection and flush its in-memory cache
     // - you may use LoadFromUri() to connect to a new server
     procedure Clear;
     /// connect to a new server
     // - aToken is an optional token which will be transmitted as HTTP header:
     // $ Authorization: Bearer <aToken>
-    // - TWinHttp will be used by default under Windows, unless you specify
-    // another class
-    function LoadFromUri(const aUri: RawUtf8; const aToken: RawUtf8 = '';
-      aHttpClass: THttpRequestClass = nil): boolean;
+    function LoadFromUri(const aUri: RawUtf8; const aToken: RawUtf8 = ''): boolean;
     /// finalize the cache
     destructor Destroy; override;
     /// retrieve a resource from the server, or internal cache
@@ -735,6 +768,9 @@ type
     /// read-only access to the connected server
     property URI: TUri
       read fUri;
+    /// access to the underlying HTTP client connection class
+    property Client: TSimpleHttpClient
+      read fClient;
   end;
 
 
@@ -822,12 +858,25 @@ implementation
 { ************** THttpClientSocket Implementing HTTP client over plain sockets }
 
 function DefaultUserAgent(Instance: TObject): RawUtf8;
+var
+  i: integer;
+  P: PShortString;
+  name: ShortString;
 begin
+  // instance class THttpClientSocket -> 'HCS'
+  P := ClassNameShort(Instance);
+  name[0] := #0;
+  for i := 2 to ord(P^[0]) do
+    if P^[i] in ['A'..'Z'] then
+      AppendShortChar(P^[i], name);
+  if name[0] <> #0 then
+    P := @name;
   // note: the framework would identify 'mORMot' pattern in the user-agent
   // header to enable advanced behavior e.g. about JSON transmission
   FormatUtf8('Mozilla/5.0 (' + OS_TEXT + '; mORMot ' +
-    SYNOPSE_FRAMEWORK_VERSION + ' %)', [Instance], result);
+    SYNOPSE_FRAMEWORK_VERSION + ' %)', [P^], result);
 end;
+
 
 { THttpClientSocket }
 
@@ -842,7 +891,7 @@ begin
     SockSend([method, ' /', url, ' HTTP/1.1'])
   else
     SockSend([method, ' ', url, ' HTTP/1.1']);
-  if Port = DEFAULT_PORT[fTLS] then
+  if Port = DEFAULT_PORT[TLS.Enabled] then
     SockSend(['Host: ', Server])
   else
     SockSend(['Host: ', Server, ':', Port]);
@@ -873,7 +922,8 @@ function THttpClientSocket.Request(const url, method: RawUtf8;
     begin
       Close; // close this connection
       try
-        OpenBind(fServer, fPort, {bind=}false, fTLS); // retry with a new socket
+        // retry with a new socket
+        OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
         HttpStateReset;
         result := Request(url, method, KeepAlive, header, Data, DataType, true);
       except
@@ -927,13 +977,13 @@ begin
             result := HTTP_HTTPVERSIONNONSUPPORTED;
             exit;
           end;
-          while result = 100 do
+          while result = HTTP_CONTINUE do
           begin
             repeat
               // 100 CONTINUE is just to be ignored on client side
               SockRecvLn(Command);
               P := pointer(Command);
-            until IdemPChar(P, 'HTTP/1.');  // ignore up to next command
+            until IdemPChar(P, 'HTTP/1.'); // ignore up to next command
             result := GetCardinal(P + 9);
           end;
           if P[7] = '0' then
@@ -952,8 +1002,11 @@ begin
         // retrieve all HTTP headers
         GetHeader({unfiltered=}false);
         // retrieve Body content (if any)
-        if (result <> HTTP_NOCONTENT) and
+        if (result >= HTTP_SUCCESS) and
+           (result <> HTTP_NOCONTENT) and
+           (result <> HTTP_NOTMODIFIED) and
            (IdemPCharArray(pointer(method), ['HEAD', 'OPTIONS']) < 0) then
+          // HEAD or status 100..109,204,304 -> no body (RFC 2616 section 4.3)
           GetBody;
       except
         on Exception do
@@ -1028,15 +1081,20 @@ begin
 end;
 
 function OpenHttpGet(const server, port, url, inHeaders: RawUtf8;
-  outHeaders: PRawUtf8; aLayer: TNetLayer; aTLS: boolean): RawByteString;
-var Http: THttpClientSocket;
+  outHeaders: PRawUtf8; aLayer: TNetLayer; aTLS: boolean;
+  outStatus: PInteger): RawByteString;
+var
+  Http: THttpClientSocket;
+  status: integer;
 begin
   result := '';
   Http := OpenHttp(server, port, aTLS, aLayer);
   if Http <> nil then
   try
-    if Http.Get(url, 0, inHeaders) in
-         [HTTP_SUCCESS..HTTP_PARTIALCONTENT] then
+    status := Http.Get(url, 0, inHeaders);
+    if outStatus <> nil then
+      outStatus^ := status;
+    if status in [HTTP_SUCCESS..HTTP_PARTIALCONTENT] then
     begin
       result := Http.Content;
       if outHeaders <> nil then
@@ -1455,7 +1513,8 @@ begin
          winAuth, pointer(AuthUserName), pointer(AuthPassword), nil) then
         RaiseLastModuleError(winhttpdll, EWinHttp);
     end;
-  if fHTTPS and IgnoreSSLCertificateErrors then
+  if fHTTPS and
+     IgnoreSSLCertificateErrors then
     if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_SECURITY_FLAGS,
        @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
       RaiseLastModuleError(winhttpdll, EWinHttp);
@@ -2037,7 +2096,7 @@ begin
       FreeAndNil(fHttps); // need a new HTTPS connection
       fHttps := MainHttpClass.Create(
         Uri.Server, Uri.Port, Uri.Https, Proxy, '', 5000, 5000, 5000);
-      fHttps.IgnoreSSLCertificateErrors := fIgnoreSSLCertificateErrors;
+      fHttps.IgnoreSSLCertificateErrors := fSocketTLS.IgnoreCertificateErrors;
       if fUserAgent <> '' then
         fHttps.UserAgent := fUserAgent;
     end;
@@ -2045,21 +2104,20 @@ begin
       Uri.Address, Method, KeepAlive, Header, Data, DataType, fHeaders, fBody);
     if KeepAlive = 0 then
       FreeAndNil(fHttps);
+    exit;
   except
     FreeAndNil(fHttps);
-  end
-  else
+  end;
+  // if we reached here, plain http or fOnlyUseClientSocket or fHttps failed
   try
     if (fHttp = nil) or
        (fHttp.Server <> Uri.Server) or
-       (fHttp.Port <> Uri.Port) or
-       // server may close after a few requests (e.g. nginx keepalive_requests)
-       (hfConnectionClose in fHttp.HeaderFlags) then
+       (fHttp.Port <> Uri.Port) then
     begin
       FreeAndNil(fHttps);
       FreeAndNil(fHttp); // need a new HTTP connection
       fHttp := THttpClientSocket.Open(
-        Uri.Server, Uri.Port, nlTCP, 5000, Uri.Https);
+        Uri.Server, Uri.Port, nlTCP, 5000, Uri.Https, @fSocketTLS);
       if fUserAgent <> '' then
         fHttp.UserAgent := fUserAgent;
     end;
@@ -2077,8 +2135,9 @@ begin
   end;
 end;
 
-function TSimpleHttpClient.Request(const uri, method, header: RawUtf8;
-  const data: RawByteString; const datatype: RawUtf8; keepalive: cardinal): integer;
+function TSimpleHttpClient.Request(const uri: RawUtf8; const method: RawUtf8;
+  const header: RawUtf8; const data: RawByteString; const datatype: RawUtf8;
+  keepalive: cardinal): integer;
 var
   u: TUri;
 begin
@@ -2086,6 +2145,14 @@ begin
     result := RawRequest(u, method, header, data, datatype, keepalive)
   else
     result := HTTP_NOTFOUND;
+end;
+
+function TSimpleHttpClient.SocketTLS: PNetTLSContext;
+begin
+  if self = nil then
+    result := nil
+  else
+    result := @fSocketTLS;
 end;
 
 
@@ -2121,21 +2188,22 @@ end;
 { THttpRequestCached }
 
 constructor THttpRequestCached.Create(const aUri: RawUtf8; aKeepAliveSeconds,
-  aTimeoutSeconds: integer; const aToken: RawUtf8; aHttpClass: THttpRequestClass);
+  aTimeoutSeconds: integer; const aToken: RawUtf8; aOnlyUseClientSocket: boolean);
 begin
   inherited Create;
   fKeepAlive := aKeepAliveSeconds * 1000;
   if aTimeoutSeconds > 0 then // 0 means no cache
     fCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
       TypeInfo(THttpRequestCacheDynArray), true, aTimeoutSeconds);
-  if not LoadFromUri(aUri, aToken, aHttpClass) then
-    raise ESynException.CreateUtf8('%.Create: invalid aUri=%', [self, aUri]);
+  fClient := fClient.Create(aOnlyUseClientSocket);
+  if aUri <> '' then
+    if not LoadFromUri(aUri, aToken) then
+      raise ESynException.CreateUtf8('%.Create: invalid aUri=%', [self, aUri]);
 end;
 
 procedure THttpRequestCached.Clear;
 begin
-  FreeAndNil(fHttp); // either fHttp or fSocket is used
-  FreeAndNil(fSocket);
+  FreeAndNil(fClient);
   if fCache <> nil then
     fCache.DeleteAll;
   fUri.Clear;
@@ -2145,8 +2213,7 @@ end;
 destructor THttpRequestCached.Destroy;
 begin
   fCache.Free;
-  fHttp.Free;
-  fSocket.Free;
+  fClient.Free;
   inherited Destroy;
 end;
 
@@ -2154,13 +2221,12 @@ function THttpRequestCached.Get(const aAddress: RawUtf8; aModified: PBoolean;
   aStatus: PInteger): RawByteString;
 var
   cache: THttpRequestCache;
-  headin, headout: RawUtf8;
+  headin: RawUtf8;
   status: integer;
   modified: boolean;
 begin
   result := '';
-  if (fHttp = nil) and
-     (fSocket = nil) then // either fHttp or fSocket is used
+  if fClient = nil then // either fHttp or fSocket is used
     exit;
   if (fCache <> nil) and
      fCache.FindAndCopy(aAddress, cache) then
@@ -2171,28 +2237,13 @@ begin
       headin := headin + #13#10;
     headin := headin + fTokenHeader;
   end;
-  if fSocket <> nil then
-  begin
-    if hfConnectionClose in fSocket.HeaderFlags then
-    begin
-      // server may close after a few requests (e.g. nginx keepalive_requests)
-      FreeAndNil(fSocket);
-      fSocket := THttpClientSocket.Open(fUri.Server, fUri.Port)
-    end;
-    status := fSocket.Get(aAddress, fKeepAlive, headin);
-    result := fSocket.Content;
-  end
-  else
-    status := fHttp.Request(aAddress, 'GET', fKeepAlive, headin, '', '', headout, result);
+  status := fClient.RawRequest(fUri, 'GET', headin, '', '', fKeepAlive);
   modified := true;
   case status of
     HTTP_SUCCESS:
       if fCache <> nil then
       begin
-        if fHttp <> nil then
-          FindNameValue(headout{%H-}, 'ETAG:', cache.Tag)
-        else
-          cache.Tag := fSocket.HeaderGetValue('ETAG');
+        FindNameValue(fClient.Headers, 'ETAG:', cache.Tag);
         if cache.Tag <> '' then
         begin
           cache.Content := result;
@@ -2211,31 +2262,14 @@ begin
     aStatus^ := status;
 end;
 
-function THttpRequestCached.LoadFromUri(const aUri, aToken: RawUtf8;
-  aHttpClass: THttpRequestClass): boolean;
+function THttpRequestCached.LoadFromUri(const aUri, aToken: RawUtf8): boolean;
 begin
   result := false;
   if (self = nil) or
-     (fHttp <> nil) or
-     (fSocket <> nil) or
+     (fClient = nil) or
      not fUri.From(aUri) then
     exit;
   fTokenHeader := AuthorizationBearer(aToken);
-  if aHttpClass = nil then
-  begin
-    {$ifdef USEWININET}
-    aHttpClass := TWinHttp;
-    {$else}
-    {$ifdef USELIBCURL}
-    if fUri.Https then
-      aHttpClass := TCurlHttp;
-    {$endif USELIBCURL}
-    {$endif USEWININET}
-  end;
-  if aHttpClass = nil then
-    fSocket := THttpClientSocket.Open(fUri.Server, fUri.Port)
-  else
-    fHttp := aHttpClass.Create(fUri.Server, fUri.Port, fUri.Https);
   result := true;
 end;
 
@@ -2268,16 +2302,19 @@ begin
       result := TWinHttp.Get(
         aUri, inHeaders, {weakCA=}true, outHeaders, outStatus)
       {$else}
-      {$ifdef USELIBCURL}
-      result := TCurlHttp.Get(
-        aUri, inHeaders, {weakCA=}true, outHeaders, outStatus)
-      {$else}
-      raise EHttpSocket.CreateFmt('https is not supported by HttpGet(%s)', [aUri])
+      {$ifdef USELIBCURL2}
+      if TCurlHttp.IsAvailable then
+        result := TCurlHttp.Get(
+          aUri, inHeaders, {weakCA=}true, outHeaders, outStatus)
+      else
       {$endif USELIBCURL}
+        // fallback to SChannel/OpenSSL if libcurl is not installed
+        result := OpenHttpGet(uri.Server, uri.Port, uri.Address,
+          inHeaders, outHeaders, uri.Layer, uri.Https, outStatus)
       {$endif USEWININET}
     else
-      result := OpenHttpGet(
-        uri.Server, uri.Port, uri.Address, inHeaders, outHeaders, uri.Layer)
+      result := OpenHttpGet(uri.Server, uri.Port, uri.Address,
+        inHeaders, outHeaders, uri.Layer, uri.Https, outStatus)
     else
       result := '';
   {$ifdef LINUX_RAWDEBUGVOIDHTTPGET}
@@ -2286,58 +2323,6 @@ begin
   {$endif LINUX_RAWDEBUGVOIDHTTPGET}
 end;
 
-
-
-{ TNewSocketAddressCache }
-
-type
-  /// thread-safe TSynDictionary-based cache of DNS names for NewSocket()
-  TNewSocketAddressCache = class(TInterfacedObject, INewSocketAddressCache)
-  public
-    Data: TSynDictionary;
-    constructor Create(aTimeOutSeconds: integer);
-    destructor Destroy; override;
-    function Search(const Host: RawUtf8; out NetAddr: TNetAddr): boolean;
-    procedure Add(const Host: RawUtf8; const NetAddr: TNetAddr);
-    procedure Flush(const Host: RawUtf8);
-    procedure SetTimeOut(aSeconds: integer);
-  end;
-
-constructor TNewSocketAddressCache.Create(aTimeOutSeconds: integer);
-begin
-  Data := TSynDictionary.Create(
-    TypeInfo(TRawUtf8DynArray), TypeInfo(TNetAddrDynArray),
-    {caseinsens=}true, aTimeOutSeconds);
-end;
-
-destructor TNewSocketAddressCache.Destroy;
-begin
-  Data.Free;
-  inherited Destroy;
-end;
-
-function TNewSocketAddressCache.Search(const Host: RawUtf8;
-  out NetAddr: TNetAddr): boolean;
-begin
-  result := Data.FindAndCopy(Host, NetAddr);
-end;
-
-procedure TNewSocketAddressCache.Add(const Host: RawUtf8;
-  const NetAddr: TNetAddr);
-begin
-  Data.DeleteDeprecated; // flush cache only when we may need some new space
-  Data.Add(Host, NetAddr); // ignore if already added in another thread
-end;
-
-procedure TNewSocketAddressCache.Flush(const Host: RawUtf8);
-begin
-  Data.Delete(Host);
-end;
-
-procedure TNewSocketAddressCache.SetTimeOut(aSeconds: integer);
-begin
-  Data.TimeOutSeconds := aSeconds; // warning: will clear the cache
-end;
 
 
 { ************** Send Email using the SMTP Protocol }
@@ -2375,8 +2360,7 @@ begin
   result := SendEmail(
     Server.Host, From, CsvDest, Subject, Text, Headers,
     Server.User, Server.Pass, Server.Port, TextCharSet,
-    (Server.Port = '465') or
-    (Server.Port = '587'));
+    aTLS or (Server.Port = '465') or (Server.Port = '587'));
 end;
 
 {$I-}
@@ -2416,7 +2400,7 @@ begin
   P := pointer(CsvDest);
   if P = nil then
     exit;
-  TCP := Open(Server, Port, aTLS);
+  TCP := SocketOpen(Server, Port, aTLS);
   if TCP <> nil then
   try
     TCP.CreateSockIn; // we use SockIn and SockOut here
@@ -2472,6 +2456,62 @@ begin
   StringToUtf8(Text, result);
   if not IsAnsiCompatible(result) then
     result := '=?UTF-8?B?' + BinToBase64(result);
+end;
+
+
+{ ************** DNS Resolution Cache for mormot.net.sock NewSocket() }
+
+{ TNewSocketAddressCache }
+
+type
+  /// thread-safe TSynDictionary-based cache of DNS names for NewSocket()
+  TNewSocketAddressCache = class(TInterfacedObject, INewSocketAddressCache)
+  protected
+    fData: TSynDictionary;
+  public
+    constructor Create(aTimeOutSeconds: integer);
+    destructor Destroy; override;
+    // INewSocketAddressCache methods
+    function Search(const Host: RawUtf8; out NetAddr: TNetAddr): boolean;
+    procedure Add(const Host: RawUtf8; const NetAddr: TNetAddr);
+    procedure Flush(const Host: RawUtf8);
+    procedure SetTimeOut(aSeconds: integer);
+  end;
+
+constructor TNewSocketAddressCache.Create(aTimeOutSeconds: integer);
+begin
+  fData := TSynDictionary.Create(
+    TypeInfo(TRawUtf8DynArray), TypeInfo(TNetAddrDynArray),
+    {caseinsens=}true, aTimeOutSeconds);
+end;
+
+destructor TNewSocketAddressCache.Destroy;
+begin
+  fData.Free;
+  inherited Destroy;
+end;
+
+function TNewSocketAddressCache.Search(const Host: RawUtf8;
+  out NetAddr: TNetAddr): boolean;
+begin
+  result := fData.FindAndCopy(Host, NetAddr);
+end;
+
+procedure TNewSocketAddressCache.Add(const Host: RawUtf8;
+  const NetAddr: TNetAddr);
+begin
+  fData.DeleteDeprecated; // flush cache only when we may need some new space
+  fData.Add(Host, NetAddr); // do nothing if already added in another thread
+end;
+
+procedure TNewSocketAddressCache.Flush(const Host: RawUtf8);
+begin
+  fData.Delete(Host);
+end;
+
+procedure TNewSocketAddressCache.SetTimeOut(aSeconds: integer);
+begin
+  fData.TimeOutSeconds := aSeconds; // warning: will clear the cache
 end;
 
 

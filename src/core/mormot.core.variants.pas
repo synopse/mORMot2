@@ -2046,7 +2046,7 @@ type
 // or with some extended (e.g. BSON) syntax
 procedure GetVariantFromJson(Json: PUtf8Char; wasString: boolean;
   var Value: variant; TryCustomVariants: PDocVariantOptions = nil;
-  AllowDouble: boolean = false);
+  AllowDouble: boolean = false; JsonLen: integer = 0);
 
 /// low-level function to set a variant from an unescaped JSON non string
 // - expect the JSON input buffer to be already unescaped, e.g. by GetJsonField(),
@@ -5082,7 +5082,7 @@ function FindNonVoidRawUtf8I(n: PPtrInt; name: PUtf8Char; len: TStrLen;
 begin
   for result := 0 to count - 1 do
     if (PStrLen(n^ - _STRLEN)^ = len) and
-       IdemPropNameUSameLen(pointer(n^), name, len) then
+       IdemPropNameUSameLenNotNull(pointer(n^), name, len) then
       exit
     else
       inc(n);
@@ -6926,7 +6926,7 @@ end;
 
 procedure GetVariantFromJson(Json: PUtf8Char; wasString: boolean;
   var Value: variant; TryCustomVariants: PDocVariantOptions;
-  AllowDouble: boolean);
+  AllowDouble: boolean; JsonLen: integer);
 var
   V: TVarData absolute Value;
 begin
@@ -6951,7 +6951,9 @@ begin
     // found no numerical value -> return a string in the expected format
     V.VType := varString;
     V.VString := nil; // avoid GPF below
-    FastSetString(RawUtf8(V.VString), Json, StrLen(Json));
+    if JsonLen = 0 then
+      JsonLen := StrLen(Json);
+    FastSetString(RawUtf8(V.VString), Json, JsonLen);
   end;
 end;
 
@@ -6968,6 +6970,7 @@ function VariantLoadJson(var Value: variant; Json, EndOfObject: PUtf8Char;
 var
   wasString: boolean;
   Val: PUtf8Char;
+  ValLen: integer;
 begin
   result := Json;
   if Json = nil then
@@ -6995,8 +6998,8 @@ begin
   end
   else
   begin
-    Val := GetJsonField(result, result, @wasString, EndOfObject);
-    GetVariantFromJson(Val, wasString, Value, nil, AllowDouble);
+    Val := GetJsonField(result, result, @wasString, EndOfObject, @ValLen);
+    GetVariantFromJson(Val, wasString, Value, nil, AllowDouble, ValLen);
   end;
   if result = nil then
     result := @NULCHAR; // reached end, but not invalid input

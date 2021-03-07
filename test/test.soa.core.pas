@@ -1822,7 +1822,7 @@ end;
 procedure TTestServiceOrientedArchitecture.ClientSideRESTMainThread;
 begin
   {$ifdef OSANDROID}
-  // Tests on Android do not run in MainThread
+  // Tests on Android never run on MainThread
   exit;
   {$endif OSANDROID}
   with TTestThread.Create(true) do

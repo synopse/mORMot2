@@ -21,8 +21,8 @@ Those `mormot.lib.*.pas` units are just wrappers to the `c`/`stdcall` external A
 
 For instance 
 
-- `mormot.lib.z.pas` contains the raw access to the `zlib` API, 
-- whereas `mormot.core.zip.pas` contains the actual deflate and .zip file process.
+- `mormot.lib.z.pas`/`mormot.lib.openssl11` contains the raw access to the `zlib`/`OpenSSL` API, 
+- whereas `mormot.core.zip.pas`/`mormot.core.crypto.openssl` contains the high-level `deflate` and `.zip` file process / encryption and signing using `OpenSSL`.
 
 On Windows, some Operating-System high-level features like Windows HTTP and WebSockets client/server API, or SSPI/SChannel API are also defined in this folder, to leverage `mormot.core.os.pas` focusing on core cross-platform features.
 
@@ -46,6 +46,21 @@ Cross-Platform and Cross-Compiler `Lizard` (LZ5) API
 Cross-Platform and Cross-Compiler `libcurl` API
 - CURL Low-Level Constants and Types
 - CURL Functions API
+
+## mormot.lib.openssl11
+
+Cross-Platform and Cross-Compiler `OpenSSL` 1.1.1 API
+- Dynamic or Static OpenSSL Library Loading
+- OpenSSL Library Constants
+- OpenSSL Library Types and Structures
+- OpenSSL Library Functions
+- OpenSSL Helpers
+- TLS / HTTPS Encryption Layer using OpenSSL for `mormot.net.sock` / `TCrtSocket`
+
+In respect to OpenSSL 1.0.x, the new 1.1.1 API hides most structures behind getter/setter functions, and doesn't require complex initialization.
+OpenSSL 1.1.1 features TLS 1.3, and is a LTS revision (until 2023-09-11).
+
+The Full OpenSSL 1.1.1 API can be defined if `OPENSSLFULLAPI` conditional is set.
 
 ### mormot.lib.winhttp
 

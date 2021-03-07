@@ -83,7 +83,7 @@ begin
   result := Assigned(ucnv_open);
 end;
 
-function IsProperWideStringManagerInstalled: boolean;
+function IsWideStringManagerProperlyInstalled: boolean;
 const
   u: WideChar = #$2020; // should convert to dagger glyph #134 in CP 1252
 var
@@ -152,7 +152,7 @@ begin
       {$endif OSDARWIN}
       if icui18n = nil then
       begin
-        if not IsProperWideStringManagerInstalled then
+        if not IsWideStringManagerProperlyInstalled then
           DisplayFatalError('ICU ' + CPU_ARCH_TEXT + ' is not available',
             'Either install it or put cwstring in your uses clause as fallback');
         Done;

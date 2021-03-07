@@ -38,7 +38,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         mov     rax, rdx // rax=r8=cnt
         mov     r8, rdx
         {$endif WIN64ABI}
-        lea     r10, [rip+@jmptab]
+        lea     r10, [rip + @jmptab]
         cmp     src, dst
         je      @equal
         cmp     cnt, 32
@@ -262,7 +262,7 @@ procedure FillCharFast(var dst; cnt: PtrInt; value: byte);
 {$ifdef FPC}nostackframe; assembler;
 asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         mov     r9, $0101010101010101
-        lea     r10, [rip+@jmptab]
+        lea     r10, [rip + @jmptab]
         {$ifdef WIN64ABI}
         movzx   eax, r8b
         {$else}
@@ -274,32 +274,32 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         ja      @abv32  // >32 or <0
         sub     rdx, 8
         jg      @sml    // 9..32
-        jmp     qword ptr [r10 + 64 + rdx*8] // small 0..8 bytes
+        jmp     qword ptr [r10 + 64 + rdx * 8] // small 0..8 bytes
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @jmptab:dq @00, @01, @02, @03, @04, @05, @06, @07, @08
 @sml:   cmp     dl, 8  // 9..32 bytes
         jle     @sml16
         cmp     dl, 16
         jle     @sml24
-        mov     qword ptr [dst+16], rax
-@sml24: mov     qword ptr [dst+8], rax
-@sml16: mov     qword ptr [dst+rdx], rax // last 8 (may be overlapping)
+        mov     qword ptr [dst + 16], rax
+@sml24: mov     qword ptr [dst + 8], rax
+@sml16: mov     qword ptr [dst + rdx], rax // last 8 (may be overlapping)
 @08:    mov     qword ptr [dst], rax
 @00:    ret
-@07:    mov     dword ptr [dst+3], eax
-@03:    mov     word ptr [dst+1], ax
+@07:    mov     dword ptr [dst + 3], eax
+@03:    mov     word ptr [dst + 1], ax
 @01:    mov     byte ptr [dst], al
         ret
-@06:    mov     dword ptr [dst+2], eax
+@06:    mov     dword ptr [dst + 2], eax
 @02:    mov     word ptr [dst], ax
         ret
-@05:    mov     byte ptr [dst+4], al
+@05:    mov     byte ptr [dst + 4], al
 @04:    mov     dword ptr [dst], eax
         ret
 {$ifdef FPC} align 8{$else} .align 8{$endif}
 @abv32: jng     @00  // < 0
         movd    xmm0, eax
-        lea     r8, [dst+cnt]  // r8 point to end
+        lea     r8, [dst + cnt]  // r8 point to end
         pshufd  xmm0, xmm0, 0  // broadcast value into all bytes of xmm0
         mov     r10, rdx       // save rdx=cnt
         {$ifdef ASMX64AVX} // Delphi doesn't support avx, and erms is slower
@@ -307,7 +307,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         jae     @abv256  // try erms or avx if cnt>255 (vzeroupper penaly)
         {$endif ASMX64AVX}
 @sse2:  movups  oword ptr [dst], xmm0  // first unaligned 16 bytes
-        lea     rdx, [dst+rdx-1]
+        lea     rdx, [dst + rdx - 1]
         and     rdx, -16
         add     dst, 16
         and     dst, -16 // dst is 16-bytes aligned
@@ -316,17 +316,17 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         cmp     r10, CPUCACHEX64
         ja      @nv  // bypass cache for cnt>512KB
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@reg:   movaps  oword ptr [rdx+dst], xmm0  // regular loop
+@reg:   movaps  oword ptr [rdx + dst], xmm0  // regular loop
         add     dst, 16
         jnz     @reg
-@last:  movups  oword ptr [r8-16], xmm0 // last unaligned 16 bytes
+@last:  movups  oword ptr [r8 - 16], xmm0 // last unaligned 16 bytes
         ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@nv:    movntdq [rdx+dst], xmm0 // non-temporal loop
+@nv:    movntdq [rdx + dst], xmm0 // non-temporal loop
         add     dst, 16
         jnz     @nv
         sfence
-        movups  oword ptr [r8-16], xmm0
+        movups  oword ptr [r8 - 16], xmm0
         ret
         {$ifdef ASMX64AVX}
 @abv256:
@@ -359,7 +359,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         add     dst, 16
         and     dst, -16
         movaps  oword ptr [dst], xmm0 // aligned 17..32 bytes
-        vinsertf128 ymm0,ymm0,xmm0,1
+        vinsertf128 ymm0, ymm0, xmm0, 1
         add     dst, 16
         and     dst, -32 // dst is 32-bytes aligned
         mov     rdx, r8
@@ -368,14 +368,14 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         cmp     r10, CPUCACHEX64
         ja      @avxnv
         align 16
-@avxreg:vmovaps ymmword ptr [rdx+dst], ymm0  // regular loop
+@avxreg:vmovaps ymmword ptr [rdx + dst], ymm0  // regular loop
         add     dst, 32
         jnz     @avxreg
-@avxok: vmovups oword ptr [r8-32], ymm0  // last unaligned 32 bytes
+@avxok: vmovups oword ptr [r8 - 32], ymm0  // last unaligned 32 bytes
         vzeroupper
         ret
         align 16
-@avxnv: vmovntps oword ptr [rdx+dst], ymm0 // non-temporal loop
+@avxnv: vmovntps oword ptr [rdx + dst], ymm0 // non-temporal loop
         add      dst, 32
         jnz      @avxnv
         sfence
@@ -473,7 +473,7 @@ function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
         xor     rdx, r10
         sub     rdx, r10        // rdx=abs(val)
         cmp     rdx, 10
-        jb      @3              // direct process of common val<10
+        jb      @3   // direct process of common val<10
         mov     rax, rdx
         lea     r8, [rip + TwoDigitLookup]
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
@@ -482,8 +482,8 @@ function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
         jb      @2
         lea     r9, [rax * 2]
         shr     rax, 2
-        mov     rdx, 2951479051793528259 // use power of two reciprocal to avoid division
-        mul     rdx
+        mov     rdx, 2951479051793528259
+        mul     rdx  // use power of two reciprocal to avoid division
         shr     rdx, 2
         mov     rax, rdx
         imul    rdx, -200
@@ -515,7 +515,7 @@ function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
         mov     rdx, rsi
         {$endif WIN64ABI}
         cmp     rdx, 10
-        jb      @3           // direct process of common val<10
+        jb      @3  // direct process of common val<10
         mov     rax, rdx
         lea     r8, [rip + TwoDigitLookup]
 @s:     lea     rcx, [rcx - 2]
@@ -523,8 +523,8 @@ function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
         jb      @2
         lea     r9, [rax * 2]
         shr     rax, 2
-        mov     rdx, 2951479051793528259 // use power of two reciprocal to avoid division
-        mul     rdx
+        mov     rdx, 2951479051793528259
+        mul     rdx  // use power of two reciprocal to avoid division
         shr     rdx, 2
         mov     rax, rdx
         imul    rdx, -200
@@ -1688,19 +1688,15 @@ end;
 
 function InterlockedIncrement(var I: integer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        mov     rax, I
-        mov     edx, 1
-        xchg    rax, rdx
-   lock xadd    dword ptr [rdx], eax
+        mov     eax, 1
+   lock xadd    dword ptr [I], eax // atomic eax=[I] + [I]:=[I]+eax
         inc     eax
 end;
 
 function InterlockedDecrement(var I: integer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        mov     rax, I
-        mov     edx, -1
-        xchg    rax, rdx
-   lock xadd    dword ptr [rdx], eax
+        mov     eax, -1
+   lock xadd    dword ptr [I], eax // atomic eax=[I] + [I]:=[I]+eax
         dec     eax
 end;
 
@@ -1711,7 +1707,7 @@ function RefCntDecFree(var refcnt: TRefCnt): boolean;
         lock dec dword ptr [refcnt]  // TRefCnt=longint on Delphi Win64
 {$endif FPC}
         setbe   al
-end; // we don't check for ismultithread global since lock is cheap on new CPUs
+end; // don't check for ismultithread global since lock is cheaper on new CPUs
 
 {$ifndef FPC}
 

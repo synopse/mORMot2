@@ -87,7 +87,6 @@ type
     fUnit: TDebugUnitDynArray;
     fSymbols, fUnits: TDynArray;
     fSymbolsCount, fUnitsCount: integer;
-    fUnitSynLogIndex, fUnitSystemIndex: integer;
     fCodeOffset: PtrUInt;
     fHasDebugInfo: boolean;
     // called by Create() constructor
@@ -130,8 +129,8 @@ type
     // - create a global TDebugFile instance for the current process, if needed
     // - if no debugging information is available (.map/.dbg/.mab), will write
     // the raw address pointer as hexadecimal
-    class procedure Log(W: TBaseWriter; aAddressAbsolute: PtrUInt;
-      AllowNotCodeAddr: boolean; SymbolNameNotFilename: boolean = false);
+    class function Log(W: TBaseWriter; aAddressAbsolute: PtrUInt;
+      AllowNotCodeAddr: boolean; SymbolNameNotFilename: boolean = false): boolean;
     /// compute the relative memory address from its absolute (pointer) value
     function AbsoluteToOffset(aAddressAbsolute: PtrUInt): integer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -293,6 +292,10 @@ const
   /// may be used to log as Trace or Warning event, depending on an Error: boolean
   LOG_TRACEWARNING: array[boolean] of TSynLogInfo = (
     sllTrace, sllWarning);
+
+  /// may be used to log as Trace or Error event, depending on an Error: boolean
+  LOG_TRACEERROR: array[boolean] of TSynLogInfo = (
+    sllTrace, sllError);
 
   /// may be used to log as Info or Warning event, depending on an Error: boolean
   LOG_INFOWARNING: array[boolean] of TSynLogInfo = (
@@ -1701,9 +1704,12 @@ var
 
 function GetInstanceDebugFile: TDebugFile; {$ifdef FPC} inline; {$endif}
 begin
-  if ExeInstanceDebugFile = nil then
-    ExeInstanceDebugFile := TDebugFile.Create;
   result := ExeInstanceDebugFile;
+  if result = nil then
+  begin
+    result := TDebugFile.Create;
+    ExeInstanceDebugFile := result;
+  end;
 end;
 
 
@@ -2104,7 +2110,6 @@ begin
   end;
 end;
 
-
 function TDwarfReader.ParseCompilationUnits(file_offset, file_size: QWord): QWord;
 var
   opcode, opcodeext, opcodeadjust, divlinerange,
@@ -2387,8 +2392,9 @@ begin
           if (typname <> '') and
              (typname[ord(typname[0])] <> '.') then
             AppendShortChar('.', typname);
-          // DWARF symbols are emitted as UPPER by FPC -> lower for esthetics
-          ShortStringToAnsi7String(lowercase(typname + name), s^.name);
+          // DWARF2 symbols are emitted as UPPER by FPC -> lower for esthetics
+          if header64.version < 3 then
+            ShortStringToAnsi7String(lowercase(typname + name), s^.name);
           s^.Start := low_pc;
           s^.Stop := high_pc - 1;
           if debugtoconsole then
@@ -2850,14 +2856,11 @@ var
   i: PtrInt;
   ExeFile, MabFile: TFileName;
   MapAge, MabAge: TDateTime;
-  U: RawUtf8;
 begin
   fSymbols.InitSpecific(TypeInfo(TDebugSymbolDynArray), fSymbol, ptRawUtf8,
     @fSymbolsCount, true);
   fUnits.InitSpecific(TypeInfo(TDebugUnitDynArray), fUnit, ptRawUtf8,
     @fUnitsCount, true);
-  fUnitSynLogIndex := -1;
-  fUnitSystemIndex := -1;
   // search for an external .map/.dbg file matching the running .exe/.dll name
   if aExeName = '' then
   begin
@@ -2922,10 +2925,6 @@ begin
         end;
       if MabCreate then // just created from .map/.dbg -> create .mab file
         SaveToFile(MabFile);
-      U := 'mormot.core.log';
-      fUnitSynLogIndex := fUnits.Find(U);
-      U := 'System';
-      fUnitSystemIndex := fUnits.Find(U);
       fHasDebugInfo := true;
     end
     else
@@ -3161,12 +3160,9 @@ begin
     result := PtrInt(aAddressAbsolute) - PtrInt(fCodeOffset);
 end;
 
-class procedure TDebugFile.Log(W: TBaseWriter; aAddressAbsolute: PtrUInt;
-  AllowNotCodeAddr, SymbolNameNotFilename: boolean);
+class function TDebugFile.Log(W: TBaseWriter; aAddressAbsolute: PtrUInt;
+  AllowNotCodeAddr, SymbolNameNotFilename: boolean): boolean;
 var
-  {$ifdef FPC}
-  str: ShortString;
-  {$endif FPC}
   u, s, Line, offset: integer;
   debug: TDebugFile;
 
@@ -3180,6 +3176,7 @@ var
   end;
 
 begin
+  result := false;
   if (W = nil) or
      (aAddressAbsolute = 0) then
     exit;
@@ -3189,24 +3186,21 @@ begin
     offset := debug.AbsoluteToOffset(aAddressAbsolute);
     s := debug.FindSymbol(offset);
     u := debug.FindUnit(offset, Line);
-    if s < 0 then
+    if (s < 0) and
+       (u < 0) then
     begin
-      if u < 0 then
-      begin
-        AddHex;
-        exit;
-      end;
-    end
-    else if (u >= 0) and
-            (s >= 0) and
-            not AllowNotCodeAddr then
-      if u = debug.fUnitSynLogIndex then
-        // don't log stack trace internal to SynLog.pas :)
-        exit
-      else if (u = debug.fUnitSystemIndex) and
-              (PosEx('Except', debug.Symbols[s].Name) > 0) then
-        // do not log stack trace of System.SysRaiseException
-        exit;
+      AddHex;
+      exit;
+    end;
+    {$ifndef FPC}
+    if (s >= 0) and
+       not AllowNotCodeAddr and
+       (FindPropName(['SynRtlUnwind', '@HandleAnyException',  'LogExcept',
+         '@HandleOnException', 'ThreadWrapper', 'ThreadProc'],
+         debug.Symbols[s].Name) >= 0) then
+      // no stack trace within the Delphi exception interception functions
+      exit;
+    {$endif FPC}
     AddHex;
     if u >= 0 then
     begin
@@ -3225,6 +3219,7 @@ begin
       W.Add(Line);
       W.Add(')', ' ');
     end;
+    result := true;
   end
   else
     AddHex;
@@ -5249,9 +5244,6 @@ begin
   fWriterEcho.AddEndOfLine(aLevel);
 end;
 
-const
-  MINIMUM_EXPECTED_STACKTRACE_DEPTH = 2;
-
 {$ifdef FPC}
 
 procedure TSynLog.AddStackTrace(Level: TSynLogInfo; Stack: PPtrUInt);
@@ -5265,12 +5257,13 @@ begin
       for i := 0 to CaptureBacktrace(2, length(frames), @frames[0]) - 1 do
         if (i = 0) or
            (frames[i] <> frames[i - 1]) then
-        begin
-          TDebugFile.Log(fWriter, PtrUInt(frames[i]), {notcode=}false, {symbol=}false);
-          dec(depth);
-          if depth = 0 then
-            break;
-        end;
+          if TDebugFile.Log(fWriter, PtrUInt(frames[i]),
+               {notcode=}false, {symbol=}false) then
+          begin
+            dec(depth);
+            if depth = 0 then
+              break;
+          end;
     except // don't let any unexpected GPF break the logging process
     end;
 end;
@@ -5333,7 +5326,6 @@ procedure TSynLog.AddStackTrace(Level: TSynLogInfo; Stack: PPtrUInt);
         mov     max_stack, eax
       // mov eax,fs:[18h]; mov ecx,dword ptr [eax+4]; mov max_stack,ecx
     end;
-    fWriter.AddShort(' stack trace ');
     if PtrUInt(Stack) >= min_stack then
     try
       while PtrUInt(Stack) < max_stack do
@@ -5343,12 +5335,12 @@ procedure TSynLog.AddStackTrace(Level: TSynLogInfo; Stack: PPtrUInt);
            (st < min_stack)) and
            not IsBadReadPtr(pointer(st - 8), 12) and
            ((PByte(st - 5)^ = $E8) or check2(st)) then
-        begin
-          TDebugFile.Log(fWriter, st, false); // ignore any TSynLog.* methods
-          dec(depth);
-          if depth = 0 then
-            break;
-        end;
+          if TDebugFile.Log(fWriter, st, false) then
+          begin
+            dec(depth);
+            if depth = 0 then
+              break;
+          end;
         inc(Stack);
       end;
     except
@@ -5359,7 +5351,7 @@ procedure TSynLog.AddStackTrace(Level: TSynLogInfo; Stack: PPtrUInt);
 {$endif CPU64}
 
 var
-  n, i: integer;
+  n, i, logged: integer;
   BackTrace: array[byte] of PtrUInt;
 begin
   if fFamily.StackTraceLevel <= 0 then
@@ -5370,18 +5362,16 @@ begin
   else
   begin
     try
+      logged := 0;
       n := RtlCaptureStackBackTrace(2, fFamily.StackTraceLevel, @BackTrace, nil);
-      if (n < MINIMUM_EXPECTED_STACKTRACE_DEPTH) and
+      for i := 0 to n - 1 do
+        if TDebugFile.Log(fWriter, BackTrace[i], false) then
+          inc(logged);
+      if (logged < 2) and
          (fFamily.StackTraceUse <> stOnlyAPI) then
-        AddStackManual(stack)
-      else
-      begin
-        fWriter.AddShort(' stack trace API ');
-        for i := 0 to n - 1 do
-          TDebugFile.Log(fWriter, BackTrace[i], false); // ignore any TSynLog.*
-      end;
+        AddStackManual(stack);
     except
-      // just ignore any access violation here
+      // just ignore any access violation here 
     end;
   end;
   {$endif OSWINDOWS}

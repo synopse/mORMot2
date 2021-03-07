@@ -437,8 +437,8 @@ asm
         or      rax, rdx
         lea     rdx, [rip + HeapStatus]
         sub     rax, rcx
-  lock  xadd    qword ptr [rdx + TMMStatus.SleepCycles], rax
-  lock  inc     qword ptr [rdx + TMMStatus.SleepCount]
+   lock add     qword ptr [rdx + TMMStatus.SleepCycles], rax
+   lock inc     qword ptr [rdx + TMMStatus.SleepCount]
 end;
 
 {$else}
@@ -458,24 +458,29 @@ procedure NotifyMediumLargeAlloc(var Arena: TMMStatusArena; Size: PtrUInt);
   nostackframe; assembler;
 asm
         mov     rax, Size
-  lock  xadd    qword ptr [Arena].TMMStatusArena.CurrentBytes, rax
-  lock  xadd    qword ptr [Arena].TMMStatusArena.CumulativeBytes, rax
         {$ifdef FPCMM_DEBUG}
-  lock  inc     qword ptr [Arena].TMMStatusArena.CumulativeAlloc
+   lock add     qword ptr [Arena].TMMStatusArena.CurrentBytes, rax
+   lock add     qword ptr [Arena].TMMStatusArena.CumulativeBytes, rax
+   lock inc     qword ptr [Arena].TMMStatusArena.CumulativeAlloc
         mov     rax, qword ptr [Arena].TMMStatusArena.CurrentBytes
         cmp     rax, qword ptr [Arena].TMMStatusArena.PeakBytes
         jbe     @s
         mov     qword ptr [Arena].TMMStatusArena.PeakBytes, rax
-@s:     {$endif FPCMM_DEBUG}
+@s:     {$else}
+        add     qword ptr [Arena].TMMStatusArena.CurrentBytes, rax
+        add     qword ptr [Arena].TMMStatusArena.CumulativeBytes, rax
+       {$endif FPCMM_DEBUG}
 end;
 
 procedure NotifyMediumLargeFree(var Arena: TMMStatusArena; Size: PtrUInt);
   nostackframe; assembler;
 asm
         neg     Size
-  lock  xadd    qword ptr [Arena].TMMStatusArena.CurrentBytes, Size
         {$ifdef FPCMM_DEBUG}
-  lock  inc     qword ptr [Arena].TMMStatusArena.CumulativeFree
+   lock add     qword ptr [Arena].TMMStatusArena.CurrentBytes, Size
+   lock inc     qword ptr [Arena].TMMStatusArena.CumulativeFree
+        {$else}
+        add     qword ptr [Arena].TMMStatusArena.CurrentBytes, Size
         {$endif FPCMM_DEBUG}
 end;
 
@@ -722,7 +727,8 @@ asm
         pop     rdi
         pop     rsi
         lea     rax, [rip + HeapStatus]
-  lock  inc     qword ptr [rax].TMMStatus.Medium.SleepCount
+        {$ifdef FPCMM_DEBUG} lock {$endif}
+        inc     qword ptr [rax].TMMStatus.Medium.SleepCount
         jmp     @s
 @ok:
 end;
@@ -909,7 +915,8 @@ asm
         jmp     @sp
 @rc:    call    ReleaseCore
         lea     rax, [rip + HeapStatus]
-  lock  inc     qword ptr [rax].TMMStatus.Large.SleepCount
+        {$ifdef FPCMM_DEBUG} lock {$endif}
+        inc     qword ptr [rax].TMMStatus.Large.SleepCount
         jmp     @s
 @ok:
 end;
@@ -966,7 +973,7 @@ begin
   header := pointer(PByte(p) - LargeBlockHeaderSize);
   if header.BlockSizeAndFlags and IsFreeBlockFlag <> 0 then
   begin
-    // try to duplicate the same pointer twice
+    // try to release the same pointer twice
     result := 0;
     exit;
   end;
@@ -1065,7 +1072,8 @@ asm
   lock  cmpxchg byte ptr [rbx].TSmallBlockType.BlockTypeLocked, ah
         je      @GotLockOnTinyBlockType
         // Thread Contention (occurs much less than during _Freemem)
-  lock  inc     dword ptr [rbx].TSmallBlockType.GetmemSleepCount
+        {$ifdef FPCMM_DEBUG} lock {$endif}
+        inc     dword ptr [rbx].TSmallBlockType.GetmemSleepCount
         push    r8
         push    rcx
         call    ReleaseCore
@@ -1109,7 +1117,8 @@ asm
         jb      @LockBlockTypeLoop // no timeout yet
         {$endif FPCMM_PAUSE}
         // Block type and two sizes larger are all locked - give up and sleep
-  lock  inc      dword ptr [rbx].TSmallBlockType.GetmemSleepCount
+        {$ifdef FPCMM_DEBUG} lock {$endif}
+        inc      dword ptr [rbx].TSmallBlockType.GetmemSleepCount
         call    ReleaseCore
         jmp     @LockBlockTypeLoopRetry
 end;
@@ -1799,7 +1808,8 @@ asm
         pop     rdx
         {$endif FPCMM_PAUSE}
         // Couldn't grab the block type - sleep and try again
-  lock  inc dword ptr [rbx].TSmallBlockType.FreeMemSleepCount
+        {$ifdef FPCMM_DEBUG} lock {$endif}
+        inc dword ptr [rbx].TSmallBlockType.FreeMemSleepCount
         push    rdx
         push    rcx
         call    ReleaseCore

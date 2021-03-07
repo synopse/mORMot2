@@ -324,6 +324,8 @@ type
     // - should have been registered by a previous call to TimerEnable() method
     // - returns true on success, false if the supplied task was not registered
     function TimerDisable(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+    /// execute once a task in the background, without waiting for it
+    function Once(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
     /// will gather CPU and RAM information in a background thread
     // - you can specify the update frequency, in seconds
     // - access to the information via the returned instance, which maps
@@ -1078,8 +1080,9 @@ type
   /// flags which may be set by the caller to notify low-level context
   // - llfHttps will indicates that the communication was made over HTTPS
   // - llfSecured is set if the transmission is encrypted or in-process,
-  // using e.g. HTTPS/SSL/TLS or our proprietary AES/ECDHE algorithms
+  // using e.g. HTTPS/TLS or our proprietary AES/ECDHE WebSockets algorithms
   // - llfWebsockets communication was made using WebSockets
+  // - match THttpServerRequestFlag from mormot.net.http.pas
   TRestUriParamsLowLevelFlag = (
     llfHttps,
     llfSecured,
@@ -1131,16 +1134,16 @@ type
     // rights management) - making access rights a parameter allows this method
     // to be handled as pure stateless, thread-safe and session-free
     RestAccessRights: POrmAccessRights;
-    /// opaque reference to the protocol context which made this request
+    /// opaque reference to the connection which made this request
     // - may point e.g. to a THttpServerResp, a TWebSocketServerResp,
     // a THttpApiServer, a TRestClientUri, a TFastCGIServer or a
     // TRestServerNamedPipeResponse instance
-    // - stores SynCrtSock's THttpServerConnectionID, i.e. a Int64 as expected
-    // by http.sys, or an incremental rolling sequence of 31-bit integers for
+    // - stores mormot.net.http's THttpServerConnectionID, e.g. a http.sys
+    // 64-bit ID, or an incremental rolling sequence of 31-bit integers for
     // THttpServer/TWebSocketServer, or maybe a raw PtrInt(self/THandle)
     LowLevelConnectionID: Int64;
-    /// low-level properties of the current protocol context
-    LowLevelFlags: TRestUriParamsLowLevelFlags;
+    /// low-level properties of the current connection
+    LowLevelConnectionFlags: TRestUriParamsLowLevelFlags;
     /// initialize the non RawUtf8 values
     procedure Init; overload;
     /// initialize the input values
@@ -1849,8 +1852,10 @@ begin
   if fOrm <> nil then
     // abort any (unlikely) pending TRestBatch
     fOrm.AsyncBatchStop(nil);
-  FreeAndNil(fRun);
+  for cmd := Low(cmd) to high(cmd) do
+    FreeAndNil(fAcquireExecution[cmd]); // calls fOrmInstance.OnEndThread
   FreeAndNil(fServices);
+  FreeAndNil(fRun); // after fAcquireExecution+fServices
   if fOrmInstance <> nil then
     if (fOrm = nil) or
        (fOrmInstance.RefCount <> 1) then
@@ -1864,8 +1869,6 @@ begin
      (fModel.Owner = self) then
     // make sure we are the Owner (TRestStorage has fModel<>nil e.g.)
     FreeAndNil(fModel);
-  for cmd := Low(cmd) to high(cmd) do
-    FreeAndNil(fAcquireExecution[cmd]);
   // fPrivateGarbageCollector should be released in last position
   if fPrivateGarbageCollector <> nil then
   begin
@@ -3332,7 +3335,7 @@ begin
   OutInternalState := 0;
   RestAccessRights := nil;
   LowLevelConnectionID := 0;
-  byte(LowLevelFlags) := 0;
+  byte(LowLevelConnectionFlags) := 0;
 end;
 
 procedure TRestUriParams.Init(const aUri, aMethod, aInHead, aInBody: RawUtf8);
@@ -3604,6 +3607,11 @@ begin
     result := false
   else
     result := fBackgroundTimer.Disable(aOnProcess);
+end;
+
+function TRestRunThreads.Once(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+begin
+  result := EnsureBackgroundTimerExists.ExecuteOnce(aOnProcess);
 end;
 
 function TRestRunThreads.SystemUseTrack(periodSec: integer): TSystemUse;

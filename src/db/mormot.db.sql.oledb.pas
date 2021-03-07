@@ -1979,8 +1979,8 @@ begin
       OleCheck(CoCreateInstance(CLSID_MSDAINITIALIZE, nil, CLSCTX_INPROC_SERVER,
         IID_IDataInitialize, DataInitialize));
       if fConnectionString <> '' then
-        DataInitialize.GetDataSource(nil, CLSCTX_INPROC_SERVER, Pointer(fConnectionString),
-          IID_IDBInitialize, DBInitialize)
+        DataInitialize.GetDataSource(nil, CLSCTX_INPROC_SERVER,
+          Pointer(fConnectionString), IID_IDBInitialize, DBInitialize)
       else
         DBInitialize := nil;
       res := DBPromptInitialize.PromptDataSource(nil, Parent,
@@ -2252,8 +2252,8 @@ begin
     tmp := {%H-}tmp + 'Data Source=' + fServerName + ';';
   if fDatabaseName <> '' then
     tmp := tmp + 'Initial Catalog=' + fDatabaseName + ';';
-  fConnectionString := Utf8ToSynUnicode(tmp + 'User Id=' + fUserID +
-    ';Password=' + fPassWord + ';');
+  Utf8ToSynUnicode(tmp + 'User Id=' + fUserID + ';Password=' + fPassWord + ';',
+    fConnectionString);
 end;
 
 function TSqlDBOleDBConnectionProperties.ColumnTypeNativeToDB(

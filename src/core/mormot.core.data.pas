@@ -6826,9 +6826,11 @@ begin
         // greater than last sorted item
         Index := n;
         if cmp = 0 then
+          // returns true + index of existing Elem
           result := true
-        else // returns true + index of existing Elem
-          inc(Index); // returns false + insert after last position
+        else
+          // returns false + insert after last position
+          inc(Index);
         exit;
       end;
       Index := 0;
@@ -6839,7 +6841,8 @@ begin
         cmp := fCompare(P[i * fInfo.Cache.ItemSize], Item);
         if cmp = 0 then
         begin
-          Index := i; // returns true + index of existing Elem
+          // returns true + index of existing Elem
+          Index := i;
           result := True;
           exit;
         end
@@ -6851,9 +6854,11 @@ begin
       // Elem not found: returns false + the index where to insert
     end
     else
+      // not Sorted
       Index := -1
-  else // not Sorted
-    Index := -1; // no fCompare()
+  else
+    // no fCompare()
+    Index := -1;
 end;
 
 procedure TDynArray.FastAddSorted(Index: integer; const Item);
@@ -8386,7 +8391,8 @@ begin
   if not forced and
      ((n = 0) or
       (n < CountTrigger)) then
-    exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
+    // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
+    exit;
   if forceGrow and
      (siz > 0) then
     // next power of two or next prime
@@ -8398,7 +8404,8 @@ begin
       siz := NextPrime(siz)
   else
   begin
-    cap := DynArray^.Capacity * 2; // Capacity better than Count - *2 for void slots
+    // Capacity better than Count, * 2 to reserve some void slots
+    cap := DynArray^.Capacity * 2;
     {$ifdef CPU32DELPHI}
     if cap <= HASH_PO2 then
     begin

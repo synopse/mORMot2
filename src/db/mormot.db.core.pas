@@ -1807,7 +1807,7 @@ begin
   until false;
   // return generic SQL statement, with ? place-holders and params in Values[]
   Gen^ := #0; // as SetLength(), but with no memory realloc
-  PStrLen(PAnsiChar(PtrUInt(result)) - _STRLEN)^ := Gen - pointer(result);
+  PStrLen(PAnsiChar(pointer(result)) - _STRLEN)^ := Gen - pointer(result);
   inc(maxParam);
 end;
 
@@ -1967,7 +1967,7 @@ begin
           AddShorter('=:(')
         else
           Add('=');
-        AddQuotedStr(pointer(Values[0]), '''');
+        AddQuotedStr(pointer(Values[0]), length(Values[0]), '''');
         if ValuesInlinedMax > 1 then
           AddShorter('):');
       end
@@ -1978,7 +1978,7 @@ begin
         begin
           if ValuesInlinedMax > n then
             Add(':', '(');
-          AddQuotedStr(pointer(Values[i]), '''');
+          AddQuotedStr(pointer(Values[i]), length(Values[i]), '''');
           if ValuesInlinedMax > n then
             AddShorter('):,')
           else

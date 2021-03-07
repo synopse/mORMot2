@@ -102,7 +102,7 @@ type
     procedure CleanUp; override;
     function NewClient(const port: RawUtf8): TRestHttpClientWebsockets;
     procedure WebsocketsLowLevel(protocol: TWebSocketProtocol;
-      opcode: TWebSocketFrameOpCode);
+      opcode: TWebSocketFrameOpCode; const name: RawUtf8);
     procedure TestRest(Rest: TRest);
     procedure TestCallback(Rest: TRest);
     procedure SoaCallbackViaWebsockets(Ajax, Relay: boolean);
@@ -110,13 +110,8 @@ type
     property HttpServer: TRestHttpServer
       read fHttpServer;
   published
-    /// low-level test of our 'synopsejson' WebSockets JSON protocol
-    procedure WebsocketsJsonProtocol;
-    /// low-level test of our 'synopsebinary' WebSockets binary protocol
-    procedure WebsocketsBinaryProtocol;
-    procedure WebsocketsBinaryProtocolEncrypted;
-    procedure WebsocketsBinaryProtocolCompressed;
-    procedure WebsocketsBinaryProtocolCompressEncrypted;
+    /// low-level test of our 'synopsejson' and 'synopsebinary' protocols
+    procedure WebsocketsProtocols;
     /// launch the WebSockets-ready HTTP server
     procedure RunHttpServer;
     /// test the callback mechanism via interface-based services on server side
@@ -236,34 +231,25 @@ end;
 const
   WEBSOCKETS_KEY = 'key';
 
-procedure TTestBidirectionalRemoteConnection.WebsocketsJsonProtocol;
+procedure TTestBidirectionalRemoteConnection.WebsocketsProtocols;
+var
+  Settings: TWebSocketProcessSettings;
 begin
+  Settings.SetDefaults;
   WebsocketsLowLevel(
-    TWebSocketProtocolJson.Create(''), focText);
-end;
-
-procedure TTestBidirectionalRemoteConnection.WebsocketsBinaryProtocol;
-begin
+    TWebSocketProtocolJson.Create(''), focText, '');
   WebsocketsLowLevel(
-    TWebSocketProtocolBinary.Create('', false, '', false), focBinary);
-end;
-
-procedure TTestBidirectionalRemoteConnection.WebsocketsBinaryProtocolEncrypted;
-begin
+    TWebSocketProtocolBinary.Create('', false, '', @Settings, []),
+    focBinary, '');
   WebsocketsLowLevel(
-    TWebSocketProtocolBinary.Create('', false, 'pass', false), focBinary);
-end;
-
-procedure TTestBidirectionalRemoteConnection.WebsocketsBinaryProtocolCompressed;
-begin
+    TWebSocketProtocolBinary.Create('', false, 'pass', @Settings, []),
+    focBinary, ' encrypted');
   WebsocketsLowLevel(
-    TWebSocketProtocolBinary.Create('', false, '', true), focBinary);
-end;
-
-procedure TTestBidirectionalRemoteConnection.WebsocketsBinaryProtocolCompressEncrypted;
-begin
+    TWebSocketProtocolBinary.Create('', false, '', @Settings, [pboSynLzCompress]),
+    focBinary, ' compressed');
   WebsocketsLowLevel(
-    TWebSocketProtocolBinary.Create('', false, 'pass', true), focBinary);
+    TWebSocketProtocolBinary.Create('', false, 'pass', @Settings, [pboSynLzCompress]),
+      focBinary, ' encrypted compressed');
 end;
 
 
@@ -271,7 +257,8 @@ type // to access protected low-level frame methods
   TWebSocketProtocolRestHook = class(TWebSocketProtocolRest);
 
 procedure TTestBidirectionalRemoteConnection.WebsocketsLowLevel(
-  protocol: TWebSocketProtocol; opcode: TWebSocketFrameOpCode);
+  protocol: TWebSocketProtocol; opcode: TWebSocketFrameOpCode;
+  const name: RawUtf8);
 
   procedure TestOne(const content, contentType: RawByteString);
   var
@@ -280,34 +267,38 @@ procedure TTestBidirectionalRemoteConnection.WebsocketsLowLevel(
     frame: TWebSocketFrame;
     head: RawUtf8;
     noAnswer1, noAnswer2: boolean;
+    i: integer;
   begin
-    C1 := THttpServerRequest.Create(nil, 0, nil);
-    C2 := THttpServerRequest.Create(nil, 0, nil);
+    C1 := THttpServerRequest.Create(nil, 0, nil, []);
+    C2 := THttpServerRequest.Create(nil, 0, nil, []);
     P2 := protocol.Clone('');
     try
-      C1.Prepare('url', 'POST', 'headers', content, contentType, '', false);
-      noAnswer1 := opcode = focBinary;
-      noAnswer2 := not noAnswer1;
-      TWebSocketProtocolRestHook(protocol).InputToFrame(C1, noAnswer1, frame, head);
-      check(frame.opcode = opcode);
-      TWebSocketProtocolRestHook(P2).FrameToInput(frame, noAnswer2, C2);
-      check(noAnswer1 = noAnswer2);
-      check(C2.URL = 'url');
-      check(C2.Method = 'POST');
-      check(C2.InHeaders = 'headers');
-      check(C2.InContentType = contentType);
-      check(C2.InContent = content);
-      C1.OutContent := content;
-      C1.OutContentType := contentType;
-      C1.OutCustomHeaders := 'outheaders';
-      frame.opcode := focContinuation;
-      head := 'answer';
-      TWebSocketProtocolRestHook(protocol).OutputToFrame(C1, 200, head, frame);
-      check(frame.opcode = opcode);
-      check(TWebSocketProtocolRestHook(P2).FrameToOutput(frame, C2) = 200);
-      check(C2.OutContent = content);
-      check(C2.OutContentType = contentType);
-      check(C2.OutCustomHeaders = 'outheaders');
+      for i := 1 to 100 do
+      begin
+        C1.Prepare('url', 'POST', 'headers', content, contentType, '');
+        noAnswer1 := opcode = focBinary;
+        noAnswer2 := not noAnswer1;
+        TWebSocketProtocolRestHook(protocol).InputToFrame(C1, noAnswer1, frame, head);
+        check(frame.opcode = opcode);
+        TWebSocketProtocolRestHook(P2).FrameToInput(frame, noAnswer2, C2);
+        check(noAnswer1 = noAnswer2);
+        check(C2.URL = 'url');
+        check(C2.Method = 'POST');
+        check(C2.InHeaders = 'headers');
+        check(C2.InContentType = contentType);
+        check(C2.InContent = content);
+        C1.OutContent := content;
+        C1.OutContentType := contentType;
+        C1.OutCustomHeaders := 'outheaders';
+        frame.opcode := focContinuation;
+        head := 'answer';
+        TWebSocketProtocolRestHook(protocol).OutputToFrame(C1, 200, head, frame);
+        check(frame.opcode = opcode);
+        check(TWebSocketProtocolRestHook(P2).FrameToOutput(frame, C2) = 200);
+        check(C2.OutContent = content);
+        check(C2.OutContentType = contentType);
+        check(C2.OutCustomHeaders = 'outheaders');
+      end;
     finally
       P2.Free;
       C2.Free;
@@ -315,13 +306,17 @@ procedure TTestBidirectionalRemoteConnection.WebsocketsLowLevel(
     end;
   end;
 
+var
+  timer: TPrecisionTimer;
 begin
+  timer.Start;
   try
     TestOne('content', TEXT_CONTENT_TYPE);
     TestOne('{"content":1234}', JSON_CONTENT_TYPE);
     TestOne('"content"', JSON_CONTENT_TYPE);
     TestOne('["json",2]', JSON_CONTENT_TYPE);
     TestOne('binary'#0'data', BINARY_CONTENT_TYPE);
+    // NotifyTestSpeed('%%', [protocol.Name, name], 100 * 5, 0, @timer);
   finally
     protocol.Free;
   end;
@@ -466,12 +461,12 @@ begin
     ServiceDefine(c1, '1');
     TestRest(c1);
     // check WebSockets communication
-    CheckEqual(c1.WebSocketsUpgrade(WEBSOCKETS_KEY, Ajax, true), '',
+    CheckEqual(c1.WebSocketsUpgrade(WEBSOCKETS_KEY, Ajax, [pboSynLzCompress]), '',
       'WebSocketsUpgrade1');
     TestCallback(c1);
     c2 := NewClient(port);
     try
-      CheckEqual(c2.WebSocketsUpgrade(WEBSOCKETS_KEY, Ajax, true), '',
+      CheckEqual(c2.WebSocketsUpgrade(WEBSOCKETS_KEY, Ajax, [pboSynLzCompress]), '',
         'WebSocketsUpgrade2');
       ServiceDefine(c2, '2');
       TestCallback(c2);

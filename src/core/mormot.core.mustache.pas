@@ -1483,14 +1483,15 @@ var
   n: integer;
 begin
   h := pointer(Helpers);
-  if h <> nil then
+  if (h <> nil) and
+     (aNameLen > 0) then
   begin
     result := 0;
     n := PDALen(PAnsiChar(h) - _DALEN)^ + _DAOFF;
     repeat
       P := pointer(h^.Name);
       if (PStrLen(P - _STRLEN)^ = aNameLen) and
-         IdemPropNameUSameLen(P, aName, aNameLen) then
+         IdemPropNameUSameLenNotNull(P, aName, aNameLen) then
         exit;
       inc(h);
       inc(result);

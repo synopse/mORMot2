@@ -12,7 +12,6 @@ unit mormot.rest.server;
     - TAuthSession for In-Memory User Sessions
     - TRestServerAuthentication Implementing Authentication Schemes
     - TRestServerMonitor for High-Level Statistics of a REST Server
-    - TInterfacedCallback/TBlockingCallback Classes
     - TRestServer Abstract REST Server
     - TRestHttpServerDefinition Settings for a HTTP Server
 
@@ -168,6 +167,7 @@ type
     fInput: TRawUtf8DynArray; // even items are parameter names, odd are values
     fInputPostContentType: RawUtf8;
     fInputCookiesRetrieved: boolean;
+    fInputAllowDouble: boolean;
     fInputCookies: array of record
       Name, Value: RawUtf8; // only computed if InCookie[] is used
     end;
@@ -501,6 +501,9 @@ type
     // but you should convert its value to AnsiString using Utf8ToString()
     function InputOrError(const ParamName: RawUtf8; out Value: variant;
       const ErrorMessageForMissingParameter: string): boolean;
+    /// if Input[] InputOrVoid[] InputOrError() variants could be double
+    property InputAllowDouble: boolean
+      read fInputAllowDouble write fInputAllowDouble;
     /// retrieve all input parameters from URI as a variant JSON object
     // - returns Unassigned if no parameter was defined
     // - returns a JSON object with input parameters encoded as
@@ -1543,83 +1546,6 @@ type
 
 
 
-{ ************ TInterfacedCallback/TBlockingCallback Classes }
-
-  /// TInterfacedObject class which will notify a REST server when it is released
-  // - could be used when implementing event callbacks as interfaces, so that
-  // the other side instance will be notified when it is destroyed
-  TInterfacedCallback = class(TInterfacedObjectLocked)
-  protected
-    fRest: TRest;
-    fInterface: TGUID;
-  public
-    /// initialize the instance for a given REST and callback interface
-    constructor Create(aRest: TRest; const aGuid: TGUID); reintroduce;
-    /// notify the associated TRestServer that the callback is disconnnected
-    // - i.e. will call TRestServer's TServiceContainer.CallBackUnRegister()
-    // - this method will process the unsubscription only once
-    procedure CallbackRestUnregister; virtual;
-    /// finalize the instance, and notify the TRestServer that the callback
-    // is now unreachable
-    // - i.e. will call CallbackRestUnregister
-    destructor Destroy; override;
-    /// the associated TRestServer instance, which will be notified
-    // when the callback is released
-    property Rest: TRest
-      read fRest;
-    /// the interface type, implemented by this callback class
-    property RestInterface: TGUID
-      read fInterface write fInterface;
-  end;
-
-  /// asynchrounous callback to emulate a synchronous/blocking process
-  // - once created, process will block via a WaitFor call, which will be
-  // released when CallbackFinished() is called by the process background thread
-  TBlockingCallback = class(TInterfacedCallback)
-  protected
-    fProcess: TBlockingProcess;
-    function GetEvent: TBlockingEvent;
-  public
-    /// initialize the callback instance
-    // - specify a time out millliseconds period after which blocking execution
-    // should be handled as failure (if 0 is set, default 3000 will be used)
-    // - you can optionally set a REST and callback interface for automatic
-    // notification when this TInterfacedCallback will be released
-    constructor Create(aTimeOutMs: integer;
-      aRest: TRest; const aGuid: TGUID); reintroduce;
-    /// finalize the callback instance
-    destructor Destroy; override;
-    /// called to wait for the callback to be processed, or trigger timeout
-    // - will block until CallbackFinished() is called by the processing thread
-    // - returns the final state of the process, i.e. beRaised or beTimeOut
-    function WaitFor: TBlockingEvent; virtual;
-    /// should be called by the callback when the process is finished
-    // - the caller will then let its WaitFor method return
-    // - if aServerUnregister is TRUE, will also call CallbackRestUnregister to
-    // notify the server that the callback is no longer needed
-    // - will optionally log all published properties values to the log class
-    // of the supplied REST instance
-    procedure CallbackFinished(aRestForLog: TRestOrm;
-      aServerUnregister: boolean = false); virtual;
-    /// just a wrapper to reset the internal Event state to evNone
-    // - may be used to re-use the same TBlockingCallback instance, after
-    // a successfull WaitFor/CallbackFinished process
-    // - returns TRUE on success (i.e. status was not beWaiting)
-    // - if there is a WaitFor currently in progress, returns FALSE
-    function Reset: boolean; virtual;
-    /// the associated blocking process instance
-    property Process: TBlockingProcess
-      read fProcess;
-  published
-    /// the current state of process
-    // - just a wrapper around Process.Event
-    // - use Reset method to re-use this instance after a WaitFor process
-    property Event: TBlockingEvent
-      read GetEvent;
-  end;
-
-
-
 { ************ TRestServer Abstract REST Server }
 
   /// some options for TRestServer process
@@ -1660,7 +1586,7 @@ type
   // header unless rsoAuthenticationUriDisable is set (for security reasons)
   // - you can switch off root/timestamp/info URI via rsoTimestampInfoUriDisable
   // - Uri() header output will be sanitized for any EOL injection, unless
-  // rsoHttpHeaderCheckDisable is defined (to gain a few cycles?)
+  // rsoHttpHeaderCheckDisable is defined (to gain a few cycles)
   // - by default, TAuthUser.Data blob is retrieved from the database,
   // unless rsoGetUserRetrieveNoBlobData is defined
   // - rsoNoInternalState could be state to avoid transmitting the
@@ -2594,7 +2520,7 @@ type
 
   /// parameters supplied to publish a TSqlRestServer via HTTP
   // - used by the overloaded TRestHttpServer.Create(TRestHttpServerDefinition)
-  // constructor in mORMotHttpServer.pas, and also in dddInfraSettings.pas
+  // constructor in mormot.rest.http.server.pas, and also in dddInfraSettings.pas
   TRestHttpServerDefinition = class(TSynPersistentWithPassword)
   protected
     fBindPort: RawByteString;
@@ -2782,7 +2708,7 @@ begin
   j := length(Server.fModel.Root);
   if (i + j > length(Call^.Url)) or
      not (P[i + j] in [#0, '/', '?']) or
-     not IdemPropNameUSameLen(P + i, pointer(Server.fModel.Root), j) then
+     not IdemPropNameUSameLenNotNull(P + i, pointer(Server.fModel.Root), j) then
   begin
     // URI do not start with Model.Root -> caller can try another TRestServer
     result := False;
@@ -2892,13 +2818,13 @@ begin
     Session := CONST_AUTHENTICATION_SESSION_NOT_STARTED;
     if // /auth + /timestamp are e.g. allowed methods without signature
        ((MethodIndex >= 0) and
-       Server.fPublishedMethod[MethodIndex].ByPassAuthentication) or
+        Server.fPublishedMethod[MethodIndex].ByPassAuthentication) or
        // you can allow a service to be called directly
        ((Service <> nil) and
-       TServiceFactoryServerAbstract(Service).ByPassAuthentication) or
+        TServiceFactoryServerAbstract(Service).ByPassAuthentication) or
        // allow by-pass for a set of HTTP verbs (e.g. mGET)
        ((Table <> nil) and
-       (Method in Server.BypassOrmAuthentication)) then
+        (Method in Server.BypassOrmAuthentication)) then
       // no need to check the sessions
       exit;
     Server.fSessions.Safe.Lock;
@@ -2914,8 +2840,8 @@ begin
             if (Log <> nil) and
                (s.RemoteIP <> '') and
                (s.RemoteIP <> '127.0.0.1') then
-              Log.Log(sllUserAuth, '%/% %', [s.User.LogonName,
-                s.ID, s.RemoteIP], self);
+              Log.Log(sllUserAuth, '%/% %',
+                [s.User.LogonName, s.ID, s.RemoteIP], self);
             exit;
           end;
           inc(a);
@@ -2942,8 +2868,7 @@ begin
   if Log <> nil then
     Log.Log(sllUserAuth, 'AuthenticationFailed(%) for % (session=%)',
       [txt^, Call^.Url, Session], self);
-  // 401 Unauthorized response MUST include a WWW-Authenticate header,
-  // which is not what we used, so here we won't send 401 error code but 403
+  // 401 HTTP_UNAUTHORIZED must include a WWW-Authenticate header, so return 403
   Call.OutStatus := HTTP_FORBIDDEN;
   FormatUtf8('Authentication Failed: % (%)',
     [UnCamelCase(TrimLeftLowerCaseShort(txt)), ord(Reason)], CustomErrorMsg);
@@ -3293,7 +3218,8 @@ procedure TRestServerUriContext.InternalExecuteSoaByInterface;
         // {"method":"_free_", "params":[], "id":1234}
         if not (Service.InstanceCreation in [sicClientDriven..sicPerThread]) then
         begin
-          Error('_free_ is not compatible with %', [ToText(Service.InstanceCreation)^]);
+          Error('_free_ is not compatible with %',
+            [ToText(Service.InstanceCreation)^]);
           exit;
         end;
       ord(imContract):
@@ -4101,7 +4027,7 @@ var
 begin
   value := GetInputUtf8OrVoid(ParamName);
   if (length(value) <> 8) or
-     not HexDisplayToCardinal(Pointer(value), result) then
+     not HexDisplayToBin(Pointer(value), @result, SizeOf(result)) then
     result := 0;
 end;
 
@@ -4252,12 +4178,17 @@ var
   v: RawUtf8;
 begin
   GetInputByName(ParamName, '', v);
-  GetVariantFromJson(pointer(v), false, result{%H-});
+  GetVariantFromJson(pointer(v), false, result{%H-}, nil,
+    fInputAllowDouble, length(v));
 end;
 
 function TRestServerUriContext.GetInputOrVoid(const ParamName: RawUtf8): variant;
+var
+  v: RawUtf8;
 begin
-  GetVariantFromJson(pointer(GetInputUtf8OrVoid(ParamName)), false, result{%H-});
+  v := GetInputUtf8OrVoid(ParamName);
+  GetVariantFromJson(pointer(v), false, result{%H-}, nil,
+    fInputAllowDouble, length(v));
 end;
 
 function TRestServerUriContext.InputOrError(const ParamName: RawUtf8;
@@ -4267,7 +4198,8 @@ var
 begin
   result := InputUtf8OrError(ParamName, v, ErrorMessageForMissingParameter);
   if result then
-    GetVariantFromJson(pointer(v), false, Value);
+    GetVariantFromJson(pointer(v), false, Value, nil,
+      fInputAllowDouble, length(v));
 end;
 
 function TRestServerUriContext.GetInputAsTDocVariant(
@@ -4297,7 +4229,8 @@ begin
       end
       else
         forcestring := false;
-      GetVariantFromJson(pointer(fInput[ndx * 2 + 1]), forcestring, v, @Options);
+      GetVariantFromJson(pointer(fInput[ndx * 2 + 1]), forcestring, v,
+        @Options, fInputAllowDouble, length(fInput[ndx * 2 + 1]));
       res.AddValue(name, v);
     end;
   end
@@ -4521,7 +4454,7 @@ begin
       agent := GetUserAgent;
       if (agent = '') or
          (PosEx('mORMot', agent) > 0) then
-        // 'mORMot' set e.g. from XPOWEREDPROGRAM value in SynCrtSock
+        // 'mORMot' set e.g. from DefaultUserAgent() in mormot.net.http
         fClientKind := ckFramework
       else
         fClientKind := ckAjax;
@@ -5428,15 +5361,15 @@ begin
   len := Ctxt.UriSessionSignaturePos - 1;
   P := @Ctxt.Call^.Url[len + (20 + 8)]; // points to Hexa8(Timestamp)
   minticks := result.fLastTimestamp - fTimestampCoherencyTicks;
-  if HexDisplayToCardinal(P, ts) and
+  if HexDisplayToBin(P, @ts, SizeOf(ts)) and
      (fNoTimestampCoherencyCheck or
       (integer(minticks) < 0) or // <0 just after login
-      (ts >= minticks)) then
+      ({%H-}ts >= minticks)) then
   begin
     expectedsign := fComputeSignature(result.fPrivateSaltHash,
       P, pointer(Ctxt.Call^.Url), len);
-    if HexDisplayToCardinal(P + 8, sign) and
-       (sign = expectedsign) then
+    if HexDisplayToBin(P + 8, @sign, SizeOf(sign)) and
+       ({%H-}sign = expectedsign) then
     begin
       if ts > result.fLastTimestamp then
         result.fLastTimestamp := ts;
@@ -5495,7 +5428,7 @@ begin
   end;
   hash := ServerNonceHash; // thread-safe SHA-3 sponge reuse
   hash.Update(@ticks, SizeOf(ticks));
-  hash.final(res, true);
+  hash.Final(res, true);
   result := BinToHexLower(@res, SizeOf(res));
   with ServerNonceCache[Previous] do
   begin
@@ -6082,84 +6015,6 @@ begin
     result := fStorage.Update(rec)
   else
     result := fStorage.Add(rec, true, true) = recid;
-end;
-
-
-
-{ ************ TInterfacedCallback/TBlockingCallback Classes }
-
-
-{ TInterfacedCallback }
-
-constructor TInterfacedCallback.Create(aRest: TRest; const aGuid: TGUID);
-begin
-  inherited Create;
-  fRest := aRest;
-  fInterface := aGuid;
-end;
-
-procedure TInterfacedCallback.CallbackRestUnregister;
-var
-  obj: pointer; // not IInvokable to avoid unexpected (recursive) Destroy call
-begin
-  if (fRest <> nil) and
-     (fRest.Services <> nil) and
-     not IsNullGuid(fInterface) then
-    if GetInterface(fInterface, obj) then
-    begin
-      fRest.Services.CallBackUnRegister(IInvokable(obj));
-      dec(fRefCount); // GetInterface() did increase the refcount
-      fRest := nil; // notify once
-    end;
-end;
-
-destructor TInterfacedCallback.Destroy;
-begin
-  CallbackRestUnregister;
-  inherited Destroy;
-end;
-
-
-{ TBlockingCallback }
-
-constructor TBlockingCallback.Create(aTimeOutMs: integer; aRest: TRest;
-  const aGuid: TGUID);
-begin
-  inherited Create(aRest, aGuid);
-  fProcess := TBlockingProcess.Create(aTimeOutMs, fSafe);
-end;
-
-destructor TBlockingCallback.Destroy;
-begin
-  FreeAndNil(fProcess);
-  inherited Destroy;
-end;
-
-procedure TBlockingCallback.CallbackFinished(aRestForLog: TRestOrm;
-  aServerUnregister: boolean);
-begin
-  if fProcess.NotifyFinished then
-  begin
-    if aRestForLog <> nil then
-      aRestForLog.LogClass.Add.Log(sllTrace, self);
-    if aServerUnregister then
-      CallbackRestUnregister;
-  end;
-end;
-
-function TBlockingCallback.WaitFor: TBlockingEvent;
-begin
-  result := fProcess.WaitFor;
-end;
-
-function TBlockingCallback.Reset: boolean;
-begin
-  result := fProcess.Reset;
-end;
-
-function TBlockingCallback.GetEvent: TBlockingEvent;
-begin
-  result := fProcess.Event;
 end;
 
 
@@ -6865,7 +6720,7 @@ begin
   if Assigned(OnSessionCreate) then
     if OnSessionCreate(self, Session, Ctxt) then
     begin
-      // TRUE aborts session creation
+      // callback returning TRUE aborts session creation
       InternalLog('Session aborted by OnSessionCreate() callback ' +
         'for User.LogonName=% (connected from %/%) - clients=%, sessions=%',
         [User.LogonName, Session.RemoteIP, Ctxt.Call^.LowLevelConnectionID,
@@ -7350,7 +7205,7 @@ const
 var
   ctxt: TRestServerUriContext;
   msstart, msstop: Int64;
-  elapsed, len: cardinal;
+  elapsed: cardinal;
   outcomingfile: boolean;
   log: ISynLog;
 begin
@@ -7399,7 +7254,7 @@ begin
       // 2. handle security
       if (rsoSecureConnectionRequired in fOptions) and
          (ctxt.MethodIndex <> fPublishedMethodTimestampIndex) and
-         not (llfSecured in Call.LowLevelFlags) then
+         not (llfSecured in Call.LowLevelConnectionFlags) then
         ctxt.AuthenticationFailed(afSecureConnectionRequired)
       else if not ctxt.Authenticate then
         ctxt.AuthenticationFailed(afInvalidSignature)
@@ -7413,9 +7268,9 @@ begin
       else if (ctxt.Session <> CONST_AUTHENTICATION_NOT_USED) or
               (fJwtForUnauthenticatedRequest = nil) or
               (ctxt.MethodIndex = fPublishedMethodTimestampIndex) or
-              ((llfSecured in Call.LowLevelFlags) and
-               // HTTPS does not authenticate by itself
-               not (llfHttps in Call.LowLevelFlags)) or
+              ((llfSecured in Call.LowLevelConnectionFlags) and
+               // HTTPS does not authenticate by itself, WebSockets does
+               not (llfHttps in Call.LowLevelConnectionFlags)) or
               ctxt.AuthenticationCheck(fJwtForUnauthenticatedRequest) then
       // 3. call appropriate ORM / SOA commands in fAcquireExecution[] context
       try
@@ -7450,12 +7305,11 @@ begin
     begin
       outcomingfile := false;
       if Call.OutBody <> '' then
-      begin
-        len := length(Call.OutHead);
-        outcomingfile := (len >= 25) and
+        // detect 'Content-type: !STATICFILE' as first header
+        outcomingfile := (length(Call.OutHead) >= 25) and
                          (Call.OutHead[15] = '!') and
-          IdemPChar(pointer(Call.OutHead), STATICFILE_CONTENT_TYPE_HEADER_UPPPER);
-      end
+                         IdemPChar(pointer(Call.OutHead),
+                           STATICFILE_CONTENT_TYPE_HEADER_UPPPER)
       else
         // handle Call.OutBody=''
         if (Call.OutStatus = HTTP_SUCCESS) and
@@ -7484,8 +7338,10 @@ begin
     else
       // database state may have changed above
       Call.OutInternalState := TRestOrmServer(fOrmInstance).InternalState;
+    // set any outgoing cookie
     if ctxt.OutSetCookie <> '' then
       ctxt.OutHeadFromCookie;
+    // paranoid check of the supplied output headers
     if not (rsoHttpHeaderCheckDisable in fOptions) and
        IsInvalidHttpHeader(pointer(Call.OutHead), length(Call.OutHead)) then
       ctxt.Error('Unsafe HTTP header rejected [%]',
@@ -7747,7 +7603,7 @@ begin
   LibraryRequestString(call.Url, Url, UrlLen);
   LibraryRequestString(call.Method, Method, MethodLen);
   call.LowLevelConnectionID := PtrInt(GlobalLibraryRequestServer);
-  call.LowLevelFlags := [llfSecured]; // in-process communication is safe
+  call.LowLevelConnectionFlags := [llfSecured]; // in-process call
   call.InHead := 'RemoteIP: 127.0.0.1';
   if (Head <> nil) and
      (HeadLen <> 0) then

@@ -1242,9 +1242,10 @@ function TPrecisionTimer.PerSec(const Count: QWord): QWord;
 begin
   if fStart <> 0 then
     Pause;
-  if fTime <= 0 then // avoid negative value in case of incorrect Start/Stop sequence
+  if fTime <= 0 then
+    // avoid negative or div per 0 in case of incorrect Start/Stop sequence
     result := 0
-  else // avoid div per 0 exception
+  else
     result := (Count * 1000000) div fTime;
 end;
 

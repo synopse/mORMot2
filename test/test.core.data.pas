@@ -2003,7 +2003,13 @@ begin
     check(CompareMem(pointer(RB), pointer(U), length(U)));
     Base64MagicToBlob(@J[4], K);
     RB := BlobToRawBlob(pointer(K));
-    check(length(RB) = length(U)); // RB=U is buggy under FPC :(
+    check(length(RB) = length(U));
+    check(CompareMem(pointer(RB), pointer(U), length(U)));
+    BlobToRawBlob(pointer(K), RB, length(K));
+    check(length(RB) = length(U));
+    check(CompareMem(pointer(RB), pointer(U), length(U)));
+    RB := BlobToRawBlob(K);
+    check(length(RB) = length(U));
     check(CompareMem(pointer(RB), pointer(U), length(U)));
 {    J := TRestServer.JsonEncodeResult([r]);
     Check(SameValue(GetExtended(pointer(JsonDecode(J)),err),r)); }
@@ -3164,11 +3170,11 @@ begin
   u := VariantSaveMongoJson(o2, modMongoStrict);
   CheckEqual(u, BSONAWESOME);
   o2 := BsonVariant(['BSON', _Arr(['awesome', 5.05, 1986])]);
-  Check(VariantSaveMongoJson(o2, modMongoStrict) = BSONAWESOME);
+  CheckEqual(VariantSaveMongoJson(o2, modMongoStrict), BSONAWESOME);
   o2 := BsonVariant(TDocVariantData(o));
-  Check(VariantSaveMongoJson(o2, modMongoStrict) = BSONAWESOME);
+  CheckEqual(VariantSaveMongoJson(o2, modMongoStrict), BSONAWESOME);
   o2 := BsonVariant('{%:[?,?,?]}', ['BSON'], ['awesome', 5.05, 1986]);
-  Check(VariantSaveMongoJson(o2, modMongoStrict) = BSONAWESOME);
+  CheckEqual(VariantSaveMongoJson(o2, modMongoStrict), BSONAWESOME);
   b := pointer(bsonDat);
   {$ifndef FPC}
   Check(o2 = BSONAWESOME, 'BsonVariant casted to string');

@@ -31,56 +31,7 @@ uses
 
 { ******************** Shared HTTP Constants and Functions }
 
-var
-  /// THttpRequest timeout default value for DNS resolution
-  // - leaving to 0 will let system default value be used
-  HTTP_DEFAULT_RESOLVETIMEOUT: integer = 0;
-  /// THttpRequest timeout default value for remote connection
-  // - default is 60 seconds
-  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
-  HTTP_DEFAULT_CONNECTTIMEOUT: integer = 60000;
-  /// THttpRequest timeout default value for data sending
-  // - default is 30 seconds
-  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
-  // - you can override this value by setting the corresponding parameter in
-  // THttpRequest.Create() constructor
-  HTTP_DEFAULT_SENDTIMEOUT: integer = 30000;
-  /// THttpRequest timeout default value for data receiving
-  // - default is 30 seconds
-  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
-  // - you can override this value by setting the corresponding parameter in
-  // THttpRequest.Create() constructor
-  HTTP_DEFAULT_RECEIVETIMEOUT: integer = 30000;
-
-const
-  /// standard text used to identify the WebSockets protocol
-  HTTP_WEBSOCKET_PROTOCOL: RawUtf8 = 'SEC-WEBSOCKET-PROTOCOL';
-
-
-/// compute the 'Authorization: Bearer ####' HTTP header of a given token value
-function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
-
-/// will remove most usual HTTP headers which are to be recomputed on sending
-function PurgeHeaders(P: PUtf8Char): RawUtf8;
-
-
-{$ifndef NOXPOWEREDNAME}
-const
-  /// pseudo-header containing the current Synopse mORMot framework version
-  XPOWEREDNAME = 'X-Powered-By';
-  /// the full text of the current Synopse mORMot framework version
-  // - we don't supply full version number with build revision
-  // (as SYNOPSE_FRAMEWORK_VERSION), to reduce potential attack surface
-  XPOWEREDVALUE = SYNOPSE_FRAMEWORK_NAME + ' 2 synopse.info';
-{$endif NOXPOWEREDNAME}
-
-
-{ ******************** THttpSocket Implementing HTTP over plain sockets }
-
 type
-  /// exception class raised during HTTP process
-  EHttpSocket = class(ENetSock);
-
   /// event used to compress or uncompress some data during HTTP protocol
   // - should always return the protocol name for ACCEPT-ENCODING: header
   // e.g. 'gzip' or 'deflate' for standard HTTP format, but you can add
@@ -108,6 +59,48 @@ type
   /// identify some items in a list of known compression algorithms
   // - filled from ACCEPT-ENCODING: header value
   THttpSocketCompressSet = set of 0..31;
+
+
+/// adjust HTTP body compression according to the supplied 'CONTENT-TYPE'
+// - will detect most used compressible content (like 'text/*' or
+// 'application/json') from OutContentType
+function CompressDataAndGetHeaders(Accepted: THttpSocketCompressSet;
+  const Handled: THttpSocketCompressRecDynArray; const OutContentType: RawUtf8;
+  var OutContent: RawByteString): RawUtf8;
+
+/// enable a give compression function for a HTTP link
+function RegisterCompressFunc(var Compress: THttpSocketCompressRecDynArray;
+  aFunction: THttpSocketCompress; var aAcceptEncoding: RawUtf8;
+  aCompressMinSize: integer): RawUtf8;
+
+/// decode 'CONTENT-ENCODING: ' parameter from registered compression list
+function ComputeContentEncoding(const Compress: THttpSocketCompressRecDynArray;
+  P: PUtf8Char): THttpSocketCompressSet;
+
+
+/// compute the 'Authorization: Bearer ####' HTTP header of a given token value
+function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
+
+/// will remove most usual HTTP headers which are to be recomputed on sending
+function PurgeHeaders(P: PUtf8Char): RawUtf8;
+
+
+{$ifndef NOXPOWEREDNAME}
+const
+  /// pseudo-header containing the current Synopse mORMot framework version
+  XPOWEREDNAME = 'X-Powered-By';
+  /// the full text of the current Synopse mORMot framework version
+  // - we don't supply full version number with build revision
+  // (as SYNOPSE_FRAMEWORK_VERSION), to reduce potential attacker knowledge
+  XPOWEREDVALUE = SYNOPSE_FRAMEWORK_NAME + ' 2 synopse.info';
+{$endif NOXPOWEREDNAME}
+
+
+{ ******************** THttpSocket Implementing HTTP over plain sockets }
+
+type
+  /// exception class raised during HTTP process
+  EHttpSocket = class(ENetSock);
 
   /// map the presence of some HTTP headers for THttpSocket.HeaderFlags
   THttpSocketHeaderFlags = set of (
@@ -163,6 +156,10 @@ type
     ContentType: RawUtf8;
     /// same as HeaderGetValue('UPGRADE'), but retrieved during Request
     Upgrade: RawUtf8;
+    /// same as FindNameValue(aInHeaders, HEADER_BEARER_UPPER, ...),
+    // but retrieved during Request
+    // - is the raw Token, excluding 'Authorization: Bearer ' trailing chars
+    BearerToken: RawUtf8;
     /// same as HeaderGetValue('X-POWERED-BY'), but retrieved during Request
     XPoweredBy: RawUtf8;
     /// map the presence of some HTTP headers, but retrieved during Request
@@ -205,20 +202,6 @@ type
   end;
 
 
-/// adjust HTTP body compression according to the supplied 'CONTENT-TYPE'
-function CompressDataAndGetHeaders(Accepted: THttpSocketCompressSet;
-  const Handled: THttpSocketCompressRecDynArray; const OutContentType: RawUtf8;
-  var OutContent: RawByteString): RawUtf8;
-
-/// enable a give compression function for a HTTP link
-function RegisterCompressFunc(var Compress: THttpSocketCompressRecDynArray;
-  aFunction: THttpSocketCompress; var aAcceptEncoding: RawUtf8;
-  aCompressMinSize: integer): RawUtf8;
-
-/// decode 'CONTENT-ENCODING: ' parameter from registered compression list
-function ComputeContentEncoding(const Compress: THttpSocketCompressRecDynArray;
-  P: PUtf8Char): THttpSocketCompressSet;
-
 
 { ******************** Abstract Server-Side Types used e.g. for Client-Server Protocol }
 
@@ -250,17 +233,6 @@ type
   TOnHttpServerAfterResponse = procedure(Ctxt: THttpServerRequestAbstract;
     const Code: cardinal) of object;
 
-  /// event handler used by THttpServerGeneric.OnBeforeBody property
-  // - if defined, is called just before the body is retrieved from the client
-  // - supplied parameters reflect the current input state, and could be
-  // modified on the fly to adapt to the expected behavior
-  // - should return HTTP_SUCCESS=200 to continue the process, or an HTTP
-  // error code (e.g. HTTP_FORBIDDEN or HTTP_PAYLOADTOOLARGE) to reject
-  // the request
-  TOnHttpServerBeforeBody = function(var aURL, aMethod, aInHeaders,
-    aInContentType, aRemoteIP: RawUtf8; aContentLength: integer;
-    aUseSSL: boolean): cardinal of object;
-
   /// the server-side available authentication schemes
   // - as used by THttpServerRequest.AuthenticationStatus
   // - hraNone..hraKerberos will match low-level HTTP_REQUEST_AUTH_TYPE enum as
@@ -273,6 +245,31 @@ type
     hraNtlm,
     hraNegotiate,
     hraKerberos);
+
+  /// available THttpServerRequest connection attributes
+  // - hsrHttps will indicates that the communication was made over HTTPS
+  // - hsrSecured is set if the transmission is encrypted or in-process,
+  // using e.g. HTTPS/TLS or our proprietary AES/ECDHE algorithms
+  // - hsrWebsockets communication was made using WebSockets
+  // - match TRestUriParamsLowLevelFlag in mormot.rest.core
+  THttpServerRequestFlag = (
+    hsrHttps,
+    hsrSecured,
+    hsrWebsockets);
+
+  /// the THttpServerRequest connection attributes
+  THttpServerRequestFlags = set of THttpServerRequestFlag;
+
+  /// event handler used by THttpServerGeneric.OnBeforeBody property
+  // - if defined, is called just before the body is retrieved from the client
+  // - supplied parameters reflect the current input state, and could be
+  // modified on the fly to adapt to the expected behavior
+  // - should return HTTP_SUCCESS=200 to continue the process, or an HTTP
+  // error code (e.g. HTTP_FORBIDDEN or HTTP_PAYLOADTOOLARGE) to reject
+  // the request
+  TOnHttpServerBeforeBody = function(var aURL, aMethod, aInHeaders,
+    aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: integer;
+    aFlags: THttpServerRequestFlags): cardinal of object;
 
   /// abstract generic input/output structure used for HTTP server requests
   // - URL/Method/InHeaders/InContent properties are input parameters
@@ -293,7 +290,7 @@ type
     fOutContent: RawByteString;
     fRequestID: integer;
     fConnectionID: THttpServerConnectionID;
-    fUseSSL: boolean;
+    fConnectionFlags: THttpServerRequestFlags;
     fAuthenticationStatus: THttpServerRequestAuthentication;
   public
     /// low-level property which may be used during requests processing
@@ -302,8 +299,8 @@ type
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
     procedure Prepare(const aURL, aMethod, aInHeaders: RawUtf8;
-      const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8;
-      aUseSSL: boolean = false); virtual; abstract;
+      const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8);
+        virtual; abstract;
     /// append some lines to the InHeaders input parameter
     procedure AddInHeader(additionalHeader: RawUtf8);
     /// input parameter containing the caller URI
@@ -352,10 +349,9 @@ type
     // increasing 31-bit integer sequence for (web)socket-based servers
     property ConnectionID: THttpServerConnectionID
       read fConnectionID;
-    /// is TRUE if the caller is connected via HTTPS
-    // - only set for THttpApiServer class yet
-    property UseSSL: boolean
-      read fUseSSL;
+    /// define how the client is connected
+    property ConnectionFlags: THttpServerRequestFlags
+      read fConnectionFlags write fConnectionFlags;
     /// contains the THttpServer-side authentication status
     // - e.g. when using http.sys authentication with HTTP API 2.0
     property AuthenticationStatus: THttpServerRequestAuthentication
@@ -517,7 +513,7 @@ begin
     until P^ = #0;
 end;
 
-procedure GetTrimmed(P: PUtf8Char; out result: RawUtf8);
+procedure GetTrimmed(P: PUtf8Char; var result: RawUtf8);
 var
   B: PUtf8Char;
 begin
@@ -595,6 +591,7 @@ begin
   ContentLength := -1;
   Content := '';
   ServerInternalState := 0;
+  BearerToken := '';
 end;
 
 procedure THttpSocket.GetHeader(HeadersUnFiltered: boolean);
@@ -630,9 +627,14 @@ begin
       P := pointer(s);
     end;
     // note: set P=nil below to store in Headers[]
-    case IdemPCharArray(P, ['CONTENT-', 'TRANSFER-ENCODING: CHUNKED',
-      'CONNECTION: ', 'ACCEPT-ENCODING:', 'UPGRADE:', 'SERVER-INTERNALSTATE:',
-      'X-POWERED-BY:']) of
+    case IdemPCharArray(P, [
+        'CONTENT-',
+        'TRANSFER-ENCODING: CHUNKED',
+        'CONNECTION: ',
+        'ACCEPT-ENCODING:',
+        'UPGRADE:',
+        'SERVER-INTERNALSTATE:',
+        'X-POWERED-BY:', HEADER_BEARER_UPPER]) of
       0:
         // 'CONTENT-'
         case IdemPCharArray(P + 8, ['LENGTH:', 'TYPE:', 'ENCODING:']) of
@@ -710,6 +712,14 @@ begin
       6:
         // 'X-POWERED-BY:'
         GetTrimmed(P + 13, XPoweredBy);
+      7:
+        // 'AUTHORIZATION: BEARER '
+        begin
+          GetTrimmed(P + 22, BearerToken);
+          if BearerToken <> '' then
+            // allows FindNameValue(..., HEADER_BEARER_UPPER, ...) search
+            P := nil;
+        end
     else
       // unrecognized name should be stored in Headers
       P := nil;
@@ -778,10 +788,11 @@ begin
     SetLength(Content, ContentLength); // not chuncked: direct read
     SockInRead(pointer(Content), ContentLength); // works with SockIn=nil or not
   end
-  else if ContentLength < 0 then // ContentLength=-1 if no Content-Length
+  else if (ContentLength < 0) and // -1 means no Content-Length header
+          IdemPChar(pointer(Command), 'HTTP/1.0 200') then
   begin
-    // no Content-Length nor Chunked header -> read until eof()
-    if SockIn <> nil then
+    // body = either Content-Length or Transfer-Encoding (HTTP/1.1 RFC2616 4.3)
+    if SockIn <> nil then // client loop for compatibility with old servers
       while not eof(SockIn^) do
       begin
         readln(SockIn^, Line);
@@ -797,7 +808,8 @@ begin
   if cardinal(fContentCompress) < cardinal(length(fCompress)) then
     if fCompress[fContentCompress].Func(Content, false) = '' then
       // invalid content
-      raise EHttpSocket.CreateFmt('%s uncompress', [fCompress[fContentCompress].Name]);
+      raise EHttpSocket.CreateFmt(
+        '%s uncompress', [fCompress[fContentCompress].Name]);
   ContentLength := length(Content); // update Content-Length
   {$ifdef SYNCRTDEBUGLOW}
   TSynLog.Add.Log(sllCustom2, 'GetBody sock=% pending=% sockin=% len=% %',

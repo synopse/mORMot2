@@ -27,6 +27,14 @@ In short:
 
 Note that the documentation is under GPL 3.0 license only, as stated in its introduction.
 
+
+## Legal Notice
+
+There are countries that restrict the use, import, export of cryptographic software. Before keeping, using, or distributing the software, make sure that you comply to these restrictions. If (for any reason) you are unable to do so, you are not allowed to download, use, distribute the software.
+
+If you are residing in a country that allows software patents you must verify that no part of the software is covered by a patent in your country. If (for any reason) you are unable to do so, you are not allowed to use or distribute the software.
+
+
 ## Publish modifications and credit for the library
 
 In all cases, any modification made to this source code **should** be published by any mean (e.g. a download link), even in case of MPL. If you need any additional feature, use the forums and we may introduce a patch to the main framework trunk.

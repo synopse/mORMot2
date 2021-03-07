@@ -170,6 +170,7 @@ type
 
   /// used by NewSocket() to cache the host names via NewSocketAddressCache global
   // - defined in this unit, but implemented in mormot.net.client.pas
+  // - the implementation should be thread-safe
   INewSocketAddressCache = interface
     /// method called by NewSocket() to resolve its address
     function Search(const Host: RawUtf8; out NetAddr: TNetAddr): boolean;
@@ -206,7 +207,8 @@ var
   DefaultListenBacklog: integer;
 
   /// defines if a connection from the loopback should be reported as ''
-  // (no Remote-IP - which is the default) or as '127.0.0.1' (force to false)
+  // - loopback connection will have no Remote-IP - for the default true
+  // - or loopback connection will be explicitly '127.0.0.1' - if equals false
   // - used by both TCrtSock.AcceptRequest and THttpApiServer.Execute servers
   RemoteIPLocalHostAsVoidInServers: boolean = true;
 
@@ -221,7 +223,8 @@ function ToText(res: TNetResult): PShortString; overload;
 
 type
   /// TLS Options and Information for a given TCrtSocket/INetTLS connection
-  // - currently only properly implemented by mormot.lib.openssl11
+  // - currently only properly implemented by mormot.lib.openssl11 - SChannel
+  // on Windows only recognizes IgnoreCertificateErrors and sets CipherName
   // - typical usage is the following:
   // $ with THttpClientSocket.Create do
   // $ try
@@ -232,11 +235,13 @@ type
   // $   writeln(TLS.PeerInfo);
   // $   writeln(TLS.CipherName);
   // $   writeln(Get('/forum/', 1000), ' len=', ContentLength);
-  // $   writeln(Get('/fossil/wiki/Synopse+OpenSource', 1000), ' len=', ContentLength);
+  // $   writeln(Get('/fossil/wiki/Synopse+OpenSource', 1000));
   // $ finally
   // $   Free;
   // $ end;
   TNetTLSContext = record
+    /// set if the TLS flag was set to TCrtSocket.OpenBind() method
+    Enabled: boolean;
     /// input: let HTTPS be less paranoid about TLS certificates
     IgnoreCertificateErrors: boolean;
     /// input: if PeerInfo field should be retrieved once connected
@@ -492,7 +497,7 @@ type
     fBytesOut: Int64;
     fSocketLayer: TNetLayer;
     fSockInEofError: integer;
-    fTLS, fWasBind: boolean;
+    fWasBind: boolean;
     // updated by every SockSend() call
     fSndBuf: RawByteString;
     fSndBufLen: integer;
@@ -520,13 +525,16 @@ type
     /// connect to aServer:aPort
     // - optionaly via TLS (using the SChannel API on Windows, or by including
     // mormot.lib.openssl11 unit to your project) - with custom input options
+    // - see also SocketOpen() for a wrapper catching any connection exception
     constructor Open(const aServer, aPort: RawUtf8; aLayer: TNetLayer = nlTCP;
       aTimeOut: cardinal = 10000; aTLS: boolean = false; aTLSContext: PNetTLSContext = nil);
     /// bind to an address
     // - aAddr='1234' - bind to a port on all interfaces, the same as '0.0.0.0:1234'
-    // - aAddr='IP:port' - bind to specified interface only, e.g. '1.2.3.4:1234'
-    // - aAddr='unix:/path/to/file' - bind to unix domain socket, e.g. 'unix:/run/mormot.sock'
-    // - aAddr='' - bind to systemd descriptor on linux. See
+    // - aAddr='IP:port' - bind to specified interface only, e.g.
+    // '1.2.3.4:1234'
+    // - aAddr='unix:/path/to/file' - bind to unix domain socket, e.g.
+    // 'unix:/run/mormot.sock'
+    // - aAddr='' - bind to systemd descriptor on linux - see
     // http://0pointer.de/blog/projects/socket-activation.html
     constructor Bind(const aAddress: RawUtf8; aLayer: TNetLayer = nlTCP;
       aTimeOut: integer = 10000);
@@ -800,10 +808,10 @@ const
     '80', '443');
 
 
-/// create a TCrtSocket, returning nil on error
-// (useful to easily catch socket error exception ENetSock)
-function Open(const aServer, aPort: RawUtf8;
-  aTLS: boolean = false): TCrtSocket;
+/// create a TCrtSocket instance, returning nil on error
+// - useful to easily catch any exception, and provide a custom TNetTLSContext
+function SocketOpen(const aServer, aPort: RawUtf8;
+  aTLS: boolean = false; aTLSContext: PNetTLSContext = nil): TCrtSocket;
 
 
 implementation
@@ -1068,11 +1076,16 @@ begin
   netsocket := nil;
   fromcache := false;
   tobecached := false;
+  // resolve the TNetAddr of the address:port layer - maybe from cache
   if (layer in nlIP) and
      (not dobind) and
      Assigned(NewSocketAddressCache) and
      ToCardinal(port, p, 1) then
-    if NewSocketAddressCache.Search(address, addr) then
+    if (address = '') or
+       (address = cLocalhost) or
+       (address = cAnyHost) then // for client: '0.0.0.0'->'127.0.0.1'
+      result := addr.SetFrom(cLocalhost, port, layer)
+    else if NewSocketAddressCache.Search(address, addr) then
     begin
       fromcache := true;
       result := addr.SetPort(p);
@@ -1086,6 +1099,7 @@ begin
     result := addr.SetFrom(address, port, layer);
   if result <> nrOK then
     exit;
+  // create the raw Socket instance
   sock := socket(PSockAddr(@addr)^.sa_family, _ST[layer], _IP[layer]);
   if sock = -1 then
   begin
@@ -1095,11 +1109,13 @@ begin
       NewSocketAddressCache.Flush(address);
     exit;
   end;
+  // bind or connect to this Socket
   repeat
     if dobind then
     begin
-      // Socket should remain open for 5 seconds after a closesocket() call
+      // bound Socket should remain open for 5 seconds after a closesocket()
       TNetSocket(sock).SetLinger(5);
+      // Server-side binding/listening of the socket to the address:port
       if (bind(sock, @addr, addr.Size)  <> NO_ERROR) or
          ((layer <> nlUDP) and
           (listen(sock, DefaultListenBacklog)  <> NO_ERROR)) then
@@ -1110,6 +1126,7 @@ begin
       // open Client connection
       if connecttimeout > 0 then
       begin
+        // set timeouts before connect()
         TNetSocket(sock).SetReceiveTimeout(connecttimeout);
         if recvtimeout = connecttimeout then
           recvtimeout := 0; // call SetReceiveTimeout() once
@@ -1128,12 +1145,15 @@ begin
   until false;
   if result <> nrOK then
   begin
+    // this address:port seems invalid or already bound
     closesocket(sock);
     if fromcache then
+      // ensure the cache won't contain this faulty address any more
       NewSocketAddressCache.Flush(address);
   end
   else
   begin
+    // Socket is successfully connected -> setup the connection
     if tobecached then
       // update cache once we are sure the host actually exists
       NewSocketAddressCache.Add(address, addr);
@@ -1202,7 +1222,11 @@ begin
     len := SizeOf(addr);
     sock := mormot.net.sock.accept(TSocket(@self), @addr, len);
     if sock = -1 then
-      result := NetLastError
+    begin
+      result := NetLastError;
+      if result = nrOk then
+        result := nrNotImplemented;
+    end
     else
     begin
       clientsocket := TNetSocket(sock);
@@ -1227,14 +1251,14 @@ end;
 
 function TNetSocketWrap.MakeAsync: TNetResult;
 var
-  nonblock: cardinal;
+  nonblocking: cardinal;
 begin
   if @self = nil then
     result := nrNoSocket
   else
   begin
-    nonblock := 1;
-    result := NetCheck(ioctlsocket(TSocket(@self), FIONBIO, @nonblock));
+    nonblocking := 1;
+    result := NetCheck(ioctlsocket(TSocket(@self), FIONBIO, @nonblocking));
   end;
 end;
 
@@ -1569,6 +1593,38 @@ end;
 const
   UNIX_LOW = ord('u') + ord('n') shl 8 + ord('i') shl 16 + ord('x') shl 24;
 
+function StartWith(p, up: PUtf8Char): boolean;
+// to avoid linking mormot.core.text for IdemPChar()
+var
+  c, u: AnsiChar;
+begin
+  result := false;
+  if (p = nil) or
+     (up = nil) then
+    exit;
+  repeat
+    u := up^;
+    if u = #0 then
+      break;
+    inc(up);
+    c := p^;
+    inc(p);
+    if c = u  then
+      continue;
+    if (c >= 'a') and
+       (c <= 'z') then
+    begin
+      dec(c, 32);
+      if c <> u then
+        exit;
+    end
+    else
+      exit;
+  until false;
+  result := true;
+end;
+
+
 { TCrtSocket }
 
 function TCrtSocket.GetRawSocket: PtrInt;
@@ -1612,8 +1668,17 @@ begin
   Create(aTimeOut); // default read timeout is 10 seconds
   if aTLSContext <> nil then
     TLS := aTLSContext^; // copy the input parameters before OpenBind()
-  // raise exception on error
-  OpenBind(aServer, aPort, {dobind=}false, aTLS, aLayer);
+  // OpenBind() raise an exception on error
+  {$ifdef OSPOSIX}
+  if StartWith(pointer(aServer), 'UNIX:') then
+  begin
+    // aServer='unix:/path/to/myapp.socket'
+    OpenBind(copy(aServer, 6, 200), '', {dobind=}false, aTLS, nlUNIX);
+    fServer := aServer; // keep the full server name if reused
+  end
+  else
+  {$endif OSPOSIX}
+    OpenBind(aServer, aPort, {dobind=}false, aTLS, aLayer);
 end;
 
 function SplitFromRight(const Text: RawUtf8; Sep: AnsiChar;
@@ -1670,9 +1735,10 @@ begin
     {$ifdef OSPOSIX}
     if s = 'unix' then
     begin
-      aLayer := nlUNIX;
-      s := p;
-      p := '';
+      // aAddress='unix:/path/to/myapp.socket'
+      FpUnlink(pointer(p)); // previous bind may have left the .socket file
+      OpenBind(p, '', {dobind=}true, {tls=}false, nlUnix, {%H-}TNetSocket(aSock));
+      exit;
     end;
     {$endif OSPOSIX}
   end;
@@ -1701,8 +1767,8 @@ begin
       retry := 10
     else
       retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
-    res := NewSocket(aServer, aPort, aLayer, doBind, Timeout, Timeout, Timeout,
-      retry, fSock);
+    res := NewSocket(aServer, aPort, aLayer, doBind,
+      Timeout, Timeout, Timeout, retry, fSock);
     if res <> nrOK then
       raise ENetSock.CreateFmt('OpenBind(%s:%s,%s) failed as ''%s'': %s',
         [aServer, fPort, BINDTXT[doBind], _NR[res], BINDMSG[doBind]]);
@@ -1730,7 +1796,7 @@ begin
         raise ENetSock.Create('TLS is not available on this system - ' +
           'try installing OpenSSL 1.1.1');
       fSecure.AfterConnection(fSock, TLS, aServer);
-      fTLS := true;
+      TLS.Enabled := true;
     except
       on E: Exception do
       begin
@@ -1969,6 +2035,10 @@ begin
   fSock := TNetSocket(-1);
   // don't reset fServer/fPort/fTls/fWasBind: caller may use them to reconnect
   // (see e.g. THttpClientSocket.Request)
+  {$ifdef OSPOSIX}
+  if fSocketLayer = nlUnix then
+    FpUnlink(pointer(fServer)); // 'unix:/path/to/myapp.socket' -> delete file
+  {$endif OSPOSIX}
 end;
 
 destructor TCrtSocket.Destroy;
@@ -2494,31 +2564,6 @@ end;
 
 { TUri }
 
-function StartWith(p, up: PUtf8Char): boolean;
-// to avoid linking mormot.core.text for IdemPChar()
-var
-  c, u: AnsiChar;
-begin
-  result := false;
-  if (p = nil) or
-     (up = nil) then
-    exit;
-  repeat
-    u := up^;
-    if u = #0 then
-      break;
-    inc(up);
-    c := p^;
-    inc(p);
-    if (c >= 'a') and
-       (c <= 'z') then
-      dec(c, 32);
-    if c <> u then
-      exit;
-  until false;
-  result := true;
-end;
-
 procedure TUri.Clear;
 begin
   Https := false;
@@ -2574,7 +2619,7 @@ begin
     port := DEFAULT_PORT[Https];
   if S^ <> #0 then // ':' or '/'
     inc(S);
-  address := S;
+  Address := S;
   if Server <> '' then
     result := true;
 end;
@@ -2610,10 +2655,11 @@ begin
     Root := copy(address, 1, i - 1);
 end;
 
-function Open(const aServer, aPort: RawUtf8; aTLS: boolean): TCrtSocket;
+function SocketOpen(const aServer, aPort: RawUtf8; aTLS: boolean;
+  aTLSContext: PNetTLSContext): TCrtSocket;
 begin
   try
-    result := TCrtSocket.Open(aServer, aPort, nlTCP, 10000, aTLS);
+    result := TCrtSocket.Open(aServer, aPort, nlTCP, 10000, aTLS, aTLSContext);
   except
     result := nil;
   end;

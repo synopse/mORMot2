@@ -115,10 +115,12 @@ const
   HTTP_DEFAULT_MODE = useHttpApiRegisteringURI;
 
   /// the kind of HTTP server which involves http.sys
-  HTTP_API_MODES = [useHttpApi .. useHttpApiRegisteringURIOnly];
+  HTTP_API_MODES =
+    [useHttpApi .. useHttpApiRegisteringURIOnly];
 
   /// the http.sys modes which won't have any fallback to the sockets server
-  HTTP_API_REGISTERING_MODES = [useHttpApiRegisteringURI, useHttpApiRegisteringURIOnly];
+  HTTP_API_REGISTERING_MODES =
+    [useHttpApiRegisteringURI, useHttpApiRegisteringURIOnly];
 
   {$else}
   HTTP_DEFAULT_MODE = useHttpSocket;
@@ -338,14 +340,16 @@ type
     function WebSocketsEnable(
       const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
       aWebSocketsAjax: boolean = false;
-      aWebSocketsCompressed: boolean = true): TWebSocketServerRest; overload;
+      aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions =
+        [pboSynLzCompress]): TWebSocketServerRest; overload;
     /// defines the useBidirSocket WebSockets protocol to be used for a REST server
     // - same as the overloaded WebSocketsEnable() method, but the URI will be
     // forced to match the aServer.Model.Root value, as expected on the client
     // side by TRestHttpClientWebsockets.WebSocketsUpgrade()
     function WebSocketsEnable(aServer: TRestServer;
       const aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean = false;
-      aWebSocketsCompressed: boolean = true): TWebSocketServerRest; overload;
+      aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions =
+        [pboSynLzCompress]): TWebSocketServerRest; overload;
     /// the associated running HTTP server instance
     // - either THttpApiServer (available only under Windows), THttpServer or
     // TWebSocketServerRest (on any system)
@@ -615,11 +619,17 @@ begin
   SetAccessControlAllowOrigin(''); // deny CORS by default
   fHosts.Init(false);
   fDomainName := aDomainName;
+  // aPort='publicip:port' or 'unix:/path/to/myapp.socket' or 'port'
   fPort := aPort;
   Split(RawUtf8(fPort), ':', fPublicAddress, fPublicPort);
-  if fPublicPort = '' then
+  if fPublicAddress = 'unix' then
   begin
-    // you should better set aPort='publicip:port'
+    // 'unix:/path/to/myapp.socket'
+    fPublicPort := fPort; // to be recognized by TCrtSocket.Bind()
+    fPublicAddress := '0.0.0.0';
+  end else if fPublicPort = '' then
+  begin
+    // no publicip supplied -> bind to HostName
     fPublicPort := fPublicAddress;
     fPublicAddress := Executable.Host;
   end;
@@ -656,7 +666,7 @@ begin
         [ToText(aUse)^, OSVersionInfoEx], self);
     // first try to use fastest http.sys
     fHttpServer := THttpApiServer.Create(false, aQueueName, HttpThreadStart,
-      HttpThreadTerminate, fDBServerNames);
+      HttpThreadTerminate, TrimU(fDBServerNames));
     for i := 0 to high(aServers) do
       HttpApiAddUri(aServers[i].Model.Root, fDomainName, aSecurity,
         fUse in HTTP_API_REGISTERING_MODES, true);
@@ -680,10 +690,10 @@ begin
     // http.sys not running -> create one instance of our pure socket server
     if aUse = useBidirSocket then
       fHttpServer := TWebSocketServerRest.Create(fPort, HttpThreadStart,
-        HttpThreadTerminate, fDBServerNames)
+        HttpThreadTerminate, TrimU(fDBServerNames))
     else
       fHttpServer := THttpServer.Create(fPort, HttpThreadStart,
-        HttpThreadTerminate, fDBServerNames, aThreadPoolCount, 30000,
+        HttpThreadTerminate, TrimU(fDBServerNames), aThreadPoolCount, 30000,
         rsoHeadersUnFiltered in fOptions);
     THttpServer(fHttpServer).WaitStarted;
   end;
@@ -881,6 +891,7 @@ end;
 function TRestHttpServer.Request(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   call: TRestUriParams;
+  tls: boolean;
   i, hostlen: PtrInt;
   P: PUtf8Char;
   headers, hostroot, redirect: RawUtf8;
@@ -888,6 +899,7 @@ var
   serv: TRestServer;
   c: THttpServerRequest absolute Ctxt;
 begin
+  tls := hsrHttps in Ctxt.ConnectionFlags;
   if (self = nil) or
      (pointer(fDBServers) = nil) or
      fShutdownInProgress then
@@ -896,9 +908,9 @@ begin
            (PWord(Ctxt.Url)^ = ord('/'))) and
           (Ctxt.Method = 'GET') then
     // RootRedirectToUri() to redirect ip:port root URI to a given sub-URI
-    if fRootRedirectToUri[Ctxt.UseSSL] <> '' then
+    if fRootRedirectToUri[tls] <> '' then
     begin
-      Ctxt.OutCustomHeaders := 'Location: ' + fRootRedirectToUri[Ctxt.UseSSL];
+      Ctxt.OutCustomHeaders := 'Location: ' + fRootRedirectToUri[tls];
       result := HTTP_TEMPORARYREDIRECT;
     end
     else
@@ -926,15 +938,7 @@ begin
     // compute URI, handling any virtual host domain
     call.Init;
     call.LowLevelConnectionID := Ctxt.ConnectionID;
-    if Ctxt.UseSSL then
-      call.LowLevelFlags := call.LowLevelFlags + [llfHttps, llfSecured];
-    if c.ConnectionThread <> nil then
-      if PClass(c.ConnectionThread)^ = TWebSocketServerResp then
-      begin
-        include(call.LowLevelFlags, llfWebsockets);
-        if TWebSocketServerResp(c.ConnectionThread).WebSocketProtocol.Encrypted then
-          include(call.LowLevelFlags, llfSecured);
-      end;
+    call.LowLevelConnectionFlags := TRestUriParamsLowLevelFlags(Ctxt.ConnectionFlags);
     if fHosts.Count > 0 then
     begin
       FindNameValue(Ctxt.InHeaders, 'HOST: ', hostroot);
@@ -966,7 +970,7 @@ begin
       // optimized for the most common case of a single DB server
       with fDBSingleServer^ do
       begin
-        if Ctxt.UseSSL = (Security = secSSL) then
+        if (Security = secSSL) = tls then
         begin
           match := Server.Model.UriMatch(call.Url);
           if match = rmNoMatch then
@@ -982,7 +986,7 @@ begin
       try
         for i := 0 to length(fDBServers) - 1 do
           with fDBServers[i] do
-            if Ctxt.UseSSL = (Security = secSSL) then
+            if (Security = secSSL) = tls then
             begin
               // registered for http or https
               match := Server.Model.UriMatch(call.Url);
@@ -1135,13 +1139,14 @@ end;
 
 function TRestHttpServer.WebSocketsEnable(
   const aWebSocketsURI, aWebSocketsEncryptionKey: RawUtf8;
-  aWebSocketsAjax, aWebSocketsCompressed: boolean): TWebSocketServerRest;
+  aWebSocketsAjax: boolean;
+  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions): TWebSocketServerRest;
 begin
   if fHttpServer.InheritsFrom(TWebSocketServerRest) then
   begin
     result := TWebSocketServerRest(fHttpServer);
     result.WebSocketsEnable(aWebSocketsURI, aWebSocketsEncryptionKey,
-      aWebSocketsAjax, aWebSocketsCompressed);
+      aWebSocketsAjax, aWebSocketsBinaryOptions);
   end
   else
     raise EWebSockets.CreateUtf8(
@@ -1149,14 +1154,15 @@ begin
 end;
 
 function TRestHttpServer.WebSocketsEnable(aServer: TRestServer;
-  const aWebSocketsEncryptionKey: RawUtf8;
-  aWebSocketsAjax, aWebSocketsCompressed: boolean): TWebSocketServerRest;
+  const aWebSocketsEncryptionKey: RawUtf8; aWebSocketsAjax: boolean;
+  aWebSocketsBinaryOptions: TWebSocketProtocolBinaryOptions): TWebSocketServerRest;
 begin
   if (aServer = nil) or
      (DBServerFind(aServer) < 0) then
-    raise EWebSockets.CreateUtf8('%.WebSocketEnable(aServer=%?)', [self, aServer]);
+    raise EWebSockets.CreateUtf8(
+      '%.WebSocketEnable(aServer=%?)', [self, aServer]);
   result := WebSocketsEnable(aServer.Model.Root, aWebSocketsEncryptionKey,
-    aWebSocketsAjax, aWebSocketsCompressed);
+    aWebSocketsAjax, aWebSocketsBinaryOptions);
 end;
 
 function TRestHttpServer.NotifyCallback(aSender: TRestServer;
@@ -1175,11 +1181,12 @@ begin
     begin
       // aConnection.InheritsFrom(TSynThread) may raise an exception
       // -> checked in WebSocketsCallback/IsActiveWebSocket
-      ctxt := THttpServerRequest.Create(nil, aConnectionID, nil);
+      ctxt := THttpServerRequest.Create(nil, aConnectionID, nil, []);
       try
         ctxt.Prepare(FormatUtf8('%/%/%', [aSender.Model.Root,
           aInterfaceDotMethodName, aFakeCallID]), 'POST', '',
-            '[' + aParams + ']', '', '', {ssl=}false);
+          '[' + aParams + ']', '', '');
+        // fHttpServer.Callback() raises EHttpServer but for TWebSocketServerRest
         status := fHttpServer.Callback(ctxt, aResult = nil);
         if status = HTTP_SUCCESS then
         begin

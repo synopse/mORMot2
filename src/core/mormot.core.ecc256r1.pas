@@ -14,6 +14,9 @@ unit mormot.core.ecc256r1;
    If mormot.core.crypto.openssl.RegisterOpenSsl is called, use faster OpenSSL.
 
   *****************************************************************************
+
+   Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
+   to any restriction about the use of cryptographic software in your country.
 }
 
 interface
@@ -255,7 +258,7 @@ type
     /// FNV-1a checksum of all previous fields
     // - we use fnv32 and not crc32c here to avoid colision with crc64c hashing
     // - avoiding to compute slow ECDSA verification in case of corruption,
-    // due e.g. to unexpected transmission/bug/fuzzing
+    // due e.g. to unexpected transmission/bug/fuzzing/dosattack
     // - should be the very last field in the record
     CRC: cardinal;
   end;
@@ -2037,11 +2040,11 @@ begin
             not IsZero(@content.Signature, sizeof(content.Signature));
 end;
 
-function EccSign(const base64: RawUtf8; out content:
-  TEccSignatureCertifiedContent): boolean;
+function EccSign(const base64: RawUtf8;
+  out content: TEccSignatureCertifiedContent): boolean;
 begin
-  result := Base64ToBin(pointer(base64), @content,
-    length(base64), sizeof(content), false);
+  result := Base64ToBin(
+    pointer(base64), @content, length(base64), sizeof(content));
 end;
 
 const
@@ -2065,7 +2068,8 @@ begin
   result := P + ECC_BYTES - pos;
 end;
 
-function EccSignToDer(const sign: TEccSignature; out der: TEccSignatureDer): integer;
+function EccSignToDer(const sign: TEccSignature;
+  out der: TEccSignatureDer): integer;
 begin
   if _isZero(PVLI(@sign[0])^) or
      _isZero(PVLI(@sign[ECC_BYTES])^) then

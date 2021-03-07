@@ -35,8 +35,10 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - Esteban Martin (EMartin)
 - Eugene Ilyin
 - Eva Freimann (EVaF)
+- Evan (eblaudy)
 - F-Vicente
 - Goran Despalatovic (gigo)
+- Hubert Touvet
 - Jean-Baptiste Roussia (jbroussia)
 - Joe (jokusoft)
 - Johan Bontes
@@ -63,6 +65,7 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - Nicolas Marchand (MC)
 - Nortg
 - Nzsolt
+- OkobaPatino
 - Oleg Tretyakov
 - Ondrej (reddwarf)
 - Pavel Mashlyakovskii (mpv)

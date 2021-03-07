@@ -1033,8 +1033,8 @@ function IdemPropNameU(const P1: RawUtf8; P2: PUtf8Char; P2Len: PtrInt): boolean
 // - if P1 and P2 are RawUtf8, you should better call overloaded function
 // IdemPropNameU(const P1,P2: RawUtf8), which would be slightly faster by
 // using the length stored before the actual text buffer of each RawUtf8
-function IdemPropNameUSameLen(P1, P2: PUtf8Char; P1P2Len: PtrInt): boolean;
-  {$ifndef OSANDROID}{$ifdef HASINLINE}inline;{$endif}{$endif}
+function IdemPropNameUSameLenNotNull(P1, P2: PUtf8Char; P1P2Len: PtrInt): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// case insensitive comparison of ASCII 7-bit identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
@@ -2024,11 +2024,11 @@ begin
   endSourceBy4 := endSource - 4;
   if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(source) and 3 = 0) and{$endif}
      (source <= endSourceBy4) then
-    repeat // handle 7-bit ASCII chars, by quad (Sha optimization)
-by4:  c := PCardinal(source)^;
+    repeat // handle 7-bit ASCII chars, by quad
+      c := PCardinal(source)^;
       if c and $80808080 <> 0 then
         goto by1; // break on first non ASCII quad
-      inc(source, 4);
+by4:  inc(source, 4);
       PCardinal(dest)^ := (c shl 8 or (c and $FF)) and $00ff00ff;
       c := c shr 16;
       PCardinal(dest + 2)^ := (c shl 8 or c) and $00ff00ff;
@@ -2044,7 +2044,12 @@ by1:  c := byte(source^);
         inc(dest);
         if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(source) and 3 = 0) and{$endif}
            (source <= endSourceBy4) then
-          goto by4;
+        begin
+          c := PCardinal(source)^;
+          if c and $80808080 = 0 then
+            goto by4;
+          continue;
+        end;
         if source < endSource then
           continue
         else
@@ -2074,7 +2079,12 @@ by1:  c := byte(source^);
         inc(dest);
         if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(source) and 3 = 0) and{$endif}
            (source <= endSourceBy4) then
-          goto by4;
+        begin
+          c := PCardinal(source)^;
+          if c and $80808080 = 0 then
+            goto by4;
+          continue;
+        end;
         if source < endSource then
           continue
         else
@@ -2086,7 +2096,12 @@ by1:  c := byte(source^);
       inc(dest, 2);
       if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(source) and 3 = 0) and{$endif}
          (source <= endSourceBy4) then
-        goto by4;
+      begin
+        c := PCardinal(source)^;
+        if c and $80808080 = 0 then
+          goto by4;
+        continue;
+      end;
       if source >= endSource then
         break;
     until false;
@@ -2887,16 +2902,16 @@ begin
   else if (Source <> nil) and
           (SourceChars > 0) then
   begin
-    // handle 7-bit ASCII WideChars, by quads (Sha optimization)
+    // handle 7-bit ASCII WideChars, by quads
     EndSource := Source + SourceChars;
     EndSourceBy4 := EndSource - 4;
     if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
        (Source <= EndSourceBy4) then
       repeat
-by4:    c := PCardinal(Source)^;
+        c := PCardinal(Source)^;
         if c and $80808080 <> 0 then
           goto by1; // break on first non ASCII quad
-        inc(Source, 4);
+by4:    inc(Source, 4);
         PCardinal(Dest)^ := c;
         inc(Dest, 4);
       until Source > EndSourceBy4;
@@ -2911,7 +2926,12 @@ by1:    c := byte(Source^);
           Inc(Dest);
           if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
              (Source <= EndSourceBy4) then
-            goto by4;
+         begin
+           c := PCardinal(Source)^;
+           if c and $80808080 = 0 then
+             goto by4;
+           continue;
+         end;
           if Source < EndSource then
             continue
           else
@@ -2929,7 +2949,12 @@ by1:    c := byte(Source^);
             Inc(Dest, 3);
             if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
                (Source <= EndSourceBy4) then
-              goto by4;
+            begin
+              c := PCardinal(Source)^;
+              if c and $80808080 = 0 then
+                goto by4;
+              continue;
+            end;
             if Source < EndSource then
               continue
             else
@@ -2942,7 +2967,12 @@ by1:    c := byte(Source^);
             Inc(Dest, 2);
             if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
                (Source < EndSourceBy4) then
-              goto by4;
+            begin
+              c := PCardinal(Source)^;
+              if c and $80808080 = 0 then
+                goto by4;
+              continue;
+            end;
             if Source < EndSource then
               continue
             else
@@ -3235,10 +3265,10 @@ begin
   if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
      (Source <= endSourceBy4) then
     repeat
-by4:  c := PCardinal(Source)^;
+      c := PCardinal(Source)^;
       if c and $80808080 <> 0 then
         goto by1; // break on first non ASCII quad
-      PCardinal(Dest)^ := c;
+by4:  PCardinal(Dest)^ := c;
       inc(Source, 4);
       inc(Dest, 4);
     until Source > endSourceBy4;
@@ -3254,7 +3284,12 @@ by1:  c := byte(Source^);
         inc(Dest);
         if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
            (Source <= endSourceBy4) then
-          goto by4;
+        begin
+          c := PCardinal(Source)^;
+          if c and $80808080 = 0 then
+            goto by4;
+          continue;
+        end;
         if Source < endSource then
           continue
         else
@@ -3282,7 +3317,12 @@ by1:  c := byte(Source^);
         inc(Dest);
         if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
            (Source <= endSourceBy4) then
-          goto by4;
+        begin
+          c := PCardinal(Source)^;
+          if c and $80808080 = 0 then
+            goto by4;
+          continue;
+        end;
         if Source < endSource then
           continue
         else
@@ -3537,7 +3577,8 @@ begin
   begin
     if L >= DestLen then
       L := DestLen - 1; // truncate to avoid buffer overflow
-    WinAnsiConvert.AnsiBufferToUnicode(PWideChar(Dest), pointer(S), L); // include last #0
+    WinAnsiConvert.AnsiBufferToUnicode(PWideChar(Dest), pointer(S), L);
+    // including last #0
   end
   else
     Dest^[0] := 0;
@@ -4108,30 +4149,16 @@ end;
 
 { **************** Text Case-(in)sensitive Conversion and Comparison }
 
-function IdemPropNameUSameLen(P1, P2: PUtf8Char; P1P2Len: PtrInt): boolean;
-label
-  zero;
+function IdemPropNameUSameLenNotNull(P1, P2: PUtf8Char; P1P2Len: PtrInt): boolean;
 begin
-  P1P2Len := PtrInt(@PAnsiChar(P1)[P1P2Len - SizeOf(cardinal)]);
-  if P1P2Len >= PtrInt(PtrUInt(P1)) then
-    repeat // case-insensitive compare 4 bytes per loop
-      if (PCardinal(P1)^ xor PCardinal(P2)^) and $dfdfdfdf <> 0 then
-        goto zero;
-      inc(P1, SizeOf(cardinal));
-      inc(P2, SizeOf(cardinal));
-    until P1P2Len < PtrInt(PtrUInt(P1));
-  inc(P1P2Len, SizeOf(cardinal));
+  inc(PtrUInt(P1P2Len), PtrUInt(P1));
   dec(PtrUInt(P2), PtrUInt(P1));
-  if PtrInt(PtrUInt(P1)) < P1P2Len then
-    repeat
-      if (ord(P1^) xor ord(P2[PtrUInt(P1)])) and $df <> 0 then
-        goto zero;
-      inc(P1);
-    until PtrInt(PtrUInt(P1)) >= P1P2Len;
-  result := true;
-  exit;
-zero:
-  result := false;
+  repeat
+    result := (ord(P1^) xor ord(P2[PtrUInt(P1)])) and $df = 0;
+    if not result then
+      exit;
+    inc(P1);
+  until PtrInt(PtrUInt(P1)) >= P1P2Len;
 end;
 
 function PropNameValid(P: PUtf8Char): boolean;
@@ -4169,34 +4196,47 @@ end;
 
 function IdemPropName(const P1, P2: shortstring): boolean;
 begin
-  if P1[0] = P2[0] then
-    result := IdemPropNameUSameLen(@P1[1], @P2[1], ord(P2[0]))
-  else
-    result := false;
+  result := (P1[0] = P2[0]) and
+            ((P1[0] = #0) or
+             IdemPropNameUSameLenNotNull(@P1[1], @P2[1], ord(P2[0])));
 end;
 
 function IdemPropName(const P1: shortstring; P2: PUtf8Char; P2Len: PtrInt): boolean;
 begin
-  if ord(P1[0]) = P2Len then
-    result := IdemPropNameUSameLen(@P1[1], P2, P2Len)
-  else
-    result := false;
+  result := (ord(P1[0]) = P2Len) and
+            ((P2Len = 0) or
+             IdemPropNameUSameLenNotNull(@P1[1], P2, P2Len));
 end;
 
 function IdemPropName(P1, P2: PUtf8Char; P1Len, P2Len: PtrInt): boolean;
 begin
-  if P1Len = P2Len then
-    result := IdemPropNameUSameLen(P1, P2, P2Len)
-  else
-    result := false;
+  result := (P1Len = P2Len) and
+            ((P2Len = 0) or
+             IdemPropNameUSameLenNotNull(P1, P2, P2Len));
 end;
 
 function IdemPropNameU(const P1: RawUtf8; P2: PUtf8Char; P2Len: PtrInt): boolean;
 begin
-  if length(P1) = P2Len then
-    result := IdemPropNameUSameLen(pointer(P1), P2, P2Len)
+  if PtrUInt(P1) <> 0 then
+    result := (PStrLen(PAnsiChar(pointer(P1)) - _STRLEN)^ = P2Len) and
+              IdemPropNameUSameLenNotNull(pointer(P1), pointer(P2), P2Len)
   else
-    result := false;
+    result := P2Len = 0;
+end;
+
+function IdemPropNameU(const P1, P2: RawUtf8): boolean;
+var
+  L: PtrInt;
+begin
+  if (PtrUInt(P1) <> 0) and
+     (PtrUInt(P2) <> 0) then
+  begin
+    L := PStrLen(PAnsiChar(pointer(P1)) - _STRLEN)^;
+    result := (PStrLen(PAnsiChar(pointer(P2)) - _STRLEN)^ = L) and
+      IdemPropNameUSameLenNotNull(pointer(P1), pointer(P2), L);
+  end
+  else
+    result := pointer(P1) = pointer(P2);
 end;
 
 function IdemPChar(p: PUtf8Char; up: PAnsiChar): boolean;
@@ -5469,22 +5509,11 @@ Next: // find beginning of next word
   until U = nil;
 end;
 
-function IdemPropNameU(const P1, P2: RawUtf8): boolean;
-var
-  L: PtrInt;
-begin
-  L := length(P1);
-  if length(P2) = L then
-    result := IdemPropNameUSameLen(pointer(P1), pointer(P2), L)
-  else
-    result := false;
-end;
-
 function UpperCopy255(dest: PAnsiChar; const source: RawUtf8): PAnsiChar;
 begin
   if source <> '' then
-    result := UpperCopy255Buf(dest, pointer(source),
-      PStrLen(PAnsiChar(pointer(source)) - _STRLEN)^)
+    result := UpperCopy255Buf(
+      dest, pointer(source), PStrLen(PAnsiChar(pointer(source)) - _STRLEN)^)
   else
     result := dest;
 end;
@@ -5575,10 +5604,10 @@ begin
     if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
        (Source <= endSourceBy4) then
       repeat
-by4:    c := PCardinal(Source)^;
+        c := PCardinal(Source)^;
         if c and $80808080 <> 0 then
           goto by1; // break on first non ASCII quad
-        inc(Source, 4);
+by4:    inc(Source, 4);
         Dest[0] := up[ToByte(c)];
         Dest[1] := up[ToByte(c shr 8)];
         Dest[2] := up[ToByte(c shr 16)];
@@ -5595,8 +5624,13 @@ by1:    c := byte(Source^);
           Dest^ := up[c];
 set1:     inc(Dest);
           if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(Source) and 3 = 0) and{$endif}
-             (Source < endSourceBy4) then
-            goto by4
+             (Source <= endSourceBy4) then
+          begin
+            c := PCardinal(Source)^;
+            if c and $80808080 = 0 then
+              goto by4;
+            continue;
+          end
           else if Source < endSource then
             continue
           else
@@ -5857,7 +5891,7 @@ end;
 //  https://github.com/BeRo1985/pucu  (C)2016-2020 Benjamin Rosseaux
 
 type
-  // 20016 bytes for full Unicode 10.0 case folding branchless conversion :)
+  // 20,016 bytes for full Unicode 10.0 case folding branchless conversion :)
   TUnicodeUpperTable = object
     Block: array[0..37, 0..127] of integer;
     IndexHi: array[0..271] of byte;
@@ -6238,9 +6272,9 @@ begin
     if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(S) and 3 = 0) and {$endif}
        (S <= endSBy4) then
       repeat
-by4:    if PCardinal(S)^ and $80808080 <> 0 then
+        if PCardinal(S)^ and $80808080 <> 0 then
           goto by1; // break on first non ASCII quad
-        i := byte(S[0]);
+by4:    i := byte(S[0]);
         inc(i, tab.Block[0, i]); // branchless a..z -> A..Z
         D[0] := AnsiChar(i);
         i := byte(S[1]);
@@ -6266,8 +6300,11 @@ by1:    c := byte(S^);
           D^ := AnsiChar(c);
           inc(D);
           if {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}(PtrUInt(S) and 3 = 0) and{$endif}
-             (S < endSBy4) then
-            goto By4
+             (S <= endSBy4) then
+            if PCardinal(S)^ and $80808080 = 0 then
+              goto By4
+            else
+              continue
           else if S < PUtf8Char(SLen) then
             continue
           else
@@ -6669,6 +6706,7 @@ nxt:u0 := U;
     until false;
   until false;
 end;
+
 
 procedure InitializeUnit;
 var

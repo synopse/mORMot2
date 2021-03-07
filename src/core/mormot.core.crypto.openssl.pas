@@ -20,6 +20,8 @@ unit mormot.core.crypto.openssl;
          than OpenSSL for most algorithms, and only 20% slower for AES-GCM.
          For ECC, our mormot.core.ecc256r1 is noticeably slower than OpenSSL.
 
+   Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
+   to any restriction about the use of cryptographic software in your country.
 }
 
 interface
@@ -169,7 +171,7 @@ type
   // $  mormot aes-256-ctr in 2.64ms i.e. 945179/s or 1.9 GB/s
   // $  openssl aes-128-ctr in 2.23ms i.e. 1121076/s or 2.3 GB/s
   // $  openssl aes-256-ctr in 2.80ms i.e. 891901/s or 1.8 GB/s
-  TAesCtrNistOsl = class(TAesAbstractOsl)
+  TAesCtrOsl = class(TAesAbstractOsl)
   protected
     procedure AfterCreate; override;
   end;
@@ -323,7 +325,8 @@ type
 // - returns 0 on error, or the result Signature size in bytes
 function OpenSslSign(const Algorithm: RawUtf8;
   Message, PrivateKey: pointer; MessageLen, PrivateKeyLen: integer;
-  out Signature: RawByteString; const PrivateKeyPassword: RawUtf8 = ''): cardinal;
+  out Signature: RawByteString; const PrivateKeyPassword: RawUtf8 = '';
+  const Engine: RawUtf8 = ''): cardinal;
 
 /// asymetric digital verification of some Message using a given PublicKey
 // - if Algorithm is '', EVP_sha256 will be used as message Digest
@@ -332,7 +335,8 @@ function OpenSslSign(const Algorithm: RawUtf8;
 // - returns false on error, or true if the Message has been authenticated
 function OpenSslVerify(const Algorithm, PublicKeyPassword: RawUtf8;
   Message, PublicKey, Signature: pointer;
-  MessageLen, PublicKeyLen, SignatureLen: integer): boolean;
+  MessageLen, PublicKeyLen, SignatureLen: integer;
+  const Engine: RawUtf8 = ''): boolean;
 
 /// generate a public/private pair of keys
 // - if EvpType is EVP_PKEY_DSA, EVP_PKEY_DH or EVP_PKEY_RSA or EVP_PKEY_RSA_PSS,
@@ -643,18 +647,17 @@ var
 class function TAesPrngOsl.Main: TAesPrngAbstract;
 begin
   result := MainAesPrngOsl;
-  if result = nil then
-  begin
-    EOpenSslCrypto.CheckAvailable(self, 'Main');
-    GlobalLock;
-    try
-      if MainAesPrngOsl = nil then
-        MainAesPrngOsl := TAesPrngOsl.Create;
-    finally
-      GlobalUnLock;
-    end;
-    result := MainAesPrngOsl;
+  if result <> nil then
+    exit;
+  EOpenSslCrypto.CheckAvailable(self, 'Main');
+  GlobalLock;
+  try
+    if MainAesPrngOsl = nil then
+      MainAesPrngOsl := TAesPrngOsl.Create;
+  finally
+    GlobalUnLock;
   end;
+  result := MainAesPrngOsl;
 end;
 
 
@@ -738,9 +741,9 @@ begin
   inherited AfterCreate;
 end;
 
-{ TAesCtrNistOsl }
+{ TAesCtrOsl }
 
-procedure TAesCtrNistOsl.AfterCreate;
+procedure TAesCtrOsl.AfterCreate;
 begin
   fAlgoMode := mCtr;
   inherited AfterCreate;
@@ -834,7 +837,7 @@ end;
 
 function TOpenSslDigestAbstract.DigestHex: RawUtf8;
 begin
-  BinToHexLower(@fDigestValue, Digest(nil), result);
+  BinToHexLower(@fDigestValue, Digest(nil), result{%H-});
 end;
 
 
@@ -1008,7 +1011,7 @@ end;
 
 function OpenSslSign(const Algorithm: RawUtf8;
   Message, PrivateKey: pointer; MessageLen, PrivateKeyLen: integer;
-  out Signature: RawByteString; const PrivateKeyPassword: RawUtf8): cardinal;
+  out Signature: RawByteString; const PrivateKeyPassword, Engine: RawUtf8): cardinal;
 var
   md: PEVP_MD;
   priv: PBIO;
@@ -1057,7 +1060,7 @@ end;
 
 function OpenSslVerify(const Algorithm, PublicKeyPassword: RawUtf8;
   Message, PublicKey, Signature: pointer;
-  MessageLen, PublicKeyLen, SignatureLen: integer): boolean;
+  MessageLen, PublicKeyLen, SignatureLen: integer; const Engine: RawUtf8): boolean;
 var
   md: PEVP_MD;
   pub: PBIO;
@@ -1081,7 +1084,7 @@ begin
     if (EVP_DigestVerifyInit(ctx, nil, md, nil, pkey) = OPENSSLSUCCESS) and
        (EVP_DigestVerify(ctx, Signature, SignatureLen,
           Message, MessageLen) = OPENSSLSUCCESS) then
-      result := true;
+      result := true {else WritelnSSL_error};
   finally
     EVP_MD_CTX_free(ctx);
     EVP_PKEY_free(pkey);
@@ -1185,8 +1188,9 @@ end;
 var
   prime256v1grp: PEC_GROUP;
 
-function NewPrime256v1Key: PEC_KEY;
+function NewPrime256v1Key(out key: PEC_KEY): boolean;
 begin
+  result := false;
   if prime256v1grp = nil then
     if OpenSslIsAvailable then
     begin
@@ -1206,17 +1210,16 @@ begin
       prime256v1grp := pointer(1);
   if prime256v1grp <> pointer(1) then
   begin
-    result := EC_KEY_new;
-    if EC_KEY_set_group(result, prime256v1grp) <> OPENSSLSUCCESS then
+    key := EC_KEY_new;
+    if EC_KEY_set_group(key, prime256v1grp) = OPENSSLSUCCESS then
+      result := true
+    else
     begin
       EC_GROUP_free(prime256v1grp);
       prime256v1grp := pointer(1);
-      EC_KEY_free(result);
-      result := nil;
+      EC_KEY_free(key);
     end;
-  end
-  else
-    result := nil;
+  end;
 end;
 
 function ecc_make_key_osl(out PublicKey: TEccPublicKey;
@@ -1228,8 +1231,7 @@ var
   publen, privlen: integer;
 begin
   result := false;
-  key := NewPrime256v1Key;
-  if key = nil then
+  if not NewPrime256v1Key(key) then
     exit;
   if EC_KEY_generate_key(key) = OPENSSLSUCCESS then
   begin
@@ -1260,13 +1262,12 @@ var
   der: TEccSignatureDer;
 begin
   result := false;
-  key := NewPrime256v1Key;
-  if (key = nil) or
-     (ECDSA_size(key) > SizeOf(der)) then
+  if not NewPrime256v1Key(key) then
     exit;
   bn := BN_bin2bn(@PrivateKey, SizeOf(PrivateKey), nil);
   derlen := 0;
-  if (EC_KEY_set_private_key(key, bn) = OPENSSLSUCCESS) and
+  if (ECDSA_size(key) <= SizeOf(der)) and
+     (EC_KEY_set_private_key(key, bn) = OPENSSLSUCCESS) and
      (ECDSA_Sign(0, @Hash, SizeOf(Hash), @der, @derlen, key) = OPENSSLSUCCESS) then
     result := DerToEccSign(der, Signature);
   BN_free(bn);
@@ -1285,19 +1286,17 @@ function ecdsa_verify_osl(const PublicKey: TEccPublicKey; const Hash: TEccHash;
 var
   key: PEC_KEY;
   pt: PEC_POINT;
-  res, derlen: integer;
+  derlen: integer;
   der: TEccSignatureDer;
 begin
   result := false;
-  key := NewPrime256v1Key;
-  if key = nil then
+  if not NewPrime256v1Key(key) then
     exit;
   if PublicKeyToPoint(PublicKey, pt) and
      (EC_KEY_set_public_key(key, pt) = OPENSSLSUCCESS) then
   begin
     derlen := EccSignToDer(Signature, der);
-    res := ECDSA_verify(0, @Hash, SizeOf(Hash), @der, derlen, key);
-    result := res = OPENSSLSUCCESS;
+    result := ECDSA_verify(0, @Hash, SizeOf(Hash), @der, derlen, key) = OPENSSLSUCCESS;
   end;
   EC_POINT_free(pt);
   EC_KEY_free(key);
@@ -1312,8 +1311,7 @@ var
 begin
   FillZero(Secret);
   result := false;
-  key := NewPrime256v1Key;
-  if key = nil then
+  if not NewPrime256v1Key(key) then
     exit;
   priv := BN_bin2bn(@PrivateKey, SizeOf(PrivateKey), nil);
   if PublicKeyToPoint(PublicKey, pub) and
@@ -1405,7 +1403,8 @@ begin
     aIDObfuscationKey, aIDObfuscationKeyNewKdf);
 end;
 
-class procedure TJwtAbstractOsl.GenerateKeys(out PrivateKey, PublicKey: RawByteString);
+class procedure TJwtAbstractOsl.GenerateKeys(
+  out PrivateKey, PublicKey: RawByteString);
 begin
   with TJwtAbstractOsl(NewInstance) do // no need to call Create
     try
@@ -1540,7 +1539,7 @@ begin
     // mormot.core.crypto x86_64 asm is faster than OpenSSL - but GCM
     {$ifndef CPUX64}
     // our AES-CTR x86_64 asm is faster than OpenSSL's
-    TAesFast[mCtr] := TAesCtrNistOsl;
+    TAesFast[mCtr] := TAesCtrOsl;
     {$endif CPUX64}
   {$else}
   // ARM/Aarch64 would rather use OpenSSL than our purepascal code
@@ -1548,7 +1547,7 @@ begin
   TAesFast[mCbc] := TAesCbcOsl;
   TAesFast[mCfb] := TAesCfbOsl;
   TAesFast[mOfb] := TAesOfbOsl;
-  TAesFast[mCtr] := TAesCtrNistOsl;
+  TAesFast[mCtr] := TAesCtrOsl;
   {$endif HASAESNI}
   // redirects raw mormot.core.ecc256r1 functions to the much faster OpenSSL
   @Ecc256r1MakeKey := @ecc_make_key_osl;

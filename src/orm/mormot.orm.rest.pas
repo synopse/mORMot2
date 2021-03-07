@@ -538,12 +538,13 @@ var
   N: PByteArray;
 begin
   L := Length(method);
-  if L < 11 then
+  if (L > 0) and
+     (L < 11) then
   begin
     N := @NAME;
     for result := low(NAME) to high(NAME) do
       if (N^[0] = L) and
-         IdemPropNameUSameLen(pointer(@N^[1]), pointer(method), L) then
+         IdemPropNameUSameLenNotNull(pointer(@N^[1]), pointer(method), L) then
         exit
       else
         inc(PByte(N), 11);

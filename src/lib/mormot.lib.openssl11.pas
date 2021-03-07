@@ -20,6 +20,8 @@ unit mormot.lib.openssl11;
 
   *****************************************************************************
 
+   Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
+   to any restriction about the use of cryptographic software in your country.
 }
 
 {.$define OPENSSLFULLAPI}
@@ -1081,6 +1083,11 @@ type
 
 
 /// OpenSSL TLS layer communication factory - as expected by mormot.net.sock.pas
+// - on non-Windows systems, this unit initialization will register OpenSSL for TLS
+// - on Windows systems, SChannel will be kept as default so you would need
+// to explicitely register OpenSSL for TLS if needed (for better cipher coverage,
+// enhanced performance and full TNetTLSContext options support):
+// ! @NewNetTLS := @OpenSslNewNetTLS;
 function OpenSslNewNetTLS: INetTLS;
 
 
@@ -2918,10 +2925,10 @@ begin
       fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
   end;
   if Context.CipherList = '' then
-    SSL_CTX_set_cipher_list(fCtx, SAFE_CIPHERLIST[ cfAESNI in CpuFeatures ])
-  else
-    EOpenSslClient.Check(self, 'AfterConnection',
-      SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)));
+    Context.CipherList := SAFE_CIPHERLIST[
+      {$ifdef CPUINTEL} cfAESNI in CpuFeatures {$else} false {$endif} ];
+  EOpenSslClient.Check(self, 'AfterConnection',
+    SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)));
   SSL_CTX_set_min_proto_version(fCtx, TLS1_2_VERSION); // no SSL3 TLS1 TLS1.1
   fSsl := SSL_new(fCtx);
   SSL_set_tlsext_host_name(fSsl, ServerAddress); // SNI field
@@ -3045,8 +3052,9 @@ end;
 
 
 initialization
-  // always register the OpenSSL TLS layer factory for TCrtSocket
-  @NewNetTLS := @OpenSslNewNetTLS;
+  // register the OpenSSL TLS layer factory for TCrtSocket (if no SChannel set)
+  if not Assigned(NewNetTLS) then
+    @NewNetTLS := @OpenSslNewNetTLS;
 
 finalization
   {$ifndef OPENSSLSTATIC}

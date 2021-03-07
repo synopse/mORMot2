@@ -516,7 +516,7 @@ var
   var
     i: integer;
     enc, after: RawByteString;
-    ref: IProtocol; // to release memory
+    ref: IProtocol; // to properly release memory
   begin
     ref := prot;
     result := 0;
@@ -564,6 +564,7 @@ begin
   Test(TProtocolNone.Create, 'none');
   TAesPrng.Main.FillRandom(key);
   Test(TProtocolAes.Create(TAesCfb, key, 128), 'aes');
+  Test(TProtocolAes.Create(TAesCtr, key, 128), 'aes');
   cs := TEccCertificateSecret.CreateNew(nil, 'client');
   ss := TEccCertificateSecret.CreateNew(nil, 'server');
   for ef := low(ef) to high(ef) do

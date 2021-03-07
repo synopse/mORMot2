@@ -171,7 +171,7 @@ uses
 {$endif OSWINDOWS}
 
 type
-  // class hooks to force DMBS property for TTestExternalDatabase.AutoAdaptSQL
+  // class hooks to access DMBS property for TTestExternalDatabase.AutoAdaptSQL
   TSqlDBConnectionPropertiesHook = class(TSqlDBConnectionProperties);
   TRestStorageExternalHook = class(TRestStorageExternal);
 
@@ -410,6 +410,14 @@ end;
 {$ifdef OSWINDOWS}
 {$ifdef USEZEOS}
 
+const
+  // if this library file is available and USEZEOS conditional is set, will run
+  //   TTestExternalDatabase.FirebirdEmbeddedViaODBC
+  // !! download driver from http://www.firebirdsql.org/en/odbc-driver
+  FIREBIRDEMBEDDEDDLL =
+    'd:\Dev\Lib\SQLite3\Samples\15 - External DB performance\Firebird' +
+    {$ifdef CPU64} '64' + {$endif=} '\fbembed.dll';
+
 procedure TTestExternalDatabase.FirebirdEmbeddedViaZDBCOverHTTP;
 var
   R: TOrmPeople;
@@ -429,8 +437,8 @@ begin
     R := TOrmPeople.Create;
     try
       DeleteFile('test.fdb'); // will be re-created at first connection
-      Props := TSqlDBZEOSConnectionProperties.Create(
-        TSqlDBZEOSConnectionProperties.URI(
+      Props := TSqlDBZeosConnectionProperties.Create(
+        TSqlDBZeosConnectionProperties.URI(
           dFirebird, '', FIREBIRDEMBEDDEDDLL, False), 'test.fdb', '', '');
       try
         VirtualTableExternalMap(Model, TOrmPeople, Props, 'peopleext').
@@ -440,12 +448,12 @@ begin
         try
           Server.CreateMissingTables;
           Http := TRestHttpServer.Create(HTTP_DEFAULTPORT, Server);
-          Client := TSQLHttpClient.Create('localhost', HTTP_DEFAULTPORT,
+          Client := TRestHttpClient.Create('localhost', HTTP_DEFAULTPORT,
             TOrmModel.Create(Model));
           Client.Model.Owner := Client;
           try
             R.FillPrepare(fPeopleData);
-            if not CheckFailed(R.fFill <> nil) then
+            if not CheckFailed(R.FillContext <> nil) then
             begin
               Client.BatchStart(TOrmPeople, 5000);
               n := 0;
@@ -488,7 +496,7 @@ begin
             R.ClearProperties;
             for i := 0 to high(ids) do
             begin
-              R.fID := ids[i];
+              R.IDValue := ids[i];
               Check(Client.Update(R), 'test locking');
             end;
             for i := 0 to high(ids) do

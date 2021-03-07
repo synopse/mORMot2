@@ -821,11 +821,10 @@ type
     // - note that unserialization process would recognize both formats
     class procedure SetDefaultEnumTrim(aShouldTrimEnumsAsText: boolean);
 
-    /// retrieve the data as a string
+    /// write pending data, then retrieve the whole text as a UTF-8 string
     function Text: RawUtf8;
       {$ifdef HASINLINE}inline;{$endif}
-    /// retrieve the data as a string
-    // - will avoid creation of a temporary RawUtf8 variable as for Text function
+    /// write pending data, then retrieve the whole text as a UTF-8 string
     procedure SetText(out result: RawUtf8; reformat: TTextWriterJsonFormat = jsonCompact);
     /// set the internal stream content with the supplied UTF-8 text
     procedure ForceContent(const text: RawUtf8);
@@ -1012,7 +1011,8 @@ type
     // documentation: "A string constant is formed by enclosing the string in single
     // quotes ('). A single quote within the string can be encoded by putting two
     // single quotes in a row - as in Pascal."
-    procedure AddQuotedStr(Text: PUtf8Char; Quote: AnsiChar; TextMaxLen: PtrInt = 0);
+    procedure AddQuotedStr(Text: PUtf8Char; TextLen: PtrUInt; Quote: AnsiChar;
+      TextMaxLen: PtrInt = 0);
     /// append some chars, escaping all HTML special chars as expected
     procedure AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHTMLFormat = hfAnyWhere); overload;
     /// append some chars, escaping all HTML special chars as expected
@@ -3397,20 +3397,15 @@ end;
 
 function IdemPropNameUSmallNotVoid(P1, P2, P1P2Len: PtrInt): boolean;
   {$ifdef HASINLINE}inline;{$endif}
-label
-  zero;
 begin
   inc(P1P2Len, P1);
   dec(P2, P1);
   repeat
-    if (PByte(P1)^ xor ord(PAnsiChar(P1)[P2])) and $df <> 0 then
-      goto zero;
+    result := (PByte(P1)^ xor ord(PAnsiChar(P1)[P2])) and $df = 0;
+    if not result then
+      exit;
     inc(P1);
   until P1 >= P1P2Len;
-  result := true;
-  exit;
-zero:
-  result := false;
 end;
 
 function FindShortStringListExact(List: PShortString; MaxValue: integer;
@@ -5998,54 +5993,36 @@ begin
   dec(B); // allow CancelLastChar
 end;
 
-procedure TBaseWriter.AddQuotedStr(Text: PUtf8Char; Quote: AnsiChar; TextMaxLen: PtrInt);
+procedure TBaseWriter.AddQuotedStr(Text: PUtf8Char; TextLen: PtrUInt;
+  Quote: AnsiChar; TextMaxLen: PtrInt);
 var
-  c: AnsiChar;
-  P: PUtf8Char;
+  Q: PUtf8Char;
 begin
-  if TextMaxLen <= 0 then
-    TextMaxLen := maxInt
-  else if TextMaxLen > 5 then
-    dec(TextMaxLen, 5);
-  if B >= BEnd then
-    FlushToStream;
-  P := B + 1;
-  P^ := Quote;
-  inc(P);
+  Add(Quote);
+  if (TextMaxLen > 5) and
+     (TextLen > PtrUInt(TextMaxLen)) then
+    TextLen := TextMaxLen - 5
+  else
+    TextMaxLen := 0;
+  inc(TextLen, PtrUInt(Text)); // PUtf8Char(TextLen)=TextEnd
   if Text <> nil then
+  begin
     repeat
-      if P < BEnd then
+      Q := PosChar(Text, Quote); // fast SSE2 asm on x86_64
+      if Q = nil then
       begin
-        dec(TextMaxLen);
-        if TextMaxLen <> 0 then
-        begin
-          c := Text^;
-          inc(Text);
-          if c = #0 then
-            break;
-          P^ := c;
-          inc(P);
-          if c <> Quote then
-            continue;
-          P^ := c;
-          inc(P);
-        end
-        else
-        begin
-          PCardinal(P)^ := ord('.') + ord('.') shl 8 + ord('.') shl 16;
-          inc(P, 3);
-          break;
-        end;
-      end
-      else
-      begin
-        B := P - 1;
-        FlushToStream;
-        P := B + 1;
+        AddNoJsonEscape(Text, PUtf8Char(TextLen) - Text);
+        break;
       end;
+      inc(Q); // include first Quote
+      AddNoJsonEscape(Text, Q - Text);
+      Add(Quote); // double Quote
+      Text := Q;  // continue
     until false;
-  P^ := Quote;
-  B := P;
+    if TextMaxLen <> 0 then
+      AddShorter('...');
+  end;
+  Add(Quote);
 end;
 
 const
@@ -6438,7 +6415,7 @@ begin
     for result := 0 to ValuesCount do
       if (PtrUInt(Values^) <> 0) and
          (PStrLen(PtrUInt(Values^) - _STRLEN)^ = ValueLen) and
-         IdemPropNameUSameLen(pointer(Values^), pointer(Value), ValueLen) then
+         IdemPropNameUSameLenNotNull(pointer(Values^), pointer(Value), ValueLen) then
         exit
       else
         inc(Values);

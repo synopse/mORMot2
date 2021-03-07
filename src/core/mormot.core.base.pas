@@ -1345,6 +1345,7 @@ procedure CopyAndSortInt64(Values: PInt64Array; ValuesCount: integer;
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
 // - return index of P^[result]=Value
 // - return -1 if Value was not found
+// - use branchless asm on x86_64
 function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt; overload;
 
 /// fast O(log(n)) binary search of an integer value in a sorted integer array
@@ -1354,12 +1355,14 @@ function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): 
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast O(log(n)) binary search of a 16-bit unsigned integer value in a sorted array
+// - use branchless asm on x86_64
 function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
 
 /// fast O(log(n)) binary search of a 64-bit signed integer value in a sorted array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
 // - return index of P^[result]=Value
 // - return -1 if Value was not found
+// - use branchless asm on x86_64
 function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt; overload;
 
 /// fast O(log(n)) binary search of a 64-bit unsigned integer value in a sorted array
@@ -2296,6 +2299,13 @@ procedure LockedDec32(int32: PInteger);
 /// slightly faster than InterlockedIncrement64()
 procedure LockedInc64(int64: PInt64);
 
+/// low-level string/dynarray reference counter unprocess
+// - caller should have tested that refcnt>=0
+// - returns true if the managed variable should be released (i.e. refcnt was 1)
+// - FPC uses PtrInt/SizeInt for refcnt, Delphi uses longint even on CPU64
+function RefCntDecFree(var refcnt: TRefCnt): boolean;
+  {$ifndef CPUINTEL}inline;{$endif}
+
 // defined here for mormot.test.base only
 function GetBitsCountSSE42(value: PtrInt): PtrInt;
 
@@ -2314,14 +2324,11 @@ procedure LockedDec32(int32: PInteger); inline;
 /// redirect to FPC InterlockedIncrement64() on non Intel CPU
 procedure LockedInc64(int64: PInt64); inline;
 
-{$endif CPUINTEL}
-
-/// low-level string/dynarray reference counter unprocess
-// - caller should have tested that refcnt>=0
-// - returns true if the managed variable should be released (i.e. refcnt was 1)
+/// redirect to FPC InterlockedDecrement() on non Intel CPU
 // - FPC uses PtrInt/SizeInt for refcnt, Delphi uses longint even on CPU64
-function RefCntDecFree(var refcnt: TRefCnt): boolean;
-  {$ifndef CPUINTEL}inline;{$endif}
+function RefCntDecFree(var refcnt: TRefCnt): boolean; inline;
+
+{$endif CPUINTEL}
 
 {$ifndef FPC}
 
@@ -2530,21 +2537,20 @@ type
   /// low-level object implementing a 32-bit Pierre L'Ecuyer software generator
   // - cross-compiler and cross-platform efficient randomness generator, very
   // fast with a much better distribution than Delphi system's Random() function
-  // - as used by Random32 overloaded functions - via a threadvar for thread safety
-  // - L'Ecuyer's algorithm is also much faster (and safer) than RDRAND HW opcode
-  // as reported by https://en.wikipedia.org/wiki/RdRand#Performance
+  // see https://www.gnu.org/software/gsl/doc/html/rng.html#c.gsl_rng_taus2
+  // - used by thread-safe Random32/FillRandom, using only 16 bytes per thread
   TLecuyer = object
   public
     rs1, rs2, rs3, seedcount: cardinal;
     /// force an immediate seed of the generator from current system state
-    // - should be executed before any call to the Next method
+    // - as executed by the Next method at thread startup, and after 2^20 values
     // - calls XorEntropy(), so RdRand32/Rdtsc opcodes on Intel/AMD CPUs
     procedure Seed(entropy: PByteArray; entropylen: PtrInt);
     /// compute the next 32-bit generated value
-    // - will automatically reseed after around 65,000 generated values
+    // - will automatically reseed after around 2^20 generated values, which is
+    // very conservative since this generator has a period of 2^88
     function Next: cardinal; overload;
     /// compute the next 32-bit generated value, in range [0..max-1]
-    // - will automatically reseed after around 65,000 generated values
     function Next(max: cardinal): cardinal; overload;
   end;
 
@@ -2554,44 +2560,44 @@ type
 // is used for seeding anyway)
 // - consider using TAesPrng.Main.Random32(), which offers cryptographic-level
 // randomness, but is twice slower (even with AES-NI)
-// - thread-safe function: each thread will maintain its own TLecuyer table
+// - thread-safe and non-blocking function: each thread will maintain its own
+// TLecuyer table (note that RTL's system.Random function is not thread-safe)
 function Random32: cardinal; overload;
 
 /// fast compute of bounded 32-bit random value, using the gsl_rng_taus2 generator
 // - calls internally the overloaded Random32 function
 // - consider using TAesPrng.Main.Random32(), which offers cryptographic-level
 // randomness, but is twice slower (even with AES-NI)
+// - thread-safe and non-blocking function using a per-thread TLecuyer engine
 function Random32(max: cardinal): cardinal; overload;
 
 /// fast compute of a 64-bit random value, using the gsl_rng_taus2 generator
+// - thread-safe function: each thread will maintain its own TLecuyer table
 function Random64: QWord;
 
+/// fill some memory buffer with random values from the gsl_rng_taus2 generator
+// - the destination buffer is expected to be allocated as 32-bit items
+// - see the more secure TAesPrng.Main.FillRandom() from mormot.core.crypto unit
+// - thread-safe and non-blocking function using a per-thread TLecuyer engine
+procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
+
 /// seed the gsl_rng_taus2 Random32 generator
-// - by default, gsl_rng_taus2 generator is re-seeded every 256KB, much more
-// often than the Pierre L'Ecuyer's algorithm period of 2^88
+// - by default, gsl_rng_taus2 generator is re-seeded every 2^20 values, which
+// is very conservative against the Pierre L'Ecuyer's algorithm period of 2^88
 // - you can specify some additional entropy buffer; note that calling this
 // function with the same entropy again WON'T seed the generator with the same
 // sequence (as with RTL's RandomSeed function), but initiate a new one
 // - calls XorEntropy(), so RdRand32/Rdtsc opcodes on Intel/AMD CPUs
-// - thread-specific function: each thread will maintain its own seed table
+// - thread-safe and non-blocking function using a per-thread TLecuyer engine
 procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
 
-/// fill some memory buffer with random values
-// - the destination buffer is expected to be allocated as 32-bit items
-// - use internally crc32c() with some rough entropy source, and Random32
-// gsl_rng_taus2 generator
-// - consider using instead the cryptographic secure TAesPrng.Main.FillRandom()
-// method from the mormot.core.crypto unit
-procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
-
 /// retrieve 128-bit of entropy, from system time and current execution state
-// - entropy is gathered using 4 crc32c 32-bit hashes, via crcblock(), and
-// 4 final xxHash32() 32-bit hashes
-// - calls RTL Now(), Random(), CreateGUID(), GetCurrentThreadID() and
-// current gsl_rng_taus2 Lecuyer state
-// - will also use RdRand32 and Rdtsc low-level sources, on Intel/AMD CPUs
-// - execution is fast, but not good as unique seed for a cryptographic PRNG:
-// TAesPrng.GetEntropy will call it several times as one of the entropy sources
+// - entropy is gathered using DefaultHasher128() - which may be AesNiHash128 -
+// over several sources like RTL Now(), Random(), CreateGUID(), current
+// gsl_rng_taus2 Lecuyer state, and RdRand32/Rdtsc low-level Intel opcodes
+// - execution is fast, but not enough as unique seed for a cryptographic PRNG:
+// TAesPrng.GetEntropy will call it several times as one of its entropy sources,
+// in addition to system-retrieved randomness
 procedure XorEntropy(entropy: PBlock128);
 
 /// convert the endianness of a given unsigned 32-bit integer into BigEndian
@@ -2711,8 +2717,7 @@ type
     // - also set len to the internal buffer size
     // - could be used e.g. for an API call, first trying with plain temp.Init
     // and using temp.buf and temp.len safely in the call, only calling
-    // temp.Init(expectedsize) if the API returned an error about insufficient
-    // buffer space
+    // temp.Init(expectedsize) if the API returns an insufficient buffer error
     function Init: integer; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize a new temporary buffer of a given number of random bytes
@@ -2871,7 +2876,7 @@ procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
 procedure crcblockfast(crc128, data128: PBlock128);
 
 /// compute a 128-bit CRC of any binary buffers
-// - combine crcblocksfast() with 4 parallel crc32c() for 1..15 trailing bytes
+// - combine crcblocks() with 4 parallel crc32c() for 1..15 trailing bytes
 procedure crc32c128(hash: PHash128; buf: PAnsiChar; len: cardinal);
 
 var
@@ -2894,7 +2899,8 @@ var
   // - apply four crc32c() calls on the 128-bit input chunk, into a 128-bit crc
   // - its output won't match crc128c() value, which works on 8-bit input
   // - will use SSE 4.2 hardware accelerated instruction, if available
-  // - is used e.g. by mormot.core.crypto's TAesCfbCrc to check for data integrity
+  // - is used e.g. by mormot.core.crypto's TAesCfc/TAesOfc/TAesCtc to 
+  // check for data integrity
   crcblock: procedure(crc128, data128: PBlock128)  = crcblockfast;
 
   /// compute a proprietary 128-bit CRC of 128-bit binary buffers
@@ -4194,7 +4200,7 @@ end;
 procedure AppendShortAnsi7String(const buf: RawByteString; var dest: shortstring);
 begin
   if buf <> '' then
-    AppendShortBuffer(pointer(buf), PStrLen(PAnsiChar(pointer(buf)) - _STRLEN)^, dest);
+    AppendShortBuffer(pointer(buf), PStrLen(PtrUInt(buf) - _STRLEN)^, dest);
 end;
 
 function ClassNameShort(C: TClass): PShortString;
@@ -4206,7 +4212,10 @@ end;
 
 function ClassNameShort(Instance: TObject): PShortString;
 begin
-  result := PPointer(PPtrInt(Instance)^ + vmtClassName)^;
+  if Instance = nil then
+    result := @NULCHAR // avoid GPF
+  else
+    result := PPointer(PPtrInt(Instance)^ + vmtClassName)^;
 end;
 
 procedure ClassToText(C: TClass; var result: RawUtf8);
@@ -4214,7 +4223,7 @@ var
   P: PShortString;
 begin
   if C = nil then
-    result := ''
+    result := '' // avoid GPF
   else
   begin
     P := PPointer(PtrInt(PtrUInt(C)) + vmtClassName)^;
@@ -8020,8 +8029,8 @@ function PosExChar(Chr: AnsiChar; const Str: RawUtf8): PtrInt;
 begin
   if Str <> '' then
   {$ifdef FPC} // will use fast FPC SSE version
-    result := IndexByte(pointer(Str)^, PStrLen(PtrUInt(Str) - _STRLEN)^,
-      byte(Chr)) + 1
+    result := IndexByte(
+      pointer(Str)^, PStrLen(PtrUInt(Str) - _STRLEN)^, byte(Chr)) + 1
   else
   {$else}
     for result := 1 to PInteger(PtrInt(Str) - sizeof(integer))^ do
@@ -8437,53 +8446,52 @@ var
 
 procedure XorEntropy(entropy: PBlock128);
 var
-  e, f: THash128Rec;
+  e: array[0..7] of THash128Rec; // including some garbage bytes from stack
+  lec: ^TLecuyer;
 begin
-  e := _EntropyGlobal;
+  e[0].c0 := _EntropyGlobal.i0 xor Random(maxInt); // some randomness from RTL
+  e[0].c1 := _EntropyGlobal.i1 xor Random(maxInt);
+  e[0].c2 := _EntropyGlobal.i2 xor Random(maxInt);
+  e[0].c3 := _EntropyGlobal.i3 xor Random(maxInt);
+  lec := @_Lecuyer; // contains 0 at thread startup, but won't hurt
+  e[1].c0 := e[1].c0 xor lec^.rs1; // perfect forward security
+  e[1].c1 := e[1].c1 xor lec^.rs2;
+  e[1].c2 := e[1].c2 xor lec^.rs3;
+  e[1].c3 := e[1].c3 xor lec^.seedcount;
+  e[2].c0 := e[2].c0 xor PtrUInt(lec); // a threadvar pointer is thread-specific
+  e[2].c1 := e[2].c1 xor PtrUInt(entropy);
   // no mormot.core.os yet, so we can't use QueryPerformanceMicroSeconds()
+  unaligned(PDouble(@e[3].Lo)^) := Now * 2123923447; // cross-platform time
   {$ifdef CPUINTEL}
-  e.Hi := e.Hi xor Rdtsc;
-  {$else}
-  e.Hi := e.Hi xor GetTickCount64; // FPC always defines this function
-  {$endif CPUINTEL}
-  crcblock(entropy, @e.b);       // includes on-stack undeterministic values
-  crcblock(entropy, @_Lecuyer); // perfect forward security
-  unaligned(PDouble(@e.L)^) := Now * 2123923447; // cross-platform time
-  // xor with some fast and simple sources of entropy
-  e.c2 := e.c2 xor e.c1 xor PtrUInt(entropy);
-  e.c3 := e.c3 xor e.c0 {$ifdef FPC} xor PtrUInt(GetCurrentThreadID) {$endif};
-  crcblock(entropy, @e.b);
-  {$ifdef CPUINTEL}
+  e[3].Hi := e[3].Hi xor Rdtsc;
   if cfRAND in CpuFeatures then
   begin
-    // won't hurt
-    f := e;
-    e.c0 := f.c3 xor RdRand32;
-    e.c1 := f.c2 xor RdRand32;
-    e.c2 := f.c1 xor RdRand32;
-    e.c3 := f.c0 xor RdRand32;
-    crcblock(entropy, @e.b);
+    e[4].c0 := e[4].c0 xor RdRand32;
+    e[4].c1 := e[4].c1 xor RdRand32;
+    e[4].c2 := e[4].c2 xor RdRand32;
+    e[4].c3 := e[4].c3 xor RdRand32;
   end;
-  e.Lo := e.Lo xor Rdtsc; // has changed in-between
+  e[5].Lo := e[5].Lo xor Rdtsc; // has changed in-between
+  {$else}
+  e[3].Hi := e[3].Hi xor GetTickCount64; // FPC always defines this function
   {$endif CPUINTEL}
-  f := e;
-  e.i0 := f.i3 xor Random(maxInt); // some randomness from RTL
-  e.i1 := f.i2 xor Random(maxInt);
-  e.i2 := f.i1 xor Random(maxInt);
-  e.i3 := f.i0 xor Random(maxInt);
-  crcblock(entropy, @e.b);
   {$ifdef OSWINDOWS}
-  CreateGUID(PGuid(@e)^); // FPC uses Random() on non-Windows -> not needed
-  crcblock(entropy, @e.b);
+  CreateGUID(TGuid(e[6])); // FPC non Windows = Random -> not worth integrating
+  CreateGUID(TGuid(e[7])); // CoCreateGuid() is fast enough on Windows (<1us)
+  {$else}
+  GetLocalTime(TSystemTime(e[6]));
   {$endif OSWINDOWS}
+  DefaultHasher128(pointer(entropy), @e, SizeOf(e)); // may be AesNiHash128()
   // persist the current entropy state for the next call
   _EntropyGlobal.c := entropy^;
-  // final cross-wired xxHash32() round not to rely on crc32c hash only
-  e.c0 := e.c0 xor xxHash32(e.c3, @e, SizeOf(e));
-  e.c1 := e.c1 xor xxHash32(e.c2, @e, SizeOf(e));
-  e.c2 := e.c2 xor xxHash32(e.c1, @e, SizeOf(e));
-  e.c3 := e.c3 xor xxHash32(e.c0, @e, SizeOf(e));
-  crcblock(entropy, @e.b);
+  if @DefaultHasher128 = @crc32c128 then
+  begin
+    // final xxHash32() round not to rely on crc32c only
+    entropy[0] := entropy[0] xor xxHash32(e[0].c0, @e, SizeOf(e));
+    entropy[1] := entropy[1] xor xxHash32(e[0].c1, @e, SizeOf(e));
+    entropy[2] := entropy[2] xor xxHash32(e[0].c2, @e, SizeOf(e));
+    entropy[3] := entropy[3] xor xxHash32(e[0].c3, @e, SizeOf(e));
+  end;
 end;
 
 procedure TLecuyer.Seed(entropy: PByteArray; entropylen: PtrInt);
@@ -8512,8 +8520,8 @@ end;
 
 function TLecuyer.Next: cardinal;
 begin
-  if word(seedcount) = 0 then
-    Seed(nil, 0) // reseed at startup, and after 256KB of output
+  if (seedcount and $fffff) = 0 then
+    Seed(nil, 0) // seed at startup, and after 2^20 output values (4MB of data)
   else
     inc(seedcount);
   result := rs1;
@@ -9897,17 +9905,19 @@ begin
   blocks := len shr 4;
   if blocks <> 0 then
   begin
-    crcblocksfast(pointer(hash), pointer(buf), blocks);
+    crcblocks(pointer(hash), pointer(buf), blocks);
     blocks := blocks shl 4;
     inc(buf, blocks);
     dec(len, blocks);
   end;
-  if len = 0 then
-    exit;
-  PHash128Rec(hash)^.c0 := crc32c(PHash128Rec(hash)^.c0, buf, len);
-  PHash128Rec(hash)^.c1 := crc32c(PHash128Rec(hash)^.c1, buf, len);
-  PHash128Rec(hash)^.c2 := crc32c(PHash128Rec(hash)^.c2, buf, len);
-  PHash128Rec(hash)^.c3 := crc32c(PHash128Rec(hash)^.c3, buf, len);
+  if len <> 0 then
+    with PHash128Rec(hash)^ do
+    begin
+      c0 := crc32c(c0, buf, len);
+      c1 := crc32c(c1, buf, len);
+      c2 := crc32c(c2, buf, len);
+      c3 := crc32c(c3, buf, len);
+    end;
 end;
 
 function crc16(Data: PAnsiChar; Len: integer): cardinal;

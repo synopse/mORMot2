@@ -141,18 +141,19 @@ procedure IgnoreComma(var P: PUtf8Char);
 function JsonPropNameValid(P: PUtf8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// decode a JSON field in-place from an UTF-8 encoded text buffer
+/// decode a JSON field value in-place from an UTF-8 encoded text buffer
 // - this function decodes in the P^ buffer memory itself (no memory allocation
 // or copy), for faster process - so take care that P^ is not shared
-// - PDest points to the next field to be decoded, or nil when end is reached
+// - works for both field names or values (e.g. '"FieldName":' or 'Value,')
 // - EndOfObject (if not nil) is set to the JSON value char (',' ':' or '}' e.g.)
 // - optional WasString is set to true if the JSON value was a JSON "string"
+// - returns a PUtf8Char to the decoded value, with its optional length in Len^
 // - '"strings"' are decoded as 'strings', with WasString=true, properly JSON
 // unescaped (e.g. any \u0123 pattern would be converted into UTF-8 content)
 // - null is decoded as nil, with WasString=false
 // - true/false boolean values are returned as 'true'/'false', with WasString=false
 // - any number value is returned as its ascii representation, with WasString=false
-// - works for both field names or values (e.g. '"FieldName":' or 'Value,')
+// - PDest points to the next field to be decoded, or nil on JSON parsing error
 function GetJsonField(P: PUtf8Char; out PDest: PUtf8Char;
   WasString: PBoolean = nil; EndOfObject: PUtf8Char = nil;
   Len: PInteger = nil): PUtf8Char;
@@ -680,7 +681,7 @@ function FormatUtf8(const Format: RawUtf8;
 type
   /// JSON-capable TBaseWriter inherited class
   // - in addition to TBaseWriter, will handle JSON serialization of any
-  // kind of value, including objects
+  // kind of value, including classes
   TTextWriter = class(TBaseWriter)
   protected
     // used by AddCRAndIndent for enums, sets and T*ObjArray comment of values
@@ -1069,7 +1070,7 @@ type
     // matched an aEnumTypeInfo item
     // - returns false if no match was found
     function ValueEnum(const aName: RawUtf8; aEnumTypeInfo: PRttiInfo;
-      out aEnum; aEnumDefault: byte = 0): boolean; overload;
+      out aEnum; aEnumDefault: PtrUInt = 0): boolean; overload;
     /// returns all values, as CSV or INI content
     function AsCsv(const KeySeparator: RawUtf8 = '=';
       const ValueSeparator: RawUtf8 = #13#10; const IgnoreKey: RawUtf8 = ''): RawUtf8;
@@ -2623,6 +2624,9 @@ begin
   if WasString <> nil then
     // not a string by default
     WasString^ := false;
+  if Len <> nil then
+    // ensure returns Len=0 on invalid input (PDest=nil)
+    Len^ := 0;
   PDest := nil; // PDest=nil indicates error or unexpected end (#0)
   result := nil;
   if P = nil then
@@ -3152,10 +3156,9 @@ end;
 
 function TValuePUtf8Char.Idem(const Text: RawUtf8): boolean;
 begin
-  if length(Text) = ValueLen then
-    result := IdemPropNameUSameLen(pointer(Text), Value, ValueLen)
-  else
-    result := false;
+  result := (length(Text) = ValueLen) and
+            ((ValueLen = 0) or
+             IdemPropNameUSameLenNotNull(pointer(Text), Value, ValueLen));
 end;
 
 
@@ -3412,7 +3415,8 @@ begin
     result := GetJsonField(P, P, @wStr, EndOfObject, Len);
     if WasString <> nil then
       WasString^ := wStr;
-    if not wStr and NormalizeBoolean and
+    if not wStr and
+       NormalizeBoolean and
        (result <> nil) then
     begin
       if PInteger(result)^ = TRUE_LOW then
@@ -4689,147 +4693,90 @@ end;
 function FormatUtf8(const Format: RawUtf8; const Args, Params: array of const;
   JsonFormat: boolean): RawUtf8;
 var
-  i, tmpN, L, A, P, len: PtrInt;
-  isParam: AnsiChar;
-  tmp: TRawUtf8DynArray;
-  inlin: set of 0..255;
+  A, P: PtrInt;
   F, FDeb: PUtf8Char;
-  WasString: boolean;
-const
-  NOTTOQUOTE: array[boolean] of set of 0..31 = (
-    [vtBoolean, vtInteger, vtInt64 {$ifdef FPC} , vtQWord {$endif},
-     vtCurrency, vtExtended],
-    [vtBoolean, vtInteger, vtInt64 {$ifdef FPC} , vtQWord {$endif},
-     vtCurrency, vtExtended, vtVariant]);
-label
-  Txt;
+  isParam: AnsiChar;
+  toquote: TTempUtf8;
+  temp: TTextWriterStackBuffer;
 begin
   if (Format = '') or
      ((high(Args) < 0) and
       (high(Params) < 0)) then
-  begin
     // no formatting to process, but may be a const
     // -> make unique since e.g. _JsonFmt() will parse it in-place
-    FastSetString(result, pointer(Format), length(Format));
-    exit;
-  end;
-  if high(Params) < 0 then
-  begin
+    FastSetString(result, pointer(Format), length(Format))
+  else if high(Params) < 0 then
     // faster function with no ?
-    FormatUtf8(Format, Args, result);
-    exit;
-  end;
-  if Format = '%' then
-  begin
+    FormatUtf8(Format, Args, result)
+  else if Format = '%' then
     // optimize raw conversion
-    VarRecToUtf8(Args[0], result);
-    exit;
-  end;
-  tmpN := 0;
-  FillCharFast(inlin, SizeOf(inlin), 0);
-  L := 0;
-  A := 0;
-  P := 0;
-  F := pointer(Format);
-  while F^ <> #0 do
-  begin
-    if (F^ <> '%') and
-       (F^ <> '?') then
-    begin
-      // handle plain text betweeb % ? markers
-      FDeb := F;
-      while not (F^ in [#0, '%', '?']) do
-        inc(F);
-Txt:  len := F - FDeb;
-      if len > 0 then
+    VarRecToUtf8(Args[0], result)
+  else
+    // handle any number of parameters with minimal memory allocations
+    with TTextWriter.CreateOwnedStream(temp) do
+    try
+      A := 0;
+      P := 0;
+      F := pointer(Format);
+      while F^ <> #0 do
       begin
-        inc(L, len);
-        if tmpN = length({%H-}tmp) then
-          SetLength(tmp, tmpN + 8);
-        FastSetString(tmp[tmpN], FDeb, len); // add inbetween text
-        inc(tmpN);
-      end;
-    end;
-    if F^ = #0 then
-      break;
-    isParam := F^;
-    inc(F); // jump '%' or '?'
-    if (isParam = '%') and
-       (A <= high(Args)) then
-    begin
-      // handle % substitution
-      if tmpN = length(tmp) then
-        SetLength(tmp, tmpN + 8);
-      VarRecToUtf8(Args[A], tmp[tmpN]);
-      inc(A);
-      if tmp[tmpN] <> '' then
-      begin
-        inc(L, length(tmp[tmpN]));
-        inc(tmpN);
-      end;
-    end
-    else if (isParam = '?') and
-            (P <= high(Params)) then
-    begin
-      // handle ? substitution
-      if tmpN = length(tmp) then
-        SetLength(tmp, tmpN + 8);
-      if JsonFormat and
-         (Params[P].VType = vtVariant) then
-        VariantSaveJson(Params[P].VVariant^, twJsonEscape, tmp[tmpN])
-      else
-      begin
-        VarRecToUtf8(Params[P], tmp[tmpN]);
-        WasString := not (Params[P].VType in NOTTOQUOTE[JsonFormat]);
-        if WasString then
-          if JsonFormat then
-            QuotedStrJson(tmp[tmpN], tmp[tmpN])
-          else
-            tmp[tmpN] := QuotedStr(tmp[tmpN], '''');
-        if not JsonFormat then
+        if (F^ <> '%') and
+           (F^ <> '?') then
         begin
-          inc(L, 4); // space for :():
-          include(inlin, tmpN);
+          // handle plain text between % ? markers
+          FDeb := F;
+          repeat
+            inc(F);
+          until F^ in [#0, '%', '?'];
+          AddNoJsonEscape(FDeb, F - FDeb);
+          if F^ = #0 then
+            break;
+        end;
+        isParam := F^;
+        inc(F); // jump '%' or '?'
+        if (isParam = '%') and
+           (A <= high(Args)) then
+        begin
+          // handle % substitution
+          if Args[A].VType = vtObject then
+            AddShort(ClassNameShort(Args[A].VObject)^)
+          else
+            Add(Args[A]);
+          inc(A);
+        end
+        else if (isParam = '?') and
+                (P <= high(Params)) then
+        begin
+          // handle ? substitution as JSON or SQL
+          if JsonFormat then
+            AddJsonEscape(Params[P]) // does the JSON magic including "quotes"
+          else
+          begin
+            Add(':', '('); // markup for SQL parameter binding
+            if Params[P].VType in [vtBoolean, vtInteger, vtInt64
+                {$ifdef FPC} , vtQWord {$endif}, vtCurrency, vtExtended] then
+              Add(Params[P]) // numbers or boolean
+            else
+            begin
+              VarRecToTempUtf8(Params[P], toquote);
+              AddQuotedStr(toquote.Text, toquote.Len, ''''); // SQL double quote
+              if toquote.TempRawUtf8 <> nil then
+                RawUtf8(toquote.TempRawUtf8) := ''; // release temp memory
+            end;
+            Add(')', ':');
+          end;
+          inc(P);
+        end
+        else
+        begin
+          // no more available Args or Params -> add all remaining text
+          AddNoJsonEscape(F, length(Format) - (F - pointer(Format)));
+          break;
         end;
       end;
-      inc(P);
-      inc(L, length(tmp[tmpN]));
-      inc(tmpN);
-    end
-    else if F^ <> #0 then
-    begin
-      // no more available Args -> add all remaining text
-      FDeb := F;
-      repeat
-        inc(F)
-      until F^ = #0;
-      goto Txt;
-    end;
-  end;
-  if L = 0 then
-    exit;
-  if not JsonFormat and
-     (tmpN > SizeOf(inlin) shl 3) then
-    raise EJSONException.CreateUtf8(
-      'Too many parameters for FormatUtf8(): %>%', [tmpN, SizeOf(inlin) shl 3]);
-  FastSetString(result, nil, L);
-  F := pointer(result);
-  for i := 0 to tmpN - 1 do
-    if tmp[i] <> '' then
-    begin
-      if byte(i) in inlin then
-      begin
-        PWord(F)^ := ord(':') + ord('(') shl 8;
-        inc(F, 2);
-      end;
-      L := PStrLen(PAnsiChar(pointer(tmp[i])) - _STRLEN)^;
-      MoveFast(pointer(tmp[i])^, F^, L);
-      inc(F, L);
-      if byte(i) in inlin then
-      begin
-        PWord(F)^ := ord(')') + ord(':') shl 8;
-        inc(F, 2);
-      end;
+      SetText(result);
+    finally
+      Free;
     end;
 end;
 
@@ -6736,10 +6683,10 @@ begin
       vtInteger:
         Add(VInteger);
       vtBoolean:
-        if VBoolean then
+        if VBoolean then // normalize
           Add('1')
         else
-          Add('0'); // normalize
+          Add('0');
       vtChar:
         Add(@VChar, 1, Escape);
       vtExtended:
@@ -8071,27 +8018,28 @@ begin
 end;
 
 function TSynNameValue.ValueEnum(const aName: RawUtf8; aEnumTypeInfo: PRttiInfo;
-  out aEnum; aEnumDefault: byte): boolean;
+  out aEnum; aEnumDefault: PtrUInt): boolean;
 var
   rtti: PRttiEnumType;
   v: RawUtf8;
-  err, i: integer;
+  err: integer;
+  i: PtrInt;
 begin
   result := false;
   rtti := aEnumTypeInfo.EnumBaseType;
   if rtti = nil then
     exit;
-  ToRttiOrd(rtti.RttiOrd, @aEnum, aEnumDefault);
+  ToRttiOrd(rtti.RttiOrd, @aEnum, aEnumDefault); // always set the default value
   v := TrimU(Value(aName, ''));
   if v = '' then
     exit;
   i := GetInteger(pointer(v), err);
   if (err <> 0) or
-     (i < 0) then
+     (PtrUInt(i) > PtrUInt(rtti.MaxValue)) then
     i := rtti.GetEnumNameValue(pointer(v), length(v), {alsotrimleft=}true);
   if i >= 0 then
   begin
-    ToRttiOrd(rtti.RttiOrd, @aEnum, i);
+    ToRttiOrd(rtti.RttiOrd, @aEnum, i); // we found a proper value
     result := true;
   end;
 end;

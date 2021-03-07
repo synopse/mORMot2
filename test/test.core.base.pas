@@ -4596,7 +4596,7 @@ begin
   U[2] := #$A8;
   U[3] := #$B3;
   U[4] := #$92;
-  SU := Utf8ToSynUnicode(U);
+  Utf8ToSynUnicode(U, SU);
   if not CheckFailed(length(SU) = 2) then
     Check(PCardinal(SU)^ = $DCD2D863);
   Check(Utf8ToUnicodeLength(Pointer(U)) = 2);
@@ -5012,7 +5012,7 @@ procedure TTestCoreBase._IdemPropName;
 
   function IPNUSL(const s1, s2: RawUtf8; len: integer): boolean;
   begin
-    result := IdemPropNameUSameLen(pointer(s1), pointer(s2), len);
+    result := IdemPropNameUSameLenNotNull(pointer(s1), pointer(s2), len);
   end;
 
 const
@@ -5056,6 +5056,8 @@ begin
   Check(IdemPropNameU('ABCDEF', 'ABCDEF'));
   Check(not IdemPropNameU('abcD', ''));
   Check(not IdemPropNameU('', 'ABcFG'));
+  Check(not IdemPropNameU('ABcFG', ''));
+  Check(IdemPropNameU('', ''));
   for i := 0 to 100 do
     Check(IdemPropNameU(RawUtf8(StringOfChar('a', i)), RawUtf8(StringOfChar('A', i))));
   Check(UpperCaseU('abcd') = 'ABCD');
@@ -5066,23 +5068,26 @@ begin
   Check(IdemPropName(abcde, abcde, 5, 5));
   Check(not IdemPropName(abcde, abcde, 4, 5));
   Check(not IdemPropName(abcde, abcdf, 5, 5));
+  Check(IdemPropName(abcde, nil, 0, 0));
+  Check(not IdemPropName(abcde, nil, 1, 0));
   Check(not IPNUSL('abcD', 'ABcF', 4));
   Check(not IPNUSL('abcD', 'ABcFG', 4));
   Check(IPNUSL('abcDe', 'ABcdE', 5));
-  Check(IPNUSL('ABcdE', 'abCDF', 0));
-  Check(IPNUSL('ABcdE', '', 0));
-  Check(IPNUSL('', 'abCDF', 0));
-  Check(IdemPropNameUSameLen(abcde, abcdf, 1));
-  Check(IdemPropNameUSameLen(abcde, abcdf, 2));
-  Check(IdemPropNameUSameLen(abcde, abcdf, 3));
-  Check(IdemPropNameUSameLen(abcde, abcdf, 4));
-  Check(not IdemPropNameUSameLen(abcde, abcdf, 5));
-  Check(IdemPropNameUSameLen(abcde, zbcde, 0));
-  Check(not IdemPropNameUSameLen(abcde, zbcde, 1));
-  Check(not IdemPropNameUSameLen(abcde, zbcde, 2));
-  Check(not IdemPropNameUSameLen(abcde, zbcde, 3));
-  Check(not IdemPropNameUSameLen(abcde, zbcde, 4));
-  Check(not IdemPropNameUSameLen(abcde, zbcde, 5));
+  Check(IPNUSL('ABcdE', 'abCDF', 1));
+  Check(IPNUSL('ABcdE', 'abCDF', 2));
+  Check(IPNUSL('ABcdE', 'abCDF', 3));
+  Check(IPNUSL('ABcdE', 'abCDF', 4));
+  Check(not IPNUSL('ABcdE', 'abCDF', 8));
+  Check(IdemPropNameUSameLenNotNull(abcde, abcdf, 1));
+  Check(IdemPropNameUSameLenNotNull(abcde, abcdf, 2));
+  Check(IdemPropNameUSameLenNotNull(abcde, abcdf, 3));
+  Check(IdemPropNameUSameLenNotNull(abcde, abcdf, 4));
+  Check(not IdemPropNameUSameLenNotNull(abcde, abcdf, 5));
+  Check(not IdemPropNameUSameLenNotNull(abcde, zbcde, 1));
+  Check(not IdemPropNameUSameLenNotNull(abcde, zbcde, 2));
+  Check(not IdemPropNameUSameLenNotNull(abcde, zbcde, 3));
+  Check(not IdemPropNameUSameLenNotNull(abcde, zbcde, 4));
+  Check(not IdemPropNameUSameLenNotNull(abcde, zbcde, 5));
   Check(FindRawUtf8(['a', 'bb', 'cc'], 'a') = 0);
   Check(FindRawUtf8(['a', 'bb', 'cc'], 'cc') = 2);
   Check(FindRawUtf8(['a', 'bb', 'cc'], 'ab') = -1);

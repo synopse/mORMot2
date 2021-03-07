@@ -660,7 +660,7 @@ begin
   SHA.Update(ToText(ClassType));
   SHA.Update(UserName);
   SHA.Update(Content);
-  SHA.final(Digest);
+  SHA.Final(Digest);
   result := Sha256DigestToString(Digest);
 end;
 
@@ -683,7 +683,8 @@ end;
 function TOrmSigned.SetAndSignContent(const UserName: RawUtf8;
   const Content: RawByteString; ForcedSignatureTime: Int64): boolean;
 begin
-  result := (fSignature = '') and (fSignatureTime = 0);
+  result := (fSignature = '') and
+            (fSignatureTime = 0);
   if not result then
     exit; // sign is allowed only once
   if ForcedSignatureTime <> 0 then

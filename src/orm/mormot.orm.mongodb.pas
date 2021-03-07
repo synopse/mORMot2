@@ -1075,13 +1075,13 @@ function TRestStorageMongoDB.GetJsonValues(const Res: TBsonDocument;
         // O(1) optimistic search
         result := @PAnsiChar(item)[o1ndx * sizeof(item^)];
         if (result^.NameLen = aNameLen) and
-           IdemPropNameUSameLen(pointer(aName), result^.name, aNameLen) then
+           IdemPropNameUSameLenNotNull(pointer(aName), result^.name, aNameLen) then
           exit;
       end;
       result := item;
       for i := 1 to itemcount do // O(n) search if field missing or moved
         if (result^.NameLen = aNameLen) and
-           IdemPropNameUSameLen(pointer(aName), result^.name, aNameLen) then
+           IdemPropNameUSameLenNotNull(pointer(aName), result^.name, aNameLen) then
           exit
         else
           inc(result);

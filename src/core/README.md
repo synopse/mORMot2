@@ -177,7 +177,7 @@ High-Level Multi-Threading features shared by all framework units
 
 High-Performance Cryptographic features shared by all framework units
 - Low-Level Memory Buffers Helper Functions
-- AES Encoding/Decoding with optimized asm and AES-NI support
+- AES Encoding/Decoding with optimized asm and AES-NI/CLMUL support
 - AES-256 Cryptographic Pseudorandom Number Generator (CSPRNG)
 - SHA-2 SHA-3 Secure Hashing
 - HMAC Authentication over SHA and CRC32C
@@ -189,6 +189,8 @@ High-Performance Cryptographic features shared by all framework units
 This unit is validated against OpenSSL for correctness.
 It is fully stand-alone, and faster than OpenSSL on x86_64 (but AES-GCM).
 
+Legal Notice: as stated by [our licensing terms](../../LICENCE.md), make sure that you comply to any restriction about the use of cryptographic software in your country.
+
 ### mormot.core.ecc256r1
 
 High-Performance *secp256r1/NISTP-256/prime256v1* Elliptic-Curve Cryptography
@@ -196,6 +198,7 @@ High-Performance *secp256r1/NISTP-256/prime256v1* Elliptic-Curve Cryptography
 - Middle-Level Certificate-based Public Key Cryptography
 
 Pascal and optimized gcc static binaries are included.
+If `mormot.core.crypto.openssl.RegisterOpenSsl` is called, faster *OpenSSL* library will be used.
 
 ### mormot.core.ecc
 
@@ -209,6 +212,19 @@ JSON Web Tokens (JWT) Implementation - see RFC 7797
 - Abstract JWT Parsing and Computation
 - JWT Implementation of `HS*` and `S3*` Symmetric Algorithms
 - JWT Implementation of `ES256` Asymmetric Algorithm
+
+### mormot.core.crypto.openssl
+
+High-Performance Cryptographic Features using *OpenSSL* 1.1.1
+- *OpenSSL* Cryptographic Pseudorandom Number Generator (CSPRNG)
+- AES Cypher/Uncypher in various Modes
+- Hashers and Signers OpenSSL Wrappers
+- *OpenSSL* Asymetric Cryptography
+- JWT Implementation using any OpenSSL Algorithm
+- Register *OpenSSL* to our General Cryptography Catalog
+
+TL;DR: On x86_64, our `mormot.core.crypto.pas` asm is stand-alone and faster than *OpenSSL* for most algorithms, and only 20% slower for `AES-GCM`.
+For `ECC`, our `mormot.core.ecc256r1` unit is noticeably slower than *OpenSSL*.
 
 ### mormot.core.secure
 

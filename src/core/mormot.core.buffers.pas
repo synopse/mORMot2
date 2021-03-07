@@ -207,7 +207,8 @@ type
   public
     /// should return a genuine byte identifier
     // - 0 is reserved for stored, 1 for TAlgoSynLz, 2/3 for TAlgoDeflate/Fast
-    // (in mORMot.pas), 4/5/6 for TAlgoLizard/Fast/Huffman (in SynLizard.pas)
+    // (in mormot.core.zip.pas), 4/5/6 for TAlgoLizard/Fast/Huffman
+    // (in mormot.lib.lizard.pas)
     function AlgoID: byte; virtual; abstract;
     /// computes by default the crc32c() digital signature of the buffer
     function AlgoHash(Previous: cardinal;
@@ -1059,15 +1060,15 @@ function Base64ToBin(sp: PAnsiChar; len: PtrInt; var Blob: TSynTempBuffer): bool
 // - returns TRUE on success, FALSE if base64 does not match binlen
 // - nofullcheck is deprecated and not used any more, since nofullcheck=false
 // is now processed with no performance cost
-function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt;
-  nofullcheck: boolean=true): boolean; overload;
+function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt
+  {$ifndef PUREMORMOT2} ; nofullcheck: boolean = true {$endif}): boolean; overload;
 
 /// fast conversion from Base64 encoded text into binary data
 // - returns TRUE on success, FALSE if base64 does not match binlen
 // - nofullcheck is deprecated and not used any more, since nofullcheck=false
 // is now processed with no performance cost
-function Base64ToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt;
-  nofullcheck: boolean=true): boolean; overload;
+function Base64ToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt
+  {$ifndef PUREMORMOT2} ; nofullcheck: boolean = true {$endif}): boolean; overload;
 
 /// fast conversion from Base64 encoded text into binary data
 // - will check supplied text is a valid Base64 encoded stream
@@ -4076,7 +4077,7 @@ end;
 
 function TBufferWriter.FlushTo: RawByteString;
 begin
-  Flush;
+  InternalFlush;
   result := (fStream as TRawByteStringStream).DataString;
 end;
 
@@ -5604,8 +5605,8 @@ begin
             Base64Decode(sp, blob.buf, len shr 2);
 end;
 
-function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt;
-  nofullcheck: boolean): boolean;
+function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt
+  {$ifndef PUREMORMOT2} ; nofullcheck: boolean {$endif}): boolean;
 begin
   // nofullcheck is just ignored and deprecated
   result := (bin <> nil) and
@@ -5613,10 +5614,10 @@ begin
             Base64Decode(base64, bin, base64len shr 2);
 end;
 
-function Base64ToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt;
-  nofullcheck: boolean): boolean;
+function Base64ToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt
+  {$ifndef PUREMORMOT2} ; nofullcheck: boolean {$endif}): boolean;
 begin
-  result := Base64ToBin(pointer(base64), bin, length(base64), binlen, nofullcheck);
+  result := Base64ToBin(pointer(base64), bin, length(base64), binlen);
 end;
 
 { --------- Base64 URI encoding/decoding }
@@ -7443,7 +7444,7 @@ begin
   if sourcelen = 0 then
     exit;
   sourcelen := EscapeBuffer(source, pointer(result), sourcelen, sourcelen * 3) - pointer(result);
-  // don't call the MM which may move the data: just adjust length()
+  // don't call the MM which may move the data -> just adjust length()
   PStrLen(PAnsiChar(pointer(result)) - _STRLEN)^ := sourcelen;
 end;
 

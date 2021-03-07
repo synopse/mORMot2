@@ -533,7 +533,7 @@ begin
     PBKDF2_HMAC_SHA256(
       Password, PasswordSalt, PasswordRounds, aeskey, 'salt');
     try
-      dst := TAesCfbCrc.MacEncrypt(Source, aeskey, Encrypt);
+      dst := TAesCfc.MacEncrypt(Source, aeskey, Encrypt);
       try
         if dst = '' then
           raise EECCException.CreateUtf8(
