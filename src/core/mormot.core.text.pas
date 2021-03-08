@@ -5143,8 +5143,14 @@ begin
 end;
 
 procedure TBaseWriter.Add(Value: boolean);
+var
+  PS: PShortString;
 begin
-  AddShorter(BOOL_STR[Value]);
+  if Value then // normalize: boolean may not be in the expected [0,1] range
+    PS := @BOOL_STR[true]
+  else
+    PS := @BOOL_STR[false];
+  AddShorter(PS^);
 end;
 
 procedure TBaseWriter.AddFloatStr(P: PUtf8Char);
@@ -8650,10 +8656,10 @@ begin
       varDate:
         begin
           if not Assigned(_VariantToUtf8DateTimeToIso8601) then
-            raise ESynException.Create('VariantToUtf8(TDateTime) unsupported:' +
+            raise ESynException.Create('VariantToUtf8(varDate) unsupported:' +
               ' please include mormot.core.json to your uses clause');
-          wasString := true;
           _VariantToUtf8DateTimeToIso8601(VDate, 'T', result, {withms=}false);
+          wasString := true;
         end;
       varString:
         begin

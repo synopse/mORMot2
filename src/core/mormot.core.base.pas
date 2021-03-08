@@ -10593,7 +10593,10 @@ begin
           exit;
         end;
       varBoolean: // 16-bit WordBool to 8-bit boolean
-        Value := vd^.VBoolean;
+        if vd^.VBoolean then
+          Value := true // normalize
+        else
+          Value := false;
       varInteger: // coming e.g. from GetJsonField()
         Value := vd^.VInteger = 1;
       varString:

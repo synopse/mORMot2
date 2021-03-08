@@ -1402,8 +1402,8 @@ function FileSize(const FileName: TFileName): Int64; overload;
 function FileSize(F: THandle): Int64; overload;
 
 /// FileSeek() overloaded function, working with huge files
-// - Delphi FileSeek() is buggy -> use this function to safe access files > 2 GB
-// (thanks to sanyin for the report)
+// - Delphi FileSeek() is buggy -> use this function to safely access files
+// bigger than 2 GB (thanks to sanyin for the report)
 function FileSeek64(Handle: THandle; const Offset: Int64;
   Origin: cardinal): Int64;
 
@@ -1420,10 +1420,10 @@ function FileInfoByHandle(aFileHandle: THandle; out FileId, FileSize,
 function CopyFile(const Source, Target: TFileName;
   FailIfExists: boolean): boolean;
 
-/// conversion of Windows OEM charset into a UTF-16 encoded string
+/// conversion of Windows OEM CP-437 charset into a UTF-16 encoded string
 function OemToUnicode(const oem: RawByteString): SynUnicode;
 
-/// conversion of Windows OEM charset into a file name
+/// conversion of Windows OEM CP-437 charset into a file name
 // - as used e.g. by mormot.core.zip for non UTF-8 file names
 function OemToFileName(const oem: RawByteString): TFileName;
 

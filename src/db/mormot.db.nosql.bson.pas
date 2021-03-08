@@ -2919,7 +2919,10 @@ begin
           betDateTime:
             PUnixMSTime(Element)^ := DateTimeToUnixMSTime(v.VDate);
           betBoolean:
-            PBoolean(Element)^ := v.VBoolean;
+            if v.VBoolean then // normalize
+              PBoolean(Element)^ := true
+            else
+              PBoolean(Element)^ := false;
           betInt32:
             if not VariantToInteger(aValue, PInteger(Element)^) then
               raise EBsonException.Create('TBsonElement.FromVariant(betInt32)');
