@@ -123,13 +123,13 @@ Main project page:
 http://mORMot.net
 
 Documentation:
-https://synopse.info/files/html/Synopse%20*mORMot*%20Framework%20SAD%201.18.html
+https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html
 
 Installation:
-https://synopse.info/files/html/Synopse%20*mORMot*%20Framework%20SAD%201.18.html#TITL_113
+https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_113
 
 FAQ:
-https://synopse.info/files/html/Synopse%20*mORMot*%20Framework%20SAD%201.18.html#TITL_123
+https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_123
 
 How to get the source:
 https://synopse.info/fossil/wiki?name=Get+the+source
