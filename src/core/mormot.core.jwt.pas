@@ -247,18 +247,19 @@ type
     // - this method is thread-safe
     function VerifyAuthorizationHeader(const HttpAuthorizationHeader: RawUtf8;
       out JWT: TJwtContent): boolean; overload;
-    /// in-place decoding and quick check of the JWT paylod
-    // - it won't check the signature, but the header's algorithm against the
-    // class name (use TJwtAbstract class to allow any algorithm)
-    // - it will decode the JWT payload and check for its expiration, and some
+    /// in-place decoding and quick check of the JWT header and paylod
+    // - it won't check the signature, only the header and payload
+    // - the header's algorithm is checked against ExpectedAlgo (if not '')
+    // - it will parse the JWT payload and check for its expiration, and some
     // mandatory fied values - you can optionally retrieve the Expiration time,
     // the ending Signature, and/or the Payload decoded as TDocVariant
     // - NotBeforeDelta allows to define some time frame for the "nbf" field
     // - may be used on client side to quickly validate a JWT received from
     // server, without knowing the exact algorithm or secret keys
-    class function VerifyPayload(const Token, ExpectedSubject, ExpectedIssuer,
-      ExpectedAudience: RawUtf8; Expiration: PUnixTime = nil;
-      Signature: PRawUtf8 = nil; Payload: PVariant = nil;
+    class function VerifyPayload(const Token,
+      ExpectedAlgo, ExpectedSubject, ExpectedIssuer, ExpectedAudience: RawUtf8;
+      Expiration: PUnixTime = nil; Signature: PRawUtf8 = nil;
+      Payload: PVariant = nil;
       IgnoreTime: boolean = false; NotBeforeDelta: TUnixTime = 15): TJwtResult;
   published
     /// the name of the algorithm used by this instance (e.g. 'HS256')
@@ -974,7 +975,7 @@ begin
 end;
 
 class function TJwtAbstract.VerifyPayload(const Token,
-  ExpectedSubject, ExpectedIssuer, ExpectedAudience: RawUtf8;
+  ExpectedAlgo, ExpectedSubject, ExpectedIssuer, ExpectedAudience: RawUtf8;
   Expiration: PUnixTime; Signature: PRawUtf8; Payload: PVariant;
   IgnoreTime: boolean; NotBeforeDelta: TUnixTime): TJwtResult;
 var
@@ -992,8 +993,8 @@ begin
     B := pointer(Token);
     if not Base64UriToBin(PAnsiChar(B), P - B, temp) or
        (JsonDecode(temp.buf, ['alg'], @V, false) = nil) or
-       not IdemPropName(copy(ClassNameShort(self)^, 5, 10),
-         {%H-}V[0].Value, {%H-}V[0].ValueLen) then
+       ((ExpectedAlgo <> '') and
+        not IdemPropNameU(ExpectedAlgo, {%H-}V[0].Value, {%H-}V[0].ValueLen)) then
       B := nil;
     temp.Done;
     if B = nil then
@@ -1017,7 +1018,7 @@ begin
     PDocVariantData(PayLoad)^.InitJsonInPlace(temp2.buf, JSON_OPTIONS_FAST);
     temp2.Done;
   end;
-  repeat // avoid try..finally
+  repeat // avoid try..finally for temp.Done
     if JsonDecode(temp.buf, ['iss', 'aud', 'exp', 'nbf', 'sub'], @V, true) = nil then
       break;
     result := jwtUnexpectedClaim;
