@@ -118,11 +118,14 @@ type
     FlushStream: TStream;
     FlushBuffer: pointer;
     FlushSize: integer;
-    FlushCheckCRC: PCardinal;
     FlushBufferOwned: boolean;
+    FlushCheckCRC: PCardinal;
   public
     /// raw zlib Stream information
     Stream: TZStream;
+    /// 64-bit number of bytes written to the output
+    // - Stream.total_out may be 32-bit on some platforms
+    Written: Int64;
     /// reset and prepare the internal Stream structure for two memory buffers
     procedure Init(src, dst: pointer; srcLen, dstLen: integer); overload;
     /// reset and prepare the internal Stream structure for a destination stream
@@ -451,6 +454,7 @@ begin
   Stream.zalloc := @zlibAllocMem; // even under Linux, use program heap
   Stream.zfree  := @zlibFreeMem;
   {$endif ZLIBPAS}
+  Written := 0;
 end;
 
 procedure TZLib.Init(src: pointer; srcLen: integer; dst: TStream;
@@ -549,6 +553,7 @@ begin
     if FlushCheckCRC <> nil then
       FlushCheckCRC^ := crc32(FlushCheckCRC^, FlushBuffer, n);
     FlushStream.WriteBuffer(FlushBuffer^, n);
+    inc(Written, n);
   end;
   Stream.next_out := FlushBuffer;
   Stream.avail_out := FlushSize;
