@@ -1462,6 +1462,18 @@ function SearchRecValidFile(const F: TSearchRec): boolean;
 function SearchRecValidFolder(const F: TSearchRec): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+{$ifdef FPC}
+type
+  // FPC TFileStream miss a Create(aHandle) constructor like Delphi
+  TFileStreamFromHandle = class(THandleStream)
+  public
+    destructor Destroy; override;
+  end;
+{$else}
+type
+  TFileStreamFromHandle = TFileStream;
+{$endif FPC}
+
 /// overloaded function optimized for one pass file reading
 // - will use e.g. the FILE_FLAG_SEQUENTIAL_SCAN flag under Windows, as stated
 // by http://blogs.msdn.com/b/oldnewthing/archive/2012/01/20/10258690.aspx
@@ -3031,23 +3043,10 @@ begin
 end;
 
 {$ifdef FPC}
-type
-  // FPC TFileStream miss a Create(aHandle) constructor like Delphi
-  TFileStreamFromHandle = class(THandleStream)
-  public
-    destructor Destroy; override;
-  end;
-
 destructor TFileStreamFromHandle.Destroy;
 begin
   FileClose(Handle); // otherwise file is still opened
 end;
-
-{$else}
-
-type
-  TFileStreamFromHandle = TFileStream;
-
 {$endif FPC}
 
 function FileStreamSequentialRead(const FileName: string): THandleStream;
