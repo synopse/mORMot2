@@ -173,6 +173,8 @@ type
     /// callback run when a WebSockets client is just disconnected
     // - triggerred by TWebSocketProcess.ProcessStop
     OnClientDisconnected: TNotifyEvent;
+    /// if the WebSockets Client should be upgraded after socket reconnection
+    ClientAutoUpgrade: boolean;
     /// by default, contains [] to minimize the logged information
     // - set logHeartbeat if you want the ping/pong frames to be logged
     // - set logTextFrameContent if you want the text frame content to be logged
@@ -625,7 +627,7 @@ type
     fProtocol: TWebSocketProtocol;
     fMaskSentFrames: byte;
     fProcessEnded: boolean;
-    fNoConnectionCloseAtDestroy: boolean;
+    fConnectionCloseWasSent: boolean;
     fProcessCount: integer;
     fSettings: PWebSocketProcessSettings;
     fSafeIn, fSafeOut: PSynLocker;
@@ -692,6 +694,8 @@ type
     // - returns the HTTP Status code (e.g. HTTP_SUCCESS=200 for success)
     function NotifyCallback(aRequest: THttpServerRequestAbstract;
       aMode: TWebSocketProcessNotifyCallback): cardinal; virtual;
+    /// send a focConnectionClose frame (if not already sent) and set wpsClose
+    procedure Shutdown;
     /// returns the current state of the underlying connection
     function State: TWebSocketProcessState;
     /// the associated 'Remote-IP' HTTP header value
@@ -721,8 +725,8 @@ type
     property ProcessCount: integer
       read fProcessCount;
     /// may be set to TRUE before Destroy to force raw socket disconnection
-    property NoConnectionCloseAtDestroy: boolean
-      read fNoConnectionCloseAtDestroy write fNoConnectionCloseAtDestroy;
+    property ConnectionCloseWasSent: boolean
+      read fConnectionCloseWasSent write fConnectionCloseWasSent;
   published
     /// the Sec-WebSocket-Protocol application protocol currently involved
     // - TWebSocketProtocolJson or TWebSocketProtocolBinary in the mORMot context
@@ -1881,6 +1885,7 @@ begin
   LogDetails := [];
   OnClientConnected := nil;
   OnClientDisconnected := nil;
+  ClientAutoUpgrade := true;
   AesSalt := 'E750ACCA-2C6F-4B0E-999B-D31C9A14EFAB';
   AesRounds := 1024;
   AesCipher := TAesFast[mCtr];
@@ -1915,35 +1920,52 @@ begin
   fSafePing := NewSynLocker;
 end;
 
-destructor TWebSocketProcess.Destroy;
+procedure TWebSocketProcess.Shutdown;
 var
   frame: TWebSocketFrame;
+  error: integer;
+begin
+  if self = nil then
+    exit;
+  fSafeOut^.Lock;
+  try
+    if fConnectionCloseWasSent then
+      exit;
+    fConnectionCloseWasSent := true;
+  finally
+    fSafeOut^.UnLock;
+  end;
+  LockedInc32(@fProcessCount);
+  try
+    if fOutgoing.Count > 0 then
+      SendPendingOutgoingFrames;
+    fState := wpsClose; // the connection is inactive from now on
+    // send and acknowledge a focConnectionClose frame to notify the other end
+    frame.opcode := focConnectionClose;
+    error := 0;
+    if not SendFrame(frame) or
+       not CanGetFrame(1000, @error) or
+       not GetFrame(frame, @error) then
+      WebSocketLog.Add.Log(sllWarning, 'Destroy: no focConnectionClose ACK %',
+        [error], self);
+  finally
+    LockedDec32(@fProcessCount);
+  end;
+end;
+
+destructor TWebSocketProcess.Destroy;
+var
   timeout: Int64;
   log: ISynLog;
-  dummyerror: integer;
 begin
   log := WebSocketLog.Enter('Destroy %', [ToText(fState)^], self);
   if fState = wpsCreate then
     fProcessEnded := true
-  else if not fNoConnectionCloseAtDestroy then
+  else if not fConnectionCloseWasSent then
   begin
     if log <> nil then
-      log.Log(sllTrace, 'Destroy: notify focConnectionClose', self);
-    LockedInc32(@fProcessCount);
-    try
-      fState := wpsDestroy;
-      if fOutgoing.Count > 0 then
-        SendPendingOutgoingFrames;
-      frame.opcode := focConnectionClose;
-      dummyerror := 0;
-      if not SendFrame(frame) or
-         not CanGetFrame(1000, @dummyerror) or
-         not GetFrame(frame, @dummyerror) then
-        if log <> nil then // expects an answer from peer
-          log.Log(sllWarning, 'Destroy: no focConnectionClose ACK %', [dummyerror], self);
-    finally
-      LockedDec32(@fProcessCount);
-    end;
+      log.Log(sllTrace, 'Destroy: send focConnectionClose', self);
+    Shutdown;
   end;
   fState := wpsDestroy;
   if (fProcessCount > 0) or
@@ -2018,7 +2040,9 @@ begin
     if invalidPing then
     begin
       inc(fInvalidPingSendCount);
-      fNoConnectionCloseAtDestroy := true;
+      fSafeOut.Lock;
+      fConnectionCloseWasSent := true;
+      fSafeOut.UnLock;
     end
     else
       fInvalidPingSendCount := 0;
@@ -2132,7 +2156,8 @@ begin
       fState := wpsRun;
       while (fOwnerThread = nil) or
             not fOwnerThread.Terminated do
-        if ProcessLoopStepReceive and ProcessLoopStepSend then
+        if ProcessLoopStepReceive and
+           ProcessLoopStepSend then
           HiResDelay(fLastSocketTicks)
         else
           break; // connection ended
@@ -2297,7 +2322,7 @@ begin
   end;
 end;
 
-procedure TWebSocketProcess.log(const frame: TWebSocketFrame;
+procedure TWebSocketProcess.Log(const frame: TWebSocketFrame;
   const aMethodName: RawUtf8; aEvent: TSynLogInfo; DisableRemoteLog: boolean);
 var
   tmp: TLogEscape;
@@ -2559,7 +2584,7 @@ begin
     try
       result := true;
       if Frame.opcode = focConnectionClose then
-        fNoConnectionCloseAtDestroy := true; // to be done once on each end
+        fConnectionCloseWasSent := true; // to be done once on each end
       if (fProtocol <> nil) and
          (Frame.payload <> '') then
         fProtocol.BeforeSendFrame(Frame);

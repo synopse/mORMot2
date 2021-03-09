@@ -38,6 +38,7 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - Evan (eblaudy)
 - F-Vicente
 - Goran Despalatovic (gigo)
+- Hubert Touvet
 - Jean-Baptiste Roussia (jbroussia)
 - Joe (jokusoft)
 - Johan Bontes

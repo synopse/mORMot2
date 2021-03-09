@@ -5286,7 +5286,10 @@ begin
         {$endif UNICODE}
         {$endif HASVARUSTRING}
         vtboolean:
-          Bind(i, integer(Vboolean), IO);
+          if VBoolean then // normalize
+            Bind(i, 1, IO)
+          else
+            Bind(i, 0, IO);
         vtInteger:
           Bind(i, VInteger, IO);
         vtInt64:

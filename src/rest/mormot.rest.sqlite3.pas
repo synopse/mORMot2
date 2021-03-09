@@ -137,8 +137,8 @@ type
     /// method calling the RESTful server fServer
     procedure InternalUri(var Call: TRestUriParams); override;
     /// overridden protected method do nothing (direct DB access has no connection)
-    function InternalCheckOpen: boolean; override;
-    /// overridden protected method do nothing (direct DB access has no connection)
+    function InternalIsOpen: boolean; override;
+    procedure InternalOpen; override;
     procedure InternalClose; override;
   public
     /// initializes the class, and creates an internal TRestServerDB to
@@ -332,9 +332,13 @@ begin
     call.OutInternalState := fServer.DB.InternalState^;
 end;
 
-function TRestClientDB.InternalCheckOpen: boolean;
+function TRestClientDB.InternalIsOpen: boolean;
 begin
   result := true;
+end;
+
+procedure TRestClientDB.InternalOpen;
+begin
 end;
 
 procedure TRestClientDB.InternalClose;

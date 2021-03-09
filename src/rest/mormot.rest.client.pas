@@ -514,20 +514,23 @@ type
   // - URI are standard Collection/Member implemented as ModelRoot/TableName/TableID
   // - handle RESTful commands GET POST PUT DELETE LOCK UNLOCK
   // - never call this abstract class, but inherit and override the
-  // InternalUri/InternalCheckOpen/InternalClose virtual abstract methods
+  // InternalUri/InternalIsOpen/InternalOpen/InternalClose virtual abstract methods
   TRestClientUri = class(TRest)
   protected
     fClient: IRestOrmClient;
     fSession: TRestClientSession;
     fComputeSignature: TOnRestAuthenticationSignedUriComputeSignature;
+    fOnConnected: TOnClientNotify;
+    fOnConnectionFailed: TOnClientFailed;
     fOnIdle: TOnIdleSynBackgroundThread;
     fOnFailed: TOnClientFailed;
     fOnAuthentificationFailed: TOnAuthentificationFailed;
     fOnSetUser: TOnClientNotify;
     fBackgroundThread: TSynBackgroundThreadEvent;
+    fConnectRetrySeconds: integer; // used by IsOpen
     fMaximumAuthentificationRetry: integer;
     fRetryOnceOnTimeout: boolean;
-    fInternalState: set of (isOpened, isDestroying, isInAuth);
+    fInternalState: set of (isDestroying, isInAuth, isNotImplemented);
     fLastErrorCode: integer;
     fLastErrorMessage: RawUtf8;
     fLastErrorException: ExceptClass;
@@ -566,11 +569,12 @@ type
     // - return the execution result in Call.OutStatus
     // - for clients, RestAccessRights is never used
     procedure InternalUri(var Call: TRestUriParams); virtual; abstract;
-    /// overridden protected method shall check if not connected to reopen it
-    // - shall return TRUE on success, FALSE on any connection error
-    function InternalCheckOpen: boolean; virtual; abstract;
+    /// overridden protected method shall check if client is connected
+    function InternalIsOpen: boolean; virtual; abstract;
+    /// overridden protected method shall reopen the connectio
+    procedure InternalOpen; virtual; abstract;
     /// overridden protected method shall force the connection to be closed,
-    // - a next call to InternalCheckOpen method shall re-open the connection
+    // - a next call to IsOpen method shall re-open the connection
     procedure InternalClose; virtual; abstract;
   {$ifndef PUREMORMOT2}
     // backward compatibility redirections to the homonymous IRestOrmClient methods
@@ -615,6 +619,12 @@ type
     // - CreateFrom() will expect Definition.UserName/Password to store the
     // credentials which will be used by SetUser()
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
+    /// check if connected to the server, or try to (re)create the connection
+    // - convenient wrapper around InternalIsOpen and InternalOpen virtual methods
+    // - return TRUE on success, FALSE on any connection error
+    // - follows ConnectRetrySeconds property for optional retrial
+    // - calls OnConnected/OnConnectionFailed events if set
+    function IsOpen: boolean; virtual;
     /// main method calling the remote Server via a RESTful command
     // - redirect to the InternalUri() abstract method, which should be
     // overridden for local, pipe, HTTP/1.1 or WebSockets actual communication
@@ -906,7 +916,12 @@ type
     class procedure ServiceNotificationMethodExecute(var Msg: TMessage);
 
     {$endif OSWINDOWS}
-
+    /// called by IsOpen when the raw connection is established
+    property OnConnected: TOnClientNotify
+      read fOnConnected write fOnConnected;
+    /// called by IsOpen when it failed to connect
+    property OnConnectionFailed: TOnClientFailed
+      read fOnConnectionFailed write fOnConnectionFailed;
     /// set a callback event to be executed in loop during remote blocking
     // process, e.g. to refresh the UI during a somewhat long request
     // - if not set, the request will be executed in the current thread,
@@ -971,6 +986,12 @@ type
     /// if the client shall retry once in case of "408 REQUEST TIMEOUT" error
     property RetryOnceOnTimeout: boolean
       read fRetryOnceOnTimeout write fRetryOnceOnTimeout;
+    /// how many seconds the client may try to connect after open socket failure
+    // - is disabled to 0 by default, but you may set some seconds here e.g. to
+    // let the server start properly, and let the client handle exceptions to
+    // wait and retry until the specified timeout is reached
+    property ConnectRetrySeconds: integer
+      read fConnectRetrySeconds write fConnectRetrySeconds;
     /// the current session ID as set after a successfull SetUser() method call
     // - equals 0 (CONST_AUTHENTICATION_SESSION_NOT_STARTED) if the session
     // is not started yet - i.e. if SetUser() call failed
@@ -1023,8 +1044,8 @@ type
     // direct memory
     procedure InternalUri(var Call: TRestUriParams); override;
     /// overridden protected method do nothing (direct DLL access has no connection)
-    function InternalCheckOpen: boolean; override;
-    /// overridden protected method do nothing (direct DLL access has no connection)
+    function InternalIsOpen: boolean; override;
+    procedure InternalOpen; override;
     procedure InternalClose; override;
   public
     /// connect to a server from a remote function
@@ -1828,16 +1849,16 @@ begin
      not (isDestroying in fInternalState) then
   begin
     if (Call^.OutStatus = HTTP_NOTIMPLEMENTED) and
-       (isOpened in fInternalState) then
+       not (isNotImplemented in fInternalState) then
     begin
       InternalClose; // force recreate connection
-      Exclude(fInternalState, isOpened);
+      Include(fInternalState, isNotImplemented);
       if (Sender = nil) or
          OnIdleBackgroundThreadActive then
         InternalUri(Call^); // try request again
     end;
     if Call^.OutStatus <> HTTP_NOTIMPLEMENTED then
-      Include(fInternalState, isOpened);
+      Exclude(fInternalState, isNotImplemented);
   end;
 end;
 
@@ -1987,6 +2008,85 @@ begin
   InternalLog('SessionRenewEvent(%) received status=% count=% from % % (timeout=% min)',
     [fModel.Root, status, JsonDecode(resp, 'count'), fSession.Server,
      fSession.Version, fSession.ServerTimeout], sllUserAuth);
+end;
+
+function TRestClientUri.IsOpen: boolean;
+var
+  started, elapsed, max: Int64;
+  wait, retry: integer;
+  exc: ExceptionClass;
+begin
+  result := InternalIsOpen;
+  if result or
+     (isDestroying in fInternalState) then
+    exit;
+  fSafe.Enter;
+  try
+    result := InternalIsOpen; // check again within lock
+    if result or
+       (isDestroying in fInternalState) then
+      exit;
+    retry := 0;
+    max := fConnectRetrySeconds * 1000;
+    if max = 0 then
+      started := 0
+    else
+      started := GetTickCount64;
+    repeat
+      exc := nil;
+      try
+        InternalOpen;
+      except
+        on E: Exception do
+        begin
+          InternalClose;
+          if (started = 0) or
+             (isDestroying in fInternalState) then
+            exit;
+          if Assigned(fOnConnectionFailed) then
+            try
+              fOnConnectionFailed(self, E, nil);
+            except
+            end;
+          exc := PPointer(E)^;
+        end;
+      end;
+      if InternalIsOpen then
+        break;
+      elapsed := GetTickCount64 - started;
+      if elapsed >= max then
+        exit;
+      inc(retry);
+      if elapsed < 500 then
+        wait := 100
+      else if elapsed < 10000 then
+        wait := 1000
+      else
+        wait := 5000;
+      inc(wait, Random32(wait)); // randomness to reduce server load
+      if elapsed + wait > max then
+      begin
+        wait := max - elapsed;
+        if wait <= 0 then
+          exit;
+      end;
+      fLogClass.Add.Log(sllTrace, 'IsOpen: % after % -> wait % and ' +
+        'retry #% up to % seconds - %',
+        [exc, MicroSecToString(elapsed * 1000),
+         MicroSecToString(wait * 1000), retry, fConnectRetrySeconds, self],
+        self);
+      SleepHiRes(wait);
+    until InternalIsOpen;
+  finally
+    fSafe.Leave;
+  end;
+  if Assigned(fOnConnected) then
+    try
+      with fLogClass.Enter(self, 'IsOpen: call OnConnected') do
+        fOnConnected(self);
+    except
+    end;
+  result := true;
 end;
 
 function TRestClientUri.OrmInstance: TRestOrm;
@@ -2545,7 +2645,7 @@ begin
 end;
 
 function TRestClientUri.ServiceRetrieveAssociated(const aServiceName: RawUtf8;
-  out URI: TRestServerUriDynArray): boolean;
+  out URI: TRestServerURIDynArray): boolean;
 var
   json: RawUtf8;
 begin
@@ -2816,9 +2916,13 @@ begin
   f(r);
 end;
 
-function TRestClientLibraryRequest.InternalCheckOpen: boolean;
+function TRestClientLibraryRequest.InternalIsOpen: boolean;
 begin
   result := @fRequest <> nil;
+end;
+
+procedure TRestClientLibraryRequest.InternalOpen;
+begin
 end;
 
 procedure TRestClientLibraryRequest.InternalClose;
