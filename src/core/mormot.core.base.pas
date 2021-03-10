@@ -11090,7 +11090,8 @@ begin
   else
   begin
     result := Count;
-    SetLength(fDataString, fPosition + result);
+    if fPosition + result > length(fDataString) then
+      SetLength(fDataString, fPosition + result);
     MoveFast(Buffer, PByteArray(fDataString)[fPosition], result);
     inc(FPosition, result);
   end;

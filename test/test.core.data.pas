@@ -4374,8 +4374,8 @@ end;
 procedure TTestCoreCompression.Setup;
 begin
   Data := StringFromFile(Executable.ProgramFileName);
-  if length(Data) > 1 shl 20 then
-    SetLength(Data, 1 shl 20); // no need to compress more than 1MB
+  if length(Data) > 1 shl 20 + 1 shl 10 then
+    SetLength(Data, 1 shl 20 + 1 shl 10); // no need to compress more than 1.1MB
   DataFile := WorkDir + 'exe.1mb';
   FileFromString(Data, DataFile);
 end;
@@ -4387,7 +4387,7 @@ begin
 end;
 
 const
-  // uses a const table instead of a dynamic array, for better regression tests
+  // regression tests use a const table instead of our computed array
   crc32tab: array[byte] of cardinal = ($00000000, $77073096, $EE0E612C,
     $990951BA, $076DC419, $706AF48F, $E963A535, $9E6495A3, $0EDB8832, $79DCB8A4,
     $E0D5E91E, $97D2D988, $09B64C2B, $7EB17CBD, $E7B82D07, $90BF1D91, $1DB71064,
@@ -4542,37 +4542,42 @@ procedure TTestCoreCompression.ZipFormat;
 var
   FN, FN2: TFileName;
   S: TRawByteStringStream;
+  zip64: boolean;
 
   procedure test(Z: TZipRead; aCount: integer);
   var
     i: integer;
     tmp: RawByteString;
     tmpFN: TFileName;
-    info: TFileInfo;
+    info: TFileInfoFull;
   begin
     with Z do
     try
+      for i := 0 to Count - 1 do
+        with Entry[i] do
+          Check(CompareMem(@dir^.fileInfo, @local^.fileInfo,
+            SizeOf(TFileInfo) - SizeOf(dir^.fileInfo.extraLen)));
       Check(Count = aCount, 'count');
       i := NameToIndex('REP1\ONE.exe');
       Check(i = 0, '0');
       FillcharFast(info, sizeof(info), 0);
       Check(RetrieveFileInfo(i, info), 'info');
-      Check(integer(info.zfullSize) = length(Data), 'siz');
-      Check(info.zcrc32 = crc0, 'crc0');
+      Check(integer(info.f64.zfullSize) = length(Data), 'siz');
+      Check(info.f32.zcrc32 = crc0, 'crc0');
       Check(UnZip(i) = Data, 'unzip1');
       i := NameToIndex('REp2\ident.gz');
       Check(i = 1, 'unzip2');
-      Check(Entry[i].infoLocal^.zcrc32 = crc1, 'crc1a');
+      Check(Entry[i].local^.fileInfo.zcrc32 = crc1, 'crc1a');
       tmp := UnZip(i);
       Check(tmp <> '', 'unzip3');
       Check(crc32(0, pointer(tmp), length(tmp)) = crc1, 'crc1b');
       i := NameToIndex(ExtractFileName(DataFile));
       Check(i = 2, 'unzip4');
       Check(UnZip(i) = Data, 'unzip6');
-      Check(Entry[i].infoLocal^.zcrc32 = info.zcrc32, 'crc32');
+      Check(Entry[i].local^.fileInfo.zcrc32 = info.f32.zcrc32, 'crc32');
       i := NameToIndex('REp2\ident2.gz');
       Check(i = 3, 'unzip5');
-      Check(Entry[i].infoLocal^.zcrc32 = crc1, 'crc1c');
+      Check(Entry[i].local^.fileInfo.zcrc32 = crc1, 'crc1c');
       tmp := UnZip(i);
       Check(tmp <> '', 'unzip7');
       Check(crc32(0, pointer(tmp), length(tmp)) = crc1, 'crc1d');
@@ -4590,60 +4595,70 @@ var
     end;
   end;
 
-  procedure Prepare(Z: TZipWriteAbstract);
+  procedure Prepare(Z: TZipWrite);
   begin
-    with Z do
     try
-      AddDeflated('rep1\one.exe', pointer(Data), length(Data));
-      Check(Count = 1, 'cnt1');
-      AddDeflated('rep2\ident.gz', M.Memory, M.Position);
-      Check(Count = 2, 'cnt2');
-      if Z is TZipWrite then
-        TZipWrite(Z).AddDeflated(DataFile)
-      else
-        Z.AddDeflated(ExtractFileName(DataFile), pointer(Data), length(Data));
-      Check(Count = 3, 'cnt3');
-      AddStored('rep2\ident2.gz', M.Memory, M.Position);
-      Check(Count = 4, 'cnt4');
+      Z.ForceZip64 := zip64;
+      Z.AddDeflated('rep1\one.exe', pointer(Data), length(Data));
+      Check(Z.Count = 1, 'cnt1');
+      Z.AddDeflated('rep2\ident.gz', M.Memory, M.Position);
+      Check(Z.Count = 2, 'cnt2');
+      Z.AddDeflated(DataFile);
+      Check(Z.Count = 3, 'cnt3');
+      Z.AddStored('rep2\ident2.gz', M.Memory, M.Position);
+      Check(Z.Count = 4, 'cnt4');
+      Check(Z.NeedZip64 = zip64);
     finally
-      Free;
+      Z.Free;
     end;
   end;
 
 var
   i: integer;
 begin
-  FN := WorkDir + 'write.zip';
-  Prepare(TZipWrite.Create(FN));
-  test(TZipRead.Create(FN), 4);
-  S := TRawByteStringStream.Create;
-  try
-    Prepare(TZipWriteToStream.Create(S));
-    test(TZipRead.Create(pointer(S.DataString), length(S.DataString)), 4);
-  finally
-    S.Free;
+  for zip64 := false to true do
+  begin
+    FN := WorkDir + 'write';
+    if zip64 then
+      FN := FN + '64.zip'
+    else
+      FN := FN + '.zip';
+    Prepare(TZipWrite.Create(FN));
+    test(TZipRead.Create(FN), 4);
+    S := TRawByteStringStream.Create;
+    try
+      Prepare(TZipWrite.Create(S));
+      //FileFromString(S.DataString, FN + 'mem');
+      test(TZipRead.Create(pointer(S.DataString), length(S.DataString)), 4);
+    finally
+      S.Free;
+    end;
+    with TZipWrite.CreateFrom(FN) do
+    try
+      Check(Count = 4, 'two4');
+      AddDeflated('rep1\two.exe', pointer(Data), length(Data));
+      Check(Count = 5, 'two5');
+    finally
+      Free;
+    end;
+    test(TZipRead.Create(FN), 5);
+    DeleteFile(FN);
+    FN2 := WorkDir + 'json';
+    if zip64 then
+      FN2 := FN2 + '64.zip'
+    else
+      FN2 := FN2 + '.zip';
+    with TZipWrite.Create(FN2) do
+    try
+      AddFolder(WorkDir, '*.json');
+      Check(Count > 2);
+      for i := 0 to Count - 1 do
+        Check(SameText(ExtractFileExt(Ansi7ToString(Entry[i].intName)), '.json'), 'json');
+    finally
+      Free;
+    end;
+    DeleteFile(FN2);
   end;
-  with TZipWrite.CreateFrom(FN) do
-  try
-    Check(Count = 4, 'two4');
-    AddDeflated('rep1\two.exe', pointer(Data), length(Data));
-    Check(Count = 5, 'two5');
-  finally
-    Free;
-  end;
-  test(TZipRead.Create(FN), 5);
-  DeleteFile(FN);
-  FN2 := WorkDir + 'json.zip';
-  with TZipWrite.Create(FN2) do
-  try
-    AddFolder(WorkDir, '*.json');
-    Check(Count > 2);
-    for i := 0 to Count - 1 do
-      Check(SameText(ExtractFileExt(Ansi7ToString(Entry[i].intName)), '.json'), 'json');
-  finally
-    Free;
-  end;
-  DeleteFile(FN2);
 end;
 
 function Spaces(n: integer): RawUtf8;

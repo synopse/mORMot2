@@ -14193,7 +14193,7 @@ const
     '<manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>' +
     '</manifest:manifest>';
 var
-  Zip: TZipWriteToStream;
+  Zip: TZipWrite;
   Dest: TRawByteStringStream;
   content: RawUtf8;
   W: TTextWriter;
@@ -14201,7 +14201,7 @@ var
 begin
   Dest := TRawByteStringStream.Create;
   try
-    Zip := TZipWriteToStream.Create(Dest);
+    Zip := TZipWrite.Create(Dest);
     try
       Zip.AddStored('mimetype', pointer(ODSmimetype), length(ODSmimetype));
       Zip.AddDeflated('styles.xml', pointer(ODSstyles), length(ODSstyles));

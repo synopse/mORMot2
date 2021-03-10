@@ -702,8 +702,8 @@ procedure TTestCoreCrypto._JWT;
   begin
     t := one.Compute(['http://example.com/is_root', true], 'joe');
     check(t <> '');
-    check(TJwtAbstract.VerifyPayload(t, '', 'joe', '', @exp) = jwtValid);
-    check(one.VerifyPayload(t, '', 'joe', '', @exp) = jwtValid);
+    check(TJwtAbstract.VerifyPayload(t, '', '', 'joe', '', @exp) = jwtValid);
+    check(one.VerifyPayload(t, '', '', 'joe', '', @exp) = jwtValid);
     check(one.CacheTimeoutSeconds = 0);
     one.Options := one.Options + [joHeaderParse];
     one.Verify(t, jwt);
