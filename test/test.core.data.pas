@@ -4642,6 +4642,15 @@ begin
       Free;
     end;
     test(TZipRead.Create(FN), 5);
+    with TZipWrite.CreateFrom(FN, 'rep1\two.exe') do
+    try
+      Check(Count = 4, 'last4');
+      AddDeflated('rep1\two.exe', pointer(Data), length(Data));
+      Check(Count = 5, 'last5');
+    finally
+      Free;
+    end;
+    test(TZipRead.Create(FN), 5);
     DeleteFile(FN);
     FN2 := WorkDir + 'json';
     if zip64 then

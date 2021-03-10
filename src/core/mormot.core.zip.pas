@@ -176,6 +176,9 @@ type
     /// retrieve our custom proprietary algorithm used
     function GetAlgoID: integer;
       {$ifdef HASINLINE}inline;{$endif}
+    /// check if neededVersion was created from ZIP_VERSION[{zip64=}true]
+    function IsZip64: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   //// extra file information structure, as used in zip64 file format
@@ -197,6 +200,7 @@ type
   /// information returned by RetrieveFileInfo()
   TFileInfoFull = record
     /// standard zip file information
+    // - if f32.IsZip64 is true, f64 has been populated
     f32: TFileInfo;
     /// zip64 extended information
     // - those zzipSize/zfullSize fields are to be taken into consideration
@@ -225,9 +229,6 @@ type
     /// check if extFileAttr contains the folder flag (bit 4)
     function IsFolder: boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    /// check if madeBy = ZIP_VERSION[{zip64=}true]
-    function IsZip64: boolean;
-      {$ifdef FPC}inline;{$endif}
     /// initialize the signature/madeby/fileinfo field information
     procedure SetVersion(NeedZip64: boolean);
   end;
@@ -261,7 +262,7 @@ type
     totalFiles: word;
     /// sizeOf(TFileHeaders + names)
     headerSize: cardinal;
-    /// 32-bit offset to the first TFileHeader
+    /// 32-bit offset to the central directory, i.e. the first TFileHeader
     headerOffset: cardinal;
     /// 0
     commentLen: word;
@@ -289,7 +290,7 @@ type
     totalFiles: QWord;
     /// sizeOf(TFileHeaders + names)
     headerSize: QWord;
-    /// 64-bit offset to the first TFileHeader
+    /// 64-bit offset to the central directory, i.e. the first TFileHeader
     headerOffset: Qword;
   end;
   PLastHeader64 = ^TLastHeader64;
@@ -301,7 +302,7 @@ type
     signature: cardinal;
     /// 0
     thisDisk: cardinal;
-    /// 64-bit offset to the first TLastHeader64
+    /// 64-bit offset to the TLastHeader64
     headerOffset: QWord;
     /// 1
     totalDisks: cardinal;
@@ -311,8 +312,8 @@ type
 {$A+}
 
 type
-  /// stores an entry of a file inside a .zip archive
-  TZipEntry = record
+  /// used internally by TZipRead to store the zip entries
+  TZipReadEntry = record
     /// the information of this file, as stored at the end of the .zip archive
     // - may differ from infoLocal^ content, depending of the zipper tool used
     dir: PFileHeader;
@@ -329,17 +330,18 @@ type
     // - converted from DOS/OEM or UTF-8 into generic (Unicode) string
     zipName: TFileName;
   end;
-  PZipEntry = ^TZipEntry;
+  PZipReadEntry = ^TZipReadEntry;
 
   /// read-only access to a .zip archive file
   // - can open directly a specified .zip file (will be memory mapped for fast access)
   // - can open a .zip archive file content from a resource (embedded in the executable)
   // - can open a .zip archive file content from memory
+  // - ZIP64 support of huge zip requires a 64-bit system due to memory mapping
   TZipRead = class
   private
     fMap: TMemoryMap;
-    fFirstFileHeader: PFileHeader;
-    fReadOffset: QWord;
+    fCentralDirectoryFirstFile: PFileHeader;
+    fCentralDirectoryOffset: PtrUInt;
     fResource: TExecutableResource;
     fFileName: TFileName;
     function UnZipStream(aIndex: integer; const aInfo: TFileInfoFull;
@@ -348,7 +350,7 @@ type
     /// the number of files inside a .zip archive
     Count: integer;
     /// the files inside the .zip archive
-    Entry: array of TZipEntry;
+    Entry: array of TZipReadEntry;
 
     /// open a .zip archive file as Read Only
     constructor Create(const aFileName: TFileName; ZipStartOffset: QWord = 0;
@@ -392,7 +394,7 @@ type
     function RetrieveFileInfo(Index: integer; out Info: TFileInfoFull): boolean;
   end;
 
-  /// used internally by TZipWrite/TZipWriteAbstract to store the zip entries
+  /// used internally by TZipWrite to store the zip entries
   TZipWriteEntry = record
     /// the file name, as stored in the .zip internal directory
     // - may be Ansi or UTF-8 if zweUtf8name flag is set
@@ -440,8 +442,13 @@ type
     // - a new .zip file content is prepared
     constructor Create(aDest: THandle; const aDestFileName: TFileName = ''); overload;
     /// open an existing .zip archive, ready to add some new files
-    // - dummy is not used, but only present for C++ Builder proper compilation
-    constructor CreateFrom(const aFileName: TFileName; dummy: integer = 0);
+    // - if LastZipNameToIgnore is set and match the last file in the archive,
+    // it won't be added to Entry[]/Count list, so could be replaced in-place
+    // with no data moved whatsoever (useful e.g. to update some metadata)
+    // - Dest stream is positioned next after the existing data (possibly
+    // ignoring LastZipNameToIgnore), ready to call AddDeflated/AddStored
+    constructor CreateFrom(const aFileName: TFileName;
+      const LastZipNameToIgnore: TFileName = '');
     /// write trailer and close destination file, then release associated memory
     procedure FinalFlush;
     /// flush pending content, then release associated memory
@@ -475,7 +482,7 @@ type
       const Mask: TFileName = FILES_ALL; Recursive: boolean = true;
       CompressLevel: integer = 6);
     /// add a file from an already compressed zip entry
-    procedure AddFromZip(const ZipEntry: TZipEntry);
+    procedure AddFromZip(const ZipEntry: TZipReadEntry);
     /// append a file content into the destination file
     // - useful to add the initial Setup.exe file, e.g.
     procedure Append(const Content: RawByteString);
@@ -485,6 +492,9 @@ type
     /// set to true when the archive needs the 64-bit extension
     property NeedZip64: boolean
       read fNeedZip64;
+    /// low-level access to the TStream used to write the .zip content
+    property Dest: TStream
+      read fDest;
   end;
 
 
@@ -551,7 +561,7 @@ const
 { TSynZipCompressor }
 
 constructor TSynZipCompressor.Create(outStream: TStream; CompressionLevel: integer;
-  Format: TSynZipCompressorFormat = szcfRaw);
+  Format: TSynZipCompressorFormat);
 begin
   fDestStream := outStream;
   fFormat := Format;
@@ -924,11 +934,6 @@ begin
   result := extFileAttr and $00000010 <> 0;
 end;
 
-function TFileHeader.IsZip64: boolean;
-begin
-  result := madeBy = ZIP_VERSION[{zip64=}true];
-end;
-
 procedure TFileHeader.SetVersion(NeedZip64: boolean);
 begin
   signature := ENTRY_SIGNATURE_INC;
@@ -983,6 +988,11 @@ end;
 procedure TFileInfo.UnSetUtf8FileName;
 begin
   flags := flags and not (1 shl 11);
+end;
+
+function TFileInfo.IsZip64: boolean;
+begin
+  result := ToByte(neededVersion) >= 45; // ignore OS flag from ZIP_VERSION[]
 end;
 
 function Is7BitAnsi(P: PChar): boolean;
@@ -1271,7 +1281,7 @@ begin
   RecursiveAdd(IncludeTrailingPathDelimiter(FolderName), '');
 end;
 
-procedure TZipWrite.AddFromZip(const ZipEntry: TZipEntry);
+procedure TZipWrite.AddFromZip(const ZipEntry: TZipReadEntry);
 begin
   if self <> nil then
     with LastEntry^ do
@@ -1280,6 +1290,11 @@ begin
       if ZipEntry.dir64 = nil then
       begin
         // as expected by WriteHeader()
+        if (h32.fileInfo.zfullSize = ZIP32_MAXSIZE) or
+           (h32.fileInfo.zzipSize = ZIP32_MAXSIZE) or
+           (h32.fileInfo.flags and FLAG_DATADESCRIPTOR <> 0) then
+          raise ESynZip.CreateFmt(
+            'TZipWrite.AddFromZip failed on %', [ZipEntry.zipName]);
         h64.zfullSize := h32.fileInfo.zfullSize;
         h64.zzipSize := h32.fileInfo.zzipSize;
       end
@@ -1321,6 +1336,7 @@ begin
       inc(lh64.headerSize, h32.fileInfo.nameLen);
       if h32.fileInfo.extraLen <> 0 then
       begin
+        // zip64 directory header contains an additional 64-bit offset
         inc(h32.fileInfo.extraLen, SizeOf(h64.offset));
         inc(h64.size, SizeOf(h64.offset));
         inc(lh64.headerSize, SizeOf(h64));
@@ -1389,11 +1405,14 @@ begin
     fDest.Free;
 end;
 
-constructor TZipWrite.CreateFrom(const aFileName: TFileName; dummy: integer);
+constructor TZipWrite.CreateFrom(
+  const aFileName, LastZipNameToIgnore: TFileName);
 var
   R: TZipRead;
   h: THandle;
-  i: PtrInt;
+  s: PZipReadEntry;
+  d: PZipWriteEntry;
+  writepos: Int64;
   info: TFileInfoFull;
 begin
   h := FileOpen(aFileName, fmOpenReadWrite or fmShareDenyNone);
@@ -1407,31 +1426,42 @@ begin
   Create(h, aFileName);
   if R <> nil then
   try
-    Count := R.Count;
-    SetLength(Entry, Count + 10);
-    for i := 0 to Count - 1 do
-      with Entry[i], R.Entry[i] do
+    SetLength(Entry, R.Count + 10);
+    writepos := R.fCentralDirectoryOffset; // where to add new files
+    s := pointer(R.Entry);
+    d := pointer(Entry);
+    while Count < R.Count do
+    begin
+      if (LastZipNameToIgnore <> '') and
+         (Count = R.Count - 1) and
+         (s^.zipName = LastZipNameToIgnore) then
       begin
-        if not R.RetrieveFileInfo(i, info) then
-          raise ESynZip.CreateFmt('TZipWrite.CreateFrom(%s) failed on %s',
-            [aFileName, zipName]);
-        h64 := info.f64;
-        h32.SetVersion(h64.zip64id = ZIP64_EXTRA_ID);
-        h32.fileInfo := info.f32;
-        h64.offset := PtrUInt(local) - PtrUInt(R.Entry[0].local);
-        if h64.zip64id = 0 then
-          h32.localHeadOff := h64.offset
-        else
-        begin
-          // zip64 input
-          assert(h32.fileInfo.extraLen = SizeOf(h64));
-          dec(h32.fileInfo.extraLen, SizeOf(h64.offset));
-          dec(h64.size, SizeOf(h64.offset));
-        end;
-        SetString(intName, storedName, h32.fileInfo.nameLen);
+        writepos := PAnsiChar(s^.local) - R.fMap.Buffer; // overwrite last file
+        break; // ignore this last file
       end;
-    // rewind to the first file
-    FileSeek64(h, R.fReadOffset, soFromBeginning);
+      if not R.RetrieveFileInfo(Count, info) then
+        raise ESynZip.CreateFmt('TZipWrite.CreateFrom(%s) failed on %s',
+          [aFileName, s^.zipName]);
+      d^.h64 := info.f64;
+      d^.h32.SetVersion(info.f32.IsZip64);
+      d^.h32.fileInfo := info.f32;
+      d^.h64.offset := PtrUInt(s^.local) - PtrUInt(R.Entry[0].local);
+      if d^.h64.zip64id = 0 then
+        d^.h32.localHeadOff := d^.h64.offset
+      else
+      begin
+        // zip64 input
+        assert(d^.h32.fileInfo.extraLen = SizeOf(d^.h64));
+        dec(d^.h32.fileInfo.extraLen, SizeOf(d^.h64.offset));
+        dec(d^.h64.size, SizeOf(d^.h64.offset));
+      end;
+      SetString(d^.intName, s^.storedName, d^.h32.fileInfo.nameLen);
+      inc(Count);
+      inc(s);
+      inc(d);
+    end;
+    // rewind to the position fitted for new files appending
+    FileSeek64(h, writepos, soFromBeginning);
   finally
     R.Free;
   end;
@@ -1446,7 +1476,7 @@ var
   lh64: TLastHeader64;
   loc64: PLocator64;
   h: PFileHeader;
-  e: PZipEntry;
+  e: PZipReadEntry;
   i: PtrInt;
   isascii7: boolean;
   P: PAnsiChar;
@@ -1491,12 +1521,12 @@ begin
       lh64.headerOffset := lh^.headerOffset;
     end;
     SetLength(Entry, lh64.totalFiles); // fill Entry[] with the Zip headers
-    fReadOffset := lh64.headerOffset;
-    if fReadOffset >= Size then
+    fCentralDirectoryOffset := lh64.headerOffset;
+    if fCentralDirectoryOffset >= Size then
       raise ESynZip.Create('TZipRead: headerOffset overflow');
-    fFirstFileHeader := @BufZip[fReadOffset];
+    fCentralDirectoryFirstFile := @BufZip[fCentralDirectoryOffset];
     e := pointer(Entry);
-    h := fFirstFileHeader;
+    h := fCentralDirectoryFirstFile;
     for i := 1 to lh64.totalFiles do
     begin
       if (h^.signature + 1 <> ENTRY_SIGNATURE_INC) or
@@ -1533,7 +1563,8 @@ begin
          (h^.fileInfo.zzipSize = ZIP32_MAXSIZE) then
       begin
         // zip64 format: retrieve TFileInfoExtra64
-        if h^.fileInfo.extraLen < SizeOf(TFileInfoExtra64) then
+        if (h^.fileInfo.extraLen < SizeOf(TFileInfoExtra64)) or
+           not h^.fileInfo.IsZip64 then
           raise ESynZip.CreateFmt(
             'TZipRead: zip64 format error for %s', [e^.zipName]);
         e^.dir64 := pointer(h);
@@ -1644,14 +1675,14 @@ function TZipRead.RetrieveFileInfo(Index: integer;
   out Info: TFileInfoFull): boolean;
 var
   desc: ^TDataDescriptor;
-  e: PZipEntry;
+  e: PZipReadEntry;
   PDataStart: PtrUInt;
 begin
   result := false;
   if (self = nil) or
      (cardinal(Index) >= cardinal(Count)) then
     exit;
-  // try to get information from directory
+  // try to get information from central directory
   e := @Entry[Index];
   Info.f32 := e^.dir^.fileInfo;
   FillCharFast(Info.f64, SizeOf(Info.f64), 0);
@@ -1672,27 +1703,22 @@ begin
   end;
   // search manually the "data descriptor" from the binary local data
   if Index < Count - 2 then
-    desc := pointer(Entry[Index + 1].local)
+    desc := pointer(Entry[Index + 1].local) // search backward from next file
   else
-    desc := pointer(fFirstFileHeader);
+    desc := pointer(fCentralDirectoryFirstFile); // search from central dir
   dec(desc);
   PDataStart := PtrUInt(e^.local^.Data);
-  repeat
+  while PtrUInt(desc) > PDataStart do
     // same pattern than ReadLocalItemDescriptor() in 7-Zip's ZipIn.cpp
     // but here, search is done backwards (much faster than 7-Zip algorithm)
-    if desc^.signature <> SIGNATURE_DATADESCRIPTOR then
-      if PtrUInt(desc) > PDataStart then
-        dec(PByte(desc))
-      else
-        break
-    else if desc^.zipSize = PtrUInt(desc) - PDataStart then
+    if (desc^.signature = SIGNATURE_DATADESCRIPTOR) and
+       (desc^.zipSize = PtrUInt(desc) - PDataStart) then
     begin
-      if (desc^.zipSize = 0) or
-         (desc^.fullSize = 0) or
+      if (desc^.fullSize = 0) or
          (desc^.zipSize = ZIP32_MAXSIZE) or
          (desc^.fullSize = ZIP32_MAXSIZE) then
-        // we expect 32-bit sizes to be available (no 64-bit descriptor yet)
-        break;
+        // we expect 32-bit sizes to be available
+        exit;
       Info.f32.zcrc32 := desc^.crc32;
       Info.f64.zzipSize := desc^.zipSize;
       Info.f64.zfullSize := desc^.fullSize;
@@ -1700,10 +1726,9 @@ begin
       Info.f64.zfullSize := desc^.fullSize;
       result := true;
       exit;
-    end;
-    dec(PByte(desc));
-  until PtrUInt(desc) = PDataStart;
-  result := false; // data descriptor block not found
+    end
+    else
+      dec(PByte(desc));
 end;
 
 function TZipRead.UnZip(aIndex: integer): RawByteString;

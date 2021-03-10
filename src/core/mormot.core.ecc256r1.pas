@@ -11,7 +11,7 @@ unit mormot.core.ecc256r1;
     - Middle-Level Certificate-based Public Key Cryptography
 
    Pascal and optimized gcc static binaries are included.
-   If mormot.core.crypto.openssl.RegisterOpenSsl is called, use faster OpenSSL.
+   If mormot.core.crypto.openssl.RegisterOpenSsl is called, uses faster OpenSSL.
 
   *****************************************************************************
 
@@ -108,7 +108,8 @@ type
 var
   /// create a public/private key pair
   // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
-  // - directly low-level access to the statically linked easy-ecc library function
+  // - directly low-level access to the statically linked easy-ecc library
+  // function, or our pure-pascal version, or OpenSSL wrappers if available
   // - returns true if the key pair was generated successfully in pub/priv
   // - returns false if an error occurred
   // - this function is thread-safe and does not perform any memory allocation
@@ -116,7 +117,8 @@ var
 
   /// compute a shared secret given your secret key and someone else's public key
   // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
-  // - directly low-level access to the statically linked easy-ecc library function
+  // - directly low-level access to the statically linked easy-ecc library
+  // function, or our pure-pascal version, or OpenSSL wrappers if available
   // - note: it is recommended that you hash the result of Ecc256r1SharedSecret
   // before using it for symmetric encryption or HMAC (via an intermediate KDF)
   // - returns true if the shared secret was generated successfully in secret
@@ -127,7 +129,8 @@ var
 
   /// generate an ECDSA signature for a given hash value
   // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
-  // - directly low-level access to the statically linked easy-ecc library function
+  // - directly low-level access to the statically linked easy-ecc library
+  // function, or our pure-pascal version, or OpenSSL wrappers if available
   // - returns true if the signature was successfully generated in sign
   // - returns false if an error occurred
   // - this function is thread-safe and does not perform any memory allocation
@@ -136,7 +139,8 @@ var
 
   /// verify an ECDSA signature
   // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
-  // - directly low-level access to the statically linked easy-ecc library function
+  // - directly low-level access to the statically linked easy-ecc library
+  // function, or our pure-pascal version, or OpenSSL wrappers if available
   // - returns true if the supplied signature is valid
   // - returns false if an error occurred
   // - this function is thread-safe and does not perform any memory allocation
