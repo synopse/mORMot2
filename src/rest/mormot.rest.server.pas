@@ -5967,8 +5967,8 @@ begin
     if rec.Gran = mugHour then
       fComment := rec.Comment;
     if rec.Process <> fProcessID then
-      fLog.SynLog.Log(sllWarning, '%.LoadDB(%,%) received Process=%, expected %',
-        [ClassType, ID, ToText(Gran)^, rec.Process, fProcessID]);
+      fLog.SynLog.Log(sllWarning, 'LoadDB(%,%) received Process=%, expected %',
+        [ID, ToText(Gran)^, rec.Process, fProcessID], self);
     result := true;
   end
   else

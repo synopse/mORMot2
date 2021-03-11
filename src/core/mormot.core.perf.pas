@@ -2173,8 +2173,8 @@ begin
   _Safe(fValues[Gran]).SortByName;
   ID.Truncate(Gran);
   if not SaveDB(ID.Value, fValues[Gran], Gran) then
-    fLog.SynLog.Log(sllWarning, '%.Save(ID=%=%,%) failed',
-      [ClassType, ID.Value, ID.Text(true), ToText(Gran)^]);
+    fLog.SynLog.Log(sllWarning, 'Save(ID=%=%,%) failed',
+      [ID.Value, ID.Text(true), ToText(Gran)^], self);
 end;
 
 procedure TSynMonitorUsage.LoadTrack(var Track: TSynMonitorUsageTrack);

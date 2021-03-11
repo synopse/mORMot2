@@ -1557,8 +1557,8 @@ begin
   if (self = nil) or
      (fFakeCallback = nil) then
     exit;
-  fFakeCallback.fLogClass.Add.Log(sllDebug, '%.Redirect: % % using %',
-    [ClassType, NAM[aSubscribe], fFakeCallback.Factory.InterfaceName,
+  fFakeCallback.fLogClass.Add.Log(sllDebug, 'Redirect: % % using %',
+    [NAM[aSubscribe], fFakeCallback.Factory.InterfaceName,
      ObjectFromInterface(aCallback)], self);
   fFakeCallback.Factory.CheckMethodIndexes(aMethodsNames, true, new.methods);
   new.instance := aCallback;
@@ -1676,8 +1676,8 @@ begin
 end;
 
 function TInterfacedObjectMulti.FakeInvoke(const aMethod: TInterfaceMethod;
-  const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
-  aServiceCustomAnswer: PServiceCustomAnswer): boolean;
+  const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8;
+  aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 var
   i: Ptrint;
   exec: TInterfaceMethodExecute;
@@ -2735,8 +2735,8 @@ begin
 end;
 
 function TInterfacedObjectAsync.FakeInvoke(const aMethod: TInterfaceMethod;
-  const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
-  aServiceCustomAnswer: PServiceCustomAnswer): boolean;
+  const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8;
+  aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 var
   msg: RawUtf8;
   call: TInterfacedObjectAsyncCall;
