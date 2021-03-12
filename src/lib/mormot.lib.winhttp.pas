@@ -61,15 +61,11 @@ type
   {$endif UNICODE}
 
   TOverlapped = Windows.TOverlapped;
-
   ULARGE_INTEGER = Windows.ULARGE_INTEGER;
 
   HTTP_OPAQUE_ID = ULONGLONG;
-
   HTTP_REQUEST_ID = HTTP_OPAQUE_ID;
-
   HTTP_URL_GROUP_ID = HTTP_OPAQUE_ID;
-
   HTTP_SERVER_SESSION_ID = HTTP_OPAQUE_ID;
 
   /// http.sys API 2.0 logging file supported layouts
@@ -1199,15 +1195,20 @@ const
   HTTP_QUERY_CONTENT_ENCODING = WinINet.HTTP_QUERY_CONTENT_ENCODING;
   HTTP_QUERY_ACCEPT_ENCODING = WinINet.HTTP_QUERY_ACCEPT_ENCODING;
   HTTP_QUERY_CONTENT_LENGTH = WinINet.HTTP_QUERY_CONTENT_LENGTH;
+
   ERROR_INVALID_HANDLE = Windows.ERROR_INVALID_HANDLE;
   ERROR_INSUFFICIENT_BUFFER = Windows.ERROR_INSUFFICIENT_BUFFER;
 
+  ERROR_WINHTTP_AUTODETECTION_FAILED = 12180;
+  
 const
   winhttpdll = 'winhttp.dll';
+
   WINHTTP_ACCESS_TYPE_DEFAULT_PROXY = 0;
   WINHTTP_ACCESS_TYPE_NO_PROXY = 1;
   WINHTTP_ACCESS_TYPE_NAMED_PROXY = 3;
   WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY = 4; // Windows 8.1 and newer
+
   WINHTTP_FLAG_BYPASS_PROXY_CACHE = $00000100; // add "pragma: no-cache" request header
   WINHTTP_FLAG_REFRESH = WINHTTP_FLAG_BYPASS_PROXY_CACHE;
   WINHTTP_FLAG_SECURE = $00800000; // use SSL if applicable (HTTPS)
@@ -1333,6 +1334,14 @@ const
   WINHTTP_AUTH_SCHEME_DIGEST = $00000008;
   WINHTTP_AUTH_SCHEME_NEGOTIATE = $00000010;
 
+  WINHTTP_AUTOPROXY_AUTO_DETECT = $00000001;
+  WINHTTP_AUTOPROXY_CONFIG_URL = $00000002;
+  WINHTTP_AUTO_DETECT_TYPE_DHCP = $00000001;
+  WINHTTP_AUTO_DETECT_TYPE_DNS_A = $00000002;
+
+  WINHTTP_NO_PROXY_NAME = nil;
+  WINHTTP_NO_PROXY_BYPASS = nil;
+
 type
   /// low-level API reference to a WebSocket session
   WEB_SOCKET_HANDLE = Pointer;
@@ -1354,6 +1363,31 @@ type
     dwStatusInformationLength: DWORD); stdcall;
 
   PWINHTTP_STATUS_CALLBACK = ^WINHTTP_STATUS_CALLBACK;
+
+  WINHTTP_AUTOPROXY_OPTIONS = record
+    dwFlags: DWORD;
+    dwAutoDetectFlags: DWORD;
+    lpszAutoConfigUrl: PWideChar;
+    lpvReserved: Pointer;
+    dwReserved: DWORD;
+    fAutoLogonIfChallenged: BOOL;
+  end;
+  PWINHTTP_AUTOPROXY_OPTIONS = ^WINHTTP_AUTOPROXY_OPTIONS;
+
+  WINHTTP_PROXY_INFO = record
+    dwAccessType: DWORD;          // see WINHTTP_ACCESS_* types
+    lpszProxy: PWideChar;         // proxy server list
+    lpszProxyBypass: PWideChar;   // proxy bypass list
+  end;
+  PWINHTTP_PROXY_INFO = ^WINHTTP_PROXY_INFO;
+
+  WINHTTP_CURRENT_USER_IE_PROXY_CONFIG = record
+    fAutoDetect: BOOL;
+    lpszAutoConfigUrl: PWideChar;
+    lpszProxy: PWideChar;
+    lpszProxyBypass: PWideChar;
+  end;
+  PWINHTTP_CURRENT_USER_IE_PROXY_CONFIG = ^WINHTTP_CURRENT_USER_IE_PROXY_CONFIG;
 
   /// direct late-binding access to the WinHttp API
   // - note: WebSocket* API calls require Windows 8 and later
@@ -1394,6 +1428,16 @@ type
     /// Returns the amount of data, in bytes, available to be read with WinHttpReadData.
     QueryDataAvailable: function(hRequest: HINTERNET;
       var lpdwNumberOfBytesAvailable: DWORD): BOOL; stdcall;
+    /// Retrieves some options about the current connection.
+    QueryOption: function(hInet: HINTERNET; dwOption: DWORD;
+      lpBuffer: Pointer; var lpdwBufferLength: DWORD): BOOL; stdcall;
+    /// Retrieves the low-level Proxy information for a given URI.
+    GetProxyForUrl: function(hSession: HINTERNET; lpcwszUrl: LPCWSTR;
+      pAutoProxyOptions: PWINHTTP_AUTOPROXY_OPTIONS;
+      var pProxyInfo: WINHTTP_PROXY_INFO): BOOL; stdcall;
+    // Retrievs the Internet Explorer Proxy information.
+    GetIEProxyConfigForCurrentUser: function(
+      var pProxyInfo: WINHTTP_CURRENT_USER_IE_PROXY_CONFIG): BOOL; stdcall;
     /// Reads data from a handle opened by the WinHttpOpenRequest function.
     ReadData: function(hRequest: HINTERNET; lpBuffer: Pointer;
       dwNumberOfBytesToRead: DWORD; var lpdwNumberOfBytesRead: DWORD): BOOL; stdcall;
@@ -1434,10 +1478,14 @@ var
   WinHttpApi: TWinHttpBinding;
 
 type
+  EWinHttp = class(ENetSock);
+  
   TWinHttpApis = (
     hOpen, hSetStatusCallback, hConnect, hOpenRequest, hCloseHandle,
     hAddRequestHeaders, hSendRequest, hReceiveResponse, hQueryHeaders,
-    hQueryDataAvailable, hReadData, hSetTimeouts, hSetOption, hSetCredentials,
+    hQueryDataAvailable, hQueryOption, hGetProxyForUrl,
+    hGetIEProxyConfigForCurrentUser, hReadData,
+    hSetTimeouts, hSetOption, hSetCredentials,
     hWebSocketCompleteUpgrade, hWebSocketClose, hWebSocketQueryCloseStatus,
     hWebSocketSend, hWebSocketReceive, hWriteData);
 
@@ -1449,19 +1497,46 @@ const
     'WinHttpOpen', 'WinHttpSetStatusCallback', 'WinHttpConnect',
     'WinHttpOpenRequest', 'WinHttpCloseHandle', 'WinHttpAddRequestHeaders',
     'WinHttpSendRequest', 'WinHttpReceiveResponse', 'WinHttpQueryHeaders',
-    'WinHttpQueryDataAvailable', 'WinHttpReadData', 'WinHttpSetTimeouts',
+    'WinHttpQueryDataAvailable', 'WinHttpQueryOption', 'WinHttpGetProxyForUrl',
+    'WinHttpGetIEProxyConfigForCurrentUser', 'WinHttpReadData', 'WinHttpSetTimeouts',
     'WinHttpSetOption', 'WinHttpSetCredentials', 'WinHttpWebSocketCompleteUpgrade',
     'WinHttpWebSocketClose', 'WinHttpWebSocketQueryCloseStatus',
     'WinHttpWebSocketSend', 'WinHttpWebSocketReceive', 'WinHttpWriteData');
 
 
 /// low-level thread-safe initialization of the WinHtpp API
-procedure WinHttpApiInitialize;
+// - this unit will try to load winhttp.dll in its initialization section below
+procedure WinHttpApiInitialize(RaiseOnError: boolean = true);
 
 /// a callback raising a EWinHttp on error
 procedure WinHttpSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
   dwInternetStatus: cardinal; lpvStatusInformation: pointer;
   dwStatusInformationLength: cardinal); stdcall;
+
+type
+  /// proxy information as returned by GetProxyInfo()
+  TProxyInfo = record
+    /// the proxy server address and port, e.g. '10.0.0.8:7985'
+    URL: SynUnicode;
+    /// the Bypass rule
+    Bypass: SynUnicode;
+    /// if the Proxy settings were auto-detected by Internet Explorer
+    AutoDetected: Boolean;
+    /// detailed error message, if GetProxyInfo() returned a non 0 error code
+    ErrorMessage: string;
+  end;
+
+/// use WinHttp to retrieve the proxy information needed to access a given URI
+// - it will first try to return the Internet Explorer settings, then
+// try to create a WinHttp client connection, and retrieve the proxy information
+// - will parse any system-defined Proxy Auto-Configuration (PAC) file if needed
+// - returns 0 on success, or an error code on failure - see also ErrorMessage -
+// e.g. ERROR_WINHTTP_AUTODETECTION_FAILED (12180)
+// - note that this call may require a network access, and can be slow: if you
+// can, try to store the proxy information in the settings, and only call it
+// in case of connection failure
+function WinHttpGetProxyInfo(const URL: SynUnicode;
+  out ProxyInfo: TProxyInfo): DWORD;
 
 
 { ******************** websocket.dll Windows API Definitions }
@@ -2063,11 +2138,111 @@ procedure WinHttpSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
 begin
   // in case lpvStatusInformation^=-2147483648 this is attempt to connect to
   // non-https socket wrong port - perhaps must be 443?
-  raise EHttpSocket.CreateFmt('WinHttp security error. Status %d, statusInfo: %d',
+  raise EWinHttp.CreateFmt('WinHttp security error. Status %d, statusInfo: %d',
     [dwInternetStatus, PDWORD(lpvStatusInformation)^]);
 end;
 
-procedure WinHttpApiInitialize;
+function WinHttpGetProxyInfo(const URL: SynUnicode;
+  out ProxyInfo: TProxyInfo): DWORD;
+// see https://stackoverflow.com/a/8961399/458259
+var
+  Session: HINTERNET;
+  AutoDetectProxy: boolean;
+  WinHttpProxyInfo: WINHTTP_PROXY_INFO;
+  AutoProxyOptions: WINHTTP_AUTOPROXY_OPTIONS;
+  IEProxyConfig: WINHTTP_CURRENT_USER_IE_PROXY_CONFIG;
+begin
+  result := 0;
+  ProxyInfo.URL := '';
+  ProxyInfo.Bypass := '';
+  ProxyInfo.ErrorMessage := '';
+  ProxyInfo.AutoDetected := false;
+  FillCharFast(WinHttpProxyInfo, SizeOf(WinHttpProxyInfo), 0);
+  FillCharFast(AutoProxyOptions, SizeOf(AutoProxyOptions), 0);
+  FillCharFast(IEProxyConfig, SizeOf(IEProxyConfig), 0);
+  AutoDetectProxy := false;
+  // check if the Internet Explorer's proxy configuration is
+  // available and if so, check its settings to auto-detect
+  // proxy settings and auto-config script URL options
+  if WinHttpApi.GetIEProxyConfigForCurrentUser(IEProxyConfig) then
+  begin
+    // if the Internet Explorer is configured to auto-detect
+    // proxy settings then we try to detect them later on
+    if IEProxyConfig.fAutoDetect then
+    begin
+      AutoProxyOptions.dwFlags := WINHTTP_AUTOPROXY_AUTO_DETECT;
+      AutoProxyOptions.dwAutoDetectFlags :=
+        WINHTTP_AUTO_DETECT_TYPE_DHCP or
+        WINHTTP_AUTO_DETECT_TYPE_DNS_A;
+      AutoDetectProxy := true;
+    end;
+    // if the Internet Explorer is configured to use the proxy
+    // auto-config script then we try to use it
+    if IEProxyConfig.lpszAutoConfigURL <> '' then
+    begin
+      AutoProxyOptions.dwFlags :=
+        AutoProxyOptions.dwFlags or WINHTTP_AUTOPROXY_CONFIG_URL;
+      AutoProxyOptions.lpszAutoConfigUrl := IEProxyConfig.lpszAutoConfigUrl;
+      AutoDetectProxy := true;
+    end;
+    // if IE doesn't have auto-detect or auto-config set, we are
+    // done here and we can fill the AProxyInfo with the IE settings
+    if not AutoDetectProxy then
+    begin
+      ProxyInfo.URL := IEProxyConfig.lpszProxy;
+      ProxyInfo.Bypass := IEProxyConfig.lpszProxyBypass;
+      ProxyInfo.AutoDetected := false;
+    end;
+  end
+  else
+  begin
+    // if the Internet Explorer's proxy configuration is not
+    // available, then try to auto-detect it
+    AutoProxyOptions.dwFlags := WINHTTP_AUTOPROXY_AUTO_DETECT;
+    AutoProxyOptions.dwAutoDetectFlags :=
+      WINHTTP_AUTO_DETECT_TYPE_DHCP or WINHTTP_AUTO_DETECT_TYPE_DNS_A;
+    AutoDetectProxy := true;
+  end;
+
+  // if the IE proxy settings are not available or IE has
+  // configured auto-config script or auto-detect proxy settings
+  if AutoDetectProxy then
+  begin
+    // create a temporary WinHttp session to allow the WinHTTP
+    // auto-detect proxy settings if possible
+    Session := WinHttpApi.Open(nil, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+      WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    // if the WinHttp session has been created then try to
+    // get the proxy data for the specified URL else we assign
+    // the last error code to the function result
+    if Assigned(Session) then
+    try
+      // get the proxy data for the specified URL with the
+      // auto-proxy options specified, if succeed then we can
+      // fill the ProxyInfo with the retrieved settings else
+      // we assign the last error code to the function result
+      if WinHttpApi.GetProxyForUrl(Session, pointer(URL),
+          @AutoProxyOptions, WinHttpProxyInfo) then
+      begin
+        ProxyInfo.URL := WinHttpProxyInfo.lpszProxy;
+        ProxyInfo.Bypass := WinHttpProxyInfo.lpszProxyBypass;
+        ProxyInfo.AutoDetected := True;
+      end
+      else
+        result := GetLastError;
+    finally
+      // close the temporary WinHttp session
+      WinHttpApi.CloseHandle(Session);
+    end
+    else
+      result := GetLastError;
+  end;
+  if result <> 0 then
+    ProxyInfo.ErrorMessage := SysErrorMessagePerModule(result, winhttpdll);
+end;
+
+
+procedure WinHttpApiInitialize(RaiseOnError: boolean);
 var
   api: TWinHttpApis;
   P: PPointer;
@@ -2079,9 +2254,12 @@ begin
     if WinHttpApi.LibraryHandle <> 0 then
       exit; // thread-safe test
     WinHttpApi.LibraryHandle := SafeLoadLibrary(winhttpdll);
-    WinHttpApi.WebSocketEnabled := true; // WebSocketEnabled if all functions are available
     if WinHttpApi.LibraryHandle = 0 then
-      raise EHttpSocket.CreateFmt('Unable to load library %s', [winhttpdll]);
+      if RaiseOnError then
+        raise EWinHttp.CreateFmt('Unable to load library %s', [winhttpdll])
+      else
+        exit;
+    WinHttpApi.WebSocketEnabled := true; // set to false on old Windows
     P := @@WinHttpApi.Open;
     for api := low(api) to high(api) do
     begin
@@ -2091,11 +2269,12 @@ begin
         begin
           FreeLibrary(WinHttpApi.LibraryHandle);
           WinHttpApi.LibraryHandle := 0;
-          raise EHttpSocket.CreateFmt('Unable to find %s() export in %s',
-            [WinHttpNames[api], winhttpdll]);
+          if RaiseOnError then
+            raise EWinHttp.CreateFmt('Unable to find %s() export in %s',
+              [WinHttpNames[api], winhttpdll]);
         end
         else
-          // e.g. system older than Windows 8
+          // no WebSockets client e.g. on systems older than Windows 8
           WinHttpApi.WebSocketEnabled := false;
       inc(P);
     end;
@@ -2241,7 +2420,7 @@ end;
 const
   // paranoid check of the API mapping against our internal enumerations
   HTTP_LOG_FIELD_TEST_SUB_STATUS: THttpApiLogFields = [hlfSubStatus];
-
+  
 initialization
   Assert(
     {$ifdef CPU64}
@@ -2268,7 +2447,7 @@ initialization
     (sizeof(THttpHeader) = 4) and
     (integer(HTTP_LOG_FIELD_TEST_SUB_STATUS) = HTTP_LOG_FIELD_SUB_STATUS)
   );
-  WinHttpApiInitialize;
+  WinHttpApiInitialize({RaiseOnError=}false);
 
 {$endif USEWININET}
 
