@@ -1345,8 +1345,8 @@ begin
     tests.Options := options;
     if ParamCount <> 0 then
     begin
-      tests.SaveToFile(paramstr(1)); // DestPath on command line -> export to file
-      {$I-}
+      tests.SaveToFile(paramstr(1)); // export to file if named on command line
+      {$I-} // minimal console output during blind regression tests
       Writeln(tests.Ident, #13#10#13#10' Running tests... please wait');
       {$I+}
     end;

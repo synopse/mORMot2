@@ -837,6 +837,7 @@ type
     /// if the method name is local, i.e. shall not be displayed at Leave()
     MethodNameLocal: (mnAlways, mnEnter, mnLeave, mnEnterOwnMethodName);
   end;
+  PSynLogThreadRecursion = ^TSynLogThreadRecursion;
 
   /// thread-specific internal context used during logging
   // - this structure is a hashed-per-thread variable
@@ -924,6 +925,7 @@ type
     function GetThreadContext: PSynLogThreadContext;
       {$ifdef HASINLINE}inline;{$endif}
     procedure GetThreadContextInternal(id: PtrUInt);
+    function NewRecursion: PSynLogThreadRecursion;
     procedure ThreadContextRehash;
     function Instance: TSynLog;
     function ConsoleEcho(Sender: TBaseWriter; Level: TSynLogInfo;
@@ -1112,6 +1114,14 @@ type
     // be added to the log content (to be used e.g. with '--' for SQL statements)
     procedure LogLines(Level: TSynLogInfo; LinesToLog: PUtf8Char; aInstance: TObject = nil;
       const IgnoreWhenStartWith: PAnsiChar = nil);
+    /// manual low-level TSynLog.Enter execution without the ISynLog
+    // - may be used to log Enter/Leave stack from non-pascal code
+    // - each call to ManualEnter should be followed by a matching ManualLeave
+    // - aMethodName should be a not nil constant text
+    procedure ManualEnter(aMethodName: PUtf8Char; aInstance: TObject = nil);
+    /// manual low-level ISynLog release after TSynLog.Enter execution
+    // - each call to ManualEnter should be followed by a matching ManualLeave
+    procedure ManualLeave;
     /// allow to temporary disable remote logging
     // - to be used within a try ... finally section:
     // ! log.DisableRemoteLog(true);
@@ -3927,6 +3937,22 @@ begin
   result := fThreadContext;
 end;
 
+function TSynLog.NewRecursion: PSynLogThreadRecursion;
+begin
+  with GetThreadContext^ do
+  begin
+    if RecursionCount = RecursionCapacity then
+    begin
+      RecursionCapacity := NextGrow(RecursionCapacity);
+      SetLength(Recursion, RecursionCapacity);
+    end;
+    result := @Recursion[RecursionCount];
+    result^.Caller := 0; // no stack trace by default
+    result^.RefCount := 0;
+    inc(RecursionCount);
+  end;
+end;
+
 procedure TSynLog.LogTrailer(Level: TSynLogInfo);
 begin
   if Level in fFamily.fLevelStackTrace then
@@ -4106,7 +4132,7 @@ begin
             result := RefCount;
           end
         else
-          result := 1; // should never be 0 (mark release of TSynLog instance)
+          result := 1; // should never be 0 (would release TSynLog instance)
     finally
       LeaveCriticalSection(GlobalThreadLock);
     end
@@ -4115,22 +4141,7 @@ begin
     result := 1;
 end;
 
-{$STACKFRAMES ON}
-
-{$ifndef FPC}
-   // FPC has very slow debug info retrieval -> not for Enter/Leave
-  {$ifdef OSWINDOWS}
-    {$ifdef CPU64}
-      {$define USERTLCAPTURESTACKBACKTRACE}
-    {$else}
-      {$define USEASMX86STACKBACKTRACE}
-    {$endif CPU64}
-  {$endif OSWINDOWS}
-{$endif FPC}
-
 function TSynLog._Release: TIntCnt;
-var
-  addr: PtrUInt;
 begin
   if fFamily.Level * [sllEnter, sllLeave] <> [] then
   begin
@@ -4146,22 +4157,6 @@ begin
             begin
               if sllLeave in fFamily.Level then
               begin
-                if MethodName = nil then
-                begin
-                  addr := 0;
-                  {$ifdef USERTLCAPTURESTACKBACKTRACE}
-                  if RtlCaptureStackBackTrace(1, 1, @addr, nil) = 0 then
-                    addr := 0;
-                  {$endif USERTLCAPTURESTACKBACKTRACE}
-                  {$ifdef USEASMX86STACKBACKTRACE}
-                  asm
-                    mov  eax, [ebp + 16] // +4->_IntfClear +16->initial caller
-                    mov  addr, eax
-                  end;
-                  {$endif USEASMX86STACKBACKTRACE}
-                  if addr <> 0 then
-                    Caller := addr {%H-}- 5;
-                end;
                 LogHeader(sllLeave);
                 AddRecursion(RecursionCount - 1, sllLeave);
               end;
@@ -4171,7 +4166,7 @@ begin
           end;
         end
         else
-          result := 1; // should never be 0 (mark release of TSynLog)
+          result := 1; // should never be 0 (would release TSynLog instance)
     finally
       LeaveCriticalSection(GlobalThreadLock);
     end;
@@ -4179,8 +4174,6 @@ begin
   else
     result := 1;
 end;
-
-{$STACKFRAMES OFF}
 
 constructor TSynLog.Create(aFamily: TSynLogFamily);
 begin
@@ -4257,55 +4250,59 @@ begin
   result := E_NOINTERFACE;
 end;
 
-{$STACKFRAMES ON}
+
+{$ifndef FPC}
+  {$STACKFRAMES ON} // we need a stack frame for ebp/RtlCaptureStackBackTrace
+  {$ifdef CPU64}
+    {$define USERTLCAPTURESTACKBACKTRACE}
+  {$else}
+    {$define USEASMX86STACKBACKTRACE}
+  {$endif CPU64}
+{$endif FPC}
 
 class function TSynLog.Enter(aInstance: TObject; aMethodName: PUtf8Char;
   aMethodNameLocal: boolean): ISynLog;
 var
   log: TSynLog;
+  {$ifndef FPC}
   addr: PtrUInt;
+  {$endif FPC}
 begin
   log := Add;
   if (log <> nil) and
      (sllEnter in log.fFamily.fLevel) then
   begin
+    {$ifndef FPC}
+    addr := 0;
+    if aMethodName = nil then
+    begin
+      {$ifdef USERTLCAPTURESTACKBACKTRACE}
+      if RtlCaptureStackBackTrace(1, 1, @addr, nil) = 0 then
+        addr := 0;
+      {$endif USERTLCAPTURESTACKBACKTRACE}
+      {$ifdef USEASMX86STACKBACKTRACE}
+      asm
+        mov  eax, [ebp + 4] // retrieve caller EIP from push ebp; mov ebp,esp
+        mov  addr, eax
+      end;
+      {$endif USEASMX86STACKBACKTRACE}
+      if addr <> 0 then
+        dec(addr, 5);
+    end;
+    {$endif FPC}
     EnterCriticalSection(GlobalThreadLock);
     try
-      with log.GetThreadContext^ do
+      with log.NewRecursion^ do
       begin
-        if RecursionCount = RecursionCapacity then
-        begin
-          RecursionCapacity := NextGrow(RecursionCapacity);
-          SetLength(Recursion, RecursionCapacity);
-        end;
-        addr := 0;
-        if aMethodName = nil then
-        begin
-          {$ifdef USERTLCAPTURESTACKBACKTRACE}
-          if RtlCaptureStackBackTrace(1, 1, @addr, nil) = 0 then
-            addr := 0;
-          {$endif USERTLCAPTURESTACKBACKTRACE}
-          {$ifdef USEASMX86STACKBACKTRACE}
-          asm
-            mov  eax, [ebp + 4]  // retrieve caller EIP from push ebp; mov ebp,esp
-            mov  addr, eax
-          end;
-          {$endif USEASMX86STACKBACKTRACE}
-          if addr <> 0 then
-            dec(addr, 5);
-        end;
-        with Recursion[RecursionCount] do
-        begin
-          Instance := aInstance;
-          MethodName := aMethodName;
-          if aMethodNameLocal then
-            MethodNameLocal := mnEnter
-          else
-            MethodNameLocal := mnAlways;
-          Caller := addr;
-          RefCount := 0;
-        end;
-        inc(RecursionCount);
+        Instance := aInstance;
+        MethodName := aMethodName;
+        if aMethodNameLocal then
+          MethodNameLocal := mnEnter
+        else
+          MethodNameLocal := mnAlways;
+        {$ifndef FPC}
+        Caller := addr;
+        {$endif FPC}
       end;
     finally
       LeaveCriticalSection(GlobalThreadLock);
@@ -4321,30 +4318,21 @@ class function TSynLog.Enter(const TextFmt: RawUtf8; const TextArgs: array of co
   aInstance: TObject): ISynLog;
 var
   log: TSynLog;
+  tmp: pointer;
 begin
   log := Add;
   if (log <> nil) and
      (sllEnter in log.fFamily.fLevel) then
   begin
+    tmp := nil; // avoid GPF on next line
+    FormatUtf8(TextFmt, TextArgs, RawUtf8(tmp)); // compute outside lock
     EnterCriticalSection(GlobalThreadLock);
     try
-      with log.GetThreadContext^ do
+      with log.NewRecursion^ do
       begin
-        if RecursionCount = RecursionCapacity then
-        begin
-          RecursionCapacity := NextGrow(RecursionCapacity);
-          SetLength(Recursion, RecursionCapacity);
-        end;
-        with Recursion[RecursionCount] do
-        begin
-          Instance := aInstance;
-          MethodName := nil; // avoid GPF on next line
-          FormatUtf8(TextFmt, TextArgs, RawUtf8(pointer(MethodName)));
-          MethodNameLocal := mnEnterOwnMethodName;
-          Caller := 0; // No stack trace needed here
-          RefCount := 0;
-        end;
-        inc(RecursionCount);
+        Instance := aInstance;
+        MethodNameLocal := mnEnterOwnMethodName;
+        MethodName := tmp;
       end;
     finally
       LeaveCriticalSection(GlobalThreadLock);
@@ -4352,6 +4340,40 @@ begin
   end;
   // copy to ISynLog interface -> will call TSynLog._AddRef
   result := log;
+end;
+
+procedure TSynLog.ManualEnter(aMethodName: PUtf8Char; aInstance: TObject);
+begin
+  if (self = nil) or
+     (fFamily.fLevel * [sllEnter, sllLeave] = []) then
+    exit;
+  if aMethodName = nil then
+    aMethodName := ' '; // something non void (call stack is irrelevant)
+  EnterCriticalSection(GlobalThreadLock);
+  try
+    with NewRecursion^ do
+    begin
+      // inlined TSynLog.Enter
+      Instance := aInstance;
+      MethodName := aMethodName;
+      MethodNameLocal := mnEnter;
+      // inlined TSynLog._AddRef
+      if sllEnter in fFamily.Level then
+      begin
+        LogHeader(sllEnter);
+        AddRecursion(fThreadContext^.RecursionCount - 1, sllEnter);
+      end;
+      inc(RefCount);
+    end;
+  finally
+    LeaveCriticalSection(GlobalThreadLock);
+  end;
+end;
+
+procedure TSynLog.ManualLeave;
+begin
+  if self <> nil then
+    _Release;
 end;
 
 type
@@ -4576,12 +4598,16 @@ begin
     LogInternalRtti(Level, aName, aTypeInfo, aValue, Instance);
 end;
 
-{$STACKFRAMES ON}
+{$ifndef FPC}
+  {$STACKFRAMES ON} // we need a stack frame for ebp/RtlCaptureStackBackTrace
+{$endif FPC}
 
 procedure TSynLog.Log(Level: TSynLogInfo);
 var
   lasterror: integer;
+  {$ifndef FPC}
   addr: PtrUInt;
+  {$endif FPC}
 begin
   if (self <> nil) and
      (Level in fFamily.fLevel) then
@@ -4596,6 +4622,7 @@ begin
       LogHeader(Level);
       if lasterror <> 0 then
         AddErrorMessage(lasterror);
+      {$ifndef FPC}
       addr := 0;
       {$ifdef USERTLCAPTURESTACKBACKTRACE}
       if RtlCaptureStackBackTrace(1, 1, @addr, nil) = 0 then
@@ -4609,6 +4636,7 @@ begin
       {$endif USEASMX86STACKBACKTRACE}
       if addr <> 0 then
         TDebugFile.Log(fWriter, addr - 5, {notcode=}false, {symbol=}true);
+      {$endif FPC}
       LogTrailer(Level);
     finally
       LeaveCriticalSection(GlobalThreadLock);
@@ -4908,6 +4936,7 @@ begin
     LogFileInit;
   if not (sllEnter in fFamily.Level) and
      (Level in fFamily.fLevelStackTrace) then
+    // to investigate: if no Enter/Leave, then no recursion -> dead code?
     for i := 0 to fThreadContext^.RecursionCount - 1 do
     begin
       fWriter.AddChars(' ', i + 24 - byte(fFamily.HighResolutionTimestamp));
@@ -4918,8 +4947,9 @@ begin
     fWriter.AddInt18ToChars3(fThreadIndex);
   fCurrentLevel := Level;
   fWriter.AddShorter(LOG_LEVEL_TEXT[Level]);
-  fWriter.AddChars(#9, fThreadContext^.RecursionCount - byte(Level in [sllEnter, sllLeave]));
-  case Level of // handle additional text for some special error levels
+  fWriter.AddChars(#9, fThreadContext^.RecursionCount -
+    byte(Level in [sllEnter, sllLeave]));
+  case Level of // handle additional information for some special error levels
     sllMemory:
       AddMemoryStats;
   end;
@@ -5196,13 +5226,14 @@ end;
 
 procedure TSynLog.AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
 begin
-  // at entry, aLevel is sllEnter, sllLeave or sllNone
+  // at entry, aLevel is sllEnter, sllLeave or sllNone (from LogHeaderBegin)
   with fThreadContext^ do
     if cardinal(aIndex) < cardinal(RecursionCount) then
       with Recursion[aIndex] do
       begin
         if aLevel <> sllLeave then
         begin
+          // sllEnter or sllNone
           if Instance <> nil then
             fWriter.AddInstancePointer(Instance, '.', fFamily.WithUnitName,
               fFamily.WithInstancePointer);
@@ -5222,11 +5253,13 @@ begin
               end;
             end;
           end
-          else
+          else if Caller <> 0 then
+            // no method name specified -> try from map/mab symbols
             TDebugFile.Log(fWriter, Caller, {notcode=}false, {symbol=}true)
         end;
         if aLevel <> sllNone then
         begin
+          // sllEnter or sllLeave
           if not fFamily.HighResolutionTimestamp then
           begin
             // no previous TSynLog.LogCurrentTime call
@@ -5238,7 +5271,7 @@ begin
               EnterTimestamp := fCurrentTimestamp;
             sllLeave:
               fWriter.AddMicroSec(fCurrentTimestamp - EnterTimestamp);
-          end; // may be sllNone when called from LogHeaderBegin()
+          end;
         end;
       end;
   fWriterEcho.AddEndOfLine(aLevel);
