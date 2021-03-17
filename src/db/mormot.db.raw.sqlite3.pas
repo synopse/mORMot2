@@ -4010,17 +4010,20 @@ type
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data (no conversion into TEXT, as with
     // TOrmTableDB) - so will work for sftBlob, sftBlobDynArray and sftBlobRecord
+    // - by default, won't write more than 512MB of JSON, to avoid OutOfMemory
     // - returns the number of data rows added to JSON (excluding the headers)
     function Execute(aDB: TSqlite3DB; const aSql: RawUtf8; Json: TStream;
-      Expand: boolean = false): PtrInt; overload;
+      Expand: boolean = false; MaxMemory: PtrUInt = 512 shl 20): PtrInt; overload;
     /// Execute one SQL statement which return the results in JSON format
     // - use internally Execute() above with a TRawByteStringStream, and return a string
     // - BLOB field value is saved as Base64, e.g. '"\uFFF0base64encodedbinary"'
     // - returns the number of data rows added to JSON (excluding the headers)
     // in the integer variable mapped by aResultCount (if any)
+    // - by default, won't write more than 512MB of JSON, to avoid OutOfMemory
     // - if any error occurs, the ESqlite3Exception is handled and '' is returned
     function ExecuteJson(aDB: TSqlite3DB; const aSql: RawUtf8;
-      Expand: boolean = false; aResultCount: PPtrInt = nil): RawUtf8;
+      Expand: boolean = false; aResultCount: PPtrInt = nil;
+      MaxMemory: PtrUInt = 512 shl 20): RawUtf8;
     /// Execute all SQL statements in the aSql UTF-8 encoded string, results will
     // be written as ANSI text in OutFile
     procedure ExecuteDebug(aDB: TSqlite3DB; const aSql: RawUtf8;
@@ -4328,6 +4331,7 @@ type
     fBackupBackgroundLastTime: RawUtf8;
     fBackupBackgroundLastFileName: TFileName;
     fUseCacheSize: integer;
+    fStatementMaxMemory: PtrUInt;
     fLogResultMaximumSize: integer;
     fLog: TSynLogClass;
     /// store TSqlDataBaseSQLFunction instances
@@ -4671,6 +4675,12 @@ type
     // - see @http://www.sqlite.org/c3ref/limit.html
     property Limit[Category: TSqlLimitCategory]: integer
       read GetLimit write SetLimit;
+    /// maximum bytes allowed for FetchAllToJSON/FetchAllToBinary methods
+    // - if a result set exceeds this limit, an ESQLDBException is raised
+    // - default is 512 shl 20, i.e. 512MB which is very high
+    // - avoid unexpected OutOfMemory errors when incorrect statement is run
+    property StatementMaxMemory: PtrUint
+      read fStatementMaxMemory write fStatementMaxMemory;
     /// access to the log class associated with this SQLite3 database engine
     // - can be customized, e.g. by overriden TRestServerDB.SetLogClass()
     property Log: TSynLogClass
@@ -6115,6 +6125,7 @@ begin
       'or run sqlite3 := TSqlite3LibraryDynamic.Create(..)', [self]);
   fLog := SQLite3Log; // leave fLog=nil if no Logging wanted
   fLogResultMaximumSize := 512;
+  fStatementMaxMemory := 512 shl 20;
   if SysUtils.Trim(aFileName) = '' then
     raise ESqlite3Exception.CreateUtf8('%.Create('''')', [self]);
   if aOpenV2Flags = 0 then
@@ -6356,7 +6367,7 @@ begin
   if result = '' then
   // only Execute the DB request if not got from cache
   try
-    result := R.ExecuteJson(DB, aSql, Expand, @Count);
+    result := R.ExecuteJson(DB, aSql, Expand, @Count, StatementMaxMemory);
     if aResultCount <> nil then
       aResultCount^ := Count;
   finally
@@ -7368,7 +7379,7 @@ begin
 end;
 
 function TSqlRequest.Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
-  Json: TStream; Expand: boolean): PtrInt;
+  Json: TStream; Expand: boolean; MaxMemory: PtrUInt): PtrInt;
 // expand=true: [ {"col1":val11,"col2":"val12"},{"col1":val21,... ]
 // expand=false: { "FieldCount":2,"Values":["col1","col2",val11,"val12",val21,..] }
 var
@@ -7399,9 +7410,13 @@ begin
       case Step of
         SQLITE_ROW:
           begin
-            inc(result);
             FieldsToJson(W);
             W.AddComma;
+            inc(result);
+            if W.WrittenBytes > MaxMemory then // TextLength is slower
+              raise ESqlite3Exception.CreateUTF8(
+                'TSqlRequest.Execute: output overflow after % for [%]',
+                [KB(MaxMemory), aSql]);
           end;
         SQLITE_DONE:
           break;
@@ -7410,7 +7425,7 @@ begin
     if (result = 0) and
        W.Expand then
     begin
-      // we want the field names at least, even with no data: we allow RowCount=0
+      // we want the field names at least, even with no data: allow RowCount=0
       W.Expand := false; //  {"FieldCount":2,"Values":["col1","col2"]}
       W.CancelAll;
       for i := 0 to FieldCount - 1 do
@@ -7461,7 +7476,7 @@ end;
 {$I+}
 
 function TSqlRequest.ExecuteJson(aDB: TSqlite3DB; const aSql: RawUtf8;
-  Expand: boolean; aResultCount: PPtrInt): RawUtf8;
+  Expand: boolean; aResultCount: PPtrInt; MaxMemory: PtrUInt): RawUtf8;
 var
   Stream: TRawByteStringStream;
   RowCount: PtrInt;
@@ -7470,7 +7485,7 @@ begin
   try
     try
       // create JSON data in Stream
-      RowCount := Execute(aDB, aSql, Stream, Expand);
+      RowCount := Execute(aDB, aSql, Stream, Expand, MaxMemory);
       if aResultCount <> nil then
         aResultCount^ := RowCount;
       result := Stream.DataString;
@@ -7936,8 +7951,8 @@ begin
   DB := aDB;
 end;
 
-function TSqlStatementCached.Prepare(const GenericSql: RawUtf8; WasPrepared:
-  PBoolean; ExecutionTimer: PPPrecisionTimer;
+function TSqlStatementCached.Prepare(const GenericSql: RawUtf8;
+  WasPrepared: PBoolean; ExecutionTimer: PPPrecisionTimer;
   ExecutionMonitor: PSynMonitor): PSqlRequest;
 var
   added: boolean;
@@ -7956,7 +7971,8 @@ begin
     end
     else
     begin
-      if Timer = nil then // there was a Statement.Prepare exception on previous call
+      if Timer = nil then
+        // there was a Statement.Prepare exception on previous call
         raise ESqlite3Exception.CreateUtf8(
           'TSqlStatementCached.Prepare failed [%]', [GenericSql]);
       if Statement.Request <> 0 then

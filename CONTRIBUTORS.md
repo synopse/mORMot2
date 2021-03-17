@@ -53,6 +53,7 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - Marius Maximus (mariuszekpl)
 - Martin Eckes
 - Martin Suer
+- Matkov
 - Maxim Masiutin
 - Mazinsw
 - MChaos

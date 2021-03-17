@@ -108,12 +108,14 @@ type
     fSendNotificationsRest: TRest;
     fSendNotificationsLogClass: TOrmServiceNotificationsClass;
     function CreateFakeInstance: TInterfacedObject;
-    function InternalInvoke(const aMethod: RawUtf8; const aParams: RawUtf8='';
-      aResult: PRawUtf8=nil; aErrorMsg: PRawUtf8=nil; aClientDrivenID: PCardinal=nil;
-      aServiceCustomAnswer: PServiceCustomAnswer=nil; aClient: TRest=nil): boolean; virtual;
+    function InternalInvoke(const aMethod: RawUtf8; const aParams: RawUtf8 = '';
+      aResult: PRawUtf8 = nil; aErrorMsg: PRawUtf8 = nil;
+      aClientDrivenID: PCardinal = nil;
+      aServiceCustomAnswer: PServiceCustomAnswer = nil;
+      aClient: TRest = nil): boolean; virtual;
     // match TOnFakeInstanceInvoke callback signature
     function Invoke(const aMethod: TInterfaceMethod; const aParams: RawUtf8;
-      aResult: PRawUtf8; aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
+      aResult, aErrorMsg: PRawUtf8; aClientDrivenID: PCardinal;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean;
     procedure NotifyInstanceDestroyed(aClientDrivenID: cardinal); virtual;
   public
@@ -128,7 +130,7 @@ type
     // expected contract (which may be a custom version number)
     constructor Create(aRest: TRest; aInterface: PRttiInfo;
       aInstanceCreation: TServiceInstanceImplementation;
-      const aContractExpected: RawUtf8='');
+      const aContractExpected: RawUtf8 = '');
     /// finalize the service provider used instance
     // - e.g. the shared fake implementation instance
     destructor Destroy; override;
@@ -463,7 +465,7 @@ constructor TInterfacedObjectFakeClient.Create(aClient: TServiceFactoryClient;
   const aInvoke: TOnFakeInstanceInvoke;
   const aNotifyDestroy: TOnFakeInstanceDestroy);
 var
-  opt: TInterfacedObjectFromFactoryOptions;
+  opt: TInterfacedObjectFakeOptions;
 begin
   fClient := aClient;
   opt := [];
@@ -512,7 +514,7 @@ begin
 end;
 
 function TServiceFactoryClient.Invoke(const aMethod: TInterfaceMethod;
-  const aParams: RawUtf8; aResult: PRawUtf8; aErrorMsg: PRawUtf8;
+  const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8;
   aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 
   procedure SendNotificationsLog;
@@ -578,7 +580,7 @@ begin
 end;
 
 function TServiceFactoryClient.InternalInvoke(const aMethod: RawUtf8;
-  const aParams: RawUtf8; aResult: PRawUtf8; aErrorMsg: PRawUtf8;
+  const aParams: RawUtf8; aResult, aErrorMsg: PRawUtf8;
   aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer;
   aClient: TRest): boolean;
 var
@@ -676,8 +678,8 @@ begin
             error := ' - ' + error;
           if not withinput then
             sent := ''; // exclude sensitive input in error text
-          aErrorMsg^ := FormatUtf8('URI % % returned status ''%'' (%%)',
-            [{%H-}uri, {%H-}sent, resp, status, error]);
+          FormatUtf8('URI % % returned status ''%'' (%%)',
+            [{%H-}uri, {%H-}sent, resp, status, error], aErrorMsg^);
         end
         else
           aErrorMsg^ := resp;

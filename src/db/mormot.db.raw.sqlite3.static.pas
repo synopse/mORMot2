@@ -194,14 +194,14 @@ uses
     {$L ..\..\static\i386-freebsd\sqlite3.o}
     {$ifdef FPC_CROSSCOMPILING}
       {$linklib ..\..\static\i386-freebsd\libgcc.a}
-    {$endif}
+    {$endif FPC_CROSSCOMPILING}
     {$endif CPUX86}
     {$ifdef CPUX64}
     const _PREFIX = '';
     {$L ..\..\static\x86_64-freebsd\sqlite3.o}
     {$ifdef FPC_CROSSCOMPILING}
       {$linklib ..\..\static\x86_64-freebsd\libgcc.a}
-    {$endif}
+    {$endif FPC_CROSSCOMPILING}
     {$endif CPUX64}
   {$endif OSFREEBSD}
 
@@ -211,14 +211,14 @@ uses
       {$L ..\..\static\i386-openbsd\sqlite3.o}
       {$ifdef FPC_CROSSCOMPILING}
         {$linklib ..\..\static\i386-openbsd\libgcc.a}
-      {$endif}
+      {$endif FPC_CROSSCOMPILING}
     {$endif CPUX86}
     {$ifdef CPUX64}
       const _PREFIX = '';
       {$L ..\..\static\x86_64-openbsd\sqlite3.o}
       {$ifdef FPC_CROSSCOMPILING}
         {$linklib ..\..\static\x86_64-openbsd\libgcc.a}
-      {$endif}
+      {$endif FPC_CROSSCOMPILING}
     {$endif CPUX64}
   {$endif OSOPENBSD}
 
@@ -236,13 +236,13 @@ uses
       {$L ..\..\static\i386-linux\sqlite3.o}
       {$ifdef FPC_CROSSCOMPILING}
         {$linklib ..\..\static\i386-linux\libgcc.a}
-      {$endif}
+      {$endif FPC_CROSSCOMPILING}
     {$endif CPUX86}
     {$ifdef CPUX64}
       {$L ..\..\static\x86_64-linux\sqlite3.o}
       {$ifdef FPC_CROSSCOMPILING}
         {$linklib ..\..\static\x86_64-linux\libgcc.a}
-      {$endif}
+      {$endif FPC_CROSSCOMPILING}
     {$endif CPUX64}
   {$endif OSLINUX}
 
@@ -1253,7 +1253,7 @@ const
   // error message if statically linked sqlite3.o(bj) does not match this
   // - Android version may be a little behind, so we are more releaxed here
   EXPECTED_SQLITE3_VERSION =
-    {$ifdef OSANDROID} '3.34' {$else} '3.34.1' {$endif};
+    {$ifdef OSANDROID} '3.34' {$else} '3.35.0' {$endif};
 
   // where to download the latest available static binaries, including SQLite3
   EXPECTED_STATIC_DOWNLOAD =

@@ -1056,6 +1056,7 @@ type
     {$ifndef UNICODE}
     fVariantWideString: boolean;
     {$endif UNICODE}
+    fStatementMaxMemory: Int64;
     fForeignKeys: TSynNameValue;
     fSqlCreateField: TSqlDBFieldTypeDefinition;
     fSqlCreateFieldMax: cardinal;
@@ -1617,6 +1618,12 @@ type
     // WHERE clause within
     property UseCache: boolean
       read fUseCache write fUseCache;
+    /// maximum bytes allowed for FetchAllToJSON/FetchAllToBinary methods
+    // - if a result set exceeds this limit, an ESQLDBException is raised
+    // - default is 512 shl 20, i.e. 512MB which is very high
+    // - avoid unexpected OutOfMemory errors when incorrect statement is run
+    property StatementMaxMemory: Int64
+      read fStatementMaxMemory write fStatementMaxMemory;
     /// if UseCache is true, how many statement replicates can be generated
     // if the cached ISqlDBStatement is already used
     // - such replication is normally not needed in a per-thread connection,
@@ -3077,6 +3084,7 @@ begin
   fRollbackOnDisconnect := true; // enabled by default
   fUseCache := true;
   fLoggedSqlMaxSize := 2048; // log up to 2KB of inlined SQL by default
+  fStatementMaxMemory := 512 shl 20; // fetch to JSON/Binary up to 512MB
   SetInternalProperties; // virtual method used to override default parameters
   db := GetDbms;
   if db in [dSQLite, dDB2, dPostgreSQL] then // for SqlDateToIso8601Quoted()
@@ -5739,12 +5747,14 @@ function TSqlDBStatement.FetchAllToJson(Json: TStream; Expanded: boolean): PtrIn
 var
   W: TJsonWriter;
   col: integer;
+  maxmem: PtrUInt;
   tmp: TTextWriterStackBuffer;
 begin
   result := 0;
   W := TJsonWriter.Create(Json, Expanded, false, nil, 0, @tmp);
   try
     Connection.InternalProcess(speActive);
+    maxmem := Connection.Properties.StatementMaxMemory;
     // get col names and types
     SetLength(W.ColNames, ColumnCount);
     for col := 0 to ColumnCount - 1 do
@@ -5761,6 +5771,10 @@ begin
       ColumnsToJson(W);
       W.AddComma;
       inc(result);
+      if (maxmem > 0) and
+         (W.WrittenBytes > maxmem) then // TextLength is slower
+        raise ESQLDBException.CreateUTF8('%.FetchAllToJson: overflow %',
+          [self, KB(maxmem)]);
     end;
     {$ifdef SYNDB_SILENCE}
     fSqlLogTimer.Pause;
@@ -5792,6 +5806,7 @@ const
     '"blob"', 'blob');
 var
   F, FMax: integer;
+  maxmem: PtrUInt;
   W: TTextWriter;
   tmp: RawByteString;
   V: TSqlVar;
@@ -5805,6 +5820,7 @@ begin
   if Tab then
     CommaSep := #9;
   FMax := ColumnCount - 1;
+  maxmem := Connection.Properties.StatementMaxMemory;
   W := TTextWriter.Create(Dest, 65536);
   try
     if AddBOM then
@@ -5872,6 +5888,10 @@ begin
           W.Add(CommaSep);
       end;
       inc(result);
+      if (maxmem > 0) and
+         (W.WrittenBytes > maxmem) then // TextLength is slower
+        raise ESQLDBException.CreateUTF8('%.FetchAllToCsvValues: overflow %',
+          [self, KB(maxmem)]);
     end;
     {$ifdef SYNDB_SILENCE}
     fSqlLogTimer.Pause;
@@ -5954,6 +5974,7 @@ function TSqlDBStatement.FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal;
 var
   F, FMax, FieldSize, NullRowSize: integer;
   StartPos: Int64;
+  maxmem: PtrUInt;
   W: TBufferWriter;
   ft: TSqlDBFieldType;
   ColTypes: TSqlDBFieldTypeDynArray;
@@ -5961,6 +5982,7 @@ var
   tmp: TTextWriterStackBuffer;
 begin
   result := 0;
+  maxmem := Connection.Properties.StatementMaxMemory;
   W := TBufferWriter.Create(Dest, @tmp, SizeOf(tmp));
   try
     W.WriteVarUInt32(FETCHALLTOBINARY_MAGIC);
@@ -6023,6 +6045,10 @@ begin
           if (MaxRowCount > 0) and
              (result >= MaxRowCount) then
             break;
+          if (maxmem > 0) and
+             (W.TotalWritten > maxmem) then // TextLength is slower
+            raise ESQLDBException.CreateUTF8('%.FetchAllToBinary: overflow %',
+              [self, KB(maxmem)]);
         until not Step;
       ReleaseRows;
     end;

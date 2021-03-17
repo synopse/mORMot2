@@ -2363,6 +2363,7 @@ function GuidToString(const guid: TGUID): string;
 type
   /// stack-allocated ASCII string, used by GuidToShort() function
   TGuidShortString = string[38];
+  PGuidShortString = ^TGuidShortString;
 
 /// convert a TGUID into text
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})

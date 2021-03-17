@@ -2144,7 +2144,7 @@ begin
         result := result + ' desc';
     end;
   {$ifdef SQLVIRTUALLOGS}
-  SQLite3Log.Add.Log(sllDebug, '%.ComputeSql [%] %', [ClassType, result, log], self);
+  SQLite3Log.Add.Log(sllDebug, 'ComputeSql [%] %', [result, log], self);
   {$endif SQLVIRTUALLOGS}
 end;
 

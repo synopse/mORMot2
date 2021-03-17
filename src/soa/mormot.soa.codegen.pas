@@ -1005,7 +1005,7 @@ begin
         'dirNoOut', DIRTOSMS[ValueDirection]], arg);
       if ValueDirection in [imdConst, imdVar] then
         _ObjAddProp('dirInput', true, arg);
-      if ValueDirection in [imdVar, imdOut, imdResult] then
+      if ValueDirection <> imdConst then
         _ObjAddProp('dirOutput', true, arg);
       if ValueDirection = imdResult then
         _ObjAddProp('dirResult', true, arg);
@@ -1021,7 +1021,7 @@ begin
        (a < meth.ArgsOutNotResultLast)
       then
       _ObjAddProp('commaOut', '; ', arg);
-    if meth.args[a].ValueDirection in [imdVar, imdOut, imdResult] then
+    if meth.args[a].ValueDirection <> imdConst then
     begin
       _ObjAddProps(['indexOutResult', UInt32ToUtf8(r) + ']'], arg);
       inc(r);
@@ -1918,7 +1918,7 @@ procedure TServiceClientCommandLine.ShowMethod(service: TInterfaceFactory;
   const
     IN_OUT: array[boolean] of RawUtf8 = ('OUT', ' IN');
   var
-    i: integer;
+    arg, i: integer;
     line, typ: RawUtf8;
   begin
     ToConsole('%', [IN_OUT[input]], ccDarkGray, {nolinefeed=}true);
@@ -1927,15 +1927,23 @@ procedure TServiceClientCommandLine.ShowMethod(service: TInterfaceFactory;
     else
     begin
       line := ' { ';
-      i := 0;
-      while method^.ArgNext(i, input) do
-        with method^.Args[i] do
+      arg := 0;
+      repeat
+        if input then
+        begin
+          if not method^.ArgNextInput(arg) then
+            break;
+        end
+        else if not method^.ArgNextOutput(arg) then
+            break;
+        with method^.Args[arg] do
         begin
           typ := TYPES_LANG[lngCS, TYPES_SOA[ValueType]];
           if typ = '' then
             ShortStringToAnsi7String(ArgTypeName^, typ);
           line := FormatUtf8('%"%":%, ', [line, ParamName^, typ]);
         end;
+      until false;
       i := length(line);
       line[i - 1] := ' ';
       line[i] := '}';

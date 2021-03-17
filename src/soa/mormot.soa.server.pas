@@ -172,7 +172,7 @@ type
     function GetTimeoutSec: cardinal;
     function GetStat(const aMethod: RawUtf8): TSynMonitorInputOutput;
     /// called by ExecuteMethod to append input/output params to Sender.TempTextWriter
-    procedure OnLogRestExecuteMethod(Sender: TInterfaceMethodExecute;
+    procedure OnLogRestExecuteMethod(Sender: TInterfaceMethodExecuteRaw;
       Step: TInterfaceMethodExecuteEventStep);
     /// this method will create an implementation instance
     // - reference count will be set to one, in order to allow safe passing
@@ -973,13 +973,13 @@ begin
 end;
 
 procedure TServiceFactoryServer.OnLogRestExecuteMethod(
-  Sender: TInterfaceMethodExecute; Step: TInterfaceMethodExecuteEventStep);
+  Sender: TInterfaceMethodExecuteRaw; Step: TInterfaceMethodExecuteEventStep);
 var
   W: TTextWriter;
   a: PtrInt;
   len: integer;
 begin
-  W := Sender.TempTextWriter;
+  W := (Sender as TInterfaceMethodExecute).TempTextWriter;
   with Sender.Method^ do
     case Step of
       smsBefore:
@@ -1036,7 +1036,7 @@ begin
             begin
               for a := ArgsOutFirst to ArgsOutLast do
                 with Args[a] do
-                  if (ValueDirection in [imdVar, imdOut, imdResult]) and
+                  if (ValueDirection <> imdConst) and
                      not IsDefault(Sender.Values[a]) then
                   begin
                     W.AddShort(ParamName^);
@@ -1436,7 +1436,7 @@ type
 constructor TInterfacedObjectFakeServer.Create(aRequest: TRestServerUriContext;
   aFactory: TInterfaceFactory; aFakeID: integer);
 var
-  opt: TInterfacedObjectFromFactoryOptions;
+  opt: TInterfacedObjectFakeOptions;
 begin
   if aRequest.ClientKind = ckFramework then
     opt := [ifoJsonAsExtended, ifoDontStoreVoidJson]
