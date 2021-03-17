@@ -3914,6 +3914,7 @@ type
     fRequest: TSqlite3Statement;
     fNextSQL: PUtf8Char;
     fFieldCount: integer;
+    fMaxMemory: PtrUInt;
     function GetReadOnly: boolean;
     function GetParamCount: integer;
 
@@ -4046,6 +4047,13 @@ type
     // do not make changes to the content of the database files on disk.
     property IsReadOnly: boolean
       read GetReadOnly;
+    /// maximum bytes allowed for Execute methods output
+    // - if a result set exceeds this limit, an ESQLDBException is raised
+    // - default is 512 shl 20, i.e. 512MB which is very high
+    // - avoid unexpected OutOfMemory errors when incorrect statement is run
+    property MaxMemory: PtrUInt
+      read fMaxMemory write fMaxMemory;
+
 
   // 2. Bind parameters to a SQL query (for the last prepared statement)
   public
@@ -7399,9 +7407,13 @@ begin
       case Step of
         SQLITE_ROW:
           begin
-            inc(result);
             FieldsToJson(W);
             W.AddComma;
+            inc(result);
+            if W.WrittenBytes > MaxMemory then // TextLength is slower
+              raise ESqlite3Exception.CreateUTF8(
+                'TSqlRequest.Execute: output overflow after % for [%]',
+                [self, KB(MaxMemory), aSql]);
           end;
         SQLITE_DONE:
           break;
@@ -7410,7 +7422,7 @@ begin
     if (result = 0) and
        W.Expand then
     begin
-      // we want the field names at least, even with no data: we allow RowCount=0
+      // we want the field names at least, even with no data: allow RowCount=0
       W.Expand := false; //  {"FieldCount":2,"Values":["col1","col2"]}
       W.CancelAll;
       for i := 0 to FieldCount - 1 do
@@ -7642,6 +7654,7 @@ function TSqlRequest.Prepare(DB: TSqlite3DB; const SQL: RawUtf8;
 begin
   fDB := DB;
   fRequest := 0;
+  fMaxMemory := 512 shl 20;
   if DB = 0 then
     raise ESqlite3Exception.Create(DB, SQLITE_CANTOPEN, SQL);
   {$ifdef RESETFPUEXCEPTION} // safest to reset x87 exceptions
