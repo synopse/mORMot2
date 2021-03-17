@@ -6046,7 +6046,7 @@ begin
              (result >= MaxRowCount) then
             break;
           if (maxmem > 0) and
-             (W.WrittenBytes > maxmem) then // TextLength is slower
+             (W.TotalWritten > maxmem) then // TextLength is slower
             raise ESQLDBException.CreateUTF8('%.FetchAllToBinary: overflow %',
               [self, KB(maxmem)]);
         until not Step;
