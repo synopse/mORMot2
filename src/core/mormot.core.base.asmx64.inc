@@ -104,7 +104,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         ret
 @nofwe: {$endif WITH_ERMS}
         mov     r9, dst
-        {$ifdef ASMX64AVX} // no AVX asm on Delphi :(
+        {$ifdef ASMX64AVX} // no AVX asm on Delphi (even 10.4) :(
         cmp     rax, 256  // vzeroupper penaly for cnt>255
         jb      @fsse2
         test    byte ptr [rip + CPUIDX64], 1 shl cpuAVX
@@ -619,7 +619,7 @@ procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: Ptr
         dec     r8
         jmp     @align
 @ok:
-        {$ifdef ASMX64AVX} // AVX2 asm is not supported by Delphi (even 10.3) :(
+        {$ifdef ASMX64AVX} // AVX2 asm is not supported by Delphi (even 10.4) :(
         test    byte ptr [rip + CPUIDX64], 1 shl cpuAVX2
         jz      @sse2
         vpshufd ymm0, ymm0, 0          // shuffle to ymm0 128-bit low lane

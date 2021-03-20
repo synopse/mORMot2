@@ -1056,7 +1056,7 @@ begin
   with Entry[Count] do
   begin
     // caller set h64.zzipSize64/zfullSize64 and h32.zzipMethod/zcrc32/zlastMod
-    h64.offset := fDest.Position - fAppendOffset;
+    h64.offset := QWord(fDest.Position) - fAppendOffset;
     if ForceZip64 or
        (h64.zzipSize >= ZIP32_MAXSIZE) or
        (h64.zfullSize >= ZIP32_MAXSIZE) or
@@ -1164,7 +1164,7 @@ procedure TZipWrite.AddDeflated(const aFileName: TFileName;
 var
   f: THandle;
   headerpos, datapos, newpos, todo, len: QWord;
-  met: cardinal;
+  met, age: cardinal;
   deflate: TSynZipCompressor;
   tmp: RawByteString;
 begin
@@ -1186,6 +1186,7 @@ begin
     try
       todo := FileSeek64(f, 0, soFromEnd);
       FileSeek64(f, 0, soFromBeginning);
+      age := FileAgeToWindowsTime(aFileName);
       // prepare and write initial version of the local file header
       met := Z_DEFLATED;
       if CompressLevel < 0 then
@@ -1241,7 +1242,7 @@ begin
         newpos := fDest.Position;
         fDest.Seek(headerpos, soFromBeginning);
         WriteRawHeader;
-        assert(fDest.Position = datapos);
+        assert(QWord(fDest.Position) = datapos);
         fDest.Seek(newpos, soFromBeginning);
       end;
       inc(Count);
@@ -1328,7 +1329,7 @@ begin
   lh.signature := LASTHEADER_SIGNATURE_INC;
   dec(lh.signature); // +1 to avoid finding it in the exe
   FillcharFast(lh64, SizeOf(lh64), 0);
-  lh64.headerOffset := fDest.Position - fAppendOffset;
+  lh64.headerOffset := QWord(fDest.Position) - fAppendOffset;
   lh64.headerSize := SizeOf(TFileHeader) * Count;
   for i := 0 to Count - 1 do
     with Entry[i] do

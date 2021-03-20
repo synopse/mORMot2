@@ -4039,7 +4039,7 @@ begin
     GetMem(result, len + (_STRRECSIZE + 4));
     {$endif FPC_X64MM}
     {$ifdef HASCODEPAGE} // also set elemSize := 1
-    PCardinal(@PStrRec(result)^.codePage)^ := codepage or (1 shl 16);
+    PCardinal(@PStrRec(result)^.codePage)^ := codepage + (1 shl 16);
     {$endif HASCODEPAGE}
     PStrRec(result)^.refCnt := 1;
     PStrRec(result)^.length := len;
@@ -4162,11 +4162,19 @@ begin
   inc(dest[0], len);
 end;
 
+procedure AppendShortChar(chr: AnsiChar; var dest: shortstring);
+begin
+  if dest[0] = #255 then
+    exit;
+  inc(dest[0]);
+  dest[ord(dest[0])] := chr;
+end;
+
 procedure AppendShortInteger(value: integer; var dest: shortstring);
 var
   temp: shortstring;
 begin
-  str(value, temp);
+  str(value, temp); // fast enough for our purpose
   AppendShort(temp, dest);
 end;
 
@@ -4176,14 +4184,6 @@ var
 begin
   str(value, temp);
   AppendShort(temp, dest);
-end;
-
-procedure AppendShortChar(chr: AnsiChar; var dest: shortstring);
-begin
-  if dest[0] = #255 then
-    exit;
-  inc(dest[0]);
-  dest[ord(dest[0])] := chr;
 end;
 
 procedure AppendShortBuffer(buf: PAnsiChar; len: integer; var dest: shortstring);

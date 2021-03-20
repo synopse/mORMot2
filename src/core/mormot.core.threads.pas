@@ -1467,7 +1467,7 @@ begin
         t := @fTask[i];
         if tix >= t^.NextTix then
         begin
-          if todo = nil then
+          if {%H-}todo = nil then
             SetLength(todo, length(fTask) - n);
           todo[n] := t^;
           inc(n);

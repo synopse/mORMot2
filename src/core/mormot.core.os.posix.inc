@@ -1891,7 +1891,7 @@ begin
     if fpgeterrno <> ESysESRCH then
       exit
     else
-    // no such process -> try to delete the .pid file
+    // ESysESRCH = no such process -> try to delete the .pid file
     if DeleteFile(pidfilename) then
     begin
       result := true; // process crashed or hard reboot -> nothing to kill
@@ -1969,7 +1969,7 @@ begin
     if Assigned(onlog) then
       onlog(sllNewRun, 'Start % /% %',
         [servicename, TXT[dofork], Executable.Version.DetailedOrVoid], nil);
-    start;
+    Start;
     while SynDaemonTerminated = 0 do
       fpPause;
   finally
@@ -1977,7 +1977,7 @@ begin
       onlog(sllNewRun, 'Stop /% from Sig=%',
         [TXT[dofork], SynDaemonTerminated], nil);
     try
-      stop;
+      Stop;
     finally
       if dofork and
          (pidfilename <> '') then
@@ -2360,6 +2360,7 @@ begin
   {$ifdef OSLINUX} // systemd API is Linux-specific
   sd.Done;
   {$endif OSLINUX}
+  SynDaemonInterceptLog := nil;
 end;
 
 

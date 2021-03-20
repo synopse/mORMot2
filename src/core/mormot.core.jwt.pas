@@ -1150,7 +1150,7 @@ end;
 
 destructor TJwtSynSignerAbstract.Destroy;
 begin
-  FillCharFast(fSignPrepared, SizeOf(fSignPrepared), 0);
+  fSignPrepared.Done;
   inherited Destroy;
 end;
 

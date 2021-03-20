@@ -1736,7 +1736,7 @@ begin
         strm := TRawByteStringStream.Create;
         try
           rows := fStatement^.Execute(0, '', strm,
-            ForceAjax or not fOwner.NoAjaxJson);
+            ForceAjax or not fOwner.NoAjaxJson, DB.StatementMaxMemory);
           result := strm.DataString;
         finally
           strm.Free;

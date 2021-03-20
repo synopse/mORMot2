@@ -50,8 +50,8 @@ procedure GetDomainUserNameFromToken(UserToken: THandle; var result: RawUtf8);
 {$A+}
 
 {$ifdef FPC}
-{$PACKRECORDS C}
-{$endif}
+  {$packrecords C}
+{$endif FPC}
 
 type
   {$ifndef UNICODE} // circumvent oldest Delphi limitation

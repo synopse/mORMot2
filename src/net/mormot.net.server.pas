@@ -1662,6 +1662,7 @@ begin
       begin
         // use thread pool to process the request header, and probably its body
         cltservsock := fSocketClass.Create(self);
+        // we tried to reuse the fSocketClass instance -> no performance change
         cltservsock.AcceptRequest(cltsock, @cltaddr);
         if not fThreadPool.Push(pointer(PtrUInt(cltservsock)),
             {waitoncontention=}true) then

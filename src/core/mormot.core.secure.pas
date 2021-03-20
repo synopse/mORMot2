@@ -570,7 +570,7 @@ type
     // - aDerivatedKey is defined as "var", since it will be zeroed after use
     procedure AssignTo(var aDerivatedKey: THash512Rec;
       out aAES: TAes; aEncrypt: boolean);
-    /// fill the intenral context with zeros, for security
+    /// fill the internal context with zeros, for security
     procedure Done;
   end;
 

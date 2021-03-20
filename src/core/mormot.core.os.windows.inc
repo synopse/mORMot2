@@ -1998,7 +1998,7 @@ end;
 
 type
   {$ifdef FPC}
-  {$PACKRECORDS C} // mandatory under Win64
+  {$packrecords C} // mandatory under Win64
   {$endif FPC}
   DATA_BLOB = record
     cbData: DWORD;
@@ -2007,7 +2007,7 @@ type
 
   PDATA_BLOB = ^DATA_BLOB;
   {$ifdef FPC}
-  {$PACKRECORDS DEFAULT}
+  {$packrecords DEFAULT}
   {$endif FPC}
 
 const

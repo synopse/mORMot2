@@ -7239,7 +7239,7 @@ begin
   if Request = 0 then
     exit;
   {$ifdef RESETFPUEXCEPTION}
-  with TSynFPUException.ForLibraryCode do
+  with TSynFpuException.ForLibraryCode do
   {$endif RESETFPUEXCEPTION}
     sqlite3.finalize(Request);
   fRequest := 0;
@@ -7660,7 +7660,7 @@ begin
   if DB = 0 then
     raise ESqlite3Exception.Create(DB, SQLITE_CANTOPEN, SQL);
   {$ifdef RESETFPUEXCEPTION} // safest to reset x87 exceptions
-  with TSynFPUException.ForLibraryCode do
+  with TSynFpuException.ForLibraryCode do
   {$endif RESETFPUEXCEPTION}
   begin
     result := sqlite3.prepare_v2(RequestDB, pointer(SQL), length(SQL) + 1,
@@ -7714,14 +7714,14 @@ begin
     raise ESqlite3Exception.Create(
       'TSqlRequest.Reset called with no previous Request');
   {$ifdef RESETFPUEXCEPTION} // safest to reset x87 exceptions
-  with TSynFPUException.ForLibraryCode do
+  with TSynFpuException.ForLibraryCode do
   {$endif RESETFPUEXCEPTION}
     // no check here since it was PREVIOUS state
     result := sqlite3.reset(Request);
 end;
 
 function TSqlRequest.Step: integer;
-{$ifdef RESETFPUEXCEPTION} // safest to reset x87 exceptions - inlined TSynFPUException
+{$ifdef RESETFPUEXCEPTION} // safest to reset x87 exceptions - inlined TSynFpuException
 var
   cw87: word;
 {$endif RESETFPUEXCEPTION}
