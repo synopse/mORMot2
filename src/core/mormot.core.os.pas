@@ -1867,10 +1867,10 @@ procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer = nil;
 procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt;
   LeaveUnprotected: boolean = false);
 
-{$ifdef CPUX64}
-/// low-level x86_64 asm routine patch and redirection
+{$ifdef CPUINTEL}
+/// low-level i386/x86_64 asm routine patch and redirection
 procedure RedirectCode(Func, RedirectFunc: Pointer);
-{$endif CPUX64}
+{$endif CPUINTEL}
 
 /// search for a given class stored in an object vmtAutoTable Slot
 // - up to 15 properties could be registered per class
@@ -2828,7 +2828,7 @@ begin
   PatchCode(Code, @Value, SizeOf(Code^), nil, LeaveUnprotected);
 end;
 
-{$ifdef CPUX64}
+{$ifdef CPUINTEL}
 procedure RedirectCode(Func, RedirectFunc: Pointer);
 var
   NewJump: packed record
@@ -2845,7 +2845,7 @@ begin
   PatchCode(Func, @NewJump, SizeOf(NewJump));
   assert(PByte(Func)^ = $e9);
 end;
-{$endif CPUX64}
+{$endif CPUINTEL}
 
 function ClassPropertiesGet(ObjectClass: TClass): pointer;
 begin
