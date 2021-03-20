@@ -211,6 +211,7 @@ function NextNotSpaceCharIs(var P: PUtf8Char; ch: AnsiChar): boolean;
 
 /// retrieve the next SQL-like identifier within the UTF-8 buffer
 // - will also trim any space (or line feeds) and trailing ';'
+// - any comment like '/*nocache*/' will be ignored
 // - returns true if something was set to Prop
 function GetNextFieldProp(var P: PUtf8Char; var Prop: RawUtf8): boolean;
 
@@ -2994,20 +2995,40 @@ begin
     result := false;
 end;
 
+function GotoNextSqlIdentifier(P: PUtf8Char; tab: PTextCharSet): PUtf8Char;
+  //{$ifdef HASINLINE} inline; {$endif}
+begin
+  while tcCtrlNot0Comma in tab[P^] do // in [#1..' ', ';']
+    inc(P);
+  if PWord(P)^ = ord('/') + ord('*') shl 8 then
+  begin
+    // detect and ignore e.g. '/*nocache*/'
+    repeat
+      inc(P);
+      if PWord(P)^ = ord('*') + ord('/') shl 8 then
+      begin
+        inc(P, 2);
+        break;
+      end;
+    until P^ = #0;
+    while tcCtrlNot0Comma in tab[P^] do
+      inc(P);
+  end;
+  result := P;
+end;
+
 function GetNextFieldProp(var P: PUtf8Char; var Prop: RawUtf8): boolean;
 var
   B: PUtf8Char;
   tab: PTextCharSet;
 begin
   tab := @TEXT_CHARS;
-  while tcCtrlNot0Comma in tab[P^] do
-    inc(P); // in [#1..' ', ';']
+  P := GotoNextSqlIdentifier(P, tab);
   B := P;
   while tcIdentifier in tab[P^] do
     inc(P); // go to end of ['_', '0'..'9', 'a'..'z', 'A'..'Z'] chars
   FastSetString(Prop, B, P - B);
-  while tcCtrlNot0Comma in tab[P^] do
-    inc(P);
+  P := GotoNextSqlIdentifier(P, tab);
   result := Prop <> '';
 end;
 
@@ -5053,17 +5074,13 @@ begin
       if P[Len - 2] = '0' then
         if P[Len - 3] = '0' then
           if P[Len - 4] = '0' then
-            // 'xxx.0000' -> 'xxx'
-            dec(Len, 5)
+            dec(Len, 5) // 'xxx.0000' -> 'xxx'
           else
-            // 'xxx.1000' -> 'xxx.1'
-            dec(Len, 3)
+            dec(Len, 3) // 'xxx.1000' -> 'xxx.1'
         else
-          // 'xxx.1200' -> 'xxx.12'
-          dec(Len, 2)
+          dec(Len, 2) // 'xxx.1200' -> 'xxx.12'
       else
-        // 'xxx.1220' -> 'xxx.123'
-        dec(Len);
+        dec(Len); // 'xxx.1220' -> 'xxx.123'
   MoveSmall(P, B + 1, Len);
   inc(B, Len);
 end;
