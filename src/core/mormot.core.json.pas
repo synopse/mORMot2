@@ -9214,8 +9214,8 @@ begin
   try
     result := 0;
     if not Assigned(OnMatch) or
-       (not Assigned(KeyCompare) and
-        not Assigned(ValueCompare)) then
+       (not (Assigned(KeyCompare) or
+        Assigned(ValueCompare))) then
       exit;
     n := fSafe.Padding[DIC_KEYCOUNT].VInteger;
     k := fKeys.Value^;
