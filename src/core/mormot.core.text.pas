@@ -8751,6 +8751,13 @@ begin
   VariantToUtf8(V, result, wasString);
 end;
 
+function ToUtf8(const V: TVarData): RawUtf8; overload;
+var
+  wasString: boolean;
+begin
+  VariantToUtf8(PVariant(@V)^, result, wasString);
+end;
+
 function VariantToUtf8(const V: Variant; var Text: RawUtf8): boolean;
 begin
   VariantToUtf8(V, Text, result);

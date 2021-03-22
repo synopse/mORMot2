@@ -7135,7 +7135,8 @@ begin
 end;
 
 var
-  LastDispInvoke: TSynInvokeableVariantType; // naive but efficient type cache
+  // naive but efficient type cache - e.g. for TBsonVariant or TQuickJsVariant
+  LastDispInvoke: TSynInvokeableVariantType;
 
 // sysdispinvoke() replacement to meet TSynInvokeableVariantType expectations
 procedure NewDispInvoke(Dest: PVarData;
@@ -7149,11 +7150,13 @@ procedure NewDispInvoke(Dest: PVarData;
 var
   v: TVarData;
   vp: PVariant;
+  t: cardinal;
   ct: TSynInvokeableVariantType;
 label
   direct;
 begin
-  if Source.vType = varByRef or varVariant then
+  t := Source.vType;
+  if t = varByRef or varVariant then
     NewDispInvoke(Dest, PVarData(Source.VPointer)^, calldesc, params)
   else
   begin
@@ -7163,7 +7166,7 @@ begin
       vp := nil;
     ct := nil;
     try
-      case Source.vType of
+      case t of
         varDispatch,
         varAny,
         varUnknown,
@@ -7178,19 +7181,22 @@ begin
             VarInvalidOp;
         CFirstUserType .. varTypeMask:
           begin
+            ct := DocVariantType; // recognize our TDocVariant
+            if t = ct.VarType then
+              goto direct;
             ct := LastDispInvoke; // atomic load
             if (ct <> nil) and
-               (ct.VarType = Source.VType) then
+               (ct.VarType = t) then
               // most calls are grouped within the same custom variant type
               goto direct;
-            if FindCustomVariantType(Source.VType, TCustomVariantType(ct)) then
+            // FindCustomVariantType() is O(1) but has a global lock
+            if FindCustomVariantType(t, TCustomVariantType(ct)) then
               if ct.InheritsFrom(TSynInvokeableVariantType) then
               begin
                 // direct access of our custom variants without any temp copy
                 LastDispInvoke := ct;
-direct:         if (Dest <> nil) and
-                   (Dest^.VType >= varOleStr) then
-                   VarClearProc(Dest^); // no temp copy, but Dest cleanup
+direct:         if Dest <> nil then
+                  VarClear(PVariant(Dest)^); // no temp copy, but Dest cleanup
                 ct.DispInvoke(Dest, Source, CallDesc, Params);
                 Dest := nil;
               end
@@ -7231,7 +7237,7 @@ begin
   BinaryVariantLoadAsJson := _BinaryVariantLoadAsJson;
   VariantClearSeveral := _VariantClearSeveral;
   SortDynArrayVariantComp := _SortDynArrayVariantComp;
-  // patch DispInvoke for performance and direct
+  // patch DispInvoke for performance and to circumvent RTL inconsistencies
   GetVariantManager(vm);
   vm.DispInvoke := NewDispInvoke;
   SetVariantManager(vm);
