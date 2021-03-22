@@ -614,15 +614,15 @@
         <IsPartOfProject Value="True"/>
       </Unit11>
       <Unit12>
-        <Filename Value="..\src\core\mormot.core.crypto.pas"/>
+        <Filename Value="..\src\core\mormot.crypto.core.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit12>
       <Unit13>
-        <Filename Value="..\src\core\mormot.core.jwt.pas"/>
+        <Filename Value="..\src\core\mormot.crypto.jwt.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit13>
       <Unit14>
-        <Filename Value="..\src\core\mormot.core.secure.pas"/>
+        <Filename Value="..\src\core\mormot.crypto.secure.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit14>
       <Unit15>
@@ -662,11 +662,11 @@
         <IsPartOfProject Value="True"/>
       </Unit23>
       <Unit24>
-        <Filename Value="..\src\core\mormot.core.ecc256r1.pas"/>
+        <Filename Value="..\src\core\mormot.crypto.ecc256r1.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit24>
       <Unit25>
-        <Filename Value="..\src\core\mormot.core.ecc.pas"/>
+        <Filename Value="..\src\core\mormot.crypto.ecc.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit25>
       <Unit26>

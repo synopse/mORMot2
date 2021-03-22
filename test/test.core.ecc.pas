@@ -16,17 +16,17 @@ uses
   mormot.core.unicode,
   mormot.core.datetime,
   mormot.core.rtti,
-  mormot.core.crypto,
+  mormot.crypto.core,
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,
   mormot.core.test,
-  mormot.core.secure,
-  mormot.core.jwt,
-  mormot.core.ecc256r1,
-  mormot.core.ecc,
+  mormot.crypto.secure,
+  mormot.crypto.jwt,
+  mormot.crypto.ecc256r1,
+  mormot.crypto.ecc,
   mormot.core.perf,
-  mormot.core.crypto.openssl,
+  mormot.crypto.openssl,
   {$ifdef USE_OPENSSL}
   mormot.lib.openssl11,
   {$endif USE_OPENSSL}
@@ -35,7 +35,7 @@ uses
 
 type
   /// this test case will test ECDH and ECDSA cryptography as implemented
-  // in the mormot.core.ecc and mormot.core.ecc256r1 unit
+  // in the mormot.crypto.ecc and mormot.crypto.ecc256r1 unit
   TTestCoreEcc = class(TSynTestCase)
   protected
     pub: array of TEccPublicKey;

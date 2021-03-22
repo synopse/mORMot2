@@ -9,12 +9,12 @@ interface
 
 uses
   mormot.app.console, mormot.app.daemon, mormot.core.base, 
-  mormot.core.buffers, mormot.core.crypto.openssl, mormot.core.crypto, 
-  mormot.core.data, mormot.core.datetime, mormot.core.ecc, 
-  mormot.core.ecc256r1, mormot.core.fpcx64mm, mormot.core.interfaces, 
-  mormot.core.json, mormot.core.jwt, mormot.core.log, mormot.core.mustache, 
+  mormot.core.buffers, mormot.crypto.openssl, mormot.crypto.core, 
+  mormot.core.data, mormot.core.datetime, mormot.crypto.ecc, 
+  mormot.crypto.ecc256r1, mormot.core.fpcx64mm, mormot.core.interfaces, 
+  mormot.core.json, mormot.crypto.jwt, mormot.core.log, mormot.core.mustache, 
   mormot.core.os, mormot.core.perf, mormot.core.rtti, mormot.core.search, 
-  mormot.core.secure, mormot.core.test, mormot.core.text, mormot.core.threads, 
+  mormot.crypto.secure, mormot.core.test, mormot.core.text, mormot.core.threads, 
   mormot.core.unicode, mormot.core.variants, mormot.core.zip, mormot.db.core, 
   mormot.db.nosql.bson, mormot.db.nosql.mongodb, mormot.db.proxy, 
   mormot.db.rad.bde, mormot.db.rad.firedac, mormot.db.rad.nexusdb, 

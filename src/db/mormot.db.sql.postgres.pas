@@ -199,7 +199,7 @@ type
 implementation
 
 uses
-  mormot.core.crypto,  // libpq requires named prepared statements = use SHA-256
+  mormot.crypto.core,  // libpq requires named prepared statements = use SHA-256
   mormot.db.raw.postgres; // raw libpq library API access
 
 { ************ TSqlDBPostgreConnection* and TSqlDBPostgreStatement Classes }

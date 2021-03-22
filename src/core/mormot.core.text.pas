@@ -2996,7 +2996,7 @@ begin
 end;
 
 function GotoNextSqlIdentifier(P: PUtf8Char; tab: PTextCharSet): PUtf8Char;
-  //{$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASINLINE} inline; {$endif}
 begin
   while tcCtrlNot0Comma in tab[P^] do // in [#1..' ', ';']
     inc(P);

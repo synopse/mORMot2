@@ -29,7 +29,7 @@ uses
   mormot.core.json,
   mormot.core.data,
   mormot.core.log,
-  mormot.core.crypto;
+  mormot.crypto.core;
 
 
 

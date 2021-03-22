@@ -1,7 +1,7 @@
 /// Framework Core JSON Web Tokens (JWT) Support
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
-unit mormot.core.jwt;
+unit mormot.crypto.jwt;
 
 {
   *****************************************************************************
@@ -11,8 +11,8 @@ unit mormot.core.jwt;
     - JWT Implementation of HS* and S3* Symmetric Algorithms
     - JWT Implementation of ES256 Asymmetric Algorithm
 
-   Uses optimized mormot.core.crypto.pas and mormot.core.ecc for its process.
-   See mormot.core.crypto.openssl.pas to support all other JWT algorithms.
+   Uses optimized mormot.crypto.core.pas and mormot.crypto.ecc for its process.
+   See mormot.crypto.openssl.pas to support all other JWT algorithms.
 
   *****************************************************************************
 }
@@ -34,10 +34,10 @@ uses
   mormot.core.datetime,
   mormot.core.variants,
   mormot.core.json,
-  mormot.core.crypto,
-  mormot.core.secure,
-  mormot.core.ecc256r1,
-  mormot.core.ecc;
+  mormot.crypto.core,
+  mormot.crypto.secure,
+  mormot.crypto.ecc256r1,
+  mormot.crypto.ecc;
 
 
 { **************** Abstract JWT Parsing and Computation }

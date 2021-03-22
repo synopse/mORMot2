@@ -32,7 +32,7 @@ uses
   mormot.core.data,
   mormot.core.rtti,
   mormot.core.json,
-  mormot.core.secure,
+  mormot.crypto.secure,
   mormot.core.log,
   mormot.orm.core,
   mormot.orm.rest,

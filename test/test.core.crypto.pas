@@ -15,16 +15,17 @@ uses
   mormot.core.buffers,
   mormot.core.unicode,
   mormot.core.rtti,
-  mormot.core.crypto,
-  mormot.core.crypto.openssl,
-  mormot.core.secure,
+  mormot.crypto.core,
+  mormot.crypto.openssl,
+  mormot.crypto.secure,
   mormot.core.perf,
   mormot.core.test,
-  mormot.core.jwt,
-  mormot.core.ecc;
+  mormot.crypto.jwt,
+  mormot.crypto.ecc,
+  mormot.lib.z;
 
 type
-  /// regression tests for mormot.core.crypto and mormot.core.jwt features
+  /// regression tests for mormot.crypto.core and mormot.crypto.jwt features
   TTestCoreCrypto = class(TSynTestCase)
   public
     procedure CryptData(dpapi: boolean);
@@ -1073,7 +1074,7 @@ begin
     200=1.3GB/s 204=1.3GB/s 208=1.2GB/s 212=1.3GB/s 216=1.3GB/s 220=1.3GB/s
     224=1.3GB/s 228=1.2GB/s 232=1.3GB/s 236=1.2GB/s 240=1.3GB/s 244=1.3GB/s
     248=1.3GB/s 252=1.3GB/s 256=1.3GB/s
-  4d5610 ../src/core/mormot.core.crypto.asmx64.inc crc32c_sse42_aesni (5279)
+  4d5610 ../src/core/mormot.crypto.core.asmx64.inc crc32c_sse42_aesni (5279)
     0=0B/s 4=381.9MB/s 8=763.4MB/s 12=1.1GB/s 16=1.4GB/s 20=1.7GB/s
     24=2GB/s 28=2.2GB/s 32=2.5GB/s 36=2.7GB/s 40=3GB/s 44=3.2GB/s 48=3.4GB/s
     52=3.6GB/s 56=3.7GB/s 60=3.9GB/s 64=4.2GB/s 68=3.1GB/s 72=3.3GB/s 76=3.7GB/s
@@ -1097,7 +1098,7 @@ begin
     200=3.4GB/s 204=3.3GB/s 208=3.5GB/s 212=3.1GB/s 216=3.4GB/s 220=3.4GB/s
     224=3.4GB/s 228=3.4GB/s 232=3.5GB/s 236=3.5GB/s 240=3.6GB/s 244=3GB/s
     248=3.6GB/s 252=3.6GB/s 256=3.7GB/s
-  4d4fe0 ../src/core/mormot.core.crypto.asmx64.inc _aesnihash32 (4930)
+  4d4fe0 ../src/core/mormot.crypto.core.asmx64.inc _aesnihash32 (4930)
     0=0B/s 4=235MB/s 8=488.5MB/s 12=723MB/s 16=0.9GB/s 20=1.1GB/s
     24=1.3GB/s 28=1.6GB/s 32=1.8GB/ s 36=2GB/s 40=2.2GB/s 44=2.4GB/s 48=2.7GB/s
     52=2.9GB/s 56=3.1GB/s 60=3.4GB/s 64=3.7GB/s 68=3.3GB/s 72=3.5GB/s 76=4GB/s
@@ -1147,7 +1148,7 @@ begin
     196=3.5GB/s 200=3.4GB/s 204=3.5GB/s 208=3.6GB/s 212=3.6GB/s 216=3.4GB/s
     220=3.5GB/s 224=3.6GB/s 228=3.5GB/s 232=3.5GB/s 236=3.6GB/s 240=3.6GB/s
     244=3.4GB/s 248=3.1GB/s 252=3.6GB/s 256=3.7GB/s
-  0810edd0 ../src/core/mormot.core.crypto.asmx86.inc _aesnihash32 (2638)
+  0810edd0 ../src/core/mormot.crypto.core.asmx86.inc _aesnihash32 (2638)
     4=235MB/s 8=508.9MB/s 12=785MB/s 16=1GB/s 20=1.2GB/s 24=1.4GB/s
     28=1.7GB/s 32=1.9GB/s 36=2GB/s 40=2.3GB/s 44=2.4GB/s 48=2.8GB/s
     52=3.1GB/s 56=3.3GB/s 60=3.6GB/s 64=3.8GB/s 68=3.3GB/s 72=3.5GB/s

@@ -35,7 +35,7 @@ uses
   mormot.core.threads,
   mormot.core.perf,
   mormot.core.search,
-  mormot.core.secure,
+  mormot.crypto.secure,
   mormot.core.log,
   mormot.core.interfaces,
   mormot.orm.core, // for TOrm and IRestOrm

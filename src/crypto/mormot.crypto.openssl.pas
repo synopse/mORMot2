@@ -1,7 +1,7 @@
 /// Framework Core Cryptographic Process using OpenSSL
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
-unit mormot.core.crypto.openssl;
+unit mormot.crypto.openssl;
 
 {
   *****************************************************************************
@@ -16,9 +16,9 @@ unit mormot.core.crypto.openssl;
 
   *****************************************************************************
 
-  TL;DR: On x86_64, our mormot.core.crypto.pas asm is stand-alone and faster
+  TL;DR: On x86_64, our mormot.crypto.core.pas asm is stand-alone and faster
          than OpenSSL for most algorithms, and only 20% slower for AES-GCM.
-         For ECC, our mormot.core.ecc256r1 is noticeably slower than OpenSSL.
+         For ECC, our mormot.crypto.ecc256r1 is noticeably slower than OpenSSL.
 
    Legal Notice: as stated by our LICENSE.md terms, make sure that you comply
    to any restriction about the use of cryptographic software in your country.
@@ -41,10 +41,10 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.buffers,
-  mormot.core.crypto,
-  mormot.core.ecc256r1,
-  mormot.core.secure,
-  mormot.core.jwt,
+  mormot.crypto.core,
+  mormot.crypto.ecc256r1,
+  mormot.crypto.secure,
+  mormot.crypto.jwt,
   mormot.lib.openssl11;
 
 
@@ -58,7 +58,7 @@ type
   // - we abbreviate OpenSsl as Osl in class names for brevity
   // - may be used instead of TAesPrng if a "proven" generator is required -
   // you could override MainAesPrng global variable
-  // - but mormot.core.crypto TAesPrng is faster, especially for small output,
+  // - but mormot.crypto.core TAesPrng is faster, especially for small output,
   // and use a similar and proven 256-bit AES-CTR source of randomness:
   // $  OpenSSL Random32 in 288.71ms i.e. 346,363/s, aver. 2us, 1.3 MB/s
   // $  mORMot Random32 in 3.95ms i.e. 25,303,643/s, aver. 0us, 96.5 MB/s
@@ -361,15 +361,15 @@ procedure OpenSslGenerateKeys(EvpType, BitsOrCurve: integer;
   out PrivateKey, PublicKey: RawByteString); overload;
 
 
-/// mormot.core.ecc256r1 compatible function for asymetric key generation
-// - this OpenSSL-powered function will replace our slower mormot.core.ecc256r1
+/// mormot.crypto.ecc256r1 compatible function for asymetric key generation
+// - this OpenSSL-powered function will replace our slower mormot.crypto.ecc256r1
 // $ OpenSSL: 300 Ecc256r1MakeKey in 7.75ms i.e. 38,664/s, aver. 25us
 // $ mORMot:  300 Ecc256r1MakeKey in 255ms i.e. 1,176/s, aver. 850us
 // - directly access OpenSSL prime256v1, so faster than OpenSslGenerateKeys()
 function ecc_make_key_osl(out PublicKey: TEccPublicKey;
   out PrivateKey: TEccPrivateKey): boolean;
 
-/// mormot.core.ecc256r1 compatible function for asymetric key signature
+/// mormot.crypto.ecc256r1 compatible function for asymetric key signature
 // - this OpenSSL-powered function will replace our slower pascal/c code
 // $ OpenSSL: 300 Ecc256r1Sign in 11.66ms i.e. 25,711/s, aver. 38us
 // $ mORMot:  300 Ecc256r1Sign in 262.72ms i.e. 1,141/s, aver. 875us
@@ -377,7 +377,7 @@ function ecc_make_key_osl(out PublicKey: TEccPublicKey;
 function ecdsa_sign_osl(const PrivateKey: TEccPrivateKey; const Hash: TEccHash;
   out Signature: TEccSignature): boolean;
 
-/// mormot.core.ecc256r1 compatible function for asymetric key verification
+/// mormot.crypto.ecc256r1 compatible function for asymetric key verification
 // - this OpenSSL-powered function will replace our slower pascal/c code
 // $ OpenSSL: 300 Ecc256r1Verify in 41.32ms i.e. 7,260/s, aver. 137us
 // $ mORMot:  300 Ecc256r1Verify in 319.32ms i.e. 939/s, aver. 1.06ms
@@ -385,7 +385,7 @@ function ecdsa_sign_osl(const PrivateKey: TEccPrivateKey; const Hash: TEccHash;
 function ecdsa_verify_osl(const PublicKey: TEccPublicKey; const Hash: TEccHash;
   const Signature: TEccSignature): boolean;
 
-/// mormot.core.ecc256r1 compatible function for ECDH shared secret computation
+/// mormot.crypto.ecc256r1 compatible function for ECDH shared secret computation
 // - this OpenSSL-powered function will replace our slower pascal/c code
 // $ OpenSSL: 598 Ecc256r1SharedSecret in 67.98ms i.e. 8,796/s, aver. 113us
 // $ mORMot:  598 Ecc256r1SharedSecret in 537.95ms i.e. 1,111/s, aver. 899us
@@ -537,7 +537,7 @@ type
 
 /// call once at program startup to use OpenSSL when its performance matters
 // - redirects TAesGcmFast (and TAesCtrFast on i386) globals to OpenSSL
-// - redirects raw mormot.core.ecc256r1 functions to use OpenSSL which is much
+// - redirects raw mormot.crypto.ecc256r1 functions to use OpenSSL which is much
 // faster than our stand-alone C/pascal version
 procedure RegisterOpenSsl;
 
@@ -1536,7 +1536,7 @@ begin
   // set the fastest AES implementation classes
   TAesFast[mGcm] := TAesGcmOsl;
   {$ifdef HASAESNI}
-    // mormot.core.crypto x86_64 asm is faster than OpenSSL - but GCM
+    // mormot.crypto.core x86_64 asm is faster than OpenSSL - but GCM
     {$ifndef CPUX64}
     // our AES-CTR x86_64 asm is faster than OpenSSL's
     TAesFast[mCtr] := TAesCtrOsl;
@@ -1549,7 +1549,7 @@ begin
   TAesFast[mOfb] := TAesOfbOsl;
   TAesFast[mCtr] := TAesCtrOsl;
   {$endif HASAESNI}
-  // redirects raw mormot.core.ecc256r1 functions to the much faster OpenSSL
+  // redirects raw mormot.crypto.ecc256r1 functions to the much faster OpenSSL
   @Ecc256r1MakeKey := @ecc_make_key_osl;
   @Ecc256r1Sign := @ecdsa_sign_osl;
   @Ecc256r1Verify := @ecdsa_verify_osl;

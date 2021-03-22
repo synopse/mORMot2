@@ -34,7 +34,7 @@ uses
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,
-  mormot.core.secure,
+  mormot.crypto.secure,
   mormot.core.rtti,
   mormot.core.log,
   mormot.db.core;

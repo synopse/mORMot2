@@ -38,7 +38,7 @@ uses
   mormot.core.perf,
   mormot.core.log,
   mormot.core.rtti,
-  mormot.core.crypto,
+  mormot.crypto.core,
   mormot.db.core,
   mormot.db.nosql.bson,
   mormot.net.sock;
