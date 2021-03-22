@@ -1,4 +1,4 @@
-/// regression tests for mormot.core.crypto/secure/jwt units
+/// regression tests for mormot.crypto units
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit test.core.crypto;
