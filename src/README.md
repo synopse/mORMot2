@@ -18,14 +18,16 @@ See [the full licensing terms](../LICENCE.md) in the root folder of this reposit
 
 The source code tree is split into the following sub-folders:
 
-- [`core`](core) for low-level shared components like text, RTTI, JSON, compression, crypto;
+- [`core`](core) for low-level shared components like text, RTTI, JSON, compression;
 - [`lib`](lib) for external third-party libraries like *zlib* or *openssl*;
+- [`crypto`](crypto) for efficient symetric/asymetric cryptography;
 - [`net`](net) for the client/server communication layer;
 - [`db`](db) for our *SQLite3* kernel, and SQL/NoSQL direct access;
 - [`rest`](rest) for the RESTful client/server processing;
 - [`orm`](orm) for high-level ORM features;
 - [`soa`](soa) for high-level SOA features;
 - [`app`](app) for hosting (micro)services/daemons and applications;
+- [`script`](script) for various supported script engines;
 - [`ddd`](ddd) for *Domain-Driven-Design* related code;
 - [`tools`](tools) for some useful tools tied to our framework.
 
@@ -48,11 +50,11 @@ Some types have been changed or enhanced:
 - `TSQLRawBlob` renamed as `RawBlob`;
 - `RawUtf8` is an alias to `System.UTF8String` type so you can use either of them in your code.
 
-Note that the `PUREMORMOT2` conditional can be defined for your project, to disable the type names backward compatible redirection enabled by default.
+Note that the `PUREMORMOT2` conditional can be defined for your project, to disable the type names backward compatible redirection enabled by default. It may be a good idea, because we may relax the backward compatibility in a few years.
 
 ## Include Files
 
 To clean the design and enhance source maintainibility, some units have associated `*.inc` source files:
-- To regroup Operating-System specific code - e.g. `mormot.core.os.posix.inc` to include non-Windows OS calls in `mormot.core.os`;
-- To regroupe Compiler-specific code - e.g. `mormot.core.rtti.fpc.inc` to include FPC RTTI in `mormot.core.rtti`;
-- To regroup CPU-specific (asm) code - e.g. `mormot.core.crypto.asmx64.inc` to include `x86_64` assembly in `mormot.core.crypto`.
+- To regroup Operating-System specific code - e.g. `mormot.core.os.posix.inc` to include non-Windows OS calls in `mormot.core.os.pas`;
+- To regroupe Compiler-specific code - e.g. `mormot.core.rtti.fpc.inc` to include FPC RTTI in `mormot.core.rtti.pas`;
+- To regroup CPU-specific (asm) code - e.g. `mormot.crypto.core.asmx64.inc` to include `x86_64` assembly in `mormot.crypto.core.pas`.
