@@ -65,7 +65,8 @@ uses
   math,
   mormot.core.base,
   mormot.core.os,
-  mormot.core.unicode;
+  mormot.core.unicode,
+  mormot.lib.static;
 
 {$ifdef JS_STRICT_NAN_BOXING}
   {$define JS_ANY_NAN_BOXING}
