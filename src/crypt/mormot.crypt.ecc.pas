@@ -1,7 +1,7 @@
 /// Framework Core High-Level Public-Key Elliptic-Curve Cryptography
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
-unit mormot.crypto.ecc;
+unit mormot.crypt.ecc;
 
 {
   *****************************************************************************
@@ -25,18 +25,18 @@ uses
   sysutils,
   mormot.core.base,
   mormot.core.os,
-  mormot.crypto.core,
+  mormot.crypt.core,
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.buffers,
   mormot.core.data,
   mormot.core.datetime,
-  mormot.crypto.secure,
+  mormot.crypt.secure,
   mormot.core.variants,
   mormot.core.json,
   mormot.core.rtti,
   mormot.core.search,
-  mormot.crypto.ecc256r1;
+  mormot.crypt.ecc256r1;
 
 
 
@@ -150,7 +150,7 @@ const
 
 
 type
-  /// exception class associated with this mormot.crypto.ecc unit
+  /// exception class associated with this mormot.crypt.ecc unit
   EECCException = class(ESynException);
 
   TEccSignatureCertified = class;

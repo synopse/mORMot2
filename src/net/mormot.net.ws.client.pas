@@ -31,9 +31,9 @@ uses
   mormot.core.rtti,
   mormot.core.json,
   mormot.core.buffers,
-  mormot.crypto.core,
-  mormot.crypto.ecc,
-  mormot.crypto.secure, // IProtocol definition
+  mormot.crypt.core,
+  mormot.crypt.ecc,
+  mormot.crypt.secure, // IProtocol definition
   mormot.net.sock,
   mormot.net.http,
   mormot.net.client,

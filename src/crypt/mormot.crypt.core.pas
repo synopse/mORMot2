@@ -1,7 +1,7 @@
 /// Framework Core Cryptographic Process (Hashing and Cypher)
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
-unit mormot.crypto.core;
+unit mormot.crypt.core;
 
 {
   *****************************************************************************
@@ -1156,29 +1156,29 @@ type
 
 var
   /// the fastest AES implementation classes available on the system, per mode
-  // - mormot.crypto.openssl may register its own classes, e.g. TAesGcmOsl
+  // - mormot.crypt.openssl may register its own classes, e.g. TAesGcmOsl
   TAesFast: array[TAesMode] of TAesAbstractClass = (
     TAesEcb, TAesCbc, TAesCfb, TAesOfb, TAesC64, TAesCtr,
     TAesCfc, TAesOfc, TAesCtc, TAesGcm);
 
-/// OpenSSL-like Cipher name encoding of mormot.crypto.core AES engines
+/// OpenSSL-like Cipher name encoding of mormot.crypt.core AES engines
 // - return e.g. 'aes-128-cfb' or 'aes-256-gcm'
 // - our mC64, mCfc, mOfc, mCtc custom algorithms use non-standard
 // trailing 'c64', 'cfc', 'ofc' and 'ctc' mode names e.g. as 'aes-256-cfc'
 function AesAlgoNameEncode(Mode: TAesMode; KeyBits: integer): RawUtf8; overload;
 
-/// OpenSSL-like Cipher name encoding of mormot.crypto.core AES engines
+/// OpenSSL-like Cipher name encoding of mormot.crypt.core AES engines
 // - returned TShort16 is #0 ended so @Result[1] can be transtyped to a PUtf8Char
 procedure AesAlgoNameEncode(Mode: TAesMode; KeyBits: integer;
   out Result: TShort16); overload;
 
-/// OpenSSL-like Cipher name decoding into mormot.crypto.core AES engines
+/// OpenSSL-like Cipher name decoding into mormot.crypt.core AES engines
 // - input AesAlgoName length should be already checked as 11
 // - decode e.g. 'aes-128-cfb' into Mode=mCfb and KeyBits=128
 function AesAlgoNameDecode(AesAlgoName: PUtf8Char;
   out Mode: TAesMode; out KeyBits: integer): boolean; overload;
 
-/// OpenSSL-like Cipher name decoding into a mormot.crypto.core TAesAbstract class
+/// OpenSSL-like Cipher name decoding into a mormot.crypt.core TAesAbstract class
 // - decode e.g. 'aes-128-cfb' into Mode=mCfb and KeyBits=128
 function AesAlgoNameDecode(const AesAlgoName: RawUtf8;
   out KeyBits: integer): TAesAbstractClass; overload;
@@ -2667,11 +2667,11 @@ var
   SBox, InvSBox: array[byte] of byte;
 
 {$ifdef CPUX64}
-  {$include mormot.crypto.core.asmx64.inc}
+  {$include mormot.crypt.core.asmx64.inc}
 {$endif}
 
 {$ifdef CPUX86}
-  {$include mormot.crypto.core.asmx86.inc}
+  {$include mormot.crypt.core.asmx86.inc}
 {$endif}
 
 

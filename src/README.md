@@ -20,7 +20,7 @@ The source code tree is split into the following sub-folders:
 
 - [`core`](core) for low-level shared components like text, RTTI, JSON, compression;
 - [`lib`](lib) for external third-party libraries like *zlib* or *openssl*;
-- [`crypto`](crypto) for efficient symetric/asymetric cryptography;
+- [`crypt`](crypt) for efficient symetric/asymetric cryptography;
 - [`net`](net) for the client/server communication layer;
 - [`db`](db) for our *SQLite3* kernel, and SQL/NoSQL direct access;
 - [`rest`](rest) for the RESTful client/server processing;
@@ -57,4 +57,4 @@ Note that the `PUREMORMOT2` conditional can be defined for your project, to disa
 To clean the design and enhance source maintainibility, some units have associated `*.inc` source files:
 - To regroup Operating-System specific code - e.g. `mormot.core.os.posix.inc` to include non-Windows OS calls in `mormot.core.os.pas`;
 - To regroupe Compiler-specific code - e.g. `mormot.core.rtti.fpc.inc` to include FPC RTTI in `mormot.core.rtti.pas`;
-- To regroup CPU-specific (asm) code - e.g. `mormot.crypto.core.asmx64.inc` to include `x86_64` assembly in `mormot.crypto.core.pas`.
+- To regroup CPU-specific (asm) code - e.g. `mormot.crypt.core.asmx64.inc` to include `x86_64` assembly in `mormot.crypt.core.pas`.

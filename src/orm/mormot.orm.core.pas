@@ -59,7 +59,7 @@ uses
   mormot.core.json,
   mormot.core.threads,
   mormot.core.search,
-  mormot.crypto.secure,
+  mormot.crypt.secure,
   mormot.core.zip, // for ODS export
   mormot.db.core;
 

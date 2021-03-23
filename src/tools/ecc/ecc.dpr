@@ -41,10 +41,10 @@ uses
   mormot.core.json         in '..\..\core\mormot.core.json.pas',
   mormot.core.log          in '..\..\core\mormot.core.log.pas',
   mormot.core.test         in '..\..\core\mormot.core.test.pas',
-  mormot.crypto.core       in '..\..\core\mormot.crypto.core.pas',
-  mormot.crypto.secure     in '..\..\core\mormot.crypto.secure.pas',
-  mormot.crypto.ecc256r1   in '..\..\core\mormot.crypto.ecc256r1.pas',
-  mormot.crypto.ecc        in '..\..\core\mormot.crypto.ecc.pas',
+  mormot.crypt.core        in '..\..\crypt\mormot.crypt.core.pas',
+  mormot.crypt.secure      in '..\..\crypt\mormot.crypt.secure.pas',
+  mormot.crypt.ecc256r1    in '..\..\crypt\mormot.crypt.ecc256r1.pas',
+  mormot.crypt.ecc         in '..\..\crypt\mormot.crypt.ecc.pas',
   mormot.app.console       in '..\..\app\mormot.app.console.pas',
   mormot.tools.ecc;
 
@@ -71,7 +71,7 @@ begin
     writeln(#13#10'Synopse ECC certificate-based public-key cryptography' + 
             #13#10'-----------------------------------------------------');
     TextColor(ccGreen);
-    writeln('Using mormot.crypto.ecc '  + SYNOPSE_FRAMEWORK_VERSION +  #13#10);
+    writeln('Using mormot.crypt.ecc '  + SYNOPSE_FRAMEWORK_VERSION +  #13#10);
     TextColor(ccLightGray);
     writeln(Executable.ProgramName,
       ' help');

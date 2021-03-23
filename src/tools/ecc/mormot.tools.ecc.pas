@@ -26,11 +26,11 @@ uses
   mormot.core.variants,
   mormot.core.rtti,
   mormot.core.json,
-  mormot.crypto.secure,
+  mormot.crypt.secure,
   mormot.core.search,
-  mormot.crypto.ecc,
-  mormot.crypto.ecc256r1,
-  mormot.crypto.core,
+  mormot.crypt.ecc,
+  mormot.crypt.ecc256r1,
+  mormot.crypt.core,
   mormot.app.console;
   
 

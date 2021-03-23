@@ -1,7 +1,7 @@
 /// Framework Core Public-Key Cryptography with secp256r1/NISTP-256 ECC Curves
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
-unit mormot.crypto.ecc256r1;
+unit mormot.crypt.ecc256r1;
 
 {
   *****************************************************************************
@@ -11,7 +11,7 @@ unit mormot.crypto.ecc256r1;
     - Middle-Level Certificate-based Public Key Cryptography
 
    Pascal and optimized gcc static binaries are included.
-   If mormot.crypto.openssl.RegisterOpenSsl is called, uses faster OpenSSL.
+   If mormot.crypt.openssl.RegisterOpenSsl is called, uses faster OpenSSL.
 
   *****************************************************************************
 
@@ -32,7 +32,7 @@ uses
   mormot.core.text,
   mormot.core.buffers, // for base-64 and baudot encoding
   mormot.core.datetime,
-  mormot.crypto.core;
+  mormot.crypt.core;
 
 
 
@@ -521,7 +521,7 @@ end;
      x64 is 4 times faster than x86 for such arithmetic tasks :)
 
 
-  Note that mormot.crypto.openssl.RegisterOpenSsl replaces those functions
+  Note that mormot.crypt.openssl.RegisterOpenSsl replaces those functions
   by the much faster OpenSSL implementation (numbers on Linux x86_64):
 
   - OpenSSL: 300 Ecc256r1MakeKey in 7.75ms i.e. 38,664/s, aver. 25us

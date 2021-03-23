@@ -62,8 +62,8 @@ uses
   mormot.core.data,
   mormot.core.unicode,
   mormot.core.text,
-  mormot.crypto.core, // for our AES encryption
-  mormot.crypto.secure,
+  mormot.crypt.core, // for our AES encryption
+  mormot.crypt.secure,
   mormot.lib.static,
   mormot.db.raw.sqlite3;
 

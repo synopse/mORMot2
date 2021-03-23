@@ -2,7 +2,7 @@
   This file is a part of the Open Source Synopse mORMot framework 2,
   licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 
-   x86 32-bit assembly used by mormot.crypto.core.pas
+   x86 32-bit assembly used by mormot.crypt.core.pas
 }
 
 

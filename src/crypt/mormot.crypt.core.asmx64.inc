@@ -2,7 +2,7 @@
   This file is a part of the Open Source Synopse mORMot framework 2,
   licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 
-   x86_64 assembly used by mormot.crypto.core.pas
+   x86_64 assembly used by mormot.crypt.core.pas
 }
 
 {$ifdef FPC}
@@ -5269,7 +5269,7 @@ procedure sha512_sse4(data, hash: pointer; blocks: Int64);
   {$endif OSLINUX}
 {$endif OSWINDOWS}
 
-// defined in mormot.crypto.core.pas, not in mormot.core.base, to avoid
+// defined in mormot.crypt.core.pas, not in mormot.core.base, to avoid
 // .o/.obj dependencies for most basic executables (for which mormot.core.base
 // crc32c x86_64 asm is alredy fast enough)
 function crc32_iscsi_01(buf: PAnsiChar; len: PtrUInt; crc: cardinal): cardinal;

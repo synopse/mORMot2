@@ -1,7 +1,7 @@
 /// Framework Core Authentication and Security Features
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
-unit mormot.crypto.secure;
+unit mormot.crypt.secure;
 
 {
   *****************************************************************************
@@ -13,7 +13,7 @@ unit mormot.crypto.secure;
     - 64-bit TSynUniqueIdentifier and its efficient Generator
     - IProtocol Safe Communication with Unilateral or Mutual Authentication
 
-   Uses optimized mormot.crypto.core.pas for its actual process.
+   Uses optimized mormot.crypt.core.pas for its actual process.
 
   *****************************************************************************
 }
@@ -34,7 +34,7 @@ uses
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,
-  mormot.crypto.core;
+  mormot.crypt.core;
 
 
 { ***************** TSyn***Password and TSynConnectionDefinition Classes }
@@ -45,7 +45,7 @@ type
   // will be persisted encrypted with a private key (which can be customized)
   // - if default simple symmetric encryption is not enough, it will also
   // read passwords strongly obfuscated for a given user using
-  // mormot.crypto.core.pas' CryptDataForCurrentUser()
+  // mormot.crypt.core.pas' CryptDataForCurrentUser()
   // - a published property should be defined as such in inherited class:
   // ! property PasswordPropertyName: RawUtf8 read fPassword write fPassword;
   // - use the PassWordPlain property to access to its uncyphered value
@@ -161,7 +161,7 @@ type
 // - used e.g. by TSynPersistentWithPassword and mormot.db.proxy to obfuscate
 // password or content - so it is not a real encryption
 // - fast, but not cryptographically secure, since naively xor data bytes with
-// crc32ctab[]: consider using mormot.crypto.core proven algorithms instead
+// crc32ctab[]: consider using mormot.crypt.core proven algorithms instead
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
 
 
@@ -485,7 +485,7 @@ type
 
 { **************** High-Level TSynSigner/TSynHasher Multi-Algorithm Wrappers }
 
-{ implemented in this unit and not in mormot.crypto.core, since TSynSignerParams
+{ implemented in this unit and not in mormot.crypt.core, since TSynSignerParams
   expects JSON support, which requires mormot.core.json }
 
 type
@@ -659,7 +659,7 @@ type
     sprInvalidMAC);
 
   /// perform safe communication after unilateral or mutual authentication
-  // - see e.g. TProtocolNone or mormot.crypto.ecc's TEcdheProtocolClient and
+  // - see e.g. TProtocolNone or mormot.crypt.ecc's TEcdheProtocolClient and
   // TEcdheProtocolServer implementation classes
   IProtocol = interface
     ['{91E3CA39-3AE2-44F4-9B8C-673AC37C1D1D}']
