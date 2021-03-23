@@ -1691,6 +1691,13 @@ function VariantToUtf8(const V: Variant): RawUtf8; overload;
 function ToUtf8(const V: Variant): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// convert any Variant/TVarData into UTF-8 encoded String
+// - use VariantSaveJson() instead if you need a conversion to JSON with
+// custom parameters
+// - note: null will be returned as 'null'
+function ToUtf8(const V: TVarData): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// convert any Variant into UTF-8 encoded String
 // - use VariantSaveJson() instead if you need a conversion to JSON with
 // custom parameters
