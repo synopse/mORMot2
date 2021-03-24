@@ -220,7 +220,7 @@ type
     procedure From(newtag, val: integer); overload;
        {$ifdef HASINLINE} inline; {$endif}
     /// set a pointer value - may be JSObject or JSString
-    procedure From(newtag: integer; ptr: pointer); overload;
+    procedure From(newtag: integer; val: pointer); overload;
      {$ifndef JS_ANY_NAN_BOXING_CPU64}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// create a JS_TAG_BOOL
     procedure From(val: boolean); overload;
@@ -728,7 +728,7 @@ type
       1:
         (generic_magic: JSCFunctionMagic);
       2:
-        (&constructor: JSCFunction);
+        (constructor_: JSCFunction);
       3:
         (constructor_magic: constructor_magic_func);
       4:
@@ -752,6 +752,7 @@ type
 
   // C property definition
 
+  PJSCFunctionListEntry = ^JSCFunctionListEntry;
   JSCFunctionListEntry = record
     name: PAnsiChar;
     prop_flags: byte;
@@ -771,13 +772,13 @@ type
             _set: JSCFunctionType;
           end);
         2:
-          (&alias: record
+          (alias_: record
             name: PAnsiChar;
             base: integer;
           end);
         3:
           (prop_list: record
-            tab: ^JSCFunctionListEntry;
+            tab: PJSCFunctionListEntry;
             len: integer;
           end);
         4:
@@ -790,7 +791,6 @@ type
           (f64: double);
     end;
   end;
-  PJSCFunctionListEntry = ^JSCFunctionListEntry;
 
 
 { ************ QuickJS Functions API }
@@ -1207,8 +1207,8 @@ function JS_DeleteProperty(ctx: JSContext; obj: JSValueConst; prop: JSAtom;
   flags: integer): integer;
    cdecl; external {$ifdef QJSDLL}QJ{$endif};
 
-function JS_SetPrototype(ctx: JSContext; obj: JSValueConst; proto_val:
-  JSValueConst): integer;
+function JS_SetPrototype(ctx: JSContext; obj: JSValueConst;
+  proto_val: JSValueConst): integer;
    cdecl; external {$ifdef QJSDLL}QJ{$endif};
 
 function JS_GetPrototype(ctx: JSContext; val: JSValueConst): JSValueConst;
@@ -1609,31 +1609,418 @@ implementation
 uses
   mormot.lib.static;
 
-{$ifdef OSLINUX}
+{$ifdef FPC}
+
+  {$ifdef OSLINUX}
+
+    {$ifdef CPUX86}
+      {$linklib ..\..\static\i386-linux\libquickjs.a}
+    {$endif CPUX86}
+    {$ifdef CPUX64}
+      {$linklib ..\..\static\x86_64-linux\libquickjs.a}
+    {$endif CPUX64}
+    {$ifdef CPUAARCH64}
+      {$L ..\..\static\aarch64-linux\libquickjs.a}
+    {$endif CPUAARCH64}
+    {$ifdef CPUARM}
+      {$L ..\..\static\arm-linux\libquickjs.a}
+    {$endif CPUARM}
+
+  {$endif OSLINUX}
+
+  {$ifdef OSWINDOWS}
+    {$ifdef CPUX86}
+      {$linklib ..\..\static\i386-win32\libquickjs.a}
+    {$endif CPUX86}
+    {$ifdef CPUX64}
+      {$linklib ..\..\static\x86_64-win64\libquickjs.a}
+    {$endif CPUX64}
+  {$endif OSWINDOWS}
+
+{$else}
 
   {$ifdef CPUX86}
-    {$linklib ..\..\static\i386-linux\libquickjs.a}
+    // we were not able to generate properly the .obj files yet :(
+    {$L ..\..\static\delphi\quickjs.obj}
+    {$L ..\..\static\delphi\libregexp.obj}
+    {$L ..\..\static\delphi\libunicode.obj}
+    {$L ..\..\static\delphi\libbf.obj}
+    {$L ..\..\static\delphi\cutils.obj}
   {$endif CPUX86}
-  {$ifdef CPUX64}
-    {$linklib ..\..\static\x86_64-linux\libquickjs.a}
-  {$endif CPUX64}
-  {$ifdef CPUAARCH64}
-    {$L ..\..\static\aarch64-linux\libquickjs.a}
-  {$endif CPUAARCH64}
-  {$ifdef CPUARM}
-    {$L ..\..\static\arm-linux\libquickjs.a}
-  {$endif CPUARM}
 
-{$endif OSLINUX}
+{$ifdef CPUX86}
 
-{$ifdef OSWINDOWS}
-  {$ifdef CPUX86}
-    {$linklib ..\..\static\i386-win32\libquickjs.a}
-  {$endif CPUX86}
-  {$ifdef CPUX64}
-    {$linklib ..\..\static\x86_64-win64\libquickjs.a}
-  {$endif CPUX64}
-{$endif OSWINDOWS}
+// note: Delphi expects the dependencies to be in the very same unit
+function pas_malloc(size: cardinal): pointer; cdecl;
+begin
+  if size = 0 then
+  begin
+    result := nil;
+    exit;
+  end;
+  GetMem(result, size + 4);
+  PInteger(result)^ := size;
+  inc(PInteger(result));
+end;
+
+function pas_calloc(n, size: PtrInt): pointer; cdecl;
+begin
+  result := AllocMem(size * n + 4);
+  PInteger(result)^ := size;
+  inc(PInteger(result));
+end;
+
+procedure pas_free(P: pointer); cdecl;
+begin
+  if P = nil then
+    exit;
+  dec(PInteger(P));
+  FreeMem(P);
+end;
+
+function pas_realloc(P: pointer; Size: integer): pointer; cdecl;
+begin
+  if (P = nil) or
+     (Size = 0) then
+  begin
+    pas_free(P);
+    exit;
+  end;
+  dec(PInteger(P));
+  ReallocMem(P, Size + 4);
+  result := P;
+  PInteger(result)^ := size;
+  inc(PInteger(result));
+end;
+
+function pas_malloc_usable_size(P: pointer): integer; cdecl;
+begin
+  if P = nil then
+    result := 0
+  else
+  begin
+    dec(PInteger(P));
+    result := PInteger(P)^;
+  end;
+end;
+
+procedure memcmp;
+asm
+  jmp libc_memcmp
+end;
+
+procedure lrerealloc2; external;
+
+procedure lre_realloc;
+asm
+  jmp lrerealloc2
+end;
+
+procedure __ms_vsnprintf;
+asm
+  jmp libc_vsnprintf
+end;
+
+procedure printf;
+asm
+  jmp libc_printf
+end;
+
+procedure sprintf;
+asm
+  jmp libc_sprintf
+end;
+
+procedure fprintf;
+asm
+  jmp libc_fprintf
+end;
+
+procedure strchr;
+asm
+  jmp libc_strchr
+end;
+
+procedure strrchr;
+asm
+  jmp mormot.lib.static.strrchr
+end;
+
+procedure ex1t;
+asm
+  jmp libc_exit
+end;
+
+procedure putchar;
+asm
+  jmp mormot.lib.static.putchar
+end;
+
+procedure __strtod;
+asm
+  jmp libc_strtod
+end;
+
+procedure strcpy;
+asm
+  jmp libc_strcpy
+end;
+
+function fwrite(buf: pointer; size, count: PtrInt; f: pointer): integer; cdecl;
+begin
+  result := libc_write(PtrInt(f), buf, size * count) div size;
+end;
+
+procedure memchr;
+asm
+  jmp libc_memchr
+end;
+
+function memcpy(dest, src: Pointer; count: PtrInt): Pointer; cdecl;
+begin
+  MoveFast(src^, dest^, count);
+  result := dest;
+end;
+
+function memmove(dest, src: Pointer; count: PtrInt): Pointer; cdecl;
+begin
+  MoveFast(src^, dest^, count);
+  result := dest;
+end;
+
+function memset(dest: Pointer; val: Integer; count: PtrInt): Pointer; cdecl;
+begin
+  FillCharFast(dest^, count, val);
+  result := dest;
+end;
+
+function strlen(p: PAnsiChar): integer; cdecl;
+begin
+  result := mormot.core.base.strlen(pointer(P));
+end;
+
+function strcmp(p1, p2: PAnsiChar): integer; cdecl;
+begin
+  result := mormot.core.base.StrComp(p1, p2);
+end;
+
+procedure __chkstk_ms;
+asm
+  jmp mormot.lib.static.__chkstk_ms
+end;
+
+procedure pas_assertfailed(cond, fn: PAnsiChar; line: integer); cdecl;
+begin
+  raise EExternal.CreateFmt('Panic in %s:%d: %s', [fn, line, cond]);
+end;
+
+procedure __moddi3;
+asm
+  jmp moddi3
+end;
+
+procedure __divdi3;
+asm
+  jmp divdi3
+end;
+
+procedure __udivdi3;
+asm
+  jmp udivdi3
+end;
+
+procedure __umoddi3;
+asm
+  jmp umoddi3
+end;
+
+procedure __udivmoddi4;
+asm
+  jmp udivmoddi4
+end;
+
+function atoi(const str: PUtf8Char): PtrInt; cdecl;
+begin
+  result := GetInteger(str);
+end;
+
+function pow(b, e: double): double; cdecl;
+begin
+  result := power(b, e);
+end;
+
+function fabs(x: double): double; cdecl;
+begin
+  result := abs(x);
+end;
+
+function sq4t(x: double): double; cdecl;
+begin
+  result := sqr(x);
+end;
+
+function cbrt(x: double): double; cdecl;
+begin
+  result := exp( (1 / 3) * ln(x));
+end;
+
+function trunk(x: double): double; cdecl;
+begin
+  result := system.trunc(x);
+end;
+
+function c0s(x: double): double; cdecl;
+begin
+  result := system.cos(x);
+end;
+
+function s1n(x: double): double; cdecl;
+begin
+  result := system.sin(x);
+end;
+
+function acos(x: double): double; cdecl;
+begin
+  result := arccos(x);
+end;
+
+function asin(x: double): double; cdecl;
+begin
+  result := arcsin(x);
+end;
+
+function e4p(x: double): double; cdecl;
+begin
+  result := system.exp(x);
+end;
+
+function expm1(x: double): double; cdecl;
+begin
+  result := system.exp(x) - 1;
+end;
+
+function log(x: double): double; cdecl;
+begin
+  result := ln(x);
+end;
+
+function tan(x: double): double; cdecl;
+begin
+  result := math.tan(x);
+end;
+
+function cosh(x: double): double; cdecl;
+begin
+  result := math.cosh(x);
+end;
+
+function sinh(x: double): double; cdecl;
+begin
+  result := math.sinh(x);
+end;
+
+function tanh(x: double): double; cdecl;
+begin
+  result := math.tanh(x);
+end;
+
+function acosh(x: double): double; cdecl;
+begin
+  result := arccosh(x);
+end;
+
+function asinh(x: double): double; cdecl;
+begin
+  result := arcsinh(x);
+end;
+
+function atan(x: double): double; cdecl;
+begin
+  result := arctan(x);
+end;
+
+function atan2(y, x: double): double; cdecl;
+begin
+  result := ArcTan2(y, x);
+end;
+
+function atanh(x: double): double; cdecl;
+begin
+  result := arctanh(x);
+end;
+
+function hypot(y, x: double): double; cdecl;
+begin
+  result := math.hypot(y, x);
+end;
+
+function floor(x: double): double; cdecl;
+begin
+  result := math.floor(x);
+end;
+
+function r0und(x: double): Int64; cdecl;
+begin
+  result := system.round(x);
+end;
+
+function ceil(x: double): double; cdecl;
+var
+  i: Int64;
+begin
+  i := system.trunc(x) + ord(system.frac(x) > 0);
+  result := i; // libc returns a double
+end;
+
+
+function lrint(x: double): Int64; cdecl;
+begin
+  result := system.round(x);
+end;
+
+function log1p(const x: double): double; cdecl;
+begin
+  result := ln(1 + X);
+end;
+
+function log10(const x: double): double; cdecl;
+const
+  InvLn10 : UInt64 = $3FDBCB7B1526E50E; // 1/Ln(10)
+begin
+  result := ln(X) * PDouble(@InvLn10)^;
+end;
+
+function log2(const x: double): double; cdecl;
+const
+  InvLn2 : UInt64 = $3FF71547652B82FE; // 1/Ln(2)
+begin
+  result := ln(X) * PDouble(@InvLn2)^;
+end;
+
+function fesetround(mode: integer): integer; cdecl;
+begin
+  // not implemented yet
+  result := mode;
+end;
+
+function fmod(x, y: double): double; cdecl;
+begin
+  result:= x - y * int(x / y);
+end;
+
+function fmax(x, y: double): double; cdecl;
+begin
+  result := math.max(x, y);
+end;
+
+function fmin(x, y: double): double; cdecl;
+begin
+  result := min(x, y);
+end;
+
+{$endif CPUX86}
+
+{$endif FPC}
 
 procedure js_std_dump_error1(ctx: JSContext; exc: JSValueRaw);
   {$ifdef FPC} public name _PREFIX + 'js_std_dump_error1'; {$endif}
@@ -1849,8 +2236,8 @@ begin
   result.prop_flags := JS_PROP_WRITABLE or JS_PROP_CONFIGURABLE;
   result.def_type := JS_DEF_ALIAS;
   result.magic := 0;
-  result.u.&alias.name := from;
-  result.u.&alias.base := -1;
+  result.u.alias_.name := from;
+  result.u.alias_.base := -1;
 end;
 
 function JS_ALIAS_BASE_DEF(name, from: PAnsiChar;
@@ -1860,8 +2247,8 @@ begin
   result.prop_flags := JS_PROP_WRITABLE or JS_PROP_CONFIGURABLE;
   result.def_type := JS_DEF_ALIAS;
   result.magic := 0;
-  result.u.&alias.name := from;
-  result.u.&alias.base := base;
+  result.u.alias_.name := from;
+  result.u.alias_.base := base;
 end;
 
 
@@ -2227,15 +2614,15 @@ begin
   u.i32 := val;
 end;
 
-procedure JSValue.From(newtag: integer; ptr: pointer);
+procedure JSValue.From(newtag: integer; val: pointer);
 begin
   SetTag(newtag);
   {$ifdef JS_ANY_NAN_BOXING_CPU64}
-  if PtrUInt(ptr) > JS_PTR64_MASK then
+  if PtrUInt(val) > JS_PTR64_MASK then
     raise EQuickJS.CreateFmt('JSValue.From(%x) 48-bit overflow', [ptr]);
-  PtrUInt(u.ptr) := PtrUInt(u.ptr) or PtrUInt(ptr); // keep upper tag bits
+  PtrUInt(u.ptr) := PtrUInt(u.ptr) or PtrUInt(val); // keep upper tag bits
   {$else}
-  u.ptr := ptr;
+  u.ptr := val;
   {$endif JS_ANY_NAN_BOXING_CPU64}
 end;
 
@@ -2337,7 +2724,7 @@ end;
 
 procedure TJSContext.ToUtf8(var v: JSValue; var s: RawUtF8);
 var
-  P: PUtf8Char;
+  P: PAnsiChar;
   len: PtrUInt;
 begin
   P := JS_ToCStringLen2(@self, @len, JSValueRaw(v), false);
@@ -2347,7 +2734,7 @@ end;
 
 procedure TJSContext.AddUtf8(var v: JSValue; var s: RawUtF8);
 var
-  P: PUtf8Char;
+  P: PAnsiChar;
   len, sl: PtrUInt;
 begin
   P := JS_ToCStringLen2(@self, @len, JSValueRaw(v), false);
@@ -2390,7 +2777,8 @@ var
 begin
   ErrorMessage({stacktrace=}true, err, reason);
   {$I-}
-  writeln(StdErr, err); // default is output to the console
+  writeln({$ifdef FPC}StdErr,{$endif} err); // default is output to the console
+  ioresult;
   {$I+}
 end;
 
@@ -2548,7 +2936,7 @@ end;
 
 function TJSContext.From(P: PUtf8Char; Len: PtrInt): JSValue;
 begin
-  result := JSValue(JS_NewStringLen(@self, P, Len));
+  result := JSValue(JS_NewStringLen(@self, pointer(P), Len));
 end;
 
 function TJSContext.FromW(P: PWideChar; Len: PtrInt): JSValue;

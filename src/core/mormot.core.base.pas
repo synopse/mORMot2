@@ -81,6 +81,10 @@ const
 { ************ Common Types Used for Compatibility Between Compilers and CPU }
 
 const
+  /// internal Code Page for UTF-8 Unicode encoding
+  // - as used by RawUtf8 and all our internal framework text process
+  CP_UTF8 = 65001;
+
   /// internal Code Page for UTF-16 Unicode encoding
   // - used e.g. for Delphi 2009+ UnicodeString=String type
   CP_UTF16 = 1200;
@@ -89,8 +93,8 @@ const
   CP_RAWBYTESTRING = 65535;
 
   /// fake code page used to recognize RawBlob
-  // - RawBlob internal code page will be CP_RAWBYTESTRING = 65535, but
-  // our ORM will identify RawBlob and serialize using CP_RAWBLOB instead
+  // - RawBlob internal code page will be CP_RAWBYTESTRING = 65535, but our ORM
+  // will identify the RawBlob type and unserialize it using CP_RAWBLOB instead
   // - TTextWriter.AddAnyAnsiBuffer will recognize it and use Base-64 encoding
   CP_RAWBLOB = 65534;
 
@@ -98,10 +102,8 @@ const
   CODEPAGE_US = 1252;
 
   /// Latin-1 ISO/IEC 8859-1 Code Page
+  // - map low 8-bit Unicode CodePoints
   CODEPAGE_LATIN1 = 819;
-
-  /// internal Code Page for UTF-8 Unicode encoding
-  CP_UTF8 = 65001;
 
   /// internal Code Page for System AnsiString encoding
   CP_ACP = 0;
@@ -148,7 +150,7 @@ type
   {$endif}
   /// points to an unsigned Int64
   PQWord = ^QWord;
-
+  
   // redefined here to not use the unexpected PWord definition from Windows unit
   PWord = System.PWord;
   // redefined here to not use the unexpected PSingle definition from Windows unit
@@ -160,6 +162,8 @@ type
   {$ifndef ISDELPHIXE2}
   /// used to store the handle of a system Thread
   TThreadID = cardinal;
+  /// compatibility definition with FPC and newer Delphi
+  PUInt64 = ^UInt64;
   {$endif}
 
 {$endif FPC}

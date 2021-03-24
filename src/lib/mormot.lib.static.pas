@@ -65,7 +65,7 @@ function libc_printf(format: PAnsiChar): Integer; cdecl; varargs;
 function libc_sprintf(buf: Pointer; format: PAnsiChar): Integer; cdecl; varargs;
 function libc_fprintf(fHandle: pointer; format: PAnsiChar): Integer; cdecl; varargs;
 function libc_vsnprintf(buf: pointer; nzize: PtrInt; format: PAnsiChar;
-   param: pointer): integer; cdecl;
+  param: pointer): integer; cdecl;
 function libc_strcspn(str, reject: PUtf8Char): integer; cdecl;
 function libc_strcat(dest: PAnsiChar; src: PAnsiChar): PAnsiChar; cdecl;
 function libc_strcpy(dest, src: PAnsiChar): PAnsiChar; cdecl;
@@ -75,6 +75,23 @@ function libc_memcmp(p1, p2: PByte; Size: integer): integer; cdecl;
 function libc_strchr(s: Pointer; c: Integer): Pointer; cdecl;
 function libc_strtod(value: PAnsiChar; endPtr: PPAnsiChar): Double; cdecl;
 function libc_write(handle: Integer; buf: Pointer; len: LongWord): Integer; cdecl;
+
+type
+  timeval = record
+    sec: integer; // defined as long in Windows SDK
+    usec: integer;
+  end;
+
+function putchar(c: integer): integer; cdecl;
+function gettimeofday(var tv: timeval; zone: pointer): integer; cdecl;
+function fputc(c: integer; f: pointer): integer; cdecl;
+function strrchr(s: PUtf8Char; c: AnsiChar): PUtf8Char; cdecl;
+function moddi3(num, den: int64): int64; cdecl;
+function umoddi3(num, den: uint64): uint64; cdecl;
+function divdi3(num, den: int64): int64; cdecl;
+function udivdi3(num, den: uint64): uint64; cdecl;
+function udivmoddi4(a, b: UInt64; var c: UInt64): UInt64; cdecl;
+procedure __chkstk_ms; 
 
 {$endif OSWINDOWS}
 
@@ -158,7 +175,7 @@ begin
   result := P;
 end;
 
-function pasmalloc_usable_size(P: pointer): integer; cdecl;
+function pas_malloc_usable_size(P: pointer): integer; cdecl;
  {$ifdef FPC} public name _PREFIX + 'pas_malloc_usable_size'; {$endif}
 begin
   {$ifdef FPC}
@@ -218,6 +235,75 @@ function libc_write(handle: Integer; buf: Pointer; len: LongWord): Integer; cdec
 procedure libc_qsort(baseP: PByte; NElem, Width: PtrInt; comparF: qsort_compare_func); cdecl;
   external _CLIB name 'qsort';
 
+
+function putchar(c: integer): integer; cdecl;
+  {$ifdef FPC} public name _PREFIX + 'putchar'; {$endif}
+begin
+  {$I-}
+  write(AnsiChar(c));
+  ioresult;
+  {$I+}
+  result := c;
+end;
+
+function gettimeofday(var tv: timeval; zone: pointer): integer; cdecl;
+  {$ifdef FPC} public name _PREFIX + 'gettimeofday'; {$else} export; {$endif}
+var
+  now: Int64;
+begin
+  now := UnixMSTimeUtcFast;
+  tv.usec := (now mod 1000) * 1000;
+  tv.sec := now div 1000;
+  result := 0;
+end;
+
+function fputc(c: integer; f: pointer): integer; cdecl;
+  {$ifdef FPC} public name _PREFIX + 'fputc'; {$endif}
+begin
+  if libc_write(PtrInt(f), @c, 1) = 1 then
+    result := c
+  else
+    result := 26;
+end;
+
+function strrchr(s: PUtf8Char; c: AnsiChar): PUtf8Char; cdecl;
+ {$ifdef FPC} public name _PREFIX + 'strrchr'; {$endif}
+begin
+  // simple full pascal version of the standard C library function
+  result := nil;
+  if s <> nil then
+    while s^<>#0 do
+    begin
+      if s^ = c then
+        result := s;
+      inc(s);
+    end;
+end;
+
+{$ifdef CPUX86}
+
+// asm stubs to circumvent libgcc.a (cross)linking issues on Win32
+
+procedure __chkstk_ms; assembler;
+  {$ifdef FPC} nostackframe; public name _PREFIX + '__chkstk_ms'; {$endif}
+asm
+        push    ecx
+        push    eax
+        cmp     eax, 4096
+        lea     ecx, dword ptr [esp+0CH]
+        jc      @@002
+@@001:  sub     ecx, 4096
+        or      dword ptr [ecx], 00H
+        sub     eax, 4096
+        cmp     eax, 4096
+        ja      @@001
+@@002:  sub     ecx, eax
+        or      dword ptr [ecx], 00H
+        pop     eax
+        pop     ecx
+end;
+
+{$endif CPUX86}
 
 {$ifdef FPC}
 
@@ -290,20 +376,6 @@ function strcmp(p1, p2: PAnsiChar): integer; cdecl;
 begin
   // called only by some obscure FTS3 functions (normal code use dedicated functions)
   result := mormot.core.base.StrComp(p1, p2);
-end;
-
-function strrchr(s: PUtf8Char; c: AnsiChar): PUtf8Char; cdecl;
- {$ifdef FPC} public name _PREFIX + 'strrchr'; {$endif}
-begin
-  // simple full pascal version of the standard C library function
-  result := nil;
-  if s <> nil then
-    while s^<>#0 do
-    begin
-      if s^ = c then
-        result := s;
-      inc(s);
-    end;
 end;
 
 function rename(oldname, newname: PUtf8Char): integer; cdecl;
@@ -396,46 +468,10 @@ begin
   result := libc_strchr(s, c);
 end;
 
-type
-  timeval = record
-    sec: integer; // defined as long in Windows SDK
-    usec: integer;
-  end;
-
-function gettimeofday(var tv: timeval; zone: pointer): integer; cdecl;
-  {$ifdef FPC} public name _PREFIX + 'gettimeofday'; {$else} export; {$endif}
-var
-  now: Int64;
-begin
-  now := UnixMSTimeUtcFast;
-  tv.usec := (now mod 1000) * 1000;
-  tv.sec := now div 1000;
-  result := 0;
-end;
-
 function fwrite(buf: pointer; size, count: PtrInt; f: pointer): integer; cdecl;
   {$ifdef FPC} public name _PREFIX + 'fwrite'; {$endif}
 begin
   result := libc_write(PtrInt(f), buf, size * count) div size;
-end;
-
-function fputc(c: integer; f: pointer): integer; cdecl;
-  {$ifdef FPC} public name _PREFIX + 'fputc'; {$endif}
-begin
-  if libc_write(PtrInt(f), @c, 1) = 1 then
-    result := c
-  else
-    result := 26;
-end;
-
-function putchar(c: integer): integer; cdecl;
-  {$ifdef FPC} public name _PREFIX + 'putchar'; {$endif}
-begin
-  {$I-}
-  write(AnsiChar(c));
-  ioresult;
-  {$I+}
-  result := c;
 end;
 
 procedure qsort(baseP: PByte; NElem, Width: PtrInt; comparF: qsort_compare_func); cdecl;
@@ -697,42 +733,40 @@ begin
   result := min(x, y);
 end;
 
-{$ifdef FPC}
-
-// we redirect basic 64-bit computation to the FPC RTL
+// we redirect basic 64-bit computation to the FPC/Delphi RTL
 
 // long __moddi3 (long a, long b)
 function moddi3(num, den: int64): int64; cdecl;
-  public name _PREFIX + '__moddi3';
+  {$ifdef FPC} public name _PREFIX + '__moddi3'; {$endif}
 begin
   result := num mod den;
 end;
 
 // unsigned long __umoddi3 (unsigned long a, unsigned long b)
 function umoddi3(num, den: uint64): uint64; cdecl;
-  public name _PREFIX + '__umoddi3';
+  {$ifdef FPC} public name _PREFIX + '__umoddi3'; {$endif}
 begin
   result := num mod den;
 end;
 
 // long __divdi3 (long a, long b)
 function divdi3(num, den: int64): int64; cdecl;
-  public name _PREFIX + '__divdi3';
+  {$ifdef FPC} public name _PREFIX + '__divdi3'; {$endif}
 begin
   result := num div den;
 end;
 
 // unsigned long __udivdi3 (unsigned long a, unsigned long b)
 function udivdi3(num, den: uint64): uint64; cdecl;
-  public name _PREFIX + '__udivdi3';
+  {$ifdef FPC} public name _PREFIX + '__udivdi3'; {$endif}
 begin
   result := num div den;
 end;
 
 // unsigned long __udivmoddi4 (unsigned long a, unsigned long b, unsigned long *c)
 // return value is the quotient, and the remainder is placed in c
-function __udivmoddi4(a, b: UInt64; var c: UInt64): UInt64; cdecl;
-  public name _PREFIX + '__udivmoddi4';
+function udivmoddi4(a, b: UInt64; var c: UInt64): UInt64; cdecl;
+  {$ifdef FPC} public name _PREFIX + '__udivmoddi4'; {$endif}
 {$ifdef CPU32}
 var
   q, r: cardinal;
@@ -756,11 +790,13 @@ end;
 
 // long __divmoddi4 (long a, long b, long *c)
 function __divmoddi4(a, b: Int64; var c: Int64): Int64; cdecl;
-  public name _PREFIX + '__divmoddi4';
+  {$ifdef FPC} public name _PREFIX + '__divmoddi4'; {$endif}
 begin
   result := a div b;
   c := a mod b; // as two divisions to properly handle the sign (seldom called)
 end;
+
+{$ifdef FPC}
 
 {$ifdef OSANDROID}
 
@@ -1275,7 +1311,7 @@ asm
 end;
 
 procedure __chkstk_ms; assembler; nostackframe;
-  public name _PREFIX + '___chkstk_ms';
+  {$ifdef FPC} public name _PREFIX + '___chkstk_ms'; {$endif}
 asm
         push    rcx
         push    rax
@@ -1666,31 +1702,6 @@ end;
 
 
 {$ifdef OSWINDOWS}
-
-{$ifdef CPUX86}
-
-// asm stubs to circumvent libgcc.a (cross)linking issues on FPC Win32
-
-procedure __chkstk_ms; assembler; nostackframe;
-  public name _PREFIX + '__chkstk_ms';
-asm
-        push    ecx
-        push    eax
-        cmp     eax, 4096
-        lea     ecx, dword ptr [esp+0CH]
-        jc      @@002
-@@001:  sub     ecx, 4096
-        or      dword ptr [ecx], 00H
-        sub     eax, 4096
-        cmp     eax, 4096
-        ja      @@001
-@@002:  sub     ecx, eax
-        or      dword ptr [ecx], 00H
-        pop     eax
-        pop     ecx
-end;
-
-{$endif CPUX86}
 
 initialization
   RedirectToMsvcrt; // stub some msvcrt.dll varargs functions

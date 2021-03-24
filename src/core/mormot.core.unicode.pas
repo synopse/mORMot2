@@ -3032,10 +3032,11 @@ begin
      (aCodePage = CODEPAGE_LATIN1) or
      (aCodePage >= CP_RAWBLOB) then
   begin
-    // do not trust the Windows API for the 1252 code page :(
+    // Win1252 has its own table, LATIN1 and RawByteString map 8-bit Unicode
     for i := 0 to 255 do
       fAnsiToWide[i] := i;
     if aCodePage = CODEPAGE_US then
+      // do not trust the Windows API for the 1252 code page :(
       for i := low(WinAnsiUnicodeChars) to high(WinAnsiUnicodeChars) do
         fAnsiToWide[i] := WinAnsiUnicodeChars[i];
   end
@@ -3045,12 +3046,13 @@ begin
     for i := 0 to 255 do
       A256[i] := AnsiChar(i);
     FillcharFast(U256, SizeOf(U256), 0);
+    // call mormot.core.os cross-platform Unicode_AnsiToWide()
     len := PtrUInt(inherited AnsiBufferToUnicode(U256, A256, 256)) - PtrUInt(@U256);
     if (len < 500) or
        (len > 512) then
       // warning: CreateUtf8() uses Utf8ToString() -> call CreateFmt() now
-      raise ESynUnicode.CreateFmt('OS error for %s.Create(%d)',
-        [ClassNameShort(self)^, aCodePage]);
+      raise ESynUnicode.CreateFmt('OS error for %s.Create(%d) [%d]',
+        [ClassNameShort(self)^, aCodePage, len]);
     MoveFast(U256[0], fAnsiToWide[0], 512);
   end;
   SetLength(fWideToAnsi, 65536);
