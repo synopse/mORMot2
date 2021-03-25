@@ -47,12 +47,12 @@
         <UnitName Value="mormot.core.buffers"/>
       </Item4>
       <Item5>
-        <Filename Value="../../src/core/mormot.crypto.openssl.pas"/>
-        <UnitName Value="mormot.crypto.openssl"/>
+        <Filename Value="../../src/crypt/mormot.crypt.openssl.pas"/>
+        <UnitName Value="mormot.crypt.openssl"/>
       </Item5>
       <Item6>
-        <Filename Value="../../src/core/mormot.crypto.core.pas"/>
-        <UnitName Value="mormot.crypto.core"/>
+        <Filename Value="../../src/crypt/mormot.crypt.core.pas"/>
+        <UnitName Value="mormot.crypt.core"/>
       </Item6>
       <Item7>
         <Filename Value="../../src/core/mormot.core.data.pas"/>
@@ -63,12 +63,12 @@
         <UnitName Value="mormot.core.datetime"/>
       </Item8>
       <Item9>
-        <Filename Value="../../src/core/mormot.crypto.ecc.pas"/>
-        <UnitName Value="mormot.crypto.ecc"/>
+        <Filename Value="../../src/crypt/mormot.crypt.ecc.pas"/>
+        <UnitName Value="mormot.crypt.ecc"/>
       </Item9>
       <Item10>
-        <Filename Value="../../src/core/mormot.crypto.ecc256r1.pas"/>
-        <UnitName Value="mormot.crypto.ecc256r1"/>
+        <Filename Value="../../src/crypt/mormot.crypt.ecc256r1.pas"/>
+        <UnitName Value="mormot.crypt.ecc256r1"/>
       </Item10>
       <Item11>
         <Filename Value="../../src/core/mormot.core.fpcx64mm.pas"/>
@@ -83,8 +83,8 @@
         <UnitName Value="mormot.core.json"/>
       </Item13>
       <Item14>
-        <Filename Value="../../src/core/mormot.crypto.jwt.pas"/>
-        <UnitName Value="mormot.crypto.jwt"/>
+        <Filename Value="../../src/crypt/mormot.crypt.jwt.pas"/>
+        <UnitName Value="mormot.crypt.jwt"/>
       </Item14>
       <Item15>
         <Filename Value="../../src/core/mormot.core.log.pas"/>
@@ -111,8 +111,8 @@
         <UnitName Value="mormot.core.search"/>
       </Item20>
       <Item21>
-        <Filename Value="../../src/core/mormot.crypto.secure.pas"/>
-        <UnitName Value="mormot.crypto.secure"/>
+        <Filename Value="../../src/crypt/mormot.crypt.secure.pas"/>
+        <UnitName Value="mormot.crypt.secure"/>
       </Item21>
       <Item22>
         <Filename Value="../../src/core/mormot.core.test.pas"/>
