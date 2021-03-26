@@ -454,7 +454,7 @@ begin
      (result.ThreadID = aThreadID) then
     exit;
   result := nil;
-  if pointer(aThreadID) = nil then
+  if PtrUInt(aThreadID) = 0 then
     exit;
   fEngines.Safe.Lock;
   try
@@ -600,7 +600,7 @@ begin
   if Assigned(fManager.fOnGetName) then
     fNameForDebug := fManager.fOnGetName(self);
   if fNameForDebug = '' then
-    FormatUtf8('% %', [PointerToHexShort(pointer(fThreadId)),
+    FormatUtf8('% %', [PointerToHexShort(pointer(PtrUInt(fThreadId))),
       CurrentThreadName], fNameForDebug);
   if Assigned(fManager.fOnGetWebAppRootPath) then
     fWebAppRootDir := fManager.fOnGetWebAppRootPath(self)

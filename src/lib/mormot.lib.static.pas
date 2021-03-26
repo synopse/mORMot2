@@ -49,8 +49,9 @@ const
 
 {$ifdef OSWINDOWS}
 
-// made public for Delphi mormot.db.raw.sqlite3.static.pas linking
-// (static linking is somewhat local to each unit with Delphi)
+// some public symbols for Delphi proper linking
+// e.g. for mormot.db.raw.sqlite3.static.pas and mormot.lib.quickjs.pas
+// (static linking is sadly local to each unit with Delphi)
 
 const
   _CLIB = 'msvcrt.dll'; // redirect to the built-in Microsoft "libc"
@@ -75,6 +76,7 @@ function libc_memcmp(p1, p2: PByte; Size: integer): integer; cdecl;
 function libc_strchr(s: Pointer; c: Integer): Pointer; cdecl;
 function libc_strtod(value: PAnsiChar; endPtr: PPAnsiChar): Double; cdecl;
 function libc_write(handle: Integer; buf: Pointer; len: LongWord): Integer; cdecl;
+function libc_log(d: double): double; cdecl;
 
 type
   timeval = record
@@ -85,13 +87,23 @@ type
 function putchar(c: integer): integer; cdecl;
 function gettimeofday(var tv: timeval; zone: pointer): integer; cdecl;
 function fputc(c: integer; f: pointer): integer; cdecl;
+function fwrite(buf: pointer; size, count: PtrInt; f: pointer): integer; cdecl;
 function strrchr(s: PUtf8Char; c: AnsiChar): PUtf8Char; cdecl;
 function moddi3(num, den: int64): int64; cdecl;
 function umoddi3(num, den: uint64): uint64; cdecl;
 function divdi3(num, den: int64): int64; cdecl;
 function udivdi3(num, den: uint64): uint64; cdecl;
 function udivmoddi4(a, b: UInt64; var c: UInt64): UInt64; cdecl;
-procedure __chkstk_ms; 
+procedure __chkstk_ms;
+
+{$ifdef CPUX64}
+
+procedure __udivti3;
+procedure __udivmodti4;
+procedure __divti3;
+procedure __umodti3;
+
+{$endif CPUX64}
 
 {$endif OSWINDOWS}
 
@@ -234,6 +246,8 @@ function libc_write(handle: Integer; buf: Pointer; len: LongWord): Integer; cdec
   external _CLIB name '_write';
 procedure libc_qsort(baseP: PByte; NElem, Width: PtrInt; comparF: qsort_compare_func); cdecl;
   external _CLIB name 'qsort';
+function libc_log(d: double): double; cdecl;
+  external _CLIB name 'log';
 
 
 function putchar(c: integer): integer; cdecl;
@@ -280,6 +294,12 @@ begin
     end;
 end;
 
+function fwrite(buf: pointer; size, count: PtrInt; f: pointer): integer; cdecl;
+  {$ifdef FPC} public name _PREFIX + 'fwrite'; {$endif}
+begin
+  result := libc_write(PtrInt(f), buf, size * count) div size;
+end;
+
 {$ifdef CPUX86}
 
 // asm stubs to circumvent libgcc.a (cross)linking issues on Win32
@@ -304,6 +324,32 @@ asm
 end;
 
 {$endif CPUX86}
+
+{$ifdef CPUX64}
+
+procedure __chkstk_ms; assembler;
+  {$ifdef FPC} nostackframe; public name _PREFIX + '___chkstk_ms'; {$endif}
+asm
+        {$ifndef FPC}
+        .noframe
+        {$endif FPC}
+        push    rcx
+        push    rax
+        cmp     rax, 4096
+        lea     rcx, qword ptr [rsp+18H]
+        jc      @@002
+@@001:  sub     rcx, 4096
+        or      qword ptr [rcx], 00H
+        sub     rax, 4096
+        cmp     rax, 4096
+        ja      @@001
+@@002:  sub     rcx, rax
+        or      qword ptr [rcx], 00H
+        pop     rax
+        pop     rcx
+end;
+
+{$endif CPUX64}
 
 {$ifdef FPC}
 
@@ -368,7 +414,7 @@ end;
 function strlen(p: PAnsiChar): integer; cdecl;
  {$ifdef FPC} public name _PREFIX + 'strlen'; {$endif}
 begin
-  result := mormot.core.base.strlen(pointer(P));
+  result := mormot.core.base.StrLen(P);
 end;
 
 function strcmp(p1, p2: PAnsiChar): integer; cdecl;
@@ -384,34 +430,34 @@ begin
   result := libc_rename(oldname, newname);
 end;
 
-procedure __exit; cdecl;
- {$ifdef FPC} public name _PREFIX + 'exit'; {$else} export; {$endif}
-begin
-  raise EExternal.Create('exit is not implemented');
+procedure __exit; assembler; 
+ {$ifdef FPC} nostackframe; public name _PREFIX + 'exit'; {$else} export; {$endif}
+asm
+  jmp libc_exit
 end;
 
-procedure printf; // varargs function requires a JIT jmp -> no cdecl
- {$ifdef FPC} public name _PREFIX + 'printf'; {$else} export; {$endif}
-begin
-  raise EExternal.Create('printf is not implemented');
+procedure printf; assembler; 
+ {$ifdef FPC} nostackframe; public name _PREFIX + 'printf'; {$else} export; {$endif}
+asm
+  jmp libc_printf
 end;
 
-procedure sprintf;
- {$ifdef FPC} public name _PREFIX + 'sprintf'; {$else} export; {$endif}
-begin
-  raise EExternal.Create('sprintf is not implemented');
+procedure sprintf; assembler;
+ {$ifdef FPC} nostackframe; public name _PREFIX + 'sprintf'; {$else} export; {$endif}
+asm
+  jmp libc_sprintf
 end;
 
-procedure fprintf;
- {$ifdef FPC} public name _PREFIX + 'fprintf'; {$else} export; {$endif}
-begin
-  raise EExternal.Create('fprintf is not implemented');
+procedure fprintf; assembler;
+ {$ifdef FPC} nostackframe; public name _PREFIX + 'fprintf'; {$else} export; {$endif}
+asm
+  jmp libc_fprintf
 end;
 
-procedure _vsnprintf;
- {$ifdef FPC} public name _PREFIX + '__ms_vsnprintf'; {$else} export; {$endif}
-begin
-  raise EExternal.Create('_vsnprintf is not implemented');
+procedure _vsnprintf; assembler;
+ {$ifdef FPC} nostackframe; public name _PREFIX + '__ms_vsnprintf'; {$else} export; {$endif}
+asm
+  jmp libc_vsnprintf
 end;
 
 function strcspn(str, reject: PUtf8Char): integer; cdecl;
@@ -468,26 +514,10 @@ begin
   result := libc_strchr(s, c);
 end;
 
-function fwrite(buf: pointer; size, count: PtrInt; f: pointer): integer; cdecl;
-  {$ifdef FPC} public name _PREFIX + 'fwrite'; {$endif}
-begin
-  result := libc_write(PtrInt(f), buf, size * count) div size;
-end;
-
 procedure qsort(baseP: PByte; NElem, Width: PtrInt; comparF: qsort_compare_func); cdecl;
   {$ifdef FPC} public name _PREFIX + 'qsort'; {$endif}
 begin
   libc_qsort(baseP, NElem, Width, comparF);
-end;
-
-procedure RedirectToMsvcrt;
-begin
-  // JIT redirect varags functions from our internal stubs to msvcrt.dll
-  RedirectCode(@__exit, @libc_exit);
-  RedirectCode(@printf, @libc_printf);
-  RedirectCode(@sprintf, @libc_sprintf);
-  RedirectCode(@fprintf, @libc_fprintf);
-  RedirectCode(@_vsnprintf, @libc_vsnprintf);
 end;
 
 {$ifdef CPUX86} // not a compiler intrinsic on x86
@@ -535,7 +565,7 @@ end;
 function sqrt(x: double): double; cdecl;
   {$ifdef FPC} public name _PREFIX + 'sqrt'; {$endif}
 begin
-  result := sqr(x);
+  result := system.sqrt(x);
 end;
 
 function cbrt(x: double): double; cdecl;
@@ -817,6 +847,8 @@ end;
 
 {$endif OSANDROID}
 
+{$endif FPC}
+
 {$ifdef CPUINTEL}
 
 {$ifdef CPU64}
@@ -826,9 +858,12 @@ end;
 // asm stubs to circumvent libgcc.a (cross)linking issues on FPC/Win64
 
 // unsigned long long __udivti3 (unsigned long long a, unsigned long long b)
-procedure __udivti3; assembler; nostackframe;
-  public name _PREFIX + '__udivti3';
+procedure __udivti3; assembler;
+  {$ifdef FPC} nostackframe; public name _PREFIX + '__udivti3'; {$endif}
 asm
+        {$ifndef FPC}
+        .noframe
+        {$endif FPC}
         push    rdi
         push    rsi
         push    rbx
@@ -853,7 +888,7 @@ asm
         xor     eax, eax
 @@002:  mov     qword ptr [rsp], rax
         mov     qword ptr [rsp+8H], r8
-        movdqu  xmm0, xmmword ptr [rsp]
+        movdqu  xmm0, oword ptr [rsp]
         add     rsp, 16
         pop     rbx
         pop     rsi
@@ -928,9 +963,12 @@ asm
 end;
 
 // unsigned long long __udivmodti4 (unsigned long long a, unsigned long long b, unsigned long long *c)
-procedure __udivmodti4; assembler; nostackframe;
- public name _PREFIX + '__udivmodti4';
+procedure __udivmodti4; assembler;
+  {$ifdef FPC} nostackframe; public name _PREFIX + '__udivmodti4'; {$endif}
 asm
+        {$ifndef FPC}
+        .noframe
+        {$endif FPC}
         push    r13
         push    r12
         push    rbp
@@ -958,7 +996,7 @@ asm
         mov     qword ptr [r8+8H], 0
 @@002:  mov     qword ptr [rsp], rsi
         mov     qword ptr [rsp+8H], r9
-        movdqu  xmm0, xmmword ptr [rsp]
+        movdqu  xmm0, oword ptr [rsp]
         nop
         add     rsp, 24
         pop     rbx
@@ -1074,9 +1112,12 @@ asm
 end;
 
 // long long __divti3 (long long a, long long b)
-procedure __divti3; assembler; nostackframe;
- public name _PREFIX + '__divti3';
+procedure __divti3; assembler;
+  {$ifdef FPC} nostackframe; public name _PREFIX + '__divti3'; {$endif}
 asm
+        {$ifndef FPC}
+        .noframe
+        {$endif FPC}
         push    rdi
         push    rsi
         push    rbx
@@ -1124,7 +1165,7 @@ asm
         neg     qword ptr [rsp]
         adc     qword ptr [rsp+8H], 0
         neg     qword ptr [rsp+8H]
-@@005:  movdqu  xmm0, xmmword ptr [rsp]
+@@005:  movdqu  xmm0, oword ptr [rsp]
         add     rsp, 16
         pop     rbx
         pop     rsi
@@ -1199,9 +1240,12 @@ asm
 end;
 
 // unsigned long long __umodti3 (unsigned long long a, unsigned long long b)
-procedure __umodti3; assembler; nostackframe;
- public name _PREFIX + '__umodti3';
+procedure __umodti3; assembler;
+  {$ifdef FPC} nostackframe; public name _PREFIX + '__umodti3'; {$endif}
 asm
+        {$ifndef FPC}
+        .noframe
+        {$endif FPC}
         push    rdi
         push    rsi
         push    rbx
@@ -1222,7 +1266,7 @@ asm
 @@001:  xor     r8d, r8d
 @@002:  mov     qword ptr [rsp], r9
         mov     qword ptr [rsp+8H], r8
-        movdqu  xmm0, xmmword ptr [rsp]
+        movdqu  xmm0, oword ptr [rsp]
         nop
         add     rsp, 16
         pop     rbx
@@ -1310,33 +1354,17 @@ asm
         jmp     @@004
 end;
 
-procedure __chkstk_ms; assembler; nostackframe;
-  {$ifdef FPC} public name _PREFIX + '___chkstk_ms'; {$endif}
-asm
-        push    rcx
-        push    rax
-        cmp     rax, 4096
-        lea     rcx, qword ptr [rsp+18H]
-        jc      @@002
-@@001:  sub     rcx, 4096
-        or      qword ptr [rcx], 00H
-        sub     rax, 4096
-        cmp     rax, 4096
-        ja      @@001
-@@002:  sub     rcx, rax
-        or      qword ptr [rcx], 00H
-        pop     rax
-        pop     rcx
-end;
-
 {$endif OSWINDOWS}
 
 {$ifdef OSLINUX}
 
 // unsigned long long __udivti3 (unsigned long long a, unsigned long long b)
-procedure __udivti3; assembler; nostackframe;
-  public name _PREFIX + '__udivti3';
+procedure __udivti3; assembler;
+  {$ifdef FPC} nostackframe; public name _PREFIX + '__udivti3'; {$endif}
 asm
+        {$ifndef FPC}
+        .noframe
+        {$endif FPC}
         mov     r8, rcx
         mov     r9, rdx
         mov     r10, rdx
@@ -1424,9 +1452,12 @@ asm
 end;
 
 // unsigned long long __udivmodti4 (unsigned long long a, unsigned long long b, unsigned long long *c)
-procedure __udivmodti4; assembler; nostackframe;
- public name _PREFIX + '__udivmodti4';
+procedure __udivmodti4; assembler;
+  {$ifdef FPC} nostackframe; public name _PREFIX + '__udivmodti4'; {$endif}
 asm
+        {$ifndef FPC}
+        .noframe
+        {$endif FPC}
         test    rcx, rcx
         push    r13
         mov     r9, rdx
@@ -1581,9 +1612,12 @@ asm
 end;
 
 // unsigned long long __umodti3 (unsigned long long a, unsigned long long b)
-procedure __umodti3; assembler; nostackframe;
- public name _PREFIX + '__umodti3';
+procedure __umodti3; assembler;
+  {$ifdef FPC} nostackframe; public name _PREFIX + '__umodti3'; {$endif}
 asm
+        {$ifndef FPC}
+        .noframe
+        {$endif FPC}
         test    rcx, rcx
         push    r12
         mov     r9, rdx
@@ -1700,15 +1734,6 @@ end;
 
 {$endif CPUINTEL}
 
-
-{$ifdef OSWINDOWS}
-
-initialization
-  RedirectToMsvcrt; // stub some msvcrt.dll varargs functions
-
-{$endif OSWINDOWS}
-
-{$endif FPC}
 
 end.
 
