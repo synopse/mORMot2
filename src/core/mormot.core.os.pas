@@ -2126,6 +2126,8 @@ type
   /// meta-class definition of the TSynLocked hierarchy
   TSynLockedClass = class of TSynLocked;
 
+  TThreadIDDynArray = array of TThreadID;
+
 {$ifdef OSPOSIX}
 
 var
@@ -2188,6 +2190,11 @@ threadvar
 // - will return the CurrentThreadName value, truncated to 31 chars
 function GetCurrentThreadName: RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// returns the thread id and the thread name as a shortstring
+// - returns e.g. 'Thread 0001abcd [shortthreadname]'
+// - for convenient use when logging or raising an exception
+function GetCurrentThreadInfo: shortstring;
 
 /// enter a process-wide giant lock for thread-safe shared process
 // - shall be protected as such:
@@ -3926,6 +3933,11 @@ begin
   ShortStringToAnsi7String(CurrentThreadName, result);
 end;
 
+function GetCurrentThreadInfo: shortstring;
+begin
+  result := ShortString(format('Thread %x [%s]',
+    [integer(GetCurrentThreadId), CurrentThreadName]));
+end;
 
 function NewSynLocker: PSynLocker;
 begin
