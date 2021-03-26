@@ -51,7 +51,8 @@ interface
 
 {$ifdef LIBQUICKJSSTATIC}
   // we supply https://github.com/c-smile/quickjspp (uncompatible) fork statics
-  // - 64-bit JSValue on all platforms, JSX, debugger, Windows compatible
+  // - 64-bit JSValue on all platforms, JSX, debugger, Windows/Delphi compatible
+  // - amalgamation file with for static integration (malloc, assert)
   {$define JS_STRICT_NAN_BOXING}
   {$define LIBQUICKJS}
 {$endif LIBQUICKJSSTATIC}
@@ -236,7 +237,7 @@ type
        {$ifdef HASINLINE} inline; {$endif}
     /// create a JS_TAG_FLOAT64
     procedure FloatFrom(val: double); overload;
-       {$ifdef HASINLINE} inline; {$endif}
+       {$ifdef FPC} inline; {$endif}
   end;
   PJSValue = ^JSValue;
 
@@ -1614,43 +1615,42 @@ uses
   {$ifdef OSLINUX}
 
     {$ifdef CPUX86}
-      {$linklib ..\..\static\i386-linux\libquickjs.a}
+      {$L  ..\..\static\i386-linux\quickjs.o}
     {$endif CPUX86}
     {$ifdef CPUX64}
-      {$linklib ..\..\static\x86_64-linux\libquickjs.a}
+      {$L ..\..\static\x86_64-linux\quickjs.o}
     {$endif CPUX64}
     {$ifdef CPUAARCH64}
-      {$L ..\..\static\aarch64-linux\libquickjs.a}
+      {$L ..\..\static\aarch64-linux\quickjs.o}
     {$endif CPUAARCH64}
     {$ifdef CPUARM}
-      {$L ..\..\static\arm-linux\libquickjs.a}
+      {$L ..\..\static\arm-linux\quickjs.o}
     {$endif CPUARM}
 
   {$endif OSLINUX}
 
   {$ifdef OSWINDOWS}
     {$ifdef CPUX86}
-      {$linklib ..\..\static\i386-win32\libquickjs.a}
+      {$L ..\..\static\i386-win32\quickjs.o}
     {$endif CPUX86}
     {$ifdef CPUX64}
-      {$linklib ..\..\static\x86_64-win64\libquickjs.a}
+      {$L ..\..\static\x86_64-win64\quickjs.o}
     {$endif CPUX64}
   {$endif OSWINDOWS}
 
 {$else}
 
+  // Win32/Win64 static files from mingw  \o/
   {$ifdef CPUX86}
-    // we were not able to generate properly the .obj files yet :(
     {$L ..\..\static\delphi\quickjs.obj}
-    {$L ..\..\static\delphi\libregexp.obj}
-    {$L ..\..\static\delphi\libunicode.obj}
-    {$L ..\..\static\delphi\libbf.obj}
-    {$L ..\..\static\delphi\cutils.obj}
   {$endif CPUX86}
-
-{$ifdef CPUX86}
+  {$ifdef CPUX64}
+    {$L ..\..\static\delphi\quickjs.o}
+  {$endif CPUX64}
 
 // note: Delphi expects the dependencies to be in the very same unit
+//  -> we either implement them here, or asm jmp to mormot.lib.static code
+
 function pas_malloc(size: cardinal): pointer; cdecl;
 begin
   if size = 0 then
@@ -1659,14 +1659,7 @@ begin
     exit;
   end;
   GetMem(result, size + 4);
-  PInteger(result)^ := size;
-  inc(PInteger(result));
-end;
-
-function pas_calloc(n, size: PtrInt): pointer; cdecl;
-begin
-  result := AllocMem(size * n + 4);
-  PInteger(result)^ := size;
+  PInteger(result)^ := size; // put size as trailer for pas_malloc_usable_size()
   inc(PInteger(result));
 end;
 
@@ -1684,6 +1677,7 @@ begin
      (Size = 0) then
   begin
     pas_free(P);
+    result := nil;
     exit;
   end;
   dec(PInteger(P));
@@ -1704,76 +1698,121 @@ begin
   end;
 end;
 
-procedure memcmp;
-asm
-  jmp libc_memcmp
+procedure pas_assertfailed(cond, fn: PAnsiChar; line: integer); cdecl;
+begin
+  raise EExternal.CreateFmt('Panic in %s:%d: %s', [fn, line, cond]);
 end;
 
-procedure lrerealloc2; external;
-
-procedure lre_realloc;
+procedure memcmp;
 asm
-  jmp lrerealloc2
+  {$ifdef CPUX64}
+  .noframe
+  {$endif CPUX64}
+  jmp libc_memcmp
 end;
 
 procedure __ms_vsnprintf;
 asm
+  {$ifdef CPUX64}
+  .noframe
+  {$endif CPUX64}
   jmp libc_vsnprintf
 end;
 
 procedure printf;
 asm
+  {$ifdef CPUX64}
+  .noframe
+  {$endif CPUX64}
   jmp libc_printf
 end;
 
 procedure sprintf;
 asm
+  {$ifdef CPUX64}
+  .noframe
+  {$endif CPUX64}
   jmp libc_sprintf
 end;
 
 procedure fprintf;
 asm
+  {$ifdef CPUX64}
+  .noframe
+  {$endif CPUX64}
   jmp libc_fprintf
 end;
 
 procedure strchr;
 asm
+  {$ifdef CPUX64}
+  .noframe
+  {$endif CPUX64}
   jmp libc_strchr
+end;
+
+procedure strcspn;
+asm
+  {$ifdef CPUX64}
+  .noframe
+  {$endif CPUX64}
+  jmp libc_strcspn
 end;
 
 procedure strrchr;
 asm
+  {$ifdef CPUX64}
+  .noframe
+  {$endif CPUX64}
   jmp mormot.lib.static.strrchr
-end;
-
-procedure ex1t;
-asm
-  jmp libc_exit
 end;
 
 procedure putchar;
 asm
+  {$ifdef CPUX64}
+  .noframe
+  {$endif CPUX64}
   jmp mormot.lib.static.putchar
 end;
 
 procedure __strtod;
 asm
+  {$ifdef CPUX64}
+  .noframe
+  {$endif CPUX64}
   jmp libc_strtod
 end;
 
 procedure strcpy;
 asm
+  {$ifdef CPUX64}
+  .noframe
+  {$endif CPUX64}
   jmp libc_strcpy
 end;
 
-function fwrite(buf: pointer; size, count: PtrInt; f: pointer): integer; cdecl;
-begin
-  result := libc_write(PtrInt(f), buf, size * count) div size;
+procedure fwrite;
+asm
+  {$ifdef CPUX64}
+  .noframe
+  {$endif CPUX64}
+  jmp mormot.lib.static.fwrite
 end;
 
 procedure memchr;
 asm
+  {$ifdef CPUX64}
+  .noframe
+  {$endif CPUX64}
   jmp libc_memchr
+end;
+
+procedure log;
+asm
+  {$ifdef CPUX64}
+  .noframe
+  {$endif CPUX64}
+  jmp libc_log // Delphi Win64 ln() is buggy -> redirect to msvcrt
 end;
 
 function memcpy(dest, src: Pointer; count: PtrInt): Pointer; cdecl;
@@ -1796,7 +1835,7 @@ end;
 
 function strlen(p: PAnsiChar): integer; cdecl;
 begin
-  result := mormot.core.base.strlen(pointer(P));
+  result := mormot.core.base.StrLen(P);
 end;
 
 function strcmp(p1, p2: PAnsiChar): integer; cdecl;
@@ -1804,14 +1843,43 @@ begin
   result := mormot.core.base.StrComp(p1, p2);
 end;
 
-procedure __chkstk_ms;
+{$ifdef CPUX64}
+
+procedure ___chkstk_ms;
 asm
+  .noframe
   jmp mormot.lib.static.__chkstk_ms
 end;
 
-procedure pas_assertfailed(cond, fn: PAnsiChar; line: integer); cdecl;
-begin
-  raise EExternal.CreateFmt('Panic in %s:%d: %s', [fn, line, cond]);
+procedure __udivti3;
+asm
+  .noframe
+  jmp mormot.lib.static.__udivti3
+end;
+
+procedure __udivmodti4;
+asm
+  .noframe
+  jmp mormot.lib.static.__udivmodti4
+end;
+
+procedure __divti3;
+asm
+  .noframe
+  jmp mormot.lib.static.__divti3
+end;
+
+procedure __umodti3;
+asm
+  .noframe
+  jmp mormot.lib.static.__umodti3
+end;
+
+{$else}
+
+procedure __chkstk_ms;
+asm
+  jmp mormot.lib.static.__chkstk_ms
 end;
 
 procedure __moddi3;
@@ -1839,6 +1907,8 @@ asm
   jmp udivmoddi4
 end;
 
+{$endif CPUX64}
+
 function atoi(const str: PUtf8Char): PtrInt; cdecl;
 begin
   result := GetInteger(str);
@@ -1854,29 +1924,9 @@ begin
   result := abs(x);
 end;
 
-function sq4t(x: double): double; cdecl;
-begin
-  result := sqr(x);
-end;
-
 function cbrt(x: double): double; cdecl;
 begin
   result := exp( (1 / 3) * ln(x));
-end;
-
-function trunk(x: double): double; cdecl;
-begin
-  result := system.trunc(x);
-end;
-
-function c0s(x: double): double; cdecl;
-begin
-  result := system.cos(x);
-end;
-
-function s1n(x: double): double; cdecl;
-begin
-  result := system.sin(x);
 end;
 
 function acos(x: double): double; cdecl;
@@ -1889,19 +1939,9 @@ begin
   result := arcsin(x);
 end;
 
-function e4p(x: double): double; cdecl;
-begin
-  result := system.exp(x);
-end;
-
 function expm1(x: double): double; cdecl;
 begin
   result := system.exp(x) - 1;
-end;
-
-function log(x: double): double; cdecl;
-begin
-  result := ln(x);
 end;
 
 function tan(x: double): double; cdecl;
@@ -1959,11 +1999,6 @@ begin
   result := math.floor(x);
 end;
 
-function r0und(x: double): Int64; cdecl;
-begin
-  result := system.round(x);
-end;
-
 function ceil(x: double): double; cdecl;
 var
   i: Int64;
@@ -1971,7 +2006,6 @@ begin
   i := system.trunc(x) + ord(system.frac(x) > 0);
   result := i; // libc returns a double
 end;
-
 
 function lrint(x: double): Int64; cdecl;
 begin
@@ -2018,7 +2052,48 @@ begin
   result := min(x, y);
 end;
 
-{$endif CPUX86}
+// we renamed some of the external symbols for proper Delphi linking
+
+// objconv -nr:_round:r0und -nr:_trunc:trunk -nr:_sqrt:sq4t
+// -nr:_exit:ex1t -nr:_cos:c0s -nr:_sin:s1n -nr:_exp:e4p quickjs.o quickjs2.o
+
+procedure ex1t;
+asm
+  {$ifdef CPUX64}
+  .noframe
+  {$endif CPUX64}
+  jmp libc_exit
+end;
+
+function r0und(x: double): Int64; cdecl;
+begin
+  result := system.round(x);
+end;
+
+function sq4t(x: double): double; cdecl;
+begin
+  result := system.sqrt(x);
+end;
+
+function trunk(x: double): double; cdecl;
+begin
+  result := system.trunc(x);
+end;
+
+function c0s(x: double): double; cdecl;
+begin
+  result := system.cos(x);
+end;
+
+function s1n(x: double): double; cdecl;
+begin
+  result := system.sin(x);
+end;
+
+function e4p(x: double): double; cdecl;
+begin
+  result := system.exp(x);
+end;
 
 {$endif FPC}
 
@@ -2316,7 +2391,7 @@ end;
 function JSValue.F64: double;
 var
   v: JSValue;
-  i: UInt64;
+  i: UInt64; // faster on 64-bit systems
 begin
   i := u.u64;
   if i > JS_TAG_MASK then
