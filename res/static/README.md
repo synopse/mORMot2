@@ -14,7 +14,8 @@ Each sub-folder contains the compilation scripts of the static libraries, and th
 - [`libsqlite3`](libsqlite3) for `SQlite3` engine, with encryption support and most extensions included;
 - [`libdeflate`](libdeflate) for fast in-memory `zlib`/`deflate` compression;
 - [`liblizard`](liblizard) for the `LZ5`/`Lizard` compression library;
-- [`libquickjs`](libquickjs) for the `QuickJS` JavaScript interpreter.
+- [`libquickjs`](libquickjs) for the `QuickJS` JavaScript interpreter;
+- [`libspidermonkey`](libspidermonkey) for the `SpiderMonkey` JavaScript Engine.
 
 
 ## Licensing
