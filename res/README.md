@@ -17,3 +17,11 @@ See [the full licensing terms](../LICENCE.md) in the root folder of this reposit
 ## Resources From Source
 
 Resources are compiled from `*.rc` source and associated files into `*.res` binary files, which will be linked to the executable during compilation.
+
+## Third-Party C Libraries
+
+Even if the framework is stand-alone, it has some optional third-party C code, to be linked as static binaries, which should be available in the [`static`](../static) sub-folder of this repository.
+
+They are to be downloaded from the latest https://github.com/synopse/mORMot2/releases 
+
+You will find in the [`res/static`](static) folder some reference code, script and text to rebuild those third-party libraries from the source.

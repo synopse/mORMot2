@@ -31,3 +31,7 @@ It will ensure that when (cross-)compiling your project, FPC will link the expec
 
 Ensure you keep in synch these binaries with the main framework source code.
 Otherwise, some random/unexpected errors may occur.
+
+## Compile From Source
+
+Take a look at [the res/static folder](../res/static) for the reference C source code used to generate those static files. 

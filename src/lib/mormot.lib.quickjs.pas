@@ -2055,7 +2055,7 @@ end;
 // we renamed some of the external symbols for proper Delphi linking
 
 // objconv -nr:_round:r0und -nr:_trunc:trunk -nr:_sqrt:sq4t
-// -nr:_exit:ex1t -nr:_cos:c0s -nr:_sin:s1n -nr:_exp:e4p quickjs.o quickjs2.o
+// -nr:_exit:ex1t -nr:_cos:c0s -nr:_sin:s1n -nr:_exp:e4p quickjs2.o quickjs.o
 
 procedure ex1t;
 asm
