@@ -646,7 +646,8 @@ type
     // - this method will call VariantSaveJson() to compute the returned content
     procedure ReturnsJson(const Value: variant; Status: integer = HTTP_SUCCESS;
       Handle304NotModified: boolean = false; Escape: TTextWriterKind = twJsonEscape;
-      MakeHumanReadable: boolean = false; const CustomHeader: RawUtf8 = '');
+      MakeHumanReadable: boolean = false; const CustomHeader: RawUtf8 = '';
+      HandleErrorAsRegularResult: boolean = false);
     /// uses this method to send back directly any binary content to the caller
     // - the exact MIME type will be retrieved using GetMimeContentTypeHeader(),
     // from the supplied Blob binary buffer, and optional a file name
@@ -3752,7 +3753,8 @@ var
   orm: TRestOrmServer;
   sqlselect, sqlwhere, sqlsort, sqldir: RawUtf8;
 begin
-  if MethodIndex = Server.fPublishedMethodBatchIndex then
+  if (MethodIndex >= 0) and
+     (MethodIndex = Server.fPublishedMethodBatchIndex) then
   begin
     // run the BATCH process in execOrmWrite context
     ExecuteSoaByMethod;
@@ -4493,7 +4495,8 @@ procedure TRestServerUriContext.Returns(const Result: RawUtf8;
 var
   clienthash: RawUtf8;
 begin
-  if HandleErrorAsRegularResult or StatusCodeIsSuccess(Status) then
+  if HandleErrorAsRegularResult or
+     StatusCodeIsSuccess(Status) then
   begin
     Call.OutStatus := Status;
     Call.OutBody := Result;
@@ -4542,7 +4545,8 @@ end;
 
 procedure TRestServerUriContext.ReturnsJson(const Value: variant;
   Status: integer; Handle304NotModified: boolean; Escape: TTextWriterKind;
-  MakeHumanReadable: boolean; const CustomHeader: RawUtf8);
+  MakeHumanReadable: boolean; const CustomHeader: RawUtf8;
+  HandleErrorAsRegularResult: boolean);
 var
   json: RawUtf8;
   tmp: TSynTempBuffer;
@@ -4559,7 +4563,8 @@ begin
       tmp.Done;
     end;
   end;
-  Returns(json, Status, CustomHeader, Handle304NotModified);
+  Returns(json, Status, CustomHeader,
+    Handle304NotModified, HandleErrorAsRegularResult);
 end;
 
 procedure TRestServerUriContext.ReturnBlob(const Blob: RawByteString;
