@@ -29,7 +29,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -63,13 +63,14 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <OtherDefines Count="6">
+            <OtherDefines Count="7">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
               <Define2 Value="FPCMM_DEBUG"/>
               <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
               <Define4 Value="PUREMORMOT2"/>
               <Define5 Value="FPCMM_SERVER"/>
+              <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -84,7 +85,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -117,13 +118,18 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <OtherDefines Count="6">
+            <CustomOptions Value="-dFPC_NO_DEFAULT_MEMORYMANAGER
+-dFPC_X64MM
+-dFPCMM_DEBUG
+-dFPCMM_REPORTMEMORYLEAKS"/>
+            <OtherDefines Count="7">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
               <Define2 Value="FPCMM_DEBUG"/>
               <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
               <Define4 Value="PUREMORMOT2"/>
               <Define5 Value="FPCMM_SERVER"/>
+              <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -138,7 +144,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -163,7 +169,6 @@
           <Linking>
             <Debugging>
               <DebugInfoType Value="dsDwarf2Set"/>
-              <UseExternalDbgSyms Value="True"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -172,13 +177,14 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <OtherDefines Count="6">
+            <OtherDefines Count="7">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
               <Define2 Value="FPCMM_DEBUG"/>
               <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
               <Define4 Value="PUREMORMOT2"/>
               <Define5 Value="FPCMM_SERVER"/>
+              <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -193,7 +199,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\app;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\tools\ecc;..\src\orm;..\src\soa"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\app;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\tools\ecc;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -219,7 +225,6 @@
             <Debugging>
               <DebugInfoType Value="dsDwarf2"/>
               <UseLineInfoUnit Value="False"/>
-              <UseExternalDbgSyms Value="True"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -237,13 +242,14 @@
 -dFPCMM_REPORTMEMORYLEAKS
 -dPUREMORMOT2
 -dFPCMM_SERVER"/>
-            <OtherDefines Count="6">
+            <OtherDefines Count="7">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
               <Define2 Value="FPCMM_DEBUG"/>
               <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
               <Define4 Value="PUREMORMOT2"/>
               <Define5 Value="FPCMM_SERVER"/>
+              <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -258,7 +264,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -314,7 +320,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -362,7 +368,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -410,7 +416,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="//if TargetOS='darwin' then
@@ -447,13 +453,14 @@
             </Verbosity>
             <CustomOptions Value="-dFPC_NO_DEFAULT_MEMORYMANAGER
 -dFPC_CMEM"/>
-            <OtherDefines Count="6">
-              <Define0 Value="FPC_CMEM"/>
-              <Define1 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
-              <Define2 Value="FPC_SYNCMEM"/>
-              <Define3 Value="FPC_FASTMM4"/>
-              <Define4 Value="FPC_SYNTBB"/>
-              <Define5 Value="FPC_SYNJEMALLOC"/>
+            <OtherDefines Count="7">
+              <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+              <Define1 Value="FPC_X64MM"/>
+              <Define2 Value="FPCMM_DEBUG"/>
+              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+              <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
+              <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -468,7 +475,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -484,6 +491,7 @@
             <Checks>
               <IOChecks Value="True"/>
             </Checks>
+            <TargetProcessor Value="ARMV7A"/>
             <TargetCPU Value="arm"/>
             <TargetOS Value="linux"/>
             <Optimizations>
@@ -503,6 +511,15 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
+            <OtherDefines Count="7">
+              <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+              <Define1 Value="FPC_X64MM"/>
+              <Define2 Value="FPCMM_DEBUG"/>
+              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+              <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
+              <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
+            </OtherDefines>
           </Other>
         </CompilerOptions>
       </Item10>
@@ -516,7 +533,7 @@
           <SearchPaths>
             <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
             <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -564,7 +581,7 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="90">
+    <Units Count="100">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -614,15 +631,15 @@
         <IsPartOfProject Value="True"/>
       </Unit11>
       <Unit12>
-        <Filename Value="..\src\core\mormot.crypt.core.pas"/>
+        <Filename Value="..\src\crypt\mormot.crypt.core.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit12>
       <Unit13>
-        <Filename Value="..\src\core\mormot.crypt.jwt.pas"/>
+        <Filename Value="..\src\crypt\mormot.crypt.jwt.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit13>
       <Unit14>
-        <Filename Value="..\src\core\mormot.crypt.secure.pas"/>
+        <Filename Value="..\src\crypt\mormot.crypt.secure.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit14>
       <Unit15>
@@ -662,11 +679,11 @@
         <IsPartOfProject Value="True"/>
       </Unit23>
       <Unit24>
-        <Filename Value="..\src\core\mormot.crypt.ecc256r1.pas"/>
+        <Filename Value="..\src\crypt\mormot.crypt.ecc256r1.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit24>
       <Unit25>
-        <Filename Value="..\src\core\mormot.crypt.ecc.pas"/>
+        <Filename Value="..\src\crypt\mormot.crypt.ecc.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit25>
       <Unit26>
@@ -752,7 +769,6 @@
       <Unit46>
         <Filename Value="..\src\net\mormot.net.async.pas"/>
         <IsPartOfProject Value="True"/>
-        <UnitName Value="mormot.net.async"/>
       </Unit46>
       <Unit47>
         <Filename Value="..\src\net\mormot.net.ws.core.pas"/>
@@ -926,6 +942,46 @@
         <Filename Value="test.soa.core.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit89>
+      <Unit90>
+        <Filename Value="..\src\lib\mormot.lib.openssl11.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit90>
+      <Unit91>
+        <Filename Value="..\src\crypt\mormot.crypt.openssl.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit91>
+      <Unit92>
+        <Filename Value="test.orm.threads.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit92>
+      <Unit93>
+        <Filename Value="..\src\lib\mormot.lib.brotli.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit93>
+      <Unit94>
+        <Filename Value="..\src\lib\mormot.lib.quickjs.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit94>
+      <Unit95>
+        <Filename Value="test.core.script.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit95>
+      <Unit96>
+        <Filename Value="..\src\lib\mormot.lib.gcc.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit96>
+      <Unit97>
+        <Filename Value="..\src\lib\mormot.lib.static.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit97>
+      <Unit98>
+        <Filename Value="..\src\script\mormot.script.core.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit98>
+      <Unit99>
+        <Filename Value="..\src\script\mormot.script.quickjs.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit99>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -969,7 +1025,7 @@
     </Other>
   </CompilerOptions>
   <Debugging>
-    <Exceptions Count="10">
+    <Exceptions Count="14">
       <Item1>
         <Name Value="EAbort"/>
       </Item1>
@@ -1000,6 +1056,18 @@
       <Item10>
         <Name Value="EThreadError"/>
       </Item10>
+      <Item11>
+        <Name Value="ESynCrypto"/>
+      </Item11>
+      <Item12>
+        <Name Value="ERelayProtocol"/>
+      </Item12>
+      <Item13>
+        <Name Value="EServiceException"/>
+      </Item13>
+      <Item14>
+        <Name Value="EFCreateError"/>
+      </Item14>
     </Exceptions>
   </Debugging>
 </CONFIG>

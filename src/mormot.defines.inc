@@ -513,16 +513,46 @@
   // https://github.com/synopse/mORMot2/releases
 
 {$ifdef FPC}
+  // Delphi doesn't accept GCC object files and libdeflate requires GCC
   {$if defined(OSOPENBSD) and defined(FPC_CROSSCOMPILING)}
     {$define NOSQLITE3STATIC} // OpenBSD problems with fpcupdeluxe libgcc.a
   {$ifend}
+  {$ifdef OSLINUX}
+    {$ifdef CPUINTEL}
+      {$define LIBDEFLATESTATIC}  // libdeflate static binding
+      {$define LIBQUICKJSSTATIC}  // quickjs static binding
+    {$endif CPUINTEL}
+    {$ifdef CPUARM}
+      {.$define LIBDEFLATESTATIC} // compiles, but untested
+      {.$define LIBQUICKJSSTATIC} // compiles, but untested
+    {$endif CPUARM}
+    {$ifdef CPUAARCH64}
+      {.$define LIBDEFLATESTATIC} // compiles, but untested
+      {.$define LIBQUICKJSSTATIC} // compiles, but untested
+    {$endif CPUAARCH64}
+  {$endif OSLINUX}
+  {$ifdef OSWINDOWS}
+    {$ifdef CPUX86}
+      {$define LIBDEFLATESTATIC}
+      {$define LIBQUICKJSSTATIC}
+    {$endif CPUX86}
+    {$ifdef CPUX64}
+      {.$define LIBDEFLATESTATIC} // Win64 + FPC 3.2 = internal error 200603061
+      {$define LIBQUICKJSSTATIC}
+    {$endif CPUX64}
+  {$endif OSWINDOWS}
 {$else}
+  {$ifdef CPUX86}
+    {$define LIBQUICKJSSTATIC}  // we have our quickjs.obj :)
+  {$endif CPUX86}
   // there is a linking bug with Delphi XE4 on Win64
   {$ifdef CPUX64}
     {$if CompilerVersion = 25.0} // exactly XE4
+      // other Win32/Win64 Delphi platforms "should work" (tm) as expected
       {$define NOSQLITE3STATIC}
     {$ifend}
-  {$endif} // other Win32/Win64 Delphi platforms should work as expected
+    {$define LIBQUICKJSSTATIC}
+  {$endif}
 {$endif FPC}
 
 {$ifdef OSWINDOWS}

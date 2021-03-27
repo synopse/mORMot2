@@ -53,6 +53,7 @@ interface
   // we supply https://github.com/c-smile/quickjspp (uncompatible) fork statics
   // - 64-bit JSValue on all platforms, JSX, debugger, Windows/Delphi compatible
   // - amalgamation file with for static integration (malloc, assert)
+  // - see res/static/libquickjs for patched source and build instructions
   {$define JS_STRICT_NAN_BOXING}
   {$define LIBQUICKJS}
 {$endif LIBQUICKJSSTATIC}

@@ -39,6 +39,7 @@ uses
   mormot.core.interfaces   in '..\src\core\mormot.core.interfaces.pas',
   mormot.core.mustache     in '..\src\core\mormot.core.mustache.pas',
   mormot.core.zip          in '..\src\core\mormot.core.zip.pas',
+  mormot.lib.static        in '..\src\lib\mormot.lib.static.pas',
   mormot.lib.z             in '..\src\lib\mormot.lib.z.pas',
   mormot.lib.lizard        in '..\src\lib\mormot.lib.lizard.pas',
   mormot.lib.winhttp       in '..\src\lib\mormot.lib.winhttp.pas',
@@ -46,6 +47,7 @@ uses
   mormot.lib.sspi          in '..\src\lib\mormot.lib.sspi.pas',
   mormot.lib.gssapi        in '..\src\lib\mormot.lib.gssapi.pas',
   mormot.lib.openssl11     in '..\src\lib\mormot.lib.openssl11.pas',
+  mormot.lib.quickjs       in '..\src\lib\mormot.lib.quickjs.pas',
   mormot.net.sock          in '..\src\net\mormot.net.sock.pas',
   mormot.net.http          in '..\src\net\mormot.net.http.pas',
   mormot.net.relay         in '..\src\net\mormot.net.relay.pas',
@@ -76,6 +78,8 @@ uses
   mormot.rest.http.client  in '..\src\rest\mormot.rest.http.client.pas',
   mormot.rest.http.server  in '..\src\rest\mormot.rest.http.server.pas',
   mormot.rest.mvc          in '..\src\rest\mormot.rest.mvc.pas',
+  mormot.script.core       in '..\src\script\mormot.script.core.pas',
+  mormot.script.quickjs    in '..\src\script\mormot.script.quickjs.pas',
   mormot.db.core           in '..\src\db\mormot.db.core.pas',
   mormot.db.sql            in '..\src\db\mormot.db.sql.pas',
   mormot.db.proxy          in '..\src\db\mormot.db.proxy.pas',
@@ -109,6 +113,9 @@ uses
   test.core.data           in '.\test.core.data.pas',
   test.core.crypt          in '.\test.core.crypt.pas',
   test.core.ecc            in '.\test.core.ecc.pas',
+  {$ifdef LIBQUICKJSSTATIC}
+  test.core.script         in '.\test.core.script.pas',
+  {$endif LIBQUICKJSSTATIC}
   test.net.proto           in '.\test.net.proto.pas',
   test.orm.core            in '.\test.orm.core.pas',
   test.orm.sqlite3         in '.\test.orm.sqlite3.pas',
@@ -151,6 +158,9 @@ end;
 
 procedure TIntegrationTests.SOA;
 begin
+  {$ifdef LIBQUICKJSSTATIC}
+  AddCase(TTestCoreScript);
+  {$endif LIBQUICKJSSTATIC}
   //exit;
   AddCase([
     //

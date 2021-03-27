@@ -222,7 +222,7 @@ type
     fRemoteDebugger: IRemoteDebugger;
     fWorkerManager: IWorkerManager;
     fOnLog: TSynLogProc;
-    function ThreadEngineIndex(aThreadID: TThreadID): integer;
+    function ThreadEngineIndex(aThreadID: TThreadID): PtrInt;
     function GetPauseDebuggerOnFirstStep: boolean;
     procedure SetPauseDebuggerOnFirstStep(aPauseDebuggerOnFirstStep: boolean);
     function GetEngineExpireTimeOutMinutes: cardinal;
@@ -249,6 +249,13 @@ type
     // - redirect to fEngineClass.From()
     function Engine(aContext: TScriptContext): TThreadSafeEngine; overload;
       {$ifdef HASINLINE} inline; {$endif}
+    /// initialize a new engine to be used outside of our engine pool
+    // - the returned engine won't be owned by this class, so is to be released
+    // explicitely by the caller
+    // - this engine won't be registered to the debugger
+    function NewEngine: TThreadSafeEngine;
+    /// returns how many times the NewEngine method has been called
+    function NewEngineCount: integer;
     /// setup and create the main engine associated with the pools
     // - should be called once at startup from the main thread
     // - this engine won't be part of the internal ThreadSafeEngine() pool
@@ -344,6 +351,7 @@ type
 
 implementation
 
+
 { TThreadSafeManager }
 
 constructor TThreadSafeManager.Create(aEngineClass: TThreadSafeEngineClass;
@@ -379,11 +387,24 @@ begin
   fEngines.Free;
 end;
 
+function TThreadSafeManager.ThreadEngineIndex(aThreadID: TThreadID): PtrInt;
+var
+  e: PPointerArray;
+begin
+  // caller made fEngines.Safe.Lock
+  e := pointer(fEngines.List);
+  for result := 0 to fEngines.Count - 1 do
+    // brute force search is fast enough since fMaxEngines is small
+    if TThreadSafeEngine(e[result]).fThreadID = aThreadID then
+      exit;
+  result := -1;
+end;
+
 function TThreadSafeManager.ThreadSafeEngine(ThreadData: pointer;
   TagForNewEngine: PtrInt): TThreadSafeEngine;
 var
   tid: TThreadID;
-  i: integer;
+  i: PtrInt;
   tobereleased: TThreadSafeEngine;
 begin
   // retrieve or (re)create the engine associated with this thread
@@ -447,7 +468,7 @@ end;
 
 function TThreadSafeManager.Engine(aThreadID: TThreadID): TThreadSafeEngine;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := fMainEngine;
   if (result <> nil) and
@@ -486,6 +507,7 @@ begin
     fMainEngine := result;
     result.fNameForDebug := 'Main';
     result.fNeverExpire := true; // not in the pool, anyway
+    result.AfterCreate;
     if Assigned(fRemoteDebugger) and
        fDebugMainThread then
       fRemoteDebugger.StartDebugCurrentThread(result);
@@ -496,6 +518,25 @@ begin
   end
   else if result.ThreadID <> tid then
     raise EScriptException.CreateUtf8('Invalid %.InitializeMainEngine', [self]);
+end;
+
+var
+  NewEngineSequence: integer;
+
+function TThreadSafeManager.NewEngine: TThreadSafeEngine;
+begin
+  result := fEngineClass.Create(nil, nil, 0, 0);
+  FormatUtf8('NewEngine%', [InterlockedIncrement(NewEngineSequence)],
+    result.fNameForDebug);
+  result.fNeverExpire := true; // not in the pool, anyway
+  result.AfterCreate;
+  if Assigned(fOnNewEngine) then
+    result.ThreadSafeCall(fOnNewEngine);
+end;
+
+function TThreadSafeManager.NewEngineCount: integer;
+begin
+  result := NewEngineSequence;
 end;
 
 function TThreadSafeManager.GetEngineExpireTimeOutMinutes: cardinal;
@@ -516,20 +557,6 @@ end;
 function TThreadSafeManager.NewWorkerManager: IWorkerManager;
 begin
   result := nil;
-end;
-
-function TThreadSafeManager.ThreadEngineIndex(aThreadID: TThreadID): integer;
-var
-  e: ^TThreadSafeEngine;
-begin
-  // caller made fEngines.Safe.Lock
-  e := pointer(fEngines.List);
-  for result := 0 to fEngines.Count - 1 do
-    if e^.fThreadID = aThreadID then
-      exit
-    else
-      inc(e); // brute force search is fast enough since fMaxEngines is small
-  result := -1;
 end;
 
 function TThreadSafeManager.GetPauseDebuggerOnFirstStep: boolean;
@@ -593,19 +620,22 @@ begin
   inherited Create;
   fManager := aManager;
   fCreateTix := GetTickCount64;
-  fContentVersion := fManager.ContentVersion;
   fThreadID := aThreadId;
   fThreadData := aThreadData;
   fTag := aTag;
-  if Assigned(fManager.fOnGetName) then
-    fNameForDebug := fManager.fOnGetName(self);
-  if fNameForDebug = '' then
-    FormatUtf8('% %', [PointerToHexShort(pointer(PtrUInt(fThreadId))),
-      CurrentThreadName], fNameForDebug);
-  if Assigned(fManager.fOnGetWebAppRootPath) then
-    fWebAppRootDir := fManager.fOnGetWebAppRootPath(self)
-  else
-    StringToUtf8(Executable.ProgramFilePath, fWebAppRootDir);
+  if Assigned(fManager) then
+  begin
+    fContentVersion := fManager.ContentVersion;
+    if Assigned(fManager.fOnGetName) then
+      fNameForDebug := fManager.fOnGetName(self);
+    if fNameForDebug = '' then
+      FormatUtf8('% %', [PointerToHexShort(pointer(PtrUInt(fThreadId))),
+        CurrentThreadName], fNameForDebug);
+    if Assigned(fManager.fOnGetWebAppRootPath) then
+      fWebAppRootDir := fManager.fOnGetWebAppRootPath(self)
+    else
+      StringToUtf8(Executable.ProgramFilePath, fWebAppRootDir);
+  end;
   // TThreadSafeManager will now call AfterCreate outside of its main lock
 end;
 
@@ -648,6 +678,7 @@ end;
 
 procedure TThreadSafeEngine.DoBeginRequest;
 begin
+  // paranoid todo: check if we need a Lock here to avoid GPF at expiration?
   if fRequestFpuBackup <> [] then
     // typical pascal FPU mask is [exDenormalized,exUnderflow,exPrecision]
     raise EScriptException.CreateUtf8('Nested %.DoBeginRequest', [self]);
