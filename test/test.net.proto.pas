@@ -16,7 +16,7 @@ uses
   mormot.core.unicode,
   mormot.core.datetime,
   mormot.core.rtti,
-  mormot.core.crypto,
+  mormot.crypt.core,
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,

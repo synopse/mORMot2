@@ -5656,15 +5656,13 @@ begin
           end;
         twJsonEscape:
           begin
-            esc := JSON_ESCAPE[c];
+            esc := JSON_ESCAPE[c]; // c<>0 -> esc<>JSON_ESCAPE_ENDINGZERO
             if esc = JSON_ESCAPE_NONE then
             begin
               // no escape needed
               inc(B);
               B^ := AnsiChar(c);
             end
-            else if esc = JSON_ESCAPE_ENDINGZERO then // #0
-              exit
             else if esc = JSON_ESCAPE_UNICODEHEX then
             begin
               // characters below ' ', #7 e.g. -> \u0007

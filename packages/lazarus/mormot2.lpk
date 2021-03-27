@@ -12,7 +12,16 @@
         <OtherUnitFiles Value="../../src/app;../../src/core;../../src/db;../../src/lib;../../src/net;../../src/orm;../../src/rest;../../src/soa;../../src/tools/ecc"/>
         <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
+      <Linking>
+        <Debugging>
+          <DebugInfoType Value="dsDwarf2"/>
+        </Debugging>
+      </Linking>
       <Other>
+        <Verbosity>
+          <ShowHintsForUnusedUnitsInMainSrc Value="True"/>
+          <ShowHintsForSenderNotUsed Value="True"/>
+        </Verbosity>
         <CustomOptions Value="-dNOSYNDBZEOS"/>
         <OtherDefines Count="1">
           <Define0 Value="NOSYNDBZEOS"/>
@@ -38,12 +47,12 @@
         <UnitName Value="mormot.core.buffers"/>
       </Item4>
       <Item5>
-        <Filename Value="../../src/core/mormot.core.crypto.openssl.pas"/>
-        <UnitName Value="mormot.core.crypto.openssl"/>
+        <Filename Value="../../src/core/mormot.crypto.openssl.pas"/>
+        <UnitName Value="mormot.crypto.openssl"/>
       </Item5>
       <Item6>
-        <Filename Value="../../src/core/mormot.core.crypto.pas"/>
-        <UnitName Value="mormot.core.crypto"/>
+        <Filename Value="../../src/core/mormot.crypto.core.pas"/>
+        <UnitName Value="mormot.crypto.core"/>
       </Item6>
       <Item7>
         <Filename Value="../../src/core/mormot.core.data.pas"/>
@@ -54,12 +63,12 @@
         <UnitName Value="mormot.core.datetime"/>
       </Item8>
       <Item9>
-        <Filename Value="../../src/core/mormot.core.ecc.pas"/>
-        <UnitName Value="mormot.core.ecc"/>
+        <Filename Value="../../src/core/mormot.crypto.ecc.pas"/>
+        <UnitName Value="mormot.crypto.ecc"/>
       </Item9>
       <Item10>
-        <Filename Value="../../src/core/mormot.core.ecc256r1.pas"/>
-        <UnitName Value="mormot.core.ecc256r1"/>
+        <Filename Value="../../src/core/mormot.crypto.ecc256r1.pas"/>
+        <UnitName Value="mormot.crypto.ecc256r1"/>
       </Item10>
       <Item11>
         <Filename Value="../../src/core/mormot.core.fpcx64mm.pas"/>
@@ -74,8 +83,8 @@
         <UnitName Value="mormot.core.json"/>
       </Item13>
       <Item14>
-        <Filename Value="../../src/core/mormot.core.jwt.pas"/>
-        <UnitName Value="mormot.core.jwt"/>
+        <Filename Value="../../src/core/mormot.crypto.jwt.pas"/>
+        <UnitName Value="mormot.crypto.jwt"/>
       </Item14>
       <Item15>
         <Filename Value="../../src/core/mormot.core.log.pas"/>
@@ -102,8 +111,8 @@
         <UnitName Value="mormot.core.search"/>
       </Item20>
       <Item21>
-        <Filename Value="../../src/core/mormot.core.secure.pas"/>
-        <UnitName Value="mormot.core.secure"/>
+        <Filename Value="../../src/core/mormot.crypto.secure.pas"/>
+        <UnitName Value="mormot.crypto.secure"/>
       </Item21>
       <Item22>
         <Filename Value="../../src/core/mormot.core.test.pas"/>

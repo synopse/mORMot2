@@ -83,3 +83,14 @@ Generic Security Service API on POSIX/Linux
 - Low-Level `libgssapi_krb5`/`libgssapi.so` Library Access
 - Middle-Level GSSAPI Wrappers
 - High-Level Client and Server Authentication using GSSAPI e.g. in `mormot.core.rest`
+
+### mormot.lib.quickjs
+
+Cross-Platform and Cross-Compiler JavaScript Interpreter
+- *QuickJS* Low-Level Constants and Types
+- *QuickJS* Functions API
+- *QuickJS* to Pascal Wrappers
+
+*QuickJS* is a small and embeddable Javascript engine.
+It supports the ES2020 specification including modules, asynchronous generators, proxies and BigInt.
+We supply the engine as static binaires (no external `.dll`/`.so` needed), with some fixes and extensions.

@@ -235,7 +235,7 @@
         {$define ASMINTEL}   // either ASMX86 or ASMX64
         {$define ASMX64AVX}  // supports AVX/AVX2/AVX512
         {$define CPUX64ASM}  // FPC has no problem (not Delphi prior XE7)
-        {$define HASAESNI}   // mormot.core.crypto rejected by Darwin asm
+        {$define HASAESNI}   // mormot.crypt.core rejected by Darwin asm
       {$endif OSDARWIN}
     {$endif CPUX64}
     {$ifdef CPUAARCH64}

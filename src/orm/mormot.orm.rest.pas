@@ -30,7 +30,7 @@ uses
   mormot.core.text,
   mormot.core.datetime,
   mormot.core.variants,
-  mormot.core.secure,
+  mormot.crypt.secure,
   mormot.core.data,
   mormot.core.rtti,
   mormot.core.log,

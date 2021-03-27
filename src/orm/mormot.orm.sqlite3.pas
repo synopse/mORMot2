@@ -37,11 +37,11 @@ uses
   mormot.core.rtti,
   mormot.core.json,
   mormot.core.threads,
-  mormot.core.crypto,
-  mormot.core.jwt,
+  mormot.crypt.core,
+  mormot.crypt.jwt,
   mormot.core.perf,
   mormot.core.search,
-  mormot.core.secure,
+  mormot.crypt.secure,
   mormot.core.log,
   mormot.orm.core,
   mormot.orm.rest,
@@ -1736,7 +1736,7 @@ begin
         strm := TRawByteStringStream.Create;
         try
           rows := fStatement^.Execute(0, '', strm,
-            ForceAjax or not fOwner.NoAjaxJson);
+            ForceAjax or not fOwner.NoAjaxJson, DB.StatementMaxMemory);
           result := strm.DataString;
         finally
           strm.Free;

@@ -445,7 +445,7 @@ type
     /// delete all items of the list
     procedure Clear; virtual;
     /// delete one item from the list
-    procedure Delete(index: integer); virtual;
+    procedure Delete(index: integer; dontfree: boolean = false); virtual;
     /// fast retrieve one item in the list
     function IndexOf(item: pointer): integer; virtual;
     /// fast check if one item exists in the list
@@ -479,7 +479,8 @@ type
     constructor Create(aOwnObjects: boolean = true;
       aItemClass: TClass = nil); reintroduce; virtual;
     /// delete one object from the list
-    procedure Delete(index: integer); override;
+    // - will also Free the item if OwnObjects was set, and dontfree is false
+    procedure Delete(index: integer; dontfree: boolean = false); override;
     /// delete all objects of the list
     procedure Clear; override;
     /// delete all objects of the list in reverse order
@@ -492,6 +493,9 @@ type
     // - could be used when unserializing from JSON
     property ItemClass: TClass
       read fItemClass write fItemClass;
+    /// flag set if this list will Free its items on Delete/Clear/Destroy
+    property OwnObjects: boolean
+      read fOwnObjects;
   end;
   PSynObjectList = ^TSynObjectList;
 
@@ -553,7 +557,7 @@ type
   end;
 
   /// add locking methods to a TSynObjectList
-  // - this class overrides the regular TSynObjectList
+  // - this class expands the regular TSynObjectList to include a TSynLocker
   // - you need to call the Safe.Lock/Unlock methods by hand to protect the
   // execution of index-oriented methods (like Delete/Items/Count...): the
   // list content may change in the background, so using indexes is thread-safe
@@ -2997,7 +3001,7 @@ begin
   fCount := 0;
 end;
 
-procedure TSynList.Delete(index: integer);
+procedure TSynList.Delete(index: integer; dontfree: boolean);
 begin
   PtrArrayDelete(fList, index, @fCount);
   if (fCount > 64) and
@@ -3040,11 +3044,12 @@ begin
   inherited Create;
 end;
 
-procedure TSynObjectList.Delete(index: integer);
+procedure TSynObjectList.Delete(index: integer; dontfree: boolean);
 begin
   if cardinal(index) >= cardinal(fCount) then
     exit;
-  if fOwnObjects then
+  if fOwnObjects and
+     not dontfree then
     TObject(fList[index]).Free;
   inherited Delete(index);
 end;

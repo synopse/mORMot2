@@ -823,7 +823,7 @@ var
 // - will use CryptProtectData DPAPI function call under Windows
 // - see https://msdn.microsoft.com/en-us/library/ms995355
 // - this function is Windows-only, could be slow, and you don't know which
-// algorithm is really used on your system, so using our mormot.core.crypto.pas
+// algorithm is really used on your system, so using our mormot.crypt.core.pas
 // CryptDataForCurrentUser() is probably a better (and cross-platform) alternative
 // - also note that DPAPI has been closely reverse engineered - see e.g.
 // https://www.passcape.com/index.php?section=docsys&cmd=details&id=28
@@ -1867,10 +1867,10 @@ procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer = nil;
 procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt;
   LeaveUnprotected: boolean = false);
 
-{$ifdef CPUX64}
-/// low-level x86_64 asm routine patch and redirection
+{$ifdef CPUINTEL}
+/// low-level i386/x86_64 asm routine patch and redirection
 procedure RedirectCode(Func, RedirectFunc: Pointer);
-{$endif CPUX64}
+{$endif CPUINTEL}
 
 /// search for a given class stored in an object vmtAutoTable Slot
 // - up to 15 properties could be registered per class
@@ -2126,6 +2126,8 @@ type
   /// meta-class definition of the TSynLocked hierarchy
   TSynLockedClass = class of TSynLocked;
 
+  TThreadIDDynArray = array of TThreadID;
+
 {$ifdef OSPOSIX}
 
 var
@@ -2188,6 +2190,11 @@ threadvar
 // - will return the CurrentThreadName value, truncated to 31 chars
 function GetCurrentThreadName: RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// returns the thread id and the thread name as a shortstring
+// - returns e.g. 'Thread 0001abcd [shortthreadname]'
+// - for convenient use when logging or raising an exception
+function GetCurrentThreadInfo: shortstring;
 
 /// enter a process-wide giant lock for thread-safe shared process
 // - shall be protected as such:
@@ -2828,7 +2835,7 @@ begin
   PatchCode(Code, @Value, SizeOf(Code^), nil, LeaveUnprotected);
 end;
 
-{$ifdef CPUX64}
+{$ifdef CPUINTEL}
 procedure RedirectCode(Func, RedirectFunc: Pointer);
 var
   NewJump: packed record
@@ -2845,7 +2852,7 @@ begin
   PatchCode(Func, @NewJump, SizeOf(NewJump));
   assert(PByte(Func)^ = $e9);
 end;
-{$endif CPUX64}
+{$endif CPUINTEL}
 
 function ClassPropertiesGet(ObjectClass: TClass): pointer;
 begin
@@ -3926,6 +3933,11 @@ begin
   ShortStringToAnsi7String(CurrentThreadName, result);
 end;
 
+function GetCurrentThreadInfo: shortstring;
+begin
+  result := ShortString(format('Thread %x [%s]',
+    [integer(GetCurrentThreadId), CurrentThreadName]));
+end;
 
 function NewSynLocker: PSynLocker;
 begin

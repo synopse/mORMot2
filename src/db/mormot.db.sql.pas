@@ -34,7 +34,7 @@ uses
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,
-  mormot.core.secure,
+  mormot.crypt.secure,
   mormot.core.rtti,
   mormot.core.log,
   mormot.db.core;
@@ -6046,7 +6046,7 @@ begin
              (result >= MaxRowCount) then
             break;
           if (maxmem > 0) and
-             (W.TotalWritten > maxmem) then // TextLength is slower
+             (W.TotalWritten > maxmem) then // Dest.Position is slower
             raise ESQLDBException.CreateUTF8('%.FetchAllToBinary: overflow %',
               [self, KB(maxmem)]);
         until not Step;

@@ -888,11 +888,14 @@ end;
 procedure IP4Short(ip4addr: PByteArray; var s: shortstring);
 begin
   str(ip4addr[0], s);
-  AppendShortChar('.', s);
+  inc(s[0]);
+  s[ord(s[0])] := '.';
   AppendShortInteger(ip4addr[1], s);
-  AppendShortChar('.', s);
+  inc(s[0]);
+  s[ord(s[0])] := '.';
   AppendShortInteger(ip4addr[2], s);
-  AppendShortChar('.', s);
+  inc(s[0]);
+  s[ord(s[0])] := '.';
   AppendShortInteger(ip4addr[3], s);
 end;
 
@@ -901,8 +904,10 @@ var
   s: shortstring;
 begin
   if PCardinal(ip4addr)^ = 0 then
+    // '0.0.0.0' bound to any host -> ''
     result := ''
   else if PCardinal(ip4addr)^ = cLocalhost32 then
+    // '127.0.0.1' loopback -> no memory allocation
     result := IP4local
   else
   begin
@@ -969,9 +974,11 @@ begin
     if sa_family = AF_INET then
       // check most common used values
       if cardinal(sin_addr) = 0 then
+        // '0.0.0.0' bound to any host -> ''
         exit
       else if cardinal(sin_addr) = cLocalhost32 then
       begin
+        // '127.0.0.1' loopback -> no memory allocation
         if not localasvoid then
           result := IP4local;
         exit;

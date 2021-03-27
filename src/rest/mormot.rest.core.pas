@@ -42,10 +42,10 @@ uses
   mormot.core.rtti,
   mormot.core.json,
   mormot.core.threads,
-  mormot.core.crypto,
+  mormot.crypt.core,
   mormot.core.perf,
   mormot.core.search,
-  mormot.core.secure,
+  mormot.crypt.secure,
   mormot.core.log,
   mormot.core.interfaces,
   mormot.orm.core, // for TOrm and IRestOrm

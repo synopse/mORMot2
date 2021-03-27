@@ -34,10 +34,10 @@ uses
   mormot.core.data,
   mormot.core.perf,
   mormot.core.rtti,
-  mormot.core.crypto,
+  mormot.crypt.core,
   mormot.core.json,
   mormot.core.search,
-  mormot.core.secure,
+  mormot.crypt.secure,
   mormot.core.log,
   mormot.core.interfaces,
   mormot.core.mustache,
@@ -190,7 +190,7 @@ type
     /// overriden implementations should return the rendered content
     procedure Render(methodIndex: Integer; const Context: variant;
       var View: TMvcView); override;
-    // some helpers defined here to avoid mormot.core.crypto link
+    // some helpers defined here to avoid mormot.crypt.core link
     class procedure md5(const Value: variant; out Result: variant);
     class procedure sha1(const Value: variant; out Result: variant);
     class procedure sha256(const Value: variant; out Result: variant);
@@ -1231,25 +1231,25 @@ end;
 class procedure TMvcViewsMustache.md5(const Value: variant;
   out Result: variant);
 begin
-  RawUtf8ToVariant(mormot.core.crypto.Md5(ToUtf8(Value)), Result);
+  RawUtf8ToVariant(mormot.crypt.core.Md5(ToUtf8(Value)), Result);
 end;
 
 class procedure TMvcViewsMustache.sha1(const Value: variant;
   out Result: variant);
 begin
-  RawUtf8ToVariant(mormot.core.crypto.Sha1(ToUtf8(Value)), Result);
+  RawUtf8ToVariant(mormot.crypt.core.Sha1(ToUtf8(Value)), Result);
 end;
 
 class procedure TMvcViewsMustache.sha256(const Value: variant;
   out Result: variant);
 begin
-  RawUtf8ToVariant(mormot.core.crypto.Sha256(ToUtf8(Value)), Result);
+  RawUtf8ToVariant(mormot.crypt.core.Sha256(ToUtf8(Value)), Result);
 end;
 
 class procedure TMvcViewsMustache.sha512(const Value: variant;
   out Result: variant);
 begin
-  RawUtf8ToVariant(mormot.core.crypto.Sha512(ToUtf8(Value)), Result);
+  RawUtf8ToVariant(mormot.crypt.core.Sha512(ToUtf8(Value)), Result);
 end;
 
 function TMvcViewsMustache.GetRenderer(methodIndex: integer;

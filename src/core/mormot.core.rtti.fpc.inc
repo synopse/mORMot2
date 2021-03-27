@@ -940,7 +940,11 @@ begin
     if pointer(s1) = pointer(dest) then
     begin
       // dest := dest+s2 -> self-resize dest
+      {$ifdef FPC_X64MM}
+      _ansistr_setlength(dest, l1 + _lstrlen(s2), cp);
+      {$else}
       SetLength(dest, l1 + _lstrlen(s2));
+      {$endif FPC_X64MM}
       PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codepage := cp;
       MoveFast(pointer(s2)^, PByteArray(dest)[l1], _lstrlen(s2));
     end

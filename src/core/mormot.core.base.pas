@@ -81,6 +81,10 @@ const
 { ************ Common Types Used for Compatibility Between Compilers and CPU }
 
 const
+  /// internal Code Page for UTF-8 Unicode encoding
+  // - as used by RawUtf8 and all our internal framework text process
+  CP_UTF8 = 65001;
+
   /// internal Code Page for UTF-16 Unicode encoding
   // - used e.g. for Delphi 2009+ UnicodeString=String type
   CP_UTF16 = 1200;
@@ -89,8 +93,8 @@ const
   CP_RAWBYTESTRING = 65535;
 
   /// fake code page used to recognize RawBlob
-  // - RawBlob internal code page will be CP_RAWBYTESTRING = 65535, but
-  // our ORM will identify RawBlob and serialize using CP_RAWBLOB instead
+  // - RawBlob internal code page will be CP_RAWBYTESTRING = 65535, but our ORM
+  // will identify the RawBlob type and unserialize it using CP_RAWBLOB instead
   // - TTextWriter.AddAnyAnsiBuffer will recognize it and use Base-64 encoding
   CP_RAWBLOB = 65534;
 
@@ -98,10 +102,8 @@ const
   CODEPAGE_US = 1252;
 
   /// Latin-1 ISO/IEC 8859-1 Code Page
+  // - map low 8-bit Unicode CodePoints
   CODEPAGE_LATIN1 = 819;
-
-  /// internal Code Page for UTF-8 Unicode encoding
-  CP_UTF8 = 65001;
 
   /// internal Code Page for System AnsiString encoding
   CP_ACP = 0;
@@ -137,7 +139,7 @@ type
   // older compilers will fallback to signed Int64 values
   // - anyway, consider using SortDynArrayQWord() to compare QWord values
   // in a safe and efficient way, under a CPUX86
-  // - use UInt64 explicitly in your computation (like in mormot.core.ecc),
+  // - use UInt64 explicitly in your computation (like in mormot.crypt.ecc),
   // if you are sure that Delphi 6-2007 compiler handles your code as expected,
   // but mORMot code will expect to use QWord for its internal process
   // (e.g. ORM/SOA serialization)
@@ -148,7 +150,7 @@ type
   {$endif}
   /// points to an unsigned Int64
   PQWord = ^QWord;
-
+  
   // redefined here to not use the unexpected PWord definition from Windows unit
   PWord = System.PWord;
   // redefined here to not use the unexpected PSingle definition from Windows unit
@@ -160,6 +162,8 @@ type
   {$ifndef ISDELPHIXE2}
   /// used to store the handle of a system Thread
   TThreadID = cardinal;
+  /// compatibility definition with FPC and newer Delphi
+  PUInt64 = ^UInt64;
   {$endif}
 
 {$endif FPC}
@@ -311,6 +315,7 @@ type
   PVariantArray = ^TVariantArray;
   TVariantDynArray = array of variant;
   PPVariant = ^PVariant;
+  PPVarData = ^PVarData;
 
   PIntegerDynArray = ^TIntegerDynArray;
   TIntegerDynArray = array of integer;
@@ -2577,7 +2582,7 @@ function Random64: QWord;
 
 /// fill some memory buffer with random values from the gsl_rng_taus2 generator
 // - the destination buffer is expected to be allocated as 32-bit items
-// - see the more secure TAesPrng.Main.FillRandom() from mormot.core.crypto unit
+// - see the more secure TAesPrng.Main.FillRandom() from mormot.crypt.core unit
 // - thread-safe and non-blocking function using a per-thread TLecuyer engine
 procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
 
@@ -2883,7 +2888,7 @@ var
   /// compute CRC32C checksum on the supplied buffer
   // - result is not compatible with zlib's crc32() - Intel/SCSI CRC32C is not
   // the same polynom - but will use the fastest mean available, e.g. SSE 4.2, to
-  // achieve up to 16GB/s with the optimized implementation from mormot.core.crypto
+  // achieve up to 16GB/s with the optimized implementation from mormot.crypt.core
   // - you should use this function instead of crc32cfast() or crc32csse42()
   crc32c: THasher = crc32cfast;
 
@@ -2899,7 +2904,7 @@ var
   // - apply four crc32c() calls on the 128-bit input chunk, into a 128-bit crc
   // - its output won't match crc128c() value, which works on 8-bit input
   // - will use SSE 4.2 hardware accelerated instruction, if available
-  // - is used e.g. by mormot.core.crypto's TAesCfc/TAesOfc/TAesCtc to 
+  // - is used e.g. by mormot.crypt.core's TAesCfc/TAesOfc/TAesCtc to 
   // check for data integrity
   crcblock: procedure(crc128, data128: PBlock128)  = crcblockfast;
 
@@ -2907,7 +2912,7 @@ var
   // - apply four crc32c() calls on the 128-bit input chunks, into a 128-bit crc
   // - its output won't match crc128c() value, which works on 8-bit input
   // - will use SSE 4.2 hardware accelerated instruction, if available
-  // - is used e.g. by mormot.core.ecc's TEcdheProtocol.ComputeMAC for macCrc128c
+  // - is used e.g. by mormot.crypt.ecc's TEcdheProtocol.ComputeMAC for macCrc128c
   crcblocks: procedure(crc128, data128: PBlock128; count: integer) = crcblocksfast;
 
 /// compute CRC16-CCITT checkum on the supplied buffer
@@ -2964,21 +2969,21 @@ var
   /// the 32-bit default hasher used by TDynArrayHashed
   // - set to crc32csse42() if SSE4.2 instructions are available on this CPU,
   // or fallback to xxHash32() which is faster than crc32cfast() e.g. on ARM
-  // - mormot.core.crypto will assign safer and faster AesNiHash32() if available
+  // - mormot.crypt.core will assign safer and faster AesNiHash32() if available
   DefaultHasher: THasher = xxHash32;
 
   /// the 32-bit hash function used by TRawUtf8Interning
   // - set to crc32csse42() if SSE4.2 instructions are available on this CPU,
   // or fallback to xxHash32() which performs better than crc32cfast()
-  // - mormot.core.crypto will assign safer and faster AesNiHash32() if available
+  // - mormot.crypt.core will assign safer and faster AesNiHash32() if available
   InterningHasher: THasher = xxHash32;
 
   /// a 64-bit hasher function
-  // - crc32cTwice() by default, but mormot.core.crypto will assign AesNiHash64()
+  // - crc32cTwice() by default, but mormot.crypt.core will assign AesNiHash64()
   DefaultHasher64: THasher64 = crc32cTwice;
 
   /// a 128-bit hasher function
-  // - crc32c128() by default, but mormot.core.crypto will assign AesNiHash128()
+  // - crc32c128() by default, but mormot.crypt.core will assign AesNiHash128()
   DefaultHasher128: THasher128 = crc32c128;
 
 
@@ -3055,6 +3060,10 @@ const
   {$else}
   varNativeString = varString;
   {$endif}
+
+  {$ifndef FPC}
+  CFirstUserType = $10F;
+  {$endif FPC}
 
   /// those TVarData.VType values are meant to be direct values
   VTYPE_SIMPLE = [varEmpty..varDate, varBoolean, varShortInt..varWord64, varUnknown];
@@ -4031,6 +4040,7 @@ end;
 
 function FastNewString(len, codepage: PtrInt): PAnsiChar;
 begin
+  result := nil;
   if len > 0 then
   begin
     {$ifdef FPC_X64MM}
@@ -4039,15 +4049,13 @@ begin
     GetMem(result, len + (_STRRECSIZE + 4));
     {$endif FPC_X64MM}
     {$ifdef HASCODEPAGE} // also set elemSize := 1
-    PCardinal(@PStrRec(result)^.codePage)^ := codepage or (1 shl 16);
+    PCardinal(@PStrRec(result)^.codePage)^ := codepage + (1 shl 16);
     {$endif HASCODEPAGE}
     PStrRec(result)^.refCnt := 1;
     PStrRec(result)^.length := len;
+    PCardinal(result + len + _STRRECSIZE)^ := 0; // ensure ends with four #0
     inc(PStrRec(result));
-    PCardinal(result + len)^ := 0; // ensure ends with four #0
-  end
-  else
-    result := nil;
+  end;
 end;
 
 procedure FastSetStringCP(var s; p: pointer; len, codepage: PtrInt);
@@ -4162,11 +4170,19 @@ begin
   inc(dest[0], len);
 end;
 
+procedure AppendShortChar(chr: AnsiChar; var dest: shortstring);
+begin
+  if dest[0] = #255 then
+    exit;
+  inc(dest[0]);
+  dest[ord(dest[0])] := chr;
+end;
+
 procedure AppendShortInteger(value: integer; var dest: shortstring);
 var
   temp: shortstring;
 begin
-  str(value, temp);
+  str(value, temp); // fast enough for our purpose
   AppendShort(temp, dest);
 end;
 
@@ -4176,14 +4192,6 @@ var
 begin
   str(value, temp);
   AppendShort(temp, dest);
-end;
-
-procedure AppendShortChar(chr: AnsiChar; var dest: shortstring);
-begin
-  if dest[0] = #255 then
-    exit;
-  inc(dest[0]);
-  dest[ord(dest[0])] := chr;
 end;
 
 procedure AppendShortBuffer(buf: PAnsiChar; len: integer; var dest: shortstring);

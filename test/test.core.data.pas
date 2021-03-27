@@ -24,8 +24,8 @@ uses
   mormot.core.json,
   mormot.core.data,
   mormot.core.datetime,
-  mormot.core.crypto,
-  mormot.core.secure,
+  mormot.crypt.core,
+  mormot.crypt.secure,
   mormot.core.perf,
   mormot.core.search,
   mormot.core.mustache,
@@ -3176,9 +3176,6 @@ begin
   o2 := BsonVariant('{%:[?,?,?]}', ['BSON'], ['awesome', 5.05, 1986]);
   CheckEqual(VariantSaveMongoJson(o2, modMongoStrict), BSONAWESOME);
   b := pointer(bsonDat);
-  {$ifndef FPC}
-  Check(o2 = BSONAWESOME, 'BsonVariant casted to string');
-  {$endif FPC}
   u := ToUtf8(string(o2));
   CheckEqual(u, '{BSON:["awesome",5.05,1986]}', 'TBsonVariant: mongoShell syntax');
   BsonParseLength(b);
@@ -3651,11 +3648,7 @@ begin
   end;
   for i := 0 to V._count - 1 do
     Check(V._(i) = Doc.Values[i]);
-  {$ifdef FPC}
-  TDocVariantData(V).AddItem(4);
-  {$else}
   V.Add(4);
-  {$endif FPC}
   Check(V._count = 4);
   for i := 0 to 2 do
     Check(V._(i) = Doc.Values[i]);
@@ -3820,18 +3813,10 @@ begin
   CheckEqual(VariantSaveJson(V1), '[1.5,1.7]');
   V2 := _obj(['id', 1]);
   Check(VariantSaveJson(V2) = '{"id":1}');
-  {$ifdef FPC}
-  _Safe(V1)^.AddItem(V2); // FPC does not accept v1.Add(v2)
-  {$else}
   V1.Add(V2);
-  {$endif FPC}
   Check(VariantSaveJson(V1) = '[1.5,1.7,{"id":1}]');
   s := 'abc';
-  {$ifdef FPC}
-  _Safe(V1)^.AddItem(s); // FPC does not accept v1.Add(s)
-  {$else}
   V1.Add(s);
-  {$endif FPC}
   Check(VariantSaveJson(V1) = '[1.5,1.7,{"id":1},"abc"]');
   RawUtf8ToVariant('def', V2);
   _Safe(V1)^.AddItem(V2);

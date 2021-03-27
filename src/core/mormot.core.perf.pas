@@ -11,7 +11,7 @@ unit mormot.core.perf;
     - TSynMonitor Process Information Classes
     - TSynMonitorUsage Process Information Database Storage
     - Operating System Monitoring
-    - TSynFPUException Wrapper for FPU Flags Preservation
+    - TSynFpuException Wrapper for FPU Flags Preservation
 
   *****************************************************************************
 }
@@ -1089,23 +1089,36 @@ function GetLastExceptions(Depth: integer = 0): variant; overload;
 
 
 
-{ ************ TSynFPUException Wrapper for FPU Flags Preservation }
+{ ************ TSynFpuException Wrapper for FPU Flags Preservation }
 
 {$ifdef CPUINTEL}
+
+type
+  TFpuFlags = (ffLibrary, ffPascal);
+
+/// mask all FPU exceptions, according to the expected target
+// - x87 flags are $1372 for pascal, or $137F for library
+// - sse flags are $1920 for pascal, or $1FA0 for library
+function SetFpuFlags(flags: TFpuFlags): cardinal;
+
+/// restore the FPU exceptions flags as overriden by SetFpuFlags()
+procedure ResetFpuFlags(saved: cardinal);
+
+
 type
   /// a simple class which will set FPU exception flags for a code block
   // - using an IUnknown interface to let the compiler auto-generate a
   // try..finally block statement to reset the FPU exception register
   // - to be used e.g. as such:
   // !begin
-  // !  with TSynFPUException.ForLibrayCode do
+  // !  with TSynFpuException.ForLibrayCode do
   // !  begin
   // !    ... now FPU exceptions will be ignored
   // !    ... so here it is safe to call external libray code
   // !  end; // now FPU exception will be reset as with standard Delphi
   // - it will avoid any unexpected invalid floating point operation in your
   // code, whereas it was in fact triggerred in some external library code
-  TSynFPUException = class(TSynInterfacedObject)
+  TSynFpuException = class(TSynInterfacedObject)
   protected
     {$ifndef CPU64}
     fExpected8087, fSaved8087: word;
@@ -2993,56 +3006,85 @@ begin
 end;
 
 
-{ ************ TSynFPUException Wrapper for FPU Flags Preservation }
+{ ************ TSynFpuException Wrapper for FPU Flags Preservation }
 
 {$ifdef CPUINTEL}
 
-{ TSynFPUException }
+function SetFpuFlags(flags: TFpuFlags): cardinal;
+const
+  _FLAGS: array[TFpuFlags] of cardinal = (
+    {$ifdef CPU64}
+      $1FA0, $1920);
+    {$else}
+      $137F, $1372);
+    {$endif CPU64}
+begin
+  {$ifdef CPU64}
+  result := GetMXCSR;
+  SetMXCSR(_FLAGS[flags]);
+  {$else}
+  result := Get8087CW;
+  Set8087CW(_FLAGS[flags]);
+  {$endif CPU64}
+end;
 
-function TSynFPUException.VirtualAddRef: integer;
+procedure ResetFpuFlags(saved: cardinal);
+begin
+  {$ifdef CPU64}
+  SetMXCSR(saved);
+  {$else}
+  Set8087CW(saved);
+  {$endif CPU64}
+end;
+
+
+{ TSynFpuException }
+
+function TSynFpuException.VirtualAddRef: integer;
 begin
   if fRefCount = 0 then
   begin
-    {$ifndef CPU64}
-    fSaved8087 := Get8087CW;
-    Set8087CW(fExpected8087); // set FPU exceptions mask
-    {$else}
+    // set FPU exceptions mask
+    {$ifdef CPU64}
     fSavedMXCSR := GetMXCSR;
-    SetMXCSR(fExpectedMXCSR); // set FPU exceptions mask
-    {$endif}
+    SetMXCSR(fExpectedMXCSR);
+    {$else}
+    fSaved8087 := Get8087CW;
+    Set8087CW(fExpected8087);
+    {$endif CPU64}
   end;
   inc(fRefCount);
-  result := 1; // should never be 0 (mark release of TSynFPUException instance)
+  result := 1; // should never be 0 (mark release of TSynFpuException instance)
 end;
 
-function TSynFPUException.VirtualRelease: integer;
+function TSynFpuException.VirtualRelease: integer;
 begin
   dec(fRefCount);
   if fRefCount = 0 then
-    {$ifndef CPU64}
-    Set8087CW(fSaved8087);
-    {$else}
+    {$ifdef CPU64}
     SetMXCSR(fSavedMXCSR);
-    {$endif}
-  result := 1; // should never be 0 (mark release of TSynFPUException instance)
+    {$else}
+    Set8087CW(fSaved8087);
+    {$endif CPU64}
+  result := 1; // should never be 0 (mark release of TSynFpuException instance)
 end;
 
 var
-  GlobalSynFPUExceptionInstances: TObjectDynArray;
+  GlobalSynFpuExceptionInstances: TObjectDynArray;
 
 threadvar
-  GlobalSynFPUExceptionDelphi,
-  GlobalSynFPUExceptionLibrary: TSynFPUException;
+  GlobalSynFpuExceptionDelphi,
+  GlobalSynFpuExceptionLibrary: TSynFpuException;
 
 {$ifndef CPU64}
-constructor TSynFPUException.Create(Expected8087Flag: word);
+constructor TSynFpuException.Create(Expected8087Flag: word);
 begin
   // $1372=Delphi $137F=library (mask all exceptions)
   inherited Create;
   fExpected8087 := Expected8087Flag;
 end;
 {$else}
-constructor TSynFPUException.Create(ExpectedMXCSR: word);
+constructor TSynFpuException.Create(ExpectedMXCSR: word);
 begin
   // $1920=Delphi $1FA0=library (mask all exceptions)
   inherited Create;
@@ -3050,37 +3092,37 @@ begin
 end;
 {$endif CPU64}
 
-class function TSynFPUException.ForLibraryCode: IUnknown;
+class function TSynFpuException.ForLibraryCode: IUnknown;
 var
-  obj: TSynFPUException;
+  obj: TSynFpuException;
 begin
-  result := GlobalSynFPUExceptionLibrary; // threadvar instances
+  result := GlobalSynFpuExceptionLibrary; // threadvar instances
   if result <> nil then
     exit;
-  {$ifndef CPU64}
-  obj := TSynFPUException.Create($137F);
+  {$ifdef CPU64}
+  obj := TSynFpuException.Create($1FA0);
   {$else}
-  obj := TSynFPUException.Create($1FA0);
+  obj := TSynFpuException.Create($137F);
   {$endif CPU64}
-  ObjArrayAdd(GlobalSynFPUExceptionInstances, obj);
-  GlobalSynFPUExceptionLibrary := obj;
+  ObjArrayAdd(GlobalSynFpuExceptionInstances, obj);
+  GlobalSynFpuExceptionLibrary := obj;
   result := obj;
 end;
 
-class function TSynFPUException.ForDelphiCode: IUnknown;
+class function TSynFpuException.ForDelphiCode: IUnknown;
 var
-  obj: TSynFPUException;
+  obj: TSynFpuException;
 begin
-  result := GlobalSynFPUExceptionDelphi;
+  result := GlobalSynFpuExceptionDelphi;
   if result <> nil then
     exit;
-  {$ifndef CPU64}
-  obj := TSynFPUException.Create($1372);
+  {$ifdef CPU64}
+  obj := TSynFpuException.Create($1920);
   {$else}
-  obj := TSynFPUException.Create($1920);
+  obj := TSynFpuException.Create($1372);
   {$endif CPU64}
-  ObjArrayAdd(GlobalSynFPUExceptionInstances, obj);
-  GlobalSynFPUExceptionDelphi := obj;
+  ObjArrayAdd(GlobalSynFpuExceptionInstances, obj);
+  GlobalSynFpuExceptionDelphi := obj;
   result := obj;
 end;
 
@@ -3091,7 +3133,7 @@ initialization
 
 finalization
   {$ifdef CPUINTEL}
-  ObjArrayClear(GlobalSynFPUExceptionInstances);
+  ObjArrayClear(GlobalSynFpuExceptionInstances);
   {$endif CPUINTEL}
   ProcessSystemUse.Free;
   

@@ -4165,7 +4165,7 @@ end;
 
 {$ifdef CPUARM}
 {$ifdef ASMORIG}
-procedure TInterfacedObjectFake.ArmFakeStub;
+procedure TInterfacedObjectFakeRaw.ArmFakeStub;
 var
   // warning: exact local variables order should match TFakeCallStack
   smetndx: pointer;
@@ -4202,7 +4202,7 @@ asm
     {$endif HAS_FPREG}
 end;
 {$else}
-procedure TInterfacedObjectFake.ArmFakeStub; nostackframe;assembler;
+procedure TInterfacedObjectFakeRaw.ArmFakeStub; nostackframe;assembler;
 asm
       // get method index
       str   r12,[r13, #-52]
@@ -4246,7 +4246,7 @@ end;
 {$endif ASMORIG}
 {$endif CPUARM}
 {$ifdef CPUAARCH64}
-procedure TInterfacedObjectFake.AArch64FakeStub;
+procedure TInterfacedObjectFakeRaw.AArch64FakeStub;
 var
   // warning: exact local variables order should match TFakeCallStack
   sx0, sx1, sx2, sx3, sx4, sx5, sx6, sx7: pointer;
@@ -6397,7 +6397,7 @@ type
   PCallMethodArgs = ^TCallMethodArgs;
   {$ifdef FPC}
   {$push}
-  {$PACKRECORDS 16}
+  {$packrecords 16} // stack is aligned on 16 bytes
   {$endif FPC}
   TCallMethodArgs = record
     StackSize: PtrInt;
