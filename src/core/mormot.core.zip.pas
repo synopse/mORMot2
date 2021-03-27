@@ -456,6 +456,7 @@ type
     /// compress (using the deflate method) a memory buffer, and add it to the zip file
     // - by default, current date/time is used if no FileAge is supplied; see also
     // DateTimeToWindowsFileTime() and FileAgeToWindowsTime()
+    // - can use faster libdeflate instead of plain zlib if available
     procedure AddDeflated(const aZipName: TFileName; Buf: pointer; Size: PtrInt;
       CompressLevel: integer = 6; FileAge: integer = 0); overload;
     /// add a memory buffer to the zip file, without compression
@@ -466,6 +467,8 @@ type
       FileAge: integer = 0); overload;
     /// compress an existing file, and add it to the zip
     // - deflate reading 1MB chunks of input, triggerring zip64 format if needed
+    // - can use faster libdeflate (if available) for files up to 32MB, but
+    // fallback to zlib with 1MB chunks for bigger files
     procedure AddDeflated(const aFileName: TFileName;
       RemovePath: boolean = true; CompressLevel: integer = 6;
       ZipName: TFileName = ''); overload;
@@ -518,6 +521,7 @@ function EventArchiveZip(const aOldLogFileName, aDestinationPath: TFileName): bo
 // - as expected by THttpSocket.RegisterCompress for 'Content-Encoding: gzip'
 // - use internally a level compression of 1, i.e. fastest available (content of
 // 4803 bytes is compressed into 700, and request is 440 us instead of 220 us)
+// - can use faster libdeflate instead of plain zlib if available
 function CompressGZip(var Data: RawByteString; Compress: boolean): RawUtf8;
 
 /// (un)compress a data content using the Deflate algorithm (i.e. "raw deflate")
@@ -525,6 +529,7 @@ function CompressGZip(var Data: RawByteString; Compress: boolean): RawUtf8;
 // - use internally a level compression of 1, i.e. fastest available
 // - HTTP 'Content-Encoding: deflate' is pretty inconsistent in practice on client
 // side, so use CompressGZip() instead - https://stackoverflow.com/a/5186177
+// - can use faster libdeflate instead of plain zlib if available
 function CompressDeflate(var Data: RawByteString; Compress: boolean): RawUtf8;
 
 /// (un)compress a data content using the zlib algorithm
@@ -532,6 +537,7 @@ function CompressDeflate(var Data: RawByteString; Compress: boolean): RawUtf8;
 // - use internally a level compression of 1, i.e. fastest available
 // - HTTP 'Content-Encoding: zlib' is pretty inconsistent in practice on client
 // side, so use CompressGZip() instead - https://stackoverflow.com/a/5186177
+// - can use faster libdeflate instead of plain zlib if available
 function CompressZLib(var Data: RawByteString; Compress: boolean): RawUtf8;
 
 
@@ -539,9 +545,11 @@ function CompressZLib(var Data: RawByteString; Compress: boolean): RawUtf8;
 
 var
   /// acccess to Zip Deflate compression in level 6 as a TAlgoCompress class
+  // - can use faster libdeflate instead of plain zlib if available
   AlgoDeflate: TAlgoCompress;
 
   /// acccess to Zip Deflate compression in level 1 as a TAlgoCompress class
+  // - can use faster libdeflate instead of plain zlib if available
   AlgoDeflateFast: TAlgoCompress;
 
 
@@ -768,6 +776,13 @@ begin
               (crc = crc32);
 end;
 
+{$ifdef LIBDEFLATESTATIC}
+// libdeflate + AVX is much faster than zlib, but its API expects only buffers
+const
+  // files up to 64MB will call libdeflate and a temporary memory buffer
+  LIBDEFLATE_MAXSIZE = 64 shl 20;
+{$endif LIBDEFLATESTATIC}
+
 function TGZRead.ToFile(const filename: TFileName; tempBufSize: integer): boolean;
 var
   f: TStream;
@@ -776,11 +791,19 @@ begin
   if (comp = nil) or
      (filename = '') then
     exit;
-  f := TFileStream.Create(filename, fmCreate);
-  try
-    result := ToStream(f, tempBufSize);
-  finally
-    f.Free;
+  {$ifdef LIBDEFLATESTATIC}
+  // files up to 64MB will call libdeflate using a temporary memory buffer
+  if uncomplen32 < LIBDEFLATE_MAXSIZE then
+    FileFromString(ToMem, filename)
+  else
+  {$endif LIBDEFLATESTATIC}
+  begin
+    f := TFileStream.Create(filename, fmCreate);
+    try
+      result := ToStream(f, tempBufSize);
+    finally
+      f.Free;
+    end;
   end;
 end;
 
@@ -1191,7 +1214,23 @@ begin
       met := Z_DEFLATED;
       if CompressLevel < 0 then
         met := Z_STORED; // called from AddStored()
-      with NewEntry(met, 0, FileAgeToWindowsTime(aFileName))^ do
+      {$ifdef LIBDEFLATESTATIC}
+      // libdeflate is much faster than zlib, but its API expects only buffers
+      if (met = Z_DEFLATED) and
+         (todo <= LIBDEFLATE_MAXSIZE) then
+      begin
+        // files up to 64MB will be loaded into memory and call libdeflate
+        Setlength(tmp, todo);
+        len := FileRead(f, pointer(tmp)^, todo);
+        if len <> todo then
+          raise ESynZip.CreateFmt('%s: failed to read %s [%d]',
+            [ClassNameShort(self)^, aFileName, GetLastError]);
+        AddDeflated(ZipName, pointer(tmp), todo, CompressLevel, age);
+        exit;
+      end;
+      // bigger files will fallback to zlib and its streaming methods
+      {$endif LIBDEFLATESTATIC}
+      with NewEntry(met, 0, age)^ do
       begin
         h64.zfullSize := todo;
         if met = Z_STORED then
@@ -1769,6 +1808,9 @@ function TZipRead.UnZipStream(aIndex: integer; const aInfo: TFileInfoFull;
 var
   crc: cardinal;
   data: pointer;
+  {$ifdef LIBDEFLATESTATIC}
+  tmp: RawByteString;
+  {$endif LIBDEFLATESTATIC}
 begin
   result := false;
   if (self = nil) or
@@ -1782,8 +1824,21 @@ begin
         crc := mormot.lib.z.crc32(0, data, aInfo.f64.zfullSize);
       end;
     Z_DEFLATED:
-      if UnCompressStream(data, aInfo.f64.zzipsize, aDest, @crc) <>
-           aInfo.f64.zfullsize then
+      with aInfo.f64 do
+      {$ifdef LIBDEFLATESTATIC}
+      // files up to 64MB will call libdeflate using a temporary memory buffer
+      if zfullsize < LIBDEFLATE_MAXSIZE then
+      begin
+        SetString(tmp, nil, zfullSize);
+        if UnCompressMem(data, pointer(tmp), zzipsize, zfullsize) <> zfullsize then
+           exit;
+        crc := mormot.lib.z.crc32(0, pointer(tmp), zfullSize);
+        aDest.WriteBuffer(pointer(tmp)^, zfullSize);
+      end
+      else
+      // big files will use the slower but unlimited zlib streaming abilities
+      {$endif LIBDEFLATESTATIC}
+      if UnCompressStream(data, zzipsize, aDest, @crc) <> zfullsize then
         exit;
   else
     raise ESynZip.CreateFmt('Unsupported method %d for %s',
