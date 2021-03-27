@@ -38,11 +38,6 @@ uses
 
 { ************ Raw SQLite3 API Constants and Functions }
 
-{$ifdef OSBSD}
-  {$linklib c}
-  {$linklib pthread}
-{$endif OSBSD}
-
 {$ifdef FPC}
   {$packrecords C}
   {$packenum 4}
@@ -1800,7 +1795,7 @@ type
     close: function(DB: TSqlite3DB): integer; cdecl;
 
     /// Return the version of the SQLite database engine, in ascii format
-    // - currently returns '3.34.1', when used with our mormot.db.raw.sqlite3.static unit
+    // - currently returns '3.35.3', when used with our mormot.db.raw.sqlite3.static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
     libversion: function: PUtf8Char; cdecl;
