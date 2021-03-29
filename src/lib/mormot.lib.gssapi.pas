@@ -650,7 +650,7 @@ end;
 procedure GssEnlistMechsSupported(MechList: TStringList);
 var
   i: PtrInt;
-  MajSt, MinSt: cardinal;
+  MinSt: cardinal;
   Mechs: gss_OID_set;
   Buf_sasl, Buf_name, Buf_desc: gss_buffer_desc;
   Sasl, Name, Desc: string;
@@ -658,10 +658,10 @@ begin
   if MechList <> nil then
   begin
     RequireGssApi;
-    MajSt := GssApi.gss_indicate_mechs(MinSt, Mechs);
+    GssApi.gss_indicate_mechs(MinSt, Mechs);
     for i := 0 to Pred(Mechs^.count) do
     begin
-      MajSt := GssApi.gss_inquire_saslname_for_mech(
+      GssApi.gss_inquire_saslname_for_mech(
         MinSt, @Mechs^.elements[i], @Buf_sasl, @Buf_name, @Buf_desc);
       SetString(Sasl, Buf_sasl.value, Buf_sasl.length);
       SetString(Name, Buf_name.value, Buf_name.length);
@@ -671,7 +671,7 @@ begin
       GssApi.gss_release_buffer(MinSt, Buf_name);
       GssApi.gss_release_buffer(MinSt, Buf_desc);
     end;
-    MajSt := GssApi.gss_release_oid_set(MinSt, Mechs);
+    GssApi.gss_release_oid_set(MinSt, Mechs);
   end;
 end;
 

@@ -525,7 +525,7 @@ var
 
 function TThreadSafeManager.NewEngine: TThreadSafeEngine;
 begin
-  result := fEngineClass.Create(nil, nil, 0, 0);
+  result := fEngineClass.Create(nil, nil, 0, TThreadID(0));
   FormatUtf8('NewEngine%', [InterlockedIncrement(NewEngineSequence)],
     result.fNameForDebug);
   result.fNeverExpire := true; // not in the pool, anyway

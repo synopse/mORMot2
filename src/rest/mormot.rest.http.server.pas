@@ -748,7 +748,7 @@ end;
 procedure TRestHttpServer.Shutdown(noRestServerShutdown: boolean);
 var
   i: PtrInt;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   if (self <> nil) and
      not fShutdownInProgress then
@@ -897,7 +897,6 @@ var
   headers, hostroot, redirect: RawUtf8;
   match: TRestModelMatch;
   serv: TRestServer;
-  c: THttpServerRequest absolute Ctxt;
 begin
   tls := hsrHttps in Ctxt.ConnectionFlags;
   if (self = nil) or

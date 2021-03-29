@@ -901,17 +901,17 @@ end;
 procedure TServiceFactoryClient.SendNotificationsWait(aTimeOutSeconds: integer);
 var
   timeOut: Int64;
-  log: ISynLog;
 begin
-  if SendNotificationsPending = 0 then
-    exit;
-  log := fClient.LogClass.Enter;
-  timeOut := GetTickCount64 + aTimeOutSeconds * 1000;
-  repeat
-    SleepHiRes(5);
-    if SendNotificationsPending = 0 then
-      exit;
-  until GetTickCount64 > timeOut;
+  if SendNotificationsPending <> 0 then
+    with fClient.LogClass.Enter do
+    begin
+      timeOut := GetTickCount64 + aTimeOutSeconds * 1000;
+      repeat
+        SleepHiRes(5);
+        if SendNotificationsPending = 0 then
+          exit;
+      until GetTickCount64 > timeOut;
+    end;
 end;
 
 procedure TServiceFactoryClient.SetOptions(const aMethod: array of RawUtf8;

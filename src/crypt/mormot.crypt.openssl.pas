@@ -1042,7 +1042,7 @@ begin
       if EVP_DigestSign(ctx, pointer(Signature), size,
            Message, MessageLen) = OPENSSLSUCCESS then
       begin
-        if size <> length(Signature) then
+        if size <> PtrUInt(length(Signature)) then
           SetLength(Signature, size); // leading zeros may trim the size
         result := size;
       end
@@ -1150,7 +1150,6 @@ procedure OpenSslSaveKeys(Keys: PEVP_PKEY;
   out PrivateKey, PublicKey: RawByteString);
 var
   bio: PBIO;
-  mem: BUF_MEM;
 begin
   if (Keys = nil) or
      not OpenSslIsAvailable then

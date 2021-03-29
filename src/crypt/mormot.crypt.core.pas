@@ -2617,7 +2617,6 @@ type
     Rounds: byte;    // Number of rounds
     KeyBits: word;   // Number of bits in key (128/192/256)
   end;
-  PAesContext = ^TAesContext;
 
   TSHAHash = packed record
     // will use A..E with TSha1, A..H with TSha256
@@ -6442,7 +6441,7 @@ end;
 
 {$ifndef CPUINTEL}
 
-procedure Sha256ExpandMessageBlocks(W, Buf: PIntegerArray);
+procedure Sha256ExpandMessageBlocks(W, Buf: PCardinalArray);
 var
   i: PtrInt;
 begin

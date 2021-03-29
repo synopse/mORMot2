@@ -1154,7 +1154,7 @@ begin
       '%.GetAndPrepareStatement(%) recognized % params, and % for SQLite3',
       [self, fStatementGenericSql, fStatementMaxParam, sqlite3param]);
   for i := 0 to fStatementMaxParam - 1 do
-    if i in nulls then
+    if byte(i) in nulls then
       fStatement^.BindNull(i + 1)
     else
       case types[i] of
@@ -1432,7 +1432,7 @@ begin
     // initialize new tables AFTER creation of ALL tables
     if not IsZero(@tablecreated, sizeof(TOrmFieldTables)) then
       for t := 0 to high(Model.Tables) do
-        if t in tablecreated then
+        if byte(t) in tablecreated then
           if not (Model.TableProps[t].Kind in IS_CUSTOM_VIRTUAL) or
              not TableHasRows(Model.Tables[t]) then
             // check is really void
@@ -1527,23 +1527,21 @@ begin
 end;
 
 destructor TRestOrmServerDB.Destroy;
-var
-  log: ISynLog;
 begin
-  log := fDB.Log.Enter('Destroy %', [fModel.SafeRoot], self);
-  try
-    if (fDB <> nil) and
-       (fDB.InternalState = @InternalState) then
-      // avoid memory modification on free block
-      fDB.InternalState := nil;
-    inherited Destroy;
-  finally
+  with fDB.Log.Enter('Destroy %', [fModel.SafeRoot], self) do
     try
-      fStatementCache.ReleaseAllDBStatements;
+      if (fDB <> nil) and
+         (fDB.InternalState = @InternalState) then
+        // avoid memory modification on free block
+        fDB.InternalState := nil;
+      inherited Destroy;
     finally
-      fOwnedDB.Free; // do nothing if DB<>fOwnedDB
+      try
+        fStatementCache.ReleaseAllDBStatements;
+      finally
+        fOwnedDB.Free; // do nothing if DB<>fOwnedDB
+      end;
     end;
-  end;
 end;
 
 function TRestOrmServerDB.PrepareVacuum(const aSql: RawUtf8): boolean;
@@ -1647,15 +1645,14 @@ function TRestOrmServerDB.StoredProcExecute(const aSql: RawUtf8;
 var
   req: TSqlRequest; // we don't use fStatementCache[] here
   res: integer;
-  log: ISynLog;
 begin
   result := false;
   if (self <> nil) and
      (DB <> nil) and
      (aSql <> '') and
      Assigned(StoredProc) then
+  with fDB.Log.Enter('StoredProcExecute(%)', [aSql], self) do
   try
-    log := fDB.Log.Enter('StoredProcExecute(%)', [aSql], self);
     DB.LockAndFlushCache; // even if aSql is SELECT, StoredProc may update data
     try
       try

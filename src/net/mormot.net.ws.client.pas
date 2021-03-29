@@ -198,7 +198,7 @@ end;
 destructor TWebSocketProcessClient.Destroy;
 var
   tix: Int64;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   log := WebSocketLog.Enter('Destroy: ThreadState=%',
     [ToText(fClientThread.fThreadState)^], self);

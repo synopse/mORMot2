@@ -116,7 +116,7 @@ const
   SYSDATA: PAnsiChar = '';
   {$endif OSANDROID}
 var
-  i, j: integer;
+  i: integer;
   err: SizeInt;
   P: PPointer;
   v, vers: string;
@@ -637,7 +637,7 @@ var
 procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
 var
   // truncated to 16 non space chars (including #0)
-  trunc: array[0..15] of AnsiChar;
+  {%H-}trunc: array[0..15] of AnsiChar;
   i, L: integer;
 begin
   if Name = '' then
@@ -843,7 +843,6 @@ const
     190, 182, 167, 247, 184, 176, 168, 183, 185, 179, 178, 9632, 160);
 var
   len, i, c: PtrInt;
-  d: PUtf8Char;
 begin
   len := length(oem);
   SetLength(result, len);
@@ -1198,7 +1197,6 @@ end;
 
 function GetNextItem(var P: PAnsiChar): RawUtf8;
 var
-  c: cardinal;
   S: PAnsiChar;
 begin
   result := '';
@@ -1572,8 +1570,8 @@ begin
   K := GetNextCardinal(P){=system};
   I := GetNextCardinal(P){=idle};
   S := U + K + I;
-  Kernel := SimpleRoundTo2Digits((K * 100) / S);
-  User := SimpleRoundTo2Digits((U * 100) / S);
+  Kernel := {%H-}SimpleRoundTo2Digits((K * 100) / S);
+  User := {%H-}SimpleRoundTo2Digits((U * 100) / S);
   Idle := 100 - Kernel - User; // ensure sum is always 100%
   result := S <> 0;
 end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux }
@@ -2163,11 +2161,12 @@ end;
 
 procedure InitializeUnit;
 var
-  tp: timespec;
   P: PAnsiChar;
-var
   modname, beg: PUtf8Char;
   uts: UtsName;
+  {$ifndef OSDARWIN}
+  tp: timespec;
+  {$endif OSDARWIN}
   {$ifdef OSBSDDARWIN}
   temp: shortstring;
   {$else}

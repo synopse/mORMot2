@@ -1125,7 +1125,7 @@ var
   dir: TFileName;
   err: string;
   C: TSynTestCase;
-  log: IUnknown;
+  {%H-}log: IUnknown;
 begin
   if TTextRec(fSaveToFile).Handle = 0 then
     CreateSaveToFile;

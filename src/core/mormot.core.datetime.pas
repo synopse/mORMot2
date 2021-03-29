@@ -887,9 +887,9 @@ begin
     // one or more digits representing a decimal fraction of a second
     MS := ord(P[16]) * 100 - 4800;
     if L > 17 then
-      MS := MS + ord(P[17]) * 10 - 480;
+      MS := MS {%H-}+ byte(P[17]) * 10 - 480;
     if L > 18 then
-      MS := MS + ord(P[18]) - 48;
+      MS := MS + byte(P[18]) - 48;
     if MS > 1000 then
       MS := 0;
   end
@@ -947,7 +947,7 @@ begin
     // one or more digits representing a decimal fraction of a second
     MS := ord(P[7]) * 100 - 4800;
     if L > 7 then
-      MS := MS + ord(P[8]) * 10 - 480;
+      MS := MS {%H-}+ ord(P[8]) * 10 - 480;
     if L > 8 then
       MS := MS + ord(P[9]) - 48;
   end

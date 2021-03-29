@@ -495,7 +495,7 @@ function GetPublishedMethods(Instance: TObject;
       Addr: Pointer;
     end;
   var
-    Table: PCardinalArray;
+    Table: PIntegerArray;
     M: ^TMethodInfo;
     i: integer;
   begin

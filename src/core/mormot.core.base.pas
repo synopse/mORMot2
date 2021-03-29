@@ -1779,7 +1779,7 @@ procedure ObjArrayClear(var aObjArray; aCount: integer); overload;
 // - will also set the dynamic array length to 0, so could be used to re-use
 // an existing T*ObjArray
 procedure ObjArrayClear(var aObjArray; aContinueOnException: boolean;
-  aCount: PInteger=nil); overload;
+  aCount: PInteger = nil); overload;
 
 /// wrapper to release all items stored in an array of T*ObjArray dynamic array
 // - e.g. aObjArray may be defined as "array of array of TSynFilter"
@@ -3878,9 +3878,9 @@ begin
   Spare := Value mod 100;
   if Spare <> 0 then
     if Spare > 50 then
-      inc(Value, 100 - Spare)
+      {%H-}inc(Value, 100 - Spare)
     else if Spare < -50 then
-      dec(Value, 100 + Spare)
+      {%H-}dec(Value, 100 + Spare)
     else
       dec(Value, Spare);
 end;
@@ -3896,12 +3896,12 @@ begin
   m := v mod 100;
   if m <> 0 then
     if m > 50 then
-      inc(v, 100 - m)
+      {%H-}inc(v, 100 - m)
     else if m < -50 then
-      dec(v, 100 + m)
+      {%H-}dec(v, 100 + m)
     else
       dec(v, m);
-  P := StrInt64(@tmp[23], v);
+  P := {%H-}StrInt64(@tmp[23], v);
   L := @tmp[22] - P;
   m := PWord(@tmp[L - 2])^;
   if m = ord('0') or ord('0') shl 8 then
@@ -5486,7 +5486,7 @@ var
 begin
   Y100 := Y div 100; // FPC will use fast reciprocal
   res.D := Y100;
-  res.M := Y - Y100 * 100; // avoid div twice
+  res.M := Y {%H-}- Y100 * 100; // avoid div twice
 end;
 
 {$else not FPC}
@@ -6996,7 +6996,7 @@ begin
     begin
       // one item left
       result := ndx[median];
-      TempBuffer.Done;
+      {%H-}TempBuffer.Done;
       exit;
     end;
     if high = low + 1 then
@@ -7005,7 +7005,7 @@ begin
       if OnCompare(ndx[low], ndx[high]) then
         Exchg32(ndx[low], ndx[high]);
       result := ndx[median];
-      TempBuffer.Done;
+      {%H-}TempBuffer.Done;
       exit;
     end;
     // find median of low, middle and high items; swap into position low
@@ -7810,7 +7810,7 @@ end;
 
 function GetBit64(const Bits: Int64; aIndex: PtrInt): boolean;
 begin
-  result := aIndex in TBits64(Bits);
+  result := byte(aIndex) in TBits64(Bits);
 end;
 
 procedure SetBit64(var Bits: Int64; aIndex: PtrInt);
@@ -9532,7 +9532,7 @@ begin
       len := SynLZcompress1(pointer(Data), DataLen, P + 8);
       PCardinal(P + 4)^ := Hash32(pointer(P + 8), len);
       SetString(Data, P, len + 8);
-      tmp.Done;
+      {%H-}tmp.Done;
     end
     else
     begin
@@ -9547,7 +9547,7 @@ begin
          ((SynLZDecompress1(P + 8, DataLen - 8, tmp.buf) = len) and
           (Hash32(tmp.buf, len) = PCardinal(P)^)) then
         SetString(Data, PAnsiChar(tmp.buf), len);
-      tmp.Done;
+      {%H-}tmp.Done;
     end;
   result := 'synlz';
 end;
@@ -10356,7 +10356,23 @@ end;
 procedure SetVariantNull(var Value: variant);
 begin
   VarClear(Value);
-  PPtrInt(@Value)^ := varNull;
+  PInteger(@Value)^ := varNull;
+end;
+
+procedure ClearVariantForString(var Value: variant);
+var
+  v: cardinal;
+begin
+  v := TVarData(Value).VType;
+  if v = varString then
+    FastAssignNew(TVarData(Value).VAny)
+  else
+    begin
+      if v >= varOleStr then // bypass for most obvious types
+        VarClearProc(TVarData(Value));
+      TVarData(Value).VType := varString;
+      TVarData(Value).VAny := nil; // to avoid GPF when assigning the value
+    end;
 end;
 
 procedure RawByteStringToVariant(Data: PByte; DataLen: integer; var Value: variant);
@@ -10692,22 +10708,6 @@ begin
     result := DefaultValue;
 end;
 
-procedure ClearVariantForString(var Value: variant);
-var
-  v: cardinal;
-begin
-  v := TVarData(Value).VType;
-  if v = varString then
-    FastAssignNew(TVarData(Value).VAny)
-  else
-    begin
-      if v >= varOleStr then // bypass for most obvious types
-        VarClearProc(TVarData(Value));
-      TVarData(Value).VType := varString;
-      TVarData(Value).VAny := nil; // to avoid GPF when assigning the value
-    end;
-end;
-
 procedure RawUtf8ToVariant(Txt: PUtf8Char; TxtLen: integer; var Value: variant);
 begin
   ClearVariantForString(Value);
@@ -10755,7 +10755,7 @@ begin
 end;
 
 function _SortDynArrayVariantComp(const A, B: TVarData;
-  caseInsensitive: boolean): integer;
+  {%H-}caseInsensitive: boolean): integer;
 const
   ICMP: array[TVariantRelationship] of integer = (0, -1, 1, 1);
 begin

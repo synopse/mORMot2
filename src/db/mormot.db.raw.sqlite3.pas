@@ -3627,7 +3627,7 @@ procedure sqlite3InternalFreeObject(p: pointer); cdecl;
 // !  tmp := nil;
 // !  RawUtf8(tmp) := Text; // fast COW assignment
 // !  sqlite3.result_text(Context,tmp,length(Text)+1,sqlite3InternalFreeRawByteString);
-procedure sqlite3InternalFreeRawByteString(p: pointer); cdecl;
+procedure sqlite3InternalFreeRawByteString({%H-}p: pointer); cdecl;
 
 /// wrapper around sqlite3.result_error() to be called if wrong number of arguments
 procedure ErrorWrongNumberOfArgs(Context: TSqlite3FunctionContext);
@@ -6149,7 +6149,7 @@ end;
 
 destructor TSqlDataBase.Destroy;
 var
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   log := fLog.Enter('Destroy %', [fFileNameWithoutPath], self);
   if DB <> 0 then

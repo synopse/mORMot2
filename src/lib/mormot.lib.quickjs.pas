@@ -228,25 +228,25 @@ type
     function DuplicateRaw: JSValueRaw;
 
     /// set a value from its tag and 32-bit content
-    procedure From(newtag, val: integer); overload;
+    procedure Fill(newtag, val: integer); overload;
        {$ifdef HASINLINE} inline; {$endif}
     /// set a pointer value - may be JSObject or JSString
-    procedure From(newtag: integer; val: pointer); overload;
+    procedure Fill(newtag: integer; val: pointer); overload;
      {$ifndef JS_ANY_NAN_BOXING_CPU64}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// create a JS_TAG_BOOL
-    procedure From(val: boolean); overload;
+    procedure From(val: boolean);
        {$ifdef HASINLINE} inline; {$endif}
     /// create a JS_TAG_INT
-    procedure From32(val: integer); overload;
+    procedure From32(val: integer);
        {$ifdef HASINLINE} inline; {$endif}
     /// create a JS_TAG_INT if possible, JS_TAG_FLOAT64 otherwise
-    procedure From(val: Int64); overload;
+    procedure From64(val: Int64);
        {$ifdef HASINLINE} inline; {$endif}
     /// create a JS_TAG_INT if possible, JS_TAG_FLOAT64 otherwise
-    procedure From(val: double); overload;
+    procedure FromNum(val: double);
        {$ifdef HASINLINE} inline; {$endif}
     /// create a JS_TAG_FLOAT64
-    procedure FloatFrom(val: double); overload;
+    procedure FromFloat(val: double);
        {$ifdef FPC} inline; {$endif}
   end;
 
@@ -2462,7 +2462,7 @@ begin
     result := JS_INFINITY_POSITIVE;
 end;
 
-procedure JSValue.FloatFrom(val: double);
+procedure JSValue.FromFloat(val: double);
 begin
   u.f64 := val;
   if u.u64 and $7ff0000000000000 = $7ff0000000000000 then
@@ -2645,7 +2645,8 @@ end;
 
 function JSValue.IsNumber: boolean;
 begin
-  result := NormTag in [JS_TAG_FLOAT64, JS_TAG_INT];
+  result := (NormTag = JS_TAG_FLOAT64) or
+            (NormTag = JS_TAG_INT);
 end;
 
 function JSValue.IsBigInt: boolean;
@@ -2730,13 +2731,13 @@ begin
   prefcnt^ := refcnt;
 end;
 
-procedure JSValue.From(newtag, val: integer);
+procedure JSValue.Fill(newtag, val: integer);
 begin
   SetTag(newtag);
   u.i32 := val;
 end;
 
-procedure JSValue.From(newtag: integer; val: pointer);
+procedure JSValue.Fill(newtag: integer; val: pointer);
 begin
   SetTag(newtag);
   {$ifdef JS_ANY_NAN_BOXING_CPU64}
@@ -2760,7 +2761,7 @@ begin
   u.i32 := val;
 end;
 
-procedure JSValue.From(val: Int64);
+procedure JSValue.From64(val: Int64);
 var
   d: double;
 begin
@@ -2770,11 +2771,11 @@ begin
   else
   begin
     d := val; // explicit step is needed
-    FloatFrom(d);
+    FromFloat(d);
   end;
 end;
 
-procedure JSValue.From(val: double);
+procedure JSValue.FromNum(val: double);
 var
   i: integer;
   f: double;
@@ -2792,7 +2793,7 @@ begin
       exit;
     end;
   end;
-  FloatFrom(val);
+  FromFloat(val);
 end;
 
 
@@ -3128,12 +3129,12 @@ initialization
   assert(SizeOf(JSValueRaw) = 2 * SizeOf(pointer));
   {$endif JS_STRICT_NAN_BOXING}
   { special constant values }
-  JSValue(JS_NULL).From(JS_TAG_NULL, 0);
-  JSValue(JS_UNDEFINED).From(JS_TAG_UNDEFINED, 0);
-  JSValue(JS_FALSE).From(JS_TAG_BOOL, 0);
-  JSValue(JS_TRUE).From(JS_TAG_BOOL, 1);
-  JSValue(JS_EXCEPTION).From(JS_TAG_EXCEPTION);
-  JSValue(JS_UNINITIALIZED).From(JS_TAG_UNINITIALIZED, 0);
+  JSValue(JS_NULL).Fill(JS_TAG_NULL, 0);
+  JSValue(JS_UNDEFINED).Fill(JS_TAG_UNDEFINED, 0);
+  JSValue(JS_FALSE).Fill(JS_TAG_BOOL, 0);
+  JSValue(JS_TRUE).Fill(JS_TAG_BOOL, 1);
+  JSValue(JS_EXCEPTION).Fill(JS_TAG_EXCEPTION, 0);
+  JSValue(JS_UNINITIALIZED).Fill(JS_TAG_UNINITIALIZED, 0);
   {$ifndef JS_ANY_NAN_BOXING}
   JSValue(JS_NAN).UnboxedTag := JS_TAG_FLOAT64;
   JSValue(JS_NAN).u.f64 := JS_FLOAT64_NAN;

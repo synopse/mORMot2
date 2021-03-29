@@ -1483,7 +1483,6 @@ type
 // - on POSIX, calls fpOpen(pointer(FileName),O_RDONLY) with no fpFlock() call
 // - is used e.g. by StringFromFile() or HashFile() functions
 function FileOpenSequentialRead(const FileName: string): integer;
-  {$ifdef FPC}inline;{$endif}
 
 /// returns a TFileStream optimized for one pass file reading
 // - will use FileOpenSequentialRead(), i.e. FILE_FLAG_SEQUENTIAL_SCAN on Windows
@@ -3018,7 +3017,7 @@ begin
     result := 0
   else
     result := (s shr 1) or (m shl 5) or (h shl 11) or
-              integer((DD shl 16) or (MM shl 21) or (word(YY - 1980) shl 25));
+              cardinal((DD shl 16) or (MM shl 21) or (cardinal(YY - 1980) shl 25));
 end;
 
 function ValidHandle(Handle: THandle): boolean;
@@ -3936,7 +3935,7 @@ end;
 function GetCurrentThreadInfo: shortstring;
 begin
   result := ShortString(format('Thread %x [%s]',
-    [integer(GetCurrentThreadId), CurrentThreadName]));
+    [PtrUInt(GetCurrentThreadId), CurrentThreadName]));
 end;
 
 function NewSynLocker: PSynLocker;

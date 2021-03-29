@@ -3047,7 +3047,7 @@ end;
 function TMongoClient.ReOpen: boolean;
 var
   digest: RawByteString;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   result := false;
   with fGracefulReconnect do
@@ -3359,7 +3359,7 @@ end;
 function TMongoCollection.Drop: RawUtf8;
 var
   res: Variant;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   if self = nil then
   begin
@@ -3380,7 +3380,7 @@ var
   indexName: RawUtf8;
   ndx, order: integer;
   useCommand: boolean;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   if (self = nil) or
      (Database = nil) then

@@ -1279,9 +1279,6 @@ begin
   end;
 end;
 
-type
-  TSynMustacheProcessSection = procedure of object;
-
 procedure TSynMustache.RenderContext(Context: TSynMustacheContext;
   TagStart, TagEnd: integer; Partials: TSynMustachePartials;
   NeverFreePartials: boolean);

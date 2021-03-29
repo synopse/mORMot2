@@ -3934,7 +3934,7 @@ begin
         {$ifdef CPUARM}
         // parameter must be aligned on a SizeInStack boundary
         if SizeInStack > POINTERBYTES then
-          Inc(ArgsSizeInStack, ArgsSizeInStack mod SizeInStack);
+          Inc(ArgsSizeInStack, ArgsSizeInStack mod cardinal(SizeInStack));
         {$endif CPUARM}
         InStackOffset := ArgsSizeInStack;
         inc(ArgsSizeInStack, SizeInStack);
@@ -4355,9 +4355,6 @@ function TInterfaceFactory.GetMethodsVirtualTable: pointer;
 var
   i, tmp: cardinal;
   P: PCardinal;
-  {$ifdef UNIX}
-  PageAlignedFakeStub: pointer;
-  {$endif UNIX}
   {$ifdef CPUAARCH64}
   stub: PtrUInt;
   {$endif CPUAARCH64}
@@ -5531,14 +5528,14 @@ end;
 function TOnInterfaceStubExecuteParamsVariant.InputAsDocVariant(
   Kind: TInterfaceMethodParamsDocVariantKind; Options: TDocVariantOptions): variant;
 begin
-  VarClear(result);
+  VarClear(result{%H-});
   fMethod^.ArgsValuesAsDocVariant(Kind, TDocVariantData(result), fInput, true, Options);
 end;
 
 function TOnInterfaceStubExecuteParamsVariant.OutputAsDocVariant(
   Kind: TInterfaceMethodParamsDocVariantKind; Options: TDocVariantOptions): variant;
 begin
-  VarClear(result);
+  VarClear(result{%H-});
   fMethod^.ArgsValuesAsDocVariant(Kind, TDocVariantData(result), fOutput, false, Options);
 end;
 

@@ -136,8 +136,6 @@ type
     revents: Smallint;
   end;
   PPollFD = ^TPollFD;
-  TPollFDDynArray = array of TPollFD;
-
 
 
 { ******** Sockets API calls via the libc }
@@ -368,7 +366,7 @@ type
   // - note: Windows WSAPoll() API is actually slower than plain Select()
   TPollSocketPoll = class(TPollSocketAbstract)
   protected
-    fFD: TPollFDDynArray; // fd=-1 for ignored fields
+    fFD: array of TPollFD; // fd=-1 for ignored fields
     fTags: array of TPollSocketTag;
     fFDCount: integer;
     procedure FDVacuum;

@@ -2107,7 +2107,9 @@ function TCrtSocket.SockInPending(aTimeOutMS: integer;
   aPendingAlsoInSocket: boolean): integer;
 var
   backup: PtrInt;
+  {$ifdef OSWINDOWS}
   insocket: integer;
+  {$endif OSWINDOWS}
 begin
   if SockIn = nil then
     raise ENetSock.Create('SockInPending without SockIn');

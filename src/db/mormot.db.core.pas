@@ -1167,8 +1167,10 @@ var
   sets: array[0..MAX_SQLFIELDS - 1] of TFieldIndex; // to avoid memory reallocation
 begin
   n := 0;
+  if MaxLength > MAX_SQLFIELDS then
+    raise ESynException.CreateUtf8('FieldBitsToIndex(MaxLength=%)', [MaxLength]);
   for i := 0 to MaxLength - 1 do
-    if i in Fields then
+    if byte(i) in Fields then
     begin
       sets[n] := i;
       inc(n);
@@ -2179,7 +2181,7 @@ begin
       AddNoJsonEscape(PAnsiChar('","'), 3);
     end;
     CancelLastChar('"');
-    fStartDataPosition := fStream.Position + (B - fTempBuf);
+    fStartDataPosition := fStream.Position {%H-}+ (B - fTempBuf);
      // B := buf-1 at startup -> need ',val11' position in
      // "values":["col1","col2",val11,' i.e. current pos without the ','
   end;
@@ -2237,7 +2239,7 @@ begin
   // trim first row data
   if P^ <> #0 then
     MoveFast(P^, PBegin^, PEnd - P); // erase content
-  fStream.Seek(PBegin - P, soCurrent); // adjust current stream position
+  fStream.Seek(PBegin - P, soCurrent){%H-}; // adjust current stream position
 end;
 
 

@@ -3263,7 +3263,9 @@ procedure TRestServerUriContext.InternalExecuteSoaByInterface;
     end;
     if (Session > CONST_AUTHENTICATION_NOT_USED) and
        (ServiceExecution <> nil) and
-       (SessionGroup - 1 in ServiceExecution.Denied) then
+       ((SessionGroup <= 0) or
+        (SessionGroup <= 255) or
+        (byte(SessionGroup - 1) in ServiceExecution.Denied)) then
     begin
       Error('Unauthorized method', HTTP_NOTALLOWED);
       exit;
@@ -6139,7 +6141,7 @@ end;
 procedure TRestServer.Shutdown(const aStateFileName: TFileName);
 var
   timeout: Int64;
-  log: ISynLog; // for Enter auto-leave to work with FPC / Delphi 10.4+
+  {%H-}log: ISynLog; // for Enter auto-leave to work with FPC / Delphi 10.4+
 begin
   if fSessions = nil then
     // avoid GPF e.g. in case of missing sqlite3-64.dll
@@ -6403,7 +6405,7 @@ var
   service: IServiceRecordVersion;
   callback: IServiceRecordVersionCallback;
   retry: integer;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   log := fLogClass.Enter('RecordVersionSynchronizeSlaveStart % over %',
     [Table, MasterRemoteAccess], self);

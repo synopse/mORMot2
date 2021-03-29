@@ -1069,7 +1069,7 @@ constructor TAsyncConnections.Create(const OnStart, OnStop: TOnNotifyThread;
   aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions; aThreadPoolCount: integer);
 var
   i: PtrInt;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   log := aLog.Enter('Create(%,%,%)', [aStreamClass, ProcessName, aThreadPoolCount], self);
   if (aStreamClass = TAsyncConnection) or

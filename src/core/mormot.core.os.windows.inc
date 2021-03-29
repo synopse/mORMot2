@@ -697,8 +697,8 @@ var
     var lpCreationTime, lpExitTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
   GetProcessMemoryInfo: function(Process: THandle;
     var ppsmemCounters: TProcessMemoryCounters; cb: DWORD): BOOL; stdcall;
-  EnumProcessModules: function (hProcess: THandle; var lphModule: HMODULE; cb: DWORD;
-    var lpcbNeeded: DWORD): BOOL; stdcall;
+  // EnumProcessModules: function (hProcess: THandle; var lphModule: HMODULE; cb: DWORD;
+  //  var lpcbNeeded: DWORD): BOOL; stdcall;
   EnumProcesses: function(lpidProcess: PDWORD; cb: DWORD; var cbNeeded: DWORD): BOOL; stdcall;
   GetModuleFileNameExW: function(hProcess: THandle; hModule: HMODULE;
     lpBaseName: PWideChar; nSize: DWORD): DWORD; stdcall;
@@ -930,8 +930,8 @@ begin
   end
   else
   begin
-    Kernel := SimpleRoundTo2Digits((fDiffKernel * 100) / fDiffTotal);
-    User := SimpleRoundTo2Digits((fDiffUser * 100) / fDiffTotal);
+    Kernel := {%H-}SimpleRoundTo2Digits((fDiffKernel * 100) / fDiffTotal);
+    User := {%H-}SimpleRoundTo2Digits((fDiffUser * 100) / fDiffTotal);
     Idle := 100 - Kernel - User; // ensure sum is always 100%
     result := true;
   end;
@@ -2927,7 +2927,7 @@ begin
   begin
     @EnumProcesses := GetProcAddress(h, 'EnumProcesses');
     @GetModuleFileNameExW := GetProcAddress(h, 'GetModuleFileNameExW');
-    @EnumProcessModules := GetProcAddress(h, 'EnumProcessModules');
+    //@EnumProcessModules := GetProcAddress(h, 'EnumProcessModules');
     @GetProcessMemoryInfo := GetProcAddress(h, 'GetProcessMemoryInfo');
   end;
   // retrieve system information

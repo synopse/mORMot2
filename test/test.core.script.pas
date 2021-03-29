@@ -96,7 +96,7 @@ begin
       for i := -100 to 100 do
       begin
         // 32-bit integer
-        j.From(i * 777);
+        j.From32(i * 777);
         Check(j.IsNumber);
         Check(not j.IsNull);
         Check(not j.IsRefCounted);
@@ -108,7 +108,7 @@ begin
         cx.Free(j); // do-nothing
         // float
         d := i * 777777777.77;
-        j.From(d);
+        j.FromNum(d);
         Check(j.IsNumber);
         Check(not j.IsRefCounted);
         Check(not j.IsString);
@@ -121,7 +121,7 @@ begin
         i64 := i * Int64(77777777777);
         cx.Free(j);
         // 32-bit and 64-bit integer
-        j.From(i64);
+        j.From64(i64);
         Check(j.IsNumber);
         Check(not j.IsRefCounted);
         Check(not j.IsString);

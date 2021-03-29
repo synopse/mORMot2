@@ -13523,7 +13523,7 @@ begin
       begin
         guessed := true;
         f := field + fFieldCount;
-        if field in fFieldParsedAsString then
+        if byte(field) in fFieldParsedAsString then
         begin
           // the parser identified string values -> check if was oftDateTime
           oft := oftUtf8Text;
@@ -13537,7 +13537,7 @@ begin
               len := StrLen(U);
               tlog := Iso8601ToTimeLogPUtf8Char(U, len);
               if tlog <> 0 then
-                if (len in [8, 10]) and (cardinal(tlog shr 26) - 1800 < 300) then
+                if (byte(len) in [8, 10]) and (cardinal(tlog shr 26) - 1800 < 300) then
                   // e.g. YYYYMMDD date (Y=1800..2100)
                   oft := oftDateTime
                 else if len >= 15 then
@@ -15352,7 +15352,7 @@ begin
       while PtrUInt(result) <= PtrUInt(fRowCount) do
       begin
         i := GetInteger(GetResults(o), err);
-        if (err = 0) and (i in EnumValues) then
+        if (err = 0) and (i < 255) and (byte(i) in EnumValues) then
           exit; // we found a matching field
         inc(o, fFieldCount); // ignore all other fields -> jump to next row data
         inc(result);
@@ -16363,7 +16363,7 @@ begin
   result.fID := fID;
   with Orm do
     for f := 0 to Fields.Count - 1 do
-      if (f in CustomFields) and (f in CopiableFieldsBits) then
+      if (byte(f) in CustomFields) and (byte(f) in CopiableFieldsBits) then
         Fields.List[f].CopyValue(self, result);
 end;
 
@@ -16374,7 +16374,7 @@ begin
   FillZero(result{%H-});
   with Orm do
     for f := 0 to Fields.Count - 1 do
-      if (f in CopiableFieldsBits) and not Fields.List[f].IsValueVoid(self) then
+      if (byte(f) in CopiableFieldsBits) and not Fields.List[f].IsValueVoid(self) then
         include(result, f);
 end;
 
@@ -16491,14 +16491,14 @@ begin
     if POrmClass(aRecord)^ = POrmClass(self)^ then
       fID := aRecord.fID; // same class -> ID values will match
     for f := 0 to D.Fields.Count - 1 do
-      if f in aRecordFieldBits then
+      if byte(f) in aRecordFieldBits then
         D.Fields.List[f].CopyValue(aRecord, self);
     exit;
   end;
   // two diverse tables -> don't copy ID, and per-field lookup
   S := aRecord.OrmProps;
   for i := 0 to S.Fields.Count - 1 do
-    if i in aRecordFieldBits then
+    if byte(i) in aRecordFieldBits then
     begin
       SP := S.Fields.List[i];
       if D.Fields.List[i].Name = SP.Name then
@@ -16814,7 +16814,7 @@ var
 begin
   with Orm.Fields do
     for f := 0 to Count - 1 do
-      if f in aFields then
+      if byte(f) in aFields then
         List[f].GetBinary(self, W);
 end;
 
@@ -16929,7 +16929,7 @@ begin
     Fields := P.SimpleFieldsBits[ooSelect];
   Props := P.Fields;
   for i := 0 to Props.Count - 1 do
-    if i in Fields then
+    if byte(i) in Fields then
     begin
       W.Add(',', '"');
       W.AddNoJsonEscape(pointer(Props.List[i].Name), length(Props.List[i].Name));
@@ -17176,7 +17176,7 @@ begin
           if SQL <> '' then
           begin
             result := result + Name + SQL;
-            if i in IsUniqueFieldsBits then
+            if byte(i) in IsUniqueFieldsBits then
               insert(' UNIQUE', result, length(result) - 1);
           end;
         end;
@@ -17332,7 +17332,7 @@ begin
     else if not FieldBitsFromCsv(aFieldsCsv, bits) then
       exit;
     for f := 0 to Fields.Count - 1 do
-      if (f in bits) and (Fields.List[f].OrmFieldType in COPIABLE_FIELDS) then
+      if (byte(f) in bits) and (Fields.List[f].OrmFieldType in COPIABLE_FIELDS) then
         Fields.List[f].SetValue(self, nil, false); // clear field value
   end;
 end;
@@ -17933,7 +17933,7 @@ begin
     doc.Values[i] := fID;
   end;
   for f := 0 to Fields.Count - 1 do
-    if f in withFields then
+    if byte(f) in withFields then
     begin
       i := doc.InternalAdd(Fields.List[f].Name);
       Fields.List[f].GetVariant(self, doc.Values[i]);
@@ -18106,7 +18106,6 @@ var
   f, i: PtrInt;
   Value: RawUtf8;
   Validate: TSynValidate;
-  ValidateRest: TSynValidateRest absolute Validate;
   valid: boolean;
 begin
   result := '';
@@ -18126,8 +18125,8 @@ begin
               if {%H-}Value = '' then
                 Fields.List[f].GetValueVar(self, false, Value, nil);
               if Validate.InheritsFrom(TSynValidateRest) then
-                valid := TSynValidateRest(Validate).Validate(f, Value, result,
-                  aRest, self)
+                valid := TSynValidateRest(Validate).Validate(
+                  f, Value, result, aRest, self)
               else
                 valid := Validate.Process(f, Value, result);
               if not valid then
@@ -19463,7 +19462,7 @@ begin
   W := TTextWriter.CreateOwnedStream(temp);
   try
     for f := 0 to Fields.Count - 1 do
-      if f in Bits then
+      if byte(f) in Bits then
       begin
         W.AddString(Fields.List[f].Name);
         W.AddComma;
@@ -20506,10 +20505,10 @@ begin // similar to TOrmPropertiesMapping.ComputeSql
           // pre-computation of SQL statements
           SQL.UpdateSetAll := SQL.UpdateSetAll + Name + '=?,';
           SQL.InsertSet := SQL.InsertSet + Name + ',';
-          if f in SimpleFieldsBits[ooUpdate] then
+          if byte(f) in SimpleFieldsBits[ooUpdate] then
             SQL.UpdateSetSimple := SQL.UpdateSetSimple + Name + '=?,';
           // filter + validation of unique fields, i.e. if marked as "stored false"
-          if f in IsUniqueFieldsBits then
+          if byte(f) in IsUniqueFieldsBits then
           begin
             // must trim() text value before storage, and validate for unicity
             if OrmFieldType in [oftUtf8Text, oftAnsiText] then
@@ -20770,18 +20769,18 @@ type
           if OrmFieldType in COPIABLE_FIELDS then // oftMany fields do not exist
             case content of
               cTableSimpleFields:
-                if f in SimpleFieldsBits[ooSelect] then
+                if byte(f) in SimpleFieldsBits[ooSelect] then
                 begin
                   if withTableName then
                     W.AddStrings([TableName, '.']);
                   W.AddString(ExtFieldNames[f]);
-                  if not (f + 1 in FieldNamesMatchInternal) then
+                  if not (byte(f + 1) in FieldNamesMatchInternal) then
                     // to get expected JSON column name
                     W.AddStrings([' as ', Name]);
                   W.AddComma;
                 end;
               cUpdateSimple:
-                if f in SimpleFieldsBits[ooSelect] then
+                if byte(f) in SimpleFieldsBits[ooSelect] then
                   W.AddStrings([ExtFieldNames[f], '=?,']);
               cUpdateSetAll:
                 W.AddStrings([ExtFieldNames[f], '=?,']);

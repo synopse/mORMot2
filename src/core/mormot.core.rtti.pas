@@ -4726,7 +4726,7 @@ begin
     if (T <> nil) and
        (T^.EntryCount > 0) then
     begin
-      SetLength(result, length(result) + T^.EntryCount);
+      SetLength(result, length(result) + PtrInt(T^.EntryCount));
       for i := 0 to T^.EntryCount - 1 do
       begin
         result[n] := {$ifndef FPC}@{$endif}T^.Entries[i].IID;
@@ -7259,7 +7259,7 @@ begin
      (n and 1 = 0) then
     for i := 0 to (n shr 1) - 1 do
       if (InfoBinarySize[i * 2].VType <> vtPointer) or
-         not(InfoBinarySize[i * 2 + 1].VType in [vtInteger, vtInt64]) then
+         not(InfoBinarySize[i * 2 + 1].VType {%H-}in [vtInteger, vtInt64]) then
         raise ERttiException.Create('Rtti.RegisterBinaryTypes(?)')
       else if RegisterType(InfoBinarySize[i * 2].VPointer).
          SetBinaryType(InfoBinarySize[i * 2 + 1].VInteger) = nil then

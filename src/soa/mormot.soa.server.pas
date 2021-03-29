@@ -1377,7 +1377,7 @@ begin
     aLogRest.Model.GetTableIndexExisting(aLogClass);
   end;
   for m := 0 to fInterface.MethodsCount - 1 do
-    if m in aMethods then
+    if byte(m) in aMethods then
       with fExecution[m] do
       begin
         LogRest := pointer(aLogRest); // weak pointer to avoid reference counting
@@ -1930,7 +1930,7 @@ begin
     end;
     repeat
       if (aExcludedMethodNamesCsv <> '') and
-         not (i in {%H-}excluded) then
+         not (byte(i) in {%H-}excluded) then
       begin
         include(methods, fInterfaceMethod[i].InterfaceMethodIndex
           - SERVICE_PSEUDO_METHOD_COUNT);

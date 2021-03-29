@@ -9041,32 +9041,54 @@ var
 label
   none;
 begin
-  isString := not (V.VType in [vtBoolean, vtInteger, vtInt64
-    {$ifdef FPC}, vtQWord{$endif}, vtCurrency, vtExtended]);
+  isString := false;
   with V do
     case V.VType of
       vtString:
-        if VString = nil then
-          goto none
-        else
+        begin
+          isString := true;
+          if VString = nil then
+            goto none;
           FastSetString(result, @VString^[1], ord(VString^[0]));
+        end;
       vtAnsiString:
-        result := RawUtf8(VAnsiString); // expect UTF-8 content
+        begin
+          isString := true;
+          result := RawUtf8(VAnsiString); // expect UTF-8 content
+        end;
       {$ifdef HASVARUSTRING}
       vtUnicodeString:
-        RawUnicodeToUtf8(VUnicodeString, length(UnicodeString(VUnicodeString)),
-          result);
+        begin
+          isString := true;
+          RawUnicodeToUtf8(VUnicodeString,
+            length(UnicodeString(VUnicodeString)), result);
+        end;
       {$endif HASVARUSTRING}
       vtWideString:
-        RawUnicodeToUtf8(VWideString, length(WideString(VWideString)), result);
+        begin
+          isString := true;
+          RawUnicodeToUtf8(VWideString, length(WideString(VWideString)), result);
+        end;
       vtPChar:
-        FastSetString(result, VPChar, StrLen(VPChar));
+        begin
+          isString := true;
+          FastSetString(result, VPChar, StrLen(VPChar));
+        end;
       vtChar:
-        FastSetString(result, PAnsiChar(@VChar), 1);
+        begin
+          isString := true;
+          FastSetString(result, PAnsiChar(@VChar), 1);
+        end;
       vtPWideChar:
-        RawUnicodeToUtf8(VPWideChar, StrLenW(VPWideChar), result);
+        begin
+          isString := true;
+          RawUnicodeToUtf8(VPWideChar, StrLenW(VPWideChar), result);
+        end;
       vtWideChar:
-        RawUnicodeToUtf8(@VWideChar, 1, result);
+        begin
+          isString := true;
+          RawUnicodeToUtf8(@VWideChar, 1, result);
+        end;
       vtBoolean:
         if VBoolean then // normalize
           result := SmallUInt32Utf8[1]
@@ -9085,17 +9107,23 @@ begin
       vtExtended:
         DoubleToStr(VExtended^,result);
       vtPointer:
-        PointerToHex(VPointer, result);
+        begin
+          isString := true;
+          PointerToHex(VPointer, result);
+        end;
       vtClass:
-        if VClass <> nil then
-          ClassToText(VClass, result)
-        else
-none:     result := '';
+        begin
+          isString := true;
+          if VClass <> nil then
+            ClassToText(VClass, result)
+          else
+none:       result := '';
+        end;
       vtObject:
         if VObject <> nil then
           ClassToText(PClass(VObject)^, result)
         else
-          result := '';
+          goto none;
       vtInterface:
       {$ifdef HASINTERFACEASTOBJECT}
         if VInterface <> nil then
@@ -9108,10 +9136,7 @@ none:     result := '';
       vtVariant:
         VariantToUtf8(VVariant^, result, isString);
     else
-      begin
-        isString := false;
-        result := '';
-      end;
+      goto none;
     end;
   if wasString <> nil then
     wasString^ := isString;

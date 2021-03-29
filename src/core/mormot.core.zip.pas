@@ -41,7 +41,7 @@ type
   /// a TStream descendant for compressing data into a stream using Zip/Deflate
   // - supports forward only Write() compression
   TSynZipCompressor = class(TStream)
-  private
+  protected
     fInitialized: boolean;
     fDestStream: TStream;
     Z: TZLib;
@@ -1476,7 +1476,7 @@ begin
          (Count = R.Count - 1) and
          (s^.zipName = LastZipNameToIgnore) then
       begin
-        writepos := PAnsiChar(s^.local) - R.fMap.Buffer; // overwrite last file
+        writepos {%H-}:= PAnsiChar(s^.local) - R.fMap.Buffer; // overwrite last file
         break; // ignore this last file
       end;
       if not R.RetrieveFileInfo(Count, info) then

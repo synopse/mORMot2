@@ -104,7 +104,6 @@ type
     coIgnoreContentLength  = 136,
     coFTPSkipPasvIp        = 137,
     coFile                 = 10001,
-    coWriteData            = coFile,
     coURL                  = 10002,
     coProxy                = 10004,
     coUserPwd              = 10005,
@@ -129,7 +128,6 @@ type
     coPostQuote            = 10039,
     coWriteInfo            = 10040,
     coProgressData         = 10057,
-    coXferInfoData         = coProgressData,
     coInterface            = 10062,
     coKRB4Level            = 10063,
     coCAInfo               = 10065,
@@ -147,7 +145,6 @@ type
     coCAPath               = 10097,
     coShare                = 10100,
     coEncoding             = 10102,
-    coAcceptEncoding       = coEncoding,
     coPrivate              = 10103,
     coHttp200Aliases       = 10104,
     coSSLCtxData           = 10109,
@@ -475,6 +472,12 @@ type
     userptr: pointer); cdecl;
 
 {$Z1}
+
+const
+  // some aliases
+  coWriteData = coFile;
+  coXferInfoData = coProgressData;
+  coAcceptEncoding = coEncoding;
 
 
 { ************ CURL Functions API }

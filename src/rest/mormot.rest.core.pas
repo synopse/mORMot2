@@ -2932,7 +2932,7 @@ function TRestBackgroundTimer.AsyncBatchStop(Table: TOrmClass): boolean;
 var
   b: PtrInt;
   timeout: Int64;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   result := false;
   if (self = nil) or
@@ -3075,7 +3075,7 @@ var
   call: TInterfacedObjectAsyncCall;
   o: PRawUtf8;
   output: RawUtf8;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   if not RecordLoad(call, Msg, TypeInfo(TInterfacedObjectAsyncCall)) then
     exit; // invalid message (e.g. periodic execution)

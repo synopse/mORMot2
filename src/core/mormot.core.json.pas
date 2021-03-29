@@ -2630,7 +2630,9 @@ type
     jtIdentifierFirstChar,
     jtSlash);
   TJsonTokens = array[AnsiChar] of TJsonToken;
+  {$ifndef CPUX86NOTPIC}
   PJsonTokens = ^TJsonTokens;
+  {$endif CPUX86NOTPIC}
 
 var
   JSON_TOKENS: TJsonTokens;
@@ -4782,15 +4784,17 @@ begin
           else
           begin
             Add(':', '('); // markup for SQL parameter binding
-            if Params[P].VType in [vtBoolean, vtInteger, vtInt64
-                {$ifdef FPC} , vtQWord {$endif}, vtCurrency, vtExtended] then
-              Add(Params[P]) // numbers or boolean
+            case Params[P].VType of
+              vtBoolean, vtInteger, vtInt64 {$ifdef FPC} , vtQWord {$endif},
+              vtCurrency, vtExtended:
+                Add(Params[P]) // numbers or boolean
             else
-            begin
-              VarRecToTempUtf8(Params[P], toquote);
-              AddQuotedStr(toquote.Text, toquote.Len, ''''); // SQL double quote
-              if toquote.TempRawUtf8 <> nil then
-                RawUtf8(toquote.TempRawUtf8) := ''; // release temp memory
+              begin
+                VarRecToTempUtf8(Params[P], toquote);
+                AddQuotedStr(toquote.Text, toquote.Len, ''''); // SQL double quote
+                if toquote.TempRawUtf8 <> nil then
+                  RawUtf8(toquote.TempRawUtf8) := ''; // release temp memory
+              end;
             end;
             Add(')', ':');
           end;
