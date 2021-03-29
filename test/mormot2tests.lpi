@@ -27,9 +27,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -63,15 +61,7 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <OtherDefines Count="7">
-              <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
-              <Define1 Value="FPC_X64MM"/>
-              <Define2 Value="FPCMM_DEBUG"/>
-              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
-              <Define4 Value="PUREMORMOT2"/>
-              <Define5 Value="FPCMM_SERVER"/>
-              <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
-            </OtherDefines>
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
           </Other>
         </CompilerOptions>
       </Item2>
@@ -83,9 +73,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -118,7 +106,8 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-dFPC_NO_DEFAULT_MEMORYMANAGER
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123
+-dFPC_NO_DEFAULT_MEMORYMANAGER
 -dFPC_X64MM
 -dFPCMM_DEBUG
 -dFPCMM_REPORTMEMORYLEAKS"/>
@@ -142,9 +131,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -177,6 +164,7 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
             <OtherDefines Count="7">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
@@ -197,9 +185,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\app;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\tools\ecc;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -236,7 +222,8 @@
             <CompilerMessages>
               <IgnoredMessages idx5089="True"/>
             </CompilerMessages>
-            <CustomOptions Value="-dFPC_NO_DEFAULT_MEMORYMANAGER
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123
+-dFPC_NO_DEFAULT_MEMORYMANAGER
 -dFPC_X64MM
 -dFPCMM_DEBUG
 -dFPCMM_REPORTMEMORYLEAKS
@@ -262,9 +249,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -299,6 +284,7 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
             <OtherDefines Count="6">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
@@ -318,9 +304,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -355,6 +339,7 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
           </Other>
         </CompilerOptions>
       </Item7>
@@ -366,9 +351,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -403,6 +386,7 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
           </Other>
         </CompilerOptions>
       </Item8>
@@ -414,9 +398,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="//if TargetOS='darwin' then
@@ -451,7 +433,8 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-dFPC_NO_DEFAULT_MEMORYMANAGER
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123
+-dFPC_NO_DEFAULT_MEMORYMANAGER
 -dFPC_CMEM"/>
             <OtherDefines Count="7">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
@@ -473,9 +456,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -511,6 +492,7 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
             <OtherDefines Count="7">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
@@ -531,9 +513,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa;..\src\crypt;..\src\script"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -568,6 +548,7 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
           </Other>
         </CompilerOptions>
       </Item11>
@@ -581,6 +562,11 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
+    <RequiredPackages Count="1">
+      <Item1>
+        <PackageName Value="mormot2"/>
+      </Item1>
+    </RequiredPackages>
     <Units Count="100">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
@@ -991,9 +977,7 @@
       <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
     </Target>
     <SearchPaths>
-      <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-      <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-      <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+      <IncludeFiles Value="$(ProjOutDir)"/>
       <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Conditionals Value="if TargetOS='darwin' then
@@ -1022,6 +1006,7 @@
         <ShowNotes Value="False"/>
         <ShowHints Value="False"/>
       </Verbosity>
+      <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
     </Other>
   </CompilerOptions>
   <Debugging>
