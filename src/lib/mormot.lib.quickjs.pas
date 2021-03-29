@@ -91,7 +91,11 @@ uses
 type
   /// exception raised by this unit on QuickJS panic
   // - mainly if assert() - aka pas_assert() - failed in the C code
-  EQuickJS = class(Exception);
+  EQuickJS = class(Exception)
+  public
+    /// create a message with the current JSContext exception information
+    constructor Create(ctx: pointer; stacktrace: boolean = true); overload;
+  end;
 
 // some definitions ahead of low-level QuickJS API to allow pointer wrapping
 
@@ -135,6 +139,11 @@ type
     {$endif JS_ANY_NAN_BOXING}
     /// return the tag of this value - won't detect JS_TAG_FLOAT64
     function TagNotFloat: PtrInt;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// get the value as expected by the raw QuickJS API
+    function GetRaw: JSValueRaw;
+       {$ifdef HASINLINE} inline; {$endif}
+    procedure SetRaw(const value: JSValueRaw);
       {$ifdef HASINLINE} inline; {$endif}
   public
     /// set the tag bits - should be called before setting u.f64/ptr/u64 (i32 ok)
@@ -210,9 +219,9 @@ type
     /// used internally by TJSContext.Free
     function DecRefCnt: boolean;
        {$ifdef HASINLINE} inline; {$endif}
-    /// get the value as expected by the raw QuickJS API
-    function Raw: JSValueRaw;
-       {$ifdef HASINLINE} inline; {$endif}
+    /// retrieve or change the value as expected by the raw QuickJS API
+    property Raw: JSValueRaw
+      read GetRaw write SetRaw;
     /// return a copy of this value, incrementing the refcount if needed
     function Duplicate: JSValue;
     /// return a copy of this value, without incrementing the refcount
@@ -240,12 +249,18 @@ type
     procedure FloatFrom(val: double); overload;
        {$ifdef FPC} inline; {$endif}
   end;
+
   PJSValue = ^JSValue;
+  JSValues = array[0..(MaxInt div SizeOf(JSValue)) - 1] of JSValue;
+  PJSValues = ^JSValues;
 
 
 type
   JSRuntime = ^TJSRuntime;
   JSContext = ^TJSContext;
+
+  JSFunction = function(ctx: JSContext; this_val: JSValueRaw; argc: integer;
+    argv: PJSValues): JSValueRaw; cdecl;
 
   /// wrapper object to the QuickJS JSRuntime abstract pointer type
   // - JSRuntime is a pointer to this opaque object
@@ -275,6 +290,18 @@ type
     /// release the memory used by a JSValue - JS_FreeValue() alternative
     procedure Free(var v: JSValue); overload;
       {$ifdef HASINLINE} inline; {$endif}
+    /// retrieve the global object of this execution context
+    // - caller should make cx.Free(glob) once done with this value
+    procedure Global(out glob: JSValue);
+      {$ifdef HASINLINE} inline; {$endif}
+    /// assign a value to an object property by name
+    procedure SetValue(obj: JSValue; prop: PAnsiChar; val: JSValue);
+    /// assign a function to an object property by name
+    procedure SetFunction(obj: JSValue; prop: PAnsiChar; func: JSFunction;
+      args: integer);
+    /// raise an EQuickJS exception if an API call result returned FALSE (0)
+    procedure Check(res: integer);
+      {$ifdef HASINLINE} inline; {$endif}
     /// returns the current error message, after JSValue.IsException=true
     // - by default will get the exception from JS_GetException(), but you
     // can optionally specify the error reason/exception
@@ -293,9 +320,12 @@ type
     function EvalModule(const code, filename: RawUtf8): RawUtf8;
 
     /// convert a JSValue into its text
-    procedure ToUtf8(var v: JSValue; var s: RawUtF8);
+    procedure ToUtf8(const v: JSValue; var s: RawUtf8); overload;
+    /// convert a JSValue into its text
+    function ToUtf8(const v: JSValue): RawUtf8; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// append a JSValue as text
-    procedure AddUtf8(var v: JSValue; var s: RawUtF8);
+    procedure AddUtf8(const v: JSValue; var s: RawUtf8; const sep: RawUtf8 = '');
     /// detect the variant type of a JSValue
     // - returns varNull, varBoolean, varInt, varDouble, varString or varAny
     // (for JS_TAG_OBJECT)
@@ -316,7 +346,7 @@ type
     /// create a JS_TAG_STRING from UTF-16 buffer
     function FromW(P: PWideChar; Len: PtrInt): JSValue; overload;
     /// create a JS_TAG_STRING from UTF-8 string
-    function From(const val: RawUtF8): JSValue; overload;
+    function From(const val: RawUtf8): JSValue; overload;
        {$ifdef HASINLINE} inline; {$endif}
     /// create a JS_TAG_STRING from UTF-16 string
     function FromW(const val: SynUnicode): JSValue; overload;
@@ -2330,6 +2360,17 @@ end;
 
 { ************ QuickJS to Pascal Wrappers }
 
+{ EQuickJS }
+
+constructor EQuickJS.Create(ctx: pointer; stacktrace: boolean);
+var
+  msg: RawUtf8;
+begin
+  JSContext(ctx).ErrorMessage(stacktrace, msg);
+  Create(Utf8ToString(msg));
+end;
+
+
 { JSValue }
 
 {$ifdef JS_STRICT_NAN_BOXING}
@@ -2622,6 +2663,16 @@ begin
   result := TagNotFloat = JS_TAG_BIG_DECIMAL;
 end;
 
+function JSValue.GetRaw: JSValueRaw;
+begin
+  result := JSValueRaw(self);
+end;
+
+procedure JSValue.SetRaw(const value: JSValueRaw);
+begin
+  self := JSValue(value);
+end;
+
 function JSValue.Duplicate: JSValue;
 begin
   if IsRefCounted then
@@ -2677,11 +2728,6 @@ begin
   dec(refcnt);
   result := refcnt = 0;
   prefcnt^ := refcnt;
-end;
-
-function JSValue.Raw: JSValueRaw;
-begin
-  result := JSValueRaw(self);
 end;
 
 procedure JSValue.From(newtag, val: integer);
@@ -2798,7 +2844,30 @@ begin
     __JS_FreeValue(@self, JSValueRaw(v));
 end;
 
-procedure TJSContext.ToUtf8(var v: JSValue; var s: RawUtF8);
+procedure TJSContext.Global(out glob: JSValue);
+begin
+  glob := JSValue(JS_GetGlobalObject(@self));
+end;
+
+procedure TJSContext.Check(res: integer);
+begin
+  if res = 0 then
+    raise EQuickJS.Create(@self);
+end;
+
+procedure TJSContext.SetValue(obj: JSValue; prop: PAnsiChar; val: JSValue);
+begin
+  Check(JS_SetPropertyStr(@self, obj.Raw, prop, val.Raw));
+end;
+
+procedure TJSContext.SetFunction(obj: JSValue; prop: PAnsiChar;
+  func: JSFunction; args: integer);
+begin
+  SetValue(obj, prop, JSValue(
+    JS_NewCFunction2(@self, @func, prop, args, JS_CFUNC_generic, 0)));
+end;
+
+procedure TJSContext.ToUtf8(const v: JSValue; var s: RawUtf8);
 var
   P: PAnsiChar;
   len: PtrUInt;
@@ -2808,19 +2877,28 @@ begin
   JS_FreeCString(@self, P);
 end;
 
-procedure TJSContext.AddUtf8(var v: JSValue; var s: RawUtF8);
+function TJSContext.ToUtf8(const v: JSValue): RawUtf8;
+begin
+  ToUtf8(v, result);
+end;
+
+procedure TJSContext.AddUtf8(
+  const v: JSValue; var s: RawUtf8; const sep: RawUtf8);
 var
   P: PAnsiChar;
-  len, sl: PtrUInt;
+  len, sl, sepl: PtrUInt;
 begin
   P := JS_ToCStringLen2(@self, @len, JSValueRaw(v), false);
   if (P = nil) or
      (len = 0) then
     exit;
   sl := length(s);
-  SetLength(s, len + sl);
+  sepl := length(sep);
+  SetLength(s, len + sl + sepl);
   MoveFast(P^, PByteArray(s)[sl], len);
   JS_FreeCString(@self, P);
+  if sepl > 0 then
+    MoveFast(pointer(sep)^, PByteArray(s)[sl + len], sepl);
 end;
 
 procedure TJSContext.ErrorMessage(stacktrace: boolean; var msg: RawUtf8;
@@ -2849,7 +2927,7 @@ end;
 
 procedure TJSContext.ErrorDump(stacktrace: boolean; reason: PJSValue);
 var
-  err: RawUtF8;
+  err: RawUtf8;
 begin
   ErrorMessage({stacktrace=}true, err, reason);
   {$I-}
@@ -3031,7 +3109,7 @@ begin
   end;
 end;
 
-function TJSContext.From(const val: RawUtF8): JSValue;
+function TJSContext.From(const val: RawUtf8): JSValue;
 begin
   result := From(pointer(val), length(val));
 end;

@@ -4903,8 +4903,9 @@ begin
        PInterfaceMethod(ServiceMethod)^.ArgsInputIsOctetStream and
        not Call.InBodyTypeIsJson then
     begin
+      // encode binary as base-64, as expected by InternalExecuteSoaByInterface
       json := BinToBase64(Call.InBody, '["', '"]', false);
-      ServiceParameters := pointer(json); // as expected by InternalExecuteSoaByInterface
+      ServiceParameters := pointer(json);
     end
     else
       ServiceParameters := pointer(Call.InBody)
