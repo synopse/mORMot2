@@ -3264,7 +3264,7 @@ procedure TRestServerUriContext.InternalExecuteSoaByInterface;
     if (Session > CONST_AUTHENTICATION_NOT_USED) and
        (ServiceExecution <> nil) and
        ((SessionGroup <= 0) or
-        (SessionGroup <= 255) or
+        (SessionGroup > 255) or
         (byte(SessionGroup - 1) in ServiceExecution.Denied)) then
     begin
       Error('Unauthorized method', HTTP_NOTALLOWED);
