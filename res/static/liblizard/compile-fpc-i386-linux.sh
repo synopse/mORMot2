@@ -1,7 +1,7 @@
 #!/bin/sh
 
 FPCARCH=i386-linux
-DEST=../../../dev/lib2/static/$FPCARCH
+DEST=../../../../static/$FPCARCH
 GCC=gcc-7
 
 echo

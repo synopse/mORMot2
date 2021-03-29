@@ -870,12 +870,13 @@ function libdeflate_crc32; external;
 
 // original code is patched for proper linking and cdecl use
 // - see res/static/libdeflate for patched source and build instructions
+// - used libdeflatepas.a to avoid collision with libdeflate.a of libdeflate-dev
 {$ifdef OSLINUX}
   {$ifdef CPUX86}
-    {$linklib ..\..\static\i386-linux\libdeflate.a}
+    {$linklib ..\..\static\i386-linux\libdeflatepas.a}
   {$endif CPUX86}
   {$ifdef CPUX64}
-    {$linklib ..\..\static\x86_64-linux\libdeflate.a}
+    {$linklib ..\..\static\x86_64-linux\libdeflatepas.a}
   {$endif CPUX64}
   {$ifdef CPUAARCH64}
     // compiles but untested yet
@@ -907,14 +908,14 @@ function libdeflate_crc32; external;
 
 {$ifdef OSWINDOWS}
   {$ifdef CPUX86}
-    {$linklib ..\..\static\i386-win32\libdeflate.a}
+    {$linklib ..\..\static\i386-win32\libdeflatepas.a}
     const
       _PU = '_';
   {$endif CPUX86}
   // note: FPC 3.2 + Win64 internal linker makes internal error 200603061
   // - to compile on Win64, try the -Xe option or a newer FPC
   {$ifdef CPUX64}
-    {$linklib ..\..\static\x86_64-win64\libdeflate.a}
+    {$linklib ..\..\static\x86_64-win64\libdeflatepas.a}
     const
       _PU = '';
   {$endif CPUX64}

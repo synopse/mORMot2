@@ -1,7 +1,7 @@
 #!/bin/sh
 
 FPCARCH=x86_64-win64
-DEST=../../../dev/lib2/static/$FPCARCH
+DEST=../../../../static/$FPCARCH
 GCC=x86_64-w64-mingw32-gcc 
 
 echo
