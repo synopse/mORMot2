@@ -679,6 +679,11 @@ begin
   result := paszlib.crc32(crc, buf, len);
 end;
 
+function adler32(adler: TZCRC; buf: pointer; len: cardinal): TZCRC;
+begin
+  result := paszlib.adler32(adler, buf, len);
+end;
+
 {$endif ZLIBPAS}
 
 {$ifdef ZLIBRTL}

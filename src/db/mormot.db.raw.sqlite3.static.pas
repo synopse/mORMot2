@@ -173,11 +173,19 @@ uses
 
   {$ifdef OSANDROID}
     {$ifdef CPUAARCH64}
-      {$L ..\..\static\aarch64-android\libsqlite3.a}
+      {$L ..\..\static\aarch64-android\sqlite3.o}
     {$endif CPUAARCH64}
     {$ifdef CPUARM}
-      {$L ..\..\static\arm-android\libsqlite3.a}
+      {$L ..\..\static\arm-android\sqlite3.o}
     {$endif CPUARM}
+    {$ifdef CPUX86}
+      {$L ..\..\static\i386-android\sqlite3.o}
+    {$endif CPUX86}
+    {$ifdef CPUX64}
+      {$L ..\..\static\x86_64-android\sqlite3.o}
+      // x86_64-linux-android-ld.bfd: final link failed
+      // (Nonrepresentable section on output)
+    {$endif CPUX64}
   {$endif OSANDROID}
 
   {$ifdef OSFREEBSD}

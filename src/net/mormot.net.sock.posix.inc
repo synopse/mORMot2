@@ -9,9 +9,9 @@ uses
   baseunix,
   termio,
   sockets,
-  {$ifdef OSLINUX}
+  {$ifdef OSLINUXANDROID}
   linux, // for epoll
-  {$endif OSLINUX}
+  {$endif OSLINUXANDROID}
   initc; // link clib='c' for our socket purpose
 
 {$ifdef OSBSDDARWIN}

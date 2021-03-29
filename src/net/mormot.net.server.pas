@@ -4163,7 +4163,7 @@ fnd:
       begin
         Dispose(fLastConnection);
         fLastConnection := nil;
-        result := 405;
+        result := HTTP_NOTALLOWED;
       end;
     finally
       LeaveCriticalSection(proto.fSafe);

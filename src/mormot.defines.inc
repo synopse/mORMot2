@@ -196,6 +196,9 @@
         {$define FPCBSD}
         {$ifdef OPENBSD}
           {$define OSOPENBSD}  // OSBDS = OSOPENBSD + OSFREEBSD
+          {$ifdef CPUX86}
+            {$define FPC_PIC}
+          {$endif CPUX86}
         {$endif OPENBSD}
         {$ifdef FREEBSD}
           {$define OSFREEBSD}
@@ -206,16 +209,22 @@
         // conditionals for Linux
         {$define OSLINUX} // e.g. to disable epoll API
         {$define FPCLINUX}
+        {$define OSLINUXANDROID}
       {$else}
+        {$ifdef ANDROID}
+          // conditionals for Android
+          {$define OSANDROID}
+          {$define FPCANDROID}
+          {$define OSLINUXANDROID}
+          {$define NOPATCHRTL} // don't mess with asm stuff
+          {$ifdef CPUX86}
+            {$define FPC_PIC}
+          {$endif CPUX86}
+        {$else}
         'Unsupported Operating System - yet'
+        {$endif ANDROID}
       {$endif LINUX}
     {$endif BSD}
-    {$ifdef ANDROID}
-      // conditionals for Android
-      {$define OSANDROID}
-      {$define FPCANDROID}
-      {$define NOPATCHRTL} // don't mess with asm stuff
-    {$endif ANDROID}
   {$endif MSWINDOWS}
 
 
@@ -248,14 +257,12 @@
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
       {$define FPC_X86}
-      {$ifndef OSDARWIN}  // MachOS requires PIC code on i386
-        {$ifndef OSOPENBSD}   // OPENBSD requires PIC code on i386
-          {$define ASMX86}       // supports asm with globals
-          {$define ASMINTEL}     // either ASMX86 or ASMX64
-          {$define CPUX86NOTPIC} // use "absolute" instead of local register
-          {$define HASAESNI}
-        {$endif OSOPENBSD}
-      {$endif OSDARWIN}
+      {$ifndef FPC_PIC}   // MachOS/OpenBSD/Android require PIC code on i386
+        {$define ASMX86}       // supports asm with globals
+        {$define ASMINTEL}     // either ASMX86 or ASMX64
+        {$define CPUX86NOTPIC} // use "absolute" instead of local register
+        {$define HASAESNI}
+      {$endif FPC_PIC}
       {$define TSYNEXTENDED80} // only 32-bit has a true x87 extended type
     {$endif CPUX86}
     {$ifdef CPUARM}

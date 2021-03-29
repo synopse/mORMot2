@@ -3646,7 +3646,9 @@ var
   offs: integer;
   {$else}
   {$ifdef OSPOSIX} // not used for Win64
+  {$ifdef HAS_FPREG}
   fpreg: integer;
+  {$endif HAS_FPREG}
   {$endif OSPOSIX}
   {$endif CPUX86}
 begin
