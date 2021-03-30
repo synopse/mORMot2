@@ -216,6 +216,7 @@ type
     fEngineClass: TThreadSafeEngineClass;
     fEngineExpireTimeOutTix: Int64;
     fEngines: TSynObjectListLocked; // TThreadSafeEngine
+    fEngineID: TThreadIDDynArray;
     fMaxEngines: integer;
     fDebugMainThread: boolean;
     fMainEngine: TThreadSafeEngine;
@@ -223,6 +224,7 @@ type
     fWorkerManager: IWorkerManager;
     fOnLog: TSynLogProc;
     function ThreadEngineIndex(aThreadID: TThreadID): PtrInt;
+      {$ifdef HASINLINE} inline; {$endif}
     function GetPauseDebuggerOnFirstStep: boolean;
     procedure SetPauseDebuggerOnFirstStep(aPauseDebuggerOnFirstStep: boolean);
     function GetEngineExpireTimeOutMinutes: cardinal;
@@ -239,11 +241,12 @@ type
     /// get or create one Engine associated with current running thread
     // - aThreadData is a pointer to any structure relative to this thread
     // accessible via TThreadSafeEngine.ThreadData
-    function ThreadSafeEngine(ThreadData: pointer;
-      TagForNewEngine: PtrInt): TThreadSafeEngine;
+    function ThreadSafeEngine(ThreadData: pointer = nil;
+      TagForNewEngine: PtrInt = 0): TThreadSafeEngine;
     /// retrieve the Engine associated with this Thread ID
     // - may be MainEngine or one of the previously created ThreadSafeEngine()
     // - return nil if this thread is unknown
+    // - warning: call Engines.Safe.Lock/Unlock if the instance can expire
     function Engine(aThreadID: TThreadID): TThreadSafeEngine; overload;
     /// should be able to retrieve the Engine from a given context
     // - redirect to fEngineClass.From()
@@ -265,10 +268,14 @@ type
     // - is nil if there is no such main engine but only ThreadSafeEngine()
     property MainEngine: TThreadSafeEngine
       read fMainEngine;
+    /// low-level access to the per-thread TThreadSafeEngine internal pool
+    property Engines: TSynObjectListLocked
+      read fEngines;
     /// specify a maximum lifetime period after which script engines will
     // be recreated, to avoid potential JavaScript memory leak (variables in global,
     // closures circle, etc.)
-    // - 0 by default - mean no expire timeout
+    // - 0 by default - mean no expiration timeout
+    // - a typical value for a production server is 4*60, i.e. 4 hours
     // - in case a specific engine must never expire, set its NeverExpire property
     property EngineExpireTimeOutMinutes: cardinal
       read GetEngineExpireTimeOutMinutes write SetEngineExpireTimeOutMinutes default 0;
@@ -389,14 +396,16 @@ end;
 
 function TThreadSafeManager.ThreadEngineIndex(aThreadID: TThreadID): PtrInt;
 var
-  e: PPointerArray;
+  e: ^TThreadID;
 begin
   // caller made fEngines.Safe.Lock
-  e := pointer(fEngines.List);
+  e := pointer(fEngineID);
   for result := 0 to fEngines.Count - 1 do
-    // brute force search is fast enough since fMaxEngines is small
-    if TThreadSafeEngine(e[result]).fThreadID = aThreadID then
-      exit;
+    // brute force search in L1 cache is fast enough since fMaxEngines is small
+    if e^ = aThreadID then
+      exit
+    else
+      inc(e);
   result := -1;
 end;
 
@@ -404,35 +413,41 @@ function TThreadSafeManager.ThreadSafeEngine(ThreadData: pointer;
   TagForNewEngine: PtrInt): TThreadSafeEngine;
 var
   tid: TThreadID;
-  i: PtrInt;
+  existing, i: PtrInt;
   tobereleased: TThreadSafeEngine;
 begin
   // retrieve or (re)create the engine associated with this thread
-  tid := GetCurrentThreadId;
-  tobereleased := nil;
   result := nil;
-  fEngines.Safe.Lock;
-  try
-    i := ThreadEngineIndex(tid);
-    if i >= 0 then
+  tid := GetCurrentThreadId;
+  fEngines.Safe.Lock; // no try..finally for exception-safe GetTickCount64
+  existing := ThreadEngineIndex(tid);
+  if existing >= 0 then
+  begin
+    result := fEngines.List[existing];
+    if ThreadData = nil then
+      ThreadData := result.fThreadData // to be used if recreated
+    else
+      result.fThreadData := ThreadData; // override with the given parameter
+    if result.NeverExpire or
+       (fEngineExpireTimeOutTix = 0) or
+       (GetTickCount64 - result.fCreateTix < fEngineExpireTimeOutTix) then
+      if result.fContentVersion = fContentVersion then
+      begin
+        // we got the right engine -> quickly return
+        fEngines.Safe.UnLock;
+        exit;
+      end;
+  end;
+  tobereleased := result;
+  try // some exceptions may occur from now on
+    if existing >= 0 then
     begin
-      result := fEngines.List[i];
-      if ThreadData = nil then
-        ThreadData := result.fThreadData // to be used if recreated
-      else
-        result.fThreadData := ThreadData; // override with the given parameter
-      if result.NeverExpire or
-         (fEngineExpireTimeOutTix = 0) or
-         (GetTickCount64 - result.fCreateTix < fEngineExpireTimeOutTix) then
-        if result.fContentVersion = fContentVersion then
-          // we got the right engine -> quickly return
-          exit;
       // the engine is expired or its content changed -> recreate
       if Assigned(fOnLog) then
         fOnLog(sllInfo, 'ThreadSafeEngine: expired %', [result], self);
-      tobereleased := result;
-      fEngines.Delete(i, {dontfree=}true);
+      fEngines.Delete(existing, {dontfree=}true);
     end;
+    // if we reached here, we need a new TThreadSafeEngine instance
     if fEngines.Count >= fMaxEngines then
       raise EScriptException.CreateUtf8(
         '%.ThreadSafeEngine reached its limit of % engines on %',
@@ -443,10 +458,15 @@ begin
     result := fEngineClass.Create(self, ThreadData, TagForNewEngine, tid);
     fEngines.Add(result);
   finally
+    // always populate the L1-cache-friendly array of all ThreadID
+    if length(fEngineID) < fEngines.Count then
+      SetLength(fEngineID, fMaxEngines);
+    for i := 0 to fEngines.Count - 1 do
+      fEngineID[i] := TThreadSafeEngine(fEngines.List[i]).ThreadID;
+    // now we don't need to access fEngines anymore
     fEngines.Safe.UnLock;
-    if tobereleased <> nil then
-      // done outside the lock - garbage collection may take some time
-      tobereleased.Free;
+    // released outside the lock - garbage collection may take some time
+    tobereleased.Free;
   end;
   // initialize the newly (re)created engine outside the lock
   result.AfterCreate;
