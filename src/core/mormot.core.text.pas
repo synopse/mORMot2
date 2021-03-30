@@ -6206,7 +6206,6 @@ begin
 end;
 
 
-
 function ObjectToJson(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUtf8;
 var
   temp: TTextWriterStackBuffer;

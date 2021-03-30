@@ -281,7 +281,7 @@ const
 
   /// TDocVariant options which may be used for plain JSON parsing
   // - this won't recognize any extended syntax
-  JSON_OPTIONS_FAST_STRICTJson: TDocVariantOptions =
+  JSON_OPTIONS_FAST_STRICT: TDocVariantOptions =
     [dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference,
      dvoJsonParseDoNotTryCustomVariants];
@@ -6618,7 +6618,7 @@ w:  if {%H-}wasString or
     if P = nil then
     begin
       TDocVariantData(Value).Clear;
-      exit; // eror parsing
+      exit; // error parsing
     end;
     if not wasParsedWithinString then
       Json := P;

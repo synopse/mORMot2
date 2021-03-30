@@ -763,7 +763,7 @@ type
     /// pointer to a set of options for a TDocVariant storage
     // - defined in this unit to avoid circular reference with mormot.core.variants
     // - you may use e.g. @JSON_OPTIONS[true], @JSON_OPTIONS[false],
-    // @JSON_OPTIONS_FAST_STRICTJson or @JSON_OPTIONS_FAST_EXTENDED
+    // @JSON_OPTIONS_FAST_STRICT or @JSON_OPTIONS_FAST_EXTENDED
     PDocVariantOptions = ^TDocVariantOptions;
 
 
