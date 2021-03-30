@@ -248,10 +248,10 @@ procedure libc_qsort(baseP: PByte; NElem, Width: PtrInt; comparF: qsort_compare_
   external _CLIB name 'qsort';
 function libc_log(d: double): double; cdecl;
   external _CLIB name 'log';
-function libc_beginthreadex(security: pointer; stksize: dword;
-  start, arg: pointer; flags: dword; var threadid: dword): THandle; cdecl;
+function libc_beginthreadex(security: pointer; stksize: cardinal;
+  start, arg: pointer; flags: cardinal; var threadid: cardinal): THandle; cdecl;
   external _CLIB name '_beginthreadex';
-procedure libc_endthreadex(exitcode: dword); cdecl;
+procedure libc_endthreadex(exitcode: cardinal); cdecl;
   external _CLIB name '_endthreadex';
 
 

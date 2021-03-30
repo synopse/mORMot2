@@ -36,6 +36,8 @@
         </OtherDefines>
       </Other>
     </CompilerOptions>
+    <Description Value="mORMot 2 ORM/SOA/MVC framework"/>
+    <License Value="MPL, GPL or LGPL"/>
     <Version Major="2" Release="1"/>
     <Files Count="89">
       <Item1>
