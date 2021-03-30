@@ -437,10 +437,12 @@ end;
 
 {$ifdef FPC}
 var
-  // redirect mingw import pointer to libc_endthreadex
-  endthreadex: pointer public name _PREFIX + '_imp___endthreadex';
   // redirect mingw import pointer to libc_beginthreadex
-  beginthreadex: pointer public name _PREFIX + '_imp___beginthreadex';
+  beginthreadex: pointer public name
+    {$ifdef CPU32} '__imp___beginthreadex' {$else} '__imp__beginthreadex' {$endif};
+  // redirect mingw import pointer to libc_endthreadex
+  endthreadex: pointer public name
+    {$ifdef CPU32} '__imp___endthreadex' {$else} '__imp__endthreadex' {$endif};
 {$endif FPC}
 
 procedure __exit; assembler;
@@ -1767,8 +1769,8 @@ end;
 initialization
 {$ifdef FPC}
 {$ifdef OSWINDOWS}
-  endthreadex := @libc_endthreadex;
   beginthreadex := @libc_beginthreadex;
+  endthreadex := @libc_endthreadex;
 {$endif OSWINDOWS}
 {$endif FPC}
 
