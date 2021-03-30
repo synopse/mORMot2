@@ -956,20 +956,17 @@ begin
             'ickFromInjectedResolver: TryResolveInternal(%)=false',
             [fInterface.InterfaceName]);
         result := TInterfacedObject(ObjectFromInterface(IInterface(dummyObj)));
-        if AndIncreaseRefCount then
-          // RefCount=1 after TryResolveInternal()
-          AndIncreaseRefCount := false
-        else
-          // adjust the reference counter
-          dec(TInjectableObjectRest(result).fRefCount);
+        // RefCount=1 after TryResolveInternal() -> adjust
+        dec(TInjectableObjectRest(result).fRefCount);
       end;
   else
     result := fImplementationClass.Create;
   end;
+  inc(TInjectableObjectRest(result).fRefCount); // >0 to call Support() in event
   if Assigned(fRestServer.OnServiceCreateInstance) then
     fRestServer.OnServiceCreateInstance(self, result);
-  if AndIncreaseRefCount then
-    IInterface(result)._AddRef; // allow passing self to sub-methods
+  if not AndIncreaseRefCount then
+    dec(TInjectableObjectRest(result).fRefCount);
 end;
 
 procedure TServiceFactoryServer.OnLogRestExecuteMethod(
