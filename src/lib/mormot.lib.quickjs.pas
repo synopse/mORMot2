@@ -7,9 +7,9 @@ unit mormot.lib.quickjs;
   *****************************************************************************
 
    Cross-Platform and Cross-Compiler JavaScript Interpreter
+   - QuickJS to Pascal Wrappers
    - QuickJS Low-Level Constants and Types
    - QuickJS Functions API
-   - QuickJS to Pascal Wrappers
 
   *****************************************************************************
 
@@ -67,7 +67,9 @@ uses
   math,
   mormot.core.base,
   mormot.core.os,
-  mormot.core.unicode;
+  mormot.core.unicode,
+  mormot.core.text,
+  mormot.core.variants;
 
 {$ifdef JS_STRICT_NAN_BOXING}
   {$define JS_ANY_NAN_BOXING}
@@ -89,15 +91,7 @@ uses
 { ************ QuickJS to Pascal Wrappers }
 
 type
-  /// exception raised by this unit on QuickJS panic
-  // - mainly if assert() - aka pas_assert() - failed in the C code
-  EQuickJS = class(Exception)
-  public
-    /// create a message with the current JSContext exception information
-    constructor Create(ctx: pointer; stacktrace: boolean = true); overload;
-  end;
-
-// some definitions ahead of low-level QuickJS API to allow pointer wrapping
+  // some definitions ahead of low-level QuickJS API to allow pointer wrapping
 
   {$ifdef JS_ANY_NAN_BOXING}
   {$ifdef CPU64}
@@ -142,83 +136,83 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// get the value as expected by the raw QuickJS API
     function GetRaw: JSValueRaw;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     procedure SetRaw(const value: JSValueRaw);
       {$ifdef HASINLINE} inline; {$endif}
   public
     /// set the tag bits - should be called before setting u.f64/ptr/u64 (i32 ok)
     procedure SetTag(newtag: PtrInt);
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// get the tag of this value, normalizing floats to JS_TAG_FLOAT64
     function NormTag: PtrInt;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// detect JS_TAG_NULL
     function IsNull: boolean;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// detect JS_TAG_UNDEFINED
     function IsUndefined: boolean;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// detect JS_TAG_UNINITIALIZED
     function IsUninitialized: boolean;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// detect JS_TAG_STRING
     function IsString: boolean;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// detect JS_TAG_OBJECT
     function IsObject: boolean;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// detect JS_TAG_EXCEPTION
     function IsException: boolean;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// detect JS_TAG_SYMBOL
     function IsSymbol: boolean;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// detect JS_TAG_INT
     function IsInt32: boolean;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// detect JS_TAG_FLOAT64
     function IsFloat: boolean;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// detect JS_TAG_INT or JS_TAG_FLOAT64
     function IsNumber: boolean;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// detect NaN/+Inf/-Inf special values
     function IsNan: boolean;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// detect JS_TAG_BIG_INT
     function IsBigInt: boolean;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// detect JS_TAG_BIG_FLOAT
     function IsBigFloat: boolean;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// detect JS_TAG_BIG_DECIMAL
     function IsBigDecimal: boolean;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// detect reference-counted values
     function IsRefCounted: boolean;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
 
     /// extract the JS_TAG_INT value
     function Int32: integer;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// extract the JS_TAG_INT or JS_TAG_FLOAT64 value as an 53-bit integer
     function Int64: Int64;
       {$ifdef HASINLINE} inline; {$endif}
     /// extract the JS_TAG_BOOL value
     function Bool: boolean;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// extract the JS_TAG_FLOAT64 value
     function F64: double;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// may be JSObject or JSString
     function Ptr: pointer;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// used internally by Duplicate/DuplicateRaw
     procedure IncRefCnt;
-       {$ifdef HASINLINE} inline; {$endif}
-    /// used internally by TJSContext.Free
+      {$ifdef HASINLINE} inline; {$endif}
+    /// used internally e.g. by TJSContext.Free
     function DecRefCnt: boolean;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// retrieve or change the value as expected by the raw QuickJS API
     property Raw: JSValueRaw
       read GetRaw write SetRaw;
@@ -227,27 +221,33 @@ type
     /// return a copy of this value, without incrementing the refcount
     function DuplicateRaw: JSValueRaw;
 
+    /// compare two JS values at binary level
+    function Equals(const another: JSValue): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// set to a JS_TAG_UNINITIALIZED value
+    procedure Empty;
+      {$ifdef HASINLINE} inline; {$endif}
     /// set a value from its tag and 32-bit content
     procedure Fill(newtag, val: integer); overload;
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// set a pointer value - may be JSObject or JSString
     procedure Fill(newtag: integer; val: pointer); overload;
-     {$ifndef JS_ANY_NAN_BOXING_CPU64}{$ifdef HASINLINE}inline;{$endif}{$endif}
+      {$ifndef JS_ANY_NAN_BOXING_CPU64}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// create a JS_TAG_BOOL
     procedure From(val: boolean);
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// create a JS_TAG_INT
     procedure From32(val: integer);
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// create a JS_TAG_INT if possible, JS_TAG_FLOAT64 otherwise
     procedure From64(val: Int64);
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// create a JS_TAG_INT if possible, JS_TAG_FLOAT64 otherwise
     procedure FromNum(val: double);
-       {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// create a JS_TAG_FLOAT64
     procedure FromFloat(val: double);
-       {$ifdef FPC} inline; {$endif}
+      {$ifdef FPC} inline; {$endif}
   end;
 
   PJSValue = ^JSValue;
@@ -290,17 +290,39 @@ type
     /// release the memory used by a JSValue - JS_FreeValue() alternative
     procedure Free(var v: JSValue); overload;
       {$ifdef HASINLINE} inline; {$endif}
-    /// retrieve the global object of this execution context
-    // - caller should make cx.Free(glob) once done with this value
-    procedure Global(out glob: JSValue);
-      {$ifdef HASINLINE} inline; {$endif}
+    /// release the memory used by a JSValue - JS_FreeValue() alternative
+    // - won't be inlined so may be used when performance don't matter
+    procedure FreeUnlikely(var v: JSValue);
+    /// retrieve a property of the global object
+    // - caller should make cx.Free(val) once done with this value
+    function GetValue(prop: PAnsiChar; out val: JSValue;
+      raiseIfNotFound: boolean = false): boolean; overload;
+    /// retrieve a property of a given object
+    // - caller should make cx.Free(val) once done with this value
+    function GetValue(obj: JSValue; prop: PAnsiChar; out val: JSValue;
+      raiseIfNotFound: boolean = false): boolean; overload;
+    /// retrieve a property of a given object, and free the object
+    // - caller should make cx.Free(val) once done with this value
+    function GetValueFree(obj: JSValue; prop: PAnsiChar; out val: JSValue;
+      raiseIfNotFound: boolean = false): boolean; overload;
+    /// retrieve a property value from its cascaded names
+    // - caller should make cx.Free(val) once done with this value
+    // - if parent is defined, it will store the previous prop[] object
+    // - GetValue([], glob) will return the global object
+    function GetValue(const prop: array of PAnsiChar; out val: JSValue;
+      parent: PJSValue = nil; raiseIfNotFound: boolean = false): boolean; overload;
     /// assign a value to an object property by name
     procedure SetValue(obj: JSValue; prop: PAnsiChar; val: JSValue);
     /// assign a function to an object property by name
-    procedure SetFunction(obj: JSValue; prop: PAnsiChar; func: JSFunction;
-      args: integer);
+    procedure SetFunction(obj: JSValue; prop: PAnsiChar;
+      func: JSFunction; args: integer); overload;
+    /// assign a function to an object property by cascaded names
+    // - will resolve the object path from the first obj[] name
+    // - SetFunction([], 'funcname',...) will set a global function
+    procedure SetFunction(const obj: array of PAnsiChar; prop: PAnsiChar;
+      func: JSFunction; args: integer); overload;
     /// raise an EQuickJS exception if an API call result returned FALSE (0)
-    procedure Check(res: integer);
+    procedure Check(res: integer; caller: PAnsiChar);
       {$ifdef HASINLINE} inline; {$endif}
     /// returns the current error message, after JSValue.IsException=true
     // - by default will get the exception from JS_GetException(), but you
@@ -318,27 +340,30 @@ type
     /// execute some JavaScript code as a module
     // - returns '' on success, or an error message if compilation failed
     function EvalModule(const code, filename: RawUtf8): RawUtf8;
+    /// raw execution of a JavaScript function
+    // - if objectname='', the Global object will be used
+    function Call(const objectname, funcname: RawUtf8;
+      const args: array of const): JSValue;
 
-    /// convert a JSValue into its text
-    procedure ToUtf8(const v: JSValue; var s: RawUtf8); overload;
-    /// convert a JSValue into its text
-    function ToUtf8(const v: JSValue): RawUtf8; overload;
+    /// convert a JSValue into its RawUtf8 text
+    // - a JS_TAG_OBJECT returns its JSON serialization unless noJson is set
+    procedure ToUtf8(v: JSValue; var s: RawUtf8; noJson: boolean = false); overload;
+    /// convert a JSValue into its RawUtf8 text
+    function ToUtf8(const v: JSValue; noJson: boolean = false): RawUtf8; overload;
       {$ifdef HASINLINE} inline; {$endif}
+    /// convert a JSValue into its RawUtf8 text and free the value
+    function ToUtf8Free(var v: JSValue; noJson: boolean = false): RawUtf8;
+    /// convert a JSValue into an UTF-8 text buffer
+    procedure ToUtf8(const v: JSValue; var temp: TSynTempBuffer); overload;
     /// append a JSValue as text
     procedure AddUtf8(const v: JSValue; var s: RawUtf8; const sep: RawUtf8 = '');
-    /// detect the variant type of a JSValue
-    // - returns varNull, varBoolean, varInt, varDouble, varString or varAny
-    // (for JS_TAG_OBJECT)
-    // - returns varUnknown if the JSValue can't be mapped into a variant
-    function ToVariantType(var v: JSValue): integer;
-      {$ifdef HASINLINE} inline; {$endif}
-    /// convert a JSValue into a simple variant
-    // - convert into varNull, varBoolean, varInt, varInt64, varDouble,
-    // varString (after JsonStringify for JS_TAG_OBJECT) and returns true
+    /// convert a JSValue into a variant
+    // - convert into varNull, varBoolean, varInt, varInt64, varDouble, varString
+    // or TDocVariant (after JsonStringify for JS_TAG_OBJECT) and returns true
     // - unhandled kinds return false
-    function ToSimpleVariant(var v: JSValue; var res: variant): boolean;
-    /// convert a JSValue into a simple variant and free the value
-    function ToSimpleVariantFree(var v: JSValue; var res: variant): boolean;
+    function ToVariant(var v: JSValue; var res: variant): boolean;
+    /// convert a JSValue into a variant and free the value
+    function ToVariantFree(var v: JSValue; var res: variant): boolean;
 
     /// create a JS_TAG_STRING from UTF-8 buffer
     function From(P: PUtf8Char; Len: PtrInt): JSValue; overload;
@@ -351,8 +376,33 @@ type
     /// create a JS_TAG_STRING from UTF-16 string
     function FromW(const val: SynUnicode): JSValue; overload;
        {$ifdef HASINLINE} inline; {$endif}
+    /// create a JS value from an "array of const" value
+    procedure From(const val: TVarRec; out result: JSValue); overload;
+    /// create a JS value from a variant value
+    procedure FromVariant(const val: variant; out result: JSValue);
+    /// create a JS_TAG_OBJECT from a class instance published properties
+    procedure FromClass(instance: TObject; out result: JSValue);
+    /// create a JS Value by unserializing JSON - maybe creating a JS_TAG_OBJECT
+    procedure FromJson(const json: RawUtf8; out result: JSValue);
   end;
 
+
+type
+  /// exception raised by this unit on QuickJS panic
+  // - mainly if assert() - aka pas_assert() - failed in the C code
+  EQuickJS = class(ESynException)
+  public
+    /// create a message with the current JSContext exception information
+    constructor Create(ctx: pointer; caller: PAnsiChar;
+      stacktrace: boolean = true); overload;
+    /// create a message with the current JSContext exception information
+    // and free the supplied value
+    // - typical use is
+    // ! if result.IsException then
+    // !    raise EQuickJS.Create(@self, 'methodname', result);
+    constructor Create(ctx: pointer; caller: PAnsiChar; var tofree: JSValue;
+      stacktrace: boolean = true); overload;
+  end;
 
 
 { ************ QuickJS Low-Level Constants and Types }
@@ -360,7 +410,7 @@ type
 const
   {$ifdef JS_STRICT_NAN_BOXING}
 
-  // https://github.com/c-smile/quickjspp encoding
+  // https://github.com/c-smile/quickjspp encoding = always 64-bit
 
   JS_TAG_UNINITIALIZED = 0;
   JS_TAG_INT = 1;
@@ -370,10 +420,10 @@ const
   JS_TAG_CATCH_OFFSET = 5;
   JS_TAG_EXCEPTION = 6;
   JS_TAG_FLOAT64 = 7;
-  // all tags with a reference count have 0b1000 bit
+  // all tags with a reference count have (NormTag and $fff8) = $0008
   JS_TAG_OBJECT = 8;
-  JS_TAG_FUNCTION_BYTECODE = 9; // used internally *
-  JS_TAG_MODULE = 10;           // used internally
+  JS_TAG_FUNCTION_BYTECODE = 9; // internal use
+  JS_TAG_MODULE = 10;           // internal use
   JS_TAG_STRING = 11;
   JS_TAG_SYMBOL = 12;
   JS_TAG_BIG_FLOAT = 13;
@@ -426,7 +476,7 @@ const
   JS_FLOAT64_NEGINF: double = NegInfinity;
 
   {$ifdef CPU64}
-  // any 64-bit pointer can be truncated to 48-bit
+  // any 64-bit pointer can be truncated to 48-bit on Intel/AMD CPUs
   JS_PTR64_MASK = $0000FFFFFFFFFFFF;
   {$endif CPU64}
 
@@ -2362,12 +2412,20 @@ end;
 
 { EQuickJS }
 
-constructor EQuickJS.Create(ctx: pointer; stacktrace: boolean);
+constructor EQuickJS.Create(ctx: pointer; caller: PAnsiChar;
+  stacktrace: boolean);
 var
   msg: RawUtf8;
 begin
   JSContext(ctx).ErrorMessage(stacktrace, msg);
-  Create(Utf8ToString(msg));
+  CreateUtf8('%: %', [caller, msg]);
+end;
+
+constructor EQuickJS.Create(ctx: pointer; caller: PAnsiChar; var tofree: JSValue;
+  stacktrace: boolean);
+begin
+  Create(ctx, caller, stacktrace);
+  JSContext(ctx).FreeUnlikely(tofree);
 end;
 
 
@@ -2390,6 +2448,11 @@ end;
 procedure JSValue.SetTag(newtag: PtrInt);
 begin
   u.tag := newtag shl 16;
+end;
+
+procedure JSValue.Empty;
+begin
+  u.u64 := JS_TAG_UNINITIALIZED shl 48; // =0
 end;
 
 function JSValue.TagNotFloat: PtrInt;
@@ -2474,21 +2537,11 @@ begin
 end;
 
 function JSValue.IsRefCounted: boolean;
-// inlined (NormTag and $fff8) = 8
-{$ifdef CPU64}
-var
-  t: UInt64;
 begin
-  t := u.u64;
-  result := (t <= JS_TAG_MASK) and
-            (((t shr 48) and $fff8) = $0008);
+  // inlined (NormTag and $fff8) = 8
+  result := ((u.tag and $fff80000) = $00080000) and
+            (u.u64 <= JS_TAG_MASK);
 end;
-{$else}
-begin
-  result := (u.u64 <= JS_TAG_MASK) and
-            ((u.tag and $fff80000) = $00080000);
-end;
-{$endif CPU64}
 
 function JSValue.IsException: boolean;
 begin
@@ -2496,6 +2549,12 @@ begin
 end;
 
 {$else}
+
+procedure JSValue.Empty;
+begin
+  SetTag(JS_TAG_UNINITIALIZED);
+  u.i32 := 0;
+end;
 
 {$ifdef JS_NAN_BOXING}
 
@@ -2688,6 +2747,16 @@ begin
   result := JSValueRaw(self);
 end;
 
+function JSValue.Equals(const another: JSValue): boolean;
+begin
+  {$ifdef JS_ANY_NAN_BOXING}
+  result := u.u64 = another.u.u64;
+  {$else}
+  result := (u.u64 = another.u.u64) and
+            (UnboxedTag = another.UnboxedTag);
+  {$endif JS_ANY_NAN_BOXING}
+end;
+
 function JSValue.Int32: integer;
 begin
   result := u.i32;
@@ -2830,35 +2899,130 @@ begin
   JS_FreeContext(@self);
 end;
 
+{$ifdef JS_STRICT_NAN_BOXING}
+
+procedure TJSContext.Free(var v: JSValueRaw);
+{$ifdef CPU64}
+var
+  q: UInt64;
+{$endif CPU64}
+begin
+  if (JSValue(v).u.tag and $fff80000) <> $00080000 then
+    exit;
+  {$ifdef CPU32}
+  if JSValue(v).u.u64 > JS_TAG_MASK then
+    exit;
+  dec(PInteger(JSValue(v).u.ptr)^);
+  if PInteger(JSValue(v).u.ptr)^ = 0 then
+  {$else}
+  q := JSValue(v).u.u64;
+  if q > JS_TAG_MASK then
+    exit;
+  q := q and JS_PTR64_MASK;
+  dec(PInteger(q)^);
+  if PInteger(q)^ = 0 then
+  {$endif CPU32}
+    __JS_FreeValue(@self, v);
+end;
+
+{$else}
+
 procedure TJSContext.Free(var v: JSValueRaw);
 begin
-  with JSValue(v) do
-    if IsRefCounted and
-       DecRefCnt then
-      __JS_FreeValue(@self, v);
+  if JSValue(v).IsRefCounted and
+     JSValue(v).DecRefCnt then
+    __JS_FreeValue(@self, v);
 end;
+
+{$endif JS_STRICT_NAN_BOXING}
 
 procedure TJSContext.Free(var v: JSValue);
 begin
-  if v.IsRefCounted and
-     v.DecRefCnt then
-    __JS_FreeValue(@self, JSValueRaw(v));
+  Free(JSValueRaw(v));
+  v.Empty;
 end;
 
-procedure TJSContext.Global(out glob: JSValue);
+procedure TJSContext.FreeUnlikely(var v: JSValue);
 begin
-  glob := JSValue(JS_GetGlobalObject(@self));
+  Free(JSValueRaw(v));
+  v.Empty;
 end;
 
-procedure TJSContext.Check(res: integer);
+function TJSContext.GetValue(prop: PAnsiChar;
+  out val: JSValue; raiseIfNotFound: boolean): boolean;
+begin
+  result := GetValue([prop], val, nil, raiseIfNotFound);
+end;
+
+function TJSContext.GetValue(obj: JSValue; prop: PAnsiChar;
+  out val: JSValue; raiseIfNotFound: boolean): boolean;
+begin
+  val := JSValue(JS_GetPropertyStr(@self, obj.Raw, prop));
+  case val.TagNotFloat of
+    JS_TAG_UNDEFINED:
+      begin
+        if raiseIfNotFound then
+          raise EQuickJS.CreateUtf8('GetValue(%) not found', [prop]);
+        result := false;
+      end;
+    JS_TAG_EXCEPTION:
+      begin
+        if raiseIfNotFound then
+          raise EQuickJS.Create(@self, prop, val);
+        FreeUnlikely(val);
+        result := false;
+      end;
+  else
+    result := true;
+  end;
+end;
+
+function TJSContext.GetValueFree(obj: JSValue; prop: PAnsiChar;
+  out val: JSValue; raiseIfNotFound: boolean): boolean;
+begin
+  result := GetValue(obj, prop, val, raiseIfNotFound);
+  Free(JSValueRaw(obj));
+end;
+
+function TJSContext.GetValue(const prop: array of PAnsiChar; out val: JSValue;
+  parent: PJSValue; raiseIfNotFound: boolean): boolean;
+var
+  p: PtrInt;
+begin
+  if parent <> nil then
+    parent^.Empty;
+  val := JSValue(JS_GetGlobalObject(@self));
+  if high(prop) >= 0 then
+  begin
+    result := false;
+    for p := 0 to high(prop) - 1 do
+      if (prop[p] <> nil) and
+         (prop[p]^ <> #0) then
+        if not GetValueFree(val, prop[p], val) then
+          exit;
+    if (prop[high(prop)] <> nil) and
+       (prop[high(prop)]^ <> #0) then
+      if parent <> nil then
+      begin
+        parent^ := val;
+        if not GetValue(val, prop[high(prop)], val) then
+          exit;
+      end
+      else if not GetValueFree(val, prop[high(prop)], val) then
+        exit;
+  end;
+  result := true;
+end;
+
+procedure TJSContext.Check(res: integer; caller: PAnsiChar);
 begin
   if res = 0 then
-    raise EQuickJS.Create(@self);
+    raise EQuickJS.Create(@self, caller);
 end;
 
 procedure TJSContext.SetValue(obj: JSValue; prop: PAnsiChar; val: JSValue);
 begin
-  Check(JS_SetPropertyStr(@self, obj.Raw, prop, val.Raw));
+  Check(JS_SetPropertyStr(@self, obj.Raw, prop, val.Raw), 'JSContext.SetValue');
 end;
 
 procedure TJSContext.SetFunction(obj: JSValue; prop: PAnsiChar;
@@ -2868,19 +3032,57 @@ begin
     JS_NewCFunction2(@self, @func, prop, args, JS_CFUNC_generic, 0)));
 end;
 
-procedure TJSContext.ToUtf8(const v: JSValue; var s: RawUtf8);
+procedure TJSContext.SetFunction(const obj: array of PAnsiChar; prop: PAnsiChar;
+  func: JSFunction; args: integer);
+var
+  o: JSValue;
+begin
+  if not GetValue(obj, o) then
+    exit;
+  SetFunction(o, prop, func, args);
+  FreeUnlikely(o);
+end;
+
+procedure TJSContext.ToUtf8(v: JSValue; var s: RawUtf8; noJson: boolean);
+var
+  P: PAnsiChar;
+  len: PtrUInt;
+  freev: boolean;
+begin
+  freev := false;
+  if (not noJson) and
+     v.IsObject and
+     (not JS_IsFunction(@self, JSValueRaw(v))) then
+  begin
+    v := JSValue(JS_JSONStringify(@self, JSValueRaw(v), JS_NULL, JS_NULL));
+    freev := true;
+  end;
+  P := JS_ToCStringLen2(@self, @len, JSValueRaw(v), false);
+  FastSetString(s, P, len);
+  JS_FreeCString(@self, P);
+  if freev then
+    FreeUnlikely(v);
+end;
+
+function TJSContext.ToUtf8(const v: JSValue; noJson: boolean): RawUtf8;
+begin
+  ToUtf8(v, result, noJson);
+end;
+
+procedure TJSContext.ToUtf8(const v: JSValue; var temp: TSynTempBuffer);
 var
   P: PAnsiChar;
   len: PtrUInt;
 begin
   P := JS_ToCStringLen2(@self, @len, JSValueRaw(v), false);
-  FastSetString(s, P, len);
+  temp.Init(P, len);
   JS_FreeCString(@self, P);
 end;
 
-function TJSContext.ToUtf8(const v: JSValue): RawUtf8;
+function TJSContext.ToUtf8Free(var v: JSValue; noJson: boolean): RawUtf8;
 begin
-  ToUtf8(v, result);
+  ToUtF8(v, result, noJson);
+  Free(v);
 end;
 
 procedure TJSContext.AddUtf8(
@@ -2913,17 +3115,17 @@ begin
     e := reason^.Raw;
   if stacktrace then
     stacktrace := JS_IsError(@self, e);
-  ToUtF8(JSValue(e), msg);
+  ToUtf8(JSValue(e), msg, {nojson=}true);
   if msg = '' then
     msg := '[exception]'#10;
   if stacktrace then
   begin
     s := JS_GetPropertyStr(@self, e, 'stack');
     AddUtf8(JSValue(s), msg);
-    Free(s);
+    FreeUnlikely(JSValue(s));
   end;
   if reason = nil then
-    Free(e);
+    FreeUnlikely(JSValue(e));
 end;
 
 procedure TJSContext.ErrorDump(stacktrace: boolean; reason: PJSValue);
@@ -2943,9 +3145,14 @@ var
   f: PAnsiChar;
   fpu: TFPUExceptionMask;
 begin
+  if code = '' then
+  begin
+    err := 'Eval(void)';
+    exit;
+  end;
   if fn = '' then
     if flags and JS_EVAL_TYPE_MASK <> JS_EVAL_TYPE_GLOBAL then
-      raise EQuickJS.CreateFmt('JSContext.Eval(%s,%d)', [fn, flags])
+      raise EQuickJS.CreateUtf8('JSContext.Eval(%,%)', [fn, flags])
     else
       f := 'main' // only global scope is allowed without file name
   else
@@ -2966,7 +3173,7 @@ var
   v: JSValue;
 begin
   v := Eval(code, filename, JS_EVAL_TYPE_GLOBAL, result);
-  Free(v);
+  FreeUnlikely(v);
 end;
 
 function TJSContext.EvalModule(const code, filename: RawUtf8): RawUtf8;
@@ -2982,110 +3189,128 @@ begin
     if v.IsException then
       ErrorMessage({stack=}true, result);
   end;
-  Free(v);
+  FreeUnlikely(v);
 end;
 
-function TJSContext.ToVariantType(var v: JSValue): integer;
+function TJSContext.Call(const objectname, funcname: RawUtf8;
+  const args: array of const): JSValue;
+var
+  obj, fun: JSValue;
+  fpu: TFPUExceptionMask;
+  i: PtrInt;
+  argv: array of JSValue;
 begin
+  result.Empty;
+  fpu := BeforeLibraryCall;
+  try
+    if not GetValue([pointer(objectname), pointer(funcname)], fun, @obj) then
+      exit;
+    SetLength(argv, length(args));
+    for i := 0 to high(args) do
+      From(args[i], argv[i]);
+    result := JSValue(JS_Call(@self, fun.Raw, obj.Raw, length(argv), pointer(argv)));
+    for i := 0 to high(args) do
+      Free(argv[i]);
+  finally
+    Free(obj);
+    Free(fun);
+    AfterLibraryCall(fpu);
+  end;
+end;
+
+function TJSContext.ToVariant(var v: JSValue; var res: variant): boolean;
+var
+  json: JSValue;
+  fpu: TFPUExceptionMask;
+  P: pointer;
+  len: PtrUInt;
+label
+  str;
+begin
+  VarClear(res);
   case v.NormTag of
-    JS_TAG_STRING:
-      result := varString;
-    JS_TAG_OBJECT:
-      result := varAny;
-    JS_TAG_INT:
-      result := varInteger;
-    JS_TAG_BOOL:
-      result := varBoolean;
-    JS_TAG_NULL:
-      result := varNull;
     JS_TAG_UNDEFINED,
     JS_TAG_UNINITIALIZED:
-      result := varEmpty;
-    JS_TAG_BIG_DECIMAL,
-    JS_TAG_BIG_FLOAT,
-    JS_TAG_FLOAT64:
-      result := varDouble;
+      TVarData(res).vType := varEmpty;
+    JS_TAG_NULL:
+      TVarData(res).vType := varNull;
+    JS_TAG_STRING, JS_TAG_EXCEPTION:
+str:  with TVarData(res) do
+      begin
+        vType := varString;
+        vAny := nil; // avoid GPF when assigning the RawUtf8
+        ToUtf8(v, RawUtf8(VAny), {nojson=}false);
+      end;
+    JS_TAG_OBJECT:
+      if JS_IsFunction(@self, JSValueRaw(v)) then
+        goto str
+      else
+      begin
+        json.Empty;
+        P := nil;
+        fpu := BeforeLibraryCall;
+        try
+          json := JSValue(JS_JSONStringify(@self, JSValueRaw(v), JS_NULL, JS_NULL));
+          if json.IsException then
+            raise EQuickJS.Create(@self, 'JSContext.ToVariant');
+          // JSONStringify() creates a temp output buffer -> in-place parsing
+          P := JS_ToCStringLen2(@self, @len, JSValueRaw(json), false);
+          VariantLoadJson(res, P, nil, @JSON_OPTIONS[true], {double=}true);
+        finally
+          JS_FreeCString(@self, P);
+          Free(json);
+          AfterLibraryCall(fpu);
+        end;
+        if VarIsEmptyOrNull(res) then
+          goto str;
+      end;
+    JS_TAG_INT:
+      begin
+        TVarData(res).vType := varInteger;
+        TVarData(res).vInteger := v.Int32;
+      end;
     JS_TAG_BIG_INT:
-      result := varInt64;
+      begin
+        TVarData(res).vType := varInt64;
+        fpu := BeforeLibraryCall;
+        result := JS_ToInt64Ext(@self, @TVarData(res).vInt64, JSValueRaw(v)) = 0;
+        AfterLibraryCall(fpu);
+        exit;
+      end;
+    JS_TAG_BOOL:
+      begin
+        TVarData(res).vType := varBoolean;
+        TVarData(res).vInteger := ord(v.Bool);
+      end;
+    JS_TAG_BIG_DECIMAL,
+    JS_TAG_BIG_FLOAT:
+      begin
+        fpu := BeforeLibraryCall;
+        if JS_ToFloat64(@self, @TVarData(res).vDouble, JSValueRaw(v)) = 0 then
+          TVarData(res).vType := varDouble;
+        AfterLibraryCall(fpu);
+      end;
+    JS_TAG_FLOAT64:
+      begin
+        TVarData(res).vType := varDouble;
+        TVarData(res).vDouble := v.F64;
+      end;
   else
     {
     JS_TAG_SYMBOL,
     JS_TAG_CATCH_OFFSET,
-    JS_TAG_EXCEPTION,
     }
-    result := varUnknown;
-  end;
-end;
-
-function TJSContext.ToSimpleVariant(var v: JSValue; var res: variant): boolean;
-var
-  json: JSValueRaw;
-  fpu: TFPUExceptionMask;
-begin
-  VarClear(res);
-  with TVarData(res) do
-    case v.NormTag of
-      JS_TAG_STRING:
-        begin
-          vType := varString;
-          vAny := nil; // avoid GPF when assigning the RawUtf8
-          ToUtf8(v, RawUtf8(VAny));
-        end;
-      JS_TAG_OBJECT:
-        begin
-          fpu := BeforeLibraryCall;
-          json := JS_JSONStringify(@self, JSValueRaw(v), JS_NULL, JS_NULL);
-          result := ToSimpleVariantFree(JSValue(json), res);
-          AfterLibraryCall(fpu);
-          exit;
-        end;
-      JS_TAG_INT:
-        begin
-          vType := varInteger;
-          vInteger := v.Int32;
-        end;
-      JS_TAG_BIG_INT:
-        begin
-          vType := varInt64;
-          result := JS_ToInt64Ext(@self, @vInt64, JSValueRaw(v)) = 0;
-          exit;
-        end;
-      JS_TAG_BOOL:
-        begin
-          vType := varBoolean;
-          vInteger := ord(v.Bool);
-        end;
-      JS_TAG_NULL:
-        vType := varNull;
-      JS_TAG_UNDEFINED,
-      JS_TAG_UNINITIALIZED:
-        vType := varEmpty;
-      JS_TAG_BIG_DECIMAL,
-      JS_TAG_BIG_FLOAT:
-          if JS_ToFloat64(@self, @vDouble, JSValueRaw(v)) = 0 then
-            vType := varDouble;
-      JS_TAG_FLOAT64:
-        begin
-          vType := varDouble;
-          vDouble := v.F64;
-        end;
-    else
-      {
-      JS_TAG_SYMBOL,
-      JS_TAG_CATCH_OFFSET,
-      JS_TAG_EXCEPTION,
-      }
-      begin
-        result := false; // unsupported type
-        exit;
-      end;
+    begin
+      result := false; // unsupported type
+      exit;
     end;
+  end;
   result := true;
 end;
 
-function TJSContext.ToSimpleVariantFree(var v: JSValue; var res: variant): boolean;
+function TJSContext.ToVariantFree(var v: JSValue; var res: variant): boolean;
 begin
-  result := ToSimpleVariant(v, res);
+  result := ToVariant(v, res);
   Free(v);
 end;
 
@@ -3119,6 +3344,82 @@ function TJSContext.FromW(const val: SynUnicode): JSValue;
 begin
   result := FromW(pointer(val), length(val));
 end;
+
+procedure TJSContext.From(const val: TVarRec; out result: JSValue);
+var
+  tmp: pointer;
+begin
+  result{%H-}.Empty;
+  case val.VType of
+    vtPointer:
+      ;
+    vtBoolean:
+      result.From(val.VBoolean);
+    vtInteger:
+      result.From32(val.VInteger);
+    vtInt64:
+      result.From64(val.VInt64^);
+    {$ifdef FPC}
+    vtQWord:
+      if val.VInt64^ >= 0 then
+        result.From64(val.VInt64^)
+      else
+        result.FromFloat(val.VQWord^);
+    {$endif FPC}
+    vtCurrency:
+      result.FromNum(val.VCurrency^);
+    vtExtended:
+      result.FromNum(val.VExtended^);
+    // warning: use varByRef or varString makes GPF -> safe and fast refcount
+    vtAnsiString:
+      result := From(RawUtf8(val.VAnsiString));
+    {$ifdef HASVARUSTRING}
+    vtUnicodeString:
+      result := FromW(val.VUnicodeString, length(UnicodeString(val.VUnicodeString)));
+    {$endif HASVARUSTRING}
+    vtWideString:
+      result := FromW(val.VWideString, length(WideString(val.VWideString)));
+    vtString, vtPChar, vtChar, vtWideChar, vtClass:
+      begin
+        tmp := nil;
+        VarRecToUtf8(val, RawUtf8(tmp)); // return as new RawUtf8 instance
+        result := From(RawUtf8(tmp));
+        FastAssignNew(tmp);
+      end;
+    vtVariant:
+      FromVariant(val.VVariant^, result);
+    vtObject:
+      FromClass(val.VObject, result);
+  else
+    raise EQuickJS.CreateUtf8('Unhandled JSContext.From(VType=%)', [val.VType]);
+  end;
+end;
+
+procedure TJSContext.FromVariant(const val: variant; out result: JSValue);
+begin
+  // not called often, so no need to make direct TVarData.VType case
+  FromJson(VariantSaveJson(val), result);
+end;
+
+procedure TJSContext.FromClass(instance: TObject; out result: JSValue);
+begin
+  FromJson(ObjectToJson(instance), result);
+end;
+
+procedure TJSContext.FromJson(const json: RawUtf8; out result: JSValue);
+var
+  fpu: TFPUExceptionMask;
+begin
+  fpu := BeforeLibraryCall;
+  try
+    result := JSValue(JS_ParseJSON(@self, pointer(json), length(json), '<inline>'));
+    if result.IsException then
+      raise EQuickJS.Create(@self, 'JSContext.FromJson', result);
+  finally
+    AfterLibraryCall(fpu);
+  end;
+end;
+
 
 
 initialization

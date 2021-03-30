@@ -66,7 +66,7 @@ var
     v := cx.Eval(js, '', JS_EVAL_TYPE_GLOBAL, result);
     if result = '' then
     begin
-      Check(cx.ToSimpleVariant(v, res));
+      Check(cx.ToVariant(v, res));
       cx.ToUtf8(v, result);
       if v.IsString or
          v.IsInt32 then
@@ -80,19 +80,18 @@ var
 
 var
   v, v2: RawUtf8;
-  j, global: JSValue;
+  j: JSValue;
   i: integer;
   d: double;
   i64: Int64;
+  va: variant;
 begin
   rt := JS_NewRuntime;
   try
     // validate numbers/text to/from JSValue conversion
     cx := rt.New;
     try
-      cx.Global(global);
-      cx.SetFunction(global, 'log', @dolog, 1);
-      cx.Free(global);
+      cx.SetFunction([], 'log', @dolog, 1);
       for i := -100 to 100 do
       begin
         // 32-bit integer
@@ -105,6 +104,8 @@ begin
         Check(not j.IsNan);
         Check(j.IsInt32);
         CheckEqual(j.Int32, i * 777);
+        Check(cx.ToVariantFree(j, va));
+        Check(va = i * 777);
         cx.Free(j); // do-nothing
         // float
         d := i * 777777777.77;
@@ -147,29 +148,26 @@ begin
         cx.ToUtf8(j, v2);
         CheckEqual(v, v2);
         cx.Free(j);
+        Check(j.Equals(j));
       end;
-      J.From(true);
+      j.From(true);
       Check(not j.IsRefCounted);
-      Check(J.Bool);
-      J.From(false);
+      Check(j.Bool);
+      j.From(false);
       Check(not j.IsRefCounted);
       Check(not J.Bool);
       for i := 1 to 1000 do
       begin
         // basic runtime execution
         CheckEqual(Run(
-          '2+2'),
-          '4');
+          '2+2'), '4');
         CheckEqual(Run(
-          'function add(x,y) { return x+y; } add(434,343)'),
-          '777');
+          'function add(x, y) { return x + y; } add(434,343)'), '777');
         CheckEqual(Run(
-          'function add(x,y) { return x+y; } add(434.732,343.045)'),
-          '777.777');
+          'add(434.732,343.045)'), '777.777');
         CheckEqual(Run(
           'function fn(x,y) { return (Math.log(y) / Math.log(x)).toString(); }'#10 +
-          'fn(5,625)'),
-          '4'); // 5 x 5 x 5 x 5 = 625
+          'fn(5,625)'), '4'); // 5 x 5 x 5 x 5 = 625
         v := Run('Date.now()');
         CheckUtf8(abs(UnixMSTimeUtcFast - round(GetExtended(pointer(v)))) < 100,
           'timestamp - may fail during slow debugging [%]', [v]);
@@ -177,9 +175,29 @@ begin
         Check(PosEx(' ' +UInt32ToUtf8(CurrentYear), v) > 0);
         v := Run('console.log("Hello World");');
         Check(PosEx('''console'' is not defined', v) > 0);
+        j := cx.Call('', 'add', [777, i]);
+        Check(cx.ToVariantFree(j, va));
+        Check(va = i + 777);
+        j := cx.Call('', 'add', ['777', i]);
+        Check(cx.ToVariantFree(j, va));
+        Check(va = '777' + UInt32ToUtf8(i));
       end;
+      CheckEqual(Run('JSON.stringify({ x: 5, y: 6 })'), '{"x":5,"y":6}');
       CheckEqual(Run('[3, 4, 5].map(x => x ** 10).forEach(x => log(x))'), 'undefined');
       CheckEqual(output, '59049,1048576,9765625');
+      Check(not cx.GetValue('notexisting', j));
+      CheckEqual(cx.EvalGlobal('var car = {type:"Fiat", model:"500", color:"white"};'), '');
+      v := '{"type":"Fiat","model":"500","color":"white"}';
+      CheckEqual(Run('JSON.stringify(car)'), v);
+      Check(cx.GetValue(['car'], j));
+      CheckEqual(cx.ToUtf8(j), v);
+      Check(cx.ToVariantFree(j, va));
+      Check(_Safe(va, dvObject)^.Count = 3);
+      Check(cx.GetValue('add', j));
+      Check(cx.ToVariant(j, va));
+      v := cx.ToUtf8Free(j);
+      CheckEqual(v, 'function add(x, y) { return x + y; }');
+      Check(v = va);
     finally
       cx.Done;
     end;
