@@ -30,9 +30,13 @@
         <CompilerMessages>
           <IgnoredMessages idx11047="True" idx6058="True" idx5092="True" idx5091="True" idx5060="True" idx5058="True" idx5057="True" idx5028="True" idx5024="True" idx5023="True" idx4081="True" idx4079="True" idx4055="True" idx3187="True" idx3124="True" idx3123="True"/>
         </CompilerMessages>
-        <CustomOptions Value="-dNOSYNDBZEOS"/>
-        <OtherDefines Count="1">
+        <CustomOptions Value="-dNOSYNDBZEOS
+-dFPCMM_REPORTMEMORYLEAKS
+-dFPCMM_DEBUG"/>
+        <OtherDefines Count="3">
           <Define0 Value="NOSYNDBZEOS"/>
+          <Define1 Value="FPCMM_REPORTMEMORYLEAKS"/>
+          <Define2 Value="FPCMM_DEBUG"/>
         </OtherDefines>
       </Other>
     </CompilerOptions>
