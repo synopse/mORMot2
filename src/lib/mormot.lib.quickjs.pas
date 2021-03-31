@@ -344,9 +344,11 @@ type
     function EvalModule(const code, filename: RawUtf8): RawUtf8;
     /// raw execution of a JavaScript function
     // - if objectname='', the Global object will be used
+    // - will release the supplied args[] values when leaving
     function CallRaw(const objectname, funcname: RawUtf8;
       var args: JSValueDynArray): JSValueRaw; overload;
     /// raw execution of a JavaScript function from a JS Object
+    // - will release the supplied args[] values when leaving
     function CallRaw(obj: JSValue; const funcname: RawUtf8;
       var args: JSValueDynArray): JSValueRaw; overload;
     /// raw execution of a JavaScript function from a JS Object and Function
@@ -3226,6 +3228,7 @@ var
   obj, fun: JSValue;
   i: PtrInt;
 begin
+  JSValue(result).Empty;
   try
     if GetValue([pointer(objectname), pointer(funcname)], fun, @obj) then
       result := CallRaw(obj, fun, args);
@@ -3243,6 +3246,7 @@ var
   fun: JSValue;
   i: PtrInt;
 begin
+  JSValue(result).Empty;
   try
     if GetValue(obj, pointer(funcname), fun) then
       result := CallRaw(obj, fun, args);
@@ -3258,7 +3262,6 @@ function TJSContext.CallRaw(obj, fun: JSValue;
 var
   fpu: TFPUExceptionMask;
 begin
-  JSValue(result).Empty;
   fpu := BeforeLibraryCall;
   try
     result := JS_Call(@self, fun.Raw, obj.Raw, length(args), pointer(args));
@@ -3324,17 +3327,17 @@ begin
     JS_TAG_NULL:
       TVarData(res).vType := varNull;
     JS_TAG_STRING, JS_TAG_EXCEPTION:
-str:  with TVarData(res) do
       begin
-        vType := varString;
-        vAny := nil; // avoid GPF when assigning the RawUtf8
-        ToUtf8(v, RawUtf8(VAny), {nojson=}false);
+str:    TVarData(res).vType := varString;
+        TVarData(res).vAny := nil; // avoid GPF when assigning the RawUtf8
+        ToUtf8(v, RawUtf8(TVarData(res).VAny), {nojson=}true);
       end;
     JS_TAG_OBJECT:
       if JS_IsFunction(@self, JSValueRaw(v)) then
         goto str
       else
       begin
+        // JSONStringify() creates a temp json -> in-place parsing w/o ToUtf8()
         json.Empty;
         P := nil;
         fpu := BeforeLibraryCall;
@@ -3342,7 +3345,6 @@ str:  with TVarData(res) do
           json := JSValue(JS_JSONStringify(@self, JSValueRaw(v), JS_NULL, JS_NULL));
           if json.IsException then
             raise EQuickJS.Create(@self, 'JSContext.ToVariant');
-          // JSONStringify() creates a temp output buffer -> in-place parsing
           P := JS_ToCStringLen2(@self, @len, JSValueRaw(json), false);
           VariantLoadJson(res, P, nil, @JSON_OPTIONS[true], {double=}true);
         finally
@@ -3554,7 +3556,7 @@ begin
         if VInt64 >= 0 then
           result.From64(VInt64)
         else
-          result.FromFloat(VWord64);
+          result.FromFloat(UInt64(VInt64));
       varSingle:
         result.FromFloat(VSingle);
       varDouble:
