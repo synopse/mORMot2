@@ -247,10 +247,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// create a JS_TAG_INT if possible, JS_TAG_FLOAT64 otherwise
     procedure FromNum(val: double);
-      {$ifdef HASINLINE} inline; {$endif}
     /// create a JS_TAG_FLOAT64
     procedure FromFloat(val: double);
-      {$ifdef FPC} inline; {$endif}
   end;
 
   PJSValue = ^JSValue;
@@ -347,22 +345,23 @@ type
     /// raw execution of a JavaScript function
     // - if objectname='', the Global object will be used
     function CallRaw(const objectname, funcname: RawUtf8;
-      const args: JSValueDynArray): JSValueRaw; overload;
+      var args: JSValueDynArray): JSValueRaw; overload;
     /// raw execution of a JavaScript function from a JS Object
     function CallRaw(obj: JSValue; const funcname: RawUtf8;
-      const args: JSValueDynArray): JSValueRaw; overload;
+      var args: JSValueDynArray): JSValueRaw; overload;
     /// raw execution of a JavaScript function from a JS Object and Function
     function CallRaw(obj, fun: JSValue;
       const args: JSValueDynArray): JSValueRaw; overload;
-    /// raw execution of a JavaScript function
+    /// execution of a JavaScript function with direct parameters provided
     // - if objectname='', the Global object will be used
+    // - caller should make cx.Free(result) once done
     function Call(const objectname, funcname: RawUtf8;
       const args: array of const): JSValue; overload;
-    /// variant-oriented raw execution of a JavaScript function
+    /// variant-oriented execution of a JavaScript function
     // - if objectname='', the Global object will be used
     function CallVariant(const objectname, funcname: RawUtf8;
       const args: array of variant): variant; overload;
-    /// variant-oriented raw execution of a JavaScript function from a JS object
+    /// variant-oriented execution of a JavaScript function from a JS object
     function CallVariant(obj: JSValue; const funcname: RawUtf8;
       const args: array of variant): variant; overload;
 
@@ -398,7 +397,7 @@ type
     function FromW(const val: SynUnicode): JSValue; overload;
        {$ifdef HASINLINE} inline; {$endif}
     /// create a JS value from an "array of const" value
-    procedure From(const val: TVarRec; out result: JSValue); overload;
+    procedure FromVarRec(const val: TVarRec; out result: JSValue);
     /// create a JS value from a variant value
     procedure FromVariant(const val: variant; out result: JSValue);
     /// create a JS_TAG_OBJECT from a class instance published properties
@@ -3222,7 +3221,7 @@ begin
 end;
 
 function TJSContext.CallRaw(const objectname, funcname: RawUtf8;
-  const args: JSValueDynArray): JSValueRaw;
+  var args: JSValueDynArray): JSValueRaw;
 var
   obj, fun: JSValue;
   i: PtrInt;
@@ -3239,7 +3238,7 @@ begin
 end;
 
 function TJSContext.CallRaw(obj: JSValue; const funcname: RawUtf8;
-  const args: JSValueDynArray): JSValueRaw;
+  var args: JSValueDynArray): JSValueRaw;
 var
   fun: JSValue;
   i: PtrInt;
@@ -3276,7 +3275,7 @@ var
 begin
   SetLength(argv, length(args));
   for i := 0 to high(args) do
-    From(args[i], argv[i]);
+    FromVarRec(args[i], argv[i]);
   result := JSValue(CallRaw(objectname, funcname, argv));
 end;
 
@@ -3464,7 +3463,7 @@ begin
   result := JSValue(JS_NewDate(@self, DateTimeToUnixMSTime(val)));
 end;
 
-procedure TJSContext.From(const val: TVarRec; out result: JSValue);
+procedure TJSContext.FromVarRec(const val: TVarRec; out result: JSValue);
 var
   tmp: pointer;
 begin
@@ -3530,7 +3529,7 @@ begin
     case vt of
       varEmpty:
         {%H-}result.Empty;
-     varNull:
+      varNull:
         result.Fill(JS_TAG_NULL, 0);
       varSmallint:
         result.From32(VSmallInt);
@@ -3565,13 +3564,13 @@ begin
       varDate:
         FromDate(VDate, result);
       varString:
-        From(RawUtf8(VString));
+        result := From(RawUtf8(VString));
       {$ifdef HASVARUSTRING}
       varUString:
-        FromW(VAny, length(UnicodeString(VAny)));
+        result := FromW(VAny, length(UnicodeString(VAny)));
       {$endif HASVARUSTRING}
       varOleStr:
-        FromW(VAny, length(WideString(VAny)));
+        result := FromW(VAny, length(WideString(VAny)));
     else
       if SetVariantUnRefSimpleValue(val, tmp{%H-}) then
         // simple varByRef
@@ -3580,13 +3579,13 @@ begin
         // complex varByRef
         FromVariant(PVariant(VPointer)^, result)
       else if vt = varByRef or varString then
-        From(PRawUtf8(VString)^)
+        result := From(PRawUtf8(VString)^)
       else if vt = varByRef or varOleStr then
-        FromW(pointer(PWideString(VAny)^), length(PWideString(VAny)^))
+        result := FromW(PPointer(VAny)^, length(PWideString(VAny)^))
       else
       {$ifdef HASVARUSTRING}
       if vt = varByRef or varUString then
-        FromW(pointer(PUnicodeString(VAny)^), length(PUnicodeString(VAny)^))
+        result := FromW(PPointer(VAny)^, length(PUnicodeString(VAny)^))
       else
       {$endif HASVARUSTRING}
         // not recognizable vt -> seralize as JSON to handle also custom types
