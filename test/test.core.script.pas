@@ -181,6 +181,8 @@ begin
         j := cx.Call('', 'add', ['777', i]);
         Check(cx.ToVariantFree(j, va));
         Check(va = '777' + UInt32ToUtf8(i));
+        va := cx.CallVariant('', 'add', [777.777, i]);
+        CheckSame(double(va), 777.777 + i);
       end;
       CheckEqual(Run('JSON.stringify({ x: 5, y: 6 })'), '{"x":5,"y":6}');
       CheckEqual(Run('[3, 4, 5].map(x => x ** 10).forEach(x => log(x))'), 'undefined');

@@ -2653,7 +2653,6 @@ var
   {$ifdef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
   first, last: PByte;
   vmt: PAnsiChar;
-  small: PSmallBlockPoolHeader;
 
   function SeemsRealPointer(p: pointer): boolean;
   begin

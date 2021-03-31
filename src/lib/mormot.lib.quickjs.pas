@@ -24,7 +24,7 @@ interface
   It supports the ES2020 specification including modules, asynchronous
   generators, proxies and BigInt.
 
-  Copyright 2017-2018 Fabrice Bellard and Charlie Gordon - MIT License
+  Copyright 2017-2020 Fabrice Bellard and Charlie Gordon - MIT License
 
   Permission is hereby granted, free of charge, to any person
   obtaining a copy of this software and associated documentation files
@@ -51,8 +51,8 @@ interface
 
 {$ifdef LIBQUICKJSSTATIC}
   // we supply https://github.com/c-smile/quickjspp (uncompatible) fork statics
-  // - 64-bit JSValue on all platforms, JSX, debugger, Windows/Delphi compatible
-  // - amalgamation file with for static integration (malloc, assert)
+  // - 64-bit JSValue on all platforms, JSX, debugger, no quickjs-libc
+  // - amalgamation file with with patches for static linking (malloc, assert)
   // - see res/static/libquickjs for patched source and build instructions
   {$define JS_STRICT_NAN_BOXING}
   {$define LIBQUICKJS}
@@ -69,9 +69,12 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.json,
+  mormot.core.datetime,
   mormot.core.variants;
 
 {$ifdef JS_STRICT_NAN_BOXING}
+  // on 32+64-bit, JSValue is an 64-bit with double NAN bits used as tag
   {$define JS_ANY_NAN_BOXING}
 {$else}
   // on 32-bit, JSValue is an 64-bit with double NAN bits used as tag
@@ -253,6 +256,7 @@ type
   PJSValue = ^JSValue;
   JSValues = array[0..(MaxInt div SizeOf(JSValue)) - 1] of JSValue;
   PJSValues = ^JSValues;
+  JSValueDynArray = array of JSValue;
 
 
 type
@@ -285,14 +289,14 @@ type
     procedure Done;
       {$ifdef HASINLINE} inline; {$endif}
     /// release the memory used by a JSValueRaw - JS_FreeValue() alternative
-    procedure Free(var v: JSValueRaw); overload;
+    procedure FreeInlined(var v: JSValueRaw); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// release the memory used by a JSValue - JS_FreeValue() alternative
-    procedure Free(var v: JSValue); overload;
+    procedure FreeInlined(var v: JSValue); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// release the memory used by a JSValue - JS_FreeValue() alternative
     // - won't be inlined so may be used when performance don't matter
-    procedure FreeUnlikely(var v: JSValue);
+    procedure Free(var v: JSValue);
     /// retrieve a property of the global object
     // - caller should make cx.Free(val) once done with this value
     function GetValue(prop: PAnsiChar; out val: JSValue;
@@ -342,8 +346,25 @@ type
     function EvalModule(const code, filename: RawUtf8): RawUtf8;
     /// raw execution of a JavaScript function
     // - if objectname='', the Global object will be used
+    function CallRaw(const objectname, funcname: RawUtf8;
+      const args: JSValueDynArray): JSValueRaw; overload;
+    /// raw execution of a JavaScript function from a JS Object
+    function CallRaw(obj: JSValue; const funcname: RawUtf8;
+      const args: JSValueDynArray): JSValueRaw; overload;
+    /// raw execution of a JavaScript function from a JS Object and Function
+    function CallRaw(obj, fun: JSValue;
+      const args: JSValueDynArray): JSValueRaw; overload;
+    /// raw execution of a JavaScript function
+    // - if objectname='', the Global object will be used
     function Call(const objectname, funcname: RawUtf8;
-      const args: array of const): JSValue;
+      const args: array of const): JSValue; overload;
+    /// variant-oriented raw execution of a JavaScript function
+    // - if objectname='', the Global object will be used
+    function CallVariant(const objectname, funcname: RawUtf8;
+      const args: array of variant): variant; overload;
+    /// variant-oriented raw execution of a JavaScript function from a JS object
+    function CallVariant(obj: JSValue; const funcname: RawUtf8;
+      const args: array of variant): variant; overload;
 
     /// convert a JSValue into its RawUtf8 text
     // - a JS_TAG_OBJECT returns its JSON serialization unless noJson is set
@@ -384,6 +405,10 @@ type
     procedure FromClass(instance: TObject; out result: JSValue);
     /// create a JS Value by unserializing JSON - maybe creating a JS_TAG_OBJECT
     procedure FromJson(const json: RawUtf8; out result: JSValue);
+    /// create a Date object value from its Unix MS timestamp
+    procedure FromUnixMSTime(val: TUnixMSTime; out result: JSValue);
+    /// create a Date object value from a TDateTime value
+    procedure FromDate(val: TDateTime; out result: JSValue);
   end;
 
 
@@ -875,6 +900,7 @@ type
   end;
 
 
+
 { ************ QuickJS Functions API }
 
 {$ifdef LIBQUICKJSSTATIC}
@@ -1239,6 +1265,9 @@ function JS_IsConstructor(ctx: JSContext; val: JSValueConst): JS_BOOL;
 
 function JS_SetConstructorBit(ctx: JSContext; func_obj: JSValueConst;
   val: JS_BOOL): JS_BOOL;
+   cdecl; external {$ifdef QJSDLL}QJ{$endif};
+
+function JS_NewDate(ctx: JSContext; ms_1970: double): JSValueRaw;
    cdecl; external {$ifdef QJSDLL}QJ{$endif};
 
 function JS_NewArray(ctx: JSContext): JSValueRaw;
@@ -2425,7 +2454,7 @@ constructor EQuickJS.Create(ctx: pointer; caller: PAnsiChar; var tofree: JSValue
   stacktrace: boolean);
 begin
   Create(ctx, caller, stacktrace);
-  JSContext(ctx).FreeUnlikely(tofree);
+  JSContext(ctx).Free(tofree);
 end;
 
 
@@ -2899,9 +2928,9 @@ begin
   JS_FreeContext(@self);
 end;
 
-{$ifdef JS_STRICT_NAN_BOXING}
+{$ifdef JS_STRICT_NAN_BOXING} // worth manual inlining
 
-procedure TJSContext.Free(var v: JSValueRaw);
+procedure TJSContext.FreeInlined(var v: JSValueRaw);
 {$ifdef CPU64}
 var
   q: UInt64;
@@ -2927,7 +2956,7 @@ end;
 
 {$else}
 
-procedure TJSContext.Free(var v: JSValueRaw);
+procedure TJSContext.FreeInlined(var v: JSValueRaw);
 begin
   if JSValue(v).IsRefCounted and
      JSValue(v).DecRefCnt then
@@ -2936,15 +2965,15 @@ end;
 
 {$endif JS_STRICT_NAN_BOXING}
 
-procedure TJSContext.Free(var v: JSValue);
+procedure TJSContext.FreeInlined(var v: JSValue);
 begin
-  Free(JSValueRaw(v));
+  FreeInlined(JSValueRaw(v));
   v.Empty;
 end;
 
-procedure TJSContext.FreeUnlikely(var v: JSValue);
+procedure TJSContext.Free(var v: JSValue);
 begin
-  Free(JSValueRaw(v));
+  FreeInlined(JSValueRaw(v));
   v.Empty;
 end;
 
@@ -2969,7 +2998,7 @@ begin
       begin
         if raiseIfNotFound then
           raise EQuickJS.Create(@self, prop, val);
-        FreeUnlikely(val);
+        Free(val);
         result := false;
       end;
   else
@@ -2981,7 +3010,7 @@ function TJSContext.GetValueFree(obj: JSValue; prop: PAnsiChar;
   out val: JSValue; raiseIfNotFound: boolean): boolean;
 begin
   result := GetValue(obj, prop, val, raiseIfNotFound);
-  Free(JSValueRaw(obj));
+  FreeInlined(JSValueRaw(obj));
 end;
 
 function TJSContext.GetValue(const prop: array of PAnsiChar; out val: JSValue;
@@ -3040,7 +3069,7 @@ begin
   if not GetValue(obj, o) then
     exit;
   SetFunction(o, prop, func, args);
-  FreeUnlikely(o);
+  Free(o);
 end;
 
 procedure TJSContext.ToUtf8(v: JSValue; var s: RawUtf8; noJson: boolean);
@@ -3061,7 +3090,7 @@ begin
   FastSetString(s, P, len);
   JS_FreeCString(@self, P);
   if freev then
-    FreeUnlikely(v);
+    Free(v);
 end;
 
 function TJSContext.ToUtf8(const v: JSValue; noJson: boolean): RawUtf8;
@@ -3082,7 +3111,7 @@ end;
 function TJSContext.ToUtf8Free(var v: JSValue; noJson: boolean): RawUtf8;
 begin
   ToUtF8(v, result, noJson);
-  Free(v);
+  FreeInlined(v);
 end;
 
 procedure TJSContext.AddUtf8(
@@ -3122,10 +3151,10 @@ begin
   begin
     s := JS_GetPropertyStr(@self, e, 'stack');
     AddUtf8(JSValue(s), msg);
-    FreeUnlikely(JSValue(s));
+    Free(JSValue(s));
   end;
   if reason = nil then
-    FreeUnlikely(JSValue(e));
+    Free(JSValue(e));
 end;
 
 procedure TJSContext.ErrorDump(stacktrace: boolean; reason: PJSValue);
@@ -3173,7 +3202,7 @@ var
   v: JSValue;
 begin
   v := Eval(code, filename, JS_EVAL_TYPE_GLOBAL, result);
-  FreeUnlikely(v);
+  Free(v);
 end;
 
 function TJSContext.EvalModule(const code, filename: RawUtf8): RawUtf8;
@@ -3189,33 +3218,94 @@ begin
     if v.IsException then
       ErrorMessage({stack=}true, result);
   end;
-  FreeUnlikely(v);
+  Free(v);
+end;
+
+function TJSContext.CallRaw(const objectname, funcname: RawUtf8;
+  const args: JSValueDynArray): JSValueRaw;
+var
+  obj, fun: JSValue;
+  i: PtrInt;
+begin
+  try
+    if GetValue([pointer(objectname), pointer(funcname)], fun, @obj) then
+      result := CallRaw(obj, fun, args);
+  finally
+    for i := 0 to high(args) do
+      FreeInlined(args[i]);
+    Free(obj);
+    Free(fun);
+  end;
+end;
+
+function TJSContext.CallRaw(obj: JSValue; const funcname: RawUtf8;
+  const args: JSValueDynArray): JSValueRaw;
+var
+  fun: JSValue;
+  i: PtrInt;
+begin
+  try
+    if GetValue(obj, pointer(funcname), fun) then
+      result := CallRaw(obj, fun, args);
+  finally
+    for i := 0 to high(args) do
+      FreeInlined(args[i]);
+    Free(fun);
+  end;
+end;
+
+function TJSContext.CallRaw(obj, fun: JSValue;
+  const args: JSValueDynArray): JSValueRaw;
+var
+  fpu: TFPUExceptionMask;
+begin
+  JSValue(result).Empty;
+  fpu := BeforeLibraryCall;
+  try
+    result := JS_Call(@self, fun.Raw, obj.Raw, length(args), pointer(args));
+  finally
+    AfterLibraryCall(fpu);
+  end;
 end;
 
 function TJSContext.Call(const objectname, funcname: RawUtf8;
   const args: array of const): JSValue;
 var
-  obj, fun: JSValue;
-  fpu: TFPUExceptionMask;
   i: PtrInt;
-  argv: array of JSValue;
+  argv: JSValueDynArray;
 begin
-  result.Empty;
-  fpu := BeforeLibraryCall;
-  try
-    if not GetValue([pointer(objectname), pointer(funcname)], fun, @obj) then
-      exit;
-    SetLength(argv, length(args));
-    for i := 0 to high(args) do
-      From(args[i], argv[i]);
-    result := JSValue(JS_Call(@self, fun.Raw, obj.Raw, length(argv), pointer(argv)));
-    for i := 0 to high(args) do
-      Free(argv[i]);
-  finally
-    Free(obj);
-    Free(fun);
-    AfterLibraryCall(fpu);
-  end;
+  SetLength(argv, length(args));
+  for i := 0 to high(args) do
+    From(args[i], argv[i]);
+  result := JSValue(CallRaw(objectname, funcname, argv));
+end;
+
+function TJSContext.CallVariant(const objectname, funcname: RawUtf8;
+  const args: array of variant): variant;
+var
+  i: PtrInt;
+  argv: JSValueDynArray;
+  res: JSValue;
+begin
+  SetLength(argv, length(args));
+  for i := 0 to high(args) do
+    FromVariant(args[i], argv[i]);
+  res := JSValue(CallRaw(objectname, funcname, argv));
+  ToVariantFree(res, result);
+end;
+
+function TJSContext.CallVariant(obj: JSValue; const funcname: RawUtf8;
+  const args: array of variant): variant;
+var
+  i: PtrInt;
+  argv: JSValueDynArray;
+  res: JSValue;
+begin
+  SetLength(argv, length(args));
+  for i := 0 to high(args) do
+    FromVariant(args[i], argv[i]);
+  res := JSValue(CallRaw(obj, funcname, argv));
+  ToVariantFree(res, result);
 end;
 
 function TJSContext.ToVariant(var v: JSValue; var res: variant): boolean;
@@ -3311,7 +3401,7 @@ end;
 function TJSContext.ToVariantFree(var v: JSValue; var res: variant): boolean;
 begin
   result := ToVariant(v, res);
-  Free(v);
+  FreeInlined(v);
 end;
 
 function TJSContext.From(P: PUtf8Char; Len: PtrInt): JSValue;
@@ -3343,6 +3433,35 @@ end;
 function TJSContext.FromW(const val: SynUnicode): JSValue;
 begin
   result := FromW(pointer(val), length(val));
+end;
+
+procedure TJSContext.FromClass(instance: TObject; out result: JSValue);
+begin
+  FromJson(ObjectToJson(instance), result);
+end;
+
+procedure TJSContext.FromJson(const json: RawUtf8; out result: JSValue);
+var
+  fpu: TFPUExceptionMask;
+begin
+  fpu := BeforeLibraryCall;
+  try
+    result := JSValue(JS_ParseJSON(@self, pointer(json), length(json), '<inline>'));
+    if result.IsException then
+      raise EQuickJS.Create(@self, 'JSContext.FromJson', result);
+  finally
+    AfterLibraryCall(fpu);
+  end;
+end;
+
+procedure TJSContext.FromUnixMSTime(val: TUnixMSTime; out result: JSValue);
+begin
+  result := JSValue(JS_NewDate(@self, val));
+end;
+
+procedure TJSContext.FromDate(val: TDateTime; out result: JSValue);
+begin
+  result := JSValue(JS_NewDate(@self, DateTimeToUnixMSTime(val)));
 end;
 
 procedure TJSContext.From(const val: TVarRec; out result: JSValue);
@@ -3396,28 +3515,83 @@ begin
 end;
 
 procedure TJSContext.FromVariant(const val: variant; out result: JSValue);
-begin
-  // not called often, so no need to make direct TVarData.VType case
-  FromJson(VariantSaveJson(val), result);
-end;
 
-procedure TJSContext.FromClass(instance: TObject; out result: JSValue);
-begin
-  FromJson(ObjectToJson(instance), result);
-end;
-
-procedure TJSContext.FromJson(const json: RawUtf8; out result: JSValue);
-var
-  fpu: TFPUExceptionMask;
-begin
-  fpu := BeforeLibraryCall;
-  try
-    result := JSValue(JS_ParseJSON(@self, pointer(json), length(json), '<inline>'));
-    if result.IsException then
-      raise EQuickJS.Create(@self, 'JSContext.FromJson', result);
-  finally
-    AfterLibraryCall(fpu);
+  procedure DoComplex;
+  begin // sub-procedure to avoid temporary try..finally for other cases
+    FromJson(VariantSaveJson(val), result);
   end;
+
+var
+  tmp: TVarData;
+  vt: cardinal;
+begin
+  vt := TVarData(val).VType;
+  with TVarData(val) do
+    case vt of
+      varEmpty:
+        {%H-}result.Empty;
+     varNull:
+        result.Fill(JS_TAG_NULL, 0);
+      varSmallint:
+        result.From32(VSmallInt);
+      varShortInt:
+        result.From32(VShortInt);
+      varWord:
+        result.From32(VWord);
+      varLongWord:
+        if VInteger >= 0 then
+          result.From32(VLongWord)
+        else
+          result.FromFloat(VLongWord);
+      varByte:
+        result.From32(VByte);
+      varBoolean:
+        result.From(VBoolean);
+      varInteger:
+        result.From32(VInteger);
+      varInt64:
+        result.From64(VInt64);
+      varWord64:
+        if VInt64 >= 0 then
+          result.From64(VInt64)
+        else
+          result.FromFloat(VWord64);
+      varSingle:
+        result.FromFloat(VSingle);
+      varDouble:
+        result.FromFloat(VDouble);
+      varCurrency:
+        result.FromFloat(VCurrency);
+      varDate:
+        FromDate(VDate, result);
+      varString:
+        From(RawUtf8(VString));
+      {$ifdef HASVARUSTRING}
+      varUString:
+        FromW(VAny, length(UnicodeString(VAny)));
+      {$endif HASVARUSTRING}
+      varOleStr:
+        FromW(VAny, length(WideString(VAny)));
+    else
+      if SetVariantUnRefSimpleValue(val, tmp{%H-}) then
+        // simple varByRef
+        FromVariant(Variant(tmp), result)
+      else if vt = varVariant or varByRef then
+        // complex varByRef
+        FromVariant(PVariant(VPointer)^, result)
+      else if vt = varByRef or varString then
+        From(PRawUtf8(VString)^)
+      else if vt = varByRef or varOleStr then
+        FromW(pointer(PWideString(VAny)^), length(PWideString(VAny)^))
+      else
+      {$ifdef HASVARUSTRING}
+      if vt = varByRef or varUString then
+        FromW(pointer(PUnicodeString(VAny)^), length(PUnicodeString(VAny)^))
+      else
+      {$endif HASVARUSTRING}
+        // not recognizable vt -> seralize as JSON to handle also custom types
+        DoComplex;
+    end;
 end;
 
 

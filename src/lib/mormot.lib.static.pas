@@ -202,7 +202,7 @@ end;
 procedure pas_assertfailed(cond, fn: PAnsiChar; line: integer); cdecl;
  {$ifdef FPC} public name _PREFIX + 'pas_assertfailed'; {$endif}
 begin
-  raise EExternal.CreateFmt('Panic in %s:%d: %s', [fn, line, cond]);
+  raise EExternal.CreateFmt('Panic in %s:%d: assert(%s)', [fn, line, cond]);
 end;
 
 
