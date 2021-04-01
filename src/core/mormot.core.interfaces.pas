@@ -794,6 +794,42 @@ type
     // - this default implementation will call TryResolve() on a local IInterface
     // which is somewhat slow, and should better be overriden
     function Implements(aInterface: PRttiInfo): boolean; virtual;
+    /// can be used to perform an DI/IoC for a given interface
+    // - will search for the supplied interface to its internal list of resolvers
+    // - returns TRUE and set the Obj variable with a matching instance
+    // - can be used as such to resolve an ICalculator interface:
+    // ! var calc: ICalculator;
+    // ! begin
+    // !   if Catalog.Resolve(TypeInfo(ICalculator),calc) then
+    // !   ... use calc methods
+    function Resolve(aInterface: PRttiInfo; out Obj): boolean; overload;
+    /// can be used to perform an DI/IoC for a given interface
+    // - you shall have registered the interface TGUID by a previous call to
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator),...])
+    // - returns TRUE and set the Obj variable with a matching instance
+    // - returns FALSE (or raise aRaiseIfNotFound) if aGuid is not available
+    // - can be used as such to resolve an ICalculator interface:
+    // ! var calc: ICalculator;
+    // ! begin
+    // !   if ServiceContainer.Resolve(ICalculator,cal) then
+    // !   ... use calc methods
+    function Resolve(const aGuid: TGUID; out Obj;
+      aRaiseIfNotFound: EInterfaceResolver = nil): boolean; overload;
+    /// can be used to perform several DI/IoC for a given set of interfaces
+    // - here interfaces and instances are provided as TypeInfo,@Instance pairs
+    // - raise an EServiceException if any interface can't be resolved, unless
+    // aRaiseExceptionIfNotFound is set to FALSE
+    procedure ResolveByPair(const aInterfaceObjPairs: array of pointer;
+      aRaiseExceptionIfNotFound: boolean = true);
+    /// can be used to perform several DI/IoC for a given set of interfaces
+    // - here interfaces and instances are provided as TGUID and @Instance
+    // - you shall have registered the interface TGUID by a previous call to
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator),...])
+    // - raise an EServiceException if any interface can't be resolved, unless
+    // aRaiseExceptionIfNotFound is set to FALSE
+    procedure Resolve(const aInterfaces: array of TGUID;
+                      const aObjs: array of pointer;
+      aRaiseExceptionIfNotFound: boolean = true); overload;
   end;
   {$M-}
 
@@ -852,12 +888,17 @@ type
   /// how TInterfaceResolverList store one interface/class
   TInterfaceResolverListEntries = array of TInterfaceResolverListEntry;
 
+  /// event signature used by TInterfaceResolverList.OnCreateInstance
+  TOnResolverCreateInstance = procedure(
+    Sender: TInterfaceResolver; Instance: TInterfacedObject) of object;
+
   /// register a list of classes to implement some interfaces
   // - as used e.g. by TInterfaceResolverInjected.RegisterGlobal()
   // - this class is thread-safe
   TInterfaceResolverList = class(TInterfaceResolver)
   protected
     fEntry: TInterfaceResolverListEntries;
+    fOnCreateInstance: TOnResolverCreateInstance;
     fSafe: TSynLocker;
     function PrepareAddAndLock(aInterface: PRttiInfo;
       aImplementationClass: TClass): PInterfaceEntry;
@@ -883,6 +924,9 @@ type
     /// unregister a given implementation class for an interface
     // - raise EInterfaceResolver if an TInterfacedObject instance was registered
     procedure Delete(aInterface: PRttiInfo);
+    /// is called when a new aImplementationClass instance has been created
+    property OnCreateInstance: TOnResolverCreateInstance
+      read fOnCreateInstance write fOnCreateInstance;
     /// low-level access to the internal registered interface/class list
     property Entry: TInterfaceResolverListEntries
       read fEntry;
@@ -945,42 +989,6 @@ type
       overload; virtual;
     /// check if a given interface can be resolved, from its RTTI
     function Implements(aInterface: PRttiInfo): boolean; override;
-    /// can be used to perform an DI/IoC for a given interface
-    // - will search for the supplied interface to its internal list of resolvers
-    // - returns TRUE and set the Obj variable with a matching instance
-    // - can be used as such to resolve an ICalculator interface:
-    // ! var calc: ICalculator;
-    // ! begin
-    // !   if Catalog.Resolve(TypeInfo(ICalculator),calc) then
-    // !   ... use calc methods
-    function Resolve(aInterface: PRttiInfo; out Obj): boolean; overload;
-    /// can be used to perform an DI/IoC for a given interface
-    // - you shall have registered the interface TGUID by a previous call to
-    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator),...])
-    // - returns TRUE and set the Obj variable with a matching instance
-    // - returns FALSE (or raise aRaiseIfNotFound) if aGuid is not available
-    // - can be used as such to resolve an ICalculator interface:
-    // ! var calc: ICalculator;
-    // ! begin
-    // !   if ServiceContainer.Resolve(ICalculator,cal) then
-    // !   ... use calc methods
-    function Resolve(const aGuid: TGUID; out Obj;
-      aRaiseIfNotFound: EInterfaceResolver = nil): boolean; overload;
-    /// can be used to perform several DI/IoC for a given set of interfaces
-    // - here interfaces and instances are provided as TypeInfo,@Instance pairs
-    // - raise an EServiceException if any interface can't be resolved, unless
-    // aRaiseExceptionIfNotFound is set to FALSE
-    procedure ResolveByPair(const aInterfaceObjPairs: array of pointer;
-      aRaiseExceptionIfNotFound: boolean = true);
-    /// can be used to perform several DI/IoC for a given set of interfaces
-    // - here interfaces and instances are provided as TGUID and @Instance
-    // - you shall have registered the interface TGUID by a previous call to
-    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator),...])
-    // - raise an EServiceException if any interface can't be resolved, unless
-    // aRaiseExceptionIfNotFound is set to FALSE
-    procedure Resolve(const aInterfaces: array of TGUID;
-      const aObjs: array of pointer;
-      aRaiseExceptionIfNotFound: boolean = true); overload;
     /// release all used instances
     // - including all TInterfaceStub instances as specified to Inject(aStubsByGUID)
     // - will call _Release on all TInterfacedObject dependencies
@@ -4755,6 +4763,73 @@ begin
   result := TryResolve(aInterface, dummy);
 end;
 
+function TInterfaceResolver.Resolve(aInterface: PRttiInfo; out Obj): boolean;
+begin
+  if self = nil then
+    result := false
+  else
+    result := TryResolve(aInterface, Obj);
+end;
+
+function TInterfaceResolver.Resolve(const aGuid: TGUID; out Obj;
+  aRaiseIfNotFound: EInterfaceResolver): boolean;
+var
+  known: TInterfaceFactory;
+begin
+  if self = nil then
+    result := false
+  else
+  begin
+    known := TInterfaceFactory.Get(aGuid);
+    if known <> nil then
+      result := TryResolve(known.fInterfaceTypeInfo, Obj)
+    else
+      result := false;
+  end;
+  if (aRaiseIfNotFound <> nil) and
+     not result then
+    raise aRaiseIfNotFound.CreateUtf8('%.Resolve(%) unsatisfied',
+      [self, GuidToShort(aGUID)]);
+end;
+
+procedure TInterfaceResolver.ResolveByPair(
+  const aInterfaceObjPairs: array of pointer; aRaiseExceptionIfNotFound: boolean);
+var
+  n, i: PtrInt;
+begin
+  n := length(aInterfaceObjPairs);
+  if (self = nil) or
+     (n = 0) or
+     (n and 1 = 1) then
+    raise EInterfaceResolver.CreateUtf8('%.Resolve([odd])', [self]);
+  for i := 0 to (n shr 1) - 1 do
+    if not TryResolve(aInterfaceObjPairs[i * 2], aInterfaceObjPairs[i * 2 + 1]^) then
+      if aRaiseExceptionIfNotFound then
+        raise EInterfaceResolver.CreateUtf8('%.ResolveByPair(%) unsatisfied',
+          [self, PRttiInfo(aInterfaceObjPairs[i * 2])^.RawName]);
+end;
+
+procedure TInterfaceResolver.Resolve(const aInterfaces: array of TGUID;
+  const aObjs: array of pointer; aRaiseExceptionIfNotFound: boolean);
+var
+  n, i: PtrInt;
+  info: PRttiInfo;
+begin
+  n := length(aInterfaces);
+  if (self = nil) or
+     (n = 0) or
+     (n <> length(aObjs)) then
+    raise EInterfaceResolver.CreateUtf8('%.Resolve([?,?])', [self]);
+  for i := 0 to n - 1 do
+    if PPointer(aObjs[i])^ = nil then
+    begin
+      info := TInterfaceFactory.Guid2TypeInfo(aInterfaces[i]);
+      if not TryResolve(info, aObjs[i]^) then
+        if aRaiseExceptionIfNotFound then
+          raise EInterfaceResolver.CreateUtf8('%.Resolve(%) unsatisfied',
+            [self, info^.RawName]);
+    end;
+end;
 
 { TInterfaceResolverForSingleInterface }
 
@@ -4984,6 +5059,7 @@ var
   e: PInterfaceResolverListEntry;
   new: TInterfacedObject;
 begin
+  new := nil;
   result := true;
   fSafe.Lock;
   try
@@ -5000,13 +5076,19 @@ begin
       begin
         // create a new instance of this registered implementation class
         new := e^.ImplementationClass.ClassNewInstance;
-        if GetInterfaceFromEntry(new , e^.InterfaceEntry, Obj) then
-          exit;
-        new.Free; // avoid memory leak (paranoid)
+        if not GetInterfaceFromEntry(new , e^.InterfaceEntry, Obj) then
+          FreeAndNil(new); // avoid memory leak (paranoid)
       end;
     end;
   finally
     fSafe.UnLock;
+  end;
+  if new <> nil then
+  begin
+    if Assigned(fOnCreateInstance) then
+      // this event should be called outside fSafe.Lock
+      fOnCreateInstance(self, new);
+    exit;
   end;
   result := false;
 end;
@@ -5130,72 +5212,6 @@ begin
   end;
 end;
 
-function TInterfaceResolverInjected.Resolve(aInterface: PRttiInfo; out Obj): boolean;
-begin
-  if self = nil then
-    result := false
-  else
-    result := TryResolve(aInterface, Obj);
-end;
-
-function TInterfaceResolverInjected.Resolve(const aGuid: TGUID; out Obj;
-  aRaiseIfNotFound: EInterfaceResolver): boolean;
-var
-  known: TInterfaceFactory;
-begin
-  if self = nil then
-    result := false
-  else
-  begin
-    known := TInterfaceFactory.Get(aGuid);
-    if known <> nil then
-      result := Resolve(known.fInterfaceTypeInfo, Obj)
-    else
-      result := false;
-  end;
-  if (aRaiseIfNotFound <> nil) and
-     not result then
-    raise aRaiseIfNotFound.CreateUtf8('%.Resolve(%) unsatisfied',
-      [self, GuidToShort(aGUID)]);
-end;
-
-procedure TInterfaceResolverInjected.ResolveByPair(
-  const aInterfaceObjPairs: array of pointer; aRaiseExceptionIfNotFound: boolean);
-var
-  n, i: PtrInt;
-begin
-  n := length(aInterfaceObjPairs);
-  if (n = 0) or
-     (n and 1 = 1) then
-    raise EInterfaceResolver.CreateUtf8('%.Resolve([odd])', [self]);
-  for i := 0 to (n shr 1) - 1 do
-    if not Resolve(aInterfaceObjPairs[i * 2], aInterfaceObjPairs[i * 2 + 1]^) then
-      if aRaiseExceptionIfNotFound then
-        raise EInterfaceResolver.CreateUtf8('%.ResolveByPair(%) unsatisfied',
-          [self, PRttiInfo(aInterfaceObjPairs[i * 2])^.RawName]);
-end;
-
-procedure TInterfaceResolverInjected.Resolve(const aInterfaces: array of TGUID;
-  const aObjs: array of pointer; aRaiseExceptionIfNotFound: boolean);
-var
-  n, i: PtrInt;
-  info: PRttiInfo;
-begin
-  n := length(aInterfaces);
-  if (n = 0) or
-     (n <> length(aObjs)) then
-    raise EInterfaceResolver.CreateUtf8('%.Resolve([?,?])', [self]);
-  for i := 0 to n - 1 do
-    if PPointer(aObjs[i])^ = nil then
-    begin
-      info := TInterfaceFactory.Guid2TypeInfo(aInterfaces[i]);
-      if not Resolve(info, aObjs[i]^) then
-        if aRaiseExceptionIfNotFound then
-          raise EInterfaceResolver.CreateUtf8('%.Resolve(%) unsatisfied',
-            [self, info^.RawName]);
-    end;
-end;
-
 
 { TInjectableObject }
 
@@ -5222,7 +5238,7 @@ var
 begin
   info := TInterfaceFactory.Guid2TypeInfo(aGuid);
   if not TryResolve(info, Obj) then
-    raise EInterfaceResolver.CreateUtf8('%.Resolve(%): Interface not registered',
+    raise EInterfaceResolver.CreateUtf8('%.Resolve(%): unsatisfied',
       [self, info^.RawName]);
 end;
 
@@ -5248,40 +5264,40 @@ begin
     raise EInterfaceResolver.CreateUtf8('%.Resolve(?,?)', [self]);
 end;
 
+type // to access fAutoCreateInterfaces protected field
+  TRttiCustomWrapper = class(TRttiJson);
+
 procedure TInjectableObject.AutoResolve(aRaiseEServiceExceptionIfNotFound: boolean);
 var
-  i: integer;
+  rtti: TRttiJson;
+  n: integer;
+  p: ^PRttiCustomProp;
   addr: pointer;
-  CT: TClass;
-  P: PRttiProp;
 begin
   if (self = nil) or
      (fResolver = nil) then
     raise EInterfaceResolver.CreateUtf8(
       '%.AutoResolve with no prior registration', [self]);
-  CT := ClassType;
-  while CT <> TInjectableObject do
-  begin
-    for i := 1 to GetRttiProp(CT, P) do
-    begin
-      if P^.TypeInfo^.Kind = rkInterface then
-        if P^.GetterIsField then
-        begin
-          addr := P^.GetterAddr(self);
-          if not TryResolve(P^.TypeInfo, addr^) then
-            if aRaiseEServiceExceptionIfNotFound then
-              raise EInterfaceResolver.CreateUtf8(
-                '%.AutoResolve: impossible to resolve published property %: %',
-                [self, P^.Name^, P^.TypeInfo^.RawName]);
-        end
-        else
-          raise EInterfaceResolver.CreateUtf8('%.AutoResolve: published ' +
-            'property %: % should directly read the field',
-            [self, P^.Name^, P^.TypeInfo^.RawName]);
-      P := P^.Next;
-    end;
-    CT := GetClassParent(CT);
-  end;
+  // inlined ClassPropertiesGet
+  rtti := PPointer(PPAnsiChar(self)^ + vmtAutoTable)^;
+  if (rtti = nil) or
+     not (rcfAutoCreateFields in rtti.Flags) then
+    rtti := DoRegisterAutoCreateFields(self);
+  // resolve all published interface fields
+  p := pointer(TRttiCustomWrapper(rtti).fAutoCreateInterfaces);
+  if p = nil then
+    exit;
+  n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF; // length(AutoCreateClasses)
+  repeat
+    addr := PAnsiChar(self) + p^^.OffsetGet;
+    if not TryResolve(p^^.Value.Info, addr^) then
+      if aRaiseEServiceExceptionIfNotFound then
+        raise EInterfaceResolver.CreateUtf8(
+          '%.AutoResolve: impossible to resolve published property %: %',
+          [self, p^^.Name, p^^.Value.Name]);
+    inc(p);
+    dec(n);
+  until n = 0;
 end;
 
 constructor TInjectableObject.CreateInjected(const aStubsByGUID: array of TGUID;
