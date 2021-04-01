@@ -943,20 +943,20 @@ begin
         fImplementationClass).Create;
     ickInjectable:
       result := TInjectableObjectClass(
-        fImplementationClass).CreateWithResolver(fRestServer.Services, true);
+        fImplementationClass).CreateWithResolver(fResolver, true);
     ickInjectableRest:
       result := TInjectableObjectRestClass(fImplementationClass).
-        CreateWithResolverAndRest(fRestServer.Services, self, RestServer, true);
+        CreateWithResolverAndRest(fResolver, self, fRestServer, true);
     ickFromInjectedResolver:
       begin
         dummyObj := nil;
-        if not (fRestServer.Services as TServiceContainerServer).
-            TryResolveInternal(fInterface.InterfaceTypeInfo, dummyObj) then
+        if not TServiceContainerServer(fResolver).TryResolve(
+            fInterface.InterfaceTypeInfo, dummyObj) then
           raise EInterfaceFactory.CreateUtf8(
-            'ickFromInjectedResolver: TryResolveInternal(%)=false',
+            'ickFromInjectedResolver: TryResolve(%) failed',
             [fInterface.InterfaceName]);
         result := TInterfacedObject(ObjectFromInterface(IInterface(dummyObj)));
-        // RefCount=1 after TryResolveInternal() -> adjust
+        // RefCount=1 after TryResolve() -> adjust
         dec(TInjectableObjectRest(result).fRefCount);
       end;
   else
@@ -976,6 +976,7 @@ var
   a: PtrInt;
   len: integer;
 begin
+  // append the input/output/error parameters as batch JSON
   W := (Sender as TInterfaceMethodExecute).TempTextWriter;
   with Sender.Method^ do
     case Step of

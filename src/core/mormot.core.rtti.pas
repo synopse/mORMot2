@@ -1437,6 +1437,8 @@ function GetRttiInterface(aTypeInfo: PRttiInfo;
 // - calling this function with a pre-computed PInterfaceEntry value is faster
 // than calling the TObject.GetInterface() method, especially when the class
 // implements several interfaces, since it avoid a slow GUID lookup
+// - if the interface is retrieved using a getter, will fallback to
+// the regular TObject.GetInterface RTL method
 function GetInterfaceFromEntry(Instance: TObject; Entry: PInterfaceEntry;
   out Obj): boolean;
 
@@ -2002,7 +2004,7 @@ type
     fJsonLoad: pointer; // contains a TRttiJsonLoad - used if fJsonReader=nil
     fJsonSave: pointer; // contains a TRttiJsonSave - used if fJsonWriter=nil
     fJsonReader, fJsonWriter: TMethod; // TOnRttiJsonRead/TOnRttiJsonWrite
-    fClassNewInstance: TRttiCustomNewInstance;
+    fClassNewInstance: TRttiCustomNewInstance; // mormot.core.json implemented
     fAutoCreateClasses,
     fAutoCreateObjArrays: PRttiCustomPropDynArray; // set by SetAutoCreateFields
     // used by NoRttiSetAndRegister()
@@ -4671,47 +4673,31 @@ begin
   result := length(aDefinition.Methods);
 end;
 
-
 function GetInterfaceFromEntry(Instance: TObject; Entry: PInterfaceEntry;
   out Obj): boolean;
-
-  {$ifndef FPC}
-  procedure UseImplGetter(Instance: TObject; ImplGetter: PtrInt;
-    var result: IInterface);
-  type // function(Instance: TObject) trick does not work with CPU64 :(
-    TGetProc = function: IInterface of object;
-  var
-    Call: TMethod;
-  begin
-    // sub-procedure to avoid try..finally for TGetProc(): Interface result
-    if PropWrap(ImplGetter).Kind = ptVirtual then
-      Call.Code := PPointer(PPtrInt(Instance)^ + SmallInt(ImplGetter))^
-    else
-      Call.Code := Pointer(ImplGetter);
-    Call.Data := Instance;
-    result := TGetProc(Call);
-  end;
-  {$endif FPC}
-
 begin
-  Pointer(Obj) := nil;
+  result := false;
+  pointer(Obj) := nil;
   if Entry <> nil then
+    {$ifdef FPC}
+    if Entry^.IType = etStandard then
+    {$else}
     if Entry^.IOffset <> 0 then
+    {$endif FPC}
     begin
+      // fast interface retrieval from the interface field instance
       Pointer(Obj) := Pointer(PAnsiChar(Instance) + Entry^.IOffset);
       if Pointer(Obj) <> nil then
+      begin
         IInterface(Obj)._AddRef;
+        result := true;
+        exit;
+      end;
     end
-  {$ifndef FPC}
-  else if PropWrap(Entry^.ImplGetter).Kind = ptField then
-    IInterface(Obj) := IInterface(PPointer(PtrUInt(Instance) +
-      PtrUInt(Entry^.ImplGetter and $00ffffff))^)
-  else
-    UseImplGetter(Instance,Entry^.ImplGetter,IInterface(Obj))
-  {$endif FPC};
-  result := Pointer(Obj) <> nil;
+    else
+      // there is a getter method -> use slower but safe RTL method
+      result := Instance.GetInterface(Entry^.IID{$ifdef FPC}^{$endif}, Obj);
 end;
-
 
 function GetRttiClassGuid(aClass: TClass): PGuidDynArray;
 var

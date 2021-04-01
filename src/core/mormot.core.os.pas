@@ -1701,7 +1701,7 @@ var
 /// cross-platform reserve some executable memory
 // - using PAGE_EXECUTE_READWRITE flags on Windows, and PROT_READ or PROT_WRITE
 // or PROT_EXEC on POSIX
-// - this function maintain an internal set of 64KB memory pages for efficiency
+// - this function maintain an internal list of 64KB memory pages for efficiency
 // - memory blocks can not be released (don't try to use fremeem on them) and
 // will be returned to the system at process finalization
 function ReserveExecutableMemory(size: cardinal): pointer;
