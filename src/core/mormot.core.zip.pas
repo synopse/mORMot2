@@ -1455,56 +1455,58 @@ var
   writepos: Int64;
   info: TFileInfoFull;
 begin
+  R := nil;
   h := FileOpen(aFileName, fmOpenReadWrite or fmShareDenyNone);
-  if not ValidHandle(h) then
+  if ValidHandle(h) then
   begin
-    R := nil;
-    h := 0;
+    // read the existing directory
+    R := TZipRead.Create(h);
+    try
+      SetLength(Entry, R.Count + 10);
+      writepos := R.fCentralDirectoryOffset; // where to add new files
+      s := pointer(R.Entry);
+      d := pointer(Entry);
+      while Count < R.Count do
+      begin
+        if (LastZipNameToIgnore <> '') and
+           (Count = R.Count - 1) and
+           (s^.zipName = LastZipNameToIgnore) then
+        begin
+          // we were asked to ignore this last file -> overwrite its content
+          writepos {%H-}:= PAnsiChar(s^.local) - R.fMap.Buffer;
+          break;
+        end;
+        if not R.RetrieveFileInfo(Count, info) then
+          raise ESynZip.CreateFmt('TZipWrite.CreateFrom(%s) failed on %s',
+            [aFileName, s^.zipName]);
+        d^.h64 := info.f64;
+        d^.h32.SetVersion(info.f32.IsZip64);
+        d^.h32.fileInfo := info.f32;
+        d^.h64.offset := PtrUInt(s^.local) - PtrUInt(R.Entry[0].local);
+        if d^.h64.zip64id = 0 then
+          d^.h32.localHeadOff := d^.h64.offset
+        else
+        begin
+          // zip64 input
+          assert(d^.h32.fileInfo.extraLen = SizeOf(d^.h64));
+          dec(d^.h32.fileInfo.extraLen, SizeOf(d^.h64.offset));
+          dec(d^.h64.size, SizeOf(d^.h64.offset));
+        end;
+        SetString(d^.intName, s^.storedName, d^.h32.fileInfo.nameLen);
+        inc(Count);
+        inc(s);
+        inc(d);
+      end;
+      // rewind to the position fitted for new files appending
+      FileSeek64(h, writepos, soFromBeginning);
+    finally
+      R.Free;
+    end;
   end
   else
-    R := TZipRead.Create(h);
+    // we need to create a new .zip file
+    h := FileCreate(aFileName, fmOpenReadWrite or fmShareDenyNone);
   Create(h, aFileName);
-  if R <> nil then
-  try
-    SetLength(Entry, R.Count + 10);
-    writepos := R.fCentralDirectoryOffset; // where to add new files
-    s := pointer(R.Entry);
-    d := pointer(Entry);
-    while Count < R.Count do
-    begin
-      if (LastZipNameToIgnore <> '') and
-         (Count = R.Count - 1) and
-         (s^.zipName = LastZipNameToIgnore) then
-      begin
-        writepos {%H-}:= PAnsiChar(s^.local) - R.fMap.Buffer; // overwrite last file
-        break; // ignore this last file
-      end;
-      if not R.RetrieveFileInfo(Count, info) then
-        raise ESynZip.CreateFmt('TZipWrite.CreateFrom(%s) failed on %s',
-          [aFileName, s^.zipName]);
-      d^.h64 := info.f64;
-      d^.h32.SetVersion(info.f32.IsZip64);
-      d^.h32.fileInfo := info.f32;
-      d^.h64.offset := PtrUInt(s^.local) - PtrUInt(R.Entry[0].local);
-      if d^.h64.zip64id = 0 then
-        d^.h32.localHeadOff := d^.h64.offset
-      else
-      begin
-        // zip64 input
-        assert(d^.h32.fileInfo.extraLen = SizeOf(d^.h64));
-        dec(d^.h32.fileInfo.extraLen, SizeOf(d^.h64.offset));
-        dec(d^.h64.size, SizeOf(d^.h64.offset));
-      end;
-      SetString(d^.intName, s^.storedName, d^.h32.fileInfo.nameLen);
-      inc(Count);
-      inc(s);
-      inc(d);
-    end;
-    // rewind to the position fitted for new files appending
-    FileSeek64(h, writepos, soFromBeginning);
-  finally
-    R.Free;
-  end;
 end;
 
 
