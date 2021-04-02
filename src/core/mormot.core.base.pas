@@ -2543,7 +2543,8 @@ type
   // - cross-compiler and cross-platform efficient randomness generator, very
   // fast with a much better distribution than Delphi system's Random() function
   // see https://www.gnu.org/software/gsl/doc/html/rng.html#c.gsl_rng_taus2
-  // - used by thread-safe Random32/FillRandom, using only 16 bytes per thread
+  // - used by thread-safe Random32/FillRandom, storing 16 bytes per thread - a
+  // stronger algorithm like Mersenne Twister (as used by FPC RTL) requires 5KB
   TLecuyer = object
   public
     rs1, rs2, rs3, seedcount: cardinal;

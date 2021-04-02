@@ -1455,11 +1455,10 @@ var
   writepos: Int64;
   info: TFileInfoFull;
 begin
-  R := nil;
   h := FileOpen(aFileName, fmOpenReadWrite or fmShareDenyNone);
   if ValidHandle(h) then
   begin
-    // read the existing directory
+    // read the existing .zip directory
     R := TZipRead.Create(h);
     try
       SetLength(Entry, R.Count + 10);
@@ -1476,6 +1475,7 @@ begin
           writepos {%H-}:= PAnsiChar(s^.local) - R.fMap.Buffer;
           break;
         end;
+        // append this entry to the TZipWrite directory
         if not R.RetrieveFileInfo(Count, info) then
           raise ESynZip.CreateFmt('TZipWrite.CreateFrom(%s) failed on %s',
             [aFileName, s^.zipName]);
@@ -1505,7 +1505,7 @@ begin
   end
   else
     // we need to create a new .zip file
-    h := FileCreate(aFileName, fmOpenReadWrite or fmShareDenyNone);
+    h := FileCreate(aFileName);
   Create(h, aFileName);
 end;
 
