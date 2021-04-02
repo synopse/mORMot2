@@ -629,7 +629,7 @@ static int parse_unicode_property(REParseState *s, CharRange *cr,
     p++;
     q = name;
     while (is_unicode_char(*p)) {
-        if ((q - name) > sizeof(name) - 1)
+        if ((q - name) >= sizeof(name) - 1)
             goto unknown_property_name;
         *q++ = *p++;
     }
@@ -638,7 +638,7 @@ static int parse_unicode_property(REParseState *s, CharRange *cr,
     if (*p == '=') {
         p++;
         while (is_unicode_char(*p)) {
-            if ((q - value) > sizeof(value) - 1)
+            if ((q - value) >= sizeof(value) - 1)
                 return re_parse_error(s, "unknown unicode property value");
             *q++ = *p++;
         }
@@ -1151,9 +1151,13 @@ static int re_parse_captures(REParseState *s, int *phas_named_captures,
                         }
                     }
                     capture_index++;
+                    if (capture_index >= CAPTURE_COUNT_MAX)
+                        goto done;
                 }
             } else {
                 capture_index++;
+                if (capture_index >= CAPTURE_COUNT_MAX)
+                    goto done;
             }
             break;
         case '\\':
@@ -1167,6 +1171,7 @@ static int re_parse_captures(REParseState *s, int *phas_named_captures,
             break;
         }
     }
+ done:
     if (capture_name)
         return -1;
     else
@@ -1738,6 +1743,9 @@ static int re_parse_disjunction(REParseState *s, BOOL is_backward_dir)
 {
     int start, len, pos;
 
+    if (lre_check_stack_overflow(s->mem_opaque, 0))
+        return re_parse_error(s, "stack overflow");
+    
     start = s->byte_code.size;
     if (re_parse_alternative(s, is_backward_dir))
         return -1;

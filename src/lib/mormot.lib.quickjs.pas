@@ -50,10 +50,10 @@ interface
 
 
 {$ifdef LIBQUICKJSSTATIC}
-  // we supply https://github.com/c-smile/quickjspp (uncompatible) fork statics
+  // we embedd https://github.com/c-smile/quickjspp fork statics
   // - 64-bit JSValue on all platforms, JSX, debugger, no quickjs-libc
-  // - amalgamation file with with patches for static linking (malloc, assert)
-  // - see res/static/libquickjs for patched source and build instructions
+  // - amalgamation file patched for pascal static linking (malloc, assert)
+  // - see res/static/libquickjs for source and build instructions
   {$define JS_STRICT_NAN_BOXING}
   {$define LIBQUICKJS}
 {$endif LIBQUICKJSSTATIC}
@@ -293,7 +293,7 @@ type
     procedure FreeInlined(var v: JSValue); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// release the memory used by a JSValue - JS_FreeValue() alternative
-    // - won't be inlined so may be used when performance don't matter
+    // - won't be inlined so may be used when performance matters less
     procedure Free(var v: JSValue);
     /// retrieve a property of the global object
     // - caller should make cx.Free(val) once done with this value
