@@ -23,11 +23,31 @@ The main refactoring points tried to better follow SOLID principles:
  - Rewrite some code to avoid internal errors on Delphi (e.g. untyped const/var changed into pointers);
  - Tools to leverage MicroServices coding and administration;
  - Add MVC support for SOA rich clients on Delphi VCL and Lazarus LCL;
+ - New features like *OpenSSL*, *libdeflate* or *QuickJS* support;
  - Introduce high-level non-visual `TComponent` version of our classes for a more RAD approach.
 
 We therefore created a whole new project and repository, since switching to version 2 induced some backward uncompatible changes. New unit names were used, to avoid unexpected collision issues during migration, or if 1.18 is to remain installed for a compatibility project.
 
 (See below if you are upgrading from 1.18 branch)
+
+
+## Quick Start
+
+*(preliminary instructions)*
+
+1. Clone the https://github.com/synopse/mORMot2 repository, or download a release from https://github.com/synopse/mORMot2/releases
+
+2. Download latest https://synopse.info/files/mormot2static.7z and extract its content to this `/static` sub-folder of the mORMot 2 repository. As an alternative, the file is part of the github releases
+
+3.1. On Lazarus, just install the [/packages/lazarus/mormot2.lpk](/package/lazarus/mormot2.lpk) package.
+
+3.2. On Delphi, add the *mORMot 2* `/src/*` sub-folders to your IDE library paths, e.g. if you clone the repository in `d:\dev\lib2`, add `D:\dev\lib2\src\core;D:\dev\lib2\src\db;D:\dev\lib2\src\rest;D:\dev\lib2\src\crypt;D:\dev\lib2\src\script;D:\dev\lib2\src\app;D:\dev\lib2\src\net;D:\dev\lib2\src\orm;D:\dev\lib2\src\soa;D:\dev\lib2\src\lib` folders to the list.
+
+4. Open and compile `/test/mormot2tests.dpr` in the IDE, and run the regression tests on your machine.
+
+5. Browse the [examples folder](/ex) (still a work in progress).
+
+5. Discover and Enjoy!
 
 
 ## Presentation
@@ -109,7 +129,7 @@ See [the full licensing terms](LICENCE.md).
 The mORMOt 2 repository content is split into the following sub-folders:
 
 - [`src`](src) is the main source code folder, where you should find the actual framework;
-- [`res`](res) to compile some resources used within `src`;
+- [`res`](res) to compile some resources used within `src` - e.g. the `static` third-party binaries;
 - [`static`](static) contains raw library `.o`/`.obj` files needed for FPC and Delphi static linking;
 - [`test`](test) defines the regression tests of all framework features;
 - [`doc`](doc) holds the documentation of the framework;

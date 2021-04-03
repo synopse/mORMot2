@@ -12,6 +12,7 @@ unit mormot.db.raw.sqlite3.static;
 
       Just include this unit in your uses clause, and the mormot.db.raw.sqlite3
     sqlite3 global variable will be filled with linked .o/.obj API entries.
+      Please download latest https://synopse.info/files/mormot2static.7z too.
       If the platform is not supported yet, fallback loading a system library.
       To patch and compile the official SQlite3 amalgamation file, follow the
     instruction from the res/static/sqlite3 folder.
@@ -1026,8 +1027,8 @@ const
   EXPECTED_SQLITE3_VERSION = '3.35.4';
 
   // where to download the latest available static binaries, including SQLite3
-  EXPECTED_STATIC_DOWNLOAD =
-    'https://github.com/synopse/mORMot2/releases/tag/sqlite.' + EXPECTED_SQLITE3_VERSION;
+  EXPECTED_STATIC_DOWNLOAD = 'https://synopse.info/files/mormot2static.7z';
+ // 'https://github.com/synopse/mORMot2/releases/tag/sqlite.' + EXPECTED_SQLITE3_VERSION;
 
 constructor TSqlite3LibraryStatic.Create;
 var
