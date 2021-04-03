@@ -824,7 +824,7 @@ var
 // - see https://msdn.microsoft.com/en-us/library/ms995355
 // - this function is Windows-only, could be slow, and you don't know which
 // algorithm is really used on your system, so using our mormot.crypt.core.pas
-// CryptDataForCurrentUser() is probably a better (and cross-platform) alternative
+// CryptDataForCurrentUser() is probably a safer (and cross-platform) alternative
 // - also note that DPAPI has been closely reverse engineered - see e.g.
 // https://www.passcape.com/index.php?section=docsys&cmd=details&id=28
 function CryptDataForCurrentUserDPAPI(const Data, AppSecret: RawByteString;

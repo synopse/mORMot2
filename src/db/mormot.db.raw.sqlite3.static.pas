@@ -6,13 +6,13 @@ unit mormot.db.raw.sqlite3.static;
 {
   *****************************************************************************
 
-    Statically linked SQLite3 3.35.3 engine with optional AES encryption
+    Statically linked SQLite3 3.35.4 engine with optional AES encryption
     - TSqlite3LibraryStatic Implementation
     - Encryption-Related Functions
 
       Just include this unit in your uses clause, and the mormot.db.raw.sqlite3
     sqlite3 global variable will be filled with linked .o/.obj API entries.
-      If the platform is not supported yet, fallback to a system .so is done.
+      If the platform is not supported yet, fallback loading a system library.
       To patch and compile the official SQlite3 amalgamation file, follow the
     instruction from the res/static/sqlite3 folder.
 
@@ -1022,10 +1022,8 @@ function sqlite3_trace_v2(DB: TSqlite3DB; Mask: integer; Callback: TSqlTraceCall
 { TSqlite3LibraryStatic }
 
 const
-  // error message if statically linked sqlite3.o(bj) does not match this
-  // - Android version may be a little behind, so we are more releaxed here
-  EXPECTED_SQLITE3_VERSION =
-    {$ifdef OSANDROID} '3.34' {$else} '3.35.3' {$endif};
+  // error message if statically linked sqlite3.o(bj) does not match this value
+  EXPECTED_SQLITE3_VERSION = '3.35.4';
 
   // where to download the latest available static binaries, including SQLite3
   EXPECTED_STATIC_DOWNLOAD =
