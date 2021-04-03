@@ -30,6 +30,37 @@ We therefore created a whole new project and repository, since switching to vers
 
 (See below if you are upgrading from 1.18 branch)
 
+## Compiler targets
+
+The framework source code:
+- Tries to stay compatible with FPC stable and Delphi 7 and up;
+- Is currently validated against FPC 3.2.0-r45643, Delphi 7, 2007, 2010, XE4, XE7 and 10.4;
+
+Please submit pull requests for non-validated versions.
+
+## MPL/GPL/LGPL Three-License
+
+Licensed under a disjunctive three-license giving you the choice of one of the three following sets of free software/open source licensing terms:
+- Mozilla Public License, version 1.1 or later;
+- GNU General Public License, version 2.0 or later;
+- GNU Lesser General Public License, version 2.1 or later.
+
+This allows the use of our code in as wide a variety of software projects as possible, while still maintaining copy-left on code we wrote.
+
+See [the full licensing terms](LICENCE.md).
+
+## Sub-Folders
+
+The mORMOt 2 repository content is split into the following sub-folders:
+
+- [`src`](src) is the main source code folder, where you should find the actual framework;
+- [`packages`](packages) contains IDE packages and tools to setup your dev environment;
+- [`static`](static) contains raw library `.o`/`.obj` files needed for FPC and Delphi static linking;
+- [`test`](test) defines the regression tests of all framework features;
+- [`res`](res) to compile some resources used within `src` - e.g. the `static` third-party binaries;
+- [`doc`](doc) holds the documentation of the framework;
+- [`ex`](ex) contains various samples.
+
 
 ## Quick Start
 
@@ -37,9 +68,11 @@ We therefore created a whole new project and repository, since switching to vers
 
 1. Clone the https://github.com/synopse/mORMot2 repository, or download a release from https://github.com/synopse/mORMot2/releases
 
-2. Download latest https://synopse.info/files/mormot2static.7z and extract its content to this `/static` sub-folder of the mORMot 2 repository. As an alternative, the file is part of the github releases
+2. Download latest https://synopse.info/files/mormot2static.7z and extract its content to this `/static` sub-folder of the mORMot 2 repository. As an alternative, the file is part of the github releases.
 
-3.1. On Lazarus, just install the [/packages/lazarus/mormot2.lpk](/package/lazarus/mormot2.lpk) package.
+3. Setup your favorite IDE: 
+
+3.1. On Lazarus, just install the `/packages/lazarus/mormot2.lpk` package.
 
 3.2. On Delphi, add the *mORMot 2* `/src/*` sub-folders to your IDE library paths, e.g. if you clone the repository in `d:\dev\lib2`, add `D:\dev\lib2\src\core;D:\dev\lib2\src\db;D:\dev\lib2\src\rest;D:\dev\lib2\src\crypt;D:\dev\lib2\src\script;D:\dev\lib2\src\app;D:\dev\lib2\src\net;D:\dev\lib2\src\orm;D:\dev\lib2\src\soa;D:\dev\lib2\src\lib` folders to the list.
 
@@ -105,35 +138,6 @@ Even if *mORMot* will be more easily used in a project designed from scratch, it
 Some units (e.g. `...`) are used by *mORMot*, but do not require the whole framework to be linked.
 
 That is, you can use e.g. only  PDF generation, SynDB fast database access, a static-linked SQLite3 engine, direct MongoDB access, Mustache templates, SpiderMonkey JavaSCript engine, code-generated reports, or the TDocVariant, TDynArray, TSynLog classes of SynCommons, without using the main *mORMot* units and features (ORM, Client-Server, services, UI).
-
-## Compiler targets
-
-The framework source code:
-- Tries to stay compatible with FPC trunk and Delphi 7 and up; 
-- Is validated against FPC 3.2.0-r45643, Delphi 7, XE4, XE7 and 10.3;
-- Please submit pull requests for non-validated versions.
-
-## MPL/GPL/LGPL Three-License
-
-Licensed under a disjunctive three-license giving you the choice of one of the three following sets of free software/open source licensing terms:
-- Mozilla Public License, version 1.1 or later;
-- GNU General Public License, version 2.0 or later;
-- GNU Lesser General Public License, version 2.1 or later.
-
-This allows the use of our code in as wide a variety of software projects as possible, while still maintaining copy-left on code we wrote.
-
-See [the full licensing terms](LICENCE.md).
-
-## Sub-Folders
-
-The mORMOt 2 repository content is split into the following sub-folders:
-
-- [`src`](src) is the main source code folder, where you should find the actual framework;
-- [`res`](res) to compile some resources used within `src` - e.g. the `static` third-party binaries;
-- [`static`](static) contains raw library `.o`/`.obj` files needed for FPC and Delphi static linking;
-- [`test`](test) defines the regression tests of all framework features;
-- [`doc`](doc) holds the documentation of the framework;
-- [`ex`](ex) contains various samples.
 
 ## Links
 

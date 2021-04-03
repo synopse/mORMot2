@@ -22,6 +22,6 @@ Resources are compiled from `*.rc` source and associated files into `*.res` bina
 
 Even if the framework is stand-alone, it has some optional third-party C code, to be linked as static binaries, which should be available in the [`static`](../static) sub-folder of this repository.
 
-They are to be downloaded from the latest https://github.com/synopse/mORMot2/releases 
+Static binaries are to be downloaded from the latest https://github.com/synopse/mORMot2/releases or https://synopse.info/files/mormot2static.7z and extracted into the `static` sub-folder of this repository.
 
 You will find in the [`res/static`](static) folder some reference code, script and text to rebuild those third-party libraries from the source.

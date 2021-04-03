@@ -4,17 +4,18 @@
 The following modifications have been made by Synopse to the original source code:
 
 - started not from original Bellard's repository, but https://github.com/c-smile/quickjspp fork;
+- merged back the official https://github.com/bellard/quickjs updates, even when the `c-smile` fork is outdated;
 - enabled `BIGNUM`, `JSX` and debugger extensions by default;
 - forced `JS_STRICT_NAN_BOXING` on all targets, for a single 64-bit contained `JSValue` definition;
 - `quickjs-libc` is not linked to enhance cross-compilation and to be reimplemented in native pascal instead of native c - `js_module_set_import_meta/js_std_eval_binary` were moved to the main `quickjs.c` file;
-- regrouped all source code into a single `quickjs2.c` amalgamation source file (so fixed redundant static definitions) - to facilitate Delphi static linking;
-- `assert()` and `abort()` redirect to less painful pascal `Exception`s;
-- `pas_malloc/free` redirection to the pascal MM;
+- regrouped all source code into a single `quickjs2.c` amalgamation source file (to fix cyclic static definitions) and facilitate Delphi static linking;
+- `assert()` and `abort()` redirect to less painful pascal `Exception`s (how want a `SIG_ABRT` to kill your service?);
+- `pas_malloc/free` redirection to the pascal MM for best performance and less memory fragmentation;
 - simple per-target compilation scripts (no complex make files) dedicated to FPC and Delphi static linking using the [FpcUpDeluxe cross-compilers](https://github.com/LongDirtyAnimAlf/fpcupdeluxe/releases).
 
-With some proper tricks, we were able to compile QuickJS using mingw/gcc for FPC (the easy part), and also for Delphi Win32/Win64. \o/
+With some proper tricks, we were able to compile QuickJS using mingw/gcc for FPC (the easy part), and also for Delphi Win32/Win64 - even if they don't support their format. \o/
 
-This source code is included as reference. Please don't try to compile the static files by yourself, but download them from the latest https://github.com/synopse/mORMot2/releases
+This source code is included as reference. Please don't try to compile the static files by yourself, but download them from the latest https://github.com/synopse/mORMot2/releases or https://synopse.info/files/mormot2static.7z
 
 
 # QuickJS Javascript Engine 
