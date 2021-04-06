@@ -2083,7 +2083,7 @@ type
     fFactory: TInterfaceFactory;
     fVTable: PPointerArray;
     // the JITed asm stubs will redirect to this low-level function(s)
-    function FakeCall(var aCall): Int64;
+    function FakeCall(stack: PFakeCallStack): Int64;
     procedure FakeCallRaiseError(var ctxt: TFakeCallContext;
       const Format: RawUtf8; const Args: array of const);
     procedure FakeCallGetParamsFromStack(var ctxt: TFakeCallContext);
@@ -3187,7 +3187,21 @@ begin
     ctxt.ServiceCustomAnswerPoint := nil;
 end;
 
-function TInterfacedObjectFakeRaw.FakeCall(var aCall): Int64;
+{$ifdef HASINLINE}
+function TInterfacedObjectFakeRaw.SelfFromInterface: TInterfacedObjectFakeRaw;
+begin
+  // obfucated but very efficient once inlined
+  result := pointer(PAnsiChar(self) - PAnsiChar(@TInterfacedObjectFake(nil).fVTable));
+end;
+{$else}
+function TInterfacedObjectFakeRaw.SelfFromInterface: TInterfacedObjectFakeRaw;
+asm
+        // asm version for oldest Delphi 7
+        sub     eax, TInterfacedObjectFake.fVTable
+end;
+{$endif HASINLINE}
+
+function TInterfacedObjectFakeRaw.FakeCall(stack: PFakeCallStack): Int64;
 var
   ctxt: TFakeCallContext;
 begin
@@ -3198,11 +3212,11 @@ begin
   *)
   self := SelfFromInterface;
   // setup context
-  ctxt.Stack := @aCall;
-  if ctxt.Stack.MethodIndex >= fFactory.MethodsCount then
+  ctxt.Stack := stack;
+  if stack.MethodIndex >= fFactory.MethodsCount then
     raise EInterfaceFactory.CreateUtf8('%.FakeCall(%) failed: out of range %',
-      [self, fFactory.fInterfaceName, ctxt.Stack.MethodIndex]);
-  ctxt.Method := @fFactory.fMethods[ctxt.Stack.MethodIndex];
+      [self, fFactory.fInterfaceName, stack.MethodIndex]);
+  ctxt.Method := @fFactory.fMethods[stack.MethodIndex];
   ctxt.ResultType := imvNone;
   ctxt.Result := @result;
   // call execution virtual method
@@ -3211,7 +3225,7 @@ begin
   // handle float result if needed (ordinals are already stored in result)
   {$ifdef HAS_FPREG} // result float is returned in FP first register
   if ctxt.ResultType in [imvDouble, imvDateTime] then
-    PInt64(@ctxt.Stack.FPRegs[FPREG_FIRST])^ := result;
+    PInt64(@stack.FPRegs[FPREG_FIRST])^ := result;
   {$else}
   {$ifdef CPUINTEL} // x87 ABI expects floats to be in st(0) FPU stack
   case ctxt.ResultType of
@@ -3227,20 +3241,6 @@ begin
   {$endif CPUINTEL}
   {$endif HAS_FPREG}
 end;
-
-{$ifdef HASINLINE}
-function TInterfacedObjectFakeRaw.SelfFromInterface: TInterfacedObjectFakeRaw;
-begin
-  // obfucated but very efficient once inlined
-  result := pointer(PAnsiChar(self) - PAnsiChar(@TInterfacedObjectFake(nil).fVTable));
-end;
-{$else}
-function TInterfacedObjectFakeRaw.SelfFromInterface: TInterfacedObjectFakeRaw;
-asm
-        // asm version for oldest Delphi 7
-        sub     eax, TInterfacedObjectFake.fVTable
-end;
-{$endif HASINLINE}
 
 function TInterfacedObjectFakeRaw.Fake_AddRef: TIntCnt;
 begin
