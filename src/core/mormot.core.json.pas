@@ -9558,9 +9558,9 @@ begin
   result := TComponentClass(Rtti.ValueClass).Create(nil);
 end;
 
-function _New_SynPersistent(Rtti: TRttiCustom): pointer;
+function _New_ObjectWithCustomCreate(Rtti: TRttiCustom): pointer;
 begin
-  result := TSynPersistentClass(Rtti.ValueClass).Create;
+  result := TObjectWithCustomCreateClass(Rtti.ValueClass).Create;
 end;
 
 function _New_SynObjectList(Rtti: TRttiCustom): pointer;
@@ -9653,11 +9653,11 @@ begin
         fClassNewInstance := @_New_InterfacedObjectWithCustomCreate
       else if C = TPersistentWithCustomCreate then
         fClassNewInstance := @_New_PersistentWithCustomCreate
-      else if C = TSynPersistent then
+      else if C = TObjectWithCustomCreate then
       begin
-        fClassNewInstance := @_New_SynPersistent;
-        // allow any kind of customization for TSynPersistent children
-        TSPHookClass(fValueClass).RttiCustomSet(self)
+        fClassNewInstance := @_New_ObjectWithCustomCreate;
+        // allow any kind of customization for TObjectWithCustomCreate children
+        TSPHookClass(fValueClass).RttiCustomSetParser(self);
       end
       else if C = TSynObjectList then
       begin

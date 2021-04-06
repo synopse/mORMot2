@@ -8,7 +8,7 @@ unit mormot.core.data;
 
    Low-Level Data Processing Functions shared by all framework units
     - RTL TPersistent / TInterfacedObject with Custom Constructor
-    - TSynPersistent* / TSyn*List classes
+    - TSynPersistent* TSyn*List TSynLocker classes
     - TSynPersistentStore with proper Binary Serialization
     - INI Files and In-memory Access
     - Efficient RTTI Values Binary Serialization and Comparison
@@ -344,40 +344,56 @@ type
 
 
 
-{ ************ TSynPersistent* / TSyn*List / TSynLocker classes }
+{ ************ TSynPersistent* TSyn*List TSynLocker classes }
 
 type
   {$M+}
+  /// abstract parent class with published properties and a virtual constructor
+  // - is the parent of both TSynPersistent and TOrm classes
+  TObjectWithCustomCreate = class(TObject)
+  protected
+    /// called by TRttiJson.SetParserType when this class is registered
+    // - used e.g. to register TOrm.ID field which is not published as RTTI
+    // - in TSynPersistent descendants, can change the Rtti.JsonSave callback
+    // if needed, or set rcfSynPersistentHook flag to call RttiBeforeWriteObject,
+    // RttiWritePropertyValue and RttiAfterWriteObject methods (disabled by
+    // default not to slow down the serialization process)
+    class procedure RttiCustomSetParser(Rtti: TRttiCustom); virtual;
+  public
+    /// virtual constructor called at instance creation
+    // - is declared as virtual so that inherited classes may have a root
+    // constructor to override
+    // - will be recognized by our RTTI serialization/initialization process
+    constructor Create; virtual; abstract;
+  end;
+
+  /// used to determine the exact class type of a TObjectWithCustomCreate
+  // - allow to create instances using its virtual constructor
+  TObjectWithCustomCreateClass = class of TObjectWithCustomCreate;
+
   /// our own empowered TPersistent-like parent class
   // - TPersistent has an unexpected speed overhead due a giant lock introduced
   // to manage property name fixup resolution (which we won't use outside the VCL)
   // - this class has a virtual constructor, so is a preferred alternative
   // to both TPersistent and TPersistentWithCustomCreate classes
+  // - features some protected methods to customize its JSON serialization
   // - for best performance, any type inheriting from this class will bypass
   // some regular steps: do not implement interfaces or use TMonitor with them!
-  // - this class also features some protected methods to customize the
-  // instance JSON serialization
-  TSynPersistent = class(TObject)
+  TSynPersistent = class(TObjectWithCustomCreate)
   protected
     // this default implementation will call AssignError()
     procedure AssignTo(Dest: TSynPersistent); virtual;
     procedure AssignError(Source: TSynPersistent);
-    /// called by TRttiJson.SetParserType when this class is registered
-    // - used e.g. by TSynPersistentWithID to register the "ID" field;
-    // you can also change the Rtti.JsonSave callback if needed, or
-    // set the rcfSynPersistentHook flag to call RttiBeforeWriteObject,
-    // RttiWritePropertyValue and RttiAfterWriteObject methods (disabled by
-    // default not to slow down the serialization process)
-    class procedure RttiCustomSet(Rtti: TRttiCustom); virtual;
+  protected
     // called before TTextWriter.WriteObject() serialize this instance as JSON
-    // - triggered only if RttiCustomSet defined the rcfSynPersistentHook flag
+    // - triggered if RttiCustomSetParser defined the rcfSynPersistentHook flag
     // - you can return true if your method made the serialization
     // - this default implementation just returns false, to continue serializing
     // - TSynMonitor will change the serialization Options for this instance
     function RttiBeforeWriteObject(W: TBaseWriter;
       var Options: TTextWriterWriteObjectOptions): boolean; virtual;
     // called by TTextWriter.WriteObject() to serialize one published property value
-    // - triggered only if RttiCustomSet defined the rcfSynPersistentHook flag
+    // - triggered if RttiCustomSetParser defined the rcfSynPersistentHook flag
     // - is overriden in TOrm/TOrmMany to detect "fake" instances
     // or by TSynPersistentWithPassword to hide the password field value
     // - should return true if a property has been written, false (which is the
@@ -385,25 +401,23 @@ type
     function RttiWritePropertyValue(W: TBaseWriter; Prop: PRttiCustomProp;
       Options: TTextWriterWriteObjectOptions): boolean; virtual;
     /// called after TTextWriter.WriteObject() serialized this instance as JSON
-    // - triggered only if RttiCustomSet defined the rcfSynPersistentHook flag
+    // - triggered if RttiCustomSetParser defined the rcfSynPersistentHook flag
     // - execute just before W.BlockEnd('}')
     procedure RttiAfterWriteObject(W: TBaseWriter;
       Options: TTextWriterWriteObjectOptions); virtual;
     /// called to unserialize this instance from JSON
-    // - triggered only if RttiCustomSet defined the rcfSynPersistentHook flag
+    // - triggered if RttiCustomSetParser defined the rcfSynPersistentHook flag
     // - you can return true if your method made the unserialization
     // - this default implementation just returns false, to continue processing
     // - opaque Ctxt is a PJsonParserContext instance
     function RttiBeforeReadObject(Ctxt: pointer): boolean; virtual;
     /// called after this instance as been unserialized from JSON
-    // - triggered only if RttiCustomSet defined the rcfSynPersistentHook flag
+    // - triggered if RttiCustomSetParser defined the rcfSynPersistentHook flag
     procedure RttiAfterReadObject; virtual;
   public
     /// virtual constructor called at instance creation
     // - this constructor also registers the class type to the Rtti global list
-    // - is declared as virtual so that inherited classes may have a root
-    // constructor to override
-    constructor Create; virtual;
+    constructor Create; override;
     /// very efficiently retrieve the TRttiCustom associated with this class
     // - since Create did register it, just return the first vmtAutoTable slot
     class function RttiCustom: TRttiCustom;
@@ -423,7 +437,6 @@ type
   end;
 
   /// used to determine the exact class type of a TSynPersistent
-  // - could be used to create instances using its virtual constructor
   TSynPersistentClass = class of TSynPersistent;
 
   /// simple and efficient TList, without any notification
@@ -590,25 +603,6 @@ type
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynLocker
       read fSafe;
-  end;
-
-
-  /// abstract persistent class with a 64-bit TID field
-  // - class is e.g. the parent of our TOrm ORM classes
-  // - defined here for proper class serialization in mormot.core.json.pas,
-  //  without the need of linking the ORM code to the executable
-  TSynPersistentWithID = class(TSynPersistent)
-  protected
-    fID: TID;
-    /// copy the TID field value
-    procedure AssignTo(Dest: TSynPersistent); override;
-    /// will register the ID field value for proper JSON serialization
-    class procedure RttiCustomSet(Rtti: TRttiCustom); override;
-  public
-    /// this property gives direct access to the class instance ID
-    // - not defined as "published" since RttiCustomSet did register it
-    property IDValue: TID
-      read fID write fID;
   end;
 
 
@@ -2896,36 +2890,20 @@ end;
 
 { ************ TSynPersistent* / TSyn*List / TSynLocker classes }
 
+{ TObjectWithCustomCreate }
+
+class procedure TObjectWithCustomCreate.RttiCustomSetParser(Rtti: TRttiCustom);
+begin
+  // do nothing by default
+end;
+
+
 { TSynPersistent }
 
 constructor TSynPersistent.Create;
 begin
   if PPointer(PPAnsiChar(self)^ + vmtAutoTable)^ = nil then
     Rtti.RegisterClass(self); // ensure TRttiCustom is set
-end;
-
-class function TSynPersistent.RttiCustom: TRttiCustom;
-begin
-  // inlined ClassPropertiesGet: we know it is the first slot
-  result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
-  // assert(result.InheritsFrom(TRttiCustom));
-end;
-
-procedure TSynPersistent.AssignError(Source: TSynPersistent);
-var
-  SourceName: string;
-begin
-  if Source <> nil then
-    SourceName := Source.ClassName
-  else
-    SourceName := 'nil';
-  raise EConvertError.CreateFmt('Cannot assign a %s to a %s',
-    [SourceName, ClassNameShort(self)^]);
-end;
-
-class procedure TSynPersistent.RttiCustomSet(Rtti: TRttiCustom);
-begin
-  // do nothing by default
 end;
 
 function TSynPersistent.RttiBeforeWriteObject(W: TBaseWriter;
@@ -2954,6 +2932,25 @@ end;
 procedure TSynPersistent.RttiAfterReadObject;
 begin
   // nothing to do
+end;
+
+class function TSynPersistent.RttiCustom: TRttiCustom;
+begin
+  // inlined ClassPropertiesGet: we know it is the first slot
+  result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
+  // assert(result.InheritsFrom(TRttiCustom));
+end;
+
+procedure TSynPersistent.AssignError(Source: TSynPersistent);
+var
+  SourceName: string;
+begin
+  if Source <> nil then
+    SourceName := Source.ClassName
+  else
+    SourceName := 'nil';
+  raise EConvertError.CreateFmt('Cannot assign a %s to a %s',
+    [SourceName, ClassNameShort(self)^]);
 end;
 
 procedure TSynPersistent.AssignTo(Dest: TSynPersistent);
@@ -3197,24 +3194,6 @@ begin
   finally
     Safe.UnLock;
   end;
-end;
-
-
-{ TSynPersistentWithID }
-
-procedure TSynPersistentWithID.AssignTo(Dest: TSynPersistent);
-begin
-  if Dest.InheritsFrom(TSynPersistentWithID) then
-    TSynPersistentWithID(Dest).fID := fID
-  else
-    Dest.AssignError(Self);
-end;
-
-class procedure TSynPersistentWithID.RttiCustomSet(Rtti: TRttiCustom);
-begin
-  // will be recognized as a TID property with all associated options
-  Rtti.Props.Add(
-    TypeInfo(TID), PtrInt(@TSynPersistentWithID(nil).fID), 'ID', {first=}true);
 end;
 
 

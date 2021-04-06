@@ -3241,10 +3241,11 @@ type
   // - consider inherit from TOrmNoCase and TOrmNoCaseExtended if
   // you expect regular NOCASE collation and smaller (but not standard JSON)
   // variant fields persistence
-  TOrm = class(TSynPersistentWithID)
+  TOrm = class(TObjectWithCustomCreate)
   { note that every TOrm has an Instance size of 20 bytes (on 32-bit)
     for private and protected fields (such as fID or fFill e.g.) }
   protected
+    fID: TID;
     /// used by FillPrepare() and corresponding Fill*() methods
     fFill: TOrmFill;
     /// internal properties getters (using fProps data for speed)
@@ -3253,6 +3254,8 @@ type
     function GetFillCurrentRow: integer;
     function GetFillReachedEnd: boolean;
     function GetTable: TOrmTable;
+    /// will register the "ID":... field value for proper JSON serialization
+    class procedure RttiCustomSetParser(Rtti: TRttiCustom); override;
   protected
     fInternalState: cardinal;
     /// defined as a protected class function for OrmProps method inlining
@@ -3293,7 +3296,7 @@ type
     class function OrmProps: TOrmProperties;
       {$ifdef HASINLINE}inline;{$endif}
     /// direct access to the TOrmProperties info of an existing TOrm instance
-    // - same as OrmProps, but we know that PropsCreate is never needed
+    // - same as OrmProps, but when we know that PropsCreate is never needed
     function Orm: TOrmProperties;
       {$ifdef HASINLINE}inline;{$endif}
     /// the Table name in the database, associated with this TOrm class
@@ -4214,6 +4217,9 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     {$endif PUREMORMOT2}
 
+    /// this property gives direct access to the class instance ID
+    // - not defined as "published" since RttiCustomSetParser did register it
+    property IDValue: TID read fID write fID;
     /// this property stores the record's integer ID
     // - if this TOrm is not a instance, but a field value in a published
     //  property of type oftID (i.e. TOrm(aID)), this method will try
@@ -4223,9 +4229,8 @@ type
     // - notice: the Setter should not be used usualy; you should not have to write
     //  aRecord.ID := someID in your code, since the ID is set during Retrieve or
     //  Add of the record
-    // - use parent TSynPersistentID.IDValue property for direct read/write
-    // access to the record's ID field, if you know that this TOrm is a
-    // true allocated class instance
+    // - rather use IDValue property for direct read/write access to the
+    // ID field, if you know that this TOrm is a true allocated class instance
     property ID: TID read GetID;
     /// this read-only property can be used to retrieve the ID as a TOrm object
     // - published properties of type TOrm (one-to-many relationship) do not
@@ -16299,7 +16304,6 @@ end;
 
 constructor TOrm.Create;
 begin
-  // no inherited TSynPersistent.Create since vmtAutoTable is set by OrmProps
   with OrmProps do
     if pointer(ManyFields) <> nil then
       // auto-instanciate any TOrmMany instance
@@ -16495,7 +16499,7 @@ begin
         D.Fields.List[f].CopyValue(aRecord, self);
     exit;
   end;
-  // two diverse tables -> don't copy ID, and per-field lookup
+  // two diverse tables -> don't copy ID, and per-name field lookup
   S := aRecord.OrmProps;
   for i := 0 to S.Fields.Count - 1 do
     if byte(i) in aRecordFieldBits then
@@ -17776,6 +17780,12 @@ begin
   T.OwnerMustFree := true;
   fFill.fFillCurrentRow := 1; // point to first data row (0 is field names)
   result := true;
+end;
+
+class procedure TOrm.RttiCustomSetParser(Rtti: TRttiCustom);
+begin
+  Rtti.Props.Add(
+    TypeInfo(TID), PtrInt(@TOrm(nil).fID), 'ID', {first=}true);
 end;
 
 function TOrm.GetID: TID;

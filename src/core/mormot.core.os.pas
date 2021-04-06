@@ -2110,7 +2110,7 @@ type
     fSafe: PSynLocker; // TSynLocker would increase inherited fields offset
   public
     /// initialize the instance, and its associated lock
-    // - is defined as virtual, just like TSynPersistent
+    // - is defined as virtual, just like TObjectWithCustomCreate/TSynPersistent
     constructor Create; virtual;
     /// finalize the instance, and its associated lock
     destructor Destroy; override;

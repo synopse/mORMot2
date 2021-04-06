@@ -3690,11 +3690,10 @@ type
   /// pointer to a dynamic array of TDateTimeMS values
   PDateTimeMSDynArray = ^TDateTimeMSDynArray;
 
-  /// a 64-bit identifier, defined for TSynPersistentWithID
-  // - type used for our ORM primary key, i.e. TOrm.ID
+  /// a 64-bit identifier, as used for our ORM primary key, i.e. TOrm.ID
   // - also maps the SQLite3 64-bit RowID definition
   TID = type Int64;
-  /// a pointer to TSynPersistentWithID.ID, i.e. our ORM primary key
+  /// a pointer to TOrm.ID, i.e. our ORM primary key
   PID = ^TID;
   /// used to store a dynamic array of ORM primary keys, i.e. TOrm.ID
   TIDDynArray = array of TID;
