@@ -6,15 +6,16 @@ unit mormot.db.raw.sqlite3.static;
 {
   *****************************************************************************
 
-    Statically linked SQLite3 3.34.1 engine with optional AES encryption
+    Statically linked SQLite3 3.35.4 engine with optional AES encryption
     - TSqlite3LibraryStatic Implementation
     - Encryption-Related Functions
 
       Just include this unit in your uses clause, and the mormot.db.raw.sqlite3
     sqlite3 global variable will be filled with linked .o/.obj API entries.
-      If the platform is not supported yet, fallback to a system .so is done.
+      Please download latest https://synopse.info/files/mormot2static.7z too.
+      If the platform is not supported yet, fallback loading a system library.
       To patch and compile the official SQlite3 amalgamation file, follow the
-    instruction from db\amalgamation\ReadMe.md
+    instruction from the res/static/sqlite3 folder.
 
   *****************************************************************************
 }
@@ -31,6 +32,7 @@ uses
   mormot.core.base,
   mormot.core.os,
   mormot.db.raw.sqlite3;
+
 
 implementation
 
@@ -138,38 +140,31 @@ var
 
 implementation
 
+{$ifndef FPC}
 {$ifdef OSWINDOWS}
-
 uses
-  Windows; // statically linked .obj requires the Windows API
-
-{$endif WINDOWS}
+  Windows; // statically linked Delphi .obj requires the Windows API
+{$endif OSWINDOWS}
+{$endif FPC}
 
 
 { ************ TSqlite3LibraryStatic Implementation }
 
 // ---------------- link raw .o .obj files
 
+// see res/static/libsqlite3 for patched source and build instructions
+
 {$ifdef FPC}  // FPC expects .o linking
 
   {$ifdef OSWINDOWS}
     {$ifdef CPU64}
-      const _PREFIX = '';
       {$L ..\..\static\x86_64-win64\sqlite3.o}
-      {$linklib ..\..\static\x86_64-win64\libkernel32.a}
-      {$linklib ..\..\static\x86_64-win64\libgcc.a}
-      {$linklib ..\..\static\x86_64-win64\libmsvcrt.a}
     {$else}
-      const _PREFIX = '_';
       {$L ..\..\static\i386-win32\sqlite3.o}
-      {$linklib ..\..\static\i386-win32\libkernel32.a}
-      {$linklib ..\..\static\i386-win32\libgcc.a}
-      {$linklib ..\..\static\i386-win32\libmsvcrt.a}
     {$endif CPU64}
   {$endif OSWINDOWS}
 
   {$ifdef OSDARWIN}
-    const _PREFIX = '_';
     {$ifdef CPU64}
       {$linklib ..\..\static\x86_64-darwin\libsqlite3.a}
     {$else}
@@ -178,189 +173,116 @@ uses
   {$endif OSDARWIN}
 
   {$ifdef OSANDROID}
-    const _PREFIX = '';
     {$ifdef CPUAARCH64}
-      {$L ..\..\static\aarch64-android\libsqlite3.a}
-      {$L ..\..\static\aarch64-android\libgcc.a}
+      {$L ..\..\static\aarch64-android\sqlite3.o}
     {$endif CPUAARCH64}
     {$ifdef CPUARM}
-      {$L ..\..\static\arm-android\libsqlite3.a}
-      {$L ..\..\static\arm-android\libgcc.a}
+      {$L ..\..\static\arm-android\sqlite3.o}
     {$endif CPUARM}
+    {$ifdef CPUX86}
+      {$L ..\..\static\i386-android\sqlite3.o}
+    {$endif CPUX86}
+    {$ifdef CPUX64}
+      {$L ..\..\static\x86_64-android\sqlite3.o}
+      // x86_64-linux-android-ld.bfd: final link failed
+      // (Nonrepresentable section on output)
+    {$endif CPUX64}
   {$endif OSANDROID}
 
   {$ifdef OSFREEBSD}
     {$ifdef CPUX86}
-    const _PREFIX = '';
     {$L ..\..\static\i386-freebsd\sqlite3.o}
-    {$ifdef FPC_CROSSCOMPILING}
-      {$linklib ..\..\static\i386-freebsd\libgcc.a}
-    {$endif FPC_CROSSCOMPILING}
     {$endif CPUX86}
     {$ifdef CPUX64}
-    const _PREFIX = '';
     {$L ..\..\static\x86_64-freebsd\sqlite3.o}
-    {$ifdef FPC_CROSSCOMPILING}
-      {$linklib ..\..\static\x86_64-freebsd\libgcc.a}
-    {$endif FPC_CROSSCOMPILING}
     {$endif CPUX64}
   {$endif OSFREEBSD}
 
   {$ifdef OSOPENBSD}
     {$ifdef CPUX86}
-      const _PREFIX = '';
       {$L ..\..\static\i386-openbsd\sqlite3.o}
-      {$ifdef FPC_CROSSCOMPILING}
-        {$linklib ..\..\static\i386-openbsd\libgcc.a}
-      {$endif FPC_CROSSCOMPILING}
     {$endif CPUX86}
     {$ifdef CPUX64}
-      const _PREFIX = '';
       {$L ..\..\static\x86_64-openbsd\sqlite3.o}
-      {$ifdef FPC_CROSSCOMPILING}
-        {$linklib ..\..\static\x86_64-openbsd\libgcc.a}
-      {$endif FPC_CROSSCOMPILING}
     {$endif CPUX64}
   {$endif OSOPENBSD}
 
   {$ifdef OSLINUX}
-    const _PREFIX = '';
     {$ifdef CPUAARCH64}
       {$L ..\..\static\aarch64-linux\sqlite3.o}
-      {$L ..\..\static\aarch64-linux\libgcc.a}
+      {$linklib ..\..\static\aarch64-linux\libgcc.a}
     {$endif CPUAARCH64}
     {$ifdef CPUARM}
       {$L ..\..\static\arm-linux\sqlite3.o}
-      {$L ..\..\static\arm-linux\libgcc.a}
+      {$linklib ..\..\static\arm-linux\libgcc.a}
     {$endif CPUARM}
     {$ifdef CPUX86}
       {$L ..\..\static\i386-linux\sqlite3.o}
-      {$ifdef FPC_CROSSCOMPILING}
-        {$linklib ..\..\static\i386-linux\libgcc.a}
-      {$endif FPC_CROSSCOMPILING}
     {$endif CPUX86}
     {$ifdef CPUX64}
       {$L ..\..\static\x86_64-linux\sqlite3.o}
-      {$ifdef FPC_CROSSCOMPILING}
-        {$linklib ..\..\static\x86_64-linux\libgcc.a}
-      {$endif FPC_CROSSCOMPILING}
     {$endif CPUX64}
   {$endif OSLINUX}
-
-function log(x: double): double; cdecl; public name _PREFIX + 'log'; export;
-begin
-  result := ln(x);
-end;
-
-{$ifdef OSWINDOWS}
-{$ifdef CPUX86} // not a compiler intrinsic on x86
-
-function _InterlockedCompareExchange(
-  var Dest: integer; New, Comp: integer): longint; stdcall;
-  public alias: '_InterlockedCompareExchange@12';
-begin
-  result := InterlockedCompareExchange(Dest,New,Comp);
-end;
-
-{$endif CPUX86}
-{$endif OSWINDOWS}
-
-{$ifdef OSDARWIN}
-
-function moddi3(num, den: int64): int64; cdecl; public alias: '___moddi3';
-begin
-  result := num mod den;
-end;
-function umoddi3(num, den: uint64): uint64; cdecl; public alias: '___umoddi3';
-begin
-  result := num mod den;
-end;
-function divdi3(num, den: int64): int64; cdecl; public alias: '___divdi3';
-begin
-  result := num div den;
-end;
-function udivdi3(num, den: uint64): uint64; cdecl; public alias: '___udivdi3';
-begin
-  result := num div den;
-end;
-
-{$endif OSDARWIN}
-
-{$ifdef OSANDROID}
-{$ifdef CPUARM}
-function bswapsi2(num:uint32):uint32; cdecl; public alias: '__bswapsi2';
-asm
-  rev r0, r0	// reverse bytes in parameter and put into result register
-  bx  lr
-end;
-function bswapdi2(num:uint64):uint64; cdecl; public alias: '__bswapdi2';
-asm
-  rev r2, r0  // r2 = rev(r0)
-  rev r0, r1  // r0 = rev(r1)
-  mov r1, r2  // r1 = r2 = rev(r0)
-  bx  lr
-end;
-{$endif}
-{$endif OSANDROID}
 
 {$else FPC} // Delphi static linking has diverse expectations
 
   // Delphi has a diverse linking strategy, since $linklib doesn't exist :(
   {$ifdef OSWINDOWS}
     {$ifdef CPU64}
-      {$L ..\..\static\delphi\sqlite3.o}  // compiled with C++ Builder 10.3 Community Edition bcc64
+      // compiled with C++ Builder 10.3 Community Edition bcc64
+      {$L ..\..\static\delphi\sqlite3.o}
     {$else}
-      {$L ..\..\static\delphi\sqlite3.obj}  // compiled with free Borland C++ Compiler 5.5
+      // compiled with the free Borland C++ Compiler 5.5
+      {$L ..\..\static\delphi\sqlite3.obj}
     {$endif}
   {$endif OSWINDOWS}
 
 // those functions will be called only under Delphi + Win32/Win64
+// - FPC will use explicit public name exports from mormot.lib.static
 
-function malloc(size: cardinal): Pointer; cdecl; { always cdecl }
+function malloc(size: cardinal): Pointer; cdecl;
 begin
   GetMem(result, size);
 end;
 
-procedure free(P: Pointer); cdecl; { always cdecl }
+procedure free(P: Pointer); cdecl;
 begin
   FreeMem(P);
 end;
 
-function realloc(P: Pointer; Size: integer): Pointer; cdecl; { always cdecl }
+function realloc(P: Pointer; Size: integer): Pointer; cdecl;
 begin
+  ReallocMem(P, Size);
   result := P;
-  ReallocMem(result, Size);
 end;
 
-function rename(oldname, newname: PUtf8Char): integer; cdecl; { always cdecl }
+function rename(oldname, newname: PUtf8Char): integer; cdecl; 
 begin
-  if RenameFile(Utf8DecodeToString(oldname, StrLen(oldname)),
-                Utf8DecodeToString(newname, StrLen(newname))) then
-    result := 0
-  else
-    result := -1;
+  result := libc_rename(oldname, newname);
 end;
 
 {$ifdef OSWINDOWS}
-{$ifdef CPU32} // Delphi Win32 will link static Borland C++ sqlite3.obj
 
-// we then implement all needed Borland C++ runtime functions in pure pascal:
+{$ifdef CPU32} // Delphi Win32 will link static C++ Builder sqlite3.obj
+
+// we then implement all needed C++ Builder runtime functions in pure pascal:
 
 function _ftol: Int64;
-// Borland C++ float to integer (Int64) conversion
+// C++ Builder float to integer (Int64) conversion
 asm
           jmp System.@Trunc  // FST(0) -> EDX:EAX, as expected by BCC32 compiler
 end;
 
 function _ftoul: Int64;
-// Borland C++ float to integer (Int64) conversion
+// C++ Builder float to integer (Int64) conversion
 asm
           jmp System.@Trunc  // FST(0) -> EDX:EAX, as expected by BCC32 compiler
 end;
 
-var __turbofloat: word; { not used, but must be present for linking }
+var
+  __turbofloat: word; { not used, but must be present for linking }
 
-// Borland C++ and Delphi share the same low level Int64 _ll*() functions:
+// C++ Builder and Delphi share the same low level Int64 _ll*() functions:
 
 procedure _lldiv;
 asm
@@ -414,7 +336,7 @@ asm
           jmp System.@_llushr
 end;
 
-function log(const val: double): double; cdecl; { always cdecl }
+function log(const val: double): double; cdecl;
 asm
           fld qword ptr val
           fldln2
@@ -423,41 +345,38 @@ asm
 end;
 
 {$endif CPU32}
+
 {$endif OSWINDOWS}
 
-function memset(P: Pointer; B: integer; count: integer): pointer; cdecl; { always cdecl }
+function memset(P: Pointer; B: integer; count: integer): pointer; cdecl;
 // a fast full pascal version of the standard C library function
 begin
   FillCharFast(P^, count, B);
   result := P;
 end;
 
-function memmove(dest, source: pointer; count: integer): pointer; cdecl; { always cdecl }
-  {$ifdef FPC}public name{$ifdef CPU64}'memmove'{$else}'_memmove'{$endif};{$endif}
+function memmove(dest, source: pointer; count: integer): pointer; cdecl;
 // a fast full pascal version of the standard C library function
 begin
   MoveFast(source^, dest^, count); // move() is overlapping-friendly
   result := dest;
 end;
 
-function memcpy(dest, source: Pointer; count: integer): pointer; cdecl; { always cdecl }
-  {$ifdef FPC}public name{$ifdef CPU64}'memcpy'{$else}'_memcpy'{$endif};{$endif}
+function memcpy(dest, source: Pointer; count: integer): pointer; cdecl;
 // a fast full pascal version of the standard C library function
 begin
   MoveFast(source^, dest^, count);
   result := dest;
 end;
 
-function strlen(p: PUtf8Char): integer; cdecl; { always cdecl }
-  {$ifdef FPC}public name{$ifdef CPU64}'strlen'{$else}'_strlen'{$endif};{$endif}
+function strlen(p: PUtf8Char): integer; cdecl;
 // a fast full pascal version of the standard C library function
 begin
   // called only by some obscure FTS3 functions (normal code use dedicated functions)
-  result := mormot.core.base.StrLen(pointer(p));
+  result := mormot.core.base.StrLen(p);
 end;
 
-function strcmp(p1, p2: PUtf8Char): integer; cdecl; { always cdecl }
-  {$ifdef FPC}public name{$ifdef CPU64}'strcmp'{$else}'_strcmp'{$endif};{$endif}
+function strcmp(p1, p2: PUtf8Char): integer; cdecl;
 // a fast full pascal version of the standard C library function
 begin
   // called only by some obscure FTS3 functions (normal code use dedicated functions)
@@ -465,14 +384,12 @@ begin
 end;
 
 function strcspn(str, reject: PUtf8Char): integer; cdecl;
-  {$ifdef FPC}public name{$ifdef CPU64}'strcspn'{$else}'_strcspn'{$endif};{$endif}
 begin
   // called e.g. during LIKE process
   result := mormot.core.unicode.strcspn(str, reject);
 end;
 
 function strrchr(s: PUtf8Char; c: AnsiChar): PUtf8Char; cdecl;
-  {$ifdef FPC}public name{$ifdef CPU64}'strrchr'{$else}'_strrchr'{$endif};{$endif}
 begin
   // simple full pascal version of the standard C library function
   result := nil;
@@ -485,161 +402,19 @@ begin
     end;
 end;
 
-function memcmp(p1, p2: pByte; Size: integer): integer; cdecl; { always cdecl }
+function memcmp(p1, p2: pByte; Size: integer): integer; cdecl;
 begin
-  // full pascal version of the standard C library function
-  if (p1 <> p2) and
-     (Size <> 0) then
-    if p1 <> nil then
-      if p2 <> nil then
-      begin
-        repeat
-          if p1^ = p2^ then
-          begin
-            inc(p1);
-            inc(p2);
-            dec(Size);
-            if Size <> 0 then
-              continue
-            else
-              break;
-          end;
-          result := p1^ - p2^;
-          exit;
-        until false;
-        result := 0;
-      end
-      else
-        result := 1
-    else
-      result := -1
-  else
-    result := 0;
+  result := libc_memcmp(p1, p2, Size);
 end;
 
-function strncmp(p1, p2: PByte; Size: integer): integer; cdecl; { always cdecl }
-  {$ifdef FPC}public name{$ifdef CPU64}'strncmp'{$else}'_strncmp'{$endif};{$endif}
-var
-  i: integer;
+function strncmp(p1, p2: PByte; Size: integer): integer; cdecl;  
 begin
-  // a fast full pascal version of the standard C library function
-  for i := 1 to Size do
-  begin
-    result := p1^ - p2^;
-    if (result <> 0) or
-       (p1^ = 0) then
-      exit;
-    inc(p1);
-    inc(p2);
-  end;
-  result := 0;
+  result := libc_strncmp(p1, p2, Size);
 end;
 
-type
-  // qsort() is used if SQLITE_ENABLE_FTS3 is defined
-  // this function type is defined for calling termDataCmp() in sqlite3.c
-  qsort_compare_func = function(P1, P2: pointer): integer; cdecl; { always cdecl }
-
-procedure QuickSortPtr(base: PPointerArray; L, R: integer;
-  comparF: qsort_compare_func);
-var
-  I, J, P: integer;
-  PP, C: PUtf8Char;
+procedure qsort(baseP: PByte; NElem, Width: PtrInt; comparF: qsort_compare_func); cdecl;
 begin
-  repeat // from SQLite (FTS), With=sizeof(PUtf8Char) AFAIK
-    I := L;
-    J := R;
-    P := (L + R) shr 1;
-    repeat
-      PP := @base[P];
-      while comparF(@base[I], PP) < 0 do
-        inc(I);
-      while comparF(@base[J], PP) > 0 do
-        dec(J);
-      if I <= J then
-      begin
-        C := base[I];
-        base[I] := base[J];
-        base[J] := C; // fast memory exchange
-        if P = I then
-          P := J
-        else if P = J then
-          P := I;
-        inc(I);
-        dec(J);
-      end;
-    until I > J;
-    if L < J then
-      QuickSortPtr(base, L, J, comparF);
-    L := I;
-  until I >= R;
-end;
-
-procedure QuickSort(baseP: PUtf8Char; Width: integer; L, R: integer;
-  comparF: qsort_compare_func);
-
-  procedure Exchg(P1, P2: PUtf8Char; Size: integer);
-  var
-    B: AnsiChar;
-    i: integer;
-  begin
-    for i := 0 to Size - 1 do
-    begin
-      B := P1[i];
-      P1[i] := P2[i];
-      P2[i] := B;
-    end;
-  end;
-
-var
-  I, J, P: integer;
-  PP, C: PUtf8Char;
-begin
-  repeat // generic sorting algorithm
-    I := L;
-    J := R;
-    P := (L + R) shr 1;
-    repeat
-      PP := baseP + P * Width; // compute PP at every loop, since P may change
-      C := baseP + I * Width;
-      while comparF(C, PP) < 0 do
-      begin
-        inc(I);
-        inc(C, Width); // avoid slower multiplication in loop
-      end;
-      C := baseP + J * Width;
-      while comparF(C, PP) > 0 do
-      begin
-        dec(J);
-        dec(C, Width); // avoid slower multiplication in loop
-      end;
-      if I <= J then
-      begin
-        Exchg(baseP + I * Width, baseP + J * Width, Width); // fast memory exchange
-        if P = I then
-          P := J
-        else if P = J then
-          P := I;
-        inc(I);
-        dec(J);
-      end;
-    until I > J;
-    if L < J then
-      QuickSort(baseP, Width, L, J, comparF);
-    L := I;
-  until I >= R;
-end;
-
-procedure qsort(baseP: pointer; NElem, Width: integer; comparF: pointer); cdecl; { always cdecl }
-  {$ifdef FPC}public name{$ifdef CPU64}'qsort'{$else}'_qsort'{$endif};{$endif}
-// a fast full pascal version of the standard C library function
-begin
-  if (cardinal(NElem) > 1) and
-     (Width > 0) then
-    if Width = sizeof(pointer) then
-      QuickSortPtr(baseP, 0, NElem-1, qsort_compare_func(comparF))
-    else
-      QuickSort(baseP, Width, 0, NElem-1, qsort_compare_func(comparF));
+  libc_qsort(baseP, NElem, Width, comparF);
 end;
 
 var
@@ -661,8 +436,7 @@ var
     __tm_zone: PChar;           { Timezone abbreviation}
   end;
 
-function localtime64(const t: Int64): pointer; cdecl; { always cdecl }
-  {$ifdef FPC}public name '__imp__localtime64';{$endif}
+function localtime64(const t: Int64): pointer; cdecl; 
 // a fast full pascal version of the standard C library function
 var S: TSystemTime;
 begin
@@ -677,21 +451,19 @@ begin
   result := @atm;
 end;
 
-function localtime(t: PCardinal): pointer; cdecl; { always cdecl }
-  {$ifdef FPC}public name{$ifdef CPU64}'localtime32'{$else}'__localtime32'{$endif};{$endif}
+function localtime(t: PCardinal): pointer; cdecl; 
 begin
   result := localtime64(t^);
 end;
 
 {$ifdef OSWINDOWS}
 
-const
-  msvcrt = 'msvcrt.dll';
-  kernel = 'kernel32.dll';
-
 function _beginthreadex(security: pointer; stksize: dword;
-  start,arg: pointer; flags: dword; var threadid: dword): THandle; cdecl; external msvcrt;
-procedure _endthreadex(exitcode: dword); cdecl; external msvcrt;
+  start, arg: pointer; flags: dword; var threadid: dword): THandle; cdecl;
+  external _CLIB;
+
+procedure _endthreadex(exitcode: dword); cdecl;
+  external _CLIB;
 
 {$ifdef CPU64}
 
@@ -747,7 +519,7 @@ begin
   s.AssignTo(k, aes, {encrypt=}true);
 end;
 
-function CodecGetReadKey(codec: pointer): PAes;  cdecl; external;
+function CodecGetReadKey(codec: pointer):  PAes; cdecl; external;
 function CodecGetWriteKey(codec: pointer): PAes; cdecl; external;
 
 procedure CodecGenerateReadKey(codec: pointer;
@@ -1251,14 +1023,12 @@ function sqlite3_trace_v2(DB: TSqlite3DB; Mask: integer; Callback: TSqlTraceCall
 { TSqlite3LibraryStatic }
 
 const
-  // error message if statically linked sqlite3.o(bj) does not match this
-  // - Android version may be a little behind, so we are more releaxed here
-  EXPECTED_SQLITE3_VERSION =
-    {$ifdef OSANDROID} '3.34' {$else} '3.35.0' {$endif};
+  // error message if statically linked sqlite3.o(bj) does not match this value
+  EXPECTED_SQLITE3_VERSION = '3.35.4';
 
   // where to download the latest available static binaries, including SQLite3
-  EXPECTED_STATIC_DOWNLOAD =
-    'https://github.com/synopse/mORMot2/releases/tag/sqlite.' + EXPECTED_SQLITE3_VERSION;
+  EXPECTED_STATIC_DOWNLOAD = 'https://synopse.info/files/mormot2static.7z';
+ // 'https://github.com/synopse/mORMot2/releases/tag/sqlite.' + EXPECTED_SQLITE3_VERSION;
 
 constructor TSqlite3LibraryStatic.Create;
 var

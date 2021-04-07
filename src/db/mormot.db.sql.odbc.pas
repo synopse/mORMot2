@@ -361,7 +361,7 @@ end;
 
 constructor TSqlDBOdbcConnection.Create(aProperties: TSqlDBConnectionProperties);
 var
-  Log: ISynLog;
+  {%H-}Log: ISynLog;
 begin
   Log := SynDBLog.Enter(self, 'Create');
   if not aProperties.InheritsFrom(TSqlDBOdbcConnectionProperties) then
@@ -380,7 +380,7 @@ end;
 
 procedure TSqlDBOdbcConnection.Disconnect;
 var
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   try
     inherited Disconnect; // flush any cached statement
@@ -440,7 +440,7 @@ end;
 
 procedure TSqlDBOdbcConnection.StartTransaction;
 var
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   log := SynDBLog.Enter(self, 'StartTransaction');
   if TransactionCount > 0 then

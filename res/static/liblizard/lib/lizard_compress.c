@@ -49,7 +49,7 @@
     #endif
 #endif
 #include "lizard_compress_lz4.h"
-#include "entropy/huf.h"
+#include "huf.h"
 
 
 /* *************************************

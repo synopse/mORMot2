@@ -2444,7 +2444,7 @@ begin
   for i := 0 to length(Pattern) - 1 do
   begin
     c := @m^[u[p[i]]]; // for FPC code generation
-    c^ := c^ or (1 shl i);
+    c^ := c^ or cardinal(1 shl i);
   end;
 end;
 
@@ -3485,8 +3485,6 @@ type
     fMatch: TMatch;
     function ParseWord: TExprParserResult; override;
   end;
-
-  PExprParserMatchNode = ^TExprParserMatchNode;
 
 function TExprParserMatchNode.ParseWord: TExprParserResult;
 begin

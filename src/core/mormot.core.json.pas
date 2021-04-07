@@ -2630,7 +2630,9 @@ type
     jtIdentifierFirstChar,
     jtSlash);
   TJsonTokens = array[AnsiChar] of TJsonToken;
+  {$ifndef CPUX86NOTPIC}
   PJsonTokens = ^TJsonTokens;
+  {$endif CPUX86NOTPIC}
 
 var
   JSON_TOKENS: TJsonTokens;
@@ -4782,15 +4784,17 @@ begin
           else
           begin
             Add(':', '('); // markup for SQL parameter binding
-            if Params[P].VType in [vtBoolean, vtInteger, vtInt64
-                {$ifdef FPC} , vtQWord {$endif}, vtCurrency, vtExtended] then
-              Add(Params[P]) // numbers or boolean
+            case Params[P].VType of
+              vtBoolean, vtInteger, vtInt64 {$ifdef FPC} , vtQWord {$endif},
+              vtCurrency, vtExtended:
+                Add(Params[P]) // numbers or boolean
             else
-            begin
-              VarRecToTempUtf8(Params[P], toquote);
-              AddQuotedStr(toquote.Text, toquote.Len, ''''); // SQL double quote
-              if toquote.TempRawUtf8 <> nil then
-                RawUtf8(toquote.TempRawUtf8) := ''; // release temp memory
+              begin
+                VarRecToTempUtf8(Params[P], toquote);
+                AddQuotedStr(toquote.Text, toquote.Len, ''''); // SQL double quote
+                if toquote.TempRawUtf8 <> nil then
+                  RawUtf8(toquote.TempRawUtf8) := ''; // release temp memory
+              end;
             end;
             Add(')', ':');
           end;
@@ -9338,8 +9342,8 @@ begin
   try
     result := 0;
     if not Assigned(OnMatch) or
-       (not Assigned(KeyCompare) and
-        not Assigned(ValueCompare)) then
+       not (Assigned(KeyCompare) or
+            Assigned(ValueCompare)) then
       exit;
     n := fSafe.Padding[DIC_KEYCOUNT].VInteger;
     k := fKeys.Value^;
@@ -9554,9 +9558,9 @@ begin
   result := TComponentClass(Rtti.ValueClass).Create(nil);
 end;
 
-function _New_SynPersistent(Rtti: TRttiCustom): pointer;
+function _New_ObjectWithCustomCreate(Rtti: TRttiCustom): pointer;
 begin
-  result := TSynPersistentClass(Rtti.ValueClass).Create;
+  result := TObjectWithCustomCreateClass(Rtti.ValueClass).Create;
 end;
 
 function _New_SynObjectList(Rtti: TRttiCustom): pointer;
@@ -9649,11 +9653,11 @@ begin
         fClassNewInstance := @_New_InterfacedObjectWithCustomCreate
       else if C = TPersistentWithCustomCreate then
         fClassNewInstance := @_New_PersistentWithCustomCreate
-      else if C = TSynPersistent then
+      else if C = TObjectWithCustomCreate then
       begin
-        fClassNewInstance := @_New_SynPersistent;
-        // allow any kind of customization for TSynPersistent children
-        TSPHookClass(fValueClass).RttiCustomSet(self)
+        fClassNewInstance := @_New_ObjectWithCustomCreate;
+        // allow any kind of customization for TObjectWithCustomCreate children
+        TSPHookClass(fValueClass).RttiCustomSetParser(self);
       end
       else if C = TSynObjectList then
       begin

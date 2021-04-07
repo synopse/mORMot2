@@ -1983,7 +1983,7 @@ begin
     begin
       SetLength(fUnique, Count);
       for f := 0 to Count - 1 do
-        if f in fIsUnique then
+        if byte(f) in fIsUnique then
           fUnique[f] := TRestStorageInMemoryUnique.Create(self, List[f]);
     end;
   ReloadFromFile;
@@ -2021,7 +2021,7 @@ begin
     exit;
   // ensure no duplicated ID or unique field
   for f := 0 to high(fUnique) do
-    if f in fIsUnique then
+    if byte(f) in fIsUnique then
     begin
       ndx := fUnique[f].Find(Rec);
       if ndx >= 0 then
@@ -2054,7 +2054,7 @@ begin
   end;
   // update internal hash tables and add to internal list
   for f := 0 to high(fUnique) do
-    if f in fIsUnique then
+    if byte(f) in fIsUnique then
       if not fUnique[f].AddedAfterFind(Rec) then // paranoid
         raise ERestStorage.CreateUtf8('%.AddOne on %.%',
           [self, Rec, fUnique[f].PropInfo.Name]);
@@ -2077,7 +2077,7 @@ var
 begin
   result := false;
   for f := 0 to high(fUnique) do
-    if f in fIsUnique then
+    if byte(f) in fIsUnique then
     begin
       ndx := fUnique[f].Find(aRec);
       if (ndx >= 0) and
@@ -2176,7 +2176,7 @@ begin
       Owner.InternalUpdateEvent(oeDelete, fStoredClassProps.TableIndex,
         rec.IDValue, '', nil);
     for f := 0 to high(fUnique) do
-      if f in fIsUnique then
+      if byte(f) in fIsUnique then
         if fUnique[f].Hasher.FindBeforeDelete(@rec) < aIndex then
           raise ERestStorage.CreateUtf8('%.DeleteOne(%) failed on %',
             [self, aIndex, fUnique[f].PropInfo.Name]);
@@ -2829,7 +2829,7 @@ begin
     begin
       timer.Start;
       for f := 0 to high(fUnique) do
-        if f in fIsUnique then
+        if byte(f) in fIsUnique then
           fUnique[f].Hasher.Clear;
       fValues.Hasher.Clear;
       fValues.Clear;
@@ -2876,7 +2876,7 @@ begin
     cf := 'ID'
   else
     for f := 0 to high(fUnique) do
-      if f in fIsUnique then
+      if byte(f) in fIsUnique then
       begin
         c := fUnique[f].Hasher.ReHash({forced=}true, {grow=}false);
         if c > 0 then
@@ -4342,7 +4342,7 @@ procedure TRestStorageShard.InternalAddNewShard;
 var
   rest: TRestOrm;
   i: PtrInt;
-  log: ISynLog; // for Enter auto-leave to work with FPC / Delphi 10.4+
+  {%H-}log: ISynLog;
 begin
   log := fOwner.Owner.Enter('InternalAddNewShard: #% for %',
     [fShardLast + 1, fStoredClass], self);

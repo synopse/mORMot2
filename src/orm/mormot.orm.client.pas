@@ -903,7 +903,7 @@ begin
         while (R^ <= ' ') and
               (R^ <> #0) do
           inc(R);
-        res := byte(R^) - 48;
+        res := Int64(ord(R^)) - 48;
         if res <= 9 then
         begin
           inc(R);

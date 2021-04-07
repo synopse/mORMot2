@@ -3241,10 +3241,11 @@ type
   // - consider inherit from TOrmNoCase and TOrmNoCaseExtended if
   // you expect regular NOCASE collation and smaller (but not standard JSON)
   // variant fields persistence
-  TOrm = class(TSynPersistentWithID)
+  TOrm = class(TObjectWithCustomCreate)
   { note that every TOrm has an Instance size of 20 bytes (on 32-bit)
     for private and protected fields (such as fID or fFill e.g.) }
   protected
+    fID: TID;
     /// used by FillPrepare() and corresponding Fill*() methods
     fFill: TOrmFill;
     /// internal properties getters (using fProps data for speed)
@@ -3253,6 +3254,8 @@ type
     function GetFillCurrentRow: integer;
     function GetFillReachedEnd: boolean;
     function GetTable: TOrmTable;
+    /// will register the "ID":... field value for proper JSON serialization
+    class procedure RttiCustomSetParser(Rtti: TRttiCustom); override;
   protected
     fInternalState: cardinal;
     /// defined as a protected class function for OrmProps method inlining
@@ -3293,7 +3296,7 @@ type
     class function OrmProps: TOrmProperties;
       {$ifdef HASINLINE}inline;{$endif}
     /// direct access to the TOrmProperties info of an existing TOrm instance
-    // - same as OrmProps, but we know that PropsCreate is never needed
+    // - same as OrmProps, but when we know that PropsCreate is never needed
     function Orm: TOrmProperties;
       {$ifdef HASINLINE}inline;{$endif}
     /// the Table name in the database, associated with this TOrm class
@@ -4214,6 +4217,9 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     {$endif PUREMORMOT2}
 
+    /// this property gives direct access to the class instance ID
+    // - not defined as "published" since RttiCustomSetParser did register it
+    property IDValue: TID read fID write fID;
     /// this property stores the record's integer ID
     // - if this TOrm is not a instance, but a field value in a published
     //  property of type oftID (i.e. TOrm(aID)), this method will try
@@ -4223,9 +4229,8 @@ type
     // - notice: the Setter should not be used usualy; you should not have to write
     //  aRecord.ID := someID in your code, since the ID is set during Retrieve or
     //  Add of the record
-    // - use parent TSynPersistentID.IDValue property for direct read/write
-    // access to the record's ID field, if you know that this TOrm is a
-    // true allocated class instance
+    // - rather use IDValue property for direct read/write access to the
+    // ID field, if you know that this TOrm is a true allocated class instance
     property ID: TID read GetID;
     /// this read-only property can be used to retrieve the ID as a TOrm object
     // - published properties of type TOrm (one-to-many relationship) do not
@@ -13523,7 +13528,7 @@ begin
       begin
         guessed := true;
         f := field + fFieldCount;
-        if field in fFieldParsedAsString then
+        if byte(field) in fFieldParsedAsString then
         begin
           // the parser identified string values -> check if was oftDateTime
           oft := oftUtf8Text;
@@ -13537,7 +13542,7 @@ begin
               len := StrLen(U);
               tlog := Iso8601ToTimeLogPUtf8Char(U, len);
               if tlog <> 0 then
-                if (len in [8, 10]) and (cardinal(tlog shr 26) - 1800 < 300) then
+                if (byte(len) in [8, 10]) and (cardinal(tlog shr 26) - 1800 < 300) then
                   // e.g. YYYYMMDD date (Y=1800..2100)
                   oft := oftDateTime
                 else if len >= 15 then
@@ -15352,7 +15357,7 @@ begin
       while PtrUInt(result) <= PtrUInt(fRowCount) do
       begin
         i := GetInteger(GetResults(o), err);
-        if (err = 0) and (i in EnumValues) then
+        if (err = 0) and (i < 255) and (byte(i) in EnumValues) then
           exit; // we found a matching field
         inc(o, fFieldCount); // ignore all other fields -> jump to next row data
         inc(result);
@@ -16299,7 +16304,6 @@ end;
 
 constructor TOrm.Create;
 begin
-  // no inherited TSynPersistent.Create since vmtAutoTable is set by OrmProps
   with OrmProps do
     if pointer(ManyFields) <> nil then
       // auto-instanciate any TOrmMany instance
@@ -16363,7 +16367,7 @@ begin
   result.fID := fID;
   with Orm do
     for f := 0 to Fields.Count - 1 do
-      if (f in CustomFields) and (f in CopiableFieldsBits) then
+      if (byte(f) in CustomFields) and (byte(f) in CopiableFieldsBits) then
         Fields.List[f].CopyValue(self, result);
 end;
 
@@ -16374,7 +16378,7 @@ begin
   FillZero(result{%H-});
   with Orm do
     for f := 0 to Fields.Count - 1 do
-      if (f in CopiableFieldsBits) and not Fields.List[f].IsValueVoid(self) then
+      if (byte(f) in CopiableFieldsBits) and not Fields.List[f].IsValueVoid(self) then
         include(result, f);
 end;
 
@@ -16491,14 +16495,14 @@ begin
     if POrmClass(aRecord)^ = POrmClass(self)^ then
       fID := aRecord.fID; // same class -> ID values will match
     for f := 0 to D.Fields.Count - 1 do
-      if f in aRecordFieldBits then
+      if byte(f) in aRecordFieldBits then
         D.Fields.List[f].CopyValue(aRecord, self);
     exit;
   end;
-  // two diverse tables -> don't copy ID, and per-field lookup
+  // two diverse tables -> don't copy ID, and per-name field lookup
   S := aRecord.OrmProps;
   for i := 0 to S.Fields.Count - 1 do
-    if i in aRecordFieldBits then
+    if byte(i) in aRecordFieldBits then
     begin
       SP := S.Fields.List[i];
       if D.Fields.List[i].Name = SP.Name then
@@ -16814,7 +16818,7 @@ var
 begin
   with Orm.Fields do
     for f := 0 to Count - 1 do
-      if f in aFields then
+      if byte(f) in aFields then
         List[f].GetBinary(self, W);
 end;
 
@@ -16929,7 +16933,7 @@ begin
     Fields := P.SimpleFieldsBits[ooSelect];
   Props := P.Fields;
   for i := 0 to Props.Count - 1 do
-    if i in Fields then
+    if byte(i) in Fields then
     begin
       W.Add(',', '"');
       W.AddNoJsonEscape(pointer(Props.List[i].Name), length(Props.List[i].Name));
@@ -17176,7 +17180,7 @@ begin
           if SQL <> '' then
           begin
             result := result + Name + SQL;
-            if i in IsUniqueFieldsBits then
+            if byte(i) in IsUniqueFieldsBits then
               insert(' UNIQUE', result, length(result) - 1);
           end;
         end;
@@ -17332,7 +17336,7 @@ begin
     else if not FieldBitsFromCsv(aFieldsCsv, bits) then
       exit;
     for f := 0 to Fields.Count - 1 do
-      if (f in bits) and (Fields.List[f].OrmFieldType in COPIABLE_FIELDS) then
+      if (byte(f) in bits) and (Fields.List[f].OrmFieldType in COPIABLE_FIELDS) then
         Fields.List[f].SetValue(self, nil, false); // clear field value
   end;
 end;
@@ -17778,6 +17782,12 @@ begin
   result := true;
 end;
 
+class procedure TOrm.RttiCustomSetParser(Rtti: TRttiCustom);
+begin
+  Rtti.Props.Add(
+    TypeInfo(TID), PtrInt(@TOrm(nil).fID), 'ID', {first=}true);
+end;
+
 function TOrm.GetID: TID;
 begin
   {$ifdef OSWINDOWS}
@@ -17933,7 +17943,7 @@ begin
     doc.Values[i] := fID;
   end;
   for f := 0 to Fields.Count - 1 do
-    if f in withFields then
+    if byte(f) in withFields then
     begin
       i := doc.InternalAdd(Fields.List[f].Name);
       Fields.List[f].GetVariant(self, doc.Values[i]);
@@ -18106,7 +18116,6 @@ var
   f, i: PtrInt;
   Value: RawUtf8;
   Validate: TSynValidate;
-  ValidateRest: TSynValidateRest absolute Validate;
   valid: boolean;
 begin
   result := '';
@@ -18126,8 +18135,8 @@ begin
               if {%H-}Value = '' then
                 Fields.List[f].GetValueVar(self, false, Value, nil);
               if Validate.InheritsFrom(TSynValidateRest) then
-                valid := TSynValidateRest(Validate).Validate(f, Value, result,
-                  aRest, self)
+                valid := TSynValidateRest(Validate).Validate(
+                  f, Value, result, aRest, self)
               else
                 valid := Validate.Process(f, Value, result);
               if not valid then
@@ -19463,7 +19472,7 @@ begin
   W := TTextWriter.CreateOwnedStream(temp);
   try
     for f := 0 to Fields.Count - 1 do
-      if f in Bits then
+      if byte(f) in Bits then
       begin
         W.AddString(Fields.List[f].Name);
         W.AddComma;
@@ -20506,10 +20515,10 @@ begin // similar to TOrmPropertiesMapping.ComputeSql
           // pre-computation of SQL statements
           SQL.UpdateSetAll := SQL.UpdateSetAll + Name + '=?,';
           SQL.InsertSet := SQL.InsertSet + Name + ',';
-          if f in SimpleFieldsBits[ooUpdate] then
+          if byte(f) in SimpleFieldsBits[ooUpdate] then
             SQL.UpdateSetSimple := SQL.UpdateSetSimple + Name + '=?,';
           // filter + validation of unique fields, i.e. if marked as "stored false"
-          if f in IsUniqueFieldsBits then
+          if byte(f) in IsUniqueFieldsBits then
           begin
             // must trim() text value before storage, and validate for unicity
             if OrmFieldType in [oftUtf8Text, oftAnsiText] then
@@ -20770,18 +20779,18 @@ type
           if OrmFieldType in COPIABLE_FIELDS then // oftMany fields do not exist
             case content of
               cTableSimpleFields:
-                if f in SimpleFieldsBits[ooSelect] then
+                if byte(f) in SimpleFieldsBits[ooSelect] then
                 begin
                   if withTableName then
                     W.AddStrings([TableName, '.']);
                   W.AddString(ExtFieldNames[f]);
-                  if not (f + 1 in FieldNamesMatchInternal) then
+                  if not (byte(f + 1) in FieldNamesMatchInternal) then
                     // to get expected JSON column name
                     W.AddStrings([' as ', Name]);
                   W.AddComma;
                 end;
               cUpdateSimple:
-                if f in SimpleFieldsBits[ooSelect] then
+                if byte(f) in SimpleFieldsBits[ooSelect] then
                   W.AddStrings([ExtFieldNames[f], '=?,']);
               cUpdateSetAll:
                 W.AddStrings([ExtFieldNames[f], '=?,']);

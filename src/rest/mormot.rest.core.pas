@@ -442,7 +442,6 @@ type
     end;
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
     procedure SetLogClass(aClass: TSynLogClass); virtual;
-    function GetLogClass: TSynLogClass;
     /// compute the server time stamp offset from the given date/time
     procedure SetServerTimestamp(const Value: TTimeLog);
     /// wrapper methods to access fAcquireExecution[]
@@ -633,9 +632,10 @@ type
     // - is used internally by the class, but can be used for business code
     property PrivateGarbageCollector: TSynObjectList
       read fPrivateGarbageCollector;
-    /// access to the associate TSynLog class type
+    /// access to the TSynLog class used for logging
+    // - equals TSynLog by default - but you could change it to a custom class
     property LogClass: TSynLogClass
-      read fLogClass;
+      read fLogClass write SetLogClass;
     /// access to the associate TSynLog class familly
     property LogFamily: TSynLogFamily
       read fLogFamily;
@@ -1266,7 +1266,8 @@ type
     // - could be used to protect shared resources within the internal process
     property Safe: TSynLocker
       read fSafe;
-    /// read-only access to the TSynLog instance of the associated REST instance
+    /// read-only access to the REST TSynLog instance matching this thread
+    // - can be used safely within InternalExecute code
     property Log: TSynLog
       read fLog;
     /// a event associated to this thread
@@ -1732,14 +1733,6 @@ procedure TRest.SetLogClass(aClass: TSynLogClass);
 begin
   fLogClass := aClass;
   fLogFamily := fLogClass.Family;
-end;
-
-function TRest.GetLogClass: TSynLogClass;
-begin
-  if self = nil then
-    result := TSynLog
-  else
-    result := fLogClass;
 end;
 
 procedure TRest.InternalLog(const Text: RawUtf8; Level: TSynLogInfo);
@@ -2932,7 +2925,7 @@ function TRestBackgroundTimer.AsyncBatchStop(Table: TOrmClass): boolean;
 var
   b: PtrInt;
   timeout: Int64;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   result := false;
   if (self = nil) or
@@ -3075,7 +3068,7 @@ var
   call: TInterfacedObjectAsyncCall;
   o: PRawUtf8;
   output: RawUtf8;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   if not RecordLoad(call, Msg, TypeInfo(TInterfacedObjectAsyncCall)) then
     exit; // invalid message (e.g. periodic execution)
@@ -3473,7 +3466,7 @@ end;
 
 procedure TRestThread.Execute;
 begin
-  fLog := fRest.fLogClass.Add;
+  fLog := fRest.fLogClass.Add; // fLog: TSynLog instance (maybe thread-specific)
   SetCurrentThreadName('%', [fThreadName]);
   fRest.fRun.BeginCurrentThread(self);
   try
@@ -3482,7 +3475,7 @@ begin
       InternalExecute;
     except
       on E: Exception do
-        fLog.Add.Log(sllError, 'Unhandled % in %.Execute -> abort',
+        fLog.Log(sllError, 'Unhandled % in %.Execute -> abort',
           [E, ClassType], self);
     end;
   finally

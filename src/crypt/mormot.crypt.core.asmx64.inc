@@ -4905,6 +4905,7 @@ end;
 
 var
   /// filled with random at startup so collisions will be harder to engineer
+  // - to avoid hash flooding http://ocert.org/advisories/ocert-2012-001.html
   // - set by GetMemAligned() - mandatory on Delphi which doesn't align properly
   AESNIHASHKEYSCHED: pointer;
   AESNIHASHKEYSCHED_: RawByteString;

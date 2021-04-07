@@ -588,7 +588,7 @@ end;
 
 constructor TSqlDBOracleConnection.Create(aProperties: TSqlDBConnectionProperties);
 var
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   log := SynDBLog.Enter(self, 'Create');
   if not aProperties.InheritsFrom(TSqlDBOracleConnectionProperties) then

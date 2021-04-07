@@ -558,13 +558,13 @@ procedure TServiceComplexCalculator.EnsureInExpectedThread;
 begin
   case GlobalInterfaceTestMode of
     itmDirect, itmClient, itmMainThread:
-      {$ifndef OSANDROID}
-      if GetThreadID <> PtrUInt(MainThreadID) then
+      {$ifdef OSANDROID}
+      // On Android, processes never run in the mainthread
+      ;
       {$else}
-      // On Android, processes never run in the mainthread.
-      if false then
-      {$endif OSANDROID}
+      if GetThreadID <> PtrUInt(MainThreadID) then
         raise Exception.Create('Shall be in main thread');
+      {$endif OSANDROID}
     itmPerInterfaceThread, itmHttp, itmLocked:
       if GetThreadID = PtrUInt(MainThreadID) then
         raise Exception.Create('Shall NOT be in main thread')

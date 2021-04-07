@@ -464,7 +464,7 @@ type
     function RttiBeforeWriteObject(W: TBaseWriter;
       var Options: TTextWriterWriteObjectOptions): boolean; override;
     // set the rcfSynPersistentHook flag to call RttiBeforeWriteObject
-    class procedure RttiCustomSet(Rtti: TRttiCustom); override;
+    class procedure RttiCustomSetParser(Rtti: TRttiCustom); override;
     /// an identifier associated to this monitored resource
     // - is used e.g. for TSynMonitorUsage persistence/tracking
     property Name: RawUtf8
@@ -1450,7 +1450,7 @@ begin
   // do nothing by default - overriden classes may track modified changes
 end;
 
-class procedure TSynMonitor.RttiCustomSet(Rtti: TRttiCustom);
+class procedure TSynMonitor.RttiCustomSetParser(Rtti: TRttiCustom);
 begin
   // let's call RttiBeforeWriteObject
   Rtti.Flags := Rtti.Flags + [rcfSynPersistentHook];

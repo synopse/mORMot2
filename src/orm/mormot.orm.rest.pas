@@ -1092,7 +1092,7 @@ begin
           if (IDToIndex <> nil) and
              (aID = IDToIndex^) then
           begin
-            IDToIndex^ := Row - 1;
+            IDToIndex^ := TID(Row) - 1;
             IDToIndex := nil; // set once
           end;
         end;

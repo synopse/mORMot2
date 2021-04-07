@@ -435,7 +435,7 @@ begin
           S.WriteBuffer(CHARS[2], 2);
           SaveToJson(S, true);
           S.WriteBuffer(CHARS[5], 1);
-          if t < integer(fStaticDataCount - 1) then
+          if t < PtrInt(fStaticDataCount - 1) then
             S.WriteBuffer(CHARS[4], 1);
         end;
       S.WriteBuffer(CHARS[6], 1);

@@ -1739,7 +1739,7 @@ procedure TSqlDBOleDBConnection.Connect;
 var
   DataInitialize: IDataInitialize;
   unknown: IUnknown;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   Log := SynDBLog.Enter(self, 'Connect');
   // check context
@@ -1778,7 +1778,7 @@ end;
 
 constructor TSqlDBOleDBConnection.Create(aProperties: TSqlDBConnectionProperties);
 var
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   Log := SynDBLog.Enter(self, 'Create');
   if not aProperties.InheritsFrom(TSqlDBOleDBConnectionProperties) then
@@ -1807,7 +1807,7 @@ end;
 
 procedure TSqlDBOleDBConnection.Disconnect;
 var
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   Log := SynDBLog.Enter(self, 'Disconnect');
   try
@@ -1915,7 +1915,7 @@ end;
 
 procedure TSqlDBOleDBConnection.Commit;
 var
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   Log := SynDBLog.Enter(self, 'Commit');
   if assigned(fTransaction) then
@@ -1932,7 +1932,7 @@ end;
 
 procedure TSqlDBOleDBConnection.Rollback;
 var
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   Log := SynDBLog.Enter(self, 'Rollback');
   if assigned(fTransaction) then
@@ -1944,7 +1944,7 @@ end;
 
 procedure TSqlDBOleDBConnection.StartTransaction;
 var
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   Log := SynDBLog.Enter(self, 'StartTransaction');
   if assigned(fTransaction) then
@@ -2013,7 +2013,7 @@ end;
 function TSqlDBOleDBConnectionProperties.CreateDatabase: boolean;
 var
   Catalog: _Catalog;
-  DB: OleVariant;
+  {%H-}DB: OleVariant;
 begin
   result := false;
   if ConnectionString <> '' then

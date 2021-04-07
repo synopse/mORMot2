@@ -382,7 +382,7 @@ end;
 
 procedure TSqlDBSQLite3Connection.Connect;
 var
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   log := SynDBLog.Enter;
   Disconnect; // force fTrans=fError=fServer=fContext=nil

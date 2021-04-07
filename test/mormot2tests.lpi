@@ -17,7 +17,7 @@
     <i18n>
       <EnableI18N LFM="False"/>
     </i18n>
-    <BuildModes Count="11">
+    <BuildModes Count="15">
       <Item1 Name="default" Default="True"/>
       <Item2 Name="win32">
         <CompilerOptions>
@@ -27,9 +27,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -63,14 +61,7 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <OtherDefines Count="6">
-              <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
-              <Define1 Value="FPC_X64MM"/>
-              <Define2 Value="FPCMM_DEBUG"/>
-              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
-              <Define4 Value="PUREMORMOT2"/>
-              <Define5 Value="FPCMM_SERVER"/>
-            </OtherDefines>
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
           </Other>
         </CompilerOptions>
       </Item2>
@@ -82,9 +73,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -117,18 +106,24 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <OtherDefines Count="6">
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123
+-dFPC_NO_DEFAULT_MEMORYMANAGER
+-dFPC_X64MM
+-dFPCMM_DEBUG
+-dFPCMM_REPORTMEMORYLEAKS"/>
+            <OtherDefines Count="7">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
               <Define2 Value="FPCMM_DEBUG"/>
               <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
               <Define4 Value="PUREMORMOT2"/>
               <Define5 Value="FPCMM_SERVER"/>
+              <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
       </Item3>
-      <Item4 Name="lin32">
+      <Item4 Name="lin386">
         <CompilerOptions>
           <Version Value="11"/>
           <PathDelim Value="\"/>
@@ -136,9 +131,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -163,7 +156,6 @@
           <Linking>
             <Debugging>
               <DebugInfoType Value="dsDwarf2Set"/>
-              <UseExternalDbgSyms Value="True"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -172,18 +164,11 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <OtherDefines Count="6">
-              <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
-              <Define1 Value="FPC_X64MM"/>
-              <Define2 Value="FPCMM_DEBUG"/>
-              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
-              <Define4 Value="PUREMORMOT2"/>
-              <Define5 Value="FPCMM_SERVER"/>
-            </OtherDefines>
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
           </Other>
         </CompilerOptions>
       </Item4>
-      <Item5 Name="lin64">
+      <Item5 Name="linx64">
         <CompilerOptions>
           <Version Value="11"/>
           <PathDelim Value="\"/>
@@ -191,9 +176,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\app;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\tools\ecc;..\src\orm;..\src\soa"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -219,7 +202,6 @@
             <Debugging>
               <DebugInfoType Value="dsDwarf2"/>
               <UseLineInfoUnit Value="False"/>
-              <UseExternalDbgSyms Value="True"/>
             </Debugging>
             <LinkSmart Value="True"/>
           </Linking>
@@ -231,24 +213,26 @@
             <CompilerMessages>
               <IgnoredMessages idx5089="True"/>
             </CompilerMessages>
-            <CustomOptions Value="-dFPC_NO_DEFAULT_MEMORYMANAGER
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123
+-dFPC_NO_DEFAULT_MEMORYMANAGER
 -dFPC_X64MM
 -dFPCMM_DEBUG
 -dFPCMM_REPORTMEMORYLEAKS
 -dPUREMORMOT2
 -dFPCMM_SERVER"/>
-            <OtherDefines Count="6">
+            <OtherDefines Count="7">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
               <Define2 Value="FPCMM_DEBUG"/>
               <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
               <Define4 Value="PUREMORMOT2"/>
               <Define5 Value="FPCMM_SERVER"/>
+              <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
       </Item5>
-      <Item6 Name="bsd32">
+      <Item6 Name="bsd386">
         <CompilerOptions>
           <Version Value="11"/>
           <PathDelim Value="\"/>
@@ -256,9 +240,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -293,6 +275,7 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
             <OtherDefines Count="6">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
@@ -304,7 +287,7 @@
           </Other>
         </CompilerOptions>
       </Item6>
-      <Item7 Name="bsd64">
+      <Item7 Name="bsdx64">
         <CompilerOptions>
           <Version Value="11"/>
           <PathDelim Value="\"/>
@@ -312,9 +295,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -349,10 +330,11 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
           </Other>
         </CompilerOptions>
       </Item7>
-      <Item8 Name="darwin32">
+      <Item8 Name="darw386">
         <CompilerOptions>
           <Version Value="11"/>
           <PathDelim Value="\"/>
@@ -360,9 +342,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -397,10 +377,11 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
           </Other>
         </CompilerOptions>
       </Item8>
-      <Item9 Name="darwin64">
+      <Item9 Name="darwx64">
         <CompilerOptions>
           <Version Value="11"/>
           <PathDelim Value="\"/>
@@ -408,9 +389,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="//if TargetOS='darwin' then
@@ -445,15 +424,17 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-dFPC_NO_DEFAULT_MEMORYMANAGER
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123
+-dFPC_NO_DEFAULT_MEMORYMANAGER
 -dFPC_CMEM"/>
-            <OtherDefines Count="6">
-              <Define0 Value="FPC_CMEM"/>
-              <Define1 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
-              <Define2 Value="FPC_SYNCMEM"/>
-              <Define3 Value="FPC_FASTMM4"/>
-              <Define4 Value="FPC_SYNTBB"/>
-              <Define5 Value="FPC_SYNJEMALLOC"/>
+            <OtherDefines Count="7">
+              <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+              <Define1 Value="FPC_X64MM"/>
+              <Define2 Value="FPCMM_DEBUG"/>
+              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+              <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
+              <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -466,9 +447,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -484,6 +463,7 @@
             <Checks>
               <IOChecks Value="True"/>
             </Checks>
+            <TargetProcessor Value="ARMV7A"/>
             <TargetCPU Value="arm"/>
             <TargetOS Value="linux"/>
             <Optimizations>
@@ -503,6 +483,16 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
+            <OtherDefines Count="7">
+              <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+              <Define1 Value="FPC_X64MM"/>
+              <Define2 Value="FPCMM_DEBUG"/>
+              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+              <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
+              <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
+            </OtherDefines>
           </Other>
         </CompilerOptions>
       </Item10>
@@ -514,9 +504,7 @@
             <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-            <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-            <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+            <IncludeFiles Value="$(ProjOutDir)"/>
             <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Conditionals Value="if TargetOS='darwin' then
@@ -551,9 +539,235 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
           </Other>
         </CompilerOptions>
       </Item11>
+      <Item12 Name="andarm32">
+        <CompilerOptions>
+          <Version Value="11"/>
+          <PathDelim Value="\"/>
+          <Target>
+            <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
+          </Target>
+          <SearchPaths>
+            <IncludeFiles Value="$(ProjOutDir)"/>
+            <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+          </SearchPaths>
+          <Conditionals Value="if TargetOS='darwin' then
+   CustomOptions := ' -Cg-';"/>
+          <Parsing>
+            <SyntaxOptions>
+              <SyntaxMode Value="Delphi"/>
+              <IncludeAssertionCode Value="True"/>
+            </SyntaxOptions>
+          </Parsing>
+          <CodeGeneration>
+            <SmartLinkUnit Value="True"/>
+            <Checks>
+              <IOChecks Value="True"/>
+            </Checks>
+            <TargetProcessor Value="ARMV7A"/>
+            <TargetCPU Value="arm"/>
+            <TargetOS Value="android"/>
+            <Optimizations>
+              <OptimizationLevel Value="3"/>
+            </Optimizations>
+          </CodeGeneration>
+          <Linking>
+            <Debugging>
+              <GenerateDebugInfo Value="False"/>
+              <DebugInfoType Value="dsDwarf2Set"/>
+              <UseExternalDbgSyms Value="True"/>
+            </Debugging>
+            <LinkSmart Value="True"/>
+          </Linking>
+          <Other>
+            <Verbosity>
+              <ShowNotes Value="False"/>
+              <ShowHints Value="False"/>
+            </Verbosity>
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
+            <OtherDefines Count="7">
+              <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+              <Define1 Value="FPC_X64MM"/>
+              <Define2 Value="FPCMM_DEBUG"/>
+              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+              <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
+              <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
+            </OtherDefines>
+          </Other>
+        </CompilerOptions>
+      </Item12>
+      <Item13 Name="andarm64">
+        <CompilerOptions>
+          <Version Value="11"/>
+          <PathDelim Value="\"/>
+          <Target>
+            <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
+          </Target>
+          <SearchPaths>
+            <IncludeFiles Value="$(ProjOutDir)"/>
+            <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+          </SearchPaths>
+          <Conditionals Value="if TargetOS='darwin' then
+   CustomOptions := ' -Cg-';"/>
+          <Parsing>
+            <SyntaxOptions>
+              <SyntaxMode Value="Delphi"/>
+              <IncludeAssertionCode Value="True"/>
+            </SyntaxOptions>
+          </Parsing>
+          <CodeGeneration>
+            <SmartLinkUnit Value="True"/>
+            <Checks>
+              <IOChecks Value="True"/>
+            </Checks>
+            <TargetCPU Value="aarch64"/>
+            <TargetOS Value="android"/>
+            <Optimizations>
+              <OptimizationLevel Value="3"/>
+            </Optimizations>
+          </CodeGeneration>
+          <Linking>
+            <Debugging>
+              <GenerateDebugInfo Value="False"/>
+              <DebugInfoType Value="dsDwarf2Set"/>
+              <UseExternalDbgSyms Value="True"/>
+            </Debugging>
+            <LinkSmart Value="True"/>
+          </Linking>
+          <Other>
+            <Verbosity>
+              <ShowNotes Value="False"/>
+              <ShowHints Value="False"/>
+            </Verbosity>
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
+            <OtherDefines Count="7">
+              <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+              <Define1 Value="FPC_X64MM"/>
+              <Define2 Value="FPCMM_DEBUG"/>
+              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+              <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
+              <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
+            </OtherDefines>
+          </Other>
+        </CompilerOptions>
+      </Item13>
+      <Item14 Name="andi386">
+        <CompilerOptions>
+          <Version Value="11"/>
+          <PathDelim Value="\"/>
+          <Target>
+            <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
+          </Target>
+          <SearchPaths>
+            <IncludeFiles Value="$(ProjOutDir)"/>
+            <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+          </SearchPaths>
+          <Conditionals Value="if TargetOS='darwin' then
+   CustomOptions := ' -Cg-';"/>
+          <Parsing>
+            <SyntaxOptions>
+              <SyntaxMode Value="Delphi"/>
+              <IncludeAssertionCode Value="True"/>
+            </SyntaxOptions>
+          </Parsing>
+          <CodeGeneration>
+            <SmartLinkUnit Value="True"/>
+            <Checks>
+              <IOChecks Value="True"/>
+            </Checks>
+            <TargetCPU Value="i386"/>
+            <TargetOS Value="android"/>
+            <Optimizations>
+              <OptimizationLevel Value="3"/>
+            </Optimizations>
+          </CodeGeneration>
+          <Linking>
+            <Debugging>
+              <GenerateDebugInfo Value="False"/>
+              <DebugInfoType Value="dsDwarf2Set"/>
+              <UseExternalDbgSyms Value="True"/>
+            </Debugging>
+            <LinkSmart Value="True"/>
+          </Linking>
+          <Other>
+            <Verbosity>
+              <ShowNotes Value="False"/>
+              <ShowHints Value="False"/>
+            </Verbosity>
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
+            <OtherDefines Count="7">
+              <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+              <Define1 Value="FPC_X64MM"/>
+              <Define2 Value="FPCMM_DEBUG"/>
+              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+              <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
+              <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
+            </OtherDefines>
+          </Other>
+        </CompilerOptions>
+      </Item14>
+      <Item15 Name="andx64">
+        <CompilerOptions>
+          <Version Value="11"/>
+          <PathDelim Value="\"/>
+          <Target>
+            <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
+          </Target>
+          <SearchPaths>
+            <IncludeFiles Value="$(ProjOutDir)"/>
+            <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
+          </SearchPaths>
+          <Conditionals Value="if TargetOS='darwin' then
+   CustomOptions := ' -Cg-';"/>
+          <Parsing>
+            <SyntaxOptions>
+              <SyntaxMode Value="Delphi"/>
+              <IncludeAssertionCode Value="True"/>
+            </SyntaxOptions>
+          </Parsing>
+          <CodeGeneration>
+            <SmartLinkUnit Value="True"/>
+            <Checks>
+              <IOChecks Value="True"/>
+            </Checks>
+            <TargetCPU Value="x86_64"/>
+            <TargetOS Value="android"/>
+            <Optimizations>
+              <OptimizationLevel Value="3"/>
+            </Optimizations>
+          </CodeGeneration>
+          <Linking>
+            <Debugging>
+              <GenerateDebugInfo Value="False"/>
+              <DebugInfoType Value="dsDwarf2Set"/>
+              <UseExternalDbgSyms Value="True"/>
+            </Debugging>
+            <LinkSmart Value="True"/>
+          </Linking>
+          <Other>
+            <Verbosity>
+              <ShowNotes Value="False"/>
+              <ShowHints Value="False"/>
+            </Verbosity>
+            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
+            <OtherDefines Count="7">
+              <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
+              <Define1 Value="FPC_X64MM"/>
+              <Define2 Value="FPCMM_DEBUG"/>
+              <Define3 Value="FPCMM_REPORTMEMORYLEAKS"/>
+              <Define4 Value="PUREMORMOT2"/>
+              <Define5 Value="FPCMM_SERVER"/>
+              <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
+            </OtherDefines>
+          </Other>
+        </CompilerOptions>
+      </Item15>
     </BuildModes>
     <PublishOptions>
       <Version Value="2"/>
@@ -564,7 +778,12 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <Units Count="90">
+    <RequiredPackages Count="1">
+      <Item1>
+        <PackageName Value="mormot2"/>
+      </Item1>
+    </RequiredPackages>
+    <Units Count="99">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -614,15 +833,15 @@
         <IsPartOfProject Value="True"/>
       </Unit11>
       <Unit12>
-        <Filename Value="..\src\core\mormot.crypt.core.pas"/>
+        <Filename Value="..\src\crypt\mormot.crypt.core.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit12>
       <Unit13>
-        <Filename Value="..\src\core\mormot.crypt.jwt.pas"/>
+        <Filename Value="..\src\crypt\mormot.crypt.jwt.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit13>
       <Unit14>
-        <Filename Value="..\src\core\mormot.crypt.secure.pas"/>
+        <Filename Value="..\src\crypt\mormot.crypt.secure.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit14>
       <Unit15>
@@ -662,11 +881,11 @@
         <IsPartOfProject Value="True"/>
       </Unit23>
       <Unit24>
-        <Filename Value="..\src\core\mormot.crypt.ecc256r1.pas"/>
+        <Filename Value="..\src\crypt\mormot.crypt.ecc256r1.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit24>
       <Unit25>
-        <Filename Value="..\src\core\mormot.crypt.ecc.pas"/>
+        <Filename Value="..\src\crypt\mormot.crypt.ecc.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit25>
       <Unit26>
@@ -752,7 +971,6 @@
       <Unit46>
         <Filename Value="..\src\net\mormot.net.async.pas"/>
         <IsPartOfProject Value="True"/>
-        <UnitName Value="mormot.net.async"/>
       </Unit46>
       <Unit47>
         <Filename Value="..\src\net\mormot.net.ws.core.pas"/>
@@ -926,6 +1144,42 @@
         <Filename Value="test.soa.core.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit89>
+      <Unit90>
+        <Filename Value="..\src\lib\mormot.lib.openssl11.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit90>
+      <Unit91>
+        <Filename Value="..\src\crypt\mormot.crypt.openssl.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit91>
+      <Unit92>
+        <Filename Value="test.orm.threads.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit92>
+      <Unit93>
+        <Filename Value="..\src\lib\mormot.lib.brotli.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit93>
+      <Unit94>
+        <Filename Value="..\src\lib\mormot.lib.quickjs.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit94>
+      <Unit95>
+        <Filename Value="test.core.script.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit95>
+      <Unit96>
+        <Filename Value="..\src\lib\mormot.lib.static.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit96>
+      <Unit97>
+        <Filename Value="..\src\script\mormot.script.core.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit97>
+      <Unit98>
+        <Filename Value="..\src\script\mormot.script.quickjs.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit98>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -935,9 +1189,7 @@
       <Filename Value="fpc\bin\$(TargetCPU)-$(TargetOS)\mormot2tests"/>
     </Target>
     <SearchPaths>
-      <IncludeFiles Value="..\src;..\src\core;$(ProjOutDir)"/>
-      <Libraries Value="..\static\$(TargetCPU)-$(TargetOS)"/>
-      <OtherUnitFiles Value="..\src;..\src\core;..\src\db;..\src\rest;..\src\lib;..\src\net;..\src\orm;..\src\soa"/>
+      <IncludeFiles Value="$(ProjOutDir)"/>
       <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Conditionals Value="if TargetOS='darwin' then
@@ -966,10 +1218,11 @@
         <ShowNotes Value="False"/>
         <ShowHints Value="False"/>
       </Verbosity>
+      <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
     </Other>
   </CompilerOptions>
   <Debugging>
-    <Exceptions Count="10">
+    <Exceptions Count="14">
       <Item1>
         <Name Value="EAbort"/>
       </Item1>
@@ -1000,6 +1253,18 @@
       <Item10>
         <Name Value="EThreadError"/>
       </Item10>
+      <Item11>
+        <Name Value="ESynCrypto"/>
+      </Item11>
+      <Item12>
+        <Name Value="ERelayProtocol"/>
+      </Item12>
+      <Item13>
+        <Name Value="EServiceException"/>
+      </Item13>
+      <Item14>
+        <Name Value="EFCreateError"/>
+      </Item14>
     </Exceptions>
   </Debugging>
 </CONFIG>

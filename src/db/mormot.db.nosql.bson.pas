@@ -3711,7 +3711,6 @@ var
   ValueLen: integer;
   VDouble: double;
   ValueDateTime: TDateTime absolute VDouble;
-  VInt64: Int64 absolute VDouble;
   Kind: TBsonElementType;
 begin
   if Json^ in [#1..' '] then

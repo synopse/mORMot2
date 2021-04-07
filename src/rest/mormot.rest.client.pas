@@ -2520,7 +2520,7 @@ function TRestClientUri.CallBack(method: TUriMethod; const aMethodName,
   aID: TID; aResponseHead: PRawUtf8): integer;
 var
   u, m: RawUtf8;
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   if (self = nil) or
      (method = mNone) then

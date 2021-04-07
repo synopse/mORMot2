@@ -196,6 +196,9 @@
         {$define FPCBSD}
         {$ifdef OPENBSD}
           {$define OSOPENBSD}  // OSBDS = OSOPENBSD + OSFREEBSD
+          {$ifdef CPUX86}
+            {$define FPC_PIC}
+          {$endif CPUX86}
         {$endif OPENBSD}
         {$ifdef FREEBSD}
           {$define OSFREEBSD}
@@ -206,16 +209,22 @@
         // conditionals for Linux
         {$define OSLINUX} // e.g. to disable epoll API
         {$define FPCLINUX}
+        {$define OSLINUXANDROID}
       {$else}
+        {$ifdef ANDROID}
+          // conditionals for Android
+          {$define OSANDROID}
+          {$define FPCANDROID}
+          {$define OSLINUXANDROID}
+          {$define NOPATCHRTL} // don't mess with asm stuff
+          {$ifdef CPUX86}
+            {$define FPC_PIC}
+          {$endif CPUX86}
+        {$else}
         'Unsupported Operating System - yet'
+        {$endif ANDROID}
       {$endif LINUX}
     {$endif BSD}
-    {$ifdef ANDROID}
-      // conditionals for Android
-      {$define OSANDROID}
-      {$define FPCANDROID}
-      {$define NOPATCHRTL} // don't mess with asm stuff
-    {$endif ANDROID}
   {$endif MSWINDOWS}
 
 
@@ -248,14 +257,12 @@
       {$define CPUINTEL}
       {$define FPC_CPUINTEL}
       {$define FPC_X86}
-      {$ifndef OSDARWIN}  // MachOS requires PIC code on i386
-        {$ifndef OSOPENBSD}   // OPENBSD requires PIC code on i386
-          {$define ASMX86}       // supports asm with globals
-          {$define ASMINTEL}     // either ASMX86 or ASMX64
-          {$define CPUX86NOTPIC} // use "absolute" instead of local register
-          {$define HASAESNI}
-        {$endif OSOPENBSD}
-      {$endif OSDARWIN}
+      {$ifndef FPC_PIC}   // MachOS/OpenBSD/Android require PIC code on i386
+        {$define ASMX86}       // supports asm with globals
+        {$define ASMINTEL}     // either ASMX86 or ASMX64
+        {$define CPUX86NOTPIC} // use "absolute" instead of local register
+        {$define HASAESNI}
+      {$endif FPC_PIC}
       {$define TSYNEXTENDED80} // only 32-bit has a true x87 extended type
     {$endif CPUX86}
     {$ifdef CPUARM}
@@ -513,16 +520,46 @@
   // https://github.com/synopse/mORMot2/releases
 
 {$ifdef FPC}
+  // Delphi doesn't accept GCC object files and libdeflate requires GCC
   {$if defined(OSOPENBSD) and defined(FPC_CROSSCOMPILING)}
     {$define NOSQLITE3STATIC} // OpenBSD problems with fpcupdeluxe libgcc.a
   {$ifend}
+  {$ifdef OSLINUX}
+    {$ifdef CPUINTEL}
+      {$define LIBDEFLATESTATIC}  // libdeflate static binding
+      {$define LIBQUICKJSSTATIC}  // quickjs static binding
+    {$endif CPUINTEL}
+    {$ifdef CPUARM}
+      {.$define LIBDEFLATESTATIC} // compiles, but untested
+      {.$define LIBQUICKJSSTATIC} // compiles, but untested
+    {$endif CPUARM}
+    {$ifdef CPUAARCH64}
+      {.$define LIBDEFLATESTATIC} // compiles, but untested
+      {.$define LIBQUICKJSSTATIC} // compiles, but untested
+    {$endif CPUAARCH64}
+  {$endif OSLINUX}
+  {$ifdef OSWINDOWS}
+    {$ifdef CPUX86}
+      {$define LIBDEFLATESTATIC}
+      {$define LIBQUICKJSSTATIC}
+    {$endif CPUX86}
+    {$ifdef CPUX64}
+      {.$define LIBDEFLATESTATIC} // Win64 + FPC 3.2 = internal error 200603061
+      {$define LIBQUICKJSSTATIC}
+    {$endif CPUX64}
+  {$endif OSWINDOWS}
 {$else}
+  {$ifdef CPUX86}
+    {$define LIBQUICKJSSTATIC}  // we have our quickjs.obj :)
+  {$endif CPUX86}
   // there is a linking bug with Delphi XE4 on Win64
   {$ifdef CPUX64}
     {$if CompilerVersion = 25.0} // exactly XE4
+      // other Win32/Win64 Delphi platforms "should work" (tm) as expected
       {$define NOSQLITE3STATIC}
     {$ifend}
-  {$endif} // other Win32/Win64 Delphi platforms should work as expected
+    {$define LIBQUICKJSSTATIC}
+  {$endif}
 {$endif FPC}
 
 {$ifdef OSWINDOWS}

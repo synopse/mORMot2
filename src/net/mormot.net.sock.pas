@@ -1848,11 +1848,11 @@ type
 function OutputSock(var F: TTextRec): integer;
 begin
   if F.BufPos = 0 then
-    result := 0
+    result := NO_ERROR
   else if PCrtSocket(@F.UserData)^.TrySndLow(F.BufPtr, F.BufPos) then
   begin
     F.BufPos := 0;
-    result := 0;
+    result := NO_ERROR;
   end
   else
     result := -1; // on socket error -> raise ioresult error
@@ -1889,7 +1889,7 @@ begin
   begin
     F.BufEnd := size;
     inc(sock.fBytesIn, size);
-    result := 0; // no error
+    result := NO_ERROR;
   end
   else
   begin
@@ -1911,7 +1911,7 @@ begin
   if PCrtSocket(@F.UserData)^ <> nil then
     PCrtSocket(@F.UserData)^.Close;
   PCrtSocket(@F.UserData)^ := nil;
-  result := 0;
+  result := NO_ERROR;
 end;
 
 function OpenSock(var F: TTextRec): integer;
@@ -1932,7 +1932,7 @@ begin
     F.FlushFunc := @OutputSock;
   end;
   F.CloseFunc := @CloseSock;
-  result := 0;
+  result := NO_ERROR;
 end;
 
 {$ifdef FPC}
@@ -2107,7 +2107,9 @@ function TCrtSocket.SockInPending(aTimeOutMS: integer;
   aPendingAlsoInSocket: boolean): integer;
 var
   backup: PtrInt;
+  {$ifdef OSWINDOWS}
   insocket: integer;
+  {$endif OSWINDOWS}
 begin
   if SockIn = nil then
     raise ENetSock.Create('SockInPending without SockIn');

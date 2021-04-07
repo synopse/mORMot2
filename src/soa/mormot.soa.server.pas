@@ -943,33 +943,30 @@ begin
         fImplementationClass).Create;
     ickInjectable:
       result := TInjectableObjectClass(
-        fImplementationClass).CreateWithResolver(fRestServer.Services, true);
+        fImplementationClass).CreateWithResolver(fResolver, true);
     ickInjectableRest:
       result := TInjectableObjectRestClass(fImplementationClass).
-        CreateWithResolverAndRest(fRestServer.Services, self, RestServer, true);
+        CreateWithResolverAndRest(fResolver, self, fRestServer, true);
     ickFromInjectedResolver:
       begin
         dummyObj := nil;
-        if not (fRestServer.Services as TServiceContainerServer).
-            TryResolveInternal(fInterface.InterfaceTypeInfo, dummyObj) then
+        if not TServiceContainerServer(fResolver).TryResolve(
+            fInterface.InterfaceTypeInfo, dummyObj) then
           raise EInterfaceFactory.CreateUtf8(
-            'ickFromInjectedResolver: TryResolveInternal(%)=false',
+            'ickFromInjectedResolver: TryResolve(%) failed',
             [fInterface.InterfaceName]);
         result := TInterfacedObject(ObjectFromInterface(IInterface(dummyObj)));
-        if AndIncreaseRefCount then
-          // RefCount=1 after TryResolveInternal()
-          AndIncreaseRefCount := false
-        else
-          // adjust the reference counter
-          dec(TInjectableObjectRest(result).fRefCount);
+        // RefCount=1 after TryResolve() -> adjust
+        dec(TInjectableObjectRest(result).fRefCount);
       end;
   else
     result := fImplementationClass.Create;
   end;
+  inc(TInjectableObjectRest(result).fRefCount); // >0 to call Support() in event
   if Assigned(fRestServer.OnServiceCreateInstance) then
     fRestServer.OnServiceCreateInstance(self, result);
-  if AndIncreaseRefCount then
-    IInterface(result)._AddRef; // allow passing self to sub-methods
+  if not AndIncreaseRefCount then
+    dec(TInjectableObjectRest(result).fRefCount);
 end;
 
 procedure TServiceFactoryServer.OnLogRestExecuteMethod(
@@ -979,6 +976,7 @@ var
   a: PtrInt;
   len: integer;
 begin
+  // append the input/output/error parameters as batch JSON
   W := (Sender as TInterfaceMethodExecute).TempTextWriter;
   with Sender.Method^ do
     case Step of
@@ -1377,7 +1375,7 @@ begin
     aLogRest.Model.GetTableIndexExisting(aLogClass);
   end;
   for m := 0 to fInterface.MethodsCount - 1 do
-    if m in aMethods then
+    if byte(m) in aMethods then
       with fExecution[m] do
       begin
         LogRest := pointer(aLogRest); // weak pointer to avoid reference counting
@@ -1930,7 +1928,7 @@ begin
     end;
     repeat
       if (aExcludedMethodNamesCsv <> '') and
-         not (i in {%H-}excluded) then
+         not (byte(i) in {%H-}excluded) then
       begin
         include(methods, fInterfaceMethod[i].InterfaceMethodIndex
           - SERVICE_PSEUDO_METHOD_COUNT);

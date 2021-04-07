@@ -1464,7 +1464,6 @@ type
     end;
     data: array[0..2047] of byte; // binary serialization of record value
   end;
-  PCookieContent = ^TCookieContent;
 
 function TMvcSessionWithCookies.CheckAndRetrieve(PRecordData: pointer;
   PRecordTypeInfo: PRttiInfo; PExpires: PCardinal): integer;

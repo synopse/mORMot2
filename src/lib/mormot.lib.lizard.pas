@@ -294,34 +294,15 @@ function Lizard_decompress_safe_usingDict(src, dst: pointer;
   dict: pointer; dictSize: integer): integer; cdecl; external;
 }
 
+// see res/static/liblizard for patched source and build instructions
+
 {$ifdef CPUX64}
   {$ifdef FPC}
     {$ifdef OSWINDOWS}
-
-    // --- FPC x86_64 Win64 Static Linking
     // note: gcc .o files don't work under Win64 for Delphi :(
-    {$L ..\..\static\x86_64-win64\lizard_compress.o}
-    {$L ..\..\static\x86_64-win64\lizard_decompress.o}
-    {$L ..\..\static\x86_64-win64\huf_compress.o}
-    {$L ..\..\static\x86_64-win64\huf_decompress.o}
-    {$L ..\..\static\x86_64-win64\fse_compress.o}
-    {$L ..\..\static\x86_64-win64\fse_decompress.o}
-    {$L ..\..\static\x86_64-win64\entropy_common.o}
-    {$linklib ..\..\static\x86_64-win64\libgcc.a}
-    {$linklib ..\..\static\x86_64-win64\libmsvcrt.a}
-    {$else OSWINDOWS}
-
-    // --- FPC x86_64 Linux Static Linking
-    {$L ../../static/x86_64-linux/lizard_compress.o}
-    {$L ../../static/x86_64-linux/lizard_decompress.o}
-    {$L ../../static/x86_64-linux/huf_compress.o}
-    {$L ../../static/x86_64-linux/huf_decompress.o}
-    {$L ../../static/x86_64-linux/fse_compress.o}
-    {$L ../../static/x86_64-linux/fse_decompress.o}
-    {$L ../../static/x86_64-linux/entropy_common.o}
-    {$ifdef FPC_CROSSCOMPILING}
-      {$linklib ./../../static/x86_64-linux/libgcc.a}
-    {$endif}
+    {$linklib ..\..\static\x86_64-win64\liblizard.a}
+    {$else}
+    {$linklib ../../static/x86_64-linux/liblizard.a}
     {$endif OSWINDOWS}
   {$endif FPC}
 {$endif CPUX64}
@@ -329,28 +310,9 @@ function Lizard_decompress_safe_usingDict(src, dst: pointer;
 {$ifdef CPUX86}
   {$ifdef FPC}
     {$ifdef OSWINDOWS}
-
-    // --- FPC i386 Win32 Static Linking
-    {$L ..\..\static\i386-win32\lizard_compress.o}
-    {$L ..\..\static\i386-win32\lizard_decompress.o}
-    {$L ..\..\static\i386-win32\huf_compress.o}
-    {$L ..\..\static\i386-win32\huf_decompress.o}
-    {$L ..\..\static\i386-win32\fse_compress.o}
-    {$L ..\..\static\i386-win32\fse_decompress.o}
-    {$L ..\..\static\i386-win32\entropy_common.o}
-    {$linklib ..\..\static\i386-win32\libgcc.a}
-    {$linklib ..\..\static\i386-win32\libmsvcrt.a}
-    {$else OSWINDOWS}
-
-    // --- FPC i386 Linux Static Linking
-    {$L ../../static/i386-linux/lizard_compress.o}
-    {$L ../../static/i386-linux/lizard_decompress.o}
-    {$L ../../static/i386-linux/huf_compress.o}
-    {$L ../../static/i386-linux/huf_decompress.o}
-    {$L ../../static/i386-linux/fse_compress.o}
-    {$L ../../static/i386-linux/fse_decompress.o}
-    {$L ../../static/i386-linux/entropy_common.o}
-    {$linklib ../../static/i386-linux\libgcc.a}
+    {$linklib ..\..\static\i386-win32\liblizard.a}
+    {$else}
+    {$linklib ../../static/i386-linux/liblizard.a}
     {$endif OSWINDOWS}
   {$endif FPC}
 {$endif CPUX86}

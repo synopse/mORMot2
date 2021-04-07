@@ -2230,7 +2230,6 @@ function TEccCertificateSecret.SaveToSecureFiles(const PassWord: RawUtf8;
 var
   diff, one: RawByteString;
   head, index, pos, difflen, onechunk, onelen: integer;
-  o: PAnsiChar absolute one;
   dest: TFileName;
 begin
   if DestFileCount = 1 then

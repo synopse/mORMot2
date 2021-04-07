@@ -4,7 +4,7 @@
 
 This folder holds some files to compile the (static) third-party C libraries used by the *mORMot* Open Source framework, version 2.
 
-**This source code is included as reference. Please don't try to compile the static files by yourself, but download them from the latest https://github.com/synopse/mORMot2/releases - we won't support your self-compiled version!**
+**This source code is included as reference. Please don't try to compile the static files by yourself, but download them from the latest https://github.com/synopse/mORMot2/releases or https://synopse.info/files/mormot2static.7z - we won't support your self-compiled version!**
 
  
 ## Static Compilation

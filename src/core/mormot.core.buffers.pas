@@ -4311,7 +4311,7 @@ begin
     if R = @tmp[BufferOffset] then
       SetString(result, PAnsiChar(@tmp), len)
     else
-      if result <> '' then
+      if result {%H-}<> '' then
         // don't call the MM which may move the data: just adjust length()
         PStrLen(R - _STRLEN)^ := len;
   end;
@@ -7365,7 +7365,8 @@ begin
   len := (AppendUInt32ToBuffer(@result[1], itemcount) - PUtf8Char(@result[1])) + 1;
   result[len] := ' ';
   L := ord(itemname[0]);
-  if L in [1..240] then
+  if (L > 0) and
+     (L <= 240) then
   begin
     // avoid buffer overflow
     MoveSmall(@itemname[1], @result[len + 1], L);

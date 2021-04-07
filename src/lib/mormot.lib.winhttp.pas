@@ -187,7 +187,7 @@ type
     reqTe,
     reqTranslate,
     reqUserAgent,
-    respAcceptRanges = 20,
+    respAcceptRanges = 20{%H-},
     respAge,
     respEtag,
     respLocation,

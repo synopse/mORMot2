@@ -15,6 +15,9 @@ unit mormot.lib.static;
 
   *****************************************************************************
 
+  Please download latest https://synopse.info/files/mormot2static.7z and
+  extract its content to the /static sub-folder of the mORMot 2 repository.
+
 }
 
 interface
@@ -202,7 +205,7 @@ end;
 procedure pas_assertfailed(cond, fn: PAnsiChar; line: integer); cdecl;
  {$ifdef FPC} public name _PREFIX + 'pas_assertfailed'; {$endif}
 begin
-  raise EExternal.CreateFmt('Panic in %s:%d: %s', [fn, line, cond]);
+  raise EExternal.CreateFmt('Panic in %s:%d: assert(%s)', [fn, line, cond]);
 end;
 
 
@@ -248,6 +251,11 @@ procedure libc_qsort(baseP: PByte; NElem, Width: PtrInt; comparF: qsort_compare_
   external _CLIB name 'qsort';
 function libc_log(d: double): double; cdecl;
   external _CLIB name 'log';
+function libc_beginthreadex(security: pointer; stksize: cardinal;
+  start, arg: pointer; flags: cardinal; var threadid: cardinal): THandle; cdecl;
+  external _CLIB name '_beginthreadex';
+procedure libc_endthreadex(exitcode: cardinal); cdecl;
+  external _CLIB name '_endthreadex';
 
 
 function putchar(c: integer): integer; cdecl;
@@ -430,7 +438,17 @@ begin
   result := libc_rename(oldname, newname);
 end;
 
-procedure __exit; assembler; 
+{$ifdef FPC}
+var
+  // redirect mingw import pointer to libc_beginthreadex
+  beginthreadex: pointer public name
+    {$ifdef CPU32} '__imp___beginthreadex' {$else} '__imp__beginthreadex' {$endif};
+  // redirect mingw import pointer to libc_endthreadex
+  endthreadex: pointer public name
+    {$ifdef CPU32} '__imp___endthreadex' {$else} '__imp__endthreadex' {$endif};
+{$endif FPC}
+
+procedure __exit; assembler;
  {$ifdef FPC} nostackframe; public name _PREFIX + 'exit'; {$else} export; {$endif}
 asm
   jmp libc_exit
@@ -830,13 +848,29 @@ end;
 
 {$ifdef OSANDROID}
 
+function mmap64(addr: pointer; len: PtrInt; prot, flags, fd: integer;
+  offset: Int64): pointer; cdecl;
+  {$ifdef FPC} public name 'mmap64'; {$endif}
+begin
+  result := nil; // fails until really needed
+  //  result := fpcmmap(addr, len, prot, flags, fd, offset shr 12);
+  // mmap2 uses 4096 bytes as offset
+end;
+
+{$endif OSANDROID}
+
+{$ifdef OSANDROID2}
+
 {$ifdef CPUARM}
-function bswapsi2(num:uint32):uint32; cdecl; public alias: '__bswapsi2';
+function bswapsi2(num: uint32): uint32; cdecl;
+  public alias: '__bswapsi2';
 asm
   rev r0, r0	// reverse bytes in parameter and put into result register
   bx  lr
 end;
-function bswapdi2(num:uint64):uint64; cdecl; public alias: '__bswapdi2';
+
+function bswapdi2(num: uint64):uint64; cdecl;
+  public alias: '__bswapdi2';
 asm
   rev r2, r0  // r2 = rev(r0)
   rev r0, r1  // r0 = rev(r1)
@@ -1734,6 +1768,14 @@ end;
 
 {$endif CPUINTEL}
 
+
+initialization
+{$ifdef FPC}
+{$ifdef OSWINDOWS}
+  beginthreadex := @libc_beginthreadex;
+  endthreadex := @libc_endthreadex;
+{$endif OSWINDOWS}
+{$endif FPC}
 
 end.
 

@@ -116,7 +116,7 @@ const
   SYSDATA: PAnsiChar = '';
   {$endif OSANDROID}
 var
-  i, j: integer;
+  i: integer;
   err: SizeInt;
   P: PPointer;
   v, vers: string;
@@ -637,7 +637,7 @@ var
 procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
 var
   // truncated to 16 non space chars (including #0)
-  trunc: array[0..15] of AnsiChar;
+  {%H-}trunc: array[0..15] of AnsiChar;
   i, L: integer;
 begin
   if Name = '' then
@@ -843,7 +843,6 @@ const
     190, 182, 167, 247, 184, 176, 168, 183, 185, 179, 178, 9632, 160);
 var
   len, i, c: PtrInt;
-  d: PUtf8Char;
 begin
   len := length(oem);
   SetLength(result, len);
@@ -1198,7 +1197,6 @@ end;
 
 function GetNextItem(var P: PAnsiChar): RawUtf8;
 var
-  c: cardinal;
   S: PAnsiChar;
 begin
   result := '';
@@ -1572,8 +1570,8 @@ begin
   K := GetNextCardinal(P){=system};
   I := GetNextCardinal(P){=idle};
   S := U + K + I;
-  Kernel := SimpleRoundTo2Digits((K * 100) / S);
-  User := SimpleRoundTo2Digits((U * 100) / S);
+  Kernel := {%H-}SimpleRoundTo2Digits((K * 100) / S);
+  User := {%H-}SimpleRoundTo2Digits((U * 100) / S);
   Idle := 100 - Kernel - User; // ensure sum is always 100%
   result := S <> 0;
 end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux }
@@ -2116,7 +2114,9 @@ end;
 
 { ****************** Gather Operating System Information }
 
+{$ifndef OSANDROID}
 function getpagesize: integer; cdecl; external clib;
+{$endif OSANDROID}
 
 {$ifdef OSLINUX}
 
@@ -2163,17 +2163,21 @@ end;
 
 procedure InitializeUnit;
 var
-  tp: timespec;
   P: PAnsiChar;
-var
   modname, beg: PUtf8Char;
   uts: UtsName;
+  {$ifndef OSDARWIN}
+  tp: timespec;
+  {$endif OSDARWIN}
   {$ifdef OSBSDDARWIN}
   temp: shortstring;
   {$else}
   cpuinfo: PUtf8Char;
-  proccpuinfo, prod, prodver, release, dist: RawUtf8;
+  proccpuinfo, release, prod: RawUtf8;
+  {$ifdef OSLINUX}
+  prodver, dist: RawUtf8;
   SR: TSearchRec;
+  {$endif OSLINUX}
   {$endif OSBSDDARWIN}
   c: cardinal;
 begin
@@ -2181,8 +2185,12 @@ begin
   // retrieve Kernel and Hardware information
   stdoutIsTTY := IsATTY(StdOutputHandle) = 1;
   modname := nil;
-  SystemInfo.dwPageSize := getpagesize; // call libc API
   fpuname(uts);
+  {$ifdef OSANDROID}
+  SystemInfo.dwPageSize := 4096;
+  {$else}
+  SystemInfo.dwPageSize := getpagesize; // call libc API
+  {$endif OSANDROID}
   {$ifdef OSBSDDARWIN}
   SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
   beg := fpsysctlhwstr(HW_MACHINE, temp);
@@ -2191,7 +2199,12 @@ begin
   with uts do
     OSVersionText := sysname + '-' + release + ' ' + version;
   {$else}
-  {$ifndef OSANDROID}
+  {$ifdef OSANDROID}
+  release := GetSystemProperty('ro.build.version.release');
+  prod := Trim(RawUtf8(GetSystemProperty('ro.product.brand') + ' ' +
+    GetSystemProperty('ro.product.name') + ' ' +
+    GetSystemProperty('ro.product.device')));
+  {$else}
   pthread := dlopen('libpthread.so.0', RTLD_LAZY);
   if pthread <> nil then
   begin
@@ -2199,7 +2212,6 @@ begin
     @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
     {$endif OSLINUX}
   end;
-  {$endif OSANDROID}
   prod := TrimU(StringFromFile('/sys/class/dmi/id/product_name', true));
   if prod <> '' then
   begin
@@ -2207,30 +2219,6 @@ begin
     if prodver <> '' then
       prod := prod + ' ' + prodver;
   end;
-  BiosInfoText := prod;
-  SystemInfo.dwNumberOfProcessors := 0;
-  proccpuinfo := StringFromFile('/proc/cpuinfo', true);
-  cpuinfo := pointer(proccpuinfo);
-  while cpuinfo <> nil do
-  begin
-    beg := cpuinfo;
-    cpuinfo := GotoNextLine(cpuinfo);
-    if IdemPChar(beg, 'PROCESSOR') then
-      if beg^ = 'P' then
-        modname := beg
-      else // Processor : ARMv7
-        inc(SystemInfo.dwNumberOfProcessors)
-    else // processor : 0
-    if IdemPChar(beg, 'MODEL NAME') then
-      modname := beg;
-  end;
-  if modname <> nil then
-    modname := strscan(modname, ':');
-  if modname <> nil then
-    repeat
-      inc(modname);
-    until (modname^ = #0) or
-          (modname^ > ' ');
   FindNameValue(StringFromFile('/etc/os-release'), 'PRETTY_NAME=', release);
   if (release <> '') and
      (release[1] = '"') then
@@ -2276,6 +2264,31 @@ begin
         (PosEx('Red Hat', release) > 0)) then
       OS_KIND := osRedHat;
   end;
+  {$endif OSANDROID}
+  BiosInfoText := prod;
+  SystemInfo.dwNumberOfProcessors := 0;
+  proccpuinfo := StringFromFile('/proc/cpuinfo', true);
+  cpuinfo := pointer(proccpuinfo);
+  while cpuinfo <> nil do
+  begin
+    beg := cpuinfo;
+    cpuinfo := GotoNextLine(cpuinfo);
+    if IdemPChar(beg, 'PROCESSOR') then
+      if beg^ = 'P' then
+        modname := beg
+      else // Processor : ARMv7
+        inc(SystemInfo.dwNumberOfProcessors)
+    else // processor : 0
+    if IdemPChar(beg, 'MODEL NAME') then
+      modname := beg;
+  end;
+  if modname <> nil then
+    modname := strscan(modname, ':');
+  if modname <> nil then
+    repeat
+      inc(modname);
+    until (modname^ = #0) or
+          (modname^ > ' ');
   SystemInfo.release := release;
   {$endif OSBSDDARWIN}
   SystemInfo.uts.release := uts.Release;

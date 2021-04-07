@@ -215,7 +215,7 @@ end;
 
 destructor TRtspOverHttpServer.Destroy;
 var
-  log: ISynLog;
+  {%H-}log: ISynLog;
 begin
   log := fLog.Enter(self, 'Destroy');
   inherited Destroy;

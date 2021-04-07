@@ -859,7 +859,7 @@ end;
 type
   TBenchmark = (
     // non cryptographic hashes
-    bCRC32c, bXXHash32, bHash32, bAesniHash,
+    bCRC32c, bXXHash32, bCRC32, bAdler32, bHash32, bAesniHash,
     // cryptographic hashes
     bMD5,
     bSHA1, bHMACSHA1, bSHA256, bHMACSHA256,
@@ -967,6 +967,10 @@ begin
             dig.d0 := AesNiHash64(0, pointer(data), SIZ[s]);
           bCRC32c:
             dig.d0 := crc32c(0, pointer(data), SIZ[s]);
+          bAdler32:
+            dig.d0 := adler32(0, pointer(data), SIZ[s]);
+          bCRC32:
+            dig.d0 := crc32(0, pointer(data), SIZ[s]);
           bMD5:
             MD5.Full(pointer(data), SIZ[s], dig.h0);
           bSHA1:

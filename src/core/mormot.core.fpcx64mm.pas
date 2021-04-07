@@ -103,7 +103,6 @@ interface
 {$ifdef FPC}
   // cut-down version of mormot.defines.inc to make this unit standalone
   {$mode Delphi}
-  {$asmmode Intel}
   {$inline on}
   {$R-} // disable Range checking
   {$S-} // disable Stack checking
@@ -112,6 +111,7 @@ interface
   {$B-} // expect short circuit boolean
   {$ifdef CPUX64}
     {$define FPC_CPUX64} // this unit is for FPC + x86_64 only
+    {$asmmode Intel}
   {$endif CPUX64}
   {$ifdef FPCMM_BOOSTER}
     {$define FPCMM_BOOST}
@@ -2653,7 +2653,6 @@ var
   {$ifdef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
   first, last: PByte;
   vmt: PAnsiChar;
-  small: PSmallBlockPoolHeader;
 
   function SeemsRealPointer(p: pointer): boolean;
   begin

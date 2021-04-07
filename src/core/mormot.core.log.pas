@@ -2280,7 +2280,7 @@ begin
         end
         else
           // FPC set line_range=255 and prefer explicit DW_LNS_ADVANCE_PC
-          inc(state.line, header64.line_base + opcodeadjust);
+          inc(state.line, header64.line_base + PtrInt(opcodeadjust));
         state.basicblock := false;
         state.prologueend := false;
         state.epiloguebegin := false;
@@ -2413,7 +2413,8 @@ begin
         end;
       end
       else if (level = 2) and
-              (Tag in [DW_TAG_class_type, DW_TAG_structure_type]) then
+              ((Tag = DW_TAG_class_type) or
+               (Tag = DW_TAG_structure_type)) then
       begin
         typname := '';
         for i := 0 to AttrsCount - 1 do

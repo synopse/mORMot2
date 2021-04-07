@@ -1027,7 +1027,6 @@ end;
 procedure TRestHttpClientWinINet.InternalSetClass;
 begin
   fRequestClass := TWinINet;
-  inherited;
 end;
 
 
@@ -1036,7 +1035,6 @@ end;
 procedure TRestHttpClientWinHttp.InternalSetClass;
 begin
   fRequestClass := TWinHttp;
-  inherited;
 end;
 
 {$endif USEWININET}
@@ -1052,7 +1050,6 @@ end;
 procedure TRestHttpClientCurl.InternalSetClass;
 begin
   fRequestClass := TCurlHttp;
-  inherited;
 end;
 
 {$endif USELIBCURL}

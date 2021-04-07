@@ -9,7 +9,7 @@ The following modifications have been made by Synopse to the original source cod
 - encryption patches redirect to our pascal code and mormot.crypto.core.pas efficient `AES-CTR`;
 - simple per-target compilation scripts (no complex make files) dedicated to FPC and Delphi static linking using the [FpcUpDeluxe cross-compilers](https://github.com/LongDirtyAnimAlf/fpcupdeluxe/releases). 
 
-This source code is included as reference. Please don't try to compile the static files by yourself, but download them from the latest https://github.com/synopse/mORMot2/releases
+This source code is included as reference. Please don't try to compile the static files by yourself, but download them from the latest https://github.com/synopse/mORMot2/releases or https://synopse.info/files/mormot2static.7z
 
 # SQLite3 Database Engine With Encryption
 

@@ -1567,11 +1567,13 @@ begin
     else
       if result and $20 = 0 then
       begin
-        result := (result shl 6) + byte(P[1]) - $3080; // fast process $0..$7ff
+        // fast $0..$7ff process
+        result := (result shl 6) + byte(P[1]) - $3080;
         inc(P, 2);
       end
       else
-        result := UTF8_TABLE.GetHighUtf8Ucs4(P); // handle even UTF-16 surrogates
+        // complex but efficient wrapper handling even UTF-16 surrogates
+        result := UTF8_TABLE.GetHighUtf8Ucs4(P);
   end
   else
     result := 0;
@@ -2435,7 +2437,7 @@ begin
       c := byte(source^);
       inc(source);
       if c <= 127 then
-        if c in [0, 10, 13] then
+        if byte(c) in [0, 10, 13] then
           break // #0, #10 or #13 stop the count
         else
           inc(result)
@@ -5902,7 +5904,9 @@ type
     function Ucs4Upper(c: Ucs4CodePoint): Ucs4CodePoint;
       {$ifdef HASINLINE} inline; {$endif}
   end;
+  {$ifndef CPUX86NOTPIC}
   PUnicodeUpperTable = ^TUnicodeUpperTable;
+  {$endif CPUX86NOTPIC}
 
 const
   UU_BLOCK_HI = 7;
