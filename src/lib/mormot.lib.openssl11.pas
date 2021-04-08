@@ -30,6 +30,15 @@ unit mormot.lib.openssl11;
 // - the full API libraries will be directly/statically linked, not dynamically
 // - full API increases compilation time, but is kept as reference
 
+{.$define OPENSSLUSERTLMM}
+// define this so that OpenSSL will use pascal RTL getmem/freemem/reallocmem
+// - note that OpenSSL has no "finalize" API, and is likely to leak memory - so
+// you may define it on production only, if you don't check memory leaks
+
+{$ifdef FPCMM_REPORTMEMORYLEAKS}
+  {$undef OPENSSLUSERTLMM} // incompatible for sure
+{$endif FPCMM_REPORTMEMORYLEAKS}
+
 
 interface
 
@@ -827,6 +836,9 @@ type
   Ppem_password_cb = function(buf: PUtf8Char; size, rwflag: integer; userdata: pointer): integer; cdecl;
   ECDH_compute_key_KDF = function(_in: pointer; inlen: PtrUInt; _out: pointer; outlen: PPtrUInt): pointer; cdecl;
 
+  dyn_MEM_malloc_fn = function(p1: PtrUInt; p2: PUtf8Char; p3: integer): pointer; cdecl;
+  dyn_MEM_realloc_fn = function(p1: pointer; p2: PtrUInt; p3: PUtf8Char; p4: integer): pointer; cdecl;
+  dyn_MEM_free_fn = procedure(p1: pointer; p2: PUtf8Char; p3: integer); cdecl;
 
 
 { ******************** OpenSSL Library Functions }
@@ -890,6 +902,8 @@ function X509_print(bp: PBIO; x: PX509): integer; cdecl;
 { --------- libcrypto entries }
 
 function CRYPTO_malloc(num: PtrUInt; _file: PUtf8Char; line: integer): pointer; cdecl;
+function CRYPTO_set_mem_functions(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn;
+  f: dyn_MEM_free_fn): integer; cdecl;
 procedure CRYPTO_free(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
 procedure ERR_remove_state(pid: cardinal); cdecl;
 procedure ERR_error_string_n(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
@@ -1397,6 +1411,7 @@ type
   TLibCrypto = class(TSynLibrary)
   public
     CRYPTO_malloc: function(num: PtrUInt; _file: PUtf8Char; line: integer): pointer; cdecl;
+    CRYPTO_set_mem_functions: function (m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn; f: dyn_MEM_free_fn): integer; cdecl;
     CRYPTO_free: procedure(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
     ERR_remove_state: procedure(pid: cardinal); cdecl;
     ERR_error_string_n: procedure(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
@@ -1501,8 +1516,9 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..101] of RawUtf8 = (
-    'CRYPTO_malloc', 'CRYPTO_free', 'ERR_remove_state', 'ERR_error_string_n',
+  LIBCRYPTO_ENTRIES: array[0..102] of RawUtf8 = (
+    'CRYPTO_malloc', 'CRYPTO_set_mem_functions', 'CRYPTO_free',
+    'ERR_remove_state', 'ERR_error_string_n',
     'ERR_get_error', 'ERR_remove_thread_state', 'ERR_load_BIO_strings',
     'EVP_MD_CTX_new', 'EVP_MD_CTX_free',
     'EVP_PKEY_size', 'EVP_PKEY_free', 'EVP_DigestSignInit', 'EVP_DigestUpdate',
@@ -1539,6 +1555,11 @@ var
 function CRYPTO_malloc(num: PtrUInt; _file: PUtf8Char; line: integer): pointer;
 begin
   result := libcrypto.CRYPTO_malloc(num, _file, line);
+end;
+
+function CRYPTO_set_mem_functions(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn; f: dyn_MEM_free_fn): integer; cdecl;
+begin
+  result := libcrypto.CRYPTO_set_mem_functions(m, r, f);
 end;
 
 procedure CRYPTO_free(ptr: pointer; _file: PUtf8Char; line: integer);
@@ -2068,6 +2089,36 @@ begin
   result := libcrypto.PEM_write_bio_PUBKEY(bp, x);
 end;
 
+{$ifdef OPENSSLUSERTLMM}
+
+// redirect OpenSSL to use our current pascal heap :)
+
+function rtl_malloc(siz: PtrUInt; fname: PUtf8Char; fline: integer): pointer; cdecl;
+begin
+  if siz <= 0 then
+    result := nil
+  else
+    Getmem(result, siz);
+end;
+
+function rtl_realloc(str: pointer; siz: PtrUInt;
+  fname: PUtf8Char; fline: integer): pointer; cdecl;
+begin
+  if str = nil then
+    if siz <= 0 then
+      result := nil
+    else
+      Getmem(result, siz)
+  else
+    result := ReAllocMem(str, siz);
+end;
+
+procedure rtl_free(str: pointer; fname: PUtf8Char; fline: integer); cdecl;
+begin
+  Freemem(str);
+end;
+
+{$endif OPENSSLUSERTLMM}
 
 function OpenSslIsAvailable: boolean;
 begin
@@ -2125,6 +2176,10 @@ begin
         libssl.Resolve(pointer(_PU + LIBSSL_ENTRIES[api]),
           @P[api], {onfail=}EOpenSsl);
       // nothing is to be initialized with OpenSSL 1.1.*
+      {$ifdef OPENSSLUSERTLMM}
+      if libcrypto.CRYPTO_set_mem_functions(@rtl_malloc, @rtl_realloc, @rtl_free) = 0 then
+        raise EOpenSsl.Create('CRYPTO_set_mem_functions() failure');
+      {$endif OPENSSLUSERTLMM}
       OpenSslVersion := libssl.OpenSSL_version_num;
       if OpenSslVersion and $ffffff00 <> $10101000 then // paranoid check 1.1.1
         raise EOpenSsl.CreateFmt(
@@ -2300,6 +2355,9 @@ function X509_print(bp: PBIO; x: PX509): integer; cdecl;
 
 function CRYPTO_malloc(num: PtrUInt; _file: PUtf8Char; line: integer): pointer; cdecl;
   external LIB_CRYPTO name _PU + 'CRYPTO_malloc';
+
+function CRYPTO_set_mem_functions(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn; f: dyn_MEM_free_fn): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'CRYPTO_set_mem_functions';
 
 procedure CRYPTO_free(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
   external LIB_CRYPTO name _PU + 'CRYPTO_free';

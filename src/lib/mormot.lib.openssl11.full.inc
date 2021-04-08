@@ -10908,10 +10908,6 @@ type
   ENGINE_PKEY_METHS_PTR = function(p1: PENGINE; p2: PPEVP_PKEY_METHOD; p3: PPInteger; p4: integer): integer; cdecl;
   ENGINE_PKEY_ASN1_METHS_PTR = function(p1: PENGINE; p2: PPEVP_PKEY_ASN1_METHOD; p3: PPInteger; p4: integer): integer; cdecl;
 
-  dyn_MEM_malloc_fn = function(p1: PtrUInt; p2: PUtf8Char; p3: integer): pointer; cdecl;
-  dyn_MEM_realloc_fn = function(p1: pointer; p2: PtrUInt; p3: PUtf8Char; p4: integer): pointer; cdecl;
-  dyn_MEM_free_fn = procedure(p1: pointer; p2: PUtf8Char; p3: integer); cdecl;
-
   st_dynamic_MEM_fns = record
     malloc_fn: dyn_MEM_malloc_fn;
     realloc_fn: dyn_MEM_realloc_fn;
@@ -11756,9 +11752,6 @@ function CRYPTO_set_ex_data(ad: PCRYPTO_EX_DATA; idx: integer; val: pointer): in
 
 function CRYPTO_get_ex_data(ad: PCRYPTO_EX_DATA; idx: integer): pointer; cdecl;
   external LIB_CRYPTO name _PU + 'CRYPTO_get_ex_data';
-
-function CRYPTO_set_mem_functions(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn; f: dyn_MEM_free_fn): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'CRYPTO_set_mem_functions';
 
 function CRYPTO_set_mem_debug(flag: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'CRYPTO_set_mem_debug';

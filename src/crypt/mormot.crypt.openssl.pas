@@ -1187,6 +1187,9 @@ end;
 var
   prime256v1grp: PEC_GROUP;
 
+const
+  PEC_GROUP_PRIME256V1_NOTAVAILABLE = pointer(1);
+
 function NewPrime256v1Key(out key: PEC_KEY): boolean;
 begin
   result := false;
@@ -1199,15 +1202,15 @@ begin
         begin
           prime256v1grp := EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
           if prime256v1grp = nil then
-            prime256v1grp := pointer(1);
+            prime256v1grp := PEC_GROUP_PRIME256V1_NOTAVAILABLE;
         end;
       finally
         GlobalUnLock;
       end;
     end
     else
-      prime256v1grp := pointer(1);
-  if prime256v1grp <> pointer(1) then
+      prime256v1grp := PEC_GROUP_PRIME256V1_NOTAVAILABLE;
+  if prime256v1grp <> PEC_GROUP_PRIME256V1_NOTAVAILABLE then
   begin
     key := EC_KEY_new;
     if EC_KEY_set_group(key, prime256v1grp) = OPENSSLSUCCESS then
@@ -1215,7 +1218,7 @@ begin
     else
     begin
       EC_GROUP_free(prime256v1grp);
-      prime256v1grp := pointer(1);
+      prime256v1grp := PEC_GROUP_PRIME256V1_NOTAVAILABLE;
       EC_KEY_free(key);
     end;
   end;
@@ -1561,7 +1564,7 @@ procedure FinalizeUnit;
 begin
   FreeAndNil(MainAesPrngOsl);
   if (prime256v1grp <> nil) and
-     (prime256v1grp <> pointer(1)) then
+     (prime256v1grp <> PEC_GROUP_PRIME256V1_NOTAVAILABLE) then
     EC_GROUP_free(prime256v1grp);
 end;
 
