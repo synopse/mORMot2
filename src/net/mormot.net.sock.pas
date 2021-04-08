@@ -194,6 +194,7 @@ var
   SocketApiVersion: RawUtf8;
 
   /// used by NewSocket() to cache the host names
+  // - avoiding DNS resolution is a always a good idea
   // - implemented by mormot.net.client unit using a TSynDictionary
   // - you may call its SetTimeOut or Flush methods to tune the caching
   NewSocketAddressCache: INewSocketAddressCache;

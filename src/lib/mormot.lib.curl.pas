@@ -660,7 +660,7 @@ implementation
   /// initialize the library
   function curl_global_init(flags: TCurlGlobalInit): TCurlResult; cdecl; external;
   /// initialize the library with a custom memory manager
-  function curl_global_init_mem(flags: TCurlGlobalInit,
+  function curl_global_init_mem(flags: TCurlGlobalInit;
     m, f, r, s, c: pointer): TCurlResult; cdecl; external;
   /// finalize the library
   procedure curl_global_cleanup cdecl; external;
@@ -759,7 +759,7 @@ begin
   result := {$ifdef LIBCURLSTATIC} true {$else} curl <> nil {$endif};
 end;
 
-// ensure libcurl will call our heap, not the libc heap
+// ensure libcurl will call our RTL MM, not the libc heap
 
 function curl_malloc_callback(size: PtrInt) : pointer; cdecl;
 begin
@@ -795,12 +795,11 @@ end;
 
 procedure LibCurlInitialize(engines: TCurlGlobalInit; const dllname: TFileName);
 
-{$ifndef LIBCURLSTATIC}
-
 var
+  res: TCurlResult;
+{$ifndef LIBCURLSTATIC}
   P: PPointerArray;
   api: PtrInt;
-  res: TCurlResult;
 
 const
   NAMES: array[0 .. {$ifdef LIBCURLMULTI} 31 {$else} 17 {$endif}] of PAnsiChar = (
@@ -950,7 +949,7 @@ begin
     InitializeCriticalSection(curl.share_cs[d]);
   curl.share_setopt(curl.globalShare, CURLSHOPT_LOCKFUNC, @curlShareLock);
   curl.share_setopt(curl.globalShare, CURLSHOPT_UNLOCKFUNC, @curlShareUnLock);
-  // share and cache DNS + TLS sessions + Connections
+  // share and cache DNS + TLS sessions (but not Connections)
   curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
   curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
   // curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
