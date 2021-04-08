@@ -11,8 +11,8 @@ unit mormot.db.raw.sqlite3.static;
     - Encryption-Related Functions
 
       Just include this unit in your uses clause, and the mormot.db.raw.sqlite3
-    sqlite3 global variable will be filled with linked .o/.obj API entries.
-      Please download latest https://synopse.info/files/mormot2static.7z too.
+    sqlite3 global variable will be filled with linked .o/.obj API entries -
+    ensure you downloaded latest https://synopse.info/files/mormot2static.7z
       If the platform is not supported yet, fallback loading a system library.
       To patch and compile the official SQlite3 amalgamation file, follow the
     instruction from the res/static/sqlite3 folder.

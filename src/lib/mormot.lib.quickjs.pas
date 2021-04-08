@@ -457,6 +457,7 @@ const
   JS_TAG_BIG_DECIMAL = 15;
 
   JS_TAG_MASK = $000FFFFFFFFFFFFF;
+  JS_NAN_MASK = $7ff00000;
 
   JS_NAN = UInt64(JS_TAG_FLOAT64) shl 48 + 0;
   JS_INFINITY_NEGATIVE = UInt64(JS_TAG_FLOAT64) shl 48 + 1;
@@ -2545,25 +2546,19 @@ begin
         result := JS_FLOAT64_NEGINF;
 end;
 
-function NanFrom(val: double): JSValueRaw;
-begin
-  if math.IsNan(val) then
-    result := JS_NAN
-  else if val < 0.0 then
-    result := JS_INFINITY_NEGATIVE
-  else
-    result := JS_INFINITY_POSITIVE;
-end;
-
 procedure JSValue.FromFloat(val: double);
 begin
   u.f64 := val;
-  if u.u64 and $7ff0000000000000 = $7ff0000000000000 then
+  if u.tag and JS_NAN_MASK = JS_NAN_MASK then
     // normalize NaN/+Inf/-Inf
-    u.u64 := NanFrom(val)
-  else
-    // the float value is stored bit inverted
-    u.u64 := not u.u64;
+    if math.IsNan(val) then
+      u.u64 := not JSValueRaw(JS_NAN)
+    else if val < 0.0 then
+      u.u64 := not JSValueRaw(JS_INFINITY_NEGATIVE)
+    else
+      u.u64 := not JSValueRaw(JS_INFINITY_POSITIVE);
+  // the float value is stored bit inverted
+  u.u64 := not u.u64;
 end;
 
 function JSValue.IsRefCounted: boolean;

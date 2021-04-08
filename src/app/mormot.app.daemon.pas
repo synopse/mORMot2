@@ -411,7 +411,8 @@ begin
         if Executable.Version.Version32 <> 0 then
           writeln(' Version: ', Executable.Version.Detailed);
       end;
-    cConsole, cVerbose:
+    cConsole,
+    cVerbose:
       begin
         WriteCopyright;
         writeln('Launched in ', cmdText, ' mode'#10);
@@ -505,10 +506,12 @@ begin
     end;
     {$else}
     // POSIX Run/Fork background execution of the executable
-    cRun, cFork:
+    cRun,
+    cFork:
       RunUntilSigTerminated(self, {dofork=}(cmd = cFork), Start, Stop,
         fSettings.fLogClass.DoLog, fSettings.ServiceName);
-    cKill, cSilentKill:
+    cKill,
+    cSilentKill:
       if RunUntilSigTerminatedForKill then
       begin
         if cmd <> cSilentKill then

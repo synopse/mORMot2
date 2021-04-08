@@ -462,7 +462,7 @@ const
   ));
 
   /// the known database engines handling CREATE INDEX IF NOT EXISTS statement
-  DB_HANDLECREATEINDEXIFNOTEXISTS = [dSQLite];
+  DB_HANDLECREATEINDEXIFNOTEXISTS = [dSQLite, dPostgreSQL];
 
   /// the known database engines handling CREATE INDEX on BLOB columns
   // - SQLite3 does not have any issue about indexing any column

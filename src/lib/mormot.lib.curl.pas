@@ -509,13 +509,16 @@ type
   TLibCurl = class(TSynLibrary)
   {$endif LIBCURLSTATIC}
   public
-    // in case CurlEnableShare is called this array holds a
-    // critical section per curl_lock_data
-    share_cs: array[0..Ord(CURL_LOCK_DATA_PSL)] of TRTLCriticalSection;
     /// global TCurlShare object, created by CurlEnableGlobalShare
     globalShare: TCurlShare;
+    /// hold CurlEnableGlobalShare mutexes
+    share_cs: array[curl_lock_data] of TRTLCriticalSection;
     /// initialize the library
     global_init: function(flags: TCurlGlobalInit): TCurlResult; cdecl;
+    /// initialize the library and specify a memory manager
+    // - set malloc, free, realloc, strdup and calloc functions
+    global_init_mem: function(flags: TCurlGlobalInit;
+      m, f, r, s, c: pointer): TCurlResult; cdecl;
     /// finalize the library
     global_cleanup: procedure; cdecl;
     /// returns run-time libcurl version info
@@ -656,6 +659,9 @@ implementation
 
   /// initialize the library
   function curl_global_init(flags: TCurlGlobalInit): TCurlResult; cdecl; external;
+  /// initialize the library with a custom memory manager
+  function curl_global_init_mem(flags: TCurlGlobalInit,
+    m, f, r, s, c: pointer): TCurlResult; cdecl; external;
   /// finalize the library
   procedure curl_global_cleanup cdecl; external;
   /// returns run-time libcurl version info
@@ -753,6 +759,40 @@ begin
   result := {$ifdef LIBCURLSTATIC} true {$else} curl <> nil {$endif};
 end;
 
+// ensure libcurl will call our heap, not the libc heap
+
+function curl_malloc_callback(size: PtrInt) : pointer; cdecl;
+begin
+  GetMem(result, size);
+end;
+
+procedure curl_free_callback(ptr: pointer); cdecl;
+begin
+  FreeMem(ptr);
+end;
+
+function curl_realloc_callback(ptr: pointer; size: PtrInt) : pointer; cdecl;
+begin
+  ReallocMem(ptr, size);
+  result := ptr;
+end;
+
+function curl_strdup_callback(str: PAnsiChar): PAnsiChar; cdecl;
+var
+  len: PtrInt;
+begin
+  len := StrLen(str);
+  GetMem(result, len + 1);
+  result[len] := #0;
+  MoveFast(str^, result^, len);
+end;
+
+function curl_calloc_callback(nmemb, size: PtrInt): pointer; cdecl;
+begin
+  result := AllocMem(size * nmemb);
+end;
+
+
 procedure LibCurlInitialize(engines: TCurlGlobalInit; const dllname: TFileName);
 
 {$ifndef LIBCURLSTATIC}
@@ -760,10 +800,11 @@ procedure LibCurlInitialize(engines: TCurlGlobalInit; const dllname: TFileName);
 var
   P: PPointerArray;
   api: PtrInt;
+  res: TCurlResult;
 
 const
-  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 30 {$else} 16 {$endif}] of PAnsiChar = (
-    'curl_global_init', 'curl_global_cleanup', 'curl_version_info',
+  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 31 {$else} 17 {$endif}] of PAnsiChar = (
+    'curl_global_init', 'curl_global_init_mem', 'curl_global_cleanup', 'curl_version_info',
     'curl_easy_init', 'curl_easy_setopt', 'curl_easy_perform', 'curl_easy_cleanup',
     'curl_easy_getinfo', 'curl_easy_duphandle', 'curl_easy_reset',
     'curl_easy_strerror', 'curl_slist_append', 'curl_slist_free_all',
@@ -793,6 +834,7 @@ begin
     {$ifdef LIBCURLSTATIC}
 
     curl.global_init := @curl_global_init;
+    curl.global_init_mem := @curl_global_init_mem;
     curl.global_cleanup := @curl_global_cleanup;
     curl.version_info := @curl_version_info;
     curl.easy_init := @curl_easy_init;
@@ -860,7 +902,10 @@ begin
     {$endif LIBCURLSTATIC}
 
     // if we reached here, the library has been successfully loaded
-    curl.global_init(engines);
+    res := curl.global_init_mem(engines, @curl_malloc_callback, @curl_free_callback,
+      @curl_realloc_callback, @curl_strdup_callback, @curl_calloc_callback);
+    if res <> crOK then
+        raise ECurl.CreateFmt('curl_global_init_mem() failed as %d', [ord(res)]);
     curl.info := curl.version_info(cvFour)^;
     curl.infoText := format('%s version %s', [LIBCURL_DLL, curl.info.version]);
     if curl.info.ssl_version <> nil then
@@ -879,18 +924,18 @@ end;
 procedure curlShareLock(handle: TCurl; data: curl_lock_data;
   locktype: curl_lock_access; userptr: pointer); cdecl;
 begin
-  EnterCriticalSection(curl.share_cs[Ord(data)]);
+  EnterCriticalSection(curl.share_cs[data]);
 end;
 
 procedure curlShareUnLock(handle: TCurl; data: curl_lock_data;
   userptr: pointer); cdecl;
 begin
-  LeaveCriticalSection(curl.share_cs[Ord(data)]);
+  LeaveCriticalSection(curl.share_cs[data]);
 end;
 
 function CurlEnableGlobalShare: boolean;
 var
-  i: PtrInt;
+  d: curl_lock_data;
 begin
   result := false;
   if not CurlIsAvailable or 
@@ -901,20 +946,21 @@ begin
     // something went wrong (out of memory, etc.) and therefore
     // the share object was not created
     exit;
-  for i := 0 to ord(CURL_LOCK_DATA_PSL) do
-    InitializeCriticalSection(curl.share_cs[i]);
+  for d := low(d) to high(d) do
+    InitializeCriticalSection(curl.share_cs[d]);
   curl.share_setopt(curl.globalShare, CURLSHOPT_LOCKFUNC, @curlShareLock);
   curl.share_setopt(curl.globalShare, CURLSHOPT_UNLOCKFUNC, @curlShareUnLock);
   // share and cache DNS + TLS sessions + Connections
   curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
   curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
-  curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
+  // curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
+ // CURL_LOCK_DATA_CONNECT triggers GPF on Debian Burster 10
   result := true;
 end;
 
 function CurlDisableGlobalShare: CURLSHcode;
 var
-  i: PtrInt;
+  d: curl_lock_data;
 begin
   result := CURLSHE_OK;
   if curl.globalShare = nil then
@@ -922,8 +968,8 @@ begin
   result := curl.share_cleanup(curl.globalShare);
   if result = CURLSHE_OK then
     curl.globalShare := nil;
-  for i := 0 to ord(CURL_LOCK_DATA_PSL) do
-    DeleteCriticalSection(curl.share_cs[i]);
+  for d := low(d) to high(d) do
+    DeleteCriticalSection(curl.share_cs[d]);
 end;
 
 {$ifndef LIBCURLSTATIC}

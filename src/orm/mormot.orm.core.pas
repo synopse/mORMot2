@@ -12957,8 +12957,9 @@ begin
   {$else}
   result := PUtf8Char(PtrInt(fData[Offset]));
   Offset := PtrUInt(fDataStart); // in two steps for better code generation
-  if result <> nil then
-    inc(result, Offset);
+  if result = nil then
+    Offset := PtrInt(result); // compile as branchless cmove on FPC
+  inc(result, Offset);
   {$endif NOPOINTEROFFSET}
 end;
 
@@ -12968,7 +12969,7 @@ begin
   fData[Offset] := Value;
   {$else}
   if Value <> nil then
-     dec(Value, PtrUInt(fDataStart));
+    dec(Value, PtrUInt(fDataStart));
   fData[Offset] := PtrInt(Value);
   {$endif NOPOINTEROFFSET}
 end;
@@ -12983,8 +12984,8 @@ begin
     dec(Value, PtrUInt(fDataStart));
     if (PtrInt(PtrUInt(Value)) > MaxInt) or (PtrInt(PtrUInt(Value)) < -MaxInt) then
       raise EOrmTable.CreateUtf8('%.Results[%] overflow: all PUtf8Char ' +
-        ' should be in a -2GB..+2GB 32-bit range [%]', [self, Offset, Value]);
-    // consider forcing NOPOINTEROFFSET conditional if you get this exception
+        'should be in a [-2GB..+2GB] 32-bit range (%) - consider forcing ' +
+        'NOPOINTEROFFSET conditional for your project', [self, Offset, Value]);
   end;
   fData[Offset] := PtrInt(Value);
   {$endif NOPOINTEROFFSET}
@@ -13021,7 +13022,7 @@ begin
       end
       else
         result := FastFindIndexedPUtf8Char(P, FieldCount - 1,
-          fFieldNameOrder, FieldName, @StrIComp);
+          fFieldNameOrder, FieldName, @StrIComp); // O(log(n)) binary search
     end
   else
     result := -1;
