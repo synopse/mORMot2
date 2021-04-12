@@ -952,8 +952,10 @@ begin
   // share and cache DNS + TLS sessions (but not Connections)
   curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
   curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
-  // curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
- // CURL_LOCK_DATA_CONNECT triggers GPF on Debian Burster 10
+  // CURL_LOCK_DATA_CONNECT triggers GPF e.g. on Debian Burster 10
+  if curl.info.version_num >= $00074400 then // seems to be fixed in 7.68
+    // see https://github.com/curl/curl/issues/4544
+    curl.share_setopt(curl.globalShare, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
   result := true;
 end;
 
