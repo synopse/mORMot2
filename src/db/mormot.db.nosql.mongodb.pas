@@ -2989,15 +2989,15 @@ begin
       raise EMongoException.CreateUtf8('%.OpenAuthSCRAM("%") step1: % - res=%',
         [self, DatabaseName, err, res]);
     key := 'c=biws,r=' {%H-}+ rnonce;
-    PBKDF2_HMAC_SHA1(Digest, Base64ToBin(resp.U['s']),
+    Pbkdf2HmacSha1(Digest, Base64ToBin(resp.U['s']),
       Utf8ToInteger(resp.U['i']), salted);
-    HMAC_Sha1(salted, 'Client Key', client);
+    HmacSha1(salted, 'Client Key', client);
     sha.Full(@client, SizeOf(client), stored);
     msg := first + ',' + RawUtf8({%H-}payload) + ',' + key;
-    HMAC_Sha1(stored, msg, stored);
+    HmacSha1(stored, msg, stored);
     XorMemory(@client, @stored, SizeOf(client));
-    HMAC_Sha1(salted, 'Server Key', server);
-    HMAC_Sha1(server, msg, server);
+    HmacSha1(salted, 'Server Key', server);
+    HmacSha1(server, msg, server);
     msg := key + ',p=' + BinToBase64(@client, SizeOf(client));
     BsonVariantType.FromBinary(msg, bbtGeneric, bson);
     err := fConnections[ConnectionIndex].RunCommand(

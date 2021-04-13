@@ -1006,18 +1006,18 @@ type
     // - as expected by this class
     // - defined as virtual so that you may use your own hashing class
     // - you may specify your own values in aHashSalt/aHashRound, to enable
-    // PBKDF2_HMAC_SHA256() use instead of plain Sha256(): it will increase
+    // Pbkdf2HmacSha256() use instead of plain Sha256(): it will increase
     // security on storage side (reducing brute force attack via rainbow tables)
     class function ComputeHashedPassword(const aPasswordPlain: RawUtf8;
       const aHashSalt: RawUtf8 = ''; aHashRound: integer = 20000): RawUtf8; virtual;
     /// able to set the PasswordHashHexa field from a plain password content
     // - in fact, PasswordHashHexa := Sha256('salt'+PasswordPlain) in UTF-8
     // - use SetPassword() method if you want to customize the hash salt value
-    // and use the much safer PBKDF2_HMAC_SHA256 algorithm
+    // and use the much safer Pbkdf2HmacSha256 algorithm
     property PasswordPlain: RawUtf8 write SetPasswordPlain;
     /// set the PasswordHashHexa field from a plain password content and salt
     // - use this method to specify aHashSalt/aHashRound values, enabling
-    // PBKDF2_HMAC_SHA256() use instead of plain Sha256(): it will increase
+    // Pbkdf2HmacSha256() use instead of plain Sha256(): it will increase
     // security on storage side (reducing brute force attack via rainbow tables)
     // - you may use an application specific fixed salt, and/or append the
     // user LogonName to make the challenge unique for each TAuthUser
@@ -3293,7 +3293,7 @@ begin
     result := Sha256(DEPRECATED_SALT + aPasswordPlain)
   else
   begin
-    PBKDF2_HMAC_SHA256(aPasswordPlain, aHashSalt, aHashRound, dig);
+    Pbkdf2HmacSha256(aPasswordPlain, aHashSalt, aHashRound, dig);
     result := Sha256DigestToString(dig);
     FillCharFast(dig, SizeOf(dig), 0);
   end;

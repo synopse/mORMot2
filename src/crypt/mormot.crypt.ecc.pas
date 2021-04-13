@@ -234,7 +234,7 @@ type
     // perform any ECC signature: use TEccCertificateChain.IsValid instead
     function CheckCRC: boolean;
     /// encrypt using the ECIES scheme, using this public certificate as key,
-    // via AES-256-CFB/PKCS7 over PBKDF2_HMAC_SHA256, and HMAC_SHA256
+    // via AES-256-CFB/PKCS7 overPbkdf2HmacSha256, and HmacSha256
     // - returns the encrypted content, in the .synecc optimized format
     // - optional salt information used for PBKDF2 or HMAC can be customized
     // - ecaUnknown algorithm will use either ecaPBKDF2_HMAC_SHA256_AES256_CFB
@@ -249,7 +249,7 @@ type
       const MACSalt: RawUtf8 = 'hmac'; MACRounds: integer = 100;
       Algo: TEciesAlgo = ecaUnknown): RawByteString;
     /// encrypt a file using the ECIES scheme, using this public certificate as
-    // key,via AES-256-CFB/PKCS7 over PBKDF2_HMAC_SHA256, and HMAC_SHA256
+    // key,via AES-256-CFB/PKCS7 overPbkdf2HmacSha256, and HmacSha256
     // - by default, will create a FileToCrypt.synecc encrypted file
     // - ecaUnknown algorithm will use either ecaPBKDF2_HMAC_SHA256_AES256_CFB
     // or ecaPBKDF2_HMAC_SHA256_AES256_CFB_SYNLZ depending if the supplied
@@ -382,7 +382,7 @@ type
     // - filename will be the certificate hexadecimal as 'Serial.private'
     // - will use anti-forensic diffusion of the private key (64 stripes = 2KB)
     // - then AES-256-CFB encryption (or the one specified in AES parameter) will
-    // be performed from PBKDF2_HMAC_SHA256 derivation of an user-supplied password
+    // be performed fromPbkdf2HmacSha256 derivation of an user-supplied password
     function SaveToSecureFile(const PassWord: RawUtf8;
       const DestFolder: TFileName; AFStripes: integer = 64;
       Pbkdf2Round: integer = DEFAULT_ECCROUNDS; AES: TAesAbstractClass = nil;
@@ -395,7 +395,7 @@ type
     // as a result, a compromission of one sub-file won't affect the secret key
     // - filename will be the certificate hexadecimal as 'Serial-###.private'
     // - AES-256-CFB encryption (or the one specified in AES parameter) will be
-    // performed from PBKDF2_HMAC_SHA256 derivation of an user-supplied password
+    // performed fromPbkdf2HmacSha256 derivation of an user-supplied password
     function SaveToSecureFiles(const PassWord: RawUtf8;
       const DestFolder: TFileName; DestFileCount: integer;
       AFStripes: integer = 64; Pbkdf2Round: integer = DEFAULT_ECCROUNDS;
@@ -410,7 +410,7 @@ type
     // - you should keep all your private keys in a safe place
     // - will use anti-forensic diffusion of the private key (64 stripes = 2KB)
     // - then AES-256-CFB encryption (or the one specified in AES parameter) will
-    // be performed from PBKDF2_HMAC_SHA256 derivation of an user-supplied password
+    // be performed fromPbkdf2HmacSha256 derivation of an user-supplied password
     function SaveToSecureBinary(const PassWord: RawUtf8; AFStripes: integer = 64;
       Pbkdf2Round: integer = DEFAULT_ECCROUNDS; AES: TAesAbstractClass = nil;
       NoHeader: boolean = false): RawByteString;
@@ -460,7 +460,7 @@ type
     function SignFile(const FileToSign: TFileName;
       const MetaNameValuePairs: array of const): TFileName;
     /// decrypt using the ECIES scheme, using this private certificate as key,
-    // via AES-256-CFB/PKCS7 over PBKDF2_HMAC_SHA256, and HMAC_SHA256
+    // via AES-256-CFB/PKCS7 overPbkdf2HmacSha256, and HmacSha256
     // - expects TEccCertificate.Crypt() cyphered content with its public key
     // - returns the decrypted content, or '' in case of failure
     // - optional shared information used for PBKDF2 or HMAC can be customized
@@ -474,7 +474,7 @@ type
       const MACSalt: RawUtf8 = 'hmac'; MACRounds: integer = 100): TEccDecrypt;
     /// decrypt using the ECIES scheme, using this private certificate as key,
     /// decrypt a file using the ECIES scheme, using this private certificate as
-    // key, via AES-256-CFB/PKCS7 over PBKDF2_HMAC_SHA256, and HMAC_SHA256
+    // key, via AES-256-CFB/PKCS7 overPbkdf2HmacSha256, and HmacSha256
     // - makes the reverse operation of TEccCertificate.EncryptFile method
     // - by default, will erase the (.synecc) extension to FileToDecrypt name
     // - optional salt information used for PBKDF2 can be customized, to unlock
@@ -1884,7 +1884,7 @@ begin
     SetLength(secret, sizeof(TEccSecretKey));
     if not Ecc256r1SharedSecret(fContent.Signed.PublicKey, rndpriv, PEccSecretKey(secret)^) then
       raise EECCException.CreateUtf8('%.Encrypt: SharedSecret?', [self]);
-    PBKDF2_HMAC_SHA256(secret, KDFSalt, KDFRounds, aeskey.b, 'salt');
+    Pbkdf2HmacSha256(secret, KDFSalt, KDFRounds, aeskey.b, 'salt');
     if Algo in ECIES_SYNLZ then
     begin
       dec := AlgoSynLZ.Compress(content);
@@ -1920,8 +1920,8 @@ begin
       enc := c.SimpleEncrypt(
         dec, aeskey, ECIES_AESSIZE[Algo], true, true);
       // HMAC of the encrypted content
-      PBKDF2_HMAC_SHA256(secret, MACSalt, MACRounds, mackey.b, 'hmac');
-      HMAC_SHA256(mackey.b, enc, head.hmac);
+      Pbkdf2HmacSha256(secret, MACSalt, MACRounds, mackey.b, 'hmac');
+      HmacSha256(mackey.b, enc, head.hmac);
     end;
     head.crc := crc32c(PCardinal(@head.hmac)^, @head, sizeof(head) - sizeof(head.crc));
     SetLength(result, sizeof(head) + length(enc));
@@ -2166,7 +2166,7 @@ begin
     try
       if SaveToStream(st) then
       begin
-        PBKDF2_HMAC_SHA256(PassWord, salt, Pbkdf2Round, aeskey);
+        Pbkdf2HmacSha256(PassWord, salt, Pbkdf2Round, aeskey);
         a := AES.Create(aeskey);
         try
           enc := a.EncryptPkcs7(st.DataString, true);
@@ -2308,7 +2308,7 @@ begin
   SetString(salt, PAnsiChar(Data) + head, PRIVKEY_SALTSIZE);
   try
     XorBlock16(pointer(salt), @PRIVKEY_MAGIC);
-    PBKDF2_HMAC_SHA256(PassWord, salt, Pbkdf2Round, aeskey);
+    Pbkdf2HmacSha256(PassWord, salt, Pbkdf2Round, aeskey);
     if AES = nil then
       AES := TAesCfb;
     a := AES.Create(aeskey);
@@ -2469,7 +2469,7 @@ begin
         head.rndpub, fPrivateKey, PEccSecretKey(secret)^) then
       exit;
     result := ecdInvalidMAC;
-    PBKDF2_HMAC_SHA256(secret, KDFSalt, KDFRounds, aeskey.b, 'salt');
+    Pbkdf2HmacSha256(secret, KDFSalt, KDFRounds, aeskey.b, 'salt');
     c := TAesFast[ECIES_AES[head.Algo]];
     if head.Algo in ECIES_AEAD then
     begin
@@ -2487,8 +2487,8 @@ begin
     else
     begin
       // validate the HMAC signature of the encrypted content
-      PBKDF2_HMAC_SHA256(secret, MACSalt, MACRounds, mackey.b, 'hmac');
-      HMAC_SHA256(@mackey, data, sizeof(mackey), datalen, hmac);
+      Pbkdf2HmacSha256(secret, MACSalt, MACRounds, mackey.b, 'hmac');
+      HmacSha256(@mackey, data, sizeof(mackey), datalen, hmac);
       if not IsEqual(hmac, head.hmac) then
         exit;
       // decrypt the content
@@ -3657,12 +3657,12 @@ begin
         raise EECCException.CreateUtf8('%.%: macDuringEF not available in %/%',
           [self, ED[aEncrypt], ToText(fAlgo.ef)^, fAes[aEncrypt]]);
     macHmacCrc256c:
-      HMAC_CRC256C(@fkM[aEncrypt], aEncrypted, sizeof(THash256), aLen, aMAC.b);
+      HmacCrc256c(@fkM[aEncrypt], aEncrypted, sizeof(THash256), aLen, aMAC.b);
     macHmacSha256:
-      HMAC_SHA256(@fkM[aEncrypt], aEncrypted, sizeof(THash256), aLen, aMAC.b);
+      HmacSha256(@fkM[aEncrypt], aEncrypted, sizeof(THash256), aLen, aMAC.b);
     macHmacCrc32c:
       begin
-        c := HMAC_CRC32C(@fkM[aEncrypt], aEncrypted, sizeof(THash256), aLen);
+        c := HmacCrc32c(@fkM[aEncrypt], aEncrypted, sizeof(THash256), aLen);
         for i := 0 to 7 do
           aMAC.c[i] := c; // naive 256-bit diffusion
       end;
@@ -3774,7 +3774,7 @@ var
 
   procedure ComputeSecret(const salt: RawByteString);
   var
-    hmac: THMAC_SHA256;
+    hmac: THmacSha256;
   begin
     hmac.Init(pointer(salt), length(salt));
     if fAlgo.auth <> authServer then

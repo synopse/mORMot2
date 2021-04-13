@@ -308,7 +308,7 @@ type
     /// an increasing counter, to implement unique session ID
     SessionSequence: integer;
     /// secret information, used for HMAC digital signature of cookie content
-    Secret: THMAC_CRC32C;
+    Secret: THmacCrc32c;
     /// random IV used as CTR on Crypt[] secret key
     CryptNonce: cardinal;
     /// secret information, used for encryption of the cookie content

@@ -940,13 +940,13 @@ begin
   SignatureSize := SIGN_SIZE[Algo];
   case Algo of
     saSha1:
-      PHMAC_SHA1(@ctxt)^.Init(aSecret, aSecretLen);
+      PHmacSha1(@ctxt)^.Init(aSecret, aSecretLen);
     saSha256:
-      PHMAC_SHA256(@ctxt)^.Init(aSecret, aSecretLen);
+      PHmacSha256(@ctxt)^.Init(aSecret, aSecretLen);
     saSha384:
-      PHMAC_SHA384(@ctxt)^.Init(aSecret, aSecretLen);
+      PHmacSha384(@ctxt)^.Init(aSecret, aSecretLen);
     saSha512:
-      PHMAC_SHA512(@ctxt)^.Init(aSecret, aSecretLen);
+      PHmacSha512(@ctxt)^.Init(aSecret, aSecretLen);
     saSha3224..saSha3S256:
       begin
         PSha3(@ctxt)^.Init(SHA3_ALGO[Algo]);
@@ -986,13 +986,13 @@ procedure TSynSigner.Update(aBuffer: pointer; aLen: integer);
 begin
   case Algo of
     saSha1:
-      PHMAC_SHA1(@ctxt)^.Update(aBuffer, aLen);
+      PHmacSha1(@ctxt)^.Update(aBuffer, aLen);
     saSha256:
-      PHMAC_SHA256(@ctxt)^.Update(aBuffer, aLen);
+      PHmacSha256(@ctxt)^.Update(aBuffer, aLen);
     saSha384:
-      PHMAC_SHA384(@ctxt)^.Update(aBuffer, aLen);
+      PHmacSha384(@ctxt)^.Update(aBuffer, aLen);
     saSha512:
-      PHMAC_SHA512(@ctxt)^.Update(aBuffer, aLen);
+      PHmacSha512(@ctxt)^.Update(aBuffer, aLen);
     saSha3224..saSha3S256:
       PSha3(@ctxt)^.Update(aBuffer, aLen);
   end;
@@ -1002,13 +1002,13 @@ procedure TSynSigner.Final(out aSignature: THash512Rec; aNoInit: boolean);
 begin
   case Algo of
     saSha1:
-      PHMAC_SHA1(@ctxt)^.Done(aSignature.b160, aNoInit);
+      PHmacSha1(@ctxt)^.Done(aSignature.b160, aNoInit);
     saSha256:
-      PHMAC_SHA256(@ctxt)^.Done(aSignature.Lo, aNoInit);
+      PHmacSha256(@ctxt)^.Done(aSignature.Lo, aNoInit);
     saSha384:
-      PHMAC_SHA384(@ctxt)^.Done(aSignature.b384, aNoInit);
+      PHmacSha384(@ctxt)^.Done(aSignature.b384, aNoInit);
     saSha512:
-      PHMAC_SHA512(@ctxt)^.Done(aSignature.b, aNoInit);
+      PHmacSha512(@ctxt)^.Done(aSignature.b, aNoInit);
     saSha3224..saSha3S256:
       PSha3(@ctxt)^.Final(@aSignature, SignatureSize shl 3, aNoInit);
   end;
@@ -1760,7 +1760,7 @@ begin
   if aSharedObfuscationKeyNewKdf > 0 then
   begin
     // efficient and safe obfuscation based on proven algoriths (AES + SHA3)
-    PBKDF2_SHA3(SHA3_256, aSharedObfuscationKey,
+    Pbkdf2Sha3(SHA3_256, aSharedObfuscationKey,
        ToText(ClassType), aSharedObfuscationKeyNewKdf, @key);
     fCryptoAesE.EncryptInit(key, 128);
     fCryptoAesD.DecryptInitFrom(fCryptoAesE, key, 128);
