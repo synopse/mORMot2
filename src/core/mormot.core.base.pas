@@ -11075,6 +11075,8 @@ begin
   else
   begin
     result := Length(fDataString) - fPosition;
+    if result = 0 then
+      exit;
     if result > Count then
       result := Count;
     MoveFast(PByteArray(fDataString)[fPosition], Buffer, result);
