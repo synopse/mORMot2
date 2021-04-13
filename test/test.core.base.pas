@@ -3100,7 +3100,7 @@ var
   crcs: THash512Rec;
   digest: THash256;
   tmp: RawByteString;
-  hmac32: THMAC_CRC32C;
+  hmac32: THmacCrc32c;
 //    hmac256: THMAC_CRC256C;
 begin
   test16('', $ffff);
@@ -3112,13 +3112,13 @@ begin
   totallen := 36;
   tmp := '123456789123456789';
   c2 := $12345678;
-  c1 := HMAC_CRC32C(@c2, pointer(tmp), 4, length(tmp));
+  c1 := HmacCrc32c(@c2, pointer(tmp), 4, length(tmp));
   check(c1 = $1C3C4B51);
   hmac32.Init(@c2, 4);
   hmac32.Update(pointer(tmp), length(tmp));
   check(hmac32.Done = c1);
   c2 := $12345678;
-  HMAC_CRC256C(@c2, pointer(tmp), 4, length(tmp), digest);
+  HmacCrc256c(@c2, pointer(tmp), 4, length(tmp), digest);
   check(Sha256DigestToString(digest) = '46da01fb9f4a97b5f8ba2c70512bc22aa' +
     'a9b57e5030ced9f5c7c825ab5ec1715');
   FillZero(crc2);
@@ -3194,7 +3194,7 @@ begin
       S := RandomString(j);
       crc := crc32creference(0, pointer(S), length(S));
       inc(totallen, length(S));
-      c2 := HMAC_CRC32C(@c1, pointer(S), 4, length(S));
+      c2 := HmacCrc32c(@c1, pointer(S), 4, length(S));
       hmac32.Init(@c1, 4);
       hmac32.Update(pointer(S), length(S));
       check(hmac32.Done = c2);
@@ -5405,21 +5405,46 @@ end;
 
 procedure TTestCoreBase.MimeTypes;
 const
-  MIMES: array[0..49] of TFileName = ('png', 'image/png', 'PNg', 'image/png',
-    'gif', 'image/gif', 'tif', 'image/tiff', 'tiff', 'image/tiff', 'jpg',
-    'image/jpeg', 'JPG', 'image/jpeg', 'jpeg', 'image/jpeg', 'bmp', 'image/bmp',
-    'doc', 'application/msword', 'docx', 'application/msword', 'htm',
-    HTML_CONTENT_TYPE, 'html', HTML_CONTENT_TYPE, 'HTML', HTML_CONTENT_TYPE,
-    'css', 'text/css', 'js', 'application/javascript', 'ico', 'image/x-icon',
-    'pdf', 'application/pdf', 'PDF', 'application/pdf', 'Json',
-    JSON_CONTENT_TYPE, 'webp', 'image/webp', 'manifest', 'text/cache-manifest',
-    'appcache', 'text/cache-manifest', 'h264', 'video/H264', 'ogg', 'video/ogg');
-  BIN: array[0..1] of Cardinal = ($04034B50, $38464947);
-  BIN_MIME: array[0..1] of RawUtf8 = ('application/zip', 'image/gif');
+  MIMES: array[0..51] of TFileName = (
+    'png', 'image/png',
+    'PNg', 'image/png',
+    'gif', 'image/gif',
+    'tif', 'image/tiff',
+    'tiff', 'image/tiff',
+    'jpg', 'image/jpeg',
+    'JPG', 'image/jpeg',
+    'jpeg', 'image/jpeg',
+    'bmp', 'image/bmp',
+    'doc', 'application/msword',
+    'docx', 'application/msword',
+    'htm', HTML_CONTENT_TYPE,
+    'html', HTML_CONTENT_TYPE,
+    'HTML', HTML_CONTENT_TYPE,
+    'css', 'text/css',
+    'js', 'application/javascript',
+    'ico', 'image/x-icon',
+    'pdf', 'application/pdf',
+    'PDF', 'application/pdf',
+    'Json', JSON_CONTENT_TYPE,
+    'webp', 'image/webp',
+    'manifest', 'text/cache-manifest',
+    'appcache', 'text/cache-manifest',
+    'h264', 'video/H264',
+    'x', 'application/x-compress',
+    'ogg', 'video/ogg');
+  BIN: array[0..1] of Cardinal = (
+    $04034B50, $38464947);
+  BIN_MIME: array[0..1] of RawUtf8 = (
+    'application/zip', 'image/gif');
 var
   i: integer;
 begin
   CheckEqual(GetMimeContentType(nil, 0, 'toto.h264'), 'video/H264');
+  CheckEqual(GetMimeContentType(nil, 0, 'toto', 'def1'), 'def1');
+  CheckEqual(GetMimeContentType(nil, 0, 'toto.', 'def2'), 'def2');
+  CheckEqual(GetMimeContentType(nil, 0, 'toto.a', 'def3'), 'application/a');
+  CheckEqual(GetMimeContentType(nil, 0, 'toto.1', 'def4'), 'def4');
+  CheckEqual(GetMimeContentType(nil, 0, 'toto.ab', 'def5'), 'application/ab');
   for i := 0 to high(MIMES) shr 1 do
     CheckEqual(GetMimeContentType(nil, 0, 'toto.' + MIMES[i * 2]),
       ToUtf8(MIMES[i * 2 + 1]));

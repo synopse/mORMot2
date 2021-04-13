@@ -116,18 +116,18 @@ begin
   s := 'Wikipedia, l''encyclopedie libre et gratuite';
   SHA.Full(pointer(s), length(s), Digest);
   CheckEqual(Sha1DigestToString(Digest), 'c18cc65028bbdc147288a2d136313287782b9c73');
-  HMAC_SHA1('', '', Digest);
+  HmacSha1('', '', Digest);
   CheckEqual(Sha1DigestToString(Digest), 'fbdb1d1b18aa6c08324b7d64b71fb76370690e1d');
-  HMAC_SHA1('key', 'The quick brown fox jumps over the lazy dog', Digest);
+  HmacSha1('key', 'The quick brown fox jumps over the lazy dog', Digest);
   CheckEqual(Sha1DigestToString(Digest), 'de7c9b85b8b78aa6bc8a7a36f70a90701c9db4d9');
   // from https://www.ietf.org/rfc/rfc6070.txt
-  PBKDF2_HMAC_SHA1('password', 'salt', 1, Digest);
+  Pbkdf2HmacSha1('password', 'salt', 1, Digest);
   s := Sha1DigestToString(Digest);
   CheckEqual(s, '0c60c80f961f0e71f3a9b524af6012062fe037a6');
-  PBKDF2_HMAC_SHA1('password', 'salt', 2, Digest);
+  Pbkdf2HmacSha1('password', 'salt', 2, Digest);
   s := Sha1DigestToString(Digest);
   CheckEqual(s, 'ea6c014dc72d6f8ccd1ed92ace1d41f0d8de8957');
-  PBKDF2_HMAC_SHA1('password', 'salt', 4096, Digest);
+  Pbkdf2HmacSha1('password', 'salt', 4096, Digest);
   s := Sha1DigestToString(Digest);
   CheckEqual(s, '4b007901b765489abead49d926f721d065a429c1');
 end;
@@ -188,21 +188,21 @@ procedure TTestCoreCrypto._SHA256;
       CheckEqual(TOpenSslHmac.Hmac('', 'what do ya want for nothing?', 'Jefe'),
         '5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843');
     {$endif USE_OPENSSL}
-    PBKDF2_HMAC_SHA256('password', 'salt', 1, Digest.Lo);
+    Pbkdf2HmacSha256('password', 'salt', 1, Digest.Lo);
     check(Sha256DigestToString(Digest.Lo) =
       '120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b');
-    PBKDF2_HMAC_SHA256('password', 'salt', 2, Digest.Lo);
+    Pbkdf2HmacSha256('password', 'salt', 2, Digest.Lo);
     check(Sha256DigestToString(Digest.Lo) =
       'ae4d0c95af6b46d32d0adff928f06dd02a303f8ef3c251dfd6e2d85a95474c43');
     SetLength(Digests, 2);
     check(IsZero(Digests[0]));
     check(IsZero(Digests[1]));
-    PBKDF2_HMAC_SHA256('password', 'salt', 2, Digests);
+    Pbkdf2HmacSha256('password', 'salt', 2, Digests);
     check(IsEqual(Digests[0], Digest.Lo));
     check(not IsEqual(Digests[1], Digest.Lo));
     check(Sha256DigestToString(Digests[1]) =
       '830651afcb5c862f0b249bd031f7a67520d136470f5ec271ece91c07773253d9');
-    PBKDF2_HMAC_SHA256('password', 'salt', 4096, Digest.Lo);
+    Pbkdf2HmacSha256('password', 'salt', 4096, Digest.Lo);
     check(Sha256DigestToString(Digest.Lo) = DIG4096);
     FillZero(Digest.b);
     sign.Pbkdf2(saSha256, 'password', 'salt', 4096, Digest);
@@ -291,7 +291,7 @@ procedure TTestCoreCrypto._SHA512;
   begin
     if rounds = 0 then
     begin
-      HMAC_SHA512(password, secret, dig.b);
+      HmacSha512(password, secret, dig.b);
       Check(Sha512DigestToString(dig.b) = expected);
       sign.Init(saSha512, password);
       sign.Update(secret);
@@ -305,7 +305,7 @@ procedure TTestCoreCrypto._SHA512;
     end
     else
     begin
-      PBKDF2_HMAC_SHA512(password, secret, rounds, dig.b);
+      Pbkdf2HmacSha512(password, secret, rounds, dig.b);
       Check(Sha512DigestToString(dig.b) = expected);
       FillZero(dig.b);
       sign.Pbkdf2(saSha512, password, secret, rounds, dig);
@@ -387,28 +387,28 @@ begin
     'd513554e1c8cf252c02d470a285a0501bad999bfe943c08f050235d7d68b1da55e63f73b60a57fce', 1);
   Test('password', 'salt', 'd197b1b33db0143e018b12f3d1d1479e6cdebdcc97c5c0f87' +
     'f6902e072f457b5143f30602641b3d55cd335988cb36b84376060ecd532e039b742a239434af2d5', 4096);
-  HMAC_SHA256('Jefe', 'what do ya want for nothing?', dig.Lo);
+  HmacSha256('Jefe', 'what do ya want for nothing?', dig.Lo);
   CheckEqual(Sha256DigestToString(dig.Lo),
     '5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843');
-  HMAC_SHA384('Jefe', 'what do ya want for nothing?', dig.b384);
+  HmacSha384('Jefe', 'what do ya want for nothing?', dig.b384);
   Check(Sha384DigestToString(dig.b384) = 'af45d2e376484031617f78d2b58a6b1' +
     'b9c7ef464f5a01b47e42ec3736322445e8e2240ca5e69e2c78b3239ecfab21649');
-  PBKDF2_HMAC_SHA384('password', 'salt', 4096, dig.b384);
+  Pbkdf2HmacSha384('password', 'salt', 4096, dig.b384);
   Check(Sha384DigestToString(dig.b384) = '559726be38db125bc85ed7895f6e3cf574c7a01c' +
     '080c3447db1e8a76764deb3c307b94853fbe424f6488c5f4f1289626');
-  PBKDF2_HMAC_SHA512('passDATAb00AB7YxDTT', 'saltKEYbcTcXHCBxtjD', 1, dig.b);
+  Pbkdf2HmacSha512('passDATAb00AB7YxDTT', 'saltKEYbcTcXHCBxtjD', 1, dig.b);
   Check(Sha512DigestToString(dig.b) = 'cbe6088ad4359af42e603c2a33760ef9d4017a7b2aad10af46' +
     'f992c660a0b461ecb0dc2a79c2570941bea6a08d15d6887e79f32b132e1c134e9525eeddd744fa');
-  PBKDF2_HMAC_SHA384('passDATAb00AB7YxDTTlRH2dqxDx19GDxDV1zFMz7E6QVqK',
+  Pbkdf2HmacSha384('passDATAb00AB7YxDTTlRH2dqxDx19GDxDV1zFMz7E6QVqK',
     'saltKEYbcTcXHCBxtjD2PnBh44AIQ6XUOCESOhXpEp3HrcG', 1, dig.b384);
   Check(Sha384DigestToString(dig.b384) =
     '0644a3489b088ad85a0e42be3e7f82500ec189366' +
     '99151a2c90497151bac7bb69300386a5e798795be3cef0a3c803227');
   { // rounds=100000 is slow, so not tested by default
-  PBKDF2_HMAC_SHA512('passDATAb00AB7YxDTT','saltKEYbcTcXHCBxtjD',100000,dig);
+  Pbkdf2HmacSha512('passDATAb00AB7YxDTT','saltKEYbcTcXHCBxtjD',100000,dig);
   Check(Sha512DigestToString(dig)='accdcd8798ae5cd85804739015ef2a11e32591b7b7d16f76819b30'+
     'b0d49d80e1abea6c9822b80a1fdfe421e26f5603eca8a47a64c9a004fb5af8229f762ff41f');
-  PBKDF2_HMAC_SHA384('passDATAb00AB7YxDTTlRH2dqxDx19GDxDV1zFMz7E6QVqK','saltKEYbcTcXHCBxtj'+
+  Pbkdf2HmacSha384('passDATAb00AB7YxDTTlRH2dqxDx19GDxDV1zFMz7E6QVqK','saltKEYbcTcXHCBxtj'+
     'D2PnBh44AIQ6XUOCESOhXpEp3HrcG',100000,PHash384(@dig)^);
   Check(Sha384DigestToString(PHash384(@dig)^)='bf625685b48fe6f187a1780c5cb8e1e4a7b0dbd'+
     '6f551827f7b2b598735eac158d77afd3602383d9a685d87f8b089af30');
@@ -497,7 +497,7 @@ begin
       Check(instance.Cypher(encrypted) = data);
     end;
   end;
-  PBKDF2_SHA3(SHA3_512, 'pass', 'salt', 1000, @h512);
+  Pbkdf2Sha3(SHA3_512, 'pass', 'salt', 1000, @h512);
   check(Sha512DigestToString(h512.b) = DK);
   FillZero(h512.b);
   sign.Pbkdf2(saSha3512, 'pass', 'salt', 1000, h512);
@@ -976,19 +976,19 @@ begin
           bSHA1:
             SHA1.Full(pointer(data), SIZ[s], dig.b160);
           bHMACSHA1:
-            HMAC_SHA1('secret', data, dig.b160);
+            HmacSha1('secret', data, dig.b160);
           bSHA256:
             SHA256.Full(pointer(data), SIZ[s], dig.Lo);
           bHMACSHA256:
-            HMAC_SHA256('secret', data, dig.Lo);
+            HmacSha256('secret', data, dig.Lo);
           bSHA384:
             SHA384.Full(pointer(data), SIZ[s], dig.b384);
           bHMACSHA384:
-            HMAC_SHA384('secret', data, dig.b384);
+            HmacSha384('secret', data, dig.b384);
           bSHA512:
             SHA512.Full(pointer(data), SIZ[s], dig.b);
           bHMACSHA512:
-            HMAC_SHA512('secret', data, dig.b);
+            HmacSha512('secret', data, dig.b);
           bSHA3_256:
             SHA3.Full(pointer(data), SIZ[s], dig.Lo);
           bSHA3_512:
