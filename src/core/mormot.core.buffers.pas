@@ -1206,8 +1206,8 @@ type
   /// used by MultiPartFormDataDecode() to return all its data items
   TMultiPartDynArray = array of TMultiPart;
 
-/// decode multipart/form-data POST request content
-// - following RFC1867
+/// decode multipart/form-data POST request content into memory
+// - following RFC 1867
 function MultiPartFormDataDecode(const MimeType,Body: RawUtf8;
   var MultiPart: TMultiPartDynArray): boolean;
 
@@ -1220,6 +1220,7 @@ function MultiPartFormDataDecode(const MimeType,Body: RawUtf8;
 // $ Content-Type: multipart/form-data; boundary=xxx
 // where xxx is the first generated boundary
 // - MultiPartContent: generated multipart content
+// - consider THttpMultiPartStream from mormot.net.client for huge file content
 function MultiPartFormDataEncode(const MultiPart: TMultiPartDynArray;
   var MultiPartContentType, MultiPartContent: RawUtf8): boolean;
 
@@ -1227,6 +1228,7 @@ function MultiPartFormDataEncode(const MultiPart: TMultiPartDynArray;
 // - FileName: file to encode
 // - Multipart: where the part is added
 // - Name: name of the part, is empty the name 'File###' is generated
+// - consider THttpMultiPartStream from mormot.net.client for huge file content
 function MultiPartFormDataAddFile(const FileName: TFileName;
   var MultiPart: TMultiPartDynArray; const Name: RawUtf8 = ''): boolean;
 
@@ -1234,6 +1236,7 @@ function MultiPartFormDataAddFile(const FileName: TFileName;
 // - FieldName: field name of the part
 // - FieldValue: value of the field
 // - Multipart: where the part is added
+// - consider THttpMultiPartStream from mormot.net.client for huge file content
 function MultiPartFormDataAddField(const FieldName, FieldValue: RawUtf8;
   var MultiPart: TMultiPartDynArray): boolean;
 
@@ -6007,7 +6010,10 @@ begin
       if (part.ContentType = '') or
          (PosEx('-8', part.ContentType) > 0) then
       begin
-        part.ContentType := TEXT_CONTENT_TYPE;
+        if IdemPChar(pointer(part.ContentType), JSON_CONTENT_TYPE_UPPER) then
+          part.ContentType := JSON_CONTENT_TYPE
+        else
+          part.ContentType := TEXT_CONTENT_TYPE;
         {$ifdef HASCODEPAGE}
         SetCodePage(part.Content, CP_UTF8, false); // ensure raw value is UTF-8
         {$endif HASCODEPAGE}
@@ -6063,7 +6069,7 @@ begin
             [bound, Name, ContentType, Content, bound])
         else
         begin
-        // if this is the first file, create the header for files
+          // if this is the first file, create the header for files
           if filescount = 0 then
           begin
             if i > 0 then

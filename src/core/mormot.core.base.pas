@@ -3337,19 +3337,29 @@ type
     function Seek(Offset: Longint; Origin: Word): Longint; override;
   end;
 
+  /// TStream with a protected fPosition field
+  TStreamWithPosition = class(TStream)
+  protected
+    fPosition: Int64;
+    {$ifdef FPC}
+    function GetPosition: Int64; override;
+    {$endif FPC}
+  public
+    /// compute soCurrent from internal Position
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+    /// call the 64-bit Seek() overload
+    function Seek(Offset: Longint; Origin: Word): Longint; override;
+  end;
+
   /// TStream using a RawByteString as internal storage
   // - default TStringStream uses WideChars since Delphi 2009, so it is
   // not compatible with previous versions, and it does make sense to
   // work with RawByteString/RawUtf8 in our UTF-8 oriented framework
   // - just like TStringStream, is designed for appending data, not modifying
   // in-place, as requested e.g. by TTextWriter or TBufferWriter classes
-  TRawByteStringStream = class(TStream)
+  TRawByteStringStream = class(TStreamWithPosition)
   protected
-    fPosition: integer;
     fDataString: RawByteString;
-    {$ifdef FPC}
-    function GetPosition: Int64; override;
-    {$endif FPC}
     function  GetSize: Int64; override;
     procedure SetSize(NewSize: Longint); override;
   public
@@ -3362,8 +3372,6 @@ type
     function Read(var Buffer; Count: Longint): Longint; override;
     /// change the current Read/Write position, within current stored range
     function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
-    /// change the current Read/Write position, within current stored range
-    function Seek(Offset: Longint; Origin: Word): Longint; override;
     /// append some data to the buffer
     // - will resize the buffer, i.e. will replace the end of the string from
     // the current position with the supplied data
@@ -11021,6 +11029,34 @@ begin
 end;
 
 
+{ TStreamWithPosition }
+
+{$ifdef FPC}
+function TStreamWithPosition.GetPosition: Int64;
+begin
+  result := fPosition;
+end;
+{$endif FPC}
+
+function TStreamWithPosition.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  case Origin of
+    soBeginning:
+      result := Offset;
+    soCurrent:
+      result := fPosition + Offset;
+  else
+    raise EStreamError.CreateFmt('Unexpected %s.Seek(%d): size is unknown',
+      [ClassNameShort(self)^, ord(Origin)]);
+  end;
+end;
+
+function TStreamWithPosition.Seek(Offset: Longint; Origin: Word): Longint;
+begin
+  result := Seek(Offset, TSeekOrigin(Origin)); // call the 64-bit version above
+end;
+
+
 { TRawByteStringStream }
 
 constructor TRawByteStringStream.Create;
@@ -11066,18 +11102,6 @@ begin
   fPosition := result;
 end;
 
-function TRawByteStringStream.Seek(Offset: Longint; Origin: Word): Longint;
-begin
-  result := Seek(Offset, TSeekOrigin(Origin)); // call the 64-bit version above
-end;
-
-{$ifdef FPC}
-function TRawByteStringStream.GetPosition: Int64;
-begin
-  result := fPosition;
-end;
-{$endif FPC}
-
 function TRawByteStringStream.GetSize: Int64;
 begin
   // faster than the TStream inherited method calling Seek() twice
@@ -11101,7 +11125,7 @@ begin
     if fPosition + result > length(fDataString) then
       SetLength(fDataString, fPosition + result);
     MoveFast(Buffer, PByteArray(fDataString)[fPosition], result);
-    inc(FPosition, result);
+    inc(fPosition, result);
   end;
 end;
 
