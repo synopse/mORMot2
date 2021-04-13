@@ -61,8 +61,8 @@ type
 
   /// a TStream descendant implementing client multipart/formdata HTTP POST
   // - AddContent/AddFileContent/AddFile will append name/contents sections
-  // to this instance, which will be Read() and sent via TCP with the proper
-  // multipart formatting as defined by RFC 2488 / RFC 1341
+  // to this instance, then after Flush, send Read() data via TCP to include the
+  // proper multipart formatting as defined by RFC 2488 / RFC 1341
   // - AddFile() won't load the file content into memory so it is more
   // efficient than MultiPartFormDataEncode() from mormot.core.buffers
   THttpMultiPartStream = class(TStreamWithPosition)
@@ -92,6 +92,8 @@ type
     // internal TFileStream to be retrieved by successive Read() calls
     procedure AddFile(const name: RawUtf8; const filename: TFileName;
       const contenttype: RawUtf8 = '');
+    /// you should call this method before any Read() call
+    procedure Flush;
     /// will read up to Count bytes from the internal sections
     // - ready to be sent to the HTTP server, with proper multipart markup
     function Read(var Buffer; Count: Longint): Longint; override;
@@ -933,9 +935,9 @@ end;
 
 procedure THttpMultiPartStream.NewBound;
 var
-  random: array[1..3] of cardinal;
+  random: array[0..3] of cardinal;
 begin
-  FillRandom(@random, 3);
+  FillRandom(@random, 4);
   fBound := BinToBase64uri(@random, SizeOf(random));
   AddRawUtf8(fBounds, fBound);
 end;
@@ -952,13 +954,18 @@ begin
   result := @fSections[ns];
   result^.Name := name;
   result^.Content := content;
-  if contenttype = '' then
+  result^.ContentType := contenttype;
+  if result^.ContentType = '' then
+    result^.ContentType := GetMimeContentType(
+      pointer(content), length(content), Ansi7ToString(filename));
+  if result^.ContentType = '' then
     if filename = '' then
-      result^.ContentType := TEXT_CONTENT_TYPE
+      if IsValidJson(content) then
+        result^.ContentType := JSON_CONTENT_TYPE
+      else
+        result^.ContentType := TEXT_CONTENT_TYPE
     else
-      result^.ContentType := BINARY_CONTENT_TYPE
-  else
-    result^.ContentType := contenttype;
+      result^.ContentType := BINARY_CONTENT_TYPE;
   result^.FileName := filename;
   nc := length(fContent);
   if nc = 0 then
@@ -978,9 +985,9 @@ begin
       [fBound, name, result^.ContentType, content, fBound])
   else
   begin
-    // if this is the first file, create the header for files
     if fFilesCount = 0 then
     begin
+      // if this is the first file, create the header for files
       if ns <> 0 then
         NewBound;
       s := 'Content-Disposition: form-data; name="files"'#13#10 +
@@ -1002,13 +1009,15 @@ begin
 end;
 
 procedure THttpMultiPartStream.AddContent(const name: RawUtf8;
-  const content: RawByteString; const contenttype, encoding: RawUtf8);
+  const content: RawByteString; const contenttype: RawUtf8;
+  const encoding: RawUtf8);
 begin
   Add(name, content, contenttype, '', encoding);
 end;
 
 procedure THttpMultiPartStream.AddFileContent(const name, filename: RawUtf8;
-  const content: RawByteString; const contenttype, encoding: RawUtf8);
+  const content: RawByteString; const contenttype: RawUtf8;
+  const encoding: RawUtf8);
 begin
   Add(name, content, contenttype, filename, encoding);
 end;
@@ -1029,17 +1038,40 @@ begin
   fContent[n + 1] := TRawByteStringStream.Create(#13#10'--' + fBound + #13#10);
 end;
 
+procedure THttpMultiPartStream.Flush;
+var
+  i: PtrInt;
+  s: RawUtf8;
+begin
+  if fBounds = nil then
+    exit;
+  for i := length(fBounds) - 1 downto 0 do
+    s := {%H-}s + '--' + fBounds[i] + '--'#13#10;
+  with fContent[high(fContent)] as TRawByteStringStream do
+    DataString := DataString + s;
+end;
+
 function THttpMultiPartStream.Read(var Buffer; Count: Longint): Longint;
+var
+  rd: LongInt;
+  P: PByte;
 begin
   result := 0;
+  P := @Buffer;
   repeat
     if fContentRead = length(fContent) then
-      exit;
-    result := fContent[fContentRead].Read(Buffer, Count);
-    if result <> 0 then
       break;
-    inc(fContentRead); // try to read from next section
-  until false;
+    rd := fContent[fContentRead].Read(P^, Count);
+    if rd = 0 then
+    begin
+      // read from next section(s) until we got Count bytes
+      inc(fContentRead);
+      continue;
+    end;
+    inc(P, rd);
+    inc(result, rd);
+    dec(Count, rd);
+  until Count = 0;
   inc(fPosition, result);
 end;
 
