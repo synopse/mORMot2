@@ -21,7 +21,7 @@ interface
 
 {.$define LIBCURLMULTI}
 // to include the more advanced "multi session" API functions of libcurl
-// see https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
+// see https://curl.se/libcurl/c/libcurl-multi.html interface
 
 {.$define LIBCURLSTATIC}
 // to use the static libcurl.a version of the library - mainly for Android
@@ -376,6 +376,44 @@ type
     cmNone,
     cmDone);
 
+  /// libcurl multipart/formdata HTTP POST result codes
+  TCurlFormCode = (
+    CURL_FORMADD_OK,
+    CURL_FORMADD_MEMORY,
+    CURL_FORMADD_OPTION_TWICE,
+    CURL_FORMADD_NULL,
+    CURL_FORMADD_UNKNOWN_OPTION,
+    CURL_FORMADD_INCOMPLETE,
+    CURL_FORMADD_ILLEGAL_ARRAY,
+    CURL_FORMADD_DISABLED,
+    CURL_FORMADD_LAST);
+
+  /// libcurl multipart/formdata HTTP POST options
+  TCurlFormOption = (
+    CURLFORM_NOTHING,
+    CURLFORM_COPYNAME, // followed by a string which will be copied by libcurl
+    CURLFORM_PTRNAME,  // followed by a string which pointer will stay available
+    CURLFORM_NAMELENGTH, // if CURLFORM_COPYNAME/PTRNAME is not #0 terminated
+    CURLFORM_COPYCONTENTS, // followed by a pointer to the contents to be copied
+    CURLFORM_PTRCONTENTS,  // followed by a persistent pointer to the contents
+    CURLFORM_CONTENTSLENGTH, // deprecated - use CURLFORM_CONTENTLEN
+    CURLFORM_FILECONTENT, // followed by a filename - may not be a file upload
+    CURLFORM_ARRAY,
+    CURLFORM_OBSOLETE,
+    CURLFORM_FILE, // followed by a filename - will be a file upload part
+    CURLFORM_BUFFER, // followed by a filename - file upload without CURLFORM_FILE
+    CURLFORM_BUFFERPTR,     // CURLFORM_BUFFER persistent pointer
+    CURLFORM_BUFFERLENGTH,  // CURLFORM_BUFFER persistent size
+    CURLFORM_CONTENTTYPE, // followed by a pointer to a string, for CURLFORM_FILE
+    CURLFORM_CONTENTHEADER, // followed by a curl_slist_append() list of headers
+    CURLFORM_FILENAME, // followed by a pointer to a string, for CURLFORM_FILE
+    CURLFORM_END,
+    CURLFORM_OBSOLETE2,
+    CURLFORM_STREAM,
+    CURLFORM_CONTENTLEN, // added in 7.46.0, provide a curl_off_t 64-bit size
+    CURLFORM_LASTENTRY
+    );
+
   /// low-level version information for libcurl library
   TCurlVersionInfo = record
     age: TCurlVersion;
@@ -418,6 +456,43 @@ type
     certinfo: PPCurlSListArray;
   end;
   PCurlCertInfo = ^TCurlCertInfo;
+
+  PCurlHttpPost = ^TCurlHttpPost;
+
+  /// defines a multipart/formdata HTTP POST section
+  TCurlHttpPost = record
+    /// next entry in the list
+    next: PCurlHttpPost;
+    /// pointer to allocated name
+    name: PAnsiChar;
+    /// length of name length
+    namelength: integer;
+    /// pointer to allocated data contents
+    contents: PAnsiChar;
+    /// length of contents field
+    // - see also CURL_HTTPPOST_LARGE / 64-bit contentlen
+    contentslength: integer;
+    /// pointer to allocated buffer contents
+    buffer: PAnsiChar;
+    /// length of buffer field
+    bufferlength: integer;
+    /// Content-Type text
+    contenttype: PAnsiChar;
+    /// list of extra headers for this form
+    contentheader: PPCurlSListArray;
+    /// if one field name has more than one file, this link should link to following files
+    more: PCurlHttpPost;
+    /// as defined below
+    flags: integer;
+    /// file name to show. If not set, the actual file name will be used (if this is a file part)
+    showfilename: PAnsiChar;
+    /// custom pointer used for HTTPPOST_CALLBACK posts
+    userp: pointer;
+    /// alternative length of contents field - used if CURL_HTTPPOST_LARGE is set
+    // - added in 7.46.0 - is defined as POSIX off_t
+    contentlen: Int64;
+  end;
+
 
   /// low-level message information for libcurl library API
   TCurlMsgRec = packed record
@@ -502,7 +577,7 @@ type
   /// low-level late binding functions access to the libcurl library API
   // - ensure you called LibCurlInitialize or CurlIsAvailable functions to
   // setup this global instance before using any of its internal functions
-  // - see also https://curl.haxx.se/libcurl/c/libcurl-multi.html interface
+  // - see also https://curl.se/libcurl/c/libcurl-multi.html interface
   {$ifdef LIBCURLSTATIC}
   TLibCurl = record
   {$else}
@@ -543,6 +618,10 @@ type
     slist_append: function(list: TCurlSList; s: PAnsiChar): TCurlSList; cdecl;
     /// free an entire slist
     slist_free_all: procedure(list: TCurlSList); cdecl;
+    /// add a section to a multipart/formdata HTTP POST request
+    formadd: function(var first, last: PCurlHttpPost): TCurlFormCode; cdecl varargs;
+    /// finalize the sections of a multipart/formdata HTTP POST request
+    formfree: procedure(first: PCurlHttpPost); cdecl;
 
     /// create a shared object
     share_init: function: pointer; cdecl;
@@ -686,6 +765,10 @@ implementation
   function curl_slist_append(list: TCurlSList; s: PAnsiChar): TCurlSList; cdecl; external;
   /// free an entire slist
   procedure curl_slist_free_all(list: TCurlSList); cdecl; external;
+  /// add a section to a multipart/formdata HTTP POST
+  function curl_formadd(var first, last: PCurlHttpPost): TCurlFormCode; cdecl varargs; external;
+  /// finalize all sections of a multipart/formdata HTTP POST
+  procedure curl_formfree(first: PCurlHttpPost); cdecl;
 
   /// create a shared object
   function curl_share_init: pointer; cdecl; external;
@@ -802,12 +885,13 @@ var
   api: PtrInt;
 
 const
-  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 31 {$else} 17 {$endif}] of PAnsiChar = (
+  NAMES: array[0 .. {$ifdef LIBCURLMULTI} 33 {$else} 19 {$endif}] of PAnsiChar = (
     'curl_global_init', 'curl_global_init_mem', 'curl_global_cleanup', 'curl_version_info',
     'curl_easy_init', 'curl_easy_setopt', 'curl_easy_perform', 'curl_easy_cleanup',
     'curl_easy_getinfo', 'curl_easy_duphandle', 'curl_easy_reset',
     'curl_easy_strerror', 'curl_slist_append', 'curl_slist_free_all',
-    'curl_share_init', 'curl_share_cleanup','curl_share_setopt', 'curl_share_strerror'
+    'curl_formadd', 'curl_formfree', 'curl_share_init',
+    'curl_share_cleanup','curl_share_setopt', 'curl_share_strerror'
     {$ifdef LIBCURLMULTI},
     'curl_multi_add_handle', 'curl_multi_assign', 'curl_multi_cleanup',
     'curl_multi_fdset', 'curl_multi_info_read', 'curl_multi_init',
@@ -846,6 +930,8 @@ begin
     curl.easy_strerror := @curl_easy_strerror;
     curl.slist_append := @curl_slist_append;
     curl.slist_free_all := @curl_slist_free_all;
+    curl.formadd := @curl_curl_formadd;
+    curl.formfree := @curl_curl_formfree;
     curl.share_init := @curl_share_init;
     curl.share_cleanup := @curl_share_cleanup;
     curl.share_setopt := @curl_share_setopt;
