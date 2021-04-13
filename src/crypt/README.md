@@ -23,7 +23,7 @@ High-Performance Cryptographic features shared by all framework units
 - AES-256 Cryptographic Pseudorandom Number Generator (CSPRNG)
 - SHA-2 SHA-3 Secure Hashing
 - HMAC Authentication over SHA and CRC32C
-- PBKDF2 Key Derivation over SHA and CRC32C
+- PBKDF2 Safe Key Derivation over SHA-2 and SHA-3
 - Digest/Hash to Hexadecimal Text Conversion
 - Deprecated MD5 RC4 SHA-1 Algorithms
 - Deprecated Weak AES/SHA Process
