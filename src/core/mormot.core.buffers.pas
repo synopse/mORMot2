@@ -1409,11 +1409,12 @@ function GetMimeContentTypeFromBuffer(Content: Pointer; Len: PtrInt;
 /// retrieve the MIME content type from its file name or a supplied binary buffer
 // - will first check for known file extensions, then inspect the binary content
 // - return the MIME type, ready to be appended to a 'Content-Type: ' HTTP header
-// - default is 'application/octet-stream' (BINARY_CONTENT_TYPE) or
-// 'application/fileextension' if FileName was specified
+// - default is DefaultContentType or 'application/octet-stream' (BINARY_CONTENT_TYPE)
+// or 'application/fileextension' if FileName was specified
 // - see @http://en.wikipedia.org/wiki/Internet_media_type for most common values
 function GetMimeContentType(Content: Pointer; Len: PtrInt;
-  const FileName: TFileName = ''): RawUtf8;
+  const FileName: TFileName = '';
+  const DefaultContentType: RawUtf8 = BINARY_CONTENT_TYPE): RawUtf8;
 
 /// retrieve the HTTP header for MIME content type from a supplied binary buffer
 // - just append HEADER_CONTENT_TYPE and GetMimeContentType() result
@@ -6134,7 +6135,7 @@ begin
   newlen := length(MultiPart) + 1;
   part.Name := FieldName;
   part.ContentType := GetMimeContentTypeFromBuffer(
-    pointer(FieldValue), length(FieldValue), 'text/plain');
+    pointer(FieldValue), length(FieldValue), TEXT_CONTENT_TYPE);
   part.Content := FieldValue;
   SetLength(MultiPart, newlen);
   MultiPart[newlen - 1] := part;
@@ -6904,79 +6905,94 @@ begin
 end;
 
 function GetMimeContentType(Content: Pointer; Len: PtrInt;
-  const FileName: TFileName): RawUtf8;
+  const FileName: TFileName; const DefaultContentType: RawUtf8): RawUtf8;
+var
+  ext: RawUtf8;
 begin
   if FileName <> '' then
   begin
     // file extension is more precise -> check first
-    result := LowerCase(RawUtf8(ExtractFileExt(FileName)));
-    case PosEx(copy(result, 2, 4),
-      'png,gif,tiff,jpg,jpeg,bmp,doc,htm,html,css,js,ico,wof,txt,svg,' +
-      // 1   5   9    14  18   23  27  31  35   40  44 47  51  55  59
-      'atom,rdf,rss,webp,appc,mani,docx,xml,json,woff,ogg,ogv,mp4,m2v,' +
-      // 63  68  72  76   81   86   91   96  100  105  110 114 118 122
-      'm2p,mp3,h264,text,log,gz,webm,mkv,rar,7z') of
-      // 126 130 134 139 144 148 151 156 160 164
-      1:
-        result := 'image/png';
-      5:
-        result := 'image/gif';
-      9:
-        result := 'image/tiff';
-      14, 18:
-        result := JPEG_CONTENT_TYPE;
-      23:
-        result := 'image/bmp';
-      27, 91:
-        result := 'application/msword';
-      31, 35:
-        result := HTML_CONTENT_TYPE;
-      40:
-        result := 'text/css';
-      44: // text/javascript and application/x-javascript are obsolete (RFC 4329)
-        result := 'application/javascript';
-      47:
-        result := 'image/x-icon';
-      51, 105:
-        result := 'application/font-woff';
-      55, 139, 144:
-        result := TEXT_CONTENT_TYPE;
-      59:
-        result := 'image/svg+xml';
-      63, 68, 72, 96:
-        result := XML_CONTENT_TYPE;
-      76:
-        result := 'image/webp';
-      81, 86:
-        result := 'text/cache-manifest';
-      100:
-        result := JSON_CONTENT_TYPE_VAR;
-      110, 114:
-        result := 'video/ogg';  // RFC 5334
-      118:
-        result := 'video/mp4';  // RFC 4337 6381
-      122, 126:
-        result := 'video/mp2';
-      130:
-        result := 'audio/mpeg'; // RFC 3003
-      134:
-        result := 'video/H264'; // RFC 6184
-      148:
-        result := 'application/gzip';
-      151, 156:
-        result := 'video/webm';
-      160:
-        result := 'application/x-rar-compressed';
-      164:
-        result := 'application/x-7z-compressed';
+    result := '';
+    ext := LowerCase(RawUtf8(ExtractFileExt(FileName)));
+    delete(ext, 1, 1);
+    if ext <> '' then
+      case PosEx('-' + copy(ext, 1, 4) + '-',
+          '-png-gif-tiff-jpg-jpeg-bmp-doc-htm-html-css-js-ico-wof-txt-svg-' +
+          // 1   5   9    14  18   23  27  31  35   40  44 47  51  55  59
+          'atom-rdf-rss-webp-appc-mani-docx-xml-json-woff-ogg-ogv-mp4-m2v-' +
+          // 63  68  72  76   81   86   91   96  100  105  110 114 118 122
+          'm2p-mp3-h264-text-log-gz-webm-mkv-rar-7z-tif-x-') of
+          // 126 130 134 139 144 148 151 156 160 164 167 171
+        1:
+          result := 'image/png';
+        5:
+          result := 'image/gif';
+        9, 167:
+          result := 'image/tiff';
+        14, 18:
+          result := JPEG_CONTENT_TYPE;
+        23:
+          result := 'image/bmp';
+        27, 91:
+          result := 'application/msword';
+        31, 35:
+          result := HTML_CONTENT_TYPE;
+        40:
+          result := 'text/css';
+        44: // text/javascript and application/x-javascript are obsolete (RFC 4329)
+          result := 'application/javascript';
+        47:
+          result := 'image/x-icon';
+        51, 105:
+          result := 'application/font-woff';
+        55, 139, 144:
+          result := TEXT_CONTENT_TYPE;
+        59:
+          result := 'image/svg+xml';
+        63, 68, 72, 96:
+          result := XML_CONTENT_TYPE;
+        76:
+          result := 'image/webp';
+        81, 86:
+          result := 'text/cache-manifest';
+        100:
+          result := JSON_CONTENT_TYPE_VAR;
+        110, 114:
+          result := 'video/ogg';  // RFC 5334
+        118:
+          result := 'video/mp4';  // RFC 4337 6381
+        122, 126:
+          result := 'video/mp2';
+        130:
+          result := 'audio/mpeg'; // RFC 3003
+        134:
+          result := 'video/H264'; // RFC 6184
+        148:
+          result := 'application/gzip';
+        151, 156:
+          result := 'video/webm';
+        160:
+          result := 'application/x-rar-compressed';
+        164:
+          result := 'application/x-7z-compressed';
+        171:
+          result := 'application/x-compress';
+      else
+        if not (ext[1] in ['a'..'z']) then
+          ext := '';
+      end;
+    if result <> '' then
+      // we found the exact type from the file extension
+      exit;
+    if ext <> '' then
+      // e.g. 'application/zip' or 'application/pdf'
+      result := 'application/' + ext
     else
-      result := GetMimeContentTypeFromBuffer(Content, Len,
-        // e.g. 'application/zip' or 'application/pdf'
-        'application/' + copy(result, 2, 20));
-    end;
+      result := DefaultContentType;
+    result := GetMimeContentTypeFromBuffer(Content, Len, result);
   end
   else
-    result := GetMimeContentTypeFromBuffer(Content, Len, BINARY_CONTENT_TYPE);
+    result := GetMimeContentTypeFromBuffer(Content, Len, DefaultContentType);
 end;
 
 function GetMimeContentTypeHeader(const Content: RawByteString;
