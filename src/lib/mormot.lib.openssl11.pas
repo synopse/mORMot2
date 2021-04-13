@@ -55,7 +55,7 @@ uses
   unixtype,
   {$endif OSPOSIX}
   mormot.core.os,
-  mormot.net.sock; // for INetTLS
+  mormot.net.sock; // for INetTls
 
 
 { ******************** Dynamic or Static OpenSSL Library Loading }
@@ -1092,7 +1092,7 @@ procedure DTLSv1_handle_timeout(s: PSSL);
 { ************** TLS / HTTPS Encryption Layer using OpenSSL for TCrtSocket }
 
 type
-  /// exception class raised by OpenSslNewNetTLS implementation class
+  /// exception class raised by OpenSslNewNetTls implementation class
   EOpenSslClient = class(EOpenSsl);
 
 
@@ -1100,9 +1100,9 @@ type
 // - on non-Windows systems, this unit initialization will register OpenSSL for TLS
 // - on Windows systems, SChannel will be kept as default so you would need
 // to explicitely register OpenSSL for TLS if needed (for better cipher coverage,
-// enhanced performance and full TNetTLSContext options support):
-// ! @NewNetTLS := @OpenSslNewNetTLS;
-function OpenSslNewNetTLS: INetTLS;
+// enhanced performance and full TNetTlsContext options support):
+// ! @NewNetTls := @OpenSslNewNetTls;
+function OpenSslNewNetTls: INetTls;
 
 
 
@@ -2919,16 +2919,16 @@ end;
 
 type
   /// OpenSSL TLS layer communication
-  TOpenSslClient = class(TInterfacedObject, INetTLS)
+  TOpenSslClient = class(TInterfacedObject, INetTls)
   private
-    fContext: PNetTLSContext;
+    fContext: PNetTlsContext;
     fCtx: PSSL_CTX;
     fSsl: PSSL;
     fDoSslShutdown: boolean;
   public
     destructor Destroy; override;
-    // INetTLS methods
-    procedure AfterConnection(Socket: TNetSocket; var Context: TNetTLSContext;
+    // INetTls methods
+    procedure AfterConnection(Socket: TNetSocket; var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
@@ -2950,7 +2950,7 @@ const
 // see https://www.ibm.com/support/knowledgecenter/SSB23S_1.1.0.2020/gtps7/s5sple2.html
 
 procedure TOpenSslClient.AfterConnection(Socket: TNetSocket;
-  var Context: TNetTLSContext; const ServerAddress: RawUtf8);
+  var Context: TNetTlsContext; const ServerAddress: RawUtf8);
 var
   res: integer;
   peer: PX509;
@@ -3001,29 +3001,35 @@ begin
      (SSL_CIPHER_description(ciph, @cipher, SizeOf(cipher)) <> nil) then
     FastSetString(Context.CipherName, @cipher, StrLen(@cipher));
   // peer validation
-  peer := SSL_get_peer_certificate(fSsl);
-  if (peer = nil) and
-     not Context.IgnoreCertificateErrors then
-    EOpenSslClient.Check(self, 'AfterConnection', 0);
-  try
-    res := SSL_get_verify_result(fSsl);
-    if (peer <> nil) and
-       (Context.WithPeerInfo or
-        (not Context.IgnoreCertificateErrors and
-        (res <> X509_V_OK))) then // include peer info on failure
-    begin
-      bio := BIO_new(BIO_s_mem());
-      X509_print(bio, peer);
-      Context.PeerInfo := BIO_ToString(bio, {andfree=}true);
-    end;
-    if not Context.IgnoreCertificateErrors and
-       (res <> X509_V_OK) then
-    begin
-      str(res, Context.LastError);
+  if Assigned(Context.OnPeerValidate) then
+    // via a custom callback
+    Context.OnPeerValidate(Socket, fContext, fSsl)
+  else
+  begin
+    peer := SSL_get_peer_certificate(fSsl);
+    if (peer = nil) and
+       not Context.IgnoreCertificateErrors then
       EOpenSslClient.Check(self, 'AfterConnection', 0);
+    try
+      res := SSL_get_verify_result(fSsl);
+      if (peer <> nil) and
+         (Context.WithPeerInfo or
+          (not Context.IgnoreCertificateErrors and
+          (res <> X509_V_OK))) then // include peer info on failure
+      begin
+        bio := BIO_new(BIO_s_mem());
+        X509_print(bio, peer);
+        Context.PeerInfo := BIO_ToString(bio, {andfree=}true);
+      end;
+      if not Context.IgnoreCertificateErrors and
+         (res <> X509_V_OK) then
+      begin
+        str(res, Context.LastError);
+        EOpenSslClient.Check(self, 'AfterConnection', 0);
+      end;
+    finally
+      X509_free(peer);
     end;
-  finally
-    X509_free(peer);
   end;
 end;
 
@@ -3099,7 +3105,7 @@ begin
   end;
 end;
 
-function OpenSslNewNetTLS: INetTLS;
+function OpenSslNewNetTls: INetTls;
 begin
   if OpenSslIsAvailable then
     result := TOpenSslClient.Create
@@ -3111,8 +3117,8 @@ end;
 
 initialization
   // register the OpenSSL TLS layer factory for TCrtSocket (if no SChannel set)
-  if not Assigned(NewNetTLS) then
-    @NewNetTLS := @OpenSslNewNetTLS;
+  if not Assigned(NewNetTls) then
+    @NewNetTls := @OpenSslNewNetTls;
 
 finalization
   {$ifndef OPENSSLSTATIC}

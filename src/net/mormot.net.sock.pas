@@ -223,7 +223,17 @@ function ToText(res: TNetResult): PShortString; overload;
 { ******************** TLS / HTTPS Encryption Abstract Layer }
 
 type
-  /// TLS Options and Information for a given TCrtSocket/INetTLS connection
+  /// pointer to TLS Options and Information for a given TCrtSocket connection
+  PNetTlsContext = ^TNetTlsContext;
+
+  /// callback raised by INetTls.AfterConnection to validate a peer
+  // - at this point, Context.CipherName is set, but PeerInfo not yet (it is
+  // up to the event to compute the PeerInfo value)
+  // - TLS is an opaque structure, typically an OpenSSL PSSL pointer
+  TOnNetTlsPeerValidate = procedure(Socket: TNetSocket;
+    Context: PNetTlsContext; TLS: pointer) of object;
+
+  /// TLS Options and Information for a given TCrtSocket/INetTls connection
   // - currently only properly implemented by mormot.lib.openssl11 - SChannel
   // on Windows only recognizes IgnoreCertificateErrors and sets CipherName
   // - typical usage is the following:
@@ -240,7 +250,7 @@ type
   // $ finally
   // $   Free;
   // $ end;
-  TNetTLSContext = record
+  TNetTlsContext = record
     /// set if the TLS flag was set to TCrtSocket.OpenBind() method
     Enabled: boolean;
     /// input: let HTTPS be less paranoid about TLS certificates
@@ -261,27 +271,26 @@ type
     CACertificatesFile: RawUtf8;
     /// input: preferred Cipher List
     CipherList: RawUtf8;
-    /// output: some information about the connected Peer
-    // - stored in the native format of the TLS library, e.g. X509_print()
-    PeerInfo: RawUtf8;
     /// output: the cipher description, as used for the current connection
     // - e.g. 'ECDHE-RSA-AES128-GCM-SHA256 TLSv1.2 Kx=ECDH Au=RSA Enc=AESGCM(128) Mac=AEAD'
     CipherName: RawUtf8;
+    /// output: some information about the connected Peer
+    // - stored in the native format of the TLS library, e.g. X509_print()
+    PeerInfo: RawUtf8;
     /// output: low-level details about the last error at TLS level
     LastError: RawUtf8;
+    /// called by INetTls.AfterConnection to customize peer validation
+    OnPeerValidate: TOnNetTlsPeerValidate;
   end;
-
-  /// pointer to TLS Options and Information for a given TCrtSocket connection
-  PNetTLSContext = ^TNetTLSContext;
 
   /// abstract definition of the TLS encrypted layer
   // - is implemented e.g. by the SChannel API on Windows, or OpenSSL on POSIX
   // if you include mormot.lib.openssl11 to your project
-  INetTLS = interface
+  INetTls = interface
     /// this method is called once to attach the underlying socket
     // - should make the proper initial TLS handshake to create a session
     // - should raise an exception on error
-    procedure AfterConnection(Socket: TNetSocket; var Context: TNetTLSContext;
+    procedure AfterConnection(Socket: TNetSocket; var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);
     /// receive some data from the TLS layer
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
@@ -290,13 +299,13 @@ type
   end;
 
   /// signature of a factory for a new TLS encrypted layer
-  TOnNewNetTLS = function: INetTLS;
+  TOnNewNetTls = function: INetTls;
 
 var
   /// global factory for a new TLS encrypted layer for TCrtSocket
   // - is set to use the SChannel API on Windows; on other targets, may be nil
   // unless the mormot.lib.openssl11.pas unit is included with your project
-  NewNetTLS: TOnNewNetTLS;
+  NewNetTls: TOnNewNetTls;
 
 
 { ******************** Efficient Multiple Sockets Polling }
@@ -506,7 +515,7 @@ type
     fRemoteIP: RawUtf8;
     // updated during UDP connection, accessed via PeerAddress/PeerPort
     fPeerAddr: TNetAddr;
-    fSecure: INetTLS;
+    fSecure: INetTls;
     procedure SetKeepAlive(aKeepAlive: boolean); virtual;
     procedure SetLinger(aLinger: integer); virtual;
     procedure SetReceiveTimeout(aReceiveTimeout: integer); virtual;
@@ -515,9 +524,9 @@ type
     function GetRawSocket: PtrInt;
   public
     /// direct access to the low-level TLS Options and Information
-    // - depending on the actual INetTLS implementation, some fields may not
+    // - depending on the actual INetTls implementation, some fields may not
     // be used nor populated - currently only supported by mormot.lib.openssl11
-    TLS: TNetTLSContext;
+    TLS: TNetTlsContext;
     /// can be assigned from TSynLog.DoLog class method for low-level logging
     OnLog: TSynLogProc;
     /// common initialization of all constructors
@@ -528,7 +537,7 @@ type
     // mormot.lib.openssl11 unit to your project) - with custom input options
     // - see also SocketOpen() for a wrapper catching any connection exception
     constructor Open(const aServer, aPort: RawUtf8; aLayer: TNetLayer = nlTCP;
-      aTimeOut: cardinal = 10000; aTLS: boolean = false; aTLSContext: PNetTLSContext = nil);
+      aTimeOut: cardinal = 10000; aTLS: boolean = false; aTLSContext: PNetTlsContext = nil);
     /// bind to an address
     // - aAddr='1234' - bind to a port on all interfaces, the same as '0.0.0.0:1234'
     // - aAddr='IP:port' - bind to specified interface only, e.g.
@@ -810,9 +819,9 @@ const
 
 
 /// create a TCrtSocket instance, returning nil on error
-// - useful to easily catch any exception, and provide a custom TNetTLSContext
+// - useful to easily catch any exception, and provide a custom TNetTlsContext
 function SocketOpen(const aServer, aPort: RawUtf8;
-  aTLS: boolean = false; aTLSContext: PNetTLSContext = nil): TCrtSocket;
+  aTLS: boolean = false; aTLSContext: PNetTlsContext = nil): TCrtSocket;
 
 
 implementation
@@ -1671,7 +1680,7 @@ begin
 end;
 
 constructor TCrtSocket.Open(const aServer, aPort: RawUtf8;
-  aLayer: TNetLayer; aTimeOut: cardinal; aTLS: boolean; aTLSContext: PNetTLSContext);
+  aLayer: TNetLayer; aTimeOut: cardinal; aTLS: boolean; aTLSContext: PNetTlsContext);
 begin
   Create(aTimeOut); // default read timeout is 10 seconds
   if aTLSContext <> nil then
@@ -1796,10 +1805,10 @@ begin
        not doBind and
        ({%H-}PtrInt(aSock) <= 0) then
     try
-      if not Assigned(NewNetTLS) then
+      if not Assigned(NewNetTls) then
         raise ENetSock.Create('TLS is not available - try including ' +
           'mormot.lib.openssl11 and installing OpenSSL 1.1.1');
-      fSecure := NewNetTLS;
+      fSecure := NewNetTls;
       if fSecure = nil then
         raise ENetSock.Create('TLS is not available on this system - ' +
           'try installing OpenSSL 1.1.1');
@@ -2666,7 +2675,7 @@ begin
 end;
 
 function SocketOpen(const aServer, aPort: RawUtf8; aTLS: boolean;
-  aTLSContext: PNetTLSContext): TCrtSocket;
+  aTLSContext: PNetTlsContext): TCrtSocket;
 begin
   try
     result := TCrtSocket.Open(aServer, aPort, nlTCP, 10000, aTLS, aTLSContext);

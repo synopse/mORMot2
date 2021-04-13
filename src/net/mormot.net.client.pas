@@ -731,7 +731,7 @@ type
     fHttps: THttpRequest;
     fProxy, fHeaders, fUserAgent: RawUtf8;
     fBody: RawByteString;
-    fSocketTLS: TNetTLSContext;
+    fSocketTLS: TNetTlsContext;
     fOnlyUseClientSocket: boolean;
   public
     /// initialize the instance
@@ -749,7 +749,7 @@ type
       const header: RawUtf8 = ''; const data: RawByteString = '';
       const datatype: RawUtf8 = ''; keepalive: cardinal = 10000): integer; overload;
     /// access to the raw TLS settings for THttpClientSocket
-    function SocketTLS: PNetTLSContext;
+    function SocketTLS: PNetTlsContext;
       {$ifdef HASINLINE} inline; {$endif}
     /// returns the HTTP body as returnsd by a previous call to Request()
     property Body: RawByteString
@@ -1025,7 +1025,7 @@ begin
     'binary')^.ContentFile := filename;
   n := length(fContent);
   SetLength(fContent, n + 2);
-  fContent[n] := fs;
+  fContent[n] := fs; // file content will be streamed when needed
   fContent[n + 1] := TRawByteStringStream.Create(#13#10'--' + fBound + #13#10);
 end;
 
@@ -2338,7 +2338,7 @@ begin
     result := HTTP_NOTFOUND;
 end;
 
-function TSimpleHttpClient.SocketTLS: PNetTLSContext;
+function TSimpleHttpClient.SocketTLS: PNetTlsContext;
 begin
   if self = nil then
     result := nil
