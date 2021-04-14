@@ -164,9 +164,10 @@ type
     // - called by all Get/Head/Post/Put/Delete REST methods
     // - after an Open(server,port), return 200,202,204 if OK, http status error otherwise
     // - retry is false by caller, and will be recursively called with true to retry once
+    // - use either Data or DataStream for sending its output body content
     function Request(const url, method: RawUtf8; KeepAlive: cardinal;
       const header: RawUtf8; const Data: RawByteString; const DataType: RawUtf8;
-      retry: boolean): integer; virtual;
+      retry: boolean; DataStream: TStream = nil): integer; virtual;
     /// after an Open(server,port), return 200 if OK, http status error otherwise
     // - get the page data in Content
     function Get(const url: RawUtf8; KeepAlive: cardinal = 0;
@@ -182,7 +183,13 @@ type
     /// after an Open(server,port), return 200,201,204 if OK, http status error otherwise
     function Post(const url: RawUtf8; const Data: RawByteString;
       const DataType: RawUtf8; KeepAlive: cardinal = 0;
-      const header: RawUtf8 = ''): integer;
+      const header: RawUtf8 = ''): integer; overload;
+    /// after an Open(server,port), return 200,201,204 if OK, http status error otherwise
+    // - this overloaded method accepts a TStream for its output body content
+    // - you could use a THttpMultiPartStream for multipart/formdata HTTP POST
+    function Post(const url: RawUtf8; Data: TStream;
+      const DataType: RawUtf8; KeepAlive: cardinal = 0;
+      const header: RawUtf8 = ''): integer; overload;
     /// after an Open(server,port), return 200,201,204 if OK, http status error otherwise
     function Put(const url: RawUtf8; const Data: RawByteString;
       const DataType: RawUtf8; KeepAlive: cardinal = 0;
@@ -1085,7 +1092,7 @@ end;
 
 function THttpClientSocket.Request(const url, method: RawUtf8;
   KeepAlive: cardinal; const header: RawUtf8; const Data: RawByteString;
-  const DataType: RawUtf8; retry: boolean): integer;
+  const DataType: RawUtf8; retry: boolean; DataStream: TStream): integer;
 
   procedure DoRetry(Error: integer; const msg: RawUtf8);
   begin
@@ -1102,7 +1109,8 @@ function THttpClientSocket.Request(const url, method: RawUtf8;
         // retry with a new socket
         OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
         HttpStateReset;
-        result := Request(url, method, KeepAlive, header, Data, DataType, true);
+        result := Request(
+          url, method, KeepAlive, header, Data, DataType, true, DataStream);
       except
         on Exception do
           result := Error;
@@ -1138,6 +1146,8 @@ begin
           SockSend(fCompressAcceptEncoding);
         SockSendCRLF;
         SockSendFlush(aData); // flush all pending data to network
+        if DataStream <> nil then
+          SockSendStream(DataStream); // may be a THttpMultiPartStream
         // retrieve HTTP command line response
         if SockReceivePending(1000) = cspSocketError then
         begin
@@ -1217,6 +1227,12 @@ function THttpClientSocket.Post(const url: RawUtf8; const Data: RawByteString;
   const DataType: RawUtf8; KeepAlive: cardinal; const header: RawUtf8): integer;
 begin
   result := Request(url, 'POST', KeepAlive, header, Data, DataType, false);
+end;
+
+function THttpClientSocket.Post(const url: RawUtf8; Data: TStream;
+  const DataType: RawUtf8; KeepAlive: cardinal; const header: RawUtf8): integer;
+begin
+  result := Request(url, 'POST', KeepAlive, header, '', DataType, false, Data);
 end;
 
 function THttpClientSocket.Put(const url: RawUtf8; const Data: RawByteString;

@@ -113,7 +113,7 @@ type
     // - after WebSocketsUpgrade() call, will use WebSockets for the communication
     function Request(const url, method: RawUtf8; KeepAlive: cardinal;
       const header: RawUtf8; const Data: RawByteString; const DataType: RawUtf8;
-      retry: boolean): integer; override;
+      retry: boolean; DataStream: TStream = nil): integer; override;
     /// upgrade the HTTP client connection to a specified WebSockets protocol
     // - i.e. 'synopsebin' and optionally 'synopsejson' modes
     // - you may specify an URI to as expected by the server for upgrade
@@ -319,11 +319,11 @@ end;
 
 function THttpClientWebSockets.Request(const url, method: RawUtf8;
   KeepAlive: cardinal; const header: RawUtf8; const Data: RawByteString;
-  const DataType: RawUtf8; retry: boolean): integer;
+  const DataType: RawUtf8; retry: boolean; DataStream: TStream): integer;
 var
   Ctxt: THttpServerRequest;
   block: TWebSocketProcessNotifyCallback;
-  resthead: RawUtf8;
+  body, resthead: RawUtf8;
 begin
   if fProcess <> nil then
   begin
@@ -338,7 +338,10 @@ begin
       Ctxt := THttpServerRequest.Create(nil, fProcess.fOwnerConnection,
         fProcess.fOwnerThread, fProcess.Protocol.ConnectionFlags);
       try
-        Ctxt.Prepare(url, method, header, Data, DataType, '');
+        body := Data;
+        if DataStream <> nil then
+          body := body + StreamToRawByteString(DataStream);
+        Ctxt.Prepare(url, method, header, body, DataType, '');
         FindNameValue(header, 'SEC-WEBSOCKET-REST:', resthead);
         if resthead = 'NonBlocking' then
           block := wscNonBlockWithoutAnswer

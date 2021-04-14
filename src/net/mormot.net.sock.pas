@@ -626,6 +626,12 @@ type
     /// flush all pending data to be sent, optionally with some body content
     // - raise ENetSock on error
     procedure SockSendFlush(const aBody: RawByteString = '');
+    /// send all TStream content till the end using SndLow()
+    // - don't forget to call SockSendFlush before using this method
+    // - will call Stream.Read() over a temporary buffer of 1MB by default
+    // - Stream may be a TFileStream, THttpMultiPartStream or TNestedStreamReader
+    // - raise ENetSock on error
+    procedure SockSendStream(Stream: TStream; ChunkSize: integer = 1 shl 20);
     /// how many bytes could be added by SockSend() in the internal buffer
     function SockSendRemainingSize: integer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2273,6 +2279,20 @@ begin
         [fServer, fSndBufLen, NetLastErrorMsg]);
   if body > 0 then
     SndLow(pointer(aBody), body); // direct sending of biggest packets
+end;
+
+procedure TCrtSocket.SockSendStream(Stream: TStream; ChunkSize: integer);
+var
+  chunk: RawByteString;
+  rd: integer;
+begin
+  SetLength(chunk, ChunkSize);
+  repeat
+    rd := Stream.Read(pointer(chunk)^, ChunkSize);
+    if rd = 0 then
+      break;
+    SndLow(pointer(chunk), rd);
+  until false;
 end;
 
 procedure TCrtSocket.SockRecv(Buffer: pointer; Length: integer);
