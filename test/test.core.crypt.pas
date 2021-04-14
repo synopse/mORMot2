@@ -475,11 +475,12 @@ begin
   begin
     FillZero(dig);
     instance.Final(dig, true);
-    Check(not IsZero(dig), 'XOF mode');
+    Check(not IsZero(dig), 'Sha3 XOF mode');
   end;
   instance.Final(dig);
   Check(Sha256DigestToString(dig) =
-    '75f8b0591e2baeae027d56c14ef3bc014d9dd29cce08b8b184528589147fc252', 'XOF vector');
+    '75f8b0591e2baeae027d56c14ef3bc014d9dd29cce08b8b184528589147fc252',
+    'Sha3 XOF vector');
   encrypted := instance.Cypher('secret', 'toto');
   Check(mormot.core.text.BinToHex(encrypted) = 'BF013A29');
   Check(BinToHexLower(encrypted) = 'bf013a29');
@@ -503,9 +504,9 @@ begin
   sign.Pbkdf2(saSha3512, 'pass', 'salt', 1000, h512);
   check(Sha512DigestToString(h512.b) = DK);
   // taken from https://en.wikipedia.org/wiki/SHA-3
-  Check(Sha3(SHAKE_128, 'The quick brown fox jumps over the lazy dog') =
+  CheckEqual(Sha3(SHAKE_128, 'The quick brown fox jumps over the lazy dog'),
     'F4202E3C5852F9182A0430FD8144F0A74B95E7417ECAE17DB0F8CFEED0E3E66E');
-  Check(Sha3(SHAKE_128, 'The quick brown fox jumps over the lazy dof') =
+  CheckEqual(Sha3(SHAKE_128, 'The quick brown fox jumps over the lazy dof'),
     '853F4538BE0DB9621A6CEA659A06C1107B1F83F02B13D18297BD39D7411CF10C');
 end;
 

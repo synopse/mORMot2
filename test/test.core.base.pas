@@ -27,6 +27,7 @@ uses
   mormot.core.log,
   mormot.core.test,
   mormot.net.sock,
+  mormot.net.client,
   mormot.db.core,
   mormot.orm.core,
   mormot.rest.client;
@@ -220,6 +221,8 @@ type
     /// test UrlEncode() and UrlDecode() functions
     // - this method use some ISO-8601 encoded dates and times for the testing
     procedure UrlDecoding;
+    /// test mime types recognition and multipart encoding
+    procedure MimeTypes;
     /// test ASCII Baudot encoding
     procedure BaudotCode;
     /// the ISO-8601 date and time encoding
@@ -227,8 +230,6 @@ type
     procedure Iso8601DateAndTime;
     /// test the TSynTimeZone class and its cross-platform local time process
     procedure TimeZones;
-    /// test mime types recognition
-    procedure MimeTypes;
     /// validates the median computation using the "Quick Select" algorithm
     procedure QuickSelect;
     /// test the TSynCache class
@@ -5437,8 +5438,35 @@ const
   BIN_MIME: array[0..1] of RawUtf8 = (
     'application/zip', 'image/gif');
 var
-  i: integer;
+  i, j, n: integer;
+  fn: array[0..10] of TFileName;
+  mp, mp2: TMultiPartDynArray;
+  mpc, mpct: RawUtf8;
+  st: THttpMultiPartStream;
+
+  procedure DecodeAndTest;
+  var
+    i: integer;
+  begin
+    mp2 := nil;
+    Check(MultiPartFormDataDecode(mpct, mpc, mp2));
+    CheckEqual(length(mp2), length(mp));
+    for i := 0 to high(mp2) do
+      if i <= n then
+      begin
+        CheckEqual(mp2[i].Name, MIMES[i * 2]);
+        CheckEqual(mp2[i].Content, MIMES[i * 2 + 1]);
+      end
+      else
+      begin
+        j := i - n - 1;
+        CheckEqual(mp2[i].FileName, StringToUtf8(ExtractFileName(fn[j])));
+        CheckEqual(mp2[i].Content, MIMES[j * 2 + 1]);
+      end;
+  end;
+
 begin
+  // mime content types
   CheckEqual(GetMimeContentType(nil, 0, 'toto.h264'), 'video/H264');
   CheckEqual(GetMimeContentType(nil, 0, 'toto', 'def1'), 'def1');
   CheckEqual(GetMimeContentType(nil, 0, 'toto.', 'def2'), 'def2');
@@ -5453,6 +5481,30 @@ begin
     CheckEqual(GetMimeContentType(@BIN[i], 34, ''), BIN_MIME[i]);
     CheckEqual(GetMimeContentTypeFromBuffer(@BIN[i], 34, ''), BIN_MIME[i]);
   end;
+  // mime multipart encoding
+  n := high(MIMES) shr 1;
+  for i := 0 to n do
+    Check(MultiPartFormDataAddField(MIMES[i * 2], MIMES[i * 2 + 1], mp));
+  for i := 0 to high(fn) do
+  begin
+    fn[i] := WorkDir + 'mp' + IntToStr(i);
+    FileFromString(MIMES[i * 2 + 1], fn[i]);
+    Check(MultiPartFormDataAddFile(fn[i], mp));
+  end;
+  Check(MultiPartFormDataEncode(mp, mpct, mpc));
+  DecodeAndTest;
+  st := THttpMultiPartStream.Create;
+  for i := 0 to n do
+    st.AddContent(MIMES[i * 2], MIMES[i * 2 + 1]);
+  for i := 0 to high(fn) do
+    st.AddFile('', fn[i]);
+  st.Flush;
+  mpct := st.MultipartContentType;
+  mpc := StreamToRawByteString(st);
+  DecodeAndTest;
+  st.Free;
+  for i := 0 to high(fn) do
+    check(DeleteFile(fn[i]));
 end;
 
 function TTestCoreBase.QuickSelectGT(IndexA, IndexB: PtrInt): boolean;
