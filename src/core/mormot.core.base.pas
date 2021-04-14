@@ -3323,6 +3323,9 @@ procedure Exchg(P1, P2: PAnsiChar; count: PtrInt);
 { ************ Some Convenient TStream descendants and File access functions }
 
 type
+  /// a dynamic array of TStream instances
+  TStreamDynArray = array of TStream;
+
   /// a fake TStream, which will just count the number of bytes written
   TFakeWriterStream = class(TStream)
   protected
@@ -3345,22 +3348,22 @@ type
     function GetPosition: Int64; override;
     {$endif FPC}
   public
-    /// compute soCurrent from internal Position
+    /// change the current Read/Write position, within current GetSize
     function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
     /// call the 64-bit Seek() overload
     function Seek(Offset: Longint; Origin: Word): Longint; override;
   end;
 
   /// TStream using a RawByteString as internal storage
-  // - default TStringStream uses WideChars since Delphi 2009, so it is
-  // not compatible with previous versions, and it does make sense to
+  // - default TStringStream uses UTF-16 WideChars since Delphi 2009, so it is
+  // not compatible with previous versions or FPC, and it makes more sense to
   // work with RawByteString/RawUtf8 in our UTF-8 oriented framework
   // - just like TStringStream, is designed for appending data, not modifying
   // in-place, as requested e.g. by TTextWriter or TBufferWriter classes
   TRawByteStringStream = class(TStreamWithPosition)
   protected
     fDataString: RawByteString;
-    function  GetSize: Int64; override;
+    function GetSize: Int64; override;
     procedure SetSize(NewSize: Longint); override;
   public
     /// initialize a void storage
@@ -3370,8 +3373,6 @@ type
     /// read some bytes from the internal storage
     // - returns the number of bytes filled into Buffer (<=Count)
     function Read(var Buffer; Count: Longint): Longint; override;
-    /// change the current Read/Write position, within current stored range
-    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
     /// append some data to the buffer
     // - will resize the buffer, i.e. will replace the end of the string from
     // the current position with the supplied data
@@ -3401,6 +3402,36 @@ type
     constructor Create(Data: pointer; DataLen: PtrInt); overload;
     /// this TStream is read-only: calling this method will raise an exception
     function Write(const Buffer; Count: Longint): Longint; override;
+  end;
+
+  /// TStream allowing to read from some nested TStream instances
+  TNestedStreamReader = class(TStreamWithPosition)
+  protected
+    fSize: Int64;
+    fNested: TStreamDynArray;
+    fContentPos: array of record
+      start, stop: Int64;
+    end;
+    fContentRead: PtrInt;
+    function GetSize: Int64; override;
+  public
+    /// finalize the nested TStream instance
+    destructor Destroy; override;
+    /// append a nested TStream instance
+    // - you could use a TFileStream here for efficient chunked reading
+    function NewStream(Stream: TStream): TStream;
+    /// get the last TRawByteStringStream, or append a new one if needed
+    function ForText: TRawByteStringStream;
+    /// append some text or content to an internal TRawByteStringStream
+    // - is the easy way to append some text or data to the internal buffers
+    procedure Append(const Content: RawByteString);
+    /// you should call this method before any Read() call
+    procedure Flush; virtual;
+    /// will read up to Count bytes from the internal nested TStream
+    function Read(var Buffer; Count: Longint): Longint; override;
+    /// low-level direct access to the internal TStream instances
+    property Nested: TStreamDynArray
+      read fNested;
   end;
 
 
@@ -11039,16 +11070,29 @@ end;
 {$endif FPC}
 
 function TStreamWithPosition.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+var
+  size: Int64;
 begin
-  case Origin of
-    soBeginning:
-      result := Offset;
-    soCurrent:
-      result := fPosition + Offset;
-  else
-    raise EStreamError.CreateFmt('Unexpected %s.Seek(%d): size is unknown',
-      [ClassNameShort(self)^, ord(Origin)]);
-  end;
+  if (Offset <> 0) or
+     (Origin <> soCurrent) then
+  begin
+    size := GetSize;
+    case Origin of
+      soBeginning:
+        result := Offset;
+      soEnd:
+        result := size - Offset;
+      else
+        result := fPosition + Offset;
+    end;
+    if result > size then
+      result := size
+    else if result < 0 then
+      result := 0;
+    fPosition := result;
+  end
+  else // quick exit on Delphi when retrieving the position
+    result := fPosition;
 end;
 
 function TStreamWithPosition.Seek(Offset: Longint; Origin: Word): Longint;
@@ -11082,26 +11126,6 @@ begin
     MoveFast(PByteArray(fDataString)[fPosition], Buffer, result);
     inc(fPosition, result);
   end;
-end;
-
-function TRawByteStringStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
-var
-  size: Int64;
-begin
-  size := length(fDataString);
-  case Origin of
-    soBeginning:
-      result := Offset;
-    soEnd:
-      result := size - Offset;
-    else
-      result := fPosition + Offset;
-  end;
-  if result > size then
-    result := size
-  else if result < 0 then
-    result := 0;
-  fPosition := result;
 end;
 
 function TRawByteStringStream.GetSize: Int64;
@@ -11163,6 +11187,119 @@ end;
 function TSynMemoryStream.{%H-}Write(const Buffer; Count: integer): Longint;
 begin
   raise EStreamError.Create('Unexpected TSynMemoryStream.Write');
+end;
+
+
+{ TNestedStreamReader }
+
+function TNestedStreamReader.GetSize: Int64;
+begin
+  result := fSize; // Flush should have been called
+end;
+
+destructor TNestedStreamReader.Destroy;
+var
+  i: PtrInt;
+begin
+  inherited Destroy;
+  for i := 0 to length(fNested) - 1 do
+    fNested[i].Free;
+end;
+
+function TNestedStreamReader.NewStream(Stream: TStream): TStream;
+var
+  n: PtrInt;
+begin
+  n := length(fNested);
+  SetLength(fNested, n + 1);
+  fNested[n] := Stream;
+  result := Stream; // allow simple fluent calls
+end;
+
+function TNestedStreamReader.ForText: TRawByteStringStream;
+var
+  n: PtrInt;
+begin
+  n := length(fNested);
+  if n <> 0 then
+  begin
+    result := pointer(fNested[n - 1]);
+    if PClass(result)^ = TRawByteStringStream then
+      exit;
+  end;
+  result := TRawByteStringStream.Create;
+  NewStream(result);
+end;
+
+procedure TNestedStreamReader.Append(const Content: RawByteString);
+begin
+  with ForText do
+    DataString := DataString + Content; // the fast and easy way
+end;
+
+procedure TNestedStreamReader.Flush;
+var
+  i, n: PtrInt;
+begin
+  fContentRead := 0;
+  fSize := 0;
+  n := length(fNested);
+  SetLength(fContentPos, n);
+  for i := 0 to n - 1 do
+  begin
+    fContentPos[i].start := fSize;
+    inc(fSize, fNested[i].Size); // to allow proper Seek() + Read()
+    fContentPos[i].stop := fSize;
+  end;
+end;
+
+function TNestedStreamReader.Read(var Buffer; Count: Longint): Longint;
+var
+  rd: LongInt;
+  n, i: PtrInt;
+  P: PByte;
+begin
+  result := 0;
+  P := @Buffer;
+  n := length(fContentPos);
+  while (Count > 0) and
+        (fPosition < fSize) do
+  begin
+    if (fContentRead >= n) or
+       (fPosition >= fContentPos[fContentRead].stop) or
+       (fPosition < fContentPos[fContentRead].start) then
+    begin
+      inc(fContentRead); // optimize the forward reading simple case
+      if (fContentRead >= n) or
+         (fPosition >= fContentPos[fContentRead].stop) or
+         (fPosition < fContentPos[fContentRead].start) then
+      begin
+        // handle random Seek() call - brute force is enough for seldom search
+        fContentRead := -1;
+        for i := 0 to n - 1 do
+          if fPosition < fContentPos[i].stop then
+          begin
+            fContentRead := i;
+            break;
+          end;
+        if fContentRead < 0 then
+          exit; // paranoid
+      end;
+    end;
+    rd := fNested[fContentRead].Read(P^, Count);
+    if rd = 0 then
+    begin
+      // read from next section(s) until we got Count bytes
+      inc(fContentRead);
+      if fContentRead = n then
+        break;
+      continue;
+    end;
+    inc(P, rd);
+    inc(result, rd);
+    inc(fPosition, rd);
+    dec(Count, rd);
+  end;
 end;
 
 
