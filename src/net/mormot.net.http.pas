@@ -26,6 +26,7 @@ uses
   mormot.core.os,
   mormot.core.unicode, // for efficient UTF-8 text process within HTTP
   mormot.core.text,
+  mormot.core.buffers,
   mormot.net.sock;
 
 
@@ -84,6 +85,9 @@ function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
 /// will remove most usual HTTP headers which are to be recomputed on sending
 function PurgeHeaders(P: PUtf8Char): RawUtf8;
 
+/// encode some text into a mime header compatible value
+// - see https://tools.ietf.org/html/rfc2047
+function MimeHeaderEncode(const header: RawUtf8): RawUtf8;
 
 {$ifndef NOXPOWEREDNAME}
 const
@@ -411,6 +415,16 @@ begin
   end;
 end;
 
+function MimeHeaderEncode(const header: RawUtf8): RawUtf8;
+begin
+  if IsAnsiCompatible(header) then
+    // US-ASCII don't need any conversion in the RFC, but only 7-bit in practice
+    result := header
+  else
+    result := '=?UTF-8?B?' + BinToBase64(header) + '?=';
+end;
+
+
 function RegisterCompressFunc(var Compress: THttpSocketCompressRecDynArray;
   aFunction: THttpSocketCompress; var aAcceptEncoding: RawUtf8;
   aCompressMinSize: integer): RawUtf8;
@@ -462,7 +476,8 @@ begin
      (Handled <> nil) then
   begin
     OutContentLen := length(OutContent);
-    case IdemPCharArray(OutContentTypeP, ['TEXT/', 'IMAGE/', 'APPLICATION/']) of
+    case IdemPCharArray(OutContentTypeP,
+          ['TEXT/', 'IMAGE/', 'APPLICATION/']) of
       0:
         compressible := true;
       1:

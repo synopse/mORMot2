@@ -65,38 +65,33 @@ type
   // proper multipart formatting as defined by RFC 2488 / RFC 1341
   // - AddFile() won't load the file content into memory so it is more
   // efficient than MultiPartFormDataEncode() from mormot.core.buffers
-  THttpMultiPartStream = class(TStreamWithPosition)
+  THttpMultiPartStream = class(TNestedStreamReader)
   protected
     fSections: THttpMultiPartStreamSections;
     fBounds: TRawUtf8DynArray;
     fBound: RawUtf8;
     fMultipartContentType: RawUtf8;
-    fContent: array of TStream;
-    fContentRead: PtrInt;
     fFilesCount: integer;
-    procedure NewBound;
     function Add(const name, content, contenttype,
       filename, encoding: RawUtf8): PHttpMultiPartStreamSection;
   public
-    /// finalize the internal sections storage
-    destructor Destroy; override;
     /// append a content section from a binary/text buffer
+    // - warning: should be called before AddFile/AddFileContent
     procedure AddContent(const name: RawUtf8; const content: RawByteString;
       const contenttype: RawUtf8 = ''; const encoding: RawUtf8 = '');
     /// append a file upload section from a binary/text buffer
+    // - warning: should be called after AddContent
     procedure AddFileContent(const name, filename: RawUtf8;
       const content: RawByteString; const contenttype: RawUtf8 = '';
       const encoding: RawUtf8 = '');
     /// append a file upload section from a local file
     // - the supplied file won't be loaded into memory, but created as an
     // internal TFileStream to be retrieved by successive Read() calls
+    // - warning: should be called after AddContent
     procedure AddFile(const name: RawUtf8; const filename: TFileName;
       const contenttype: RawUtf8 = '');
-    /// you should call this method before any Read() call
-    procedure Flush;
-    /// will read up to Count bytes from the internal sections
-    // - ready to be sent to the HTTP server, with proper multipart markup
-    function Read(var Buffer; Count: Longint): Longint; override;
+    /// call this method before any Read() call to sent data to HTTP server
+    procedure Flush; override;
     /// the content-type header value for this multipart content
     // - equals '' if no section has been added
     // - includes a random boundary field
@@ -924,35 +919,23 @@ implementation
 
 { THttpMultiPartStream }
 
-destructor THttpMultiPartStream.Destroy;
-var
-  i: PtrInt;
-begin
-  inherited Destroy;
-  for i := 0 to high(fContent) do
-    fContent[i].Free;
-end;
-
-procedure THttpMultiPartStream.NewBound;
-var
-  random: array[0..3] of cardinal;
-begin
-  FillRandom(@random, 4);
-  fBound := BinToBase64uri(@random, SizeOf(random));
-  AddRawUtf8(fBounds, fBound);
-end;
-
 function THttpMultiPartStream.Add(const name, content, contenttype,
   filename, encoding: RawUtf8): PHttpMultiPartStreamSection;
 var
-  ns, nc: PtrInt;
+  ns: PtrInt;
   s: RawUtf8;
 begin
   // same logic than MultiPartFormDataEncode() from mormot.core.buffers
   ns := length(fSections);
   SetLength(fSections, ns + 1);
   result := @fSections[ns];
-  result^.Name := name;
+  if name = '' then
+    if filename = '' then
+      FormatUtf8('field%', [ns], result^.Name)
+    else
+      FormatUtf8('file%', [fFilesCount], result^.Name)
+  else
+    result^.Name := MimeHeaderEncode(name);
   result^.Content := content;
   result^.ContentType := contenttype;
   if result^.ContentType = '' then
@@ -960,52 +943,49 @@ begin
       pointer(content), length(content), Ansi7ToString(filename));
   if result^.ContentType = '' then
     if filename = '' then
-      if IsValidJson(content) then
+      if (content <> '') and
+         (GotoNextNotSpace(pointer(content))^ in ['{', '[', '"']) and
+         IsValidJson(content) then
         result^.ContentType := JSON_CONTENT_TYPE
       else
         result^.ContentType := TEXT_CONTENT_TYPE
     else
       result^.ContentType := BINARY_CONTENT_TYPE;
   result^.FileName := filename;
-  nc := length(fContent);
-  if nc = 0 then
+  if fNested = nil then
   begin
     // compute multipart content type with the main random boundary
-    NewBound;
+    fBound := MultiPartFormDataNewBound(fBounds);
     fMultipartContentType  := 'multipart/form-data; boundary=' + fBound;
-    SetLength(fContent, 1);
-    fContent[0] := TRawByteStringStream.Create;
-  end
-  else
-    dec(nc);
+  end;
   if filename = '' then
     // simple form field
-    s := FormatUtf8('--%'#13#10'Content-Disposition: form-data; name="%"'#13#10 +
-      'Content-Type: %'#13#10#13#10'%'#13#10'--%'#13#10,
-      [fBound, name, result^.ContentType, content, fBound])
+    FormatUtf8('--%'#13#10'Content-Disposition: form-data; name="%"'#13#10 +
+      'Content-Type: %'#13#10#13#10'%'#13#10,
+      [fBound, result^.Name, result^.ContentType, content], s)
   else
   begin
     if fFilesCount = 0 then
     begin
       // if this is the first file, create the header for files
-      if ns <> 0 then
-        NewBound;
-      s := 'Content-Disposition: form-data; name="files"'#13#10 +
+      FormatUtf8('--%'#13#10, [fBound], s);
+      fBound := MultiPartFormDataNewBound(fBounds);
+      s := s + 'Content-Disposition: form-data; name="files"'#13#10 +
            'Content-Type: multipart/mixed; boundary=' + fBound + #13#10#13#10;
     end;
     inc(fFilesCount);
     s := FormatUtf8('%--%'#13#10 +
-      'Content-Disposition: file; filename="%"'#13#10 +
-      'Content-Type: %'#13#10, [{%H-}s, fBound, filename, result^.ContentType]);
+      'Content-Disposition: file; name="%"; filename="%"'#13#10 +
+      'Content-Type: %'#13#10, [{%H-}s, fBound,
+       result^.Name, MimeHeaderEncode(filename), result^.ContentType]);
     if encoding <> '' then
       s := FormatUtf8('%Content-Transfer-Encoding: %'#13#10, [s, encoding]);
     if content <> '' then
-      s := s + #13#10 + content + #13#10'--' + fBound + #13#10
+      s := s + #13#10 + content + #13#10
     else
       s := s + #13#10;
   end;
-  with fContent[nc] as TRawByteStringStream do
-    DataString := DataString + s;
+  Append(s);
 end;
 
 procedure THttpMultiPartStream.AddContent(const name: RawUtf8;
@@ -1025,17 +1005,15 @@ end;
 procedure THttpMultiPartStream.AddFile(const name: RawUtf8;
   const filename: TFileName; const contenttype: RawUtf8);
 var
-  n: PtrInt;
   fs: TFileStream;
+  fn: RawUtf8;
 begin
   fs := TFileStream.Create(filename, fmShareDenyNone or fmOpenRead);
   // an exception is raised in above line if filename is incorrect
-  Add(name, '', contenttype, StringToUtf8(ExtractFileName(filename)),
-    'binary')^.ContentFile := filename;
-  n := length(fContent);
-  SetLength(fContent, n + 2);
-  fContent[n] := fs; // file content will be streamed when needed
-  fContent[n + 1] := TRawByteStringStream.Create(#13#10'--' + fBound + #13#10);
+  fn := StringToUtf8(ExtractFileName(filename));
+  Add(name, '', contenttype, fn, 'binary')^.ContentFile := filename;
+  NewStream(fs);
+  Append(#13#10);
 end;
 
 procedure THttpMultiPartStream.Flush;
@@ -1047,32 +1025,8 @@ begin
     exit;
   for i := length(fBounds) - 1 downto 0 do
     s := {%H-}s + '--' + fBounds[i] + '--'#13#10;
-  with fContent[high(fContent)] as TRawByteStringStream do
-    DataString := DataString + s;
-end;
-
-function THttpMultiPartStream.Read(var Buffer; Count: Longint): Longint;
-var
-  rd: LongInt;
-  P: PByte;
-begin
-  result := 0;
-  P := @Buffer;
-  repeat
-    if fContentRead = length(fContent) then
-      break;
-    rd := fContent[fContentRead].Read(P^, Count);
-    if rd = 0 then
-    begin
-      // read from next section(s) until we got Count bytes
-      inc(fContentRead);
-      continue;
-    end;
-    inc(P, rd);
-    inc(result, rd);
-    dec(Count, rd);
-  until Count = 0;
-  inc(fPosition, result);
+  Append(s);
+  inherited Flush; // compute fSize
 end;
 
 
@@ -2677,8 +2631,7 @@ end;
 function SendEmailSubject(const Text: string): RawUtf8;
 begin
   StringToUtf8(Text, result);
-  if not IsAnsiCompatible(result) then
-    result := '=?UTF-8?B?' + BinToBase64(result);
+  result := MimeHeaderEncode(result);
 end;
 
 
