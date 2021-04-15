@@ -4236,7 +4236,7 @@ procedure TTestCoreBase._UTF8;
     {$ifdef FPC}
     CheckUtf8(CompareMem(pointer(W), pointer(A), length(W)), 'CP%', [CP]);
     {$else}
-    CheckUtF8(A = W, , 'CP%-AW', [CP]);
+    CheckUtF8(A = W, 'CP%-AW', [CP]);
     CheckUtf8(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W)) = W, 'CP%-CW', [CP]);
     {$endif FPC}
   end;
