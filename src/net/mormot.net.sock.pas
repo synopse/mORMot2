@@ -75,12 +75,19 @@ type
   {$M+}
   /// exception class raised by this unit
   ENetSock = class(Exception)
+  protected
+    fLastError: TNetResult;
   public
+    /// reintroduced constructor with TNetResult information
+    constructor Create(msg: string; const args: array of const;
+      error: TNetResult = nrOK); reintroduce;
     /// raise ENetSock if res is not nrOK or nrRetry
     class procedure Check(res: TNetResult; const Context: shortstring);
     /// call NetLastError and raise ENetSock if not nrOK nor nrRetry
     class procedure CheckLastError(const Context: shortstring; ForceRaise: boolean = false;
       AnotherNonFatal: integer = 0);
+    property LastError: TNetResult
+      read fLastError;
   end;
   {$M-}
 
@@ -940,11 +947,20 @@ end;
 
 { ENetSock }
 
+constructor ENetSock.Create(msg: string; const args: array of const;
+  error: TNetResult);
+begin
+  fLastError := error;
+  if error <> nrOK then
+    msg := format('%s [%s - #%d]', [msg, _NR[error], ord(error)]);
+  inherited CreateFmt(msg, args);
+end;
+
 class procedure ENetSock.Check(res: TNetResult; const Context: shortstring);
 begin
   if (res <> nrOK) and
      (res <> nrRetry) then
-    raise CreateFmt('%s: ''%s'' error', [Context, _NR[res]]);
+    raise Create('%s failed', [Context], res);
 end;
 
 class procedure ENetSock.CheckLastError(const Context: shortstring;
@@ -1194,10 +1210,9 @@ procedure TNetSocketWrap.SetOpt(prot, name: integer;
   value: pointer; valuelen: integer);
 begin
   if @self = nil then
-    raise ENetSock.CreateFmt('SetOptions(%d,%d) with no socket', [prot, name]);
-  if setsockopt(TSocket(@self), prot, name, value, valuelen)  <> NO_ERROR then
-    raise ENetSock.CreateFmt('SetOptions(%d,%d) failed as %s',
-      [prot, name, NetLastErrorMsg]);
+    raise ENetSock.Create('SetOptions(%d,%d) with no socket', [prot, name]);
+  if setsockopt(TSocket(@self), prot, name, value, valuelen) <> NO_ERROR then
+    raise ENetSock.Create('SetOptions(%d,%d)', [prot, name], NetLastError);
 end;
 
 procedure TNetSocketWrap.SetKeepAlive(keepalive: boolean);
@@ -1724,8 +1739,8 @@ const
   BINDTXT: array[boolean] of string[4] = (
     'open', 'bind');
   BINDMSG: array[boolean] of string = (
-    'is a server available on this address:port?',
-    'another process may be currently listening to this port!');
+    'Is a server available on this address:port?',
+    'Another process may be currently listening to this port!');
 
 constructor TCrtSocket.Bind(const aAddress: RawUtf8; aLayer: TNetLayer;
   aTimeOut: integer);
@@ -1738,13 +1753,15 @@ begin
   begin
     {$ifdef OSLINUX} // try systemd activation
     if not sd.IsAvailable then
-      raise ENetSock.Create('Bind('''') but Systemd is not available');
+      raise ENetSock.Create('%s.Bind('''') but Systemd is not available',
+        [ClassNameShort(self)^]);
     if sd.listen_fds(0) > 1 then
-      raise ENetSock.Create('Bind(''''): Systemd activation failed - too ' +
-        'many file descriptors received');
+      raise ENetSock.Create('%s.Bind(''''): Systemd activation failed - too ' +
+        'many file descriptors received', [ClassNameShort(self)^]);
     aSock := SD_LISTEN_FDS_START + 0;
     {$else}
-    raise ENetSock.Create('Bind(''''), i.e. Systemd activation, is not allowed on this platform');
+    raise ENetSock.Create('%s.Bind(''''), i.e. Systemd activation, ' +
+      'is not allowed on this platform', [ClassNameShort(self)^]);
     {$endif OSLINUX}
   end
   else
@@ -1793,8 +1810,8 @@ begin
     res := NewSocket(aServer, aPort, aLayer, doBind,
       Timeout, Timeout, Timeout, retry, fSock);
     if res <> nrOK then
-      raise ENetSock.CreateFmt('OpenBind(%s:%s,%s) failed as ''%s'': %s',
-        [aServer, fPort, BINDTXT[doBind], _NR[res], BINDMSG[doBind]]);
+      raise ENetSock.Create('%s %s.OpenBind(%s:%s,%s)',
+        [BINDMSG[doBind], ClassNameShort(self)^, aServer, fPort], res);
   end
   else
   begin
@@ -1812,20 +1829,22 @@ begin
        ({%H-}PtrInt(aSock) <= 0) then
     try
       if not Assigned(NewNetTls) then
-        raise ENetSock.Create('TLS is not available - try including ' +
-          'mormot.lib.openssl11 and installing OpenSSL 1.1.1');
+        raise ENetSock.Create('%s.OpenBind: TLS is not available - try ' +
+          'including mormot.lib.openssl11 and installing OpenSSL 1.1.1',
+          [ClassNameShort(self)^]);
       fSecure := NewNetTls;
       if fSecure = nil then
-        raise ENetSock.Create('TLS is not available on this system - ' +
-          'try installing OpenSSL 1.1.1');
+        raise ENetSock.Create('%s.OpenBind; TLS is not available on this ' +
+          'system - try installing OpenSSL 1.1.1', [ClassNameShort(self)^]);
       fSecure.AfterConnection(fSock, TLS, aServer);
       TLS.Enabled := true;
     except
       on E: Exception do
       begin
         fSecure := nil;
-        raise ENetSock.CreateFmt('OpenBind(%s:%s,%s): TLS failed [%s %s]',
-          [aServer, port, BINDTXT[doBind], ClassNameShort(E)^, E.Message]);
+        raise ENetSock.CreateFmt('%s.OpenBind(%s:%s,%s): TLS failed [%s %s]',
+          [ClassNameShort(self)^, aServer, port, BINDTXT[doBind],
+           ClassNameShort(E)^, E.Message]);
       end;
     end;
   if Assigned(OnLog) then
@@ -2128,9 +2147,11 @@ var
   {$endif OSWINDOWS}
 begin
   if SockIn = nil then
-    raise ENetSock.Create('SockInPending without SockIn');
+    raise ENetSock.Create('%s.SockInPending(SockIn=nil)',
+      [ClassNameShort(self)^]);
   if aTimeOutMS < 0 then
-    raise ENetSock.Create('SockInPending(aTimeOutMS<0)');
+    raise ENetSock.Create('%s.SockInPending(aTimeOutMS<0)',
+      [ClassNameShort(self)^]);
   with PTextRec(SockIn)^ do
     result := BufEnd - BufPos;
   if result = 0 then
@@ -2275,8 +2296,8 @@ begin
     if TrySndLow(pointer(fSndBuf), fSndBufLen) then
       fSndBufLen := 0
     else
-      raise ENetSock.CreateFmt('SockSendFlush(%s) len=%d %s',
-        [fServer, fSndBufLen, NetLastErrorMsg]);
+      raise ENetSock.Create('%s.SockSendFlush(%s) len=%d %s',
+        [ClassNameShort(self)^, fServer, fSndBufLen], NetLastError);
   if body > 0 then
     SndLow(pointer(aBody), body); // direct sending of biggest packets
 end;
@@ -2302,7 +2323,8 @@ begin
   read := Length;
   if not TrySockRecv(Buffer, read, {StopBeforeLength=}false) or
      (Length <> read) then
-    raise ENetSock.CreateFmt('SockRecv(%d) failure (read=%d)', [Length, read]);
+    raise ENetSock.Create('%s.SockRecv(%d) read=%d',
+      [ClassNameShort(self)^, Length, read], NetLastError);
 end;
 
 function TCrtSocket.SockReceivePending(TimeOutMS: integer): TCrtSocketPending;
@@ -2488,8 +2510,8 @@ begin
     readln(SockIn^, Line); // example: HTTP/1.0 200 OK
     Error := ioresult;
     if Error <> 0 then
-      raise ENetSock.CreateFmt('SockRecvLn error %d after %d chars',
-        [Error, Length(Line)]);
+      raise ENetSock.Create('%s.SockRecvLn error %d after %d chars',
+        [ClassNameShort(self)^, Error, Length(Line)]);
     {$I+}
   end
   else
@@ -2506,7 +2528,8 @@ begin
     readln(SockIn^);
     Error := ioresult;
     if Error <> 0 then
-      raise ENetSock.CreateFmt('SockRecvLn error %d', [Error]);
+      raise ENetSock.Create('%s.SockRecvLn error %d',
+        [ClassNameShort(self)^, Error]);
     {$I+}
   end
   else
@@ -2518,8 +2541,8 @@ end;
 procedure TCrtSocket.SndLow(P: pointer; Len: integer);
 begin
   if not TrySndLow(P, Len) then
-    raise ENetSock.CreateFmt('SndLow(%s) len=%d %s',
-      [fServer, Len, NetLastErrorMsg]);
+    raise ENetSock.Create('%s.SndLow(%s) len=%d %s',
+      [ClassNameShort(self)^, fServer, Len], NetLastError);
 end;
 
 function TCrtSocket.TrySndLow(P: pointer; Len: integer): boolean;
