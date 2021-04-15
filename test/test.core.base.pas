@@ -5454,14 +5454,14 @@ var
     for i := 0 to high(mp2) do
       if i <= n then
       begin
-        CheckEqual(mp2[i].Name, MIMES[i * 2]);
-        CheckEqual(mp2[i].Content, MIMES[i * 2 + 1]);
+        CheckEqual(mp2[i].Name, StringToUtf8(MIMES[i * 2]));
+        CheckEqual(mp2[i].Content, StringToUtf8(MIMES[i * 2 + 1]));
       end
       else
       begin
         j := i - n - 1;
         CheckEqual(mp2[i].FileName, StringToUtf8(ExtractFileName(fn[j])));
-        CheckEqual(mp2[i].Content, MIMES[j * 2 + 1]);
+        CheckEqual(mp2[i].Content, StringToUtf8(MIMES[j * 2 + 1]));
       end;
   end;
 
@@ -5484,18 +5484,19 @@ begin
   // mime multipart encoding
   n := high(MIMES) shr 1;
   for i := 0 to n do
-    Check(MultiPartFormDataAddField(MIMES[i * 2], MIMES[i * 2 + 1], mp));
+    Check(MultiPartFormDataAddField(
+      StringToUtf8(MIMES[i * 2]), StringToUtf8(MIMES[i * 2 + 1]), mp));
   for i := 0 to high(fn) do
   begin
     fn[i] := WorkDir + 'mp' + IntToStr(i);
-    FileFromString(MIMES[i * 2 + 1], fn[i]);
+    FileFromString(StringToUtf8(MIMES[i * 2 + 1]), fn[i]);
     Check(MultiPartFormDataAddFile(fn[i], mp));
   end;
   Check(MultiPartFormDataEncode(mp, mpct, mpc));
   DecodeAndTest;
   st := THttpMultiPartStream.Create;
   for i := 0 to n do
-    st.AddContent(MIMES[i * 2], MIMES[i * 2 + 1]);
+    st.AddContent(StringToUtf8(MIMES[i * 2]), StringToUtf8(MIMES[i * 2 + 1]));
   for i := 0 to high(fn) do
     st.AddFile('', fn[i]);
   st.Flush;
