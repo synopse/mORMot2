@@ -4221,26 +4221,23 @@ procedure TTestCoreBase._UTF8;
     U: RawUtf8;
   begin
     C := TSynAnsiConvert.Engine(CP);
-    Check(C.CodePage = CP);
+    CheckEqual(C.CodePage, CP, 'cpa');
     U := C.AnsiToUtf8(W);
     A := C.Utf8ToAnsi(U);
     if W = '' then
       exit;
     {$ifdef HASCODEPAGE}
-    {$ifndef FPC}
-    Check(StringCodePage(W) = 1252);
-    {$endif FPC}
     CP := StringCodePage(A);
-    Check(CP = C.CodePage);
+    CheckEqual(CP, C.CodePage, 'cpb');
     {$endif FPC}
     if CP = CP_UTF16 then
       exit;
     Check(length(W) = length(A));
     {$ifdef FPC}
-    Check(CompareMem(pointer(W), pointer(A), length(W)));
+    CheckUtf8(CompareMem(pointer(W), pointer(A), length(W)), 'CP%', [CP]);
     {$else}
-    Check(A = W);
-    Check(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W)) = W);
+    CheckUtF8(A = W, , 'CP%-AW', [CP]);
+    CheckUtf8(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W)) = W, 'CP%-CW', [CP]);
     {$endif FPC}
   end;
 
