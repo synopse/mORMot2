@@ -3404,15 +3404,17 @@ type
     function Write(const Buffer; Count: Longint): Longint; override;
   end;
 
+  TNestedStream = record
+    Stream: TStream;
+    Start, Stop: Int64;
+  end;
+
   /// TStream allowing to read from some nested TStream instances
   TNestedStreamReader = class(TStreamWithPosition)
   protected
     fSize: Int64;
-    fNested: TStreamDynArray;
-    fContentPos: array of record
-      start, stop: Int64;
-    end;
-    fContentRead: PtrInt;
+    fNested: array of TNestedStream;
+    fContentRead: ^TNestedStream;
     function GetSize: Int64; override;
   public
     /// finalize the nested TStream instance
@@ -3429,9 +3431,8 @@ type
     procedure Flush; virtual;
     /// will read up to Count bytes from the internal nested TStream
     function Read(var Buffer; Count: Longint): Longint; override;
-    /// low-level direct access to the internal TStream instances
-    property Nested: TStreamDynArray
-      read fNested;
+    /// this TStream is read-only: calling this method will raise an exception
+    function Write(const Buffer; Count: Longint): Longint; override;
   end;
 
 
@@ -11203,7 +11204,7 @@ var
 begin
   inherited Destroy;
   for i := 0 to length(fNested) - 1 do
-    fNested[i].Free;
+    fNested[i].Stream.Free;
 end;
 
 function TNestedStreamReader.NewStream(Stream: TStream): TStream;
@@ -11212,7 +11213,7 @@ var
 begin
   n := length(fNested);
   SetLength(fNested, n + 1);
-  fNested[n] := Stream;
+  fNested[n].Stream := Stream;
   result := Stream; // allow simple fluent calls
 end;
 
@@ -11223,7 +11224,7 @@ begin
   n := length(fNested);
   if n <> 0 then
   begin
-    result := pointer(fNested[n - 1]);
+    result := pointer(fNested[n - 1].Stream);
     if PClass(result)^ = TRawByteStringStream then
       exit;
   end;
@@ -11241,72 +11242,81 @@ procedure TNestedStreamReader.Flush;
 var
   i, n: PtrInt;
 begin
-  fContentRead := 0;
+  fContentRead := pointer(fNested);
   fSize := 0;
   n := length(fNested);
-  SetLength(fContentPos, n);
   for i := 0 to n - 1 do
-  begin
-    fContentPos[i].start := fSize;
-    inc(fSize, fNested[i].Size); // to allow proper Seek() + Read()
-    fContentPos[i].stop := fSize;
-  end;
+    with fNested[i] do
+    begin
+      Stream.Seek(0, soBeginning);
+      Start := fSize;
+      inc(fSize, Stream.Size); // to allow proper Seek() + Read()
+      Stop := fSize;
+    end;
 end;
 
 function TNestedStreamReader.Read(var Buffer; Count: Longint): Longint;
 var
-  rd: LongInt;
-  n, i: PtrInt;
+  s, m: ^TNestedStream;
   P: PByte;
+  rd: LongInt;
 begin
   result := 0;
+  s := pointer(fContentRead);
+  if s = nil then
+    exit; // Flush was not called
   P := @Buffer;
-  n := length(fContentPos);
+  m := @fNested[length(fNested)];
   while (Count > 0) and
         (fPosition < fSize) do
   begin
-    if (fContentRead >= n) or
-       (fPosition >= fContentPos[fContentRead].stop) or
-       (fPosition < fContentPos[fContentRead].start) then
+    if (PtrUInt(s) >= PtrUInt(m)) or
+       (fPosition >= s^.Stop) or
+       (fPosition < s^.Start) then
     begin
-      inc(fContentRead); // optimize the forward reading simple case
-      if (fContentRead >= n) or
-         (fPosition >= fContentPos[fContentRead].stop) or
-         (fPosition < fContentPos[fContentRead].start) then
+      inc(s); // optimize forward reading (most common case)
+      if (PtrUInt(s) >= PtrUInt(m)) or
+         (fPosition >= s^.Stop) or
+         (fPosition < s^.Start) then
       begin
-        // handle random Seek() call - brute force is enough for seldom search
-        fContentRead := -1;
-        for i := 0 to n - 1 do
-          if fPosition < fContentPos[i].stop then
-          begin
-            fContentRead := i;
+        // handle random Seek() call - brute force is enough (seldom used)
+        s := pointer(fNested);
+        repeat
+          if fPosition >= s^.Start then
             break;
-          end;
-        if fContentRead < 0 then
-          exit; // paranoid
+          inc(s);
+        until PtrUInt(s) >= PtrUInt(m);
+        if PtrUInt(s) >= PtrUInt(m) then
+          break; // paranoid (we know fPosition < fSize)
       end;
     end;
-    rd := fNested[fContentRead].Read(P^, Count);
+    rd := s^.Stream.Read(P^, Count);
     if rd = 0 then
     begin
       // read from next section(s) until we got Count bytes
-      inc(fContentRead);
-      if fContentRead = n then
+      inc(s);
+      if PtrUInt(s) >= PtrUInt(m) then
         break;
       continue;
     end;
-    inc(P, rd);
-    inc(result, rd);
-    inc(fPosition, rd);
     dec(Count, rd);
+    inc(P, rd);
+    inc(fPosition, rd);
+    inc(result, rd);
   end;
+  fContentRead := pointer(s);
+end;
+
+function TNestedStreamReader.{%H-}Write(const Buffer; Count: integer): Longint;
+begin
+  raise EStreamError.Create('Unexpected TNestedStreamReader.Write');
 end;
 
 
 { ************ Raw Shared Constants / Types Definitions }
 
 var
-  // live cache array to avoid memory allocation
+  // live cache array to avoid memory allocations
   ReasonCache: array[1..5, 0..13] of RawUtf8;
 
 procedure StatusCode2Reason(Code: cardinal; var Reason: RawUtf8);
@@ -11412,8 +11422,7 @@ var
 begin
   if Code = 200 then
   begin
-    // optimistic approach :)
-    Hi := 2;
+    Hi := 2; // optimistic approach :)
     Lo := 0;
   end
   else

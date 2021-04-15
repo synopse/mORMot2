@@ -166,8 +166,9 @@ type
     // - retry is false by caller, and will be recursively called with true to retry once
     // - use either Data or DataStream for sending its output body content
     function Request(const url, method: RawUtf8; KeepAlive: cardinal;
-      const header: RawUtf8; const Data: RawByteString; const DataType: RawUtf8;
-      retry: boolean; DataStream: TStream = nil): integer; virtual;
+      const header: RawUtf8; const Data: RawByteString = '';
+      const DataType: RawUtf8 = ''; retry: boolean = false;
+      DataStream: TStream = nil): integer; virtual;
     /// after an Open(server,port), return 200 if OK, http status error otherwise
     // - get the page data in Content
     function Get(const url: RawUtf8; KeepAlive: cardinal = 0;
@@ -1208,7 +1209,7 @@ end;
 function THttpClientSocket.Get(const url: RawUtf8; KeepAlive: cardinal;
   const header: RawUtf8): integer;
 begin
-  result := Request(url, 'GET', KeepAlive, header, '', '', false);
+  result := Request(url, 'GET', KeepAlive, header);
 end;
 
 function THttpClientSocket.GetAuth(const url, AuthToken: RawUtf8;
@@ -1220,13 +1221,13 @@ end;
 function THttpClientSocket.Head(const url: RawUtf8; KeepAlive: cardinal;
   const header: RawUtf8): integer;
 begin
-  result := Request(url, 'HEAD', KeepAlive, header, '', '', false);
+  result := Request(url, 'HEAD', KeepAlive, header);
 end;
 
 function THttpClientSocket.Post(const url: RawUtf8; const Data: RawByteString;
   const DataType: RawUtf8; KeepAlive: cardinal; const header: RawUtf8): integer;
 begin
-  result := Request(url, 'POST', KeepAlive, header, Data, DataType, false);
+  result := Request(url, 'POST', KeepAlive, header, Data, DataType);
 end;
 
 function THttpClientSocket.Post(const url: RawUtf8; Data: TStream;
@@ -1238,13 +1239,13 @@ end;
 function THttpClientSocket.Put(const url: RawUtf8; const Data: RawByteString;
   const DataType: RawUtf8; KeepAlive: cardinal; const header: RawUtf8): integer;
 begin
-  result := Request(url, 'PUT', KeepAlive, header, Data, DataType, false);
+  result := Request(url, 'PUT', KeepAlive, header, Data, DataType);
 end;
 
 function THttpClientSocket.Delete(const url: RawUtf8; KeepAlive: cardinal;
   const header: RawUtf8): integer;
 begin
-  result := Request(url, 'DELETE', KeepAlive, header, '', '', false);
+  result := Request(url, 'DELETE', KeepAlive, header);
 end;
 
 
