@@ -134,6 +134,12 @@ const
   {$endif OSWINDOWS}
 
 var
+  /// optional libcrypto location for OpenSslIsAvailable/OpenSslInitialize
+  OpenSslDefaultCrypto: TFileName;
+  /// optional libssl location for OpenSslIsAvailable/OpenSslInitialize
+  OpenSslDefaultSsl: TFileName;
+
+
   /// numeric OpenSSL library version loaded e.g. after OpenSslIsAvailable call
   // - equals e.g. $1010106f
   OpenSslVersion: cardinal;
@@ -2147,6 +2153,7 @@ begin
     try
       // attempt to load libcrypto
       libcrypto.TryLoadLibrary([
+        OpenSslDefaultCrypto,
       {$ifdef OSWINDOWS}
         // first try the libcrypto*.dll in the local executable folder
         Executable.ProgramFilePath + libcryptoname,
@@ -2162,6 +2169,7 @@ begin
           @P[api], {onfail=}EOpenSsl);
       // attempt to load libssl
       libssl.TryLoadLibrary([
+        OpenSslDefaultSsl,
       {$ifdef OSWINDOWS}
         // first try the libssl*.dll in the local executable folder
         Executable.ProgramFilePath + libsslname,
@@ -2181,9 +2189,10 @@ begin
         raise EOpenSsl.Create('CRYPTO_set_mem_functions() failure');
       {$endif OPENSSLUSERTLMM}
       OpenSslVersion := libssl.OpenSSL_version_num;
-      if OpenSslVersion and $ffffff00 <> $10101000 then // paranoid check 1.1.1
+      if OpenSslVersion and $ffffff00 < $10101000 then // paranoid check 1.1.1
         raise EOpenSsl.CreateFmt(
-          'Incorrect OpenSSL version %x - expected 101010xx', [OpenSslVersion]);
+          'Incorrect OpenSSL version %x - expected at least 101010xx',
+          [OpenSslVersion]);
     except
       FreeAndNil(libssl);
       FreeAndNil(libcrypto);
