@@ -6034,6 +6034,7 @@ class function TAesPrng.GetEntropy(Len: integer; SystemOnly: boolean): RawByteSt
 var
   data: THash512Rec;
   fromos: RawByteString;
+  mem: TMemoryInfo;
   sha3: TSha3;
   aes: TAes; // used for entropy obfuscation
 
@@ -6069,18 +6070,20 @@ begin
     sha3.Update(Executable.ProgramFullSpec);
     data.h0 := Executable.Hash.b;
     sha3update;
+    if RetrieveSystemTimes(data.d0, data.d1, data.d2) then
+      sha3.Update(@data, SizeOf(data)) // from GetSystemTimes() WinAPI
+    else
+      sha3.Update(StringFromFile('/proc/stat', {nosize=}true)); // Linux kernel
+    sha3.Update(RetrieveLoadAvg); // may return '' e.g. on Windows
+    GetMemoryInfo(mem, {withalloc=}true);
+    sha3.Update(@mem, SizeOf(mem));
+    sha3.Update(OSVersionText);
+    sha3.Update(@SystemInfo, SizeOf(SystemInfo));
     data.i0 := integer(HInstance);
     data.i1 := PtrInt(GetCurrentThreadId);
     data.i2 := PtrInt(MainThreadID);
     data.i3 := integer(UnixMSTimeUtcFast);
-    {$ifdef FPC}
-    ThreadSwitch; // non deterministic time shift
-    {$else}
-    SleepHiRes(0);
-    {$endif FPC}
     sha3update;
-    sha3.Update(OSVersionText);
-    sha3.Update(@SystemInfo, SizeOf(SystemInfo));
     result := sha3.Cypher(fromos); // = xor OS entropy using SHA-3 in XOF mode
   finally
     sha3.Done;
@@ -6107,7 +6110,7 @@ begin
       EnterCriticalSection(fSafe);
       try
         fAes.EncryptInit(key.Lo, fAesKeySize);
-        crcblocks(@TAesContext(fAes.Context).iv, @key.Hi, 2);
+        DefaultHasher128(@TAesContext(fAes.Context).iv, @key.Hi,SizeOf(key.Hi));
         fBytesSinceSeed := 0;
       finally
         LeaveCriticalSection(fSafe);
