@@ -2293,6 +2293,16 @@ begin
   Check(U.Uri = 'https://toto.com:123/tata/tutu:tete');
   Check(U.From('toto.com/tata/tutu:tete'));
   Check(U.Uri = 'http://toto.com/tata/tutu:tete');
+  Check(U.User = '');
+  Check(U.Password = '');
+  Check(U.From('https://user:password@server:port/address'));
+  CheckEqual(U.Uri, 'https://server:port/address');
+  CheckEqual(U.User, 'user');
+  CheckEqual(U.Password, 'password');
+  Check(U.From('https://user@server:port/address'));
+  CheckEqual(U.Uri, 'https://server:port/address');
+  CheckEqual(U.User, 'user');
+  CheckEqual(U.Password, '');
 end;
 
 procedure TTestCoreBase._GUID;
