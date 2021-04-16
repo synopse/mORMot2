@@ -152,7 +152,10 @@ type
   protected
     fUserAgent: RawUtf8;
     fProcessName: RawUtf8;
+    fRangeStart, fRangeEnd: Int64;
+    fBasicAuthUserPassword, fAuthBearer: RawUtf8;
     procedure RequestSendHeader(const url, method: RawUtf8); virtual;
+    procedure RequestClear; virtual;
   public
     /// common initialization of all constructors
     // - this overridden method will set the UserAgent with some default value
@@ -207,6 +210,20 @@ type
     /// the associated process name
     property ProcessName: RawUtf8
       read fProcessName write fProcessName;
+    /// optional begining position of a request
+    // - is reset once the Request has been sent
+    property RangeStart: Int64
+      read fRangeStart write fRangeStart;
+    /// optional ending position of a request
+    // - is reset once the Request has been sent
+    property RangeEnd: Int64
+      read fRangeEnd write fRangeEnd;
+    /// optional Authorization: Basic header, encoded as 'User:Password' text
+    property BasicAuthUserPassword: RawUtf8
+      read fBasicAuthUserPassword write fBasicAuthUserPassword;
+    /// optional Authorization: Bearer header value
+    property AuthBearer: RawUtf8
+      read fAuthBearer write fAuthBearer;
   end;
 
   /// class-reference type (metaclass) of a HTTP client socket access
@@ -1084,7 +1101,23 @@ begin
     SockSend(['Host: ', Server])
   else
     SockSend(['Host: ', Server, ':', Port]);
+  if (fRangeStart > 0) or
+     (fRangeEnd > 0) then
+    if fRangeEnd > fRangeStart then
+      SockSend(['Range: bytes=', fRangeStart, '-', fRangeEnd])
+    else
+      SockSend(['Range: bytes=', fRangeStart, '-']);
+  if fAuthBearer <> '' then
+    SockSend(['Authorization: Bearer ', fAuthBearer]);
+  if fBasicAuthUserPassword <> '' then
+    SockSend(['Authorization: Basic ', BinToBase64Short(fBasicAuthUserPassword)]);
   SockSend(['Accept: */*'#13#10'User-Agent: ', UserAgent]);
+end;
+
+procedure THttpClientSocket.RequestClear;
+begin
+  fRangeStart := 0;
+  fRangeEnd := 0;
 end;
 
 constructor THttpClientSocket.Create(aTimeOut: PtrInt);
@@ -1137,10 +1170,11 @@ begin
     try
       try
         // send request - we use SockSend because writeln() is calling flush()
-        // -> all headers will be sent at once
+        // prepare headers
         RequestSendHeader(url, method);
         if KeepAlive > 0 then
-          SockSend(['Keep-Alive: ', KeepAlive, #13#10'Connection: Keep-Alive'])
+          SockSend(['Keep-Alive: ', KeepAlive,
+              #13#10'Connection: Keep-Alive'])
         else
           SockSend('Connection: Close');
         aData := Data; // local var copy for Data to be compressed in-place
@@ -1150,7 +1184,8 @@ begin
         if fCompressAcceptEncoding <> '' then
           SockSend(fCompressAcceptEncoding);
         SockSendCRLF;
-        SockSendFlush(aData); // flush all pending data to network
+        // flush headers and Data/DataStream body
+        SockSendFlush(aData);
         if DataStream <> nil then
           SockSendStream(DataStream); // may be a THttpMultiPartStream
         // retrieve HTTP command line response
@@ -1200,6 +1235,8 @@ begin
            (IdemPCharArray(pointer(method), ['HEAD', 'OPTIONS']) < 0) then
           // HEAD or status 100..109,204,304 -> no body (RFC 2616 section 4.3)
           GetBody;
+        // successfully sent -> reset some fields for the next request
+        RequestClear;
       except
         on Exception do
           DoRetry(HTTP_NOTFOUND, 'Exception');
