@@ -71,7 +71,8 @@ type
     nrClosed,
     nrFatalError,
     nrUnknownError,
-    nrTooManyConnections);
+    nrTooManyConnections,
+    nrRefused);
 
   {$M+}
   /// exception class raised by this unit
@@ -573,6 +574,7 @@ type
     fSock: TNetSocket;
     fServer: RawUtf8;
     fPort: RawUtf8;
+    fProxyUrl: RawUtf8;
     fSockIn: PTextFile;
     fSockOut: PTextFile;
     fTimeOut: PtrInt;
@@ -596,7 +598,11 @@ type
     procedure SetTCPNoDelay(aTCPNoDelay: boolean); virtual;
     function GetRawSocket: PtrInt;
   public
-    /// direct access to the low-level TLS Options and Information
+    /// direct access to the optional low-level HTTP proxy tunnelling information
+    // - could have been assigned by a Tunnel.From() call
+    // - User/Password would taken into consideration for authentication
+    Tunnel: TUri;
+    /// direct access to the optional low-level TLS Options and Information
     // - depending on the actual INetTls implementation, some fields may not
     // be used nor populated - currently only supported by mormot.lib.openssl11
     TLS: TNetTlsContext;
@@ -605,13 +611,13 @@ type
     /// common initialization of all constructors
     // - do not call directly, but use Open / Bind constructors instead
     constructor Create(aTimeOut: PtrInt = 10000); reintroduce; virtual;
-    /// connect to aServer:aPort
+    /// constructor to connect to aServer:aPort
     // - optionaly via TLS (using the SChannel API on Windows, or by including
     // mormot.lib.openssl11 unit to your project) - with custom input options
     // - see also SocketOpen() for a wrapper catching any connection exception
     constructor Open(const aServer, aPort: RawUtf8; aLayer: TNetLayer = nlTCP;
       aTimeOut: cardinal = 10000; aTLS: boolean = false; aTLSContext: PNetTlsContext = nil);
-    /// bind to an address
+    /// constructor to bind to an address
     // - aAddr='1234' - bind to a port on all interfaces, the same as '0.0.0.0:1234'
     // - aAddr='IP:port' - bind to specified interface only, e.g.
     // '1.2.3.4:1234'
@@ -825,12 +831,15 @@ type
     /// IP address, initialized after Open() with Server name
     property Server: RawUtf8
       read fServer;
-    /// contains Sock, but transtyped as number for log display
-    property RawSocket: PtrInt
-      read GetRawSocket;
     /// IP port, initialized after Open() with port number
     property Port: RawUtf8
       read fPort;
+    /// contains Sock, but transtyped as number for log display
+    property RawSocket: PtrInt
+      read GetRawSocket;
+    /// HTTP Proxy URI used for tunnelling, from Tunnel.Server/Port values
+    property ProxyUrl: RawUtf8
+      read fProxyUrl;
     /// if higher than 0, read loop will wait for incoming data till
     // TimeOut milliseconds (default value is 10000) - used also in SockSend()
     property TimeOut: PtrInt
@@ -849,6 +858,7 @@ type
 // - useful to easily catch any exception, and provide a custom TNetTlsContext
 function SocketOpen(const aServer, aPort: RawUtf8;
   aTLS: boolean = false; aTLSContext: PNetTlsContext = nil): TCrtSocket;
+
 
 
 implementation
@@ -877,7 +887,8 @@ const
     'Closed',
     'Fatal Error',
     'Unknown Error',
-    'Too Many Connections');
+    'Too Many Connections',
+    'Refused');
 
 function NetLastError(AnotherNonFatal: integer = NO_ERROR;
   Error: PInteger = nil): TNetResult;
@@ -955,7 +966,7 @@ end;
 
 function ToText(res: TNetResult): PShortString;
 begin
-  result := @_NR[res];
+  result := @_NR[res]; // no mormot.core.rtti.pas need
 end;
 
 
@@ -1977,32 +1988,65 @@ procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8;
   doBind, aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket);
 var
   retry: integer;
+  head: RawUtf8;
   res: TNetResult;
 begin
   fSocketLayer := aLayer;
   fWasBind := doBind;
   if {%H-}PtrInt(aSock)<=0 then
   begin
+    // OPEN or BIND mode -> create the socket
+    if doBind then
+      // allow small number of retries (e.g. XP or BSD during aggressive tests)
+      retry := 10
+    else if (Tunnel.Server <> '') and
+            (aLayer = nlTCP) then
+    begin
+      // handle client tunnelling via an HTTP proxy
+      res := nrRefused;
+      fProxyUrl := Tunnel.URI;
+      try
+        OpenBind(Tunnel.Server, Tunnel.Port, false, Tunnel.Https);
+        SockSend(['CONNECT ', aServer, ':', aPort, ' HTTP/1.0']);
+        if Tunnel.User <> '' then
+          SockSend(['Proxy-Authorization: Basic ', Tunnel.UserPasswordBase64]);
+        SockSendFlush;
+        repeat
+          SockRecvLn(head);
+          if StartWith(pointer(head), 'HTTP/') and
+             (length(head) > 11) and
+             (head[10] = '2') then // 'HTTP/1.1 2xx xxxx' success
+            res := nrOK;
+        until  head = '';
+      except
+        res := nrNotFound;
+      end;
+      if res <> nrOk then
+        raise ENetSock.Create('%s.OpenBind(%s:%s): %s proxy error',
+          [ClassNameShort(self)^, aServer, aPort, Tunnel.URI], res);
+      fServer := aServer;
+      fPort := aPort;
+      exit;
+    end
+    else
+      // direct client connection
+      retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
     if (aPort = '') and
        (aLayer <> nlUNIX) then
       fPort := DEFAULT_PORT[aTLS] // default port is 80/443 (HTTP/S)
     else
       fPort := aPort;
     fServer := aServer;
-    if doBind then
-      // allow small number of retries (e.g. XP or BSD during aggressive tests)
-      retry := 10
-    else
-      retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
-    res := NewSocket(aServer, aPort, aLayer, doBind,
-      Timeout, Timeout, Timeout, retry, fSock);
+    res := NewSocket(fServer, fPort, aLayer, doBind,
+      fTimeout, fTimeout, fTimeout, retry, fSock);
     if res <> nrOK then
       raise ENetSock.Create('%s %s.OpenBind(%s:%s,%s)',
         [BINDMSG[doBind], ClassNameShort(self)^, aServer, fPort], res);
   end
   else
   begin
-    fSock := aSock; // ACCEPT mode -> socket is already created by caller
+    // ACCEPT mode -> socket is already created by caller
+    fSock := aSock;
     if TimeOut > 0 then
     begin
       // set timout values for both directions
@@ -2809,8 +2853,6 @@ function TCrtSocket.PeerPort: integer;
 begin
   result := fPeerAddr.Port;
 end;
-
-
 
 function SocketOpen(const aServer, aPort: RawUtf8; aTLS: boolean;
   aTLSContext: PNetTlsContext): TCrtSocket;
