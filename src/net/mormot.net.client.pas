@@ -738,6 +738,7 @@ type
     fBody: RawByteString;
     fSocketTLS: TNetTlsContext;
     fOnlyUseClientSocket: boolean;
+    fTimeOut: integer;
   public
     /// initialize the instance
     // - aOnlyUseClientSocket=true will use THttpClientSocket even for HTTPS
@@ -746,7 +747,7 @@ type
     destructor Destroy; override;
     /// low-level entry point of this instance
     function RawRequest(const Uri: TUri; const Method, Header: RawUtf8;
-     const Data: RawByteString; const DataType: RawUtf8;
+      const Data: RawByteString; const DataType: RawUtf8;
       KeepAlive: cardinal): integer; overload;
     /// simple-to-use entry point of this instance
     // - use Body and Headers properties to retrieve the HTTP body and headers
@@ -768,6 +769,9 @@ type
     /// allows to customize HTTPS connection and allow weak certificates
     property IgnoreSSLCertificateErrors: boolean
       read fSocketTLS.IgnoreCertificateErrors write fSocketTLS.IgnoreCertificateErrors;
+    /// set the timeout value for RawRequest/Request, in milliseconds
+    property TimeOut: integer
+      read fTimeOut write fTimeOut;
     /// alows to customize the connection using a proxy
     property Proxy: RawUtf8
       read fProxy write fProxy;
@@ -2263,6 +2267,7 @@ end;
 constructor TSimpleHttpClient.Create(aOnlyUseClientSocket: boolean);
 begin
   fOnlyUseClientSocket := aOnlyUseClientSocket;
+  fTimeOut := 5000;
   inherited Create;
 end;
 
@@ -2289,7 +2294,7 @@ begin
       FreeAndNil(fHttp);
       FreeAndNil(fHttps); // need a new HTTPS connection
       fHttps := MainHttpClass.Create(
-        Uri.Server, Uri.Port, Uri.Https, Proxy, '', 5000, 5000, 5000);
+        Uri.Server, Uri.Port, Uri.Https, Proxy, '', fTimeOut, fTimeOut, fTimeOut);
       fHttps.IgnoreSSLCertificateErrors := fSocketTLS.IgnoreCertificateErrors;
       if fUserAgent <> '' then
         fHttps.UserAgent := fUserAgent;
@@ -2311,7 +2316,7 @@ begin
       FreeAndNil(fHttps);
       FreeAndNil(fHttp); // need a new HTTP connection
       fHttp := THttpClientSocket.Open(
-        Uri.Server, Uri.Port, nlTCP, 5000, Uri.Https, @fSocketTLS);
+        Uri.Server, Uri.Port, nlTCP, fTimeOut, Uri.Https, @fSocketTLS);
       if fUserAgent <> '' then
         fHttp.UserAgent := fUserAgent;
     end;
