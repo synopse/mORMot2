@@ -532,6 +532,7 @@ type
     /// reset all stored information
     procedure Clear;
   end;
+  PUri = ^TUri;
 
 
 const
@@ -616,7 +617,8 @@ type
     // mormot.lib.openssl11 unit to your project) - with custom input options
     // - see also SocketOpen() for a wrapper catching any connection exception
     constructor Open(const aServer, aPort: RawUtf8; aLayer: TNetLayer = nlTCP;
-      aTimeOut: cardinal = 10000; aTLS: boolean = false; aTLSContext: PNetTlsContext = nil);
+      aTimeOut: cardinal = 10000; aTLS: boolean = false;
+      aTLSContext: PNetTlsContext = nil; aTunnel: PUri = nil);
     /// constructor to bind to an address
     // - aAddr='1234' - bind to a port on all interfaces, the same as '0.0.0.0:1234'
     // - aAddr='IP:port' - bind to specified interface only, e.g.
@@ -1736,6 +1738,22 @@ begin
   DoEncode(pointer(result), pointer(s), len);
 end;
 
+function SplitFromRight(const Text: RawUtf8; Sep: AnsiChar;
+  var Before, After: RawUtf8): boolean;
+var
+  i: PtrInt;
+begin
+  for i := length(Text) - 1 downto 2 do // search Sep from right side
+    if Text[i] = Sep then
+    begin
+      TrimCopy(Text, 1, i - 1, Before);
+      TrimCopy(Text, i + 1, maxInt, After);
+      result := true;
+      exit;
+    end;
+  result := false;
+end;
+
 
 { TUri }
 
@@ -1777,11 +1795,11 @@ begin
   end
   else
   begin
-    P1 := PosChar(P, '@');
+    P1 := pointer(PosChar(pointer(P), '@'));
     if P1 <> nil then
     begin
       // parse 'https://user:password@server:port/address'
-      P2 := PosChar(P, '/');
+      P2 := pointer(PosChar(pointer(P), '/'));
       if (P2 = nil) or
          (PtrUInt(P2) > PtrUInt(P1)) then
       begin
@@ -1813,8 +1831,10 @@ begin
   else
     port := DEFAULT_PORT[Https];
   if S^ <> #0 then // ':' or '/'
+  begin
     inc(S);
-  Address := S;
+    FastSetString(Address, S, StrLen(S));
+  end;
   if Server <> '' then
     result := true;
 end;
@@ -1899,11 +1919,15 @@ begin
 end;
 
 constructor TCrtSocket.Open(const aServer, aPort: RawUtf8;
-  aLayer: TNetLayer; aTimeOut: cardinal; aTLS: boolean; aTLSContext: PNetTlsContext);
+  aLayer: TNetLayer; aTimeOut: cardinal; aTLS: boolean;
+  aTLSContext: PNetTlsContext; aTunnel: PUri);
 begin
   Create(aTimeOut); // default read timeout is 10 seconds
+  // copy the input parameters before OpenBind()
   if aTLSContext <> nil then
-    TLS := aTLSContext^; // copy the input parameters before OpenBind()
+    TLS := aTLSContext^;
+  if aTunnel <> nil then
+    Tunnel := aTunnel^;
   // OpenBind() raise an exception on error
   {$ifdef OSPOSIX}
   if StartWith(pointer(aServer), 'UNIX:') then
@@ -1915,22 +1939,6 @@ begin
   else
   {$endif OSPOSIX}
     OpenBind(aServer, aPort, {dobind=}false, aTLS, aLayer);
-end;
-
-function SplitFromRight(const Text: RawUtf8; Sep: AnsiChar;
-  var Before, After: RawUtf8): boolean;
-var
-  i: PtrInt;
-begin
-  for i := length(Text) - 1 downto 2 do // search Sep from right side
-    if Text[i] = Sep then
-    begin
-      TrimCopy(Text, 1, i - 1, Before);
-      TrimCopy(Text, i + 1, maxInt, After);
-      result := true;
-      exit;
-    end;
-  result := false;
 end;
 
 const
@@ -2023,9 +2031,11 @@ begin
       end;
       if res <> nrOk then
         raise ENetSock.Create('%s.OpenBind(%s:%s): %s proxy error',
-          [ClassNameShort(self)^, aServer, aPort, Tunnel.URI], res);
+          [ClassNameShort(self)^, aServer, aPort, fProxyUrl], res);
       fServer := aServer;
       fPort := aPort;
+      if Assigned(OnLog) then
+        OnLog(sllTrace, 'Open(%:%) via proxy %', [fServer, fPort, fProxyUrl], self);
       exit;
     end
     else
