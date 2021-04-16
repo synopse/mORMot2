@@ -814,6 +814,11 @@ begin
   FileTimeToInt64(ftusr, UserTime);
 end;
 
+function RetrieveLoadAvg: RawUtf8;
+begin
+  result := ''; // call RetrieveSystemTimes() instead
+end;
+
 function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
   out WorkKB, VirtualKB: cardinal): boolean;
 var

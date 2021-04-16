@@ -901,7 +901,7 @@ type
     // - returns '' if the Process ID was not registered via Create/Subscribe
     // - you can customize the maximum depth, with aDepth < HistoryDepth
     // - the memory history (in MB) can be optionally returned in aDestMemoryMB
-    // - on Linux, will return the /proc/loadavg pseudo-file content
+    // - on POSIX, will call RetrieveLoadAvg function for system-wide info
     function HistoryText(aProcessID: integer = 0; aDepth: integer = 0;
       aDestMemoryMB: PRawUtf8 = nil): RawUtf8;
     /// returns total (Kernel+User) CPU usage percent history of the supplied process
@@ -2704,13 +2704,11 @@ begin
   result := '';
   mem := '';
   data := HistoryData(aProcessID, aDepth);
-  {$ifdef OSLINUX}
-  // bsd: see VM_LOADAVG
-  // https://www.retro11.de/ouxr/211bsd/usr/src/lib/libc/gen/getloadavg.c.html
+  {$ifndef OSWINDOWS}
   if data = nil then
-    result := StringFromFile('/proc/loadavg', {HasNoSize=}true)
+    result := RetrieveLoadAvg // from '/proc/loadavg' or libc getloadavg()
   else
-  {$endif OSLINUX}
+  {$endif OSWINDOWS}
     for i := 0 to high(data) do
       with data[i] do
       begin

@@ -1726,7 +1726,13 @@ function EnumProcessName(PID: cardinal): RawUtf8;
 
 /// return the system-wide time usage information
 // - under Windows, is a wrapper around GetSystemTimes() kernel API call
+// - return false on POSIX system - call RetrieveLoadAvg() instead
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
+
+/// return the system-wide time usage information
+// - on LINUX, retrieve /proc/loadavg or on OSX/BSD call libc getloadavg()
+// - return '' on Windows - call RetrieveSystemTimes() instead
+function RetrieveLoadAvg: RawUtf8;
 
 /// return the time and memory usage information about a given process
 // - under Windows, is a wrapper around GetProcessTimes/GetProcessMemoryInfo
