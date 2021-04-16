@@ -10,6 +10,7 @@ unit mormot.net.sock;
    - Socket Process High-Level Encapsulation
    - TLS / HTTPS Encryption Abstract Layer
    - Efficient Multiple Sockets Polling
+   - TUri parsing/generating URL wrapper
    - TCrtSocket Buffered Socket Read/Write Class
 
    The Low-Level Sockets API, which is complex and inconsistent among OS, is
@@ -266,6 +267,7 @@ type
     WithPeerInfo: boolean;
     /// input: PEM file name containing a certificate to be loaded
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
+    // - on OpenSSL, calls the SSL_CTX_use_certificate_file() API
     CertificateFile: RawUtf8;
     /// input: PEM file name containing a private key to be loaded
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
@@ -275,6 +277,7 @@ type
     /// input: file containing a specific set of CA certificates chain
     // - e.g. entrust_2048_ca.cer from https://web.entrust.com
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
+    // - on OpenSSL, calls the SSL_CTX_load_verify_locations() API
     CACertificatesFile: RawUtf8;
     /// input: preferred Cipher List
     CipherList: RawUtf8;
@@ -472,6 +475,69 @@ type
 // - as used by TPollSocketAbstract.New method
 function PollSocketClass: TPollSocketClass;
 
+
+{ *************************** TUri parsing/generating URL wrapper }
+
+type
+  /// structure used to parse an URI into its components
+  // - ready to be supplied e.g. to a THttpRequest sub-class
+  // - used e.g. by class function THttpRequest.Get()
+  // - will decode standard HTTP/HTTPS urls or Unix sockets URI like
+  // 'http://unix:/path/to/socket.sock:/url/path'
+  {$ifdef USERECORDWITHMETHODS}
+  TUri = record
+  {$else}
+  TUri = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// if the server is accessible via https:// and not plain http://
+    Https: boolean;
+    /// either nlTCP for HTTP/HTTPS or nlUnix for Unix socket URI
+    Layer: TNetLayer;
+    /// if the server is accessible via something else than http:// or https://
+    // - e.g. 'ws' or 'wss' for ws:// or wss://
+    Scheme: RawUtf8;
+    /// the server name
+    // - e.g. 'www.somewebsite.com' or 'path/to/socket.sock' Unix socket URI
+    Server: RawUtf8;
+    /// the server port
+    // - e.g. '80'
+    Port: RawUtf8;
+    /// optional user for authentication, as retrieved before '@'
+    // - e.g. from 'https://user:password@server:port/address'
+    User: RawUtf8;
+    /// optional password for authentication, as retrieved before '@'
+    // - e.g. from 'https://user:password@server:port/address'
+    Password: RawUtf8;
+    /// the resource address, including optional parameters
+    // - e.g. '/category/name/10?param=1'
+    Address: RawUtf8;
+    /// fill the members from a supplied URI
+    // - recognize e.g. 'http://Server:Port/Address', 'https://Server/Address',
+    // 'Server/Address' (as http), or 'http://unix:/Server:/Address' (as nlUnix)
+    // - recognize 'https://user:password@server:port/address' authentication
+    // - returns TRUE is at least the Server has been extracted, FALSE on error
+    function From(aUri: RawUtf8; const DefaultPort: RawUtf8 = ''): boolean;
+    /// compute the whole normalized URI
+    // - e.g. 'https://Server:Port/Address' or 'http://unix:/Server:/Address'
+    function URI: RawUtf8;
+    /// the server port, as integer value
+    function PortInt: integer;
+    /// compute the root resource Address, without any URI-encoded parameter
+    // - e.g. '/category/name/10'
+    function Root: RawUtf8;
+    /// returns BinToBase64(User + ':' + Password) encoded value
+    function UserPasswordBase64: RawUtf8;
+    /// reset all stored information
+    procedure Clear;
+  end;
+
+
+const
+  /// the default TCP port used for HTTP = DEFAULT_PORT[false] or
+  // HTTPS = DEFAULT_PORT[true]
+  DEFAULT_PORT: array[boolean] of RawUtf8 = (
+    '80', '443');
 
 
 { ********* TCrtSocket Buffered Socket Read/Write Class }
@@ -777,58 +843,6 @@ type
       read fBytesOut write fBytesOut;
   end;
   {$M-}
-
-type
-  /// structure used to parse an URI into its components
-  // - ready to be supplied e.g. to a THttpRequest sub-class
-  // - used e.g. by class function THttpRequest.Get()
-  // - will decode standard HTTP/HTTPS urls or Unix sockets URI like
-  // 'http://unix:/path/to/socket.sock:/url/path'
-  {$ifdef USERECORDWITHMETHODS}
-  TUri = record
-  {$else}
-  TUri = object
-  {$endif USERECORDWITHMETHODS}
-  public
-    /// if the server is accessible via https:// and not plain http://
-    Https: boolean;
-    /// either nlTCP for HTTP/HTTPS or nlUnix for Unix socket URI
-    Layer: TNetLayer;
-    /// if the server is accessible via something else than http:// or https://
-    // - e.g. 'ws' or 'wss' for ws:// or wss://
-    Scheme: RawUtf8;
-    /// the server name
-    // - e.g. 'www.somewebsite.com' or 'path/to/socket.sock' Unix socket URI
-    Server: RawUtf8;
-    /// the server port
-    // - e.g. '80'
-    Port: RawUtf8;
-    /// the resource address, including optional parameters
-    // - e.g. '/category/name/10?param=1'
-    Address: RawUtf8;
-    /// fill the members from a supplied URI
-    // - recognize e.g. 'http://Server:Port/Address', 'https://Server/Address',
-    // 'Server/Address' (as http), or 'http://unix:/Server:/Address'
-    // - returns TRUE is at least the Server has been extracted, FALSE on error
-    function From(aUri: RawUtf8; const DefaultPort: RawUtf8 = ''): boolean;
-    /// compute the whole normalized URI
-    // - e.g. 'https://Server:Port/Address' or 'http://unix:/Server:/Address'
-    function URI: RawUtf8;
-    /// the server port, as integer value
-    function PortInt: integer;
-    /// compute the root resource Address, without any URI-encoded parameter
-    // - e.g. '/category/name/10'
-    function Root: RawUtf8;
-    /// reset all stored information
-    procedure Clear;
-  end;
-
-
-const
-  /// the default TCP port used for HTTP = DEFAULT_PORT[false] or
-  // HTTPS = DEFAULT_PORT[true]
-  DEFAULT_PORT: array[boolean] of RawUtf8 = (
-    '80', '443');
 
 
 /// create a TCrtSocket instance, returning nil on error
@@ -1626,10 +1640,7 @@ begin
 end;
 
 
-{ ********* TCrtSocket Buffered Socket Read/Write Class }
-
-const
-  UNIX_LOW = ord('u') + ord('n') shl 8 + ord('i') shl 16 + ord('x') shl 24;
+{ *************************** TUri parsing/generating URL wrapper }
 
 function StartWith(p, up: PUtf8Char): boolean;
 // to avoid linking mormot.core.text for IdemPChar()
@@ -1662,6 +1673,182 @@ begin
   result := true;
 end;
 
+function SockBase64Encode(const s: RawUtf8): RawUtf8;
+// to avoid linking mormot.core.buffers for BinToBase64()
+
+  procedure DoEncode(rp, sp: PAnsiChar; len: integer);
+  const
+    b64: array[0..63] of AnsiChar =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  var
+    i: integer;
+    c: cardinal;
+  begin
+    for i := 1 to len div 3 do
+    begin
+      c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
+      rp[0] := b64[(c shr 18) and $3f];
+      rp[1] := b64[(c shr 12) and $3f];
+      rp[2] := b64[(c shr 6) and $3f];
+      rp[3] := b64[c and $3f];
+      inc(rp, 4);
+      inc(sp, 3);
+    end;
+    case len mod 3 of
+      1:
+        begin
+          c := ord(sp[0]) shl 16;
+          rp[0] := b64[(c shr 18) and $3f];
+          rp[1] := b64[(c shr 12) and $3f];
+          rp[2] := '=';
+          rp[3] := '=';
+        end;
+      2:
+        begin
+          c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8;
+          rp[0] := b64[(c shr 18) and $3f];
+          rp[1] := b64[(c shr 12) and $3f];
+          rp[2] := b64[(c shr 6) and $3f];
+          rp[3] := '=';
+        end;
+    end;
+  end;
+
+var
+  len: integer;
+begin
+  result:='';
+  len := length(s);
+  if len = 0 then
+    exit;
+  SetLength(result, ((len + 2) div 3) * 4);
+  DoEncode(pointer(result), pointer(s), len);
+end;
+
+
+{ TUri }
+
+procedure TUri.Clear;
+begin
+  Https := false;
+  layer := nlTCP;
+  Finalize(self);
+end;
+
+function TUri.From(aUri: RawUtf8; const DefaultPort: RawUtf8): boolean;
+var
+  P, S, P1, P2: PAnsiChar;
+  i: integer;
+begin
+  Clear;
+  result := false;
+  aUri := TrimU(aUri);
+  if aUri = '' then
+    exit;
+  P := pointer(aUri);
+  S := P;
+  while S^ in ['a'..'z', 'A'..'Z', '+', '-', '.', '0'..'9'] do
+    inc(S);
+  if PInteger(S)^ and $ffffff = ord(':') + ord('/') shl 8 + ord('/') shl 16 then
+  begin
+    FastSetString(Scheme, P, S - P);
+    if StartWith(pointer(P), 'HTTPS') then
+      Https := true;
+    P := S + 3;
+  end;
+  if StartWith(pointer(P), 'UNIX:') then
+  begin
+    inc(P, 5); // 'http://unix:/path/to/socket.sock:/url/path'
+    layer := nlUNIX;
+    S := P;
+    while not (S^ in [#0, ':']) do
+      inc(S); // Server='path/to/socket.sock'
+  end
+  else
+  begin
+    P1 := PosChar(P, '@');
+    if P1 <> nil then
+    begin
+      // parse 'https://user:password@server:port/address'
+      P2 := PosChar(P, '/');
+      if (P2 = nil) or
+         (PtrUInt(P2) > PtrUInt(P1)) then
+      begin
+        FastSetString(User, P, P1 - P);
+        i := PosExChar(':', User);
+        if i <> 0 then
+        begin
+          Password := copy(User, i + 1, 1000);
+          SetLength(User, i - 1);
+        end;
+        P := P1 + 1;
+      end;
+    end;
+    S := P;
+    while not (S^ in [#0, ':', '/']) do
+      inc(S); // 'server:port/address' or 'server/address'
+  end;
+  FastSetString(Server, P, S - P);
+  if S^ = ':' then
+  begin
+    inc(S);
+    P := S;
+    while not (S^ in [#0, '/']) do
+      inc(S);
+    FastSetString(Port, P, S - P); // Port='' for nlUNIX
+  end
+  else if DefaultPort <> '' then
+    port := DefaultPort
+  else
+    port := DEFAULT_PORT[Https];
+  if S^ <> #0 then // ':' or '/'
+    inc(S);
+  Address := S;
+  if Server <> '' then
+    result := true;
+end;
+
+function TUri.URI: RawUtf8;
+const
+  Prefix: array[boolean] of RawUtf8 = (
+    'http://', 'https://');
+begin
+  if layer = nlUNIX then
+    result := 'http://unix:' + Server + ':/' + address
+  else if (port = '') or
+          (port = '0') or
+          (port = DEFAULT_PORT[Https]) then
+    result := Prefix[Https] + Server + '/' + address
+  else
+    result := Prefix[Https] + Server + ':' + port + '/' + address;
+end;
+
+function TUri.PortInt: integer;
+begin
+  result := GetCardinal(pointer(port));
+end;
+
+function TUri.Root: RawUtf8;
+var
+  i: PtrInt;
+begin
+  i := PosExChar('?', address);
+  if i = 0 then
+    Root := address
+  else
+    Root := copy(address, 1, i - 1);
+end;
+
+function TUri.UserPasswordBase64: RawUtf8;
+begin
+  if User = '' then
+    result := ''
+  else
+    result := SockBase64Encode(User + ':' + Password);
+end;
+
+
+{ ********* TCrtSocket Buffered Socket Read/Write Class }
 
 { TCrtSocket }
 
@@ -2624,98 +2811,6 @@ begin
 end;
 
 
-{ TUri }
-
-procedure TUri.Clear;
-begin
-  Https := false;
-  layer := nlTCP;
-  Finalize(self);
-end;
-
-function TUri.From(aUri: RawUtf8; const DefaultPort: RawUtf8): boolean;
-var
-  P, S: PAnsiChar;
-begin
-  Clear;
-  result := false;
-  aUri := TrimU(aUri);
-  if aUri = '' then
-    exit;
-  P := pointer(aUri);
-  S := P;
-  while S^ in ['a'..'z', 'A'..'Z', '+', '-', '.', '0'..'9'] do
-    inc(S);
-  if PInteger(S)^ and $ffffff = ord(':') + ord('/') shl 8 + ord('/') shl 16 then
-  begin
-    FastSetString(Scheme, P, S - P);
-    if StartWith(pointer(P), 'HTTPS') then
-      Https := true;
-    P := S + 3;
-  end;
-  S := P;
-  if (PInteger(S)^ = UNIX_LOW) and
-     (S[4] = ':') then
-  begin
-    inc(S, 5); // 'http://unix:/path/to/socket.sock:/url/path'
-    inc(P, 5);
-    layer := nlUNIX;
-    while not (S^ in [#0, ':']) do
-      inc(S); // Server='path/to/socket.sock'
-  end
-  else
-    while not (S^ in [#0, ':', '/']) do
-      inc(S);
-  FastSetString(Server, P, S - P);
-  if S^ = ':' then
-  begin
-    inc(S);
-    P := S;
-    while not (S^ in [#0, '/']) do
-      inc(S);
-    FastSetString(Port, P, S - P); // Port='' for nlUNIX
-  end
-  else if DefaultPort <> '' then
-    port := DefaultPort
-  else
-    port := DEFAULT_PORT[Https];
-  if S^ <> #0 then // ':' or '/'
-    inc(S);
-  Address := S;
-  if Server <> '' then
-    result := true;
-end;
-
-function TUri.Uri: RawUtf8;
-const
-  Prefix: array[boolean] of RawUtf8 = (
-    'http://', 'https://');
-begin
-  if layer = nlUNIX then
-    result := 'http://unix:' + Server + ':/' + address
-  else if (port = '') or
-          (port = '0') or
-          (port = DEFAULT_PORT[Https]) then
-    result := Prefix[Https] + Server + '/' + address
-  else
-    result := Prefix[Https] + Server + ':' + port + '/' + address;
-end;
-
-function TUri.PortInt: integer;
-begin
-  result := GetCardinal(pointer(port));
-end;
-
-function TUri.Root: RawUtf8;
-var
-  i: PtrInt;
-begin
-  i := PosExChar('?', address);
-  if i = 0 then
-    Root := address
-  else
-    Root := copy(address, 1, i - 1);
-end;
 
 function SocketOpen(const aServer, aPort: RawUtf8; aTLS: boolean;
   aTLSContext: PNetTlsContext): TCrtSocket;
