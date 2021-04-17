@@ -4880,7 +4880,7 @@ begin
   W.AddDateTime(d, WithMS);
   if woDateTimeWithZSuffix in Options then
     if frac(d) = 0 then // FireFox can't decode short form "2017-01-01Z"
-      W.AddShorter('T00:00Z')
+      W.AddShorter('T00:00:00Z') // the same pattern for date and dateTime
     else
       W.Add('Z');
   W.Add('"');
