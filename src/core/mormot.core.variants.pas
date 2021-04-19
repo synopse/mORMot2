@@ -791,7 +791,7 @@ type
       aOptions: TDocVariantOptions = [];
       aEndOfObject: PUtf8Char = nil): PUtf8Char;
     /// initialize a variant instance to store some document-based object content
-    // from a supplied JSON array of JSON object content
+    // from a supplied JSON array or JSON object content
     // - a private copy of the incoming JSON buffer will be used, then
     // it will call the other overloaded InitJsonInPlace() method
     // - this method is called e.g. by _Json() and _JsonFast() global functions
