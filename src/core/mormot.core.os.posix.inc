@@ -2343,6 +2343,7 @@ begin
   if CpuInfoText = '' then
     CpuInfoText := CPU_ARCH_TEXT;
   // intialize supported APIs
+  TimeZoneLocalBias := -GetLocalTimeOffset;
   {$ifdef ISFPC27}
   GetACP := GetSystemCodePage;
   {$endif ISFPC27}

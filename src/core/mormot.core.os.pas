@@ -4502,7 +4502,6 @@ initialization
   {$endif ISFPC27}
   InitializeCriticalSection(GlobalCriticalSection);
   InitializeCriticalSection(AutoSlotsLock);
-  TimeZoneLocalBias := -GetLocalTimeOffset;
   InitializeUnit; // in mormot.core.os.posix/windows.inc files
   OSVersionShort := ToTextOS(OSVersionInt32);
   SetExecutableVersion(0,0,0,0);

@@ -2888,6 +2888,22 @@ begin
   s := TrimU(s);
 end;
 
+function GetLocalTimeOffset: Integer; // not defined in oldest Delphi
+var
+  tzi: TTimeZoneInformation;
+begin
+   case GetTimeZoneInformation(tzi) of
+     TIME_ZONE_ID_UNKNOWN:
+       result := tzi.Bias;
+     TIME_ZONE_ID_STANDARD:
+       result := tzi.Bias + tzi.StandardBias;
+     TIME_ZONE_ID_DAYLIGHT:
+       result := tzi.Bias + tzi.DaylightBias;
+   else
+     result := 0;
+   end;
+end;
+
 procedure InitializeUnit;
 var
   h: THandle;
@@ -2936,6 +2952,7 @@ begin
     @GetProcessMemoryInfo := GetProcAddress(h, 'GetProcessMemoryInfo');
   end;
   // retrieve system information
+  TimeZoneLocalBias := -GetLocalTimeOffset;
   FillcharFast(SystemInfo, SizeOf(SystemInfo), 0);
   if Assigned(GetNativeSystemInfo) then
     GetNativeSystemInfo(SystemInfo)
