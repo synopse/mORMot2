@@ -513,6 +513,8 @@ type
     /// the resource address, including optional parameters
     // - e.g. '/category/name/10?param=1'
     Address: RawUtf8;
+    /// reset all stored information
+    procedure Clear;
     /// fill the members from a supplied URI
     // - recognize e.g. 'http://Server:Port/Address', 'https://Server/Address',
     // 'Server/Address' (as http), or 'http://unix:/Server:/Address' (as nlUnix)
@@ -529,8 +531,6 @@ type
     function Root: RawUtf8;
     /// returns BinToBase64(User + ':' + Password) encoded value
     function UserPasswordBase64: RawUtf8;
-    /// reset all stored information
-    procedure Clear;
   end;
   PUri = ^TUri;
 
@@ -1782,7 +1782,9 @@ begin
   begin
     FastSetString(Scheme, P, S - P);
     if StartWith(pointer(P), 'HTTPS') then
-      Https := true;
+      Https := true
+    else if StartWith(pointer(P), 'UDP') then
+      layer := nlUDP; // 'udp://server:port';
     P := S + 3;
   end;
   if StartWith(pointer(P), 'UNIX:') then
