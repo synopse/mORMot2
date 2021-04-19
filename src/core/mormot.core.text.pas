@@ -4747,6 +4747,7 @@ begin
   L := ord(Text[0]);
   if L > 0 then
   begin
+    {$ifdef DEBUG} assert(L <= 8); {$endif}
     if BEnd - B <= L then
       FlushToStream;
     PInt64(B + 1)^ := PInt64(@Text[1])^;
