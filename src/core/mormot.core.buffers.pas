@@ -15,6 +15,7 @@ unit mormot.core.buffers;
    - Basic MIME Content Types Support
    - Text Memory Buffers and Files
    - Markup (e.g. HTML or Emoji) process
+   - TStreamRedirect and other Hash process
 
   *****************************************************************************
 }
@@ -1643,9 +1644,6 @@ function AnyTextFileToSynUnicode(const FileName: TFileName;
 function AnyTextFileToRawUtf8(const FileName: TFileName;
   AssumeUtf8IfNoBom: boolean = false): RawUtf8;
 
-/// compute the 32-bit default hash of a file content
-// - you can specify your own hashing function if DefaultHasher is not what you expect
-function HashFile(const FileName: TFileName; Hasher: THasher = nil): cardinal;
 
 /// generate some pascal source code holding some data binary as constant
 // - can store sensitive information (e.g. certificates) within the executable
@@ -1667,6 +1665,125 @@ procedure BinToSource(Dest: TBaseWriter; const ConstName, Comment: RawUtf8;
 function BinToSource(const ConstName, Comment: RawUtf8; Data: pointer;
   Len: integer; PerLine: integer = 16; const Suffix: RawUtf8 = ''): RawUtf8; overload;
 
+
+{ *************************** TStreamRedirect and other Hash process }
+
+/// compute the 32-bit default hash of a file content
+// - you can specify your own hashing function if DefaultHasher is not what you expect
+function HashFile(const FileName: TFileName; Hasher: THasher = nil): cardinal; overload;
+
+type
+  /// prototype of a file hashing function, returning its hexadecimal hash
+  // - match HashFileCrc32c() below, HashFileCrc32() in mormot.core.zip,
+  // and HashFileMd5/HashFileSha* in mormot.crypt.secure functions signature
+  THashFile = function(const FileName: TFileName): RawUtf8;
+
+  TStreamRedirect = class;
+
+  /// TStreamHasher.Write optional progression callback
+  TOnStreamProgress = procedure(Sender: TStreamRedirect);
+
+  /// an abstract pipeline stream able to hash its written content
+  // - hashing is performed on the fly during the Write() process
+  // - it features also a callback to mark its progress
+  // - can sleep during Write() to reach a LimitPerSecond average bandwidth
+  TStreamRedirect = class(TStreamWithPosition)
+  protected
+    fDestination: TStream;
+    fExpectedSize, fCurrentSize: Int64;
+    fStartTix, fReportTix, fLastTix, fTimeOut: Int64;
+    fPerSecond, fLimitPerSecond: PtrInt;
+    fPercent: integer;
+    fOnProgress: TOnStreamProgress;
+    fOnLog: TSynLogProc;
+    fContext: RawUtf8;
+    function GetSize: Int64; override;
+    procedure DoReport;
+    procedure DoHash(data: pointer; len: integer); virtual; // do nothing
+  public
+    /// initialize the internal structure, and start the timing
+    // - before calling Write(), you should set the Destination property
+    constructor Create(aDestination: TStream); reintroduce; virtual;
+    /// release the associated Destination stream
+    destructor Destroy; override;
+    /// can be used by for TOnStreamProgress callback writing into the console
+    class procedure ProgressToConsole(Sender: TStreamRedirect);
+    /// this method will raise an error: it's a write-only stream
+    function Read(var Buffer; Count: Longint): Longint; override;
+    /// update the hash and redirect the data to the associated TStream
+    // - also trigger OnProgress at least every second
+    function Write(const Buffer; Count: Longint): Longint; override;
+    /// update the hash of the existing Destination stream content
+    // - ready to Write() some new data after the existing
+    procedure Append;
+    /// notify end of process
+    // - should be called explicitly when all Write() has been done
+    procedure Ended;
+    /// return the current state of the hash as lower hexadecimal
+    // - by default, will return '' meaning that no hashing algorithm was set
+    function GetHash: RawUtf8; virtual;
+    /// current algorithm name as file extension, e.g. '.md5' or '.sha256'
+    // - by default, will return '' meaning that no hashing algorithm was set
+    class function GetHashFileExt: RawUtf8; virtual;
+    /// apply the internal hash algorithm to the supplied file content
+    // - could be used ahead of time to validate a cached file
+    class function HashFile(const FileName: TFileName): RawUtf8;
+    /// specify a TStream to which any Write() will be redirected
+    property Destination: TStream
+      read fDestination write fDestination;
+    /// you can specify a number of bytes for the final Destination size
+    // - will be used for the callback progress - could be 0 if size is unknown
+    property ExpectedSize: Int64
+      read fExpectedSize write fExpectedSize;
+    /// percentage of Size versus ExpectedSize
+    // - equals 0 if ExpectedSize is 0
+    property Percent: integer
+      read fPercent;
+    /// number of bytes processed per second, since initialization of this instance
+    property PerSecond: PtrInt
+      read fPerSecond;
+    /// can limit the Write() bandwidth used
+    // - sleep so that PerSecond will keep close to this LimitPerSecond value
+    property LimitPerSecond: PtrInt
+      read fLimitPerSecond write fLimitPerSecond;
+    /// Write() will raise an exception if not finished after TimeOut milliseconds
+    property TimeOut: Int64
+      read fTimeOut write fTimeOut;
+    /// optional process context, e.g. a download URI, used for logging/progress
+    property Context: RawUtf8
+      read fContext write fContext;
+    /// can be assigned from TSynLog.DoLog class method for low-level logging
+    property OnLog: TSynLogProc
+      read fOnLog write fOnLog;
+    /// optional callback triggered during Write()
+    // - at least at process startup and finish, and every second
+    property OnProgress: TOnStreamProgress
+      read fOnProgress write fOnProgress;
+  end;
+
+  /// meta-class of TStreamRedirect hierarchy
+  TStreamRedirectClass = class of TStreamRedirect;
+
+  /// TStreamRedirect with 32-bit THasher checksum
+  TStreamRedirectHasher = class(TStreamRedirect)
+  protected
+    fHash: cardinal;
+  public
+    function GetHash: RawUtf8; override;
+  end;
+
+  /// TStreamRedirect with crc32c 32-bit checksum
+  TStreamRedirectCrc32c = class(TStreamRedirectHasher)
+  protected
+    procedure DoHash(data: pointer; len: integer); override;
+  public
+    class function GetHashFileExt: RawUtf8; override;
+  end;
+
+
+/// compute the crc32c checksum of a given file
+// - this function maps the THashFile signature
+function HashFileCrc32c(const FileName: TFileName): RawUtf8;
 
 
 { ************* Markup (e.g. HTML or Emoji) process }
@@ -2523,7 +2640,6 @@ begin
   result.Len := FromVarUInt32(Data);
   result.Ptr := pointer(Data);
 end;
-
 
 
 { ****************** TFastReader / TBufferWriter Binary Streams }
@@ -7609,27 +7725,6 @@ begin
   end;
 end;
 
-function HashFile(const FileName: TFileName; Hasher: THasher): cardinal;
-var
-  buf: array[word] of cardinal; // 256KB of buffer
-  read: integer;
-  f: THandle;
-begin
-  if not Assigned(Hasher) then
-    Hasher := DefaultHasher;
-  result := 0;
-  f := FileOpenSequentialRead(FileName);
-  if ValidHandle(f) then
-  begin
-    repeat
-      read := FileRead(f, buf, SizeOf(buf));
-      if read<=0 then
-        break;
-      result := Hasher(result, @buf, read);
-    until false;
-    FileClose(f);
-  end;
-end;
 
 function BinToSource(const ConstName, Comment: RawUtf8;
   Data: pointer; Len, PerLine: integer; const Suffix: RawUtf8): RawUtf8;
@@ -7692,6 +7787,240 @@ begin
   until Len = 0;
   Dest.CancelLastComma;
   Dest.Add(');'#13#10'  %_LEN = SizeOf(%);'#13#10, [ConstName, ConstName]);
+end;
+
+
+{ *************************** TStreamRedirect and other Hash process }
+
+{ TStreamRedirect }
+
+constructor TStreamRedirect.Create(aDestination: TStream);
+begin
+  fDestination := aDestination;
+  fStartTix := GetTickCount64;
+end;
+
+destructor TStreamRedirect.Destroy;
+begin
+  fDestination.Free;
+  inherited Destroy;
+end;
+
+function TStreamRedirect.GetSize: Int64;
+begin
+  result := fCurrentSize;
+end;
+
+{$I-}
+class procedure TStreamRedirect.ProgressToConsole(Sender: TStreamRedirect);
+var
+  msg: shortstring;
+begin
+  if Sender.ExpectedSize = 0 then
+    FormatShort('% % %/s'#13,  [Sender.Context,
+      KB(Sender.fCurrentSize), KB(Sender.PerSecond)], msg)
+  else if Sender.Size < Sender.ExpectedSize then
+    FormatShort('% %% %/% %/s'#13, [Sender.Context,
+      UInt2DigitsToShort(Sender.Percent), '%', KBNoSpace(Sender.fCurrentSize),
+      KBNoSpace(Sender.ExpectedSize), KBNoSpace(Sender.PerSecond)], msg)
+  else
+    FormatShort('% % downloaded in %/s' + CRLF, [Sender.Context,
+      KBNoSpace(Sender.ExpectedSize), KBNoSpace(Sender.PerSecond)], msg);
+  system.write(msg);
+end;
+{$I+}
+
+procedure TStreamRedirect.DoReport;
+var
+  elapsed: Int64;
+begin
+  elapsed := GetTickCount64 - fStartTix;
+  if (fCurrentSize <> fExpectedSize) and
+     (elapsed < fReportTix) then
+    exit;
+  fReportTix := elapsed + 1000; // notify once per second
+  if fExpectedSize = 0 then
+    fPercent := 0
+  else if fCurrentSize >= fExpectedSize then
+    fPercent := 100
+  else
+    fPercent := (fCurrentSize * 100) div fExpectedSize;
+  if elapsed = 0 then
+    fPerSecond := 0
+  else
+    fPerSecond := (fCurrentSize * 1000) div elapsed;
+  if Assigned(fOnLog) then
+    if fExpectedSize = 0 then
+      fOnLog(sllTrace, '%: % %/s',
+        [fContext, KB(fCurrentSize), KB(fPerSecond)], self)
+    else
+      fOnLog(sllTrace, '%: %% - % / % - %/s', [fContext, fPercent, '%',
+        KB(fCurrentSize), KB(fExpectedSize), KB(PerSecond)], self);
+  if Assigned(fOnProgress) then
+    fOnProgress(self);
+end;
+
+procedure TStreamRedirect.DoHash(data: pointer; len: integer);
+begin // no associated hasher on this parent class
+end;
+
+function TStreamRedirect.GetHash: RawUtf8;
+begin
+  result := ''; // no associated hasher on this parent class
+end;
+
+class function TStreamRedirect.GetHashFileExt: RawUtf8;
+begin
+  result := ''; // no associated hasher on this parent class
+end;
+
+class function TStreamRedirect.HashFile(const FileName: TFileName): RawUtf8;
+var
+  hasher: TStreamRedirect;
+  f: THandle;
+begin
+  result := '';
+  if GetHashFileExt = '' then
+    exit; // no hash function defined
+  f := FileOpenSequentialRead(FileName);
+  if not ValidHandle(f) then
+    exit;
+  hasher := Create(TFileStreamFromHandle(f));
+  try
+    hasher.Append;
+    result := hasher.GetHash;
+  finally
+    hasher.Free; // includes FileClose(f)
+  end;
+end;
+
+procedure TStreamRedirect.Append;
+var
+  buf: array[word] of cardinal; // 256KB of buffer
+  read: PtrInt;
+begin
+  if fDestination = nil then
+    raise ESynException.CreateUtf8('%.Append: Destination=nil', [self]);
+  if GetHashFileExt = '' then
+  begin
+    fCurrentSize := Seek(0, soEnd); // DoHash() does nothing
+    fPosition := fCurrentSize;
+  end
+  else
+  repeat
+    read := fDestination.Read(buf, SizeOf(buf));
+    if read <= 0 then
+      break;
+    DoHash(@buf, read);
+    inc(fCurrentSize, read);
+    inc(fPosition, read);
+  until false;
+end;
+
+procedure TStreamRedirect.Ended;
+begin
+  fExpectedSize := fCurrentSize; // reached 100%
+  if Assigned(fOnProgress) or
+     Assigned(fOnLog) then
+    DoReport; // notify finished
+end;
+
+function TStreamRedirect.Read(var Buffer; Count: Longint): Longint;
+begin
+  {$ifdef DELPHI20062007}
+  result := 0;
+  {$endif DELPHI20062007}
+  raise ESynException.CreateUtf8('%.Read is not supported', [self]);
+end;
+
+function TStreamRedirect.Write(const Buffer; Count: Longint): Longint;
+var
+  tix, tosleep: Int64;
+begin
+  if fDestination = nil then
+    raise ESynException.CreateUtf8('%.Write: Destination=nil', [self]);
+  DoHash(@Buffer, Count);
+  fDestination.WriteBuffer(Buffer, Count);
+  inc(fCurrentSize, Count);
+  inc(fPosition, Count);
+  if (fLimitPerSecond <> 0) or
+     (fTimeOut <> 0) then
+  begin
+    tix := GetTickCount64;
+    if tix shr 7 <> fLastTix shr 7 then // checking every 128 ms is good enough
+    begin
+      fLastTix := tix;
+      dec(tix, fStartTix);
+      if tix > 0 then
+      begin
+        if (fTimeOut <> 0) and
+           (tix > fTimeOut) then
+          raise ESynException.CreateUtf8('%.Write timeout after %',
+            [self, MicroSecToString(tix * 1000)]);
+        if fLimitPerSecond > 0 then
+        begin
+          // adjust bandwith limit every 128 ms by adding some sleep() steps
+          tosleep := ((fCurrentSize * 1000) div fLimitPerSecond) - tix;
+          if tosleep > 10 then
+            SleepHiRes(tosleep); // on Windows, typical resolution is 16ms
+        end;
+      end;
+    end;
+  end;
+  if Assigned(fOnProgress) or
+     Assigned(fOnLog) then
+    DoReport;
+  result := Count;
+end;
+
+
+{ TStreamRedirectHasher }
+
+function TStreamRedirectHasher.GetHash: RawUtf8;
+begin
+  result := CardinalToHexLower(fHash);
+end;
+
+
+{ TStreamRedirectCrc32c }
+
+procedure TStreamRedirectCrc32c.DoHash(data: pointer; len: integer);
+begin
+  fHash := crc32c(fHash, data, len);
+end;
+
+class function TStreamRedirectCrc32c.GetHashFileExt: RawUtf8;
+begin
+  result := '.crc32c';
+end;
+
+
+
+function HashFile(const FileName: TFileName; Hasher: THasher): cardinal;
+var
+  buf: array[word] of cardinal; // 256KB of buffer
+  read: integer;
+  f: THandle;
+begin
+  if not Assigned(Hasher) then
+    Hasher := DefaultHasher;
+  result := 0;
+  f := FileOpenSequentialRead(FileName);
+  if ValidHandle(f) then
+  begin
+    repeat
+      read := FileRead(f, buf, SizeOf(buf));
+      if read <= 0 then
+        break;
+      result := Hasher(result, @buf, read);
+    until false;
+    FileClose(f);
+  end;
+end;
+
+function HashFileCrc32c(const FileName: TFileName): RawUtf8;
+begin
+  result := CardinalToHexLower(HashFile(FileName, crc32c));
 end;
 
 

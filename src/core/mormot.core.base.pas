@@ -4360,7 +4360,7 @@ end;
 
 function DateTimeToIsoString(dt: TDateTime): string;
 begin
-// avoid to link mormot.core.datetime
+  // avoid to link mormot.core.datetime
   DateTimeToString(result, 'yyyy-mm-dd hh:nn:ss', dt);
 end;
 
@@ -11290,7 +11290,7 @@ begin
       end;
     end;
     rd := s^.Stream.Read(P^, Count);
-    if rd = 0 then
+    if rd <= 0 then
     begin
       // read from next section(s) until we got Count bytes
       inc(s);
