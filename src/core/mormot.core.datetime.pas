@@ -239,6 +239,18 @@ function TimeToIso8601PChar(Time: TDateTime; P: PUtf8Char; Expanded: boolean;
 // ISO-8601 parsing if possible
 function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
 
+/// decode most used TimeZone text values (CEST, GMT, +0200, -0800, etc.)
+// - returns the time zone offset in respect to UTC (when known)
+// - if P is not a time zone, leave Zone to its supplied value
+// - will recognize only the most used text values using a fixed table: consider
+// TSynTimeZone from mormot.core.search if you need a wider support
+function ParseTimeZone(var P: PUtf8Char; var Zone: integer): boolean; overload;
+
+/// decode most used TimeZone text values (CEST, GMT, +0200, -0800, etc.)
+// - just a wrapper around overloaded ParseTimeZone(PUtf8Char)
+function ParseTimeZone(const s: RawUtf8; var Zone: integer): boolean; overload;
+
+
 var
   /// custom TTimeLog date to ready to be displayed text function
   // - you can override this pointer in order to display the text according
@@ -1297,6 +1309,82 @@ begin
       end;
     end;
   end;
+end;
+
+const
+  _TZs: PAnsiChar = // fast brute force search in L1 cache
+    #4'NZDT'#4'IDLE'#4'NZST'#3'NZT'#4'EADT'#3'GST'#3'JST'#3'CCT'#4'WADT' +
+    #4'WAST'#3'ZP6'#3'ZP5'#3'ZP4'#2'BT'#3'EET'#4'MEST'#4'MESZ'#3'SST'  +
+    #3'FST'#4'CEST'#3'CET'#3'FWT'#3'MET'#4'MEWT'#3'SWT'#2'UT'#3'UTC'  +
+    #3'GMT'#3'WET'#3'WAT'#3'BST'#2'AT'#3'ADT'#3'AST'#3'EDT'#3'EST'  +
+    #3'CDT'#3'CST'#3'MDT'#3'MST'#3'PDT'#3'PST'#3'YDT'#3'YST'#3'HDT'  +
+    #4'AHST'#3'CAT'#3'HST'#4'EAST'#2'NT'#4'IDLW';
+  _TZv: array[0..50] of ShortInt = (
+    13, 12, 12, 12, 11, 10, 9, 8, 8,
+    7, 6, 5, 4, 3, 2, 2, 2, 2,
+    2, 2, 1, 1, 1, 1, 1, 0, 0,
+    0, 0, -1, -1, -2, -3, -4, -4, -5,
+    -5, -6, -6, -7, -7, -8, -8, -9, -9,
+    -10, -10, -10, -10, -11, -12);
+
+function ParseTimeZone(var P: PUtf8Char; var Zone: integer): boolean;
+var
+  z: PtrInt;
+  S: PUtf8Char;
+begin
+  result := false;
+  if P = nil then
+    exit;
+  P := GotoNextNotSpace(P);
+  if (P^ = '+') or
+     (P^ = '-') then
+  begin
+    if not (P[1] in ['0'..'9']) or
+       not (P[2] in ['0'..'9']) or
+       not (P[3] in ['0'..'9']) or
+       not (P[4] in ['0'..'9']) then
+      exit;
+    if (P^ = '-') and
+       (PCardinal(P + 1)^ = $30303030) then // '-0000'
+      Zone := TimeZoneLocalBias
+    else
+    begin
+      Zone := (ord(P[1]) * 10 + ord(P[2]) - (48 + 480)) * 60 +
+              (ord(P[3]) * 10 + ord(P[4]) - (48 + 480));
+      if P^ = '-' then
+        Zone := -Zone;
+    end;
+    inc(P, 5);
+    result := true;
+  end
+  else
+  begin
+    // TODO: enhance TSynTimeZone from mormot.core.search to parse timezones?
+    S := P;
+    while (S^ in ['a'..'z', 'A'..'Z']) do
+      inc(S);
+    z := S - P;
+    if (z >= 2) and
+       (z <= 4) then
+    begin
+      z := FindShortStringListExact(@_TZs[0], high(_TZv), P, z);
+      if z >= 0 then
+      begin
+        Zone := integer(_TZv[z]) * 60;
+        P := S;
+        result := true
+      end;
+    end;
+  end;
+end;
+
+function ParseTimeZone(const s: RawUtf8; var Zone: integer): boolean;
+var
+  P: PUtf8Char;
+begin
+  P := pointer(s);
+  result := ParseTimeZone(P, Zone) and
+            (GotoNextNotSpace(P)^ = #0);
 end;
 
 
