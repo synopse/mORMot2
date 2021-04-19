@@ -24,8 +24,9 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
-  mormot.core.buffers, // for TAlgoCompress
   mormot.core.unicode,
+  mormot.core.text,
+  mormot.core.buffers, // for TAlgoCompress
   mormot.lib.z;
 
 
@@ -541,6 +542,25 @@ function CompressDeflate(var Data: RawByteString; Compress: boolean): RawUtf8;
 function CompressZLib(var Data: RawByteString; Compress: boolean): RawUtf8;
 
 
+type
+  /// TStreamRedirect with crc32 32-bit checksum
+  TStreamRedirectCrc32 = class(TStreamRedirectHasher)
+  protected
+    procedure DoHash(data: pointer; len: integer); override;
+  public
+    class function GetHashFileExt: RawUtf8; override;
+  end;
+
+
+/// THasher-compatible wrapper to the mormot.lib.z.crc32() low-level function
+function crc32wrapper(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+
+/// compute the crc32 checksum of a given file
+// - this function maps the THashFile signature as defined in mormot.core.buffers
+function HashFileCrc32(const FileName: TFileName): RawUtf8;
+
+
+
 { ************ TAlgoDeflate and TAlgoDeflate High-Level Compression Algorithms }
 
 var
@@ -564,7 +584,6 @@ const
   GZHEAD_SIZE = 10;
   GZHEAD: array[0..2] of cardinal = (
     $088B1F, 0, 0);
-
 
 { TSynZipCompressor }
 
@@ -2007,6 +2026,29 @@ begin
   result := 'zlib';
 end;
 
+
+{ TStreamRedirectCrc32 }
+
+procedure TStreamRedirectCrc32.DoHash(data: pointer; len: integer);
+begin
+  fHash := mormot.lib.z.crc32(fHash, data, len);
+end;
+
+class function TStreamRedirectCrc32.GetHashFileExt: RawUtf8;
+begin
+  result := '.crc32';
+end;
+
+
+function crc32wrapper(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+begin
+  result := mormot.lib.z.crc32(crc, buf, len);
+end;
+
+function HashFileCrc32(const FileName: TFileName): RawUtf8;
+begin
+  result := CardinalToHexLower(HashFile(FileName, crc32wrapper));
+end;
 
 
 { ************ TAlgoDeflate and TAlgoDeflate High-Level Compression Algorithms }
