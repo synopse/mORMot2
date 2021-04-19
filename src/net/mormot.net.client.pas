@@ -172,7 +172,7 @@ type
     function Request(const url, method: RawUtf8; KeepAlive: cardinal;
       const header: RawUtf8; const Data: RawByteString = '';
       const DataType: RawUtf8 = ''; retry: boolean = false;
-      DataStream: TStream = nil): integer; virtual;
+      InStream: TStream = nil; OutStream: TStream = nil): integer; virtual;
     /// after an Open(server,port), return 200 if OK, http status error otherwise
     // - get the page data in Content
     function Get(const url: RawUtf8; KeepAlive: cardinal = 0;
@@ -1136,7 +1136,7 @@ end;
 
 function THttpClientSocket.Request(const url, method: RawUtf8;
   KeepAlive: cardinal; const header: RawUtf8; const Data: RawByteString;
-  const DataType: RawUtf8; retry: boolean; DataStream: TStream): integer;
+  const DataType: RawUtf8; retry: boolean; InStream, OutStream: TStream): integer;
 
   procedure DoRetry(Error: integer; const msg: RawUtf8);
   begin
@@ -1153,8 +1153,8 @@ function THttpClientSocket.Request(const url, method: RawUtf8;
         // retry with a new socket
         OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
         HttpStateReset;
-        result := Request(
-          url, method, KeepAlive, header, Data, DataType, true, DataStream);
+        result := Request(url, method, KeepAlive, header,
+          Data, DataType, true, InStream, OutStream);
       except
         on Exception do
           result := Error;
@@ -1164,7 +1164,7 @@ function THttpClientSocket.Request(const url, method: RawUtf8;
 
 var
   P: PUtf8Char;
-  aData: RawByteString;
+  dat: RawByteString;
 begin
   if SockIn = nil then // done once
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
@@ -1183,17 +1183,17 @@ begin
               #13#10'Connection: Keep-Alive'])
         else
           SockSend('Connection: Close');
-        aData := Data; // local var copy for Data to be compressed in-place
-        CompressDataAndWriteHeaders(DataType, aData);
+        dat := Data; // local var copy for Data to be compressed in-place
+        CompressDataAndWriteHeaders(DataType, dat, InStream);
         if header <> '' then
           SockSend(header);
         if fCompressAcceptEncoding <> '' then
           SockSend(fCompressAcceptEncoding);
         SockSendCRLF;
         // flush headers and Data/DataStream body
-        SockSendFlush(aData);
-        if DataStream <> nil then
-          SockSendStream(DataStream); // may be a THttpMultiPartStream
+        SockSendFlush(dat);
+        if InStream <> nil then
+          SockSendStream(InStream); // may be a THttpMultiPartStream
         // retrieve HTTP command line response
         if SockReceivePending(1000) = cspSocketError then
         begin
@@ -1239,8 +1239,14 @@ begin
            (result <> HTTP_NOCONTENT) and
            (result <> HTTP_NOTMODIFIED) and
            (IdemPCharArray(pointer(method), ['HEAD', 'OPTIONS']) < 0) then
-          // HEAD or status 100..109,204,304 -> no body (RFC 2616 section 4.3)
-          GetBody;
+           // HEAD or status 100..109,204,304 -> no body (RFC 2616 section 4.3)
+        begin
+          if (ContentLength > 0) and
+             (OutStream <> nil) and
+             OutStream.InheritsFrom(TStreamRedirect) then
+            TStreamRedirect(OutStream).ExpectedSize := ContentLength; // WGet()
+          GetBody(OutStream);
+        end;
         // successfully sent -> reset some fields for the next request
         RequestClear;
       except
@@ -1468,7 +1474,8 @@ begin
               else
                 break; // successfully uncompressed content
       if aAcceptEncoding <> '' then
-        fCompressAcceptHeader := ComputeContentEncoding(fCompress, pointer(aAcceptEncoding));
+        fCompressAcceptHeader := ComputeContentEncoding(
+          fCompress, pointer(aAcceptEncoding));
     end;
   finally
     InternalCloseRequest;

@@ -113,7 +113,7 @@ type
     // - after WebSocketsUpgrade() call, will use WebSockets for the communication
     function Request(const url, method: RawUtf8; KeepAlive: cardinal;
       const header: RawUtf8; const Data: RawByteString; const DataType: RawUtf8;
-      retry: boolean; DataStream: TStream = nil): integer; override;
+      retry: boolean; InStream: TStream = nil; OutStream: TStream = nil): integer; override;
     /// upgrade the HTTP client connection to a specified WebSockets protocol
     // - i.e. 'synopsebin' and optionally 'synopsejson' modes
     // - you may specify an URI to as expected by the server for upgrade
@@ -319,7 +319,7 @@ end;
 
 function THttpClientWebSockets.Request(const url, method: RawUtf8;
   KeepAlive: cardinal; const header: RawUtf8; const Data: RawByteString;
-  const DataType: RawUtf8; retry: boolean; DataStream: TStream): integer;
+  const DataType: RawUtf8; retry: boolean; InStream, OutStream: TStream): integer;
 var
   Ctxt: THttpServerRequest;
   block: TWebSocketProcessNotifyCallback;
@@ -339,8 +339,8 @@ begin
         fProcess.fOwnerThread, fProcess.Protocol.ConnectionFlags);
       try
         body := Data;
-        if DataStream <> nil then
-          body := body + StreamToRawByteString(DataStream);
+        if InStream <> nil then
+          body := body + StreamToRawByteString(InStream);
         Ctxt.Prepare(url, method, header, body, DataType, '');
         FindNameValue(header, 'SEC-WEBSOCKET-REST:', resthead);
         if resthead = 'NonBlocking' then
@@ -352,9 +352,12 @@ begin
           HeaderSetText(Ctxt.OutCustomHeaders)
         else
           HeaderSetText(Ctxt.OutCustomHeaders, Ctxt.OutContentType);
-        Content := Ctxt.OutContent;
-        ContentType := Ctxt.OutContentType;
         ContentLength := length(Ctxt.OutContent);
+        if OutStream <> nil then
+          OutStream.WriteBuffer(pointer(Ctxt.OutContent)^, ContentLength)
+        else
+          Content := Ctxt.OutContent;
+        ContentType := Ctxt.OutContentType;
       finally
         Ctxt.Free;
       end;
@@ -362,7 +365,8 @@ begin
   end
   else
     // standard HTTP/1.1 REST request (before WebSocketsUpgrade call)
-    result := inherited request(url, method, KeepAlive, header, Data, DataType, retry);
+    result := inherited Request(url, method, KeepAlive, header, Data, DataType,
+      retry, InStream, OutStream);
 end;
 
 procedure THttpClientWebSockets.SetReceiveTimeout(aReceiveTimeout: integer);

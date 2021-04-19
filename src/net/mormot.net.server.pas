@@ -1857,7 +1857,8 @@ var
       XPOWEREDNAME + ': ' + XPOWEREDVALUE + #13#10 +
       {$endif NOXPOWEREDNAME}
       'Server: ', fServerName]);
-    ClientSock.CompressDataAndWriteHeaders(ctxt.OutContentType, ctxt.fOutContent);
+    ClientSock.CompressDataAndWriteHeaders(
+      ctxt.OutContentType, ctxt.fOutContent, nil);
     if ClientSock.KeepAliveClient then
     begin
       if ClientSock.fCompressAcceptEncoding <> '' then

@@ -139,7 +139,7 @@ type
     // - e.g. 'Content-Encoding: synlz' header if compressed using synlz
     // - and if Data is not '', will add 'Content-Type: ' header
     procedure CompressDataAndWriteHeaders(const OutContentType: RawUtf8;
-      var OutContent: RawByteString);
+      var OutContent: RawByteString; OutStream: TStream);
   public
     /// will contain the first header line:
     // - 'GET /path HTTP/1.1' for a GET request with THttpServer, e.g.
@@ -152,7 +152,7 @@ type
     Content: RawByteString;
     /// same as HeaderGetValue('CONTENT-LENGTH'), but retrieved during Request
     // - is overridden with real Content length during HTTP body retrieval
-    ContentLength: integer;
+    ContentLength: Int64;
     /// same as HeaderGetValue('SERVER-INTERNALSTATE'), but retrieved during Request
     // - proprietary header, used with our RESTful ORM access
     ServerInternalState: integer;
@@ -175,8 +175,9 @@ type
     // - force HeadersUnFiltered=true to store all headers including the
     // connection-related fields, but increase memory and reduce performance
     procedure GetHeader(HeadersUnFiltered: boolean = false);
-    /// retrieve the HTTP body (after uncompression if necessary) into Content
-    procedure GetBody;
+    /// retrieve the HTTP body (after uncompression if necessary)
+    // - into Content or DestStream
+    procedure GetBody(DestStream: TStream = nil);
     /// add an header 'name: value' entry
     procedure HeaderAdd(const aValue: RawUtf8);
     /// set all Header values at once, from CRLF delimited text
@@ -272,7 +273,7 @@ type
   // error code (e.g. HTTP_FORBIDDEN or HTTP_PAYLOADTOOLARGE) to reject
   // the request
   TOnHttpServerBeforeBody = function(var aURL, aMethod, aInHeaders,
-    aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: integer;
+    aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
     aFlags: THttpServerRequestFlags): cardinal of object;
 
   /// abstract generic input/output structure used for HTTP server requests
@@ -577,18 +578,24 @@ end;
 { THttpSocket }
 
 procedure THttpSocket.CompressDataAndWriteHeaders(const OutContentType: RawUtf8;
-  var OutContent: RawByteString);
+  var OutContent: RawByteString; OutStream: TStream);
 var
   OutContentEncoding: RawUtf8;
+  len: Int64;
 begin
-  if integer(fCompressAcceptHeader) <> 0 then
+  if (integer(fCompressAcceptHeader) <> 0) and
+     (OutStream <> nil) then // no stream compression (yet)
   begin
     OutContentEncoding := CompressDataAndGetHeaders(
       fCompressAcceptHeader, fCompress, OutContentType, OutContent);
     if OutContentEncoding <> '' then
       SockSend(['Content-Encoding: ', OutContentEncoding]);
   end;
-  SockSend(['Content-Length: ', length(OutContent)]); // needed even 0
+  if OutStream = nil then
+    len := length(OutContent)
+  else
+    len := OutStream.Size;
+  SockSend(['Content-Length: ', len]); // needed even 0
   if (OutContentType <> '') and
      (OutContentType <> STATICFILE_CONTENT_TYPE) then
     SockSend(['Content-Type: ', OutContentType]);
@@ -655,7 +662,7 @@ begin
         case IdemPCharArray(P + 8, ['LENGTH:', 'TYPE:', 'ENCODING:']) of
           0:
             // 'CONTENT-LENGTH:'
-            ContentLength := GetCardinal(P + 16);
+            ContentLength := GetInt64(P + 16);
           1:
             begin
               // 'CONTENT-TYPE:'
@@ -758,20 +765,25 @@ begin
   fSndBufLen := 0;
 end;
 
-procedure THttpSocket.GetBody;
+procedure THttpSocket.GetBody(DestStream: TStream);
 var
   Line: RawUtf8;
   LinePChar: array[0..31] of AnsiChar; // 32 bits chunk length in hexa
-  Len, LContent, Error: integer;
+  chunk: RawByteString;
+  Len, LChunk, Error: integer;
 begin
   fBodyRetrieved := true;
   Content := '';
+  if (DestStream <> nil) and
+     (cardinal(fContentCompress) < cardinal(length(fCompress))) then
+    raise EHttpSocket.Create('%s.GetBody(%s) with compression',
+      [ClassNameShort(self)^, ClassNameShort(DestStream)^]);
   {$I-}
   // direct read bytes, as indicated by Content-Length or Chunked
   if hfTransferChuked in HeaderFlags then
   begin
-    // we ignore the Length
-    LContent := 0; // current read position in Content
+    // supplied Content-Length header should not be ignored when chunked
+    ContentLength := 0;
     repeat
       if SockIn <> nil then
       begin
@@ -788,21 +800,46 @@ begin
       end;
       if Len = 0 then
       begin
-        // ignore next line (normally void)
-        SockRecvLn;
+        SockRecvLn; // ignore next line (normally void)
         break;
       end;
-      SetLength(Content, LContent + Len); // reserve memory space for this chunk
-      SockInRead(@PByteArray(Content)[LContent], Len); // append chunk data
-      inc(LContent, Len);
+      if DestStream <> nil then
+      begin
+        if length({%H-}chunk) < Len then
+          SetString(chunk, nil, Len); // usually the chunks are same or smaller
+        SockInRead(pointer(chunk), Len);
+        DestStream.WriteBuffer(pointer(chunk)^, Len);
+      end
+      else begin
+        SetLength(Content, ContentLength + Len); // reserve space for this chunk
+        SockInRead(@PByteArray(Content)[ContentLength], Len); // append data
+      end;
+      inc(ContentLength, Len);
       SockRecvLn; // ignore next #13#10
     until false;
   end
   else if ContentLength > 0 then
-  begin
-    SetLength(Content, ContentLength); // not chuncked: direct read
-    SockInRead(pointer(Content), ContentLength); // works with SockIn=nil or not
-  end
+    // read Content-Length header bytes
+    if DestStream <> nil then
+    begin
+      LChunk := 128 shl 10;
+      if ContentLength < LChunk then
+        LChunk := ContentLength;
+      SetLength(chunk, LChunk);
+      Len := ContentLength;
+      repeat
+        if LChunk > Len then
+          LChunk := Len;
+        SockInRead(pointer(chunk), LChunk);
+        DestStream.WriteBuffer(pointer(chunk)^, LChunk);
+        dec(Len, LChunk);
+      until Len = 0;
+    end
+    else
+    begin
+      SetLength(Content, ContentLength); // not chuncked: direct read
+      SockInRead(pointer(Content), ContentLength);
+    end
   else if (ContentLength < 0) and // -1 means no Content-Length header
           IdemPChar(pointer(Command), 'HTTP/1.0 200') then
   begin
@@ -817,6 +854,11 @@ begin
           Content := Content + #13#10 + Line;
       end;
     ContentLength := length(Content); // update Content-Length
+    if DestStream <> nil then
+    begin
+      DestStream.WriteBuffer(pointer(Content)^, ContentLength);
+      Content := '';
+    end;
     exit;
   end;
   // optionaly uncompress content
@@ -825,7 +867,7 @@ begin
       // invalid content
       raise EHttpSocket.CreateFmt(
         '%s uncompress', [fCompress[fContentCompress].Name]);
-  ContentLength := length(Content); // update Content-Length
+  ContentLength := length(Content); // uncompressed Content-Length
   {$ifdef SYNCRTDEBUGLOW}
   TSynLog.Add.Log(sllCustom2, 'GetBody sock=% pending=% sockin=% len=% %',
     [fSock, SockInPending(0), PTextRec(SockIn)^.BufEnd - PTextRec(SockIn)^.bufpos,
