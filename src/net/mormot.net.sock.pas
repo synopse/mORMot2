@@ -619,6 +619,10 @@ type
     constructor Open(const aServer, aPort: RawUtf8; aLayer: TNetLayer = nlTCP;
       aTimeOut: cardinal = 10000; aTLS: boolean = false;
       aTLSContext: PNetTlsContext = nil; aTunnel: PUri = nil);
+    /// high-level constructor to connect to a given URI
+    constructor OpenUri(const aURI: RawUtf8; out aAddress: RawUtf8;
+      const aTunnel: RawUtf8 = ''; aTimeOut: cardinal = 10000;
+      aTLSContext: PNetTlsContext = nil); overload;
     /// constructor to bind to an address
     // - aAddr='1234' - bind to a port on all interfaces, the same as '0.0.0.0:1234'
     // - aAddr='IP:port' - bind to specified interface only, e.g.
@@ -1928,7 +1932,8 @@ begin
   // copy the input parameters before OpenBind()
   if aTLSContext <> nil then
     TLS := aTLSContext^;
-  if aTunnel <> nil then
+  if (aTunnel <> nil) and
+     (aTunnel^.Server <> '') then
     Tunnel := aTunnel^;
   // OpenBind() raise an exception on error
   {$ifdef OSPOSIX}
@@ -1941,6 +1946,18 @@ begin
   else
   {$endif OSPOSIX}
     OpenBind(aServer, aPort, {dobind=}false, aTLS, aLayer);
+end;
+
+constructor TCrtSocket.OpenUri(const aURI: RawUtf8; out aAddress: RawUtf8;
+  const aTunnel: RawUtf8; aTimeOut: cardinal; aTLSContext: PNetTlsContext);
+var
+  u, t: TUri;
+begin
+  if not u.From(aURI) then
+    raise ENetSock.Create('%s.Open: invalid %s', [ClassNameShort(self)^, aURI]);
+  aAddress := u.Address;
+  t.From(aTunnel);
+  Open(u.Server, u.Port, nlTCP, aTimeOut, u.Https, aTLSContext, @t);
 end;
 
 const
@@ -2012,7 +2029,7 @@ begin
     else if (Tunnel.Server <> '') and
             (aLayer = nlTCP) then
     begin
-      // handle client tunnelling via an HTTP proxy
+      // handle client tunnelling via an HTTP(s) proxy
       res := nrRefused;
       fProxyUrl := Tunnel.URI;
       try

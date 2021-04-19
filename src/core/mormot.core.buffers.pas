@@ -1683,7 +1683,7 @@ type
   /// TStreamHasher.Write optional progression callback
   // - see Sender properties like Context/Size/PerSecond and ExpectedSize
   // (which may be 0 if the download size is unknown)
-  TOnStreamProgress = procedure(Sender: TStreamRedirect);
+  TOnStreamProgress = procedure(Sender: TStreamRedirect) of object;
 
   /// an abstract pipeline stream able to hash its written content
   // - hashing is performed on the fly during the Write() process

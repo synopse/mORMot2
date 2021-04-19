@@ -3224,7 +3224,7 @@ begin
   repeat
     if UpperNameSeparator <> #0 then
       if P^ = UpperNameSeparator then
-        inc(P)
+        inc(P) // e.g. THttpSocket.HeaderGetValue uses UpperNameSeparator=':'
       else
         break;
     while P^ in [#9, ' '] do // trim left

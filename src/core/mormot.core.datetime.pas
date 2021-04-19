@@ -2152,7 +2152,8 @@ function HttpDateToDateTime(const httpdate: RawUtf8; var datetime: TDateTime;
 var
   T: TSynSystemTime;
 begin
-  if T.FromHttpDate(httpdate, tolocaltime) then
+  if (httpdate <> '') and
+     T.FromHttpDate(httpdate, tolocaltime) then
   begin
     datetime := T.ToDateTime;
     result := true;

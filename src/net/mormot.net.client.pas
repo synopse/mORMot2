@@ -42,6 +42,7 @@ uses
   mormot.core.buffers,
   mormot.core.text,
   mormot.core.data,
+  mormot.core.datetime,
   mormot.core.json; // TSynDictionary for THttpRequestCached
 
 
@@ -137,6 +138,53 @@ const
 
 
 type
+  /// parameters set for THttpClientSocket.WGet() process
+  // - some parameters are optional, and you should call Clear by default
+  // - you could call redirectly the WGet method after having called Clear
+  // and set the appropriated variables
+  {$ifdef USERECORDWITHMETHODS}
+  THttpClientSocketWGet = record
+  {$else}
+  THttpClientSocketWGet = object
+  {$endif USERECORDWITHMETHODS}
+    /// how much time this connection should be kept alive
+    // - as redirected to the internal Request() parameter
+    KeepAlive: cardinal;
+    /// callback event called during download process
+    // - typical usage is to assign e.g. TStreamRedirect.ProgressToConsole
+    // - note that by default, THttpClientSocket.OnLoog will always be called
+    OnProgress: TOnStreamProgress;
+    /// allow to continue an existing .part file download
+    // - during the download phase, url + '.part' is used locally to avoid
+    // confusion in case of process shutdown - you can use this parameter to
+    // continue the download from the existing content (useful for huge files)
+    Resume: boolean;
+    /// allow custom hashing of the content
+    // - if not set, a plain TStreamRedirect with no hashing instance will be
+    // used for correct streaming to the destination file
+    Hasher: TStreamRedirectClass;
+    /// the expected hash value, to be compared with Hasher.GetHash return
+    // - if supplied, the downloaded content will be checked against this value
+    // - see also HashFromServer and HashCacheDir parameters
+    Hash: RawUtf8;
+    /// try to download the Hash value from the server, e.g. from url + '.md5'
+    // - the hash URI extension is retrieved from TStreamRedirect.GetHashFileExt
+    HashFromServer: boolean;
+    /// an optional folder to lookup for existing content
+    // - the Hash parameter will be used to validate the content
+    HashCacheDir: TFileName;
+    /// can be used to reduce the download speed into supplied bytes per second
+    LimitBandwith: integer;
+    /// will raise ESynException after TimeOutSec seconds are elapsed
+    TimeOutSec: integer;
+    /// initialize the default parameters
+    procedure Clear;
+    /// after Clear, instantiate and wrap THttpClientSocket.WGet
+    function WGet(const url: RawUtf8; const destfile: TFileName;
+      const tunnel: RawUtf8 = ''; tls: PNetTlsContext = nil;
+      timeout: cardinal = 10000): TFileName;
+  end;
+
   /// Socket API based REST and HTTP/1.1 compatible client class
   // - this component is HTTP/1.1 compatible, according to RFC 2068 document
   // - the REST commands (GET/POST/PUT/DELETE) are directly available
@@ -181,6 +229,12 @@ type
     // - get the page data in Content
     // - if AuthToken<>'', will add an header with 'Authorization: Bearer '+AuthToken
     function GetAuth(const url, AuthToken: RawUtf8; KeepAlive: cardinal = 0): integer;
+    /// download a (huge) file with proper resume and optional caching
+    // - DestFile is the file name to use to put the downloaded content - if
+    // leftf void, will compute and return a file name from the url value
+    // - fine tuning of the process could be done using params
+    function WGet(const url: RawUtf8; const destfile: TFileName;
+      var params: THttpClientSocketWGet): TFileName;
     /// after an Open(server,port), return 200 if OK, http status error otherwise - only
     // header is read from server: Content is always '', but Headers are set
     function Head(const url: RawUtf8; KeepAlive: cardinal = 0;
@@ -257,6 +311,12 @@ function OpenHttpGet(const server, port, url, inHeaders: RawUtf8;
   outHeaders: PRawUtf8 = nil; aLayer: TNetLayer = nlTCP;
   aTLS: boolean = false; outStatus: PInteger = nil): RawByteString; overload;
 
+/// download some potentially huge file, with proper resume
+// - is a wrapper around THttpClientSocket.WGet() method
+procedure WGet(const url: RawUtf8; const destfile: TFileName;
+  const tunnel: RawUtf8 = ''; hasher: TStreamRedirectClass = nil;
+  const hash: RawUtf8 = ''; tls: PNetTlsContext = nil;
+  timeout: cardinal = 10000; consoledisplay: boolean = false);
 
 
 { ******************** THttpRequest Abstract HTTP client class }
@@ -1088,6 +1148,47 @@ begin
 end;
 
 
+{ THttpClientSocketWGet }
+
+procedure THttpClientSocketWGet.Clear;
+begin
+  Finalize(self);
+  FillCharFast(self, SizeOf(self), 0);
+end;
+
+function THttpClientSocketWGet.WGet(const url: RawUtf8;
+  const destfile: TFileName; const tunnel: RawUtf8; tls: PNetTlsContext;
+  timeout: cardinal): TFileName;
+var
+  s: THttpClientSocket;
+  u: RawUtf8;
+begin
+  s := THttpClientSocket.OpenUri(url, u, tunnel, timeout, tls);
+  try
+    result := s.WGet(u, destfile, self);
+  finally
+    s.Free;
+  end;
+end;
+
+procedure WGet(const url: RawUtf8; const destfile: TFileName;
+  const tunnel: RawUtf8; hasher: TStreamRedirectClass; const hash: RawUtf8;
+  tls: PNetTlsContext; timeout: cardinal; consoledisplay: boolean);
+var
+  params: THttpClientSocketWGet;
+begin
+  if destfile <> '' then
+    raise EHttpSocket.Create('WGet(destfile='''') for %s', [url]);
+  params.Clear;
+  params.Resume := true;
+  params.Hasher := hasher;
+  params.Hash := hash;
+  if consoledisplay then
+    params.OnProgress := TStreamRedirect.ProgressToConsole;
+  params.WGet(url, destfile, tunnel, tls, timeout);
+end;
+
+
 { THttpClientSocket }
 
 procedure THttpClientSocket.RequestSendHeader(const url, method: RawUtf8);
@@ -1270,6 +1371,144 @@ function THttpClientSocket.GetAuth(const url, AuthToken: RawUtf8;
 begin
   result := Get(url, KeepAlive, AuthorizationBearer(AuthToken));
 end;
+
+{$ifdef ISDELPHI20062007}
+  {$warnings off} // avoid paranoid Delphi 2007 warning
+{$endif ISDELPHI20062007}
+
+function THttpClientSocket.WGet(const url: RawUtf8; const destfile: TFileName;
+  var params: THttpClientSocketWGet): TFileName;
+var
+  size: Int64;
+  cached, temp: TFileName;
+  temphash: RawUtf8;
+  res: integer;
+  tempdest: TStreamRedirect;
+
+  procedure DoRequestAndFreeTempDest;
+  var
+    modif: TDateTime;
+  begin
+    tempdest.Context := url;
+    tempdest.OnLog := OnLog;
+    tempdest.TimeOut := params.TimeOutSec * 1000;
+    tempdest.LimitPerSecond := params.LimitBandwith;
+    res := Request(url, 'GET', params.KeepAlive, '', '', '', false, nil, tempdest);
+    if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
+      raise EHttpSocket.Create('WGet: %s failed as %d', [url, res]);
+    tempdest.Ended; // notify finished
+    temphash := tempdest.GetHash; // hash updated during each tempdest.Write()
+    FreeAndNil(tempdest);
+    if HttpDateToDateTime(HeaderGetValue('LAST-MODIFIED'), modif, {local=}true) then
+      FileSetDate(temp, DateTimeToFileDate(modif));
+  end;
+
+begin
+  result := destfile;
+  if result = '' then
+    result := GetSystemPath(spTempFolder) + ExtractFileName(TFileName(url));
+  params.Hash := TrimU(params.Hash);
+  if params.HashFromServer and
+     Assigned(params.Hasher) and
+     (params.Hash = '') then
+    begin
+      // try to retrieve the hash from the HTTP server
+      temphash := params.Hasher.GetHashFileExt;
+      if temphash <> '' then
+      begin
+        temphash := url + temphash; // e.g. 'files/somefile.zip.md5'
+        if Get(temphash, 1000) = 200 then
+          // handle 'c7d8e61e82a14404169af3fa5a72be85 *file.name' format
+          params.Hash := Split(TrimU(Content), ' ');
+        if Assigned(OnLog) then
+          OnLog(sllTrace, 'WGet: hash from % = %', [temphash, params.Hash], self);
+      end;
+    end;
+  if (params.HashCacheDir <> '') and
+     DirectoryExists(params.HashCacheDir) then
+    cached := IncludeTrailingPathDelimiter(params.HashCacheDir) +
+              ExtractFileName(result);
+  if (destfile <> '') and
+     Assigned(params.Hasher) and
+     (params.Hash <> '') then
+    // check if we already got the file from its md5/sha* hash
+    if FileExists(destfile) and
+       IdemPropNameU(params.Hasher.HashFile(result), params.Hash) then
+    begin
+      if Assigned(OnLog) then
+        OnLog(sllTrace, 'WGet %: % already available', [url, result], self);
+      exit;
+    end
+    else if cached <> '' then
+    begin
+      // check from local cache folder
+      if IdemPropNameU(params.Hasher.HashFile(cached), params.Hash) then
+      begin
+        if Assigned(OnLog) then
+          OnLog(sllTrace, 'WGet %: copy from cached %', [url, cached], self);
+        if not CopyFile(cached, result, {failexists=}false) then
+          raise EHttpSocket.Create('WGet: copy from %s failed', [cached]);
+        exit;
+      end;
+    end;
+  // we need to download the file
+  if not Assigned(params.Hasher) then
+    params.Hasher := TStreamRedirect; // no hash by default
+  if FileExists(result) then
+    if not DeleteFile(result) or
+       FileExists(result) then
+      raise EHttpSocket.Create('WGet: impossible to delete old %s', [result]);
+  temp := result + '.part';
+  size := FileSize(temp);
+  if (size > 0) and
+     params.Resume then
+  begin
+    if Assigned(OnLog) then
+      OnLog(sllTrace, 'WGet %: resume % (%)', [url, temp, KB(size)], self);
+    tempdest := params.Hasher.Create(TFileStream.Create(temp, fmOpenReadWrite));
+    tempdest.Append; // hash partial content
+    fRangeStart := size;
+  end
+  else
+  begin
+    if Assigned(OnLog) then
+      OnLog(sllTrace, 'WGet %: start downloading %', [url, temp], self);
+    tempdest := params.Hasher.Create(TFileStream.Create(temp, fmCreate));
+    params.Resume := false;
+  end;
+  try
+    DoRequestAndFreeTempDest;
+    if (params.Hash <> '') and
+       (temphash <> '') then
+    begin
+      // check the hash
+      if params.Resume and
+         not IdemPropNameU(temphash, params.Hash) then
+      begin
+        if Assigned(OnLog) then
+          OnLog(sllDebug, 'WGet %: wrong hash after resume -> reset and retry', [url]);
+        tempdest := params.Hasher.Create(TFileStream.Create(temp, fmCreate));
+        DoRequestAndFreeTempDest;
+      end;
+      if not IdemPropNameU(temphash, params.Hash) then
+        raise EHttpSocket.Create('WGet: %s hash failure', [url]);
+    end;
+    if cached <> '' then
+    begin
+      if Assigned(OnLog) then
+        OnLog(sllTrace, 'WGet %: copy into cached %', [url, cached]);
+      CopyFile(temp, cached, {failsexist=}false);
+    end;
+    if not RenameFile(temp, result) then
+      raise EHttpSocket.Create('WGet: impossible to rename %s', [result]);
+  finally
+    tempdest.Free; // close file on unexpected error
+  end;
+end;
+
+{$ifdef ISDELPHI20062007}
+  {$warnings on} // avoid paranoid Delphi 2007 warning
+{$endif ISDELPHI20062007}
 
 function THttpClientSocket.Head(const url: RawUtf8; KeepAlive: cardinal;
   const header: RawUtf8): integer;
@@ -2437,13 +2676,13 @@ end;
 { THttpRequestCached }
 
 constructor THttpRequestCached.Create(const aUri: RawUtf8; aKeepAliveSeconds,
-  aTimeoutSeconds: integer; const aToken: RawUtf8; aOnlyUseClientSocket: boolean);
+  aTimeOutSeconds: integer; const aToken: RawUtf8; aOnlyUseClientSocket: boolean);
 begin
   inherited Create;
   fKeepAlive := aKeepAliveSeconds * 1000;
-  if aTimeoutSeconds > 0 then // 0 means no cache
+  if aTimeOutSeconds > 0 then // 0 means no cache
     fCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
-      TypeInfo(THttpRequestCacheDynArray), true, aTimeoutSeconds);
+      TypeInfo(THttpRequestCacheDynArray), true, aTimeOutSeconds);
   fClient := fClient.Create(aOnlyUseClientSocket);
   if aUri <> '' then
     if not LoadFromUri(aUri, aToken) then
