@@ -1311,6 +1311,11 @@ function UnixMSTimeUtc: Int64;
 function UnixMSTimeUtcFast: Int64;
   {$ifdef OSPOSIX} inline; {$endif}
 
+/// the number of minutes in respect to UTC/GMT date/time
+// - as retrieved by - sysutils.GetLocalTimeOffset() at startup
+var
+  TimeZoneLocalBias: integer;
+
 {$ifndef NOEXCEPTIONINTERCEPT}
 
 type
@@ -4497,6 +4502,7 @@ initialization
   {$endif ISFPC27}
   InitializeCriticalSection(GlobalCriticalSection);
   InitializeCriticalSection(AutoSlotsLock);
+  TimeZoneLocalBias := -GetLocalTimeOffset;
   InitializeUnit; // in mormot.core.os.posix/windows.inc files
   OSVersionShort := ToTextOS(OSVersionInt32);
   SetExecutableVersion(0,0,0,0);

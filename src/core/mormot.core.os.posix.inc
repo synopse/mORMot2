@@ -538,10 +538,10 @@ const
   CLOCK_REALTIME_COARSE = 10; // named CLOCK_REALTIME_FAST in FreeBSD 8.1+
   CLOCK_MONOTONIC_COARSE = 12;
 
-function clock_gettime(ID: cardinal; r: ptimespec): integer;
+function clock_gettime(clk_id: cardinal; tp: ptimespec): integer;
   cdecl external clib name 'clock_gettime';
 
-function clock_getres(ID: cardinal; r: ptimespec): integer;
+function clock_getres(clk_id: cardinal; tp: ptimespec): integer;
   cdecl external clib name 'clock_getres';
 
 {$else}
@@ -556,7 +556,7 @@ const
 // is compiled without FPC_USE_LIBC defined and do a syscall each time
 //   GetTickCount64 fpc    2 494 563 op/sec
 //   GetTickCount64 libc 119 919 893 op/sec
-function clock_gettime(clk_id : clockid_t; tp: ptimespec): cint;
+function clock_gettime(clk_id: clockid_t; tp: ptimespec): cint;
   cdecl; external clib name 'clock_gettime';
 
 function gettimeofday(tp: ptimeval; tzp: ptimezone): cint;

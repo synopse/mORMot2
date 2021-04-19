@@ -1322,8 +1322,8 @@ type
     // - under Linux, the file should be located with the executable, renamed
     // with a .tz extension - may have been created via SaveToFile(''), or
     // from a 'TSynTimeZone' bound resource
-    // "dummy" parameter exists only to disambiguate constructors for C++
-    constructor CreateDefault(dummy: integer = 0);
+    // - "dummycpp" parameter exists only to disambiguate constructors for C++
+    constructor CreateDefault(dummycpp: integer = 0);
     /// finalize the instance
     destructor Destroy; override;
     {$ifdef OSWINDOWS}
