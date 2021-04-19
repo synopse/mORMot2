@@ -1681,6 +1681,8 @@ type
   TStreamRedirect = class;
 
   /// TStreamHasher.Write optional progression callback
+  // - see Sender properties like Context/Size/PerSecond and ExpectedSize
+  // (which may be 0 if the download size is unknown)
   TOnStreamProgress = procedure(Sender: TStreamRedirect);
 
   /// an abstract pipeline stream able to hash its written content
@@ -1722,7 +1724,7 @@ type
     /// return the current state of the hash as lower hexadecimal
     // - by default, will return '' meaning that no hashing algorithm was set
     function GetHash: RawUtf8; virtual;
-    /// current algorithm name as file extension, e.g. '.md5' or '.sha256'
+    /// current algorithm name as file/url extension, e.g. '.md5' or '.sha256'
     // - by default, will return '' meaning that no hashing algorithm was set
     class function GetHashFileExt: RawUtf8; virtual;
     /// apply the internal hash algorithm to the supplied file content

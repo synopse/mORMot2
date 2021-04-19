@@ -198,7 +198,7 @@ function GotoNextNotSpace(P: PUtf8Char): PUtf8Char;
 function GotoNextNotSpaceSameLine(P: PUtf8Char): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// get the next character in [#1..' ']
+/// get the next character in [#0..' ']
 function GotoNextSpace(P: PUtf8Char): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 

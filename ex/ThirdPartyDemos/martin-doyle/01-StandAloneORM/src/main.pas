@@ -48,8 +48,10 @@ begin
   try
     Rec.Name := StringToUTF8(NameEdit.Text);
     Rec.Question := StringToUTF8(QuestionMemo.Text);
-    if Client.Orm.Add(Rec,true)=0 then
-      ShowMessage('Error adding the data') else begin
+    if Client.Orm.Add(Rec,true) = 0 then
+      ShowMessage('Error adding the data')
+    else
+    begin
       NameEdit.Text := '';
       QuestionMemo.Text := '';
       NameEdit.SetFocus;

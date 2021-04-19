@@ -4157,7 +4157,8 @@ begin
     if RaiseESynCryptoOnError then
       raise ESynCrypto.CreateUtf8('%.DecryptPkcs7: Invalid InputLen=%',
         [self, InputLen])
-    else begin
+    else
+    begin
       result := false;
       exit;
     end;

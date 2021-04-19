@@ -1429,17 +1429,19 @@ function UpperCaseReference(const S: RawUtf8): RawUtf8;
 
 /// UTF-8 comparison using our Unicode 10.0 tables
 // - this version expects u1 and u2 to be zero-terminated
-// - Utf8IComp() only handle WinAnsi CP-1252 latin accents
+// - Utf8IComp() handles WinAnsi CP-1252 latin accents - this one is Unicode
 // - won't call the Operating System, so is consistent on all platforms, and
 // don't require any temporary UTF-16 decoding
+// - has a branchless optimized process of 7-bit ASCII charset [a..z] -> [A..Z]
 function Utf8ICompReference(u1, u2: PUtf8Char): PtrInt;
 
 /// UTF-8 comparison using our Unicode 10.0 tables
 // - this version expects u1 and u2 not to be necessary zero-terminated, but
 // uses L1 and L2 as length for u1 and u2 respectively
-// - Utf8ILComp() only handle WinAnsi CP-1252 latin accents
+// - Utf8ILComp() handles WinAnsi CP-1252 latin accents - this one is Unicode
 // - won't call the Operating System, so is consistent on all platforms, and
 // don't require any temporary UTF-16 decoding
+// - has a branchless optimized process of 7-bit ASCII charset [a..z] -> [A..Z]
 function Utf8ILCompReference(u1, u2: PUtf8Char; L1, L2: integer): PtrInt;
 
 /// UpperCase conversion of UTF-8 into UCS4 using our Unicode 10.0 tables

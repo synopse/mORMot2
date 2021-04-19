@@ -810,7 +810,8 @@ begin
         SockInRead(pointer(chunk), Len);
         DestStream.WriteBuffer(pointer(chunk)^, Len);
       end
-      else begin
+      else
+      begin
         SetLength(Content, ContentLength + Len); // reserve space for this chunk
         SockInRead(@PByteArray(Content)[ContentLength], Len); // append data
       end;

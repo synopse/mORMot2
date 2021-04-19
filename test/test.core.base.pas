@@ -4913,6 +4913,7 @@ var
   tz: TSynTimeZone;
   d: TTimeZoneData;
   i, bias: integer;
+  m: word;
   hdl, reload: boolean;
   buf: RawByteString;
   dt: TDateTime;
@@ -4947,6 +4948,10 @@ begin
   bias := -10;
   Check(not ParseTimeZone('toto', bias));
   CheckEqual(bias, -10);
+  Check(ParseTimeZone('z', bias));
+  CheckEqual(bias, 0);
+  Check(ParseTimeZone('M', bias));
+  CheckEqual(bias, 12 * 60);
   Check(ParseTimeZone('NZDT', bias));
   CheckEqual(bias, 13 * 60);
   Check(ParseTimeZone(' NZT ', bias));
@@ -4955,12 +4960,33 @@ begin
   CheckEqual(bias, 0);
   Check(not ParseTimeZone('uta', bias));
   CheckEqual(bias, 0);
-  Check(ParseTimeZone('gmT ', bias));
-  CheckEqual(bias, 0);
   Check(ParseTimeZone(' east', bias));
   CheckEqual(bias, -10 * 60);
+  Check(ParseTimeZone('gmT ', bias));
+  CheckEqual(bias, 0);
   Check(ParseTimeZone('    IDLW    ', bias));
   CheckEqual(bias, -12 * 60);
+  m := 0;
+  Check(ParseMonth('Jan', m));
+  CheckEqual(m, 1);
+  Check(not ParseMonth('Jab', m));
+  CheckEqual(m, 1);
+  Check(ParseMonth(' DEC ', m));
+  CheckEqual(m, 12);
+  CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
+    'Sun, 06 Nov 1994 08:49:37 GMT')), '1994-11-06T08:49:37');
+  CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
+    'Sunday, 06-DEC-94 08:49:37 UTC')), '1994-12-06T08:49:37');
+  CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
+    'Sun Feb  6 08:49:37 1994')), '1994-02-06T08:49:37');
+  CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
+    'Sun, 06 Nov 2021 08:49:37 east')), '2021-11-06T18:49:37');
+  CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
+    'Sun, 06 Nov 08:49:37 east')), '');
+  CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
+    'Sun, 06 Nov 2021 084937 east')), '');
+  CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
+    'Tue, 15 Nov 1994 12:45:26 Z')), '1994-11-15T12:45:26');
   tz := TSynTimeZone.Create;
   try
     check(tz.Zone = nil);
