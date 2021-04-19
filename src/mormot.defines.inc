@@ -487,6 +487,10 @@
   {$Z1} // enumerators stored as byte by default
   {$P+} // Open string params
 
+  {$ifdef DEBUG}
+    {$assertions on} // assert() may be disabled, e.g. on FPC
+  {$endif DEBUG}
+
 
 // -----------
 // -- CPU specific conditionals
