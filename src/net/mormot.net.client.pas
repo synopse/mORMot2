@@ -151,6 +151,7 @@ type
   THttpClientSocket = class(THttpSocket)
   protected
     fUserAgent: RawUtf8;
+    fReferer: RawUtf8;
     fProcessName: RawUtf8;
     fRangeStart, fRangeEnd: Int64;
     fBasicAuthUserPassword, fAuthBearer: RawUtf8;
@@ -207,6 +208,9 @@ type
     // - you can specify a custom value here
     property UserAgent: RawUtf8
       read fUserAgent write fUserAgent;
+    /// the optional 'Referer: ' header value
+    property Referer: RawUtf8
+      read fReferer write fReferer;
     /// the associated process name
     property ProcessName: RawUtf8
       read fProcessName write fProcessName;
@@ -1111,6 +1115,8 @@ begin
     SockSend(['Authorization: Bearer ', fAuthBearer]);
   if fBasicAuthUserPassword <> '' then
     SockSend(['Authorization: Basic ', BinToBase64Short(fBasicAuthUserPassword)]);
+  if fReferer <> '' then
+    SockSend(['Referer: ', fReferer]);
   SockSend(['Accept: */*'#13#10'User-Agent: ', UserAgent]);
 end;
 
