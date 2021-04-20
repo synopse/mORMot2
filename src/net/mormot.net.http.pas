@@ -807,7 +807,7 @@ begin
       if DestStream <> nil then
       begin
         if length({%H-}chunk) < Len then
-          SetString(chunk, nil, Len); // usually the chunks are same or smaller
+          SetString(chunk, nil, Len + Len shr 3); // + shr 3 to avoid realloc
         SockInRead(pointer(chunk), Len);
         DestStream.WriteBuffer(pointer(chunk)^, Len);
       end

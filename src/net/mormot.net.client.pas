@@ -34,6 +34,9 @@ uses
   {$ifdef USEWININET}  // as set in mormot.defines.inc
   WinINet,
   mormot.lib.winhttp,
+  {$ifdef FORCE_OPENSSL}
+  mormot.lib.openssl11, // bypass SChannel for a given project
+  {$endif FORCE_OPENSSL}
   {$endif USEWININET}
   {$ifdef USELIBCURL}  // as set in mormot.defines.inc
   mormot.lib.curl,
@@ -1417,7 +1420,7 @@ begin
   result := destfile;
   urlfile := SplitRight(url, '/');
   if urlfile = '' then
-    raise EHttpSocket.Create('WGet: %s is not a valid URL', [url]);
+    urlfile := 'index';
   if result = '' then
     result := GetSystemPath(spTempFolder) + Utf8ToString(urlfile);
   params.Hash := TrimU(params.Hash);
