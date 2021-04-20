@@ -875,7 +875,6 @@ function SSL_CTX_ctrl(ctx: PSSL_CTX; cmd: integer; larg: clong; parg: pointer): 
 function SSL_new(ctx: PSSL_CTX): PSSL; cdecl;
 function SSL_shutdown(s: PSSL): integer; cdecl;
 function SSL_get_error(s: PSSL; ret_code: integer): integer; cdecl;
-function OpenSSL_version_num(): cardinal; cdecl;
 function SSL_ctrl(ssl: PSSL; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
 procedure SSL_set_bio(s: PSSL; rbio: PBIO; wbio: PBIO); cdecl;
 function SSL_get_peer_certificate(s: PSSL): PX509; cdecl;
@@ -901,7 +900,6 @@ function SSL_get_current_cipher(s: PSSL): PSSL_CIPHER; cdecl;
 function SSL_CIPHER_description(p1: PSSL_CIPHER;
    buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
 function SSL_get_verify_result(ssl: PSSL): integer; cdecl;
-function X509_print(bp: PBIO; x: PX509): integer; cdecl;
 
 
 
@@ -1032,6 +1030,8 @@ procedure EVP_PKEY_CTX_free(ctx: PEVP_PKEY_CTX); cdecl;
 function PEM_write_bio_PrivateKey(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER;
   kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
 function PEM_write_bio_PUBKEY(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
+function OpenSSL_version_num(): cardinal; cdecl;
+function X509_print(bp: PBIO; x: PX509): integer; cdecl;
 
 
 { ******************** OpenSSL Full API Declaration }
@@ -1104,9 +1104,8 @@ type
 
 /// OpenSSL TLS layer communication factory - as expected by mormot.net.sock.pas
 // - on non-Windows systems, this unit initialization will register OpenSSL for TLS
-// - on Windows systems, SChannel will be kept as default so you would need
-// to explicitely register OpenSSL for TLS if needed (for better cipher coverage,
-// enhanced performance and full TNetTlsContext options support):
+// - on Windows systems, SChannel will be kept as default so you would need to
+// set the FORCE_OPENSSL conditional, or register OpenSSL for TLS mannually:
 // ! @NewNetTls := @OpenSslNewNetTls;
 function OpenSslNewNetTls: INetTls;
 
@@ -1142,7 +1141,6 @@ type
     SSL_new: function(ctx: PSSL_CTX): PSSL; cdecl;
     SSL_shutdown: function(s: PSSL): integer; cdecl;
     SSL_get_error: function(s: PSSL; ret_code: integer): integer; cdecl;
-    OpenSSL_version_num: function(): cardinal; cdecl;
     SSL_ctrl: function(ssl: PSSL; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
     SSL_set_bio: procedure(s: PSSL; rbio: PBIO; wbio: PBIO); cdecl;
     SSL_get_peer_certificate: function(s: PSSL): PX509; cdecl;
@@ -1166,26 +1164,24 @@ type
     SSL_get_current_cipher: function(s: PSSL): PSSL_CIPHER; cdecl;
     SSL_CIPHER_description: function(p1: PSSL_CIPHER; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
     SSL_get_verify_result: function(ssl: PSSL): integer; cdecl;
-    X509_print: function(bp: PBIO; x: PX509): integer; cdecl;
   end;
 
 const
-  LIBSSL_ENTRIES: array[0..43] of RawUtf8 = (
+  LIBSSL_ENTRIES: array[0..41] of RawUtf8 = (
     'SSL_CTX_new', 'SSL_CTX_free', 'SSL_CTX_set_timeout', 'SSL_CTX_get_timeout',
     'SSL_CTX_set_verify', 'SSL_CTX_use_PrivateKey', 'SSL_CTX_use_RSAPrivateKey',
     'SSL_CTX_use_RSAPrivateKey_file', 'SSL_CTX_use_certificate',
     'SSL_CTX_check_private_key', 'SSL_CTX_use_certificate_file',
     'SSL_CTX_get_cert_store', 'SSL_CTX_load_verify_locations',
     'SSL_CTX_use_certificate_chain_file', 'SSL_CTX_set_alpn_protos',
-    'SSL_CTX_ctrl', 'SSL_new', 'SSL_shutdown', 'SSL_get_error', 'OpenSSL_version_num',
+    'SSL_CTX_ctrl', 'SSL_new', 'SSL_shutdown', 'SSL_get_error',
     'SSL_ctrl', 'SSL_set_bio', 'SSL_get_peer_certificate', 'SSL_free',
     'SSL_connect', 'SSL_set_connect_state', 'SSL_set_accept_state',
     'SSL_read', 'SSL_write', 'SSL_get_state', 'SSL_pending', 'SSL_set_cipher_list',
     'SSL_get0_alpn_selected', 'SSL_clear', 'TLS_client_method',
     'SSL_CTX_set_default_verify_paths', 'SSL_CTX_set_default_passwd_cb_userdata',
     'SSL_CTX_use_PrivateKey_file', 'SSL_CTX_set_cipher_list', 'SSL_set_fd',
-    'SSL_get_current_cipher', 'SSL_CIPHER_description', 'SSL_get_verify_result',
-    'X509_print');
+    'SSL_get_current_cipher', 'SSL_CIPHER_description', 'SSL_get_verify_result');
 
 var
   libssl: TLibSsl;
@@ -1283,11 +1279,6 @@ end;
 function SSL_get_error(s: PSSL; ret_code: integer): integer;
 begin
   result := libssl.SSL_get_error(s, ret_code);
-end;
-
-function OpenSSL_version_num(): cardinal;
-begin
-  result := libssl.OpenSSL_version_num();
 end;
 
 function SSL_ctrl(ssl: PSSL; cmd: integer; larg: clong; parg: pointer): clong;
@@ -1405,11 +1396,6 @@ begin
   result := libssl.SSL_get_verify_result(ssl);
 end;
 
-function X509_print(bp: PBIO; x: PX509): integer;
-begin
-  result := libssl.X509_print(bp, x);
-end;
-
 
 { --------- libcrypto entries }
 
@@ -1519,10 +1505,12 @@ type
     EVP_PKEY_CTX_free: procedure(ctx: PEVP_PKEY_CTX); cdecl;
     PEM_write_bio_PrivateKey: function(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr: PByte; klen: integer; cb: Ppem_password_cb; u: pointer): integer; cdecl;
     PEM_write_bio_PUBKEY: function(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
+    OpenSSL_version_num: function(): cardinal; cdecl;
+    X509_print: function(bp: PBIO; x: PX509): integer; cdecl;
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..102] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..104] of RawUtf8 = (
     'CRYPTO_malloc', 'CRYPTO_set_mem_functions', 'CRYPTO_free',
     'ERR_remove_state', 'ERR_error_string_n',
     'ERR_get_error', 'ERR_remove_thread_state', 'ERR_load_BIO_strings',
@@ -1553,7 +1541,7 @@ const
     'EVP_PKEY_CTX_new_id', 'EVP_PKEY_paramgen_init', 'EVP_PKEY_paramgen',
     'EVP_PKEY_keygen_init', 'EVP_PKEY_keygen', 'EVP_PKEY_CTX_ctrl',
     'EVP_PKEY_CTX_new', 'EVP_PKEY_CTX_free', 'PEM_write_bio_PrivateKey',
-    'PEM_write_bio_PUBKEY');
+    'PEM_write_bio_PUBKEY', 'OpenSSL_version_num', 'X509_print');
 
 var
   libcrypto: TLibCrypto;
@@ -2095,6 +2083,17 @@ begin
   result := libcrypto.PEM_write_bio_PUBKEY(bp, x);
 end;
 
+function OpenSSL_version_num(): cardinal;
+begin
+  result := libcrypto.OpenSSL_version_num();
+end;
+
+function X509_print(bp: PBIO; x: PX509): integer;
+begin
+  result := libcrypto.X509_print(bp, x);
+end;
+
+
 {$ifdef OPENSSLUSERTLMM}
 
 // redirect OpenSSL to use our current pascal heap :)
@@ -2143,6 +2142,7 @@ var
   P: PPointerArray;
   api: PtrInt;
 begin
+  result := true;
   GlobalLock;
   try
     if openssl_initialized = osslAvailable then
@@ -2188,7 +2188,7 @@ begin
       if libcrypto.CRYPTO_set_mem_functions(@rtl_malloc, @rtl_realloc, @rtl_free) = 0 then
         raise EOpenSsl.Create('CRYPTO_set_mem_functions() failure');
       {$endif OPENSSLUSERTLMM}
-      OpenSslVersion := libssl.OpenSSL_version_num;
+      OpenSslVersion := libcrypto.OpenSSL_version_num;
       if OpenSslVersion and $ffffff00 < $10101000 then // paranoid check 1.1.1
         raise EOpenSsl.CreateFmt(
           'Incorrect OpenSSL version %x - expected at least 101010xx',
@@ -2284,9 +2284,6 @@ function SSL_shutdown(s: PSSL): integer; cdecl;
 function SSL_get_error(s: PSSL; ret_code: integer): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_get_error';
 
-function OpenSSL_version_num(): cardinal; cdecl;
-  external LIB_CRYPTO name _PU + 'OpenSSL_version_num';
-
 function SSL_ctrl(ssl: PSSL; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
   external LIB_SSL name _PU + 'SSL_ctrl';
 
@@ -2355,9 +2352,6 @@ function SSL_CIPHER_description(p1: PSSL_CIPHER; buf: PUtf8Char; size: integer):
 
 function SSL_get_verify_result(ssl: PSSL): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_get_verify_result';
-
-function X509_print(bp: PBIO; x: PX509): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_print';
 
 
 { --------- libcrypto entries }
@@ -2680,6 +2674,13 @@ function PEM_write_bio_PrivateKey(bp: PBIO; x: PEVP_PKEY; enc: PEVP_CIPHER; kstr
 function PEM_write_bio_PUBKEY(bp: PBIO; x: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'PEM_write_bio_PUBKEY';
 
+function OpenSSL_version_num(): cardinal; cdecl;
+  external LIB_CRYPTO name _PU + 'OpenSSL_version_num';
+
+function X509_print(bp: PBIO; x: PX509): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_print';
+
+
 function OpenSslInitialize(const libcryptoname, libsslname: TFileName): boolean;
 begin
   OpenSslVersion := OpenSSL_version_num;
@@ -2744,7 +2745,7 @@ begin
      (BIO_ctrl(b, BIO_C_GET_BUF_MEM_PTR, 0, @mem) <> OPENSSLSUCCESS) then
     data := ''
   else
-    SetString(data, pointer(mem.data), mem.length);
+    SetString(data, PAnsiChar(pointer(mem.data)), mem.length);
 end;
 
 function BIO_ToString(b: PBIO; andfree: boolean): RawUtf8;
@@ -2802,7 +2803,7 @@ begin
   if err = 0 then
     exit;
   ERR_error_string_n(err, @tmp, SizeOf(tmp));
-  writeln(stderr, tmp);
+  writeln({$ifdef FPC}stderr,{$endif} tmp);
   ioresult;
 end;
 {$I+}
@@ -3126,7 +3127,9 @@ end;
 
 initialization
   // register the OpenSSL TLS layer factory for TCrtSocket (if no SChannel set)
+  {$ifndef FORCE_OPENSSL}
   if not Assigned(NewNetTls) then
+  {$endif FORCE_OPENSSL}
     @NewNetTls := @OpenSslNewNetTls;
 
 finalization

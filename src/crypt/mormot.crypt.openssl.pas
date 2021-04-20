@@ -1113,6 +1113,8 @@ begin
               ctrl := EVP_PKEY_CTRL_EC_PARAMGEN_CURVE_NID;
             EVP_PKEY_DSA, EVP_PKEY_DH:
               ctrl := EVP_PKEY_CTRL_DSA_PARAMGEN_BITS;
+          else
+            exit; // paranoid
           end;
           EOpenSsl.Check(EVP_PKEY_CTX_ctrl(
             ctx, EvpType, EVP_PKEY_OP_PARAMGEN, ctrl, BitsOrCurve, nil));
