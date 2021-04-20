@@ -289,13 +289,15 @@ begin
 end;
 
 function AnsiToWideRTL(CodePage: cardinal; A: PAnsiChar; W: PWideChar;
-  AL: PtrInt): PtrInt;
+  AL, WL: PtrInt): PtrInt;
 var
   tmp: UnicodeString;
 begin
   // cwstring as fallback, using iconv on systems where ICU is not available
   widestringmanager.Ansi2UnicodeMoveProc(A, CodePage, tmp, AL);
   result := length(tmp);
+  if result > WL then
+    result := WL;
   MoveFast(pointer(tmp)^, W^, result * 2);
 end;
 
@@ -309,7 +311,7 @@ begin
     exit(Utf8ToUnicode(W, A, LA));
   cnv := icu.ucnv(CodePage);
   if cnv = nil then
-    exit(AnsiToWideRTL(CodePage, A, W, LA));
+    exit(AnsiToWideRTL(CodePage, A, W, LA, LW)); // fallback to cwstring/iconv
   err := 0;
   result := icu.ucnv_toUChars(cnv, W, LW, A, LA, err);
   if result < 0 then
@@ -318,13 +320,15 @@ begin
 end;
 
 function WideToAnsiRTL(CodePage: cardinal; W: PWideChar; A: PAnsiChar;
-  WL: PtrInt): PtrInt;
+  WL, AL: PtrInt): PtrInt;
 var
   tmp: RawByteString;
 begin
   // cwstring as fallback, using iconv on systems where ICU is not available
   widestringmanager.Unicode2AnsiMoveProc(W, tmp, CodePage, WL);
   result := length(tmp);
+  if result > AL then
+    result := AL;
   MoveFast(pointer(tmp)^, A^, result);
 end;
 
@@ -338,7 +342,7 @@ begin
     exit(UnicodeToUtf8(A, W, LW));
   cnv := icu.ucnv(CodePage);
   if cnv = nil then
-    exit(WideToAnsiRTL(CodePage, W, A, LW));
+    exit(WideToAnsiRTL(CodePage, W, A, LW, LA)); // fallback to cwstring/iconv
   err := 0;
   result := icu.ucnv_fromUChars(cnv, A, LA, W, LW, err);
   if result < 0 then
