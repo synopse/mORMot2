@@ -1692,17 +1692,19 @@ type
   TStreamRedirect = class(TStreamWithPosition)
   protected
     fDestination: TStream;
-    fExpectedSize, fCurrentSize, fWrittenSize: Int64;
-    fStartTix, fReportTix, fLastTix, fTimeOut: Int64;
+    fExpectedSize, fCurrentSize, fExpectedWrittenSize, fWrittenSize: Int64;
+    fStartTix, fReportTix, fLastTix, fTimeOut, fElapsed, fRemaining: Int64;
     fPerSecond, fLimitPerSecond: PtrInt;
     fPercent: integer;
     fOnProgress: TOnStreamProgress;
     fOnLog: TSynLogProc;
     fContext: RawUtf8;
     fTerminated: boolean;
+    fConsoleLen: byte;
     function GetSize: Int64; override;
     procedure DoReport;
     procedure DoHash(data: pointer; len: integer); virtual; // do nothing
+    procedure SetExpectedSize(Value: Int64);
   public
     /// initialize the internal structure, and start the timing
     // - before calling Write(), you should set the Destination property
@@ -1740,7 +1742,7 @@ type
     /// you can specify a number of bytes for the final Destination size
     // - will be used for the callback progress - could be 0 if size is unknown
     property ExpectedSize: Int64
-      read fExpectedSize write fExpectedSize;
+      read fExpectedSize write SetExpectedSize;
     /// how many bytes have passed through Write()
     // - may not equal Size e.g. on resumed download from partial file
     property WrittenSize: Int64
@@ -1749,6 +1751,14 @@ type
     // - equals 0 if ExpectedSize is 0
     property Percent: integer
       read fPercent;
+    /// number of milliseconds elasped since beginning, as set by Write()
+    property Elapsed: Int64
+      read fElapsed;
+    /// number of milliseconds remaining for full process, as set by Write()
+    // - equals 0 if ExpectedSize is 0
+    // - is just an estimation based on the average PerSecond speed
+    property Remaining: Int64
+      read fRemaining;
     /// number of bytes processed per second, since initialization of this instance
     property PerSecond: PtrInt
       read fPerSecond;
@@ -7826,55 +7836,74 @@ class procedure TStreamRedirect.ProgressToConsole(Sender: TStreamRedirect);
 var
   msg: shortstring;
 begin
+  msg[0] := AnsiChar(Sender.fConsoleLen + 2);
+  msg[1] := #13;
+  FillCharFast(msg[2], ord(msg[0]) - 2, 32);
+  msg[ord(msg[0])] := #13;
+  system.write(msg);
   if Sender.ExpectedSize = 0 then
     // size may not be known (e.g. server-side chunking)
-    FormatShort(#13'% % %/s ..',  [Sender.Context,
+    FormatShort('% % %/s ...',  [Sender.Context,
       KB(Sender.Size), KB(Sender.PerSecond)], msg)
   else if Sender.Size < Sender.ExpectedSize then
-    // partial download
-    FormatShort(#13'% %% %/% %/s ..', [Sender.Context,
+    // we can state the current progression ratio
+    FormatShort('% %% %/% %/s remaining:%', [Sender.Context,
       Sender.Percent, '%', KBNoSpace(Sender.Size),
-      KBNoSpace(Sender.ExpectedSize), KBNoSpace(Sender.PerSecond)], msg)
+      KBNoSpace(Sender.ExpectedSize), KBNoSpace(Sender.PerSecond),
+      MicroSecToString(Sender.Remaining * 1000)], msg)
   else
     // process is finished
-    FormatShort(#13'% % downloaded in %/s' + CRLF, [Sender.Context,
-      KBNoSpace(Sender.ExpectedSize), KBNoSpace(Sender.PerSecond)], msg);
+    FormatShort('% % downloaded in % (%/s)' + CRLF, [Sender.Context,
+      KBNoSpace(Sender.ExpectedSize), MicroSecToString(Sender.Elapsed * 1000),
+      KBNoSpace(Sender.PerSecond)], msg);
+  Sender.fConsoleLen := ord(msg[0]);
   system.write(msg);
 end;
 {$I+}
 
 procedure TStreamRedirect.DoReport;
-var
-  elapsed: Int64;
 begin
-  elapsed := GetTickCount64 - fStartTix;
   if (fCurrentSize <> fExpectedSize) and
-     (elapsed < fReportTix) then
+     (fElapsed < fReportTix) then
     exit;
-  fReportTix := elapsed + 1000; // notify once per second or when finished
+  fReportTix := fElapsed + 1000; // notify once per second or when finished
   if fExpectedSize = 0 then
     fPercent := 0
   else if fCurrentSize >= fExpectedSize then
-    fPercent := 100
+  begin
+    fPercent := 100;
+    fRemaining := 0;
+  end
   else
+  begin
+    if (fElapsed <> 0) and
+       (fElapsed <> 0) then
+      fRemaining := (fElapsed * (fExpectedWrittenSize - fWrittenSize)) div fWrittenSize;
     fPercent := (fCurrentSize * 100) div fExpectedSize;
-  if elapsed = 0 then
+  end;
+  if fElapsed = 0 then
     fPerSecond := 0
   else
-    fPerSecond := (fWrittenSize * 1000) div elapsed;
+    fPerSecond := (fWrittenSize * 1000) div fElapsed;
   if Assigned(fOnLog) then
     if fExpectedSize = 0 then
-      fOnLog(sllTrace, '%: % %/s',
-        [fContext, KB(fCurrentSize), KB(fPerSecond)], self)
+      fOnLog(sllTrace, '%: % - % %/s',
+        [fContext, KB(fCurrentSize), KB(fWrittenSize), KB(fPerSecond)], self)
     else
-      fOnLog(sllTrace, '%: %% - % / % - %/s', [fContext, fPercent, '%',
-        KB(fCurrentSize), KB(fExpectedSize), KB(PerSecond)], self);
+      fOnLog(sllTrace, '%: %% - % / % - % %/s', [fContext, fPercent, '%',
+        KB(fCurrentSize), KB(fExpectedSize), KB(fWrittenSize), KB(PerSecond)], self);
   if Assigned(fOnProgress) then
     fOnProgress(self);
 end;
 
 procedure TStreamRedirect.DoHash(data: pointer; len: integer);
 begin // no associated hasher on this parent class
+end;
+
+procedure TStreamRedirect.SetExpectedSize(Value: Int64);
+begin
+  fExpectedSize := Value;
+  fExpectedWrittenSize := Value - fPosition;
 end;
 
 function TStreamRedirect.GetHash: RawUtf8;
@@ -7968,24 +7997,24 @@ begin
   inc(fCurrentSize, Count);
   inc(fWrittenSize, Count);
   inc(fPosition, Count);
+  tix := GetTickCount64;
+  fElapsed := tix - fStartTix;
   if (fLimitPerSecond <> 0) or
      (fTimeOut <> 0) then
   begin
-    tix := GetTickCount64;
     if tix shr 7 <> fLastTix shr 7 then // checking every 128 ms is good enough
     begin
       fLastTix := tix;
-      dec(tix, fStartTix);
-      if tix > 0 then
+      if fElapsed > 0 then
       begin
         if (fTimeOut <> 0) and
-           (tix > fTimeOut) then
+           (fElapsed > fTimeOut) then
           raise ESynException.CreateUtf8('%.Write(%) timeout after %',
-            [self, fContext, MicroSecToString(tix * 1000)]);
+            [self, fContext, MicroSecToString(fElapsed * 1000)]);
         if fLimitPerSecond > 0 then
         begin
           // adjust bandwith limit every 128 ms by adding some sleep() steps
-          tosleep := ((fWrittenSize * 1000) div fLimitPerSecond) - tix;
+          tosleep := ((fWrittenSize * 1000) div fLimitPerSecond) - fElapsed;
           if tosleep > 10 then
           begin
             while tosleep > 300 do
