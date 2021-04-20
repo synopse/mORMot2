@@ -313,10 +313,11 @@ function OpenHttpGet(const server, port, url, inHeaders: RawUtf8;
 
 /// download some potentially huge file, with proper resume
 // - is a wrapper around THttpClientSocket.WGet() method
-procedure WGet(const url: RawUtf8; const destfile: TFileName;
+// - returns '' on success, or an error message otherwise
+function WGet(const url: RawUtf8; const destfile: TFileName;
   const tunnel: RawUtf8 = ''; hasher: TStreamRedirectClass = nil;
   const hash: RawUtf8 = ''; tls: PNetTlsContext = nil;
-  timeout: cardinal = 10000; consoledisplay: boolean = false);
+  timeout: cardinal = 10000; consoledisplay: boolean = false): string;
 
 
 { ******************** THttpRequest Abstract HTTP client class }
@@ -1171,21 +1172,27 @@ begin
   end;
 end;
 
-procedure WGet(const url: RawUtf8; const destfile: TFileName;
+function WGet(const url: RawUtf8; const destfile: TFileName;
   const tunnel: RawUtf8; hasher: TStreamRedirectClass; const hash: RawUtf8;
-  tls: PNetTlsContext; timeout: cardinal; consoledisplay: boolean);
+  tls: PNetTlsContext; timeout: cardinal; consoledisplay: boolean): string;
 var
   params: THttpClientSocketWGet;
 begin
-  if destfile = '' then
-    raise EHttpSocket.Create('WGet(destfile='''') for %s', [url]);
-  params.Clear;
-  params.Resume := true;
-  params.Hasher := hasher;
-  params.Hash := hash;
-  if consoledisplay then
-    params.OnProgress := TStreamRedirect.ProgressToConsole;
-  params.WGet(url, destfile, tunnel, tls, timeout);
+  try
+    if destfile = '' then
+      raise EHttpSocket.Create('WGet(destfile='''') for %s', [url]);
+    params.Clear;
+    params.Resume := true;
+    params.Hasher := hasher;
+    params.Hash := hash;
+    if consoledisplay then
+      params.OnProgress := TStreamRedirect.ProgressToConsole;
+    if params.WGet(url, destfile, tunnel, tls, timeout) <> destfile then
+      result := 'WGet: unexpected destfile'; // paranoid
+  except
+    on E: Exception do
+      result := E.Message;
+  end;
 end;
 
 
@@ -1346,7 +1353,7 @@ begin
           if (ContentLength > 0) and
              (OutStream <> nil) and
              OutStream.InheritsFrom(TStreamRedirect) then
-            TStreamRedirect(OutStream).ExpectedSize := ContentLength; // WGet()
+            TStreamRedirect(OutStream).ExpectedSize := fRangeStart + ContentLength;
           GetBody(OutStream);
         end;
         // successfully sent -> reset some fields for the next request
@@ -1381,48 +1388,53 @@ function THttpClientSocket.WGet(const url: RawUtf8; const destfile: TFileName;
   var params: THttpClientSocketWGet): TFileName;
 var
   size: Int64;
-  cached, temp: TFileName;
-  temphash: RawUtf8;
+  cached, part: TFileName;
+  parthash, urlfile: RawUtf8;
   res: integer;
-  tempdest: TStreamRedirect;
+  partstream: TStreamRedirect;
 
-  procedure DoRequestAndFreeTempDest;
+  procedure DoRequestAndFreePartStream;
   var
     modif: TDateTime;
   begin
-    tempdest.Context := url;
-    tempdest.OnLog := OnLog;
-    tempdest.TimeOut := params.TimeOutSec * 1000;
-    tempdest.LimitPerSecond := params.LimitBandwith;
-    res := Request(url, 'GET', params.KeepAlive, '', '', '', false, nil, tempdest);
+    partstream.Context := urlfile;
+    partstream.OnProgress := params.OnProgress;
+    partstream.OnLog := OnLog;
+    partstream.TimeOut := params.TimeOutSec * 1000;
+    partstream.LimitPerSecond := params.LimitBandwith;
+    res := Request(url, 'GET', params.KeepAlive, '', '', '', false, nil, partstream);
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
-      raise EHttpSocket.Create('WGet: %s failed as %d', [url, res]);
-    tempdest.Ended; // notify finished
-    temphash := tempdest.GetHash; // hash updated during each tempdest.Write()
-    FreeAndNil(tempdest);
+      raise EHttpSocket.Create('WGet: %s failed with %s',
+        [url, StatusCodeToErrorMsg(res)]);
+    partstream.Ended; // notify finished
+    parthash := partstream.GetHash; // hash updated during each partstream.Write()
+    FreeAndNil(partstream);
     if HttpDateToDateTime(HeaderGetValue('LAST-MODIFIED'), modif, {local=}true) then
-      FileSetDate(temp, DateTimeToFileDate(modif));
+      FileSetDate(part, DateTimeToFileDate(modif));
   end;
 
 begin
   result := destfile;
+  urlfile := SplitRight(url, '/');
+  if urlfile = '' then
+    raise EHttpSocket.Create('WGet: %s is not a valid URL', [url]);
   if result = '' then
-    result := GetSystemPath(spTempFolder) + ExtractFileName(TFileName(url));
+    result := GetSystemPath(spTempFolder) + Utf8ToString(urlfile);
   params.Hash := TrimU(params.Hash);
   if params.HashFromServer and
      Assigned(params.Hasher) and
      (params.Hash = '') then
     begin
       // try to retrieve the hash from the HTTP server
-      temphash := params.Hasher.GetHashFileExt;
-      if temphash <> '' then
+      parthash := params.Hasher.GetHashFileExt;
+      if parthash <> '' then
       begin
-        temphash := url + temphash; // e.g. 'files/somefile.zip.md5'
-        if Get(temphash, 1000) = 200 then
+        parthash := url + parthash; // e.g. 'files/somefile.zip.md5'
+        if Get(parthash, 1000) = 200 then
           // handle 'c7d8e61e82a14404169af3fa5a72be85 *file.name' format
           params.Hash := Split(TrimU(Content), ' ');
         if Assigned(OnLog) then
-          OnLog(sllTrace, 'WGet: hash from % = %', [temphash, params.Hash], self);
+          OnLog(sllTrace, 'WGet: hash from % = %', [parthash, params.Hash], self);
       end;
     end;
   if (params.HashCacheDir <> '') and
@@ -1459,51 +1471,56 @@ begin
     if not DeleteFile(result) or
        FileExists(result) then
       raise EHttpSocket.Create('WGet: impossible to delete old %s', [result]);
-  temp := result + '.part';
-  size := FileSize(temp);
+  part := result + '.part';
+  size := FileSize(part);
   if (size > 0) and
      params.Resume then
   begin
     if Assigned(OnLog) then
-      OnLog(sllTrace, 'WGet %: resume % (%)', [url, temp, KB(size)], self);
-    tempdest := params.Hasher.Create(TFileStream.Create(temp, fmOpenReadWrite));
-    tempdest.Append; // hash partial content
+      OnLog(sllTrace, 'WGet %: resume % (%)', [url, part, KB(size)], self);
+    partstream := params.Hasher.Create(TFileStream.Create(part, fmOpenReadWrite));
+    partstream.Append; // hash partial content
     fRangeStart := size;
+    urlfile := urlfile + ' (resumed)';
   end
   else
   begin
-    if Assigned(OnLog) then
-      OnLog(sllTrace, 'WGet %: start downloading %', [url, temp], self);
-    tempdest := params.Hasher.Create(TFileStream.Create(temp, fmCreate));
     params.Resume := false;
+    if Assigned(OnLog) then
+      OnLog(sllTrace, 'WGet %: start downloading %', [url, part], self);
+    partstream := params.Hasher.Create(TFileStream.Create(part, fmCreate));
   end;
   try
-    DoRequestAndFreeTempDest;
+    DoRequestAndFreePartStream;
     if (params.Hash <> '') and
-       (temphash <> '') then
+       (parthash <> '') then
     begin
       // check the hash
       if params.Resume and
-         not IdemPropNameU(temphash, params.Hash) then
+         not IdemPropNameU(parthash, params.Hash) then
       begin
         if Assigned(OnLog) then
-          OnLog(sllDebug, 'WGet %: wrong hash after resume -> reset and retry', [url]);
-        tempdest := params.Hasher.Create(TFileStream.Create(temp, fmCreate));
-        DoRequestAndFreeTempDest;
+          OnLog(sllDebug,
+            'WGet %: wrong hash after resume -> reset and retry', [url]);
+        partstream := params.Hasher.Create(TFileStream.Create(part, fmCreate));
+        DoRequestAndFreePartStream;
       end;
-      if not IdemPropNameU(temphash, params.Hash) then
+      if not IdemPropNameU(parthash, params.Hash) then
         raise EHttpSocket.Create('WGet: %s hash failure', [url]);
     end;
     if cached <> '' then
     begin
       if Assigned(OnLog) then
         OnLog(sllTrace, 'WGet %: copy into cached %', [url, cached]);
-      CopyFile(temp, cached, {failsexist=}false);
+      CopyFile(part, cached, {failsexist=}false);
     end;
-    if not RenameFile(temp, result) then
+    if not RenameFile(part, result) then
       raise EHttpSocket.Create('WGet: impossible to rename %s', [result]);
+    part := '';
   finally
-    tempdest.Free; // close file on unexpected error
+    partstream.Free;  // close file on unexpected error
+    if part <> '' then
+      DeleteFile(part); // force next attempt from scratch
   end;
 end;
 

@@ -1692,13 +1692,14 @@ type
   TStreamRedirect = class(TStreamWithPosition)
   protected
     fDestination: TStream;
-    fExpectedSize, fCurrentSize: Int64;
+    fExpectedSize, fCurrentSize, fWrittenSize: Int64;
     fStartTix, fReportTix, fLastTix, fTimeOut: Int64;
     fPerSecond, fLimitPerSecond: PtrInt;
     fPercent: integer;
     fOnProgress: TOnStreamProgress;
     fOnLog: TSynLogProc;
     fContext: RawUtf8;
+    fTerminated: boolean;
     function GetSize: Int64; override;
     procedure DoReport;
     procedure DoHash(data: pointer; len: integer); virtual; // do nothing
@@ -1721,6 +1722,9 @@ type
     /// notify end of process
     // - should be called explicitly when all Write() has been done
     procedure Ended;
+    /// could be set from another thread to abort the streaming process
+    // - will raise an exception in Write()
+    procedure Terminate;
     /// return the current state of the hash as lower hexadecimal
     // - by default, will return '' meaning that no hashing algorithm was set
     function GetHash: RawUtf8; virtual;
@@ -1737,6 +1741,10 @@ type
     // - will be used for the callback progress - could be 0 if size is unknown
     property ExpectedSize: Int64
       read fExpectedSize write fExpectedSize;
+    /// how many bytes have passed through Write()
+    // - may not equal Size e.g. on resumed download from partial file
+    property WrittenSize: Int64
+      read fWrittenSize;
     /// percentage of Size versus ExpectedSize
     // - equals 0 if ExpectedSize is 0
     property Percent: integer
@@ -7819,14 +7827,17 @@ var
   msg: shortstring;
 begin
   if Sender.ExpectedSize = 0 then
-    FormatShort('% % %/s'#13,  [Sender.Context,
-      KB(Sender.fCurrentSize), KB(Sender.PerSecond)], msg)
+    // size may not be known (e.g. server-side chunking)
+    FormatShort(#13'% % %/s       ',  [Sender.Context,
+      KB(Sender.Size), KB(Sender.PerSecond)], msg)
   else if Sender.Size < Sender.ExpectedSize then
-    FormatShort('% %% %/% %/s'#13, [Sender.Context,
-      UInt2DigitsToShort(Sender.Percent), '%', KBNoSpace(Sender.fCurrentSize),
+    // partial download
+    FormatShort(#13'% %% %/% %/s       ', [Sender.Context,
+      Sender.Percent, '%', KBNoSpace(Sender.Size),
       KBNoSpace(Sender.ExpectedSize), KBNoSpace(Sender.PerSecond)], msg)
   else
-    FormatShort('% % downloaded in %/s' + CRLF, [Sender.Context,
+    // process is finished
+    FormatShort(#13'% % downloaded in %/s' + CRLF, [Sender.Context,
       KBNoSpace(Sender.ExpectedSize), KBNoSpace(Sender.PerSecond)], msg);
   system.write(msg);
 end;
@@ -7840,7 +7851,7 @@ begin
   if (fCurrentSize <> fExpectedSize) and
      (elapsed < fReportTix) then
     exit;
-  fReportTix := elapsed + 1000; // notify once per second
+  fReportTix := elapsed + 1000; // notify once per second or when finished
   if fExpectedSize = 0 then
     fPercent := 0
   else if fCurrentSize >= fExpectedSize then
@@ -7850,7 +7861,7 @@ begin
   if elapsed = 0 then
     fPerSecond := 0
   else
-    fPerSecond := (fCurrentSize * 1000) div elapsed;
+    fPerSecond := (fWrittenSize * 1000) div elapsed;
   if Assigned(fOnLog) then
     if fExpectedSize = 0 then
       fOnLog(sllTrace, '%: % %/s',
@@ -7902,29 +7913,39 @@ var
   read: PtrInt;
 begin
   if fDestination = nil then
-    raise ESynException.CreateUtf8('%.Append: Destination=nil', [self]);
+    raise ESynException.CreateUtf8('%.Append(%): Destination=nil',
+      [self, fContext]);
   if GetHashFileExt = '' then
   begin
     fCurrentSize := Seek(0, soEnd); // DoHash() does nothing
     fPosition := fCurrentSize;
   end
   else
-  repeat
-    read := fDestination.Read(buf, SizeOf(buf));
-    if read <= 0 then
-      break;
-    DoHash(@buf, read);
-    inc(fCurrentSize, read);
-    inc(fPosition, read);
-  until false;
+  begin
+    repeat
+      read := fDestination.Read(buf, SizeOf(buf));
+      if read <= 0 then
+        break;
+      DoHash(@buf, read);
+      inc(fCurrentSize, read);
+      inc(fPosition, read);
+    until false;
+  end;
 end;
 
 procedure TStreamRedirect.Ended;
 begin
+  if fCurrentSize = fExpectedSize then
+    exit; // nothing to report
   fExpectedSize := fCurrentSize; // reached 100%
   if Assigned(fOnProgress) or
      Assigned(fOnLog) then
     DoReport; // notify finished
+end;
+
+procedure TStreamRedirect.Terminate;
+begin
+  fTerminated := true;
 end;
 
 function TStreamRedirect.Read(var Buffer; Count: Longint): Longint;
@@ -7940,10 +7961,12 @@ var
   tix, tosleep: Int64;
 begin
   if fDestination = nil then
-    raise ESynException.CreateUtf8('%.Write: Destination=nil', [self]);
+    raise ESynException.CreateUtf8('%.Write(%): Destination=nil',
+      [self, fContext]);
   DoHash(@Buffer, Count);
   fDestination.WriteBuffer(Buffer, Count);
   inc(fCurrentSize, Count);
+  inc(fWrittenSize, Count);
   inc(fPosition, Count);
   if (fLimitPerSecond <> 0) or
      (fTimeOut <> 0) then
@@ -7957,14 +7980,27 @@ begin
       begin
         if (fTimeOut <> 0) and
            (tix > fTimeOut) then
-          raise ESynException.CreateUtf8('%.Write timeout after %',
-            [self, MicroSecToString(tix * 1000)]);
+          raise ESynException.CreateUtf8('%.Write(%) timeout after %',
+            [self, fContext, MicroSecToString(tix * 1000)]);
         if fLimitPerSecond > 0 then
         begin
           // adjust bandwith limit every 128 ms by adding some sleep() steps
-          tosleep := ((fCurrentSize * 1000) div fLimitPerSecond) - tix;
+          tosleep := ((fWrittenSize * 1000) div fLimitPerSecond) - tix;
           if tosleep > 10 then
+          begin
+            while tosleep > 300 do
+            begin
+              SleepHiRes(300); // show progress on very low bandwidth
+              if Assigned(fOnProgress) or
+                 Assigned(fOnLog) then
+                DoReport;
+              dec(tosleep, 300);
+              if fTerminated then
+                raise ESynException.CreateUtf8('%.Write(%) Terminated',
+                  [self, fContext]);
+            end;
             SleepHiRes(tosleep); // on Windows, typical resolution is 16ms
+          end;
         end;
       end;
     end;
@@ -7972,6 +8008,9 @@ begin
   if Assigned(fOnProgress) or
      Assigned(fOnLog) then
     DoReport;
+  if fTerminated then
+    raise ESynException.CreateUtf8('%.Write(%) Terminated',
+      [self, fContext]);
   result := Count;
 end;
 
