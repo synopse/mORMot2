@@ -7887,7 +7887,7 @@ begin
   f := FileOpenSequentialRead(FileName);
   if not ValidHandle(f) then
     exit;
-  hasher := Create(TFileStreamFromHandle(f));
+  hasher := Create(TFileStreamFromHandle.Create(f));
   try
     hasher.Append;
     result := hasher.GetHash;

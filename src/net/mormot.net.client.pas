@@ -1255,7 +1255,7 @@ function THttpClientSocket.Request(const url, method: RawUtf8;
         OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
         HttpStateReset;
         result := Request(url, method, KeepAlive, header,
-          Data, DataType, true, InStream, OutStream);
+          Data, DataType, {retry=}true, InStream, OutStream);
       except
         on Exception do
           result := Error;
@@ -1305,7 +1305,8 @@ begin
         P := pointer(Command);
         if IdemPChar(P, 'HTTP/1.') then
         begin
-          result := GetCardinal(P + 9); // get http numeric status code (200,404...)
+          // get http numeric status code (200,404...) from 'HTTP/1.x ######'
+          result := GetCardinal(P + 9);
           if result = 0 then
           begin
             result := HTTP_HTTPVERSIONNONSUPPORTED;

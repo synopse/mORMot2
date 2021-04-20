@@ -1954,7 +1954,7 @@ var
   u, t: TUri;
 begin
   if not u.From(aURI) then
-    raise ENetSock.Create('%s.Open: invalid %s', [ClassNameShort(self)^, aURI]);
+    raise ENetSock.Create('%s.OpenUri: invalid %s', [ClassNameShort(self)^, aURI]);
   aAddress := u.Address;
   t.From(aTunnel);
   Open(u.Server, u.Port, nlTCP, aTimeOut, u.Https, aTLSContext, @t);
