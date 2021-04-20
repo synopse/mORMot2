@@ -1404,8 +1404,8 @@ var
     partstream.LimitPerSecond := params.LimitBandwith;
     res := Request(url, 'GET', params.KeepAlive, '', '', '', false, nil, partstream);
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
-      raise EHttpSocket.Create('WGet: %s failed with %s',
-        [url, StatusCodeToErrorMsg(res)]);
+      raise EHttpSocket.Create('WGet: %s:%s/%s failed with %s',
+        [fServer, fPort, url, StatusCodeToErrorMsg(res)]);
     partstream.Ended; // notify finished
     parthash := partstream.GetHash; // hash updated during each partstream.Write()
     FreeAndNil(partstream);
@@ -1506,7 +1506,8 @@ begin
         DoRequestAndFreePartStream;
       end;
       if not IdemPropNameU(parthash, params.Hash) then
-        raise EHttpSocket.Create('WGet: %s hash failure', [url]);
+        raise EHttpSocket.Create('WGet: %s:%s/%s hash failure',
+          [fServer, fPort, url]);
     end;
     if cached <> '' then
     begin

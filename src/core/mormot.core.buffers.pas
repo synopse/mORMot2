@@ -7828,11 +7828,11 @@ var
 begin
   if Sender.ExpectedSize = 0 then
     // size may not be known (e.g. server-side chunking)
-    FormatShort(#13'% % %/s       ',  [Sender.Context,
+    FormatShort(#13'% % %/s ..',  [Sender.Context,
       KB(Sender.Size), KB(Sender.PerSecond)], msg)
   else if Sender.Size < Sender.ExpectedSize then
     // partial download
-    FormatShort(#13'% %% %/% %/s       ', [Sender.Context,
+    FormatShort(#13'% %% %/% %/s ..', [Sender.Context,
       Sender.Percent, '%', KBNoSpace(Sender.Size),
       KBNoSpace(Sender.ExpectedSize), KBNoSpace(Sender.PerSecond)], msg)
   else
