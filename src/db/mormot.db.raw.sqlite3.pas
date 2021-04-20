@@ -6295,8 +6295,8 @@ begin
   finally
     UnLock;
     if not NoLog then
-      fLog.Add.Log(sllSQL, '% % returned [%] for %', [Timer.Stop,
-        FileNameWithoutPath, aValue, aSql], self);
+      fLog.Add.Log(sllSQL, '% % returned [%] for %',
+        [Timer.Stop, FileNameWithoutPath, aValue, aSql], self);
   end;
 end;
 

@@ -3594,22 +3594,19 @@ end;
 
 initialization
   assert(SizeOf(JSValueRaw) = SizeOf(JSValue));
-  {$ifdef JS_STRICT_NAN_BOXING}
+  {$ifdef JS_ANY_NAN_BOXING}
   assert(SizeOf(JSValueRaw) = SizeOf(double));
   {$else}
   assert(SizeOf(JSValueRaw) = 2 * SizeOf(pointer));
-  {$endif JS_STRICT_NAN_BOXING}
-  { special constant values }
+  JSValue(JS_NAN).UnboxedTag := JS_TAG_FLOAT64;
+  JSValue(JS_NAN).u.f64 := JS_FLOAT64_NAN;
+  {$endif JS_ANY_NAN_BOXING}
   JSValue(JS_NULL).Fill(JS_TAG_NULL, 0);
   JSValue(JS_UNDEFINED).Fill(JS_TAG_UNDEFINED, 0);
   JSValue(JS_FALSE).Fill(JS_TAG_BOOL, 0);
   JSValue(JS_TRUE).Fill(JS_TAG_BOOL, 1);
   JSValue(JS_EXCEPTION).Fill(JS_TAG_EXCEPTION, 0);
   JSValue(JS_UNINITIALIZED).Fill(JS_TAG_UNINITIALIZED, 0);
-  {$ifndef JS_ANY_NAN_BOXING}
-  JSValue(JS_NAN).UnboxedTag := JS_TAG_FLOAT64;
-  JSValue(JS_NAN).u.f64 := JS_FLOAT64_NAN;
-  {$endif JS_ANY_NAN_BOXING}
 
 {$else}
 

@@ -123,13 +123,13 @@ function EccCommandCheat(const PrivateFile: TFileName;
   out authpass: RawUtf8; out authround: integer): RawUtf8;
 
 /// end-user command to encrypt a file with the symetric .synaead format
-// - will use symetric encryption via AES-256-CFB/PKCS7 over PBKDF2_HMAC_SHA256
+// - will use symetric encryption via AES-256-CFB/PKCS7 over Pbkdf2HmacSha256
 // - as used in the ecc.dpr command-line tool
 procedure AeadCommandCryptFile(const FileToCrypt, DestFile: TFileName;
   const Password, PasswordSalt: RawUtf8; PasswordRounds: integer);
 
 /// end-user command to decrypt a symetric .synaead file
-// - will use symetric encryption via AES-256-CFB/PKCS7 over PBKDF2_HMAC_SHA256
+// - will use symetric encryption via AES-256-CFB/PKCS7 over Pbkdf2HmacSha256
 // - as used in the ecc.dpr command-line tool
 procedure AeadCommandDecryptFile(const FileToDecrypt, DestFile: TFileName;
   const Password, PasswordSalt: RawUtf8; PasswordRounds: integer);
@@ -530,7 +530,7 @@ var
   dst: RawByteString;
 begin
   try
-    PBKDF2_HMAC_SHA256(
+    Pbkdf2HmacSha256(
       Password, PasswordSalt, PasswordRounds, aeskey, 'salt');
     try
       dst := TAesCfc.MacEncrypt(Source, aeskey, Encrypt);

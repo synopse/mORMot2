@@ -138,7 +138,7 @@ type
     // - if saoUserByLogonOrID is defined in the server Options, aUserName may
     // be a TAuthUser.ID and not a TAuthUser.LogonName
     // - if passClear is used, you may specify aHashSalt and aHashRound,
-    // to enable PBKDF2_HMAC_SHA256() use instead of plain Sha256(), and increase
+    // to enable Pbkdf2HmacSha256() use instead of plain Sha256(), and increase
     // security on storage side (reducing brute force attack via rainbow tables)
     // - will call the ModelRoot/Auth service, i.e. call TRestServer.Auth()
     // published method to create a session for this user
@@ -1220,7 +1220,7 @@ begin
       else if aHashSalt = '' then
         U.PasswordPlain := aPassword
       else
-        // compute Sha256() or proper PBKDF2_HMAC_SHA256()
+        // compute Sha256() or proper Pbkdf2HmacSha256()
         U.SetPassword(aPassword, aHashSalt, aHashRound);
       key := ClientComputeSessionKey(Sender, U);
       result := Sender.SessionCreate(self, U, key);

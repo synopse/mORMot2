@@ -27,6 +27,7 @@ uses
   mormot.core.log,
   mormot.core.test,
   mormot.net.sock,
+  mormot.net.client,
   mormot.db.core,
   mormot.orm.core,
   mormot.rest.client;
@@ -220,6 +221,8 @@ type
     /// test UrlEncode() and UrlDecode() functions
     // - this method use some ISO-8601 encoded dates and times for the testing
     procedure UrlDecoding;
+    /// test mime types recognition and multipart encoding
+    procedure MimeTypes;
     /// test ASCII Baudot encoding
     procedure BaudotCode;
     /// the ISO-8601 date and time encoding
@@ -227,8 +230,6 @@ type
     procedure Iso8601DateAndTime;
     /// test the TSynTimeZone class and its cross-platform local time process
     procedure TimeZones;
-    /// test mime types recognition
-    procedure MimeTypes;
     /// validates the median computation using the "Quick Select" algorithm
     procedure QuickSelect;
     /// test the TSynCache class
@@ -602,52 +603,52 @@ end;
 
 procedure TTestCoreBase.FastStringCompare;
 begin
-  Check(CompareText('', '') = 0);
+  CheckEqual(CompareText('', ''), 0);
   Check(CompareText('abcd', '') > 0);
   Check(CompareText('', 'abcd') < 0);
-  Check(StrIComp(nil, nil) = 0);
-  Check(StrIComp(PAnsiChar('abcD'), nil) = 1);
-  Check(StrIComp(nil, PAnsiChar('ABcd')) = -1);
-  Check(StrIComp(PAnsiChar('abcD'), PAnsiChar('ABcd')) = 0);
+  CheckEqual(StrIComp(nil, nil), 0);
+  CheckEqual(StrIComp(PAnsiChar('abcD'), nil), 1);
+  CheckEqual(StrIComp(nil, PAnsiChar('ABcd')), -1);
+  CheckEqual(StrIComp(PAnsiChar('abcD'), PAnsiChar('ABcd')), 0);
   Check(StrIComp(PAnsiChar('abcD'), PAnsiChar('ABcF')) =
     StrComp(PAnsiChar('ABCD'), PAnsiChar('ABCF')));
-  Check(StrComp(PAnsiChar('abcD'), nil) = 1);
-  Check(StrComp(nil, PAnsiChar('ABcd')) = -1);
-  Check(StrComp(nil, nil) = 0);
-  Check(StrComp(PAnsiChar('ABCD'), PAnsiChar('ABCD')) = 0);
-  Check(StrComp(PAnsiChar('ABCD'), PAnsiChar('ABCE')) = -1);
-  Check(StrComp(PAnsiChar('ABCD'), PAnsiChar('ABCC')) = 1);
-  Check(AnsiIComp(pointer(PAnsiChar('abcD')), pointer(PAnsiChar('ABcd'))) = 0);
+  CheckEqual(StrComp(PAnsiChar('abcD'), nil), 1);
+  CheckEqual(StrComp(nil, PAnsiChar('ABcd')), -1);
+  CheckEqual(StrComp(nil, nil), 0);
+  CheckEqual(StrComp(PAnsiChar('ABCD'), PAnsiChar('ABCD')), 0);
+  CheckEqual(StrComp(PAnsiChar('ABCD'), PAnsiChar('ABCE')), -1);
+  CheckEqual(StrComp(PAnsiChar('ABCD'), PAnsiChar('ABCC')), 1);
+  CheckEqual(AnsiIComp(pointer(PAnsiChar('abcD')), pointer(PAnsiChar('ABcd'))), 0);
   Check(AnsiIComp(pointer(PAnsiChar('abcD')), pointer(PAnsiChar('ABcF'))) =
     StrComp(PAnsiChar('ABCD'), PAnsiChar('ABCF')));
   Check(StrIComp(PAnsiChar('abcD'), PAnsiChar('ABcd')) =
     AnsiIComp(PAnsiChar('abcD'), PAnsiChar('ABcd')));
   Check(StrIComp(PAnsiChar('abcD'), PAnsiChar('ABcF')) =
     AnsiIComp(PAnsiChar('ABCD'), PAnsiChar('ABCF')));
-  Check(strcspn(PAnsiChar('ab'), PAnsiChar('a'#0)) = 0);
-  Check(strcspn(PAnsiChar('ab'), PAnsiChar('b'#0)) = 1);
-  Check(strcspn(PAnsiChar('1234ab'), PAnsiChar('a'#0)) = 4);
-  Check(strcspn(PAnsiChar('12345ab'), PAnsiChar('a'#0)) = 5);
-  Check(strcspn(PAnsiChar('123456ab'), PAnsiChar('a'#0)) = 6);
-  Check(strcspn(PAnsiChar('1234567ab'), PAnsiChar('a'#0)) = 7);
-  Check(strcspn(PAnsiChar('12345678ab'), PAnsiChar('a'#0)) = 8);
-  Check(strcspn(PAnsiChar('1234ab'), PAnsiChar('c'#0)) = 6);
-  Check(strcspn(PAnsiChar('12345678901234567ab'),
-    PAnsiChar('cccccccccccccccccccd')) = 19);
-  Assert(strspn(PAnsiChar('abcdef'), PAnsiChar('debca')) = 5);
-  Assert(strspn(PAnsiChar('baabbaabcd'), PAnsiChar('ab')) = 8);
-  Assert(strspn(PAnsiChar('abcdef'), PAnsiChar('g'#0)) = 0);
-  Assert(strspn(PAnsiChar('abcdef'), PAnsiChar('a'#0)) = 1);
-  Assert(strspn(PAnsiChar('bbcdef'), PAnsiChar('b'#0)) = 2);
-  Assert(strspn(PAnsiChar('bbcdef'), PAnsiChar('bf')) = 2);
-  Assert(strspn(PAnsiChar('bcbdef'), PAnsiChar('cb')) = 3);
-  Assert(strspn(PAnsiChar('baabcd'), PAnsiChar('ab')) = 4);
-  Assert(strspn(PAnsiChar('abcdef'), PAnsiChar('debca')) = 5);
-  Assert(strspn(PAnsiChar('baabbaabcd'), PAnsiChar('ab')) = 8);
-  Assert(strspn(PAnsiChar('baabbaabbaabcd'), PAnsiChar('ab')) = 12);
-  Assert(strspn(PAnsiChar('baabbaabbaabbabcd'), PAnsiChar('ab')) = 15);
-  Assert(strspn(PAnsiChar('baabbaabbaabbaabcd'), PAnsiChar('ab')) = 16);
-  Assert(strspn(PAnsiChar('baabbaabbaababaabcd'), PAnsiChar('ab')) = 17);
+  CheckEqual(strcspn(PAnsiChar('ab'), PAnsiChar('a'#0)), 0);
+  CheckEqual(strcspn(PAnsiChar('ab'), PAnsiChar('b'#0)), 1);
+  CheckEqual(strcspn(PAnsiChar('1234ab'), PAnsiChar('a'#0)), 4);
+  CheckEqual(strcspn(PAnsiChar('12345ab'), PAnsiChar('a'#0)), 5);
+  CheckEqual(strcspn(PAnsiChar('123456ab'), PAnsiChar('a'#0)), 6);
+  CheckEqual(strcspn(PAnsiChar('1234567ab'), PAnsiChar('a'#0)), 7);
+  CheckEqual(strcspn(PAnsiChar('12345678ab'), PAnsiChar('a'#0)), 8);
+  CheckEqual(strcspn(PAnsiChar('1234ab'), PAnsiChar('c'#0)), 6);
+  CheckEqual(strcspn(PAnsiChar('12345678901234567ab'),
+    PAnsiChar('cccccccccccccccccccd')), 19);
+  CheckEqual(strspn(PAnsiChar('abcdef'), PAnsiChar('debca')), 5);
+  CheckEqual(strspn(PAnsiChar('baabbaabcd'), PAnsiChar('ab')), 8);
+  CheckEqual(strspn(PAnsiChar('abcdef'), PAnsiChar('g'#0)), 0);
+  CheckEqual(strspn(PAnsiChar('abcdef'), PAnsiChar('a'#0)), 1);
+  CheckEqual(strspn(PAnsiChar('bbcdef'), PAnsiChar('b'#0)), 2);
+  CheckEqual(strspn(PAnsiChar('bbcdef'), PAnsiChar('bf')), 2);
+  CheckEqual(strspn(PAnsiChar('bcbdef'), PAnsiChar('cb')), 3);
+  CheckEqual(strspn(PAnsiChar('baabcd'), PAnsiChar('ab')), 4);
+  CheckEqual(strspn(PAnsiChar('abcdef'), PAnsiChar('debca')), 5);
+  CheckEqual(strspn(PAnsiChar('baabbaabcd'), PAnsiChar('ab')), 8);
+  CheckEqual(strspn(PAnsiChar('baabbaabbaabcd'), PAnsiChar('ab')), 12);
+  CheckEqual(strspn(PAnsiChar('baabbaabbaabbabcd'), PAnsiChar('ab')), 15);
+  CheckEqual(strspn(PAnsiChar('baabbaabbaabbaabcd'), PAnsiChar('ab')), 16);
+  CheckEqual(strspn(PAnsiChar('baabbaabbaababaabcd'), PAnsiChar('ab')), 17);
 end;
 
 procedure TTestCoreBase.IniFiles;
@@ -2284,14 +2285,29 @@ begin
   Check(IsEqualGuid(@Guid2, @GUID));
   Check(U.From('toto.com'));
   Check(U.Uri = 'http://toto.com/');
+  Check(not U.Https);
   Check(U.From('toto.com:123'));
   Check(U.Uri = 'http://toto.com:123/');
+  Check(not U.Https);
   Check(U.From('https://toto.com:123/tata/titi'));
   Check(U.Uri = 'https://toto.com:123/tata/titi');
+  Check(U.Https);
   Check(U.From('https://toto.com:123/tata/tutu:tete'));
   Check(U.Uri = 'https://toto.com:123/tata/tutu:tete');
+  Check(U.From('http://user:password@server:port/address'));
+  Check(not U.Https);
+  CheckEqual(U.Uri, 'http://server:port/address');
+  CheckEqual(U.User, 'user');
+  CheckEqual(U.Password, 'password');
+  Check(U.From('https://user@server:port/address'));
+  Check(U.Https);
+  CheckEqual(U.Uri, 'https://server:port/address');
+  CheckEqual(U.User, 'user');
+  CheckEqual(U.Password, '');
   Check(U.From('toto.com/tata/tutu:tete'));
-  Check(U.Uri = 'http://toto.com/tata/tutu:tete');
+  CheckEqual(U.Uri, 'http://toto.com/tata/tutu:tete');
+  CheckEqual(U.User, '');
+  CheckEqual(U.Password, '');
 end;
 
 procedure TTestCoreBase._GUID;
@@ -3100,7 +3116,7 @@ var
   crcs: THash512Rec;
   digest: THash256;
   tmp: RawByteString;
-  hmac32: THMAC_CRC32C;
+  hmac32: THmacCrc32c;
 //    hmac256: THMAC_CRC256C;
 begin
   test16('', $ffff);
@@ -3112,13 +3128,13 @@ begin
   totallen := 36;
   tmp := '123456789123456789';
   c2 := $12345678;
-  c1 := HMAC_CRC32C(@c2, pointer(tmp), 4, length(tmp));
+  c1 := HmacCrc32c(@c2, pointer(tmp), 4, length(tmp));
   check(c1 = $1C3C4B51);
   hmac32.Init(@c2, 4);
   hmac32.Update(pointer(tmp), length(tmp));
   check(hmac32.Done = c1);
   c2 := $12345678;
-  HMAC_CRC256C(@c2, pointer(tmp), 4, length(tmp), digest);
+  HmacCrc256c(@c2, pointer(tmp), 4, length(tmp), digest);
   check(Sha256DigestToString(digest) = '46da01fb9f4a97b5f8ba2c70512bc22aa' +
     'a9b57e5030ced9f5c7c825ab5ec1715');
   FillZero(crc2);
@@ -3194,7 +3210,7 @@ begin
       S := RandomString(j);
       crc := crc32creference(0, pointer(S), length(S));
       inc(totallen, length(S));
-      c2 := HMAC_CRC32C(@c1, pointer(S), 4, length(S));
+      c2 := HmacCrc32c(@c1, pointer(S), 4, length(S));
       hmac32.Init(@c1, 4);
       hmac32.Update(pointer(S), length(S));
       check(hmac32.Done = c2);
@@ -4220,26 +4236,23 @@ procedure TTestCoreBase._UTF8;
     U: RawUtf8;
   begin
     C := TSynAnsiConvert.Engine(CP);
-    Check(C.CodePage = CP);
+    CheckEqual(C.CodePage, CP, 'cpa');
     U := C.AnsiToUtf8(W);
     A := C.Utf8ToAnsi(U);
     if W = '' then
       exit;
     {$ifdef HASCODEPAGE}
-    {$ifndef FPC}
-    Check(StringCodePage(W) = 1252);
-    {$endif FPC}
     CP := StringCodePage(A);
-    Check(CP = C.CodePage);
+    CheckEqual(CP, C.CodePage, 'cpb');
     {$endif FPC}
     if CP = CP_UTF16 then
       exit;
     Check(length(W) = length(A));
     {$ifdef FPC}
-    Check(CompareMem(pointer(W), pointer(A), length(W)));
+    CheckUtf8(CompareMem(pointer(W), pointer(A), length(W)), 'CP%', [CP]);
     {$else}
-    Check(A = W);
-    Check(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W)) = W);
+    CheckUtF8(A = W, 'CP%-AW', [CP]);
+    CheckUtf8(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W)) = W, 'CP%-CW', [CP]);
     {$endif FPC}
   end;
 
@@ -4900,6 +4913,7 @@ var
   tz: TSynTimeZone;
   d: TTimeZoneData;
   i, bias: integer;
+  m: word;
   hdl, reload: boolean;
   buf: RawByteString;
   dt: TDateTime;
@@ -4914,6 +4928,65 @@ var
   end;
 
 begin
+  bias := -10;
+  Check(not ParseTimeZone('', bias));
+  CheckEqual(bias, -10);
+  Check(ParseTimeZone('-0000', bias));
+  CheckEqual(bias, TimeZoneLocalBias);
+  Check(ParseTimeZone('+0000', bias));
+  CheckEqual(bias, 0);
+  Check(ParseTimeZone('+0100', bias));
+  CheckEqual(bias, 60);
+  Check(ParseTimeZone('+1005', bias));
+  CheckEqual(bias, 605);
+  Check(ParseTimeZone('-1005', bias));
+  CheckEqual(bias, -605);
+  Check(not ParseTimeZone('+1O05', bias));
+  CheckEqual(bias, -605);
+  Check(not ParseTimeZone('+105', bias));
+  CheckEqual(bias, -605);
+  bias := -10;
+  Check(not ParseTimeZone('toto', bias));
+  CheckEqual(bias, -10);
+  Check(ParseTimeZone('z', bias));
+  CheckEqual(bias, 0);
+  Check(ParseTimeZone('M', bias));
+  CheckEqual(bias, 12 * 60);
+  Check(ParseTimeZone('NZDT', bias));
+  CheckEqual(bias, 13 * 60);
+  Check(ParseTimeZone(' NZT ', bias));
+  CheckEqual(bias, 12 * 60);
+  Check(ParseTimeZone('utc', bias));
+  CheckEqual(bias, 0);
+  Check(not ParseTimeZone('uta', bias));
+  CheckEqual(bias, 0);
+  Check(ParseTimeZone(' east', bias));
+  CheckEqual(bias, -10 * 60);
+  Check(ParseTimeZone('gmT ', bias));
+  CheckEqual(bias, 0);
+  Check(ParseTimeZone('    IDLW    ', bias));
+  CheckEqual(bias, -12 * 60);
+  m := 0;
+  Check(ParseMonth('Jan', m));
+  CheckEqual(m, 1);
+  Check(not ParseMonth('Jab', m));
+  CheckEqual(m, 1);
+  Check(ParseMonth(' DEC ', m));
+  CheckEqual(m, 12);
+  CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
+    'Sun, 06 Nov 1994 08:49:37 GMT')), '1994-11-06T08:49:37');
+  CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
+    'Sunday, 06-DEC-94 08:49:37 UTC')), '1994-12-06T08:49:37');
+  CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
+    'Sun Feb  6 08:49:37 1994')), '1994-02-06T08:49:37');
+  CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
+    'Sun, 06 Nov 2021 08:49:37 east')), '2021-11-06T18:49:37');
+  CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
+    'Sun, 06 Nov 08:49:37 east')), '');
+  CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
+    'Sun, 06 Nov 2021 084937 east')), '');
+  CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
+    'Tue, 15 Nov 1994 12:45:26 Z')), '1994-11-15T12:45:26');
   tz := TSynTimeZone.Create;
   try
     check(tz.Zone = nil);
@@ -5405,21 +5478,73 @@ end;
 
 procedure TTestCoreBase.MimeTypes;
 const
-  MIMES: array[0..49] of TFileName = ('png', 'image/png', 'PNg', 'image/png',
-    'gif', 'image/gif', 'tif', 'image/tiff', 'tiff', 'image/tiff', 'jpg',
-    'image/jpeg', 'JPG', 'image/jpeg', 'jpeg', 'image/jpeg', 'bmp', 'image/bmp',
-    'doc', 'application/msword', 'docx', 'application/msword', 'htm',
-    HTML_CONTENT_TYPE, 'html', HTML_CONTENT_TYPE, 'HTML', HTML_CONTENT_TYPE,
-    'css', 'text/css', 'js', 'application/javascript', 'ico', 'image/x-icon',
-    'pdf', 'application/pdf', 'PDF', 'application/pdf', 'Json',
-    JSON_CONTENT_TYPE, 'webp', 'image/webp', 'manifest', 'text/cache-manifest',
-    'appcache', 'text/cache-manifest', 'h264', 'video/H264', 'ogg', 'video/ogg');
-  BIN: array[0..1] of Cardinal = ($04034B50, $38464947);
-  BIN_MIME: array[0..1] of RawUtf8 = ('application/zip', 'image/gif');
+  MIMES: array[0..51] of TFileName = (
+    'png', 'image/png',
+    'PNg', 'image/png',
+    'gif', 'image/gif',
+    'tif', 'image/tiff',
+    'tiff', 'image/tiff',
+    'jpg', 'image/jpeg',
+    'JPG', 'image/jpeg',
+    'jpeg', 'image/jpeg',
+    'bmp', 'image/bmp',
+    'doc', 'application/msword',
+    'docx', 'application/msword',
+    'htm', HTML_CONTENT_TYPE,
+    'html', HTML_CONTENT_TYPE,
+    'HTML', HTML_CONTENT_TYPE,
+    'css', 'text/css',
+    'js', 'application/javascript',
+    'ico', 'image/x-icon',
+    'pdf', 'application/pdf',
+    'PDF', 'application/pdf',
+    'Json', JSON_CONTENT_TYPE,
+    'webp', 'image/webp',
+    'manifest', 'text/cache-manifest',
+    'appcache', 'text/cache-manifest',
+    'h264', 'video/H264',
+    'x', 'application/x-compress',
+    'ogg', 'video/ogg');
+  BIN: array[0..1] of Cardinal = (
+    $04034B50, $38464947);
+  BIN_MIME: array[0..1] of RawUtf8 = (
+    'application/zip', 'image/gif');
 var
-  i: integer;
+  i, j, n: integer;
+  fn: array[0..10] of TFileName;
+  mp, mp2: TMultiPartDynArray;
+  mpc, mpct: RawUtf8;
+  st: THttpMultiPartStream;
+
+  procedure DecodeAndTest;
+  var
+    i: integer;
+  begin
+    mp2 := nil;
+    Check(MultiPartFormDataDecode(mpct, mpc, mp2));
+    CheckEqual(length(mp2), length(mp));
+    for i := 0 to high(mp2) do
+      if i <= n then
+      begin
+        CheckEqual(mp2[i].Name, StringToUtf8(MIMES[i * 2]));
+        CheckEqual(mp2[i].Content, StringToUtf8(MIMES[i * 2 + 1]));
+      end
+      else
+      begin
+        j := i - n - 1;
+        CheckEqual(mp2[i].FileName, StringToUtf8(ExtractFileName(fn[j])));
+        CheckEqual(mp2[i].Content, StringToUtf8(MIMES[j * 2 + 1]));
+      end;
+  end;
+
 begin
+  // mime content types
   CheckEqual(GetMimeContentType(nil, 0, 'toto.h264'), 'video/H264');
+  CheckEqual(GetMimeContentType(nil, 0, 'toto', 'def1'), 'def1');
+  CheckEqual(GetMimeContentType(nil, 0, 'toto.', 'def2'), 'def2');
+  CheckEqual(GetMimeContentType(nil, 0, 'toto.a', 'def3'), 'application/a');
+  CheckEqual(GetMimeContentType(nil, 0, 'toto.1', 'def4'), 'def4');
+  CheckEqual(GetMimeContentType(nil, 0, 'toto.ab', 'def5'), 'application/ab');
   for i := 0 to high(MIMES) shr 1 do
     CheckEqual(GetMimeContentType(nil, 0, 'toto.' + MIMES[i * 2]),
       ToUtf8(MIMES[i * 2 + 1]));
@@ -5428,6 +5553,31 @@ begin
     CheckEqual(GetMimeContentType(@BIN[i], 34, ''), BIN_MIME[i]);
     CheckEqual(GetMimeContentTypeFromBuffer(@BIN[i], 34, ''), BIN_MIME[i]);
   end;
+  // mime multipart encoding
+  n := high(MIMES) shr 1;
+  for i := 0 to n do
+    Check(MultiPartFormDataAddField(
+      StringToUtf8(MIMES[i * 2]), StringToUtf8(MIMES[i * 2 + 1]), mp));
+  for i := 0 to high(fn) do
+  begin
+    fn[i] := WorkDir + 'mp' + IntToStr(i);
+    FileFromString(StringToUtf8(MIMES[i * 2 + 1]), fn[i]);
+    Check(MultiPartFormDataAddFile(fn[i], mp));
+  end;
+  Check(MultiPartFormDataEncode(mp, mpct, mpc));
+  DecodeAndTest;
+  st := THttpMultiPartStream.Create;
+  for i := 0 to n do
+    st.AddContent(StringToUtf8(MIMES[i * 2]), StringToUtf8(MIMES[i * 2 + 1]));
+  for i := 0 to high(fn) do
+    st.AddFile('', fn[i]);
+  st.Flush;
+  mpct := st.MultipartContentType;
+  mpc := StreamToRawByteString(st);
+  DecodeAndTest;
+  st.Free;
+  for i := 0 to high(fn) do
+    check(DeleteFile(fn[i]));
 end;
 
 function TTestCoreBase.QuickSelectGT(IndexA, IndexB: PtrInt): boolean;

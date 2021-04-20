@@ -30,6 +30,15 @@ unit mormot.lib.openssl11;
 // - the full API libraries will be directly/statically linked, not dynamically
 // - full API increases compilation time, but is kept as reference
 
+{.$define OPENSSLUSERTLMM}
+// define this so that OpenSSL will use pascal RTL getmem/freemem/reallocmem
+// - note that OpenSSL has no "finalize" API, and is likely to leak memory - so
+// you may define it on production only, if you don't check memory leaks
+
+{$ifdef FPCMM_REPORTMEMORYLEAKS}
+  {$undef OPENSSLUSERTLMM} // incompatible for sure
+{$endif FPCMM_REPORTMEMORYLEAKS}
+
 
 interface
 
@@ -46,7 +55,7 @@ uses
   unixtype,
   {$endif OSPOSIX}
   mormot.core.os,
-  mormot.net.sock; // for INetTLS
+  mormot.net.sock; // for INetTls
 
 
 { ******************** Dynamic or Static OpenSSL Library Loading }
@@ -125,6 +134,12 @@ const
   {$endif OSWINDOWS}
 
 var
+  /// optional libcrypto location for OpenSslIsAvailable/OpenSslInitialize
+  OpenSslDefaultCrypto: TFileName;
+  /// optional libssl location for OpenSslIsAvailable/OpenSslInitialize
+  OpenSslDefaultSsl: TFileName;
+
+
   /// numeric OpenSSL library version loaded e.g. after OpenSslIsAvailable call
   // - equals e.g. $1010106f
   OpenSslVersion: cardinal;
@@ -827,6 +842,9 @@ type
   Ppem_password_cb = function(buf: PUtf8Char; size, rwflag: integer; userdata: pointer): integer; cdecl;
   ECDH_compute_key_KDF = function(_in: pointer; inlen: PtrUInt; _out: pointer; outlen: PPtrUInt): pointer; cdecl;
 
+  dyn_MEM_malloc_fn = function(p1: PtrUInt; p2: PUtf8Char; p3: integer): pointer; cdecl;
+  dyn_MEM_realloc_fn = function(p1: pointer; p2: PtrUInt; p3: PUtf8Char; p4: integer): pointer; cdecl;
+  dyn_MEM_free_fn = procedure(p1: pointer; p2: PUtf8Char; p3: integer); cdecl;
 
 
 { ******************** OpenSSL Library Functions }
@@ -890,6 +908,8 @@ function X509_print(bp: PBIO; x: PX509): integer; cdecl;
 { --------- libcrypto entries }
 
 function CRYPTO_malloc(num: PtrUInt; _file: PUtf8Char; line: integer): pointer; cdecl;
+function CRYPTO_set_mem_functions(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn;
+  f: dyn_MEM_free_fn): integer; cdecl;
 procedure CRYPTO_free(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
 procedure ERR_remove_state(pid: cardinal); cdecl;
 procedure ERR_error_string_n(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
@@ -1078,7 +1098,7 @@ procedure DTLSv1_handle_timeout(s: PSSL);
 { ************** TLS / HTTPS Encryption Layer using OpenSSL for TCrtSocket }
 
 type
-  /// exception class raised by OpenSslNewNetTLS implementation class
+  /// exception class raised by OpenSslNewNetTls implementation class
   EOpenSslClient = class(EOpenSsl);
 
 
@@ -1086,9 +1106,9 @@ type
 // - on non-Windows systems, this unit initialization will register OpenSSL for TLS
 // - on Windows systems, SChannel will be kept as default so you would need
 // to explicitely register OpenSSL for TLS if needed (for better cipher coverage,
-// enhanced performance and full TNetTLSContext options support):
-// ! @NewNetTLS := @OpenSslNewNetTLS;
-function OpenSslNewNetTLS: INetTLS;
+// enhanced performance and full TNetTlsContext options support):
+// ! @NewNetTls := @OpenSslNewNetTls;
+function OpenSslNewNetTls: INetTls;
 
 
 
@@ -1397,6 +1417,7 @@ type
   TLibCrypto = class(TSynLibrary)
   public
     CRYPTO_malloc: function(num: PtrUInt; _file: PUtf8Char; line: integer): pointer; cdecl;
+    CRYPTO_set_mem_functions: function (m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn; f: dyn_MEM_free_fn): integer; cdecl;
     CRYPTO_free: procedure(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
     ERR_remove_state: procedure(pid: cardinal); cdecl;
     ERR_error_string_n: procedure(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
@@ -1501,8 +1522,9 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..101] of RawUtf8 = (
-    'CRYPTO_malloc', 'CRYPTO_free', 'ERR_remove_state', 'ERR_error_string_n',
+  LIBCRYPTO_ENTRIES: array[0..102] of RawUtf8 = (
+    'CRYPTO_malloc', 'CRYPTO_set_mem_functions', 'CRYPTO_free',
+    'ERR_remove_state', 'ERR_error_string_n',
     'ERR_get_error', 'ERR_remove_thread_state', 'ERR_load_BIO_strings',
     'EVP_MD_CTX_new', 'EVP_MD_CTX_free',
     'EVP_PKEY_size', 'EVP_PKEY_free', 'EVP_DigestSignInit', 'EVP_DigestUpdate',
@@ -1539,6 +1561,11 @@ var
 function CRYPTO_malloc(num: PtrUInt; _file: PUtf8Char; line: integer): pointer;
 begin
   result := libcrypto.CRYPTO_malloc(num, _file, line);
+end;
+
+function CRYPTO_set_mem_functions(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn; f: dyn_MEM_free_fn): integer; cdecl;
+begin
+  result := libcrypto.CRYPTO_set_mem_functions(m, r, f);
 end;
 
 procedure CRYPTO_free(ptr: pointer; _file: PUtf8Char; line: integer);
@@ -2068,6 +2095,36 @@ begin
   result := libcrypto.PEM_write_bio_PUBKEY(bp, x);
 end;
 
+{$ifdef OPENSSLUSERTLMM}
+
+// redirect OpenSSL to use our current pascal heap :)
+
+function rtl_malloc(siz: PtrUInt; fname: PUtf8Char; fline: integer): pointer; cdecl;
+begin
+  if siz <= 0 then
+    result := nil
+  else
+    Getmem(result, siz);
+end;
+
+function rtl_realloc(str: pointer; siz: PtrUInt;
+  fname: PUtf8Char; fline: integer): pointer; cdecl;
+begin
+  if str = nil then
+    if siz <= 0 then
+      result := nil
+    else
+      Getmem(result, siz)
+  else
+    result := ReAllocMem(str, siz);
+end;
+
+procedure rtl_free(str: pointer; fname: PUtf8Char; fline: integer); cdecl;
+begin
+  Freemem(str);
+end;
+
+{$endif OPENSSLUSERTLMM}
 
 function OpenSslIsAvailable: boolean;
 begin
@@ -2096,6 +2153,7 @@ begin
     try
       // attempt to load libcrypto
       libcrypto.TryLoadLibrary([
+        OpenSslDefaultCrypto,
       {$ifdef OSWINDOWS}
         // first try the libcrypto*.dll in the local executable folder
         Executable.ProgramFilePath + libcryptoname,
@@ -2111,6 +2169,7 @@ begin
           @P[api], {onfail=}EOpenSsl);
       // attempt to load libssl
       libssl.TryLoadLibrary([
+        OpenSslDefaultSsl,
       {$ifdef OSWINDOWS}
         // first try the libssl*.dll in the local executable folder
         Executable.ProgramFilePath + libsslname,
@@ -2125,10 +2184,15 @@ begin
         libssl.Resolve(pointer(_PU + LIBSSL_ENTRIES[api]),
           @P[api], {onfail=}EOpenSsl);
       // nothing is to be initialized with OpenSSL 1.1.*
+      {$ifdef OPENSSLUSERTLMM}
+      if libcrypto.CRYPTO_set_mem_functions(@rtl_malloc, @rtl_realloc, @rtl_free) = 0 then
+        raise EOpenSsl.Create('CRYPTO_set_mem_functions() failure');
+      {$endif OPENSSLUSERTLMM}
       OpenSslVersion := libssl.OpenSSL_version_num;
-      if OpenSslVersion and $ffffff00 <> $10101000 then // paranoid check 1.1.1
+      if OpenSslVersion and $ffffff00 < $10101000 then // paranoid check 1.1.1
         raise EOpenSsl.CreateFmt(
-          'Incorrect OpenSSL version %x - expected 101010xx', [OpenSslVersion]);
+          'Incorrect OpenSSL version %x - expected at least 101010xx',
+          [OpenSslVersion]);
     except
       FreeAndNil(libssl);
       FreeAndNil(libcrypto);
@@ -2300,6 +2364,9 @@ function X509_print(bp: PBIO; x: PX509): integer; cdecl;
 
 function CRYPTO_malloc(num: PtrUInt; _file: PUtf8Char; line: integer): pointer; cdecl;
   external LIB_CRYPTO name _PU + 'CRYPTO_malloc';
+
+function CRYPTO_set_mem_functions(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn; f: dyn_MEM_free_fn): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'CRYPTO_set_mem_functions';
 
 procedure CRYPTO_free(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
   external LIB_CRYPTO name _PU + 'CRYPTO_free';
@@ -2861,16 +2928,16 @@ end;
 
 type
   /// OpenSSL TLS layer communication
-  TOpenSslClient = class(TInterfacedObject, INetTLS)
+  TOpenSslClient = class(TInterfacedObject, INetTls)
   private
-    fContext: PNetTLSContext;
+    fContext: PNetTlsContext;
     fCtx: PSSL_CTX;
     fSsl: PSSL;
     fDoSslShutdown: boolean;
   public
     destructor Destroy; override;
-    // INetTLS methods
-    procedure AfterConnection(Socket: TNetSocket; var Context: TNetTLSContext;
+    // INetTls methods
+    procedure AfterConnection(Socket: TNetSocket; var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
@@ -2892,7 +2959,7 @@ const
 // see https://www.ibm.com/support/knowledgecenter/SSB23S_1.1.0.2020/gtps7/s5sple2.html
 
 procedure TOpenSslClient.AfterConnection(Socket: TNetSocket;
-  var Context: TNetTLSContext; const ServerAddress: RawUtf8);
+  var Context: TNetTlsContext; const ServerAddress: RawUtf8);
 var
   res: integer;
   peer: PX509;
@@ -2943,29 +3010,35 @@ begin
      (SSL_CIPHER_description(ciph, @cipher, SizeOf(cipher)) <> nil) then
     FastSetString(Context.CipherName, @cipher, StrLen(@cipher));
   // peer validation
-  peer := SSL_get_peer_certificate(fSsl);
-  if (peer = nil) and
-     not Context.IgnoreCertificateErrors then
-    EOpenSslClient.Check(self, 'AfterConnection', 0);
-  try
-    res := SSL_get_verify_result(fSsl);
-    if (peer <> nil) and
-       (Context.WithPeerInfo or
-        (not Context.IgnoreCertificateErrors and
-        (res <> X509_V_OK))) then // include peer info on failure
-    begin
-      bio := BIO_new(BIO_s_mem());
-      X509_print(bio, peer);
-      Context.PeerInfo := BIO_ToString(bio, {andfree=}true);
-    end;
-    if not Context.IgnoreCertificateErrors and
-       (res <> X509_V_OK) then
-    begin
-      str(res, Context.LastError);
+  if Assigned(Context.OnPeerValidate) then
+    // via a custom callback
+    Context.OnPeerValidate(Socket, fContext, fSsl)
+  else
+  begin
+    peer := SSL_get_peer_certificate(fSsl);
+    if (peer = nil) and
+       not Context.IgnoreCertificateErrors then
       EOpenSslClient.Check(self, 'AfterConnection', 0);
+    try
+      res := SSL_get_verify_result(fSsl);
+      if (peer <> nil) and
+         (Context.WithPeerInfo or
+          (not Context.IgnoreCertificateErrors and
+          (res <> X509_V_OK))) then // include peer info on failure
+      begin
+        bio := BIO_new(BIO_s_mem());
+        X509_print(bio, peer);
+        Context.PeerInfo := BIO_ToString(bio, {andfree=}true);
+      end;
+      if not Context.IgnoreCertificateErrors and
+         (res <> X509_V_OK) then
+      begin
+        str(res, Context.LastError);
+        EOpenSslClient.Check(self, 'AfterConnection', 0);
+      end;
+    finally
+      X509_free(peer);
     end;
-  finally
-    X509_free(peer);
   end;
 end;
 
@@ -3041,7 +3114,7 @@ begin
   end;
 end;
 
-function OpenSslNewNetTLS: INetTLS;
+function OpenSslNewNetTls: INetTls;
 begin
   if OpenSslIsAvailable then
     result := TOpenSslClient.Create
@@ -3053,8 +3126,8 @@ end;
 
 initialization
   // register the OpenSSL TLS layer factory for TCrtSocket (if no SChannel set)
-  if not Assigned(NewNetTLS) then
-    @NewNetTLS := @OpenSslNewNetTLS;
+  if not Assigned(NewNetTls) then
+    @NewNetTls := @OpenSslNewNetTls;
 
 finalization
   {$ifndef OPENSSLSTATIC}

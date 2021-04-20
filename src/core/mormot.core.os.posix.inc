@@ -538,10 +538,10 @@ const
   CLOCK_REALTIME_COARSE = 10; // named CLOCK_REALTIME_FAST in FreeBSD 8.1+
   CLOCK_MONOTONIC_COARSE = 12;
 
-function clock_gettime(ID: cardinal; r: ptimespec): integer;
+function clock_gettime(clk_id: cardinal; tp: ptimespec): integer;
   cdecl external clib name 'clock_gettime';
 
-function clock_getres(ID: cardinal; r: ptimespec): integer;
+function clock_getres(clk_id: cardinal; tp: ptimespec): integer;
   cdecl external clib name 'clock_getres';
 
 {$else}
@@ -556,7 +556,7 @@ const
 // is compiled without FPC_USE_LIBC defined and do a syscall each time
 //   GetTickCount64 fpc    2 494 563 op/sec
 //   GetTickCount64 libc 119 919 893 op/sec
-function clock_gettime(clk_id : clockid_t; tp: ptimespec): cint;
+function clock_gettime(clk_id: clockid_t; tp: ptimespec): cint;
   cdecl; external clib name 'clock_gettime';
 
 function gettimeofday(tp: ptimeval; tzp: ptimezone): cint;
@@ -1450,6 +1450,22 @@ begin
   result := '';
 end;
 
+type
+  TLoadAvg = array[0..2] of double;
+
+function getloadavg(var loadavg: TLoadAvg; nelem: integer): integer;
+  cdecl external clib name 'getloadavg';
+
+function RetrieveLoadAvg: RawUtf8;
+var
+  avg: TLoadAvg;
+begin
+  if getloadavg(avg, 3) = 3 then
+    result := Format('%g %g %d', [avg[0], avg[1], avg[2]])
+  else
+    result := '';
+end;
+
 {$else}
 
 const
@@ -1525,11 +1541,17 @@ begin
     tryprocexe := false; // no need to try again next time
 end;
 
+function RetrieveLoadAvg: RawUtf8;
+begin
+  // the libc parse this file anyway :)
+  result := StringFromFile('/proc/loadavg', {nosize=}true);
+end;
+
 {$endif OSBSDDARWIN}
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 begin
-  result := false;
+  result := false; // call RetrieveLoadAvg() instead
 end;
 
 function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
@@ -1570,11 +1592,13 @@ begin
   K := GetNextCardinal(P){=system};
   I := GetNextCardinal(P){=idle};
   S := U + K + I;
+  result := S <> 0;
+  if not result then
+    exit;
   Kernel := {%H-}SimpleRoundTo2Digits((K * 100) / S);
   User := {%H-}SimpleRoundTo2Digits((U * 100) / S);
   Idle := 100 - Kernel - User; // ensure sum is always 100%
-  result := S <> 0;
-end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux }
+end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux? }
 
 {$ifdef OSBSDDARWIN}
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
@@ -1583,14 +1607,9 @@ begin
   info.memtotal := fpsysctlhwint(
     {$ifdef OSDARWIN} HW_MEMSIZE {$else} HW_PHYSMEM {$endif});
   info.memfree := info.memtotal - fpsysctlhwint(HW_USERMEM);
-  if info.memtotal <> 0 then
-  begin
-    // avoid div per 0 exception
+  result := info.memtotal <> 0;// avoid div per 0 exception
+  if result then
     info.percent := ((info.memtotal - info.memfree) * 100) div info.memtotal;
-    result := true;
-  end
-  else
-    result := false;
 end;
 {$else}
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
@@ -2324,6 +2343,7 @@ begin
   if CpuInfoText = '' then
     CpuInfoText := CPU_ARCH_TEXT;
   // intialize supported APIs
+  TimeZoneLocalBias := -GetLocalTimeOffset;
   {$ifdef ISFPC27}
   GetACP := GetSystemCodePage;
   {$endif ISFPC27}

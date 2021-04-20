@@ -75,15 +75,25 @@ if [[ $TARGET == win* ]]; then
   dest_fn="$dest_fn.exe"
 fi
 
+# suppress warnings
+# Warning: (5059) Function result variable does not seem to be initialized
+# Warning: (5036) Local variable XXX does not seem to be initialized
+# Warning: (5089) Local variable XXX of a managed type does not seem to be initialized
+# Warning: (5090) Variable XXX of a managed type does not seem to be initialized
+SUPRESS_WARN=-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123,5059,5036,5089,5090
+
+set -o pipefail
+
 fpc -MDelphi -Sci -Ci -O3 -g -gl -gw2 -Xg -k'-rpath=$ORIGIN' -k-L$BIN \
   -T$TARGET -P$ARCH \
-  -veiq -vw-n-h- \
+  -veiq -v-n-h- $SUPRESS_WARN \
   -Fi"$BIN/fpc-$ARCH_TG/.dcu" -Fi"$LIB2/src/core" -Fi"$LIB2/src/db" -Fi"$LIB2/src/rest" \
   -Fl"$STATIC/$ARCH-$TARGET" \
-  -Fu"$LIB2/src/core" -Fu"$LIB2/src/db" -Fu"$LIB2/src/rest" \
+  -Fu"$LIB2/src/core" -Fu"$LIB2/src/db" -Fu"$LIB2/src/rest" -Fu"$LIB2/src/crypt" \
+    -Fu"$LIB2/src/app" -Fu"$LIB2/src/net" -Fu"$LIB2/src/lib" -Fu"$LIB2/src/orm" -Fu"$LIB2/src/soa" \
   -FU"$BIN/fpc-$ARCH_TG/.dcu" -FE"$BIN/fpc-$ARCH_TG" -o"$BIN/fpc-$ARCH_TG/$dest_fn" \
   -dFPC_SYNCMEM -dDOPATCHTRTL -dFPCUSEVERSIONINFO1 \
-  -B -Se1 "$LIB2/test/mormot2tests.dpr"
+  -B -Se1 "$LIB2/test/mormot2tests.dpr" | grep "[Warning|Error|Fatal]:"
 
 if [ -f "$LIB2/test/mormot2tests.cfg.bak" ]; then
   mv -f "$LIB2/test/mormot2tests.cfg.bak"  "$LIB2/test/mormot2tests.cfg"

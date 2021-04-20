@@ -24,6 +24,7 @@ interface
 
 uses
   sysutils,
+  classes,
   mormot.core.base,
   mormot.core.os,
   mormot.core.rtti,
@@ -625,8 +626,67 @@ type
       read fAlgo;
   end;
 
+  /// TStreamRedirect with TSynHasher cryptographic hashing
+  // - do not use this abstract class but inherited with overloaded GetAlgo
+  TStreamRedirectSynHasher = class(TStreamRedirect)
+  protected
+    fHash: TSynHasher;
+    class function GetAlgo: THashAlgo; virtual; abstract;
+    procedure DoHash(data: pointer; len: integer); override;
+  public
+    constructor Create(aDestination: TStream); override;
+    function GetHash: RawUtf8; override;
+    class function GetHashFileExt: RawUtf8; override;
+  end;
+
+  /// TStreamRedirect with MD5 cryptographic hashing
+  TStreamRedirectMd5 = class(TStreamRedirectSynHasher)
+  protected
+    class function GetAlgo: THashAlgo; override;
+  end;
+
+  /// TStreamRedirect with SHA-1 cryptographic hashing
+  TStreamRedirectSha1 = class(TStreamRedirectSynHasher)
+  protected
+    class function GetAlgo: THashAlgo; override;
+  end;
+
+  /// TStreamRedirect with SHA-256 cryptographic hashing
+  TStreamRedirectSha256 = class(TStreamRedirectSynHasher)
+  protected
+    class function GetAlgo: THashAlgo; override;
+  end;
+
+  /// TStreamRedirect with SHA-384 cryptographic hashing
+  TStreamRedirectSha384 = class(TStreamRedirectSynHasher)
+  protected
+    class function GetAlgo: THashAlgo; override;
+  end;
+
+  /// TStreamRedirect with SHA-512 cryptographic hashing
+  TStreamRedirectSha512 = class(TStreamRedirectSynHasher)
+  protected
+    class function GetAlgo: THashAlgo; override;
+  end;
+
+  /// TStreamRedirect with SHA-3-256 cryptographic hashing
+  TStreamRedirectSha3_256 = class(TStreamRedirectSynHasher)
+  protected
+    class function GetAlgo: THashAlgo; override;
+  end;
+
+  /// TStreamRedirect with SHA-3-512 cryptographic hashing
+  TStreamRedirectSha3_512 = class(TStreamRedirectSynHasher)
+  protected
+    class function GetAlgo: THashAlgo; override;
+  end;
+
+
+
+
 function ToText(algo: TSignAlgo): PShortString; overload;
 function ToText(algo: THashAlgo): PShortString; overload;
+
 
 /// compute the hexadecimal hash of any (big) file
 // - using a temporary buffer of 1MB for the sequential reading
@@ -639,6 +699,34 @@ procedure HashFile(const aFileName: TFileName; aAlgos: THashAlgos); overload;
 
 /// one-step hash computation of a buffer as lowercase hexadecimal string
 function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8;
+
+/// compute the MD5 checksum of a given file
+// - this function maps the THashFile signature as defined in mormot.core.buffers
+function HashFileMd5(const FileName: TFileName): RawUtf8;
+
+/// compute the SHA-1 checksum of a given file
+// - this function maps the THashFile signature as defined in mormot.core.buffers
+function HashFileSha1(const FileName: TFileName): RawUtf8;
+
+/// compute the SHA-256 checksum of a given file
+// - this function maps the THashFile signature as defined in mormot.core.buffers
+function HashFileSha256(const FileName: TFileName): RawUtf8;
+
+/// compute the SHA-384 checksum of a given file
+// - this function maps the THashFile signature as defined in mormot.core.buffers
+function HashFileSha384(const FileName: TFileName): RawUtf8;
+
+/// compute the SHA-512 checksum of a given file
+// - this function maps the THashFile signature as defined in mormot.core.buffers
+function HashFileSha512(const FileName: TFileName): RawUtf8;
+
+/// compute the SHA-3-256 checksum of a given file
+// - this function maps the THashFile signature as defined in mormot.core.buffers
+function HashFileSha3_256(const FileName: TFileName): RawUtf8;
+
+/// compute the SHA-3-512 checksum of a given file
+// - this function maps the THashFile signature as defined in mormot.core.buffers
+function HashFileSha3_512(const FileName: TFileName): RawUtf8;
 
 
 
@@ -758,7 +846,6 @@ function ToText(res: TProtocolResult): PShortString; overload;
 implementation
 
 
-
 { **************** High-Level TSynSigner/TSynHasher Multi-Algorithm Wrappers }
 
 { TSynHasher }
@@ -866,6 +953,86 @@ begin
   result := Final(aDigest);
 end;
 
+
+{ TStreamRedirectSynHasher }
+
+constructor TStreamRedirectSynHasher.Create(aDestination: TStream);
+begin
+  inherited Create(aDestination);
+  fHash.Init(GetAlgo);
+end;
+
+procedure TStreamRedirectSynHasher.DoHash(data: pointer; len: integer);
+begin
+  fHash.Update(data, len);
+end;
+
+function TStreamRedirectSynHasher.GetHash: RawUtf8;
+begin
+  result := fHash.Final;
+end;
+
+const
+  HASH_EXT: array[THashAlgo] of RawUtf8 = (
+    '.md5', '.sha1', '.sha256', '.sha384', '.sha512', '.sha3-256', '.sha3-512');
+
+class function TStreamRedirectSynHasher.GetHashFileExt: RawUtf8;
+begin
+  result := HASH_EXT[GetAlgo];
+end;
+
+
+{ TStreamRedirectSha3_512 }
+
+class function TStreamRedirectSha3_512.GetAlgo: THashAlgo;
+begin
+  result := hfSHA3_512;
+end;
+
+{ TStreamRedirectSha3_256 }
+
+class function TStreamRedirectSha3_256.GetAlgo: THashAlgo;
+begin
+  result := hfSHA3_256;
+end;
+
+{ TStreamRedirectSha512 }
+
+class function TStreamRedirectSha512.GetAlgo: THashAlgo;
+begin
+  result := hfSHA512;
+end;
+
+{ TStreamRedirectSha384 }
+
+class function TStreamRedirectSha384.GetAlgo: THashAlgo;
+begin
+  result := hfSHA384;
+end;
+
+{ TStreamRedirectSha256 }
+
+class function TStreamRedirectSha256.GetAlgo: THashAlgo;
+begin
+  result := hfSHA256;
+end;
+
+{ TStreamRedirectSha1 }
+
+class function TStreamRedirectSha1.GetAlgo: THashAlgo;
+begin
+  result := hfSHA1;
+end;
+
+{ TStreamRedirectMd5 }
+
+class function TStreamRedirectMd5.GetAlgo: THashAlgo;
+begin
+  result := hfMD5;
+end;
+
+
+
 function HashFull(aAlgo: THashAlgo; aBuffer: Pointer; aLen: integer): RawUtf8;
 var
   hasher: TSynHasher;
@@ -926,6 +1093,42 @@ begin
       end;
 end;
 
+function HashFileMd5(const FileName: TFileName): RawUtf8;
+begin
+  result := HashFile(FileName, hfMD5);
+end;
+
+function HashFileSha1(const FileName: TFileName): RawUtf8;
+begin
+  result := HashFile(FileName, hfSHA1);
+end;
+
+function HashFileSha256(const FileName: TFileName): RawUtf8;
+begin
+  result := HashFile(FileName, hfSHA256);
+end;
+
+function HashFileSha384(const FileName: TFileName): RawUtf8;
+begin
+  result := HashFile(FileName, hfSHA384);
+end;
+
+function HashFileSha512(const FileName: TFileName): RawUtf8;
+begin
+  result := HashFile(FileName, hfSHA512);
+end;
+
+function HashFileSha3_256(const FileName: TFileName): RawUtf8;
+begin
+  result := HashFile(FileName, hfSHA3_256);
+end;
+
+function HashFileSha3_512(const FileName: TFileName): RawUtf8;
+begin
+  result := HashFile(FileName, hfSHA3_512);
+end;
+
+
 
 { TSynSigner }
 
@@ -940,13 +1143,13 @@ begin
   SignatureSize := SIGN_SIZE[Algo];
   case Algo of
     saSha1:
-      PHMAC_SHA1(@ctxt)^.Init(aSecret, aSecretLen);
+      PHmacSha1(@ctxt)^.Init(aSecret, aSecretLen);
     saSha256:
-      PHMAC_SHA256(@ctxt)^.Init(aSecret, aSecretLen);
+      PHmacSha256(@ctxt)^.Init(aSecret, aSecretLen);
     saSha384:
-      PHMAC_SHA384(@ctxt)^.Init(aSecret, aSecretLen);
+      PHmacSha384(@ctxt)^.Init(aSecret, aSecretLen);
     saSha512:
-      PHMAC_SHA512(@ctxt)^.Init(aSecret, aSecretLen);
+      PHmacSha512(@ctxt)^.Init(aSecret, aSecretLen);
     saSha3224..saSha3S256:
       begin
         PSha3(@ctxt)^.Init(SHA3_ALGO[Algo]);
@@ -986,13 +1189,13 @@ procedure TSynSigner.Update(aBuffer: pointer; aLen: integer);
 begin
   case Algo of
     saSha1:
-      PHMAC_SHA1(@ctxt)^.Update(aBuffer, aLen);
+      PHmacSha1(@ctxt)^.Update(aBuffer, aLen);
     saSha256:
-      PHMAC_SHA256(@ctxt)^.Update(aBuffer, aLen);
+      PHmacSha256(@ctxt)^.Update(aBuffer, aLen);
     saSha384:
-      PHMAC_SHA384(@ctxt)^.Update(aBuffer, aLen);
+      PHmacSha384(@ctxt)^.Update(aBuffer, aLen);
     saSha512:
-      PHMAC_SHA512(@ctxt)^.Update(aBuffer, aLen);
+      PHmacSha512(@ctxt)^.Update(aBuffer, aLen);
     saSha3224..saSha3S256:
       PSha3(@ctxt)^.Update(aBuffer, aLen);
   end;
@@ -1002,13 +1205,13 @@ procedure TSynSigner.Final(out aSignature: THash512Rec; aNoInit: boolean);
 begin
   case Algo of
     saSha1:
-      PHMAC_SHA1(@ctxt)^.Done(aSignature.b160, aNoInit);
+      PHmacSha1(@ctxt)^.Done(aSignature.b160, aNoInit);
     saSha256:
-      PHMAC_SHA256(@ctxt)^.Done(aSignature.Lo, aNoInit);
+      PHmacSha256(@ctxt)^.Done(aSignature.Lo, aNoInit);
     saSha384:
-      PHMAC_SHA384(@ctxt)^.Done(aSignature.b384, aNoInit);
+      PHmacSha384(@ctxt)^.Done(aSignature.b384, aNoInit);
     saSha512:
-      PHMAC_SHA512(@ctxt)^.Done(aSignature.b, aNoInit);
+      PHmacSha512(@ctxt)^.Done(aSignature.b, aNoInit);
     saSha3224..saSha3S256:
       PSha3(@ctxt)^.Final(@aSignature, SignatureSize shl 3, aNoInit);
   end;
@@ -1760,7 +1963,7 @@ begin
   if aSharedObfuscationKeyNewKdf > 0 then
   begin
     // efficient and safe obfuscation based on proven algoriths (AES + SHA3)
-    PBKDF2_SHA3(SHA3_256, aSharedObfuscationKey,
+    Pbkdf2Sha3(SHA3_256, aSharedObfuscationKey,
        ToText(ClassType), aSharedObfuscationKeyNewKdf, @key);
     fCryptoAesE.EncryptInit(key, 128);
     fCryptoAesD.DecryptInitFrom(fCryptoAesE, key, 128);

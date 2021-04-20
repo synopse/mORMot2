@@ -30,10 +30,14 @@ HTTP/HTTPS Abstract Process Classes and Definitions
 ### mormot.net.client
 
 HTTP Client Classes
+- `THttpMultiPartStream` for multipart/formdata HTTP POST
 - `THttpClientSocket` Implementing HTTP client over plain sockets
 - `THttpRequest` Abstract HTTP client class
 - `TWinHttp` `TWinINet` `TWinHttpWebSocketClient` `TCurlHTTP`
+- `TSimpleHttpClient` Wrapper Class
 - Cached HTTP Connection to a Remote Server
+- Send Email using the `SMTP` Protocol
+- `DNS` Resolution Cache for `mormot.net.sock` `NewSocket()`
 
 ### mormot.net.server
 

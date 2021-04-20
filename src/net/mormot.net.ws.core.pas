@@ -877,7 +877,7 @@ begin
       Sha256Weak(aKey, key.b)
     else
       // new safer password derivation algorithm (rounds=1000 -> 1ms)
-      PBKDF2_SHA3(SHA3_256, aKey, aSettings.AesSalt, aSettings.AesRounds,
+      Pbkdf2Sha3(SHA3_256, aKey, aSettings.AesSalt, aSettings.AesRounds,
         @key, SizeOf(key));
     SetEncryptKeyAes(aSettings.AesCipher, key, aSettings.AesBits);
   end;

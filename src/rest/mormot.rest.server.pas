@@ -5397,7 +5397,7 @@ begin
 end;
 
 var
-  ServerNonceHash: TSha3; // faster than THMAC_SHA256 on small input
+  ServerNonceHash: TSha3; // faster than THmacSha256 on small input
   ServerNonceCache: array[boolean] of record
     tix: cardinal;
     res: RawUtf8;

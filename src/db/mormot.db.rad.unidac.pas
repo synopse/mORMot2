@@ -799,10 +799,11 @@ begin
               P.AsBlobRef.Write(0, Length(VArray[aArrayIndex]),
                 Pointer(VArray[aArrayIndex]));
             end
-          else begin
-              P.AsBlobRef.Clear;
-              P.AsBlobRef.Write(0, Length(VData), Pointer(VData));
-            end;
+          else
+          begin
+            P.AsBlobRef.Clear;
+            P.AsBlobRef.Write(0, Length(VData), Pointer(VData));
+          end;
           {$else}
             P.AsString := VArray[aArrayIndex]
           else

@@ -10,6 +10,7 @@ unit mormot.net.sock;
    - Socket Process High-Level Encapsulation
    - TLS / HTTPS Encryption Abstract Layer
    - Efficient Multiple Sockets Polling
+   - TUri parsing/generating URL wrapper
    - TCrtSocket Buffered Socket Read/Write Class
 
    The Low-Level Sockets API, which is complex and inconsistent among OS, is
@@ -70,17 +71,25 @@ type
     nrClosed,
     nrFatalError,
     nrUnknownError,
-    nrTooManyConnections);
+    nrTooManyConnections,
+    nrRefused);
 
   {$M+}
   /// exception class raised by this unit
   ENetSock = class(Exception)
+  protected
+    fLastError: TNetResult;
   public
+    /// reintroduced constructor with TNetResult information
+    constructor Create(msg: string; const args: array of const;
+      error: TNetResult = nrOK); reintroduce;
     /// raise ENetSock if res is not nrOK or nrRetry
     class procedure Check(res: TNetResult; const Context: shortstring);
     /// call NetLastError and raise ENetSock if not nrOK nor nrRetry
     class procedure CheckLastError(const Context: shortstring; ForceRaise: boolean = false;
       AnotherNonFatal: integer = 0);
+    property LastError: TNetResult
+      read fLastError;
   end;
   {$M-}
 
@@ -194,6 +203,7 @@ var
   SocketApiVersion: RawUtf8;
 
   /// used by NewSocket() to cache the host names
+  // - avoiding DNS resolution is a always a good idea
   // - implemented by mormot.net.client unit using a TSynDictionary
   // - you may call its SetTimeOut or Flush methods to tune the caching
   NewSocketAddressCache: INewSocketAddressCache;
@@ -222,7 +232,17 @@ function ToText(res: TNetResult): PShortString; overload;
 { ******************** TLS / HTTPS Encryption Abstract Layer }
 
 type
-  /// TLS Options and Information for a given TCrtSocket/INetTLS connection
+  /// pointer to TLS Options and Information for a given TCrtSocket connection
+  PNetTlsContext = ^TNetTlsContext;
+
+  /// callback raised by INetTls.AfterConnection to validate a peer
+  // - at this point, Context.CipherName is set, but PeerInfo not yet (it is
+  // up to the event to compute the PeerInfo value)
+  // - TLS is an opaque structure, typically an OpenSSL PSSL pointer
+  TOnNetTlsPeerValidate = procedure(Socket: TNetSocket;
+    Context: PNetTlsContext; TLS: pointer) of object;
+
+  /// TLS Options and Information for a given TCrtSocket/INetTls connection
   // - currently only properly implemented by mormot.lib.openssl11 - SChannel
   // on Windows only recognizes IgnoreCertificateErrors and sets CipherName
   // - typical usage is the following:
@@ -239,7 +259,7 @@ type
   // $ finally
   // $   Free;
   // $ end;
-  TNetTLSContext = record
+  TNetTlsContext = record
     /// set if the TLS flag was set to TCrtSocket.OpenBind() method
     Enabled: boolean;
     /// input: let HTTPS be less paranoid about TLS certificates
@@ -248,6 +268,7 @@ type
     WithPeerInfo: boolean;
     /// input: PEM file name containing a certificate to be loaded
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
+    // - on OpenSSL, calls the SSL_CTX_use_certificate_file() API
     CertificateFile: RawUtf8;
     /// input: PEM file name containing a private key to be loaded
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
@@ -257,30 +278,30 @@ type
     /// input: file containing a specific set of CA certificates chain
     // - e.g. entrust_2048_ca.cer from https://web.entrust.com
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
+    // - on OpenSSL, calls the SSL_CTX_load_verify_locations() API
     CACertificatesFile: RawUtf8;
     /// input: preferred Cipher List
     CipherList: RawUtf8;
-    /// output: some information about the connected Peer
-    // - stored in the native format of the TLS library, e.g. X509_print()
-    PeerInfo: RawUtf8;
     /// output: the cipher description, as used for the current connection
     // - e.g. 'ECDHE-RSA-AES128-GCM-SHA256 TLSv1.2 Kx=ECDH Au=RSA Enc=AESGCM(128) Mac=AEAD'
     CipherName: RawUtf8;
+    /// output: some information about the connected Peer
+    // - stored in the native format of the TLS library, e.g. X509_print()
+    PeerInfo: RawUtf8;
     /// output: low-level details about the last error at TLS level
     LastError: RawUtf8;
+    /// called by INetTls.AfterConnection to customize peer validation
+    OnPeerValidate: TOnNetTlsPeerValidate;
   end;
-
-  /// pointer to TLS Options and Information for a given TCrtSocket connection
-  PNetTLSContext = ^TNetTLSContext;
 
   /// abstract definition of the TLS encrypted layer
   // - is implemented e.g. by the SChannel API on Windows, or OpenSSL on POSIX
   // if you include mormot.lib.openssl11 to your project
-  INetTLS = interface
+  INetTls = interface
     /// this method is called once to attach the underlying socket
     // - should make the proper initial TLS handshake to create a session
     // - should raise an exception on error
-    procedure AfterConnection(Socket: TNetSocket; var Context: TNetTLSContext;
+    procedure AfterConnection(Socket: TNetSocket; var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);
     /// receive some data from the TLS layer
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
@@ -289,13 +310,13 @@ type
   end;
 
   /// signature of a factory for a new TLS encrypted layer
-  TOnNewNetTLS = function: INetTLS;
+  TOnNewNetTls = function: INetTls;
 
 var
   /// global factory for a new TLS encrypted layer for TCrtSocket
   // - is set to use the SChannel API on Windows; on other targets, may be nil
   // unless the mormot.lib.openssl11.pas unit is included with your project
-  NewNetTLS: TOnNewNetTLS;
+  NewNetTls: TOnNewNetTls;
 
 
 { ******************** Efficient Multiple Sockets Polling }
@@ -456,6 +477,70 @@ type
 function PollSocketClass: TPollSocketClass;
 
 
+{ *************************** TUri parsing/generating URL wrapper }
+
+type
+  /// structure used to parse an URI into its components
+  // - ready to be supplied e.g. to a THttpRequest sub-class
+  // - used e.g. by class function THttpRequest.Get()
+  // - will decode standard HTTP/HTTPS urls or Unix sockets URI like
+  // 'http://unix:/path/to/socket.sock:/url/path'
+  {$ifdef USERECORDWITHMETHODS}
+  TUri = record
+  {$else}
+  TUri = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// if the server is accessible via https:// and not plain http://
+    Https: boolean;
+    /// either nlTCP for HTTP/HTTPS or nlUnix for Unix socket URI
+    Layer: TNetLayer;
+    /// if the server is accessible via something else than http:// or https://
+    // - e.g. 'ws' or 'wss' for ws:// or wss://
+    Scheme: RawUtf8;
+    /// the server name
+    // - e.g. 'www.somewebsite.com' or 'path/to/socket.sock' Unix socket URI
+    Server: RawUtf8;
+    /// the server port
+    // - e.g. '80'
+    Port: RawUtf8;
+    /// optional user for authentication, as retrieved before '@'
+    // - e.g. from 'https://user:password@server:port/address'
+    User: RawUtf8;
+    /// optional password for authentication, as retrieved before '@'
+    // - e.g. from 'https://user:password@server:port/address'
+    Password: RawUtf8;
+    /// the resource address, including optional parameters
+    // - e.g. '/category/name/10?param=1'
+    Address: RawUtf8;
+    /// reset all stored information
+    procedure Clear;
+    /// fill the members from a supplied URI
+    // - recognize e.g. 'http://Server:Port/Address', 'https://Server/Address',
+    // 'Server/Address' (as http), or 'http://unix:/Server:/Address' (as nlUnix)
+    // - recognize 'https://user:password@server:port/address' authentication
+    // - returns TRUE is at least the Server has been extracted, FALSE on error
+    function From(aUri: RawUtf8; const DefaultPort: RawUtf8 = ''): boolean;
+    /// compute the whole normalized URI
+    // - e.g. 'https://Server:Port/Address' or 'http://unix:/Server:/Address'
+    function URI: RawUtf8;
+    /// the server port, as integer value
+    function PortInt: integer;
+    /// compute the root resource Address, without any URI-encoded parameter
+    // - e.g. '/category/name/10'
+    function Root: RawUtf8;
+    /// returns BinToBase64(User + ':' + Password) encoded value
+    function UserPasswordBase64: RawUtf8;
+  end;
+  PUri = ^TUri;
+
+
+const
+  /// the default TCP port used for HTTP = DEFAULT_PORT[false] or
+  // HTTPS = DEFAULT_PORT[true]
+  DEFAULT_PORT: array[boolean] of RawUtf8 = (
+    '80', '443');
+
 
 { ********* TCrtSocket Buffered Socket Read/Write Class }
 
@@ -490,6 +575,7 @@ type
     fSock: TNetSocket;
     fServer: RawUtf8;
     fPort: RawUtf8;
+    fProxyUrl: RawUtf8;
     fSockIn: PTextFile;
     fSockOut: PTextFile;
     fTimeOut: PtrInt;
@@ -505,7 +591,7 @@ type
     fRemoteIP: RawUtf8;
     // updated during UDP connection, accessed via PeerAddress/PeerPort
     fPeerAddr: TNetAddr;
-    fSecure: INetTLS;
+    fSecure: INetTls;
     procedure SetKeepAlive(aKeepAlive: boolean); virtual;
     procedure SetLinger(aLinger: integer); virtual;
     procedure SetReceiveTimeout(aReceiveTimeout: integer); virtual;
@@ -513,22 +599,31 @@ type
     procedure SetTCPNoDelay(aTCPNoDelay: boolean); virtual;
     function GetRawSocket: PtrInt;
   public
-    /// direct access to the low-level TLS Options and Information
-    // - depending on the actual INetTLS implementation, some fields may not
+    /// direct access to the optional low-level HTTP proxy tunnelling information
+    // - could have been assigned by a Tunnel.From() call
+    // - User/Password would taken into consideration for authentication
+    Tunnel: TUri;
+    /// direct access to the optional low-level TLS Options and Information
+    // - depending on the actual INetTls implementation, some fields may not
     // be used nor populated - currently only supported by mormot.lib.openssl11
-    TLS: TNetTLSContext;
+    TLS: TNetTlsContext;
     /// can be assigned from TSynLog.DoLog class method for low-level logging
     OnLog: TSynLogProc;
     /// common initialization of all constructors
     // - do not call directly, but use Open / Bind constructors instead
     constructor Create(aTimeOut: PtrInt = 10000); reintroduce; virtual;
-    /// connect to aServer:aPort
+    /// constructor to connect to aServer:aPort
     // - optionaly via TLS (using the SChannel API on Windows, or by including
     // mormot.lib.openssl11 unit to your project) - with custom input options
     // - see also SocketOpen() for a wrapper catching any connection exception
     constructor Open(const aServer, aPort: RawUtf8; aLayer: TNetLayer = nlTCP;
-      aTimeOut: cardinal = 10000; aTLS: boolean = false; aTLSContext: PNetTLSContext = nil);
-    /// bind to an address
+      aTimeOut: cardinal = 10000; aTLS: boolean = false;
+      aTLSContext: PNetTlsContext = nil; aTunnel: PUri = nil);
+    /// high-level constructor to connect to a given URI
+    constructor OpenUri(const aURI: RawUtf8; out aAddress: RawUtf8;
+      const aTunnel: RawUtf8 = ''; aTimeOut: cardinal = 10000;
+      aTLSContext: PNetTlsContext = nil); overload;
+    /// constructor to bind to an address
     // - aAddr='1234' - bind to a port on all interfaces, the same as '0.0.0.0:1234'
     // - aAddr='IP:port' - bind to specified interface only, e.g.
     // '1.2.3.4:1234'
@@ -616,6 +711,12 @@ type
     /// flush all pending data to be sent, optionally with some body content
     // - raise ENetSock on error
     procedure SockSendFlush(const aBody: RawByteString = '');
+    /// send all TStream content till the end using SndLow()
+    // - don't forget to call SockSendFlush before using this method
+    // - will call Stream.Read() over a temporary buffer of 1MB by default
+    // - Stream may be a TFileStream, THttpMultiPartStream or TNestedStreamReader
+    // - raise ENetSock on error
+    procedure SockSendStream(Stream: TStream; ChunkSize: integer = 1 shl 20);
     /// how many bytes could be added by SockSend() in the internal buffer
     function SockSendRemainingSize: integer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -736,12 +837,15 @@ type
     /// IP address, initialized after Open() with Server name
     property Server: RawUtf8
       read fServer;
-    /// contains Sock, but transtyped as number for log display
-    property RawSocket: PtrInt
-      read GetRawSocket;
     /// IP port, initialized after Open() with port number
     property Port: RawUtf8
       read fPort;
+    /// contains Sock, but transtyped as number for log display
+    property RawSocket: PtrInt
+      read GetRawSocket;
+    /// HTTP Proxy URI used for tunnelling, from Tunnel.Server/Port values
+    property ProxyUrl: RawUtf8
+      read fProxyUrl;
     /// if higher than 0, read loop will wait for incoming data till
     // TimeOut milliseconds (default value is 10000) - used also in SockSend()
     property TimeOut: PtrInt
@@ -755,63 +859,12 @@ type
   end;
   {$M-}
 
-type
-  /// structure used to parse an URI into its components
-  // - ready to be supplied e.g. to a THttpRequest sub-class
-  // - used e.g. by class function THttpRequest.Get()
-  // - will decode standard HTTP/HTTPS urls or Unix sockets URI like
-  // 'http://unix:/path/to/socket.sock:/url/path'
-  {$ifdef USERECORDWITHMETHODS}
-  TUri = record
-  {$else}
-  TUri = object
-  {$endif USERECORDWITHMETHODS}
-  public
-    /// if the server is accessible via https:// and not plain http://
-    Https: boolean;
-    /// either nlTCP for HTTP/HTTPS or nlUnix for Unix socket URI
-    Layer: TNetLayer;
-    /// if the server is accessible via something else than http:// or https://
-    // - e.g. 'ws' or 'wss' for ws:// or wss://
-    Scheme: RawUtf8;
-    /// the server name
-    // - e.g. 'www.somewebsite.com' or 'path/to/socket.sock' Unix socket URI
-    Server: RawUtf8;
-    /// the server port
-    // - e.g. '80'
-    Port: RawUtf8;
-    /// the resource address, including optional parameters
-    // - e.g. '/category/name/10?param=1'
-    Address: RawUtf8;
-    /// fill the members from a supplied URI
-    // - recognize e.g. 'http://Server:Port/Address', 'https://Server/Address',
-    // 'Server/Address' (as http), or 'http://unix:/Server:/Address'
-    // - returns TRUE is at least the Server has been extracted, FALSE on error
-    function From(aUri: RawUtf8; const DefaultPort: RawUtf8 = ''): boolean;
-    /// compute the whole normalized URI
-    // - e.g. 'https://Server:Port/Address' or 'http://unix:/Server:/Address'
-    function URI: RawUtf8;
-    /// the server port, as integer value
-    function PortInt: integer;
-    /// compute the root resource Address, without any URI-encoded parameter
-    // - e.g. '/category/name/10'
-    function Root: RawUtf8;
-    /// reset all stored information
-    procedure Clear;
-  end;
-
-
-const
-  /// the default TCP port used for HTTP = DEFAULT_PORT[false] or
-  // HTTPS = DEFAULT_PORT[true]
-  DEFAULT_PORT: array[boolean] of RawUtf8 = (
-    '80', '443');
-
 
 /// create a TCrtSocket instance, returning nil on error
-// - useful to easily catch any exception, and provide a custom TNetTLSContext
+// - useful to easily catch any exception, and provide a custom TNetTlsContext
 function SocketOpen(const aServer, aPort: RawUtf8;
-  aTLS: boolean = false; aTLSContext: PNetTLSContext = nil): TCrtSocket;
+  aTLS: boolean = false; aTLSContext: PNetTlsContext = nil): TCrtSocket;
+
 
 
 implementation
@@ -840,7 +893,8 @@ const
     'Closed',
     'Fatal Error',
     'Unknown Error',
-    'Too Many Connections');
+    'Too Many Connections',
+    'Refused');
 
 function NetLastError(AnotherNonFatal: integer = NO_ERROR;
   Error: PInteger = nil): TNetResult;
@@ -918,17 +972,26 @@ end;
 
 function ToText(res: TNetResult): PShortString;
 begin
-  result := @_NR[res];
+  result := @_NR[res]; // no mormot.core.rtti.pas need
 end;
 
 
 { ENetSock }
 
+constructor ENetSock.Create(msg: string; const args: array of const;
+  error: TNetResult);
+begin
+  fLastError := error;
+  if error <> nrOK then
+    msg := format('%s [%s - #%d]', [msg, _NR[error], ord(error)]);
+  inherited CreateFmt(msg, args);
+end;
+
 class procedure ENetSock.Check(res: TNetResult; const Context: shortstring);
 begin
   if (res <> nrOK) and
      (res <> nrRetry) then
-    raise CreateFmt('%s: ''%s'' error', [Context, _NR[res]]);
+    raise Create('%s failed', [Context], res);
 end;
 
 class procedure ENetSock.CheckLastError(const Context: shortstring;
@@ -1178,10 +1241,9 @@ procedure TNetSocketWrap.SetOpt(prot, name: integer;
   value: pointer; valuelen: integer);
 begin
   if @self = nil then
-    raise ENetSock.CreateFmt('SetOptions(%d,%d) with no socket', [prot, name]);
-  if setsockopt(TSocket(@self), prot, name, value, valuelen)  <> NO_ERROR then
-    raise ENetSock.CreateFmt('SetOptions(%d,%d) failed as %s',
-      [prot, name, NetLastErrorMsg]);
+    raise ENetSock.Create('SetOptions(%d,%d) with no socket', [prot, name]);
+  if setsockopt(TSocket(@self), prot, name, value, valuelen) <> NO_ERROR then
+    raise ENetSock.Create('SetOptions(%d,%d)', [prot, name], NetLastError);
 end;
 
 procedure TNetSocketWrap.SetKeepAlive(keepalive: boolean);
@@ -1595,10 +1657,7 @@ begin
 end;
 
 
-{ ********* TCrtSocket Buffered Socket Read/Write Class }
-
-const
-  UNIX_LOW = ord('u') + ord('n') shl 8 + ord('i') shl 16 + ord('x') shl 24;
+{ *************************** TUri parsing/generating URL wrapper }
 
 function StartWith(p, up: PUtf8Char): boolean;
 // to avoid linking mormot.core.text for IdemPChar()
@@ -1631,6 +1690,202 @@ begin
   result := true;
 end;
 
+function SockBase64Encode(const s: RawUtf8): RawUtf8;
+// to avoid linking mormot.core.buffers for BinToBase64()
+
+  procedure DoEncode(rp, sp: PAnsiChar; len: integer);
+  const
+    b64: array[0..63] of AnsiChar =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  var
+    i: integer;
+    c: cardinal;
+  begin
+    for i := 1 to len div 3 do
+    begin
+      c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
+      rp[0] := b64[(c shr 18) and $3f];
+      rp[1] := b64[(c shr 12) and $3f];
+      rp[2] := b64[(c shr 6) and $3f];
+      rp[3] := b64[c and $3f];
+      inc(rp, 4);
+      inc(sp, 3);
+    end;
+    case len mod 3 of
+      1:
+        begin
+          c := ord(sp[0]) shl 16;
+          rp[0] := b64[(c shr 18) and $3f];
+          rp[1] := b64[(c shr 12) and $3f];
+          rp[2] := '=';
+          rp[3] := '=';
+        end;
+      2:
+        begin
+          c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8;
+          rp[0] := b64[(c shr 18) and $3f];
+          rp[1] := b64[(c shr 12) and $3f];
+          rp[2] := b64[(c shr 6) and $3f];
+          rp[3] := '=';
+        end;
+    end;
+  end;
+
+var
+  len: integer;
+begin
+  result:='';
+  len := length(s);
+  if len = 0 then
+    exit;
+  SetLength(result, ((len + 2) div 3) * 4);
+  DoEncode(pointer(result), pointer(s), len);
+end;
+
+function SplitFromRight(const Text: RawUtf8; Sep: AnsiChar;
+  var Before, After: RawUtf8): boolean;
+var
+  i: PtrInt;
+begin
+  for i := length(Text) - 1 downto 2 do // search Sep from right side
+    if Text[i] = Sep then
+    begin
+      TrimCopy(Text, 1, i - 1, Before);
+      TrimCopy(Text, i + 1, maxInt, After);
+      result := true;
+      exit;
+    end;
+  result := false;
+end;
+
+
+{ TUri }
+
+procedure TUri.Clear;
+begin
+  Https := false;
+  layer := nlTCP;
+  Finalize(self);
+end;
+
+function TUri.From(aUri: RawUtf8; const DefaultPort: RawUtf8): boolean;
+var
+  P, S, P1, P2: PAnsiChar;
+  i: integer;
+begin
+  Clear;
+  result := false;
+  aUri := TrimU(aUri);
+  if aUri = '' then
+    exit;
+  P := pointer(aUri);
+  S := P;
+  while S^ in ['a'..'z', 'A'..'Z', '+', '-', '.', '0'..'9'] do
+    inc(S);
+  if PInteger(S)^ and $ffffff = ord(':') + ord('/') shl 8 + ord('/') shl 16 then
+  begin
+    FastSetString(Scheme, P, S - P);
+    if StartWith(pointer(P), 'HTTPS') then
+      Https := true
+    else if StartWith(pointer(P), 'UDP') then
+      layer := nlUDP; // 'udp://server:port';
+    P := S + 3;
+  end;
+  if StartWith(pointer(P), 'UNIX:') then
+  begin
+    inc(P, 5); // 'http://unix:/path/to/socket.sock:/url/path'
+    layer := nlUNIX;
+    S := P;
+    while not (S^ in [#0, ':']) do
+      inc(S); // Server='path/to/socket.sock'
+  end
+  else
+  begin
+    P1 := pointer(PosChar(pointer(P), '@'));
+    if P1 <> nil then
+    begin
+      // parse 'https://user:password@server:port/address'
+      P2 := pointer(PosChar(pointer(P), '/'));
+      if (P2 = nil) or
+         (PtrUInt(P2) > PtrUInt(P1)) then
+      begin
+        FastSetString(User, P, P1 - P);
+        i := PosExChar(':', User);
+        if i <> 0 then
+        begin
+          Password := copy(User, i + 1, 1000);
+          SetLength(User, i - 1);
+        end;
+        P := P1 + 1;
+      end;
+    end;
+    S := P;
+    while not (S^ in [#0, ':', '/']) do
+      inc(S); // 'server:port/address' or 'server/address'
+  end;
+  FastSetString(Server, P, S - P);
+  if S^ = ':' then
+  begin
+    inc(S);
+    P := S;
+    while not (S^ in [#0, '/']) do
+      inc(S);
+    FastSetString(Port, P, S - P); // Port='' for nlUNIX
+  end
+  else if DefaultPort <> '' then
+    port := DefaultPort
+  else
+    port := DEFAULT_PORT[Https];
+  if S^ <> #0 then // ':' or '/'
+  begin
+    inc(S);
+    FastSetString(Address, S, StrLen(S));
+  end;
+  if Server <> '' then
+    result := true;
+end;
+
+function TUri.URI: RawUtf8;
+const
+  Prefix: array[boolean] of RawUtf8 = (
+    'http://', 'https://');
+begin
+  if layer = nlUNIX then
+    result := 'http://unix:' + Server + ':/' + address
+  else if (port = '') or
+          (port = '0') or
+          (port = DEFAULT_PORT[Https]) then
+    result := Prefix[Https] + Server + '/' + address
+  else
+    result := Prefix[Https] + Server + ':' + port + '/' + address;
+end;
+
+function TUri.PortInt: integer;
+begin
+  result := GetCardinal(pointer(port));
+end;
+
+function TUri.Root: RawUtf8;
+var
+  i: PtrInt;
+begin
+  i := PosExChar('?', address);
+  if i = 0 then
+    Root := address
+  else
+    Root := copy(address, 1, i - 1);
+end;
+
+function TUri.UserPasswordBase64: RawUtf8;
+begin
+  if User = '' then
+    result := ''
+  else
+    result := SockBase64Encode(User + ':' + Password);
+end;
+
+
+{ ********* TCrtSocket Buffered Socket Read/Write Class }
 
 { TCrtSocket }
 
@@ -1670,11 +1925,16 @@ begin
 end;
 
 constructor TCrtSocket.Open(const aServer, aPort: RawUtf8;
-  aLayer: TNetLayer; aTimeOut: cardinal; aTLS: boolean; aTLSContext: PNetTLSContext);
+  aLayer: TNetLayer; aTimeOut: cardinal; aTLS: boolean;
+  aTLSContext: PNetTlsContext; aTunnel: PUri);
 begin
   Create(aTimeOut); // default read timeout is 10 seconds
+  // copy the input parameters before OpenBind()
   if aTLSContext <> nil then
-    TLS := aTLSContext^; // copy the input parameters before OpenBind()
+    TLS := aTLSContext^;
+  if (aTunnel <> nil) and
+     (aTunnel^.Server <> '') then
+    Tunnel := aTunnel^;
   // OpenBind() raise an exception on error
   {$ifdef OSPOSIX}
   if StartWith(pointer(aServer), 'UNIX:') then
@@ -1688,28 +1948,24 @@ begin
     OpenBind(aServer, aPort, {dobind=}false, aTLS, aLayer);
 end;
 
-function SplitFromRight(const Text: RawUtf8; Sep: AnsiChar;
-  var Before, After: RawUtf8): boolean;
+constructor TCrtSocket.OpenUri(const aURI: RawUtf8; out aAddress: RawUtf8;
+  const aTunnel: RawUtf8; aTimeOut: cardinal; aTLSContext: PNetTlsContext);
 var
-  i: PtrInt;
+  u, t: TUri;
 begin
-  for i := length(Text) - 1 downto 2 do // search Sep from right side
-    if Text[i] = Sep then
-    begin
-      TrimCopy(Text, 1, i - 1, Before);
-      TrimCopy(Text, i + 1, maxInt, After);
-      result := true;
-      exit;
-    end;
-  result := false;
+  if not u.From(aURI) then
+    raise ENetSock.Create('%s.OpenUri: invalid %s', [ClassNameShort(self)^, aURI]);
+  aAddress := u.Address;
+  t.From(aTunnel);
+  Open(u.Server, u.Port, nlTCP, aTimeOut, u.Https, aTLSContext, @t);
 end;
 
 const
   BINDTXT: array[boolean] of string[4] = (
     'open', 'bind');
   BINDMSG: array[boolean] of string = (
-    'is a server available on this address:port?',
-    'another process may be currently listening to this port!');
+    'Is a server available on this address:port?',
+    'Another process may be currently listening to this port!');
 
 constructor TCrtSocket.Bind(const aAddress: RawUtf8; aLayer: TNetLayer;
   aTimeOut: integer);
@@ -1722,13 +1978,15 @@ begin
   begin
     {$ifdef OSLINUX} // try systemd activation
     if not sd.IsAvailable then
-      raise ENetSock.Create('Bind('''') but Systemd is not available');
+      raise ENetSock.Create('%s.Bind('''') but Systemd is not available',
+        [ClassNameShort(self)^]);
     if sd.listen_fds(0) > 1 then
-      raise ENetSock.Create('Bind(''''): Systemd activation failed - too ' +
-        'many file descriptors received');
+      raise ENetSock.Create('%s.Bind(''''): Systemd activation failed - too ' +
+        'many file descriptors received', [ClassNameShort(self)^]);
     aSock := SD_LISTEN_FDS_START + 0;
     {$else}
-    raise ENetSock.Create('Bind(''''), i.e. Systemd activation, is not allowed on this platform');
+    raise ENetSock.Create('%s.Bind(''''), i.e. Systemd activation, ' +
+      'is not allowed on this platform', [ClassNameShort(self)^]);
     {$endif OSLINUX}
   end
   else
@@ -1757,32 +2015,67 @@ procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8;
   doBind, aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket);
 var
   retry: integer;
+  head: RawUtf8;
   res: TNetResult;
 begin
   fSocketLayer := aLayer;
   fWasBind := doBind;
   if {%H-}PtrInt(aSock)<=0 then
   begin
+    // OPEN or BIND mode -> create the socket
+    if doBind then
+      // allow small number of retries (e.g. XP or BSD during aggressive tests)
+      retry := 10
+    else if (Tunnel.Server <> '') and
+            (aLayer = nlTCP) then
+    begin
+      // handle client tunnelling via an HTTP(s) proxy
+      res := nrRefused;
+      fProxyUrl := Tunnel.URI;
+      try
+        OpenBind(Tunnel.Server, Tunnel.Port, false, Tunnel.Https);
+        SockSend(['CONNECT ', aServer, ':', aPort, ' HTTP/1.0']);
+        if Tunnel.User <> '' then
+          SockSend(['Proxy-Authorization: Basic ', Tunnel.UserPasswordBase64]);
+        SockSendFlush;
+        repeat
+          SockRecvLn(head);
+          if StartWith(pointer(head), 'HTTP/') and
+             (length(head) > 11) and
+             (head[10] = '2') then // 'HTTP/1.1 2xx xxxx' success
+            res := nrOK;
+        until  head = '';
+      except
+        res := nrNotFound;
+      end;
+      if res <> nrOk then
+        raise ENetSock.Create('%s.OpenBind(%s:%s): %s proxy error',
+          [ClassNameShort(self)^, aServer, aPort, fProxyUrl], res);
+      fServer := aServer;
+      fPort := aPort;
+      if Assigned(OnLog) then
+        OnLog(sllTrace, 'Open(%:%) via proxy %', [fServer, fPort, fProxyUrl], self);
+      exit;
+    end
+    else
+      // direct client connection
+      retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
     if (aPort = '') and
        (aLayer <> nlUNIX) then
       fPort := DEFAULT_PORT[aTLS] // default port is 80/443 (HTTP/S)
     else
       fPort := aPort;
     fServer := aServer;
-    if doBind then
-      // allow small number of retries (e.g. XP or BSD during aggressive tests)
-      retry := 10
-    else
-      retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
-    res := NewSocket(aServer, aPort, aLayer, doBind,
-      Timeout, Timeout, Timeout, retry, fSock);
+    res := NewSocket(fServer, fPort, aLayer, doBind,
+      fTimeout, fTimeout, fTimeout, retry, fSock);
     if res <> nrOK then
-      raise ENetSock.CreateFmt('OpenBind(%s:%s,%s) failed as ''%s'': %s',
-        [aServer, fPort, BINDTXT[doBind], _NR[res], BINDMSG[doBind]]);
+      raise ENetSock.Create('%s %s.OpenBind(%s:%s,%s)',
+        [BINDMSG[doBind], ClassNameShort(self)^, aServer, fPort], res);
   end
   else
   begin
-    fSock := aSock; // ACCEPT mode -> socket is already created by caller
+    // ACCEPT mode -> socket is already created by caller
+    fSock := aSock;
     if TimeOut > 0 then
     begin
       // set timout values for both directions
@@ -1795,21 +2088,23 @@ begin
        not doBind and
        ({%H-}PtrInt(aSock) <= 0) then
     try
-      if not Assigned(NewNetTLS) then
-        raise ENetSock.Create('TLS is not available - try including ' +
-          'mormot.lib.openssl11 and installing OpenSSL 1.1.1');
-      fSecure := NewNetTLS;
+      if not Assigned(NewNetTls) then
+        raise ENetSock.Create('%s.OpenBind: TLS is not available - try ' +
+          'including mormot.lib.openssl11 and installing OpenSSL 1.1.1',
+          [ClassNameShort(self)^]);
+      fSecure := NewNetTls;
       if fSecure = nil then
-        raise ENetSock.Create('TLS is not available on this system - ' +
-          'try installing OpenSSL 1.1.1');
+        raise ENetSock.Create('%s.OpenBind; TLS is not available on this ' +
+          'system - try installing OpenSSL 1.1.1', [ClassNameShort(self)^]);
       fSecure.AfterConnection(fSock, TLS, aServer);
       TLS.Enabled := true;
     except
       on E: Exception do
       begin
         fSecure := nil;
-        raise ENetSock.CreateFmt('OpenBind(%s:%s,%s): TLS failed [%s %s]',
-          [aServer, port, BINDTXT[doBind], ClassNameShort(E)^, E.Message]);
+        raise ENetSock.CreateFmt('%s.OpenBind(%s:%s,%s): TLS failed [%s %s]',
+          [ClassNameShort(self)^, aServer, port, BINDTXT[doBind],
+           ClassNameShort(E)^, E.Message]);
       end;
     end;
   if Assigned(OnLog) then
@@ -2112,9 +2407,11 @@ var
   {$endif OSWINDOWS}
 begin
   if SockIn = nil then
-    raise ENetSock.Create('SockInPending without SockIn');
+    raise ENetSock.Create('%s.SockInPending(SockIn=nil)',
+      [ClassNameShort(self)^]);
   if aTimeOutMS < 0 then
-    raise ENetSock.Create('SockInPending(aTimeOutMS<0)');
+    raise ENetSock.Create('%s.SockInPending(aTimeOutMS<0)',
+      [ClassNameShort(self)^]);
   with PTextRec(SockIn)^ do
     result := BufEnd - BufPos;
   if result = 0 then
@@ -2259,10 +2556,24 @@ begin
     if TrySndLow(pointer(fSndBuf), fSndBufLen) then
       fSndBufLen := 0
     else
-      raise ENetSock.CreateFmt('SockSendFlush(%s) len=%d %s',
-        [fServer, fSndBufLen, NetLastErrorMsg]);
+      raise ENetSock.Create('%s.SockSendFlush(%s) len=%d %s',
+        [ClassNameShort(self)^, fServer, fSndBufLen], NetLastError);
   if body > 0 then
     SndLow(pointer(aBody), body); // direct sending of biggest packets
+end;
+
+procedure TCrtSocket.SockSendStream(Stream: TStream; ChunkSize: integer);
+var
+  chunk: RawByteString;
+  rd: integer;
+begin
+  SetLength(chunk, ChunkSize);
+  repeat
+    rd := Stream.Read(pointer(chunk)^, ChunkSize);
+    if rd = 0 then
+      break;
+    SndLow(pointer(chunk), rd);
+  until false;
 end;
 
 procedure TCrtSocket.SockRecv(Buffer: pointer; Length: integer);
@@ -2272,7 +2583,8 @@ begin
   read := Length;
   if not TrySockRecv(Buffer, read, {StopBeforeLength=}false) or
      (Length <> read) then
-    raise ENetSock.CreateFmt('SockRecv(%d) failure (read=%d)', [Length, read]);
+    raise ENetSock.Create('%s.SockRecv(%d) read=%d',
+      [ClassNameShort(self)^, Length, read], NetLastError);
 end;
 
 function TCrtSocket.SockReceivePending(TimeOutMS: integer): TCrtSocketPending;
@@ -2458,8 +2770,8 @@ begin
     readln(SockIn^, Line); // example: HTTP/1.0 200 OK
     Error := ioresult;
     if Error <> 0 then
-      raise ENetSock.CreateFmt('SockRecvLn error %d after %d chars',
-        [Error, Length(Line)]);
+      raise ENetSock.Create('%s.SockRecvLn error %d after %d chars',
+        [ClassNameShort(self)^, Error, Length(Line)]);
     {$I+}
   end
   else
@@ -2476,7 +2788,8 @@ begin
     readln(SockIn^);
     Error := ioresult;
     if Error <> 0 then
-      raise ENetSock.CreateFmt('SockRecvLn error %d', [Error]);
+      raise ENetSock.Create('%s.SockRecvLn error %d',
+        [ClassNameShort(self)^, Error]);
     {$I+}
   end
   else
@@ -2488,8 +2801,8 @@ end;
 procedure TCrtSocket.SndLow(P: pointer; Len: integer);
 begin
   if not TrySndLow(P, Len) then
-    raise ENetSock.CreateFmt('SndLow(%s) len=%d %s',
-      [fServer, Len, NetLastErrorMsg]);
+    raise ENetSock.Create('%s.SndLow(%s) len=%d %s',
+      [ClassNameShort(self)^, fServer, Len], NetLastError);
 end;
 
 function TCrtSocket.TrySndLow(P: pointer; Len: integer): boolean;
@@ -2570,102 +2883,8 @@ begin
   result := fPeerAddr.Port;
 end;
 
-
-{ TUri }
-
-procedure TUri.Clear;
-begin
-  Https := false;
-  layer := nlTCP;
-  Finalize(self);
-end;
-
-function TUri.From(aUri: RawUtf8; const DefaultPort: RawUtf8): boolean;
-var
-  P, S: PAnsiChar;
-begin
-  Clear;
-  result := false;
-  aUri := TrimU(aUri);
-  if aUri = '' then
-    exit;
-  P := pointer(aUri);
-  S := P;
-  while S^ in ['a'..'z', 'A'..'Z', '+', '-', '.', '0'..'9'] do
-    inc(S);
-  if PInteger(S)^ and $ffffff = ord(':') + ord('/') shl 8 + ord('/') shl 16 then
-  begin
-    FastSetString(Scheme, P, S - P);
-    if StartWith(pointer(P), 'HTTPS') then
-      Https := true;
-    P := S + 3;
-  end;
-  S := P;
-  if (PInteger(S)^ = UNIX_LOW) and
-     (S[4] = ':') then
-  begin
-    inc(S, 5); // 'http://unix:/path/to/socket.sock:/url/path'
-    inc(P, 5);
-    layer := nlUNIX;
-    while not (S^ in [#0, ':']) do
-      inc(S); // Server='path/to/socket.sock'
-  end
-  else
-    while not (S^ in [#0, ':', '/']) do
-      inc(S);
-  FastSetString(Server, P, S - P);
-  if S^ = ':' then
-  begin
-    inc(S);
-    P := S;
-    while not (S^ in [#0, '/']) do
-      inc(S);
-    FastSetString(Port, P, S - P); // Port='' for nlUNIX
-  end
-  else if DefaultPort <> '' then
-    port := DefaultPort
-  else
-    port := DEFAULT_PORT[Https];
-  if S^ <> #0 then // ':' or '/'
-    inc(S);
-  Address := S;
-  if Server <> '' then
-    result := true;
-end;
-
-function TUri.Uri: RawUtf8;
-const
-  Prefix: array[boolean] of RawUtf8 = (
-    'http://', 'https://');
-begin
-  if layer = nlUNIX then
-    result := 'http://unix:' + Server + ':/' + address
-  else if (port = '') or
-          (port = '0') or
-          (port = DEFAULT_PORT[Https]) then
-    result := Prefix[Https] + Server + '/' + address
-  else
-    result := Prefix[Https] + Server + ':' + port + '/' + address;
-end;
-
-function TUri.PortInt: integer;
-begin
-  result := GetCardinal(pointer(port));
-end;
-
-function TUri.Root: RawUtf8;
-var
-  i: PtrInt;
-begin
-  i := PosExChar('?', address);
-  if i = 0 then
-    Root := address
-  else
-    Root := copy(address, 1, i - 1);
-end;
-
 function SocketOpen(const aServer, aPort: RawUtf8; aTLS: boolean;
-  aTLSContext: PNetTLSContext): TCrtSocket;
+  aTLSContext: PNetTlsContext): TCrtSocket;
 begin
   try
     result := TCrtSocket.Open(aServer, aPort, nlTCP, 10000, aTLS, aTLSContext);

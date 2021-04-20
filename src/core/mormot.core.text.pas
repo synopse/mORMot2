@@ -198,7 +198,7 @@ function GotoNextNotSpace(P: PUtf8Char): PUtf8Char;
 function GotoNextNotSpaceSameLine(P: PUtf8Char): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// get the next character in [#1..' ']
+/// get the next character in [#0..' ']
 function GotoNextSpace(P: PUtf8Char): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -3224,7 +3224,7 @@ begin
   repeat
     if UpperNameSeparator <> #0 then
       if P^ = UpperNameSeparator then
-        inc(P)
+        inc(P) // e.g. THttpSocket.HeaderGetValue uses UpperNameSeparator=':'
       else
         break;
     while P^ in [#9, ' '] do // trim left
@@ -4747,6 +4747,7 @@ begin
   L := ord(Text[0]);
   if L > 0 then
   begin
+    {$ifdef DEBUG} assert(L <= 8); {$endif}
     if BEnd - B <= L then
       FlushToStream;
     PInt64(B + 1)^ := PInt64(@Text[1])^;

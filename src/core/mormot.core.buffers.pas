@@ -15,6 +15,7 @@ unit mormot.core.buffers;
    - Basic MIME Content Types Support
    - Text Memory Buffers and Files
    - Markup (e.g. HTML or Emoji) process
+   - TStreamRedirect and other Hash process
 
   *****************************************************************************
 }
@@ -1206,10 +1207,14 @@ type
   /// used by MultiPartFormDataDecode() to return all its data items
   TMultiPartDynArray = array of TMultiPart;
 
-/// decode multipart/form-data POST request content
-// - following RFC1867
-function MultiPartFormDataDecode(const MimeType,Body: RawUtf8;
+/// decode multipart/form-data POST request content into memory
+// - following RFC 1867
+// - decoded sections are appended to MultiPart[] existing array
+function MultiPartFormDataDecode(const MimeType, Body: RawUtf8;
   var MultiPart: TMultiPartDynArray): boolean;
+
+/// used e.g. by MultiPartFormDataEncode and THttpMultiPartStream.Add
+function MultiPartFormDataNewBound(var boundaries: TRawUtf8DynArray): RawUtf8;
 
 /// encode multipart fields and files
 // - only one of them can be used because MultiPartFormDataDecode must implement
@@ -1220,6 +1225,7 @@ function MultiPartFormDataDecode(const MimeType,Body: RawUtf8;
 // $ Content-Type: multipart/form-data; boundary=xxx
 // where xxx is the first generated boundary
 // - MultiPartContent: generated multipart content
+// - consider THttpMultiPartStream from mormot.net.client for huge file content
 function MultiPartFormDataEncode(const MultiPart: TMultiPartDynArray;
   var MultiPartContentType, MultiPartContent: RawUtf8): boolean;
 
@@ -1227,6 +1233,7 @@ function MultiPartFormDataEncode(const MultiPart: TMultiPartDynArray;
 // - FileName: file to encode
 // - Multipart: where the part is added
 // - Name: name of the part, is empty the name 'File###' is generated
+// - consider THttpMultiPartStream from mormot.net.client for huge file content
 function MultiPartFormDataAddFile(const FileName: TFileName;
   var MultiPart: TMultiPartDynArray; const Name: RawUtf8 = ''): boolean;
 
@@ -1234,6 +1241,7 @@ function MultiPartFormDataAddFile(const FileName: TFileName;
 // - FieldName: field name of the part
 // - FieldValue: value of the field
 // - Multipart: where the part is added
+// - consider THttpMultiPartStream from mormot.net.client for huge file content
 function MultiPartFormDataAddField(const FieldName, FieldValue: RawUtf8;
   var MultiPart: TMultiPartDynArray): boolean;
 
@@ -1406,11 +1414,12 @@ function GetMimeContentTypeFromBuffer(Content: Pointer; Len: PtrInt;
 /// retrieve the MIME content type from its file name or a supplied binary buffer
 // - will first check for known file extensions, then inspect the binary content
 // - return the MIME type, ready to be appended to a 'Content-Type: ' HTTP header
-// - default is 'application/octet-stream' (BINARY_CONTENT_TYPE) or
-// 'application/fileextension' if FileName was specified
+// - default is DefaultContentType or 'application/octet-stream' (BINARY_CONTENT_TYPE)
+// or 'application/fileextension' if FileName was specified
 // - see @http://en.wikipedia.org/wiki/Internet_media_type for most common values
 function GetMimeContentType(Content: Pointer; Len: PtrInt;
-  const FileName: TFileName = ''): RawUtf8;
+  const FileName: TFileName = '';
+  const DefaultContentType: RawUtf8 = BINARY_CONTENT_TYPE): RawUtf8;
 
 /// retrieve the HTTP header for MIME content type from a supplied binary buffer
 // - just append HEADER_CONTENT_TYPE and GetMimeContentType() result
@@ -1635,9 +1644,6 @@ function AnyTextFileToSynUnicode(const FileName: TFileName;
 function AnyTextFileToRawUtf8(const FileName: TFileName;
   AssumeUtf8IfNoBom: boolean = false): RawUtf8;
 
-/// compute the 32-bit default hash of a file content
-// - you can specify your own hashing function if DefaultHasher is not what you expect
-function HashFile(const FileName: TFileName; Hasher: THasher = nil): cardinal;
 
 /// generate some pascal source code holding some data binary as constant
 // - can store sensitive information (e.g. certificates) within the executable
@@ -1659,6 +1665,127 @@ procedure BinToSource(Dest: TBaseWriter; const ConstName, Comment: RawUtf8;
 function BinToSource(const ConstName, Comment: RawUtf8; Data: pointer;
   Len: integer; PerLine: integer = 16; const Suffix: RawUtf8 = ''): RawUtf8; overload;
 
+
+{ *************************** TStreamRedirect and other Hash process }
+
+/// compute the 32-bit default hash of a file content
+// - you can specify your own hashing function if DefaultHasher is not what you expect
+function HashFile(const FileName: TFileName; Hasher: THasher = nil): cardinal; overload;
+
+type
+  /// prototype of a file hashing function, returning its hexadecimal hash
+  // - match HashFileCrc32c() below, HashFileCrc32() in mormot.core.zip,
+  // and HashFileMd5/HashFileSha* in mormot.crypt.secure functions signature
+  THashFile = function(const FileName: TFileName): RawUtf8;
+
+  TStreamRedirect = class;
+
+  /// TStreamHasher.Write optional progression callback
+  // - see Sender properties like Context/Size/PerSecond and ExpectedSize
+  // (which may be 0 if the download size is unknown)
+  TOnStreamProgress = procedure(Sender: TStreamRedirect) of object;
+
+  /// an abstract pipeline stream able to hash its written content
+  // - hashing is performed on the fly during the Write() process
+  // - it features also a callback to mark its progress
+  // - can sleep during Write() to reach a LimitPerSecond average bandwidth
+  TStreamRedirect = class(TStreamWithPosition)
+  protected
+    fDestination: TStream;
+    fExpectedSize, fCurrentSize: Int64;
+    fStartTix, fReportTix, fLastTix, fTimeOut: Int64;
+    fPerSecond, fLimitPerSecond: PtrInt;
+    fPercent: integer;
+    fOnProgress: TOnStreamProgress;
+    fOnLog: TSynLogProc;
+    fContext: RawUtf8;
+    function GetSize: Int64; override;
+    procedure DoReport;
+    procedure DoHash(data: pointer; len: integer); virtual; // do nothing
+  public
+    /// initialize the internal structure, and start the timing
+    // - before calling Write(), you should set the Destination property
+    constructor Create(aDestination: TStream); reintroduce; virtual;
+    /// release the associated Destination stream
+    destructor Destroy; override;
+    /// can be used by for TOnStreamProgress callback writing into the console
+    class procedure ProgressToConsole(Sender: TStreamRedirect);
+    /// this method will raise an error: it's a write-only stream
+    function Read(var Buffer; Count: Longint): Longint; override;
+    /// update the hash and redirect the data to the associated TStream
+    // - also trigger OnProgress at least every second
+    function Write(const Buffer; Count: Longint): Longint; override;
+    /// update the hash of the existing Destination stream content
+    // - ready to Write() some new data after the existing
+    procedure Append;
+    /// notify end of process
+    // - should be called explicitly when all Write() has been done
+    procedure Ended;
+    /// return the current state of the hash as lower hexadecimal
+    // - by default, will return '' meaning that no hashing algorithm was set
+    function GetHash: RawUtf8; virtual;
+    /// current algorithm name as file/url extension, e.g. '.md5' or '.sha256'
+    // - by default, will return '' meaning that no hashing algorithm was set
+    class function GetHashFileExt: RawUtf8; virtual;
+    /// apply the internal hash algorithm to the supplied file content
+    // - could be used ahead of time to validate a cached file
+    class function HashFile(const FileName: TFileName): RawUtf8;
+    /// specify a TStream to which any Write() will be redirected
+    property Destination: TStream
+      read fDestination write fDestination;
+    /// you can specify a number of bytes for the final Destination size
+    // - will be used for the callback progress - could be 0 if size is unknown
+    property ExpectedSize: Int64
+      read fExpectedSize write fExpectedSize;
+    /// percentage of Size versus ExpectedSize
+    // - equals 0 if ExpectedSize is 0
+    property Percent: integer
+      read fPercent;
+    /// number of bytes processed per second, since initialization of this instance
+    property PerSecond: PtrInt
+      read fPerSecond;
+    /// can limit the Write() bandwidth used
+    // - sleep so that PerSecond will keep close to this LimitPerSecond value
+    property LimitPerSecond: PtrInt
+      read fLimitPerSecond write fLimitPerSecond;
+    /// Write() will raise an exception if not finished after TimeOut milliseconds
+    property TimeOut: Int64
+      read fTimeOut write fTimeOut;
+    /// optional process context, e.g. a download URI, used for logging/progress
+    property Context: RawUtf8
+      read fContext write fContext;
+    /// can be assigned from TSynLog.DoLog class method for low-level logging
+    property OnLog: TSynLogProc
+      read fOnLog write fOnLog;
+    /// optional callback triggered during Write()
+    // - at least at process startup and finish, and every second
+    property OnProgress: TOnStreamProgress
+      read fOnProgress write fOnProgress;
+  end;
+
+  /// meta-class of TStreamRedirect hierarchy
+  TStreamRedirectClass = class of TStreamRedirect;
+
+  /// TStreamRedirect with 32-bit THasher checksum
+  TStreamRedirectHasher = class(TStreamRedirect)
+  protected
+    fHash: cardinal;
+  public
+    function GetHash: RawUtf8; override;
+  end;
+
+  /// TStreamRedirect with crc32c 32-bit checksum
+  TStreamRedirectCrc32c = class(TStreamRedirectHasher)
+  protected
+    procedure DoHash(data: pointer; len: integer); override;
+  public
+    class function GetHashFileExt: RawUtf8; override;
+  end;
+
+
+/// compute the crc32c checksum of a given file
+// - this function maps the THashFile signature
+function HashFileCrc32c(const FileName: TFileName): RawUtf8;
 
 
 { ************* Markup (e.g. HTML or Emoji) process }
@@ -2515,7 +2642,6 @@ begin
   result.Len := FromVarUInt32(Data);
   result.Ptr := pointer(Data);
 end;
-
 
 
 { ****************** TFastReader / TBufferWriter Binary Streams }
@@ -5956,118 +6082,150 @@ function MultiPartFormDataDecode(const MimeType, Body: RawUtf8;
   var MultiPart: TMultiPartDynArray): boolean;
 var
   boundary, endBoundary: RawUtf8;
-  i, j: integer;
+  i, j, n: integer;
   P: PUtf8Char;
   part: TMultiPart;
+
+  function GetBoundary(const line: RawUtf8): boolean;
+  var
+    i: integer;
+  begin
+    result := false;
+    i := PosEx('boundary=', line);
+    if i = 0 then
+      exit;
+    TrimCopy(line, i + 9, 200, boundary);
+    if (boundary <> '') and
+       (boundary[1] = '"') then
+      // "boundary" -> boundary
+      boundary := copy(boundary, 2, length(boundary) - 2);
+    boundary := '--' + boundary;
+    endBoundary := boundary + '--' + #13#10;
+    boundary := boundary + #13#10;
+    result := true;
+  end;
+
 begin
   result := false;
-  i := PosEx('boundary=', MimeType);
-  if i = 0 then
+  if not GetBoundary(MimeType) then
     exit;
-  TrimCopy(MimeType, i + 9, 200, boundary);
-  if (boundary <> '') and
-     (boundary[1] = '"') then
-    // "boundary" -> boundary
-    boundary := copy(boundary, 2, length(boundary) - 2);
-  boundary := '--' + boundary;
-  endBoundary := boundary + '--' + #13#10;
-  boundary := boundary + #13#10;
-  i := PosEx(boundary, Body);
+  i := PosEx(boundary{%H-}, Body);
   if i <> 0 then
     repeat
       inc(i, length(boundary));
       if i = length(Body) then
-        exit; // reached the end
+        exit; // reached the (premature) end
       P := PUtf8Char(Pointer(Body)) + i - 1;
       Finalize(part);
+      // decode section header
       repeat
         if IdemPChar(P, 'CONTENT-DISPOSITION: ') then
         begin
           inc(P, 21);
           if IdemPCharAndGetNextItem(P, 'FORM-DATA; NAME="', part.Name, '"') then
             IdemPCharAndGetNextItem(P, '; FILENAME="', part.FileName, '"')
-          else
-            IdemPCharAndGetNextItem(P, 'FILE; FILENAME="', part.FileName, '"')
+          else if IdemPChar(P, 'FILE; ') then
+          begin
+            inc(P, 6);
+            IdemPCharAndGetNextItem(P, 'NAME="', part.Name, '"');
+            if P^ = ';' then
+              P := GotoNextNotSpace(P + 1);
+            IdemPCharAndGetNextItem(P, 'FILENAME="', part.FileName, '"');
+          end;
         end
-        else if not IdemPCharAndGetNextItem(P, 'CONTENT-TYPE: ', part.ContentType) then
+        else if IdemPCharAndGetNextItem(P, 'CONTENT-TYPE: ', part.ContentType) then
+        begin
+          if IdemPChar(pointer(part.ContentType), 'MULTIPART/MIXED') then
+            if GetBoundary(part.ContentType) then
+              part.ContentType := 'files'
+            else
+              exit;
+        end
+        else
           IdemPCharAndGetNextItem(P, 'CONTENT-TRANSFER-ENCODING: ', part.Encoding);
         P := GotoNextLine(P);
         if P = nil then
           exit;
       until PWord(P)^ = 13 + 10 shl 8;
+      // decode section content
       i := P - PUtf8Char(Pointer(Body)) + 3; // i = just after header
       j := PosEx(boundary, Body, i);
       if j = 0 then
       begin
-        j := PosEx(endBoundary, Body, i); // try last boundary
+        j := PosEx(endBoundary{%H-}, Body, i); // try last boundary
         if j = 0 then
           exit;
+        result := true; // content seems well formatted enough
       end;
-      part.Content := copy(Body, i, j - i - 2); // -2 to ignore latest #13#10
-      if (part.ContentType = '') or
-         (PosEx('-8', part.ContentType) > 0) then
+      if part.ContentType <> 'files' then
       begin
-        part.ContentType := TEXT_CONTENT_TYPE;
-        {$ifdef HASCODEPAGE}
-        SetCodePage(part.Content, CP_UTF8, false); // ensure raw value is UTF-8
-        {$endif HASCODEPAGE}
+        part.Content := copy(Body, i, j - i - 2); // -2 to ignore trailing #13#10
+        if (part.ContentType = '') or
+           (PosEx('-8', part.ContentType) > 0) then
+        begin
+          if IdemPChar(pointer(part.ContentType), JSON_CONTENT_TYPE_UPPER) then
+            part.ContentType := JSON_CONTENT_TYPE
+          else
+            part.ContentType := TEXT_CONTENT_TYPE;
+          {$ifdef HASCODEPAGE}
+          SetCodePage(part.Content, CP_UTF8, false); // ensure raw value is UTF-8
+          {$endif HASCODEPAGE}
+        end;
+        if IdemPropNameU(part.Encoding, 'base64') then
+          part.Content := Base64ToBin(part.Content);
+        // note: "quoted-printable" not yet handled here
+        n := length(MultiPart);
+        SetLength(MultiPart, n + 1);
+        MultiPart[n] := part;
       end;
-      if IdemPropNameU(part.Encoding, 'base64') then
-        part.Content := Base64ToBin(part.Content);
-      // note: "quoted-printable" not yet handled here
-      SetLength(MultiPart, length(MultiPart) + 1);
-      MultiPart[high(MultiPart)] := part;
-      result := true;
       i := j;
-    until false;
+    until result;
+end;
+
+function MultiPartFormDataNewBound(var boundaries: TRawUtf8DynArray): RawUtf8;
+var
+  random: array[0..3] of cardinal;
+begin
+  FillRandom(@random, 4);
+  result := BinToBase64uri(@random, SizeOf(random));
+  AddRawUtf8(boundaries, result);
 end;
 
 function MultiPartFormDataEncode(const MultiPart: TMultiPartDynArray;
   var MultiPartContentType, MultiPartContent: RawUtf8): boolean;
 var
-  len, boundcount, filescount, i: integer;
-  boundaries: array of RawUtf8;
+  len, filescount, i: integer;
+  boundaries: TRawUtf8DynArray;
   bound: RawUtf8;
   W: TBaseWriter;
   temp: TTextWriterStackBuffer;
-
-  procedure NewBound;
-  var
-    random: array[1..3] of cardinal;
-  begin
-    FillRandom(@random, 3);
-    bound := BinToBase64(@random, SizeOf(random));
-    SetLength(boundaries, boundcount + 1);
-    boundaries[boundcount] := bound;
-    inc(boundcount);
-  end;
-
 begin
   result := false;
   len := length(MultiPart);
   if len = 0 then
     exit;
-  boundcount := 0;
   filescount := 0;
   W := TBaseWriter.CreateOwnedStream(temp);
   try
     // header - see https://www.w3.org/Protocols/rfc1341/7_2_Multipart.html
-    NewBound;
-    MultiPartContentType := 'Content-Type: multipart/form-data; boundary=' + bound;
+    bound := MultiPartFormDataNewBound(boundaries);
+    MultiPartContentType :=
+      'Content-Type: multipart/form-data; boundary=' + bound;
     for i := 0 to len - 1 do
       with MultiPart[i] do
       begin
         if FileName = '' then
+          // simple name/value form section
           W.Add('--%'#13#10'Content-Disposition: form-data; name="%"'#13#10 +
-            'Content-Type: %'#13#10#13#10'%'#13#10'--%'#13#10,
-            [bound, Name, ContentType, Content, bound])
+            'Content-Type: %'#13#10#13#10'%'#13#10,
+            [bound, Name, ContentType, Content])
         else
         begin
-        // if this is the first file, create the header for files
+          // if this is the first file, create the "files" sub-section
           if filescount = 0 then
           begin
-            if i > 0 then
-              NewBound;
+            W.Add('--%'#13#10, [bound]);
+            bound := MultiPartFormDataNewBound(boundaries);
             W.Add('Content-Disposition: form-data; name="files"'#13#10 +
               'Content-Type: multipart/mixed; boundary=%'#13#10#13#10, [bound]);
           end;
@@ -6078,11 +6236,11 @@ begin
             W.Add('Content-Transfer-Encoding: %'#13#10, [Encoding]);
           W.AddCR;
           W.AddString(MultiPart[i].Content);
-          W.Add(#13#10'--%'#13#10, [bound]);
+          W.AddCR;
         end;
       end;
     // footer multipart
-    for i := boundcount - 1 downto 0 do
+    for i := length(boundaries) - 1 downto 0 do
       W.Add('--%--'#13#10, [boundaries[i]]);
     W.SetText(MultiPartContent);
     result := True;
@@ -6128,7 +6286,7 @@ begin
   newlen := length(MultiPart) + 1;
   part.Name := FieldName;
   part.ContentType := GetMimeContentTypeFromBuffer(
-    pointer(FieldValue), length(FieldValue), 'text/plain');
+    pointer(FieldValue), length(FieldValue), TEXT_CONTENT_TYPE);
   part.Content := FieldValue;
   SetLength(MultiPart, newlen);
   MultiPart[newlen - 1] := part;
@@ -6898,79 +7056,94 @@ begin
 end;
 
 function GetMimeContentType(Content: Pointer; Len: PtrInt;
-  const FileName: TFileName): RawUtf8;
+  const FileName: TFileName; const DefaultContentType: RawUtf8): RawUtf8;
+var
+  ext: RawUtf8;
 begin
   if FileName <> '' then
   begin
     // file extension is more precise -> check first
-    result := LowerCase(RawUtf8(ExtractFileExt(FileName)));
-    case PosEx(copy(result, 2, 4),
-      'png,gif,tiff,jpg,jpeg,bmp,doc,htm,html,css,js,ico,wof,txt,svg,' +
-      // 1   5   9    14  18   23  27  31  35   40  44 47  51  55  59
-      'atom,rdf,rss,webp,appc,mani,docx,xml,json,woff,ogg,ogv,mp4,m2v,' +
-      // 63  68  72  76   81   86   91   96  100  105  110 114 118 122
-      'm2p,mp3,h264,text,log,gz,webm,mkv,rar,7z') of
-      // 126 130 134 139 144 148 151 156 160 164
-      1:
-        result := 'image/png';
-      5:
-        result := 'image/gif';
-      9:
-        result := 'image/tiff';
-      14, 18:
-        result := JPEG_CONTENT_TYPE;
-      23:
-        result := 'image/bmp';
-      27, 91:
-        result := 'application/msword';
-      31, 35:
-        result := HTML_CONTENT_TYPE;
-      40:
-        result := 'text/css';
-      44: // text/javascript and application/x-javascript are obsolete (RFC 4329)
-        result := 'application/javascript';
-      47:
-        result := 'image/x-icon';
-      51, 105:
-        result := 'application/font-woff';
-      55, 139, 144:
-        result := TEXT_CONTENT_TYPE;
-      59:
-        result := 'image/svg+xml';
-      63, 68, 72, 96:
-        result := XML_CONTENT_TYPE;
-      76:
-        result := 'image/webp';
-      81, 86:
-        result := 'text/cache-manifest';
-      100:
-        result := JSON_CONTENT_TYPE_VAR;
-      110, 114:
-        result := 'video/ogg';  // RFC 5334
-      118:
-        result := 'video/mp4';  // RFC 4337 6381
-      122, 126:
-        result := 'video/mp2';
-      130:
-        result := 'audio/mpeg'; // RFC 3003
-      134:
-        result := 'video/H264'; // RFC 6184
-      148:
-        result := 'application/gzip';
-      151, 156:
-        result := 'video/webm';
-      160:
-        result := 'application/x-rar-compressed';
-      164:
-        result := 'application/x-7z-compressed';
+    result := '';
+    ext := LowerCase(RawUtf8(ExtractFileExt(FileName)));
+    delete(ext, 1, 1);
+    if ext <> '' then
+      case PosEx('-' + copy(ext, 1, 4) + '-',
+          '-png-gif-tiff-jpg-jpeg-bmp-doc-htm-html-css-js-ico-wof-txt-svg-' +
+          // 1   5   9    14  18   23  27  31  35   40  44 47  51  55  59
+          'atom-rdf-rss-webp-appc-mani-docx-xml-json-woff-ogg-ogv-mp4-m2v-' +
+          // 63  68  72  76   81   86   91   96  100  105  110 114 118 122
+          'm2p-mp3-h264-text-log-gz-webm-mkv-rar-7z-tif-x-') of
+          // 126 130 134 139 144 148 151 156 160 164 167 171
+        1:
+          result := 'image/png';
+        5:
+          result := 'image/gif';
+        9, 167:
+          result := 'image/tiff';
+        14, 18:
+          result := JPEG_CONTENT_TYPE;
+        23:
+          result := 'image/bmp';
+        27, 91:
+          result := 'application/msword';
+        31, 35:
+          result := HTML_CONTENT_TYPE;
+        40:
+          result := 'text/css';
+        44: // text/javascript and application/x-javascript are obsolete (RFC 4329)
+          result := 'application/javascript';
+        47:
+          result := 'image/x-icon';
+        51, 105:
+          result := 'application/font-woff';
+        55, 139, 144:
+          result := TEXT_CONTENT_TYPE;
+        59:
+          result := 'image/svg+xml';
+        63, 68, 72, 96:
+          result := XML_CONTENT_TYPE;
+        76:
+          result := 'image/webp';
+        81, 86:
+          result := 'text/cache-manifest';
+        100:
+          result := JSON_CONTENT_TYPE_VAR;
+        110, 114:
+          result := 'video/ogg';  // RFC 5334
+        118:
+          result := 'video/mp4';  // RFC 4337 6381
+        122, 126:
+          result := 'video/mp2';
+        130:
+          result := 'audio/mpeg'; // RFC 3003
+        134:
+          result := 'video/H264'; // RFC 6184
+        148:
+          result := 'application/gzip';
+        151, 156:
+          result := 'video/webm';
+        160:
+          result := 'application/x-rar-compressed';
+        164:
+          result := 'application/x-7z-compressed';
+        171:
+          result := 'application/x-compress';
+      else
+        if not (ext[1] in ['a'..'z']) then
+          ext := '';
+      end;
+    if result <> '' then
+      // we found the exact type from the file extension
+      exit;
+    if ext <> '' then
+      // e.g. 'application/zip' or 'application/pdf'
+      result := 'application/' + ext
     else
-      result := GetMimeContentTypeFromBuffer(Content, Len,
-        // e.g. 'application/zip' or 'application/pdf'
-        'application/' + copy(result, 2, 20));
-    end;
+      result := DefaultContentType;
+    result := GetMimeContentTypeFromBuffer(Content, Len, result);
   end
   else
-    result := GetMimeContentTypeFromBuffer(Content, Len, BINARY_CONTENT_TYPE);
+    result := GetMimeContentTypeFromBuffer(Content, Len, DefaultContentType);
 end;
 
 function GetMimeContentTypeHeader(const Content: RawByteString;
@@ -7554,27 +7727,6 @@ begin
   end;
 end;
 
-function HashFile(const FileName: TFileName; Hasher: THasher): cardinal;
-var
-  buf: array[word] of cardinal; // 256KB of buffer
-  read: integer;
-  f: THandle;
-begin
-  if not Assigned(Hasher) then
-    Hasher := DefaultHasher;
-  result := 0;
-  f := FileOpenSequentialRead(FileName);
-  if ValidHandle(f) then
-  begin
-    repeat
-      read := FileRead(f, buf, SizeOf(buf));
-      if read<=0 then
-        break;
-      result := Hasher(result, @buf, read);
-    until false;
-    FileClose(f);
-  end;
-end;
 
 function BinToSource(const ConstName, Comment: RawUtf8;
   Data: pointer; Len, PerLine: integer; const Suffix: RawUtf8): RawUtf8;
@@ -7637,6 +7789,240 @@ begin
   until Len = 0;
   Dest.CancelLastComma;
   Dest.Add(');'#13#10'  %_LEN = SizeOf(%);'#13#10, [ConstName, ConstName]);
+end;
+
+
+{ *************************** TStreamRedirect and other Hash process }
+
+{ TStreamRedirect }
+
+constructor TStreamRedirect.Create(aDestination: TStream);
+begin
+  fDestination := aDestination;
+  fStartTix := GetTickCount64;
+end;
+
+destructor TStreamRedirect.Destroy;
+begin
+  fDestination.Free;
+  inherited Destroy;
+end;
+
+function TStreamRedirect.GetSize: Int64;
+begin
+  result := fCurrentSize;
+end;
+
+{$I-}
+class procedure TStreamRedirect.ProgressToConsole(Sender: TStreamRedirect);
+var
+  msg: shortstring;
+begin
+  if Sender.ExpectedSize = 0 then
+    FormatShort('% % %/s'#13,  [Sender.Context,
+      KB(Sender.fCurrentSize), KB(Sender.PerSecond)], msg)
+  else if Sender.Size < Sender.ExpectedSize then
+    FormatShort('% %% %/% %/s'#13, [Sender.Context,
+      UInt2DigitsToShort(Sender.Percent), '%', KBNoSpace(Sender.fCurrentSize),
+      KBNoSpace(Sender.ExpectedSize), KBNoSpace(Sender.PerSecond)], msg)
+  else
+    FormatShort('% % downloaded in %/s' + CRLF, [Sender.Context,
+      KBNoSpace(Sender.ExpectedSize), KBNoSpace(Sender.PerSecond)], msg);
+  system.write(msg);
+end;
+{$I+}
+
+procedure TStreamRedirect.DoReport;
+var
+  elapsed: Int64;
+begin
+  elapsed := GetTickCount64 - fStartTix;
+  if (fCurrentSize <> fExpectedSize) and
+     (elapsed < fReportTix) then
+    exit;
+  fReportTix := elapsed + 1000; // notify once per second
+  if fExpectedSize = 0 then
+    fPercent := 0
+  else if fCurrentSize >= fExpectedSize then
+    fPercent := 100
+  else
+    fPercent := (fCurrentSize * 100) div fExpectedSize;
+  if elapsed = 0 then
+    fPerSecond := 0
+  else
+    fPerSecond := (fCurrentSize * 1000) div elapsed;
+  if Assigned(fOnLog) then
+    if fExpectedSize = 0 then
+      fOnLog(sllTrace, '%: % %/s',
+        [fContext, KB(fCurrentSize), KB(fPerSecond)], self)
+    else
+      fOnLog(sllTrace, '%: %% - % / % - %/s', [fContext, fPercent, '%',
+        KB(fCurrentSize), KB(fExpectedSize), KB(PerSecond)], self);
+  if Assigned(fOnProgress) then
+    fOnProgress(self);
+end;
+
+procedure TStreamRedirect.DoHash(data: pointer; len: integer);
+begin // no associated hasher on this parent class
+end;
+
+function TStreamRedirect.GetHash: RawUtf8;
+begin
+  result := ''; // no associated hasher on this parent class
+end;
+
+class function TStreamRedirect.GetHashFileExt: RawUtf8;
+begin
+  result := ''; // no associated hasher on this parent class
+end;
+
+class function TStreamRedirect.HashFile(const FileName: TFileName): RawUtf8;
+var
+  hasher: TStreamRedirect;
+  f: THandle;
+begin
+  result := '';
+  if GetHashFileExt = '' then
+    exit; // no hash function defined
+  f := FileOpenSequentialRead(FileName);
+  if not ValidHandle(f) then
+    exit;
+  hasher := Create(TFileStreamFromHandle.Create(f));
+  try
+    hasher.Append;
+    result := hasher.GetHash;
+  finally
+    hasher.Free; // includes FileClose(f)
+  end;
+end;
+
+procedure TStreamRedirect.Append;
+var
+  buf: array[word] of cardinal; // 256KB of buffer
+  read: PtrInt;
+begin
+  if fDestination = nil then
+    raise ESynException.CreateUtf8('%.Append: Destination=nil', [self]);
+  if GetHashFileExt = '' then
+  begin
+    fCurrentSize := Seek(0, soEnd); // DoHash() does nothing
+    fPosition := fCurrentSize;
+  end
+  else
+  repeat
+    read := fDestination.Read(buf, SizeOf(buf));
+    if read <= 0 then
+      break;
+    DoHash(@buf, read);
+    inc(fCurrentSize, read);
+    inc(fPosition, read);
+  until false;
+end;
+
+procedure TStreamRedirect.Ended;
+begin
+  fExpectedSize := fCurrentSize; // reached 100%
+  if Assigned(fOnProgress) or
+     Assigned(fOnLog) then
+    DoReport; // notify finished
+end;
+
+function TStreamRedirect.Read(var Buffer; Count: Longint): Longint;
+begin
+  {$ifdef DELPHI20062007}
+  result := 0;
+  {$endif DELPHI20062007}
+  raise ESynException.CreateUtf8('%.Read is not supported', [self]);
+end;
+
+function TStreamRedirect.Write(const Buffer; Count: Longint): Longint;
+var
+  tix, tosleep: Int64;
+begin
+  if fDestination = nil then
+    raise ESynException.CreateUtf8('%.Write: Destination=nil', [self]);
+  DoHash(@Buffer, Count);
+  fDestination.WriteBuffer(Buffer, Count);
+  inc(fCurrentSize, Count);
+  inc(fPosition, Count);
+  if (fLimitPerSecond <> 0) or
+     (fTimeOut <> 0) then
+  begin
+    tix := GetTickCount64;
+    if tix shr 7 <> fLastTix shr 7 then // checking every 128 ms is good enough
+    begin
+      fLastTix := tix;
+      dec(tix, fStartTix);
+      if tix > 0 then
+      begin
+        if (fTimeOut <> 0) and
+           (tix > fTimeOut) then
+          raise ESynException.CreateUtf8('%.Write timeout after %',
+            [self, MicroSecToString(tix * 1000)]);
+        if fLimitPerSecond > 0 then
+        begin
+          // adjust bandwith limit every 128 ms by adding some sleep() steps
+          tosleep := ((fCurrentSize * 1000) div fLimitPerSecond) - tix;
+          if tosleep > 10 then
+            SleepHiRes(tosleep); // on Windows, typical resolution is 16ms
+        end;
+      end;
+    end;
+  end;
+  if Assigned(fOnProgress) or
+     Assigned(fOnLog) then
+    DoReport;
+  result := Count;
+end;
+
+
+{ TStreamRedirectHasher }
+
+function TStreamRedirectHasher.GetHash: RawUtf8;
+begin
+  result := CardinalToHexLower(fHash);
+end;
+
+
+{ TStreamRedirectCrc32c }
+
+procedure TStreamRedirectCrc32c.DoHash(data: pointer; len: integer);
+begin
+  fHash := crc32c(fHash, data, len);
+end;
+
+class function TStreamRedirectCrc32c.GetHashFileExt: RawUtf8;
+begin
+  result := '.crc32c';
+end;
+
+
+
+function HashFile(const FileName: TFileName; Hasher: THasher): cardinal;
+var
+  buf: array[word] of cardinal; // 256KB of buffer
+  read: integer;
+  f: THandle;
+begin
+  if not Assigned(Hasher) then
+    Hasher := DefaultHasher;
+  result := 0;
+  f := FileOpenSequentialRead(FileName);
+  if ValidHandle(f) then
+  begin
+    repeat
+      read := FileRead(f, buf, SizeOf(buf));
+      if read <= 0 then
+        break;
+      result := Hasher(result, @buf, read);
+    until false;
+    FileClose(f);
+  end;
+end;
+
+function HashFileCrc32c(const FileName: TFileName): RawUtf8;
+begin
+  result := CardinalToHexLower(HashFile(FileName, crc32c));
 end;
 
 

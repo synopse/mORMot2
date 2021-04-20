@@ -822,10 +822,10 @@ type
 
   ESChannel = class(Exception);
 
-  TSChannelClient = class(TInterfacedObject, INetTLS)
+  TSChannelClient = class(TInterfacedObject, INetTls)
   private
     fSocket: TNetSocket;
-    fContext: PNetTLSContext;
+    fContext: PNetTlsContext;
     fServerAddress: RawUtf8;
     fCred: TCredHandle;
     fCtxt: TCtxtHandle;
@@ -838,7 +838,7 @@ type
     procedure HandshakeLoop;
   public
     destructor Destroy; override;
-    procedure AfterConnection(Socket: TNetSocket;  var Context: TNetTLSContext;
+    procedure AfterConnection(Socket: TNetSocket;  var Context: TNetTlsContext;
       const ServerAddress: RawUtf8);
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
@@ -1069,7 +1069,7 @@ begin
 end;
 
 procedure TSChannelClient.AfterConnection(Socket: TNetSocket;
-  var Context: TNetTLSContext; const ServerAddress: RawUtf8);
+  var Context: TNetTlsContext; const ServerAddress: RawUtf8);
 var
   buf: THandshakeBuf;
   res, f: cardinal;
@@ -1363,7 +1363,7 @@ end;
 
 
 
-function SChannelNewNetTLS: INetTLS;
+function SChannelNewNetTls: INetTls;
 begin
   result := TSChannelClient.Create;
 end;
@@ -1403,7 +1403,7 @@ begin
        Assigned(QueryContextAttributes) and
        Assigned(EncryptMessage) and
        Assigned(DecryptMessage) then
-     NewNetTLS := SChannelNewNetTLS;
+     NewNetTls := SChannelNewNetTls;
   end;
 end;
 
