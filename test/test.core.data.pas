@@ -3751,6 +3751,10 @@ begin
   TDocVariantData(V2).DeleteByProp('name', 'JIM', false);
   Check(V2 = '["root"]');
   {$endif FPC}
+  V1 := _ObjFast(['n1', 'v1']);
+  Check(V1._JSON = '{"n1":"v1"}');
+  V1.Add('n2', 'v2');
+  Check(V1._JSON = '{"n1":"v1","n2":"v2"}', 'FPC 3.2+ inverted order');
   s := '{"Url":"argentina","Seasons":[{"Name":"2011/2012","Url":"2011-2012",' +
     '"Competitions":[{"Name":"Ligue1","Url":"ligue-1"},{"Name":"Ligue2","Url":"ligue-2"}]},' +
     '{"Name":"2010/2011","Url":"2010-2011","Competitions":[{"Name":"Ligue1","Url":"ligue-1"},' +
