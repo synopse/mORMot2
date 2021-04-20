@@ -425,6 +425,8 @@ type
     // set offset, and write TFileInfo+TFileInfoExtra64 for LastEntry^
     procedure WriteHeader(const zipName: TFileName);
     procedure WriteRawHeader;
+    /// write trailer and close destination file, then release associated memory
+    procedure FinalFlush;
   public
     /// the total number of entries
     Count: integer;
@@ -450,8 +452,6 @@ type
     // ignoring LastZipNameToIgnore), ready to call AddDeflated/AddStored
     constructor CreateFrom(const aFileName: TFileName;
       const LastZipNameToIgnore: TFileName = '');
-    /// write trailer and close destination file, then release associated memory
-    procedure FinalFlush;
     /// flush pending content, then release associated memory
     destructor Destroy; override;
     /// compress (using the deflate method) a memory buffer, and add it to the zip file
@@ -1247,7 +1247,7 @@ begin
         AddDeflated(ZipName, pointer(tmp), todo, CompressLevel, age);
         exit;
       end;
-      // bigger files will fallback to zlib and its streaming methods
+      // bigger/stored files will fallback to (zlib and its) streaming methods
       {$endif LIBDEFLATESTATIC}
       with NewEntry(met, 0, age)^ do
       begin
@@ -1276,7 +1276,7 @@ begin
                 [ClassNameShort(self)^, aFileName, GetLastError]);
             if deflate = nil then
             begin
-              h32.fileInfo.zcrc32 := // manual crc computation
+              h32.fileInfo.zcrc32 := // manual (libdeflate) crc computation
                 mormot.lib.z.crc32(h32.fileInfo.zcrc32, pointer(tmp), len);
               fDest.WriteBuffer(pointer(tmp)^, len); // store
             end
@@ -1290,9 +1290,9 @@ begin
             assert(deflate.SizeIn = h64.zfullSize);
             h64.zzipSize := deflate.SizeOut;
             h32.fileInfo.zcrc32 := deflate.CRC;
-            if h32.fileInfo.extraLen = 0 then
-              h32.fileInfo.zzipSize := deflate.SizeOut;
           end;
+          if h32.fileInfo.extraLen = 0 then
+            h32.fileInfo.zzipSize := h64.zzipSize;
         finally
           deflate.Free;
         end;
