@@ -2899,7 +2899,7 @@ begin
   begin
     // convert varargs Params buffer into an array of TVarData
     SetLength(args, n);
-    v := pointer(args);
+    v := pointer(@args[n-1]);
     a := Params;
     for i := 0 to n - 1 do
     begin
@@ -2960,7 +2960,7 @@ begin
         end;
       end;
       inc(a, asize);
-      inc(v);
+      dec(v);
     end;
   end;
   case CallDesc^.CallType of
