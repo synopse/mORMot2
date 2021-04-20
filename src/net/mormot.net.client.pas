@@ -1177,7 +1177,7 @@ procedure WGet(const url: RawUtf8; const destfile: TFileName;
 var
   params: THttpClientSocketWGet;
 begin
-  if destfile <> '' then
+  if destfile = '' then
     raise EHttpSocket.Create('WGet(destfile='''') for %s', [url]);
   params.Clear;
   params.Resume := true;
