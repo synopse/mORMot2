@@ -1484,7 +1484,6 @@ begin
     partstream := params.Hasher.Create(TFileStream.Create(part, fmOpenReadWrite));
     partstream.Append; // hash partial content
     fRangeStart := size;
-    urlfile := urlfile + ' (resumed)';
   end
   else
   begin

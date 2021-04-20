@@ -7834,26 +7834,29 @@ end;
 {$I-}
 class procedure TStreamRedirect.ProgressToConsole(Sender: TStreamRedirect);
 var
-  msg: shortstring;
+  ctx, msg: shortstring;
 begin
   msg[0] := AnsiChar(Sender.fConsoleLen + 2);
   msg[1] := #13;
-  FillCharFast(msg[2], ord(msg[0]) - 2, 32);
+  FillCharFast(msg[2], Sender.fConsoleLen, 32);
   msg[ord(msg[0])] := #13;
   system.write(msg);
+  Ansi7StringToShortString(Sender.Context, ctx);
+  if ctx[0] > #30 then
+    ctx[0] := #30;
   if Sender.ExpectedSize = 0 then
     // size may not be known (e.g. server-side chunking)
-    FormatShort('% % %/s ...',  [Sender.Context,
-      KB(Sender.Size), KB(Sender.PerSecond)], msg)
+    FormatShort('% % %/s ...',
+      [ctx, KB(Sender.Size), KB(Sender.PerSecond)], msg)
   else if Sender.Size < Sender.ExpectedSize then
     // we can state the current progression ratio
-    FormatShort('% %% %/% %/s remaining:%', [Sender.Context,
-      Sender.Percent, '%', KBNoSpace(Sender.Size),
+    FormatShort('% %% %/% %/s remaining:%',
+      [ctx, Sender.Percent, '%', KBNoSpace(Sender.Size),
       KBNoSpace(Sender.ExpectedSize), KBNoSpace(Sender.PerSecond),
       MicroSecToString(Sender.Remaining * 1000)], msg)
   else
     // process is finished
-    FormatShort('% % downloaded in % (%/s)' + CRLF, [Sender.Context,
+    FormatShort('% % done in % (%/s)' + CRLF,  [Sender.Context,
       KBNoSpace(Sender.ExpectedSize), MicroSecToString(Sender.Elapsed * 1000),
       KBNoSpace(Sender.PerSecond)], msg);
   Sender.fConsoleLen := ord(msg[0]);
@@ -7877,8 +7880,9 @@ begin
   else
   begin
     if (fElapsed <> 0) and
-       (fElapsed <> 0) then
-      fRemaining := (fElapsed * (fExpectedWrittenSize - fWrittenSize)) div fWrittenSize;
+       (fWrittenSize <> 0) then
+      fRemaining :=
+        (fElapsed * (fExpectedWrittenSize - fWrittenSize)) div fWrittenSize;
     fPercent := (fCurrentSize * 100) div fExpectedSize;
   end;
   if fElapsed = 0 then
@@ -8015,7 +8019,7 @@ begin
         begin
           // adjust bandwith limit every 128 ms by adding some sleep() steps
           tosleep := ((fWrittenSize * 1000) div fLimitPerSecond) - fElapsed;
-          if tosleep > 10 then
+          if tosleep > 10 then // on Windows, typical resolution is 16ms
           begin
             while tosleep > 300 do
             begin
@@ -8028,7 +8032,7 @@ begin
                 raise ESynException.CreateUtf8('%.Write(%) Terminated',
                   [self, fContext]);
             end;
-            SleepHiRes(tosleep); // on Windows, typical resolution is 16ms
+            SleepHiRes(tosleep);
           end;
         end;
       end;
