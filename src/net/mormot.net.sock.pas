@@ -914,6 +914,8 @@ begin
           (err <> AnotherNonFatal) then
     if err = WSAEMFILE then
       result := nrTooManyConnections
+    else if err = WSAECONNREFUSED then
+      result := nrRefused
     else
       result := nrFatalError
   else
@@ -2013,80 +2015,9 @@ end;
 
 procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8;
   doBind, aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket);
-var
-  retry: integer;
-  head: RawUtf8;
-  res: TNetResult;
-begin
-  fSocketLayer := aLayer;
-  fWasBind := doBind;
-  if {%H-}PtrInt(aSock)<=0 then
+
+  procedure DoTlsHandshake;
   begin
-    // OPEN or BIND mode -> create the socket
-    if doBind then
-      // allow small number of retries (e.g. XP or BSD during aggressive tests)
-      retry := 10
-    else if (Tunnel.Server <> '') and
-            (aLayer = nlTCP) then
-    begin
-      // handle client tunnelling via an HTTP(s) proxy
-      res := nrRefused;
-      fProxyUrl := Tunnel.URI;
-      try
-        OpenBind(Tunnel.Server, Tunnel.Port, false, Tunnel.Https);
-        SockSend(['CONNECT ', aServer, ':', aPort, ' HTTP/1.0']);
-        if Tunnel.User <> '' then
-          SockSend(['Proxy-Authorization: Basic ', Tunnel.UserPasswordBase64]);
-        SockSendFlush;
-        repeat
-          SockRecvLn(head);
-          if StartWith(pointer(head), 'HTTP/') and
-             (length(head) > 11) and
-             (head[10] = '2') then // 'HTTP/1.1 2xx xxxx' success
-            res := nrOK;
-        until  head = '';
-      except
-        res := nrNotFound;
-      end;
-      if res <> nrOk then
-        raise ENetSock.Create('%s.OpenBind(%s:%s): %s proxy error',
-          [ClassNameShort(self)^, aServer, aPort, fProxyUrl], res);
-      fServer := aServer;
-      fPort := aPort;
-      if Assigned(OnLog) then
-        OnLog(sllTrace, 'Open(%:%) via proxy %', [fServer, fPort, fProxyUrl], self);
-      exit;
-    end
-    else
-      // direct client connection
-      retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
-    if (aPort = '') and
-       (aLayer <> nlUNIX) then
-      fPort := DEFAULT_PORT[aTLS] // default port is 80/443 (HTTP/S)
-    else
-      fPort := aPort;
-    fServer := aServer;
-    res := NewSocket(fServer, fPort, aLayer, doBind,
-      fTimeout, fTimeout, fTimeout, retry, fSock);
-    if res <> nrOK then
-      raise ENetSock.Create('%s %s.OpenBind(%s:%s,%s)',
-        [BINDMSG[doBind], ClassNameShort(self)^, aServer, fPort], res);
-  end
-  else
-  begin
-    // ACCEPT mode -> socket is already created by caller
-    fSock := aSock;
-    if TimeOut > 0 then
-    begin
-      // set timout values for both directions
-      ReceiveTimeout := TimeOut;
-      SendTimeout := TimeOut;
-    end;
-  end;
-  if aLayer = nlTCP then
-    if aTLS and
-       not doBind and
-       ({%H-}PtrInt(aSock) <= 0) then
     try
       if not Assigned(NewNetTls) then
         raise ENetSock.Create('%s.OpenBind: TLS is not available - try ' +
@@ -2107,6 +2038,91 @@ begin
            ClassNameShort(E)^, E.Message]);
       end;
     end;
+  end;
+
+var
+  retry: integer;
+  head: RawUtf8;
+  res: TNetResult;
+begin
+  fSocketLayer := aLayer;
+  fWasBind := doBind;
+  if {%H-}PtrInt(aSock)<=0 then
+  begin
+    // OPEN or BIND mode -> create the socket
+    if doBind then
+      // allow small number of retries (e.g. XP or BSD during aggressive tests)
+      retry := 10
+    else if (Tunnel.Server <> '') and
+            (Tunnel.Server <> aServer) and
+            (aLayer = nlTCP) then
+    begin
+      // handle client tunnelling via an HTTP(s) proxy
+      res := nrRefused;
+      fProxyUrl := Tunnel.URI;
+      if Tunnel.Https and aTLS then
+        raise ENetSock.Create('%s.Open(%s:%s): %s proxy - unsupported dual ' +
+          'TLS layers', [ClassNameShort(self)^, aServer, aPort, fProxyUrl]);
+      try
+        OpenBind(Tunnel.Server, Tunnel.Port, false, Tunnel.Https);
+        SockSend(['CONNECT ', aServer, ':', aPort, ' HTTP/1.0']);
+        if Tunnel.User <> '' then
+          SockSend(['Proxy-Authorization: Basic ', Tunnel.UserPasswordBase64]);
+        SockSendFlush(#13#10);
+        repeat
+          SockRecvLn(head);
+          if StartWith(pointer(head), 'HTTP/') and
+             (length(head) > 11) and
+             (head[10] = '2') then // 'HTTP/1.1 2xx xxxx' success
+            res := nrOK;
+        until head = '';
+      except
+        on E: Exception do
+          raise ENetSock.Create('%s.Open(%s:%s): %s proxy error %s',
+            [ClassNameShort(self)^, aServer, aPort, fProxyUrl, E.Message]);
+      end;
+      if res <> nrOk then
+        raise ENetSock.Create('%s.Open(%s:%s): %s proxy error',
+          [ClassNameShort(self)^, aServer, aPort, fProxyUrl], res);
+      fServer := aServer; // nested OpenBind
+      fPort := aPort;
+      if Assigned(OnLog) then
+        OnLog(sllTrace, 'Open(%:%) via proxy %', [fServer, fPort, fProxyUrl], self);
+      if aTLS then
+        DoTlsHandshake;
+      exit;
+    end
+    else
+      // direct client connection
+      retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
+    if (aPort = '') and
+       (aLayer <> nlUNIX) then
+      fPort := DEFAULT_PORT[aTLS] // default port is 80/443 (HTTP/S)
+    else
+      fPort := aPort;
+    fServer := aServer;
+    res := NewSocket(fServer, fPort, aLayer, doBind,
+      fTimeout, fTimeout, fTimeout, retry, fSock);
+    if res <> nrOK then
+      raise ENetSock.Create('%s %s.OpenBind(%s:%s)',
+        [BINDMSG[doBind], ClassNameShort(self)^, aServer, fPort], res);
+  end
+  else
+  begin
+    // ACCEPT mode -> socket is already created by caller
+    fSock := aSock;
+    if TimeOut > 0 then
+    begin
+      // set timout values for both directions
+      ReceiveTimeout := TimeOut;
+      SendTimeout := TimeOut;
+    end;
+  end;
+  if (aLayer = nlTCP) and
+     aTLS and
+     not doBind and
+     ({%H-}PtrInt(aSock) <= 0) then
+    DoTlsHandshake;
   if Assigned(OnLog) then
     OnLog(sllTrace, '%(%:%) sock=% %', [BINDTXT[doBind], fServer, fPort,
       fSock.Socket, TLS.CipherName], self);
