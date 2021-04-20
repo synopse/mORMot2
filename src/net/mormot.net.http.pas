@@ -549,20 +549,21 @@ function HttpChunkToHex32(p: PAnsiChar): integer;
 var
   v0, v1: byte;
 begin
+  // note: chunk is not regular two-chars-per-byte hexa but may have odd len
   result := 0;
   if p <> nil then
   begin
     while p^ = ' ' do
-      inc(p);
+      inc(p); // trim left
     repeat
       v0 := ConvertHexToBin[ord(p[0])];
       if v0 = 255 then
-        break; // not in '0'..'9','a'..'f'
+        break; // not in '0'..'9','a'..'f' -> trim right
       v1 := ConvertHexToBin[ord(p[1])];
       inc(p);
       if v1 = 255 then
       begin
-        result := (result shl 4) or v0; // only one hexa char supplied
+        result := (result shl 4) or v0; // odd number of hexa chars supplied
         break;
       end;
       result := (result shl 8) or (integer(v0) shl 4) or v1;
@@ -776,21 +777,21 @@ begin
   Content := '';
   if (DestStream <> nil) and
      (cardinal(fContentCompress) < cardinal(length(fCompress))) then
-    raise EHttpSocket.Create('%s.GetBody(%s) with compression',
+    raise EHttpSocket.Create('%s.GetBody(%s) does not support compression',
       [ClassNameShort(self)^, ClassNameShort(DestStream)^]);
   {$I-}
   // direct read bytes, as indicated by Content-Length or Chunked
   if hfTransferChuked in HeaderFlags then
   begin
-    // supplied Content-Length header should not be ignored when chunked
+    // supplied Content-Length header should be ignored when chunked
     ContentLength := 0;
-    repeat
+    repeat // chunks decoding loop
       if SockIn <> nil then
       begin
         readln(SockIn^, LinePChar); // use of a static PChar is faster
         Error := ioresult;
         if Error <> 0 then
-          raise EHttpSocket.CreateFmt('GetBody1 ioresult=%d', [Error]);
+          raise EHttpSocket.CreateFmt('GetBody chunked ioresult=%d', [Error]);
         Len := HttpChunkToHex32(LinePChar); // get chunk length in hexa
       end
       else
@@ -801,7 +802,7 @@ begin
       if Len = 0 then
       begin
         SockRecvLn; // ignore next line (normally void)
-        break;
+        break; // reached the end of input stream
       end;
       if DestStream <> nil then
       begin
@@ -864,11 +865,13 @@ begin
   end;
   // optionaly uncompress content
   if cardinal(fContentCompress) < cardinal(length(fCompress)) then
+  begin
     if fCompress[fContentCompress].Func(Content, false) = '' then
       // invalid content
-      raise EHttpSocket.CreateFmt(
-        '%s uncompress', [fCompress[fContentCompress].Name]);
-  ContentLength := length(Content); // uncompressed Content-Length
+      raise EHttpSocket.CreateFmt('%s uncompress failed',
+        [fCompress[fContentCompress].Name]);
+    ContentLength := length(Content); // uncompressed Content-Length
+  end;
   {$ifdef SYNCRTDEBUGLOW}
   TSynLog.Add.Log(sllCustom2, 'GetBody sock=% pending=% sockin=% len=% %',
     [fSock, SockInPending(0), PTextRec(SockIn)^.BufEnd - PTextRec(SockIn)^.bufpos,
