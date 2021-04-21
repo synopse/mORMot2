@@ -39,20 +39,43 @@ type
     szcfZip,
     szcfGZ);
 
-  /// a TStream descendant for compressing data into a stream using Zip/Deflate
-  // - supports forward only Write() compression
-  TSynZipCompressor = class(TStream)
+  /// abstract TStream as inherited by TSynZipCompressor/TSynZipDecompressor
+  TSynZipStream = class(TStream)
   protected
     fInitialized: boolean;
+    fFormat: TSynZipCompressorFormat;
     fDestStream: TStream;
     Z: TZLib;
     fCRC: cardinal;
-    fFormat: TSynZipCompressorFormat;
     fSizeIn, fSizeOut: Int64;
     {$ifdef FPC}
     function GetPosition: Int64; override;
-    function GetSize: Int64; override;
     {$endif FPC}
+    function GetSize: Int64; override;
+  public
+    /// this method will raise an error: it's a compression-only stream
+    function Read(var Buffer; Count: Longint): Longint; override;
+    /// used to return the current position, i.e. the real byte written count
+    // - for real seek, this method will raise an error: it's a compression-only stream
+    function Seek(Offset: Longint; Origin: Word): Longint; override;
+    /// used to return the current position, i.e. the real byte written count
+    // - for real seek, this method will raise an error: it's a compression-only stream
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+    /// the number of byte read, i.e. the current (un)compressed size
+    property SizeIn: Int64
+      read fSizeIn;
+    /// the number of byte sent to the destination stream, i.e. the current
+    // (un)compressed size
+    property SizeOut: Int64
+      read fSizeOut;
+    /// the current crc32 of the read or written data, i.e. the uncompressed CRC
+    property CRC: cardinal
+      read fCRC;
+  end;
+
+  /// a TStream descendant for compressing data into a stream using Zip/Deflate
+  // - supports forward only Write() compression
+  TSynZipCompressor = class(TSynZipStream)
   public
     /// create a compression stream, writting the compressed data into
     // the specified stream (e.g. a file stream)
@@ -60,28 +83,27 @@ type
       Format: TSynZipCompressorFormat = szcfRaw);
     /// release memory
     destructor Destroy; override;
-    /// this method will raise an error: it's a compression-only stream
-    function Read(var Buffer; Count: Longint): Longint; override;
     /// update the global CRC and compress some data
     function Write(const Buffer; Count: Longint): Longint; override;
-    /// used to return the current position, i.e. the real byte written count
-    // - for real seek, this method will raise an error: it's a compression-only stream
-    function Seek(Offset: Longint; Origin: Word): Longint; override;
-    /// used to return the current position, i.e. the real byte written count
-    // - for real seek, this method will raise an error: it's a compression-only stream
-    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
     /// write all pending compressed data into outStream
     procedure Flush;
-    /// the number of byte read, i.e. the current uncompressed size
-    property SizeIn: Int64
-      read fSizeIn;
-    /// the number of byte sent to the destination stream, i.e. the current
-    // compressed size
-    property SizeOut: Int64
-      read fSizeOut;
-    /// the current crc32 of the written data, i.e. the uncompressed data CRC
-    property CRC: cardinal
-      read fCRC;
+  end;
+
+  /// a TStream descendant for uncompressing data into a stream using Zip/Deflate
+  // - supports forward only Write() decompression
+  TSynZipDecompressor = class(TSynZipStream)
+  public
+    /// create a decompression stream, writting the uncompressed data into
+    // the specified stream (e.g. a file stream)
+    // - only supported formats are szcfRaw and szcfZip (not szcfGZ)
+    constructor Create(outStream: TStream;
+      Format: TSynZipCompressorFormat = szcfRaw);
+    /// release memory
+    destructor Destroy; override;
+    /// decompress some data and update the global CRC
+    function Write(const Buffer; Count: Longint): Longint; override;
+    /// write all pending uncompressed data into outStream
+    procedure Flush;
   end;
 
 
@@ -588,6 +610,60 @@ const
   GZHEAD: array[0..2] of cardinal = (
     $088B1F, 0, 0);
 
+  {$ifdef LIBDEFLATESTATIC}
+  // libdeflate + AVX is much faster than zlib, but its API expects only buffers
+  // - files up to 64MB will call libdeflate and a temporary memory buffer
+  LIBDEFLATE_MAXSIZE = 64 shl 20;
+  {$endif LIBDEFLATESTATIC}
+
+
+{ TSynZipStream }
+
+{$ifdef FPC}
+function TSynZipStream.GetPosition: Int64;
+begin
+  result := fSizeIn;
+end;
+{$endif FPC}
+
+function TSynZipStream.GetSize: Int64;
+begin
+  result := fSizeIn;
+end;
+
+function TSynZipStream.Seek(Offset: Longint; Origin: Word): Longint;
+begin
+  result := Seek(Offset, TSeekOrigin(Origin));
+end;
+
+function TSynZipStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  if not fInitialized then
+    result := 0
+  else if (Offset = 0) and
+          (Origin = soCurrent) then
+    // for TStream.Position on Delphi
+    result := fSizeIn
+  else
+  begin
+    result := 0;
+    if (Offset <> 0) or
+       (Origin <> soBeginning) or
+       (fSizeIn <> 0) then
+      raise ESynZip.CreateFmt('Unexpected %.Seek', [ClassNameShort(self)^]);
+  end;
+end;
+
+function TSynZipStream.{%H-}Read(var Buffer; Count: Longint): Longint;
+begin
+  {$ifdef DELPHI20062007}
+  result := 0;
+  {$endif DELPHI20062007}
+  raise ESynZip.Create('TSynZipCompressor.Read is not supported');
+end;
+
+
+
 { TSynZipCompressor }
 
 constructor TSynZipCompressor.Create(outStream: TStream; CompressionLevel: integer;
@@ -599,18 +675,6 @@ begin
     fDestStream.WriteBuffer(GZHEAD, GZHEAD_SIZE);
   Z.Init(nil, 0, outStream, nil, nil, 0, 128 shl 10);
   fInitialized := Z.CompressInit(CompressionLevel, fFormat = szcfZip);
-end;
-
-procedure TSynZipCompressor.Flush;
-begin
-  if not fInitialized then
-    exit;
-  while (Z.Check(Z.Compress(Z_FINISH),
-          [Z_OK, Z_STREAM_END], 'TSynZipCompressor.Flush') <> Z_STREAM_END) and
-        (Z.Stream.avail_out = 0) do
-    Z.DoFlush;
-  Z.DoFlush;
-  fSizeOut := Z.Written;
 end;
 
 destructor TSynZipCompressor.Destroy;
@@ -627,49 +691,6 @@ begin
     fDestStream.WriteBuffer(Z.Stream.total_in, 4); // truncated to 32-bit
   end;
   inherited Destroy;
-end;
-
-function TSynZipCompressor.{%H-}Read(var Buffer; Count: Longint): Longint;
-begin
-  {$ifdef DELPHI20062007}
-  result := 0;
-  {$endif DELPHI20062007}
-  raise ESynZip.Create('TSynZipCompressor.Read is not supported');
-end;
-
-{$ifdef FPC}
-function TSynZipCompressor.GetPosition: Int64;
-begin
-  result := fSizeIn;
-end;
-
-function TSynZipCompressor.GetSize: Int64;
-begin
-  result := fSizeIn;
-end;
-{$endif FPC}
-
-function TSynZipCompressor.Seek(Offset: Longint; Origin: Word): Longint;
-begin
-  result := Seek(Offset, TSeekOrigin(Origin));
-end;
-
-function TSynZipCompressor.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
-begin
-  if not fInitialized then
-    result := 0
-  else if (Offset = 0) and
-          (Origin = soCurrent) then
-    // for TStream.Position on Delphi
-    result := fSizeIn
-  else
-  begin
-    result := 0;
-    if (Offset <> 0) or
-       (Origin <> soBeginning) or
-       (fSizeIn <> 0) then
-      raise ESynZip.CreateFmt('Unexpected %.Seek', [ClassNameShort(self)^]);
-  end;
 end;
 
 function TSynZipCompressor.Write(const Buffer; Count: Longint): Longint;
@@ -696,6 +717,80 @@ begin
   Z.Stream.avail_in := 0;
   fSizeOut := Z.Written;
   result := Count;
+end;
+
+procedure TSynZipCompressor.Flush;
+begin
+  if not fInitialized then
+    exit;
+  while (Z.Check(Z.Compress(Z_FINISH),
+          [Z_OK, Z_STREAM_END], 'TSynZipCompressor.Flush') <> Z_STREAM_END) and
+        (Z.Stream.avail_out = 0) do
+    Z.DoFlush;
+  Z.DoFlush;
+  fSizeOut := Z.Written;
+end;
+
+
+{ TSynZipDecompressor }
+
+constructor TSynZipDecompressor.Create(outStream: TStream;
+  Format: TSynZipCompressorFormat);
+begin
+  if fFormat = szcfGZ then
+    raise ESynZip.Create('TSynZipDecompressor.Create: unsupported szcfGZ');
+  fDestStream := outStream;
+  fFormat := Format;
+  Z.Init(nil, 0, outStream, @fCRC, nil, 0, 128 shl 10);
+  fInitialized := Z.UncompressInit(fFormat = szcfZip);
+end;
+
+destructor TSynZipDecompressor.Destroy;
+begin
+  if fInitialized then
+  begin
+    Flush;
+    Z.UncompressEnd;
+  end;
+  inherited Destroy;
+end;
+
+function TSynZipDecompressor.Write(const Buffer; Count: Longint): Longint;
+begin
+  if (self = nil) or
+     not fInitialized or
+     (Count <= 0) then
+  begin
+    result := 0;
+    exit;
+  end;
+  inc(fSizeIn, Count);
+  Z.Stream.next_in := pointer(@Buffer);
+  Z.Stream.avail_in := Count;
+  while Z.Stream.avail_in > 0 do
+  begin
+    // uncompress pending data
+    Z.Check(Z.Uncompress(Z_NO_FLUSH), [Z_OK, Z_STREAM_END],
+      'TSynZipDecompressor.Write');
+    if Z.Stream.avail_out = 0 then
+      Z.DoFlush;
+  end;
+  Z.Stream.next_in := nil;
+  Z.Stream.avail_in := 0;
+  fSizeOut := Z.Written;
+  result := Count;
+end;
+
+procedure TSynZipDecompressor.Flush;
+begin
+  if not fInitialized then
+    exit;
+  while (Z.Check(Z.Uncompress(Z_FINISH),
+          [Z_OK, Z_STREAM_END], 'TSynZipDecompressor.Flush') <> Z_STREAM_END) and
+        (Z.Stream.avail_out = 0) do
+    Z.DoFlush;
+  Z.DoFlush;
+  fSizeOut := Z.Written;
 end;
 
 
