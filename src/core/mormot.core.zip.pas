@@ -67,6 +67,9 @@ type
     /// used to return the current position, i.e. the real byte written count
     // - for real seek, this method will raise an error: it's a compression-only stream
     function Seek(Offset: Longint; Origin: Word): Longint; override;
+    /// used to return the current position, i.e. the real byte written count
+    // - for real seek, this method will raise an error: it's a compression-only stream
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
     /// write all pending compressed data into outStream
     procedure Flush;
     /// the number of byte read, i.e. the current uncompressed size
@@ -648,17 +651,22 @@ end;
 
 function TSynZipCompressor.Seek(Offset: Longint; Origin: Word): Longint;
 begin
+  result := Seek(Offset, TSeekOrigin(Origin));
+end;
+
+function TSynZipCompressor.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
   if not fInitialized then
     result := 0
   else if (Offset = 0) and
-          (Origin = soFromCurrent) then
+          (Origin = soCurrent) then
     // for TStream.Position on Delphi
     result := fSizeIn
   else
   begin
     result := 0;
     if (Offset <> 0) or
-       (Origin <> soFromBeginning) or
+       (Origin <> soBeginning) or
        (fSizeIn <> 0) then
       raise ESynZip.CreateFmt('Unexpected %.Seek', [ClassNameShort(self)^]);
   end;
@@ -1298,10 +1306,10 @@ begin
         end;
         // overwrite the local file header with the exact values
         newpos := fDest.Position;
-        fDest.Seek(headerpos, soFromBeginning);
+        fDest.Seek(headerpos, soBeginning);
         WriteRawHeader;
         assert(QWord(fDest.Position) = datapos);
-        fDest.Seek(newpos, soFromBeginning);
+        fDest.Seek(newpos, soBeginning);
       end;
       inc(Count);
     finally

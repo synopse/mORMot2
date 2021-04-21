@@ -5188,7 +5188,7 @@ begin
       fWriterStream := TFakeWriterStream.Create;
     if (fFileRotationSize > 0) or
        (fFamily.FileExistsAction <> acOverwrite) then
-      fWriterStream.Seek(0, soFromEnd); // in rotation mode, append at the end
+      fWriterStream.Seek(0, soEnd); // in rotation mode, append at the end
   end;
   if fWriterClass = nil then
     // use TTextWriter since mormot.core.json.pas is linked

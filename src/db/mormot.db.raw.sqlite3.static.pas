@@ -785,7 +785,7 @@ begin
   if OldPassWord <> '' then
     CreateSqlEncryptTableBytes(OldPassWord, @OldP);
   Posi := 1024; // don't change first page, which is uncrypted
-  FileSeek(F, 1024, soFromBeginning);
+  FileSeek64(F, 1024, soFromBeginning);
   while Posi < Size do
   begin
     R := FileRead(F, Buf, sizeof(Buf)); // read buffer

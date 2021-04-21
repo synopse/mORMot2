@@ -3515,7 +3515,7 @@ begin
   if Append and FileExists(aFileName) then
   begin
     s := TFileStream.Create(aFileName, fmOpenWrite);
-    s.Seek(0, soFromEnd);
+    s.Seek(0, soEnd);
   end
   else
     s := TFileStream.Create(aFileName, fmCreate);
@@ -4781,7 +4781,7 @@ begin
     if Source.InheritsFrom(TCustomMemoryStream) then
     begin
       S := PAnsiChar(TCustomMemoryStream(Source).Memory) + PtrUInt(sourcePosition);
-      Source.Seek(Head.CompressedSize, soFromCurrent);
+      Source.Seek(Head.CompressedSize, soCurrent);
     end
     else
     begin
