@@ -1051,6 +1051,7 @@ const
   LASTHEADER64_SIGNATURE_INC = $06064b50 + 1;  // PK#6#6
   LASTHEADERLOCATOR64_SIGNATURE_INC = $07064b50 + 1;  // PK#6#7
 
+  // identify the OS used to forge the .zip
   ZIP_OS = (0
       {$ifdef OSDARWIN}
         + 19
@@ -1059,6 +1060,7 @@ const
         + 3
       {$endif OSPOSIX}
       {$endif OSDARWIN}) shl 8;
+
   // regular .zip format is version 2.0, Zip64 format has version 4.5
   ZIP_VERSION: array[{zip64:}boolean] of cardinal = (
     20 + ZIP_OS,
@@ -1072,6 +1074,8 @@ const
   UNIX_EXTRA_ID = $000d; // UNIX
   EXT_TIME_EXTRA_ID = $5455; // Extended timestamp
   INFOZIP_UNIX_EXTRAID = $5855; // Info-ZIP Unix extension
+
+  ZIP_MINSIZE_DEFLATE = 256; // size < 256 -> Z_STORED
 
   ZIP32_MAXSIZE = cardinal(-1);   // > trigger size for ZIP64 format
   ZIP32_MAXFILE = (1 shl 16) - 1; // > trigger file count for ZIP64 format
@@ -1296,9 +1300,14 @@ var
 begin
   if self = nil then
     exit;
+  if Size < ZIP_MINSIZE_DEFLATE then
+  begin
+    AddStored(aZipName, Buf, Size, FileAge);
+    exit;
+  end;
   e := NewEntry(Z_DEFLATED, mormot.lib.z.crc32(0, Buf, Size), FileAge);
   e^.h64.zfullSize := Size;
-  tmp.Init((Int64(Size) * 11) div 10 + 12); // max potential size
+  tmp.Init((Size * 11) div 10 + 256); // max potential size
   try
     e^.h64.zzipSize := CompressMem(Buf, tmp.buf, Size, tmp.len, CompressLevel);
     WriteHeader(aZipName);
@@ -1359,7 +1368,8 @@ begin
       age := FileAgeToWindowsTime(aFileName);
       // prepare and write initial version of the local file header
       met := Z_DEFLATED;
-      if CompressLevel < 0 then
+      if (CompressLevel < 0) or
+         (todo < ZIP_MINSIZE_DEFLATE) then
         met := Z_STORED; // called from AddStored()
       {$ifdef LIBDEFLATESTATIC}
       // libdeflate is much faster than zlib, but its API expects only buffers
@@ -1383,7 +1393,7 @@ begin
         if met = Z_STORED then
           h64.zzipSize := todo
         else
-          h64.zzipSize := (todo * 11) div 10 + 12; // max potential size
+          h64.zzipSize := (todo * 11) div 10 + 256; // max potential size
         headerpos := fDest.Position;
         WriteHeader(ZipName);
         // append the stored/deflated data
