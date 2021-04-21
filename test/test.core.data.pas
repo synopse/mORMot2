@@ -4545,11 +4545,12 @@ var
   begin
     with Z do
     try
+      if CheckFailed(Count = aCount, 'count') then
+        exit;
       for i := 0 to Count - 1 do
         if not CheckFailed(RetrieveLocalFileHeader(i, local)) then
           Check(CompareMem(@Entry[i].dir^.fileInfo, @local.fileInfo,
             SizeOf(TFileInfo) - SizeOf(Entry[i].dir^.fileInfo.extraLen)));
-      Check(Count = aCount, 'count');
       i := NameToIndex('REP1\ONE.exe');
       Check(i = 0, '0');
       FillcharFast(info, sizeof(info), 0);
@@ -4649,7 +4650,13 @@ begin
       Free;
     end;
     test(TZipRead.Create(FN), 5);
-    DeleteFile(FN);
+    FN2 := ChangeFileExt(FN, 'append.exe');
+    FileFromString(Data, FN2);
+    FileAppend(FN2, FN);
+    if m = 2 then
+      mem := mem * 2;
+    test(TZipRead.Create(FN2, length(Data) - 100, 0, mem), 5);
+    DeleteFile(FN2);
     FN2 := WorkDir + 'json';
     if zip64 then
       FN2 := FN2 + '64.zip'
@@ -4664,9 +4671,9 @@ begin
     finally
       Free;
     end;
+    DeleteFile(FN);
     DeleteFile(FN2);
   end;
-  { TODO: test TZipRead with .zip appended to some executable }
 end;
 
 function Spaces(n: integer): RawUtf8;

@@ -560,6 +560,9 @@ type
 // aDestinationPath directory, i.e. TSynLogFamily.ArchivePath+'\log\YYYYMM.zip'
 function EventArchiveZip(const aOldLogFileName, aDestinationPath: TFileName): boolean;
 
+/// add aAppendFile after the end of aMainFile
+// - could be used e.g. to add a .zip to an executable
+procedure FileAppend(const aMainFile, aAppendFile: TFileName);
 
 
 /// (un)compress a data content using the gzip algorithm
@@ -620,7 +623,6 @@ var
 
 
 implementation
-
 
 { ************ TSynZipCompressor Stream Class }
 
@@ -1811,23 +1813,38 @@ begin
     Create(fResource.Buffer, fResource.Size);
 end;
 
+function IsZipStart(P: PCardinal): boolean; {$ifdef HASINLINE} inline; {$endif}
+begin
+  // we need to check more than the signature because of false positives
+  case P^ + 1 of
+    FIRSTHEADER_SIGNATURE_INC:
+      with PLocalFileHeader(P)^.fileInfo do
+        result := (ToByte(neededVersion) in [20, 45]) and
+                  (zzipMethod in [Z_STORED, Z_DEFLATED]) and
+                  (extraLen < 100) and
+                  (nameLen < 512);
+    LASTHEADER_SIGNATURE_INC:
+      result := PInt64(@PLastHeader(P)^.totalFiles)^ = 0; // *Disk=0
+  else
+    result := false;
+  end;
+end;
+
 constructor TZipRead.Create(aFile: THandle;
   ZipStartOffset, Size, WorkingMem: QWord; DontReleaseHandle: boolean);
 var
-  buffersize: QWord;
   read, i: PtrInt;
   P: PByteArray;
-  c: cardinal;
+  local: TLocalFileHeader;
 begin
   if not ValidHandle(aFile) then
     exit;
   // prepare the internal buffer - contains at least the central directory
   if Size = 0 then
     Size := FileSize(aFile);
-  buffersize := Size;
-  if Size > WorkingMem then
-    buffersize := WorkingMem;
-  SetString(fSourceBuffer, nil, buffersize);
+  if Size < WorkingMem then
+    WorkingMem := Size; // up to 1MB by default
+  SetString(fSourceBuffer, nil, WorkingMem);
   P := pointer(fSourceBuffer);
   // search for the first zip file local header
   fSource := TFileStreamFromHandle.Create(aFile);
@@ -1835,43 +1852,38 @@ begin
   if ZipStartOffset = 0 then
   begin
     fSource.Seek(0, soBeginning);
-    if (fSource.Read(c, 4) = 4) and
-       (c + 1 = FIRSTHEADER_SIGNATURE_INC) or
-       (c + 1 = LASTHEADER_SIGNATURE_INC) then
+    if (fSource.Read(local, SizeOf(local)) = SizeOf(local)) and
+       IsZipStart(@local) then
     begin
-      // it seems to be a regular .zip -> read up to 1MB of trailing data
-      fSource.Seek(Size - buffersize, soBeginning);
-      fSource.Read(P^, buffersize);
-      Create(P, buffersize, Size - buffersize);
+      // it seems to be a regular .zip -> read WorkingMem trailing data
+      fSource.Seek(Size - WorkingMem, soBeginning);
+      fSource.Read(P^, WorkingMem);
+      Create(P, WorkingMem, Size - WorkingMem);
       exit;
     end;
   end;
   // the .zip content may have been appended e.g. to an executable
   repeat
     fSource.Seek(ZipStartOffset, soBeginning);
-    read := fSource.Read(P^, buffersize);
-    for i := 0 to read - 5 do
-    begin
-      c := PCardinal(@P[i])^ + 1;
-      if (c = FIRSTHEADER_SIGNATURE_INC) or
-         (c = LASTHEADER_SIGNATURE_INC) then
+    read := fSource.Read(P^, WorkingMem);
+    for i := 0 to read - SizeOf(TLocalFileHeader) do
+      if IsZipStart(@P[i]) then
       begin
         fSourceOffset := Int64(ZipStartOffset) + i;
-        if Size = buffersize then
+        if Size = WorkingMem then
           // small files could reuse the existing buffer
-          Create(@P[i], buffersize - i, 0)
+          Create(@P[i], read - i, 0)
         else
         begin
-          // big files need to read the last 1MB
-          fSource.Seek(Size - buffersize, soBeginning);
-          fSource.Read(P^, buffersize);
-          Create(P, buffersize, Size - buffersize - fSourceOffset);
+          // big files need to read the last WorkingMem
+          fSource.Seek(Size - WorkingMem, soBeginning);
+          fSource.Read(P^, WorkingMem);
+          Create(P, WorkingMem, Size - WorkingMem- fSourceOffset);
         end;
         exit;
       end;
-    end;
-    inc(ZipStartOffset, buffersize - 4); // search in next chunk
-  until read <> buffersize;
+    inc(ZipStartOffset, WorkingMem - SizeOf(TLocalFileHeader)); // search next
+  until read <> WorkingMem;
   raise ESynZip.CreateFmt('TZipRead: No ZIP header found %s', [fFileName]);
 end;
 
@@ -2262,6 +2274,24 @@ begin
     if (EventArchiveZipWrite.Count = n + 1) and
        DeleteFile(aOldLogFileName) then
       result := True;
+  end;
+end;
+
+procedure FileAppend(const aMainFile, aAppendFile: TFileName);
+var
+  M, A: TStream;
+begin
+  M := TFileStream.Create(aMainFile, fmOpenReadWrite);
+  try
+    A := TFileStream.Create(aAppendFile, fmOpenRead);
+    try
+      M.Seek(0, soEnd);
+      M.CopyFrom(A, 0);
+    finally
+      A.Free;
+    end;
+  finally
+    M.Free;
   end;
 end;
 
