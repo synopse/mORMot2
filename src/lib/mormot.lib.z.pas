@@ -847,7 +847,7 @@ begin
   for i := Low(ValidCodes) to High(ValidCodes) do
     if ValidCodes[i] = Code then
       exit;
-  raise ESynZip.CreateFmt('Error %d during %s process (avail_in=%d avail_out=%d)',
+  raise ESynZip.CreateFmt('Error %d during %s process (avail in=%d out=%d)',
     [Code, Context, Stream.avail_in, Stream.avail_out]);
 end;
 

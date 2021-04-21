@@ -11091,7 +11091,8 @@ begin
       result := 0;
     fPosition := result;
   end
-  else // quick exit on Delphi when retrieving the position
+  else
+    // quick exit on Delphi when retrieving TStream.Position
     result := fPosition;
 end;
 

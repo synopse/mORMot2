@@ -6543,7 +6543,7 @@ var
 begin
   S := PAnsiChar(Stream.Memory);
   P := LoadFrom(S + Stream.Position, S + Stream.Size);
-  Stream.Seek(P - S, soBeginning);
+  Stream.Seek(Int64(PtrUInt(P) - PtrUInt(S)), soBeginning);
 end;
 
 function TDynArray.SaveToJson(EnumSetsAsText: boolean; reformat: TTextWriterJsonFormat): RawUtf8;
