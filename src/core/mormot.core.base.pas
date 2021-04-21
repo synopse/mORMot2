@@ -3104,13 +3104,13 @@ procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
 function VarDataFromVariant(const Value: variant): PVarData;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
+/// same as VarIsEmpty(V) or VarIsNull(V), but faster
 // - we also discovered some issues with FPC's Variants unit, so this function
 // may be used even in end-user cross-compiler code
 function VarIsEmptyOrNull(const V: Variant): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// same as VarIsEmpty(PVariant(V)^) or VarIsEmpty(PVariant(V)^), but faster
+/// same as VarIsEmpty(PVariant(V)^) or VarIsNull(PVariant(V)^), but faster
 // - we also discovered some issues with FPC's Variants unit, so this function
 // may be used even in end-user cross-compiler code
 function VarDataIsEmptyOrNull(VarData: pointer): boolean;

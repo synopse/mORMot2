@@ -1315,7 +1315,7 @@ function FindPropName(const Names: array of RawUtf8; const Name: RawUtf8): integ
 
 /// return the index of Value in Values[] using IdemPropNameU(), -1 if not found
 // - typical use with a dynamic array is like:
-// ! index := FindPropName(pointer(aDynArray),length(aDynArray),aValue);
+// ! index := FindPropName(pointer(aDynArray),aValue,length(aDynArray));
 function FindPropName(Values: PRawUtf8;
   const Value: RawUtf8; ValuesCount: integer): integer; overload;
 

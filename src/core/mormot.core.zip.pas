@@ -512,7 +512,7 @@ type
       FileAge: integer = 0); overload;
     /// compress an existing file, and add it to the zip
     // - deflate reading 1MB chunks of input, triggerring zip64 format if needed
-    // - can use faster libdeflate (if available) for files up to 32MB, but
+    // - can use faster libdeflate (if available) for files up to 64 MB, but
     // fallback to zlib with 1MB chunks for bigger files
     procedure AddDeflated(const aFileName: TFileName;
       RemovePath: boolean = true; CompressLevel: integer = 6;
@@ -1370,7 +1370,7 @@ begin
       met := Z_DEFLATED;
       if (CompressLevel < 0) or
          (todo < ZIP_MINSIZE_DEFLATE) then
-        met := Z_STORED; // called from AddStored()
+        met := Z_STORED; // tiny file, or called from AddStored()
       {$ifdef LIBDEFLATESTATIC}
       // libdeflate is much faster than zlib, but its API expects only buffers
       if (met = Z_DEFLATED) and
