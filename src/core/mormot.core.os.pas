@@ -1467,17 +1467,18 @@ function SearchRecValidFile(const F: TSearchRec): boolean;
 function SearchRecValidFolder(const F: TSearchRec): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-{$ifdef FPC}
 type
   // FPC TFileStream miss a Create(aHandle) constructor like Delphi
   TFileStreamFromHandle = class(THandleStream)
+  protected
+    fDontReleaseHandle: boolean;
   public
+    /// explictely close the handle if needed
     destructor Destroy; override;
+    /// Destroy calls FileClose(Handle) unless this property is true
+    property DontReleaseHandle: boolean
+      read fDontReleaseHandle write fDontReleaseHandle;
   end;
-{$else}
-type
-  TFileStreamFromHandle = TFileStream;
-{$endif FPC}
 
 /// overloaded function optimized for one pass file reading
 // - will use e.g. the FILE_FLAG_SEQUENTIAL_SCAN flag under Windows, as stated
@@ -3028,7 +3029,7 @@ begin
     result := 0
   else
     result := (s shr 1) or (m shl 5) or (h shl 11) or
-              cardinal((DD shl 16) or (MM shl 21) or (cardinal(YY - 1980) shl 25));
+      cardinal((DD shl 16) or (MM shl 21) or (cardinal(YY - 1980) shl 25));
 end;
 
 function ValidHandle(Handle: THandle): boolean;
@@ -3059,12 +3060,11 @@ begin
             (F.Name <> '..');
 end;
 
-{$ifdef FPC}
 destructor TFileStreamFromHandle.Destroy;
 begin
-  FileClose(Handle); // otherwise file is still opened
+  if not fDontReleaseHandle then
+    FileClose(Handle); // otherwise file is stil opened
 end;
-{$endif FPC}
 
 function FileStreamSequentialRead(const FileName: string): THandleStream;
 begin
