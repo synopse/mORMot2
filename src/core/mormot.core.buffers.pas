@@ -777,6 +777,7 @@ type
     procedure InternalFlush;
     function GetTotalWritten: Int64;
       {$ifdef HASINLINE}inline;{$endif}
+    procedure InternalWrite(Data: pointer; DataLen: PtrInt);
     procedure FlushAndWrite(Data: pointer; DataLen: PtrInt);
   public
     /// initialize the buffer, and specify a file handle to use for writing
@@ -798,6 +799,7 @@ type
     // - parameter could be e.g. TMemoryStream or TRawByteStringStream
     // - use Flush then TMemoryStream(Stream) to retrieve its content, or
     // FlushTo if TRawByteStringStream was used
+    // - Write() fails over 800MB (_STRMAXSIZE) for a TRawByteStringStream
     constructor Create(aClass: TStreamClass; BufLen: integer = 4096); overload;
     /// initialize with a specified buffer and an owned TStream
     // - use a specified external buffer (which may be allocated on stack),
@@ -807,6 +809,7 @@ type
     /// initialize with a stack-allocated 8KB of buffer
     // - destination stream is an owned TRawByteStringStream - so you can
     // call FlushTo to retrieve all written data
+    // - Write() fails over 800MB (_STRMAXSIZE) for a TRawByteStringStream
     // - convenient to reduce heap presure, when writing a few KB of data
     constructor Create(const aStackBuffer: TTextWriterStackBuffer); overload;
     /// release internal TStream (after AssignToHandle call)
@@ -917,7 +920,7 @@ type
     // - raise an exception if internal Stream is not a TRawByteStringStream
     function FlushTo: RawByteString;
     /// write any pending data, then create a TBytes array from the content
-    // - raise an exception if internal Stream is not a TRawByteStringStream
+    // - raise an exception if the size exceeds 800MB (_DAMAXSIZE)
     function FlushToBytes: TBytes;
     /// write any pending data, then call algo.Compress() on the buffer
     // - if algo is left to its default nil, will use global AlgoSynLZ
@@ -3576,11 +3579,22 @@ end;
 
 procedure TBufferWriter.InternalFlush;
 begin
-  if fPos = 0 then
-    exit;
-  fStream.WriteBuffer(fBuffer^, fPos);
-  inc(fTotalFlushed, fPos);
-  fPos := 0;
+  if fPos > 0 then
+  begin
+    InternalWrite(fBuffer, fPos);
+    fPos := 0;
+  end;
+end;
+
+procedure TBufferWriter.InternalWrite(Data: pointer; DataLen: PtrInt);
+begin
+  inc(fTotalFlushed, DataLen);
+  if fStream.InheritsFrom(TRawByteStringStream) and
+     (fTotalFlushed > _STRMAXSIZE) then
+    // Delphi strings have a 32-bit length so you should change your algorithm
+    raise ESynException.CreateUtf8('%.Write: % overflow (%)',
+      [self, fStream, KBNoSpace(fTotalFlushed)]);
+  fStream.WriteBuffer(Data^, DataLen);
 end;
 
 function TBufferWriter.GetTotalWritten: Int64;
@@ -3613,7 +3627,7 @@ begin
   if fPos > 0 then
     InternalFlush;
   if DataLen > fBufLen then
-    fStream.WriteBuffer(Data^, DataLen)
+    InternalWrite(Data, DataLen)
   else
   begin
     MoveFast(Data^, fBuffer^[fPos], DataLen);
@@ -4228,9 +4242,14 @@ begin
 end;
 
 function TBufferWriter.FlushToBytes: TBytes;
+var
+  siz: Int64;
 begin
   result := nil;
-  SetLength(result, TotalWritten);
+  siz := GetTotalWritten;
+  if siz > _DAMAXSIZE then
+    raise ESynException.CreateUtf8('%.FlushToBytes: overflow (%)', [KB(siz)]);
+  SetLength(result, siz);
   if fStream.Position = 0 then
     // direct assignment from internal buffer
     MoveFast(fBuffer[0], pointer(result)^, fPos)

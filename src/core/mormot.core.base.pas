@@ -556,12 +556,11 @@ type
     PStrRec = ^TStrRec;
     PDynArrayRec = ^TDynArrayRec;
 
-  const
-    /// codePage offset = string header size
-    // - used to calc the beginning of memory allocation of a string
-    _STRRECSIZE = SizeOf(TStrRec);
-
 const
+  /// codePage offset = string header size
+  // - used to calc the beginning of memory allocation of a string
+  _STRRECSIZE = SizeOf(TStrRec);
+
   /// cross-compiler negative offset to TStrRec.length field
   // - to be used inlined e.g. as PStrLen(p - _STRLEN)^
   _STRLEN = SizeOf(TStrLen);
@@ -582,6 +581,18 @@ const
   /// cross-compiler negative offset to TDynArrayRec.refCnt field
   // - to be used inlined e.g. as PRefCnt(PAnsiChar(Values) - _DAREFCNT)^
   _DAREFCNT = Sizeof(TRefCnt) + _DALEN;
+
+  /// in-memory string process will allow up to 800 MB
+  // - used as high limit e.g. for TBufferWriter over a TRawByteStringStream
+  // - Delphi strings have a 32-bit length so you should change your algorithm
+  // - even if FPC on CPU64 can handle bigger strings, consider other patterns
+  _STRMAXSIZE = $5fffffff;
+
+  /// in-memory TBytes process will allow up to 800 MB
+  // - used as high limit e.g. for TBufferWriter.FlushToBytes
+  // - even if a dynamic array can handle PtrInt length, consider other patterns
+  _DAMAXSIZE = $5fffffff;
+
 
 {$ifndef CPUARM}
 type
