@@ -4613,6 +4613,7 @@ var
 var
   i, m: integer;
   mem: QWord;
+  json, deleted: TStringDynArray;
 begin
   for m := 1 to 2 do
   for zip64 := false to true do
@@ -4633,7 +4634,7 @@ begin
     finally
       S.Free;
     end;
-    with TZipWrite.CreateFrom(FN, '', mem) do
+    with TZipWrite.CreateFrom(FN, mem) do
     try
       Check(Count = 4, 'two4');
       AddDeflated('rep1\two.exe', pointer(Data), length(Data));
@@ -4642,7 +4643,7 @@ begin
       Free;
     end;
     test(TZipRead.Create(FN, 0, 0, mem), 5);
-    with TZipWrite.CreateFrom(FN, 'rep1\two.exe') do
+    with TZipWrite.CreateFrom(FN, ['rep1\two.exe']) do
     try
       Check(Count = 4, 'last4');
       AddDeflated('rep1\two.exe', pointer(Data), length(Data));
@@ -4663,15 +4664,29 @@ begin
       FN2 := FN2 + '64.zip'
     else
       FN2 := FN2 + '.zip';
+    json := nil;
+    deleted := nil;
     with TZipWrite.Create(FN2) do
     try
-      AddFolder(WorkDir, '*.json');
-      Check(Count > 2);
+      AddFolder(WorkDir, '*.json', true, 1);
+      CheckUtf8(Count > 2, 'json=%', [Count]);
       for i := 0 to Count - 1 do
-        Check(SameText(ExtractFileExt(Ansi7ToString(Entry[i].intName)), '.json'), 'json');
+      begin
+        Check(AddString(json, Ansi7ToString(Entry[i].intName)) = i);
+        if (i and 1) = (m - 1) then
+          AddString(deleted, json[i]);
+        Check(SameText(ExtractFileExt(json[i]), '.json'), 'json');
+      end;
     finally
       Free;
     end;
+    with TZipWrite.CreateFrom(FN2, TFileNameDynArray(deleted)) do
+    try
+      Check(Count = length(json) - length(deleted));
+    finally
+      Free;
+    end;
+    Check(ZipTest(FN2), 'ziptest');
     DeleteFile(FN);
     DeleteFile(FN2);
   end;
