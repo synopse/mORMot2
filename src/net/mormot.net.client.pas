@@ -76,6 +76,7 @@ type
     fBound: RawUtf8;
     fMultipartContentType: RawUtf8;
     fFilesCount: integer;
+    fRfc2388NestedFiles: boolean;
     function Add(const name, content, contenttype,
       filename, encoding: RawUtf8): PHttpMultiPartStreamSection;
   public
@@ -101,6 +102,9 @@ type
     // - includes a random boundary field
     property MultipartContentType: RawUtf8
       read fMultipartContentType;
+    /// will force the deprecated nested "multipart/mixed" format
+    property Rfc2388NestedFiles: boolean
+      read fRfc2388NestedFiles write fRfc2388NestedFiles;
     /// high-level sections parameters as provided to Add* methods
     // - can be used e.g. by libcurl which makes its own encoding
     property Sections: THttpMultiPartStreamSections
@@ -1057,30 +1061,39 @@ begin
   end;
   if filename = '' then
     // simple form field
-    FormatUtf8('--%'#13#10'Content-Disposition: form-data; name="%"'#13#10 +
+    FormatUtf8('--%'#13#10 +
+      'Content-Disposition: form-data; name="%"'#13#10 +
       'Content-Type: %'#13#10#13#10'%'#13#10,
       [fBound, result^.Name, result^.ContentType, content], s)
   else
   begin
-    if fFilesCount = 0 then
+    // file field
+    if fRfc2388NestedFiles and
+       (fFilesCount = 0) then
     begin
-      // if this is the first file, create the header for files
+      // if this is the first file, create the RFC 2388 nested "files"
       FormatUtf8('--%'#13#10, [fBound], s);
       fBound := MultiPartFormDataNewBound(fBounds);
-      s := s + 'Content-Disposition: form-data; name="files"'#13#10 +
-           'Content-Type: multipart/mixed; boundary=' + fBound + #13#10#13#10;
-    end;
-    inc(fFilesCount);
-    s := FormatUtf8('%--%'#13#10 +
-      'Content-Disposition: file; name="%"; filename="%"'#13#10 +
-      'Content-Type: %'#13#10, [{%H-}s, fBound,
-       result^.Name, MimeHeaderEncode(filename), result^.ContentType]);
+      s := FormatUtf8(
+        '%Content-Disposition: form-data; name="files"'#13#10 +
+        'Content-Type: multipart/mixed; boundary=%'#13#10#13#10'--%'#13#10 +
+        'Content-Disposition: file; name="%"; filename="%"'#13#10 +
+        'Content-Type: %'#13#10, [{%H-}s, fBound, fBound,
+         result^.Name, MimeHeaderEncode(filename), result^.ContentType]);
+    end
+    else
+      // see https://tools.ietf.org/html/rfc7578#appendix-A
+      FormatUtf8('--%'#13#10 +
+        'Content-Disposition: form-data; name="%"; filename="%"'#13#10 +
+        'Content-Type: %'#13#10,
+        [fBound, result^.Name, filename, result^.ContentType], s);
     if encoding <> '' then
       s := FormatUtf8('%Content-Transfer-Encoding: %'#13#10, [s, encoding]);
     if content <> '' then
       s := s + #13#10 + content + #13#10
     else
-      s := s + #13#10;
+      s := s + #13#10; // a TFileStream content will be appended
+    inc(fFilesCount);
   end;
   Append(s);
 end;

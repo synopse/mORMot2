@@ -1225,9 +1225,11 @@ function MultiPartFormDataNewBound(var boundaries: TRawUtf8DynArray): RawUtf8;
 // $ Content-Type: multipart/form-data; boundary=xxx
 // where xxx is the first generated boundary
 // - MultiPartContent: generated multipart content
+// - Rfc2388NestedFiles will force the deprecated nested "multipart/mixed" format
 // - consider THttpMultiPartStream from mormot.net.client for huge file content
 function MultiPartFormDataEncode(const MultiPart: TMultiPartDynArray;
-  var MultiPartContentType, MultiPartContent: RawUtf8): boolean;
+  var MultiPartContentType, MultiPartContent: RawUtf8;
+  Rfc2388NestedFiles: boolean = false): boolean;
 
 /// encode a file in a multipart array
 // - FileName: file to encode
@@ -6202,15 +6204,16 @@ end;
 
 function MultiPartFormDataNewBound(var boundaries: TRawUtf8DynArray): RawUtf8;
 var
-  random: array[0..3] of cardinal;
+  random: array[0..2] of cardinal;
 begin
-  FillRandom(@random, 4);
+  FillRandom(@random, 3);
   result := BinToBase64uri(@random, SizeOf(random));
   AddRawUtf8(boundaries, result);
 end;
 
 function MultiPartFormDataEncode(const MultiPart: TMultiPartDynArray;
-  var MultiPartContentType, MultiPartContent: RawUtf8): boolean;
+  var MultiPartContentType, MultiPartContent: RawUtf8;
+  Rfc2388NestedFiles: boolean): boolean;
 var
   len, filescount, i: integer;
   boundaries: TRawUtf8DynArray;
@@ -6239,22 +6242,29 @@ begin
             [bound, Name, ContentType, Content])
         else
         begin
-          // if this is the first file, create the "files" sub-section
-          if filescount = 0 then
+          // if this is the first file, create the RFC 2388 nested "files"
+          if Rfc2388NestedFiles and
+             (filescount = 0) then
           begin
             W.Add('--%'#13#10, [bound]);
             bound := MultiPartFormDataNewBound(boundaries);
             W.Add('Content-Disposition: form-data; name="files"'#13#10 +
               'Content-Type: multipart/mixed; boundary=%'#13#10#13#10, [bound]);
-          end;
-          inc(filescount);
-          W.Add('--%'#13#10'Content-Disposition: file; filename="%"'#13#10 +
-            'Content-Type: %'#13#10, [bound, FileName, ContentType]);
+            W.Add('--%'#13#10'Content-Disposition: file; filename="%"'#13#10 +
+              'Content-Type: %'#13#10, [bound, FileName, ContentType]);
+          end
+          else
+            // see https://tools.ietf.org/html/rfc7578#appendix-A
+            W.Add('--%'#13#10 +
+              'Content-Disposition: form-data; name="%"; filename="%"'#13#10 +
+              'Content-Type: %'#13#10,
+              [bound, Name, FileName, ContentType]);
           if Encoding <> '' then
             W.Add('Content-Transfer-Encoding: %'#13#10, [Encoding]);
           W.AddCR;
           W.AddString(MultiPart[i].Content);
           W.AddCR;
+          inc(filescount);
         end;
       end;
     // footer multipart
