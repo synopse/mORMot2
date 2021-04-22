@@ -5515,6 +5515,7 @@ var
   mp, mp2: TMultiPartDynArray;
   mpc, mpct: RawUtf8;
   st: THttpMultiPartStream;
+  rfc2388: boolean;
 
   procedure DecodeAndTest;
   var
@@ -5554,30 +5555,36 @@ begin
     CheckEqual(GetMimeContentTypeFromBuffer(@BIN[i], 34, ''), BIN_MIME[i]);
   end;
   // mime multipart encoding
-  n := high(MIMES) shr 1;
-  for i := 0 to n do
-    Check(MultiPartFormDataAddField(
-      StringToUtf8(MIMES[i * 2]), StringToUtf8(MIMES[i * 2 + 1]), mp));
-  for i := 0 to high(fn) do
+  for rfc2388 := false to true do
   begin
-    fn[i] := WorkDir + 'mp' + IntToStr(i);
-    FileFromString(StringToUtf8(MIMES[i * 2 + 1]), fn[i]);
-    Check(MultiPartFormDataAddFile(fn[i], mp));
+    mp := nil;
+    mp2 := nil;
+    n := high(MIMES) shr 1;
+    for i := 0 to n do
+      Check(MultiPartFormDataAddField(
+        StringToUtf8(MIMES[i * 2]), StringToUtf8(MIMES[i * 2 + 1]), mp));
+    for i := 0 to high(fn) do
+    begin
+      fn[i] := WorkDir + 'mp' + IntToStr(i);
+      FileFromString(StringToUtf8(MIMES[i * 2 + 1]), fn[i]);
+      Check(MultiPartFormDataAddFile(fn[i], mp));
+    end;
+    Check(MultiPartFormDataEncode(mp, mpct, mpc, rfc2388));
+    DecodeAndTest;
+    st := THttpMultiPartStream.Create;
+    st.Rfc2388NestedFiles := rfc2388;
+    for i := 0 to n do
+      st.AddContent(StringToUtf8(MIMES[i * 2]), StringToUtf8(MIMES[i * 2 + 1]));
+    for i := 0 to high(fn) do
+      st.AddFile('', fn[i]);
+    st.Flush;
+    mpct := st.MultipartContentType;
+    mpc := StreamToRawByteString(st);
+    DecodeAndTest;
+    st.Free;
+    for i := 0 to high(fn) do
+      check(DeleteFile(fn[i]));
   end;
-  Check(MultiPartFormDataEncode(mp, mpct, mpc));
-  DecodeAndTest;
-  st := THttpMultiPartStream.Create;
-  for i := 0 to n do
-    st.AddContent(StringToUtf8(MIMES[i * 2]), StringToUtf8(MIMES[i * 2 + 1]));
-  for i := 0 to high(fn) do
-    st.AddFile('', fn[i]);
-  st.Flush;
-  mpct := st.MultipartContentType;
-  mpc := StreamToRawByteString(st);
-  DecodeAndTest;
-  st.Free;
-  for i := 0 to high(fn) do
-    check(DeleteFile(fn[i]));
 end;
 
 function TTestCoreBase.QuickSelectGT(IndexA, IndexB: PtrInt): boolean;
