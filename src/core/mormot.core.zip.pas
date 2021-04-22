@@ -427,6 +427,8 @@ type
     // destination directory
     // - returns -1 on success, or the index in Entry[] of the failing file
     function UnZipAll(DestDir: TFileName): integer;
+    /// uncompress and check the crc of all files of this .zip archive
+    function TestAll: boolean;
     /// retrieve information about a file
     // - in some cases (e.g. for a .zip created by latest Java JRE),
     // infoLocal^.zzipSize/zfullSize/zcrc32 may equal 0: this method is able
@@ -569,6 +571,10 @@ type
 // - resulting file will be named YYYYMM.zip and will be located in the
 // aDestinationPath directory, i.e. TSynLogFamily.ArchivePath+'\log\YYYYMM.zip'
 function EventArchiveZip(const aOldLogFileName, aDestinationPath: TFileName): boolean;
+
+/// check the content of a .zip file, decompressing and checking all crc
+// - just a wrapper around TZipRead.TestAll
+function ZipTest(const aZipName: TFileName): boolean;
 
 /// add aAppendFile after the end of aMainFile
 // - could be used e.g. to add a .zip to an executable
@@ -2260,6 +2266,23 @@ begin
   result := -1;
 end;
 
+function TZipRead.TestAll: boolean;
+var
+  i: integer;
+  fake: TStream;
+begin
+  result := false;
+  fake := TFakeWriterStream.Create;
+  try
+    for i := 0 to Count - 1 do
+      if not UnZip(i, fake) then
+        exit;
+  finally
+    fake.Free;
+  end;
+  result := true;
+end;
+
 function TZipRead.UnZip(const aName, DestDir: TFileName;
   DestDirIsFileName: boolean): boolean;
 var
@@ -2306,6 +2329,25 @@ begin
        DeleteFile(aOldLogFileName) then
       result := True;
   end;
+end;
+
+function ZipTest(const aZipName: TFileName): boolean;
+var
+  ZR: TZipRead;
+begin
+  if FileExists(aZipName) then
+    try
+      ZR := TZipRead.Create(aZipName);
+      try
+        result := ZR.TestAll;
+      finally
+        ZR.Free;
+      end;
+    except
+      result := false; // interpret exception as wrong .zip format
+    end
+  else
+    result := false;
 end;
 
 procedure FileAppend(const aMainFile, aAppendFile: TFileName);

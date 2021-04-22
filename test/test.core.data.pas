@@ -4543,6 +4543,7 @@ var
     local: TLocalFileHeader;
     info: TFileInfoFull;
   begin
+    Check(Z.TestAll, 'testall');
     with Z do
     try
       if CheckFailed(Count = aCount, 'count') then
