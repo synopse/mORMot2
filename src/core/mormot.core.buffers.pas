@@ -7993,14 +7993,14 @@ function TStreamRedirect.Write(const Buffer; Count: Longint): Longint;
 var
   tix, tosleep: Int64;
 begin
-  if fDestination = nil then
-    raise ESynException.CreateUtf8('%.Write(%): Destination=nil',
-      [self, fContext]);
   DoHash(@Buffer, Count);
-  fDestination.WriteBuffer(Buffer, Count);
   inc(fCurrentSize, Count);
   inc(fWrittenSize, Count);
   inc(fPosition, Count);
+  result := Count;
+  if fDestination = nil then
+    exit; // we may just want the hash
+  fDestination.WriteBuffer(Buffer, Count);
   tix := GetTickCount64;
   fElapsed := tix - fStartTix;
   if (fLimitPerSecond <> 0) or
@@ -8044,7 +8044,6 @@ begin
   if fTerminated then
     raise ESynException.CreateUtf8('%.Write(%) Terminated',
       [self, fContext]);
-  result := Count;
 end;
 
 
