@@ -1300,7 +1300,8 @@ var
 begin
   if self = nil then
     exit;
-  if Size < ZIP_MINSIZE_DEFLATE then
+  if (Size < ZIP_MINSIZE_DEFLATE) or
+     IsContentCompressed(Buf, Size)  then
   begin
     AddStored(aZipName, Buf, Size, FileAge);
     exit;
