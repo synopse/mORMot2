@@ -348,11 +348,12 @@ type
     /// the zip64 information of this file, as stored just after dir
     // - may be nil for regular zip 2.0 entry
     dir64: PFileInfoExtra64;
-    /// points to the local file header in the .zip archive, mapped in memory
+    /// points to the local file header in the .zip archive, stored in memory
     // - local^.data points to the stored/deflated data
-    // - may be nil if the file mapping was not possible (e.g. on Win32+zip64)
+    // - may be nil if the file size is bigger than WorkingMem
     local: PLocalFileHeader;
     /// offset to the local file header in the .zip archive
+    // - use TLocalFileHeader.DataSeek to load and seek the stream
     localoffs: Int64;
     /// name of the file inside the .zip archive
     // - not ASCIIZ: length = dir^.fileInfo.nameLen
@@ -362,12 +363,13 @@ type
     zipName: TFileName;
   end;
   PZipReadEntry = ^TZipReadEntry;
+  TZipReadEntryDynArray = array of TZipReadEntry;
 
   /// read-only access to a .zip archive file
-  // - can open directly a specified .zip file (will be memory mapped for fast access)
+  // - can open directly a specified .zip file - only trailing WorkingMem bytes
+  // are read in the memory, and should contain at least the Central Directory
   // - can open a .zip archive file content from a resource (embedded in the executable)
   // - can open a .zip archive file content from memory
-  // - ZIP64 support of huge zip requires a 64-bit system due to memory mapping
   TZipRead = class
   private
     fSource: TStream; // if .zip is a file bigger than 1MB
@@ -383,7 +385,7 @@ type
     /// the number of files inside a .zip archive
     Count: integer;
     /// the files inside the .zip archive
-    Entry: array of TZipReadEntry;
+    Entry: TZipReadEntryDynArray;
 
     /// open a .zip archive file as Read Only
     // - if the .zip content has been appended to the file, search for its
@@ -452,6 +454,13 @@ type
     flags: set of (zweZip64, zweUtf8Name);
   end;
   PZipWriteEntry = ^TZipWriteEntry;
+
+  /// callback used by AddFolder() to customize the file creation
+  // - return false to ignore this file, true to add this file
+  // - you can customize the CompressLevel (-1 = Z_STORED) and ZipFolder/ZipName
+  TOnZipWriteAdd = function(const FolderName, FileName: TFileName;
+    var CompressLevel: integer;
+    var ZipFolder, ZipName: TFileName): boolean of object;
 
   /// write-only access for creating a .zip archive
   // - update can be done manualy by using a TZipRead instance and the
@@ -525,10 +534,11 @@ type
     /// compress (using AddDeflate) all files within a folder, and
     // add it to the zip file
     // - if Recursive is TRUE, would include files from nested sub-folders
-    // - you may set CompressLevel=-1 to force stored method with no deflate
+    // - you may set CompressLevel=-1 to force Z_STORED method with no deflate
+    // - OnAdd callback could be used to customize the process
     procedure AddFolder(const FolderName: TFileName;
       const Mask: TFileName = FILES_ALL; Recursive: boolean = true;
-      CompressLevel: integer = 6);
+      CompressLevel: integer = 6; const OnAdd: TOnZipWriteAdd = nil);
     /// add a file from an already compressed zip entry
     procedure AddFromZip(const ZipEntry: TZipReadEntry; ZipSource: TStream);
     /// append a file content into the destination file
@@ -1450,11 +1460,14 @@ end;
 
 
 procedure TZipWrite.AddFolder(const FolderName: TFileName;
-  const Mask: TFileName; Recursive: boolean; CompressLevel: integer);
+  const Mask: TFileName; Recursive: boolean; CompressLevel: integer;
+  const OnAdd: TOnZipWriteAdd);
 
   procedure RecursiveAdd(const fileDir, zipDir: TFileName);
   var
     f: TSearchRec;
+    cl: integer;
+    zf, zn: TFileName;
   begin
     if Recursive then
       if FindFirst(fileDir + FILES_ALL, faDirectory, f) = 0 then
@@ -1469,7 +1482,14 @@ procedure TZipWrite.AddFolder(const FolderName: TFileName;
     begin
       repeat
         if SearchRecValidFile(f) then
-          AddDeflated(fileDir + f.Name, false, CompressLevel, zipDir + f.Name);
+        begin
+          cl := CompressLevel;
+          zf := zipDir;
+          zn := f.Name;
+          if not Assigned(OnAdd) or
+             OnAdd(fileDir, f.Name, cl, zf, zn) then
+            AddDeflated(fileDir + f.Name, {removepath=}false, cl, zf + zn);
+        end;
       until FindNext(f) <> 0;
       FindClose(f);
     end;
