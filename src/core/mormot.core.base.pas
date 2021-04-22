@@ -8456,7 +8456,7 @@ function EnsureDirectoryExists(const Directory: TFileName;
 begin
   result := IncludeTrailingPathDelimiter(ExpandFileName(Directory));
   if not DirectoryExists(result) then
-    if not CreateDir(result) then
+    if not ForceDirectories(result) then
       if not RaiseExceptionOnCreationFailure then
         result := ''
       else
