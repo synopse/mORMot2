@@ -197,10 +197,10 @@ const
   Z_BUF_ERROR = -5;
   Z_VERSION_ERROR = -6;
 
-  Z_NO_CompressION = 0;
+  Z_NO_COMPRESSION = 0;
   Z_BEST_SPEED = 1;
-  Z_BEST_CompressION = 9;
-  Z_DEFAULT_CompressION = -1;
+  Z_BEST_COMPRESSION = 9;
+  Z_DEFAULT_COMPRESSION = -1;
 
   Z_FILTERED = 1;
   Z_HUFFMAN_ONLY = 2;
@@ -274,7 +274,7 @@ type
 // - A single compressor is not safe to use by multiple threads concurrently.
 // However, different threads may use different compressors concurrently
 function libdeflate_alloc_compressor(
-    compression_level: integer): PLibDeflateCompressor; cdecl;
+  compression_level: integer): PLibDeflateCompressor; cdecl;
 
 /// performs raw DEFLATE compression on a buffer of data
 // - The function attempts to compress 'in_nbytes' bytes of data located at
@@ -345,7 +345,7 @@ type
 // - This function takes no parameters, and the returned decompressor is valid for
 // decompressing data that was compressed at any compression level and with any
 // sliding window size
-// A single decompressor is not safe to use by multiple threads concurrently.
+// - A single decompressor is not safe to use by multiple threads concurrently.
 // However, different threads may use different decompressors concurrently.
 function libdeflate_alloc_decompressor: PLibDeflateDecompressor; cdecl;
 
@@ -382,9 +382,9 @@ type
 // 'out_nbytes_avail' that you think is large enough to hold all the
 // uncompressed data.  In this case, if the data decompresses to less than
 // or equal to 'out_nbytes_avail' bytes, then libdeflate_deflate_decompress()
-// will write the actual uncompressed size
-// to actual_out_nbytes_ret and return 0 (LIBDEFLATE_SUCCESS).  Otherwise,
-// it will return LIBDEFLATE_INSUFFICIENT_SPACE if the provided buffer was
+// will write the actual uncompressed size to actual_out_nbytes_ret and
+// return 0 (LIBDEFLATE_SUCCESS).  Otherwise, it will return
+// LIBDEFLATE_INSUFFICIENT_SPACE if  the provided buffer was
 // not large enough but no other problems were encountered, or another
 // nonzero result code if decompression failed for another reason.
 function libdeflate_deflate_decompress(
@@ -763,6 +763,8 @@ begin
     bits := MAX_WBITS
   else
     bits := -MAX_WBITS;
+  if CompressionLevel > 9 then
+    CompressionLevel := 9; // libdeflate allows additional 10,11,12 level
   result := deflateInit2_(Stream, CompressionLevel, Z_DEFLATED, bits,
     DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY, ZLIB_VERSION, sizeof(Stream)) >= 0;
   if FlushBufferOwned and
