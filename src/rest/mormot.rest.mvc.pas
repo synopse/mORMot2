@@ -1101,7 +1101,7 @@ begin
     ViewTemplateFolder := aParameters.Folder;
   if (aParameters.ExtensionForNotExistingTemplate <> '') and
      not DirectoryExists(ViewTemplateFolder) then
-    CreateDir(ViewTemplateFolder);
+    ForceDirectories(ViewTemplateFolder);
   if aParameters.CsvExtensions = '' then
     LowerExt := ',html,json,css,'
   else

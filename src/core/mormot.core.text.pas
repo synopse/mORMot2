@@ -1337,6 +1337,9 @@ function RawUtf8DynArrayEquals(const A, B: TRawUtf8DynArray): boolean; overload;
 function RawUtf8DynArrayEquals(const A, B: TRawUtf8DynArray;
   Count: integer): boolean; overload;
 
+/// add the Value to Values[] string array
+function AddString(var Values: TStringDynArray; const Value: string): PtrInt;
+
 /// convert the string dynamic array into a dynamic array of UTF-8 strings
 procedure StringDynArrayToRawUtf8DynArray(const Source: TStringDynArray;
   var result: TRawUtf8DynArray);
@@ -6407,6 +6410,13 @@ begin
     if A[i] <> B[i] then
       exit;
   result := true;
+end;
+
+function AddString(var Values: TStringDynArray; const Value: string): PtrInt;
+begin
+  result := length(Values);
+  SetLength(Values, result + 1);
+  Values[result] := Value;
 end;
 
 procedure StringDynArrayToRawUtf8DynArray(const Source: TStringDynArray;
