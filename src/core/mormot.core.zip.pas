@@ -2116,7 +2116,7 @@ begin
           while len > 0 do
           begin
             if len < tmpLen then
-              len := tmpLen;
+              tmpLen := len;
             read := fSource.Read(pointer(tmp)^, tmpLen);
             if read = 0 then
               exit;
