@@ -363,7 +363,7 @@ type
     local: PLocalFileHeader;
     /// offset to the local file header in the .zip archive
     // - use TLocalFileHeader.DataSeek to load and seek the stream
-    localoffs: Int64;
+    localoffs: QWord;
     /// name of the file inside the .zip archive
     // - not ASCIIZ: length = dir^.fileInfo.nameLen
     storedName: PAnsiChar;
@@ -382,7 +382,7 @@ type
   TZipRead = class
   private
     fSource: TStream; // if .zip is a file bigger than 1MB
-    fSourceOffset: Int64; // where the .zip start in fSource (if appended)
+    fSourceOffset: QWord; // where the .zip start in fSource (if appended)
     fSourceBuffer: RawByteString; // last 1MB of fSource (central dir)
     fCentralDirectoryOffset: Int64;
     fCentralDirectoryFirstFile: PFileHeader;
@@ -1346,7 +1346,7 @@ begin
                 if tmp = '' then
                   SetString(tmp, nil, 1 shl 20);
                 len := info.f64.zzipSize;
-                readpos := s^.localoffs + info.localfileheadersize;
+                readpos := Int64(s^.localoffs) + info.localfileheadersize;
                 repeat
                   FileSeek64(h, readpos, soFromBeginning);
                   read := length(tmp);
@@ -1376,7 +1376,7 @@ begin
               dec(d^.h64.size, SizeOf(d^.h64.offset));
             end;
             SetString(d^.intName, s^.storedName, d^.h32.fileInfo.nameLen);
-            inc(writepos, info.localfileheadersize + info.f64.zzipSize);
+            inc(writepos, info.localfileheadersize + Int64(info.f64.zzipSize));
           end;
           inc(Count);
           inc(d);
@@ -1972,7 +1972,7 @@ begin
     if e^.localoffs >= Offset then
     begin
       // can unzip directly from existing memory buffer
-      e^.local := @BufZip[e^.localoffs - Offset];
+      e^.local := @BufZip[Int64(e^.localoffs) - Offset];
       with e^.local^.fileInfo do
         if flags and FLAG_DATADESCRIPTOR <> 0 then
           // crc+sizes in "data descriptor" -> call RetrieveFileInfo()
@@ -2055,7 +2055,7 @@ begin
        (PCardinal(@P[i])^ + 1 = FILEAPPEND_SIGNATURE_INC) and
        (PCardinal(@P[i + 12])^ + 1 = FILEAPPEND_SIGNATURE_INC) then
     begin
-      fSourceOffset := PInt64(@P[i + 4])^;
+      fSourceOffset := PQWord(@P[i + 4])^;
       if (fSourceOffset > 0) and
          (fSourceOffset < Size - 16) then
       begin
@@ -2075,7 +2075,7 @@ begin
     for i := 0 to read - SizeOf(TLocalFileHeader) do
       if IsZipStart(@P[i]) then
       begin
-        fSourceOffset := Int64(ZipStartOffset) + i;
+        fSourceOffset := ZipStartOffset + Qword(i);
         if Size = WorkingMem then
           // small files could reuse the existing buffer
           Create(@P[i], read - i, 0)
@@ -2569,7 +2569,7 @@ var
   i, read: PtrInt;
   Apos, Asize: Int64;
   parsePEheader: boolean;
-  certoffs, certlenoffs, certlen, certlen2, magic: cardinal;
+  certoffs, certlenoffs, certlen, certlen2: cardinal;
   zip: TZipWrite;
   buf: array[0 .. 128 shl 10 - 1] of byte;
 begin
@@ -2654,11 +2654,11 @@ begin
       FileAppendSignature(O, APos);
       if keepdigitalsign then
       begin
-        // the certificate length should be 64-bit aligned -> padding payload
+        // the certificate length should be 64-bit aligned -> pad the payload
         ASize := O.Position - APos;
         while ASize and 7 <> 0 do
         begin
-          O.WriteBuffer(magic, 1);
+          O.WriteBuffer(buf[0], 1);
           inc(ASize);
         end;
         // include appended content to the certificate length
