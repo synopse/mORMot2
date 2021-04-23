@@ -5842,7 +5842,6 @@ end;
 procedure TTestCoreBase._TSynDictionary;
 type
   tvalue = variant;
-
   tvalues = TVariantDynArray;
 const
   MAX = 10000;

@@ -115,7 +115,7 @@ type
 
 type
   /// class of Exceptions raised by ZCheck()
-  ESynZip = class(Exception);
+  EZLib = class(Exception);
 
   /// main access to the zlib API for compression/uncompression
   // - we encapsulated all low-level C calls into this object-oriented structure
@@ -157,7 +157,7 @@ type
     /// low-level flush of the compressed data pending in the internal buffer
     procedure DoFlush;
     /// low-level check of the code returned by the ZLib library
-    // - raise ESynZipException on error
+    // - raise EZLib Exception on error
     function Check(const Code: integer; const ValidCodes: array of integer;
       const Context: string = ''): integer;
   end;
@@ -849,7 +849,7 @@ begin
   for i := Low(ValidCodes) to High(ValidCodes) do
     if ValidCodes[i] = Code then
       exit;
-  raise ESynZip.CreateFmt('Error %d during %s process (avail in=%d out=%d)',
+  raise EZLib.CreateFmt('Error %d during %s process (avail in=%d out=%d)',
     [Code, Context, Stream.avail_in, Stream.avail_out]);
 end;
 
@@ -968,7 +968,7 @@ var
 begin
   comp := libdeflate_alloc_compressor(CompressionLevel);
   if comp = nil then
-    raise ESynZip.CreateFmt(
+    raise EZLib.CreateFmt(
       'CompressMem: libdeflate_alloc_compressor(%d) failed', [CompressionLevel]);
   if ZlibFormat then
     result := libdeflate_zlib_compress(comp, src, srcLen, dst, dstLen)
@@ -976,7 +976,7 @@ begin
     result := libdeflate_deflate_compress(comp, src, srcLen, dst, dstLen);
   libdeflate_free_compressor(comp);
   if result = 0 then
-    raise ESynZip.Create('CompressMem: libdeflate failure');
+    raise EZLib.Create('CompressMem: libdeflate failure');
 end;
 
 function UncompressMem(src, dst: pointer; srcLen, dstLen: PtrInt;
@@ -987,14 +987,14 @@ var
 begin
   dec := libdeflate_alloc_decompressor;
   if dec = nil then
-    raise ESynZip.Create('UncompressMem: libdeflate_alloc_decompressor failed');
+    raise EZLib.Create('UncompressMem: libdeflate_alloc_decompressor failed');
   if ZlibFormat then
     res := libdeflate_zlib_decompress(dec, src, srcLen, dst, dstLen, @result)
   else
     res := libdeflate_deflate_decompress(dec, src, srcLen, dst, dstLen, @result);
   libdeflate_free_decompressor(dec);
   if res <> LIBDEFLATE_SUCCESS  then
-    raise ESynZip.CreateFmt('UncompressMem: libdeflate = %d', [ord(res)]);
+    raise EZLib.CreateFmt('UncompressMem: libdeflate = %d', [ord(res)]);
 end;
 
 {$else}
