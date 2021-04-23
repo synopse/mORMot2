@@ -1753,7 +1753,7 @@ begin
               dec(d^.h64.size, SizeOf(d^.h64.offset));
             end;
             SetString(d^.intName, s^.storedName, d^.h32.fileInfo.nameLen);
-            inc(writepos, info.localfileheadersize + info.f64.zzipSize);
+            inc(writepos, info.localfileheadersize + Int64(info.f64.zzipSize));
           end;
           inc(Count);
           inc(d);
@@ -2008,7 +2008,7 @@ begin
           // big files need to read the last WorkingMem
           fSource.Seek(Size - WorkingMem, soBeginning);
           fSource.Read(P^, WorkingMem);
-          Create(P, WorkingMem, Size - WorkingMem- fSourceOffset);
+          Create(P, WorkingMem, Size - WorkingMem - UInt64(fSourceOffset));
         end;
         exit;
       end;
