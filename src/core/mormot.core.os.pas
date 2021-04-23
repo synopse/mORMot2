@@ -3895,7 +3895,7 @@ function _GetExecutableLocation(aAddress: pointer): shortstring;
 var
   i: PtrInt;
   b: PByte;
-begin
+begin // just return the address as hexadecimal
   result[0] := AnsiChar(SizeOf(aAddress) * 2);
   b := @aAddress;
   for i := SizeOf(aAddress) - 1 downto 0 do
@@ -3904,7 +3904,7 @@ begin
     result[i * 2 + 2] := HexCharsLower[b^ and $F];
     inc(b);
   end;
-end;
+end; // mormot.core.log.pas will properly decode debug info - and handle .mab
 
 
 { **************** TSynLocker Threading Features }

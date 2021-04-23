@@ -766,7 +766,7 @@ begin
     result := FileInfo.st_size;
 end;
 
-function FileSeek64(Handle: THandle; const Offset: Int64; Origin: DWORD): Int64;
+function FileSeek64(Handle: THandle; const Offset: Int64; Origin: cardinal): Int64;
 begin
   result := FPLSeek(Handle, Offset, Origin);
 end;
