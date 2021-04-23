@@ -4652,12 +4652,18 @@ begin
       Free;
     end;
     test(TZipRead.Create(FN), 5);
-    FN2 := ChangeFileExt(FN, 'append.exe');
-    FileFromString(Data, FN2);
-    FileAppend(FN2, FN);
-    if m = 2 then
+    FN2 := ChangeFileExt(FN, 'appended.exe');
+    if m = 1 then
+    begin
+      FileFromString(Data, FN2);
+      FileAppend(FN2, FN);
+    end
+    else
+    begin
+      FileAppend(DataFile, FN, FN2);
       mem := mem * 2;
-    test(TZipRead.Create(FN2, length(Data) - 100, 0, mem), 5);
+    end;
+    test(TZipRead.Create(FN2, 0, 0, mem), 5);
     DeleteFile(FN2);
     FN2 := WorkDir + 'json';
     if zip64 then
@@ -4686,7 +4692,11 @@ begin
     finally
       Free;
     end;
-    Check(ZipTest(FN2), 'ziptest');
+    Check(ZipTest(FN2), 'zipjson1');
+    for i := 0 to high(json) do
+      json[i] := WorkDir + json[i];
+    ZipAppendFiles(DataFile, FN2, TFileNameDynArray(json), false, 1);
+    Check(ZipTest(FN2), 'zipjson2');
     DeleteFile(FN);
     DeleteFile(FN2);
   end;

@@ -1116,6 +1116,7 @@ const
   LASTHEADER_SIGNATURE_INC = $06054b50 + 1;  // PK#5#6
   LASTHEADER64_SIGNATURE_INC = $06064b50 + 1;  // PK#6#6
   LASTHEADERLOCATOR64_SIGNATURE_INC = $07064b50 + 1;  // PK#6#7
+  FILEAPPEND_SIGNATURE_INC = $a5ababa5 + 1; // as marked by FileAppendSignature
 
   // identify the OS used to forge the .zip
   ZIP_OS = (0
@@ -1808,13 +1809,15 @@ begin
      (lh64.headerOffset >= ZIP32_MAXSIZE) then
   begin
     // need zip64 format to store more than 65534 files or more than 2GB
-    lh64.signature := LASTHEADER64_SIGNATURE_INC - 1;
+    lh64.signature := LASTHEADER64_SIGNATURE_INC;
+    dec(lh64.Signature);
     lh64.recordsize := SizeOf(lh64) - SizeOf(lh64.signature) - SizeOf(lh64.recordsize);
     lh64.madeBy := ZIP_VERSION[{zip64=}true];
     lh64.neededVersion := lh64.madeBy;
     lh64.thisFiles := Count;
     lh64.totalFiles := Count;
-    loc64.signature := LASTHEADERLOCATOR64_SIGNATURE_INC - 1;
+    loc64.signature := LASTHEADERLOCATOR64_SIGNATURE_INC;
+    dec(loc64.signature);
     loc64.thisDisk := 0;
     loc64.headerOffset := lh64.headerOffset + lh64.headerSize; // lh64 offset
     loc64.totalDisks := 1;
@@ -2037,14 +2040,35 @@ begin
     if (fSource.Read(local, SizeOf(local)) = SizeOf(local)) and
        IsZipStart(@local) then
     begin
-      // it seems to be a regular .zip -> read WorkingMem trailing data
+      // it seems to be a regular .zip -> read WorkingMem trailing content
       fSource.Seek(Size - WorkingMem, soBeginning);
       fSource.Read(P^, WorkingMem);
       Create(P, WorkingMem, Size - WorkingMem);
       exit;
     end;
   end;
-  // the .zip content may have been appended e.g. to an executable
+  // search FileAppendSignature() mark from the trailing bytes
+  fSource.Seek(Size - WorkingMem, soBeginning);
+  fSource.Read(P^, WorkingMem);
+  for i := WorkingMem - 16 downto WorkingMem - 32 do
+    if (i >= 0) and  // expects magic4+offset8+magic4 pattern
+       (PCardinal(@P[i])^ + 1 = FILEAPPEND_SIGNATURE_INC) and
+       (PCardinal(@P[i + 12])^ + 1 = FILEAPPEND_SIGNATURE_INC) then
+    begin
+      fSourceOffset := PInt64(@P[i + 4])^;
+      if (fSourceOffset > 0) and
+         (fSourceOffset < Size - 16) then
+      begin
+         fSource.Seek(fSourceOffset, soBeginning);
+         if (fSource.Read(local, SizeOf(local)) = SizeOf(local)) and
+            IsZipStart(@local) then
+         begin
+           Create(P, i, Size - WorkingMem - fSourceOffset);
+           exit;
+         end;
+      end;
+    end;
+  // manual search of the first zip local file header
   repeat
     fSource.Seek(ZipStartOffset, soBeginning);
     read := fSource.Read(P^, WorkingMem);
@@ -2060,7 +2084,7 @@ begin
           // big files need to read the last WorkingMem
           fSource.Seek(Size - WorkingMem, soBeginning);
           fSource.Read(P^, WorkingMem);
-          Create(P, WorkingMem, Size - WorkingMem- fSourceOffset);
+          Create(P, WorkingMem, Size - WorkingMem - fSourceOffset);
         end;
         exit;
       end;
@@ -2503,16 +2527,29 @@ begin
     result := false;
 end;
 
+procedure FileAppendSignature(O: TStream; APos: Int64);
+var
+  magic: cardinal;
+begin
+  magic := FILEAPPEND_SIGNATURE_INC; // searched by TZipRead() to retrieve APos
+  dec(magic);
+  O.WriteBuffer(magic, SizeOf(magic));
+  O.WriteBuffer(APos, SizeOf(APos));
+  O.WriteBuffer(magic, SizeOf(magic));
+end;
+
 procedure FileAppend(const MainFile, AppendFile: TFileName);
 var
   M, A: TStream;
+  APos: Int64;
 begin
   M := TFileStream.Create(MainFile, fmOpenReadWrite);
   try
+    APos := M.Seek(0, soEnd);
     A := TFileStream.Create(AppendFile, fmOpenRead);
     try
-      M.Seek(0, soEnd);
       M.CopyFrom(A, 0);
+      FileAppendSignature(M, APos);
     finally
       A.Free;
     end;
@@ -2529,13 +2566,15 @@ const
   CERTIFICATE_ENTRY_OFFSET = 148;
 var
   M, A, O: TStream;
-  head: array[word] of byte;
   i, read: PtrInt;
-  Asize: Int64;
+  Apos, Asize: Int64;
   parsePEheader: boolean;
-  certoffs, certlenoffs, certlen, certlen2: cardinal;
+  certoffs, certlenoffs, certlen, certlen2, magic: cardinal;
   zip: TZipWrite;
+  buf: array[0 .. 128 shl 10 - 1] of byte;
 begin
+  if new = main then
+    raise ESynZip.CreateUtf8('%: main=new=%', [ctxt, main]);
   certoffs := 0;
   certlenoffs := 0;
   O := TFileStream.Create(new, fmCreate);
@@ -2546,7 +2585,7 @@ begin
       M := TFileStream.Create(main, fmOpenRead or fmShareDenyNone);
       try
         repeat
-          read := M.Read(head, SizeOf(head));
+          read := M.Read(buf, SizeOf(buf));
           if read < 0 then
             raise ESynZip.CreateUtf8('%: % read error', [ctxt, main]);
           if parsePEheader then
@@ -2557,15 +2596,15 @@ begin
               if i >= read - (CERTIFICATE_ENTRY_OFFSET + 8) then
                 raise ESynZip.CreateUtf8(
                   '%: % is not a PE executable', [ctxt, main]);
-              if PCardinal(@head[i])^ = ord('P') + ord('E') shl 8 then
-                break;
+              if PCardinal(@buf[i])^ = ord('P') + ord('E') shl 8 then
+                break; // typical DOS header is $100
               inc(i);
             until false;
             // parse PE header
             inc(i, CERTIFICATE_ENTRY_OFFSET);
-            certoffs := PCardinal(@head[i])^;
+            certoffs := PCardinal(@buf[i])^;
             certlenoffs := i + 4;
-            certlen  := PCardinal(@head[certlenoffs])^;
+            certlen  := PCardinal(@buf[certlenoffs])^;
             // parse certificate table
             M.Seek(certoffs, soBeginning);
             if (M.Read(certlen2, 4) <> 4) or
@@ -2578,31 +2617,28 @@ begin
             parsePEheader := false; // do it once
           end;
           if read > 0 then
-            O.WriteBuffer(head, read);
-        until read < SizeOf(head);
+            O.WriteBuffer(buf, read);
+        until read < SizeOf(buf);
       finally
         M.Free;
       end;
       // append the additional payload - which may be some zipped files
+      APos := O.Position;
       if append <> '' then
       begin
         A := TFileStream.Create(append, fmOpenRead or fmShareDenyNone);
         try
-          ASize := 0;
           repeat
-            read := A.Read(head, SizeOf(head));
-            if read <= 0 then
-              break;
-            O.WriteBuffer(head, read);
-            inc(Asize, read);
-          until read < SizeOf(head);
+            read := A.Read(buf, SizeOf(buf));
+            if read > 0 then
+              O.WriteBuffer(buf, read);
+          until read < SizeOf(buf);
         finally
           A.Free;
         end;
       end
       else
       begin
-        ASize := O.Position;
         zip := TZipWrite.CreateAppend(O, new);
         try
           if zipfolder <> '' then
@@ -2614,14 +2650,15 @@ begin
         finally
           zip.Free;
         end;
-        ASize := O.Position - ASize;
       end;
+      FileAppendSignature(O, APos);
       if keepdigitalsign then
       begin
         // the certificate length should be 64-bit aligned -> padding payload
+        ASize := O.Position - APos;
         while ASize and 7 <> 0 do
         begin
-          O.WriteBuffer(head, 1);
+          O.WriteBuffer(magic, 1);
           inc(ASize);
         end;
         // include appended content to the certificate length
