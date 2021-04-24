@@ -2097,8 +2097,10 @@ type
     // is not implemented by the given class)
     // - the same implementation class can be used to handle several interfaces
     // (just as Delphi allows to do natively)
-    // - you can use the returned TServiceFactoryServerAbstract instance to set the
-    // expected security parameters associated as a fluent interface
+    // - will return the first of the registered TServiceFactoryServerAbstract
+    // on success (i.e. corresponding to aInterfaces[0] - not to the others),
+    // or nil if registration failed (e.g. if any of the supplied interfaces
+    // is not implemented by the given class)
     function ServiceRegister(aImplementationClass: TInterfacedClass;
       const aInterfaces: array of PRttiInfo;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
@@ -2114,8 +2116,10 @@ type
     // is not implemented by the given class)
     // - the same implementation class can be used to handle several interfaces
     // (just as Delphi allows to do natively)
-    // - you can use the returned TServiceFactoryServerAbstract instance to set the
-    // expected security parameters associated as a fluent interface
+    // - will return the first of the registered TServiceFactoryServerAbstract
+    // on success (i.e. corresponding to aInterfaces[0] - not to the others),
+    // or nil if registration failed (e.g. if any of the supplied interfaces
+    // is not implemented by the given class)
     function ServiceRegister(aSharedImplementation: TInterfacedObject;
       const aInterfaces: array of PRttiInfo;
       const aContractExpected: RawUtf8 = ''): TServiceFactoryServerAbstract; overload; virtual;
@@ -2139,8 +2143,10 @@ type
     /// register a Service class on the server side
     // - this method expects the interface(s) to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
-    // - you can use the returned TServiceFactoryServerAbstract instance to set the
-    // expected security parameters associated as a fluent interface
+    // - will return the first of the registered TServiceFactoryServerAbstract
+    // on success (i.e. corresponding to aInterfaces[0] - not to the others),
+    // or nil if registration failed (e.g. if any of the supplied interfaces
+    // is not implemented by the given class)
     function ServiceDefine(aImplementationClass: TInterfacedClass;
       const aInterfaces: array of TGUID;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
@@ -2149,16 +2155,16 @@ type
     // - this method expects the interface(s) to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     // - the supplied aSharedImplementation will be owned by this Server instance
-    // - you can use the returned TServiceFactoryServerAbstract instance to set the
-    // expected security parameters associated as a fluent interface
+    // - will return the first of the registered TServiceFactoryServerAbstract
+    // on success (i.e. corresponding to aInterfaces[0] - not to the others),
+    // or nil if registration failed (e.g. if any of the supplied interfaces
+    // is not implemented by the given class)
     function ServiceDefine(aSharedImplementation: TInterfacedObject;
       const aInterfaces: array of TGUID;
       const aContractExpected: RawUtf8 = ''): TServiceFactoryServerAbstract; overload;
     /// register a remote Service via its interface
     // - this method expects the interface(s) to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
-    // - you can use the returned TServiceFactoryServerAbstract instance to set the
-    // expected security parameters associated as a fluent interface
     function ServiceDefine(aClient: TRest; const aInterfaces: array of TGUID;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
       const aContractExpected: RawUtf8 = ''): boolean; overload;
