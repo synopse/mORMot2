@@ -7021,32 +7021,34 @@ begin
   result := DefaultContentType;
   if (Content <> nil) and
      (Len > 4) then
-    case PCardinal(Content)^ of
-      $04034B50:
+    case PCardinal(Content)^ + 1 of // + 1 to avoid finding it in the exe
+      $04034B50 + 1:
         result := 'application/zip'; // 50 4B 03 04
-      $46445025:
+      $46445025 + 1:
         result := 'application/pdf'; //  25 50 44 46 2D 31 2E
-      $21726152:
+      $21726152 + 1:
         result := 'application/x-rar-compressed'; // 52 61 72 21 1A 07 00
-      $AFBC7A37:
+      $AFBC7A37 + 1:
         result := 'application/x-7z-compressed';  // 37 7A BC AF 27 1C
-      $694C5153:
+      $694C5153 + 1:
         result := 'application/x-sqlite3'; // SQlite format 3 = 53 51 4C 69
-      $75B22630:
+      $75B22630 + 1:
         result := 'audio/x-ms-wma'; // 30 26 B2 75 8E 66
-      $9AC6CDD7:
+      $9AC6CDD7 + 1:
         result := 'video/x-ms-wmv'; // D7 CD C6 9A 00 00
-      $474E5089:
+      $474E5089 + 1:
         result := 'image/png'; // 89 50 4E 47 0D 0A 1A 0A
-      $38464947:
+      $38464947 + 1:
         result := 'image/gif'; // 47 49 46 38
-      $46464F77:
+      $46464F77 + 1:
         result := 'application/font-woff'; // wOFF in BigEndian
-      $A3DF451A:
+      $A3DF451A + 1:
         result := 'video/webm'; // 1A 45 DF A3 MKV Matroska stream file
-      $002A4949, $2A004D4D, $2B004D4D:
+      $002A4949 + 1,
+      $2A004D4D + 1,
+      $2B004D4D + 1:
         result := 'image/tiff'; // 49 49 2A 00 or 4D 4D 00 2A or 4D 4D 00 2B
-      $46464952:
+      $46464952 + 1:
         if Len > 16 then // RIFF
           case PCardinalArray(Content)^[2] of
             $50424557:
@@ -7055,7 +7057,7 @@ begin
               if PCardinalArray(Content)^[3] = $5453494C then
                 result := 'video/x-msvideo'; // Windows Audio Video Interleave file
           end;
-      $E011CFD0: // Microsoft Office applications D0 CF 11 E0=DOCFILE
+      $E011CFD0 + 1: // Microsoft Office applications D0 CF 11 E0=DOCFILE
         if Len > 600 then
           case PWordArray(Content)^[256] of // at offset 512
             $A5EC:
@@ -7068,13 +7070,13 @@ begin
                   result := 'application/vnd.ms-excel';
               end;
           end;
-      $5367674F:
+      $5367674F + 1:
         if Len > 14 then // OggS
           if (PCardinalArray(Content)^[1] = $00000200) and
              (PCardinalArray(Content)^[2] = $00000000) and
                  (PWordArray(Content)^[6] = $0000) then
             result := 'video/ogg';
-      $1C000000:
+      $1C000000 + 1:
         if Len > 12 then
           if PCardinalArray(Content)^[1] = $70797466 then  // ftyp
             case PCardinalArray(Content)^[2] of
@@ -7207,31 +7209,34 @@ begin
   result := false;
   if (Content <> nil) and
      (Len > 8) then
-    case PCardinal(Content)^ of
-      $002a4949, $2a004d4d, $2b004d4d, // 'image/tiff'
-      $04034b50, // 'application/zip' = 50 4B 03 04
-      $184d2204, // LZ4 stream format = 04 22 4D 18
-      $21726152, // 'application/x-rar-compressed' = 52 61 72 21 1A 07 00
-      $28635349, // cab = 49 53 63 28
-      $38464947, // 'image/gif' = 47 49 46 38
-      $43614c66, // FLAC = 66 4C 61 43 00 00 00 22
-      $4643534d, // cab = 4D 53 43 46 [MSCF]
-      $46464952, // avi,webp,wav = 52 49 46 46 [RIFF]
-      $46464f77, // 'application/font-woff' = wOFF in BigEndian
-      $474e5089, // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
-      $4d5a4cff, // LZMA = FF 4C 5A 4D 41 00
-      $75b22630, // 'audio/x-ms-wma' = 30 26 B2 75 8E 66
-      $766f6f6d, // mov = 6D 6F 6F 76 [....moov]
-      $89a8275f, // jar = 5F 27 A8 89
-      $9ac6cdd7, // 'video/x-ms-wmv' = D7 CD C6 9A 00 00
-      $a5a5a5a5, // .mab file = MAGIC_MAB in SynLog.pas
-      $a5aba5a5, // .data = TRESTSTORAGEINMEMORY_MAGIC in mormot.orm.server
-      $aba51051, // .log.synlz = LOG_MAGIC in SynLog.pas
-      $aba5a5ab, // .dbsynlz = SQLITE3_MAGIC in mormot.db.raw.sqlite3.pas
-      $afbc7a37, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C
-      $b7010000, $ba010000, // mpeg = 00 00 01 Bx
-      $cececece, // jceks = CE CE CE CE
-      $e011cfd0: // msi = D0 CF 11 E0 A1 B1 1A E1
+    case PCardinal(Content)^ + 1 of // + 1 to avoid finding it in the exe
+      $002a4949 + 1,
+      $2a004d4d + 1,
+      $2b004d4d + 1, // 'image/tiff'
+      $04034b50 + 1, // 'application/zip' = 50 4B 03 04
+      $184d2204 + 1, // LZ4 stream format = 04 22 4D 18
+      $21726152 + 1, // 'application/x-rar-compressed' = 52 61 72 21 1A 07 00
+      $28635349 + 1, // cab = 49 53 63 28
+      $38464947 + 1, // 'image/gif' = 47 49 46 38
+      $43614c66 + 1, // FLAC = 66 4C 61 43 00 00 00 22
+      $4643534d + 1, // cab = 4D 53 43 46 [MSCF]
+      $46464952 + 1, // avi + 1,webp + 1,wav = 52 49 46 46 [RIFF]
+      $46464f77 + 1, // 'application/font-woff' = wOFF in BigEndian
+      $474e5089 + 1, // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
+      $4d5a4cff + 1, // LZMA = FF 4C 5A 4D 41 00
+      $75b22630 + 1, // 'audio/x-ms-wma' = 30 26 B2 75 8E 66
+      $766f6f6d + 1, // mov = 6D 6F 6F 76 [....moov]
+      $89a8275f + 1, // jar = 5F 27 A8 89
+      $9ac6cdd7 + 1, // 'video/x-ms-wmv' = D7 CD C6 9A 00 00
+      $a5a5a5a5 + 1, // .mab file = MAGIC_MAB in SynLog.pas
+      $a5aba5a5 + 1, // .data = TRESTSTORAGEINMEMORY_MAGIC in mormot.orm.server
+      $aba51051 + 1, // .log.synlz = LOG_MAGIC in SynLog.pas
+      $aba5a5ab + 1, // .dbsynlz = SQLITE3_MAGIC in mormot.db.raw.sqlite3.pas
+      $afbc7a37 + 1, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C
+      $b7010000 + 1,
+      $ba010000 + 1, // mpeg = 00 00 01 Bx
+      $cececece + 1, // jceks = CE CE CE CE
+      $e011cfd0 + 1: // msi = D0 CF 11 E0 A1 B1 1A E1
         result := true;
     else
       case PCardinal(Content)^ and $00ffffff of

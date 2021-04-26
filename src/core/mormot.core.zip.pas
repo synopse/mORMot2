@@ -537,6 +537,7 @@ type
     // - by default, current date/time is used if no FileAge is supplied; see also
     // DateTimeToWindowsFileTime() and FileAgeToWindowsTime()
     // - can use faster libdeflate instead of plain zlib if available
+    // - will call IsContentCompressed() to detect and use Z_STORED if applying
     procedure AddDeflated(const aZipName: TFileName; Buf: pointer; Size: PtrInt;
       CompressLevel: integer = 6; FileAge: integer = 0); overload;
     /// add a memory buffer to the zip file, without compression
@@ -1111,10 +1112,10 @@ end;
 
 const
   // those constants have +1 to avoid finding it in the exe
-  ENTRY_SIGNATURE_INC = $02014b50 + 1;   // PK#1#2
-  FIRSTHEADER_SIGNATURE_INC = $04034b50 + 1; // PK#3#4
-  LASTHEADER_SIGNATURE_INC = $06054b50 + 1;  // PK#5#6
-  LASTHEADER64_SIGNATURE_INC = $06064b50 + 1;  // PK#6#6
+  ENTRY_SIGNATURE_INC = $02014b50 + 1;                 // PK#1#2
+  FIRSTHEADER_SIGNATURE_INC = $04034b50 + 1;           // PK#3#4
+  LASTHEADER_SIGNATURE_INC = $06054b50 + 1;            // PK#5#6
+  LASTHEADER64_SIGNATURE_INC = $06064b50 + 1;          // PK#6#6
   LASTHEADERLOCATOR64_SIGNATURE_INC = $07064b50 + 1;  // PK#6#7
   FILEAPPEND_SIGNATURE_INC = $a5ababa5 + 1; // as marked by FileAppendSignature
 
@@ -1133,6 +1134,7 @@ const
     20 + ZIP_OS,
     45 + ZIP_OS);
 
+  // some tools (e.g. MacOS) have local size+crc=0 and append a descriptor
   FLAG_DATADESCRIPTOR = 8;
   SIGNATURE_DATADESCRIPTOR = $08074b50;
 
@@ -1142,7 +1144,7 @@ const
   EXT_TIME_EXTRA_ID = $5455; // Extended timestamp
   INFOZIP_UNIX_EXTRAID = $5855; // Info-ZIP Unix extension
 
-  ZIP_MINSIZE_DEFLATE = 256; // size < 256 -> Z_STORED
+  ZIP_MINSIZE_DEFLATE = 256; // size < 256 bytes -> Z_STORED
 
   ZIP32_MAXSIZE = cardinal(-1);   // > trigger size for ZIP64 format
   ZIP32_MAXFILE = (1 shl 16) - 1; // > trigger file count for ZIP64 format
@@ -1330,7 +1332,7 @@ begin
           d^.h32.fileInfo := info.f32;
           if tomove then
           begin
-            // some files were deleted/ignored -> move content in-place
+            // some files were ignored -> move content over deleted file(s)
             if writepos >= s^.localoffs then
               raise ESynZip.CreateUtf8('%.CreateFrom deletion overlap', [self]);
             FileSeek64(h, writepos, soFromBeginning);
