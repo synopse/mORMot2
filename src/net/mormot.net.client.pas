@@ -180,6 +180,8 @@ type
     /// an optional folder to lookup for existing content
     // - the Hash parameter will be used to validate the content
     HashCacheDir: TFileName;
+    /// allow to customize request headers, e.g. a cookie or Auth-Bearer
+    Header: RawUtf8;
     /// can be used to reduce the download speed into supplied bytes per second
     LimitBandwith: integer;
     /// will raise ESynException after TimeOutSec seconds are elapsed
@@ -1418,7 +1420,8 @@ var
     partstream.OnLog := OnLog;
     partstream.TimeOut := params.TimeOutSec * 1000;
     partstream.LimitPerSecond := params.LimitBandwith;
-    res := Request(url, 'GET', params.KeepAlive, '', '', '', false, nil, partstream);
+    res := Request(url, 'GET', params.KeepAlive, params.Header, '', '',
+      {retry=}false, nil, partstream);
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
       raise EHttpSocket.Create('WGet: %s:%s/%s failed with %s',
         [fServer, fPort, url, StatusCodeToErrorMsg(res)]);
