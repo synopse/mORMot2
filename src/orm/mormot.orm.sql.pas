@@ -93,8 +93,8 @@ type
     fBatchMethod: TUriMethod;
     fBatchCapacity, fBatchCount: integer;
     // BATCH sending uses TEXT storage for direct sending to database driver
-    fBatchValues: TRawUtf8DynArray;
     fBatchIDs: TIDDynArray;
+    fBatchValues: TRawUtf8DynArray;
     /// get fFieldsExternal[] index using fFieldsExternalToInternal[] mapping
     // - do handle ID/RowID fields and published methods
     function InternalFieldNameToFieldExternalIndex(
@@ -166,7 +166,7 @@ type
     // to remote database engine (e.g. Oracle bound arrays or MS SQL Bulk insert)
     procedure InternalBatchStop; override;
     /// called internally by EngineAdd/EngineUpdate/EngineDelete in batch mode
-    procedure InternalBatchAdd(const aValue: RawUtf8; const aID: TID);
+    procedure InternalBatchAppend(const aValue: RawUtf8; const aID: TID);
     /// TRestServer.Uri use it for Static.EngineList to by-pass virtual table
     // - overridden method to handle most potential simple queries, e.g. like
     // $ SELECT Field1,RowID FROM table WHERE RowID=... AND/OR/NOT Field2=
@@ -1036,7 +1036,7 @@ begin
             BatchEnd := fBatchCount - 1;
             for i := BatchBegin to BatchEnd do
             begin
-              tmp.Init(fBatchValues[i]);
+              tmp.Init(fBatchValues[i]); // Decode() modify the buffer in-place
               try
                 P := tmp.buf;
                 while P^ in [#1..' ', '{', '['] do
@@ -1173,18 +1173,25 @@ begin
   end;
 end;
 
-procedure TRestStorageExternal.InternalBatchAdd(const aValue: RawUtf8;
+procedure TRestStorageExternal.InternalBatchAppend(const aValue: RawUtf8;
   const aID: TID);
 begin
   if fBatchCount >= fBatchCapacity then
   begin
-    fBatchCapacity := fBatchCapacity + 64 + fBatchCount shr 3;
+    if fBatchCapacity = 0 then
+      fBatchCapacity := 64
+    else
+      fBatchCapacity := NextGrow(fBatchCapacity);
     SetLength(fBatchIDs, fBatchCapacity);
-    if aValue <> '' then
+    if fBatchValues <> nil then
       SetLength(fBatchValues, fBatchCapacity);
   end;
   if aValue <> '' then
+  begin
+    if fBatchValues = nil then
+      SetLength(fBatchValues, fBatchCapacity);
     fBatchValues[fBatchCount] := aValue;
+  end;
   fBatchIDs[fBatchCount] := aID;
   inc(fBatchCount);
 end;
@@ -1194,9 +1201,10 @@ function TRestStorageExternal.EngineAdd(TableModelIndex: integer;
 begin
   if (TableModelIndex < 0) or
      (fModel.Tables[TableModelIndex] <> fStoredClass) then
-    result := 0
-  else // avoid GPF
+    result := 0 // avoid GPF
+  else
     if fBatchMethod <> mNone then
+      // BATCH process
       if fBatchMethod <> mPOST then
         result := 0
       else
@@ -1205,12 +1213,12 @@ begin
           result := EngineLockedNextID
         else if result > fEngineLockedMaxID then
           fEngineLockedMaxID := result;
-        InternalBatchAdd(SentData, result);
+        InternalBatchAppend(SentData, result);
       end
     else
     begin
+      // regular insert with EngineLockedNextID (UpdatedID=0)
       result := ExecuteFromJson(SentData, ooInsert, 0);
-      // UpdatedID=0 -> insert with EngineLockedNextID
       if (result > 0) and
          (Owner <> nil) then
       begin
@@ -1229,15 +1237,17 @@ begin
      (Model.Tables[TableModelIndex] <> fStoredClass) then
     result := false
   else if fBatchMethod <> mNone then
+    // BATCH process
     if fBatchMethod <> mPUT then
       result := false
     else
     begin
-      InternalBatchAdd(SentData, ID);
+      InternalBatchAppend(SentData, ID);
       result := true;
     end
   else
   begin
+    // regular update
     result := ExecuteFromJson(SentData, ooUpdate, ID) = ID;
     if result and
        (Owner <> nil) then
@@ -1256,15 +1266,17 @@ begin
      (Model.Tables[TableModelIndex] <> fStoredClass) then
     result := false
   else if fBatchMethod <> mNone then
+    // BATCH process
     if fBatchMethod <> mDELETE then
       result := false
     else
     begin
-      InternalBatchAdd('', ID);
+      InternalBatchAppend('', ID);
       result := true;
     end
   else
   begin
+    // regular deletion
     if Owner <> nil then // notify BEFORE deletion
       Owner.InternalUpdateEvent(oeDelete, TableModelIndex, ID, '', nil);
     result := ExecuteDirect('delete from % where %=?',
@@ -1290,13 +1302,15 @@ begin
     exit;
   n := length(IDs);
   if fBatchMethod <> mNone then
+    // BATCH process
     if fBatchMethod <> mDELETE then
       exit
     else
       for i := 0 to n - 1 do
-        InternalBatchAdd('', IDs[i])
+        InternalBatchAppend('', IDs[i])
   else
   begin
+    // regular deletion
     if Owner <> nil then // notify BEFORE deletion
       for i := 0 to n - 1 do
         Owner.InternalUpdateEvent(oeDelete, TableModelIndex, IDs[i], '', nil);
