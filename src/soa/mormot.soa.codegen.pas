@@ -295,7 +295,7 @@ const
 // - you shall have registered the aServices interface(s) by a previous call to
 // the overloaded Get(TypeInfo(IMyInterface)) method or RegisterInterfaces()
 // - you may specify an optional description file, as previously generated
-// by mORMotWrappers' FillDescriptionFromSource function - a local
+// by mormot.soa.codegen.pas' FillDescriptionFromSource function - a local
 // 'WrappersDescription' resource will also be checked
 // - to actually call the remote server, aOnCall should be supplied
 procedure ExecuteFromCommandLine(
@@ -338,7 +338,7 @@ const
     'oftVariant');
 
 type
-  /// types recognized and handled by this mORMotWrappers unit
+  /// types recognized and handled by this mormot.soa.codegen.pas unit
   TWrapperType = (
     wUnknown,
     wBoolean,

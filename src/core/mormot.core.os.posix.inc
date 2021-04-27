@@ -805,7 +805,7 @@ end;
 function CopyFile(const Source, Target: TFileName;
   FailIfExists: boolean): boolean;
 var
-  SourceF, DestF: TFileStream;
+  src, dst: TFileStream;
 begin
   result := false;
   if FileExists(Target) then
@@ -814,17 +814,17 @@ begin
     else
       DeleteFile(Target);
   try
-    SourceF := TFileStream.Create(Source, fmOpenRead);
+    src := TFileStream.Create(Source, fmOpenRead);
     try
-      DestF := TFileStream.Create(Target, fmCreate);
+      dst := TFileStream.Create(Target, fmCreate);
       try
-        DestF.CopyFrom(SourceF, SourceF.Size);
+        dst.CopyFrom(src, src.Size);
       finally
-        DestF.Free;
+        dst.Free;
       end;
-      FileSetDateFrom(Target, SourceF.Handle);
+      FileSetDateFrom(Target, src.Handle);
     finally
-      SourceF.Free;
+      src.Free;
     end;
     result := true;
   except

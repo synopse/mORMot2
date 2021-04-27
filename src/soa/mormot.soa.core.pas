@@ -967,7 +967,7 @@ function TOrmServiceNotifications.SaveInputAsObject(
 var
   m: integer;
 begin
-  VarClear(result);
+  VarClear(result{%H-});
   with TDocVariantData(result) do
     if IDAsHexa then
       InitObject([

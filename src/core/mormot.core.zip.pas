@@ -170,6 +170,7 @@ type
   // - used in any header, contains info about following block
   TFileInfo = object
     /// ZIP_VERSION[] is either 20 for regular .zip or 45 for Zip64/4.5
+    // - use ToByte() for the format version - high 8-bit may identify the OS
     neededVersion: word;
     /// 0
     flags: word;

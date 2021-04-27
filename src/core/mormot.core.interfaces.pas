@@ -705,8 +705,8 @@ type
   /// class handling interface implementation generated from source
   // - this class targets oldest FPC, which did not generate the expected RTTI -
   // see http://bugs.freepascal.org/view.php?id=26774
-  // - mORMotWrapper.pas will generate a new inherited class, overriding abstract
-  // AddMethodsFromTypeInfo() to define the interface methods
+  // - mormot.soa.codegen.pas will generate a new inherited class, overriding
+  // abstract AddMethodsFromTypeInfo() to define the interface methods
   TInterfaceFactoryGenerated = class(TInterfaceFactory)
   protected
     fTempStrings: TRawUtf8DynArray;
@@ -719,7 +719,7 @@ type
     procedure AddMethod(const aName: RawUtf8; const aParams: array of const); virtual;
   public
     /// register one interface type definition from the current class
-    // - will be called by mORMotWrapper.pas generated code, in initialization
+    // - will be called by mormot.soa.codegen generated code, in initialization
     // section, so that the needed type information will be available
     class procedure RegisterInterface(aInterface: PRttiInfo); virtual;
   end;
