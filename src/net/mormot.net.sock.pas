@@ -117,6 +117,10 @@ type
     nfIP6,
     nfUNIX);
 
+  /// the IP port to connect/bind to
+  TNetPort = cardinal;
+
+
 const
   /// the socket protocol layers over the IP protocol
   nlIP = [nlTCP, nlUDP];
@@ -134,8 +138,8 @@ type
     function IPShort(withport: boolean = false): shortstring; overload;
       {$ifdef HASINLINE}inline;{$endif}
     procedure IPShort(out result: shortstring; withport: boolean = false); overload;
-    function Port: cardinal;
-    function SetPort(p: cardinal): TNetResult;
+    function Port: TNetPort;
+    function SetPort(p: TNetPort): TNetResult;
     function Size: integer;
   end;
 
@@ -525,7 +529,7 @@ type
     // - e.g. 'https://Server:Port/Address' or 'http://unix:/Server:/Address'
     function URI: RawUtf8;
     /// the server port, as integer value
-    function PortInt: integer;
+    function PortInt: TNetPort;
     /// compute the root resource Address, without any URI-encoded parameter
     // - e.g. '/category/name/10'
     function Root: RawUtf8;
@@ -786,7 +790,7 @@ type
     /// remote IP address of the last packet received (SocketLayer=slUDP only)
     function PeerAddress(LocalAsVoid: boolean = false): RawByteString;
     /// remote IP port of the last packet received (SocketLayer=slUDP only)
-    function PeerPort: integer;
+    function PeerPort: TNetPort;
     /// set the TCP_NODELAY option for the connection
     // - default true will disable the Nagle buffering algorithm; it should
     // only be set for applications that send frequent small bursts of information
@@ -1099,7 +1103,7 @@ begin
   end;
 end;
 
-function TNetAddr.Port: cardinal;
+function TNetAddr.Port: TNetPort;
 begin
   with PSockAddr(@Addr)^ do
     if sa_family in [AF_INET, AF_INET6] then
@@ -1108,7 +1112,7 @@ begin
       result := 0;
 end;
 
-function TNetAddr.SetPort(p: cardinal): TNetResult;
+function TNetAddr.SetPort(p: TNetPort): TNetResult;
 begin
   with PSockAddr(@Addr)^ do
     if (sa_family in [AF_INET, AF_INET6]) and
@@ -1862,7 +1866,7 @@ begin
     result := Prefix[Https] + Server + ':' + port + '/' + address;
 end;
 
-function TUri.PortInt: integer;
+function TUri.PortInt: TNetPort;
 begin
   result := GetCardinal(pointer(port));
 end;
@@ -2894,7 +2898,7 @@ begin
   result := fPeerAddr.IP(LocalAsVoid);
 end;
 
-function TCrtSocket.PeerPort: integer;
+function TCrtSocket.PeerPort: TNetPort;
 begin
   result := fPeerAddr.Port;
 end;

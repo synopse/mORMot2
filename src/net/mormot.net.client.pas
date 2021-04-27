@@ -365,9 +365,9 @@ type
     fServer: RawUtf8;
     fProxyName: RawUtf8;
     fProxyByPass: RawUtf8;
-    fPort: cardinal;
-    fHttps: boolean;
+    fPort: TNetPort;
     fLayer: TNetLayer;
+    fHttps: boolean;
     fKeepAlive: cardinal;
     fExtendedOptions: THttpRequestExtendedOptions;
     /// used by RegisterCompress method
@@ -515,7 +515,7 @@ type
     property Server: RawUtf8
       read fServer;
     /// the remote server port number, as specified to the class constructor
-    property Port: cardinal
+    property Port: TNetPort
       read fPort;
     /// if the remote server uses HTTPS, as specified to the class constructor
     property Https: boolean
@@ -2612,7 +2612,7 @@ begin
   try
     if (fHttps = nil) or
        (fHttps.Server <> Uri.Server) or
-       (integer(fHttps.Port) <> Uri.PortInt) then
+       (fHttps.Port <> Uri.PortInt) then
     begin
       FreeAndNil(fHttp);
       FreeAndNil(fHttps); // need a new HTTPS connection
