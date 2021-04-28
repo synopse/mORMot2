@@ -229,7 +229,8 @@ begin
   end;
   // check supplied port
   ip4.sin_port := htons(GetCardinal(pointer(addrport)));
-  if ip4.sin_port = 0 then
+  if (ip4.sin_port = 0) and
+     (addrport <> '0') then // explicit '0' to get ephemeral port
     exit;
   // handle simple cases
   result := nrOk;

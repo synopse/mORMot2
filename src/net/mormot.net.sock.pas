@@ -1107,7 +1107,7 @@ function TNetAddr.Port: TNetPort;
 begin
   with PSockAddr(@Addr)^ do
     if sa_family in [AF_INET, AF_INET6] then
-      result := swap(sin_port)
+      result := htons(sin_port)
     else
       result := 0;
 end;
@@ -1118,7 +1118,7 @@ begin
     if (sa_family in [AF_INET, AF_INET6]) and
        (p <= 65535) then
     begin
-      sin_port := swap(word(p)); // word() is mandatory
+      sin_port := htons(p);
       result := nrOk;
     end
     else

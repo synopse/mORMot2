@@ -360,6 +360,11 @@ const
     IPPROTO_UDP,
     0);
 
+function htons(port: cardinal): cardinal; {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := swap(word(port)); // port should be 16-bit word
+end;
+
 
 { ******** WinSock2 API calls }
 
