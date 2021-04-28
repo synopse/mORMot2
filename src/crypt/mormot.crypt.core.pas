@@ -635,7 +635,7 @@ type
   end;
   {$M-}
 
-  /// handle AES cypher/uncypher with chaining with out own optimized code
+  /// handle AES cypher/uncypher with chaining with our own optimized code
   // - use any of the inherited implementation, corresponding to the chaining
   // mode required - TAesEcb, TAesCbc, TAesCfb, TAesOfb and TAesCtr classes to
   // handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7-like padding)

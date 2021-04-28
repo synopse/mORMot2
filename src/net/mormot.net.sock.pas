@@ -153,6 +153,8 @@ type
   // - then methods allow cross-platform access to the connection
   TNetSocket = ^TNetSocketWrap;
 
+  PTerminated = ^boolean; // on FPC system.PBoolean doesn't exist :(
+
   /// convenient object-oriented wrapper around a socket connection
   // - TNetSocket is a pointer to this, so TSocket(@self) is used for the OS API
   TNetSocketWrap = object
@@ -174,6 +176,10 @@ type
     function RecvFrom(Buf: pointer; len: integer; out addr: TNetAddr): integer;
     function WaitFor(ms: integer; scope: TNetEvents): TNetEvents;
     function RecvPending(out pending: integer): TNetResult;
+    function RecvWait(ms: integer; out data: RawByteString;
+      terminated: PTerminated = nil): TNetResult;
+    function SendAll(Buf: PByte; len: integer;
+      terminated: PTerminated = nil): TNetResult;
     function ShutdownAndClose(rdwr: boolean): TNetResult;
     function Close: TNetResult;
     function Socket: PtrInt;
@@ -1396,6 +1402,71 @@ begin
     result := nrNoSocket
   else
     result := NetCheck(ioctlsocket(TSocket(@self), FIONREAD, @pending));
+end;
+
+function TNetSocketWrap.RecvWait(ms: integer;
+  out data: RawByteString; terminated: PTerminated): TNetResult;
+var
+  events: TNetEvents;
+  pending: integer;
+begin
+  events := WaitFor(100, [neRead]);
+  if (neError in events) or
+     (Assigned(terminated) and
+      terminated^) then
+    result := nrClosed
+  else if neRead in events then
+  begin
+    result := RecvPending(pending);
+    if result = nrOK then
+      if pending > 0 then
+      begin
+        SetLength(data, pending);
+        result := Recv(pointer(data), pending);
+        if Assigned(terminated) and
+           terminated^ then
+          result := nrClosed;
+        if result <> nrOK then
+          exit;
+        if pending <= 0 then
+        begin
+          result := nrUnknownError;
+          exit;
+        end;
+        if pending <> length(data) then
+          SetLength(data, pending);
+      end
+      else
+        result := nrRetry;
+  end
+  else
+    result := nrRetry;
+end;
+
+function TNetSocketWrap.SendAll(Buf: PByte; len: integer;
+  terminated: PTerminated): TNetResult;
+var
+  sent: integer;
+begin
+  repeat
+    sent := len;
+    result := Send(Buf, len);
+    if Assigned(terminated) and
+       terminated^ then
+      break;
+    if sent > 0 then
+    begin
+      inc(Buf, sent);
+      dec(len, sent);
+      if len = 0 then
+        exit;
+    end;
+    if result <> nrRetry then
+      exit;
+    SleepHiRes(1);
+  until Assigned(terminated) and
+        terminated^;
+  result := nrClosed;
 end;
 
 function TNetSocketWrap.ShutdownAndClose(rdwr: boolean): TNetResult;
