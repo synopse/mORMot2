@@ -8745,10 +8745,10 @@ begin
   // retrieve CPUID raw flags
   regs.edx := 0;
   regs.ecx := 0;
-  GetCPUID(1, regs);
+  GetCpuid(1, regs);
   PIntegerArray(@CpuFeatures)^[0] := regs.edx;
   PIntegerArray(@CpuFeatures)^[1] := regs.ecx;
-  GetCPUID(7, regs);
+  GetCpuid(7, regs);
   PIntegerArray(@CpuFeatures)^[2] := regs.ebx;
   PIntegerArray(@CpuFeatures)^[3] := regs.ecx;
   PIntegerArray(@CpuFeatures)^[4] := regs.edx;
