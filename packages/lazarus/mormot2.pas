@@ -27,14 +27,14 @@ uses
   mormot.lib.quickjs, mormot.lib.sspi, mormot.lib.static, mormot.lib.winhttp, 
   mormot.lib.z, mormot.net.async, mormot.net.client, mormot.net.http, 
   mormot.net.relay, mormot.net.rtsphttp, mormot.net.server, mormot.net.sock, 
-  mormot.net.ws.client, mormot.net.ws.core, mormot.net.ws.server, 
-  mormot.orm.client, mormot.orm.core, mormot.orm.mongodb, mormot.orm.rest, 
-  mormot.orm.server, mormot.orm.sql, mormot.orm.sqlite3, mormot.orm.storage, 
-  mormot.rest.client, mormot.rest.core, mormot.rest.http.client, 
-  mormot.rest.http.server, mormot.rest.memserver, mormot.rest.mvc, 
-  mormot.rest.server, mormot.rest.sqlite3, mormot.script.core, 
-  mormot.script.quickjs, mormot.soa.client, mormot.soa.codegen, 
-  mormot.soa.core, mormot.soa.server;
+  mormot.net.tunnel, mormot.net.ws.client, mormot.net.ws.core, 
+  mormot.net.ws.server, mormot.orm.client, mormot.orm.core, 
+  mormot.orm.mongodb, mormot.orm.rest, mormot.orm.server, mormot.orm.sql, 
+  mormot.orm.sqlite3, mormot.orm.storage, mormot.rest.client, 
+  mormot.rest.core, mormot.rest.http.client, mormot.rest.http.server, 
+  mormot.rest.memserver, mormot.rest.mvc, mormot.rest.server, 
+  mormot.rest.sqlite3, mormot.script.core, mormot.script.quickjs, 
+  mormot.soa.client, mormot.soa.codegen, mormot.soa.core, mormot.soa.server;
 
 implementation
 
