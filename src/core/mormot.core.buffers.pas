@@ -1691,14 +1691,15 @@ type
   // - see e.g. TStreamRedirect.ProgressToConsole
   TOnStreamProgress = procedure(Sender: TStreamRedirect) of object;
 
-  /// an abstract pipeline stream able to hash its written content
-  // - hashing is performed on the fly during the Write() process
+  /// an abstract pipeline stream able to redirect and hash read/written content
+  // - can be used either Read() or Write() calls during its livetime
+  // - hashing is performed on the fly during the Read/Write process
   // - it features also a callback to mark its progress
-  // - can sleep during Write() to reach a LimitPerSecond average bandwidth
+  // - can sleep during Read/Write to reach a LimitPerSecond average bandwidth
   TStreamRedirect = class(TStreamWithPosition)
   protected
-    fDestination: TStream;
-    fExpectedSize, fCurrentSize, fExpectedWrittenSize, fWrittenSize: Int64;
+    fRedirected: TStream;
+    fExpectedSize, fCurrentSize, fExpectedWrittenSize, fProcessedSize: Int64;
     fStartTix, fReportTix, fLastTix, fTimeOut, fElapsed, fRemaining: Int64;
     fPerSecond, fLimitPerSecond: PtrInt;
     fPercent: integer;
@@ -1707,31 +1708,38 @@ type
     fContext: RawUtf8;
     fTerminated: boolean;
     fConsoleLen: byte;
+    fMode: (mUnknown, mRead, mWrite);
     function GetSize: Int64; override;
     procedure DoReport;
     procedure DoHash(data: pointer; len: integer); virtual; // do nothing
     procedure SetExpectedSize(Value: Int64);
+    procedure ReadWriteHash(const Buffer; Count: Longint); virtual;
+    procedure ReadWriteReport(const Caller: ShortString); virtual;
   public
     /// initialize the internal structure, and start the timing
-    // - before calling Write(), you should set the Destination property
-    constructor Create(aDestination: TStream); reintroduce; virtual;
-    /// release the associated Destination stream
+    // - before calling Read/Write, you should set the Redirected property or
+    // specify aRedirected here - which will be owned by this instance
+    constructor Create(aRedirected: TStream); reintroduce; virtual;
+    /// release the associated Redirected stream
     destructor Destroy; override;
     /// can be used by for TOnStreamProgress callback writing into the console
     class procedure ProgressToConsole(Sender: TStreamRedirect);
-    /// this method will raise an error: it's a write-only stream
+    /// update the hash and redirect the data to the associated TStream
+    // - also trigger OnProgress at least every second
+    // - will raise an error if Write() (or Append) have been called before
     function Read(var Buffer; Count: Longint): Longint; override;
     /// update the hash and redirect the data to the associated TStream
     // - also trigger OnProgress at least every second
+    // - will raise an error if Read() has been called before
     function Write(const Buffer; Count: Longint): Longint; override;
-    /// update the hash of the existing Destination stream content
+    /// update the hash of the existing Redirected stream content
     // - ready to Write() some new data after the existing
     procedure Append;
     /// notify end of process
-    // - should be called explicitly when all Write() has been done
+    // - should be called explicitly when all Read()/Write() has been done
     procedure Ended;
     /// could be set from another thread to abort the streaming process
-    // - will raise an exception in Write()
+    // - will raise an exception at the next Read()/Write() call
     procedure Terminate;
     /// return the current state of the hash as lower hexadecimal
     // - by default, will return '' meaning that no hashing algorithm was set
@@ -1742,25 +1750,27 @@ type
     /// apply the internal hash algorithm to the supplied file content
     // - could be used ahead of time to validate a cached file
     class function HashFile(const FileName: TFileName): RawUtf8;
-    /// specify a TStream to which any Write() will be redirected
-    property Destination: TStream
-      read fDestination write fDestination;
-    /// you can specify a number of bytes for the final Destination size
+    /// specify a TStream to which any Read()/Write() will be redirected
+    // - this TStream instance will be owned by the TStreamRedirect
+    property Redirected: TStream
+      read fRedirected write fRedirected;
+    /// you can specify a number of bytes for the final Redirected size
     // - will be used for the callback progress - could be 0 if size is unknown
     property ExpectedSize: Int64
       read fExpectedSize write SetExpectedSize;
-    /// how many bytes have passed through Write()
-    // - may not equal Size e.g. on resumed download from partial file
-    property WrittenSize: Int64
-      read fWrittenSize;
+    /// how many bytes have passed through Read() or Write()
+    // - may not equal Size or Position after an Append - e.g. on resumed
+    // download from partial file
+    property ProcessedSize: Int64
+      read fProcessedSize;
     /// percentage of Size versus ExpectedSize
     // - equals 0 if ExpectedSize is 0
     property Percent: integer
       read fPercent;
-    /// number of milliseconds elasped since beginning, as set by Write()
+    /// number of milliseconds elasped since beginning, as set by Read/Write
     property Elapsed: Int64
       read fElapsed;
-    /// number of milliseconds remaining for full process, as set by Write()
+    /// number of milliseconds remaining for full process, as set by Read/Write
     // - equals 0 if ExpectedSize is 0
     // - is just an estimation based on the average PerSecond speed
     property Remaining: Int64
@@ -1768,11 +1778,11 @@ type
     /// number of bytes processed per second, since initialization of this instance
     property PerSecond: PtrInt
       read fPerSecond;
-    /// can limit the Write() bandwidth used
+    /// can limit the Read/Write bandwidth used
     // - sleep so that PerSecond will keep close to this LimitPerSecond value
     property LimitPerSecond: PtrInt
       read fLimitPerSecond write fLimitPerSecond;
-    /// Write() will raise an exception if not finished after TimeOut milliseconds
+    /// Read/Write will raise an exception if not finished after TimeOut milliseconds
     property TimeOut: Int64
       read fTimeOut write fTimeOut;
     /// optional process context, e.g. a download URI, used for logging/progress
@@ -1781,7 +1791,7 @@ type
     /// can be assigned from TSynLog.DoLog class method for low-level logging
     property OnLog: TSynLogProc
       read fOnLog write fOnLog;
-    /// optional callback triggered during Write()
+    /// optional callback triggered during Read/Write
     // - at least at process startup and finish, and every second
     property OnProgress: TOnStreamProgress
       read fOnProgress write fOnProgress;
@@ -7849,15 +7859,15 @@ end;
 
 { TStreamRedirect }
 
-constructor TStreamRedirect.Create(aDestination: TStream);
+constructor TStreamRedirect.Create(aRedirected: TStream);
 begin
-  fDestination := aDestination;
+  fRedirected := aRedirected;
   fStartTix := GetTickCount64;
 end;
 
 destructor TStreamRedirect.Destroy;
 begin
-  fDestination.Free;
+  fRedirected.Free;
   inherited Destroy;
 end;
 
@@ -7915,22 +7925,22 @@ begin
   else
   begin
     if (fElapsed <> 0) and
-       (fWrittenSize <> 0) then
+       (fProcessedSize <> 0) then
       fRemaining :=
-        (fElapsed * (fExpectedWrittenSize - fWrittenSize)) div fWrittenSize;
+        (fElapsed * (fExpectedWrittenSize - fProcessedSize)) div fProcessedSize;
     fPercent := (fCurrentSize * 100) div fExpectedSize;
   end;
   if fElapsed = 0 then
     fPerSecond := 0
   else
-    fPerSecond := (fWrittenSize * 1000) div fElapsed;
+    fPerSecond := (fProcessedSize * 1000) div fElapsed;
   if Assigned(fOnLog) then
     if fExpectedSize = 0 then
       fOnLog(sllTrace, '%: % - % %/s',
-        [fContext, KB(fCurrentSize), KB(fWrittenSize), KB(fPerSecond)], self)
+        [fContext, KB(fCurrentSize), KB(fProcessedSize), KB(fPerSecond)], self)
     else
       fOnLog(sllTrace, '%: %% - % / % - % %/s', [fContext, fPercent, '%',
-        KB(fCurrentSize), KB(fExpectedSize), KB(fWrittenSize), KB(PerSecond)], self);
+        KB(fCurrentSize), KB(fExpectedSize), KB(fProcessedSize), KB(PerSecond)], self);
   if Assigned(fOnProgress) then
     fOnProgress(self);
 end;
@@ -7980,9 +7990,12 @@ var
   buf: array[word] of cardinal; // 256KB of buffer
   read: PtrInt;
 begin
-  if fDestination = nil then
-    raise ESynException.CreateUtf8('%.Append(%): Destination=nil',
+  if fRedirected = nil then
+    raise ESynException.CreateUtf8('%.Append(%): Redirected=nil',
       [self, fContext]);
+  if fMode = mRead then
+    raise ESynException.CreateUtf8('%.Append(%) after Read()', [self, fContext]);
+  fMode := mWrite;
   if GetHashFileExt = '' then
   begin
     fCurrentSize := Seek(0, soEnd); // DoHash() does nothing
@@ -7991,7 +8004,7 @@ begin
   else
   begin
     repeat
-      read := fDestination.Read(buf, SizeOf(buf));
+      read := fRedirected.Read(buf, SizeOf(buf));
       if read <= 0 then
         break;
       DoHash(@buf, read);
@@ -8016,26 +8029,18 @@ begin
   fTerminated := true;
 end;
 
-function TStreamRedirect.Read(var Buffer; Count: Longint): Longint;
-begin
-  {$ifdef DELPHI20062007}
-  result := 0;
-  {$endif DELPHI20062007}
-  raise ESynException.CreateUtf8('%.Read is not supported', [self]);
-end;
-
-function TStreamRedirect.Write(const Buffer; Count: Longint): Longint;
-var
-  tix, tosleep: Int64;
+procedure TStreamRedirect.ReadWriteHash(const Buffer; Count: Longint);
 begin
   DoHash(@Buffer, Count);
   inc(fCurrentSize, Count);
-  inc(fWrittenSize, Count);
+  inc(fProcessedSize, Count);
   inc(fPosition, Count);
-  result := Count;
-  if fDestination = nil then
-    exit; // we may just want the hash
-  fDestination.WriteBuffer(Buffer, Count);
+end;
+
+procedure TStreamRedirect.ReadWriteReport(const Caller: ShortString);
+var
+  tix, tosleep: Int64;
+begin
   tix := GetTickCount64;
   fElapsed := tix - fStartTix;
   if (fLimitPerSecond <> 0) or
@@ -8048,12 +8053,12 @@ begin
       begin
         if (fTimeOut <> 0) and
            (fElapsed > fTimeOut) then
-          raise ESynException.CreateUtf8('%.Write(%) timeout after %',
-            [self, fContext, MicroSecToString(fElapsed * 1000)]);
+          raise ESynException.CreateUtf8('%.%(%) timeout after %',
+            [self, Caller, fContext, MicroSecToString(fElapsed * 1000)]);
         if fLimitPerSecond > 0 then
         begin
           // adjust bandwith limit every 128 ms by adding some sleep() steps
-          tosleep := ((fWrittenSize * 1000) div fLimitPerSecond) - fElapsed;
+          tosleep := ((fProcessedSize * 1000) div fLimitPerSecond) - fElapsed;
           if tosleep > 10 then // on Windows, typical resolution is 16ms
           begin
             while tosleep > 300 do
@@ -8064,8 +8069,8 @@ begin
                 DoReport;
               dec(tosleep, 300);
               if fTerminated then
-                raise ESynException.CreateUtf8('%.Write(%) Terminated',
-                  [self, fContext]);
+                raise ESynException.CreateUtf8('%.%(%) Terminated',
+                  [self, Caller, fContext]);
             end;
             SleepHiRes(tosleep);
           end;
@@ -8077,8 +8082,36 @@ begin
      Assigned(fOnLog) then
     DoReport;
   if fTerminated then
-    raise ESynException.CreateUtf8('%.Write(%) Terminated',
+    raise ESynException.CreateUtf8('%.%(%) Terminated',
+      [self, Caller, fContext]);
+end;
+
+function TStreamRedirect.Read(var Buffer; Count: Longint): Longint;
+begin
+  if fMode = mWrite then
+    raise ESynException.CreateUtf8('%.Read(%) in Write() mode',
       [self, fContext]);
+  fMode := mRead;
+  if fRedirected = nil then
+    raise ESynException.CreateUtf8('%.Read(%) with Redirected=nil',
+      [self, fContext]);
+  result := fRedirected.Read(Buffer, Count);
+  ReadWriteHash(Buffer, result);
+  ReadWriteReport('Read');
+end;
+
+function TStreamRedirect.Write(const Buffer; Count: Longint): Longint;
+begin
+  if fMode = mRead then
+    raise ESynException.CreateUtf8('%.Write(%) in Read() mode',
+      [self, fContext]);
+  fMode := mWrite;
+  ReadWriteHash(Buffer, Count);
+  result := Count;
+  if fRedirected = nil then
+    exit; // we may just want the hash
+  fRedirected.WriteBuffer(Buffer, Count);
+  ReadWriteReport('Write');
 end;
 
 
