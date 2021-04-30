@@ -634,7 +634,7 @@ type
     class function GetAlgo: THashAlgo; virtual; abstract;
     procedure DoHash(data: pointer; len: integer); override;
   public
-    constructor Create(aDestination: TStream); override;
+    constructor Create(aDestination: TStream; aRead: boolean = false); override;
     function GetHash: RawUtf8; override;
     class function GetHashFileExt: RawUtf8; override;
   end;
@@ -956,9 +956,9 @@ end;
 
 { TStreamRedirectSynHasher }
 
-constructor TStreamRedirectSynHasher.Create(aDestination: TStream);
+constructor TStreamRedirectSynHasher.Create(aDestination: TStream; aRead: boolean);
 begin
-  inherited Create(aDestination);
+  inherited Create(aDestination, aRead);
   fHash.Init(GetAlgo);
 end;
 
