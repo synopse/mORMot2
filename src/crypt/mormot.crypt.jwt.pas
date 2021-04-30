@@ -337,6 +337,15 @@ function ToCaption(res: TJwtResult): string; overload;
 function ToText(claim: TJwtClaim): PShortString; overload;
 function ToText(claims: TJwtClaims): ShortString; overload;
 
+/// try to recognize a JWT from a supplied text, which may be an URI
+// - will ignore any trailing spaces, then extract any ending Base64-URI encoded
+// text which matches the JWT 'algo.payload.sign' layout
+// - returns '' if no JWT-like pattern was found
+// - it won't validate the exact JWT format, nor any signature, only guess if
+// there is a chance the supplied text contains a JWT
+function ParseTrailingJwt(const aText: RawUtf8): RawUtf8;
+
+
 
 { **************** JWT Implementation of HS and S3 Algorithms }
 
@@ -565,6 +574,31 @@ end;
 function ToText(claims: TJwtClaims): ShortString;
 begin
   GetSetNameShort(TypeInfo(TJwtClaims), claims, result);
+end;
+
+function ParseTrailingJwt(const aText: RawUtf8): RawUtf8;
+var
+  txtlen, beg, dotcount: PtrInt;
+begin
+  result := ''; // no JWT found
+  txtlen := length(aText);
+  while (txtlen > 10) and
+        (aText[txtlen] <= ' ') do
+    dec(txtlen);
+  beg := txtlen + 1;
+  dotcount := 0;
+  while (beg > 1) and
+        (tcURIUnreserved in TEXT_CHARS[aText[beg - 1]]) do
+  begin
+    dec(beg);
+    if aText[beg] = '.' then
+      inc(dotcount);
+  end;
+  dec(txtlen, beg - 1);
+  if (dotcount <> 2) or
+     (txtlen <= 10) then
+    exit;
+  result := copy(aText, beg, txtlen);
 end;
 
 
