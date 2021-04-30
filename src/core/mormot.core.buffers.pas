@@ -1719,7 +1719,8 @@ type
     /// initialize the internal structure, and start the timing
     // - before calling Read/Write, you should set the Redirected property or
     // specify aRedirected here - which will be owned by this instance
-    constructor Create(aRedirected: TStream); reintroduce; virtual;
+    // - if aRead is true, ExpectedSize is set from aRedirected.Size
+    constructor Create(aRedirected: TStream; aRead: boolean = false); reintroduce; virtual;
     /// release the associated Redirected stream
     destructor Destroy; override;
     /// can be used by for TOnStreamProgress callback writing into the console
@@ -1755,7 +1756,8 @@ type
     property Redirected: TStream
       read fRedirected write fRedirected;
     /// you can specify a number of bytes for the final Redirected size
-    // - will be used for the callback progress - could be 0 if size is unknown
+    // - will be used for the callback progress - could be left to 0 for Write()
+    // if size is unknown
     property ExpectedSize: Int64
       read fExpectedSize write SetExpectedSize;
     /// how many bytes have passed through Read() or Write()
@@ -7859,9 +7861,12 @@ end;
 
 { TStreamRedirect }
 
-constructor TStreamRedirect.Create(aRedirected: TStream);
+constructor TStreamRedirect.Create(aRedirected: TStream; aRead: boolean);
 begin
   fRedirected := aRedirected;
+  if aRead and
+     Assigned(aRedirected) then
+    fExpectedSize := aRedirected.Size; // needed e.g. to upload a file
   fStartTix := GetTickCount64;
 end;
 
@@ -7873,7 +7878,11 @@ end;
 
 function TStreamRedirect.GetSize: Int64;
 begin
-  result := fCurrentSize;
+  if (fMode <> mWrite) and
+     (fExpectedSize <> 0) then
+    result := fExpectedSize
+  else
+    result := fCurrentSize;
 end;
 
 {$I-}
