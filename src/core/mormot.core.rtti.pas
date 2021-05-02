@@ -3861,7 +3861,7 @@ begin
   if (Instance <> nil) and
      (@self <> nil) and
      (TypeInfo^.Kind = rkFloat) then
-    SetFloatProp(Instance, Value);
+    SetDoubleProp(Instance, Value);
 end;
 
 procedure TRttiProp.GetRawByteStringValue(Instance: TObject; var Value: RawByteString);
