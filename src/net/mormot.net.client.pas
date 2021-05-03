@@ -157,9 +157,12 @@ type
     /// how much time this connection should be kept alive
     // - as redirected to the internal Request() parameter
     KeepAlive: cardinal;
+    /// how many 30x redirections are allowed
+    // - default is 0 - i.e. no redirection
+    RedirectMax: integer;
     /// callback event called during download process
     // - typical usage is to assign e.g. TStreamRedirect.ProgressToConsole
-    // - note that by default, THttpClientSocket.OnLoog will always be called
+    // - note that by default, THttpClientSocket.OnLog will always be called
     OnProgress: TOnStreamProgress;
     /// allow to continue an existing .part file download
     // - during the download phase, url + '.part' is used locally to avoid
@@ -185,13 +188,14 @@ type
     /// can be used to reduce the download speed into supplied bytes per second
     LimitBandwith: integer;
     /// will raise ESynException after TimeOutSec seconds are elapsed
+    // - WGet(sockettimeout) is the TCP connect/receive/send raw timeout
     TimeOutSec: integer;
     /// initialize the default parameters
     procedure Clear;
     /// after Clear, instantiate and wrap THttpClientSocket.WGet
     function WGet(const url: RawUtf8; const destfile: TFileName;
       const tunnel: RawUtf8 = ''; tls: PNetTlsContext = nil;
-      timeout: cardinal = 10000): TFileName;
+      sockettimeout: cardinal = 10000): TFileName;
   end;
 
   /// Socket API based REST and HTTP/1.1 compatible client class
@@ -326,7 +330,7 @@ function OpenHttpGet(const server, port, url, inHeaders: RawUtf8;
 function WGet(const url: RawUtf8; const destfile: TFileName;
   const tunnel: RawUtf8 = ''; hasher: TStreamRedirectClass = nil;
   const hash: RawUtf8 = ''; tls: PNetTlsContext = nil;
-  timeout: cardinal = 10000; consoledisplay: boolean = false): string;
+  sockettimeout: cardinal = 10000; consoledisplay: boolean = false): string;
 
 
 { ******************** THttpRequest Abstract HTTP client class }
@@ -1177,12 +1181,12 @@ end;
 
 function THttpClientSocketWGet.WGet(const url: RawUtf8;
   const destfile: TFileName; const tunnel: RawUtf8; tls: PNetTlsContext;
-  timeout: cardinal): TFileName;
+  sockettimeout: cardinal): TFileName;
 var
   s: THttpClientSocket;
   u: RawUtf8;
 begin
-  s := THttpClientSocket.OpenUri(url, u, tunnel, timeout, tls);
+  s := THttpClientSocket.OpenUri(url, u, tunnel, sockettimeout, tls);
   try
     result := s.WGet(u, destfile, self);
   finally
@@ -1192,7 +1196,7 @@ end;
 
 function WGet(const url: RawUtf8; const destfile: TFileName;
   const tunnel: RawUtf8; hasher: TStreamRedirectClass; const hash: RawUtf8;
-  tls: PNetTlsContext; timeout: cardinal; consoledisplay: boolean): string;
+  tls: PNetTlsContext; sockettimeout: cardinal; consoledisplay: boolean): string;
 var
   params: THttpClientSocketWGet;
 begin
@@ -1205,7 +1209,7 @@ begin
     params.Hash := hash;
     if consoledisplay then
       params.OnProgress := TStreamRedirect.ProgressToConsole;
-    if params.WGet(url, destfile, tunnel, tls, timeout) <> destfile then
+    if params.WGet(url, destfile, tunnel, tls, sockettimeout) <> destfile then
       result := 'WGet: unexpected destfile'; // paranoid
   except
     on E: Exception do
@@ -1414,21 +1418,35 @@ var
   procedure DoRequestAndFreePartStream;
   var
     modif: TDateTime;
+    redirected: integer;
+    requrl, lastmod: RawUtf8;
   begin
     partstream.Context := urlfile;
     partstream.OnProgress := params.OnProgress;
     partstream.OnLog := OnLog;
     partstream.TimeOut := params.TimeOutSec * 1000;
     partstream.LimitPerSecond := params.LimitBandwith;
-    res := Request(url, 'GET', params.KeepAlive, params.Header, '', '',
-      {retry=}false, nil, partstream);
+    redirected := 0;
+    requrl := url;
+    repeat
+      res := Request(requrl, 'GET', params.KeepAlive, params.Header, '', '',
+        {retry=}false, {instream=}nil, partstream);
+      if (redirected >= params.RedirectMax) or
+         (res < 300) or
+         (res = HTTP_NOTMODIFIED) or // 304 is no redirect
+         (res > 399) then
+        break;
+      requrl := HeaderGetValue('LOCATION'); // internal redirection only
+      inc(redirected);
+    until false;
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
       raise EHttpSocket.Create('WGet: %s:%s/%s failed with %s',
         [fServer, fPort, url, StatusCodeToErrorMsg(res)]);
     partstream.Ended; // notify finished
     parthash := partstream.GetHash; // hash updated during each partstream.Write()
     FreeAndNil(partstream);
-    if HttpDateToDateTime(HeaderGetValue('LAST-MODIFIED'), modif, {local=}true) then
+    lastmod := HeaderGetValue('LAST-MODIFIED');
+    if HttpDateToDateTime(lastmod, modif, {local=}true) then
       FileSetDate(part, DateTimeToFileDate(modif));
   end;
 
@@ -2991,7 +3009,7 @@ type
   /// thread-safe TSynDictionary-based cache of DNS names for NewSocket()
   TNewSocketAddressCache = class(TInterfacedObject, INewSocketAddressCache)
   protected
-    fData: TSynDictionary;
+    fData: TSynDictionary; // RawUtf8/TNetAddr pairs
   public
     constructor Create(aTimeOutSeconds: integer);
     destructor Destroy; override;
@@ -3024,7 +3042,7 @@ end;
 procedure TNewSocketAddressCache.Add(const Host: RawUtf8;
   const NetAddr: TNetAddr);
 begin
-  fData.DeleteDeprecated; // flush cache only when we may need some new space
+  fData.DeleteDeprecated;   // flush cache only when we may need some new space
   fData.Add(Host, NetAddr); // do nothing if already added in another thread
 end;
 
