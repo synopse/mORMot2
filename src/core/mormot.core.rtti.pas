@@ -3710,7 +3710,6 @@ var
   call: TMethod;
   rf: TRttiFloat;
 begin
-  Value := 0;
   rf := TypeInfo^.RttiFloat;
   case Setter(Instance, @call) of
     rpcField:
