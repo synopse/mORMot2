@@ -3710,7 +3710,6 @@ var
   call: TMethod;
   rf: TRttiFloat;
 begin
-  Value := 0;
   rf := TypeInfo^.RttiFloat;
   case Setter(Instance, @call) of
     rpcField:
@@ -3861,7 +3860,7 @@ begin
   if (Instance <> nil) and
      (@self <> nil) and
      (TypeInfo^.Kind = rkFloat) then
-    SetDoubleProp(Instance, Value);
+    SetFloatProp(Instance, Value);
 end;
 
 procedure TRttiProp.GetRawByteStringValue(Instance: TObject; var Value: RawByteString);
