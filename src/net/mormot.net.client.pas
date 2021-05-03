@@ -198,6 +198,34 @@ type
       sockettimeout: cardinal = 10000): TFileName;
   end;
 
+  /// THttpClientSocket.Request low-level execution context
+  TTHttpClientSocketRequestParams = record
+    url, method, header: RawUtf8;
+    KeepAlive: cardinal;
+    Data: RawByteString;
+    DataType: RawUtf8;
+    InStream, OutStream: TStream;
+    status: integer;
+    retry: boolean;
+  end;
+
+  THttpClientSocket = class;
+
+  /// callback used by THttpClientSocket.Request on HTTP_UNAUTHORIZED (401)
+  // - Authenticate contains the "WWW-Authenticate" response header value
+  // - should return false if this authentication scheme is not supported
+  // - should return true and set Sender.AuthBearer/BasicAuthUserPassword
+  // to retry the request with, or use Sender.RequestInternal(Context)
+  // - more complex schemes (like SSPI) could be implemented within the callback
+  TOnHttpClientSocketAuthorize = function(Sender: THttpClientSocket;
+    var Context: TTHttpClientSocketRequestParams;
+    const Authenticate: RawUtf8): boolean of object;
+
+  /// callback used by THttpClientSocket.Request before/after every request
+  // - return true to continue execution, false to abort normal process
+  TOnHttpClientSocketRequest = function(Sender: THttpClientSocket;
+    var Context: TTHttpClientSocketRequestParams): boolean of object;
+
   /// Socket API based REST and HTTP/1.1 compatible client class
   // - this component is HTTP/1.1 compatible, according to RFC 2068 document
   // - the REST commands (GET/POST/PUT/DELETE) are directly available
@@ -216,6 +244,9 @@ type
     fProcessName: RawUtf8;
     fRangeStart, fRangeEnd: Int64;
     fBasicAuthUserPassword, fAuthBearer: RawUtf8;
+    fOnAuthorize: TOnHttpClientSocketAuthorize;
+    fOnBeforeRequest: TOnHttpClientSocketRequest;
+    fOnAfterRequest: TOnHttpClientSocketRequest;
     procedure RequestSendHeader(const url, method: RawUtf8); virtual;
     procedure RequestClear; virtual;
   public
@@ -227,13 +258,20 @@ type
     constructor Create(aTimeOut: PtrInt = 0); override;
     /// low-level HTTP/1.1 request
     // - called by all Get/Head/Post/Put/Delete REST methods
-    // - after an Open(server,port), return 200,202,204 if OK, http status error otherwise
-    // - retry is false by caller, and will be recursively called with true to retry once
-    // - use either Data or DataStream for sending its output body content
+    // - after an Open(server,port), return 200,202,204 if OK, or an http
+    // status error otherwise
+    // - retry is usually false, but could be recursively recalled as true
+    // - use either Data or InStream for sending its body request
+    // - response body will be either in Content or in OutStream
+    // - wrapper around RequestInternal() with OnBeforeRequest/OnAfterRequest
     function Request(const url, method: RawUtf8; KeepAlive: cardinal;
       const header: RawUtf8; const Data: RawByteString = '';
       const DataType: RawUtf8 = ''; retry: boolean = false;
       InStream: TStream = nil; OutStream: TStream = nil): integer; virtual;
+    /// low-level processing method called from Request()
+    // - can be used e.g. when implementing callbacks like OnAuthorize or
+    // OnBeforeRequest/OnAfterRequest
+    procedure RequestInternal(var ctxt: TTHttpClientSocketRequestParams); virtual;
     /// after an Open(server,port), return 200 if OK, http status error otherwise
     // - get the page data in Content
     function Get(const url: RawUtf8; KeepAlive: cardinal = 0;
@@ -244,7 +282,7 @@ type
     function GetAuth(const url, AuthToken: RawUtf8; KeepAlive: cardinal = 0): integer;
     /// download a (huge) file with proper resume and optional caching
     // - DestFile is the file name to use to put the downloaded content - if
-    // leftf void, will compute and return a file name from the url value
+    // left void, will compute and return a file name from the url value
     // - fine tuning of the process could be done using params
     function WGet(const url: RawUtf8; const destfile: TFileName;
       var params: THttpClientSocketWGet): TFileName;
@@ -295,6 +333,16 @@ type
     /// optional Authorization: Bearer header value
     property AuthBearer: RawUtf8
       read fAuthBearer write fAuthBearer;
+    /// optional authorization callback
+    // - is triggered by Request() on HTTP_UNAUTHORIZED (401) result
+    property OnAuthorize: TOnHttpClientSocketAuthorize
+      read fOnAuthorize write fOnAuthorize;
+    /// optional callback called before each Request()
+    property OnBeforeRequest: TOnHttpClientSocketRequest
+      read fOnBeforeRequest write fOnBeforeRequest;
+    /// optional callback called after each Request()
+    property OnAfterRequest: TOnHttpClientSocketRequest
+      read fOnAfterRequest write fOnAfterRequest;
   end;
 
   /// class-reference type (metaclass) of a HTTP client socket access
@@ -1220,6 +1268,147 @@ end;
 
 { THttpClientSocket }
 
+constructor THttpClientSocket.Create(aTimeOut: PtrInt);
+begin
+  if aTimeOut = 0 then
+    aTimeOut := HTTP_DEFAULT_RECEIVETIMEOUT;
+  inherited Create(aTimeOut);
+  fUserAgent := DefaultUserAgent(self);
+end;
+
+procedure THttpClientSocket.RequestInternal(
+  var ctxt: TTHttpClientSocketRequestParams);
+
+  procedure DoRetry(Error: integer; const msg: RawUtf8);
+  begin
+    //writeln('DoRetry ',retry, ' ', Error, ' / ', msg);
+    if Assigned(OnLog) then
+       OnLog(sllTrace, 'Request(% %): % socket=% DoRetry(%) retry=%',
+         [ctxt.method, ctxt.url, msg, fSock.Socket, Error,
+          BOOL_STR[ctxt.retry]], self);
+    if ctxt.retry then // retry once -> return error only if failed twice
+      ctxt.status := Error
+    else
+    begin
+      Close; // close this connection
+      try
+        // retry with a new socket
+        OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
+        HttpStateReset;
+        ctxt.retry := true;
+        RequestInternal(ctxt);
+      except
+        on Exception do
+          ctxt.status := Error;
+      end;
+    end;
+  end;
+
+var
+  P: PUtf8Char;
+  dat: RawByteString;
+begin
+  if SockIn = nil then // done once
+    CreateSockIn; // use SockIn by default if not already initialized: 2x faster
+  Content := '';
+  if (hfConnectionClose in HeaderFlags) or
+     (SockReceivePending(0) = cspSocketError) then
+    DoRetry(HTTP_NOTFOUND, 'connection closed/broken (keepalive or maxrequest)')
+  else
+    try
+      try
+        // send request - we use SockSend because writeln() is calling flush()
+        // prepare headers
+        RequestSendHeader(ctxt.url, ctxt.method);
+        if ctxt.KeepAlive > 0 then
+          SockSend(['Keep-Alive: ', ctxt.KeepAlive,
+              #13#10'Connection: Keep-Alive'])
+        else
+          SockSend('Connection: Close');
+        dat := ctxt.Data; // local var copy for Data to be compressed in-place
+        CompressDataAndWriteHeaders(ctxt.DataType, dat, ctxt.InStream);
+        if ctxt.header <> '' then
+          SockSend(ctxt.header);
+        if fCompressAcceptEncoding <> '' then
+          SockSend(fCompressAcceptEncoding);
+        SockSendCRLF;
+        // flush headers and Data/InStream body
+        SockSendFlush(dat);
+        if ctxt.InStream <> nil then
+          SockSendStream(ctxt.InStream); // may be a THttpMultiPartStream
+        // retrieve HTTP command line response
+        if SockReceivePending(1000) = cspSocketError then
+        begin
+          DoRetry(HTTP_NOTFOUND, 'cspSocketError waiting for headers');
+          exit;
+        end;
+        SockRecvLn(Command); // will raise ENetSock on any error
+        P := pointer(Command);
+        if IdemPChar(P, 'HTTP/1.') then
+        begin
+          // get http numeric status code (200,404...) from 'HTTP/1.x ######'
+          ctxt.status := GetCardinal(P + 9);
+          if ctxt.status = 0 then
+          begin
+            ctxt.status := HTTP_HTTPVERSIONNONSUPPORTED;
+            exit;
+          end;
+          while ctxt.status = HTTP_CONTINUE do
+          begin
+            repeat
+              // 100 CONTINUE is just to be ignored on client side
+              SockRecvLn(Command);
+              P := pointer(Command);
+            until IdemPChar(P, 'HTTP/1.'); // ignore up to next command
+            ctxt.status := GetCardinal(P + 9);
+          end;
+          if P[7] = '0' then
+            // HTTP/1.0 -> force connection close
+            ctxt.KeepAlive := 0;
+        end
+        else
+        begin
+          // error on reading answer -> 505=wrong format
+          if Command = '' then
+            DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, 'Broken Link')
+          else
+            DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, Command);
+          exit;
+        end;
+        // retrieve all HTTP headers
+        GetHeader({unfiltered=}false);
+        // retrieve Body content (if any)
+        if (ctxt.status >= HTTP_SUCCESS) and
+           (ctxt.status <> HTTP_NOCONTENT) and
+           (ctxt.status <> HTTP_NOTMODIFIED) and
+           (IdemPCharArray(pointer(ctxt.method), ['HEAD', 'OPTIONS']) < 0) then
+           // HEAD or status 100..109,204,304 -> no body (RFC 2616 section 4.3)
+        begin
+          if (ContentLength > 0) and
+             (ctxt.OutStream <> nil) and
+             ctxt.OutStream.InheritsFrom(TStreamRedirect) then
+            TStreamRedirect(ctxt.OutStream).ExpectedSize := fRangeStart + ContentLength;
+          GetBody(ctxt.OutStream);
+        end;
+        if (ctxt.status = HTTP_UNAUTHORIZED) and
+           Assigned(fOnAuthorize) and
+           fOnAuthorize(self, ctxt, HeaderGetValue('WWW-AUTHENTICATE')) then
+        begin
+          RequestInternal(ctxt);
+          exit;
+        end;
+        // successfully sent -> reset some fields for the next request
+        RequestClear;
+      except
+        on Exception do
+          DoRetry(HTTP_NOTFOUND, 'Exception');
+      end;
+    finally
+      if ctxt.KeepAlive = 0 then
+        Close;
+    end;
+end;
+
 procedure THttpClientSocket.RequestSendHeader(const url, method: RawUtf8);
 begin
   if not SockIsDefined then
@@ -1256,138 +1445,30 @@ begin
   fRangeEnd := 0;
 end;
 
-constructor THttpClientSocket.Create(aTimeOut: PtrInt);
-begin
-  if aTimeOut = 0 then
-    aTimeOut := HTTP_DEFAULT_RECEIVETIMEOUT;
-  inherited Create(aTimeOut);
-  fUserAgent := DefaultUserAgent(self);
-end;
-
 function THttpClientSocket.Request(const url, method: RawUtf8;
   KeepAlive: cardinal; const header: RawUtf8; const Data: RawByteString;
   const DataType: RawUtf8; retry: boolean; InStream, OutStream: TStream): integer;
-
-  procedure DoRetry(Error: integer; const msg: RawUtf8);
-  begin
-    //writeln('DoRetry ',retry, ' ', Error, ' / ', msg);
-    if Assigned(OnLog) then
-       OnLog(sllTrace, 'Request(% %): % socket=% DoRetry(%) retry=%',
-         [method, url, msg, fSock.Socket, Error, BOOL_STR[retry]], self);
-    if retry then // retry once -> return error only if failed twice
-      result := Error
-    else
-    begin
-      Close; // close this connection
-      try
-        // retry with a new socket
-        OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
-        HttpStateReset;
-        result := Request(url, method, KeepAlive, header,
-          Data, DataType, {retry=}true, InStream, OutStream);
-      except
-        on Exception do
-          result := Error;
-      end;
-    end;
-  end;
-
 var
-  P: PUtf8Char;
-  dat: RawByteString;
+  ctxt: TTHttpClientSocketRequestParams;
 begin
-  if SockIn = nil then // done once
-    CreateSockIn; // use SockIn by default if not already initialized: 2x faster
-  Content := '';
-  if (hfConnectionClose in HeaderFlags) or
-     (SockReceivePending(0) = cspSocketError) then
-    DoRetry(HTTP_NOTFOUND, 'connection closed/broken (keepalive or maxrequest)')
-  else
-    try
-      try
-        // send request - we use SockSend because writeln() is calling flush()
-        // prepare headers
-        RequestSendHeader(url, method);
-        if KeepAlive > 0 then
-          SockSend(['Keep-Alive: ', KeepAlive,
-              #13#10'Connection: Keep-Alive'])
-        else
-          SockSend('Connection: Close');
-        dat := Data; // local var copy for Data to be compressed in-place
-        CompressDataAndWriteHeaders(DataType, dat, InStream);
-        if header <> '' then
-          SockSend(header);
-        if fCompressAcceptEncoding <> '' then
-          SockSend(fCompressAcceptEncoding);
-        SockSendCRLF;
-        // flush headers and Data/DataStream body
-        SockSendFlush(dat);
-        if InStream <> nil then
-          SockSendStream(InStream); // may be a THttpMultiPartStream
-        // retrieve HTTP command line response
-        if SockReceivePending(1000) = cspSocketError then
-        begin
-          DoRetry(HTTP_NOTFOUND, 'cspSocketError waiting for headers');
-          exit;
-        end;
-        SockRecvLn(Command); // will raise ENetSock on any error
-        P := pointer(Command);
-        if IdemPChar(P, 'HTTP/1.') then
-        begin
-          // get http numeric status code (200,404...) from 'HTTP/1.x ######'
-          result := GetCardinal(P + 9);
-          if result = 0 then
-          begin
-            result := HTTP_HTTPVERSIONNONSUPPORTED;
-            exit;
-          end;
-          while result = HTTP_CONTINUE do
-          begin
-            repeat
-              // 100 CONTINUE is just to be ignored on client side
-              SockRecvLn(Command);
-              P := pointer(Command);
-            until IdemPChar(P, 'HTTP/1.'); // ignore up to next command
-            result := GetCardinal(P + 9);
-          end;
-          if P[7] = '0' then
-            // HTTP/1.0 -> force connection close
-            KeepAlive := 0;
-        end
-        else
-        begin
-          // error on reading answer -> 505=wrong format
-          if Command = '' then
-            DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, 'Broken Link')
-          else
-            DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, Command);
-          exit;
-        end;
-        // retrieve all HTTP headers
-        GetHeader({unfiltered=}false);
-        // retrieve Body content (if any)
-        if (result >= HTTP_SUCCESS) and
-           (result <> HTTP_NOCONTENT) and
-           (result <> HTTP_NOTMODIFIED) and
-           (IdemPCharArray(pointer(method), ['HEAD', 'OPTIONS']) < 0) then
-           // HEAD or status 100..109,204,304 -> no body (RFC 2616 section 4.3)
-        begin
-          if (ContentLength > 0) and
-             (OutStream <> nil) and
-             OutStream.InheritsFrom(TStreamRedirect) then
-            TStreamRedirect(OutStream).ExpectedSize := fRangeStart + ContentLength;
-          GetBody(OutStream);
-        end;
-        // successfully sent -> reset some fields for the next request
-        RequestClear;
-      except
-        on Exception do
-          DoRetry(HTTP_NOTFOUND, 'Exception');
-      end;
-    finally
-      if KeepAlive = 0 then
-        Close;
-    end;
+  ctxt.url := url;
+  ctxt.method := method;
+  ctxt.KeepAlive := KeepAlive;
+  ctxt.header := header;
+  ctxt.Data := Data;
+  ctxt.DataType := DataType;
+  ctxt.InStream := InStream;
+  ctxt.OutStream := OutStream;
+  ctxt.status := 0;
+  ctxt.retry := retry;
+  if not Assigned(fOnBeforeRequest) or
+     fOnBeforeRequest(self, ctxt) then
+  begin
+    RequestInternal(ctxt);
+    if Assigned(fOnAfterRequest) then
+      fOnAfterRequest(self, ctxt);
+  end;
+  result := ctxt.status;
 end;
 
 function THttpClientSocket.Get(const url: RawUtf8; KeepAlive: cardinal;
