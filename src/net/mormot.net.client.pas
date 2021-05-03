@@ -41,6 +41,10 @@ uses
   {$ifdef USELIBCURL}  // as set in mormot.defines.inc
   mormot.lib.curl,
   {$endif USELIBCURL}
+  {$ifdef DOMAINRESTAUTH}
+  mormot.lib.sspi, // do-nothing units on non compliant system
+  mormot.lib.gssapi,
+  {$endif DOMAINRESTAUTH}
   mormot.core.unicode, // for efficient UTF-8 text process within HTTP
   mormot.core.buffers,
   mormot.core.text,
@@ -216,10 +220,11 @@ type
   // - Authenticate contains the "WWW-Authenticate" response header value
   // - could e.g. set Sender.AuthBearer/BasicAuthUserPassword then retry
   // the request with Sender.RequestInternal(Context)
-  // - more complex schemes (like SSPI) could be implemented within the callback
+  // - more complex schemes (like SSPI) could be implemented within the
+  // callback - see e.g. THttpClientSocket.AuthorizeSspi class method
   TOnHttpClientSocketAuthorize = procedure(Sender: THttpClientSocket;
     var Context: TTHttpClientSocketRequestParams;
-    const Authenticate: RawUtf8): boolean of object;
+    const Authenticate: RawUtf8) of object;
 
   /// callback used by THttpClientSocket.Request before/after every request
   // - return true to continue execution, false to abort normal process
@@ -248,6 +253,9 @@ type
     fOnAuthorize, fOnProxyAuthorize: TOnHttpClientSocketAuthorize;
     fOnBeforeRequest: TOnHttpClientSocketRequest;
     fOnAfterRequest: TOnHttpClientSocketRequest;
+    {$ifdef DOMAINRESTAUTH}
+    fAuthorizeSspiSpn: RawUtf8;
+    {$endif DOMAINRESTAUTH}
     procedure RequestSendHeader(const url, method: RawUtf8); virtual;
     procedure RequestClear; virtual;
   public
@@ -308,6 +316,25 @@ type
     /// after an Open(server,port), return 200,202,204 if OK, http status error otherwise
     function Delete(const url: RawUtf8; KeepAlive: cardinal = 0;
       const header: RawUtf8 = ''): integer;
+    {$ifdef DOMAINRESTAUTH}
+    /// web authentication of the current logged user using Windows Security
+    // Support Provider Interface (SSPI) or GSSAPI library on Linux
+    // - match the OnAuthorize callback signature
+    // - see also ClientForceSPN() from mormot.lib.sspi/gssapi unit
+    class procedure AuthorizeSspi(Sender: THttpClientSocket;
+      var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8);
+    /// web authentication of the current logged user using Windows Security
+    // Support Provider Interface (SSPI) or GSSAPI library on Linux
+    // - match the OnProxyAuthorize callback signature
+    // - see also ClientForceSPN() from mormot.lib.sspi/gssapi unit
+    class procedure ProxyAuthorizeSspi(Sender: THttpClientSocket;
+      var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8);
+    /// the Kerberos Service Principal Name, as registered in domain
+    // - e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
+    // - used by class procedure AuthorizeSspi/ProxyAuthorizeSspi callbacks
+    property AuthorizeSspiSpn: RawUtf8
+      read fAuthorizeSspiSpn write fAuthorizeSspiSpn;
+    {$endif DOMAINRESTAUTH}
 
     /// by default, the client is identified as IE 5.5, which is very
     // friendly welcome by most servers :(
@@ -338,11 +365,13 @@ type
     property AuthBearer: RawUtf8
       read fAuthBearer write fAuthBearer;
     /// optional authorization callback
-    // - is triggered by Request() on HTTP_UNAUTHORIZED (401) result
+    // - is triggered by Request() on HTTP_UNAUTHORIZED (401) status
+    // - see e.g. THttpClientSocket.AuthorizeSspi class method for SSPI auth
     property OnAuthorize: TOnHttpClientSocketAuthorize
       read fOnAuthorize write fOnAuthorize;
     /// optional proxy authorization callback
-    // - is triggered by Request() on HTTP_PROXYAUTHREQUIRED (407) result
+    // - is triggered by Request() on HTTP_PROXYAUTHREQUIRED (407) status
+    // - see e.g. THttpClientSocket.ProxyAuthorizeSspi class method for SSPI auth
     property OnProxyAuthorize: TOnHttpClientSocketAuthorize
       read fOnProxyAuthorize write fOnProxyAuthorize;
     /// optional callback called before each Request()
@@ -1687,6 +1716,56 @@ begin
   result := Request(url, 'DELETE', KeepAlive, header);
 end;
 
+{$ifdef DOMAINRESTAUTH}
+
+// see https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication
+
+procedure DoSspi(Sender: THttpClientSocket;
+  var Context: TTHttpClientSocketRequestParams;
+  const Authenticate, InHeaderUp, OutHeader: RawUtf8);
+var
+  sc: TSecContext;
+  bak: RawUtf8;
+  datain, dataout: RawByteString;
+begin
+  if (Sender = nil) or
+     not IdemPChar(pointer(Authenticate), pointer(SECPKGNAMEHTTP_UPPER)) or
+     not InitializeDomainAuth then // try to setup mormot.lib.sspi/gssapi
+    exit;
+  InvalidateSecContext(sc, 0);
+  bak := Context.header;
+  repeat
+    FindNameValue(Sender.Headers, pointer(InHeaderUp), RawUtf8(datain));
+    datain := Base64ToBin(TrimU(datain));
+    ClientSspiAuth(sc, datain, Sender.AuthorizeSspiSpn, dataout);
+    if dataout = '' then
+      break;
+    Context.header := OutHeader + BinToBase64(dataout);
+    if bak <> '' then
+      Context.header := Context.header + #13#10 + bak;
+    Sender.RequestInternal(Context);
+  until Context.status <> HTTP_UNAUTHORIZED;
+  Context.header := bak;
+  FreeSecContext(sc);
+end;
+
+class procedure THttpClientSocket.AuthorizeSspi(Sender: THttpClientSocket;
+  var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8);
+begin
+  DoSspi(Sender, Context, Authenticate,
+    'WWW-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
+    'Authorization: ' + SECPKGNAMEHTTP + ' ');
+end;
+
+class procedure THttpClientSocket.ProxyAuthorizeSspi(Sender: THttpClientSocket;
+  var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8);
+begin
+  DoSspi(Sender, Context, Authenticate,
+    'PROXY-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
+    'Proxy-Authorization: ' + SECPKGNAMEHTTP + ' ');
+end;
+
+{$endif DOMAINRESTAUTH}
 
 function OpenHttp(const aServer, aPort: RawUtf8; aTLS: boolean;
   aLayer: TNetLayer): THttpClientSocket;

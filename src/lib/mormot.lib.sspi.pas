@@ -372,20 +372,15 @@ procedure ServerSspiAuthUser(var aSecContext: TSecContext;
 // ServerSspiAuth() or ClientSspiAuth()
 function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 
-/// force using aSecKerberosSPN for server identification
+/// force using a Kerberos SPN for server identification
 // - aSecKerberosSPN is the Service Principal Name, as registered in domain,
 // e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
 procedure ClientForceSPN(const aSecKerberosSPN: RawUtf8);
 
-/// force/unforce NTLM authentication instead of Negotiate for browser authenticaton
-// - use case: SPNs not configured properly in domain
-// - see for details https://synopse.info/forum/viewtopic.php?id=931&p=3
-procedure ServerForceNTLM(ForceNTLM: boolean);
-
 /// high-level cross-platform initialization function
 // - as called e.g. by mormot.rest.client/server.pas
 // - in this unit, will just call ServerForceNTLM(false)
-procedure InitializeDomainAuth;
+function InitializeDomainAuth: boolean;
 
 
 const
@@ -398,6 +393,13 @@ const
   SECPKGNAMENEGOTIATE = 'Negotiate';
 
 var
+  /// HTTP Challenge name for SSPI authentication
+  // - call ServerForceNTLM() to specialize this value to 'NTLM' or 'Negotiate'
+  SECPKGNAMEHTTP: RawUtf8;
+
+  /// HTTP Challenge name, converted into uppercase for IdemPChar() pattern
+  SECPKGNAMEHTTP_UPPER: RawUtf8;
+
   /// HTTP header to be set for SSPI authentication
   // - call ServerForceNTLM() to specialize this value to either
   // 'WWW-Authenticate: NTLM' or 'WWW-Authenticate: Negotiate';
@@ -406,7 +408,13 @@ var
   /// HTTP header pattern received for SSPI authentication
   // - call ServerForceNTLM() to specialize this value to either
   // 'AUTHORIZATION: NTLM ' or 'AUTHORIZATION: NEGOTIATE '
-  SECPKGNAMEHTTPAUTHORIZATION: PAnsiChar;
+  SECPKGNAMEHTTPAUTHORIZATION: RawUtf8;
+
+  /// by default, this unit will use Negotiate/Kerberos for client authentication
+  // - can be set to TRUE to use the deprecated and unsafe NTLM protocol instead
+  // - use case: SPNs not configured properly in domain
+  // - see for details https://synopse.info/forum/viewtopic.php?id=931&p=3
+  SspiForceNtlmClient: boolean = false;
 
 
 
@@ -827,23 +835,32 @@ begin
   Utf8ToSynUnicode(aSecKerberosSPN, ForceSecKerberosSPN);
 end;
 
-procedure ServerForceNTLM(ForceNTLM: boolean);
+var
+  DomainAuthMode: (damUndefined, damNtlm, damNegotiate);
+
+procedure SetDomainAuthMode;
 begin
-  if ForceNTLM then
+  if SspiForceNtlmClient then
   begin
-    SECPKGNAMEHTTPWWWAUTHENTICATE := 'WWW-Authenticate: NTLM';
-    SECPKGNAMEHTTPAUTHORIZATION := 'AUTHORIZATION: NTLM ';
+    SECPKGNAMEHTTP := 'NTLM';
+    DomainAuthMode := damNtlm;
   end
   else
   begin
-    SECPKGNAMEHTTPWWWAUTHENTICATE := 'WWW-Authenticate: Negotiate';
-    SECPKGNAMEHTTPAUTHORIZATION := 'AUTHORIZATION: NEGOTIATE ';
+    SECPKGNAMEHTTP := 'Negotiate';
+    DomainAuthMode := damNegotiate;
   end;
+  SECPKGNAMEHTTP_UPPER := UpperCase(SECPKGNAMEHTTP);
+  SECPKGNAMEHTTPWWWAUTHENTICATE := 'WWW-Authenticate: ' + SECPKGNAMEHTTP;
+  SECPKGNAMEHTTPAUTHORIZATION := 'AUTHORIZATION: ' + SECPKGNAMEHTTP_UPPER + ' ';
 end;
 
-procedure InitializeDomainAuth;
+function InitializeDomainAuth: boolean;
 begin
-  ServerForceNTLM(false);
+  if (DomainAuthMode = damUndefined) or
+     (SspiForceNtlmClient <> (DomainAuthMode = damNtlm)) then
+    SetDomainAuthMode;
+  result := true;
 end;
 
 {$endif OSPOSIX}

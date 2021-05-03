@@ -357,7 +357,7 @@ function ClientSspiAuth(var aSecContext: TSecContext;
   out aOutData: RawByteString): boolean;
 
 /// Client-side authentication procedure with clear text password.
-//  This function must be used when application need to use different
+// - This function must be used when application need to use different
 //  user credentials (not credentials of logged in user)
 // - aSecContext holds information between function calls
 // - aInData contains data received from server
@@ -391,9 +391,9 @@ procedure ServerSspiAuthUser(var aSecContext: TSecContext; out aUserName: RawUtf
 // or ClientSspiAuth
 function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 
-/// Force using aSecKerberosSPN for server identification
-// - aSecKerberosSPN is the Service Principal Name, registered in domain, e.g.
-// 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
+/// force using a Kerberos SPN for server identification
+// - aSecKerberosSPN is the Service Principal Name, as registered in domain,
+// e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
 procedure ClientForceSPN(const aSecKerberosSPN: RawUtf8);
 
 /// Force loading server credentials from specified keytab file
@@ -403,11 +403,19 @@ procedure ClientForceSPN(const aSecKerberosSPN: RawUtf8);
 procedure ServerForceKeytab(const aKeytab: RawUtf8);
 
 const
+  /// HTTP Challenge name
+  // - GSS API only supports Negotiate/Kerberos - NTLM is unsafe and deprecated
+  SECPKGNAMEHTTP: RawUtf8 = 'Negotiate';
+
+  /// HTTP Challenge name, converted into uppercase for IdemPChar() pattern
+  SECPKGNAMEHTTP_UPPER: RawUtf8 = 'NEGOTIATE';
+
   /// HTTP header to be set for authentication
-  SECPKGNAMEHTTPWWWAUTHENTICATE = 'WWW-Authenticate: Negotiate';
+  // - GSS API only supports Negotiate/Kerberos - NTLM is unsafe and deprecated
+  SECPKGNAMEHTTPWWWAUTHENTICATE: RawUtf8 = 'WWW-Authenticate: Negotiate';
 
   /// HTTP header pattern received for authentication
-  SECPKGNAMEHTTPAUTHORIZATION = 'AUTHORIZATION: NEGOTIATE ';
+  SECPKGNAMEHTTPAUTHORIZATION: RawUtf8 = 'AUTHORIZATION: NEGOTIATE ';
 
   /// character used as marker in user name to indicates the associated domain
   SSPI_USER_CHAR = '@';
@@ -435,8 +443,7 @@ procedure ServerDomainMapUnRegisterAll;
 /// high-level cross-platform initialization function
 // - as called e.g. by mormot.rest.client/server.pas
 // - in this unit, will just call LoadGssApi('')
-procedure InitializeDomainAuth;
-  {$ifdef HASINLINE} inline; {$endif}
+function InitializeDomainAuth: boolean;
 
 
 implementation
@@ -497,15 +504,24 @@ const
     'gss_release_oid_set', 'gss_display_status',
     'krb5_gss_register_acceptor_identity');
 
+var
+  GssApiTried: TFileName;
+
 procedure LoadGssApi(const LibraryName: TFileName);
 var
   i: PtrInt;
   P: PPointerArray;
-  api: TGssApi;
+  api: TGssApi; // local instance for thread-safe load attempt
+  tried: RawUtf8;
 begin
   if GssApi <> nil then
     // already loaded
     exit;
+  tried := LibraryName + GssLib_MIT + GssLib_Heimdal;
+  if GssApiTried = tried then
+    // try LoadLibrary() only if any of the .so names changed
+    exit;
+  GssApiTried := tried;
   api := TGssApi.Create;
   if api.TryLoadLibrary([LibraryName, GssLib_MIT, GssLib_Heimdal], nil) then
   begin
@@ -948,10 +964,11 @@ begin
     GssApi.krb5_gss_register_acceptor_identity(pointer(aKeytab));
 end;
 
-procedure InitializeDomainAuth;
+function InitializeDomainAuth: boolean;
 begin
   if GssApi = nil then
     LoadGssApi('');
+  result := GssApi <> nil;
 end;
 
 initialization
