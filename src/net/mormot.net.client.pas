@@ -212,12 +212,12 @@ type
   THttpClientSocket = class;
 
   /// callback used by THttpClientSocket.Request on HTTP_UNAUTHORIZED (401)
+  // - as set to OnAuthorize/OnProxyAuthorize
   // - Authenticate contains the "WWW-Authenticate" response header value
-  // - should return false if this authentication scheme is not supported
-  // - should return true and set Sender.AuthBearer/BasicAuthUserPassword
-  // to retry the request with, or use Sender.RequestInternal(Context)
+  // - could e.g. set Sender.AuthBearer/BasicAuthUserPassword then retry
+  // the request with Sender.RequestInternal(Context)
   // - more complex schemes (like SSPI) could be implemented within the callback
-  TOnHttpClientSocketAuthorize = function(Sender: THttpClientSocket;
+  TOnHttpClientSocketAuthorize = procedure(Sender: THttpClientSocket;
     var Context: TTHttpClientSocketRequestParams;
     const Authenticate: RawUtf8): boolean of object;
 
@@ -241,10 +241,11 @@ type
   protected
     fUserAgent: RawUtf8;
     fReferer: RawUtf8;
+    fAccept: RawUtf8;
     fProcessName: RawUtf8;
     fRangeStart, fRangeEnd: Int64;
     fBasicAuthUserPassword, fAuthBearer: RawUtf8;
-    fOnAuthorize: TOnHttpClientSocketAuthorize;
+    fOnAuthorize, fOnProxyAuthorize: TOnHttpClientSocketAuthorize;
     fOnBeforeRequest: TOnHttpClientSocketRequest;
     fOnAfterRequest: TOnHttpClientSocketRequest;
     procedure RequestSendHeader(const url, method: RawUtf8); virtual;
@@ -313,6 +314,9 @@ type
     // - you can specify a custom value here
     property UserAgent: RawUtf8
       read fUserAgent write fUserAgent;
+    /// the optional 'Accept: ' header value
+    property Accept: RawUtf8
+      read fAccept write fAccept;
     /// the optional 'Referer: ' header value
     property Referer: RawUtf8
       read fReferer write fReferer;
@@ -337,6 +341,10 @@ type
     // - is triggered by Request() on HTTP_UNAUTHORIZED (401) result
     property OnAuthorize: TOnHttpClientSocketAuthorize
       read fOnAuthorize write fOnAuthorize;
+    /// optional proxy authorization callback
+    // - is triggered by Request() on HTTP_PROXYAUTHREQUIRED (407) result
+    property OnProxyAuthorize: TOnHttpClientSocketAuthorize
+      read fOnProxyAuthorize write fOnProxyAuthorize;
     /// optional callback called before each Request()
     property OnBeforeRequest: TOnHttpClientSocketRequest
       read fOnBeforeRequest write fOnBeforeRequest;
@@ -1274,6 +1282,7 @@ begin
     aTimeOut := HTTP_DEFAULT_RECEIVETIMEOUT;
   inherited Create(aTimeOut);
   fUserAgent := DefaultUserAgent(self);
+  fAccept := '*/*';
 end;
 
 procedure THttpClientSocket.RequestInternal(
@@ -1390,13 +1399,13 @@ begin
             TStreamRedirect(ctxt.OutStream).ExpectedSize := fRangeStart + ContentLength;
           GetBody(ctxt.OutStream);
         end;
+        // handle optional (proxy) authentication callbacks
         if (ctxt.status = HTTP_UNAUTHORIZED) and
-           Assigned(fOnAuthorize) and
-           fOnAuthorize(self, ctxt, HeaderGetValue('WWW-AUTHENTICATE')) then
-        begin
-          RequestInternal(ctxt);
-          exit;
-        end;
+            Assigned(fOnAuthorize) then
+          fOnAuthorize(self, ctxt, HeaderGetValue('WWW-AUTHENTICATE'))
+        else if (ctxt.status = HTTP_PROXYAUTHREQUIRED) and
+            Assigned(fOnProxyAuthorize) then
+          fOnProxyAuthorize(self, ctxt, HeaderGetValue('PROXY-AUTHENTICATE'));
         // successfully sent -> reset some fields for the next request
         RequestClear;
       except
@@ -1436,7 +1445,9 @@ begin
     SockSend(['Authorization: Basic ', BinToBase64Short(fBasicAuthUserPassword)]);
   if fReferer <> '' then
     SockSend(['Referer: ', fReferer]);
-  SockSend(['Accept: */*'#13#10'User-Agent: ', UserAgent]);
+  if fAccept <> '' then
+    SockSend(['Accept: ', fAccept]);
+  SockSend(['User-Agent: ', UserAgent]);
 end;
 
 procedure THttpClientSocket.RequestClear;
