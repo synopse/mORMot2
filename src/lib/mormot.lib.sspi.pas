@@ -678,7 +678,7 @@ begin
   Status := InitializeSecurityContextW(@aSecContext.CredHandle, LInCtxPtr,
     pszTargetName, CtxReqAttr, 0, SECURITY_NATIVE_DREP, InDescPtr, 0,
     @aSecContext.CtxHandle, @OutDesc, CtxAttr, Expiry);
-  Result := (Status = SEC_I_CONTINUE_NEEDED) or
+  result := (Status = SEC_I_CONTINUE_NEEDED) or
             (Status = SEC_I_COMPLETE_AND_CONTINUE);
   if (Status = SEC_I_COMPLETE_NEEDED) or
      (Status = SEC_I_COMPLETE_AND_CONTINUE) then
@@ -697,14 +697,11 @@ var
 begin
   if aSecKerberosSPN <> '' then
     TargetName := pointer(Utf8ToSynUnicode(aSecKerberosSPN))
+  else if ForceSecKerberosSPN <> '' then
+    TargetName := pointer(ForceSecKerberosSPN)
   else
-  begin
-    if ForceSecKerberosSPN <> '' then
-      TargetName := pointer(ForceSecKerberosSPN)
-    else
-      TargetName := nil;
-  end;
-  Result := ClientSspiAuthWorker(
+    TargetName := nil;
+  result :=  ClientSspiAuthWorker(
     aSecContext, aInData, TargetName, nil, aOutData);
 end;
 
@@ -740,7 +737,7 @@ begin
     TargetName := pointer(ForceSecKerberosSPN)
   else
     TargetName := nil;
-  Result := ClientSspiAuthWorker(
+  result :=  ClientSspiAuthWorker(
     aSecContext, aInData, TargetName, @AuthIdentity, aOutData);
 end;
 
@@ -795,7 +792,7 @@ begin
   Status := AcceptSecurityContext(@aSecContext.CredHandle, LInCtxPtr, @InDesc,
       ASC_REQ_ALLOCATE_MEMORY or ASC_REQ_CONFIDENTIALITY,
       SECURITY_NATIVE_DREP, @aSecContext.CtxHandle, @OutDesc, CtxAttr, Expiry);
-  Result := (Status = SEC_I_CONTINUE_NEEDED) or
+  result := (Status = SEC_I_CONTINUE_NEEDED) or
             (Status = SEC_I_COMPLETE_AND_CONTINUE);
   if (Status = SEC_I_COMPLETE_NEEDED) or
      (Status = SEC_I_COMPLETE_AND_CONTINUE) then
@@ -825,7 +822,7 @@ begin
   if QueryContextAttributesW(@aSecContext.CtxHandle,
        SECPKG_ATTR_NEGOTIATION_INFO, @NegotiationInfo) <> 0 then
     raise ESynSspi.CreateLastOSError(aSecContext);
-  Result := RawUnicodeToUtf8(NegotiationInfo.PackageInfo^.Name,
+  result := RawUnicodeToUtf8(NegotiationInfo.PackageInfo^.Name,
               StrLenW(NegotiationInfo.PackageInfo^.Name));
   FreeContextBuffer(NegotiationInfo.PackageInfo);
 end;

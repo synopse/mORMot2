@@ -1733,20 +1733,25 @@ begin
      not InitializeDomainAuth then // try to setup mormot.lib.sspi/gssapi
     exit;
   InvalidateSecContext(sc, 0);
-  bak := Context.header;
-  repeat
-    FindNameValue(Sender.Headers, pointer(InHeaderUp), RawUtf8(datain));
-    datain := Base64ToBin(TrimU(datain));
-    ClientSspiAuth(sc, datain, Sender.AuthorizeSspiSpn, dataout);
-    if dataout = '' then
-      break;
-    Context.header := OutHeader + BinToBase64(dataout);
-    if bak <> '' then
-      Context.header := Context.header + #13#10 + bak;
-    Sender.RequestInternal(Context);
-  until Context.status <> HTTP_UNAUTHORIZED;
-  Context.header := bak;
-  FreeSecContext(sc);
+  try
+    bak := Context.header;
+    repeat
+      FindNameValue(Sender.Headers, pointer(InHeaderUp), RawUtf8(datain));
+      datain := Base64ToBin(TrimU(datain));
+      ClientSspiAuth(sc, datain, Sender.AuthorizeSspiSpn, dataout);
+      if dataout = '' then
+        break;
+      Context.header := OutHeader + BinToBase64(dataout);
+      if bak <> '' then
+        Context.header := Context.header + #13#10 + bak;
+      Sender.RequestInternal(Context);
+    until Context.status <> HTTP_UNAUTHORIZED;
+  finally
+    FreeSecContext(sc);
+    if Assigned(Sender.OnLog) then
+      Sender.OnLog(sllDebug, '%%', [OutHeader, Context.status], Sender);
+    Context.header := bak;
+  end;
 end;
 
 class procedure THttpClientSocket.AuthorizeSspi(Sender: THttpClientSocket;
