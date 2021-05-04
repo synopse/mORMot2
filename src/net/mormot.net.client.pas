@@ -161,9 +161,6 @@ type
     /// how much time this connection should be kept alive
     // - as redirected to the internal Request() parameter
     KeepAlive: cardinal;
-    /// how many 30x redirections are allowed
-    // - default is 0 - i.e. no redirection
-    RedirectMax: integer;
     /// callback event called during download process
     // - typical usage is to assign e.g. TStreamRedirect.ProgressToConsole
     // - note that by default, THttpClientSocket.OnLog will always be called
@@ -209,7 +206,7 @@ type
     Data: RawByteString;
     DataType: RawUtf8;
     InStream, OutStream: TStream;
-    status: integer;
+    status, redirected: integer;
     retry: boolean;
   end;
 
@@ -253,6 +250,7 @@ type
     fOnAuthorize, fOnProxyAuthorize: TOnHttpClientSocketAuthorize;
     fOnBeforeRequest: TOnHttpClientSocketRequest;
     fOnAfterRequest: TOnHttpClientSocketRequest;
+    fRedirectMax: integer;
     {$ifdef DOMAINRESTAUTH}
     fAuthorizeSspiSpn: RawUtf8;
     {$endif DOMAINRESTAUTH}
@@ -273,6 +271,7 @@ type
     // - use either Data or InStream for sending its body request
     // - response body will be either in Content or in OutStream
     // - wrapper around RequestInternal() with OnBeforeRequest/OnAfterRequest
+    // and RedirectMax handling
     function Request(const url, method: RawUtf8; KeepAlive: cardinal;
       const header: RawUtf8; const Data: RawByteString = '';
       const DataType: RawUtf8 = ''; retry: boolean = false;
@@ -358,6 +357,10 @@ type
     // - is reset once the Request has been sent
     property RangeEnd: Int64
       read fRangeEnd write fRangeEnd;
+    /// how many 30x redirections are allowed
+    // - default is 0 - i.e. no redirection
+    property RedirectMax: integer
+      read fRedirectMax write fRedirectMax;
     /// optional Authorization: Basic header, encoded as 'User:Password' text
     property BasicAuthUserPassword: RawUtf8
       read fBasicAuthUserPassword write fBasicAuthUserPassword;
@@ -1500,11 +1503,23 @@ begin
   ctxt.InStream := InStream;
   ctxt.OutStream := OutStream;
   ctxt.status := 0;
+  ctxt.redirected := 0;
   ctxt.retry := retry;
   if not Assigned(fOnBeforeRequest) or
      fOnBeforeRequest(self, ctxt) then
   begin
-    RequestInternal(ctxt);
+    repeat
+      RequestInternal(ctxt);
+      if (ctxt.redirected >= fRedirectMax) or
+         (ctxt.status < 300) or
+         (ctxt.status = HTTP_NOTMODIFIED) or // 304 is no redirect
+         (ctxt.status > 399) then
+        break;
+      ctxt.url := HeaderGetValue('LOCATION'); // internal redirection only
+      if assigned(OnLog) then
+        OnLog(sllTrace, 'Request % % redirected to %', [method, url, ctxt.url], self);
+      inc(ctxt.redirected);
+    until false;
     if Assigned(fOnAfterRequest) then
       fOnAfterRequest(self, ctxt);
   end;
@@ -1539,7 +1554,6 @@ var
   procedure DoRequestAndFreePartStream;
   var
     modif: TDateTime;
-    redirected: integer;
     requrl, lastmod: RawUtf8;
   begin
     partstream.Context := urlfile;
@@ -1547,19 +1561,9 @@ var
     partstream.OnLog := OnLog;
     partstream.TimeOut := params.TimeOutSec * 1000;
     partstream.LimitPerSecond := params.LimitBandwith;
-    redirected := 0;
     requrl := url;
-    repeat
-      res := Request(requrl, 'GET', params.KeepAlive, params.Header, '', '',
-        {retry=}false, {instream=}nil, partstream);
-      if (redirected >= params.RedirectMax) or
-         (res < 300) or
-         (res = HTTP_NOTMODIFIED) or // 304 is no redirect
-         (res > 399) then
-        break;
-      requrl := HeaderGetValue('LOCATION'); // internal redirection only
-      inc(redirected);
-    until false;
+    res := Request(requrl, 'GET', params.KeepAlive, params.Header, '', '',
+      {retry=}false, {instream=}nil, partstream);
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
       raise EHttpSocket.Create('WGet: %s:%s/%s failed with %s',
         [fServer, fPort, url, StatusCodeToErrorMsg(res)]);
@@ -2491,9 +2495,9 @@ begin
   inherited InternalSendRequest(aMethod, aData);
 end;
 
-constructor TWinHttpUpgradeable.Create(const aServer, aPort: RawUtf8; aHttps:
-  boolean; const aProxyName: RawUtf8; const aProxyByPass: RawUtf8;
-  ConnectionTimeOut: cardinal; SendTimeout: cardinal; ReceiveTimeout: cardinal; aLayer: TNetLayer);
+constructor TWinHttpUpgradeable.Create(const aServer, aPort: RawUtf8;
+  aHttps: boolean; const aProxyName, aProxyByPass: RawUtf8;
+  ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal; aLayer: TNetLayer);
 begin
   inherited Create(aServer, aPort, aHttps, aProxyName, aProxyByPass,
     ConnectionTimeOut, SendTimeout, ReceiveTimeout, aLayer);
@@ -2507,10 +2511,9 @@ begin
   result := fSocket <> nil;
 end;
 
-constructor TWinHttpWebSocketClient.Create(const aServer, aPort: RawUtf8; aHttps:
-  boolean; const url: RawUtf8; const aSubProtocol: RawUtf8; const aProxyName:
-  RawUtf8; const aProxyByPass: RawUtf8; ConnectionTimeOut: cardinal; SendTimeout:
-  cardinal; ReceiveTimeout: cardinal);
+constructor TWinHttpWebSocketClient.Create(const aServer, aPort: RawUtf8;
+  aHttps: boolean; const url, aSubProtocol, aProxyName, aProxyByPass: RawUtf8;
+  ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal);
 var
   _http: TWinHttpUpgradeable;
   inH, outH: RawUtf8;
