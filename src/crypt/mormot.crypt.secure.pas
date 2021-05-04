@@ -893,7 +893,7 @@ type
     // - return the associated session/sequence number, 0 on error
     function Validate(const cookie: RawUtf8;
       PRecordData: pointer = nil; PRecordTypeInfo: PRttiInfo = nil;
-      PExpires: PCardinal = nil): TBinaryCookieGeneratorSessionID;
+      PExpires: PCardinal = nil; PIssued: PCardinal = nil): TBinaryCookieGeneratorSessionID;
     /// allow the very same cookie to be recognized after server restart
     function Save: RawUtf8;
     /// unserialize the cookie generation context as serialized by Save
@@ -2303,7 +2303,7 @@ var
 begin
   DefaultTimeOutMinutes := DefaultSessionTimeOutMinutes;
   CookieName := Name;
-  SessionSequence := Random32;
+  SessionSequence := Random32 and $7ffffff;
   // temporary secret for encryption
   CryptNonce := Random32;
   TAesPrng.Main.FillRandom(@Crypt, sizeof(Crypt));
@@ -2321,7 +2321,7 @@ type
   // map the binary layout of our base-64 serialized cookies
   TCookieContent = packed record
     head: packed record
-      cryptnonce: cardinal; // ctr=hash32(cryptnonce)
+      cryptnonce: cardinal; // ctr=hash32(cryptnonce) to cipher following bytes
       hmac: cardinal;       // = signature
       session: integer;     // = jti claim
       issued: cardinal;     // = iat claim (from UnixTimeUtc)
@@ -2334,21 +2334,20 @@ function TBinaryCookieGenerator.Generate(out Cookie: RawUtf8;
   TimeOutMinutes: cardinal; PRecordData: pointer;
   PRecordTypeInfo: PRttiInfo): TBinaryCookieGeneratorSessionID;
 var
-  cc: TCookieContent; // local
+  cc: TCookieContent; // local working buffer
   tmp: TSynTempBuffer;
 begin
   tmp.Init(0);
   try
     result := InterlockedIncrement(integer(SessionSequence));
-    if result = MaxInt - 1024 then
-      // thread-safe overflow rounding (disconnecting previous sessions)
-      SessionSequence := 0;
     if (PRecordData <> nil) and
        (PRecordTypeInfo <> nil) then
+    begin
       BinarySave(PRecordData, tmp, PRecordTypeInfo, rkRecordTypes);
-    if tmp.len > sizeof(cc.data) then
-      // all cookies storage should be < 4K
-      raise ESynException.Create('TBinaryCookieGenerator: Too Big Too Fat');
+      if tmp.len > sizeof(cc.data) then
+        // all cookies storage should be < 4K
+        raise ESynException.Create('TBinaryCookieGenerator: Too Big Too Fat');
+    end;
     cc.head.cryptnonce := Random32;
     cc.head.session := result;
     cc.head.issued := UnixTimeUtc;
@@ -2371,7 +2370,7 @@ end;
 
 function TBinaryCookieGenerator.Validate(const cookie: RawUtf8;
   PRecordData: pointer; PRecordTypeInfo: PRttiInfo;
-  PExpires: PCardinal): TBinaryCookieGeneratorSessionID;
+  PExpires, PIssued: PCardinal): TBinaryCookieGeneratorSessionID;
 var
   clen, len: integer;
   now: cardinal;
@@ -2392,6 +2391,8 @@ begin
     begin
       if PExpires <> nil then
         PExpires^ := cc.head.expires;
+      if PIssued <> nil then
+        PIssued^ := cc.head.issued;
       now := UnixTimeUtc;
       if (cc.head.issued <= now) and
          (cc.head.expires >= now) and
@@ -2418,8 +2419,8 @@ end;
 
 function TBinaryCookieGenerator.Load(const Saved: RawUtf8): boolean;
 begin
-  result := RecordLoadBase64(
-    pointer(Saved), length(Saved), self, TypeInfo(TBinaryCookieGenerator));
+  result := RecordLoadBase64(pointer(Saved), length(Saved),
+    self, TypeInfo(TBinaryCookieGenerator), {uri=}true);
 end;
 
 

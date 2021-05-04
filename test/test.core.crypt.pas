@@ -69,6 +69,8 @@ type
     procedure Benchmark;
     /// Cryptography Catalog
     procedure Catalog;
+    /// validate TBinaryCookieGenerator object
+    procedure _TBinaryCookieGenerator;
   end;
 
 
@@ -1916,6 +1918,35 @@ begin
       n[10] := ' ';
       CheckUtf8(AesAlgoNameDecode(n, k2) = nil, n);
     end;
+end;
+
+procedure TTestCoreCrypto._TBinaryCookieGenerator;
+var
+  gen: TBinaryCookieGenerator;
+  i: integer;
+  bak: RawUtf8;
+  timer: TPrecisionTimer;
+  cook: array[0..511] of RawUtf8;
+  cookid: array[0..high(cook)] of TBinaryCookieGeneratorSessionID;
+begin
+  gen.Init;
+  timer.Start;
+  for i := 0 to high(cook) do
+    cookid[i] := gen.Generate(cook[i]);
+  NotifyTestSpeed('generate', length(cook), 0, @timer);
+  for i := 0 to high(cook) - 1 do
+    Check(cookid[i] <> cookid[i + 1]);
+  for i := 0 to high(cook) do
+    CheckEqual(gen.Validate(cook[i]), cookid[i]);
+  bak := gen.Save;
+  gen.Init;
+  for i := 0 to high(cook) do
+    CheckEqual(gen.Validate(cook[i]), 0);
+  Check(gen.Load(bak));
+  timer.Start;
+  for i := 0 to high(cook) do
+    CheckEqual(gen.Validate(cook[i]), cookid[i]);
+  NotifyTestSpeed('validate', length(cook), 0, @timer);
 end;
 
 initialization
