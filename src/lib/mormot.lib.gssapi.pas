@@ -244,7 +244,7 @@ type
     fMajorStatus: cardinal;
     fMinorStatus: cardinal;
   public
-    /// initialize an gssapi library exception
+    /// initialize an gssapi library exception with the proper error message
     constructor Create(aMajorStatus, aMinorStatus: cardinal;
       const aPrefix: string);
     /// associated GSS_C_GSS_CODE state value
@@ -588,7 +588,7 @@ begin
     SetString(Str, MsgBuf.value, MsgBuf.length);
     GssApi.gss_release_buffer(MinSt, MsgBuf);
     if Msg <> '' then
-      Msg := Msg + ': ' + Str
+      Msg := Msg + ' - ' + Str
     else
       Msg := Str;
   until (GSS_ERROR(MajSt) <> 0) or

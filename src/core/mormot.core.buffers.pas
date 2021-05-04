@@ -1551,8 +1551,14 @@ type
 procedure AppendBufferToRawUtf8(var Text: RawUtf8; Buffer: pointer; BufferLen: PtrInt);
 
 /// fast add one character to a RawUtf8 string
-// - faster than Text := Text + ch;
+// - faster than
+// ! Text := Text + ch;
 procedure AppendCharToRawUtf8(var Text: RawUtf8; Ch: AnsiChar);
+
+/// fast add one character to a RawUtf8 string, if not already present
+// - faster than
+// ! if (Text<>'') and (Text[length(Text)]<>Ch) then Text := Text + ch;
+procedure AppendCharOnceToRawUtf8(var Text: RawUtf8; Ch: AnsiChar);
 
 /// fast add some characters to a RawUtf8 string
 // - faster than Text := Text+RawUtf8(Buffers[0])+RawUtf8(Buffers[0])+...
@@ -7511,6 +7517,18 @@ begin
   PByteArray(Text)[L] := ord(Ch);
 end;
 
+procedure AppendCharOnceToRawUtf8(var Text: RawUtf8; Ch: AnsiChar);
+var
+  L: PtrInt;
+begin
+  L := length(Text);
+  if (L <> 0) and
+     (Text[L] = Ch) then
+    exit;
+  SetLength(Text, L + 1);
+  PByteArray(Text)[L] := ord(Ch);
+end;
+
 procedure AppendBufferToRawUtf8(var Text: RawUtf8; Buffer: pointer; BufferLen: PtrInt);
 var
   L: PtrInt;
@@ -7563,20 +7581,13 @@ end;
 
 function Append999ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
 var
-  L: integer;
+  L: PtrInt;
   P: PAnsiChar;
-  c: cardinal;
 begin
   P := pointer(SmallUInt32Utf8[Value]);
   L := PStrLen(P - _STRLEN)^;
-  c := PCardinal(P)^;
-  repeat // PCardinal() write = FastMM4 FullDebugMode errors
-    Buffer^ := AnsiChar(c);
-    inc(Buffer);
-    c := c shr 8;
-    dec(L);
-  until L = 0;
-  result := pointer(Buffer);
+  MoveSmall(P, Buffer, L);
+  result := Buffer + L;
 end;
 
 function AppendUInt32ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
@@ -7586,14 +7597,17 @@ var
   tmp: array[0..23] of AnsiChar;
 begin
   if Value <= high(SmallUInt32Utf8) then
-    result := Append999ToBuffer(Buffer, Value)
+  begin
+    P := pointer(SmallUInt32Utf8[Value]);
+    L := PStrLen(P - _STRLEN)^;
+  end
   else
   begin
     P := StrUInt32(@tmp[23], Value);
     L := @tmp[23] - P;
-    MoveSmall(P, Buffer, L);
-    result := Buffer + L;
   end;
+  MoveSmall(P, Buffer, L);
+  result := Buffer + L;
 end;
 
 function Plural(const itemname: shortstring; itemcount: cardinal): shortstring;
@@ -8011,7 +8025,6 @@ begin
     fPosition := fCurrentSize;
   end
   else
-  begin
     repeat
       read := fRedirected.Read(buf, SizeOf(buf));
       if read <= 0 then
@@ -8020,7 +8033,6 @@ begin
       inc(fCurrentSize, read);
       inc(fPosition, read);
     until false;
-  end;
 end;
 
 procedure TStreamRedirect.Ended;

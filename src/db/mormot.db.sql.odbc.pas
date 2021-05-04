@@ -1212,7 +1212,7 @@ begin
     if TODBCConnectionProperties(Connection.Properties).SqlStatementTimeoutSec > 0 then
       ODBC.Check(nil, self,
         ODBC.SetStmtAttrA(fStatement, SQL_ATTR_QUERY_TIMEOUT,
-          SqlPointer(TODBCConnectionProperties(Connection.Properties).SqlStatementTimeoutSec),
+          SqlPointer(PtrUInt(TODBCConnectionProperties(Connection.Properties).SqlStatementTimeoutSec)),
           SQL_IS_INTEGER),
         SQL_HANDLE_STMT, fStatement);
     SqlLogEnd;
