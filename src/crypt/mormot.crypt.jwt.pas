@@ -579,6 +579,7 @@ end;
 function ParseTrailingJwt(const aText: RawUtf8): RawUtf8;
 var
   txtlen, beg, dotcount: PtrInt;
+  tc: PTextByteSet;
 begin
   result := ''; // no JWT found
   txtlen := length(aText);
@@ -587,8 +588,9 @@ begin
     dec(txtlen);
   beg := txtlen + 1;
   dotcount := 0;
+  tc := @TEXT_CHARS;
   while (beg > 1) and
-        (tcURIUnreserved in TEXT_CHARS[aText[beg - 1]]) do
+        (tcURIUnreserved in tc[PByteArray(aText)[beg]]) do
   begin
     dec(beg);
     if aText[beg] = '.' then

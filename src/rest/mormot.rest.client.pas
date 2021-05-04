@@ -78,11 +78,11 @@ type
   // by the user in the login screen
   // - passHashed means that the passwod is already hashed as in
   // TAuthUser.PasswordHashHexa i.e. Sha256('salt'+Value)
-  // - passKerberosSPN indicates that the password is the Kerberos SPN domain
+  // - passKerberosSpn indicates that the password is the Kerberos SPN domain
   TRestClientSetUserPassword = (
     passClear,
     passHashed,
-    passKerberosSPN);
+    passKerberosSpn);
 
   /// algorithms known by TRestClientAuthenticationSignedUri and
   // TRestServerAuthenticationSignedUri to digitaly compute the
@@ -2757,7 +2757,7 @@ begin
   if ((TrimU(aUserName) = '') or
       (PosExChar(SSPI_USER_CHAR, aUserName) > 0)) and
      TRestClientAuthenticationSspi.ClientSetUser(
-       self, aUserName, aPassword, passKerberosSPN) then
+       self, aUserName, aPassword, passKerberosSpn) then
     exit;
   {$endif DOMAINRESTAUTH}
   result := TRestClientAuthenticationDefault.ClientSetUser(self, aUserName,

@@ -4335,7 +4335,7 @@ type
 
   {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
 
-  /// since Delphi interface cannot have parametrized methods, we need
+  /// since Delphi interfaces cannot have parametrized methods, we need
   // to use this abstract class to use generics signature
   TRestOrmGenerics = class(TInterfacedObject)
   protected

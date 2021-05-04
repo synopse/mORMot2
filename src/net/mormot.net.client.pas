@@ -189,14 +189,15 @@ type
     /// can be used to reduce the download speed into supplied bytes per second
     LimitBandwith: integer;
     /// will raise ESynException after TimeOutSec seconds are elapsed
-    // - WGet(sockettimeout) is the TCP connect/receive/send raw timeout
+    // - WGet(sockettimeout) is the TCP connect/receive/send raw timeout for
+    // each packet, whereas this property is about the global time elapsed
     TimeOutSec: integer;
     /// initialize the default parameters
     procedure Clear;
     /// after Clear, instantiate and wrap THttpClientSocket.WGet
     function WGet(const url: RawUtf8; const destfile: TFileName;
       const tunnel: RawUtf8 = ''; tls: PNetTlsContext = nil;
-      sockettimeout: cardinal = 10000): TFileName;
+      sockettimeout: cardinal = 10000; redirectmax: integer = 0): TFileName;
   end;
 
   /// THttpClientSocket.Request low-level execution context
@@ -319,18 +320,19 @@ type
     /// web authentication of the current logged user using Windows Security
     // Support Provider Interface (SSPI) or GSSAPI library on Linux
     // - match the OnAuthorize callback signature
-    // - see also ClientForceSPN() from mormot.lib.sspi/gssapi unit
+    // - see also ClientForceSpn() and AuthorizeSspiSpn property
     class procedure AuthorizeSspi(Sender: THttpClientSocket;
       var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8);
     /// web authentication of the current logged user using Windows Security
     // Support Provider Interface (SSPI) or GSSAPI library on Linux
     // - match the OnProxyAuthorize callback signature
-    // - see also ClientForceSPN() from mormot.lib.sspi/gssapi unit
+    // - see also ClientForceSpn() and AuthorizeSspiSpn property
     class procedure ProxyAuthorizeSspi(Sender: THttpClientSocket;
       var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8);
     /// the Kerberos Service Principal Name, as registered in domain
     // - e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
     // - used by class procedure AuthorizeSspi/ProxyAuthorizeSspi callbacks
+    // - on Linux/GSSAPI either this property or ClientForceSpn() is mandatory
     property AuthorizeSspiSpn: RawUtf8
       read fAuthorizeSspiSpn write fAuthorizeSspiSpn;
     {$endif DOMAINRESTAUTH}
@@ -357,7 +359,7 @@ type
     // - is reset once the Request has been sent
     property RangeEnd: Int64
       read fRangeEnd write fRangeEnd;
-    /// how many 30x redirections are allowed
+    /// how many 3xx status code redirections are allowed
     // - default is 0 - i.e. no redirection
     property RedirectMax: integer
       read fRedirectMax write fRedirectMax;
@@ -418,7 +420,8 @@ function OpenHttpGet(const server, port, url, inHeaders: RawUtf8;
 function WGet(const url: RawUtf8; const destfile: TFileName;
   const tunnel: RawUtf8 = ''; hasher: TStreamRedirectClass = nil;
   const hash: RawUtf8 = ''; tls: PNetTlsContext = nil;
-  sockettimeout: cardinal = 10000; consoledisplay: boolean = false): string;
+  sockettimeout: cardinal = 10000; redirectmax: integer = 0;
+  consoledisplay: boolean = false): string;
 
 
 { ******************** THttpRequest Abstract HTTP client class }
@@ -1269,13 +1272,14 @@ end;
 
 function THttpClientSocketWGet.WGet(const url: RawUtf8;
   const destfile: TFileName; const tunnel: RawUtf8; tls: PNetTlsContext;
-  sockettimeout: cardinal): TFileName;
+  sockettimeout: cardinal; redirectmax: integer): TFileName;
 var
   s: THttpClientSocket;
   u: RawUtf8;
 begin
   s := THttpClientSocket.OpenUri(url, u, tunnel, sockettimeout, tls);
   try
+    s.RedirectMax := redirectmax;
     result := s.WGet(u, destfile, self);
   finally
     s.Free;
@@ -1284,7 +1288,8 @@ end;
 
 function WGet(const url: RawUtf8; const destfile: TFileName;
   const tunnel: RawUtf8; hasher: TStreamRedirectClass; const hash: RawUtf8;
-  tls: PNetTlsContext; sockettimeout: cardinal; consoledisplay: boolean): string;
+  tls: PNetTlsContext; sockettimeout: cardinal; redirectmax: integer;
+  consoledisplay: boolean): string;
 var
   params: THttpClientSocketWGet;
 begin
@@ -1297,7 +1302,8 @@ begin
     params.Hash := hash;
     if consoledisplay then
       params.OnProgress := TStreamRedirect.ProgressToConsole;
-    if params.WGet(url, destfile, tunnel, tls, sockettimeout) <> destfile then
+    if params.WGet(url, destfile,
+         tunnel, tls, sockettimeout, redirectmax) <> destfile then
       result := 'WGet: unexpected destfile'; // paranoid
   except
     on E: Exception do
@@ -1733,8 +1739,7 @@ var
   datain, dataout: RawByteString;
 begin
   if (Sender = nil) or
-     not IdemPChar(pointer(Authenticate), pointer(SECPKGNAMEHTTP_UPPER)) or
-     not InitializeDomainAuth then // try to setup mormot.lib.sspi/gssapi
+     not IdemPChar(pointer(Authenticate), pointer(SECPKGNAMEHTTP_UPPER)) then
     exit;
   InvalidateSecContext(sc, 0);
   try
@@ -1761,17 +1766,19 @@ end;
 class procedure THttpClientSocket.AuthorizeSspi(Sender: THttpClientSocket;
   var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8);
 begin
-  DoSspi(Sender, Context, Authenticate,
-    'WWW-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
-    'Authorization: ' + SECPKGNAMEHTTP + ' ');
+  if InitializeDomainAuth then // try to setup sspi/gssapi -> SECPKGNAMEHTTP
+    DoSspi(Sender, Context, Authenticate,
+      'WWW-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
+      'Authorization: ' + SECPKGNAMEHTTP + ' ');
 end;
 
 class procedure THttpClientSocket.ProxyAuthorizeSspi(Sender: THttpClientSocket;
   var Context: TTHttpClientSocketRequestParams; const Authenticate: RawUtf8);
 begin
-  DoSspi(Sender, Context, Authenticate,
-    'PROXY-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
-    'Proxy-Authorization: ' + SECPKGNAMEHTTP + ' ');
+  if InitializeDomainAuth then // try to setup sspi/gssapi -> SECPKGNAMEHTTP
+    DoSspi(Sender, Context, Authenticate,
+      'PROXY-AUTHENTICATE: ' + SECPKGNAMEHTTP_UPPER + ' ',
+      'Proxy-Authorization: ' + SECPKGNAMEHTTP + ' ');
 end;
 
 {$endif DOMAINRESTAUTH}

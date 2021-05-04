@@ -326,13 +326,13 @@ function SecDecrypt(var aSecContext: TSecContext;
 /// client-side authentication procedure
 // - aSecContext holds information between function calls
 // - aInData contains data received from server
-// - aSecKerberosSPN is the optional SPN domain name, e.g.
+// - aSecKerberosSpn is the optional SPN domain name, e.g.
 // 'mymormotservice/myserver.mydomain.tld'
 // - aOutData contains data that must be sent to server
 // - if function returns True, client must send aOutData to server
 // and call function again width data, returned from servsr
 function ClientSspiAuth(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aSecKerberosSPN: RawUtf8;
+  const aInData: RawByteString; const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString): boolean;
 
 /// client-side authentication procedure with clear text password
@@ -373,9 +373,9 @@ procedure ServerSspiAuthUser(var aSecContext: TSecContext;
 function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 
 /// force using a Kerberos SPN for server identification
-// - aSecKerberosSPN is the Service Principal Name, as registered in domain,
+// - aSecKerberosSpn is the Service Principal Name, as registered in domain,
 // e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
-procedure ClientForceSPN(const aSecKerberosSPN: RawUtf8);
+procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
 
 /// high-level cross-platform initialization function
 // - as called e.g. by mormot.rest.client/server.pas
@@ -620,7 +620,7 @@ end;
 { ****************** High-Level Client and Server Authentication using SSPI }
 
 var
-  ForceSecKerberosSPN: SynUnicode;
+  ForceSecKerberosSpn: SynUnicode;
 
 function ClientSspiAuthWorker(var aSecContext: TSecContext;
   const aInData: RawByteString; pszTargetName: PWideChar;
@@ -690,15 +690,15 @@ begin
 end;
 
 function ClientSspiAuth(var aSecContext: TSecContext;
-  const aInData: RawByteString; const aSecKerberosSPN: RawUtf8;
+  const aInData: RawByteString; const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString): boolean;
 var
   TargetName: PWideChar;
 begin
-  if aSecKerberosSPN <> '' then
-    TargetName := pointer(Utf8ToSynUnicode(aSecKerberosSPN))
-  else if ForceSecKerberosSPN <> '' then
-    TargetName := pointer(ForceSecKerberosSPN)
+  if aSecKerberosSpn <> '' then
+    TargetName := pointer(Utf8ToSynUnicode(aSecKerberosSpn))
+  else if ForceSecKerberosSpn <> '' then
+    TargetName := pointer(ForceSecKerberosSpn)
   else
     TargetName := nil;
   result :=  ClientSspiAuthWorker(
@@ -733,8 +733,8 @@ begin
   AuthIdentity.Password := pointer(Password);
   AuthIdentity.PasswordLength := Length(Password);
   AuthIdentity.Flags := SEC_WINNT_AUTH_IDENTITY_UNICODE;
-  if ForceSecKerberosSPN <> '' then
-    TargetName := pointer(ForceSecKerberosSPN)
+  if ForceSecKerberosSpn <> '' then
+    TargetName := pointer(ForceSecKerberosSpn)
   else
     TargetName := nil;
   result :=  ClientSspiAuthWorker(
@@ -827,9 +827,9 @@ begin
   FreeContextBuffer(NegotiationInfo.PackageInfo);
 end;
 
-procedure ClientForceSPN(const aSecKerberosSPN: RawUtf8);
+procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
 begin
-  Utf8ToSynUnicode(aSecKerberosSPN, ForceSecKerberosSPN);
+  Utf8ToSynUnicode(aSecKerberosSpn, ForceSecKerberosSpn);
 end;
 
 var
