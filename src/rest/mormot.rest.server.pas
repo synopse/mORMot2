@@ -5738,7 +5738,7 @@ begin
   if indataenc = '' then
   begin
     // client is browser and used HTTP headers to send auth data
-    FindNameValue(Ctxt.Call.InHead, SECPKGNAMEHTTPAUTHORIZATION, indataenc);
+    FindNameValue(Ctxt.Call.InHead, pointer(SECPKGNAMEHTTPAUTHORIZATION), indataenc);
     if indataenc = '' then
     begin
       // no auth data sent, reply with supported auth methods

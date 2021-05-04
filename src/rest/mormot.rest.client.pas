@@ -1500,7 +1500,8 @@ end;
 class function TRestClientAuthenticationHttpBasic.ComputeAuthenticateHeader(
   const aUserName, aPasswordClear: RawUtf8): RawUtf8;
 begin
-  result := 'Authorization: Basic ' + BinToBase64(aUserName + ':' + aPasswordClear);
+  result := 'Authorization: Basic ' +
+    BinToBase64(aUserName + ':' + aPasswordClear);
 end;
 
 
@@ -1537,6 +1538,7 @@ begin
          'data', BinToBase64(OutData)]);
     until Sender.fSession.Data = '';
     if result <> '' then
+      // TRestServerAuthenticationSspi.Auth encrypted session.fPrivateSalt
       result := SecDecrypt(SecCtx, Base64ToBin(result));
   finally
     FreeSecContext(SecCtx);
