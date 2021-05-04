@@ -34,6 +34,7 @@ uses
   mormot.core.buffers,
   mormot.crypt.core,
   mormot.crypt.ecc,
+  mormot.crypt.jwt,
   mormot.crypt.secure, // IProtocol definition
   mormot.net.sock,
   mormot.net.http;
@@ -601,6 +602,42 @@ type
     function AnswerToIgnore(incr: integer = 0): integer;
   end;
 
+  /// a WebSocket protocol associated able to generate connection URIs
+  // - on JavaScript, it is not possible to use a HTTP header bearer to
+  // authenticate: so this class uses an URI to authenticate
+  // - inherited classes should override the ProcessIncomingFrame() method
+  TWebSocketProtocolUri = class(TWebSocketProtocol)
+  protected
+    fGenerator: PBinaryCookieGenerator;
+    fGeneratorOwned: boolean;
+    fPublicUri: RawUtf8;
+    fCounter: integer;
+  public
+    /// initialize the protocol for a given Jwt
+    // - if aExpirationMinutes is set, will own a new cookie generator
+    // - aPublicUri is mandatory and will be used by NewUri, e.g. '127.0.0.1:888'
+    // or 'publicdomain.com/websockgateway'
+    constructor Create(const aName, aPublicUri: RawUtf8;
+      aExpirationMinutes: integer); reintroduce; virtual;
+    /// finalize the protocol definition
+    destructor Destroy; override;
+    /// validate the JWT stored in the URI
+    function ProcessHandshakeUri(const aClientUri: RawUtf8): boolean; override;
+    /// called when a new connection arrives
+    function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
+    /// high-level code should call this method to retrieve a valid URI
+    // - each Uri will have an internal counter so will be unique
+    // - this method is thread-safe
+    function NewUri: RawUtf8; virtual;
+  published
+    /// the public Root URI as used by NewUri
+    // - e.g. '127.0.0.1:888' or 'publicdomain.com/wsgateway'
+    property PublicUri: RawUtf8
+      read fPublicUri;
+  end;
+
+  TWebSocketProtocolUriClass = class of TWebSocketProtocolUri;
+
 
 
 { ******************** WebSockets Client and Server Shared Process }
@@ -977,7 +1014,8 @@ begin
       GetCaptionFromEnum(TypeInfo(TProtocolResult), ord(res))]);
 end;
 
-function TWebSocketProtocol.ProcessHandshakeUri(const aClientUri: RawUtf8): boolean;
+function TWebSocketProtocol.ProcessHandshakeUri(
+  const aClientUri: RawUtf8): boolean;
 begin
   result := true; // override and return false to return HTTP_UNAUTHORIZED
 end;
@@ -1270,7 +1308,8 @@ begin
   inherited Create('synopsejson', aUri);
 end;
 
-function TWebSocketProtocolJson.Clone(const aClientUri: RawUtf8): TWebSocketProtocol;
+function TWebSocketProtocolJson.Clone(
+  const aClientUri: RawUtf8): TWebSocketProtocol;
 begin
   result := TWebSocketProtocolJson.Create(fUri);
 end;
@@ -1731,6 +1770,56 @@ begin
 end;
 
 
+
+{ TWebSocketProtocolUri }
+
+constructor TWebSocketProtocolUri.Create(const aName, aPublicUri: RawUtf8;
+  aExpirationMinutes: integer);
+begin
+  if aExpirationMinutes <> 0 then
+  begin
+    New(fGenerator);
+    fGenerator^.Init('uri', aExpirationMinutes);
+    fGeneratorOwned := true;
+  end;
+  if aPublicUri = '' then
+    raise EJwtException.CreateUtf8('%.Create uri=%', [self, aPublicUri]);
+  fPublicUri := aPublicUri;
+  AppendCharOnceToRawUtf8(fPublicUri, '/');
+  inherited Create(aName, '');
+end;
+
+destructor TWebSocketProtocolUri.Destroy;
+begin
+  inherited Destroy;
+  if fGeneratorOwned then
+    Dispose(fGenerator);
+end;
+
+function TWebSocketProtocolUri.Clone(
+  const aClientUri: RawUtf8): TWebSocketProtocol;
+begin
+  result := TWebSocketProtocolUriClass(ClassType).Create(fName, fPublicUri, 0);
+  TWebSocketProtocolUri(result).fGenerator := fGenerator; // reuse main instance
+end;
+
+function TWebSocketProtocolUri.ProcessHandshakeUri(
+  const aClientUri: RawUtf8): boolean;
+var
+  bearer: RawUtf8; // quick extraction of the trailing Base64-URI content
+begin
+  bearer := ParseTrailingJwt(aClientUri, {nodotcheck=}true);
+  result := fGenerator^.Validate(bearer) <> 0;
+end;
+
+function TWebSocketProtocolUri.NewUri: RawUtf8;
+begin
+  fGenerator^.Generate(result);
+  result := fPublicUri + result;
+end;
+
+
+
 { TWebSocketProtocolList }
 
 function TWebSocketProtocolList.CloneByName(const aProtocolName,
@@ -1758,7 +1847,8 @@ begin
   end;
 end;
 
-function TWebSocketProtocolList.CloneByUri(const aClientUri: RawUtf8): TWebSocketProtocol;
+function TWebSocketProtocolList.CloneByUri(
+  const aClientUri: RawUtf8): TWebSocketProtocol;
 var
   i: PtrInt;
 begin

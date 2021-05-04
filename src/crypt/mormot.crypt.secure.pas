@@ -847,28 +847,38 @@ function ToText(res: TProtocolResult): PShortString; overload;
 { ******* TBinaryCookieGenerator Simple Cookie Generator }
 
 type
+  /// a 31-bit increasing sequence used for TBinaryCookieGenerator sessions
+  TBinaryCookieGeneratorSessionID = type integer;
+
   {$A-}
-  /// efficient cookie generation
-  // - you can see it as a JWT-Of-The-Poor content: it is very fast to check
-  // its content, which is very efficiently serialized as binary
+  /// efficient thread-safe cookie generation
+  // - you can see it as a JWT-Of-The-Poor: faster to parse and validate
+  // its content, and with very efficiently binary-based serialization
   // - stores a session ID, cookie name, encryption and HMAC secret keys
   // - can optionally store any associated record as efficient binary
   // - it is NOT cryptographic secure, because cookies are not, but it is
   // strong enough to avoid naive attacks, and uses less space than a JWT
+  {$ifdef USERECORDWITHMETHODS}
+  TBinaryCookieGenerator = record
+  {$else}
   TBinaryCookieGenerator = object
+  {$endif USERECORDWITHMETHODS}
     /// the cookie name, used for storage in the client side HTTP headers
     // - is not part of the Generate/Validate content
     CookieName: RawUtf8;
     /// an increasing counter, to implement unique session ID
-    SessionSequence: integer;
+    SessionSequence: TBinaryCookieGeneratorSessionID;
     /// secret information, used for HMAC digital signature of cookie content
     Secret: THmacCrc32c;
     /// random IV used as CTR on Crypt[] secret key
     CryptNonce: cardinal;
+    /// used when Generate() has TimeOutMinutes=0
+    DefaultTimeOutMinutes: cardinal;
     /// secret information, used for encryption of the cookie content
     Crypt: array[byte] of byte;
     /// initialize ephemeral temporary cookie generation
-    procedure Init(const Name: RawUtf8 = 'mORMot');
+    procedure Init(const Name: RawUtf8 = 'mORMot';
+      DefaultSessionTimeOutMinutes: cardinal = 0);
     /// low-level wrapper to cipher/uncipher a cookie binary content
     procedure Cipher(P: PAnsiChar; bytes: integer);
     /// will initialize a new Base64Uri-encoded session cookie
@@ -876,19 +886,22 @@ type
     // - will return the 32-bit internal session ID and
     // - you can supply a time period, after which the session will expire -
     // default is 1 hour, and could go up to
-    function Generate(out Cookie: RawUtf8; TimeOutMinutes: cardinal = 60;
-      PRecordData: pointer = nil; PRecordTypeInfo: PRttiInfo = nil): integer;
+    function Generate(out Cookie: RawUtf8; TimeOutMinutes: cardinal = 0;
+      PRecordData: pointer = nil; PRecordTypeInfo: PRttiInfo = nil
+      ): TBinaryCookieGeneratorSessionID;
     ///  decode a base64uri cookie and optionally fill an associated record
     // - return the associated session/sequence number, 0 on error
     function Validate(const cookie: RawUtf8;
       PRecordData: pointer = nil; PRecordTypeInfo: PRttiInfo = nil;
-      PExpires: PCardinal = nil): integer;
+      PExpires: PCardinal = nil): TBinaryCookieGeneratorSessionID;
     /// allow the very same cookie to be recognized after server restart
     function Save: RawUtf8;
     /// unserialize the cookie generation context as serialized by Save
     function Load(const Saved: RawUtf8): boolean;
   end;
   {$A+}
+
+  PBinaryCookieGenerator = ^TBinaryCookieGenerator;
 
 
 
@@ -2283,11 +2296,14 @@ end;
 
 { TBinaryCookieGenerator }
 
-procedure TBinaryCookieGenerator.Init(const Name: RawUtf8);
+procedure TBinaryCookieGenerator.Init(const Name: RawUtf8;
+  DefaultSessionTimeOutMinutes: cardinal);
 var
   rnd: THash512;
 begin
+  DefaultTimeOutMinutes := DefaultSessionTimeOutMinutes;
   CookieName := Name;
+  SessionSequence := Random32;
   // temporary secret for encryption
   CryptNonce := Random32;
   TAesPrng.Main.FillRandom(@Crypt, sizeof(Crypt));
@@ -2315,14 +2331,15 @@ type
   end;
 
 function TBinaryCookieGenerator.Generate(out Cookie: RawUtf8;
-  TimeOutMinutes: cardinal; PRecordData: pointer; PRecordTypeInfo: PRttiInfo): integer;
+  TimeOutMinutes: cardinal; PRecordData: pointer;
+  PRecordTypeInfo: PRttiInfo): TBinaryCookieGeneratorSessionID;
 var
-  cc: TCookieContent;
+  cc: TCookieContent; // local
   tmp: TSynTempBuffer;
 begin
   tmp.Init(0);
   try
-    result := InterlockedIncrement(SessionSequence);
+    result := InterlockedIncrement(integer(SessionSequence));
     if result = MaxInt - 1024 then
       // thread-safe overflow rounding (disconnecting previous sessions)
       SessionSequence := 0;
@@ -2336,7 +2353,9 @@ begin
     cc.head.session := result;
     cc.head.issued := UnixTimeUtc;
     if TimeOutMinutes = 0 then
-      // 1 month expiration is a reasonable high value
+      TimeOutMinutes := DefaultTimeOutMinutes;
+    if TimeOutMinutes = 0 then
+      // 1 month expiration is a reasonable high value for "never expires"
       TimeOutMinutes := 31 * 24 * 60;
     cc.head.expires := cc.head.issued + TimeOutMinutes * 60;
     if tmp.len > 0 then
@@ -2351,7 +2370,8 @@ begin
 end;
 
 function TBinaryCookieGenerator.Validate(const cookie: RawUtf8;
-  PRecordData: pointer; PRecordTypeInfo: PRttiInfo; PExpires: PCardinal): integer;
+  PRecordData: pointer; PRecordTypeInfo: PRttiInfo;
+  PExpires: PCardinal): TBinaryCookieGeneratorSessionID;
 var
   clen, len: integer;
   now: cardinal;
