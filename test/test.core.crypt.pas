@@ -1942,7 +1942,7 @@ begin
     CheckEqual(gen.Validate(cook[i]), cookid[i]);
   for i := 0 to high(cook) do
     CheckEqual(gen.Validate(
-      ParseTrailingJwt('/uri/' + cook[i] + '  ', true)), cookid[i]);
+      ParseTrailingJwt('/uri/' + cook[i] + '  ', {nodot=}true)), cookid[i]);
   bak := gen.Save;
   gen.Init;
   for i := 0 to high(cook) do

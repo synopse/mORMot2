@@ -1146,7 +1146,7 @@ begin
             end
           else
           begin
-            Error('mode expects an authenticated session', HTTP_UNAUTHORIZED);
+            Error('mode expects an authenticated session', HTTP_FORBIDDEN);
             exit;
           end;
         end;
@@ -1168,7 +1168,7 @@ begin
   end;
   if Inst.Instance = nil then
   begin
-    Error('instance not found or deprecated', HTTP_UNAUTHORIZED);
+    Error('instance not found or deprecated', HTTP_FORBIDDEN);
     exit;
   end;
   Ctxt.ServiceInstanceID := Inst.InstanceID;

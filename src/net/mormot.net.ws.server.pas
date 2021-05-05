@@ -373,7 +373,7 @@ begin
          not Protocol.ProcessHandshakeUri(uri) then
       begin
         Protocol.Free;
-        result := HTTP_UNAUTHORIZED;
+        result := HTTP_NOTFOUND;
         exit;
       end;
     end
@@ -400,7 +400,7 @@ begin
       if not Protocol.ProcessHandshake(extins, extout, nil) then
       begin
         Protocol.Free;
-        result := HTTP_UNAUTHORIZED;
+        result := HTTP_NOTACCEPTABLE;
         exit;
       end;
     end;
