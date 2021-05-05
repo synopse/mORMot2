@@ -621,15 +621,15 @@ type
     // - aPublicUri is mandatory and will be used by NewUri, e.g. '127.0.0.1:888'
     // or 'publicdomain.com/websockgateway'
     // - each time this protocol is setup, a random seed is used for NewUri
-    // - aGeneratorRecordTypeInfo can optionally associated a record to each URI
+    // - aRecordTypeInfo can optionally associate a record to each URI
     constructor Create(const aName, aPublicUri: RawUtf8;
-      aExpirationMinutes: integer; aGeneratorRecordTypeInfo: PRttiInfo);
+      aExpirationMinutes: integer; aRecordTypeInfo: PRttiInfo);
       reintroduce; virtual;
     /// finalize the protocol definition
     destructor Destroy; override;
-    /// validate the JWT stored in the URI
+    /// validate the URI supplied during connection upgrade on server side
     function ProcessHandshakeUri(const aClientUri: RawUtf8): boolean; override;
-    /// called when a new connection upgrade is started
+    /// called when a new connection upgrade attempt is received on server side
     function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; override;
     /// high-level code should call this method to generate a valid URI
     // - WebSockets connection on this URI will be upgraded by this protocol
@@ -1799,7 +1799,7 @@ end;
 { TWebSocketProtocolUri }
 
 constructor TWebSocketProtocolUri.Create(const aName, aPublicUri: RawUtf8;
-  aExpirationMinutes: integer; aGeneratorRecordTypeInfo: PRttiInfo);
+  aExpirationMinutes: integer; aRecordTypeInfo: PRttiInfo);
 begin
   // validate and compute the NewUri prefix
   if aPublicUri = '' then
@@ -1813,9 +1813,9 @@ begin
     fGenerator^.Init('uri', aExpirationMinutes);
     fGeneratorOwned := true;
   end;
-  if (aGeneratorRecordTypeInfo <> nil) and
-     (aGeneratorRecordTypeInfo^.Kind in rkRecordTypes) then
-    fRecordTypeInfo := aGeneratorRecordTypeInfo;
+  if (aRecordTypeInfo <> nil) and
+     (aRecordTypeInfo^.Kind in rkRecordTypes) then
+    fRecordTypeInfo := aRecordTypeInfo;
   inherited Create(aName, '');
 end;
 

@@ -103,6 +103,7 @@ interface
 {$ifdef FPC}
   // cut-down version of mormot.defines.inc to make this unit standalone
   {$mode Delphi}
+  {$asmmode Intel}
   {$inline on}
   {$R-} // disable Range checking
   {$S-} // disable Stack checking
@@ -2340,7 +2341,7 @@ begin
   if i >= 1 shl 50 then
   begin
     i := i shr 50;
-    tmp := 'Z';
+    tmp := 'P';
   end
   else
   if i >= 1 shl 40 then

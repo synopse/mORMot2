@@ -3981,8 +3981,8 @@ begin
         fPool[i].Init;
       exit;
     end;
-  raise ESynException.CreateUtf8(
-    '%.Create(%) not allowed: should be a power of 2 <= 512', [self, aHashTables]);
+  raise ESynException.CreateUtf8('%.Create(%) not allowed: ' +
+    'should be a power of 2 <= 512', [self, aHashTables]);
 end;
 
 destructor TRawUtf8Interning.Destroy;
@@ -7478,7 +7478,7 @@ begin
   {$ifndef CPU64}
   if NeededSize > 1 shl 30 then
     // in practice, consider that max workable memory block is 1 GB on 32-bit
-    raise EDynArray.CreateFmt('TDynArray.InternalSetLength(%s,%d) size concern',
+    raise EDynArray.CreateUtf8('TDynArray.InternalSetLength(%,%) size concern',
       [fInfo.Name, NewLength]);
   {$endif CPU64}
   // if not shared (refCnt=1), resize; if shared, create copy (not thread safe)
