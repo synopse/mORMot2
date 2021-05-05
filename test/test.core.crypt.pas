@@ -1937,7 +1937,12 @@ begin
   for i := 0 to high(cook) - 1 do
     Check(cookid[i] <> cookid[i + 1]);
   for i := 0 to high(cook) do
+    Check(cookid[i] <> 0);
+  for i := 0 to high(cook) do
     CheckEqual(gen.Validate(cook[i]), cookid[i]);
+  for i := 0 to high(cook) do
+    CheckEqual(gen.Validate(
+      ParseTrailingJwt('/uri/' + cook[i] + '  ', true)), cookid[i]);
   bak := gen.Save;
   gen.Init;
   for i := 0 to high(cook) do

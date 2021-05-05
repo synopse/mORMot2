@@ -342,7 +342,7 @@ function ToText(claims: TJwtClaims): ShortString; overload;
 // text which matches the JWT 'algo.payload.sign' layout
 // - returns '' if no JWT-like pattern was found
 // - it won't validate the exact JWT format, nor any signature, only guess if
-// there is a chance the supplied text contains a JWT
+// there is a chance the supplied text contains a JWT, and extract it
 function ParseTrailingJwt(const aText: RawUtf8; noDotCheck: boolean = false): RawUtf8;
 
 
@@ -579,7 +579,7 @@ end;
 function ParseTrailingJwt(const aText: RawUtf8; noDotCheck: boolean): RawUtf8;
 var
   txtlen, beg, dotcount: PtrInt;
-  tc: PTextByteSet;
+  tc: PTextCharSet;
 begin
   result := ''; // no JWT found
   txtlen := length(aText);
@@ -590,7 +590,7 @@ begin
   dotcount := 0;
   tc := @TEXT_CHARS;
   while (beg > 1) and
-        (tcURIUnreserved in tc[PByteArray(aText)[beg]]) do
+        (tcURIUnreserved in tc[aText[beg - 1]]) do
   begin
     dec(beg);
     if aText[beg] = '.' then
