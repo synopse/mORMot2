@@ -72,7 +72,8 @@ type
     nrFatalError,
     nrUnknownError,
     nrTooManyConnections,
-    nrRefused);
+    nrRefused,
+    nrConnectTimeout);
 
   {$M+}
   /// exception class raised by this unit
@@ -160,6 +161,7 @@ type
   TNetSocketWrap = object
   private
     procedure SetOpt(prot, name: integer; value: pointer; valuelen: integer);
+    function SetIoMode(async: cardinal): TNetResult;
   public
     procedure SetupConnection(layer: TNetLayer; sendtimeout, recvtimeout: integer);
     procedure SetSendTimeout(ms: integer);
@@ -170,6 +172,7 @@ type
     function Accept(out clientsocket: TNetSocket; out addr: TNetAddr): TNetResult;
     function GetPeer(out addr: TNetAddr): TNetResult;
     function MakeAsync: TNetResult;
+    function MakeBlocking: TNetResult;
     function Send(Buf: pointer; var len: integer): TNetResult;
     function Recv(Buf: pointer; var len: integer): TNetResult;
     function SendTo(Buf: pointer; len: integer; out addr: TNetAddr): TNetResult;
@@ -904,7 +907,8 @@ const
     'Fatal Error',
     'Unknown Error',
     'Too Many Connections',
-    'Refused');
+    'Refused',
+    'Connect Timeout');
 
 function NetLastError(AnotherNonFatal: integer = NO_ERROR;
   Error: PInteger = nil): TNetResult;
@@ -1153,6 +1157,7 @@ var
   addr: TNetAddr;
   sock: TSocket;
   fromcache, tobecached: boolean;
+  connectendtix: Int64;
   p: cardinal;
 begin
   netsocket := nil;
@@ -1192,6 +1197,30 @@ begin
     exit;
   end;
   // bind or connect to this Socket
+  // open non-blocking Client connection if a timeout was specified
+  if (connecttimeout > 0) and
+     not dobind then
+  begin
+    // SetReceiveTimeout/SetSendTimeout don't apply to connect() -> async
+    if connecttimeout < 100 then
+      connectendtix := 0
+    else
+      connectendtix := mormot.core.os.GetTickCount64 + connecttimeout;
+    TNetSocket(sock).MakeAsync;
+    connect(sock, @addr, addr.Size); // non-blocking connect() once
+    TNetSocket(sock).MakeBlocking;
+    result := nrConnectTimeout;
+    repeat
+      if TNetSocket(sock).WaitFor(1, [neWrite]) = [neWrite] then
+      begin
+        result := nrOK;
+        break;
+      end;
+      SleepHiRes(1); // wait for actual connection
+    until (connectendtix = 0) or
+          (mormot.core.os.GetTickCount64 > connectendtix);
+  end
+  else
   repeat
     if dobind then
     begin
@@ -1204,21 +1233,9 @@ begin
         result := NetLastError(WSAEADDRNOTAVAIL);
     end
     else
-    begin
-      // open Client connection
-      if connecttimeout > 0 then
-      begin
-        // set timeouts before connect()
-        TNetSocket(sock).SetReceiveTimeout(connecttimeout);
-        if recvtimeout = connecttimeout then
-          recvtimeout := 0; // call SetReceiveTimeout() once
-        TNetSocket(sock).SetSendTimeout(connecttimeout);
-        if sendtimeout = connecttimeout then
-          sendtimeout := 0; // call SetSendTimeout() once
-      end;
+      // open blocking Client connection (use system-defined timeout)
       if connect(sock, @addr, addr.Size) <> NO_ERROR then
         result := NetLastError(WSAEADDRNOTAVAIL);
-    end;
     if (result = nrOK) or
        (retry <= 0) then
       break;
@@ -1330,17 +1347,22 @@ begin
   end;
 end;
 
-function TNetSocketWrap.MakeAsync: TNetResult;
-var
-  nonblocking: cardinal;
+function TNetSocketWrap.SetIoMode(async: cardinal): TNetResult;
 begin
   if @self = nil then
     result := nrNoSocket
   else
-  begin
-    nonblocking := 1;
-    result := NetCheck(ioctlsocket(TSocket(@self), FIONBIO, @nonblocking));
-  end;
+    result := NetCheck(ioctlsocket(TSocket(@self), FIONBIO, @async));
+end;
+
+function TNetSocketWrap.MakeAsync: TNetResult;
+begin
+  result := SetIoMode(1);
+end;
+
+function TNetSocketWrap.MakeBlocking: TNetResult;
+begin
+  result := SetIoMode(0);
 end;
 
 function TNetSocketWrap.Send(Buf: pointer; var len: integer): TNetResult;
