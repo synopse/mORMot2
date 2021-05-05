@@ -2898,7 +2898,7 @@ begin
     {$ifdef USELIBCURL}
     _MainHttpClass := TCurlHttp
     {$else}
-    raise EHttpSocket.Create('No THttpRequest class known!');
+    raise EHttpSocket.Create('MainHttpClass: No THttpRequest class known!', []);
     {$endif USELIBCURL}
     {$endif USEWININET}
   end;
