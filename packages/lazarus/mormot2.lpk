@@ -33,10 +33,11 @@
         <CustomOptions Value="-dNOSYNDBZEOS
 -dFPCMM_REPORTMEMORYLEAKS
 -dFPCMM_DEBUG"/>
-        <OtherDefines Count="3">
+        <OtherDefines Count="4">
           <Define0 Value="NOSYNDBZEOS"/>
           <Define1 Value="FPCMM_REPORTMEMORYLEAKS"/>
           <Define2 Value="FPCMM_DEBUG"/>
+          <Define3 Value="FPCMM_ASSUMEMULTITHREAD"/>
         </OtherDefines>
       </Other>
     </CompilerOptions>
