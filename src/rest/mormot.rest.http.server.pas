@@ -1007,7 +1007,7 @@ begin
     begin
       // force redirection to exact Server.Model.Root case sensitivity
       call.OutStatus := HTTP_TEMPORARYREDIRECT;
-      call.OutHead := 'Location: ' + serv.Model.Root +
+      call.OutHead := 'Location: /' + serv.Model.Root +
         copy(call.Url, length(serv.Model.Root)  + 1, maxInt);
     end
     else
