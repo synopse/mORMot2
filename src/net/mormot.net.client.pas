@@ -1252,7 +1252,7 @@ begin
   name[0] := #0;
   for i := 2 to ord(P^[0]) do
     if P^[i] in ['A'..'Z'] then
-      AppendShortChar(P^[i], name);
+      {%H-}AppendShortChar(P^[i], name);
   if name[0] <> #0 then
     P := @name;
   // note: the framework would identify 'mORMot' pattern in the user-agent
