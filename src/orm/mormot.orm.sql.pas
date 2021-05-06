@@ -938,13 +938,14 @@ function TRestStorageExternal.EngineLockedNextID: TID;
   var
     rows: ISqlDBRows;
   begin
+    fEngineLockedMaxID := 0;
     rows := ExecuteDirect('select max(%) from %',
       [fStoredClassMapping^.RowIDFieldName, fTableName], [], true);
-    if (rows <> nil) and
-       rows.Step then
-      fEngineLockedMaxID := rows.ColumnInt(0)
-    else
-      fEngineLockedMaxID := 0;
+    if rows = nil then
+      exit;
+    if rows.Step then
+      fEngineLockedMaxID := rows.ColumnInt(0);
+    rows.ReleaseRows;
   end;
 
 var
@@ -1403,7 +1404,10 @@ begin
     if rows = nil then
       result := false
     else
+    begin
       result := rows.Step;
+      rows.ReleaseRows;
+    end;
   end;
 end;
 
@@ -1411,18 +1415,16 @@ function TRestStorageExternal.TableRowCount(Table: TOrmClass): Int64;
 var
   rows: ISqlDBRows;
 begin
+  result := 0;
   if (self = nil) or
      (Table <> fStoredClass) then
-    result := 0
-  else
-  begin
-    rows := ExecuteDirect('select count(*) from %', [fTableName], [], true);
-    if (rows = nil) or
-       not rows.Step then
-      result := 0
-    else
-      result := rows.ColumnInt(0);
-  end;
+    exit;
+  rows := ExecuteDirect('select count(*) from %', [fTableName], [], true);
+  if rows = nil then
+    exit;
+  if rows.Step then
+    result := rows.ColumnInt(0);
+  rows.ReleaseRows;
 end;
 
 function TRestStorageExternal.EngineRetrieveBlob(TableModelIndex: integer;
