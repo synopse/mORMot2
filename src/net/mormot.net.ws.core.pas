@@ -618,8 +618,8 @@ type
   public
     /// initialize the protocol for a given Jwt
     // - if aExpirationMinutes is set, will own a new URI generator
-    // - aPublicUri is mandatory and will be used by NewUri, e.g. '127.0.0.1:888'
-    // or 'publicdomain.com/websockgateway'
+    // - aPublicUri is mandatory and will be used by NewUri, typically equals
+    // '127.0.0.1:888' or 'publicdomain.com/websockgateway'
     // - each time this protocol is setup, a random seed is used for NewUri
     // - aRecordTypeInfo can optionally associate a record to each URI
     constructor Create(const aName, aPublicUri: RawUtf8;
@@ -636,7 +636,8 @@ type
     // - URI are obfuscated and signed with an ephemeral TBinaryCookieGenerator,
     // so will have an unique Session ID, and can be associated with a record
     // - this method is thread-safe
-    function NewUri(PRecordData: pointer = nil): RawUtf8; virtual;
+    function NewUri(out SessionID: TBinaryCookieGeneratorSessionID;
+      PRecordData: pointer = nil): RawUtf8; virtual;
     /// access to the low-level ephemeral URI generator
     property Generator: PBinaryCookieGenerator
       read fGenerator;
@@ -1854,9 +1855,11 @@ begin
   result := fSession <> 0;
 end;
 
-function TWebSocketProtocolUri.NewUri(PRecordData: pointer): RawUtf8;
+function TWebSocketProtocolUri.NewUri(
+  out SessionID: TBinaryCookieGeneratorSessionID;
+  PRecordData: pointer): RawUtf8;
 begin
-  fGenerator^.Generate(result, 0, PRecordData, fRecordTypeInfo);
+  SessionID := fGenerator^.Generate(result, 0, PRecordData, fRecordTypeInfo);
   result := fPublicUri + result;
 end;
 
@@ -2769,8 +2772,8 @@ end;
 
 { TWebCrtSocketProcess }
 
-constructor TWebCrtSocketProcess.Create(aSocket: TCrtSocket; aProtocol:
-  TWebSocketProtocol; aOwnerConnection: THttpServerConnectionID;
+constructor TWebCrtSocketProcess.Create(aSocket: TCrtSocket;
+  aProtocol: TWebSocketProtocol; aOwnerConnection: THttpServerConnectionID;
   aOwnerThread: TSynThread; aSettings: PWebSocketProcessSettings;
   const aProcessName: RawUtf8);
 begin
