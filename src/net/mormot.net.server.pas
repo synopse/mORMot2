@@ -493,13 +493,13 @@ type
     fServerKeepAliveTimeOut: cardinal;
     fSockPort: RawUtf8;
     fSock: TCrtSocket;
-    fThreadRespClass: THttpServerRespClass;
     fOnSendFile: TOnHttpServerSendFile;
     fNginxSendFileFrom: array of TFileName;
     fHttpQueueLength: cardinal;
     fExecuteState: (esNotStarted, esBinding, esRunning, esFinished);
     fStats: array[THttpServerSocketGetRequestResult] of integer;
     fSocketClass: THttpServerSocketClass;
+    fThreadRespClass: THttpServerRespClass;
     fHeadersUnFiltered: boolean;
     fExecuteMessage: string;
     function GetStat(one: THttpServerSocketGetRequestResult): integer;

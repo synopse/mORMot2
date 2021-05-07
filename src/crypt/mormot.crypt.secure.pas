@@ -887,13 +887,14 @@ type
     // - you can supply a time period, after which the session will expire -
     // default is 1 hour, and could go up to
     function Generate(out Cookie: RawUtf8; TimeOutMinutes: cardinal = 0;
-      PRecordData: pointer = nil; PRecordTypeInfo: PRttiInfo = nil
-      ): TBinaryCookieGeneratorSessionID;
+      PRecordData: pointer = nil;
+      PRecordTypeInfo: PRttiInfo = nil): TBinaryCookieGeneratorSessionID;
     ///  decode a base64uri cookie and optionally fill an associated record
     // - return the associated session/sequence number, 0 on error
-    function Validate(const cookie: RawUtf8;
+    function Validate(const Cookie: RawUtf8;
       PRecordData: pointer = nil; PRecordTypeInfo: PRttiInfo = nil;
-      PExpires: PCardinal = nil; PIssued: PCardinal = nil): TBinaryCookieGeneratorSessionID;
+      PExpires: PCardinal = nil;
+      PIssued: PCardinal = nil): TBinaryCookieGeneratorSessionID;
     /// allow the very same cookie to be recognized after server restart
     function Save: RawUtf8;
     /// unserialize the cookie generation context as serialized by Save
@@ -2368,7 +2369,7 @@ begin
   end;
 end;
 
-function TBinaryCookieGenerator.Validate(const cookie: RawUtf8;
+function TBinaryCookieGenerator.Validate(const Cookie: RawUtf8;
   PRecordData: pointer; PRecordTypeInfo: PRttiInfo;
   PExpires, PIssued: PCardinal): TBinaryCookieGeneratorSessionID;
 var
@@ -2378,13 +2379,13 @@ var
   cc: TCookieContent;
 begin
   result := 0; // parsing error
-  if cookie = '' then
+  if Cookie = '' then
     exit;
-  clen := length(cookie);
+  clen := length(Cookie);
   len := Base64uriToBinLength(clen);
   if (len >= sizeof(cc.head)) and
      (len <= sizeof(cc)) and
-     Base64uriDecode(pointer(cookie), @cc, clen) then
+     Base64uriDecode(pointer(Cookie), @cc, clen) then
   begin
     Cipher(@cc, len);
     if (cardinal(cc.head.session) <= cardinal(SessionSequence)) then

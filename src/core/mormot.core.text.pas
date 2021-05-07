@@ -9217,7 +9217,7 @@ begin
     if argN <= high(Args) then
     begin
       inc(L, VarRecToTempUtf8(Args[argN], b^));
-      if b.Len > 0 then
+      if b^.Len > 0 then
         inc(b);
       inc(argN);
       if F^ = #0 then
@@ -9454,7 +9454,7 @@ type
 const
   TXT: array[{nospace:}boolean, TUnits] of RawUtf8 = (
     (' KB', ' MB', ' GB', ' TB', ' PB', ' EB', '% B'),
-    ('KB', 'MB', 'GB', 'TB', 'PB', 'EB', '%B'));
+    ('KB',  'MB',  'GB',  'TB',  'PB',  'EB', '%B'));
 var
   hi, rem: cardinal;
   u: TUnits;

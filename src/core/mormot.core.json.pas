@@ -239,6 +239,7 @@ function GotoEndOfJsonString(P: PUtf8Char; tab: PJsonCharSet): PUtf8Char; overlo
 // and MongoDB extended syntax like {age:{$gt:18}} will be allowed - so you
 // may consider GotoEndJsonItemStrict() if you expect full standard JSON parsing
 function GotoEndJsonItem(P: PUtf8Char; PMax: PUtf8Char = nil): PUtf8Char;
+  {$ifdef FPC}inline;{$endif}
 
 /// reach positon just after the current JSON item in the supplied UTF-8 buffer
 // - in respect to GotoEndJsonItem(), this function will validate for strict
@@ -1465,7 +1466,7 @@ type
     function FindValue(const aKey; aUpdateTimeOut: boolean = false;
       aIndex: PInteger = nil): pointer;
     /// search of a primary key within the internal hashed dictionary
-    // - returns a pointer to the matching or already existing item
+    // - returns a pointer to the matching or already existing value item
     // - if you want to access the value, you should use fSafe.Lock/Unlock:
     // consider using Exists or FindAndCopy thread-safe methods instead
     // - will update the associated timeout value of the entry, if applying
@@ -2123,7 +2124,7 @@ function JsonToObject(var ObjectInstance; From: PUtf8Char;
 // - will make a TSynTempBuffer copy for parsing, and un-comment it
 // - returns true if the supplied JSON was successfully retrieved
 // - returns false and set InitialJsonContent := '' on error
-function JSONSettingsToObject(var InitialJsonContent: RawUtf8;
+function JsonSettingsToObject(var InitialJsonContent: RawUtf8;
   Instance: TObject): boolean;
 
 /// read an object properties, as saved by ObjectToJson function
@@ -10140,7 +10141,7 @@ begin
   result := ctxt.JSON;
 end;
 
-function JSONSettingsToObject(var InitialJsonContent: RawUtf8;
+function JsonSettingsToObject(var InitialJsonContent: RawUtf8;
   Instance: TObject): boolean;
 var
   tmp: TSynTempBuffer;
@@ -10424,7 +10425,12 @@ end;
 
 function TSynJsonFileSettings.LoadFromJson(var aJson: RawUtf8): boolean;
 begin
-  result := JSONSettingsToObject(aJson, self);
+  result := JsonSettingsToObject(aJson, self);
+end;
+
+function TSynJsonFileSettings.LoadFromYaml(var aYaml: RawUtf8): boolean;
+begin
+  result := YamlSettingsToObject(aYaml, self);
 end;
 
 function TSynJsonFileSettings.LoadFromFile(const aFileName: TFileName): boolean;

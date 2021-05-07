@@ -642,6 +642,7 @@ var
           'select count(*) from People where YearOfDeath=?', [1519]);
         {%H-}Check(res.Step);
         result := res.ColumnInt(0);
+        res.ReleaseRows;
       end;
 
     var

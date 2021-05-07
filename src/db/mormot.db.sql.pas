@@ -774,6 +774,11 @@ type
   // cache (if available) for NewThreadSafeStatementPrepared() or PrepareInlined()
   ISqlDBStatement = interface(ISqlDBRows)
     ['{EC27B81C-BD57-47D4-9711-ACFA27B583D7}']
+    // some raw properties getter/setter
+    function GetForceBlobAsNull: boolean;
+    procedure SetForceBlobAsNull(value: boolean);
+    function GetForceDateWithMS: boolean;
+    procedure SetForceDateWithMS(value: boolean);
     /// bind a NULL value to a parameter
     // - the leftmost SQL parameter has an index of 1
     // - some providers (e.g. OleDB during MULTI INSERT statements) expect the
@@ -933,15 +938,11 @@ type
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
     procedure ExecutePreparedAndFetchAllAsJson(Expanded: boolean; out Json: RawUtf8);
-    function GetForceBlobAsNull: boolean;
-    procedure SetForceBlobAsNull(value: boolean);
     /// if set, any BLOB field won't be retrieved, and forced to be null
     // - this may be used to speed up fetching the results for SQL requests
     // with * statements
     property ForceBlobAsNull: boolean
       read GetForceBlobAsNull write SetForceBlobAsNull;
-    function GetForceDateWithMS: boolean;
-    procedure SetForceDateWithMS(value: boolean);
     /// if set, any ftDate field will contain the milliseconds information
     // when serialized into ISO-8601 text
     // - this setting is private to each statement, since may vary depending
@@ -5787,7 +5788,7 @@ begin
       W.Expand := false; //  {"FieldCount":2,"Values":["col1","col2"]}
       W.CancelAll;
       for col := 0 to ColumnCount - 1 do
-        W.ColNames[col] := ColumnName(col); // previous W.AddColumns did add ""
+        W.ColNames[col] := ColumnName(col); // previous W.AddColumns did nothing
       W.AddColumns;
     end;
     W.EndJsonObject(0, result);
@@ -5823,8 +5824,9 @@ begin
   maxmem := Connection.Properties.StatementMaxMemory;
   W := TTextWriter.Create(Dest, 65536);
   try
+    // add optional/deprecated/Windows-centric UTF-8 Byte Order Mark
     if AddBOM then
-      W.AddShorter(#$ef#$bb#$bf); // add UTF-8 byte Order Mark
+      W.AddShorter(#$ef#$bb#$bf);
     // add CSV header
     for F := 0 to FMax do
     begin

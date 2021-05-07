@@ -3535,6 +3535,7 @@ begin
     result := false;
     exit;
   end;
+  // reset any previous resultset
   if fMatchedLastSet > 0 then
   begin
     n := fWordCount;
@@ -3548,6 +3549,7 @@ begin
   while (P < PEnd) and
         (fMatchedLastSet < fWordCount) do
   begin
+    // recognize next word boudaries
     tab := @ROUGH_UTF8;
     while tab[P^] = 0 do
     begin
@@ -3562,6 +3564,7 @@ begin
       inc(P);
     until (P = PEnd) or
           (tab[P^] = 0);
+    // apply the expression nodes to this word
     aTextLen := P - aText; // now aText/aTextLen point to a word
     n := fWordCount;
     repeat
@@ -4912,12 +4915,22 @@ const
   atom_chars: TSynAnsicharSet = [#33..#255] -
     ['(', ')', '<', '>', '@', ',', ';', ':', '\', '/', '"', '.', '[', ']', #127];
   // Valid characters in a "quoted-string"
-  quoted_string_chars: TSynAnsicharSet = [#0..#255] - ['"', #13, '\'];
+  quoted_string_chars: TSynAnsicharSet =
+    [#0..#255] - ['"', #13, '\'];
   // Valid characters in a subdomain
-  letters_digits: TSynAnsicharSet = ['0'..'9', 'A'..'Z', 'a'..'z'];
+  letters_digits: TSynAnsicharSet =
+    ['0'..'9', 'A'..'Z', 'a'..'z'];
 type
-  States = (STATE_BEGIN, STATE_ATOM, STATE_QTEXT, STATE_QCHAR, STATE_QUOTE,
-    STATE_LOCAL_PERIOD, STATE_EXPECTING_SUBDOMAIN, STATE_SUBDOMAIN, STATE_HYPHEN);
+  States = (
+    STATE_BEGIN,
+    STATE_ATOM,
+    STATE_QTEXT,
+    STATE_QCHAR,
+    STATE_QUOTE,
+    STATE_LOCAL_PERIOD,
+    STATE_EXPECTING_SUBDOMAIN,
+    STATE_SUBDOMAIN,
+    STATE_HYPHEN);
 var
   State: States;
   subdomains: integer;
