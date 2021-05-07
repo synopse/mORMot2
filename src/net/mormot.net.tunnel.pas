@@ -104,12 +104,7 @@ type
     procedure OnReceived(Frame: RawByteString);
   end;
 
-  TTunnelLocalNode = (
-    tlnUnknown,
-    tlnClient,
-    tlnServer);
   TTunnelLocalHeader = packed record
-    magic: TTunnelLocalNode;
     options: TTunnelOptions;
     session: TTunnelSession;
   end;
@@ -125,6 +120,7 @@ type
   /// abstract tunneling service implementation
   // - also implement ITunnelTransmit so that could be used as callback
   // from the other side
+  // - if you release this instance, the tunnel will end
   TTunnelLocal = class(TInterfacedObjectWithCustomCreate,
     ITunnelLocal, ITunnelTransmit)
   protected
@@ -132,25 +128,21 @@ type
     fPort: TNetPort;
     fThread: TTunnelLocalThread;
     fHandshake: TSynQueue;
-    function DoHandshake(var header: TTunnelLocalHeader; TimeOutMS: integer;
-      const Transmit: ITunnelTransmit; out ecdhe: TTunnelEcdheContext): boolean;
-      virtual; abstract;
+    function EcdheHandshake(TimeOutMS: integer; const Transmit: ITunnelTransmit;
+      out ecdhe: TTunnelEcdheContext): boolean; virtual; abstract;
   public
     /// called e.g. by CallbackReleased
     procedure ClosePort;
     /// finalize the server
     destructor Destroy; override;
   public
-    { ITunnelTransmit methods }
-    /// called when a Frame is received from the relay server
+    /// ITunnelTransmit method: when a Frame is received from the relay server
     procedure Send(const Frame: RawByteString);
-  public
-    { ITunnelLocal methods }
-    /// initialize a local forwarding port
+    /// ITunnelLocal method: initialize a local forwarding port
     // - returns 0 on failure, an ephemeral port on 127.0.0.1 on success
     function BindLocalPort(Session: TTunnelSession; TransmitOptions: TTunnelOptions;
       TimeOutMS: integer; const Transmit: ITunnelTransmit): TNetPort; virtual;
-    /// called when a ITunnelTransmit callback is not used any more
+    /// ITunnelLocal method: when a ITunnelTransmit remote callback is finished
     procedure CallbackReleased(const callback: IInvokable;
       const interfaceName: RawUtf8);
   published
@@ -169,9 +161,8 @@ type
   TTunnelLocalServer = class(TTunnelLocal)
   protected
     /// initialize a local forwarding server port
-    function DoHandshake(var header: TTunnelLocalHeader; TimeOutMS: integer;
-      const Transmit: ITunnelTransmit; out ecdhe: TTunnelEcdheContext): boolean;
-      override;
+    function EcdheHandshake(TimeOutMS: integer; const Transmit: ITunnelTransmit;
+      out ecdhe: TTunnelEcdheContext): boolean; override;
   end;
 
 
@@ -180,9 +171,8 @@ type
   TTunnelLocalClient = class(TTunnelLocal)
   protected
     /// initialize a local forwarding client port
-    function DoHandshake(var header: TTunnelLocalHeader; TimeOutMS: integer;
-      const Transmit: ITunnelTransmit; out ecdhe: TTunnelEcdheContext): boolean;
-      override;
+    function EcdheHandshake(TimeOutMS: integer; const Transmit: ITunnelTransmit;
+      out ecdhe: TTunnelEcdheContext): boolean; override;
   end;
 
 
@@ -191,14 +181,15 @@ type
 type
   TTunnelRelayIDs = array of TBinaryCookieGeneratorSessionID;
   TTunnelRelayLink = record
-    Process: array[tlnClient .. tlnServer] of TWebSocketProcess;
+    // order doesn't matter -> just a link between two clients
+    ProcessA, ProcessB: TWebSocketProcess;
   end;
   TTunnelRelayLinks = array of TTunnelRelayLink;
 
   TTunnelRelayServer = class(TWebSocketServer)
   protected
     fMainProtocol: TWebSocketProtocolUri;
-    fConnections: TSynDictionary; // TTunnelRelayIDs/TTunnelRelayLinks
+    fLinks: TSynDictionary; // TTunnelRelayIDs/TTunnelRelayLinks
   public
     /// initialize the Relay Server with its publicUri
     constructor Create(const publicUri, localPort: RawUtf8); reintroduce;
@@ -369,6 +360,7 @@ function TTunnelLocal.BindLocalPort(Session: TTunnelSession;
 var
   sock: TNetSocket;
   addr: TNetAddr;
+  frame, remote: RawByteString;
   header: TTunnelLocalHeader;
   secret: TEccSecretKey;
   ecdhe: TTunnelEcdheContext;
@@ -385,13 +377,22 @@ begin
   fOptions := TransmitOptions;
   fHandshake := TSynQueue.Create(TypeInfo(TRawByteStringDynArray));
   try
-    // initial handshake: TTunnelOptions+TTunnelSession should match
+    // initial handshake: TTunnelOptions+TTunnelSession until both connected
     header.options := fOptions;
     header.session := Session;
-    if not DoHandshake(header, TimeOutMS, Transmit, ecdhe) or
-       not Ecc256r1SharedSecret(ecdhe.pub, ecdhe.priv, secret) then
-      raise ETunnel.CreateUtf8('%.BindLocalPort handshake', [self]);
-    HmacSha256(@ecdhe.rnd, @secret, SizeOf(ecdhe.rnd), SizeOf(secret), key.b);
+    SetString(frame, PAnsiChar(@header), SizeOf(header));
+    Transmit.Send(frame);
+    if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
+       (remote <> frame) then
+      raise ETunnel.CreateUtf8('%.BindLocalPort handshake failed', [self]);
+    // optional ECDHE ephemeral encryption
+    if toEcdhe in fOptions then
+    begin
+      if not EcdheHandshake(TimeOutMS, Transmit, ecdhe) or
+         not Ecc256r1SharedSecret(ecdhe.pub, ecdhe.priv, secret) then
+        raise ETunnel.CreateUtf8('%.BindLocalPort ECDHE handshake', [self]);
+      HmacSha256(@ecdhe.rnd, @secret, SizeOf(ecdhe.rnd), SizeOf(secret), key.b);
+    end;
     // launch the background processing thread
     fThread := TTunnelLocalThread.Create(self, Transmit, key.Lo, key.hi, sock);
   except
@@ -407,71 +408,45 @@ end;
 
 { TTunnelLocalServer }
 
-function TTunnelLocalServer.DoHandshake(var header: TTunnelLocalHeader;
-  TimeOutMS: integer; const Transmit: ITunnelTransmit;
-  out ecdhe: TTunnelEcdheContext): boolean;
+function TTunnelLocalServer.EcdheHandshake(TimeOutMS: integer;
+  const Transmit: ITunnelTransmit; out ecdhe: TTunnelEcdheContext): boolean;
 var
   frame, remote: RawByteString;
 begin
   result := false;
-  // expects header from both ends, when full link is established
-  header.magic := tlnServer;
-  SetString(frame, PAnsiChar(@header), SizeOf(header));
-  Transmit.Send(frame);
-  header.magic := tlnClient;
-  if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
-     (length({%H-}remote) <> SizeOf(header)) or
-     not CompareMemFixed(pointer(remote), @header, SizeOf(header)) then
+  // EDCHE handshake with perfect forward security - server side
+  TAesPrng.Main.FillRandom(ecdhe.rnd);
+  if not Ecc256r1MakeKey(ecdhe.pub, ecdhe.priv) then
     exit;
-  if toEcdhe in fOptions then
-  begin
-    // EDCHE handshake with perfect forward security
-    TAesPrng.Main.FillRandom(ecdhe.rnd);
-    if not Ecc256r1MakeKey(ecdhe.pub, ecdhe.priv) then
-      exit;
-    SetString(frame, PAnsiChar(@ecdhe), SizeOf(ecdhe.rnd) + SizeOf(ecdhe.pub));
-    Transmit.Send(frame); // frame = rnd+pub
-    if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
-       (length(remote) <> SizeOf(TEccPublicKey)) then
-      exit;
-    ecdhe.pub := PEccPublicKey(remote)^; // remote = pub
-  end;
+  SetString(frame, PAnsiChar(@ecdhe), SizeOf(ecdhe.rnd) + SizeOf(ecdhe.pub));
+  Transmit.Send(frame); // frame = rnd+pub
+  if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
+     (length({%H-}remote) <> SizeOf(TEccPublicKey)) then
+    exit;
+  ecdhe.pub := PEccPublicKey(remote)^; // remote = pub
   result := true;
 end;
 
 
 { TTunnelLocalClient }
 
-function TTunnelLocalClient.DoHandshake(var header: TTunnelLocalHeader;
-  TimeOutMS: integer; const Transmit: ITunnelTransmit;
-  out ecdhe: TTunnelEcdheContext): boolean;
+function TTunnelLocalClient.EcdheHandshake(TimeOutMS: integer;
+  const Transmit: ITunnelTransmit; out ecdhe: TTunnelEcdheContext): boolean;
 var
   frame, remote: RawByteString;
 begin
   result := false;
-  // expects header from both ends, when full link is established
-  header.magic := tlnServer;
-  if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
-     (length({%H-}remote) <> SizeOf(header)) or
-     not CompareMemFixed(pointer(remote), @header, SizeOf(header)) then
-    exit;
-  header.magic := tlnClient;
-  SetString(frame, PAnsiChar(@header), SizeOf(header));
-  Transmit.Send(frame);
-  if toEcdhe in fOptions then
+  // EDCHE handshake with perfect forward security - client side
+  SetString(frame, nil, SizeOf(TEccPublicKey));
+  if not fHandshake.WaitPop(TimeOutMS, nil, remote) or // remote = rnd+pub
+     (length({%H-}remote) <> SizeOf(ecdhe.rnd) + SizeOf(ecdhe.pub)) or
+     not Ecc256r1MakeKey(PEccPublicKey(frame)^, ecdhe.priv) then
+    exit;{%H-}
+  Transmit.Send(frame); // frame = pub
+  with PTunnelEcdheContext(remote)^ do
   begin
-    // EDCHE handshake with perfect forward security
-    SetString(frame, nil, SizeOf(TEccPublicKey));
-    if not fHandshake.WaitPop(TimeOutMS, nil, remote) or // remote = rnd+pub
-       (length(remote) <> SizeOf(ecdhe.rnd) + SizeOf(ecdhe.pub)) or
-       not Ecc256r1MakeKey(PEccPublicKey(frame)^, ecdhe.priv) then
-      exit;
-    Transmit.Send(frame); // frame = pub
-    with PTunnelEcdheContext(remote)^ do
-    begin
-      ecdhe.rnd := rnd;
-      ecdhe.pub := pub;
-    end;
+    ecdhe.rnd := rnd;
+    ecdhe.pub := pub;
   end;
   result := true;
 end;
@@ -484,8 +459,8 @@ end;
 type
   TTunnelRelayServerProtocol = class(TWebSocketProtocolUri)
   protected
-    fConnected: boolean;
     fReverse: TWebSocketProcess;
+    fOptions: TTunnelOptions;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var request: TWebSocketFrame; const info: RawUtf8); override;
   end;
@@ -505,64 +480,63 @@ procedure TTunnelRelayServerProtocol.ProcessIncomingFrame(
 var
   added: boolean;
   link: ^TTunnelRelayLink;
-  ndx: integer;
   connections: TSynDictionary;
-  head: PTunnelLocalHeader;
-  reverse: TTunnelLocalNode;
+  session: TTunnelSession;
   reversed: TTunnelRelayServerProtocol;
+  head: PTunnelLocalHeader;
 begin
-  if (request.opcode <> focBinary) or
-     (Sender = nil) or
-     (Sender.Protocol = nil) or
-     (Sender.Protocol.ClassType <> TTunnelRelayServerProtocol) then
-    exit;
-  if not fConnected then
-  begin
-    // initialization of this connection
-    head := pointer(request.payload);
-    if (length(request.payload) <> SizeOf(head^)) or
-       (head^.session <> TTunnelRelayServerProtocol(Sender.Protocol).Session) then
-      raise ETunnel.CreateUtf8('%.ProcessIncomingFrame: bad handshake', [self]);
-    case head^.magic of
-      tlnClient:
-        reverse := tlnServer;
-      tlnServer:
-        reverse := tlnClient;
-    else
-      raise ETunnel.CreateUtf8('%.ProcessIncomingFrame: magic', [self]);
-    end;
-    connections := ((Sender as TWebSocketProcessServer).
-      ServerResp.Server as TTunnelRelayServer).fConnections;
-    connections.Safe.Lock;
-    try
-      link := connections.FindValueOrAdd(head^.Session, added, @ndx);
-      if link^.Process[head^.magic] <> nil then
-        raise ETunnel.CreateUtf8('%.ProcessIncomingFrame: duplicated', [self]);
-      link^.Process[head^.magic] := Sender;
-      fReverse := link^.Process[reverse];
-      if fReverse <> nil then
+  if (Sender <> nil) and
+     (Sender.Protocol <> nil) and
+     (Sender.Protocol.ClassType = TTunnelRelayServerProtocol) then
+  case request.opcode of
+    // focBinary or focContinuation/focConnectionClose
+    focBinary:
+      if fReverse = nil then
       begin
-        // now both sides are properly connected -> notify both to start relay
-        reversed := fReverse.Protocol as TTunnelRelayServerProtocol;
-        if reversed.fReverse <> nil then
-          raise ETunnel.CreateUtf8('%.ProcessIncomingFrame: reversed', [self]);
-        reversed.fReverse := Sender;
-        AsynchSend(fReverse, request.PayLoad); // unblock reverse
-        head^.magic := reverse;
-        AsynchSend(Sender, request.PayLoad);   // unblock caller
-        connections.DeleteAt(ndx);
-        connections.DeleteDeprecated;
-      end;
-    finally
-      connections.Safe.UnLock;
-    end;
-    fConnected := true;
-  end
-  else if fReverse <> nil then
-    // normal process: asynch relaying to the other side
-    AsynchSend(fReverse, request.payload)
-  else
-    raise ETunnel.CreateUtf8('%.ProcessIncomingFrame: out of order', [self]);
+        // initialization of this connection
+        session := TTunnelRelayServerProtocol(Sender.Protocol).Session;
+        head := pointer(request.payload);
+        if (length(request.payload) <> SizeOf(head^)) or
+           (head^.session <> session) then
+          raise ETunnel.CreateUtf8('%.ProcessIncomingFrame: bad handshake %.%.%',
+            [self, length(request.payload), head^.session, session]);
+        fOptions := head^.options;
+        connections := ((Sender as TWebSocketProcessServer).
+          ServerResp.Server as TTunnelRelayServer).fLinks;
+        connections.Safe.Lock;
+        try
+          link := connections.FindValueOrAdd(session, added);
+          if link^.ProcessA = nil then
+            // first end connected for this Session
+            link^.ProcessA := Sender
+          else
+          begin
+            // ensure only one link with matching options per URI/session
+            reversed := link^.ProcessA.Protocol as TTunnelRelayServerProtocol;
+            if (link^.ProcessB <> nil) or
+               (reversed.fOptions <> fOptions) then
+              raise ETunnel.CreateUtf8('%.ProcessIncomingFrame: abusive', [self]);
+            // now both sides are properly connected
+            link^.ProcessB := Sender;
+            fReverse := link^.ProcessA;
+            reversed.fReverse := Sender;
+            // unblock both ends to begin normal relay
+            AsynchSend(fReverse, request.PayLoad);
+            AsynchSend(Sender, request.PayLoad);
+            // no connections.DeleteAt(ndx) to ensure single link
+            connections.DeleteDeprecated;
+          end;
+        finally
+          connections.Safe.UnLock;
+        end;
+      end
+      else
+        // normal process: asynch relaying to the other side
+        AsynchSend(fReverse, request.payload);
+    focConnectionClose:
+       if fReverse <> nil then
+         fReverse.Shutdown;
+  end;
 end;
 
 
@@ -570,7 +544,7 @@ end;
 
 constructor TTunnelRelayServer.Create(const publicUri, localPort: RawUtf8);
 begin
-  fConnections := TSynDictionary.Create(
+  fLinks := TSynDictionary.Create(
     TypeInfo(TTunnelRelayIDs), TypeInfo(TTunnelRelayLinks), false, 5 * 60);
   inherited Create(localPort, nil, nil, 'relaysrv');
   fMainProtocol := TTunnelRelayServerProtocol.Create(
@@ -581,7 +555,7 @@ end;
 destructor TTunnelRelayServer.Destroy;
 begin
   inherited Destroy;
-  fConnections.Free;
+  fLinks.Free;
 end;
 
 function TTunnelRelayServer.NewUri(out SessionID: TTunnelSession): RawUtf8;
