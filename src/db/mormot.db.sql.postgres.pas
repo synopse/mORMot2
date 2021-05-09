@@ -548,10 +548,11 @@ var
 begin
   SqlLogBegin(sllSQL);
   if fSqlPrepared = '' then
-    raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Statement not prepared', [self]);
+    raise ESqlDBPostgres.CreateUtf8(
+      '%.ExecutePrepared: Statement not prepared', [self]);
   if fParamCount <> fPreparedParamsCount then
-    raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Query expects % parameters ' +
-      'but % bound', [self, fPreparedParamsCount, fParamCount]);
+    raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Query expects % ' +
+      'parameters but % bound', [self, fPreparedParamsCount, fParamCount]);
   inherited ExecutePrepared;
   for i := 0 to fParamCount - 1 do // set parameters as expected by PostgreSQL
   begin
@@ -563,8 +564,8 @@ begin
     if p^.VArray <> nil then
     begin
       if not (p^.VType in [ftInt64, ftDouble, ftCurrency, ftDate, ftUtf8]) then
-        raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Invalid array type % ' +
-          'on bound parameter #%', [Self, ToText(p^.VType)^, i]);
+        raise ESqlDBPostgres.CreateUtf8('%.ExecutePrepared: Invalid array ' +
+          'type % on bound parameter #%', [Self, ToText(p^.VType)^, i]);
       p^.VData := BoundArrayToJsonArray(p^.VArray);
     end
     else
@@ -581,7 +582,8 @@ begin
           DoubleToStr(PDouble(@p^.VInt64)^, RawUtf8(p^.VData));
         ftDate:
           // Postgres expects space instead of T in ISO-8601 expanded format
-          p^.VData := DateTimeToIso8601(PDateTime(@p^.VInt64)^, true, ' ');
+          p^.VData := DateTimeToIso8601(
+            PDateTime(@p^.VInt64)^, true, ' ', fForceDateWithMS);
         ftUtf8:
           ; // text already in p^.VData
         ftBlob:

@@ -727,7 +727,8 @@ begin
     colWrongType:
       ColumnToTypedValue(Col, ftUtf8, result);
   else
-    RawUnicodeToUtf8(pointer(fColData[Col]), fColumns[Col].ColumnDataSize shr 1, result);
+    RawUnicodeToUtf8(
+      pointer(fColData[Col]), fColumns[Col].ColumnDataSize shr 1, result);
   end;
 end;
 
@@ -751,8 +752,8 @@ begin
     colWrongType:
       ColumnToTypedValue(Col, ftDate, result);
   else
-    result := PSql_TIMESTAMP_STRUCT(Pointer(fColData[Col]))^.ToDateTime(fColumns
-      [Col].ColumnValueDBType);
+    result := PSql_TIMESTAMP_STRUCT(Pointer(fColData[Col]))^.ToDateTime(
+      fColumns[Col].ColumnValueDBType);
   end;
 end;
 
