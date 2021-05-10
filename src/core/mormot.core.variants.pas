@@ -3226,7 +3226,8 @@ end;
 function TSynInvokeableVariantType.FindSynVariantType(aVarType: Word;
   out CustomType: TSynInvokeableVariantType): boolean;
 begin
-  if aVarType = VarType then
+  if (self <> nil) and
+     (aVarType = VarType) then
     CustomType := self
   else
     CustomType := FindSynVariantTypeFromVType(aVarType);
@@ -4489,9 +4490,11 @@ begin
           break;
         v := v^.VPointer;
       until false;
-      if vt <= varNativeString then // simple string/number types copy
+      if vt <= varNativeString then
+        // simple string/number types copy
         VValue[ndx] := variant(v^)
-      else if vt = DocVariantVType then // direct recursive copy for TDocVariant
+      else if vt = DocVariantVType then
+        // direct recursive copy for TDocVariant
         TDocVariantData(VValue[ndx]).InitCopy(variant(v^), VOptions)
       else if FindCustomVariantType(vt, Handler) then
         if Handler.InheritsFrom(TSynInvokeableVariantType) then
