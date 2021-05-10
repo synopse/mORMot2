@@ -827,7 +827,7 @@ begin
   if (P[0] = '''') and
      (P[L - 1] = '''') then
   begin
-    // unquote input
+    // in-place unquote of input - typical from SQL values
     inc(P);
     dec(L, 2);
     if L < 4 then

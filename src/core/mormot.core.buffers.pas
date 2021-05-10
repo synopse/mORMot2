@@ -7242,6 +7242,7 @@ begin
       $46464f77 + 1, // 'application/font-woff' = wOFF in BigEndian
       $474e5089 + 1, // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
       $4d5a4cff + 1, // LZMA = FF 4C 5A 4D 41 00
+      $72613c21 + 1, // .ar/.deb files = '!<arch>' (assuming compressed)
       $75b22630 + 1, // 'audio/x-ms-wma' = 30 26 B2 75 8E 66
       $766f6f6d + 1, // mov = 6D 6F 6F 76 [....moov]
       $89a8275f + 1, // jar = 5F 27 A8 89
