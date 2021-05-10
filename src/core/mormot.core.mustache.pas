@@ -505,13 +505,9 @@ begin
   result := nil;
   if aDoc.VType <= varAny then
     exit;
-  if (fContextCount > 0) and
-     (fContext[0].DocumentType <> nil) and
-     (aDoc.VType = fContext[0].DocumentType.VarType) then
-    result := fContext[0].DocumentType
-  else if not (FindCustomVariantType(aDoc.VType, TCustomVariantType(result)) and
-          result.InheritsFrom(TSynInvokeableVariantType)) then
-    result := nil;
+  if fContextCount > 0 then
+    result := fContext[0].DocumentType;
+  result.FindSynVariantType(aDoc.VType, result); // faster than FindCustomVariantType
 end;
 
 procedure TSynMustacheContextVariant.PushContext(aDoc: TVarData);
