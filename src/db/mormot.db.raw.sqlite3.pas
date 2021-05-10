@@ -1795,7 +1795,7 @@ type
     close: function(DB: TSqlite3DB): integer; cdecl;
 
     /// Return the version of the SQLite database engine, in ascii format
-    // - currently returns '3.35.4', when used in conjunction with our
+    // - currently returns '3.35.5', when used in conjunction with our
     // mormot.db.raw.sqlite3.static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
@@ -4821,7 +4821,7 @@ type
   protected
     fBlob: TSqlite3Blob;
     fDB: TSqlite3DB;
-    fSize, fPosition: integer;
+    fSize, fPosition: Int64;
     fWritable: boolean;
   public
     /// Opens a BLOB located in row RowID, column ColumnName, table TableName
@@ -4836,6 +4836,8 @@ type
     /// write is allowed for in-place replacement (resizing is not allowed)
     // - Create() must have been called with ReadWrite=true
     function Write(const Buffer; Count: Longint): Longint; override;
+    /// change the current read position
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
     /// change the current read position
     function Seek(Offset: Longint; Origin: Word): Longint; override;
     /// reuse this class instance with another row of the same table
@@ -7817,6 +7819,7 @@ begin
     result := Count;
   if result <> 0 then
   begin
+    // warning: sqlite3.blob_read() seems to work with 32-bit position only
     sqlite3_check(fDB, sqlite3.blob_read(fBlob, Buffer, result, fPosition));
     inc(fPosition, result);
   end;
@@ -7824,12 +7827,17 @@ end;
 
 function TSqlBlobStream.Seek(Offset: Longint; Origin: Word): Longint;
 begin
+  result := Seek(Offset, TSeekOrigin(Origin));
+end;
+
+function TSqlBlobStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
   case Origin of
-    soFromBeginning:
+    soBeginning:
       fPosition := Offset;
-    soFromCurrent:
+    soCurrent:
       Inc(fPosition, Offset);
-    soFromEnd:
+    soEnd:
       fPosition := fSize + Offset;
   end;
   if fPosition > fSize then

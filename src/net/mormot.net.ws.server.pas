@@ -100,7 +100,14 @@ type
     fServerResp: TWebSocketServerResp;
     function ComputeContext(
       out RequestProcess: TOnHttpServerRequest): THttpServerRequestAbstract; override;
+  public
+    /// low-level access to the associated HTTP/WebSockets connection
+    property ServerResp: TWebSocketServerResp
+      read fServerResp;
   end;
+
+  /// meta-class of WebSockets process as used on server side
+  TWebSocketProcessServerClass = class of TWebSocketProcessServer;
 
 
 
@@ -125,10 +132,14 @@ type
     // - TWebSocketProtocolJson or TWebSocketProtocolBinary in the mORMot context
     // - could be nil if the connection is in standard HTTP/1.1 mode
     function WebSocketProtocol: TWebSocketProtocol;
+      {$ifdef HASINLINE} inline; {$endif}
     /// low-level WebSocket protocol processing instance
     property WebSocketProcess: TWebSocketProcessServer
       read fProcess;
   end;
+
+  /// callback signature to notify TWebSocketServer connections
+  TOnWebSocketServerEvent = procedure(Sender: TWebSocketServerResp) of object;
 
   /// main HTTP/WebSockets server Thread using the standard Sockets API (e.g. WinSock)
   // - once upgraded to WebSockets from the client, this class is able to serve
@@ -138,6 +149,11 @@ type
     fWebSocketConnections: TSynObjectListLocked;
     fProtocols: TWebSocketProtocolList;
     fSettings: TWebSocketProcessSettings;
+    fProcessClass: TWebSocketProcessServerClass;
+    fOnWSConnect: TOnWebSocketServerEvent;
+    fOnWSDisconnect: TOnWebSocketServerEvent;
+    procedure DoConnect(Context: TWebSocketServerResp); virtual;
+    procedure DoDisconnect(Context: TWebSocketServerResp); virtual;
     /// validate the WebSockets handshake, then call Context.fProcess.ProcessLoop()
     function WebSocketProcessUpgrade(ClientSock: THttpServerSocket;
       Context: TWebSocketServerResp): integer; virtual;
@@ -186,11 +202,22 @@ type
     // so you should better not modify them once the server started
     function Settings: PWebSocketProcessSettings;
       {$ifdef HASINLINE}inline;{$endif}
+    /// allow to customize the WebSockets processing classes
+    property ProcessClass: TWebSocketProcessServerClass
+      read fProcessClass write fProcessClass;
     /// how many WebSockets connections are currently maintained
     function WebSocketConnections: integer;
     /// access to the protocol list handled by this server
     property WebSocketProtocols: TWebSocketProtocolList
       read fProtocols;
+    /// event triggerred when a new connection upgrade has been done
+    // - just before the main processing WebSockets frames processing loop
+    property OnWebSocketConnect: TOnWebSocketServerEvent
+      read fOnWSConnect write fOnWSConnect;
+    /// event triggerred when a connection is about to be closed
+    // - when the main processing WebSockets frames processing loop finishes
+    property OnWebSocketDisconnect: TOnWebSocketServerEvent
+      read fOnWSDisconnect write fOnWSDisconnect;
   end;
 
 
@@ -373,7 +400,7 @@ begin
          not Protocol.ProcessHandshakeUri(uri) then
       begin
         Protocol.Free;
-        result := HTTP_UNAUTHORIZED;
+        result := HTTP_NOTFOUND;
         exit;
       end;
     end
@@ -400,7 +427,7 @@ begin
       if not Protocol.ProcessHandshake(extins, extout, nil) then
       begin
         Protocol.Free;
-        result := HTTP_UNAUTHORIZED;
+        result := HTTP_NOTACCEPTABLE;
         exit;
       end;
     end;
@@ -428,7 +455,7 @@ begin
   finally
     if result <> HTTP_SUCCESS then
     begin
-      // notify upgrade failure to client
+      // notify upgrade failure to client and close connection
       FormatUtf8('HTTP/1.0 % WebSocket Upgrade Error'#13#10 +
                  'Connection: Close'#13#10#13#10, [result], header);
       ClientSock.TrySndLow(pointer(header), length(header));
@@ -447,6 +474,7 @@ begin
   // override with custom processing classes
   fSocketClass := TWebSocketServerSocket;
   fThreadRespClass := TWebSocketServerResp;
+  fProcessClass := TWebSocketProcessServer;
   // initialize protocols and connections
   fWebSocketConnections := TSynObjectListLocked.Create({owned=}false);
   fProtocols := TWebSocketProtocolList.Create;
@@ -467,15 +495,32 @@ begin
   if result <> HTTP_SUCCESS then
     exit;
   ClientSock.KeepAliveClient := false; // close connection with WebSockets
-  Context.fProcess := TWebSocketProcessServer.Create(ClientSock, protocol,
+  Context.fProcess := fProcessClass.Create(ClientSock, protocol,
     Context.ConnectionID, Context, @fSettings, fProcessName);
   Context.fProcess.fServerResp := Context;
-  fWebSocketConnections. Add(Context);
+  fWebSocketConnections.Add(Context);
   try
+    DoConnect(Context);
     Context.fProcess.ProcessLoop;  // run main blocking loop
   finally
+    DoDisconnect(Context);
     FreeAndNil(Context.fProcess); // notify end of WebSockets
     fWebSocketConnections.Remove(Context);
+  end;
+end;
+
+procedure TWebSocketServer.DoConnect(Context: TWebSocketServerResp);
+begin
+  if Assigned(fOnWSConnect) then
+    fOnWSConnect(Context);
+end;
+
+procedure TWebSocketServer.DoDisconnect(Context: TWebSocketServerResp);
+begin
+  if Assigned(fOnWSDisconnect) then
+  try
+    fOnWSDisconnect(Context);
+  except // ignore any external callback error during shutdown
   end;
 end;
 

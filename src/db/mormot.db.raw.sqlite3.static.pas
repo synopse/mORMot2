@@ -6,7 +6,7 @@ unit mormot.db.raw.sqlite3.static;
 {
   *****************************************************************************
 
-    Statically linked SQLite3 3.35.4 engine with optional AES encryption
+    Statically linked SQLite3 3.35.5 engine with optional AES encryption
     - TSqlite3LibraryStatic Implementation
     - Encryption-Related Functions
 
@@ -785,7 +785,7 @@ begin
   if OldPassWord <> '' then
     CreateSqlEncryptTableBytes(OldPassWord, @OldP);
   Posi := 1024; // don't change first page, which is uncrypted
-  FileSeek(F, 1024, soFromBeginning);
+  FileSeek64(F, 1024, soFromBeginning);
   while Posi < Size do
   begin
     R := FileRead(F, Buf, sizeof(Buf)); // read buffer
@@ -1024,7 +1024,7 @@ function sqlite3_trace_v2(DB: TSqlite3DB; Mask: integer; Callback: TSqlTraceCall
 
 const
   // error message if statically linked sqlite3.o(bj) does not match this value
-  EXPECTED_SQLITE3_VERSION = '3.35.4';
+  EXPECTED_SQLITE3_VERSION = '3.35.5';
 
   // where to download the latest available static binaries, including SQLite3
   EXPECTED_STATIC_DOWNLOAD = 'https://synopse.info/files/mormot2static.7z';

@@ -37,7 +37,7 @@ uses
   mormot.net.sock,
   mormot.net.http,
   mormot.net.client,
-  mormot.net.server,
+  mormot.net.server,  // THttpServerRequest for callbacks
   mormot.net.ws.core;
 
 

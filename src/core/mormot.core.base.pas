@@ -556,12 +556,11 @@ type
     PStrRec = ^TStrRec;
     PDynArrayRec = ^TDynArrayRec;
 
-  const
-    /// codePage offset = string header size
-    // - used to calc the beginning of memory allocation of a string
-    _STRRECSIZE = SizeOf(TStrRec);
-
 const
+  /// codePage offset = string header size
+  // - used to calc the beginning of memory allocation of a string
+  _STRRECSIZE = SizeOf(TStrRec);
+
   /// cross-compiler negative offset to TStrRec.length field
   // - to be used inlined e.g. as PStrLen(p - _STRLEN)^
   _STRLEN = SizeOf(TStrLen);
@@ -582,6 +581,18 @@ const
   /// cross-compiler negative offset to TDynArrayRec.refCnt field
   // - to be used inlined e.g. as PRefCnt(PAnsiChar(Values) - _DAREFCNT)^
   _DAREFCNT = Sizeof(TRefCnt) + _DALEN;
+
+  /// in-memory string process will allow up to 800 MB
+  // - used as high limit e.g. for TBufferWriter over a TRawByteStringStream
+  // - Delphi strings have a 32-bit length so you should change your algorithm
+  // - even if FPC on CPU64 can handle bigger strings, consider other patterns
+  _STRMAXSIZE = $5fffffff;
+
+  /// in-memory TBytes process will allow up to 800 MB
+  // - used as high limit e.g. for TBufferWriter.FlushToBytes
+  // - even if a dynamic array can handle PtrInt length, consider other patterns
+  _DAMAXSIZE = $5fffffff;
+
 
 {$ifndef CPUARM}
 type
@@ -3104,13 +3115,13 @@ procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
 function VarDataFromVariant(const Value: variant): PVarData;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
+/// same as VarIsEmpty(V) or VarIsNull(V), but faster
 // - we also discovered some issues with FPC's Variants unit, so this function
 // may be used even in end-user cross-compiler code
 function VarIsEmptyOrNull(const V: Variant): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// same as VarIsEmpty(PVariant(V)^) or VarIsEmpty(PVariant(V)^), but faster
+/// same as VarIsEmpty(PVariant(V)^) or VarIsNull(PVariant(V)^), but faster
 // - we also discovered some issues with FPC's Variants unit, so this function
 // may be used even in end-user cross-compiler code
 function VarDataIsEmptyOrNull(VarData: pointer): boolean;
@@ -8456,7 +8467,7 @@ function EnsureDirectoryExists(const Directory: TFileName;
 begin
   result := IncludeTrailingPathDelimiter(ExpandFileName(Directory));
   if not DirectoryExists(result) then
-    if not CreateDir(result) then
+    if not ForceDirectories(result) then
       if not RaiseExceptionOnCreationFailure then
         result := ''
       else
@@ -8734,10 +8745,10 @@ begin
   // retrieve CPUID raw flags
   regs.edx := 0;
   regs.ecx := 0;
-  GetCPUID(1, regs);
+  GetCpuid(1, regs);
   PIntegerArray(@CpuFeatures)^[0] := regs.edx;
   PIntegerArray(@CpuFeatures)^[1] := regs.ecx;
-  GetCPUID(7, regs);
+  GetCpuid(7, regs);
   PIntegerArray(@CpuFeatures)^[2] := regs.ebx;
   PIntegerArray(@CpuFeatures)^[3] := regs.ecx;
   PIntegerArray(@CpuFeatures)^[4] := regs.edx;
@@ -11091,7 +11102,8 @@ begin
       result := 0;
     fPosition := result;
   end
-  else // quick exit on Delphi when retrieving the position
+  else
+    // quick exit on Delphi when retrieving TStream.Position
     result := fPosition;
 end;
 

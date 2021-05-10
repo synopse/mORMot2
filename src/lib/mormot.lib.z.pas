@@ -115,7 +115,7 @@ type
 
 type
   /// class of Exceptions raised by ZCheck()
-  ESynZip = class(Exception);
+  EZLib = class(Exception);
 
   /// main access to the zlib API for compression/uncompression
   // - we encapsulated all low-level C calls into this object-oriented structure
@@ -157,7 +157,7 @@ type
     /// low-level flush of the compressed data pending in the internal buffer
     procedure DoFlush;
     /// low-level check of the code returned by the ZLib library
-    // - raise ESynZipException on error
+    // - raise EZLib Exception on error
     function Check(const Code: integer; const ValidCodes: array of integer;
       const Context: string = ''): integer;
   end;
@@ -197,10 +197,10 @@ const
   Z_BUF_ERROR = -5;
   Z_VERSION_ERROR = -6;
 
-  Z_NO_CompressION = 0;
+  Z_NO_COMPRESSION = 0;
   Z_BEST_SPEED = 1;
-  Z_BEST_CompressION = 9;
-  Z_DEFAULT_CompressION = -1;
+  Z_BEST_COMPRESSION = 9;
+  Z_DEFAULT_COMPRESSION = -1;
 
   Z_FILTERED = 1;
   Z_HUFFMAN_ONLY = 2;
@@ -274,7 +274,7 @@ type
 // - A single compressor is not safe to use by multiple threads concurrently.
 // However, different threads may use different compressors concurrently
 function libdeflate_alloc_compressor(
-    compression_level: integer): PLibDeflateCompressor; cdecl;
+  compression_level: integer): PLibDeflateCompressor; cdecl;
 
 /// performs raw DEFLATE compression on a buffer of data
 // - The function attempts to compress 'in_nbytes' bytes of data located at
@@ -345,7 +345,7 @@ type
 // - This function takes no parameters, and the returned decompressor is valid for
 // decompressing data that was compressed at any compression level and with any
 // sliding window size
-// A single decompressor is not safe to use by multiple threads concurrently.
+// - A single decompressor is not safe to use by multiple threads concurrently.
 // However, different threads may use different decompressors concurrently.
 function libdeflate_alloc_decompressor: PLibDeflateDecompressor; cdecl;
 
@@ -382,9 +382,9 @@ type
 // 'out_nbytes_avail' that you think is large enough to hold all the
 // uncompressed data.  In this case, if the data decompresses to less than
 // or equal to 'out_nbytes_avail' bytes, then libdeflate_deflate_decompress()
-// will write the actual uncompressed size
-// to actual_out_nbytes_ret and return 0 (LIBDEFLATE_SUCCESS).  Otherwise,
-// it will return LIBDEFLATE_INSUFFICIENT_SPACE if the provided buffer was
+// will write the actual uncompressed size to actual_out_nbytes_ret and
+// return 0 (LIBDEFLATE_SUCCESS).  Otherwise, it will return
+// LIBDEFLATE_INSUFFICIENT_SPACE if  the provided buffer was
 // not large enough but no other problems were encountered, or another
 // nonzero result code if decompression failed for another reason.
 function libdeflate_deflate_decompress(
@@ -763,6 +763,8 @@ begin
     bits := MAX_WBITS
   else
     bits := -MAX_WBITS;
+  if CompressionLevel > 9 then
+    CompressionLevel := 9; // libdeflate allows additional 10,11,12 level
   result := deflateInit2_(Stream, CompressionLevel, Z_DEFLATED, bits,
     DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY, ZLIB_VERSION, sizeof(Stream)) >= 0;
   if FlushBufferOwned and
@@ -847,7 +849,7 @@ begin
   for i := Low(ValidCodes) to High(ValidCodes) do
     if ValidCodes[i] = Code then
       exit;
-  raise ESynZip.CreateFmt('Error %d during %s process (avail_in=%d avail_out=%d)',
+  raise EZLib.CreateFmt('Error %d during %s process (avail in=%d out=%d)',
     [Code, Context, Stream.avail_in, Stream.avail_out]);
 end;
 
@@ -966,7 +968,7 @@ var
 begin
   comp := libdeflate_alloc_compressor(CompressionLevel);
   if comp = nil then
-    raise ESynZip.CreateFmt(
+    raise EZLib.CreateFmt(
       'CompressMem: libdeflate_alloc_compressor(%d) failed', [CompressionLevel]);
   if ZlibFormat then
     result := libdeflate_zlib_compress(comp, src, srcLen, dst, dstLen)
@@ -974,7 +976,7 @@ begin
     result := libdeflate_deflate_compress(comp, src, srcLen, dst, dstLen);
   libdeflate_free_compressor(comp);
   if result = 0 then
-    raise ESynZip.Create('CompressMem: libdeflate failure');
+    raise EZLib.Create('CompressMem: libdeflate failure');
 end;
 
 function UncompressMem(src, dst: pointer; srcLen, dstLen: PtrInt;
@@ -985,14 +987,14 @@ var
 begin
   dec := libdeflate_alloc_decompressor;
   if dec = nil then
-    raise ESynZip.Create('UncompressMem: libdeflate_alloc_decompressor failed');
+    raise EZLib.Create('UncompressMem: libdeflate_alloc_decompressor failed');
   if ZlibFormat then
     res := libdeflate_zlib_decompress(dec, src, srcLen, dst, dstLen, @result)
   else
     res := libdeflate_deflate_decompress(dec, src, srcLen, dst, dstLen, @result);
   libdeflate_free_decompressor(dec);
   if res <> LIBDEFLATE_SUCCESS  then
-    raise ESynZip.CreateFmt('UncompressMem: libdeflate = %d', [ord(res)]);
+    raise EZLib.CreateFmt('UncompressMem: libdeflate = %d', [ord(res)]);
 end;
 
 {$else}

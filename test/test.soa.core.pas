@@ -534,14 +534,14 @@ var
 
 function TServiceComplexCalculator.IsNull(n: TComplexNumber): boolean;
 begin
-  Result := (n.Real = 0) and (n.Imaginary = 0);
+  result := (n.Real = 0) and (n.Imaginary = 0);
 end;
 
 procedure TServiceComplexCalculator.Substract(n1, n2: TComplexNumber;
   out Result: TComplexNumber);
 begin
-  {%H-}Result.Real := n1.Real - n2.Real;
-  Result.Imaginary := n1.Imaginary - n2.Imaginary;
+  {%H-}result.Real := n1.Real - n2.Real;
+  result.Imaginary := n1.Imaginary - n2.Imaginary;
 end;
 
 function TServiceComplexCalculator.EchoRecord(const Nav: TConsultaNav): TConsultaNav;

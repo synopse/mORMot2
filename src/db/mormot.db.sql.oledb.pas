@@ -549,6 +549,14 @@ type
     procedure SetInternalProperties; override;
   end;
 
+  /// OleDB connection properties to Microsoft SQL Server 2012 R2 and later, via
+  // SQL Server OLE DB driver (Microsoft OLE DB SQL / MSOLEDBSQL)
+  TSqlDBOleDBMSSQL2018ConnectionProperties = class(TSqlDBOleDBMSSQLConnectionProperties)
+  protected
+    /// will set the appropriate provider name, i.e. 'MSOLEDBSQL'
+    procedure SetInternalProperties; override;
+  end;
+
   /// OleDB connection properties to MySQL Server
   TSqlDBOleDBMySQLConnectionProperties = class(TSqlDBOleDBConnectionProperties)
   protected
@@ -639,6 +647,7 @@ type
 
 
 implementation
+
 
 { ************ TSqlDBOleDBConnection* and TSqlDBOleDBStatement Classes }
 
@@ -2384,6 +2393,15 @@ begin
   if OSVersion > wVista then
     fProviderName := 'SQLNCLI11';
   inherited SetInternalProperties;
+end;
+
+
+{ TSqlDBOleDBMSSQL2018ConnectionProperties }
+
+procedure TSqlDBOleDBMSSQL2018ConnectionProperties.SetInternalProperties;
+begin
+  inherited SetInternalProperties;
+  fProviderName := 'MSOLEDBSQL';
 end;
 
 

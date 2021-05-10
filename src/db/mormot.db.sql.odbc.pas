@@ -40,6 +40,7 @@ type
   protected
     fDriverDoesNotHandleUnicode: boolean;
     fSqlDriverConnectPrompt: boolean;
+    fSqlStatementTimeout: integer;
     /// this overridden method will hide de DATABASE/PWD fields in ODBC connection string
     function GetDatabaseNameSafe: RawUtf8; override;
     /// this overridden method will retrieve the kind of DBMS from the main connection
@@ -115,6 +116,10 @@ type
     // - set to TRUE to allow UI prompt if needed
     property SqlDriverConnectPrompt: boolean
       read fSqlDriverConnectPrompt write fSqlDriverConnectPrompt;
+    /// The number of seconds to wait for a SQL statement to execute before canceling the query.
+    // When set to 0 (the default) there is no timeout. See ODBC SQL_QUERY_TIMEOUT documentation
+    property SqlStatementTimeoutSec: integer
+      read fSqlStatementTimeout write fSqlStatementTimeout;
   end;
 
   /// implements a direct connection to the ODBC library
@@ -722,7 +727,8 @@ begin
     colWrongType:
       ColumnToTypedValue(Col, ftUtf8, result);
   else
-    RawUnicodeToUtf8(pointer(fColData[Col]), fColumns[Col].ColumnDataSize shr 1, result);
+    RawUnicodeToUtf8(
+      pointer(fColData[Col]), fColumns[Col].ColumnDataSize shr 1, result);
   end;
 end;
 
@@ -746,8 +752,8 @@ begin
     colWrongType:
       ColumnToTypedValue(Col, ftDate, result);
   else
-    result := PSql_TIMESTAMP_STRUCT(Pointer(fColData[Col]))^.ToDateTime(fColumns
-      [Col].ColumnValueDBType);
+    result := PSql_TIMESTAMP_STRUCT(Pointer(fColData[Col]))^.ToDateTime(
+      fColumns[Col].ColumnValueDBType);
   end;
 end;
 
@@ -979,7 +985,20 @@ begin
               ftDouble:
                 begin
                   CValueType := SQL_C_DOUBLE;
-	          // in case of "Invalid character value for cast specification" error
+                  if (fDBMS = dMSSQL) and (VInOut=paramIn) and
+                     (double(VInt64) > -1) and (double(VInt64) < 1) then
+                  begin
+                    // prevent "Invalid character value for cast specification" error for numbers (-1; 1)
+                    // for doubles outside this range SQL_C_DOUBLE must be used
+                    ParameterType := SQL_NUMERIC;
+                    ColumnSize := 9;
+                    DecimalDigits := 6;
+                  end;
+                  // in case of "Invalid character value for cast specification" error
+                  // for small digits like 0.01, -0.0001 under Linux msodbcsql17 should
+                  // be updated to >= 17.5.2
+                  ParameterValue := pointer(@VInt64);
+                  // in case of "Invalid character value for cast specification" error
                   // for small digits like 0.01, -0.0001 under Linux msodbcsql17 should
                   // be updated to >= 17.5.2
                   ParameterValue := pointer(@VInt64);
@@ -1064,7 +1083,7 @@ retry:            VData := CurrentAnsiConvert.Utf8ToAnsi(VData);
           begin
             // first set focus on param
             status := ODBC.SetStmtAttrA(fStatement, SQL_SOPT_SS_PARAM_FOCUS,
-              SQLPOINTER(p + 1), SQL_IS_INTEGER);
+              SqlPointer(p + 1), SQL_IS_INTEGER);
             if not (status in [SQL_SUCCESS, SQL_NO_DATA]) then
               ODBC.HandleError(nil, self, status, SQL_HANDLE_STMT, fStatement,
                 false, sllNone);
@@ -1100,7 +1119,7 @@ retry:            VData := CurrentAnsiConvert.Utf8ToAnsi(VData);
                 false, sllNone);
             // Reset param focus
             status := ODBC.SetStmtAttrA(fStatement, SQL_SOPT_SS_PARAM_FOCUS,
-              SQLPOINTER(0), SQL_IS_INTEGER);
+              SqlPointer(0), SQL_IS_INTEGER);
             if not (status in [SQL_SUCCESS, SQL_NO_DATA]) then
               ODBC.HandleError(nil, self, status, SQL_HANDLE_STMT, fStatement,
                 false, sllNone);
@@ -1191,6 +1210,12 @@ begin
     ODBC.Check(nil, self,
       ODBC.PrepareW(fStatement, pointer(fSqlW), length(fSqlW) shr 1),
       SQL_HANDLE_STMT, fStatement);
+    if TODBCConnectionProperties(Connection.Properties).SqlStatementTimeoutSec > 0 then
+      ODBC.Check(nil, self,
+        ODBC.SetStmtAttrA(fStatement, SQL_ATTR_QUERY_TIMEOUT,
+          SqlPointer(PtrUInt(TODBCConnectionProperties(Connection.Properties).SqlStatementTimeoutSec)),
+          SQL_IS_INTEGER),
+        SQL_HANDLE_STMT, fStatement);
     SqlLogEnd;
   except
     on E: Exception do

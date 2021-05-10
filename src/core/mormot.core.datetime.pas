@@ -65,6 +65,7 @@ function Iso8601ToDateTimePUtf8Char(P: PUtf8Char; L: integer = 0): TDateTime;
 // - handle 'YYYYMMDDThhmmss' and 'YYYY-MM-DD hh:mm:ss' format, with potentially
 // shorten versions has handled by the ISO-8601 standard (e.g. 'YYYY')
 // - will also recognize '.sss' milliseconds suffix, if any
+// - any ending/trailing single quote will be removed
 // - if L is left to default 0, it will be computed from StrLen(P)
 procedure Iso8601ToDateTimePUtf8CharVar(P: PUtf8Char; L: integer;
   var result: TDateTime);
@@ -823,6 +824,15 @@ begin
     L := StrLen(P);
   if L < 4 then
     exit; // we need 'YYYY' at least
+  if (P[0] = '''') and
+     (P[L - 1] = '''') then
+  begin
+    // unquote input
+    inc(P);
+    dec(L, 2);
+    if L < 4 then
+      exit;
+  end;
   if P[0] = 'T' then
   begin
     dec(P, 8);

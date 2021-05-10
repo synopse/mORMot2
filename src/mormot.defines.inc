@@ -579,6 +579,9 @@
     {$define USE_OPENSSL}
   {$endif OSANDROID}
 {$endif OSWINDOWS}
+{$ifdef FORCE_OPENSSL}
+  {$define USE_OPENSSL} // if you think you are a lucky enough guy
+{$endif FORCE_OPENSSL}
 
 
 // -----------

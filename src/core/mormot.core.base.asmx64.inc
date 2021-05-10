@@ -1760,7 +1760,7 @@ function IsXmmYmmOSEnabled: boolean;
         sete    al   // check if OS enabled both XMM (bit 1=2) and YMM (bit 2=4)
 end;
 
-procedure GetCPUID(Param: cardinal; var Registers: TIntelRegisters);
+procedure GetCpuid(Param: cardinal; var Registers: TIntelRegisters);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     eax, Param
         mov     r9, Registers

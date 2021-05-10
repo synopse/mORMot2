@@ -4335,7 +4335,7 @@ type
 
   {$ifdef ISDELPHI2010} // Delphi 2009/2010 generics support is buggy :(
 
-  /// since Delphi interface cannot have parametrized methods, we need
+  /// since Delphi interfaces cannot have parametrized methods, we need
   // to use this abstract class to use generics signature
   TRestOrmGenerics = class(TInterfacedObject)
   protected
@@ -8680,7 +8680,7 @@ end;
 
 function TJsonObjectDecoder.SameFieldNames(const Fields: TRawUtf8DynArray): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := false;
   if length(Fields) <> FieldCount then
@@ -8693,7 +8693,7 @@ end;
 
 procedure TJsonObjectDecoder.AssignFieldNamesTo(var Fields: TRawUtf8DynArray);
 var
-  i: integer;
+  i: PtrInt;
 begin
   SetLength(Fields, FieldCount);
   for i := 0 to FieldCount - 1 do
@@ -8712,7 +8712,7 @@ function TJsonObjectDecoder.EncodeAsSqlPrepared(const TableName: RawUtf8;
   Occasion: TOrmOccasion; const UpdateIDFieldName: RawUtf8;
   BatchOptions: TRestBatchOptions): RawUtf8;
 var
-  F: integer;
+  F: PtrInt;
   W: TTextWriter;
   temp: TTextWriterStackBuffer;
 begin
@@ -8823,7 +8823,7 @@ end;
 
 function TJsonObjectDecoder.EncodeAsSql(Update: boolean): RawUtf8;
 var
-  F: integer;
+  F: PtrInt;
   W: TTextWriter;
   temp: TTextWriterStackBuffer;
 
@@ -8879,7 +8879,7 @@ end;
 
 procedure TJsonObjectDecoder.EncodeAsJson(out result: RawUtf8);
 var
-  F: integer;
+  F: PtrInt;
   W: TTextWriter;
   temp: TTextWriterStackBuffer;
 begin

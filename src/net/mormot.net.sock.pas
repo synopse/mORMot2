@@ -72,7 +72,8 @@ type
     nrFatalError,
     nrUnknownError,
     nrTooManyConnections,
-    nrRefused);
+    nrRefused,
+    nrConnectTimeout);
 
   {$M+}
   /// exception class raised by this unit
@@ -117,6 +118,10 @@ type
     nfIP6,
     nfUNIX);
 
+  /// the IP port to connect/bind to
+  TNetPort = cardinal;
+
+
 const
   /// the socket protocol layers over the IP protocol
   nlIP = [nlTCP, nlUDP];
@@ -134,8 +139,8 @@ type
     function IPShort(withport: boolean = false): shortstring; overload;
       {$ifdef HASINLINE}inline;{$endif}
     procedure IPShort(out result: shortstring; withport: boolean = false); overload;
-    function Port: cardinal;
-    function SetPort(p: cardinal): TNetResult;
+    function Port: TNetPort;
+    function SetPort(p: TNetPort): TNetResult;
     function Size: integer;
   end;
 
@@ -149,11 +154,14 @@ type
   // - then methods allow cross-platform access to the connection
   TNetSocket = ^TNetSocketWrap;
 
+  PTerminated = ^boolean; // on FPC system.PBoolean doesn't exist :(
+
   /// convenient object-oriented wrapper around a socket connection
   // - TNetSocket is a pointer to this, so TSocket(@self) is used for the OS API
   TNetSocketWrap = object
   private
     procedure SetOpt(prot, name: integer; value: pointer; valuelen: integer);
+    function SetIoMode(async: cardinal): TNetResult;
   public
     procedure SetupConnection(layer: TNetLayer; sendtimeout, recvtimeout: integer);
     procedure SetSendTimeout(ms: integer);
@@ -164,12 +172,17 @@ type
     function Accept(out clientsocket: TNetSocket; out addr: TNetAddr): TNetResult;
     function GetPeer(out addr: TNetAddr): TNetResult;
     function MakeAsync: TNetResult;
+    function MakeBlocking: TNetResult;
     function Send(Buf: pointer; var len: integer): TNetResult;
     function Recv(Buf: pointer; var len: integer): TNetResult;
     function SendTo(Buf: pointer; len: integer; out addr: TNetAddr): TNetResult;
     function RecvFrom(Buf: pointer; len: integer; out addr: TNetAddr): integer;
     function WaitFor(ms: integer; scope: TNetEvents): TNetEvents;
     function RecvPending(out pending: integer): TNetResult;
+    function RecvWait(ms: integer; out data: RawByteString;
+      terminated: PTerminated = nil): TNetResult;
+    function SendAll(Buf: PByte; len: integer;
+      terminated: PTerminated = nil): TNetResult;
     function ShutdownAndClose(rdwr: boolean): TNetResult;
     function Close: TNetResult;
     function Socket: PtrInt;
@@ -525,7 +538,7 @@ type
     // - e.g. 'https://Server:Port/Address' or 'http://unix:/Server:/Address'
     function URI: RawUtf8;
     /// the server port, as integer value
-    function PortInt: integer;
+    function PortInt: TNetPort;
     /// compute the root resource Address, without any URI-encoded parameter
     // - e.g. '/category/name/10'
     function Root: RawUtf8;
@@ -786,7 +799,7 @@ type
     /// remote IP address of the last packet received (SocketLayer=slUDP only)
     function PeerAddress(LocalAsVoid: boolean = false): RawByteString;
     /// remote IP port of the last packet received (SocketLayer=slUDP only)
-    function PeerPort: integer;
+    function PeerPort: TNetPort;
     /// set the TCP_NODELAY option for the connection
     // - default true will disable the Nagle buffering algorithm; it should
     // only be set for applications that send frequent small bursts of information
@@ -894,7 +907,8 @@ const
     'Fatal Error',
     'Unknown Error',
     'Too Many Connections',
-    'Refused');
+    'Refused',
+    'Connect Timeout');
 
 function NetLastError(AnotherNonFatal: integer = NO_ERROR;
   Error: PInteger = nil): TNetResult;
@@ -914,6 +928,8 @@ begin
           (err <> AnotherNonFatal) then
     if err = WSAEMFILE then
       result := nrTooManyConnections
+    else if err = WSAECONNREFUSED then
+      result := nrRefused
     else
       result := nrFatalError
   else
@@ -1097,22 +1113,22 @@ begin
   end;
 end;
 
-function TNetAddr.Port: cardinal;
+function TNetAddr.Port: TNetPort;
 begin
   with PSockAddr(@Addr)^ do
     if sa_family in [AF_INET, AF_INET6] then
-      result := swap(sin_port)
+      result := htons(sin_port)
     else
       result := 0;
 end;
 
-function TNetAddr.SetPort(p: cardinal): TNetResult;
+function TNetAddr.SetPort(p: TNetPort): TNetResult;
 begin
   with PSockAddr(@Addr)^ do
     if (sa_family in [AF_INET, AF_INET6]) and
        (p <= 65535) then
     begin
-      sin_port := swap(word(p)); // word() is mandatory
+      sin_port := htons(p);
       result := nrOk;
     end
     else
@@ -1141,6 +1157,7 @@ var
   addr: TNetAddr;
   sock: TSocket;
   fromcache, tobecached: boolean;
+  connectendtix: Int64;
   p: cardinal;
 begin
   netsocket := nil;
@@ -1180,6 +1197,30 @@ begin
     exit;
   end;
   // bind or connect to this Socket
+  // open non-blocking Client connection if a timeout was specified
+  if (connecttimeout > 0) and
+     not dobind then
+  begin
+    // SetReceiveTimeout/SetSendTimeout don't apply to connect() -> async
+    if connecttimeout < 100 then
+      connectendtix := 0
+    else
+      connectendtix := mormot.core.os.GetTickCount64 + connecttimeout;
+    TNetSocket(sock).MakeAsync;
+    connect(sock, @addr, addr.Size); // non-blocking connect() once
+    TNetSocket(sock).MakeBlocking;
+    result := nrConnectTimeout;
+    repeat
+      if TNetSocket(sock).WaitFor(1, [neWrite]) = [neWrite] then
+      begin
+        result := nrOK;
+        break;
+      end;
+      SleepHiRes(1); // wait for actual connection
+    until (connectendtix = 0) or
+          (mormot.core.os.GetTickCount64 > connectendtix);
+  end
+  else
   repeat
     if dobind then
     begin
@@ -1192,21 +1233,9 @@ begin
         result := NetLastError(WSAEADDRNOTAVAIL);
     end
     else
-    begin
-      // open Client connection
-      if connecttimeout > 0 then
-      begin
-        // set timeouts before connect()
-        TNetSocket(sock).SetReceiveTimeout(connecttimeout);
-        if recvtimeout = connecttimeout then
-          recvtimeout := 0; // call SetReceiveTimeout() once
-        TNetSocket(sock).SetSendTimeout(connecttimeout);
-        if sendtimeout = connecttimeout then
-          sendtimeout := 0; // call SetSendTimeout() once
-      end;
+      // open blocking Client connection (use system-defined timeout)
       if connect(sock, @addr, addr.Size) <> NO_ERROR then
         result := NetLastError(WSAEADDRNOTAVAIL);
-    end;
     if (result = nrOK) or
        (retry <= 0) then
       break;
@@ -1318,17 +1347,22 @@ begin
   end;
 end;
 
-function TNetSocketWrap.MakeAsync: TNetResult;
-var
-  nonblocking: cardinal;
+function TNetSocketWrap.SetIoMode(async: cardinal): TNetResult;
 begin
   if @self = nil then
     result := nrNoSocket
   else
-  begin
-    nonblocking := 1;
-    result := NetCheck(ioctlsocket(TSocket(@self), FIONBIO, @nonblocking));
-  end;
+    result := NetCheck(ioctlsocket(TSocket(@self), FIONBIO, @async));
+end;
+
+function TNetSocketWrap.MakeAsync: TNetResult;
+begin
+  result := SetIoMode(1);
+end;
+
+function TNetSocketWrap.MakeBlocking: TNetResult;
+begin
+  result := SetIoMode(0);
 end;
 
 function TNetSocketWrap.Send(Buf: pointer; var len: integer): TNetResult;
@@ -1390,6 +1424,71 @@ begin
     result := nrNoSocket
   else
     result := NetCheck(ioctlsocket(TSocket(@self), FIONREAD, @pending));
+end;
+
+function TNetSocketWrap.RecvWait(ms: integer;
+  out data: RawByteString; terminated: PTerminated): TNetResult;
+var
+  events: TNetEvents;
+  pending: integer;
+begin
+  events := WaitFor(100, [neRead]);
+  if (neError in events) or
+     (Assigned(terminated) and
+      terminated^) then
+    result := nrClosed
+  else if neRead in events then
+  begin
+    result := RecvPending(pending);
+    if result = nrOK then
+      if pending > 0 then
+      begin
+        SetLength(data, pending);
+        result := Recv(pointer(data), pending);
+        if Assigned(terminated) and
+           terminated^ then
+          result := nrClosed;
+        if result <> nrOK then
+          exit;
+        if pending <= 0 then
+        begin
+          result := nrUnknownError;
+          exit;
+        end;
+        if pending <> length(data) then
+          SetLength(data, pending);
+      end
+      else
+        result := nrRetry;
+  end
+  else
+    result := nrRetry;
+end;
+
+function TNetSocketWrap.SendAll(Buf: PByte; len: integer;
+  terminated: PTerminated): TNetResult;
+var
+  sent: integer;
+begin
+  repeat
+    sent := len;
+    result := Send(Buf, len);
+    if Assigned(terminated) and
+       terminated^ then
+      break;
+    if sent > 0 then
+    begin
+      inc(Buf, sent);
+      dec(len, sent);
+      if len = 0 then
+        exit;
+    end;
+    if result <> nrRetry then
+      exit;
+    SleepHiRes(1);
+  until Assigned(terminated) and
+        terminated^;
+  result := nrClosed;
 end;
 
 function TNetSocketWrap.ShutdownAndClose(rdwr: boolean): TNetResult;
@@ -1860,7 +1959,7 @@ begin
     result := Prefix[Https] + Server + ':' + port + '/' + address;
 end;
 
-function TUri.PortInt: integer;
+function TUri.PortInt: TNetPort;
 begin
   result := GetCardinal(pointer(port));
 end;
@@ -2013,80 +2112,9 @@ end;
 
 procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8;
   doBind, aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket);
-var
-  retry: integer;
-  head: RawUtf8;
-  res: TNetResult;
-begin
-  fSocketLayer := aLayer;
-  fWasBind := doBind;
-  if {%H-}PtrInt(aSock)<=0 then
+
+  procedure DoTlsHandshake;
   begin
-    // OPEN or BIND mode -> create the socket
-    if doBind then
-      // allow small number of retries (e.g. XP or BSD during aggressive tests)
-      retry := 10
-    else if (Tunnel.Server <> '') and
-            (aLayer = nlTCP) then
-    begin
-      // handle client tunnelling via an HTTP(s) proxy
-      res := nrRefused;
-      fProxyUrl := Tunnel.URI;
-      try
-        OpenBind(Tunnel.Server, Tunnel.Port, false, Tunnel.Https);
-        SockSend(['CONNECT ', aServer, ':', aPort, ' HTTP/1.0']);
-        if Tunnel.User <> '' then
-          SockSend(['Proxy-Authorization: Basic ', Tunnel.UserPasswordBase64]);
-        SockSendFlush;
-        repeat
-          SockRecvLn(head);
-          if StartWith(pointer(head), 'HTTP/') and
-             (length(head) > 11) and
-             (head[10] = '2') then // 'HTTP/1.1 2xx xxxx' success
-            res := nrOK;
-        until  head = '';
-      except
-        res := nrNotFound;
-      end;
-      if res <> nrOk then
-        raise ENetSock.Create('%s.OpenBind(%s:%s): %s proxy error',
-          [ClassNameShort(self)^, aServer, aPort, fProxyUrl], res);
-      fServer := aServer;
-      fPort := aPort;
-      if Assigned(OnLog) then
-        OnLog(sllTrace, 'Open(%:%) via proxy %', [fServer, fPort, fProxyUrl], self);
-      exit;
-    end
-    else
-      // direct client connection
-      retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
-    if (aPort = '') and
-       (aLayer <> nlUNIX) then
-      fPort := DEFAULT_PORT[aTLS] // default port is 80/443 (HTTP/S)
-    else
-      fPort := aPort;
-    fServer := aServer;
-    res := NewSocket(fServer, fPort, aLayer, doBind,
-      fTimeout, fTimeout, fTimeout, retry, fSock);
-    if res <> nrOK then
-      raise ENetSock.Create('%s %s.OpenBind(%s:%s,%s)',
-        [BINDMSG[doBind], ClassNameShort(self)^, aServer, fPort], res);
-  end
-  else
-  begin
-    // ACCEPT mode -> socket is already created by caller
-    fSock := aSock;
-    if TimeOut > 0 then
-    begin
-      // set timout values for both directions
-      ReceiveTimeout := TimeOut;
-      SendTimeout := TimeOut;
-    end;
-  end;
-  if aLayer = nlTCP then
-    if aTLS and
-       not doBind and
-       ({%H-}PtrInt(aSock) <= 0) then
     try
       if not Assigned(NewNetTls) then
         raise ENetSock.Create('%s.OpenBind: TLS is not available - try ' +
@@ -2107,6 +2135,91 @@ begin
            ClassNameShort(E)^, E.Message]);
       end;
     end;
+  end;
+
+var
+  retry: integer;
+  head: RawUtf8;
+  res: TNetResult;
+begin
+  fSocketLayer := aLayer;
+  fWasBind := doBind;
+  if {%H-}PtrInt(aSock)<=0 then
+  begin
+    // OPEN or BIND mode -> create the socket
+    if doBind then
+      // allow small number of retries (e.g. XP or BSD during aggressive tests)
+      retry := 10
+    else if (Tunnel.Server <> '') and
+            (Tunnel.Server <> aServer) and
+            (aLayer = nlTCP) then
+    begin
+      // handle client tunnelling via an HTTP(s) proxy
+      res := nrRefused;
+      fProxyUrl := Tunnel.URI;
+      if Tunnel.Https and aTLS then
+        raise ENetSock.Create('%s.Open(%s:%s): %s proxy - unsupported dual ' +
+          'TLS layers', [ClassNameShort(self)^, aServer, aPort, fProxyUrl]);
+      try
+        OpenBind(Tunnel.Server, Tunnel.Port, false, Tunnel.Https);
+        SockSend(['CONNECT ', aServer, ':', aPort, ' HTTP/1.0']);
+        if Tunnel.User <> '' then
+          SockSend(['Proxy-Authorization: Basic ', Tunnel.UserPasswordBase64]);
+        SockSendFlush(#13#10);
+        repeat
+          SockRecvLn(head);
+          if StartWith(pointer(head), 'HTTP/') and
+             (length(head) > 11) and
+             (head[10] = '2') then // 'HTTP/1.1 2xx xxxx' success
+            res := nrOK;
+        until head = '';
+      except
+        on E: Exception do
+          raise ENetSock.Create('%s.Open(%s:%s): %s proxy error %s',
+            [ClassNameShort(self)^, aServer, aPort, fProxyUrl, E.Message]);
+      end;
+      if res <> nrOk then
+        raise ENetSock.Create('%s.Open(%s:%s): %s proxy error',
+          [ClassNameShort(self)^, aServer, aPort, fProxyUrl], res);
+      fServer := aServer; // nested OpenBind
+      fPort := aPort;
+      if Assigned(OnLog) then
+        OnLog(sllTrace, 'Open(%:%) via proxy %', [fServer, fPort, fProxyUrl], self);
+      if aTLS then
+        DoTlsHandshake;
+      exit;
+    end
+    else
+      // direct client connection
+      retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
+    if (aPort = '') and
+       (aLayer <> nlUNIX) then
+      fPort := DEFAULT_PORT[aTLS] // default port is 80/443 (HTTP/S)
+    else
+      fPort := aPort;
+    fServer := aServer;
+    res := NewSocket(fServer, fPort, aLayer, doBind,
+      fTimeout, fTimeout, fTimeout, retry, fSock);
+    if res <> nrOK then
+      raise ENetSock.Create('%s %s.OpenBind(%s:%s)',
+        [BINDMSG[doBind], ClassNameShort(self)^, aServer, fPort], res);
+  end
+  else
+  begin
+    // ACCEPT mode -> socket is already created by caller
+    fSock := aSock;
+    if TimeOut > 0 then
+    begin
+      // set timout values for both directions
+      ReceiveTimeout := TimeOut;
+      SendTimeout := TimeOut;
+    end;
+  end;
+  if (aLayer = nlTCP) and
+     aTLS and
+     not doBind and
+     ({%H-}PtrInt(aSock) <= 0) then
+    DoTlsHandshake;
   if Assigned(OnLog) then
     OnLog(sllTrace, '%(%:%) sock=% %', [BINDTXT[doBind], fServer, fPort,
       fSock.Socket, TLS.CipherName], self);
@@ -2878,7 +2991,7 @@ begin
   result := fPeerAddr.IP(LocalAsVoid);
 end;
 
-function TCrtSocket.PeerPort: integer;
+function TCrtSocket.PeerPort: TNetPort;
 begin
   result := fPeerAddr.Port;
 end;

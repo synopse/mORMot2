@@ -4540,15 +4540,18 @@ var
     i: integer;
     tmp: RawByteString;
     tmpFN: TFileName;
+    local: TLocalFileHeader;
     info: TFileInfoFull;
   begin
+    Check(Z.TestAll, 'testall');
     with Z do
     try
+      if CheckFailed(Count = aCount, 'count') then
+        exit;
       for i := 0 to Count - 1 do
-        with Entry[i] do
-          Check(CompareMem(@dir^.fileInfo, @local^.fileInfo,
-            SizeOf(TFileInfo) - SizeOf(dir^.fileInfo.extraLen)));
-      Check(Count = aCount, 'count');
+        if not CheckFailed(RetrieveLocalFileHeader(i, local)) then
+          Check(CompareMem(@Entry[i].dir^.fileInfo, @local.fileInfo,
+            SizeOf(TFileInfo) - SizeOf(Entry[i].dir^.fileInfo.extraLen)));
       i := NameToIndex('REP1\ONE.exe');
       Check(i = 0, '0');
       FillcharFast(info, sizeof(info), 0);
@@ -4558,17 +4561,20 @@ var
       Check(UnZip(i) = Data, 'unzip1');
       i := NameToIndex('REp2\ident.gz');
       Check(i = 1, 'unzip2');
-      Check(Entry[i].local^.fileInfo.zcrc32 = crc1, 'crc1a');
+      Check(RetrieveLocalFileHeader(i, local));
+      Check(local.fileInfo.zcrc32 = crc1, 'crc1a');
       tmp := UnZip(i);
       Check(tmp <> '', 'unzip3');
       Check(crc32(0, pointer(tmp), length(tmp)) = crc1, 'crc1b');
       i := NameToIndex(ExtractFileName(DataFile));
       Check(i = 2, 'unzip4');
       Check(UnZip(i) = Data, 'unzip6');
-      Check(Entry[i].local^.fileInfo.zcrc32 = info.f32.zcrc32, 'crc32');
+      Check(RetrieveLocalFileHeader(i, local));
+      Check(local.fileInfo.zcrc32 = info.f32.zcrc32, 'crc32');
       i := NameToIndex('REp2\ident2.gz');
       Check(i = 3, 'unzip5');
-      Check(Entry[i].local^.fileInfo.zcrc32 = crc1, 'crc1c');
+      Check(RetrieveLocalFileHeader(i, local));
+      Check(local.fileInfo.zcrc32 = crc1, 'crc1c');
       tmp := UnZip(i);
       Check(tmp <> '', 'unzip7');
       Check(crc32(0, pointer(tmp), length(tmp)) = crc1, 'crc1d');
@@ -4605,17 +4611,21 @@ var
   end;
 
 var
-  i: integer;
+  i, m: integer;
+  mem: QWord;
+  json, deleted: TStringDynArray;
 begin
+  for m := 1 to 2 do
   for zip64 := false to true do
   begin
+    mem := 1 shl 20 * m; // test with and without TZipRead.fSource
     FN := WorkDir + 'write';
     if zip64 then
       FN := FN + '64.zip'
     else
       FN := FN + '.zip';
     Prepare(TZipWrite.Create(FN));
-    test(TZipRead.Create(FN), 4);
+    test(TZipRead.Create(FN, 0, 0, mem), 4);
     S := TRawByteStringStream.Create;
     try
       Prepare(TZipWrite.Create(S));
@@ -4624,7 +4634,7 @@ begin
     finally
       S.Free;
     end;
-    with TZipWrite.CreateFrom(FN) do
+    with TZipWrite.CreateFrom(FN, mem) do
     try
       Check(Count = 4, 'two4');
       AddDeflated('rep1\two.exe', pointer(Data), length(Data));
@@ -4632,8 +4642,8 @@ begin
     finally
       Free;
     end;
-    test(TZipRead.Create(FN), 5);
-    with TZipWrite.CreateFrom(FN, 'rep1\two.exe') do
+    test(TZipRead.Create(FN, 0, 0, mem), 5);
+    with TZipWrite.CreateFrom(FN, ['rep1\two.exe']) do
     try
       Check(Count = 4, 'last4');
       AddDeflated('rep1\two.exe', pointer(Data), length(Data));
@@ -4642,21 +4652,52 @@ begin
       Free;
     end;
     test(TZipRead.Create(FN), 5);
-    DeleteFile(FN);
+    FN2 := ChangeFileExt(FN, 'appended.exe');
+    if m = 1 then
+    begin
+      FileFromString(Data, FN2);
+      FileAppend(FN2, FN);
+    end
+    else
+    begin
+      FileAppend(DataFile, FN, FN2);
+      mem := mem * 2;
+    end;
+    test(TZipRead.Create(FN2, 0, 0, mem), 5);
+    DeleteFile(FN2);
     FN2 := WorkDir + 'json';
     if zip64 then
       FN2 := FN2 + '64.zip'
     else
       FN2 := FN2 + '.zip';
+    json := nil;
+    deleted := nil;
     with TZipWrite.Create(FN2) do
     try
-      AddFolder(WorkDir, '*.json');
-      Check(Count > 2);
+      AddFolder(WorkDir, '*.json', true, 1);
+      CheckUtf8(Count > 2, 'json=%', [Count]);
       for i := 0 to Count - 1 do
-        Check(SameText(ExtractFileExt(Ansi7ToString(Entry[i].intName)), '.json'), 'json');
+      begin
+        Check(AddString(json, Ansi7ToString(Entry[i].intName)) = i);
+        if (i and 1) = (m - 1) then
+          AddString(deleted, json[i]);
+        Check(SameText(ExtractFileExt(json[i]), '.json'), 'json');
+      end;
     finally
       Free;
     end;
+    with TZipWrite.CreateFrom(FN2, TFileNameDynArray(deleted)) do
+    try
+      Check(Count = length(json) - length(deleted));
+    finally
+      Free;
+    end;
+    Check(ZipTest(FN2), 'zipjson1');
+    for i := 0 to high(json) do
+      json[i] := WorkDir + json[i];
+    ZipAppendFiles(DataFile, FN2, TFileNameDynArray(json), false, 1);
+    Check(ZipTest(FN2), 'zipjson2');
+    DeleteFile(FN);
     DeleteFile(FN2);
   end;
 end;
@@ -4831,6 +4872,7 @@ end;
   log files like above. But Lizard/LizardFast seem a better candidate for
   fast decompression of any kind of data, especially large JSON/binary buffers.
 }
+
 
 end.
 

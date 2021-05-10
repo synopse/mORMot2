@@ -1472,7 +1472,7 @@ procedure FastFinalizeArray(Value: PPointer; ElemTypeInfo: PRttiInfo;
   Count: integer);
 
 /// clear the managed fields of a record content
-// - won't reset all values to zero - see RecordZero() instead
+// - won't reset all values to zero, only managed fields - see RecordZero()
 // - caller should ensure the type is indeed a record/object
 // - see also TRttiInfo.Clear if you want to finalize any type
 // - same as RTTI_FINALIZE[rkRecord]()
@@ -3710,7 +3710,6 @@ var
   call: TMethod;
   rf: TRttiFloat;
 begin
-  Value := 0;
   rf := TypeInfo^.RttiFloat;
   case Setter(Instance, @call) of
     rpcField:

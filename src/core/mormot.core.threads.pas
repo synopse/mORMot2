@@ -2055,13 +2055,17 @@ end;
 
 procedure TSynThread.DoTerminate;
 begin
-  if Assigned(fStartNotified) and
-     Assigned(fOnThreadTerminate) then
-  begin
-    fOnThreadTerminate(self);
-    fStartNotified := nil;
+  try
+    if Assigned(fStartNotified) and
+       Assigned(fOnThreadTerminate) then
+    begin
+      fStartNotified := nil;
+      fOnThreadTerminate(self);
+    end;
+    inherited DoTerminate; // call OnTerminate via Synchronize()
+  except
+    // hardened: a closing thread should not jeopardize the whole executable! 
   end;
-  inherited DoTerminate;
 end;
 
 {$ifndef HASTTHREADSTART}

@@ -777,6 +777,7 @@ type
     procedure InternalFlush;
     function GetTotalWritten: Int64;
       {$ifdef HASINLINE}inline;{$endif}
+    procedure InternalWrite(Data: pointer; DataLen: PtrInt);
     procedure FlushAndWrite(Data: pointer; DataLen: PtrInt);
   public
     /// initialize the buffer, and specify a file handle to use for writing
@@ -798,6 +799,7 @@ type
     // - parameter could be e.g. TMemoryStream or TRawByteStringStream
     // - use Flush then TMemoryStream(Stream) to retrieve its content, or
     // FlushTo if TRawByteStringStream was used
+    // - Write() fails over 800MB (_STRMAXSIZE) for a TRawByteStringStream
     constructor Create(aClass: TStreamClass; BufLen: integer = 4096); overload;
     /// initialize with a specified buffer and an owned TStream
     // - use a specified external buffer (which may be allocated on stack),
@@ -807,6 +809,7 @@ type
     /// initialize with a stack-allocated 8KB of buffer
     // - destination stream is an owned TRawByteStringStream - so you can
     // call FlushTo to retrieve all written data
+    // - Write() fails over 800MB (_STRMAXSIZE) for a TRawByteStringStream
     // - convenient to reduce heap presure, when writing a few KB of data
     constructor Create(const aStackBuffer: TTextWriterStackBuffer); overload;
     /// release internal TStream (after AssignToHandle call)
@@ -917,7 +920,7 @@ type
     // - raise an exception if internal Stream is not a TRawByteStringStream
     function FlushTo: RawByteString;
     /// write any pending data, then create a TBytes array from the content
-    // - raise an exception if internal Stream is not a TRawByteStringStream
+    // - raise an exception if the size exceeds 800MB (_DAMAXSIZE)
     function FlushToBytes: TBytes;
     /// write any pending data, then call algo.Compress() on the buffer
     // - if algo is left to its default nil, will use global AlgoSynLZ
@@ -1225,9 +1228,11 @@ function MultiPartFormDataNewBound(var boundaries: TRawUtf8DynArray): RawUtf8;
 // $ Content-Type: multipart/form-data; boundary=xxx
 // where xxx is the first generated boundary
 // - MultiPartContent: generated multipart content
+// - Rfc2388NestedFiles will force the deprecated nested "multipart/mixed" format
 // - consider THttpMultiPartStream from mormot.net.client for huge file content
 function MultiPartFormDataEncode(const MultiPart: TMultiPartDynArray;
-  var MultiPartContentType, MultiPartContent: RawUtf8): boolean;
+  var MultiPartContentType, MultiPartContent: RawUtf8;
+  Rfc2388NestedFiles: boolean = false): boolean;
 
 /// encode a file in a multipart array
 // - FileName: file to encode
@@ -1546,8 +1551,14 @@ type
 procedure AppendBufferToRawUtf8(var Text: RawUtf8; Buffer: pointer; BufferLen: PtrInt);
 
 /// fast add one character to a RawUtf8 string
-// - faster than Text := Text + ch;
+// - faster than
+// ! Text := Text + ch;
 procedure AppendCharToRawUtf8(var Text: RawUtf8; Ch: AnsiChar);
+
+/// fast add one character to a RawUtf8 string, if not already present
+// - faster than
+// ! if (Text<>'') and (Text[length(Text)]<>Ch) then Text := Text + ch;
+procedure AppendCharOnceToRawUtf8(var Text: RawUtf8; Ch: AnsiChar);
 
 /// fast add some characters to a RawUtf8 string
 // - faster than Text := Text+RawUtf8(Buffers[0])+RawUtf8(Buffers[0])+...
@@ -1683,44 +1694,60 @@ type
   /// TStreamHasher.Write optional progression callback
   // - see Sender properties like Context/Size/PerSecond and ExpectedSize
   // (which may be 0 if the download size is unknown)
+  // - see e.g. TStreamRedirect.ProgressToConsole
   TOnStreamProgress = procedure(Sender: TStreamRedirect) of object;
 
-  /// an abstract pipeline stream able to hash its written content
-  // - hashing is performed on the fly during the Write() process
+  /// an abstract pipeline stream able to redirect and hash read/written content
+  // - can be used either Read() or Write() calls during its livetime
+  // - hashing is performed on the fly during the Read/Write process
   // - it features also a callback to mark its progress
-  // - can sleep during Write() to reach a LimitPerSecond average bandwidth
+  // - can sleep during Read/Write to reach a LimitPerSecond average bandwidth
   TStreamRedirect = class(TStreamWithPosition)
   protected
-    fDestination: TStream;
-    fExpectedSize, fCurrentSize: Int64;
-    fStartTix, fReportTix, fLastTix, fTimeOut: Int64;
+    fRedirected: TStream;
+    fExpectedSize, fCurrentSize, fExpectedWrittenSize, fProcessedSize: Int64;
+    fStartTix, fReportTix, fLastTix, fTimeOut, fElapsed, fRemaining: Int64;
     fPerSecond, fLimitPerSecond: PtrInt;
     fPercent: integer;
     fOnProgress: TOnStreamProgress;
     fOnLog: TSynLogProc;
     fContext: RawUtf8;
+    fTerminated: boolean;
+    fConsoleLen: byte;
+    fMode: (mUnknown, mRead, mWrite);
     function GetSize: Int64; override;
     procedure DoReport;
     procedure DoHash(data: pointer; len: integer); virtual; // do nothing
+    procedure SetExpectedSize(Value: Int64);
+    procedure ReadWriteHash(const Buffer; Count: Longint); virtual;
+    procedure ReadWriteReport(const Caller: ShortString); virtual;
   public
     /// initialize the internal structure, and start the timing
-    // - before calling Write(), you should set the Destination property
-    constructor Create(aDestination: TStream); reintroduce; virtual;
-    /// release the associated Destination stream
+    // - before calling Read/Write, you should set the Redirected property or
+    // specify aRedirected here - which will be owned by this instance
+    // - if aRead is true, ExpectedSize is set from aRedirected.Size
+    constructor Create(aRedirected: TStream; aRead: boolean = false); reintroduce; virtual;
+    /// release the associated Redirected stream
     destructor Destroy; override;
     /// can be used by for TOnStreamProgress callback writing into the console
     class procedure ProgressToConsole(Sender: TStreamRedirect);
-    /// this method will raise an error: it's a write-only stream
+    /// update the hash and redirect the data to the associated TStream
+    // - also trigger OnProgress at least every second
+    // - will raise an error if Write() (or Append) have been called before
     function Read(var Buffer; Count: Longint): Longint; override;
     /// update the hash and redirect the data to the associated TStream
     // - also trigger OnProgress at least every second
+    // - will raise an error if Read() has been called before
     function Write(const Buffer; Count: Longint): Longint; override;
-    /// update the hash of the existing Destination stream content
+    /// update the hash of the existing Redirected stream content
     // - ready to Write() some new data after the existing
     procedure Append;
     /// notify end of process
-    // - should be called explicitly when all Write() has been done
+    // - should be called explicitly when all Read()/Write() has been done
     procedure Ended;
+    /// could be set from another thread to abort the streaming process
+    // - will raise an exception at the next Read()/Write() call
+    procedure Terminate;
     /// return the current state of the hash as lower hexadecimal
     // - by default, will return '' meaning that no hashing algorithm was set
     function GetHash: RawUtf8; virtual;
@@ -1730,25 +1757,40 @@ type
     /// apply the internal hash algorithm to the supplied file content
     // - could be used ahead of time to validate a cached file
     class function HashFile(const FileName: TFileName): RawUtf8;
-    /// specify a TStream to which any Write() will be redirected
-    property Destination: TStream
-      read fDestination write fDestination;
-    /// you can specify a number of bytes for the final Destination size
-    // - will be used for the callback progress - could be 0 if size is unknown
+    /// specify a TStream to which any Read()/Write() will be redirected
+    // - this TStream instance will be owned by the TStreamRedirect
+    property Redirected: TStream
+      read fRedirected write fRedirected;
+    /// you can specify a number of bytes for the final Redirected size
+    // - will be used for the callback progress - could be left to 0 for Write()
+    // if size is unknown
     property ExpectedSize: Int64
-      read fExpectedSize write fExpectedSize;
+      read fExpectedSize write SetExpectedSize;
+    /// how many bytes have passed through Read() or Write()
+    // - may not equal Size or Position after an Append - e.g. on resumed
+    // download from partial file
+    property ProcessedSize: Int64
+      read fProcessedSize;
     /// percentage of Size versus ExpectedSize
     // - equals 0 if ExpectedSize is 0
     property Percent: integer
       read fPercent;
+    /// number of milliseconds elasped since beginning, as set by Read/Write
+    property Elapsed: Int64
+      read fElapsed;
+    /// number of milliseconds remaining for full process, as set by Read/Write
+    // - equals 0 if ExpectedSize is 0
+    // - is just an estimation based on the average PerSecond speed
+    property Remaining: Int64
+      read fRemaining;
     /// number of bytes processed per second, since initialization of this instance
     property PerSecond: PtrInt
       read fPerSecond;
-    /// can limit the Write() bandwidth used
+    /// can limit the Read/Write bandwidth used
     // - sleep so that PerSecond will keep close to this LimitPerSecond value
     property LimitPerSecond: PtrInt
       read fLimitPerSecond write fLimitPerSecond;
-    /// Write() will raise an exception if not finished after TimeOut milliseconds
+    /// Read/Write will raise an exception if not finished after TimeOut milliseconds
     property TimeOut: Int64
       read fTimeOut write fTimeOut;
     /// optional process context, e.g. a download URI, used for logging/progress
@@ -1757,7 +1799,7 @@ type
     /// can be assigned from TSynLog.DoLog class method for low-level logging
     property OnLog: TSynLogProc
       read fOnLog write fOnLog;
-    /// optional callback triggered during Write()
+    /// optional callback triggered during Read/Write
     // - at least at process startup and finish, and every second
     property OnProgress: TOnStreamProgress
       read fOnProgress write fOnProgress;
@@ -3497,7 +3539,7 @@ begin
   if Append and FileExists(aFileName) then
   begin
     s := TFileStream.Create(aFileName, fmOpenWrite);
-    s.Seek(0, soFromEnd);
+    s.Seek(0, soEnd);
   end
   else
     s := TFileStream.Create(aFileName, fmCreate);
@@ -3556,11 +3598,22 @@ end;
 
 procedure TBufferWriter.InternalFlush;
 begin
-  if fPos = 0 then
-    exit;
-  fStream.WriteBuffer(fBuffer^, fPos);
-  inc(fTotalFlushed, fPos);
-  fPos := 0;
+  if fPos > 0 then
+  begin
+    InternalWrite(fBuffer, fPos);
+    fPos := 0;
+  end;
+end;
+
+procedure TBufferWriter.InternalWrite(Data: pointer; DataLen: PtrInt);
+begin
+  inc(fTotalFlushed, DataLen);
+  if fStream.InheritsFrom(TRawByteStringStream) and
+     (fTotalFlushed > _STRMAXSIZE) then
+    // Delphi strings have a 32-bit length so you should change your algorithm
+    raise ESynException.CreateUtf8('%.Write: % overflow (%)',
+      [self, fStream, KBNoSpace(fTotalFlushed)]);
+  fStream.WriteBuffer(Data^, DataLen);
 end;
 
 function TBufferWriter.GetTotalWritten: Int64;
@@ -3593,7 +3646,7 @@ begin
   if fPos > 0 then
     InternalFlush;
   if DataLen > fBufLen then
-    fStream.WriteBuffer(Data^, DataLen)
+    InternalWrite(Data, DataLen)
   else
   begin
     MoveFast(Data^, fBuffer^[fPos], DataLen);
@@ -4208,9 +4261,14 @@ begin
 end;
 
 function TBufferWriter.FlushToBytes: TBytes;
+var
+  siz: Int64;
 begin
   result := nil;
-  SetLength(result, TotalWritten);
+  siz := GetTotalWritten;
+  if siz > _DAMAXSIZE then
+    raise ESynException.CreateUtf8('%.FlushToBytes: overflow (%)', [KB(siz)]);
+  SetLength(result, siz);
   if fStream.Position = 0 then
     // direct assignment from internal buffer
     MoveFast(fBuffer[0], pointer(result)^, fPos)
@@ -4763,7 +4821,7 @@ begin
     if Source.InheritsFrom(TCustomMemoryStream) then
     begin
       S := PAnsiChar(TCustomMemoryStream(Source).Memory) + PtrUInt(sourcePosition);
-      Source.Seek(Head.CompressedSize, soFromCurrent);
+      Source.Seek(Head.CompressedSize, soCurrent);
     end
     else
     begin
@@ -6184,15 +6242,16 @@ end;
 
 function MultiPartFormDataNewBound(var boundaries: TRawUtf8DynArray): RawUtf8;
 var
-  random: array[0..3] of cardinal;
+  random: array[0..2] of cardinal;
 begin
-  FillRandom(@random, 4);
+  FillRandom(@random, 3);
   result := BinToBase64uri(@random, SizeOf(random));
   AddRawUtf8(boundaries, result);
 end;
 
 function MultiPartFormDataEncode(const MultiPart: TMultiPartDynArray;
-  var MultiPartContentType, MultiPartContent: RawUtf8): boolean;
+  var MultiPartContentType, MultiPartContent: RawUtf8;
+  Rfc2388NestedFiles: boolean): boolean;
 var
   len, filescount, i: integer;
   boundaries: TRawUtf8DynArray;
@@ -6221,22 +6280,29 @@ begin
             [bound, Name, ContentType, Content])
         else
         begin
-          // if this is the first file, create the "files" sub-section
-          if filescount = 0 then
+          // if this is the first file, create the RFC 2388 nested "files"
+          if Rfc2388NestedFiles and
+             (filescount = 0) then
           begin
             W.Add('--%'#13#10, [bound]);
             bound := MultiPartFormDataNewBound(boundaries);
             W.Add('Content-Disposition: form-data; name="files"'#13#10 +
               'Content-Type: multipart/mixed; boundary=%'#13#10#13#10, [bound]);
-          end;
-          inc(filescount);
-          W.Add('--%'#13#10'Content-Disposition: file; filename="%"'#13#10 +
-            'Content-Type: %'#13#10, [bound, FileName, ContentType]);
+            W.Add('--%'#13#10'Content-Disposition: file; filename="%"'#13#10 +
+              'Content-Type: %'#13#10, [bound, FileName, ContentType]);
+          end
+          else
+            // see https://tools.ietf.org/html/rfc7578#appendix-A
+            W.Add('--%'#13#10 +
+              'Content-Disposition: form-data; name="%"; filename="%"'#13#10 +
+              'Content-Type: %'#13#10,
+              [bound, Name, FileName, ContentType]);
           if Encoding <> '' then
             W.Add('Content-Transfer-Encoding: %'#13#10, [Encoding]);
           W.AddCR;
           W.AddString(MultiPart[i].Content);
           W.AddCR;
+          inc(filescount);
         end;
       end;
     // footer multipart
@@ -6973,32 +7039,34 @@ begin
   result := DefaultContentType;
   if (Content <> nil) and
      (Len > 4) then
-    case PCardinal(Content)^ of
-      $04034B50:
+    case PCardinal(Content)^ + 1 of // + 1 to avoid finding it in the exe
+      $04034B50 + 1:
         result := 'application/zip'; // 50 4B 03 04
-      $46445025:
+      $46445025 + 1:
         result := 'application/pdf'; //  25 50 44 46 2D 31 2E
-      $21726152:
+      $21726152 + 1:
         result := 'application/x-rar-compressed'; // 52 61 72 21 1A 07 00
-      $AFBC7A37:
+      $AFBC7A37 + 1:
         result := 'application/x-7z-compressed';  // 37 7A BC AF 27 1C
-      $694C5153:
+      $694C5153 + 1:
         result := 'application/x-sqlite3'; // SQlite format 3 = 53 51 4C 69
-      $75B22630:
+      $75B22630 + 1:
         result := 'audio/x-ms-wma'; // 30 26 B2 75 8E 66
-      $9AC6CDD7:
+      $9AC6CDD7 + 1:
         result := 'video/x-ms-wmv'; // D7 CD C6 9A 00 00
-      $474E5089:
+      $474E5089 + 1:
         result := 'image/png'; // 89 50 4E 47 0D 0A 1A 0A
-      $38464947:
+      $38464947 + 1:
         result := 'image/gif'; // 47 49 46 38
-      $46464F77:
+      $46464F77 + 1:
         result := 'application/font-woff'; // wOFF in BigEndian
-      $A3DF451A:
+      $A3DF451A + 1:
         result := 'video/webm'; // 1A 45 DF A3 MKV Matroska stream file
-      $002A4949, $2A004D4D, $2B004D4D:
+      $002A4949 + 1,
+      $2A004D4D + 1,
+      $2B004D4D + 1:
         result := 'image/tiff'; // 49 49 2A 00 or 4D 4D 00 2A or 4D 4D 00 2B
-      $46464952:
+      $46464952 + 1:
         if Len > 16 then // RIFF
           case PCardinalArray(Content)^[2] of
             $50424557:
@@ -7007,7 +7075,7 @@ begin
               if PCardinalArray(Content)^[3] = $5453494C then
                 result := 'video/x-msvideo'; // Windows Audio Video Interleave file
           end;
-      $E011CFD0: // Microsoft Office applications D0 CF 11 E0=DOCFILE
+      $E011CFD0 + 1: // Microsoft Office applications D0 CF 11 E0=DOCFILE
         if Len > 600 then
           case PWordArray(Content)^[256] of // at offset 512
             $A5EC:
@@ -7020,13 +7088,13 @@ begin
                   result := 'application/vnd.ms-excel';
               end;
           end;
-      $5367674F:
+      $5367674F + 1:
         if Len > 14 then // OggS
           if (PCardinalArray(Content)^[1] = $00000200) and
              (PCardinalArray(Content)^[2] = $00000000) and
                  (PWordArray(Content)^[6] = $0000) then
             result := 'video/ogg';
-      $1C000000:
+      $1C000000 + 1:
         if Len > 12 then
           if PCardinalArray(Content)^[1] = $70797466 then  // ftyp
             case PCardinalArray(Content)^[2] of
@@ -7159,31 +7227,34 @@ begin
   result := false;
   if (Content <> nil) and
      (Len > 8) then
-    case PCardinal(Content)^ of
-      $002a4949, $2a004d4d, $2b004d4d, // 'image/tiff'
-      $04034b50, // 'application/zip' = 50 4B 03 04
-      $184d2204, // LZ4 stream format = 04 22 4D 18
-      $21726152, // 'application/x-rar-compressed' = 52 61 72 21 1A 07 00
-      $28635349, // cab = 49 53 63 28
-      $38464947, // 'image/gif' = 47 49 46 38
-      $43614c66, // FLAC = 66 4C 61 43 00 00 00 22
-      $4643534d, // cab = 4D 53 43 46 [MSCF]
-      $46464952, // avi,webp,wav = 52 49 46 46 [RIFF]
-      $46464f77, // 'application/font-woff' = wOFF in BigEndian
-      $474e5089, // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
-      $4d5a4cff, // LZMA = FF 4C 5A 4D 41 00
-      $75b22630, // 'audio/x-ms-wma' = 30 26 B2 75 8E 66
-      $766f6f6d, // mov = 6D 6F 6F 76 [....moov]
-      $89a8275f, // jar = 5F 27 A8 89
-      $9ac6cdd7, // 'video/x-ms-wmv' = D7 CD C6 9A 00 00
-      $a5a5a5a5, // .mab file = MAGIC_MAB in SynLog.pas
-      $a5aba5a5, // .data = TRESTSTORAGEINMEMORY_MAGIC in mormot.orm.server
-      $aba51051, // .log.synlz = LOG_MAGIC in SynLog.pas
-      $aba5a5ab, // .dbsynlz = SQLITE3_MAGIC in mormot.db.raw.sqlite3.pas
-      $afbc7a37, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C
-      $b7010000, $ba010000, // mpeg = 00 00 01 Bx
-      $cececece, // jceks = CE CE CE CE
-      $e011cfd0: // msi = D0 CF 11 E0 A1 B1 1A E1
+    case PCardinal(Content)^ + 1 of // + 1 to avoid finding it in the exe
+      $002a4949 + 1,
+      $2a004d4d + 1,
+      $2b004d4d + 1, // 'image/tiff'
+      $04034b50 + 1, // 'application/zip' = 50 4B 03 04
+      $184d2204 + 1, // LZ4 stream format = 04 22 4D 18
+      $21726152 + 1, // 'application/x-rar-compressed' = 52 61 72 21 1A 07 00
+      $28635349 + 1, // cab = 49 53 63 28
+      $38464947 + 1, // 'image/gif' = 47 49 46 38
+      $43614c66 + 1, // FLAC = 66 4C 61 43 00 00 00 22
+      $4643534d + 1, // cab = 4D 53 43 46 [MSCF]
+      $46464952 + 1, // avi + 1,webp + 1,wav = 52 49 46 46 [RIFF]
+      $46464f77 + 1, // 'application/font-woff' = wOFF in BigEndian
+      $474e5089 + 1, // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
+      $4d5a4cff + 1, // LZMA = FF 4C 5A 4D 41 00
+      $75b22630 + 1, // 'audio/x-ms-wma' = 30 26 B2 75 8E 66
+      $766f6f6d + 1, // mov = 6D 6F 6F 76 [....moov]
+      $89a8275f + 1, // jar = 5F 27 A8 89
+      $9ac6cdd7 + 1, // 'video/x-ms-wmv' = D7 CD C6 9A 00 00
+      $a5a5a5a5 + 1, // .mab file = MAGIC_MAB in SynLog.pas
+      $a5aba5a5 + 1, // .data = TRESTSTORAGEINMEMORY_MAGIC in mormot.orm.server
+      $aba51051 + 1, // .log.synlz = LOG_MAGIC in SynLog.pas
+      $aba5a5ab + 1, // .dbsynlz = SQLITE3_MAGIC in mormot.db.raw.sqlite3.pas
+      $afbc7a37 + 1, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C
+      $b7010000 + 1,
+      $ba010000 + 1, // mpeg = 00 00 01 Bx
+      $cececece + 1, // jceks = CE CE CE CE
+      $e011cfd0 + 1: // msi = D0 CF 11 E0 A1 B1 1A E1
         result := true;
     else
       case PCardinal(Content)^ and $00ffffff of
@@ -7446,6 +7517,18 @@ begin
   PByteArray(Text)[L] := ord(Ch);
 end;
 
+procedure AppendCharOnceToRawUtf8(var Text: RawUtf8; Ch: AnsiChar);
+var
+  L: PtrInt;
+begin
+  L := length(Text);
+  if (L <> 0) and
+     (Text[L] = Ch) then
+    exit;
+  SetLength(Text, L + 1);
+  PByteArray(Text)[L] := ord(Ch);
+end;
+
 procedure AppendBufferToRawUtf8(var Text: RawUtf8; Buffer: pointer; BufferLen: PtrInt);
 var
   L: PtrInt;
@@ -7498,20 +7581,13 @@ end;
 
 function Append999ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
 var
-  L: integer;
+  L: PtrInt;
   P: PAnsiChar;
-  c: cardinal;
 begin
   P := pointer(SmallUInt32Utf8[Value]);
   L := PStrLen(P - _STRLEN)^;
-  c := PCardinal(P)^;
-  repeat // PCardinal() write = FastMM4 FullDebugMode errors
-    Buffer^ := AnsiChar(c);
-    inc(Buffer);
-    c := c shr 8;
-    dec(L);
-  until L = 0;
-  result := pointer(Buffer);
+  MoveSmall(P, Buffer, L);
+  result := Buffer + L;
 end;
 
 function AppendUInt32ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
@@ -7521,14 +7597,17 @@ var
   tmp: array[0..23] of AnsiChar;
 begin
   if Value <= high(SmallUInt32Utf8) then
-    result := Append999ToBuffer(Buffer, Value)
+  begin
+    P := pointer(SmallUInt32Utf8[Value]);
+    L := PStrLen(P - _STRLEN)^;
+  end
   else
   begin
     P := StrUInt32(@tmp[23], Value);
     L := @tmp[23] - P;
-    MoveSmall(P, Buffer, L);
-    result := Buffer + L;
   end;
+  MoveSmall(P, Buffer, L);
+  result := Buffer + L;
 end;
 
 function Plural(const itemname: shortstring; itemcount: cardinal): shortstring;
@@ -7796,74 +7875,107 @@ end;
 
 { TStreamRedirect }
 
-constructor TStreamRedirect.Create(aDestination: TStream);
+constructor TStreamRedirect.Create(aRedirected: TStream; aRead: boolean);
 begin
-  fDestination := aDestination;
+  fRedirected := aRedirected;
+  if aRead and
+     Assigned(aRedirected) then
+    fExpectedSize := aRedirected.Size; // needed e.g. to upload a file
   fStartTix := GetTickCount64;
 end;
 
 destructor TStreamRedirect.Destroy;
 begin
-  fDestination.Free;
+  fRedirected.Free;
   inherited Destroy;
 end;
 
 function TStreamRedirect.GetSize: Int64;
 begin
-  result := fCurrentSize;
+  if (fMode <> mWrite) and
+     (fExpectedSize <> 0) then
+    result := fExpectedSize
+  else
+    result := fCurrentSize;
 end;
 
 {$I-}
 class procedure TStreamRedirect.ProgressToConsole(Sender: TStreamRedirect);
 var
-  msg: shortstring;
+  ctx, msg: shortstring;
 begin
+  msg[0] := AnsiChar(Sender.fConsoleLen + 2);
+  msg[1] := #13;
+  FillCharFast(msg[2], Sender.fConsoleLen, 32);
+  msg[ord(msg[0])] := #13;
+  system.write(msg);
+  Ansi7StringToShortString(Sender.Context, ctx);
+  if ctx[0] > #30 then
+    ctx[0] := #30;
   if Sender.ExpectedSize = 0 then
-    FormatShort('% % %/s'#13,  [Sender.Context,
-      KB(Sender.fCurrentSize), KB(Sender.PerSecond)], msg)
+    // size may not be known (e.g. server-side chunking)
+    FormatShort('% % %/s ...',
+      [ctx, KB(Sender.Size), KB(Sender.PerSecond)], msg)
   else if Sender.Size < Sender.ExpectedSize then
-    FormatShort('% %% %/% %/s'#13, [Sender.Context,
-      UInt2DigitsToShort(Sender.Percent), '%', KBNoSpace(Sender.fCurrentSize),
-      KBNoSpace(Sender.ExpectedSize), KBNoSpace(Sender.PerSecond)], msg)
+    // we can state the current progression ratio
+    FormatShort('% %% %/% %/s remaining:%',
+      [ctx, Sender.Percent, '%', KBNoSpace(Sender.Size),
+      KBNoSpace(Sender.ExpectedSize), KBNoSpace(Sender.PerSecond),
+      MicroSecToString(Sender.Remaining * 1000)], msg)
   else
-    FormatShort('% % downloaded in %/s' + CRLF, [Sender.Context,
-      KBNoSpace(Sender.ExpectedSize), KBNoSpace(Sender.PerSecond)], msg);
+    // process is finished
+    FormatShort('% % done in % (%/s)' + CRLF,  [Sender.Context,
+      KBNoSpace(Sender.ExpectedSize), MicroSecToString(Sender.Elapsed * 1000),
+      KBNoSpace(Sender.PerSecond)], msg);
+  Sender.fConsoleLen := ord(msg[0]);
   system.write(msg);
 end;
 {$I+}
 
 procedure TStreamRedirect.DoReport;
-var
-  elapsed: Int64;
 begin
-  elapsed := GetTickCount64 - fStartTix;
   if (fCurrentSize <> fExpectedSize) and
-     (elapsed < fReportTix) then
+     (fElapsed < fReportTix) then
     exit;
-  fReportTix := elapsed + 1000; // notify once per second
+  fReportTix := fElapsed + 1000; // notify once per second or when finished
   if fExpectedSize = 0 then
     fPercent := 0
   else if fCurrentSize >= fExpectedSize then
-    fPercent := 100
+  begin
+    fPercent := 100;
+    fRemaining := 0;
+  end
   else
+  begin
+    if (fElapsed <> 0) and
+       (fProcessedSize <> 0) then
+      fRemaining :=
+        (fElapsed * (fExpectedWrittenSize - fProcessedSize)) div fProcessedSize;
     fPercent := (fCurrentSize * 100) div fExpectedSize;
-  if elapsed = 0 then
+  end;
+  if fElapsed = 0 then
     fPerSecond := 0
   else
-    fPerSecond := (fCurrentSize * 1000) div elapsed;
+    fPerSecond := (fProcessedSize * 1000) div fElapsed;
   if Assigned(fOnLog) then
     if fExpectedSize = 0 then
-      fOnLog(sllTrace, '%: % %/s',
-        [fContext, KB(fCurrentSize), KB(fPerSecond)], self)
+      fOnLog(sllTrace, '%: % - % %/s',
+        [fContext, KB(fCurrentSize), KB(fProcessedSize), KB(fPerSecond)], self)
     else
-      fOnLog(sllTrace, '%: %% - % / % - %/s', [fContext, fPercent, '%',
-        KB(fCurrentSize), KB(fExpectedSize), KB(PerSecond)], self);
+      fOnLog(sllTrace, '%: %% - % / % - % %/s', [fContext, fPercent, '%',
+        KB(fCurrentSize), KB(fExpectedSize), KB(fProcessedSize), KB(PerSecond)], self);
   if Assigned(fOnProgress) then
     fOnProgress(self);
 end;
 
 procedure TStreamRedirect.DoHash(data: pointer; len: integer);
 begin // no associated hasher on this parent class
+end;
+
+procedure TStreamRedirect.SetExpectedSize(Value: Int64);
+begin
+  fExpectedSize := Value;
+  fExpectedWrittenSize := Value - fPosition;
 end;
 
 function TStreamRedirect.GetHash: RawUtf8;
@@ -7901,70 +8013,88 @@ var
   buf: array[word] of cardinal; // 256KB of buffer
   read: PtrInt;
 begin
-  if fDestination = nil then
-    raise ESynException.CreateUtf8('%.Append: Destination=nil', [self]);
+  if fRedirected = nil then
+    raise ESynException.CreateUtf8('%.Append(%): Redirected=nil',
+      [self, fContext]);
+  if fMode = mRead then
+    raise ESynException.CreateUtf8('%.Append(%) after Read()', [self, fContext]);
+  fMode := mWrite;
   if GetHashFileExt = '' then
   begin
     fCurrentSize := Seek(0, soEnd); // DoHash() does nothing
     fPosition := fCurrentSize;
   end
   else
-  repeat
-    read := fDestination.Read(buf, SizeOf(buf));
-    if read <= 0 then
-      break;
-    DoHash(@buf, read);
-    inc(fCurrentSize, read);
-    inc(fPosition, read);
-  until false;
+    repeat
+      read := fRedirected.Read(buf, SizeOf(buf));
+      if read <= 0 then
+        break;
+      DoHash(@buf, read);
+      inc(fCurrentSize, read);
+      inc(fPosition, read);
+    until false;
 end;
 
 procedure TStreamRedirect.Ended;
 begin
+  if fCurrentSize = fExpectedSize then
+    exit; // nothing to report
   fExpectedSize := fCurrentSize; // reached 100%
   if Assigned(fOnProgress) or
      Assigned(fOnLog) then
     DoReport; // notify finished
 end;
 
-function TStreamRedirect.Read(var Buffer; Count: Longint): Longint;
+procedure TStreamRedirect.Terminate;
 begin
-  {$ifdef DELPHI20062007}
-  result := 0;
-  {$endif DELPHI20062007}
-  raise ESynException.CreateUtf8('%.Read is not supported', [self]);
+  fTerminated := true;
 end;
 
-function TStreamRedirect.Write(const Buffer; Count: Longint): Longint;
+procedure TStreamRedirect.ReadWriteHash(const Buffer; Count: Longint);
+begin
+  DoHash(@Buffer, Count);
+  inc(fCurrentSize, Count);
+  inc(fProcessedSize, Count);
+  inc(fPosition, Count);
+end;
+
+procedure TStreamRedirect.ReadWriteReport(const Caller: ShortString);
 var
   tix, tosleep: Int64;
 begin
-  if fDestination = nil then
-    raise ESynException.CreateUtf8('%.Write: Destination=nil', [self]);
-  DoHash(@Buffer, Count);
-  fDestination.WriteBuffer(Buffer, Count);
-  inc(fCurrentSize, Count);
-  inc(fPosition, Count);
+  tix := GetTickCount64;
+  fElapsed := tix - fStartTix;
   if (fLimitPerSecond <> 0) or
      (fTimeOut <> 0) then
   begin
-    tix := GetTickCount64;
     if tix shr 7 <> fLastTix shr 7 then // checking every 128 ms is good enough
     begin
       fLastTix := tix;
-      dec(tix, fStartTix);
-      if tix > 0 then
+      if fElapsed > 0 then
       begin
         if (fTimeOut <> 0) and
-           (tix > fTimeOut) then
-          raise ESynException.CreateUtf8('%.Write timeout after %',
-            [self, MicroSecToString(tix * 1000)]);
+           (fElapsed > fTimeOut) then
+          raise ESynException.CreateUtf8('%.%(%) timeout after %',
+            [self, Caller, fContext, MicroSecToString(fElapsed * 1000)]);
         if fLimitPerSecond > 0 then
         begin
           // adjust bandwith limit every 128 ms by adding some sleep() steps
-          tosleep := ((fCurrentSize * 1000) div fLimitPerSecond) - tix;
-          if tosleep > 10 then
-            SleepHiRes(tosleep); // on Windows, typical resolution is 16ms
+          tosleep := ((fProcessedSize * 1000) div fLimitPerSecond) - fElapsed;
+          if tosleep > 10 then // on Windows, typical resolution is 16ms
+          begin
+            while tosleep > 300 do
+            begin
+              SleepHiRes(300); // show progress on very low bandwidth
+              if Assigned(fOnProgress) or
+                 Assigned(fOnLog) then
+                DoReport;
+              dec(tosleep, 300);
+              if fTerminated then
+                raise ESynException.CreateUtf8('%.%(%) Terminated',
+                  [self, Caller, fContext]);
+            end;
+            SleepHiRes(tosleep);
+          end;
         end;
       end;
     end;
@@ -7972,7 +8102,37 @@ begin
   if Assigned(fOnProgress) or
      Assigned(fOnLog) then
     DoReport;
+  if fTerminated then
+    raise ESynException.CreateUtf8('%.%(%) Terminated',
+      [self, Caller, fContext]);
+end;
+
+function TStreamRedirect.Read(var Buffer; Count: Longint): Longint;
+begin
+  if fMode = mWrite then
+    raise ESynException.CreateUtf8('%.Read(%) in Write() mode',
+      [self, fContext]);
+  fMode := mRead;
+  if fRedirected = nil then
+    raise ESynException.CreateUtf8('%.Read(%) with Redirected=nil',
+      [self, fContext]);
+  result := fRedirected.Read(Buffer, Count);
+  ReadWriteHash(Buffer, result);
+  ReadWriteReport('Read');
+end;
+
+function TStreamRedirect.Write(const Buffer; Count: Longint): Longint;
+begin
+  if fMode = mRead then
+    raise ESynException.CreateUtf8('%.Write(%) in Read() mode',
+      [self, fContext]);
+  fMode := mWrite;
+  ReadWriteHash(Buffer, Count);
   result := Count;
+  if fRedirected = nil then
+    exit; // we may just want the hash
+  fRedirected.WriteBuffer(Buffer, Count);
+  ReadWriteReport('Write');
 end;
 
 

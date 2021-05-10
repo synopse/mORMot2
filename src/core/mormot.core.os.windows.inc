@@ -137,11 +137,16 @@ function  GetDesktopWindow;           external user32;
 function  Unicode_InPlaceUpper;       external user32 name 'CharUpperBuffW';
 function  Unicode_InPlaceLower;       external user32 name 'CharLowerBuffW';
 
+{$I-}
 procedure DisplayFatalError(const title, msg: RawUtf8);
 begin
   // better than a MessageBox() especially for services
-  raise Exception.CreateFmt('%s in %s - %s', [title, Executable.ProgramName, msg]);
+  AllocConsole;
+  writeln(title);
+  writeln(msg);
+  ioresult;
 end;
+{$I+}
 
 function GetModuleHandle(lpModuleName: PChar): HMODULE;
 begin

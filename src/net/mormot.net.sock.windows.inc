@@ -360,6 +360,11 @@ const
     IPPROTO_UDP,
     0);
 
+function htons(port: cardinal): cardinal; {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := swap(word(port)); // port should be 16-bit word
+end;
+
 
 { ******** WinSock2 API calls }
 
@@ -833,6 +838,7 @@ type
     fSizes: TSecPkgContextStreamSizes;
     fData, fInput: AnsiString;
     fInputSize, fDataPos, fDataCount, fInputCount: integer;
+    fSessionClosed: boolean;
     procedure ESChannelRaiseLastError(res: cardinal);
     function CheckSEC_E_OK(res: integer): cardinal;
     procedure HandshakeLoop;
@@ -1232,7 +1238,11 @@ var
   end;
 
 begin
-  result := nrFatalError;
+  if fSessionClosed and (fDataCount = 0) then
+  begin
+    result := nrClosed;
+    exit;
+  end;
   while fDataCount = 0 do
   try
     fDataPos := 0;
@@ -1258,7 +1268,7 @@ begin
         SEC_I_RENEGOTIATE:
           needsRenegotiate := true;
         SEC_I_CONTEXT_EXPIRED:
-          exit;
+          fSessionClosed := true;
         SEC_E_INCOMPLETE_MESSAGE:
           break;
         else
@@ -1288,6 +1298,7 @@ begin
     if needsRenegotiate then
       HandshakeLoop;
   except
+    result := nrFatalError;
     exit; // shutdown the connection on ESChannel fatal error
   end;
   read := fDataCount;

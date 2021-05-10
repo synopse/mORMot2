@@ -1315,7 +1315,7 @@ function FindPropName(const Names: array of RawUtf8; const Name: RawUtf8): integ
 
 /// return the index of Value in Values[] using IdemPropNameU(), -1 if not found
 // - typical use with a dynamic array is like:
-// ! index := FindPropName(pointer(aDynArray),length(aDynArray),aValue);
+// ! index := FindPropName(pointer(aDynArray),aValue,length(aDynArray));
 function FindPropName(Values: PRawUtf8;
   const Value: RawUtf8; ValuesCount: integer): integer; overload;
 
@@ -1336,6 +1336,9 @@ function RawUtf8DynArrayEquals(const A, B: TRawUtf8DynArray): boolean; overload;
 // - comparison is case-sensitive
 function RawUtf8DynArrayEquals(const A, B: TRawUtf8DynArray;
   Count: integer): boolean; overload;
+
+/// add the Value to Values[] string array
+function AddString(var Values: TStringDynArray; const Value: string): PtrInt;
 
 /// convert the string dynamic array into a dynamic array of UTF-8 strings
 procedure StringDynArrayToRawUtf8DynArray(const Source: TStringDynArray;
@@ -6409,6 +6412,13 @@ begin
   result := true;
 end;
 
+function AddString(var Values: TStringDynArray; const Value: string): PtrInt;
+begin
+  result := length(Values);
+  SetLength(Values, result + 1);
+  Values[result] := Value;
+end;
+
 procedure StringDynArrayToRawUtf8DynArray(const Source: TStringDynArray;
   var Result: TRawUtf8DynArray);
 var
@@ -9207,7 +9217,7 @@ begin
     if argN <= high(Args) then
     begin
       inc(L, VarRecToTempUtf8(Args[argN], b^));
-      if b.Len > 0 then
+      if b^.Len > 0 then
         inc(b);
       inc(argN);
       if F^ = #0 then
@@ -9444,7 +9454,7 @@ type
 const
   TXT: array[{nospace:}boolean, TUnits] of RawUtf8 = (
     (' KB', ' MB', ' GB', ' TB', ' PB', ' EB', '% B'),
-    ('KB', 'MB', 'GB', 'TB', 'PB', 'EB', '%B'));
+    ('KB',  'MB',  'GB',  'TB',  'PB',  'EB', '%B'));
 var
   hi, rem: cardinal;
   u: TUnits;

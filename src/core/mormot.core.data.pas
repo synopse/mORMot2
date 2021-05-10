@@ -2202,7 +2202,8 @@ type
 // - this function scans the Content memory buffer, and is
 // therefore very fast (no temporary TMemIniFile is created)
 // - if Section equals '', find the Name= value before any [Section]
-function FindIniEntry(const Content, Section, Name: RawUtf8): RawUtf8;
+function FindIniEntry(const Content, Section, Name: RawUtf8;
+  const DefaultValue: RawUtf8 = ''): RawUtf8;
 
 /// find a Name= Value in a [Section] of a INI WinAnsi Content
 // - same as FindIniEntry(), but the value is converted from WinAnsi into UTF-8
@@ -2219,7 +2220,8 @@ function FindIniEntryInteger(const Content, Section, Name: RawUtf8): integer;
 /// find a Name= Value in a [Section] of a .INI file
 // - if Section equals '', find the Name= value before any [Section]
 // - use internally fast FindIniEntry() function above
-function FindIniEntryFile(const FileName: TFileName; const Section, Name: RawUtf8): RawUtf8;
+function FindIniEntryFile(const FileName: TFileName;
+  const Section, Name: RawUtf8; const DefaultValue: RawUtf8 = ''): RawUtf8;
 
 /// update a Name= Value in a [Section] of a INI RawUtf8 Content
 // - this function scans and update the Content memory buffer, and is
@@ -2283,7 +2285,8 @@ function ExistsIniName(P: PUtf8Char; UpperName: PAnsiChar): boolean;
 
 /// find the Value of UpperName in P, till end of current section
 // - expect UpperName as 'NAME='
-function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar): RawUtf8;
+function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
+  const DefaultValue: RawUtf8 = ''): RawUtf8;
 
 /// return TRUE if one of the Value of UpperName exists in P, till end of
 // current section
@@ -3392,7 +3395,8 @@ begin
   source := nil;
 end;
 
-function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar): RawUtf8;
+function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
+  const DefaultValue: RawUtf8): RawUtf8;
 var
   u, PBeg: PUtf8Char;
   by4: cardinal;
@@ -3468,7 +3472,7 @@ begin
         inc(u);
     until u^ in [#0, '['];
   end;
-  result := '';
+  result := DefaultValue;
 end;
 
 function ExistsIniName(P: PUtf8Char; UpperName: PAnsiChar): boolean;
@@ -3684,26 +3688,26 @@ begin
   result := GetInteger(P + length(UpperName));
 end;
 
-function FindIniEntry(const Content, Section, Name: RawUtf8): RawUtf8;
+function FindIniEntry(const Content, Section, Name, DefaultValue: RawUtf8): RawUtf8;
 var
   P: PUtf8Char;
   UpperSection, UpperName: array[byte] of AnsiChar;
 begin
-  result := '';
+  result := DefaultValue;
   P := pointer(Content);
   if P = nil then
     exit;
-  // UpperName := UpperCase(Name)+'=';
+  // fast UpperName := UpperCase(Name)+'='
   PWord(UpperCopy255(UpperName{%H-}, Name))^ := ord('=');
   if Section = '' then
     // find the Name= entry before any [Section]
-    result := FindIniNameValue(P, UpperName)
+    result := FindIniNameValue(P, UpperName, DefaultValue)
   else
   begin
     // find the Name= entry in the specified [Section]
     PWord(UpperCopy255(UpperSection{%H-}, Section))^ := ord(']');
     if FindSectionFirstLine(P, UpperSection) then
-      result := FindIniNameValue(P, UpperName);
+      result := FindIniNameValue(P, UpperName, DefaultValue);
   end;
 end;
 
@@ -3717,15 +3721,16 @@ begin
   result := GetInteger(pointer(FindIniEntry(Content, Section, Name)));
 end;
 
-function FindIniEntryFile(const FileName: TFileName; const Section, Name: RawUtf8): RawUtf8;
+function FindIniEntryFile(const FileName: TFileName;
+  const Section, Name, DefaultValue: RawUtf8): RawUtf8;
 var
   Content: RawUtf8;
 begin
   Content := StringFromFile(FileName);
   if Content = '' then
-    result := ''
+    result := DefaultValue
   else
-    result := FindIniEntry(Content, Section, Name);
+    result := FindIniEntry(Content, Section, Name, DefaultValue);
 end;
 
 function UpdateIniNameValueInternal(var Content: RawUtf8; const NewValue, NewValueCRLF: RawUtf8;
@@ -3976,8 +3981,8 @@ begin
         fPool[i].Init;
       exit;
     end;
-  raise ESynException.CreateUtf8(
-    '%.Create(%) not allowed: should be a power of 2 <= 512', [self, aHashTables]);
+  raise ESynException.CreateUtf8('%.Create(%) not allowed: ' +
+    'should be a power of 2 <= 512', [self, aHashTables]);
 end;
 
 destructor TRawUtf8Interning.Destroy;
@@ -6538,7 +6543,7 @@ var
 begin
   S := PAnsiChar(Stream.Memory);
   P := LoadFrom(S + Stream.Position, S + Stream.Size);
-  Stream.Seek(P - S, soFromBeginning);
+  Stream.Seek(Int64(PtrUInt(P) - PtrUInt(S)), soBeginning);
 end;
 
 function TDynArray.SaveToJson(EnumSetsAsText: boolean; reformat: TTextWriterJsonFormat): RawUtf8;
@@ -7473,7 +7478,7 @@ begin
   {$ifndef CPU64}
   if NeededSize > 1 shl 30 then
     // in practice, consider that max workable memory block is 1 GB on 32-bit
-    raise EDynArray.CreateFmt('TDynArray.InternalSetLength(%s,%d) size concern',
+    raise EDynArray.CreateUtf8('TDynArray.InternalSetLength(%,%) size concern',
       [fInfo.Name, NewLength]);
   {$endif CPU64}
   // if not shared (refCnt=1), resize; if shared, create copy (not thread safe)

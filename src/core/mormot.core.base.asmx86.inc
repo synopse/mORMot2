@@ -1860,7 +1860,7 @@ asm // see https://software.intel.com/en-us/blogs/2011/04/14/is-avx-enabled
         sete    al
 end;
 
-procedure GetCPUID(Param: cardinal; var Registers: TIntelRegisters);
+procedure GetCpuid(Param: cardinal; var Registers: TIntelRegisters);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    esi

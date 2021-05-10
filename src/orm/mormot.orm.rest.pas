@@ -2040,7 +2040,7 @@ begin
     exit;
   if BlobStream.Write(pointer(data)^, length(data)) <> length(data) then
     result := false;
-  BlobStream.Seek(0, soFromBeginning); // rewind
+  BlobStream.Seek(0, soBeginning); // rewind
 end;
 
 function TRestOrm.UpdateBlob(Table: TOrmClass; aID: TID;
@@ -2064,15 +2064,17 @@ function TRestOrm.UpdateBlob(Table: TOrmClass; aID: TID;
   const BlobFieldName: RawUtf8; BlobData: TStream): boolean;
 var
   data: RawBlob;
-  L: integer;
+  L: Int64;
 begin
   result := false;
   if (self = nil) or
      (BlobData = nil) then
     exit;
-  L := BlobData.Seek(0, soFromEnd);
+  L := BlobData.Seek(0, soEnd);
+  if L > maxInt then
+    raise EOrmException.CreateUtf8('%.UpdateBlob: %.Size=%', [self, BlobData, L]);
   SetLength(data, L);
-  BlobData.Seek(0, soFromBeginning);
+  BlobData.Seek(0, soBeginning);
   if BlobData.Read(pointer(data)^, L) <> L then
     exit;
   result := UpdateBlob(Table, aID, BlobFieldName, data);
