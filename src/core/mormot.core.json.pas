@@ -10428,11 +10428,6 @@ begin
   result := JsonSettingsToObject(aJson, self);
 end;
 
-function TSynJsonFileSettings.LoadFromYaml(var aYaml: RawUtf8): boolean;
-begin
-  result := YamlSettingsToObject(aYaml, self);
-end;
-
 function TSynJsonFileSettings.LoadFromFile(const aFileName: TFileName): boolean;
 begin
   fFileName := aFileName;
