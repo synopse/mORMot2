@@ -4308,39 +4308,24 @@ end;
 function ClassFieldCountWithParents(ClassType: TClass; onlyWithoutGetter: boolean): integer;
 var
   cp: PRttiProps;
-  rc: PRttiClass;
   p: PRttiProp;
   i: integer;
 begin
   result := 0;
-  if onlyWithoutGetter then
+  while ClassType <> nil do
   begin
-    // we need to browse all inherited properties RTTI
-    while ClassType <> nil do
+    cp := GetRttiProps(ClassType);
+    if cp = nil then
+      break; // no RTTI information (e.g. reached TObject level)
+    p := cp^.PropList;
+    for i := 1 to cp^.PropCount do
     begin
-      cp := GetRttiProps(ClassType);
-      if cp = nil then
-        break; // no RTTI information (e.g. reached TObject level)
-      p := cp^.PropList;
-      for i := 1 to cp^.PropCount do
-      begin
-        if p^.GetterIsField then
-          inc(result);
-        p := p^.Next;
-      end;
-      ClassType := GetClassParent(ClassType);
+      if (not onlyWithoutGetter) or
+         p^.GetterIsField then
+        inc(result);
+      p := p^.Next;
     end;
-  end
-  else
-  begin
-    // we can use directly the root RTTI information
-    while ClassType <> nil do
-    begin
-      rc := GetRttiClass(ClassType);
-      if rc <> nil then
-        inc(result, rc^.PropCount);
-      ClassType := GetClassParent(ClassType);
-    end;
+    ClassType := GetClassParent(ClassType);
   end;
 end;
 
