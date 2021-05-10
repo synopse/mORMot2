@@ -2914,16 +2914,12 @@ end;
 
 function TDocVariantDataEnumerator.GetCurrent: PVariant;
 begin
-  if dvoIsArray in fValue.VOptions then
-    result := @fValue.VValue[fIndex]
-  else if dvoIsObject in fValue.VOptions then
-  begin
-    RawUtf8ToVariant(fValue.VName[fIndex], fFakeItem.VValue[0]);
-    SetVariantByRef(fValue.VValue[fIndex], fFakeItem.VValue[1]);
-    result := @fFakeItem;
-  end
-  else
-    result := @Null;
+  result := @fValue.VValue[fIndex];
+  if fFakeItem.VCount = 0 then
+    exit;
+  SetVariantByRef(result^, fFakeItem.VValue[1]);
+  RawUtf8ToVariant(fValue.VName[fIndex], fFakeItem.VValue[0]);
+  result := @fFakeItem;
 end;
 
 { TDocVariantDataArrayEnumerator }
