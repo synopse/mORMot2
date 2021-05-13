@@ -2378,7 +2378,7 @@ function TRestStorageInMemory.FindWhereEqual(WhereField: integer;
   const WhereValue: RawUtf8; const OnFind: TOnFindWhereEqual; Dest: pointer;
   FoundLimit, FoundOffset: PtrInt; CaseInsensitive: boolean): PtrInt;
 var
-  i, currentRow, found: PtrInt;
+  i, found: PtrInt;
   v: Int64;
   err: integer;
   P: TOrmPropInfo;
@@ -2393,10 +2393,8 @@ var
     if FoundOffset > 0 then
     begin
       // omit first FoundOffset rows
-      inc(currentRow);
-      if currentRow > FoundOffset then
-        FoundOffset := 0
-      else
+      dec(FoundOffset);
+      if FoundOffset >= 0 then
         exit;
     end;
     if Assigned(OnFind) then
@@ -2459,7 +2457,6 @@ begin
   end;
   // full scan optimized search for a specified value
   found := 0;
-  currentRow := 0;
   if P.InheritsFrom(TOrmPropInfoRttiInt32) and
      (TOrmPropInfoRttiInt32(P).PropRtti.Kind in [rkInteger, rkEnumeration, rkSet]) then
   begin
@@ -2544,27 +2541,9 @@ var
   P: TOrmPropInfo;
   cmp: integer;
   id: Int64;
-  i, currentRow, found: PtrInt;
-
-  function FoundOneAndReachedLimit: boolean;
-  begin
-    result := false; // continue search
-    if FoundOffset > 0 then
-    begin
-      // omit first FoundOffset rows
-      inc(currentRow);
-      if currentRow > FoundOffset then
-        FoundOffset := 0
-      else
-        exit;
-    end;
-    if Assigned(OnFind) then
-      OnFind(Dest, fValue[i], i);
-    inc(found);
-    if found >= FoundLimit then
-      result := true; // stop the loop
-  end;
-
+  i: PtrInt;
+  found: boolean;
+  v: POrm;
 begin
   // prepare the search
   result := 0;
@@ -2589,14 +2568,12 @@ begin
   else
     exit; // unsupported operation
   end;
-  // generic search using fast CompareValue() overridden methods (fast enough)
+  // generic search using fast CompareValue() overridden methods
   if FoundLimit <= 0 then
     FoundLimit := maxInt;
-  found := 0;
-  currentRow := 0;
   if WhereField = 0 then
     if ToInt64(WhereValue, id) then
-      P := nil
+      P := nil // will search v^.IDValue
     else
       exit
   else
@@ -2604,30 +2581,34 @@ begin
     P := fStoredClassRecordProps.Fields.List[WhereField - 1];
     P.SetValueVar(fSearchRec, WhereValue, false); // private copy for comparison
   end;
+  v := pointer(fValue);
   for i := 0 to fCount - 1 do
   begin
     if P = nil then
-      cmp := CompareInt64(fValue[i].IDValue, id{%H-})
+      cmp := CompareInt64(v^.IDValue, id{%H-})
     else
-      cmp := P.CompareValue(fValue[i], fSearchRec, CaseInsensitive);
+      cmp := P.CompareValue(v^, fSearchRec, CaseInsensitive);
     if cmp < 0 then
-    begin
-      if WhereOp in [opNotEqualTo, opLessThan, opLessThanOrEqualTo] then
-        if FoundOneAndReachedLimit then
-          break;
-    end else
-    if cmp > 0 then
-    begin
-      if WhereOp in [opNotEqualTo, opGreaterThan, opGreaterThanOrEqualTo] then
-        if FoundOneAndReachedLimit then
-          break;
-    end else
+      found := WhereOp in [opNotEqualTo, opLessThan, opLessThanOrEqualTo]
+    else if cmp > 0 then
+      found := WhereOp in [opNotEqualTo, opGreaterThan, opGreaterThanOrEqualTo]
+    else
       // cmp = 0 -> opEqualTo has been handled above
-      if WhereOp in [opLessThanOrEqualTo, opGreaterThanOrEqualTo] then
-        if FoundOneAndReachedLimit then
-          break;
+      found := WhereOp in [opLessThanOrEqualTo, opGreaterThanOrEqualTo];
+    if found then
+      if FoundOffset > 0 then
+        // omit first FoundOffset rows
+        dec(FoundOffset)
+      else
+      begin
+        // notify match found
+        OnFind(Dest, v^, i);
+        inc(result);
+        if result >= FoundLimit then
+          exit;
+      end;
+    inc(v);
   end;
-  result := found;
 end;
 
 function TRestStorageInMemory.FindWhere(
