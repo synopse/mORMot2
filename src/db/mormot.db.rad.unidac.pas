@@ -743,8 +743,8 @@ begin
                   P.Values[i].AsString := UTF8ToString(tmp);
                 {$endif UNICODE}
               end
-          end else
-          if aArrayIndex >= 0 then
+          end
+          else if aArrayIndex >= 0 then
             if (VArray[aArrayIndex] = 'null') or
                (fConnection.Properties.StoreVoidStringAsNull and
                 (VArray[aArrayIndex] = #39#39)) then

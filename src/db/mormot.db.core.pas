@@ -836,6 +836,8 @@ type
      opLike,
      opContains,
      opFunction);
+  /// a set of operators recognized by a TSelectStatement where clause
+  TSelectStatementOperators = set of TSelectStatementOperator;
 
   /// one recognized SELECT expression for TSelectStatement
   TSelectStatementSelect = record

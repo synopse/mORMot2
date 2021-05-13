@@ -9681,7 +9681,8 @@ begin
         // should use RawByteString length, and ignore any #0
         fCompare[true] := @_BC_RawByteString;
         fCompare[false] := @_BC_RawByteString;
-      end else if Cache.CodePage = CP_UTF16 then
+      end
+      else if Cache.CodePage = CP_UTF16 then
       begin
         // RawUnicode expects _BC_WString=StrCompW and _BCI_WString=StrICompW
         fCompare[true] := RTTI_COMPARE[true][rkWString];

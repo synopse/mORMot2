@@ -4399,7 +4399,8 @@ begin
           begin
             exclude(state, sInSQ);
             continue;
-          end else if state = [] then
+          end
+          else if state = [] then
           begin
             if argv <> nil then
             begin
@@ -4410,7 +4411,8 @@ begin
             end;
             state := [sInSQ, sInArg];
             continue;
-          end else if state = [sInArg] then
+          end
+          else if state = [sInArg] then
           begin
             state := [sInSQ, sInArg];
             continue;
@@ -4421,7 +4423,8 @@ begin
           begin
             exclude(state, sInDQ);
             continue;
-          end else if state = [] then
+          end
+          else if state = [] then
           begin
             if argv <> nil then
             begin
