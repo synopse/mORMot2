@@ -2945,15 +2945,9 @@ begin
 end;
 
 procedure TSynPersistent.AssignError(Source: TSynPersistent);
-var
-  SourceName: string;
 begin
-  if Source <> nil then
-    SourceName := Source.ClassName
-  else
-    SourceName := 'nil';
   raise EConvertError.CreateFmt('Cannot assign a %s to a %s',
-    [SourceName, ClassNameShort(self)^]);
+    [ClassNameShort(Source)^, ClassNameShort(self)^]);
 end;
 
 procedure TSynPersistent.AssignTo(Dest: TSynPersistent);

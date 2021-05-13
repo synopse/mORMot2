@@ -613,8 +613,8 @@ type
 
 { ************ TRestStorageInMemory as Stand-Alone JSON/Binary Storage }
 
-  /// event prototype called by TRestStorageInMemory.FindWhereEqual() or
-  // TRestStorageInMemory.ForEach() methods
+  /// event prototype called by TRestStorageInMemory.FindWhereEqual(),
+  // FindWhere() or ForEach() methods
   // - aDest is an opaque pointer, as supplied to FindWhereEqual(), which may
   // point e.g. to a result list, or a shared variable to apply the process
   // - aRec will point to the corresponding item
@@ -907,27 +907,36 @@ type
     // list, so you should NOT use this on a read/write table, but rather
     // use the slightly slower but safer SearchCopy() method or make explicit
     // ! StorageLock ... try ... SearchInstance ... finally StorageUnlock end
-    function SearchInstance(const FieldName, FieldValue: RawUtf8): pointer;
+    function SearchInstance(const FieldName, FieldValue: RawUtf8;
+      CaseInsensitive: boolean = true;
+      Op: TSelectStatementOperator = opEqualTo): pointer;
     /// search for a field value, according to its SQL content representation
     // - return the found TOrm index on success, -1 if none did match
     // - warning: it returns a reference to the current index of the unlocked
     // internal list, so you should NOT use without StorageLock/StorageUnlock
-    function SearchIndex(const FieldName, FieldValue: RawUtf8): integer;
+    function SearchIndex(const FieldName, FieldValue: RawUtf8;
+      CaseInsensitive: boolean = true;
+      Op: TSelectStatementOperator = opEqualTo): integer;
     /// search for a field value, according to its SQL content representation
     // - return a copy of the found TOrm on success, nil if no match
     // - you should use SearchCopy() instead of SearchInstance(), unless you
     // are sure that the internal TOrm list won't change
-    function SearchCopy(const FieldName, FieldValue: RawUtf8): pointer;
+    function SearchCopy(const FieldName, FieldValue: RawUtf8;
+      CaseInsensitive: boolean = true;
+      Op: TSelectStatementOperator = opEqualTo): pointer;
     /// search and count for a field value, according to its SQL content representation
     // - return the number of found entries on success, 0 if it was not found
-    function SearchCount(const FieldName, FieldValue: RawUtf8): integer;
+    function SearchCount(const FieldName, FieldValue: RawUtf8;
+      CaseInsensitive: boolean = true;
+      Op: TSelectStatementOperator = opEqualTo): integer;
     /// search for a field value, according to its SQL content representation
     // - call the supplied OnFind event on match
     // - returns the number of found entries
-    // - is just a wrapper around FindWhereEqual() with StorageLock protection
+    // - is just a wrapper around FindWhere() with StorageLock protection
     function SearchEvent(const FieldName, FieldValue: RawUtf8;
       const OnFind: TOnFindWhereEqual; Dest: pointer;
-      FoundLimit, FoundOffset: PtrInt): integer;
+      FoundLimit, FoundOffset: PtrInt; CaseInsensitive: boolean = true;
+      Op: TSelectStatementOperator = opEqualTo): integer;
     /// optimized search of WhereValue in WhereField (0=RowID,1..=RTTI)
     // - will use fast O(1) hash for fUnique[] fields
     // - will use SYSTEMNOCASE case-insensitive search for text values, unless
@@ -943,6 +952,24 @@ type
     // CaseInsensitive is set to FALSE
     // - warning: this method should be protected via StorageLock/StorageUnlock
     function FindWhereEqual(const WhereFieldName, WhereValue: RawUtf8;
+      const OnFind: TOnFindWhereEqual; Dest: pointer;
+      FoundLimit, FoundOffset: integer;
+      CaseInsensitive: boolean = true): PtrInt; overload;
+    /// comparison lookup of the WhereValue in a field, specified by name
+    // - this method won't use any index but brute force using the comparison
+    // function over each stored item to implement < <= <> > >= search
+    // - warning: this method should be protected via StorageLock/StorageUnlock
+    function FindWhere(WhereField: integer; const WhereValue: RawUtf8;
+      WhereOp: TSelectStatementOperator;
+      const OnFind: TOnFindWhereEqual; Dest: pointer;
+      FoundLimit, FoundOffset: integer;
+      CaseInsensitive: boolean = true): PtrInt; overload;
+    /// comparison lookup of the WhereValue in a field, specified by name
+    // - this method won't use any index but brute force using the comparison
+    // function over each stored item to implement < <= <> > >= search
+    // - warning: this method should be protected via StorageLock/StorageUnlock
+    function FindWhere(const WhereFieldName, WhereValue: RawUtf8;
+      WhereOp: TSelectStatementOperator;
       const OnFind: TOnFindWhereEqual; Dest: pointer;
       FoundLimit, FoundOffset: integer;
       CaseInsensitive: boolean = true): PtrInt; overload;
@@ -2330,7 +2357,8 @@ var
 begin
   result := 0;
   if (self = nil) or
-     not Assigned(OnFind) then
+     not Assigned(OnFind) or
+     (fCount = 0) then
     exit;
   if IsRowID(pointer(WhereFieldName)) then
     WhereFieldIndex := 0
@@ -2508,6 +2536,122 @@ begin
   result := found;
 end;
 
+function TRestStorageInMemory.FindWhere(WhereField: integer;
+  const WhereValue: RawUtf8; WhereOp: TSelectStatementOperator;
+  const OnFind: TOnFindWhereEqual; Dest: pointer; FoundLimit,
+  FoundOffset: integer; CaseInsensitive: boolean): PtrInt;
+var
+  P: TOrmPropInfo;
+  cmp: integer;
+  id: Int64;
+  i, currentRow, found: PtrInt;
+
+  function FoundOneAndReachedLimit: boolean;
+  begin
+    result := false; // continue search
+    if FoundOffset > 0 then
+    begin
+      // omit first FoundOffset rows
+      inc(currentRow);
+      if currentRow > FoundOffset then
+        FoundOffset := 0
+      else
+        exit;
+    end;
+    if Assigned(OnFind) then
+      OnFind(Dest, fValue[i], i);
+    inc(found);
+    if found >= FoundLimit then
+      result := true; // stop the loop
+  end;
+
+begin
+  // prepare the search
+  result := 0;
+  if (self = nil) or
+     not Assigned(OnFind) or
+     (fCount = 0) then
+    exit;
+  case WhereOp of
+    opEqualTo:
+      begin
+        // redirect to the optimized FindWhereEqual() method
+        result := FindWhereEqual(WhereField, WhereValue, OnFind, Dest,
+          FoundLimit, FoundOffset, CaseInsensitive);
+        exit;
+      end;
+    opNotEqualTo,
+    opLessThan,
+    opLessThanOrEqualTo,
+    opGreaterThan,
+    opGreaterThanOrEqualTo:
+      ; // CompareValue() operations
+  else
+    exit; // unsupported operation
+  end;
+  // generic search using fast CompareValue() overridden methods (fast enough)
+  if FoundLimit <= 0 then
+    FoundLimit := maxInt;
+  found := 0;
+  currentRow := 0;
+  if WhereField = 0 then
+    if ToInt64(WhereValue, id) then
+      P := nil
+    else
+      exit
+  else
+  begin
+    P := fStoredClassRecordProps.Fields.List[WhereField - 1];
+    P.SetValueVar(fSearchRec, WhereValue, false); // private copy for comparison
+  end;
+  for i := 0 to fCount - 1 do
+  begin
+    if P = nil then
+      cmp := CompareInt64(fValue[i].IDValue, id{%H-})
+    else
+      cmp := P.CompareValue(fValue[i], fSearchRec, CaseInsensitive);
+    if cmp < 0 then
+    begin
+      if WhereOp in [opNotEqualTo, opLessThan, opLessThanOrEqualTo] then
+        if FoundOneAndReachedLimit then
+          break;
+    end else
+    if cmp > 0 then
+    begin
+      if WhereOp in [opNotEqualTo, opGreaterThan, opGreaterThanOrEqualTo] then
+        if FoundOneAndReachedLimit then
+          break;
+    end else
+      // cmp = 0 -> opEqualTo has been handled above
+      if WhereOp in [opLessThanOrEqualTo, opGreaterThanOrEqualTo] then
+        if FoundOneAndReachedLimit then
+          break;
+  end;
+  result := found;
+end;
+
+function TRestStorageInMemory.FindWhere(
+  const WhereFieldName, WhereValue: RawUtf8; WhereOp: TSelectStatementOperator;
+  const OnFind: TOnFindWhereEqual; Dest: pointer;
+  FoundLimit, FoundOffset: integer; CaseInsensitive: boolean): PtrInt;
+var
+  WhereFieldIndex: integer;
+begin
+  result := 0;
+  if IsRowID(pointer(WhereFieldName)) then
+    WhereFieldIndex := 0
+  else
+  begin
+    WhereFieldIndex := fStoredClassRecordProps.Fields.
+      IndexByName(pointer(WhereFieldName));
+    if WhereFieldIndex < 0 then
+      exit;
+    inc(WhereFieldIndex); // FindWhere() expects index = RTTI+1
+  end;
+  result := FindWhere(WhereFieldIndex, WhereValue, WhereOp, OnFind, Dest,
+    FoundLimit, FoundOffset, CaseInsensitive);
+end;
+
 function TRestStorageInMemory.FindMax(WhereField: integer;
   out max: Int64): boolean;
 var
@@ -2626,6 +2770,14 @@ begin
         opEqualTo:
           result := FindWhereEqual(Stmt.Where[0].Field, Stmt.Where[0].Value,
             GetJsonValuesEvent, W, Stmt.Limit, Stmt.Offset);
+        opNotEqualTo,
+        opLessThan,
+        opLessThanOrEqualTo,
+        opGreaterThan,
+        opGreaterThanOrEqualTo:
+          with Stmt.Where[0] do
+            result := FindWhere(Field, Value, Operation,
+              GetJsonValuesEvent, W, Stmt.Limit, Stmt.Offset);
         opIn:
           // only handle ID IN (..) by now
           if (Stmt.Where[0].Field <> 0) or
@@ -3748,7 +3900,9 @@ begin
 end;
 
 function TRestStorageInMemory.SearchEvent(const FieldName, FieldValue: RawUtf8;
-  const OnFind: TOnFindWhereEqual; Dest: pointer; FoundLimit, FoundOffset: PtrInt): integer;
+  const OnFind: TOnFindWhereEqual; Dest: pointer;
+  FoundLimit, FoundOffset: PtrInt; CaseInsensitive: boolean;
+  Op: TSelectStatementOperator): integer;
 begin
   result := 0;
   if (self = nil) or
@@ -3757,38 +3911,46 @@ begin
     exit;
   StorageLock(false, 'SearchEvent');
   try
-    result := FindWhereEqual(FieldName, FieldValue, OnFind, Dest,
-      FoundLimit, FoundOffset);
+    result := FindWhere(FieldName, FieldValue, Op, OnFind, Dest,
+      FoundLimit, FoundOffset, CaseInsensitive);
   finally
     StorageUnlock;
   end;
 end;
 
 function TRestStorageInMemory.SearchCopy(
-  const FieldName, FieldValue: RawUtf8): pointer;
+  const FieldName, FieldValue: RawUtf8;
+  CaseInsensitive: boolean; Op: TSelectStatementOperator): pointer;
 begin
-  if SearchEvent(FieldName, FieldValue, DoCopyEvent, @result, 1, 0) = 0 then
+  if SearchEvent(FieldName, FieldValue, DoCopyEvent,
+      @result, 1, 0, CaseInsensitive, Op) = 0 then
     result := nil;
 end;
 
 function TRestStorageInMemory.SearchInstance(
-  const FieldName, FieldValue: RawUtf8): pointer;
+  const FieldName, FieldValue: RawUtf8;
+  CaseInsensitive: boolean; Op: TSelectStatementOperator): pointer;
 begin
-  if SearchEvent(FieldName, FieldValue, DoInstanceEvent, @result, 1, 0) = 0 then
+  if SearchEvent(FieldName, FieldValue, DoInstanceEvent,
+      @result, 1, 0, CaseInsensitive, Op) = 0 then
     result := nil;
 end;
 
 function TRestStorageInMemory.SearchIndex(
-  const FieldName, FieldValue: RawUtf8): integer;
+  const FieldName, FieldValue: RawUtf8;
+  CaseInsensitive: boolean; Op: TSelectStatementOperator): integer;
 begin
-  if SearchEvent(FieldName, FieldValue, DoIndexEvent, @result, 1, 0) = 0 then
+  if SearchEvent(FieldName, FieldValue, DoIndexEvent,
+      @result, 1, 0, CaseInsensitive, Op) = 0 then
     result := -1;
 end;
 
 function TRestStorageInMemory.SearchCount(
-  const FieldName, FieldValue: RawUtf8): integer;
+  const FieldName, FieldValue: RawUtf8;
+  CaseInsensitive: boolean; Op: TSelectStatementOperator): integer;
 begin
-  result := SearchEvent(FieldName, FieldValue, DoNothingEvent, nil, 0, 0);
+  result := SearchEvent(FieldName, FieldValue, DoNothingEvent,
+      nil, 0, 0, CaseInsensitive, Op);
 end;
 
 class procedure TRestStorageInMemory.DoNothingEvent(

@@ -7242,7 +7242,7 @@ begin
       $46464f77, // 'application/font-woff' = wOFF in BigEndian
       $474e5089, // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
       $4d5a4cff, // LZMA = FF 4C 5A 4D 41 00
-      $72613c21, // .ar/.deb files = '!<arch>' (assuming compressed)
+      $72613c21, // .ar/.deb package file = '!<arch>' (assuming compressed)
       $75b22630, // 'audio/x-ms-wma' = 30 26 B2 75 8E 66
       $766f6f6d, // mov = 6D 6F 6F 76 [....moov]
       $89a8275f, // jar = 5F 27 A8 89
@@ -7255,6 +7255,7 @@ begin
       $b7010000,
       $ba010000, // mpeg = 00 00 01 Bx
       $cececece, // jceks = CE CE CE CE
+      $dbeeabed, // .rpm package file
       $e011cfd0: // msi = D0 CF 11 E0 A1 B1 1A E1
         result := true;
     else
