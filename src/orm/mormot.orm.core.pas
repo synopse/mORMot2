@@ -1026,7 +1026,7 @@ type
   /// information about an ordinal Int32 published property
   TOrmPropInfoRttiInt32 = class(TOrmPropInfoRtti)
   protected
-    fUnsigned: boolean;
+    fUnsigned, fIntegerPropOffset: boolean;
     procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
       Dest: TObject); override;
   public
@@ -9888,6 +9888,7 @@ constructor TOrmPropInfoRttiInt32.Create(aPropInfo: PRttiProp;
 begin
   inherited Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
   fUnsigned := fPropType^.RttiOrd in [roUByte, roUWord, roULong];
+  fIntegerPropOffset := (fGetterIsFieldPropOffset <> 0) and (fPropType^.RttiOrd = roSLong);
 end;
 
 procedure TOrmPropInfoRttiInt32.CopySameClassProp(Source: TObject;
@@ -9915,11 +9916,16 @@ procedure TOrmPropInfoRttiInt32.GetJsonValues(Instance: TObject; W: TJsonSeriali
 var
   v: integer;
 begin
-  v := fPropInfo.GetOrdProp(Instance);
-  if fUnsigned then
-    W.AddU(cardinal(v))
+  if fIntegerPropOffset then
+    W.Add(PInteger(PtrUInt(Instance) + fGetterIsFieldPropOffset)^)
   else
-    W.Add(v);
+  begin
+    v := fPropInfo.GetOrdProp(Instance);
+    if fUnsigned then
+      W.AddU(cardinal(v))
+    else
+      W.Add(v);
+  end;
 end;
 
 procedure TOrmPropInfoRttiInt32.GetValueVar(Instance: TObject; ToSql: boolean;
@@ -9962,8 +9968,16 @@ begin
     result := 1
   else
   begin
-    A := fPropInfo.GetOrdProp(Item1);
-    B := fPropInfo.GetOrdProp(Item2);
+    if fIntegerPropOffset then
+    begin
+      A := PInteger(PtrUInt(Item1) + fGetterIsFieldPropOffset)^;
+      B := PInteger(PtrUInt(Item2) + fGetterIsFieldPropOffset)^;
+    end
+    else
+    begin
+      A := fPropInfo.GetOrdProp(Item1);
+      B := fPropInfo.GetOrdProp(Item2);
+    end;
     result := CompareInteger(A, B);
   end;
 end;
