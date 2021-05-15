@@ -1890,6 +1890,8 @@ type
     function ParseNewInstance(var Context: TJsonParserContext): TObject;
     /// compare two stored values of this type
     function ValueCompare(Data, Other: pointer; CaseInsensitive: boolean): integer; override;
+    /// fill a variant with a stored value of this type
+    function ValueToVariant(Data: pointer; out Dest: TVarData): PtrInt; override;
     /// unserialize some JSON input into Data^
     procedure ValueLoadJson(Data: pointer; var Json: PUtf8Char; EndOfObject: PUtf8Char;
       ParserOptions: TJsonParserOptions; CustomVariantOptions: PDocVariantOptions;
@@ -9811,6 +9813,70 @@ begin
     fCompare[CaseInsensitive](Data, Other, Info, result)
   else
     result := ComparePointer(Data, Other);
+end;
+
+function TRttiJson.ValueToVariant(Data: pointer; out Dest: TVarData): PtrInt;
+label
+  fro;
+begin
+  // see TRttiCustomProp.GetValueDirect
+  PCardinal(@Dest.VType)^ := Cache.RttiVarDataVType;
+  case Cache.RttiVarDataVType of
+    varInt64, varBoolean:
+      // rkInteger, rkBool using VInt64 for proper cardinal support
+fro:  Dest.VInt64 := FromRttiOrd(Cache.RttiOrd, Data);
+    varWord64:
+      // rkInt64, rkQWord
+      begin
+        if not (rcfQWord in Cache.Flags) then
+          PCardinal(@Dest.VType)^ := varInt64; // fix VType
+        Dest.VInt64 := PInt64(Data)^;
+      end;
+    varDouble, varCurrency:
+      Dest.VInt64 := PInt64(Data)^;
+    varString:
+      // rkString
+      begin
+        Dest.VAny := nil; // avoid GPF
+        RawByteString(Dest.VAny) := PRawByteString(Data)^;
+      end;
+    varOleStr:
+      // rkWString
+      begin
+        Dest.VAny := nil; // avoid GPF
+        WideString(Dest.VAny) := PWideString(Data)^;
+      end;
+    {$ifdef HASVARUSTRING}
+    varUString:
+      // rkUString
+      begin
+        Dest.VAny := nil; // avoid GPF
+        UnicodeString(Dest.VAny) := PUnicodeString(Data)^;
+      end;
+    {$endif HASVARUSTRING}
+    varVariant:
+      // rkVariant
+      SetVariantByValue(PVariant(Data)^, PVariant(@Dest)^);
+    varUnknown:
+      // rkChar, rkWChar, rkSString converted into temporary RawUtf8
+      begin
+        PCardinal(@Dest.VType)^ := varString;
+        Dest.VAny := nil; // avoid GPF
+        Info.StringToUtf8(Data, RawUtf8(Dest.VAny));
+      end;
+   else
+     case Cache.Kind of
+       rkEnumeration, rkSet:
+         begin
+           PCardinal(@Dest.VType)^ := varInt64;
+           goto fro;
+         end;
+     else
+       raise EDocVariant.CreateUtf8(
+         'Unsupported %.InitArrayFrom(%)', [self, ToText(Cache.Kind)^]);
+     end;
+  end;
+  result := Cache.ItemSize;
 end;
 
 procedure TRttiJson.ValueLoadJson(Data: pointer; var Json: PUtf8Char;

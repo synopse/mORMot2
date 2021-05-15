@@ -2062,6 +2062,10 @@ type
     // but in TRttiJson, so that it will use mormot.core.data comparison
     function ValueCompare(Data, Other: pointer;
       CaseInsensitive: boolean): integer; virtual;
+    /// fill a variant with a stored value of this type
+    // - not implemented in this class (raise an ERttiException)
+    // but in TRttiJson, so that it will use mormot.core.variants process
+    function ValueToVariant(Data: pointer; out Dest: TVarData): PtrInt; virtual;
     /// create a new TObject instance of this rkClass
     // - not implemented here (raise an ERttiException) but in TRttiJson,
     // so that mormot.core.rtti has no dependency to TSynPersistent and such
@@ -6586,6 +6590,13 @@ end;
 function TRttiCustom.{%H-}ValueCompare(Data, Other: pointer; CaseInsensitive: boolean): integer;
 begin
   raise ERttiException.CreateUtf8('%.ValueCompare not implemented -> please ' +
+    'include mormot.core.json unit to register TRttiJson', [self]);
+end;
+
+function TRttiCustom.{%H-}ValueToVariant(Data: pointer;
+  out Dest: TVarData): PtrInt;
+begin
+  raise ERttiException.CreateUtf8('%.ValueToVariant not implemented -> please ' +
     'include mormot.core.json unit to register TRttiJson', [self]);
 end;
 
