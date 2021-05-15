@@ -6990,10 +6990,9 @@ var
 // return TRUE
 begin
   result := (CsvNames = nil);
-  if result then
-    exit; // no parameter to check -> success
-  if U = nil then
-    exit; // no input data -> error
+  if result or
+     (U = nil) then
+    exit; // no parameter to check -> success; no input data -> error
   repeat
     L := 0;
     while (CsvNames^ <> #0) and
