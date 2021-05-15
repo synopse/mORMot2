@@ -3838,7 +3838,7 @@ function ObjectToVariantDebug(Value: TObject;
   const ContextFormat: RawUtf8; const ContextArgs: array of const;
   const ContextName: RawUtf8): variant;
 begin
-  _Json(ObjectToJson(Value), result, JSON_OPTIONS_FAST);
+  ObjectToVariant(Value, result, [woDontStoreDefault, woEnumSetsAsText]);
   if ContextFormat <> '' then
     if ContextFormat[1] = '{' then
       _ObjAddProps([ContextName,
@@ -4174,6 +4174,7 @@ procedure TDocVariantData.InitArrayFrom(const Items: TRawUtf8DynArray;
   aOptions: TDocVariantOptions);
 var
   ndx: PtrInt;
+  v: PRttiVarData;
 begin
   if Items = nil then
     VType := varNull
@@ -4182,8 +4183,13 @@ begin
     Init(aOptions, dvArray);
     VCount := length(Items);
     SetLength(VValue, VCount);
+    v := pointer(VValue);
     for ndx := 0 to VCount - 1 do
-      RawUtf8ToVariant(Items[ndx], VValue[ndx]);
+    begin
+      v^.VType := varString;
+      RawUtf8(v^.Data.VAny) := Items[ndx];
+      inc(v);
+    end;
   end;
 end;
 
@@ -4191,6 +4197,7 @@ procedure TDocVariantData.InitArrayFrom(const Items: TIntegerDynArray;
   aOptions: TDocVariantOptions);
 var
   ndx: PtrInt;
+  v: PRttiVarData;
 begin
   if Items = nil then
     VType := varNull
@@ -4199,8 +4206,13 @@ begin
     Init(aOptions, dvArray);
     VCount := length(Items);
     SetLength(VValue, VCount);
+    v := pointer(VValue);
     for ndx := 0 to VCount - 1 do
-      VValue[ndx] := Items[ndx];
+    begin
+      v^.VType := varInteger;
+      v^.Data.VInteger := Items[ndx];
+      inc(v);
+    end;
   end;
 end;
 
@@ -4208,6 +4220,7 @@ procedure TDocVariantData.InitArrayFrom(const Items: TInt64DynArray;
   aOptions: TDocVariantOptions);
 var
   ndx: PtrInt;
+  v: PRttiVarData;
 begin
   if Items = nil then
     VType := varNull
@@ -4216,8 +4229,13 @@ begin
     Init(aOptions, dvArray);
     VCount := length(Items);
     SetLength(VValue, VCount);
+    v := pointer(VValue);
     for ndx := 0 to VCount - 1 do
-      VValue[ndx] := Items[ndx];
+    begin
+      v^.VType := varInt64;
+      v^.Data.VInt64 := Items[ndx];
+      inc(v);
+    end;
   end;
 end;
 
