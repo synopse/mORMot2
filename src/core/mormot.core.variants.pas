@@ -28,6 +28,7 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.data, // already included in mormot.core.json
+  mormot.core.buffers,
   mormot.core.rtti,
   mormot.core.json;
 
@@ -765,6 +766,15 @@ type
       aOptions: TDocVariantOptions); overload;
     /// initialize a variant instance to store some 64-bit integer array content
     procedure InitArrayFrom(const Items: TInt64DynArray;
+      aOptions: TDocVariantOptions); overload;
+    /// initialize a variant instance to store some double array content
+    procedure InitArrayFrom(const Items: TDoubleDynArray;
+      aOptions: TDocVariantOptions); overload;
+    /// initialize a variant instance to store some dynamic array content
+    procedure InitArrayFrom(var Items; ArrayInfo: PRttiInfo;
+      aOptions: TDocVariantOptions; ItemsCount: PInteger = nil); overload;
+    /// initialize a variant instance to store some TDynArray content
+    procedure InitArrayFrom(const Items: TDynArray;
       aOptions: TDocVariantOptions); overload;
     /// initialize a variant instance to store a T*ObjArray content
     // - will call internally ObjectToVariant() to make the conversion
@@ -4208,6 +4218,72 @@ begin
     SetLength(VValue, VCount);
     for ndx := 0 to VCount - 1 do
       VValue[ndx] := Items[ndx];
+  end;
+end;
+
+procedure TDocVariantData.InitArrayFrom(const Items: TDoubleDynArray;
+  aOptions: TDocVariantOptions);
+var
+  ndx: PtrInt;
+begin
+  if Items = nil then
+    VType := varNull
+  else
+  begin
+    Init(aOptions, dvArray);
+    VCount := length(Items);
+    SetLength(VValue, VCount);
+    for ndx := 0 to VCount - 1 do
+      VValue[ndx] := Items[ndx];
+  end;
+end;
+
+procedure TDocVariantData.InitArrayFrom(var Items; ArrayInfo: PRttiInfo;
+  aOptions: TDocVariantOptions; ItemsCount: PInteger);
+var
+  da: TDynArray;
+begin
+  da.Init(ArrayInfo, Items, ItemsCount);
+  InitArrayFrom(da, aOptions);
+end;
+
+procedure TDocVariantData.InitArrayFrom(const Items: TDynArray;
+  aOptions: TDocVariantOptions);
+var
+  n: integer;
+  P: PByte;
+  v: PVarData;
+  item: TRttiCustom;
+  json: RawUtf8;
+begin
+  Init(aOptions, dvArray);
+  n := Items.Count;
+  item := Items.Info.ArrayRtti;
+  if (n = 0) or
+     (item = nil) then
+    exit;
+  if item.Kind in rkRecordOrDynArrayTypes then
+  begin
+    // use temporary JSON conversion for complex nested content
+    Items.SaveToJson(json);
+    if (json <> '') and
+       (json[1] = '[') and
+       (PCardinal(@PByteArray(json)[1])^ <> JSON_BASE64_MAGIC_QUOTE_C) then
+      // should be serialized as a true array
+      InitJsonInPlace(pointer(json), aOptions);
+  end
+  else
+  begin
+    // handle array of simple types
+    VCount := n;
+    SetLength(VValue, n);
+    P := Items.Value^;
+    v := pointer(VValue);
+    repeat
+      inc(P, item.ValueToVariant(P, v^));
+      inc(v);
+      dec(n);
+    until n = 0;
   end;
 end;
 
