@@ -10236,6 +10236,7 @@ begin
   if tmp.len <> 0 then
     try
       JsonToObject(ObjectInstance, tmp.buf, result, TObjectListItemClass, Options);
+      result :=  true;
     finally
       tmp.Done;
     end
