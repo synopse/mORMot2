@@ -691,7 +691,6 @@ begin
                    {$else}
                    meta.GetIdentifierConvertor
                    {$endif}.ExtractQuote(Utf8ToString(TableName));
-    sTableName := meta.AddEscapeCharToWildcards(sTableName);
     // do not escape https://synopse.info/forum/viewtopic.php?pid=34896#p34896
     res := meta.GetColumns('', sSchema,
       meta.AddEscapeCharToWildcards(sTableName), '');
