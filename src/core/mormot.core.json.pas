@@ -1999,20 +1999,6 @@ function DynArraySaveJson(const Value; TypeInfo: PRttiInfo;
 // TDynArrayJsonCustomWriter callback or RegisterCustomJsonSerializerFromText()
 function DynArrayBlobSaveJson(TypeInfo: PRttiInfo; BlobValue: pointer): RawUtf8;
 
-/// will serialize any TObject into its UTF-8 JSON representation
-/// - serialize as JSON the published integer, Int64, floating point values,
-// TDateTime (stored as ISO 8601 text), string, variant and enumerate
-// (e.g. boolean) properties of the object (and its parents)
-// - would set twoForceJsonStandard to force standard (non-extended) JSON
-// - the enumerates properties are stored with their integer index value
-// - will write also the properties published in the parent classes
-// - nested properties are serialized as nested JSON objects
-// - any TCollection property will also be serialized as JSON arrays
-// - you can add some custom serializers for ANY class, via mormot.core.json
-// TRttiJson.RegisterCustomSerializer() class method
-function ObjectToJson(Value: TObject;
-  Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUtf8;
-
 /// will serialize set of TObject into its UTF-8 JSON representation
 // - follows ObjectToJson()/TTextWriter.WriterObject() functions output
 // - if Names is not supplied, the corresponding class names would be used
@@ -10048,24 +10034,6 @@ begin
   finally
     DynArray.Clear; // release temporary memory
   end;
-end;
-
-function ObjectToJson(Value: TObject;
-  Options: TTextWriterWriteObjectOptions): RawUtf8;
-var
-  temp: TTextWriterStackBuffer;
-begin
-  if Value = nil then
-    result := NULL_STR_VAR
-  else
-    with TTextWriter.CreateOwnedStream(temp) do
-    try
-      CustomOptions := CustomOptions + [twoForceJsonStandard];
-      WriteObject(Value, Options);
-      SetText(result);
-    finally
-      Free;
-    end;
 end;
 
 function ObjectsToJson(const Names: array of RawUtf8;

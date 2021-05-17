@@ -1192,13 +1192,6 @@ var
 function ObjectToJson(Value: TObject;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUtf8;
 
-/// will serialize set of TObject into its UTF-8 JSON representation
-// - follows ObjectToJson()/TTextWriter.WriterObject() functions output
-// - if Names is not supplied, the corresponding class names would be used
-// - call internally TBaseWriter.WriteObject() method from DefaultTextWriterSerializer
-function ObjectsToJson(const Names: array of RawUtf8; const Values: array of TObject;
-  Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUtf8;
-
 /// escape some UTF-8 text into HTML
 // - just a wrapper around TBaseWriter.AddHtmlEscape() process,
 // replacing < > & " chars depending on the HTML layer
@@ -6225,34 +6218,6 @@ begin
     finally
       Free;
     end;
-end;
-
-function ObjectsToJson(const Names: array of RawUtf8; const Values: array of TObject;
-  Options: TTextWriterWriteObjectOptions): RawUtf8;
-var
-  i, n: PtrInt;
-  temp: TTextWriterStackBuffer;
-begin
-  with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
-  try
-    n := length(Names);
-    Add('{');
-    for i := 0 to high(Values) do
-      if Values[i] <> nil then
-      begin
-        if i < n then
-          AddFieldName(Names[i])
-        else
-          AddPropName(ClassNameShort(Values[i])^);
-        WriteObject(Values[i], Options);
-        AddComma;
-      end;
-    CancelLastComma;
-    Add('}');
-    SetText(result);
-  finally
-    Free;
-  end;
 end;
 
 
