@@ -1326,15 +1326,15 @@ end;
 procedure THttpClientSocket.RequestInternal(
   var ctxt: TTHttpClientSocketRequestParams);
 
-  procedure DoRetry(Error: integer; const msg: RawUtf8);
+  procedure DoRetry(FatalError: integer; const msg: RawUtf8);
   begin
     //writeln('DoRetry ',retry, ' ', Error, ' / ', msg);
     if Assigned(OnLog) then
        OnLog(sllTrace, 'Request(% %): % socket=% DoRetry(%) retry=%',
-         [ctxt.method, ctxt.url, msg, fSock.Socket, Error,
+         [ctxt.method, ctxt.url, msg, fSock.Socket, FatalError,
           BOOL_STR[ctxt.retry]], self);
     if ctxt.retry then // retry once -> return error only if failed twice
-      ctxt.status := Error
+      ctxt.status := FatalError
     else
     begin
       Close; // close this connection
@@ -1346,7 +1346,7 @@ procedure THttpClientSocket.RequestInternal(
         RequestInternal(ctxt);
       except
         on Exception do
-          ctxt.status := Error;
+          ctxt.status := FatalError;
       end;
     end;
   end;
@@ -1561,6 +1561,7 @@ var
   parthash, urlfile: RawUtf8;
   res: integer;
   partstream: TStreamRedirect;
+  resumed: boolean;
 
   procedure DoRequestAndFreePartStream;
   var
@@ -1646,8 +1647,9 @@ begin
       raise EHttpSocket.Create('WGet: impossible to delete old %s', [result]);
   part := result + '.part';
   size := FileSize(part);
+  resumed := params.Resume;
   if (size > 0) and
-     params.Resume then
+     resumed then
   begin
     if Assigned(OnLog) then
       OnLog(sllTrace, 'WGet %: resume % (%)', [url, part, KB(size)], self);
@@ -1657,7 +1659,7 @@ begin
   end
   else
   begin
-    params.Resume := false;
+    resumed := false;
     if Assigned(OnLog) then
       OnLog(sllTrace, 'WGet %: start downloading %', [url, part], self);
     partstream := params.Hasher.Create(TFileStream.Create(part, fmCreate));
@@ -1668,7 +1670,7 @@ begin
        (parthash <> '') then
     begin
       // check the hash
-      if params.Resume and
+      if resumed and
          not IdemPropNameU(parthash, params.Hash) then
       begin
         if Assigned(OnLog) then
@@ -1692,8 +1694,9 @@ begin
     part := '';
   finally
     partstream.Free;  // close file on unexpected error
-    if part <> '' then
-      DeleteFile(part); // force next attempt from scratch
+    if (part <> '') and
+       not resumed then
+      DeleteFile(part); // force next attempt from scratch if resume is not set
   end;
 end;
 
