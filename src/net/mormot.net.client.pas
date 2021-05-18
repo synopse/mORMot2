@@ -1447,8 +1447,13 @@ begin
         // successfully sent -> reset some fields for the next request
         RequestClear;
       except
-        on Exception do
-          DoRetry(HTTP_NOTFOUND, 'Exception');
+        on E: Exception do
+          if E.InheritsFrom(ENetSock) then
+            // network layer problem - typically EHttpSocket
+            DoRetry(HTTP_NOTFOUND, 'ENetSock Exception')
+          else
+            // propagate custom exceptions to the caller (e.g. from progression)
+            raise;
       end;
     finally
       if ctxt.KeepAlive = 0 then
