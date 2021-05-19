@@ -5331,6 +5331,7 @@ begin
            (p^.Name <> '') and
            // handle woStoreStoredFalse flag and "stored" attribute in code
            ((woStoreStoredFalse in c.Options) or
+            (rcfDisableStored in Ctxt.Info.Flags) or
             (p^.Prop = nil) or
             (p^.Prop.IsStored(pointer(Data)))) and
            // handle woDontStoreDefault flag over "default" attribute in code

@@ -1802,6 +1802,8 @@ type
   // - rcfReadIgnoreUnknownFields will let JSON unserialization ignore unknown
   // fields for this class/record
   // - rcfAutoCreateFields is defined when AutoCreateFields() has been called
+  // - rcfIgnoreStored is set for TOrm, where "stored AS_UNIQUE" does not mean
+  // "not stored" for serialization but "UNIQUE SQL"
   TRttiCustomFlag = (
     rcfIsManaged,
     rcfObjArray,
@@ -1813,7 +1815,8 @@ type
     rcfHasNestedManagedProperties,
     rcfArrayItemManaged,
     rcfReadIgnoreUnknownFields,
-    rcfAutoCreateFields);
+    rcfAutoCreateFields,
+    rcfDisableStored);
 
   /// define specific behaviors for a given TypeInfo/PRttIinfo
   // - as stored in TRttiCustom.Flags
