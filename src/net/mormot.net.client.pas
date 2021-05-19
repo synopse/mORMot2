@@ -1695,7 +1695,7 @@ begin
   finally
     partstream.Free;  // close file on unexpected error
     if (part <> '') and
-       not resumed then
+       not params.Resume then
       DeleteFile(part); // force next attempt from scratch if resume is not set
   end;
 end;
