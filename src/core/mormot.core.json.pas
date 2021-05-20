@@ -5337,11 +5337,11 @@ begin
            // handle woDontStoreDefault flag over "default" attribute in code
            (not (woDontStoreDefault in c.Options) or
             (p^.Prop = nil) or
-            (p.OrdinalDefault = NO_DEFAULT) or
-            not p.ValueIsDefault(Data)) and
+            (p^.OrdinalDefault = NO_DEFAULT) or
+            not p^.ValueIsDefault(Data)) and
            // detect 0 numeric values and empty strings
            (not (woDontStoreVoid in c.Options) or
-            not p.ValueIsVoid(Data)) then
+            not p^.ValueIsVoid(Data)) then
         begin
           // if we reached here, we should serialize this property
           if done then
@@ -10265,7 +10265,7 @@ begin
   end;
 end;
 
-procedure JsonBufferToXML(P: PUtf8Char; const Header,NameSpace: RawUtf8;
+procedure JsonBufferToXML(P: PUtf8Char; const Header, NameSpace: RawUtf8;
   out result: RawUtf8);
 var
   i, j, L: integer;
@@ -10301,8 +10301,7 @@ begin
     end;
 end;
 
-function JsonToXML(const Json: RawUtf8; const Header: RawUtf8;
-  const NameSpace: RawUtf8): RawUtf8;
+function JsonToXML(const Json, Header, NameSpace: RawUtf8): RawUtf8;
 var
   tmp: TSynTempBuffer;
 begin
