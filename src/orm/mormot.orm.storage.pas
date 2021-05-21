@@ -702,11 +702,13 @@ type
   // - must be registered individualy in a TRestOrmServer to access data from a
   // common client, by using the TRestOrmServer.StaticDataCreate method:
   // it allows an unique access for both SQLite3 and Static databases
-  // - handle basic REST commands, no SQL interpreter is implemented: only
+  // - handle basic REST commands, no full SQL interpreter is implemented: only
   // valid SQL command is "SELECT Field1,Field2 FROM Table WHERE ID=120;", i.e
-  // a one Table SELECT with one optional "WHERE fieldname = value" statement;
-  // if used within a TOrmVirtualTableJson, you'll be able to handle any kind of
+  // a one Table SELECT with one optional "WHERE fieldname operator value"
+  // statement, with = < <= <> != >= > operators, and IS / IS NULL / ID IN (...)
+  // - if used within a TOrmVirtualTableJson, you'll be able to handle any kind of
   // SQL statement (even joined SELECT or such) with this memory-stored database
+  // via the SQlite3 virtual tables engine
   // - data can be stored and retrieved from a file (JSON format is used by
   // default, if BinaryFile parameter is left to false; a proprietary compressed
   // binary format can be used instead) if a file name is supplied at creating
@@ -2541,7 +2543,7 @@ var
   P: TOrmPropInfo;
   cmp: integer;
   id: Int64;
-  i: PtrInt;
+  i: integer;
   found: boolean;
   v: POrm;
 begin
@@ -2842,11 +2844,8 @@ end;
 
 function TRestStorageInMemory.EngineList(const SQL: RawUtf8; ForceAjax: boolean;
   ReturnedRowCount: PPtrInt): RawUtf8;
-// - GetJsonValues/FindWhereEqual will handle basic REST commands (not all SQL)
-// only valid SQL command is "SELECT Field1,Field2 FROM Table WHERE ID=120;",
-// i.e one Table SELECT with one optional "WHERE fieldname = value" statement
-// - handle also basic "SELECT Count(*) FROM TableName;" SQL statement
-// Note: this is sufficient for OneFieldValue() and MultiFieldValue() to work
+// - GetJsonValues/FindWhere(Equal) will handle basic REST commands (not all SQL)
+// - note: sufficient for OneFieldValue() and MultiFieldValue() to work
 var
   MS: TRawByteStringStream;
   ResCount: PtrInt;
@@ -2868,19 +2867,21 @@ begin
       SetCount(TableRowCount(fStoredClass))
     else if IdemPropNameU(fBasicSqlHasRows[false], SQL) or
             IdemPropNameU(fBasicSqlHasRows[true], SQL) then
-      if TableRowCount(fStoredClass) = 0 then
+      if TableHasRows(fStoredClass) then
       begin
-        result := '{"fieldCount":1,"values":["RowID"]}'#$A;
-        ResCount := 0;
-      end
-      else
-      begin
-        // return one row with fake ID=1
+        // return one expanded row with fake ID=1 - enough for the ORM usecase
         result := '[{"RowID":1}]'#$A;
         ResCount := 1;
       end
+      else
+      begin
+        // return the not expanded field name if no row, as a regular SQL engine
+        result := '{"fieldCount":1,"values":["RowID"]}'#$A;
+        ResCount := 0;
+      end
     else
     begin
+      // parse SQL SELECT with a single where clause
       Stmt := TSelectStatement.Create(SQL,
         fStoredClassRecordProps.Fields.IndexByName,
         fStoredClassRecordProps.SimpleFieldSelect);

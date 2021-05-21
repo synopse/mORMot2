@@ -6234,7 +6234,7 @@ type
     // - this array will handle special cases, like the TCreateTime fields
     // which shall not be included in ooUpdate but ooInsert and ooSelect e.g.
     SimpleFieldsCount: array[TOrmOccasion] of integer;
-    /// "simple" fields SELECT expressions for TSelectStatement.Create
+    /// "simple" fields SELECT expressions for TSelectStatement.Create parsing
     SimpleFieldSelect: TSelectStatementSelectDynArray;
     /// bit set to 1 for an unique field
     // - an unique field is defined as "stored AS_UNIQUE" (i.e. "stored false")
@@ -16291,6 +16291,7 @@ begin
     // create the properties information from RTTI
     result := TOrmProperties.Create(self);
     rtticustom.PrivateSlot := result; // will be owned by this TRttiCustom
+    rtticustom.Flags := rtticustom.Flags + [rcfDisableStored]; // for AS_UNIQUE
     self.InternalDefineModel(result);
   finally
     Rtti.DoUnLock;
@@ -17019,8 +17020,8 @@ begin
   if self = nil then
     exit;
   with Orm do
-    serializer := CreateJsonWriter(Json, Expand, withID, SimpleFieldsBits[Occasion],
-      {knownrows=}0);
+    serializer := CreateJsonWriter(Json, Expand, withID,
+      SimpleFieldsBits[Occasion], {knownrows=}0);
   serializer.OrmOptions := OrmOptions;
   GetJsonValuesAndFree(serializer);
 end;
@@ -17268,7 +17269,7 @@ begin
      (Reference.fID <> fID) then
     exit;
   with Orm do
-    for i := 0 to length(SimpleFields) - 1 do      // compare not RawBlob/TOrmMany fields
+    for i := 0 to length(SimpleFields) - 1 do // not compare RawBlob/TOrmMany
       if SimpleFields[i].CompareValue(self, Reference, false) <> 0 then
         exit; // properties don't have the same value
   result := true;
@@ -17287,12 +17288,10 @@ begin
   if self <> Reference then
     if POrmClass(Reference)^ = POrmClass(self)^ then
     begin
-      // faster comparison on same exact class
-      with Orm do
-        for i := 0 to length(SimpleFields) - 1 do      // compare not RawBlob/TOrmMany fields
-          with SimpleFields[i] do
-            if CompareValue(self, Reference, false) <> 0 then
-              exit; // properties don't have the same value
+      with Orm do  // fast comparison on same exact class - as TOrm.SameRecord
+        for i := 0 to length(SimpleFields) - 1 do // not compare RawBlob/TOrmMany
+          if SimpleFields[i].CompareValue(self, Reference, false) <> 0 then
+            exit; // properties don't have the same value
     end
     else
     begin

@@ -105,18 +105,18 @@ type
   TNetEvents = set of TNetEvent;
 
   /// the available socket protocol layers
-  // - by definition, nlUNIX will return nrNotImplemented on Windows
+  // - by definition, nlUnix will return nrNotImplemented on Windows
   TNetLayer = (
-    nlTCP,
-    nlUDP,
-    nlUNIX);
+    nlTcp,
+    nlUdp,
+    nlUnix);
 
   /// the available socket families - mapping AF_INET/AF_INET6/AF_UNIX
   TNetFamily = (
     nfUnknown,
     nfIP4,
     nfIP6,
-    nfUNIX);
+    nfUnix);
 
   /// the IP port to connect/bind to
   TNetPort = cardinal;
@@ -124,7 +124,7 @@ type
 
 const
   /// the socket protocol layers over the IP protocol
-  nlIP = [nlTCP, nlUDP];
+  nlIP = [nlTcp, nlUdp];
 
 type
   /// internal mapping of an address, in any supported socket layer
@@ -273,7 +273,7 @@ type
   // $   Free;
   // $ end;
   TNetTlsContext = record
-    /// set if the TLS flag was set to TCrtSocket.OpenBind() method
+    /// set by TCrtSocket.OpenBind() method if TLS flag was true and established
     Enabled: boolean;
     /// input: let HTTPS be less paranoid about TLS certificates
     IgnoreCertificateErrors: boolean;
@@ -506,7 +506,7 @@ type
   public
     /// if the server is accessible via https:// and not plain http://
     Https: boolean;
-    /// either nlTCP for HTTP/HTTPS or nlUnix for Unix socket URI
+    /// either nlTcp for HTTP/HTTPS or nlUnix for Unix socket URI
     Layer: TNetLayer;
     /// if the server is accessible via something else than http:// or https://
     // - e.g. 'ws' or 'wss' for ws:// or wss://
@@ -609,7 +609,7 @@ type
     procedure SetLinger(aLinger: integer); virtual;
     procedure SetReceiveTimeout(aReceiveTimeout: integer); virtual;
     procedure SetSendTimeout(aSendTimeout: integer); virtual;
-    procedure SetTCPNoDelay(aTCPNoDelay: boolean); virtual;
+    procedure SetTcpNoDelay(aTcpNoDelay: boolean); virtual;
     function GetRawSocket: PtrInt;
   public
     /// direct access to the optional low-level HTTP proxy tunnelling information
@@ -628,12 +628,13 @@ type
     /// constructor to connect to aServer:aPort
     // - optionaly via TLS (using the SChannel API on Windows, or by including
     // mormot.lib.openssl11 unit to your project) - with custom input options
+    // - aTunnel could be populated from mormot.net.client GetSystemProxyUri()
     // - see also SocketOpen() for a wrapper catching any connection exception
-    constructor Open(const aServer, aPort: RawUtf8; aLayer: TNetLayer = nlTCP;
+    constructor Open(const aServer, aPort: RawUtf8; aLayer: TNetLayer = nlTcp;
       aTimeOut: cardinal = 10000; aTLS: boolean = false;
       aTLSContext: PNetTlsContext = nil; aTunnel: PUri = nil);
     /// high-level constructor to connect to a given URI
-    constructor OpenUri(const aURI: RawUtf8; out aAddress: RawUtf8;
+    constructor OpenUri(const aUri: RawUtf8; out aAddress: RawUtf8;
       const aTunnel: RawUtf8 = ''; aTimeOut: cardinal = 10000;
       aTLSContext: PNetTlsContext = nil); overload;
     /// constructor to bind to an address
@@ -644,14 +645,14 @@ type
     // 'unix:/run/mormot.sock'
     // - aAddr='' - bind to systemd descriptor on linux - see
     // http://0pointer.de/blog/projects/socket-activation.html
-    constructor Bind(const aAddress: RawUtf8; aLayer: TNetLayer = nlTCP;
+    constructor Bind(const aAddress: RawUtf8; aLayer: TNetLayer = nlTcp;
       aTimeOut: integer = 10000);
     /// low-level internal method called by Open() and Bind() constructors
     // - raise an ENetSock exception on error
     // - optionaly via TLS (using the SChannel API on Windows, or by including
     // mormot.lib.openssl11 unit) - with custom input options in the TLS fields
     procedure OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
-      aTLS: boolean = false; aLayer: TNetLayer = nlTCP;
+      aTLS: boolean = false; aLayer: TNetLayer = nlTcp;
       aSock: TNetSocket = TNetSocket(-1));
     /// initialize the instance with the supplied accepted socket
     // - is called from a bound TCP Server, just after Accept()
@@ -807,8 +808,8 @@ type
     // is required - so it expects buffering before calling Write() or SndLow()
     // - you can set false here to enable the Nagle algorithm, if needed
     // - see http://www.unixguide.net/network/socketfaq/2.16.shtml
-    property TCPNoDelay: boolean
-      write SetTCPNoDelay;
+    property TcpNoDelay: boolean
+      write SetTcpNoDelay;
     /// set the SO_SNDTIMEO option for the connection
     // - i.e. the timeout, in milliseconds, for blocking send calls
     // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ms740476
@@ -875,8 +876,10 @@ type
 
 /// create a TCrtSocket instance, returning nil on error
 // - useful to easily catch any exception, and provide a custom TNetTlsContext
+// - aTunnel could be populated from mormot.net.client GetSystemProxyUri()
 function SocketOpen(const aServer, aPort: RawUtf8;
-  aTLS: boolean = false; aTLSContext: PNetTlsContext = nil): TCrtSocket;
+  aTLS: boolean = false; aTLSContext: PNetTlsContext = nil;
+  aTunnel: PUri = nil): TCrtSocket;
 
 
 
@@ -1037,7 +1040,7 @@ begin
       result := nfIP6;
     {$ifdef OSPOSIX}
     AF_UNIX:
-      result := nfUNIX;
+      result := nfUnix;
     {$endif OSPOSIX}
     else
       result := nfUnknown;
@@ -1228,7 +1231,7 @@ begin
       TNetSocket(sock).SetLinger(5);
       // Server-side binding/listening of the socket to the address:port
       if (bind(sock, @addr, addr.Size)  <> NO_ERROR) or
-         ((layer <> nlUDP) and
+         ((layer <> nlUdp) and
           (listen(sock, DefaultListenBacklog)  <> NO_ERROR)) then
         result := NetLastError(WSAEADDRNOTAVAIL);
     end
@@ -1300,7 +1303,7 @@ begin
     SetSendTimeout(sendtimeout);
   if recvtimeout > 0 then
     SetReceiveTimeout(recvtimeout);
-  if layer = nlTCP then
+  if layer = nlTcp then
   begin
     SetNoDelay(true);   // disable Nagle algorithm (we use our own buffers)
     SetKeepAlive(true); // enabled TCP keepalive
@@ -1863,7 +1866,7 @@ end;
 procedure TUri.Clear;
 begin
   Https := false;
-  layer := nlTCP;
+  layer := nlTcp;
   Finalize(self);
 end;
 
@@ -1887,13 +1890,13 @@ begin
     if StartWith(pointer(P), 'HTTPS') then
       Https := true
     else if StartWith(pointer(P), 'UDP') then
-      layer := nlUDP; // 'udp://server:port';
+      layer := nlUdp; // 'udp://server:port';
     P := S + 3;
   end;
   if StartWith(pointer(P), 'UNIX:') then
   begin
     inc(P, 5); // 'http://unix:/path/to/socket.sock:/url/path'
-    layer := nlUNIX;
+    layer := nlUnix;
     S := P;
     while not (S^ in [#0, ':']) do
       inc(S); // Server='path/to/socket.sock'
@@ -1929,7 +1932,7 @@ begin
     P := S;
     while not (S^ in [#0, '/']) do
       inc(S);
-    FastSetString(Port, P, S - P); // Port='' for nlUNIX
+    FastSetString(Port, P, S - P); // Port='' for nlUnix
   end
   else if DefaultPort <> '' then
     port := DefaultPort
@@ -1949,7 +1952,7 @@ const
   Prefix: array[boolean] of RawUtf8 = (
     'http://', 'https://');
 begin
-  if layer = nlUNIX then
+  if layer = nlUnix then
     result := 'http://unix:' + Server + ':/' + address
   else if (port = '') or
           (port = '0') or
@@ -2013,9 +2016,9 @@ begin
   fSock.SetSendTimeout(aSendTimeout);
 end;
 
-procedure TCrtSocket.SetTCPNoDelay(aTCPNoDelay: boolean);
+procedure TCrtSocket.SetTcpNoDelay(aTcpNoDelay: boolean);
 begin
-  fSock.SetNoDelay(aTCPNoDelay);
+  fSock.SetNoDelay(aTcpNoDelay);
 end;
 
 constructor TCrtSocket.Create(aTimeOut: PtrInt);
@@ -2039,7 +2042,7 @@ begin
   if StartWith(pointer(aServer), 'UNIX:') then
   begin
     // aServer='unix:/path/to/myapp.socket'
-    OpenBind(copy(aServer, 6, 200), '', {dobind=}false, aTLS, nlUNIX);
+    OpenBind(copy(aServer, 6, 200), '', {dobind=}false, aTLS, nlUnix);
     fServer := aServer; // keep the full server name if reused
   end
   else
@@ -2047,16 +2050,16 @@ begin
     OpenBind(aServer, aPort, {dobind=}false, aTLS, aLayer);
 end;
 
-constructor TCrtSocket.OpenUri(const aURI: RawUtf8; out aAddress: RawUtf8;
+constructor TCrtSocket.OpenUri(const aUri: RawUtf8; out aAddress: RawUtf8;
   const aTunnel: RawUtf8; aTimeOut: cardinal; aTLSContext: PNetTlsContext);
 var
   u, t: TUri;
 begin
-  if not u.From(aURI) then
-    raise ENetSock.Create('%s.OpenUri: invalid %s', [ClassNameShort(self)^, aURI]);
+  if not u.From(aUri) then
+    raise ENetSock.Create('%s.OpenUri: invalid %s', [ClassNameShort(self)^, aUri]);
   aAddress := u.Address;
   t.From(aTunnel);
-  Open(u.Server, u.Port, nlTCP, aTimeOut, u.Https, aTLSContext, @t);
+  Open(u.Server, u.Port, nlTcp, aTimeOut, u.Https, aTLSContext, @t);
 end;
 
 const
@@ -2152,7 +2155,7 @@ begin
       retry := 10
     else if (Tunnel.Server <> '') and
             (Tunnel.Server <> aServer) and
-            (aLayer = nlTCP) then
+            (aLayer = nlTcp) then
     begin
       // handle client tunnelling via an HTTP(s) proxy
       res := nrRefused;
@@ -2193,7 +2196,7 @@ begin
       // direct client connection
       retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
     if (aPort = '') and
-       (aLayer <> nlUNIX) then
+       (aLayer <> nlUnix) then
       fPort := DEFAULT_PORT[aTLS] // default port is 80/443 (HTTP/S)
     else
       fPort := aPort;
@@ -2215,7 +2218,7 @@ begin
       SendTimeout := TimeOut;
     end;
   end;
-  if (aLayer = nlTCP) and
+  if (aLayer = nlTcp) and
      aTLS and
      not doBind and
      ({%H-}PtrInt(aSock) <= 0) then
@@ -2286,10 +2289,10 @@ begin
   if result <> 0 then
     exit; // already reached error below
   size := F.BufSize;
-  if sock.SocketLayer = nlUDP then
+  if sock.SocketLayer = nlUdp then
     size := sock.Sock.RecvFrom(F.BufPtr, size, sock.fPeerAddr)
   else
-    // nlTCP/nlUNIX
+    // nlTcp/nlUnix
     if not sock.TrySockRecv(F.BufPtr, size, {StopBeforeLength=}true) then
       size := -1; // fatal socket error
   // TrySockRecv() may return size=0 if no data is pending, but no TCP/IP error
@@ -2997,10 +3000,11 @@ begin
 end;
 
 function SocketOpen(const aServer, aPort: RawUtf8; aTLS: boolean;
-  aTLSContext: PNetTlsContext): TCrtSocket;
+  aTLSContext: PNetTlsContext; aTunnel: PUri): TCrtSocket;
 begin
   try
-    result := TCrtSocket.Open(aServer, aPort, nlTCP, 10000, aTLS, aTLSContext);
+    result := TCrtSocket.Open(
+      aServer, aPort, nlTcp, 10000, aTLS, aTLSContext, aTunnel);
   except
     result := nil;
   end;

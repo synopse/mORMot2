@@ -213,7 +213,7 @@ begin
   if address = '' then
     exit;
   // handle domain socket name
-  if layer = nlUNIX then
+  if layer = nlUnix then
   begin
     if length(address) >= SizeOf(psockaddr_un(@Addr)^.sun_path) then
       // avoid buffer overflow

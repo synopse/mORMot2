@@ -2502,12 +2502,12 @@ begin
       exit;
     if EventArchiveZipWrite = nil then
       EventArchiveZipWrite := TZipWrite.CreateFrom(
-        system.copy(aDestinationPath, 1, length(aDestinationPath) - 1) + '.zip');
+        copy(aDestinationPath, 1, length(aDestinationPath) - 1) + '.zip');
     n := EventArchiveZipWrite.Count;
     EventArchiveZipWrite.AddDeflated(aOldLogFileName, {removepath=}true);
     if (EventArchiveZipWrite.Count = n + 1) and
        DeleteFile(aOldLogFileName) then
-      result := True;
+      result := true;
   end;
 end;
 

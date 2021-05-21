@@ -131,6 +131,7 @@ interface
 
 {$ifdef FPC_CPUX64}
 // this unit is available only for FPC + X86_64 CPU
+// other targets would compile as a void unit
 
 type
   /// Arena (middle/large) heap information as returned by CurrentHeapStatus

@@ -34,6 +34,110 @@ uses
 {$endif UNICODE}
 
 
+// define some raw text functions, to avoid linking mormot.core.text
+
+function IdemPChar(p, up: PUtf8Char): boolean; inline;
+var
+  c, u: AnsiChar;
+begin
+  // we know that p<>nil and up<>nil within this unit
+  result := false;
+  repeat
+    u := up^;
+    if u = #0 then
+      break;
+    inc(up);
+    c := p^;
+    inc(p);
+    if c <> u then
+      if (c >= 'a') and
+         (c <= 'z') then
+      begin
+        dec(c, 32);
+        if c <> u then
+          exit;
+      end
+      else
+        exit;
+  until false;
+  result := true;
+end;
+
+function IdemPChars(const s: RawUtf8; const up: array of PUtf8Char): boolean;
+var
+  i: PtrInt;
+begin
+  result := true;
+  for i := 0 to high(up) do
+    if IdemPChar(pointer(s), up[i]) then
+      exit;
+  result := false;
+end;
+
+procedure FindNameValue(const s, up: RawUtf8; var res: RawUtf8);
+var
+  p: PUtf8Char;
+  L: PtrInt;
+begin
+  p := pointer(s);
+  while p <> nil do
+  begin
+    if IdemPChar(p, pointer(up)) then
+    begin
+      inc(p, length(up));
+      while (p^ <= ' ') and
+            (p^ <> #0) do
+        inc(p);
+      L := 0;
+      while p[L] > #13 do
+        inc(L);
+      while p[L - 1] = ' ' do
+        dec(L);
+      FastSetString(res, p, L);
+      exit;
+    end;
+    p := GotoNextLine(p);
+  end;
+  res := '';
+end;
+
+function GetNextCardinal(var P: PAnsiChar): PtrUInt;
+var
+  c: cardinal;
+begin
+  result := 0;
+  while not (P^ in ['0'..'9']) do
+    if P^ = #0 then
+      exit
+    else
+      inc(P);
+  repeat
+    c := ord(P^) - 48;
+    if c > 9 then
+      break;
+    result := result * 10 + c;
+    inc(P);
+  until false;
+end;
+
+function GetNextItem(var P: PAnsiChar): RawUtf8;
+var
+  S: PAnsiChar;
+begin
+  result := '';
+  while P^ <= ' ' do
+    if P^ = #0 then
+      exit
+    else
+      inc(P);
+  S := P;
+  repeat
+    inc(P);
+  until P^ <= ' ';
+  FastSetString(result, S, P - S);
+end;
+
+
 { ****************** Unicode, Time, File process }
 var
   /// contains the curent system code page (default UTF-8 on POSIX systems)
@@ -1113,109 +1217,6 @@ end;
 {$endif OSLINUX}
 
 
-// define some raw text functions, to avoid linking mormot.core.text
-
-function IdemPChar(p, up: PUtf8Char): boolean; inline;
-var
-  c, u: AnsiChar;
-begin
-  // we know that p<>nil and up<>nil within this unit
-  result := false;
-  repeat
-    u := up^;
-    if u = #0 then
-      break;
-    inc(up);
-    c := p^;
-    inc(p);
-    if c <> u then
-      if (c >= 'a') and
-         (c <= 'z') then
-      begin
-        dec(c, 32);
-        if c <> u then
-          exit;
-      end
-      else
-        exit;
-  until false;
-  result := true;
-end;
-
-function IdemPChars(const s: RawUtf8; const up: array of PUtf8Char): boolean;
-var
-  i: PtrInt;
-begin
-  result := true;
-  for i := 0 to high(up) do
-    if IdemPChar(pointer(s), up[i]) then
-      exit;
-  result := false;
-end;
-
-procedure FindNameValue(const s, up: RawUtf8; var res: RawUtf8);
-var
-  p: PUtf8Char;
-  L: PtrInt;
-begin
-  p := pointer(s);
-  while p <> nil do
-  begin
-    if IdemPChar(p, pointer(up)) then
-    begin
-      inc(p, length(up));
-      while (p^ <= ' ') and
-            (p^ <> #0) do
-        inc(p);
-      L := 0;
-      while p[L] > #13 do
-        inc(L);
-      while p[L - 1] = ' ' do
-        dec(L);
-      FastSetString(res, p, L);
-      exit;
-    end;
-    p := GotoNextLine(p);
-  end;
-  res := '';
-end;
-
-function GetNextCardinal(var P: PAnsiChar): PtrUInt;
-var
-  c: cardinal;
-begin
-  result := 0;
-  while not (P^ in ['0'..'9']) do
-    if P^ = #0 then
-      exit
-    else
-      inc(P);
-  repeat
-    c := ord(P^) - 48;
-    if c > 9 then
-      break;
-    result := result * 10 + c;
-    inc(P);
-  until false;
-end;
-
-function GetNextItem(var P: PAnsiChar): RawUtf8;
-var
-  S: PAnsiChar;
-begin
-  result := '';
-  while P^ <= ' ' do
-    if P^ = #0 then
-      exit
-    else
-      inc(P);
-  S := P;
-  repeat
-    inc(P);
-  until P^ <= ' ';
-  FastSetString(result, S, P - S);
-end;
-
 // we bypass crt.pp since this unit cancels the SIGINT signal
 
 procedure AllocConsole;
@@ -1547,7 +1548,7 @@ end;
 
 function RetrieveLoadAvg: RawUtf8;
 begin
-  // the libc parse this file anyway :)
+  // the libc parses this file anyway :)
   result := StringFromFile('/proc/loadavg', {nosize=}true);
 end;
 
@@ -1555,7 +1556,7 @@ end;
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 begin
-  result := false; // call RetrieveLoadAvg() instead
+  result := false; // should call e.g. RetrieveLoadAvg() instead
 end;
 
 function RetrieveProcessInfo(PID: cardinal; out KernelTime, UserTime: Int64;
