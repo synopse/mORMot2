@@ -150,11 +150,15 @@
     {$define ISFPC27}
     {$define ISFPC30}
     {$define ISFPC32}
+    {$ifdef VER3_2_2}
+      {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
+    {$endif VER3_2_2}
   {$endif VER3_2}
-  {$ifdef VER3_3} // trunk before 3.4
+  {$ifdef VER3_3} // trunk before 3.2
     {$define ISFPC27}
     {$define ISFPC30}
     {$define ISFPC32}
+   {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
   {$endif VER3_3}
   {$ifdef VER3_4}
     {$define ISFPC27}
@@ -162,6 +166,7 @@
     {$define ISFPC32}
     {$define ISFPC34}
     {$define FPC_PROVIDE_ATTR_TABLE} // introducing TTypeData.AttributeTable
+    {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
   {$endif VER3_4}
   {$if not defined(VER3_0) and not defined(VER3_2) and not defined(VER2)}
     {.$define FPC_PROVIDE_ATTR_TABLE} // to be defined since SVN 42356-42411
