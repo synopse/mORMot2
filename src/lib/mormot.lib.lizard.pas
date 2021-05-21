@@ -234,6 +234,17 @@ var
   AlgoLizardHuffman: TAlgoCompress;
 
 
+/// a TSynLogArchiveEvent handler which will compress older .log files
+// using our proprietary AlgoLizardFast format
+// - resulting file will have the .synlz extension and will be located
+// in the aDestinationPath directory, i.e. TSynLogFamily.ArchivePath+'\log\YYYYMM\'
+// - use UnSynLZ.dpr tool to uncompress it into .log textual file - it will use
+// the TAlgoCompress.AlgoID mechanism to recognize the SynLZ or Lizard format
+// - AlgoLizardFast has been identified as a good alternative to AlgoSynLZ for
+// compressing .log content
+function EventArchiveLizard(
+  const aOldLogFileName, aDestinationPath: TFileName): boolean;
+
 
 implementation
 
@@ -523,6 +534,14 @@ begin
 end;
 
 
+{ ****************** TAlgoLizard/TAlgoLizardFast/TAlgoLizardHuffman High-Level Algorithms }
+
+function EventArchiveLizard(
+  const aOldLogFileName, aDestinationPath: TFileName): boolean;
+begin
+  result := AlgoLizardFast.EventArchive(
+    LOG_MAGIC, aOldLogFileName, aDestinationPath, '.synlz');
+end;
 
 
 initialization

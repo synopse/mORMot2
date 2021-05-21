@@ -374,6 +374,11 @@ type
     // so that Hash32() is used instead of the AlgoHash() of this instance
     function FileUnCompress(const Source, Dest: TFileName; Magic: cardinal;
       ForceHash32: boolean = false): boolean;
+    /// a TSynLogArchiveEvent handler which will compress older .log files
+    // using our proprietary FileCompress format for this algorithm
+    function EventArchive(aMagic: cardinal;
+      const aOldLogFileName, aDestinationPath, aDestinationExt: TFileName): boolean;
+
     /// get the TAlgoCompress instance corresponding to the AlgoID stored
     // in the supplied compressed buffer
     // - returns nil if no algorithm was identified
@@ -1432,6 +1437,11 @@ function GetMimeContentType(Content: Pointer; Len: PtrInt;
 // !  Call.OutHead := GetMimeContentTypeHeader(Call.OutBody,aFileName);
 function GetMimeContentTypeHeader(const Content: RawByteString;
   const FileName: TFileName = ''): RawUtf8;
+
+const
+  /// the "magic" number used to identify .log.synlz compressed files, as
+  // created by EventArchiveSynLZ / EventArchiveLizard callbacks
+  LOG_MAGIC = $ABA51051;
 
 /// retrieve if some content is compressed, from a supplied binary buffer
 // - returns TRUE, if the header in binary buffer "may" be compressed (this method
@@ -5090,6 +5100,26 @@ begin
   result := true;
 end;
 
+function TAlgoCompress.EventArchive(aMagic: cardinal;
+  const aOldLogFileName, aDestinationPath, aDestinationExt: TFileName): boolean;
+begin
+  // aDestinationPath = 'ArchivePath\log\YYYYMM\'
+  result := false;
+  if (aOldLogFileName <> '') and
+     FileExists(aOldLogFileName) then
+  try
+    if DirectoryExists(aDestinationPath) or
+       CreateDir(aDestinationPath) then
+      if FileCompress(aOldLogFileName,
+         aDestinationPath + ExtractFileName(aOldLogFileName) + aDestinationExt,
+         aMagic, {hash32=}true) then
+        result := DeleteFile(aOldLogFileName);
+  except
+    on Exception do
+      result := false;
+  end;
+end;
+
 
 { TAlgoSynLZ }
 
@@ -7246,9 +7276,9 @@ begin
       $766f6f6d, // mov = 6D 6F 6F 76 [....moov]
       $89a8275f, // jar = 5F 27 A8 89
       $9ac6cdd7, // 'video/x-ms-wmv' = D7 CD C6 9A 00 00
-      $a5a5a5a5, // .mab file = MAGIC_MAB in SynLog.pas
-      $a5aba5a5, // .data = TRESTSTORAGEINMEMORY_MAGIC in mormot.orm.server
-      $aba51051, // .log.synlz = LOG_MAGIC in SynLog.pas
+      $a5a5a5a5, // .mab file = MAGIC_MAB in mormot.core.log.pas
+      $a5aba5a5, // .data = TRESTSTORAGEINMEMORY_MAGIC in mormot.orm.server.pas
+      LOG_MAGIC, // .log.synlz with SynLZ or Lizard compression
       $aba5a5ab, // .dbsynlz = SQLITE3_MAGIC in mormot.db.raw.sqlite3.pas
       $afbc7a37, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C
       $b7010000,
