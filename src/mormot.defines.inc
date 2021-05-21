@@ -158,7 +158,7 @@
     {$define ISFPC27}
     {$define ISFPC30}
     {$define ISFPC32}
-   {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
+    {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
   {$endif VER3_3}
   {$ifdef VER3_4}
     {$define ISFPC27}

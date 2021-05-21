@@ -3305,6 +3305,14 @@ begin
   else if k = rkFloat then
     if VariantToDouble(Value, f64) then
       SetFloatProp(Instance, f64)
+    else if Assigned(_Iso8601ToDateTime) and
+            VariantToUtf8(Value, u) then
+    begin
+      f64 := _Iso8601ToDateTime(u);
+      if f64 = 0 then
+        exit;
+      SetFloatProp(Instance, f64);
+    end
     else
       exit
   else if k = rkVariant then

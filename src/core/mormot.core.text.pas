@@ -1749,6 +1749,11 @@ var
   _VariantToUtf8DateTimeToIso8601: procedure(DT: TDateTime; FirstChar: AnsiChar;
     var result: RawUtf8; WithMS: boolean);
 
+  /// Date/Time conversion from ISO-8601 text
+  // - is implemented by Iso8601ToDateTime() from mormot.core.datetime.pas:
+  // if this unit is not included in the project, this function is nil
+  // - used by TRttiProp.SetValue() for TDateTime properties with a getter
+  _Iso8601ToDateTime: function(const iso: RawByteString): TDateTime;
 
 
 type
