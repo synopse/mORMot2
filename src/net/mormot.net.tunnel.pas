@@ -128,13 +128,21 @@ type
     fPort: TNetPort;
     fThread: TTunnelLocalThread;
     fHandshake: TSynQueue;
+    fContext: TTunnelEcdheContext;
     function EcdheHandshake(TimeOutMS: integer; const Transmit: ITunnelTransmit;
       out ecdhe: TTunnelEcdheContext): boolean; virtual; abstract;
   public
     /// called e.g. by CallbackReleased
     procedure ClosePort;
+    /// initialize the class, especially the Context values
+    constructor Create; override;
     /// finalize the server
     destructor Destroy; override;
+    /// Create will initialize this with some random values
+    // - is publicated here to allow putting the public key into some message
+    // before calling BindLocalPort()
+    property Context: TTunnelEcdheContext
+      read fContext;
   public
     /// ITunnelTransmit method: when a Frame is received from the relay server
     procedure Send(const Frame: RawByteString);
@@ -328,6 +336,14 @@ begin
   fPort := 0;
 end;
 
+constructor TTunnelLocal.Create;
+begin
+  inherited Create;
+  TAesPrng.Main.FillRandom(fContext.rnd);
+  if not Ecc256r1MakeKey(fContext.pub, fContext.priv) then
+    raise ETunnel.CreateUtf8('%.Create: no ECC engine available', [self]);
+end;
+
 destructor TTunnelLocal.Destroy;
 begin
   if fThread <> nil then
@@ -419,9 +435,7 @@ var
 begin
   result := false;
   // EDCHE handshake with perfect forward security - server side
-  TAesPrng.Main.FillRandom(ecdhe.rnd);
-  if not Ecc256r1MakeKey(ecdhe.pub, ecdhe.priv) then
-    exit;
+  ecdhe := fContext; // pre-computed by overriden Create
   SetString(frame, PAnsiChar(@ecdhe), SizeOf(ecdhe.rnd) + SizeOf(ecdhe.pub));
   Transmit.Send(frame); // frame = rnd+pub
   if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
@@ -443,9 +457,10 @@ begin
   // EDCHE handshake with perfect forward security - client side
   SetString(frame, nil, SizeOf(TEccPublicKey));
   if not fHandshake.WaitPop(TimeOutMS, nil, remote) or // remote = rnd+pub
-     (length({%H-}remote) <> SizeOf(ecdhe.rnd) + SizeOf(ecdhe.pub)) or
-     not Ecc256r1MakeKey(PEccPublicKey(frame)^, ecdhe.priv) then
-    exit;{%H-}
+     (length({%H-}remote) <> SizeOf(ecdhe.rnd) + SizeOf(ecdhe.pub)) then
+    exit;
+  PEccPublicKey(frame)^ := fContext.pub;
+  ecdhe.priv := fContext.priv;
   Transmit.Send(frame); // frame = pub
   with PTunnelEcdheContext(remote)^ do
   begin
