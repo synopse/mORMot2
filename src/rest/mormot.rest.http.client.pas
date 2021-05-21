@@ -705,7 +705,7 @@ begin
   if fSocketClass = nil then
     fSocketClass := THttpClientSocket;
   fSocket := fSocketClass.Open(
-    fServer, fPort, nlTCP, fConnectTimeout, fHttps);
+    fServer, fPort, nlTcp, fConnectTimeout, fHttps);
   // note that first registered algo will be the prefered one
   {$ifndef PUREMORMOT2}
   if hcSynShaAes in Compression then

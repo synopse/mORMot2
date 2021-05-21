@@ -1535,6 +1535,7 @@ type
 // - note that this call may require a network access, and can be slow: if you
 // can, try to store the proxy information in the settings, and only call it
 // in case of connection failure
+// - as called by cross-platform GetProxyForUri() function from mormot.net.client
 function WinHttpGetProxyInfo(const URL: SynUnicode;
   out ProxyInfo: TProxyInfo): DWORD;
 
@@ -2203,7 +2204,6 @@ begin
       WINHTTP_AUTO_DETECT_TYPE_DHCP or WINHTTP_AUTO_DETECT_TYPE_DNS_A;
     AutoDetectProxy := true;
   end;
-
   // if the IE proxy settings are not available or IE has
   // configured auto-config script or auto-detect proxy settings
   if AutoDetectProxy then
