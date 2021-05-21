@@ -191,8 +191,11 @@ type
     fMainProtocol: TWebSocketProtocolUri;
     fLinks: TSynDictionary; // TTunnelRelayIDs/TTunnelRelayLinks
   public
-    /// initialize the Relay Server with its publicUri
-    constructor Create(const publicUri, localPort: RawUtf8); reintroduce;
+    /// initialize the Relay Server
+    // - if publicUri is not set, '127.0.0.1:localPort' is used, but you can
+    // use a reverse proxy URI like 'publicdomain.com/websockgateway'
+    constructor Create(const localPort: RawUtf8;
+      const publicUri: RawUtf8 = ''); reintroduce;
     /// finalize this Relay Server
     destructor Destroy; override;
     /// generate a new WebSockets connection URI and its associated session ID
@@ -237,7 +240,7 @@ begin
   fClientSock.ShutdownAndClose({rdwr=}true);
   fClientSock := nil;
   if fState = stAccepting then
-    if NewSocket(cLocalhost, UInt32ToUtf8(fPort), nlTCP,
+    if NewSocket(cLocalhost, UInt32ToUtf8(fPort), nlTcp,
        {dobind=}false, 10, 0, 0, 0, callback) = nrOK then
       // Windows TCP/UDP socket may not release Accept() until connected
       callback.ShutdownAndClose({rdwr=}false);
@@ -371,17 +374,18 @@ begin
     raise ETunnel.CreateUtf8('%.BindLocalPort invalid call', [self]);
   // bind to a local ephemeral port
   ClosePort;
-  ENetSock.Check(NewSocket(cLocalhost, {port=}'0', nlTCP, {bind=}true,
+  ENetSock.Check(NewSocket(cLocalhost, {port=}'0', nlTcp, {bind=}true,
     TimeOutMS, TimeOutMS, TimeOutMS, {retry=}0, sock, @addr), 'BindLocalPort');
   result := addr.Port; // bind on port='0' = ephemeral port
   fOptions := TransmitOptions;
   fHandshake := TSynQueue.Create(TypeInfo(TRawByteStringDynArray));
   try
-    // initial handshake: TTunnelOptions+TTunnelSession until both connected
+    // initial handshake: TTunnelOptions+TTunnelSession
     header.options := fOptions;
     header.session := Session;
     SetString(frame, PAnsiChar(@header), SizeOf(header));
     Transmit.Send(frame);
+    // server will wait until both sides are connected
     if not fHandshake.WaitPop(TimeOutMS, nil, remote) or
        (remote <> frame) then
       raise ETunnel.CreateUtf8('%.BindLocalPort handshake failed', [self]);
@@ -542,13 +546,18 @@ end;
 
 { TTunnelRelayServer }
 
-constructor TTunnelRelayServer.Create(const publicUri, localPort: RawUtf8);
+constructor TTunnelRelayServer.Create(const localPort, publicUri: RawUtf8);
+var
+  uri: RawUtf8;
 begin
   fLinks := TSynDictionary.Create(
     TypeInfo(TTunnelRelayIDs), TypeInfo(TTunnelRelayLinks), false, 5 * 60);
   inherited Create(localPort, nil, nil, 'relaysrv');
-  fMainProtocol := TTunnelRelayServerProtocol.Create(
-    'mrmtproxy', publicUri, 1, nil);
+  if publicUri = '' then
+    uri := '127.0.0.1:' + localPort
+  else
+    uri := publicUri;
+  fMainProtocol := TTunnelRelayServerProtocol.Create('mrmtproxy', uri, 1, nil);
   fProtocols.Add(fMainProtocol); // will be cloned for each URI
 end;
 

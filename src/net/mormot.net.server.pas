@@ -1444,7 +1444,7 @@ destructor THttpServer.Destroy;
 var
   endtix: Int64;
   i: PtrInt;
-  callback: TNetSocket; // touch-and-go to the server to release main Accept()
+  dummy: TNetSocket; // touch-and-go to the server to release main Accept()
 begin
   Terminate; // set Terminated := true for THttpServerResp.Execute
   if fThreadPool <> nil then
@@ -1455,9 +1455,9 @@ begin
     if Sock.SocketLayer <> nlUnix then
       Sock.Close; // shutdown TCP/UDP socket to unlock Accept() in Execute
     if NewSocket(Sock.Server, Sock.Port, Sock.SocketLayer,
-       {dobind=}false, 10, 10, 10, 0, callback) = nrOK then
+       {dobind=}false, 10, 10, 10, 0, dummy) = nrOK then
       // Windows TCP/UDP socket may not release Accept() until connected
-      callback.ShutdownAndClose({rdwr=}false);
+      dummy.ShutdownAndClose({rdwr=}false);
     if Sock.SockIsDefined then
       Sock.Close; // nlUnix expects shutdown after accept() returned
   end;

@@ -7302,7 +7302,7 @@ begin
     if Ctxt.WasString then
       Iso8601ToDateTimePUtf8CharVar(Ctxt.Value, Ctxt.ValueLen, Data^)
     else
-      Data^ := GetExtended(Ctxt.Value);
+      Data^ := GetExtended(Ctxt.Value); // was propbably stored as double
 end;
 
 procedure _JL_GUID(Data: PByteArray; var Ctxt: TJsonParserContext);
