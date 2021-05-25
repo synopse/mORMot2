@@ -1402,9 +1402,9 @@ procedure THttpClientSocket.RequestInternal(
   begin
     //writeln('DoRetry ',retry, ' ', Error, ' / ', msg);
     if Assigned(OnLog) then
-       OnLog(sllTrace, 'Request(% %): % socket=% DoRetry(%) retry=%',
+       OnLog(sllTrace, 'Request(% %): % socket=% DoRetry(%) retry=% on %:%',
          [ctxt.method, ctxt.url, msg, fSock.Socket, FatalError,
-          BOOL_STR[ctxt.retry]], self);
+          BOOL_STR[ctxt.retry], fServer, fPort], self);
     if ctxt.retry then // retry once -> return error only if failed twice
       ctxt.status := FatalError
     else

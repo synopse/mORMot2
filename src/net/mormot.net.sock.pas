@@ -614,7 +614,7 @@ type
   public
     /// direct access to the optional low-level HTTP proxy tunnelling information
     // - could have been assigned by a Tunnel.From() call
-    // - User/Password would taken into consideration for authentication
+    // - User/Password would be taken into consideration for authentication
     Tunnel: TUri;
     /// direct access to the optional low-level TLS Options and Information
     // - depending on the actual INetTls implementation, some fields may not
@@ -2164,18 +2164,23 @@ begin
         raise ENetSock.Create('%s.Open(%s:%s): %s proxy - unsupported dual ' +
           'TLS layers', [ClassNameShort(self)^, aServer, aPort, fProxyUrl]);
       try
-        OpenBind(Tunnel.Server, Tunnel.Port, false, Tunnel.Https);
-        SockSend(['CONNECT ', aServer, ':', aPort, ' HTTP/1.0']);
-        if Tunnel.User <> '' then
-          SockSend(['Proxy-Authorization: Basic ', Tunnel.UserPasswordBase64]);
-        SockSendFlush(#13#10);
-        repeat
-          SockRecvLn(head);
-          if StartWith(pointer(head), 'HTTP/') and
-             (length(head) > 11) and
-             (head[10] = '2') then // 'HTTP/1.1 2xx xxxx' success
-            res := nrOK;
-        until head = '';
+        res := NewSocket(Tunnel.Server, Tunnel.Port, nlTcp, {doBind=}false,
+          fTimeout, fTimeout, fTimeout, {retry=}2, fSock);
+        if res = nrOK then
+        begin
+          res := nrRefused;
+          SockSend(['CONNECT ', aServer, ':', aPort, ' HTTP/1.0']);
+          if Tunnel.User <> '' then
+            SockSend(['Proxy-Authorization: Basic ', Tunnel.UserPasswordBase64]);
+          SockSendFlush(#13#10);
+          repeat
+            SockRecvLn(head);
+            if StartWith(pointer(head), 'HTTP/') and
+               (length(head) > 11) and
+               (head[10] = '2') then // 'HTTP/1.1 2xx xxxx' success
+              res := nrOK;
+          until head = '';
+        end;
       except
         on E: Exception do
           raise ENetSock.Create('%s.Open(%s:%s): %s proxy error %s',
