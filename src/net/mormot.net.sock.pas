@@ -2677,7 +2677,7 @@ begin
     if TrySndLow(pointer(fSndBuf), fSndBufLen) then
       fSndBufLen := 0
     else
-      raise ENetSock.Create('%s.SockSendFlush(%s) len=%d %s',
+      raise ENetSock.Create('%s.SockSendFlush(%s) len=%d',
         [ClassNameShort(self)^, fServer, fSndBufLen], NetLastError);
   if body > 0 then
     SndLow(pointer(aBody), body); // direct sending of biggest packets
