@@ -986,7 +986,8 @@ begin
                 begin
                   CValueType := SQL_C_DOUBLE;
                   if (fDBMS = dMSSQL) and (VInOut=paramIn) and
-                     (double(VInt64) > -1) and (double(VInt64) < 1) then
+                     (unaligned(PDouble(@VInt64)^) > -1) and
+                     (unaligned(PDouble(@VInt64)^) < 1) then
                   begin
                     // prevent "Invalid character value for cast specification" error for numbers (-1; 1)
                     // for doubles outside this range SQL_C_DOUBLE must be used
@@ -1210,10 +1211,12 @@ begin
     ODBC.Check(nil, self,
       ODBC.PrepareW(fStatement, pointer(fSqlW), length(fSqlW) shr 1),
       SQL_HANDLE_STMT, fStatement);
-    if TODBCConnectionProperties(Connection.Properties).SqlStatementTimeoutSec > 0 then
+    if TSqlDBOdbcConnectionProperties(Connection.Properties).
+         SqlStatementTimeoutSec > 0 then
       ODBC.Check(nil, self,
         ODBC.SetStmtAttrA(fStatement, SQL_ATTR_QUERY_TIMEOUT,
-          SqlPointer(PtrUInt(TODBCConnectionProperties(Connection.Properties).SqlStatementTimeoutSec)),
+          SqlPointer(PtrUInt(TSqlDBOdbcConnectionProperties(
+            Connection.Properties).SqlStatementTimeoutSec)),
           SQL_IS_INTEGER),
         SQL_HANDLE_STMT, fStatement);
     SqlLogEnd;
