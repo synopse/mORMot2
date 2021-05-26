@@ -836,6 +836,8 @@ type
      opLike,
      opContains,
      opFunction);
+  /// a set of operators recognized by a TSelectStatement where clause
+  TSelectStatementOperators = set of TSelectStatementOperator;
 
   /// one recognized SELECT expression for TSelectStatement
   TSelectStatementSelect = record
@@ -2448,7 +2450,7 @@ var
       repeat
         inc(P);
       until not (jcJsonIdentifier in JSON_CHARS[P^]);
-      FastSetString(Where.SubField, B, P - B);
+      FastSetString(Where.SubField, B, P - B); // '.subfield1.subfield2'
       fWhereHasSubFields := true;
       P := GotoNextNotSpace(P);
     end;
@@ -2478,6 +2480,14 @@ var
         else
           Where.Operation := opLessThan;
         end;
+      '!':
+         if P[1] = '=' then
+         begin
+           inc(P);
+           Where.Operation := opNotEqualTo;
+         end
+         else
+           exit;
       'i', 'I':
         case P[1] of
           's', 'S':

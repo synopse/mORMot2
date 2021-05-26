@@ -279,8 +279,8 @@ type
   // could define one published property of a mormot.core.interface.pas
   // TInjectableObject as IAutoLocker so that this class may be automatically
   // injected
-  // - you may use the inherited TAutoLockerDebug class, as defined in SynLog.pas,
-  // to debug unexpected race conditions due to such critical sections
+  // - you may use the inherited TAutoLockerDebug class to debug unexpected race
+  // conditions due to such critical sections
   // - consider inherit from high-level TSynPersistentLock or call low-level
   // fSafe := NewSynLocker / fSafe^.DoneAndFreemem instead
   TAutoLocker = class(TInterfacedObjectWithCustomCreate, IAutoLocker)
@@ -2945,15 +2945,9 @@ begin
 end;
 
 procedure TSynPersistent.AssignError(Source: TSynPersistent);
-var
-  SourceName: string;
 begin
-  if Source <> nil then
-    SourceName := Source.ClassName
-  else
-    SourceName := 'nil';
   raise EConvertError.CreateFmt('Cannot assign a %s to a %s',
-    [SourceName, ClassNameShort(self)^]);
+    [ClassNameShort(Source)^, ClassNameShort(self)^]);
 end;
 
 procedure TSynPersistent.AssignTo(Dest: TSynPersistent);

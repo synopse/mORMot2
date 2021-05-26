@@ -1802,6 +1802,8 @@ type
   // - rcfReadIgnoreUnknownFields will let JSON unserialization ignore unknown
   // fields for this class/record
   // - rcfAutoCreateFields is defined when AutoCreateFields() has been called
+  // - rcfIgnoreStored is set for TOrm, where "stored AS_UNIQUE" does not mean
+  // "not stored" for serialization but "UNIQUE SQL"
   TRttiCustomFlag = (
     rcfIsManaged,
     rcfObjArray,
@@ -1813,7 +1815,8 @@ type
     rcfHasNestedManagedProperties,
     rcfArrayItemManaged,
     rcfReadIgnoreUnknownFields,
-    rcfAutoCreateFields);
+    rcfAutoCreateFields,
+    rcfDisableStored);
 
   /// define specific behaviors for a given TypeInfo/PRttIinfo
   // - as stored in TRttiCustom.Flags
@@ -2062,6 +2065,10 @@ type
     // but in TRttiJson, so that it will use mormot.core.data comparison
     function ValueCompare(Data, Other: pointer;
       CaseInsensitive: boolean): integer; virtual;
+    /// fill a variant with a stored value of this type
+    // - not implemented in this class (raise an ERttiException)
+    // but in TRttiJson, so that it will use mormot.core.variants process
+    function ValueToVariant(Data: pointer; out Dest: TVarData): PtrInt; virtual;
     /// create a new TObject instance of this rkClass
     // - not implemented here (raise an ERttiException) but in TRttiJson,
     // so that mormot.core.rtti has no dependency to TSynPersistent and such
@@ -3298,6 +3305,14 @@ begin
   else if k = rkFloat then
     if VariantToDouble(Value, f64) then
       SetFloatProp(Instance, f64)
+    else if Assigned(_Iso8601ToDateTime) and
+            VariantToUtf8(Value, u) then
+    begin
+      f64 := _Iso8601ToDateTime(u);
+      if f64 = 0 then
+        exit;
+      SetFloatProp(Instance, f64);
+    end
     else
       exit
   else if k = rkVariant then
@@ -4308,39 +4323,24 @@ end;
 function ClassFieldCountWithParents(ClassType: TClass; onlyWithoutGetter: boolean): integer;
 var
   cp: PRttiProps;
-  rc: PRttiClass;
   p: PRttiProp;
   i: integer;
 begin
   result := 0;
-  if onlyWithoutGetter then
+  while ClassType <> nil do
   begin
-    // we need to browse all inherited properties RTTI
-    while ClassType <> nil do
+    cp := GetRttiProps(ClassType);
+    if cp = nil then
+      break; // no RTTI information (e.g. reached TObject level)
+    p := cp^.PropList;
+    for i := 1 to cp^.PropCount do
     begin
-      cp := GetRttiProps(ClassType);
-      if cp = nil then
-        break; // no RTTI information (e.g. reached TObject level)
-      p := cp^.PropList;
-      for i := 1 to cp^.PropCount do
-      begin
-        if p^.GetterIsField then
-          inc(result);
-        p := p^.Next;
-      end;
-      ClassType := GetClassParent(ClassType);
+      if (not onlyWithoutGetter) or
+         p^.GetterIsField then
+        inc(result);
+      p := p^.Next;
     end;
-  end
-  else
-  begin
-    // we can use directly the root RTTI information
-    while ClassType <> nil do
-    begin
-      rc := GetRttiClass(ClassType);
-      if rc <> nil then
-        inc(result, rc^.PropCount);
-      ClassType := GetClassParent(ClassType);
-    end;
+    ClassType := GetClassParent(ClassType);
   end;
 end;
 
@@ -6601,6 +6601,13 @@ end;
 function TRttiCustom.{%H-}ValueCompare(Data, Other: pointer; CaseInsensitive: boolean): integer;
 begin
   raise ERttiException.CreateUtf8('%.ValueCompare not implemented -> please ' +
+    'include mormot.core.json unit to register TRttiJson', [self]);
+end;
+
+function TRttiCustom.{%H-}ValueToVariant(Data: pointer;
+  out Dest: TVarData): PtrInt;
+begin
+  raise ERttiException.CreateUtf8('%.ValueToVariant not implemented -> please ' +
     'include mormot.core.json unit to register TRttiJson', [self]);
 end;
 

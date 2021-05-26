@@ -131,6 +131,7 @@ interface
 
 {$ifdef FPC_CPUX64}
 // this unit is available only for FPC + X86_64 CPU
+// other targets would compile as a void unit
 
 type
   /// Arena (middle/large) heap information as returned by CurrentHeapStatus
@@ -2334,43 +2335,29 @@ begin
     result := maxcount;
 end;
 
+const
+  K_: array[0..4] of string[1] = (
+    'P', 'T', 'G', 'M', 'K');
+
 function K(i: PtrUInt): shortstring;
 var
-  tmp: string[1];
+  j, n: PtrUInt;
+  tmp: PShortString;
 begin
-  if i >= 1 shl 50 then
-  begin
-    i := i shr 50;
-    tmp := 'P';
-  end
-  else
-  if i >= 1 shl 40 then
-  begin
-    i := i shr 40;
-    tmp := 'T';
-  end
-  else
-  if i >= 1 shl 30 then
-  begin
-    i := i shr 30;
-    tmp := 'G';
-  end
-  else
-  if i >= 1 shl 20 then
-  begin
-    i := i shr 20;
-    tmp := 'M';
-  end
-  else
-  if i >= 1 shl 10 then
-  begin
-    i := i shr 10;
-    tmp := 'K';
-  end
-  else
-    tmp := '';
+  tmp := nil;
+  n := 1 shl 50;
+  for j := 0 to high(K_) do
+    if i >= n then
+    begin
+      i := i div n;
+      tmp := @K_[j];
+      break;
+    end
+    else
+      n := n shr 10;
   str(i, result);
-  result := result + tmp;
+  if tmp <> nil then
+    result := result + tmp^;
 end;
 
 {$I-}

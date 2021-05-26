@@ -399,7 +399,7 @@ function DefaultUserAgent(Instance: TObject): RawUtf8;
 /// create a THttpClientSocket, returning nil on error
 // - useful to easily catch socket error exception ENetSock
 function OpenHttp(const aServer, aPort: RawUtf8; aTLS: boolean = false;
-  aLayer: TNetLayer = nlTCP): THttpClientSocket; overload;
+  aLayer: TNetLayer = nlTcp; const aUrlForProxy: RawUtf8 = ''): THttpClientSocket; overload;
 
 /// create a THttpClientSocket, returning nil on error
 // - useful to easily catch socket error exception ENetSock
@@ -411,7 +411,7 @@ function OpenHttp(const aUri: RawUtf8;
 // something able to use your computer proxy, take a look at TWinINet.Get()
 // and the overloaded HttpGet() functions
 function OpenHttpGet(const server, port, url, inHeaders: RawUtf8;
-  outHeaders: PRawUtf8 = nil; aLayer: TNetLayer = nlTCP;
+  outHeaders: PRawUtf8 = nil; aLayer: TNetLayer = nlTcp;
   aTLS: boolean = false; outStatus: PInteger = nil): RawByteString; overload;
 
 /// download some potentially huge file, with proper resume
@@ -422,6 +422,34 @@ function WGet(const url: RawUtf8; const destfile: TFileName;
   const hash: RawUtf8 = ''; tls: PNetTlsContext = nil;
   sockettimeout: cardinal = 10000; redirectmax: integer = 0;
   consoledisplay: boolean = false): string;
+
+
+var
+  /// global overriden value for the GetSystemProxyUri() function
+  // - as used by OpenHttp/OpenHttpGet and TSimpleHttpClient
+  // - can be set manually to a forced global value
+  DefaultHttpClientSocketProxy: TUri;
+
+  /// force GetProxyForUri(fromSystem=true) in GetSystemProxyUri() function
+  DefaultHttpClientSocketProxyAuto: boolean;
+
+
+/// ask the Operating System to return the Tunnel/Proxy settings for a given URI
+// - as used by OpenHttp/OpenHttpGet and TSimpleHttpClient
+// - if proxy is set, will return its value from @temp, otherwise return
+// @DefaultHttpClientSocketProxy or call
+// GetProxyForUri(DefaultHttpClientSocketProxyAuto) to fill and return @temp
+// - return nil if no proxy is to be used for this URI
+function GetSystemProxyUri(const uri, proxy: RawUtf8; var temp: TUri): PUri;
+
+/// ask the Operating System to return the Tunnel/Proxy setting for a given URI
+// - will always use or HTTP_PROXY/HTTPS_PROXY environment variables
+// - if no environment variable is set, on Windows fromSystem=true will call
+// WinHttpGetProxyInfo from mormot.lib.winhttp to use the Internet Explorer
+// settings or system PAC file
+// - return '' if no proxy is defined
+function GetProxyForUri(const uri: RawUtf8;
+  fromSystem: boolean = true): RawUtf8;
 
 
 { ******************** THttpRequest Abstract HTTP client class }
@@ -507,7 +535,7 @@ type
     constructor Create(const aServer, aPort: RawUtf8; aHttps: boolean;
       const aProxyName: RawUtf8 = ''; const aProxyByPass: RawUtf8 = '';
       ConnectionTimeOut: cardinal = 0; SendTimeout: cardinal = 0;
-      ReceiveTimeout: cardinal = 0; aLayer: TNetLayer = nlTCP); overload; virtual;
+      ReceiveTimeout: cardinal = 0; aLayer: TNetLayer = nlTcp); overload; virtual;
     /// connect to the supplied URI
     // - is just a wrapper around TUri and the overloaded Create() constructor
     constructor Create(const aUri: RawUtf8; const aProxyName: RawUtf8 = '';
@@ -815,7 +843,7 @@ type
     constructor Create(const aServer, aPort: RawUtf8; aHttps: boolean;
       const aProxyName: RawUtf8 = ''; const aProxyByPass: RawUtf8 = '';
       ConnectionTimeOut: cardinal = 0; SendTimeout: cardinal = 0;
-      ReceiveTimeout: cardinal = 0; aLayer: TNetLayer = nlTCP); override;
+      ReceiveTimeout: cardinal = 0; aLayer: TNetLayer = nlTcp); override;
   end;
 
   /// WebSocket client implementation
@@ -1091,7 +1119,7 @@ type
 function SendEmail(const Server, From, CsvDest, Subject, Text: RawUtf8;
   const Headers: RawUtf8 = ''; const User: RawUtf8 = ''; const Pass: RawUtf8 = '';
   const Port: RawUtf8 = '25'; const TextCharSet: RawUtf8  =  'ISO-8859-1';
-  aTLS: boolean = false): boolean; overload;
+  TLS: boolean = false): boolean; overload;
 
 /// send an email using the SMTP protocol
 // - retry true on success
@@ -1100,7 +1128,7 @@ function SendEmail(const Server, From, CsvDest, Subject, Text: RawUtf8;
 // - you can optionally set the encoding charset to be used for the Text body
 function SendEmail(const Server: TSMTPConnection;
   const From, CsvDest, Subject, Text: RawUtf8; const Headers: RawUtf8 = '';
-  const TextCharSet: RawUtf8  =  'ISO-8859-1'; aTLS: boolean = false): boolean; overload;
+  const TextCharSet: RawUtf8  = 'ISO-8859-1'; TLS: boolean = false): boolean; overload;
 
 /// convert a supplied subject text into an Unicode encoding
 // - will convert the text into UTF-8 and append '=?UTF-8?B?'
@@ -1312,6 +1340,50 @@ begin
 end;
 
 
+var
+  _PROXYSET: boolean; // retrieve environment variables only once
+  _PROXY: array[{https:}boolean] of RawUtf8;
+
+function GetProxyForUri(const uri: RawUtf8; fromSystem: boolean): RawUtf8;
+{$ifdef USEWININET}
+var
+  pi: TProxyInfo;
+{$endif USEWININET}
+begin
+  if not _PROXYSET then
+  begin
+    GlobalLock;
+    StringToUtf8(GetEnvironmentVariable('HTTP_PROXY'), _PROXY[false]);
+    StringToUtf8(GetEnvironmentVariable('HTTPS_PROXY'), _PROXY[true]);
+    if _PROXY[true] = '' then
+      _PROXY[true] := _PROXY[false];
+    _PROXYSET := true;
+    GlobalUnLock;
+  end;
+  result := _PROXY[IdemPChar(pointer(uri), 'HTTPS://')];
+  {$ifdef USEWININET}
+  if (result = '') and
+     fromsystem then
+    // no environment variable was set -> try using mormot.lib.winhttp
+    if WinHttpGetProxyInfo(Utf8ToSynUnicode(uri), pi) = 0 then
+      result := SynUnicodeToUtf8(pi.URL);
+  {$endif USEWININET}
+end;
+
+function GetSystemProxyUri(const uri, proxy: RawUtf8; var temp: TUri): PUri;
+begin
+  if (proxy <> '') and
+     temp.From(proxy) then
+    result := @temp
+  else if DefaultHttpClientSocketProxy.Server <> '' then
+    result := @DefaultHttpClientSocketProxy
+  else if temp.From(GetProxyForUri(uri, DefaultHttpClientSocketProxyAuto)) then
+    result := @temp
+  else
+    result := nil;
+end;
+
+
 { THttpClientSocket }
 
 constructor THttpClientSocket.Create(aTimeOut: PtrInt);
@@ -1326,15 +1398,15 @@ end;
 procedure THttpClientSocket.RequestInternal(
   var ctxt: TTHttpClientSocketRequestParams);
 
-  procedure DoRetry(Error: integer; const msg: RawUtf8);
+  procedure DoRetry(FatalError: integer; const msg: RawUtf8);
   begin
     //writeln('DoRetry ',retry, ' ', Error, ' / ', msg);
     if Assigned(OnLog) then
-       OnLog(sllTrace, 'Request(% %): % socket=% DoRetry(%) retry=%',
-         [ctxt.method, ctxt.url, msg, fSock.Socket, Error,
-          BOOL_STR[ctxt.retry]], self);
+       OnLog(sllTrace, 'Request(% %): % socket=% DoRetry(%) retry=% on %:%',
+         [ctxt.method, ctxt.url, msg, fSock.Socket, FatalError,
+          BOOL_STR[ctxt.retry], fServer, fPort], self);
     if ctxt.retry then // retry once -> return error only if failed twice
-      ctxt.status := Error
+      ctxt.status := FatalError
     else
     begin
       Close; // close this connection
@@ -1346,7 +1418,7 @@ procedure THttpClientSocket.RequestInternal(
         RequestInternal(ctxt);
       except
         on Exception do
-          ctxt.status := Error;
+          ctxt.status := FatalError;
       end;
     end;
   end;
@@ -1447,8 +1519,13 @@ begin
         // successfully sent -> reset some fields for the next request
         RequestClear;
       except
-        on Exception do
-          DoRetry(HTTP_NOTFOUND, 'Exception');
+        on E: Exception do
+          if E.InheritsFrom(ENetSock) then
+            // network layer problem - typically EHttpSocket
+            DoRetry(HTTP_NOTFOUND, 'ENetSock Exception')
+          else
+            // propagate custom exceptions to the caller (e.g. from progression)
+            raise;
       end;
     finally
       if ctxt.KeepAlive = 0 then
@@ -1556,6 +1633,7 @@ var
   parthash, urlfile: RawUtf8;
   res: integer;
   partstream: TStreamRedirect;
+  resumed: boolean;
 
   procedure DoRequestAndFreePartStream;
   var
@@ -1641,8 +1719,9 @@ begin
       raise EHttpSocket.Create('WGet: impossible to delete old %s', [result]);
   part := result + '.part';
   size := FileSize(part);
+  resumed := params.Resume;
   if (size > 0) and
-     params.Resume then
+     resumed then
   begin
     if Assigned(OnLog) then
       OnLog(sllTrace, 'WGet %: resume % (%)', [url, part, KB(size)], self);
@@ -1652,7 +1731,7 @@ begin
   end
   else
   begin
-    params.Resume := false;
+    resumed := false;
     if Assigned(OnLog) then
       OnLog(sllTrace, 'WGet %: start downloading %', [url, part], self);
     partstream := params.Hasher.Create(TFileStream.Create(part, fmCreate));
@@ -1663,7 +1742,7 @@ begin
        (parthash <> '') then
     begin
       // check the hash
-      if params.Resume and
+      if resumed and
          not IdemPropNameU(parthash, params.Hash) then
       begin
         if Assigned(OnLog) then
@@ -1687,8 +1766,9 @@ begin
     part := '';
   finally
     partstream.Free;  // close file on unexpected error
-    if part <> '' then
-      DeleteFile(part); // force next attempt from scratch
+    if (part <> '') and
+       not params.Resume then
+      DeleteFile(part); // force next attempt from scratch if resume is not set
   end;
 end;
 
@@ -1784,11 +1864,13 @@ end;
 {$endif DOMAINRESTAUTH}
 
 function OpenHttp(const aServer, aPort: RawUtf8; aTLS: boolean;
-  aLayer: TNetLayer): THttpClientSocket;
+  aLayer: TNetLayer; const aUrlForProxy: RawUtf8): THttpClientSocket;
+var
+  temp: TUri;
 begin
   try
-    result := THttpClientSocket.Open(
-      aServer, aPort, aLayer, 0, aTLS); // HTTP_DEFAULT_RECEIVETIMEOUT
+    result := THttpClientSocket.Open(aServer, aPort, aLayer, 0, aTLS, nil,
+      GetSystemProxyUri(aUrlForProxy, '', temp));
   except
     on ENetSock do
       result := nil;
@@ -1871,7 +1953,7 @@ constructor THttpRequest.Create(const aServer, aPort: RawUtf8; aHttps: boolean;
   SendTimeout, ReceiveTimeout: cardinal; aLayer: TNetLayer);
 begin
   fLayer := aLayer;
-  if fLayer <> nlUNIX then
+  if fLayer <> nlUnix then
   begin
     fPort := GetCardinal(pointer(aPort));
     if fPort = 0 then
@@ -2618,7 +2700,7 @@ begin
     ConnectionTimeOut := 1;
   curl.easy_setopt(fHandle, coConnectTimeout, ConnectionTimeOut); // default=300 !
   // coTimeout=CURLOPT_TIMEOUT is global for the transfer, so shouldn't be used
-  if fLayer = nlUNIX then
+  if fLayer = nlUnix then
     // see CURLOPT_UNIX_SOCKET_PATH doc
     fRootURL := 'http://localhost'
   else
@@ -2658,7 +2740,7 @@ begin
   fIn.URL := fRootURL + aURL;
   curl.easy_setopt(fHandle, coFollowLocation, 1); // url redirection (as TWinHttp)
   //curl.easy_setopt(fHandle,coTCPNoDelay,0); // disable Nagle
-  if fLayer = nlUNIX then
+  if fLayer = nlUnix then
     curl.easy_setopt(fHandle, coUnixSocketPath, pointer(fServer));
   curl.easy_setopt(fHandle, coURL, pointer(fIn.URL));
   if fProxyName <> '' then
@@ -2811,6 +2893,8 @@ end;
 function TSimpleHttpClient.RawRequest(const Uri: TUri;
   const Method, Header: RawUtf8; const Data: RawByteString;
   const DataType: RawUtf8; KeepAlive: cardinal): integer;
+var
+  temp: TUri;
 begin
   result := 0;
   if (Uri.Https or
@@ -2846,7 +2930,8 @@ begin
       FreeAndNil(fHttps);
       FreeAndNil(fHttp); // need a new HTTP connection
       fHttp := THttpClientSocket.Open(
-        Uri.Server, Uri.Port, nlTCP, fTimeOut, Uri.Https, @fSocketTLS);
+        Uri.Server, Uri.Port, nlTcp, fTimeOut, Uri.Https, @fSocketTLS,
+          GetSystemProxyUri(Uri.Address, Proxy, temp));
       if fUserAgent <> '' then
         fHttp.UserAgent := fUserAgent;
     end;
@@ -3084,18 +3169,18 @@ begin
 end;
 
 function SendEmail(const Server: TSMTPConnection; const From, CsvDest, Subject,
-  Text, Headers, TextCharSet: RawUtf8; aTLS: boolean): boolean;
+  Text, Headers, TextCharSet: RawUtf8; TLS: boolean): boolean;
 begin
   result := SendEmail(
     Server.Host, From, CsvDest, Subject, Text, Headers,
     Server.User, Server.Pass, Server.Port, TextCharSet,
-    aTLS or (Server.Port = '465') or (Server.Port = '587'));
+    TLS or (Server.Port = '465') or (Server.Port = '587'));
 end;
 
 {$I-}
 
 function SendEmail(const Server, From, CsvDest, Subject, Text, Headers, User,
-  Pass, Port, TextCharSet: RawUtf8; aTLS: boolean): boolean;
+  Pass, Port, TextCharSet: RawUtf8; TLS: boolean): boolean;
 var
   TCP: TCrtSocket;
 
@@ -3129,7 +3214,7 @@ begin
   P := pointer(CsvDest);
   if P = nil then
     exit;
-  TCP := SocketOpen(Server, Port, aTLS);
+  TCP := SocketOpen(Server, Port, TLS);
   if TCP <> nil then
   try
     TCP.CreateSockIn; // we use SockIn and SockOut here

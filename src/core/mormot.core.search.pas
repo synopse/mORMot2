@@ -118,6 +118,7 @@ type
   // - implemented as a fast brute-force state-machine without any heap allocation
   // - some common patterns ('exactmatch', 'startwith*', '*endwith', '*contained*')
   // are handled with dedicated code, optionally with case-insensitive search
+  // - PrepareContains() is the most efficient method for '*contained*' search
   // - consider using TMatchs (or SetMatchs/TMatchDynArray) if you expect to
   // search for several patterns, or even TExprParserMatch for expression search
   TMatch = object
@@ -2722,7 +2723,7 @@ end;
 
 function MatchExists(const One: TMatch; const Several: TMatchDynArray): boolean;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := true;
   for i := 0 to high(Several) do
@@ -2733,7 +2734,7 @@ end;
 
 function MatchAdd(const One: TMatch; var Several: TMatchDynArray): boolean;
 var
-  n: integer;
+  n: PtrInt;
 begin
   result := not MatchExists(One, Several);
   if result then

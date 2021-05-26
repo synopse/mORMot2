@@ -236,7 +236,7 @@ const
   /// RGB colors corresponding to each logging level
   // - matches the TColor values, as used by the VCL
   LOG_LEVEL_COLORS: array[boolean, TSynLogInfo] of integer = (
-  ($FFFFFF, $DCC0C0, $DCDCDC, $C0C0C0, $8080C0, $8080FF, $C0DCC0, $DCDCC0,
+   ($FFFFFF, $DCC0C0, $DCDCDC, $C0C0C0, $8080C0, $8080FF, $C0DCC0, $DCDCC0,
  // sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError, sllEnter, sllLeave,
     $C0C0F0, $C080FF, $C080F0, $C080C0, $C080C0,
  // sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
@@ -280,10 +280,6 @@ const
     [sllDebug, sllTrace, sllEnter],
     [sllCustom1..sllCustom4],
     [sllDDDError, sllDDDInfo]);
-
-  /// the "magic" number used to identify .log.synlz compressed files, as
-  // created by TSynLogFamily.EventArchiveSynLZ
-  LOG_MAGIC = $ABA51051;
 
   /// may be used to log as Debug or Error event, depending on an Error: boolean
   LOG_DEBUGERROR: array[boolean] of TSynLogInfo = (
@@ -413,8 +409,8 @@ type
   // - the aOldLogFileName will contain the .log file with full path
   // - the aDestinationPath parameter will contain 'ArchivePath\log\YYYYMM\'
   // - should return true on success, false on error
-  // - example of matching event handler are EventArchiveDelete/EventArchiveSynLZ
-  // or EventArchiveZip in SynZip.pas
+  // - example of matching event handler are EventArchiveDelete,
+  // EventArchiveSynLZ, EventArchiveLizard or EventArchiveZip in SynZip.pas
   // - this event handler will be called one time per .log file to archive,
   // then one last time with aOldLogFileName='' in order to close any pending
   // archive (used e.g. by EventArchiveZip to open the .zip only once)
@@ -1300,6 +1296,19 @@ type
       read fRotateFileCount write fRotateFileCount;
   end;
 
+
+/// a TSynLogArchiveEvent handler which will delete older .log files
+function EventArchiveDelete(
+  const aOldLogFileName, aDestinationPath: TFileName): boolean;
+
+/// a TSynLogArchiveEvent handler which will compress older .log files
+// using our proprietary SynLZ format
+// - resulting file will have the .synlz extension and will be located
+// in the aDestinationPath directory, i.e. TSynLogFamily.ArchivePath+'\log\YYYYMM\'
+// - use UnSynLZ.dpr tool to uncompress it into .log textual file
+// - SynLZ is much faster than zip for compression content, but proprietary
+function EventArchiveSynLZ(
+  const aOldLogFileName, aDestinationPath: TFileName): boolean;
 
 
 { ************** Efficient .log File Access via TSynLogFile }
@@ -4413,7 +4422,7 @@ begin
     jvec[0].iov_len := length(tmp);
     // skip time "20200615 08003008  ."
     // (journal do it for us, and first space after it)
-    FormatUtf8('MESSAGE=%', [PUtf8Char(pointer(Text))+18], mtmp);
+    FormatUtf8('MESSAGE=%', [PUtf8Char(pointer(Text)) + 18], mtmp);
     jvec[1].iov_base := pointer(mtmp);
     jvec[1].iov_len := length(mtmp);
     sd.journal_sendv(jvec[0], 2);
@@ -5845,6 +5854,22 @@ begin
   f.Level := fLevels;
   fLogClass := aLogClass;
 end;
+
+
+function EventArchiveDelete(
+  const aOldLogFileName, aDestinationPath: TFileName): boolean;
+begin
+  result := DeleteFile(aOldLogFileName);
+end;
+
+function EventArchiveSynLZ(
+  const aOldLogFileName, aDestinationPath: TFileName): boolean;
+begin
+  result := AlgoSynLZ.EventArchive(
+    LOG_MAGIC, aOldLogFileName, aDestinationPath, '.synlz');
+end;
+
+
 
 
 { ************** Efficient .log File Access via TSynLogFile }

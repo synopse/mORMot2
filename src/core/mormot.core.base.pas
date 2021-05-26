@@ -1047,6 +1047,8 @@ function GetQWord(P: PUtf8Char; var err: integer): QWord;
 /// get the extended floating point value stored in P^
 // - set the err content to the index of any faulty character, 0 if conversion
 // was successful (same as the standard val function)
+// - this optimized function is consistent on all platforms/compilers and return
+// the decoded value even if err is not 0 (e.g. if P^ is not #0 ended)
 function GetExtended(P: PUtf8Char; out err: integer): TSynExtended; overload;
 
 /// get the extended floating point value stored in P^
@@ -8545,10 +8547,10 @@ begin
   if @DefaultHasher128 = @crc32c128 then
   begin
     // final xxHash32() round not to rely on crc32c only
-    entropy[0] := entropy[0] xor xxHash32(e[0].c0, @e, SizeOf(e));
-    entropy[1] := entropy[1] xor xxHash32(e[0].c1, @e, SizeOf(e));
-    entropy[2] := entropy[2] xor xxHash32(e[0].c2, @e, SizeOf(e));
-    entropy[3] := entropy[3] xor xxHash32(e[0].c3, @e, SizeOf(e));
+    entropy[0] := entropy[0] xor xxHash32(e[0].c0, @e[1], SizeOf(e[0]) * 4);
+    entropy[1] := entropy[1] xor xxHash32(e[0].c1, @e[2], SizeOf(e[0]) * 4);
+    entropy[2] := entropy[2] xor xxHash32(e[0].c2, @e[3], SizeOf(e[0]) * 4);
+    entropy[3] := entropy[3] xor xxHash32(e[0].c3, @e[4], SizeOf(e[0]) * 4);
   end;
 end;
 

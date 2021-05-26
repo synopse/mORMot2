@@ -1228,7 +1228,7 @@ begin
   FormatUtf8(#13#10#13#10'Time elapsed for all tests: %'#13#10'Performed % by % on %',
     [RunTimer.Stop, NowToString, Executable.User, Executable.Host], Elapsed);
   TextLn([#13#10, Version, CustomVersions, #13#10'Generated with: ',
-    COMPILER_VERSION, ' compiler', Elapsed]);
+    COMPILER_VERSION, ' ' + OS_TEXT + ' compiler', Elapsed]);
   if result then
     Color(ccWhite)
   else

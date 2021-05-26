@@ -374,6 +374,11 @@ type
     // so that Hash32() is used instead of the AlgoHash() of this instance
     function FileUnCompress(const Source, Dest: TFileName; Magic: cardinal;
       ForceHash32: boolean = false): boolean;
+    /// a TSynLogArchiveEvent handler which will compress older .log files
+    // using our proprietary FileCompress format for this algorithm
+    function EventArchive(aMagic: cardinal;
+      const aOldLogFileName, aDestinationPath, aDestinationExt: TFileName): boolean;
+
     /// get the TAlgoCompress instance corresponding to the AlgoID stored
     // in the supplied compressed buffer
     // - returns nil if no algorithm was identified
@@ -1432,6 +1437,11 @@ function GetMimeContentType(Content: Pointer; Len: PtrInt;
 // !  Call.OutHead := GetMimeContentTypeHeader(Call.OutBody,aFileName);
 function GetMimeContentTypeHeader(const Content: RawByteString;
   const FileName: TFileName = ''): RawUtf8;
+
+const
+  /// the "magic" number used to identify .log.synlz compressed files, as
+  // created by EventArchiveSynLZ / EventArchiveLizard callbacks
+  LOG_MAGIC = $ABA51051;
 
 /// retrieve if some content is compressed, from a supplied binary buffer
 // - returns TRUE, if the header in binary buffer "may" be compressed (this method
@@ -5090,6 +5100,26 @@ begin
   result := true;
 end;
 
+function TAlgoCompress.EventArchive(aMagic: cardinal;
+  const aOldLogFileName, aDestinationPath, aDestinationExt: TFileName): boolean;
+begin
+  // aDestinationPath = 'ArchivePath\log\YYYYMM\'
+  result := false;
+  if (aOldLogFileName <> '') and
+     FileExists(aOldLogFileName) then
+  try
+    if DirectoryExists(aDestinationPath) or
+       CreateDir(aDestinationPath) then
+      if FileCompress(aOldLogFileName,
+         aDestinationPath + ExtractFileName(aOldLogFileName) + aDestinationExt,
+         aMagic, {hash32=}true) then
+        result := DeleteFile(aOldLogFileName);
+  except
+    on Exception do
+      result := false;
+  end;
+end;
+
 
 { TAlgoSynLZ }
 
@@ -6990,10 +7020,9 @@ var
 // return TRUE
 begin
   result := (CsvNames = nil);
-  if result then
-    exit; // no parameter to check -> success
-  if U = nil then
-    exit; // no input data -> error
+  if result or
+     (U = nil) then
+    exit; // no parameter to check -> success; no input data -> error
   repeat
     L := 0;
     while (CsvNames^ <> #0) and
@@ -7227,37 +7256,39 @@ begin
   result := false;
   if (Content <> nil) and
      (Len > 8) then
-    case PCardinal(Content)^ + 1 of // + 1 to avoid finding it in the exe
-      $002a4949 + 1,
-      $2a004d4d + 1,
-      $2b004d4d + 1, // 'image/tiff'
-      $04034b50 + 1, // 'application/zip' = 50 4B 03 04
-      $184d2204 + 1, // LZ4 stream format = 04 22 4D 18
-      $21726152 + 1, // 'application/x-rar-compressed' = 52 61 72 21 1A 07 00
-      $28635349 + 1, // cab = 49 53 63 28
-      $38464947 + 1, // 'image/gif' = 47 49 46 38
-      $43614c66 + 1, // FLAC = 66 4C 61 43 00 00 00 22
-      $4643534d + 1, // cab = 4D 53 43 46 [MSCF]
-      $46464952 + 1, // avi + 1,webp + 1,wav = 52 49 46 46 [RIFF]
-      $46464f77 + 1, // 'application/font-woff' = wOFF in BigEndian
-      $474e5089 + 1, // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
-      $4d5a4cff + 1, // LZMA = FF 4C 5A 4D 41 00
-      $75b22630 + 1, // 'audio/x-ms-wma' = 30 26 B2 75 8E 66
-      $766f6f6d + 1, // mov = 6D 6F 6F 76 [....moov]
-      $89a8275f + 1, // jar = 5F 27 A8 89
-      $9ac6cdd7 + 1, // 'video/x-ms-wmv' = D7 CD C6 9A 00 00
-      $a5a5a5a5 + 1, // .mab file = MAGIC_MAB in SynLog.pas
-      $a5aba5a5 + 1, // .data = TRESTSTORAGEINMEMORY_MAGIC in mormot.orm.server
-      $aba51051 + 1, // .log.synlz = LOG_MAGIC in SynLog.pas
-      $aba5a5ab + 1, // .dbsynlz = SQLITE3_MAGIC in mormot.db.raw.sqlite3.pas
-      $afbc7a37 + 1, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C
-      $b7010000 + 1,
-      $ba010000 + 1, // mpeg = 00 00 01 Bx
-      $cececece + 1, // jceks = CE CE CE CE
-      $e011cfd0 + 1: // msi = D0 CF 11 E0 A1 B1 1A E1
+    case PCardinal(Content)^ of // check magic DWORD
+      $002a4949,
+      $2a004d4d,
+      $2b004d4d, // 'image/tiff'
+      $04034b50, // 'application/zip' = 50 4B 03 04
+      $184d2204, // LZ4 stream format = 04 22 4D 18
+      $21726152, // 'application/x-rar-compressed' = 52 61 72 21 1A 07 00
+      $28635349, // cab = 49 53 63 28
+      $38464947, // 'image/gif' = 47 49 46 38
+      $43614c66, // FLAC = 66 4C 61 43 00 00 00 22
+      $4643534d, // cab = 4D 53 43 46 [MSCF]
+      $46464952, // avi,webp,wav = 52 49 46 46 [RIFF]
+      $46464f77, // 'application/font-woff' = wOFF in BigEndian
+      $474e5089, // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
+      $4d5a4cff, // LZMA = FF 4C 5A 4D 41 00
+      $72613c21, // .ar/.deb package file = '!<arch>' (assuming compressed)
+      $75b22630, // 'audio/x-ms-wma' = 30 26 B2 75 8E 66
+      $766f6f6d, // mov = 6D 6F 6F 76 [....moov]
+      $89a8275f, // jar = 5F 27 A8 89
+      $9ac6cdd7, // 'video/x-ms-wmv' = D7 CD C6 9A 00 00
+      $a5a5a5a5, // .mab file = MAGIC_MAB in mormot.core.log.pas
+      $a5aba5a5, // .data = TRESTSTORAGEINMEMORY_MAGIC in mormot.orm.server.pas
+      LOG_MAGIC, // .log.synlz with SynLZ or Lizard compression
+      $aba5a5ab, // .dbsynlz = SQLITE3_MAGIC in mormot.db.raw.sqlite3.pas
+      $afbc7a37, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C
+      $b7010000,
+      $ba010000, // mpeg = 00 00 01 Bx
+      $cececece, // jceks = CE CE CE CE
+      $dbeeabed, // .rpm package file
+      $e011cfd0: // msi = D0 CF 11 E0 A1 B1 1A E1
         result := true;
     else
-      case PCardinal(Content)^ and $00ffffff of
+      case PCardinal(Content)^ and $00ffffff of // 24-bit magic
         $088b1f, // 'application/gzip' = 1F 8B 08
         $334449, // mp3 = 49 44 33 [ID3]
         $492049, // 'image/tiff' = 49 20 49

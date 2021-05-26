@@ -2191,14 +2191,14 @@ begin
   if fSocket <> nil then
     raise EMongoConnectionException.Create('Duplicate Open', self);
   try
-    fSocket := TCrtSocket.Open(fServerAddress, UInt32ToUtf8(fServerPort), nlTCP,
+    fSocket := TCrtSocket.Open(fServerAddress, UInt32ToUtf8(fServerPort), nlTcp,
       Client.ConnectionTimeOut, Client.ConnectionTLS);
   except
     on E: Exception do
       raise EMongoException.CreateUtf8('%.Open unable to connect to MongoDB server %: % [%]',
         [self, Client.ConnectionString, E, E.Message]);
   end;
-  fSocket.TCPNoDelay := true; // we buffer all output data before sending
+  fSocket.TcpNoDelay := true; // we buffer all output data before sending
   fSocket.KeepAlive := true;  // do not close the connection without notice
 end;
 

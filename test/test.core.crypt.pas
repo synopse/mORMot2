@@ -1427,7 +1427,8 @@ begin
             Check(m in [low(TEST_AES_MAC) .. high(TEST_AES_MAC)]);
             //writeln(m,' ',k,' ',Sha256DigestToString(mac1)); writeln(TEST_AES_MAC[m, k]);
             //CheckEqual(Sha256DigestToString(mac1), TEST_AES_MAC[m, k], 'TEST_AES_MAC');
-          end else if gcm then
+          end
+          else if gcm then
           begin
             FillRandom(@tag1, 4);
             Check(TAesGcmAbstract(one).AesGcmFinal(tag1));
@@ -1444,7 +1445,8 @@ begin
             FillRandom(@mac2, 4);
             Check(one.MacEncryptGetTag(mac2));
             Check(IsEqual(mac2, mac1));
-          end else if gcm then
+          end
+          else if gcm then
           begin
             FillZero(tag2);
             Check(TAesGcmAbstract(one).AesGcmFinal(tag2));
@@ -1475,7 +1477,8 @@ begin
               FillZero(mac1);
               Check(two.MacEncryptGetTag(mac1));
               Check(IsEqual(mac2, mac1));
-            end else if gcm then
+            end
+            else if gcm then
             begin
               FillZero(tag1);
               Check(TAesGcmAbstract(two).AesGcmFinal(tag1));
@@ -1490,7 +1493,8 @@ begin
               FillZero(mac2);
               Check(one.MacEncryptGetTag(mac2));
               Check(IsEqual(mac2, mac1));
-            end else if gcm then
+            end
+            else if gcm then
             begin
               FillZero(tag2);
               Check(TAesGcmAbstract(two).AesGcmFinal(tag2));

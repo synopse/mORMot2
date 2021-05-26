@@ -5819,7 +5819,8 @@ begin
                 BinToBase64(outdata),'');
       finally
         user.Free;
-      end else
+      end
+      else
         Ctxt.AuthenticationFailed(afUnknownUser);
     finally
       FreeSecContext(fSspiAuthContext[ndx]);

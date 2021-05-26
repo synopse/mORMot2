@@ -1125,7 +1125,7 @@ var
   connection: TAsyncConnection;
 begin
   with fThreadClients do
-    res := NewSocket(Address, Port, nlTCP, {bind=}false, timeout, timeout,
+    res := NewSocket(Address, Port, nlTcp, {bind=}false, timeout, timeout,
       timeout, {retry=}0, client);
   if res <> nrOK then
     raise EAsyncConnections.CreateUtf8('%: %:% connection failure (%)',
@@ -1360,7 +1360,7 @@ begin
   if fServer <> nil then
   begin
     fServer.Close; // shutdown the socket to unlock Accept() in Execute
-    if NewSocket('127.0.0.1', fServer.Port, nlTCP, false, 1000, 0, 0, 0, touchandgo) = nrOk then
+    if NewSocket('127.0.0.1', fServer.Port, nlTcp, false, 1000, 0, 0, 0, touchandgo) = nrOk then
       touchandgo.ShutdownAndClose(false);
   end;
   endtix := mormot.core.os.GetTickCount64 + 10000;

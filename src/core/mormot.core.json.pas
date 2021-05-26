@@ -1890,6 +1890,8 @@ type
     function ParseNewInstance(var Context: TJsonParserContext): TObject;
     /// compare two stored values of this type
     function ValueCompare(Data, Other: pointer; CaseInsensitive: boolean): integer; override;
+    /// fill a variant with a stored value of this type
+    function ValueToVariant(Data: pointer; out Dest: TVarData): PtrInt; override;
     /// unserialize some JSON input into Data^
     procedure ValueLoadJson(Data: pointer; var Json: PUtf8Char; EndOfObject: PUtf8Char;
       ParserOptions: TJsonParserOptions; CustomVariantOptions: PDocVariantOptions;
@@ -1997,20 +1999,6 @@ function DynArraySaveJson(const Value; TypeInfo: PRttiInfo;
 // TDynArrayJsonCustomWriter callback or RegisterCustomJsonSerializerFromText()
 function DynArrayBlobSaveJson(TypeInfo: PRttiInfo; BlobValue: pointer): RawUtf8;
 
-/// will serialize any TObject into its UTF-8 JSON representation
-/// - serialize as JSON the published integer, Int64, floating point values,
-// TDateTime (stored as ISO 8601 text), string, variant and enumerate
-// (e.g. boolean) properties of the object (and its parents)
-// - would set twoForceJsonStandard to force standard (non-extended) JSON
-// - the enumerates properties are stored with their integer index value
-// - will write also the properties published in the parent classes
-// - nested properties are serialized as nested JSON objects
-// - any TCollection property will also be serialized as JSON arrays
-// - you can add some custom serializers for ANY class, via mormot.core.json
-// TRttiJson.RegisterCustomSerializer() class method
-function ObjectToJson(Value: TObject;
-  Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUtf8;
-
 /// will serialize set of TObject into its UTF-8 JSON representation
 // - follows ObjectToJson()/TTextWriter.WriterObject() functions output
 // - if Names is not supplied, the corresponding class names would be used
@@ -2020,6 +2008,7 @@ function ObjectsToJson(const Names: array of RawUtf8; const Values: array of TOb
 /// persist a class instance into a JSON file
 // - returns TRUE on success, false on error (e.g. the file name is invalid
 // or the file is existing and could not be overwritten)
+// - see ObjectToJson() as defined in momrot.core.text.pas
 function ObjectToJsonFile(Value: TObject; const JsonFile: TFileName;
   Options: TTextWriterWriteObjectOptions = [woHumanReadable]): boolean;
 
@@ -2715,7 +2704,7 @@ begin
         D := P;
         if P^ <> '"' then
         repeat
-          // escape needed -> inplace unescape from P^ into D^
+          // escape needed -> in-place unescape from P^ into D^
           c := P^;
           if not (jcJsonStringMarker in jsonset[c]) then
           begin
@@ -5342,16 +5331,17 @@ begin
            (p^.Name <> '') and
            // handle woStoreStoredFalse flag and "stored" attribute in code
            ((woStoreStoredFalse in c.Options) or
+            (rcfDisableStored in Ctxt.Info.Flags) or
             (p^.Prop = nil) or
             (p^.Prop.IsStored(pointer(Data)))) and
            // handle woDontStoreDefault flag over "default" attribute in code
            (not (woDontStoreDefault in c.Options) or
             (p^.Prop = nil) or
-            (p.OrdinalDefault = NO_DEFAULT) or
-            not p.ValueIsDefault(Data)) and
+            (p^.OrdinalDefault = NO_DEFAULT) or
+            not p^.ValueIsDefault(Data)) and
            // detect 0 numeric values and empty strings
            (not (woDontStoreVoid in c.Options) or
-            not p.ValueIsVoid(Data)) then
+            not p^.ValueIsVoid(Data)) then
         begin
           // if we reached here, we should serialize this property
           if done then
@@ -7312,7 +7302,7 @@ begin
     if Ctxt.WasString then
       Iso8601ToDateTimePUtf8CharVar(Ctxt.Value, Ctxt.ValueLen, Data^)
     else
-      Data^ := GetExtended(Ctxt.Value);
+      Data^ := GetExtended(Ctxt.Value); // was propbably stored as double
 end;
 
 procedure _JL_GUID(Data: PByteArray; var Ctxt: TJsonParserContext);
@@ -9681,7 +9671,8 @@ begin
         // should use RawByteString length, and ignore any #0
         fCompare[true] := @_BC_RawByteString;
         fCompare[false] := @_BC_RawByteString;
-      end else if Cache.CodePage = CP_UTF16 then
+      end
+      else if Cache.CodePage = CP_UTF16 then
       begin
         // RawUnicode expects _BC_WString=StrCompW and _BCI_WString=StrICompW
         fCompare[true] := RTTI_COMPARE[true][rkWString];
@@ -9810,6 +9801,70 @@ begin
     fCompare[CaseInsensitive](Data, Other, Info, result)
   else
     result := ComparePointer(Data, Other);
+end;
+
+function TRttiJson.ValueToVariant(Data: pointer; out Dest: TVarData): PtrInt;
+label
+  fro;
+begin
+  // see TRttiCustomProp.GetValueDirect
+  PCardinal(@Dest.VType)^ := Cache.RttiVarDataVType;
+  case Cache.RttiVarDataVType of
+    varInt64, varBoolean:
+      // rkInteger, rkBool using VInt64 for proper cardinal support
+fro:  Dest.VInt64 := FromRttiOrd(Cache.RttiOrd, Data);
+    varWord64:
+      // rkInt64, rkQWord
+      begin
+        if not (rcfQWord in Cache.Flags) then
+          PCardinal(@Dest.VType)^ := varInt64; // fix VType
+        Dest.VInt64 := PInt64(Data)^;
+      end;
+    varDouble, varCurrency:
+      Dest.VInt64 := PInt64(Data)^;
+    varString:
+      // rkString
+      begin
+        Dest.VAny := nil; // avoid GPF
+        RawByteString(Dest.VAny) := PRawByteString(Data)^;
+      end;
+    varOleStr:
+      // rkWString
+      begin
+        Dest.VAny := nil; // avoid GPF
+        WideString(Dest.VAny) := PWideString(Data)^;
+      end;
+    {$ifdef HASVARUSTRING}
+    varUString:
+      // rkUString
+      begin
+        Dest.VAny := nil; // avoid GPF
+        UnicodeString(Dest.VAny) := PUnicodeString(Data)^;
+      end;
+    {$endif HASVARUSTRING}
+    varVariant:
+      // rkVariant
+      SetVariantByValue(PVariant(Data)^, PVariant(@Dest)^);
+    varUnknown:
+      // rkChar, rkWChar, rkSString converted into temporary RawUtf8
+      begin
+        PCardinal(@Dest.VType)^ := varString;
+        Dest.VAny := nil; // avoid GPF
+        Info.StringToUtf8(Data, RawUtf8(Dest.VAny));
+      end;
+   else
+     case Cache.Kind of
+       rkEnumeration, rkSet:
+         begin
+           PCardinal(@Dest.VType)^ := varInt64;
+           goto fro;
+         end;
+     else
+       raise EDocVariant.CreateUtf8(
+         'Unsupported %.InitArrayFrom(%)', [self, ToText(Cache.Kind)^]);
+     end;
+  end;
+  result := Cache.ItemSize;
 end;
 
 procedure TRttiJson.ValueLoadJson(Data: pointer; var Json: PUtf8Char;
@@ -9981,24 +10036,6 @@ begin
   finally
     DynArray.Clear; // release temporary memory
   end;
-end;
-
-function ObjectToJson(Value: TObject;
-  Options: TTextWriterWriteObjectOptions): RawUtf8;
-var
-  temp: TTextWriterStackBuffer;
-begin
-  if Value = nil then
-    result := NULL_STR_VAR
-  else
-    with TTextWriter.CreateOwnedStream(temp) do
-    try
-      CustomOptions := CustomOptions + [twoForceJsonStandard];
-      WriteObject(Value, Options);
-      SetText(result);
-    finally
-      Free;
-    end;
 end;
 
 function ObjectsToJson(const Names: array of RawUtf8;
@@ -10228,7 +10265,7 @@ begin
   end;
 end;
 
-procedure JsonBufferToXML(P: PUtf8Char; const Header,NameSpace: RawUtf8;
+procedure JsonBufferToXML(P: PUtf8Char; const Header, NameSpace: RawUtf8;
   out result: RawUtf8);
 var
   i, j, L: integer;
@@ -10264,8 +10301,7 @@ begin
     end;
 end;
 
-function JsonToXML(const Json: RawUtf8; const Header: RawUtf8;
-  const NameSpace: RawUtf8): RawUtf8;
+function JsonToXML(const Json, Header, NameSpace: RawUtf8): RawUtf8;
 var
   tmp: TSynTempBuffer;
 begin
@@ -10510,7 +10546,6 @@ begin
       'Rtti.Count=% at mormot.core.json start', [Rtti.Count]);
   Rtti.GlobalClass := TRttiJson;
   GetDataFromJson := _GetDataFromJson;
-  _VariantToUtf8DateTimeToIso8601 := DateTimeToIso8601TextVar;
 end;
 
 

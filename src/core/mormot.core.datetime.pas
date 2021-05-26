@@ -827,7 +827,7 @@ begin
   if (P[0] = '''') and
      (P[L - 1] = '''') then
   begin
-    // unquote input
+    // in-place unquote of input - typical from SQL values
     inc(P);
     dec(L, 2);
     if L < 4 then
@@ -2778,6 +2778,9 @@ end;
 initialization
   // as expected by ParseMonth() to call FindShortStringListExact()
   assert(PtrUInt(@HTML_MONTH_NAMES[3]) - PtrUInt(@HTML_MONTH_NAMES[1]) = 8);
+  // some mormot.core.text wrappers are implemented by this unit
+  _VariantToUtf8DateTimeToIso8601 := DateTimeToIso8601TextVar;
+  _Iso8601ToDateTime := Iso8601ToDateTime;
 
 end.
 

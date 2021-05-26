@@ -6117,7 +6117,7 @@ begin
         LeaveCriticalSection(fSafe);
       end;
     finally
-      FillZero(key.b); // avoid the key appear in clear on stack
+      FillZero(key.b); // avoid the ephemeral key to appear in clear on stack
       FillZero(entropy);
       fSeeding := false;
     end;

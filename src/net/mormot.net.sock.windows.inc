@@ -462,7 +462,7 @@ function TNetAddr.SetFrom(const address, addrport: RawUtf8;
 var
   h4, h6: TAddrInfo;
 begin
-  if layer = nlUNIX then
+  if layer = nlUnix then
     result := nrNotImplemented
   else
   begin

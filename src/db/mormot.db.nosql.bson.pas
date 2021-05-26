@@ -3563,8 +3563,8 @@ begin
   BsonDocumentEnd;
 end;
 
-function TBsonWriter.BsonWriteQueryOperator(name: RawUtf8; inverted: boolean; op:
-  TSelectStatementOperator; const Value: variant): boolean;
+function TBsonWriter.BsonWriteQueryOperator(name: RawUtf8; inverted: boolean;
+  op: TSelectStatementOperator; const Value: variant): boolean;
 const
   QUERY_OPS: array[opNotEqualTo..opIn] of RawUtf8 = (
     '$ne', '$lt', '$lte', '$gt', '$gte', '$in');

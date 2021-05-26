@@ -627,7 +627,8 @@ begin
     // 'unix:/path/to/myapp.socket'
     fPublicPort := fPort; // to be recognized by TCrtSocket.Bind()
     fPublicAddress := '0.0.0.0';
-  end else if fPublicPort = '' then
+  end
+  else if fPublicPort = '' then
   begin
     // no publicip supplied -> bind to HostName
     fPublicPort := fPublicAddress;

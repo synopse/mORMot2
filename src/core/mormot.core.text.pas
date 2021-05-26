@@ -1066,13 +1066,14 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append a Value as significant hexadecimal text
     // - expects BinBytes to be > 0
-    // - append its minimal size, i.e. excluding highest bytes containing 0
+    // - append its minimal chars, i.e. excluding highest bytes containing 0
     // - use GetNextItemHexa() to decode such a text value
     procedure AddBinToHexDisplayMinChars(Bin: pointer; BinBytes: PtrInt;
       QuotedChar: AnsiChar = #0);
     /// add the pointer into significant hexa chars, ready to be displayed
+    // - append its minimal chars i.e. excluding highest bytes containing 0
     procedure AddPointer(P: PtrUInt; QuotedChar: AnsiChar = #0);
-    /// write a byte as hexa chars
+    /// write a byte as two hexa chars
     procedure AddByteToHex(Value: PtrUInt);
     /// write a Int18 value (0..262143) as 3 chars
     // - this encoding is faster than Base64, and has spaces on the left side
@@ -1190,13 +1191,6 @@ var
 // TRttiJson.RegisterCustomSerializer() class method
 // - call internally TBaseWriter.WriteObject() method from DefaultTextWriterSerializer
 function ObjectToJson(Value: TObject;
-  Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUtf8;
-
-/// will serialize set of TObject into its UTF-8 JSON representation
-// - follows ObjectToJson()/TTextWriter.WriterObject() functions output
-// - if Names is not supplied, the corresponding class names would be used
-// - call internally TBaseWriter.WriteObject() method from DefaultTextWriterSerializer
-function ObjectsToJson(const Names: array of RawUtf8; const Values: array of TObject;
   Options: TTextWriterWriteObjectOptions = [woDontStoreDefault]): RawUtf8;
 
 /// escape some UTF-8 text into HTML
@@ -1755,6 +1749,11 @@ var
   _VariantToUtf8DateTimeToIso8601: procedure(DT: TDateTime; FirstChar: AnsiChar;
     var result: RawUtf8; WithMS: boolean);
 
+  /// Date/Time conversion from ISO-8601 text
+  // - is implemented by Iso8601ToDateTime() from mormot.core.datetime.pas:
+  // if this unit is not included in the project, this function is nil
+  // - used by TRttiProp.SetValue() for TDateTime properties with a getter
+  _Iso8601ToDateTime: function(const iso: RawByteString): TDateTime;
 
 
 type
@@ -6225,34 +6224,6 @@ begin
     finally
       Free;
     end;
-end;
-
-function ObjectsToJson(const Names: array of RawUtf8; const Values: array of TObject;
-  Options: TTextWriterWriteObjectOptions): RawUtf8;
-var
-  i, n: PtrInt;
-  temp: TTextWriterStackBuffer;
-begin
-  with DefaultTextWriterSerializer.CreateOwnedStream(temp) do
-  try
-    n := length(Names);
-    Add('{');
-    for i := 0 to high(Values) do
-      if Values[i] <> nil then
-      begin
-        if i < n then
-          AddFieldName(Names[i])
-        else
-          AddPropName(ClassNameShort(Values[i])^);
-        WriteObject(Values[i], Options);
-        AddComma;
-      end;
-    CancelLastComma;
-    Add('}');
-    SetText(result);
-  finally
-    Free;
-  end;
 end;
 
 
