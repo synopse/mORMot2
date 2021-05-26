@@ -344,6 +344,8 @@ type
     fKeepAliveClient: boolean;
     fRemoteConnectionID: THttpServerConnectionID;
     fServer: THttpServer;
+    // from TSynThreadPoolTHttpServer.Task - return true for custom process
+    function TaskProcess(aCaller: TSynThreadPoolWorkThread): boolean; virtual;
   public
     /// create the socket according to a server
     // - will register the THttpSocketCompress functions from the server
@@ -431,7 +433,8 @@ type
     function QueueLength: integer; override;
     {$endif USE_WINIOCP}
     // here aContext is a THttpServerSocket instance
-    procedure Task(aCaller: TSynThread; aContext: Pointer); override;
+    procedure Task(aCaller: TSynThreadPoolWorkThread;
+      aContext: Pointer); override;
     procedure TaskAbort(aContext: Pointer); override;
   public
     /// initialize a thread pool with the supplied number of threads
@@ -1938,6 +1941,11 @@ end;
 
 { THttpServerSocket }
 
+function THttpServerSocket.TaskProcess(aCaller: TSynThreadPoolWorkThread): boolean;
+begin
+  result := false;
+end;
+
 constructor THttpServerSocket.Create(aServer: THttpServer);
 begin
   inherited Create(5000);
@@ -2294,23 +2302,29 @@ begin
 end;
 {$endif USE_WINIOCP}
 
-procedure TSynThreadPoolTHttpServer.Task(aCaller: TSynThread; aContext: Pointer);
+procedure TSynThreadPoolTHttpServer.Task(
+  aCaller: TSynThreadPoolWorkThread; aContext: Pointer);
 var
   srvsock: THttpServerSocket;
   headertix: Int64;
   res: THttpServerSocketGetRequestResult;
 begin
+  // process this THttpServerSocket in the thread pool
   srvsock := aContext;
+  if (fServer = nil) or
+     fServer.Terminated or
+     srvsock.TaskProcess(TSynThreadPoolWorkThread(aCaller)) then
+    // custom process for this socket (e.g. for asynchrounous WebSockets)
+    exit;
   try
-    if fServer.Terminated then
-      exit;
-    // get Header of incoming request in the thread pool
+    // regular HTTP process in this thread pool
     headertix := fServer.HeaderRetrieveAbortDelay;
     if headertix > 0 then
       headertix := headertix + GetTickCount64;
+    // get Header of incoming request
     res := srvsock.GetRequest({withbody=}false, headertix);
     if (fServer = nil) or
-       fServer.Terminated then
+       fServer.Terminated  then
       exit;
     // properly get the incoming body and process the request
     LockedInc32(@fServer.fStats[res]);

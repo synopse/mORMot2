@@ -2127,14 +2127,14 @@ procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8;
       if fSecure = nil then
         raise ENetSock.Create('%s.OpenBind; TLS is not available on this ' +
           'system - try installing OpenSSL 1.1.1', [ClassNameShort(self)^]);
-      fSecure.AfterConnection(fSock, TLS, aServer);
+      fSecure.AfterConnection(fSock, TLS, fServer);
       TLS.Enabled := true;
     except
       on E: Exception do
       begin
         fSecure := nil;
         raise ENetSock.CreateFmt('%s.OpenBind(%s:%s,%s): TLS failed [%s %s]',
-          [ClassNameShort(self)^, aServer, port, BINDTXT[doBind],
+          [ClassNameShort(self)^, fServer, fPort, BINDTXT[doBind],
            ClassNameShort(E)^, E.Message]);
       end;
     end;
@@ -2150,11 +2150,17 @@ begin
   if {%H-}PtrInt(aSock)<=0 then
   begin
     // OPEN or BIND mode -> create the socket
+    fServer := aServer;
+    if (aPort = '') and
+       (aLayer <> nlUnix) then
+      fPort := DEFAULT_PORT[aTLS] // default port is 80/443 (HTTP/S)
+    else
+      fPort := aPort;
     if doBind then
       // allow small number of retries (e.g. XP or BSD during aggressive tests)
       retry := 10
     else if (Tunnel.Server <> '') and
-            (Tunnel.Server <> aServer) and
+            (Tunnel.Server <> fServer) and
             (aLayer = nlTcp) then
     begin
       // handle client tunnelling via an HTTP(s) proxy
@@ -2162,14 +2168,14 @@ begin
       fProxyUrl := Tunnel.URI;
       if Tunnel.Https and aTLS then
         raise ENetSock.Create('%s.Open(%s:%s): %s proxy - unsupported dual ' +
-          'TLS layers', [ClassNameShort(self)^, aServer, aPort, fProxyUrl]);
+          'TLS layers', [ClassNameShort(self)^, fServer, fPort, fProxyUrl]);
       try
         res := NewSocket(Tunnel.Server, Tunnel.Port, nlTcp, {doBind=}false,
           fTimeout, fTimeout, fTimeout, {retry=}2, fSock);
         if res = nrOK then
         begin
           res := nrRefused;
-          SockSend(['CONNECT ', aServer, ':', aPort, ' HTTP/1.0']);
+          SockSend(['CONNECT ', fServer, ':', fPort, ' HTTP/1.0']);
           if Tunnel.User <> '' then
             SockSend(['Proxy-Authorization: Basic ', Tunnel.UserPasswordBase64]);
           SockSendFlush(#13#10);
@@ -2184,13 +2190,11 @@ begin
       except
         on E: Exception do
           raise ENetSock.Create('%s.Open(%s:%s): %s proxy error %s',
-            [ClassNameShort(self)^, aServer, aPort, fProxyUrl, E.Message]);
+            [ClassNameShort(self)^, fServer, fPort, fProxyUrl, E.Message]);
       end;
       if res <> nrOk then
         raise ENetSock.Create('%s.Open(%s:%s): %s proxy error',
-          [ClassNameShort(self)^, aServer, aPort, fProxyUrl], res);
-      fServer := aServer; // nested OpenBind
-      fPort := aPort;
+          [ClassNameShort(self)^, fServer, fPort, fProxyUrl], res);
       if Assigned(OnLog) then
         OnLog(sllTrace, 'Open(%:%) via proxy %', [fServer, fPort, fProxyUrl], self);
       if aTLS then
@@ -2200,17 +2204,11 @@ begin
     else
       // direct client connection
       retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
-    if (aPort = '') and
-       (aLayer <> nlUnix) then
-      fPort := DEFAULT_PORT[aTLS] // default port is 80/443 (HTTP/S)
-    else
-      fPort := aPort;
-    fServer := aServer;
     res := NewSocket(fServer, fPort, aLayer, doBind,
       fTimeout, fTimeout, fTimeout, retry, fSock);
     if res <> nrOK then
       raise ENetSock.Create('%s %s.OpenBind(%s:%s)',
-        [BINDMSG[doBind], ClassNameShort(self)^, aServer, fPort], res);
+        [BINDMSG[doBind], ClassNameShort(self)^, fServer, fPort], res);
   end
   else
   begin

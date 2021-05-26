@@ -793,7 +793,8 @@ type
     /// end thread on IO error
     function NeedStopOnIOError: boolean; virtual;
     /// process to be executed after notification
-    procedure Task(aCaller: TSynThread; aContext: Pointer); virtual; abstract;
+    procedure Task(aCaller: TSynThreadPoolWorkThread;
+      aContext: Pointer); virtual; abstract;
     procedure TaskAbort(aContext: Pointer); virtual;
   public
     /// initialize a thread pool with the supplied number of threads

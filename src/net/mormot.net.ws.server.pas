@@ -494,6 +494,7 @@ begin
   result := HttpServerWebSocketUpgrade(ClientSock, fProtocols, protocol);
   if result <> HTTP_SUCCESS then
     exit;
+  // if we reached here, we switched/upgraded to WebSockets bidir frames
   ClientSock.KeepAliveClient := false; // close connection with WebSockets
   Context.fProcess := fProcessClass.Create(ClientSock, protocol,
     Context.ConnectionID, Context, @fSettings, fProcessName);
