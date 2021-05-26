@@ -222,10 +222,11 @@ type
 
 
   TWebSocketServerSocket = class(THttpServerSocket)
-  public
-    /// overriden to detect upgrade: websocket header and return grOwned
-    function GetRequest(withBody: boolean;
-      headerMaxTix: Int64): THttpServerSocketGetRequestResult; override;
+  protected
+    fProcess: TWebCrtSocketProcess; // set once upgraded
+    /// overriden to detect upgrade, or process WebSockets in the thread pool
+    procedure TaskProcess(aCaller: TSynThreadPoolWorkThread;
+      aTimeOutTix: Int64); override;
   end;
 
   /// main HTTP/WebSockets server Thread using the standard Sockets API (e.g. WinSock)
@@ -691,16 +692,36 @@ end;
 
 { TWebSocketServerSocket }
 
-function TWebSocketServerSocket.GetRequest(withBody: boolean;
-  headerMaxTix: Int64): THttpServerSocketGetRequestResult;
+procedure TWebSocketServerSocket.TaskProcess(aCaller: TSynThreadPoolWorkThread;
+  aTimeOutTix: Int64);
+var
+  freeme: boolean;
+  res: THttpServerSocketGetRequestResult;
 begin
-  result := inherited GetRequest(withBody, headerMaxTix);
-{  if (result = grHeaderReceived) and
-     (hfConnectionUpgrade in HeaderFlags) and
-     KeepAliveClient and
-     IdemPropNameU(Method, 'GET') and
-     IdemPropNameU(Upgrade, 'websocket') then
-    result := grOwned; }
+  // from TSynThreadPoolTHttpServer.Task
+  freeme := true;
+  try
+    if Assigned(fProcess) then
+    begin
+      freeme := false;
+      exit;
+    end;
+    res := GetRequest({withbody=}false, aTimeOutTix);
+    if (res = grHeaderReceived) and
+       (hfConnectionUpgrade in HeaderFlags) and
+       KeepAliveClient and
+       IdemPropNameU(Method, 'GET') and
+       IdemPropNameU(Upgrade, 'websocket') then
+    begin
+      // perform a WebSockets upgrade
+      res := grHeaderReceived;
+    end;
+    // regular HTTP request process
+    freeme := TaskProcessBody(aCaller, res);
+  finally
+    if freeme then
+      Free;
+  end;
 end;
 
 

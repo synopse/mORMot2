@@ -2164,7 +2164,6 @@ begin
             (aLayer = nlTcp) then
     begin
       // handle client tunnelling via an HTTP(s) proxy
-      res := nrRefused;
       fProxyUrl := Tunnel.URI;
       if Tunnel.Https and aTLS then
         raise ENetSock.Create('%s.Open(%s:%s): %s proxy - unsupported dual ' +

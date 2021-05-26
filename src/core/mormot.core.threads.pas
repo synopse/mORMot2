@@ -758,6 +758,9 @@ type
     destructor Destroy; override;
     /// will loop for any pending task, and execute fOwner.Task()
     procedure Execute; override;
+    /// the associated thread pool
+    property Owner: TSynThreadPool
+      read fOwner;
   end;
 
   TSynThreadPoolWorkThreads = array of TSynThreadPoolWorkThread;
