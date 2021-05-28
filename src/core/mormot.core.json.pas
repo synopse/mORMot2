@@ -5051,7 +5051,8 @@ begin
     if (Ctxt.Prop <> nil) and
        (Ctxt.Prop^.Name <> '') then
     begin
-      FormatShort('%_str', [Ctxt.Prop^.Name], _str);
+      Ansi7StringToShortString(Ctxt.Prop^.Name, _str);
+      AppendShort('_str', _str);
       Ctxt.W.WriteObjectPropNameShort(_str, Ctxt.Options);
     end
     else

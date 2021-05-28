@@ -146,7 +146,7 @@ type
   // any Sec-WebSocket-Protocol application content
   TWebSocketServer = class(THttpServer)
   protected
-    fWebSocketConnections: TSynObjectListLocked;
+    fWebSocketConnections: TSynObjectListLocked; // of TWebSocketServerResp
     fProtocols: TWebSocketProtocolList;
     fSettings: TWebSocketProcessSettings;
     fProcessClass: TWebSocketProcessServerClass;
@@ -225,8 +225,7 @@ type
   protected
     fProcess: TWebCrtSocketProcess; // set once upgraded
     /// overriden to detect upgrade, or process WebSockets in the thread pool
-    procedure TaskProcess(aCaller: TSynThreadPoolWorkThread;
-      aTimeOutTix: Int64); override;
+    procedure TaskProcess(aCaller: TSynThreadPoolWorkThread); override;
   end;
 
   /// main HTTP/WebSockets server Thread using the standard Sockets API (e.g. WinSock)
@@ -492,6 +491,7 @@ function TWebSocketServer.WebSocketProcessUpgrade(ClientSock: THttpServerSocket;
 var
   protocol: TWebSocketProtocol;
 begin
+  // validate the WebSockets upgrade handshake
   result := HttpServerWebSocketUpgrade(ClientSock, fProtocols, protocol);
   if result <> HTTP_SUCCESS then
     exit;
@@ -526,8 +526,8 @@ begin
   end;
 end;
 
-procedure TWebSocketServer.Process(ClientSock: THttpServerSocket; ConnectionID:
-  THttpServerConnectionID; ConnectionThread: TSynThread);
+procedure TWebSocketServer.Process(ClientSock: THttpServerSocket;
+  ConnectionID: THttpServerConnectionID; ConnectionThread: TSynThread);
 var
   err: integer;
 begin
@@ -537,6 +537,7 @@ begin
      IdemPropNameU(ClientSock.Upgrade, 'websocket') and
      ConnectionThread.InheritsFrom(TWebSocketServerResp) then
   begin
+    // upgrade and run fProcess.ProcessLoop
     err := WebSocketProcessUpgrade(ClientSock, TWebSocketServerResp(ConnectionThread));
     if err <> HTTP_SUCCESS then
       WebSocketLog.Add.Log(sllTrace,
@@ -692,10 +693,10 @@ end;
 
 { TWebSocketServerSocket }
 
-procedure TWebSocketServerSocket.TaskProcess(aCaller: TSynThreadPoolWorkThread;
-  aTimeOutTix: Int64);
+procedure TWebSocketServerSocket.TaskProcess(aCaller: TSynThreadPoolWorkThread);
 var
   freeme: boolean;
+  headertix: Int64;
   res: THttpServerSocketGetRequestResult;
 begin
   // from TSynThreadPoolTHttpServer.Task
@@ -706,7 +707,10 @@ begin
       freeme := false;
       exit;
     end;
-    res := GetRequest({withbody=}false, aTimeOutTix);
+    headertix := fServer.HeaderRetrieveAbortDelay;
+    if headertix > 0 then
+      headertix := headertix + GetTickCount64;
+    res := GetRequest({withbody=}false, headertix);
     if (res = grHeaderReceived) and
        (hfConnectionUpgrade in HeaderFlags) and
        KeepAliveClient and

@@ -3146,17 +3146,7 @@ begin
       if ValueType > imvSelf then
       begin
         V := nil;
-        {$ifndef CPUX86}
-        {$ifdef HAS_FPREG} // x64, armhf, aarch64
-        if FPRegisterIdent > 0 then
-          V := @ctxt.Stack.FPRegs[FPREG_FIRST + FPRegisterIdent - 1]
-        else
-        {$endif HAS_FPREG}
-        if RegisterIdent > 0 then
-          V := @ctxt.Stack.ParamRegs[PARAMREG_FIRST + RegisterIdent - 1];
-        if RegisterIdent = PARAMREG_FIRST then
-          FakeCallRaiseError(ctxt, 'unexpected self', []);
-        {$else}
+        {$ifdef CPUX86}
         case RegisterIdent of
           REGEAX:
             FakeCallRaiseError(ctxt, 'unexpected self', []);
@@ -3165,6 +3155,16 @@ begin
           REGECX:
             V := @ctxt.Stack.ECX;
         else
+        {$else}
+        {$ifdef HAS_FPREG} // x64, armhf, aarch64
+        if FPRegisterIdent > 0 then
+          V := @ctxt.Stack.FPRegs[FPRegisterIdent + (FPREG_FIRST - 1)]
+        else
+        {$endif HAS_FPREG}
+          if RegisterIdent > 0 then
+            V := @ctxt.Stack.ParamRegs[RegisterIdent + (PARAMREG_FIRST - 1)];
+        if RegisterIdent = PARAMREG_FIRST then
+          FakeCallRaiseError(ctxt, 'unexpected self', []);
         {$endif CPUX86}
           if V = nil then
             if (SizeInStack > 0) and
@@ -3173,7 +3173,7 @@ begin
             else
               V := @ctxt.I64s[IndexVar]; // for results in CPU
         {$ifdef CPUX86}
-        end;
+        end; // case RegisterIdent of
         {$endif CPUX86}
         if vPassedByReference in ValueKindAsm then
           V := PPointer(V)^;

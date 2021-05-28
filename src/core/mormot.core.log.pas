@@ -3005,7 +3005,7 @@ begin
         W.WriteVarUInt32Array(Line, length(Line), wkOffsetI); // not always increasing
         W.WriteVarUInt32Array(Addr, length(Addr), wkOffsetU); // always increasing
       end;
-    W.Flush;
+    W.Flush; // now MS contains the uncompressed binary data
     AlgoSynLZ.StreamCompress(MS, aStream, MAGIC_MAB, {hash32=}true);
   finally
     MS.Free;
@@ -5537,7 +5537,7 @@ begin
         ESynException(Ctxt.EInstance).RaisedAt := pointer(Ctxt.EAddr);
         if ESynException(Ctxt.EInstance).CustomLog(log.fWriter, Ctxt) then
           goto fin;
-        goto adr;
+        goto adr; // CustomLog() included DefaultSynLogExceptionToStr()
       end;
     end
     else
@@ -5553,7 +5553,7 @@ adr:with log.fWriter do
     try
       TDebugFile.Log(log.fWriter, Ctxt.EAddr, {notcode=}true, {symbol=}false);
       {$ifdef FPC}
-      // we can rely on the stack trace supplied by FPC RTL
+      // we rely on the stack trace supplied by FPC RTL
       for i := 0 to Ctxt.EStackCount - 1 do
         if (i = 0) or
            (Ctxt.EStack[i] <> Ctxt.EStack[i - 1]) then

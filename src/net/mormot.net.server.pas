@@ -345,8 +345,7 @@ type
     fRemoteConnectionID: THttpServerConnectionID;
     fServer: THttpServer;
     // from TSynThreadPoolTHttpServer.Task - return true for custom process
-    procedure TaskProcess(aCaller: TSynThreadPoolWorkThread;
-      aTimeOutTix: Int64); virtual;
+    procedure TaskProcess(aCaller: TSynThreadPoolWorkThread); virtual;
     function TaskProcessBody(aCaller: TSynThreadPoolWorkThread;
       aHeaderResult: THttpServerSocketGetRequestResult): boolean;
   public
@@ -1945,15 +1944,18 @@ end;
 
 { THttpServerSocket }
 
-procedure THttpServerSocket.TaskProcess(aCaller: TSynThreadPoolWorkThread;
-  aTimeOutTix: Int64);
+procedure THttpServerSocket.TaskProcess(aCaller: TSynThreadPoolWorkThread);
 var
   freeme: boolean;
+  headertix: Int64;
 begin
   // process this THttpServerSocket in the thread pool
   freeme := true;
   try
-    freeme := TaskProcessBody(aCaller, GetRequest({withbody=}false, aTimeOutTix));
+    headertix := fServer.HeaderRetrieveAbortDelay;
+    if headertix > 0 then
+      headertix := headertix + GetTickCount64;
+    freeme := TaskProcessBody(aCaller, GetRequest({withbody=}false, headertix));
   finally
     if freeme then
       Free;
@@ -2368,20 +2370,13 @@ end;
 
 procedure TSynThreadPoolTHttpServer.Task(
   aCaller: TSynThreadPoolWorkThread; aContext: Pointer);
-var
-  headertix: Int64;
 begin
   // process this THttpServerSocket in the thread pool
   if (fServer = nil) or
      fServer.Terminated then
     THttpServerSocket(aContext).Free
   else
-  begin
-    headertix := fServer.HeaderRetrieveAbortDelay;
-    if headertix > 0 then
-      headertix := headertix + GetTickCount64;
-    THttpServerSocket(aContext).TaskProcess(aCaller, headertix);
-  end;
+    THttpServerSocket(aContext).TaskProcess(aCaller);
 end;
 
 procedure TSynThreadPoolTHttpServer.TaskAbort(aContext: Pointer);
