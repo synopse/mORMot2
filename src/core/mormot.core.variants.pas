@@ -875,9 +875,10 @@ type
     // directly within the Values[]/Names[] arrays, using e.g.
     // InitFast(InitialCapacity) to initialize the document
     // - if aName='', append a dvArray item, otherwise append a dvObject field
+    // - you can specify an optional aIndex value to Insert instead of Add
     // - warning: FPC optimizer is confused by Values[InternalAdd(name)] so
     // you should call InternalAdd() in an explicit previous step
-    function InternalAdd(const aName: RawUtf8): integer;
+    function InternalAdd(const aName: RawUtf8; aIndex: integer = -1): integer;
     /// an enumerator able to compile "for .. in ... do" statements
     // - returns a pointer variant over all Values[] of a document array, or
     // over all fields of an object array, with "Name" and "Value" fields
@@ -1170,13 +1171,14 @@ type
     // ! Assert(TDocVariantData(aVariant).Kind=dvUndefined);
     // ! TDocVariantData(aVariant).AddValue('name','John');
     // ! Assert(TDocVariantData(aVariant).Kind=dvObject);
+    // - you can specify an optional index in the array where to insert
     // - returns the index of the corresponding newly added value
     function AddValue(const aName: RawUtf8; const aValue: variant;
-      aValueOwned: boolean = false): integer; overload;
+      aValueOwned: boolean = false; aIndex: integer = -1): integer; overload;
     /// add a value in this document
     // - overloaded function accepting a UTF-8 encoded buffer for the name
     function AddValue(aName: PUtf8Char; aNameLen: integer; const aValue: variant;
-      aValueOwned: boolean = false): integer; overload;
+      aValueOwned: boolean = false; aIndex: integer = -1): integer; overload;
     /// add a value in this document, or update an existing entry
     // - if instance's Kind is dvArray, it will raise an EDocVariant exception
     // - any existing Name would be updated with the new Value, unless
@@ -1216,20 +1218,23 @@ type
     // ! Assert(TDocVariantData(aVariant).Kind=dvUndefined);
     // ! TDocVariantData(aVariant).AddItem('one');
     // ! Assert(TDocVariantData(aVariant).Kind=dvArray);
+    // - you can specify an optional index in the array where to insert
     // - returns the index of the corresponding newly added item
-    function AddItem(const aValue: variant): integer;
+    function AddItem(const aValue: variant; aIndex: integer = -1): integer;
     /// add a value to this document, handled as array, from its text representation
     // - this function expects a UTF-8 text for the value, which would be
     // converted to a variant number, if possible (as varInt/varInt64/varCurrency
     // unless AllowVarDouble is set)
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
+    // - you can specify an optional index in the array where to insert
     // - returns the index of the corresponding newly added item
     function AddItemFromText(const aValue: RawUtf8;
-      AllowVarDouble: boolean = false): integer;
+      AllowVarDouble: boolean = false; aIndex: integer = -1): integer;
     /// add a RawUtf8 value to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
+    // - you can specify an optional index in the array where to insert
     // - returns the index of the corresponding newly added item
-    function AddItemText(const aValue: RawUtf8): integer;
+    function AddItemText(const aValue: RawUtf8; aIndex: integer = -1): integer;
     /// add one or several values to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     procedure AddItems(const aValue: array of const);
@@ -4650,10 +4655,12 @@ begin
   VCount := aCount;
 end;
 
-function TDocVariantData.InternalAdd(const aName: RawUtf8): integer;
+function TDocVariantData.InternalAdd(
+  const aName: RawUtf8; aIndex: integer): integer;
 var
   len: integer;
 begin
+  // validate consistent add/insert
   if aName <> '' then
   begin
     if dvoIsArray in VOptions then
@@ -4675,23 +4682,40 @@ begin
       include(VOptions, dvoIsArray);
     end;
   end;
+  // grow up memory if needed
   len := length(VValue);
   if VCount >= len then
   begin
     len := NextGrow(VCount);
     SetLength(VValue, len);
   end;
+  result := VCount;
+  inc(VCount);
+  if cardinal(aIndex) < cardinal(result) then
+  begin
+    // reserve space for the inserted new item
+    dec(result, aIndex);
+    MoveFast(VValue[aIndex], VValue[aIndex + 1], result * SizeOf(variant));
+    PInteger(@VValue[aIndex])^ := varEmpty; // avoid GPF
+    if aName <> '' then
+    begin
+      if Length(VName) <> len then
+        SetLength(VName, len);
+      MoveFast(VName[aIndex], VName[aIndex + 1], result * SizeOf(pointer));
+      PPointer(@VName[aIndex])^ := nil;
+    end;
+    result := aIndex;
+  end;
   if aName <> '' then
   begin
+    // store the object field name
     if Length(VName) <> len then
       SetLength(VName, len);
     if dvoInternNames in VOptions then
-      DocVariantType.InternNames.Unique(VName[VCount], aName)
+      DocVariantType.InternNames.Unique(VName[result], aName)
     else
-      VName[VCount] := aName;
+      VName[result] := aName;
   end;
-  result := VCount;
-  inc(VCount);
 end;
 
 function TDocVariantData.GetEnumerator: TDocVariantDataEnumerator;
@@ -4717,7 +4741,7 @@ begin
 end;
 
 function TDocVariantData.AddValue(const aName: RawUtf8; const aValue: variant;
-  aValueOwned: boolean): integer;
+  aValueOwned: boolean; aIndex: integer): integer;
 begin
   if dvoCheckForDuplicatedNames in VOptions then
   begin
@@ -4725,7 +4749,7 @@ begin
     if result >= 0 then
       raise EDocVariant.CreateUtf8('AddValue: Duplicated [%] name', [aName]);
   end;
-  result := InternalAdd(aName);
+  result := InternalAdd(aName, aIndex);
   if aValueOwned then
     VValue[result] := aValue
   else
@@ -4735,12 +4759,12 @@ begin
 end;
 
 function TDocVariantData.AddValue(aName: PUtf8Char; aNameLen: integer;
-  const aValue: variant; aValueOwned: boolean): integer;
+  const aValue: variant; aValueOwned: boolean; aIndex: integer): integer;
 var
   tmp: RawUtf8;
 begin
   FastSetString(tmp, aName, aNameLen);
-  result := AddValue(tmp, aValue, aValueOwned);
+  result := AddValue(tmp, aValue, aValueOwned, aIndex);
 end;
 
 function TDocVariantData.AddValueFromText(const aName, aValue: RawUtf8;
@@ -4828,18 +4852,18 @@ begin
       src^.VName[ndx], src^.VValue[ndx], nil, aOnlyAddMissing);
 end;
 
-function TDocVariantData.AddItem(const aValue: variant): integer;
+function TDocVariantData.AddItem(const aValue: variant; aIndex: integer): integer;
 begin
-  result := InternalAdd('');
+  result := InternalAdd('', aIndex);
   SetVariantByValue(aValue, VValue[result]);
   if dvoInternValues in VOptions then
     DocVariantType.InternValues.UniqueVariant(VValue[result]);
 end;
 
 function TDocVariantData.AddItemFromText(const aValue: RawUtf8;
-  AllowVarDouble: boolean): integer;
+  AllowVarDouble: boolean; aIndex: integer): integer;
 begin
-  result := InternalAdd('');
+  result := InternalAdd('', aIndex);
   if not GetNumericVariantFromJson(pointer(aValue),
            TVarData(VValue[result]), AllowVarDouble) then
     if dvoInternValues in VOptions then
@@ -4848,9 +4872,10 @@ begin
       RawUtf8ToVariant(aValue, VValue[result]);
 end;
 
-function TDocVariantData.AddItemText(const aValue: RawUtf8): integer;
+function TDocVariantData.AddItemText(
+  const aValue: RawUtf8; aIndex: integer): integer;
 begin
-  result := InternalAdd('');
+  result := InternalAdd('', aIndex);
   if dvoInternValues in VOptions then
     DocVariantType.InternValues.UniqueVariant(VValue[result], aValue)
   else
