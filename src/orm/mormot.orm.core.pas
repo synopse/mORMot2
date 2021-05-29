@@ -12732,7 +12732,7 @@ end;
 {$ifdef CPUX64}
 
 // very efficient branchless asm - rcx/rdi=Item1 rdx/rsi=Item2
-function TOrmDynArrayCompare(const Item1,Item2): integer;
+function TOrmDynArrayCompare(const Item1, Item2): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     rcx, qword ptr [Item1]
         mov     rdx, qword ptr [Item2]
@@ -12757,12 +12757,7 @@ end;
 
 function TOrmDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
 begin
-  with PInt64Rec(@TOrm(Elem).fID)^ do
-    {$ifdef CPUINTEL}
-    result := crc32cBy4(Lo, Hi);
-    {$else}
-    result := xxHash32Mixup(Lo) xor xxHash32Mixup(Hi);
-    {$endif CPUINTEL}
+  result := Hasher(0, pointer(@TOrm(Elem).fID), SizeOf(TID));
 end;
 
 function ClassOrmFieldType(info: PRttiInfo): TOrmFieldType;
