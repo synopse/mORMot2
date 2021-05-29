@@ -6330,7 +6330,7 @@ end;
 { TRttiCustom }
 
 type
-  EHook = class(Exception) // to access @Message pointe
+  EHook = class(Exception) // to access @Message private field offset
   public
     function MessageOffset: PtrInt; // for Delphi
   end;

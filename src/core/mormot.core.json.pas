@@ -1416,7 +1416,7 @@ type
     // DeleteDeprecated periodically to search for deprecated items
     constructor Create(aKeyTypeInfo, aValueTypeInfo: PRttiInfo;
       aKeyCaseInsensitive: boolean = false; aTimeoutSeconds: cardinal = 0;
-      aCompressAlgo: TAlgoCompress = nil); reintroduce; virtual;
+      aCompressAlgo: TAlgoCompress = nil; aHasher: THasher = nil); reintroduce; virtual;
     /// finalize the storage
     // - would release all internal stored values
     destructor Destroy; override;
@@ -8851,7 +8851,8 @@ begin
 end;
 
 constructor TSynDictionary.Create(aKeyTypeInfo, aValueTypeInfo: PRttiInfo;
-  aKeyCaseInsensitive: boolean; aTimeoutSeconds: cardinal; aCompressAlgo: TAlgoCompress);
+  aKeyCaseInsensitive: boolean; aTimeoutSeconds: cardinal;
+  aCompressAlgo: TAlgoCompress; aHasher: THasher);
 begin
   inherited Create;
   fSafe.Padding[DIC_KEYCOUNT].VType := varInteger;
@@ -8862,7 +8863,7 @@ begin
   fSafe.Padding[DIC_TIMESEC].VType := varInteger;
   fSafe.Padding[DIC_TIMETIX].VType := varInteger;
   fSafe.PaddingUsedCount := DIC_TIMETIX + 1;
-  fKeys.Init(aKeyTypeInfo, fSafe.Padding[DIC_KEY].VAny, nil, nil, nil,
+  fKeys.Init(aKeyTypeInfo, fSafe.Padding[DIC_KEY].VAny, nil, nil, aHasher,
     @fSafe.Padding[DIC_KEYCOUNT].VInteger, aKeyCaseInsensitive);
   if not Assigned(fKeys.HashItem) then
     fKeys.EventHash := KeyFullHash;

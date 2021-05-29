@@ -2864,7 +2864,7 @@ function crc32cTwice(seed: QWord; buf: PAnsiChar; len: cardinal): QWord;
 // - similar to crc64c, but with 63-bit, so no negative value: may be used
 // safely e.g. as mORMot's TID source
 // - will use SSE 4.2 hardware accelerated instruction, if available
-// - will combine two crc32c() calls into a single Int64 result
+// - will combine two crc32c() calls into an unsigned 63-bit Int64 result
 // - by design, such combined hashes cannot be cascaded
 function crc63c(buf: PAnsiChar; len: cardinal): Int64;
 
