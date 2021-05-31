@@ -100,6 +100,7 @@ type
     procedure AddFile(const name: RawUtf8; const filename: TFileName;
       const contenttype: RawUtf8 = '');
     /// call this method before any Read() call to sent data to HTTP server
+    // - it is called also when Seek(0, soBeginning) is called
     procedure Flush; override;
     /// the content-type header value for this multipart content
     // - equals '' if no section has been added
@@ -1454,7 +1455,11 @@ begin
         // flush headers and Data/InStream body
         SockSendFlush(dat);
         if ctxt.InStream <> nil then
-          SockSendStream(ctxt.InStream); // may be a THttpMultiPartStream
+        begin
+          // InStream may be a THttpMultiPartStream -> Seek(0) calls Flush
+          ctxt.InStream.Seek(0, soBeginning);
+          SockSendStream(ctxt.InStream);
+        end;
         // retrieve HTTP command line response
         if SockReceivePending(1000) = cspSocketError then
         begin

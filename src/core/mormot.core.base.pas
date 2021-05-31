@@ -3429,6 +3429,8 @@ type
     fContentRead: ^TNestedStream;
     function GetSize: Int64; override;
   public
+    /// overriden method to call Flush on rewind, i.e. if position is set to 0
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
     /// finalize the nested TStream instance
     destructor Destroy; override;
     /// append a nested TStream instance
@@ -3440,6 +3442,7 @@ type
     // - is the easy way to append some text or data to the internal buffers
     procedure Append(const Content: RawByteString);
     /// you should call this method before any Read() call
+    // - is also called when you execute Seek(0, soBeginning)
     procedure Flush; virtual;
     /// will read up to Count bytes from the internal nested TStream
     function Read(var Buffer; Count: Longint): Longint; override;
@@ -11211,6 +11214,14 @@ begin
   result := fSize; // Flush should have been called
 end;
 
+function TNestedStreamReader.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  if (Offset = 0) and
+     (Origin = soBeginning) then
+    Flush; // allow to read the file again, and set nested stream sizes
+  result := inherited Seek(Offset, Origin);
+end;
+
 destructor TNestedStreamReader.Destroy;
 var
   i: PtrInt;
@@ -11320,7 +11331,7 @@ begin
   fContentRead := pointer(s);
 end;
 
-function TNestedStreamReader.{%H-}Write(const Buffer; Count: integer): Longint;
+function TNestedStreamReader.Write(const Buffer; Count: Longint): Longint;
 begin
   raise EStreamError.Create('Unexpected TNestedStreamReader.Write');
 end;
