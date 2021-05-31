@@ -1739,7 +1739,7 @@ type
   // - can be set as an alternative to TDynArrayHashOne
   TOnDynArrayHashOne = function(const Item): cardinal of object;
 
-  {.$define DYNARRAYHASHCOLLISIONCOUNT}
+  {.$define DYNARRAYHASHCOLLISIONCOUNT} // to be defined also in test.core.base
 
   /// implements O(1) lookup to any dynamic array content
   // - this won't handle the storage process (like add/update), just efficiently
@@ -1756,9 +1756,11 @@ type
     HashItem: TDynArrayHashOne;
     EventHash: TOnDynArrayHashOne;
     HashTable: TIntegerDynArray; // store 0 for void entry, or Index+1
+    {$ifndef DYNARRAYHASHCOLLISIONCOUNT}
     HashTableSize: integer;
+    {$endif DYNARRAYHASHCOLLISIONCOUNT}
     ScanCounter: integer; // Scan()>=0 up to CountTrigger*2
-    State: set of (hasHasher, canHash);
+    State: set of (hasHasher, canHash, moreMem);
     function HashTableIndex(aHashCode: PtrUInt): PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
     procedure HashAdd(aHashCode: cardinal; var result: integer);
@@ -1774,8 +1776,12 @@ type
     /// after how many FindBeforeAdd() or Scan() the hashing starts - default 32
     CountTrigger: integer;
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-    /// low-level access to an hash collisions counter
-    FindCollisions: cardinal;
+    /// low-level access to an hash collisions counter for all instance live
+    CountCollisions: cardinal;
+    /// low-level access to an hash collisions counter for the last HashTable[]
+    CountCollisionsCurrent: cardinal;
+    /// low-level access to the size of the internal HashTable[]
+    HashTableSize: integer;
     {$endif DYNARRAYHASHCOLLISIONCOUNT}
     /// initialize the hash table for a given dynamic array storage
     // - you can call this method several times, e.g. if aCaseInsensitive changed
@@ -1809,7 +1815,7 @@ type
     procedure Clear;
     /// full computation of the internal hash table
     // - returns the number of duplicated values found
-    function ReHash(forced, forceGrow: boolean): integer;
+    function ReHash(forced: boolean): integer;
     /// compute the hash of a given item
     function HashOne(Item: pointer): cardinal;
       {$ifdef FPC_OR_DELPHIXE4}inline;{$endif}
@@ -1916,7 +1922,7 @@ type
     // FindHashedForAdding / FindHashedAndUpdate / FindHashedAndDelete methods
     // - returns the number of duplicated items found - which won't be available
     // by hashed FindHashed() by definition
-    function ReHash(forAdd: boolean = false; forceGrow: boolean = false): integer;
+    function ReHash(forAdd: boolean = false): integer;
     /// search for an element value inside the dynamic array using hashing
     // - Item should be of the type expected by both the hash function and
     // Equals/Compare methods: e.g. if the searched/hashed field in a record is
@@ -2087,7 +2093,21 @@ var
   // - not to be used as such, but e.g. when inlining TDynArray methods
   PT_HASH: array[{caseinsensitive=}boolean, TRttiParserType] of TDynArrayHashOne;
 
-{$ifdef CPU32DELPHI}
+{$ifndef CPU32DELPHI}
+
+{$define DYNARRAYHASH_LEMIRE}
+// use the Lemire 64-bit multiplication for faster hash reduction
+// see https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction
+// - generate more collisions with crc32c, but is always faster -> enabled
+
+{$endif CPU32DELPHI}
+
+// use Power-Of-Two sizes for smallest HashTables[], to reduce the hash as AND
+// - and Delphi Win32 has a not efficient 64-bit multiplication, anyway
+{$define DYNARRAYHASH_PO2}
+
+
+{$ifdef DYNARRAYHASH_PO2}
 const
   /// defined for inlining bitwise division in TDynArrayHasher.HashTableIndex
   // - HashTableSize<=HASH_PO2 is expected to be a power of two (fast binary op);
@@ -2095,9 +2115,9 @@ const
   // - above this limit, a set of increasing primes is used; using a prime as
   // hashtable modulo enhances its distribution, especially for a weak hash function
   // - 64-bit CPU and FPC can efficiently compute a prime reduction using Lemire
-  // algorithm, so no power of two is defined on those targets
+  // algorithm, but power of two sizes still have a better practical performance
   HASH_PO2 = 1 shl 18;
-{$endif CPU32DELPHI}
+{$endif DYNARRAYHASH_PO2}
 
 type
   /// thread-safe FIFO (First-In-First-Out) in-order queue of records
@@ -7967,6 +7987,10 @@ begin
     Compare := PT_SORT[aCaseInsensitive, DynArray^.Info.ArrayFirstField];
   CountTrigger := 32;
   Clear;
+  {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+  CountCollisions := 0;
+  CountCollisionsCurrent := 0;
+  {$endif DYNARRAYHASHCOLLISIONCOUNT}
 end;
 
 procedure TDynArrayHasher.InitSpecific(aDynArray: PDynArray; aKind: TRttiParserType;
@@ -8007,12 +8031,12 @@ end;
 
 const
   // reduces memory consumption and enhances distribution at hash table growing
-  _PRIMES: array[0..38 {$ifndef CPU32DELPHI} + 15 {$endif}] of integer = (
-    {$ifndef CPU32DELPHI}
+  _PRIMES: array[0..38 {$ifndef DYNARRAYHASH_PO2} + 15 {$endif}] of integer = (
+    {$ifndef DYNARRAYHASH_PO2}
     31, 127, 251, 499, 797, 1259, 2011, 3203, 5087,
     8089, 12853, 20399, 81649, 129607, 205759,
-    {$endif CPU32DELPHI}
-    // start after HASH_PO2=2^18=262144 for Delphi Win32 (poor 64-bit mul)
+    {$endif DYNARRAYHASH_PO2}
+    // start after HASH_PO2=2^18=262144 for DYNARRAYHASH_PO2 (poor 64-bit mul)
     326617, 411527, 518509, 653267, 823117, 1037059, 1306601, 1646237,
     2074129, 2613229, 3292489, 4148279, 5226491, 6584983, 8296553, 10453007,
     13169977, 16593127, 20906033, 26339969, 33186281, 41812097, 52679969,
@@ -8035,20 +8059,26 @@ begin
   end;
 end;
 
+// see TTestCoreBase._TSynDictionary for some numbers, and why
+//  DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2 are defined by default
 function TDynArrayHasher.HashTableIndex(aHashCode: PtrUInt): PtrUInt;
 begin
   result := HashTableSize;
-  {$ifdef CPU32DELPHI}
-  // Delphi Win32 is not efficient with 64-bit multiplication
-  if result > HASH_PO2 then
-    result := aHashCode mod result
+  {$ifdef DYNARRAYHASH_PO2}
+  // Delphi Win32 e.g. is not efficient with Lemire 64-bit multiplication
+  if result <= HASH_PO2 then
+    // efficient AND for power of two division
+    result := aHashCode and (result - 1)
   else
-    result := aHashCode and (result - 1);
+  {$endif DYNARRAYHASH_PO2}
+  {$ifdef DYNARRAYHASH_LEMIRE}
+    // FPC or dcc64 compile next line as very optimized asm
+    result := (QWord(aHashCode) * result) shr 32;
+    // https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction
   {$else}
-  // FPC or dcc64 compile next line as very optimized asm
-  result := (QWord(aHashCode) * result) shr 32;
-  // see https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction
-  {$endif CPU32DELPHI}
+    // regular 32-bit modulo over a Prime: slower but best from our tests
+    result := aHashCode mod result;
+  {$endif DYNARRAYHASH_LEMIRE}
 end;
 
 function TDynArrayHasher.Find(aHashCode: cardinal; aForAdd: boolean): integer;
@@ -8107,6 +8137,9 @@ function TDynArrayHasher.FindOrNew(aHashCode: cardinal; Item: pointer;
   aHashTableIndex: PInteger): integer;
 var
   first, last, ndx, cmp: integer;
+  {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+  collisions: integer;
+  {$endif DYNARRAYHASHCOLLISIONCOUNT}
   P: PAnsiChar;
 begin
   if not (canHash in State) then
@@ -8115,6 +8148,9 @@ begin
     result := Scan(Item);
     exit;
   end;
+  {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+  collisions := 0;
+  {$endif DYNARRAYHASHCOLLISIONCOUNT}
   result := HashTableIndex(aHashCode);
   first := result;
   last := HashTableSize;
@@ -8123,7 +8159,11 @@ begin
     if ndx < 0 then
     begin
       result := -(result + 1);
-      exit; // returns void index in HashTable[]
+      {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+      inc(CountCollisions, collisions);
+      inc(CountCollisionsCurrent, collisions);
+      {$endif DYNARRAYHASHCOLLISIONCOUNT}
+      exit; // not found: returns void index in HashTable[] as negative value
     end;
     with DynArray^ do
       P := PAnsiChar(Value^) + ndx * fInfo.Cache.ItemSize;
@@ -8139,11 +8179,11 @@ begin
       if aHashTableIndex <> nil then
         aHashTableIndex^ := result;
       result := ndx;
-      exit;
+      exit; // found: returns the matching index
     end;
     // hash or slot collision -> search next item
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-    inc(FindCollisions);
+    inc(collisions);
     {$endif DYNARRAYHASHCOLLISIONCOUNT}
     inc(result);
     if result = last then
@@ -8170,7 +8210,7 @@ begin
   if HashTableSize - n < n shr 2 then
   begin
     // grow hash table when 25% void
-    ReHash({forced=}true, {grow=}true);
+    ReHash({forced=}true);
     result := Find(aHashCode, {foradd=}true); // recompute position
     if result >= 0 then
       RaiseFatalCollision('HashAdd', aHashCode);
@@ -8247,7 +8287,7 @@ begin
     end;
   end;
   if not (canHash in State) then
-    ReHash({forced=}true, {grow=}false); // hash previous CountTrigger items
+    ReHash({forced=}true); // hash previous CountTrigger items
   result := FindOrNew(aHashCode, Item, nil);
   if result < 0 then
   begin
@@ -8334,14 +8374,14 @@ begin
   if hasHasher in State then
     if max > CountTrigger then
       // e.g. after Init() without explicit ReHash
-      ReHash({forced=}false, {grow=}false) // set HashTable[] and canHash
+      ReHash({forced=}false) // set HashTable[] and canHash
   else if max > 7 then      
   begin
     inc(ScanCounter);
     if ScanCounter >= CountTrigger * 2 then
     begin
       CountTrigger := 2; // rather use hashing from now on
-      ReHash({forced=}false, {grow=}false);
+      ReHash({forced=}false);
     end;
   end;
 end;
@@ -8358,50 +8398,45 @@ begin
     result := -1; // for coherency with most search methods
 end;
 
-function TDynArrayHasher.ReHash(forced, forceGrow: boolean): integer;
+function TDynArrayHasher.ReHash(forced: boolean): integer;
 var
   i, n, cap, siz, ndx: integer;
   P: PAnsiChar;
   hc: cardinal;
 begin
   result := 0;
-  // initialize a new void HashTable[]=0
-  siz := HashTableSize;
-  Clear;
-  if not (hasHasher in State) then
-    exit;
+  // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
   n := DynArray^.count;
-  if not forced and
-     ((n = 0) or
-      (n < CountTrigger)) then
-    // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
-    exit;
-  if forceGrow and
-     (siz > 0) then
-    // next power of two or next prime
-    {$ifdef CPU32DELPHI}
-    if siz < HASH_PO2 then
-      siz := siz shl 1
-    else
-    {$endif CPU32DELPHI}
-      siz := NextPrime(siz)
-  else
+  if not (Assigned(HashItem) or Assigned(EventHash)) or
+     (not forced and
+      ((n = 0) or
+       (n < CountTrigger))) then
   begin
-    // Capacity better than Count, * 2 to reserve some void slots
-    cap := DynArray^.Capacity * 2;
-    {$ifdef CPU32DELPHI}
-    if cap <= HASH_PO2 then
-    begin
-      siz := 256; // find nearest power of two for fast bitwise division
-      while siz < cap do
-        siz := siz shl 1;
-    end
-    else
-    {$endif CPU32DELPHI}
-      siz := NextPrime(cap);
+    Clear; // reset HashTable[]
+    exit;
   end;
+  // Capacity better than Count or HashTableSize, * 2 to reserve some void slots
+  cap := DynArray^.Capacity * 2;
+  {$ifdef DYNARRAYHASH_PO2}
+  if cap <= HASH_PO2 then
+  begin
+    siz := 256; // find nearest power of two for fast bitwise division
+    while siz < cap do
+      siz := siz shl 1;
+  end
+  else
+  {$endif DYNARRAYHASH_PO2}
+    siz := NextPrime(cap);
+//QueryPerformanceMicroSeconds(t1); write('rehash count=',n,' old=',HashTableSize,
+//' new=', siz, ' oldcol=',CountCollisionsCurrent);
+  if siz = HashTableSize then
+    exit; // no need to rehash now
+  Clear;
   HashTableSize := siz;
   SetLength(HashTable, siz); // fill with 0 (void slot)
+  {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+  CountCollisionsCurrent := 0; // count collision for this HashTable[] only
+  {$endif DYNARRAYHASHCOLLISIONCOUNT}
   // fill HashTable[]=index+1 from all existing items
   include(State, canHash);   // needed before Find() below
   P := DynArray^.Value^;
@@ -8421,6 +8456,8 @@ begin
       HashTable[-ndx - 1] := i;
     inc(P, siz);
   end;
+//QueryPerformanceMicroSeconds(t2); writeln(' newcol=',CountCollisionsCurrent,' ',
+//(CountCollisionsCurrent * 100) div cardinal(n), '%  ',MicroSecToString(t2-t1));
 end;
 
 { ************ TDynArrayHashed }
@@ -8724,9 +8761,9 @@ begin
   result := fHash.GetHashFromIndex(aIndex);
 end;
 
-function TDynArrayHashed.ReHash(forAdd: boolean; forceGrow: boolean): integer;
+function TDynArrayHashed.ReHash(forAdd: boolean): integer;
 begin
-  result := fHash.ReHash(forAdd, forceGrow);
+  result := fHash.ReHash(forAdd);
 end;
 
 
