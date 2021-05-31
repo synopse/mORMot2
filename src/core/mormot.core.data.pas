@@ -6098,7 +6098,7 @@ function TDynArray.GetCount: PtrInt;
 begin
   result := PtrUInt(fCountP);
   if result <> 0 then
-    result := PInteger(result)^
+    result := PInteger(result)^ // count is external
   else
   begin
     result := PtrUInt(fValue);
@@ -6106,7 +6106,10 @@ begin
     begin
       result := PPtrInt(result)^;
       if result <> 0 then
-        result := PDALen(result - _DALEN)^ + _DAOFF;
+      begin
+        result := PDALen(result - _DALEN)^; // count = length()
+        {$ifdef FPC} inc(result, _DAOFF); {$endif}
+      end;
     end;
   end;
 end;
@@ -6118,7 +6121,10 @@ begin
   begin
     result := PPtrInt(result)^;
     if result <> 0 then
-      result := PDALen(result - _DALEN)^ + _DAOFF; // capacity = length()
+    begin
+      result := PDALen(result - _DALEN)^; // capacity = length()
+      {$ifdef FPC} inc(result, _DAOFF); {$endif}
+    end;
   end;
 end;
 
@@ -8273,7 +8279,7 @@ begin
   wasAdded := false;
   if not (canHash in State) then
   begin
-    n := DynArray^.count;
+    n := DynArray^.Count;
     if n < CountTrigger then
     begin
       result := Scan(Item); // may trigger ReHash and set canHash
@@ -8350,7 +8356,7 @@ var
   siz: PtrInt;
 begin
   result := -1;
-  max := DynArray^.count - 1;
+  max := DynArray^.Count - 1;
   P := DynArray^.Value^;
   siz := DynArray^.Info.Cache.ItemSize;
   if Assigned(EventCompare) then // custom comparison
@@ -8407,7 +8413,7 @@ var
 begin
   result := 0;
   // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
-  n := DynArray^.count;
+  n := DynArray^.Count;
   if not (Assigned(HashItem) or Assigned(EventHash)) or
      (not forced and
       ((n = 0) or
@@ -8430,7 +8436,7 @@ begin
     siz := NextPrime(cap);
 //QueryPerformanceMicroSeconds(t1); write('rehash count=',n,' old=',HashTableSize,
 //' new=', siz, ' oldcol=',CountCollisionsCurrent);
-  if (not forced) or
+  if (not forced) and
      (siz = HashTableSize) then
     exit; // ReHash() was called
   Clear;

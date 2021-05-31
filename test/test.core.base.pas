@@ -6053,8 +6053,8 @@ var
       v := i;
       dic.Add(a[i], v);
     end;
-    NotifyTestSpeed('add  %', [Msg], Count, 0, @timer);
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+    NotifyTestSpeed('add  %', [Msg], Count, 0, @timer);
     write(' ', Msg, ' slots=', KBNoSpace(dic.Keys.Hasher.HashTableSize * 4),
       ' col=', K(dic.Keys.Hasher.CountCollisions), ' curcol=',
       K(dic.Keys.Hasher.CountCollisionsCurrent),
