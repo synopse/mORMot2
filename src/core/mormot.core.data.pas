@@ -2082,7 +2082,7 @@ function DynArray(aTypeInfo: PRttiInfo; var aValue;
 /// sort any dynamic array, via an external array of indexes
 // - this function will use the supplied TSynTempBuffer for index storage,
 // so use PIntegerArray(Indexes.buf) to access the values
-// - caller should always make Indexes.Done once done
+// - caller should always make Indexes.Done once finshed
 procedure DynArraySortIndexed(Values: pointer; ItemSize, Count: integer;
   out Indexes: TSynTempBuffer; Compare: TDynArraySortCompare);
 
@@ -2093,7 +2093,7 @@ var
   // - not to be used as such, but e.g. when inlining TDynArray methods
   PT_HASH: array[{caseinsensitive=}boolean, TRttiParserType] of TDynArrayHashOne;
 
-{$ifndef CPU32DELPHI}
+{$ifndef CPU32DELPHI} // Delphi Win32 compiler doesn't like Lemire algorithm
 
 {$define DYNARRAYHASH_LEMIRE}
 // use the Lemire 64-bit multiplication for faster hash reduction
@@ -2102,7 +2102,7 @@ var
 
 {$endif CPU32DELPHI}
 
-// use Power-Of-Two sizes for smallest HashTables[], to reduce the hash as AND
+// use Power-Of-Two sizes for smallest HashTables[], to reduce the hash with AND
 // - and Delphi Win32 has a not efficient 64-bit multiplication, anyway
 {$define DYNARRAYHASH_PO2}
 
@@ -2116,6 +2116,7 @@ const
   // hashtable modulo enhances its distribution, especially for a weak hash function
   // - 64-bit CPU and FPC can efficiently compute a prime reduction using Lemire
   // algorithm, but power of two sizes still have a better practical performance
+  // for lower (and most common) content until it consumes too much memory
   HASH_PO2 = 1 shl 18;
 {$endif DYNARRAYHASH_PO2}
 
@@ -8429,8 +8430,9 @@ begin
     siz := NextPrime(cap);
 //QueryPerformanceMicroSeconds(t1); write('rehash count=',n,' old=',HashTableSize,
 //' new=', siz, ' oldcol=',CountCollisionsCurrent);
-  if siz = HashTableSize then
-    exit; // no need to rehash now
+  if (not forced) or
+     (siz = HashTableSize) then
+    exit; // ReHash() was called
   Clear;
   HashTableSize := siz;
   SetLength(HashTable, siz); // fill with 0 (void slot)
