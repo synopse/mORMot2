@@ -103,7 +103,6 @@ interface
 {$ifdef FPC}
   // cut-down version of mormot.defines.inc to make this unit standalone
   {$mode Delphi}
-  {$asmmode Intel}
   {$inline on}
   {$R-} // disable Range checking
   {$S-} // disable Stack checking
