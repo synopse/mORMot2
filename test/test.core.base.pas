@@ -6066,8 +6066,11 @@ var
     {$endif DYNARRAYHASHCOLLISIONCOUNT}
     timer.Start;
     for i := 0 to High(a) do
+    begin
       // FindAndCopy + random index for a more realistic benchmark
       Check(dic.FindAndCopy(a[r[i]], v));
+      Check(v = r[i]);
+    end;
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     NotifyTestSpeed('find %', [Msg], Count, 0, @timer);
     writeln(' find ', K(timer.PerSec(count)), '/s');

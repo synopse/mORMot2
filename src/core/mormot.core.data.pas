@@ -6095,7 +6095,7 @@ begin
 end;
 
 function TDynArray.GetCount: PtrInt;
-begin
+begin // use result as a single temporary variable for better FPC asm generation
   result := PtrUInt(fCountP);
   if result <> 0 then
     result := PInteger(result)^ // count is external
