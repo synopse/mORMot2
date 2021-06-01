@@ -6316,7 +6316,7 @@ end;
 
 function TDynArray.ItemPtr(index: PtrInt): pointer;
 label
-  ok;
+  ok, ko;
 var
   c: PtrUInt;
 begin
@@ -6331,9 +6331,9 @@ begin
   if c <> 0 then
   begin
     if PtrUInt(index) < PCardinal(c)^ then
-ok:   inc(PByte(result), index * fInfo.Cache.ItemSize)
+ok:   inc(PByte(result), index * fInfo.Cache.ItemSize) // branchless ext count
     else
-      result := nil
+      goto ko;
   end
   else
     {$ifdef FPC} // FPC stores high() in TDALen=PtrInt
@@ -6343,7 +6343,7 @@ ok:   inc(PByte(result), index * fInfo.Cache.ItemSize)
     {$endif FPC}
       goto ok
     else
-      result := nil;
+ko:   result := nil;
 end;
 
 procedure TDynArray.ItemCopyAt(index: PtrInt; Dest: pointer);
