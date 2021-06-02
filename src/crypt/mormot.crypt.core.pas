@@ -2204,6 +2204,7 @@ procedure HmacCrc256c(const key, msg: RawByteString; out result: THash256); over
 { ----------- HMAC over CRC-32C }
 
 type
+  {$A-}
   /// compute the HMAC message authentication code using crc32c as hash function
   // - HMAC over a non cryptographic hash function like crc32c is known to be a
   // safe enough MAC, if the supplied key comes e.g. from cryptographic HmacSha256
@@ -2239,6 +2240,7 @@ type
     // - this method is thread-safe
     function Compute(msg: pointer; msglen: integer): cardinal;
   end;
+  {$A+}
 
   /// points to HMAC message authentication code using crc32c as hash function
   PHmacCrc32c = ^THmacCrc32c;
