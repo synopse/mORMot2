@@ -9413,7 +9413,7 @@ begin
           SetOutLen(inLen + SizeOf(TAesBlock))
         else
           SetOutLen((nBlock + 2) shl AesBlockShift);
-        Head.SomeSalt := random(MaxInt);
+        Head.SomeSalt := Random32;
         Head.HeaderCheck := Head.Calc(Key, KeySize);
         Crypt.Encrypt(TAesBlock(Head));
         Write(@Head, SizeOf(Head));

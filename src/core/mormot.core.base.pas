@@ -637,11 +637,11 @@ function IsNullGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: 
 function AddGuid(var guids: TGuidDynArray; const guid: TGUID;
   NoDuplicates: boolean = false): integer;
 
-/// compute a random GUID value
+/// compute a random GUID value from the FillRandom() generator
 procedure RandomGuid(out result: TGUID); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// compute a random GUID value
+/// compute a random GUID value from the FillRandom() generator
 function RandomGuid: TGUID; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -2570,7 +2570,13 @@ type
     function Next: cardinal; overload;
     /// compute the next 32-bit generated value, in range [0..max-1]
     function Next(max: cardinal): cardinal; overload;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
+  PLecuyer = ^TLecuyer;
+
+/// return the 32-bit Pierre L'Ecuyer software generator for the current thread
+// - can be used as an alternative to several Random32 function calls
+function Lecuyer: PLecuyer;
 
 /// fast compute of some 32-bit random value, using the gsl_rng_taus2 generator
 // - this function will use well documented and proven Pierre L'Ecuyer software
@@ -8507,10 +8513,15 @@ threadvar
 var
   _EntropyGlobal: THash128Rec; // to avoid replay attacks
 
+function Lecuyer: PLecuyer;
+begin
+  result := @_Lecuyer;
+end;
+
 procedure XorEntropy(entropy: PBlock128);
 var
   e: array[0..7] of THash128Rec; // including some garbage bytes from stack
-  lec: ^TLecuyer;
+  lec: PLecuyer;
 begin
   e[0].c0 := _EntropyGlobal.i0 xor Random(maxInt); // some randomness from RTL
   e[0].c1 := _EntropyGlobal.i1 xor Random(maxInt);
@@ -8618,7 +8629,7 @@ end;
 
 function Random64: QWord;
 var
-  gen: ^TLecuyer; // with _Lecuyer do ... get twice the threadvar on FPC :(
+  gen: PLecuyer; // with _Lecuyer do ... get twice the threadvar on FPC :(
 begin
   gen := @_Lecuyer;
   result := QWord(gen^.Next) * gen^.Next;
@@ -8627,7 +8638,7 @@ end;
 procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
 var
   c: cardinal;
-  gen: ^TLecuyer;
+  gen: PLecuyer;
 begin
   if CardinalCount <= 0 then
     exit;
@@ -8637,7 +8648,7 @@ begin
   else
     c := Rdtsc;   // lowest 32-bit part of RDTSC is highly unpredictable
   {$else}
-  c := Random(MaxInt); // good enough as seed, especially on FPC
+  c := PtrUInt(Dest); // naive but good enough as seed
   {$endif CPUINTEL}
   gen := @_Lecuyer;
   repeat
