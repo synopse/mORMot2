@@ -8843,12 +8843,13 @@ end;
 
 function VarRecToTempUtf8(const V: TVarRec; var Res: TTempUtf8): integer;
 var
+  i: PtrInt;
   v64: Int64;
   isString: boolean;
 label
-  smlu32, none;
+  smlu32, none, done;
 begin
-  Res.TempRawUtf8 := nil; // avoid GPF
+  Res.TempRawUtf8 := nil; // no allocation by default - and avoid GPF
   case V.VType of
     vtString:
       if V.VString = nil then
@@ -8857,16 +8858,14 @@ begin
       begin
         Res.Text := @V.VString^[1];
         Res.Len := ord(V.VString^[0]);
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     vtAnsiString:
       begin
         // expect UTF-8 content
         Res.Text := pointer(V.VAnsiString);
         Res.Len := length(RawUtf8(V.VAnsiString));
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     {$ifdef HASVARUSTRING}
     vtUnicodeString:
@@ -8881,16 +8880,14 @@ begin
         // expect UTF-8 content
         Res.Text := V.VPointer;
         Res.Len := StrLen(V.VPointer);
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     vtChar:
       begin
         Res.Temp[0] := V.VChar; // V may be on transient stack (alf: FPC)
         Res.Text := @Res.Temp;
         Res.Len := 1;
-        result := 1;
-        exit;
+        goto done;
       end;
     vtPWideChar:
       RawUnicodeToUtf8(V.VPWideChar, StrLenW(V.VPWideChar),
@@ -8904,60 +8901,55 @@ begin
         else
           Res.Text := pointer(SmallUInt32Utf8[0]);
         Res.Len := 1;
-        result := 1;
-        exit;
+        goto done;
       end;
     vtInteger:
       begin
-        result := V.VInteger;
-        if cardinal(result) <= high(SmallUInt32Utf8) then
+        i := V.VInteger;
+        if PtrUInt(i) <= high(SmallUInt32Utf8) then
         begin
-smlu32:   Res.Text := pointer(SmallUInt32Utf8[result]);
+smlu32:   Res.Text := pointer(SmallUInt32Utf8[i]);
           Res.Len := PStrLen(Res.Text - _STRLEN)^;
         end
         else
         begin
-          Res.Text := PUtf8Char(StrInt32(@Res.Temp[23], result));
+          Res.Text := PUtf8Char(StrInt32(@Res.Temp[23], i));
           Res.Len := @Res.Temp[23] - Res.Text;
         end;
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     vtInt64:
       if (PCardinalArray(V.VInt64)^[0] <= high(SmallUInt32Utf8)) and
          (PCardinalArray(V.VInt64)^[1] = 0) then
       begin
-        result := V.VInt64^;
+        i := V.VInt64^;
         goto smlu32;
       end
       else
       begin
         Res.Text := PUtf8Char(StrInt64(@Res.Temp[23], V.VInt64^));
         Res.Len := @Res.Temp[23] - Res.Text;
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     {$ifdef FPC}
     vtQWord:
       if V.VQWord^ <= high(SmallUInt32Utf8) then
       begin
-        result := V.VQWord^;
+        i := V.VQWord^;
         goto smlu32;
       end
       else
       begin
         Res.Text := PUtf8Char(StrUInt64(@Res.Temp[23], V.VQWord^));
         Res.Len := @Res.Temp[23] - Res.Text;
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     {$endif FPC}
     vtCurrency:
       begin
         Res.Text := @Res.Temp;
         Res.Len := Curr64ToPChar(V.VInt64^, Res.Temp);
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     vtExtended:
       DoubleToStr(V.VExtended^, RawUtf8(Res.TempRawUtf8));
@@ -8966,8 +8958,7 @@ smlu32:   Res.Text := pointer(SmallUInt32Utf8[result]);
         Res.Text := @Res.Temp;
         Res.Len := DisplayMinChars(@V.VPointer, SizeOf(pointer)) * 2;
         BinToHexDisplayLower(@V.VPointer, @Res.Temp, Res.Len shr 1);
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     vtClass:
       begin
@@ -8975,8 +8966,7 @@ smlu32:   Res.Text := pointer(SmallUInt32Utf8[result]);
           goto none;
         Res.Text := PPUtf8Char(PtrInt(PtrUInt(V.VClass)) + vmtClassName)^ + 1;
         Res.Len := ord(Res.Text[-1]);
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     vtObject:
       begin
@@ -8984,35 +8974,33 @@ smlu32:   Res.Text := pointer(SmallUInt32Utf8[result]);
           goto none;
         Res.Text := PPUtf8Char(PPtrInt(V.VObject)^ + vmtClassName)^ + 1;
         Res.Len := ord(Res.Text[-1]);
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     vtVariant:
       if VariantToInt64(V.VVariant^, v64) then
         if (PCardinalArray(@v64)^[0] <= high(SmallUInt32Utf8)) and
            (PCardinalArray(@v64)^[1] = 0) then
         begin
-          result := v64;
+          i := v64;
           goto smlu32;
         end
         else
         begin
           Res.Text := PUtf8Char(StrInt64(@Res.Temp[23], v64));
           Res.Len := @Res.Temp[23] - Res.Text;
-          result := Res.Len;
-          exit;
+          goto done;
         end
       else
         VariantToUtf8(V.VVariant^, RawUtf8(Res.TempRawUtf8), isString);
   else
     begin
 none: Res.Len := 0;
-      result := 0;
-      exit;
+      goto done;
     end;
   end;
   Res.Text := Res.TempRawUtf8;
   Res.Len := length(RawUtf8(Res.TempRawUtf8));
+done:
   result := Res.Len;
 end;
 
@@ -9149,7 +9137,7 @@ type
   // only supported token is %, with any const arguments
   TFormatUtf8 = object
     b: PTempUtf8;
-    L, argN: integer;
+    L, argN: PtrInt;
     blocks: array[0..63] of TTempUtf8; // to avoid most heap allocations
     procedure Parse(const Format: RawUtf8; const Args: array of const);
     procedure Write(Dest: PUtf8Char);
@@ -9159,12 +9147,13 @@ type
 procedure TFormatUtf8.Parse(const Format: RawUtf8; const Args: array of const);
 var
   F, FDeb: PUtf8Char;
+  c: PTempUtf8;
 begin
   if length(Args) * 2 >= high(blocks) then
-    raise ESynException.Create('FormatUtf8: too many args (max=32)!');
+    raise ESynException.Create('FormatUtf8: too many args (max=32)');
   L := 0;
   argN := 0;
-  b := @blocks;
+  c := @blocks;
   F := pointer(Format);
   repeat
     if F^ = #0 then
@@ -9176,20 +9165,20 @@ begin
         inc(F);
       until (F^ = '%') or
             (F^ = #0);
-      b^.Text := FDeb;
-      b^.Len := F - FDeb;
-      b^.TempRawUtf8 := nil;
-      inc(L, b^.Len);
-      inc(b);
+      c^.Text := FDeb;
+      c^.Len := F - FDeb;
+      inc(L, c^.Len);
+      c^.TempRawUtf8 := nil;
+      inc(c);
       if F^ = #0 then
         break;
     end;
     inc(F); // jump '%'
     if argN <= high(Args) then
     begin
-      inc(L, VarRecToTempUtf8(Args[argN], b^));
-      if b^.Len > 0 then
-        inc(b);
+      inc(L, VarRecToTempUtf8(Args[argN], c^));
+      if c^.Len > 0 then
+        inc(c);
       inc(argN);
       if F^ = #0 then
         break;
@@ -9199,14 +9188,15 @@ begin
       break
     else
     begin
-      b^.Len := length(Format) - (F - pointer(Format));
-      b^.Text := F;
-      b^.TempRawUtf8 := nil;
-      inc(L, b^.Len);
-      inc(b);
+      c^.Text := F;
+      c^.Len := length(Format) - (F - pointer(Format));
+      inc(L, c^.Len);
+      c^.TempRawUtf8 := nil;
+      inc(c);
       break;
     end;
   until false;
+  b := c;
 end;
 
 procedure TFormatUtf8.Write(Dest: PUtf8Char);

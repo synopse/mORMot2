@@ -1357,7 +1357,7 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
         ret
         {$ifdef FPC}
         align 16
-@s:     crc32   rax, qword [buf] // hash 8 bytes per loop
+@s:     crc32   rax, qword ptr [buf] // hash 8 bytes per loop
         {$else}
        .align 16
 @s:     db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
