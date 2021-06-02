@@ -196,6 +196,8 @@
         {$ifdef CPUINTEL}
           {$define FPC_PIC} // may have not be defined in the compiler options
         {$endif CPUINTEL}
+        {$define NOPATCHRTL} // don't mess with asm stuff
+        {$define DISABLE_SSE42} // the clang asm seems buggy
       {$else}
         {$define OSBSD}   // OSX has some non-standard API calls
         {$define FPCBSD}

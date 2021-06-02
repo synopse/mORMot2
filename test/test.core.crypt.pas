@@ -1943,18 +1943,18 @@ begin
   for i := 0 to high(cook) do
     Check(cookid[i] <> 0);
   for i := 0 to high(cook) do
-    CheckEqual(gen.Validate(cook[i]), cookid[i]);
+    CheckEqual(gen.Validate(cook[i]), cookid[i], 'gen1');
   for i := 0 to high(cook) do
-    CheckEqual(gen.Validate(
-      ParseTrailingJwt('/uri/' + cook[i] + '  ', {nodot=}true)), cookid[i]);
+    CheckEqual(gen.Validate(ParseTrailingJwt('/uri/' + cook[i] + '  ',
+      {nodot=}true)), cookid[i], 'gen2');
   bak := gen.Save;
   gen.Init;
   for i := 0 to high(cook) do
-    CheckEqual(gen.Validate(cook[i]), 0);
+    CheckEqual(gen.Validate(cook[i]), 0, 'void');
   Check(gen.Load(bak));
   timer.Start;
   for i := 0 to high(cook) do
-    CheckEqual(gen.Validate(cook[i]), cookid[i]);
+    CheckEqual(gen.Validate(cook[i]), cookid[i], 'loaded');
   NotifyTestSpeed('validate', length(cook), 0, @timer);
 end;
 
