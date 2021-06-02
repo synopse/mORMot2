@@ -1466,7 +1466,7 @@ var
   avg: TLoadAvg;
 begin
   if getloadavg(avg, 3) = 3 then
-    result := Format('%g %g %d', [avg[0], avg[1], avg[2]])
+    result := Format('%g %g %g', [avg[0], avg[1], avg[2]])
   else
     result := '';
 end;
