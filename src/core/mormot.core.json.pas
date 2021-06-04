@@ -1386,8 +1386,9 @@ type
   /// thread-safe dictionary to store some values from associated keys
   // - will maintain a dynamic array of values, associated with a hash table
   // for the keys, so that setting or retrieving values would be O(1)
-  // - all process is protected by a TSynLocker, so will be thread-safe
-  // - TDynArray is a wrapper which do not store anything, whereas this class
+  // - thread-safe by default, since most methods are protected by a TSynLocker;
+  // set the doSingleThreaded option if you don't need thread-safety
+  // - TDynArray is a wrapper which does not store anything, whereas this class
   // is able to store both keys and values, and provide convenient methods to
   // access the stored data, including JSON serialization and binary storage
   TSynDictionary = class(TSynLocked)

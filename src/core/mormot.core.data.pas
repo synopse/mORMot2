@@ -2313,7 +2313,7 @@ function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
 // current section
 // - expect UpperName e.g. as 'CONTENT-TYPE: '
 // - expect UpperValues to be any upper value with left side matching, e.g. as
-// used by IsHTMLContentTypeTextual() function:
+// used by IsHtmlContentTypeTextual() function:
 // ! result := ExistsIniNameValue(htmlHeaders,HEADER_CONTENT_TYPE_UPPER,
 // !  ['TEXT/','APPLICATION/JSON','APPLICATION/XML']);
 // - warning: this function calls IdemPCharArray(), so expects UpperValues[]
@@ -2336,7 +2336,7 @@ function UpdateIniNameValue(var Content: RawUtf8;
 
 /// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...',
 // 'Content-Type: application/json' or 'Content-Type: application/xml'
-function IsHTMLContentTypeTextual(Headers: PUtf8Char): boolean;
+function IsHtmlContentTypeTextual(Headers: PUtf8Char): boolean;
 
 
 
@@ -3855,7 +3855,7 @@ begin
   FileFromString(Content, FileName);
 end;
 
-function IsHTMLContentTypeTextual(Headers: PUtf8Char): boolean;
+function IsHtmlContentTypeTextual(Headers: PUtf8Char): boolean;
 begin
   result := ExistsIniNameValue(Headers, HEADER_CONTENT_TYPE_UPPER,
     [JSON_CONTENT_TYPE_UPPER, 'TEXT/', 'APPLICATION/XML',

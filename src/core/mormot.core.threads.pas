@@ -1578,7 +1578,8 @@ end;
 function TSynBackgroundTimer.ExecuteOnce(
   const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
 begin
-  result := Assigned(aOnProcess) and Assigned(self);
+  result := Assigned(aOnProcess) and
+            Assigned(self);
   if not result then
     exit;
   Enable(aOnProcess, cardinal(-1));

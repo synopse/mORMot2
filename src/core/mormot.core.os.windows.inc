@@ -1008,7 +1008,8 @@ begin
       end;
   end;
   {$else}
-  if withalloc and Assigned(GetProcessMemoryInfo) then
+  if withalloc and
+     Assigned(GetProcessMemoryInfo) then
   begin
     FillcharFast(mem, SizeOf(mem), 0);
     mem.cb := SizeOf(mem);

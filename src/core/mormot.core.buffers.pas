@@ -1847,7 +1847,7 @@ type
   // - heHtmlEscape will escape any HTML special chars, e.g. & into &amp;
   // - heEmojiToUtf8 will convert any Emoji text into UTF-8 Unicode character,
   // recognizing e.g. :joy: or :) in the text
-  TTextWriterHTMLEscape = set of (
+  TTextWriterHtmlEscape = set of (
     heHtmlEscape,
     heEmojiToUtf8);
 
@@ -1857,7 +1857,7 @@ type
 // <a href=http://...>
 // - escape any HTML special chars, and Emoji tags as specified with esc
 procedure AddHtmlEscapeWiki(W: TBaseWriter; P: PUtf8Char;
-  esc: TTextWriterHTMLEscape = [heHtmlEscape, heEmojiToUtf8]);
+  esc: TTextWriterHtmlEscape = [heHtmlEscape, heEmojiToUtf8]);
 
 /// convert minimal Markdown text into proper HTML
 // - see https://enterprise.github.com/downloads/en/markdown-cheatsheet.pdf
@@ -1872,17 +1872,17 @@ procedure AddHtmlEscapeWiki(W: TBaseWriter; P: PUtf8Char;
 // - only inline-style links and images are supported yet (not reference-style);
 // tables aren't supported either
 procedure AddHtmlEscapeMarkdown(W: TBaseWriter; P: PUtf8Char;
-  esc: TTextWriterHTMLEscape = [heEmojiToUtf8]);
+  esc: TTextWriterHtmlEscape = [heEmojiToUtf8]);
 
 /// escape some wiki-marked text into HTML
 // - just a wrapper around AddHtmlEscapeWiki() process
 function HtmlEscapeWiki(const wiki: RawUtf8;
-  esc: TTextWriterHTMLEscape = [heHtmlEscape, heEmojiToUtf8]): RawUtf8;
+  esc: TTextWriterHtmlEscape = [heHtmlEscape, heEmojiToUtf8]): RawUtf8;
 
 /// escape some Markdown-marked text into HTML
 // - just a wrapper around AddHtmlEscapeMarkdown() process
 function HtmlEscapeMarkdown(const md: RawUtf8;
-  esc: TTextWriterHTMLEscape = [heEmojiToUtf8]): RawUtf8;
+  esc: TTextWriterHtmlEscape = [heEmojiToUtf8]): RawUtf8;
 
 type
   /// map the first Unicode page of Emojis, from U+1F600 to U+1F64F
@@ -8233,10 +8233,10 @@ type
     P, B, P2, B2: PUtf8Char;
     W: TBaseWriter;
     st: set of TTextWriterEscapeStyle;
-    fmt: TTextWriterHTMLFormat;
-    esc: TTextWriterHTMLEscape;
+    fmt: TTextWriterHtmlFormat;
+    esc: TTextWriterHtmlEscape;
     lst: TTextWriterEscapeLineStyle;
-    procedure Start(dest: TBaseWriter; src: PUtf8Char; escape: TTextWriterHTMLEscape);
+    procedure Start(dest: TBaseWriter; src: PUtf8Char; escape: TTextWriterHtmlEscape);
     function ProcessText(const stopchars: TSynByteSet): AnsiChar;
     procedure ProcessHRef;
     function ProcessLink: boolean;
@@ -8247,13 +8247,13 @@ type
     procedure EndOfParagraph;
     procedure NewMarkdownLine;
     procedure AddHtmlEscapeWiki(dest: TBaseWriter; src: PUtf8Char;
-      escape: TTextWriterHTMLEscape);
+      escape: TTextWriterHtmlEscape);
     procedure AddHtmlEscapeMarkdown(dest: TBaseWriter; src: PUtf8Char;
-      escape: TTextWriterHTMLEscape);
+      escape: TTextWriterHtmlEscape);
   end;
 
 procedure TTextWriterEscape.Start(dest: TBaseWriter; src: PUtf8Char;
-  escape: TTextWriterHTMLEscape);
+  escape: TTextWriterHtmlEscape);
 begin
   P := src;
   W := dest;
@@ -8486,7 +8486,7 @@ none:     if lst = twlParagraph then
 end;
 
 procedure TTextWriterEscape.AddHtmlEscapeWiki(dest: TBaseWriter;
-  src: PUtf8Char; escape: TTextWriterHTMLEscape);
+  src: PUtf8Char; escape: TTextWriterHtmlEscape);
 begin
   Start(dest, src, escape);
   SetLine(twlParagraph);
@@ -8533,7 +8533,7 @@ begin
 end;
 
 procedure TTextWriterEscape.AddHtmlEscapeMarkdown(dest: TBaseWriter;
-  src: PUtf8Char; escape: TTextWriterHTMLEscape);
+  src: PUtf8Char; escape: TTextWriterHtmlEscape);
 begin
   Start(dest, src, escape);
   NewMarkDownLine;
@@ -8637,7 +8637,7 @@ begin
   SetLine(twlNone);
 end;
 
-function HtmlEscapeWiki(const wiki: RawUtf8; esc: TTextWriterHTMLEscape): RawUtf8;
+function HtmlEscapeWiki(const wiki: RawUtf8; esc: TTextWriterHtmlEscape): RawUtf8;
 var
   temp: TTextWriterStackBuffer;
   W: TBaseWriter;
@@ -8651,7 +8651,7 @@ begin
   end;
 end;
 
-function HtmlEscapeMarkdown(const md: RawUtf8; esc: TTextWriterHTMLEscape): RawUtf8;
+function HtmlEscapeMarkdown(const md: RawUtf8; esc: TTextWriterHtmlEscape): RawUtf8;
 var
   temp: TTextWriterStackBuffer;
   W: TBaseWriter;
@@ -8665,14 +8665,14 @@ begin
   end;
 end;
 
-procedure AddHtmlEscapeWiki(W: TBaseWriter; P: PUtf8Char; esc: TTextWriterHTMLEscape);
+procedure AddHtmlEscapeWiki(W: TBaseWriter; P: PUtf8Char; esc: TTextWriterHtmlEscape);
 var
   doesc: TTextWriterEscape;
 begin
   doesc.AddHtmlEscapeWiki(W, P, esc);
 end;
 
-procedure AddHtmlEscapeMarkdown(W: TBaseWriter; P: PUtf8Char; esc: TTextWriterHTMLEscape);
+procedure AddHtmlEscapeMarkdown(W: TBaseWriter; P: PUtf8Char; esc: TTextWriterHtmlEscape);
 var
   doesc: TTextWriterEscape;
 begin

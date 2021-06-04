@@ -720,7 +720,7 @@ type
   // outside HTML attributes (hfOutsideAttributes)
   // $  & "  ->   &amp; &quote;
   // within HTML attributes (hfWithinAttributes)
-  TTextWriterHTMLFormat = (
+  TTextWriterHtmlFormat = (
     hfNone,
     hfAnyWhere,
     hfOutsideAttributes,
@@ -1005,16 +1005,16 @@ type
     procedure AddQuotedStr(Text: PUtf8Char; TextLen: PtrUInt; Quote: AnsiChar;
       TextMaxLen: PtrInt = 0);
     /// append some chars, escaping all HTML special chars as expected
-    procedure AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHTMLFormat = hfAnyWhere); overload;
+    procedure AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat = hfAnyWhere); overload;
     /// append some chars, escaping all HTML special chars as expected
     procedure AddHtmlEscape(Text: PUtf8Char; TextLen: PtrInt;
-      Fmt: TTextWriterHTMLFormat = hfAnyWhere); overload;
+      Fmt: TTextWriterHtmlFormat = hfAnyWhere); overload;
     /// append some VCL/LCL chars, escaping all HTML special chars as expected
     procedure AddHtmlEscapeString(const Text: string;
-      Fmt: TTextWriterHTMLFormat = hfAnyWhere);
+      Fmt: TTextWriterHtmlFormat = hfAnyWhere);
     /// append some chars, escaping all HTML special chars as expected
     procedure AddHtmlEscapeUtf8(const Text: RawUtf8;
-      Fmt: TTextWriterHTMLFormat = hfAnyWhere);
+      Fmt: TTextWriterHtmlFormat = hfAnyWhere);
     /// append some chars, escaping all XML special chars as expected
     // - i.e.   < > & " '  as   &lt; &gt; &amp; &quote; &apos;
     // - and all control chars (i.e. #1..#31) as &#..;
@@ -1197,13 +1197,13 @@ function ObjectToJson(Value: TObject;
 // - just a wrapper around TBaseWriter.AddHtmlEscape() process,
 // replacing < > & " chars depending on the HTML layer
 function HtmlEscape(const text: RawUtf8;
-  fmt: TTextWriterHTMLFormat = hfAnyWhere): RawUtf8;
+  fmt: TTextWriterHtmlFormat = hfAnyWhere): RawUtf8;
 
 /// escape some VCL/LCL text into UTF-8 HTML
 // - just a wrapper around TBaseWriter.AddHtmlEscapeString() process,
 // replacing < > & " chars depending on the HTML layer
 function HtmlEscapeString(const text: string;
-  fmt: TTextWriterHTMLFormat = hfAnyWhere): RawUtf8;
+  fmt: TTextWriterHtmlFormat = hfAnyWhere): RawUtf8;
 
 
 const
@@ -5539,7 +5539,8 @@ end;
 procedure TBaseWriter.AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
   IncludeUnitName, IncludePointer: boolean);
 begin
-  if IncludeUnitName and Assigned(ClassUnit) then
+  if IncludeUnitName and
+     Assigned(ClassUnit) then
   begin
     AddShort(ClassUnit(PClass(Instance)^)^);
     Add('.');
@@ -5938,14 +5939,14 @@ begin
 end;
 
 const
-  HTML_ESC: array[hfAnyWhere..high(TTextWriterHTMLFormat)] of TSynAnsicharSet = (
+  HTML_ESC: array[hfAnyWhere..high(TTextWriterHtmlFormat)] of TSynAnsicharSet = (
     [#0, '&', '"', '<', '>'],
     [#0, '&', '<', '>'],
     [#0, '&', '"']);
   XML_ESC: TSynByteSet =
     [0..31, ord('<'), ord('>'), ord('&'), ord('"'), ord('''')];
 
-procedure TBaseWriter.AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHTMLFormat);
+procedure TBaseWriter.AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat);
 var
   B: PUtf8Char;
   esc: ^TSynAnsicharSet;
@@ -5979,7 +5980,7 @@ begin
   until Text^ = #0;
 end;
 
-function HtmlEscape(const text: RawUtf8; fmt: TTextWriterHTMLFormat): RawUtf8;
+function HtmlEscape(const text: RawUtf8; fmt: TTextWriterHtmlFormat): RawUtf8;
 var
   temp: TTextWriterStackBuffer;
   W: TBaseWriter;
@@ -5993,7 +5994,7 @@ begin
   end;
 end;
 
-function HtmlEscapeString(const text: string; fmt: TTextWriterHTMLFormat): RawUtf8;
+function HtmlEscapeString(const text: string; fmt: TTextWriterHtmlFormat): RawUtf8;
 var
   temp: TTextWriterStackBuffer;
   W: TBaseWriter;
@@ -6008,7 +6009,7 @@ begin
 end;
 
 procedure TBaseWriter.AddHtmlEscape(Text: PUtf8Char; TextLen: PtrInt;
-  Fmt: TTextWriterHTMLFormat);
+  Fmt: TTextWriterHtmlFormat);
 var
   B: PUtf8Char;
   esc: ^TSynAnsicharSet;
@@ -6047,7 +6048,7 @@ begin
   until false;
 end;
 
-procedure TBaseWriter.AddHtmlEscapeString(const Text: string; Fmt: TTextWriterHTMLFormat);
+procedure TBaseWriter.AddHtmlEscapeString(const Text: string; Fmt: TTextWriterHtmlFormat);
 var
   tmp: TSynTempBuffer;
   len: integer;
@@ -6057,7 +6058,7 @@ begin
   tmp.Done;
 end;
 
-procedure TBaseWriter.AddHtmlEscapeUtf8(const Text: RawUtf8; Fmt: TTextWriterHTMLFormat);
+procedure TBaseWriter.AddHtmlEscapeUtf8(const Text: RawUtf8; Fmt: TTextWriterHtmlFormat);
 begin
   AddHtmlEscape(pointer(Text), length(Text), Fmt);
 end;

@@ -7397,7 +7397,7 @@ begin
       if (Call.OutBody <> '') and
          (sllServiceReturn in fLogFamily.Level) then
         if not (optNoLogOutput in ctxt.ServiceExecutionOptions) then
-          if IsHTMLContentTypeTextual(pointer(Call.OutHead)) then
+          if IsHtmlContentTypeTextual(pointer(Call.OutHead)) then
             fLogFamily.SynLog.Log(sllServiceReturn, Call.OutBody, self,
               MAX_SIZE_RESPONSE_LOG);
     end;
