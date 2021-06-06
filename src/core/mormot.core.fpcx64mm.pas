@@ -63,12 +63,9 @@ unit mormot.core.fpcx64mm;
 // includes more detailed information to WriteHeapStatus()
 {.$define FPCMM_DEBUG}
 
-// on contention problem, execute "pause" opcode and spin retrying the lock
-// - defined by default to follow Intel recommendatations from
-// https://software.intel.com/content/www/us/en/develop/articles/benefitting-power-and-performance-sleep-loops.html
-// - on SkylakeX (Intel 7th gen), "pause" opcode went from 10-20 to 140 cycles
-// - spinning loop is either using constants or rdtsc (if FPCMM_SLEEPTSC is set)
-{$define FPCMM_PAUSE}
+// on thread contention, don't spin executing "pause" but directly call Sleep()
+// - may help on a single core CPU, or for very specific workloads
+{.$define FPCMM_NOPAUSE}
 
 // let FPCMM_DEBUG include SleepCycles information from rdtsc
 // and FPCMM_PAUSE call rdtsc for its spinnning loop
@@ -321,6 +318,16 @@ implementation
 
 {$ifdef FPC_CPUX64}
 // this unit is available only for FPC + X86_64 CPU
+
+{$ifndef FPCMM_NOPAUSE}
+  // on contention problem, execute "pause" opcode and spin retrying the lock
+  // - defined by default to follow Intel recommendatations from
+  // https://software.intel.com/content/www/us/en/develop/articles/benefitting-power-and-performance-sleep-loops.html
+  // - spinning loop is either using constants or rdtsc (if FPCMM_SLEEPTSC is set)
+  // - on SkylakeX (Intel 7th gen), "pause" opcode went from 10-20 to 140 cycles
+  // so our constants below will favor those latest CPUs with a longer pause
+  {$define FPCMM_PAUSE}
+{$endif FPCMM_NOPAUSE}
 
 
 { ********* Operating System Specific API Calls }
@@ -599,7 +606,7 @@ const
   {$endif FPCMM_LOCKLESSFREE}
   {$endif FPCMM_PAUSE}
   {$else}
-  // pause with constant spinning counts (empirical values)
+  // pause with constant spinning counts (empirical values from fastmm4-avx)
   SpinMediumLockCount = 5000;
   SpinLargeLockCount = 5000;
   {$ifdef FPCMM_PAUSE}
