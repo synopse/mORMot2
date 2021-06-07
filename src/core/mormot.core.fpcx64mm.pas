@@ -125,9 +125,6 @@ interface
     {$define FPCMM_DEBUG}
     {$define FPCMM_ASSUMEMULTITHREAD}
   {$endif FPCMM_SERVER}
-  {$ifndef FPCMM_DEBUG}
-    {$undef FPCMM_SLEEPTSC}
-  {$endif FPCMM_DEBUG}
 {$endif FPC}
 
 
@@ -441,10 +438,11 @@ end;
 
 {$endif MSWINDOWS}
 
-{$ifdef FPCMM_SLEEPTSC}
+{$ifdef FPCMM_DEBUG}
 
 procedure ReleaseCore; nostackframe; assembler;
 asm
+        {$ifdef FPCMM_SLEEPTSC}
         rdtsc // returns the TSC in EDX:EAX
         shl     rdx, 32
         or      rax, rdx
@@ -457,6 +455,10 @@ asm
         lea     rdx, [rip + HeapStatus]
         sub     rax, rcx
    lock add     qword ptr [rdx + TMMStatus.SleepCycles], rax
+        {$else}
+        call    SwitchToThread
+        lea     rdx, [rip + HeapStatus]
+        {$endif FPCMM_SLEEPTSC}
    lock inc     qword ptr [rdx + TMMStatus.SleepCount]
 end;
 
@@ -468,7 +470,7 @@ begin
   inc(HeapStatus.SleepCount); // indicative counter
 end;
 
-{$endif FPCMM_SLEEPTSC}
+{$endif FPCMM_DEBUG}
 
 
 { ********* Some Assembly Helpers }
@@ -476,18 +478,17 @@ end;
 procedure NotifyMediumLargeAlloc(var Arena: TMMStatusArena; Size: PtrUInt);
   nostackframe; assembler;
 asm
-        mov     rax, Size
         {$ifdef FPCMM_DEBUG}
-   lock add     qword ptr [Arena].TMMStatusArena.CurrentBytes, rax
-   lock add     qword ptr [Arena].TMMStatusArena.CumulativeBytes, rax
+   lock add     qword ptr [Arena].TMMStatusArena.CurrentBytes, Size
+   lock add     qword ptr [Arena].TMMStatusArena.CumulativeBytes, Size
    lock inc     qword ptr [Arena].TMMStatusArena.CumulativeAlloc
         mov     rax, qword ptr [Arena].TMMStatusArena.CurrentBytes
         cmp     rax, qword ptr [Arena].TMMStatusArena.PeakBytes
         jbe     @s
         mov     qword ptr [Arena].TMMStatusArena.PeakBytes, rax
 @s:     {$else}
-        add     qword ptr [Arena].TMMStatusArena.CurrentBytes, rax
-        add     qword ptr [Arena].TMMStatusArena.CumulativeBytes, rax
+        add     qword ptr [Arena].TMMStatusArena.CurrentBytes, Size
+        add     qword ptr [Arena].TMMStatusArena.CumulativeBytes, Size
        {$endif FPCMM_DEBUG}
 end;
 
