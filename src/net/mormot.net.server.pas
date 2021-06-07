@@ -339,11 +339,11 @@ type
   /// Socket API based HTTP/1.1 server class used by THttpServer Threads
   THttpServerSocket = class(THttpSocket)
   protected
+    fRemoteConnectionID: THttpServerConnectionID;
     fMethod: RawUtf8;
     fURL: RawUtf8;
-    fKeepAliveClient: boolean;
-    fRemoteConnectionID: THttpServerConnectionID;
     fServer: THttpServer;
+    fKeepAliveClient: boolean;
     // from TSynThreadPoolTHttpServer.Task - return true for custom process
     procedure TaskProcess(aCaller: TSynThreadPoolWorkThread); virtual;
     function TaskProcessBody(aCaller: TSynThreadPoolWorkThread;
@@ -388,11 +388,11 @@ type
   // (change the protocol, e.g.) THttpServer.Process() method itself
   THttpServerResp = class(TSynThread)
   protected
+    fConnectionID: THttpServerConnectionID;
     fServer: THttpServer;
     fServerSock: THttpServerSocket;
     fClientSock: TNetSocket;
     fClientSin: TNetAddr;
-    fConnectionID: THttpServerConnectionID;
     /// main thread loop: read request from socket, send back answer
     procedure Execute; override;
   public

@@ -589,6 +589,8 @@ type
     fServer: RawUtf8;
     fPort: RawUtf8;
     fProxyUrl: RawUtf8;
+    // set by AcceptRequest() from TVarSin
+    fRemoteIP: RawUtf8;
     fSockIn: PTextFile;
     fSockOut: PTextFile;
     fTimeOut: PtrInt;
@@ -600,10 +602,8 @@ type
     // updated by every SockSend() call
     fSndBuf: RawByteString;
     fSndBufLen: integer;
-    // set by AcceptRequest() from TVarSin
-    fRemoteIP: RawUtf8;
     // updated during UDP connection, accessed via PeerAddress/PeerPort
-    fPeerAddr: TNetAddr;
+    fPeerAddr: PNetAddr;
     fSecure: INetTls;
     procedure SetKeepAlive(aKeepAlive: boolean); virtual;
     procedure SetLinger(aLinger: integer); virtual;
@@ -2292,7 +2292,11 @@ begin
     exit; // already reached error below
   size := F.BufSize;
   if sock.SocketLayer = nlUdp then
-    size := sock.Sock.RecvFrom(F.BufPtr, size, sock.fPeerAddr)
+  begin
+    if sock.fPeerAddr = nil then
+      New(sock.fPeerAddr); // allocated on demand (may be up to 110 bytes)
+    size := sock.Sock.RecvFrom(F.BufPtr, size, sock.fPeerAddr^);
+  end
   else
     // nlTcp/nlUnix
     if not sock.TrySockRecv(F.BufPtr, size, {StopBeforeLength=}true) then
@@ -2466,6 +2470,8 @@ begin
   Close;
   CloseSockIn;
   CloseSockOut;
+  if fPeerAddr <> nil then
+    Dispose(fPeerAddr);
   inherited Destroy;
 end;
 
@@ -2993,12 +2999,18 @@ end;
 
 function TCrtSocket.PeerAddress(LocalAsVoid: boolean): RawByteString;
 begin
-  result := fPeerAddr.IP(LocalAsVoid);
+  if fPeerAddr = nil then
+    result := ''
+  else
+    result := fPeerAddr^.IP(LocalAsVoid);
 end;
 
 function TCrtSocket.PeerPort: TNetPort;
 begin
-  result := fPeerAddr.Port;
+  if fPeerAddr = nil then
+    result := 0
+  else
+    result := fPeerAddr^.Port;
 end;
 
 function SocketOpen(const aServer, aPort: RawUtf8; aTLS: boolean;

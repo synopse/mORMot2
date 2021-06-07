@@ -624,7 +624,7 @@ begin
   if ids > 0 then
   begin
     sorted.Init(pointer(aClientsConnectionID), ids * 8);
-    QuickSortInt64(sorted.buf, 0, ids - 1); // branchless O(log(n)) asm on x86_64
+    QuickSortInt64(sorted.buf, 0, ids - 1);
   end;
   dec(ids); // WebSocketBroadcast(nil) -> ids<0 -> broadcast all
   temp.opcode := aFrame.opcode;
@@ -636,7 +636,9 @@ begin
     for i := 1 to fWebSocketConnections.Count do
     begin
       if (c^.fProcess.State = wpsRun) and
+          // broadcast all
          ((ids < 0) or
+          // branchless O(log(n)) asm on x86_64
           (FastFindInt64Sorted(sorted.buf, ids, c^.ConnectionID) >= 0)) then
       begin
         SetString(temp.payload, PAnsiChar(pointer(aFrame.payload)), len);
