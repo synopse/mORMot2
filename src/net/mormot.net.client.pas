@@ -2110,6 +2110,8 @@ begin
   // retrieve received content (if any)
   Read := 0;
   ContentLength := InternalGetInfo32(HTTP_QUERY_CONTENT_LENGTH);
+  if Assigned(fOnProgress) then
+    fOnProgress(self, 0, ContentLength); // initial notification
   if Assigned(fOnDownload) then
     // download per-chunk using calback event
     repeat
@@ -2173,6 +2175,8 @@ begin
     until false;
     SetLength(Data, Read);
   end;
+  if Assigned(fOnProgress) then
+    fOnProgress(self, Read, Read); // final notification
 end;
 
 class function TWinHttpApi.IsAvailable: boolean;
