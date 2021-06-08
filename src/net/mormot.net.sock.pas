@@ -596,8 +596,8 @@ type
     fTimeOut: PtrInt;
     fBytesIn: Int64;
     fBytesOut: Int64;
-    fSocketLayer: TNetLayer;
     fSockInEofError: integer;
+    fSocketLayer: TNetLayer;
     fWasBind: boolean;
     // updated by every SockSend() call
     fSndBuf: RawByteString;
@@ -3034,7 +3034,7 @@ initialization
   assert(SizeOf(TNetAddr) >=
     {$ifdef OSWINDOWS} SizeOf(sockaddr_in6) {$else} SizeOf(sockaddr_un) {$endif});
   DefaultListenBacklog := SOMAXCONN;
-  InitializeUnit; // in mormot.net.sock.windows.inc
+  InitializeUnit; // in mormot.net.sock.windows/posix.inc
 
 finalization
   FinalizeUnit;

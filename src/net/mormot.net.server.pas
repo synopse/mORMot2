@@ -378,6 +378,9 @@ type
     // THttpServerGeneric.RemoteConnIDHeader='X-Conn-ID' for nginx
     property RemoteConnectionID: THttpServerConnectionID
       read fRemoteConnectionID;
+    /// the associated HTTP Server instance - may be nil
+    property Server: THttpServer
+      read fServer;
   end;
 
   /// HTTP response Thread as used by THttpServer Socket API based class
@@ -1310,7 +1313,8 @@ begin
   else
   begin
     thrd := THttpServerRequest(Ctxt).ConnectionThread;
-    if not Assigned(thrd.StartNotified) then
+    if Assigned(thrd) and
+       not Assigned(thrd.StartNotified) then
       NotifyThreadStart(thrd);
     if Assigned(OnRequest) then
       result := OnRequest(Ctxt)
@@ -2163,9 +2167,10 @@ begin
   fServerSock := aServerSock;
   fOnThreadTerminate := fServer.fOnThreadTerminate;
   fServer.InternalHttpServerRespListAdd(self);
-  fConnectionID := aServerSock.RemoteConnectionID;
-  if fConnectionID = 0 then
-    fConnectionID := fServer.NextConnectionID; // fallback to 31-bit sequence
+  if aServerSock.fRemoteConnectionID = 0 then
+    // fallback to 31-bit sequence
+    aServerSock.fRemoteConnectionID := fServer.NextConnectionID;
+  fConnectionID := aServerSock.fRemoteConnectionID;
   FreeOnTerminate := true;
   inherited Create(false);
 end;
