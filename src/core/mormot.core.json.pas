@@ -4398,7 +4398,7 @@ end;
 function UrlEncodeJsonObject(const UriName: RawUtf8; ParametersJson: PUtf8Char;
   const PropNamesToIgnore: array of RawUtf8; IncludeQueryDelimiter: boolean): RawUtf8;
 var
-  i, j: integer;
+  i, j: PtrInt;
   sep: AnsiChar;
   Params: TNameValuePUtf8CharDynArray;
   temp: TTextWriterStackBuffer;
@@ -4417,7 +4417,7 @@ begin
           with Params[i] do
           begin
             for j := 0 to high(PropNamesToIgnore) do
-              if IdemPropNameU(PropNamesToIgnore[j], name, NameLen) then
+              if IdemPropNameU(PropNamesToIgnore[j], Name, NameLen) then
               begin
                 NameLen := 0;
                 break;
@@ -4426,7 +4426,7 @@ begin
               continue;
             if IncludeQueryDelimiter then
               Add(sep);
-            AddNoJsonEscape(name, NameLen);
+            AddNoJsonEscape(Name, NameLen);
             Add('=');
             AddString(UrlEncode(Value));
             sep := '&';
@@ -4446,7 +4446,8 @@ var
 begin
   temp.Init(ParametersJson);
   try
-    result := UrlEncodeJsonObject(UriName, temp.buf, PropNamesToIgnore, IncludeQueryDelimiter);
+    result := UrlEncodeJsonObject(
+      UriName, temp.buf, PropNamesToIgnore, IncludeQueryDelimiter);
   finally
     temp.Done;
   end;
@@ -4792,11 +4793,11 @@ begin
             case Params[P].VType of
               vtBoolean, vtInteger, vtInt64 {$ifdef FPC} , vtQWord {$endif},
               vtCurrency, vtExtended:
-                Add(Params[P]) // numbers or boolean
+                Add(Params[P]) // numbers or boolean don't need any SQL quoting
             else
               begin
                 VarRecToTempUtf8(Params[P], toquote);
-                AddQuotedStr(toquote.Text, toquote.Len, ''''); // SQL double quote
+                AddQuotedStr(toquote.Text, toquote.Len, ''''); // double quote
                 if toquote.TempRawUtf8 <> nil then
                   RawUtf8(toquote.TempRawUtf8) := ''; // release temp memory
               end;
@@ -6853,8 +6854,8 @@ begin
       vtPWideChar:
         AddW(pointer(VPWideChar), StrLenW(VPWideChar), Escape);
       vtAnsiString:
-        if VAnsiString <> nil then
-          Add(VAnsiString, length(RawUtf8(VAnsiString)), Escape); // expect RawUtf8
+        if VAnsiString <> nil then // expect RawUtf8
+          Add(VAnsiString, length(RawUtf8(VAnsiString)), Escape);
       vtWideString:
         if VWideString <> nil then
           AddW(VWideString, length(WideString(VWideString)), Escape);

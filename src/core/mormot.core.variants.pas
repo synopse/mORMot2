@@ -606,6 +606,7 @@ type
   TDocVariantDataEnumerator = class;
   TDocVariantDataArrayEnumerator = class;
   TDocVariantDataObjectEnumerator = class;
+  TDocVariantDataDocVariantEnumerator = class;
 
   {$A-} { packet object not allowed since Delphi 2009 :( }
   /// memory structure used for TDocVariant storage of any JSON/BSON
@@ -884,9 +885,14 @@ type
     // over all fields of an object array, with "Name" and "Value" fields
     function GetEnumerator: TDocVariantDataEnumerator;
     /// an enumerator able to compile "for .. in ... do" statements for arrays
-    // - returns a pointer variant over all Values[] of a document array, or
+    // - returns a PVariant over all Values[] of a document array
     // - don't iterate if the document is an object
     function ArrayEnumerator: TDocVariantDataArrayEnumerator;
+    /// an enumerator able to compile "for .. in ... do" statements for arrays
+    // of objects
+    // - returns a PDocVariantData over all _Safe(Values[]) of a document array
+    // - don't iterate if the document is an object
+    function DocVariantEnumerator: TDocVariantDataDocVariantEnumerator;
     /// an enumerator able to compile "for .. in ... do" statements for objects
     // - returns a pointer record with Name/Value fields over all fields of
     // an object array
@@ -943,6 +949,7 @@ type
     /// save an array document as an array of TVarRec, i.e. an array of const
     // - will expect the document to be a dvArray - otherwise, will raise a
     // EDocVariant exception
+    // - values will be passed by referenced as vtVariant to @VValue[ndx]
     // - would allow to write code as such:
     // !  Doc.InitArray(['one',2,3]);
     // !  Doc.ToArrayOfConst(vr);
@@ -954,6 +961,7 @@ type
     /// save an array document as an array of TVarRec, i.e. an array of const
     // - will expect the document to be a dvArray - otherwise, will raise a
     // EDocVariant exception
+    // - values will be passed by referenced as vtVariant to @VValue[ndx]
     // - would allow to write code as such:
     // !  Doc.InitArray(['one',2,3]);
     // !  s := FormatUtf8('[%,%,%]',Doc.ToArrayOfConst,[],true);
@@ -1584,6 +1592,20 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// returns the current Values[] item
     property Current: PVariant
+      read GetCurrent;
+  end;
+
+  /// low-level Enumerator as returned by TDocVariantData.DocVariantEnumerator
+  TDocVariantDataDocVariantEnumerator = class(TDocVariantDataEnumeratorAbstract)
+  protected
+    function GetCurrent: PDocVariantData;
+      {$ifdef HASINLINE}inline;{$endif}
+  public
+    constructor Create(const Value: TDocVariantData);
+    function GetEnumerator: TDocVariantDataDocVariantEnumerator;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns the current _Safe(Values[]) item
+    property Current: PDocVariantData
       read GetCurrent;
   end;
 
@@ -2929,13 +2951,14 @@ end;
 
 function TDocVariantDataEnumerator.GetCurrent: PVariant;
 begin
-  result := @fValue.VValue[fIndex];
+  result := @fValue^.VValue[fIndex];
   if fFakeItem.VCount = 0 then
     exit;
   SetVariantByRef(result^, fFakeItem.VValue[1]);
-  RawUtf8ToVariant(fValue.VName[fIndex], fFakeItem.VValue[0]);
+  RawUtf8ToVariant(fValue^.VName[fIndex], fFakeItem.VValue[0]);
   result := @fFakeItem;
 end;
+
 
 { TDocVariantDataArrayEnumerator }
 
@@ -2950,13 +2973,38 @@ end;
 
 function TDocVariantDataArrayEnumerator.GetCurrent: PVariant;
 begin
-  result := @fValue.VValue[fIndex];
+  result := @fValue^.VValue[fIndex];
 end;
 
 function TDocVariantDataArrayEnumerator.GetEnumerator: TDocVariantDataArrayEnumerator;
 begin
   result := self;
 end;
+
+
+{ TDocVariantDataDocVariantEnumerator }
+
+constructor TDocVariantDataDocVariantEnumerator.Create(
+  const Value: TDocVariantData);
+begin
+  fValue := @Value;
+  if dvoIsObject in Value.VOptions then
+    fIndex := -1
+  else
+    fIndex := maxInt;
+end;
+
+function TDocVariantDataDocVariantEnumerator.GetCurrent: PDocVariantData;
+begin
+  result := _Safe(fValue^.VValue[fIndex]);
+end;
+
+function TDocVariantDataDocVariantEnumerator.GetEnumerator:
+  TDocVariantDataDocVariantEnumerator;
+begin
+  result := self;
+end;
+
 
 { TDocVariantDataObjectEnumerator }
 
@@ -2971,8 +3019,8 @@ end;
 
 function TDocVariantDataObjectEnumerator.GetCurrent: TDocVariantDataObjectEnumerated;
 begin
-  result.Name := @fValue.VName[fIndex];
-  result.Value := @fValue.VValue[fIndex];
+  result.Name := @fValue^.VName[fIndex];
+  result.Value := @fValue^.VValue[fIndex];
 end;
 
 function TDocVariantDataObjectEnumerator.GetEnumerator: TDocVariantDataObjectEnumerator;
@@ -4728,6 +4776,11 @@ begin
   result := TDocVariantDataArrayEnumerator.Create(self);
 end;
 
+function TDocVariantData.DocVariantEnumerator: TDocVariantDataDocVariantEnumerator;
+begin
+  result := TDocVariantDataDocVariantEnumerator.Create(self);
+end;
+
 function TDocVariantData.ObjectEnumerator: TDocVariantDataObjectEnumerator;
 begin
   result := TDocVariantDataObjectEnumerator.Create(self);
@@ -5984,8 +6037,8 @@ begin
   end;
 end;
 
-function TDocVariantData.RetrieveValueOrRaiseException(aName: PUtf8Char;
-  aNameLen: integer; aCaseSensitive: boolean;
+function TDocVariantData.RetrieveValueOrRaiseException(
+  aName: PUtf8Char; aNameLen: integer; aCaseSensitive: boolean;
   var Dest: variant; DestByRef: boolean): boolean;
 var
   ndx: integer;
@@ -6102,13 +6155,11 @@ end;
 function TDocVariantData.ToNonExpandedJson: RawUtf8;
 var
   fields: TRawUtf8DynArray;
-  fieldsCount: integer;
+  fieldsCount, r, f: PtrInt;
   W: TTextWriter;
-  r, f: integer;
   row: PDocVariantData;
   temp: TTextWriterStackBuffer;
 begin
-  fieldsCount := 0;
   if not (dvoIsArray in VOptions) then
   begin
     result := '';
@@ -6119,6 +6170,7 @@ begin
     result := '[]';
     exit;
   end;
+  fieldsCount := 0;
   with _Safe(VValue[0])^ do
     if dvoIsObject in VOptions then
     begin
