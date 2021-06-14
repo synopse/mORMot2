@@ -3909,7 +3909,7 @@ begin
         imvInteger, imvCardinal, imvInt64:
           if rcfQWord in ArgRtti.Cache.Flags then
             Include(ValueKindAsm,vIsQword);
-        imvDouble,imvDateTime:
+        imvDouble, imvDateTime:
           begin
             {$ifdef HAS_FPREG}
             ValueIsInFPR := not (vPassedByReference in ValueKindAsm);

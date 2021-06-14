@@ -6685,8 +6685,8 @@ type
 procedure TQuickSortRawUtf8.Sort(L, R: PtrInt);
 var
   I, J, P: PtrInt;
-  Tmp: Pointer;
-  TmpInt: integer;
+  tmp: Pointer;
+  int: integer;
 begin
   if L < R then
     repeat
@@ -6696,26 +6696,26 @@ begin
       repeat
         pivot := Values^[P];
         while Compare(Values^[I], pivot) < 0 do
-          Inc(I);
+          inc(I);
         while Compare(Values^[J], pivot) > 0 do
-          Dec(J);
+          dec(J);
         if I <= J then
         begin
-          Tmp := Values^[J];
+          tmp := Values^[J];
           Values^[J] := Values^[I];
-          Values^[I] := Tmp;
+          Values^[I] := tmp;
           if CoValues <> nil then
           begin
-            TmpInt := CoValues^[J];
+            int := CoValues^[J];
             CoValues^[J] := CoValues^[I];
-            CoValues^[I] := TmpInt;
+            CoValues^[I] := int;
           end;
           if P = I then
             P := J
           else if P = J then
             P := I;
-          Inc(I);
-          Dec(J);
+          inc(I);
+          dec(J);
         end;
       until I > J;
       if J - L < R - I then
