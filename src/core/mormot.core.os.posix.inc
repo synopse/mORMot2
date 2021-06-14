@@ -1495,7 +1495,7 @@ var
   fn, status, tgid: RawUtf8;
 begin
   result := nil;
-  d := FpOpendir('/proc'); // alternative to FindFirst()
+  d := FpOpendir('/proc'); // faster alternative to FindFirst()
   if d = nil then
     exit;
   n := 0;
@@ -1504,20 +1504,21 @@ begin
     e := FpReaddir(d^);
     if e = nil then
       break;
-    if (e.d_type = DT_UNKNOWN) or
-       (e.d_type = DT_DIR) or
-       not (e.d_name[0] in ['1'..'9']) then
-      continue;
-    pid := GetCardinal(@e.d_name[0]);
-    if pid = 0 then
-      continue;
-    fn := e.d_name;
-    status := StringFromFile('/proc/' + fn + '/status', {nosize=}true);
-    FindNameValue(status, 'TGID:', tgid);
-    if GetCardinal(pointer(tgid)) = pid then
-      // ensure is a real process, not a thread
-      // https://www.memsql.com/blog/the-curious-case-of-thread-groups-identifiers
-      AddInteger(TIntegerDynArray(result), n, pid);
+    if ((e.d_type = DT_UNKNOWN) or
+        (e.d_type = DT_DIR)) and
+       (e.d_name[0] in ['1'..'9']) then
+    begin
+      pid := GetCardinal(@e.d_name[0]);
+      if pid = 0 then
+        continue;
+      fn := e.d_name;
+      status := StringFromFile('/proc/' + fn + '/status', {nosize=}true);
+      FindNameValue(status, 'TGID:', tgid);
+      if GetCardinal(pointer(tgid)) = pid then
+        // ensure is a real process, not a thread
+        // https://www.memsql.com/blog/the-curious-case-of-thread-groups-identifiers
+        AddInteger(TIntegerDynArray(result), n, pid);
+    end;
   until false;
   FpClosedir(d^);
   SetLength(result, n);
@@ -2205,7 +2206,6 @@ var
   {$endif OSBSDDARWIN}
   c: cardinal;
 begin
-  EnumAllProcesses(c);
   // retrieve Kernel and Hardware information
   stdoutIsTTY := (IsATTY(StdOutputHandle) = 1) and
                  IdemPChars(RawUtf8(GetEnvironmentVariable('TERM')), [
