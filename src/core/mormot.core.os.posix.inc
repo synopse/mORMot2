@@ -1231,7 +1231,7 @@ var
 
 procedure TextColor(Color: TConsoleColor);
 const
-  AnsiTbl: string[8] = '04261537';
+  TERM_CTRL: string[8] = '04261537';
 begin
 {$ifdef OSPOSIX}
   if not stdoutIsTTY then
@@ -1241,9 +1241,9 @@ begin
     exit;
   TextAttr := ord(Color);
   if ord(Color) >= 8 then
-    write(#27'[1;3', AnsiTbl[(ord(Color) and 7) + 1], 'm')
+    write(#27'[1;3', TERM_CTRL[(ord(Color) and 7) + 1], 'm')
   else
-    write(#27'[0;3', AnsiTbl[(ord(Color) and 7) + 1], 'm');
+    write(#27'[0;3', TERM_CTRL[(ord(Color) and 7) + 1], 'm');
   ioresult;
 end;
 
@@ -2207,7 +2207,9 @@ var
 begin
   EnumAllProcesses(c);
   // retrieve Kernel and Hardware information
-  stdoutIsTTY := IsATTY(StdOutputHandle) = 1;
+  stdoutIsTTY := (IsATTY(StdOutputHandle) = 1) and
+                 IdemPChars(RawUtf8(GetEnvironmentVariable('TERM')), [
+                   'XTERM-', 'SCREEN', 'TMUX', 'RXVT-', 'LINUX', 'CYGWIN']);
   modname := nil;
   fpuname(uts);
   {$ifdef OSANDROID}
