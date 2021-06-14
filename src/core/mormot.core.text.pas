@@ -1277,7 +1277,7 @@ type
 type
   /// function prototype used internally for UTF-8 buffer comparison
   // - also used e.g. in mormot.core.variants unit
-  TUtf8Compare = function(P1,P2: PUtf8Char): PtrInt;
+  TUtf8Compare = function(P1, P2: PUtf8Char): PtrInt;
 
 /// returns TRUE if Value is nil or all supplied Values[] equal ''
 function IsZero(const Values: TRawUtf8DynArray): boolean; overload;

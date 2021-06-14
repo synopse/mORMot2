@@ -1340,6 +1340,9 @@ procedure QuickSortPtrInt(P: PPtrIntArray; L, R: PtrInt);
 procedure QuickSortPointer(P: PPointerArray; L, R: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
+/// sort a double array, low values first
+procedure QuickSortDouble(ID: PDoubleArray; L, R: PtrInt);
+
 type
   /// event handler called by NotifySortedIntegerChanges()
   // - Sender is an opaque const value, maybe a TObject or any pointer
@@ -6472,6 +6475,51 @@ begin
       begin
         if I < R then
           QuickSortQWord(ID, I, R);
+        R := J;
+      end;
+    until L >= R;
+end;
+
+procedure QuickSortDouble(ID: PDoubleArray; L, R: PtrInt);
+var
+  I, J, P: PtrInt;
+  tmp: double;
+begin
+  if L < R then
+    repeat
+      I := L;
+      J := R;
+      P := (L + R) shr 1;
+      repeat
+        tmp := ID[P];
+        while ID[I] < tmp do
+          inc(I);
+        while ID[J] > tmp do
+          dec(J);
+        if I <= J then
+        begin
+          tmp := ID[J];
+          ID[J] := ID[I];
+          ID[I] := tmp;
+          if P = I then
+            P := J
+          else if P = J then
+            P := I;
+          inc(I);
+          dec(J);
+        end;
+      until I > J;
+      if J - L < R - I then
+      begin
+        // use recursion only for smaller range
+        if L < J then
+          QuickSortDouble(ID, L, J);
+        L := I;
+      end
+      else
+      begin
+        if I < R then
+          QuickSortDouble(ID, I, R);
         R := J;
       end;
     until L >= R;

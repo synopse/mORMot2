@@ -1053,7 +1053,7 @@ var
 
 type
   /// function prototype to be used for TDynArray Sort and Find method
-  // - common functions exist for base types: see e.g. SortDynArrayboolean,
+  // - common functions exist for base types: see e.g. SortDynArrayBoolean,
   // SortDynArrayByte, SortDynArrayWord, SortDynArrayInteger, SortDynArrayCardinal,
   // SortDynArrayInt64, SortDynArrayQWord, SordDynArraySingle, SortDynArrayDouble,
   // SortDynArrayAnsiString, SortDynArrayAnsiStringI, SortDynArrayUnicodeString,
@@ -1117,7 +1117,7 @@ var
   // - e.g. as PT_SORT[CaseInSensitive,ptRawUtf8]
   // - not to be used as such, but e.g. when inlining TDynArray methods
   PT_SORT: array[boolean, TRttiParserType] of TDynArraySortCompare = (
-    (nil, nil, SortDynArrayboolean, SortDynArrayByte, SortDynArrayCardinal,
+    (nil, nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayCardinal,
      SortDynArrayInt64, SortDynArrayDouble, SortDynArrayExtended,
      SortDynArrayInt64, SortDynArrayInteger, SortDynArrayQWord,
      SortDynArrayRawByteString, SortDynArrayAnsiString, SortDynArrayAnsiString,
@@ -1127,7 +1127,7 @@ var
      SortDynArrayUnicodeString, SortDynArrayInt64, SortDynArrayInt64, SortDynArrayVariant,
      SortDynArrayUnicodeString, SortDynArrayAnsiString, SortDynArrayWord,
      nil, nil, nil, nil, nil, nil),
-   (nil, nil, SortDynArrayboolean, SortDynArrayByte, SortDynArrayCardinal,
+   (nil, nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayCardinal,
     SortDynArrayInt64, SortDynArrayDouble, SortDynArrayExtended,
     SortDynArrayInt64, SortDynArrayInteger, SortDynArrayQWord,
     SortDynArrayRawByteString, SortDynArrayAnsiStringI, SortDynArrayAnsiStringI,
@@ -1701,7 +1701,7 @@ type
       read GetCapacity write SetCapacity;
     /// the compare function to be used for Sort and Find methods
     // - by default, no comparison function is set
-    // - common functions exist for base types: e.g. SortDynArrayByte, SortDynArrayboolean,
+    // - common functions exist for base types: e.g. SortDynArrayByte, SortDynArrayBoolean,
     // SortDynArrayWord, SortDynArrayInteger, SortDynArrayCardinal, SortDynArraySingle,
     // SortDynArrayInt64, SortDynArrayDouble, SortDynArrayAnsiString,
     // SortDynArrayAnsiStringI, SortDynArrayString, SortDynArrayStringI,
@@ -6975,8 +6975,8 @@ begin
             p := J
           else if p = J then
             p := I;
-          Inc(I);
-          Dec(J);
+          inc(I);
+          dec(J);
         end;
       until I > J;
       if J - L < R - I then
@@ -7026,8 +7026,8 @@ begin
             p := J
           else if p = J then
             p := I;
-          Inc(I);
-          Dec(J);
+          inc(I);
+          dec(J);
         end;
       until I > J;
       if J - L < R - I then
@@ -7077,8 +7077,8 @@ begin
             p := J
           else if p = J then
             p := I;
-          Inc(I);
-          Dec(J);
+          inc(I);
+          dec(J);
         end;
       until I > J;
       if J - L < R - I then
@@ -7125,8 +7125,8 @@ begin
             p := J
           else if p = J then
             p := I;
-          Inc(I);
-          Dec(J);
+          inc(I);
+          dec(J);
         end;
       until I > J;
       if J - L < R - I then
@@ -7175,8 +7175,8 @@ begin
             P := J
           else if P = J then
             P := I;
-          Inc(I);
-          Dec(J);
+          inc(I);
+          dec(J);
         end;
       until I > J;
       if J - L < R - I then
@@ -7208,16 +7208,52 @@ begin
   if Assigned(QuickSort.Compare) and
      (fValue <> nil) and
      (fValue^ <> nil) then
+  begin
+    if fInfo.ArrayRtti <> nil then
+      case fInfo.ArrayRtti.Parser of
+        // call optimized sorting functions for most simple types
+        ptWord:
+          if @QuickSort.Compare = @SortDynArrayWord then
+          begin
+            QuickSortWord(fValue^, aStart, aStop);
+            exit;
+          end;
+        ptInteger:
+          if @QuickSort.Compare = @SortDynArrayInteger then
+          begin
+            QuickSortInteger(fValue^, aStart, aStop);
+            exit;
+          end;
+        ptInt64:
+          if @QuickSort.Compare = @SortDynArrayInt64 then
+          begin
+            QuickSortInt64(fValue^, aStart, aStop);
+            exit;
+          end;
+        ptQWord:
+          if @QuickSort.Compare = @SortDynArrayQWord then
+          begin
+            QuickSortQWord(fValue^, aStart, aStop);
+            exit;
+          end;
+        ptDouble:
+          if @QuickSort.Compare = @SortDynArrayDouble then
+          begin
+            QuickSortDouble(fValue^, aStart, aStop);
+            exit;
+          end;
+      end;
     if fInfo.Cache.ItemSize = SizeOf(pointer) then
-      // dedicated function for pointers - e.g. T*ObjArray
+      // dedicated function for pointers - e.g. strings or T*ObjArray
       QuickSortPtr(aStart, aStop, QuickSort.Compare, fValue^)
     else
     begin
-      // generic process for any size of array items
+      // generic process for any kind of array items
       QuickSort.Value := fValue^;
       QuickSort.ElemSize := fInfo.Cache.ItemSize;
       QuickSort.QuickSort(aStart, aStop);
     end;
+  end;
 end;
 
 procedure TDynArray.Sort(const aCompare: TOnDynArraySortCompare; aReverse: boolean);
