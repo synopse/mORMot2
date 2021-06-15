@@ -7,15 +7,16 @@ unit mormot.core.buffers;
   *****************************************************************************
 
    Low-Level Memory Buffers Processing Functions shared by all framework units
-   - Variable Length integer Encoding / Decoding
+   - Variable Length Integer Encoding / Decoding
    - TAlgoCompress Compression/Decompression Classes - with AlgoSynLZ
    - TFastReader / TBufferWriter Binary Streams
    - Base64, Base64Uri and Baudot Encoding / Decoding
    - URI-Encoded Text Buffer Process
    - Basic MIME Content Types Support
    - Text Memory Buffers and Files
-   - Markup (e.g. HTML or Emoji) process
    - TStreamRedirect and other Hash process
+   - Markup (e.g. HTML or Emoji) process
+   - RawByteString Buffers Aggregation via TRawByteStringGroup
 
   *****************************************************************************
 }
@@ -34,7 +35,7 @@ uses
   mormot.core.rtti;
 
 
-{ ************ Variable Length integer Encoding / Decoding }
+{ ************ Variable Length Integer Encoding / Decoding }
 
 /// convert a cardinal into a 32-bit variable-length integer buffer
 function ToVarUInt32(Value: cardinal; Dest: PByte): PByte;
@@ -2015,11 +2016,110 @@ procedure EmojiFromDots(P: PUtf8Char; W: TBaseWriter); overload;
 function EmojiFromDots(const text: RawUtf8): RawUtf8; overload;
 
 
+{ ************ RawByteString Buffers Aggregation via TRawByteStringGroup }
+
+type
+  /// item as stored in a TRawByteStringGroup instance
+  TRawByteStringGroupValue = record
+    Position: integer;
+    Value: RawByteString;
+  end;
+
+  PRawByteStringGroupValue = ^TRawByteStringGroupValue;
+
+  /// items as stored in a TRawByteStringGroup instance
+  TRawByteStringGroupValueDynArray = array of TRawByteStringGroupValue;
+
+  /// store several RawByteString content with optional concatenation
+  {$ifdef USERECORDWITHMETHODS}
+  TRawByteStringGroup = record
+  {$else}
+  TRawByteStringGroup = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// actual list storing the data
+    Values: TRawByteStringGroupValueDynArray;
+    /// how many items are currently stored in Values[]
+    Count: integer;
+    /// the current size of data stored in Values[]
+    Position: integer;
+    /// naive but efficient cache for Find()
+    LastFind: integer;
+    /// add a new item to Values[]
+    procedure Add(const aItem: RawByteString); overload;
+    /// add a new item to Values[]
+    procedure Add(aItem: pointer; aItemLen: integer); overload;
+    /// add another TRawByteStringGroup to Values[]
+    procedure Add(const aAnother: TRawByteStringGroup); overload;
+    /// low-level method to abort the latest Add() call
+    // - warning: will work only once, if an Add() has actually been just called:
+    // otherwise, the behavior is unexpected, and may wrongly truncate data
+    procedure RemoveLastAdd;
+    /// compare two TRawByteStringGroup instance stored text
+    function Equals(const aAnother: TRawByteStringGroup): boolean;
+    /// clear any stored information
+    procedure Clear;
+    /// append stored information into another RawByteString, and clear content
+    procedure AppendTextAndClear(var aDest: RawByteString);
+    // compact the Values[] array into a single item
+    // - is also used by AsText to compute a single RawByteString
+    procedure Compact;
+    /// return all content as a single RawByteString
+    // - will also compact the Values[] array into a single item (which is returned)
+    function AsText: RawByteString;
+    /// return all content as a single TByteDynArray
+    function AsBytes: TByteDynArray;
+    /// save all content into a TTextWriter instance
+    procedure Write(W: TBaseWriter; Escape: TTextWriterKind = twJsonEscape); overload;
+    /// save all content into a TBufferWriter instance
+    procedure WriteBinary(W: TBufferWriter); overload;
+    /// save all content as a string into a TBufferWriter instance
+    // - storing the length as WriteVarUInt32() prefix
+    procedure WriteString(W: TBufferWriter);
+    /// add another TRawByteStringGroup previously serialized via WriteString()
+    procedure AddFromReader(var aReader: TFastReader);
+    /// returns a pointer to Values[] containing a given position
+    // - returns nil if not found
+    function Find(aPosition: integer): PRawByteStringGroupValue; overload;
+    /// returns a pointer to Values[].Value containing a given position and length
+    // - returns nil if not found
+    function Find(aPosition, aLength: integer): pointer; overload;
+    /// returns the text at a given position in Values[]
+    // - text should be in a single Values[] entry
+    procedure FindAsText(aPosition, aLength: integer; out aText: RawByteString); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns the text at a given position in Values[]
+    // - text should be in a single Values[] entry
+    function FindAsText(aPosition, aLength: integer): RawByteString; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns the text at a given position in Values[]
+    // - text should be in a single Values[] entry
+    // - explicitly returns null if the supplied text was not found
+    procedure FindAsVariant(aPosition, aLength: integer; out aDest: variant);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append the text at a given position in Values[], JSON escaped by default
+    // - text should be in a single Values[] entry
+    procedure FindWrite(aPosition, aLength: integer; W: TBaseWriter;
+      Escape: TTextWriterKind = twJsonEscape; TrailingCharsToIgnore: integer = 0);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// append the blob at a given position in Values[], base-64 encoded
+    // - text should be in a single Values[] entry
+    procedure FindWriteBase64(aPosition, aLength: integer; W: TBaseWriter;
+      withMagic: boolean);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// copy the text at a given position in Values[]
+    // - text should be in a single Values[] entry
+    procedure FindMove(aPosition, aLength: integer; aDest: pointer);
+  end;
+
+  /// pointer reference to a TRawByteStringGroup
+  PRawByteStringGroup = ^TRawByteStringGroup;
+
 
 implementation
 
 
-{ ************ Variable Length integer Encoding / Decoding }
+{ ************ Variable Length Integer Encoding / Decoding }
 
 function ToVarInt32(Value: PtrInt; Dest: PByte): PByte;
 begin
@@ -8792,6 +8892,337 @@ begin
     W.Free;
   end;
 end;
+
+
+{ ************ RawByteString Buffers Aggregation via TRawByteStringGroup }
+
+{ TRawByteStringGroup }
+
+procedure TRawByteStringGroup.Add(const aItem: RawByteString);
+begin
+  if Values = nil then
+    Clear; // ensure all fields are initialized, even if on stack
+  if Count = Length(Values) then
+    SetLength(Values, NextGrow(Count));
+  with Values[Count] do
+  begin
+    Position := self.Position;
+    Value := aItem;
+  end;
+  LastFind := Count;
+  inc(Count);
+  inc(Position, Length(aItem));
+end;
+
+procedure TRawByteStringGroup.Add(aItem: pointer; aItemLen: integer);
+var
+  tmp: RawByteString;
+begin
+  SetString(tmp, PAnsiChar(aItem), aItemLen);
+  Add(tmp);
+end;
+
+procedure TRawByteStringGroup.Add(const aAnother: TRawByteStringGroup);
+var
+  i: integer;
+  s, d: PRawByteStringGroupValue;
+begin
+  if aAnother.Values = nil then
+    exit;
+  if Values = nil then
+    Clear; // ensure all fields are initialized, even if on stack
+  if Count + aAnother.Count > Length(Values) then
+    SetLength(Values, Count + aAnother.Count);
+  s := pointer(aAnother.Values);
+  d := @Values[Count];
+  for i := 1 to aAnother.Count do
+  begin
+    d^.Position := Position;
+    d^.Value := s^.Value;
+    inc(Position, length(s^.Value));
+    inc(s);
+    inc(d);
+  end;
+  inc(Count, aAnother.Count);
+  LastFind := Count - 1;
+end;
+
+procedure TRawByteStringGroup.RemoveLastAdd;
+begin
+  if Count > 0 then
+  begin
+    dec(Count);
+    dec(Position, Length(Values[Count].Value));
+    Values[Count].Value := ''; // release memory
+    LastFind := Count - 1;
+  end;
+end;
+
+function TRawByteStringGroup.Equals(const aAnother: TRawByteStringGroup): boolean;
+begin
+  if ((Values = nil) and
+      (aAnother.Values <> nil)) or
+     ((Values <> nil) and
+      (aAnother.Values = nil)) or
+     (Position <> aAnother.Position) then
+    result := false
+  else if (Count <> 1) or
+          (aAnother.Count <> 1) or
+          (Values[0].Value <> aAnother.Values[0].Value) then
+    result := AsText = aAnother.AsText
+  else
+    result := true;
+end;
+
+procedure TRawByteStringGroup.Clear;
+begin
+  Values := nil;
+  Position := 0;
+  Count := 0;
+  LastFind := 0;
+end;
+
+procedure TRawByteStringGroup.AppendTextAndClear(var aDest: RawByteString);
+var
+  d, i: integer;
+  v: PRawByteStringGroupValue;
+begin
+  d := length(aDest);
+  SetLength(aDest, d + Position);
+  v := pointer(Values);
+  for i := 1 to Count do
+  begin
+    MoveFast(pointer(v^.Value)^, PByteArray(aDest)[d + v^.Position], length(v^.Value));
+    inc(v);
+  end;
+  Clear;
+end;
+
+function TRawByteStringGroup.AsText: RawByteString;
+begin
+  if Values = nil then
+    result := ''
+  else
+  begin
+    if Count > 1 then
+      Compact;
+    result := Values[0].Value;
+  end;
+end;
+
+procedure TRawByteStringGroup.Compact;
+var
+  i: integer;
+  v: PRawByteStringGroupValue;
+  tmp: RawByteString;
+begin
+  if (Values <> nil) and
+     (Count > 1) then
+  begin
+    SetString(tmp, nil, Position);
+    v := pointer(Values);
+    for i := 1 to Count do
+    begin
+      MoveFast(pointer(v^.Value)^, PByteArray(tmp)[v^.Position], length(v^.Value));
+      {$ifdef FPC}
+      FastAssignNew(v^.Value);
+      {$else}
+      v^.Value := '';
+      {$endif FPC}
+      inc(v);
+    end;
+    Values[0].Value := tmp; // use result for absolute compaction ;)
+    if Count > 128 then
+      SetLength(Values, 128);
+    Count := 1;
+    LastFind := 0;
+  end;
+end;
+
+function TRawByteStringGroup.AsBytes: TByteDynArray;
+var
+  i: integer;
+begin
+  result := nil;
+  if Values = nil then
+    exit;
+  SetLength(result, Position);
+  for i := 0 to Count - 1 do
+    with Values[i] do
+      MoveFast(pointer(Value)^, PByteArray(result)[Position], length(Value));
+end;
+
+procedure TRawByteStringGroup.Write(W: TBaseWriter; Escape: TTextWriterKind);
+var
+  i: integer;
+begin
+  if Values <> nil then
+    for i := 0 to Count - 1 do
+      with Values[i] do
+        W.Add(PUtf8Char(pointer(Value)), length(Value), Escape);
+end;
+
+procedure TRawByteStringGroup.WriteBinary(W: TBufferWriter);
+var
+  i: integer;
+begin
+  if Values <> nil then
+    for i := 0 to Count - 1 do
+      W.WriteBinary(Values[i].Value);
+end;
+
+procedure TRawByteStringGroup.WriteString(W: TBufferWriter);
+begin
+  if Values = nil then
+  begin
+    W.Write1(0);
+    exit;
+  end;
+  W.WriteVarUInt32(Position);
+  WriteBinary(W);
+end;
+
+procedure TRawByteStringGroup.AddFromReader(var aReader: TFastReader);
+var
+  complexsize: integer;
+begin
+  complexsize := aReader.VarUInt32;
+  if complexsize > 0 then
+    // directly create a RawByteString from aReader buffer
+    Add(aReader.Next(complexsize), complexsize);
+end;
+
+function TRawByteStringGroup.Find(aPosition: integer): PRawByteStringGroupValue;
+var
+  i: integer;
+begin
+  if (pointer(Values) <> nil) and
+     (cardinal(aPosition) < cardinal(Position)) then
+  begin
+    result := @Values[LastFind]; // this cache is very efficient in practice
+    if (aPosition >= result^.Position) and
+       (aPosition < result^.Position + length(result^.Value)) then
+      exit;
+    result := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
+    for i := 0 to Count - 2 do
+      if result^.Position > aPosition then
+      begin
+        dec(result);
+        LastFind := i;
+        exit;
+      end
+      else
+        inc(result);
+    dec(result);
+    LastFind := Count - 1;
+  end
+  else
+    result := nil;
+end;
+
+function TRawByteStringGroup.Find(aPosition, aLength: integer): pointer;
+var
+  P: PRawByteStringGroupValue;
+  i: integer;
+label
+  found;
+begin
+  if (pointer(Values) <> nil) and
+     (cardinal(aPosition) < cardinal(Position)) then
+  begin
+    P := @Values[LastFind]; // this cache is very efficient in practice
+    i := aPosition - P^.Position;
+    if (i >= 0) and
+       (i + aLength < length(P^.Value)) then
+    begin
+      result := @PByteArray(P^.Value)[i];
+      exit;
+    end;
+    P := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
+    for i := 0 to Count - 2 do
+      if P^.Position > aPosition then
+      begin
+        LastFind := i;
+found:  dec(P);
+        dec(aPosition, P^.Position);
+        if aLength - aPosition <= length(P^.Value) then
+          result := @PByteArray(P^.Value)[aPosition]
+        else
+          result := nil;
+        exit;
+      end
+      else
+        inc(P);
+    LastFind := Count - 1;
+    goto found;
+  end
+  else
+    result := nil;
+end;
+
+procedure TRawByteStringGroup.FindAsText(aPosition, aLength: integer;
+  out aText: RawByteString);
+var
+  P: PRawByteStringGroupValue;
+begin
+  P := Find(aPosition);
+  if P = nil then
+    exit;
+  dec(aPosition, P^.Position);
+  if (aPosition = 0) and
+     (length(P^.Value) = aLength) then
+    aText := P^.Value
+  else
+  // direct return if not yet compacted
+  if aLength - aPosition <= length(P^.Value) then
+    SetString(aText, PAnsiChar(@PByteArray(P^.Value)[aPosition]), aLength);
+end;
+
+function TRawByteStringGroup.FindAsText(aPosition, aLength: integer): RawByteString;
+{%H-}begin
+  {%H-}FindAsText(aPosition, aLength, result);
+end;
+
+procedure TRawByteStringGroup.FindAsVariant(aPosition, aLength: integer;
+  out aDest: variant);
+var
+  tmp: RawByteString;
+begin
+  FindAsText(aPosition, aLength, tmp);
+  if {%H-}tmp <> '' then
+    RawUtf8ToVariant(tmp, aDest);
+end;
+
+procedure TRawByteStringGroup.FindWrite(aPosition, aLength: integer;
+  W: TBaseWriter; Escape: TTextWriterKind; TrailingCharsToIgnore: integer);
+var
+  P: pointer;
+begin
+  P := Find(aPosition, aLength);
+  if P <> nil then
+    W.Add(PUtf8Char(P) + TrailingCharsToIgnore, aLength - TrailingCharsToIgnore, Escape);
+end;
+
+procedure TRawByteStringGroup.FindWriteBase64(aPosition, aLength: integer;
+  W: TBaseWriter; withMagic: boolean);
+var
+  P: pointer;
+begin
+  P := Find(aPosition, aLength);
+  if P <> nil then
+    W.WrBase64(P, aLength, withMagic);
+end;
+
+procedure TRawByteStringGroup.FindMove(aPosition, aLength: integer;
+  aDest: pointer);
+var
+  P: pointer;
+begin
+  P := Find(aPosition, aLength);
+  if P <> nil then
+    MoveFast(P^, aDest^, aLength);
+end;
+
 
 
 procedure InitializeUnit;
