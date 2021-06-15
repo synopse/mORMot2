@@ -113,6 +113,8 @@ type
     /// overriden to detect upgrade, or process WebSockets in the thread pool
     procedure TaskProcess(aCaller: TSynThreadPoolWorkThread); override;
   public
+    /// ensure focConnectionClose is done before closing the connection
+    procedure Close; override;
     /// finalize this socket and its associated TWebSocketProcessServer
     destructor Destroy; override;
     /// push a notification to the client
@@ -126,14 +128,6 @@ type
     /// low-level WebSocket protocol processing instance
     property WebSocketProcess: TWebSocketProcessServer
       read fProcess;
-  end;
-
-  /// an enhanced input/output structure used for HTTP and WebSockets requests
-  TWebSocketServerResp = class(THttpServerResp)
-  public
-    /// called by THttpServer.Destroy on existing connections
-    // - send focConnectionClose before killing the socket
-    procedure Shutdown; override;
   end;
 
   /// callback signature to notify TWebSocketServer connections
@@ -466,7 +460,6 @@ constructor TWebSocketServer.Create(const aPort: RawUtf8;
 begin
   // override with custom processing classes
   fSocketClass := TWebSocketServerSocket;
-  fThreadRespClass := TWebSocketServerResp;
   fProcessClass := TWebSocketProcessServer;
   // initialize protocols and connections
   fWebSocketConnections := TSynObjectListLocked.Create({owned=}false);
@@ -528,8 +521,7 @@ begin
   if (hfConnectionUpgrade in ClientSock.HeaderFlags) and
      ClientSock.KeepAliveClient and
      IdemPropNameU('GET', ClientSock.Method) and
-     IdemPropNameU(ClientSock.Upgrade, 'websocket') and
-     ConnectionThread.InheritsFrom(TWebSocketServerResp) then
+     IdemPropNameU(ClientSock.Upgrade, 'websocket') then
   begin
     // upgrade and run fProcess.ProcessLoop
     err := WebSocketProcessUpgrade(ClientSock);
@@ -645,23 +637,6 @@ begin
 end;
 
 
-{ TWebSocketServerResp }
-
-procedure TWebSocketServerResp.Shutdown;
-var
-  process: TWebSocketProcessServer;
-begin
-  process := (fServerSock as TWebSocketServerSocket).fProcess;
-  if (process <> nil) and
-     not process.ConnectionCloseWasSent then
-  begin
-    WebSocketLog.Add.Log(sllTrace, 'Shutdown: send focConnectionClose', self);
-    process.Shutdown; // notify client with focConnectionClose
-  end;
-  inherited Shutdown;
-end;
-
-
 { TWebSocketServerSocket }
 
 procedure TWebSocketServerSocket.TaskProcess(aCaller: TSynThreadPoolWorkThread);
@@ -701,10 +676,21 @@ begin
   end;
 end;
 
+procedure TWebSocketServerSocket.Close;
+begin
+  if (fProcess <> nil) and
+     not fProcess.ConnectionCloseWasSent then
+  begin
+    WebSocketLog.Add.Log(sllTrace, 'Close: send focConnectionClose', self);
+    fProcess.Shutdown; // notify client with focConnectionClose
+  end;
+  inherited Close;
+end;
+
 destructor TWebSocketServerSocket.Destroy;
 begin
-  FreeAndNil(fProcess);
   inherited Destroy;
+  FreeAndNil(fProcess);
 end;
 
 function TWebSocketServerSocket.NotifyCallback(Ctxt: THttpServerRequest;

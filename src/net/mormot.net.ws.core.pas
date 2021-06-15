@@ -1201,7 +1201,7 @@ var
   head: RawUtf8;
 begin
   if not (request.opcode in [focText, focBinary]) then
-    exit; // ignore e.g. from TWebSocketServerResp.ProcessStart/ProcessStop
+    exit; // ignore e.g. from ProcessStart/ProcessStop
   if FrameData(request, 'r', @head) <> nil then
   try
     Ctxt := Sender.ComputeContext(onRequest);

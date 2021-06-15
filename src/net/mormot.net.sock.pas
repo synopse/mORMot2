@@ -62,6 +62,9 @@ var
 
 type
   /// the error codes returned by TNetSocket wrapper
+  // - convenient cross-platform error handling is not possible, mostly because
+  // Windows doesn't behave exactly like other targets: this enumeration
+  // flattens socket execution results, and allow easy ToText() text conversion
   TNetResult = (
     nrOK,
     nrRetry,
@@ -94,7 +97,7 @@ type
   end;
   {$M-}
 
-  /// one data state on a given socket
+  /// one data state to be tracked on a given socket
   TNetEvent = (
     neRead,
     neWrite,
@@ -661,6 +664,7 @@ type
     // - data is buffered, filled as the data is available
     // - read(char) or readln() is indeed very fast
     // - multithread applications would also use this SockIn pseudo-text file
+    // - default 1KB is big enough for headers (content will be read directly)
     // - by default, expect CR+LF as line feed (i.e. the HTTP way)
     procedure CreateSockIn(LineBreak: TTextLineBreakStyle = tlbsCRLF;
       InputBufferSize: integer = 1024);
@@ -679,8 +683,9 @@ type
     // output buffering feature on this connection any more (e.g. after having
     // parsed the HTTP header, then rely on direct socket comunication)
     procedure CloseSockOut;
-    /// close and shutdown the connection (called from Destroy)
-    procedure Close;
+    /// close and shutdown the connection
+    // - called from Destroy, but is reintrant so could be called earlier
+    procedure Close; virtual;
     /// close the opened socket, and corresponding SockIn/SockOut
     destructor Destroy; override;
     /// read Length bytes from SockIn buffer + Sock if necessary
@@ -2433,8 +2438,6 @@ end;
 
 procedure TCrtSocket.Close;
 begin
-  if self = nil then
-    exit;
   fSndBufLen := 0; // always reset (e.g. in case of further Open)
   fSockInEofError := 0;
   ioresult; // reset readln/writeln value

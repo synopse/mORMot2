@@ -344,7 +344,7 @@ type
     fURL: RawUtf8;
     fServer: THttpServer;
     fKeepAliveClient: boolean;
-    // from TSynThreadPoolTHttpServer.Task - return true for custom process
+    // from TSynThreadPoolTHttpServer.Task
     procedure TaskProcess(aCaller: TSynThreadPoolWorkThread); virtual;
     function TaskProcessBody(aCaller: TSynThreadPoolWorkThread;
       aHeaderResult: THttpServerSocketGetRequestResult): boolean;
@@ -2080,6 +2080,9 @@ begin
         if P <> nil then
           SetQWord(P, PQWord(@fRemoteConnectionID)^);
       end;
+      if fRemoteConnectionID = 0 then
+        // fallback to 31-bit sequence
+        fRemoteConnectionID := fServer.NextConnectionID;
     end;
     if hfConnectionClose in HeaderFlags then
       fKeepAliveClient := false;
@@ -2167,9 +2170,6 @@ begin
   fServerSock := aServerSock;
   fOnThreadTerminate := fServer.fOnThreadTerminate;
   fServer.InternalHttpServerRespListAdd(self);
-  if aServerSock.fRemoteConnectionID = 0 then
-    // fallback to 31-bit sequence
-    aServerSock.fRemoteConnectionID := fServer.NextConnectionID;
   fConnectionID := aServerSock.fRemoteConnectionID;
   FreeOnTerminate := true;
   inherited Create(false);
@@ -2178,7 +2178,8 @@ end;
 procedure THttpServerResp.Shutdown;
 begin
   Terminate;
-  fServerSock.Sock.ShutdownAndClose({rdwr=}true);
+  if fServerSock <> nil then
+    fServerSock.Close;
 end;
 
 procedure THttpServerResp.Execute;

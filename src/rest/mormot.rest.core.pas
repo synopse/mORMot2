@@ -1135,9 +1135,6 @@ type
     // to be handled as pure stateless, thread-safe and session-free
     RestAccessRights: POrmAccessRights;
     /// opaque reference to the connection which made this request
-    // - may point e.g. to a THttpServerResp, a TWebSocketServerResp,
-    // a THttpApiServer, a TRestClientUri, a TFastCGIServer or a
-    // TRestServerNamedPipeResponse instance
     // - stores mormot.net.http's THttpServerConnectionID, e.g. a http.sys
     // 64-bit ID, or an incremental rolling sequence of 31-bit integers for
     // THttpServer/TWebSocketServer, or maybe a raw PtrInt(self/THandle)
