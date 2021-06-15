@@ -7454,15 +7454,17 @@ function TDynArray.IndexOf(const Item; CaseInSensitive: boolean): PtrInt;
 var
   rtti: PRttiInfo;
   cmp: TRttiCompare;
+  n: PtrInt;
   comp: integer;
   P: PAnsiChar;
 label
   bin;
 begin
-  if (fValue <> nil) and
+  n := GetCount;
+  if (n <> 0) and
      (@Item <> nil) then
     if not(rcfArrayItemManaged in fInfo.Flags) then
-bin:  result := AnyScanIndex(fValue^, @Item, GetCount, fInfo.Cache.ItemSize)
+bin:  result := AnyScanIndex(fValue^, @Item, n, fInfo.Cache.ItemSize)
     else
     begin
       rtti := fInfo.Cache.ItemInfo;
@@ -7472,7 +7474,7 @@ bin:  result := AnyScanIndex(fValue^, @Item, GetCount, fInfo.Cache.ItemSize)
       if Assigned(cmp) then
       begin
         P := fValue^;
-        for result := 0 to GetCount - 1 do
+        for result := 0 to n - 1 do
         begin
           inc(P, cmp(P, @Item, rtti, comp));
           if comp = 0 then
@@ -9198,7 +9200,8 @@ begin
   MoveFast(_PT_HASH, PT_HASH, SizeOf(PT_HASH));
   for k := succ(low(k)) to high(k) do
     case k of
-      rkInteger, rkEnumeration, rkSet, rkChar, rkWChar {$ifdef FPC}, rkBool{$endif}:
+      rkInteger, rkEnumeration, rkSet,
+      rkChar, rkWChar {$ifdef FPC}, rkBool{$endif}:
         begin
           RTTI_BINARYSAVE[k] := @_BS_Ord;
           RTTI_BINARYLOAD[k] := @_BL_Ord;

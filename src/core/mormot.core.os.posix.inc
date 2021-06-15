@@ -2204,7 +2204,6 @@ var
   SR: TSearchRec;
   {$endif OSLINUX}
   {$endif OSBSDDARWIN}
-  c: cardinal;
 begin
   // retrieve Kernel and Hardware information
   stdoutIsTTY := (IsATTY(StdOutputHandle) = 1) and
