@@ -1100,6 +1100,15 @@ type
     // - TypeInfo is a PRttiInfo instance - but not available in this early unit
     procedure AddTypedJson(Value: pointer; TypeInfo: pointer;
       WriteOptions: TTextWriterWriteObjectOptions = []); virtual;
+    /// write some #0 ended UTF-8 text, according to the specified format
+    // - use overriden TTextWriter version instead!
+    procedure Add(P: PUtf8Char; Escape: TTextWriterKind); overload; virtual;
+    /// write some #0 ended UTF-8 text, according to the specified format
+    // - use overriden TTextWriter version instead!
+    procedure Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind); overload; virtual;
+    /// write some data Base64 encoded
+    // - use overriden TTextWriter version instead!
+    procedure WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean); virtual;
 
     /// serialize as JSON the given object
     // - use overriden TTextWriter version instead!
@@ -4740,6 +4749,24 @@ function TBaseWriter.{%H-}AddJsonReformat(Json: PUtf8Char;
 begin
   raise ESynException.CreateUtf8(
     '%.AddJsonReformat unimplemented: use TTextWriter', [self]);
+end;
+
+procedure TBaseWriter.Add(P: PUtf8Char; Escape: TTextWriterKind);
+begin
+  raise ESynException.CreateUtf8(
+    '%.Add(..,Escape: TTextWriterKind) unimplemented: use TTextWriter', [self]);
+end;
+
+procedure TBaseWriter.Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind);
+begin
+  raise ESynException.CreateUtf8(
+    '%.Add(..,Escape: TTextWriterKind) unimplemented: use TTextWriter', [self]);
+end;
+
+procedure TBaseWriter.WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
+begin
+  raise ESynException.CreateUtf8(
+    '%.WrBase64() unimplemented: use TTextWriter', [self]);
 end;
 
 procedure TBaseWriter.AddShorter(const Text: TShort8);

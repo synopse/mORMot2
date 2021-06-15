@@ -737,13 +737,11 @@ type
     /// write some #0 ended UTF-8 text, according to the specified format
     // - if Escape is a constant, consider calling directly AddNoJsonEscape,
     // AddJsonEscape or AddOnSameLine methods
-    procedure Add(P: PUtf8Char; Escape: TTextWriterKind); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure Add(P: PUtf8Char; Escape: TTextWriterKind); override;
     /// write some #0 ended UTF-8 text, according to the specified format
     // - if Escape is a constant, consider calling directly AddNoJsonEscape,
     // AddJsonEscape or AddOnSameLine methods
-    procedure Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind); override;
     /// write some #0 ended Unicode text as UTF-8, according to the specified format
     // - if Escape is a constant, consider calling directly AddNoJsonEscapeW,
     // AddJsonEscapeW or AddOnSameLineW methods
@@ -768,7 +766,7 @@ type
       Escape: TTextWriterKind; CodePage: integer);
     /// write some data Base64 encoded
     // - if withMagic is TRUE, will write as '"\uFFF0base64encodedbinary"'
-    procedure WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
+    procedure WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean); override;
     /// write some binary-saved data with Base64 encoding
     // - if withMagic is TRUE, will write as '"\uFFF0base64encodedbinary"'
     // - is a wrapper around BinarySave() and WrBase64()
