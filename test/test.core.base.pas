@@ -3336,6 +3336,7 @@ var
   i32: TIntegerDynArray;
   i64: TInt64DynArray;
   i, n: integer;
+  timer: TPrecisionTimer;
 begin
   check({%H-}i32 = nil);
   DeduplicateInteger(i32);
@@ -3449,6 +3450,17 @@ begin
     for i := 0 to high(i64) do
       check(i64[i] = i);
   end;
+  SetLength(i32, 100000);
+  n := 10;
+  repeat
+    FillRandom(pointer(i32), n);
+    timer.Start;
+    QuickSortInteger(pointer(i32), 0, n - 1);
+    NotifyTestSpeed('QuickSortInteger', n, 0, @timer, {onlylog=}true);
+    for i := 1 to n - 1 do
+      Check(i32[i - 1] <= i32[i]);
+    n := n * 10;
+  until n > length(i32);
 end;
 
 function TestAddFloatStr(const str: RawUtf8): RawUtf8;
