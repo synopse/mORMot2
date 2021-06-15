@@ -372,8 +372,10 @@ function JsonObjectsByPath(JsonObject, PropPath: PUtf8Char): RawUtf8;
 // modify the JSON input buffer
 // - is the reverse of the TTextWriter.AddJsonArraysAsJsonObject() method
 // - used e.g. by TSynDictionary.LoadFromJson
+// - returns the number of items parsed and stored into keys/values, -1 on
+// error parsing the input JSON buffer
 function JsonObjectAsJsonArrays(Json: PUtf8Char;
-  out keys, values: RawUtf8): boolean;
+  out keys, values: RawUtf8): integer;
 
 /// remove comments and trailing commas from a text buffer before passing
 // it to a JSON parser
@@ -1310,7 +1312,7 @@ type
     function KeyFullCompare(const A, B): integer;
     function GetCapacity: integer;
     procedure SetCapacity(const Value: integer);
-    function GetTimeOutSeconds: cardinal;
+    function GetTimeOutSeconds: cardinal; {$ifdef HASINLINE} inline; {$endif}
     procedure SetTimeOutSeconds(Value: cardinal);
   public
     /// initialize the dictionary storage, specifyng dynamic array keys/values
@@ -1397,6 +1399,10 @@ type
     // - returns TRUE if aKey was found, FALSE if no match exists
     // - this method is thread-safe
     function Exists(const aKey): boolean;
+    /// search for a value presence
+    // - returns TRUE if aValue was found, FALSE if no match exists
+    // - this method is thread-safe, but will use O(n) slow browsing
+    function ExistsValue(const aValue; aCompare: TDynArraySortCompare = nil): boolean;
     /// apply a specified event over all items stored in this dictionnary
     // - would browse the list in the adding order
     // - returns the number of times OnEach has been called
@@ -4075,16 +4081,18 @@ begin
   end;
 end;
 
-function JsonObjectAsJsonArrays(Json: PUtf8Char; out keys, values: RawUtf8): boolean;
+function JsonObjectAsJsonArrays(Json: PUtf8Char; out keys, values: RawUtf8): integer;
 var
   wk, wv: TBaseWriter;
   kb, ke, vb, ve: PUtf8Char;
   temp1, temp2: TTextWriterStackBuffer;
+  n: integer;
 begin
-  result := false;
+  result := -1;
   if (Json = nil) or
      (Json^ <> '{') then
     exit;
+  n := 0;
   wk := TBaseWriter.CreateOwnedStream(temp1);
   wv := TBaseWriter.CreateOwnedStream(temp2);
   try
@@ -4106,6 +4114,7 @@ begin
       wv.AddNoJsonEscape(vb, ve - vb);
       wv.AddComma;
       kb := ve + 1;
+      inc(n);
     until ve^ = '}';
     wk.CancelLastComma;
     wk.Add(']');
@@ -4113,7 +4122,7 @@ begin
     wv.CancelLastComma;
     wv.Add(']');
     wv.SetText(values);
-    result := true;
+    result := n; // success
   finally
     wv.Free;
     wk.Free;
@@ -8283,6 +8292,7 @@ begin
 end;
 
 
+
 { TSynCache }
 
 constructor TSynCache.Create(aMaxCacheRamUsed: cardinal;
@@ -8910,6 +8920,19 @@ begin
   end;
 end;
 
+function TSynDictionary.ExistsValue(
+  const aValue; aCompare: TDynArraySortCompare): boolean;
+begin
+  if not (doSingleThreaded in fOptions) then
+    fSafe.Lock;
+  try
+    result := fValues.Find(aValue, aCompare) >= 0;
+  finally
+    if not (doSingleThreaded in fOptions) then
+      fSafe.UnLock;
+  end;
+end;
+
 procedure TSynDictionary.CopyValues(out Dest; ObjArrayByRef: boolean);
 begin
   if not (doSingleThreaded in fOptions) then
@@ -9072,16 +9095,19 @@ function TSynDictionary.LoadFromJson(Json: PUtf8Char;
   CustomVariantOptions: PDocVariantOptions): boolean;
 var
   k, v: RawUtf8; // private copy of the Json input, expanded as Keys/Values arrays
+  n: integer;
 begin
   result := false;
-  if not JsonObjectAsJsonArrays(Json, k, v) then
+  n := JsonObjectAsJsonArrays(Json, k, v);
+  if n <= 0 then
     exit;
   if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
   try
     if (fKeys.LoadFromJson(pointer(k), nil, CustomVariantOptions) <> nil) and
+       (fKeys.Count = n) and
        (fValues.LoadFromJson(pointer(v), nil, CustomVariantOptions) <> nil) and
-       (fKeys.Count = fValues.Count) then
+       (fValues.Count = n) then
       begin
         SetTimeouts;
         fKeys.Rehash; // warning: duplicated keys won't be identified
