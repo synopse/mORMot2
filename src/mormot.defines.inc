@@ -290,6 +290,7 @@
 
   {$ifdef FPC_NEWRTTI}
     {$define ISDELPHI2010_OR_FPC_NEWRTTI}
+    {$define HASGENERICS}
   {$else}
     {$define DELPHI_OR_FPC_OLDRTTI}
     {$define FPC_OLDRTTI}
@@ -405,6 +406,7 @@
     {$if CompilerVersion >= 21.0}
       {$define HASSAFEINLINE} // Delphi 2007 has sometimes troubles inlining :(
       {$define ISDELPHI2010}
+      {$define HASGENERICS}
       {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
       {$define ISDELPHI2010_OR_FPC_NEWRTTI}
       {$define HASTTHREADSTART}

@@ -128,6 +128,11 @@ JSON functions shared by all framework units
 - JSON Serialization Wrapper Functions
 - Abstract Classes with Auto-Create-Fields
 
+### mormot.core.collections
+
+Generics Collections as used by all framework units
+- JSON-aware Generics `TSynKeyValue<>` Dictionary Storage
+
 ### mormot.core.variants
 
 `Variant` / `TDocVariant` feature shared by all framework units
