@@ -4467,7 +4467,7 @@ begin
         for i := 0 to MethodsCount - 1 do
         begin
           fFakeVTable[i + RESERVED_VTABLE_SLOTS] := P;
-          {$ifdef CPUX64}
+          {$ifdef CPUX64}   { TODO: generate a JIT jmp instead of push + ret }
           PWord(P)^ := $b848;
           inc(PWord(P));           // mov rax,offset x64FakeStub
           PPtrUInt(P)^ := PtrUInt(@x64FakeStub);
