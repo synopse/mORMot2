@@ -1651,7 +1651,7 @@ type
     function ItemCompare(A, B: pointer; CaseInSensitive: boolean = false): integer;
     /// will reset the element content
     procedure ItemClear(Item: pointer);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     /// will copy one element content
     procedure ItemCopy(Source, Dest: pointer);
       {$ifdef HASINLINE}inline;{$endif}

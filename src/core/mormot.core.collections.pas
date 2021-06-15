@@ -117,15 +117,14 @@ type
   protected
     fData: TSynDictionary;
     fOptions: TSynKeyValueOptions;
-    procedure RaiseException(const msg: ShortString); overload;
-    procedure RaiseException(const fmt: RawUtf8; const args: array of const); overload;
+    procedure RaiseException(const fmt: RawUtf8; const args: array of const);
     // some property accessors
     function GetItem(const key: TKey): TValue;
-    procedure SetItem(const key: TKey; const value: TValue); inline;
-    function GetCapacity: integer; inline;
-    procedure SetCapacity(value: integer); inline;
-    function GetTimeOutSeconds: cardinal; inline;
-    procedure SetTimeOutSeconds(value: cardinal); inline;
+    procedure SetItem(const key: TKey; const value: TValue);
+    function GetCapacity: integer;
+    procedure SetCapacity(value: integer);
+    function GetTimeOutSeconds: cardinal;
+    procedure SetTimeOutSeconds(value: cardinal);
   public
     /// initialize the dictionary storage, specifyng dynamic array keys/values
     // - you will need to provide the dynamic arrays TypeInfo() of TKey/TValue
@@ -146,14 +145,14 @@ type
     /// add a key/value pair to be unique
     // - raise an EKeyValue if key was already set
     // - use default Items[] property to add or replace a key/value pair
-    procedure Add(const key: TKey; const value: TValue); inline;
+    procedure Add(const key: TKey; const value: TValue);
     /// add a key/value pair if key is not existing
     // - returns true if was added, false if key was already set
     // - use default Items[] property to add or replace a key/value pair
-    function TryAdd(const key: TKey; const value: TValue): boolean; inline;
+    function TryAdd(const key: TKey; const value: TValue): boolean;
     /// search a key and return the associated key pair
     // - returns true if the key was found, false otherwise
-    function TryGetValue(const key: TKey; var value: TValue): boolean; inline;
+    function TryGetValue(const key: TKey; var value: TValue): boolean;
     /// search a key and return the associated key pair or its default value
     function GetValueOrDefault(const key: TKey): TValue; overload;
     /// search a key and return the associated key pair or a supplied default value
@@ -161,20 +160,20 @@ type
       const defaultValue: TValue): TValue; overload;
     /// remove a key/value pair
     // - returns true if the entry was deleted, false if key was not found
-    function Remove(const key: TKey): boolean; inline;
+    function Remove(const key: TKey): boolean;
     /// search a key, get the associated value, then delete the key/value pair
-    function Extract(const key: TKey; var value: TValue): boolean; inline;
+    function Extract(const key: TKey; var value: TValue): boolean;
     /// search for a key/value pair from a key
     // - returns true if the key was found, false otherwise
-    function ContainsKey(const key: TKey): boolean; inline;
+    function ContainsKey(const key: TKey): boolean;
     /// search for a key/value pair from a value
     // - returns true if the value was found, false otherwise
-    function ContainsValue(const value: TValue): boolean; inline;
+    function ContainsValue(const value: TValue): boolean;
     /// search and delete all deprecated items according to TimeoutSeconds
     // - returns how many items have been deleted
     // - you can call this method very often: it will ensure that the
     // search process will take place at most once every second
-    function DeleteDeprecated: integer; inline;
+    function DeleteDeprecated: integer;
     /// delete all stored key/value pairs
     procedure Clear; overload;
     /// delete one stored key/value pairs from its key
@@ -186,7 +185,7 @@ type
     property Items[const key: TKey]: TValue
       read GetItem write SetItem; default;
     /// returns the number of key/value pairs actually stored
-    function Count: integer; inline;
+    function Count: integer;
     /// returns the internal TSynDictionary capacity
     property Capacity: integer
       read GetCapacity write SetCapacity;
@@ -199,12 +198,14 @@ type
     // manually access its content
     // - you can use e.g. Data.SaveToJson/SaveToBinary and
     // Data.LoadFromJson/LoadFromBinary
-    function Data: TSynDictionary; inline;
+    function Data: TSynDictionary;
     /// low-level access to the TSynKeyValueOptions as supplied to Create()
     property Options: TSynKeyValueOptions
       read fOptions;
   end;
 
+
+type
   // some convenient aliases to most useful TSynKeyValue<TKey, TValue> types
   IIntegerRawUtf8 = IKeyValue<Integer, RawUtf8>;
   IInt64RawUtf8 = IKeyValue<Int64, RawUtf8>;
@@ -218,34 +219,32 @@ type
   IGuidInt64 = IKeyValue<TGuid, Int64>;
   IGuidRawUtf8 = IKeyValue<TGuid, RawUtf8>;
 
-
 /// generate a new TSynKeyValue<integer, RawUtf8> dictionary instance
-function NewIntegerRawUtf8(options: TSynKeyValueOptions = []): IIntegerRawUtf8;
+function NewIntegerRawUtf8(options: TSynKeyValueOptions = []): TSynKeyValue<Integer, RawUtf8>;
 
 /// generate a new TSynKeyValue<Int64, RawUtf8> dictionary instance
-function NewInt64RawUtf8(options: TSynKeyValueOptions = []): IInt64RawUtf8;
+function NewInt64RawUtf8(options: TSynKeyValueOptions = []): TSynKeyValue<Int64, RawUtf8>;
 
 /// generate a new TSynKeyValue<RawUtf8, Integer> dictionary instance
-function NewRawUtf8Integer(options: TSynKeyValueOptions = []): IRawUtf8Integer;
+function NewRawUtf8Integer(options: TSynKeyValueOptions = []): TSynKeyValue<RawUtf8, Integer>;
 
 /// generate a new TSynKeyValue<RawUtf8, Int64> dictionary instance
-function NewRawUtf8Int64(options: TSynKeyValueOptions = []): IRawUtf8Int64;
+function NewRawUtf8Int64(options: TSynKeyValueOptions = []): TSynKeyValue<RawUtf8, Int64>;
 
 /// generate a new TSynKeyValue<RawUtf8, RawUtf8> dictionary instance
-function NewRawUtf8RawUtf8(options: TSynKeyValueOptions = []): IRawUtf8RawUtf8;
+function NewRawUtf8RawUtf8(options: TSynKeyValueOptions = []): TSynKeyValue<RawUtf8, RawUtf8>;
 
 /// generate a new TSynKeyValue<RawUtf8, String> dictionary instance
-function NewRawUtf8String(options: TSynKeyValueOptions = []): IRawUtf8String;
+function NewRawUtf8String(options: TSynKeyValueOptions = []): TSynKeyValue<RawUtf8, String>;
 
 /// generate a new TSynKeyValue<TGuid, Integer> dictionary instance
-function NewGuidInteger(options: TSynKeyValueOptions = []): IGuidInteger;
+function NewGuidInteger(options: TSynKeyValueOptions = []): TSynKeyValue<TGuid, Integer>;
 
 /// generate a new TSynKeyValue<TGuid, Int64> dictionary instance
-function NewGuidInt64(options: TSynKeyValueOptions = []): IGuidInt64;
+function NewGuidInt64(options: TSynKeyValueOptions = []): TSynKeyValue<TGuid, Int64>;
 
 /// generate a new TSynKeyValue<TGuid, RawUtf8> dictionary instance
-function NewGuidRawUtf8(options: TSynKeyValueOptions = []): IGuidRawUtf8;
-
+function NewGuidRawUtf8(options: TSynKeyValueOptions = []): TSynKeyValue<TGuid, RawUtf8>;
 
 
 implementation
@@ -263,10 +262,10 @@ begin
   fOptions := aOptions;
   if (aKeyDynArrayTypeInfo = nil) or
      (aKeyDynArrayTypeInfo^.Kind <> rkDynArray) then
-     RaiseException('Create: TKey should be a dynamic array');
+     RaiseException('Create: TKey should be a dynamic array', []);
   if (aValueDynArrayTypeInfo = nil) or
      (aValueDynArrayTypeInfo^.Kind <> rkDynArray) then
-     RaiseException('Create: TValue should be a dynamic array');
+     RaiseException('Create: TValue should be a dynamic array', []);
   fData := TSynDictionary.Create(aKeyDynArrayTypeInfo, aValueDynArrayTypeInfo,
     kvoKeyCaseInsensitive in aOptions, aTimeoutSeconds, aCompressAlgo, aHasher);
   if fData.Keys.Info.Cache.ItemInfo <> TypeInfo(TKey) then
@@ -285,25 +284,55 @@ begin
   fData.Free;
 end;
 
-procedure TSynKeyValue<TKey, TValue>.RaiseException(const msg: ShortString);
-begin
-  raise EKeyValue.CreateUtf8('TSynKeyValue<%, %>.%',
-    [PRttiInfo(TypeInfo(TKey))^.Name, PRttiInfo(TypeInfo(TValue))^.Name, msg]);
-end;
-
 procedure TSynKeyValue<TKey, TValue>.RaiseException(const fmt: RawUtf8;
   const args: array of const);
 var
   msg: ShortString;
 begin
   FormatShort(fmt, args, msg);
-  RaiseException(msg);
+  raise EKeyValue.CreateUtf8('TSynKeyValue<%, %>.%',
+    [PRttiInfo(TypeInfo(TKey))^.Name, PRttiInfo(TypeInfo(TValue))^.Name, msg]);
+end;
+
+function TSynKeyValue<TKey, TValue>.GetItem(const key: TKey): TValue;
+begin
+  if not fData.FindAndCopy(key, result) then
+    if kvoDefaultIfNotFound in fOptions then
+      fData.Values.ItemClear(@result)
+    else
+      RaiseException('GetItem: key not found', []);
+end;
+
+procedure TSynKeyValue<TKey, TValue>.SetItem(const key: TKey;
+  const value: TValue);
+begin
+  fData.AddOrUpdate(key, value);
+end;
+
+function TSynKeyValue<TKey, TValue>.GetCapacity: integer;
+begin
+  result := fData.Capacity;
+end;
+
+procedure TSynKeyValue<TKey, TValue>.SetCapacity(value: integer);
+begin
+  fData.Capacity := value;
+end;
+
+function TSynKeyValue<TKey, TValue>.GetTimeOutSeconds: cardinal;
+begin
+  result := fData.TimeOutSeconds;
+end;
+
+procedure TSynKeyValue<TKey, TValue>.SetTimeOutSeconds(value: cardinal);
+begin
+  fData.TimeOutSeconds := value;
 end;
 
 procedure TSynKeyValue<TKey, TValue>.Add(const key: TKey; const value: TValue);
 begin
   if fData.Add(key, value) < 0 then
-    RaiseException('Add: duplicated key');
+    RaiseException('Add: duplicated key', []);
 end;
 
 function TSynKeyValue<TKey, TValue>.TryAdd(const key: TKey;
@@ -372,96 +401,61 @@ begin
   result := fData.Count;
 end;
 
-function TSynKeyValue<TKey, TValue>.GetTimeOutSeconds: cardinal;
-begin
-  result := fData.TimeOutSeconds;
-end;
-
-procedure TSynKeyValue<TKey, TValue>.SetTimeOutSeconds(value: cardinal);
-begin
-  fData.TimeOutSeconds := value;
-end;
-
 function TSynKeyValue<TKey, TValue>.Data: TSynDictionary;
 begin
   result := fData;
 end;
 
-function TSynKeyValue<TKey, TValue>.GetItem(const key: TKey): TValue;
-begin
-  if not fData.FindAndCopy(key, result) then
-    if kvoDefaultIfNotFound in fOptions then
-      fData.Values.ItemClear(@result)
-    else
-      RaiseException('GetItem: key not found');
-end;
 
-procedure TSynKeyValue<TKey, TValue>.SetItem(const key: TKey;
-  const value: TValue);
-begin
-  fData.AddOrUpdate(key, value);
-end;
-
-function TSynKeyValue<TKey, TValue>.GetCapacity: integer;
-begin
-  result := fData.Capacity;
-end;
-
-procedure TSynKeyValue<TKey, TValue>.SetCapacity(value: integer);
-begin
-  fData.Capacity := value;
-end;
-
-
-function NewIntegerRawUtf8(options: TSynKeyValueOptions): IIntegerRawUtf8;
+function NewIntegerRawUtf8(options: TSynKeyValueOptions): TSynKeyValue<Integer, RawUtf8>;
 begin
   result := TSynKeyValue<Integer, RawUtf8>.Create(TypeInfo(TIntegerDynArray),
     TypeInfo(TRawUtf8DynArray), options);
 end;
 
-function NewInt64RawUtf8(options: TSynKeyValueOptions): IInt64RawUtf8;
+function NewInt64RawUtf8(options: TSynKeyValueOptions): TSynKeyValue<Int64, RawUtf8>;
 begin
   result := TSynKeyValue<Int64, RawUtf8>.Create(TypeInfo(TInt64DynArray),
     TypeInfo(TRawUtf8DynArray), options);
 end;
 
-function NewRawUtf8RawUtf8(options: TSynKeyValueOptions): IRawUtf8RawUtf8;
+function NewRawUtf8RawUtf8(options: TSynKeyValueOptions): TSynKeyValue<RawUtf8, RawUtf8>;
 begin
   result := TSynKeyValue<RawUtf8, RawUtf8>.Create(TypeInfo(TRawUtf8DynArray),
     TypeInfo(TRawUtf8DynArray), options);
 end;
 
-function NewRawUtf8Integer(options: TSynKeyValueOptions): IRawUtf8Integer;
+function NewRawUtf8Integer(options: TSynKeyValueOptions): TSynKeyValue<RawUtf8, Integer>;
 begin
   result := TSynKeyValue<RawUtf8, Integer>.Create(TypeInfo(TRawUtf8DynArray),
     TypeInfo(TIntegerDynArray), options);
 end;
 
-function NewRawUtf8Int64(options: TSynKeyValueOptions): IRawUtf8Int64;
+function NewRawUtf8Int64(options: TSynKeyValueOptions): TSynKeyValue<RawUtf8, Int64>;
 begin
   result := TSynKeyValue<RawUtf8, Int64>.Create(TypeInfo(TRawUtf8DynArray),
     TypeInfo(TInt64DynArray), options);
 end;
 
-function NewRawUtf8String(options: TSynKeyValueOptions): IRawUtf8String;
+function NewRawUtf8String(options: TSynKeyValueOptions): TSynKeyValue<RawUtf8, String>;
 begin
   result := TSynKeyValue<RawUtf8, String>.Create(TypeInfo(TRawUtf8DynArray),
     TypeInfo(TStringDynArray), options);
 end;
 
-function NewGuidInteger(options: TSynKeyValueOptions): IGuidInteger;
+function NewGuidInteger(options: TSynKeyValueOptions): TSynKeyValue<TGuid, Integer>;
 begin
   result := TSynKeyValue<TGuid, Integer>.Create(TypeInfo(TGuidDynArray),
     TypeInfo(TIntegerDynArray), options);
 end;
 
-function NewGuidInt64(options: TSynKeyValueOptions): IGuidInt64;
+function NewGuidInt64(options: TSynKeyValueOptions): TSynKeyValue<TGuid, Int64>;
 begin
   result := TSynKeyValue<TGuid, Int64>.Create(TypeInfo(TGuidDynArray),
     TypeInfo(TInt64DynArray), options);
 end;
 
-function NewGuidRawUtf8(options: TSynKeyValueOptions): IGuidRawUtf8;
+function NewGuidRawUtf8(options: TSynKeyValueOptions): TSynKeyValue<TGuid, RawUtf8>;
 begin
   result := TSynKeyValue<TGuid, RawUtf8>.Create(TypeInfo(TGuidDynArray),
     TypeInfo(TRawUtf8DynArray), options);
@@ -470,6 +464,7 @@ end;
 {$else}
 implementation
 {$endif HASGENERICS} // do-nothing unit on oldest compilers
+
 
 
 end.
