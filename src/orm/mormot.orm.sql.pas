@@ -460,7 +460,7 @@ type
 
 /// register all tables of the model to be external, with some options
 // - by default, all tables are handled by the SQLite3 engine, unless they
-// are explicitely declared as external via VirtualTableExternalRegister: this
+// are explicitly declared as external via VirtualTableExternalRegister: this
 // function can be used to register all tables to be handled by an external DBs
 // - this function shall be called BEFORE TRestServer.Create (the server-side
 // ORM must know if the database is to be managed as internal or external)

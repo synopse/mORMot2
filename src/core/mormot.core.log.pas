@@ -1347,7 +1347,7 @@ type
   // (i.e. will fill EventLevel[] for each line <> sllNone)
   // - Count is not the global text line numbers, but the number of valid events
   // within the file (LinePointers/Line/Strings will contain only event lines) -
-  // it will not be a concern, since the .log header is parsed explicitely
+  // it will not be a concern, since the .log header is parsed explicitly
   TSynLogFile = class(TMemoryMapText)
   protected
     /// map the events occurring in the .log file content

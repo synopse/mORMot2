@@ -1510,7 +1510,7 @@ begin
   S.DenyAllByName(['Supervisor']);
   Test([1, 2, 3, 4, 5], 'this group name won''t affect the current Admin user');
   S.DenyAllByName(['Supervisor', 'Admin']);
-  Test([], 'Admin group user was explicitely denied access');
+  Test([], 'Admin group user was explicitly denied access');
   S.AllowAllByName(['Admin']);
   Test([1, 2, 3, 4, 5], 'restore allowed for current Admin user');
   S.AllowAll;

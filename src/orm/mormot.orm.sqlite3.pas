@@ -68,7 +68,7 @@ type
     /// Execute a SQL statement, and init TOrmTable fields
     // - FieldCount=0 if no result is returned
     // - the BLOB data is converted into TEXT: you have to retrieve it with
-    //  a special request explicitely (note that JSON format returns BLOB data)
+    //  a special request explicitly (note that JSON format returns BLOB data)
     // - uses a TOrmTableJson internally: all currency is transformed to its
     // floating point TEXT representation, and allows efficient caching
     // - if the SQL statement is in the DB cache, it's retrieved from its
@@ -352,7 +352,7 @@ type
     destructor Destroy; override;
     /// Missing tables are created if they don't exist yet for every TOrm
     // class of the Database Model
-    // - you must call explicitely this before having called StaticDataCreate()
+    // - you must call explicitly this before having called StaticDataCreate()
     // - all table description (even Unique feature) is retrieved from the Model
     // - this method also create additional fields, if the TOrm definition
     // has been modified; only field adding is available, field renaming or

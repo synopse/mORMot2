@@ -740,7 +740,7 @@ type
     // - if you override this contructor, put the AddUrl() methods within,
     // and you can set CreateSuspended to FALSE
     // - if you will call AddUrl() methods later, set CreateSuspended to TRUE,
-    // then call explicitely the Resume method, after all AddUrl() calls, in
+    // then call explicitly the Resume method, after all AddUrl() calls, in
     // order to start the server
     constructor Create(CreateSuspended: boolean; QueueName: SynUnicode = '';
       const OnStart: TOnNotifyThread = nil; const OnStop: TOnNotifyThread = nil;

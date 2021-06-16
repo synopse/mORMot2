@@ -1388,13 +1388,13 @@ type
     // - will update the associated timeout value of the entry, unless
     // aUpdateTimeOut is set to false
     function FindAndCopy(const aKey;
-      out aValue; aUpdateTimeOut: boolean = true): boolean;
+      var aValue; aUpdateTimeOut: boolean = true): boolean;
     /// search of a stored value by its primary key, then delete and return it
     // - returns TRUE if aKey was found, fill aValue with its content,
     // and delete the entry in the internal storage
     // - so this method is thread-safe
     // - returns FALSE if no match exists
-    function FindAndExtract(const aKey; out aValue): boolean;
+    function FindAndExtract(const aKey; var aValue): boolean;
     /// search for a primary key presence
     // - returns TRUE if aKey was found, FALSE if no match exists
     // - this method is thread-safe
@@ -2018,7 +2018,7 @@ function DynArrayLoadJson(var Value; const Json: RawUtf8;
 // TRttiJson.RegisterCustomSerializer() class method
 // - set Valid=TRUE on success, Valid=FALSE on error, and the main function
 // will point in From at the syntax error place (e.g. on any unknown property name)
-// - caller should explicitely perform a SetDefaultValuesObject(Value) if
+// - caller should explicitly perform a SetDefaultValuesObject(Value) if
 // the default values are expected to be set before JSON parsing
 function JsonToObject(var ObjectInstance; From: PUtf8Char;
   out Valid: boolean; TObjectListItemClass: TClass = nil;
@@ -8860,7 +8860,7 @@ begin
 end;
 
 function TSynDictionary.FindAndCopy(const aKey;
-  out aValue; aUpdateTimeOut: boolean): boolean;
+  var aValue; aUpdateTimeOut: boolean): boolean;
 var
   ndx: integer;
 begin
@@ -8881,7 +8881,7 @@ begin
   end;
 end;
 
-function TSynDictionary.FindAndExtract(const aKey; out aValue): boolean;
+function TSynDictionary.FindAndExtract(const aKey; var aValue): boolean;
 var
   ndx: integer;
 begin

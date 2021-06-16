@@ -259,7 +259,7 @@ type
   // will change this field value: manual SQL statements (like
   // 'UPDATE Table SET Column=0') won't change its content; note also that
   // this is automated on Delphi client side, so only within TOrm ORM use
-  // (a pure AJAX application should fill such fields explicitely before sending)
+  // (a pure AJAX application should fill such fields explicitly before sending)
   // - oftCreateTime is an INTEGER field containing the TCreateTime time
   // of the record creation; TCreateTime (just like TTimeLog or TModTime)
   // published property can be typecasted to the TTimeLogBits memory structure;
@@ -271,7 +271,7 @@ type
   // will set this field value: manual SQL statements (like
   // 'INSERT INTO Table ...') won't set its content; note also that this is
   // automated on Delphi client side, so only within TOrm ORM use (a
-  // pure AJAX application should fill such fields explicitely before sending)
+  // pure AJAX application should fill such fields explicitly before sending)
   // - oftTID is an INTEGER field containing a TID pointing to another record;
   // since regular TOrm published properties (i.e. oftID kind of field)
   // can not be greater than 2,147,483,647 (i.e. a signed 32-bit value) under
@@ -293,7 +293,7 @@ type
   // only RESTful PUT/POST access will change this field value: manual SQL
   // statements (like 'UPDATE Table SET Column=0') won't change its content;
   // this is automated on Delphi client side, so only within TOrm ORM use
-  // (a pure AJAX application should fill such fields explicitely before sending)
+  // (a pure AJAX application should fill such fields explicitly before sending)
   // - oftUnixTime is an INTEGER field for coding a date and time as second-based
   // Unix Time (SQLite3 compatible), which should be defined as TUnixTime=Int64
   // TOrm property
@@ -2364,7 +2364,7 @@ type
       ForceID: boolean = false; DoNotAutoComputeFields: boolean = false): TID;
     /// create a new member, from a supplied list of field values
     // - implements REST POST collection
-    // - the aSimpleFields parameters must follow explicitely the order of published
+    // - the aSimpleFields parameters must follow explicitly the order of published
     // properties of the supplied aTable class, excepting the RawBlob and
     // TOrmMany kind (i.e. only so called "simple fields")
     // - the aSimpleFields must have exactly the same count of parameters as
@@ -2401,7 +2401,7 @@ type
       DoNotAutoComputeFields: boolean = false): boolean; overload;
     /// update a member from a supplied list of simple field values
     // - implements REST PUT collection
-    // - the aSimpleFields parameters MUST follow explicitely both count and
+    // - the aSimpleFields parameters MUST follow explicitly both count and
     // order of published properties of the supplied aTable class, excepting the
     // RawBlob and TOrmMany kind (i.e. only so called "simple fields")
     // - return true on success
@@ -2997,7 +2997,7 @@ type
     ['{F8FB2109-5629-4DFB-A74C-7A0F86F91362}']
     /// missing tables are created if they don't exist yet for every TOrm
     // class of the Database Model
-    // - you must call explicitely this before having called StaticDataCreate()
+    // - you must call explicitly this before having called StaticDataCreate()
     // - all table description (even Unique feature) is retrieved from the Model
     // - this method should also create additional fields, if the TOrm definition
     // has been modified; only field adding is mandatory, field renaming or
@@ -3487,7 +3487,7 @@ type
     constructor Create; overload; override;
     /// this constructor initializes the record and set the simple fields
     // with the supplied values
-    // - the aSimpleFields parameters must follow explicitely the order of
+    // - the aSimpleFields parameters must follow explicitly the order of
     // published properties of the aTable class, excepting the RawBlob and
     // TOrmMany kind (i.e. only so called "simple fields") - in
     // particular, parent properties must appear first in the list
@@ -3732,7 +3732,7 @@ type
     // $ where c.id=cc.dest and cc.source=p.id and
     // $  s.id=ss.dest and ss.source=p.id and
     // $  p.Owner='mark' and c.Name='for boy' and (s.Name='small' or s.Name='medium')
-    // - you SHALL call explicitely the FillClose method before using any
+    // - you SHALL call explicitly the FillClose method before using any
     // methods of nested TOrmMany instances which may override the Dest
     // instance content (e.g. ManySelect) to avoid any GPF
     // - the aFormatSQLJoin clause will replace all '%' chars with the supplied
@@ -4067,7 +4067,7 @@ type
     // - the FormatSqlWhere clause will replace all '%' chars with the supplied
     // ParamsSqlWhere[] supplied values, and bind all '?' chars as parameters
     // with BoundsSqlWhere[] values
-    // - you SHALL call explicitely the FillClose method before using any
+    // - you SHALL call explicitly the FillClose method before using any
     // methods of nested TOrmMany instances which may override the Dest
     // instance content (e.g. ManySelect) to avoid any GPF
     // - is used by TOrm.CreateAndFillPrepareMany constructor
@@ -4189,7 +4189,7 @@ type
     // - '' will leave the content untouched, '*' will clear all simple fields
     procedure ClearProperties(const aFieldsCsv: RawUtf8); overload;
     /// set the simple fields with the supplied values
-    // - the aSimpleFields parameters must follow explicitely the order of published
+    // - the aSimpleFields parameters must follow explicitly the order of published
     // properties of the supplied aTable class, excepting the RawBlob and
     // TOrmMany kind (i.e. only so called "simple fields") - in particular,
     // parent properties must appear first in the list

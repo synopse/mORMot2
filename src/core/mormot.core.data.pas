@@ -1622,7 +1622,7 @@ type
     // slower and more error prone method (such pointer access lacks of strong
     // typing abilities), which is designed for TDynArray abstract/internal use
     function ItemPtr(index: PtrInt): pointer;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     /// just a convenient wrapper of Info.Cache.ItemSize
     function ItemSize: PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1654,7 +1654,7 @@ type
       {$ifdef FPC}inline;{$endif}
     /// will copy one element content
     procedure ItemCopy(Source, Dest: pointer);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     /// will copy the first field value of an array element
     // - will use the array KnownType to guess the copy routine to use
     // - returns false if the type information is not enough for a safe copy
@@ -1931,6 +1931,7 @@ type
     // - will call fHashItem(Item,fHasher) to compute the needed hash
     // - returns -1 if not found, or the index in the dynamic array if found
     function FindHashed(const Item): integer;
+      {$ifdef FPC} inline; {$endif}
     /// search for an element value inside the dynamic array using its hash
     // - returns -1 if not found, or the index in the dynamic array if found
     // - aHashCode parameter constains an already hashed value of the item,

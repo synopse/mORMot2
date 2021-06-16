@@ -186,7 +186,7 @@ type
     procedure EndCurrentThread(Sender: TThread); override;
     /// missing tables are created if they don't exist yet for every TOrm
     // class of the Database Model
-    // - you must call explicitely this before having called StaticDataCreate()
+    // - you must call explicitly this before having called StaticDataCreate()
     // - all table description (even Unique feature) is retrieved from the Model
     // - this method should also create additional fields, if the TOrm definition
     // has been modified; only field adding is mandatory, field renaming or

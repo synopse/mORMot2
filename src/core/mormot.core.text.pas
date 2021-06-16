@@ -127,7 +127,7 @@ procedure FillZero(var secret: RawByteString); overload;
 procedure FillZero(var secret: RawUtf8); overload;
 
 /// fill all bytes of this UTF-8 string with zeros, i.e. 'toto' -> #0#0#0#0
-// - SpiUtf8 type has been defined explicitely to store Sensitive Personal
+// - SpiUtf8 type has been defined explicitly to store Sensitive Personal
 // Information
 procedure FillZero(var secret: SpiUtf8); overload;
 

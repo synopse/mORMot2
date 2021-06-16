@@ -803,7 +803,7 @@ type
   // $ netsh winhttp import proxy source=ie
   // to use the current user's proxy settings for Internet Explorer (under 64-bit
   // Vista/Seven, to configure applications using the 32 bit WinHttp settings,
-  // call netsh or proxycfg bits from %SystemRoot%\SysWOW64 folder explicitely)
+  // call netsh or proxycfg bits from %SystemRoot%\SysWOW64 folder explicitly)
   // - Microsoft Windows HTTP Services (WinHttp) is targeted at middle-tier and
   // back-end server applications that require access to an HTTP client stack
   TWinHttp = class(TWinHttpApi)

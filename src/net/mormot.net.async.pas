@@ -140,7 +140,7 @@ type
     function Start(connection: TObject): boolean; virtual;
     /// remove a connection from the internal poll, and shutdown its socket
     // - most of the time, the connection is released by OnClose when the other
-    // end shutdown the socket; but you can explicitely call this method when
+    // end shutdown the socket; but you can explicitly call this method when
     // the connection (and its socket) is to be shutdown
     // - this method won't call OnClose, since it is initiated by the class
     function Stop(connection: TObject): boolean; virtual;

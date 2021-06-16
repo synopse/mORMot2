@@ -1226,7 +1226,7 @@ function UpperCopy255(dest: PAnsiChar; const source: RawUtf8): PAnsiChar; overlo
 // array[byte] of AnsiChar on the caller stack)
 // - won't use SSE4.2 instructions on supported CPUs by default, which may read
 // some bytes beyond the s string, so should be avoided e.g. over memory mapped
-// files - call explicitely UpperCopy255BufSSE42() if you are confident on your input
+// files - call explicitly UpperCopy255BufSSE42() if you are confident on your input
 function UpperCopy255Buf(dest: PAnsiChar; source: PUtf8Char; sourceLen: PtrInt): PAnsiChar;
 
 /// copy source into dest^ with WinAnsi 8-bit upper case conversion
