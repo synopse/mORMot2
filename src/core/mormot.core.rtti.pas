@@ -1728,6 +1728,12 @@ function TypeInfoToStandardParserType(Info: PRttiInfo;
   FirstSearchByName: boolean = true;
   Complex: PRttiParserComplexType = nil): TRttiParserType; overload;
 
+/// recognize most simple types and return their known dynamic array RTTI
+// - returns nil if we don't know any dynamic array for this type
+// - ExpectExactElemInfo=true ensure that result's ArrayRtti.Info = ElemInfo
+function TypeInfoToDynArrayTypeInfo(ElemInfo: PRttiInfo;
+  ExpectExactElemInfo: boolean): PRttiInfo;
+
 /// recognize a simple value type from a dynamic array RTTI
 // - if ExactType=false, will approximate the first field
 function DynArrayTypeInfoToStandardParserType(
@@ -2223,6 +2229,8 @@ type
     /// efficient search of TRttiCustom from a given type name
     function Find(const Name: shortstring; Kinds: TRttiKinds = []): TRttiCustom;
        overload; {$ifdef HASINLINE}inline;{$endif}
+    /// manual search of any matching TRttiCustom.ArrayRtti type
+    function FindByArrayRtti(ElemInfo: PRttiInfo): TRttiCustom;
     /// register a given RTTI TypeInfo()
     // - returns a new (or existing if it was already registered) TRttiCustom
     // - if Info.Kind is rkDynArray, it will also register the nested rkRecord
@@ -5513,19 +5521,26 @@ begin
   case Info^.Kind of
     // FPC and Delphi will use a fast jmp table
     {$ifdef FPC} rkLStringOld, {$endif} rkLString:
-    begin
-      cp := Info^.AnsiStringCodePage;
-      if cp >= CP_RAWBLOB then
-        result := ptRawByteString
-      {$ifndef UNICODE}
-      else if (cp <> CP_UTF8) and
-              ((cp = CP_ACP) or
-               (cp = Unicode_CodePage)) then
-        result := ptString
-      {$endif UNICODE}
+      if (not FirstSearchByName) and
+         (Info = TypeInfo(RawJson)) then
+        result := ptRawJson
       else
-        result := ptRawUtf8;
-    end;
+      begin
+        cp := Info^.AnsiStringCodePage;
+        if cp = CP_UTF8 then
+          result := ptRawUtf8
+        else if cp = CODEPAGE_US then
+          result := ptWinAnsi
+        else if cp >= CP_RAWBLOB then
+          result := ptRawByteString
+        {$ifndef UNICODE}
+        else if (cp = CP_ACP) or
+                (cp = Unicode_CodePage) then
+          result := ptString
+        {$endif UNICODE}
+        else
+          result := ptRawUtf8; // fallback to UTF-8 string
+      end;
     rkWString:
       result := ptWideString;
   {$ifdef HASVARUSTRING}
@@ -5543,7 +5558,13 @@ begin
     rkDynArray:
       result := ptDynArray;
     rkRecord {$ifdef FPC}, rkObject {$endif}:
-      result := ptRecord;
+      {$ifndef HASNOSTATICRTTI}
+      if (not FirstSearchByName) and
+         (Info = TypeInfo(TGuid)) then
+        result := ptGuid
+      else
+      {$endif HASNOSTATICRTTI}
+        result := ptRecord;
     rkChar:
       result := ptByte;
     rkWChar:
@@ -5575,6 +5596,25 @@ begin
         result := ptQWord
       else
     {$endif FPC}
+      if FirstSearchByName then
+        result := ptInt64
+      else if Info = TypeInfo(TID) then
+      begin
+        result := ptOrm;
+        if Complex <> nil then
+          Complex^ := pctID;
+      end
+      else if Info = TypeInfo(TTimeLog) then
+      begin
+        result := ptTimeLog;
+        if Complex <> nil then
+          Complex^ := pctTimeLog;
+      end
+      else if Info = TypeInfo(TUnixTime) then
+        result := ptUnixTime
+      else if Info = TypeInfo(TUnixMSTime) then
+        result := ptUnixMSTime
+      else
         result := ptInt64;
   {$ifdef FPC}
     rkQWord:
@@ -5598,7 +5638,14 @@ begin
         rfSingle:
           result := ptSingle;
         rfDouble:
-          result := ptDouble;
+          if FirstSearchByName then
+            result := ptDouble
+          else if Info = TypeInfo(TDateTime) then
+            result := ptDateTime
+          else if Info = TypeInfo(TDateTimeMS) then
+            result := ptDateTimeMS
+          else
+            result := ptDouble;
         rfCurr:
           result := ptCurrency;
         rfExtended:
@@ -5629,6 +5676,34 @@ begin  // rough estimation
   else
     result := ptNone;
   end;
+end;
+
+var
+  PT_DYNARRAY: array[TRttiParserType] of pointer; // most simple dynamic arrays
+
+function TypeInfoToDynArrayTypeInfo(ElemInfo: PRttiInfo;
+  ExpectExactElemInfo: boolean): PRttiInfo;
+var
+  parser: TRttiParserType;
+  rc: TRttiCustom;
+begin
+  parser := TypeInfoToStandardParserType(ElemInfo, {byname=}false);
+  if parser = ptArray then
+    parser := SizeToDynArrayKind(ElemInfo^.ArraySize);
+  result := PT_DYNARRAY[parser];
+  if result <> nil then
+  begin
+    if (not ExpectExactElemInfo) or
+       (PT_INFO[parser] = ElemInfo) then
+      exit;
+    rc := Rtti.RegisterType(result);
+    if (rc.ArrayRtti <> nil) and
+       (rc.ArrayRtti.Info = ElemInfo) then
+      exit;
+  end;
+  rc := Rtti.FindByArrayRtti(ElemInfo);
+  if rc <> nil then
+    result := rc.Info;
 end;
 
 function DynArrayTypeInfoToStandardParserType(DynArrayInfo, ElemInfo: PRttiInfo;
@@ -7127,6 +7202,31 @@ begin
   result := Find(@Name[1], ord(Name[0]), Kinds);
 end;
 
+function TRttiCustomList.FindByArrayRtti(ElemInfo: PRttiInfo): TRttiCustom;
+var
+  i, j: PtrInt;
+  p: PPointerArray;
+begin
+  EnterCriticalSection(Lock);
+  try
+    if ElemInfo <> nil then
+      for i := 0 to high(Pairs[rkDynArray]) do
+      begin
+        p := pointer(Pairs[rkDynArray, i]); // TPointerDynArray
+        for j := 0 to (length(TPointerDynArray(p)) shr 1) - 1 do
+        begin
+          result := p[j * 2 + 1]; // PRttiInfo/TRttiCustom pairs
+          if (result.ArrayRtti <> nil) and
+             (result.ArrayRtti.Info = ElemInfo) then
+            exit;
+        end;
+      end;
+    result := nil;
+  finally
+    LeaveCriticalSection(Lock);
+  end;
+end;
+
 function TRttiCustomList.RegisterType(Info: PRttiInfo): TRttiCustom;
 begin
   if Info <> nil then
@@ -7709,8 +7809,10 @@ begin
   {$endif HASNOSTATICRTTI}
   {$ifdef HASVARUSTRING}
   PT_INFO[ptUnicodeString] := TypeInfo(UnicodeString);
+  PT_DYNARRAY[ptUnicodeString] := TypeInfo(TUnicodeStringDynArray);
   {$else}
   PT_INFO[ptUnicodeString] := TypeInfo(SynUnicode);
+  PT_DYNARRAY[ptUnicodeString] := TypeInfo(TSynUnicodeDynArray);
   {$endif HASVARUSTRING}
   PT_INFO[ptUnixTime] := TypeInfo(TUnixTime);
   PT_INFO[ptUnixMSTime] := TypeInfo(TUnixMSTime);
@@ -7733,6 +7835,35 @@ begin
   for t := succ(low(t)) to high(t) do
     if Assigned(PT_INFO[t]) = (t in (ptComplexTypes - [ptOrm, ptTimeLog])) then
       raise ERttiException.CreateUtf8('Unexpected PT_INFO[%]', [ToText(t)^]);
+  PT_DYNARRAY[ptBoolean] := TypeInfo(TBooleanDynArray);
+  PT_DYNARRAY[ptByte] := TypeInfo(TByteDynArray);
+  PT_DYNARRAY[ptCardinal] := TypeInfo(TCardinalDynArray);
+  PT_DYNARRAY[ptCurrency] := TypeInfo(TCurrencyDynArray);
+  PT_DYNARRAY[ptDouble] := TypeInfo(TDoubleDynArray);
+  PT_DYNARRAY[ptExtended] := TypeInfo(TExtendedDynArray);
+  PT_DYNARRAY[ptInt64] := TypeInfo(TInt64DynArray);
+  PT_DYNARRAY[ptInteger] := TypeInfo(TIntegerDynArray);
+  PT_DYNARRAY[ptQWord] := TypeInfo(TQWordDynArray);
+  PT_DYNARRAY[ptRawByteString] := TypeInfo(TRawByteStringDynArray);
+  PT_DYNARRAY[ptRawJson] := TypeInfo(TRawJsonDynArray);
+  PT_DYNARRAY[ptRawUtf8] := TypeInfo(TRawUtf8DynArray);
+  PT_DYNARRAY[ptSingle] := TypeInfo(TSingleDynArray);
+  PT_DYNARRAY[ptString] := TypeInfo(TStringDynArray);
+  PT_DYNARRAY[ptSynUnicode] := TypeInfo(TSynUnicodeDynArray);
+  PT_DYNARRAY[ptDateTime] := TypeInfo(TDateTimeDynArray);
+  PT_DYNARRAY[ptDateTimeMS] := TypeInfo(TDateTimeMSDynArray);
+  PT_DYNARRAY[ptGuid] := TypeInfo(TGuidDynArray);
+  PT_DYNARRAY[ptHash128] := TypeInfo(THash128DynArray);
+  PT_DYNARRAY[ptHash256] := TypeInfo(THash256DynArray);
+  PT_DYNARRAY[ptHash512] := TypeInfo(THash512DynArray);
+  PT_DYNARRAY[ptOrm] := TypeInfo(TIDDynArray);
+  PT_DYNARRAY[ptTimeLog] := TypeInfo(TTimeLogDynArray);
+  PT_DYNARRAY[ptUnixTime] := TypeInfo(TUnixTimeDynArray);
+  PT_DYNARRAY[ptUnixMSTime] := TypeInfo(TUnixMSTimeDynArray);
+  PT_DYNARRAY[ptVariant] := TypeInfo(TVariantDynArray);
+  PT_DYNARRAY[ptWideString] := TypeInfo(TWideStringDynArray);
+  PT_DYNARRAY[ptWinAnsi] := TypeInfo(TWinAnsiDynArray);
+  PT_DYNARRAY[ptWord] := TypeInfo(TWordDynArray);
   // prepare global thread-safe TRttiCustomList
   InitializeCriticalSection(Rtti.Lock);
   Rtti.GlobalClass := TRttiCustom;
