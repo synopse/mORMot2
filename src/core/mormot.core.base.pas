@@ -2277,18 +2277,19 @@ type
    cf_c16, cfPCID,  cfDCA,  cfSSE41, cfSSE42, cfX2A,  cfMOVBE, cfPOPCNT,
    cfTSC2, cfAESNI, cfXS,   cfOSXS,  cfAVX,   cfF16C, cfRAND,  cfHYP,
    { extended features CPUID 7 in EBX, ECX, EDX }
-   cfFSGS, cf_b01, cfSGX, cfBMI1, cfHLE, cfAVX2, cf_b06, cfSMEP,
+   cfFSGS, cfTSCADJ, cfSGX, cfBMI1, cfHLE, cfAVX2, cfFDPEO, cfSMEP,
    cfBMI2, cfERMS, cfINVPCID, cfRTM, cfPQM, cf_b13, cfMPX, cfPQE,
-   cfAVX512F, cfAVX512DQ, cfRDSEED, cfADX, cfSMAP, cfAVX512IFMA, cfPCOMMIT, cfCLFLUSH,
-   cfCLWB, cfIPT, cfAVX512PF, cfAVX512ER, cfAVX512CD, cfSHA, cfAVX512BW, cfAVX512VL,
-   cfPREFW1, cfAVX512VBMI, cfUMIP, cfPKU, cfOSPKE, cf_c05, cfAVX512VBMI2, cf_c07,
-   cfGFNI, cfVAES, cfVCLMUL, cfAVX512NNI, cfAVX512BITALG, cf_c13, cfAVX512VPC, cf_c15,
-   cf_cc16, cf_c17, cf_c18, cf_c19, cf_c20, cf_c21, cfRDPID, cf_c23,
-   cf_c24, cf_CLDEMOTE, cf_c26, cf_MOVDIRI, cf_MOVDIR64B, cf_ENQCMD, cfSGXLC, cf_c31,
-   cf_d0, cf_d1, cfAVX512NNIW, cfAVX512MAS, cfFSRM, cf_d5, cf_d6, cf_d7,
-   cf_AVX512VP2I, cf_d9, cf_dMDCLR, cf_d11, cf_d12, cf_TSXFA, cf_SER, cf_HYBRID,
-   cf_TSXLDTRK, cf_d17, cf_PCFG, cf_d19, cf_IBT, cf_d21, cf_d22, cf_d34,
-   cf_d24, cf_d25, cf_IBRSPB, cf_STIBP, cf_dL1DFL, cf_ARCAB, cf_d30, cf_SSBD);
+   cfAVX512F, cfAVX512DQ, cfRDSEED, cfADX, cfSMAP, cfAVX512IFMA, cfPCOMMIT,
+   cfCLFLUSH, cfCLWB, cfIPT, cfAVX512PF, cfAVX512ER, cfAVX512CD, cfSHA,
+   cfAVX512BW, cfAVX512VL, cfPREFW1, cfAVX512VBMI, cfUMIP, cfPKU, cfOSPKE,
+   cf_c05, cfAVX512VBMI2, cfCETSS, cfGFNI, cfVAES, cfVCLMUL, cfAVX512NNI,
+   cfAVX512BITALG, cf_c13, cfAVX512VPC, cf_c15, cfFLP, cf_c17, cf_c18,
+   cf_c19, cf_c20, cf_c21, cfRDPID, cf_c23, cf_c24, cfCLDEMOTE, cf_c26,
+   cfMOVDIRI, cfMOVDIR64B, cfENQCMD, cfSGXLC, cfPKS, cf_d0, cf_d1,
+   cfAVX512NNIW, cfAVX512MAPS, cfFSRM, cf_d5, cf_d6, cf_d7, cfAVX512VP2I,
+   cfSRBDS, cfMDCLR, cf_d11, cf_d12, cfTSXFA, cfSER, cfHYBRID,
+   cfTSXLDTRK, cf_d17, cfPCFG, cfLBR, cfIBT, cf_d21, cfAMXBF16, cf_d23,
+   cfAMXTILE, cfAMXINT8, cfIBRSPB, cfSTIBP, cfL1DFL, cfARCAB, cfCORCAB, cfSSBD);
 
   /// all CPU features flags, as retrieved from an Intel/AMD CPU
   TIntelCpuFeatures = set of TIntelCpuFeature;
