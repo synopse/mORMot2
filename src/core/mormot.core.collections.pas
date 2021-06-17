@@ -178,15 +178,16 @@ type
     procedure SetItem(const key: TKey; const value: TValue); inline;
   public
     /// initialize the dictionary storage, specifyng dynamic array keys/values
-    // - you will need to provide the dynamic arrays TypeInfo() of TKey/TValue
+    // - you can provide the dynamic arrays TypeInfo() of TKey/TValue if the
+    // types are too complex, or not already registered to mormot.core.rtti
     // - by default, this instance won't be thread-safe unless the kvoThreadSafe
     // option is forced, so that process is protected with a TSynLocker mutex
     // - by default, string keys would be searched following exact case, unless
     // the kvoKeyCaseInsensitive option is set
     // - you can set an optional timeout period, in seconds - you should call
     // DeleteDeprecated periodically to search for deprecated items
-    constructor Create(aKeyDynArrayTypeInfo, aValueDynArrayTypeInfo: PRttiInfo;
-      aOptions: TSynKeyValueOptions = [];
+    constructor Create(aOptions: TSynKeyValueOptions = [];
+      aKeyDynArrayTypeInfo: PRttiInfo = nil; aValueDynArrayTypeInfo: PRttiInfo = nil;
       aTimeoutSeconds: cardinal = 0; aCompressAlgo: TAlgoCompress = nil;
       aHasher: THasher = nil); reintroduce; virtual;
   public
@@ -278,34 +279,46 @@ implementation
 
 { TSynKeyValueAbstract }
 
-// methods leveraged against all TSynKeyValue<> to reduce exe code size
+// shared methods leveraged against all TSynKeyValue<> to reduce exe code size
 
 procedure TSynKeyValueAbstract.DoCreate(aKeyDynArrayTypeInfo,
   aValueDynArrayTypeInfo, aKeyTypeInfo, aValueTypeInfo: PRttiInfo;
   aOptions: TSynKeyValueOptions; aTimeoutSeconds: cardinal;
   aCompressAlgo: TAlgoCompress; aHasher: THasher);
+var
+  k, v: PRttiInfo;
 begin
   fOptions := aOptions;
   fKeyTypeInfo := aKeyTypeInfo;
   fValueTypeInfo := aValueTypeInfo;
-  if (aKeyDynArrayTypeInfo = nil) or
-     (aKeyDynArrayTypeInfo^.Kind <> rkDynArray) then
-     RaiseException('Create: % should be a dynamic array of TKey',
-       [aKeyDynArrayTypeInfo^.Name]);
-  if (aValueDynArrayTypeInfo = nil) or
-     (aValueDynArrayTypeInfo^.Kind <> rkDynArray) then
-     RaiseException('Create: % should be a dynamic array of TValue',
-       [aValueDynArrayTypeInfo^.Name]);
-  fData := TSynDictionary.Create(aKeyDynArrayTypeInfo, aValueDynArrayTypeInfo,
-    kvoKeyCaseInsensitive in aOptions, aTimeoutSeconds, aCompressAlgo, aHasher);
-  if fData.Keys.Info.Cache.ItemInfo <> aKeyTypeInfo then
+  // validate or recognize most simple dynamic arrays from its TKey/TValue types
+  k := aKeyDynArrayTypeInfo;
+  if k = nil then
+    k := TypeInfoToDynArrayTypeInfo(aKeyTypeInfo, {exact=}false);
+  if (k = nil) or
+     (k ^.Kind <> rkDynArray) then
+     RaiseException('Create: % should be a dynamic array of TKey', [k^.Name^]);
+  v := aValueDynArrayTypeInfo;
+  if v = nil then
+    v := TypeInfoToDynArrayTypeInfo(aValueTypeInfo, {exact=}false);
+  if (v = nil) or
+     (v^.Kind <> rkDynArray) then
+     RaiseException('Create: % should be a dynamic array of TValue', [v^.Name^]);
+  // initialize the associated dictionary
+  fData := TSynDictionary.Create(k, v, kvoKeyCaseInsensitive in fOptions,
+    aTimeoutSeconds, aCompressAlgo, aHasher);
+  if kvoThreadSafe in fOptions then
+    fData.Options := [doSingleThreaded];
+  if (fData.Keys.Info.ArrayRtti = nil) or
+     ((aKeyDynArrayTypeInfo <> nil) and
+      (fData.Keys.Info.ArrayRtti.Info <> fKeyTypeInfo)) then
     RaiseException('Create: TKey does not match %',
       [aKeyDynArrayTypeInfo^.RawName]);
-  if fData.Values.Info.Cache.ItemInfo <> aValueTypeInfo then
+  if (fData.Values.Info.ArrayRtti = nil) or
+     ((aValueDynArrayTypeInfo <> nil) and
+      (fData.Values.Info.ArrayRtti.Info <> fValueTypeInfo)) then
     RaiseException('Create: TValue does not match %',
       [aValueDynArrayTypeInfo^.RawName]);
-  if kvoThreadSafe in aOptions then
-    fData.Options := [doSingleThreaded];
 end;
 
 destructor TSynKeyValueAbstract.Destroy;
@@ -388,10 +401,9 @@ end;
 
 { TSynKeyValue<TKey, TValue> }
 
-constructor TSynKeyValue<TKey, TValue>.Create(
+constructor TSynKeyValue<TKey, TValue>.Create(aOptions: TSynKeyValueOptions;
   aKeyDynArrayTypeInfo, aValueDynArrayTypeInfo: PRttiInfo;
-  aOptions: TSynKeyValueOptions; aTimeoutSeconds: cardinal;
-  aCompressAlgo: TAlgoCompress; aHasher: THasher);
+  aTimeoutSeconds: cardinal; aCompressAlgo: TAlgoCompress; aHasher: THasher);
 begin
   DoCreate(aKeyDynArrayTypeInfo, aValueDynArrayTypeInfo, TypeInfo(TKey),
     TypeInfo(TValue), aOptions, aTimeoutSeconds, aCompressAlgo, aHasher);
@@ -466,56 +478,56 @@ end;
 
 function NewIntegerRawUtf8(options: TSynKeyValueOptions): TSynKeyValue<Integer, RawUtf8>;
 begin
-  result := TSynKeyValue<Integer, RawUtf8>.Create(TypeInfo(TIntegerDynArray),
-    TypeInfo(TRawUtf8DynArray), options);
+  result := TSynKeyValue<Integer, RawUtf8>.Create(options,
+    TypeInfo(TIntegerDynArray), TypeInfo(TRawUtf8DynArray));
 end;
 
 function NewInt64RawUtf8(options: TSynKeyValueOptions): TSynKeyValue<Int64, RawUtf8>;
 begin
-  result := TSynKeyValue<Int64, RawUtf8>.Create(TypeInfo(TInt64DynArray),
-    TypeInfo(TRawUtf8DynArray), options);
+  result := TSynKeyValue<Int64, RawUtf8>.Create(options,
+    TypeInfo(TInt64DynArray), TypeInfo(TRawUtf8DynArray));
 end;
 
 function NewRawUtf8RawUtf8(options: TSynKeyValueOptions): TSynKeyValue<RawUtf8, RawUtf8>;
 begin
-  result := TSynKeyValue<RawUtf8, RawUtf8>.Create(TypeInfo(TRawUtf8DynArray),
-    TypeInfo(TRawUtf8DynArray), options);
+  result := TSynKeyValue<RawUtf8, RawUtf8>.Create(options,
+    TypeInfo(TRawUtf8DynArray), TypeInfo(TRawUtf8DynArray));
 end;
 
 function NewRawUtf8Integer(options: TSynKeyValueOptions): TSynKeyValue<RawUtf8, Integer>;
 begin
-  result := TSynKeyValue<RawUtf8, Integer>.Create(TypeInfo(TRawUtf8DynArray),
-    TypeInfo(TIntegerDynArray), options);
+  result := TSynKeyValue<RawUtf8, Integer>.Create(options,
+    TypeInfo(TRawUtf8DynArray), TypeInfo(TIntegerDynArray));
 end;
 
 function NewRawUtf8Int64(options: TSynKeyValueOptions): TSynKeyValue<RawUtf8, Int64>;
 begin
-  result := TSynKeyValue<RawUtf8, Int64>.Create(TypeInfo(TRawUtf8DynArray),
-    TypeInfo(TInt64DynArray), options);
+  result := TSynKeyValue<RawUtf8, Int64>.Create(options,
+    TypeInfo(TRawUtf8DynArray), TypeInfo(TInt64DynArray));
 end;
 
 function NewRawUtf8String(options: TSynKeyValueOptions): TSynKeyValue<RawUtf8, String>;
 begin
-  result := TSynKeyValue<RawUtf8, String>.Create(TypeInfo(TRawUtf8DynArray),
-    TypeInfo(TStringDynArray), options);
+  result := TSynKeyValue<RawUtf8, String>.Create(options,
+    TypeInfo(TRawUtf8DynArray), TypeInfo(TStringDynArray));
 end;
 
 function NewGuidInteger(options: TSynKeyValueOptions): TSynKeyValue<TGuid, Integer>;
 begin
-  result := TSynKeyValue<TGuid, Integer>.Create(TypeInfo(TGuidDynArray),
-    TypeInfo(TIntegerDynArray), options);
+  result := TSynKeyValue<TGuid, Integer>.Create(options,
+    TypeInfo(TGuidDynArray), TypeInfo(TIntegerDynArray));
 end;
 
 function NewGuidInt64(options: TSynKeyValueOptions): TSynKeyValue<TGuid, Int64>;
 begin
-  result := TSynKeyValue<TGuid, Int64>.Create(TypeInfo(TGuidDynArray),
-    TypeInfo(TInt64DynArray), options);
+  result := TSynKeyValue<TGuid, Int64>.Create(options,
+    TypeInfo(TGuidDynArray), TypeInfo(TInt64DynArray));
 end;
 
 function NewGuidRawUtf8(options: TSynKeyValueOptions): TSynKeyValue<TGuid, RawUtf8>;
 begin
-  result := TSynKeyValue<TGuid, RawUtf8>.Create(TypeInfo(TGuidDynArray),
-    TypeInfo(TRawUtf8DynArray), options);
+  result := TSynKeyValue<TGuid, RawUtf8>.Create(options,
+    TypeInfo(TGuidDynArray), TypeInfo(TRawUtf8DynArray));
 end;
 
 {$else}
