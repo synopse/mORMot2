@@ -333,6 +333,8 @@ type
   TDoubleDynArray = array of double;
   PCurrencyDynArray = ^TCurrencyDynArray;
   TCurrencyDynArray = array of currency;
+  PExtendedDynArray = ^TExtendedDynArray;
+  TExtendedDynArray = array of Extended;
   TWordDynArray = array of word;
   PWordDynArray = ^TWordDynArray;
   TByteDynArray = array of byte;
@@ -360,7 +362,6 @@ type
   TClassDynArray = array of TClass;
   TWinAnsiDynArray = array of WinAnsiString;
   PWinAnsiDynArray = ^TWinAnsiDynArray;
-  TRawByteStringDynArray = array of RawByteString;
   TStringDynArray = array of string;
   PStringDynArray = ^TStringDynArray;
   PShortStringDynArray = array of PShortString;
@@ -380,6 +381,14 @@ type
   PWideStringDynArray = ^TWideStringDynArray;
   TSynUnicodeDynArray = array of SynUnicode;
   PSynUnicodeDynArray = ^TSynUnicodeDynArray;
+  TRawByteStringDynArray = array of RawByteString;
+  PRawByteStringDynArray = ^TRawByteStringDynArray;
+  {$ifdef HASVARUSTRING}
+  TUnicodeStringDynArray = array of UnicodeString;
+  PUnicodeStringDynArray = ^TUnicodeStringDynArray;
+  {$endif HASVARUSTRING}
+  TRawJsonDynArray = array of RawJson;
+  PRawJsonDynArray = ^TRawJsonDynArray;
   TGuidDynArray = array of TGUID;
   PGuidDynArray = array of PGUID;
 
@@ -1303,17 +1312,17 @@ function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
 // - Count is the number of entries in P^[]
 // - return index of P^[index]=Elem^, comparing ElemSize bytes
 // - return -1 if Value was not found
-function AnyScanIndex(P,Elem: pointer; Count, ElemSize: PtrInt): PtrInt;
+function AnyScanIndex(P, Elem: pointer; Count, ElemSize: PtrInt): PtrInt;
 
 /// fast search of a binary value position in a fixed-size array
 // - Count is the number of entries in P^[]
-function AnyScanExists(P,Elem: pointer; Count, ElemSize: PtrInt): boolean;
+function AnyScanExists(P, Elem: pointer; Count, ElemSize: PtrInt): boolean;
 
 /// sort an integer array, low values first
 procedure QuickSortInteger(ID: PIntegerArray; L, R: PtrInt); overload;
 
 /// sort an integer array, low values first
-procedure QuickSortInteger(ID,CoValues: PIntegerArray; L, R: PtrInt); overload;
+procedure QuickSortInteger(ID, CoValues: PIntegerArray; L, R: PtrInt); overload;
 
 /// sort an integer array, low values first
 procedure QuickSortInteger(var ID: TIntegerDynArray); overload;
@@ -1330,7 +1339,7 @@ procedure QuickSortInt64(ID: PInt64Array; L, R: PtrInt); overload;
 procedure QuickSortQWord(ID: PQWordArray; L, R: PtrInt); overload;
 
 /// sort a 64-bit integer array, low values first
-procedure QuickSortInt64(ID,CoValues: PInt64Array; L, R: PtrInt); overload;
+procedure QuickSortInt64(ID, CoValues: PInt64Array; L, R: PtrInt); overload;
 
 /// sort a PtrInt array, low values first
 procedure QuickSortPtrInt(P: PPtrIntArray; L, R: PtrInt);
@@ -5412,9 +5421,8 @@ begin
       if PtrUInt(P) >= PtrUInt(Count) then
         break;
       if P^[0] = Value then
-        exit
-      else
-        P := @P[1];
+        exit;
+      P := @P[1];
     until false;
   end;
   result := false;
@@ -5453,9 +5461,8 @@ begin
     if PtrUInt(result) >= PtrUInt(Count) then
       break;
     if result^ = Value then
-      exit
-    else
-      inc(result);
+      exit;
+    inc(result);
   until false;
   result := nil;
 end;
@@ -5502,9 +5509,8 @@ begin
       if result >= Count then
         break;
       if P^[result] = Value then
-        exit
-      else
-        inc(result);
+        exit;
+      inc(result);
     until false;
   end;
   result := -1;
@@ -5583,9 +5589,8 @@ begin
       if result >= Count then
         break;
       if P^[result] = Value then
-        exit
-      else
-        inc(result);
+        exit;
+      inc(result);
     until false;
   result := -1;
 end;
@@ -5598,9 +5603,8 @@ begin
       if result >= Count then
         break;
       if P^[result] = Value then
-        exit
-      else
-        inc(result);
+        exit;
+      inc(result);
     until false;
   result := -1;
 end;
@@ -8015,20 +8019,22 @@ end;
 function StrComp(Str1, Str2: pointer): PtrInt;
 var
   c: byte;
-begin
+label
+  eq;
+{%H-}begin
   if Str1 <> Str2 then
     if Str1 <> nil then
       if Str2 <> nil then
       begin
-        c := PByte(Str1)^;
-        if c = PByte(Str2)^ then
-          repeat
-            if c = 0 then
-              break;
-            inc(PByte(Str1));
-            inc(PByte(Str2));
-            c := PByte(Str1)^;
-          until c <> PByte(Str2)^;
+        repeat
+          c := PByte(Str1)^;
+          if c <> PByte(Str2)^ then
+            break;
+          if c = 0 then
+            goto eq;
+          inc(PByte(Str1));
+          inc(PByte(Str2));
+        until false;
         result := c - PByte(Str2)^;
         exit;
       end
@@ -8037,7 +8043,7 @@ begin
     else
       result := -1  // Str1=''
   else
-    result := 0;    // Str1=Str2
+eq: result := 0;    // Str1=Str2
 end;
 
 // from A. Sharahov's PosEx_Sha_Pas_2() - refactored for cross-platform/compiler
@@ -10266,9 +10272,8 @@ begin
       if result >= Count then
         break;
       if P^[result] = Value then
-        exit
-      else
-        inc(result);
+        exit;
+      inc(result);
     until false;
   end;
   result := -1;
@@ -10307,9 +10312,8 @@ begin
     if PtrUInt(result) >= PtrUInt(Count) then
       break;
     if result^ = Value then
-      exit
-    else
-      inc(result);
+      exit;
+    inc(result);
   until false;
   result := nil;
 end;
@@ -10335,9 +10339,8 @@ begin
       if PtrUInt(P) >= PtrUInt(Count) then
         break;
       if P^[0] = Value then
-        exit
-      else
-        P := @P[1];
+        exit;
+      P := @P[1];
     until false;
   end;
   result := false;
@@ -11586,6 +11589,7 @@ begin
   begin
     Hi := 2; // optimistic approach :)
     Lo := 0;
+    Reason := ReasonCache[2, 0];
   end
   else
   begin
@@ -11594,11 +11598,11 @@ begin
     if not ((Hi in [1..5]) and
             (Lo in [0..13])) then
     begin
-      StatusCode2Reason(Code, Reason);
-      exit;
+      Hi := 5;
+      Lo := 13; // returns cached 'Invalid Request'
     end;
+    Reason := ReasonCache[Hi, Lo];
   end;
-  Reason := ReasonCache[Hi, Lo];
   if Reason <> '' then
     exit;
   StatusCode2Reason(Code, Reason);
