@@ -690,7 +690,7 @@ end;
 
 // functions below are always available, even on DARWIN
 
-function SortDynArrayInteger(const A,B): integer;
+function SortDynArrayInteger(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     r8d, dword ptr [A]
         mov     edx, dword ptr [B]
@@ -702,7 +702,7 @@ function SortDynArrayInteger(const A,B): integer;
         sub     eax, ecx
 end;
 
-function SortDynArrayCardinal(const A,B): integer;
+function SortDynArrayCardinal(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     ecx, dword ptr [A]
         mov     edx, dword ptr [B]
@@ -712,7 +712,7 @@ function SortDynArrayCardinal(const A,B): integer;
         sbb     eax, 0
 end;
 
-function SortDynArrayInt64(const A,B): integer;
+function SortDynArrayInt64(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     r8, qword ptr [A]
         mov     rdx, qword ptr [B]
@@ -724,7 +724,7 @@ function SortDynArrayInt64(const A,B): integer;
         sub     eax, ecx
 end;
 
-function SortDynArrayQWord(const A,B): integer;
+function SortDynArrayQWord(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     rcx, qword ptr [A]
         mov     rdx, qword ptr [B]
@@ -734,7 +734,7 @@ function SortDynArrayQWord(const A,B): integer;
         sbb     eax, 0
 end;
 
-function SortDynArrayPointer(const A,B): integer;
+function SortDynArrayPointer(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     rcx, qword ptr [A]
         mov     rdx, qword ptr [B]
@@ -744,7 +744,7 @@ function SortDynArrayPointer(const A,B): integer;
         sbb     eax, 0
 end;
 
-function SortDynArrayDouble(const A,B): integer;
+function SortDynArrayDouble(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         movsd   xmm0, qword ptr [A]
         movsd   xmm1, qword ptr [B]
@@ -756,7 +756,7 @@ function SortDynArrayDouble(const A,B): integer;
         sub     eax, edx
 end;
 
-function SortDynArraySingle(const A,B): integer;
+function SortDynArraySingle(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         movss   xmm0, dword ptr [A]
         movss   xmm1, dword ptr [B]
@@ -768,7 +768,7 @@ function SortDynArraySingle(const A,B): integer;
         sub     eax, edx
 end;
 
-function SortDynArrayAnsiString(const A,B): integer;
+function SortDynArrayAnsiString(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     rcx, qword ptr [A]
         mov     rdx, qword ptr [B]
@@ -1830,14 +1830,14 @@ function IsXmmYmmOSEnabled: boolean;
         xor     ecx, ecx  // specify control register XCR0=XFEATURE_ENABLED_MASK
         db $0f, $01, $d0  // XGETBV opcode reads XCR0 into EDX:EAX
         and     eax, 6
-        cmp     al, 6
-        sete    al   // check if OS enabled both XMM (bit 1=2) and YMM (bit 2=4)
+        cmp     al, 6     // check XMM (bit 1=2) and YMM (bit 2=4)
+        sete    al        // true if OS enabled both XMM and YMM
 end;
 
-procedure GetCpuid(Param: cardinal; var Registers: TIntelRegisters);
+procedure GetCpuid(param: cardinal; var regs: TIntelRegisters);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        mov     eax, Param
-        mov     r9, Registers
+        mov     eax, param
+        mov     r9, regs
         mov     r10, rbx // preserve rbx
         xor     ebx, ebx
         xor     ecx, ecx

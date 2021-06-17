@@ -5270,11 +5270,16 @@ end;
 { TAesGcm }
 
 function TAesGcm.AesGcmInit: boolean;
+{$ifdef USEGCMAVX}
+var
+  cf: ^TIntelCpuFeatures;
+{$endif USEGCMAVX}
 begin
   {$ifdef USEGCMAVX}
-  if (cfCLMUL in CpuFeatures) and
-     (cfSSE41 in CpuFeatures) and
-     (cfAESNI in CpuFeatures) then
+  cf := @CpuFeatures;
+  if (cfCLMUL in cf^) and
+     (cfSSE41 in cf^) and
+     (cfAESNI in cf^) then
   begin
     // 8x interleaved aesni + pclmulqdq x86_64 asm
     include(fGcm.flags, flagAVX);
