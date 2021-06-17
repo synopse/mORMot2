@@ -3501,7 +3501,7 @@ const
     imvInt64, imvInteger, imvInt64, imvRawByteString, imvRawJson, imvRawUtf8,
   // ptRecord, ptSingle, ptString, ptSynUnicode, ptDateTime, ptDateTimeMS,
     imvRecord, imvDouble, imvString, imvSynUnicode, imvDateTime, imvDateTime,
-  // ptGuid, ptHash128, ptHash256, ptHash512, ptORM, ptTimeLog, ptUnicodeString,
+  // ptGuid, ptHash128, ptHash256, ptHash512, ptOrm, ptTimeLog, ptUnicodeString,
     imvBinary, imvBinary, imvBinary, imvBinary, imvInt64, imvInt64, imvUnicodeString,
   // ptUnixTime, ptUnixMSTime, ptVariant, ptWideString, ptWinAnsi, ptWord,
     imvInt64, imvInt64, imvVariant, imvWideString, imvRawUtf8, imvNone,

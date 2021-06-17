@@ -1559,7 +1559,7 @@ var
 type
   /// the kind of variables handled by our RTTI/JSON parser
   // - the last item should be ptCustom, for non simple types
-  // - ptORM is recognized from TID, T*ID, TRecordReference,
+  // - ptOrm is recognized from TID, T*ID, TRecordReference,
   // TRecordReferenceToBeDeleted and TRecordVersion type names
   // - ptTimeLog is recognized from TTimeLog, TCreateTime and TModTime
   // - other types (not ptComplexTypes) are recognized by their genuine type name
@@ -1591,7 +1591,7 @@ type
     ptHash128,
     ptHash256,
     ptHash512,
-    ptORM,
+    ptOrm,
     ptTimeLog,
     ptUnicodeString,
     ptUnixTime,
@@ -1607,7 +1607,7 @@ type
     ptInterface,
     ptCustom);
 
-  /// the complex kind of variables for ptTimeLog and ptORM TRttiParserType
+  /// the complex kind of variables for ptTimeLog and ptOrm TRttiParserType
   // - as recognized by TypeNameToStandardParserType/TypeInfoToStandardParserType
   TRttiParserComplexType = (
     pctNone,
@@ -1633,10 +1633,10 @@ const
   ptPtrUInt = {$ifdef CPU64} ptQWord {$else} ptCardinal {$endif};
 
   /// which TRttiParserType are not simple types
-  // - ptTimeLog and ptORM are complex, since more than one TypeInfo() may
+  // - ptTimeLog and ptOrm are complex, since more than one TypeInfo() may
   // map to their TRttiParserType - see also TRttiParserComplexType
   ptComplexTypes =
-    [ptArray, ptRecord, ptCustom, ptTimeLog, ptORM,
+    [ptArray, ptRecord, ptCustom, ptTimeLog, ptOrm,
      ptDynArray, ptEnumeration, ptSet, ptClass, ptInterface];
 
   /// which TRttiParserType types don't need memory management
@@ -1703,7 +1703,7 @@ function ParserTypeToTypeInfo(pt: TRttiParserType;
 /// recognize a simple value type from a supplied type name
 // - from known ('byte', 'string', 'RawUtf8', 'TGUID'...) type names
 // - will return ptNone for any unknown type
-// - for ptORM and ptTimeLog, optional Complex will contain the specific type found
+// - for ptOrm and ptTimeLog, optional Complex will contain the specific type found
 function TypeNameToStandardParserType(Name: PUtf8Char; NameLen: integer;
   Complex: PRttiParserComplexType = nil): TRttiParserType; overload;
 
@@ -5340,7 +5340,7 @@ const
     ptRawByteString, ptRawByteString, ptRawJson, ptRawUtf8, ptRecord, ptSingle,
     ptRawUtf8, ptString, ptSynUnicode,
     ptTimeLog, ptDateTime, ptDateTimeMS, ptGuid, ptHash128, ptHash256,
-    ptHash512, ptORM, ptTimeLog, ptORM, ptORM, ptORM, ptUnixMSTime,
+    ptHash512, ptOrm, ptTimeLog, ptOrm, ptOrm, ptOrm, ptUnixMSTime,
     ptUnixTime, ptTimeLog, ptUnicodeString,
     ptRawUtf8, ptVariant, ptWideString, ptWord);
   SORTEDCOMPLEX: array[0..SORTEDMAX] of TRttiParserComplexType = (
@@ -5371,7 +5371,7 @@ begin
           (tmp[0] = 'T') and // T...ID pattern in name?
           (PWord(@tmp[NameLen - 2])^ = ord('I') + ord('D') shl 8) then
   begin
-    result := ptORM;
+    result := ptOrm;
     c := pctSpecificClassID;
   end
   else
@@ -5407,9 +5407,10 @@ begin
     exit;
   if FirstSearchByName then
   begin
-    result := TypeNameToStandardParserType(Info^.RawName, Complex);
+    result := TypeNameToStandardParserType(
+      @Info^.RawName[1], ord(Info^.RawName[0]), Complex);
     if result <> ptNone then
-      if (result = ptORM) and
+      if (result = ptOrm) and
          (Info^.Kind <> rkInt64) then
         // paranoid check e.g. for T...ID false positives
         result := ptNone
@@ -7615,7 +7616,7 @@ begin
   PT_INFO[ptWinAnsi] := TypeInfo(WinAnsiString);
   PT_INFO[ptWord] := TypeInfo(Word);
   // ptComplexTypes may have several matching TypeInfo() -> put generic
-  PT_INFO[ptORM] := TypeInfo(TID);
+  PT_INFO[ptOrm] := TypeInfo(TID);
   PT_INFO[ptTimeLog] := TypeInfo(TTimeLog);
   PTC_INFO[pctTimeLog] := TypeInfo(TTimeLog);
   PTC_INFO[pctID] := TypeInfo(TID);
@@ -7627,7 +7628,7 @@ begin
   PTC_INFO[pctRecordReferenceToBeDeleted] := TypeInfo(QWord);
   PTC_INFO[pctRecordVersion] := TypeInfo(QWord);
   for t := succ(low(t)) to high(t) do
-    if Assigned(PT_INFO[t]) = (t in (ptComplexTypes - [ptORM, ptTimeLog])) then
+    if Assigned(PT_INFO[t]) = (t in (ptComplexTypes - [ptOrm, ptTimeLog])) then
       raise ERttiException.CreateUtf8('Unexpected PT_INFO[%]', [ToText(t)^]);
   // prepare global thread-safe TRttiCustomList
   InitializeCriticalSection(Rtti.Lock);
