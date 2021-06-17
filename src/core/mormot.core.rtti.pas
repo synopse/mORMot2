@@ -12,7 +12,7 @@ unit mormot.core.rtti;
     - Published Class Properties and Methods RTTI
     - IInvokable Interface RTTI
     - Efficient Dynamic Arrays and Records Process
-    - Managed Types Finalization or Copy
+    - Managed Types Finalization, Random or Copy
     - RTTI Value Types used for JSON Parsing
     - RTTI-based Registration for Custom JSON Parsing
     - Redirect Most Used FPC RTL Functions to Optimized x86_64 Assembly
@@ -1521,7 +1521,7 @@ procedure DynArrayCopy(Dest, Source: PPointer; Info: PRttiInfo;
   SourceExtCount: PInteger);
 
 
-{ ************* Managed Types Finalization or Copy }
+{ ************* Managed Types Finalization, Random or Copy }
 
 type
   /// internal function handler for finalizing a managed type value
@@ -1965,6 +1965,9 @@ type
   // - member is properly initialized by TRttiJson from mormot.core.json.pas
   TRttiCustomNewInstance = function(Rtti: TRttiCustom): pointer;
 
+  /// internal function handler for filling a value with some randomness
+  TRttiCustomRandom = procedure(Data: pointer; Rtti: TRttiCustom);
+
   TRttiCustomFromTextExpectedEnd = (
     eeNothing,
     eeSquare,
@@ -1996,6 +1999,8 @@ type
     fPrivateSlots: TObjectDynArray;
     fArrayRtti: TRttiCustom;
     fFinalize: TRttiFinalizer;
+    fSetRandom: TRttiCustomRandom;
+    fRandomGenerator: TLecuyer;
     fCopy: TRttiCopier;
     fName: RawUtf8;
     fProps: TRttiCustomProps;
@@ -2069,6 +2074,10 @@ type
     // - not implemented in this class (raise an ERttiException)
     // but in TRttiJson, so that it will use mormot.core.variants process
     function ValueToVariant(Data: pointer; out Dest: TVarData): PtrInt; virtual;
+    /// fill a value from random - including strings and nested types
+    // - each TRttiCustom class will maintain its own TLecuyer generator
+    procedure ValueRandom(Data: pointer);
+      {$ifdef HASINLINE}inline;{$endif}
     /// create a new TObject instance of this rkClass
     // - not implemented here (raise an ERttiException) but in TRttiJson,
     // so that mormot.core.rtti has no dependency to TSynPersistent and such
@@ -5039,7 +5048,7 @@ begin
 end;
 
 
-{ ************* Managed Types Finalization or Copy }
+{ ************* Managed Types Finalization, Random or Copy }
 
 { RTTI_FINALIZE[] implementation functions }
 
@@ -5152,6 +5161,90 @@ begin
   end;
   result := SizeOf(V^);
 end;
+
+
+{ PT_RANDOM[] implementation functions }
+
+procedure _NoRandom(V: PPointer; Rtti: TRttiCustom);
+begin
+end;
+
+procedure _StringRandom(V: PPointer; Rtti: TRttiCustom);
+var
+  tmp: TShort31;
+begin
+  Rtti.fRandomGenerator.FillShort31(tmp);
+  FastSetStringCP(V^, @tmp[1], ord(tmp[0]), Rtti.Cache.CodePage);
+end;
+
+procedure _WStringRandom(V: PWideString; Rtti: TRttiCustom);
+var
+  tmp: TShort31;
+  i: PtrInt;
+  W: PWordArray;
+begin
+  Rtti.fRandomGenerator.FillShort31(tmp);
+  SetString(V^, PWideChar(nil), ord(tmp[0]));
+  W := pointer(V^);
+  for i := 1 to ord(tmp[0]) do
+    W[i - 1] := cardinal(PByteArray(@tmp)[i]);
+end;
+
+{$ifdef HASVARUSTRING}
+procedure _UStringRandom(V: PUnicodeString; Rtti: TRttiCustom);
+var
+  tmp: TShort31;
+  i: PtrInt;
+  W: PWordArray;
+begin
+  Rtti.fRandomGenerator.FillShort31(tmp);
+  SetString(V^, PWideChar(nil), ord(tmp[0]));
+  W := pointer(V^);
+  for i := 1 to ord(tmp[0]) do
+    W[i - 1] := cardinal(PByteArray(@tmp)[i]);
+end;
+{$endif HASVARUSTRING}
+
+procedure _VariantRandom(V: PRttiVarData; Rtti: TRttiCustom);
+begin
+  {$ifdef CPUINTEL} // see VarClear: problems reported on ARM + BSD
+  if V^.VType and $BFE8 <> 0 then
+  {$else}
+  if V^.DataType >= varOleStr then // bypass for most obvious types
+  {$endif CPUINTEL}
+    VarClearProc(V^.Data);
+  V^.VType := varInteger;
+  V^.Data.VInteger := Rtti.fRandomGenerator.Next; // just a random integer
+end;
+
+procedure _DoubleRandom(V: PDouble; Rtti: TRttiCustom);
+begin
+  V^ := Rtti.fRandomGenerator.NextDouble;
+end;
+
+procedure _SingleRandom(V: PSingle; Rtti: TRttiCustom);
+begin
+  V^ := Rtti.fRandomGenerator.NextDouble;
+end;
+
+var
+  PT_RANDOM: array[TRttiParserType] of pointer = ( // nil = fill random bytes
+  // ptNone, ptArray, ptBoolean, ptByte, ptCardinal,
+  @_NoRandom, @_NoRandom, nil, nil, nil,
+  // ptCurrency, ptDouble, ptExtended, ptInt64, ptInteger, ptQWord,
+  nil, @_DoubleRandom, @_NoRandom, nil, nil, nil,
+  // ptRawByteString, ptRawJson, ptRawUtf8, ptRecord, ptSingle,
+  @_StringRandom, @_NoRandom, @_StringRandom, @_NoRandom, @_SingleRandom,
+  // ptString, ptSynUnicode,
+  @_NoRandom, {$ifdef HASVARUSTRING} @_UStringRandom {$else} @_WStringRandom {$endif},
+  // ptDateTime, ptDateTimeMS, ptGuid, ptHash128, ptHash256, ptHash512,
+  @_DoubleRandom, @_DoubleRandom, nil, nil, nil, nil,
+  // ptOrm, ptTimeLog, ptUnicodeString,
+  @_NoRandom, nil, {$ifdef HASVARUSTRING} @_UStringRandom {$else} @_NoRandom {$endif},
+  // ptUnixTime, ptUnixMSTime, ptVariant, ptWideString, ptWinAnsi,
+  nil,           nil,       @_VariantRandom, @_WStringRandom, @_StringRandom,
+  // ptWord, ptEnumeration, ptSet, ptClass, ptDynArray, ptInterface, ptCustom
+  nil,       nil,           nil, @_NoRandom, @_NoRandom, @_NoRandom, @_NoRandom);
 
 
 { RTTI_COPY[] implementation functions }
@@ -6427,6 +6520,7 @@ begin
     // also check nested record fields
     include(fFlags, rcfIsManaged);
   fCopy := RTTI_COPY[fCache.Kind];
+  fSetRandom := PT_RANDOM[fParser];
   pt := TypeInfoToStandardParserType(aInfo, {byname=}true, @pct);
   SetParserType(pt, pct);
 end;
@@ -6610,6 +6704,15 @@ function TRttiCustom.{%H-}ValueToVariant(Data: pointer;
 begin
   raise ERttiException.CreateUtf8('%.ValueToVariant not implemented -> please ' +
     'include mormot.core.json unit to register TRttiJson', [self]);
+end;
+
+procedure TRttiCustom.ValueRandom(Data: pointer);
+begin
+  // handle complex kinds of value from RTTI
+  if Assigned(fSetRandom) then
+    fSetRandom(Data, self)
+  else
+    fRandomGenerator.Fill(Data, fCache.ItemSize);
 end;
 
 function TRttiCustom.ClassNewInstance: pointer;
