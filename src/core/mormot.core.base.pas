@@ -2567,13 +2567,26 @@ type
     // - as executed by the Next method at thread startup, and after 2^20 values
     // - calls XorEntropy(), so RdRand32/Rdtsc opcodes on Intel/AMD CPUs
     procedure Seed(entropy: PByteArray; entropylen: PtrInt);
+    /// compute the next 32-bit generated value with no Seed - internal call
+    function RawNext: cardinal;
     /// compute the next 32-bit generated value
     // - will automatically reseed after around 2^20 generated values, which is
     // very conservative since this generator has a period of 2^88
     function Next: cardinal; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// compute the next 32-bit generated value, in range [0..max-1]
     function Next(max: cardinal): cardinal; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// compute a 64-bit integer value
+    function NextQWord: QWord;
+    /// compute a 64-bit floating point value
+    function NextDouble: double;
+    /// fill some memory buffer with random bytes
+    procedure Fill(dest: PByte; count: integer);
+    /// fill some string[size] with 7-bit ASCII random text
+    procedure FillShort(var dest: shortstring; size: PtrUInt);
+    /// fill some string[31] with 7-bit ASCII random text
+    procedure FillShort31(var dest: TShort31);
   end;
   PLecuyer = ^TLecuyer;
 
@@ -2601,6 +2614,10 @@ function Random32(max: cardinal): cardinal; overload;
 /// fast compute of a 64-bit random value, using the gsl_rng_taus2 generator
 // - thread-safe function: each thread will maintain its own TLecuyer table
 function Random64: QWord;
+
+/// fast compute of a 64-bit random floating point, using the gsl_rng_taus2 generator
+// - thread-safe function: each thread will maintain its own TLecuyer table
+function RandomDouble: double;
 
 /// fill some memory buffer with random values from the gsl_rng_taus2 generator
 // - the destination buffer is expected to be allocated as 32-bit items
@@ -8640,15 +8657,11 @@ begin
         (rs3 > 15);
   seedcount := 1;
   for i := 1 to e.i3 and 15 do
-    Next; // warm up
+    RawNext; // warm up
 end;
 
-function TLecuyer.Next: cardinal;
-begin
-  if (seedcount and $fffff) = 0 then
-    Seed(nil, 0) // seed at startup, and after 2^20 output values (4MB of data)
-  else
-    inc(seedcount);
+function TLecuyer.RawNext: cardinal;
+begin // not inlined for better code generation
   result := rs1;
   rs1 := ((result and -2) shl 12) xor (((result shl 13) xor result) shr 19);
   result := rs2;
@@ -8658,9 +8671,88 @@ begin
   result := rs1 xor rs2 xor result;
 end;
 
+function TLecuyer.Next: cardinal;
+begin
+  if seedcount and $fffff = 0 then
+    Seed(nil, 0) // seed at startup, and after 2^20 output data = 4MB
+  else
+    inc(seedcount);
+  result := RawNext;
+end;
+
 function TLecuyer.Next(max: cardinal): cardinal;
 begin
   result := (QWord(Next) * max) shr 32;
+end;
+
+function TLecuyer.NextQWord: QWord;
+begin
+  with PQWordRec(@result)^ do
+  begin
+    L := Next;
+    H := RawNext;
+  end;
+end;
+
+function TLecuyer.NextDouble: double;
+const
+  COEFF64: double = (1.0 / $80000000) / $100000000;  // 2^-63
+begin
+  result := (Int64(NextQWord) and $7fffffffffffffff) * COEFF64;
+end;
+
+procedure TLecuyer.Fill(dest: PByte; count: integer);
+var
+  c: cardinal;
+begin
+  if count <= 0 then
+    exit;
+  c := Next;
+  repeat
+    if count < 4 then
+      break;
+    PCardinal(dest)^ := c;
+    inc(PCardinal(dest));
+    dec(count, 4);
+    if count = 0 then
+      exit;
+    c := RawNext;
+  until false;
+  repeat
+    dest^ := c;
+    inc(dest);
+    c := c shr 8;
+    dec(count);
+  until count = 0;
+end;
+
+procedure TLecuyer.FillShort(var dest: shortstring; size: PtrUInt);
+begin
+  if size > 255 then
+    size := 255;
+  Fill(@dest, size + 1);
+  size := PByte(@dest)^ mod size;
+  dest[0] := AnsiChar(size);
+  if size <> 0 then
+    repeat
+      PByteArray(@dest)[size] := (cardinal(PByteArray(@dest)[size]) and 63) + 32;
+      dec(size);
+    until size = 0;
+end;
+
+procedure TLecuyer.FillShort31(var dest: TShort31);
+var
+  size: PtrUInt;
+begin
+  Fill(@dest, 32);
+  size := PByte(@dest)^;
+  size := size and 31;
+  dest[0] := AnsiChar(size);
+  if size <> 0 then
+    repeat
+      PByteArray(@dest)[size] := (cardinal(PByteArray(@dest)[size]) and 63) + 32;
+      dec(size);
+    until size = 0;
 end;
 
 procedure Random32Seed(entropy: pointer; entropylen: PtrInt);
@@ -8679,35 +8771,19 @@ begin
 end;
 
 function Random64: QWord;
-var
-  gen: PLecuyer; // with _Lecuyer do ... get twice the threadvar on FPC :(
 begin
-  gen := @_Lecuyer;
-  result := QWord(gen^.Next) * gen^.Next;
+  result := _Lecuyer.NextQWord;
+end;
+
+function RandomDouble: double;
+begin
+  result := _Lecuyer.NextDouble;
 end;
 
 procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
-var
-  c: cardinal;
-  gen: PLecuyer;
 begin
-  if CardinalCount <= 0 then
-    exit;
-  {$ifdef CPUINTEL}
-  if cfRAND in CpuFeatures then
-    c := RdRand32 // won't hurt
-  else
-    c := Rdtsc;   // lowest 32-bit part of RDTSC is highly unpredictable
-  {$else}
-  c := PtrUInt(Dest); // naive but good enough as seed
-  {$endif CPUINTEL}
-  gen := @_Lecuyer;
-  repeat
-    c := c xor gen^.Next;
-    Dest^ := Dest^ xor c;
-    inc(Dest);
-    dec(CardinalCount);
-  until CardinalCount = 0;
+  if CardinalCount > 0 then
+    _Lecuyer.Fill(pointer(Dest), CardinalCount shl 2);
 end;
 
 
