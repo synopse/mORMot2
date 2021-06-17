@@ -719,7 +719,7 @@ type
     /// for rkDynArray: get the dynamic array deep RTTI of the stored item
     // - works for both managed and unmanaged types, on FPC and Delphi 2010+
     // - caller should ensure the type is indeed a dynamic array
-    function DynArrayItemTypeAny: PRttiInfo;
+    function DynArrayItemTypeExtended: PRttiInfo;
     /// for rkDynArray: get the dynamic array type information of the stored item
     // - this overloaded method will also return the item size in bytes
     // - caller should ensure the type is indeed a dynamic array
@@ -5701,7 +5701,7 @@ begin
        (rc.ArrayRtti.Info = ElemInfo) then
       exit;
   end;
-  rc := Rtti.FindByArrayRtti(ElemInfo);
+  rc := Rtti.FindByArrayRtti(ElemInfo); // search in registered rkDynArray
   if rc <> nil then
     result := rc.Info;
 end;
@@ -5714,64 +5714,22 @@ function DynArrayTypeInfoToStandardParserType(DynArrayInfo, ElemInfo: PRttiInfo;
 var
   fields: TRttiRecordManagedFields;
   offset: integer;
+  pt: TRttiParserType;
 begin
   result := ptNone;
   if Complex <> nil then
     Complex^ := pctNone;
   FieldSize := 0;
-  case ElemSize of // very fast guess of most known ArrayType
-    1:
-      if DynArrayInfo = TypeInfo(TBooleanDynArray) then
-        result := ptBoolean;
-    4:
-      if DynArrayInfo = TypeInfo(TCardinalDynArray) then
-        result := ptCardinal
-      else if DynArrayInfo = TypeInfo(TSingleDynArray) then
-        result := ptSingle
-    {$ifdef CPU64} ;
-    8: {$else} else {$endif CPU64}
-      if DynArrayInfo = TypeInfo(TRawUtf8DynArray) then
-        result := ptRawUtf8
-      else if DynArrayInfo = TypeInfo(TStringDynArray) then
-        result := ptString
-      else if DynArrayInfo = TypeInfo(TWinAnsiDynArray) then
-        result := ptWinAnsi
-      else if DynArrayInfo = TypeInfo(TRawByteStringDynArray) then
-        result := ptRawByteString
-      else if DynArrayInfo = TypeInfo(TSynUnicodeDynArray) then
-        result := ptSynUnicode
-      else if (DynArrayInfo = TypeInfo(TClassDynArray)) or
-              (DynArrayInfo = TypeInfo(TPointerDynArray)) then
-        result := ptPtrInt
-      else
-      {$ifdef CPU64}
-      else {$else} ;
-    8: {$endif CPU64}
-      if ElemInfo <> nil then
-        case ElemInfo^.Kind of
-          rkFloat:
-            if DynArrayInfo = TypeInfo(TDoubleDynArray) then
-              result := ptDouble
-            else if DynArrayInfo = TypeInfo(TCurrencyDynArray) then
-              result := ptCurrency
-            else if DynArrayInfo = TypeInfo(TDateTimeDynArray) then
-              result := ptDateTime
-            else if DynArrayInfo = TypeInfo(TDateTimeMSDynArray) then
-              result := ptDateTimeMS;
-          rkInt64:
-            if DynArrayInfo = TypeInfo(TTimeLogDynArray) then
-              result := ptTimeLog
-            else if DynArrayInfo = TypeInfo(TUnixTimeDynArray) then
-              result := ptUnixTime
-            else if DynArrayInfo = TypeInfo(TUnixMSTimeDynArray) then
-              result := ptUnixMSTime;
-        end;
-    {$ifdef TSYNEXTENDED80}
-    10:
-      if DynArrayInfo = TypeInfo(TSynExtendedDynArray) then
-        result := ptExtended
-    {$endif TSYNEXTENDED80}
-  end;
+  // fast guess of most known ArrayType
+  if (DynArrayInfo <> nil) and
+     ((ElemInfo = nil) or
+      not(ElemInfo^.Kind in [rkEnumeration, rkSet, rkDynArray, rkClass])) then
+    for pt := ptBoolean to ptWord do
+      if PT_DYNARRAY[pt] = DynArrayInfo then
+      begin
+        result := pt;
+        break;
+      end;
   if result = ptNone then
     repeat
       // guess from RTTI of nested record(s)
@@ -6561,7 +6519,7 @@ begin
         if item = nil then // =nil for unmanaged types
         begin
           // try to guess the actual type, e.g. a TGUID or an integer
-          item := aInfo^.DynArrayItemTypeAny; // FPC or Delphi 2010+
+          item := aInfo^.DynArrayItemTypeExtended; // FPC or Delphi 2010+
           if item = nil then
           begin
             // on Delphi 7-2009, recognize at least the most common types
@@ -6595,7 +6553,6 @@ begin
     // also check nested record fields
     include(fFlags, rcfIsManaged);
   fCopy := RTTI_COPY[fCache.Kind];
-  fSetRandom := PT_RANDOM[fParser];
   pt := TypeInfoToStandardParserType(aInfo, {byname=}true, @pct);
   SetParserType(pt, pct);
 end;
@@ -6688,6 +6645,7 @@ function TRttiCustom.SetParserType(aParser: TRttiParserType;
 begin
   fParser := aParser;
   fParserComplex := aParserComplex;
+  fSetRandom := PT_RANDOM[aParser];
   if fCache.Info <> nil then
     ShortStringToAnsi7String(fCache.Info.Name^, fName);
   if fProps.Count > 0 then

@@ -473,7 +473,7 @@ begin
    result := PPointer(result)^;
 end;
 
-function TRttiInfo.DynArrayItemTypeAny: PRttiInfo;
+function TRttiInfo.DynArrayItemTypeExtended: PRttiInfo;
 begin
   with GetTypeData(@self)^ do
   begin
