@@ -28,12 +28,12 @@ interface
   // select best known choice if not overriden for the whole project
   {$ifdef FPC}
     {$ifdef OSWINDOWS}
-      {$define ZLIBSTATIC}   // FPC Win32 Win64: static .o
+      {$define ZLIBSTATIC}   // FPC Win32 Win64: we supply our static .o
     {$else}
       {$ifdef OSANDROID}
         {$define ZLIBPAS}    // FPC Android: paszlib (Alf reported problems)
       {$else}
-        {$define ZLIBEXT} // FPC other POSIX: system's libz.so
+        {$define ZLIBEXT}    // FPC other POSIX: system's libz.so
       {$endif OSANDROID}
     {$endif OSWINDOWS}
   {$else not FPC}
@@ -61,6 +61,9 @@ uses
   {$ifdef ZLIBRTL}
   zlib,
   {$endif ZLIBRTL}
+  {$ifdef LIBDEFLATESTATIC}
+  mormot.lib.static, // some definitions to properly link libdeflate
+  {$endif LIBDEFLATESTATIC}
   mormot.core.base;
 
 

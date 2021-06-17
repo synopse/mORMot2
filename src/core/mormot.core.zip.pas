@@ -1530,6 +1530,7 @@ begin
     AddStored(aZipName, Buf, Size, FileAge);
     exit;
   end;
+  // may call libdeflate_crc32 / libdeflate_deflate_compress
   e := NewEntry(Z_DEFLATED, mormot.lib.z.crc32(0, Buf, Size), FileAge);
   e^.h64.zfullSize := Size;
   tmp.Init((Size * 11) div 10 + 256); // max potential size
@@ -1547,6 +1548,7 @@ procedure TZipWrite.AddStored(const aZipName: TFileName;
   Buf: pointer; Size: PtrInt; FileAge: integer);
 begin
   if self <> nil then
+    // may call libdeflate_crc32
     with NewEntry(Z_STORED, mormot.lib.z.crc32(0, Buf, Size), FileAge)^ do
     begin
       h64.zfullSize := Size;
@@ -2239,6 +2241,7 @@ begin
     result := '';
     exit;
   end;
+  // may call libdeflate_crc32 / libdeflate_deflate_decompress
   SetString(result, nil, info.f64.zfullSize);
   e := @Entry[aIndex];
   if e^.local = nil then
@@ -2366,6 +2369,7 @@ begin
   end
   else
   begin
+    // directly decompress from the .zip content memory buffer
     data := e^.local^.Data;
     case aInfo.f32.zZipMethod of
       Z_STORED:
@@ -2717,9 +2721,9 @@ begin
     P := pointer(result);
     MoveFast(GZHEAD, P^, GZHEAD_SIZE);
     inc(P, GZHEAD_SIZE);
-    inc(P, CompressMem(pointer(Data), P, L,
+    inc(P, CompressMem(pointer(Data), P, L, // maybe libdeflate_deflate_compress
       length(result) - (GZHEAD_SIZE + 8), HTTP_LEVEL));
-    PCardinal(P)^ := crc32(0, pointer(Data), L);
+    PCardinal(P)^ := crc32(0, pointer(Data), L); // maybe libdeflate_crc32
     inc(P,4);
     PCardinal(P)^ := L;
     inc(P,4);
