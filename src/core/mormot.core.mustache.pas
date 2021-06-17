@@ -1607,7 +1607,7 @@ begin
 end;
 
 procedure ToHtml(const Value: variant; var Result: variant;
-  fmt: TTextWriterHTMLEscape; wiki: boolean = false);
+  fmt: TTextWriterHtmlEscape; wiki: boolean = false);
 var
   txt: RawUtf8;
   d: PDocVariantData;

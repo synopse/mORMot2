@@ -100,6 +100,7 @@ type
     procedure AddFile(const name: RawUtf8; const filename: TFileName;
       const contenttype: RawUtf8 = '');
     /// call this method before any Read() call to sent data to HTTP server
+    // - it is called also when Seek(0, soBeginning) is called
     procedure Flush; override;
     /// the content-type header value for this multipart content
     // - equals '' if no section has been added
@@ -802,7 +803,7 @@ type
   // $ netsh winhttp import proxy source=ie
   // to use the current user's proxy settings for Internet Explorer (under 64-bit
   // Vista/Seven, to configure applications using the 32 bit WinHttp settings,
-  // call netsh or proxycfg bits from %SystemRoot%\SysWOW64 folder explicitely)
+  // call netsh or proxycfg bits from %SystemRoot%\SysWOW64 folder explicitly)
   // - Microsoft Windows HTTP Services (WinHttp) is targeted at middle-tier and
   // back-end server applications that require access to an HTTP client stack
   TWinHttp = class(TWinHttpApi)
@@ -1454,7 +1455,11 @@ begin
         // flush headers and Data/InStream body
         SockSendFlush(dat);
         if ctxt.InStream <> nil then
-          SockSendStream(ctxt.InStream); // may be a THttpMultiPartStream
+        begin
+          // InStream may be a THttpMultiPartStream -> Seek(0) calls Flush
+          ctxt.InStream.Seek(0, soBeginning);
+          SockSendStream(ctxt.InStream);
+        end;
         // retrieve HTTP command line response
         if SockReceivePending(1000) = cspSocketError then
         begin
@@ -2105,6 +2110,8 @@ begin
   // retrieve received content (if any)
   Read := 0;
   ContentLength := InternalGetInfo32(HTTP_QUERY_CONTENT_LENGTH);
+  if Assigned(fOnProgress) then
+    fOnProgress(self, 0, ContentLength); // initial notification
   if Assigned(fOnDownload) then
     // download per-chunk using calback event
     repeat
@@ -2168,6 +2175,8 @@ begin
     until false;
     SetLength(Data, Read);
   end;
+  if Assigned(fOnProgress) then
+    fOnProgress(self, Read, Read); // final notification
 end;
 
 class function TWinHttpApi.IsAvailable: boolean;
@@ -2197,8 +2206,9 @@ begin
       OpenType := WINHTTP_ACCESS_TYPE_NO_PROXY
   else
     OpenType := WINHTTP_ACCESS_TYPE_NAMED_PROXY;
-  fSession := WinHttpApi.Open(pointer(Utf8ToSynUnicode(fExtendedOptions.UserAgent)),
-    OpenType, pointer(Utf8ToSynUnicode(fProxyName)), pointer(Utf8ToSynUnicode(fProxyByPass)), 0);
+  fSession := WinHttpApi.Open(
+    pointer(Utf8ToSynUnicode(fExtendedOptions.UserAgent)), OpenType,
+    pointer(Utf8ToSynUnicode(fProxyName)), pointer(Utf8ToSynUnicode(fProxyByPass)), 0);
   if fSession = nil then
     RaiseLastModuleError(winhttpdll, EWinHttp);
   // cf. http://msdn.microsoft.com/en-us/library/windows/desktop/aa384116
@@ -2245,8 +2255,8 @@ begin
   if fKeepAlive = 0 then
   begin
     Flags := WINHTTP_DISABLE_KEEP_ALIVE;
-    if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_DISABLE_FEATURE, @Flags,
-      sizeOf(Flags)) then
+    if not WinHttpApi.SetOption(
+       fRequest, WINHTTP_OPTION_DISABLE_FEATURE, @Flags, sizeOf(Flags)) then
       RaiseLastModuleError(winhttpdll, EWinHttp);
   end;
 end;
@@ -2264,7 +2274,7 @@ procedure TWinHttp.InternalAddHeader(const hdr: RawUtf8);
 begin
   if (hdr <> '') and
      not WinHttpApi.AddRequestHeaders(FRequest,
-    Pointer(Utf8ToSynUnicode(hdr)), length(hdr), WINHTTP_ADDREQ_FLAG_COALESCE) then
+     Pointer(Utf8ToSynUnicode(hdr)), length(hdr), WINHTTP_ADDREQ_FLAG_COALESCE) then
     RaiseLastModuleError(winhttpdll, EWinHttp);
 end;
 
@@ -2278,7 +2288,8 @@ procedure TWinHttp.InternalSendRequest(const aMethod: RawUtf8;
     if Assigned(fOnUpload) and
        (IdemPropNameU(aMethod, 'POST') or IdemPropNameU(aMethod, 'PUT')) then
     begin
-      result := WinHttpApi.SendRequest(fRequest, nil, 0, nil, 0, L, 0);
+      result := WinHttpApi.SendRequest(
+        fRequest, nil, 0, nil, 0, L, 0);
       if result then
       begin
         Current := 0;
@@ -2300,7 +2311,8 @@ procedure TWinHttp.InternalSendRequest(const aMethod: RawUtf8;
       end;
     end
     else
-      result := WinHttpApi.SendRequest(fRequest, nil, 0, pointer(aData), L, L, 0);
+      result := WinHttpApi.SendRequest(
+        fRequest, nil, 0, pointer(aData), L, L, 0);
   end;
 
 var
@@ -2413,13 +2425,15 @@ constructor EWinINet.Create;
 begin
   // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa383884
   fLastError := GetLastError;
-  inherited CreateFmt('%s (%x)', [SysErrorMessageWinInet(fLastError), fLastError]);
+  inherited CreateFmt(
+    '%s (%x)', [SysErrorMessageWinInet(fLastError), fLastError]);
 end;
 
 
 { TWinINet }
 
-procedure TWinINet.InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal);
+procedure TWinINet.InternalConnect(
+  ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal);
 var
   OpenType: integer;
 begin
@@ -2431,14 +2445,14 @@ begin
     pointer(fProxyName), pointer(fProxyByPass), 0);
   if fSession = nil then
     raise EWinINet.Create;
-  InternetSetOption(fConnection, INTERNET_OPTION_CONNECT_TIMEOUT, @ConnectionTimeOut,
-    SizeOf(ConnectionTimeOut));
-  InternetSetOption(fConnection, INTERNET_OPTION_SEND_TIMEOUT, @SendTimeout,
-    SizeOf(SendTimeout));
-  InternetSetOption(fConnection, INTERNET_OPTION_RECEIVE_TIMEOUT, @ReceiveTimeout,
-    SizeOf(ReceiveTimeout));
-  fConnection := InternetConnectA(fSession, pointer(fServer), fPort, nil, nil,
-    INTERNET_SERVICE_HTTP, 0, 0);
+  InternetSetOption(fConnection, INTERNET_OPTION_CONNECT_TIMEOUT,
+    @ConnectionTimeOut, SizeOf(ConnectionTimeOut));
+  InternetSetOption(fConnection, INTERNET_OPTION_SEND_TIMEOUT,
+    @SendTimeout, SizeOf(SendTimeout));
+  InternetSetOption(fConnection, INTERNET_OPTION_RECEIVE_TIMEOUT,
+    @ReceiveTimeout, SizeOf(ReceiveTimeout));
+  fConnection := InternetConnectA(fSession, pointer(fServer), fPort,
+    nil, nil, INTERNET_SERVICE_HTTP, 0, 0);
   if fConnection = nil then
     raise EWinINet.Create;
 end;
@@ -2458,8 +2472,8 @@ begin
     Flags := Flags or INTERNET_FLAG_KEEP_CONNECTION;
   if fHttps then
     Flags := Flags or INTERNET_FLAG_SECURE;
-  FRequest := HttpOpenRequestA(FConnection, Pointer(aMethod), Pointer(aURL), nil,
-    nil, ACCEPT_TYPES[fNoAllAccept], Flags, 0);
+  FRequest := HttpOpenRequestA(FConnection, Pointer(aMethod), Pointer(aURL),
+    nil, nil, ACCEPT_TYPES[fNoAllAccept], Flags, 0);
   if FRequest = nil then
     raise EWinINet.Create;
 end;
@@ -2505,8 +2519,8 @@ begin
       max := datalen - datapos;
       if Bytes > max then
         Bytes := max;
-      if not InternetWriteFile(fRequest, @PByteArray(aData)[datapos], Bytes,
-        BytesWritten) then
+      if not InternetWriteFile(fRequest,
+         @PByteArray(aData)[datapos], Bytes, BytesWritten) then
         raise EWinINet.Create;
       inc(datapos, BytesWritten);
       if not fOnUpload(Self, datapos, datalen) then
@@ -2572,14 +2586,15 @@ end;
 
 { TWinHttpUpgradeable }
 
-function TWinHttpUpgradeable.InternalRetrieveAnswer(var Header, Encoding,
-  AcceptEncoding: RawUtf8; var Data: RawByteString): integer;
+function TWinHttpUpgradeable.InternalRetrieveAnswer(
+  var Header, Encoding, AcceptEncoding: RawUtf8;
+  var Data: RawByteString): integer;
 begin
   result := inherited InternalRetrieveAnswer(Header, Encoding, AcceptEncoding, Data);
 end;
 
-procedure TWinHttpUpgradeable.InternalSendRequest(const aMethod: RawUtf8; const
-  aData: RawByteString);
+procedure TWinHttpUpgradeable.InternalSendRequest(const aMethod: RawUtf8;
+  const aData: RawByteString);
 begin
   inherited InternalSendRequest(aMethod, aData);
 end;
@@ -2626,17 +2641,20 @@ begin
   end;
 end;
 
-function TWinHttpWebSocketClient.Send(aBufferType:
-  WINHTTP_WEB_SOCKET_BUFFER_TYPE; aBuffer: pointer; aBufferLength: cardinal): cardinal;
+function TWinHttpWebSocketClient.Send(aBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE;
+  aBuffer: pointer; aBufferLength: cardinal): cardinal;
 begin
   if not CheckSocket then
     result := ERROR_INVALID_HANDLE
   else
-    result := WinHttpApi.WebSocketSend(fSocket, aBufferType, aBuffer, aBufferLength);
+    result := WinHttpApi.WebSocketSend(
+      fSocket, aBufferType, aBuffer, aBufferLength);
 end;
 
-function TWinHttpWebSocketClient.Receive(aBuffer: pointer; aBufferLength: cardinal;
-  out aBytesRead: cardinal; out aBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE): cardinal;
+function TWinHttpWebSocketClient.Receive(
+  aBuffer: pointer; aBufferLength: cardinal;
+  out aBytesRead: cardinal;
+  out aBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE): cardinal;
 begin
   if not CheckSocket then
     result := ERROR_INVALID_HANDLE
@@ -2645,7 +2663,8 @@ begin
       aBytesRead, aBufferType);
 end;
 
-function TWinHttpWebSocketClient.CloseConnection(const aCloseReason: RawUtf8): cardinal;
+function TWinHttpWebSocketClient.CloseConnection(
+  const aCloseReason: RawUtf8): cardinal;
 begin
   if not CheckSocket then
     result := ERROR_INVALID_HANDLE
@@ -2667,8 +2686,8 @@ begin
   if CheckSocket then
   begin
     // todo: check result
-    WinHttpApi.WebSocketClose(fSocket, WEB_SOCKET_ABORTED_CLOSE_STATUS, Pointer(CloseReason),
-      Length(CloseReason));
+    WinHttpApi.WebSocketClose(fSocket, WEB_SOCKET_ABORTED_CLOSE_STATUS,
+      Pointer(CloseReason), Length(CloseReason));
     SetLength(reason, WEB_SOCKET_MAX_CLOSE_REASON_LENGTH);
     WinHttpApi.WebSocketQueryCloseStatus(fSocket, status, Pointer(reason),
       WEB_SOCKET_MAX_CLOSE_REASON_LENGTH, reasonLength);
@@ -2829,8 +2848,8 @@ var
 begin
   res := curl.easy_perform(fHandle);
   if res <> crOK then
-    raise ECurlHttp.CreateFmt('libcurl error %d (%s) on %s %s', [ord(res), curl.easy_strerror
-      (res), fIn.Method, fIn.URL]);
+    raise ECurlHttp.CreateFmt('libcurl error %d (%s) on %s %s',
+      [ord(res), curl.easy_strerror(res), fIn.Method, fIn.URL]);
   rc := 0;
   curl.easy_getinfo(fHandle, ciResponseCode, rc);
   result := rc;
@@ -2931,7 +2950,7 @@ begin
       FreeAndNil(fHttp); // need a new HTTP connection
       fHttp := THttpClientSocket.Open(
         Uri.Server, Uri.Port, nlTcp, fTimeOut, Uri.Https, @fSocketTLS,
-          GetSystemProxyUri(Uri.Address, Proxy, temp));
+        GetSystemProxyUri(Uri.Address, Proxy, temp));
       if fUserAgent <> '' then
         fHttp.UserAgent := fUserAgent;
     end;

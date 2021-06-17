@@ -104,6 +104,7 @@ Low-Level Memory Buffers Processing Functions shared by all framework units
 - Basic MIME Content Types Support
 - Text Memory Buffers and Files
 - Markup (e.g. HTML or Emoji) process
+- `RawByteString` Buffers Aggregation via `TRawByteStringGroup`
 
 ### mormot.core.data
 
@@ -121,11 +122,16 @@ Low-Level Data Processing Functions shared by all framework units
 JSON functions shared by all framework units
 - Low-Level JSON Processing Functions
 - `TTextWriter` class with proper JSON escaping and `WriteObject()` support
-- JSON-aware `TSynNameValue` `TSynPersistentStoreJson` `&TRawByteStringGroup`
+- JSON-aware `TSynNameValue` `TSynPersistentStoreJson`
 - JSON-aware `TSynDictionary` Storage
 - JSON Unserialization for any kind of Values
 - JSON Serialization Wrapper Functions
 - Abstract Classes with Auto-Create-Fields
+
+### mormot.core.collections
+
+Generics Collections as used by all framework units
+- JSON-aware Generics `TSynKeyValue<>` Dictionary Storage
 
 ### mormot.core.variants
 

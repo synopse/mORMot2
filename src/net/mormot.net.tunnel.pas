@@ -520,8 +520,8 @@ begin
           raise ETunnel.CreateUtf8('%.ProcessIncomingFrame: bad handshake %.%.%',
             [self, length(request.payload), head^.session, session]);
         fOptions := head^.options;
-        connections := ((Sender as TWebSocketProcessServer).
-          ServerResp.Server as TTunnelRelayServer).fLinks;
+        connections := (((Sender as TWebSocketProcessServer).Socket
+          as TWebSocketServerSocket).Server as TTunnelRelayServer).fLinks;
         connections.Safe.Lock;
         try
           link := connections.FindValueOrAdd(session, added);

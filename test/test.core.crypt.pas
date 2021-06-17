@@ -65,12 +65,12 @@ type
     {$endif OSWINDOWS}
     /// JWT classes
     procedure _JWT;
-    /// compute some performance numbers, mostly against regression
-    procedure Benchmark;
-    /// Cryptography Catalog
-    procedure Catalog;
     /// validate TBinaryCookieGenerator object
     procedure _TBinaryCookieGenerator;
+    /// Cryptography Catalog
+    procedure Catalog;
+    /// compute some performance numbers, mostly against regression
+    procedure Benchmark;
   end;
 
 
@@ -1031,8 +1031,8 @@ begin
   end;
   for b := low(b) to high(b) do
     if time[b] <> 0 then
-      AddConsole(format('%d %s in %s i.e. %d/s or %s/s', [n, TXT[b],
-        MicroSecToString(time[b]), (Int64(n) * 1000000) div time[b],
+      AddConsole(FormatString('% % in % i.e. %/s or %/s', [n, TXT[b],
+        MicroSecToString(time[b]), K((Int64(n) * 1000000) div time[b]),
         KB((Int64(size) * 1000000) div time[b])]));
   for b := low(AES) to high(AES) do
     AES[b].Free;
@@ -1930,9 +1930,11 @@ var
   i: integer;
   bak: RawUtf8;
   timer: TPrecisionTimer;
-  cook: array[0..511] of RawUtf8;
-  cookid: array[0..high(cook)] of TBinaryCookieGeneratorSessionID;
+  cook: array of RawUtf8;
+  cookid: array of TBinaryCookieGeneratorSessionID;
 begin
+  SetLength(cook, 16384);
+  SetLength(cookid, length(cook));
   gen.Init;
   timer.Start;
   for i := 0 to high(cook) do
@@ -1943,18 +1945,18 @@ begin
   for i := 0 to high(cook) do
     Check(cookid[i] <> 0);
   for i := 0 to high(cook) do
-    CheckEqual(gen.Validate(cook[i]), cookid[i]);
-  for i := 0 to high(cook) do
-    CheckEqual(gen.Validate(
-      ParseTrailingJwt('/uri/' + cook[i] + '  ', {nodot=}true)), cookid[i]);
+    CheckEqual(gen.Validate(cook[i]), cookid[i], 'gen1');
+  for i := 0 to high(cook) shr 4 do
+    CheckEqual(gen.Validate(ParseTrailingJwt('/uri/' + cook[i] + '  ',
+      {nodot=}true)), cookid[i], 'gen2');
   bak := gen.Save;
   gen.Init;
   for i := 0 to high(cook) do
-    CheckEqual(gen.Validate(cook[i]), 0);
-  Check(gen.Load(bak));
+    CheckEqual(gen.Validate(cook[i]), 0, 'void');
+  Check(gen.Load(bak), 'load');
   timer.Start;
   for i := 0 to high(cook) do
-    CheckEqual(gen.Validate(cook[i]), cookid[i]);
+    CheckEqual(gen.Validate(cook[i]), cookid[i], 'loaded');
   NotifyTestSpeed('validate', length(cook), 0, @timer);
 end;
 

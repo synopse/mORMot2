@@ -3146,17 +3146,7 @@ begin
       if ValueType > imvSelf then
       begin
         V := nil;
-        {$ifndef CPUX86}
-        {$ifdef HAS_FPREG} // x64, armhf, aarch64
-        if FPRegisterIdent > 0 then
-          V := @ctxt.Stack.FPRegs[FPREG_FIRST + FPRegisterIdent - 1]
-        else
-        {$endif HAS_FPREG}
-        if RegisterIdent > 0 then
-          V := @ctxt.Stack.ParamRegs[PARAMREG_FIRST + RegisterIdent - 1];
-        if RegisterIdent = PARAMREG_FIRST then
-          FakeCallRaiseError(ctxt, 'unexpected self', []);
-        {$else}
+        {$ifdef CPUX86}
         case RegisterIdent of
           REGEAX:
             FakeCallRaiseError(ctxt, 'unexpected self', []);
@@ -3165,6 +3155,16 @@ begin
           REGECX:
             V := @ctxt.Stack.ECX;
         else
+        {$else}
+        {$ifdef HAS_FPREG} // x64, armhf, aarch64
+        if FPRegisterIdent > 0 then
+          V := @ctxt.Stack.FPRegs[FPRegisterIdent + (FPREG_FIRST - 1)]
+        else
+        {$endif HAS_FPREG}
+          if RegisterIdent > 0 then
+            V := @ctxt.Stack.ParamRegs[RegisterIdent + (PARAMREG_FIRST - 1)];
+        if RegisterIdent = PARAMREG_FIRST then
+          FakeCallRaiseError(ctxt, 'unexpected self', []);
         {$endif CPUX86}
           if V = nil then
             if (SizeInStack > 0) and
@@ -3173,7 +3173,7 @@ begin
             else
               V := @ctxt.I64s[IndexVar]; // for results in CPU
         {$ifdef CPUX86}
-        end;
+        end; // case RegisterIdent of
         {$endif CPUX86}
         if vPassedByReference in ValueKindAsm then
           V := PPointer(V)^;
@@ -3501,7 +3501,7 @@ const
     imvInt64, imvInteger, imvInt64, imvRawByteString, imvRawJson, imvRawUtf8,
   // ptRecord, ptSingle, ptString, ptSynUnicode, ptDateTime, ptDateTimeMS,
     imvRecord, imvDouble, imvString, imvSynUnicode, imvDateTime, imvDateTime,
-  // ptGuid, ptHash128, ptHash256, ptHash512, ptORM, ptTimeLog, ptUnicodeString,
+  // ptGuid, ptHash128, ptHash256, ptHash512, ptOrm, ptTimeLog, ptUnicodeString,
     imvBinary, imvBinary, imvBinary, imvBinary, imvInt64, imvInt64, imvUnicodeString,
   // ptUnixTime, ptUnixMSTime, ptVariant, ptWideString, ptWinAnsi, ptWord,
     imvInt64, imvInt64, imvVariant, imvWideString, imvRawUtf8, imvNone,
@@ -3909,7 +3909,7 @@ begin
         imvInteger, imvCardinal, imvInt64:
           if rcfQWord in ArgRtti.Cache.Flags then
             Include(ValueKindAsm,vIsQword);
-        imvDouble,imvDateTime:
+        imvDouble, imvDateTime:
           begin
             {$ifdef HAS_FPREG}
             ValueIsInFPR := not (vPassedByReference in ValueKindAsm);
@@ -4467,7 +4467,7 @@ begin
         for i := 0 to MethodsCount - 1 do
         begin
           fFakeVTable[i + RESERVED_VTABLE_SLOTS] := P;
-          {$ifdef CPUX64}
+          {$ifdef CPUX64}   { TODO: generate a JIT jmp instead of push + ret }
           PWord(P)^ := $b848;
           inc(PWord(P));           // mov rax,offset x64FakeStub
           PPtrUInt(P)^ := PtrUInt(@x64FakeStub);

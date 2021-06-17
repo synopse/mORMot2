@@ -786,7 +786,7 @@ end;
 
 procedure _dynarray_decr_ref_free(p: PDynArrayRec; Info: pointer);
 begin
-  Info := GetTypeData(Info)^.elTypeRef;
+  Info := GetTypeData(Info)^.elTypeRef; // on x86_64 we know it is by reference
   if Info <> nil then
   begin
     Info := PPointer(Info)^;

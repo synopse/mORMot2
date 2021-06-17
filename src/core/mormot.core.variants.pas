@@ -606,6 +606,7 @@ type
   TDocVariantDataEnumerator = class;
   TDocVariantDataArrayEnumerator = class;
   TDocVariantDataObjectEnumerator = class;
+  TDocVariantDataDocVariantEnumerator = class;
 
   {$A-} { packet object not allowed since Delphi 2009 :( }
   /// memory structure used for TDocVariant storage of any JSON/BSON
@@ -875,17 +876,23 @@ type
     // directly within the Values[]/Names[] arrays, using e.g.
     // InitFast(InitialCapacity) to initialize the document
     // - if aName='', append a dvArray item, otherwise append a dvObject field
+    // - you can specify an optional aIndex value to Insert instead of Add
     // - warning: FPC optimizer is confused by Values[InternalAdd(name)] so
     // you should call InternalAdd() in an explicit previous step
-    function InternalAdd(const aName: RawUtf8): integer;
+    function InternalAdd(const aName: RawUtf8; aIndex: integer = -1): integer;
     /// an enumerator able to compile "for .. in ... do" statements
     // - returns a pointer variant over all Values[] of a document array, or
     // over all fields of an object array, with "Name" and "Value" fields
     function GetEnumerator: TDocVariantDataEnumerator;
     /// an enumerator able to compile "for .. in ... do" statements for arrays
-    // - returns a pointer variant over all Values[] of a document array, or
+    // - returns a PVariant over all Values[] of a document array
     // - don't iterate if the document is an object
     function ArrayEnumerator: TDocVariantDataArrayEnumerator;
+    /// an enumerator able to compile "for .. in ... do" statements for arrays
+    // of objects
+    // - returns a PDocVariantData over all _Safe(Values[]) of a document array
+    // - don't iterate if the document is an object
+    function DocVariantEnumerator: TDocVariantDataDocVariantEnumerator;
     /// an enumerator able to compile "for .. in ... do" statements for objects
     // - returns a pointer record with Name/Value fields over all fields of
     // an object array
@@ -942,6 +949,7 @@ type
     /// save an array document as an array of TVarRec, i.e. an array of const
     // - will expect the document to be a dvArray - otherwise, will raise a
     // EDocVariant exception
+    // - values will be passed by referenced as vtVariant to @VValue[ndx]
     // - would allow to write code as such:
     // !  Doc.InitArray(['one',2,3]);
     // !  Doc.ToArrayOfConst(vr);
@@ -953,6 +961,7 @@ type
     /// save an array document as an array of TVarRec, i.e. an array of const
     // - will expect the document to be a dvArray - otherwise, will raise a
     // EDocVariant exception
+    // - values will be passed by referenced as vtVariant to @VValue[ndx]
     // - would allow to write code as such:
     // !  Doc.InitArray(['one',2,3]);
     // !  s := FormatUtf8('[%,%,%]',Doc.ToArrayOfConst,[],true);
@@ -1170,13 +1179,14 @@ type
     // ! Assert(TDocVariantData(aVariant).Kind=dvUndefined);
     // ! TDocVariantData(aVariant).AddValue('name','John');
     // ! Assert(TDocVariantData(aVariant).Kind=dvObject);
+    // - you can specify an optional index in the array where to insert
     // - returns the index of the corresponding newly added value
     function AddValue(const aName: RawUtf8; const aValue: variant;
-      aValueOwned: boolean = false): integer; overload;
+      aValueOwned: boolean = false; aIndex: integer = -1): integer; overload;
     /// add a value in this document
     // - overloaded function accepting a UTF-8 encoded buffer for the name
     function AddValue(aName: PUtf8Char; aNameLen: integer; const aValue: variant;
-      aValueOwned: boolean = false): integer; overload;
+      aValueOwned: boolean = false; aIndex: integer = -1): integer; overload;
     /// add a value in this document, or update an existing entry
     // - if instance's Kind is dvArray, it will raise an EDocVariant exception
     // - any existing Name would be updated with the new Value, unless
@@ -1216,20 +1226,23 @@ type
     // ! Assert(TDocVariantData(aVariant).Kind=dvUndefined);
     // ! TDocVariantData(aVariant).AddItem('one');
     // ! Assert(TDocVariantData(aVariant).Kind=dvArray);
+    // - you can specify an optional index in the array where to insert
     // - returns the index of the corresponding newly added item
-    function AddItem(const aValue: variant): integer;
+    function AddItem(const aValue: variant; aIndex: integer = -1): integer;
     /// add a value to this document, handled as array, from its text representation
     // - this function expects a UTF-8 text for the value, which would be
     // converted to a variant number, if possible (as varInt/varInt64/varCurrency
     // unless AllowVarDouble is set)
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
+    // - you can specify an optional index in the array where to insert
     // - returns the index of the corresponding newly added item
     function AddItemFromText(const aValue: RawUtf8;
-      AllowVarDouble: boolean = false): integer;
+      AllowVarDouble: boolean = false; aIndex: integer = -1): integer;
     /// add a RawUtf8 value to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
+    // - you can specify an optional index in the array where to insert
     // - returns the index of the corresponding newly added item
-    function AddItemText(const aValue: RawUtf8): integer;
+    function AddItemText(const aValue: RawUtf8; aIndex: integer = -1): integer;
     /// add one or several values to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     procedure AddItems(const aValue: array of const);
@@ -1579,6 +1592,20 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// returns the current Values[] item
     property Current: PVariant
+      read GetCurrent;
+  end;
+
+  /// low-level Enumerator as returned by TDocVariantData.DocVariantEnumerator
+  TDocVariantDataDocVariantEnumerator = class(TDocVariantDataEnumeratorAbstract)
+  protected
+    function GetCurrent: PDocVariantData;
+      {$ifdef HASINLINE}inline;{$endif}
+  public
+    constructor Create(const Value: TDocVariantData);
+    function GetEnumerator: TDocVariantDataDocVariantEnumerator;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns the current _Safe(Values[]) item
+    property Current: PDocVariantData
       read GetCurrent;
   end;
 
@@ -2924,13 +2951,14 @@ end;
 
 function TDocVariantDataEnumerator.GetCurrent: PVariant;
 begin
-  result := @fValue.VValue[fIndex];
+  result := @fValue^.VValue[fIndex];
   if fFakeItem.VCount = 0 then
     exit;
   SetVariantByRef(result^, fFakeItem.VValue[1]);
-  RawUtf8ToVariant(fValue.VName[fIndex], fFakeItem.VValue[0]);
+  RawUtf8ToVariant(fValue^.VName[fIndex], fFakeItem.VValue[0]);
   result := @fFakeItem;
 end;
+
 
 { TDocVariantDataArrayEnumerator }
 
@@ -2945,13 +2973,38 @@ end;
 
 function TDocVariantDataArrayEnumerator.GetCurrent: PVariant;
 begin
-  result := @fValue.VValue[fIndex];
+  result := @fValue^.VValue[fIndex];
 end;
 
 function TDocVariantDataArrayEnumerator.GetEnumerator: TDocVariantDataArrayEnumerator;
 begin
   result := self;
 end;
+
+
+{ TDocVariantDataDocVariantEnumerator }
+
+constructor TDocVariantDataDocVariantEnumerator.Create(
+  const Value: TDocVariantData);
+begin
+  fValue := @Value;
+  if dvoIsObject in Value.VOptions then
+    fIndex := -1
+  else
+    fIndex := maxInt;
+end;
+
+function TDocVariantDataDocVariantEnumerator.GetCurrent: PDocVariantData;
+begin
+  result := _Safe(fValue^.VValue[fIndex]);
+end;
+
+function TDocVariantDataDocVariantEnumerator.GetEnumerator:
+  TDocVariantDataDocVariantEnumerator;
+begin
+  result := self;
+end;
+
 
 { TDocVariantDataObjectEnumerator }
 
@@ -2966,8 +3019,8 @@ end;
 
 function TDocVariantDataObjectEnumerator.GetCurrent: TDocVariantDataObjectEnumerated;
 begin
-  result.Name := @fValue.VName[fIndex];
-  result.Value := @fValue.VValue[fIndex];
+  result.Name := @fValue^.VName[fIndex];
+  result.Value := @fValue^.VValue[fIndex];
 end;
 
 function TDocVariantDataObjectEnumerator.GetEnumerator: TDocVariantDataObjectEnumerator;
@@ -4650,10 +4703,12 @@ begin
   VCount := aCount;
 end;
 
-function TDocVariantData.InternalAdd(const aName: RawUtf8): integer;
+function TDocVariantData.InternalAdd(
+  const aName: RawUtf8; aIndex: integer): integer;
 var
   len: integer;
 begin
+  // validate consistent add/insert
   if aName <> '' then
   begin
     if dvoIsArray in VOptions then
@@ -4675,23 +4730,40 @@ begin
       include(VOptions, dvoIsArray);
     end;
   end;
+  // grow up memory if needed
   len := length(VValue);
   if VCount >= len then
   begin
     len := NextGrow(VCount);
     SetLength(VValue, len);
   end;
+  result := VCount;
+  inc(VCount);
+  if cardinal(aIndex) < cardinal(result) then
+  begin
+    // reserve space for the inserted new item
+    dec(result, aIndex);
+    MoveFast(VValue[aIndex], VValue[aIndex + 1], result * SizeOf(variant));
+    PInteger(@VValue[aIndex])^ := varEmpty; // avoid GPF
+    if aName <> '' then
+    begin
+      if Length(VName) <> len then
+        SetLength(VName, len);
+      MoveFast(VName[aIndex], VName[aIndex + 1], result * SizeOf(pointer));
+      PPointer(@VName[aIndex])^ := nil;
+    end;
+    result := aIndex;
+  end;
   if aName <> '' then
   begin
+    // store the object field name
     if Length(VName) <> len then
       SetLength(VName, len);
     if dvoInternNames in VOptions then
-      DocVariantType.InternNames.Unique(VName[VCount], aName)
+      DocVariantType.InternNames.Unique(VName[result], aName)
     else
-      VName[VCount] := aName;
+      VName[result] := aName;
   end;
-  result := VCount;
-  inc(VCount);
 end;
 
 function TDocVariantData.GetEnumerator: TDocVariantDataEnumerator;
@@ -4702,6 +4774,11 @@ end;
 function TDocVariantData.ArrayEnumerator: TDocVariantDataArrayEnumerator;
 begin
   result := TDocVariantDataArrayEnumerator.Create(self);
+end;
+
+function TDocVariantData.DocVariantEnumerator: TDocVariantDataDocVariantEnumerator;
+begin
+  result := TDocVariantDataDocVariantEnumerator.Create(self);
 end;
 
 function TDocVariantData.ObjectEnumerator: TDocVariantDataObjectEnumerator;
@@ -4717,7 +4794,7 @@ begin
 end;
 
 function TDocVariantData.AddValue(const aName: RawUtf8; const aValue: variant;
-  aValueOwned: boolean): integer;
+  aValueOwned: boolean; aIndex: integer): integer;
 begin
   if dvoCheckForDuplicatedNames in VOptions then
   begin
@@ -4725,7 +4802,7 @@ begin
     if result >= 0 then
       raise EDocVariant.CreateUtf8('AddValue: Duplicated [%] name', [aName]);
   end;
-  result := InternalAdd(aName);
+  result := InternalAdd(aName, aIndex);
   if aValueOwned then
     VValue[result] := aValue
   else
@@ -4735,12 +4812,12 @@ begin
 end;
 
 function TDocVariantData.AddValue(aName: PUtf8Char; aNameLen: integer;
-  const aValue: variant; aValueOwned: boolean): integer;
+  const aValue: variant; aValueOwned: boolean; aIndex: integer): integer;
 var
   tmp: RawUtf8;
 begin
   FastSetString(tmp, aName, aNameLen);
-  result := AddValue(tmp, aValue, aValueOwned);
+  result := AddValue(tmp, aValue, aValueOwned, aIndex);
 end;
 
 function TDocVariantData.AddValueFromText(const aName, aValue: RawUtf8;
@@ -4828,18 +4905,18 @@ begin
       src^.VName[ndx], src^.VValue[ndx], nil, aOnlyAddMissing);
 end;
 
-function TDocVariantData.AddItem(const aValue: variant): integer;
+function TDocVariantData.AddItem(const aValue: variant; aIndex: integer): integer;
 begin
-  result := InternalAdd('');
+  result := InternalAdd('', aIndex);
   SetVariantByValue(aValue, VValue[result]);
   if dvoInternValues in VOptions then
     DocVariantType.InternValues.UniqueVariant(VValue[result]);
 end;
 
 function TDocVariantData.AddItemFromText(const aValue: RawUtf8;
-  AllowVarDouble: boolean): integer;
+  AllowVarDouble: boolean; aIndex: integer): integer;
 begin
-  result := InternalAdd('');
+  result := InternalAdd('', aIndex);
   if not GetNumericVariantFromJson(pointer(aValue),
            TVarData(VValue[result]), AllowVarDouble) then
     if dvoInternValues in VOptions then
@@ -4848,9 +4925,10 @@ begin
       RawUtf8ToVariant(aValue, VValue[result]);
 end;
 
-function TDocVariantData.AddItemText(const aValue: RawUtf8): integer;
+function TDocVariantData.AddItemText(
+  const aValue: RawUtf8; aIndex: integer): integer;
 begin
-  result := InternalAdd('');
+  result := InternalAdd('', aIndex);
   if dvoInternValues in VOptions then
     DocVariantType.InternValues.UniqueVariant(VValue[result], aValue)
   else
@@ -5959,8 +6037,8 @@ begin
   end;
 end;
 
-function TDocVariantData.RetrieveValueOrRaiseException(aName: PUtf8Char;
-  aNameLen: integer; aCaseSensitive: boolean;
+function TDocVariantData.RetrieveValueOrRaiseException(
+  aName: PUtf8Char; aNameLen: integer; aCaseSensitive: boolean;
   var Dest: variant; DestByRef: boolean): boolean;
 var
   ndx: integer;
@@ -6077,13 +6155,11 @@ end;
 function TDocVariantData.ToNonExpandedJson: RawUtf8;
 var
   fields: TRawUtf8DynArray;
-  fieldsCount: integer;
+  fieldsCount, r, f: PtrInt;
   W: TTextWriter;
-  r, f: integer;
   row: PDocVariantData;
   temp: TTextWriterStackBuffer;
 begin
-  fieldsCount := 0;
   if not (dvoIsArray in VOptions) then
   begin
     result := '';
@@ -6094,6 +6170,7 @@ begin
     result := '[]';
     exit;
   end;
+  fieldsCount := 0;
   with _Safe(VValue[0])^ do
     if dvoIsObject in VOptions then
     begin

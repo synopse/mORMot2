@@ -3336,6 +3336,7 @@ var
   i32: TIntegerDynArray;
   i64: TInt64DynArray;
   i, n: integer;
+  timer: TPrecisionTimer;
 begin
   check({%H-}i32 = nil);
   DeduplicateInteger(i32);
@@ -3449,6 +3450,17 @@ begin
     for i := 0 to high(i64) do
       check(i64[i] = i);
   end;
+  SetLength(i32, 100000);
+  n := 10;
+  repeat
+    FillRandom(pointer(i32), n);
+    timer.Start;
+    QuickSortInteger(pointer(i32), 0, n - 1);
+    NotifyTestSpeed('QuickSortInteger', n, 0, @timer, {onlylog=}true);
+    for i := 1 to n - 1 do
+      Check(i32[i - 1] <= i32[i]);
+    n := n * 10;
+  until n > length(i32);
 end;
 
 function TestAddFloatStr(const str: RawUtf8): RawUtf8;
@@ -5839,6 +5851,178 @@ begin
   end;
 end;
 
+function HashAnsiString(Item: PAnsiChar; Hasher: THasher): cardinal;
+begin
+  Item := PPointer(Item)^; // passed by reference
+  if Item = nil then
+    result := 0
+  else
+    result := Hasher(0, Item, PStrLen(Item - _STRLEN)^);
+end;
+
+{  TSynDictionary perf numbers on increasing integers or random guid strings
+   with FPC 3.2.0 on x86_64 with our fpcx64mm - which is our main server target
+
+ About Find(), we tested 3 scenarios based on the pre-computed r[] lookups
+
+ A) r[i] := i;  =  unrealistic case, but best performance
+
+ count=1,000 DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2
+  crc32c int  grow   slots=8KB col=5.1K curcol=1K 107%  add 6.1M/s find 14M/s
+  crc32c int  setcap slots=8KB col=1K curcol=1K 108%  add 12.2M/s find 14.9M/s
+  crc32c guid grow   slots=8KB col=3.2K curcol=497 49%  add 6.7M/s find 14.6M/s
+  crc32c guid setcap slots=8KB col=489 curcol=489 48%  add 13.6M/s find 14.9M/s
+  aesni  int  grow   slots=8KB col=3.3K curcol=466 46%  add 6.9M/s find 15.6M/s
+  aesni  int  setcap slots=8KB col=466 curcol=466 46%  add 12.8M/s find 15.8M/s
+  aesni  guid grow   slots=8KB col=4K curcol=587 58%  add 6.2M/s find 14M/s
+  aesni  guid setcap slots=8KB col=540 curcol=540 54%  add 13.2M/s find 14.2M/s
+ count=10,000 DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2
+  crc32c int  grow   slots=64KB col=17.9K curcol=2.3K 24%  add 9.9M/s find 19.3M/s
+  crc32c int  setcap slots=128KB col=1.2K curcol=1.2K 12%  add 17.1M/s find 20M/s
+  crc32c guid grow   slots=64KB col=33K curcol=7.7K 79%  add 6.5M/s find 13.9M/s
+  crc32c guid setcap slots=128KB col=2.1K curcol=2.1K 22%  add 8M/s find 15.3M/s
+  aesni  int  grow   slots=64KB col=33.1K curcol=7.9K 81%  add 7.2M/s find 14.1M/s
+  aesni  int  setcap slots=128KB col=2.1K curcol=2.1K 22%  add 15M/s find 18M/s
+  aesni  guid grow   slots=64KB col=33.2K curcol=7.1K 73%  add 6.3M/s find 14M/s
+  aesni  guid setcap slots=128KB col=2.1K curcol=2.1K 21%  add 14M/s find 16.8M/s
+ count=100,000 DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2
+  crc32c int  grow   slots=512KB col=185.9K curcol=74.6K 76%  add 6.2M/s find 11.1M/s
+  crc32c int  setcap slots=1MB col=15.3K curcol=15.3K 15%  add 8.3M/s find 14.4M/s
+  crc32c guid grow   slots=512KB col=358.1K curcol=156K 159%  add 3.8M/s find 6M/s
+  crc32c guid setcap slots=1MB col=30.2K curcol=30.2K 30%  add 7.8M/s find 8M/s
+  aesni  int  grow   slots=512KB col=366.8K curcol=155.2K 158%  add 3.7M/s find 6.6M/s
+  aesni  int  setcap slots=1MB col=29.7K curcol=29.7K 30%  add 6.2M/s find 10M/s
+  aesni  guid grow   slots=512KB col=360K curcol=158.5K 162%  add 3.5M/s find 5.7M/s
+  aesni  guid setcap slots=1MB col=30.3K curcol=30.3K 31%  add 6.9M/s find 7.8M/s
+ count=1,000,000 DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2
+  crc32c int  grow   slots=7.9MB col=2.9M curcol=503.6K 51%  add 2.7M/s find 6M/s
+  crc32c int  setcap slots=7.9MB col=503.6K curcol=503.6K 51%  add 5.9M/s find 6M/s
+  crc32c guid grow   slots=7.9MB col=3.6M curcol=454.9K 46%  add 1.6M/s find 4.4M/s
+  crc32c guid setcap slots=7.9MB col=452.1K curcol=452.1K 46%  add 4.5M/s find 4.4M/s
+  aesni  int  grow   slots=7.9MB col=3.6M curcol=453.6K 46%  add 1.6M/s find 4.6M/s
+  aesni  int  setcap slots=7.9MB col=453.6K curcol=453.6K 46%  add 4.7M/s find 4.6M/s
+  aesni  guid grow   slots=7.9MB col=3.6M curcol=457.8K 46%  add 1.6M/s find 4.4M/s
+  aesni  guid setcap slots=7.9MB col=454.2K curcol=454.2K 46%  add 4.4M/s find 4.4M/s
+ count=10,000,000 DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2
+  crc32c int  grow   slots=63.2MB col=28.6M curcol=6.4M 67%  add 2.3M/s find 5.1M/s
+  crc32c int  setcap slots=79.7MB col=4.5M curcol=4.5M 47%  add 5.2M/s find 5.6M/s
+  crc32c guid grow   slots=63.2MB col=32.5M curcol=7.2M 76%  add 1.4M/s find 3.3M/s
+  crc32c guid setcap slots=79.7MB col=4.3M curcol=4.3M 45%  add 3.9M/s find 4M/s
+  aesni  int  grow   slots=63.2MB col=32.4M curcol=7.2M 75%  add 1.5M/s find 3.6M/s
+  aesni  int  setcap slots=79.7MB col=4.3M curcol=4.3M 45%  add 4.1M/s find 4.2M/s
+  aesni  guid grow   slots=63.2MB col=32.6M curcol=7.2M 75%  add 1.4M/s find 3.3M/s
+  aesni  guid setcap slots=79.7MB col=4.3M curcol=4.3M 45%  add 3.9M/s find 3.9M/s
+
+ B) r[i] := Random32((Count shr 2) - 1) - maybe realistic use case (25% coverage)
+
+ count=1,000 DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2
+  crc32c int  grow   slots=8KB col=5.1K curcol=1K 107%  add 6.9M/s find 18.7M/s
+  crc32c int  setcap slots=8KB col=1K curcol=1K 108%  add 13.8M/s find 19M/s
+  crc32c guid grow   slots=8KB col=4K curcol=540 54%  add 6.1M/s find 19.8M/s
+  crc32c guid setcap slots=8KB col=395 curcol=395 39%  add 14M/s find 20.2M/s
+  aesni  int  grow   slots=8KB col=3.3K curcol=478 47%  add 7.2M/s find 20.2M/s
+  aesni  int  setcap slots=8KB col=478 curcol=478 47%  add 14.6M/s find 20.7M/s
+  aesni  guid grow   slots=8KB col=4.3K curcol=531 53%  add 5.9M/s find 18.3M/s
+  aesni  guid setcap slots=8KB col=437 curcol=437 43%  add 13.4M/s find 19M/s
+ count=10,000 DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2
+  crc32c int  grow   slots=64KB col=17.9K curcol=2.3K 24%  add 9.8M/s find 17.8M/s
+  crc32c int  setcap slots=128KB col=1.2K curcol=1.2K 12%  add 17.4M/s find 17.5M/s
+  crc32c guid grow   slots=64KB col=31.2K curcol=7.5K 77%  add 6.8M/s find 17.3M/s
+  crc32c guid setcap slots=128KB col=2.1K curcol=2.1K 21%  add 10.9M/s find 11.5M/s
+  aesni  int  grow   slots=64KB col=31.5K curcol=7.3K 74%  add 7.4M/s find 16.1M/s
+  aesni  int  setcap slots=128KB col=2K curcol=2K 21%  add 16.1M/s find 17.4M/s
+  aesni  guid grow   slots=64KB col=32.2K curcol=7.3K 75%  add 6.3M/s find 16.4M/s
+  aesni  guid setcap slots=128KB col=2.1K curcol=2.1K 22%  add 14.7M/s find 16.4M/s
+ count=100,000 DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2
+  crc32c int  grow   slots=512KB col=185.9K curcol=74.6K 76%  add 5.9M/s find 10.3M/s
+  crc32c int  setcap slots=1MB col=15.3K curcol=15.3K 15%  add 9.4M/s find 8.9M/s
+  crc32c guid grow   slots=512KB col=366.7K curcol=153.2K 156%  add 3.9M/s find 6.8M/s
+  crc32c guid setcap slots=1MB col=30.2K curcol=30.2K 31%  add 6.9M/s find 6.1M/s
+  aesni  int  grow   slots=512KB col=355.4K curcol=156.2K 160%  add 3.8M/s find 7.3M/s
+  aesni  int  setcap slots=1MB col=29.6K curcol=29.6K 30%  add 6.2M/s find 8.8M/s
+  aesni  guid grow   slots=512KB col=362.3K curcol=158.4K 162%  add 3.7M/s find 5.9M/s
+  aesni  guid setcap slots=1MB col=30K curcol=30K 30%  add 6.9M/s find 5.8M/s
+ count=1,000,000 DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2
+  crc32c int  grow   slots=7.9MB col=2.9M curcol=503.6K 51%  add 2.7M/s find 2.3M/s
+  crc32c int  setcap slots=7.9MB col=503.6K curcol=503.6K 51%  add 5.8M/s find 2.3M/s
+  crc32c guid grow   slots=7.9MB col=3.6M curcol=455.7K 46%  add 1.6M/s find 2.4M/s
+  crc32c guid setcap slots=7.9MB col=456.5K curcol=456.5K 46%  add 4.5M/s find 2.4M/s
+  aesni  int  grow   slots=7.9MB col=3.6M curcol=453.1K 46%  add 1.7M/s find 2.4M/s
+  aesni  int  setcap slots=7.9MB col=453.1K curcol=453.1K 46%  add 4.7M/s find 2.3M/s
+  aesni  guid grow   slots=7.9MB col=3.5M curcol=452K 46%  add 1.6M/s find 2.3M/s
+  aesni  guid setcap slots=7.9MB col=452.9K curcol=452.9K 46%  add 4.5M/s find 2.3M/s
+ count=10,000,000 DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2
+  crc32c int  grow   slots=63.2MB col=28.6M curcol=6.4M 67%  add 2.3M/s find 2M/s
+  crc32c int  setcap slots=79.7MB col=4.5M curcol=4.5M 47%  add 5.2M/s find 2M/s
+  crc32c guid grow   slots=63.2MB col=32.6M curcol=7.2M 75%  add 1.4M/s find 2M/s
+  crc32c guid setcap slots=79.7MB col=4.3M curcol=4.3M 45%  add 3.9M/s find 1.9M/s
+  aesni  int  grow   slots=63.2MB col=32.5M curcol=7.2M 75%  add 1.5M/s find 2M/s
+  aesni  int  setcap slots=79.7MB col=4.3M curcol=4.3M 45%  add 4.1M/s find 2M/s
+  aesni  guid grow   slots=63.2MB col=32.5M curcol=7.2M 75%  add 1.4M/s find 1.9M/s
+  aesni  guid setcap slots=79.7MB col=4.3M curcol=4.3M 45%  add 3.9M/s find 2M/s
+
+ C) r[i] := Random32(Count - 1) - worse case with full range coverage
+
+ count=1,000 DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2
+  crc32c int  grow   slots=8KB col=5.1K curcol=1K 107%  add 6.5M/s find 13.8M/s
+  crc32c int  setcap slots=8KB col=1K curcol=1K 108%  add 13.6M/s find 14.6M/s
+  crc32c guid grow   slots=8KB col=3.6K curcol=574 57%  add 6.1M/s find 14.6M/s
+  crc32c guid setcap slots=8KB col=527 curcol=527 52%  add 13.2M/s find 15.6M/s
+  aesni  int  grow   slots=8KB col=3.7K curcol=479 47%  add 7M/s find 16.4M/s
+  aesni  int  setcap slots=8KB col=480 curcol=480 48%  add 12.2M/s find 16.7M/s
+  aesni  guid grow   slots=8KB col=3K curcol=514 51%  add 6.5M/s find 15.1M/s
+  aesni  guid setcap slots=8KB col=527 curcol=527 52%  add 13M/s find 14.6M/s
+ count=10,000 DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2
+  crc32c int  grow   slots=64KB col=17.9K curcol=2.3K 24%  add 9.7M/s find 13.9M/s
+  crc32c int  setcap slots=128KB col=1.2K curcol=1.2K 12%  add 17.3M/s find 14.4M/s
+  crc32c guid grow   slots=64KB col=30.4K curcol=7.1K 73%  add 6.4M/s find 10M/s
+  crc32c guid setcap slots=128KB col=2.1K curcol=2.1K 22%  add 9.7M/s find 9.3M/s
+  aesni  int  grow   slots=64KB col=30.8K curcol=7.6K 77%  add 7.2M/s find 10.7M/s
+  aesni  int  setcap slots=128KB col=2.1K curcol=2.1K 22%  add 14.2M/s find 12.2M/s
+  aesni  guid grow   slots=64KB col=32.6K curcol=7.9K 81%  add 6M/s find 9.4M/s
+  aesni  guid setcap slots=128KB col=2.1K curcol=2.1K 21%  add 13.8M/s find 7.1M/s
+ count=100,000 DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2
+  crc32c int  grow   slots=512KB col=185.9K curcol=74.6K 76%  add 6.8M/s find 2.9M/s
+  crc32c int  setcap slots=1MB col=15.3K curcol=15.3K 15%  add 6.4M/s find 3.2M/s
+  crc32c guid grow   slots=512KB col=367.9K curcol=159.9K 163%  add 3.7M/s find 2.3M/s
+  crc32c guid setcap slots=1MB col=30.8K curcol=30.8K 31%  add 7.1M/s find 2.5M/s
+  aesni  int  grow   slots=512KB col=361.5K curcol=157.8K 161%  add 3.5M/s find 2.4M/s
+  aesni  int  setcap slots=1MB col=29.5K curcol=29.5K 30%  add 5.4M/s find 2.9M/s
+  aesni  guid grow   slots=512KB col=356.2K curcol=156.4K 160%  add 3.2M/s find 2.3M/s
+  aesni  guid setcap slots=1MB col=30.7K curcol=30.7K 31%  add 7.4M/s find 3M/s
+ count=1,000,000 DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2
+  crc32c int  grow   slots=7.9MB col=2.9M curcol=503.6K 51%  add 2.7M/s find 1.8M/s
+  crc32c int  setcap slots=7.9MB col=503.6K curcol=503.6K 51%  add 5.8M/s find 1.8M/s
+  crc32c guid grow   slots=7.9MB col=3.5M curcol=453K 46%  add 1.6M/s find 1.8M/s
+  crc32c guid setcap slots=7.9MB col=454.2K curcol=454.2K 46%  add 4.5M/s find 1.8M/s
+  aesni  int  grow   slots=7.9MB col=3.6M curcol=456.4K 46%  add 1.7M/s find 1.8M/s
+  aesni  int  setcap slots=7.9MB col=456.4K curcol=456.4K 46%  add 4.7M/s find 1.8M/s
+  aesni  guid grow   slots=7.9MB col=3.6M curcol=452.6K 46%  add 1.6M/s find 1.8M/s
+  aesni  guid setcap slots=7.9MB col=453.3K curcol=453.3K 46%  add 4.2M/s find 1.8M/s
+ count=10,000,000 DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2
+  crc32c int  grow   slots=63.2MB col=28.6M curcol=6.4M 67%  add 2.3M/s find 1.5M/s
+  crc32c int  setcap slots=79.7MB col=4.5M curcol=4.5M 47%  add 5.2M/s find 1.5M/s
+  crc32c guid grow   slots=63.2MB col=32.5M curcol=7.2M 75%  add 1.4M/s find 1.4M/s
+  crc32c guid setcap slots=79.7MB col=4.3M curcol=4.3M 45%  add 3.9M/s find 1.5M/s
+  aesni  int  grow   slots=63.2MB col=32.5M curcol=7.2M 75%  add 1.5M/s find 1.5M/s
+  aesni  int  setcap slots=79.7MB col=4.3M curcol=4.3M 45%  add 4.1M/s find 1.5M/s
+  aesni  guid grow   slots=63.2MB col=32.5M curcol=7.2M 75%  add 1.4M/s find 1.4M/s
+  aesni  guid setcap slots=79.7MB col=4.3M curcol=4.3M 45%  add 3.9M/s find 1.5M/s
+
+  comments:
+   1) r[i]=i is faster than r[i]=Random32() - up to 3x for count>100,000
+     -> naive tests with simple loops are pointless - and we won't use a
+        dictionary for a lookup from first to last item, anyway
+   2) SetCapacity() makes Add() up to twice faster, but not affects Find() much
+   3) Only default DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2 settings are shown,
+      since we found out that this combination was a good balance,
+      but you can recompile the tests to compare with other algorithms
+   => CPU cache size seems to have a bigger impact than our TSynDictionary :)
+}
+
+{.$define DYNARRAYHASHCOLLISIONCOUNT}
+// should also be defined in mormot.core.data.pas to have detailed information
+
 procedure TTestCoreBase._TSynDictionary;
 type
   tvalue = variant;
@@ -5847,6 +6031,64 @@ const
   MAX = 10000;
 var
   dict: TSynDictionary;
+
+  procedure TestSpeed(Count: integer; SetCapacity, RandomString: boolean;
+    Hasher: THasher; const Msg: RawUtf8);
+  var
+    timer: TPrecisionTimer;
+    i: PtrInt;
+    v: integer;
+    dic: TSynDictionary;
+    a: TRawUtf8DynArray;
+    r: TIntegerDynArray;
+  begin
+    if not Assigned(Hasher) then
+      exit; // AesNiHash32 not available on this platform
+    SetLength(a, Count);
+    SetLength(r, Count);
+    for i := 0 to High(a) do // pre-computed values and indexes for fairness
+    begin
+      r[i] := Random32((Count shr 2) - 1); // realistic 25% coverage
+      if RandomString then
+        a[i] := GuidToRawUtf8(RandomGuid)
+      else
+        a[i] := UInt32ToUtf8(i);
+    end;
+    dic := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
+      TypeInfo(TIntegerDynArray), false, 0, nil, Hasher);
+    dic.Options := [doSingleThreaded];
+    if SetCapacity then
+      dic.Capacity := Length(a);
+    timer.Start;
+    for i := 0 to High(a) do
+    begin
+      v := i;
+      dic.Add(a[i], v);
+    end;
+    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+    NotifyTestSpeed('add  %', [Msg], Count, 0, @timer);
+    write(' ', Msg, ' slots=', KBNoSpace(dic.Keys.Hasher.HashTableSize * 4),
+      ' col=', K(dic.Keys.Hasher.CountCollisions), ' curcol=',
+      K(dic.Keys.Hasher.CountCollisionsCurrent),
+      ' ', (dic.Keys.Hasher.CountCollisionsCurrent * 100) div Count,
+      '%  add ', K(timer.PerSec(count)), '/s');
+    {AddConsole(FormatString('collisions: total=% current=% %%',
+      [dic.Keys.Hasher.CountCollisions, dic.Keys.Hasher.CountCollisionsCurrent,
+       (dic.Keys.Hasher.CountCollisionsCurrent * 100) div Count, '%']));}
+    {$endif DYNARRAYHASHCOLLISIONCOUNT}
+    timer.Start;
+    for i := 0 to High(a) do
+    begin
+      // FindAndCopy + random index for a more realistic benchmark
+      Check(dic.FindAndCopy(a[r[i]], v));
+      Check(v = r[i]);
+    end;
+    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+    NotifyTestSpeed('find %', [Msg], Count, 0, @timer);
+    writeln(' find ', K(timer.PerSec(count)), '/s');
+    {$endif DYNARRAYHASHCOLLISIONCOUNT}
+    dic.Free;
+  end;
 
   procedure Test;
   var
@@ -5868,9 +6110,30 @@ var
 var
   v: tvalue;
   s, k: RawUtf8;
-  i: integer;
+  i, n: integer;
   exists: boolean;
 begin
+  {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+  n := 1000;
+  for i := 1 to 5 do
+  {$else}
+  n := 100;
+  for i := 1 to 3 do
+  {$endif DYNARRAYHASHCOLLISIONCOUNT}
+  begin
+    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+    writeln('count=', IntToThousandString(n), ' DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2');
+    {$endif DYNARRAYHASHCOLLISIONCOUNT}
+    TestSpeed(n, false, false, crc32c, 'crc32c int  grow  ');
+    TestSpeed(n, true,  false, crc32c, 'crc32c int  setcap');
+    TestSpeed(n, false, true,  crc32c, 'crc32c guid grow  ');
+    TestSpeed(n, true,  true,  crc32c, 'crc32c guid setcap');
+    TestSpeed(n, false, false, AesNiHash32, 'aesni  int  grow  ');
+    TestSpeed(n, true,  false, AesNiHash32, 'aesni  int  setcap');
+    TestSpeed(n, false, true,  AesNiHash32, 'aesni  guid grow  ');
+    TestSpeed(n, true,  true,  AesNiHash32, 'aesni  guid setcap');
+    n := n * 10;
+  end;
   dict := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray), TypeInfo(tvalues));
   try
     for i := 1 to MAX do

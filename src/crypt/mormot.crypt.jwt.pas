@@ -584,13 +584,13 @@ begin
   result := ''; // no JWT found
   txtlen := length(aText);
   while (txtlen > 10) and
-        (aText[txtlen] <= ' ') do
+        (aText[txtlen] <= ' ') do // trim right
     dec(txtlen);
   beg := txtlen + 1;
   dotcount := 0;
   tc := @TEXT_CHARS;
   while (beg > 1) and
-        (tcURIUnreserved in tc[aText[beg - 1]]) do
+        (tcURIUnreserved in tc[aText[beg - 1]]) do // search backward end of JWT
   begin
     dec(beg);
     if aText[beg] = '.' then

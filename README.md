@@ -1,6 +1,6 @@
 # Synopse *mORMot* Framework
 
-An Open Source Client-Server ORM/SOA framework, version 2
+An Open Source Client-Server ORM/SOA framework in modern Object Pascal, version 2
 
 (c) 2008-2021 Synopse Informatique - Arnaud Bouchez
 

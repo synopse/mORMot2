@@ -520,8 +520,8 @@ begin
   result := PArrayInfo(GetTypeData(@self))^.ArraySize;
 end;
 
-function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray;
-  aClass: TClass): integer;
+function GetPublishedMethods(Instance: TObject;
+  out Methods: TPublishedMethodInfoDynArray; aClass: TClass): integer;
 
   procedure AddParentsFirst(C: TClass);
   type

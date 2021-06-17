@@ -577,7 +577,7 @@ type
   LARGE_INTEGER = Windows.LARGE_INTEGER;
   BOOL = Windows.BOOL;
 
-  /// the known Windows Registry Root key used by TWinRegistry.Open
+  /// the known Windows Registry Root key used by TWinRegistry.ReadOpen
   TWinRegistryRoot = (
     wrClasses,
     wrCurrentUser,
@@ -593,7 +593,7 @@ type
     /// the opened HKEY handle
     key: HKEY;
     /// start low-level read access to a Windows Registry node
-    // - on success (returned true), ReadClose() should be called
+    // - on success (returned true), Close method should be eventually called
     function ReadOpen(root: TWinRegistryRoot; const keyname: RawUtf8;
       closefirst: boolean = false): boolean;
     /// finalize low-level read access to the Windows Registry after ReadOpen()
@@ -661,14 +661,14 @@ type
   TWinSystemPrivileges = set of TWinSystemPrivilege;
 
   /// TSynWindowsPrivileges enumeration synchronized with WinAPI
-  // - define the execution context, i.e. if the token is used for current
+  // - define the execution context, i.e. if the token is used for the current
   // process or the current thread
   TPrivilegeTokenType = (
     pttProcess,
     pttThread);
 
-  /// object dedicated to management of available privileges on Windows platform
-  // - not all available privileges are active for process
+  /// manage available privileges on Windows platform
+  // - not all available privileges are active for all process
   // - for usage of more advanced WinAPI, explicit enabling of privilege is
   // sometimes needed
   TSynWindowsPrivileges = object
@@ -1902,7 +1902,7 @@ function ClassPropertiesAdd(ObjectClass: TClass; PropertiesInstance: TObject;
 
 { **************** TSynLocker/TSynLocked and Low-Level Threading Features }
 
-  { TODO : introduce light read/write lockers }
+  { TODO : introduce light cross-platform read/write lockers ? }
 
 type
   /// allow to add cross-platform locking methods to any class instance

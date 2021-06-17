@@ -768,7 +768,7 @@ implementation
   /// add a section to a multipart/formdata HTTP POST
   function curl_formadd(var first, last: PCurlHttpPost): TCurlFormCode; cdecl varargs; external;
   /// finalize all sections of a multipart/formdata HTTP POST
-  procedure curl_formfree(first: PCurlHttpPost); cdecl;
+  procedure curl_formfree(first: PCurlHttpPost); cdecl; external;
 
   /// create a shared object
   function curl_share_init: pointer; cdecl; external;
@@ -930,8 +930,8 @@ begin
     curl.easy_strerror := @curl_easy_strerror;
     curl.slist_append := @curl_slist_append;
     curl.slist_free_all := @curl_slist_free_all;
-    curl.formadd := @curl_curl_formadd;
-    curl.formfree := @curl_curl_formfree;
+    curl.formadd := @curl_formadd;
+    curl.formfree := @curl_formfree;
     curl.share_init := @curl_share_init;
     curl.share_cleanup := @curl_share_cleanup;
     curl.share_setopt := @curl_share_setopt;

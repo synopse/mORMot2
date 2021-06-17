@@ -2491,7 +2491,7 @@ begin
     if (log <> nil) and
        (aResponse <> '') and
        (sllServiceReturn in fLogFamily.Level) then
-      if IsHTMLContentTypeTextual(pointer(header)) then
+      if IsHtmlContentTypeTextual(pointer(header)) then
         log.Log(sllServiceReturn, aResponse, self, MAX_SIZE_RESPONSE_LOG)
       else
         log.Log(sllServiceReturn, '% bytes [%]', [length(aResponse), header], self);

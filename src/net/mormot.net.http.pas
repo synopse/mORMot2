@@ -148,14 +148,6 @@ type
     /// will contain all header lines after a Request
     // - use HeaderGetValue() to get one HTTP header item value by name
     Headers: RawUtf8;
-    /// will contain the data retrieved from the server, after the Request
-    Content: RawByteString;
-    /// same as HeaderGetValue('CONTENT-LENGTH'), but retrieved during Request
-    // - is overridden with real Content length during HTTP body retrieval
-    ContentLength: Int64;
-    /// same as HeaderGetValue('SERVER-INTERNALSTATE'), but retrieved during Request
-    // - proprietary header, used with our RESTful ORM access
-    ServerInternalState: integer;
     /// same as HeaderGetValue('CONTENT-TYPE'), but retrieved during Request
     ContentType: RawUtf8;
     /// same as HeaderGetValue('UPGRADE'), but retrieved during Request
@@ -166,6 +158,14 @@ type
     BearerToken: RawUtf8;
     /// same as HeaderGetValue('X-POWERED-BY'), but retrieved during Request
     XPoweredBy: RawUtf8;
+    /// will contain the data retrieved from the server, after the Request
+    Content: RawByteString;
+    /// same as HeaderGetValue('CONTENT-LENGTH'), but retrieved during Request
+    // - is overridden with real Content length during HTTP body retrieval
+    ContentLength: Int64;
+    /// same as HeaderGetValue('SERVER-INTERNALSTATE'), but retrieved during Request
+    // - proprietary header, used with our RESTful ORM access
+    ServerInternalState: integer;
     /// map the presence of some HTTP headers, but retrieved during Request
     HeaderFlags: THttpSocketHeaderFlags;
     /// retrieve the HTTP headers into Headers[] and fill most properties below
@@ -537,8 +537,7 @@ begin
         (P^ <= ' ') do
     inc(P);
   B := P;
-  while P^ <> #0 do
-    inc(P);
+  inc(P, StrLen(P));
   while (P > B) and
         (P[-1] <= ' ') do
     dec(P);
@@ -549,7 +548,7 @@ function HttpChunkToHex32(p: PAnsiChar): integer;
 var
   v0, v1: byte;
 begin
-  // note: chunk is not regular two-chars-per-byte hexa but may have odd len
+  // note: chunk is not regular two-chars-per-byte hexa since may have odd len
   result := 0;
   if p <> nil then
   begin

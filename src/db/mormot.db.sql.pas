@@ -5366,7 +5366,7 @@ begin
       varCurrency:
         BindCurrency(Param, VCurrency, IO);
       varOleStr:
-        // handle special case if was bound explicitely as WideString
+        // handle special case if was bound explicitly as WideString
         BindTextW(Param, WideString(VAny), IO);
       {$ifdef HASVARUSTRING}
       varUString:

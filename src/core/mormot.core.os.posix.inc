@@ -1231,7 +1231,7 @@ var
 
 procedure TextColor(Color: TConsoleColor);
 const
-  AnsiTbl: string[8] = '04261537';
+  TERM_CTRL: string[8] = '04261537';
 begin
 {$ifdef OSPOSIX}
   if not stdoutIsTTY then
@@ -1241,9 +1241,9 @@ begin
     exit;
   TextAttr := ord(Color);
   if ord(Color) >= 8 then
-    write(#27'[1;3', AnsiTbl[(ord(Color) and 7) + 1], 'm')
+    write(#27'[1;3', TERM_CTRL[(ord(Color) and 7) + 1], 'm')
   else
-    write(#27'[0;3', AnsiTbl[(ord(Color) and 7) + 1], 'm');
+    write(#27'[0;3', TERM_CTRL[(ord(Color) and 7) + 1], 'm');
   ioresult;
 end;
 
@@ -1466,7 +1466,7 @@ var
   avg: TLoadAvg;
 begin
   if getloadavg(avg, 3) = 3 then
-    result := Format('%g %g %d', [avg[0], avg[1], avg[2]])
+    result := Format('%g %g %g', [avg[0], avg[1], avg[2]])
   else
     result := '';
 end;
@@ -1495,7 +1495,7 @@ var
   fn, status, tgid: RawUtf8;
 begin
   result := nil;
-  d := FpOpendir('/proc'); // alternative to FindFirst()
+  d := FpOpendir('/proc'); // faster alternative to FindFirst()
   if d = nil then
     exit;
   n := 0;
@@ -1504,20 +1504,21 @@ begin
     e := FpReaddir(d^);
     if e = nil then
       break;
-    if (e.d_type = DT_UNKNOWN) or
-       (e.d_type = DT_DIR) or
-       not (e.d_name[0] in ['1'..'9']) then
-      continue;
-    pid := GetCardinal(@e.d_name[0]);
-    if pid = 0 then
-      continue;
-    fn := e.d_name;
-    status := StringFromFile('/proc/' + fn + '/status', {nosize=}true);
-    FindNameValue(status, 'TGID:', tgid);
-    if GetCardinal(pointer(tgid)) = pid then
-      // ensure is a real process, not a thread
-      // https://www.memsql.com/blog/the-curious-case-of-thread-groups-identifiers
-      AddInteger(TIntegerDynArray(result), n, pid);
+    if ((e.d_type = DT_UNKNOWN) or
+        (e.d_type = DT_DIR)) and
+       (e.d_name[0] in ['1'..'9']) then
+    begin
+      pid := GetCardinal(@e.d_name[0]);
+      if pid = 0 then
+        continue;
+      fn := e.d_name;
+      status := StringFromFile('/proc/' + fn + '/status', {nosize=}true);
+      FindNameValue(status, 'TGID:', tgid);
+      if GetCardinal(pointer(tgid)) = pid then
+        // ensure is a real process, not a thread
+        // https://www.memsql.com/blog/the-curious-case-of-thread-groups-identifiers
+        AddInteger(TIntegerDynArray(result), n, pid);
+    end;
   until false;
   FpClosedir(d^);
   SetLength(result, n);
@@ -2203,11 +2204,11 @@ var
   SR: TSearchRec;
   {$endif OSLINUX}
   {$endif OSBSDDARWIN}
-  c: cardinal;
 begin
-  EnumAllProcesses(c);
   // retrieve Kernel and Hardware information
-  stdoutIsTTY := IsATTY(StdOutputHandle) = 1;
+  stdoutIsTTY := (IsATTY(StdOutputHandle) = 1) and
+                 IdemPChars(RawUtf8(GetEnvironmentVariable('TERM')), [
+                   'XTERM-', 'SCREEN', 'TMUX', 'RXVT-', 'LINUX', 'CYGWIN']);
   modname := nil;
   fpuname(uts);
   {$ifdef OSANDROID}

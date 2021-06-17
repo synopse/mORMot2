@@ -62,6 +62,9 @@ var
 
 type
   /// the error codes returned by TNetSocket wrapper
+  // - convenient cross-platform error handling is not possible, mostly because
+  // Windows doesn't behave exactly like other targets: this enumeration
+  // flattens socket execution results, and allow easy ToText() text conversion
   TNetResult = (
     nrOK,
     nrRetry,
@@ -94,7 +97,7 @@ type
   end;
   {$M-}
 
-  /// one data state on a given socket
+  /// one data state to be tracked on a given socket
   TNetEvent = (
     neRead,
     neWrite,
@@ -589,21 +592,21 @@ type
     fServer: RawUtf8;
     fPort: RawUtf8;
     fProxyUrl: RawUtf8;
+    // set by AcceptRequest() from TVarSin
+    fRemoteIP: RawUtf8;
     fSockIn: PTextFile;
     fSockOut: PTextFile;
     fTimeOut: PtrInt;
     fBytesIn: Int64;
     fBytesOut: Int64;
-    fSocketLayer: TNetLayer;
     fSockInEofError: integer;
+    fSocketLayer: TNetLayer;
     fWasBind: boolean;
     // updated by every SockSend() call
     fSndBuf: RawByteString;
     fSndBufLen: integer;
-    // set by AcceptRequest() from TVarSin
-    fRemoteIP: RawUtf8;
     // updated during UDP connection, accessed via PeerAddress/PeerPort
-    fPeerAddr: TNetAddr;
+    fPeerAddr: PNetAddr;
     fSecure: INetTls;
     procedure SetKeepAlive(aKeepAlive: boolean); virtual;
     procedure SetLinger(aLinger: integer); virtual;
@@ -661,6 +664,7 @@ type
     // - data is buffered, filled as the data is available
     // - read(char) or readln() is indeed very fast
     // - multithread applications would also use this SockIn pseudo-text file
+    // - default 1KB is big enough for headers (content will be read directly)
     // - by default, expect CR+LF as line feed (i.e. the HTTP way)
     procedure CreateSockIn(LineBreak: TTextLineBreakStyle = tlbsCRLF;
       InputBufferSize: integer = 1024);
@@ -679,8 +683,9 @@ type
     // output buffering feature on this connection any more (e.g. after having
     // parsed the HTTP header, then rely on direct socket comunication)
     procedure CloseSockOut;
-    /// close and shutdown the connection (called from Destroy)
-    procedure Close;
+    /// close and shutdown the connection
+    // - called from Destroy, but is reintrant so could be called earlier
+    procedure Close; virtual;
     /// close the opened socket, and corresponding SockIn/SockOut
     destructor Destroy; override;
     /// read Length bytes from SockIn buffer + Sock if necessary
@@ -2127,14 +2132,14 @@ procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8;
       if fSecure = nil then
         raise ENetSock.Create('%s.OpenBind; TLS is not available on this ' +
           'system - try installing OpenSSL 1.1.1', [ClassNameShort(self)^]);
-      fSecure.AfterConnection(fSock, TLS, aServer);
+      fSecure.AfterConnection(fSock, TLS, fServer);
       TLS.Enabled := true;
     except
       on E: Exception do
       begin
         fSecure := nil;
         raise ENetSock.CreateFmt('%s.OpenBind(%s:%s,%s): TLS failed [%s %s]',
-          [ClassNameShort(self)^, aServer, port, BINDTXT[doBind],
+          [ClassNameShort(self)^, fServer, fPort, BINDTXT[doBind],
            ClassNameShort(E)^, E.Message]);
       end;
     end;
@@ -2150,26 +2155,31 @@ begin
   if {%H-}PtrInt(aSock)<=0 then
   begin
     // OPEN or BIND mode -> create the socket
+    fServer := aServer;
+    if (aPort = '') and
+       (aLayer <> nlUnix) then
+      fPort := DEFAULT_PORT[aTLS] // default port is 80/443 (HTTP/S)
+    else
+      fPort := aPort;
     if doBind then
       // allow small number of retries (e.g. XP or BSD during aggressive tests)
       retry := 10
     else if (Tunnel.Server <> '') and
-            (Tunnel.Server <> aServer) and
+            (Tunnel.Server <> fServer) and
             (aLayer = nlTcp) then
     begin
       // handle client tunnelling via an HTTP(s) proxy
-      res := nrRefused;
       fProxyUrl := Tunnel.URI;
       if Tunnel.Https and aTLS then
         raise ENetSock.Create('%s.Open(%s:%s): %s proxy - unsupported dual ' +
-          'TLS layers', [ClassNameShort(self)^, aServer, aPort, fProxyUrl]);
+          'TLS layers', [ClassNameShort(self)^, fServer, fPort, fProxyUrl]);
       try
         res := NewSocket(Tunnel.Server, Tunnel.Port, nlTcp, {doBind=}false,
           fTimeout, fTimeout, fTimeout, {retry=}2, fSock);
         if res = nrOK then
         begin
           res := nrRefused;
-          SockSend(['CONNECT ', aServer, ':', aPort, ' HTTP/1.0']);
+          SockSend(['CONNECT ', fServer, ':', fPort, ' HTTP/1.0']);
           if Tunnel.User <> '' then
             SockSend(['Proxy-Authorization: Basic ', Tunnel.UserPasswordBase64]);
           SockSendFlush(#13#10);
@@ -2184,13 +2194,11 @@ begin
       except
         on E: Exception do
           raise ENetSock.Create('%s.Open(%s:%s): %s proxy error %s',
-            [ClassNameShort(self)^, aServer, aPort, fProxyUrl, E.Message]);
+            [ClassNameShort(self)^, fServer, fPort, fProxyUrl, E.Message]);
       end;
       if res <> nrOk then
         raise ENetSock.Create('%s.Open(%s:%s): %s proxy error',
-          [ClassNameShort(self)^, aServer, aPort, fProxyUrl], res);
-      fServer := aServer; // nested OpenBind
-      fPort := aPort;
+          [ClassNameShort(self)^, fServer, fPort, fProxyUrl], res);
       if Assigned(OnLog) then
         OnLog(sllTrace, 'Open(%:%) via proxy %', [fServer, fPort, fProxyUrl], self);
       if aTLS then
@@ -2200,17 +2208,11 @@ begin
     else
       // direct client connection
       retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
-    if (aPort = '') and
-       (aLayer <> nlUnix) then
-      fPort := DEFAULT_PORT[aTLS] // default port is 80/443 (HTTP/S)
-    else
-      fPort := aPort;
-    fServer := aServer;
     res := NewSocket(fServer, fPort, aLayer, doBind,
       fTimeout, fTimeout, fTimeout, retry, fSock);
     if res <> nrOK then
       raise ENetSock.Create('%s %s.OpenBind(%s:%s)',
-        [BINDMSG[doBind], ClassNameShort(self)^, aServer, fPort], res);
+        [BINDMSG[doBind], ClassNameShort(self)^, fServer, fPort], res);
   end
   else
   begin
@@ -2295,7 +2297,11 @@ begin
     exit; // already reached error below
   size := F.BufSize;
   if sock.SocketLayer = nlUdp then
-    size := sock.Sock.RecvFrom(F.BufPtr, size, sock.fPeerAddr)
+  begin
+    if sock.fPeerAddr = nil then
+      New(sock.fPeerAddr); // allocated on demand (may be up to 110 bytes)
+    size := sock.Sock.RecvFrom(F.BufPtr, size, sock.fPeerAddr^);
+  end
   else
     // nlTcp/nlUnix
     if not sock.TrySockRecv(F.BufPtr, size, {StopBeforeLength=}true) then
@@ -2432,8 +2438,6 @@ end;
 
 procedure TCrtSocket.Close;
 begin
-  if self = nil then
-    exit;
   fSndBufLen := 0; // always reset (e.g. in case of further Open)
   fSockInEofError := 0;
   ioresult; // reset readln/writeln value
@@ -2469,6 +2473,8 @@ begin
   Close;
   CloseSockIn;
   CloseSockOut;
+  if fPeerAddr <> nil then
+    Dispose(fPeerAddr);
   inherited Destroy;
 end;
 
@@ -2996,12 +3002,18 @@ end;
 
 function TCrtSocket.PeerAddress(LocalAsVoid: boolean): RawByteString;
 begin
-  result := fPeerAddr.IP(LocalAsVoid);
+  if fPeerAddr = nil then
+    result := ''
+  else
+    result := fPeerAddr^.IP(LocalAsVoid);
 end;
 
 function TCrtSocket.PeerPort: TNetPort;
 begin
-  result := fPeerAddr.Port;
+  if fPeerAddr = nil then
+    result := 0
+  else
+    result := fPeerAddr^.Port;
 end;
 
 function SocketOpen(const aServer, aPort: RawUtf8; aTLS: boolean;
@@ -3025,7 +3037,7 @@ initialization
   assert(SizeOf(TNetAddr) >=
     {$ifdef OSWINDOWS} SizeOf(sockaddr_in6) {$else} SizeOf(sockaddr_un) {$endif});
   DefaultListenBacklog := SOMAXCONN;
-  InitializeUnit; // in mormot.net.sock.windows.inc
+  InitializeUnit; // in mormot.net.sock.windows/posix.inc
 
 finalization
   FinalizeUnit;

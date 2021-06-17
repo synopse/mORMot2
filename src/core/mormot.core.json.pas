@@ -9,7 +9,7 @@ unit mormot.core.json;
    JSON functions shared by all framework units
     - Low-Level JSON Processing Functions
     - TTextWriter class with proper JSON escaping and WriteObject() support
-    - JSON-aware TSynNameValue TSynPersistentStoreJson TRawByteStringGroup
+    - JSON-aware TSynNameValue TSynPersistentStoreJson
     - JSON-aware TSynDictionary Storage
     - JSON Unserialization for any kind of Values
     - JSON Serialization Wrapper Functions
@@ -372,8 +372,10 @@ function JsonObjectsByPath(JsonObject, PropPath: PUtf8Char): RawUtf8;
 // modify the JSON input buffer
 // - is the reverse of the TTextWriter.AddJsonArraysAsJsonObject() method
 // - used e.g. by TSynDictionary.LoadFromJson
+// - returns the number of items parsed and stored into keys/values, -1 on
+// error parsing the input JSON buffer
 function JsonObjectAsJsonArrays(Json: PUtf8Char;
-  out keys, values: RawUtf8): boolean;
+  out keys, values: RawUtf8): integer;
 
 /// remove comments and trailing commas from a text buffer before passing
 // it to a JSON parser
@@ -737,13 +739,11 @@ type
     /// write some #0 ended UTF-8 text, according to the specified format
     // - if Escape is a constant, consider calling directly AddNoJsonEscape,
     // AddJsonEscape or AddOnSameLine methods
-    procedure Add(P: PUtf8Char; Escape: TTextWriterKind); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure Add(P: PUtf8Char; Escape: TTextWriterKind); override;
     /// write some #0 ended UTF-8 text, according to the specified format
     // - if Escape is a constant, consider calling directly AddNoJsonEscape,
     // AddJsonEscape or AddOnSameLine methods
-    procedure Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind); overload;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind); override;
     /// write some #0 ended Unicode text as UTF-8, according to the specified format
     // - if Escape is a constant, consider calling directly AddNoJsonEscapeW,
     // AddJsonEscapeW or AddOnSameLineW methods
@@ -768,7 +768,7 @@ type
       Escape: TTextWriterKind; CodePage: integer);
     /// write some data Base64 encoded
     // - if withMagic is TRUE, will write as '"\uFFF0base64encodedbinary"'
-    procedure WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
+    procedure WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean); override;
     /// write some binary-saved data with Base64 encoding
     // - if withMagic is TRUE, will write as '"\uFFF0base64encodedbinary"'
     // - is a wrapper around BinarySave() and WrBase64()
@@ -991,7 +991,7 @@ type
   end;
 
 
-{ ************ JSON-aware TSynNameValue TSynPersistentStoreJson TRawByteStringGroup }
+{ ************ JSON-aware TSynNameValue TSynPersistentStoreJson }
 
 type
   /// store one Name/Value pair, as used by TSynNameValue class
@@ -1159,120 +1159,10 @@ type
       read GetBool;
   end;
 
+
   /// a reference pointer to a Name/Value RawUtf8 pairs storage
   PSynNameValue = ^TSynNameValue;
 
-
-type
-  /// implement binary persistence and JSON serialization (not deserialization)
-  TSynPersistentStoreJson = class(TSynPersistentStore)
-  protected
-    // append "name" -> inherited should add properties to the JSON object
-    procedure AddJson(W: TTextWriter); virtual;
-  public
-    /// serialize this instance as a JSON object
-    function SaveToJson(reformat: TTextWriterJsonFormat = jsonCompact): RawUtf8;
-  end;
-
-
-type
-  /// item as stored in a TRawByteStringGroup instance
-  TRawByteStringGroupValue = record
-    Position: integer;
-    Value: RawByteString;
-  end;
-
-  PRawByteStringGroupValue = ^TRawByteStringGroupValue;
-
-  /// items as stored in a TRawByteStringGroup instance
-  TRawByteStringGroupValueDynArray = array of TRawByteStringGroupValue;
-
-  /// store several RawByteString content with optional concatenation
-  {$ifdef USERECORDWITHMETHODS}
-  TRawByteStringGroup = record
-  {$else}
-  TRawByteStringGroup = object
-  {$endif USERECORDWITHMETHODS}
-  public
-    /// actual list storing the data
-    Values: TRawByteStringGroupValueDynArray;
-    /// how many items are currently stored in Values[]
-    Count: integer;
-    /// the current size of data stored in Values[]
-    Position: integer;
-    /// naive but efficient cache for Find()
-    LastFind: integer;
-    /// add a new item to Values[]
-    procedure Add(const aItem: RawByteString); overload;
-    /// add a new item to Values[]
-    procedure Add(aItem: pointer; aItemLen: integer); overload;
-    /// add another TRawByteStringGroup to Values[]
-    procedure Add(const aAnother: TRawByteStringGroup); overload;
-    /// low-level method to abort the latest Add() call
-    // - warning: will work only once, if an Add() has actually been just called:
-    // otherwise, the behavior is unexpected, and may wrongly truncate data
-    procedure RemoveLastAdd;
-    /// compare two TRawByteStringGroup instance stored text
-    function Equals(const aAnother: TRawByteStringGroup): boolean;
-    /// clear any stored information
-    procedure Clear;
-    /// append stored information into another RawByteString, and clear content
-    procedure AppendTextAndClear(var aDest: RawByteString);
-    // compact the Values[] array into a single item
-    // - is also used by AsText to compute a single RawByteString
-    procedure Compact;
-    /// return all content as a single RawByteString
-    // - will also compact the Values[] array into a single item (which is returned)
-    function AsText: RawByteString;
-    /// return all content as a single TByteDynArray
-    function AsBytes: TByteDynArray;
-    /// save all content into a TTextWriter instance
-    procedure Write(W: TTextWriter; Escape: TTextWriterKind = twJsonEscape); overload;
-    /// save all content into a TBufferWriter instance
-    procedure WriteBinary(W: TBufferWriter); overload;
-    /// save all content as a string into a TBufferWriter instance
-    // - storing the length as WriteVarUInt32() prefix
-    procedure WriteString(W: TBufferWriter);
-    /// add another TRawByteStringGroup previously serialized via WriteString()
-    procedure AddFromReader(var aReader: TFastReader);
-    /// returns a pointer to Values[] containing a given position
-    // - returns nil if not found
-    function Find(aPosition: integer): PRawByteStringGroupValue; overload;
-    /// returns a pointer to Values[].Value containing a given position and length
-    // - returns nil if not found
-    function Find(aPosition, aLength: integer): pointer; overload;
-    /// returns the text at a given position in Values[]
-    // - text should be in a single Values[] entry
-    procedure FindAsText(aPosition, aLength: integer; out aText: RawByteString); overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// returns the text at a given position in Values[]
-    // - text should be in a single Values[] entry
-    function FindAsText(aPosition, aLength: integer): RawByteString; overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// returns the text at a given position in Values[]
-    // - text should be in a single Values[] entry
-    // - explicitly returns null if the supplied text was not found
-    procedure FindAsVariant(aPosition, aLength: integer; out aDest: variant);
-      {$ifdef HASINLINE}inline;{$endif}
-    /// append the text at a given position in Values[], JSON escaped by default
-    // - text should be in a single Values[] entry
-    procedure FindWrite(aPosition, aLength: integer; W: TTextWriter;
-      Escape: TTextWriterKind = twJsonEscape; TrailingCharsToIgnore: integer = 0);
-      {$ifdef HASINLINE}inline;{$endif}
-    /// append the blob at a given position in Values[], base-64 encoded
-    // - text should be in a single Values[] entry
-    procedure FindWriteBase64(aPosition, aLength: integer; W: TTextWriter;
-      withMagic: boolean);
-      {$ifdef HASINLINE}inline;{$endif}
-    /// copy the text at a given position in Values[]
-    // - text should be in a single Values[] entry
-    procedure FindMove(aPosition, aLength: integer; aDest: pointer);
-  end;
-
-  /// pointer reference to a TRawByteStringGroup
-  PRawByteStringGroup = ^TRawByteStringGroup;
-
-type
   /// implement a cache of some key/value pairs, e.g. to improve reading speed
   // - used e.g. by TSqlDataBase for caching the SELECT statements results in an
   // internal JSON format (which is faster than a query to the SQLite3 engine)
@@ -1350,6 +1240,19 @@ type
   end;
 
 
+type
+  /// implement binary persistence and JSON serialization (not deserialization)
+  TSynPersistentStoreJson = class(TSynPersistentStore)
+  protected
+    // append "name" -> inherited should add properties to the JSON object
+    procedure AddJson(W: TTextWriter); virtual;
+  public
+    /// serialize this instance as a JSON object
+    function SaveToJson(reformat: TTextWriterJsonFormat = jsonCompact): RawUtf8;
+  end;
+
+
+
 { *********** JSON-aware TSynDictionary Storage }
 
 type
@@ -1364,6 +1267,12 @@ type
     iaFindAndAddIfNotExisting,
     iaAdd,
     iaAddForced);
+
+  /// tune TSynDictionary process depending on your use case
+  // - doSingleThreaded will bypass Safe.Lock/UnLock call for better performance
+  // if you are sure that this dictionary will be accessed from a single thread
+  TSynDictionaryOptions = set of (
+    doSingleThreaded);
 
   /// event called by TSynDictionary.ForEach methods to iterate over stored items
   // - if the implementation method returns TRUE, will continue the loop
@@ -1380,8 +1289,9 @@ type
   /// thread-safe dictionary to store some values from associated keys
   // - will maintain a dynamic array of values, associated with a hash table
   // for the keys, so that setting or retrieving values would be O(1)
-  // - all process is protected by a TSynLocker, so will be thread-safe
-  // - TDynArray is a wrapper which do not store anything, whereas this class
+  // - thread-safe by default, since most methods are protected by a TSynLocker;
+  // set the doSingleThreaded option if you don't need thread-safety
+  // - TDynArray is a wrapper which does not store anything, whereas this class
   // is able to store both keys and values, and provide convenient methods to
   // access the stored data, including JSON serialization and binary storage
   TSynDictionary = class(TSynLocked)
@@ -1391,7 +1301,7 @@ type
     fTimeOut: TCardinalDynArray;
     fTimeOuts: TDynArray;
     fCompressAlgo: TAlgoCompress;
-    fSingleThreaded: boolean;
+    fOptions: TSynDictionaryOptions;
     fOnCanDelete: TOnSynDictionaryCanDelete;
     function InternalAddUpdate(aKey, aValue: pointer; aUpdate: boolean): integer;
     function InArray(const aKey, aArrayValue; aAction: TSynDictionaryInArray;
@@ -1402,7 +1312,7 @@ type
     function KeyFullCompare(const A, B): integer;
     function GetCapacity: integer;
     procedure SetCapacity(const Value: integer);
-    function GetTimeOutSeconds: cardinal;
+    function GetTimeOutSeconds: cardinal; {$ifdef HASINLINE} inline; {$endif}
     procedure SetTimeOutSeconds(Value: cardinal);
   public
     /// initialize the dictionary storage, specifyng dynamic array keys/values
@@ -1416,7 +1326,7 @@ type
     // DeleteDeprecated periodically to search for deprecated items
     constructor Create(aKeyTypeInfo, aValueTypeInfo: PRttiInfo;
       aKeyCaseInsensitive: boolean = false; aTimeoutSeconds: cardinal = 0;
-      aCompressAlgo: TAlgoCompress = nil); reintroduce; virtual;
+      aCompressAlgo: TAlgoCompress = nil; aHasher: THasher = nil); reintroduce; virtual;
     /// finalize the storage
     // - would release all internal stored values
     destructor Destroy; override;
@@ -1478,17 +1388,21 @@ type
     // - will update the associated timeout value of the entry, unless
     // aUpdateTimeOut is set to false
     function FindAndCopy(const aKey;
-      out aValue; aUpdateTimeOut: boolean = true): boolean;
+      var aValue; aUpdateTimeOut: boolean = true): boolean;
     /// search of a stored value by its primary key, then delete and return it
     // - returns TRUE if aKey was found, fill aValue with its content,
     // and delete the entry in the internal storage
     // - so this method is thread-safe
     // - returns FALSE if no match exists
-    function FindAndExtract(const aKey; out aValue): boolean;
+    function FindAndExtract(const aKey; var aValue): boolean;
     /// search for a primary key presence
     // - returns TRUE if aKey was found, FALSE if no match exists
     // - this method is thread-safe
     function Exists(const aKey): boolean;
+    /// search for a value presence
+    // - returns TRUE if aValue was found, FALSE if no match exists
+    // - this method is thread-safe, but will use O(n) slow browsing
+    function ExistsValue(const aValue; aCompare: TDynArraySortCompare = nil): boolean;
     /// apply a specified event over all items stored in this dictionnary
     // - would browse the list in the adding order
     // - returns the number of times OnEach has been called
@@ -1623,6 +1537,8 @@ type
     property Values: TDynArray
       read fValues;
     /// defines how many items are currently stored in Keys/Values internal arrays
+    // - if you set a maximum size of this store (even a rough size), Add() are
+    // likely to be up to twice faster than letting the table grow by chunks
     property Capacity: integer
       read GetCapacity write SetCapacity;
     /// direct low-level access to the internal access tick (GetTickCount64 shr 10)
@@ -1641,11 +1557,10 @@ type
     // TSynPersistentLock instance, to avoid any potential access violation
     property OnCanDeleteDeprecated: TOnSynDictionaryCanDelete
       read fOnCanDelete write fOnCanDelete;
-    /// can be set if this TSynDictionary instance is used in a single thread
-    // - force no Safe.Lock/UnLock call during process for better performance
-    // - then you can use direct Find/FindValue/FindValueOrAdd methods
-    property SingleThreaded: boolean
-      read fSingleThreaded write fSingleThreaded;
+    /// can tune TSynDictionary process depending on your use case
+    // - warning: any performance impact should always be monitored, not guessed
+    property Options: TSynDictionaryOptions
+      read fOptions write fOptions;
   end;
 
 
@@ -2103,7 +2018,7 @@ function DynArrayLoadJson(var Value; const Json: RawUtf8;
 // TRttiJson.RegisterCustomSerializer() class method
 // - set Valid=TRUE on success, Valid=FALSE on error, and the main function
 // will point in From at the syntax error place (e.g. on any unknown property name)
-// - caller should explicitely perform a SetDefaultValuesObject(Value) if
+// - caller should explicitly perform a SetDefaultValuesObject(Value) if
 // the default values are expected to be set before JSON parsing
 function JsonToObject(var ObjectInstance; From: PUtf8Char;
   out Valid: boolean; TObjectListItemClass: TClass = nil;
@@ -4166,16 +4081,18 @@ begin
   end;
 end;
 
-function JsonObjectAsJsonArrays(Json: PUtf8Char; out keys, values: RawUtf8): boolean;
+function JsonObjectAsJsonArrays(Json: PUtf8Char; out keys, values: RawUtf8): integer;
 var
   wk, wv: TBaseWriter;
   kb, ke, vb, ve: PUtf8Char;
   temp1, temp2: TTextWriterStackBuffer;
+  n: integer;
 begin
-  result := false;
+  result := -1;
   if (Json = nil) or
      (Json^ <> '{') then
     exit;
+  n := 0;
   wk := TBaseWriter.CreateOwnedStream(temp1);
   wv := TBaseWriter.CreateOwnedStream(temp2);
   try
@@ -4197,6 +4114,7 @@ begin
       wv.AddNoJsonEscape(vb, ve - vb);
       wv.AddComma;
       kb := ve + 1;
+      inc(n);
     until ve^ = '}';
     wk.CancelLastComma;
     wk.Add(']');
@@ -4204,7 +4122,7 @@ begin
     wv.CancelLastComma;
     wv.Add(']');
     wv.SetText(values);
-    result := true;
+    result := n; // success
   finally
     wv.Free;
     wk.Free;
@@ -4390,7 +4308,7 @@ end;
 function UrlEncodeJsonObject(const UriName: RawUtf8; ParametersJson: PUtf8Char;
   const PropNamesToIgnore: array of RawUtf8; IncludeQueryDelimiter: boolean): RawUtf8;
 var
-  i, j: integer;
+  i, j: PtrInt;
   sep: AnsiChar;
   Params: TNameValuePUtf8CharDynArray;
   temp: TTextWriterStackBuffer;
@@ -4409,7 +4327,7 @@ begin
           with Params[i] do
           begin
             for j := 0 to high(PropNamesToIgnore) do
-              if IdemPropNameU(PropNamesToIgnore[j], name, NameLen) then
+              if IdemPropNameU(PropNamesToIgnore[j], Name, NameLen) then
               begin
                 NameLen := 0;
                 break;
@@ -4418,7 +4336,7 @@ begin
               continue;
             if IncludeQueryDelimiter then
               Add(sep);
-            AddNoJsonEscape(name, NameLen);
+            AddNoJsonEscape(Name, NameLen);
             Add('=');
             AddString(UrlEncode(Value));
             sep := '&';
@@ -4438,7 +4356,8 @@ var
 begin
   temp.Init(ParametersJson);
   try
-    result := UrlEncodeJsonObject(UriName, temp.buf, PropNamesToIgnore, IncludeQueryDelimiter);
+    result := UrlEncodeJsonObject(
+      UriName, temp.buf, PropNamesToIgnore, IncludeQueryDelimiter);
   finally
     temp.Done;
   end;
@@ -4784,11 +4703,11 @@ begin
             case Params[P].VType of
               vtBoolean, vtInteger, vtInt64 {$ifdef FPC} , vtQWord {$endif},
               vtCurrency, vtExtended:
-                Add(Params[P]) // numbers or boolean
+                Add(Params[P]) // numbers or boolean don't need any SQL quoting
             else
               begin
                 VarRecToTempUtf8(Params[P], toquote);
-                AddQuotedStr(toquote.Text, toquote.Len, ''''); // SQL double quote
+                AddQuotedStr(toquote.Text, toquote.Len, ''''); // double quote
                 if toquote.TempRawUtf8 <> nil then
                   RawUtf8(toquote.TempRawUtf8) := ''; // release temp memory
               end;
@@ -5051,7 +4970,8 @@ begin
     if (Ctxt.Prop <> nil) and
        (Ctxt.Prop^.Name <> '') then
     begin
-      FormatShort('%_str', [Ctxt.Prop^.Name], _str);
+      Ansi7StringToShortString(Ctxt.Prop^.Name, _str);
+      AppendShort('_str', _str);
       Ctxt.W.WriteObjectPropNameShort(_str, Ctxt.Options);
     end
     else
@@ -6844,8 +6764,8 @@ begin
       vtPWideChar:
         AddW(pointer(VPWideChar), StrLenW(VPWideChar), Escape);
       vtAnsiString:
-        if VAnsiString <> nil then
-          Add(VAnsiString, length(RawUtf8(VAnsiString)), Escape); // expect RawUtf8
+        if VAnsiString <> nil then // expect RawUtf8
+          Add(VAnsiString, length(RawUtf8(VAnsiString)), Escape);
       vtWideString:
         if VWideString <> nil then
           AddW(VWideString, length(WideString(VWideString)), Escape);
@@ -7941,7 +7861,7 @@ var
     nil, @_JL_DynArray, @_JL_Interface, nil);
 
 
-{ ************ JSON-aware TSynNameValue TSynPersistentStoreJson TRawByteStringGroup }
+{ ************ JSON-aware TSynNameValue TSynPersistentStoreJson }
 
 { TSynNameValue }
 
@@ -8372,333 +8292,6 @@ begin
 end;
 
 
-{ TRawByteStringGroup }
-
-procedure TRawByteStringGroup.Add(const aItem: RawByteString);
-begin
-  if Values = nil then
-    Clear; // ensure all fields are initialized, even if on stack
-  if Count = Length(Values) then
-    SetLength(Values, NextGrow(Count));
-  with Values[Count] do
-  begin
-    Position := self.Position;
-    Value := aItem;
-  end;
-  LastFind := Count;
-  inc(Count);
-  inc(Position, Length(aItem));
-end;
-
-procedure TRawByteStringGroup.Add(aItem: pointer; aItemLen: integer);
-var
-  tmp: RawByteString;
-begin
-  SetString(tmp, PAnsiChar(aItem), aItemLen);
-  Add(tmp);
-end;
-
-procedure TRawByteStringGroup.Add(const aAnother: TRawByteStringGroup);
-var
-  i: integer;
-  s, d: PRawByteStringGroupValue;
-begin
-  if aAnother.Values = nil then
-    exit;
-  if Values = nil then
-    Clear; // ensure all fields are initialized, even if on stack
-  if Count + aAnother.Count > Length(Values) then
-    SetLength(Values, Count + aAnother.Count);
-  s := pointer(aAnother.Values);
-  d := @Values[Count];
-  for i := 1 to aAnother.Count do
-  begin
-    d^.Position := Position;
-    d^.Value := s^.Value;
-    inc(Position, length(s^.Value));
-    inc(s);
-    inc(d);
-  end;
-  inc(Count, aAnother.Count);
-  LastFind := Count - 1;
-end;
-
-procedure TRawByteStringGroup.RemoveLastAdd;
-begin
-  if Count > 0 then
-  begin
-    dec(Count);
-    dec(Position, Length(Values[Count].Value));
-    Values[Count].Value := ''; // release memory
-    LastFind := Count - 1;
-  end;
-end;
-
-function TRawByteStringGroup.Equals(const aAnother: TRawByteStringGroup): boolean;
-begin
-  if ((Values = nil) and
-      (aAnother.Values <> nil)) or
-     ((Values <> nil) and
-      (aAnother.Values = nil)) or
-     (Position <> aAnother.Position) then
-    result := false
-  else if (Count <> 1) or
-          (aAnother.Count <> 1) or
-          (Values[0].Value <> aAnother.Values[0].Value) then
-    result := AsText = aAnother.AsText
-  else
-    result := true;
-end;
-
-procedure TRawByteStringGroup.Clear;
-begin
-  Values := nil;
-  Position := 0;
-  Count := 0;
-  LastFind := 0;
-end;
-
-procedure TRawByteStringGroup.AppendTextAndClear(var aDest: RawByteString);
-var
-  d, i: integer;
-  v: PRawByteStringGroupValue;
-begin
-  d := length(aDest);
-  SetLength(aDest, d + Position);
-  v := pointer(Values);
-  for i := 1 to Count do
-  begin
-    MoveFast(pointer(v^.Value)^, PByteArray(aDest)[d + v^.Position], length(v^.Value));
-    inc(v);
-  end;
-  Clear;
-end;
-
-function TRawByteStringGroup.AsText: RawByteString;
-begin
-  if Values = nil then
-    result := ''
-  else
-  begin
-    if Count > 1 then
-      Compact;
-    result := Values[0].Value;
-  end;
-end;
-
-procedure TRawByteStringGroup.Compact;
-var
-  i: integer;
-  v: PRawByteStringGroupValue;
-  tmp: RawByteString;
-begin
-  if (Values <> nil) and
-     (Count > 1) then
-  begin
-    SetString(tmp, nil, Position);
-    v := pointer(Values);
-    for i := 1 to Count do
-    begin
-      MoveFast(pointer(v^.Value)^, PByteArray(tmp)[v^.Position], length(v^.Value));
-      {$ifdef FPC}
-      FastAssignNew(v^.Value);
-      {$else}
-      v^.Value := '';
-      {$endif FPC}
-      inc(v);
-    end;
-    Values[0].Value := tmp; // use result for absolute compaction ;)
-    if Count > 128 then
-      SetLength(Values, 128);
-    Count := 1;
-    LastFind := 0;
-  end;
-end;
-
-function TRawByteStringGroup.AsBytes: TByteDynArray;
-var
-  i: integer;
-begin
-  result := nil;
-  if Values = nil then
-    exit;
-  SetLength(result, Position);
-  for i := 0 to Count - 1 do
-    with Values[i] do
-      MoveFast(pointer(Value)^, PByteArray(result)[Position], length(Value));
-end;
-
-procedure TRawByteStringGroup.Write(W: TTextWriter; Escape: TTextWriterKind);
-var
-  i: integer;
-begin
-  if Values <> nil then
-    for i := 0 to Count - 1 do
-      with Values[i] do
-        W.Add(PUtf8Char(pointer(Value)), length(Value), Escape);
-end;
-
-procedure TRawByteStringGroup.WriteBinary(W: TBufferWriter);
-var
-  i: integer;
-begin
-  if Values <> nil then
-    for i := 0 to Count - 1 do
-      W.WriteBinary(Values[i].Value);
-end;
-
-procedure TRawByteStringGroup.WriteString(W: TBufferWriter);
-begin
-  if Values = nil then
-  begin
-    W.Write1(0);
-    exit;
-  end;
-  W.WriteVarUInt32(Position);
-  WriteBinary(W);
-end;
-
-procedure TRawByteStringGroup.AddFromReader(var aReader: TFastReader);
-var
-  complexsize: integer;
-begin
-  complexsize := aReader.VarUInt32;
-  if complexsize > 0 then
-    // directly create a RawByteString from aReader buffer
-    Add(aReader.Next(complexsize), complexsize);
-end;
-
-function TRawByteStringGroup.Find(aPosition: integer): PRawByteStringGroupValue;
-var
-  i: integer;
-begin
-  if (pointer(Values) <> nil) and
-     (cardinal(aPosition) < cardinal(Position)) then
-  begin
-    result := @Values[LastFind]; // this cache is very efficient in practice
-    if (aPosition >= result^.Position) and
-       (aPosition < result^.Position + length(result^.Value)) then
-      exit;
-    result := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
-    for i := 0 to Count - 2 do
-      if result^.Position > aPosition then
-      begin
-        dec(result);
-        LastFind := i;
-        exit;
-      end
-      else
-        inc(result);
-    dec(result);
-    LastFind := Count - 1;
-  end
-  else
-    result := nil;
-end;
-
-function TRawByteStringGroup.Find(aPosition, aLength: integer): pointer;
-var
-  P: PRawByteStringGroupValue;
-  i: integer;
-label
-  found;
-begin
-  if (pointer(Values) <> nil) and
-     (cardinal(aPosition) < cardinal(Position)) then
-  begin
-    P := @Values[LastFind]; // this cache is very efficient in practice
-    i := aPosition - P^.Position;
-    if (i >= 0) and
-       (i + aLength < length(P^.Value)) then
-    begin
-      result := @PByteArray(P^.Value)[i];
-      exit;
-    end;
-    P := @Values[1]; // seldom O(n) brute force search (in CPU L1 cache)
-    for i := 0 to Count - 2 do
-      if P^.Position > aPosition then
-      begin
-        LastFind := i;
-found:  dec(P);
-        dec(aPosition, P^.Position);
-        if aLength - aPosition <= length(P^.Value) then
-          result := @PByteArray(P^.Value)[aPosition]
-        else
-          result := nil;
-        exit;
-      end
-      else
-        inc(P);
-    LastFind := Count - 1;
-    goto found;
-  end
-  else
-    result := nil;
-end;
-
-procedure TRawByteStringGroup.FindAsText(aPosition, aLength: integer;
-  out aText: RawByteString);
-var
-  P: PRawByteStringGroupValue;
-begin
-  P := Find(aPosition);
-  if P = nil then
-    exit;
-  dec(aPosition, P^.Position);
-  if (aPosition = 0) and
-     (length(P^.Value) = aLength) then
-    aText := P^.Value
-  else
-  // direct return if not yet compacted
-  if aLength - aPosition <= length(P^.Value) then
-    SetString(aText, PAnsiChar(@PByteArray(P^.Value)[aPosition]), aLength);
-end;
-
-function TRawByteStringGroup.FindAsText(aPosition, aLength: integer): RawByteString;
-begin
-  FindAsText(aPosition, aLength, result);
-end;
-
-procedure TRawByteStringGroup.FindAsVariant(aPosition, aLength: integer;
-  out aDest: variant);
-var
-  tmp: RawByteString;
-begin
-  tmp := FindAsText(aPosition, aLength);
-  if tmp <> '' then
-    RawUtf8ToVariant(tmp, aDest);
-end;
-
-procedure TRawByteStringGroup.FindWrite(aPosition, aLength: integer;
-  W: TTextWriter; Escape: TTextWriterKind; TrailingCharsToIgnore: integer);
-var
-  P: pointer;
-begin
-  P := Find(aPosition, aLength);
-  if P <> nil then
-    W.Add(PUtf8Char(P) + TrailingCharsToIgnore, aLength - TrailingCharsToIgnore, Escape);
-end;
-
-procedure TRawByteStringGroup.FindWriteBase64(aPosition, aLength: integer;
-  W: TTextWriter; withMagic: boolean);
-var
-  P: pointer;
-begin
-  P := Find(aPosition, aLength);
-  if P <> nil then
-    W.WrBase64(P, aLength, withMagic);
-end;
-
-procedure TRawByteStringGroup.FindMove(aPosition, aLength: integer;
-  aDest: pointer);
-var
-  P: pointer;
-begin
-  P := Find(aPosition, aLength);
-  if P <> nil then
-    MoveFast(P^, aDest^, aLength);
-end;
-
 
 { TSynCache }
 
@@ -8822,7 +8415,7 @@ end;
 
 { TSynDictionary }
 
-const
+const // use fSafe.Padding[DIC_*] slots for Keys/Values place holders
   DIC_KEYCOUNT = 0;
   DIC_KEY = 1;
   DIC_VALUECOUNT = 2;
@@ -8842,7 +8435,8 @@ var
 begin
   for i := 0 to fKeys.Info.Cache.ItemSize - 1 do
   begin
-    result := TByteArray(A)[i] - TByteArray(B)[i];
+    result := TByteArray(A)[i];
+    dec(result, TByteArray(B)[i]); // in two steps for better asm generation
     if result <> 0 then
       exit;
   end;
@@ -8850,18 +8444,19 @@ begin
 end;
 
 constructor TSynDictionary.Create(aKeyTypeInfo, aValueTypeInfo: PRttiInfo;
-  aKeyCaseInsensitive: boolean; aTimeoutSeconds: cardinal; aCompressAlgo: TAlgoCompress);
+  aKeyCaseInsensitive: boolean; aTimeoutSeconds: cardinal;
+  aCompressAlgo: TAlgoCompress; aHasher: THasher);
 begin
   inherited Create;
-  fSafe.Padding[DIC_KEYCOUNT].VType := varInteger;
-  fSafe.Padding[DIC_KEY].VType := varUnknown;
-  fSafe.Padding[DIC_VALUECOUNT].VType := varInteger;
-  fSafe.Padding[DIC_VALUE].VType := varUnknown;
-  fSafe.Padding[DIC_TIMECOUNT].VType := varInteger;
-  fSafe.Padding[DIC_TIMESEC].VType := varInteger;
-  fSafe.Padding[DIC_TIMETIX].VType := varInteger;
+  fSafe.Padding[DIC_KEYCOUNT].VType := varInteger;    // Keys.Count integer
+  fSafe.Padding[DIC_VALUECOUNT].VType := varInteger;  // Values.Count integer
+  fSafe.Padding[DIC_KEY].VType := varUnknown;         // Key.Value pointer
+  fSafe.Padding[DIC_VALUE].VType := varUnknown;       // Values.Value pointer
+  fSafe.Padding[DIC_TIMECOUNT].VType := varInteger;   // Timeouts.Count integer
+  fSafe.Padding[DIC_TIMESEC].VType := varInteger;     // Timeouts Seconds
+  fSafe.Padding[DIC_TIMETIX].VType := varInteger;  // last GetTickCount64 shr 10
   fSafe.PaddingUsedCount := DIC_TIMETIX + 1;
-  fKeys.Init(aKeyTypeInfo, fSafe.Padding[DIC_KEY].VAny, nil, nil, nil,
+  fKeys.Init(aKeyTypeInfo, fSafe.Padding[DIC_KEY].VAny, nil, nil, aHasher,
     @fSafe.Padding[DIC_KEYCOUNT].VInteger, aKeyCaseInsensitive);
   if not Assigned(fKeys.HashItem) then
     fKeys.EventHash := KeyFullHash;
@@ -8886,23 +8481,29 @@ end;
 
 function TSynDictionary.GetCapacity: integer;
 begin
-  if not fSingleThreaded then
+  if doSingleThreaded in fOptions then
+    result := fKeys.Capacity
+  else
+  begin
     fSafe.Lock;
-  result := fKeys.Capacity;
-  if not fSingleThreaded then
+    result := fKeys.Capacity;
     fSafe.UnLock;
+  end;
 end;
 
 procedure TSynDictionary.SetCapacity(const Value: integer);
 begin
-  if not fSingleThreaded then
+  if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
-  fKeys.Capacity := Value;
-  fValues.Capacity := Value;
-  if fSafe.Padding[DIC_TIMESEC].VInteger > 0 then
-    fTimeOuts.Capacity := Value;
-  if not fSingleThreaded then
-    fSafe.UnLock;
+  try
+    fKeys.Capacity := Value;
+    fValues.Capacity := Value;
+    if fSafe.Padding[DIC_TIMESEC].VInteger > 0 then
+      fTimeOuts.Capacity := Value;
+  finally
+    if not (doSingleThreaded in fOptions) then
+      fSafe.UnLock;
+  end;
 end;
 
 function TSynDictionary.GetTimeOutSeconds: cardinal;
@@ -8912,13 +8513,13 @@ end;
 
 procedure TSynDictionary.SetTimeOutSeconds(Value: cardinal);
 begin
-  if not fSingleThreaded then
+  if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
   try
     DeleteAll;
     fSafe.Padding[DIC_TIMESEC].VInteger := Value;
   finally
-    if not fSingleThreaded then
+    if not (doSingleThreaded in fOptions) then
       fSafe.UnLock;
   end;
 end;
@@ -8949,7 +8550,7 @@ begin
   now := GetTickCount64 shr 10;
   if fSafe.Padding[DIC_TIMETIX].VInteger = integer(now) then
     exit; // no need to search more often than every second
-  if not fSingleThreaded then
+  if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
   try
     fSafe.Padding[DIC_TIMETIX].VInteger := now;
@@ -8967,7 +8568,7 @@ begin
     if result > 0 then
       fKeys.Rehash; // mandatory after fKeys.Delete(i)
   finally
-    if not fSingleThreaded then
+    if not (doSingleThreaded in fOptions) then
       fSafe.UnLock;
   end;
 end;
@@ -8976,7 +8577,7 @@ procedure TSynDictionary.DeleteAll;
 begin
   if self = nil then
     exit;
-  if not fSingleThreaded then
+  if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
   try
     fKeys.Clear;
@@ -8985,7 +8586,7 @@ begin
     if fSafe.Padding[DIC_TIMESEC].VInteger > 0 then
       fTimeOuts.Clear;
   finally
-    if not fSingleThreaded then
+    if not (doSingleThreaded in fOptions) then
       fSafe.UnLock;
   end;
 end;
@@ -9026,7 +8627,7 @@ end;
 
 function TSynDictionary.Add(const aKey, aValue): integer;
 begin
-  if fSingleThreaded then
+  if doSingleThreaded in fOptions then
     result := InternalAddUpdate(@aKey, @aValue, {update=}false)
   else
   begin
@@ -9041,7 +8642,7 @@ end;
 
 function TSynDictionary.AddOrUpdate(const aKey, aValue): integer;
 begin
-  if fSingleThreaded then
+  if doSingleThreaded in fOptions then
     result := InternalAddUpdate(@aKey, @aValue, {update=}true)
   else
   begin
@@ -9056,7 +8657,7 @@ end;
 
 function TSynDictionary.Clear(const aKey): integer;
 begin
-  if not fSingleThreaded then
+  if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
   try
     result := fKeys.FindHashed(aKey);
@@ -9067,14 +8668,14 @@ begin
         fTimeOut[result] := 0;
     end;
   finally
-    if not fSingleThreaded then
+    if not (doSingleThreaded in fOptions) then
       fSafe.UnLock;
   end;
 end;
 
 function TSynDictionary.Delete(const aKey): integer;
 begin
-  if not fSingleThreaded then
+  if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
   try
     result := fKeys.FindHashedAndDelete(aKey);
@@ -9085,7 +8686,7 @@ begin
         fTimeOuts.Delete(result);
     end;
   finally
-    if not fSingleThreaded then
+    if not (doSingleThreaded in fOptions) then
       fSafe.UnLock;
   end;
 end;
@@ -9111,7 +8712,7 @@ begin
      (fValues.Info.ArrayRtti.Kind <> rkDynArray) then
     raise ESynDictionary.CreateUtf8('%.Values: % items are not dynamic arrays',
       [self, fValues.Info.Name]);
-  if not fSingleThreaded then
+  if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
   try
     ndx := fKeys.FindHashed(aKey);
@@ -9138,7 +8739,7 @@ begin
         result := nested.Add(aArrayValue) >= 0;
     end;
   finally
-    if not fSingleThreaded then
+    if not (doSingleThreaded in fOptions) then
       fSafe.UnLock;
   end;
 end;
@@ -9154,7 +8755,7 @@ function TSynDictionary.FindKeyFromValue(const aValue;
 var
   ndx: integer;
 begin
-  if not fSingleThreaded then
+  if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
   try
     ndx := fValues.IndexOf(aValue); // use fast RTTI for value search
@@ -9166,7 +8767,7 @@ begin
         SetTimeoutAtIndex(ndx);
     end;
   finally
-    if not fSingleThreaded then
+    if not (doSingleThreaded in fOptions) then
       fSafe.UnLock;
   end;
 end;
@@ -9259,11 +8860,11 @@ begin
 end;
 
 function TSynDictionary.FindAndCopy(const aKey;
-  out aValue; aUpdateTimeOut: boolean): boolean;
+  var aValue; aUpdateTimeOut: boolean): boolean;
 var
   ndx: integer;
 begin
-  if not fSingleThreaded then
+  if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
   try
     ndx := Find(aKey, aUpdateTimeOut);
@@ -9275,16 +8876,16 @@ begin
     else
       result := false;
   finally
-    if not fSingleThreaded then
+    if not (doSingleThreaded in fOptions) then
       fSafe.UnLock;
   end;
 end;
 
-function TSynDictionary.FindAndExtract(const aKey; out aValue): boolean;
+function TSynDictionary.FindAndExtract(const aKey; var aValue): boolean;
 var
   ndx: integer;
 begin
-  if not fSingleThreaded then
+  if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
   try
     ndx := fKeys.FindHashedAndDelete(aKey);
@@ -9299,14 +8900,14 @@ begin
     else
       result := false;
   finally
-    if not fSingleThreaded then
+    if not (doSingleThreaded in fOptions) then
       fSafe.UnLock;
   end;
 end;
 
 function TSynDictionary.Exists(const aKey): boolean;
 begin
-  if fSingleThreaded then
+  if doSingleThreaded in fOptions then
   begin
     result := fKeys.FindHashed(aKey) >= 0;
     exit;
@@ -9319,14 +8920,27 @@ begin
   end;
 end;
 
+function TSynDictionary.ExistsValue(
+  const aValue; aCompare: TDynArraySortCompare): boolean;
+begin
+  if not (doSingleThreaded in fOptions) then
+    fSafe.Lock;
+  try
+    result := fValues.Find(aValue, aCompare) >= 0;
+  finally
+    if not (doSingleThreaded in fOptions) then
+      fSafe.UnLock;
+  end;
+end;
+
 procedure TSynDictionary.CopyValues(out Dest; ObjArrayByRef: boolean);
 begin
-  if not fSingleThreaded then
+  if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
   try
     fValues.CopyTo(Dest, ObjArrayByRef);
   finally
-    if not fSingleThreaded then
+    if not (doSingleThreaded in fOptions) then
       fSafe.UnLock;
   end;
 end;
@@ -9338,7 +8952,7 @@ var
   i, n, ks, vs: PtrInt;
 begin
   result := 0;
-  if not fSingleThreaded then
+  if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
   try
     n := fSafe.Padding[DIC_KEYCOUNT].VInteger;
@@ -9358,7 +8972,7 @@ begin
       inc(v, vs);
     end;
   finally
-    if not fSingleThreaded then
+    if not (doSingleThreaded in fOptions) then
       fSafe.UnLock;
   end;
 end;
@@ -9370,7 +8984,7 @@ var
   k, v: PAnsiChar;
   i, n, ks, vs: PtrInt;
 begin
-  if not fSingleThreaded then
+  if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
   try
     result := 0;
@@ -9398,7 +9012,7 @@ begin
       inc(v, vs);
     end;
   finally
-    if not fSingleThreaded then
+    if not (doSingleThreaded in fOptions) then
       fSafe.UnLock;
   end;
 end;
@@ -9428,7 +9042,7 @@ procedure TSynDictionary.SaveToJson(W: TTextWriter; EnumSetsAsText: boolean);
 var
   k, v: RawUtf8;
 begin
-  if not fSingleThreaded then
+  if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
   try
     if fSafe.Padding[DIC_KEYCOUNT].VInteger > 0 then
@@ -9438,7 +9052,7 @@ begin
       fValues.SaveToJson(v, EnumSetsAsText);
     end;
   finally
-    if not fSingleThreaded then
+    if not (doSingleThreaded in fOptions) then
       fSafe.UnLock;
   end;
   W.AddJsonArraysAsJsonObject(pointer(k), pointer(v));
@@ -9460,12 +9074,12 @@ end;
 
 function TSynDictionary.SaveValuesToJson(EnumSetsAsText: boolean): RawUtf8;
 begin
-  if not fSingleThreaded then
+  if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
   try
     fValues.SaveToJson(result, EnumSetsAsText);
   finally
-    if not fSingleThreaded then
+    if not (doSingleThreaded in fOptions) then
       fSafe.UnLock;
   end;
 end;
@@ -9481,23 +9095,26 @@ function TSynDictionary.LoadFromJson(Json: PUtf8Char;
   CustomVariantOptions: PDocVariantOptions): boolean;
 var
   k, v: RawUtf8; // private copy of the Json input, expanded as Keys/Values arrays
+  n: integer;
 begin
   result := false;
-  if not JsonObjectAsJsonArrays(Json, k, v) then
+  n := JsonObjectAsJsonArrays(Json, k, v);
+  if n <= 0 then
     exit;
-  if not fSingleThreaded then
+  if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
   try
     if (fKeys.LoadFromJson(pointer(k), nil, CustomVariantOptions) <> nil) and
+       (fKeys.Count = n) and
        (fValues.LoadFromJson(pointer(v), nil, CustomVariantOptions) <> nil) and
-       (fKeys.Count = fValues.Count) then
+       (fValues.Count = n) then
       begin
         SetTimeouts;
         fKeys.Rehash; // warning: duplicated keys won't be identified
         result := true;
       end;
   finally
-    if not fSingleThreaded then
+    if not (doSingleThreaded in fOptions) then
       fSafe.UnLock;
   end;
 end;
@@ -9513,7 +9130,7 @@ begin
   if plain = '' then
     exit;
   rdr.Init(plain);
-  if not fSingleThreaded then
+  if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
   try
     try
@@ -9533,7 +9150,7 @@ begin
       result := false;
     end;
   finally
-    if not fSingleThreaded then
+    if not (doSingleThreaded in fOptions) then
       fSafe.UnLock;
   end;
 end;
@@ -9556,7 +9173,7 @@ var
   tmp: TTextWriterStackBuffer;
   W: TBufferWriter;
 begin
-  if not fSingleThreaded then
+  if not (doSingleThreaded in fOptions) then
     fSafe.Lock;
   try
     result := '';
@@ -9571,7 +9188,7 @@ begin
       W.Free;
     end;
   finally
-    if not fSingleThreaded then
+    if not (doSingleThreaded in fOptions) then
       fSafe.UnLock;
   end;
 end;

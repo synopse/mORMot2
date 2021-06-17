@@ -558,7 +558,7 @@ begin
         Client := TRestClientDB.Create(
           Model, nil, SQLITE_MEMORY_DATABASE_NAME, TRestServerDB);
         try
-          Client.Server.CreateMissingTables;
+          Client.Server.Server.CreateMissingTables;
           Client.Orm.TransactionBegin(TOrmPeople);
           n := 0;
           while R.FillOne do

@@ -2995,7 +2995,7 @@ procedure TRestStorageInMemory.ComputeStateAfterLoad(
   var loaded: TPrecisionTimer; binary: boolean);
 const
   _CALLER: array[boolean] of string[7] = (
-    'JSON', 'Binary');
+    'Json', 'Binary');
 var
   f, c: PtrInt;
   cf: RawUtf8;
@@ -3012,7 +3012,7 @@ begin
     for f := 0 to high(fUnique) do
       if byte(f) in fIsUnique then
       begin
-        c := fUnique[f].Hasher.ReHash({forced=}true, {grow=}false);
+        c := fUnique[f].Hasher.ReHash({forced=}true);
         if c > 0 then
         begin
           cf := fUnique[f].PropInfo.Name;

@@ -574,7 +574,8 @@ begin
        IsZero(CustomFields) and
        fForceBlobTransfert[fModel.GetTableIndexExisting(POrmClass(Value)^)] then
       result := UpdateBlobFields(Value);
-    if result and assigned(OnRecordUpdate) then
+    if result and
+       assigned(OnRecordUpdate) then
       OnRecordUpdate(Value);
   end;
 end;

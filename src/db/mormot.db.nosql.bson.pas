@@ -1031,7 +1031,7 @@ function Bson(const Json: RawUtf8; kind: PBsonElementType = nil): TBsonDocument;
 // by calling JsonBufferToBsonDocument() on the generated JSON content
 // - since all content will be transformed into JSON internally, use this
 // method only if the supplied parameters are simple types, and identified
-// explicitely via BSON-like extensions: any complex value (e.g. a TDateTime
+// explicitly via BSON-like extensions: any complex value (e.g. a TDateTime
 // or a BsonVariant binary) won't be handled as expected - use the overloaded
 // Bson() with explicit BsonVariant() name/value pairs instead
 

@@ -758,6 +758,9 @@ type
     destructor Destroy; override;
     /// will loop for any pending task, and execute fOwner.Task()
     procedure Execute; override;
+    /// the associated thread pool
+    property Owner: TSynThreadPool
+      read fOwner;
   end;
 
   TSynThreadPoolWorkThreads = array of TSynThreadPoolWorkThread;
@@ -793,7 +796,8 @@ type
     /// end thread on IO error
     function NeedStopOnIOError: boolean; virtual;
     /// process to be executed after notification
-    procedure Task(aCaller: TSynThread; aContext: Pointer); virtual; abstract;
+    procedure Task(aCaller: TSynThreadPoolWorkThread;
+      aContext: Pointer); virtual; abstract;
     procedure TaskAbort(aContext: Pointer); virtual;
   public
     /// initialize a thread pool with the supplied number of threads
@@ -1574,7 +1578,8 @@ end;
 function TSynBackgroundTimer.ExecuteOnce(
   const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
 begin
-  result := Assigned(aOnProcess) and Assigned(self);
+  result := Assigned(aOnProcess) and
+            Assigned(self);
   if not result then
     exit;
   Enable(aOnProcess, cardinal(-1));

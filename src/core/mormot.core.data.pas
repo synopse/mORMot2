@@ -1053,7 +1053,7 @@ var
 
 type
   /// function prototype to be used for TDynArray Sort and Find method
-  // - common functions exist for base types: see e.g. SortDynArrayboolean,
+  // - common functions exist for base types: see e.g. SortDynArrayBoolean,
   // SortDynArrayByte, SortDynArrayWord, SortDynArrayInteger, SortDynArrayCardinal,
   // SortDynArrayInt64, SortDynArrayQWord, SordDynArraySingle, SortDynArrayDouble,
   // SortDynArrayAnsiString, SortDynArrayAnsiStringI, SortDynArrayUnicodeString,
@@ -1117,7 +1117,7 @@ var
   // - e.g. as PT_SORT[CaseInSensitive,ptRawUtf8]
   // - not to be used as such, but e.g. when inlining TDynArray methods
   PT_SORT: array[boolean, TRttiParserType] of TDynArraySortCompare = (
-    (nil, nil, SortDynArrayboolean, SortDynArrayByte, SortDynArrayCardinal,
+    (nil, nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayCardinal,
      SortDynArrayInt64, SortDynArrayDouble, SortDynArrayExtended,
      SortDynArrayInt64, SortDynArrayInteger, SortDynArrayQWord,
      SortDynArrayRawByteString, SortDynArrayAnsiString, SortDynArrayAnsiString,
@@ -1127,7 +1127,7 @@ var
      SortDynArrayUnicodeString, SortDynArrayInt64, SortDynArrayInt64, SortDynArrayVariant,
      SortDynArrayUnicodeString, SortDynArrayAnsiString, SortDynArrayWord,
      nil, nil, nil, nil, nil, nil),
-   (nil, nil, SortDynArrayboolean, SortDynArrayByte, SortDynArrayCardinal,
+   (nil, nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayCardinal,
     SortDynArrayInt64, SortDynArrayDouble, SortDynArrayExtended,
     SortDynArrayInt64, SortDynArrayInteger, SortDynArrayQWord,
     SortDynArrayRawByteString, SortDynArrayAnsiStringI, SortDynArrayAnsiStringI,
@@ -1622,7 +1622,7 @@ type
     // slower and more error prone method (such pointer access lacks of strong
     // typing abilities), which is designed for TDynArray abstract/internal use
     function ItemPtr(index: PtrInt): pointer;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     /// just a convenient wrapper of Info.Cache.ItemSize
     function ItemSize: PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1651,10 +1651,10 @@ type
     function ItemCompare(A, B: pointer; CaseInSensitive: boolean = false): integer;
     /// will reset the element content
     procedure ItemClear(Item: pointer);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     /// will copy one element content
     procedure ItemCopy(Source, Dest: pointer);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     /// will copy the first field value of an array element
     // - will use the array KnownType to guess the copy routine to use
     // - returns false if the type information is not enough for a safe copy
@@ -1701,7 +1701,7 @@ type
       read GetCapacity write SetCapacity;
     /// the compare function to be used for Sort and Find methods
     // - by default, no comparison function is set
-    // - common functions exist for base types: e.g. SortDynArrayByte, SortDynArrayboolean,
+    // - common functions exist for base types: e.g. SortDynArrayByte, SortDynArrayBoolean,
     // SortDynArrayWord, SortDynArrayInteger, SortDynArrayCardinal, SortDynArraySingle,
     // SortDynArrayInt64, SortDynArrayDouble, SortDynArrayAnsiString,
     // SortDynArrayAnsiStringI, SortDynArrayString, SortDynArrayStringI,
@@ -1739,7 +1739,7 @@ type
   // - can be set as an alternative to TDynArrayHashOne
   TOnDynArrayHashOne = function(const Item): cardinal of object;
 
-  {.$define DYNARRAYHASHCOLLISIONCOUNT}
+  {.$define DYNARRAYHASHCOLLISIONCOUNT} // to be defined also in test.core.base
 
   /// implements O(1) lookup to any dynamic array content
   // - this won't handle the storage process (like add/update), just efficiently
@@ -1756,9 +1756,11 @@ type
     HashItem: TDynArrayHashOne;
     EventHash: TOnDynArrayHashOne;
     HashTable: TIntegerDynArray; // store 0 for void entry, or Index+1
+    {$ifndef DYNARRAYHASHCOLLISIONCOUNT}
     HashTableSize: integer;
+    {$endif DYNARRAYHASHCOLLISIONCOUNT}
     ScanCounter: integer; // Scan()>=0 up to CountTrigger*2
-    State: set of (hasHasher, canHash);
+    State: set of (hasHasher, canHash, moreMem);
     function HashTableIndex(aHashCode: PtrUInt): PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
     procedure HashAdd(aHashCode: cardinal; var result: integer);
@@ -1774,8 +1776,12 @@ type
     /// after how many FindBeforeAdd() or Scan() the hashing starts - default 32
     CountTrigger: integer;
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-    /// low-level access to an hash collisions counter
-    FindCollisions: cardinal;
+    /// low-level access to an hash collisions counter for all instance live
+    CountCollisions: cardinal;
+    /// low-level access to an hash collisions counter for the last HashTable[]
+    CountCollisionsCurrent: cardinal;
+    /// low-level access to the size of the internal HashTable[]
+    HashTableSize: integer;
     {$endif DYNARRAYHASHCOLLISIONCOUNT}
     /// initialize the hash table for a given dynamic array storage
     // - you can call this method several times, e.g. if aCaseInsensitive changed
@@ -1809,7 +1815,7 @@ type
     procedure Clear;
     /// full computation of the internal hash table
     // - returns the number of duplicated values found
-    function ReHash(forced, forceGrow: boolean): integer;
+    function ReHash(forced: boolean): integer;
     /// compute the hash of a given item
     function HashOne(Item: pointer): cardinal;
       {$ifdef FPC_OR_DELPHIXE4}inline;{$endif}
@@ -1916,7 +1922,7 @@ type
     // FindHashedForAdding / FindHashedAndUpdate / FindHashedAndDelete methods
     // - returns the number of duplicated items found - which won't be available
     // by hashed FindHashed() by definition
-    function ReHash(forAdd: boolean = false; forceGrow: boolean = false): integer;
+    function ReHash(forAdd: boolean = false): integer;
     /// search for an element value inside the dynamic array using hashing
     // - Item should be of the type expected by both the hash function and
     // Equals/Compare methods: e.g. if the searched/hashed field in a record is
@@ -1925,6 +1931,7 @@ type
     // - will call fHashItem(Item,fHasher) to compute the needed hash
     // - returns -1 if not found, or the index in the dynamic array if found
     function FindHashed(const Item): integer;
+      {$ifdef FPC} inline; {$endif}
     /// search for an element value inside the dynamic array using its hash
     // - returns -1 if not found, or the index in the dynamic array if found
     // - aHashCode parameter constains an already hashed value of the item,
@@ -2076,7 +2083,7 @@ function DynArray(aTypeInfo: PRttiInfo; var aValue;
 /// sort any dynamic array, via an external array of indexes
 // - this function will use the supplied TSynTempBuffer for index storage,
 // so use PIntegerArray(Indexes.buf) to access the values
-// - caller should always make Indexes.Done once done
+// - caller should always make Indexes.Done once finshed
 procedure DynArraySortIndexed(Values: pointer; ItemSize, Count: integer;
   out Indexes: TSynTempBuffer; Compare: TDynArraySortCompare);
 
@@ -2087,7 +2094,21 @@ var
   // - not to be used as such, but e.g. when inlining TDynArray methods
   PT_HASH: array[{caseinsensitive=}boolean, TRttiParserType] of TDynArrayHashOne;
 
-{$ifdef CPU32DELPHI}
+{$ifndef CPU32DELPHI} // Delphi Win32 compiler doesn't like Lemire algorithm
+
+{$define DYNARRAYHASH_LEMIRE}
+// use the Lemire 64-bit multiplication for faster hash reduction
+// see https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction
+// - generate more collisions with crc32c, but is always faster -> enabled
+
+{$endif CPU32DELPHI}
+
+// use Power-Of-Two sizes for smallest HashTables[], to reduce the hash with AND
+// - and Delphi Win32 has a not efficient 64-bit multiplication, anyway
+{$define DYNARRAYHASH_PO2}
+
+
+{$ifdef DYNARRAYHASH_PO2}
 const
   /// defined for inlining bitwise division in TDynArrayHasher.HashTableIndex
   // - HashTableSize<=HASH_PO2 is expected to be a power of two (fast binary op);
@@ -2095,9 +2116,10 @@ const
   // - above this limit, a set of increasing primes is used; using a prime as
   // hashtable modulo enhances its distribution, especially for a weak hash function
   // - 64-bit CPU and FPC can efficiently compute a prime reduction using Lemire
-  // algorithm, so no power of two is defined on those targets
+  // algorithm, but power of two sizes still have a better practical performance
+  // for lower (and most common) content until it consumes too much memory
   HASH_PO2 = 1 shl 18;
-{$endif CPU32DELPHI}
+{$endif DYNARRAYHASH_PO2}
 
 type
   /// thread-safe FIFO (First-In-First-Out) in-order queue of records
@@ -2292,7 +2314,7 @@ function FindIniNameValue(P: PUtf8Char; UpperName: PAnsiChar;
 // current section
 // - expect UpperName e.g. as 'CONTENT-TYPE: '
 // - expect UpperValues to be any upper value with left side matching, e.g. as
-// used by IsHTMLContentTypeTextual() function:
+// used by IsHtmlContentTypeTextual() function:
 // ! result := ExistsIniNameValue(htmlHeaders,HEADER_CONTENT_TYPE_UPPER,
 // !  ['TEXT/','APPLICATION/JSON','APPLICATION/XML']);
 // - warning: this function calls IdemPCharArray(), so expects UpperValues[]
@@ -2315,7 +2337,7 @@ function UpdateIniNameValue(var Content: RawUtf8;
 
 /// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...',
 // 'Content-Type: application/json' or 'Content-Type: application/xml'
-function IsHTMLContentTypeTextual(Headers: PUtf8Char): boolean;
+function IsHtmlContentTypeTextual(Headers: PUtf8Char): boolean;
 
 
 
@@ -3834,7 +3856,7 @@ begin
   FileFromString(Content, FileName);
 end;
 
-function IsHTMLContentTypeTextual(Headers: PUtf8Char): boolean;
+function IsHtmlContentTypeTextual(Headers: PUtf8Char): boolean;
 begin
   result := ExistsIniNameValue(Headers, HEADER_CONTENT_TYPE_UPPER,
     [JSON_CONTENT_TYPE_UPPER, 'TEXT/', 'APPLICATION/XML',
@@ -6074,10 +6096,10 @@ begin
 end;
 
 function TDynArray.GetCount: PtrInt;
-begin
+begin // use result as a single temporary variable for better FPC asm generation
   result := PtrUInt(fCountP);
   if result <> 0 then
-    result := PInteger(result)^
+    result := PInteger(result)^ // count is external
   else
   begin
     result := PtrUInt(fValue);
@@ -6085,7 +6107,10 @@ begin
     begin
       result := PPtrInt(result)^;
       if result <> 0 then
-        result := PDALen(result - _DALEN)^ + _DAOFF;
+      begin
+        result := PDALen(result - _DALEN)^; // count = length()
+        {$ifdef FPC} inc(result, _DAOFF); {$endif}
+      end;
     end;
   end;
 end;
@@ -6097,7 +6122,10 @@ begin
   begin
     result := PPtrInt(result)^;
     if result <> 0 then
-      result := PDALen(result - _DALEN)^ + _DAOFF; // capacity = length()
+    begin
+      result := PDALen(result - _DALEN)^; // capacity = length()
+      {$ifdef FPC} inc(result, _DAOFF); {$endif}
+    end;
   end;
 end;
 
@@ -6289,7 +6317,7 @@ end;
 
 function TDynArray.ItemPtr(index: PtrInt): pointer;
 label
-  ok;
+  ok, ko;
 var
   c: PtrUInt;
 begin
@@ -6304,9 +6332,9 @@ begin
   if c <> 0 then
   begin
     if PtrUInt(index) < PCardinal(c)^ then
-ok:   inc(PByte(result), index * fInfo.Cache.ItemSize)
+ok:   inc(PByte(result), index * fInfo.Cache.ItemSize) // branchless ext count
     else
-      result := nil
+      goto ko;
   end
   else
     {$ifdef FPC} // FPC stores high() in TDALen=PtrInt
@@ -6316,7 +6344,7 @@ ok:   inc(PByte(result), index * fInfo.Cache.ItemSize)
     {$endif FPC}
       goto ok
     else
-      result := nil;
+ko:   result := nil;
 end;
 
 procedure TDynArray.ItemCopyAt(index: PtrInt; Dest: pointer);
@@ -6948,8 +6976,8 @@ begin
             p := J
           else if p = J then
             p := I;
-          Inc(I);
-          Dec(J);
+          inc(I);
+          dec(J);
         end;
       until I > J;
       if J - L < R - I then
@@ -6999,8 +7027,8 @@ begin
             p := J
           else if p = J then
             p := I;
-          Inc(I);
-          Dec(J);
+          inc(I);
+          dec(J);
         end;
       until I > J;
       if J - L < R - I then
@@ -7050,8 +7078,8 @@ begin
             p := J
           else if p = J then
             p := I;
-          Inc(I);
-          Dec(J);
+          inc(I);
+          dec(J);
         end;
       until I > J;
       if J - L < R - I then
@@ -7098,8 +7126,8 @@ begin
             p := J
           else if p = J then
             p := I;
-          Inc(I);
-          Dec(J);
+          inc(I);
+          dec(J);
         end;
       until I > J;
       if J - L < R - I then
@@ -7148,8 +7176,8 @@ begin
             P := J
           else if P = J then
             P := I;
-          Inc(I);
-          Dec(J);
+          inc(I);
+          dec(J);
         end;
       until I > J;
       if J - L < R - I then
@@ -7181,16 +7209,52 @@ begin
   if Assigned(QuickSort.Compare) and
      (fValue <> nil) and
      (fValue^ <> nil) then
+  begin
+    if fInfo.ArrayRtti <> nil then
+      case fInfo.ArrayRtti.Parser of
+        // call optimized sorting functions for most simple types
+        ptWord:
+          if @QuickSort.Compare = @SortDynArrayWord then
+          begin
+            QuickSortWord(fValue^, aStart, aStop);
+            exit;
+          end;
+        ptInteger:
+          if @QuickSort.Compare = @SortDynArrayInteger then
+          begin
+            QuickSortInteger(fValue^, aStart, aStop);
+            exit;
+          end;
+        ptInt64:
+          if @QuickSort.Compare = @SortDynArrayInt64 then
+          begin
+            QuickSortInt64(fValue^, aStart, aStop);
+            exit;
+          end;
+        ptQWord:
+          if @QuickSort.Compare = @SortDynArrayQWord then
+          begin
+            QuickSortQWord(fValue^, aStart, aStop);
+            exit;
+          end;
+        ptDouble:
+          if @QuickSort.Compare = @SortDynArrayDouble then
+          begin
+            QuickSortDouble(fValue^, aStart, aStop);
+            exit;
+          end;
+      end;
     if fInfo.Cache.ItemSize = SizeOf(pointer) then
-      // dedicated function for pointers - e.g. T*ObjArray
+      // dedicated function for pointers - e.g. strings or T*ObjArray
       QuickSortPtr(aStart, aStop, QuickSort.Compare, fValue^)
     else
     begin
-      // generic process for any size of array items
+      // generic process for any kind of array items
       QuickSort.Value := fValue^;
       QuickSort.ElemSize := fInfo.Cache.ItemSize;
       QuickSort.QuickSort(aStart, aStop);
     end;
+  end;
 end;
 
 procedure TDynArray.Sort(const aCompare: TOnDynArraySortCompare; aReverse: boolean);
@@ -7391,15 +7455,17 @@ function TDynArray.IndexOf(const Item; CaseInSensitive: boolean): PtrInt;
 var
   rtti: PRttiInfo;
   cmp: TRttiCompare;
+  n: PtrInt;
   comp: integer;
   P: PAnsiChar;
 label
   bin;
 begin
-  if (fValue <> nil) and
+  n := GetCount;
+  if (n <> 0) and
      (@Item <> nil) then
     if not(rcfArrayItemManaged in fInfo.Flags) then
-bin:  result := AnyScanIndex(fValue^, @Item, GetCount, fInfo.Cache.ItemSize)
+bin:  result := AnyScanIndex(fValue^, @Item, n, fInfo.Cache.ItemSize)
     else
     begin
       rtti := fInfo.Cache.ItemInfo;
@@ -7409,7 +7475,7 @@ bin:  result := AnyScanIndex(fValue^, @Item, GetCount, fInfo.Cache.ItemSize)
       if Assigned(cmp) then
       begin
         P := fValue^;
-        for result := 0 to GetCount - 1 do
+        for result := 0 to n - 1 do
         begin
           inc(P, cmp(P, @Item, rtti, comp));
           if comp = 0 then
@@ -7967,6 +8033,10 @@ begin
     Compare := PT_SORT[aCaseInsensitive, DynArray^.Info.ArrayFirstField];
   CountTrigger := 32;
   Clear;
+  {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+  CountCollisions := 0;
+  CountCollisionsCurrent := 0;
+  {$endif DYNARRAYHASHCOLLISIONCOUNT}
 end;
 
 procedure TDynArrayHasher.InitSpecific(aDynArray: PDynArray; aKind: TRttiParserType;
@@ -8007,12 +8077,12 @@ end;
 
 const
   // reduces memory consumption and enhances distribution at hash table growing
-  _PRIMES: array[0..38 {$ifndef CPU32DELPHI} + 15 {$endif}] of integer = (
-    {$ifndef CPU32DELPHI}
+  _PRIMES: array[0..38 {$ifndef DYNARRAYHASH_PO2} + 15 {$endif}] of integer = (
+    {$ifndef DYNARRAYHASH_PO2}
     31, 127, 251, 499, 797, 1259, 2011, 3203, 5087,
     8089, 12853, 20399, 81649, 129607, 205759,
-    {$endif CPU32DELPHI}
-    // start after HASH_PO2=2^18=262144 for Delphi Win32 (poor 64-bit mul)
+    {$endif DYNARRAYHASH_PO2}
+    // start after HASH_PO2=2^18=262144 for DYNARRAYHASH_PO2 (poor 64-bit mul)
     326617, 411527, 518509, 653267, 823117, 1037059, 1306601, 1646237,
     2074129, 2613229, 3292489, 4148279, 5226491, 6584983, 8296553, 10453007,
     13169977, 16593127, 20906033, 26339969, 33186281, 41812097, 52679969,
@@ -8035,20 +8105,26 @@ begin
   end;
 end;
 
+// see TTestCoreBase._TSynDictionary for some numbers, and why
+//  DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2 are defined by default
 function TDynArrayHasher.HashTableIndex(aHashCode: PtrUInt): PtrUInt;
 begin
   result := HashTableSize;
-  {$ifdef CPU32DELPHI}
-  // Delphi Win32 is not efficient with 64-bit multiplication
-  if result > HASH_PO2 then
-    result := aHashCode mod result
+  {$ifdef DYNARRAYHASH_PO2}
+  // Delphi Win32 e.g. is not efficient with Lemire 64-bit multiplication
+  if result <= HASH_PO2 then
+    // efficient AND for power of two division
+    result := aHashCode and (result - 1)
   else
-    result := aHashCode and (result - 1);
+  {$endif DYNARRAYHASH_PO2}
+  {$ifdef DYNARRAYHASH_LEMIRE}
+    // FPC or dcc64 compile next line as very optimized asm
+    result := (QWord(aHashCode) * result) shr 32;
+    // https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction
   {$else}
-  // FPC or dcc64 compile next line as very optimized asm
-  result := (QWord(aHashCode) * result) shr 32;
-  // see https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction
-  {$endif CPU32DELPHI}
+    // regular 32-bit modulo over a Prime: slower but best from our tests
+    result := aHashCode mod result;
+  {$endif DYNARRAYHASH_LEMIRE}
 end;
 
 function TDynArrayHasher.Find(aHashCode: cardinal; aForAdd: boolean): integer;
@@ -8107,6 +8183,9 @@ function TDynArrayHasher.FindOrNew(aHashCode: cardinal; Item: pointer;
   aHashTableIndex: PInteger): integer;
 var
   first, last, ndx, cmp: integer;
+  {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+  collisions: integer;
+  {$endif DYNARRAYHASHCOLLISIONCOUNT}
   P: PAnsiChar;
 begin
   if not (canHash in State) then
@@ -8115,6 +8194,9 @@ begin
     result := Scan(Item);
     exit;
   end;
+  {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+  collisions := 0;
+  {$endif DYNARRAYHASHCOLLISIONCOUNT}
   result := HashTableIndex(aHashCode);
   first := result;
   last := HashTableSize;
@@ -8123,7 +8205,11 @@ begin
     if ndx < 0 then
     begin
       result := -(result + 1);
-      exit; // returns void index in HashTable[]
+      {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+      inc(CountCollisions, collisions);
+      inc(CountCollisionsCurrent, collisions);
+      {$endif DYNARRAYHASHCOLLISIONCOUNT}
+      exit; // not found: returns void index in HashTable[] as negative value
     end;
     with DynArray^ do
       P := PAnsiChar(Value^) + ndx * fInfo.Cache.ItemSize;
@@ -8139,11 +8225,11 @@ begin
       if aHashTableIndex <> nil then
         aHashTableIndex^ := result;
       result := ndx;
-      exit;
+      exit; // found: returns the matching index
     end;
     // hash or slot collision -> search next item
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-    inc(FindCollisions);
+    inc(collisions);
     {$endif DYNARRAYHASHCOLLISIONCOUNT}
     inc(result);
     if result = last then
@@ -8170,7 +8256,7 @@ begin
   if HashTableSize - n < n shr 2 then
   begin
     // grow hash table when 25% void
-    ReHash({forced=}true, {grow=}true);
+    ReHash({forced=}true);
     result := Find(aHashCode, {foradd=}true); // recompute position
     if result >= 0 then
       RaiseFatalCollision('HashAdd', aHashCode);
@@ -8232,7 +8318,7 @@ begin
   wasAdded := false;
   if not (canHash in State) then
   begin
-    n := DynArray^.count;
+    n := DynArray^.Count;
     if n < CountTrigger then
     begin
       result := Scan(Item); // may trigger ReHash and set canHash
@@ -8247,7 +8333,7 @@ begin
     end;
   end;
   if not (canHash in State) then
-    ReHash({forced=}true, {grow=}false); // hash previous CountTrigger items
+    ReHash({forced=}true); // hash previous CountTrigger items
   result := FindOrNew(aHashCode, Item, nil);
   if result < 0 then
   begin
@@ -8309,7 +8395,7 @@ var
   siz: PtrInt;
 begin
   result := -1;
-  max := DynArray^.count - 1;
+  max := DynArray^.Count - 1;
   P := DynArray^.Value^;
   siz := DynArray^.Info.Cache.ItemSize;
   if Assigned(EventCompare) then // custom comparison
@@ -8334,14 +8420,14 @@ begin
   if hasHasher in State then
     if max > CountTrigger then
       // e.g. after Init() without explicit ReHash
-      ReHash({forced=}false, {grow=}false) // set HashTable[] and canHash
+      ReHash({forced=}false) // set HashTable[] and canHash
   else if max > 7 then      
   begin
     inc(ScanCounter);
     if ScanCounter >= CountTrigger * 2 then
     begin
       CountTrigger := 2; // rather use hashing from now on
-      ReHash({forced=}false, {grow=}false);
+      ReHash({forced=}false);
     end;
   end;
 end;
@@ -8358,50 +8444,46 @@ begin
     result := -1; // for coherency with most search methods
 end;
 
-function TDynArrayHasher.ReHash(forced, forceGrow: boolean): integer;
+function TDynArrayHasher.ReHash(forced: boolean): integer;
 var
   i, n, cap, siz, ndx: integer;
   P: PAnsiChar;
   hc: cardinal;
 begin
   result := 0;
-  // initialize a new void HashTable[]=0
-  siz := HashTableSize;
-  Clear;
-  if not (hasHasher in State) then
-    exit;
-  n := DynArray^.count;
-  if not forced and
-     ((n = 0) or
-      (n < CountTrigger)) then
-    // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
-    exit;
-  if forceGrow and
-     (siz > 0) then
-    // next power of two or next prime
-    {$ifdef CPU32DELPHI}
-    if siz < HASH_PO2 then
-      siz := siz shl 1
-    else
-    {$endif CPU32DELPHI}
-      siz := NextPrime(siz)
-  else
+  // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
+  n := DynArray^.Count;
+  if not (Assigned(HashItem) or Assigned(EventHash)) or
+     (not forced and
+      ((n = 0) or
+       (n < CountTrigger))) then
   begin
-    // Capacity better than Count, * 2 to reserve some void slots
-    cap := DynArray^.Capacity * 2;
-    {$ifdef CPU32DELPHI}
-    if cap <= HASH_PO2 then
-    begin
-      siz := 256; // find nearest power of two for fast bitwise division
-      while siz < cap do
-        siz := siz shl 1;
-    end
-    else
-    {$endif CPU32DELPHI}
-      siz := NextPrime(cap);
+    Clear; // reset HashTable[]
+    exit;
   end;
+  // Capacity better than Count or HashTableSize, * 2 to reserve some void slots
+  cap := DynArray^.Capacity * 2;
+  {$ifdef DYNARRAYHASH_PO2}
+  if cap <= HASH_PO2 then
+  begin
+    siz := 256; // find nearest power of two for fast bitwise division
+    while siz < cap do
+      siz := siz shl 1;
+  end
+  else
+  {$endif DYNARRAYHASH_PO2}
+    siz := NextPrime(cap);
+//QueryPerformanceMicroSeconds(t1); write('rehash count=',n,' old=',HashTableSize,
+//' new=', siz, ' oldcol=',CountCollisionsCurrent);
+  if (not forced) and
+     (siz = HashTableSize) then
+    exit; // ReHash() was called
+  Clear;
   HashTableSize := siz;
   SetLength(HashTable, siz); // fill with 0 (void slot)
+  {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+  CountCollisionsCurrent := 0; // count collision for this HashTable[] only
+  {$endif DYNARRAYHASHCOLLISIONCOUNT}
   // fill HashTable[]=index+1 from all existing items
   include(State, canHash);   // needed before Find() below
   P := DynArray^.Value^;
@@ -8421,6 +8503,8 @@ begin
       HashTable[-ndx - 1] := i;
     inc(P, siz);
   end;
+//QueryPerformanceMicroSeconds(t2); writeln(' newcol=',CountCollisionsCurrent,' ',
+//(CountCollisionsCurrent * 100) div cardinal(n), '%  ',MicroSecToString(t2-t1));
 end;
 
 { ************ TDynArrayHashed }
@@ -8724,9 +8808,9 @@ begin
   result := fHash.GetHashFromIndex(aIndex);
 end;
 
-function TDynArrayHashed.ReHash(forAdd: boolean; forceGrow: boolean): integer;
+function TDynArrayHashed.ReHash(forAdd: boolean): integer;
 begin
-  result := fHash.ReHash(forAdd, forceGrow);
+  result := fHash.ReHash(forAdd);
 end;
 
 
@@ -9117,7 +9201,8 @@ begin
   MoveFast(_PT_HASH, PT_HASH, SizeOf(PT_HASH));
   for k := succ(low(k)) to high(k) do
     case k of
-      rkInteger, rkEnumeration, rkSet, rkChar, rkWChar {$ifdef FPC}, rkBool{$endif}:
+      rkInteger, rkEnumeration, rkSet,
+      rkChar, rkWChar {$ifdef FPC}, rkBool{$endif}:
         begin
           RTTI_BINARYSAVE[k] := @_BS_Ord;
           RTTI_BINARYLOAD[k] := @_BL_Ord;

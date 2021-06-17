@@ -416,7 +416,7 @@ type
   // you can run "proxycfg -u" or "netsh winhttp import proxy source=ie" to use
   // the current user's proxy settings for Internet Explorer (under 64 bit
   // Vista/Seven, to configure applications using the 32 bit WinHttp settings,
-  // call netsh or proxycfg bits from %SystemRoot%\SysWOW64 folder explicitely)
+  // call netsh or proxycfg bits from %SystemRoot%\SysWOW64 folder explicitly)
   // - you can optionaly specify manual Proxy settings at constructor level
   // - by design, the WinHttp API can be used from a service or a server
   // - is implemented by creating a TWinHttp internal class instance

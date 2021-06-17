@@ -127,7 +127,7 @@ procedure FillZero(var secret: RawByteString); overload;
 procedure FillZero(var secret: RawUtf8); overload;
 
 /// fill all bytes of this UTF-8 string with zeros, i.e. 'toto' -> #0#0#0#0
-// - SpiUtf8 type has been defined explicitely to store Sensitive Personal
+// - SpiUtf8 type has been defined explicitly to store Sensitive Personal
 // Information
 procedure FillZero(var secret: SpiUtf8); overload;
 
@@ -720,7 +720,7 @@ type
   // outside HTML attributes (hfOutsideAttributes)
   // $  & "  ->   &amp; &quote;
   // within HTML attributes (hfWithinAttributes)
-  TTextWriterHTMLFormat = (
+  TTextWriterHtmlFormat = (
     hfNone,
     hfAnyWhere,
     hfOutsideAttributes,
@@ -1005,16 +1005,16 @@ type
     procedure AddQuotedStr(Text: PUtf8Char; TextLen: PtrUInt; Quote: AnsiChar;
       TextMaxLen: PtrInt = 0);
     /// append some chars, escaping all HTML special chars as expected
-    procedure AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHTMLFormat = hfAnyWhere); overload;
+    procedure AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat = hfAnyWhere); overload;
     /// append some chars, escaping all HTML special chars as expected
     procedure AddHtmlEscape(Text: PUtf8Char; TextLen: PtrInt;
-      Fmt: TTextWriterHTMLFormat = hfAnyWhere); overload;
+      Fmt: TTextWriterHtmlFormat = hfAnyWhere); overload;
     /// append some VCL/LCL chars, escaping all HTML special chars as expected
     procedure AddHtmlEscapeString(const Text: string;
-      Fmt: TTextWriterHTMLFormat = hfAnyWhere);
+      Fmt: TTextWriterHtmlFormat = hfAnyWhere);
     /// append some chars, escaping all HTML special chars as expected
     procedure AddHtmlEscapeUtf8(const Text: RawUtf8;
-      Fmt: TTextWriterHTMLFormat = hfAnyWhere);
+      Fmt: TTextWriterHtmlFormat = hfAnyWhere);
     /// append some chars, escaping all XML special chars as expected
     // - i.e.   < > & " '  as   &lt; &gt; &amp; &quote; &apos;
     // - and all control chars (i.e. #1..#31) as &#..;
@@ -1100,6 +1100,15 @@ type
     // - TypeInfo is a PRttiInfo instance - but not available in this early unit
     procedure AddTypedJson(Value: pointer; TypeInfo: pointer;
       WriteOptions: TTextWriterWriteObjectOptions = []); virtual;
+    /// write some #0 ended UTF-8 text, according to the specified format
+    // - use overriden TTextWriter version instead!
+    procedure Add(P: PUtf8Char; Escape: TTextWriterKind); overload; virtual;
+    /// write some #0 ended UTF-8 text, according to the specified format
+    // - use overriden TTextWriter version instead!
+    procedure Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind); overload; virtual;
+    /// write some data Base64 encoded
+    // - use overriden TTextWriter version instead!
+    procedure WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean); virtual;
 
     /// serialize as JSON the given object
     // - use overriden TTextWriter version instead!
@@ -1197,13 +1206,13 @@ function ObjectToJson(Value: TObject;
 // - just a wrapper around TBaseWriter.AddHtmlEscape() process,
 // replacing < > & " chars depending on the HTML layer
 function HtmlEscape(const text: RawUtf8;
-  fmt: TTextWriterHTMLFormat = hfAnyWhere): RawUtf8;
+  fmt: TTextWriterHtmlFormat = hfAnyWhere): RawUtf8;
 
 /// escape some VCL/LCL text into UTF-8 HTML
 // - just a wrapper around TBaseWriter.AddHtmlEscapeString() process,
 // replacing < > & " chars depending on the HTML layer
 function HtmlEscapeString(const text: string;
-  fmt: TTextWriterHTMLFormat = hfAnyWhere): RawUtf8;
+  fmt: TTextWriterHtmlFormat = hfAnyWhere): RawUtf8;
 
 
 const
@@ -1277,7 +1286,7 @@ type
 type
   /// function prototype used internally for UTF-8 buffer comparison
   // - also used e.g. in mormot.core.variants unit
-  TUtf8Compare = function(P1,P2: PUtf8Char): PtrInt;
+  TUtf8Compare = function(P1, P2: PUtf8Char): PtrInt;
 
 /// returns TRUE if Value is nil or all supplied Values[] equal ''
 function IsZero(const Values: TRawUtf8DynArray): boolean; overload;
@@ -4742,6 +4751,24 @@ begin
     '%.AddJsonReformat unimplemented: use TTextWriter', [self]);
 end;
 
+procedure TBaseWriter.Add(P: PUtf8Char; Escape: TTextWriterKind);
+begin
+  raise ESynException.CreateUtf8(
+    '%.Add(..,Escape: TTextWriterKind) unimplemented: use TTextWriter', [self]);
+end;
+
+procedure TBaseWriter.Add(P: PUtf8Char; Len: PtrInt; Escape: TTextWriterKind);
+begin
+  raise ESynException.CreateUtf8(
+    '%.Add(..,Escape: TTextWriterKind) unimplemented: use TTextWriter', [self]);
+end;
+
+procedure TBaseWriter.WrBase64(P: PAnsiChar; Len: PtrUInt; withMagic: boolean);
+begin
+  raise ESynException.CreateUtf8(
+    '%.WrBase64() unimplemented: use TTextWriter', [self]);
+end;
+
 procedure TBaseWriter.AddShorter(const Text: TShort8);
 var
   L: PtrInt;
@@ -5539,7 +5566,8 @@ end;
 procedure TBaseWriter.AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
   IncludeUnitName, IncludePointer: boolean);
 begin
-  if IncludeUnitName and Assigned(ClassUnit) then
+  if IncludeUnitName and
+     Assigned(ClassUnit) then
   begin
     AddShort(ClassUnit(PClass(Instance)^)^);
     Add('.');
@@ -5938,14 +5966,14 @@ begin
 end;
 
 const
-  HTML_ESC: array[hfAnyWhere..high(TTextWriterHTMLFormat)] of TSynAnsicharSet = (
+  HTML_ESC: array[hfAnyWhere..high(TTextWriterHtmlFormat)] of TSynAnsicharSet = (
     [#0, '&', '"', '<', '>'],
     [#0, '&', '<', '>'],
     [#0, '&', '"']);
   XML_ESC: TSynByteSet =
     [0..31, ord('<'), ord('>'), ord('&'), ord('"'), ord('''')];
 
-procedure TBaseWriter.AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHTMLFormat);
+procedure TBaseWriter.AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat);
 var
   B: PUtf8Char;
   esc: ^TSynAnsicharSet;
@@ -5979,7 +6007,7 @@ begin
   until Text^ = #0;
 end;
 
-function HtmlEscape(const text: RawUtf8; fmt: TTextWriterHTMLFormat): RawUtf8;
+function HtmlEscape(const text: RawUtf8; fmt: TTextWriterHtmlFormat): RawUtf8;
 var
   temp: TTextWriterStackBuffer;
   W: TBaseWriter;
@@ -5993,7 +6021,7 @@ begin
   end;
 end;
 
-function HtmlEscapeString(const text: string; fmt: TTextWriterHTMLFormat): RawUtf8;
+function HtmlEscapeString(const text: string; fmt: TTextWriterHtmlFormat): RawUtf8;
 var
   temp: TTextWriterStackBuffer;
   W: TBaseWriter;
@@ -6008,7 +6036,7 @@ begin
 end;
 
 procedure TBaseWriter.AddHtmlEscape(Text: PUtf8Char; TextLen: PtrInt;
-  Fmt: TTextWriterHTMLFormat);
+  Fmt: TTextWriterHtmlFormat);
 var
   B: PUtf8Char;
   esc: ^TSynAnsicharSet;
@@ -6047,7 +6075,7 @@ begin
   until false;
 end;
 
-procedure TBaseWriter.AddHtmlEscapeString(const Text: string; Fmt: TTextWriterHTMLFormat);
+procedure TBaseWriter.AddHtmlEscapeString(const Text: string; Fmt: TTextWriterHtmlFormat);
 var
   tmp: TSynTempBuffer;
   len: integer;
@@ -6057,7 +6085,7 @@ begin
   tmp.Done;
 end;
 
-procedure TBaseWriter.AddHtmlEscapeUtf8(const Text: RawUtf8; Fmt: TTextWriterHTMLFormat);
+procedure TBaseWriter.AddHtmlEscapeUtf8(const Text: RawUtf8; Fmt: TTextWriterHtmlFormat);
 begin
   AddHtmlEscape(pointer(Text), length(Text), Fmt);
 end;
@@ -6504,7 +6532,7 @@ function FastFindPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt; Value: PUtf8Char
         cmovnc  r9, r13
 @nxt:   cmp     r9, R
         jle     @s
-@err:   or      rax, -1
+@err:   mov     rax, -1
 @found: pop     r13
         pop     r12
         {$ifdef win64}
@@ -6528,7 +6556,7 @@ function FastFindPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt; Value: PUtf8Char
         cmp     r9, R
         jle     @s
         jmp     @err
-@void:  or      rax, -1
+@void:  mov     rax, -1
         cmp     qword ptr [P], 0
         cmove   rax, Value
         jmp     @found
@@ -6684,8 +6712,8 @@ type
 procedure TQuickSortRawUtf8.Sort(L, R: PtrInt);
 var
   I, J, P: PtrInt;
-  Tmp: Pointer;
-  TmpInt: integer;
+  tmp: Pointer;
+  int: integer;
 begin
   if L < R then
     repeat
@@ -6695,26 +6723,26 @@ begin
       repeat
         pivot := Values^[P];
         while Compare(Values^[I], pivot) < 0 do
-          Inc(I);
+          inc(I);
         while Compare(Values^[J], pivot) > 0 do
-          Dec(J);
+          dec(J);
         if I <= J then
         begin
-          Tmp := Values^[J];
+          tmp := Values^[J];
           Values^[J] := Values^[I];
-          Values^[I] := Tmp;
+          Values^[I] := tmp;
           if CoValues <> nil then
           begin
-            TmpInt := CoValues^[J];
+            int := CoValues^[J];
             CoValues^[J] := CoValues^[I];
-            CoValues^[I] := TmpInt;
+            CoValues^[I] := int;
           end;
           if P = I then
             P := J
           else if P = J then
             P := I;
-          Inc(I);
-          Dec(J);
+          inc(I);
+          dec(J);
         end;
       until I > J;
       if J - L < R - I then
@@ -8843,12 +8871,13 @@ end;
 
 function VarRecToTempUtf8(const V: TVarRec; var Res: TTempUtf8): integer;
 var
+  i: PtrInt;
   v64: Int64;
   isString: boolean;
 label
-  smlu32, none;
+  smlu32, none, done;
 begin
-  Res.TempRawUtf8 := nil; // avoid GPF
+  Res.TempRawUtf8 := nil; // no allocation by default - and avoid GPF
   case V.VType of
     vtString:
       if V.VString = nil then
@@ -8857,16 +8886,14 @@ begin
       begin
         Res.Text := @V.VString^[1];
         Res.Len := ord(V.VString^[0]);
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     vtAnsiString:
       begin
         // expect UTF-8 content
         Res.Text := pointer(V.VAnsiString);
         Res.Len := length(RawUtf8(V.VAnsiString));
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     {$ifdef HASVARUSTRING}
     vtUnicodeString:
@@ -8881,16 +8908,14 @@ begin
         // expect UTF-8 content
         Res.Text := V.VPointer;
         Res.Len := StrLen(V.VPointer);
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     vtChar:
       begin
         Res.Temp[0] := V.VChar; // V may be on transient stack (alf: FPC)
         Res.Text := @Res.Temp;
         Res.Len := 1;
-        result := 1;
-        exit;
+        goto done;
       end;
     vtPWideChar:
       RawUnicodeToUtf8(V.VPWideChar, StrLenW(V.VPWideChar),
@@ -8904,60 +8929,55 @@ begin
         else
           Res.Text := pointer(SmallUInt32Utf8[0]);
         Res.Len := 1;
-        result := 1;
-        exit;
+        goto done;
       end;
     vtInteger:
       begin
-        result := V.VInteger;
-        if cardinal(result) <= high(SmallUInt32Utf8) then
+        i := V.VInteger;
+        if PtrUInt(i) <= high(SmallUInt32Utf8) then
         begin
-smlu32:   Res.Text := pointer(SmallUInt32Utf8[result]);
+smlu32:   Res.Text := pointer(SmallUInt32Utf8[i]);
           Res.Len := PStrLen(Res.Text - _STRLEN)^;
         end
         else
         begin
-          Res.Text := PUtf8Char(StrInt32(@Res.Temp[23], result));
+          Res.Text := PUtf8Char(StrInt32(@Res.Temp[23], i));
           Res.Len := @Res.Temp[23] - Res.Text;
         end;
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     vtInt64:
       if (PCardinalArray(V.VInt64)^[0] <= high(SmallUInt32Utf8)) and
          (PCardinalArray(V.VInt64)^[1] = 0) then
       begin
-        result := V.VInt64^;
+        i := V.VInt64^;
         goto smlu32;
       end
       else
       begin
         Res.Text := PUtf8Char(StrInt64(@Res.Temp[23], V.VInt64^));
         Res.Len := @Res.Temp[23] - Res.Text;
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     {$ifdef FPC}
     vtQWord:
       if V.VQWord^ <= high(SmallUInt32Utf8) then
       begin
-        result := V.VQWord^;
+        i := V.VQWord^;
         goto smlu32;
       end
       else
       begin
         Res.Text := PUtf8Char(StrUInt64(@Res.Temp[23], V.VQWord^));
         Res.Len := @Res.Temp[23] - Res.Text;
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     {$endif FPC}
     vtCurrency:
       begin
         Res.Text := @Res.Temp;
         Res.Len := Curr64ToPChar(V.VInt64^, Res.Temp);
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     vtExtended:
       DoubleToStr(V.VExtended^, RawUtf8(Res.TempRawUtf8));
@@ -8966,8 +8986,7 @@ smlu32:   Res.Text := pointer(SmallUInt32Utf8[result]);
         Res.Text := @Res.Temp;
         Res.Len := DisplayMinChars(@V.VPointer, SizeOf(pointer)) * 2;
         BinToHexDisplayLower(@V.VPointer, @Res.Temp, Res.Len shr 1);
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     vtClass:
       begin
@@ -8975,8 +8994,7 @@ smlu32:   Res.Text := pointer(SmallUInt32Utf8[result]);
           goto none;
         Res.Text := PPUtf8Char(PtrInt(PtrUInt(V.VClass)) + vmtClassName)^ + 1;
         Res.Len := ord(Res.Text[-1]);
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     vtObject:
       begin
@@ -8984,35 +9002,33 @@ smlu32:   Res.Text := pointer(SmallUInt32Utf8[result]);
           goto none;
         Res.Text := PPUtf8Char(PPtrInt(V.VObject)^ + vmtClassName)^ + 1;
         Res.Len := ord(Res.Text[-1]);
-        result := Res.Len;
-        exit;
+        goto done;
       end;
     vtVariant:
       if VariantToInt64(V.VVariant^, v64) then
         if (PCardinalArray(@v64)^[0] <= high(SmallUInt32Utf8)) and
            (PCardinalArray(@v64)^[1] = 0) then
         begin
-          result := v64;
+          i := v64;
           goto smlu32;
         end
         else
         begin
           Res.Text := PUtf8Char(StrInt64(@Res.Temp[23], v64));
           Res.Len := @Res.Temp[23] - Res.Text;
-          result := Res.Len;
-          exit;
+          goto done;
         end
       else
         VariantToUtf8(V.VVariant^, RawUtf8(Res.TempRawUtf8), isString);
   else
     begin
 none: Res.Len := 0;
-      result := 0;
-      exit;
+      goto done;
     end;
   end;
   Res.Text := Res.TempRawUtf8;
   Res.Len := length(RawUtf8(Res.TempRawUtf8));
+done:
   result := Res.Len;
 end;
 
@@ -9149,7 +9165,7 @@ type
   // only supported token is %, with any const arguments
   TFormatUtf8 = object
     b: PTempUtf8;
-    L, argN: integer;
+    L, argN: PtrInt;
     blocks: array[0..63] of TTempUtf8; // to avoid most heap allocations
     procedure Parse(const Format: RawUtf8; const Args: array of const);
     procedure Write(Dest: PUtf8Char);
@@ -9159,12 +9175,13 @@ type
 procedure TFormatUtf8.Parse(const Format: RawUtf8; const Args: array of const);
 var
   F, FDeb: PUtf8Char;
+  c: PTempUtf8;
 begin
   if length(Args) * 2 >= high(blocks) then
-    raise ESynException.Create('FormatUtf8: too many args (max=32)!');
+    raise ESynException.Create('FormatUtf8: too many args (max=32)');
   L := 0;
   argN := 0;
-  b := @blocks;
+  c := @blocks;
   F := pointer(Format);
   repeat
     if F^ = #0 then
@@ -9176,20 +9193,20 @@ begin
         inc(F);
       until (F^ = '%') or
             (F^ = #0);
-      b^.Text := FDeb;
-      b^.Len := F - FDeb;
-      b^.TempRawUtf8 := nil;
-      inc(L, b^.Len);
-      inc(b);
+      c^.Text := FDeb;
+      c^.Len := F - FDeb;
+      inc(L, c^.Len);
+      c^.TempRawUtf8 := nil;
+      inc(c);
       if F^ = #0 then
         break;
     end;
     inc(F); // jump '%'
     if argN <= high(Args) then
     begin
-      inc(L, VarRecToTempUtf8(Args[argN], b^));
-      if b^.Len > 0 then
-        inc(b);
+      inc(L, VarRecToTempUtf8(Args[argN], c^));
+      if c^.Len > 0 then
+        inc(c);
       inc(argN);
       if F^ = #0 then
         break;
@@ -9199,14 +9216,15 @@ begin
       break
     else
     begin
-      b^.Len := length(Format) - (F - pointer(Format));
-      b^.Text := F;
-      b^.TempRawUtf8 := nil;
-      inc(L, b^.Len);
-      inc(b);
+      c^.Text := F;
+      c^.Len := length(Format) - (F - pointer(Format));
+      inc(L, c^.Len);
+      c^.TempRawUtf8 := nil;
+      inc(c);
       break;
     end;
   until false;
+  b := c;
 end;
 
 procedure TFormatUtf8.Write(Dest: PUtf8Char);

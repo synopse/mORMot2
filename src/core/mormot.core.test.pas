@@ -980,7 +980,7 @@ begin
     FormatString('% in %', [ItemName, Temp.Stop], msg)
   else
     FormatString('% % in % i.e. %/s, aver. %', [ItemCount, ItemName, Temp.Stop,
-      IntToThousandString(Temp.PerSec(ItemCount)), Temp.ByCount(ItemCount)], msg);
+      K(Temp.PerSec(ItemCount)), Temp.ByCount(ItemCount)], msg);
   if SizeInBytes > 0 then
     msg := FormatString('%, %/s', [msg, KB(Temp.PerSec(SizeInBytes))]);
   AddConsole(msg, OnlyLog);
