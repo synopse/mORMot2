@@ -1123,27 +1123,27 @@ function BufferLineLength(Text, TextEnd: PUtf8Char): PtrInt;
         mov     rsi, rdx
         {$endif WIN64ABI}
         mov     r8, rsi
-        sub     r8, rdi // rdi=Text, rsi=TextEnd, r8=TextLen
+        sub     r8, rdi            // rdi=Text, rsi=TextEnd, r8=TextLen
         jz      @fail
         mov     ecx, edi
         movaps  xmm0, [rip + @for10]
         movaps  xmm1, [rip + @for13]
-        and     rdi, -16 // check first aligned 16 bytes
-        and     ecx, 15  // lower cl 4 bits indicate misalignment
+        and     rdi, -16           // check first aligned 16 bytes
+        and     ecx, 15            // lower cl 4 bits indicate misalignment
         movaps  xmm2, [rdi]
         movaps  xmm3, xmm2
         pcmpeqb xmm2, xmm0
         pcmpeqb xmm3, xmm1
         por     xmm3, xmm2
         pmovmskb eax, xmm3
-        shr     eax, cl  // shift out unaligned bytes
+        shr     eax, cl            // shift out unaligned bytes
         test    eax, eax
         jz      @main
         bsf     eax, eax
         add     rax, rcx
         add     rax, rdi
         sub     rax, rsi
-        jae     @fail   // don't exceed TextEnd
+        jae     @fail              // don't exceed TextEnd
         add     rax, r8 // rax = TextFound - TextEnd + (TextEnd - Text) = offset
         {$ifdef WIN64ABI}
         pop     rdi
@@ -1159,7 +1159,7 @@ function BufferLineLength(Text, TextEnd: PUtf8Char): PtrInt;
         dq      $0a0a0a0a0a0a0a0a
 @for13: dq      $0d0d0d0d0d0d0d0d
         dq      $0d0d0d0d0d0d0d0d
-@by16:  movaps  xmm2, [rdi + rsi] // check 16 bytes per loop
+@by16:  movaps  xmm2, [rdi + rsi]  // check 16 bytes per loop
         movaps  xmm3, xmm2
         pcmpeqb xmm2, xmm0
         pcmpeqb xmm3, xmm1
@@ -1169,7 +1169,7 @@ function BufferLineLength(Text, TextEnd: PUtf8Char): PtrInt;
         jnz     @found
         add     rdi, 16
         jnc     @by16
-@fail:  mov     rax, r8 // returns TextLen if no CR/LF found
+@fail:  mov     rax, r8            // returns TextLen if no CR/LF found
         {$ifdef WIN64ABI}
         pop     rdi
         pop     rsi
@@ -1183,6 +1183,80 @@ function BufferLineLength(Text, TextEnd: PUtf8Char): PtrInt;
         pop     rdi
         pop     rsi
         {$endif WIN64ABI}
+end;
+
+function MemCmpSse2(P1, P2: Pointer; Length: PtrInt): integer;
+{$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
+// from GPL memcmp64.asm by Agner Fog - www.agner.org/optimize
+          add     P1, Length    // use negative index from end of memory block
+          add     P2, Length
+          neg     Length
+          jz      @9
+          mov     r9d, $FFFF             // 16 bits mask = 16 bytes
+          cmp     Length, -16
+          ja      @2
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@1:       // loop comparing 16 bytes
+          movups  xmm1, oword ptr [P1 + Length]
+          movups  xmm2, oword ptr [P2 + Length]
+          pcmpeqb xmm1, xmm2             // compare 16 bytes
+          pmovmskb eax, xmm1             // get byte mask
+          xor     eax, r9d               // not ax
+          jnz     @7                     // difference found
+          add     Length, 16
+          jz      @9                     // finished, equal
+          cmp     Length, -16
+          jna     @1                     // next 16 bytes
+@2:       // less than 16 bytes left
+          cmp     Length, -8
+          ja      @3
+          // compare 8 bytes
+          movq    xmm1, qword ptr [P1 + Length]
+          movq    xmm2, qword ptr [P2 + Length]
+          pcmpeqb xmm1, xmm2             // compare 8 bytes
+          pmovmskb eax, xmm1             // get byte mask
+          xor     eax, r9d               // not ax
+          jnz     @7                     // difference found
+          add     Length, 8
+          jz      @9
+@3:       // less than 8 bytes left
+          cmp     Length, -4
+          ja      @4
+          // compare 4 bytes
+          movd    xmm1, dword ptr [P1 + Length]
+          movd    xmm2, dword ptr [P2 + Length]
+          pcmpeqb xmm1, xmm2             // compare 4 bytes
+          pmovmskb eax, xmm1             // get byte mask
+          xor     eax, r9d               // not ax
+          jnz     @7                     // difference found
+          add     Length, 4
+          jz      @9
+@4:       // less than 4 bytes left
+          cmp     Length, -2
+          ja      @5
+          movzx   eax, word ptr [P1 + Length]
+          movzx   r9d, word ptr [P2 + Length]
+          sub     eax, r9d
+          jnz     @8                     // difference in byte 0 or 1
+          add     Length, 2
+          jz      @9
+@5:       // less than 2 bytes left
+          test    Length, Length
+          jz      @9                     // no bytes left
+          jmp     @6                     // one byte left
+@7:       // difference found: find position
+          bsf     eax, eax
+          add     Length, rax
+@6:       movzx   eax, byte ptr [P1 + Length]
+          movzx   r9d, byte ptr [P2 + Length]
+          sub     eax, r9d               // return result
+          ret
+@8:       // difference in byte 0 or 1
+          neg     al
+          sbb     Length, -1             // add 1 to Length if al == 0
+          jmp     @6
+@9:       // equal
+          xor     eax, eax
 end;
 
 function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;

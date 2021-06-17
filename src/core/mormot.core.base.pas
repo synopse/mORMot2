@@ -2428,8 +2428,16 @@ procedure FillZero(var dest; count: PtrInt); overload;
 procedure FillZeroSmall(P: pointer; Length: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
-/// our fast version of CompareMem() with optimized asm for x86 and tune pascal
+{$ifdef CPUX64}
+/// a fast SSE2 asm version of the C function memcmp()
+// - defined here to properly inline CompareMem()
+function MemCmpSse2(P1, P2: Pointer; Length: PtrInt): integer;
+{$endif CPUX64}
+
+/// our fast version of CompareMem()
+// - tuned asm for x86, call MemCmpSse2 for x64, or fallback to tuned pascal
 function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
+  {$ifdef CPUX64}inline;{$endif}
 
 {$ifdef HASINLINE}
 function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): boolean; inline;
@@ -10174,6 +10182,12 @@ end;
 
 {$else} // those functions have their tuned x86 asm version
 
+{$ifdef CPUX64}
+function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
+begin
+  result := MemCmpSse2(P1, P2, Length) = 0; // use SSE2 optimized asm
+end;
+{$else}
 function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
 label
   zero;
@@ -10241,6 +10255,7 @@ begin
 zero:
   result := false;
 end;
+{$endif CPUX64}
 
 function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
 begin
