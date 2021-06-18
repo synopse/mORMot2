@@ -99,7 +99,7 @@ Low-Level Memory Buffers Processing Functions shared by all framework units
 - *Variable Length Integer* Encoding / Decoding
 - `TAlgoCompress` Compression/Decompression Classes - with `AlgoSynLZ`
 - `TFastReader` / `TBufferWriter` Binary Streams
-- Base64, Base64URI and Baudot Encoding / Decoding
+- Base64, Base64URI, Base58 and Baudot Encoding / Decoding
 - URI-Encoded Text Buffer Process
 - Basic MIME Content Types Support
 - Text Memory Buffers and Files

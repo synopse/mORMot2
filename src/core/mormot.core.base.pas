@@ -6257,7 +6257,7 @@ begin
       J := R;
       P := (L + R) shr 1;
       repeat
-        tmp := ID^[P];
+        tmp := ID[P];
         if ID[I] < tmp then
           repeat
             inc(I)

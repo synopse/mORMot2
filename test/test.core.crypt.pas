@@ -1253,6 +1253,7 @@ var
   b64: RawUtf8;
   Value: WinAnsiString;
   i, L: Integer;
+  i64: Qword;
 begin
   Value := 'Hello /c''0tait 67+';
   Value[10] := #$E9;
@@ -1267,6 +1268,17 @@ begin
   b64 := BinToBase64(tmp);
   Check(IsBase64(b64));
   Check(Base64ToBin(b64) = tmp);
+  CheckEqual(BinToBase58('Hello World!'), '2NEpo7TZRRrLZSi2U', 'b58-1');
+  CheckEqual(BinToBase58('The quick brown fox jumps over the lazy dog.'),
+    'USm3fpXnKG5EUBx2ndxBDMPVciP5hGey2Jh4NDv6gmeo1LkMeiKrLJUUBk6Z', 'b58-2');
+  i64 := $cdb47f28000000; // test vector for leading zeros from RFC
+  CheckEqual(BinToBase58(@i64, 7), '111233QC4', 'b58-3');
+  CheckEqual(Base58ToBin('2NEpo7TZRRrLZSi2U'), 'Hello World!', 'b58-4');
+  CheckEqual(Base58ToBin('USm3fpXnKG5EUBx2ndxBDMPVciP5hGey2Jh4NDv6gmeo1LkMeiKrLJUUBk6Z'),
+    'The quick brown fox jumps over the lazy dog.', 'b58-5');
+  tmp := Base58ToBin('111233QC4');
+  CheckEqual(length(tmp), 7, 'b58-6');
+  Check(CompareMem(pointer(tmp), @i64, 7), 'b58-7');
   tmp := '';
   for i := 1 to 1998 do
   begin
@@ -1283,7 +1295,12 @@ begin
     end;
     b64 := BinToBase64uri(tmp);
     Check(Base64uriToBin(b64) = tmp);
-    tmp := tmp + AnsiChar(Random(255));
+    if i < 67 then // Base58 is much slower than Base64: not used on big buffers
+    begin
+      b64 := BinToBase58(tmp);
+      Check(Base58ToBin(b64) = tmp);
+    end;
+    tmp := tmp + AnsiChar(Random32(255));
   end;
 end;
 
