@@ -1627,8 +1627,24 @@ function Sha256Digest(const Data: RawByteString): TSha256Digest; overload;
 
 
 type
-  TSha512Hash = record
+  TSha512Hash = packed record
     a, b, c, d, e, f, g, h: QWord;
+  end;
+
+  /// abstract parent for implementing both SHA-384 and SHA-512 hashing
+  TSha384512 = object
+  private
+    Index: PtrUInt;
+    MLen: QWord;
+    Hash: TSha512Hash;
+    Data: array[0..127] of byte;
+    /// perform the final step of SHA-384 / SHA-512 into Hash private field
+    procedure FinalStep;
+  public
+    /// update the SHA-384 / SHA-512 context with some data
+    procedure Update(Buffer: pointer; Len: integer); overload;
+    /// update the SHA-384 / SHA-512 context with some data
+    procedure Update(const Buffer: RawByteString); overload;
   end;
 
   /// implements SHA-384 hashing
@@ -1636,19 +1652,10 @@ type
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, e.g. for THmacSha384
   // - see TSynHasher if you expect to support more than one algorithm at runtime
-  TSha384 = object
-  private
-    Hash: TSha512Hash;
-    MLen: QWord;
-    Data: array[0..127] of byte;
-    Index: integer;
+  TSha384 = object(TSha384512)
   public
     /// initialize SHA-384 context for hashing
     procedure Init;
-    /// update the SHA-384 context with some data
-    procedure Update(Buffer: pointer; Len: integer); overload;
-    /// update the SHA-384 context with some data
-    procedure Update(const Buffer: RawByteString); overload;
     /// finalize and compute the resulting SHA-384 hash Digest of all data
     // affected to Update() method
     // - will also call Init to reset all internal temporary context, for safety
@@ -1677,19 +1684,10 @@ type
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, e.g. for THmacSha512
   // - see TSynHasher if you expect to support more than one algorithm at runtime
-  TSha512 = object
-  private
-    Hash: TSha512Hash;
-    MLen: QWord;
-    Data: array[0..127] of byte;
-    Index: integer;
+  TSha512 = object(TSha384512)
   public
     /// initialize SHA-512 context for hashing
     procedure Init;
-    /// update the SHA-512 context with some data
-    procedure Update(Buffer: pointer; Len: integer); overload;
-    /// update the SHA-512 context with some data
-    procedure Update(const Buffer: RawByteString); overload;
     /// finalize and compute the resulting SHA-512 hash Digest of all data
     // affected to Update() method
     // - will also call Init to reset all internal temporary context, for safety
@@ -6795,24 +6793,9 @@ begin
 end;
 
 
-{ TSha384 }
+{ TSha3845121 }
 
-procedure TSha384.Init;
-begin
-  Hash.a := QWord($cbbb9d5dc1059ed8);
-  Hash.b := QWord($629a292a367cd507);
-  Hash.c := QWord($9159015a3070dd17);
-  Hash.d := QWord($152fecd8f70e5939);
-  Hash.e := QWord($67332667ffc00b31);
-  Hash.f := QWord($8eb44a8768581511);
-  Hash.g := QWord($db0c2e0d64f98fa7);
-  Hash.h := QWord($47b5481dbefa4fa4);
-  MLen := 0;
-  Index := 0;
-  FillcharFast(Data, SizeOf(Data), 0);
-end;
-
-procedure TSha384.Update(Buffer: pointer; Len: integer);
+procedure TSha384512.Update(Buffer: pointer; Len: integer);
 var
   aLen: integer;
 begin
@@ -6844,12 +6827,12 @@ begin
   until Len <= 0;
 end;
 
-procedure TSha384.Update(const Buffer: RawByteString);
+procedure TSha384512.Update(const Buffer: RawByteString);
 begin
   Update(pointer(Buffer), length(Buffer));
 end;
 
-procedure TSha384.Final(out Digest: TSha384Digest; NoInit: boolean);
+procedure TSha384512.FinalStep;
 begin
   Data[Index] := $80;
   FillcharFast(Data[Index + 1], 127 - Index, 0);
@@ -6861,6 +6844,29 @@ begin
   PQWord(@Data[112])^ := bswap64(MLen shr 61);
   PQWord(@Data[120])^ := bswap64(MLen shl 3);
   RawSha512Compress(Hash, @Data);
+end;
+
+
+{ TSha384 }
+
+procedure TSha384.Init;
+begin
+  Hash.a := QWord($cbbb9d5dc1059ed8);
+  Hash.b := QWord($629a292a367cd507);
+  Hash.c := QWord($9159015a3070dd17);
+  Hash.d := QWord($152fecd8f70e5939);
+  Hash.e := QWord($67332667ffc00b31);
+  Hash.f := QWord($8eb44a8768581511);
+  Hash.g := QWord($db0c2e0d64f98fa7);
+  Hash.h := QWord($47b5481dbefa4fa4);
+  MLen := 0;
+  Index := 0;
+  FillcharFast(Data, SizeOf(Data), 0);
+end;
+
+procedure TSha384.Final(out Digest: TSha384Digest; NoInit: boolean);
+begin
+  FinalStep;
   bswap64array(@Hash, @Digest, 6);
   if not NoInit then
     Init;
@@ -6883,69 +6889,22 @@ end;
 
 procedure TSha512.Init;
 begin
-  Hash.a := $6a09e667f3bcc908;
+  Hash.a := QWord($6a09e667f3bcc908);
   Hash.b := QWord($bb67ae8584caa73b);
-  Hash.c := $3c6ef372fe94f82b;
+  Hash.c := QWord($3c6ef372fe94f82b);
   Hash.d := QWord($a54ff53a5f1d36f1);
-  Hash.e := $510e527fade682d1;
+  Hash.e := QWord($510e527fade682d1);
   Hash.f := QWord($9b05688c2b3e6c1f);
-  Hash.g := $1f83d9abfb41bd6b;
-  Hash.h := $5be0cd19137e2179;
+  Hash.g := QWord($1f83d9abfb41bd6b);
+  Hash.h := QWord($5be0cd19137e2179);
   MLen := 0;
   Index := 0;
   FillcharFast(Data, SizeOf(Data), 0);
 end;
 
-procedure TSha512.Update(Buffer: pointer; Len: integer);
-var
-  aLen: integer;
-begin
-  if (Buffer = nil) or
-     (Len <= 0) then
-    exit; // avoid GPF
-  inc(MLen, Len);
-  repeat
-    aLen := SizeOf(Data) - Index;
-    if aLen <= Len then
-    begin
-      if Index <> 0 then
-      begin
-        MoveFast(Buffer^, Data[Index], aLen);
-        RawSha512Compress(Hash, @Data);
-        Index := 0;
-      end
-      else
-        // avoid temporary copy
-        RawSha512Compress(Hash, Buffer);
-      dec(Len, aLen);
-      inc(PByte(Buffer), aLen);
-    end
-    else
-    begin
-      MoveFast(Buffer^, Data[Index], Len);
-      inc(Index, Len);
-      break;
-    end;
-  until Len <= 0;
-end;
-
-procedure TSha512.Update(const Buffer: RawByteString);
-begin
-  Update(pointer(Buffer), length(Buffer));
-end;
-
 procedure TSha512.Final(out Digest: TSha512Digest; NoInit: boolean);
 begin
-  Data[Index] := $80;
-  FillcharFast(Data[Index + 1], 127 - Index, 0);
-  if Index >= 112 then
-  begin
-    RawSha512Compress(Hash, @Data);
-    FillcharFast(Data, 112, 0);
-  end;
-  PQWord(@Data[112])^ := bswap64(MLen shr 61);
-  PQWord(@Data[120])^ := bswap64(MLen shl 3);
-  RawSha512Compress(Hash, @Data);
+  FinalStep;
   bswap64array(@Hash, @Digest, 8);
   if not NoInit then
     Init;

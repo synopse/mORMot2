@@ -2349,7 +2349,7 @@ begin
     Check(st = SysUtils.GuidToString(g));
     Check(IsEqualGuid(StringToGuid(st), g));
     s := GuidToRawUtf8(g);
-    Check(st = Utf8ToString(s));
+    Check(st = mormot.core.unicode.Utf8ToString(s));
     st[Random32(38) + 1] := ' ';
     g2 := StringToGuid(st);
     Check(IsZero(@g2, sizeof(g2)));
