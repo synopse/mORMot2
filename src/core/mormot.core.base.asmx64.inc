@@ -1191,7 +1191,7 @@ function MemCmpSse2(P1, P2: Pointer; Length: PtrInt): integer;
           add     P1, Length    // use negative index from end of memory block
           add     P2, Length
           neg     Length
-          jz      @9
+          jge     @9
           mov     r9d, $FFFF             // 16 bits mask = 16 bytes
           cmp     Length, -16
           ja      @2

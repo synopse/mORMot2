@@ -8702,11 +8702,8 @@ end;
 
 function TLecuyer.NextQWord: QWord;
 begin
-  with PQWordRec(@result)^ do
-  begin
-    L := Next;
-    H := RawNext;
-  end;
+  PQWordRec(@result)^.L := Next;
+  PQWordRec(@result)^.H := RawNext;
 end;
 
 function TLecuyer.NextDouble: double;
