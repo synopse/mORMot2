@@ -552,10 +552,12 @@ type
 
 
 const
-  /// the default TCP port used for HTTP = DEFAULT_PORT[false] or
-  // HTTPS = DEFAULT_PORT[true]
+  /// the default TCP port as text, as DEFAULT_PORT[Https]
   DEFAULT_PORT: array[boolean] of RawUtf8 = (
     '80', '443');
+  /// the default TCP port as integer, as DEFAULT_PORT_INT[Https]
+  DEFAULT_PORT_INT: array[boolean] of TNetPort = (
+    80, 443);
 
 
 { ********* TCrtSocket Buffered Socket Read/Write Class }
