@@ -1302,6 +1302,8 @@ type
     function RandomExt: TSynExtended;
     /// returns a 64-bit floating-point random number in range [0..1]
     function RandomDouble: double;
+    /// returns a contemporary date/time
+    function RandomDateTime: TDateTime;
     /// computes a random ASCII password
     // - will contain uppercase/lower letters, digits and $.:()?%!-+*/@#
     // excluding ;,= to allow direct use in CSV content
@@ -5878,6 +5880,11 @@ var
 begin
   FillRandom(block);
   result := Hash128ToDouble(@block);
+end;
+
+function TAesPrngAbstract.RandomDateTime: TDateTime;
+begin
+  result := 38000 + Int64(Random32) / (maxInt shr 12);
 end;
 
 function TAesPrngAbstract.RandomPassword(Len: integer): RawUtf8;

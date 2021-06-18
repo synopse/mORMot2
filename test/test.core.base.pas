@@ -2155,7 +2155,7 @@ type
   end;
 var
   A, B, C: TR;
-  i: integer;
+  i, j: PtrInt;
 begin
   FillCharFast(A, sizeof(A), 0);
   FillCharFast(B, sizeof(B), 0);
@@ -2186,8 +2186,20 @@ begin
   Check(A.Dyn[0] = 0);
   for i := 0 to High(B.Bulk) do
     Check(B.Bulk[i] = i);
-  for i := 0 to High(B.Bulk) do
+  for i := -10 to 0 do
     Check(CompareMem(@A.Bulk, @B.Bulk, i));
+  for i := 0 to High(B.Bulk) do
+  begin
+    for j := 0 to i - 1 do
+    begin
+      inc(B.Bulk[j]); // validate each byte modification
+      Check(not CompareMem(@A.Bulk, @B.Bulk, i));
+      Check(not CompareMemSmall(@A.Bulk, @B.Bulk, i));
+      Check(not CompareMemFixed(@A.Bulk, @B.Bulk, i));
+      dec(B.Bulk[j]);
+    end;
+    Check(CompareMem(@A.Bulk, @B.Bulk, i));
+  end;
   for i := 0 to High(B.Bulk) do
     Check(CompareMemSmall(@A.Bulk, @B.Bulk, i));
   for i := 0 to High(B.Bulk) do
