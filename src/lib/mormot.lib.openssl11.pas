@@ -27,8 +27,12 @@ unit mormot.lib.openssl11;
 {.$define OPENSSLFULLAPI}
 // define this conditional to publish the whole (huge) OpenSSL API
 // - by default, only the API features needed by mORMot are published
-// - the full API libraries will be directly/statically linked, not dynamically
 // - full API increases compilation time, but is kept as reference
+// - the full API libraries will be directly/statically linked, not dynamically:
+// if you have "cannot find -lcrypto" errors at linking, run the following:
+//     cd /usr/lib/x86_64-linux-gnu
+//     sudo ln -s libcrypto.so.1.1 libcrypto.so
+//     sudo ln -s libssl.so.1.1 libssl.so
 
 {.$define OPENSSLUSERTLMM}
 // define this so that OpenSSL will use pascal RTL getmem/freemem/reallocmem
@@ -122,7 +126,7 @@ const
         {$endif CPUX64}
       {$else}
         {$ifdef OSLINUX}
-        LIB_CRYPTO = 'libcrypto.so.1.1'; // specific verion on Linux
+        LIB_CRYPTO = 'libcrypto.so.1.1'; // specific version on Linux
         LIB_SSL = 'libssl.so.1.1';
         {$else}
         LIB_CRYPTO = 'libcrypto.so'; // should redirect to 1.1.1
@@ -294,6 +298,18 @@ const
   EVP_PKEY_CTRL_EC_PARAMGEN_CURVE_NID = EVP_PKEY_ALG_CTRL + 1;
   EVP_PKEY_CTRL_DSA_PARAMGEN_BITS = EVP_PKEY_ALG_CTRL + 1;
   EVP_PKEY_CTRL_RSA_KEYGEN_BITS = EVP_PKEY_ALG_CTRL + 3;
+  EVP_PKEY_CTRL_RSA_PADDING = EVP_PKEY_ALG_CTRL + 1;
+  EVP_PKEY_CTRL_RSA_PSS_SALTLEN = EVP_PKEY_ALG_CTRL + 2;
+  EVP_PKEY_CTRL_RSA_KEYGEN_PUBEXP = EVP_PKEY_ALG_CTRL + 4;
+  EVP_PKEY_CTRL_RSA_MGF1_MD = EVP_PKEY_ALG_CTRL + 5;
+  EVP_PKEY_CTRL_GET_RSA_PADDING = EVP_PKEY_ALG_CTRL + 6;
+  EVP_PKEY_CTRL_GET_RSA_PSS_SALTLEN = EVP_PKEY_ALG_CTRL + 7;
+  EVP_PKEY_CTRL_GET_RSA_MGF1_MD = EVP_PKEY_ALG_CTRL + 8;
+  EVP_PKEY_CTRL_RSA_OAEP_MD = EVP_PKEY_ALG_CTRL + 9;
+  EVP_PKEY_CTRL_RSA_OAEP_LABEL = EVP_PKEY_ALG_CTRL + 10;
+  EVP_PKEY_CTRL_GET_RSA_OAEP_MD = EVP_PKEY_ALG_CTRL + 11;
+  EVP_PKEY_CTRL_GET_RSA_OAEP_LABEL = EVP_PKEY_ALG_CTRL + 12;
+  EVP_PKEY_CTRL_RSA_KEYGEN_PRIMES = EVP_PKEY_ALG_CTRL + 13;
 
   BIO_FLAGS_READ = $01;
   BIO_FLAGS_WRITE = $02;
@@ -941,6 +957,7 @@ function BIO_write(b: PBIO; data: pointer; dlen: integer): integer; cdecl;
 function BIO_new_socket(sock: integer; close_flag: integer): PBIO; cdecl;
 function X509_get_issuer_name(a: PX509): PX509_NAME; cdecl;
 function X509_get_subject_name(a: PX509): PX509_NAME; cdecl;
+function X509_get_pubkey(x: PX509): PEVP_PKEY; cdecl;
 procedure X509_free(a: PX509); cdecl;
 function X509_NAME_print_ex_fp(fp: PPointer; nm: PX509_NAME; indent: integer;
   flags: cardinal): integer; cdecl;
@@ -1433,6 +1450,7 @@ type
     BIO_new_socket: function(sock: integer; close_flag: integer): PBIO; cdecl;
     X509_get_issuer_name: function(a: PX509): PX509_NAME; cdecl;
     X509_get_subject_name: function(a: PX509): PX509_NAME; cdecl;
+    X509_get_pubkey: function(x: PX509): PEVP_PKEY; cdecl;
     X509_free: procedure(a: PX509); cdecl;
     X509_NAME_print_ex_fp: function(fp: PPointer; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
     OPENSSL_sk_pop: function(st: POPENSSL_STACK): pointer; cdecl;
@@ -1510,7 +1528,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..104] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..105] of RawUtf8 = (
     'CRYPTO_malloc', 'CRYPTO_set_mem_functions', 'CRYPTO_free',
     'ERR_remove_state', 'ERR_error_string_n',
     'ERR_get_error', 'ERR_remove_thread_state', 'ERR_load_BIO_strings',
@@ -1520,7 +1538,8 @@ const
     'EVP_DigestSign', 'EVP_DigestVerify',
     'HMAC', 'BIO_new', 'BIO_free', 'BIO_test_flags', 'BIO_ctrl', 'BIO_new_mem_buf',
     'BIO_s_mem', 'BIO_read', 'BIO_write', 'BIO_new_socket', 'X509_get_issuer_name',
-    'X509_get_subject_name', 'X509_free', 'X509_NAME_print_ex_fp', 'OPENSSL_sk_pop',
+    'X509_get_subject_name', 'X509_get_pubkey', 'X509_free',
+    'X509_NAME_print_ex_fp', 'OPENSSL_sk_pop',
     'OPENSSL_sk_num', 'ASN1_BIT_STRING_get_bit', 'OBJ_nid2sn', 'OBJ_obj2nid',
     'ASN1_STRING_data', 'PEM_read_bio_X509', 'PEM_read_bio_PrivateKey',
     'PEM_read_bio_PUBKEY', 'PEM_read_bio_RSAPublicKey',
@@ -1704,6 +1723,11 @@ end;
 function X509_get_subject_name(a: PX509): PX509_NAME;
 begin
   result := libcrypto.X509_get_subject_name(a);
+end;
+
+function X509_get_pubkey(x: PX509): PEVP_PKEY;
+begin
+  result := libcrypto.X509_get_pubkey(x);
 end;
 
 procedure X509_free(a: PX509);
@@ -2452,6 +2476,9 @@ function X509_get_issuer_name(a: PX509): PX509_NAME; cdecl;
 
 function X509_get_subject_name(a: PX509): PX509_NAME; cdecl;
   external LIB_CRYPTO name _PU + 'X509_get_subject_name';
+
+function X509_get_pubkey(x: PX509): PEVP_PKEY; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_get_pubkey';
 
 procedure X509_free(a: PX509); cdecl;
   external LIB_CRYPTO name _PU + 'X509_free';
