@@ -6357,7 +6357,7 @@ begin
     i := 0;
     P2 := PEnd;
     carry := PByte(Bin)^;
-    while (P2 >= P) and
+    while (PtrUInt(P2) >= PtrUInt(P)) and
           ((carry <> 0) or
            (i < len)) do
     begin
@@ -6378,7 +6378,7 @@ begin
   while (P2 <> PEnd) and
         (P2^ = 0) do
     inc(P2);
-  inc(result, PEnd - P2);
+  inc(result, PtrUInt(PEnd) - PtrUInt(P2));
   while P2 <> PEnd do
   begin
     P^ := ord(b58enc[P2^]);
@@ -6405,7 +6405,8 @@ end;
 function Base58ToBin(B58: PAnsiChar; B58Len: integer;
   var Dest: TSynTempBuffer): integer;
 var
-  P, PEnd, P2: PByte;
+  P: PByteArray;
+  PEnd, P2: PByte;
   zeros, carry: integer;
 begin
   result := 0; // means void or error
@@ -6425,7 +6426,7 @@ begin
       break;
   end;
   P := Dest.InitZero(zeros + integer(cardinal(B58Len * 733) div 1000));
-  PEnd := @PByteArray(P)[Dest.len];
+  PEnd := @P[Dest.len];
   if B58Len = 0 then
   begin
     result := zeros;
@@ -6437,7 +6438,7 @@ begin
     if carry < 0 then
       exit; // invalid input
     P2 := PEnd;
-    while P2 >= P do
+    while PtrUInt(P2) >= PtrUInt(P) do
     begin
       inc(carry, 58 * P2^);
       P2^ := carry;
@@ -6446,13 +6447,13 @@ begin
     end;
     dec(B58Len);
   until B58Len = 0;
-  P2 := P;
+  P2 := pointer(P);
   while (P2 <> PEnd) and
         (P2^ = 0) do
     inc(P2);
-  result := PEnd - P2 + 1;
+  result := PtrUInt(PEnd) - PtrUInt(P2) + 1;
   if result + zeros <> Dest.len + 1 then
-    MoveFast(P[P2 - P], P[zeros], result);
+    MoveFast(P[PtrUInt(P2) - PtrUInt(P)], P[zeros], result);
   inc(result, zeros);
 end;
 
