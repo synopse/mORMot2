@@ -1430,7 +1430,7 @@ begin
   fModuleName := fTableClass.ModuleName;
   if fFeatures.FileExtension = '' then
     // default extension is the module name
-    fFeatures.FileExtension := Utf8ToString(LowerCase(fModuleName));
+    Utf8ToFileName(LowerCase(fModuleName), fFeatures.FileExtension);
 end;
 
 function TOrmVirtualTableModule.FileName(const aTableName: RawUtf8): TFileName;
@@ -4220,7 +4220,7 @@ var
 begin
   inherited Create(aModule, aTableName, FieldCount, Fields);
   if FieldCount = 1 then
-    aFileName := Utf8ToString(Fields[0])
+    Utf8ToFileName(Fields[0], aFileName)
   else
     aFileName := aModule.FileName(aTableName);
   fLogFile := TSynLogFile.Create(aFileName);

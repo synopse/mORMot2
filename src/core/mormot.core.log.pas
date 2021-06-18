@@ -3323,7 +3323,7 @@ begin
     name := unitname;
   u := map.FindUnit(name);
   if u >= 0 then
-    result := Utf8ToString(map.fUnit[u].FileName);
+    Utf8ToFileName(map.fUnit[u].FileName, result);
 end;
 
 
@@ -5114,7 +5114,7 @@ begin
   fFileName := fFamily.fCustomFileName;
   if fFileName = '' then
   begin
-    fFileName := Utf8ToString(Executable.ProgramName);
+    Utf8ToFileName(Executable.ProgramName, fFileName);
     if fFamily.IncludeComputerNameInFileName then
       fFileName := fFileName + ' (' + Utf8ToString(Executable.Host) + ')';
   end;
@@ -6645,7 +6645,7 @@ begin
   if replaceTabs <> '' then
     tmp := StringReplaceAll(tmp, #9, replaceTabs);
   if IsValidUtf8(pointer(tmp)) then
-    result := Utf8ToString(tmp)
+    Utf8ToString(tmp, result)
   else
     {$ifdef UNICODE}
     result := CurrentAnsiConvert.AnsiToUnicodeString(pointer(tmp), length(tmp));

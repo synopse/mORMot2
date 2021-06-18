@@ -1947,7 +1947,7 @@ begin
       e^.zipName := Ansi7ToString(tmp)
     else if h^.fileInfo.GetUtf8FileName then
       // decode UTF-8 file name into native string/TFileName type
-      e^.zipName := Utf8ToString(tmp)
+      Utf8ToFileName(tmp, e^.zipName)
     else
       // legacy Windows-OEM-CP437 encoding - from mormot.core.os
       e^.zipName := OemToFileName(tmp);

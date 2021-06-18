@@ -1644,7 +1644,7 @@ begin
   result := EciesHeader(encrypted, head);
   if result then
   begin
-    keyfile := Utf8ToString(EccText(head.recid));
+    Utf8ToFileName(EccText(head.recid), keyfile);
     result := EccKeyFileFind(keyfile, privkey);
   end;
 end;
@@ -1771,7 +1771,7 @@ begin
     exit;
   if AuthSerial <> '' then
   begin
-    authfilename := Utf8ToString(AuthSerial);
+    Utf8ToFileName(AuthSerial, authfilename);
     if EccKeyFileFind(authfilename, false) and
        FromFile(authfilename) then
       exit;
@@ -3509,7 +3509,7 @@ begin
   if c <> '' then
   begin
     ca := TEccCertificateChain.Create;
-    fn := Utf8ToString(c);
+    Utf8ToFileName(c, fn);
     if not ca.LoadFromFile(fn) then
     begin
       CsvToRawUtf8DynArray(c, ',', '', chain);
@@ -3529,7 +3529,7 @@ begin
   end;
   // compute priv: TEccCertificateSecret
   priv := nil;
-  fn := Utf8ToString(sw.Str['p']);
+  Utf8ToFileName(sw.Str['p'], fn);
   pw := sw.Str['pw'];
   pr := sw.ValueInt('pr', DEFAULT_ECCROUNDS);
   if (fn <> '') and
@@ -3587,8 +3587,8 @@ begin
     // PosExChar() fails if '#' appears within the password -> manual loop
     if aPasswordSecureFile[i] = '#' then
     begin
-      fn := Utf8ToString( // trim '.private' extension for EccKeyFileFind()
-        copy(aPasswordSecureFile, i + 1, length(aPasswordSecureFile) - i - 9));
+      Utf8ToFileName( // trim '.private' extension for EccKeyFileFind()
+        copy(aPasswordSecureFile, i + 1, length(aPasswordSecureFile) - i - 9), fn);
       if EccKeyFileFind(fn, {privkey=}true) then
       begin
         // try to load the 'xxxx.private' secret key

@@ -1788,7 +1788,7 @@ var
   begin
     result := true;
     ExtractNameValue(ctxt.fOutCustomHeaders, 'CONTENT-TYPE:', ctxt.fOutContentType);
-    fn := Utf8ToString(ctxt.OutContent);
+    Utf8ToFileName(ctxt.OutContent, fn);
     if not Assigned(fOnSendFile) or
        not fOnSendFile(ctxt, fn) then
     begin

@@ -2604,7 +2604,7 @@ begin
         if tmp = '' then
           result := ''
         else
-          Utf8DecodeToString(pointer(tmp), length(tmp), result);
+          Utf8ToString(tmp, result);
       end;
     end;
 end;

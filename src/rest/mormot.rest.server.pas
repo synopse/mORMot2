@@ -4185,7 +4185,7 @@ begin
   if i < 0 then
     raise EParsingException.CreateUtf8('%: missing InputString[%]',
       [self, ParamName]);
-  result := Utf8ToString(fInput[i * 2 + 1]);
+  Utf8ToString(fInput[i * 2 + 1], result);
 end;
 
 function TRestServerUriContext.GetInputStringOrVoid(
@@ -4197,7 +4197,7 @@ begin
   if i < 0 then
     result := ''
   else
-    result := Utf8ToString(fInput[i * 2 + 1]);
+    Utf8ToString(fInput[i * 2 + 1], result);
 end;
 
 function TRestServerUriContext.GetInputExists(const ParamName: RawUtf8): boolean;
@@ -4515,7 +4515,7 @@ begin
     // for security, disallow .. in the supplied file path
     result := ''
   else
-    result := Utf8ToString(StringReplaceAll(UriBlobFieldName, '/', PathDelim));
+    Utf8ToFileName(StringReplaceAll(UriBlobFieldName, '/', PathDelim), result);
 end;
 
 procedure TRestServerUriContext.Returns(const Result: RawUtf8;
@@ -4670,8 +4670,7 @@ begin
   else if PosEx('..', UriBlobFieldName) > 0 then
     fileName := ''
   else
-    fileName := Utf8ToString(
-      StringReplaceChars(UriBlobFieldName, '/', PathDelim));
+    Utf8ToFileName(StringReplaceChars(UriBlobFieldName, '/', PathDelim), filename);
   if fileName <> '' then
     fileName := IncludeTrailingPathDelimiter(FolderName) + fileName;
   ReturnFile(fileName, Handle304NotModified, '', '', Error404Redirect,

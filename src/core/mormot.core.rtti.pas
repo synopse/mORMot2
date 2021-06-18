@@ -589,7 +589,7 @@ type
     case TRttiKind of
       rkFloat: (
         RttiFloat: TRttiFloat);
-      rkLString: (
+      rkLString: ( // from TypeInfo() on older Delphi with no CP RTTI
         CodePage: cardinal; // RawBlob=CP_RAWBYTESTRING not CP_RAWBLOB
         Engine: TSynAnsiConvert);
       rkEnumeration, rkSet: (
@@ -3089,7 +3089,7 @@ begin
       end
       else
       begin
-        Cache.CodePage := AnsiStringCodePage;
+        Cache.CodePage := AnsiStringCodePage; // use TypeInfo() on old Delphi
         Cache.Engine := TSynAnsiConvert.Engine(Cache.CodePage);
       end;
    end;

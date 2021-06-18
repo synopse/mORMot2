@@ -396,7 +396,7 @@ begin
     begin
       if not EciesHeaderFile(FileToDecrypt, head) then
         exit;
-      priv := Utf8ToString(EccText(head.recid));
+      Utf8ToFileName(EccText(head.recid), priv);
       if not EccKeyFileFind(priv, true) then
         exit; // not found local .private from header
     end;
@@ -430,7 +430,7 @@ begin
     SetLength(files, n);
     for i := 0 to n - 1 do
     begin
-      files[i] := Utf8ToString(CertFiles[i]);
+      Utf8ToFileName(CertFiles[i], files[i]);
       if not EccKeyFileFind(files[i], false) then
         exit;
     end;
