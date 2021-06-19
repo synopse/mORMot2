@@ -22,8 +22,10 @@ interface
 
 {$I ..\mormot.defines.inc}
 
-{$if not defined(ZLIBSTATIC) and not defined (ZLIBPAS) and
-     not defined(ZLIBRTL) and not defined(ZLIBEXT)}
+{$if not defined(ZLIBSTATIC) and
+     not defined(ZLIBPAS) and
+     not defined(ZLIBRTL) and
+     not defined(ZLIBEXT)}
 
   // select best known choice if not overriden for the whole project
   {$ifdef FPC}
@@ -61,9 +63,10 @@ uses
   {$ifdef ZLIBRTL}
   zlib,
   {$endif ZLIBRTL}
-  {$ifdef LIBDEFLATESTATIC}
+  {$if defined(LIBDEFLATESTATIC) or
+       defined(ZLIBSTATIC)}
   mormot.lib.static, // some definitions to properly link libdeflate
-  {$endif LIBDEFLATESTATIC}
+  {$ifend}
   mormot.core.base;
 
 
