@@ -108,7 +108,7 @@ type
 var
   /// create a public/private key pair
   // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
-  // - directly low-level access to the statically linked easy-ecc library
+  // - directly low-level access to the statically linked micro-ecc library
   // function, or our pure-pascal version, or OpenSSL wrappers if available
   // - returns true if the key pair was generated successfully in pub/priv
   // - returns false if an error occurred
@@ -117,7 +117,7 @@ var
 
   /// compute a shared secret given your secret key and someone else's public key
   // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
-  // - directly low-level access to the statically linked easy-ecc library
+  // - directly low-level access to the statically linked micro-ecc library
   // function, or our pure-pascal version, or OpenSSL wrappers if available
   // - note: it is recommended that you hash the result of Ecc256r1SharedSecret
   // before using it for symmetric encryption or HMAC (via an intermediate KDF)
@@ -129,7 +129,7 @@ var
 
   /// generate an ECDSA signature for a given hash value
   // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
-  // - directly low-level access to the statically linked easy-ecc library
+  // - directly low-level access to the statically linked micro-ecc library
   // function, or our pure-pascal version, or OpenSSL wrappers if available
   // - returns true if the signature was successfully generated in sign
   // - returns false if an error occurred
@@ -139,7 +139,7 @@ var
 
   /// verify an ECDSA signature
   // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
-  // - directly low-level access to the statically linked easy-ecc library
+  // - directly low-level access to the statically linked micro-ecc library
   // function, or our pure-pascal version, or OpenSSL wrappers if available
   // - returns true if the supplied signature is valid
   // - returns false if an error occurred
@@ -448,7 +448,8 @@ implementation
 
 {
   Using secp256r1 curve from "simple and secure ECDH and ECDSA library"
-  https://github.com/esxgx/easy-ecc - now offline, possibly from CN regulation
+  https://github.com/kmackay/micro-ecc
+  Copyright (c) 2014, Kenneth MacKay - BSD 2-Clause "Simplified" License
 }
 
 function getRandomNumber(out dest: THash256): integer;
@@ -650,7 +651,7 @@ end;
 {$endif ECC_STATICLIB_AVAILABLE}
 
 
-{ Pure Pascal Version of low-level ECC process (adapted from easy-ecc.c code)
+{ Pure Pascal Version of low-level ECC process (adapted from micro-ecc.c code)
 
  Some numbers (on another slower computer than the previous values above),
  which is quite acceptable, since it is faster than gcc -O1 mode :)
