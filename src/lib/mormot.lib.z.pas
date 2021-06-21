@@ -53,6 +53,9 @@ interface
 {.$define LIBDEFLATESTATIC}
 // you may try to enable it e.g. for arm/aarch64-linux (not tested yet)
 
+{$ifdef NOLIBDEFLATESTATIC}
+  {$undef LIBDEFLATESTATIC}
+{$endif NOLIBDEFLATESTATIC}
 
 uses
   sysutils,
