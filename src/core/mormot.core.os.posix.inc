@@ -965,7 +965,7 @@ end;
 
 function OemToFileName(const oem: RawByteString): TFileName;
 begin
-  // let's assume UTF-8 under Linux/POSIX
+  // let's assume TFileName is UTF-8 under Linux/POSIX
   result := Utf8Encode(OemToUnicode(oem));
 end;
 

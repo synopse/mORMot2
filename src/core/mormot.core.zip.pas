@@ -527,7 +527,7 @@ type
       WorkingMem: QWord = 1 shl 20; const OnAdd: TOnZipWriteCreateFrom = nil); overload;
     /// open an existing .zip archive, ready to add some new files
     // - overloaded constructor converting a file list into a corresponding
-    // TOnZipWriteCreateFrom callback
+    // TOnZipWriteCreateFrom callback for case-insensitive file exclusion
     // - this is a convenient way of updating a .zip in-place: e.g. to replace a
     // file, supply it to the IgnoreZipFiles array, then call AddDeflate
     constructor CreateFrom(const aFileName: TFileName;
@@ -1403,7 +1403,8 @@ var
 begin
   result := false;
   for i := 0 to length(fOnCreateFromFiles) - 1 do
-    if AnsiCompareFileName(Entry.zipName, fOnCreateFromFiles[i]) = 0 then
+    // case-insensitive even on POSIX (no AnsiCompareFileName)
+    if AnsiCompareText(Entry.zipName, fOnCreateFromFiles[i]) = 0 then
       exit;
   result := true;
 end;

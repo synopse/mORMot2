@@ -30,20 +30,20 @@ interface
   // select best known choice if not overriden for the whole project
   {$ifdef FPC}
     {$ifdef OSWINDOWS}
-      {$define ZLIBSTATIC}   // FPC Win32 Win64: we supply our static .o
+      {$define ZLIBSTATIC} // FPC Win32 Win64: we supply our static .o
     {$else}
       {$ifdef OSANDROID}
-        {$define ZLIBPAS}    // FPC Android: paszlib (Alf reported problems)
+        {$define ZLIBPAS}  // FPC Android: paszlib (Alf reported problems)
       {$else}
-        {$define ZLIBEXT}    // FPC other POSIX: system's libz.so
+        {$define ZLIBEXT}  // FPC other POSIX: system's libz.so
       {$endif OSANDROID}
     {$endif OSWINDOWS}
   {$else not FPC}
     {$ifdef WIN32}
-      {$define ZLIBSTATIC} // Delphi Win32: static .obj
+      {$define ZLIBSTATIC} // Delphi Win32: our static .obj
     {$endif WIN32}
     {$ifdef WIN64}
-      {$define ZLIBRTL} // Delphi Win64: system.zlib.pas from Delphi RTL
+      {$define ZLIBRTL}    // Delphi Win64: system.zlib.pas from Delphi RTL
     {$endif WIN64}
   {$endif FPC}
 
