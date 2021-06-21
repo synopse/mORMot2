@@ -4126,24 +4126,30 @@ begin
   CheckIdData(0, 0);
   Check((length(Stmt.OrderByField) = 1) and
         (Props.Fields.List[Stmt.OrderByField[0] - 1].name = 'FirstName'));
-  Check(not Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = []);
   NewStmt('select iD,Data from tab order by firstname desc');
   CheckIdData(0, 0);
   Check((length(Stmt.OrderByField) = 1) and
         (Props.Fields.List[Stmt.OrderByField[0] - 1].name = 'FirstName'));
-  Check(Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = [0]);
   NewStmt('select rowid , Data from tab order by firstname , lastname desc');
   CheckIdData(0, 0);
   Check((length(Stmt.OrderByField) = 2) and
         (Props.Fields.List[Stmt.OrderByField[0] - 1].name = 'FirstName') and
         (Props.Fields.List[Stmt.OrderByField[1] - 1].name = 'LastName'));
-  Check(Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = [1]);
   NewStmt('select rowid,Data from tab order by firstname,lastname limit 10');
   CheckIdData(10, 0);
   Check((length(Stmt.OrderByField) = 2) and
         (Props.Fields.List[Stmt.OrderByField[0] - 1].name = 'FirstName') and
         (Props.Fields.List[Stmt.OrderByField[1] - 1].name = 'LastName'));
-  Check(not Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = []);
+  NewStmt('select rowid,Data from tab order by firstname desc,lastname limit 10');
+  CheckIdData(10, 0);
+  Check((length(Stmt.OrderByField) = 2) and
+        (Props.Fields.List[Stmt.OrderByField[0] - 1].name = 'FirstName') and
+        (Props.Fields.List[Stmt.OrderByField[1] - 1].name = 'LastName'));
+  Check(Stmt.OrderByFieldDesc = [0]);
   NewStmt('select rowid,Data from tab group by firstname order by firstname,lastname');
   CheckIdData(0, 0);
   Check((length(Stmt.GroupByField) = 1) and
@@ -4156,15 +4162,15 @@ begin
   Check((length(Stmt.GroupByField) = 2) and
         (Props.Fields.List[Stmt.GroupByField[0] - 1].name = 'FirstName') and
         (Props.Fields.List[Stmt.GroupByField[1] - 1].name = 'LastName'));
-  Check(not Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = []);
   NewStmt('select iD,Data from tab limit   20');
   CheckIdData(20, 0);
   Check(Stmt.OrderByField = nil);
-  Check(not Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = []);
   NewStmt('select iD,Data from tab  offset   20');
   CheckIdData(0, 20);
   Check(Stmt.OrderByField = nil);
-  Check(not Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = []);
   NewStmt(
     'select data,iD from tab where id >= 10 limit 10 offset 20 order by firstname desc');
   Check(Stmt.TableName = 'tab');
@@ -4179,7 +4185,7 @@ begin
         (Props.Fields.List[Stmt.Select[0].Field - 1].name = 'Data'));
   Check((length(Stmt.OrderByField) = 1) and
         (Props.Fields.List[Stmt.OrderByField[0] - 1].name = 'FirstName'));
-  Check(Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = [0]);
   NewStmt('select iD,Data from tab where id in (1, 2, 3)');
   Check(Stmt.TableName = 'tab');
   Check(length(Stmt.Where) = 1);
@@ -4195,7 +4201,7 @@ begin
   Check(Stmt.Where[0].Value = '["a","b","3"]');
   Check((length(Stmt.OrderByField) = 1) and
         (Stmt.OrderByField[0] = 0));
-  Check(Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = [0]);
   NewStmt('select data,iD from tab where id >= 10 and YearOfBirth > 1600 limit 10 offset 20');
   CheckWhere(false);
   NewStmt('select data,iD from tab where rowid>=10 or YearOfBirth>1600 offset 20 limit 10');
@@ -4285,7 +4291,7 @@ begin
   Check(Stmt.Where[1].Operation = opContains);
   Check((length(Stmt.OrderByField) = 1) and
         (Props.Fields.List[Stmt.OrderByField[0] - 1].name = 'FirstName'));
-  Check(Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = [0]);
   Check(Stmt.Limit = 20);
   NewStmt('select max(yearofdeath) as maxYOD from tab where yearofbirth > :(1000):');
   Check(Stmt.TableName = 'tab');
