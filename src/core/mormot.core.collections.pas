@@ -153,6 +153,8 @@ type
     // - if aSortAs is ptNone, will guess the comparison/sort function from RTTI
     constructor Create(aOptions: TSynListOptions;
       aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; aSortAs: TRttiParserType);
+    /// finalize the array storage, mainly the internal TDynArray
+    destructor Destroy; override;
     /// delete one item inside the collection
     // - the deleted item is finalized if necessary
     function Delete(ndx: PtrInt): boolean;
@@ -583,7 +585,7 @@ var
   msg: ShortString;
 begin
   FormatShort(fmt, args, msg);
-  raise  ESynKeyValue.CreateUtf8('%.%', [self, msg])
+  raise ESynKeyValue.CreateUtf8('%.%', [self, msg])
     {$ifdef ISDELPHIXE4} at ReturnAddress {$endif};
 end;
 
@@ -607,6 +609,12 @@ begin
      ((aDynArrayTypeInfo <> nil) and
       (fDynArray.Info.ArrayRtti.Info <> aItemTypeInfo)) then
     RaiseException('Create: T does not match %', [aDynArrayTypeInfo.RawName]);
+end;
+
+destructor TSynListAbstract.Destroy;
+begin
+  inherited Destroy;
+  fDynArray.Clear;
 end;
 
 function TSynListAbstract.Delete(ndx: PtrInt): boolean;
@@ -697,7 +705,7 @@ begin
 end;
 
 function TSynListSpecialized<T>.AsArray: TArray<T>;
-begin // assign existing dynamic array instance to TArray<T>
+begin // assign existing dynamic array instance to TArray<T> result
   fDynArray.SliceAsDynArray(@result);
 end;
 
@@ -892,7 +900,8 @@ class function TGenerics.RaiseUseNewPlainList(aItemTypeInfo: PRttiInfo): pointer
 begin
   raise ESynList.CreateUtf8(
     'TGenerics: Type is too complex - use TGenerics.NewPlainList<%> instead',
-    [aItemTypeInfo.RawName]);
+    [aItemTypeInfo.RawName])
+    {$ifdef ISDELPHIXE4} at ReturnAddress {$endif};
   result := nil; // returns something to please the Delphi compiler
 end;
 
@@ -901,7 +910,8 @@ class function TGenerics.RaiseUseNewPlainKeyValue(
 begin
   raise ESynKeyValue.CreateUtf8('TGenerics: Types are too complex - ' +
     'use TGenerics.NewPlainKeyValue<%, %> instead',
-    [aContext.KeyItemTypeInfo.RawName, aContext.ValueItemTypeInfo.RawName]);
+    [aContext.KeyItemTypeInfo.RawName, aContext.ValueItemTypeInfo.RawName])
+    {$ifdef ISDELPHIXE4} at ReturnAddress {$endif};
   result := nil; // returns something to please the Delphi compiler
 end;
 

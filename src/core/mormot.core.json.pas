@@ -1312,7 +1312,7 @@ type
     function KeyFullCompare(const A, B): integer;
     function GetCapacity: integer;
     procedure SetCapacity(const Value: integer);
-    function GetTimeOutSeconds: cardinal; {$ifdef HASINLINE} inline; {$endif}
+    function GetTimeOutSeconds: cardinal; {$ifdef FPC} inline; {$endif}
     procedure SetTimeOutSeconds(Value: cardinal);
   public
     /// initialize the dictionary storage, specifyng dynamic array keys/values
