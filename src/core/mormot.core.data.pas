@@ -1568,6 +1568,11 @@ type
       Tolerant: boolean = false): PUtf8Char;
     ///  select a sub-section (slice) of a dynamic array content
     procedure Slice(var Dest; aCount: cardinal; aFirstIndex: cardinal = 0);
+    /// assign the current dynamic array content into a variable
+    // - with no memory allocation, just finalize the Dest slot, then make
+    // Inc(RefCnt) and force the internal length/Capacity to equal Count
+    // with no memory (re)allocation
+    procedure SliceAsDynArray(Dest: PPointer);
     /// add items from a given dynamic array variable
     // - the supplied source DynArray MUST be of the same exact type as the
     // current used for this TDynArray - warning: pass here a reference to
@@ -6634,8 +6639,8 @@ function TDynArray.LoadFromJson(P: PUtf8Char; EndOfObject: PUtf8Char;
   CustomVariantOptions: PDocVariantOptions; Tolerant: boolean): PUtf8Char;
 begin
   SetCount(0); // faster to use our own routine now
-  GetDataFromJson(fValue,
-    P, EndOfObject, Info.Info, CustomVariantOptions, Tolerant);
+  GetDataFromJson(fValue, P, EndOfObject, Info.Info,
+    CustomVariantOptions, Tolerant);
   if (fCountP <> nil) and
      (fValue^ <> nil) then
     // GetDataFromJson() set the array length, not the external count
@@ -7706,6 +7711,24 @@ begin
   CopySeveral(pointer(Dest),
     @(PByteArray(fValue^)[aFirstIndex * cardinal(fInfo.Cache.ItemSize)]),
     aCount, fInfo.Cache.ItemInfo, fInfo.Cache.ItemSize);
+end;
+
+procedure TDynArray.SliceAsDynArray(Dest: PPointer);
+var
+  p: PDynArrayRec;
+  n: TStrLen;
+begin
+  if dest^ <> nil then
+    FastDynArrayClear(dest, fInfo.Cache.ItemInfo); // reset Dest variable slot
+  n := GetCount;
+  if n = 0 then
+    exit;
+  p := fValue^;
+  dec(p);
+  inc(p^.refCnt); // reuse existing dynamic array instance
+  p^.Length := n; // no memory realloc/copy, just force Capacity=Length=Count
+  inc(p);
+  dest^ := p;     // assign to Dest variable
 end;
 
 function TDynArray.AddArray(const DynArrayVar; aStartIndex, aCount: integer): integer;
