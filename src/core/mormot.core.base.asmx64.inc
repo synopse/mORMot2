@@ -1263,7 +1263,7 @@ function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
 {$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
         {$ifdef WIN64ABI}
         push    rdi
-        mov     rdi, P  // rdi=P
+        mov     rdi, P  // rdi=P - we use ecx to read the word ptr value
         {$endif WIN64ABI}
         xor     r9, r9  // r9=L rax=result
         test    R, R

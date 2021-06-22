@@ -376,7 +376,16 @@ type
   // - mCfc, mOfc and mCtc are non standard AEAD modes with 256-bit crc32c
   // - matching algo names are e.g. 'aes-128-cfb', 'aes-256-ctc' or 'aes-256-gcm'
   TAesMode = (
-    mEcb, mCbc, mCfb, mOfb, mC64, mCtr, mCfc, mOfc, mCtc, mGcm);
+    mEcb,
+    mCbc,
+    mCfb,
+    mOfb,
+    mC64,
+    mCtr,
+    mCfc,
+    mOfc,
+    mCtc,
+    mGcm);
 
   /// class-reference type (metaclass) of an AES cypher/uncypher
   TAesAbstractClass = class of TAesAbstract;
@@ -5592,8 +5601,9 @@ var
   tab: PByteArray;
 begin
   result := false;
-  if PCardinal(AesAlgoName)^ and $ffdfdfdf <>
-      ord('A') + ord('E') shl 8 + ord('S') shl 16 + ord('-') shl 24 then
+  if (AesAlgoName = nil) or
+     (PCardinal(AesAlgoName)^ and $ffdfdfdf <>
+        ord('A') + ord('E') shl 8 + ord('S') shl 16 + ord('-') shl 24) then
     exit;
   case PCardinal(AesAlgoName + 4)^ of
     ord('1') + ord('2') shl 8 + ord('8') shl 16 + ord('-') shl 24:
