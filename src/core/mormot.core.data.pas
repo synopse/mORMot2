@@ -1215,7 +1215,8 @@ type
     procedure Init(aTypeInfo: PRttiInfo; var aValue; aCountPointer: PInteger = nil);
     /// initialize the wrapper with a one-dimension dynamic array
     // - also set the Compare() function from a supplied TRttiParserType
-    // - ptNone and ptCustom are too vague, and will raise an exception
+    // - aKind=ptNone will guess the type from Info.ArrayRtti/ArrayFirstField
+    // - will raise an exception if there is not enough RTTI available
     // - no RTTI check is made over the corresponding array layout: you shall
     // ensure that the aKind parameter matches at least the first field of
     // the dynamic array item definition
@@ -1629,7 +1630,7 @@ type
     /// will copy one element content from its index into another variable
     // - do nothing if index is out of range
     procedure ItemCopyAt(index: PtrInt; Dest: pointer);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     /// will move one element content from its index into another variable
     // - will erase the internal item after copy
     // - do nothing if index is out of range
@@ -1640,7 +1641,7 @@ type
     // if the source item is a copy of Values[index] with some dynamic arrays
     procedure ItemCopyFrom(Source: pointer; index: PtrInt;
       ClearBeforeCopy: boolean = false);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     /// compare the content of two items, returning TRUE if both values equal
     // - use the Compare() property function (if set) or using Info.Cache.ItemInfo
     // if available - and fallbacks to binary comparison
@@ -6080,6 +6081,11 @@ begin
     raise EDynArray.CreateUtf8('TDynArray.InitSpecific: % is %, expected rkDynArray',
       [aTypeInfo.RawName, ToText(aTypeInfo.Kind)^]);
   InitRtti(Rtti.RegisterType(aTypeInfo), aValue, aCountPointer);
+  if aKind = ptNone then
+    if Assigned(fInfo.ArrayRtti) then
+      aKind := fInfo.ArrayRtti.Parser
+    else
+      aKind := fInfo.ArrayFirstField;
   fCompare := PT_SORT[aCaseInsensitive, aKind];
   if not Assigned(fCompare) then
     if aKind = ptVariant then
