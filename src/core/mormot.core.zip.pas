@@ -1404,7 +1404,7 @@ begin
   result := false;
   for i := 0 to length(fOnCreateFromFiles) - 1 do
     // case-insensitive even on POSIX (no AnsiCompareFileName)
-    if AnsiCompareText(Entry.zipName, fOnCreateFromFiles[i]) = 0 then
+    if CompareText(Entry.zipName, fOnCreateFromFiles[i]) = 0 then
       exit;
   result := true;
 end;
