@@ -1147,7 +1147,7 @@ var
 begin
   case aValue of
     {$ifdef FPC} tkAString {$else} tkLString {$endif FPC}:
-      obj := TSynKeyValueSpecialized<IInterface, IInterface>.Create(aContext);
+      obj := TSynKeyValueSpecialized<IInterface, RawByteString>.Create(aContext);
     tkWString:
       obj := TSynKeyValueSpecialized<IInterface, WideString>.Create(aContext);
     tkUString:
@@ -1191,7 +1191,7 @@ var
 begin
   case aValue of
     {$ifdef FPC} tkAString {$else} tkLString {$endif FPC}:
-      obj := TSynKeyValueSpecialized<WideString, WideString>.Create(aContext);
+      obj := TSynKeyValueSpecialized<WideString, RawByteString>.Create(aContext);
     tkWString:
       obj := TSynKeyValueSpecialized<WideString, WideString>.Create(aContext);
     tkUString:
@@ -1235,7 +1235,7 @@ var
 begin
   case aValue of
     {$ifdef FPC} tkAString {$else} tkLString {$endif FPC}:
-      obj := TSynKeyValueSpecialized<UnicodeString, UnicodeString>.Create(aContext);
+      obj := TSynKeyValueSpecialized<UnicodeString, RawByteString>.Create(aContext);
     tkWString:
       obj := TSynKeyValueSpecialized<UnicodeString, WideString>.Create(aContext);
     tkUString:
@@ -1279,7 +1279,7 @@ var
 begin
   case aValue of
     {$ifdef FPC} tkAString {$else} tkLString {$endif FPC}:
-      obj := TSynKeyValueSpecialized<IInterface, IInterface>.Create(aContext);
+      obj := TSynKeyValueSpecialized<IInterface, RawByteString>.Create(aContext);
     tkWString:
       obj := TSynKeyValueSpecialized<IInterface, WideString>.Create(aContext);
     tkUString:
@@ -1322,7 +1322,7 @@ var
 begin
   case aValue of
     {$ifdef FPC} tkAString {$else} tkLString {$endif FPC}:
-      obj := TSynKeyValueSpecialized<Variant, Variant>.Create(aContext);
+      obj := TSynKeyValueSpecialized<Variant, RawByteString>.Create(aContext);
     tkWString:
       obj := TSynKeyValueSpecialized<Variant, WideString>.Create(aContext);
     tkUString:
@@ -1371,7 +1371,7 @@ end;
 class procedure TGenerics.NewLString(aOptions: TSynListOptions;
   aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result);
 begin
-  IList<Variant>(result) := TSynListSpecialized<Variant>.Create(
+  IList<RawByteString>(result) := TSynListSpecialized<RawByteString>.Create(
     aOptions, aDynArrayTypeInfo, aItemTypeInfo, ptNone); // may be RawUtf8/RawJson
 end;
 
