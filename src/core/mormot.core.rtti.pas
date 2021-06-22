@@ -2950,7 +2950,7 @@ begin
       result := SizeOf(variant);
     rkArray:
       result := ArraySize;
-    rkRecord {$ifdef FPC}, rkObject {$endif} :
+    rkRecord {$ifdef FPC}, rkObject {$endif}:
       result := RecordSize;
     rkSString:
       result := GetTypeData(@self)^.MaxLength + 1;

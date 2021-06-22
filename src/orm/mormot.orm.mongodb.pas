@@ -1435,7 +1435,7 @@ var
   W: TJsonSerializer;
   MS: TRawByteStringStream;
   Res: TBsonDocument;
-  f, limit: PtrInt;
+  limit: PtrInt;
   extFieldNames, subFields: TRawUtf8DynArray;
   bits: TFieldBits;
   withID: boolean;

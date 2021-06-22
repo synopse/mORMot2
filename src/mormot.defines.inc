@@ -150,6 +150,7 @@
     {$define ISFPC27}
     {$define ISFPC30}
     {$define ISFPC32}
+    {$define HASGETTYPEKIND}
     {$ifdef VER3_2_2}
       {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
     {$endif VER3_2_2}
@@ -446,6 +447,7 @@
     {$ifend}
     {$if CompilerVersion >= 28.0}
       {$define ISDELPHIXE7}
+      {$define HASGETTYPEKIND}
       {$ifdef CPU64}
         {$define CPUX64ASM} // e.g. Delphi XE4 SSE asm is buggy :(
       {$endif}
