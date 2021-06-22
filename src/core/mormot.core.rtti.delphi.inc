@@ -360,7 +360,10 @@ end;
 
 function TRttiInfo.Name: PShortString;
 begin
-  result := @RawName;
+  if @self <> nil then
+    result := @RawName
+  else
+    result := @NULCHAR;
 end;
 
 function TRttiInfo.RecordSize: PtrInt;

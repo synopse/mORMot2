@@ -628,6 +628,7 @@ type
     // - won't adjust internal/cardinal names on FPC as with Name method
     RawName: ShortString;
     /// the declared name of the type ('String','Word','RawUnicode'...)
+    // - will return '' if @self is nil
     // - on FPC, will adjust 'integer'/'cardinal' from 'longint'/'longword' RTTI
     function Name: PShortString;
       {$ifdef ISDELPHI2006ANDUP}inline;{$endif}
@@ -1732,7 +1733,7 @@ function TypeInfoToStandardParserType(Info: PRttiInfo;
 // - returns nil if we don't know any dynamic array for this type
 // - ExpectExactElemInfo=true ensure that result's ArrayRtti.Info = ElemInfo
 function TypeInfoToDynArrayTypeInfo(ElemInfo: PRttiInfo;
-  ExpectExactElemInfo: boolean): PRttiInfo;
+  ExpectExactElemInfo: boolean; ParserType: PRttiParserType = nil): PRttiInfo;
 
 /// recognize a simple value type from a dynamic array RTTI
 // - if ExactType=false, will approximate the first field
@@ -5687,7 +5688,7 @@ var
   PT_DYNARRAY: array[TRttiParserType] of pointer; // most simple dynamic arrays
 
 function TypeInfoToDynArrayTypeInfo(ElemInfo: PRttiInfo;
-  ExpectExactElemInfo: boolean): PRttiInfo;
+  ExpectExactElemInfo: boolean; ParserType: PRttiParserType): PRttiInfo;
 var
   parser: TRttiParserType;
   rc: TRttiCustom;
@@ -5698,6 +5699,8 @@ begin
   result := PT_DYNARRAY[parser];
   if result <> nil then
   begin
+    if ParserType <> nil then
+      ParserType^ := Parser;
     if (not ExpectExactElemInfo) or
        (PT_INFO[parser] = ElemInfo) then
       exit;
@@ -5708,7 +5711,11 @@ begin
   end;
   rc := Rtti.FindByArrayRtti(ElemInfo); // search in registered rkDynArray
   if rc <> nil then
+  begin
+    if ParserType <> nil then
+      ParserType^ := rc.ArrayRtti.Parser;
     result := rc.Info;
+  end;
 end;
 
 function DynArrayTypeInfoToStandardParserType(DynArrayInfo, ElemInfo: PRttiInfo;
