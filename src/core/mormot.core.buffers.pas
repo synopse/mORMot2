@@ -4522,15 +4522,18 @@ begin
   else
   begin
     ptr := pointer(SynCompressAlgos);
-    n := PDALen(PAnsiChar(ptr) - _DALEN)^ + ( _DAOFF - 1 ); // - 1 for List[0]
-    if n > 0 then
-      repeat
-        inc(ptr); // ignore List[0] = AlgoSynLZ
-        result := ptr^;
-        if result.AlgoID = AlgoID then
-          exit;
-        dec(n);
-      until n = 0;
+    if ptr <> nil then
+    begin
+      n := PDALen(PAnsiChar(ptr) - _DALEN)^ + ( _DAOFF - 1 ); // - 1 for List[0]
+      if n > 0 then
+        repeat
+          inc(ptr); // ignore List[0] = AlgoSynLZ
+          result := ptr^;
+          if result.AlgoID = AlgoID then
+            exit;
+          dec(n);
+        until n = 0;
+    end;
     result := nil;
   end;
 end;
