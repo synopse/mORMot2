@@ -2011,11 +2011,7 @@ type
     // - will handle vtPointer/vtClass/vtObject/vtVariant kind of arguments,
     // appending class name for any class or object, the hexa value for a
     // pointer, or the JSON representation of any supplied TDocVariant
-    constructor CreateUtf8(
-      const Format: RawUtf8; const Args: array of const); overload;
-    /// constructor which append caller 'ClassName.' before FormatUtf8() content
-    constructor CreateUtf8(Caller: TObject;
-      const Format: RawUtf8; const Args: array of const); overload;
+    constructor CreateUtf8(const Format: RawUtf8; const Args: array of const);
     /// constructor appending some FormatUtf8() content to the GetLastError
     // - message will contain GetLastError value followed by the formatted text
     // - expect % as delimiter, so is less error prone than %s %d %g
@@ -9630,12 +9626,6 @@ var
 begin
   FormatString(Format, Args, msg);
   inherited Create(msg);
-end;
-
-constructor ESynException.CreateUtf8(Caller: TObject; const Format: RawUtf8;
-  const Args: array of const);
-begin
-  CreateUtf8(FormatUtf8('%.%', [Caller, Format]), Args);
 end;
 
 constructor ESynException.CreateLastOSError(const Format: RawUtf8;
