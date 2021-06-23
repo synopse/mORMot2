@@ -656,6 +656,21 @@ function CompressDeflate(var Data: RawByteString; Compress: boolean): RawUtf8;
 // - can use faster libdeflate instead of plain zlib if available
 function CompressZLib(var Data: RawByteString; Compress: boolean): RawUtf8;
 
+{$ifndef PUREMORMOT2}
+// backward compatibility functions
+
+/// compress some data, with a proprietary format (deflate + Adler32)
+// - for backward compatibility - consider using TAlgoCompress instead
+function CompressString(const data: RawByteString; failIfGrow: boolean = false;
+  CompressionLevel: integer = 6) : RawByteString;
+
+/// uncompress some data, with a proprietary format (deflate + Adler32)
+// - for backward compatibility - consider using TAlgoCompress instead
+// - return '' in case of a decompression failure
+function UncompressString(const data: RawByteString) : RawByteString;
+
+{$endif PUREMORMOT2}
+
 
 type
   /// TStreamRedirect with crc32 32-bit checksum
@@ -2767,6 +2782,45 @@ begin
   CompressInternal(Data, Compress, {zlib=}true);
   result := 'zlib';
 end;
+
+{$ifndef PUREMORMOT2}
+
+function CompressString(const data: RawByteString; failIfGrow: boolean;
+  CompressionLevel: integer): RawByteString;
+var
+  len : integer;
+begin
+  result := '';
+  SetLength(result, 12 + (Int64(length(data)) * 11) div 10 + 12);
+  PInt64(result)^ := length(data);
+  PCardinalArray(result)^[2] := adler32(0, pointer(data), length(data));
+  // use faster libdeflate instead of plain zlib if available
+  len := CompressMem(pointer(data), @PByteArray(result)[12], length(data),
+    length(result) - 12, CompressionLevel);
+  if (len > 0) and
+     ( (12 + len < length(data)) or
+       not failIfGrow ) then
+    SetLength(result, 12 + len)
+  else
+    result := '';
+end;
+
+function UncompressString(const data: RawByteString): RawByteString;
+begin
+  result := '';
+  if Length(data) > 12 then
+  begin
+    SetLength(result, PCardinal(data)^);
+    // use faster libdeflate instead of plain zlib if available
+    SetLength(result, UncompressMem(@PByteArray(data)[12], pointer(result),
+      length(data) - 12, length(result)));
+    if (result <> '') and
+       ((Adler32(0, pointer(result), length(result))) <> PCardinalArray(data)^[2]) then
+      result := '';
+  end;
+end;
+
+{$endif PUREMORMOT2}
 
 
 { TStreamRedirectCrc32 }
