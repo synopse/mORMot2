@@ -76,7 +76,10 @@ type
     procedure SetCount(value: PtrInt);
     function GetCapacity: PtrInt;
     procedure SetCapacity(value: PtrInt);
+    function GetComparer: TDynArraySortCompare;
+    procedure SetComparer(customcompare: TDynArraySortCompare);
     /// append a new value to the collection
+    // - always append the new item at the end
     function Add(const value: T): PtrInt;
     /// insert a new value to the collection
     procedure Insert(ndx: PtrInt; const value: T);
@@ -90,6 +93,46 @@ type
     function Pop(var dest: T; keepvalue: boolean = false): boolean;
     /// delete all stored items
     procedure Clear;
+    /// will reverse all collection items, in place
+    procedure Reverse;
+    /// sort the collection items
+    // - use the main Comparer function from RTTI, unless customcompare is set
+    procedure Sort(customcompare: TDynArraySortCompare = nil); overload;
+    /// sort a collection range
+    // - use the main Comparer function from RTTI, unless customcompare is set
+    // - this method allows to sort only some part of the items
+    procedure Sort(start, stop: integer;
+      customcompare: TDynArraySortCompare = nil); overload;
+    /// sort the collection items using an external lookup array of indexes
+    // - use the main Comparer function from RTTI, unless customcompare is set
+    // - in comparison to the Sort method, this overload won't change the
+    // collection content, but only create (or update) the supplied indexes[]
+    // - if the indexes lookup table has less items than the collection,
+    // its content will be recreated
+    procedure Sort(var indexes: TIntegerDynArray;
+      customcompare: TDynArraySortCompare = nil); overload;
+    /// sort the collection, using a comparison property method (not function)
+    // - you could optionally sort in reverse order
+    procedure Sort(const customcompare: TOnDynArraySortCompare;
+      descending: boolean = false); overload;
+    /// search and add an item inside a sorted collection
+    // - a sorted collection will use O(log(n)) binary search
+    // - this method will use the main Comparer function for the search
+    // - returns the index of the existing Item if wasadded^=false
+    // - returns the sorted index of the inserted Item if wasadded^=true
+    // - if the collection is not sorted, returns -1 and wasadded^=false
+    function AddSorted(const value: T; wasadded: PBoolean = nil): integer;
+    /// is true if Sort() has just been called, or AddSorted() used
+    function Sorted: boolean;
+    /// search for a value inside this collection
+    // - if the collection is sorted (i.e. AddSorted was used, or Sort was
+    // called after Add) will perform fast O(log(n)) binary search
+    // - on a non-sorted collection, will make O(n) comparisons with the value
+    // - if customcompare is set, a O(n) comparison lookup will be done
+    // - if rttisearch is true, no comparison function will be used but RTTI -
+    // which may be faster for simple ordinal types (bytes, integers)
+    function Find(const value: T; customcompare: TDynArraySortCompare = nil;
+      rttisearch: boolean = false): PtrInt;
     /// allows to iterate over a generic collection of a specific type
     // - we redefined our own type with its own method because RTL IEnumerable<T>
     // is inconsistent between Delphi and FPC
@@ -119,6 +162,10 @@ type
     /// returns the internal array capacity
     property Capacity: PtrInt
       read GetCapacity write SetCapacity;
+    /// returns the current comparison function, used e.g. for default Sort()
+    // - will be assigned by default from RTTI and the aoCaseInsensitive option
+    property Comparer: TDynArraySortCompare
+      read GetComparer write SetComparer;
     /// low-level access to the internal TDynArray wrapper
     // - you can use e.g. Data.SaveToJson/SaveTo and
     // Data.LoadFromJson/LoadFromBinary
@@ -132,12 +179,17 @@ type
     fCount: PtrInt;  // external TDynArray count
     fValue: pointer; // holds the actual dynamic array of <T>
     fDynArray: TDynArray;
+    fOptions: TSynListOptions;
     function DoPop(var dest; keepvalue: boolean): boolean;
+    function DoFind(const value; customcompare: TDynArraySortCompare;
+      rttisearch: boolean): PtrInt;
     // some property accessors
     function GetCount: PtrInt;
     procedure SetCount(value: PtrInt);
     function GetCapacity: PtrInt;
     procedure SetCapacity(value: PtrInt);
+    function GetComparer: TDynArraySortCompare;
+    procedure SetComparer(customcompare: TDynArraySortCompare);
   public
     /// initialize the array storage, specifying dynamic array type
     // - do not use this constructor, but Collections.NewList<T> class factory
@@ -151,25 +203,38 @@ type
       aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; aSortAs: TRttiParserType);
     /// finalize the array storage, mainly the internal TDynArray
     destructor Destroy; override;
-    /// delete one item inside the collection
-    // - the deleted item is finalized if necessary
+    /// IList<> method to delete one item inside the collection
     function Delete(ndx: PtrInt): boolean;
-    /// delete all stored items
+    /// IList<> method to delete all stored items
     procedure Clear;
-    /// low-level add an item to the dynamic array, returning its pointer
+    /// IList<> method to reverse all collection items, in place
+    procedure Reverse;
+    /// IList<> method to sort the collection items
+    procedure Sort(customcompare: TDynArraySortCompare = nil); overload;
+    /// IList<> method to sort a collection range
+    procedure Sort(start, stop: integer; customcompare: TDynArraySortCompare = nil); overload;
+    /// IList<> method to sort the collection items using an external lookup array
+    procedure Sort(var indexes: TIntegerDynArray;
+      customcompare: TDynArraySortCompare = nil); overload;
+    /// IList<> method to sort the collection, using a comparison method
+    procedure Sort(const customcompare: TOnDynArraySortCompare;
+      descending: boolean = false); overload;
+    /// IList<> method returning true if Sort() or AddSorted() have been used
+    function Sorted: boolean;
+    /// low-level IList<> method to add an item to the dynamic array, returning its pointer
     function NewPtr: pointer;
-    /// low-level pointer over the first item of the collection
+    /// low-level IList<> method to access the first item of the collection
     // - could be used to quickly lookup all items of the array, using Count
     // - can be nil if there is no item stored yet
     // - just a wrapper around fValue
     function First: pointer;
-    /// returns the number of items actually stored
+    /// IList<> method to return the number of items actually stored
     property Count: PtrInt
       read fCount write SetCount;
-    /// returns the internal array capacity
+    /// IList<> method to return the internal array capacity
     property Capacity: PtrInt
       read GetCapacity write SetCapacity;
-    /// low-level access to the internal TDynArray wrapper
+    /// low-level IList<> method to access to the internal TDynArray wrapper
     function Data: PDynArray;
   end;
 
@@ -184,23 +249,24 @@ type
     function GetItem(ndx: PtrInt): T;
     procedure SetItem(ndx: PtrInt; const value: T);
   public
-    /// append a new value to the collection
+    /// IList<T> method to append a new value to the collection
     function Add(const value: T): PtrInt;
-    /// insert a new value to the collection
+    /// IList<T> method to insert a new value to the collection
     procedure Insert(ndx: PtrInt; const value: T);
-    /// get and remove the last item stored in the collection
-    // - Add + Pop will implement a LIFO (Last-In-First-Out) stack
-    // - returns true if the item was successfully copied and removed
-    // - set keepvalue=true if you don't want to remove the item - i.e. Pick
+    /// IList<T> method to get and remove the last item stored in the collection
     function Pop(var dest: T; keepvalue: boolean = false): boolean;
-    /// returns a dynamic array containing data of this collection
-    // - is a convenient way to consume such a list as regular SOA parameters
+    /// IList<T> method to search for a value inside this collection
+    function Find(const value: T; customcompare: TDynArraySortCompare = nil;
+      rttisearch: boolean = false): PtrInt;
+    /// IList<T> method to search and add an item inside a sorted collection
+    function AddSorted(const value: T; wasadded: PBoolean = nil): integer;
+    /// IList<T> method to return a dynamic array of this collection items
     function AsArray(Offset: integer = 0; Limit: integer = 0): TArray<T>;
-    /// allows to iterate over a generic collection of this specific type
+    /// IList<T> method to iterate over a generic collection
     function GetEnumerator: ISynEnumerator<T>;
-    /// allows to iterate over some range of the generic collection
+    /// IList<T> method to iterate over some range of the generic collection
     function Range(Offset: integer = 0; Limit: integer = 0): ISynEnumerator<T>;
-    /// high-level access to the stored values from their associated indexes
+    /// IList<T> method to access the stored values from their associated indexes
     // - returns nil or do nothing if the supplied index is out of range
     property Items[ndx: PtrInt]: T
       read GetItem write SetItem; default;
@@ -262,13 +328,11 @@ type
     // - returns true if was added, false if key was already set
     // - use default Items[] property to add or replace a key/value pair
     function TryAdd(const key: TKey; const value: TValue): boolean;
-    /// search a key and return the associated key pair
+    /// search a key and return the associated value
     // - returns true if the key was found, false otherwise
     function TryGetValue(const key: TKey; var value: TValue): boolean;
-    /// search a key and return the associated key pair or its default value
-    function GetValueOrDefault(const key: TKey): TValue; overload;
-    /// search a key and return the associated key pair or a supplied default value
-    function GetValueOrDefault(const key: TKey; const defaultValue: TValue): TValue; overload;
+    /// search a key and return the associated value or a supplied default
+    function GetValueOrDefault(const key: TKey; const defaultValue: TValue): TValue;
     /// remove a key/value pair
     // - returns true if the entry was deleted, false if key was not found
     function Remove(const key: TKey): boolean;
@@ -289,18 +353,18 @@ type
     procedure Clear; overload;
     /// delete one stored key/value pairs from its key
     function Clear(const key: TKey): boolean; overload;
+    /// returns the number of key/value pairs actually stored
+    function Count: integer;
     /// high-level access to the stored values from their associated keys
     // - raise an  ESynKeyValue if the key is not available, unless
     // kvoDefaultIfNotFound option was set
     // - use TryGetValue() if you want to detect non available key
     property Items[const key: TKey]: TValue
       read GetItem write SetItem; default;
-    /// returns the number of key/value pairs actually stored
-    function Count: integer;
     /// returns the internal TSynDictionary capacity
     property Capacity: integer
       read GetCapacity write SetCapacity;
-    /// returns the aTimeOutSeconds parameter value, as specified to Create()
+    /// returns the TimeOutSeconds parameter, as specified to NewKeyValue<>
     // - warning: setting a new timeout will clear all previous content
     property TimeOutSeconds: cardinal
       read GetTimeOutSeconds write SetTimeOutSeconds;
@@ -337,7 +401,6 @@ type
     fOptions: TSynKeyValueOptions;
     procedure AddOne(const key, value);
     procedure GetOne(const key; var value);
-    procedure GetOneOrDefault(const key; var value);
     function GetCapacity: integer;
     procedure SetCapacity(value: integer);
     function GetTimeOutSeconds: cardinal;
@@ -350,35 +413,28 @@ type
     constructor Create(const aContext: TNewSynKeyValueContext); reintroduce; virtual;
     /// finalize the dictionary storage
     destructor Destroy; override;
-    /// search and delete all deprecated items according to TimeoutSeconds
-    // - returns how many items have been deleted
-    // - you can call this method very often: it will ensure that the
-    // search process will take place at most once every second
+    /// IKeyValue<> method to search and delete all deprecated items
     function DeleteDeprecated: integer;
-    /// delete all stored key/value pairs
+    /// IKeyValue<> method to delete all stored key/value pairs
     procedure Clear; overload;
-    /// returns the number of key/value pairs actually stored
+    /// IKeyValue<> method to get the number of key/value pairs actually stored
     function Count: integer;
-    /// returns the internal TSynDictionary capacity
+    /// IKeyValue<> method to get the internal TSynDictionary capacity
     property Capacity: integer
       read GetCapacity write SetCapacity;
-    /// returns the aTimeOutSeconds parameter value, as supplied to Create()
+    /// IKeyValue<> method to get the TimeOutSeconds param of NewKeyValue<>
     // - warning: setting a new timeout will clear all previous content
     property TimeOutSeconds: cardinal
       read GetTimeOutSeconds write SetTimeOutSeconds;
-    /// low-level access to the internal TSynDictionary storage
-    // - since this class is thread-safe, you could use this method to
-    // manually access its content
-    // - you can use e.g. Data.SaveToJson/SaveToBinary and
-    // Data.LoadFromJson/LoadFromBinary
+    /// low-level IKeyValue<> method to get the internal TSynDictionary storage
     function Data: TSynDictionary;
-    /// low-level access to the TSynKeyValueOptions as supplied to Create()
+    /// low-level IKeyValue<> method to get the NewKeyValue<> TSynKeyValueOptions
     property Options: TSynKeyValueOptions
       read fOptions;
-    /// low-level access to TypeInfo(TKey) - match fData.Keys.Info as array
+    /// low-level TypeInfo(TKey) access
     property KeyTypeInfo: PRttiInfo
       read fKeyTypeInfo;
-    /// low-level access to TypeInfo(TValue) - match fData.Values.Info as array
+    /// low-level TypeInfo(TValue) access
     property ValueTypeInfo: PRttiInfo
       read fValueTypeInfo;
   end;
@@ -395,39 +451,27 @@ type
     function GetItem(const key: TKey): TValue;
     procedure SetItem(const key: TKey; const value: TValue);
   public
-    /// add a key/value pair to be unique
-    // - raise an  ESynKeyValue if key was already set
-    // - use default Items[] property to add or replace a key/value pair
+    /// IKeyValue<> method to add an unique key/value pair
     procedure Add(const key: TKey; const value: TValue);
-    /// add a key/value pair if key is not existing
-    // - returns true if was added, false if key was already set
-    // - use default Items[] property to add or replace a key/value pair
+    /// IKeyValue<> method to add a key/value pair if key is not existing
     function TryAdd(const key: TKey; const value: TValue): boolean;
-    /// search a key and return the associated key pair
-    // - returns true if the key was found, false otherwise
+    /// IKeyValue<> method to search a key and return its associated value
     function TryGetValue(const key: TKey; var value: TValue): boolean;
-    /// search a key and return the associated key pair or its default value
-    function GetValueOrDefault(const key: TKey): TValue; overload;
-    /// search a key and return the associated key pair or a supplied default value
+    /// IKeyValue<> method to search a key or a supplied default
     function GetValueOrDefault(const key: TKey;
-      const defaultValue: TValue): TValue; overload;
-    /// remove a key/value pair
+      const defaultValue: TValue): TValue;
+    /// IKeyValue<> method to remove a key/value pair
     // - returns true if the entry was deleted, false if key was not found
     function Remove(const key: TKey): boolean;
-    /// search a key, get the associated value, then delete the key/value pair
+    /// IKeyValue<> method to search a key/value, then delete the pair
     function Extract(const key: TKey; var value: TValue): boolean;
-    /// search for a key/value pair from a key
-    // - returns true if the key was found, false otherwise
+    /// IKeyValue<> method to search for a key/value pair from a key
     function ContainsKey(const key: TKey): boolean;
-    /// search for a key/value pair from a value
-    // - returns true if the value was found, false otherwise
+    /// IKeyValue<> method to search for a key/value pair from a value
     function ContainsValue(const value: TValue): boolean;
-    /// delete one stored key/value pairs from its key
+    /// IKeyValue<> method to delete one stored key/value pairs from its key
     function Clear(const key: TKey): boolean; overload;
-    /// high-level access to the stored values from their associated keys
-    // - raise an  ESynKeyValue if the key is not available, unless
-    // kvoDefaultIfNotFound option was set
-    // - use TryGetValue/GetValueOrDefault to detect non available key
+    /// high-level IKeyValue<> method to get the stored values from their keys
     property Items[const key: TKey]: TValue
       read GetItem write SetItem; default;
   end;
@@ -622,6 +666,7 @@ constructor TSynListAbstract.Create(aOptions: TSynListOptions;
 var
   r: PRttiInfo;
 begin
+  fOptions := aOptions;
   r := aDynArrayTypeInfo;
   if r = nil then
     r := TypeInfoToDynArrayTypeInfo(aItemTypeInfo, {exact=}false);
@@ -630,7 +675,7 @@ begin
      raise ESynList.CreateUtf8(self,
        'Create: % should be a dynamic array of T', [r^.Name^]);
   fDynArray.InitSpecific(r, fValue, aSortAs, // aSortAs=ptNone = use RTTI
-    @fCount, aoCaseInsensitive in aOptions);
+    @fCount, aoCaseInsensitive in fOptions);
   if (fDynArray.Info.ArrayRtti = nil) or
      ((aDynArrayTypeInfo <> nil) and
       (fDynArray.Info.ArrayRtti.Info <> aItemTypeInfo)) then
@@ -657,6 +702,15 @@ begin
     result := fDynArray.Pop(dest);
 end;
 
+function TSynListAbstract.DoFind(const value;
+  customcompare: TDynArraySortCompare; rttisearch: boolean): PtrInt;
+begin
+  if rttisearch then
+    result := fDynArray.IndexOf(value, aoCaseInsensitive in fOptions)
+  else
+    result := fDynArray.Find(value, customcompare);
+end;
+
 function TSynListAbstract.GetCount: PtrInt;
 begin
   result := fCount;
@@ -680,6 +734,49 @@ end;
 procedure TSynListAbstract.Clear;
 begin
   fDynArray.Clear;
+end;
+
+procedure TSynListAbstract.Reverse;
+begin
+  fDynArray.Reverse;
+end;
+
+function TSynListAbstract.GetComparer: TDynArraySortCompare;
+begin
+  result := fDynArray.Compare;
+end;
+
+procedure TSynListAbstract.SetComparer(customcompare: TDynArraySortCompare);
+begin
+  fDynArray.Compare := customcompare;
+end;
+
+procedure TSynListAbstract.Sort(customcompare: TDynArraySortCompare);
+begin
+  fDynArray.Sort(customcompare);
+end;
+
+procedure TSynListAbstract.Sort(start, stop: integer;
+  customcompare: TDynArraySortCompare);
+begin
+  fDynArray.SortRange(start, stop, customcompare);
+end;
+
+procedure TSynListAbstract.Sort(var indexes: TIntegerDynArray;
+  customcompare: TDynArraySortCompare);
+begin
+  fDynArray.CreateOrderedIndex(indexes, customcompare);
+end;
+
+procedure TSynListAbstract.Sort(const customcompare: TOnDynArraySortCompare;
+  descending: boolean);
+begin
+  fDynArray.Sort(customcompare, descending);
+end;
+
+function TSynListAbstract.Sorted: boolean;
+begin
+  result := fDynArray.Sorted;
 end;
 
 function TSynListAbstract.NewPtr: pointer;
@@ -737,6 +834,17 @@ end;
 function TSynListSpecialized<T>.Pop(var dest: T; keepvalue: boolean): boolean;
 begin
   result := DoPop(dest, keepvalue);
+end;
+
+function TSynListSpecialized<T>.Find(const value: T;
+  customcompare: TDynArraySortCompare; rttisearch: boolean): PtrInt;
+begin
+  result := DoFind(value, customcompare, rttisearch);
+end;
+
+function TSynListSpecialized<T>.AddSorted(const value: T; wasadded: PBoolean): integer;
+begin
+  result := fDynArray.FastLocateOrAddSorted(value, wasadded);
 end;
 
 function TSynListSpecialized<T>.AsArray(Offset, Limit: integer): TArray<T>;
@@ -812,12 +920,6 @@ begin
       raise ESynKeyValue.CreateUtf8(self, 'GetItem: key not found', []);
 end;
 
-procedure TSynKeyValueAbstract.GetOneOrDefault(const key; var value);
-begin
-  if not fData.FindAndCopy(key, value) then
-    fData.Values.ItemClear(@value);
-end;
-
 function TSynKeyValueAbstract.GetCapacity: integer;
 begin
   result := fData.Capacity;
@@ -887,11 +989,6 @@ function TSynKeyValueSpecialized<TKey, TValue>.TryGetValue(const key: TKey;
   var value: TValue): boolean;
 begin
   result := fData.FindAndCopy(key, value);
-end;
-
-function TSynKeyValueSpecialized<TKey, TValue>.GetValueOrDefault(const key: TKey): TValue;
-begin
-  GetOneOrDefault(key, result);
 end;
 
 function TSynKeyValueSpecialized<TKey, TValue>.GetValueOrDefault(const key: TKey;
@@ -965,6 +1062,7 @@ class procedure Collections.NewOrdinal(aSize: integer; aOptions: TSynListOptions
 var
   obj: pointer;
 begin
+  // IList<T> will assume ordinal parameters are passed in a consistent way
   case aSize of
     1:
       obj := TSynListSpecialized<Byte>.Create(

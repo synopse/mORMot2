@@ -1450,7 +1450,7 @@ type
     // - returns the sorted index of the inserted Item and wasAdded^=true
     // - if the array is not sorted, returns -1 and wasAdded^=false
     // - is just a wrapper around FastLocateSorted+FastAddSorted
-    function FastLocateOrAddSorted(const Item; wasAdded: Pboolean = nil): integer;
+    function FastLocateOrAddSorted(const Item; wasAdded: PBoolean = nil): integer;
     /// delete a sorted element value at the proper place
     // - plain Delete(Index) would reset the fSorted flag to FALSE, so use
     // this method with a FastLocateSorted/FastAddSorted array
@@ -6308,6 +6308,7 @@ var
   n, len: PtrInt;
   s: PtrUInt;
   P: PAnsiChar;
+  wassorted: boolean;
 begin
   result := false;
   if fValue = nil then
@@ -6330,7 +6331,9 @@ begin
   end
   else
     FillCharFast(P^, s, 0);
+  wassorted := fSorted;
   SetCount(n);
+  fSorted := wassorted; // deletion won't change the order
   result := true;
 end;
 
@@ -6903,7 +6906,7 @@ begin
   fSorted := true; // Delete -> SetCount -> fSorted := false
 end;
 
-function TDynArray.FastLocateOrAddSorted(const Item; wasAdded: Pboolean): integer;
+function TDynArray.FastLocateOrAddSorted(const Item; wasAdded: PBoolean): integer;
 var
   toInsert: boolean;
 begin
