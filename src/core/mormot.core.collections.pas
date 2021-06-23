@@ -583,7 +583,7 @@ type
     // - raise ESynList if T type is too complex: use NewPlainList<T>() instead
     class function NewList<T>(aOptions: TSynListOptions = [];
       aDynArrayTypeInfo: PRttiInfo = nil): IList<T>;
-        static; {$ifdef FPC} inline; {$endif}
+        static; inline;
     /// generate a new IList<T> instance with exact TSynListSpecialized<T>
     // - to be called for complex types (e.g. managed records) when
     // NewList<T> fails and triggers ESynList
@@ -595,7 +595,7 @@ type
     // but you can force one e.g. to sort/compare/hash using a record first field
     class function NewPlainList<T>(aOptions: TSynListOptions = [];
       aDynArrayTypeInfo: PRttiInfo = nil; aSortAs: TRttiParserType = ptNone): IList<T>;
-        static; {$ifdef FPC} inline; {$endif}
+        static; inline;
     /// generate a new IKeyValue<TKey, TValue> instance
     // - use this factory method instead of TSynKeyValueSpecialized<>.Create
     // so that the types will be specifialized and compiled once in this unit
@@ -612,7 +612,7 @@ type
       aKeyDynArrayTypeInfo: PRttiInfo = nil; aValueDynArrayTypeInfo: PRttiInfo = nil;
       aTimeoutSeconds: cardinal = 0; aCompressAlgo: TAlgoCompress = nil;
       aHasher: THasher = nil): IKeyValue<TKey, TValue>;
-        static; {$ifdef FPC} inline; {$endif}
+        static; inline;
     /// generate a new IKeyValue<TKey, TValue> instance with exact
     // TSynKeyValueSpecialized<TKey, TValue>
     // - to be called for complex types (e.g. managed records) when
@@ -621,7 +621,7 @@ type
       aKeyDynArrayTypeInfo: PRttiInfo = nil; aValueDynArrayTypeInfo: PRttiInfo = nil;
       aTimeoutSeconds: cardinal = 0; aCompressAlgo: TAlgoCompress = nil;
       aHasher: THasher = nil): IKeyValue<TKey, TValue>;
-        static; {$ifdef FPC} inline; {$endif}
+        static; inline;
   end;
 
 
@@ -1187,6 +1187,11 @@ end;
 // some shared TSynListSpecialized<> which could be reused for IList<>
 // - ptNone below will use proper RTTI at runtime for process
 
+// circumvent "F2084 Internal Error" with the Delphi compiler and big ordinals
+{$ifdef FPC}
+  {$define SPECIALIZEHASH}
+{$endif FPC}
+
 class procedure Collections.NewOrdinal(aSize: integer; aOptions: TSynListOptions;
   aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result);
 var
@@ -1206,6 +1211,7 @@ begin
     8:
       obj := TSynListSpecialized<Int64>.Create(
         aOptions, aDynArrayTypeInfo, aItemTypeInfo, ptNone);
+    {$ifdef SPECIALIZEHASH}
     16:
       obj := TSynListSpecialized<THash128>.Create(
         aOptions, aDynArrayTypeInfo, aItemTypeInfo, ptNone);
@@ -1215,6 +1221,7 @@ begin
     64:
       obj := TSynListSpecialized<THash512>.Create(
         aOptions, aDynArrayTypeInfo, aItemTypeInfo, ptNone);
+    {$endif SPECIALIZEHASH}
   else
     obj := RaiseUseNewPlainList(aItemTypeInfo);
   end;
@@ -1279,8 +1286,10 @@ begin
           obj := TSynKeyValueSpecialized<Byte, Integer>.Create(aContext);
         8:
           obj := TSynKeyValueSpecialized<Byte, Int64>.Create(aContext);
+        {$ifdef SPECIALIZEHASH}
         16:
           obj := TSynKeyValueSpecialized<Byte, THash128>.Create(aContext);
+        {$endif SPECIALIZEHASH}
       else
 err:    obj := RaiseUseNewPlainKeyValue(aContext);
       end;
@@ -1294,8 +1303,10 @@ err:    obj := RaiseUseNewPlainKeyValue(aContext);
           obj := TSynKeyValueSpecialized<Word, Integer>.Create(aContext);
         8:
           obj := TSynKeyValueSpecialized<Word, Int64>.Create(aContext);
+        {$ifdef SPECIALIZEHASH}
         16:
           obj := TSynKeyValueSpecialized<Word, THash128>.Create(aContext);
+        {$endif SPECIALIZEHASH}
       else
         goto err;
       end;
@@ -1309,8 +1320,10 @@ err:    obj := RaiseUseNewPlainKeyValue(aContext);
           obj := TSynKeyValueSpecialized<Integer, Integer>.Create(aContext);
         8:
           obj := TSynKeyValueSpecialized<Integer, Int64>.Create(aContext);
+        {$ifdef SPECIALIZEHASH}
         16:
           obj := TSynKeyValueSpecialized<Integer, THash128>.Create(aContext);
+        {$endif SPECIALIZEHASH}
       else
         goto err;
       end;
@@ -1324,11 +1337,14 @@ err:    obj := RaiseUseNewPlainKeyValue(aContext);
           obj := TSynKeyValueSpecialized<Int64, Integer>.Create(aContext);
         8:
           obj := TSynKeyValueSpecialized<Int64, Int64>.Create(aContext);
+        {$ifdef SPECIALIZEHASH}
         16:
           obj := TSynKeyValueSpecialized<Int64, THash128>.Create(aContext);
+        {$endif SPECIALIZEHASH}
       else
         goto err;
       end;
+    {$ifdef SPECIALIZEHASH}
     16:
       case aSizeValue of
         1:
@@ -1344,6 +1360,7 @@ err:    obj := RaiseUseNewPlainKeyValue(aContext);
       else
         goto err;
       end;
+    {$endif SPECIALIZEHASH}
   else
     goto err;
   end;
@@ -1358,15 +1375,17 @@ var
 begin
   case aSizeKey of
     1:
-      obj := TSynKeyValueSpecialized<Byte, IInterface>.Create(aContext);
+      obj := TSynKeyValueSpecialized<Byte, RawByteString>.Create(aContext);
     2:
-      obj := TSynKeyValueSpecialized<Word, IInterface>.Create(aContext);
+      obj := TSynKeyValueSpecialized<Word, RawByteString>.Create(aContext);
     4:
-      obj := TSynKeyValueSpecialized<Integer, IInterface>.Create(aContext);
+      obj := TSynKeyValueSpecialized<Integer, RawByteString>.Create(aContext);
     8:
-      obj := TSynKeyValueSpecialized<Int64, IInterface>.Create(aContext);
+      obj := TSynKeyValueSpecialized<Int64, RawByteString>.Create(aContext);
+    {$ifdef SPECIALIZEHASH}
     16:
-      obj := TSynKeyValueSpecialized<THash128, IInterface>.Create(aContext);
+      obj := TSynKeyValueSpecialized<THash128, RawByteString>.Create(aContext);
+    {$endif SPECIALIZEHASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
@@ -1387,8 +1406,10 @@ begin
       obj := TSynKeyValueSpecialized<Integer, WideString>.Create(aContext);
     8:
       obj := TSynKeyValueSpecialized<Int64, WideString>.Create(aContext);
+    {$ifdef SPECIALIZEHASH}
     16:
       obj := TSynKeyValueSpecialized<THash128, WideString>.Create(aContext);
+    {$endif SPECIALIZEHASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
@@ -1409,8 +1430,10 @@ begin
       obj := TSynKeyValueSpecialized<Integer, UnicodeString>.Create(aContext);
     8:
       obj := TSynKeyValueSpecialized<Int64, UnicodeString>.Create(aContext);
+    {$ifdef SPECIALIZEHASH}
     16:
       obj := TSynKeyValueSpecialized<THash128, UnicodeString>.Create(aContext);
+    {$endif SPECIALIZEHASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
@@ -1431,8 +1454,10 @@ begin
       obj := TSynKeyValueSpecialized<Integer, IInterface>.Create(aContext);
     8:
       obj := TSynKeyValueSpecialized<Int64, IInterface>.Create(aContext);
+    {$ifdef SPECIALIZEHASH}
     16:
       obj := TSynKeyValueSpecialized<THash128, IInterface>.Create(aContext);
+    {$endif SPECIALIZEHASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
@@ -1453,8 +1478,10 @@ begin
       obj := TSynKeyValueSpecialized<Integer, Variant>.Create(aContext);
     8:
       obj := TSynKeyValueSpecialized<Int64, Variant>.Create(aContext);
+    {$ifdef SPECIALIZEHASH}
     16:
       obj := TSynKeyValueSpecialized<THash128, Variant>.Create(aContext);
+    {$endif SPECIALIZEHASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
@@ -1468,15 +1495,21 @@ var
 begin
   case aSizeValue of
     1:
-      obj := TSynKeyValueSpecialized<IInterface, Byte>.Create(aContext);
+      obj := TSynKeyValueSpecialized<RawByteString, Byte>.Create(aContext);
     2:
-      obj := TSynKeyValueSpecialized<IInterface, Word>.Create(aContext);
+      obj := TSynKeyValueSpecialized<RawByteString, Word>.Create(aContext);
     4:
-      obj := TSynKeyValueSpecialized<IInterface, Integer>.Create(aContext);
+      obj := TSynKeyValueSpecialized<RawByteString, Integer>.Create(aContext);
     8:
-      obj := TSynKeyValueSpecialized<IInterface, Int64>.Create(aContext);
+      obj := TSynKeyValueSpecialized<RawByteString, Int64>.Create(aContext);
+    {$ifdef SPECIALIZEHASH}
     16:
-      obj := TSynKeyValueSpecialized<IInterface, THash128>.Create(aContext);
+      obj := TSynKeyValueSpecialized<RawByteString, THash128>.Create(aContext);
+    32:
+      obj := TSynKeyValueSpecialized<RawByteString, THash256>.Create(aContext);
+    64:
+      obj := TSynKeyValueSpecialized<RawByteString, THash512>.Create(aContext);
+    {$endif SPECIALIZEHASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
@@ -1490,15 +1523,15 @@ var
 begin
   case aValue of
     tkLString:
-      obj := TSynKeyValueSpecialized<IInterface, RawByteString>.Create(aContext);
+      obj := TSynKeyValueSpecialized<RawByteString, RawByteString>.Create(aContext);
     tkWString:
-      obj := TSynKeyValueSpecialized<IInterface, WideString>.Create(aContext);
+      obj := TSynKeyValueSpecialized<RawByteString, WideString>.Create(aContext);
     tkUString:
-      obj := TSynKeyValueSpecialized<IInterface, UnicodeString>.Create(aContext);
+      obj := TSynKeyValueSpecialized<RawByteString, UnicodeString>.Create(aContext);
     tkInterface:
-      obj := TSynKeyValueSpecialized<IInterface, IInterface>.Create(aContext);
+      obj := TSynKeyValueSpecialized<RawByteString, IInterface>.Create(aContext);
     tkVariant:
-      obj := TSynKeyValueSpecialized<IInterface, Variant>.Create(aContext);
+      obj := TSynKeyValueSpecialized<RawByteString, Variant>.Create(aContext);
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
@@ -1519,8 +1552,10 @@ begin
       obj := TSynKeyValueSpecialized<WideString, Integer>.Create(aContext);
     8:
       obj := TSynKeyValueSpecialized<WideString, Int64>.Create(aContext);
+    {$ifdef SPECIALIZEHASH}
     16:
       obj := TSynKeyValueSpecialized<WideString, THash128>.Create(aContext);
+    {$endif SPECIALIZEHASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
@@ -1563,8 +1598,10 @@ begin
       obj := TSynKeyValueSpecialized<UnicodeString, Integer>.Create(aContext);
     8:
       obj := TSynKeyValueSpecialized<UnicodeString, Int64>.Create(aContext);
+    {$ifdef SPECIALIZEHASH}
     16:
       obj := TSynKeyValueSpecialized<UnicodeString, THash128>.Create(aContext);
+    {$endif SPECIALIZEHASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
@@ -1607,8 +1644,10 @@ begin
       obj := TSynKeyValueSpecialized<IInterface, Integer>.Create(aContext);
     8:
       obj := TSynKeyValueSpecialized<IInterface, Int64>.Create(aContext);
+    {$ifdef SPECIALIZEHASH}
     16:
       obj := TSynKeyValueSpecialized<IInterface, THash128>.Create(aContext);
+    {$endif SPECIALIZEHASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
@@ -1651,8 +1690,10 @@ begin
       obj := TSynKeyValueSpecialized<Variant, Integer>.Create(aContext);
     8:
       obj := TSynKeyValueSpecialized<Variant, Int64>.Create(aContext);
+    {$ifdef SPECIALIZEHASH}
     16:
       obj := TSynKeyValueSpecialized<Variant, THash128>.Create(aContext);
+    {$endif SPECIALIZEHASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
