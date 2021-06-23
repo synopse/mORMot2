@@ -67,10 +67,13 @@ function IdemPChars(const s: RawUtf8; const up: array of PUtf8Char): boolean;
 var
   i: PtrInt;
 begin
-  result := true;
-  for i := 0 to high(up) do
-    if IdemPChar(pointer(s), up[i]) then
-      exit;
+  if s <> '' then
+  begin
+    result := true;
+    for i := 0 to high(up) do
+      if IdemPChar(pointer(s), up[i]) then
+        exit;
+  end;
   result := false;
 end;
 
