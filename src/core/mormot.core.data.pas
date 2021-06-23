@@ -1170,7 +1170,7 @@ type
     fInfo: TRttiCustom;
     fCountP: PInteger;
     fCompare: TDynArraySortCompare;
-    fSorted: boolean;
+    fSorted, fNoFinalize: boolean;
     function GetCount: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetCount(aCount: PtrInt);
@@ -1221,8 +1221,8 @@ type
     // ensure that the aKind parameter matches at least the first field of
     // the dynamic array item definition
     // - aCaseInsensitive will be used for ptStringTypes
-    procedure InitSpecific(aTypeInfo: PRttiInfo; var aValue; aKind: TRttiParserType;
-      aCountPointer: PInteger = nil; aCaseInsensitive: boolean = false);
+    function InitSpecific(aTypeInfo: PRttiInfo; var aValue; aKind: TRttiParserType;
+      aCountPointer: PInteger = nil; aCaseInsensitive: boolean = false): TRttiParserType;
     /// initialize the wrapper with a one-dimension dynamic array
     // - low-level method, as called by Init() and InitSpecific()
     // - can be called directly for a very fast TDynArray initialization
@@ -1731,6 +1731,10 @@ type
     // search in an unsorted array, and miss its purpose
     property Sorted: boolean
       read fSorted write fSorted;
+    /// can be set to TRUE to avoid any item finalization
+    // -  e.g. with T*ObjArray - handle with care to avoid memory leaks
+    property NoFinalize: boolean
+      read fNoFinalize write fNoFinalize;
 
     /// low-level direct access to the storage variable
     property Value: PPointer
@@ -1822,7 +1826,8 @@ type
       aHashTableIndex: PInteger = nil): integer;
     /// search an hashed element value for adding, updating the internal hash table
     // - trigger hashing if Count reaches CountTrigger
-    function FindBeforeAdd(Item: pointer; out wasAdded: boolean; aHashCode: cardinal): integer;
+    function FindBeforeAdd(Item: pointer; out wasAdded: boolean;
+      aHashCode: cardinal): integer;
     /// search and delete an element value, updating the internal hash table
     function FindBeforeDelete(Item: pointer): integer;
     /// reset the hash table - no rehash yet
@@ -6067,6 +6072,7 @@ begin
     fCountP^ := 0;
   fCompare := nil;
   fSorted := false;
+  fNoFinalize := false;
 end;
 
 procedure TDynArray.InitRtti(aInfo: TRttiCustom; var aValue);
@@ -6076,6 +6082,7 @@ begin
   fCountP := nil;
   fCompare := nil;
   fSorted := false;
+  fNoFinalize := false;
 end;
 
 procedure TDynArray.Init(aTypeInfo: PRttiInfo; var aValue;
@@ -6087,26 +6094,30 @@ begin
   InitRtti(Rtti.RegisterType(aTypeInfo), aValue, aCountPointer);
 end;
 
-procedure TDynArray.InitSpecific(aTypeInfo: PRttiInfo; var aValue;
-  aKind: TRttiParserType; aCountPointer: PInteger; aCaseInsensitive: boolean);
+function TDynArray.InitSpecific(aTypeInfo: PRttiInfo; var aValue;
+  aKind: TRttiParserType; aCountPointer: PInteger; aCaseInsensitive: boolean): TRttiParserType;
 begin
   if aTypeInfo^.Kind <> rkDynArray then
     raise EDynArray.CreateUtf8('TDynArray.InitSpecific: % is %, expected rkDynArray',
       [aTypeInfo.RawName, ToText(aTypeInfo.Kind)^]);
   InitRtti(Rtti.RegisterType(aTypeInfo), aValue, aCountPointer);
-  if aKind = ptNone then
-    if Assigned(fInfo.ArrayRtti) then
-      aKind := fInfo.ArrayRtti.Parser
-    else
-      aKind := fInfo.ArrayFirstField;
-  fCompare := PT_SORT[aCaseInsensitive, aKind];
+  case aKind of
+    ptNone:
+      if Assigned(fInfo.ArrayRtti) then
+        result := fInfo.ArrayRtti.Parser
+      else
+        result := fInfo.ArrayFirstField;
+  else
+    result := aKind;
+  end;
+  fCompare := PT_SORT[aCaseInsensitive, result];
   if not Assigned(fCompare) then
-    if aKind = ptVariant then
+    if result = ptVariant then
       raise EDynArray.CreateUtf8('TDynArray.InitSpecific(%): missing mormot.core.json',
-        [Info.Name, ToText(aKind)^])
+        [Info.Name, ToText(result)^])
     else
       raise EDynArray.CreateUtf8('TDynArray.InitSpecific(%) unsupported %',
-        [Info.Name, ToText(aKind)^]);
+        [Info.Name, ToText(result)^]);
 end;
 
 function TDynArray.ItemSize: PtrUInt;
@@ -6160,7 +6171,8 @@ procedure TDynArray.ItemClear(Item: pointer);
 begin
   if Item = nil then
     exit;
-  if fInfo.ArrayRtti <> nil then
+  if (fInfo.ArrayRtti <> nil) and
+     not fNoFinalize then
     fInfo.ArrayRtti.ValueFinalize(Item); // also for T*ObjArray
   FillCharFast(Item^, fInfo.Cache.ItemSize, 0); // always
 end;
@@ -6321,7 +6333,8 @@ begin
   dec(n);
   s := fInfo.Cache.ItemSize;
   P := PAnsiChar(fValue^) + PtrUInt(aIndex) * s;
-  if fInfo.ArrayRtti <> nil then
+  if (fInfo.ArrayRtti <> nil) and
+     not fNoFinalize then
     fInfo.ArrayRtti.ValueFinalize(P); // also for T*ObjArray
   if n > aIndex then
   begin
@@ -6386,7 +6399,8 @@ begin
   if (p = nil) or
      (Dest = nil) then
     exit;
-  if fInfo.ArrayRtti <> nil then
+  if (fInfo.ArrayRtti <> nil) and
+     not fNoFinalize then
     fInfo.ArrayRtti.ValueFinalize(Dest); // also handle T*ObjArray
   MoveFast(p^, Dest^, fInfo.Cache.ItemSize);
   FillCharFast(p^, fInfo.Cache.ItemSize, 0);
@@ -7544,7 +7558,8 @@ begin
       if (p^.refCnt >= 0) and
          RefCntDecFree(p^.refCnt) then
       begin
-        if OldLength <> 0 then
+        if (OldLength <> 0) and
+           not fNoFinalize then
           if rcfArrayItemManaged in fInfo.Flags then
             FastFinalizeArray(fValue^, fInfo.Cache.ItemInfo, OldLength)
           else if rcfObjArray in fInfo.Flags then
@@ -7576,7 +7591,8 @@ begin
        RefCntDecFree(p^.refCnt) then
     begin
       // we own the dynamic array instance -> direct reallocation
-      if NewLength < OldLength then
+      if (NewLength < OldLength) and
+         not fNoFinalize then
         // reduce array in-place
         if rcfArrayItemManaged in fInfo.Flags then // in trailing items
           FastFinalizeArray(pointer(PAnsiChar(p) + NeededSize),
@@ -8543,7 +8559,7 @@ begin
 //' new=', siz, ' oldcol=',CountCollisionsCurrent);
   if (not forced) and
      (siz = HashTableSize) then
-    exit; // ReHash() was called
+    exit; // ReHash() was called with forced=false -> delay actual hashing
   Clear;
   HashTableSize := siz;
   SetLength(HashTable, siz); // fill with 0 (void slot)
