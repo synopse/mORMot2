@@ -1569,10 +1569,18 @@ type
     ///  select a sub-section (slice) of a dynamic array content
     procedure Slice(var Dest; aCount: cardinal; aFirstIndex: cardinal = 0);
     /// assign the current dynamic array content into a variable
-    // - with no memory allocation, just finalize the Dest slot, then make
-    // Inc(RefCnt) and force the internal length/Capacity to equal Count
-    // with no memory (re)allocation
-    procedure SliceAsDynArray(Dest: PPointer);
+    // - by default (Offset=Limit=0), the whole array is set with no memory
+    // (re)allocation, just finalize the Dest slot, then make Inc(RefCnt) and
+    // force the internal length/Capacity to equal Count
+    // - Offset/Limit could be used to create a new dynamic array with some part
+    // of the existing content (Offset<0 meaning from the end):
+    // ! SliceAsDynArray(DA);         // items 0..Count-1 (assign with refcount)
+    // ! SliceAsDynArray(DA, 10);     // items 10..Count-1
+    // ! SliceAsDynArray(DA, 0, 10);  // first 0..9 items
+    // ! SliceAsDynArray(DA, 10, 20); // items 10..19 - truncated if Count < 20
+    // ! SliceAsDynArray(DA, -10);    // last Count-10..Count-1 items
+    procedure SliceAsDynArray(Dest: PPointer; Offset: integer = 0;
+      Limit: integer = 0);
     /// add items from a given dynamic array variable
     // - the supplied source DynArray MUST be of the same exact type as the
     // current used for this TDynArray - warning: pass here a reference to
@@ -7704,8 +7712,12 @@ begin
   n := GetCount;
   if aFirstIndex >= n then
     aCount := 0
-  else if aCount >= n - aFirstIndex then
-    aCount := n - aFirstIndex;
+  else
+  begin
+    dec(n, aFirstIndex);
+    if aCount >= n  then
+      aCount := n;
+  end;
   dst.InitRtti(fInfo, Dest);
   dst.SetCapacity(aCount);
   CopySeveral(pointer(Dest),
@@ -7713,22 +7725,41 @@ begin
     aCount, fInfo.Cache.ItemInfo, fInfo.Cache.ItemSize);
 end;
 
-procedure TDynArray.SliceAsDynArray(Dest: PPointer);
+procedure TDynArray.SliceAsDynArray(Dest: PPointer; Offset, Limit: integer);
 var
   p: PDynArrayRec;
-  n: TStrLen;
+  n: integer;
 begin
   if dest^ <> nil then
     FastDynArrayClear(dest, fInfo.Cache.ItemInfo); // reset Dest variable slot
   n := GetCount;
-  if n = 0 then
+  if Offset >= n then // also handles n = 0
     exit;
-  p := fValue^;
-  dec(p);
-  inc(p^.refCnt); // reuse existing dynamic array instance
-  p^.Length := n; // no memory realloc/copy, just force Capacity=Length=Count
-  inc(p);
-  dest^ := p;     // assign to Dest variable
+  if (Offset = 0) and
+     ((Limit = 0) or
+      (Limit >= n)) then
+  begin
+    // we can return the current dynamic array with proper COW
+    p := fValue^;
+    dec(p);
+    inc(p^.refCnt); // reuse existing dynamic array instance
+    p^.Length := n; // no memory realloc/copy, just force Capacity=Length=Count
+    inc(p);
+    dest^ := p;     // assign to Dest variable
+  end
+  else
+  begin
+    // ! SliceAsDynArray(DA, 0, 10);  // first 0..9 items
+    // ! SliceAsDynArray(DA, 10, 20); // items 10..19 - truncated if Count < 20
+    if Limit = 0 then
+      // ! SliceAsDynArray(DA);       // all items
+      // ! SliceAsDynArray(DA, 10);   // all items excluding the first 0..9
+      Limit := n;
+    if Offset < 0 then
+      // ! SliceAsDynArray(DA, -10);  // last Count-10..Count-1 items
+      inc(Offset, n);
+    Slice(Dest^, Limit, Offset);
+  end;
 end;
 
 function TDynArray.AddArray(const DynArrayVar; aStartIndex, aCount: integer): integer;
