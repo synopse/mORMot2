@@ -1577,7 +1577,7 @@ type
     // ! SliceAsDynArray(DA);         // items 0..Count-1 (assign with refcount)
     // ! SliceAsDynArray(DA, 10);     // items 10..Count-1
     // ! SliceAsDynArray(DA, 0, 10);  // first 0..9 items
-    // ! SliceAsDynArray(DA, 10, 20); // items 10..19 - truncated if Count < 20
+    // ! SliceAsDynArray(DA, 10, 20); // items 10..29 - truncated if Count < 20
     // ! SliceAsDynArray(DA, -10);    // last Count-10..Count-1 items
     procedure SliceAsDynArray(Dest: PPointer; Offset: integer = 0;
       Limit: integer = 0);
@@ -7735,6 +7735,12 @@ begin
   n := GetCount;
   if Offset >= n then // also handles n = 0
     exit;
+  if Offset < 0 then begin
+    // ! SliceAsDynArray(DA, -10);  // last Count-10..Count-1 items
+    inc(Offset, n);
+    if Offset < 0 then
+      Offset := 0;
+  end;
   if (Offset = 0) and
      ((Limit = 0) or
       (Limit >= n)) then
@@ -7750,14 +7756,11 @@ begin
   else
   begin
     // ! SliceAsDynArray(DA, 0, 10);  // first 0..9 items
-    // ! SliceAsDynArray(DA, 10, 20); // items 10..19 - truncated if Count < 20
+    // ! SliceAsDynArray(DA, 10, 20); // items 10..29 - truncated if Count < 30
     if Limit = 0 then
       // ! SliceAsDynArray(DA);       // all items
       // ! SliceAsDynArray(DA, 10);   // all items excluding the first 0..9
       Limit := n;
-    if Offset < 0 then
-      // ! SliceAsDynArray(DA, -10);  // last Count-10..Count-1 items
-      inc(Offset, n);
     Slice(Dest^, Limit, Offset);
   end;
 end;
