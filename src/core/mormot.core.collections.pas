@@ -109,9 +109,16 @@ type
     // - could be used to quickly lookup all items of the array, using Count
     // - can be nil if there is no item stored yet
     function First: pointer;
-    /// returns a dynamic array containing all data of this collection
+    /// returns a dynamic array containing data of this collection
     // - is a convenient way to consume such a list as regular SOA parameters
-    function AsArray: TArray<T>;
+    // - Offset/Limit could be used to create a new dynamic array with some part
+    // of the existing content (Offset<0 meaning from the end):
+    // ! Array := List.AsArray;         // whole data assigned with refcount
+    // ! Array := List.AsArray(10);     // items 10..Count-1
+    // ! Array := List.AsArray(0, 10);  // first 0..9 items
+    // ! Array := List.AsArray(10, 20); // items 10..19 - truncated if Count<20
+    // ! Array := List.AsArray(-10);    // last Count-10..Count-1 items
+    function AsArray(Offset: integer = 0; Limit: integer = 0): TArray<T>;
     /// returns the number of items actually stored
     // - you can also set the Count value then fill it with Items[]
     property Count: PtrInt
@@ -204,10 +211,9 @@ type
     // - returns true if the item was successfully copied into Dest
     // - use Pop() if you also want to remove the item
     function Peek(var dest: T): boolean;
-    /// returns a dynamic array containing all data of this collection
+    /// returns a dynamic array containing data of this collection
     // - is a convenient way to consume such a list as regular SOA parameters
-    // - returns the current dynamic array stored in fValue with length = count
-    function AsArray: TArray<T>;
+    function AsArray(Offset: integer = 0; Limit: integer = 0): TArray<T>;
     /// high-level access to the stored values from their associated indexes
     // - returns nil or do nothing if the supplied index is out of range
     property Items[ndx: PtrInt]: T
@@ -704,9 +710,9 @@ begin
   result := fDynArray.Peek(dest);
 end;
 
-function TSynListSpecialized<T>.AsArray: TArray<T>;
+function TSynListSpecialized<T>.AsArray(Offset, Limit: integer): TArray<T>;
 begin // assign existing dynamic array instance to TArray<T> result
-  fDynArray.SliceAsDynArray(@result);
+  fDynArray.SliceAsDynArray(@result, Offset, Limit);
 end;
 
 
