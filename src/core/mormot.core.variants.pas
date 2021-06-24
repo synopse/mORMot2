@@ -605,6 +605,7 @@ type
   TOnReducePerValue = function(const Value: variant): boolean of object;
 
   {$ifdef HASITERATORS}
+  /// internal state engine used by TDocVariant enumerators records
   TDocVariantEnumeratorState = record
   private
     Curr, After: PVariant;
@@ -618,32 +619,35 @@ type
   end;
 
   /// local iterated name/value pair as returned by TDocVariantData.GetEnumerator
-  // - we use pointers for best performance - but warning: Name may be nil
-  TDocVariantEnumerated = record
-    /// equals nil if the TDocVariantData is an array, or points to current Name[]
+  // and TDocVariantData.Fields
+  // - we use pointers for best performance - but warning: Name may be nil for
+  // TDocVariantData.GetEnumerator over an array
+  TDocVariantFields = record
+    /// points to current Name[] - nil if the TDocVariantData is an array
     Name: PRawUtf8;
-    /// points to the current Value[] (never nil)
+    /// points to the current Value[] - never nil
     Value: PVariant;
   end;
 
   /// low-level Enumerator as returned by TDocVariantData.GetEnumerator
+  // (simple "for .. in dv do") and TDocVariantData.Fields
   TDocVariantEnumerator = record
   private
     State: TDocVariantEnumeratorState;
     Name: PRawUtf8;
-    function GetCurrent: TDocVariantEnumerated;
+    function GetCurrent: TDocVariantFields;
       {$ifdef HASINLINE}inline;{$endif}
   public
     function MoveNext: Boolean;
       {$ifdef HASINLINE}inline;{$endif}
     function GetEnumerator: TDocVariantEnumerator;
       {$ifdef HASINLINE}inline;{$endif}
-    property Current: TDocVariantEnumerated
+    /// returns the current Name/Value or Value as pointers in TDocVariantFields
+    property Current: TDocVariantFields
       read GetCurrent;
   end;
 
-  /// low-level Enumerator as returned by TDocVariantData.ArrayEnumerator
-  // - we use a record for highest possible performance
+  /// low-level Enumerator as returned by TDocVariantData.Items
   TDocVariantArrayEnumerator = record
   private
     State: TDocVariantEnumeratorState;
@@ -652,11 +656,12 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     function GetEnumerator: TDocVariantArrayEnumerator;
       {$ifdef HASINLINE}inline;{$endif}
+    /// returns the current Value as pointer
     property Current: PVariant
       read State.Curr;
   end;
 
-  /// low-level Enumerator as returned by TDocVariantData.DocVariantEnumerator
+  /// low-level Enumerator as returned by TDocVariantData.Objects
   TDocVariantDocVariantEnumerator = record
   private
     State: TDocVariantEnumeratorState;
@@ -666,6 +671,7 @@ type
     function MoveNext: Boolean;
     function GetEnumerator: TDocVariantDocVariantEnumerator;
       {$ifdef HASINLINE}inline;{$endif}
+    /// returns the current Value as pointer to the TDocVariantData
     property Current: PDocVariantData
       read GetCurrent;
   end;
@@ -947,7 +953,7 @@ type
     /// an enumerator able to compile "for .. in ... do" statements
     // - returns pointers over all Names[] and Values[]
     // - warning: if the document is an array, returned Name is nil:
-    // ! var e: TDocVariantEnumerated;
+    // ! var e: TDocVariantFields;
     // ! ...
     // !    dv.InitArray([1, 3, 3, 4]);
     // !    for e in dv do
@@ -956,16 +962,16 @@ type
     // ! // output  1  2  3  4
     function GetEnumerator: TDocVariantEnumerator;
     /// an enumerator able to compile "for .. in ... do" statements for objects
-    // - returns a pointer record with Name/Value fields over all fields of
+    // - returns a pointer record with Name/Value pairs over all fields of
     // an object array
     // - don't iterate if the document is an array - so Name is never nil:
-    // ! var e: TDocVariantEnumerated;
+    // ! var e: TDocVariantFields;
     // ! ...
     // !   dv.InitJson('{a:1,b:2,c:3}');
-    // !   for e in dv.ObjectEnumerator do
+    // !   for e in dv.Fields do
     // !     writeln(e.Name^, ':', e.Value^);
     // ! // output  a:1  b:2  c:3
-    function ObjectEnumerator: TDocVariantEnumerator;
+    function Fields: TDocVariantEnumerator;
     /// an enumerator able to compile "for .. in ... do" statements for arrays
     // - returns a PVariant over all Values[] of a document array
     // - don't iterate if the document is an object
@@ -973,10 +979,10 @@ type
     // ! var v: PVariant;
     // ! ...
     // !    dv.InitArray([1, 3, 3, 4]);
-    // !    for v in dv.ArrayEnumerator do
+    // !    for v in dv.Items do
     // !      writeln(v^);
     // ! // output  1  2  3  4
-    function ArrayEnumerator: TDocVariantArrayEnumerator;
+    function Items: TDocVariantArrayEnumerator;
     /// an enumerator able to compile "for .. in ... do" statements for arrays
     // of objects
     // - returns all Values[] of a document array which are a TDocVariantData
@@ -984,10 +990,10 @@ type
     // ! var d: PDocVariantData;
     // ! ...
     // !    dv.InitJson('[{a:1,b:1},1,"no object",{a:2,b:2}]');
-    // !    for d in dv.DocVariantEnumerator do
+    // !    for d in dv.Objects do
     // !      writeln(d^.ToJson);
     // ! // output {"a":1,"b":1} and {"a":2,"b":2} only
-    function DocVariantEnumerator: TDocVariantDocVariantEnumerator;
+    function Objects: TDocVariantDocVariantEnumerator;
     {$endif HASITERATORS}
 
     /// save a document as UTF-8 encoded JSON
@@ -3944,7 +3950,7 @@ end;
 
 { TDocVariantEnumerator }
 
-function TDocVariantEnumerator.GetCurrent: TDocVariantEnumerated;
+function TDocVariantEnumerator.GetCurrent: TDocVariantFields;
 begin
   result.Name := Name;
   result.Value := State.Curr;
@@ -3995,6 +4001,8 @@ end;
 function TDocVariantDocVariantEnumerator.GetCurrent: PDocVariantData;
 begin
   result := pointer(State.Curr);
+  while result^.VType = varByRef or varVariant do
+    result := PVarData(result)^.VPointer;
 end;
 
 function TDocVariantDocVariantEnumerator.GetEnumerator: TDocVariantDocVariantEnumerator;
@@ -4784,7 +4792,7 @@ begin
     result.Name := nil;
 end;
 
-function TDocVariantData.ArrayEnumerator: TDocVariantArrayEnumerator;
+function TDocVariantData.Items: TDocVariantArrayEnumerator;
 begin
   if dvoIsObject in VOptions then
     result{%H-}.State.Void
@@ -4792,7 +4800,7 @@ begin
     result.State.Init(pointer(Values), VCount);
 end;
 
-function TDocVariantData.DocVariantEnumerator: TDocVariantDocVariantEnumerator;
+function TDocVariantData.Objects: TDocVariantDocVariantEnumerator;
 begin
   if dvoIsObject in VOptions then
     result{%H-}.State.Void
@@ -4800,7 +4808,7 @@ begin
     result.State.Init(pointer(Values), VCount);
 end;
 
-function TDocVariantData.ObjectEnumerator: TDocVariantEnumerator;
+function TDocVariantData.Fields: TDocVariantEnumerator;
 begin
   if dvoIsArray in VOptions then
     result{%H-}.State.Void
@@ -6178,8 +6186,8 @@ end;
 
 function TDocVariantData.ToNonExpandedJson: RawUtf8;
 var
-  fields: TRawUtf8DynArray;
-  fieldsCount, r, f: PtrInt;
+  field: TRawUtf8DynArray;
+  fieldCount, r, f: PtrInt;
   W: TTextWriter;
   row: PDocVariantData;
   temp: TTextWriterStackBuffer;
@@ -6194,22 +6202,22 @@ begin
     result := '[]';
     exit;
   end;
-  fieldsCount := 0;
+  fieldCount := 0;
   with _Safe(VValue[0])^ do
     if dvoIsObject in VOptions then
     begin
-      fields := VName;
-      fieldsCount := VCount;
+      field := VName;
+      fieldCount := VCount;
     end;
-  if fieldsCount = 0 then
+  if fieldCount = 0 then
     raise EDocVariant.Create('ToNonExpandedJson: Value[0] is not an object');
   W := DefaultTextWriterSerializer.CreateOwnedStream(temp) as TTextWriter;
   try
-    W.Add('{"fieldCount":%,"rowCount":%,"values":[', [fieldsCount, VCount]);
-    for f := 0 to fieldsCount - 1 do
+    W.Add('{"fieldCount":%,"rowCount":%,"values":[', [fieldCount, VCount]);
+    for f := 0 to fieldCount - 1 do
     begin
       W.Add('"');
-      W.AddJsonEscape(pointer(fields[f]));
+      W.AddJsonEscape(pointer(field[f]));
       W.Add('"', ',');
     end;
     for r := 0 to VCount - 1 do
@@ -6217,15 +6225,15 @@ begin
       row := _Safe(VValue[r]);
       if (r > 0) and
          (not (dvoIsObject in row^.VOptions) or
-          (row^.VCount <> fieldsCount)) then
+          (row^.VCount <> fieldCount)) then
         raise EDocVariant.CreateUtf8(
           'ToNonExpandedJson: Value[%] not expected object', [r]);
-      for f := 0 to fieldsCount - 1 do
+      for f := 0 to fieldCount - 1 do
         if (r > 0) and
-           not IdemPropNameU(row^.VName[f], fields[f]) then
+           not IdemPropNameU(row^.VName[f], field[f]) then
           raise EDocVariant.CreateUtf8(
             'ToNonExpandedJson: Value[%] field=% expected=%',
-            [r, row^.VName[f], fields[f]])
+            [r, row^.VName[f], field[f]])
         else
         begin
           W.AddVariant(row^.VValue[f], twJsonEscape);
