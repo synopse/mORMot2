@@ -630,8 +630,8 @@ type
   end;
 
   /// low-level Enumerator as returned by TDocVariantData.GetEnumerator
-  // (simple "for .. in dv do") and TDocVariantData.Fields
-  TDocVariantEnumerator = record
+  // (default "for .. in dv do") and TDocVariantData.Fields
+  TDocVariantFieldsEnumerator = record
   private
     State: TDocVariantEnumeratorState;
     Name: PRawUtf8;
@@ -640,7 +640,7 @@ type
   public
     function MoveNext: Boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    function GetEnumerator: TDocVariantEnumerator;
+    function GetEnumerator: TDocVariantFieldsEnumerator;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns the current Name/Value or Value as pointers in TDocVariantFields
     property Current: TDocVariantFields
@@ -648,13 +648,13 @@ type
   end;
 
   /// low-level Enumerator as returned by TDocVariantData.Items
-  TDocVariantArrayEnumerator = record
+  TDocVariantItemsEnumerator = record
   private
     State: TDocVariantEnumeratorState;
   public
     function MoveNext: Boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    function GetEnumerator: TDocVariantArrayEnumerator;
+    function GetEnumerator: TDocVariantItemsEnumerator;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns the current Value as pointer
     property Current: PVariant
@@ -662,14 +662,14 @@ type
   end;
 
   /// low-level Enumerator as returned by TDocVariantData.Objects
-  TDocVariantDocVariantEnumerator = record
+  TDocVariantObjectsEnumerator = record
   private
     State: TDocVariantEnumeratorState;
     function GetCurrent: PDocVariantData;
       {$ifdef HASINLINE}inline;{$endif}
   public
     function MoveNext: Boolean;
-    function GetEnumerator: TDocVariantDocVariantEnumerator;
+    function GetEnumerator: TDocVariantObjectsEnumerator;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns the current Value as pointer to the TDocVariantData
     property Current: PDocVariantData
@@ -950,7 +950,7 @@ type
     // you should call InternalAdd() in an explicit previous step
     function InternalAdd(const aName: RawUtf8; aIndex: integer = -1): integer;
     {$ifdef HASITERATORS}
-    /// an enumerator able to compile "for .. in ... do" statements
+    /// an enumerator able to compile "for .. in dv do" statements
     // - returns pointers over all Names[] and Values[]
     // - warning: if the document is an array, returned Name is nil:
     // ! var e: TDocVariantFields;
@@ -960,10 +960,9 @@ type
     // !      // here e^.Name = nil
     // !      writeln(e^.Value^);
     // ! // output  1  2  3  4
-    function GetEnumerator: TDocVariantEnumerator;
-    /// an enumerator able to compile "for .. in ... do" statements for objects
-    // - returns a pointer record with Name/Value pairs over all fields of
-    // an object array
+    function GetEnumerator: TDocVariantFieldsEnumerator;
+    /// an enumerator able to compile "for .. in dv.Fields do" for objects
+    // - returns pointers over all Names[] and Values[]
     // - don't iterate if the document is an array - so Name is never nil:
     // ! var e: TDocVariantFields;
     // ! ...
@@ -971,8 +970,8 @@ type
     // !   for e in dv.Fields do
     // !     writeln(e.Name^, ':', e.Value^);
     // ! // output  a:1  b:2  c:3
-    function Fields: TDocVariantEnumerator;
-    /// an enumerator able to compile "for .. in ... do" statements for arrays
+    function Fields: TDocVariantFieldsEnumerator;
+    /// an enumerator able to compile "for .. in dv.Items do" for arrays
     // - returns a PVariant over all Values[] of a document array
     // - don't iterate if the document is an object
     // - for instance:
@@ -982,18 +981,19 @@ type
     // !    for v in dv.Items do
     // !      writeln(v^);
     // ! // output  1  2  3  4
-    function Items: TDocVariantArrayEnumerator;
-    /// an enumerator able to compile "for .. in ... do" statements for arrays
-    // of objects
+    function Items: TDocVariantItemsEnumerator;
+    /// an enumerator able to compile "for .. dv.Objects do" for array of objects
     // - returns all Values[] of a document array which are a TDocVariantData
-    // - don't iterate if the document is an object
+    // - don't iterate if the document is an object, or if an item is not a
+    // TDocVariantData:
     // ! var d: PDocVariantData;
     // ! ...
     // !    dv.InitJson('[{a:1,b:1},1,"no object",{a:2,b:2}]');
     // !    for d in dv.Objects do
     // !      writeln(d^.ToJson);
     // ! // output {"a":1,"b":1} and {"a":2,"b":2} only
-    function Objects: TDocVariantDocVariantEnumerator;
+    // ! // (ignoring 1 and "no object" items)
+    function Objects: TDocVariantObjectsEnumerator;
     {$endif HASITERATORS}
 
     /// save a document as UTF-8 encoded JSON
@@ -3948,15 +3948,15 @@ begin
    result := PtrUInt(Curr) < PtrUInt(After);
 end;
 
-{ TDocVariantEnumerator }
+{ TDocVariantFieldsEnumerator }
 
-function TDocVariantEnumerator.GetCurrent: TDocVariantFields;
+function TDocVariantFieldsEnumerator.GetCurrent: TDocVariantFields;
 begin
   result.Name := Name;
   result.Value := State.Curr;
 end;
 
-function TDocVariantEnumerator.MoveNext: Boolean;
+function TDocVariantFieldsEnumerator.MoveNext: Boolean;
 begin
   result := State.MoveNext;
   if result and
@@ -3964,26 +3964,26 @@ begin
     inc(Name);
 end;
 
-function TDocVariantEnumerator.GetEnumerator: TDocVariantEnumerator;
+function TDocVariantFieldsEnumerator.GetEnumerator: TDocVariantFieldsEnumerator;
 begin
   result := self;
 end;
 
-{ TDocVariantArrayEnumerator }
+{ TDocVariantItemsEnumerator }
 
-function TDocVariantArrayEnumerator.MoveNext: Boolean;
+function TDocVariantItemsEnumerator.MoveNext: Boolean;
 begin
    result := State.MoveNext;
 end;
 
-function TDocVariantArrayEnumerator.GetEnumerator: TDocVariantArrayEnumerator;
+function TDocVariantItemsEnumerator.GetEnumerator: TDocVariantItemsEnumerator;
 begin
   result := self;
 end;
 
-{ TDocVariantDocVariantEnumerator }
+{ TDocVariantObjectsEnumerator }
 
-function TDocVariantDocVariantEnumerator.MoveNext: Boolean;
+function TDocVariantObjectsEnumerator.MoveNext: Boolean;
 begin
   repeat
     inc(State.Curr);
@@ -3998,14 +3998,14 @@ begin
   result := false;
 end;
 
-function TDocVariantDocVariantEnumerator.GetCurrent: PDocVariantData;
+function TDocVariantObjectsEnumerator.GetCurrent: PDocVariantData;
 begin
   result := pointer(State.Curr);
   while result^.VType = varByRef or varVariant do
     result := PVarData(result)^.VPointer;
 end;
 
-function TDocVariantDocVariantEnumerator.GetEnumerator: TDocVariantDocVariantEnumerator;
+function TDocVariantObjectsEnumerator.GetEnumerator: TDocVariantObjectsEnumerator;
 begin
   result := self;
 end;
@@ -4780,7 +4780,7 @@ end;
 
 {$ifdef HASITERATORS}
 
-function TDocVariantData.GetEnumerator: TDocVariantEnumerator;
+function TDocVariantData.GetEnumerator: TDocVariantFieldsEnumerator;
 begin
   result.State.Init(pointer(Values), VCount);
   if dvoIsObject in VOptions then
@@ -4792,7 +4792,7 @@ begin
     result.Name := nil;
 end;
 
-function TDocVariantData.Items: TDocVariantArrayEnumerator;
+function TDocVariantData.Items: TDocVariantItemsEnumerator;
 begin
   if dvoIsObject in VOptions then
     result{%H-}.State.Void
@@ -4800,7 +4800,7 @@ begin
     result.State.Init(pointer(Values), VCount);
 end;
 
-function TDocVariantData.Objects: TDocVariantDocVariantEnumerator;
+function TDocVariantData.Objects: TDocVariantObjectsEnumerator;
 begin
   if dvoIsObject in VOptions then
     result{%H-}.State.Void
@@ -4808,7 +4808,7 @@ begin
     result.State.Init(pointer(Values), VCount);
 end;
 
-function TDocVariantData.Fields: TDocVariantEnumerator;
+function TDocVariantData.Fields: TDocVariantFieldsEnumerator;
 begin
   if dvoIsArray in VOptions then
     result{%H-}.State.Void
