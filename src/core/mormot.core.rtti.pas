@@ -4974,8 +4974,7 @@ begin
   if SourceCount > 0 then
     if ItemInfo = nil then
       MoveFast(Source^, Dest^, ItemSize * SourceCount)
-    else
-    if ItemInfo^.Kind in rkRecordTypes then
+    else if ItemInfo^.Kind in rkRecordTypes then
       // retrieve record/object RTTI once for all items
       _RecordCopySeveral(pointer(Dest), pointer(Source), SourceCount, ItemInfo)
     else

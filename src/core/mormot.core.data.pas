@@ -1567,7 +1567,7 @@ type
       CustomVariantOptions: PDocVariantOptions = nil;
       Tolerant: boolean = false): PUtf8Char;
     ///  select a sub-section (slice) of a dynamic array content
-    procedure Slice(var Dest; aCount: cardinal; aFirstIndex: cardinal = 0);
+    procedure Slice(var Dest; Limit: cardinal; Offset: cardinal = 0);
     /// assign the current dynamic array content into a variable
     // - by default (Offset=Limit=0), the whole array is set with no memory
     // (re)allocation, just finalize the Dest slot, then make Inc(RefCnt) and
@@ -7655,7 +7655,7 @@ begin
       capa := PDALen(arrayptr - _DALEN)^ + _DAOFF;
       if delta > 0 then
       begin
-        // size-up - Add()
+        // size-up - Add() - is handled branchless
         if capa >= aCount then
           exit; // no need to grow
         capa := NextGrow(capa);
@@ -7721,7 +7721,7 @@ begin
   end;
 end;
 
-procedure TDynArray.Slice(var Dest; aCount, aFirstIndex: cardinal);
+procedure TDynArray.Slice(var Dest; Limit, Offset: cardinal);
 var
   n: cardinal;
   dst: TDynArray;
@@ -7729,19 +7729,19 @@ begin
   if fValue = nil then
     exit; // avoid GPF if void
   n := GetCount;
-  if aFirstIndex >= n then
-    aCount := 0
+  if Offset >= n then
+    Limit := 0
   else
   begin
-    dec(n, aFirstIndex);
-    if aCount >= n  then
-      aCount := n;
+    dec(n, Offset);
+    if Limit >= n  then
+      Limit := n;
   end;
   dst.InitRtti(fInfo, Dest);
-  dst.SetCapacity(aCount);
+  dst.SetCapacity(Limit);
   CopySeveral(pointer(Dest),
-    @(PByteArray(fValue^)[aFirstIndex * cardinal(fInfo.Cache.ItemSize)]),
-    aCount, fInfo.Cache.ItemInfo, fInfo.Cache.ItemSize);
+    @(PByteArray(fValue^)[Offset * cardinal(fInfo.Cache.ItemSize)]),
+    Limit, fInfo.Cache.ItemInfo, fInfo.Cache.ItemSize);
 end;
 
 procedure TDynArray.SliceAsDynArray(Dest: PPointer; Offset, Limit: integer);
@@ -7752,20 +7752,22 @@ begin
   if dest^ <> nil then
     FastDynArrayClear(dest, fInfo.Cache.ItemInfo); // reset Dest variable slot
   n := GetCount;
-  if Offset >= n then // also handles n = 0
-    exit;
   if Offset < 0 then begin
     // ! SliceAsDynArray(DA, -10);  // last Count-10..Count-1 items
     inc(Offset, n);
     if Offset < 0 then
       Offset := 0;
   end;
+  if Offset >= n then // also handles n = 0
+    exit;
   if (Offset = 0) and
      ((Limit = 0) or
       (Limit >= n)) then
   begin
-    // we can return the current dynamic array with proper COW
+    // we can return the current dynamic array with proper Copy-On-Write
     p := fValue^;
+    if p = nil then
+      exit;
     dec(p);
     inc(p^.refCnt); // reuse existing dynamic array instance
     p^.Length := n; // no memory realloc/copy, just force Capacity=Length=Count
