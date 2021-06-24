@@ -26,6 +26,14 @@ interface
 
 {$ifdef HASGENERICS} // do-nothing unit on oldest compilers (e.g. < Delphi 2010)
 
+// FPC 3.2+ and Delphi XE7+ allow to gather most common specializations in this
+// unit and not in the end-user units to reduce executable code size
+// - NOSPECIALIZE disable ahead-of-time compilation and make naive bloated generics
+// - you may try this conditional to circumvent some Delphi internal errors
+// - see also SPECIALIZE_HASH and SPECIALIZE_WSTRING conditionals below
+{.$define NOSPECIALIZE}
+
+
 uses
   classes,
   contnrs,
@@ -160,14 +168,36 @@ type
     // - we redefined our own type with its own method because RTL IEnumerable<T>
     // is inconsistent between Delphi and FPC
     function GetEnumerator: ISynEnumerator<T>;
+    /// allows to iterate over a range of the collection
+    // - returned iterator will efficiently browse the items data in-place
+    // ! for d in List.Range do         // = for d in List do (all data)
+    // ! for d in List.Range(10) do     // items 10..Count-1
+    // ! for d in List.Range(0, 10) do  // first 0..9 items
+    // ! for d in List.Range(10, 20) do // items 10..29 - truncated if Count<30
+    // ! for d in List.Range(-10) do    // last Count-10..Count-1 items
+    function Range(Offset: integer = 0; Limit: integer = 0): ISynEnumerator<T>;
     /// high-level access to the stored values from their associated indexes
     // - raise ESynList if the supplied index is out of range
     // - SetItem() will raise ESynList if loCreateUniqueIndex is defined
     property Items[ndx: PtrInt]: T
       read GetItem write SetItem; default;
     /// low-level pointer over the first item of the collection
-    // - could be used to quickly lookup all items of the array, using Count
     // - can be nil if there is no item stored yet
+    // - could be used to quickly lookup all items of the array, using Count:
+    // ! var pi: PInteger; i: integer; list: IList<integer>;
+    // ! begin
+    // !   list := Collections.NewList<integer>;
+    // !   for i := 1 to 10 do // populate with some data
+    // !     list.Add(i);
+    // !   for i := 0 to list.Count - 1 do // regular Items[] access
+    // !     writeln(list[i]);
+    // !   for i in list do    // use an enumerator - safe and clean
+    // !     writeln(i);
+    // !   pi := list.First;        // fastest method
+    // !   for i := 1 to list.Count do begin
+    // !     writeln(pi^);
+    // !     inc(pi);
+    // !   end;
     function First: pointer;
     /// returns a dynamic array containing data of this collection
     // - is a convenient way to consume such a list as regular SOA parameters
@@ -249,12 +279,7 @@ type
       descending: boolean = false); overload;
     /// IList<> method returning true if Sort() or AddSorted() have been used
     function Sorted: boolean;
-    /// low-level IList<> method to add an item to the dynamic array, returning its pointer
-    function NewPtr: pointer;
     /// low-level IList<> method to access the first item of the collection
-    // - could be used to quickly lookup all items of the array, using Count
-    // - can be nil if there is no item stored yet
-    // - just a wrapper around fValue
     function First: pointer;
     /// IList<> method to return the number of items actually stored
     property Count: PtrInt
@@ -399,8 +424,8 @@ type
     property TimeOutSeconds: cardinal
       read GetTimeOutSeconds write SetTimeOutSeconds;
     /// low-level access to the internal TSynDictionary storage
-    // - since this class is thread-safe, you could use this method to
-    // manually access its content
+    // - which handles a lot of other useful methods not included as generics
+    // to reduce the executable code size
     // - you can use e.g. Data.SaveToJson/SaveToBinary and
     // Data.LoadFromJson/LoadFromBinary
     function Data: TSynDictionary;
@@ -510,6 +535,27 @@ type
 
 { ************ Collections Factory for IList<> and IKeyValue<> Instances }
 
+{$ifdef HASGETTYPEKIND} // our specialization rely on new compiler intrinsics
+
+  {$ifndef NOSPECIALIZE} // if not disabled for the project
+
+    // enable generics cold compilation in mormot.core.collections unit
+    {$define SPECIALIZE_ENABLED}
+
+    // circumvent "F2084 Internal Error" with the Delphi compiler and big ordinals
+    // - you may try and risk to define SPECIALIZE_HASH conditional for your project
+    {$ifdef FPC}
+      {$define SPECIALIZE_HASH}
+    {$endif FPC} // FPC 3.2 is mature for sure :)
+
+    // WideString are not often used (use UnicodeString/SynUnicode instead)
+    // so are not pre-compiled by default - this conditional generate them
+    {.$define SPECIALIZE_WSTRING}
+
+  {$endif NOSPECIALIZE}
+
+{$endif HASGETTYPEKIND}
+
 type
   /// various factories to create instances of our generic collections
   // - this is main entry point of mormot.core.collections unit
@@ -518,7 +564,7 @@ type
   // Collections.NewList<T> and Collections.NewKeyValue<TKey, TValue> methods
   Collections = class
   protected
-    {$ifdef HASGETTYPEKIND}
+    {$ifdef SPECIALIZE_ENABLED}
     {$ifdef FPC}
     const
       tkLString = tkAString; // circumvent FPC RTTI incompatibility
@@ -528,8 +574,10 @@ type
       aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result); static;
     class procedure NewLString(aOptions: TSynListOptions;
       aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result); static;
+    {$ifdef SPECIALIZE_WSTRING}
     class procedure NewWString(aOptions: TSynListOptions;
       aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result); static;
+    {$endif SPECIALIZE_WSTRING}
     class procedure NewUString(aOptions: TSynListOptions;
       aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result); static;
     class procedure NewInterface(aOptions: TSynListOptions;
@@ -541,21 +589,23 @@ type
       aSizeKey, aSizeValue: integer; var result); static;
     class procedure NewOrdinalLString(const aContext: TNewSynKeyValueContext;
       aSizeKey: integer; var result); static;
-    class procedure NewOrdinalWString(const aContext: TNewSynKeyValueContext;
-      aSizeKey: integer; var result); static;
     class procedure NewOrdinalUString(const aContext: TNewSynKeyValueContext;
       aSizeKey: integer; var result); static;
     class procedure NewOrdinalInterface(const aContext: TNewSynKeyValueContext;
       aSizeKey: integer; var result); static;
     class procedure NewOrdinalVariant(const aContext: TNewSynKeyValueContext;
       aSizeKey: integer; var result); static;
-    class procedure NewLStringOrdinal(const aContext: TNewSynKeyValueContext;
-      aSizeValue: integer; var result); static;
-    class procedure NewLStringManaged(const aContext: TNewSynKeyValueContext;
-      aValue: TTypeKind; var result); static;
+    {$ifdef SPECIALIZE_WSTRING}
+    class procedure NewOrdinalWString(const aContext: TNewSynKeyValueContext;
+      aSizeKey: integer; var result); static;
     class procedure NewWStringOrdinal(const aContext: TNewSynKeyValueContext;
       aSizeValue: integer; var result); static;
     class procedure NewWStringManaged(const aContext: TNewSynKeyValueContext;
+      aValue: TTypeKind; var result); static;
+    {$endif SPECIALIZE_WSTRING}
+    class procedure NewLStringOrdinal(const aContext: TNewSynKeyValueContext;
+      aSizeValue: integer; var result); static;
+    class procedure NewLStringManaged(const aContext: TNewSynKeyValueContext;
       aValue: TTypeKind; var result); static;
     class procedure NewUStringOrdinal(const aContext: TNewSynKeyValueContext;
       aSizeValue: integer; var result); static;
@@ -573,7 +623,7 @@ type
     class function RaiseUseNewPlainList(aItemTypeInfo: PRttiInfo): pointer; static;
     class function RaiseUseNewPlainKeyValue(
       const aContext: TNewSynKeyValueContext): pointer; static;
-    {$endif HASGETTYPEKIND}
+    {$endif SPECIALIZE_ENABLED}
   public
     /// generate a new IList<T> instance for most simple types
     // - use this factory method instead of plain TSynListSpecialized<T>.Create
@@ -698,7 +748,7 @@ var
 begin
   fOptions := aOptions;
   r := aDynArrayTypeInfo;
-  if r = nil then
+  if r = nil then // use RTTI to guess the associated TArray<T> type
     r := TypeInfoToDynArrayTypeInfo(aItemTypeInfo, {exact=}false);
   if (r = nil) or
      (r ^.Kind <> rkDynArray) then
@@ -789,7 +839,7 @@ function TSynListAbstract.DoFind(const value;
   customcompare: TDynArraySortCompare): PtrInt;
 begin
   if fHasher <> nil then
-    result := fHasher^.Find(@value)
+    result := fHasher^.Find(@value, fHasher^.HashOne(@value))
   else
     result := fDynArray.Find(value, customcompare);
 end;
@@ -898,11 +948,6 @@ end;
 function TSynListAbstract.Sorted: boolean;
 begin
   result := fDynArray.Sorted;
-end;
-
-function TSynListAbstract.NewPtr: pointer;
-begin
-  result := fDynArray.NewPtr;
 end;
 
 function TSynListAbstract.First: pointer;
@@ -1160,7 +1205,7 @@ end;
 
 { Collections }
 
-{$ifdef HASGETTYPEKIND}
+{$ifdef SPECIALIZE_ENABLED}
 
 // since Delphi XE7 or FPC 3.2: generate the most common type specializations
 // in this very unit, to reduce units and executable code size
@@ -1179,18 +1224,12 @@ begin
   raise ESynKeyValue.CreateUtf8('Collections.NewKeyValue<>: Types are too ' +
     'complex - use Collections.NewPlainKeyValue<%, %> instead',
     [aContext.KeyItemTypeInfo.RawName, aContext.ValueItemTypeInfo.RawName]);
-    // we tried Delphi' "at ReturnAddress" but disabled to avoid internal errors
   result := nil; // returns something to please the Delphi compiler
 end;
 
 
 // some shared TSynListSpecialized<> which could be reused for IList<>
 // - ptNone below will use proper RTTI at runtime for process
-
-// circumvent "F2084 Internal Error" with the Delphi compiler and big ordinals
-{$ifdef FPC}
-  {$define SPECIALIZEHASH}
-{$endif FPC}
 
 class procedure Collections.NewOrdinal(aSize: integer; aOptions: TSynListOptions;
   aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result);
@@ -1211,7 +1250,7 @@ begin
     8:
       obj := TSynListSpecialized<Int64>.Create(
         aOptions, aDynArrayTypeInfo, aItemTypeInfo, ptNone);
-    {$ifdef SPECIALIZEHASH}
+    {$ifdef SPECIALIZE_HASH}
     16:
       obj := TSynListSpecialized<THash128>.Create(
         aOptions, aDynArrayTypeInfo, aItemTypeInfo, ptNone);
@@ -1221,7 +1260,7 @@ begin
     64:
       obj := TSynListSpecialized<THash512>.Create(
         aOptions, aDynArrayTypeInfo, aItemTypeInfo, ptNone);
-    {$endif SPECIALIZEHASH}
+    {$endif SPECIALIZE_HASH}
   else
     obj := RaiseUseNewPlainList(aItemTypeInfo);
   end;
@@ -1236,12 +1275,14 @@ begin
     aOptions, aDynArrayTypeInfo, aItemTypeInfo, ptNone); // may be RawUtf8/RawJson
 end;
 
+{$ifdef SPECIALIZE_WSTRING}
 class procedure Collections.NewWString(aOptions: TSynListOptions;
   aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result);
 begin
   IList<WideString>(result) := TSynListSpecialized<WideString>.Create(
     aOptions, aDynArrayTypeInfo, aItemTypeInfo, ptWideString);
 end;
+{$endif SPECIALIZE_WSTRING}
 
 class procedure Collections.NewUString(aOptions: TSynListOptions;
   aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result);
@@ -1286,10 +1327,10 @@ begin
           obj := TSynKeyValueSpecialized<Byte, Integer>.Create(aContext);
         8:
           obj := TSynKeyValueSpecialized<Byte, Int64>.Create(aContext);
-        {$ifdef SPECIALIZEHASH}
+        {$ifdef SPECIALIZE_HASH}
         16:
           obj := TSynKeyValueSpecialized<Byte, THash128>.Create(aContext);
-        {$endif SPECIALIZEHASH}
+        {$endif SPECIALIZE_HASH}
       else
 err:    obj := RaiseUseNewPlainKeyValue(aContext);
       end;
@@ -1303,10 +1344,10 @@ err:    obj := RaiseUseNewPlainKeyValue(aContext);
           obj := TSynKeyValueSpecialized<Word, Integer>.Create(aContext);
         8:
           obj := TSynKeyValueSpecialized<Word, Int64>.Create(aContext);
-        {$ifdef SPECIALIZEHASH}
+        {$ifdef SPECIALIZE_HASH}
         16:
           obj := TSynKeyValueSpecialized<Word, THash128>.Create(aContext);
-        {$endif SPECIALIZEHASH}
+        {$endif SPECIALIZE_HASH}
       else
         goto err;
       end;
@@ -1320,10 +1361,10 @@ err:    obj := RaiseUseNewPlainKeyValue(aContext);
           obj := TSynKeyValueSpecialized<Integer, Integer>.Create(aContext);
         8:
           obj := TSynKeyValueSpecialized<Integer, Int64>.Create(aContext);
-        {$ifdef SPECIALIZEHASH}
+        {$ifdef SPECIALIZE_HASH}
         16:
           obj := TSynKeyValueSpecialized<Integer, THash128>.Create(aContext);
-        {$endif SPECIALIZEHASH}
+        {$endif SPECIALIZE_HASH}
       else
         goto err;
       end;
@@ -1337,14 +1378,14 @@ err:    obj := RaiseUseNewPlainKeyValue(aContext);
           obj := TSynKeyValueSpecialized<Int64, Integer>.Create(aContext);
         8:
           obj := TSynKeyValueSpecialized<Int64, Int64>.Create(aContext);
-        {$ifdef SPECIALIZEHASH}
+        {$ifdef SPECIALIZE_HASH}
         16:
           obj := TSynKeyValueSpecialized<Int64, THash128>.Create(aContext);
-        {$endif SPECIALIZEHASH}
+        {$endif SPECIALIZE_HASH}
       else
         goto err;
       end;
-    {$ifdef SPECIALIZEHASH}
+    {$ifdef SPECIALIZE_HASH}
     16:
       case aSizeValue of
         1:
@@ -1360,7 +1401,7 @@ err:    obj := RaiseUseNewPlainKeyValue(aContext);
       else
         goto err;
       end;
-    {$endif SPECIALIZEHASH}
+    {$endif SPECIALIZE_HASH}
   else
     goto err;
   end;
@@ -1382,16 +1423,21 @@ begin
       obj := TSynKeyValueSpecialized<Integer, RawByteString>.Create(aContext);
     8:
       obj := TSynKeyValueSpecialized<Int64, RawByteString>.Create(aContext);
-    {$ifdef SPECIALIZEHASH}
+    {$ifdef SPECIALIZE_HASH}
     16:
       obj := TSynKeyValueSpecialized<THash128, RawByteString>.Create(aContext);
-    {$endif SPECIALIZEHASH}
+    32:
+      obj := TSynKeyValueSpecialized<THash256, RawByteString>.Create(aContext);
+    64:
+      obj := TSynKeyValueSpecialized<THash512, RawByteString>.Create(aContext);
+    {$endif SPECIALIZE_HASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
   IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
 end;
 
+{$ifdef SPECIALIZE_WSTRING}
 class procedure Collections.NewOrdinalWString(
   const aContext: TNewSynKeyValueContext; aSizeKey: integer; var result);
 var
@@ -1406,15 +1452,16 @@ begin
       obj := TSynKeyValueSpecialized<Integer, WideString>.Create(aContext);
     8:
       obj := TSynKeyValueSpecialized<Int64, WideString>.Create(aContext);
-    {$ifdef SPECIALIZEHASH}
+    {$ifdef SPECIALIZE_HASH}
     16:
       obj := TSynKeyValueSpecialized<THash128, WideString>.Create(aContext);
-    {$endif SPECIALIZEHASH}
+    {$endif SPECIALIZE_HASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
   IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
 end;
+{$endif SPECIALIZE_WSTRING}
 
 class procedure Collections.NewOrdinalUString(
   const aContext: TNewSynKeyValueContext; aSizeKey: integer; var result);
@@ -1430,10 +1477,10 @@ begin
       obj := TSynKeyValueSpecialized<Integer, UnicodeString>.Create(aContext);
     8:
       obj := TSynKeyValueSpecialized<Int64, UnicodeString>.Create(aContext);
-    {$ifdef SPECIALIZEHASH}
+    {$ifdef SPECIALIZE_HASH}
     16:
       obj := TSynKeyValueSpecialized<THash128, UnicodeString>.Create(aContext);
-    {$endif SPECIALIZEHASH}
+    {$endif SPECIALIZE_HASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
@@ -1454,10 +1501,10 @@ begin
       obj := TSynKeyValueSpecialized<Integer, IInterface>.Create(aContext);
     8:
       obj := TSynKeyValueSpecialized<Int64, IInterface>.Create(aContext);
-    {$ifdef SPECIALIZEHASH}
+    {$ifdef SPECIALIZE_HASH}
     16:
       obj := TSynKeyValueSpecialized<THash128, IInterface>.Create(aContext);
-    {$endif SPECIALIZEHASH}
+    {$endif SPECIALIZE_HASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
@@ -1478,10 +1525,10 @@ begin
       obj := TSynKeyValueSpecialized<Integer, Variant>.Create(aContext);
     8:
       obj := TSynKeyValueSpecialized<Int64, Variant>.Create(aContext);
-    {$ifdef SPECIALIZEHASH}
+    {$ifdef SPECIALIZE_HASH}
     16:
       obj := TSynKeyValueSpecialized<THash128, Variant>.Create(aContext);
-    {$endif SPECIALIZEHASH}
+    {$endif SPECIALIZE_HASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
@@ -1502,14 +1549,14 @@ begin
       obj := TSynKeyValueSpecialized<RawByteString, Integer>.Create(aContext);
     8:
       obj := TSynKeyValueSpecialized<RawByteString, Int64>.Create(aContext);
-    {$ifdef SPECIALIZEHASH}
+    {$ifdef SPECIALIZE_HASH}
     16:
       obj := TSynKeyValueSpecialized<RawByteString, THash128>.Create(aContext);
     32:
       obj := TSynKeyValueSpecialized<RawByteString, THash256>.Create(aContext);
     64:
       obj := TSynKeyValueSpecialized<RawByteString, THash512>.Create(aContext);
-    {$endif SPECIALIZEHASH}
+    {$endif SPECIALIZE_HASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
@@ -1524,8 +1571,10 @@ begin
   case aValue of
     tkLString:
       obj := TSynKeyValueSpecialized<RawByteString, RawByteString>.Create(aContext);
+    {$ifdef SPECIALIZE_WSTRING}
     tkWString:
       obj := TSynKeyValueSpecialized<RawByteString, WideString>.Create(aContext);
+    {$endif SPECIALIZE_WSTRING}
     tkUString:
       obj := TSynKeyValueSpecialized<RawByteString, UnicodeString>.Create(aContext);
     tkInterface:
@@ -1538,6 +1587,7 @@ begin
   IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
 end;
 
+{$ifdef SPECIALIZE_WSTRING}
 class procedure Collections.NewWStringOrdinal(
   const aContext: TNewSynKeyValueContext; aSizeValue: integer; var result);
 var
@@ -1552,10 +1602,10 @@ begin
       obj := TSynKeyValueSpecialized<WideString, Integer>.Create(aContext);
     8:
       obj := TSynKeyValueSpecialized<WideString, Int64>.Create(aContext);
-    {$ifdef SPECIALIZEHASH}
+    {$ifdef SPECIALIZE_HASH}
     16:
       obj := TSynKeyValueSpecialized<WideString, THash128>.Create(aContext);
-    {$endif SPECIALIZEHASH}
+    {$endif SPECIALIZE_HASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
@@ -1583,6 +1633,7 @@ begin
   end;
   IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
 end;
+{$endif SPECIALIZE_WSTRING}
 
 class procedure Collections.NewUStringOrdinal(
   const aContext: TNewSynKeyValueContext; aSizeValue: integer; var result);
@@ -1598,10 +1649,10 @@ begin
       obj := TSynKeyValueSpecialized<UnicodeString, Integer>.Create(aContext);
     8:
       obj := TSynKeyValueSpecialized<UnicodeString, Int64>.Create(aContext);
-    {$ifdef SPECIALIZEHASH}
+    {$ifdef SPECIALIZE_HASH}
     16:
       obj := TSynKeyValueSpecialized<UnicodeString, THash128>.Create(aContext);
-    {$endif SPECIALIZEHASH}
+    {$endif SPECIALIZE_HASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
@@ -1616,8 +1667,10 @@ begin
   case aValue of
     tkLString:
       obj := TSynKeyValueSpecialized<UnicodeString, RawByteString>.Create(aContext);
+    {$ifdef SPECIALIZE_WSTRING}
     tkWString:
       obj := TSynKeyValueSpecialized<UnicodeString, WideString>.Create(aContext);
+    {$endif SPECIALIZE_WSTRING}
     tkUString:
       obj := TSynKeyValueSpecialized<UnicodeString, UnicodeString>.Create(aContext);
     tkInterface:
@@ -1644,10 +1697,10 @@ begin
       obj := TSynKeyValueSpecialized<IInterface, Integer>.Create(aContext);
     8:
       obj := TSynKeyValueSpecialized<IInterface, Int64>.Create(aContext);
-    {$ifdef SPECIALIZEHASH}
+    {$ifdef SPECIALIZE_HASH}
     16:
       obj := TSynKeyValueSpecialized<IInterface, THash128>.Create(aContext);
-    {$endif SPECIALIZEHASH}
+    {$endif SPECIALIZE_HASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
@@ -1662,8 +1715,10 @@ begin
   case aValue of
     tkLString:
       obj := TSynKeyValueSpecialized<IInterface, RawByteString>.Create(aContext);
+    {$ifdef SPECIALIZE_WSTRING}
     tkWString:
       obj := TSynKeyValueSpecialized<IInterface, WideString>.Create(aContext);
+    {$endif SPECIALIZE_WSTRING}
     tkUString:
       obj := TSynKeyValueSpecialized<IInterface, UnicodeString>.Create(aContext);
     tkInterface:
@@ -1690,10 +1745,10 @@ begin
       obj := TSynKeyValueSpecialized<Variant, Integer>.Create(aContext);
     8:
       obj := TSynKeyValueSpecialized<Variant, Int64>.Create(aContext);
-    {$ifdef SPECIALIZEHASH}
+    {$ifdef SPECIALIZE_HASH}
     16:
       obj := TSynKeyValueSpecialized<Variant, THash128>.Create(aContext);
-    {$endif SPECIALIZEHASH}
+    {$endif SPECIALIZE_HASH}
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
@@ -1708,8 +1763,10 @@ begin
   case aValue of
     tkLString:
       obj := TSynKeyValueSpecialized<Variant, RawByteString>.Create(aContext);
+    {$ifdef SPECIALIZE_WSTRING}
     tkWString:
       obj := TSynKeyValueSpecialized<Variant, WideString>.Create(aContext);
+    {$endif SPECIALIZE_WSTRING}
     tkUString:
       obj := TSynKeyValueSpecialized<Variant, UnicodeString>.Create(aContext);
     tkInterface:
@@ -1725,15 +1782,17 @@ end;
 class function Collections.NewList<T>(aOptions: TSynListOptions;
   aDynArrayTypeInfo: PRttiInfo): IList<T>;
 begin
-  // GetTypeKind() SizeOf() IsManagedType() intrinsics to compile efficiently
+  // IsManagedType() GetTypeKind() SizeOf() intrinsics to compile efficiently
   if IsManagedType(T) then
     case GetTypeKind(T) of
       tkLString:
         // reuse TSynListSpecialized<RawByteString> for all AnsiString
         NewLString(aOptions, aDynArrayTypeInfo, TypeInfo(T), result);
+      {$ifdef SPECIALIZE_WSTRING}
       tkWString:
         // reuse TSynListSpecialized<WideString> for all WideString
         NewWString(aOptions, aDynArrayTypeInfo, TypeInfo(T), result);
+      {$endif SPECIALIZE_WSTRING}
       tkUString:
         // reuse TSynListSpecialized<UnicodeString> for all UnicodeString
         NewUString(aOptions, aDynArrayTypeInfo, TypeInfo(T), result);
@@ -1765,7 +1824,7 @@ begin
     aOptions, aDynArrayTypeInfo, TypeInfo(T), ptNone);
 end;
 
-{$endif HASGETTYPEKIND}
+{$endif SPECIALIZE_ENABLED}
 
 class function Collections.NewPlainList<T>(aOptions: TSynListOptions;
   aDynArrayTypeInfo: PRttiInfo; aSortAs: TRttiParserType): IList<T>;
@@ -1789,8 +1848,8 @@ begin
   ctx.Timeout := aTimeOutSeconds;
   ctx.Compress := aCompressAlgo;
   ctx.Hasher := aHasher;
-  {$ifdef HASGETTYPEKIND}
-  // GetTypeKind() SizeOf() IsManagedType() intrinsics to compile efficiently
+  {$ifdef SPECIALIZE_ENABLED}
+  // IsManagedType() GetTypeKind() SizeOf() intrinsics to compile efficiently
   if IsManagedType(TKey) then
     case GetTypeKind(TKey) of
       tkLString:
@@ -1798,11 +1857,13 @@ begin
           NewLStringManaged(ctx, GetTypeKind(TValue), result)
         else
           NewLStringOrdinal(ctx, SizeOf(TValue), result);
+      {$ifdef SPECIALIZE_WSTRING}
       tkWString:
         if IsManagedType(TValue) then
           NewWStringManaged(ctx, GetTypeKind(TValue), result)
         else
           NewWStringOrdinal(ctx, SizeOf(TValue), result);
+      {$endif SPECIALIZE_WSTRING}
       tkUString:
         if IsManagedType(TValue) then
           NewUStringManaged(ctx, GetTypeKind(TValue), result)
@@ -1826,8 +1887,10 @@ begin
       case GetTypeKind(TValue) of
         tkLString:
           NewOrdinalLString(ctx, SizeOf(TKey), result);
+        {$ifdef SPECIALIZE_WSTRING}
         tkWString:
           NewOrdinalWString(ctx, SizeOf(TKey), result);
+        {$endif SPECIALIZE_WSTRING}
         tkUString:
           NewOrdinalUString(ctx, SizeOf(TKey), result);
         tkInterface:
@@ -1842,7 +1905,7 @@ begin
   {$else}
   // oldest Delphi will generate bloated code for each specific type
   result := TSynKeyValueSpecialized<TKey, TValue>.Create(ctx);
-  {$endif HASGETTYPEKIND}
+  {$endif SPECIALIZE_ENABLED}
 end;
 
 class function Collections.NewPlainKeyValue<TKey, TValue>(

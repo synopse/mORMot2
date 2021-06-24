@@ -62,14 +62,14 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
 @sml16: mov     qword ptr [dst], r9       // first 8
         mov     qword ptr [dst + rax], r8 // last 8 (may be overlapping)
         ret
-@02:    movzx   eax, word ptr [src] // use small size moves as code alignment
-        mov     word ptr [dst], ax
-        ret
-@04:    mov     eax, [src]
+@04:    mov     eax, dword ptr [src] // use small size moves as code alignment
         mov     dword ptr [dst], eax
         ret
-@08:    mov     rax, [src]
+@08:    mov     rax, qword ptr [src]
         mov     [dst], rax
+        ret
+@02:    movzx   eax, word ptr [src]
+        mov     word ptr [dst], ax
 @exit:  ret
 @lrg:   jng     @exit   // cnt < 0
         cmp     src, dst
