@@ -114,6 +114,7 @@
   {$define HASSAFEINLINE} // Delphi 2007 has sometimes troubles inlining :(
   {$define NODELPHIASM}   // avoid e.g. low-level System.@LStrFromPCharLen calls
   {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
+  {$define HASITERATORS}
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSHORT_USESTR} // FloatToText uses str() in FPC
@@ -289,11 +290,12 @@
     {$define FPC_NEWRTTI}
     // when http://bugs.freepascal.org/view.php?id=26774 has been fixed
     {$define HASINTERFACERTTI}
+    // generics support is excellent in FPC 3.2+
+    {$define HASGENERICS}
   {$endif}
 
   {$ifdef FPC_NEWRTTI}
     {$define ISDELPHI2010_OR_FPC_NEWRTTI}
-    {$define HASGENERICS}
   {$else}
     {$define DELPHI_OR_FPC_OLDRTTI}
     {$define FPC_OLDRTTI}
@@ -399,6 +401,7 @@
     {$endif}
     {$if CompilerVersion > 18}
       {$define ISDELPHI2007ANDUP} // Delphi 2007 or newer
+      {$define HASITERATORS}
     {$ifend}
     {$if CompilerVersion = 20}
       {$define ISDELPHI20092010} // specific compilation issues

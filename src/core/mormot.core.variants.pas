@@ -242,6 +242,7 @@ type
       Index: integer); virtual;
     /// returns TRUE if the supplied variant is of the exact custom type
     function IsOfType(const V: variant): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// class-reference type (metaclass) of custom variant type definition
@@ -603,10 +604,72 @@ type
   // - should return TRUE if the item match the expectations
   TOnReducePerValue = function(const Value: variant): boolean of object;
 
-  TDocVariantDataEnumerator = class;
-  TDocVariantDataArrayEnumerator = class;
-  TDocVariantDataObjectEnumerator = class;
-  TDocVariantDataDocVariantEnumerator = class;
+  {$ifdef HASITERATORS}
+  TDocVariantEnumeratorState = record
+  private
+    Curr, After: PVariant;
+  public
+    procedure Init(Values: PVariantArray; Count: PtrUInt);
+      {$ifdef HASINLINE}inline;{$endif}
+    procedure Void;
+      {$ifdef HASINLINE}inline;{$endif}
+    function MoveNext: Boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+  end;
+
+  /// local iterated name/value pair as returned by TDocVariantData.GetEnumerator
+  // - we use pointers for best performance - but warning: Name may be nil
+  TDocVariantEnumerated = record
+    /// equals nil if the TDocVariantData is an array, or points to current Name[]
+    Name: PRawUtf8;
+    /// points to the current Value[] (never nil)
+    Value: PVariant;
+  end;
+
+  /// low-level Enumerator as returned by TDocVariantData.GetEnumerator
+  TDocVariantEnumerator = record
+  private
+    State: TDocVariantEnumeratorState;
+    Name: PRawUtf8;
+    function GetCurrent: TDocVariantEnumerated;
+      {$ifdef HASINLINE}inline;{$endif}
+  public
+    function MoveNext: Boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetEnumerator: TDocVariantEnumerator;
+      {$ifdef HASINLINE}inline;{$endif}
+    property Current: TDocVariantEnumerated
+      read GetCurrent;
+  end;
+
+  /// low-level Enumerator as returned by TDocVariantData.ArrayEnumerator
+  // - we use a record for highest possible performance
+  TDocVariantArrayEnumerator = record
+  private
+    State: TDocVariantEnumeratorState;
+  public
+    function MoveNext: Boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetEnumerator: TDocVariantArrayEnumerator;
+      {$ifdef HASINLINE}inline;{$endif}
+    property Current: PVariant
+      read State.Curr;
+  end;
+
+  /// low-level Enumerator as returned by TDocVariantData.DocVariantEnumerator
+  TDocVariantDocVariantEnumerator = record
+  private
+    State: TDocVariantEnumeratorState;
+    function GetCurrent: PDocVariantData;
+      {$ifdef HASINLINE}inline;{$endif}
+  public
+    function MoveNext: Boolean;
+    function GetEnumerator: TDocVariantDocVariantEnumerator;
+      {$ifdef HASINLINE}inline;{$endif}
+    property Current: PDocVariantData
+      read GetCurrent;
+  end;
+  {$endif HASITERATORS}
 
   {$A-} { packet object not allowed since Delphi 2009 :( }
   /// memory structure used for TDocVariant storage of any JSON/BSON
@@ -880,24 +943,52 @@ type
     // - warning: FPC optimizer is confused by Values[InternalAdd(name)] so
     // you should call InternalAdd() in an explicit previous step
     function InternalAdd(const aName: RawUtf8; aIndex: integer = -1): integer;
+    {$ifdef HASITERATORS}
     /// an enumerator able to compile "for .. in ... do" statements
-    // - returns a pointer variant over all Values[] of a document array, or
-    // over all fields of an object array, with "Name" and "Value" fields
-    function GetEnumerator: TDocVariantDataEnumerator;
-    /// an enumerator able to compile "for .. in ... do" statements for arrays
-    // - returns a PVariant over all Values[] of a document array
-    // - don't iterate if the document is an object
-    function ArrayEnumerator: TDocVariantDataArrayEnumerator;
-    /// an enumerator able to compile "for .. in ... do" statements for arrays
-    // of objects
-    // - returns a PDocVariantData over all _Safe(Values[]) of a document array
-    // - don't iterate if the document is an object
-    function DocVariantEnumerator: TDocVariantDataDocVariantEnumerator;
+    // - returns pointers over all Names[] and Values[]
+    // - warning: if the document is an array, returned Name is nil:
+    // ! var e: TDocVariantEnumerated;
+    // ! ...
+    // !    dv.InitArray([1, 3, 3, 4]);
+    // !    for e in dv do
+    // !      // here e^.Name = nil
+    // !      writeln(e^.Value^);
+    // ! // output  1  2  3  4
+    function GetEnumerator: TDocVariantEnumerator;
     /// an enumerator able to compile "for .. in ... do" statements for objects
     // - returns a pointer record with Name/Value fields over all fields of
     // an object array
-    // - don't iterate if the document is an array
-    function ObjectEnumerator: TDocVariantDataObjectEnumerator;
+    // - don't iterate if the document is an array - so Name is never nil:
+    // ! var e: TDocVariantEnumerated;
+    // ! ...
+    // !   dv.InitJson('{a:1,b:2,c:3}');
+    // !   for e in dv.ObjectEnumerator do
+    // !     writeln(e.Name^, ':', e.Value^);
+    // ! // output  a:1  b:2  c:3
+    function ObjectEnumerator: TDocVariantEnumerator;
+    /// an enumerator able to compile "for .. in ... do" statements for arrays
+    // - returns a PVariant over all Values[] of a document array
+    // - don't iterate if the document is an object
+    // - for instance:
+    // ! var v: PVariant;
+    // ! ...
+    // !    dv.InitArray([1, 3, 3, 4]);
+    // !    for v in dv.ArrayEnumerator do
+    // !      writeln(v^);
+    // ! // output  1  2  3  4
+    function ArrayEnumerator: TDocVariantArrayEnumerator;
+    /// an enumerator able to compile "for .. in ... do" statements for arrays
+    // of objects
+    // - returns all Values[] of a document array which are a TDocVariantData
+    // - don't iterate if the document is an object
+    // ! var d: PDocVariantData;
+    // ! ...
+    // !    dv.InitJson('[{a:1,b:1},1,"no object",{a:2,b:2}]');
+    // !    for d in dv.DocVariantEnumerator do
+    // !      writeln(d^.ToJson);
+    // ! // output {"a":1,"b":1} and {"a":2,"b":2} only
+    function DocVariantEnumerator: TDocVariantDocVariantEnumerator;
+    {$endif HASITERATORS}
 
     /// save a document as UTF-8 encoded JSON
     // - will write either a JSON object or array, depending of the internal
@@ -1559,76 +1650,6 @@ type
   end;
   {$A+} { packet object not allowed since Delphi 2009 :( }
 
-  TDocVariantDataEnumeratorAbstract = class
-  protected
-    fValue: PDocVariantData;
-    fIndex: integer;
-  public
-    function MoveNext: Boolean;
-      {$ifdef HASINLINE}inline;{$endif}
-  end;
-
-  /// low-level Enumerator as returned by TDocVariantData.GetEnumerator
-  TDocVariantDataEnumerator = class(TDocVariantDataEnumeratorAbstract)
-  protected
-    fFakeItem: TDocVariantData;
-    function GetCurrent: PVariant;
-  public
-    constructor Create(const Value: TDocVariantData);
-    /// returns either the current Values[] for an array, or a TDocVariant
-    // with 'Name' and 'Value' fields for an object
-    property Current: PVariant
-      read GetCurrent;
-  end;
-
-  /// low-level Enumerator as returned by TDocVariantData.ArrayEnumerator
-  TDocVariantDataArrayEnumerator = class(TDocVariantDataEnumeratorAbstract)
-  protected
-    function GetCurrent: PVariant;
-      {$ifdef HASINLINE}inline;{$endif}
-  public
-    constructor Create(const Value: TDocVariantData);
-    function GetEnumerator: TDocVariantDataArrayEnumerator;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// returns the current Values[] item
-    property Current: PVariant
-      read GetCurrent;
-  end;
-
-  /// low-level Enumerator as returned by TDocVariantData.DocVariantEnumerator
-  TDocVariantDataDocVariantEnumerator = class(TDocVariantDataEnumeratorAbstract)
-  protected
-    function GetCurrent: PDocVariantData;
-      {$ifdef HASINLINE}inline;{$endif}
-  public
-    constructor Create(const Value: TDocVariantData);
-    function GetEnumerator: TDocVariantDataDocVariantEnumerator;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// returns the current _Safe(Values[]) item
-    property Current: PDocVariantData
-      read GetCurrent;
-  end;
-
-  /// item type as returned by TDocVariantData.ObjectEnumerator
-  TDocVariantDataObjectEnumerated = record
-    Name: PRawUtf8;
-    Value: PVariant;
-  end;
-
-  /// low-level Enumerator as returned by TDocVariantData.ObjectEnumerator
-  TDocVariantDataObjectEnumerator = class(TDocVariantDataEnumeratorAbstract)
-  protected
-    function GetCurrent: TDocVariantDataObjectEnumerated;
-      {$ifdef HASINLINE}inline;{$endif}
-  public
-    constructor Create(const Value: TDocVariantData);
-    function GetEnumerator: TDocVariantDataObjectEnumerator;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// returns the current object field Name and value
-    property Current: TDocVariantDataObjectEnumerated
-      read GetCurrent;
-  end;
-
 var
   /// the internal custom variant type used to register TDocVariant
   DocVariantType: TDocVariant;
@@ -1659,7 +1680,7 @@ const
   // - dvoReturnNullForUnknownProperty is defined, so that U[]/I[]... methods
   // won't raise any exception about unexpected field name
   DocVariantDataFake: TDocVariantData = (
-    VType: 1;
+    VType: varNull;
     VOptions: [dvoReturnNullForUnknownProperty]{%H-});
 
 /// direct access to a TDocVariantData from a given variant instance
@@ -2921,114 +2942,6 @@ begin
 end;
 
 
-{ TDocVariantDataEnumeratorAbstract }
-
-function TDocVariantDataEnumeratorAbstract.MoveNext: Boolean;
-begin
-  inc(fIndex);
-  result := cardinal(fIndex) < cardinal(fValue.VCount);
-end;
-
-
-{ TDocVariantDataEnumerator }
-
-constructor TDocVariantDataEnumerator.Create(const Value: TDocVariantData);
-begin
-  fValue := @Value;
-  fIndex := -1;
-  if (dvoIsObject in Value.VOptions) and
-     (Value.VCount > 0) then
-  begin
-    fFakeItem.VType := DocVariantVType;
-    fFakeItem.VOptions := JSON_OPTIONS_FAST + [dvoIsObject];
-    SetLength(fFakeItem.VName, 2);
-    fFakeItem.VName[0] := 'Name';
-    fFakeItem.VName[1] := 'Value';
-    SetLength(fFakeItem.VValue, 2);
-    fFakeItem.VCount := 2;
-  end;
-end;
-
-function TDocVariantDataEnumerator.GetCurrent: PVariant;
-begin
-  result := @fValue^.VValue[fIndex];
-  if fFakeItem.VCount = 0 then
-    exit;
-  SetVariantByRef(result^, fFakeItem.VValue[1]);
-  RawUtf8ToVariant(fValue^.VName[fIndex], fFakeItem.VValue[0]);
-  result := @fFakeItem;
-end;
-
-
-{ TDocVariantDataArrayEnumerator }
-
-constructor TDocVariantDataArrayEnumerator.Create(const Value: TDocVariantData);
-begin
-  fValue := @Value;
-  if dvoIsObject in Value.VOptions then
-    fIndex := -1
-  else
-    fIndex := maxInt;
-end;
-
-function TDocVariantDataArrayEnumerator.GetCurrent: PVariant;
-begin
-  result := @fValue^.VValue[fIndex];
-end;
-
-function TDocVariantDataArrayEnumerator.GetEnumerator: TDocVariantDataArrayEnumerator;
-begin
-  result := self;
-end;
-
-
-{ TDocVariantDataDocVariantEnumerator }
-
-constructor TDocVariantDataDocVariantEnumerator.Create(
-  const Value: TDocVariantData);
-begin
-  fValue := @Value;
-  if dvoIsObject in Value.VOptions then
-    fIndex := -1
-  else
-    fIndex := maxInt;
-end;
-
-function TDocVariantDataDocVariantEnumerator.GetCurrent: PDocVariantData;
-begin
-  result := _Safe(fValue^.VValue[fIndex]);
-end;
-
-function TDocVariantDataDocVariantEnumerator.GetEnumerator:
-  TDocVariantDataDocVariantEnumerator;
-begin
-  result := self;
-end;
-
-
-{ TDocVariantDataObjectEnumerator }
-
-constructor TDocVariantDataObjectEnumerator.Create(const Value: TDocVariantData);
-begin
-  fValue := @Value;
-  if dvoIsObject in Value.VOptions then
-    fIndex := -1
-  else
-    fIndex := maxInt;
-end;
-
-function TDocVariantDataObjectEnumerator.GetCurrent: TDocVariantDataObjectEnumerated;
-begin
-  result.Name := @fValue^.VName[fIndex];
-  result.Value := @fValue^.VValue[fIndex];
-end;
-
-function TDocVariantDataObjectEnumerator.GetEnumerator: TDocVariantDataObjectEnumerator;
-begin
-  result := self;
-end;
-
-
 { TSynInvokeableVariantType }
 
 function TSynInvokeableVariantType.IterateCount(const V: TVarData): integer;
@@ -4001,6 +3914,97 @@ begin
 end;
 
 
+{$ifdef HASITERATORS}
+
+{ TDocVariantEnumeratorState }
+
+procedure TDocVariantEnumeratorState.Void;
+begin
+  After := nil;
+  Curr := nil;
+end;
+
+procedure TDocVariantEnumeratorState.Init(Values: PVariantArray; Count: PtrUInt);
+begin
+  if Count = 0 then
+    Void
+  else
+  begin
+    Curr := pointer(Values);
+    After := @Values[Count];
+    dec(Curr);
+  end;
+end;
+
+function TDocVariantEnumeratorState.MoveNext: Boolean;
+begin
+   inc(Curr);
+   result := PtrUInt(Curr) < PtrUInt(After);
+end;
+
+{ TDocVariantEnumerator }
+
+function TDocVariantEnumerator.GetCurrent: TDocVariantEnumerated;
+begin
+  result.Name := Name;
+  result.Value := State.Curr;
+end;
+
+function TDocVariantEnumerator.MoveNext: Boolean;
+begin
+  result := State.MoveNext;
+  if result and
+     Assigned(Name) then
+    inc(Name);
+end;
+
+function TDocVariantEnumerator.GetEnumerator: TDocVariantEnumerator;
+begin
+  result := self;
+end;
+
+{ TDocVariantArrayEnumerator }
+
+function TDocVariantArrayEnumerator.MoveNext: Boolean;
+begin
+   result := State.MoveNext;
+end;
+
+function TDocVariantArrayEnumerator.GetEnumerator: TDocVariantArrayEnumerator;
+begin
+  result := self;
+end;
+
+{ TDocVariantDocVariantEnumerator }
+
+function TDocVariantDocVariantEnumerator.MoveNext: Boolean;
+begin
+  repeat
+    inc(State.Curr);
+    if PtrUInt(State.Curr) >= PtrUInt(State.After) then
+      break;
+    if DocVariantType.IsOfType(State.Curr^) then
+    begin
+      result := true;
+      exit;
+    end
+  until false;
+  result := false;
+end;
+
+function TDocVariantDocVariantEnumerator.GetCurrent: PDocVariantData;
+begin
+  result := pointer(State.Curr);
+end;
+
+function TDocVariantDocVariantEnumerator.GetEnumerator: TDocVariantDocVariantEnumerator;
+begin
+  result := self;
+end;
+
+{$endif HASITERATORS}
+
+
 { TDocVariantData }
 
 function TDocVariantData.GetKind: TDocVariantKind;
@@ -4766,25 +4770,45 @@ begin
   end;
 end;
 
-function TDocVariantData.GetEnumerator: TDocVariantDataEnumerator;
+{$ifdef HASITERATORS}
+
+function TDocVariantData.GetEnumerator: TDocVariantEnumerator;
 begin
-  result := TDocVariantDataEnumerator.Create(self);
+  result.State.Init(pointer(Values), VCount);
+  if dvoIsObject in VOptions then
+  begin
+    result.Name := pointer(Names);
+    dec(result.Name);
+  end
+  else
+    result.Name := nil;
 end;
 
-function TDocVariantData.ArrayEnumerator: TDocVariantDataArrayEnumerator;
+function TDocVariantData.ArrayEnumerator: TDocVariantArrayEnumerator;
 begin
-  result := TDocVariantDataArrayEnumerator.Create(self);
+  if dvoIsObject in VOptions then
+    result{%H-}.State.Void
+  else
+    result.State.Init(pointer(Values), VCount);
 end;
 
-function TDocVariantData.DocVariantEnumerator: TDocVariantDataDocVariantEnumerator;
+function TDocVariantData.DocVariantEnumerator: TDocVariantDocVariantEnumerator;
 begin
-  result := TDocVariantDataDocVariantEnumerator.Create(self);
+  if dvoIsObject in VOptions then
+    result{%H-}.State.Void
+  else
+    result.State.Init(pointer(Values), VCount);
 end;
 
-function TDocVariantData.ObjectEnumerator: TDocVariantDataObjectEnumerator;
+function TDocVariantData.ObjectEnumerator: TDocVariantEnumerator;
 begin
-  result := TDocVariantDataObjectEnumerator.Create(self);
+  if dvoIsArray in VOptions then
+    result{%H-}.State.Void
+  else
+    result := GetEnumerator;
 end;
+
+{$endif HASITERATORS}
 
 procedure TDocVariantData.SetCapacity(aValue: integer);
 begin
