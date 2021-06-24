@@ -4954,7 +4954,7 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         cmp     len, 16 // 1..16 bytes have no branch
         ja      @17up
         je      @16
-        pshufb  xmm2, dqword ptr [r11 + r10]
+        pshufb  xmm2, dqword ptr [r11 + r10]  // shuffle data bits to lower xmm2
 @16:    pxor    xmm2, xmm0
         aesenc  xmm2, xmm2
         aesenc  xmm2, xmm2

@@ -1636,7 +1636,7 @@ type
     // slower and more error prone method (such pointer access lacks of strong
     // typing abilities), which is designed for TDynArray abstract/internal use
     function ItemPtr(index: PtrInt): pointer;
-      {$ifdef FPC}inline;{$endif}
+      {$ifdef HASGETTYPEKIND}inline;{$endif}
     /// just a convenient wrapper of Info.Cache.ItemSize
     function ItemSize: PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1654,7 +1654,7 @@ type
     // if the source item is a copy of Values[index] with some dynamic arrays
     procedure ItemCopyFrom(Source: pointer; index: PtrInt;
       ClearBeforeCopy: boolean = false);
-      {$ifdef FPC}inline;{$endif}
+      {$ifdef HASGETTYPEKIND}inline;{$endif}
     /// compare the content of two items, returning TRUE if both values equal
     // - use the Compare() property function (if set) or using Info.Cache.ItemInfo
     // if available - and fallbacks to binary comparison
@@ -1665,10 +1665,10 @@ type
     function ItemCompare(A, B: pointer; CaseInSensitive: boolean = false): integer;
     /// will reset the element content
     procedure ItemClear(Item: pointer);
-      {$ifdef FPC}inline;{$endif}
+      {$ifdef HASGETTYPEKIND}inline;{$endif}
     /// will copy one element content
     procedure ItemCopy(Source, Dest: pointer);
-      {$ifdef FPC}inline;{$endif}
+      {$ifdef HASGETTYPEKIND}inline;{$endif}
     /// will copy the first field value of an array element
     // - will use the array KnownType to guess the copy routine to use
     // - returns false if the type information is not enough for a safe copy

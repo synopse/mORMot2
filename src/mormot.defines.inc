@@ -449,13 +449,13 @@
     {$ifend}
     {$if CompilerVersion >= 28.0}
       {$define ISDELPHIXE7}
-      {$define HASGETTYPEKIND}
       {$ifdef CPU64}
         {$define CPUX64ASM} // e.g. Delphi XE4 SSE asm is buggy :(
       {$endif}
     {$ifend}
     {$if CompilerVersion >= 29.0}
       {$define ISDELPHIXE8}
+      {$define HASGETTYPEKIND} // Delphi XE7 generics and intrinsics are buggy
     {$ifend}
     {$if CompilerVersion >= 30.0}
       {$define ISDELPHI10}
