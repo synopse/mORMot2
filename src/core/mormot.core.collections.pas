@@ -929,7 +929,11 @@ var
 begin
   state.Current := PtrUInt(fValue);
   if state.Current = 0 then
+  begin
+    state.ItemSize := 0; // likely <> 0 on stack -> MoveNext=false
+    state.After := 0;
     exit;
+  end;
   s := fDynArray.Info.Cache.ItemSize;
   state.ItemSize := s;
   state.After := state.Current + s * PtrUInt(fCount);
@@ -947,11 +951,14 @@ begin
     if Offset < 0 then
       Offset := 0;
   end;
-  if Offset >= fCount then
-    exit;
   state.Current := PtrUInt(fValue);
-  if state.Current = 0 then
+  if (state.Current = 0) or
+     (Offset >= fCount) then
+  begin
+    state.ItemSize := 0; // ensure MoveNext=false
+    state.After := 0;
     exit;
+  end;
   if Limit = 0 then
     Limit := fCount;
   s := fCount - Offset;
