@@ -7333,8 +7333,8 @@ begin
     raise ERttiException.CreateUtf8('Rtti.Count=% at Rtti.GlobalClass := % : ' +
       'some types have been registered as % before % has been loaded and ' +
       'initialized - please put % in the uses clause where you register '+
-      'your [ %] types, in addition to %', [Count, RttiClass, fGlobalClass,
-      RttiClass.UnitName, RttiClass.UnitName, regtypes, fGlobalClass.UnitName]);
+      'your [ %] types, in addition to mormot.core.rtti', [Count, RttiClass,
+      fGlobalClass, RttiClass.UnitName, RttiClass.UnitName, regtypes]);
   end;
   fGlobalClass := RttiClass;
 end;
