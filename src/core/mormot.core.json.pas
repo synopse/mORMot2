@@ -42,7 +42,7 @@ uses
 
 type
   /// exception raised by this unit, in relation to raw JSON process
-  EJSONException = class(ESynException);
+  EJsonException = class(ESynException);
 
   /// kind of character used from JSON_CHARS[] for efficient JSON parsing
   // - using such a set compiles into TEST [MEM], IMM so is more efficient
@@ -4162,7 +4162,7 @@ begin
   end;
 end;
 
-procedure RemoveCommentsFromJSON(P: PUtf8Char);
+procedure RemoveCommentsFromJson(P: PUtf8Char);
 var
   PComma: PUtf8Char;
 begin // replace comments by ' ' characters which will be ignored by parser
@@ -6155,7 +6155,7 @@ begin
     else if DocVariantType.FindSynVariantType(vt, cv) then
       cv.ToJson(self, Value, Escape)
     else if not CustomVariantToJson(self, Value, Escape) then
-      raise EJSONException.CreateUtf8('%.AddVariant VType=%', [self, vt]);
+      raise EJsonException.CreateUtf8('%.AddVariant VType=%', [self, vt]);
   end;
 end;
 
@@ -6228,7 +6228,7 @@ begin
     end
     else
       // rkRecord,rkObject have no getter methods
-      raise EJSONException.CreateUtf8('%.AddRttiVarData: unsupported % (%)',
+      raise EJsonException.CreateUtf8('%.AddRttiVarData: unsupported % (%)',
         [self, Value.Prop.Value.Name, ToText(Value.Prop.Value.Kind)^]);
   end
   else
@@ -9734,7 +9734,7 @@ function RecordLoadJson(var Rec; Json: PUtf8Char; TypeInfo: PRttiInfo;
 begin
   if (TypeInfo = nil) or
      not (TypeInfo.Kind in rkRecordTypes) then
-    raise EJSONException.CreateUtf8('RecordLoadJson: % is not a record',
+    raise EJsonException.CreateUtf8('RecordLoadJson: % is not a record',
       [TypeInfo.Name]);
   TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(@Rec, Json, EndOfObject,
       JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions);
@@ -9761,7 +9761,7 @@ function DynArrayLoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
 begin
   if (TypeInfo = nil) or
      (TypeInfo.Kind <> rkDynArray) then
-    raise EJSONException.CreateUtf8('DynArrayLoadJson: % is not a dynamic array',
+    raise EJsonException.CreateUtf8('DynArrayLoadJson: % is not a dynamic array',
       [TypeInfo.Name]);
   TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(@Value, Json, EndOfObject,
     JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions);
@@ -9793,7 +9793,7 @@ begin
     nil, TObjectListItemClass);
   TRttiJsonLoad(Ctxt.Info.JsonLoad)(@ObjectInstance, ctxt);
   Valid := ctxt.Valid;
-  result := ctxt.JSON;
+  result := ctxt.Json;
 end;
 
 function JsonSettingsToObject(var InitialJsonContent: RawUtf8;
@@ -9855,7 +9855,7 @@ begin
   if not JsonLoadProp(pointer(Instance), Prop^, ctxt) then
     exit;
   Valid := true;
-  result := ctxt.JSON;
+  result := ctxt.Json;
 end;
 
 function UrlDecodeObject(U: PUtf8Char; Upper: PAnsiChar;
@@ -10108,6 +10108,7 @@ procedure InitializeUnit;
 var
   i: PtrInt;
   c: AnsiChar;
+  regtypes: RawUtf8;
 begin
   // branchless JSON escaping - JSON_ESCAPE_NONE=0 if no JSON escape needed
   JSON_ESCAPE[0] := JSON_ESCAPE_ENDINGZERO;   // 1 for #0 end of input
@@ -10159,10 +10160,7 @@ begin
   JSON_TOKENS['n'] := jtNullFirstChar;
   JSON_TOKENS['/'] := jtSlash;
   // initialize JSON serialization
-  if Rtti.Count > 0 then
-    raise EJSONException.CreateUtf8(
-      'Rtti.Count=% at mormot.core.json start', [Rtti.Count]);
-  Rtti.GlobalClass := TRttiJson;
+  Rtti.GlobalClass := TRttiJson; // will ensure Rtti.Count = 0
   GetDataFromJson := _GetDataFromJson;
 end;
 

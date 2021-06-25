@@ -2185,6 +2185,7 @@ type
   /// maintain a thread-safe list of PRttiInfo/TRttiCustom/TRttiJson registration
   TRttiCustomList = object
   private
+    fGlobalClass: TRttiCustomClass;
     // for DoRegister thread-safety - no need of TSynLocker padding
     Lock: TRTLCriticalSection;
     // speedup search by name e.g. from a loop
@@ -2201,10 +2202,8 @@ type
     function DoRegister(ObjectClass: TClass): TRttiCustom; overload;
     function DoRegister(ObjectClass: TClass; ToDo: TRttiCustomFlags): TRttiCustom; overload;
     procedure Add(Instance: TRttiCustom);
+    procedure SetGlobalClass(RttiClass: TRttiCustomClass); // ensure Count=0
   public
-    /// which kind of TRttiCustom class is to be used for registration
-    // - properly set e.g. by mormot.core.json.pas to TRttiJson for JSON support
-    GlobalClass: TRttiCustomClass;
     /// how many TRttiCustom instances have been registered
     Count: integer;
     /// how many TRttiCustom instances have been registered for a given type
@@ -2394,6 +2393,10 @@ type
     // ! Rtti.ByClass[TMyClass].Props.NameChanges(['old', 'new'])
     property ByClass[C: TClass]: TRttiCustom
       read GetByClass;
+    /// which kind of TRttiCustom class is to be used for registration
+    // - properly set e.g. by mormot.core.json.pas to TRttiJson for JSON support
+    property GlobalClass: TRttiCustomClass
+      read fGlobalClass write SetGlobalClass;
   end;
 
 
@@ -7318,6 +7321,24 @@ begin // call is made within Lock..UnLock
   inc(Counts[Instance.Kind]);
 end;
 
+procedure TRttiCustomList.SetGlobalClass(RttiClass: TRttiCustomClass);
+var
+  i: PtrInt;
+  regtypes: RawUtf8;
+begin
+  if Count <> 0 then
+  begin
+    for i := 0 to Count - 1 do
+      regtypes := {%H-}regtypes + Instances[i].Name + ' ';
+    raise ERttiException.CreateUtf8('Rtti.Count=% at Rtti.GlobalClass := % : ' +
+      'some types have been registered as % before % has been loaded and ' +
+      'initialized - please put % in the uses clause where you register '+
+      'your [ %] types, in addition to %', [Count, RttiClass, fGlobalClass,
+      RttiClass.UnitName, RttiClass.UnitName, regtypes, fGlobalClass.UnitName]);
+  end;
+  fGlobalClass := RttiClass;
+end;
+
 procedure TRttiCustomList.RegisterTypes(const Info: array of PRttiInfo);
 var
   i: PtrInt;
@@ -7835,7 +7856,7 @@ begin
   PT_DYNARRAY[ptWord] := TypeInfo(TWordDynArray);
   // prepare global thread-safe TRttiCustomList
   InitializeCriticalSection(Rtti.Lock);
-  Rtti.GlobalClass := TRttiCustom;
+  Rtti.fGlobalClass := TRttiCustom;
   ClassUnit := _ClassUnit;
   // redirect most used FPC RTL functions to optimized x86_64 assembly
   {$ifdef FPC_CPUX64}
