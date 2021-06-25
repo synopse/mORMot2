@@ -5189,6 +5189,28 @@ begin
   result := SizeOf(pointer);
 end;
 
+{$ifdef CPUX64}
+function MemCmp(P1, P2: PByteArray; L: PtrInt): PtrInt; inline;
+begin
+  result := MemCmpSse2(P1, P2, L);
+end;
+{$else}
+function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  // caller ensured that P1<>nil, P2<>nil and L>0
+  inc(PtrUInt(P1), PtrUInt(L));
+  inc(PtrUInt(P2), PtrUInt(L));
+  L := -L;
+  repeat
+    result := P1[L] - P2[L];
+    if result <> 0 then
+      exit;
+    inc(L);
+  until L = 0;
+end;
+{$endif CPUX64}
+
 function DynArrayCompare(A, B: PAnsiChar; ExternalCountA, ExternalCountB: PInteger;
   Info: PRttiInfo; CaseInSensitive: boolean): integer;
 var
@@ -5251,8 +5273,8 @@ begin
         dec(n); // both items are equal -> continue to next items
       until n = 0
     else
-    begin
-      result := StrCompL(A, B, n * itemsize); // binary comparison with length
+    begin // binary comparison with length
+      result := MemCmp(pointer(A), pointer(B), n * itemsize);
       if result <> 0 then
         exit;
     end;
@@ -5387,7 +5409,7 @@ begin
       offset := f^.Offset - offset;
       if offset <> 0 then
       begin
-        result := StrCompL(A, B, offset); // binary comparison with length
+        result := MemCmp(pointer(A), pointer(B), offset); // binary comparison
         if result <> 0 then
           exit;
         inc(A, offset);
@@ -5404,7 +5426,7 @@ begin
   end;
   offset := PtrUInt(fields.Size) - offset;
   if offset > 0 then
-    result := StrCompL(A, B, offset); // compare trailing binary
+    result := MemCmp(pointer(A), pointer(B), offset); // trailing binary
 end;
 
 function _BC_Record(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
@@ -5471,7 +5493,7 @@ var
 begin
   Info := Info^.ArrayItemType(n, ArraySize);
   if Info = nil then
-    result := StrCompL(A, B, ArraySize) // binary comparison with length
+    result := MemCmp(pointer(A), pointer(B), ArraySize) // binary comparison
   else
   begin
     cmp := RTTI_COMPARE[CaseInSensitive, Info^.Kind];
@@ -6214,7 +6236,7 @@ begin
   if Assigned(fCompare) then
     result := fCompare(A^, B^)
   else if not(rcfArrayItemManaged in fInfo.Flags) then
-bin:result := StrCompL(A, B, fInfo.Cache.ItemSize) // binary compare with length
+bin:result := MemCmp(A, B, fInfo.Cache.ItemSize) // binary compare with length
   else
   begin
     rtti := fInfo.Cache.ItemInfo;
@@ -7445,7 +7467,7 @@ begin
   end
   else if not(rcfArrayItemManaged in fInfo.Flags) then
     // binary comparison with length
-    result := StrCompL(fValue^, B.fValue^, n * fInfo.Cache.ItemSize)
+    result := MemCmp(fValue^, B.fValue^, n * fInfo.Cache.ItemSize)
   else if rcfObjArray in fInfo.Flags then
     result := DynArrayCompare(pointer(fValue), pointer(B.fValue),
       fCountP, B.fCountP, TypeInfo(TObjectDynArray), casesensitive)
