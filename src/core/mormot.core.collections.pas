@@ -30,7 +30,7 @@ interface
 // unit and not in the end-user units to reduce executable code size
 // - NOSPECIALIZE disable ahead-of-time compilation and make naive bloated generics
 // - you may try this conditional to circumvent some Delphi internal errors
-// - see also SPECIALIZE_HASH and SPECIALIZE_WSTRING conditionals below
+// - see also SPECIALIZE_HASH, SPECIALIZE_SMALL SPECIALIZE_WSTRING conditionals
 {.$define NOSPECIALIZE}
 
 
@@ -90,7 +90,9 @@ type
   // - by default, managed values and T*ObjArray will delete their content
   // unless the loNoFinalize option is set (handle with care to avoid mem leaks)
   // - loCreateUniqueIndex will maintain a hash table over the items so that
-  // Add() would avoid any duplicate and Find() perform in O(1) fast lookup
+  // Add() would avoid any duplicate and Find() perform in O(1) fast lookup -
+  // note that aSortAs could be set in Collections.NewPlainList<> to index the
+  // first field of a record instead of the whole collection item
   TListOptions = set of (
     loCaseInsensitive,
     loNoFinalize,
@@ -171,7 +173,9 @@ type
     function IndexOf(const value: T): PtrInt;
     /// search for a value inside this collection using Comparer function
     // - if the collection was created with loCreateUniqueIndex, will use
-    // the internal hash table for O(1) efficient lookup
+    // the internal hash table for O(1) efficient lookup - aSortAs could be set
+    // in Collections.NewPlainList<> to hash the first field of a record instead
+    // of the whole collection item
     // - if the collection is sorted (i.e. AddSorted was used, or Sort was
     // called after Add) will perform fast O(log(n)) binary search
     // - on a non-sorted collection, will make O(n) comparisons with the value
@@ -221,9 +225,11 @@ type
     /// high-level access to the stored values from their associated indexes
     // - raise ESynList if the supplied index is out of range
     // - SetItem() will raise ESynList if loCreateUniqueIndex is defined
-    // - is the default propery so that ISynList<T> could be used as an array:
+    // - is the default propery so that IList<T> could be used as an array:
     // !   for i := 0 to list.Count - 1 do // regular Items[] access
     // !     writeln(list[i]);
+    // - note that using an enumerator is faster than using this property within
+    // a loop, since TSynEnumerator<T> is a record which can be inlined
     property Items[ndx: PtrInt]: T
       read GetItem write SetItem; default;
     /// returns the number of items actually stored
@@ -364,7 +370,7 @@ type
     function GetTimeOutSeconds: cardinal;
     procedure SetTimeOutSeconds(value: cardinal);
     /// add a key/value pair to be unique
-    // - raise an  ESynKeyValue if key was already set
+    // - raise an ESynKeyValue if key was already set
     // - use default Items[] property to add or replace a key/value pair
     procedure Add(const key: TKey; const value: TValue);
     /// add a key/value pair if key is not existing
@@ -394,14 +400,13 @@ type
     function DeleteDeprecated: integer;
     /// delete all stored key/value pairs
     procedure Clear; overload;
-    /// delete one stored key/value pairs from its key
-    function Clear(const key: TKey): boolean; overload;
     /// returns the number of key/value pairs actually stored
     function Count: integer;
     /// high-level access to the stored values from their associated keys
-    // - raise an  ESynKeyValue if the key is not available, unless
-    // kvoDefaultIfNotFound option was set
-    // - use TryGetValue() if you want to detect non available key
+    // - GetItem() raise an ESynKeyValue if the key is not available, unless
+    // kvoDefaultIfNotFound option was set- use TryGetValue() if you want to
+    // detect (without any exception) any non available key
+    // - SetItem() will add the value if key is not existing, or replace it
     property Items[const key: TKey]: TValue
       read GetItem write SetItem; default;
     /// returns the internal TSynDictionary capacity
@@ -504,7 +509,6 @@ type
     function GetValueOrDefault(const key: TKey;
       const defaultValue: TValue): TValue;
     /// IKeyValue<> method to remove a key/value pair
-    // - returns true if the entry was deleted, false if key was not found
     function Remove(const key: TKey): boolean;
     /// IKeyValue<> method to search a key/value, then delete the pair
     function Extract(const key: TKey; var value: TValue): boolean;
@@ -512,8 +516,6 @@ type
     function ContainsKey(const key: TKey): boolean;
     /// IKeyValue<> method to search for a key/value pair from a value
     function ContainsValue(const value: TValue): boolean;
-    /// IKeyValue<> method to delete one stored key/value pairs from its key
-    function Clear(const key: TKey): boolean; overload;
     /// high-level IKeyValue<> method to get the stored values from their keys
     property Items[const key: TKey]: TValue
       read GetItem write SetItem; default;
@@ -532,9 +534,14 @@ type
 
     // circumvent "F2084 Internal Error" with the Delphi compiler and big ordinals
     // - you may try and risk to define SPECIALIZE_HASH conditional for your project
-    //{$ifdef FPC}
+    {$ifdef FPC}
       {$define SPECIALIZE_HASH}
-    //{$endif FPC} // FPC 3.2 is mature for sure :)
+    {$endif FPC} // FPC 3.2 is mature for sure :)
+
+    // small byte/word are not useful in dictionaries (use integer instead)
+    // so are not pre-compiled by default - this conditional generates them
+    // - this affects only IKeyValue<> not IList<> which specializes byte/word
+    {.$define SPECIALIZE_SMALL}
 
     // WideString are not often used (use UnicodeString/SynUnicode instead)
     // so are not pre-compiled by default - this conditional generates them
@@ -1205,11 +1212,6 @@ begin
   result := fData.ExistsValue(value);
 end;
 
-function TSynKeyValueSpecialized<TKey, TValue>.Clear(const key: TKey): boolean;
-begin
-  result := fData.Clear(key) >= 0;
-end;
-
 
 
 { ************ Collections Factory for IList<> and IKeyValue<> Instances }
@@ -1328,6 +1330,7 @@ label
   err;
 begin
   case aSizeKey of
+    {$ifdef SPECIALIZE_SMALL}
     1:
       case aSizeValue of
         1:
@@ -1343,7 +1346,7 @@ begin
           obj := TSynKeyValueSpecialized<Byte, THash128>.Create(aContext);
         {$endif SPECIALIZE_HASH}
       else
-err:    obj := RaiseUseNewPlainKeyValue(aContext);
+        goto err;
       end;
     2:
       case aSizeValue of
@@ -1362,12 +1365,15 @@ err:    obj := RaiseUseNewPlainKeyValue(aContext);
       else
         goto err;
       end;
+    {$endif SPECIALIZE_SMALL}
     4:
       case aSizeValue of
+        {$ifdef SPECIALIZE_SMALL}
         1:
           obj := TSynKeyValueSpecialized<Integer, Byte>.Create(aContext);
         2:
           obj := TSynKeyValueSpecialized<Integer, Word>.Create(aContext);
+        {$endif SPECIALIZE_SMALL}
         4:
           obj := TSynKeyValueSpecialized<Integer, Integer>.Create(aContext);
         8:
@@ -1377,14 +1383,16 @@ err:    obj := RaiseUseNewPlainKeyValue(aContext);
           obj := TSynKeyValueSpecialized<Integer, THash128>.Create(aContext);
         {$endif SPECIALIZE_HASH}
       else
-        goto err;
+err:    obj := RaiseUseNewPlainKeyValue(aContext);
       end;
     8:
       case aSizeValue of
+        {$ifdef SPECIALIZE_SMALL}
         1:
           obj := TSynKeyValueSpecialized<Int64, Byte>.Create(aContext);
         2:
           obj := TSynKeyValueSpecialized<Int64, Word>.Create(aContext);
+        {$endif SPECIALIZE_SMALL}
         4:
           obj := TSynKeyValueSpecialized<Int64, Integer>.Create(aContext);
         8:
@@ -1399,10 +1407,12 @@ err:    obj := RaiseUseNewPlainKeyValue(aContext);
     {$ifdef SPECIALIZE_HASH}
     16:
       case aSizeValue of
+        {$ifdef SPECIALIZE_SMALL}
         1:
           obj := TSynKeyValueSpecialized<THash128, Byte>.Create(aContext);
         2:
           obj := TSynKeyValueSpecialized<THash128, Word>.Create(aContext);
+        {$endif SPECIALIZE_SMALL}
         4:
           obj := TSynKeyValueSpecialized<THash128, Integer>.Create(aContext);
         8:
@@ -1417,7 +1427,7 @@ err:    obj := RaiseUseNewPlainKeyValue(aContext);
     goto err;
   end;
   // all IKeyValue<TKey, TValue> share the same VMT -> assign once
-  IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
+  IKeyValue<Int64, Int64>(result) := TSynKeyValueSpecialized<Int64, Int64>({%H-}obj);
 end;
 
 class procedure Collections.NewOrdinalLString(
@@ -1426,10 +1436,12 @@ var
   obj: pointer;
 begin
   case aSizeKey of
+    {$ifdef SPECIALIZE_SMALL}
     1:
       obj := TSynKeyValueSpecialized<Byte, RawByteString>.Create(aContext);
     2:
       obj := TSynKeyValueSpecialized<Word, RawByteString>.Create(aContext);
+    {$endif SPECIALIZE_SMALL}
     4:
       obj := TSynKeyValueSpecialized<Integer, RawByteString>.Create(aContext);
     8:
@@ -1445,7 +1457,7 @@ begin
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
+  IKeyValue<Int64, Int64>(result) := TSynKeyValueSpecialized<Int64, Int64>({%H-}obj);
 end;
 
 {$ifdef SPECIALIZE_WSTRING}
@@ -1455,10 +1467,12 @@ var
   obj: pointer;
 begin
   case aSizeKey of
+    {$ifdef SPECIALIZE_SMALL}
     1:
       obj := TSynKeyValueSpecialized<Byte, WideString>.Create(aContext);
     2:
       obj := TSynKeyValueSpecialized<Word, WideString>.Create(aContext);
+    {$endif SPECIALIZE_SMALL}
     4:
       obj := TSynKeyValueSpecialized<Integer, WideString>.Create(aContext);
     8:
@@ -1470,7 +1484,7 @@ begin
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
+  IKeyValue<Int64, Int64>(result) := TSynKeyValueSpecialized<Int64, Int64>({%H-}obj);
 end;
 {$endif SPECIALIZE_WSTRING}
 
@@ -1480,10 +1494,12 @@ var
   obj: pointer;
 begin
   case aSizeKey of
+    {$ifdef SPECIALIZE_SMALL}
     1:
       obj := TSynKeyValueSpecialized<Byte, UnicodeString>.Create(aContext);
     2:
       obj := TSynKeyValueSpecialized<Word, UnicodeString>.Create(aContext);
+    {$endif SPECIALIZE_SMALL}
     4:
       obj := TSynKeyValueSpecialized<Integer, UnicodeString>.Create(aContext);
     8:
@@ -1495,7 +1511,7 @@ begin
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
+  IKeyValue<Int64, Int64>(result) := TSynKeyValueSpecialized<Int64, Int64>({%H-}obj);
 end;
 
 class procedure Collections.NewOrdinalInterface(
@@ -1504,10 +1520,12 @@ var
   obj: pointer;
 begin
   case aSizeKey of
+    {$ifdef SPECIALIZE_SMALL}
     1:
       obj := TSynKeyValueSpecialized<Byte, IInterface>.Create(aContext);
     2:
       obj := TSynKeyValueSpecialized<Word, IInterface>.Create(aContext);
+    {$endif SPECIALIZE_SMALL}
     4:
       obj := TSynKeyValueSpecialized<Integer, IInterface>.Create(aContext);
     8:
@@ -1519,7 +1537,7 @@ begin
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
+  IKeyValue<Int64, Int64>(result) := TSynKeyValueSpecialized<Int64, Int64>({%H-}obj);
 end;
 
 class procedure Collections.NewOrdinalVariant(
@@ -1528,10 +1546,12 @@ var
   obj: pointer;
 begin
   case aSizeKey of
+    {$ifdef SPECIALIZE_SMALL}
     1:
       obj := TSynKeyValueSpecialized<Byte, Variant>.Create(aContext);
     2:
       obj := TSynKeyValueSpecialized<Word, Variant>.Create(aContext);
+    {$endif SPECIALIZE_SMALL}
     4:
       obj := TSynKeyValueSpecialized<Integer, Variant>.Create(aContext);
     8:
@@ -1543,7 +1563,7 @@ begin
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
+  IKeyValue<Int64, Int64>(result) := TSynKeyValueSpecialized<Int64, Int64>({%H-}obj);
 end;
 
 class procedure Collections.NewLStringOrdinal(
@@ -1552,10 +1572,12 @@ var
   obj: pointer;
 begin
   case aSizeValue of
+    {$ifdef SPECIALIZE_SMALL}
     1:
       obj := TSynKeyValueSpecialized<RawByteString, Byte>.Create(aContext);
     2:
       obj := TSynKeyValueSpecialized<RawByteString, Word>.Create(aContext);
+    {$endif SPECIALIZE_SMALL}
     4:
       obj := TSynKeyValueSpecialized<RawByteString, Integer>.Create(aContext);
     8:
@@ -1571,7 +1593,7 @@ begin
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
+  IKeyValue<Int64, Int64>(result) := TSynKeyValueSpecialized<Int64, Int64>({%H-}obj);
 end;
 
 class procedure Collections.NewLStringManaged(
@@ -1595,7 +1617,7 @@ begin
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
+  IKeyValue<Int64, Int64>(result) := TSynKeyValueSpecialized<Int64, Int64>({%H-}obj);
 end;
 
 {$ifdef SPECIALIZE_WSTRING}
@@ -1605,10 +1627,12 @@ var
   obj: pointer;
 begin
   case aSizeValue of
+    {$ifdef SPECIALIZE_SMALL}
     1:
       obj := TSynKeyValueSpecialized<WideString, Byte>.Create(aContext);
     2:
       obj := TSynKeyValueSpecialized<WideString, Word>.Create(aContext);
+    {$endif SPECIALIZE_SMALL}
     4:
       obj := TSynKeyValueSpecialized<WideString, Integer>.Create(aContext);
     8:
@@ -1620,7 +1644,7 @@ begin
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
+  IKeyValue<Int64, Int64>(result) := TSynKeyValueSpecialized<Int64, Int64>({%H-}obj);
 end;
 
 class procedure Collections.NewWStringManaged(
@@ -1642,7 +1666,7 @@ begin
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
+  IKeyValue<Int64, Int64>(result) := TSynKeyValueSpecialized<Int64, Int64>({%H-}obj);
 end;
 {$endif SPECIALIZE_WSTRING}
 
@@ -1652,10 +1676,12 @@ var
   obj: pointer;
 begin
   case aSizeValue of
+    {$ifdef SPECIALIZE_SMALL}
     1:
       obj := TSynKeyValueSpecialized<UnicodeString, Byte>.Create(aContext);
     2:
       obj := TSynKeyValueSpecialized<UnicodeString, Word>.Create(aContext);
+    {$endif SPECIALIZE_SMALL}
     4:
       obj := TSynKeyValueSpecialized<UnicodeString, Integer>.Create(aContext);
     8:
@@ -1667,7 +1693,7 @@ begin
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
+  IKeyValue<Int64, Int64>(result) := TSynKeyValueSpecialized<Int64, Int64>({%H-}obj);
 end;
 
 class procedure Collections.NewUStringManaged(
@@ -1691,7 +1717,7 @@ begin
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
+  IKeyValue<Int64, Int64>(result) := TSynKeyValueSpecialized<Int64, Int64>({%H-}obj);
 end;
 
 class procedure Collections.NewInterfaceOrdinal(
@@ -1700,10 +1726,12 @@ var
   obj: pointer;
 begin
   case aSizeValue of
+    {$ifdef SPECIALIZE_SMALL}
     1:
       obj := TSynKeyValueSpecialized<IInterface, Byte>.Create(aContext);
     2:
       obj := TSynKeyValueSpecialized<IInterface, Word>.Create(aContext);
+    {$endif SPECIALIZE_SMALL}
     4:
       obj := TSynKeyValueSpecialized<IInterface, Integer>.Create(aContext);
     8:
@@ -1715,7 +1743,7 @@ begin
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
+  IKeyValue<Int64, Int64>(result) := TSynKeyValueSpecialized<Int64, Int64>({%H-}obj);
 end;
 
 class procedure Collections.NewInterfaceManaged(
@@ -1739,7 +1767,7 @@ begin
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
+  IKeyValue<Int64, Int64>(result) := TSynKeyValueSpecialized<Int64, Int64>({%H-}obj);
 end;
 
 class procedure Collections.NewVariantOrdinal(
@@ -1748,10 +1776,12 @@ var
   obj: pointer;
 begin
   case aSizeValue of
+    {$ifdef SPECIALIZE_SMALL}
     1:
       obj := TSynKeyValueSpecialized<Variant, Byte>.Create(aContext);
     2:
       obj := TSynKeyValueSpecialized<Variant, Word>.Create(aContext);
+    {$endif SPECIALIZE_SMALL}
     4:
       obj := TSynKeyValueSpecialized<Variant, Integer>.Create(aContext);
     8:
@@ -1763,7 +1793,7 @@ begin
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
+  IKeyValue<Int64, Int64>(result) := TSynKeyValueSpecialized<Int64, Int64>({%H-}obj);
 end;
 
 class procedure Collections.NewVariantManaged(
@@ -1787,7 +1817,7 @@ begin
   else
     obj := RaiseUseNewPlainKeyValue(aContext);
   end;
-  IKeyValue<Byte, Byte>(result) := TSynKeyValueSpecialized<Byte, Byte>({%H-}obj);
+  IKeyValue<Int64, Int64>(result) := TSynKeyValueSpecialized<Int64, Int64>({%H-}obj);
 end;
 
 class function Collections.NewList<T>(aOptions: TListOptions;
