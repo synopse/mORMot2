@@ -667,15 +667,15 @@ type
   TDocVariantObjectsEnumerator = record
   private
     State: TDocVariantEnumeratorState;
-    function GetCurrent: PDocVariantData;
-      {$ifdef HASINLINE}inline;{$endif}
+    Value: PDocVariantData;
   public
     function MoveNext: Boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     function GetEnumerator: TDocVariantObjectsEnumerator;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns the current Value as pointer to the TDocVariantData
     property Current: PDocVariantData
-      read GetCurrent;
+      read Value;
   end;
   {$endif HASITERATORS}
 
@@ -3995,25 +3995,29 @@ end;
 { TDocVariantObjectsEnumerator }
 
 function TDocVariantObjectsEnumerator.MoveNext: Boolean;
+var
+  vt: cardinal;
+  vd: PVarData;
 begin
   repeat
     inc(State.Curr);
-    if PtrUInt(State.Curr) >= PtrUInt(State.After) then
+    vd := pointer(State.Curr);
+    if PtrUInt(vd) >= PtrUInt(State.After) then
       break;
-    if DocVariantType.IsOfType(State.Curr^) then
-    begin
-      result := true;
-      exit;
-    end
+    repeat
+      vt := vd^.VType;
+      if vt = DocVariantVType then
+      begin
+        Value := pointer(vd);
+        result := true;
+        exit;
+      end;
+      if vt <> varByRef or varVariant then
+        break;
+      vd := vd^.VPointer;
+    until false;
   until false;
   result := false;
-end;
-
-function TDocVariantObjectsEnumerator.GetCurrent: PDocVariantData;
-begin
-  result := pointer(State.Curr);
-  while result^.VType = varByRef or varVariant do
-    result := PVarData(result)^.VPointer;
 end;
 
 function TDocVariantObjectsEnumerator.GetEnumerator: TDocVariantObjectsEnumerator;
