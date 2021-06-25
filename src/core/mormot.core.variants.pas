@@ -365,6 +365,14 @@ type
   // if you are not sure how aVariant was allocated (may be not _Obj/_Json)
   PDocVariantData = ^TDocVariantData;
 
+  /// define the TDocVariant storage layout
+  // - if it has one or more named properties, it is a dvObject
+  // - if it has no name property, it is a dvArray
+  TDocVariantKind = (
+    dvUndefined,
+    dvObject,
+    dvArray);
+
   /// a custom variant type used to store any JSON/BSON document-based content
   // - i.e. name/value pairs for objects, or an array of values (including
   // nested documents), stored in a TDocVariantData memory structure
@@ -421,7 +429,8 @@ type
     // !begin
     // !  TDocVariant.NewFast(v);
     // !  ...
-    class procedure NewFast(out aValue: variant); overload;
+    class procedure NewFast(out aValue: variant;
+      aKind: TDocVariantKind = dvUndefined); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// ensure a variant is a TDocVariant instance
     // - if aValue is not a TDocVariant, will create a new JSON_OPTIONS[true]
@@ -433,7 +442,8 @@ type
     // !begin
     // !  TDocVariant.NewFast([@v1,@v2,@v3]);
     // !  ...
-    class procedure NewFast(const aValues: array of PDocVariantData); overload;
+    class procedure NewFast(const aValues: array of PDocVariantData;
+      aKind: TDocVariantKind = dvUndefined); overload;
     /// initialize a variant instance to store some document-based content
     // - you can use this function to create a variant, which can be nested into
     // another document, e.g.:
@@ -587,14 +597,6 @@ type
     procedure Compare(const Left, Right: TVarData;
       var Relationship: TVarCompareResult); override;
   end;
-
-  /// define the TDocVariant storage layout
-  // - if it has one or more named properties, it is a dvObject
-  // - if it has no name property, it is a dvArray
-  TDocVariantKind = (
-    dvUndefined,
-    dvObject,
-    dvArray);
 
   /// method used by TDocVariantData.ReduceAsArray to filter each object
   // - should return TRUE if the item match the expectations
@@ -774,12 +776,12 @@ type
     // - see also TDocVariant.NewFast() if you want to initialize several
     // TDocVariantData variable instances at once
     // - if you call Init*() methods in a row, ensure you call Clear in-between
-    procedure InitFast; overload;
+    procedure InitFast(aKind: TDocVariantKind = dvUndefined); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// initialize a TDocVariantData to store per-reference document-based content
     // - this overloaded method allows to specify an estimation of how many
     // properties or items this aKind document would contain
-    procedure InitFast(InitialCapacity: integer;
-      aKind: TDocVariantKind); overload;
+    procedure InitFast(InitialCapacity: integer; aKind: TDocVariantKind); overload;
     /// initialize a TDocVariantData to store document-based object content
     // - object will be initialized with data supplied two by two, as Name,Value
     // pairs, e.g.
@@ -817,7 +819,7 @@ type
     // !end;
     // - this method is called e.g. by _Arr() and _ArrFast() global functions
     // - if you call Init*() methods in a row, ensure you call Clear in-between
-    procedure InitArray(const Items: array of const;
+    procedure InitArray(const aItems: array of const;
       aOptions: TDocVariantOptions = []);
     /// initialize a variant instance to store some document-based array content
     // - array will be initialized with data supplied as variant dynamic array
@@ -825,26 +827,26 @@ type
     // - will be almost immediate, since TVariantDynArray is reference-counted,
     // unless ItemsCopiedByReference is set to FALSE
     // - if you call Init*() methods in a row, ensure you call Clear in-between
-    procedure InitArrayFromVariants(const Items: TVariantDynArray;
+    procedure InitArrayFromVariants(const aItems: TVariantDynArray;
       aOptions: TDocVariantOptions = [];
-      ItemsCopiedByReference: boolean = true);
+      aItemsCopiedByReference: boolean = true);
     /// initialize a variant instance to store some RawUtf8 array content
-    procedure InitArrayFrom(const Items: TRawUtf8DynArray;
+    procedure InitArrayFrom(const aItems: TRawUtf8DynArray;
       aOptions: TDocVariantOptions); overload;
     /// initialize a variant instance to store some 32-bit integer array content
-    procedure InitArrayFrom(const Items: TIntegerDynArray;
+    procedure InitArrayFrom(const aItems: TIntegerDynArray;
       aOptions: TDocVariantOptions); overload;
     /// initialize a variant instance to store some 64-bit integer array content
-    procedure InitArrayFrom(const Items: TInt64DynArray;
+    procedure InitArrayFrom(const aItems: TInt64DynArray;
       aOptions: TDocVariantOptions); overload;
     /// initialize a variant instance to store some double array content
-    procedure InitArrayFrom(const Items: TDoubleDynArray;
+    procedure InitArrayFrom(const aItems: TDoubleDynArray;
       aOptions: TDocVariantOptions); overload;
     /// initialize a variant instance to store some dynamic array content
-    procedure InitArrayFrom(var Items; ArrayInfo: PRttiInfo;
+    procedure InitArrayFrom(var aItems; ArrayInfo: PRttiInfo;
       aOptions: TDocVariantOptions; ItemsCount: PInteger = nil); overload;
     /// initialize a variant instance to store some TDynArray content
-    procedure InitArrayFrom(const Items: TDynArray;
+    procedure InitArrayFrom(const aItems: TDynArray;
       aOptions: TDocVariantOptions); overload;
     /// initialize a variant instance to store a T*ObjArray content
     // - will call internally ObjectToVariant() to make the conversion
@@ -1664,6 +1666,10 @@ var
   // - as used by inlined functions of TDocVariantData
   DocVariantVType: cardinal;
 
+  // will be properly filled in initialization section below
+  DV_FAST: array[TDocVariantKind] of TVarData;
+
+
 /// retrieve the text representation of a TDocVairnatKind
 function ToText(kind: TDocVariantKind): PShortString; overload;
 
@@ -2454,7 +2460,7 @@ begin
     TVarData(Dest) := TVarData(Source)
   else if not SetVariantUnRefSimpleValue(Source, TVarData(Dest)) then
   begin
-    TVarData(Dest).VType := varVariant or varByRef;
+    TRttiVarData(Dest).VType := varVariant or varByRef;
     TVarData(Dest).VPointer := @Source;
   end;
 end;
@@ -2463,6 +2469,7 @@ procedure SetVariantByValue(const Source: Variant; var Dest: Variant);
 var
   s: PVarData;
   d: TVarData absolute Dest;
+  dt: cardinal absolute Dest;
   vt: cardinal;
 begin
   s := @Source;
@@ -2476,25 +2483,25 @@ begin
   case vt of
     varEmpty..varDate, varBoolean, varShortInt..varWord64:
       begin
-        d.VType := vt;
+        dt := vt;
         d.VInt64 := s^.VInt64;
       end;
     varString:
       begin
-        d.VType := varString;
+        dt := varString;
         d.VAny := nil;
         RawByteString(d.VAny) := RawByteString(s^.VAny);
       end;
     varByRef or varString:
       begin
-        d.VType := varString;
+        dt := varString;
         d.VAny := nil;
         RawByteString(d.VAny) := PRawByteString(s^.VAny)^;
       end;
     {$ifdef HASVARUSTRING} varUString, varByRef or varUString, {$endif}
     varOleStr, varByRef or varOleStr:
       begin
-        d.VType := varString;
+        dt := varString;
         d.VAny := nil;
         VariantToUtf8(PVariant(s)^, RawUtf8(d.VAny)); // store a RawUtf8 instance
       end;
@@ -2591,7 +2598,7 @@ begin
     exit;
   end;
   VarClear(variant(Value));
-  Value.VType := ExpectedValueType;
+  TRttiVarData(Value).VType := ExpectedValueType;
   Value.VAny := nil; // avoid GPF below
   if Txt <> '' then
     case ExpectedValueType of
@@ -3006,11 +3013,11 @@ procedure TSynInvokeableVariantType.DispInvoke(
 var
   name: string;
   res: TVarData;
-  namelen, i, t, n: integer;
+  namelen, i, t, n: PtrInt;
   nameptr, a: PAnsiChar;
   asize: PtrInt;
   v: PVarData;
-  args: TVarDataArray;
+  args: TVarDataArray; // DoProcedure/DoFunction require a dynamic array
   {$ifdef FPC}
   inverted: boolean;
   {$endif FPC}
@@ -3068,12 +3075,12 @@ begin
       end;
       if CallDesc^.ArgTypes[i] and $80 <> 0 then
       begin
-        v^.VType := t or varByRef;
+        TRttiVarData(v^).VType := t or varByRef;
         v^.VPointer := PPointer(a)^;
       end
       else
       begin
-        v^.VType := t;
+        TRttiVarData(v^).VType := t;
         case t of
           varError:
             begin
@@ -3128,7 +3135,7 @@ begin
         TryFunction
       else if not DoProcedure(Source, name, args) then
       begin
-        res.VType := varEmpty;
+        PCardinal(@res)^ := varEmpty;
         try
           TryFunction;
         finally
@@ -3224,7 +3231,7 @@ var
   vt: cardinal;
   itemName: ShortString;
 begin
-  PInteger(@Dest)^ := varEmpty; // left to Unassigned if not found
+  TRttiVarData(Dest).VType := varEmpty; // left to Unassigned if not found
   v := Instance;
   repeat
     vt := v.VType;
@@ -3248,7 +3255,7 @@ begin
         exit;
     end;
     tmp := v; // v will be modified in-place
-    PInteger(@v)^ := varEmpty; // IntGet() would clear it otherwise!
+    TRttiVarData(v).VType := varEmpty; // IntGet() would clear it otherwise!
     if not handler.IntGet(v, tmp, @itemName[1], ord(itemName[0])) then
       exit; // property not found
     repeat
@@ -3260,7 +3267,7 @@ begin
     if (vt = DocVariantVType) and
        (TDocVariantData(v).VCount = 0) then
       // recognize void TDocVariant as null
-      v.VType := varNull;
+      v.VType := varNull; // do not use PCardinal/TRttiVarData(v).VType here
   until FullName = nil;
   Dest := v;
 end;
@@ -3376,7 +3383,7 @@ begin
      (cardinal(Index) < cardinal(Data.VCount)) then
     Dest := TVarData(Data.VValue[Index])
   else
-    Dest.VType := varEmpty;
+    TRttiVarData(Dest).VType := varEmpty;
 end;
 
 function TDocVariant.DoProcedure(const V: TVarData; const Name: string;
@@ -3635,9 +3642,10 @@ begin
   TDocVariantData(aValue).Init(aOptions);
 end;
 
-class procedure TDocVariant.NewFast(out aValue: variant);
+class procedure TDocVariant.NewFast(out aValue: variant;
+  aKind: TDocVariantKind);
 begin
-  TDocVariantData(aValue).InitFast;
+  TVarData(aValue) := DV_FAST[aKind];
 end;
 
 class procedure TDocVariant.IsOfTypeOrNewFast(var aValue: variant);
@@ -3645,15 +3653,18 @@ begin
   if DocVariantType.IsOfType(aValue) then
     exit;
   VarClear(aValue);
-  TDocVariantData(aValue).InitFast;
+  TVarData(aValue) := DV_FAST[dvUndefined];
 end;
 
-class procedure TDocVariant.NewFast(const aValues: array of PDocVariantData);
+class procedure TDocVariant.NewFast(const aValues: array of PDocVariantData;
+  aKind: TDocVariantKind);
 var
   i: PtrInt;
+  def: PDocVariantData;
 begin
+  def := @DV_FAST[aKind];
   for i := 0 to high(aValues) do
-    aValues[i]^.InitFast;
+    aValues[i]^ := def^;
 end;
 
 class function TDocVariant.New(Options: TDocVariantOptions): Variant;
@@ -3839,7 +3850,7 @@ var
   PS: PShortString;
   arr: TDocVariantData;
 begin
-  arr.InitFast;
+  TVarData(arr) := DV_FAST[dvArray];
   if FullSetsAsStar and
      GetAllBits(Value, Info.Cache.EnumMax + 1) then
     arr.AddItem('*')
@@ -4061,36 +4072,31 @@ end;
 
 procedure TDocVariantData.Init(aOptions: TDocVariantOptions;
   aKind: TDocVariantKind);
+var
+  opt: cardinal; // Intel has latency on word-level memory access
 begin
   aOptions := aOptions - [dvoIsArray, dvoIsObject];
-  case aKind of
-    dvArray:
-      include(aOptions, dvoIsArray);
-    dvObject:
+  if aKind <> dvUndefined then
+    if aKind = dvArray then
+      include(aOptions, dvoIsArray)
+    else
       include(aOptions, dvoIsObject);
-  end;
-  ZeroFill(@self);
-  VType := DocVariantVType;
-  VOptions := aOptions;
+  opt := word(aOptions);
+  TRttiVarData(self).VType := DocVariantVType + opt shl 16;
+  pointer(VName) := nil;
+  pointer(VValue) := nil;
+  VCount := 0;
 end;
 
-procedure TDocVariantData.InitFast;
+procedure TDocVariantData.InitFast(aKind: TDocVariantKind);
 begin
-  ZeroFill(@self);
-  VType := DocVariantVType;
-  VOptions := JSON_OPTIONS_FAST;
+  TVarData(self) := DV_FAST[aKind];
 end;
 
 procedure TDocVariantData.InitFast(InitialCapacity: integer;
   aKind: TDocVariantKind);
 begin
-  InitFast;
-  case aKind of
-    dvArray:
-      include(VOptions, dvoIsArray);
-    dvObject:
-      include(VOptions, dvoIsObject);
-  end;
+  TVarData(self) := DV_FAST[aKind];
   if aKind = dvObject then
     SetLength(VName, InitialCapacity);
   SetLength(VValue, InitialCapacity);
@@ -4179,40 +4185,40 @@ begin
     end;
 end;
 
-procedure TDocVariantData.InitArray(const Items: array of const;
+procedure TDocVariantData.InitArray(const aItems: array of const;
   aOptions: TDocVariantOptions);
 var
   arg: PtrInt;
   tmp: variant;
 begin
   Init(aOptions, dvArray);
-  if high(Items) >= 0 then
+  if high(aItems) >= 0 then
   begin
-    VCount := length(Items);
+    VCount := length(aItems);
     SetLength(VValue, VCount);
     if dvoValueCopiedByReference in VOptions then
-      for arg := 0 to high(Items) do
-        VarRecToVariant(Items[arg], VValue[arg])
+      for arg := 0 to high(aItems) do
+        VarRecToVariant(aItems[arg], VValue[arg])
     else
-      for arg := 0 to high(Items) do
+      for arg := 0 to high(aItems) do
       begin
-        VarRecToVariant(Items[arg], tmp);
+        VarRecToVariant(aItems[arg], tmp);
         SetVariantByValue(tmp, VValue[arg]);
       end;
   end;
 end;
 
-procedure TDocVariantData.InitArrayFromVariants(const Items: TVariantDynArray;
-  aOptions: TDocVariantOptions; ItemsCopiedByReference: boolean);
+procedure TDocVariantData.InitArrayFromVariants(const aItems: TVariantDynArray;
+  aOptions: TDocVariantOptions; aItemsCopiedByReference: boolean);
 begin
-  if Items = nil then
-    VType := varNull
+  if aItems = nil then
+    TRttiVarData(self).VType := varNull
   else
   begin
     Init(aOptions, dvArray);
-    VCount := length(Items);
-    VValue := Items; // fast by-reference copy of VValue[]
-    if not ItemsCopiedByReference then
+    VCount := length(aItems);
+    VValue := aItems; // fast by-reference copy of VValue[]
+    if not aItemsCopiedByReference then
       InitCopy(variant(self), aOptions);
   end;
 end;
@@ -4221,116 +4227,116 @@ procedure TDocVariantData.InitArrayFromObjArray(const ObjArray;
   aOptions: TDocVariantOptions; aWriterOptions: TTextWriterWriteObjectOptions);
 var
   ndx: PtrInt;
-  Items: TObjectDynArray absolute ObjArray;
+  aItems: TObjectDynArray absolute ObjArray;
 begin
-  if Items = nil then
-    VType := varNull
+  if aItems = nil then
+    TRttiVarData(self).VType := varNull
   else
   begin
     Init(aOptions, dvArray);
-    VCount := length(Items);
+    VCount := length(aItems);
     SetLength(VValue, VCount);
     for ndx := 0 to VCount - 1 do
-      ObjectToVariant(Items[ndx], VValue[ndx], aWriterOptions);
+      ObjectToVariant(aItems[ndx], VValue[ndx], aWriterOptions);
   end;
 end;
 
-procedure TDocVariantData.InitArrayFrom(const Items: TRawUtf8DynArray;
+procedure TDocVariantData.InitArrayFrom(const aItems: TRawUtf8DynArray;
   aOptions: TDocVariantOptions);
 var
   ndx: PtrInt;
   v: PRttiVarData;
 begin
-  if Items = nil then
-    VType := varNull
+  if aItems = nil then
+    TRttiVarData(self).VType := varNull
   else
   begin
     Init(aOptions, dvArray);
-    VCount := length(Items);
+    VCount := length(aItems);
     SetLength(VValue, VCount);
     v := pointer(VValue);
     for ndx := 0 to VCount - 1 do
     begin
       v^.VType := varString;
-      RawUtf8(v^.Data.VAny) := Items[ndx];
+      RawUtf8(v^.Data.VAny) := aItems[ndx];
       inc(v);
     end;
   end;
 end;
 
-procedure TDocVariantData.InitArrayFrom(const Items: TIntegerDynArray;
+procedure TDocVariantData.InitArrayFrom(const aItems: TIntegerDynArray;
   aOptions: TDocVariantOptions);
 var
   ndx: PtrInt;
   v: PRttiVarData;
 begin
-  if Items = nil then
+  if aItems = nil then
     VType := varNull
   else
   begin
     Init(aOptions, dvArray);
-    VCount := length(Items);
+    VCount := length(aItems);
     SetLength(VValue, VCount);
     v := pointer(VValue);
     for ndx := 0 to VCount - 1 do
     begin
       v^.VType := varInteger;
-      v^.Data.VInteger := Items[ndx];
+      v^.Data.VInteger := aItems[ndx];
       inc(v);
     end;
   end;
 end;
 
-procedure TDocVariantData.InitArrayFrom(const Items: TInt64DynArray;
+procedure TDocVariantData.InitArrayFrom(const aItems: TInt64DynArray;
   aOptions: TDocVariantOptions);
 var
   ndx: PtrInt;
   v: PRttiVarData;
 begin
-  if Items = nil then
+  if aItems = nil then
     VType := varNull
   else
   begin
     Init(aOptions, dvArray);
-    VCount := length(Items);
+    VCount := length(aItems);
     SetLength(VValue, VCount);
     v := pointer(VValue);
     for ndx := 0 to VCount - 1 do
     begin
       v^.VType := varInt64;
-      v^.Data.VInt64 := Items[ndx];
+      v^.Data.VInt64 := aItems[ndx];
       inc(v);
     end;
   end;
 end;
 
-procedure TDocVariantData.InitArrayFrom(const Items: TDoubleDynArray;
+procedure TDocVariantData.InitArrayFrom(const aItems: TDoubleDynArray;
   aOptions: TDocVariantOptions);
 var
   ndx: PtrInt;
 begin
-  if Items = nil then
+  if aItems = nil then
     VType := varNull
   else
   begin
     Init(aOptions, dvArray);
-    VCount := length(Items);
+    VCount := length(aItems);
     SetLength(VValue, VCount);
     for ndx := 0 to VCount - 1 do
-      VValue[ndx] := Items[ndx];
+      VValue[ndx] := aItems[ndx];
   end;
 end;
 
-procedure TDocVariantData.InitArrayFrom(var Items; ArrayInfo: PRttiInfo;
+procedure TDocVariantData.InitArrayFrom(var aItems; ArrayInfo: PRttiInfo;
   aOptions: TDocVariantOptions; ItemsCount: PInteger);
 var
   da: TDynArray;
 begin
-  da.Init(ArrayInfo, Items, ItemsCount);
+  da.Init(ArrayInfo, aItems, ItemsCount);
   InitArrayFrom(da, aOptions);
 end;
 
-procedure TDocVariantData.InitArrayFrom(const Items: TDynArray;
+procedure TDocVariantData.InitArrayFrom(const aItems: TDynArray;
   aOptions: TDocVariantOptions);
 var
   n: integer;
@@ -4340,15 +4346,15 @@ var
   json: RawUtf8;
 begin
   Init(aOptions, dvArray);
-  n := Items.Count;
-  item := Items.Info.ArrayRtti;
+  n := aItems.Count;
+  item := aItems.Info.ArrayRtti;
   if (n = 0) or
      (item = nil) then
     exit;
   if item.Kind in rkRecordOrDynArrayTypes then
   begin
     // use temporary JSON conversion for complex nested content
-    Items.SaveToJson(json);
+    aItems.SaveToJson(json);
     if (json <> '') and
        (json[1] = '[') and
        (PCardinal(@PByteArray(json)[1])^ <> JSON_BASE64_MAGIC_QUOTE_C) then
@@ -4360,7 +4366,7 @@ begin
     // handle array of simple types
     VCount := n;
     SetLength(VValue, n);
-    P := Items.Value^;
+    P := aItems.Value^;
     v := pointer(VValue);
     repeat
       inc(P, item.ValueToVariant(P, v^));
@@ -5280,7 +5286,7 @@ var
   ndx, j: PtrInt;
   reduced: TDocVariantData;
 begin
-  result.InitFast;
+  TVarData(result) := DV_FAST[dvUndefined];
   if (VCount = 0) or
      (high(aPropNames) < 0) then
     exit;
@@ -5332,7 +5338,7 @@ var
   ndx, j: PtrInt;
   item: PDocVariantData;
 begin
-  result.InitFast;
+  TVarData(result) := DV_FAST[dvArray];
   if (VCount = 0) or
      (aPropName = '') or
      not (dvoIsArray in VOptions) then
@@ -5361,7 +5367,7 @@ var
   item: PDocVariantData;
   v: PVariant;
 begin
-  result.InitFast;
+  TVarData(result) := DV_FAST[dvArray];
   if (VCount = 0) or
      (aPropName = '') or
      not (dvoIsArray in VOptions) then
@@ -7557,7 +7563,7 @@ begin
     NewDispInvoke(Dest, PVarData(Source.VPointer)^, calldesc, params)
   else
   begin
-    PCardinal(@v)^ := varEmpty;
+    TRttiVarData(v).VType := varEmpty;
     vp := @v;
     if Dest = nil then
       vp := nil;
@@ -7625,14 +7631,22 @@ end;
 procedure InitializeUnit;
 var
   vm: TVariantManager; // available since Delphi 7
+  vt: cardinal;
   {$ifdef FPC}
   test: variant;
   {$endif FPC}
 begin
   // register the TDocVariant custom type
   DocVariantType := TDocVariant(SynRegisterCustomVariantType(TDocVariant));
-  DocVariantVType := DocVariantType.VarType;
-  assert({%H-}SynVariantTypes[0].VarType = DocVariantVType);
+  vt := DocVariantType.VarType;
+  DocVariantVType := vt;
+  DV_FAST[dvUndefined].VType := vt;
+  PDocVariantData(@DV_FAST[dvUndefined])^.VOptions := JSON_OPTIONS_FAST;
+  DV_FAST[dvArray].VType := vt;
+  PDocVariantData(@DV_FAST[dvArray])^.VOptions := JSON_OPTIONS_FAST + [dvoIsArray];
+  DV_FAST[dvObject].VType := vt;
+  PDocVariantData(@DV_FAST[dvObject])^.VOptions := JSON_OPTIONS_FAST + [dvoIsObject];
+  assert({%H-}SynVariantTypes[0].VarType = vt);
   // redirect to the feature complete variant wrapper functions
   BinaryVariantLoadAsJson := _BinaryVariantLoadAsJson;
   VariantClearSeveral := _VariantClearSeveral;

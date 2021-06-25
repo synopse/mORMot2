@@ -10108,7 +10108,6 @@ procedure InitializeUnit;
 var
   i: PtrInt;
   c: AnsiChar;
-  regtypes: RawUtf8;
 begin
   // branchless JSON escaping - JSON_ESCAPE_NONE=0 if no JSON escape needed
   JSON_ESCAPE[0] := JSON_ESCAPE_ENDINGZERO;   // 1 for #0 end of input

@@ -121,7 +121,7 @@
   {$define DOUBLETOSHORT_USEGRISU} // fast DoubleToAscii()
   {$define USERECORDWITHMETHODS}  // use "object" only for Delphi 7
   {$define FPC_OR_UNICODE}
-  {$define FPC_OR_DELPHIXE}
+  {$define FPC_OR_DELPHIXE} // to circumvent Delphi internal errors
   {$define FPC_OR_DELPHIXE4}
 
 

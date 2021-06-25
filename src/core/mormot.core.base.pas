@@ -753,6 +753,7 @@ function ToText(C: TClass): RawUtf8; overload;
 var
   /// retrieve the unit name where a given class is implemented
   // - is implemented in mormot.core.rtti.pas; so may be nil otherwise
+  // - is needed since Delphi 7-2007 do not define TObject.UnitName
   ClassUnit: function(C: TClass): PShortString;
 
 /// just a wrapper around vmtParent to avoid a function call
@@ -3963,7 +3964,7 @@ procedure CurrencyToVariant(const c: currency; var v: variant);
 begin
   if PVarData(@v)^.VType >= varOleStr then // bypass for most obvious types
     VarClearProc(PVarData(@v)^);
-  PVarData(@v)^.VType := varCurrency;
+  PCardinal(@v)^ := varCurrency;
   PVarData(@v).VCurrency := c;
 end;
 
@@ -10579,7 +10580,7 @@ begin
     begin
       if v >= varOleStr then // bypass for most obvious types
         VarClearProc(TVarData(Value));
-      TVarData(Value).VType := varString;
+      PCardinal(@Value)^ := varString;
       TVarData(Value).VAny := nil; // to avoid GPF when assigning the value
     end;
 end;
@@ -10589,7 +10590,7 @@ begin
   ClearVariantForString(Value);
   if (Data = nil) or
      (DataLen <= 0) then
-    TVarData(Value).VType := varNull
+    PCardinal(@Value)^ := varNull
   else
     SetString(RawByteString(TVarData(Value).VAny), PAnsiChar(Data), DataLen);
 end;
@@ -10598,7 +10599,7 @@ procedure RawByteStringToVariant(const Data: RawByteString; var Value: variant);
 begin
   ClearVariantForString(Value);
   if Data = '' then
-    TVarData(Value).VType := varNull
+    PCardinal(@Value)^ := varNull
   else
     RawByteString(TVarData(Value).VAny) := Data;
 end;
@@ -10645,7 +10646,8 @@ begin
               (VType = varNull or varByRef);
 end;
 
-function SetVariantUnRefSimpleValue(const Source: variant; var Dest: TVarData): boolean;
+function SetVariantUnRefSimpleValue(const Source: variant;
+  var Dest: TVarData): boolean;
 var
   typ: cardinal;
 begin
@@ -10663,7 +10665,7 @@ begin
       end;
     varEmpty..varDate, varBoolean, varShortInt..varWord64:
       begin
-        Dest.VType := typ;
+        PCardinal(@Dest)^ := typ;
         Dest.VInt64 := PInt64(TVarData(Source).VAny)^;
         result := true;
       end;
@@ -10681,7 +10683,7 @@ begin
     typ := typ and not varByRef;
     if typ in VTYPE_SIMPLE then
     begin
-      tmp.VType := typ;
+      PCardinal(@tmp)^ := typ;
       tmp.VInt64 := PInt64(V^.VAny)^;
       result := @tmp;
       exit;

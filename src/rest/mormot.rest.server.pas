@@ -7485,7 +7485,7 @@ procedure TRestServer.Timestamp(Ctxt: TRestServerUriContext);
   var
     info: TDocVariantData;
   begin
-    info.InitFast;
+    {%H-}info.InitFast;
     InternalInfo(info);
     Ctxt.Returns(info.ToJson('', '', jsonHumanReadable));
   end;
