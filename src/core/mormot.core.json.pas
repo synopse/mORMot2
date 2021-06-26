@@ -9202,7 +9202,7 @@ end;
 
 function _New_ObjectList(Rtti: TRttiCustom): pointer;
 begin
-  result := TObjectList(Rtti.ValueClass).Create;
+  result := TObjectListClass(Rtti.ValueClass).Create;
 end;
 
 function _New_InterfacedObjectWithCustomCreate(Rtti: TRttiCustom): pointer;
@@ -9253,9 +9253,14 @@ begin
   result := TCollectionItemClass(Rtti.ValueClass).Create(nil);
 end;
 
+function _New_List(Rtti: TRttiCustom): pointer;
+begin
+  result := TListClass(Rtti.ValueClass).Create;
+end;
+
 function _New_Object(Rtti: TRttiCustom): pointer;
 begin
-  result := Rtti.ValueClass.Create;
+  result := Rtti.ValueClass.Create; // non-virtual TObject.Create constructor
 end;
 
 function _BC_RawByteString(A, B: PPUtf8Char; Info: PRttiInfo;
@@ -9351,6 +9356,8 @@ begin
       end
       else if C = TCollectionItem then
         fClassNewInstance := @_New_CollectionItem
+      else if C = TList then
+        fClassNewInstance := @_New_List
       else if C = TObject then
         fClassNewInstance := @_New_Object
       else

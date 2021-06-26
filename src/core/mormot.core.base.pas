@@ -456,6 +456,8 @@ type
 
   TStreamClass = class of TStream;
   TInterfacedObjectClass = class of TInterfacedObject;
+  TListClass = class of TList;
+  TObjectListClass = class of TObjectList;
   TCollectionClass = class of TCollection;
   TCollectionItemClass = class of TCollectionItem;
   ExceptionClass = class of Exception;
