@@ -2168,6 +2168,9 @@ type
     // - is owned, as TObject, by this TRttiCustom
     property PrivateSlot: pointer
       read fPrivateSlot write fPrivateSlot;
+    /// low-level access to the associated Lecuyer's random generator
+    property RandomGenerator: TLecuyer
+      read fRandomGenerator;
     /// opaque TRttiJsonLoad callback used by mormot.core.json.pas
     property JsonLoad: pointer
       read fJsonLoad write fJsonLoad;
@@ -5225,7 +5228,22 @@ begin
   {$endif CPUINTEL}
     VarClearProc(V^.Data);
   V^.VType := varInteger;
-  V^.Data.VInteger := Rtti.fRandomGenerator.Next; // just a random integer
+  V^.Data.VInt64 := Rtti.fRandomGenerator.Next;
+  // generate some 8-bit 32-bit 64-bit integers or a RawUtf8 varString
+  case V^.Data.VInteger and 3 of
+    0:
+      V^.VType := varInteger;
+    1:
+      V^.VType := varInt64;
+    2:
+      V^.VType := varByte;
+    3:
+      begin
+        V^.VType := varString;
+        V^.Data.VAny := nil;
+        _StringRandom(@V^.Data.VAny, Rtti);
+      end;
+  end;
 end;
 
 procedure _DoubleRandom(V: PDouble; Rtti: TRttiCustom);
@@ -6755,11 +6773,10 @@ end;
 
 procedure TRttiCustom.ValueRandom(Data: pointer);
 begin
-  // handle complex kinds of value from RTTI
   if Assigned(fSetRandom) then
-    fSetRandom(Data, self)
+    fSetRandom(Data, self)  // handle complex kinds of value from RTTI
   else
-    fRandomGenerator.Fill(Data, fCache.ItemSize);
+    fRandomGenerator.Fill(Data, fCache.Size); // just a bunch of bytes
 end;
 
 function TRttiCustom.ClassNewInstance: pointer;
