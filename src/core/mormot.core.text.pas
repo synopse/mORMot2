@@ -4933,6 +4933,7 @@ end;
 procedure TBaseWriter.SetText(out result: RawUtf8; reformat: TTextWriterJsonFormat);
 var
   Len: cardinal;
+  temp: TBaseWriter;
 begin
   FlushFinal;
   Len := fTotalFileSize - fInitialStreamPosition;
@@ -4951,10 +4952,14 @@ begin
   end;
   if reformat <> jsonCompact then
   begin
-    // reformat using the very same instance
-    CancelAll;
-    AddJsonReformat(pointer(result), reformat, nil);
-    SetText(result);
+    // reformat using the very same temp buffer but not the same RawUtf8
+    temp := DefaultTextWriterSerializer.CreateOwnedStream(fTempBuf, fTempBufSize);
+    try
+      temp.AddJsonReformat(pointer(result), reformat, nil);
+      temp.SetText(result);
+    finally
+      temp.Free;
+    end;
   end;
 end;
 
