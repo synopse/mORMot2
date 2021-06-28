@@ -1666,6 +1666,9 @@ type
     /// will reset the element content
     procedure ItemClear(Item: pointer);
       {$ifdef HASGETTYPEKIND}inline;{$endif}
+    /// will fill the element with some random content
+    procedure ItemRandom(Item: pointer);
+      {$ifdef HASGETTYPEKIND}inline;{$endif}
     /// will copy one element content
     procedure ItemCopy(Source, Dest: pointer);
       {$ifdef HASGETTYPEKIND}inline;{$endif}
@@ -6201,6 +6204,15 @@ begin
      not fNoFinalize then
     fInfo.ArrayRtti.ValueFinalize(Item); // also for T*ObjArray
   FillCharFast(Item^, fInfo.Cache.ItemSize, 0); // always
+end;
+
+procedure TDynArray.ItemRandom(Item: pointer);
+begin
+  if Item <> nil then
+    if fInfo.ArrayRtti <> nil then
+      fInfo.ArrayRtti.ValueRandom(Item)
+    else
+      fInfo.RandomGenerator.Fill(Item, fInfo.Cache.ItemSize);
 end;
 
 function TDynArray.ItemEquals(A, B: pointer; CaseInSensitive: boolean): boolean;
