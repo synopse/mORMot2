@@ -3338,7 +3338,7 @@ begin
     RaiseProc := @SynRaiseProc; // register once
   end;
   {$endif WITH_RAISEPROC}
-  {$ifdef WITH_VECTOREXCEPT} // Win64 official API
+  {$ifdef WITH_VECTOREXCEPT} // SEH32/SEH64 official API
   // RemoveVectoredContinueHandler() is available under 64 bit editions only
   if Assigned(AddVectoredExceptionHandler) then
   begin

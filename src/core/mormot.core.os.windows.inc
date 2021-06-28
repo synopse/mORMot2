@@ -512,8 +512,12 @@ var
   {$ifdef WIN64}
     {$define WITH_VECTOREXCEPT} // use AddVectoredExceptionHandler Win64 API
   {$else}
-    // Win32, Linux: intercept via the RaiseProc global variable
-    {$define WITH_RAISEPROC} // RaiseProc is set in main mormot.core.os.pas
+    {$ifdef FPC_USE_WIN32_SEH}
+      {$define WITH_VECTOREXCEPT} // new since FPC 3.2
+    {$else}
+      // Win32, Linux: intercept via the RaiseProc global variable
+      {$define WITH_RAISEPROC} // RaiseProc is set in main mormot.core.os.pas
+    {$endif FPC_USE_WIN32_SEH}
   {$endif WIN64}
 {$else}
   {$ifdef CPU64}
