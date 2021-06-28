@@ -2272,6 +2272,7 @@ begin
         result := result and $1FFFFF or c;
         if c > $7f shl 21 then
         begin
+          // Values above 266338304
           c := p^;
           c := c shl 28;
           inc(p);
@@ -2288,25 +2289,27 @@ var
   c: cardinal;
   p: PByte;
 begin
-  // Values above 128
+  // Values above 127
   p := Source;
   result := p^ shl 7;
   inc(p);
   if result > $7f shl 7 then
   begin
-    // Values above 16257
+    // Values above 16256
     c := p^;
     c := c shl 14;
     inc(p);
     result := result and $3FFF or c;
     if c > $7f shl 14 then
     begin
+      // Values above 2080768
       c := p^;
       c := c shl 21;
       inc(p);
       result := result and $1FFFFF or c;
       if c > $7f shl 21 then
       begin
+        // Values above 266338304
         c := p^;
         c := c shl 28;
         inc(p);
@@ -2371,6 +2374,7 @@ begin
         Value := Value and $1FFFFF or c;
         if c > $7f shl 21 then
         begin
+          // Values above 266338304
           if PAnsiChar(Source) >= PAnsiChar(SourceMax) then
             exit;
           c := Source^;

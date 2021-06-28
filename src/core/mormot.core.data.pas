@@ -7258,7 +7258,8 @@ begin
     until L >= R;
 end;
 
-procedure TDynArray.SortRange(aStart, aStop: integer; aCompare: TDynArraySortCompare);
+procedure TDynArray.SortRange(aStart, aStop: integer;
+  aCompare: TDynArraySortCompare);
 var
   QuickSort: TDynArrayQuickSort;
 begin
@@ -7303,6 +7304,12 @@ begin
           if @QuickSort.Compare = @SortDynArrayDouble then
           begin
             QuickSortDouble(fValue^, aStart, aStop);
+            exit;
+          end;
+        ptRawUtf8:
+          if @QuickSort.Compare = @SortDynArrayAnsiString then
+          begin
+            QuickSortRawUtf8(fValue^, aStart, aStop, {caseinsens=}false);
             exit;
           end;
       end;
