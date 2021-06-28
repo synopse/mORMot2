@@ -670,8 +670,8 @@ type
   end;
 
 
-implementation
 
+implementation
 
 { ************** JSON-aware IList<> List Storage }
 
@@ -716,7 +716,7 @@ begin
     @fCount, loCaseInsensitive in fOptions);
   if (fDynArray.Info.ArrayRtti = nil) or
      ((aDynArrayTypeInfo <> nil) and
-      (fDynArray.Info.ArrayRtti.Info <> aItemTypeInfo)) then
+      (fDynArray.Info.ArrayRtti.Kind <> aItemTypeInfo^.Kind))  then
     raise ESynList.CreateUtf8('%.Create: T does not match %',
       [self, aDynArrayTypeInfo.RawName]);
   if loNoFinalize in fOptions then

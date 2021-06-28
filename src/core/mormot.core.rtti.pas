@@ -2169,6 +2169,7 @@ type
     property PrivateSlot: pointer
       read fPrivateSlot write fPrivateSlot;
     /// low-level access to the associated Lecuyer's random generator
+    // - each type has its own 16-bytes generator to avoid using the main threadvar
     property RandomGenerator: TLecuyer
       read fRandomGenerator;
     /// opaque TRttiJsonLoad callback used by mormot.core.json.pas
