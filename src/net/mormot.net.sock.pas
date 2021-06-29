@@ -251,32 +251,32 @@ type
   /// pointer to TLS Options and Information for a given TCrtSocket connection
   PNetTlsContext = ^TNetTlsContext;
 
+  /// callback raised by INetTls.AfterConnection to return a private key
+  // password - typically prompting the user for it
+  // - TLS is an opaque structure, typically an OpenSSL PSSL_CTX pointer
+  TOnNetTlsGetPassword = function(Socket: TNetSocket;
+    Context: PNetTlsContext; TLS: pointer): RawUtf8 of object;
+
   /// callback raised by INetTls.AfterConnection to validate a peer
-  // - at this point, Context.CipherName is set, but PeerInfo not yet (it is
-  // up to the event to compute the PeerInfo value)
+  // - at this point, Context.CipherName is set, but PeerInfo, PeerIssuer and
+  // PeerSubject are not - it is up to the event to compute the PeerInfo value
   // - TLS is an opaque structure, typically an OpenSSL PSSL pointer
   TOnNetTlsPeerValidate = procedure(Socket: TNetSocket;
     Context: PNetTlsContext; TLS: pointer) of object;
 
   /// callback raised by INetTls.AfterConnection after validating a peer
   // - called after standard peer validation - ignored by TOnNetTlsPeerValidate
-  // - at this point, Context.CipherName, LastError and PeerInfo are set
+  // - Context.CipherName, LastError PeerIssuer and PeerSubject are set
   // - TLS and Peer are opaque structures, typically OpenSSL PSSL and PX509
   TOnNetTlsAfterPeerValidate = procedure(Socket: TNetSocket;
     Context: PNetTlsContext; TLS, Peer: pointer) of object;
-
-  /// callback raised by INetTls.AfterConnection to return a value for
-  // PrivatePassword - typically prompting the user for it
-  // - TLS is an opaque structure, typically an OpenSSL PSSL_CTX pointer
-  TOnNetTlsGetPassword = function(Socket: TNetSocket;
-    Context: PNetTlsContext; TLS: pointer): RawUtf8 of object;
 
   /// callback raised by INetTls.AfterConnection for each peer verification
   // - wasok=true if the SSL library did validate the incoming certificate
   // - should process the supplied peer information, and return true to continue
   // and accept the connection, or false to abort the connection
   // - Context.PeerIssuer and PeerSubject have been properly populated from Peer
-  // - TLS and Peer are opaque structures, typically OpenSSL PSSL and PX509Cert
+  // - TLS and Peer are opaque structures, typically OpenSSL PSSL and PX509
   TOnNetTlsEachPeerVerify = function(Socket: TNetSocket; Context: PNetTlsContext;
     wasok: boolean; TLS, Peer: pointer): boolean of object;
 
@@ -298,7 +298,7 @@ type
   // $   Free;
   // $ end;
   TNetTlsContext = record
-    /// set by TCrtSocket.OpenBind() method if TLS flag was true and established
+    /// output: set by TCrtSocket.OpenBind() method if TLS was established
     Enabled: boolean;
     /// input: let HTTPS be less paranoid about TLS certificates
     IgnoreCertificateErrors: boolean;
@@ -312,6 +312,7 @@ type
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
     PrivateKeyFile: RawUtf8;
     /// input: optional password to load the PrivateKey file
+    // - see also OnPrivatePassword callback
     PrivatePassword: RawUtf8;
     /// input: file containing a specific set of CA certificates chain
     // - e.g. entrust_2048_ca.cer from https://web.entrust.com
@@ -347,7 +348,7 @@ type
     /// called by INetTls.AfterConnection after standard peer validation
     // - allow e.g. to verify CN or DNSName fields of the peer certificate
     OnAfterPeerValidate: TOnNetTlsAfterPeerValidate;
-    /// called by INetTls.AfterConnection to fill the PrivatePassword field
+    /// called by INetTls.AfterConnection to retrieve a private password
     OnPrivatePassword: TOnNetTlsGetPassword;
   end;
 

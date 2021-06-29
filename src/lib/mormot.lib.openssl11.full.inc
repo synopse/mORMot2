@@ -24593,9 +24593,6 @@ function SSL_CTX_use_certificate_ASN1(ctx: PSSL_CTX; len: integer; d: PByte): in
 function SSL_CTX_use_cert_and_key(ctx: PSSL_CTX; x509: PX509; privatekey: PEVP_PKEY; chain: Pstack_st_X509; _override: integer): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_use_cert_and_key';
 
-procedure SSL_CTX_set_default_passwd_cb(ctx: PSSL_CTX; cb: Ppem_password_cb); cdecl;
-  external LIB_SSL name _PU + 'SSL_CTX_set_default_passwd_cb';
-
 function SSL_CTX_get_default_passwd_cb(ctx: PSSL_CTX): Ppem_password_cb; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_get_default_passwd_cb';
 

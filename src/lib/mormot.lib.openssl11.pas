@@ -916,6 +916,7 @@ procedure SSL_get0_alpn_selected(ssl: PSSL; data: PPByte; len: PCardinal); cdecl
 function SSL_clear(s: PSSL): integer; cdecl;
 function TLS_client_method(): PSSL_METHOD; cdecl;
 function SSL_CTX_set_default_verify_paths(ctx: PSSL_CTX): integer; cdecl;
+procedure SSL_CTX_set_default_passwd_cb(ctx: PSSL_CTX; cb: Ppem_password_cb); cdecl;
 procedure SSL_CTX_set_default_passwd_cb_userdata(ctx: PSSL_CTX; u: pointer); cdecl;
 function SSL_CTX_use_PrivateKey_file(ctx: PSSL_CTX; _file: PUtf8Char;
    typ: integer): integer; cdecl;
@@ -1191,6 +1192,7 @@ type
     SSL_clear: function(s: PSSL): integer; cdecl;
     TLS_client_method: function(): PSSL_METHOD; cdecl;
     SSL_CTX_set_default_verify_paths: function(ctx: PSSL_CTX): integer; cdecl;
+    SSL_CTX_set_default_passwd_cb: procedure(ctx: PSSL_CTX; cb: Ppem_password_cb); cdecl;
     SSL_CTX_set_default_passwd_cb_userdata: procedure(ctx: PSSL_CTX; u: pointer); cdecl;
     SSL_CTX_use_PrivateKey_file: function(ctx: PSSL_CTX; _file: PUtf8Char; typ: integer): integer; cdecl;
     SSL_CTX_set_cipher_list: function(p1: PSSL_CTX; str: PUtf8Char): integer; cdecl;
@@ -1204,7 +1206,7 @@ type
   end;
 
 const
-  LIBSSL_ENTRIES: array[0..44] of RawUtf8 = (
+  LIBSSL_ENTRIES: array[0..45] of RawUtf8 = (
     'SSL_CTX_new', 'SSL_CTX_free', 'SSL_CTX_set_timeout', 'SSL_CTX_get_timeout',
     'SSL_CTX_set_verify', 'SSL_CTX_use_PrivateKey', 'SSL_CTX_use_RSAPrivateKey',
     'SSL_CTX_use_RSAPrivateKey_file', 'SSL_CTX_use_certificate',
@@ -1216,7 +1218,8 @@ const
     'SSL_connect', 'SSL_set_connect_state', 'SSL_set_accept_state',
     'SSL_read', 'SSL_write', 'SSL_get_state', 'SSL_pending', 'SSL_set_cipher_list',
     'SSL_get0_alpn_selected', 'SSL_clear', 'TLS_client_method',
-    'SSL_CTX_set_default_verify_paths', 'SSL_CTX_set_default_passwd_cb_userdata',
+    'SSL_CTX_set_default_verify_paths',
+    'SSL_CTX_set_default_passwd_cb', 'SSL_CTX_set_default_passwd_cb_userdata',
     'SSL_CTX_use_PrivateKey_file', 'SSL_CTX_set_cipher_list', 'SSL_set_fd',
     'SSL_get_current_cipher', 'SSL_CIPHER_description', 'SSL_get_verify_result',
     'SSL_set_hostflags', 'SSL_set1_host', 'SSL_add1_host');
@@ -1397,6 +1400,11 @@ end;
 function SSL_CTX_set_default_verify_paths(ctx: PSSL_CTX): integer;
 begin
   result := libssl.SSL_CTX_set_default_verify_paths(ctx);
+end;
+
+procedure SSL_CTX_set_default_passwd_cb(ctx: PSSL_CTX; cb: Ppem_password_cb);
+begin
+  libssl.SSL_CTX_set_default_passwd_cb(ctx, cb);
 end;
 
 procedure SSL_CTX_set_default_passwd_cb_userdata(ctx: PSSL_CTX; u: pointer);
@@ -2405,6 +2413,9 @@ function TLS_client_method(): PSSL_METHOD; cdecl;
 function SSL_CTX_set_default_verify_paths(ctx: PSSL_CTX): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_set_default_verify_paths';
 
+procedure SSL_CTX_set_default_passwd_cb(ctx: PSSL_CTX; cb: Ppem_password_cb); cdecl;
+  external LIB_SSL name _PU + 'SSL_CTX_set_default_passwd_cb';
+
 procedure SSL_CTX_set_default_passwd_cb_userdata(ctx: PSSL_CTX; u: pointer); cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_set_default_passwd_cb_userdata';
 
@@ -2975,9 +2986,9 @@ var
   temp: array[0..511] of AnsiChar;
 begin
   temp[0] := #0;
-  temp[high(temp)] := #0; // paranoid
   X509_NAME_oneline(a, @temp, SizeOf(temp) - 1);
-  FastSetString(result, @temp, StrLen(@temp));
+  if temp[0] <> #0 then
+    FastSetString(result, @temp, StrLen(@temp));
 end;
 
 function X509_SubjectName(cert: PX509): RawUtf8;
@@ -3088,6 +3099,22 @@ begin
     c.fSocket, c.fContext, wasok <> 0, c.fSsl, peer));
 end;
 
+function AfterConnectionAskPassword(buf: PUtf8Char; size, rwflag: integer;
+  userdata: pointer): integer; cdecl;
+var
+  c: TOpenSslClient;
+  pwd: RawUtf8;
+begin
+  c := _PeerVerify;
+  pwd := c.fContext.OnPrivatePassword(c.fSocket, c.fContext, c.fSsl);
+  result := length(pwd);
+  if result <> 0 then
+    if size > result  then
+      MoveSmall(buf, pointer(pwd), result + 1) // +1 to include trailing #0
+    else
+      result := 0; // buf[0..size-1] is too small for this password -> abort
+end;
+
 function GetNextCsv(var P: PUtf8Char; var value: RawUtf8): boolean;
 var
   S: PUtf8Char;
@@ -3137,6 +3164,7 @@ var
 begin
   fSocket := Socket;
   fContext := @Context;
+  _PeerVerify := self; // safe and simple context for the callbacks
   // reset output information
   Context.CipherName := '';
   Context.PeerIssuer := '';
@@ -3150,10 +3178,7 @@ begin
   else
   begin
     if Assigned(Context.OnEachPeerVerify) then
-    begin
-      _PeerVerify := self; // safe and simple context for the callback
-      SSL_CTX_set_verify(fCtx, SSL_VERIFY_PEER, AfterConnectionPeerVerify);
-    end
+      SSL_CTX_set_verify(fCtx, SSL_VERIFY_PEER, AfterConnectionPeerVerify)
     else
       SSL_CTX_set_verify(fCtx, SSL_VERIFY_PEER, nil);
     if FileExists(TFileName(Context.CACertificatesFile)) then
@@ -3168,8 +3193,8 @@ begin
   if FileExists(TFileName(Context.PrivateKeyFile)) then
   begin
     if Assigned(Context.OnPrivatePassword) then
-      Context.PrivatePassword := Context.OnPrivatePassword(Socket, fContext, fCtx);
-    if Context.PrivatePassword <> '' then
+      SSL_CTX_set_default_passwd_cb(fCtx, AfterConnectionAskPassword)
+    else if Context.PrivatePassword <> '' then
       SSL_CTX_set_default_passwd_cb_userdata(fCtx, pointer(Context.PrivatePassword));
     SSL_CTX_use_PrivateKey_file(
       fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
@@ -3214,7 +3239,7 @@ begin
   end;
   // peer validation
   if Assigned(Context.OnPeerValidate) then
-    // via a custom callback
+    // via a global custom callback
     Context.OnPeerValidate(Socket, fContext, fSsl)
   else
   begin
