@@ -923,8 +923,9 @@ function SSL_get_current_cipher(s: PSSL): PSSL_CIPHER; cdecl;
 function SSL_CIPHER_description(p1: PSSL_CIPHER;
    buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
 function SSL_get_verify_result(ssl: PSSL): integer; cdecl;
-
-
+procedure SSL_set_hostflags(s: PSSL; flags: cardinal); cdecl;
+function SSL_set1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
+function SSL_add1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
 
 { --------- libcrypto entries }
 
@@ -970,9 +971,6 @@ function X509_NAME_print_ex_fp(fp: PPointer; nm: PX509_NAME; indent: integer;
   flags: cardinal): integer; cdecl;
 function X509_STORE_CTX_get_current_cert(ctx: PX509_STORE_CTX): PX509; cdecl;
 function X509_NAME_oneline(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
-procedure SSL_set_hostflags(s: PSSL; flags: cardinal); cdecl;
-function SSL_set1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
-function SSL_add1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
 function OPENSSL_sk_pop(st: POPENSSL_STACK): pointer; cdecl;
 function OPENSSL_sk_num(p1: POPENSSL_STACK): integer; cdecl;
 function ASN1_BIT_STRING_get_bit(a: PASN1_BIT_STRING; n: integer): integer; cdecl;
@@ -1126,6 +1124,7 @@ procedure DTLSv1_handle_timeout(s: PSSL);
 procedure X509_NAME_ToUtf8(a: PX509_NAME; out result: RawUtf8);
 function X509_SubjectName(cert: PX509): RawUtf8;
 function X509_IssuerName(cert: PX509): RawUtf8;
+function X509_PeerInfo(cert: PX509): RawUtf8;
 
 
 { ************** TLS / HTTPS Encryption Layer using OpenSSL for TCrtSocket }
@@ -1197,10 +1196,13 @@ type
     SSL_get_current_cipher: function(s: PSSL): PSSL_CIPHER; cdecl;
     SSL_CIPHER_description: function(p1: PSSL_CIPHER; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
     SSL_get_verify_result: function(ssl: PSSL): integer; cdecl;
+    SSL_set_hostflags: procedure(s: PSSL; flags: cardinal); cdecl;
+    SSL_set1_host: function(s: PSSL; hostname: PUtf8Char): integer; cdecl;
+    SSL_add1_host: function(s: PSSL; hostname: PUtf8Char): integer; cdecl;
   end;
 
 const
-  LIBSSL_ENTRIES: array[0..41] of RawUtf8 = (
+  LIBSSL_ENTRIES: array[0..44] of RawUtf8 = (
     'SSL_CTX_new', 'SSL_CTX_free', 'SSL_CTX_set_timeout', 'SSL_CTX_get_timeout',
     'SSL_CTX_set_verify', 'SSL_CTX_use_PrivateKey', 'SSL_CTX_use_RSAPrivateKey',
     'SSL_CTX_use_RSAPrivateKey_file', 'SSL_CTX_use_certificate',
@@ -1214,7 +1216,8 @@ const
     'SSL_get0_alpn_selected', 'SSL_clear', 'TLS_client_method',
     'SSL_CTX_set_default_verify_paths', 'SSL_CTX_set_default_passwd_cb_userdata',
     'SSL_CTX_use_PrivateKey_file', 'SSL_CTX_set_cipher_list', 'SSL_set_fd',
-    'SSL_get_current_cipher', 'SSL_CIPHER_description', 'SSL_get_verify_result');
+    'SSL_get_current_cipher', 'SSL_CIPHER_description', 'SSL_get_verify_result',
+    'SSL_set_hostflags', 'SSL_set1_host', 'SSL_add1_host');
 
 var
   libssl: TLibSsl;
@@ -1429,6 +1432,21 @@ begin
   result := libssl.SSL_get_verify_result(ssl);
 end;
 
+procedure SSL_set_hostflags(s: PSSL; flags: cardinal);
+begin
+  libssl.SSL_set_hostflags(s, flags);
+end;
+
+function SSL_set1_host(s: PSSL; hostname: PUtf8Char): integer;
+begin
+  result := libssl.SSL_set1_host(s, hostname);
+end;
+
+function SSL_add1_host(s: PSSL; hostname: PUtf8Char): integer;
+begin
+  result := libssl.SSL_add1_host(s, hostname);
+end;
+
 
 { --------- libcrypto entries }
 
@@ -1471,9 +1489,6 @@ type
     X509_NAME_print_ex_fp: function(fp: PPointer; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
     X509_STORE_CTX_get_current_cert: function(ctx: PX509_STORE_CTX): PX509; cdecl;
     X509_NAME_oneline: function(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
-    SSL_set_hostflags: procedure(s: PSSL; flags: cardinal); cdecl;
-    SSL_set1_host: function(s: PSSL; hostname: PUtf8Char): integer; cdecl;
-    SSL_add1_host: function(s: PSSL; hostname: PUtf8Char): integer; cdecl;
     OPENSSL_sk_pop: function(st: POPENSSL_STACK): pointer; cdecl;
     OPENSSL_sk_num: function(p1: POPENSSL_STACK): integer; cdecl;
     ASN1_BIT_STRING_get_bit: function(a: PASN1_BIT_STRING; n: integer): integer; cdecl;
@@ -1549,7 +1564,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..110] of RawUtf8 = (
+  LIBCRYPTO_ENTRIES: array[0..107] of RawUtf8 = (
     'CRYPTO_malloc', 'CRYPTO_set_mem_functions', 'CRYPTO_free',
     'ERR_remove_state', 'ERR_error_string_n',
     'ERR_get_error', 'ERR_remove_thread_state', 'ERR_load_BIO_strings',
@@ -1560,8 +1575,8 @@ const
     'HMAC', 'BIO_new', 'BIO_free', 'BIO_test_flags', 'BIO_ctrl', 'BIO_new_mem_buf',
     'BIO_s_mem', 'BIO_read', 'BIO_write', 'BIO_new_socket', 'X509_get_issuer_name',
     'X509_get_subject_name', 'X509_get_pubkey', 'X509_free', 'X509_NAME_print_ex_fp',
-    'X509_STORE_CTX_get_current_cert', 'X509_NAME_oneline', 'SSL_set_hostflags',
-    'SSL_set1_host', 'SSL_add1_host', 'OPENSSL_sk_pop', 'OPENSSL_sk_num',
+    'X509_STORE_CTX_get_current_cert', 'X509_NAME_oneline',
+    'OPENSSL_sk_pop', 'OPENSSL_sk_num',
     'ASN1_BIT_STRING_get_bit', 'OBJ_nid2sn', 'OBJ_obj2nid',
     'ASN1_STRING_data', 'PEM_read_bio_X509', 'PEM_read_bio_PrivateKey',
     'PEM_read_bio_PUBKEY', 'PEM_read_bio_RSAPublicKey',
@@ -1771,21 +1786,6 @@ end;
 function X509_NAME_oneline(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char;
 begin
   result := libcrypto.X509_NAME_oneline(a, buf, size);
-end;
-
-procedure SSL_set_hostflags(s: PSSL; flags: cardinal);
-begin
-  libcrypto.SSL_set_hostflags(s, flags);
-end;
-
-function SSL_set1_host(s: PSSL; hostname: PUtf8Char): integer;
-begin
-  result := libcrypto.SSL_set1_host(s, hostname);
-end;
-
-function SSL_add1_host(s: PSSL; hostname: PUtf8Char): integer;
-begin
-  result := libcrypto.SSL_add1_host(s, hostname);
 end;
 
 function OPENSSL_sk_pop(st: POPENSSL_STACK): pointer;
@@ -2424,6 +2424,15 @@ function SSL_CIPHER_description(p1: PSSL_CIPHER; buf: PUtf8Char; size: integer):
 function SSL_get_verify_result(ssl: PSSL): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_get_verify_result';
 
+procedure SSL_set_hostflags(s: PSSL; flags: cardinal); cdecl;
+  external LIB_SSL name _PU + 'SSL_set_hostflags';
+
+function SSL_set1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
+  external LIB_SSL name _PU + 'SSL_set1_host';
+
+function SSL_add1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
+  external LIB_SSL name _PU + 'SSL_add1_host';
+
 
 { --------- libcrypto entries }
 
@@ -2539,15 +2548,6 @@ function X509_STORE_CTX_get_current_cert(ctx: PX509_STORE_CTX): PX509; cdecl;
 
 function X509_NAME_oneline(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_oneline';
-
-procedure SSL_set_hostflags(s: PSSL; flags: cardinal); cdecl;
-  external LIB_SSL name _PU + 'SSL_set_hostflags';
-
-function SSL_set1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
-  external LIB_SSL name _PU + 'SSL_set1_host';
-
-function SSL_add1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
-  external LIB_SSL name _PU + 'SSL_add1_host';
 
 function OPENSSL_sk_pop(st: POPENSSL_STACK): pointer; cdecl;
   external LIB_CRYPTO name _PU + 'OPENSSL_sk_pop';
@@ -2988,6 +2988,15 @@ begin
   X509_NAME_ToUtf8(X509_get_issuer_name(cert), result);
 end;
 
+function X509_PeerInfo(cert: PX509): RawUtf8;
+var
+  bio: PBIO;
+begin
+  bio := BIO_new(BIO_s_mem());
+  X509_print(bio, cert);
+  result := BIO_ToString(bio, {andfree=}true);
+end;
+
 
 { EOpenSsl }
 
@@ -3113,7 +3122,7 @@ procedure TOpenSslClient.AfterConnection(Socket: TNetSocket;
   var Context: TNetTlsContext; const ServerAddress: RawUtf8);
 var
   res: integer;
-  bio: PBIO;
+  len: PtrInt;
   ciph: PSSL_CIPHER;
   P: PUtf8Char;
   h: RawUtf8;
@@ -3121,26 +3130,22 @@ var
 begin
   fSocket := Socket;
   fContext := @Context;
+  // reset output information
+  Context.CipherName := '';
+  Context.PeerIssuer := '';
+  Context.PeerSubject := '';
+  Context.PeerInfo := '';
+  Context.LastError := '';
   // prepare TLS connection properties
   fCtx := SSL_CTX_new(TLS_client_method);
   if Context.IgnoreCertificateErrors then
     SSL_CTX_set_verify(fCtx, SSL_VERIFY_NONE, nil)
   else
   begin
-    P := pointer(Context.HostNamesCsv);
-    if GetNextCsv(P, h) then
-    begin
-      SSL_set_hostflags(fSsl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
-      EOpenSslClient.Check(self, 'AfterConnection set1host',
-        SSL_set1_host(fSsl, pointer(h)));
-      while GetNextCsv(P, h) do
-        EOpenSslClient.Check(self, 'AfterConnection add1host',
-          SSL_add1_host(fSsl, pointer(h)));
-    end;
     if Assigned(Context.OnEachPeerVerify) then
     begin
       _PeerVerify := self; // safe and simple context for the callback
-      SSL_CTX_set_verify(fSsl, SSL_VERIFY_PEER, AfterConnectionPeerVerify);
+      SSL_CTX_set_verify(fCtx, SSL_VERIFY_PEER, AfterConnectionPeerVerify);
     end
     else
       SSL_CTX_set_verify(fCtx, SSL_VERIFY_PEER, nil);
@@ -3170,6 +3175,19 @@ begin
   SSL_CTX_set_min_proto_version(fCtx, TLS1_2_VERSION); // no SSL3 TLS1 TLS1.1
   fSsl := SSL_new(fCtx);
   SSL_set_tlsext_host_name(fSsl, ServerAddress); // SNI field
+  if not Context.IgnoreCertificateErrors then
+  begin
+    P := pointer(Context.HostNamesCsv);
+    if GetNextCsv(P, h) then
+    begin
+      SSL_set_hostflags(fSsl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+      EOpenSslClient.Check(self, 'AfterConnection set1host',
+        SSL_set1_host(fSsl, pointer(h)));
+      while GetNextCsv(P, h) do
+        EOpenSslClient.Check(self, 'AfterConnection add1host',
+          SSL_add1_host(fSsl, pointer(h)));
+    end;
+  end;
   EOpenSslClient.Check(self, 'AfterConnection setfd',
     SSL_set_fd(fSsl, Socket.Socket));
   // client TLS negotiation with server
@@ -3179,13 +3197,20 @@ begin
   ciph := SSL_get_current_cipher(fSsl);
   if (ciph <> nil) and
      (SSL_CIPHER_description(ciph, @cipher, SizeOf(cipher)) <> nil) then
-    FastSetString(Context.CipherName, @cipher, StrLen(@cipher));
+  begin
+    len := StrLen(@cipher);
+    while (len > 0) and
+          (cipher[len - 1] <= ' ') do
+      dec(len); // trim right #10
+    FastSetString(Context.CipherName, @cipher, len);
+  end;
   // peer validation
   if Assigned(Context.OnPeerValidate) then
     // via a custom callback
     Context.OnPeerValidate(Socket, fContext, fSsl)
   else
   begin
+    // OpenSSL powered certificate validation
     fPeer := SSL_get_peer_certificate(fSsl);
     if (fPeer = nil) and
        not Context.IgnoreCertificateErrors then
@@ -3198,12 +3223,8 @@ begin
         Context.PeerSubject := X509_SubjectName(fPeer);
         if (Context.WithPeerInfo or
            (not Context.IgnoreCertificateErrors and
-           (res <> X509_V_OK))) then // include peer info on failure
-        begin
-          bio := BIO_new(BIO_s_mem());
-          X509_print(bio, fPeer);
-          Context.PeerInfo := BIO_ToString(bio, {andfree=}true);
-        end;
+            (res <> X509_V_OK))) then // include full peer info on failure
+          Context.PeerInfo := X509_PeerInfo(fPeer);
       end;
       if res <> X509_V_OK then
       begin

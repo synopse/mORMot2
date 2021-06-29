@@ -327,8 +327,10 @@ type
     // - e.g. 'ECDHE-RSA-AES128-GCM-SHA256 TLSv1.2 Kx=ECDH Au=RSA Enc=AESGCM(128) Mac=AEAD'
     CipherName: RawUtf8;
     /// output: the connected Peer issuer name
+    // - e.g. '/C=US/O=Let''s Encrypt/CN=R3'
     PeerIssuer: RawUtf8;
     /// output: the connected Peer subject name
+    // - e.g. '/CN=synopse.info'
     PeerSubject: RawUtf8;
     /// output: detailed information about the connected Peer
     // - stored in the native format of the TLS library, e.g. X509_print()
@@ -340,6 +342,7 @@ type
     /// called by INetTls.AfterConnection to fully customize peer validation
     OnPeerValidate: TOnNetTlsPeerValidate;
     /// called by INetTls.AfterConnection for each peer validation
+    // - allow e.g. to verify CN or DNSName fields of each peer certificate
     OnEachPeerVerify: TOnNetTlsEachPeerVerify;
     /// called by INetTls.AfterConnection after standard peer validation
     // - allow e.g. to verify CN or DNSName fields of the peer certificate
