@@ -612,12 +612,9 @@ type
   private
     Curr, After: PVariant;
   public
-    procedure Init(Values: PVariantArray; Count: PtrUInt);
-      {$ifdef HASINLINE}inline;{$endif}
-    procedure Void;
-      {$ifdef HASINLINE}inline;{$endif}
-    function MoveNext: Boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure Init(Values: PVariantArray; Count: PtrUInt); inline;
+    procedure Void; inline;
+    function MoveNext: Boolean; inline;
   end;
 
   /// local iterated name/value pair as returned by TDocVariantData.GetEnumerator
@@ -637,13 +634,10 @@ type
   private
     State: TDocVariantEnumeratorState;
     Name: PRawUtf8;
-    function GetCurrent: TDocVariantFields;
-      {$ifdef HASINLINE}inline;{$endif}
+    function GetCurrent: TDocVariantFields; inline;
   public
-    function MoveNext: Boolean;
-      {$ifdef HASINLINE}inline;{$endif}
-    function GetEnumerator: TDocVariantFieldsEnumerator;
-      {$ifdef HASINLINE}inline;{$endif}
+    function MoveNext: Boolean; inline;
+    function GetEnumerator: TDocVariantFieldsEnumerator; inline;
     /// returns the current Name/Value or Value as pointers in TDocVariantFields
     property Current: TDocVariantFields
       read GetCurrent;
@@ -654,10 +648,8 @@ type
   private
     State: TDocVariantEnumeratorState;
   public
-    function MoveNext: Boolean;
-      {$ifdef HASINLINE}inline;{$endif}
-    function GetEnumerator: TDocVariantItemsEnumerator;
-      {$ifdef HASINLINE}inline;{$endif}
+    function MoveNext: Boolean; inline;
+    function GetEnumerator: TDocVariantItemsEnumerator; inline;
     /// returns the current Value as pointer
     property Current: PVariant
       read State.Curr;
@@ -669,10 +661,8 @@ type
     State: TDocVariantEnumeratorState;
     Value: PDocVariantData;
   public
-    function MoveNext: Boolean;
-      {$ifdef HASINLINE}inline;{$endif}
-    function GetEnumerator: TDocVariantObjectsEnumerator;
-      {$ifdef HASINLINE}inline;{$endif}
+    function MoveNext: Boolean; inline;
+    function GetEnumerator: TDocVariantObjectsEnumerator; inline;
     /// returns the current Value as pointer to the TDocVariantData
     property Current: PDocVariantData
       read Value;
@@ -1179,7 +1169,19 @@ type
     // then aValue stores a pointer to the value
     // - after a SortByName(aSortedCompare), could use faster binary search
     function GetAsDocVariant(const aName: RawUtf8; out aValue: PDocVariantData;
-      aSortedCompare: TUtf8Compare = nil): boolean; overload;
+      aSortedCompare: TUtf8Compare = nil): boolean;
+    /// find a non-void array item in this document, and returns its value
+    // - return false if aName is not found, or if not a TDocVariant array
+    // - return true if the name was found as non-void array and set to aArray
+    // - after a SortByName(aSortedCompare), could use faster binary search
+    function GetAsArray(const aName: RawUtf8; out aArray: PDocVariantData;
+      aSortedCompare: TUtf8Compare = nil): boolean;
+    /// find a non-void object item in this document, and returns its value
+    // - return false if aName is not found, or if not a TDocVariant object
+    // - return true if the name was found as non-void object and set to aObject
+    // - after a SortByName(aSortedCompare), could use faster binary search
+    function GetAsObject(const aName: RawUtf8; out aObject: PDocVariantData;
+      aSortedCompare: TUtf8Compare = nil): boolean;
     /// find an item in this document, and returns its value as a TDocVariantData
     // - returns a void TDocVariant if aName is not a document
     // - after a SortByName(aSortedCompare), could use faster binary search
@@ -1238,7 +1240,7 @@ type
     // - returns FALSE if no match is found, TRUE if found and copied
     // - create a copy of the variant by default, unless DestByRef is TRUE
     // - will call VariantEquals() for value comparison
-    function GetItemByProp(const aPropName,aPropValue: RawUtf8;
+    function GetItemByProp(const aPropName, aPropValue: RawUtf8;
       aPropValueCaseSensitive: boolean; var Dest: variant;
       DestByRef: boolean = false): boolean;
     /// retrieve a reference to a dvObject in the dvArray, from a property value
@@ -4000,7 +4002,7 @@ end;
 function TDocVariantObjectsEnumerator.MoveNext: Boolean;
 var
   vt: cardinal;
-  vd: PVarData;
+  vd: PVarData; // inlined while not DocVariant.IsOfType() + Value := _Safe()
 begin
   repeat
     inc(State.Curr);
@@ -5742,6 +5744,22 @@ begin
     aValue := _Safe(PVariant(found)^);
     result := aValue <> @DocVariantDataFake;
   end;
+end;
+
+function TDocVariantData.GetAsArray(const aName: RawUtf8;
+  out aArray: PDocVariantData; aSortedCompare: TUtf8Compare): boolean;
+begin
+  result := GetAsDocVariant(aName, aArray, aSortedCompare) and
+            (dvoIsArray in aArray^.VOptions) and
+            (aArray^.Count > 0);
+end;
+
+function TDocVariantData.GetAsObject(const aName: RawUtf8;
+  out aObject: PDocVariantData; aSortedCompare: TUtf8Compare): boolean;
+begin
+  result := GetAsDocVariant(aName, aObject, aSortedCompare) and
+            (dvoIsObject in aObject^.VOptions) and
+            (aObject^.Count > 0);
 end;
 
 function TDocVariantData.GetAsDocVariantSafe(const aName: RawUtf8;
