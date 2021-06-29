@@ -271,6 +271,15 @@ type
   TOnNetTlsGetPassword = function(Socket: TNetSocket;
     Context: PNetTlsContext; TLS: pointer): RawUtf8 of object;
 
+  /// callback raised by INetTls.AfterConnection for each peer verification
+  // - wasok=true if the SSL library did validate the incoming certificate
+  // - should process the supplied peer information, and return true to continue
+  // and accept the connection, or false to abort the connection
+  // - Context.PeerIssuer and PeerSubject have been properly populated from Peer
+  // - TLS and Peer are opaque structures, typically OpenSSL PSSL and PX509Cert
+  TOnNetTlsEachPeerVerify = function(Socket: TNetSocket; Context: PNetTlsContext;
+    wasok: boolean; TLS, Peer: pointer): boolean of object;
+
   /// TLS Options and Information for a given TCrtSocket/INetTls connection
   // - currently only properly implemented by mormot.lib.openssl11 - SChannel
   // on Windows only recognizes IgnoreCertificateErrors and sets CipherName
@@ -311,17 +320,27 @@ type
     CACertificatesFile: RawUtf8;
     /// input: preferred Cipher List
     CipherList: RawUtf8;
+    /// input: a CSV list of host names to be validated
+    // - e.g. 'smtp.example.com,example.com'
+    HostNamesCsv: RawUtf8;
     /// output: the cipher description, as used for the current connection
     // - e.g. 'ECDHE-RSA-AES128-GCM-SHA256 TLSv1.2 Kx=ECDH Au=RSA Enc=AESGCM(128) Mac=AEAD'
     CipherName: RawUtf8;
-    /// output: some information about the connected Peer
+    /// output: the connected Peer issuer name
+    PeerIssuer: RawUtf8;
+    /// output: the connected Peer subject name
+    PeerSubject: RawUtf8;
+    /// output: detailed information about the connected Peer
     // - stored in the native format of the TLS library, e.g. X509_print()
+    // - only populated if WithPeerInfo was set to true, or an error occurred
     PeerInfo: RawUtf8;
     /// output: low-level details about the last error at TLS level
     // - typically one X509_V_ERR_* integer constant
     LastError: RawUtf8;
     /// called by INetTls.AfterConnection to fully customize peer validation
     OnPeerValidate: TOnNetTlsPeerValidate;
+    /// called by INetTls.AfterConnection for each peer validation
+    OnEachPeerVerify: TOnNetTlsEachPeerVerify;
     /// called by INetTls.AfterConnection after standard peer validation
     // - allow e.g. to verify CN or DNSName fields of the peer certificate
     OnAfterPeerValidate: TOnNetTlsAfterPeerValidate;

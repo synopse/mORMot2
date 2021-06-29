@@ -5319,14 +5319,6 @@ const
   X509V3_ADD_DELETE = 5;
   X509V3_ADD_SILENT = $10;
   
-  X509_CHECK_FLAG_ALWAYS_CHECK_SUBJECT = $1;
-  X509_CHECK_FLAG_NO_WILDCARDS = $2;
-  X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS = $4;
-  X509_CHECK_FLAG_MULTI_LABEL_WILDCARDS = $8;
-  X509_CHECK_FLAG_SINGLE_LABEL_SUBDOMAINS = $10;
-  X509_CHECK_FLAG_NEVER_CHECK_SUBJECT = $20;
-  _X509_CHECK_FLAG_DOT_SUBDOMAINS = $8000;
-  
   ASIdOrRange_id = 0;
   ASIdOrRange_range = 1;
   ASIdentifierChoice_inherit = 0;
@@ -17370,9 +17362,6 @@ function X509_STORE_CTX_get_error_depth(ctx: PX509_STORE_CTX): integer; cdecl;
 procedure X509_STORE_CTX_set_error_depth(ctx: PX509_STORE_CTX; depth: integer); cdecl;
   external LIB_CRYPTO name _PU + 'X509_STORE_CTX_set_error_depth';
 
-function X509_STORE_CTX_get_current_cert(ctx: PX509_STORE_CTX): PX509; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_STORE_CTX_get_current_cert';
-
 procedure X509_STORE_CTX_set_current_cert(ctx: PX509_STORE_CTX; x: PX509); cdecl;
   external LIB_CRYPTO name _PU + 'X509_STORE_CTX_set_current_cert';
 
@@ -18701,9 +18690,6 @@ function X509_INFO_new(): PX509_INFO; cdecl;
 
 procedure X509_INFO_free(a: PX509_INFO); cdecl;
   external LIB_CRYPTO name _PU + 'X509_INFO_free';
-
-function X509_NAME_oneline(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_NAME_oneline';
 
 function ASN1_verify(i2d: Pi2d_of_void; algor1: PX509_ALGOR; signature: PASN1_BIT_STRING; data: PUtf8Char; pkey: PEVP_PKEY): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_verify';
@@ -24655,17 +24641,8 @@ function SSL_CTX_set_trust(ctx: PSSL_CTX; trust: integer): integer; cdecl;
 function SSL_set_trust(ssl: PSSL; trust: integer): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_set_trust';
 
-function SSL_set1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
-  external LIB_SSL name _PU + 'SSL_set1_host';
-
-function SSL_add1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
-  external LIB_SSL name _PU + 'SSL_add1_host';
-
 function SSL_get0_peername(s: PSSL): PUtf8Char; cdecl;
   external LIB_SSL name _PU + 'SSL_get0_peername';
-
-procedure SSL_set_hostflags(s: PSSL; flags: cardinal); cdecl;
-  external LIB_SSL name _PU + 'SSL_set_hostflags';
 
 function SSL_CTX_dane_enable(ctx: PSSL_CTX): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_dane_enable';
