@@ -1074,6 +1074,9 @@ type
     // (0..9a..zA..Z_.~), otherwise their values are skipped
     function ToUrlEncode(const UriRoot: RawUtf8): RawUtf8;
 
+    /// returns true if this is not a true TDocVariant, or Count equals 0
+    function IsVoid: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// find an item index in this document from its name
     // - search will follow dvoNameCaseSensitive option of this document
     // - lookup the value by name for an object document, or accept an integer
@@ -5526,6 +5529,12 @@ begin
       Delete(ndx);
       inc(result);
     end;
+end;
+
+function TDocVariantData.IsVoid: boolean;
+begin
+  result := (cardinal(VType) <> DocVariantVType) or
+            (VCount = 0);
 end;
 
 function FindNonVoidRawUtf8(n: PPtrInt; name: PUtf8Char; len: TStrLen;
