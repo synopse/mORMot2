@@ -258,6 +258,13 @@ type
   TOnNetTlsPeerValidate = procedure(Socket: TNetSocket;
     Context: PNetTlsContext; TLS: pointer) of object;
 
+  /// callback raised by INetTls.AfterConnection after validating a peer
+  // - called after standard peer validation - ignored by TOnNetTlsPeerValidate
+  // - at this point, Context.CipherName, LastError and PeerInfo are set
+  // - TLS and Peer are opaque structures, typically OpenSSL PSSL and PX509
+  TOnNetTlsAfterPeerValidate = procedure(Socket: TNetSocket;
+    Context: PNetTlsContext; TLS, Peer: pointer) of object;
+
   /// callback raised by INetTls.AfterConnection to return a value for
   // PrivatePassword - typically prompting the user for it
   // - TLS is an opaque structure, typically an OpenSSL PSSL_CTX pointer
@@ -311,9 +318,13 @@ type
     // - stored in the native format of the TLS library, e.g. X509_print()
     PeerInfo: RawUtf8;
     /// output: low-level details about the last error at TLS level
+    // - typically one X509_V_ERR_* integer constant
     LastError: RawUtf8;
-    /// called by INetTls.AfterConnection to customize peer validation
+    /// called by INetTls.AfterConnection to fully customize peer validation
     OnPeerValidate: TOnNetTlsPeerValidate;
+    /// called by INetTls.AfterConnection after standard peer validation
+    // - allow e.g. to verify CN or DNSName fields of the peer certificate
+    OnAfterPeerValidate: TOnNetTlsAfterPeerValidate;
     /// called by INetTls.AfterConnection to fill the PrivatePassword field
     OnPrivatePassword: TOnNetTlsGetPassword;
   end;

@@ -3060,12 +3060,15 @@ begin
         X509_print(bio, peer);
         Context.PeerInfo := BIO_ToString(bio, {andfree=}true);
       end;
-      if not Context.IgnoreCertificateErrors and
-         (res <> X509_V_OK) then
+      if res <> X509_V_OK then
       begin
         str(res, Context.LastError);
-        EOpenSslClient.Check(self, 'AfterConnection', 0);
+        if not Context.IgnoreCertificateErrors then
+          EOpenSslClient.Check(self, 'AfterConnection', 0);
       end;
+      if Assigned(Context.OnAfterPeerValidate) then
+        // allow e.g. to verify CN or DNSName fields
+        Context.OnAfterPeerValidate(Socket, fContext, fSsl, peer);
     finally
       X509_free(peer);
     end;
