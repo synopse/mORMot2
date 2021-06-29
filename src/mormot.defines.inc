@@ -450,6 +450,9 @@
     {$if CompilerVersion >= 27.0}
       {$define ISDELPHIXE6}
     {$ifend}
+    {$if CompilerVersion = 28.0}
+       {$undef HASGENERICS} // XE7 trigger internal error with our generics
+    {$ifend}
     {$if CompilerVersion >= 28.0}
       {$define ISDELPHIXE7}
       {$ifdef CPU64}
