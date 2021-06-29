@@ -3014,6 +3014,8 @@ begin
        fCtx, pointer(Context.CertificateFile), SSL_FILETYPE_PEM);
   if FileExists(TFileName(Context.PrivateKeyFile)) then
   begin
+    if Assigned(Context.OnPrivatePassword) then
+      Context.PrivatePassword := Context.OnPrivatePassword(Socket, fContext, fCtx);
     if Context.PrivatePassword <> '' then
       SSL_CTX_set_default_passwd_cb_userdata(fCtx, pointer(Context.PrivatePassword));
     SSL_CTX_use_PrivateKey_file(

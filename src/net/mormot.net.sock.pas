@@ -258,6 +258,12 @@ type
   TOnNetTlsPeerValidate = procedure(Socket: TNetSocket;
     Context: PNetTlsContext; TLS: pointer) of object;
 
+  /// callback raised by INetTls.AfterConnection to return a value for
+  // PrivatePassword - typically prompting the user for it
+  // - TLS is an opaque structure, typically an OpenSSL PSSL_CTX pointer
+  TOnNetTlsGetPassword = function(Socket: TNetSocket;
+    Context: PNetTlsContext; TLS: pointer): RawUtf8 of object;
+
   /// TLS Options and Information for a given TCrtSocket/INetTls connection
   // - currently only properly implemented by mormot.lib.openssl11 - SChannel
   // on Windows only recognizes IgnoreCertificateErrors and sets CipherName
@@ -308,6 +314,8 @@ type
     LastError: RawUtf8;
     /// called by INetTls.AfterConnection to customize peer validation
     OnPeerValidate: TOnNetTlsPeerValidate;
+    /// called by INetTls.AfterConnection to fill the PrivatePassword field
+    OnPrivatePassword: TOnNetTlsGetPassword;
   end;
 
   /// abstract definition of the TLS encrypted layer
