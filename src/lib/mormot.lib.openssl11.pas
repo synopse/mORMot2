@@ -68,10 +68,12 @@ type
   /// exception class raised by this unit
   EOpenSsl = class(Exception)
   protected
-    class procedure CheckFailed(caller: TObject; const method: string; res: integer);
+    class procedure CheckFailed(caller: TObject; const method: string;
+      res: integer; errormsg: PRawUtf8);
   public
     /// wrapper around ERR_get_error/ERR_error_string_n if res <> 1
-    class procedure Check(caller: TObject; const method: string; res: integer); overload;
+    class procedure Check(caller: TObject; const method: string;
+      res: integer; errormsg: PRawUtf8 = nil); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// wrapper around ERR_get_error/ERR_error_string_n if res <> 1
     class procedure Check(res: integer); overload;
@@ -3000,19 +3002,21 @@ end;
 
 { EOpenSsl }
 
-class procedure EOpenSsl.Check(caller: TObject; const method: string; res: integer);
+class procedure EOpenSsl.Check(caller: TObject; const method: string;
+  res: integer; errormsg: PRawUtf8);
 begin
   if res <> OPENSSLSUCCESS then
-    CheckFailed(caller, method, res);
+    CheckFailed(caller, method, res, errormsg);
 end;
 
 class procedure EOpenSsl.Check(res: integer);
 begin
   if res <> OPENSSLSUCCESS then
-    CheckFailed(nil, '', res);
+    CheckFailed(nil, '', res, nil);
 end;
 
-class procedure EOpenSsl.CheckFailed(caller: TObject; const method: string; res: integer);
+class procedure EOpenSsl.CheckFailed(caller: TObject; const method: string;
+  res: integer; errormsg: PRawUtf8);
 var
   tmp: array[0..1023] of AnsiChar;
 begin
@@ -3021,6 +3025,9 @@ begin
     tmp[0] := #0
   else
     ERR_error_string_n(res, @tmp, SizeOf(tmp));
+  if (errormsg <> nil) and
+     (tmp[0] <> #0) then
+    FastSetString(errormsg^, @tmp, StrLen(@tmp));
   if caller = nil then
     raise CreateFmt('OpenSSL error %d [%s]', [res, PAnsiChar(@tmp)])
   else
@@ -3171,7 +3178,8 @@ begin
     Context.CipherList := SAFE_CIPHERLIST[
       {$ifdef CPUINTEL} cfAESNI in CpuFeatures {$else} false {$endif} ];
   EOpenSslClient.Check(self, 'AfterConnection setcipherlist',
-    SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)));
+    SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)),
+    @Context.LastError);
   SSL_CTX_set_min_proto_version(fCtx, TLS1_2_VERSION); // no SSL3 TLS1 TLS1.1
   fSsl := SSL_new(fCtx);
   SSL_set_tlsext_host_name(fSsl, ServerAddress); // SNI field
@@ -3182,17 +3190,17 @@ begin
     begin
       SSL_set_hostflags(fSsl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
       EOpenSslClient.Check(self, 'AfterConnection set1host',
-        SSL_set1_host(fSsl, pointer(h)));
+        SSL_set1_host(fSsl, pointer(h)), @Context.LastError);
       while GetNextCsv(P, h) do
         EOpenSslClient.Check(self, 'AfterConnection add1host',
-          SSL_add1_host(fSsl, pointer(h)));
+          SSL_add1_host(fSsl, pointer(h)), @Context.LastError);
     end;
   end;
   EOpenSslClient.Check(self, 'AfterConnection setfd',
-    SSL_set_fd(fSsl, Socket.Socket));
+    SSL_set_fd(fSsl, Socket.Socket), @Context.LastError);
   // client TLS negotiation with server
   EOpenSslClient.Check(self, 'AfterConnection connect',
-    SSL_connect(fSsl));
+    SSL_connect(fSsl), @Context.LastError);
   fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
   ciph := SSL_get_current_cipher(fSsl);
   if (ciph <> nil) and
@@ -3214,7 +3222,8 @@ begin
     fPeer := SSL_get_peer_certificate(fSsl);
     if (fPeer = nil) and
        not Context.IgnoreCertificateErrors then
-      EOpenSslClient.Check(self, 'AfterConnection getpeercertificate', 0);
+      EOpenSslClient.Check(self, 'AfterConnection getpeercertificate',
+        0, @Context.LastError);
     try
       res := SSL_get_verify_result(fSsl);
       if fPeer <> nil then
@@ -3230,7 +3239,8 @@ begin
       begin
         str(res, Context.LastError);
         if not Context.IgnoreCertificateErrors then
-          EOpenSslClient.Check(self, 'AfterConnection getverifyresult', 0);
+          EOpenSslClient.Check(self, 'AfterConnection getverifyresult',
+            0, @Context.LastError);
       end;
       if Assigned(Context.OnAfterPeerValidate) then
         // allow e.g. to verify CN or DNSName fields
