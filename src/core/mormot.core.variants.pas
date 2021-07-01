@@ -643,7 +643,19 @@ type
       read GetCurrent;
   end;
 
-  /// low-level Enumerator as returned by TDocVariantData.Items
+  /// low-level Enumerator as returned by TDocVariantData.FieldNames
+  TDocVariantFieldNamesEnumerator = record
+  private
+    Curr, After: PRawUtf8;
+  public
+    function MoveNext: Boolean; inline;
+    function GetEnumerator: TDocVariantFieldNamesEnumerator; inline;
+    /// returns the current Name/Value or Value as pointers in TDocVariantFields
+    property Current: PRawUtf8
+      read Curr;
+  end;
+
+  /// low-level Enumerator as returned by TDocVariantData.Items and FieldValues
   TDocVariantItemsEnumerator = record
   private
     State: TDocVariantEnumeratorState;
@@ -963,6 +975,26 @@ type
     // !     writeln(e.Name^, ':', e.Value^);
     // ! // output  a:1  b:2  c:3
     function Fields: TDocVariantFieldsEnumerator;
+    /// an enumerator able to compile "for .. in dv.FieldNames do" for objects
+    // - returns pointers over all Names[]
+    // - don't iterate if the document is an array - so n is never nil:
+    // ! var n: PRawUtf8;
+    // ! ...
+    // !   dv.InitJson('{a:1,b:2,c:3}');
+    // !   for n in dv.FieldNames do
+    // !     writeln(n^);
+    // ! // output  a  b  c
+    function FieldNames: TDocVariantFieldNamesEnumerator;
+    /// an enumerator able to compile "for .. in dv.FieldValues do" for objects
+    // - returns pointers over all Values[]
+    // - don't iterate if the document is an array - so n is never nil:
+    // ! var v: PRawUtf8;
+    // ! ...
+    // !   dv.InitJson('{a:1,b:2,c:3}');
+    // !   for v in dv.FieldValues do
+    // !     writeln(v^);
+    // ! // output  1  2  3
+    function FieldValues: TDocVariantItemsEnumerator;
     /// an enumerator able to compile "for .. in dv.Items do" for arrays
     // - returns a PVariant over all Values[] of a document array
     // - don't iterate if the document is an object
@@ -1511,6 +1543,8 @@ type
     property Capacity: integer
       read GetCapacity write SetCapacity;
     /// direct acces to the low-level internal array of values
+    // - note that length(Values)=Capacity and not Count, so should use
+    // copy(Values, 0, Count) if you want an array with the exact count
     // - transtyping a variant and direct access to TDocVariantData is the
     // fastest way of accessing all properties of a given dvObject:
     // ! with TDocVariantData(aVariantObject) do
@@ -1524,6 +1558,8 @@ type
       read VValue;
     /// direct acces to the low-level internal array of names
     // - is void (nil) if Kind is not dvObject
+    // - note that length(Names)=Capacity and not Count, so should write
+    // copy(dv.Names, 0, dv.Count) if you want an array with the exact length
     // - transtyping a variant and direct access to TDocVariantData is the
     // fastest way of accessing all properties of a given dvObject:
     // ! with TDocVariantData(aVariantObject) do
@@ -3961,7 +3997,7 @@ end;
 function TDocVariantEnumeratorState.MoveNext: Boolean;
 begin
    inc(Curr);
-   result := PtrUInt(Curr) < PtrUInt(After);
+   result := PtrUInt(Curr) < PtrUInt(After); // Void = nil<nil = false
 end;
 
 { TDocVariantFieldsEnumerator }
@@ -3981,6 +4017,19 @@ begin
 end;
 
 function TDocVariantFieldsEnumerator.GetEnumerator: TDocVariantFieldsEnumerator;
+begin
+  result := self;
+end;
+
+{ TDocVariantFieldNamesEnumerator }
+
+function TDocVariantFieldNamesEnumerator.MoveNext: Boolean;
+begin
+  inc(Curr);
+  result := PtrUInt(Curr) < PtrUInt(After);
+end;
+
+function TDocVariantFieldNamesEnumerator.GetEnumerator: TDocVariantFieldNamesEnumerator;
 begin
   result := self;
 end;
@@ -4829,6 +4878,30 @@ begin
     result{%H-}.State.Void
   else
     result := GetEnumerator;
+end;
+
+function TDocVariantData.FieldNames: TDocVariantFieldNamesEnumerator;
+begin
+  if (dvoIsArray in VOptions) or
+     (VCount = 0) then
+  begin
+    result.Curr := nil;
+    result.After := nil;
+  end
+  else
+  begin
+    result.Curr := pointer(Names);
+    result.After := @Names[VCount];
+    dec(result.Curr);
+  end;
+end;
+
+function TDocVariantData.FieldValues: TDocVariantItemsEnumerator;
+begin
+  if dvoIsArray in VOptions then
+    result{%H-}.State.Void
+  else
+    result.State.Init(pointer(Values), VCount);
 end;
 
 {$endif HASITERATORS}
