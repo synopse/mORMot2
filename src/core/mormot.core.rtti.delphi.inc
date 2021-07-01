@@ -438,7 +438,7 @@ end;
 function TRttiInfo.RecordAllFields(out RecSize: PtrInt): TRttiRecordAllFields;
 begin
   RecSize := self.RecordSize;
-  result := nil; // not available before Delphi 2010
+  result := nil; // extended record information not available before Delphi 2010
 end;
 
 {$endif ISDELPHI2010}
@@ -448,7 +448,7 @@ begin
   if @self = TypeInfo(QWord) then
     result := true
   else
-    {$ifdef UINICODE}
+    {$ifdef UNICODE}
     if Kind = tkInt64 then
       with PHash128Rec(PAnsiChar(@Name[1]) + ord(Name[0]))^ do
         result := Lo > Hi // check MinInt64Value>MaxInt64Value
@@ -565,12 +565,10 @@ begin
     AddParentsFirst(PPointer(Instance)^); // use recursion for adding
 end;
 
-{$ifndef UNICODE} // not defined on Delphi 7/2007
-
+{$ifndef ISDELPHI2010} // not defined on Delphi 7/2007/2009
 type
   TCallConv = (ccReg, ccCdecl, ccPascal, ccStdCall, ccSafeCall);
-
-{$endif UNICODE}
+{$endif ISDELPHI2010}
 
 /// fake TTypeInfo RTTI used for TGUID/THash128... on Delphi 7/2007
 {$ifdef HASNOSTATICRTTI}
@@ -662,7 +660,7 @@ begin
   ancestor := pi^.IntfParent^;
   if ancestor <> nil then
   begin
-    AddMethodsFromTypeInfo(ancestor);
+    AddMethodsFromTypeInfo(ancestor); // recursive call of parents
     inc(Level);
   end;
   p := @pi^.IntfUnit[ord(pi^.IntfUnit[0]) + 1];
