@@ -1682,6 +1682,8 @@ type
     function ParseUtf8: RawUtf8;
     /// retrieve the next JSON value as VCL string text
     function ParseString: string;
+    /// retrieve the next JSON value as integer
+    function ParseInteger: Int64;
     /// set the EndOfObject field of a JSON buffer, just like GetJsonField() does
     // - to be called whan a JSON object or JSON array has been manually parsed
     procedure ParseEndOfObject;
@@ -6999,6 +7001,14 @@ begin
   if not ParseNext then
     ValueLen := 0; // return ''
   Utf8DecodeToString(Value, ValueLen, result);
+end;
+
+function TJsonParserContext.ParseInteger: Int64;
+begin
+  if ParseNext then
+    SetInt64(Value, result{%H-})
+  else
+    result := 0;
 end;
 
 procedure TJsonParserContext.ParseEndOfObject;

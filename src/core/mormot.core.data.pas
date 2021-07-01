@@ -1668,7 +1668,6 @@ type
       {$ifdef HASGETTYPEKIND}inline;{$endif}
     /// will fill the element with some random content
     procedure ItemRandom(Item: pointer);
-      {$ifdef HASGETTYPEKIND}inline;{$endif}
     /// will copy one element content
     procedure ItemCopy(Source, Dest: pointer);
       {$ifdef HASGETTYPEKIND}inline;{$endif}

@@ -449,8 +449,8 @@ begin
     result := true
   else
     {$ifdef UNICODE}
-    if Kind = tkInt64 then
-      with PHash128Rec(PAnsiChar(@Name[1]) + ord(Name[0]))^ do
+    if Kind = rkInt64 then
+      with PHash128Rec(PAnsiChar(@RawName[1]) + ord(RawName[0]))^ do
         result := Lo > Hi // check MinInt64Value>MaxInt64Value
     else
     {$endif UNICODE}
@@ -471,9 +471,9 @@ end;
 
 function TRttiInfo.DynArrayItemType: PRttiInfo;
 begin
- result := pointer(GetTypeData(@self)^.elType);
- if result <> nil then // nil e.g. for TIntegerDynArray or T*ObjArray
-   result := PPointer(result)^;
+  result := pointer(GetTypeData(@self)^.elType);
+  if result <> nil then // nil e.g. for TIntegerDynArray or T*ObjArray
+    result := PPointer(result)^;
 end;
 
 function TRttiInfo.DynArrayItemTypeExtended: PRttiInfo;

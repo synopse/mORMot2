@@ -3947,8 +3947,8 @@ begin
     until false;
   end;
   if Sep <> #0 then
-    while (P^ <> #0) and (P^ <> Sep) do // go to end of CSV item (ignore any decimal)
-      inc(P);
+    while (P^ <> #0) and (P^ <> Sep) do
+      inc(P); // go to end of CSV item (ignore any decimal)
   if P^ = #0 then
     P := nil
   else if Sep <> #0 then
@@ -4076,7 +4076,7 @@ begin
   result := result + '0'; // '0' marks end of list
 end;
 
-function GetNextItemCardinalW(var P: PWideChar; Sep: WideChar = ','): PtrUInt;
+function GetNextItemCardinalW(var P: PWideChar; Sep: WideChar): PtrUInt;
 var
   c: PtrUInt;
 begin
