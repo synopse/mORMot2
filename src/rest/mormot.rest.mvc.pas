@@ -1092,7 +1092,7 @@ begin
       with fViews[m] do
       begin
         Locker := TAutoLocker.Create;
-        Utf8ToString(fFactory.Methods[m].Uri, MethodName);
+        Utf8ToFileName(fFactory.Methods[m].Uri, MethodName);
         SearchPattern := MethodName + '.*';
         files := FindTemplates(SearchPattern);
         if length(files) > 0 then
@@ -1850,7 +1850,7 @@ begin
           cached := ''
         else
         begin
-          Utf8ToString(StringReplaceChars(rawFormat, '/', PathDelim), staticFileName);
+          Utf8ToFileName(StringReplaceChars(rawFormat, '/', PathDelim), staticFileName);
           if cacheStatic in fPublishOptions then
           begin
             // retrieve and cache

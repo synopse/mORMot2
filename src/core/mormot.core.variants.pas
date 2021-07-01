@@ -1336,7 +1336,7 @@ type
     // and/or as varDouble is AllowVarDouble is set)
     // - if Update=TRUE, will set the property, even if it is existing
     function AddValueFromText(const aName, aValue: RawUtf8;
-      Update: boolean = false; AllowVarDouble: boolean = false): integer;
+      DoUpdate: boolean = false; AllowVarDouble: boolean = false): integer;
     /// add some properties to a TDocVariantData dvObject
     // - data is supplied two by two, as Name,Value pairs
     // - caller should ensure that Kind=dvObject, otherwise it won't do anything
@@ -4954,7 +4954,7 @@ begin
 end;
 
 function TDocVariantData.AddValueFromText(const aName, aValue: RawUtf8;
-  Update, AllowVarDouble: boolean): integer;
+  DoUpdate, AllowVarDouble: boolean): integer;
 begin
   if aName = '' then
   begin
@@ -4962,7 +4962,7 @@ begin
     exit;
   end;
   result := GetValueIndex(aName);
-  if not Update and
+  if not DoUpdate and
      (dvoCheckForDuplicatedNames in VOptions) and
      (result >= 0) then
     raise EDocVariant.CreateUtf8(
