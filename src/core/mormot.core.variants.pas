@@ -987,8 +987,8 @@ type
     function FieldNames: TDocVariantFieldNamesEnumerator;
     /// an enumerator able to compile "for .. in dv.FieldValues do" for objects
     // - returns pointers over all Values[]
-    // - don't iterate if the document is an array - so n is never nil:
-    // ! var v: PRawUtf8;
+    // - don't iterate if the document is an array:
+    // ! var v: PVariant;
     // ! ...
     // !   dv.InitJson('{a:1,b:2,c:3}');
     // !   for v in dv.FieldValues do
@@ -1340,13 +1340,18 @@ type
     /// add some properties to a TDocVariantData dvObject
     // - data is supplied two by two, as Name,Value pairs
     // - caller should ensure that Kind=dvObject, otherwise it won't do anything
-    // - any existing Name would be duplicated
+    // - any existing Name would be duplicated - use Update() if you want to
+    // replace any existing value
     procedure AddNameValuesToObject(const NameValuePairs: array of const);
     /// merge some properties to a TDocVariantData dvObject
     // - data is supplied two by two, as Name,Value pairs
     // - caller should ensure that Kind=dvObject, otherwise it won't do anything
     // - any existing Name would be updated with the new Value
+    procedure Update(const NameValuePairs: array of const);
+    {$ifndef PUREMORMOT2}
+    /// deprecated method which redirects to Update()
     procedure AddOrUpdateNameValuesToObject(const NameValuePairs: array of const);
+    {$endif PUREMORMOT2}
     /// merge some TDocVariantData dvObject properties to a TDocVariantData dvObject
     // - data is supplied two by two, as Name,Value pairs
     // - caller should ensure that both variants have Kind=dvObject, otherwise
@@ -1543,8 +1548,8 @@ type
     property Capacity: integer
       read GetCapacity write SetCapacity;
     /// direct acces to the low-level internal array of values
-    // - note that length(Values)=Capacity and not Count, so should use
-    // copy(Values, 0, Count) if you want an array with the exact count
+    // - note that length(Values)=Capacity and not Count, so copy(Values, 0, Count)
+    // or use FieldValues iterator if you want the exact count
     // - transtyping a variant and direct access to TDocVariantData is the
     // fastest way of accessing all properties of a given dvObject:
     // ! with TDocVariantData(aVariantObject) do
@@ -1558,8 +1563,8 @@ type
       read VValue;
     /// direct acces to the low-level internal array of names
     // - is void (nil) if Kind is not dvObject
-    // - note that length(Names)=Capacity and not Count, so should write
-    // copy(dv.Names, 0, dv.Count) if you want an array with the exact length
+    // - note that length(Names)=Capacity and not Count, so copy(Names, 0, Count)
+    // or use FieldNames iterator if you want the exact count
     // - transtyping a variant and direct access to TDocVariantData is the
     // fastest way of accessing all properties of a given dvObject:
     // ! with TDocVariantData(aVariantObject) do
@@ -4203,22 +4208,30 @@ begin
   inc(VCount, n);
 end;
 
+{$ifndef PUREMORMOT2}
 procedure TDocVariantData.AddOrUpdateNameValuesToObject(
   const NameValuePairs: array of const);
+begin
+  Update(NameValuePairs);
+end;
+{$endif PUREMORMOT2}
+
+procedure TDocVariantData.Update(const NameValuePairs: array of const);
 var
   n, arg: PtrInt;
-  n2: RawUtf8;
-  v: Variant;
+  nam: RawUtf8;
+  val: Variant;
 begin
-  n := length(NameValuePairs) shr 1;
+  n := length(NameValuePairs);
   if (n = 0) or
+     (n and 1 = 1) or
      (dvoIsArray in VOptions) then
     exit; // nothing to add
-  for arg := 0 to n - 1 do
+  for arg := 0 to (n shr 1) - 1 do
   begin
-    VarRecToUtf8(NameValuePairs[arg * 2], n2);
-    VarRecToVariant(NameValuePairs[arg * 2 + 1], v);
-    AddOrUpdateValue(n2, v)
+    VarRecToUtf8(NameValuePairs[arg * 2], nam);
+    VarRecToVariant(NameValuePairs[arg * 2 + 1], val);
+    AddOrUpdateValue(nam, val)
   end;
 end;
 
