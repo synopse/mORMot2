@@ -1121,7 +1121,7 @@ function BsonVariant(const Format: RawUtf8;
   const Args, Params: array of const): variant; overload;
 
 /// convert a TDocVariant variant into a TBsonVariant betDoc type instance
-function BsonVariant(doc: TDocVariantData): variant; overload;
+function BsonVariant(const doc: TDocVariantData): variant; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// store an array of integer into a TBsonVariant betArray type instance
@@ -4094,11 +4094,11 @@ begin
   dec.ToVariant(result);
 end;
 
-function bson(const doc: TDocVariantData): TBsonDocument;
+function Bson(const doc: TDocVariantData): TBsonDocument;
 begin
   if doc.VarType = varVariant or varByRef then
   begin
-    result := bson(PDocVariantData(TVarData(doc).VPointer)^);
+    result := Bson(PDocVariantData(TVarData(doc).VPointer)^);
     exit;
   end;
   if doc.VarType <> DocVariantType.VarType then
@@ -4287,7 +4287,7 @@ begin
     VarRecToVariant(Params[0], v);
     if DocVariantType.IsOfType(v) then
     begin
-      result := bson(TDocVariantData(v));
+      result := Bson(TDocVariantData(v));
       if kind <> nil then
         if TDocVariantData(v).kind = dvArray then
           kind^ := betArray
@@ -4320,7 +4320,7 @@ end;
 
 function BsonVariant(const NameValuePairs: array of const): variant;
 begin
-  BsonVariantType.FromBsonDocument(bson(NameValuePairs), result, betDoc);
+  BsonVariantType.FromBsonDocument(Bson(NameValuePairs), result, betDoc);
 end;
 
 function BsonVariant(const Json: RawUtf8): variant;
@@ -4328,7 +4328,7 @@ var
   k: TBsonElementType;
   b: RawByteString;
 begin
-  b := bson(Json, @k);
+  b := Bson(Json, @k);
   BsonVariantType.FromBsonDocument(b, result, k);
 end;
 
@@ -4346,11 +4346,11 @@ var
   k: TBsonElementType;
   b: RawByteString;
 begin
-  b := bson(Format, Args, Params, @k);
+  b := Bson(Format, Args, Params, @k);
   BsonVariantType.FromBsonDocument(b, result, k);
 end;
 
-function BsonVariant(doc: TDocVariantData): variant;
+function BsonVariant(const doc: TDocVariantData): variant;
 var
   k: TBsonElementType;
 begin
@@ -4358,7 +4358,7 @@ begin
     k := betArray
   else
     k := betDoc;
-  BsonVariantType.FromBsonDocument(bson(doc), result, k);
+  BsonVariantType.FromBsonDocument(Bson(doc), result, k);
 end;
 
 function BsonVariantFieldSelector(const FieldNames: array of RawUtf8): variant;

@@ -251,12 +251,34 @@ type
   /// pointer to TLS Options and Information for a given TCrtSocket connection
   PNetTlsContext = ^TNetTlsContext;
 
+  /// callback raised by INetTls.AfterConnection to return a private key
+  // password - typically prompting the user for it
+  // - TLS is an opaque structure, typically an OpenSSL PSSL_CTX pointer
+  TOnNetTlsGetPassword = function(Socket: TNetSocket;
+    Context: PNetTlsContext; TLS: pointer): RawUtf8 of object;
+
   /// callback raised by INetTls.AfterConnection to validate a peer
-  // - at this point, Context.CipherName is set, but PeerInfo not yet (it is
-  // up to the event to compute the PeerInfo value)
+  // - at this point, Context.CipherName is set, but PeerInfo, PeerIssuer and
+  // PeerSubject are not - it is up to the event to compute the PeerInfo value
   // - TLS is an opaque structure, typically an OpenSSL PSSL pointer
   TOnNetTlsPeerValidate = procedure(Socket: TNetSocket;
     Context: PNetTlsContext; TLS: pointer) of object;
+
+  /// callback raised by INetTls.AfterConnection after validating a peer
+  // - called after standard peer validation - ignored by TOnNetTlsPeerValidate
+  // - Context.CipherName, LastError PeerIssuer and PeerSubject are set
+  // - TLS and Peer are opaque structures, typically OpenSSL PSSL and PX509
+  TOnNetTlsAfterPeerValidate = procedure(Socket: TNetSocket;
+    Context: PNetTlsContext; TLS, Peer: pointer) of object;
+
+  /// callback raised by INetTls.AfterConnection for each peer verification
+  // - wasok=true if the SSL library did validate the incoming certificate
+  // - should process the supplied peer information, and return true to continue
+  // and accept the connection, or false to abort the connection
+  // - Context.PeerIssuer and PeerSubject have been properly populated from Peer
+  // - TLS and Peer are opaque structures, typically OpenSSL PSSL and PX509
+  TOnNetTlsEachPeerVerify = function(Socket: TNetSocket; Context: PNetTlsContext;
+    wasok: boolean; TLS, Peer: pointer): boolean of object;
 
   /// TLS Options and Information for a given TCrtSocket/INetTls connection
   // - currently only properly implemented by mormot.lib.openssl11 - SChannel
@@ -276,7 +298,7 @@ type
   // $   Free;
   // $ end;
   TNetTlsContext = record
-    /// set by TCrtSocket.OpenBind() method if TLS flag was true and established
+    /// output: set by TCrtSocket.OpenBind() method if TLS was established
     Enabled: boolean;
     /// input: let HTTPS be less paranoid about TLS certificates
     IgnoreCertificateErrors: boolean;
@@ -290,6 +312,7 @@ type
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
     PrivateKeyFile: RawUtf8;
     /// input: optional password to load the PrivateKey file
+    // - see also OnPrivatePassword callback
     PrivatePassword: RawUtf8;
     /// input: file containing a specific set of CA certificates chain
     // - e.g. entrust_2048_ca.cer from https://web.entrust.com
@@ -298,16 +321,35 @@ type
     CACertificatesFile: RawUtf8;
     /// input: preferred Cipher List
     CipherList: RawUtf8;
+    /// input: a CSV list of host names to be validated
+    // - e.g. 'smtp.example.com,example.com'
+    HostNamesCsv: RawUtf8;
     /// output: the cipher description, as used for the current connection
     // - e.g. 'ECDHE-RSA-AES128-GCM-SHA256 TLSv1.2 Kx=ECDH Au=RSA Enc=AESGCM(128) Mac=AEAD'
     CipherName: RawUtf8;
-    /// output: some information about the connected Peer
+    /// output: the connected Peer issuer name
+    // - e.g. '/C=US/O=Let''s Encrypt/CN=R3'
+    PeerIssuer: RawUtf8;
+    /// output: the connected Peer subject name
+    // - e.g. '/CN=synopse.info'
+    PeerSubject: RawUtf8;
+    /// output: detailed information about the connected Peer
     // - stored in the native format of the TLS library, e.g. X509_print()
+    // - only populated if WithPeerInfo was set to true, or an error occurred
     PeerInfo: RawUtf8;
     /// output: low-level details about the last error at TLS level
+    // - typically one X509_V_ERR_* integer constant
     LastError: RawUtf8;
-    /// called by INetTls.AfterConnection to customize peer validation
+    /// called by INetTls.AfterConnection to fully customize peer validation
     OnPeerValidate: TOnNetTlsPeerValidate;
+    /// called by INetTls.AfterConnection for each peer validation
+    // - allow e.g. to verify CN or DNSName fields of each peer certificate
+    OnEachPeerVerify: TOnNetTlsEachPeerVerify;
+    /// called by INetTls.AfterConnection after standard peer validation
+    // - allow e.g. to verify CN or DNSName fields of the peer certificate
+    OnAfterPeerValidate: TOnNetTlsAfterPeerValidate;
+    /// called by INetTls.AfterConnection to retrieve a private password
+    OnPrivatePassword: TOnNetTlsGetPassword;
   end;
 
   /// abstract definition of the TLS encrypted layer
@@ -552,10 +594,12 @@ type
 
 
 const
-  /// the default TCP port used for HTTP = DEFAULT_PORT[false] or
-  // HTTPS = DEFAULT_PORT[true]
+  /// the default TCP port as text, as DEFAULT_PORT[Https]
   DEFAULT_PORT: array[boolean] of RawUtf8 = (
     '80', '443');
+  /// the default TCP port as integer, as DEFAULT_PORT_INT[Https]
+  DEFAULT_PORT_INT: array[boolean] of TNetPort = (
+    80, 443);
 
 
 { ********* TCrtSocket Buffered Socket Read/Write Class }

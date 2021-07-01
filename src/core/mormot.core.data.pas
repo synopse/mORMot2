@@ -1170,7 +1170,7 @@ type
     fInfo: TRttiCustom;
     fCountP: PInteger;
     fCompare: TDynArraySortCompare;
-    fSorted: boolean;
+    fSorted, fNoFinalize: boolean;
     function GetCount: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetCount(aCount: PtrInt);
@@ -1215,13 +1215,14 @@ type
     procedure Init(aTypeInfo: PRttiInfo; var aValue; aCountPointer: PInteger = nil);
     /// initialize the wrapper with a one-dimension dynamic array
     // - also set the Compare() function from a supplied TRttiParserType
-    // - ptNone and ptCustom are too vague, and will raise an exception
+    // - aKind=ptNone will guess the type from Info.ArrayRtti/ArrayFirstField
+    // - will raise an exception if there is not enough RTTI available
     // - no RTTI check is made over the corresponding array layout: you shall
     // ensure that the aKind parameter matches at least the first field of
     // the dynamic array item definition
     // - aCaseInsensitive will be used for ptStringTypes
-    procedure InitSpecific(aTypeInfo: PRttiInfo; var aValue; aKind: TRttiParserType;
-      aCountPointer: PInteger = nil; aCaseInsensitive: boolean = false);
+    function InitSpecific(aTypeInfo: PRttiInfo; var aValue; aKind: TRttiParserType;
+      aCountPointer: PInteger = nil; aCaseInsensitive: boolean = false): TRttiParserType;
     /// initialize the wrapper with a one-dimension dynamic array
     // - low-level method, as called by Init() and InitSpecific()
     // - can be called directly for a very fast TDynArray initialization
@@ -1449,7 +1450,7 @@ type
     // - returns the sorted index of the inserted Item and wasAdded^=true
     // - if the array is not sorted, returns -1 and wasAdded^=false
     // - is just a wrapper around FastLocateSorted+FastAddSorted
-    function FastLocateOrAddSorted(const Item; wasAdded: Pboolean = nil): integer;
+    function FastLocateOrAddSorted(const Item; wasAdded: PBoolean = nil): integer;
     /// delete a sorted element value at the proper place
     // - plain Delete(Index) would reset the fSorted flag to FALSE, so use
     // this method with a FastLocateSorted/FastAddSorted array
@@ -1566,7 +1567,20 @@ type
       CustomVariantOptions: PDocVariantOptions = nil;
       Tolerant: boolean = false): PUtf8Char;
     ///  select a sub-section (slice) of a dynamic array content
-    procedure Slice(var Dest; aCount: cardinal; aFirstIndex: cardinal = 0);
+    procedure Slice(var Dest; Limit: cardinal; Offset: cardinal = 0);
+    /// assign the current dynamic array content into a variable
+    // - by default (Offset=Limit=0), the whole array is set with no memory
+    // (re)allocation, just finalize the Dest slot, then make Inc(RefCnt) and
+    // force the internal length/Capacity to equal Count
+    // - Offset/Limit could be used to create a new dynamic array with some part
+    // of the existing content (Offset<0 meaning from the end):
+    // ! SliceAsDynArray(DA);         // items 0..Count-1 (assign with refcount)
+    // ! SliceAsDynArray(DA, 10);     // items 10..Count-1
+    // ! SliceAsDynArray(DA, 0, 10);  // first 0..9 items
+    // ! SliceAsDynArray(DA, 10, 20); // items 10..29 - truncated if Count < 20
+    // ! SliceAsDynArray(DA, -10);    // last Count-10..Count-1 items
+    procedure SliceAsDynArray(Dest: PPointer; Offset: integer = 0;
+      Limit: integer = 0);
     /// add items from a given dynamic array variable
     // - the supplied source DynArray MUST be of the same exact type as the
     // current used for this TDynArray - warning: pass here a reference to
@@ -1622,14 +1636,14 @@ type
     // slower and more error prone method (such pointer access lacks of strong
     // typing abilities), which is designed for TDynArray abstract/internal use
     function ItemPtr(index: PtrInt): pointer;
-      {$ifdef FPC}inline;{$endif}
+      {$ifdef HASGETTYPEKIND}inline;{$endif}
     /// just a convenient wrapper of Info.Cache.ItemSize
     function ItemSize: PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
     /// will copy one element content from its index into another variable
     // - do nothing if index is out of range
     procedure ItemCopyAt(index: PtrInt; Dest: pointer);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     /// will move one element content from its index into another variable
     // - will erase the internal item after copy
     // - do nothing if index is out of range
@@ -1640,7 +1654,7 @@ type
     // if the source item is a copy of Values[index] with some dynamic arrays
     procedure ItemCopyFrom(Source: pointer; index: PtrInt;
       ClearBeforeCopy: boolean = false);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASGETTYPEKIND}inline;{$endif}
     /// compare the content of two items, returning TRUE if both values equal
     // - use the Compare() property function (if set) or using Info.Cache.ItemInfo
     // if available - and fallbacks to binary comparison
@@ -1651,10 +1665,12 @@ type
     function ItemCompare(A, B: pointer; CaseInSensitive: boolean = false): integer;
     /// will reset the element content
     procedure ItemClear(Item: pointer);
-      {$ifdef FPC}inline;{$endif}
+      {$ifdef HASGETTYPEKIND}inline;{$endif}
+    /// will fill the element with some random content
+    procedure ItemRandom(Item: pointer);
     /// will copy one element content
     procedure ItemCopy(Source, Dest: pointer);
-      {$ifdef FPC}inline;{$endif}
+      {$ifdef HASGETTYPEKIND}inline;{$endif}
     /// will copy the first field value of an array element
     // - will use the array KnownType to guess the copy routine to use
     // - returns false if the type information is not enough for a safe copy
@@ -1717,6 +1733,10 @@ type
     // search in an unsorted array, and miss its purpose
     property Sorted: boolean
       read fSorted write fSorted;
+    /// can be set to TRUE to avoid any item finalization
+    // -  e.g. with T*ObjArray - handle with care to avoid memory leaks
+    property NoFinalize: boolean
+      read fNoFinalize write fNoFinalize;
 
     /// low-level direct access to the storage variable
     property Value: PPointer
@@ -1808,7 +1828,8 @@ type
       aHashTableIndex: PInteger = nil): integer;
     /// search an hashed element value for adding, updating the internal hash table
     // - trigger hashing if Count reaches CountTrigger
-    function FindBeforeAdd(Item: pointer; out wasAdded: boolean; aHashCode: cardinal): integer;
+    function FindBeforeAdd(Item: pointer; out wasAdded: boolean;
+      aHashCode: cardinal): integer;
     /// search and delete an element value, updating the internal hash table
     function FindBeforeDelete(Item: pointer): integer;
     /// reset the hash table - no rehash yet
@@ -5170,6 +5191,32 @@ begin
   result := SizeOf(pointer);
 end;
 
+{$ifdef CPUX64}
+function MemCmp(P1, P2: PByteArray; L: PtrInt): PtrInt; inline;
+begin
+  result := MemCmpSse2(P1, P2, L);
+end;
+{$else}
+function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  // caller ensured that P1<>nil, P2<>nil and L>0 -> aggressively inlined asm
+  inc(PtrUInt(P1), PtrUInt(L));
+  inc(PtrUInt(P2), PtrUInt(L));
+  L := -L;
+  repeat
+    if P1[L] <> P2[L] then
+      break;
+    inc(L);
+    if L <> 0 then
+      continue;
+    result := 0;
+    exit;
+  until false;
+  result := P1[L] - P2[L];
+end;
+{$endif CPUX64}
+
 function DynArrayCompare(A, B: PAnsiChar; ExternalCountA, ExternalCountB: PInteger;
   Info: PRttiInfo; CaseInSensitive: boolean): integer;
 var
@@ -5232,8 +5279,8 @@ begin
         dec(n); // both items are equal -> continue to next items
       until n = 0
     else
-    begin
-      result := StrCompL(A, B, n * itemsize); // binary comparison with length
+    begin // binary comparison with length
+      result := MemCmp(pointer(A), pointer(B), n * itemsize);
       if result <> 0 then
         exit;
     end;
@@ -5368,7 +5415,7 @@ begin
       offset := f^.Offset - offset;
       if offset <> 0 then
       begin
-        result := StrCompL(A, B, offset); // binary comparison with length
+        result := MemCmp(pointer(A), pointer(B), offset); // binary comparison
         if result <> 0 then
           exit;
         inc(A, offset);
@@ -5385,7 +5432,7 @@ begin
   end;
   offset := PtrUInt(fields.Size) - offset;
   if offset > 0 then
-    result := StrCompL(A, B, offset); // compare trailing binary
+    result := MemCmp(pointer(A), pointer(B), offset); // trailing binary
 end;
 
 function _BC_Record(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
@@ -5452,7 +5499,7 @@ var
 begin
   Info := Info^.ArrayItemType(n, ArraySize);
   if Info = nil then
-    result := StrCompL(A, B, ArraySize) // binary comparison with length
+    result := MemCmp(pointer(A), pointer(B), ArraySize) // binary comparison
   else
   begin
     cmp := RTTI_COMPARE[CaseInSensitive, Info^.Kind];
@@ -6053,6 +6100,7 @@ begin
     fCountP^ := 0;
   fCompare := nil;
   fSorted := false;
+  fNoFinalize := false;
 end;
 
 procedure TDynArray.InitRtti(aInfo: TRttiCustom; var aValue);
@@ -6062,6 +6110,7 @@ begin
   fCountP := nil;
   fCompare := nil;
   fSorted := false;
+  fNoFinalize := false;
 end;
 
 procedure TDynArray.Init(aTypeInfo: PRttiInfo; var aValue;
@@ -6073,21 +6122,30 @@ begin
   InitRtti(Rtti.RegisterType(aTypeInfo), aValue, aCountPointer);
 end;
 
-procedure TDynArray.InitSpecific(aTypeInfo: PRttiInfo; var aValue;
-  aKind: TRttiParserType; aCountPointer: PInteger; aCaseInsensitive: boolean);
+function TDynArray.InitSpecific(aTypeInfo: PRttiInfo; var aValue;
+  aKind: TRttiParserType; aCountPointer: PInteger; aCaseInsensitive: boolean): TRttiParserType;
 begin
   if aTypeInfo^.Kind <> rkDynArray then
     raise EDynArray.CreateUtf8('TDynArray.InitSpecific: % is %, expected rkDynArray',
       [aTypeInfo.RawName, ToText(aTypeInfo.Kind)^]);
   InitRtti(Rtti.RegisterType(aTypeInfo), aValue, aCountPointer);
-  fCompare := PT_SORT[aCaseInsensitive, aKind];
+  case aKind of
+    ptNone:
+      if Assigned(fInfo.ArrayRtti) then
+        result := fInfo.ArrayRtti.Parser
+      else
+        result := fInfo.ArrayFirstField;
+  else
+    result := aKind;
+  end;
+  fCompare := PT_SORT[aCaseInsensitive, result];
   if not Assigned(fCompare) then
-    if aKind = ptVariant then
+    if result = ptVariant then
       raise EDynArray.CreateUtf8('TDynArray.InitSpecific(%): missing mormot.core.json',
-        [Info.Name, ToText(aKind)^])
+        [Info.Name, ToText(result)^])
     else
       raise EDynArray.CreateUtf8('TDynArray.InitSpecific(%) unsupported %',
-        [Info.Name, ToText(aKind)^]);
+        [Info.Name, ToText(result)^]);
 end;
 
 function TDynArray.ItemSize: PtrUInt;
@@ -6141,9 +6199,19 @@ procedure TDynArray.ItemClear(Item: pointer);
 begin
   if Item = nil then
     exit;
-  if fInfo.ArrayRtti <> nil then
+  if (fInfo.ArrayRtti <> nil) and
+     not fNoFinalize then
     fInfo.ArrayRtti.ValueFinalize(Item); // also for T*ObjArray
   FillCharFast(Item^, fInfo.Cache.ItemSize, 0); // always
+end;
+
+procedure TDynArray.ItemRandom(Item: pointer);
+begin
+  if Item <> nil then
+    if fInfo.ArrayRtti <> nil then
+      fInfo.ArrayRtti.ValueRandom(Item)
+    else
+      fInfo.RandomGenerator.Fill(Item, fInfo.Cache.ItemSize);
 end;
 
 function TDynArray.ItemEquals(A, B: pointer; CaseInSensitive: boolean): boolean;
@@ -6183,7 +6251,7 @@ begin
   if Assigned(fCompare) then
     result := fCompare(A^, B^)
   else if not(rcfArrayItemManaged in fInfo.Flags) then
-bin:result := StrCompL(A, B, fInfo.Cache.ItemSize) // binary compare with length
+bin:result := MemCmp(A, B, fInfo.Cache.ItemSize) // binary compare with length
   else
   begin
     rtti := fInfo.Cache.ItemInfo;
@@ -6289,6 +6357,7 @@ var
   n, len: PtrInt;
   s: PtrUInt;
   P: PAnsiChar;
+  wassorted: boolean;
 begin
   result := false;
   if fValue = nil then
@@ -6301,7 +6370,8 @@ begin
   dec(n);
   s := fInfo.Cache.ItemSize;
   P := PAnsiChar(fValue^) + PtrUInt(aIndex) * s;
-  if fInfo.ArrayRtti <> nil then
+  if (fInfo.ArrayRtti <> nil) and
+     not fNoFinalize then
     fInfo.ArrayRtti.ValueFinalize(P); // also for T*ObjArray
   if n > aIndex then
   begin
@@ -6311,7 +6381,9 @@ begin
   end
   else
     FillCharFast(P^, s, 0);
+  wassorted := fSorted;
   SetCount(n);
+  fSorted := wassorted; // deletion won't change the order
   result := true;
 end;
 
@@ -6364,7 +6436,8 @@ begin
   if (p = nil) or
      (Dest = nil) then
     exit;
-  if fInfo.ArrayRtti <> nil then
+  if (fInfo.ArrayRtti <> nil) and
+     not fNoFinalize then
     fInfo.ArrayRtti.ValueFinalize(Dest); // also handle T*ObjArray
   MoveFast(p^, Dest^, fInfo.Cache.ItemSize);
   FillCharFast(p^, fInfo.Cache.ItemSize, 0);
@@ -6628,8 +6701,8 @@ function TDynArray.LoadFromJson(P: PUtf8Char; EndOfObject: PUtf8Char;
   CustomVariantOptions: PDocVariantOptions; Tolerant: boolean): PUtf8Char;
 begin
   SetCount(0); // faster to use our own routine now
-  GetDataFromJson(fValue,
-    P, EndOfObject, Info.Info, CustomVariantOptions, Tolerant);
+  GetDataFromJson(fValue, P, EndOfObject, Info.Info,
+    CustomVariantOptions, Tolerant);
   if (fCountP <> nil) and
      (fValue^ <> nil) then
     // GetDataFromJson() set the array length, not the external count
@@ -6884,7 +6957,7 @@ begin
   fSorted := true; // Delete -> SetCount -> fSorted := false
 end;
 
-function TDynArray.FastLocateOrAddSorted(const Item; wasAdded: Pboolean): integer;
+function TDynArray.FastLocateOrAddSorted(const Item; wasAdded: PBoolean): integer;
 var
   toInsert: boolean;
 begin
@@ -7196,7 +7269,8 @@ begin
     until L >= R;
 end;
 
-procedure TDynArray.SortRange(aStart, aStop: integer; aCompare: TDynArraySortCompare);
+procedure TDynArray.SortRange(aStart, aStop: integer;
+  aCompare: TDynArraySortCompare);
 var
   QuickSort: TDynArrayQuickSort;
 begin
@@ -7241,6 +7315,12 @@ begin
           if @QuickSort.Compare = @SortDynArrayDouble then
           begin
             QuickSortDouble(fValue^, aStart, aStop);
+            exit;
+          end;
+        ptRawUtf8:
+          if @QuickSort.Compare = @SortDynArrayAnsiString then
+          begin
+            QuickSortRawUtf8(fValue^, aStart, aStop, {caseinsens=}false);
             exit;
           end;
       end;
@@ -7409,7 +7489,7 @@ begin
   end
   else if not(rcfArrayItemManaged in fInfo.Flags) then
     // binary comparison with length
-    result := StrCompL(fValue^, B.fValue^, n * fInfo.Cache.ItemSize)
+    result := MemCmp(fValue^, B.fValue^, n * fInfo.Cache.ItemSize)
   else if rcfObjArray in fInfo.Flags then
     result := DynArrayCompare(pointer(fValue), pointer(B.fValue),
       fCountP, B.fCountP, TypeInfo(TObjectDynArray), casesensitive)
@@ -7522,7 +7602,8 @@ begin
       if (p^.refCnt >= 0) and
          RefCntDecFree(p^.refCnt) then
       begin
-        if OldLength <> 0 then
+        if (OldLength <> 0) and
+           not fNoFinalize then
           if rcfArrayItemManaged in fInfo.Flags then
             FastFinalizeArray(fValue^, fInfo.Cache.ItemInfo, OldLength)
           else if rcfObjArray in fInfo.Flags then
@@ -7554,7 +7635,8 @@ begin
        RefCntDecFree(p^.refCnt) then
     begin
       // we own the dynamic array instance -> direct reallocation
-      if NewLength < OldLength then
+      if (NewLength < OldLength) and
+         not fNoFinalize then
         // reduce array in-place
         if rcfArrayItemManaged in fInfo.Flags then // in trailing items
           FastFinalizeArray(pointer(PAnsiChar(p) + NeededSize),
@@ -7617,7 +7699,7 @@ begin
       capa := PDALen(arrayptr - _DALEN)^ + _DAOFF;
       if delta > 0 then
       begin
-        // size-up - Add()
+        // size-up - Add() - is handled branchless
         if capa >= aCount then
           exit; // no need to grow
         capa := NextGrow(capa);
@@ -7683,7 +7765,7 @@ begin
   end;
 end;
 
-procedure TDynArray.Slice(var Dest; aCount, aFirstIndex: cardinal);
+procedure TDynArray.Slice(var Dest; Limit, Offset: cardinal);
 var
   n: cardinal;
   dst: TDynArray;
@@ -7691,15 +7773,61 @@ begin
   if fValue = nil then
     exit; // avoid GPF if void
   n := GetCount;
-  if aFirstIndex >= n then
-    aCount := 0
-  else if aCount >= n - aFirstIndex then
-    aCount := n - aFirstIndex;
+  if Offset >= n then
+    Limit := 0
+  else
+  begin
+    dec(n, Offset);
+    if Limit >= n  then
+      Limit := n;
+  end;
   dst.InitRtti(fInfo, Dest);
-  dst.SetCapacity(aCount);
+  dst.SetCapacity(Limit);
   CopySeveral(pointer(Dest),
-    @(PByteArray(fValue^)[aFirstIndex * cardinal(fInfo.Cache.ItemSize)]),
-    aCount, fInfo.Cache.ItemInfo, fInfo.Cache.ItemSize);
+    @(PByteArray(fValue^)[Offset * cardinal(fInfo.Cache.ItemSize)]),
+    Limit, fInfo.Cache.ItemInfo, fInfo.Cache.ItemSize);
+end;
+
+procedure TDynArray.SliceAsDynArray(Dest: PPointer; Offset, Limit: integer);
+var
+  p: PDynArrayRec;
+  n: integer;
+begin
+  if dest^ <> nil then
+    FastDynArrayClear(dest, fInfo.Cache.ItemInfo); // reset Dest variable slot
+  n := GetCount;
+  if Offset < 0 then begin
+    // ! SliceAsDynArray(DA, -10);  // last Count-10..Count-1 items
+    inc(Offset, n);
+    if Offset < 0 then
+      Offset := 0;
+  end;
+  if Offset >= n then // also handles n = 0
+    exit;
+  if (Offset = 0) and
+     ((Limit = 0) or
+      (Limit >= n)) then
+  begin
+    // we can return the current dynamic array with proper Copy-On-Write
+    p := fValue^;
+    if p = nil then
+      exit;
+    dec(p);
+    inc(p^.refCnt); // reuse existing dynamic array instance
+    p^.Length := n; // no memory realloc/copy, just force Capacity=Length=Count
+    inc(p);
+    dest^ := p;     // assign to Dest variable
+  end
+  else
+  begin
+    // ! SliceAsDynArray(DA, 0, 10);  // first 0..9 items
+    // ! SliceAsDynArray(DA, 10, 20); // items 10..29 - truncated if Count < 30
+    if Limit = 0 then
+      // ! SliceAsDynArray(DA);       // all items
+      // ! SliceAsDynArray(DA, 10);   // all items excluding the first 0..9
+      Limit := n;
+    Slice(Dest^, Limit, Offset);
+  end;
 end;
 
 function TDynArray.AddArray(const DynArrayVar; aStartIndex, aCount: integer): integer;
@@ -8477,7 +8605,7 @@ begin
 //' new=', siz, ' oldcol=',CountCollisionsCurrent);
   if (not forced) and
      (siz = HashTableSize) then
-    exit; // ReHash() was called
+    exit; // ReHash() was called with forced=false -> delay actual hashing
   Clear;
   HashTableSize := siz;
   SetLength(HashTable, siz); // fill with 0 (void slot)

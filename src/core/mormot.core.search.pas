@@ -5690,7 +5690,7 @@ begin
   begin
     fIDs := TStringList.Create;
     for i := 0 to length(fZone) - 1 do
-      fIDs.Add(Utf8ToString(fZone[i].id));
+      fIDs.Add(Utf8ToString(RawUtf8(fZone[i].id)));
   end;
   result := fIDs;
 end;

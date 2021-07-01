@@ -856,7 +856,15 @@ function SynUnicodeToString(const U: SynUnicode): string;
 // - under older version of Delphi (no unicode), it will use the
 // current RTL codepage, as with WideString conversion (but without slow
 // WideString usage)
-function Utf8ToString(const Text: RawUtf8): string;
+function Utf8ToString(const Text: RawUtf8): string; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert any UTF-8 encoded String into a generic VCL Text
+procedure Utf8ToString(const Text: RawUtf8; var result: string); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert any UTF-8 encoded String into a generic RTL file name string
+procedure Utf8ToFileName(const Text: RawUtf8; var result: TFileName);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any UTF-8 encoded buffer into a generic VCL Text
@@ -3899,6 +3907,16 @@ begin
   Utf8DecodeToUnicodeString(pointer(Text), length(Text), result);
 end;
 
+procedure Utf8ToString(const Text: RawUtf8; var result: string);
+begin
+  Utf8DecodeToUnicodeString(pointer(Text), length(Text), result);
+end;
+
+procedure Utf8ToFileName(const Text: RawUtf8; var result: TFileName);
+begin
+  Utf8DecodeToUnicodeString(pointer(Text), length(Text), string(result));
+end;
+
 {$else}
 
 function Ansi7ToString(const Text: RawByteString): string;
@@ -4018,6 +4036,16 @@ begin
 end;
 
 function Utf8ToString(const Text: RawUtf8): string;
+begin
+  result := CurrentAnsiConvert.Utf8ToAnsi(Text);
+end;
+
+procedure Utf8ToString(const Text: RawUtf8; var result: string);
+begin
+  result := CurrentAnsiConvert.Utf8ToAnsi(Text);
+end;
+
+procedure Utf8ToFileName(const Text: RawUtf8; var result: TFileName);
 begin
   result := CurrentAnsiConvert.Utf8ToAnsi(Text);
 end;

@@ -27,6 +27,7 @@ The source code tree is split into the following sub-folders:
 - [`orm`](orm) for high-level ORM features;
 - [`soa`](soa) for high-level SOA features;
 - [`app`](app) for hosting (micro)services/daemons and applications;
+- [`ui`](ui) for VCL/LCL User Interface oriented components;
 - [`script`](script) for the supported (java)script engines;
 - [`ddd`](ddd) for *Domain-Driven-Design* related code;
 - [`tools`](tools) for some useful tools tied to our framework.

@@ -840,16 +840,15 @@ var
   p: PtrInt;
 begin
   result := nil;
-  if DocVariantType.IsOfType(Partials) then
-    with TDocVariantData(Partials) do
-      if (Kind = dvObject) and
-         (Count > 0) then
-      begin
-        result := TSynMustachePartials.Create;
-        result.fOwned := true;
-        for p := 0 to Count - 1 do
-          result.Add(names[p], VariantToUtf8(Values[p]));
-      end;
+  with _Safe(Partials)^ do
+    if (Kind = dvObject) and
+       (Count > 0) then
+    begin
+      result := TSynMustachePartials.Create;
+      result.fOwned := true;
+      for p := 0 to Count - 1 do
+        result.Add(names[p], VariantToUtf8(Values[p]));
+    end;
 end;
 
 destructor TSynMustachePartials.Destroy;

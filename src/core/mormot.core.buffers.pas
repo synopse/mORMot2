@@ -10,7 +10,7 @@ unit mormot.core.buffers;
    - Variable Length Integer Encoding / Decoding
    - TAlgoCompress Compression/Decompression Classes - with AlgoSynLZ
    - TFastReader / TBufferWriter Binary Streams
-   - Base64, Base64Uri and Baudot Encoding / Decoding
+   - Base64, Base64Uri, Base58 and Baudot Encoding / Decoding
    - URI-Encoded Text Buffer Process
    - Basic MIME Content Types Support
    - Text Memory Buffers and Files
@@ -965,7 +965,7 @@ const
 {$endif PUREMORMOT2}
 
 
-{ ************ Base64, Base64Uri and Baudot Encoding / Decoding }
+{ ************ Base64, Base64Uri, Base58 and Baudot Encoding / Decoding }
 
 const
   /// UTF-8 encoded \uFFF0 special code to mark Base64 binary content in JSON
@@ -1203,6 +1203,47 @@ function Base64uriToBin(const base64: RawByteString;
 // unsignificant characters, and replace '+' or '/' by '_' or '-'
 // - you should better not use this, but Base64uriToBin() overloaded functions
 function Base64uriDecode(sp, rp: PAnsiChar; len: PtrInt): boolean;
+
+/// conversion from a binary buffer into Base58 encoded text as TSynTempBuffer
+// - Bitcoin' Base58 was defined as alphanumeric chars without misleading 0O I1
+// - Base58 is much slower than Base64, and should not be used on big buffers
+// - returns the number of encoded chars encoded into Dest.buf
+// - caller should call Dest.Done once it is finished with the output text
+function BinToBase58(Bin: PAnsiChar; BinLen: integer;
+  var Dest: TSynTempBuffer): integer; overload;
+
+/// conversion from a binary buffer into Base58 encoded text as TSynTempBuffer
+// - Bitcoin' Base58 was defined as alphanumeric chars without misleading 0O I1
+// - Base58 is much slower than Base64, and should not be used on big buffers
+function BinToBase58(Bin: PAnsiChar; BinLen: integer): RawUtf8; overload;
+
+/// conversion from a binary buffer into Base58 encoded text as TSynTempBuffer
+// - Bitcoin' Base58 was defined as alphanumeric chars without misleading 0O I1
+// - Base58 is much slower than Base64, and should not be used on big buffers
+function BinToBase58(const Bin: RawByteString): RawUtf8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// conversion from Base58 encoded text into a binary buffer
+// - Bitcoin' Base58 was defined as alphanumeric chars without misleading 0O I1
+// - Base58 is much slower than Base64, and should not be used on big buffers
+// - returns the number of decoded chars encoded into Dest.buf
+// - caller should call Dest.Done once it is finished with the output binary
+function Base58ToBin(B58: PAnsiChar; B58Len: integer;
+  var Dest: TSynTempBuffer): integer; overload;
+
+/// conversion from Base58 encoded text into a binary string
+// - Bitcoin' Base58 was defined as alphanumeric chars without misleading 0O I1
+// - Base58 is much slower than Base64, and should not be used on big buffers
+// - returns '' if input was not valid Base58 encoded
+function Base58ToBin(B58: PAnsiChar; B58Len: integer): RawByteString; overload;
+
+/// conversion from Base58 encoded text into a binary string
+// - Bitcoin' Base58 was defined as alphanumeric chars without misleading 0O I1
+// - Base58 is much slower than Base64, and should not be used on big buffers
+// - returns '' if input was not valid Base58 encoded
+function Base58ToBin(const base58: RawUtf8): RawByteString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 
 type
   /// used by MultiPartFormDataDecode() to return one item of its data
@@ -2102,7 +2143,7 @@ type
     procedure FindWrite(aPosition, aLength: integer; W: TBaseWriter;
       Escape: TTextWriterKind = twJsonEscape; TrailingCharsToIgnore: integer = 0);
       {$ifdef HASINLINE}inline;{$endif}
-    /// append the blob at a given position in Values[], base-64 encoded
+    /// append the blob at a given position in Values[], Base64 encoded
     // - text should be in a single Values[] entry
     procedure FindWriteBase64(aPosition, aLength: integer; W: TBaseWriter;
       withMagic: boolean);
@@ -2231,6 +2272,7 @@ begin
         result := result and $1FFFFF or c;
         if c > $7f shl 21 then
         begin
+          // Values above 266338304
           c := p^;
           c := c shl 28;
           inc(p);
@@ -2247,25 +2289,27 @@ var
   c: cardinal;
   p: PByte;
 begin
-  // Values above 128
+  // Values above 127
   p := Source;
   result := p^ shl 7;
   inc(p);
   if result > $7f shl 7 then
   begin
-    // Values above 16257
+    // Values above 16256
     c := p^;
     c := c shl 14;
     inc(p);
     result := result and $3FFF or c;
     if c > $7f shl 14 then
     begin
+      // Values above 2080768
       c := p^;
       c := c shl 21;
       inc(p);
       result := result and $1FFFFF or c;
       if c > $7f shl 21 then
       begin
+        // Values above 266338304
         c := p^;
         c := c shl 28;
         inc(p);
@@ -2330,6 +2374,7 @@ begin
         Value := Value and $1FFFFF or c;
         if c > $7f shl 21 then
         begin
+          // Values above 266338304
           if PAnsiChar(Source) >= PAnsiChar(SourceMax) then
             exit;
           c := Source^;
@@ -4481,15 +4526,18 @@ begin
   else
   begin
     ptr := pointer(SynCompressAlgos);
-    n := PDALen(PAnsiChar(ptr) - _DALEN)^ + ( _DAOFF - 1 ); // - 1 for List[0]
-    if n > 0 then
-      repeat
-        inc(ptr); // ignore List[0] = AlgoSynLZ
-        result := ptr^;
-        if result.AlgoID = AlgoID then
-          exit;
-        dec(n);
-      until n = 0;
+    if ptr <> nil then
+    begin
+      n := PDALen(PAnsiChar(ptr) - _DALEN)^ + ( _DAOFF - 1 ); // - 1 for List[0]
+      if n > 0 then
+        repeat
+          inc(ptr); // ignore List[0] = AlgoSynLZ
+          result := ptr^;
+          if result.AlgoID = AlgoID then
+            exit;
+          dec(n);
+        until n = 0;
+    end;
     result := nil;
   end;
 end;
@@ -5482,7 +5530,7 @@ end;
 {$endif PUREMORMOT2}
 
 
-{ ************ Base64, Base64Uri, URL and Baudot Encoding / Decoding }
+{ ************ Base64, Base64Uri, Base58 and Baudot Encoding / Decoding }
 
 type
   TBase64Enc = array[0..63] of AnsiChar;
@@ -6265,6 +6313,174 @@ begin
   else
     result := Base64ToBinSafe(PAnsiChar(Value) + 3, ValueLen - 3, Blob);
 end;
+
+
+{ --------- Base58 encoding/decoding }
+
+type
+  TBase58Enc = array[0..57] of AnsiChar;
+  PBase58Enc = ^TBase58Enc;
+  TBase58Dec = array[AnsiChar] of shortint;
+  PBase58Dec = ^TBase58Dec;
+
+const
+  b58enc: TBase58Enc =
+    '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+var
+  /// a conversion table from Base58 text into binary data
+  ConvertBase58ToBin: TBase58Dec;
+
+function BinToBase58(Bin: PAnsiChar; BinLen: integer; var Dest: TSynTempBuffer): integer;
+var
+  P, PEnd, P2: PByte;
+  len, c, carry, i: cardinal;
+begin
+  result := 0;
+  if (Bin = nil) or
+     (BinLen <= 0) then
+  begin
+    Dest.buf := nil;
+    exit;
+  end;
+  while Bin^ = #0 do
+  begin
+    inc(result); // any leading zero is stored as '1' -> result = num of zeros
+    inc(Bin);
+    dec(BinLen);
+    if BinLen = 0 then
+      break;
+  end;
+  P := Dest.InitZero(result + integer(cardinal(BinLen * 138) div 100));
+  PEnd := @PByteArray(P)[Dest.len];
+  if result <> 0 then
+  begin
+    FillcharFast(P^, result, ord('1'));
+    inc(P, result);
+  end;
+  if BinLen = 0 then
+    exit;
+  len := 0;
+  repeat
+    i := 0;
+    P2 := PEnd;
+    carry := PByte(Bin)^;
+    while (PtrUInt(P2) >= PtrUInt(P)) and
+          ((carry <> 0) or
+           (i < len)) do
+    begin
+      inc(carry, cardinal(P2^) shl 8);
+      c := carry div 58;   // FPC will use fast reciprocal mul by 0x8d3dcb09
+      dec(carry, c * 58);
+      P2^ := carry;        // P2^ := carry mod 58
+      carry := c;
+      dec(P2);
+      inc(i);
+    end;
+    len := i;
+    inc(Bin);
+    dec(BinLen);
+  until BinLen = 0;
+  inc(PEnd);
+  P2 := P;
+  while (P2 <> PEnd) and
+        (P2^ = 0) do
+    inc(P2);
+  inc(result, PtrUInt(PEnd) - PtrUInt(P2));
+  while P2 <> PEnd do
+  begin
+    P^ := ord(b58enc[P2^]);
+    inc(P);
+    inc(P2);
+  end;
+end;
+
+function BinToBase58(Bin: PAnsiChar; BinLen: integer): RawUtf8;
+var
+  temp: TSynTempBuffer;
+  len: integer;
+begin
+  len := BinToBase58(Bin, BinLen, temp);
+  FastSetString(result, temp.buf, len);
+  temp.Done;
+end;
+
+function BinToBase58(const Bin: RawByteString): RawUtf8;
+begin
+  result := BinToBase58(pointer(Bin), length(Bin));
+end;
+
+function Base58ToBin(B58: PAnsiChar; B58Len: integer;
+  var Dest: TSynTempBuffer): integer;
+var
+  P: PByteArray;
+  PEnd, P2: PByte;
+  zeros, carry: integer;
+begin
+  result := 0; // means void or error
+  if (B58 = nil) or
+     (B58Len <= 0) then
+  begin
+    Dest.buf := nil;
+    exit;
+  end;
+  zeros := 0;
+  while B58^ = '1' do
+  begin
+    inc(zeros);
+    inc(B58);
+    dec(B58Len);
+    if B58Len = 0 then
+      break;
+  end;
+  P := Dest.InitZero(zeros + integer(cardinal(B58Len * 733) div 1000));
+  PEnd := @P[Dest.len];
+  if B58Len = 0 then
+  begin
+    result := zeros;
+    exit;
+  end;
+  repeat
+    carry := ConvertBase58ToBin[B58^];
+    inc(B58);
+    if carry < 0 then
+      exit; // invalid input
+    P2 := PEnd;
+    while PtrUInt(P2) >= PtrUInt(P) do
+    begin
+      inc(carry, 58 * P2^);
+      P2^ := carry;
+      carry := carry shr 8;
+      dec(P2);
+    end;
+    dec(B58Len);
+  until B58Len = 0;
+  P2 := pointer(P);
+  while (P2 <> PEnd) and
+        (P2^ = 0) do
+    inc(P2);
+  result := PtrUInt(PEnd) - PtrUInt(P2) + 1;
+  if result + zeros <> Dest.len + 1 then
+    MoveFast(P[PtrUInt(P2) - PtrUInt(P)], P[zeros], result);
+  inc(result, zeros);
+end;
+
+function Base58ToBin(B58: PAnsiChar; B58Len: integer): RawByteString;
+var
+  temp: TSynTempBuffer;
+  len: integer;
+begin
+  len := Base58ToBin(B58, B58Len, temp);
+  SetString(result, PAnsiChar(temp.buf), len);
+  temp.Done;
+end;
+
+function Base58ToBin(const base58: RawUtf8): RawByteString;
+begin
+  result := Base58ToBin(pointer(base58), length(base58));
+end;
+
+
+{ --------- MultiPart encoding/decoding }
 
 function MultiPartFormDataDecode(const MimeType, Body: RawUtf8;
   var MultiPart: TMultiPartDynArray): boolean;
@@ -9230,13 +9446,16 @@ var
   i: PtrInt;
   e: TEmoji;
 begin
-  // initialize Base64/Base64Uri encoding/decoding tables
+  // initialize Base64/Base64Uri/Base58 encoding/decoding tables
   FillcharFast(ConvertBase64ToBin, SizeOf(ConvertBase64ToBin), 255); // -1 = invalid
   for i := 0 to high(b64enc) do
     ConvertBase64ToBin[b64enc[i]] := i;
   ConvertBase64ToBin['='] := -2; // special value for '='
   for i := 0 to high(b64urienc) do
     ConvertBase64uriToBin[b64urienc[i]] := i;
+  FillcharFast(ConvertBase58ToBin, SizeOf(ConvertBase58ToBin), 255); // -1 = invalid
+  for i := 0 to high(b58enc) do
+    ConvertBase58ToBin[b58enc[i]] := i;
   for i := high(Baudot2Char) downto 0 do
     if Baudot2Char[i]<#128 then
       Char2Baudot[Baudot2Char[i]] := i;

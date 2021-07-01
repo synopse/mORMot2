@@ -42,7 +42,7 @@ uses
 
 type
   /// exception raised by this unit, in relation to raw JSON process
-  EJSONException = class(ESynException);
+  EJsonException = class(ESynException);
 
   /// kind of character used from JSON_CHARS[] for efficient JSON parsing
   // - using such a set compiles into TEST [MEM], IMM so is more efficient
@@ -1312,7 +1312,7 @@ type
     function KeyFullCompare(const A, B): integer;
     function GetCapacity: integer;
     procedure SetCapacity(const Value: integer);
-    function GetTimeOutSeconds: cardinal; {$ifdef HASINLINE} inline; {$endif}
+    function GetTimeOutSeconds: cardinal; {$ifdef FPC} inline; {$endif}
     procedure SetTimeOutSeconds(Value: cardinal);
   public
     /// initialize the dictionary storage, specifyng dynamic array keys/values
@@ -1682,6 +1682,8 @@ type
     function ParseUtf8: RawUtf8;
     /// retrieve the next JSON value as VCL string text
     function ParseString: string;
+    /// retrieve the next JSON value as integer
+    function ParseInteger: Int64;
     /// set the EndOfObject field of a JSON buffer, just like GetJsonField() does
     // - to be called whan a JSON object or JSON array has been manually parsed
     procedure ParseEndOfObject;
@@ -4162,7 +4164,7 @@ begin
   end;
 end;
 
-procedure RemoveCommentsFromJSON(P: PUtf8Char);
+procedure RemoveCommentsFromJson(P: PUtf8Char);
 var
   PComma: PUtf8Char;
 begin // replace comments by ' ' characters which will be ignored by parser
@@ -6155,7 +6157,7 @@ begin
     else if DocVariantType.FindSynVariantType(vt, cv) then
       cv.ToJson(self, Value, Escape)
     else if not CustomVariantToJson(self, Value, Escape) then
-      raise EJSONException.CreateUtf8('%.AddVariant VType=%', [self, vt]);
+      raise EJsonException.CreateUtf8('%.AddVariant VType=%', [self, vt]);
   end;
 end;
 
@@ -6228,7 +6230,7 @@ begin
     end
     else
       // rkRecord,rkObject have no getter methods
-      raise EJSONException.CreateUtf8('%.AddRttiVarData: unsupported % (%)',
+      raise EJsonException.CreateUtf8('%.AddRttiVarData: unsupported % (%)',
         [self, Value.Prop.Value.Name, ToText(Value.Prop.Value.Kind)^]);
   end
   else
@@ -6999,6 +7001,14 @@ begin
   if not ParseNext then
     ValueLen := 0; // return ''
   Utf8DecodeToString(Value, ValueLen, result);
+end;
+
+function TJsonParserContext.ParseInteger: Int64;
+begin
+  if ParseNext then
+    SetInt64(Value, result{%H-})
+  else
+    result := 0;
 end;
 
 procedure TJsonParserContext.ParseEndOfObject;
@@ -8608,8 +8618,9 @@ begin
   result := fKeys.FindHashedForAdding(aKey^, added);
   if added then
   begin
-    fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif}.
-      ItemCopyFrom(aKey, result); // fKey[result] := aKey;
+    with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
+      // fKey[result] := aKey;
+      ItemCopy(aKey, PAnsiChar(Value^) + (result * Info.Cache.ItemSize));
     if fValues.Add(aValue^) <> result then
       raise ESynDictionary.CreateUtf8('%.Add fValues.Add', [self]);
     if tim <> 0 then
@@ -9201,7 +9212,7 @@ end;
 
 function _New_ObjectList(Rtti: TRttiCustom): pointer;
 begin
-  result := TObjectList(Rtti.ValueClass).Create;
+  result := TObjectListClass(Rtti.ValueClass).Create;
 end;
 
 function _New_InterfacedObjectWithCustomCreate(Rtti: TRttiCustom): pointer;
@@ -9252,9 +9263,14 @@ begin
   result := TCollectionItemClass(Rtti.ValueClass).Create(nil);
 end;
 
+function _New_List(Rtti: TRttiCustom): pointer;
+begin
+  result := TListClass(Rtti.ValueClass).Create;
+end;
+
 function _New_Object(Rtti: TRttiCustom): pointer;
 begin
-  result := Rtti.ValueClass.Create;
+  result := Rtti.ValueClass.Create; // non-virtual TObject.Create constructor
 end;
 
 function _BC_RawByteString(A, B: PPUtf8Char; Info: PRttiInfo;
@@ -9350,6 +9366,8 @@ begin
       end
       else if C = TCollectionItem then
         fClassNewInstance := @_New_CollectionItem
+      else if C = TList then
+        fClassNewInstance := @_New_List
       else if C = TObject then
         fClassNewInstance := @_New_Object
       else
@@ -9733,7 +9751,7 @@ function RecordLoadJson(var Rec; Json: PUtf8Char; TypeInfo: PRttiInfo;
 begin
   if (TypeInfo = nil) or
      not (TypeInfo.Kind in rkRecordTypes) then
-    raise EJSONException.CreateUtf8('RecordLoadJson: % is not a record',
+    raise EJsonException.CreateUtf8('RecordLoadJson: % is not a record',
       [TypeInfo.Name]);
   TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(@Rec, Json, EndOfObject,
       JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions);
@@ -9760,7 +9778,7 @@ function DynArrayLoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
 begin
   if (TypeInfo = nil) or
      (TypeInfo.Kind <> rkDynArray) then
-    raise EJSONException.CreateUtf8('DynArrayLoadJson: % is not a dynamic array',
+    raise EJsonException.CreateUtf8('DynArrayLoadJson: % is not a dynamic array',
       [TypeInfo.Name]);
   TRttiJson(Rtti.RegisterType(TypeInfo)).ValueLoadJson(@Value, Json, EndOfObject,
     JSONPARSER_DEFAULTORTOLERANTOPTIONS[Tolerant], CustomVariantOptions);
@@ -9792,7 +9810,7 @@ begin
     nil, TObjectListItemClass);
   TRttiJsonLoad(Ctxt.Info.JsonLoad)(@ObjectInstance, ctxt);
   Valid := ctxt.Valid;
-  result := ctxt.JSON;
+  result := ctxt.Json;
 end;
 
 function JsonSettingsToObject(var InitialJsonContent: RawUtf8;
@@ -9854,7 +9872,7 @@ begin
   if not JsonLoadProp(pointer(Instance), Prop^, ctxt) then
     exit;
   Valid := true;
-  result := ctxt.JSON;
+  result := ctxt.Json;
 end;
 
 function UrlDecodeObject(U: PUtf8Char; Upper: PAnsiChar;
@@ -10158,10 +10176,7 @@ begin
   JSON_TOKENS['n'] := jtNullFirstChar;
   JSON_TOKENS['/'] := jtSlash;
   // initialize JSON serialization
-  if Rtti.Count > 0 then
-    raise EJSONException.CreateUtf8(
-      'Rtti.Count=% at mormot.core.json start', [Rtti.Count]);
-  Rtti.GlobalClass := TRttiJson;
+  Rtti.GlobalClass := TRttiJson; // will ensure Rtti.Count = 0
   GetDataFromJson := _GetDataFromJson;
 end;
 

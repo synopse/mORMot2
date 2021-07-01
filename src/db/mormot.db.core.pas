@@ -924,10 +924,10 @@ type
     fOrderByField: TFieldIndexDynArray;
     fGroupByField: TFieldIndexDynArray;
     fWhereHasParenthesis, fHasSelectSubFields, fWhereHasSubFields: boolean;
-    fOrderByDesc: boolean;
     fLimit: integer;
     fOffset: integer;
     fWriter: TJsonWriter;
+    fOrderByFieldDesc: TFieldBits;
   public
     /// parse the given SELECT SQL statement and retrieve the corresponding
     // parameters into this class read-only properties
@@ -979,9 +979,10 @@ type
     // - here 0 = ID, otherwise RTTI field index +1
     property OrderByField: TFieldIndexDynArray
       read fOrderByField;
-    /// false for default ASC order, true for DESC attribute
-    property OrderByDesc: boolean
-      read fOrderByDesc;
+    /// recognize an ORDER BY ... DESC clause with one or several fields
+    // - follow the indexes within OrderByField[]
+    property OrderByFieldDesc: TFieldBits
+      read fOrderByFieldDesc;
     /// the number specified by the optional LIMIT ... clause
     // - set to 0 by default (meaning no LIMIT clause)
     property Limit: integer
@@ -2257,7 +2258,7 @@ constructor TSelectStatement.Create(const SQL: RawUtf8;
 var
   Prop, whereBefore: RawUtf8;
   P, B: PUtf8Char;
-  ndx, err, len, selectCount, whereCount: integer;
+  ndx, order, err, len, selectCount, whereCount: integer;
   whereWithOR, whereNotClause: boolean;
 
   function GetPropIndex: integer;
@@ -2690,23 +2691,24 @@ lim2: if IdemPropNameU(Prop, 'LIMIT') then
       else if IdemPropNameU(Prop, 'ORDER') then
       begin
         GetNextFieldProp(P, Prop);
-        if IdemPropNameU(Prop, 'BY') then
+        if IdemPropNameU(Prop, 'BY') or
+           (fOrderByField <> nil) then
         begin
           repeat
             ndx := GetPropIndex; // 0 = ID, otherwise PropertyIndex+1
             if ndx < 0 then
               exit; // incorrect SQL statement
-            AddFieldIndex(fOrderByField, ndx);
+            order := AddFieldIndex(fOrderByField, ndx);
             if P^ <> ',' then
             begin
               // check ORDER BY ... ASC/DESC
-              B := P;
               if GetNextFieldProp(P, Prop) then
                 if IdemPropNameU(Prop, 'DESC') then
-                  fOrderByDesc := true
+                  include(fOrderByFieldDesc, order)
                 else if not IdemPropNameU(Prop, 'ASC') then
-                  P := B;
-              break;
+                  goto lim2; // parse LIMIT OFFSET clauses after ORDER
+              if P^ <> ',' then
+                break; // no more fields in this ORDER BY clause
             end;
             P := GotoNextNotSpace(P + 1);
           until P^ in [#0, ';'];
@@ -2734,8 +2736,7 @@ lim2: if IdemPropNameU(Prop, 'LIMIT') then
       end
       else if (Prop <> '') or
               not (GotoNextNotSpace(P)^ in [#0, ';']) then
-        // incorrect SQL statement
-        exit
+        exit // incorrect SQL statement
       else
         break; // reached the end of the statement
     end;

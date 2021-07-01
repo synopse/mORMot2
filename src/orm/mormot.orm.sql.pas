@@ -910,11 +910,11 @@ begin
         for f := 0 to high(Stmt.OrderByField) do
         begin
           W.AddString(fStoredClassMapping^.FieldNameByIndex(Stmt.OrderByField[f] - 1));
+          if byte(f) in Stmt.OrderByFieldDesc then
+            W.AddShorter(' desc');
           W.AddComma;
         end;
         W.CancelLastComma;
-        if Stmt.OrderByDesc then
-          W.AddShorter(' desc');
       end;
       if limit.Position = posAfter then
         W.AddString(limitSQL);

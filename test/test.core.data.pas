@@ -2078,7 +2078,7 @@ begin
     '"serverType": "Socket",'#10'/*"reverseProxy": {'#10'"kind": "nginx",'#10 +
     '"sendFileLocationRoot": "snake-ukrpatent-local"'#10'}*/'#10'} //eol'#10'}';
   check(not IsValidJSON(J));
-  RemoveCommentsFromJSON(UniqueRawUTF8(J));
+  RemoveCommentsFromJson(UniqueRawUTF8(J));
   CheckUtf8(IsValidJSON(J), J);
   J := JSONReformat(J,jsonCompact);
   CheckEqual(J,'{"httpServer":{"host":"*","port":"8881","serverType":"Socket"}}');
@@ -3566,6 +3566,70 @@ var
     end;
   end;
 
+  {$ifdef HASITERATORS}
+  procedure DoEnumerators;
+  var
+    vd, v2: TDocVariantData;
+    v: PVariant;
+    d: PDocVariantData;
+    f: TDocVariantFields;
+  begin
+    vd.InitArray([1, 2, 3, 4]);
+    for f in vd do
+    begin
+      Check(f.Name = nil);
+      Check(integer(f.Value^) in [1..4]);
+    end;
+    for v in vd.Items do
+      Check(integer(v^) in [1..4]);
+    vd.Clear;
+    for f in vd do
+      Check(f.Name = pointer(1)); // should not iterate
+    for v in vd.Items do
+      Check(v = nil); // should not iterate
+    vd.InitJson('[{a:1,b:1}, 1, "no object", {a:2,b:2}]');
+    v2.InitFast;
+    for f in vd do
+    begin
+      Check(f.Name = nil);
+      v2.AddItem(f.Value^);
+    end;
+    CheckEqual(vd.ToJson, v2.ToJson);
+    v2.Clear;
+    v2.InitFast;
+    for v in vd.Items do
+      v2.AddItem(v^);
+    CheckEqual(vd.ToJson, v2.ToJson);
+    v2.Clear;
+    v2.InitFast;
+    for d in vd.Objects do
+    begin
+      Check(DocVariantType.IsOfType(variant(d^)));
+      v2.AddItem(variant(d^));
+    end;
+    CheckEqual(v2.ToJson, '[{"a":1,"b":1},{"a":2,"b":2}]');
+    vd.Clear;
+    vd.InitJson('{a:1,b:2,c:3}');
+    v2.Clear;
+    v2.InitFast;
+    for f in vd do
+    begin
+      Check(f.Name <> nil);
+      v2.AddValue(f.Name^, f.Value^);
+    end;
+    CheckEqual(vd.ToJson, v2.ToJson);
+    for v in vd.Items do
+      Check(v = nil); // should not iterate
+    for f in vd.Fields do
+    begin
+      CheckEqual(f.Name^, v2.Names[0]);
+      Check(f.Value^ = v2.Values[0]);
+      v2.Delete(0);
+    end;
+    Check(v2.Count = 0);
+  end;
+  {$endif HASITERATORS}
+
 const
   MAX = 20000;
   TEST_DATA_1 = '[' +
@@ -3876,6 +3940,9 @@ begin
   check(s = '{"ID":2,"Notation":"ABC","Price":10.1}');
   s := VariantSaveJson(V);
   check(s = '{"ID":1,"Notation":"ABC","Price":10.1,"CustomNotation":"XYZ"}');
+  {$ifdef HASITERATORS}
+  DoEnumerators;
+  {$endif HASITERATORS}
   // some tests to avoid regression about bugs reported by users on forum
   lTable := TOrmTableJson.Create('');
   try
@@ -4126,24 +4193,30 @@ begin
   CheckIdData(0, 0);
   Check((length(Stmt.OrderByField) = 1) and
         (Props.Fields.List[Stmt.OrderByField[0] - 1].name = 'FirstName'));
-  Check(not Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = []);
   NewStmt('select iD,Data from tab order by firstname desc');
   CheckIdData(0, 0);
   Check((length(Stmt.OrderByField) = 1) and
         (Props.Fields.List[Stmt.OrderByField[0] - 1].name = 'FirstName'));
-  Check(Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = [0]);
   NewStmt('select rowid , Data from tab order by firstname , lastname desc');
   CheckIdData(0, 0);
   Check((length(Stmt.OrderByField) = 2) and
         (Props.Fields.List[Stmt.OrderByField[0] - 1].name = 'FirstName') and
         (Props.Fields.List[Stmt.OrderByField[1] - 1].name = 'LastName'));
-  Check(Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = [1]);
   NewStmt('select rowid,Data from tab order by firstname,lastname limit 10');
   CheckIdData(10, 0);
   Check((length(Stmt.OrderByField) = 2) and
         (Props.Fields.List[Stmt.OrderByField[0] - 1].name = 'FirstName') and
         (Props.Fields.List[Stmt.OrderByField[1] - 1].name = 'LastName'));
-  Check(not Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = []);
+  NewStmt('select rowid,Data from tab order by firstname desc,lastname limit 10');
+  CheckIdData(10, 0);
+  Check((length(Stmt.OrderByField) = 2) and
+        (Props.Fields.List[Stmt.OrderByField[0] - 1].name = 'FirstName') and
+        (Props.Fields.List[Stmt.OrderByField[1] - 1].name = 'LastName'));
+  Check(Stmt.OrderByFieldDesc = [0]);
   NewStmt('select rowid,Data from tab group by firstname order by firstname,lastname');
   CheckIdData(0, 0);
   Check((length(Stmt.GroupByField) = 1) and
@@ -4156,15 +4229,15 @@ begin
   Check((length(Stmt.GroupByField) = 2) and
         (Props.Fields.List[Stmt.GroupByField[0] - 1].name = 'FirstName') and
         (Props.Fields.List[Stmt.GroupByField[1] - 1].name = 'LastName'));
-  Check(not Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = []);
   NewStmt('select iD,Data from tab limit   20');
   CheckIdData(20, 0);
   Check(Stmt.OrderByField = nil);
-  Check(not Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = []);
   NewStmt('select iD,Data from tab  offset   20');
   CheckIdData(0, 20);
   Check(Stmt.OrderByField = nil);
-  Check(not Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = []);
   NewStmt(
     'select data,iD from tab where id >= 10 limit 10 offset 20 order by firstname desc');
   Check(Stmt.TableName = 'tab');
@@ -4179,7 +4252,7 @@ begin
         (Props.Fields.List[Stmt.Select[0].Field - 1].name = 'Data'));
   Check((length(Stmt.OrderByField) = 1) and
         (Props.Fields.List[Stmt.OrderByField[0] - 1].name = 'FirstName'));
-  Check(Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = [0]);
   NewStmt('select iD,Data from tab where id in (1, 2, 3)');
   Check(Stmt.TableName = 'tab');
   Check(length(Stmt.Where) = 1);
@@ -4195,7 +4268,7 @@ begin
   Check(Stmt.Where[0].Value = '["a","b","3"]');
   Check((length(Stmt.OrderByField) = 1) and
         (Stmt.OrderByField[0] = 0));
-  Check(Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = [0]);
   NewStmt('select data,iD from tab where id >= 10 and YearOfBirth > 1600 limit 10 offset 20');
   CheckWhere(false);
   NewStmt('select data,iD from tab where rowid>=10 or YearOfBirth>1600 offset 20 limit 10');
@@ -4285,7 +4358,7 @@ begin
   Check(Stmt.Where[1].Operation = opContains);
   Check((length(Stmt.OrderByField) = 1) and
         (Props.Fields.List[Stmt.OrderByField[0] - 1].name = 'FirstName'));
-  Check(Stmt.OrderByDesc);
+  Check(Stmt.OrderByFieldDesc = [0]);
   Check(Stmt.Limit = 20);
   NewStmt('select max(yearofdeath) as maxYOD from tab where yearofbirth > :(1000):');
   Check(Stmt.TableName = 'tab');

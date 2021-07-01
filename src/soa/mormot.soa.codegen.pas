@@ -967,7 +967,7 @@ begin
   interfaces := TInterfaceFactory.GetUsedInterfaces;
   if interfaces = nil then
     exit;
-  services.InitFast;
+  {%H-}services.InitFast;
   for i := 0 to interfaces.Count - 1 do
     services.AddItem(_ObjFast([
       'interfaceName',
@@ -1101,7 +1101,7 @@ var
   methods: TDocVariantData; // circumvent FPC -O2 memory leak
 begin
   AddUnit(int.InterfaceTypeInfo^.InterfaceUnitName^, nil);
-  methods.InitFast;
+  {%H-}methods.InitFast;
   for m := 0 to int.MethodsCount - 1 do
     methods.AddItem(ContextFromMethod(int.Methods[m]));
   result := variant(methods);

@@ -1772,7 +1772,7 @@ end;
 initialization
 {$ifdef FPC}
 {$ifdef OSWINDOWS}
-  beginthreadex := @libc_beginthreadex;
+  beginthreadex := @libc_beginthreadex; // manual fill of our import table
   endthreadex := @libc_endthreadex;
 {$endif OSWINDOWS}
 {$endif FPC}

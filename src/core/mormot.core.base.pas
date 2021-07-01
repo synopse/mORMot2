@@ -456,6 +456,8 @@ type
 
   TStreamClass = class of TStream;
   TInterfacedObjectClass = class of TInterfacedObject;
+  TListClass = class of TList;
+  TObjectListClass = class of TObjectList;
   TCollectionClass = class of TCollection;
   TCollectionItemClass = class of TCollectionItem;
   ExceptionClass = class of Exception;
@@ -753,6 +755,7 @@ function ToText(C: TClass): RawUtf8; overload;
 var
   /// retrieve the unit name where a given class is implemented
   // - is implemented in mormot.core.rtti.pas; so may be nil otherwise
+  // - is needed since Delphi 7-2007 do not define TObject.UnitName
   ClassUnit: function(C: TClass): PShortString;
 
 /// just a wrapper around vmtParent to avoid a function call
@@ -2277,18 +2280,19 @@ type
    cf_c16, cfPCID,  cfDCA,  cfSSE41, cfSSE42, cfX2A,  cfMOVBE, cfPOPCNT,
    cfTSC2, cfAESNI, cfXS,   cfOSXS,  cfAVX,   cfF16C, cfRAND,  cfHYP,
    { extended features CPUID 7 in EBX, ECX, EDX }
-   cfFSGS, cf_b01, cfSGX, cfBMI1, cfHLE, cfAVX2, cf_b06, cfSMEP,
+   cfFSGS, cfTSCADJ, cfSGX, cfBMI1, cfHLE, cfAVX2, cfFDPEO, cfSMEP,
    cfBMI2, cfERMS, cfINVPCID, cfRTM, cfPQM, cf_b13, cfMPX, cfPQE,
-   cfAVX512F, cfAVX512DQ, cfRDSEED, cfADX, cfSMAP, cfAVX512IFMA, cfPCOMMIT, cfCLFLUSH,
-   cfCLWB, cfIPT, cfAVX512PF, cfAVX512ER, cfAVX512CD, cfSHA, cfAVX512BW, cfAVX512VL,
-   cfPREFW1, cfAVX512VBMI, cfUMIP, cfPKU, cfOSPKE, cf_c05, cfAVX512VBMI2, cf_c07,
-   cfGFNI, cfVAES, cfVCLMUL, cfAVX512NNI, cfAVX512BITALG, cf_c13, cfAVX512VPC, cf_c15,
-   cf_cc16, cf_c17, cf_c18, cf_c19, cf_c20, cf_c21, cfRDPID, cf_c23,
-   cf_c24, cf_CLDEMOTE, cf_c26, cf_MOVDIRI, cf_MOVDIR64B, cf_ENQCMD, cfSGXLC, cf_c31,
-   cf_d0, cf_d1, cfAVX512NNIW, cfAVX512MAS, cfFSRM, cf_d5, cf_d6, cf_d7,
-   cf_AVX512VP2I, cf_d9, cf_dMDCLR, cf_d11, cf_d12, cf_TSXFA, cf_SER, cf_HYBRID,
-   cf_TSXLDTRK, cf_d17, cf_PCFG, cf_d19, cf_IBT, cf_d21, cf_d22, cf_d34,
-   cf_d24, cf_d25, cf_IBRSPB, cf_STIBP, cf_dL1DFL, cf_ARCAB, cf_d30, cf_SSBD);
+   cfAVX512F, cfAVX512DQ, cfRDSEED, cfADX, cfSMAP, cfAVX512IFMA, cfPCOMMIT,
+   cfCLFLUSH, cfCLWB, cfIPT, cfAVX512PF, cfAVX512ER, cfAVX512CD, cfSHA,
+   cfAVX512BW, cfAVX512VL, cfPREFW1, cfAVX512VBMI, cfUMIP, cfPKU, cfOSPKE,
+   cf_c05, cfAVX512VBMI2, cfCETSS, cfGFNI, cfVAES, cfVCLMUL, cfAVX512NNI,
+   cfAVX512BITALG, cf_c13, cfAVX512VPC, cf_c15, cfFLP, cf_c17, cf_c18,
+   cf_c19, cf_c20, cf_c21, cfRDPID, cf_c23, cf_c24, cfCLDEMOTE, cf_c26,
+   cfMOVDIRI, cfMOVDIR64B, cfENQCMD, cfSGXLC, cfPKS, cf_d0, cf_d1,
+   cfAVX512NNIW, cfAVX512MAPS, cfFSRM, cf_d5, cf_d6, cf_d7, cfAVX512VP2I,
+   cfSRBDS, cfMDCLR, cf_d11, cf_d12, cfTSXFA, cfSER, cfHYBRID,
+   cfTSXLDTRK, cf_d17, cfPCFG, cfLBR, cfIBT, cf_d21, cfAMXBF16, cf_d23,
+   cfAMXTILE, cfAMXINT8, cfIBRSPB, cfSTIBP, cfL1DFL, cfARCAB, cfCORCAB, cfSSBD);
 
   /// all CPU features flags, as retrieved from an Intel/AMD CPU
   TIntelCpuFeatures = set of TIntelCpuFeature;
@@ -2428,8 +2432,16 @@ procedure FillZero(var dest; count: PtrInt); overload;
 procedure FillZeroSmall(P: pointer; Length: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
-/// our fast version of CompareMem() with optimized asm for x86 and tune pascal
+{$ifdef CPUX64}
+/// a fast SSE2 asm version of the C function memcmp()
+// - defined here to properly inline CompareMem()
+function MemCmpSse2(P1, P2: Pointer; Length: PtrInt): integer;
+{$endif CPUX64}
+
+/// our fast version of CompareMem()
+// - tuned asm for x86, call MemCmpSse2 for x64, or fallback to tuned pascal
 function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
+  {$ifdef CPUX64}inline;{$endif}
 
 {$ifdef HASINLINE}
 function CompareMemFixed(P1, P2: Pointer; Length: PtrInt): boolean; inline;
@@ -3954,7 +3966,7 @@ procedure CurrencyToVariant(const c: currency; var v: variant);
 begin
   if PVarData(@v)^.VType >= varOleStr then // bypass for most obvious types
     VarClearProc(PVarData(@v)^);
-  PVarData(@v)^.VType := varCurrency;
+  PCardinal(@v)^ := varCurrency;
   PVarData(@v).VCurrency := c;
 end;
 
@@ -6248,7 +6260,7 @@ begin
       J := R;
       P := (L + R) shr 1;
       repeat
-        tmp := ID^[P];
+        tmp := ID[P];
         if ID[I] < tmp then
           repeat
             inc(I)
@@ -8693,11 +8705,8 @@ end;
 
 function TLecuyer.NextQWord: QWord;
 begin
-  with PQWordRec(@result)^ do
-  begin
-    L := Next;
-    H := RawNext;
-  end;
+  PQWordRec(@result)^.L := Next;
+  PQWordRec(@result)^.H := RawNext;
 end;
 
 function TLecuyer.NextDouble: double;
@@ -10174,6 +10183,12 @@ end;
 
 {$else} // those functions have their tuned x86 asm version
 
+{$ifdef CPUX64}
+function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
+begin
+  result := MemCmpSse2(P1, P2, Length) = 0; // use SSE2 optimized asm
+end;
+{$else}
 function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
 label
   zero;
@@ -10241,6 +10256,7 @@ begin
 zero:
   result := false;
 end;
+{$endif CPUX64}
 
 function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
 begin
@@ -10566,7 +10582,7 @@ begin
     begin
       if v >= varOleStr then // bypass for most obvious types
         VarClearProc(TVarData(Value));
-      TVarData(Value).VType := varString;
+      PCardinal(@Value)^ := varString;
       TVarData(Value).VAny := nil; // to avoid GPF when assigning the value
     end;
 end;
@@ -10576,7 +10592,7 @@ begin
   ClearVariantForString(Value);
   if (Data = nil) or
      (DataLen <= 0) then
-    TVarData(Value).VType := varNull
+    PCardinal(@Value)^ := varNull
   else
     SetString(RawByteString(TVarData(Value).VAny), PAnsiChar(Data), DataLen);
 end;
@@ -10585,7 +10601,7 @@ procedure RawByteStringToVariant(const Data: RawByteString; var Value: variant);
 begin
   ClearVariantForString(Value);
   if Data = '' then
-    TVarData(Value).VType := varNull
+    PCardinal(@Value)^ := varNull
   else
     RawByteString(TVarData(Value).VAny) := Data;
 end;
@@ -10632,7 +10648,8 @@ begin
               (VType = varNull or varByRef);
 end;
 
-function SetVariantUnRefSimpleValue(const Source: variant; var Dest: TVarData): boolean;
+function SetVariantUnRefSimpleValue(const Source: variant;
+  var Dest: TVarData): boolean;
 var
   typ: cardinal;
 begin
@@ -10650,7 +10667,7 @@ begin
       end;
     varEmpty..varDate, varBoolean, varShortInt..varWord64:
       begin
-        Dest.VType := typ;
+        PCardinal(@Dest)^ := typ;
         Dest.VInt64 := PInt64(TVarData(Source).VAny)^;
         result := true;
       end;
@@ -10668,7 +10685,7 @@ begin
     typ := typ and not varByRef;
     if typ in VTYPE_SIMPLE then
     begin
-      tmp.VType := typ;
+      PCardinal(@tmp)^ := typ;
       tmp.VInt64 := PInt64(V^.VAny)^;
       result := @tmp;
       exit;

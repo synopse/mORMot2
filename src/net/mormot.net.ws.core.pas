@@ -1221,13 +1221,13 @@ begin
         exit;
       OutputToFrame(Ctxt, status, head, answer);
       if not Sender.SendFrame(answer) then
-        fLastError := Utf8ToString(FormatUtf8('SendFrame error %', [Sender]));
+        FormatString('%.SendFrame error', [Sender], fLastError);
     finally
       Ctxt.Free;
     end;
   except
     on E: Exception do
-      FormatString('% [%]', [ClassNameShort(E)^, E.Message], fLastError);
+      FormatString('% [%]', [E, E.Message], fLastError);
   end
   else if (Sender.fIncoming.AnswerToIgnore > 0) and
           (FrameData(request, 'answer') <> nil) then

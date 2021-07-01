@@ -1160,15 +1160,16 @@ begin
   W.EndJsonObject(0, result);
 end;
 
+const
+  ORDERBY_FIELD: array[boolean] of Integer = (1, -1);
+
 function TRestStorageMongoDB.EngineList(const SQL: RawUtf8; ForceAjax: boolean;
   ReturnedRowCount: PPtrInt): RawUtf8;
 var
   ResCount: PtrInt;
   Stmt: TSelectStatement;
   Query: variant;
-  TextOrderByField: RawUtf8;
-const
-  ORDERBY_FIELD: array[boolean] of Integer = (1, -1);
+  TextOrderByFirstField: RawUtf8;
 
   procedure AddWhereClause(B: TBsonWriter);
   var
@@ -1258,14 +1259,17 @@ const
            (Stmt.Offset = 0) and
            (fStoredClassRecordProps.Fields.List[Stmt.OrderByField[0] - 1].
              OrmFieldType in [oftAnsiText, oftUtf8Text]) then
-          TextOrderByField := fStoredClassMapping^.FieldNameByIndex(
+          // $orderby is case sensitive with MongoDB -> client-side sort
+          TextOrderByFirstField := fStoredClassMapping^.FieldNameByIndex(
             Stmt.OrderByField[0] - 1)
         else if n >= 0 then
         begin
+          // non textual or multiple fields -> server-side sort
           B.BsonDocumentBegin('$orderby');
           for i := 0 to n do
             B.BsonWrite(fStoredClassMapping^.FieldNameByIndex(
-              Stmt.OrderByField[i] - 1), ORDERBY_FIELD[Stmt.OrderByDesc]);
+              Stmt.OrderByField[i] - 1),
+              ORDERBY_FIELD[i in Stmt.OrderByFieldDesc]);
           B.BsonDocumentEnd;
         end;
         B.BsonDocumentEnd;
@@ -1378,7 +1382,7 @@ const
           exit;
         end;
         B.BsonDocumentBeginInArray('$sort');
-        B.BsonWrite('_id', ORDERBY_FIELD[Stmt.OrderByDesc]);
+        B.BsonWrite('_id', ORDERBY_FIELD[0 in Stmt.OrderByFieldDesc]);
         B.BsonDocumentEnd;
       end;
       B.BsonDocumentBeginInArray('$project');
@@ -1514,14 +1518,14 @@ begin
           finally
             MS.Free;
           end;
-          if TextOrderByField <> '' then
+          if TextOrderByFirstField <> '' then
           begin
             // $orderby is case sensitive with MongoDB -> client-side sort
             T := TOrmTableJson.CreateFromTables([fStoredClass], SQL,
               pointer(result), length(result));
             try
-              T.SortFields(T.FieldIndex(TextOrderByField),
-                not Stmt.OrderByDesc, nil, oftUtf8Text);
+              T.SortFields(T.FieldIndex(TextOrderByFirstField),
+                not(0 in Stmt.OrderByFieldDesc), nil, oftUtf8Text);
               result := T.GetJsonValues(W.Expand);
             finally
               T.Free;

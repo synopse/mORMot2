@@ -22,26 +22,28 @@ interface
 
 {$I ..\mormot.defines.inc}
 
-{$if not defined(ZLIBSTATIC) and not defined (ZLIBPAS) and
-     not defined(ZLIBRTL) and not defined(ZLIBEXT)}
+{$if not defined(ZLIBSTATIC) and
+     not defined(ZLIBPAS) and
+     not defined(ZLIBRTL) and
+     not defined(ZLIBEXT)}
 
   // select best known choice if not overriden for the whole project
   {$ifdef FPC}
     {$ifdef OSWINDOWS}
-      {$define ZLIBSTATIC}   // FPC Win32 Win64: static .o
+      {$define ZLIBSTATIC} // FPC Win32 Win64: we supply our static .o
     {$else}
       {$ifdef OSANDROID}
-        {$define ZLIBPAS}    // FPC Android: paszlib (Alf reported problems)
+        {$define ZLIBPAS}  // FPC Android: paszlib (Alf reported problems)
       {$else}
-        {$define ZLIBEXT} // FPC other POSIX: system's libz.so
+        {$define ZLIBEXT}  // FPC other POSIX: system's libz.so
       {$endif OSANDROID}
     {$endif OSWINDOWS}
   {$else not FPC}
     {$ifdef WIN32}
-      {$define ZLIBSTATIC} // Delphi Win32: static .obj
+      {$define ZLIBSTATIC} // Delphi Win32: our static .obj
     {$endif WIN32}
     {$ifdef WIN64}
-      {$define ZLIBRTL} // Delphi Win64: system.zlib.pas from Delphi RTL
+      {$define ZLIBRTL}    // Delphi Win64: system.zlib.pas from Delphi RTL
     {$endif WIN64}
   {$endif FPC}
 
@@ -51,6 +53,9 @@ interface
 {.$define LIBDEFLATESTATIC}
 // you may try to enable it e.g. for arm/aarch64-linux (not tested yet)
 
+{$ifdef NOLIBDEFLATESTATIC}
+  {$undef LIBDEFLATESTATIC}
+{$endif NOLIBDEFLATESTATIC}
 
 uses
   sysutils,
@@ -61,6 +66,10 @@ uses
   {$ifdef ZLIBRTL}
   zlib,
   {$endif ZLIBRTL}
+  {$if defined(LIBDEFLATESTATIC) or
+       defined(ZLIBSTATIC)}
+  mormot.lib.static, // some definitions to properly link libdeflate
+  {$ifend}
   mormot.core.base;
 
 

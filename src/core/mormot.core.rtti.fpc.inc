@@ -452,7 +452,7 @@ begin
   result := DeRef(GetTypeData(@self)^.elTypeRef);
 end;
 
-function TRttiInfo.DynArrayItemTypeAny: PRttiInfo;
+function TRttiInfo.DynArrayItemTypeExtended: PRttiInfo;
 begin
   with GetTypeData(@self)^ do
   begin

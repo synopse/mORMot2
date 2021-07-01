@@ -114,12 +114,15 @@
   {$define HASSAFEINLINE} // Delphi 2007 has sometimes troubles inlining :(
   {$define NODELPHIASM}   // avoid e.g. low-level System.@LStrFromPCharLen calls
   {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
+  {$define HASITERATORS}
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSHORT_USESTR} // FloatToText uses str() in FPC
   {$define DOUBLETOSHORT_USEGRISU} // fast DoubleToAscii()
   {$define USERECORDWITHMETHODS}  // use "object" only for Delphi 7
   {$define FPC_OR_UNICODE}
+  {$define FPC_OR_DELPHIXE} // to circumvent Delphi internal errors
+  {$define FPC_OR_DELPHIXE4}
 
 
   // -----------
@@ -150,6 +153,7 @@
     {$define ISFPC27}
     {$define ISFPC30}
     {$define ISFPC32}
+    {$define HASGETTYPEKIND}
     {$ifdef VER3_2_2}
       {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
     {$endif VER3_2_2}
@@ -286,11 +290,12 @@
     {$define FPC_NEWRTTI}
     // when http://bugs.freepascal.org/view.php?id=26774 has been fixed
     {$define HASINTERFACERTTI}
+    // generics support is excellent in FPC 3.2+
+    {$define HASGENERICS}
   {$endif}
 
   {$ifdef FPC_NEWRTTI}
     {$define ISDELPHI2010_OR_FPC_NEWRTTI}
-    {$define HASGENERICS}
   {$else}
     {$define DELPHI_OR_FPC_OLDRTTI}
     {$define FPC_OLDRTTI}
@@ -396,6 +401,7 @@
     {$endif}
     {$if CompilerVersion > 18}
       {$define ISDELPHI2007ANDUP} // Delphi 2007 or newer
+      {$define HASITERATORS}
     {$ifend}
     {$if CompilerVersion = 20}
       {$define ISDELPHI20092010} // specific compilation issues
@@ -444,6 +450,9 @@
     {$if CompilerVersion >= 27.0}
       {$define ISDELPHIXE6}
     {$ifend}
+    {$if CompilerVersion = 28.0}
+       {$undef HASGENERICS} // XE7 trigger internal error with our generics
+    {$ifend}
     {$if CompilerVersion >= 28.0}
       {$define ISDELPHIXE7}
       {$ifdef CPU64}
@@ -452,6 +461,7 @@
     {$ifend}
     {$if CompilerVersion >= 29.0}
       {$define ISDELPHIXE8}
+      {$define HASGETTYPEKIND} // Delphi XE7 generics and intrinsics are buggy
     {$ifend}
     {$if CompilerVersion >= 30.0}
       {$define ISDELPHI10}

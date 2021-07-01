@@ -2476,8 +2476,8 @@ begin
     current_offset := dwarf.DebugLineSectionOffset;
     end_offset := current_offset + dwarf.DebugLineSection_Size;
     while current_offset < end_offset do
-      current_offset := dwarf.ParseCompilationUnits(current_offset, end_offset -
-        current_offset);
+      current_offset := dwarf.ParseCompilationUnits(
+        current_offset, end_offset - current_offset);
     fUnits.Sort(SymbolSortByAddr);
     // retrieve function names
     current_offset := dwarf.DebugInfoSectionOffset;
@@ -2918,7 +2918,8 @@ begin
         fUnit[i].Symbol.Stop := fUnit[i + 1].Symbol.Start - 1;
       if fUnitsCount <> 0 then // wild guess of the last unit end of code
         with fUnit[fUnitsCount - 1] do
-          if Addr <> nil then // units may overlap with .inc -> use Addr[]
+          if Addr <> nil then
+            // units may overlap with .inc -> use Addr[]
             Symbol.Stop := Addr[high(Addr)] + 64
           else
             Symbol.Stop := Symbol.Start;
@@ -2936,13 +2937,18 @@ begin
     // verify available symbols
     if fSymbolsCount > 0 then
     begin
+      // in DWARF, fSymbol[i].Start/Stop sometimes overlap -> ignore on FPC
+      // GenerateFromMapOrDbg() did Sort() by Start so we can guess its enough
+      {$ifndef FPC}
       for i := 1 to fSymbolsCount - 1 do
         if fSymbol[i].Start <= fSymbol[i - 1].Stop then
         begin
+          // on Delphi, there should be no overlap
           fUnits.Clear;
           fSymbols.Clear;
           exit;
         end;
+      {$endif FPC}
       if MabCreate then // just created from .map/.dbg -> create .mab file
         SaveToFile(MabFile);
       fHasDebugInfo := true;
@@ -3323,7 +3329,7 @@ begin
     name := unitname;
   u := map.FindUnit(name);
   if u >= 0 then
-    result := Utf8ToString(map.fUnit[u].FileName);
+    Utf8ToFileName(map.fUnit[u].FileName, result);
 end;
 
 
@@ -5114,7 +5120,7 @@ begin
   fFileName := fFamily.fCustomFileName;
   if fFileName = '' then
   begin
-    fFileName := Utf8ToString(Executable.ProgramName);
+    Utf8ToFileName(Executable.ProgramName, fFileName);
     if fFamily.IncludeComputerNameInFileName then
       fFileName := fFileName + ' (' + Utf8ToString(Executable.Host) + ')';
   end;
@@ -6645,7 +6651,7 @@ begin
   if replaceTabs <> '' then
     tmp := StringReplaceAll(tmp, #9, replaceTabs);
   if IsValidUtf8(pointer(tmp)) then
-    result := Utf8ToString(tmp)
+    Utf8ToString(tmp, result)
   else
     {$ifdef UNICODE}
     result := CurrentAnsiConvert.AnsiToUnicodeString(pointer(tmp), length(tmp));
@@ -7222,6 +7228,7 @@ begin
   SetCurrentThreadName('MainThread');
   GetExecutableLocation := _GetExecutableLocation; // use FindLocationShort()
   //writeln(BacktraceStrFpc(Get_pc_addr));
+  //writeln(GetExecutableLocation(get_caller_addr(get_frame)));
   //writeln(GetInstanceDebugFile.FindLocationShort(PtrUInt(@TDynArray.InitFrom)));
   //GetInstanceDebugFile.SaveToJson(DateTimeToFileShort(Now)+'.json',jsonUnquotedPropName);
 end;

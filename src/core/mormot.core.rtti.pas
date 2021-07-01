@@ -589,7 +589,7 @@ type
     case TRttiKind of
       rkFloat: (
         RttiFloat: TRttiFloat);
-      rkLString: (
+      rkLString: ( // from TypeInfo() on older Delphi with no CP RTTI
         CodePage: cardinal; // RawBlob=CP_RAWBYTESTRING not CP_RAWBLOB
         Engine: TSynAnsiConvert);
       rkEnumeration, rkSet: (
@@ -628,6 +628,7 @@ type
     // - won't adjust internal/cardinal names on FPC as with Name method
     RawName: ShortString;
     /// the declared name of the type ('String','Word','RawUnicode'...)
+    // - will return '' if @self is nil
     // - on FPC, will adjust 'integer'/'cardinal' from 'longint'/'longword' RTTI
     function Name: PShortString;
       {$ifdef ISDELPHI2006ANDUP}inline;{$endif}
@@ -719,7 +720,7 @@ type
     /// for rkDynArray: get the dynamic array deep RTTI of the stored item
     // - works for both managed and unmanaged types, on FPC and Delphi 2010+
     // - caller should ensure the type is indeed a dynamic array
-    function DynArrayItemTypeAny: PRttiInfo;
+    function DynArrayItemTypeExtended: PRttiInfo;
     /// for rkDynArray: get the dynamic array type information of the stored item
     // - this overloaded method will also return the item size in bytes
     // - caller should ensure the type is indeed a dynamic array
@@ -1732,7 +1733,7 @@ function TypeInfoToStandardParserType(Info: PRttiInfo;
 // - returns nil if we don't know any dynamic array for this type
 // - ExpectExactElemInfo=true ensure that result's ArrayRtti.Info = ElemInfo
 function TypeInfoToDynArrayTypeInfo(ElemInfo: PRttiInfo;
-  ExpectExactElemInfo: boolean): PRttiInfo;
+  ExpectExactElemInfo: boolean; ParserType: PRttiParserType = nil): PRttiInfo;
 
 /// recognize a simple value type from a dynamic array RTTI
 // - if ExactType=false, will approximate the first field
@@ -2167,6 +2168,10 @@ type
     // - is owned, as TObject, by this TRttiCustom
     property PrivateSlot: pointer
       read fPrivateSlot write fPrivateSlot;
+    /// low-level access to the associated Lecuyer's random generator
+    // - each type has its own 16-bytes generator to avoid using the main threadvar
+    property RandomGenerator: TLecuyer
+      read fRandomGenerator;
     /// opaque TRttiJsonLoad callback used by mormot.core.json.pas
     property JsonLoad: pointer
       read fJsonLoad write fJsonLoad;
@@ -2184,6 +2189,7 @@ type
   /// maintain a thread-safe list of PRttiInfo/TRttiCustom/TRttiJson registration
   TRttiCustomList = object
   private
+    fGlobalClass: TRttiCustomClass;
     // for DoRegister thread-safety - no need of TSynLocker padding
     Lock: TRTLCriticalSection;
     // speedup search by name e.g. from a loop
@@ -2200,10 +2206,8 @@ type
     function DoRegister(ObjectClass: TClass): TRttiCustom; overload;
     function DoRegister(ObjectClass: TClass; ToDo: TRttiCustomFlags): TRttiCustom; overload;
     procedure Add(Instance: TRttiCustom);
+    procedure SetGlobalClass(RttiClass: TRttiCustomClass); // ensure Count=0
   public
-    /// which kind of TRttiCustom class is to be used for registration
-    // - properly set e.g. by mormot.core.json.pas to TRttiJson for JSON support
-    GlobalClass: TRttiCustomClass;
     /// how many TRttiCustom instances have been registered
     Count: integer;
     /// how many TRttiCustom instances have been registered for a given type
@@ -2393,6 +2397,10 @@ type
     // ! Rtti.ByClass[TMyClass].Props.NameChanges(['old', 'new'])
     property ByClass[C: TClass]: TRttiCustom
       read GetByClass;
+    /// which kind of TRttiCustom class is to be used for registration
+    // - properly set e.g. by mormot.core.json.pas to TRttiJson for JSON support
+    property GlobalClass: TRttiCustomClass
+      read fGlobalClass write SetGlobalClass;
   end;
 
 
@@ -2949,7 +2957,7 @@ begin
       result := SizeOf(variant);
     rkArray:
       result := ArraySize;
-    rkRecord {$ifdef FPC}, rkObject {$endif} :
+    rkRecord {$ifdef FPC}, rkObject {$endif}:
       result := RecordSize;
     rkSString:
       result := GetTypeData(@self)^.MaxLength + 1;
@@ -3089,7 +3097,7 @@ begin
       end
       else
       begin
-        Cache.CodePage := AnsiStringCodePage;
+        Cache.CodePage := AnsiStringCodePage; // use TypeInfo() on old Delphi
         Cache.Engine := TSynAnsiConvert.Engine(Cache.CodePage);
       end;
    end;
@@ -4973,8 +4981,7 @@ begin
   if SourceCount > 0 then
     if ItemInfo = nil then
       MoveFast(Source^, Dest^, ItemSize * SourceCount)
-    else
-    if ItemInfo^.Kind in rkRecordTypes then
+    else if ItemInfo^.Kind in rkRecordTypes then
       // retrieve record/object RTTI once for all items
       _RecordCopySeveral(pointer(Dest), pointer(Source), SourceCount, ItemInfo)
     else
@@ -5222,12 +5229,32 @@ begin
   {$endif CPUINTEL}
     VarClearProc(V^.Data);
   V^.VType := varInteger;
-  V^.Data.VInteger := Rtti.fRandomGenerator.Next; // just a random integer
+  V^.Data.VInt64 := Rtti.fRandomGenerator.Next;
+  // generate some 8-bit 32-bit 64-bit integers or a RawUtf8 varString
+  case V^.Data.VInteger and 3 of
+    0:
+      V^.VType := varInteger;
+    1:
+      V^.VType := varInt64;
+    2:
+      V^.VType := varByte;
+    3:
+      begin
+        V^.VType := varString;
+        V^.Data.VAny := nil;
+        _StringRandom(@V^.Data.VAny, Rtti);
+      end;
+  end;
 end;
 
 procedure _DoubleRandom(V: PDouble; Rtti: TRttiCustom);
 begin
   V^ := Rtti.fRandomGenerator.NextDouble;
+end;
+
+procedure _DateTimeRandom(V: PDouble; Rtti: TRttiCustom);
+begin
+  V^ := 38000 + Int64(Rtti.fRandomGenerator.Next) / (maxInt shr 12);
 end;
 
 procedure _SingleRandom(V: PSingle; Rtti: TRttiCustom);
@@ -5246,7 +5273,7 @@ var
   // ptString, ptSynUnicode,
   @_NoRandom, {$ifdef HASVARUSTRING} @_UStringRandom {$else} @_WStringRandom {$endif},
   // ptDateTime, ptDateTimeMS, ptGuid, ptHash128, ptHash256, ptHash512,
-  @_DoubleRandom, @_DoubleRandom, nil, nil, nil, nil,
+  @_DateTimeRandom, @_DateTimeRandom, nil, nil, nil, nil,
   // ptOrm, ptTimeLog, ptUnicodeString,
   @_NoRandom, nil, {$ifdef HASVARUSTRING} @_UStringRandom {$else} @_NoRandom {$endif},
   // ptUnixTime, ptUnixMSTime, ptVariant, ptWideString, ptWinAnsi,
@@ -5682,7 +5709,7 @@ var
   PT_DYNARRAY: array[TRttiParserType] of pointer; // most simple dynamic arrays
 
 function TypeInfoToDynArrayTypeInfo(ElemInfo: PRttiInfo;
-  ExpectExactElemInfo: boolean): PRttiInfo;
+  ExpectExactElemInfo: boolean; ParserType: PRttiParserType): PRttiInfo;
 var
   parser: TRttiParserType;
   rc: TRttiCustom;
@@ -5693,6 +5720,8 @@ begin
   result := PT_DYNARRAY[parser];
   if result <> nil then
   begin
+    if ParserType <> nil then
+      ParserType^ := Parser;
     if (not ExpectExactElemInfo) or
        (PT_INFO[parser] = ElemInfo) then
       exit;
@@ -5701,9 +5730,13 @@ begin
        (rc.ArrayRtti.Info = ElemInfo) then
       exit;
   end;
-  rc := Rtti.FindByArrayRtti(ElemInfo);
+  rc := Rtti.FindByArrayRtti(ElemInfo); // search in registered rkDynArray
   if rc <> nil then
+  begin
+    if ParserType <> nil then
+      ParserType^ := rc.ArrayRtti.Parser;
     result := rc.Info;
+  end;
 end;
 
 function DynArrayTypeInfoToStandardParserType(DynArrayInfo, ElemInfo: PRttiInfo;
@@ -5714,64 +5747,22 @@ function DynArrayTypeInfoToStandardParserType(DynArrayInfo, ElemInfo: PRttiInfo;
 var
   fields: TRttiRecordManagedFields;
   offset: integer;
+  pt: TRttiParserType;
 begin
   result := ptNone;
   if Complex <> nil then
     Complex^ := pctNone;
   FieldSize := 0;
-  case ElemSize of // very fast guess of most known ArrayType
-    1:
-      if DynArrayInfo = TypeInfo(TBooleanDynArray) then
-        result := ptBoolean;
-    4:
-      if DynArrayInfo = TypeInfo(TCardinalDynArray) then
-        result := ptCardinal
-      else if DynArrayInfo = TypeInfo(TSingleDynArray) then
-        result := ptSingle
-    {$ifdef CPU64} ;
-    8: {$else} else {$endif CPU64}
-      if DynArrayInfo = TypeInfo(TRawUtf8DynArray) then
-        result := ptRawUtf8
-      else if DynArrayInfo = TypeInfo(TStringDynArray) then
-        result := ptString
-      else if DynArrayInfo = TypeInfo(TWinAnsiDynArray) then
-        result := ptWinAnsi
-      else if DynArrayInfo = TypeInfo(TRawByteStringDynArray) then
-        result := ptRawByteString
-      else if DynArrayInfo = TypeInfo(TSynUnicodeDynArray) then
-        result := ptSynUnicode
-      else if (DynArrayInfo = TypeInfo(TClassDynArray)) or
-              (DynArrayInfo = TypeInfo(TPointerDynArray)) then
-        result := ptPtrInt
-      else
-      {$ifdef CPU64}
-      else {$else} ;
-    8: {$endif CPU64}
-      if ElemInfo <> nil then
-        case ElemInfo^.Kind of
-          rkFloat:
-            if DynArrayInfo = TypeInfo(TDoubleDynArray) then
-              result := ptDouble
-            else if DynArrayInfo = TypeInfo(TCurrencyDynArray) then
-              result := ptCurrency
-            else if DynArrayInfo = TypeInfo(TDateTimeDynArray) then
-              result := ptDateTime
-            else if DynArrayInfo = TypeInfo(TDateTimeMSDynArray) then
-              result := ptDateTimeMS;
-          rkInt64:
-            if DynArrayInfo = TypeInfo(TTimeLogDynArray) then
-              result := ptTimeLog
-            else if DynArrayInfo = TypeInfo(TUnixTimeDynArray) then
-              result := ptUnixTime
-            else if DynArrayInfo = TypeInfo(TUnixMSTimeDynArray) then
-              result := ptUnixMSTime;
-        end;
-    {$ifdef TSYNEXTENDED80}
-    10:
-      if DynArrayInfo = TypeInfo(TSynExtendedDynArray) then
-        result := ptExtended
-    {$endif TSYNEXTENDED80}
-  end;
+  // fast guess of most known ArrayType
+  if (DynArrayInfo <> nil) and
+     ((ElemInfo = nil) or
+      not(ElemInfo^.Kind in [rkEnumeration, rkSet, rkDynArray, rkClass])) then
+    for pt := ptBoolean to ptWord do
+      if PT_DYNARRAY[pt] = DynArrayInfo then
+      begin
+        result := pt;
+        break;
+      end;
   if result = ptNone then
     repeat
       // guess from RTTI of nested record(s)
@@ -6561,7 +6552,7 @@ begin
         if item = nil then // =nil for unmanaged types
         begin
           // try to guess the actual type, e.g. a TGUID or an integer
-          item := aInfo^.DynArrayItemTypeAny; // FPC or Delphi 2010+
+          item := aInfo^.DynArrayItemTypeExtended; // FPC or Delphi 2010+
           if item = nil then
           begin
             // on Delphi 7-2009, recognize at least the most common types
@@ -6595,7 +6586,6 @@ begin
     // also check nested record fields
     include(fFlags, rcfIsManaged);
   fCopy := RTTI_COPY[fCache.Kind];
-  fSetRandom := PT_RANDOM[fParser];
   pt := TypeInfoToStandardParserType(aInfo, {byname=}true, @pct);
   SetParserType(pt, pct);
 end;
@@ -6688,6 +6678,7 @@ function TRttiCustom.SetParserType(aParser: TRttiParserType;
 begin
   fParser := aParser;
   fParserComplex := aParserComplex;
+  fSetRandom := PT_RANDOM[aParser];
   if fCache.Info <> nil then
     ShortStringToAnsi7String(fCache.Info.Name^, fName);
   if fProps.Count > 0 then
@@ -6783,11 +6774,10 @@ end;
 
 procedure TRttiCustom.ValueRandom(Data: pointer);
 begin
-  // handle complex kinds of value from RTTI
   if Assigned(fSetRandom) then
-    fSetRandom(Data, self)
+    fSetRandom(Data, self)  // handle complex kinds of value from RTTI
   else
-    fRandomGenerator.Fill(Data, fCache.ItemSize);
+    fRandomGenerator.Fill(Data, fCache.Size); // just a bunch of bytes
 end;
 
 function TRttiCustom.ClassNewInstance: pointer;
@@ -7349,6 +7339,26 @@ begin // call is made within Lock..UnLock
   inc(Counts[Instance.Kind]);
 end;
 
+procedure TRttiCustomList.SetGlobalClass(RttiClass: TRttiCustomClass);
+var
+  i: PtrInt;
+  regtypes: RawUtf8;
+  newunit: PShortString;
+begin
+  if Count <> 0 then
+  begin
+    for i := 0 to Count - 1 do
+      regtypes := {%H-}regtypes + Instances[i].Name + ' ';
+    newunit := _ClassUnit(RttiClass);
+    raise ERttiException.CreateUtf8('Rtti.Count=% at Rtti.GlobalClass := % : ' +
+      'some types have been registered as % before % has been loaded and ' +
+      'initialized - please put % in the uses clause where you register '+
+      'your [ %] types, in addition to mormot.core.rtti',
+      [Count, RttiClass, fGlobalClass, newunit, newunit, regtypes]);
+  end;
+  fGlobalClass := RttiClass;
+end;
+
 procedure TRttiCustomList.RegisterTypes(const Info: array of PRttiInfo);
 var
   i: PtrInt;
@@ -7866,7 +7876,7 @@ begin
   PT_DYNARRAY[ptWord] := TypeInfo(TWordDynArray);
   // prepare global thread-safe TRttiCustomList
   InitializeCriticalSection(Rtti.Lock);
-  Rtti.GlobalClass := TRttiCustom;
+  Rtti.fGlobalClass := TRttiCustom;
   ClassUnit := _ClassUnit;
   // redirect most used FPC RTL functions to optimized x86_64 assembly
   {$ifdef FPC_CPUX64}

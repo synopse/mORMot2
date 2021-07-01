@@ -1844,6 +1844,9 @@ type
   protected
     fHandle: TLibHandle;
     fLibraryPath: TFileName;
+    {$ifdef OSPOSIX}
+    fLibraryPathTested: boolean;
+    {$endif OSPOSIX}
   public
     /// cross-platform resolution of a function entry in this library
     // - if RaiseExceptionOnFailure is set, missing entry will call FreeLib then raise it
@@ -1861,6 +1864,7 @@ type
     property Handle: TLibHandle
       read fHandle write fHandle;
     /// the loaded library path
+    // - on POSIX, contains the full path (via dladdr) once Resolve() is called
     property LibraryPath: TFileName
       read fLibraryPath;
   end;
@@ -3334,7 +3338,7 @@ begin
     RaiseProc := @SynRaiseProc; // register once
   end;
   {$endif WITH_RAISEPROC}
-  {$ifdef WITH_VECTOREXCEPT} // Win64 official API
+  {$ifdef WITH_VECTOREXCEPT} // SEH32/SEH64 official API
   // RemoveVectoredContinueHandler() is available under 64 bit editions only
   if Assigned(AddVectoredExceptionHandler) then
   begin
@@ -3681,6 +3685,10 @@ end;
 
 function TSynLibrary.Resolve(ProcName: PAnsiChar; Entry: PPointer;
   RaiseExceptionOnFailure: ExceptionClass): boolean;
+{$ifdef OSPOSIX}
+var
+  dlinfo: dl_info;
+{$endif OSPOSIX}
 begin
   if (Entry = nil) or
      (fHandle = 0) or
@@ -3690,6 +3698,17 @@ begin
   begin
     Entry^ := LibraryResolve(fHandle, ProcName);
     result := Entry^ <> nil;
+    {$ifdef OSPOSIX}
+    if result and
+       not fLibraryPathTested then
+    begin
+      fLibraryPathTested := true;
+      FillCharFast(dlinfo, SizeOf(dlinfo), 0);
+      dladdr(Entry^, @dlinfo);
+      if dlinfo.dli_fname <> nil then
+        fLibraryPath := dlinfo.dli_fname;
+    end;
+    {$endif OSPOSIX}
   end;
   if (RaiseExceptionOnFailure <> nil) and
      not result then
@@ -3712,7 +3731,10 @@ function TSynLibrary.TryLoadLibrary(const aLibrary: array of TFileName;
   aRaiseExceptionOnFailure: ExceptionClass): boolean;
 var
   i: integer;
-  lib, libs {$ifdef OSWINDOWS} , nwd, cwd {$endif}: TFileName;
+  lib, libs: TFileName;
+  {$ifdef OSWINDOWS}
+  nwd, cwd: TFileName;
+  {$endif OSWINDOWS}
 begin
   for i := 0 to high(aLibrary) do
   begin
@@ -3734,8 +3756,10 @@ begin
     {$endif OSWINDOWS}
     if fHandle <> 0 then
     begin
+      {$ifdef OSWINDOWS} // on POSIX, will call dladdr() in Resolve()
       fLibraryPath := GetModuleName(fHandle);
       if length(fLibraryPath) < length(lib) then
+      {$endif OSWINDOWS}
         fLibraryPath := lib;
       result := true;
       exit;

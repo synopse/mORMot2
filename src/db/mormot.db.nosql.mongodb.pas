@@ -3394,13 +3394,12 @@ begin
   doc := _ObjFast(['key', Keys]);
   if not useCommand then
     doc.ns := FullCollectionName;
-  if DocVariantType.IsOfType(Options) then
-    with _Safe(Options)^ do
-      for ndx := 0 to count - 1 do
-        if Names[ndx] = 'name' then
-          indexName := VariantToUtf8(Values[ndx])
-        else
-          TDocVariantData(doc).AddValue(Names[ndx], Values[ndx]);
+  with _Safe(Options)^ do
+    for ndx := 0 to Count - 1 do
+      if Names[ndx] = 'name' then
+        indexName := VariantToUtf8(Values[ndx])
+      else
+        TDocVariantData(doc).AddValue(Names[ndx], Values[ndx]);
   if {%H-}indexName = '' then
   begin
     with _Safe(Keys)^ do

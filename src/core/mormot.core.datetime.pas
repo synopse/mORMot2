@@ -752,7 +752,7 @@ function TimeLogToUnixTime(const Timestamp: TTimeLog): TUnixTime;
 // set according to the layout in P (e.g. TRUE for '2012-05-26')
 // - returns 0 in case of invalid input string
 function Iso8601ToTimeLogPUtf8Char(P: PUtf8Char; L: integer;
-  ContainsNoTime: Pboolean = nil): TTimeLog;
+  ContainsNoTime: PBoolean = nil): TTimeLog;
 
 /// convert a Iso8601 encoded string into a TTimeLog value
 // - handle TTimeLog bit-encoded Int64 format
@@ -2654,7 +2654,7 @@ begin
   result := PTimeLogBits(@Timestamp)^.ToUnixTime;
 end;
 
-function Iso8601ToTimeLogPUtf8Char(P: PUtf8Char; L: integer; ContainsNoTime: Pboolean): TTimeLog;
+function Iso8601ToTimeLogPUtf8Char(P: PUtf8Char; L: integer; ContainsNoTime: PBoolean): TTimeLog;
 // bits: S=0..5 M=6..11 H=12..16 D=17..21 M=22..25 Y=26..40
 // i.e. S<64 M<64 H<32 D<32 M<16 Y<9999: power of 2 -> use fast shl/shr
 var
