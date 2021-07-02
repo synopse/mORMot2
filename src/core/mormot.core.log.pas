@@ -3537,6 +3537,8 @@ begin
   fSynLogClass := aSynLog;
   fIdent := ObjArrayAdd(SynLogFamily, self);
   fDestinationPath := Executable.ProgramFilePath; // use .exe path
+  if not IsDirectoryWritable(fDestinationPath) then
+    fDestinationPath := GetSystemPath(spLog); // fallback to a writable folder
   fDefaultExtension := '.log';
   fArchivePath := fDestinationPath;
   fArchiveAfterDays := 7;
@@ -3622,7 +3624,7 @@ begin
   ExceptionIgnore.Free;
   try
     if Assigned(OnArchive) then
-      if FindFirst(DestinationPath + '*' + DefaultExtension, faAnyFile, SR) = 0 then
+      if FindFirst(fDestinationPath + '*' + fDefaultExtension, faAnyFile, SR) = 0 then
       try
         if ArchiveAfterDays < 0 then
           ArchiveAfterDays := 0;
@@ -3635,7 +3637,7 @@ begin
           if (aTime = 0) or
              (aTime > oldTime) then
             continue;
-          aOldLogFileName := DestinationPath + SR.Name;
+          aOldLogFileName := fDestinationPath + SR.Name;
           if {%H-}aPath = '' then
           begin
             aPath := EnsureDirectoryExists(ArchivePath + 'log');
