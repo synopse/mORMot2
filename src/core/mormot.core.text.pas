@@ -855,12 +855,12 @@ type
     procedure AddOnce(c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append two chars to the buffer
-    procedure Add(c1,c2: AnsiChar); overload;
+    procedure Add(c1, c2: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
-    {$ifndef CPU64} // already implemented by Add(Value: PtrInt) method
+    {$ifdef CPU32} // already implemented by Add(Value: PtrInt) method on CPU64
     /// append a 64-bit signed integer Value as text
     procedure Add(Value: Int64); overload;
-    {$endif}
+    {$endif CPU32}
     /// append a 32-bit signed integer Value as text
     procedure Add(Value: PtrInt); overload;
     /// append a boolean Value as text
@@ -1119,7 +1119,8 @@ type
     procedure AddObjArrayJson(const aObjArray;
       aOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
     /// return the last char appended
-    // - returns #0 if no char has been written yet
+    // - returns #0 if no char has been written yet, or the buffer has been just
+    // flushed: so this method is to be handled only in some particular usecases
     function LastChar: AnsiChar;
     /// how many bytes are currently in the internal buffer and not on disk/stream
     // - see TextLength for the total number of bytes, on both stream and memory
@@ -1475,11 +1476,11 @@ procedure Int64ToUtf8(Value: Int64; var result: RawUtf8); overload;
 function ToUtf8(Value: PtrInt): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-{$ifndef CPU64}
+{$ifdef CPU32}
 /// fast RawUtf8 version of 64-bit IntToStr()
 function ToUtf8(Value: Int64): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
-{$endif CPU64}
+{$endif CPU32}
 
 /// optimized conversion of a cardinal into RawUtf8
 function UInt32ToUtf8(Value: PtrUInt): RawUtf8; overload;
@@ -4705,7 +4706,11 @@ begin
   if aBufSize > SizeOf(aStackBuf) then // too small -> allocate on heap
     CreateOwnedStream(aBufSize)
   else
-    CreateOwnedStream(@aStackBuf, SizeOf(aStackBuf));
+  begin
+    SetStream(TRawByteStringStream.Create);
+    SetBuffer(@aStackBuf, SizeOf(aStackBuf));
+    Include(fCustomOptions, twoStreamIsOwned);
+  end;
 end;
 
 destructor TBaseWriter.Destroy;
@@ -4715,6 +4720,36 @@ begin
   if not (twoBufferIsExternal in fCustomOptions) then
     FreeMem(fTempBuf);
   inherited;
+end;
+
+function TBaseWriter.PendingBytes: PtrUInt;
+begin
+  result := B - fTempBuf + 1;
+end;
+
+procedure TBaseWriter.Add(c: AnsiChar);
+begin
+  if B >= BEnd then
+    FlushToStream; // may rewind B -> not worth any local PUtf8Char variable
+  B[1] := c;
+  inc(B);
+end;
+
+procedure TBaseWriter.AddComma;
+begin
+  if B >= BEnd then
+    FlushToStream;
+  B[1] := ',';
+  inc(B);
+end;
+
+procedure TBaseWriter.Add(c1, c2: AnsiChar);
+begin
+  if B >= BEnd then
+    FlushToStream;
+  B[1] := c1;
+  B[2] := c2;
+  inc(B, 2);
 end;
 
 procedure TBaseWriter.Add(const Format: RawUtf8; const Values: array of const;
@@ -5013,27 +5048,6 @@ begin
     result := #0;
 end;
 
-function TBaseWriter.PendingBytes: PtrUInt;
-begin
-  result := B - fTempBuf + 1;
-end;
-
-procedure TBaseWriter.Add(c: AnsiChar);
-begin
-  if B >= BEnd then
-    FlushToStream;
-  B[1] := c;
-  inc(B);
-end;
-
-procedure TBaseWriter.AddComma;
-begin
-  if B >= BEnd then
-    FlushToStream;
-  B[1] := ',';
-  inc(B);
-end;
-
 procedure TBaseWriter.AddOnce(c: AnsiChar);
 begin
   if (B >= fTempBuf) and
@@ -5043,15 +5057,6 @@ begin
     FlushToStream;
   B[1] := c;
   inc(B);
-end;
-
-procedure TBaseWriter.Add(c1, c2: AnsiChar);
-begin
-  if B >= BEnd then
-    FlushToStream;
-  B[1] := c1;
-  B[2] := c2;
-  inc(B, 2);
 end;
 
 procedure TBaseWriter.Add(Value: PtrInt);
@@ -5076,7 +5081,7 @@ begin
   inc(B, Len);
 end;
 
-{$ifndef CPU64} // Add(Value: PtrInt) already implemented it
+{$ifdef CPU32} // Add(Value: PtrInt) already implemented it for CPU64
 procedure TBaseWriter.Add(Value: Int64);
 var
   tmp: array[0..23] of AnsiChar;
@@ -5104,7 +5109,7 @@ begin
   MoveSmall(P, B + 1, Len);
   inc(B, Len);
 end;
-{$endif CPU64}
+{$endif CPU32}
 
 procedure TBaseWriter.AddCurr64(Value: PInt64);
 var
@@ -6926,12 +6931,12 @@ begin
   Int64ToUtf8(Value, result);
 end;
 
-{$ifndef CPU64} // already implemented by ToUtf8(Value: PtrInt) below
+{$ifdef CPU32} // already implemented by ToUtf8(Value: PtrInt) below for CPU64
 function ToUtf8(Value: Int64): RawUtf8;
 begin
   Int64ToUtf8(Value, result);
 end;
-{$endif CPU64}
+{$endif CPU32}
 
 function ToUtf8(Value: PtrInt): RawUtf8;
 begin

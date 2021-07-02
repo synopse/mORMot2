@@ -7616,12 +7616,12 @@ begin
   end;
   // calculate the needed size of the resulting memory structure on heap
   NeededSize := NewLength * PtrUInt(fInfo.Cache.ItemSize) + SizeOf(TDynArrayRec);
-  {$ifndef CPU64}
+  {$ifdef CPU32}
   if NeededSize > 1 shl 30 then
     // in practice, consider that max workable memory block is 1 GB on 32-bit
     raise EDynArray.CreateUtf8('TDynArray.InternalSetLength(%,%) size concern',
       [fInfo.Name, NewLength]);
-  {$endif CPU64}
+  {$endif CPU32}
   // if not shared (refCnt=1), resize; if shared, create copy (not thread safe)
   if p = nil then
   begin

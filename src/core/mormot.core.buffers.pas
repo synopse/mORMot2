@@ -2554,10 +2554,10 @@ begin
     until false;
     result := result or (QWord(c) shl n);
   end
-  {$ifndef CPU64}
+  {$ifdef CPU32}
   else
     result := p^
-  {$endif};
+  {$endif CPU32};
   inc(p);
   Source := p;
 end;
@@ -4950,10 +4950,10 @@ begin
   if Source = nil then
     exit;
   sourceSize := Source.Size;
-  {$ifndef CPU64}
+  {$ifdef CPU32}
   if sourceSize > maxInt then
     exit; // result TMemoryStream should stay in memory!
-  {$endif CPU64}
+  {$endif CPU32}
   sourcePosition := Source.Position;
   if sourceSize - sourcePosition < SizeOf(Head) then
     exit;
@@ -5007,13 +5007,13 @@ begin
       result := TMemoryStream.Create
     else
     begin
-      {$ifndef CPU64}
+      {$ifdef CPU32}
       if resultSize + Head.UnCompressedSize > maxInt then
       begin
         FreeAndNil(result); // result TMemoryStream should stay in memory!
         break;
       end;
-      {$endif CPU64}
+      {$endif CPU32}
     end;
     result.Size := resultSize + Head.UnCompressedSize;
     D := PAnsiChar(result.Memory) + resultSize;

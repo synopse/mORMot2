@@ -17827,13 +17827,13 @@ begin
     // (will return 0 if current instance is nil)
     result := self
   else    // was called from a real TOrm instance
-  {$ifndef CPU64}
+  {$ifdef CPU32}
   if fID > MaxInt then
     raise EOrmException.CreateUtf8('%.GetIDAsPointer is storing ID=%, which ' +
       'cannot be stored in a pointer/TOrm 32-bit instance: use ' +
       'a TID/T*ID published field for 64-bit IDs', [self, fID])
   else
-  {$endif CPU64}
+  {$endif CPU32}
     result := pointer(PtrInt(fID));
   {$else}
   if PtrUInt(self) < $100000 then // rough estimation, but works in practice

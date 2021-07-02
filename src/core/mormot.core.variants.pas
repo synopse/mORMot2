@@ -1552,7 +1552,7 @@ type
     // or use FieldValues iterator if you want the exact count
     // - transtyping a variant and direct access to TDocVariantData is the
     // fastest way of accessing all properties of a given dvObject:
-    // ! with TDocVariantData(aVariantObject) do
+    // ! with _Safe(aVariantObject)^ do
     // !   for i := 0 to Count-1 do
     // !     writeln(Names[i],'=',Values[i]);
     // - or to access a dvArray items (e.g. a MongoDB collection):
@@ -1567,7 +1567,7 @@ type
     // or use FieldNames iterator if you want the exact count
     // - transtyping a variant and direct access to TDocVariantData is the
     // fastest way of accessing all properties of a given dvObject:
-    // ! with TDocVariantData(aVariantObject) do
+    // ! with _Safe(aVariantObject)^ do
     // !   for i := 0 to Count-1 do
     // !     writeln(Names[i],'=',Values[i]);
     property Names: TRawUtf8DynArray
