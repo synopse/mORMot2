@@ -406,11 +406,11 @@ var
   p: PRecordTypeField;
   f: PtrInt;
 begin
+  result := nil; // don't reallocate previous answer
   info := pointer(GetTypeData(@self));
   RecSize := info^.RecSize;
   inc(PByte(info), info^.ManagedCount * SizeOf(TManagedField));
   inc(PByte(info), info^.NumOps * SizeOf(pointer));
-  result := nil; // don't reallocate previous answer
   SetLength(result, info^.AllCount);
   p := @info^.AllFields[0];
   for f := 0 to info^.AllCount - 1 do
@@ -572,7 +572,7 @@ type
 
 /// fake TTypeInfo RTTI used for TGUID/THash128... on Delphi 7/2007
 {$ifdef HASNOSTATICRTTI}
-
+                       
 type
   // enough Delphi RTTI for TRttiInfo.RecordManagedFields
   TFakeTypeInfo = packed record

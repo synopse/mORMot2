@@ -404,14 +404,14 @@
       {$define HASITERATORS}
     {$ifend}
     {$if CompilerVersion = 20}
-      {$define ISDELPHI20092010} // specific compilation issues
+      {$define ISDELPHI20092010} // Delphi 2009 specific compilation issues
+      {$define HASNOSTATICRTTI}  // Delphi 2009 has no TypeInfo(TGUID)
     {$ifend}
     {$if CompilerVersion = 21}
-      {$define ISDELPHI20092010} //specific compilation issues
-      {$define HASNOSTATICRTTI} // Delphi 2009 has no TypeInfo(TGUID)
+      {$define ISDELPHI20092010} // Delphi 2010 specific compilation issues
     {$ifend}
     {$if CompilerVersion >= 21.0}
-      {$define HASSAFEINLINE} // Delphi 2007 has sometimes troubles inlining :(
+      {$define HASSAFEINLINE}  // Delphi 2007 has sometimes troubles inlining :(
       {$define ISDELPHI2010}
       {$define HASGENERICS}     // Delphi 2009 has unusable generics
       {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray

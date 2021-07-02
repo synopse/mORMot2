@@ -945,7 +945,7 @@ begin
       {$else}
       SetLength(dest, l1 + _lstrlen(s2));
       {$endif FPC_X64MM}
-      PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codepage := cp;
+      PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codePage := cp;
       MoveFast(pointer(s2)^, PByteArray(dest)[l1], _lstrlen(s2));
     end
     else
@@ -1045,7 +1045,7 @@ begin
       // dest := dest+s... -> self-resize
       SetLength(dest, len);
       new := pointer(dest);
-      PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codepage := cp;
+      PStrRec(PtrUInt(dest) - _STRRECSIZE)^.codePage := cp;
       cp := 0; // no FastAssignNew() below
     end
     else

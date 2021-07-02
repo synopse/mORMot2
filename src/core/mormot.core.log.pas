@@ -2797,7 +2797,7 @@ const
 
 procedure ReadSymbol(var R: TFastReader; var A: TDynArray);
 var
-  i, n, L: integer;
+  i, n, L: PtrInt;
   S: PDebugSymbol;
   prev: cardinal;
   P: PByte;
@@ -4884,7 +4884,9 @@ begin
   WriteArena(W, 'Large', s.Large);
   W.Add('  Sleep: count=% ', [K(s.SleepCount)]);
   {$ifdef FPCMM_DEBUG}
+  {$ifdef FPCMM_SLEEPTSC}
   W.Add(' rdtsc=%', [K(s.SleepCycles)]);
+  {$endif FPCMM_SLEEPTSC}
   {$ifdef FPCMM_LOCKLESSFREE}
   W.Add(' locklessspin=%', [K(s.SmallFreememLockLessSpin)]);
   {$endif FPCMM_LOCKLESSFREE}

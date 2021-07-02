@@ -565,7 +565,7 @@ asm
         test    rax, rax
         jz      @z
         mov     d, rax
-        cmp     qword ptr [rax - _STRREFCNT], 0
+        cmp     qword ptr [rax - _STRREFCNT], 0 // refcnt=-1 for const
         jl      @z
 lock    dec     qword ptr [rax - _STRREFCNT]
         jbe     @free

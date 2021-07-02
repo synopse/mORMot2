@@ -509,15 +509,23 @@ type
     {$ifdef FPC}
 
     TStrRec = packed record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
-    {$ifdef HASCODEPAGE}
-      codePage: TSystemCodePage; // =Word
-      elemSize: Word;
-      {$ifdef CPU64}
-      _PaddingToQWord: DWord;
-      {$endif CPU64}
-    {$endif HASCODEPAGE}
-      refCnt: TRefCnt; // =SizeInt
-      length: TStrLen;
+    case integer of
+      0: (
+          {$ifdef HASCODEPAGE}
+          codePage: TSystemCodePage; // =Word
+          elemSize: Word;
+          {$ifdef CPU64}
+          _PaddingToQWord: DWord;
+          {$endif CPU64}
+          {$endif HASCODEPAGE}
+          refCnt: TRefCnt; // =SizeInt
+          length: TStrLen;
+        );
+      {$ifdef HASCODEPAGE}
+      1: (
+          codePageElemSize: cardinal;
+        );
+      {$endif HASCODEPAGE}
     end;
 
     TDynArrayRec = packed record
@@ -4144,22 +4152,30 @@ end;
 {$endif FPC_ASMX64}
 
 function FastNewString(len, codepage: PtrInt): PAnsiChar;
+var
+  P: PStrRec;
 begin
   result := nil;
   if len > 0 then
   begin
     {$ifdef FPC_X64MM}
-    result := _GetMem(len + (_STRRECSIZE + 4));
+    P := _GetMem(len + (_STRRECSIZE + 4));
+    result := PAnsiChar(P) + _STRRECSIZE;
     {$else}
     GetMem(result, len + (_STRRECSIZE + 4));
+    P := pointer(result);
+    inc(PStrRec(result));
     {$endif FPC_X64MM}
     {$ifdef HASCODEPAGE} // also set elemSize := 1
-    PCardinal(@PStrRec(result)^.codePage)^ := codepage + (1 shl 16);
+    {$ifdef FPC}
+    P^.codePageElemSize := codepage + (1 shl 16);
+    {$else}
+    PCardinal(@P^.codePage)^ := codepage + (1 shl 16);
+    {$endif FPC}
     {$endif HASCODEPAGE}
-    PStrRec(result)^.refCnt := 1;
-    PStrRec(result)^.length := len;
-    PCardinal(result + len + _STRRECSIZE)^ := 0; // ensure ends with four #0
-    inc(PStrRec(result));
+    P^.refCnt := 1;
+    P^.length := len;
+    PCardinal(PAnsiChar(P) + len + _STRRECSIZE)^ := 0; // ends with four #0
   end;
 end;
 
