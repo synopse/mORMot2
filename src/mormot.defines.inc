@@ -404,7 +404,8 @@
       {$define HASITERATORS}
     {$ifend}
     {$if CompilerVersion = 20}
-      {$define ISDELPHI20092010} // Delphi 2009 specific compilation issues
+      {$define ISDELPHI2009}     // Delphi 2009 specific compilation issues
+      {$define ISDELPHI20092010}
       {$define HASNOSTATICRTTI}  // Delphi 2009 has no TypeInfo(TGUID)
     {$ifend}
     {$if CompilerVersion = 21}
