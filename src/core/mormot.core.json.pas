@@ -4749,10 +4749,10 @@ procedure TJsonSaveContext.Init(WR: TTextWriter;
   WriteOptions: TTextWriterWriteObjectOptions; Rtti: TRttiCustom);
 begin
   W := WR;
-  Info := Rtti;
-  Options := WriteOptions;
   if Rtti <> nil then
-    Options := Options + TRttiJson(Rtti).fIncludeWriteOptions;
+    WriteOptions := WriteOptions + TRttiJson(Rtti).fIncludeWriteOptions;
+  Options := WriteOptions;
+  Info := Rtti;
   Prop := nil;
 end;
 
@@ -5175,17 +5175,26 @@ type
   TSPHook = class(TSynPersistent); // to access its protected methods
   TSPHookClass = class of TSPHook;
 
+procedure AppendExceptionLocation(w: TTextWriter; e: ESynException);
+begin // call TDebugFile.FindLocationShort if mormot.core.log is used
+  w.Add('"');
+  w.AddShort(GetExecutableLocation(e.RaisedAt));
+  w.Add('"');
+end;
+
 // serialization of published props for records and classes
 procedure _JS_RttiCustom(Data: PAnsiChar; const Ctxt: TJsonSaveContext);
 var
-  c: TJsonSaveContext;
+  nfo: TRttiJson;
   p: PRttiCustomProp;
   n: integer;
   done: boolean;
+  c: TJsonSaveContext;
 begin
   c.W := Ctxt.W;
   c.Options := Ctxt.Options;
-  if (Ctxt.Info.Kind = rkClass) and
+  nfo := TRttiJson(Ctxt.Info);
+  if (nfo.Kind = rkClass) and
      (Data <> nil) then
     // class instances are accessed by reference, records are stored by value
     Data := PPointer(Data)^
@@ -5194,17 +5203,17 @@ begin
   if Data = nil then
     // append 'null' for nil class instance
     c.W.AddNull
-  else if TRttiJson(Ctxt.Info).fJsonWriter.Code <> nil then
+  else if nfo.fJsonWriter.Code <> nil then
     // TRttiJson.RegisterCustomSerializer() custom callbacks
-    TOnRttiJsonWrite(TRttiJson(Ctxt.Info).fJsonWriter)(c.W, Data, c.Options)
-  else if not (rcfSynPersistentHook in Ctxt.Info.Flags) or
+    TOnRttiJsonWrite(nfo.fJsonWriter)(c.W, Data, c.Options)
+  else if not (rcfSynPersistentHook in nfo.Flags) or
           not TSPHook(Data).RttiBeforeWriteObject(c.W, c.Options) then
   begin
     // regular JSON serialization using nested fields/properties
     c.W.BlockBegin('{', c.Options);
-    c.Prop := pointer(Ctxt.Info.Props.List);
-    n := Ctxt.Info.Props.Count;
-    if (Ctxt.Info.Kind = rkClass) and
+    c.Prop := pointer(nfo.Props.List);
+    n := nfo.Props.Count;
+    if (nfo.Kind = rkClass) and
        (c.Options * [woFullExpand, woStoreClassName, woStorePointer, woDontStoreInherited] <> []) then
     begin
       if woFullExpand in c.Options then
@@ -5226,11 +5235,7 @@ begin
       begin
         c.W.WriteObjectPropNameShort('Address', c.Options);
         if Ctxt.Info.ValueRtlClass = vcESynException then
-        begin // run TDebugFile.FindLocationShort if mormot.core.log is used
-          c.W.Add('"');
-          c.W.AddShort(GetExecutableLocation(ESynException(Data).RaisedAt));
-          c.W.Add('"');
-        end
+          AppendExceptionLocation(c.W, ESynException(Data))
         else
           c.W.AddPointer(PtrUInt(Data), '"');
         if c.Prop <> nil then
@@ -6186,18 +6191,18 @@ var
   ctxt: TJsonSaveContext;
   save: TRttiJsonSave;
 begin
-  if Value = nil then
-    AddNull
-  else
+  if Value <> nil then
   begin
     // Rtti.RegisterClass() may create fake RTTI if {$M+} was not used
     {%H-}ctxt.Init(self, WriteOptions, Rtti.RegisterClass(PClass(Value)^));
     save := ctxt.Info.JsonSave;
     if Assigned(save) then
-      save(@Value, ctxt)
-    else
-      AddNull;
+    begin
+      save(@Value, ctxt);
+      exit;
+    end;
   end;
+  AddNull;
 end;
 
 procedure TTextWriter.AddRttiCustomJson(Value: pointer; RttiCustom: TObject;

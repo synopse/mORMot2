@@ -1555,7 +1555,7 @@ begin
   if P <> nil then
   begin
     result := byte(P^);
-    if result and $80 <> 0 then
+    if result > $7f then
     begin
       result := UTF8_TABLE.GetHighUtf8Ucs4(P);
       if result > $ffff then
@@ -2126,8 +2126,7 @@ end;
 
 function IsValidUtf8(source: PUtf8Char): boolean;
 var
-  extra: integer;
-  c: cardinal;
+  c: PtrUInt;
   {$ifdef CPUX86NOTPIC}
   utf8: TUtf8Table absolute UTF8_TABLE;
   {$else}
@@ -2144,10 +2143,10 @@ begin
       inc(source);
       if c = 0 then
         break;
-      if c and $80 <> 0 then
+      if c > $7f then
       begin
-        extra := utf8.Bytes[c];
-        if extra = 0 then
+        c := utf8.Bytes[c]; // extras
+        if c = 0 then
           // invalid leading byte
           exit;
         // check valid UTF-8 content
@@ -2155,8 +2154,8 @@ begin
           if byte(source^) and $c0 <> $80 then
             exit;
           inc(source);
-          dec(extra);
-        until extra = 0;
+          dec(c);
+        until c = 0;
       end;
     until false;
   result := true;
@@ -2169,8 +2168,7 @@ end;
 
 function IsValidUtf8(source: PUtf8Char; sourcelen: PtrInt): boolean;
 var
-  extra: PtrInt;
-  c: cardinal;
+  c: PtrUInt;
   {$ifdef CPUX86NOTPIC}
   utf8: TUtf8Table absolute UTF8_TABLE;
   {$else}
@@ -2183,35 +2181,38 @@ begin
   result := false;
   inc(sourcelen, PtrInt(source));
   if source <> nil then
-    while PtrInt(PtrUInt(source)) < sourcelen do
-    begin
+    if PtrInt(PtrUInt(source)) < sourcelen then
+    repeat
       c := byte(source^);
       inc(source);
-      if c = 0 then
+      if c <= $7f then
+        if c = 0 then
+          exit
+        else if PtrInt(PtrUInt(source)) < sourcelen then
+          continue
+        else
+          break;
+      c := utf8.Bytes[c]; // extra bytes
+      if (c = 0) or
+         (PtrInt(PtrUInt(source)) + PtrInt(c) > sourcelen) then
+        // invalid leading byte
         exit;
-      if c and $80 <> 0 then
-      begin
-        extra := utf8.Bytes[c];
-        if (extra = 0) or
-           (PtrInt(PtrUInt(source)) + extra > sourcelen) then
-          // invalid leading byte
+      // check valid UTF-8 content
+      repeat
+        if byte(source^) and $c0 <> $80 then
           exit;
-        // check valid UTF-8 content
-        repeat
-          if byte(source^) and $c0 <> $80 then
-            exit;
-          inc(source);
-          dec(extra)
-        until extra = 0;
-      end;
-    end;
+        inc(source);
+        dec(c)
+      until c = 0;
+      if PtrInt(PtrUInt(source)) >= sourcelen then
+        break;
+    until false;
   result := true;
 end;
 
 function IsValidUtf8WithoutControlChars(source: PUtf8Char): boolean;
 var
-  extra: integer;
-  c: cardinal;
+  c: PtrUInt;
   {$ifdef CPUX86NOTPIC}
   utf8: TUtf8Table absolute UTF8_TABLE;
   {$else}
@@ -2226,32 +2227,33 @@ begin
     repeat
       c := byte(source^);
       inc(source);
+      if c <= $7f then
+        if c < 32 then
+          if c = 0 then
+            break // reached end of input
+          else
+            exit // disallow #1..#31 control char
+        else
+         continue;
+      c := utf8.Bytes[c];
       if c = 0 then
-        break;
-      if c < 32 then
-        exit; // disallow #1..#31 control char
-      if c and $80 <> 0 then
-      begin
-        extra := utf8.Bytes[c];
-        if extra = 0 then
-          // invalid leading byte
+        // invalid leading byte
+        exit;
+      // check valid UTF-8 content
+      repeat
+        if byte(source^) and $c0 <> $80 then
           exit;
-        // check valid UTF-8 content
-        repeat
-          if byte(source^) and $c0 <> $80 then
-            exit;
-          inc(source);
-          dec(extra);
-        until extra = 0;
-      end;
+        inc(source);
+        dec(c);
+      until c = 0;
     until false;
   result := true;
 end;
 
 function IsValidUtf8WithoutControlChars(const source: RawUtf8): boolean;
 var
-  s, extra, len: integer;
-  c: cardinal;
+  s, len: PtrInt;
+  c: PtrUInt;
   {$ifdef CPUX86NOTPIC}
   utf8: TUtf8Table absolute UTF8_TABLE;
   {$else}
@@ -2270,10 +2272,10 @@ begin
     inc(s);
     if c < 32 then
       exit; // disallow #0..#31 control char
-    if c and $80 <> 0 then
+    if c > $7f then
     begin
-      extra := utf8.Bytes[c];
-      if extra = 0 then
+      c := utf8.Bytes[c];
+      if c = 0 then
         // invalid leading byte
         exit;
       // check valid UTF-8 content
@@ -2281,8 +2283,8 @@ begin
         if byte(source[s]) and $c0 <> $80 then
           exit;
         inc(s);
-        dec(extra);
-      until extra = 0;
+        dec(c);
+      until c = 0;
     end;
   end;
   result := true;
@@ -2291,7 +2293,6 @@ end;
 function Utf8ToUnicodeLength(source: PUtf8Char): PtrUInt;
 var
   c: PtrUInt;
-  extra: integer;
   {$ifdef CPUX86NOTPIC}
   utf8: TUtf8Table absolute UTF8_TABLE;
   {$else}
@@ -2312,21 +2313,18 @@ begin
         inc(result)
       else
       begin
-        extra := utf8.Bytes[c];
-        if extra = 0 then
+        c := utf8.Bytes[c];
+        if c = 0 then
           // invalid leading byte
           exit;
-        if extra >= UTF8_EXTRA_SURROGATE then
-          inc(result, 2)
-        else
-          inc(result);
+        inc(result, 1 + ord(c >= UTF8_EXTRA_SURROGATE));
         // check valid UTF-8 content
         repeat
           if byte(source^) and $c0 <> $80 then
             exit;
           inc(source);
-          dec(extra);
-        until extra = 0;
+          dec(c);
+        until c = 0;
       end;
     until false;
 end;
@@ -2334,7 +2332,6 @@ end;
 function Utf8TruncateToUnicodeLength(var text: RawUtf8; maxUtf16: integer): boolean;
 var
   c: PtrUInt;
-  extra: integer;
   source: PUtf8Char;
   {$ifdef CPUX86NOTPIC}
   utf8: TUtf8Table absolute UTF8_TABLE;
@@ -2363,20 +2360,17 @@ begin
         dec(maxUtf16)
       else
       begin
-        extra := utf8.Bytes[c];
-        if extra = 0 then
+        c := utf8.Bytes[c];
+        if c = 0 then
           break; // invalid leading byte
-        if extra >= UTF8_EXTRA_SURROGATE then
-          dec(maxUtf16, 2)
-        else
-          dec(maxUtf16);
+        dec(maxUtf16, 1 + ord(c >= UTF8_EXTRA_SURROGATE));
         // check valid UTF-8 content
         repeat
           if byte(source^) and $c0 <> $80 then
             break;
           inc(source);
-          dec(extra);
-        until extra = 0;
+          dec(c);
+        until c = 0;
       end;
     until false;
   result := false;
@@ -2393,7 +2387,7 @@ begin
         (ord(text[maxBytes]) and $c0 = $80) do
     dec(maxBytes);
   if (maxBytes > 0) and
-     (ord(text[maxBytes]) and $80 <> 0) then
+     (text[maxBytes] > #$7f) then
     dec(maxBytes);
   SetLength(text, maxBytes);
   result := true;
@@ -2409,7 +2403,7 @@ begin
         (ord(text[result]) and $c0 = $80) do
     dec(result);
   if (result > 0) and
-     (ord(text[result]) and $80 <> 0) then
+     (text[result] > #$7f) then
     dec(result);
 end;
 
@@ -2425,13 +2419,13 @@ begin
         (ord(text[result]) and $c0 = $80) do
     dec(result);
   if (result > 0) and
-     (ord(text[result]) and $80 <> 0) then
+     (text[result] > #$7f) then
     dec(result);
 end;
 
 function Utf8FirstLineToUtf16Length(source: PUtf8Char): PtrInt;
 var
-  c, extra: PtrUInt;
+  c: PtrUInt;
   {$ifdef CPUX86NOTPIC}
   utf8: TUtf8Table absolute UTF8_TABLE;
   {$else}
@@ -2446,21 +2440,18 @@ begin
     repeat
       c := byte(source^);
       inc(source);
-      if c <= 127 then
+      if c <= $7f then
         if byte(c) in [0, 10, 13] then
           break // #0, #10 or #13 stop the count
         else
           inc(result)
       else
       begin
-        extra := utf8.Bytes[c];
-        if extra = 0 then
+        c := utf8.Bytes[c];
+        if c = 0 then
           exit; // invalid leading byte
-        if extra >= UTF8_EXTRA_SURROGATE then
-          inc(result, 2)
-        else
-          inc(result);
-        inc(source, extra); // a bit less safe, but faster
+        inc(result, 1 + ord(c >= UTF8_EXTRA_SURROGATE));
+        inc(source, c); // a bit less safe, but faster
       end;
     until false;
 end;
