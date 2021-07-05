@@ -8980,7 +8980,12 @@ begin
     DefaultHasher := @crc32csse42;
     InterningHasher := @crc32csse42;
     if cfPOPCNT in CpuFeatures then
-      GetBitsCountPtrInt := @GetBitsCountSse42;
+      try
+        if GetBitsCountSse42(7) = 3 then
+          GetBitsCountPtrInt := @GetBitsCountSse42;
+      except
+        exclude(CpuFeatures, cfPOPCNT);
+      end;
   end;
 end;
 
