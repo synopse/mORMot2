@@ -608,7 +608,8 @@ function EventArchiveZip(const aOldLogFileName, aDestinationPath: TFileName): bo
 // - just a wrapper around TZipRead.TestAll
 function ZipTest(const ZipName: TFileName): boolean;
 
-/// add AppendFile after the end of MainFile
+/// add AppendFile after the end of MainFile with a magic markup for its position
+// - the magic will be used as trailer to locate the offset of appended data
 // - could be used e.g. to add a .zip to an executable
 procedure FileAppend(const MainFile, AppendFile: TFileName); overload;
 
@@ -1135,6 +1136,7 @@ const
   LASTHEADERLOCATOR64_SIGNATURE_INC = $07064b50 + 1;  // PK#6#7
   FILEAPPEND_SIGNATURE_INC = $a5ababa5 + 1; // as marked by FileAppendSignature
 
+
   // identify the OS used to forge the .zip
   ZIP_OS = (0
       {$ifdef OSDARWIN}
@@ -1494,6 +1496,7 @@ begin
       h32.fileInfo.zzipSize := h64.zzipSize;
       h32.fileInfo.zfullSize := h64.zfullSize;
       h32.localHeadOff := h64.offset;
+      h32.fileInfo.extraLen := 0; // AddFromZip() source may have something here
     end;
     if Is7BitAnsi(pointer(zipName)) then
       // ZIP should handle CP437 charset, but fails sometimes (e.g. Korean)
@@ -2563,6 +2566,7 @@ begin
   O.WriteBuffer(magic, SizeOf(magic));
 end;
 
+
 procedure FileAppend(const MainFile, AppendFile: TFileName);
 var
   M, A: TStream;
@@ -2596,7 +2600,7 @@ var
   parsePEheader: boolean;
   certoffs, certlenoffs, certlen, certlen2: cardinal;
   zip: TZipWrite;
-  buf: array[0 .. 128 shl 10 - 1] of byte;
+  buf: array[0 .. 128 shl 10 - 1] of byte; // 128KB of temp copy buffer on stack
 begin
   if new = main then
     raise ESynZip.CreateUtf8('%: main=new=%', [ctxt, main]);
