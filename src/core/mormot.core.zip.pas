@@ -572,7 +572,7 @@ type
     procedure AddFiles(const aFiles: array of TFileName;
       RemovePath: boolean = true; CompressLevel: integer = 6);
     /// add a file from an already compressed zip entry
-    procedure AddFromZip(const ZipEntry: TZipReadEntry; ZipSource: TStream);
+    procedure AddFromZip(ZipSource: TZipRead; ZipEntry: integer);
     /// append a file content into the destination file
     // - should be called before any file has been added
     // - useful  e.g. to add initial Setup.exe file before zipping some files
@@ -1744,36 +1744,40 @@ begin
     AddDeflated(aFiles[i], RemovePath, CompressLevel);
 end;
 
-procedure TZipWrite.AddFromZip(const ZipEntry: TZipReadEntry; ZipSource: TStream);
+procedure TZipWrite.AddFromZip(ZipSource: TZipRead; ZipEntry: integer);
 var
   local: TLocalFileHeader;
+  z: PZipReadEntry;
 begin
-  if self <> nil then
+  if (self <> nil) and
+     (ZipSource <> nil) and
+     (cardinal(ZipEntry) < cardinal(ZipSource.Count)) then
     with LastEntry^ do
     begin
       // retrieve file information, as expected by WriteHeader()
-      h32 := ZipEntry.dir^;
-      if ZipEntry.dir64 = nil then
+      z := @ZipSource.Entry[ZipEntry];
+      h32 := z^.dir^;
+      if z^.dir64 = nil then
       begin
         if (h32.fileInfo.zfullSize = ZIP32_MAXSIZE) or
            (h32.fileInfo.zzipSize = ZIP32_MAXSIZE) or
            (h32.fileInfo.flags and FLAG_DATADESCRIPTOR <> 0) then
           raise ESynZip.CreateUtf8('%.AddFromZip failed on %: unexpected ' +
-            'data descriptor (MacOS) format', [self, ZipEntry.zipName]);
+            'data descriptor (MacOS) format', [self, z^.zipName]);
         h64.zfullSize := h32.fileInfo.zfullSize;
         h64.zzipSize := h32.fileInfo.zzipSize;
       end
       else
-        h64 := ZipEntry.dir64^; // proper Zip64 support
+        h64 := z^.dir64^; // proper Zip64 support
       // append new header and file content
-      WriteHeader(ZipEntry.zipName);
-      if ZipEntry.local = nil then
+      WriteHeader(z^.zipName);
+      if z^.local = nil then
       begin
-        local.DataSeek(ZipSource, ZipEntry.localoffs);
-        fDest.CopyFrom(ZipSource, h64.zzipSize);
+        local.DataSeek(ZipSource.fSource, z^.localoffs);
+        fDest.CopyFrom(ZipSource.fSource, h64.zzipSize);
       end
       else
-        fDest.WriteBuffer(ZipEntry.local^.Data^, h64.zzipSize);
+        fDest.WriteBuffer(z^.local^.Data^, h64.zzipSize);
       inc(Count);
     end;
 end;
@@ -2030,7 +2034,7 @@ begin
   case P^ + 1 of
     FIRSTHEADER_SIGNATURE_INC:
       with PLocalFileHeader(P)^.fileInfo do
-        result := (ToByte(neededVersion) in [20, 45]) and
+        result := (ToByte(neededVersion) in [10, 20, 45]) and
                   (zzipMethod in [Z_STORED, Z_DEFLATED]) and
                   (extraLen < 100) and
                   (nameLen < 512);
