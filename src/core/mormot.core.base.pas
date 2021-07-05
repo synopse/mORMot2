@@ -2488,7 +2488,7 @@ function PosExString(const SubStr, S: string; Offset: PtrUInt = 1): PtrInt;
 
 /// optimized version of PosEx() with search text as one AnsiChar
 function PosExChar(Chr: AnsiChar; const Str: RawUtf8): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif}
 
 /// fast retrieve the position of a given character in a #0 ended buffer
 // - will use fast SSE2 asm on x86_64
@@ -8203,7 +8203,7 @@ begin
     result := IndexByte(
       pointer(Str)^, PStrLen(PtrUInt(Str) - _STRLEN)^, byte(Chr)) + 1
   else
-  {$else}
+  {$else} // Delphi "for" loop is faster when not inlined
     for result := 1 to PInteger(PtrInt(Str) - sizeof(integer))^ do
       if Str[result] = Chr then
         exit;

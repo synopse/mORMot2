@@ -33,6 +33,7 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.datetime,
   mormot.core.rtti,
   mormot.core.buffers,
   mormot.core.data;
@@ -2268,7 +2269,6 @@ type
 implementation
 
 uses
-  mormot.core.datetime,
   mormot.core.variants;
 
 

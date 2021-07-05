@@ -599,11 +599,11 @@ end;
 // brute force O(n) indexes fix after deletion (much faster than full ReHash)
 procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-{$ifdef SYSVABI}
+        {$ifdef SYSVABI}
         mov     r8, rdx
         mov     rcx, rdi
         mov     rdx, rsi
-{$endif SYSVABI}
+        {$endif SYSVABI}
         xor     eax, eax    // reset eax high bits for setg al below
         movq    xmm0, rdx   // xmm0 = 128-bit of quad deleted
         pshufd  xmm0, xmm0, 0
@@ -618,8 +618,7 @@ procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: Ptr
         add     rcx, 4
         dec     r8
         jmp     @align
-@ok:
-        {$ifdef ASMX64AVX} // AVX2 asm is not supported by Delphi (even 10.4) :(
+@ok:    {$ifdef ASMX64AVX} // AVX2 asm is not supported by Delphi (even 10.4) :(
         test    byte ptr [rip + CPUIDX64], 1 shl cpuAVX2
         jz      @sse2
         vpshufd ymm0, ymm0, 0          // shuffle to ymm0 128-bit low lane

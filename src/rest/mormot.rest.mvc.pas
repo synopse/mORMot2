@@ -668,7 +668,7 @@ type
   /// event as called by TMvcApplication.OnBeforeRender/OnAfterRender
   // - should return TRUE to continue the process, FALSE if Ctxt has been filled
   // as expected and no further process should be done
-  TOnRender = function(Ctxt: TRestServerUriContext; Method: PInterfaceMethod;
+  TOnMvcRender = function(Ctxt: TRestServerUriContext; Method: PInterfaceMethod;
     var Input: variant; Renderer: TMvcRendererReturningData): boolean of object;
 
   /// parent class to implement a MVC/MVVM application
@@ -691,7 +691,7 @@ type
     // if any TMvcRun instance is store here, will be freed by Destroy
     // but note that a single TMvcApplication logic may handle several TMvcRun
     fMainRunner: TMvcRun;
-    fOnBeforeRender, fOnAfterRender: TOnRender;
+    fOnBeforeRender, fOnAfterRender: TOnMvcRender;
     procedure SetSession(Value: TMvcSessionAbstract);
     /// to be called when the data model did change to force content re-creation
     // - this default implementation will call fMainRunner.NotifyContentChanged
@@ -738,11 +738,11 @@ type
       read fSession write SetSession;
     /// this event is called before page is rendered
     // - you can override the supplied Input TDocVariantData if needed
-    property OnBeforeRender: TOnRender
+    property OnBeforeRender: TOnMvcRender
       read fOnBeforeRender write fOnBeforeRender;
     /// this event is called after the page has been rendered
     // - Renderer.Output.Content contains the result of Renderer.ExecuteCommand
-    property OnAfterRender: TOnRender
+    property OnAfterRender: TOnMvcRender
       read fOnAfterRender write fOnAfterRender;
 
     /// global mutex which may be used to protect ViewModel/Controller code
