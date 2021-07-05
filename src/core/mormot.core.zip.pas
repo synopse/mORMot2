@@ -1183,9 +1183,11 @@ procedure TLocalFileHeader.DataSeek(Source: TStream; LocalOffset: Int64);
 begin
   if Source = nil then
     raise ESynZip.Create('Zip: DataSeek with Source=nil');
+  // we read the real local header content before calling Size for its offset
   Source.Seek(LocalOffset, soBeginning);
   if Source.Read(self, SizeOf(self)) <> SizeOf(self) then
     raise ESynZip.Create('Zip: DataSeek reading error');
+  // now we can compute and ignore the real header size -> seek on data
   Source.Seek(LocalOffset + Size, soBeginning);
 end;
 
@@ -1753,13 +1755,13 @@ begin
         if (h32.fileInfo.zfullSize = ZIP32_MAXSIZE) or
            (h32.fileInfo.zzipSize = ZIP32_MAXSIZE) or
            (h32.fileInfo.flags and FLAG_DATADESCRIPTOR <> 0) then
-          raise ESynZip.CreateUtf8('%.AddFromZip failed on %',
-            [self, ZipEntry.zipName]);
+          raise ESynZip.CreateUtf8('%.AddFromZip failed on %: unexpected ' +
+            'data descriptor (MacOS) format', [self, ZipEntry.zipName]);
         h64.zfullSize := h32.fileInfo.zfullSize;
         h64.zzipSize := h32.fileInfo.zzipSize;
       end
       else
-        h64 := ZipEntry.dir64^;
+        h64 := ZipEntry.dir64^; // proper Zip64 support
       // append new header and file content
       WriteHeader(ZipEntry.zipName);
       if ZipEntry.local = nil then
@@ -2000,8 +2002,8 @@ begin
           if (zcrc32 <> 0) or
              (zzipSize <> 0) or
              (zfullSize <> 0) then
-            raise ESynZip.CreateUtf8('%.Create: data descriptor with sizes ' +
-              'for % %', [self, e^.zipName, fFileName]);
+            raise ESynZip.CreateUtf8('%.Create: data descriptor (MacOS) with ' +
+              'sizes for % %', [self, e^.zipName, fFileName]);
     end;
     h := hnext;
     inc(Count); // add file to Entry[]
@@ -2187,7 +2189,7 @@ begin
     local.DataSeek(fSource, e^.localoffs + fSourceOffset);
     if local.fileInfo.flags and FLAG_DATADESCRIPTOR <> 0 then
       raise ESynZip.CreateUtf8('%: increase WorkingMem for data descriptor ' +
-        'support on % %', [self, e^.zipName, fFileName]);
+        '(MacOS) support on % %', [self, e^.zipName, fFileName]);
     Info.localfileheadersize := local.Size;
   end
   else

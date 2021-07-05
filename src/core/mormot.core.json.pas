@@ -435,6 +435,10 @@ type
     /// convert the value into an unsigned integer
     function ToCardinal: PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
+    /// convert the ISO-8601 text value as TDateTime
+    // - could have been written e.g. by DateTimeToIso8601Text()
+    function Iso8601ToDateTime: TDateTime;
+      {$ifdef HASINLINE}inline;{$endif}
     /// will call IdemPropNameU() over the stored text Value
     function Idem(const Text: RawUtf8): boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -3097,6 +3101,11 @@ end;
 function TValuePUtf8Char.ToCardinal: PtrUInt;
 begin
   result := GetCardinal(Value);
+end;
+
+function TValuePUtf8Char.Iso8601ToDateTime: TDateTime;
+begin
+  result := Iso8601ToDateTimePUtf8Char(Value, ValueLen);
 end;
 
 function TValuePUtf8Char.Idem(const Text: RawUtf8): boolean;
