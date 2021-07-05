@@ -665,6 +665,12 @@ type
     procedure Error(var Msg: RawUtf8; var Scope: variant);
   end;
 
+  /// event as called by TMvcApplication.OnBeforeRender/OnAfterRender
+  // - should return TRUE to continue the process, FALSE if Ctxt has been filled
+  // as expected and no further process should be done
+  TOnRender = function(Ctxt: TRestServerUriContext; Method: PInterfaceMethod;
+    var Input: variant; Renderer: TMvcRendererReturningData): boolean of object;
+
   /// parent class to implement a MVC/MVVM application
   // - you should inherit from this class, then implement an interface inheriting
   // from IMvcApplication to define the various commands of the application
@@ -685,6 +691,7 @@ type
     // if any TMvcRun instance is store here, will be freed by Destroy
     // but note that a single TMvcApplication logic may handle several TMvcRun
     fMainRunner: TMvcRun;
+    fOnBeforeRender, fOnAfterRender: TOnRender;
     procedure SetSession(Value: TMvcSessionAbstract);
     /// to be called when the data model did change to force content re-creation
     // - this default implementation will call fMainRunner.NotifyContentChanged
@@ -729,6 +736,15 @@ type
     /// read-write access to the associated Session instance
     property CurrentSession: TMvcSessionAbstract
       read fSession write SetSession;
+    /// this event is called before page is rendered
+    // - you can override the supplied Input TDocVariantData if needed
+    property OnBeforeRender: TOnRender
+      read fOnBeforeRender write fOnBeforeRender;
+    /// this event is called after the page has been rendered
+    // - Renderer.Output.Content contains the result of Renderer.ExecuteCommand
+    property OnAfterRender: TOnRender
+      read fOnAfterRender write fOnAfterRender;
+
     /// global mutex which may be used to protect ViewModel/Controller code
     // - you may call Locker.ProtectMethod in any implementation method to
     // ensure that no other thread would access the same data
@@ -1896,6 +1912,10 @@ begin
           method := @fApplication.fFactory.Methods[methodIndex];
           inputContext := Ctxt.GetInputAsTDocVariant(
             JSON_OPTIONS_FAST_EXTENDED, method);
+          if Assigned(fApplication.OnBeforeRender) then
+            if not fApplication.OnBeforeRender(Ctxt, method, inputContext, renderer) then
+              // aborted by this event handler
+              exit;
           if not VarIsEmpty(inputContext) then
             with _Safe(inputContext)^ do
             begin
@@ -1907,8 +1927,14 @@ begin
                     method^.Args[method^.ArgsInFirst].ParamName^));
               renderer.fInput := ToJson;
             end;
-        end;
+        end
+        else
+          method := nil;
         renderer.ExecuteCommand(methodIndex);
+        if Assigned(fApplication.OnAfterRender) then
+          if not fApplication.OnAfterRender(Ctxt, method, inputContext, renderer) then
+            // processed by this event handler
+            exit;
       end
       else
         renderer.CommandError('notfound', true, HTTP_NOTFOUND);
