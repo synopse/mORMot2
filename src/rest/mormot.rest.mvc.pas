@@ -250,6 +250,8 @@ type
 { ************ ViewModel/Controller Sessions using Cookies }
 
 type
+  TMvcApplication = class;
+
   /// an abstract class able to implement ViewModel/Controller sessions
   // - see TMvcSessionWithCookies to implement cookie-based sessions
   // - this kind of ViewModel will implement client side storage of sessions,
@@ -266,9 +268,11 @@ type
   // lifetime, so are lost after server restart, unless they are persisted
   // via LoadContext/SaveContext methods
   TMvcSessionAbstract = class
+  protected
+    fApplication: TMvcApplication;
   public
     /// create an instance of this ViewModel implementation class
-    constructor Create; virtual;
+    constructor Create(Owner: TMvcApplication); virtual;
     /// will create a new session
     // - setting an optional record data, and returning the internal session ID
     // - you can supply a time period, after which the session will expire -
@@ -284,18 +288,23 @@ type
       PRecordTypeInfo: PRttiInfo = nil;
       PExpires: PCardinal = nil): integer; virtual; abstract;
     /// retrieve the session information as a JSON object
-    // - returned as a TDocVariant, including any associated record Data
+    // - returned as a TDocVariant, including any associated record Data and
+    // optionally its session ID
     // - will call CheckAndRetrieve() then RecordSaveJson() and _JsonFast()
-    function CheckAndRetrieveInfo(
-      PRecordDataTypeInfo: PRttiInfo): variant; virtual;
+    // - to be called in overriden TMvcApplication.GetViewInfo method
+    function CheckAndRetrieveInfo(PRecordDataTypeInfo: PRttiInfo;
+      PSessionID: PInteger = nil): variant; virtual;
     /// clear the session
-    procedure Finalize; virtual; abstract;
+    procedure Finalize(PRecordTypeInfo: PRttiInfo = nil); virtual; abstract;
     /// return all session generation information as ready-to-be stored string
     // - to be retrieved via LoadContext, e.g. after restart
     function SaveContext: RawUtf8; virtual; abstract;
     /// restore session generation information from SaveContext format
     // - returns TRUE on success
     function LoadContext(const Saved: RawUtf8): boolean; virtual; abstract;
+    /// access to the owner MVC Application
+    property Application: TMvcApplication
+      read fApplication;
   end;
 
   /// a class able to implement ViewModel/Controller sessions with cookies
@@ -318,7 +327,7 @@ type
     procedure SetCookie(const cookie: RawUtf8); virtual; abstract;
   public
     /// create an instance of this ViewModel implementation class
-    constructor Create; override;
+    constructor Create(Owner: TMvcApplication); override;
     /// will initialize the session cookie
     // - setting an optional record data, which will be stored Base64-encoded
     // - will return the 32-bit internal session ID
@@ -337,7 +346,7 @@ type
       PExpires: PCardinal = nil): integer; override;
     /// clear the session
     // - by deleting the cookie on the client side
-    procedure Finalize; override;
+    procedure Finalize(PRecordTypeInfo: PRttiInfo = nil); override;
     /// return all cookie generation information as base64 encoded text
     // - to be retrieved via LoadContext
     function SaveContext: RawUtf8; override;
@@ -403,8 +412,6 @@ type
     ReturnedStatus: cardinal;
   end;
 
-  TMvcApplication = class;
-
   /// abstract MVC rendering execution context
   // - you shoud not execute this abstract class, but any of the inherited class
   // - one instance inherited from this class would be allocated for each event
@@ -431,6 +438,9 @@ type
     // - should be specified as a raw JSON object
     property Input: RawUtf8
       read fInput write fInput;
+    /// access to the owner MVC Application
+    property Application: TMvcApplication
+      read fApplication;
   end;
 
   /// how TMvcRendererReturningData should cache its content
@@ -671,6 +681,10 @@ type
   TOnMvcRender = function(Ctxt: TRestServerUriContext; Method: PInterfaceMethod;
     var Input: variant; Renderer: TMvcRendererReturningData): boolean of object;
 
+  /// event called by TMvcApplication.OnSessionCreate/OnSessionFinalized
+  TOnMvcSession = procedure(Sender: TMvcSessionAbstract; SessionID: integer;
+    const Info: variant) of object;
+
   /// parent class to implement a MVC/MVVM application
   // - you should inherit from this class, then implement an interface inheriting
   // from IMvcApplication to define the various commands of the application
@@ -692,6 +706,7 @@ type
     // but note that a single TMvcApplication logic may handle several TMvcRun
     fMainRunner: TMvcRun;
     fOnBeforeRender, fOnAfterRender: TOnMvcRender;
+    fOnSessionCreate, fOnSessionFinalized: TOnMvcSession;
     procedure SetSession(Value: TMvcSessionAbstract);
     /// to be called when the data model did change to force content re-creation
     // - this default implementation will call fMainRunner.NotifyContentChanged
@@ -736,7 +751,8 @@ type
     /// read-write access to the associated Session instance
     property CurrentSession: TMvcSessionAbstract
       read fSession write SetSession;
-    /// this event is called before page is rendered
+
+    /// this event is called before a page is rendered
     // - you can override the supplied Input TDocVariantData if needed
     property OnBeforeRender: TOnMvcRender
       read fOnBeforeRender write fOnBeforeRender;
@@ -744,6 +760,12 @@ type
     // - Renderer.Output.Content contains the result of Renderer.ExecuteCommand
     property OnAfterRender: TOnMvcRender
       read fOnAfterRender write fOnAfterRender;
+    /// this event is called when a session/cookie has been initiated
+    property OnSessionCreate: TOnMvcSession
+      read fOnSessionCreate write fOnSessionCreate;
+    /// this event is called when a session/cookie has been finalized
+    property OnSessionFinalized: TOnMvcSession
+      read fOnSessionFinalized write fOnSessionFinalized;
 
     /// global mutex which may be used to protect ViewModel/Controller code
     // - you may call Locker.ProtectMethod in any implementation method to
@@ -1349,28 +1371,28 @@ end;
 
 { TMvcSessionAbstract }
 
-constructor TMvcSessionAbstract.Create;
+constructor TMvcSessionAbstract.Create(Owner: TMvcApplication);
 begin
-  inherited;
+  fApplication := Owner;
+  inherited Create;
+end;
+
+procedure CookieRecordToVariant(rec: pointer; recrtti: PRttiInfo;
+  var result: variant);
+var
+  json: RawUtf8;
+begin
+  // create a TDocVariant from the binary record content
+  SaveJson(rec^, recrtti, TEXTWRITEROPTIONS_MUSTACHE, json);
+  TDocVariantData(result).InitJsonInPlace(pointer(json), JSON_OPTIONS_FAST);
 end;
 
 function TMvcSessionAbstract.CheckAndRetrieveInfo(
-  PRecordDataTypeInfo: PRttiInfo): variant;
+  PRecordDataTypeInfo: PRttiInfo; PSessionID: PInteger): variant;
 var
   rec: TByteToWord; // 512 bytes to store locally any kind of record
   recsize: integer;
   sessionID: integer;
-
-  procedure ProcessSession;
-  var
-    recjson: RawUtf8;
-  begin
-    // create a TDocVariant from the binary record content
-    SaveJson(rec, PRecordDataTypeInfo, TEXTWRITEROPTIONS_MUSTACHE, recjson);
-    TDocVariantData(result).InitJsonInPlace(
-      pointer(recjson), JSON_OPTIONS_FAST);
-  end;
-
 begin
   SetVariantNull(result);
   if PRecordDataTypeInfo = nil then
@@ -1387,10 +1409,12 @@ begin
   end;
   try
     sessionID := CheckAndRetrieve(@rec, PRecordDataTypeInfo);
+    if PSessionID <> nil then
+      PSessionID^ := sessionID;
     if sessionID <> 0 then
     begin
       if recsize > 0 then
-        ProcessSession;
+        CookieRecordToVariant(@rec, PRecordDataTypeInfo, result);
       _ObjAddProps(['id', sessionID], result);
     end;
   finally
@@ -1403,9 +1427,9 @@ end;
 
 { TMvcSessionWithCookies }
 
-constructor TMvcSessionWithCookies.Create;
+constructor TMvcSessionWithCookies.Create(Owner: TMvcApplication);
 begin
-  inherited Create;
+  inherited Create(Owner);
   fContext.Init('mORMot');
 end;
 
@@ -1437,15 +1461,37 @@ function TMvcSessionWithCookies.Initialize(PRecordData: pointer;
   PRecordTypeInfo: PRttiInfo; SessionTimeOutMinutes: cardinal): integer;
 var
   cookie: RawUtf8;
+  info: variant;
 begin
   result := fContext.Generate(cookie, SessionTimeOutMinutes,
-      PRecordData, PRecordTypeInfo);
+    PRecordData, PRecordTypeInfo);
   if result <> 0 then
+  begin
+    if Assigned(fApplication) and
+       Assigned(fApplication.OnSessionCreate) then
+    begin
+      if (PRecordData <> nil) and
+         (PRecordTypeInfo <> nil) then
+        CookieRecordToVariant(PRecordData, PRecordTypeInfo, info);
+      fApplication.OnSessionCreate(self, result, info);
+    end;
     SetCookie(cookie);
+  end;
 end;
 
-procedure TMvcSessionWithCookies.Finalize;
+procedure TMvcSessionWithCookies.Finalize(PRecordTypeInfo: PRttiInfo);
+var
+  sessionID: integer;
+  info: variant;
 begin
+  if Assigned(fApplication) and
+     Assigned(fApplication.OnSessionFinalized) then
+  begin
+    info := CheckAndRetrieveInfo(PRecordTypeInfo, @sessionID);
+    if sessionID = 0 then
+      exit; // nothing to finalize
+    fApplication.OnSessionFinalized(self, sessionID, info);
+  end;
   SetCookie(COOKIE_EXPIRED);
 end;
 
@@ -1806,7 +1852,7 @@ begin
      aViews.InheritsFrom(TMvcViewsMustache) then
     TMvcViewsMustache(aViews).RegisterExpressionHelpersForTables(fRestServer);
   fStaticCache.Init({casesensitive=}true);
-  fApplication.SetSession(TMvcSessionWithRestServer.Create);
+  fApplication.SetSession(TMvcSessionWithRestServer.Create(aApplication));
 end;
 
 function TMvcRunOnRestServer.AddStaticCache(const aFileName: TFileName;

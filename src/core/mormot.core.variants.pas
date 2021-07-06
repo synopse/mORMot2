@@ -4146,7 +4146,7 @@ begin
       include(aOptions, dvoIsObject);
   opt := word(aOptions);
   TRttiVarData(self).VType := DocVariantVType + opt shl 16;
-  pointer(VName) := nil;
+  pointer(VName) := nil; // reset garbage content -> explicit Clear call needed
   pointer(VValue) := nil;
   VCount := 0;
 end;
