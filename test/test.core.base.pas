@@ -1980,7 +1980,9 @@ var
     timer: TPrecisionTimer;
     P: PByteArray;
     msg: string;
+    {$ifdef ASMX64}
     cpu: RawUtf8;
+    {$endif ASMX64}
     elapsed: Int64;
   begin
      // first validate FillCharFast
@@ -2026,13 +2028,21 @@ var
     if rtl then
       msg := 'FillChar'
     else
+      {$ifdef ASMX64}
       FormatString('FillCharFast [%]', [{%H-}cpu], msg);
+      {$else}
+      msg := 'FillCharFast';
+      {$endif ASMX64}
     NotifyTestSpeed(msg, 1, filled, @timer);
      // validates overlapping forward Move/MoveFast
     if rtl then
       msg := 'Move'
     else
+      {$ifdef ASMX64}
       FormatString('MoveFast [%]', [{%H-}cpu], msg);
+      {$else}
+      msg := 'MoveFast';
+      {$endif ASMX64}
     P := pointer(buf);
     for i := 0 to length(buf) - 1 do
       P[i] := i; // fills with 0,1,2,...
@@ -2077,7 +2087,7 @@ var
     timer.FromExternalMicroSeconds(elapsed);
     NotifyTestSpeed('small %', [msg], 1, moved, @timer);
     CheckHash(buf, 1635609040);
-     // forward and backward non-overlapped moves on big buffers
+    // forward and backward non-overlapped moves on big buffers
     len := (length(buf) - 3200) shr 1;
     timer.Start;
     for i := 1 to 25 do
@@ -2093,7 +2103,7 @@ var
       end;
     NotifyTestSpeed('big %', [msg], 1, 50 * len, @timer);
     CheckHash(buf, 818419281);
-     // forward and backward overlapped moves on big buffers
+    // forward and backward overlapped moves on big buffers
     len := length(buf) - 3200;
     for i := 1 to 3 do
       if rtl then
