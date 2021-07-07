@@ -1562,7 +1562,7 @@ begin
   if fAuthBearer <> '' then
     SockSend(['Authorization: Bearer ', fAuthBearer]);
   if fBasicAuthUserPassword <> '' then
-    SockSend(['Authorization: Basic ', BinToBase64Short(fBasicAuthUserPassword)]);
+    SockSend(['Authorization: Basic ', BinToBase64(fBasicAuthUserPassword)]);
   if fReferer <> '' then
     SockSend(['Referer: ', fReferer]);
   if fAccept <> '' then
