@@ -57,9 +57,9 @@
 // all crc32c and aesenc/aesdec opcodes - is set for FPC DARWIN target
 
 {.$define WITH_ERMS}
-// you may define this to enable REP MOVSB/STOSB for Fillchar/Move if cfERMS
-// flag is available in Intel's CpuFeatures
-// -> disabled by default, since in practice it is (much) slower for small blocks
+// you may define this to enable REP MOVSB/STOSB for x86_64 FillcharFast/MoveFast
+// if cfERMS flag is available in Intel's CpuFeatures
+// -> disabled by default, since in practice it is slower than non-temporal mov
 
 {.$define NOXPOWEREDNAME}
 // define this to avoid sending "X-Powered-By: Synopse mORMot" HTTP header

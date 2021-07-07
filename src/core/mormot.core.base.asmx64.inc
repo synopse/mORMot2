@@ -18,7 +18,7 @@
 const
   // non-temporal writes should bypass the cache when the size is bigger than
   // half the size of the largest level cache - we assume low 1MB cache here
-  CPUCACHEX64 = 512*1024;
+  CPUCACHEX64 = 512 * 1024;
 
 {
   regarding benchmark numbers from TTestLowLevelCommon.CustomRTL
@@ -273,11 +273,11 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         cmp     cnt, 32
         ja      @abv32  // >32 or <0
         sub     rdx, 8
-        jg      @sml    // 9..32
-        jmp     qword ptr [r10 + 64 + rdx * 8] // small 0..8 bytes
+        jg      @sml32  // 9..32
+        jmp     qword ptr [r10 + 64 + rdx * 8] // tinest 0..8 bytes
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @jmptab:dq @00, @01, @02, @03, @04, @05, @06, @07, @08
-@sml:   cmp     dl, 8  // 9..32 bytes
+@sml32: cmp     dl, 8  // 9..32 bytes
         jle     @sml16
         cmp     dl, 16
         jle     @sml24

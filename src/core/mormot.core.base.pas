@@ -2413,8 +2413,14 @@ procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
 /// our fast version of move()
 // - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available),
 // or optimized X87 assembly implementation for older CPUs
+// - FPC i386 has fastmove.inc which is faster than our FPU/ERMS version
+// - FPC x86_64 RTL is slower than our SSE2/AVX asm
 // - on non-Intel CPUs, it will fallback to the default RTL Move()
+{$ifdef FPC_X86}
+var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
+{$else}
 procedure MoveFast(const src; var dst; cnt: PtrInt);
+{$endif FPC_X86}
 
 {$else} // fallback to RTL versions on non-INTEL or PIC platforms
 
@@ -8935,6 +8941,10 @@ begin
     // available on the CPU, but not supported at OS level during context switch
     CpuFeatures := CpuFeatures - [cfAVX, cfAVX2, cfFMA];
   {$endif DISABLE_SSE42}
+  {$ifdef ASMX86}
+  if cfERMS in CpuFeatures then // ERMSB is faster than John O'Harrow FPU code
+    ERMSB_MIN_SIZE := 511;      // but not for smallest sizes due to its warmup
+  {$endif ASMX86}
   {$ifdef ASMX64}
   {$ifdef WITH_ERMS}
   if cfERMS in CpuFeatures then // actually slower than our AVX code -> disabled
