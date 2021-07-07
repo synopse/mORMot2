@@ -370,26 +370,31 @@ end;
 
 procedure TRttiInfo.RecordManagedFields(out Fields: TRttiRecordManagedFields);
 var
-  info: PTypeData;
-  d: PRecInitData absolute info; // = PRecordInfoInit in rtti.inc
+  info, init: pointer;
 begin
   info := GetTypeData(@self);
-  Fields.Size := info^.RecSize;
-  if Assigned(info^.RecInitInfo) then // see RTTIRecordOp() in rtti.inc
-    d := pointer(GetTypeData(info^.RecInitInfo));
-  Fields.Count := d^.ManagedFieldCount;
-  Fields.Fields := AlignToPtr(Pointer(@d^.ManagedFieldCount) + SizeOf(d^.ManagedFieldCount));
+  Fields.Size := PTypeData(info)^.RecSize;
+  init := PTypeData(info)^.RecInitInfo;
+  if Assigned(init) then // see RTTIRecordOp() in rtti.inc
+    info := GetTypeData(init);
+  Fields.Count := PRecInitData(info)^.ManagedFieldCount;
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  Fields.Fields := AlignToPtr(Pointer(@PRecInitData(info)^.ManagedFieldCount) +
+    SizeOf(PRecInitData(info)^.ManagedFieldCount));
+  {$else}
+  Fields.Fields := pointer(PAnsiChar(info) + SizeOf(PRecInitData(info)^));
+  {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 end;
 
 function TRttiInfo.RecordManagedFieldsCount: integer;
 var
-  info: PTypeData;
-  d: PRecInitData absolute info; // = PRecordInfoInit in rtti.inc
+  info, init: pointer;
 begin
   info := GetTypeData(@self);
-  if Assigned(info^.RecInitInfo) then
-    d := pointer(GetTypeData(info^.RecInitInfo));
-  result := d^.ManagedFieldCount;
+  init := PTypeData(info)^.RecInitInfo;
+  if Assigned(init) then
+    info := GetTypeData(init);
+  result := PRecInitData(info)^.ManagedFieldCount; // PRecordInfoInit in rtti.inc
 end;
 
 {$else}

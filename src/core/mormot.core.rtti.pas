@@ -4933,10 +4933,8 @@ var
   f: PRttiRecordField;
   p: PRttiInfo;
   i, offset: PtrUInt;
-  cop: PRttiCopiers;
 begin
   Info^.RecordManagedFields(fields); // retrieve RTTI once for all items
-  cop := @RTTI_COPY;
   repeat
     i := fields.Count;
     offset := 0;
@@ -4956,7 +4954,7 @@ begin
             inc(Source, offset);
             inc(Dest, offset);
           end;
-          offset := cop[p^.Kind](Dest, Source, p);
+          offset := RTTI_COPY[p^.Kind](Dest, Source, p);
           inc(Source, offset);
           inc(Dest, offset);
           inc(offset, f^.Offset);

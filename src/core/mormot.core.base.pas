@@ -530,10 +530,10 @@ type
 
     TDynArrayRec = packed record
       refCnt: TRefCnt; // =SizeInt
-      high: tdynarrayindex;  // differs from Delphi: equals length-1
-      function GetLength: sizeint; inline;
-      procedure SetLength(len: sizeint); inline;
-      property length: sizeint // Delphi compatibility wrapper
+      high: TDALen;   // =SizeInt (differs from Delphi: equals length-1)
+      function GetLength: TDALen; inline;
+      procedure SetLength(len: TDALen); inline;
+      property length: TDALen // Delphi compatibility wrapper
         read GetLength write SetLength;
     end;
 
@@ -5584,12 +5584,12 @@ end;
 
 {$ifdef FPC}
 
-function TDynArrayRec.GetLength: sizeint;
+function TDynArrayRec.GetLength: TDALen;
 begin
   result := high + 1;
 end;
 
-procedure TDynArrayRec.SetLength(len: sizeint);
+procedure TDynArrayRec.SetLength(len: TDALen);
 begin
   high := len - 1;
 end;

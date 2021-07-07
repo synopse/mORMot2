@@ -3431,10 +3431,8 @@ function GotoNextJsonObjectOrArrayInternal(P, PMax: PUtf8Char;
   EndChar: AnsiChar): PUtf8Char;
 var
   {$ifdef CPUX86NOTPIC} // not enough registers
-  jt: TJsonTokens absolute JSON_TOKENS;
   jsonset: TJsonCharSet absolute JSON_CHARS;
   {$else}
-  jt: PJsonTokens;
   jsonset: PJsonCharSet;
   {$endif CPUX86NOTPIC}
 label
@@ -3443,11 +3441,11 @@ begin
   // should match GetJsonPropName()
   result := nil;
   {$ifndef CPUX86NOTPIC}
-  jt := @JSON_TOKENS;
+  jsonset := @JSON_CHARS;
   {$endif CPUX86NOTPIC}
   repeat
     // main loop for quick parsing without full validation
-    case jt[P^] of
+    case JSON_TOKENS[P^] of
       jtObjectStart: // '{'
         begin
           repeat
@@ -3493,16 +3491,11 @@ begin
           inc(P);
         end;
       jtFirstDigit: // '-', '0'..'9'
-        begin
-          // '0123' excluded by JSON, but not here
-          {$ifndef CPUX86NOTPIC}
-          jsonset := @JSON_CHARS;
-          {$endif CPUX86NOTPIC}
-          repeat
-            inc(P);
-          until not (jcDigitFloatChar in jsonset[P^]);
-          // not ['-', '+', '0'..'9', '.', 'E', 'e']
-        end;
+        // '0123' excluded by JSON, but not here
+        repeat
+          inc(P);
+        until not (jcDigitFloatChar in jsonset[P^]);
+        // not ['-', '+', '0'..'9', '.', 'E', 'e']
       jtTrueFirstChar: // 't'
         if PInteger(P)^ = TRUE_LOW then
           inc(P, 4)
@@ -3546,10 +3539,7 @@ begin
         end;
       jtIdentifierFirstChar: // ['_', 'a'..'z', 'A'..'Z', '$']
         begin
-Prop:     {$ifndef CPUX86NOTPIC}
-          jsonset := @JSON_CHARS;
-          {$endif CPUX86NOTPIC}
-          repeat
+Prop:     repeat
             inc(P);
           until not (jcJsonIdentifier in jsonset[P^]);
           // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
