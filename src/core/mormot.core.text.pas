@@ -638,7 +638,6 @@ type
   /// may be used to allocate on stack a 8KB work buffer for a TBaseWriter
   // - via the TBaseWriter.CreateOwnedStream overloaded constructor
   TTextWriterStackBuffer = array[0..8191] of AnsiChar;
-
   PTextWriterStackBuffer = ^TTextWriterStackBuffer;
 
   /// available options for TBaseWriter.WriteObject() method

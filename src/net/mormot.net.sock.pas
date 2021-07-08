@@ -982,6 +982,10 @@ begin
       result := nrTooManyConnections
     else if err = WSAECONNREFUSED then
       result := nrRefused
+    {$ifdef OSLINUX}
+    else if err = ESysEPIPE then
+      result := nrClosed
+    {$endif OSLINUX}
     else
       result := nrFatalError
   else
@@ -1359,10 +1363,15 @@ begin
   end;
 end;
 
+{$ifdef OSWINDOWS}
+type
+  tsocklen = integer;
+{$endif OSWINDOWS}
+
 function TNetSocketWrap.Accept(out clientsocket: TNetSocket;
   out addr: TNetAddr): TNetResult;
 var
-  len: integer;
+  len: tsocklen;
   sock: TSocket;
 begin
   if @self = nil then
@@ -1387,7 +1396,7 @@ end;
 
 function TNetSocketWrap.GetPeer(out addr: TNetAddr): TNetResult;
 var
-  len: integer;
+  len: tsocklen;
 begin
   FillCharFast(addr, SizeOf(addr), 0);
   if @self = nil then
@@ -1418,14 +1427,27 @@ begin
 end;
 
 function TNetSocketWrap.Send(Buf: pointer; var len: integer): TNetResult;
+var
+  err, tosend: integer;
 begin
   if @self = nil then
     result := nrNoSocket
   else
   begin
+    tosend := len;
     len := mormot.net.sock.send(TSocket(@self), Buf, len, MSG_NOSIGNAL);
+    // Upon successful completion, send() shall return the number of bytes sent.
+    // Otherwise, -1 is returned and errno set to indicate the error. (man send)
     if len < 0 then
+    begin
+      err := sockerrno;
+      if err <> WSATRY_AGAIN then
+      begin
+        if tosend>=0 then PAnsiChar(Buf)[tosend] := #0;
+        writeln('send: sockerrno=',err,' for len=',tosend, ' buf=',PAnsiChar(buf));
+      end;
       result := NetLastError
+    end
     else
       result := nrOK;
   end;
@@ -1438,6 +1460,10 @@ begin
   else
   begin
     len := mormot.net.sock.recv(TSocket(@self), Buf, len, 0);
+    // Upon successful completion, recv() shall return the length of the message
+    // in bytes. If no messages are available to be received and the peer has
+    // performed an orderly shutdown, recv() shall return 0. Otherwise, -1 shall
+    // be returned and errno set to indicate the error. (man recv)
     if len <= 0 then
       if len = 0 then
         result := nrClosed
@@ -1448,13 +1474,15 @@ begin
   end;
 end;
 
-function TNetSocketWrap.SendTo(Buf: pointer; len: integer; out addr: TNetAddr): TNetResult;
+function TNetSocketWrap.SendTo(Buf: pointer; len: integer;
+  out addr: TNetAddr): TNetResult;
 begin
   if @self = nil then
     result := nrNoSocket
+  else if mormot.net.sock.sendto(TSocket(@self), Buf, len, 0, @addr, SizeOf(addr)) < 0 then
+    result := NetLastError
   else
-    result := NetCheck(mormot.net.sock.sendto(TSocket(@self),
-      Buf, len, 0, @addr, SizeOf(addr)));
+    result := nrOk;
 end;
 
 function TNetSocketWrap.RecvFrom(Buf: pointer; len: integer; out addr: TNetAddr): integer;
@@ -1553,7 +1581,7 @@ begin
   else
   begin
     {$ifdef OSLINUX}
-    // on Linux close() is enough (e.g. nginx doesn't call shutdown)
+    // on Linux close() is enough after accept (e.g. nginx don't call shutdown)
     if rdwr then
     {$endif OSLINUX}
       shutdown(TSocket(@self), SHUT_[rdwr]);
@@ -1844,13 +1872,12 @@ end;
 function SockBase64Encode(const s: RawUtf8): RawUtf8;
 // to avoid linking mormot.core.buffers for BinToBase64()
 
-  procedure DoEncode(rp, sp: PAnsiChar; len: integer);
+  procedure DoEncode(rp, sp: PAnsiChar; len: cardinal);
   const
     b64: array[0..63] of AnsiChar =
       'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   var
-    i: integer;
-    c: cardinal;
+    i, c: cardinal;
   begin
     for i := 1 to len div 3 do
     begin
@@ -2972,7 +2999,7 @@ end;
 procedure TCrtSocket.SndLow(P: pointer; Len: integer);
 begin
   if not TrySndLow(P, Len) then
-    raise ENetSock.Create('%s.SndLow(%s) len=%d %s',
+    raise ENetSock.Create('%s.SndLow(%s) len=%d',
       [ClassNameShort(self)^, fServer, Len], NetLastError);
 end;
 
