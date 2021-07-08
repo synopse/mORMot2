@@ -53,6 +53,15 @@ uses
 
 { ************ Web Views Implementation using Mustache }
 
+const
+  /// TDocVariantOptions for efficient MVC data context rendering
+  // - maps JSON_OPTIONS_FAST_EXTENDED with field names interning
+  JSON_OPTIONS_MVC =
+    [dvoReturnNullForUnknownProperty,
+     dvoValueCopiedByReference,
+     dvoSerializeAsExtendedJson,
+     dvoInternNames];
+
 type
   /// TMvcView.Flags rendering context
   // - viewHasGenerationTimeTag is set if TMvcViewsAbstract.ViewGenerationTimeTag
@@ -576,7 +585,7 @@ type
   // - cacheStatic enables an in-memory cache of publishStatic files; if not set,
   // TRestServerUriContext.ReturnFile is called to avoid buffering, which may
   // be a better solution on http.sys or if NGINX's X-Accel-Redirect header is set
-  // - registerORMTableAsExpressions will register Mustache Expression Helpers
+  // - registerOrmTableAsExpressions will register Mustache Expression Helpers
   // for every TOrm table of the Server data model
   // - by default, TRestServer authentication would be by-passed for all
   // MVC routes, unless bypassAuthentication option is undefined
@@ -584,7 +593,7 @@ type
     publishMvcInfo,
     publishStatic,
     cacheStatic,
-    registerORMTableAsExpressions,
+    registerOrmTableAsExpressions,
     bypassAuthentication);
 
   /// which kind of optional content should be publish
@@ -1243,7 +1252,7 @@ end;
 function TMvcViewsMustache.RegisterExpressionHelpersForCrypto: TMvcViewsMustache;
 begin
   result := RegisterExpressionHelpers(['md5', 'sha1', 'sha256', 'sha512'],
-                                      [md5, sha1, sha256, sha512]);
+                                      [ md5,   sha1,   sha256,   sha512 ]);
 end;
 
 class procedure TMvcViewsMustache.md5(const Value: variant;
@@ -1384,7 +1393,7 @@ var
 begin
   // create a TDocVariant from the binary record content
   SaveJson(rec^, recrtti, TEXTWRITEROPTIONS_MUSTACHE, json);
-  TDocVariantData(result).InitJsonInPlace(pointer(json), JSON_OPTIONS_FAST);
+  TDocVariantData(result).InitJsonInPlace(pointer(json), JSON_OPTIONS_MVC);
 end;
 
 function TMvcSessionAbstract.CheckAndRetrieveInfo(
@@ -1585,6 +1594,7 @@ begin
           isAction := m^.ArgsResultIsServiceCustomAnswer;
           WR := TJsonSerializer.CreateOwnedStream(tmp);
           try
+            WR.CustomOptions := WR.CustomOptions + [twoForceJsonExtended];
             WR.Add('{');
             exec := TInterfaceMethodExecute.Create(m);
             try
@@ -1616,7 +1626,9 @@ begin
           else
           begin
             // rendering, e.g. with fast Mustache {{template}}
-            _Json(methodOutput, renderContext, JSON_OPTIONS_FAST);
+            VarClear(renderContext);
+            TDocVariantData(renderContext).InitJsonInPlace(
+              pointer(methodOutput), JSON_OPTIONS_MVC);
             fApplication.GetViewInfo(fMethodIndex, info);
             _Safe(renderContext)^.AddValue('main', info);
             if fMethodIndex = fApplication.fFactoryErrorIndex then
@@ -1712,8 +1724,11 @@ end;
 
 procedure TMvcRendererJson.Renders(var outContext: variant; status: cardinal;
   forcesError: boolean);
+var
+  json: RawUtf8;
 begin
-  fOutput.Content := JsonReformat(ToUtf8(outContext));
+  VariantToUtf8(outContext, json);
+  JsonBufferReformat(pointer(json), RawUtf8(fOutput.Content));
   fOutput.Header := JSON_CONTENT_TYPE_HEADER_VAR;
   fOutput.Status := status;
 end;
@@ -1848,7 +1863,7 @@ begin
       fRestServer.ServiceMethodRegister(
         STATIC_URI, RunOnRestServerRoot, bypass);
   end;
-  if (registerORMTableAsExpressions in fPublishOptions) and
+  if (registerOrmTableAsExpressions in fPublishOptions) and
      aViews.InheritsFrom(TMvcViewsMustache) then
     TMvcViewsMustache(aViews).RegisterExpressionHelpersForTables(fRestServer);
   fStaticCache.Init({casesensitive=}true);
@@ -1956,8 +1971,7 @@ begin
         if methodIndex >= 0 then
         begin
           method := @fApplication.fFactory.Methods[methodIndex];
-          inputContext := Ctxt.GetInputAsTDocVariant(
-            JSON_OPTIONS_FAST_EXTENDED, method);
+          inputContext := Ctxt.GetInputAsTDocVariant(JSON_OPTIONS_MVC, method);
           if Assigned(fApplication.OnBeforeRender) then
             if not fApplication.OnBeforeRender(Ctxt, method, inputContext, renderer) then
               // aborted by this event handler
