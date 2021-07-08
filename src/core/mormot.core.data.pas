@@ -355,10 +355,47 @@ type
     /// called by TRttiJson.SetParserType when this class is registered
     // - used e.g. to register TOrm.ID field which is not published as RTTI
     // - in TSynPersistent descendants, can change the Rtti.JsonSave callback
-    // if needed, or set rcfSynPersistentHook flag to call RttiBeforeWriteObject,
-    // RttiWritePropertyValue and RttiAfterWriteObject methods (disabled by
-    // default not to slow down the serialization process)
+    // if needed, or e.g. set rcfHookWrite flag to call RttiBeforeWriteObject
+    // and RttiAfterWriteObject, rcfHookWriteProperty for RttiWritePropertyValue
+    // and/or rcfHookRead for RttiBeforeReadObject or RttiAfterReadObject methods
+    // (disabled by default not to slow down the serialization process)
     class procedure RttiCustomSetParser(Rtti: TRttiCustom); virtual;
+    // called before TTextWriter.WriteObject() serialize this instance as JSON
+    // - triggered if RttiCustomSetParser defined the rcfHookWrite flag
+    // - you can return true if your method made the serialization
+    // - this default implementation just returns false, to continue serializing
+    // - TSynMonitor will change the serialization Options for this instance
+    function RttiBeforeWriteObject(W: TBaseWriter;
+      var Options: TTextWriterWriteObjectOptions): boolean; virtual;
+    // called by TTextWriter.WriteObject() to serialize one published property value
+    // - triggered if RttiCustomSetParser defined the rcfHookWriteProperty flag
+    // - is overriden in TOrm/TOrmMany to detect "fake" instances
+    // or by TSynPersistentWithPassword to hide the password field value
+    // - should return true if a property has been written, false (which is the
+    // default) if the property is to be serialized as usual
+    function RttiWritePropertyValue(W: TBaseWriter; Prop: PRttiCustomProp;
+      Options: TTextWriterWriteObjectOptions): boolean; virtual;
+    /// called after TTextWriter.WriteObject() serialized this instance as JSON
+    // - triggered if RttiCustomSetParser defined the rcfHookWrite flag
+    // - execute just before W.BlockEnd('}')
+    procedure RttiAfterWriteObject(W: TBaseWriter;
+      Options: TTextWriterWriteObjectOptions); virtual;
+    /// called to unserialize this instance from JSON
+    // - triggered if RttiCustomSetParser defined the rcfHookRead flag
+    // - you can return true if your method made the unserialization
+    // - this default implementation just returns false, to continue processing
+    // - opaque Ctxt is a PJsonParserContext instance
+    function RttiBeforeReadObject(Ctxt: pointer): boolean; virtual;
+    /// called to unserialize of property of this instance from JSON
+    // - triggered if RttiCustomSetParser defined the rcfHookReadProperty flag
+    // - you can return true if your method made the unserialization
+    // - this default implementation just returns false, to continue processing
+    // - opaque Ctxt is a PJsonParserContext instance
+    function RttiBeforeReadPropertyValue(Ctxt: pointer;
+      Prop: PRttiCustomProp): boolean; virtual;
+    /// called after this instance as been unserialized from JSON
+    // - triggered if RttiCustomSetParser defined the rcfHookRead flag
+    procedure RttiAfterReadObject; virtual;
   public
     /// virtual constructor called at instance creation
     // - is declared as virtual so that inherited classes may have a root
@@ -384,36 +421,6 @@ type
     // this default implementation will call AssignError()
     procedure AssignTo(Dest: TSynPersistent); virtual;
     procedure AssignError(Source: TSynPersistent);
-  protected
-    // called before TTextWriter.WriteObject() serialize this instance as JSON
-    // - triggered if RttiCustomSetParser defined the rcfSynPersistentHook flag
-    // - you can return true if your method made the serialization
-    // - this default implementation just returns false, to continue serializing
-    // - TSynMonitor will change the serialization Options for this instance
-    function RttiBeforeWriteObject(W: TBaseWriter;
-      var Options: TTextWriterWriteObjectOptions): boolean; virtual;
-    // called by TTextWriter.WriteObject() to serialize one published property value
-    // - triggered if RttiCustomSetParser defined the rcfSynPersistentHook flag
-    // - is overriden in TOrm/TOrmMany to detect "fake" instances
-    // or by TSynPersistentWithPassword to hide the password field value
-    // - should return true if a property has been written, false (which is the
-    // default) if the property is to be serialized as usual
-    function RttiWritePropertyValue(W: TBaseWriter; Prop: PRttiCustomProp;
-      Options: TTextWriterWriteObjectOptions): boolean; virtual;
-    /// called after TTextWriter.WriteObject() serialized this instance as JSON
-    // - triggered if RttiCustomSetParser defined the rcfSynPersistentHook flag
-    // - execute just before W.BlockEnd('}')
-    procedure RttiAfterWriteObject(W: TBaseWriter;
-      Options: TTextWriterWriteObjectOptions); virtual;
-    /// called to unserialize this instance from JSON
-    // - triggered if RttiCustomSetParser defined the rcfSynPersistentHook flag
-    // - you can return true if your method made the unserialization
-    // - this default implementation just returns false, to continue processing
-    // - opaque Ctxt is a PJsonParserContext instance
-    function RttiBeforeReadObject(Ctxt: pointer): boolean; virtual;
-    /// called after this instance as been unserialized from JSON
-    // - triggered if RttiCustomSetParser defined the rcfSynPersistentHook flag
-    procedure RttiAfterReadObject; virtual;
   public
     /// virtual constructor called at instance creation
     // - this constructor also registers the class type to the Rtti global list
@@ -530,6 +537,8 @@ type
       var Options: TTextWriterWriteObjectOptions): boolean; override;
     procedure RttiAfterWriteObject(W: TBaseWriter;
       Options: TTextWriterWriteObjectOptions); override;
+    // set the rcfHookWrite flag to call RttiBeforeWriteObject
+    class procedure RttiCustomSetParser(Rtti: TRttiCustom); override;
   public
     /// initialize the instance, and its associated lock
     constructor Create; override;
@@ -2943,6 +2952,40 @@ begin
   // do nothing by default
 end;
 
+function TObjectWithCustomCreate.RttiBeforeWriteObject(W: TBaseWriter;
+  var Options: TTextWriterWriteObjectOptions): boolean;
+begin
+  result := false; // default JSON serialization
+end;
+
+function TObjectWithCustomCreate.RttiWritePropertyValue(W: TBaseWriter;
+  Prop: PRttiCustomProp; Options: TTextWriterWriteObjectOptions): boolean;
+begin
+  result := false; // default JSON serializaiton
+end;
+
+procedure TObjectWithCustomCreate.RttiAfterWriteObject(W: TBaseWriter;
+  Options: TTextWriterWriteObjectOptions);
+begin
+  // nothing to do
+end;
+
+function TObjectWithCustomCreate.RttiBeforeReadObject(Ctxt: pointer): boolean;
+begin
+  result := false; // default JSON unserialization
+end;
+
+function TObjectWithCustomCreate.RttiBeforeReadPropertyValue(
+  Ctxt: pointer; Prop: PRttiCustomProp): boolean;
+begin
+  result := false; // default JSON unserialization
+end;
+
+procedure TObjectWithCustomCreate.RttiAfterReadObject;
+begin
+  // nothing to do
+end;
+
 
 { TSynPersistent }
 
@@ -2950,34 +2993,6 @@ constructor TSynPersistent.Create;
 begin
   if PPointer(PPAnsiChar(self)^ + vmtAutoTable)^ = nil then
     Rtti.RegisterClass(self); // ensure TRttiCustom is set
-end;
-
-function TSynPersistent.RttiBeforeWriteObject(W: TBaseWriter;
-  var Options: TTextWriterWriteObjectOptions): boolean;
-begin
-  result := false; // default JSON serialization
-end;
-
-function TSynPersistent.RttiWritePropertyValue(W: TBaseWriter;
-  Prop: PRttiCustomProp; Options: TTextWriterWriteObjectOptions): boolean;
-begin
-  result := false; // default JSON serializaiton
-end;
-
-procedure TSynPersistent.RttiAfterWriteObject(W: TBaseWriter;
-  Options: TTextWriterWriteObjectOptions);
-begin
-  // nothing to do
-end;
-
-function TSynPersistent.RttiBeforeReadObject(Ctxt: pointer): boolean;
-begin
-  result := false; // default JSON unserialization
-end;
-
-procedure TSynPersistent.RttiAfterReadObject;
-begin
-  // nothing to do
 end;
 
 class function TSynPersistent.RttiCustom: TRttiCustom;
@@ -3139,6 +3154,12 @@ procedure TSynPersistentLock.Unlock;
 begin
   if self <> nil then
     fSafe^.UnLock;
+end;
+
+class procedure TSynPersistentLock.RttiCustomSetParser(Rtti: TRttiCustom);
+begin
+  // let's call our overriden RttiBeforeWriteObject and RttiAfterWriteObject
+  Rtti.Flags := Rtti.Flags + [rcfHookWrite];
 end;
 
 function TSynPersistentLock.RttiBeforeWriteObject(W: TBaseWriter;

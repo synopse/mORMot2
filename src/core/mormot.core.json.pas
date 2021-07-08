@@ -5171,8 +5171,8 @@ const
     nil, nil, nil, nil, @_JS_ID, @_JS_ID, @_JS_QWord, @_JS_QWord, @_JS_QWord);
 
 type
-  TSPHook = class(TSynPersistent); // to access its protected methods
-  TSPHookClass = class of TSPHook;
+  TCCHook = class(TObjectWithCustomCreate); // to access its protected methods
+  TCCHookClass = class of TCCHook;
 
 procedure AppendExceptionLocation(w: TTextWriter; e: ESynException);
 begin // call TDebugFile.FindLocationShort if mormot.core.log is used
@@ -5205,8 +5205,8 @@ begin
   else if nfo.fJsonWriter.Code <> nil then
     // TRttiJson.RegisterCustomSerializer() custom callbacks
     TOnRttiJsonWrite(nfo.fJsonWriter)(c.W, Data, c.Options)
-  else if not (rcfSynPersistentHook in nfo.Flags) or
-          not TSPHook(Data).RttiBeforeWriteObject(c.W, c.Options) then
+  else if not (rcfHookWrite in nfo.Flags) or
+          not TCCHook(Data).RttiBeforeWriteObject(c.W, c.Options) then
   begin
     // regular JSON serialization using nested fields/properties
     c.W.BlockBegin('{', c.Options);
@@ -5275,10 +5275,10 @@ begin
             c.W.BlockAfterItem(c.Options);
           done := true;
           c.W.WriteObjectPropName(pointer(p^.Name), length(p^.Name), c.Options);
-          if not (rcfSynPersistentHook in Ctxt.Info.Flags) or
-             not TSPHook(Data).RttiWritePropertyValue(c.W, p, c.Options) then
+          if not (rcfHookWriteProperty in Ctxt.Info.Flags) or
+             not TCCHook(Data).RttiWritePropertyValue(c.W, p, c.Options) then
             if (woHideSensitivePersonalInformation in c.Options) and
-               (rcfSPI in p^.Value.Flags) then
+               (rcfSpi in p^.Value.Flags) then
               c.W.AddShorter('"***"')
             else if p^.OffsetGet >= 0 then
             begin
@@ -5295,8 +5295,8 @@ begin
           break;
         inc(c.Prop);
       until false;
-    if rcfSynPersistentHook in Ctxt.Info.Flags then
-       TSPHook(Data).RttiAfterWriteObject(c.W, c.Options);
+    if rcfHookWrite in Ctxt.Info.Flags then
+       TCCHook(Data).RttiAfterWriteObject(c.W, c.Options);
     c.W.BlockEnd('}', c.Options);
     if woFullExpand in c.Options then
       c.W.BlockEnd('}', c.Options);
@@ -7545,8 +7545,12 @@ begin
   if not Assigned(load) then
     Ctxt.Valid := false
   else if Prop.OffsetSet >= 0 then
-    // fast parsing into the property/field memory
-    load(Data + Prop.OffsetSet, Ctxt)
+    if (rcfHookReadProperty in Ctxt.Info.Flags) and
+       TCCHook(Data).RttiBeforeReadPropertyValue(@Ctxt, @Prop) then
+      // custom parsing method (e.g. TOrm nested TOrm properties)
+    else
+      // default fast parsing into the property/field memory
+      load(Data + Prop.OffsetSet, Ctxt)
   else if Prop.Value.Kind = rkClass then
     // special case of a setter method for a class property: use a temp instance
     if jpoSetterNoCreate in Ctxt.Options then
@@ -7613,8 +7617,8 @@ begin
         Ctxt.Info.Props.FinalizeAndClearPublishedProperties(PPointer(Data)^);
       // class instances are accessed by reference, records are stored by value
       Data := PPointer(Data)^;
-      if (rcfSynPersistentHook in Ctxt.Info.Flags) and
-         (TSPHook(Data).RttiBeforeReadObject(@Ctxt)) then
+      if (rcfHookRead in Ctxt.Info.Flags) and
+         (TCCHook(Data).RttiBeforeReadObject(@Ctxt)) then
         exit;
     end
     else
@@ -7703,8 +7707,8 @@ any:        propname := GetJsonPropName(Ctxt.Json, @propnamelen);
       Ctxt.ParseEndOfObject; // mimics GetJsonField() - set Ctxt.EndOfObject
       Ctxt.Info := root; // restore
     end;
-    if rcfSynPersistentHook in Ctxt.Info.Flags then
-      TSPHook(Data).RttiAfterReadObject;
+    if rcfHookRead in Ctxt.Info.Flags then
+      TCCHook(Data).RttiAfterReadObject;
   end;
 end;
 
@@ -9339,7 +9343,7 @@ begin
       begin
         fClassNewInstance := @_New_ObjectWithCustomCreate;
         // allow any kind of customization for TObjectWithCustomCreate children
-        TSPHookClass(fValueClass).RttiCustomSetParser(self);
+        TCCHookClass(fValueClass).RttiCustomSetParser(self);
       end
       else if C = TSynObjectList then
       begin
@@ -9990,7 +9994,7 @@ var
   rtti: TRttiJson;
   n: integer;
   p: ^PRttiCustomProp;
-  arr: PPAnsiChar;
+  arr: pointer;
   o: TObject;
 begin
   rtti := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
@@ -10014,10 +10018,10 @@ begin
     exit;
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
   repeat
-    arr := pointer(PAnsiChar(ObjectInstance) + p^^.OffsetGet);
-    if arr^ <> nil then
+    arr := PPointer(PAnsiChar(ObjectInstance) + p^^.OffsetGet)^;
+    if arr <> nil then
       // inlined ObjArrayClear()
-      RawObjectsClear(pointer(arr^), PDALen(arr^ - _DALEN)^ + _DAOFF);
+      RawObjectsClear(arr, PDALen(PAnsiChar(arr) - _DALEN)^ + _DAOFF);
     inc(p);
     dec(n);
   until n = 0;

@@ -1715,7 +1715,7 @@ begin
   fClient.Server.ServicesRouting := TRestServerRoutingJsonRpc; // back to previous
   fClient.Server.AuthenticationUnregister([
     {$ifdef OSWINDOWS}
-    TRestServerAuthenticationSSPI,
+    TRestServerAuthenticationSspi,
     {$endif OSWINDOWS}
     TRestServerAuthenticationDefault]);
   fClient.Server.AuthenticationRegister(TRestServerAuthenticationNone);
@@ -1734,7 +1734,7 @@ begin
   // restore default authentications
   fClient.Server.AuthenticationRegister([
     {$ifdef OSWINDOWS}
-    TRestServerAuthenticationSSPI,
+    TRestServerAuthenticationSspi,
     {$endif OSWINDOWS}
     TRestServerAuthenticationDefault]);
   fClient.SetUser('User', 'synopse');

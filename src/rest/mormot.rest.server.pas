@@ -319,7 +319,7 @@ type
     ServiceExecution: PServiceFactoryExecution;
     /// the current execution options of an interface-based service
     // - contain ServiceExecution.Options including optNoLogInput/optNoLogOutput
-    // in case of TInterfaceFactory.RegisterUnsafeSPIType
+    // in case of TInterfaceFactory.RegisterUnsafeSpiType
     ServiceExecutionOptions: TInterfaceMethodOptions;
     /// low-level index of the Service in the internal methods list
     ServiceListInterfaceMethodIndex: integer;
@@ -2510,7 +2510,7 @@ type
     adDefault,
     adHttpBasic,
     adWeak,
-    adSSPI);
+    adSspi);
 
   /// customize TRestHttpServer process
   // - rsoOnlyJsonRequests to force the server to respond only to MIME type
@@ -3317,9 +3317,9 @@ begin
     with PInterfaceMethod(ServiceMethod)^ do
     begin
       // log from Ctxt.ServiceExecutionOptions
-      if [imdConst, imdVar] * HasSPIParams <> [] then
+      if [imdConst, imdVar] * HasSpiParams <> [] then
         include(ServiceExecutionOptions, optNoLogInput);
-      if [imdVar, imdOut, imdResult] * HasSPIParams <> [] then
+      if [imdVar, imdOut, imdResult] * HasSpiParams <> [] then
         include(ServiceExecutionOptions, optNoLogOutput);
     end;
     // log method call and parameter values (if worth it)

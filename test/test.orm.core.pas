@@ -531,7 +531,7 @@ begin
     s := ObjectToJson(T);
     CheckEqual(s,
       '{"ID":0,"Int":0,"Test":"","Unicode":"","Ansi":"","ValFloat":0,' +
-      '"ValWord":0,"ValDate":"","Next":null,"Data":null,"ValVariant":null}');
+      '"ValWord":0,"ValDate":"","Next":0,"Data":null,"ValVariant":null}');
     T.ValDate := 39882.888612; // a fixed date and time
     wa := 'abcde6ef90';
     wa[6] := #$E9; // put some accents to validate UTF-8 encoding
@@ -581,7 +581,7 @@ begin
     s := ObjectToJson(T);
     CheckEqual(s, '{"ID":10,"Int":0,"Test":"' + T.Test + '","Unicode":"' + T.Test
       + '","Ansi":"' + T.Test + '","ValFloat":3.141592653,"ValWord":1203,' +
-      '"ValDate":"2009-03-10T21:19:36","Next":null,"Data":null,"ValVariant":3.1416}');
+      '"ValDate":"2009-03-10T21:19:36","Next":0,"Data":null,"ValVariant":3.1416}');
     T2.ClearProperties;
     Check(not T.SameValues(T2));
     Check(JsonToObject(T2, pointer(s), valid) <> nil);

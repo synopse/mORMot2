@@ -129,7 +129,7 @@ type
     vIsString,
     vPassedByReference,
     vIsObjArray,
-    vIsSPI,
+    vIsSpi,
     vIsQword,
     vIsDynArrayString,
     vIsDateTimeMS);
@@ -283,8 +283,8 @@ type
     ExecutionMethodIndex: byte;
     /// TRUE if the method is inherited from another parent interface
     IsInherited: boolean;
-    /// the directions of arguments with vIsSPI defined in Args[].ValueKindAsm
-    HasSPIParams: TInterfaceMethodValueDirections;
+    /// the directions of arguments with vIsSpi defined in Args[].ValueKindAsm
+    HasSpiParams: TInterfaceMethodValueDirections;
     /// is 0 for the root interface, 1..n for all inherited interfaces
     HierarchyLevel: byte;
     /// describe expected method arguments
@@ -588,7 +588,7 @@ type
     // a bank card number or a plain password
     // - such values will force associated values to be ignored during loging,
     // as a more tuned alternative to optNoLogInput or optNoLogOutput
-    class procedure RegisterUnsafeSPIType(const Types: array of PRttiInfo);
+    class procedure RegisterUnsafeSpiType(const Types: array of PRttiInfo);
 
     /// initialize the internal properties from the supplied interface RTTI
     // - it will check and retrieve all methods of the supplied interface,
@@ -2241,7 +2241,7 @@ type
   // won't log any parameter values at input/output - this may be useful for
   // regulatory/safety purposes, e.g. to ensure that no sensitive information
   // (like a credit card number or a password), is logged during process -
-  // consider using TInterfaceFactory.RegisterUnsafeSPIType() instead if you
+  // consider using TInterfaceFactory.RegisterUnsafeSpiType() instead if you
   // prefer a more tuned filtering, for specific high-level types
   // - when parameters are transmitted as JSON object, any missing parameter
   // will be replaced by their default value, unless optErrorOnMissingParam
@@ -3695,9 +3695,9 @@ begin
   result := InterfaceFactoryCache;
 end;
 
-class procedure TInterfaceFactory.RegisterUnsafeSPIType(const Types: array of PRttiInfo);
+class procedure TInterfaceFactory.RegisterUnsafeSpiType(const Types: array of PRttiInfo);
 begin
-  Rtti.RegisterUnsafeSPIType(Types);
+  Rtti.RegisterUnsafeSpiType(Types);
 end;
 
 constructor TInterfaceFactory.Create(aInterface: PRttiInfo);
@@ -3832,11 +3832,11 @@ begin
           ArgsManagedFirst := a;
         ArgsManagedLast := a;
       end;
-      if rcfSPI in ArgRtti.Flags then
+      if rcfSpi in ArgRtti.Flags then
       begin
-        // as defined by Rtti.RegisterUnsafeSPIType()
-        include(ValueKindAsm, vIsSPI);
-        include(HasSPIParams, ValueDirection);
+        // as defined by Rtti.RegisterUnsafeSpiType()
+        include(ValueKindAsm, vIsSpi);
+        include(HasSpiParams, ValueDirection);
       end;
     end;
     if ArgsOutputValuesCount = 0 then
@@ -7485,7 +7485,7 @@ end;
 { TSetWeakZero maintains a per-instance reference list }
 
 type
-  TSetWeakZero = class(TSynDictionary)
+  TSetWeakZero = class(TSynDictionary) // TClass / TPointerDynArray map
   protected
     fHookedFreeInstance: PtrUInt;
   public

@@ -1798,32 +1798,39 @@ type
   // - rcfObjArray is for T*ObjArray dynamic arrays
   // - rcfBinary is for hexadecimal serialization of integers
   // - rcfWithoutRtti is set if was created purely by text, and uses fake RTTI
-  // - rcfSPI identifies types containing Sensitive Personal Information
-  // (e.g. a bank card number or a plain password)
-  // - rcfSynPersistentHook identifies TSynPersistent kind of class, to
-  // customize TRttiCustom process calling its set of virtual methods - disabled
-  // by default not to slow down serialization process
+  // - rcfSpi identifies types containing Sensitive Personal Information
+  // (e.g. a bank card number or a plain password) which should be hidden
+  // - rcfHookWrite, rcfHookWriteProperty, rcfHookRead, rcfHookReadProperty for
+  // TObjectWithCustomCreate kind of class, to customize JSON serialization
+  // calling the set of TObjectWithCustomCreate protected virtual methods -
+  // disabled by default not to slow down the serialization process
   // - rcfHasNestedProperties is set e.g. for rkClass or rcfWithoutRtti records,
   // rcfHasNestedManagedProperties if any of the property/field is rcfIsManaged
   // - rcfArrayItemManaged maps rcfIsManaged flag in ArrayRtti.Flags
   // - rcfReadIgnoreUnknownFields will let JSON unserialization ignore unknown
   // fields for this class/record
   // - rcfAutoCreateFields is defined when AutoCreateFields() has been called
-  // - rcfIgnoreStored is set for TOrm, where "stored AS_UNIQUE" does not mean
+  // - rcfDisableStored is set for TOrm, where "stored AS_UNIQUE" does not mean
   // "not stored" for serialization but "UNIQUE SQL"
+  // - rcfClassMayBeID is set e.g. for TOrm classes, which may be storing
+  // not instances but IDs in published properties PtrInt
   TRttiCustomFlag = (
     rcfIsManaged,
     rcfObjArray,
     rcfBinary,
     rcfWithoutRtti,
-    rcfSPI,
-    rcfSynPersistentHook,
+    rcfSpi,
+    rcfHookWrite,
+    rcfHookWriteProperty,
+    rcfHookRead,
+    rcfHookReadProperty,
     rcfHasNestedProperties,
     rcfHasNestedManagedProperties,
     rcfArrayItemManaged,
     rcfReadIgnoreUnknownFields,
     rcfAutoCreateFields,
-    rcfDisableStored);
+    rcfDisableStored,
+    rcfClassMayBeID);
 
   /// define specific behaviors for a given TypeInfo/PRttIinfo
   // - as stored in TRttiCustom.Flags
@@ -2290,7 +2297,7 @@ type
     // as a more tuned alternative to optNoLogInput or optNoLogOutput
     // - not thread-safe: should be called once from the main thread, at startup,
     // e.g. in the initialization section of your types definition unit
-    procedure RegisterUnsafeSPIType(const Types: array of PRttiInfo);
+    procedure RegisterUnsafeSpiType(const Types: array of PRttiInfo);
     /// register one RTTI TypeInfo() to be serialized as hexadecimal
     // - data will be serialized as BinToHexDisplayLower() JSON hexadecimal
     // string, using BinarySize bytes of the value, i.e. BinarySize*2 hexa chars
@@ -6543,7 +6550,7 @@ begin
       fProps.SetFromRecordExtendedRtti(aInfo); // only for Delphi 2010+
     rkLString:
       if aInfo = TypeInfo(SpiUtf8) then
-        include(fFlags, rcfSPI);
+        include(fFlags, rcfSpi);
     rkDynArray:
       begin
         item := fCache.ItemInfo;
@@ -7445,12 +7452,12 @@ begin
   end;
 end;
 
-procedure TRttiCustomList.RegisterUnsafeSPIType(const Types: array of PRttiInfo);
+procedure TRttiCustomList.RegisterUnsafeSpiType(const Types: array of PRttiInfo);
 var
   i: PtrInt;
 begin
   for i := 0 to high(Types) do
-    include(RegisterType(Types[i]).fFlags, rcfSPI);
+    include(RegisterType(Types[i]).fFlags, rcfSpi);
 end;
 
 function TRttiCustomList.RegisterBinaryType(Info: PRttiInfo;

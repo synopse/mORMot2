@@ -1219,7 +1219,7 @@ constructor TRestHttpServer.Create(aServer: TRestServer;
 const
   AUTH: array[TRestHttpServerRestAuthentication] of
     TRestServerAuthenticationClass = (
-    // adDefault, adHttpBasic, adWeak, adSSPI
+    // adDefault, adHttpBasic, adWeak, adSspi
     TRestServerAuthenticationDefault,
     TRestServerAuthenticationHttpBasic,
     TRestServerAuthenticationNone,

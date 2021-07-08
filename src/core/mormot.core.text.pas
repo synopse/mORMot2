@@ -673,7 +673,7 @@ type
   // woIDAsIDstr to append an additional "ID_str":"##########" field
   // - by default, RawBlob properties are serialized as null, unless
   // woRawBlobAsBase64 is defined
-  // - if woHideSensitivePersonalInformation is set, rcfSPI types (e.g. the
+  // - if woHideSensitivePersonalInformation is set, rcfSpi types (e.g. the
   // TSynPersistentWithPassword.Password field) will be serialized as "***"
   // to prevent security issues (e.g. in log)
   // - by default, TObjectList will set the woStoreClassName for its nested

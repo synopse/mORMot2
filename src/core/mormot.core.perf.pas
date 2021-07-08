@@ -463,8 +463,6 @@ type
     // customize JSON Serialization to set woEnumSetsAsText
     function RttiBeforeWriteObject(W: TBaseWriter;
       var Options: TTextWriterWriteObjectOptions): boolean; override;
-    // set the rcfSynPersistentHook flag to call RttiBeforeWriteObject
-    class procedure RttiCustomSetParser(Rtti: TRttiCustom); override;
     /// an identifier associated to this monitored resource
     // - is used e.g. for TSynMonitorUsage persistence/tracking
     property Name: RawUtf8
@@ -1450,12 +1448,6 @@ begin
   // do nothing by default - overriden classes may track modified changes
 end;
 
-class procedure TSynMonitor.RttiCustomSetParser(Rtti: TRttiCustom);
-begin
-  // let's call RttiBeforeWriteObject
-  Rtti.Flags := Rtti.Flags + [rcfSynPersistentHook];
-end;
-
 function TSynMonitor.RttiBeforeWriteObject(W: TBaseWriter;
   var Options: TTextWriterWriteObjectOptions): boolean;
 begin
@@ -1465,7 +1457,7 @@ begin
    exclude(Options, woFullExpand);
    include(Options, woEnumSetsAsText);
  end;
- result := false; // continue serialization as usual
+ result := inherited; // call fSafe.Lock + continue serialization as usual
 end;
 
 procedure TSynMonitor.ProcessStart;

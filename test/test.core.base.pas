@@ -1985,7 +1985,7 @@ var
     {$endif ASMX64}
     elapsed: Int64;
   begin
-     // first validate FillCharFast
+    // first validate FillCharFast
     filled := 0;
     b1 := 0;
     len := 1;
@@ -2062,7 +2062,7 @@ var
     NotifyTestSpeed(msg, 1, moved, @timer);
     Check(IsBufIncreasing(P, moved, 1));
     CheckHash(buf, 2284147540);
-     // forward and backward overlapped moves on small buffers
+    // forward and backward overlapped moves on small buffers
     elapsed := 0;
     moved := 0;
     for len := 1 to 48 do

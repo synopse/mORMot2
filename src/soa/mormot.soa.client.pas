@@ -630,7 +630,7 @@ begin
   else
     service := @fInterface.Methods[m];
   withinput := ((service = nil) or
-                ([imdConst, imdVar] * service^.HasSPIParams = [])) and
+                ([imdConst, imdVar] * service^.HasSpiParams = [])) and
                not (optNoLogInput in fExecution[m].Options);
   if withinput then
     // include non-sensitive input in log
@@ -691,7 +691,7 @@ begin
        (resp <> '') and
        not (optNoLogOutput in fExecution[m].Options) and
        ((service = nil) or
-        ([imdConst, imdVar] * service^.HasSPIParams = [])) then
+        ([imdConst, imdVar] * service^.HasSpiParams = [])) then
       with fClient.LogFamily do
         if sllServiceReturn in Level then
           log.Log(sllServiceReturn, resp, self, MAX_SIZE_RESPONSE_LOG);
