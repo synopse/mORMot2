@@ -3791,6 +3791,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// return the RTTI property information for this record
     function ClassProp: TRttiJson;
+      {$ifdef HASINLINE}inline;{$endif}
     /// return the TRecordReference Int64 value pointing to this record
     function RecordReference(Model: TOrmModel): TRecordReference;
 

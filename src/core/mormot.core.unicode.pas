@@ -3966,8 +3966,11 @@ var
 begin
   len := length(Text);
   Temp.Init(len * 3);
-  result := CurrentAnsiConvert.AnsiBufferToUtf8(Temp.buf, pointer(Text), len)
-     - PUtf8Char(Temp.buf);
+  if len <> 0 then
+    result := CurrentAnsiConvert.
+      AnsiBufferToUtf8(Temp.buf, pointer(Text), len) - PUtf8Char(Temp.buf)
+  else
+    result := 0;
 end;
 
 function ToUtf8(const Text: string): RawUtf8;
