@@ -404,6 +404,11 @@ function ClassOrmFieldType(info: PRttiInfo): TOrmFieldType;
 /// get the SQL type of this type, as managed with the database driver
 function GetOrmFieldType(Info: PRttiInfo): TOrmFieldType;
 
+/// cast a TID into a TOrm instance
+// - just like pointer(Value) but cross-platform and more explicit
+function CastID(Value: TID): pointer;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// similar to AddInt64() function, but for a TIDDynArray
 // - some random GPF were identified with AddInt64(TInt64DynArray(Values),...)
 // with the Delphi Win64 compiler
@@ -7963,6 +7968,11 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
       exit;
     end;
   end;
+end;
+
+function CastID(Value: TID): pointer;
+begin
+  result := pointer(PtrUInt(PtrInt(Value)));
 end;
 
 procedure AddID(var Values: TIDDynArray; var ValuesCount: integer; Value: TID);
