@@ -1157,8 +1157,6 @@ type
 
 implementation
 
-
-
 { ************ Performance Counters }
 
 { TPrecisionTimer }
@@ -1457,7 +1455,8 @@ begin
    exclude(Options, woFullExpand);
    include(Options, woEnumSetsAsText);
  end;
- result := inherited; // call fSafe.Lock + continue serialization as usual
+ // call fSafe.Lock + continue serialization as usual
+ result := inherited RttiBeforeWriteObject(W, Options);
 end;
 
 procedure TSynMonitor.ProcessStart;
