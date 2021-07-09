@@ -9649,7 +9649,8 @@ begin
     InterningHasher := @crc32c_sse42_aesni;
   end;
   {$endif CRC32C_X64}
-  if cfSSE41 in CpuFeatures then
+  if (cfSSE41 in CpuFeatures) and   // PINSRD/Q
+     (cfSSE3 in CpuFeatures) then   // PSHUFB
   begin
     // optimized Intel's Sha256Sse4.asm
     K256Aligned := @K256;
@@ -9663,8 +9664,9 @@ begin
   end;
   {$endif ASMX64}
   {$ifdef USEAESNIHASH}
-  if (cfSSE41 in CpuFeatures) and
-     (cfAesNi in CpuFeatures) then
+  if (cfSSE41 in CpuFeatures) and   // PINSRD/Q
+     (cfSSE3 in CpuFeatures) and    // PSHUFB
+     (cfAesNi in CpuFeatures) then  // AESENC
   begin
     // 128-bit aeshash as implemented in Go runtime, using aesenc opcode
     GetMemAligned(AESNIHASHKEYSCHED_, nil, 16 * 16, AESNIHASHKEYSCHED);
