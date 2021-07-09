@@ -382,7 +382,7 @@ type
     function NameList: PShortString;
       {$ifdef HASINLINE}inline;{$endif}
     /// get the corresponding enumeration name
-    // - return the first one if Value is invalid (>MaxValue)
+    // - return a void '' shortstring if Value is invalid (>MaxValue)
     function GetEnumNameOrd(Value: cardinal): PShortString;
       {$ifdef FPC} inline; {$endif}
     /// get the corresponding enumeration name
@@ -511,9 +511,8 @@ type
     /// ancestor interface type
     function IntfParent: PRttiInfo;
       {$ifdef HASINLINE}inline;{$endif}
-    /// interface abilities
+    /// interface abilities - not inlined to avoid random trouble on FPC trunk
     function IntfFlags: TRttiIntfFlags;
-      {$ifdef HASINLINE}inline;{$endif}
     /// interface 128-bit GUID
     function IntfGuid: PGUID;
       {$ifdef HASINLINE}inline;{$endif}
