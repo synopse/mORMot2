@@ -135,12 +135,12 @@ type
       out CustomerData: TCustomerData): Boolean;
     //// validate TOrm transmission
     procedure FillPeople(var People: TOrmPeople);
-    {$ifdef UNICODE}
+    {$ifndef HASNOSTATICRTTI}
     /// validate simple record transmission
-    // - older Delphi versions (e.g. 6-7) do not allow records without
+    // - older Delphi versions (e.g. 6-7-2009) do not allow records without
     // nested reference-counted types
     function EchoRecord(const Nav: TConsultaNav): TConsultaNav;
-    {$endif UNICODE}
+    {$endif HASNOSTATICRTTI}
   end;
 
   /// a test interface, used by TTestServiceOrientedArchitecture
@@ -853,9 +853,9 @@ var
   j: integer;
   x, y: PtrUInt; // TThreadID  = ^TThreadRec under BSD
   V1, V2, V3: variant;
-{$ifdef UNICODE}
+  {$ifndef HASNOSTATICRTTI}
   Nav: TConsultaNav;
-{$endif UNICODE}
+  {$endif HASNOSTATICRTTI}
 begin
   Check(Inst.I.Add(1, 2) = 3);
   Check(Inst.I.Multiply($1111333, $222266667) = $24693E8DB170B85);
@@ -924,7 +924,7 @@ begin
       finally
         people.Free;
       end;
-{$ifdef UNICODE}
+      {$ifndef HASNOSTATICRTTI}
       Nav.MaxRows := c;
       Nav.Row0 := c * 2;
       Nav.RowCount := c * 3;
@@ -938,7 +938,7 @@ begin
         Check(IsSQLUpdateBack = (c and 1 = 0));
         Check(EOF = (c and 1 = 1));
       end;
-{$endif UNICODE}
+      {$endif HASNOSTATICRTTI}
       if c mod 10 = 1 then
       begin
         Item.Color := Item.Color + 1;
@@ -1715,7 +1715,7 @@ begin
   fClient.Server.ServicesRouting := TRestServerRoutingJsonRpc; // back to previous
   fClient.Server.AuthenticationUnregister([
     {$ifdef OSWINDOWS}
-    TRestServerAuthenticationSSPI,
+    TRestServerAuthenticationSspi,
     {$endif OSWINDOWS}
     TRestServerAuthenticationDefault]);
   fClient.Server.AuthenticationRegister(TRestServerAuthenticationNone);
@@ -1734,7 +1734,7 @@ begin
   // restore default authentications
   fClient.Server.AuthenticationRegister([
     {$ifdef OSWINDOWS}
-    TRestServerAuthenticationSSPI,
+    TRestServerAuthenticationSspi,
     {$endif OSWINDOWS}
     TRestServerAuthenticationDefault]);
   fClient.SetUser('User', 'synopse');

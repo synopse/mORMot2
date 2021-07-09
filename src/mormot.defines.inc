@@ -57,9 +57,9 @@
 // all crc32c and aesenc/aesdec opcodes - is set for FPC DARWIN target
 
 {.$define WITH_ERMS}
-// you may define this to enable REP MOVSB/STOSB for Fillchar/Move if cfERMS
-// flag is available in Intel's CpuFeatures
-// -> disabled by default, since in practice it is (much) slower for small blocks
+// you may define this to enable REP MOVSB/STOSB for x86_64 FillcharFast/MoveFast
+// if cfERMS flag is available in Intel's CpuFeatures
+// -> disabled by default, since in practice it is slower than non-temporal mov
 
 {.$define NOXPOWEREDNAME}
 // define this to avoid sending "X-Powered-By: Synopse mORMot" HTTP header
@@ -404,15 +404,17 @@
       {$define HASITERATORS}
     {$ifend}
     {$if CompilerVersion = 20}
-      {$define ISDELPHI20092010} // specific compilation issues
+      {$define ISDELPHI2009}     // Delphi 2009 specific compilation issues
+      {$define ISDELPHI20092010}
+      {$define HASNOSTATICRTTI}  // Delphi 2009 has no TypeInfo(TGUID)
     {$ifend}
     {$if CompilerVersion = 21}
-      {$define ISDELPHI20092010} //specific compilation issues
+      {$define ISDELPHI20092010} // Delphi 2010 specific compilation issues
     {$ifend}
     {$if CompilerVersion >= 21.0}
-      {$define HASSAFEINLINE} // Delphi 2007 has sometimes troubles inlining :(
+      {$define HASSAFEINLINE}  // Delphi 2007 has sometimes troubles inlining :(
       {$define ISDELPHI2010}
-      {$define HASGENERICS}
+      {$define HASGENERICS}     // Delphi 2009 has unusable generics
       {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
       {$define ISDELPHI2010_OR_FPC_NEWRTTI}
       {$define HASTTHREADSTART}

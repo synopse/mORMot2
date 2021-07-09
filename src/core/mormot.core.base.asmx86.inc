@@ -11,8 +11,10 @@
   {$WARN 7104 off : Use of -offset(%ebp) is not recommended for local variable access }
 {$endif FPC}
 
-
 {$ifdef ASMX86}
+
+var
+  ERMSB_MIN_SIZE: integer = maxInt; // "rep stosb/movsb" disabled by default
 
 // fast x87 versions by John O'Harrow - SSE2 is not really faster
 procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
@@ -22,13 +24,15 @@ asm
         mov     ch, cl                 // copy value into both bytes of cx
         cmp     edx, 32
         jl      @small
+        cmp     edx, ERMSB_MIN_SIZE
+        ja      @ermsb
         mov     [eax], cx              // fill first 8 bytes
         mov     [eax + 2], cx
         mov     [eax + 4], cx
         mov     [eax + 6], cx
         sub     edx, 16
         fld     qword ptr [eax]
-        fst     qword ptr [eax + edx]    // fill last 16 bytes
+        fst     qword ptr [eax + edx]  // fill last 16 bytes
         fst     qword ptr [eax + edx + 8]
         mov     ecx, eax
         and     ecx, 7                 // 8-byte align writes
@@ -38,12 +42,20 @@ asm
         add     eax, edx
         neg     edx
         {$ifdef FPC} align 8 {$endif}
-@loop:  fst     qword ptr [eax + edx]    // fill 16 bytes per loop
+@loop:  fst     qword ptr [eax + edx]  // fill 16 bytes per loop
         fst     qword ptr [eax + edx + 8]
         add     edx, 16
         jl      @loop
         ffree   st(0)
         fincstp
+        ret
+@ermsb: push    edi
+        mov     edi, eax
+        mov     al, cl
+        mov     ecx, edx
+        cld
+        rep     stosb                    // ERMSB version
+        pop     edi
         ret
 @small: test    edx, edx
         jle     @done
@@ -71,6 +83,8 @@ asm
         ret                         // for 4-bytes @fill alignment
 @done:  db      $f3 // rep ret AMD trick here
 end;
+
+{$ifndef FPC_X86} // FPC RTL has fastmove.inc -> our FPU/ERMS asm is slower
 
 // fast x87 versions by John O'Harrow - SSE2 is not really faster
 procedure MoveFast(const src; var dst; cnt: PtrInt);
@@ -100,7 +114,29 @@ asm
 @exit:  rep     ret
         {$ifdef FPC} align 4 {$endif}
 @table: dd      @exit, @m01, @m02, @m03, @m04, @m05, @m06, @m07, @m08
-@lrgfwd:push    edx
+@ermsf: push    esi
+        push    edi
+        mov     esi, eax
+        mov     edi, edx
+        cld
+        rep     movsb  // ERMSB forward move
+        pop     edi
+        pop     esi
+        ret
+@ermsb: push    esi
+        push    edi
+        lea     esi, [eax + ecx - 1]
+        lea     edi, [edx + ecx - 1]
+        std
+        rep     movsb  // ERMSB backward move
+        pop     edi
+        pop     esi
+        cld            // FPC requires this
+        ret
+@lrgfwd:// large forward move
+        cmp     ecx, ERMSB_MIN_SIZE
+        ja      @ermsf
+        push    edx
         fild    qword ptr [eax]       // first 8
         lea     eax, [eax + ecx - 8]
         lea     ecx, [ecx + edx - 8]
@@ -126,7 +162,10 @@ asm
         cmp     eax, edx
         lea     edx, [edx + ecx]
         jna     @lrgfwd
-        sub     ecx, 8               // backward move
+        // large backward/overlapping move
+        cmp     ecx, ERMSB_MIN_SIZE
+        ja      @ermsb
+        sub     ecx, 8
         push    ecx
         fild    qword ptr [eax + ecx] // last 8
         fild    qword ptr [eax]       // first 8
@@ -176,6 +215,8 @@ asm
         mov     [edx], ecx
         mov     [edx + 4], eax
 end;
+
+{$endif FPC_X86}
 
 function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
 {$ifdef FPC}nostackframe; assembler;{$endif}

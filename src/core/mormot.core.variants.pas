@@ -643,7 +643,19 @@ type
       read GetCurrent;
   end;
 
-  /// low-level Enumerator as returned by TDocVariantData.Items
+  /// low-level Enumerator as returned by TDocVariantData.FieldNames
+  TDocVariantFieldNamesEnumerator = record
+  private
+    Curr, After: PRawUtf8;
+  public
+    function MoveNext: Boolean; inline;
+    function GetEnumerator: TDocVariantFieldNamesEnumerator; inline;
+    /// returns the current Name/Value or Value as pointers in TDocVariantFields
+    property Current: PRawUtf8
+      read Curr;
+  end;
+
+  /// low-level Enumerator as returned by TDocVariantData.Items and FieldValues
   TDocVariantItemsEnumerator = record
   private
     State: TDocVariantEnumeratorState;
@@ -963,6 +975,26 @@ type
     // !     writeln(e.Name^, ':', e.Value^);
     // ! // output  a:1  b:2  c:3
     function Fields: TDocVariantFieldsEnumerator;
+    /// an enumerator able to compile "for .. in dv.FieldNames do" for objects
+    // - returns pointers over all Names[]
+    // - don't iterate if the document is an array - so n is never nil:
+    // ! var n: PRawUtf8;
+    // ! ...
+    // !   dv.InitJson('{a:1,b:2,c:3}');
+    // !   for n in dv.FieldNames do
+    // !     writeln(n^);
+    // ! // output  a  b  c
+    function FieldNames: TDocVariantFieldNamesEnumerator;
+    /// an enumerator able to compile "for .. in dv.FieldValues do" for objects
+    // - returns pointers over all Values[]
+    // - don't iterate if the document is an array:
+    // ! var v: PVariant;
+    // ! ...
+    // !   dv.InitJson('{a:1,b:2,c:3}');
+    // !   for v in dv.FieldValues do
+    // !     writeln(v^);
+    // ! // output  1  2  3
+    function FieldValues: TDocVariantItemsEnumerator;
     /// an enumerator able to compile "for .. in dv.Items do" for arrays
     // - returns a PVariant over all Values[] of a document array
     // - don't iterate if the document is an object
@@ -1304,17 +1336,22 @@ type
     // and/or as varDouble is AllowVarDouble is set)
     // - if Update=TRUE, will set the property, even if it is existing
     function AddValueFromText(const aName, aValue: RawUtf8;
-      Update: boolean = false; AllowVarDouble: boolean = false): integer;
+      DoUpdate: boolean = false; AllowVarDouble: boolean = false): integer;
     /// add some properties to a TDocVariantData dvObject
     // - data is supplied two by two, as Name,Value pairs
     // - caller should ensure that Kind=dvObject, otherwise it won't do anything
-    // - any existing Name would be duplicated
+    // - any existing Name would be duplicated - use Update() if you want to
+    // replace any existing value
     procedure AddNameValuesToObject(const NameValuePairs: array of const);
     /// merge some properties to a TDocVariantData dvObject
     // - data is supplied two by two, as Name,Value pairs
     // - caller should ensure that Kind=dvObject, otherwise it won't do anything
     // - any existing Name would be updated with the new Value
+    procedure Update(const NameValuePairs: array of const);
+    {$ifndef PUREMORMOT2}
+    /// deprecated method which redirects to Update()
     procedure AddOrUpdateNameValuesToObject(const NameValuePairs: array of const);
+    {$endif PUREMORMOT2}
     /// merge some TDocVariantData dvObject properties to a TDocVariantData dvObject
     // - data is supplied two by two, as Name,Value pairs
     // - caller should ensure that both variants have Kind=dvObject, otherwise
@@ -1511,9 +1548,11 @@ type
     property Capacity: integer
       read GetCapacity write SetCapacity;
     /// direct acces to the low-level internal array of values
+    // - note that length(Values)=Capacity and not Count, so copy(Values, 0, Count)
+    // or use FieldValues iterator if you want the exact count
     // - transtyping a variant and direct access to TDocVariantData is the
     // fastest way of accessing all properties of a given dvObject:
-    // ! with TDocVariantData(aVariantObject) do
+    // ! with _Safe(aVariantObject)^ do
     // !   for i := 0 to Count-1 do
     // !     writeln(Names[i],'=',Values[i]);
     // - or to access a dvArray items (e.g. a MongoDB collection):
@@ -1524,9 +1563,11 @@ type
       read VValue;
     /// direct acces to the low-level internal array of names
     // - is void (nil) if Kind is not dvObject
+    // - note that length(Names)=Capacity and not Count, so copy(Names, 0, Count)
+    // or use FieldNames iterator if you want the exact count
     // - transtyping a variant and direct access to TDocVariantData is the
     // fastest way of accessing all properties of a given dvObject:
-    // ! with TDocVariantData(aVariantObject) do
+    // ! with _Safe(aVariantObject)^ do
     // !   for i := 0 to Count-1 do
     // !     writeln(Names[i],'=',Values[i]);
     property Names: TRawUtf8DynArray
@@ -3961,7 +4002,7 @@ end;
 function TDocVariantEnumeratorState.MoveNext: Boolean;
 begin
    inc(Curr);
-   result := PtrUInt(Curr) < PtrUInt(After);
+   result := PtrUInt(Curr) < PtrUInt(After); // Void = nil<nil = false
 end;
 
 { TDocVariantFieldsEnumerator }
@@ -3981,6 +4022,19 @@ begin
 end;
 
 function TDocVariantFieldsEnumerator.GetEnumerator: TDocVariantFieldsEnumerator;
+begin
+  result := self;
+end;
+
+{ TDocVariantFieldNamesEnumerator }
+
+function TDocVariantFieldNamesEnumerator.MoveNext: Boolean;
+begin
+  inc(Curr);
+  result := PtrUInt(Curr) < PtrUInt(After);
+end;
+
+function TDocVariantFieldNamesEnumerator.GetEnumerator: TDocVariantFieldNamesEnumerator;
 begin
   result := self;
 end;
@@ -4092,7 +4146,7 @@ begin
       include(aOptions, dvoIsObject);
   opt := word(aOptions);
   TRttiVarData(self).VType := DocVariantVType + opt shl 16;
-  pointer(VName) := nil;
+  pointer(VName) := nil; // reset garbage content -> explicit Clear call needed
   pointer(VValue) := nil;
   VCount := 0;
 end;
@@ -4154,22 +4208,30 @@ begin
   inc(VCount, n);
 end;
 
+{$ifndef PUREMORMOT2}
 procedure TDocVariantData.AddOrUpdateNameValuesToObject(
   const NameValuePairs: array of const);
+begin
+  Update(NameValuePairs);
+end;
+{$endif PUREMORMOT2}
+
+procedure TDocVariantData.Update(const NameValuePairs: array of const);
 var
   n, arg: PtrInt;
-  n2: RawUtf8;
-  v: Variant;
+  nam: RawUtf8;
+  val: Variant;
 begin
-  n := length(NameValuePairs) shr 1;
+  n := length(NameValuePairs);
   if (n = 0) or
+     (n and 1 = 1) or
      (dvoIsArray in VOptions) then
     exit; // nothing to add
-  for arg := 0 to n - 1 do
+  for arg := 0 to (n shr 1) - 1 do
   begin
-    VarRecToUtf8(NameValuePairs[arg * 2], n2);
-    VarRecToVariant(NameValuePairs[arg * 2 + 1], v);
-    AddOrUpdateValue(n2, v)
+    VarRecToUtf8(NameValuePairs[arg * 2], nam);
+    VarRecToVariant(NameValuePairs[arg * 2 + 1], val);
+    AddOrUpdateValue(nam, val)
   end;
 end;
 
@@ -4831,6 +4893,30 @@ begin
     result := GetEnumerator;
 end;
 
+function TDocVariantData.FieldNames: TDocVariantFieldNamesEnumerator;
+begin
+  if (dvoIsArray in VOptions) or
+     (VCount = 0) then
+  begin
+    result.Curr := nil;
+    result.After := nil;
+  end
+  else
+  begin
+    result.Curr := pointer(Names);
+    result.After := @Names[VCount];
+    dec(result.Curr);
+  end;
+end;
+
+function TDocVariantData.FieldValues: TDocVariantItemsEnumerator;
+begin
+  if dvoIsArray in VOptions then
+    result{%H-}.State.Void
+  else
+    result.State.Init(pointer(Values), VCount);
+end;
+
 {$endif HASITERATORS}
 
 procedure TDocVariantData.SetCapacity(aValue: integer);
@@ -4868,7 +4954,7 @@ begin
 end;
 
 function TDocVariantData.AddValueFromText(const aName, aValue: RawUtf8;
-  Update, AllowVarDouble: boolean): integer;
+  DoUpdate, AllowVarDouble: boolean): integer;
 begin
   if aName = '' then
   begin
@@ -4876,7 +4962,7 @@ begin
     exit;
   end;
   result := GetValueIndex(aName);
-  if not Update and
+  if not DoUpdate and
      (dvoCheckForDuplicatedNames in VOptions) and
      (result >= 0) then
     raise EDocVariant.CreateUtf8(

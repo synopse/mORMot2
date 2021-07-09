@@ -33,6 +33,7 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.datetime,
   mormot.core.rtti,
   mormot.core.buffers,
   mormot.core.data;
@@ -434,6 +435,10 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// convert the value into an unsigned integer
     function ToCardinal: PtrUInt;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// convert the ISO-8601 text value as TDateTime
+    // - could have been written e.g. by DateTimeToIso8601Text()
+    function Iso8601ToDateTime: TDateTime;
       {$ifdef HASINLINE}inline;{$endif}
     /// will call IdemPropNameU() over the stored text Value
     function Idem(const Text: RawUtf8): boolean;
@@ -2264,7 +2269,6 @@ type
 implementation
 
 uses
-  mormot.core.datetime,
   mormot.core.variants;
 
 
@@ -3099,6 +3103,11 @@ begin
   result := GetCardinal(Value);
 end;
 
+function TValuePUtf8Char.Iso8601ToDateTime: TDateTime;
+begin
+  result := Iso8601ToDateTimePUtf8Char(Value, ValueLen);
+end;
+
 function TValuePUtf8Char.Idem(const Text: RawUtf8): boolean;
 begin
   result := (length(Text) = ValueLen) and
@@ -3422,10 +3431,8 @@ function GotoNextJsonObjectOrArrayInternal(P, PMax: PUtf8Char;
   EndChar: AnsiChar): PUtf8Char;
 var
   {$ifdef CPUX86NOTPIC} // not enough registers
-  jt: TJsonTokens absolute JSON_TOKENS;
   jsonset: TJsonCharSet absolute JSON_CHARS;
   {$else}
-  jt: PJsonTokens;
   jsonset: PJsonCharSet;
   {$endif CPUX86NOTPIC}
 label
@@ -3434,11 +3441,11 @@ begin
   // should match GetJsonPropName()
   result := nil;
   {$ifndef CPUX86NOTPIC}
-  jt := @JSON_TOKENS;
+  jsonset := @JSON_CHARS;
   {$endif CPUX86NOTPIC}
   repeat
     // main loop for quick parsing without full validation
-    case jt[P^] of
+    case JSON_TOKENS[P^] of
       jtObjectStart: // '{'
         begin
           repeat
@@ -3484,16 +3491,11 @@ begin
           inc(P);
         end;
       jtFirstDigit: // '-', '0'..'9'
-        begin
-          // '0123' excluded by JSON, but not here
-          {$ifndef CPUX86NOTPIC}
-          jsonset := @JSON_CHARS;
-          {$endif CPUX86NOTPIC}
-          repeat
-            inc(P);
-          until not (jcDigitFloatChar in jsonset[P^]);
-          // not ['-', '+', '0'..'9', '.', 'E', 'e']
-        end;
+        // '0123' excluded by JSON, but not here
+        repeat
+          inc(P);
+        until not (jcDigitFloatChar in jsonset[P^]);
+        // not ['-', '+', '0'..'9', '.', 'E', 'e']
       jtTrueFirstChar: // 't'
         if PInteger(P)^ = TRUE_LOW then
           inc(P, 4)
@@ -3537,10 +3539,7 @@ begin
         end;
       jtIdentifierFirstChar: // ['_', 'a'..'z', 'A'..'Z', '$']
         begin
-Prop:     {$ifndef CPUX86NOTPIC}
-          jsonset := @JSON_CHARS;
-          {$endif CPUX86NOTPIC}
-          repeat
+Prop:     repeat
             inc(P);
           until not (jcJsonIdentifier in jsonset[P^]);
           // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
@@ -4749,10 +4748,10 @@ procedure TJsonSaveContext.Init(WR: TTextWriter;
   WriteOptions: TTextWriterWriteObjectOptions; Rtti: TRttiCustom);
 begin
   W := WR;
-  Info := Rtti;
-  Options := WriteOptions;
   if Rtti <> nil then
-    Options := Options + TRttiJson(Rtti).fIncludeWriteOptions;
+    WriteOptions := WriteOptions + TRttiJson(Rtti).fIncludeWriteOptions;
+  Options := WriteOptions;
+  Info := Rtti;
   Prop := nil;
 end;
 
@@ -5172,20 +5171,29 @@ const
     nil, nil, nil, nil, @_JS_ID, @_JS_ID, @_JS_QWord, @_JS_QWord, @_JS_QWord);
 
 type
-  TSPHook = class(TSynPersistent); // to access its protected methods
-  TSPHookClass = class of TSPHook;
+  TCCHook = class(TObjectWithCustomCreate); // to access its protected methods
+  TCCHookClass = class of TCCHook;
+
+procedure AppendExceptionLocation(w: TTextWriter; e: ESynException);
+begin // call TDebugFile.FindLocationShort if mormot.core.log is used
+  w.Add('"');
+  w.AddShort(GetExecutableLocation(e.RaisedAt));
+  w.Add('"');
+end;
 
 // serialization of published props for records and classes
 procedure _JS_RttiCustom(Data: PAnsiChar; const Ctxt: TJsonSaveContext);
 var
-  c: TJsonSaveContext;
+  nfo: TRttiJson;
   p: PRttiCustomProp;
   n: integer;
   done: boolean;
+  c: TJsonSaveContext;
 begin
   c.W := Ctxt.W;
   c.Options := Ctxt.Options;
-  if (Ctxt.Info.Kind = rkClass) and
+  nfo := TRttiJson(Ctxt.Info);
+  if (nfo.Kind = rkClass) and
      (Data <> nil) then
     // class instances are accessed by reference, records are stored by value
     Data := PPointer(Data)^
@@ -5194,17 +5202,17 @@ begin
   if Data = nil then
     // append 'null' for nil class instance
     c.W.AddNull
-  else if TRttiJson(Ctxt.Info).fJsonWriter.Code <> nil then
+  else if nfo.fJsonWriter.Code <> nil then
     // TRttiJson.RegisterCustomSerializer() custom callbacks
-    TOnRttiJsonWrite(TRttiJson(Ctxt.Info).fJsonWriter)(c.W, Data, c.Options)
-  else if not (rcfSynPersistentHook in Ctxt.Info.Flags) or
-          not TSPHook(Data).RttiBeforeWriteObject(c.W, c.Options) then
+    TOnRttiJsonWrite(nfo.fJsonWriter)(c.W, Data, c.Options)
+  else if not (rcfHookWrite in nfo.Flags) or
+          not TCCHook(Data).RttiBeforeWriteObject(c.W, c.Options) then
   begin
     // regular JSON serialization using nested fields/properties
     c.W.BlockBegin('{', c.Options);
-    c.Prop := pointer(Ctxt.Info.Props.List);
-    n := Ctxt.Info.Props.Count;
-    if (Ctxt.Info.Kind = rkClass) and
+    c.Prop := pointer(nfo.Props.List);
+    n := nfo.Props.Count;
+    if (nfo.Kind = rkClass) and
        (c.Options * [woFullExpand, woStoreClassName, woStorePointer, woDontStoreInherited] <> []) then
     begin
       if woFullExpand in c.Options then
@@ -5226,11 +5234,7 @@ begin
       begin
         c.W.WriteObjectPropNameShort('Address', c.Options);
         if Ctxt.Info.ValueRtlClass = vcESynException then
-        begin // run TDebugFile.FindLocationShort if mormot.core.log is used
-          c.W.Add('"');
-          c.W.AddShort(GetExecutableLocation(ESynException(Data).RaisedAt));
-          c.W.Add('"');
-        end
+          AppendExceptionLocation(c.W, ESynException(Data))
         else
           c.W.AddPointer(PtrUInt(Data), '"');
         if c.Prop <> nil then
@@ -5271,10 +5275,10 @@ begin
             c.W.BlockAfterItem(c.Options);
           done := true;
           c.W.WriteObjectPropName(pointer(p^.Name), length(p^.Name), c.Options);
-          if not (rcfSynPersistentHook in Ctxt.Info.Flags) or
-             not TSPHook(Data).RttiWritePropertyValue(c.W, p, c.Options) then
+          if not (rcfHookWriteProperty in Ctxt.Info.Flags) or
+             not TCCHook(Data).RttiWritePropertyValue(c.W, p, c.Options) then
             if (woHideSensitivePersonalInformation in c.Options) and
-               (rcfSPI in p^.Value.Flags) then
+               (rcfSpi in p^.Value.Flags) then
               c.W.AddShorter('"***"')
             else if p^.OffsetGet >= 0 then
             begin
@@ -5291,8 +5295,8 @@ begin
           break;
         inc(c.Prop);
       until false;
-    if rcfSynPersistentHook in Ctxt.Info.Flags then
-       TSPHook(Data).RttiAfterWriteObject(c.W, c.Options);
+    if rcfHookWrite in Ctxt.Info.Flags then
+       TCCHook(Data).RttiAfterWriteObject(c.W, c.Options);
     c.W.BlockEnd('}', c.Options);
     if woFullExpand in c.Options then
       c.W.BlockEnd('}', c.Options);
@@ -6186,18 +6190,18 @@ var
   ctxt: TJsonSaveContext;
   save: TRttiJsonSave;
 begin
-  if Value = nil then
-    AddNull
-  else
+  if Value <> nil then
   begin
     // Rtti.RegisterClass() may create fake RTTI if {$M+} was not used
     {%H-}ctxt.Init(self, WriteOptions, Rtti.RegisterClass(PClass(Value)^));
     save := ctxt.Info.JsonSave;
     if Assigned(save) then
-      save(@Value, ctxt)
-    else
-      AddNull;
+    begin
+      save(@Value, ctxt);
+      exit;
+    end;
   end;
+  AddNull;
 end;
 
 procedure TTextWriter.AddRttiCustomJson(Value: pointer; RttiCustom: TObject;
@@ -7541,8 +7545,12 @@ begin
   if not Assigned(load) then
     Ctxt.Valid := false
   else if Prop.OffsetSet >= 0 then
-    // fast parsing into the property/field memory
-    load(Data + Prop.OffsetSet, Ctxt)
+    if (rcfHookReadProperty in Ctxt.Info.Flags) and
+       TCCHook(Data).RttiBeforeReadPropertyValue(@Ctxt, @Prop) then
+      // custom parsing method (e.g. TOrm nested TOrm properties)
+    else
+      // default fast parsing into the property/field memory
+      load(Data + Prop.OffsetSet, Ctxt)
   else if Prop.Value.Kind = rkClass then
     // special case of a setter method for a class property: use a temp instance
     if jpoSetterNoCreate in Ctxt.Options then
@@ -7609,8 +7617,8 @@ begin
         Ctxt.Info.Props.FinalizeAndClearPublishedProperties(PPointer(Data)^);
       // class instances are accessed by reference, records are stored by value
       Data := PPointer(Data)^;
-      if (rcfSynPersistentHook in Ctxt.Info.Flags) and
-         (TSPHook(Data).RttiBeforeReadObject(@Ctxt)) then
+      if (rcfHookRead in Ctxt.Info.Flags) and
+         (TCCHook(Data).RttiBeforeReadObject(@Ctxt)) then
         exit;
     end
     else
@@ -7699,8 +7707,8 @@ any:        propname := GetJsonPropName(Ctxt.Json, @propnamelen);
       Ctxt.ParseEndOfObject; // mimics GetJsonField() - set Ctxt.EndOfObject
       Ctxt.Info := root; // restore
     end;
-    if rcfSynPersistentHook in Ctxt.Info.Flags then
-      TSPHook(Data).RttiAfterReadObject;
+    if rcfHookRead in Ctxt.Info.Flags then
+      TCCHook(Data).RttiAfterReadObject;
   end;
 end;
 
@@ -9335,7 +9343,7 @@ begin
       begin
         fClassNewInstance := @_New_ObjectWithCustomCreate;
         // allow any kind of customization for TObjectWithCustomCreate children
-        TSPHookClass(fValueClass).RttiCustomSetParser(self);
+        TCCHookClass(fValueClass).RttiCustomSetParser(self);
       end
       else if C = TSynObjectList then
       begin
@@ -9986,7 +9994,7 @@ var
   rtti: TRttiJson;
   n: integer;
   p: ^PRttiCustomProp;
-  arr: PPAnsiChar;
+  arr: pointer;
   o: TObject;
 begin
   rtti := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^;
@@ -10010,10 +10018,10 @@ begin
     exit;
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF;
   repeat
-    arr := pointer(PAnsiChar(ObjectInstance) + p^^.OffsetGet);
-    if arr^ <> nil then
+    arr := PPointer(PAnsiChar(ObjectInstance) + p^^.OffsetGet)^;
+    if arr <> nil then
       // inlined ObjArrayClear()
-      RawObjectsClear(pointer(arr^), PDALen(arr^ - _DALEN)^ + _DAOFF);
+      RawObjectsClear(arr, PDALen(PAnsiChar(arr) - _DALEN)^ + _DAOFF);
     inc(p);
     dec(n);
   until n = 0;

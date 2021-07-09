@@ -1868,10 +1868,10 @@ var
 begin
   result := (a[0] = b[0]) and
             (a[1] = b[1])
-            {$ifndef CPU64} and
+            {$ifdef CPU32} and
             (a[2] = b[2]) and
             (a[3] = b[3])
-            {$endif CPU64};
+            {$endif CPU32};
 end;
 
 function IsEqual(const id1, id2: TEccCertificateID): boolean;
@@ -1881,10 +1881,10 @@ var
 begin
   result := (a[0] = b[0]) and
             (a[1] = b[1])
-            {$ifndef CPU64} and
+            {$ifdef CPU32} and
             (a[2] = b[2]) and
             (a[3] = b[3])
-            {$endif CPU64};
+            {$endif CPU32};
 end;
 
 function IsZero(const issuer: TEccCertificateIssuer): boolean;
@@ -1893,10 +1893,10 @@ var
 begin
   result := (a[0] = 0) and
             (a[1] = 0)
-            {$ifndef CPU64} and
+            {$ifdef CPU32} and
             (a[2] = 0) and
             (a [3] = 0)
-            {$endif CPU64};
+            {$endif CPU32};
 end;
 
 function IsZero(const id: TEccCertificateID): boolean;
@@ -1905,10 +1905,10 @@ var
 begin
   result := (a[0] = 0) and
             (a[1] = 0)
-            {$ifndef CPU64} and
+            {$ifdef CPU32} and
             (a[2] = 0) and
             (a [3] = 0)
-            {$endif CPU64};
+            {$endif CPU32};
 end;
 
 const

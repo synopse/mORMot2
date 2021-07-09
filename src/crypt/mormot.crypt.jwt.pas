@@ -383,15 +383,17 @@ type
       aPBKDF2Secret: PHash512Rec = nil); reintroduce;
     /// finalize the instance
     destructor Destroy; override;
+    /// low-level read access to the internal signature structure
+    property SignPrepared: TSynSigner
+      read fSignPrepared;
+    {$ifndef ISDELPHI2009} // avoid Delphi 2009 F2084 Internal Error: DT5830
     /// the digital signature size, in byte
     property SignatureSize: integer
       read fSignPrepared.SignatureSize;
     /// the TSynSigner raw algorithm used for digital signature
     property SignatureAlgo: TSignAlgo
       read fSignPrepared.Algo;
-    /// low-level read access to the internal signature structure
-    property SignPrepared: TSynSigner
-      read fSignPrepared;
+    {$endif ISDELPHI2009}
   end;
 
   /// meta-class for TJwtSynSignerAbstract creations
@@ -1161,7 +1163,7 @@ var
   temp: THash512Rec;
 begin
   JWT.result := jwtInvalidSignature;
-  if length(signature) <> SignatureSize then
+  if length(signature) <> fSignPrepared.SignatureSize then
     exit;
   signer := fSignPrepared; // thread-safe re-use of prepared TSynSigner
   signer.Update(pointer(headpayload), length(headpayload));
@@ -1169,7 +1171,7 @@ begin
 {  writeln('payload=',headpayload);
    writeln('sign=',bintohex(@temp,SignatureSize));
    writeln('expected=',bintohex(pointer(signature),SignatureSize)); }
-  if CompareMem(@temp, pointer(signature), SignatureSize) then
+  if CompareMem(@temp, pointer(signature), fSignPrepared.SignatureSize) then
     JWT.result := jwtValid;
 end;
 
@@ -1182,7 +1184,7 @@ begin
   signer := fSignPrepared;
   signer.Update(pointer(headpayload), length(headpayload));
   signer.Final(temp);
-  result := BinToBase64Uri(@temp, SignatureSize);
+  result := BinToBase64Uri(@temp, fSignPrepared.SignatureSize);
 end;
 
 destructor TJwtSynSignerAbstract.Destroy;

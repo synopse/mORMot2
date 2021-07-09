@@ -56,6 +56,7 @@ function Iso8601ToDateTime(const S: RawByteString): TDateTime; overload;
 
 /// Date/Time conversion from ISO-8601
 // - handle 'YYYYMMDDThhmmss' and 'YYYY-MM-DD hh:mm:ss' format
+// - could have been written e.g. by DateTimeToIso8601Text()
 // - will also recognize '.sss' milliseconds suffix, if any
 // - if L is left to default 0, it will be computed from StrLen(P)
 function Iso8601ToDateTimePUtf8Char(P: PUtf8Char; L: integer = 0): TDateTime;

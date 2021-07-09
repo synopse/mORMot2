@@ -509,23 +509,31 @@ type
     {$ifdef FPC}
 
     TStrRec = packed record // see TAnsiRec/TUnicodeRec in astrings/ustrings.inc
-    {$ifdef HASCODEPAGE}
-      codePage: TSystemCodePage; // =Word
-      elemSize: Word;
-      {$ifdef CPU64}
-      _PaddingToQWord: DWord;
-      {$endif CPU64}
-    {$endif HASCODEPAGE}
-      refCnt: TRefCnt; // =SizeInt
-      length: TStrLen;
+    case integer of
+      0: (
+          {$ifdef HASCODEPAGE}
+          codePage: TSystemCodePage; // =Word
+          elemSize: Word;
+          {$ifdef CPU64}
+          _PaddingToQWord: DWord;
+          {$endif CPU64}
+          {$endif HASCODEPAGE}
+          refCnt: TRefCnt; // =SizeInt
+          length: TStrLen;
+        );
+      {$ifdef HASCODEPAGE}
+      1: (
+          codePageElemSize: cardinal;
+        );
+      {$endif HASCODEPAGE}
     end;
 
     TDynArrayRec = packed record
       refCnt: TRefCnt; // =SizeInt
-      high: tdynarrayindex;  // differs from Delphi: equals length-1
-      function GetLength: sizeint; inline;
-      procedure SetLength(len: sizeint); inline;
-      property length: sizeint // Delphi compatibility wrapper
+      high: TDALen;   // =SizeInt (differs from Delphi: equals length-1)
+      function GetLength: TDALen; inline;
+      procedure SetLength(len: TDALen); inline;
+      property length: TDALen // Delphi compatibility wrapper
         read GetLength write SetLength;
     end;
 
@@ -2405,8 +2413,14 @@ procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
 /// our fast version of move()
 // - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available),
 // or optimized X87 assembly implementation for older CPUs
+// - FPC i386 has fastmove.inc which is faster than our FPU/ERMS version
+// - FPC x86_64 RTL is slower than our SSE2/AVX asm
 // - on non-Intel CPUs, it will fallback to the default RTL Move()
+{$ifdef FPC_X86}
+var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
+{$else}
 procedure MoveFast(const src; var dst; cnt: PtrInt);
+{$endif FPC_X86}
 
 {$else} // fallback to RTL versions on non-INTEL or PIC platforms
 
@@ -2480,7 +2494,7 @@ function PosExString(const SubStr, S: string; Offset: PtrUInt = 1): PtrInt;
 
 /// optimized version of PosEx() with search text as one AnsiChar
 function PosExChar(Chr: AnsiChar; const Str: RawUtf8): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif}
 
 /// fast retrieve the position of a given character in a #0 ended buffer
 // - will use fast SSE2 asm on x86_64
@@ -4073,9 +4087,9 @@ var
   a: TPtrIntArray absolute guid;
 begin
   result := (a[0] = 0) and
-            (a[1] = 0) {$ifndef CPU64} and
+            (a[1] = 0) {$ifdef CPU32} and
             (a[2] = 0) and
-            (a[3] = 0) {$endif CPU64};
+            (a[3] = 0) {$endif CPU32};
 end;
 
 function AddGuid(var guids: TGuidDynArray; const guid: TGUID; NoDuplicates: boolean): integer;
@@ -4144,22 +4158,30 @@ end;
 {$endif FPC_ASMX64}
 
 function FastNewString(len, codepage: PtrInt): PAnsiChar;
+var
+  P: PStrRec;
 begin
   result := nil;
   if len > 0 then
   begin
     {$ifdef FPC_X64MM}
-    result := _GetMem(len + (_STRRECSIZE + 4));
+    P := _GetMem(len + (_STRRECSIZE + 4));
+    result := PAnsiChar(P) + _STRRECSIZE;
     {$else}
     GetMem(result, len + (_STRRECSIZE + 4));
+    P := pointer(result);
+    inc(PStrRec(result));
     {$endif FPC_X64MM}
     {$ifdef HASCODEPAGE} // also set elemSize := 1
-    PCardinal(@PStrRec(result)^.codePage)^ := codepage + (1 shl 16);
+    {$ifdef FPC}
+    P^.codePageElemSize := codepage + (1 shl 16);
+    {$else}
+    PCardinal(@P^.codePage)^ := codepage + (1 shl 16);
+    {$endif FPC}
     {$endif HASCODEPAGE}
-    PStrRec(result)^.refCnt := 1;
-    PStrRec(result)^.length := len;
-    PCardinal(result + len + _STRRECSIZE)^ := 0; // ensure ends with four #0
-    inc(PStrRec(result));
+    P^.refCnt := 1;
+    P^.length := len;
+    PCardinal(PAnsiChar(P) + len + _STRRECSIZE)^ := 0; // ends with four #0
   end;
 end;
 
@@ -5562,12 +5584,12 @@ end;
 
 {$ifdef FPC}
 
-function TDynArrayRec.GetLength: sizeint;
+function TDynArrayRec.GetLength: TDALen;
 begin
   result := high + 1;
 end;
 
-procedure TDynArrayRec.SetLength(len: sizeint);
+procedure TDynArrayRec.SetLength(len: TDALen);
 begin
   high := len - 1;
 end;
@@ -7626,7 +7648,7 @@ function IsZero(const dig: THash128): boolean;
 var
   a: TPtrIntArray absolute dig;
 begin
-  result := a[0] or a[1] {$ifndef CPU64} or a[2] or a[3]{$endif}  = 0;
+  result := a[0] or a[1] {$ifdef CPU32} or a[2] or a[3]{$endif}  = 0;
 end;
 
 function IsEqual(const A, B: THash128): boolean;
@@ -7635,7 +7657,7 @@ var
   b_: TPtrIntArray absolute B;
 begin
   // uses anti-forensic time constant "xor/or" pattern
-  result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) {$ifndef CPU64} or
+  result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) {$ifdef CPU32} or
              (a_[2] xor b_[2]) or (a_[3] xor b_[3]) {$endif} ) = 0;
 end;
 
@@ -7751,7 +7773,7 @@ function IsZero(const dig: THash256): boolean;
 var
   a: TPtrIntArray absolute dig;
 begin
-  result := a[0] or a[1] or a[2] or a[3] {$ifndef CPU64} or
+  result := a[0] or a[1] or a[2] or a[3] {$ifdef CPU32} or
             a[4] or a[5] or a[6] or a[7] {$endif} = 0;
 end;
 
@@ -7762,7 +7784,7 @@ var
 begin
   // uses anti-forensic time constant "xor/or" pattern
   result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) or (a_[2] xor b_[2]) or
-    (a_[3] xor b_[3]) {$ifndef CPU64}  or (a_[4] xor b_[4]) or (a_[5] xor b_[5]) or
+    (a_[3] xor b_[3]) {$ifdef CPU32}  or (a_[4] xor b_[4]) or (a_[5] xor b_[5]) or
     (a_[6] xor b_[6]) or (a_[7] xor b_[7]) {$endif} ) = 0;
 end;
 
@@ -7780,7 +7802,7 @@ function IsZero(const dig: THash384): boolean;
 var
   a: TPtrIntArray absolute dig;
 begin
-  result := a[0] or a[1] or a[2] or a[3] or a[4] or a[5] {$ifndef CPU64} or
+  result := a[0] or a[1] or a[2] or a[3] or a[4] or a[5] {$ifdef CPU32} or
     a[6] or a[7] or a[8] or a[9] or a[10] or a[11] {$endif}  = 0;
 end;
 
@@ -7791,7 +7813,7 @@ var
 begin
   // uses anti-forensic time constant "xor/or" pattern
   result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) or (a_[2] xor b_[2]) or
-    (a_[3] xor b_[3]) or (a_[4] xor b_[4]) or (a_[5] xor b_[5]) {$ifndef CPU64} or
+    (a_[3] xor b_[3]) or (a_[4] xor b_[4]) or (a_[5] xor b_[5]) {$ifdef CPU32} or
     (a_[6] xor b_[6]) or (a_[7] xor b_[7]) or (a_[8] xor b_[8]) or
     (a_[9] xor b_[9]) or (a_[10] xor b_[10]) or (a_[11] xor b_[11]) {$endif}) = 0;
 end;
@@ -7812,7 +7834,7 @@ function IsZero(const dig: THash512): boolean;
 var
   a: TPtrIntArray absolute dig;
 begin
-  result := a[0] or a[1] or a[2] or a[3] or a[4] or a[5] or a[6] or a[7] {$ifndef CPU64}
+  result := a[0] or a[1] or a[2] or a[3] or a[4] or a[5] or a[6] or a[7] {$ifdef CPU32}
     or a[8] or a[9] or a[10] or a[11] or a[12] or a[13] or a[14] or a[15] {$endif}  = 0;
 end;
 
@@ -7824,7 +7846,7 @@ begin
   // uses anti-forensic time constant "xor/or" pattern
   result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) or (a_[2] xor b_[2]) or
              (a_[3] xor b_[3]) or (a_[4] xor b_[4]) or (a_[5] xor b_[5]) or
-             (a_[6] xor b_[6]) or (a_[7] xor b_[7]) {$ifndef CPU64} or
+             (a_[6] xor b_[6]) or (a_[7] xor b_[7]) {$ifdef CPU32} or
              (a_[8] xor b_[8]) or (a_[9] xor b_[9]) or (a_[10] xor b_[10]) or
              (a_[11] xor b_[11]) or (a_[12] xor b_[12]) or (a_[13] xor b_[13]) or
              (a_[14] xor b_[14]) or (a_[15] xor b_[15]) {$endif}) = 0;
@@ -8187,7 +8209,7 @@ begin
     result := IndexByte(
       pointer(Str)^, PStrLen(PtrUInt(Str) - _STRLEN)^, byte(Chr)) + 1
   else
-  {$else}
+  {$else} // Delphi "for" loop is faster when not inlined
     for result := 1 to PInteger(PtrInt(Str) - sizeof(integer))^ do
       if Str[result] = Chr then
         exit;
@@ -8919,6 +8941,10 @@ begin
     // available on the CPU, but not supported at OS level during context switch
     CpuFeatures := CpuFeatures - [cfAVX, cfAVX2, cfFMA];
   {$endif DISABLE_SSE42}
+  {$ifdef ASMX86}
+  if cfERMS in CpuFeatures then // ERMSB is faster than John O'Harrow FPU code
+    ERMSB_MIN_SIZE := 511;      // but not for smallest sizes due to its warmup
+  {$endif ASMX86}
   {$ifdef ASMX64}
   {$ifdef WITH_ERMS}
   if cfERMS in CpuFeatures then // actually slower than our AVX code -> disabled
@@ -8964,7 +8990,12 @@ begin
     DefaultHasher := @crc32csse42;
     InterningHasher := @crc32csse42;
     if cfPOPCNT in CpuFeatures then
-      GetBitsCountPtrInt := @GetBitsCountSse42;
+      try
+        if GetBitsCountSse42(7) = 3 then
+          GetBitsCountPtrInt := @GetBitsCountSse42;
+      except
+        exclude(CpuFeatures, cfPOPCNT);
+      end;
   end;
 end;
 

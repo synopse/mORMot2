@@ -426,9 +426,9 @@ type
     wLineNumber: word;
   end;
 
-{$ifndef CPU64}
+{$ifdef CPU32}
   {$A-} // packed records
-{$endif}
+{$endif CPU32}
 
 
 { ************ Native OleDB Interfaces }

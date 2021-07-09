@@ -2067,7 +2067,7 @@ begin
       fStartNotified := nil;
       fOnThreadTerminate(self);
     end;
-    inherited DoTerminate; // call OnTerminate via Synchronize()
+    inherited DoTerminate; // call OnTerminate via Synchronize() in main thread
   except
     // hardened: a closing thread should not jeopardize the whole executable! 
   end;

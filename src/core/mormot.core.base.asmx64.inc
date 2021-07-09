@@ -18,7 +18,7 @@
 const
   // non-temporal writes should bypass the cache when the size is bigger than
   // half the size of the largest level cache - we assume low 1MB cache here
-  CPUCACHEX64 = 512*1024;
+  CPUCACHEX64 = 512 * 1024;
 
 {
   regarding benchmark numbers from TTestLowLevelCommon.CustomRTL
@@ -273,11 +273,11 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         cmp     cnt, 32
         ja      @abv32  // >32 or <0
         sub     rdx, 8
-        jg      @sml    // 9..32
-        jmp     qword ptr [r10 + 64 + rdx * 8] // small 0..8 bytes
+        jg      @sml32  // 9..32
+        jmp     qword ptr [r10 + 64 + rdx * 8] // tinest 0..8 bytes
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @jmptab:dq @00, @01, @02, @03, @04, @05, @06, @07, @08
-@sml:   cmp     dl, 8  // 9..32 bytes
+@sml32: cmp     dl, 8  // 9..32 bytes
         jle     @sml16
         cmp     dl, 16
         jle     @sml24
@@ -565,7 +565,7 @@ asm
         test    rax, rax
         jz      @z
         mov     d, rax
-        cmp     qword ptr [rax - _STRREFCNT], 0
+        cmp     qword ptr [rax - _STRREFCNT], 0 // refcnt=-1 for const
         jl      @z
 lock    dec     qword ptr [rax - _STRREFCNT]
         jbe     @free
@@ -599,11 +599,11 @@ end;
 // brute force O(n) indexes fix after deletion (much faster than full ReHash)
 procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-{$ifdef SYSVABI}
+        {$ifdef SYSVABI}
         mov     r8, rdx
         mov     rcx, rdi
         mov     rdx, rsi
-{$endif SYSVABI}
+        {$endif SYSVABI}
         xor     eax, eax    // reset eax high bits for setg al below
         movq    xmm0, rdx   // xmm0 = 128-bit of quad deleted
         pshufd  xmm0, xmm0, 0
@@ -618,8 +618,7 @@ procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: Ptr
         add     rcx, 4
         dec     r8
         jmp     @align
-@ok:
-        {$ifdef ASMX64AVX} // AVX2 asm is not supported by Delphi (even 10.4) :(
+@ok:    {$ifdef ASMX64AVX} // AVX2 asm is not supported by Delphi (even 10.4) :(
         test    byte ptr [rip + CPUIDX64], 1 shl cpuAVX2
         jz      @sse2
         vpshufd ymm0, ymm0, 0          // shuffle to ymm0 128-bit low lane

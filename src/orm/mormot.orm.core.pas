@@ -404,6 +404,11 @@ function ClassOrmFieldType(info: PRttiInfo): TOrmFieldType;
 /// get the SQL type of this type, as managed with the database driver
 function GetOrmFieldType(Info: PRttiInfo): TOrmFieldType;
 
+/// cast a TID into a TOrm instance
+// - just like pointer(Value) but cross-platform and more explicit
+function CastID(Value: TID): pointer;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// similar to AddInt64() function, but for a TIDDynArray
 // - some random GPF were identified with AddInt64(TInt64DynArray(Values),...)
 // with the Delphi Win64 compiler
@@ -3256,6 +3261,12 @@ type
     function GetTable: TOrmTable;
     /// will register the "ID":... field value for proper JSON serialization
     class procedure RttiCustomSetParser(Rtti: TRttiCustom); override;
+    /// fake nested TOrm classes would be serialized as integer
+    function IsPropClassInstance(Prop: PRttiCustomProp): boolean; virtual;
+    function RttiWritePropertyValue(W: TBaseWriter; Prop: PRttiCustomProp;
+      Options: TTextWriterWriteObjectOptions): boolean; override;
+    function RttiBeforeReadPropertyValue(Ctxt: pointer;
+      Prop: PRttiCustomProp): boolean; override;
   protected
     fInternalState: cardinal;
     /// defined as a protected class function for OrmProps method inlining
@@ -3785,6 +3796,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// return the RTTI property information for this record
     function ClassProp: TRttiJson;
+      {$ifdef HASINLINE}inline;{$endif}
     /// return the TRecordReference Int64 value pointing to this record
     function RecordReference(Model: TOrmModel): TRecordReference;
 
@@ -5409,6 +5421,7 @@ type
       aSourceID, aDestID: TID): TID;
     function InternalFillMany(const aClient: IRestOrm; aID: TID;
       const aAndWhereSql: RawUtf8; isDest: boolean): integer;
+    function IsPropClassInstance(Prop: PRttiCustomProp): boolean; override;
   public
     /// initialize this instance, and needed internal fields
     // - will set protected fSourceID/fDestID fields
@@ -7955,6 +7968,11 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
       exit;
     end;
   end;
+end;
+
+function CastID(Value: TID): pointer;
+begin
+  result := pointer(PtrUInt(PtrInt(Value)));
 end;
 
 procedure AddID(var Values: TIDDynArray; var ValuesCount: integer; Value: TID);
@@ -16286,7 +16304,10 @@ begin
     // create the properties information from RTTI
     result := TOrmProperties.Create(self);
     rtticustom.PrivateSlot := result; // will be owned by this TRttiCustom
-    rtticustom.Flags := rtticustom.Flags + [rcfDisableStored]; // for AS_UNIQUE
+    rtticustom.Flags := rtticustom.Flags +
+      [rcfDisableStored,  // for AS_UNIQUE
+       rcfHookWriteProperty, rcfHookReadProperty, // custom RttiWrite/RttiRead
+       rcfClassMayBeID];  // for IsPropClassInstance
     self.InternalDefineModel(result);
   finally
     Rtti.DoUnLock;
@@ -16762,8 +16783,8 @@ begin
   W.Add(']');
 end;
 
-procedure TOrm.FillValue(PropName: PUtf8Char; Value: PUtf8Char;
-  wasString: boolean; FieldBits: PFieldBits);
+procedure TOrm.FillValue(PropName, Value: PUtf8Char; wasString: boolean;
+  FieldBits: PFieldBits);
 var
   field: TOrmPropInfo;
 begin
@@ -17797,6 +17818,41 @@ begin
     TypeInfo(TID), PtrInt(@TOrm(nil).fID), 'ID', {first=}true);
 end;
 
+function TOrm.IsPropClassInstance(Prop: PRttiCustomProp): boolean;
+begin
+  // returns TRUE for object serialization, FALSE for integer value
+  result := fFill.JoinedFields;
+end;
+
+function TOrm.RttiWritePropertyValue(W: TBaseWriter; Prop: PRttiCustomProp;
+  Options: TTextWriterWriteObjectOptions): boolean;
+begin
+  if (not(rcfClassMayBeID in Prop^.Value.Flags)) or
+     IsPropClassInstance(Prop) or
+     (Prop^.OffsetGet < 0) then
+    result := false // default JSON object serialization
+  else
+  begin
+    W.Add(PPtrInt(PAnsiChar(self) + Prop^.OffsetGet)^); // serialized as integer
+    result := true; // abort default serialization
+  end;
+end;
+
+function TOrm.RttiBeforeReadPropertyValue(Ctxt: pointer;
+  Prop: PRttiCustomProp): boolean;
+begin
+  if (not(rcfClassMayBeID in Prop^.Value.Flags)) or
+     IsPropClassInstance(Prop) or
+     (Prop^.OffsetSet < 0) then
+    result := false // default JSON object serialization
+  else
+  begin
+    PPtrInt(PAnsiChar(self) + Prop^.OffsetSet)^ :=
+      PJsonParserContext(Ctxt)^.ParseInteger;
+    result := true; // abort default serialization
+  end;
+end;
+
 function TOrm.GetID: TID;
 begin
   {$ifdef OSWINDOWS}
@@ -17827,13 +17883,13 @@ begin
     // (will return 0 if current instance is nil)
     result := self
   else    // was called from a real TOrm instance
-  {$ifndef CPU64}
+  {$ifdef CPU32}
   if fID > MaxInt then
     raise EOrmException.CreateUtf8('%.GetIDAsPointer is storing ID=%, which ' +
       'cannot be stored in a pointer/TOrm 32-bit instance: use ' +
       'a TID/T*ID published field for 64-bit IDs', [self, fID])
   else
-  {$endif CPU64}
+  {$endif CPU32}
     result := pointer(PtrInt(fID));
   {$else}
   if PtrUInt(self) < $100000 then // rough estimation, but works in practice
@@ -17923,9 +17979,8 @@ begin
   GetAsDocVariant(withID, withFields, result, options, replaceRowIDWithID);
 end;
 
-procedure TOrm.GetAsDocVariant(withID: boolean;
-  const withFields: TFieldBits; var result: variant; options: PDocVariantOptions;
-  replaceRowIDWithID: boolean);
+procedure TOrm.GetAsDocVariant(withID: boolean; const withFields: TFieldBits;
+  var result: variant; options: PDocVariantOptions; ReplaceRowIDWithID: boolean);
 const
   _ID: array[boolean] of RawUtf8 = ('RowID', 'ID');
 var
@@ -18557,6 +18612,16 @@ begin
   aTable.OwnerMustFree := true;
   FillPrepare(aTable); // temporary storage for FillRow, FillOne and FillRewind
   result := aTable.fRowCount;
+end;
+
+function TOrmMany.IsPropClassInstance(Prop: PRttiCustomProp): boolean;
+begin
+  // returns TRUE for object serialization, FALSE for integer value
+  if IdemPropNameU(Prop^.Name, 'source') or
+     IdemPropNameU(Prop^.Name, 'dest') then
+    result := false // source/dest fields are not class instances
+  else
+    result := fFill.JoinedFields;
 end;
 
 function TOrmMany.FillMany(const aClient: IRestOrm; aSourceID: TID;

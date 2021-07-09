@@ -2331,12 +2331,15 @@ begin
     finally
       try
         if fServer <> nil then
-        try
-          fServer.OnDisconnect;
-        finally
-          fServer.InternalHttpServerRespListRemove(self);
-          fServer := nil;
-        end;
+          try
+            fServer.OnDisconnect;
+            if Assigned(fOnThreadTerminate) then
+              fOnThreadTerminate(self);
+          finally
+            fServer.InternalHttpServerRespListRemove(self);
+            fServer := nil;
+            fOnThreadTerminate := nil;
+          end;
       finally
         FreeAndNil(fServerSock);
         // if Destroy happens before fServerSock.GetRequest() in Execute below

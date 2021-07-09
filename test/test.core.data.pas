@@ -752,11 +752,11 @@ begin
      'Major', 'Minor', 'Release', 'Build', 'Main', 'Detailed'], @Values) then
     with PFV(Data)^ do
     begin
-      Major := Values[0].ToInteger;
-      Minor := Values[1].ToInteger;
+      Major   := Values[0].ToInteger;
+      Minor   := Values[1].ToInteger;
       Release := Values[2].ToInteger;
-      Build := Values[3].ToInteger;
-      Main := Values[4].ToString;
+      Build   := Values[3].ToInteger;
+      Main    := Values[4].ToString;
       Detailed := Values[5].ToString;
     end;
 end;
@@ -783,13 +783,12 @@ begin
      'Major', 'Minor', 'Release', 'Build', 'Main', 'BuildDateTime'], @Values) then
     with TFileVersion(Value) do
     begin
-      Major := Values[0].ToInteger;
-      Minor := Values[1].ToInteger;
+      Major   := Values[0].ToInteger;
+      Minor   := Values[1].ToInteger;
       Release := Values[2].ToInteger;
-      Build := Values[3].ToInteger;
-      Main := Values[4].ToString;
-      BuildDateTime :=
-        Iso8601ToDateTimePUtf8Char(Values[5].Value, Values[5].ValueLen);
+      Build   := Values[3].ToInteger;
+      Main    := Values[4].ToString;
+      BuildDateTime := Values[5].Iso8601ToDateTime;
     end;
 end;
 
@@ -797,11 +796,11 @@ class procedure TCollTstDynArray.FVClassWriter(W: TTextWriter; Value: TObject;
   Options: TTextWriterWriteObjectOptions);
 begin
   with TFileVersion(Value) do
-    W.AddJsonEscape(['Major', Major,
-                     'Minor', Minor,
+    W.AddJsonEscape(['Major',   Major,
+                     'Minor',   Minor,
                      'Release', Release,
-                     'Build', Build,
-                     'Main', Main,
+                     'Build',   Build,
+                     'Main',    Main,
                      'BuildDateTime', DateTimeToIso8601Text(BuildDateTime)]);
 end;
 

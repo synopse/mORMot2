@@ -564,7 +564,7 @@ type
     procedure SetInternalProperties; override;
   end;
 
-{$ifndef CPU64} // Jet is not available on Win64
+{$ifdef CPU32} // Jet is not available on Win64
 
   /// OleDB connection properties to Jet/MSAccess .mdb files
   // - the server name should be the .mdb file name
@@ -575,7 +575,7 @@ type
     procedure SetInternalProperties; override;
   end;
 
-{$endif CPU64}
+{$endif CPU32}
 
   /// OleDB connection properties to Microsoft Access Database
   TSqlDBOleDBACEConnectionProperties = class(TSqlDBOleDBConnectionProperties)
@@ -636,9 +636,9 @@ type
   TOleDBMSSQL2008ConnectionProperties = TSqlDBOleDBMSSQL2008ConnectionProperties;
   TOleDBMSSQL2012ConnectionProperties = TSqlDBOleDBMSSQL2012ConnectionProperties;
   TOleDBMySQLConnectionProperties = TSqlDBOleDBMySQLConnectionProperties;
-  {$ifndef CPU64} // Jet is not available on Win64
+  {$ifdef CPU32} // Jet is not available on Win64
   TOleDBJetConnectionProperties = TSqlDBOleDBJetConnectionProperties;
-  {$endif}
+  {$endif CPU32}
   TOleDBACEConnectionProperties = TSqlDBOleDBACEConnectionProperties;
   TOleDBAS400ConnectionProperties = TSqlDBOleDBAS400ConnectionProperties;
   TOleDBOdbcSQLConnectionProperties = TSqlDBOleDBOdbcSQLConnectionProperties;
@@ -2451,7 +2451,7 @@ begin
   inherited SetInternalProperties;
 end;
 
-{$ifndef CPU64}
+{$ifdef CPU32}
 
 { TSqlDBOleDBJetConnectionProperties }
 
@@ -2489,9 +2489,9 @@ initialization
   TSqlDBOleDBMSSQL2008ConnectionProperties.RegisterClassNameForDefinition;
   TSqlDBOleDBMSSQL2012ConnectionProperties.RegisterClassNameForDefinition;
   TSqlDBOleDBMySQLConnectionProperties.RegisterClassNameForDefinition;
-  {$ifndef CPU64} // Jet is not available on Win64
+  {$ifdef CPU32} // Jet is not available on Win64
   TSqlDBOleDBJetConnectionProperties.RegisterClassNameForDefinition;
-  {$endif}
+  {$endif CPU32}
   TSqlDBOleDBACEConnectionProperties.RegisterClassNameForDefinition;
   TSqlDBOleDBAS400ConnectionProperties.RegisterClassNameForDefinition;
   TSqlDBOleDBOdbcSQLConnectionProperties.RegisterClassNameForDefinition;
@@ -2506,9 +2506,9 @@ initialization
   TOleDBMSSQL2008ConnectionProperties.RegisterClassNameForDefinition;
   TOleDBMSSQL2012ConnectionProperties.RegisterClassNameForDefinition;
   TOleDBMySQLConnectionProperties.RegisterClassNameForDefinition;
-  {$ifndef CPU64} // Jet is not available on Win64
+  {$ifdef CPU32} // Jet is not available on Win64
   TOleDBJetConnectionProperties.RegisterClassNameForDefinition;
-  {$endif}
+  {$endif CPU32}
   TOleDBACEConnectionProperties.RegisterClassNameForDefinition;
   TOleDBAS400ConnectionProperties.RegisterClassNameForDefinition;
   TOleDBOdbcSQLConnectionProperties.RegisterClassNameForDefinition;

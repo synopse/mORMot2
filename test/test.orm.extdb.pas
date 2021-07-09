@@ -92,12 +92,12 @@ type
     /// test external DB implementation via faster REST calls and change tracking
     // - a TOrmHistory table will be used to store record history
     procedure ExternalViaRESTWithChangeTracking;
-    {$ifndef CPU64}
+    {$ifdef CPU32}
     {$ifdef OSWINDOWS}
     /// test external DB using the JET engine
     procedure JETDatabase;
     {$endif OSWINDOWS}
-    {$endif CPU64}
+    {$endif CPU32}
     {$ifdef OSWINDOWS}
     {$ifdef USEZEOS}
     /// test external Firebird embedded engine via Zeos/ZDBC (if available)
@@ -534,7 +534,7 @@ end;
 {$endif USEZEOS}
 {$endif OSWINDOWS}
 
-{$ifndef CPU64}
+{$ifdef CPU32}
 {$ifdef OSWINDOWS}
 
 procedure TTestExternalDatabase.JETDatabase;
@@ -608,7 +608,7 @@ begin
 end;
 
 {$endif OSWINDOWS}
-{$endif CPU64}
+{$endif CPU32}
 
 procedure TTestExternalDatabase._SynDBRemote;
 var

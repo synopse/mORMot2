@@ -587,7 +587,6 @@ function SynLZDecompressPartial(P,Partial: PAnsiChar; PLen,PartialLen: integer):
 {$endif PUREMORMOT2}
 
 
-
 { ****************** TFastReader / TBufferWriter Binary Streams }
 
 type
@@ -2554,10 +2553,10 @@ begin
     until false;
     result := result or (QWord(c) shl n);
   end
-  {$ifndef CPU64}
+  {$ifdef CPU32}
   else
     result := p^
-  {$endif};
+  {$endif CPU32};
   inc(p);
   Source := p;
 end;
@@ -4940,7 +4939,8 @@ function TAlgoCompress.StreamUnCompress(Source: TStream; Magic: cardinal;
   ForceHash32: boolean): TMemoryStream;
 var
   S, D: PAnsiChar;
-  sourcePosition, resultSize, sourceSize: Int64;
+  sourcePosition, resultSize, sourceSize, buflen: Int64;
+  t: PAlgoCompressTrailer;
   Head: TAlgoCompressHead;
   Trailer: TAlgoCompressTrailer;
   buf: RawByteString;
@@ -4950,10 +4950,10 @@ begin
   if Source = nil then
     exit;
   sourceSize := Source.Size;
-  {$ifndef CPU64}
+  {$ifdef CPU32}
   if sourceSize > maxInt then
     exit; // result TMemoryStream should stay in memory!
-  {$endif CPU64}
+  {$endif CPU32}
   sourcePosition := Source.Position;
   if sourceSize - sourcePosition < SizeOf(Head) then
     exit;
@@ -4966,8 +4966,25 @@ begin
       Source.Position := sourceSize - SizeOf(Trailer);
       if (Source.Read(Trailer, SizeOf(Trailer)) <> SizeOf(Trailer)) or
          (Trailer.Magic <> Magic) then
-        exit;
-      sourcePosition := sourceSize - Trailer.HeaderRelativeOffset;
+      begin
+        // may have been appended before a digital signature -> try last 64KB
+        buflen := 65536;
+        if sourcesize < buflen then
+          buflen := sourcesize;
+        SetLength(buf, buflen);
+        Source.Position := sourceSize - buflen;
+        if Source.Read(pointer(buf)^, buflen) <> buflen then
+          exit;
+        t := @PByteArray(buf)[buflen - SizeOf(t^)];
+        repeat
+          dec(PByte(t)); // search backward
+          if PtrUInt(t) < PtrUInt(buf) then
+            exit;
+        until t^.Magic = Magic;
+        sourcePosition := sourceSize - t^.HeaderRelativeOffset; // found
+      end
+      else
+        sourcePosition := sourceSize - Trailer.HeaderRelativeOffset;
       Source.Position := sourcePosition;
       if (Source.Read(Head, SizeOf(Head)) <> SizeOf(Head)) or
          (Head.Magic <> Magic) then
@@ -5007,13 +5024,13 @@ begin
       result := TMemoryStream.Create
     else
     begin
-      {$ifndef CPU64}
+      {$ifdef CPU32}
       if resultSize + Head.UnCompressedSize > maxInt then
       begin
         FreeAndNil(result); // result TMemoryStream should stay in memory!
         break;
       end;
-      {$endif CPU64}
+      {$endif CPU32}
     end;
     result.Size := resultSize + Head.UnCompressedSize;
     D := PAnsiChar(result.Memory) + resultSize;
@@ -5021,8 +5038,8 @@ begin
     if stored then
       MoveFast(S^, D^, Head.CompressedSize)
     else if (AlgoDecompress(S, Head.CompressedSize, D) <> Head.UnCompressedSize) or
-      (AlgoHash(ForceHash32, D, Head.UnCompressedSize) <> Head.HashUncompressed) then
-        FreeAndNil(result);
+       (AlgoHash(ForceHash32, D, Head.UnCompressedSize) <> Head.HashUncompressed) then
+      FreeAndNil(result);
   until (result = nil) or
         (sourcePosition >= sourceSize);
 end;

@@ -572,7 +572,7 @@ type
     procedure AddFiles(const aFiles: array of TFileName;
       RemovePath: boolean = true; CompressLevel: integer = 6);
     /// add a file from an already compressed zip entry
-    procedure AddFromZip(const ZipEntry: TZipReadEntry; ZipSource: TStream);
+    procedure AddFromZip(ZipSource: TZipRead; ZipEntry: integer);
     /// append a file content into the destination file
     // - should be called before any file has been added
     // - useful  e.g. to add initial Setup.exe file before zipping some files
@@ -608,7 +608,8 @@ function EventArchiveZip(const aOldLogFileName, aDestinationPath: TFileName): bo
 // - just a wrapper around TZipRead.TestAll
 function ZipTest(const ZipName: TFileName): boolean;
 
-/// add AppendFile after the end of MainFile
+/// add AppendFile after the end of MainFile with a magic markup for its position
+// - the magic will be used as trailer to locate the offset of appended data
 // - could be used e.g. to add a .zip to an executable
 procedure FileAppend(const MainFile, AppendFile: TFileName); overload;
 
@@ -1135,6 +1136,7 @@ const
   LASTHEADERLOCATOR64_SIGNATURE_INC = $07064b50 + 1;  // PK#6#7
   FILEAPPEND_SIGNATURE_INC = $a5ababa5 + 1; // as marked by FileAppendSignature
 
+
   // identify the OS used to forge the .zip
   ZIP_OS = (0
       {$ifdef OSDARWIN}
@@ -1183,9 +1185,11 @@ procedure TLocalFileHeader.DataSeek(Source: TStream; LocalOffset: Int64);
 begin
   if Source = nil then
     raise ESynZip.Create('Zip: DataSeek with Source=nil');
+  // we read the real local header content before calling Size for its offset
   Source.Seek(LocalOffset, soBeginning);
   if Source.Read(self, SizeOf(self)) <> SizeOf(self) then
     raise ESynZip.Create('Zip: DataSeek reading error');
+  // now we can compute and ignore the real header size -> seek on data
   Source.Seek(LocalOffset + Size, soBeginning);
 end;
 
@@ -1492,6 +1496,7 @@ begin
       h32.fileInfo.zzipSize := h64.zzipSize;
       h32.fileInfo.zfullSize := h64.zfullSize;
       h32.localHeadOff := h64.offset;
+      h32.fileInfo.extraLen := 0; // AddFromZip() source may have something here
     end;
     if Is7BitAnsi(pointer(zipName)) then
       // ZIP should handle CP437 charset, but fails sometimes (e.g. Korean)
@@ -1739,36 +1744,40 @@ begin
     AddDeflated(aFiles[i], RemovePath, CompressLevel);
 end;
 
-procedure TZipWrite.AddFromZip(const ZipEntry: TZipReadEntry; ZipSource: TStream);
+procedure TZipWrite.AddFromZip(ZipSource: TZipRead; ZipEntry: integer);
 var
   local: TLocalFileHeader;
+  z: PZipReadEntry;
 begin
-  if self <> nil then
+  if (self <> nil) and
+     (ZipSource <> nil) and
+     (cardinal(ZipEntry) < cardinal(ZipSource.Count)) then
     with LastEntry^ do
     begin
       // retrieve file information, as expected by WriteHeader()
-      h32 := ZipEntry.dir^;
-      if ZipEntry.dir64 = nil then
+      z := @ZipSource.Entry[ZipEntry];
+      h32 := z^.dir^;
+      if z^.dir64 = nil then
       begin
         if (h32.fileInfo.zfullSize = ZIP32_MAXSIZE) or
            (h32.fileInfo.zzipSize = ZIP32_MAXSIZE) or
            (h32.fileInfo.flags and FLAG_DATADESCRIPTOR <> 0) then
-          raise ESynZip.CreateUtf8('%.AddFromZip failed on %',
-            [self, ZipEntry.zipName]);
+          raise ESynZip.CreateUtf8('%.AddFromZip failed on %: unexpected ' +
+            'data descriptor (MacOS) format', [self, z^.zipName]);
         h64.zfullSize := h32.fileInfo.zfullSize;
         h64.zzipSize := h32.fileInfo.zzipSize;
       end
       else
-        h64 := ZipEntry.dir64^;
+        h64 := z^.dir64^; // proper Zip64 support
       // append new header and file content
-      WriteHeader(ZipEntry.zipName);
-      if ZipEntry.local = nil then
+      WriteHeader(z^.zipName);
+      if z^.local = nil then
       begin
-        local.DataSeek(ZipSource, ZipEntry.localoffs);
-        fDest.CopyFrom(ZipSource, h64.zzipSize);
+        local.DataSeek(ZipSource.fSource, z^.localoffs);
+        fDest.CopyFrom(ZipSource.fSource, h64.zzipSize);
       end
       else
-        fDest.WriteBuffer(ZipEntry.local^.Data^, h64.zzipSize);
+        fDest.WriteBuffer(z^.local^.Data^, h64.zzipSize);
       inc(Count);
     end;
 end;
@@ -2000,8 +2009,8 @@ begin
           if (zcrc32 <> 0) or
              (zzipSize <> 0) or
              (zfullSize <> 0) then
-            raise ESynZip.CreateUtf8('%.Create: data descriptor with sizes ' +
-              'for % %', [self, e^.zipName, fFileName]);
+            raise ESynZip.CreateUtf8('%.Create: data descriptor (MacOS) with ' +
+              'sizes for % %', [self, e^.zipName, fFileName]);
     end;
     h := hnext;
     inc(Count); // add file to Entry[]
@@ -2025,7 +2034,7 @@ begin
   case P^ + 1 of
     FIRSTHEADER_SIGNATURE_INC:
       with PLocalFileHeader(P)^.fileInfo do
-        result := (ToByte(neededVersion) in [20, 45]) and
+        result := (ToByte(neededVersion) in [10, 20, 45]) and
                   (zzipMethod in [Z_STORED, Z_DEFLATED]) and
                   (extraLen < 100) and
                   (nameLen < 512);
@@ -2187,7 +2196,7 @@ begin
     local.DataSeek(fSource, e^.localoffs + fSourceOffset);
     if local.fileInfo.flags and FLAG_DATADESCRIPTOR <> 0 then
       raise ESynZip.CreateUtf8('%: increase WorkingMem for data descriptor ' +
-        'support on % %', [self, e^.zipName, fFileName]);
+        '(MacOS) support on % %', [self, e^.zipName, fFileName]);
     Info.localfileheadersize := local.Size;
   end
   else
@@ -2561,6 +2570,7 @@ begin
   O.WriteBuffer(magic, SizeOf(magic));
 end;
 
+
 procedure FileAppend(const MainFile, AppendFile: TFileName);
 var
   M, A: TStream;
@@ -2594,7 +2604,7 @@ var
   parsePEheader: boolean;
   certoffs, certlenoffs, certlen, certlen2: cardinal;
   zip: TZipWrite;
-  buf: array[0 .. 128 shl 10 - 1] of byte;
+  buf: array[0 .. 128 shl 10 - 1] of byte; // 128KB of temp copy buffer on stack
 begin
   if new = main then
     raise ESynZip.CreateUtf8('%: main=new=%', [ctxt, main]);

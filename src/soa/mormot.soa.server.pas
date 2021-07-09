@@ -996,7 +996,7 @@ begin
                 begin
                   W.AddShort(ParamName^); // in JSON_OPTIONS_FAST_EXTENDED format
                   W.Add(':');
-                  if vIsSPI in ValueKindAsm then
+                  if vIsSpi in ValueKindAsm then
                     W.AddShorter('"****",')
                   else
                     AddJson(W, Sender.Values[a], SERVICELOG_WRITEOPTIONS);
@@ -1039,7 +1039,7 @@ begin
                   begin
                     W.AddShort(ParamName^);
                     W.Add(':');
-                    if vIsSPI in ValueKindAsm then
+                    if vIsSpi in ValueKindAsm then
                       W.AddShorter('"****",')
                     else
                       AddJson(W, Sender.Values[a], SERVICELOG_WRITEOPTIONS);
