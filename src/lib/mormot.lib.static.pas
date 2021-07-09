@@ -12,6 +12,7 @@ unit mormot.lib.static;
    - Link Dependencies
    - GCC Math Functions
    - Minimal libc Replacement for Windows
+   - Cross-Platform FPU Exceptions Masking
 
   *****************************************************************************
 
@@ -111,18 +112,49 @@ procedure __umodti3;
 {$endif OSWINDOWS}
 
 
-{ ****************** GCC Math Functions }
+{ ********************** Cross-Platform FPU Exceptions Masking }
 
-/// to be called before executing C code, disabling FPU exceptions
-// - this version uses the cross-platform math unit
-// - any call to this function should reset the previous "pascal" state by
-// calling AfterLibraryCall() with the returned value
-function BeforeLibraryCall: TFPUExceptionMask;
-  {$ifdef HASINLINE} inline; {$endif}
+type
+  TFpuFlags = (
+    ffLibrary,
+    ffPascal);
 
-/// to be called after executing C code, re-enbling FPU exceptions
-procedure AfterLibraryCall(saved: TFPUExceptionMask);
-  {$ifdef HASINLINE} inline; {$endif}
+{$ifdef CPUINTEL}
+
+var
+  /// direct efficient x87 / SSE2 FPU flags for rounding and exceptions
+  _FPUFLAGS: array[TFpuFlags] of cardinal = (
+    {$ifdef CPU64}
+      $1FA0, $1920);
+    {$else}
+      $137F, $1372);
+    {$endif CPU64}
+
+{$else}
+
+var
+  /// on non Intel/AMD, use slower but cross-platform RTL Math unit
+  // - defined as var for runtime customization
+  _FPUFLAGS: array[TFpuFlags] of TFPUExceptionMask = (
+    // ffLibrary
+    [exInvalidOp, exDenormalized, exZeroDivide, exOverflow, exUnderflow, exPrecision],
+    // ffPascal
+    [exDenormalized, exUnderflow, exPrecision]);
+
+{$endif CPUINTEL}
+
+/// mask/unmask all FPU exceptions, according to the running CPU
+// - returns the previous execption flags, for ResetFpuFlags() call
+// - x87 flags are $1372 for pascal, or $137F for library
+// - sse flags are $1920 for pascal, or $1FA0 for library
+// - on non Intel/AMD CPUs, will use TFPUExceptionMask from the RTL Math unit
+// - do nothing and return -1 if the supplied flags are the one already set
+function SetFpuFlags(flags: TFpuFlags): cardinal;
+
+/// restore the FPU exceptions flags as overriden by SetFpuFlags()
+// - do nothing if the saved flags are the one already set, i.e. -1
+procedure ResetFpuFlags(saved: cardinal);
+
 
 
 implementation
@@ -555,24 +587,6 @@ end;
 
 
 { ****************** GCC Math Functions }
-
-function BeforeLibraryCall: TFPUExceptionMask;
-const
-  FLAGS = [exInvalidOp,
-           exDenormalized,
-           exZeroDivide,
-           exOverflow,
-           exUnderflow,
-           exPrecision];
-begin
-  result := GetExceptionMask;
-  SetExceptionMask(FLAGS);
-end;
-
-procedure AfterLibraryCall(saved: TFPUExceptionMask);
-begin
-  SetExceptionMask(saved);
-end;
 
 function fabs(x: double): double; cdecl;
   {$ifdef FPC} public name _PREFIX + 'fabs'; {$endif}
@@ -1767,6 +1781,52 @@ end;
 {$endif CPU64}
 
 {$endif CPUINTEL}
+
+
+{ ********************** Cross-Platform FPU Exceptions Masking }
+
+const
+  _FPUFLAGSIDEM = cardinal(-1); // fake value used for faster nested calls
+
+procedure _SetFlags(flags: cardinal);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+{$ifdef CPUINTEL}
+  {$ifdef CPU64}
+  SetMXCSR(flags);
+  {$else}
+  Set8087CW(flags);
+  {$endif CPU64}
+{$else}
+  SetExceptionMask(TFPUExceptionMask(flags));
+{$endif CPUINTEL}
+end;
+
+function SetFpuFlags(flags: TFpuFlags): cardinal;
+var
+  new: cardinal;
+begin
+{$ifdef CPUINTEL}
+  {$ifdef CPU64}
+  result := GetMXCSR;
+  {$else}
+  result := Get8087CW;
+  {$endif CPU64}
+{$else}
+  result := cardinal(GetExceptionMask);
+{$endif CPUINTEL}
+  new := cardinal(_FPUFLAGS[flags]);
+  if new <> result then
+    _SetFlags(new)
+  else
+    result := _FPUFLAGSIDEM;
+end;
+
+procedure ResetFpuFlags(saved: cardinal);
+begin
+  if saved <> _FPUFLAGSIDEM then
+    _SetFlags(saved);
+end;
 
 
 initialization

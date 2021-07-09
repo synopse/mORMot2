@@ -85,15 +85,13 @@ uses
   {$endif CPU32}
 {$endif JS_STRICT_NAN_BOXING}
 
-{$ifdef FPC}
-  {$packrecords C}
-{$endif FPC}
-
 
 
 { ************ QuickJS to Pascal Wrappers }
 
 type
+  {$A-} { packet object not allowed since Delphi 2009 :( }
+
   // some definitions ahead of low-level QuickJS API to allow pointer wrapping
 
   {$ifdef JS_ANY_NAN_BOXING}
@@ -250,6 +248,11 @@ type
     /// create a JS_TAG_FLOAT64
     procedure FromFloat(val: double);
   end;
+
+  {$A+}
+  {$ifdef FPC}
+    {$packrecords C}
+  {$endif FPC}
 
   PJSValue = ^JSValue;
   JSValues = array[0..(MaxInt div SizeOf(JSValue)) - 1] of JSValue;
@@ -3072,21 +3075,27 @@ procedure TJSContext.ToUtf8(v: JSValue; var s: RawUtf8; noJson: boolean);
 var
   P: PAnsiChar;
   len: PtrUInt;
+  saved: cardinal;
   freev: boolean;
 begin
   freev := false;
-  if (not noJson) and
-     v.IsObject and
-     (not JS_IsFunction(@self, JSValueRaw(v))) then
-  begin
-    v := JSValue(JS_JSONStringify(@self, JSValueRaw(v), JS_NULL, JS_NULL));
-    freev := true;
+  saved := SetFpuFlags(ffLibrary);
+  try
+    if (not noJson) and
+       v.IsObject and
+       (not JS_IsFunction(@self, JSValueRaw(v))) then
+    begin
+      v := JSValue(JS_JSONStringify(@self, JSValueRaw(v), JS_NULL, JS_NULL));
+      freev := true;
+    end;
+    P := JS_ToCStringLen2(@self, @len, JSValueRaw(v), false);
+    FastSetString(s, P, len);
+    JS_FreeCString(@self, P);
+  finally
+    if freev then
+      Free(v);
+    ResetFpuFlags(saved);
   end;
-  P := JS_ToCStringLen2(@self, @len, JSValueRaw(v), false);
-  FastSetString(s, P, len);
-  JS_FreeCString(@self, P);
-  if freev then
-    Free(v);
 end;
 
 function TJSContext.ToUtf8(const v: JSValue; noJson: boolean): RawUtf8;
@@ -3097,9 +3106,12 @@ end;
 procedure TJSContext.ToUtf8(const v: JSValue; var temp: TSynTempBuffer);
 var
   P: PAnsiChar;
+  saved: cardinal;
   len: PtrUInt;
 begin
+  saved := SetFpuFlags(ffLibrary);
   P := JS_ToCStringLen2(@self, @len, JSValueRaw(v), false);
+  ResetFpuFlags(saved);
   temp.Init(P, len);
   JS_FreeCString(@self, P);
 end;
@@ -3115,8 +3127,11 @@ procedure TJSContext.AddUtf8(
 var
   P: PAnsiChar;
   len, sl, sepl: PtrUInt;
+  saved: cardinal;
 begin
+  saved := SetFpuFlags(ffLibrary);
   P := JS_ToCStringLen2(@self, @len, JSValueRaw(v), false);
+  ResetFpuFlags(saved);
   if (P = nil) or
      (len = 0) then
     exit;
@@ -3168,7 +3183,7 @@ function TJSContext.Eval(const code, fn: RawUtf8; flags: integer;
   out err: RawUtf8): JSValue;
 var
   f: PAnsiChar;
-  fpu: TFPUExceptionMask;
+  saved: cardinal;
 begin
   if code = '' then
   begin
@@ -3182,13 +3197,13 @@ begin
       f := 'main' // only global scope is allowed without file name
   else
     f := pointer(fn);
-  fpu := BeforeLibraryCall;
+  saved := SetFpuFlags(ffLibrary);
   try
     result := JSValue(JS_Eval(@self, pointer(code), length(code), f, flags));
     if result.IsException then
       ErrorMessage({stack=}true, err);
   finally
-    AfterLibraryCall(fpu);
+    ResetFpuFlags(saved);
   end;
 end;
 
@@ -3255,13 +3270,13 @@ end;
 function TJSContext.CallRaw(obj, fun: JSValue;
   const args: JSValueDynArray): JSValueRaw;
 var
-  fpu: TFPUExceptionMask;
+  saved: cardinal;
 begin
-  fpu := BeforeLibraryCall;
+  saved := SetFpuFlags(ffLibrary);
   try
     result := JS_Call(@self, fun.Raw, obj.Raw, length(args), pointer(args));
   finally
-    AfterLibraryCall(fpu);
+    ResetFpuFlags(saved);
   end;
 end;
 
@@ -3308,7 +3323,7 @@ end;
 function TJSContext.ToVariant(var v: JSValue; var res: variant): boolean;
 var
   json: JSValue;
-  fpu: TFPUExceptionMask;
+  saved: cardinal;
   P: pointer;
   len: PtrUInt;
 label
@@ -3335,7 +3350,7 @@ str:    TVarData(res).vType := varString;
         // JSONStringify() creates a temp json -> in-place parsing w/o ToUtf8()
         json.Empty;
         P := nil;
-        fpu := BeforeLibraryCall;
+        saved := SetFpuFlags(ffLibrary);
         try
           json := JSValue(JS_JSONStringify(@self, JSValueRaw(v), JS_NULL, JS_NULL));
           if json.IsException then
@@ -3345,7 +3360,7 @@ str:    TVarData(res).vType := varString;
         finally
           JS_FreeCString(@self, P);
           Free(json);
-          AfterLibraryCall(fpu);
+          ResetFpuFlags(saved);
         end;
         if VarIsEmptyOrNull(res) then
           goto str;
@@ -3358,9 +3373,9 @@ str:    TVarData(res).vType := varString;
     JS_TAG_BIG_INT:
       begin
         TVarData(res).vType := varInt64;
-        fpu := BeforeLibraryCall;
+        saved := SetFpuFlags(ffLibrary);
         result := JS_ToInt64Ext(@self, @TVarData(res).vInt64, JSValueRaw(v)) = 0;
-        AfterLibraryCall(fpu);
+        ResetFpuFlags(saved);
         exit;
       end;
     JS_TAG_BOOL:
@@ -3371,10 +3386,10 @@ str:    TVarData(res).vType := varString;
     JS_TAG_BIG_DECIMAL,
     JS_TAG_BIG_FLOAT:
       begin
-        fpu := BeforeLibraryCall;
+        saved := SetFpuFlags(ffLibrary);
         if JS_ToFloat64(@self, @TVarData(res).vDouble, JSValueRaw(v)) = 0 then
           TVarData(res).vType := varDouble;
-        AfterLibraryCall(fpu);
+        ResetFpuFlags(saved);
       end;
     JS_TAG_FLOAT64:
       begin
@@ -3438,15 +3453,15 @@ end;
 
 procedure TJSContext.FromJson(const json: RawUtf8; out result: JSValue);
 var
-  fpu: TFPUExceptionMask;
+  saved: cardinal;
 begin
-  fpu := BeforeLibraryCall;
+  saved := SetFpuFlags(ffLibrary);
   try
     result := JSValue(JS_ParseJSON(@self, pointer(json), length(json), '<inline>'));
     if result.IsException then
       raise EQuickJS.Create(@self, 'JSContext.FromJson', result);
   finally
-    AfterLibraryCall(fpu);
+    ResetFpuFlags(saved);
   end;
 end;
 

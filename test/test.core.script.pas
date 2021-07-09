@@ -147,7 +147,7 @@ begin
         Check(j.IsString);
         Check(j.IsRefCounted);
         cx.ToUtf8(j, v2);
-        CheckEqual(v, v2);
+        CheckEqual(v, v2, v);
         cx.Free(j);
         Check(j.Equals(j));
       end;

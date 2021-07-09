@@ -33,7 +33,8 @@ uses
   mormot.core.variants,
   mormot.core.search,
   mormot.core.log,
-  mormot.db.core;
+  mormot.db.core,
+  mormot.lib.static;
 
 
 { ************ Raw SQLite3 API Constants and Functions }
@@ -7233,13 +7234,14 @@ begin
 end;
 
 procedure TSqlRequest.Close;
+var
+  saved: cardinal;
 begin
   if Request = 0 then
     exit;
-  {$ifdef RESETFPUEXCEPTION}
-  with TSynFpuException.ForLibraryCode do
-  {$endif RESETFPUEXCEPTION}
-    sqlite3.finalize(Request);
+  saved := SetFpuFlags(ffLibrary);
+  sqlite3.finalize(Request);
+  ResetFpuFlags(saved);
   fRequest := 0;
   fFieldCount := 0;
 end;
@@ -7652,15 +7654,15 @@ end;
 
 function TSqlRequest.Prepare(DB: TSqlite3DB; const SQL: RawUtf8;
   NoExcept: boolean): integer;
+var
+  saved: cardinal;
 begin
   fDB := DB;
   fRequest := 0;
   if DB = 0 then
     raise ESqlite3Exception.Create(DB, SQLITE_CANTOPEN, SQL);
-  {$ifdef RESETFPUEXCEPTION} // safest to reset x87 exceptions
-  with TSynFpuException.ForLibraryCode do
-  {$endif RESETFPUEXCEPTION}
-  begin
+  saved := SetFpuFlags(ffLibrary);
+  try
     result := sqlite3.prepare_v2(RequestDB, pointer(SQL), length(SQL) + 1,
       fRequest, fNextSQL);
     while (result = SQLITE_OK) and
@@ -7676,6 +7678,8 @@ begin
     fFieldCount := sqlite3.column_count(fRequest);
     if not NoExcept then
       sqlite3_check(RequestDB, result, SQL);
+  finally
+    ResetFpuFlags(saved);
   end;
 end;
 
@@ -7707,35 +7711,30 @@ begin
 end;
 
 function TSqlRequest.Reset: integer;
+var
+  saved: cardinal;
 begin
   if Request = 0 then
     raise ESqlite3Exception.Create(
       'TSqlRequest.Reset called with no previous Request');
-  {$ifdef RESETFPUEXCEPTION} // safest to reset x87 exceptions
-  with TSynFpuException.ForLibraryCode do
-  {$endif RESETFPUEXCEPTION}
-    // no check here since it was PREVIOUS state
-    result := sqlite3.reset(Request);
+  saved := SetFpuFlags(ffLibrary);
+  // no check here since it was PREVIOUS state
+  result := sqlite3.reset(Request);
+  ResetFpuFlags(saved);
 end;
 
 function TSqlRequest.Step: integer;
-{$ifdef RESETFPUEXCEPTION} // safest to reset x87 exceptions - inlined TSynFpuException
 var
-  cw87: word;
-{$endif RESETFPUEXCEPTION}
+  saved: cardinal;
 begin
   if Request = 0 then
     raise ESqlite3Exception.Create(RequestDB, SQLITE_MISUSE, 'Step');
-  {$ifdef RESETFPUEXCEPTION}
-  cw87 := Get8087CW;
+  saved := SetFpuFlags(ffLibrary);
   try
-  {$endif RESETFPUEXCEPTION}
     result := sqlite3_check(RequestDB, sqlite3.step(Request), 'Step');
-  {$ifdef RESETFPUEXCEPTION}
   finally
-    Set8087CW(cw87);
+    ResetFpuFlags(saved);
   end;
-  {$endif RESETFPUEXCEPTION}
 end;
 
 function TSqlRequest.GetReadOnly: boolean;

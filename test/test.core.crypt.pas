@@ -1249,7 +1249,7 @@ begin
   Check(Hash64Test(@buf, @crc32cTwice));
   if Assigned(AesNiHash64) then
     Check(Hash64Test(@buf, @AesNiHash64));
-  Check(Hash128Test(@buf, @crc32c128, msg), msg);
+  Check(Hash128Test(@buf, @crc32c128, msg), msg{%H-});
   if Assigned(AesNiHash128) then
     Check(Hash128Test(@buf, @AesNiHash128, msg), msg);
 end;

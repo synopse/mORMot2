@@ -518,11 +518,9 @@
 
 {$ifdef CPUINTEL}
   {$ifdef OSWINDOWS}
-    {$ifdef CPUX86} // safest to reset x87 exceptions on Win32
-      {$define RESETFPUEXCEPTION}
-    {$else}
+    {$ifdef CPUX64}
       {$define WIN64ABI} // for asm on x86_64
-    {$endif CPUX86}
+    {$endif CPUX64}
   {$endif OSWINDOWS}
   {$ifdef OSPOSIX}
     {$ifdef CPUX64}
@@ -583,7 +581,7 @@
       // other Win32/Win64 Delphi platforms "should work" (tm) as expected
       {$define NOSQLITE3STATIC}
     {$ifend}
-    {$define LIBQUICKJSSTATIC}
+    {$define LIBQUICKJSSTATIC} // seems fine BUT on Delphi 10.4 Win64
   {$endif}
 {$endif FPC}
 

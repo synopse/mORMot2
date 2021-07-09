@@ -102,9 +102,9 @@ type
     fPrivateDataForDebugger: pointer;
     fNeverExpire: boolean;
     fNameForDebug, fWebAppRootDir: RawUtf8;
-    fRequestFpuBackup: TFPUExceptionMask;
     fAtomCache: TRawUtf8List; // hashed list of objects=TScriptAtom
     fDoInteruptInOwnThread: TThreadMethod;
+    fRequestFpuBackup: array[0..3] of cardinal;
     function AtomCacheFind(const Name: RawUtf8): TScriptAtom; // nil = not found
       {$ifdef HASINLINE} inline; {$endif}
     procedure AtomCacheAdd(const Name: RawUtf8; Atom: TScriptAtom);
@@ -254,7 +254,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// initialize a new engine to be used outside of our engine pool
     // - the returned engine won't be owned by this class, so is to be released
-    // explicitely by the caller
+    // explicitly by the caller
     // - this engine won't be registered to the debugger
     function NewEngine: TThreadSafeEngine;
     /// returns how many times the NewEngine method has been called
@@ -699,17 +699,19 @@ end;
 procedure TThreadSafeEngine.DoBeginRequest;
 begin
   // paranoid todo: check if we need a Lock here to avoid GPF at expiration?
-  if fRequestFpuBackup <> [] then
-    // typical pascal FPU mask is [exDenormalized,exUnderflow,exPrecision]
-    raise EScriptException.CreateUtf8('Nested %.DoBeginRequest', [self]);
-  fRequestFpuBackup := BeforeLibraryCall;
-  assert(fRequestFpuBackup <> []);
+  if fRequestFpuBackup[0] = high(fRequestFpuBackup) then
+    raise EScriptException.CreateUtf8(
+      'Too Many Nested %.DoBeginRequest', [self]);
+  inc(fRequestFpuBackup[0]);
+  fRequestFpuBackup[fRequestFpuBackup[0]] := SetFpuFlags(ffLibrary);
 end;
 
 procedure TThreadSafeEngine.DoEndRequest;
 begin
-  AfterLibraryCall(fRequestFpuBackup);
-  fRequestFpuBackup := [];
+  if fRequestFpuBackup[0] = 0 then
+    exit;
+  dec(fRequestFpuBackup[0]);
+  ResetFpuFlags(fRequestFpuBackup[fRequestFpuBackup[0]]);
 end;
 
 
