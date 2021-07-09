@@ -34,7 +34,7 @@ We therefore created a whole new project and repository, since switching to vers
 
 The framework source code:
 - Tries to stay compatible with FPC stable and Delphi 7 and up;
-- Is currently validated against FPC 3.2.0-r45643, Delphi 7, 2007, 2010, XE4, XE7 and 10.4;
+- Is currently validated against FPC 3.2.0-r45643 (Lazarus 2.1.0-r64940), Delphi 7, 2007, 2010, XE4, XE7 and 10.4;
 
 Please submit pull requests for non-validated versions.
 

@@ -62,17 +62,18 @@ var
     v: JSValue;
     res: variant;
   begin
-    Check(cx <> nil);
+    Check(cx <> nil, 'cx');
     v := cx.Eval(js, '', JS_EVAL_TYPE_GLOBAL, result);
     if result = '' then
     begin
-      Check(cx.ToVariant(v, res));
+      Check(cx.ToVariant(v, res), 'tovar');
       cx.ToUtf8(v, result);
       if v.IsString or
          v.IsInt32 then
-        CheckEqual(VariantToUtf8(res), result)
+        CheckEqual(VariantToUtf8(res), result, 'istring/isint32')
       else if v.IsFloat then
-        CheckSame(VariantToDoubleDef(res), GetExtended(pointer(result)));
+        CheckSame(VariantToDoubleDef(res), GetExtended(pointer(result)),
+          DOUBLE_SAME, 'isfloat');
     end;
     cx.Free(v);
     //writeln(js,' = ',result);

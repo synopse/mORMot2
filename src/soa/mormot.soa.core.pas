@@ -1359,11 +1359,15 @@ begin
     else
       with aInterfaces[i]^ do
         if InterfaceGuid = nil then
-          raise EServiceException.CreateUtf8('%: % is not an interface', [self, Name^])
+          raise EServiceException.CreateUtf8('%: % is not an interface',
+            [self, RawName])
         else if not (ifHasGuid in InterfaceType^.IntfFlags) then
-          raise EServiceException.CreateUtf8('%: % interface has no GUID', [self, Name^])
+          raise EServiceException.CreateUtf8('%: % interface has no GUID',
+            [self, RawName])
         else if Info(InterfaceGuid^) <> nil then
-          raise EServiceException.CreateUtf8('%: % GUID already registered', [self, Name^]);
+          raise EServiceException.CreateUtf8('%: % GUID already registered',
+            [self, RawName])
+
 end;
 
 procedure TServiceContainer.SetExpectMangledUri(Mangled: boolean);

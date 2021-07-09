@@ -1371,8 +1371,8 @@ begin
 end;
 
 function TRestOrm.RetrieveDocVariantArray(Table: TOrmClass;
-  const ObjectName, CustomFieldsCsv: RawUtf8; FirstRecordID: PID;
-  LastRecordID: PID): variant;
+  const ObjectName, CustomFieldsCsv: RawUtf8;
+  FirstRecordID, LastRecordID: PID): variant;
 begin
   result := RetrieveDocVariantArray(Table, ObjectName, '', [], CustomFieldsCsv,
     FirstRecordID, LastRecordID);
@@ -1381,7 +1381,7 @@ end;
 function TRestOrm.RetrieveDocVariantArray(Table: TOrmClass;
   const ObjectName: RawUtf8; const FormatSqlWhere: RawUtf8;
   const BoundsSqlWhere: array of const; const CustomFieldsCsv: RawUtf8;
-  FirstRecordID: PID; LastRecordID: PID): variant;
+  FirstRecordID, LastRecordID: PID): variant;
 var
   T: TOrmTable;
   v: variant;

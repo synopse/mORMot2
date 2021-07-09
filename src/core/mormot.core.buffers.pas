@@ -4279,6 +4279,7 @@ begin
     begin
       case DataLayout of
         wkUInt32:
+          // format: uncompressed array of cardinals
           begin
             n := (fBufLen - fPos) shr 2;
             if ValuesCount < n then
@@ -4288,6 +4289,7 @@ begin
           end;
         wkVarInt32, wkVarUInt32, wkOffsetU, wkOffsetI:
           begin
+            // format: Isize + varUInt32s
             PBeg := PAnsiChar(P); // leave space for chunk size
             inc(P, 4);
             n := ValuesCount;
@@ -4311,16 +4313,17 @@ begin
                 break; // avoid buffer overflow
               end;
             end;
-            PInteger(PBeg)^ := PAnsiChar(P) - PBeg - 4; // format: Isize+varUInt32s
+            PInteger(PBeg)^ := PAnsiChar(P) - PBeg - 4;
           end;
         wkSorted:
           begin
+            // format: Isize + cleverStorage
             PBeg := PAnsiChar(P) + 4; // leave space for chunk size
             P := PByte(CleverStoreInteger(pointer(Values), PBeg, PEnd, ValuesCount, n));
             if P = nil then
               raise ESynException.CreateUtf8(
                 '%.WriteVarUInt32Array: data not sorted', [self]);
-            PInteger(PBeg - 4)^ := PAnsiChar(P) - PBeg; // format: Isize+cleverStorage
+            PInteger(PBeg - 4)^ := PAnsiChar(P) - PBeg;
           end;
       end;
       inc(PByte(Values), n * 4);

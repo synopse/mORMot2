@@ -1044,7 +1044,7 @@ const
 function Hash32Test(buf: PAnsiChar; hash: THasher): boolean;
 var
   L, modif: PtrInt;
-  c {, s}: cardinal;
+  c, c2 {, s}: cardinal;
 begin
   result := false;
   for L := 0 to HASHESMAX do
@@ -1054,10 +1054,11 @@ begin
     for modif := 0 to L - 1 do
     begin
       inc(buf[modif]);
-      if hash(0, buf, L) = c then
+      c2 := hash(0, buf, L);
+      dec(buf[modif]);
+      if c2 = c then
         exit; // should detect one modified bit at any position
       //inc(s, L);
-      dec(buf[modif]);
     end;
     if hash(0, buf, L) <> c then
       exit; // should return the same value for the same data
@@ -1180,7 +1181,7 @@ end;
 function Hash64Test(buf: PAnsiChar; hash: THasher64): boolean;
 var
   L, modif: PtrInt;
-  c: QWord;
+  c, c2: QWord;
 begin
   result := false;
   for L := 0 to HASHESMAX do
@@ -1189,9 +1190,10 @@ begin
     for modif := 0 to L - 1 do
     begin
       inc(buf[modif]);
-      if hash(0, buf, L) = c then
-        exit; // should detect one modified bit at any position
+      c2 := hash(0, buf, L);
       dec(buf[modif]);
+      if c2 = c then
+        exit; // should detect one modified bit at any position
     end;
     if hash(0, buf, L) <> c then
       exit; // should return the same value for the same data
@@ -1199,7 +1201,7 @@ begin
   result := true;
 end;
 
-function Hash128Test(buf: PAnsiChar; hash: THasher128): boolean;
+function Hash128Test(buf: PAnsiChar; hash: THasher128; out msg: string): boolean;
 var
   L, modif: PtrInt;
   c, c2: THash128;
@@ -1211,17 +1213,23 @@ begin
     hash(@c, buf, L);
     for modif := 0 to L - 1 do
     begin
-      inc(buf[modif]);
       FillZero(c2);
+      inc(buf[modif]);
       hash(@c2, buf, L);
-      if IsEqual(c, c2) then
-        exit; // should detect one modified bit at any position
       dec(buf[modif]);
+      if IsEqual(c, c2) then
+      begin
+        FormatString('L=% modif=%', [L, modif], msg);
+        exit; // should detect one modified bit at any position
+      end;
     end;
     FillZero(c2);
     hash(@c2, buf, L);
     if not IsEqual(c, c2) then
+    begin
+      msg := 'after reset';
       exit; // should return the same value for the same data
+    end;
   end;
   result := true;
 end;
@@ -1229,6 +1237,7 @@ end;
 procedure TTestCoreCrypto.Hashes;
 var
   buf: array[0 .. HASHESMAX - 1] of AnsiChar;
+  msg: string;
 begin
   Check(Adler32SelfTest);
   FillIncreasing(@buf, $12345670, SizeOf(buf) shr 2);
@@ -1240,9 +1249,9 @@ begin
   Check(Hash64Test(@buf, @crc32cTwice));
   if Assigned(AesNiHash64) then
     Check(Hash64Test(@buf, @AesNiHash64));
-  Check(Hash128Test(@buf, @crc32c128));
+  Check(Hash128Test(@buf, @crc32c128, msg), msg);
   if Assigned(AesNiHash128) then
-    Check(Hash128Test(@buf, @AesNiHash128));
+    Check(Hash128Test(@buf, @AesNiHash128, msg), msg);
 end;
 
 procedure TTestCoreCrypto._Base64;

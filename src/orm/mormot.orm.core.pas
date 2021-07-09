@@ -13303,7 +13303,7 @@ begin
     GetAsVariant(Row, f, v[f], expandTimeLogAsText, expandEnumsAsText,
       expandHugeIDAsUniqueIdentifier, options);
   if length(fFieldNames) <> fFieldCount then
-    InitFieldNames;
+    InitFieldNames; // will reuse fFieldNames using COW between rows
   TDocVariantData(doc).InitObjectFromVariants(fFieldNames, v, JSON_OPTIONS_FAST);
 end;
 
@@ -13319,6 +13319,7 @@ begin
   SetLength(docs, fRowCount);
   if readonly then
   begin
+    // read-only access with no memory allocation via our TOrmTableRowVariant
     if OrmTableRowVariantType = nil then
       OrmTableRowVariantType := SynRegisterCustomVariantType(TOrmTableRowVariant);
     for r := 0 to fRowCount - 1 do
@@ -13330,6 +13331,7 @@ begin
       end;
   end
   else
+    // manual conversion to stand-alone variants
     for r := 0 to fRowCount - 1 do
       ToDocVariant(r + 1, docs[r]);
 end;
