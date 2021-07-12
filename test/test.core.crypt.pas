@@ -1041,12 +1041,19 @@ end;
 const
   HASHESMAX = 512;
 
-function Hash32Test(buf: PAnsiChar; hash: THasher): boolean;
+function Hash32Test(buf: PAnsiChar; hash: THasher; var expected: cardinal): boolean;
 var
   L, modif: PtrInt;
   c, c2 {, s}: cardinal;
 begin
   result := false;
+  if expected = 0 then
+    expected := hash(0, buf, HASHESMAX) // use first call as aligned reference
+  else if hash(0, buf, HASHESMAX) <> expected then
+  begin
+    //writeln('alignement problem');
+    exit;
+  end;
   for L := 0 to HASHESMAX do
   begin
     c := hash(0, buf, L);
@@ -1055,9 +1062,12 @@ begin
     begin
       inc(buf[modif]);
       c2 := hash(0, buf, L);
-      dec(buf[modif]);
       if c2 = c then
+      begin
+        //writeln('L=',L,' modif=',modif);
         exit; // should detect one modified bit at any position
+      end;
+      dec(buf[modif]);
       //inc(s, L);
     end;
     if hash(0, buf, L) <> c then
@@ -1178,12 +1188,19 @@ begin
   result := true;
 end;
 
-function Hash64Test(buf: PAnsiChar; hash: THasher64): boolean;
+function Hash64Test(buf: PAnsiChar; hash: THasher64; var expected: QWord): boolean;
 var
   L, modif: PtrInt;
   c, c2: QWord;
 begin
   result := false;
+  if expected = 0 then
+    expected := hash(0, buf, HASHESMAX) // use first call as aligned reference
+  else if hash(0, buf, HASHESMAX) <> expected then
+  begin
+    //writeln('alignement problem');
+    exit;
+  end;
   for L := 0 to HASHESMAX do
   begin
     c := hash(0, buf, L);
@@ -1193,7 +1210,10 @@ begin
       c2 := hash(0, buf, L);
       dec(buf[modif]);
       if c2 = c then
+      begin
+        //writeln('L=',L,' modif=',modif);
         exit; // should detect one modified bit at any position
+      end;
     end;
     if hash(0, buf, L) <> c then
       exit; // should return the same value for the same data
@@ -1235,23 +1255,41 @@ begin
 end;
 
 procedure TTestCoreCrypto.Hashes;
+const
+  HASHALIGN = 4; // you may try with paranoid 32 here
 var
-  buf: array[0 .. HASHESMAX - 1] of AnsiChar;
+  buf: RawByteString;
+  P: PAnsiChar;
   msg: string;
+  unalign: PtrInt;
+  exp321, exp322, exp323, exp324: cardinal;
+  exp641, exp642: QWord;
 begin
   Check(Adler32SelfTest);
-  FillIncreasing(@buf, $12345670, SizeOf(buf) shr 2);
-  Check(Hash32Test(@buf, @crc32cfast));
-  Check(Hash32Test(@buf, @crc32c));
-  Check(Hash32Test(@buf, @xxHash32));
-  if Assigned(AesNiHash32) then
-    Check(Hash32Test(@buf, @AesNiHash32));
-  Check(Hash64Test(@buf, @crc32cTwice));
-  if Assigned(AesNiHash64) then
-    Check(Hash64Test(@buf, @AesNiHash64));
-  Check(Hash128Test(@buf, @crc32c128, msg), msg{%H-});
-  if Assigned(AesNiHash128) then
-    Check(Hash128Test(@buf, @AesNiHash128, msg), msg);
+  SetLength(buf, HASHESMAX + HASHALIGN);
+  exp321 := 0;
+  exp322 := 0;
+  exp323 := 0;
+  exp324 := 0;
+  exp641 := 0;
+  exp642 := 0;
+  for unalign := 0 to HASHALIGN - 1 do
+  begin
+    P := pointer(buf);
+    inc(P, unalign);
+    FillIncreasing(pointer(P), $12345670, HASHESMAX shr 2);
+    Check(Hash32Test(P, @crc32cfast, exp321));
+    Check(Hash32Test(P, @crc32c, exp322));
+    Check(Hash32Test(P, @xxHash32, exp323));
+    if Assigned(AesNiHash32) then
+      Check(Hash32Test(P, @AesNiHash32, exp324));
+    Check(Hash64Test(P, @crc32cTwice, exp641));
+    if Assigned(AesNiHash64) then
+      Check(Hash64Test(P, @AesNiHash64, exp642));
+    Check(Hash128Test(P, @crc32c128, msg), msg{%H-});
+    if Assigned(AesNiHash128) then
+      Check(Hash128Test(P, @AesNiHash128, msg), msg);
+  end;
 end;
 
 procedure TTestCoreCrypto._Base64;
