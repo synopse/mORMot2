@@ -3608,6 +3608,7 @@ end;
 
 
 initialization
+  SetLibcNumericLocale; // required for quickjs parsing :(
   assert(SizeOf(JSValueRaw) = SizeOf(JSValue));
   {$ifdef JS_ANY_NAN_BOXING}
   assert(SizeOf(JSValueRaw) = SizeOf(double));

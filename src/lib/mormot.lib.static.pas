@@ -49,6 +49,11 @@ const
 {$endif OSWINDOWS}
 
 
+/// calls setlocale(LC_NUMERIC, 'C') to force to use the C default locale
+// - is mandatory e.g. for mormot.lib.quickjs to properly parse float values
+procedure SetLibcNumericLocale;
+
+
 { ********************** Minimal libc Replacement for Windows }
 
 {$ifdef OSWINDOWS}
@@ -1781,6 +1786,31 @@ end;
 {$endif CPU64}
 
 {$endif CPUINTEL}
+
+// see clocale.pp unit for those values
+
+function setlocale(category: integer; locale: PAnsiChar): PAnsiChar; cdecl;
+{$ifdef NETBSD}
+  { NetBSD has a new setlocale function defined in /usr/include/locale.h
+    that should be used }
+  external 'c' name '__setlocale_mb_len_max_32';
+{$else}
+  {$ifdef OSWINDOWS}
+  external _CLIB name 'setlocale';
+  {$else}
+external 'c' name 'setlocale';
+  {$endif OSWINDOWS}
+{$endif NETBSD}
+
+const
+  LC_CTYPE = 0;
+  LC_NUMERIC = 1;
+  LC_ALL = 6;
+
+procedure SetLibcNumericLocale;
+begin
+  setlocale(LC_NUMERIC, 'C');
+end;
 
 
 { ********************** Cross-Platform FPU Exceptions Masking }
