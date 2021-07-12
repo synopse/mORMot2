@@ -49,10 +49,6 @@ const
 {$endif OSWINDOWS}
 
 
-/// calls setlocale(LC_NUMERIC, 'C') to force to use the C default locale
-// - is mandatory e.g. for mormot.lib.quickjs to properly parse float values
-procedure SetLibcNumericLocale;
-
 
 { ********************** Minimal libc Replacement for Windows }
 
@@ -115,6 +111,11 @@ procedure __umodti3;
 {$endif CPUX64}
 
 {$endif OSWINDOWS}
+
+/// calls setlocale(LC_NUMERIC, 'C') to force to use the C default locale
+// - is mandatory e.g. for mormot.lib.quickjs to properly parse float values
+// - on Windows, redirects to msvcrt.dll's setlocale() API
+procedure SetLibcNumericLocale;
 
 
 { ********************** Cross-Platform FPU Exceptions Masking }
@@ -589,6 +590,30 @@ end;
 {$endif FPC}
 
 {$endif OSWINDOWS}
+
+// see clocale.pp unit for those values
+
+function setlocale(category: integer; locale: PAnsiChar): PAnsiChar; cdecl;
+{$ifdef OSWINDOWS}
+  external _CLIB name 'setlocale'; // redirect to msvcrt.dll
+{$else}
+  {$ifdef NETBSD}
+  // NetBSD has a new setlocale function defined in /usr/include/locale.h
+  external 'c' name '__setlocale_mb_len_max_32';
+  {$else}
+  external 'c' name 'setlocale'; // regular libc POSIX call
+  {$endif NETBSD}
+{$endif OSWINDOWS}
+
+const
+  LC_CTYPE = 0;
+  LC_NUMERIC = 1;
+  LC_ALL = 6;
+
+procedure SetLibcNumericLocale;
+begin
+  setlocale(LC_NUMERIC, 'C');
+end;
 
 
 { ****************** GCC Math Functions }
@@ -1787,30 +1812,6 @@ end;
 
 {$endif CPUINTEL}
 
-// see clocale.pp unit for those values
-
-function setlocale(category: integer; locale: PAnsiChar): PAnsiChar; cdecl;
-{$ifdef NETBSD}
-  { NetBSD has a new setlocale function defined in /usr/include/locale.h
-    that should be used }
-  external 'c' name '__setlocale_mb_len_max_32';
-{$else}
-  {$ifdef OSWINDOWS}
-  external _CLIB name 'setlocale';
-  {$else}
-external 'c' name 'setlocale';
-  {$endif OSWINDOWS}
-{$endif NETBSD}
-
-const
-  LC_CTYPE = 0;
-  LC_NUMERIC = 1;
-  LC_ALL = 6;
-
-procedure SetLibcNumericLocale;
-begin
-  setlocale(LC_NUMERIC, 'C');
-end;
 
 
 { ********************** Cross-Platform FPU Exceptions Masking }
