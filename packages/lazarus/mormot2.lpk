@@ -2,7 +2,6 @@
 <CONFIG>
   <Package Version="5">
     <Name Value="mormot2"/>
-    <Type Value="RunTimeOnly"/>
     <Author Value="A. Bouchez, Synopse"/>
     <CompilerOptions>
       <Version Value="11"/>
