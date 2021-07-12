@@ -1892,7 +1892,6 @@ procedure RedirectCode(Func, RedirectFunc: Pointer);
 {$endif CPUINTEL}
 
 /// search for a given class stored in an object vmtAutoTable Slot
-// - up to 15 properties could be registered per class
 // - quickly returns the PropertiesClass instance for this class on success
 // - returns nil if no Properties was registered for this class; caller should
 // call ClassPropertiesAdd() to initialize

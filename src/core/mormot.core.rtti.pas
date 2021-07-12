@@ -2157,6 +2157,7 @@ type
       read fValueClass;
     /// identify most common RTL inherited classes for special handling
     // - recognize TCollection TStrings TObjectList TList parents
+    // - TRttiValueClass enumerate is faster than InheritsFrom() call
     property ValueRtlClass: TRttiValueClass
       read fValueRtlClass;
     /// store the class of a T*ObjArray dynamic array
@@ -6505,10 +6506,16 @@ begin
 end;
 
 procedure TRttiCustom.SetValueClass(aClass: TClass; aInfo: PRttiInfo);
+var
+  vmt: TObject;
 begin
   fValueClass := aClass;
   // set vmtAutoTable slot for efficient Find(TClass) - to be done asap
-  ClassPropertiesAdd(aClass, self, {freexist=}false);
+  vmt := ClassPropertiesAdd(aClass, self, {freexist=}false);
+  if vmt <> self then
+    raise ERttiException.CreateUtf8(
+      '%.SetValueClass(%): vmtAutoTable already set to %', [self, aClass, vmt]);
+  // identify the most known class types
   if aClass.InheritsFrom(TCollection) then
     fValueRtlClass := vcCollection
   else if aClass.InheritsFrom(TStrings) then
@@ -6521,6 +6528,7 @@ begin
     fValueRtlClass := vcESynException
   else if aClass.InheritsFrom(Exception) then
     fValueRtlClass := vcException;
+  // register the published properties of this class
   fProps.AddFromClass(aInfo, {includeparents=}true);
   if fProps.Count = 0 then
     if fValueRtlClass = vcException then

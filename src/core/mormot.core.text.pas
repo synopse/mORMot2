@@ -2035,7 +2035,7 @@ type
       const Context: TSynLogExceptionContext): boolean; virtual;
     {$endif NOEXCEPTIONINTERCEPT}
     /// the code location when this exception was triggered
-    // - populated by SynLog unit, during interception - so may be nil
+    // - populated by mormot.core.log unit, during interception - so may be nil
     // - you can use TDebugFile.FindLocation(ESynException) class function to
     // guess the corresponding source code line
     // - will be serialized as "Address": hexadecimal and source code location,
