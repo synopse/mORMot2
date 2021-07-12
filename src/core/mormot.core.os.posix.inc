@@ -143,13 +143,9 @@ end;
 
 { ****************** Unicode, Time, File process }
 var
-  /// contains the curent system code page (default UTF-8 on POSIX systems)
-  GetACP: integer = CP_UTF8;
-
   /// contains the current Linux kernel revision, as one 24-bit integer
   // - e.g. $030d02 for 3.13.2, or $020620 for 2.6.32
   KernelRevision: cardinal;
-
 
 function LibraryOpen(const LibraryName: TFileName): TLibHandle;
 begin
@@ -2353,9 +2349,6 @@ begin
     CpuInfoText := CPU_ARCH_TEXT;
   // intialize supported APIs
   TimeZoneLocalBias := -GetLocalTimeOffset;
-  {$ifdef ISFPC27}
-  GetACP := GetSystemCodePage;
-  {$endif ISFPC27}
   {$ifdef OSDARWIN}
   mach_timebase_info(mach_timeinfo);
   mach_timecoeff := mach_timeinfo.Numer / mach_timeinfo.Denom;

@@ -1211,9 +1211,13 @@ procedure RaiseLastModuleError(ModuleName: PChar; ModuleException: ExceptClass);
 function GetDesktopWindow: PtrInt;
   {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
-/// compatibility function, wrapping GetACP() Win32 API function
-// - returns the curent system code page (default WinAnsi)
+/// returns the curent system code page for AnsiString types
+// - as used to initialize CurrentAnsiConvert in mormot.core.unicode unit
+// - initialized at startup: contains GetACP() Win32 API value on Delphi,
+// or DefaultSystemCodePage on FPC - i.e. GetSystemCodePage() on POSIX (likely
+// to be UTF-8) or the value used by the LCL for its "string" types
 function Unicode_CodePage: integer;
+  {$ifdef FPC} inline; {$endif}
 
 /// compatibility function, wrapping CompareStringW() Win32 API text comparison
 // - returns 1 if PW1>PW2, 2 if PW1=PW2, 3 if PW1<PW2 - so substract 2 to have
@@ -2979,7 +2983,13 @@ end;
 
 function Unicode_CodePage: integer;
 begin
+{$ifdef FPC}
+  // = GetSystemCodePage on POSIX, Lazarus may override to UTF-8 on Windows
+  result := DefaultSystemCodePage;
+{$else}
+  // Delphi always uses the main Windows System Code Page
   result := GetACP;
+{$endif FPC}
 end;
 
 function Unicode_CompareString(PW1, PW2: PWideChar; L1, L2: PtrInt;
