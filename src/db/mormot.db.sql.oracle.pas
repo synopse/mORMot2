@@ -542,8 +542,9 @@ begin
           if Step then
             fOCICharSet := ColumnInt(0)
           else
-            fOCICharSet := CodePageToCharSetID(fEnv, 0); // retrieve from NLS_LANG
-        except // on error, retrieve from NLS_LANG
+            fOCICharSet := CodePageToCharSetID(fEnv, 0); // from NLS_LANG
+        except
+          // on error, retrieve default from NLS_LANG
           fOCICharSet := CodePageToCharSetID(fEnv, 0);
         end;
       finally
@@ -725,7 +726,7 @@ procedure TSqlDBOracleConnection.STRToUtf8(P: PAnsiChar; var result: RawUtf8;
 var
   L: integer;
 begin
-  L := StrLen(PUtf8Char(P));
+  L := StrLen(P);
   if (L = 0) or
      (ColumnDBCharSet = OCI_AL32UTF8) or
      (ColumnDBCharSet = OCI_UTF8) or
@@ -741,12 +742,12 @@ procedure TSqlDBOracleConnection.STRToAnsiString(P: PAnsiChar;
 var
   L: integer;
 begin
-  L := StrLen(PUtf8Char(P));
+  L := StrLen(P);
   if (L = 0) or
      ((ColumnDBCharSet <> OCI_AL32UTF8) and
       (ColumnDBCharSet <> OCI_UTF8) and
       (ColumnDBForm <> SQLCS_NCHAR) and
-      (fAnsiConvert.CodePage = cardinal(Unicode_CodePage))) then
+      (fAnsiConvert.CodePage = CurrentAnsiConvert.CodePage)) then
     SetString(result, P, L)
   else
     result := CurrentAnsiConvert.AnsiToAnsi(fAnsiConvert, P, L);
@@ -1763,7 +1764,8 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
                     end;
                 end;
               ftUtf8:
-                if VInOut <> paramIn then // retrieve OUT text parameter
+                if VInOut <> paramIn then
+                  // retrieve OUT text parameter - is #0 terminated -> StrLen()
                   SetLength(VData, StrLen(pointer(VData)));
             end;
     end;

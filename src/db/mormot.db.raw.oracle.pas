@@ -1573,18 +1573,28 @@ begin
       [fLibraryPath, major_version, minor_version, update_num, patch_num]);
 end;
 
+var
+  _NLSLANG: AnsiString = '';
+
+procedure SetNlsLang;
+begin
+  _NLSLANG := AnsiString(GetEnvironmentVariable('NLS_LANG'));
+  if _NLSLANG = '' then
+    _NLSLANG := '-';
+end;
+
 function TSqlDBOracleLib.CodePageToCharSetID(env: pointer; aCodePage: cardinal): cardinal;
 var
   ocp: PUtf8Char;
   i: integer;
-  nlslang: AnsiString;
 begin
   case aCodePage of
     0:
       begin
-        nlslang := AnsiString(GetEnvironmentVariable('NLS_LANG'));
-        if nlslang <> '' then
-          result := NlsCharSetNameToID(env, pointer(nlslang))
+        if _NLSLANG = '' then
+          SetNlsLang;
+        if _NLSLANG <> '-' then
+          result := NlsCharSetNameToID(env, pointer(_NLSLANG))
         else
           result := CodePageToCharSetID(env, Unicode_CodePage);
       end;
@@ -1605,7 +1615,7 @@ begin
     end;
   end;
   if result = 0 then
-    result := OCI_WE8MSWIN1252;
+    result := OCI_WE8MSWIN1252; // unknown code page -> fallback to Win1252
 end;
 
 const
@@ -1661,6 +1671,7 @@ end;
 procedure Int64ToSqlT_VNU(Value: Int64; OutData: PSqlT_VNU);
 var
   V, Exp: byte;
+  d100: Qword;
   minus: boolean; // True, if the sign is positive
   Size, i: PtrInt;
   Mant: array[0..19] of byte;
@@ -1675,8 +1686,9 @@ begin
   begin
     if Value >= 100 then
     begin
-      V := Value mod 100;
-      Value := Value div 100;
+      d100 := Qword(Value) div 100;
+      V := Qword(Value) - (d100 * 100); // V := Value mod 100
+      Value := d100;
       inc(Exp);
     end
     else
@@ -1712,7 +1724,7 @@ end;
 
 function SimilarCharSet(aCharset1, aCharset2: cardinal): boolean;
 var
-  i1, i2: integer;
+  i1, i2: PtrInt;
 begin
   result := true;
   if aCharset1 = aCharset2 then
@@ -1728,7 +1740,7 @@ end;
 
 function OracleCharSetName(aCharsetID: cardinal): PUtf8Char;
 var
-  i: integer;
+  i: PtrInt;
 begin
   for i := 0 to high(CODEPAGES) do
     with CODEPAGES[i] do
@@ -1742,7 +1754,7 @@ end;
 
 function CharSetIDToCodePage(aCharSetID: cardinal): cardinal;
 var
-  i: integer;
+  i: PtrInt;
 begin
   for i := 0 to high(CODEPAGES) do
     with CODEPAGES[i] do
