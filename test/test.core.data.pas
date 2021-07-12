@@ -3594,11 +3594,13 @@ var
       v2.AddItem(f.Value^);
     end;
     CheckEqual(vd.ToJson, v2.ToJson);
+    Check(vd.Equals(v2));
     v2.Clear;
     v2.InitFast;
     for v in vd.Items do
       v2.AddItem(v^);
     CheckEqual(vd.ToJson, v2.ToJson);
+    Check(vd.Equals(v2));
     v2.Clear;
     v2.InitFast;
     for d in vd.Objects do
@@ -3617,6 +3619,7 @@ var
       v2.AddValue(f.Name^, f.Value^);
     end;
     CheckEqual(vd.ToJson, v2.ToJson);
+    Check(vd.Equals(v2));
     for v in vd.Items do
       Check(v = nil); // should not iterate
     for f in vd.Fields do
@@ -3675,6 +3678,7 @@ begin
   Check(Doc.U['name'] = 'John');
   CheckDoc(Doc);
   Doc2.InitJson(Doc.ToJson);
+  Check(Doc2.Equals(Doc));
   CheckDoc(Doc2);
   Doc.Clear;
   Doc.InitArray(['one', 2, 3.0]);
@@ -3777,6 +3781,7 @@ begin
   s := Doc.ToJson;
   CheckHash(s, 2110959969, 'bigjson');
   Doc2.InitJson(s);
+  Check(Doc2.Equals(Doc));
   check(Doc2.Count = MAX + 1);
   for i := 0 to MAX do
     Check(Doc2.Values[i] = Doc.Values[i]);
