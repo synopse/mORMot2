@@ -2922,7 +2922,7 @@ begin
         result := ICMP[VarCompareValue(PVariant(A)^, PVariant(B)^)]
       else if at = DocVariantVType then
         // direct TDocVariantDat.VName/VValue comparison with no serialization
-        result := PDocVariantData(A)^.Compare(PDocVariantData(B)^)
+        result := PDocVariantData(A)^.Compare(PDocVariantData(B)^, caseInsensitive)
       else
         // compare from its UTF-8 text representation/serialization
         result := CMP[caseInsensitive](PVariant(A)^, PVariant(B)^);
