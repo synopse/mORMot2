@@ -4372,14 +4372,13 @@ var // warning: exact local variables order should match TFakeCallStack
   {$ifdef OSPOSIX}
   sr9, sr8, srcx, srdx, srsi, srdi: pointer;
   {$endif OSPOSIX}
-asm // caller = mov ax,{MethodIndex}; jmp x64FakeStub
+asm     // caller = mov eax,{MethodIndex}; jmp x64FakeStub
         {$ifndef FPC}
         // FakeCall(self: TInterfacedObjectFake; var aCall: TFakeCallStack): Int64
         // So, make space for two variables (+shadow space)
         // adds $50 to stack, so rcx .. at rpb+$10+$50 = rpb+$60
        .params 2
         {$endif FPC}
-        and     rax, $ffff
         mov     smetndx, rax
         movlpd  sxmm0, xmm0 // movlpd to ignore upper 64-bit of 128-bit xmm reg
         movlpd  sxmm1, xmm1
@@ -4419,13 +4418,107 @@ end;
 
 {$endif CPUX64}
 
-function TInterfaceFactory.GetMethodsVirtualTable: pointer;
+{$ifndef CPUX86}
+
 var
-  i, tmp: cardinal;
+  // reuse the very same JITted stubs for all interfaces
+  _FAKEVMT: array of pointer;
+
+// JIT MAX_METHOD_COUNT VMT stubs for every method of any interface
+// - internal function protected by InterfaceFactoryCache.Safe lock
+procedure Compute_FAKEVMT;
+var
   P: PCardinal;
+  tmp: cardinal;
+  i: PtrInt;
   {$ifdef CPUAARCH64}
   stub: PtrUInt;
   {$endif CPUAARCH64}
+begin
+  // reserve executable memory for JIT (aligned to 8 bytes)
+  {$ifdef CPUX64}
+  tmp := MAX_METHOD_COUNT * 24;
+  {$endif CPUX64}
+  {$ifdef CPUARM}
+  tmp := MAX_METHOD_COUNT * 16;
+  {$endif CPUARM}
+  {$ifdef CPUAARCH64}
+  tmp := ($120 shr 2) + MAX_METHOD_COUNT * 28;
+  {$endif CPUAARCH64}
+  P := ReserveExecutableMemory(tmp);
+  // populate _FAKEVMT[] with JITted stubs
+  SetLength(_FAKEVMT, MAX_METHOD_COUNT);
+  for i := 0 to MAX_METHOD_COUNT - 1 do
+  begin
+    _FAKEVMT[i] := P;
+    {$ifdef CPUX64}
+    PWord(P)^ := $ba49; // mov r10, x64FakeStub
+    inc(PWord(P));
+    PPointer(P)^ := @x64FakeStub; // on Linux Posix > 32-bit -> absolute
+    inc(PPointer(P));
+    PByte(P)^ := $b8;   // mov eax, MethodIndex
+    inc(PByte(P));
+    P^ := i;
+    inc(P);
+    P^ := $90e2ff41;    // jmp r10  (faster than push + ret)
+    inc(PByte(P), 9);
+    {$endif CPUX64}
+    {$ifdef CPUARM}
+    {$ifdef ASMORIG}
+    P^ := ($e3a040 shl 8) + i;
+    inc(P); // mov r4 (v1),{MethodIndex} : store method index in register
+    {$else}
+    P^ := ($e3a0c0 shl 8) + cardinal(i);
+    inc(P); // mov r12 (ip),{MethodIndex} : store method index in register
+    {$endif ASMORIG}
+    tmp := ((PtrUInt(@TInterfacedObjectFake.ArmFakeStub) -
+             PtrUInt(P)) shr 2) - 2;
+    // branch ArmFakeStub (24bit relative, word aligned)
+    P^ := ($ea shl 24) + (tmp and $00ffffff);
+    inc(P);
+    P^ := $e320f000;
+    inc(P);
+    {$endif CPUARM}
+    {$ifdef CPUAARCH64}
+    // store method index in register r16 [IP0]
+    // $10 = r16 ... loop to $1F -> number shifted * $20
+    P^ := ($d280 shl 16) + (i shl 5) + $10;
+    inc(P);  // mov r16 ,{MethodIndex}
+    // we are using a register branch here
+    // fill register x10 with address
+    stub := PtrUInt(@TInterfacedObjectFake.AArch64FakeStub);
+    tmp := (stub shr 0) and $ffff;
+    P^ := ($d280 shl 16) + (tmp shl 5) + $0a;
+    inc(P);
+    tmp := (stub shr 16) and $ffff;
+    P^ := ($f2a0 shl 16) + (tmp shl 5) + $0a;
+    inc(P);
+    tmp := (stub shr 32) and $ffff;
+    P^ := ($f2c0 shl 16) + (tmp shl 5) + $0a;
+    inc(P);
+    tmp := (stub shr 48) and $ffff;
+    P^ := ($f2e0 shl 16) + (tmp shl 5) + $0a;
+    inc(P);
+    // branch to address in x10 register
+    P^ := $d61f0140;
+    inc(P);
+    P^ := $d503201f;
+    inc(P);
+    {$endif CPUAARCH64}
+  end;
+  // reenable execution permission of JITed memory as expected by the VMT
+  ReserveExecutableMemoryPageAccess(_FAKEVMT[0], {exec=}true);
+end;
+
+{$endif CPUX86}
+
+
+function TInterfaceFactory.GetMethodsVirtualTable: pointer;
+{$ifdef CPUX86}
+var
+  P: PCardinal;
+  i: PtrInt;
+{$endif CPUX86}
 begin
   result := pointer(fFakeVTable);
   if result <> nil then
@@ -4440,88 +4533,15 @@ begin
       fFakeVTable[0] := @TInterfacedObjectFake.FakeQueryInterface;
       fFakeVTable[1] := @TInterfacedObjectFake.Fake_AddRef;
       fFakeVTable[2] := @TInterfacedObjectFake.Fake_Release;
-      // JIT one VMT stub for each method of this interface
+      // set JITted VMT stubs for each method of this interface
       if MethodsCount <> 0 then
       begin
-        // reserve executable memory for JIT
         {$ifdef CPUX86}
-        tmp := MethodsCount * 24;
-        {$endif CPUX86}
-        {$ifdef CPUX64}
-        tmp := MethodsCount * 16;
-        {$endif CPUX64}
-        {$ifdef CPUARM}
-        tmp := MethodsCount * 12;
-        {$endif CPUARM}
-        {$ifdef CPUAARCH64}
-        tmp := ($120 shr 2) + MethodsCount * 28;
-        {$endif CPUAARCH64}
-        fFakeStub := ReserveExecutableMemory(tmp);
-        P := pointer(fFakeStub);
-        {$ifdef CPUAARCH64}
-        PtrUInt(P) := PtrUInt(P) + $120;
-        {$endif CPUAARCH64}
-        // disable execution permission of memory for proper writing
-        ReserveExecutableMemoryPageAccess(P, {exec=}false);
-        // JIT cpu-specific VMT entry for each method
+        // we need to JIT with an explicit ArgsSizeInStack adjustement
+        P := ReserveExecutableMemory(MethodsCount * 24);
         for i := 0 to MethodsCount - 1 do
         begin
-          fFakeVTable[i + RESERVED_VTABLE_SLOTS] := P;
-          {$ifdef CPUX64}   { TODO: generate a JIT jmp instead of push + ret }
-          PWord(P)^ := $b848;
-          inc(PWord(P));           // mov rax,offset x64FakeStub
-          PPtrUInt(P)^ := PtrUInt(@x64FakeStub);
-          inc(PPtrUInt(P));
-          PByte(P)^ := $50;
-          inc(PByte(P));           // push rax
-          P^ := $b866 + (i shl 16);
-          inc(P);                  // mov (r)ax,{MethodIndex}
-          PByte(P)^ := $c3;
-          inc(PByte(P));           // ret
-          {$endif CPUX64}
-          {$ifdef CPUARM}
-          {$ifdef ASMORIG}
-          P^ := ($e3a040 shl 8) + i;
-          inc(P); // mov r4 (v1),{MethodIndex} : store method index in register
-          {$else}
-          P^ := ($e3a0c0 shl 8) + i;
-          inc(P); // mov r12 (ip),{MethodIndex} : store method index in register
-          {$endif ASMORIG}
-          tmp := ((PtrUInt(@TInterfacedObjectFake.ArmFakeStub) -
-                   PtrUInt(P)) shr 2) - 2;
-          // branch ArmFakeStub (24bit relative, word aligned)
-          P^ := ($ea shl 24) + (tmp and $00ffffff);
-          inc(P);
-          P^ := $e320f000;
-          inc(P);
-          {$endif CPUARM}
-          {$ifdef CPUAARCH64}
-          // store method index in register r16 [IP0]
-          // $10 = r16 ... loop to $1F -> number shifted * $20
-          P^ := ($d280 shl 16) + (i shl 5) + $10;
-          inc(P);  // mov r16 ,{MethodIndex}
-          // we are using a register branch here
-          // fill register x10 with address
-          stub := PtrUInt(@TInterfacedObjectFake.AArch64FakeStub);
-          tmp := (stub shr 0) and $ffff;
-          P^ := ($d280 shl 16) + (tmp shl 5) + $0a;
-          inc(P);
-          tmp := (stub shr 16) and $ffff;
-          P^ := ($f2a0 shl 16) + (tmp shl 5) + $0a;
-          inc(P);
-          tmp := (stub shr 32) and $ffff;
-          P^ := ($f2c0 shl 16) + (tmp shl 5) + $0a;
-          inc(P);
-          tmp := (stub shr 48) and $ffff;
-          P^ := ($f2e0 shl 16) + (tmp shl 5) + $0a;
-          inc(P);
-          // branch to address in x10 register
-          P^ := $d61f0140;
-          inc(P);
-          P^ := $d503201f;
-          inc(P);
-          {$endif CPUAARCH64}
-          {$ifdef CPUX86}
+          fFakeVTable[RESERVED_VTABLE_SLOTS + i] := P;
           P^ := $68ec8b55;
           inc(P);                 // push ebp; mov ebp,esp
           P^ := i;
@@ -4534,16 +4554,17 @@ begin
           inc(P);
           P^ := $c25dec89;
           inc(P);                 // mov esp,ebp; pop ebp
-          {$ifdef OSDARWIN}
-          P^ := $900000;         // ret; nop
-          {$else}
           P^ := fMethods[i].ArgsSizeInStack or $900000; // ret {StackSize}; nop
-          {$endif OSDARWIN}
           inc(PByte(P), 3);
-          {$endif CPUX86}
         end;
-        // reenable execution permission of JITed memory as expected by the VMT
-        ReserveExecutableMemoryPageAccess(P, {exec=}true);
+        ReserveExecutableMemoryPageAccess(
+          fFakeVTable[RESERVED_VTABLE_SLOTS], {exec=}true);
+        {$else}
+        if _FAKEVMT = nil then
+          Compute_FAKEVMT; // we can reuse pre-JITted stubs
+        MoveFast(_FAKEVMT[0], fFakeVTable[RESERVED_VTABLE_SLOTS],
+          MethodsCount * SizeOf(pointer));
+        {$endif CPUX86}
       end;
     end;
   finally
