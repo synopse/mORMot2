@@ -4949,19 +4949,18 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         shl     r10, 4
         movdqa  xmm1, xmm0
         pxor    xmm0, dqword ptr [rax]
-        movdqu  xmm2, dqword ptr [data + len - 16] // no read after end of page
+        movdqu  xmm1, dqword ptr [data + len - 16] // no read after end of page
         lea     r11, [rip + @shifts] // (heap has header so no read before EOP)
         aesenc  xmm0, xmm0
         cmp     len, 16 // 1..16 bytes have no branch
         ja      @17up
         je      @16
-        pshufb  xmm2, dqword ptr [r11 + r10]  // shuffle data bits to lower xmm2
-@16:    pxor    xmm2, xmm0
-        aesenc  xmm2, xmm2
-        aesenc  xmm2, xmm2
-        aesenc  xmm2, xmm2
-        movdqa  xmm0, xmm2
-        movd    eax, xmm2 // when jumped from _AesNiHash32
+        pshufb  xmm1, dqword ptr [r11 + r10]  // shuffle data bits to lower xmm2
+@16:    aesenc  xmm1, xmm0
+        aesenc  xmm1, xmm1
+        aesenc  xmm1, xmm1
+        movdqa  xmm0, xmm1
+        movd    eax, xmm0 // when jumped from _AesNiHash32
         ret
 @0:     mov     eax, seedfromhash32 // _AesNiHash32 left seed in first param reg
         ret
@@ -4970,11 +4969,9 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         pxor    xmm1, dqword ptr [rax + 16] // 17..32 bytes
         aesenc  xmm1, xmm1
         movdqu  xmm2, dqword ptr [data]
-        movdqu  xmm3, dqword ptr [data + len - 10H] // may overlap
-        pxor    xmm2, xmm0
-        pxor    xmm3, xmm1
-        aesenc  xmm2, xmm2
-        aesenc  xmm3, xmm3
+        movdqu  xmm3, dqword ptr [data + len - 16] // may overlap
+        aesenc  xmm2, xmm0
+        aesenc  xmm3, xmm1
         aesenc  xmm2, xmm2
         aesenc  xmm3, xmm3
         aesenc  xmm2, xmm2
@@ -4987,24 +4984,20 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         ja      @65up
         movdqa  xmm2, xmm1  // 33..64 bytes
         movdqa  xmm3, xmm1
-        pxor    xmm1, dqword ptr [rax + 16]
+        pxor    xmm1, dqword ptr [rax + 16] // from AESNIHASHKEYSCHED
         pxor    xmm2, dqword ptr [rax + 32]
         pxor    xmm3, dqword ptr [rax + 48]
         aesenc  xmm1, xmm1
         aesenc  xmm2, xmm2
         aesenc  xmm3, xmm3
         movdqu  xmm4, dqword ptr [data]
-        movdqu  xmm5, dqword ptr [data + 10H]
-        movdqu  xmm6, dqword ptr [data + len - 20H] // may overlap
-        movdqu  xmm7, dqword ptr [data + len - 10H]
-        pxor    xmm4, xmm0
-        pxor    xmm5, xmm1
-        pxor    xmm6, xmm2
-        pxor    xmm7, xmm3
-        aesenc  xmm4, xmm4
-        aesenc  xmm5, xmm5
-        aesenc  xmm6, xmm6
-        aesenc  xmm7, xmm7
+        movdqu  xmm5, dqword ptr [data + 16]
+        movdqu  xmm6, dqword ptr [data + len - 32] // may overlap
+        movdqu  xmm7, dqword ptr [data + len - 16]
+        aesenc  xmm4, xmm0
+        aesenc  xmm5, xmm1
+        aesenc  xmm6, xmm2
+        aesenc  xmm7, xmm3
         aesenc  xmm4, xmm4
         aesenc  xmm5, xmm5
         aesenc  xmm6, xmm6
@@ -5027,7 +5020,7 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         movdqa  xmm5, xmm1
         movdqa  xmm6, xmm1
         movdqa  xmm7, xmm1
-        pxor    xmm1, dqword ptr [rax + 16]
+        pxor    xmm1, dqword ptr [rax + 16] // from AESNIHASHKEYSCHED
         pxor    xmm2, dqword ptr [rax + 32]
         pxor    xmm3, dqword ptr [rax + 48]
         pxor    xmm4, dqword ptr [rax + 64]
@@ -5042,13 +5035,13 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         aesenc  xmm6, xmm6
         aesenc  xmm7, xmm7
         movdqu  xmm8, dqword ptr [data]
-        movdqu  xmm9, dqword ptr [data + 10H]
-        movdqu  xmm10, dqword ptr [data + 20H]
-        movdqu  xmm11, dqword ptr [data + 30H]
-        movdqu  xmm12, dqword ptr [data + len - 40H] // may overlap
-        movdqu  xmm13, dqword ptr [data + len - 30H]
-        movdqu  xmm14, dqword ptr [data + len - 20H]
-        movdqu  xmm15, dqword ptr [data + len - 10H]
+        movdqu  xmm9, dqword ptr [data + 16]
+        movdqu  xmm10, dqword ptr [data + 32]
+        movdqu  xmm11, dqword ptr [data + 48]
+        movdqu  xmm12, dqword ptr [data + len - 64] // may overlap
+        movdqu  xmm13, dqword ptr [data + len - 48]
+        movdqu  xmm14, dqword ptr [data + len - 32]
+        movdqu  xmm15, dqword ptr [data + len - 16]
         pxor    xmm8, xmm0
         pxor    xmm9, xmm1
         pxor    xmm10, xmm2
@@ -5116,7 +5109,7 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         movdqa  xmm5, xmm1
         movdqa  xmm6, xmm1
         movdqa  xmm7, xmm1
-        pxor    xmm1, dqword ptr [rax + 16]
+        pxor    xmm1, dqword ptr [rax + 16] // from AESNIHASHKEYSCHED
         pxor    xmm2, dqword ptr [rax + 32]
         pxor    xmm3, dqword ptr [rax + 48]
         pxor    xmm4, dqword ptr [rax + 64]
@@ -5130,14 +5123,14 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         aesenc  xmm5, xmm5
         aesenc  xmm6, xmm6
         aesenc  xmm7, xmm7
-        movdqu  xmm8, dqword ptr [data + len - 80H] // may overlap
-        movdqu  xmm9, dqword ptr [data + len - 70H]
-        movdqu  xmm10, dqword ptr [data + len - 60H]
-        movdqu  xmm11, dqword ptr [data + len - 50H]
-        movdqu  xmm12, dqword ptr [data + len - 40H]
-        movdqu  xmm13, dqword ptr [data + len - 30H]
-        movdqu  xmm14, dqword ptr [data + len - 20H]
-        movdqu  xmm15, dqword ptr [data + len - 10H]
+        movdqu  xmm8, dqword ptr [data + len - 128] // may overlap
+        movdqu  xmm9, dqword ptr [data + len - 112]
+        movdqu  xmm10, dqword ptr [data + len - 96]
+        movdqu  xmm11, dqword ptr [data + len - 80]
+        movdqu  xmm12, dqword ptr [data + len - 64]
+        movdqu  xmm13, dqword ptr [data + len - 48]
+        movdqu  xmm14, dqword ptr [data + len - 32]
+        movdqu  xmm15, dqword ptr [data + len - 16]
         pxor    xmm8, xmm0
         pxor    xmm9, xmm1
         pxor    xmm10, xmm2
@@ -5148,7 +5141,6 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         pxor    xmm15, xmm7
         dec     len
         shr     len, 7
-        and     data, -16 // 16-byte aligned reads in main loop
         // process 128 bytes per iteration
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @loop:  aesenc  xmm8, xmm8
@@ -5159,18 +5151,18 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         aesenc  xmm13, xmm13
         aesenc  xmm14, xmm14
         aesenc  xmm15, xmm15
-        movdqa  xmm0, dqword ptr [data]
-        movdqa  xmm1, dqword ptr [data + 10H]
-        movdqa  xmm2, dqword ptr [data + 20H]
-        movdqa  xmm3, dqword ptr [data + 30H]
+        movdqu  xmm0, dqword ptr [data]
+        movdqu  xmm1, dqword ptr [data + 16]
+        movdqu  xmm2, dqword ptr [data + 32]
+        movdqu  xmm3, dqword ptr [data + 48]
         aesenc  xmm8, xmm0
         aesenc  xmm9, xmm1
         aesenc  xmm10, xmm2
         aesenc  xmm11, xmm3
-        movdqa  xmm4, dqword ptr [data + 40H]
-        movdqa  xmm5, dqword ptr [data + 50H]
-        movdqa  xmm6, dqword ptr [data + 60H]
-        movdqa  xmm7, dqword ptr [data + 70H]
+        movdqu  xmm4, dqword ptr [data + 64]
+        movdqu  xmm5, dqword ptr [data + 80]
+        movdqu  xmm6, dqword ptr [data + 96]
+        movdqu  xmm7, dqword ptr [data + 112]
         aesenc  xmm12, xmm4
         aesenc  xmm13, xmm5
         aesenc  xmm14, xmm6
