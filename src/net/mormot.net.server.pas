@@ -67,7 +67,7 @@ type
     /// prepare an incoming request
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
-    procedure Prepare(const aURL, aMethod, aInHeaders: RawUtf8;
+    procedure Prepare(const aUrl, aMethod, aInHeaders: RawUtf8;
       const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8);
         override;
     {$ifdef OSWINDOWS}
@@ -341,7 +341,7 @@ type
   protected
     fRemoteConnectionID: THttpServerConnectionID;
     fMethod: RawUtf8;
-    fURL: RawUtf8;
+    fUrl: RawUtf8;
     fServer: THttpServer;
     fKeepAliveClient: boolean;
     // from TSynThreadPoolTHttpServer.Task
@@ -364,7 +364,7 @@ type
       read fMethod;
     /// contains the URL ('/' e.g.) after GetRequest()
     property URL: RawUtf8
-      read fURL;
+      read fUrl;
     /// true if the client is HTTP/1.1 and 'Connection: Close' is not set
     // - default HTTP/1.1 behavior is "keep alive", unless 'Connection: Close'
     // is specified, cf. RFC 2068 page 108: "HTTP/1.1 applications that do not
@@ -1222,7 +1222,7 @@ var
   // global request counter if no THttpServer is defined
   GlobalRequestID: integer;
 
-procedure THttpServerRequest.Prepare(const aURL, aMethod, aInHeaders: RawUtf8;
+procedure THttpServerRequest.Prepare(const aUrl, aMethod, aInHeaders: RawUtf8;
   const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8);
 var
   id: PInteger;
@@ -1234,7 +1234,7 @@ begin
   fRequestID := InterLockedIncrement(id^);
   if fRequestID = maxInt - 2048 then // ensure no overflow (31-bit range)
     id^ := 0;
-  fURL := aURL;
+  fUrl := aUrl;
   fMethod := aMethod;
   fRemoteIP := aRemoteIP;
   if aRemoteIP <> '' then
@@ -2061,7 +2061,7 @@ begin
     if P = nil then
       exit; // broken
     GetNextItem(P, ' ', fMethod); // 'GET'
-    GetNextItem(P, ' ', fURL);    // '/path'
+    GetNextItem(P, ' ', fUrl);    // '/path'
     fKeepAliveClient := ((fServer = nil) or
                          (fServer.ServerKeepAliveTimeOut > 0)) and
                         IdemPChar(P, 'HTTP/1.1');
@@ -2110,7 +2110,7 @@ begin
       if Assigned(fServer.OnBeforeBody) then
       begin
         allheaders := HeaderGetText(fRemoteIP);
-        status := fServer.OnBeforeBody(fURL, fMethod, allheaders, ContentType,
+        status := fServer.OnBeforeBody(fUrl, fMethod, allheaders, ContentType,
           fRemoteIP, BearerToken, ContentLength, HTTPREMOTEFLAGS[TLS.Enabled]);
         {$ifdef SYNCRTDEBUGLOW}
         TSynLog.Add.Log(sllCustom2,
@@ -2906,7 +2906,7 @@ begin
             ctxt.fConnectionID := req^.ConnectionID;
             ctxt.fHttpApiRequest := req;
             SetString(ctxt.fFullURL, req^.CookedUrl.pFullUrl, req^.CookedUrl.FullUrlLength);
-            FastSetString(ctxt.fURL, req^.pRawUrl, req^.RawUrlLength);
+            FastSetString(ctxt.fUrl, req^.pRawUrl, req^.RawUrlLength);
             if req^.Verb in [low(vervs)..high(vervs)] then
               ctxt.fMethod := vervs[req^.Verb]
             else
@@ -2976,7 +2976,7 @@ begin
                   FastSetString(token, pRawValue + 7, RawValueLength - 7)
                 else
                   token := '';
-              err := OnBeforeBody(ctxt.fURL, ctxt.fMethod, ctxt.fInHeaders,
+              err := OnBeforeBody(ctxt.fUrl, ctxt.fMethod, ctxt.fInHeaders,
                 ctxt.fInContentType, remoteip, token, incontlen, ctxt.ConnectionFlags);
               if err <> HTTP_SUCCESS then
               begin

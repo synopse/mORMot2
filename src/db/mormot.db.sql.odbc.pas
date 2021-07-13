@@ -352,7 +352,7 @@ begin
         [self, DbmsName, DriverName, DbmsVersion]);
     if Log <> nil then
       Log.Log(sllDebug, 'Connected to % using % % recognized as %', [DbmsName,
-        DriverName, DbmsVersion, fProperties.DBMSEngineName]);
+        DriverName, DbmsVersion, fProperties.DbmsEngineName]);
     // notify any re-connection
     inherited Connect;
   except
@@ -985,7 +985,7 @@ begin
               ftDouble:
                 begin
                   CValueType := SQL_C_DOUBLE;
-                  if (fDBMS = dMSSQL) and (VInOut=paramIn) and
+                  if (fDbms = dMSSQL) and (VInOut=paramIn) and
                      (unaligned(PDouble(@VInt64)^) > -1) and
                      (unaligned(PDouble(@VInt64)^) < 1) then
                   begin

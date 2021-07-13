@@ -232,17 +232,17 @@ begin
     for p := Low(FIREDAC_PROVIDER) to high(FIREDAC_PROVIDER) do
       if SameTextU(FIREDAC_PROVIDER[p], server) then
       begin
-        fDBMS := p;
+        fDbms := p;
         break;
       end;
   inherited Create(server, aDatabaseName, aUserID, aPassWord);
   fOnBatchInsert := nil; // MultipleValuesInsert is slower than FireDAC ArrayDML
   fFireDACOptions := TStringList.Create;
-  if ((fDBMS < low(FIREDAC_PROVIDER)) or
-      (fDBMS > high(FIREDAC_PROVIDER))) and
-     (fDBMS <> dNexusDB) then
+  if ((fDbms < low(FIREDAC_PROVIDER)) or
+      (fDbms > high(FIREDAC_PROVIDER))) and
+     (fDbms <> dNexusDB) then
     if SameTextU(server, 'ASA') then
-      fDBMS := dMSSQL
+      fDbms := dMSSQL
     else
     begin
       for p := Low(FIREDAC_PROVIDER) to high(FIREDAC_PROVIDER) do
@@ -251,7 +251,7 @@ begin
         [self, namevalue]);
     end;
   if server = '' then
-    server := FIREDAC_PROVIDER[fDBMS];
+    server := FIREDAC_PROVIDER[fDbms];
   fFireDACOptions.Text := FormatString(
     'DriverID=%'#13#10'User_Name=%'#13#10'Password=%'#13#10'Database=%',
     [server, fUserId, fPassWord, fDatabaseName]);
@@ -262,7 +262,7 @@ begin
     if namevalue <> '' then
       fFireDACOptions.Add(Utf8ToString(namevalue));
   end;
-  case fDBMS of
+  case fDbms of
     dSQLite:
       begin
         if fFireDACOptions.Values['CharacterSet'] = '' then
@@ -451,7 +451,7 @@ begin
     raise ESqlDBFireDAC.CreateUtf8('%.Connect(%): Database=nil',
       [self, fProperties.ServerName]);
   Log := SynDBLog.Enter('Connect to DriverID=% Database=%',
-    [FIREDAC_PROVIDER[fProperties.DBMS], fProperties.DatabaseName], self);
+    [FIREDAC_PROVIDER[fProperties.Dbms], fProperties.DatabaseName], self);
   try
     fDatabase.Open;
     inherited Connect; // notify any re-connection

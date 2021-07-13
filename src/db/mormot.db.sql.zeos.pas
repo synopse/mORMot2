@@ -112,9 +112,9 @@ type
   /// implement properties shared by ZEOS connections
   TSqlDBZeosConnectionProperties = class(TSqlDBConnectionPropertiesThreadSafe)
   protected
-    fURL: TZURL;
+    fUrl: TZURL;
     fStatementParams: TStrings;
-    fDBMSName: RawUtf8;
+    fDbmsName: RawUtf8;
     fSupportsArrayBindings: boolean;
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - do nothing by now (ZEOS metadata may be used in the future)
@@ -148,7 +148,7 @@ type
     // - you can define the protocol by hand eg. "odbc_w"/"OleDB" and define
     // TSqlDBDefinition to describe the server syntax mormot.db.sql and the ORM
     // use behind the abstract driver
-    constructor CreateWithZURL(const aURL: TZURL; aDBMS: TSqlDBDefinition;
+    constructor CreateWithZURL(const aUrl: TZURL; aDbms: TSqlDBDefinition;
       aOwnsURL: boolean); virtual;
     /// finalize properties internal structures
     destructor Destroy; override;
@@ -200,11 +200,11 @@ type
       aLibraryLocationAppendExePath: boolean = true): RawUtf8; overload;
   published
     /// the remote DBMS name, as retrieved from ServerName, i.e. ZEOS URL
-    property DBMSName: RawUtf8
-      read fDBMSName;
+    property DbmsName: RawUtf8
+      read fDbmsName;
     /// direct access to the internal TZURL connection parameters
     property ZeosURL: TZURL
-      read fURL;
+      read fUrl;
     /// direct access to the internal statement parameters
     // - i.e. will be used by IZConnection.PrepareStatementWithParams()
     // - default values (set in Create method) try to achieve best permormance
@@ -378,7 +378,7 @@ begin
       (aServerName[Length(aServerName) - 1] = ']')) then
   begin
     fServerName := Copy(aServerName, 1, BrakedPos - 1);
-    fDBMSName := Copy(aServerName, BrakedPos + 1,
+    fDbmsName := Copy(aServerName, BrakedPos + 1,
       PosExChar(']', aServerName) - 1 - BrakedPos);
   end
   else
@@ -388,16 +388,16 @@ begin
     fServerName := fServerName + ':';
   if not IdemPChar(Pointer(aServerName), 'ZDBC:') then
     fServerName := 'zdbc:' + fServerName;
-  fURL := TZURL.Create(Utf8ToString(fServerName));
-  if fURL.Database = '' then
-    fURL.Database := Utf8ToString(aDatabaseName);
-  if fURL.UserName = '' then
-    fURL.UserName := Utf8ToString(aUserID);
-  if fURL.Password = '' then
-    fURL.Password := Utf8ToString(aPassWord);
-  if fDBMSName = '' then
-    StringToUtf8(fURL.Protocol, fDBMSName);
-  CreateWithZURL(fURL, TYPES[IdemPCharArray(pointer(fDBMSName), PCHARS)], true);
+  fUrl := TZURL.Create(Utf8ToString(fServerName));
+  if fUrl.Database = '' then
+    fUrl.Database := Utf8ToString(aDatabaseName);
+  if fUrl.UserName = '' then
+    fUrl.UserName := Utf8ToString(aUserID);
+  if fUrl.Password = '' then
+    fUrl.Password := Utf8ToString(aPassWord);
+  if fDbmsName = '' then
+    StringToUtf8(fUrl.Protocol, fDbmsName);
+  CreateWithZURL(fUrl, TYPES[IdemPCharArray(pointer(fDbmsName), PCHARS)], true);
 end;
 
 procedure TSqlDBZeosConnectionProperties.GetForeignKeys;
@@ -410,8 +410,8 @@ begin
   result := TSqlDBZeosConnection.Create(self);
 end;
 
-constructor TSqlDBZeosConnectionProperties.CreateWithZURL(const aURL: TZURL;
-  aDBMS: TSqlDBDefinition; aOwnsURL: boolean);
+constructor TSqlDBZeosConnectionProperties.CreateWithZURL(const aUrl: TZURL;
+  aDbms: TSqlDBDefinition; aOwnsURL: boolean);
 {$ifdef ZEOS73UP}
 var
   protocol: RawUtf8;
@@ -419,12 +419,12 @@ var
 begin
   // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
   if aOwnsURL then
-    fURL := aURL
+    fUrl := aUrl
   else
-    fURL := TZURL.Create(aURL);
-  fDBMS := aDBMS;
+    fUrl := TZURL.Create(aUrl);
+  fDbms := aDbms;
   {$ifndef UNICODE}
-  fURL.Properties.Values['controls_cp'] := 'CP_UTF8';
+  fUrl.Properties.Values['controls_cp'] := 'CP_UTF8';
   {$endif UNICODE}
   { Implementation/Enhancements Notes About settings below (from Michael):
     ConnectionProperties:
@@ -463,7 +463,7 @@ begin
        row_prefetch_size you allow to execute a query
   }
   {$ifdef ZEOS73UP}
-  if fDBMS = dMSSQL then
+  if fDbms = dMSSQL then
   begin
     protocol := LowerCase(StringToUtf8(FURL.Protocol));
     //EH: switch off tds support in any kind -> deprecated and our 64bit lib isn't compiled with libiconv support
@@ -484,11 +484,11 @@ begin
   {$endif ZEOS73UP}
   inherited Create(StringToUtf8(FURL.HostName), StringToUtf8(FURL.Database),
     StringToUtf8(FURL.UserName), StringToUtf8(FURL.Password));
-  if StrToBoolDef(fURL.Properties.Values['syndb_singleconnection'], false) then
+  if StrToBoolDef(fUrl.Properties.Values['syndb_singleconnection'], false) then
     ThreadingMode := tmMainConnection;
   // caching disabled by default - enabled if stable enough
   fUseCache := {$ifdef ZEOS72UP}true{$else}false{$endif ZEOS72UP};
-  case fDBMS of
+  case fDbms of
     dSQLite:
       begin
         {$ifndef ZEOS72UP}
@@ -497,25 +497,25 @@ begin
       end;
     dFirebird:
       begin
-        if (fURL.HostName = '') and // Firebird embedded
-           (fURL.Database <> '') then
+        if (fUrl.HostName = '') and // Firebird embedded
+           (fUrl.Database <> '') then
         begin
           ThreadingMode := tmMainConnection; // force SINGLE connection
-          if not FileExists(fURL.Database) then // create local DB file if needed
-            fURL.Properties.Add('createNewDatabase=' + Utf8ToString(
-              SQLCreateDatabase(StringToUtf8(fURL.Database))));
+          if not FileExists(fUrl.Database) then // create local DB file if needed
+            fUrl.Properties.Add('createNewDatabase=' + Utf8ToString(
+              SQLCreateDatabase(StringToUtf8(fUrl.Database))));
         end;
-        fURL.Properties.Add('codepage=UTF8');
+        fUrl.Properties.Add('codepage=UTF8');
         fUseCache := true; // caching rocks with Firebird ZDBC provider :)
       end;
     dOracle, dPostgreSQL, dMySQL:
       begin
-        fURL.Properties.Add('codepage=UTF8');
+        fUrl.Properties.Add('codepage=UTF8');
         fUseCache := true;
       end;
   end;
   fStatementParams := TStringList.Create;
-  case fDBMS of
+  case fDbms of
     dOracle:
       begin
         {$ifndef ZEOS72UP} // fixed since 7.2up
@@ -553,9 +553,9 @@ begin
     dPostgreSQL:
       begin
         // see https://synopse.info/forum/viewtopic.php?pid=13260#p13260
-        fURL.Properties.Add('NoTableInfoCache=true');
+        fUrl.Properties.Add('NoTableInfoCache=true');
         {$ifdef ZEOS73UP}
-        //fURL.Properties.Add(DSProps_BinaryWireResultMode+'=False');
+        //fUrl.Properties.Add(DSProps_BinaryWireResultMode+'=False');
         {$endif ZEOS73UP}
       end;
     dMSSQL:
@@ -570,7 +570,7 @@ begin
         StoreVoidStringAsNull := False;
       end;
   end;
-  if fDBMS in [dOracle, dPostgreSQL, dMySQL, dMSSQL] then
+  if fDbms in [dOracle, dPostgreSQL, dMySQL, dMSSQL] then
   begin
     // let's set 1024KB / chunk for synopse  or more?
     // retrieving/submitting lob's in chunks. Default is 4096Bytes / Chunk
@@ -578,7 +578,7 @@ begin
     // for Firebird we always using the blob-segment size
     fStatementParams.Add('chunk_size=1048576');
   end;
-  if fDBMS in [dPostgreSQL,dFireBird] then
+  if fDbms in [dPostgreSQL,dFireBird] then
   begin
     {$ifdef ZEOS72UP} // new since 7.2up
     // Always load the lobs? Or just on accessing them?
@@ -590,7 +590,7 @@ end;
 
 destructor TSqlDBZeosConnectionProperties.Destroy;
 begin
-  FreeAndNil(fURL);
+  FreeAndNil(fUrl);
   FreeAndNil(fStatementParams);
   inherited;
 end;
@@ -804,7 +804,7 @@ var
   url: TZURL;
 begin
   inherited Create(aProperties);
-  url := (fProperties as TSqlDBZeosConnectionProperties).fURL;
+  url := (fProperties as TSqlDBZeosConnectionProperties).fUrl;
   fDatabase := DriverManager.GetConnectionWithParams(url.URL, url.Properties);
   // EG: setup the connection transaction behavior now, not once Opened in Connect
   //fDatabase.SetReadOnly(false); // is default
@@ -822,7 +822,7 @@ begin
       fProperties.ServerName]);
   log := SynDBLog.Enter(self, 'Connect');
   if log <> nil then
-    with (fProperties as TSqlDBZeosConnectionProperties).fURL do
+    with (fProperties as TSqlDBZeosConnectionProperties).fUrl do
       log.Log(sllTrace, 'Connect to % % for % at %:%',
         [Protocol, Database, HostName, Port]);
   try
@@ -1075,7 +1075,7 @@ begin
         arrayBinding := TZeosArrayBinding.Create(self)
       else if not fExpectResults then
         raise ESqlDBZeos.CreateUtf8(
-          '%.BindArray() not supported by % provider', [self, DBMSName]);
+          '%.BindArray() not supported by % provider', [self, DbmsName]);
   try
     if arrayBinding=nil then
   {$else}
@@ -1088,7 +1088,7 @@ begin
     with fParams[i] do
     begin
       if (Length(VArray) > 0) and
-         (fConnection.Properties.DBMS = dPostgreSQL) then
+         (fConnection.Properties.Dbms = dPostgreSQL) then
       begin
         if VType in [ftInt64, ftCurrency, ftDouble, ftUtf8] then
           VData := BoundArrayToJsonArray(VArray)
@@ -1351,7 +1351,7 @@ begin
         ftNull:
           WR.AddNull;
         ftInt64:
-          if fDBMS in [dMySQL, dPostgreSQL] then
+          if fDbms in [dMySQL, dPostgreSQL] then
           begin
             P := fResultSet.GetPAnsiChar(col + FirstDbcIndex, Len);
             WR.AddNoJsonEscape(P, Len);
@@ -1359,7 +1359,7 @@ begin
           else
             WR.Add(fResultSet.GetLong(col + FirstDbcIndex));
         ftDouble:
-          if fDBMS in [dMySQL, dPostgreSQL] then
+          if fDbms in [dMySQL, dPostgreSQL] then
           begin
             P := fResultSet.GetPAnsiChar(col + FirstDbcIndex, Len);
             WR.AddNoJsonEscape(P, Len);
@@ -1367,7 +1367,7 @@ begin
           else
             WR.AddDouble(fResultSet.GetDouble(col + FirstDbcIndex));
         ftCurrency:
-          if fDBMS = dSQLite then
+          if fDbms = dSQLite then
             WR.AddDouble(fResultSet.GetDouble(col + FirstDbcIndex))
           else
             WR.AddCurr(fResultSet.GetCurrency(col + FirstDbcIndex));
@@ -1381,7 +1381,7 @@ begin
         ftUtf8:
           begin
             WR.Add('"');
-            if fDBMS = dMSSQL then
+            if fDbms = dMSSQL then
             begin
               P := Pointer(fResultSet.GetPWideChar(col + FirstDbcIndex, Len));
               WR.AddJsonEscapeW(Pointer(P), Len);
@@ -1396,7 +1396,7 @@ begin
         ftBlob:
           if fForceBlobAsNull then
             WR.AddNull
-          else if fDBMS in [dMySQL, dSQLite] then
+          else if fDbms in [dMySQL, dSQLite] then
           begin
             P := fResultSet.GetPAnsiChar(col + FirstDbcIndex, Len);
             WR.WrBase64(P, Len, true); // withMagic=true

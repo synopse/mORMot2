@@ -899,7 +899,7 @@ begin
                 'check connection and User/Password');
           end;
           PRemoteMessageHeader(msgOutput)^.sessionID := session;
-          msgOutput := msgOutput + AnsiChar(Connection.Properties.DBMS);
+          msgOutput := msgOutput + AnsiChar(Connection.Properties.Dbms);
         end;
       cConnect:
         Connection.Connect;

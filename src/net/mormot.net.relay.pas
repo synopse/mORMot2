@@ -275,7 +275,7 @@ type
     fServerConnectedToLocalHost: boolean;
     fStatCache: RawJson;
     fStatTix: integer;
-    function OnServerBeforeBody(var aURL, aMethod, aInHeaders, aInContentType,
+    function OnServerBeforeBody(var aUrl, aMethod, aInHeaders, aInContentType,
       aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
       aFlags: THttpServerRequestFlags): cardinal;
     function OnServerRequest(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -940,12 +940,12 @@ begin
 end;
 
 function TPublicRelay.OnServerBeforeBody(
-  var aURL, aMethod, aInHeaders, aInContentType, aRemoteIP, aBearerToken: RawUtf8;
+  var aUrl, aMethod, aInHeaders, aInContentType, aRemoteIP, aBearerToken: RawUtf8;
   aContentLength: Int64; aFlags: THttpServerRequestFlags): cardinal;
 var
   res: TJwtResult;
 begin
-  if IdemPChar(pointer(aURL), '/STAT') then
+  if IdemPChar(pointer(aUrl), '/STAT') then
   begin
     result := HTTP_SUCCESS;
     exit;

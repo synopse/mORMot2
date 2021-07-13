@@ -6302,7 +6302,7 @@ type
 
   /// pre-computed SQL statements for ORM operations for a given
   // TOrmModelProperties instance
-  TOrmModelPropertiesSQL = record
+  TOrmModelPropertiesSql = record
     /// the simple field names in a SQL SELECT compatible format: 'COL1,COL2' e.g.
     // - format is
     // ! SQL.TableSimpleFields[withID: boolean; withTableName: boolean]
@@ -6381,7 +6381,7 @@ type
     fRowIDFieldName: RawUtf8;
     fExtFieldNames: TRawUtf8DynArray;
     fExtFieldNamesUnQuotedSQL: TRawUtf8DynArray;
-    fSql: TOrmModelPropertiesSQL;
+    fSql: TOrmModelPropertiesSql;
     fFieldNamesMatchInternal: TFieldBits;
     fOptions: TOrmPropertiesMappingOptions;
     fAutoComputeSql: boolean;
@@ -6505,7 +6505,7 @@ type
     /// pre-computed SQL statements for this external TOrm in this model
     // - you can use those SQL statements directly with the external engine
     // - filled if AutoComputeSql was set to true in Init() method
-    property SQL: TOrmModelPropertiesSQL read fSql;
+    property SQL: TOrmModelPropertiesSql read fSql;
     /// the ID/RowID customized external field name, if any
     // - is 'ID' by default, since 'RowID' is a reserved column name for some
     // database engines (e.g. Oracle)
@@ -6596,7 +6596,7 @@ type
     /// pre-computed SQL statements for this TOrm in this model
     // - those statements will work for internal tables, not for external
     // tables with mapped table or fields names
-    SQL: TOrmModelPropertiesSQL;
+    SQL: TOrmModelPropertiesSql;
     /// allow SQL process for one external TOrm in this model
     ExternalDB: TOrmPropertiesMapping;
     /// will by-pass automated table and field creation for this TOrm

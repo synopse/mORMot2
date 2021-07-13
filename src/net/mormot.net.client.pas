@@ -508,7 +508,7 @@ type
       outHeaders: PRawUtf8 = nil; outStatus: PInteger = nil): RawByteString;
     // inherited class should override those abstract methods
     procedure InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); virtual; abstract;
-    procedure InternalCreateRequest(const aMethod, aURL: RawUtf8); virtual; abstract;
+    procedure InternalCreateRequest(const aMethod, aUrl: RawUtf8); virtual; abstract;
     procedure InternalSendRequest(const aMethod: RawUtf8; const aData:
       RawByteString); virtual; abstract;
     function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding: RawUtf8;
@@ -759,7 +759,7 @@ type
     // those internal methods will raise an EWinINet exception on error
     procedure InternalConnect(ConnectionTimeOut, SendTimeout,
       ReceiveTimeout: cardinal); override;
-    procedure InternalCreateRequest(const aMethod, aURL: RawUtf8); override;
+    procedure InternalCreateRequest(const aMethod, aUrl: RawUtf8); override;
     procedure InternalCloseRequest; override;
     procedure InternalAddHeader(const hdr: RawUtf8); override;
     procedure InternalSendRequest(const aMethod: RawUtf8;
@@ -811,7 +811,7 @@ type
     // those internal methods will raise an EOSError exception on error
     procedure InternalConnect(ConnectionTimeOut, SendTimeout,
       ReceiveTimeout: cardinal); override;
-    procedure InternalCreateRequest(const aMethod, aURL: RawUtf8); override;
+    procedure InternalCreateRequest(const aMethod, aUrl: RawUtf8); override;
     procedure InternalCloseRequest; override;
     procedure InternalAddHeader(const hdr: RawUtf8); override;
     procedure InternalSendRequest(const aMethod: RawUtf8;
@@ -911,7 +911,7 @@ type
     end;
     procedure InternalConnect(
       ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); override;
-    procedure InternalCreateRequest(const aMethod, aURL: RawUtf8); override;
+    procedure InternalCreateRequest(const aMethod, aUrl: RawUtf8); override;
     procedure InternalSendRequest(const aMethod: RawUtf8;
       const aData: RawByteString); override;
     function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding: RawUtf8;
@@ -2000,16 +2000,16 @@ function THttpRequest.Request(const url, method: RawUtf8; KeepAlive: cardinal;
   out OutHeader: RawUtf8; out OutData: RawByteString): integer;
 var
   aData: RawByteString;
-  aDataEncoding, aAcceptEncoding, aURL: RawUtf8;
+  aDataEncoding, aAcceptEncoding, aUrl: RawUtf8;
   i: integer;
 begin
   if (url = '') or
      (url[1] <> '/') then
-    aURL := '/' + url
+    aUrl := '/' + url
   else // need valid url according to the HTTP/1.1 RFC
-    aURL := url;
+    aUrl := url;
   fKeepAlive := KeepAlive;
-  InternalCreateRequest(method, aURL); // should raise an exception on error
+  InternalCreateRequest(method, aUrl); // should raise an exception on error
   try
     // common headers
     InternalAddHeader(InHeader);
@@ -2236,7 +2236,7 @@ begin
     RaiseLastModuleError(winhttpdll, EWinHttp);
 end;
 
-procedure TWinHttp.InternalCreateRequest(const aMethod, aURL: RawUtf8);
+procedure TWinHttp.InternalCreateRequest(const aMethod, aUrl: RawUtf8);
 const
   ALL_ACCEPT: array[0..1] of PWideChar = (
     '*/*', nil);
@@ -2249,7 +2249,7 @@ begin
   if fHttps then
     Flags := Flags or WINHTTP_FLAG_SECURE;
   fRequest := WinHttpApi.OpenRequest(fConnection, pointer(Utf8ToSynUnicode(aMethod)),
-    pointer(Utf8ToSynUnicode(aURL)), nil, nil, ACCEPT_TYPES[fNoAllAccept], Flags);
+    pointer(Utf8ToSynUnicode(aUrl)), nil, nil, ACCEPT_TYPES[fNoAllAccept], Flags);
   if fRequest = nil then
     RaiseLastModuleError(winhttpdll, EWinHttp);
   if fKeepAlive = 0 then
@@ -2457,7 +2457,7 @@ begin
     raise EWinINet.Create;
 end;
 
-procedure TWinINet.InternalCreateRequest(const aMethod, aURL: RawUtf8);
+procedure TWinINet.InternalCreateRequest(const aMethod, aUrl: RawUtf8);
 const
   ALL_ACCEPT: array[0..1] of PAnsiChar = (
     '*/*', nil);
@@ -2472,7 +2472,7 @@ begin
     Flags := Flags or INTERNET_FLAG_KEEP_CONNECTION;
   if fHttps then
     Flags := Flags or INTERNET_FLAG_SECURE;
-  FRequest := HttpOpenRequestA(FConnection, Pointer(aMethod), Pointer(aURL),
+  FRequest := HttpOpenRequestA(FConnection, Pointer(aMethod), Pointer(aUrl),
     nil, nil, ACCEPT_TYPES[fNoAllAccept], Flags, 0);
   if FRequest = nil then
     raise EWinINet.Create;
@@ -2752,11 +2752,11 @@ begin
   fSSL.PassPhrase := aPassPhrase;
 end;
 
-procedure TCurlHttp.InternalCreateRequest(const aMethod, aURL: RawUtf8);
+procedure TCurlHttp.InternalCreateRequest(const aMethod, aUrl: RawUtf8);
 const
   CERT_PEM: RawUtf8 = 'PEM';
 begin
-  fIn.URL := fRootURL + aURL;
+  fIn.URL := fRootURL + aUrl;
   curl.easy_setopt(fHandle, coFollowLocation, 1); // url redirection (as TWinHttp)
   //curl.easy_setopt(fHandle,coTCPNoDelay,0); // disable Nagle
   if fLayer = nlUnix then

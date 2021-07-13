@@ -197,14 +197,14 @@ var
   Server: TRestServer;
   Ext: TRestStorageExternalHook;
 
-  procedure Test(aDBMS: TSqlDBDefinition; AdaptShouldWork: boolean;
+  procedure Test(aDbms: TSqlDBDefinition; AdaptShouldWork: boolean;
     const SQLExpected: RawUtf8 = '');
   var
     SQL: RawUtf8;
   begin
     SQL := SqlOrigin;
-    TSqlDBConnectionPropertiesHook(Props).fDBMS := aDBMS;
-    Check((Props.DBMS = aDBMS) or (aDBMS = dUnknown));
+    TSqlDBConnectionPropertiesHook(Props).fDbms := aDbms;
+    Check((Props.Dbms = aDbms) or (aDbms = dUnknown));
     Check(Ext.AdaptSQLForEngineList(SQL) = AdaptShouldWork);
     CheckUtf8(SameTextU(SQL, SQLExpected) or
           not AdaptShouldWork, SQLExpected + #13#10 + SQL);
@@ -212,11 +212,11 @@ var
 
   procedure Test2(const Orig, Expected: RawUtf8);
   var
-    DBMS: TSqlDBDefinition;
+    db: TSqlDBDefinition;
   begin
     SqlOrigin := Orig;
-    for DBMS := low(DBMS) to high(DBMS) do
-      Test(DBMS, true, Expected);
+    for db := low(db) to high(db) do
+      Test(db, true, Expected);
   end;
 
 begin

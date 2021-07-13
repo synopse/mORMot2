@@ -272,7 +272,7 @@ type
   // - should return HTTP_SUCCESS=200 to continue the process, or an HTTP
   // error code (e.g. HTTP_FORBIDDEN or HTTP_PAYLOADTOOLARGE) to reject
   // the request
-  TOnHttpServerBeforeBody = function(var aURL, aMethod, aInHeaders,
+  TOnHttpServerBeforeBody = function(var aUrl, aMethod, aInHeaders,
     aInContentType, aRemoteIP, aBearerToken: RawUtf8; aContentLength: Int64;
     aFlags: THttpServerRequestFlags): cardinal of object;
 
@@ -303,7 +303,7 @@ type
     /// prepare an incoming request
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
-    procedure Prepare(const aURL, aMethod, aInHeaders: RawUtf8;
+    procedure Prepare(const aUrl, aMethod, aInHeaders: RawUtf8;
       const aInContent: RawByteString; const aInContentType, aRemoteIP: RawUtf8);
         virtual; abstract;
     /// append some lines to the InHeaders input parameter

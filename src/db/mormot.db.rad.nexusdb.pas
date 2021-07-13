@@ -250,7 +250,7 @@ constructor TSqlDBNexusDBConnectionProperties.Create(const aServerName,
 var
   lServerURL, lAlias: RawUtf8;
 begin
-  fDBMS := dNexusDB;
+  fDbms := dNexusDB;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
   fProtocol := GetNXProtocol(aServerName, lServerURL, lAlias);
   if fProtocol = nxpFOLDER then

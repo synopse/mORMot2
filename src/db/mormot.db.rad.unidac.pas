@@ -192,7 +192,7 @@ begin
   for p := Low(UNIDAC_PROVIDER) to high(UNIDAC_PROVIDER) do
     if SameTextU(UNIDAC_PROVIDER[p], provider) then
     begin
-      fDBMS := p;
+      fDbms := p;
       break;
     end;
   inherited Create(provider, aDatabaseName, aUserID, aPassWord);
@@ -204,7 +204,7 @@ begin
     if namevalue <> '' then
       fSpecificOptions.Add(Utf8ToString(namevalue));
   end;
-  case fDBMS of
+  case fDbms of
     dSQLite:
       begin
         // UniDAC support of SQLite3 is just buggy
@@ -312,7 +312,8 @@ begin
       Table := Owner;
       Owner := '';
     end;
-    if Owner = '' then
+    if (Owner = '') and
+       (fDbms <> dOracle) then
       Owner := MainConnection.Properties.DatabaseName; // itSDS
     if Owner <> '' then
       meta.Restrictions.Values['TABLE_SCHEMA'] := Utf8ToString(UpperCase(Owner))
@@ -374,7 +375,7 @@ begin
       Owner := '';
     end;
     if (Owner = '') and 
-       (fDBMS <> dOracle) then
+       (fDbms <> dOracle) then
       Owner := MainConnection.Properties.DatabaseName; // itSDS
     if Owner <> '' then
       meta.Restrictions.Values['TABLE_SCHEMA'] := UTF8ToString(UpperCase(Owner))
@@ -498,13 +499,13 @@ var
   PortNumber, i: integer;
 begin
   inherited Create(aProperties);
-  if (aProperties.DBMS = dMSSQL) and
+  if (aProperties.Dbms = dMSSQL) and
      not SameText(cMSSQLProvider, 'prDirect') then
     CoInit;
   fDatabase := TUniConnection.Create(nil);
   fDatabase.LoginPrompt := false;
   fDatabase.ProviderName := Utf8ToString(fProperties.ServerName);
-  case aProperties.DBMS of
+  case aProperties.Dbms of
     dSQLite, dFirebird, dPostgreSQL, dMySQL, dDB2, dMSSQL:
       fDatabase.Database := Utf8ToString(fProperties.DatabaseName);
   else
@@ -512,10 +513,10 @@ begin
   end;
   fDatabase.Username := Utf8ToString(fProperties.UserID);
   fDatabase.Password := Utf8ToString(fProperties.PassWord);
-  if aProperties.DBMS = dMySQL then
+  if aProperties.Dbms = dMySQL then
     // s.d. 30.11.19 Damit der Connect schneller geht
     fDatabase.SpecificOptions.Add('MySQL.ConnectionTimeout=0');
-  if aProperties.DBMS = dMSSQL then
+  if aProperties.Dbms = dMSSQL then
   begin
     fDatabase.SpecificOptions.Add('SQL Server.Provider=' + cMSSQLProvider);
     // s.d. 30.11.19 Damit der Connect im Direct Mode so Schnell ist wie mit prAuto/OleDB
@@ -545,7 +546,7 @@ begin
   Log := SynDBLog.Enter('Connect to ProviderName=% Database=% on Server=%',
     [fDatabase.ProviderName, fDatabase.Database, fDatabase.Server], self);
   try
-    case fProperties.DBMS of
+    case fProperties.Dbms of
       dFirebird:
         if (fDatabase.Server = '') and
            not FileExists(fDatabase.Database) then
@@ -587,7 +588,7 @@ destructor TSqlDBUniDACConnection.Destroy;
 begin
   try
     Disconnect;
-    if (fProperties.DBMS = dMSSQL) and
+    if (fProperties.Dbms = dMSSQL) and
        not SameText(cMSSQLProvider, 'prDirect') then
       CoUnInit;
   except
