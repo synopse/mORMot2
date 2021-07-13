@@ -2381,13 +2381,12 @@ type
   {$else}
   TRawUtf8InterningSlot = object
   {$endif USERECORDWITHMETHODS}
+  private
+    fSafe: TRTLCriticalSection;
+    fCount: integer;
+    fValue: TRawUtf8DynArray;
+    fValues: TDynArrayHashed;
   public
-    /// actual RawUtf8 storage
-    Value: TRawUtf8DynArray;
-    /// hashed access to the Value[] list
-    Values: TDynArrayHashed;
-    /// associated mutex for thread-safe process
-    Safe: TSynLocker;
     /// initialize the RawUtf8 slot (and its Safe mutex)
     procedure Init;
     /// finalize the RawUtf8 slot - mainly its associated Safe mutex
@@ -2407,7 +2406,8 @@ type
     // - any string with an usage count <= aMaxRefCount will be removed
     function Clean(aMaxRefCount: TRefCnt): integer;
     /// how many items are currently stored in Value[]
-    function Count: integer;
+    property Count: integer
+      read fCount;
   end;
 
   /// allow to store only one copy of distinct RawUtf8 values
@@ -3919,20 +3919,14 @@ end;
 
 procedure TRawUtf8InterningSlot.Init;
 begin
-  Safe.Init;
-  Safe.LockedInt64[0] := 0;
-  Values.InitSpecific(TypeInfo(TRawUtf8DynArray), Value, ptRawUtf8,
-    @Safe.Padding[0].VInteger, false, InterningHasher);
+  InitializeCriticalSection(fSafe);
+  fValues.InitSpecific(TypeInfo(TRawUtf8DynArray), fValue, ptRawUtf8,
+    @fCount, false, InterningHasher);
 end;
 
 procedure TRawUtf8InterningSlot.Done;
 begin
-  Safe.Done;
-end;
-
-function TRawUtf8InterningSlot.Count: integer;
-begin
-  result := Safe.LockedInt64[0];
+  DeleteCriticalSection(fSafe);
 end;
 
 procedure TRawUtf8InterningSlot.Unique(var aResult: RawUtf8;
@@ -3941,18 +3935,18 @@ var
   i: PtrInt;
   added: boolean;
 begin
-  Safe.Lock;
+  EnterCriticalSection(fSafe);
   try
-    i := Values.FindHashedForAdding(aText, added, aTextHash);
+    i := fValues.FindHashedForAdding(aText, added, aTextHash);
     if added then
     begin
-      Value[i] := aText;   // copy new value to the pool
+      fValue[i] := aText;   // copy new value to the pool
       aResult := aText;
     end
     else
-      aResult := Value[i]; // return unified string instance
+      aResult := fValue[i]; // return unified string instance
   finally
-    Safe.UnLock;
+    LeaveCriticalSection(fSafe);
   end;
 end;
 
@@ -3963,22 +3957,22 @@ var
   added: boolean;
   bak: TDynArraySortCompare;
 begin
-  Safe.Lock;
+  EnterCriticalSection(fSafe);
   {$ifdef HASFASTTRYFINALLY} // make a huge performance difference
   try
   {$endif HASFASTTRYFINALLY}
-    // compare(RawUtf8,RawUtf8) -> compare(RawUtf8,PUtf8Char)
-    bak := Values.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare;
-    Values.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := @SortDynArrayPUtf8Char;
-    i := Values.FindHashedForAdding(aText, added, aTextHash);
-    Values.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := bak;
+    bak := fValues.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare;
+    fValues.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare :=
+      @SortDynArrayPUtf8Char; // compare(RawUtf8,RawUtf8) -> (RawUtf8,PUtf8Char)
+    i := fValues.FindHashedForAdding(aText, added, aTextHash);
+    fValues.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := bak;
     if added then
-      FastSetString(Value[i], aText, aTextLen); // new value to the pool
-    aResult := Value[i]; // return unified string instance
+      FastSetString(fValue[i], aText, aTextLen); // new value to the pool
+    aResult := fValue[i]; // return unified string instance
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
-    Safe.UnLock;
+    LeaveCriticalSection(fSafe);
   {$ifdef HASFASTTRYFINALLY}
   end;
   {$endif HASFASTTRYFINALLY}
@@ -3989,26 +3983,26 @@ var
   i: PtrInt;
   added: boolean;
 begin
-  Safe.Lock;
+  EnterCriticalSection(fSafe);
   try
-    i := Values.FindHashedForAdding(aText, added, aTextHash);
+    i := fValues.FindHashedForAdding(aText, added, aTextHash);
     if added then
-      Value[i] := aText    // copy new value to the pool
+      fValue[i] := aText    // copy new value to the pool
     else
-      aText := Value[i];   // return unified string instance
+      aText := fValue[i];   // return unified string instance
   finally
-    Safe.UnLock;
+    LeaveCriticalSection(fSafe);
   end;
 end;
 
 procedure TRawUtf8InterningSlot.Clear;
 begin
-  Safe.Lock;
+  EnterCriticalSection(fSafe);
   try
-    Values.SetCount(0); // Values.Clear
-    Values.Hasher.Clear;
+    fValues.SetCount(0); // Values.Clear
+    fValues.Hasher.Clear;
   finally
-    Safe.UnLock;
+    LeaveCriticalSection(fSafe);
   end;
 end;
 
@@ -4018,13 +4012,13 @@ var
   s, d: PPtrUInt; // points to RawUtf8 values
 begin
   result := 0;
-  Safe.Lock;
+  EnterCriticalSection(fSafe);
   try
-    if Safe.Padding[0].VInteger = 0 then // len = 0 ?
+    if fCount = 0 then
       exit;
-    s := pointer(Value);
+    s := pointer(fValue);
     d := s;
-    for i := 1 to Safe.Padding[0].VInteger do
+    for i := 1 to fCount do
     begin
       if PRefCnt(PAnsiChar(s^) - _STRREFCNT)^ <= aMaxRefCount then
       begin
@@ -4048,11 +4042,11 @@ begin
     end;
     if result > 0 then
     begin
-      Values.SetCount((PtrUInt(d) - PtrUInt(Value)) div SizeOf(d^));
-      Values.ReHash;
+      fValues.SetCount((PtrUInt(d) - PtrUInt(fValue)) div SizeOf(d^));
+      fValues.ReHash;
     end;
   finally
-    Safe.UnLock;
+    LeaveCriticalSection(fSafe);
   end;
 end;
 
