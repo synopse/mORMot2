@@ -2706,7 +2706,7 @@ begin
         if tmp = '' then
           result := ''
         else
-          Utf8ToString(tmp, result);
+          Utf8ToStringVar(tmp, result);
       end;
     end;
 end;

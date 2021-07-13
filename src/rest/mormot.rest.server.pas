@@ -4185,7 +4185,7 @@ begin
   if i < 0 then
     raise EParsingException.CreateUtf8('%: missing InputString[%]',
       [self, ParamName]);
-  Utf8ToString(fInput[i * 2 + 1], result);
+  Utf8ToStringVar(fInput[i * 2 + 1], result);
 end;
 
 function TRestServerUriContext.GetInputStringOrVoid(
@@ -4197,7 +4197,7 @@ begin
   if i < 0 then
     result := ''
   else
-    Utf8ToString(fInput[i * 2 + 1], result);
+    Utf8ToStringVar(fInput[i * 2 + 1], result);
 end;
 
 function TRestServerUriContext.GetInputExists(const ParamName: RawUtf8): boolean;

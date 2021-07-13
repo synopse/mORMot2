@@ -6094,7 +6094,7 @@ end;
 
 function TSqlDBStatement.ColumnString(Col: integer): string;
 begin
-  Utf8ToString(ColumnUtf8(Col), result);
+  Utf8ToStringVar(ColumnUtf8(Col), result);
 end;
 
 function TSqlDBStatement.ColumnString(const ColName: RawUtf8): string;

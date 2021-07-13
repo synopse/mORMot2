@@ -369,7 +369,7 @@ end;
 function TCommandLine.AsString(const Switch: RawUtf8;
   const Default, Prompt: string): string;
 begin
-  Utf8ToString(AsUtf8(Switch, StringToUtf8(Default), Prompt), result);
+  Utf8ToStringVar(AsUtf8(Switch, StringToUtf8(Default), Prompt), result);
 end;
 
 

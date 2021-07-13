@@ -6656,7 +6656,7 @@ begin
   if replaceTabs <> '' then
     tmp := StringReplaceAll(tmp, #9, replaceTabs);
   if IsValidUtf8(pointer(tmp)) then
-    Utf8ToString(tmp, result)
+    Utf8ToStringVar(tmp, result)
   else
     {$ifdef UNICODE}
     result := CurrentAnsiConvert.AnsiToUnicodeString(pointer(tmp), length(tmp));

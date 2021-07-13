@@ -155,7 +155,7 @@ begin
   inherited Create;
   fLog := LOG_STACKTRACE + [sllNewRun];
   fLogRotateFileCount := 2;
-  Utf8ToString(Executable.ProgramName, fServiceName);
+  Utf8ToStringVar(Executable.ProgramName, fServiceName);
   fServiceDisplayName := fServiceName;
 end;
 
