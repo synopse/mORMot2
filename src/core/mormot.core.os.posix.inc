@@ -1079,6 +1079,15 @@ begin
   DoneCriticalSection(cs);
 end;
 
+function GetCurrentThreadId: TThreadID;
+begin
+  {$ifdef OSLINUX}
+  result := TThreadID(pthread_self);
+  {$else}
+  result := FpcCurrentThreadManager.GetCurrentThreadId;
+  {$endif OSLINUX}
+end;
+
 procedure EnterCriticalSection(var cs: TRTLCriticalSection);
 begin
   {$ifdef OSLINUX}
@@ -2248,6 +2257,7 @@ begin
   if pthread <> nil then
   begin
     {$ifdef OSLINUX}
+    @pthread_self := dlsym(pthread, 'pthread_self');
     @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
     @pthread_mutex_lock := dlsym(pthread, 'pthread_mutex_lock');
     @pthread_mutex_unlock := dlsym(pthread, 'pthread_mutex_unlock');

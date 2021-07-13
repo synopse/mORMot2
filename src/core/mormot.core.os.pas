@@ -1127,6 +1127,7 @@ procedure GetLocalTime(out result: TSystemTime); stdcall;
 var
   // globally defined for proper inlined calls
 {$ifdef OSLINUX}
+  pthread_self: function: pointer; cdecl;
   pthread_mutex_lock: function(mutex: pointer): integer; cdecl;
   pthread_mutex_unlock: function(mutex: pointer): integer; cdecl;
   pthread_setname_np: function(thread: pointer; name: PAnsiChar): integer; cdecl;
@@ -1169,12 +1170,16 @@ procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
 
 {$ifndef OSWINDOWS}
 
+/// returns the unique ID of the current running thread
+// - defined in mormot.core.os for inlined FpcCurrentThreadManager/pthread call
+function GetCurrentThreadId: TThreadID; inline;
+
 /// enter a Critical Section (Lock)
-// - redefined in mormot.core.os for direct FpcCurrentThreadManager call
+// - defined in mormot.core.os for inlined FpcCurrentThreadManager/pthread call
 procedure EnterCriticalSection(var cs: TRTLCriticalSection); inline;
 
 /// leave a Critical Section (UnLock)
-// - redefined in mormot.core.os for direct FpcCurrentThreadManager call
+// - defined in mormot.core.os for inlined FpcCurrentThreadManager/pthread call
 procedure LeaveCriticalSection(var cs: TRTLCriticalSection); inline;
 
 {$endif OSWINDOWS}
