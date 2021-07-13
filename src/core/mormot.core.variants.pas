@@ -418,6 +418,8 @@ type
   protected
     /// name and values interning are shared among all TDocVariantData instances
     fInternNames, fInternValues: TRawUtf8Interning;
+    procedure CreateInternNames;
+    procedure CreateInternValues;
     /// fast getter implementation
     function IntGet(var Dest: TVarData; const Instance: TVarData;
       Name: PAnsiChar; NameLen: PtrInt): boolean; override;
@@ -4158,15 +4160,37 @@ end;
 function TDocVariant.InternNames: TRawUtf8Interning;
 begin
   if fInternNames = nil then
-    fInternNames := TRawUtf8Interning.Create;
+    CreateInternNames;
   result := fInternNames;
+end;
+
+procedure TDocVariant.CreateInternNames;
+begin
+  GlobalLock;
+  try
+    if fInternNames = nil then
+      fInternNames := TRawUtf8Interning.Create;
+  finally
+    GlobalUnLock;
+  end;
 end;
 
 function TDocVariant.InternValues: TRawUtf8Interning;
 begin
   if fInternValues = nil then
-    fInternValues := TRawUtf8Interning.Create;
+    CreateInternValues;
   result := fInternValues;
+end;
+
+procedure TDocVariant.CreateInternValues;
+begin
+  GlobalLock;
+  try
+    if fInternValues = nil then
+      fInternValues := TRawUtf8Interning.Create;
+  finally
+    GlobalUnLock;
+  end;
 end;
 
 procedure TDocVariantData.SetOptions(const opt: TDocVariantOptions);
@@ -4600,7 +4624,7 @@ begin
           exit; // invalid content
         include(VOptions, dvoIsObject);
         if dvoInternNames in VOptions then
-          intnames := DocVariantType.InternNames
+          intnames := DocVariantType.InternNames // call the function once
         else
           intnames := nil;
         if cap > 0 then
@@ -4614,9 +4638,10 @@ begin
             Name := GetJsonPropName(Json, @NameLen);
             if Name = nil then
               exit;
-            FastSetString(VName[VCount], Name, NameLen);
             if intnames <> nil then
-              intnames.UniqueText(VName[VCount]);
+              intnames.Unique(VName[VCount], Name, NameLen)
+            else
+              FastSetString(VName[VCount], Name, NameLen);
             GetJsonToAnyVariant(VValue[VCount], Json, @EndOfObject, @VOptions,
               {double=}false{is set from VOptions});
             if Json = nil then
@@ -4743,7 +4768,8 @@ begin
       SetLength(VName, VCount);
       for ndx := 0 to VCount - 1 do
         VName[ndx] := Source^.VName[ndx]; // manual copy is needed
-      if dvoInternNames in aOptions then
+      if (dvoInternNames in aOptions) and
+         not (dvoInternNames in Source^.Options) then
         with DocVariantType.InternNames do
           for ndx := 0 to VCount - 1 do
             UniqueText(VName[ndx]);

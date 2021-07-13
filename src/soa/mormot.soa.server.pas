@@ -863,9 +863,9 @@ var
   P: ^TServiceFactoryServerInstance;
 begin
   result := -1;
+  Inst.LastAccess64 := GetTickCount64;
   EnterCriticalSection(fInstanceLock);
   try
-    Inst.LastAccess64 := GetTickCount64;
     // first release any deprecated instances
     if (fInstanceTimeout <> 0) and
        (fInstanceCount > 0) then

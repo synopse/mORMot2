@@ -2393,7 +2393,12 @@ type
     /// finalize the RawUtf8 slot - mainly its associated Safe mutex
     procedure Done;
     /// returns the interned RawUtf8 value
-    procedure Unique(var aResult: RawUtf8; const aText: RawUtf8; aTextHash: cardinal);
+    procedure Unique(var aResult: RawUtf8; const aText: RawUtf8;
+      aTextHash: cardinal);
+    /// returns the interned RawUtf8 value
+    // - only allocates new aResult string if needed
+    procedure UniqueFromBuffer(var aResult: RawUtf8;
+      aText: PUtf8Char; aTextLen: PtrInt; aTextHash: cardinal);
     /// ensure the supplied RawUtf8 value is interned
     procedure UniqueText(var aText: RawUtf8; aTextHash: cardinal);
     /// delete all stored RawUtf8 values
@@ -2430,6 +2435,7 @@ type
     // - if aText does exist in the internal string pool, return the shared
     // instance (with its reference counter increased), to reduce memory usage
     function Unique(aText: PUtf8Char; aTextLen: PtrInt): RawUtf8; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// return a RawUtf8 variable stored within this class
     // - if aText occurs for the first time, add it to the internal string pool
     // - if aText does exist in the internal string pool, return the shared
@@ -2439,8 +2445,8 @@ type
     // - if aText occurs for the first time, add it to the internal string pool
     // - if aText does exist in the internal string pool, return the shared
     // instance (with its reference counter increased), to reduce memory usage
+    // - this method won't allocate any memory if aText is already interned
     procedure Unique(var aResult: RawUtf8; aText: PUtf8Char; aTextLen: PtrInt); overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// ensure a RawUtf8 variable is stored within this class
     // - if aText occurs for the first time, add it to the internal string pool
     // - if aText does exist in the internal string pool, set the shared
@@ -3950,6 +3956,34 @@ begin
   end;
 end;
 
+procedure TRawUtf8InterningSlot.UniqueFromBuffer(var aResult: RawUtf8;
+  aText: PUtf8Char; aTextLen: PtrInt; aTextHash: cardinal);
+var
+  i: PtrInt;
+  added: boolean;
+  bak: TDynArraySortCompare;
+begin
+  Safe.Lock;
+  {$ifdef HASFASTTRYFINALLY} // make a huge performance difference
+  try
+  {$endif HASFASTTRYFINALLY}
+    // compare(RawUtf8,RawUtf8) -> compare(RawUtf8,PUtf8Char)
+    bak := Values.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare;
+    Values.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := @SortDynArrayPUtf8Char;
+    i := Values.FindHashedForAdding(aText, added, aTextHash);
+    Values.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := bak;
+    if added then
+      FastSetString(Value[i], aText, aTextLen); // new value to the pool
+    aResult := Value[i]; // return unified string instance
+  {$ifdef HASFASTTRYFINALLY}
+  finally
+  {$endif HASFASTTRYFINALLY}
+    Safe.UnLock;
+  {$ifdef HASFASTTRYFINALLY}
+  end;
+  {$endif HASFASTTRYFINALLY}
+end;
+
 procedure TRawUtf8InterningSlot.UniqueText(var aText: RawUtf8; aTextHash: cardinal);
 var
   i: PtrInt;
@@ -3959,9 +3993,9 @@ begin
   try
     i := Values.FindHashedForAdding(aText, added, aTextHash);
     if added then
-      Value[i] := aText
-    else  // copy new value to the pool
-      aText := Value[i];      // return unified string instance
+      Value[i] := aText    // copy new value to the pool
+    else
+      aText := Value[i];   // return unified string instance
   finally
     Safe.UnLock;
   end;
@@ -4115,7 +4149,7 @@ var
   hash: cardinal;
 begin
   if aText = '' then
-    result := ''
+    FastAssignNew(result)
   else if self = nil then
     result := aText
   else
@@ -4128,15 +4162,25 @@ end;
 
 function TRawUtf8Interning.Unique(aText: PUtf8Char; aTextLen: PtrInt): RawUtf8;
 begin
-  FastSetString(result, aText, aTextLen);
-  UniqueText(result);
+  Unique(result, aText, aTextLen);
 end;
 
 procedure TRawUtf8Interning.Unique(var aResult: RawUtf8;
   aText: PUtf8Char; aTextLen: PtrInt);
+var
+  hash: cardinal;
 begin
-  FastSetString(aResult, aText, aTextLen);
-  UniqueText(aResult);
+  if (aText = nil) or
+     (aTextLen <= 0) then
+    FastAssignNew(aResult)
+  else if self = nil then
+    FastSetString(aResult, aText, aTextLen)
+  else
+  begin
+    // inlined fPool[].Values.HashElement
+    hash := InterningHasher(0, pointer(aText), aTextLen);
+    fPool[hash and fPoolLast].UniqueFromBuffer(aResult, aText, aTextLen, hash);
+  end;
 end;
 
 procedure TRawUtf8Interning.UniqueVariant(var aResult: variant; const aText: RawUtf8);

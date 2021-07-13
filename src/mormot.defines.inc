@@ -316,6 +316,9 @@
     {$define FPC_VARIANTSETVAR}
   {$endif ISFPC27}
 
+  {$if defined(FPC_USE_WIN32_SEH) or defined(FPC_USE_WIN64_SEH)}
+    {$define HASFASTTRYFINALLY}
+  {$ifend}
 
 {$else FPC}
 
@@ -372,6 +375,7 @@
 
   {$define DELPHI_OR_FPC_OLDRTTI}
   {$define HASINTERFACERTTI} // interface RTTI (not oldest FPC)
+  {$define HASFASTTRYFINALLY}
   {$warn UNSAFE_CODE OFF}    // Delphi for .Net does not exist any more!
   {$warn UNSAFE_TYPE OFF}
   {$warn UNSAFE_CAST OFF}

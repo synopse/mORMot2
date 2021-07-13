@@ -11007,7 +11007,7 @@ function _SortDynArrayVariantComp(const A, B: TVarData;
 const
   ICMP: array[TVariantRelationship] of integer = (0, -1, 1, 1);
 begin
-  // caseInsensitive not supported by the RTL
+  // caseInsensitive not supported by the RTL -> include mormot.core.variants
   result := ICMP[VarCompareValue(PVariant(@A)^, PVariant(@B)^)];
 end;
 

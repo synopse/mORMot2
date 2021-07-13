@@ -2934,7 +2934,7 @@ begin
     check(int.Count = 512);
     for i := 0 to MAX do
       check(Utf8ToInteger(vs[i]) = i and 511);
-    vs := nil;
+    vs := nil; // fair test
     check(int.Count = 512);
     check(int.Clean = 512);
     check(int.Count = 0);
