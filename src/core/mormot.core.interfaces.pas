@@ -542,8 +542,9 @@ type
     fInterfaceName: RawUtf8;
     fInterfaceUri: RawUtf8;
     fDocVariantOptions: TDocVariantOptions;
+    {$ifdef CPUX86}  // i386 stub requires "ret ArgsSizeInStack"
     fFakeVTable: array of pointer;
-    fFakeStub: PByteArray;
+    {$endif CPUX86}
     fMethodIndexCallbackReleased: integer;
     fMethodIndexCurrentFrameCallback: integer;
     procedure AddMethodsFromTypeInfo(aInterface: PRttiInfo); virtual; abstract;
@@ -1915,6 +1916,7 @@ const
   PARAMREG_FIRST = REGEAX;
   PARAMREG_LAST = REGECX;
   // floating-point params are passed by reference
+  VMTSTUBSIZE = 24;
 {$endif CPUX86}
 
 {$ifdef CPUX64}
@@ -1954,6 +1956,7 @@ const
   FPREG_LAST = REGXMM3;
   {$endif SYSVABI}
   {$define HAS_FPREG}
+  VMTSTUBSIZE = 24;
 {$endif CPUX64}
 
 {$ifdef CPUARM}
@@ -1979,6 +1982,7 @@ const
   FPREG_LAST = REGD7;
   {$define HAS_FPREG}
   {$endif CPUARMHF}
+  VMTSTUBSIZE = 16;
 {$endif CPUARM}
 
 {$ifdef CPUAARCH64}
@@ -2006,6 +2010,7 @@ const
   FPREG_FIRST = REGD0;
   FPREG_LAST = REGD7;
   {$define HAS_FPREG}
+  VMTSTUBSIZE = 28;
 {$endif CPUAARCH64}
 
   STACKOFFSET_NONE = -1;
@@ -4227,7 +4232,7 @@ begin
 end;
 
 { low-level ASM for TInterfaceFactory.GetMethodsVirtualTable
-  - all ARM, AARCH64 and Linux64 code below was provided by ALF! Thanks! :)  }
+  - initial ARM, AARCH64 and Linux64 code below was provided by ALF! Thanks! :}
 
 {$ifdef FPC}
 
@@ -4429,30 +4434,26 @@ var
 procedure Compute_FAKEVMT;
 var
   P: PCardinal;
-  tmp: cardinal;
   i: PtrInt;
   {$ifdef CPUAARCH64}
   stub: PtrUInt;
   {$endif CPUAARCH64}
 begin
   // reserve executable memory for JIT (aligned to 8 bytes)
-  {$ifdef CPUX64}
-  tmp := MAX_METHOD_COUNT * 24;
-  {$endif CPUX64}
-  {$ifdef CPUARM}
-  tmp := MAX_METHOD_COUNT * 16;
-  {$endif CPUARM}
-  {$ifdef CPUAARCH64}
-  tmp := ($120 shr 2) + MAX_METHOD_COUNT * 28;
-  {$endif CPUAARCH64}
-  P := ReserveExecutableMemory(tmp);
+  P := ReserveExecutableMemory(MAX_METHOD_COUNT * VMTSTUBSIZE
+    {$ifdef CPUAARCH64} + ($120 shr 2) {$endif CPUAARCH64});
   // populate _FAKEVMT[] with JITted stubs
-  SetLength(_FAKEVMT, MAX_METHOD_COUNT);
+  SetLength(_FAKEVMT, MAX_METHOD_COUNT + RESERVED_VTABLE_SLOTS);
+  // set IInterface required methods
+  _FAKEVMT[0] := @TInterfacedObjectFake.FakeQueryInterface;
+  _FAKEVMT[1] := @TInterfacedObjectFake.Fake_AddRef;
+  _FAKEVMT[2] := @TInterfacedObjectFake.Fake_Release;
+  // JIT all potential custom method stubs
   for i := 0 to MAX_METHOD_COUNT - 1 do
   begin
-    _FAKEVMT[i] := P;
+    _FAKEVMT[i + RESERVED_VTABLE_SLOTS] := P;
     {$ifdef CPUX64} // on Posix stub-P > 32-bit -> need absolute jmp
-    PWord(P)^ := $ba49; // mov r10, x64FakeStub
+    P^ := $ba49;        // mov r10, x64FakeStub
     inc(PWord(P));
     PPointer(P)^ := @x64FakeStub;
     inc(PPointer(P));
@@ -4507,11 +4508,11 @@ begin
     {$endif CPUAARCH64}
   end;
   // reenable execution permission of JITed memory as expected by the VMT
-  ReserveExecutableMemoryPageAccess(_FAKEVMT[0], {exec=}true);
+  ReserveExecutableMemoryPageAccess(
+    _FAKEVMT[RESERVED_VTABLE_SLOTS], {exec=}true);
 end;
 
 {$endif CPUX86}
-
 
 function TInterfaceFactory.GetMethodsVirtualTable: pointer;
 {$ifdef CPUX86}
@@ -4520,13 +4521,19 @@ var
   i: PtrInt;
 {$endif CPUX86}
 begin
-  result := pointer(fFakeVTable);
+  {$ifdef CPUX86}
+  result := fFakeVTable;
+  {$else}
+  result := pointer(_FAKEVMT);
+  {$endif CPUX86}
   if result <> nil then
     exit;
   // it is the first time we use this interface -> create JITed VMT
   InterfaceFactoryCache.Safe.Lock;
   try
-    if fFakeVTable = nil then // avoid race condition error
+    {$ifdef CPUX86}
+    // we need to JIT with an explicit ArgsSizeInStack adjustement
+    if fFakeVTable = nil then // avoid race condition
     begin
       SetLength(fFakeVTable, MethodsCount + RESERVED_VTABLE_SLOTS);
       // set IInterface required methods
@@ -4536,41 +4543,38 @@ begin
       // set JITted VMT stubs for each method of this interface
       if MethodsCount <> 0 then
       begin
-        {$ifdef CPUX86}
-        // we need to JIT with an explicit ArgsSizeInStack adjustement
-        P := ReserveExecutableMemory(MethodsCount * 24);
+        P := ReserveExecutableMemory(MethodsCount * VMTSTUBSIZE);
         for i := 0 to MethodsCount - 1 do
         begin
           fFakeVTable[RESERVED_VTABLE_SLOTS + i] := P;
           P^ := $68ec8b55;
-          inc(P);                 // push ebp; mov ebp,esp
+          inc(P);                 // push ebp; mov ebp, esp
           P^ := i;
           inc(P);                 // push {MethodIndex}
           P^ := $e2895251;
-          inc(P);                 // push ecx; push edx; mov edx,esp
+          inc(P);                 // push ecx; push edx; mov edx, esp
           PByte(P)^ := $e8;
           inc(PByte(P));          // call FakeCall
           P^ := PtrUInt(@TInterfacedObjectFake.FakeCall) - PtrUInt(P) - 4;
           inc(P);
-          P^ := $c25dec89;        // mov esp,ebp; pop ebp; ret {StackSize}
-          inc(PByte(P), 3);  // overlap c2=ret to avoid GPF
+          P^ := $c25dec89;        // mov esp, ebp; pop ebp; ret {StackSize}
+          inc(PByte(P), 3);       // overlap c2=ret to avoid GPF
           P^ := (fMethods[i].ArgsSizeInStack shl 8) or $900000c2;
           inc(P);
         end;
         ReserveExecutableMemoryPageAccess(
           fFakeVTable[RESERVED_VTABLE_SLOTS], {exec=}true);
-        {$else}
-        if _FAKEVMT = nil then
-          Compute_FAKEVMT; // we can reuse pre-JITted stubs
-        MoveFast(_FAKEVMT[0], fFakeVTable[RESERVED_VTABLE_SLOTS],
-          MethodsCount * SizeOf(pointer));
-        {$endif CPUX86}
       end;
     end;
+    result := pointer(fFakeVTable);
+    {$else}
+    if _FAKEVMT = nil then // avoid race condition
+      Compute_FAKEVMT;    // we can reuse pre-JITted stubs
+    result := pointer(_FAKEVMT);
+    {$endif CPUX86}
   finally
     InterfaceFactoryCache.Safe.UnLock;
   end;
-  result := pointer(fFakeVTable);
 end;
 
 
