@@ -1197,20 +1197,22 @@ end;
 
 function Utf8ToConsole(const S: RawUtf8): RawByteString;
 var
-  tmp: SynUnicode;
+  utf16: SynUnicode;
+  tmp: TSynTempBuffer;
   i: integer;
 begin
   for i := 1 to length(S) do
     if S[i] > #127 then
     begin
-      tmp := Utf8Decode(S);
-      SetLength(result, length(tmp) * 4);
-      CharToOemW(pointer(tmp), pointer(result));
-      SetLength(result, StrLen(pointer(result)));
+      utf16 := Utf8Decode(S);
+      tmp.Init(length(utf16) * 3);
+      CharToOemBuffW(pointer(utf16), tmp.buf, tmp.len);
+      SetString(result, PAnsiChar(tmp.buf), StrLen(tmp.buf));
+      tmp.Done;
+      writeln(result);
       exit;
-    end
-  else
-    result := S;
+    end;
+  result := S;
 end;
 
 {$I+}
