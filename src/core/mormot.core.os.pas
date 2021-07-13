@@ -1122,6 +1122,18 @@ type
 // defined in mormot.core.datetime which is really cross-platform
 procedure GetLocalTime(out result: TSystemTime); stdcall;
 
+{$else}
+
+var
+  // globally defined for proper inlined calls
+{$ifdef OSLINUX}
+  pthread_mutex_lock: function(mutex: pointer): integer; cdecl;
+  pthread_mutex_unlock: function(mutex: pointer): integer; cdecl;
+  pthread_setname_np: function(thread: pointer; name: PAnsiChar): integer; cdecl;
+{$else}
+  FpcCurrentThreadManager: TThreadManager;
+{$endif OSLINUX}
+
 {$endif OSWINDOWS}
 
 /// raw cross-platform library loading function
@@ -1154,6 +1166,18 @@ procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
 // - under Delphi/Windows, directly call the homonymous Win32 API
 procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
   {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
+
+{$ifndef OSWINDOWS}
+
+/// enter a Critical Section (Lock)
+// - redefined in mormot.core.os for direct FpcCurrentThreadManager call
+procedure EnterCriticalSection(var cs: TRTLCriticalSection); inline;
+
+/// leave a Critical Section (UnLock)
+// - redefined in mormot.core.os for direct FpcCurrentThreadManager call
+procedure LeaveCriticalSection(var cs: TRTLCriticalSection); inline;
+
+{$endif OSWINDOWS}
 
 /// returns TRUE if the supplied mutex has been initialized
 // - will check if the supplied mutex is void (i.e. all filled with 0 bytes)
@@ -1979,7 +2003,8 @@ type
     // ! finally
     // !   Safe.Unlock;
     // ! end;
-    procedure Lock; {$ifdef FPC} inline; {$endif}
+    procedure Lock;
+      {$ifdef FPC} inline; {$endif}
     /// will try to acquire the mutex
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
     // ! if Safe.TryLock then
@@ -1988,7 +2013,8 @@ type
     // !   finally
     // !     Safe.Unlock;
     // !   end;
-    function TryLock: boolean; {$ifdef FPC} inline; {$endif}
+    function TryLock: boolean;
+      {$ifdef FPC} inline; {$endif}
     /// will try to acquire the mutex for a given time
     // - use as such to avoid race condition (from a Safe: TSynLocker property):
     // ! if Safe.TryLockMS(100) then
@@ -2001,7 +2027,8 @@ type
     /// release the instance for exclusive access
     // - each Lock/TryLock should have its exact UnLock opposite, so a
     // try..finally block is mandatory for safe code
-    procedure UnLock; {$ifdef FPC} inline; {$endif}
+    procedure UnLock;
+      {$ifdef FPC} inline; {$endif}
     /// will enter the mutex until the IUnknown reference is released
     // - could be used as such under Delphi:
     // !begin
@@ -4008,11 +4035,11 @@ end;
 
 procedure TSynLocker.Init;
 begin
-  fSectionPadding := 0;
-  PaddingUsedCount := 0;
   InitializeCriticalSection(fSection);
+  fSectionPadding := 0;
   fLocked := false;
   fInitialized := true;
+  PaddingUsedCount := 0;
 end;
 
 procedure TSynLocker.Done;
@@ -4046,8 +4073,14 @@ end;
 
 function TSynLocker.TryLock: boolean;
 begin
-  result := not fLocked and
-            (TryEnterCriticalSection(fSection) <> 0);
+  if fLocked or
+     (TryEnterCriticalSection(fSection) = 0) then
+    result := false
+  else
+  begin
+    fLocked := true;
+    result := true;
+  end;
 end;
 
 function TSynLocker.TryLockMS(retryms: integer): boolean;

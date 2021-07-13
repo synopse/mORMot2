@@ -737,9 +737,6 @@ end;
 
 var
   {%H-}pthread: pointer;
-  {$ifdef OSLINUX} // see https://stackoverflow.com/a/7989973
-  pthread_setname_np: function(thread: pointer; name: PAnsiChar): integer; cdecl;
-  {$endif OSLINUX}
 
 procedure SetUnixThreadName(ThreadID: TThreadID; const Name: RawByteString);
 var
@@ -771,7 +768,7 @@ begin
   if L = 0 then
     exit;
   trunc[L] := #0;
-  {$ifdef OSLINUX}
+  {$ifdef OSLINUX} // see https://stackoverflow.com/a/7989973
   if Assigned(pthread_setname_np) then
     pthread_setname_np(pointer(ThreadID), @trunc[0]);
   {$endif OSLINUX}
@@ -1080,6 +1077,24 @@ end;
 procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
 begin
   DoneCriticalSection(cs);
+end;
+
+procedure EnterCriticalSection(var cs: TRTLCriticalSection);
+begin
+  {$ifdef OSLINUX}
+  pthread_mutex_lock(@cs);
+  {$else}
+  FpcCurrentThreadManager.EnterCriticalSection(cs);
+  {$endif OSLINUX}
+end;
+
+procedure LeaveCriticalSection(var cs: TRTLCriticalSection);
+begin
+  {$ifdef OSLINUX}
+  pthread_mutex_unlock(@cs);
+  {$else}
+  FpcCurrentThreadManager.LeaveCriticalSection(cs);
+  {$endif OSLINUX}
 end;
 
 {$ifdef OSBSDDARWIN}
@@ -2207,7 +2222,7 @@ begin
   // retrieve Kernel and Hardware information
   stdoutIsTTY := (IsATTY(StdOutputHandle) = 1) and
                  IdemPChars(RawUtf8(GetEnvironmentVariable('TERM')), [
-                   'XTERM-', 'SCREEN', 'TMUX', 'RXVT-', 'LINUX', 'CYGWIN']);
+                   'XTERM', 'SCREEN', 'TMUX', 'RXVT', 'LINUX', 'CYGWIN']);
   modname := nil;
   fpuname(uts);
   {$ifdef OSANDROID}
@@ -2234,6 +2249,8 @@ begin
   begin
     {$ifdef OSLINUX}
     @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
+    @pthread_mutex_lock := dlsym(pthread, 'pthread_mutex_lock');
+    @pthread_mutex_unlock := dlsym(pthread, 'pthread_mutex_unlock');
     {$endif OSLINUX}
   end;
   prod := TrimU(StringFromFile('/sys/class/dmi/id/product_name', true));
@@ -2348,6 +2365,9 @@ begin
   if CpuInfoText = '' then
     CpuInfoText := CPU_ARCH_TEXT;
   // intialize supported APIs
+  {$ifndef OSLINUX}
+  GetThreadManager(FpcCurrentThreadManager); // for inlined calls
+  {$endif OSLINUX}
   TimeZoneLocalBias := -GetLocalTimeOffset;
   {$ifdef OSDARWIN}
   mach_timebase_info(mach_timeinfo);
