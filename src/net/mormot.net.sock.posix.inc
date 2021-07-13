@@ -335,7 +335,7 @@ begin
   p.fd := TSocket(@self);
   p.events := 0;
   if neRead in scope then
-    p.events := POLLIN;
+    p.events := POLLIN or POLLPRI;
   if neWrite in scope then
     p.events := p.events or POLLOUT;
   p.revents := 0;
@@ -349,7 +349,7 @@ begin
     exit;
   end;
   result := [];
-  if p.revents and POLLIN <> 0 then
+  if p.revents and (POLLIN or POLLPRI) <> 0 then
     include(result, neRead);
   if p.revents and POLLOUT <> 0 then
     include(result, neWrite);
@@ -377,8 +377,8 @@ type
     function Subscribe(socket: TNetSocket; events: TPollSocketEvents;
       tag: TPollSocketTag): boolean; override;
     function Unsubscribe(socket: TNetSocket): boolean; override;
-    function WaitForModified(out results: TPollSocketResults;
-      timeoutMS: integer): integer; override;
+    function WaitForModified(var results: TPollSocketResults;
+      timeoutMS: integer): boolean; override;
   end;
 
 constructor TPollSocketPoll.Create;
@@ -400,7 +400,7 @@ begin
      (fCount = fMaxSockets) then
     exit;
   if pseRead in events then
-    e := POLLIN
+    e := POLLIN or POLLPRI
   else
     e := 0;
   if pseWrite in events then
@@ -492,21 +492,22 @@ begin
   result := false;
 end;
 
-function TPollSocketPoll.WaitForModified(out results: TPollSocketResults;
-  timeoutMS: integer): integer;
+function TPollSocketPoll.WaitForModified(var results: TPollSocketResults;
+  timeoutMS: integer): boolean;
 var
   e: TPollSocketEvents;
   i, d: PtrInt;
   ev: integer;
 begin
-  result := -1; // error
+  result := false; // error
   if (self = nil) or
      (fCount = 0) then
     exit;
-  result := poll(pointer(fFD), fFDCount, timeoutMS);
-  if result <= 0 then
+  results.Count := poll(pointer(fFD), fFDCount, timeoutMS);
+  if results.Count <= 0 then
     exit;
-  SetLength(results, result);
+  if length(results.Events) < results.Count then
+    SetLength(results.Events, fCount);
   d := 0;
   for i := 0 to fFDCount - 1 do
   begin
@@ -514,23 +515,32 @@ begin
     if (ev <> 0) and
        (fFD[i].fd > 0) then
     begin
-      byte(e) := 0;
-      if ev and POLLIN <> 0 then
-        include(e, pseRead);
-      if ev and POLLOUT <> 0 then
-        include(e, pseWrite);
-      if ev and POLLERR <> 0 then
-        include(e, pseError);
-      if ev and POLLHUP <> 0 then
-        include(e, pseClosed);
-      results[d].events := e;
-      results[d].tag := fTags[i];
+      if ev = POLLIN then
+        byte(e) := byte([pseRead]) // optimized for the most common case
+      else
+      begin
+        byte(e) := 0;
+        if ev and (POLLIN or POLLPRI) <> 0 then
+          include(e, pseRead);
+        if ev and POLLOUT <> 0 then
+          include(e, pseWrite);
+        if ev and POLLERR <> 0 then
+          include(e, pseError);
+        if ev and POLLHUP <> 0 then
+          include(e, pseClosed);
+      end;
+      with results.Events[d] do
+      begin
+        events := e;
+        tag := fTags[i];
+      end;
       inc(d);
       fFD[i].revents := 0; // reset result flags for reuse
     end;
   end;
-  if d <> result then
-    raise ENetSock.CreateFmt('TPollSocketPoll: result=%d d=%d', [result, d]);
+  if d <> results.Count then // paranoid
+    raise ENetSock.CreateFmt('TPollSocketPoll: %d<>%d', [results.Count, d]);
+  result := true;
 end;
 
 function PollSocketClass: TPollSocketClass;
@@ -557,17 +567,18 @@ type
     // directly calls epoll's EPOLL_CTL_DEL control interface
     function Unsubscribe(socket: TNetSocket): boolean; override;
     // directly calls epool_wait() function
-    function WaitForModified(out results: TPollSocketResults;
-      timeoutMS: integer): integer; override;
+    function WaitForModified(var results: TPollSocketResults;
+      timeoutMS: integer): boolean; override;
     /// read-only access to the low-level epoll_create file descriptor
-    property EPFD: integer read fEPFD;
+    property EPFD: integer
+      read fEPFD;
   end;
 
 constructor TPollSocketEpoll.Create;
 begin
   inherited Create;
-  fEPFD := epoll_create($cafe);
   fMaxSockets := 20000;
+  fEPFD := epoll_create(fMaxSockets);
   SetLength(fResults, fMaxSockets);
 end;
 
@@ -591,11 +602,14 @@ begin
     exit;
   e.data.ptr := pointer(tag); // don't use data.u64
   if pseRead in events then
-    e.events := EPOLLIN
+    if pseWrite in events then
+      e.events := EPOLLIN or EPOLLPRI or EPOLLOUT
+    else
+      e.events := EPOLLIN or EPOLLPRI
+  else if pseWrite in events then
+    e.events := EPOLLOUT
   else
     e.events := 0;
-  if pseWrite in events then
-    e.events := e.events or EPOLLOUT;
   // EPOLLERR and EPOLLHUP are always implicitly tracked
   result := epoll_ctl(fEPFD, EPOLL_CTL_ADD, TSocket(socket), @e) = NO_ERROR;
   if result then
@@ -618,44 +632,51 @@ begin
   end;
 end;
 
-function TPollSocketEpoll.WaitForModified(out results: TPollSocketResults;
-  timeoutMS: integer): integer;
+function TPollSocketEpoll.WaitForModified(var results: TPollSocketResults;
+  timeoutMS: integer): boolean;
 var
   e: TPollSocketEvents;
   i: PtrInt;
   ev: integer;
   t: TPollSocketTag;
 begin
-  result := -1; // error
+  result := false; // error
   if (self = nil) or
      (fCount = 0) then
     exit;
-  result := epoll_wait(fEPFD, pointer(fResults), fMaxSockets, timeoutMS);
-  if result <= 0 then
+  results.Count := epoll_wait(fEPFD, pointer(fResults), fMaxSockets, timeoutMS);
+  if results.Count <= 0 then
     exit;
-  SetLength(results, result);
-  for i := 0 to result - 1 do
+  if length(results.Events) < results.Count then
+    SetLength(results.Events, fCount);
+  for i := 0 to results.Count - 1 do
   begin
     with fResults[i] do
     begin
       ev := events;
       t := TPollSocketTag(data.ptr);
     end;
-    byte(e) := 0;
-    if ev and EPOLLIN <> 0 then
-      include(e, pseRead);
-    if ev and EPOLLOUT <> 0 then
-      include(e, pseWrite);
-    if ev and EPOLLERR <> 0 then
-      include(e, pseError);
-    if ev and EPOLLHUP <> 0 then
-      include(e, pseClosed);
-    with results[i] do
+    if ev = EPOLLIN then
+      byte(e) := byte([pseRead]) // optimized for the most common case
+    else
+    begin
+      byte(e) := 0;
+      if ev and (EPOLLIN or EPOLLPRI) <> 0 then
+        include(e, pseRead);
+      if ev and EPOLLOUT <> 0 then
+        include(e, pseWrite);
+      if ev and EPOLLERR <> 0 then
+        include(e, pseError);
+      if ev and EPOLLHUP <> 0 then
+        include(e, pseClosed);
+    end;
+    with results.Events[i] do
     begin
       events := e;
       tag := t;
     end;
   end;
+  result := true;
 end;
 
 function PollSocketClass: TPollSocketClass;

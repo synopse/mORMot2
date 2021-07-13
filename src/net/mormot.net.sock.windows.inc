@@ -33,7 +33,7 @@ type
   PFDSet = ^TFDSet;
   TFDSet = record
     fd_count: integer;
-    fd_array: array[0..FD_SETSIZE-1] of TSocket;
+    fd_array: array[0 .. FD_SETSIZE - 1] of TSocket;
   end;
 
 const
@@ -622,8 +622,8 @@ type
     function Subscribe(socket: TNetSocket; events: TPollSocketEvents;
       tag: TPollSocketTag): boolean; override;
     function Unsubscribe(socket: TNetSocket): boolean; override;
-    function WaitForModified(out results: TPollSocketResults;
-      timeoutMS: integer): integer; override;
+    function WaitForModified(var results: TPollSocketResults;
+      timeoutMS: integer): boolean; override;
   end;
 
 constructor TPollSocketSelect.Create;
@@ -658,7 +658,7 @@ end;
 
 function TPollSocketSelect.Unsubscribe(socket: TNetSocket): boolean;
 var
-  i: PtrInt;
+  i, n: PtrInt;
 begin
   result := false;
   if (self <> nil) and
@@ -670,10 +670,11 @@ begin
     FD_CLR(socket, fRead);
     FD_CLR(socket, fWrite);
     dec(fCount);
-    if i < fCount then
+    n := fCount - i;
+    if n > 0 then
     begin
-      MoveFast(fTagSocket[i + 1], fTagSocket[i], (fCount - i) * sizeof(fTagSocket[i]));
-      MoveFast(fTagTag[i + 1], fTagTag[i], (fCount - i) * sizeof(fTagTag[i]));
+      MoveFast(fTagSocket[i + 1], fTagSocket[i], n * sizeof(fTagSocket[i]));
+      MoveFast(fTagTag[i + 1], fTagTag[i], n * sizeof(fTagTag[i]));
     end;
     if fCount = 0 then
       fHighestSocket := nil;
@@ -681,8 +682,8 @@ begin
   end;
 end;
 
-function TPollSocketSelect.WaitForModified(out results: TPollSocketResults;
-  timeoutMS: integer): integer;
+function TPollSocketSelect.WaitForModified(var results: TPollSocketResults;
+  timeoutMS: integer): boolean;
 var
   tv: TTimeVal;
   rdp, wrp: PFDSet;
@@ -690,10 +691,10 @@ var
   i: PtrInt;
   pending: cardinal;
   sock: TNetSocket;
-  rd, wr: TFDSet;
-  tmp: array[0..FD_SETSIZE - 1] of TPollSocketResult;
+  rd, wr: TFDSet; // modified by select() -> local copy on stack
 begin
-  result := -1; // error
+  result := false; // error
+  results.Count := 0;
   if (self = nil) or
      (fCount = 0) then
     exit;
@@ -712,10 +713,10 @@ begin
   else
     wrp := nil;
   SetTimeVal(timeoutMS, tv);
-  result := select(PtrUInt(fHighestSocket) + 1, rdp, wrp, nil, @tv);
-  if result <= 0 then
+  if select(PtrUInt(fHighestSocket) + 1, rdp, wrp, nil, @tv) <= 0 then
     exit;
-  result := 0;
+  if length(results.Events) < fCount then
+    SetLength(results.Events, FD_SETSIZE);
   for i := 0 to fCount - 1 do
   begin
     byte(ev) := 0;
@@ -734,15 +735,14 @@ begin
        FD_ISSET(sock, wr{%H-}) then
       include(ev, pseWrite);
     if byte(ev) <> 0 then
-      with {%H-}tmp[result] do
+      with results.Events[results.Count] do
       begin
+        result := true;
         events := ev;
         tag := fTagTag[i];
-        inc(result);
+        inc(results.Count);
       end;
   end;
-  SetLength(results, result);
-  MoveFast(tmp, results[0], result * sizeof(tmp[0]));
 end;
 
 

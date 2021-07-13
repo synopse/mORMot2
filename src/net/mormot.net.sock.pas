@@ -26,9 +26,11 @@ unit mormot.net.sock;
 
 }
 
+
 interface
 
 {$I ..\mormot.defines.inc}
+
 
 uses
   sysutils,
@@ -402,8 +404,13 @@ type
     events: TPollSocketEvents;
   end;
 
-  /// all modifications returned by IPollSocket.WaitForModified
-  TPollSocketResults = array of TPollSocketResult;
+  /// all modifications returned by TPollSocketAbstract.WaitForModified
+  TPollSocketResults = record
+    // hold [0 .. Count - 1] notified events
+    Events: array of TPollSocketResult;
+    /// how many modifications are currently monitored in Results[]
+    Count: PtrInt;
+  end;
 
   {$M+}
   /// abstract parent for TPollSocket* and TPollSockets polling
@@ -452,10 +459,10 @@ type
     /// waits for status modifications of all tracked TSocket
     // - will wait up to timeoutMS milliseconds, 0 meaning immediate return
     // and -1 for infinite blocking
-    // - returns -1 on error (e.g. no TSocket currently registered), or
-    // the number of modifications stored in results[] (may be 0 if none)
-    function WaitForModified(out results: TPollSocketResults;
-      timeoutMS: integer): integer; virtual; abstract;
+    // - returns false on error (e.g. no TSocket registered) or no event
+    // - returns true and results.Events[0..results.Count-1] notifications
+    function WaitForModified(var results: TPollSocketResults;
+      timeoutMS: integer): boolean; virtual; abstract;
   published
     /// how many TSocket instances could be tracked, at most
     // - depends on the API used
@@ -1696,10 +1703,10 @@ begin
   result := false;
   EnterCriticalSection(fPendingLock);
   try
-    for p := fPendingIndex to high(fPending) do
-      if fPending[p].tag = tag then
+    for p := fPendingIndex to fPending.Count - 1 do
+      if fPending.Events[p].tag = tag then
         // event to be ignored in future GetOneWithinPending
-        byte(fPending[p].events) := 0;
+        byte(fPending.Events[p].events) := 0;
   finally
     LeaveCriticalSection(fPendingLock);
   end;
@@ -1719,38 +1726,43 @@ end;
 
 function TPollSockets.GetOneWithinPending(out notif: TPollSocketResult): boolean;
 var
-  last: PtrInt;
+  ndx: PtrInt;
 begin
   result := false;
   if fTerminated or
-     (fPending = nil) then
+     (fPending.Count <= 0) then
     exit;
   EnterCriticalSection(fPendingLock);
+  {$ifdef HASFASTTRYFINALLY} // make a huge performance difference
   try
-    last := high(fPending);
-    while (fPendingIndex <= last) and
-          (fPending <> nil) do
-    begin
-      // retrieve next notified event
-      notif := fPending[fPendingIndex];
-      // move forward
-      if fPendingIndex < last then
-        inc(fPendingIndex)
-      else
-      begin
-        fPending := nil;
-        fPendingIndex := 0;
-      end;
-      // return event (if not set to 0 by Unsubscribe)
-      if byte(notif.events) <> 0 then
-      begin
-        result := true;
-        exit;
-      end;
-    end;
+  {$endif HASFASTTRYFINALLY}
+    ndx := fPendingIndex;
+    if ndx < fPending.Count then
+      repeat
+        // retrieve next notified event
+        notif := fPending.Events[ndx];
+        // move forward
+        inc(ndx);
+        if ndx = fPending.Count then
+        begin
+          fPending.Count := 0; // reuse shared Events[] memory
+          ndx := 0;
+        end;
+        // return event (if not set to 0 by Unsubscribe)
+        if byte(notif.events) <> 0 then
+        begin
+          result := true;
+          break;
+        end;
+      until ndx >= fPending.Count;
+    fPendingIndex := ndx;
+  {$ifdef HASFASTTRYFINALLY}
   finally
+  {$endif HASFASTTRYFINALLY}
     LeaveCriticalSection(fPendingLock);
+  {$ifdef HASFASTTRYFINALLY}
   end;
+  {$endif HASFASTTRYFINALLY}
 end;
 
 function TPollSockets.GetOne(timeoutMS: integer; out notif: TPollSocketResult): boolean;
@@ -1758,11 +1770,11 @@ function TPollSockets.GetOne(timeoutMS: integer; out notif: TPollSocketResult): 
   function PollAndSearchWithinPending(p: PtrInt): boolean;
   begin
     if not fTerminated and
-       (fPoll[p].WaitForModified(fPending, {waitms=}0) > 0) then
+       fPoll[p].WaitForModified(fPending, {waitms=}0) then
     begin
       result := GetOneWithinPending(notif);
       if result then
-        fPollIndex := p; // next call to continue from fPoll[fPollIndex+1]
+        fPollIndex := p; // next fPollLock to continue from fPoll[fPollIndex+1]
     end
     else
       result := false;

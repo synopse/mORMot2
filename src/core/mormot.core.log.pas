@@ -1721,7 +1721,8 @@ uses
 var
   ExeInstanceDebugFile: TDebugFile;
 
-function GetInstanceDebugFile: TDebugFile; {$ifdef FPC} inline; {$endif}
+function GetInstanceDebugFile: TDebugFile;
+  {$ifdef FPC} inline; {$endif}
 begin
   result := ExeInstanceDebugFile;
   if result = nil then
