@@ -2249,17 +2249,12 @@ end;
 
 function TSynThreadPool.GetPendingContextCount: integer;
 begin
-  result := 0;
   if (self = nil) or
      fTerminated or
      (fPendingContext = nil) then
-    exit;
-  EnterCriticalsection(fSafe);
-  try
+    result := 0
+  else
     result := fPendingContextCount;
-  finally
-    LeaveCriticalsection(fSafe);
-  end;
 end;
 
 function TSynThreadPool.QueueIsFull: boolean;
@@ -2281,8 +2276,8 @@ begin
     begin
       result := fPendingContext[0];
       dec(fPendingContextCount);
-      MoveFast(fPendingContext[1], fPendingContext[0], fPendingContextCount *
-        SizeOf(pointer));
+      MoveFast(fPendingContext[1], fPendingContext[0],
+        fPendingContextCount * SizeOf(pointer));
       if fPendingContextCount = 128 then
         SetLength(fPendingContext, 128); // small queue when congestion is resolved
     end;

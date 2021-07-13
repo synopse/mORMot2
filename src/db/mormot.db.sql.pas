@@ -1045,11 +1045,12 @@ type
     fUserID: RawUtf8;
     fForcedSchemaName: RawUtf8;
     fMainConnection: TSqlDBConnection;
-    fBatchSendingAbilities: TSqlDBStatementCRUDs;
     fBatchMaxSentAtOnce: integer;
     fLoggedSqlMaxSize: integer;
+    fConnectionTimeOutTicks: Int64;
     fOnBatchInsert: TOnBatchInsert;
     fDbms: TSqlDBDefinition;
+    fBatchSendingAbilities: TSqlDBStatementCRUDs;
     fUseCache, fStoreVoidStringAsNull, fLogSqlStatementOnException,
       fRollbackOnDisconnect, fReconnectAfterConnectionError,
       fFilterTableViewSchemaName: boolean;
@@ -1058,21 +1059,20 @@ type
     fVariantWideString: boolean;
     {$endif UNICODE}
     fStatementMaxMemory: Int64;
-    fForeignKeys: TSynNameValue;
-    fSqlCreateField: TSqlDBFieldTypeDefinition;
-    fSqlCreateFieldMax: cardinal;
     fSqlGetServerTimestamp: RawUtf8;
     fEngineName: RawUtf8;
     fOnProcess: TOnSqlDBProcess;
     fOnStatementInfo: TOnSqlDBInfo;
     fStatementCacheReplicates: integer;
-    fConnectionTimeOutTicks: Int64;
+    fSqlCreateField: TSqlDBFieldTypeDefinition;
+    fSqlCreateFieldMax: cardinal;
     fSharedTransactions: array of record
       SessionID: cardinal;
       RefCount: integer;
       Connection: TSqlDBConnection;
     end;
     fExecuteWhenConnected: TRawUtf8DynArray;
+    fForeignKeys: TSynNameValue;
     procedure SetConnectionTimeOutMinutes(minutes: cardinal);
     function GetConnectionTimeOutMinutes: cardinal;
     // this default implementation just returns the fDbms value or dDefault
@@ -1705,7 +1705,6 @@ type
     fRollbackOnDisconnect: boolean;
     fLastAccessTicks: Int64;
     function IsOutdated(tix: Int64): boolean; // do not make virtual
-      {$ifdef HASINLINE} inline; {$endif}
     function GetInTransaction: boolean; virtual;
     function GetServerTimestamp: TTimeLog;
     function GetServerDateTime: TDateTime; virtual;
@@ -2428,10 +2427,10 @@ type
   TSqlDBConnectionPropertiesThreadSafe = class(TSqlDBConnectionProperties)
   protected
     fConnectionPool: TSynObjectListLocked;
-    fLatestConnectionRetrievedInPool: integer;
+    fLatestConnectionRetrievedInPool: PtrInt;
     fThreadingMode: TSqlDBConnectionPropertiesThreadSafeThreadingMode;
     /// returns -1 if none was defined yet
-    function CurrentThreadConnectionIndex: integer;
+    function CurrentThreadConnectionIndex: PtrInt;
     /// overridden method to properly handle multi-thread
     function GetMainConnection: TSqlDBConnection; override;
   public
@@ -6656,24 +6655,25 @@ begin
 end;
 
 function TSqlDBConnection.IsOutdated(tix: Int64): boolean;
+label
+  ok;
 begin
-  result := false;
   if (self = nil) or
      (fProperties.fConnectionTimeOutTicks = 0) then
-    exit;
-  if fLastAccessTicks < 0 then
-  begin
+    result := false
+  else if fLastAccessTicks < 0 then
     // connection release was forced by ClearConnectionPool
-    result := true;
-    exit;
-  end;
-  if (fLastAccessTicks = 0) or
-     (tix - fLastAccessTicks < fProperties.fConnectionTimeOutTicks) then
+    goto ok
+  else if (fLastAccessTicks = 0) or
+          (tix - fLastAccessTicks < fProperties.fConnectionTimeOutTicks) then
+  begin
     // brand new connection, or active enough connection
-    fLastAccessTicks := tix
+    fLastAccessTicks := tix;
+    result := false;
+  end
   else
     // notify connection is clearly outdated
-    result := true;
+ok: result := true;
 end;
 
 function TSqlDBConnection.GetInTransaction: boolean;
@@ -6976,7 +6976,7 @@ begin
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
 end;
 
-function TSqlDBConnectionPropertiesThreadSafe.CurrentThreadConnectionIndex: integer;
+function TSqlDBConnectionPropertiesThreadSafe.CurrentThreadConnectionIndex: PtrInt;
 var
   id: TThreadID;
   tix: Int64;
@@ -7047,19 +7047,27 @@ end;
 
 function TSqlDBConnectionPropertiesThreadSafe.ThreadSafeConnection: TSqlDBConnection;
 var
-  i: integer;
+  i: PtrInt;
 begin
   case fThreadingMode of
     tmThreadPool:
       begin
         fConnectionPool.Safe.Lock;
+        {$ifdef HASFASTTRYFINALLY}
         try
+        {$endif HASFASTTRYFINALLY}
           i := CurrentThreadConnectionIndex;
           if i >= 0 then
           begin
             result := fConnectionPool.List[i];
+            {$ifndef HASFASTTRYFINALLY}
+            fConnectionPool.Safe.UnLock;
+            {$endif HASFASTTRYFINALLY}
             exit;
           end;
+        {$ifndef HASFASTTRYFINALLY}
+        try
+        {$endif HASFASTTRYFINALLY}
           result := NewConnection; // no need to release the lock (fast method)
           (result as TSqlDBConnectionThreadSafe).fThreadID := GetCurrentThreadId;
           fLatestConnectionRetrievedInPool := fConnectionPool.Add(result)

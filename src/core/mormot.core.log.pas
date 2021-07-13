@@ -4133,6 +4133,7 @@ end;
 
 function TSynLog._AddRef: TIntCnt;
 begin
+  result := 1; // should never be 0 (would release TSynLog instance)
   if fFamily.Level * [sllEnter, sllLeave] <> [] then
   begin
     EnterCriticalSection(GlobalThreadLock);
@@ -4149,19 +4150,16 @@ begin
             end;
             inc(RefCount);
             result := RefCount;
-          end
-        else
-          result := 1; // should never be 0 (would release TSynLog instance)
+          end;
     finally
       LeaveCriticalSection(GlobalThreadLock);
     end
   end
-  else
-    result := 1;
 end;
 
 function TSynLog._Release: TIntCnt;
 begin
+  result := 1;
   if fFamily.Level * [sllEnter, sllLeave] <> [] then
   begin
     EnterCriticalSection(GlobalThreadLock);
@@ -4183,15 +4181,11 @@ begin
             end;
             result := RefCount;
           end;
-        end
-        else
-          result := 1; // should never be 0 (would release TSynLog instance)
+        end;
     finally
       LeaveCriticalSection(GlobalThreadLock);
     end;
-  end
-  else
-    result := 1;
+  end;
 end;
 
 constructor TSynLog.Create(aFamily: TSynLogFamily);
