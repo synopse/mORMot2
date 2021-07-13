@@ -4319,7 +4319,7 @@ var
   // warning: exact local variables order should match TFakeCallStack
   sx0, sx1, sx2, sx3, sx4, sx5, sx6, sx7: pointer;
   sd0, sd1, sd2, sd3, sd4, sd5, sd6, sd7: double;
-  smetndx:pointer;
+  smetndx: pointer;
 asm
     // get method index from IP0 [x16/r16]
     str x16,smetndx
@@ -4418,7 +4418,7 @@ end;
 
 {$endif CPUX64}
 
-{$ifndef CPUX86}
+{$ifndef CPUX86}  // i386 stub requires "ret ArgsSizeInStack"
 
 var
   // reuse the very same JITted stubs for all interfaces
@@ -4451,10 +4451,10 @@ begin
   for i := 0 to MAX_METHOD_COUNT - 1 do
   begin
     _FAKEVMT[i] := P;
-    {$ifdef CPUX64}
+    {$ifdef CPUX64} // on Posix stub-P > 32-bit -> need absolute jmp
     PWord(P)^ := $ba49; // mov r10, x64FakeStub
     inc(PWord(P));
-    PPointer(P)^ := @x64FakeStub; // on Linux Posix > 32-bit -> absolute
+    PPointer(P)^ := @x64FakeStub;
     inc(PPointer(P));
     PByte(P)^ := $b8;   // mov eax, MethodIndex
     inc(PByte(P));
@@ -4552,10 +4552,10 @@ begin
           inc(PByte(P));          // call FakeCall
           P^ := PtrUInt(@TInterfacedObjectFake.FakeCall) - PtrUInt(P) - 4;
           inc(P);
-          P^ := $c25dec89;
-          inc(P);                 // mov esp,ebp; pop ebp
-          P^ := fMethods[i].ArgsSizeInStack or $900000; // ret {StackSize}; nop
-          inc(PByte(P), 3);
+          P^ := $c25dec89;        // mov esp,ebp; pop ebp; ret {StackSize}
+          inc(PByte(P), 3);  // overlap c2=ret to avoid GPF
+          P^ := (fMethods[i].ArgsSizeInStack shl 8) or $900000c2;
+          inc(P);
         end;
         ReserveExecutableMemoryPageAccess(
           fFakeVTable[RESERVED_VTABLE_SLOTS], {exec=}true);
