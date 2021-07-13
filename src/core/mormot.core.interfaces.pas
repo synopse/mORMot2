@@ -4435,9 +4435,9 @@ procedure Compute_FAKEVMT;
 var
   P: PCardinal;
   i: PtrInt;
-  {$ifdef CPUAARCH64}
-  stub: PtrUInt;
-  {$endif CPUAARCH64}
+  {$ifdef CPUARM3264}
+  stub {$ifdef CPUAARCH64} , tmp {$endif}: PtrUInt;
+  {$endif CPUARM3264}
 begin
   // reserve executable memory for JIT (aligned to 8 bytes)
   P := ReserveExecutableMemory(MAX_METHOD_COUNT * VMTSTUBSIZE
@@ -4472,10 +4472,10 @@ begin
     P^ := ($e3a0c0 shl 8) + cardinal(i);
     inc(P); // mov r12 (ip),{MethodIndex} : store method index in register
     {$endif ASMORIG}
-    tmp := ((PtrUInt(@TInterfacedObjectFake.ArmFakeStub) -
+    stub := ((PtrUInt(@TInterfacedObjectFake.ArmFakeStub) -
              PtrUInt(P)) shr 2) - 2;
     // branch ArmFakeStub (24bit relative, word aligned)
-    P^ := ($ea shl 24) + (tmp and $00ffffff);
+    P^ := ($ea shl 24) + (stub and $00ffffff);
     inc(P);
     P^ := $e320f000;
     inc(P);
