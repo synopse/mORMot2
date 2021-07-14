@@ -1561,7 +1561,7 @@ type
     // TRawUtf8DynArray, TWinAnsiDynArray, TRawByteStringDynArray,
     // TStringDynArray, TWideStringDynArray, TSynUnicodeDynArray,
     // TTimeLogDynArray and TDateTimeDynArray as JSON array - or any customized
-    // valid JSON serialization as set by TTextWriter.RegisterCustomJsonSerializer
+    // Rtti.RegisterFromText/TRttiJson.RegisterCustomSerializer format
     // - or any other kind of array as Base64 encoded binary stream precessed
     // via JSON_BASE64_MAGIC_C (UTF-8 encoded \uFFF0 special code)
     // - typical handled content could be

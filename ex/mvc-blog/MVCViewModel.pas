@@ -76,9 +76,9 @@ type
   /// session information which will be stored on client side within a cookie
   // - TMvcSessionWithCookies is able to store any record on the client side,
   // as optimized base64 encoded binary data, without any storage on the server
-  // - before Delphi 2010, TTextWriter.RegisterCustomJSONSerializerFromText() is
-  // called in initialization block below, to allow proper JSON serialization
-  // as needed for fields injection into the Mustache rendering data context
+  // - before Delphi 2010, Rtti.RegisterFromText() is called in initialization
+  // block  below, to allow proper JSON serialization as needed for fields
+  // injection into the Mustache rendering data context
   TCookieData = packed record
     AuthorName: RawUtf8;
     AuthorID: cardinal;

@@ -51,7 +51,7 @@ type
   // TDynArray.LoadFromJson / TTextWriter.AddDynArrayJson methods (smvDynArray)
   // - records will be serialized as Base64 string, with our RecordSave/RecordLoad
   // low-level format by default, or as true JSON objects since Delphi 2010 or
-  // after registration via a TTextWriter.RegisterCustomJsonSerializer call
+  // after a Rtti.RegisterFromText/TRttiJson.RegisterCustomSerializer call
   // - imvRawJson will transmit the raw JSON content, without serialization
   TInterfaceMethodValueType = (
     imvNone,
@@ -478,7 +478,7 @@ const
   // ease method calls
   MAX_METHOD_ARGS = 32;
 
-  // QueryInterface, _AddRef and _Release methods are hard-coded
+  /// IInterface QueryInterface, _AddRef and _Release methods are hard-coded
   RESERVED_VTABLE_SLOTS = 3;
 
 type
@@ -7507,7 +7507,7 @@ begin
 end;
 
 
-{ TSetWeakZero maintains a per-instance reference list }
+{ TSetWeakZero maintains a thread-safe per-instance reference list }
 
 type
   TSetWeakZero = class(TSynDictionary) // TClass / TPointerDynArray map

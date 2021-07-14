@@ -1549,7 +1549,7 @@ type
       reintroduce; overload; virtual;
     /// define a custom property from its RTTI definition
     // - handle any kind of property, e.g. from enhanced RTTI or a custom record
-    // defined via TTextWriter.RegisterCustomJsonSerializer[FromText]()
+    // defined by Rtti.RegisterFromText/TRttiJson.RegisterCustomSerializer
     // - aPropertyPointer shall be filled with the offset to the private
     // field within a nil object, e.g for
     // !  class TMainObject = class(TOrm)
@@ -1571,7 +1571,7 @@ type
       reintroduce; overload;
     /// define a custom property from its RTTI definition
     // - handle any kind of property, e.g. from enhanced RTTI or a custom record
-    // defined via TTextWriter.RegisterCustomJsonSerializer[FromText]()
+    // defined by Rtti.RegisterFromText/TRttiJson.RegisterCustomSerializer
     // - aPropertyPointer shall be filled with the offset to the private
     // field within a nil object, e.g for
     // !  class TMainObject = class(TOrm)
@@ -17866,7 +17866,7 @@ begin
     result := fID;
     // was called from a real TOrm instance
   {$else}
-  if PtrUInt(self) < $100000 then // rough estimation, but works in practice
+  if PtrUInt(self) < $100000 then // rough estimation, may work in practice
     result := PtrUInt(self)
   else
   try
