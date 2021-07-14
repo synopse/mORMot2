@@ -220,15 +220,7 @@ function GotoNextJsonPropName(P: PUtf8Char): PUtf8Char;
 // - the first character in P^ must be "
 // - it will return the latest " position, ignoring \" within
 // - caller should check that return PUtf8Char is indeed a "
-function GotoEndOfJsonString(P: PUtf8Char): PUtf8Char; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// get the next character after a quoted buffer
-// - the first character in P^ must be "
-// - it will return the latest " position, ignoring \" within
-// - overloaded version when JSON_CHARS table is already available locally
-function GotoEndOfJsonString(P: PUtf8Char; tab: PJsonCharSet): PUtf8Char; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+function GotoEndOfJsonString(P: PUtf8Char): PUtf8Char;
 
 /// reach positon just after the current JSON item in the supplied UTF-8 buffer
 // - buffer can be either any JSON item, i.e. a string, a number or even a
@@ -1896,9 +1888,9 @@ function SaveJson(const Value; TypeInfo: PRttiInfo;
 
 /// save record into its JSON serialization as saved by TTextWriter.AddRecordJson
 // - will use default Base64 encoding over RecordSave() binary - or custom true
-// JSON format (as set by TTextWriter.RegisterCustomJsonSerializer or via
-// enhanced RTTI), if available (following EnumSetsAsText optional parameter
-// for nested enumerates and sets)
+// JSON format (as set by Rtti.RegisterFromText/TRttiJson.RegisterCustomSerializer
+// or via enhanced RTTI), if available (following EnumSetsAsText optional
+// parameter for nested enumerates and sets)
 function RecordSaveJson(const Rec; TypeInfo: PRttiInfo;
   EnumSetsAsText: boolean = false): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
@@ -1956,9 +1948,9 @@ function LoadJson(var Value; Json: PUtf8Char; TypeInfo: PRttiInfo;
 
 /// fill a record content from a JSON serialization as saved by
 // TTextWriter.AddRecordJson / RecordSaveJson
-// - will use default Base64 encoding over RecordSave() binary - or custom true
-// JSON format (as set by TTextWriter.RegisterCustomJsonSerializer or via
-// enhanced RTTI), if available
+// - will use default Base64 encoding over RecordSave() binary - or custom
+// JSON format (as set by Rtti.RegisterFromText/TRttiJson.RegisterCustomSerializer
+// or via enhanced RTTI), if available
 // - returns nil on error, or the end of buffer on success
 // - warning: the JSON buffer will be modified in-place during process - use
 // a temporary copy if you need to access it later or if the string comes from
@@ -1971,9 +1963,9 @@ function RecordLoadJson(var Rec; Json: PUtf8Char; TypeInfo: PRttiInfo;
 // TTextWriter.AddRecordJson / RecordSaveJson
 // - this overloaded function will make a private copy before parsing it,
 // so is safe with a read/only or shared string - but slightly slower
-// - will use default Base64 encoding over RecordSave() binary - or custom true
-// JSON format (as set by TTextWriter.RegisterCustomJsonSerializer or via
-// enhanced RTTI), if available
+// - will use default Base64 encoding over RecordSave() binary - or custom
+// JSON format (as set by Rtti.RegisterFromText/TRttiJson.RegisterCustomSerializer
+// or via enhanced RTTI), if available
 function RecordLoadJson(var Rec; const Json: RawUtf8; TypeInfo: PRttiInfo;
   CustomVariantOptions: PDocVariantOptions = nil;
   Tolerant: boolean = true): boolean; overload;
@@ -2811,10 +2803,10 @@ lit:        inc(P);
     PDest := P;
 end;
 
-function GotoEndOfJsonString(P: PUtf8Char; tab: PJsonCharSet): PUtf8Char;
+function GotoEndOfJsonString2(P: PUtf8Char; tab: PJsonCharSet): PUtf8Char;
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  // P^='"' at function call
-  inc(P);
+  // P[-1]='"' at function call
   repeat
     if not (jcJsonStringMarker in tab[P^]) then
     begin
@@ -2834,7 +2826,8 @@ end;
 
 function GotoEndOfJsonString(P: PUtf8Char): PUtf8Char;
 begin
-  result := GotoEndOfJsonString(P, @JSON_CHARS);
+  // P^='"' at function call
+  result := GotoEndOfJsonString2(P + 1, @JSON_CHARS);
 end;
 
 function GetJsonPropName(var P: PUtf8Char; Len: PInteger): PUtf8Char;
@@ -3024,10 +3017,11 @@ begin
       exit;
     inc(P);
   end;
+  tab := @JSON_CHARS;
   c := P^;
   if c = '"' then
   begin
-    P := GotoEndOfJsonString(P, @JSON_CHARS);
+    P := GotoEndOfJsonString2(P + 1, tab);
     if P^ <> '"' then
       exit;
 s:  repeat
@@ -3051,7 +3045,6 @@ s:  repeat
   else
   begin
     // e.g. '{age:{$gt:18}}'
-    tab := @JSON_CHARS;
     if not (jcJsonIdentifierFirstChar in tab[c]) then
       exit; // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '$']
     repeat
@@ -3428,21 +3421,16 @@ begin
 end;
 
 function GotoNextJsonObjectOrArrayInternal(P, PMax: PUtf8Char;
-  EndChar: AnsiChar): PUtf8Char;
+  EndChar: AnsiChar{$ifndef CPUX86NOTPIC} ; jsonset: PJsonCharSet{$endif}): PUtf8Char;
+{$ifdef CPUX86NOTPIC} // not enough registers
 var
-  {$ifdef CPUX86NOTPIC} // not enough registers
   jsonset: TJsonCharSet absolute JSON_CHARS;
-  {$else}
-  jsonset: PJsonCharSet;
-  {$endif CPUX86NOTPIC}
+{$endif CPUX86NOTPIC}
 label
-  Prop;
+  prop;
 begin
   // should match GetJsonPropName()
   result := nil;
-  {$ifndef CPUX86NOTPIC}
-  jsonset := @JSON_CHARS;
-  {$endif CPUX86NOTPIC}
   repeat
     // main loop for quick parsing without full validation
     case JSON_TOKENS[P^] of
@@ -3452,7 +3440,8 @@ begin
             inc(P)
           until (P^ > ' ') or
                 (P^ = #0);
-          P := GotoNextJsonObjectOrArrayInternal(P, PMax, '}');
+          P := GotoNextJsonObjectOrArrayInternal(
+                 P, PMax, '}' {$ifndef CPUX86NOTPIC}, jsonset{$endif});
           if P = nil then
             exit;
         end;
@@ -3462,7 +3451,8 @@ begin
             inc(P)
           until (P^ > ' ') or
                 (P^ = #0);
-          P := GotoNextJsonObjectOrArrayInternal(P, PMax, ']');
+          P := GotoNextJsonObjectOrArrayInternal(
+            P, PMax, ']'{$ifndef CPUX86NOTPIC}, jsonset{$endif});
           if P = nil then
             exit;
         end;
@@ -3485,7 +3475,7 @@ begin
           exit;
       jtDoubleQuote: // '"'
         begin
-          P := GotoEndOfJsonString(P, @JSON_CHARS);
+          P := GotoEndOfJsonString2(P + 1, {$ifdef CPUX86NOTPIC}@{$endif}jsonset);
           if P^ <> '"' then
             exit;
           inc(P);
@@ -3500,17 +3490,17 @@ begin
         if PInteger(P)^ = TRUE_LOW then
           inc(P, 4)
         else
-          goto Prop;
+          goto prop;
       jtFalseFirstChar: // 'f'
         if PInteger(P + 1)^ = FALSE_LOW2 then
           inc(P, 5)
         else
-          goto Prop;
+          goto prop;
       jtNullFirstChar: // 'n'
         if PInteger(P)^ = NULL_LOW then
           inc(P, 4)
         else
-          goto Prop;
+          goto prop;
       jtSingleQuote: // '''' as single-quoted identifier
         begin
           repeat
@@ -3539,7 +3529,7 @@ begin
         end;
       jtIdentifierFirstChar: // ['_', 'a'..'z', 'A'..'Z', '$']
         begin
-Prop:     repeat
+prop:     repeat
             inc(P);
           until not (jcJsonIdentifier in jsonset[P^]);
           // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
@@ -3555,7 +3545,7 @@ Prop:     repeat
               inc(P);
             if P^ = '"' then
             begin
-              P := GotoEndOfJsonString(P, {$ifdef CPUX86NOTPIC}@{$endif}jsonset);
+              P := GotoEndOfJsonString2(P + 1, {$ifdef CPUX86NOTPIC}@{$endif}jsonset);
               if P^ <> '"' then
                 exit;
             end;
@@ -3592,7 +3582,7 @@ var
   jsonset: PJsonCharSet;
   {$endif CPUX86NOTPIC}
 label
-  pok, ok;
+  ok, ok4;
 begin
   result := nil; // to notify unexpected end
   if P = nil then
@@ -3607,11 +3597,15 @@ begin
     // complex JSON string, object or array
     jtDoubleQuote: // '"'
       begin
-        P := GotoEndOfJsonString(P {$ifndef CPUX86NOTPIC}, jsonset{$endif} );
+        P := GotoEndOfJsonString2(P + 1, {$ifdef CPUX86NOTPIC}@{$endif}jsonset);
         if P^ <> '"' then
           exit;
-        inc(P);
-        goto ok;
+        repeat
+          inc(P);
+ok:     until (P^ > ' ') or
+              (P^ = #0);
+        result := P;
+        exit;
       end;
     jtArrayStart: // '['
       begin
@@ -3619,8 +3613,11 @@ begin
           inc(P)
         until (P^ > ' ') or
               (P^ = #0);
-        P := GotoNextJsonObjectOrArrayInternal(P, nil, ']');
-        goto pok;
+        P := GotoNextJsonObjectOrArrayInternal(
+          P, nil, ']' {$ifndef CPUX86NOTPIC}, jsonset{$endif});
+        if P = nil then
+          exit;
+        goto ok;
       end;
     jtObjectStart: // '{'
       begin
@@ -3628,20 +3625,17 @@ begin
           inc(P)
         until (P^ > ' ') or
               (P^ = #0);
-        P := GotoNextJsonObjectOrArrayInternal(P, nil, '}');
-pok:    if P = nil then
+        P := GotoNextJsonObjectOrArrayInternal(
+          P, nil, '}' {$ifndef CPUX86NOTPIC}, jsonset{$endif});
+        if P = nil then
           exit;
-ok:     while (P^ <= ' ') and
-              (P^ <> #0) do
-          inc(P);
-        result := P;
-        exit;
+        goto ok;
       end;
     // strict JSON numbers and constants validation
     jtTrueFirstChar: // 't'
       if PInteger(P)^ = TRUE_LOW then
       begin
-        inc(P, 4);
+ok4:    inc(P, 4);
         goto ok;
       end;
     jtFalseFirstChar: // 'f'
@@ -3652,10 +3646,7 @@ ok:     while (P^ <= ' ') and
       end;
     jtNullFirstChar: // 'n'
       if PInteger(P)^ = NULL_LOW then
-      begin
-        inc(P, 4);
-        goto ok;
-      end;
+        goto ok4;
     jtFirstDigit: // '-', '0'..'9'
       begin
         repeat
@@ -3690,7 +3681,7 @@ begin
   case P^ of
     '"':
       begin
-        P := GotoEndOfJsonString(P {$ifndef CPUX86NOTPIC}, jsonset{$endif} );
+        P := GotoEndOfJsonString2(P + 1, {$ifdef CPUX86NOTPIC}@{$endif}jsonset);
         if (P^ <> '"') or
            ((PMax <> nil) and
             (P > PMax)) then
@@ -3704,7 +3695,8 @@ begin
           inc(P)
         until (P^ > ' ') or
               (P^ = #0);
-        P := GotoNextJsonObjectOrArrayInternal(P, PMax, ']');
+        P := GotoNextJsonObjectOrArrayInternal(
+               P, PMax, ']' {$ifndef CPUX86NOTPIC}, jsonset{$endif});
         goto pok;
       end;
     '{':
@@ -3713,7 +3705,8 @@ begin
           inc(P)
         until (P^ > ' ') or
               (P^ = #0);
-        P := GotoNextJsonObjectOrArrayInternal(P, PMax, '}');
+        P := GotoNextJsonObjectOrArrayInternal(
+               P, PMax, '}' {$ifndef CPUX86NOTPIC}, jsonset{$endif});
 pok:    if P = nil then
           exit;
 ok:     while (P^ <= ' ') and
@@ -3759,7 +3752,8 @@ begin
   while (P^ <= ' ') and
         (P^ <> #0) do
     inc(P);
-  result := GotoNextJsonObjectOrArrayInternal(P, nil, EndChar);
+  result := GotoNextJsonObjectOrArrayInternal(
+    P, nil, EndChar {$ifndef CPUX86NOTPIC}, @JSON_CHARS{$endif});
 end;
 
 function GotoNextJsonObjectOrArrayMax(P, PMax: PUtf8Char): PUtf8Char;
@@ -3783,7 +3777,8 @@ begin
     inc(P)
   until (P^ > ' ') or
         (P^ = #0);
-  result := GotoNextJsonObjectOrArrayInternal(P, PMax, EndChar);
+  result := GotoNextJsonObjectOrArrayInternal(
+    P, PMax, EndChar {$ifndef CPUX86NOTPIC}, @JSON_CHARS{$endif});
 end;
 
 function GotoNextJsonObjectOrArray(P: PUtf8Char): PUtf8Char;
@@ -4173,7 +4168,7 @@ begin // replace comments by ' ' characters which will be ignored by parser
       case P^ of
         '"':
           begin
-            P := GotoEndOfJSONString(P);
+            P := GotoEndOfJSONString(P + 1);
             if P^ <> '"' then
               exit
             else
@@ -6367,7 +6362,7 @@ begin
       begin
         // string
         Value := Json;
-        Json := GotoEndOfJsonString(Json, @JSON_CHARS);
+        Json := GotoEndOfJsonString2(Json + 1, @JSON_CHARS);
         if Json^ <> '"' then
           exit;
         inc(Json);

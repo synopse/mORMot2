@@ -2143,20 +2143,19 @@ begin
       inc(source);
       if c = 0 then
         break;
-      if c > $7f then
-      begin
-        c := utf8.Bytes[c]; // extras
-        if c = 0 then
-          // invalid leading byte
+      if c <= $7f then
+        continue;
+      c := utf8.Bytes[c]; // extras
+      if c = 0 then
+        // invalid leading byte
+        exit;
+      // check valid UTF-8 content
+      repeat
+        if byte(source^) and $c0 <> $80 then
           exit;
-        // check valid UTF-8 content
-        repeat
-          if byte(source^) and $c0 <> $80 then
-            exit;
-          inc(source);
-          dec(c);
-        until c = 0;
-      end;
+        inc(source);
+        dec(c);
+      until c = 0;
     until false;
   result := true;
 end;
