@@ -344,11 +344,11 @@ type
     /// find the next input (const / var) argument index in Args[]
     // - returns true if arg is the new value, false otherwise
     function ArgNextInput(var arg: integer): boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// find the next output (var / out / result) argument index in Args[]
     // - returns true if arg is the new value, false otherwise
     function ArgNextOutput(var arg: integer): boolean;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// convert parameters encoded as a JSON array into a JSON object
     // - if Input is TRUE, will handle const / var arguments
     // - if Input is FALSE, will handle var / out / result arguments
@@ -2095,7 +2095,7 @@ type
     procedure FakeCallInternalProcess(var ctxt: TFakeCallContext); virtual; abstract;
     // used internally to compute the actual instance from the FakeCall()
     function SelfFromInterface: TInterfacedObjectFakeRaw;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     {$ifdef CPUARM}
     // on ARM, the FakeStub needs to be here, for FakeCall redirection
     procedure ArmFakeStub;
@@ -2113,10 +2113,10 @@ type
     constructor Create(aFactory: TInterfaceFactory); reintroduce;
     /// retrieve one instance of this interface, increasing its RefCount
     procedure Get(out Obj);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// retrieve one instance of this interface, without increasing its RefCount
     procedure GetNoAddRef(out Obj);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINE} inline; {$endif}
   published
     /// the associated interface factory class
     property Factory: TInterfaceFactory
@@ -4444,7 +4444,7 @@ begin
     {$ifdef CPUAARCH64} + ($120 shr 2) {$endif CPUAARCH64});
   // populate _FAKEVMT[] with JITted stubs
   SetLength(_FAKEVMT, MAX_METHOD_COUNT + RESERVED_VTABLE_SLOTS);
-  // set IInterface required methods
+  // set IInterface RESERVED_VTABLE_SLOTS required methods
   _FAKEVMT[0] := @TInterfacedObjectFake.FakeQueryInterface;
   _FAKEVMT[1] := @TInterfacedObjectFake.Fake_AddRef;
   _FAKEVMT[2] := @TInterfacedObjectFake.Fake_Release;
@@ -4461,8 +4461,10 @@ begin
     inc(PByte(P));
     P^ := i;
     inc(P);
-    P^ := $90e2ff41;    // jmp r10  (faster than push + ret)
-    inc(PByte(P), 9);
+    P^ := $66e2ff41;    // jmp r10  (faster than push + ret)
+    inc(P);
+    P^ := $00441f0f;   // multi-byte nop
+    inc(PByte(P), 5);
     {$endif CPUX64}
     {$ifdef CPUARM}
     {$ifdef ASMORIG}
@@ -4569,8 +4571,8 @@ begin
     result := pointer(fFakeVTable);
     {$else}
     if _FAKEVMT = nil then // avoid race condition
-      Compute_FAKEVMT;    // we can reuse pre-JITted stubs
-    result := pointer(_FAKEVMT);
+      Compute_FAKEVMT;
+    result := pointer(_FAKEVMT);  // we can reuse pre-JITted stubs
     {$endif CPUX86}
   finally
     InterfaceFactoryCache.Safe.UnLock;
