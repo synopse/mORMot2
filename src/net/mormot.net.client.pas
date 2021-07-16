@@ -960,7 +960,8 @@ type
     constructor Create(aOnlyUseClientSocket: boolean = false); reintroduce;
     /// finalize the connection
     destructor Destroy; override;
-    /// low-level entry point of this instance
+    /// low-level entry point of this instance, using an TUri as input
+    // - rather use the Request() more usable method
     function RawRequest(const Uri: TUri; const Method, Header: RawUtf8;
       const Data: RawByteString; const DataType: RawUtf8;
       KeepAlive: cardinal): integer; overload;
@@ -972,7 +973,7 @@ type
     /// access to the raw TLS settings for THttpClientSocket
     function SocketTLS: PNetTlsContext;
       {$ifdef HASINLINE} inline; {$endif}
-    /// returns the HTTP body as returnsd by a previous call to Request()
+    /// returns the HTTP body as returned by a previous call to Request()
     property Body: RawByteString
       read fBody;
     /// returns the HTTP headers as returned by a previous call to Request()

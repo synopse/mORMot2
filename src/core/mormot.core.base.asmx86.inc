@@ -1025,7 +1025,7 @@ asm
         bswap   eax
 end;
 
-procedure bswap64array(a,b: PQWordArray; n: PtrInt);
+procedure bswap64array(A, B: PQWordArray; n: PtrInt);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    ebx
@@ -1216,7 +1216,7 @@ asm
 @zero:  xor     eax, eax
 end;
 
-function SortDynArrayInteger(const A,B): integer;
+function SortDynArrayInteger(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         mov     ecx, [eax]
@@ -1229,7 +1229,7 @@ asm
         sub     eax, ecx
 end;
 
-function SortDynArrayCardinal(const A,B): integer;
+function SortDynArrayCardinal(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         mov     ecx, [eax]
@@ -1240,7 +1240,7 @@ asm
         sbb     eax,0
 end;
 
-function SortDynArrayPointer(const A,B): integer;
+function SortDynArrayPointer(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         mov     ecx, [eax]
@@ -1251,7 +1251,7 @@ asm
         sbb     eax,0
 end;
 
-function SortDynArrayInt64(const A,B): integer;
+function SortDynArrayInt64(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // Delphi x86 compiler is not efficient at compiling Int64 comparisons
@@ -1270,7 +1270,7 @@ asm
 @p:     mov     eax, 1
 end;
 
-function SortDynArrayQWord(const A,B): integer;
+function SortDynArrayQWord(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // Delphi x86 compiler is not efficient, and oldest even incorrect
@@ -1288,7 +1288,7 @@ asm
 @p:     mov     eax, 1
 end;
 
-function SortDynArrayAnsiString(const A,B): integer;
+function SortDynArrayAnsiString(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // x86 version optimized for AnsiString/RawUtf8/RawByteString types
@@ -1347,7 +1347,7 @@ asm
 @1:     mov     eax, 1
 end;
 
-function SortDynArrayDouble(const A,B): integer;
+function SortDynArrayDouble(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         fld     qword ptr [eax]
@@ -1363,7 +1363,7 @@ asm
 @p:     mov     eax, 1
 end;
 
-function SortDynArraySingle(const A,B): integer;
+function SortDynArraySingle(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         fld     dword ptr [eax]
