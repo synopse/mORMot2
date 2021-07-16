@@ -605,8 +605,7 @@ type
     procedure CastTo(var Dest: TVarData; const Source: TVarData;
       const AVarType: TVarType); override;
     /// compare two variant values
-    // - it uses case-sensitive text comparison of the JSON representation
-    // of each variant (including TDocVariant instances)
+    // - redirect to case-sensitive FastVarDataComp() comparison
     procedure Compare(const Left, Right: TVarData;
       var Relationship: TVarCompareResult); override;
   end;
@@ -2814,129 +2813,82 @@ begin
   result := tmp.VValue;
 end;
 
-function SortDynArrayVariantCompareAsString(const A, B: variant): integer;
+
 var
-  UA, UB: RawUtf8;
+  // FastVarDataComp() efficient lookup for per-VType comparison function
+  _VARDATASAMEVTYPECMP:
+      array[boolean, 0 .. $102 {varUString}] of TDynArraySortCompare;
+
+function VariantCompAsUtf8(const A, B: variant;
+  caseInsensitive: boolean): integer;
+// need to serialize both as UTF-8 text/JSON
+var
+  au, bu: RawUtf8;
   wasString: boolean;
 begin
-  VariantToUtf8(A, UA, wasString);
-  VariantToUtf8(B, UB, wasString);
-  result := StrComp(pointer(UA), pointer(UB));
+  VariantToUtf8(A, au, wasString);
+  VariantToUtf8(B, bu, wasString);
+  if caseInsensitive then
+    result := StrIComp(pointer(au), pointer(bu))
+  else
+    result := StrComp(pointer(au), pointer(bu));
 end;
-
-function SortDynArrayVariantCompareAsStringI(const A, B: variant): integer;
-var
-  UA, UB: RawUtf8;
-  wasString: boolean;
-begin
-  VariantToUtf8(A, UA, wasString);
-  VariantToUtf8(B, UB, wasString);
-  result := StrIComp(pointer(UA), pointer(UB));
-end;
-
-function SortDynArrayEmptyNull(const A, B): integer;
-begin
-  result := 0; // VType=varEmpty/varNull are always equal
-end;
-
-type
-  TSortDynArrayVariantComp = function(const A, B: variant): integer;
-const
-  // efficient comparison of simple types
-  _NUM1: array[varEmpty..varDate] of TDynArraySortCompare = (
-    SortDynArrayEmptyNull,
-    SortDynArrayEmptyNull,
-    SortDynArraySmallInt,
-    SortDynArrayInteger,
-    SortDynArraySingle,
-    SortDynArrayDouble,
-    SortDynArrayInt64,
-    SortDynArrayDouble);
-  _NUM2: array[varShortInt..varWord64] of TDynArraySortCompare = (
-    SortDynArrayShortInt,
-    SortDynArrayByte,
-    SortDynArrayWord,
-    SortDynArrayCardinal,
-    SortDynArrayInt64,
-    SortDynArrayQWord);
-  // need to serialize both as UTF-8 text/JSON
-  CMP: array[boolean] of TSortDynArrayVariantComp = (
-    SortDynArrayVariantCompareAsString,
-    SortDynArrayVariantCompareAsStringI);
-  // from Variants RTL comparison to integer
-  ICMP: array[TVariantRelationship] of integer = (
-    0, -1, 1, 1);
 
 function FastVarDataComp(A, B: PVarData; caseInsensitive: boolean): integer;
 var
   at, bt: cardinal;
+  sametypecomp: TDynArraySortCompare;
+label
+  rtl, utf;
 begin
   repeat
     at := cardinal(A^.VType);
-    if at <> varVariant or varByRef then
+    if at <> varVariantByRef then
       break;
     A := A^.VPointer;
   until false;
   repeat
     bt := cardinal(B^.VType);
-    if bt <> varVariant or varByRef then
+    if bt <> varVariantByRef then
       break;
     B := B^.VPointer;
   until false;
   if at = bt then
-    // optimized comparison if A and B share the same type
-    case at of
-      low(_NUM1)..high(_NUM1):
-        result := _NUM1[at](A^.VAny, B^.VAny);
-      low(_NUM2)..high(_NUM2):
-        result := _NUM2[at](A^.VAny, B^.VAny);
-      varString:
-        // RawUtf8 most of the time (e.g. from TDocVariant) - inlined
-        if caseInsensitive then
-          result := StrIComp(A^.VAny, B^.VAny)
-        else
-          result := StrComp(A^.VAny, B^.VAny);
-      varBoolean:
-        if A^.VBoolean then // normalize
-          if B^.VBoolean then
-            result := 0
-          else
-            result := 1
-        else if B^.VBoolean then
-          result := -1
-        else
-          result := 0;
-      varOleStr
-      {$ifdef HASVARUSTRING}, varUString{$endif HASVARUSTRING}:
-        if caseInsensitive then
-          result := AnsiICompW(A^.VAny, B^.VAny)
-        else
-          result := StrCompW(A^.VAny, B^.VAny);
-    else
-      if at = varString or varByRef then
-        // e.g. from TRttiVarData / TRttiCustomProp.CompareValue
-        if caseInsensitive then
-          result := StrIComp(PPointer(A^.VAny)^, PPointer(B^.VAny)^)
-        else
-          result := StrComp(PPointer(A^.VAny)^, PPointer(B^.VAny)^)
-      else if at < varFirstCustom then
-        // fallback to the Variants unit for complex types
-        result := ICMP[VarCompareValue(PVariant(A)^, PVariant(B)^)]
-      else if at = DocVariantVType then
-        // direct TDocVariantDat.VName/VValue comparison with no serialization
-        result := PDocVariantData(A)^.Compare(PDocVariantData(B)^, caseInsensitive)
+    // optimized comparison if A and B share the same type (most common case)
+    if at <= high(_VARDATASAMEVTYPECMP[false]) then
+    begin
+      sametypecomp := _VARDATASAMEVTYPECMP[caseInsensitive, at];
+      if Assigned(sametypecomp) then
+        result := sametypecomp(A^.VAny, B^.VAny)
       else
-        // compare from its UTF-8 text representation/serialization
-        result := CMP[caseInsensitive](PVariant(A)^, PVariant(B)^);
+rtl:    result := VariantCompSimple(PVariant(A)^, PVariant(B)^)
     end
+    else if at = varStringByRef then
+      // e.g. from TRttiVarData / TRttiCustomProp.CompareValue
+      result := _VARDATASAMEVTYPECMP[caseInsensitive, varString](
+        PPointer(A^.VAny)^, PPointer(B^.VAny)^)
+    else if at = varSynUnicode or varByRef then
+      result := _VARDATASAMEVTYPECMP[caseInsensitive, varSynUnicode](
+         PPointer(A^.VAny)^, PPointer(B^.VAny)^)
+    else if at < varFirstCustom then
+      goto rtl
+    else if at = DocVariantVType then
+      // direct TDocVariantDat.VName/VValue comparison with no serialization
+      result := PDocVariantData(A)^.Compare(PDocVariantData(B)^, caseInsensitive)
+    else
+      // compare from custom types UTF-8 text representation/serialization
+utf:  result := VariantCompAsUtf8(PVariant(A)^, PVariant(B)^, caseInsensitive)
+  // A and B do not share the same type
   else if (at <= varNull) or
           (bt <= varNull) then
     result := ord(at > varNull) - ord(bt > varNull)
   else if (at < varString) and
-          (bt < varString) then
-    result := ICMP[VarCompareValue(PVariant(A)^, PVariant(B)^)]
+          (at <> varOleStr) and
+          (bt < varString) and
+          (bt <> varOleStr) then
+    goto rtl
   else
-    result := CMP[caseInsensitive](PVariant(A)^, PVariant(B)^);
+    goto utf;
 end;
 
 function VariantCompare(const V1, V2: variant): PtrInt;
@@ -3644,41 +3596,39 @@ end;
 
 procedure TDocVariant.Copy(var Dest: TVarData; const Source: TVarData;
   const Indirect: boolean);
-begin
-  //Assert(Source.VType=DocVariantVType);
-  if Indirect then
-    SimplisticCopy(Dest, Source, true)
-  else if dvoValueCopiedByReference in TDocVariantData(Source).Options then
-  begin
-    VarClear(variant(Dest)); // Dest may be a complex type
-    pointer(TDocVariantData(Dest).VName) := nil;      // avoid GPF
-    pointer(TDocVariantData(Dest).VValue) := nil;
-    TDocVariantData(Dest) := TDocVariantData(Source); // copy whole record
-  end
-  else
-    CopyByValue(Dest, Source);
-end;
-
-procedure TDocVariant.CopyByValue(var Dest: TVarData; const Source: TVarData);
 var
   S: TDocVariantData absolute Source;
   D: TDocVariantData absolute Dest;
   i: PtrInt;
 begin
   //Assert(Source.VType=DocVariantVType);
+  if Indirect then
+  begin
+    SetVariantByRef(variant(Source), variant(Dest));
+    exit;
+  end;
   VarClear(variant(Dest)); // Dest may be a complex type
-  D.VType := S.VType;
-  D.VOptions := S.VOptions; // copies also Kind
-  D.VCount := S.VCount;
+  PCardinal(@D)^ := PCardinal(@S)^; // VType + VOptions
   pointer(D.VName) := nil; // avoid GPF
   pointer(D.VValue) := nil;
+  D.VCount := S.VCount;
   if S.VCount = 0 then
     exit; // no data to copy
-  D.VName := S.VName; // names can always be safely copied
-  // slower but safe by-value copy
-  SetLength(D.VValue, S.VCount);
-  for i := 0 to S.VCount - 1 do
-    D.VValue[i] := S.VValue[i];
+  D.VName := S.VName;
+  if dvoValueCopiedByReference in S.VOptions then
+    D.VValue := S.VValue
+  else
+  begin
+    SetLength(D.VValue, S.VCount);
+    for i := 0 to S.VCount - 1 do
+      D.VValue[i] := S.VValue[i];
+  end;
+end;
+
+procedure TDocVariant.CopyByValue(var Dest: TVarData; const Source: TVarData);
+begin
+  //Assert(Source.VType=DocVariantVType);
+  Copy(Dest, Source, {indirect=}false);
 end;
 
 procedure TDocVariant.Cast(var Dest: TVarData; const Source: TVarData);
@@ -3689,16 +3639,16 @@ end;
 procedure TDocVariant.CastTo(var Dest: TVarData; const Source: TVarData;
   const AVarType: TVarType);
 var
-  Tmp: RawUtf8;
+  json: RawUtf8;
   wasString: boolean;
 begin
   if AVarType = VarType then
   begin
-    VariantToUtf8(Variant(Source), Tmp, wasString);
+    VariantToUtf8(Variant(Source), json, wasString);
     if wasString then
     begin
       VarClear(variant(Dest));
-      variant(Dest) := _JsonFast(Tmp); // convert from JSON text
+      variant(Dest) := _JsonFast(json); // convert from JSON text
       exit;
     end;
     RaiseCastError;
@@ -3707,8 +3657,8 @@ begin
   begin
     if Source.VType <> VarType then
       RaiseCastError;
-    VariantSaveJson(variant(Source), twJsonEscape, Tmp);
-    RawUtf8ToVariant(Tmp, Dest, AVarType); // convert to JSON text
+    VariantSaveJson(variant(Source), twJsonEscape, json);
+    RawUtf8ToVariant(json, Dest, AVarType); // convert to JSON text
   end;
 end;
 
@@ -7862,10 +7812,42 @@ direct:         if Dest <> nil then
   end;
 end;
 
-function _SortDynArrayVariantComp(const A, B: TVarData; ci: boolean): integer;
+function SortDynArrayEmptyNull(const A, B): integer;
 begin
-  result := FastVarDataComp(@A, @B, ci);
+  result := 0; // VType=varEmpty/varNull are always equal
 end;
+
+function SortDynArrayWordBoolean(const A, B): integer;
+begin
+  if WordBool(A) then // normalize
+    if WordBool(B) then
+      result := 0
+    else
+      result := 1
+  else if WordBool(B) then
+    result := -1
+  else
+    result := 0;
+end;
+
+const
+  // comparison of simple types - copied at startup to _VARDATASAMEVTYPECMP[]
+  _NUM1: array[varEmpty..varDate] of TDynArraySortCompare = (
+    SortDynArrayEmptyNull,
+    SortDynArrayEmptyNull,
+    SortDynArraySmallInt,
+    SortDynArrayInteger,
+    SortDynArraySingle,
+    SortDynArrayDouble,
+    SortDynArrayInt64,
+    SortDynArrayDouble);
+  _NUM2: array[varShortInt..varWord64] of TDynArraySortCompare = (
+    SortDynArrayShortInt,
+    SortDynArrayByte,
+    SortDynArrayWord,
+    SortDynArrayCardinal,
+    SortDynArrayInt64,
+    SortDynArrayQWord);
 
 procedure InitializeUnit;
 var
@@ -7889,7 +7871,21 @@ begin
   // redirect to the feature complete variant wrapper functions
   BinaryVariantLoadAsJson := _BinaryVariantLoadAsJson;
   VariantClearSeveral := _VariantClearSeveral;
-  SortDynArrayVariantComp := _SortDynArrayVariantComp;
+  SortDynArrayVariantComp := pointer(@FastVarDataComp);
+  // setup FastVarDataComp() efficient lookup comparison functions
+  MoveFast(_NUM1, _VARDATASAMEVTYPECMP[false, varEmpty], SizeOf(_NUM1));
+  MoveFast(_NUM2, _VARDATASAMEVTYPECMP[false, varShortInt], SizeOf(_NUM2));
+  _VARDATASAMEVTYPECMP[false, varBoolean] := @SortDynArrayWordBoolean;
+  _VARDATASAMEVTYPECMP[true] := _VARDATASAMEVTYPECMP[false]; // =caseinsensitive
+  _VARDATASAMEVTYPECMP[false, varString] := @SortDynArrayAnsiString;
+  _VARDATASAMEVTYPECMP[true,  varString] := @SortDynArrayAnsiStringI;
+  _VARDATASAMEVTYPECMP[false, varOleStr] := @SortDynArrayUnicodeString;
+  _VARDATASAMEVTYPECMP[true,  varOleStr] := @SortDynArrayUnicodeStringI;
+  {$ifdef HASVARUSTRING}
+  _VARDATASAMEVTYPECMP[false, varUString] := @SortDynArrayUnicodeString;
+  _VARDATASAMEVTYPECMP[true,  varUString] := @SortDynArrayUnicodeStringI;
+  {$endif HASVARUSTRING}
+
   // patch DispInvoke for performance and to circumvent RTL inconsistencies
   GetVariantManager(vm);
   vm.DispInvoke := NewDispInvoke;

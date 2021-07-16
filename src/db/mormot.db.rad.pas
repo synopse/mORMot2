@@ -1221,8 +1221,8 @@ begin
            not IdemPropNameU(aLookupFieldName, Names[f]) then
           f := GetValueIndex(aLookupFieldName);
         if (f >= 0) and
-           (SortDynArrayVariantComp(TVarData(Values[f]), TVarData(aLookupValue),
-            loCaseInsensitive in aOptions) = 0) then
+           (FastVarDataComp(
+             @Values[f], @aLookupValue, loCaseInsensitive in aOptions) = 0) then
           exit;
       end;
   result := 0;

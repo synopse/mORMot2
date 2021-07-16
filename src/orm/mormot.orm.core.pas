@@ -11933,7 +11933,7 @@ function TOrmPropInfoRttiVariant.CompareValue(Item1, Item2: TObject;
   begin
     fPropInfo.GetVariantProp(Item1, V1, {byref=}true);
     fPropInfo.GetVariantProp(Item2, V2, {byref=}true);
-    result := SortDynArrayVariantComp(TVarData(V1), TVarData(V2), CaseInsensitive);
+    result := FastVarDataComp(@V1, @V2, CaseInsensitive);
   end;
 
 begin
@@ -11944,9 +11944,8 @@ begin
   else if Item2 = nil then
     result := 1
   else if fGetterIsFieldPropOffset <> 0 then // avoid any temporary variable
-    result := SortDynArrayVariantComp(PVarData(PtrUInt(Item1) +
-      fGetterIsFieldPropOffset)^, PVarData(PtrUInt(Item2) +
-      fGetterIsFieldPropOffset)^, CaseInsensitive)
+    result := FastVarDataComp(PVarData(PtrUInt(Item1) + fGetterIsFieldPropOffset),
+            PVarData(PtrUInt(Item2) + fGetterIsFieldPropOffset), CaseInsensitive)
   else
     result := CompareWithLocalTempCopy;
 end;

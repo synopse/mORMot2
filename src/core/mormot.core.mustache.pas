@@ -1727,8 +1727,7 @@ begin
   with _Safe(Value)^ do
     if (Kind = dvArray) and
        (Count = 2) and
-       (SortDynArrayVariantComp(
-         TVarData(Values[0]), TVarData(Values[1]), false) = 0) then
+       (FastVarDataComp(@Values[0], @Values[1], false) = 0) then
       Result := true
     else
       SetVariantNull(Result{%H-});
@@ -1750,8 +1749,7 @@ begin
       if wasString and
          (oper <> '') then
       begin
-        cmp := SortDynArrayVariantComp(
-          TVarData(Values[0]), TVarData(Values[2]), false);
+        cmp := FastVarDataComp(@Values[0], @Values[2], false);
         case PWord(oper)^ of
           ord('='):
             if cmp = 0 then
