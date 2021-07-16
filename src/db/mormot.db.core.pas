@@ -1290,7 +1290,7 @@ var
 begin
   Output.Options := [];
   with TVarData(Input) do
-    if VType = varVariant or varByRef then
+    if VType = varVariantByRef then
       VariantToSqlVar(PVariant(VPointer)^, temp, Output)
     else
       case VType of

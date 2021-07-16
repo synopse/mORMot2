@@ -4200,9 +4200,9 @@ begin
   vt := vd.VType;
   if vt = varString then
     UniqueText(RawUtf8(vd.VString))
-  else if vt = varVariant or varByRef then
+  else if vt = varVariantByRef then
     UniqueVariant(PVariant(vd.VPointer)^)
-  else if vt = varString or varByRef then
+  else if vt = varStringByRef then
     UniqueText(PRawUtf8(vd.VPointer)^);
 end;
 

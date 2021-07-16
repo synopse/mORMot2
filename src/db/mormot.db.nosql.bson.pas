@@ -1848,7 +1848,7 @@ var
   bson: TBsonVariantData absolute value;
   v64: Int64;
 begin
-  if bson.VType = varByRef or varVariant then
+  if bson.VType = varVariantByRef then
   begin
     result := FromVariant(PVariant(TVarData(value).VPointer)^);
     exit;
@@ -2020,7 +2020,7 @@ var
   bson: PBsonVariantData;
 begin
   bson := @value;
-  if bson^.VType = varByRef or varVariant then
+  if bson^.VType = varVariantByRef then
     bson := TVarData(value).VPointer;
   if (bson^.VType = BsonVariantType.VarType) and
      (bson^.VKind = betObjectID) then
@@ -2065,7 +2065,7 @@ end;
 function TBsonVariant.IsOfKind(const V: variant; Kind: TBsonElementType): boolean;
 begin
   with TBsonVariantData(V) do
-    if VType = varByRef or varVariant then
+    if VType = varVariantByRef then
       result := IsOfKind(PVariant(TVarData(V).VPointer)^, Kind)
     else
       result := (self <> nil) and
@@ -2076,7 +2076,7 @@ end;
 function TBsonVariant.ToBlob(const V: Variant; var Blob: RawByteString): boolean;
 begin
   with TVarData(V) do
-    if VType = varByRef or varVariant then
+    if VType = varVariantByRef then
     begin
       result := ToBlob(PVariant(VPointer)^, Blob);
       exit;
@@ -2901,7 +2901,7 @@ label
   str, st2;
 begin
   v := @aValue;
-  while v.VType = varByRef or varVariant do
+  while v.VType = varVariantByRef do
     v := v.VPointer;
   FillCharFast(self, sizeof(self), 0);
   Name := pointer(aName);
@@ -3516,7 +3516,7 @@ begin
         else
           BsonWrite(name, RawUtf8(VAny)); // expect UTF-8 content
     else
-      if VType = varByRef or varVariant then
+      if VType = varVariantByRef then
         BsonWriteVariant(name, PVariant(VPointer)^)
       else if VType = BsonVariantType.VarType then
         BsonWrite(name, TBsonVariantData(value))
@@ -4096,7 +4096,7 @@ end;
 
 function Bson(const doc: TDocVariantData): TBsonDocument;
 begin
-  if doc.VarType = varVariant or varByRef then
+  if doc.VarType = varVariantByRef then
   begin
     result := Bson(PDocVariantData(TVarData(doc).VPointer)^);
     exit;

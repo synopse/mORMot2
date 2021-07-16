@@ -8748,10 +8748,10 @@ begin
       if SetVariantUnRefSimpleValue(V, tmp{%H-}) then
         // simple varByRef
         VariantToUtf8(Variant(tmp), result, wasString)
-      else if vt = varVariant or varByRef then
+      else if vt = varVariantByRef then
         // complex varByRef
         VariantToUtf8(PVariant(VPointer)^, result, wasString)
-      else if vt = varByRef or varString then
+      else if vt = varStringByRef then
       begin
         wasString := true;
         {$ifdef HASCODEPAGE}
@@ -8760,7 +8760,7 @@ begin
         result := PRawUtf8(VString)^;
         {$endif HASCODEPAGE}
       end
-      else if vt = varByRef or varOleStr then
+      else if vt = varOleStrByRef then
       begin
         wasString := true;
         RawUnicodeToUtf8(pointer(PWideString(VAny)^),
@@ -8768,7 +8768,7 @@ begin
       end
       else
       {$ifdef HASVARUSTRING}
-      if vt = varByRef or varUString then
+      if vt = varUStringByRef then
       begin
         wasString := true;
         RawUnicodeToUtf8(pointer(PUnicodeString(VAny)^),

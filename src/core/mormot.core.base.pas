@@ -3126,10 +3126,15 @@ const
   // and varQWord in FPC
   varWord64 = 21;
 
+  varVariantByRef = varVariant or varByRef;
+  varStringByRef = varString or varByRef;
+  varOleStrByRef = varOleStr or varByRef;
+
   /// this variant type will map the current SynUnicode type
   // - depending on the compiler version
   {$ifdef HASVARUSTRING}
   varSynUnicode = varUString;
+  varUStringByRef = varUString or varByRef;
   {$else}
   varSynUnicode = varOleStr;
   {$endif HASVARUSTRING}
@@ -3276,12 +3281,15 @@ var
   VariantClearSeveral: procedure(V: PVarData; n: integer);
 
   /// compare two variant/TVarData values, with or without case sensitivity
-  // - this unit registers a basic case-sensitive version calling the RTL
-  // VarCompareValue(), but mormot.core.variants will assign a (much) more
-  // efficient implementation, also properly handling caseInsensitive parameter
+  // - this unit registers the basic VariantCompSimple() case-sensitive comparer
+  // - mormot.core.variants will assign the much better FastVarDataComp()
   // - called e.g. by SortDynArrayVariant/SortDynArrayVariantI functions
   SortDynArrayVariantComp: function(
     const A, B: TVarData; caseInsensitive: boolean): integer;
+
+/// basic default case-sensitive variant comparison function
+// - try as VariantToInt64/VariantToDouble, then RTL VarCompareValue()
+function VariantCompSimple(const A, B: variant): integer;
 
 
 { ************ Sorting/Comparison Functions }
@@ -10657,7 +10665,7 @@ function VarDataFromVariant(const Value: variant): PVarData;
 begin
   result := @Value;
   repeat
-    if integer(result^.VType) <> varVariant or varByRef then
+    if integer(result^.VType) <> varVariantByRef then
       exit;
     if result^.VPointer <> nil then
       result := result^.VPointer
@@ -10672,15 +10680,15 @@ end;
 function VarDataIsEmptyOrNull(VarData: pointer): boolean;
 begin
   with VarDataFromVariant(PVariant(VarData)^)^ do
-    result := (VType <= varNull) or
-              (VType = varNull or varByRef);
+    result := (cardinal(VType) <= varNull) or
+              (cardinal(VType) = varNull or varByRef);
 end;
 
 function VarIsEmptyOrNull(const V: Variant): boolean;
 begin
   with VarDataFromVariant(V)^ do
-    result := (VType <= varNull) or
-              (VType = varNull or varByRef);
+    result := (cardinal(VType) <= varNull) or
+              (cardinal(VType) = varNull or varByRef);
 end;
 
 function SetVariantUnRefSimpleValue(const Source: variant;
@@ -10790,7 +10798,7 @@ end;
 function VariantToDouble(const V: Variant; var Value: double): boolean;
 var
   vd: PVarData;
-  tmp: TVarData;
+  i64: Int64;
 begin
   vd := VarDataFromVariant(V);
   result := true;
@@ -10810,8 +10818,8 @@ begin
     varCurrency or varByRef:
       CurrencyToDouble(vd^.VAny, Value);
   else
-    if VariantToInt64(PVariant(vd)^, tmp.VInt64) then
-      Value := tmp.VInt64
+    if VariantToInt64(PVariant(vd)^, i64) then
+      Value := i64
     else
       result := false;
   end;
@@ -10981,7 +10989,7 @@ end;
 procedure VariantStringToUtf8(const V: Variant; var result: RawUtf8);
 begin
   with VarDataFromVariant(V)^ do
-    if VType = varString then
+    if cardinal(VType) = varString then
       result := RawUtf8(VString)
     else
       result := '';
@@ -11002,13 +11010,33 @@ begin
     until n = 0;
 end;
 
+function VariantCompSimple(const A, B: variant): integer;
+var
+  a64, b64: Int64;
+  af64, bf64: double;
+begin
+  // directly handle ordinal and floating point values
+  if VariantToInt64(A, a64) and
+     VariantToInt64(B, b64) then
+    result := CompareInt64(a64, b64)
+  else if VariantToDouble(A, af64) and
+          VariantToDouble(B, bf64) then
+    result := CompareFloat(af64, bf64)
+  else
+    // inlined VarCompareValue() for complex/mixed types
+    if A = B then
+      result := 0
+    else if A < B then
+      result := -1
+    else
+      result := 1;
+end;
+
 function _SortDynArrayVariantComp(const A, B: TVarData;
   {%H-}caseInsensitive: boolean): integer;
-const
-  ICMP: array[TVariantRelationship] of integer = (0, -1, 1, 1);
+// caseInsensitive not supported by the RTL -> include mormot.core.variants
 begin
-  // caseInsensitive not supported by the RTL -> include mormot.core.variants
-  result := ICMP[VarCompareValue(PVariant(@A)^, PVariant(@B)^)];
+  result := VariantCompSimple(PVariant(@A)^, PVariant(@B)^);
 end;
 
 

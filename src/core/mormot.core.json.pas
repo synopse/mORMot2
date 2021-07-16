@@ -6144,12 +6144,12 @@ begin
       // from TRttiCustomProp.GetValueDirect/GetValueGetter
       AddRttiVarData(TRttiVarData(V), WriteOptions);
   else
-    if vt = varVariant or varByRef then
+    if vt = varVariantByRef then
       AddVariant(PVariant(v.VPointer)^, Escape, WriteOptions)
-    else if vt = varByRef or varString then
+    else if vt = varStringByRef then
       AddText(PRawByteString(v.VAny)^, Escape)
-    else if {$ifdef HASVARUSTRING} (vt = varByRef or varUString) or {$endif}
-            (vt = varByRef or varOleStr) then
+    else if {$ifdef HASVARUSTRING} (vt = varUStringByRef) or {$endif}
+            (vt = varOleStrByRef) then
       AddTextW(PPointer(v.VAny)^, Escape)
     else if vt >= varArray then // complex types are always < varArray
       AddNull
@@ -8262,13 +8262,13 @@ begin
     begin
       VarClear(v{%H-});
       if ValueAsString or
-         not GetNumericVariantFromJson(pointer(List[i].Value),
-           TVarData(v), AllowVarDouble) then
+         not GetNumericVariantFromJson(pointer(List[i].Value), TVarData(v),
+               AllowVarDouble) then
         RawUtf8ToVariant(List[i].Value, v);
       ndx := dv.GetValueIndex(List[i].Name);
       if ndx < 0 then
         ndx := dv.InternalAdd(List[i].Name)
-      else if SortDynArrayVariantComp(TVarData(v), TVarData(dv.Values[ndx]), false) = 0 then
+      else if FastVarDataComp(@v, @dv.Values[ndx], false) = 0 then
         continue; // value not changed -> skip
       if ChangedProps <> nil then
         PDocVariantData(ChangedProps)^.AddValue(List[i].Name, v);

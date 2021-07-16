@@ -1662,7 +1662,7 @@ end;
 
 procedure TMongoRequest.BsonWriteParam(const paramDoc: variant);
 begin
-  if TVarData(paramDoc).VType = varByRef or varVariant then
+  if TVarData(paramDoc).VType = varVariantByRef then
     BsonWriteParam(PVariant(TVarData(paramDoc).VPointer)^)
   else if VarIsStr(paramDoc) then
     BsonWriteProjection(VariantToUtf8(paramDoc))

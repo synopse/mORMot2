@@ -5393,9 +5393,9 @@ begin
           BindTextU(Param, RawUtf8(VAny), IO);
           {$endif HASCODEPAGE}
     else
-      if VType = varByRef or varVariant then
+      if VType = varVariantByRef then
         BindVariant(Param, PVariant(VPointer)^, DataIsBlob, IO)
-      else if VType = varByRef or varOleStr then
+      else if VType = varOleStrByRef then
         BindTextW(Param, PWideString(VAny)^, IO)
       else
         // also use TEXT for any non native VType parameter

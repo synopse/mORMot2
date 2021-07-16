@@ -1318,7 +1318,7 @@ var
   vt: cardinal;
 begin
   vt := TVarData(V).VType;
-  if vt = varVariant or varByRef then
+  if vt = varVariantByRef then
     result := VariantToDateTime(PVariant(TVarData(V).VPointer)^, Value)
   else
   begin

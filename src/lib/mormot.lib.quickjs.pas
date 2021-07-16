@@ -3500,7 +3500,7 @@ begin
       result.FromNum(val.VCurrency^);
     vtExtended:
       result.FromNum(val.VExtended^);
-    // warning: use varByRef or varString makes GPF -> safe and fast refcount
+    // warning: use varStringByRef makes GPF -> safe and fast refcount
     vtAnsiString:
       result := From(RawUtf8(val.VAnsiString));
     {$ifdef HASVARUSTRING}
@@ -3587,16 +3587,16 @@ begin
       if SetVariantUnRefSimpleValue(val, tmp{%H-}) then
         // simple varByRef
         FromVariant(Variant(tmp), result)
-      else if vt = varVariant or varByRef then
+      else if vt = varVariantByRef then
         // complex varByRef
         FromVariant(PVariant(VPointer)^, result)
-      else if vt = varByRef or varString then
+      else if vt = varStringByRef then
         result := From(PRawUtf8(VString)^)
-      else if vt = varByRef or varOleStr then
+      else if vt = varOleStrByRef then
         result := FromW(PPointer(VAny)^, length(PWideString(VAny)^))
       else
       {$ifdef HASVARUSTRING}
-      if vt = varByRef or varUString then
+      if vt = varUStringByRef then
         result := FromW(PPointer(VAny)^, length(PUnicodeString(VAny)^))
       else
       {$endif HASVARUSTRING}

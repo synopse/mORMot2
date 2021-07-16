@@ -65,7 +65,7 @@ function VarIs(const V: Variant; const VTypes: TVarDataTypes): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// same as Dest := Source, but copying by reference
-// - i.e. VType is defined as varVariant or varByRef
+// - i.e. VType is defined as varVariant or varByRef / varVariantByRef
 // - for instance, it will be used for late binding of TDocVariant properties,
 // to let following statements work as expected:
 // ! V := _Json('{arr:[1,2]}');
@@ -144,7 +144,7 @@ type
   // - used in mormot.core.variants.pas unit e.g. by TDocVariantData.SortByValue
   TVariantCompare = function(const V1, V2: variant): PtrInt;
 
-/// internal function as called by inlined VariantCompare/VariantEquals and
+/// internal function as called by inlined VariantCompare/VariantCompareI and
 // the SortDynArrayVariantComp() function overriden by this unit
 function FastVarDataComp(A, B: PVarData; caseInsensitive: boolean): integer;
 
@@ -2466,7 +2466,7 @@ begin
   vd := @V;
   repeat
     vt := vd^.VType;
-    if vt <> varVariant or varByRef then
+    if vt <> varVariantByRef then
       break;
     vd := vd^.VPointer;
     if vd = nil then
@@ -2494,12 +2494,12 @@ begin
       varDate:
         result := VInt64 = 0;
     else
-      if vt = varVariant or varByRef then
+      if vt = varVariantByRef then
         result := VarIsVoid(PVariant(VPointer)^)
-      else if (vt = varByRef or varString) or
-              (vt = varByRef or varOleStr)
+      else if (vt = varStringByRef) or
+              (vt = varOleStrByRef)
               {$ifdef HASVARUSTRING} or
-              (vt = varByRef or varUString)
+              (vt = varUStringByRef)
               {$endif HASVARUSTRING} then
         result := PPointer(VAny)^ = nil
       else if vt = DocVariantVType then
@@ -2528,7 +2528,7 @@ begin
     TVarData(Dest) := TVarData(Source)
   else if not SetVariantUnRefSimpleValue(Source, TVarData(Dest)) then
   begin
-    TRttiVarData(Dest).VType := varVariant or varByRef;
+    TRttiVarData(Dest).VType := varVariantByRef;
     TVarData(Dest).VPointer := @Source;
   end;
 end;
@@ -2543,7 +2543,7 @@ begin
   s := @Source;
   VarClear(Dest);
   vt := s^.VType;
-  if vt = varVariant or varByRef then
+  if vt = varVariantByRef then
   begin
     s := s^.VPointer;
     vt := s^.VType;
@@ -2560,14 +2560,14 @@ begin
         d.VAny := nil;
         RawByteString(d.VAny) := RawByteString(s^.VAny);
       end;
-    varByRef or varString:
+    varStringByRef:
       begin
         dt := varString;
         d.VAny := nil;
         RawByteString(d.VAny) := PRawByteString(s^.VAny)^;
       end;
-    {$ifdef HASVARUSTRING} varUString, varByRef or varUString, {$endif}
-    varOleStr, varByRef or varOleStr:
+    {$ifdef HASVARUSTRING} varUString, varUStringByRef, {$endif}
+    varOleStr, varOleStrByRef:
       begin
         dt := varString;
         d.VAny := nil;
@@ -2697,7 +2697,7 @@ begin
       varUString:
         result := UnicodeString(VAny);
       else
-        if vt = varByRef or varUString then
+        if vt = varUStringByRef then
           result := PUnicodeString(VAny)^
       {$endif UNICODE}
       else
@@ -2714,7 +2714,7 @@ end;
 procedure VariantToVarRec(const V: variant; var result: TVarRec);
 begin
   result.VType := vtVariant;
-  if TVarData(V).VType = varByRef or varVariant then
+  if TVarData(V).VType = varVariantByRef then
     result.VVariant := TVarData(V).VPointer
   else
     result.VVariant := @V;
@@ -2766,7 +2766,7 @@ begin
         end;
       vtVariant:
         result := V.VVariant^;
-      // warning: use varByRef or varString makes GPF -> safe and fast refcount
+      // warning: use varStringByRef makes GPF -> safe and fast refcount
       vtAnsiString:
         begin
           VType := varString;
@@ -3264,7 +3264,7 @@ procedure TSynInvokeableVariantType.Copy(var Dest: TVarData;
   const Source: TVarData; const Indirect: boolean);
 begin
   if Indirect then
-    SimplisticCopy(Dest, Source, true)
+    SetVariantByRef(variant(Source), variant(Dest))
   else
   begin
     VarClear(variant(Dest)); // Dest may be a complex type
@@ -3300,7 +3300,7 @@ var
     vd := @V;
     repeat
       vt := vd^.VType;
-      if vt <> varByRef or varVariant then
+      if vt <> varVariantByRef then
         break;
       vd := vd^.VPointer;
     until false;
@@ -3333,7 +3333,7 @@ begin
   v := Instance;
   repeat
     vt := v.VType;
-    if vt <> varByRef or varVariant then
+    if vt <> varVariantByRef then
       break;
     v := PVarData(v.VPointer)^;
   until false;
@@ -3358,7 +3358,7 @@ begin
       exit; // property not found
     repeat
       vt := v.VType;
-      if vt <> varByRef or varVariant then
+      if vt <> varVariantByRef then
         break;
       v := PVarData(v.VPointer)^;
     until false;
@@ -3803,7 +3803,7 @@ var
   vt: cardinal;
 begin
   vt := TVarData(docVariantArray).VType;
-  if vt = varByRef or varVariant then
+  if vt = varVariantByRef then
     GetSingleOrDefault(
       PVariant(TVarData(docVariantArray).VPointer)^, default, result)
   else if (vt <> DocVariantVType) or
@@ -3823,7 +3823,7 @@ begin
   vt := result^.VType;
   if vt = docv then
     exit
-  else if vt = varByRef or varVariant then
+  else if vt = varVariantByRef then
   begin
     result := PVarData(result)^.VPointer;
     if cardinal(result^.VType) = docv then
@@ -3843,7 +3843,7 @@ begin
   vt := result^.VType;
   if vt = docv then
     exit
-  else if vt = varByRef or varVariant then
+  else if vt = varVariantByRef then
   begin
     result := PVarData(result)^.VPointer;
     if cardinal(result^.VType) = docv then
@@ -3863,7 +3863,7 @@ asm
         movzx   edx, word ptr [eax].TVarData.VType
         cmp     edx, ecx
         je      @ok
-@by:    cmp     edx, varByRef OR varVariant
+@by:    cmp     edx, varVariantByRef
         je      @ptr
         lea     eax, [DocVariantDataFake]
 @ok:
@@ -4115,7 +4115,7 @@ begin
         result := true;
         exit;
       end;
-      if vt <> varByRef or varVariant then
+      if vt <> varVariantByRef then
         break;
       vd := vd^.VPointer;
     until false;
@@ -4745,7 +4745,7 @@ var
   v: PVarData;
 begin
   with TVarData(SourceDocVariant) do
-    if cardinal(VType) = varByRef or varVariant then
+    if cardinal(VType) = varVariantByRef then
       Source := VPointer
     else
       Source := @SourceDocVariant;
@@ -4789,7 +4789,7 @@ begin
       v := @SourceVValue[ndx];
       repeat
         vt := v^.VType;
-        if vt <> varByRef or varVariant then
+        if vt <> varVariantByRef then
           break;
         v := v^.VPointer;
       until false;
@@ -6139,7 +6139,7 @@ begin
     // if we reached here, we should try for the next scope within Dest
     repeat
       vt := found^.VType;
-      if vt <> varByRef or varVariant then
+      if vt <> varVariantByRef then
         break;
       found := found^.VPointer;
     until false;
@@ -6148,7 +6148,7 @@ begin
     exit;
   until false;
   res := found;
-  while cardinal(res^.VType) = varByRef or varVariant do
+  while cardinal(res^.VType) = varVariantByRef do
     res := res^.VPointer;
   if (cardinal(res^.VType) = VType) and
      (PDocVariantData(res)^.VCount = 0) then
@@ -6303,7 +6303,7 @@ begin
   else
   begin
     Source := @VValue[Index];
-    while PVarData(Source)^.VType = varVariant or varByRef do
+    while PVarData(Source)^.VType = varVariantByRef do
       Source := PVarData(Source)^.VPointer;
     Dest := Source^;
   end;
@@ -7793,7 +7793,7 @@ label
   direct;
 begin
   t := Source.vType;
-  if t = varByRef or varVariant then
+  if t = varVariantByRef then
     NewDispInvoke(Dest, PVarData(Source.VPointer)^, calldesc, params)
   else
   begin
