@@ -1129,7 +1129,8 @@ var
     (nil, nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayCardinal,
      SortDynArrayInt64, SortDynArrayDouble, SortDynArrayExtended,
      SortDynArrayInt64, SortDynArrayInteger, SortDynArrayQWord,
-     SortDynArrayRawByteString, SortDynArrayAnsiString, SortDynArrayAnsiString,
+     {$ifdef CPUINTEL}SortDynArrayAnsiString{$else}SortDynArrayRawByteString{$endif},
+     SortDynArrayAnsiString, SortDynArrayAnsiString,
      nil, SortDynArraySingle, SortDynArrayString, SortDynArrayUnicodeString,
      SortDynArrayDouble, SortDynArrayDouble, SortDynArray128, SortDynArray128,
      SortDynArray256, SortDynArray512, SortDynArrayInt64, SortDynArrayInt64,
@@ -1139,7 +1140,8 @@ var
    (nil, nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayCardinal,
     SortDynArrayInt64, SortDynArrayDouble, SortDynArrayExtended,
     SortDynArrayInt64, SortDynArrayInteger, SortDynArrayQWord,
-    SortDynArrayRawByteString, SortDynArrayAnsiStringI, SortDynArrayAnsiStringI,
+    {$ifdef CPUINTEL}SortDynArrayAnsiString{$else}SortDynArrayRawByteString{$endif},
+    SortDynArrayAnsiStringI, SortDynArrayAnsiStringI,
     nil, SortDynArraySingle, SortDynArrayStringI, SortDynArrayUnicodeStringI,
     SortDynArrayDouble, SortDynArrayDouble, SortDynArray128, SortDynArray128,
     SortDynArray256, SortDynArray512, SortDynArrayInt64, SortDynArrayInt64,
@@ -7374,12 +7376,6 @@ begin
           if @QuickSort.Compare = @SortDynArrayDouble then
           begin
             QuickSortDouble(fValue^, aStart, aStop);
-            exit;
-          end;
-        ptRawUtf8:
-          if @QuickSort.Compare = @SortDynArrayAnsiString then
-          begin
-            QuickSortRawUtf8(fValue^, aStart, aStop, {caseinsens=}false);
             exit;
           end;
       end;

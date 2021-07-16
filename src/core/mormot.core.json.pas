@@ -9279,7 +9279,11 @@ end;
 function _BC_RawByteString(A, B: PPUtf8Char; Info: PRttiInfo;
   out Compared: integer): PtrInt;
 begin
+  {$ifdef CPUINTEL}
+  compared := SortDynArrayAnsiString(A^, B^); // i386/x86_64 asm uses length
+  {$else}
   compared := SortDynArrayRawByteString(A^, B^); // will use length not #0
+  {$endif CPUINTEL}
   result := SizeOf(pointer);
 end;
 

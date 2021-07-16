@@ -7885,7 +7885,6 @@ begin
   _VARDATASAMEVTYPECMP[false, varUString] := @SortDynArrayUnicodeString;
   _VARDATASAMEVTYPECMP[true,  varUString] := @SortDynArrayUnicodeStringI;
   {$endif HASVARUSTRING}
-
   // patch DispInvoke for performance and to circumvent RTL inconsistencies
   GetVariantManager(vm);
   vm.DispInvoke := NewDispInvoke;

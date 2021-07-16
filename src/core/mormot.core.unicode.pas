@@ -1305,11 +1305,11 @@ function AnsiICompW(u1, u2: PWideChar): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compare two "array of AnsiString" elements, with no case sensitivity
-// - just a wrapper around StrIComp()
+// - just a wrapper around inlined StrIComp()
 function SortDynArrayAnsiStringI(const A, B): integer;
 
 /// compare two "array of PUtf8Char/PAnsiChar" elements, with no case sensitivity
-// - just a wrapper around StrIComp()
+// - just a wrapper around inlined StrIComp()
 function SortDynArrayPUtf8CharI(const A, B): integer;
 
 /// compare two "array of generic string" elements, with no case sensitivity

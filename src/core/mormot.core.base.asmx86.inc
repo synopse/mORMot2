@@ -1193,8 +1193,8 @@ asm
         je      @zero  // same string or both nil
         test    eax, edx
         jz      @maynil
-@1:     mov     cl, [eax]
-        mov     ch, [edx]
+@1:     mov     cl, byte ptr [eax]
+        mov     ch, byte ptr [edx]
         inc     eax
         inc     edx
         test    cl, cl
@@ -1219,8 +1219,8 @@ end;
 function SortDynArrayInteger(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
-        mov     ecx, [eax]
-        mov     edx, [edx]
+        mov     ecx, dword ptr [eax]
+        mov     edx, dword ptr[edx]
         xor     eax, eax
         cmp     ecx, edx
         setl    cl
@@ -1292,57 +1292,53 @@ function SortDynArrayAnsiString(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // x86 version optimized for AnsiString/RawUtf8/RawByteString types
-        mov     eax, [eax]
-        mov     edx, [edx]
+        mov     eax, dword ptr [eax]
+        mov     edx, dword ptr [edx]
         cmp     eax, edx
         je      @0
         test    eax, edx
-        jz      @n1
-@n2:    movzx   ecx, byte ptr [eax] // first char comparison (quicksort speedup)
-        sub     cl, [edx]
-        jne     @no
-        push    ebx
-        mov     ebx, [eax - 4]
-        sub     ebx, [edx - 4]   // ebx = length(A)-length(B)
+        jz      @maynil
+@f:     movzx   ecx, byte ptr [eax] // first char comparison (quicksort speedup)
+        sub     cl, byte ptr [edx]
+        je      @s
+        jnc     @1
+        mov     eax, -1
+        ret
+@s:     push    ebx
+        mov     ebx, dword ptr [eax - 4]
+        sub     ebx, dword ptr [edx - 4]   // ebx = length(A)-length(B)
         push    ebx
         adc     ecx, -1
         and     ecx, ebx
-        sub     ecx, [eax - 4]
+        sub     ecx, dword ptr [eax - 4]   // ecx = -min(length(A),length(B))
         sub     eax, ecx
         sub     edx, ecx
-@s:     mov     ebx, [eax + ecx]  // compare by dword
-        xor     ebx, [edx + ecx]
+{$ifdef FPC} align 16 {$else} nop {$endif}
+@by4:   mov     ebx, dword ptr [eax + ecx]  // compare 4 bytes each loop
+        xor     ebx, dword ptr [edx + ecx]
         jnz     @d
         add     ecx, 4
-        js      @s
-@l:     pop     eax            // all chars equal -> returns length(a)-length(b)
+        js      @by4
+@eq:    pop     eax            // all chars equal -> returns length(A)-length(B)
         pop     ebx
         ret
-@d:     bsf     ebx, ebx       // char differs -> returns pbyte(a)^-pbyte(b)^
+@0:     xor     eax, eax
+        ret
+@d:     bsf     ebx, ebx       // char differs -> returns pbyte(A)^-pbyte(B)^
         shr     ebx, 3
         add     ecx, ebx
-        jns     @l
+        jns     @eq
         movzx   eax, byte ptr [eax + ecx]
         movzx   edx, byte ptr [edx + ecx]
         pop     ebx
         pop     ebx
         sub     eax, edx
         ret
-@n1:    test    eax, eax       // a or b may be ''
-        jz      @n0
-        test    edx, edx
-        jnz     @n2
-        cmp     [eax - 4], edx
-        je      @0
-@no:    jnc     @1
-        mov     eax, -1
-        ret
-@n0:    cmp     eax, [edx - 4]
-        je      @0
-        jnc     @1
-        mov     eax, -1
-        ret
-@0:     xor     eax, eax
+@maynil:test    edx, edx       // A or B may be ''
+        jz      @1
+        test    eax, eax
+        jnz     @f
+        dec     eax
         ret
 @1:     mov     eax, 1
 end;

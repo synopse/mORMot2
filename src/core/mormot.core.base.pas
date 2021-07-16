@@ -3362,10 +3362,13 @@ function SortDynArrayDouble(const A, B): integer;
 function SortDynArrayExtended(const A, B): integer;
 
 /// compare two "array of AnsiString" elements, with case sensitivity
+// - on Intel/AMD will use efficient i386/x86_64 assembly using length
+// - on other CPU, will redirect to inlined StrComp() using #0 trailing char
 function SortDynArrayAnsiString(const A, B): integer;
 
 /// compare two "array of RawByteString" elements, with case sensitivity
 // - can't use StrComp() or similar functions since RawByteString may contain #0
+// - on Intel/AMD, rather use the more efficient SortDynArrayAnsiString
 function SortDynArrayRawByteString(const A, B): integer;
 
 /// compare two "array of PUtf8Char/PAnsiChar" elements, with case sensitivity
@@ -11026,7 +11029,7 @@ begin
     // inlined VarCompareValue() for complex/mixed types
     if A = B then
       result := 0
-    else if A < B then
+    else if A < B then // both FPC and Delphi RTL require these two comparisons
       result := -1
     else
       result := 1;

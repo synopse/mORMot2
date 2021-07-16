@@ -6716,14 +6716,13 @@ end;
 type
   /// used internally for faster quick sort
   TQuickSortRawUtf8 = object
-    Values: PPointerArray;
     Compare: TUtf8Compare;
     CoValues: PIntegerArray;
     pivot: pointer;
-    procedure Sort(L, R: PtrInt);
+    procedure Sort(Values: PPointerArray; L, R: PtrInt);
   end;
 
-procedure TQuickSortRawUtf8.Sort(L, R: PtrInt);
+procedure TQuickSortRawUtf8.Sort(Values: PPointerArray; L, R: PtrInt);
 var
   I, J, P: PtrInt;
   tmp: Pointer;
@@ -6763,13 +6762,13 @@ begin
       begin
         // use recursion only for smaller range
         if L < J then
-          Sort(L, J);
+          Sort(Values, L, J);
         L := I;
       end
       else
       begin
         if I < R then
-          Sort(I, R);
+          Sort(Values, I, R);
         R := J;
       end;
     until L >= R;
@@ -6780,7 +6779,6 @@ procedure QuickSortRawUtf8(var Values: TRawUtf8DynArray; ValuesCount: integer;
 var
   QS: TQuickSortRawUtf8;
 begin
-  QS.Values := pointer(Values);
   if Assigned(Compare) then
     QS.Compare := Compare
   else
@@ -6789,7 +6787,7 @@ begin
     QS.CoValues := nil
   else
     QS.CoValues := pointer(CoValues^);
-  QS.Sort(0, ValuesCount - 1);
+  QS.Sort(pointer(Values), 0, ValuesCount - 1);
 end;
 
 procedure QuickSortRawUtf8(Values: PRawUtf8Array; L, R: PtrInt;
@@ -6797,13 +6795,12 @@ procedure QuickSortRawUtf8(Values: PRawUtf8Array; L, R: PtrInt;
 var
   QS: TQuickSortRawUtf8;
 begin
-  QS.Values := pointer(Values);
   if caseInsensitive then
     QS.Compare := @StrIComp
   else
     QS.Compare := @StrComp;
   QS.CoValues := nil;
-  QS.Sort(L, R);
+  QS.Sort(pointer(Values), L, R);
 end;
 
 function DeleteRawUtf8(var Values: TRawUtf8DynArray; Index: integer): boolean;
