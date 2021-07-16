@@ -11118,40 +11118,47 @@ begin
   result := StrCompW(PWideChar(A), PWideChar(B));
 end;
 
+function CompareHash128(A, B: PHash128Rec): integer;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := ord(A.Lo > B.Lo) - ord(A.Lo < B.Lo);
+  if result = 0 then
+    result := ord(A.Hi > B.Hi) - ord(A.Hi < B.Hi);
+end;
+
 function SortDynArray128(const A, B): integer;
 begin
-  if THash128Rec(A).Lo < THash128Rec(B).Lo then
-    result := -1
-  else if THash128Rec(A).Lo > THash128Rec(B).Lo then
-    result := 1
-  else if THash128Rec(A).Hi < THash128Rec(B).Hi then
-    result := -1
-  else if THash128Rec(A).Hi > THash128Rec(B).Hi then
-    result := 1
-  else
-    result := 0;
+  result := CompareHash128(@A, @B);
 end;
 
 function SortDynArray256(const A, B): integer;
 begin
-  result := SortDynArray128(THash256Rec(A).Lo, THash256Rec(B).Lo);
+  {$ifdef CPUX64}
+  result := MemCmpSse2(@A, @B, SizeOf(THash256));
+  {$else}
+  result := CompareHash128(@THash256Rec(A).l, @THash256Rec(B).l);
   if result = 0 then
-    result := SortDynArray128(THash256Rec(A).Hi, THash256Rec(B).Hi);
+    result := CompareHash128(@THash256Rec(A).h, @THash256Rec(B).h);
+  {$endif CPUX64}
 end;
 
 function SortDynArray512(const A, B): integer;
 begin
-  result := SortDynArray128(THash512Rec(A).c0, THash512Rec(B).c0);
+  {$ifdef CPUX64}
+  result := MemCmpSse2(@A, @B, SizeOf(THash512));
+  {$else}
+  result := CompareHash128(@THash512Rec(A).l.l, @THash512Rec(B).l.l);
   if result = 0 then
   begin
-    result := SortDynArray128(THash512Rec(A).c1, THash512Rec(B).c1);
+    result := CompareHash128(@THash512Rec(A).l.h, @THash512Rec(B).l.h);
     if result = 0 then
     begin
-      result := SortDynArray128(THash512Rec(A).c2, THash512Rec(B).c2);
+      result := CompareHash128(@THash512Rec(A).h.l, @THash512Rec(B).h.l);
       if result = 0 then
-        result := SortDynArray128(THash512Rec(A).c3, THash512Rec(B).c3);
+        result := CompareHash128(@THash512Rec(A).h.h, @THash512Rec(B).h.h);
     end;
   end;
+  {$endif CPUX64}
 end;
 
 function SortDynArrayRawByteString(const A, B): integer;
