@@ -715,8 +715,16 @@ asm
         jz      @maybe0
 @first: mov     al, byte ptr [s1] // we can check the first char (for quicksort)
         sub     al, byte ptr [s2]
-        jne     @ne
-        mov     r8, qword ptr [s1 - _STRLEN]
+        je      @s
+        movsx   rax, al           // branchless execution on Quicksort
+        ret
+@maybe0:test    s2, s2
+        jz      @1
+        test    s1, s1
+        jnz     @first
+        dec     rax
+        ret
+@s:     mov     r8, qword ptr [s1 - _STRLEN]
         mov     r11, r8
         sub     r8, qword ptr [s2 - _STRLEN] // r8 = length(s1)-length(s2)
         adc     rax, -1
@@ -725,15 +733,13 @@ asm
         sub     s1, rax
         sub     s2, rax
         align   16
-@s:     mov     r10, qword ptr [s1 + rax] // compare by 8 bytes (may include len)
+@by8:   mov     r10, qword ptr [s1 + rax] // compare by 8 bytes
         xor     r10, qword ptr [s2 + rax]
         jnz     @d
         add     rax, 8
-        js      @s
+        js      @by8
 @e:     mov     rax, r8 // all equal -> return difflen
 @0:     ret
-@ne:    movsx   rax, al
-        ret
 @d:     bsf     r10, r10 // compute s1^-s2^
         shr     r10, 3
         add     rax, r10
@@ -741,12 +747,6 @@ asm
         movzx   edx, byte ptr [s2 + rax]
         movzx   eax, byte ptr [s1 + rax]
         sub     rax, rdx
-        ret
-@maybe0:test    s2, s2
-        jz      @1
-        test    s1, s1
-        jnz     @first
-        dec     rax
         ret
 @1:     inc     eax
 end;
@@ -764,7 +764,7 @@ asm
         lea     s1, qword ptr [s1 + rax - 8]
         lea     s2, qword ptr [s2 + rax - 8]
         neg     rax
-        mov     r8, qword ptr [s1] // compare last 8 bytes (may include len)
+        mov     r8, qword ptr [s1] // compare last 8 bytes
         cmp     r8, qword ptr [s2]
         jne     @q
         align 16
