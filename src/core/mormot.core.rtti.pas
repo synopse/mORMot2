@@ -760,6 +760,9 @@ type
     /// for rkClass: get the class type information
     function RttiClass: PRttiClass;
       {$ifdef HASINLINE}inline;{$endif}
+    /// for rkClass: get the class type information
+    function RttiNonVoidClass: PRttiClass;
+      {$ifdef HASINLINE}inline;{$endif}
     /// for rkClass: return the number of published properties in this class
     // - you can count the plain fields without any getter function, if you
     // do need only the published properties corresponding to some value
@@ -2193,6 +2196,12 @@ type
   // - is usually a TRttiCustom or a TRttiJson class type
   TRttiCustomClass = class of TRttiCustom;
 
+  TRttiCustomListPair = record
+    RttiInfoRttiCustom: TPointerDynArray;
+    CurrentEnd: pointer;
+  end;
+  PRttiCustomListPair = ^TRttiCustomListPair;
+
   /// maintain a thread-safe list of PRttiInfo/TRttiCustom/TRttiJson registration
   TRttiCustomList = object
   private
@@ -2203,7 +2212,7 @@ type
     LastPair: array[succ(low(TRttiKind)) .. high(TRttiKind)] of TRttiCustom;
     // store PRttiInfo/TRttiCustom pairs by TRttiKind.Kind+Name[0..1] 
     Pairs: array[succ(low(TRttiKind)) .. high(TRttiKind)] of
-           array[0..RTTICUSTOMTYPEINFOHASH] of TPointerDynArray;
+           array[0..RTTICUSTOMTYPEINFOHASH] of TRttiCustomListPair;
     // used to release memory used by registered customizations
     Instances: array of TRttiCustom;
     function GetByClass(ObjectClass: TClass): TRttiCustom;
@@ -2514,7 +2523,7 @@ var
 begin
   P := PPointer(PAnsiChar(C) + vmtTypeInfo)^;
   if P <> nil then
-    result := P^.RttiClass^.UnitName
+    result := P^.RttiNonVoidClass^.UnitName
   else
     result := @NULCHAR;
 end;
@@ -2528,7 +2537,7 @@ begin
     exit;
   P := ParentInfo;
   while P <> nil do
-    with P^.RttiClass^ do
+    with P^.RttiNonVoidClass^ do
       if RttiClass = AClass then
         exit
       else
@@ -2989,7 +2998,7 @@ end;
 
 function TRttiInfo.InheritsFrom(AClass: TClass): boolean;
 begin
-  result := RttiClass^.InheritsFrom(AClass);
+  result := RttiNonVoidClass^.InheritsFrom(AClass);
 end;
 
 function TRttiInfo.EnumBaseType(out NameList: PShortString;
@@ -3824,7 +3833,7 @@ begin
     if SetByRef then
     begin
       VarClear(Result);
-      TVarData(Result).VType := varVariant or varByRef;
+      TVarData(Result).VType := varVariantByRef;
       TVarData(Result).VPointer := call.Data;
     end
     else
@@ -4220,7 +4229,7 @@ begin
       for i := 1 to GetRttiProp(aClassType, result) do
         with result^.TypeInfo^ do
           if (Kind = rkClass) and
-             (RttiClass^.RttiClass = aSearchedClassType) then
+             (RttiNonVoidClass^.RttiClass = aSearchedClassType) then
             exit
           else
             result := result^.Next;
@@ -6297,7 +6306,7 @@ begin
   if (ClassInfo = nil) or
      (ClassInfo^.Kind <> rkClass) then
     exit;
-  rc := ClassInfo^.RttiClass;
+  rc := ClassInfo^.RttiNonVoidClass;
   if IncludeParents then
     // put parent properties first
     AddFromClass(rc^.ParentInfo, true);
@@ -7088,24 +7097,24 @@ end;
 
 function TRttiCustomList.Find(Info: PRttiInfo): TRttiCustom;
 var
-  PEnd: PAnsiChar;
-  // paranoid use of a local TPointerDynArray for refcnt? slower...
+  P: PRttiCustomListPair;
 begin
   if Info^.Kind <> rkClass then
   begin
     // our optimized "hash table of the poor" (tm) lookup
-    result := pointer(Pairs[Info^.Kind, (PtrUInt(Info.RawName[0]) xor
-      PtrUInt(Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH]);
+    P := @Pairs[Info^.Kind, (PtrUInt(Info.RawName[0]) xor
+      PtrUInt(Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH];
     // note: we tried to include RawName[1] and $df, but with no gain
+    result := pointer(P^.RttiInfoRttiCustom);
     if result = nil then
       exit;
-    PEnd := @PPointerArray(result)[PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF];
+    P := P^.CurrentEnd;
     repeat
       // efficient brute force search within L1 cache
       if PPointer(result)^ <> Info then
       begin
         inc(PByte(result), 2 * SizeOf(pointer)); // PRttiInfo/TRttiCustom pairs
-        if PAnsiChar(result) < PEnd then
+        if PAnsiChar(result) < PAnsiChar(P) then
           continue;
         result := nil; // not found
         exit;
@@ -7116,7 +7125,7 @@ begin
   end
   else
     // it is (slightly) faster to use the vmtAutoTable slot for classes
-    result := PPointer(PAnsiChar(Info.RttiClass.RttiClass) + vmtAutoTable)^;
+    result := PPointer(PAnsiChar(Info.RttiNonVoidClass.RttiClass) + vmtAutoTable)^;
 end;
 
 function TRttiCustomList.Find(ObjectClass: TClass): TRttiCustom;
@@ -7124,20 +7133,19 @@ begin
   result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
 end;
 
-function FindNameInPairs(Pairs: PPointerArray; Name: PUtf8Char; NameLen: PtrInt): TRttiCustom;
+function FindNameInPairs(Pairs, PEnd: PPointerArray;
+  Name: PUtf8Char; NameLen: PtrInt): TRttiCustom;
 var
-  PEnd: PAnsiChar;
   s: PRttiInfo;
 label
   nxt;
 begin
-  PEnd := @Pairs[PDALen(PAnsiChar(Pairs) - _DALEN)^ + _DAOFF];
   repeat
     s := Pairs[0];
     if ord(s^.RawName[0]) <> NameLen then
     begin
 nxt:  Pairs := @Pairs[2]; // PRttiInfo/TRttiCustom pairs
-      if PAnsiChar(Pairs) >= PEnd then
+      if PAnsiChar(Pairs) >= PAnsiChar(PEnd) then
         break;
     end
     else if not IdemPropNameUSameLenNotNull(Name, @s^.RawName[1], NameLen) then
@@ -7153,6 +7161,8 @@ end;
 
 function TRttiCustomList.Find(Name: PUtf8Char; NameLen: PtrInt;
   Kind: TRttiKind): TRttiCustom;
+var
+  P: PRttiCustomListPair;
 begin
   if (Kind <> rkUnknown) and
      (Name <> nil) and
@@ -7164,11 +7174,12 @@ begin
        IdemPropNameU(result.Name, Name, NameLen) then
       exit;
     // our optimized "hash table of the poor" (tm) lookup
-    result := pointer(Pairs[Kind,
-      (PtrUInt(NameLen) xor PtrUInt(Name[0])) and RTTICUSTOMTYPEINFOHASH]);
+    P := @Pairs[Kind,
+      (PtrUInt(NameLen) xor PtrUInt(Name[0])) and RTTICUSTOMTYPEINFOHASH];
+    result := pointer(P^.RttiInfoRttiCustom);
     if result <> nil then
     begin
-      result := FindNameInPairs(pointer(result), Name, NameLen);
+      result := FindNameInPairs(pointer(result), P^.CurrentEnd, Name, NameLen);
       if result <> nil then
         LastPair[Kind] := result;
     end;
@@ -7206,22 +7217,26 @@ end;
 
 function TRttiCustomList.FindByArrayRtti(ElemInfo: PRttiInfo): TRttiCustom;
 var
-  i, j: PtrInt;
-  p: PPointerArray;
+  i: PtrInt;
+  p: PRttiCustomListPair;
+  pp: PPointerArray;
 begin
   EnterCriticalSection(Lock);
   try
     if ElemInfo <> nil then
       for i := 0 to high(Pairs[rkDynArray]) do
       begin
-        p := pointer(Pairs[rkDynArray, i]); // TPointerDynArray
-        for j := 0 to (length(TPointerDynArray(p)) shr 1) - 1 do
-        begin
-          result := p[j * 2 + 1]; // PRttiInfo/TRttiCustom pairs
-          if (result.ArrayRtti <> nil) and
-             (result.ArrayRtti.Info = ElemInfo) then
-            exit;
-        end;
+        p := @Pairs[rkDynArray, i];
+        pp := pointer(p^.RttiInfoRttiCustom);
+        p := p^.CurrentEnd;
+        if pp <> nil then
+          repeat
+            result := pp[1]; // PRttiInfo/TRttiCustom pairs
+            if (result.ArrayRtti <> nil) and
+               (result.ArrayRtti.Info = ElemInfo) then
+              exit;
+            pp := @pp[2];
+          until PAnsiChar(pp) = PAnsiChar(p);
       end;
     result := nil;
   finally
@@ -7337,16 +7352,21 @@ end;
 procedure TRttiCustomList.Add(Instance: TRttiCustom);
 var
   hash, n: PtrInt;
-  newlist: TPointerDynArray; // don't touch List during background Find()
+  P: PRttiCustomListPair;
 begin // call is made within Lock..UnLock
   hash := (PtrUInt(Instance.Info.RawName[0]) xor
            PtrUInt(Instance.Info.RawName[1])) and RTTICUSTOMTYPEINFOHASH;
-  newlist := copy(Pairs[Instance.Kind, hash]);
-  n := length(newlist);
-  SetLength(newlist, n + 2); // PRttiInfo/TRttiCustom pairs
-  newlist[n] := Instance.Info;
-  newlist[n + 1] := Instance;
-  Pairs[Instance.Kind, hash] := newlist; // almost atomic set
+  P := @Pairs[Instance.Kind, hash];
+  n := length(P^.RttiInfoRttiCustom);
+  if (n = 0) or
+     (@P^.RttiInfoRttiCustom[n] = P^.CurrentEnd) then
+  begin
+    SetLength(P^.RttiInfoRttiCustom, n + 32); // seldom resize for thread safety
+    P^.CurrentEnd := @P^.RttiInfoRttiCustom[n];
+  end;
+  PPointerArray(P^.CurrentEnd)[0] := Instance.Info;
+  PPointerArray(P^.CurrentEnd)[1] := Instance;
+  P^.CurrentEnd := @PPointerArray(P^.CurrentEnd)[2];
   ObjArrayAddCount(Instances, Instance, Count); // to release memory
   inc(Counts[Instance.Kind]);
 end;

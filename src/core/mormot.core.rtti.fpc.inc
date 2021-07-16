@@ -60,6 +60,11 @@ begin
     result := nil;
 end;
 
+function TRttiInfo.RttiNonVoidClass: PRttiClass;
+begin
+  result := pointer(GetTypeData(@self))
+end;
+
 function TRttiClass.ParentInfo: PRttiInfo;
 begin
   result := DeRef(PTypeData(@self)^.ParentInfoRef);

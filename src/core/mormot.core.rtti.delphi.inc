@@ -40,6 +40,11 @@ begin
     result := nil;
 end;
 
+function TRttiInfo.RttiNonVoidClass: PRttiClass;
+begin
+  result := pointer(GetTypeData(@self))
+end;
+
 function TRttiClass.PropCount: integer;
 begin
   result := PTypeData(@self)^.PropCount;
