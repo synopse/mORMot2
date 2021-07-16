@@ -769,7 +769,7 @@ end;
 
 function SortDynArrayAnsiString(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        // x86 version optimized for AnsiString/RawUtf8/RawByteString types
+        // x86_64 version optimized for AnsiString/RawUtf8/RawByteString types
         mov     rax, [A]
         mov     rdx, [B]
         xor     ecx, ecx

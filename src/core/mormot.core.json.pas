@@ -2010,7 +2010,7 @@ function DynArrayLoadJson(var Value; const Json: RawUtf8;
 // is missing), unless: 1. you set the TObjectListItemClass property as expected,
 // and provide a TObjectList object, or 2. woStoreClassName option has been
 // used at ObjectToJson() call and the corresponding classes have been previously
-// registered by TJsonSerializer.RegisterClassForJson() (or Classes.RegisterClass)
+// registered by Rtti.RegisterClass()
 // - will clear any previous TCollection objects, and convert any null JSON
 // basic type into nil - e.g. if From='null', will call FreeAndNil(Value)
 // - you can add some custom (un)serializers for ANY class, via mormot.core.json
@@ -2044,8 +2044,7 @@ function ObjectLoadJson(var ObjectInstance; const Json: RawUtf8;
 // - JSON input should be either 'null', either '{"ClassName":"TMyClass",...}'
 // - woStoreClassName option shall have been used at ObjectToJson() call
 // - and the corresponding class shall have been previously registered by
-// TJsonSerializer.RegisterClassForJson(), in order to retrieve the class type
-// from it name - or, at least, by a Classes.RegisterClass() function call
+// Rtti.RegisterClass() to retrieve the class type from it name
 // - the data inside From^ is modified in-place (unescaped and transformed):
 // don't call JsonToObject(pointer(JSONRawUtf8)) but makes a temporary copy of
 // the JSON text buffer before calling this function, if want to reuse it later
@@ -5562,72 +5561,91 @@ var
   c: cardinal;
   esc: byte;
 begin
-  while SourceChars > 0 do
-  begin
-    c := byte(Source^);
-    if c <= $7F then
-    begin
-      if c = 0 then
-        exit;
-      if B >= BEnd then
-        FlushToStream;
-      case Escape of // twJsonEscape or twOnSameLine only occur on c <= $7f
-        twNone:
+  if SourceChars > 0 then
+  repeat
+    case Escape of // twJsonEscape or twOnSameLine only occur on c <= $7f
+      twNone:
+        repeat
+          if B >= BEnd then
+            FlushToStream;
+          c := byte(Source^);
+          inc(Source);
+          if c > $7F then
+             break;
+          if c = 0 then
+            exit;
+          inc(B);
+          B^ := AnsiChar(c);
+          dec(SourceChars);
+          if SourceChars = 0 then
+            exit;
+        until false;
+      twJsonEscape:
+        repeat
+          if B >= BEnd then
+            FlushToStream;
+          c := byte(Source^);
+          inc(Source);
+          if c > $7F then
+             break;
+          if c = 0 then
+            exit;
+          esc := JSON_ESCAPE[c]; // c<>0 -> esc<>JSON_ESCAPE_ENDINGZERO
+          if esc = JSON_ESCAPE_NONE then
           begin
+            // no escape needed
             inc(B);
             B^ := AnsiChar(c);
-          end;
-        twJsonEscape:
+          end
+          else if esc = JSON_ESCAPE_UNICODEHEX then
           begin
-            esc := JSON_ESCAPE[c]; // c<>0 -> esc<>JSON_ESCAPE_ENDINGZERO
-            if esc = JSON_ESCAPE_NONE then
-            begin
-              // no escape needed
-              inc(B);
-              B^ := AnsiChar(c);
-            end
-            else if esc = JSON_ESCAPE_UNICODEHEX then
-            begin
-              // characters below ' ', #7 e.g. -> \u0007
-              AddShorter('\u00');
-              AddByteToHex(c);
-            end
-            else
-              Add('\', AnsiChar(esc)); // escaped as \ + b,t,n,f,r,\,"
-          end;
-        twOnSameLine:
-          begin
-            inc(B);
-            if c < 32 then
-              B^ := ' '
-            else
-              B^ := AnsiChar(c);
-          end;
-      end
+            // characters below ' ', #7 e.g. -> \u0007
+            AddShorter('\u00');
+            AddByteToHex(c);
+          end
+          else
+            Add('\', AnsiChar(esc)); // escaped as \ + b,t,n,f,r,\,"
+          dec(SourceChars);
+          if SourceChars = 0 then
+            exit;
+        until false;
+    else  //twOnSameLine:
+      repeat
+        if B >= BEnd then
+          FlushToStream;
+        c := byte(Source^);
+        inc(Source);
+        if c > $7F then
+           break;
+        if c = 0 then
+          exit;
+        inc(B);
+        if c < 32 then
+          B^ := ' '
+        else
+          B^ := AnsiChar(c);
+        dec(SourceChars);
+        if SourceChars = 0 then
+          exit;
+      until false;
+    end;
+    // handle c > $7F (no surrogate is expected in TSynAnsiFixedWidth charsets)
+    c := AnsiToWide[c]; // convert FixedAnsi char into Unicode char
+    if c > $7ff then
+    begin
+      B[1] := AnsiChar($E0 or (c shr 12));
+      B[2] := AnsiChar($80 or ((c shr 6) and $3F));
+      B[3] := AnsiChar($80 or (c and $3F));
+      inc(B, 3);
     end
     else
     begin
-      // no surrogate is expected in TSynAnsiFixedWidth charsets
-      if BEnd - B <= 3 then
-        FlushToStream;
-      c := AnsiToWide[c]; // convert FixedAnsi char into Unicode char
-      if c > $7ff then
-      begin
-        B[1] := AnsiChar($E0 or (c shr 12));
-        B[2] := AnsiChar($80 or ((c shr 6) and $3F));
-        B[3] := AnsiChar($80 or (c and $3F));
-        inc(B, 3);
-      end
-      else
-      begin
-        B[1] := AnsiChar($C0 or (c shr 6));
-        B[2] := AnsiChar($80 or (c and $3F));
-        inc(B, 2);
-      end;
+      B[1] := AnsiChar($C0 or (c shr 6));
+      B[2] := AnsiChar($80 or (c and $3F));
+      inc(B, 2);
     end;
     dec(SourceChars);
-    inc(Source);
-  end;
+  until SourceChars = 0;
 end;
 
 destructor TTextWriter.Destroy;
@@ -5728,21 +5746,22 @@ procedure TTextWriter.AddAnyAnsiBuffer(P: PAnsiChar; Len: PtrInt;
 var
   B: PUtf8Char;
   engine: TSynAnsiConvert;
+label
+  utf8;
 begin
   if Len > 0 then
   begin
-    {$ifdef FPC} // CP_UTF8 is very likely on POSIX or LCL
-    if CodePage = 0 then
-      CodePage := CurrentAnsiConvert.CodePage;
-    {$endif FPC}
+    if CodePage = 0 then // CP_UTF8 is very likely on POSIX or LCL
+      CodePage := Unicode_CodePage; // = CurrentAnsiConvert.CodePage
     case CodePage of
       CP_UTF8:          // direct write of RawUtf8 content
-        if Escape = twJsonEscape then
-          Add(PUtf8Char(P), 0, Escape)    // faster with no Len
-        else
-          Add(PUtf8Char(P), Len, Escape); // expects a supplied Len
+        begin
+          if Escape = twJsonEscape then
+            Len := 0;    // faster with no Len
+utf8:     Add(PUtf8Char(P), Len, Escape);
+        end;
       CP_RAWBYTESTRING: // direct write of RawByteString content
-        Add(PUtf8Char(P), Len, Escape);
+        goto utf8;
       CP_UTF16:         // direct write of UTF-16 content
         AddW(PWord(P), 0, Escape);
       CP_RAWBLOB:       // RawBlob written with Base-64 encoding
@@ -6143,19 +6162,19 @@ begin
       // rkEnumeration,rkSet,rkDynArray,rkClass,rkInterface,rkRecord,rkObject
       // from TRttiCustomProp.GetValueDirect/GetValueGetter
       AddRttiVarData(TRttiVarData(V), WriteOptions);
-  else
-    if vt = varVariantByRef then
-      AddVariant(PVariant(v.VPointer)^, Escape, WriteOptions)
-    else if vt = varStringByRef then
-      AddText(PRawByteString(v.VAny)^, Escape)
-    else if {$ifdef HASVARUSTRING} (vt = varUStringByRef) or {$endif}
-            (vt = varOleStrByRef) then
+    varVariantByRef:
+      AddVariant(PVariant(v.VPointer)^, Escape, WriteOptions);
+    varStringByRef:
+      AddText(PRawByteString(v.VAny)^, Escape);
+    {$ifdef HASVARUSTRING} varUStringByRef, {$endif}
+    varOleStrByRef:
       AddTextW(PPointer(v.VAny)^, Escape)
-    else if vt >= varArray then // complex types are always < varArray
+  else
+    if vt >= varArray then // complex types are always < varArray
       AddNull
-    else if DocVariantType.FindSynVariantType(vt, cv) then
+    else if DocVariantType.FindSynVariantType(vt, cv) then // our custom types
       cv.ToJson(self, Value, Escape)
-    else if not CustomVariantToJson(self, Value, Escape) then
+    else if not CustomVariantToJson(self, Value, Escape) then // generic CastTo
       raise EJsonException.CreateUtf8('%.AddVariant VType=%', [self, vt]);
   end;
 end;

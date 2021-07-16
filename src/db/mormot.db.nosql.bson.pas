@@ -510,6 +510,10 @@ type
     /// used internally to set the TBsonElement content, once Kind has been set
     procedure FromBson(bson: PByte);
   public
+    /// the UTF-8 encoded name of this element
+    Name: PUtf8Char;
+    /// the name length (in chars) of this element
+    NameLen: integer;
     /// index of this element in the original sequence list
     // - is correct only when the element has been reset before the parsing
     // loop, e.g.:
@@ -517,10 +521,6 @@ type
     // ! while item.FromNext(elem.Document) do
     // !   writeln(item.Index,' ',Item.Name,' ',Item.ValueBytes);
     Index: integer;
-    /// the UTF-8 encoded name of this element
-    Name: PUtf8Char;
-    /// the name length (in chars) of this element
-    NameLen: integer;
     /// the element type
     Kind: TBsonElementType;
     /// number of bytes in the BSON element
@@ -567,18 +567,17 @@ type
           BlobSubType: TBsonElementBinaryType;);
         betRegEx:
           (RegEx: PUtf8Char;
-          RegExLen: integer;
-          RegExOptions: PUtf8Char;
-          RegExOptionsLen: integer;);
+           RegExLen: integer;
+           RegExOptions: PUtf8Char;
+           RegExOptionsLen: integer;);
         betJSScope:
           (JavaScript: PUtf8Char;
-          JavaScriptLen: integer;
-          ScopeDocument: PByte;);
+           JavaScriptLen: integer;
+           ScopeDocument: PByte;);
         betTimestamp:
-          (
-          { map InternalStorage: Int64 }
-          time_t: cardinal;
-          ordinal: cardinal;);
+          ({ map InternalStorage: Int64 }
+           time_t: cardinal;
+           ordinal: cardinal;);
     end;
     /// fill a BSON Element structure from a variant content and associated name
     // - perform the reverse conversion as made with ToVariant()

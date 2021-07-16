@@ -4310,8 +4310,8 @@ type
   public
     /// will setup the corresponding RecordClass property from the TID type name
     // - the TOrm type should have previously been registered to the
-    // TJsonSerializer.RegisterClassForJson list, e.g. in TOrmModel.Create, so
-    // that e.g. 'TOrmClientID' type name will match TOrmClient
+    // Rtti.RegisterClass list, e.g. in TOrmModel.Create, so that e.g.
+    // 'TOrmClientID' type name will match TOrmClient
     // - in addition, the '...ToBeDeletedID' name pattern will set CascadeDelete
     constructor Create(aPropInfo: PRttiProp; aPropIndex: integer;
       aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions); override;

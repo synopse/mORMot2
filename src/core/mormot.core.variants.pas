@@ -7861,13 +7861,13 @@ begin
   DocVariantType := TDocVariant(SynRegisterCustomVariantType(TDocVariant));
   vt := DocVariantType.VarType;
   DocVariantVType := vt;
-  DV_FAST[dvUndefined].VType := vt;
-  PDocVariantData(@DV_FAST[dvUndefined])^.VOptions := JSON_OPTIONS_FAST;
-  DV_FAST[dvArray].VType := vt;
-  PDocVariantData(@DV_FAST[dvArray])^.VOptions := JSON_OPTIONS_FAST + [dvoIsArray];
-  DV_FAST[dvObject].VType := vt;
-  PDocVariantData(@DV_FAST[dvObject])^.VOptions := JSON_OPTIONS_FAST + [dvoIsObject];
+  PCardinal(@DV_FAST[dvUndefined])^ := vt;
+  PCardinal(@DV_FAST[dvArray])^ := vt;
+  PCardinal(@DV_FAST[dvObject])^ := vt;
   assert({%H-}SynVariantTypes[0].VarType = vt);
+  PDocVariantData(@DV_FAST[dvUndefined])^.VOptions := JSON_OPTIONS_FAST;
+  PDocVariantData(@DV_FAST[dvArray])^.VOptions := JSON_OPTIONS_FAST + [dvoIsArray];
+  PDocVariantData(@DV_FAST[dvObject])^.VOptions := JSON_OPTIONS_FAST + [dvoIsObject];
   // redirect to the feature complete variant wrapper functions
   BinaryVariantLoadAsJson := _BinaryVariantLoadAsJson;
   VariantClearSeveral := _VariantClearSeveral;

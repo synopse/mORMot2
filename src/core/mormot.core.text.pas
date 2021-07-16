@@ -749,20 +749,18 @@ type
   // - use an internal buffer, so much faster than naive string+string
   // - see TTextWriter in mormot.core.json for proper JSON support
   // - see TJsonWriter in mormot.db.core for SQL resultset export
-  // - see TJsonSerializer in mormot.core.reflection for proper class
-  // serialization via WriteObject
+  // - see TJsonSerializer in mormot.orm.core for ORM oriented serialization
   TBaseWriter = class
   protected
     fStream: TStream;
     fInitialStreamPosition: PtrUInt;
     fTotalFileSize: PtrUInt;
-    fCustomOptions: TTextWriterOptions;
     fHumanReadableLevel: integer;
     // internal temporary buffer
     fTempBufSize: integer;
     fTempBuf: PUtf8Char;
     fOnFlushToStream: TOnTextWriterFlush;
-    fInternalJsonWriter: TBaseWriter;
+    fCustomOptions: TTextWriterOptions;
     procedure WriteToStream(data: pointer; len: PtrUInt); virtual;
     function GetTextLength: PtrUInt;
     procedure SetStream(aStream: TStream);
@@ -865,7 +863,6 @@ type
     /// append a boolean Value as text
     // - write either 'true' or 'false'
     procedure Add(Value: boolean); overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// append a Currency from its Int64 in-memory representation
     // - expects a PInt64 to avoid ambiguity with the AddCurr() method
     procedure AddCurr64(Value: PInt64);
@@ -888,13 +885,11 @@ type
     // - noexp=true will call ExtendedToShortNoExp() to avoid any scientific
     // notation in the resulting text
     procedure AddDouble(Value: double; noexp: boolean = false);
-      {$ifdef HASINLINE}inline;{$endif}
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     // - noexp=true will call ExtendedToShortNoExp() to avoid any scientific
     // notation in the resulting text
     procedure AddSingle(Value: single; noexp: boolean = false);
-      {$ifdef HASINLINE}inline;{$endif}
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     // - noexp=true will call ExtendedToShortNoExp() to avoid any scientific
@@ -5531,7 +5526,7 @@ begin
     exit; // paranoid check
   if BEnd - B <= PropNameLen then
     FlushToStream;
-  if twoForceJsonExtended in CustomOptions then
+  if twoForceJsonExtended in fCustomOptions then
   begin
     MoveSmall(PropName, B + 1, PropNameLen);
     inc(B, PropNameLen + 1);
