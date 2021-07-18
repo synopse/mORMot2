@@ -770,8 +770,8 @@ end;
 function SortDynArrayAnsiString(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         // x86_64 version optimized for AnsiString/RawUtf8/RawByteString types
-        mov     rax, [A]
-        mov     rdx, [B]
+        mov     rax, qword ptr [A]
+        mov     rdx, qword ptr [B]
         xor     ecx, ecx
         cmp     rax, rdx
         je      @0
@@ -785,26 +785,23 @@ function SortDynArrayAnsiString(const A, B): integer;
 @1:     mov     eax, 1
         ret
         {$ifdef FPC}
-@s:     mov     r9, qword ptr [rax - _STRLEN]
+@s:     mov     r9, qword ptr [rax - _STRLEN]   // TStrLen=SizeInt on FPC
         mov     r8, r9
         sub     r9, qword ptr [rdx - _STRLEN]   // r9 = length(A)-length(B)
-        adc     rcx, -1
-        and     rcx, r9
-        sub     rcx, r8                  // rcx = -min(length(A),length(B))
         {$else}
         .align 16
-@s:     mov     r9d,  dword ptr [rax - _STRLEN]
+@s:     mov     r9d,  dword ptr [rax - _STRLEN] // TStrLen=integer on Delphi
         mov     r8, r9
         mov     r10d, dword ptr [rdx - _STRLEN]
-        sub     r9, r10                   // r9 = length(A)-length(B)
+        sub     r9, r10                         // r9 = length(A)-length(B)
+        {$endif FPC}
         adc     rcx, -1
         and     rcx, r9
         sub     rcx, r8                  // rcx = -min(length(A),length(B))
-        {$endif FPC}
         sub     rax, rcx
         sub     rdx, rcx
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@by8:   mov     r10, qword ptr [rax + rcx]  // compare 8 bytes each loop
+@by8:   mov     r10, qword ptr [rax + rcx]  // compare 8 bytes at once
         xor     r10, qword ptr [rdx + rcx]
         jnz     @d
         add     rcx, 8
