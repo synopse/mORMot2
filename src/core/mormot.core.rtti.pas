@@ -7107,7 +7107,7 @@ end;
 
 procedure TRttiCustomList.Init;
 begin
-  New(Table);
+  Table := AllocMem(SizeOf(Table^));
   InitializeCriticalSection(Table^.Lock);
   fGlobalClass := TRttiCustom;
 end;
