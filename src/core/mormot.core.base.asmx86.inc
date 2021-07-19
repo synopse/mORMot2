@@ -9,84 +9,122 @@
   // disabled some FPC paranoid warnings
   {$WARN 7102 off : Use of +offset(%ebp) for parameters invalid here }
   {$WARN 7104 off : Use of -offset(%ebp) is not recommended for local variable access }
+  {$WARN 7121 off : Check size of XMM memory operand }
+  {$WARN 7122 off : Check size of XMM memory operand }
 {$endif FPC}
 
 {$ifdef ASMX86}
 
-var
-  ERMSB_MIN_SIZE: integer = maxInt; // "rep stosb/movsb" disabled by default
+{$define WITH_ERMS} // we found out that ERMS is worth it on i386
 
-// fast x87 versions by John O'Harrow - SSE2 is not really faster
+{$ifdef WITH_ERMS}
+var
+  // "rep stosb/movsb" enabled for len >= 512 on ERMSB CPUs
+  ERMSB_MIN_SIZE: integer = maxInt; // maxInt = disabled by default
+  {$define WITH_ERMSASM}
+{$endif WITH_ERMS}
+{$ifdef HASNOSSE2}
+  {$define WITH_ERMSASM} // rep movsb as fallback on oldest CPU
+{$endif HASNOSSE2}
+
+const
+  // non-temporal writes should bypass the cache when the size is bigger than
+  // half the size of the largest level cache - we assume low 1MB cache here
+  CPUCACHESSE2 = 512 * 1024;
+
+// fast SSE2 version - force define HASNOSSE2 when run any very old CPU
+// - using FPU fld/fst may trigger unexpected exceptions, as reported by Agner
+// Fog on "Optimizing Assembly" page 118 -> default is SSE2 code
+// - note: Delphi Win32 x87 RTL code by John O'Harrow seems deprecated 
 procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // eax=Dest edx=Count cl=Value
-        mov     ch, cl                 // copy value into both bytes of cx
+        movzx   ecx, cl
+        imul    ecx, ecx, $01010101
         cmp     edx, 32
-        jl      @small
+        jg      @32up
+        test    edx, edx
+        jle     @00        
+        mov     [eax + edx - 1], cl     // fill last byte
+        shr     edx, 1                  // how many words to fill
+        jmp     dword ptr [edx * 4 + @jmptab]
+@00:    ret
+@32up:
+{$ifndef HASNOSSE2}
+        {$ifdef WITH_ERMS}
         cmp     edx, ERMSB_MIN_SIZE
         ja      @ermsb
-        mov     [eax], cx              // fill first 8 bytes
-        mov     [eax + 2], cx
-        mov     [eax + 4], cx
-        mov     [eax + 6], cx
+        {$endif WITH_ERMS}
         sub     edx, 16
-        fld     qword ptr [eax]
-        fst     qword ptr [eax + edx]  // fill last 16 bytes
-        fst     qword ptr [eax + edx + 8]
+        movd    xmm0, ecx
         mov     ecx, eax
-        and     ecx, 7                 // 8-byte align writes
-        sub     ecx, 8
+        pshufd  xmm0, xmm0, 0
+        and     ecx, 15                 // 16-byte align writes
+        movdqu  dqword ptr [eax], xmm0       // fill first 16 bytes
+        movdqu  dqword ptr [eax + edx], xmm0 // fill last 16 bytes
+        sub     ecx, 16
         sub     eax, ecx
         add     edx, ecx
         add     eax, edx
         neg     edx
-        {$ifdef FPC} align 8 {$endif}
-@loop:  fst     qword ptr [eax + edx]  // fill 16 bytes per loop
-        fst     qword ptr [eax + edx + 8]
+        cmp     edx, - CPUCACHESSE2 * 1024 // assume 512KB of L1 cache
+        jl      @nv
+// {$ifdef FPC} align 16 {$endif} natural alignment is actually OK
+@loop:  movdqa  dqword ptr [eax + edx], xmm0 // fill 16 bytes per loop
         add     edx, 16
         jl      @loop
-        ffree   st(0)
-        fincstp
         ret
+{$ifdef FPC} align 16 {$endif}
+@nv:    movntdq dqword ptr [eax + edx], xmm0 // non-temporal fill 16 bytes
+        add     edx, 16
+        jl      @nv
+        ret
+{$endif HASNOSSE2}
+{$ifdef WITH_ERMSASM}
 @ermsb: push    edi
         mov     edi, eax
-        mov     al, cl
+        mov     eax, ecx
         mov     ecx, edx
         cld
-        rep     stosb                    // ERMSB version
-        pop     edi
+        shr     ecx, 2
+        jz      @erms2
+        rep     stosd    // ERMSB / no SSE2 version
+@erms2: test    dl, 2
+        jz      @erms1
+        mov     word ptr [edi], ax
+        add     edi, 2
+@erms1: test    dl, 1
+        jz      @erms0
+        mov     byte ptr [edi], al
+@erms0: pop     edi
         ret
-@small: test    edx, edx
-        jle     @done
-        mov     [eax + edx - 1], cl      // fill last byte
-        and     edx, -2                  // no. of words to fill
-        neg     edx
-        lea     edx, [@fill + 60 + edx * 2]
-        jmp     edx
-        {$ifdef FPC} align 4 {$endif}
-@fill:  mov     [eax + 28], cx
-        mov     [eax + 26], cx
-        mov     [eax + 24], cx
-        mov     [eax + 22], cx
-        mov     [eax + 20], cx
-        mov     [eax + 18], cx
-        mov     [eax + 16], cx
-        mov     [eax + 14], cx
-        mov     [eax + 12], cx
-        mov     [eax + 10], cx
-        mov     [eax + 8], cx
-        mov     [eax + 6], cx
-        mov     [eax + 4], cx
-        mov     [eax + 2], cx
-        mov     [eax], cx
-        ret                         // for 4-bytes @fill alignment
-@done:  db      $f3 // rep ret AMD trick here
+{$endif WITH_ERMSASM}
+{$ifdef FPC} align 4 {$endif}
+@jmptab:dd      @00, @02, @04, @06, @08, @10, @12, @14, @16
+        dd      @18, @20, @22, @24, @26, @28, @30, @32
+@32:    mov     [eax + 28], ecx
+@28:    mov     [eax + 24], ecx
+@24:    mov     [eax + 20], ecx
+@20:    mov     [eax + 16], ecx
+@16:    mov     [eax + 12], ecx
+@12:    mov     [eax + 8], ecx
+@08:    mov     [eax + 4], ecx
+@04:    mov     [eax], ecx
+        ret
+@30:    mov     [eax + 26], ecx
+@26:    mov     [eax + 22], ecx
+@22:    mov     [eax + 18], ecx
+@18:    mov     [eax + 14], ecx
+@14:    mov     [eax + 10], ecx
+@10:    mov     [eax + 6], ecx
+@06:    mov     [eax + 2], ecx
+@02:    mov     word ptr [eax], cx
 end;
 
-{$ifndef FPC_X86} // FPC RTL has fastmove.inc -> our FPU/ERMS asm is slower
+{$ifndef FPC_X86} // FPC RTL has fastmove.inc -> our SSE2/ERMS asm is slower
 
-// fast x87 versions by John O'Harrow - SSE2 is not really faster
+// fast SSE2 version - force define HASNOSSE2 when run any very old CPU
 procedure MoveFast(const src; var dst; cnt: PtrInt);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
@@ -98,22 +136,38 @@ asm
         sub     ecx, 8
         jg      @sml                   // 9..32 byte move
         jmp     dword ptr [@table + 32 + ecx * 4]   // 0..8 byte move
-@sml:   fild    qword ptr [eax + ecx]   // load last 8
-        fild    qword ptr [eax]         // load first 8
+{$ifdef HASNOSSE2}
+@sml:   fild    qword ptr [eax + ecx]   // last 8
+        fild    qword ptr [eax]         // first 8
         cmp     ecx, 8
         jle     @sml16
-        fild    qword ptr [eax + 8]     // load second 8
+        fild    qword ptr [eax + 8]     // second 8
         cmp     ecx, 16
         jle     @sml24
-        fild    qword ptr [eax + 16]    // load third 8
-        fistp   qword ptr [edx + 16]    // save third 8
-@sml24: fistp   qword ptr [edx + 8]     // save second 8
-@sml16: fistp   qword ptr [edx]         // save first 8
-        fistp   qword ptr [edx + ecx]   // save last 8
+        fild    qword ptr [eax + 16]    // third 8
+        fistp   qword ptr [edx + 16]    // third 8
+@sml24: fistp   qword ptr [edx + 8]     // second 8
+@sml16: fistp   qword ptr [edx]         // first 8
+        fistp   qword ptr [edx + ecx]   // last 8
+{$else}
+@sml:   movq    xmm0, qword ptr [eax + ecx]   // last 8
+        movq    xmm1, qword ptr [eax]         // first 8
+        cmp     ecx, 8
+        jle     @sml16
+        movq    xmm2, qword ptr [eax + 8]     // second 8
+        cmp     ecx, 16
+        jle     @sml24
+        movq    xmm3, qword ptr [eax + 16]    // third 8
+        movq    qword ptr [edx + 16], xmm3    // third 8
+@sml24: movq    qword ptr [edx + 8], xmm2     // second 8
+@sml16: movq    qword ptr [edx], xmm1         // first 8
+        movq    qword ptr [edx + ecx], xmm0   // last 8
         ret
+{$endif HASNOSSE2}
 @exit:  rep     ret
         {$ifdef FPC} align 4 {$endif}
 @table: dd      @exit, @m01, @m02, @m03, @m04, @m05, @m06, @m07, @m08
+{$ifdef WITH_ERMSASM}
 @ermsf: push    esi
         push    edi
         mov     esi, eax
@@ -133,28 +187,50 @@ asm
         pop     esi
         cld            // FPC requires this
         ret
+{$endif WITH_ERMSASM}
+{$ifdef HASNOSSE2}
+@lrg:   jng     @exit                // count < 0
+        cmp     eax, edx
+        ja      @ermsf               // fallback to rep movsb on old CPUs
+        sub     edx, ecx
+        cmp     eax, edx
+        lea     edx, [edx + ecx]
+        jna     @ermsf
+        jmp     @ermsb
+{$else}
 @lrgfwd:// large forward move
+        {$ifdef WITH_ERMS}
         cmp     ecx, ERMSB_MIN_SIZE
         ja      @ermsf
+        {$endif WITH_ERMS}
         push    edx
-        fild    qword ptr [eax]       // first 8
-        lea     eax, [eax + ecx - 8]
-        lea     ecx, [ecx + edx - 8]
-        fild    qword ptr [eax]       // last 8
+        movdqu  xmm2, dqword ptr [eax]       // first 16
+        lea     eax, [eax + ecx - 16]
+        lea     ecx, [ecx + edx - 16]
+        movdqu  xmm1, dqword ptr [eax]       // last 16
         push    ecx
         neg     ecx
-        and     edx,  -8             // 8-byte align writes
-        lea     ecx, [ecx + edx + 8]
+        and     edx,  - 16             // 16-byte align writes
+        lea     ecx, [ecx + edx + 16]
         pop     edx
-        {$ifdef FPC} align 8 {$endif}
-@fwd:   fild    qword ptr [eax + ecx]
-        fistp   qword ptr [edx + ecx]
-        add     ecx, 8
+        cmp     ecx, - CPUCACHESSE2 * 1024 // assume 512KB of L1 cache
+        jl      @fwnv
+        {$ifdef FPC} align 16 {$endif}
+@fwd:   movdqu  xmm0, dqword ptr [eax + ecx] // move by 16 bytes
+        movdqa  dqword ptr [edx + ecx], xmm0
+        add     ecx, 16
         jl      @fwd
-        fistp   qword ptr [edx]       // last 8
+@fwde:  movdqu  dqword ptr [edx], xmm1       // last 16
         pop     edx
-        fistp   qword ptr [edx]       // first 8
+        movdqu  dqword ptr [edx], xmm2       // first 16
         ret
+        {$ifdef FPC} align 16 {$endif}
+@fwnv:  movdqu  xmm0, dqword ptr [eax + ecx]
+        movntdq dqword ptr [edx + ecx], xmm0  // non-temporal move by 16 bytes
+        add     ecx, 16
+        jl      @fwd
+        sfence
+        jmp     @fwde
 @lrg:   jng     @exit                // count < 0
         cmp     eax, edx
         ja      @lrgfwd
@@ -163,24 +239,27 @@ asm
         lea     edx, [edx + ecx]
         jna     @lrgfwd
         // large backward/overlapping move
+        {$ifdef WITH_ERMS}
         cmp     ecx, ERMSB_MIN_SIZE
         ja      @ermsb
-        sub     ecx, 8
+        {$endif WITH_ERMS}
+        sub     ecx, 16
         push    ecx
-        fild    qword ptr [eax + ecx] // last 8
-        fild    qword ptr [eax]       // first 8
+        movdqu  xmm2, dqword ptr [eax + ecx] // last 16
+        movdqu  xmm1, dqword ptr [eax]       // first 16
         add     ecx, edx
-        and     ecx, -8              // 8-byte align writes
+        and     ecx, -16              // 16-byte align writes
         sub     ecx, edx
-        {$ifdef FPC} align 8 {$endif}
-@bwd:   fild    qword ptr [eax + ecx]
-        fistp   qword ptr [edx + ecx]
-        sub     ecx, 8
+        {$ifdef FPC} align 16 {$endif}
+@bwd:   movdqu  xmm0, dqword ptr [eax + ecx]
+        movdqa  dqword ptr [edx + ecx], xmm0
+        sub     ecx, 16
         jg      @bwd
         pop     ecx
-        fistp   qword ptr [edx]       // first 8
-        fistp   qword ptr [edx + ecx] // last 8
+        movdqu  dqword ptr [edx], xmm1       // first 16
+        movdqu  dqword ptr [edx + ecx], xmm2 // last 16
         ret
+{$endif HASNOSSE2}
 @m01:   movzx   ecx, byte ptr [eax]
         mov     [edx], cl
         ret
@@ -1301,8 +1380,9 @@ asm
 @f:     movzx   ecx, byte ptr [eax] // first char comparison (quicksort speedup)
         sub     cl, byte ptr [edx]
         je      @s
-        jnc     @1
-        mov     eax, -1
+        movsx   eax, cl              // branchless execution on Quicksort
+        ret
+@0:     xor     eax, eax
         ret
 @s:     push    ebx
         mov     ebx, dword ptr [eax - 4]
@@ -1313,16 +1393,14 @@ asm
         sub     ecx, dword ptr [eax - 4]   // ecx = -min(length(A),length(B))
         sub     eax, ecx
         sub     edx, ecx
-{$ifdef FPC} align 16 {$else} nop {$endif}
-@by4:   mov     ebx, dword ptr [eax + ecx]  // compare 4 bytes each loop
+{$ifdef FPC} align 16 {$else} nop; nop {$endif}
+@by4:   mov     ebx, dword ptr [eax + ecx]  // compare 4 bytes per iteration
         xor     ebx, dword ptr [edx + ecx]
         jnz     @d
         add     ecx, 4
         js      @by4
 @eq:    pop     eax            // all chars equal -> returns length(A)-length(B)
         pop     ebx
-        ret
-@0:     xor     eax, eax
         ret
 @d:     bsf     ebx, ebx       // char differs -> returns pbyte(A)^-pbyte(B)^
         shr     ebx, 3
@@ -1573,7 +1651,7 @@ asm
         or      eax, edx
         mov     [esp], eax
         add     ebx, 2
-@@0907: lea     ebp, [esi-1]
+@@0907: lea     ebp, [esi - 1]
 @@0908: mov     ecx, [ebx]
         add     ebx, 4
         mov     [esp+14H], ecx
@@ -1598,7 +1676,7 @@ asm
         shr     eax, 12
         xor     eax, edx
         and     eax, 0FFFH
-        mov     [esp+eax*4+1CH], ebp
+        mov     [esp+1CH + eax * 4], ebp
 @@0910: add     edi, edi
         jnz     @@090A
         jmp     @@0908
@@ -1613,52 +1691,90 @@ asm
         movzx   edx, byte ptr [ebx]
         inc     ebx
         add     edx, 18
-@@0912: mov     eax, [esp+eax*4+1CH]
+@@0912: mov     eax, [esp+1CH + eax * 4]
         mov     ecx, esi
         mov     [esp+18H], edx
         sub     ecx, eax
+        // inlined optimized move()
         cmp     ecx, edx
-        jl      @@0913
-        cmp     edx, 32            // inlined optimized move()
+        jl      @@ovlap   // overlapping content requires per-byte copy
+        cmp     edx, 32
         ja      @large
         sub     edx, 8
         jg      @9_32
+{$ifdef HASNOSSE2}
+        // slowest x87 FPU code on very old CPU with no SSE2 support
         mov     ecx, [eax]
-        mov     eax, [eax+4]       // always copy 8 bytes for 0..8
+        mov     eax, [eax + 4]     // always copy 8 bytes for 0..8
         mov     [esi], ecx         // safe since src_endmatch := src_end-(6+5)
-        mov     [esi+4], eax
+        mov     [esi + 4], eax
         jmp     @movend
-@9_32:  fild    qword ptr [eax+edx]
+@9_32:  fild    qword ptr [eax + edx]
         fild    qword ptr [eax]
         cmp     edx, 8
         jle     @16
-        fild    qword ptr [eax+8]
+        fild    qword ptr [eax + 8]
         cmp     edx, 16
         jle     @24
-        fild    qword ptr [eax+16]
-        fistp   qword ptr [esi+16]
-@24:    fistp   qword ptr [esi+8]
+        fild    qword ptr [eax + 16]
+        fistp   qword ptr [esi + 16]
+@24:    fistp   qword ptr [esi + 8]
 @16:    fistp   qword ptr [esi]
-        fistp   qword ptr [esi+edx]
+        fistp   qword ptr [esi + edx]
         jmp     @movend
         nop
 @large: push    esi
         fild    qword ptr [eax]
-        lea     eax, [eax+edx-8]
-        lea     edx, [esi+edx-8]
+        lea     eax, [eax + edx - 8]
+        lea     edx, [esi + edx - 8]
         fild    qword ptr [eax]
         push    edx
         neg     edx
         and     esi,  -8
-        lea     edx, [edx+esi+8]
+        lea     edx, [edx + esi + 8]
         pop     esi
-@lrgnxt:fild    qword ptr [eax+edx]
-        fistp   qword ptr [esi+edx]
+@lrgnxt:fild    qword ptr [eax + edx]
+        fistp   qword ptr [esi + edx]
         add     edx, 8
         jl      @lrgnxt
         fistp   qword ptr [esi]
         pop     esi
         fistp   qword ptr [esi]
+{$else} // inlined SSE2 move
+        movq    xmm0, qword ptr [eax]
+        movq    qword ptr [esi], xmm0
+        jmp     @movend
+@9_32:  movq    xmm0, qword ptr [eax + edx]
+        movq    xmm1, qword ptr [eax]
+        cmp     edx, 8
+        jle     @16
+        movq    xmm2, qword ptr [eax + 8]
+        cmp     edx, 16
+        jle     @24
+        movq    xmm3, qword ptr [eax + 16]
+        movq    qword ptr [esi + 16], xmm3
+@24:    movq    qword ptr [esi + 8], xmm2
+@16:    movq    qword ptr [esi], xmm1
+        movq    qword ptr [esi + edx], xmm0
+        jmp     @movend
+@large: push    esi
+        movdqu  xmm2, dqword ptr [eax]
+        lea     eax, [eax + edx - 16]
+        lea     edx, [esi + edx - 16]
+        movdqu  xmm1, dqword ptr [eax]
+        push    edx
+        neg     edx
+        and     esi,  -16
+        lea     edx, [edx + esi + 16]
+        pop     esi
+@lrgnxt:movdqu  xmm0, dqword ptr [eax + edx]
+        movdqa  dqword ptr [esi + edx], xmm0
+        add     edx, 16
+        jl      @lrgnxt
+        movdqu  dqword ptr [esi], xmm1
+        pop     esi
+        movdqu  dqword ptr [esi], xmm2
+{$endif HASNOSSE2}
 @movend:cmp     esi, ebp
         jbe     @@0916
 @@0915: inc     ebp
@@ -1667,23 +1783,26 @@ asm
         shr     edx, 12
         xor     eax, edx
         and     eax, 0FFFH
-        mov     [esp+eax*4+1CH], ebp
+        mov     [esp+1CH + eax * 4], ebp
         cmp     esi, ebp
         ja      @@0915
 @@0916: add     esi, [esp+18H]
         cmp     ebx, [esp+10H]
         jnc     @@0917
         add     edi, edi
-        lea     ebp, [esi-1]
+        lea     ebp, [esi - 1]
         jz      @@0908
         jmp     @@0909
-@@0913: push    ebx
-        xor     ecx, ecx
-@s:     dec     edx
-        mov     bl, [eax+ecx]
-        mov     [esi+ecx], bl
-        lea     ecx,[ecx+1]
+@@ovlap:push    ebx
+        push    esi
+        lea     ebx, [eax + edx]
+        add     esi, edx
+        neg     edx
+@s:     mov     al, [ebx + edx]
+        mov     [esi + edx], al
+        inc     edx
         jnz     @s
+        pop     esi
         pop     ebx
         jmp     @movend
 @@0917: mov     eax, [esp]
@@ -1729,7 +1848,7 @@ asm
         mov     [edi], eax
         mov     eax, edx
         shr     eax, 15
-        mov     [edi+2], eax
+        mov     [edi + 2], eax
         add     edi, 4
         jmp     @@0891
 @@0890: mov     eax, 2
@@ -1738,19 +1857,29 @@ asm
         test    eax, eax
         jz      @@0890
         add     edi, 2
-@@0891: lea     eax, [edx+esi]
+@@0891: lea     eax, [edx + esi]
         mov     [esp+18H], edi
         mov     [esp+0CH], eax
         sub     eax, 11
         mov     [esp+4], eax
-        lea     ebx, [esp+24H]
         xor     eax, eax
+        lea     ebx, [esp+24H] // reset offsets lookup table
+        {$ifdef HASNOSSE2}
         mov     ecx, 1024
-@@089I: mov     [ebx], eax // faster than FillChar / stosb
-        mov     [ebx+4], eax
-        mov     [ebx+8], eax
-        mov     [ebx+12], eax
+@@089I: mov     [ebx], eax
+        mov     [ebx + 4], eax
+        mov     [ebx + 8], eax
+        mov     [ebx + 12], eax
         add     ebx, 16
+        {$else}
+        pxor    xmm0, xmm0
+        mov     ecx, 256
+@@089I: movdqu  dqword ptr [ebx], xmm0
+        movdqu  dqword ptr [ebx + 16], xmm0
+        movdqu  dqword ptr [ebx + 32], xmm0
+        movdqu  dqword ptr [ebx + 48], xmm0
+        add     ebx, 64
+        {$endif HASNOSSE2}
         dec     ecx
         jnz     @@089I
         mov     [edi], eax
@@ -1764,12 +1893,12 @@ asm
         shr     edx, 12
         xor     edx, eax
         and     edx, 0FFFH
-        mov     ebp, [esp+edx*4+24H]
-        mov     ecx, [esp+edx*4+4024H]
-        mov     [esp+edx*4+24H], esi
+        mov     ebp, [esp+24H + edx * 4]
+        mov     ecx, [esp+4024H + edx * 4]
+        mov     [esp+24H + edx * 4], esi
         xor     ecx, eax
         test    ecx, 0FFFFFFH
-        mov     [esp+edx*4+4024H], eax
+        mov     [esp+4024H + edx * 4], eax
         jnz     @@0897
         mov     eax, esi
         or      ebp, ebp
@@ -1778,7 +1907,7 @@ asm
         mov     ecx, [esp+18H]
         cmp     eax, 2
         jle     @@0897
-        lea     esi, [esi+2]
+        add     esi, 2
         or      dword ptr [ecx], ebx
         mov     ecx, [esp+0CH]
         add     ebp, 2
@@ -1791,24 +1920,24 @@ asm
         mov     dword ptr [esp], 271
         jmp     @@0894
 @@0893: inc     eax
-@@0894: mov     ecx, [ebp+eax]
-        cmp     cl, [esi+eax]
+@@0894: mov     ecx, [ebp + eax]
+        cmp     cl, [esi + eax]
         jnz     @@0895
         cmp     eax, [esp]
         jge     @@0895
         inc     eax
-        cmp     ch, [esi+eax]
+        cmp     ch, [esi + eax]
         jnz     @@0895
         shr     ecx, 16
         cmp     eax, [esp]
         jge     @@0895
         inc     eax
-        cmp     cl, [esi+eax]
+        cmp     cl, [esi + eax]
         jnz     @@0895
         cmp     eax, [esp]
         jge     @@0895
         inc     eax
-        cmp     ch, [esi+eax]
+        cmp     ch, [esi + eax]
         jnz     @@0895
         cmp     eax, [esp]
         jl      @@0893
@@ -1822,7 +1951,7 @@ asm
         jmp     @@0898
 @@0896: sub     eax, 16
         mov     [edi], dx
-        mov     [edi+2H], al
+        mov     [edi + 2H], al
         add     edi, 3
         jmp     @@0898
 @@0897: mov     al, [esi] // movsb is actually slower!

@@ -60,6 +60,9 @@
 // you may define this to enable REP MOVSB/STOSB for x86_64 FillcharFast/MoveFast
 // if cfERMS flag is available in Intel's CpuFeatures
 // -> disabled by default, since in practice it is slower than non-temporal mov
+{$ifdef CPUX86}
+  {.$define HASNOSSE2} // force x87 code on very very old CPU
+{$endif CPUX86}
 
 {.$define NOXPOWEREDNAME}
 // define this to avoid sending "X-Powered-By: Synopse mORMot" HTTP header

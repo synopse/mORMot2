@@ -2,6 +2,7 @@
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.core.base;
+
 {
   *****************************************************************************
 
@@ -2403,18 +2404,18 @@ var
 {$endif ASMX64}
 
 /// our fast version of FillChar()
-// - on Intel i386/x86_64, will use fast SSE2/AVX instructions (if available),
-// or optimized X87 assembly implementation for older CPUs
+// - on Intel i386/x86_64, will use fast SSE2/AVX instructions (if available)
 // - on non-Intel CPUs, it will fallback to the default RTL FillChar()
-// - note: Delphi x86_64 is far from efficient: even ERMS was wrongly
-// introduced in latest updates
+// - you could try to define WITH_ERMS conditional but it is usually slower
+// - note: Delphi RTL is far from efficient: on i386 the FPU is slower/unsafe,
+// and on x86_64, ERMS is wrongly used even for small blocks
 procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
 
 /// our fast version of move()
-// - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available),
-// or optimized X87 assembly implementation for older CPUs
-// - FPC i386 has fastmove.inc which is faster than our FPU/ERMS version
+// - on Delphi Intel i386/x86_64, will use fast SSE2 instructions (if available)
+// - FPC i386 has fastmove.inc which is faster than our SSE2/ERMS version
 // - FPC x86_64 RTL is slower than our SSE2/AVX asm
+// - you could try to define WITH_ERMS conditional but it is usually slower
 // - on non-Intel CPUs, it will fallback to the default RTL Move()
 {$ifdef FPC_X86}
 var MoveFast: procedure(const Source; var Dest; Count: PtrInt) = Move;
@@ -8957,11 +8958,13 @@ begin
     CpuFeatures := CpuFeatures - [cfAVX, cfAVX2, cfFMA];
   {$endif DISABLE_SSE42}
   {$ifdef ASMX86}
-  if cfERMS in CpuFeatures then // ERMSB is faster than John O'Harrow FPU code
-    ERMSB_MIN_SIZE := 511;      // but not for smallest sizes due to its warmup
+  {$ifdef WITH_ERMS}
+  if cfERMS in CpuFeatures then
+    ERMSB_MIN_SIZE := 511;      // ERMSB is less efficient than SSE2 movntdq
+  {$endif WITH_ERMS}
   {$endif ASMX86}
   {$ifdef ASMX64}
-  {$ifdef WITH_ERMS}
+  {$ifdef WITH_ERMS} // WITH_ERMS is enabled in mormot.core.base.asmx86.inc :)
   if cfERMS in CpuFeatures then // actually slower than our AVX code -> disabled
     include(CPUIDX64, cpuERMS);
   {$endif WITH_ERMS}
