@@ -2173,11 +2173,8 @@ end;
 // -nr:_exit:ex1t -nr:_cos:c0s -nr:_sin:s1n -nr:_exp:e4p quickjs2.o quickjs.o
 
 procedure ex1t;
-asm
-  {$ifdef CPUX64}
-  .noframe
-  {$endif CPUX64}
-  jmp libc_exit
+begin
+  raise EQuickJS.Create('Unexpected exit() call');
 end;
 
 function r0und(x: double): Int64; cdecl;
