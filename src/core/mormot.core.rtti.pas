@@ -5288,22 +5288,26 @@ end;
 
 var
   PT_RANDOM: array[TRttiParserType] of pointer = ( // nil = fill random bytes
-  // ptNone, ptArray, ptBoolean, ptByte, ptCardinal,
-  @_NoRandom, @_NoRandom, nil, nil, nil,
-  // ptCurrency, ptDouble, ptExtended, ptInt64, ptInteger, ptQWord,
-  nil, @_DoubleRandom, @_NoRandom, nil, nil, nil,
-  // ptRawByteString, ptRawJson, ptRawUtf8, ptRecord, ptSingle,
-  @_StringRandom, @_NoRandom, @_StringRandom, @_NoRandom, @_SingleRandom,
-  // ptString, ptSynUnicode,
-  @_NoRandom, {$ifdef HASVARUSTRING} @_UStringRandom {$else} @_WStringRandom {$endif},
-  // ptDateTime, ptDateTimeMS, ptGuid, ptHash128, ptHash256, ptHash512,
-  @_DateTimeRandom, @_DateTimeRandom, nil, nil, nil, nil,
-  // ptOrm, ptTimeLog, ptUnicodeString,
-  @_NoRandom, nil, {$ifdef HASVARUSTRING} @_UStringRandom {$else} @_NoRandom {$endif},
-  // ptUnixTime, ptUnixMSTime, ptVariant, ptWideString, ptWinAnsi,
-  nil,           nil,       @_VariantRandom, @_WStringRandom, @_StringRandom,
-  // ptWord, ptEnumeration, ptSet, ptClass, ptDynArray, ptInterface, ptCustom
-  nil,       nil,           nil, @_NoRandom, @_NoRandom, @_NoRandom, @_NoRandom);
+    // ptNone, ptArray, ptBoolean, ptByte, ptCardinal,
+    @_NoRandom, @_NoRandom, nil, nil, nil,
+    // ptCurrency, ptDouble, ptExtended, ptInt64, ptInteger, ptQWord,
+    nil, @_DoubleRandom, @_NoRandom, nil, nil, nil,
+    // ptRawByteString, ptRawJson, ptRawUtf8, ptRecord, ptSingle,
+    @_StringRandom, @_NoRandom, @_StringRandom, @_NoRandom, @_SingleRandom,
+    // ptString,
+    {$ifdef UNICODE} @_StringRandom, {$else} @_UStringRandom, {$endif}
+    // ptSynUnicode,
+    {$ifdef HASVARUSTRING} @_UStringRandom {$else} @_WStringRandom {$endif},
+    // ptDateTime, ptDateTimeMS, ptGuid, ptHash128, ptHash256, ptHash512,
+    @_DateTimeRandom, @_DateTimeRandom, nil, nil, nil, nil,
+    // ptOrm, ptTimeLog,
+    @_NoRandom, nil,
+    // ptUnicodeString,
+    {$ifdef HASVARUSTRING} @_UStringRandom {$else} @_NoRandom {$endif},
+    // ptUnixTime, ptUnixMSTime, ptVariant, ptWideString, ptWinAnsi,
+    nil,           nil,       @_VariantRandom, @_WStringRandom, @_StringRandom,
+    // ptWord, ptEnumeration, ptSet, ptClass, ptDynArray, ptInterface, ptCustom
+    nil,       nil,           nil, @_NoRandom, @_NoRandom, @_NoRandom, @_NoRandom);
 
 
 { RTTI_COPY[] implementation functions }
