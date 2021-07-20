@@ -3572,6 +3572,14 @@ type
 
     /// Initialize the internal version numbers
     constructor Create; virtual;
+    /// this method is called by Create after SQlite3 is loaded, and before
+    // sqlite3_initialize is called
+    // - do nothing by default, but you may override it
+    procedure BeforeInitialization; virtual;
+    /// this method is called by Create after SQlite3 is loaded, and after
+    // sqlite3_initialize is called
+    // - do nothing by default, but you may override it
+    procedure AfterInitialization; virtual;
     /// Will change the SQLite3 configuration to use Delphi/FPC memory manager
     // - this will reduce memory fragmentation, and enhance speed, especially
     // under multi-process activity
@@ -5242,6 +5250,15 @@ begin
                       GetNextItemCardinal(V, '.') * 1000 +
                       GetNextItemCardinal(V, '.');
   end;
+  AfterInitialization;
+end;
+
+procedure TSqlite3Library.BeforeInitialization;
+begin
+end;
+
+procedure TSqlite3Library.AfterInitialization;
+begin
 end;
 
 // under FPC, MemSize() returns the value expected by xSize()
@@ -5586,6 +5603,7 @@ begin
     raise ESqlite3Exception.CreateUtf8(
       '%.Create: TOO OLD % % - need 3.7 at least', [self, LibraryName, vers]);
   end;
+  BeforeInitialization;
   inherited Create; // set fVersionNumber/fVersionText
   SQLite3Log.Add.Log(sllInfo,
     'Loaded external % version %', [LibraryName, Version]);

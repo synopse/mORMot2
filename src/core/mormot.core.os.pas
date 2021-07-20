@@ -1465,9 +1465,9 @@ function OemToUnicode(const oem: RawByteString): SynUnicode;
 // - as used e.g. by mormot.core.zip for non UTF-8 file names
 function OemToFileName(const oem: RawByteString): TFileName;
 
-/// prompt the user for an error message
-// - in practice, text encoding is expected to be plain ASCII 
-// - on Windows, will call MessageBoxA()
+/// prompt the user for an error message to notify an unexpected issue
+// - in practice, text encoding is expected to be plain 7-bit ASCII
+// - on Windows, will use Writeln() on a (newly allocated if needed) console
 // - on POSIX, will use Writeln(StdErr)
 procedure DisplayFatalError(const title, msg: RawUtf8);
 

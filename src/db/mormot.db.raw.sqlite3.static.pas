@@ -84,6 +84,10 @@ type
     constructor Create; override;
     /// unload the static library
     destructor Destroy; override;
+    /// calls ForceToUseSharedMemoryManager after SQlite3 is loaded
+    procedure BeforeInitialization; override;
+    /// validates EXPECTED_SQLITE3_VERSION after SQlite3 is initialized
+    procedure AfterInitialization; override;
   end;
 
 
@@ -1031,8 +1035,6 @@ const
  // 'https://github.com/synopse/mORMot2/releases/tag/sqlite.' + EXPECTED_SQLITE3_VERSION;
 
 constructor TSqlite3LibraryStatic.Create;
-var
-  error: RawUtf8;
 begin
   initialize             := @sqlite3_initialize;
   shutdown               := @sqlite3_shutdown;
@@ -1204,9 +1206,25 @@ begin
   config                 := @sqlite3_config;
   db_config              := @sqlite3_db_config;
 
-  // our static SQLite3 is compiled with SQLITE_OMIT_AUTOINIT defined
+  // ForceToUseSharedMemoryManager call before initialize otherwise SQLITE_MISUSE
+  BeforeInitialization;
+  // note: our static SQLite3 is compiled with SQLITE_OMIT_AUTOINIT defined
+  sqlite3_initialize;
+  // set fVersionNumber/fVersionText and call AfterInitialization
+  inherited Create;
+end;
+
+destructor TSqlite3LibraryStatic.Destroy;
+begin
+  if Assigned(shutdown) then
+    shutdown;
+  inherited;
+end;
+
+procedure TSqlite3LibraryStatic.BeforeInitialization;
+begin
   {$ifdef FPC}
-  ForceToUseSharedMemoryManager; // before sqlite3_initialize otherwise SQLITE_MISUSE
+  ForceToUseSharedMemoryManager;
   {$else}
   {$ifdef CPUX86}
   fUseInternalMM := true; // Delphi .obj are using FastMM4
@@ -1214,8 +1232,12 @@ begin
   ForceToUseSharedMemoryManager; // Delphi .o
   {$endif CPUX86}
   {$endif FPC}
-  sqlite3_initialize;
-  inherited Create; // set fVersionNumber/fVersionText
+end;
+
+procedure TSqlite3LibraryStatic.AfterInitialization;
+var
+  error: RawUtf8;
+begin
   if (EXPECTED_SQLITE3_VERSION <> '') and
      not IdemPChar(pointer(fVersionText), EXPECTED_SQLITE3_VERSION) then
   begin
@@ -1227,13 +1249,6 @@ begin
     // SQLite3Log.Add.Log() would do nothing: we are in .exe initialization
     DisplayFatalError(' WARNING: deprecated SQLite3 engine', error);
   end;
-end;
-
-destructor TSqlite3LibraryStatic.Destroy;
-begin
-  if Assigned(shutdown) then
-    shutdown;
-  inherited;
 end;
 
 

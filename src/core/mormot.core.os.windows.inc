@@ -141,7 +141,7 @@ function  Unicode_InPlaceLower;       external user32 name 'CharLowerBuffW';
 procedure DisplayFatalError(const title, msg: RawUtf8);
 begin
   // better than a MessageBox() especially for services
-  AllocConsole;
+  AllocConsole; // will create one black window console if none
   writeln(title);
   writeln(msg);
   ioresult;
