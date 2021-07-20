@@ -1469,8 +1469,8 @@ asm
 @s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         movaps  xmm1, xmm0
-        movaps  xmm7, xmm0              // fIV := fIn
         pxor    xmm0, xmm7
+        movaps  xmm7, xmm0              // fIV := fIn
         movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
         add     esi, 16
         add     edi, 16
@@ -1534,8 +1534,8 @@ asm
         call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         movaps  xmm1, xmm0
-        movaps  xmm7, xmm0              // fIV := fIn
         pxor    xmm0, xmm7
+        movaps  xmm7, xmm0              // fIV := fIn
         movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
         lea     eax, [ebx].TAesCfc.fMac.plain
         mov     edx, edi
