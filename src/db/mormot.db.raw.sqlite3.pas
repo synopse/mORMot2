@@ -3576,9 +3576,9 @@ type
     // to avoid a memory leak.
     snapshot_free: function(DB: TSqlite3DB; Snapshot: PSqlite3Snapshot): integer; cdecl;
 
-    /// Initialize the internal version numbers
+    /// Initialize the internal version numbers and call AfterInitialization
     constructor Create; virtual;
-    /// this method is called by Create after SQlite3 is loaded, and before
+    /// this method is called by Create after SQlite3 is loaded, but before
     // sqlite3_initialize is called
     // - do nothing by default, but you may override it
     procedure BeforeInitialization; virtual;
@@ -3589,7 +3589,9 @@ type
     /// Will change the SQLite3 configuration to use Delphi/FPC memory manager
     // - this will reduce memory fragmentation, and enhance speed, especially
     // under multi-process activity
-    // - this method should be called before sqlite3.initialize()
+    // - this method should be called before sqlite3.initialize(), e.g. by
+    // overriding the BeforeInitialization virtual method - as does the
+    // TSqlite3LibraryStatic class
     procedure ForceToUseSharedMemoryManager; virtual;
     /// Returns the current version number as a plain integer
     // - equals e.g. 3008003001 for '3.8.3.1'
@@ -5595,6 +5597,12 @@ begin
   P := @@initialize;
   for i := 0 to High(SQLITE3_ENTRIES) do
     fLoader.Resolve(SQLITE3_ENTRIES[i], @P^[i]); // no exception, but set nil
+  if (Assigned(limit) and
+      (LibraryResolve(fLoader.Handle, 'sqlite3_limit') <> @limit)) or
+     (Assigned(snapshot_free) and
+      (LibraryResolve(fLoader.Handle, SQLITE3_ENTRIES[171]) <> @snapshot_free)) then
+    raise ESqlite3Exception.CreateUtf8( // paranoid check
+      '%.Create: please check SQLITE3_ENTRIES[] order for %', [self, LibraryName]);
   if not Assigned(initialize) or
      not Assigned(libversion) or
      not Assigned(open) or

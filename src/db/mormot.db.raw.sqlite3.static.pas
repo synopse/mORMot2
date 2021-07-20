@@ -44,10 +44,8 @@ begin
     sqlite3.ForceToUseSharedMemoryManager; // faster process
   except
     on E: Exception do
-      {$ifdef OSPOSIX} // there is always an error console ouput on POSIX
-      writeln(SQLITE_LIBRARY_DEFAULT_NAME + ' initialization failed with ',
-        ClassNameShort(E)^, ': ', E.Message);
-      {$endif OSPOSIX}
+      DisplayFatalError(SQLITE_LIBRARY_DEFAULT_NAME + ' initialization failed',
+        RawUtf8(E.ClassName +  ': ' + E.Message));
   end;
 end;
 
@@ -243,6 +241,7 @@ uses
 
 // those functions will be called only under Delphi + Win32/Win64
 // - FPC will use explicit public name exports from mormot.lib.static
+// but Delphi requires the exports to be defined in this very same unit
 
 function malloc(size: cardinal): Pointer; cdecl;
 begin
@@ -1232,7 +1231,8 @@ begin
   ForceToUseSharedMemoryManager;
   {$else}
   {$ifdef CPUX86}
-  fUseInternalMM := true; // Delphi .obj are using FastMM4
+  // Delphi .obj are using FastMM4 via malloc/free/realloc above functions
+  fUseInternalMM := true;
   {$else}
   ForceToUseSharedMemoryManager; // Delphi .o
   {$endif CPUX86}
