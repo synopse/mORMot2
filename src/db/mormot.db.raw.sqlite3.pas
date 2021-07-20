@@ -656,19 +656,7 @@ const
   // with a wrapper that simulations memory allocation failure or tracks memory
   // usage, for example.
   SQLITE_CONFIG_GETMALLOC = 5;
-  /// This option specifies a static memory buffer that SQLite can use for scratch memory
-  // - There are three arguments: A pointer an 8-byte aligned memory buffer from which
-  // the scratch allocations will be drawn, the size of each scratch allocation (sz),
-  // and the maximum number of scratch allocations (N).
-  // - The sz argument must be a multiple of 16.
-  // - The first argument must be a pointer to an 8-byte aligned buffer of at least sz*N
-  // bytes of memory.
-  // - SQLite will use no more than two scratch buffers per thread.
-  // - So N should be set to twice the expected maximum number of threads.
-  // - SQLite will never require a scratch buffer that is more than 6 times the database
-  // page size.
-  // - If SQLite needs needs additional scratch memory beyond what is provided by this
-  // - configuration option, then sqlite3.malloc() will be used to obtain the memory needed.
+  /// This option is no longer used
   SQLITE_CONFIG_SCRATCH = 6;
   /// This option specifies a static memory buffer that SQLite can use for the database
   // page cache with the default page cache implementation
@@ -755,7 +743,7 @@ const
   /// This option takes two arguments: a pointer to a function with a call
   // signature of void(*)(void*,int,const char*), and a pointer to void
   // - If the function pointer is not NULL, it is invoked by sqlite3.log()
-  // - to process each logging event.
+  // to process each logging event.
   // - If the function pointer is NULL, the sqlite3.log() interface becomes a no-op.
   // - The void pointer that is the second argument to SQLITE_CONFIG_LOG is passed
   // through as the first parameter to the application-defined logger function whenever
@@ -792,15 +780,179 @@ const
   // sqlite3_pcache_methods2 object
   // - SQLite copies of the current page cache implementation into that object.
   SQLITE_CONFIG_GETPCACHE2 = 19;
+  /// This option takes a single integer argument which is interpreted
+  // as a boolean in order to enable or disable the use of covering indices
+  // for full table scans in the query optimizer.
+  // - The default setting is determined by the SQLITE_ALLOW_COVERING_INDEX_SCAN
+  // compile-time option, or is "on" if that compile-time option is omitted.
+  // - The ability to disable the use of covering indices for full table scans
+  // is because some incorrectly coded legacy applications might malfunction
+  // when the optimization is enabled. Providing the ability to disable the
+  // optimization allows the older, buggy application code to work without
+  // change even with newer versions of SQLite.
   SQLITE_CONFIG_COVERING_INDEX_SCAN = 20;
+  /// This option is used to configure the SQLite global error log.
+  // - The SQLITE_CONFIG_LOG option takes two arguments: a pointer to a function
+  // with a call signature of void(*)(void*,int,const char*), and a pointer
+  // to void.
+  // - If the function pointer is not NULL, it is invoked by sqlite3_log()
+  // to process each logging event. If the function pointer is NULL, the
+  // sqlite3_log() interface becomes a no-op.
+  // - The void pointer that is the second argument to SQLITE_CONFIG_LOG is
+  // passed through as the first parameter to the application-defined logger
+  // function whenever that function is invoked. The second parameter to the
+  // logger function is a copy of the first parameter to the corresponding
+  // sqlite3_log() call and is intended to be a result code or an extended
+  // result code. The third parameter passed to the logger is log message
+  // after formatting via sqlite3_snprintf().
+  // - The SQLite logging interface is not reentrant; the logger function
+  // supplied by the application must not invoke any SQLite interface.
+  // - In a multi-threaded application, the application-defined logger function
+  // must be threadsafe.
   SQLITE_CONFIG_SQLLOG = 21;
+  /// This option takes two 64-bit integer (sqlite3_int64) values that are the
+  // default mmap size limit (the default setting for PRAGMA mmap_size) and
+  // the maximum allowed mmap size limit.
+  // - The default setting can be overridden by each database connection using
+  // either the PRAGMA mmap_size command, or by using the SQLITE_FCNTL_MMAP_SIZE
+  // file control. The maximum allowed mmap size will be silently truncated if
+  // necessary so that it does not exceed the compile-time maximum mmap size
+  // set by the SQLITE_MAX_MMAP_SIZE compile-time option.
+  // - If either argument to this option is negative, then that argument is
+  // changed to its compile-time default.
   SQLITE_CONFIG_MMAP_SIZE = 22;
+  /// Available if SQLite is compiled for Windows with the SQLITE_WIN32_MALLOC.
   SQLITE_CONFIG_WIN32_HEAPSIZE = 23;
+  /// This option takes a single parameter which is a pointer to an integer
+  // and writes into that integer the number of extra bytes per page required
+  // for each page in SQLITE_CONFIG_PAGECACHE.
+  // - The amount of extra space required can change depending on the compiler,
+  // target platform, and SQLite version.
+  SQLITE_CONFIG_PCACHE_HDRSZ = 24;
+  /// This option takes a single parameter which is an unsigned integer and
+  // sets the "Minimum PMA Size" for the multithreaded sorter to that integer.
+  // - The default minimum PMA Size is set by the SQLITE_SORTER_PMASZ
+  // compile-time option. New threads are launched to help with sort operations
+  // when multithreaded sorting is enabled (using the PRAGMA threads command)
+  // and the amount of content to be sorted exceeds the page size times the
+  // minimum of the PRAGMA cache_size setting and this value.
+  SQLITE_CONFIG_PMASZ = 25;
+  /// This option takes a single parameter which becomes the statement journal
+  // spill-to-disk threshold.
+  // - Statement journals are held in memory until their size (in bytes) exceeds
+  // this threshold, at which point they are written to disk. Or if the
+  // threshold is -1, statement journals are always held exclusively in memory.
+  // - Since many statement journals never become large, setting the spill
+  // threshold to a value such as 64KiB can greatly reduce the amount of
+  // I/O required to support statement rollback.
+  // - The default value for this setting is controlled by the
+  // SQLITE_STMTJRNL_SPILL compile-time option.
+  SQLITE_CONFIG_STMTJRNL_SPILL = 26;
+  /// This option takes single argument of type int, interpreted as a boolean,
+  // which if true provides a hint to SQLite that it should avoid large memory
+  // allocations if possible.
+  // - SQLite will run faster if it is free to make large memory allocations,
+  // but some application might prefer to run slower in exchange for guarantees
+  // about memory fragmentation that are possible if large allocations are avoided.
+  // - This hint is normally off.
+  SQLITE_CONFIG_SMALL_MALLOC = 27;
+  /// This option accepts a single parameter of type (int) - the new value of
+  // the sorter-reference size threshold.
+  // - Usually, when SQLite uses an external sort to order records according to
+  // an ORDER BY clause, all fields required by the caller are present in the
+  // sorted records. However, if SQLite determines based on the declared type
+  // of a table column that its values are likely to be very large - larger than
+  // the configured sorter-reference size threshold - then a reference is stored
+  // in each sorted record and the required column values loaded from the
+  // database as records are returned in sorted order.
+  // - The default value for this option is to never use this optimization.
+  // - Specifying a negative value for this option restores the default behaviour.
+  // - This option is only available if SQLite is compiled with the
+  // SQLITE_ENABLE_SORTER_REFERENCES compile-time option.
+  SQLITE_CONFIG_SORTERREF_SIZE = 28;
+  /// This option accepts a single parameter sqlite3_int64 parameter which is
+  // the default maximum size for an in-memory database created
+  // using sqlite3_deserialize().
+  // - This default maximum size can be adjusted up or down for individual
+  // databases using the SQLITE_FCNTL_SIZE_LIMIT file-control.
+  // - If this configuration setting is never used, then the default maximum is
+  // determined by the SQLITE_MEMDB_DEFAULT_MAXSIZE compile-time option.
+  // - If that compile-time option is not set, then the default maximum is
+  // 1073741824.
+  SQLITE_CONFIG_MEMDB_MAXSIZE = 29;
 
+  /// This option takes three additional arguments that determine the lookaside
+  // memory allocator configuration for the database connection.
+  // - The first argument (the third parameter to sqlite3_db_config() is a
+  // pointer to a memory buffer to use for lookaside memory.
+  // - The first argument after the SQLITE_DBCONFIG_LOOKASIDE verb may be NULL
+  // in which case SQLite will allocate the lookaside buffer itself using
+  // sqlite3_malloc().
+  // - The second argument is the size of each lookaside buffer slot.
+  // - The third argument is the number of slots.
+  // - The size of the buffer in the first argument must be greater than or
+  // equal to the product of the second and third arguments.
+  // - The buffer must be aligned to an 8-byte boundary.
+  // - If the second argument to SQLITE_DBCONFIG_LOOKASIDE is not a multiple
+  // of 8, it is internally rounded down to the next smaller multiple of 8.
+  // - The lookaside memory configuration for a database connection can only be
+  // changed when that connection is not currently using lookaside memory,
+  // or in other words when the "current value" returned by
+  // sqlite3_db_status(D,SQLITE_CONFIG_LOOKASIDE,...) is zero. Any attempt to
+  // change the lookaside memory configuration when lookaside memory is in use
+  // leaves the configuration unchanged and returns SQLITE_BUSY.
   SQLITE_DBCONFIG_LOOKASIDE = 1001;
+  /// This option is used to enable or disable the enforcement of foreign key
+  // constraints.
+  // - There should be two additional arguments.
+  // - The first argument is an integer which is 0 to disable FK enforcement,
+  // positive to enable FK enforcement or negative to leave FK enforcement unchanged.
+  // - The second parameter is a pointer to an integer into which is written
+  // 0 or 1 to indicate whether FK enforcement is off or on following this call.
+  // - The second parameter may be a NULL pointer, in which case the FK
+  // enforcement setting is not reported back.
   SQLITE_DBCONFIG_ENABLE_FKEY = 1002;
+  /// This option is used to enable or disable triggers.
+  // - There should be two additional arguments.
+  // - The first argument is an integer which is 0 to disable triggers,
+  // positive to enable triggers or negative to leave the setting unchanged.
+  // - The second parameter is a pointer to an integer into which is written
+  // 0 or 1 to indicate whether triggers are disabled or enabled following
+  // this call.
+  // - The second parameter may be a NULL pointer, in which case the trigger
+  // setting is not reported back.
+  // - Originally this option disabled all triggers. However, since SQLite
+  // version 3.35.0, TEMP triggers are still allowed even if this option is off.
+  // So, in other words, this option now only disables triggers in the main
+  // database schema or in the schemas of ATTACH-ed databases.
   SQLITE_DBCONFIG_ENABLE_TRIGGER = 1003;
+  /// This option is used to enable or disable the fts3_tokenizer() function
+  // which is part of the FTS3 full-text search engine extension.
+  // - There should be two additional arguments.
+  // - The first argument is an integer which is 0 to disable fts3_tokenizer()
+  // or positive to enable fts3_tokenizer() or negative to leave the setting
+  // unchanged.
+  // - The second parameter is a pointer to an integer into which is
+  // written 0 or 1 to indicate whether fts3_tokenizer is disabled or enabled
+  // following this call. The second parameter may be a NULL pointer, in which
+  // case the new setting is not reported back.
   SQLITE_DBCONFIG_ENABLE_FTS3_TOKENIZER = 1004;
+  /// This option is used to enable or disable the sqlite3_load_extension()
+  // interface independently of the load_extension() SQL function.
+  // - The sqlite3_enable_load_extension() API enables or disables both the
+  // C-API sqlite3_load_extension() and the SQL function load_extension().
+  // - There should be two additional arguments.
+  // - When the first argument to this interface is 1, then only the C-API
+  // is enabled and the SQL function remains disabled.
+  // - If the first argument to this interface is 0, then both the C-API
+  // and the SQL function are disabled.
+  // - If the first argument is -1, then no changes are made to state of either
+  // the C-API or the SQL function.
+  // - The second parameter is a pointer to an integer into which is written
+  // 0 or 1 to indicate whether sqlite3_load_extension() interface is disabled
+  // or enabled following this call.
+  // - The second parameter may be a NULL pointer, in which case the new
+  // setting is not reported back.
   SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION = 1005;
 
 
