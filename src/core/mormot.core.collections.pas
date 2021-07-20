@@ -53,32 +53,38 @@ uses
 
 { ************** JSON-aware IList<> List Storage }
 
+// Delphi allows SizeOf(T) in TSynEnumerator<T>.MoveNext but FPC doesn't
+{$ifdef FPC}
+  {$define NOSIZEOFT}
+{$endif FPC}
+
 type
   TSynListAbstract = class;
 
   /// abstract execution context for the TSynEnumerator<T> record
   TSynEnumeratorState = record
-    ItemSize, Current, After: PtrUInt; // 3 pointers on stack
+    {$ifdef NOSIZEOFT} ItemSize, {$endif}
+    Current, After: PtrUInt; // 2-3 pointers on stack
   end;
 
   /// efficient mean to iterate over a generic collection of a specific type
   // - we redefined our own record type for better performance: it properly
-  // inlines, and allocates as 3 pointers on stack with no try..finally
+  // inlines, and allocates as 2-3 pointers on stack with no try..finally
   TSynEnumerator<T> = record
   private
     fState: TSynEnumeratorState;
-  public
     type
       PT = ^T;
     // some property accessor
-    function GetCurrent: T; inline;
+    function DoGetCurrent: T; inline;
+  public
+    /// this property is needed for any enumerator
+    property Current: T
+      read DoGetCurrent;
     /// go to the next item iterated in this collection
     function MoveNext: boolean; inline;
     /// self-reference is needed for IList<T>.Range custom enumerator
     function GetEnumerator: TSynEnumerator<T>; inline;
-    /// this property is needed for any enumerator
-    property Current: T
-      read GetCurrent;
   end;
 
   /// exception class raised by IList<T>
@@ -328,6 +334,11 @@ type
     function GetItem(ndx: PtrInt): T;
     procedure SetItem(ndx: PtrInt; const value: T);
   public
+    /// internal constructor to create an IList<T> instance from RTTI
+    // - you should rather use Collections.NewList or Collections.NewPlainList
+    // - is used only to circumvent FPC internal error 2010021502 on x86_64
+    constructor Create(aOptions: TListOptions = [];
+      aSortAs: TRttiParserType = ptNone; aDynArrayTypeInfo: PRttiInfo = nil); overload;
     /// IList<T> method to append a new value to the collection
     function Add(const value: T): PtrInt;
     /// IList<T> method to insert a new value to the collection
@@ -543,7 +554,7 @@ type
     // - this affects only IKeyValue<> not IList<> which specializes byte/word
     {.$define SPECIALIZE_SMALL}
 
-    // WideString are not often used (use UnicodeString/SynUnicode instead)
+    // WideString are slow - RawUtf8 or UnicodeString are to be used instead -
     // so are not pre-compiled by default - this conditional generates them
     {.$define SPECIALIZE_WSTRING}
 
@@ -566,6 +577,8 @@ type
     {$endif FPC}
     // dedicated factories for most common TSynListSpecialized<T> types
     class procedure NewOrdinal(aSize: integer; aOptions: TListOptions;
+      aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result); static;
+    class procedure NewFloat(aOptions: TListOptions;
       aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result); static;
     class procedure NewLString(aOptions: TListOptions;
       aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result); static;
@@ -626,9 +639,9 @@ type
     // - by default, string values would be searched following exact case,
     // unless the loCaseInsensitive option is set
     // - raise ESynList if T type is too complex: use NewPlainList<T>() instead
+    // - not inlined since it is of little benefit
     class function NewList<T>(aOptions: TListOptions = [];
-      aDynArrayTypeInfo: PRttiInfo = nil): IList<T>;
-        static; {$ifdef FPC} inline; {$endif}
+      aDynArrayTypeInfo: PRttiInfo = nil): IList<T>; static;
     /// generate a new IList<T> instance with exact TSynListSpecialized<T>
     // - to be called for complex types (e.g. managed records) when
     // NewList<T> fails and triggers ESynList
@@ -653,11 +666,11 @@ type
     // - you can set an optional timeout period, in seconds - you should call
     // DeleteDeprecated periodically to search for deprecated items
     // - raise ESynKeyValue if T type is too complex: use NewPlainList<T>() instead
+    // - inlining does (little) sense even if most parameters would be inlined
     class function NewKeyValue<TKey, TValue>(aOptions: TSynKeyValueOptions = [];
       aKeyDynArrayTypeInfo: PRttiInfo = nil; aValueDynArrayTypeInfo: PRttiInfo = nil;
       aTimeoutSeconds: cardinal = 0; aCompressAlgo: TAlgoCompress = nil;
-      aHasher: THasher = nil): IKeyValue<TKey, TValue>;
-        static; {$ifdef FPC} inline; {$endif}
+      aHasher: THasher = nil): IKeyValue<TKey, TValue>; static;
     /// generate a new IKeyValue<TKey, TValue> instance with exact
     // TSynKeyValueSpecialized<TKey, TValue>
     // - to be called for complex types (e.g. managed records) when
@@ -677,16 +690,15 @@ implementation
 
 { TSynEnumerator }
 
-function TSynEnumerator<T>.GetCurrent: T;
-begin
-  result := PT(fState.Current)^; // faster than fDynArray^.ItemCopy()
-end;
-
 function TSynEnumerator<T>.MoveNext: boolean;
 var
   c: PtrUInt; // to enhance code generation
 begin
+  {$ifdef NOSIZEOFT}
   c := fState.ItemSize + fState.Current;
+  {$else}
+  c := fState.Current + PtrUInt(SizeOf(T));
+  {$endif NOSIZEOFT}
   fState.Current := c;
   result := c < fState.After; // false if fCurrent=fItemSize=fAfter=0
 end;
@@ -694,6 +706,11 @@ end;
 function TSynEnumerator<T>.GetEnumerator: TSynEnumerator<T>;
 begin
   result := self; // just a copy of 3 PtrInt
+end;
+
+function TSynEnumerator<T>.DoGetCurrent: T;
+begin
+  result := PT(fState.Current)^; // faster than fDynArray^.ItemCopy()
 end;
 
 
@@ -709,7 +726,7 @@ begin
   if r = nil then // use RTTI to guess the associated TArray<T> type
     r := TypeInfoToDynArrayTypeInfo(aItemTypeInfo, {exact=}false);
   if (r = nil) or
-     (r ^.Kind <> rkDynArray) then
+     (r^.Kind <> rkDynArray) then
      raise ESynList.CreateUtf8('%.Create: % should be a dynamic array of T',
        [self, r^.Name^]);
   aSortAs := fDynArray.InitSpecific(r, fValue, aSortAs, // aSortAs=ptNone->RTTI
@@ -937,12 +954,12 @@ begin
   state.Current := PtrUInt(fValue);
   if state.Current = 0 then
   begin
-    state.ItemSize := 0; // likely <> 0 on stack -> MoveNext=false
-    state.After := 0;
+    {$ifdef NOSIZEOFT} state.ItemSize := 0; {$endif}
+    state.After := 0; // ensure MoveNext=false
     exit;
   end;
   s := fDynArray.Info.Cache.ItemSize;
-  state.ItemSize := s;
+  {$ifdef NOSIZEOFT} state.ItemSize := s; {$endif}
   state.After := state.Current + s * PtrUInt(fCount);
   dec(state.Current, s);
 end;
@@ -962,8 +979,8 @@ begin
   if (state.Current = 0) or
      (Offset >= fCount) then
   begin
-    state.ItemSize := 0; // ensure MoveNext=false
-    state.After := 0;
+    {$ifdef NOSIZEOFT} state.ItemSize := 0; {$endif}
+    state.After := 0;  // ensure MoveNext=false
     exit;
   end;
   if Limit = 0 then
@@ -972,7 +989,7 @@ begin
   if Limit > PtrInt(s) then
     Limit := s;
   s := fDynArray.Info.Cache.ItemSize;
-  state.ItemSize := s;
+  {$ifdef NOSIZEOFT} state.ItemSize := s; {$endif}
   inc(state.Current, s * PtrUInt(Offset));
   state.After := state.Current + s * PtrUInt(Limit);
   dec(state.Current, s);
@@ -980,6 +997,12 @@ end;
 
 
 { TSynListSpecialized }
+
+constructor TSynListSpecialized<T>.Create(aOptions: TListOptions;
+  aSortAs: TRttiParserType; aDynArrayTypeInfo: PRttiInfo);
+begin
+  Create(aOptions, aDynArrayTypeInfo, TypeInfo(T), aSortAs);
+end;
 
 function TSynListSpecialized<T>.GetItem(ndx: PtrInt): T;
 begin
@@ -1279,6 +1302,24 @@ begin
   end;
   // all IList<T> share the same VMT -> assign once
   IList<Byte>(result) := TSynListSpecialized<Byte>(obj);
+end;
+
+class procedure Collections.NewFloat(aOptions: TListOptions;
+  aDynArrayTypeInfo, aItemTypeInfo: PRttiInfo; var result);
+var
+  obj: pointer;
+begin
+  case aItemTypeInfo^.RttiFloat of
+    rfSingle:
+      obj := TSynListSpecialized<single>.Create(
+        aOptions, aDynArrayTypeInfo, aItemTypeInfo, ptSingle);
+    rfDouble:
+      obj := TSynListSpecialized<Double>.Create(
+        aOptions, aDynArrayTypeInfo, aItemTypeInfo, ptDouble);
+  else
+    obj := RaiseUseNewPlainList(aItemTypeInfo);
+  end;
+  IList<Double>(result) := TSynListSpecialized<Double>(obj);
 end;
 
 class procedure Collections.NewLString(aOptions: TListOptions;
@@ -1851,8 +1892,12 @@ begin
       RaiseUseNewPlainList(TypeInfo(T));
     end
   else
-    // reuse TSynListSpecialized<integers> for ordinals (including TObject)
-    NewOrdinal(SizeOf(T), aOptions, aDynArrayTypeInfo, TypeInfo(T), result);
+    if GetTypeKind(T) = tkFloat then
+      // reuse TSynListSpecialized<> for floats (double or single only)
+      NewFloat(aOptions, aDynArrayTypeInfo, TypeInfo(T), result)
+    else
+      // reuse TSynListSpecialized<integers> for ordinals (including TObject)
+      NewOrdinal(SizeOf(T), aOptions, aDynArrayTypeInfo, TypeInfo(T), result);
 end;
 
 {$else}
