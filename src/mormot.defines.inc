@@ -293,7 +293,7 @@
     {$define FPC_NEWRTTI}
     // when http://bugs.freepascal.org/view.php?id=26774 has been fixed
     {$define HASINTERFACERTTI}
-    // generics support is excellent in FPC 3.2+
+    // generics support seems excellent in FPC 3.2+
     {$define HASGENERICS}
   {$endif}
 
@@ -387,10 +387,10 @@
   {$warn SYMBOL_DEPRECATED OFF} // for faVolumeID
   {$warn UNIT_PLATFORM OFF}
 
-  {$if CompilerVersion >= 17}
-    {$define ISDELPHI2005ANDUP} // Delphi 2005 or newer
+  {$if CompilerVersion >= 17}     // = Delphi 2005
+    {$define ISDELPHI2005ANDUP}
     {$if CompilerVersion >= 18}
-      {$define ISDELPHI2006ANDUP} // Delphi 2006 or newer
+      {$define ISDELPHI2006ANDUP} // = Delphi 2006
       {$define HASNEWFILEAGE}
       {$define HASINLINE}
       {$define HASINLINEDELPHI}
@@ -400,28 +400,27 @@
       // low-level FastMM4 information
       {.$define WITH_FASTMM4STATS}
     {$ifend}
-    {$ifdef VER180}
+    {$ifdef VER180}              // = Delphi 2006
       {$define ISDELPHI20062007} // to circumvent some specific bugs
     {$endif}
-    {$ifdef VER185}
+    {$ifdef VER185}              // = Delphi 2007
       {$define ISDELPHI20062007}
     {$endif}
     {$if CompilerVersion > 18}
-      {$define ISDELPHI2007ANDUP} // Delphi 2007 or newer
+      {$define ISDELPHI2007ANDUP} // = Delphi 2007 or newer
       {$define HASITERATORS}
     {$ifend}
-    {$if CompilerVersion = 20}
-      {$define ISDELPHI2009}     // Delphi 2009 specific compilation issues
+    {$if CompilerVersion = 20}   // = Delphi 2009
+      {$define ISDELPHI2009}     // to circumvent some specific bugs
       {$define ISDELPHI20092010}
-      {$define HASNOSTATICRTTI}  // Delphi 2009 has no TypeInfo(TGUID)
+      {$define HASNOSTATICRTTI}  // has no TypeInfo(TGUID)
     {$ifend}
-    {$if CompilerVersion = 21}
-      {$define ISDELPHI20092010} // Delphi 2010 specific compilation issues
+    {$if CompilerVersion = 21}   // = Delphi 2010
+      {$define ISDELPHI20092010} // to circumvent some specific bugs
     {$ifend}
     {$if CompilerVersion >= 21.0}
-      {$define HASSAFEINLINE}  // Delphi 2007 has sometimes troubles inlining :(
+      {$define HASSAFEINLINE}  // earliest Delphi have troubles inlining :(
       {$define ISDELPHI2010}
-      {$define HASGENERICS}     // Delphi 2009 has unusable generics
       {$define HASDYNARRAYTYPE} // eltype2 field, used e.g. for T*ObjArray
       {$define ISDELPHI2010_OR_FPC_NEWRTTI}
       {$define HASTTHREADSTART}
@@ -431,54 +430,54 @@
         {$RTTI EXPLICIT METHODS([]) PROPERTIES([]) FIELDS([])}
       {$endif NEWRTTINOTUSED}
     {$ifend}
-    {$if CompilerVersion >= 22.0}
+    {$if CompilerVersion >= 22.0} // = Delphi XE
       {$define FPC_OR_DELPHIXE} // Delphi 2007/2009/2010 inlining bugs
       {$define ISDELPHIXE}
+      {$define HASGENERICS}     // somewhat unusable generics (?)
     {$ifend}
-    {$if CompilerVersion >= 23.0}
+    {$if CompilerVersion >= 23.0} // = Delphi XE2
       // Delphi XE2 has some cross-platform features
       // e.g. {$ifdef ISDELPHIXE2}VCL.Graphics{$else}Graphics{$endif}
       {$define ISDELPHIXE2}
       {$define HASVARUSTRARG}
       {$define HASTTHREADTERMINATESET} // introduced TThread.TerminateSet
     {$ifend}
-    {$if CompilerVersion >= 24.0}
+    {$if CompilerVersion >= 24.0} // = Delphi XE3
       {$define ISDELPHIXE3}
     {$ifend}
-    {$if CompilerVersion >= 25.0}
+    {$if CompilerVersion >= 25.0} // = Delphi XE4
       {$define ISDELPHIXE4}
       {$define FPC_OR_DELPHIXE4} // circumvent Internal Error: C2130 on XE3
       {$define HASAESNI}
     {$ifend}
-    {$if CompilerVersion >= 26.0}
+    {$if CompilerVersion >= 26.0} // = Delphi XE5
       {$define ISDELPHIXE5}
       {$define PUBLISHRECORD}
       // if defined, will handle RTTI available only since Delphi XE5 for
       // record published properties
     {$ifend}
-    {$if CompilerVersion >= 27.0}
+    {$if CompilerVersion >= 27.0} // = Delphi XE6
       {$define ISDELPHIXE6}
     {$ifend}
-    {$if CompilerVersion = 28.0}
-       {$undef HASGENERICS} // XE7 trigger internal error with our generics
+    {$if CompilerVersion = 28.0}  // = Delphi XE7
     {$ifend}
     {$if CompilerVersion >= 28.0}
       {$define ISDELPHIXE7}
       {$ifdef CPU64}
-        {$define CPUX64ASM} // e.g. Delphi XE4 SSE asm is buggy :(
+        {$define CPUX64ASM} // e.g. XE4 SSE asm is buggy :(
       {$endif}
     {$ifend}
-    {$if CompilerVersion >= 29.0}
+    {$if CompilerVersion >= 29.0} // = Delphi XE8
       {$define ISDELPHIXE8}
-      {$define HASGETTYPEKIND} // Delphi XE7 generics and intrinsics are buggy
+      {$define HASGETTYPEKIND} // generics and intrinsics are buggy before XE8
     {$ifend}
-    {$if CompilerVersion >= 30.0}
+    {$if CompilerVersion >= 30.0} // = Delphi 10
       {$define ISDELPHI10}
     {$ifend}
-    {$if CompilerVersion >= 31.0}
+    {$if CompilerVersion >= 31.0} // = Delphi 10.1
       {$define ISDELPHI101}
     {$ifend}
-    {$if CompilerVersion >= 32.0}
+    {$if CompilerVersion >= 32.0} // = Delphi 10.2
       {$define ISDELPHI102}
       {$ifdef CPUX64}
       {$ifdef VER320withoutAprilUpdate}
@@ -487,11 +486,14 @@
       {$endif}
       {$endif}
     {$ifend}
-    {$if CompilerVersion >= 33.0}
+    {$if CompilerVersion >= 33.0} // = Delphi 10.3
       {$define ISDELPHI103}
     {$ifend}
-    {$if CompilerVersion >= 34.0}
+    {$if CompilerVersion >= 34.0} // = Delphi 10.4
       {$define ISDELPHI104}
+    {$ifend}
+    {$if CompilerVersion >= 35.0} // = Delphi 11
+      {$define ISDELPHI11}
     {$ifend}
   {$ifend CompilerVersion >= 17}
 
