@@ -161,20 +161,29 @@ begin
       begin
         // basic runtime execution
         CheckEqual(Run(
-          '2+2'), '4');
+          '2+2'),
+          '4');
         CheckEqual(Run(
-          'function add(x, y) { return x + y; } add(434,343)'), '777');
+          'a=1234567; a.toString()'),
+          '1234567');
         CheckEqual(Run(
-          'add(434.732,343.045)'), '777.777');
+          'function add(x, y) { return x + y; } add(434,343)'),
+          '777');
+        CheckEqual(Run(
+          'add(434.732,343.045)'),
+          '777.777');
         CheckEqual(Run(
           'function fn(x,y) { return (Math.log(y) / Math.log(x)).toString(); }'#10 +
-          'fn(5,625)'), '4'); // 5 x 5 x 5 x 5 = 625
-        v := Run('Date.now()');
+          'fn(5,625)'),
+          '4'); // 5 x 5 x 5 x 5 = 625
+        v := Run(
+          'Date.now()');
         CheckUtf8(abs(UnixMSTimeUtcFast - round(GetExtended(pointer(v)))) < 100,
           'timestamp - may fail during slow debugging [%]', [v]);
-        v := Run('Date() + "=" + new Date().toString()');
-        Check(PosEx(' ' +UInt32ToUtf8(CurrentYear), v) > 0);
-        v := Run('console.log("Hello World");');
+{        v := Run('new Date().toString();');
+        Check(PosEx(' ' +UInt32ToUtf8(CurrentYear), v) > 0); }
+        v := Run(
+          'console.log("Hello World");');
         Check(PosEx('''console'' is not defined', v) > 0);
         j := cx.Call('', 'add', [777, i]);
         Check(cx.ToVariantFree(j, va));

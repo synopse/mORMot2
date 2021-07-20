@@ -66,7 +66,6 @@ type
 
 procedure libc_qsort(baseP: PByte; NElem, Width: PtrInt; comparF: qsort_compare_func); cdecl;
 function libc_rename(oldname, newname: PUtf8Char): integer; cdecl;
-procedure libc_exit(status: integer); cdecl;
 function libc_printf(format: PAnsiChar): Integer; cdecl; varargs;
 function libc_sprintf(buf: Pointer; format: PAnsiChar): Integer; cdecl; varargs;
 function libc_fprintf(fHandle: pointer; format: PAnsiChar): Integer; cdecl; varargs;
@@ -240,10 +239,13 @@ end;
 
 // see e.g. #define assert(x) in QuickJS cutils.h
 
+type
+  ELibStatic = class(Exception);
+
 procedure pas_assertfailed(cond, fn: PAnsiChar; line: integer); cdecl;
  {$ifdef FPC} public name _PREFIX + 'pas_assertfailed'; {$endif}
 begin
-  raise EExternal.CreateFmt('Panic in %s:%d: assert(%s)', [fn, line, cond]);
+  raise ELibStatic.CreateFmt('Panic in %s:%d: assert(%s)', [fn, line, cond]);
 end;
 
 
@@ -256,8 +258,6 @@ end;
 
 function libc_rename(oldname, newname: PUtf8Char): integer; cdecl;
   external _CLIB name 'rename';
-procedure libc_exit(status: integer); cdecl;
-  external _CLIB name 'exit';
 function libc_printf(format: PAnsiChar): Integer; cdecl; varargs;
   external _CLIB name 'printf';
 function libc_sprintf(buf: Pointer; format: PAnsiChar): Integer; cdecl; varargs;
@@ -269,7 +269,7 @@ function libc_vsnprintf(buf: pointer; nzize: PtrInt; format: PAnsiChar;
   external _CLIB name '_vsnprintf';
 function libc_strcspn(str, reject: PUtf8Char): integer; cdecl;
   external _CLIB name 'strcspn';
-function libc_strcat(dest: PAnsiChar; src: PAnsiChar): PAnsiChar; cdecl;
+function libc_strcat(dest, src: PAnsiChar): PAnsiChar; cdecl;
   external _CLIB name 'strcat';
 function libc_strcpy(dest, src: PAnsiChar): PAnsiChar; cdecl;
   external _CLIB name 'strcpy';
@@ -280,7 +280,7 @@ function libc_memchr(s: Pointer; c: Integer; n: PtrInt): Pointer; cdecl;
 function libc_memcmp(p1, p2: PByte; Size: integer): integer; cdecl;
   external _CLIB name 'memcmp';
 function libc_strchr(s: Pointer; c: Integer): Pointer; cdecl;
-  external _CLIB name 'memchr';
+  external _CLIB name 'strchr';
 function libc_strtod(value: PAnsiChar; endPtr: PPAnsiChar): Double; cdecl;
   external _CLIB name 'strtod';
 function libc_write(handle: Integer; buf: Pointer; len: LongWord): Integer; cdecl;
@@ -309,11 +309,12 @@ end;
 function gettimeofday(var tv: timeval; zone: pointer): integer; cdecl;
   {$ifdef FPC} public name _PREFIX + 'gettimeofday'; {$else} export; {$endif}
 var
-  now: Int64;
+  now, sec: QWord;
 begin
   now := UnixMSTimeUtcFast;
-  tv.usec := (now mod 1000) * 1000;
-  tv.sec := now div 1000;
+  sec := now div 1000;
+  tv.sec := sec;
+  tv.usec := (now - sec * 1000) * 1000;
   result := 0;
 end;
 
@@ -332,7 +333,7 @@ begin
   // simple full pascal version of the standard C library function
   result := nil;
   if s <> nil then
-    while s^<>#0 do
+    while s^ <> #0 do
     begin
       if s^ = c then
         result := s;
@@ -486,10 +487,10 @@ var
     {$ifdef CPU32} '__imp___endthreadex' {$else} '__imp__endthreadex' {$endif};
 {$endif FPC}
 
-procedure __exit; assembler;
- {$ifdef FPC} nostackframe; public name _PREFIX + 'exit'; {$else} export; {$endif}
-asm
-  jmp libc_exit
+procedure __exit;
+ {$ifdef FPC} public name _PREFIX + 'exit'; {$else} export; {$endif}
+begin
+  raise ELibStatic.Create('Unexpected exit() call');
 end;
 
 procedure printf; assembler; 
@@ -564,7 +565,7 @@ begin
  result := libc_memcmp(p1, p2, Size);
 end;
 
-function strchr(s: Pointer; c: Integer): Pointer; cdecl;
+function strchr(s: PAnsiChar; c: Integer): Pointer; cdecl;
   {$ifdef FPC} public name _PREFIX + 'strchr'; {$else} export; {$endif}
 begin
   result := libc_strchr(s, c);
@@ -582,7 +583,7 @@ function _InterlockedCompareExchange(
   var Dest: integer; New, Comp: integer): longint; stdcall;
   public alias: '_InterlockedCompareExchange@12';
 begin
-  result := InterlockedCompareExchange(Dest,New,Comp);
+  result := InterlockedCompareExchange(Dest, New, Comp);
 end;
 
 {$endif CPUX86}
