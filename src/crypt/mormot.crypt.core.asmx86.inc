@@ -1470,7 +1470,7 @@ asm
         movups  xmm0, dqword ptr [esi]
         movaps  xmm1, xmm0
         pxor    xmm0, xmm7
-        movaps  xmm7, xmm0              // fIV := fIn
+        movaps  xmm7, xmm1              // fIV := fIn
         movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
         add     esi, 16
         add     edi, 16
@@ -1535,7 +1535,7 @@ asm
         movups  xmm0, dqword ptr [esi]
         movaps  xmm1, xmm0
         pxor    xmm0, xmm7
-        movaps  xmm7, xmm0              // fIV := fIn
+        movaps  xmm7, xmm1              // fIV := fIn
         movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
         lea     eax, [ebx].TAesCfc.fMac.plain
         mov     edx, edi
