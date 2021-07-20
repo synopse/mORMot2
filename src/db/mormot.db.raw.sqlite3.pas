@@ -1806,12 +1806,12 @@ type
     // - you may use the VersionText property (or Version for full details) instead
     libversion: function: PUtf8Char; cdecl;
 
+    /// Returns the integer version of the SQLite database engine like 3034000
+    libversion_number: function: integer; cdecl;
+
     /// Returns string containing the date and time of the check-in (UTC) and a SHA1
     // or SHA3-256 hash of the entire source tree.
     sourceid: function: PUtf8Char; cdecl;
-
-    /// Returns the integer version of the SQLite database engine like 3034000
-    libversion_number: function: integer; cdecl;
 
     /// Returns zero if and only if SQLite was compiled with mutexing code omitted due
     // to the SQLITE_THREADSAFE compile-time option being set to 0.
@@ -3188,6 +3188,9 @@ type
     db_release_memory: function(DB: TSqlite3DB): integer; cdecl;
 
     /// Returns the number of bytes of memory currently outstanding (malloced but not freed)
+    // - our SQlite3 static library is compiled with #define SQLITE_DEFAULT_MEMSTATUS 0
+    // so this value is not available, unless you override the BeforeInitialization virtual
+    // method and set the SQLITE_CONFIG_MEMSTATUS value to 1
     memory_used: function: Int64; cdecl;
 
     /// Returns the maximum value of sqlite3.memory_used() since the high-water mark
@@ -5391,6 +5394,8 @@ end;
 { TSqlite3LibraryDynamic }
 
 const
+  // warning: those entry should follow EXACTLY the order in TSqlite3Library
+  // methods, from @initialize() to the last one
   SQLITE3_ENTRIES: array[0..171] of PAnsiChar = (
     'sqlite3_initialize',
     'sqlite3_shutdown',
@@ -5414,26 +5419,31 @@ const
     'sqlite3_keyword_name',
     'sqlite3_keyword_check',
     'sqlite3_txn_state',
-    'sqlite3_create_function',
-    'sqlite3_create_function_v2',
-    'sqlite3_create_window_function',
-    'sqlite3_set_auxdata',
-    'sqlite3_get_auxdata',
-    'sqlite3_create_collation',
-    'sqlite3_create_collation_v2',
-    'sqlite3_collation_needed',
+    'sqlite3_exec',
+    'sqlite3_interrupt',
     'sqlite3_last_insert_rowid',
     'sqlite3_set_last_insert_rowid',
     'sqlite3_busy_timeout',
     'sqlite3_busy_handler',
+    'sqlite3_progress_handler',
+    'sqlite3_get_autocommit',
+    'sqlite3_set_authorizer',
+    'sqlite3_preupdate_hook',
+    'sqlite3_preupdate_old',
+    'sqlite3_preupdate_new',
+    'sqlite3_preupdate_count',
+    'sqlite3_preupdate_depth',
+    'sqlite3_unlock_notify',
+    'sqlite3_update_hook',
+    'sqlite3_commit_hook',
+    'sqlite3_rollback_hook',
+    'sqlite3_changes',
+    'sqlite3_total_changes',
     'sqlite3_prepare_v2',
     'sqlite3_prepare_v3',
     'sqlite3_finalize',
-    'sqlite3_exec',
     'sqlite3_next_stmt',
     'sqlite3_reset',
-    'sqlite3_interrupt',
-    'sqlite3_progress_handler',
     'sqlite3_stmt_busy',
     'sqlite3_stmt_isexplain',
     'sqlite3_stmt_readonly',
@@ -5474,6 +5484,11 @@ const
     'sqlite3_value_int64',
     'sqlite3_value_text',
     'sqlite3_value_blob',
+    'sqlite3_create_function',
+    'sqlite3_create_function_v2',
+    'sqlite3_create_window_function',
+    'sqlite3_set_auxdata',
+    'sqlite3_get_auxdata',
     'sqlite3_result_pointer',
     'sqlite3_result_null',
     'sqlite3_result_int64',
@@ -5506,6 +5521,9 @@ const
     'sqlite3_blob_read',
     'sqlite3_blob_write',
     'sqlite3_blob_bytes',
+    'sqlite3_create_collation',
+    'sqlite3_create_collation_v2',
+    'sqlite3_collation_needed',
     'sqlite3_create_module_v2',
     'sqlite3_drop_modules',
     'sqlite3_declare_vtab',
@@ -5518,19 +5536,6 @@ const
     'sqlite3_cancel_auto_extension',
     'sqlite3_reset_auto_extension',
     'sqlite3_load_extension',
-    'sqlite3_get_autocommit',
-    'sqlite3_set_authorizer',
-    'sqlite3_preupdate_hook',
-    'sqlite3_preupdate_old',
-    'sqlite3_preupdate_new',
-    'sqlite3_preupdate_count',
-    'sqlite3_preupdate_depth',
-    'sqlite3_unlock_notify',
-    'sqlite3_update_hook',
-    'sqlite3_commit_hook',
-    'sqlite3_rollback_hook',
-    'sqlite3_changes',
-    'sqlite3_total_changes',
     'sqlite3_malloc',
     'sqlite3_realloc',
     'sqlite3_free',
@@ -5539,6 +5544,9 @@ const
     'sqlite3_db_release_memory',
     'sqlite3_memory_used',
     'sqlite3_memory_highwater',
+    'sqlite3_soft_heap_limit64',
+    'sqlite3_config',
+    'sqlite3_db_config',
     'sqlite3_status64',
     'sqlite3_db_status',
     'sqlite3_db_cacheflush',
@@ -5560,10 +5568,8 @@ const
     'sqlite3_snapshot_open',
     'sqlite3_snapshot_recover',
     'sqlite3_snapshot_cmp',
-    'sqlite3_snapshot_free',
-    'sqlite3_soft_heap_limit64',
-    'sqlite3_config',
-    'sqlite3_db_config');
+    'sqlite3_snapshot_free');
+
 
 function TSqlite3LibraryDynamic.GetLibraryName: TFileName;
 begin
@@ -5597,6 +5603,7 @@ begin
      not Assigned(prepare_v2) or
      not Assigned(create_module_v2) then
      // note: some APIs like config() key() or trace() may not be available
+     // -> use the "if Assigned(xxx) then xxx(...)" pattern for safety
   begin
     if Assigned(libversion) then
       vers := libversion
