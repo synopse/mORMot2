@@ -37,6 +37,7 @@ uses
   test.core.data           in '.\test.core.data.pas',
   test.core.crypt          in '.\test.core.crypt.pas',
   test.core.ecc            in '.\test.core.ecc.pas',
+  test.core.collections    in '.\test.core.collections.pas',
   {$ifdef LIBQUICKJSSTATIC}
   test.core.script         in '.\test.core.script.pas',
   {$endif LIBQUICKJSSTATIC}
@@ -65,7 +66,11 @@ begin
   //exit;
   AddCase([
   //
-    TTestCoreBase, TTestCoreProcess, TTestCoreCrypto, TTestCoreEcc,
+    TTestCoreBase, TTestCoreProcess,
+    {$ifdef HASGENERICS} // do-nothing on oldest compilers (e.g. <= Delphi 2010)
+    TTestCoreCollections,
+    {$endif HASGENERICS}
+    TTestCoreCrypto, TTestCoreEcc,
     TTestCoreCompression, TNetworkProtocols
   ]);
 end;
@@ -76,7 +81,8 @@ begin
   AddCase([
     //
     TTestOrmCore, TTestSqliteFile, TTestSqliteFileWAL, TTestSqliteFileMemoryMap,
-    TTestSqliteMemory, TTestExternalDatabase, TTestClientServerAccess, TTestMultiThreadProcess
+    TTestSqliteMemory, TTestExternalDatabase,
+    TTestClientServerAccess, TTestMultiThreadProcess
   ]);
 end;
 
