@@ -62,19 +62,21 @@ var
   name: RawUtf8;
 begin
   all.Start;
-  // circumvent x86_64 FPC internal error 2010021502 if T is not specific :(
-  {$ifdef FPC_CPUX64}
+  // circumvent FPC x86_64/aarch64 internal error 2010021502 :(
+  // - root cause seems to be that if T is coming through a generic method
+  // - direct specialization like Collections.NewList<integer> works fine
+  {$ifdef FPC_64}
   li := TSynListSpecialized<T>.Create;
   {$else}
   li := Collections.NewList<T>;
-  {$endif FPC}
+  {$endif FPC_64}
   da := li.Data;
   name := da^.Info.ArrayRtti.Name;
   Check(name <> '');
   for i in li do
   begin
     Check(false); // should never be executed with a void list
-    cop[0] := i;  // the compiler needs to use i somewhere
+    {%H-}cop[0] := i;  // the compiler needs to use i somewhere
   end;
   timer.Start;
   SetLength(cop, MAX);

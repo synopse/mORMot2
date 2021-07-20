@@ -336,7 +336,15 @@ type
   public
     /// internal constructor to create an IList<T> instance from RTTI
     // - you should rather use Collections.NewList or Collections.NewPlainList
-    // - is used only to circumvent FPC internal error 2010021502 on x86_64
+    // - used only to circumvent FPC internal error 2010021502 on x86_64/aarch64
+    // - root cause seems to be that if T is coming through a generic method
+    // - direct specialization like Collections.NewList<integer> works fine,
+    // but cascaded generics like TTestCoreCollections.TestOne<T> need this:
+    // ! {$ifdef FPC_64}
+    // ! li := TSynListSpecialized<T>.Create;
+    // ! {$else}
+    // ! li := Collections.NewList<T>;
+    // ! {$endif FPC_64}
     constructor Create(aOptions: TListOptions = [];
       aSortAs: TRttiParserType = ptNone; aDynArrayTypeInfo: PRttiInfo = nil); overload;
     /// IList<T> method to append a new value to the collection
