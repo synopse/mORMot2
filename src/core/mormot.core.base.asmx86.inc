@@ -75,7 +75,7 @@ asm
         add     edx, 16
         jl      @loop
         ret
-{$ifdef FPC} align 16 {$endif}
+{$ifdef FPC} align 16 {$else} nop; nop; nop {$endif}
 @nv:    movntdq dqword ptr [eax + edx], xmm0 // non-temporal fill 16 bytes
         add     edx, 16
         jl      @nv
@@ -103,6 +103,7 @@ asm
 {$ifdef FPC} align 4 {$endif}
 @jmptab:dd      @00, @02, @04, @06, @08, @10, @12, @14, @16
         dd      @18, @20, @22, @24, @26, @28, @30, @32
+        // Delphi RTL uses 16-bit moves which are slower
 @32:    mov     [eax + 28], ecx
 @28:    mov     [eax + 24], ecx
 @24:    mov     [eax + 20], ecx
@@ -210,14 +211,14 @@ asm
         movups  xmm1, dqword ptr [eax]       // last 16
         push    ecx
         neg     ecx
-        and     edx,  - 16             // 16-byte align writes
+        and     edx,  - 16                   // 16-byte align writes
         lea     ecx, [ecx + edx + 16]
         pop     edx
-        cmp     ecx, - CPUCACHESSE2 * 1024 // assume 512KB of L1 cache
+        cmp     ecx, - CPUCACHESSE2 * 1024   // assume 512KB of L1 cache
         jl      @fwnv
         {$ifdef FPC} align 16 {$endif}
 @fwd:   movups  xmm0, dqword ptr [eax + ecx] // move by 16 bytes
-        movaps   dqword ptr [edx + ecx], xmm0
+        movaps  dqword ptr [edx + ecx], xmm0
         add     ecx, 16
         jl      @fwd
 @fwde:  movups  dqword ptr [edx], xmm1       // last 16
@@ -226,7 +227,7 @@ asm
         ret
         {$ifdef FPC} align 16 {$endif}
 @fwnv:  movdqu  xmm0, dqword ptr [eax + ecx]
-        movntdq dqword ptr [edx + ecx], xmm0  // non-temporal move by 16 bytes
+        movntdq dqword ptr [edx + ecx], xmm0 // non-temporal move by 16 bytes
         add     ecx, 16
         jl      @fwd
         sfence

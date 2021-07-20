@@ -1165,9 +1165,8 @@ function BufferLineLength(Text, TextEnd: PUtf8Char): PtrInt;
         por     xmm3, xmm2
         pmovmskb eax, xmm3
         shr     eax, cl            // shift out unaligned bytes
-        test    eax, eax
-        jz      @main
         bsf     eax, eax
+        jz      @main
         add     rax, rcx
         add     rax, rdi
         sub     rax, rsi
