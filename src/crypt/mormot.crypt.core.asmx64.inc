@@ -253,7 +253,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
 @loop1: movaps  xmm9, [rbp]
         paddd   xmm9, xmm4
         movaps  [rsp + 10h], xmm9
-        movaps  xmm0, xmm7
+        movdqa  xmm0, xmm7
         mov     r13d, r8d
         ror     r13d, 14
         mov     r14d, eax
@@ -262,7 +262,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         xor     r13d, r8d
         mov     r15d, r9d
         ror     r13d, 5
-        movaps  xmm1, xmm5
+        movdqa  xmm1, xmm5
         xor     r14d, eax
         xor     r15d, r10d
         paddd   xmm0, xmm4
@@ -273,11 +273,11 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         xor     r14d, eax
         ror     r13d, 6
         xor     r15d, r10d
-        movaps  xmm2, xmm1
+        movdqa  xmm2, xmm1
         ror     r14d, 2
         add     r15d, r13d
         add     r15d, [rsp + 10h]
-        movaps  xmm3, xmm1
+        movdqa  xmm3, xmm1
         mov     r13d, eax
         add     r11d, r15d
         mov     r15d, eax
@@ -291,10 +291,10 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         por     xmm1, xmm2
         or      r13d, r15d
         add     r11d, r13d
-        movaps  xmm2, xmm3
+        movdqa  xmm2, xmm3
         mov     r13d, esi
         mov     r14d, r11d
-        movaps  xmm8, xmm3
+        movdqa  xmm8, xmm3
         ror     r13d, 14
         xor     r13d, esi
         mov     r15d, r8d
@@ -329,11 +329,11 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         paddd   xmm0, xmm1
         or      r13d, r15d
         add     r10d, r13d
-        movaps  xmm3, xmm2
+        movdqa  xmm3, xmm2
         mov     r13d, edi
         mov     r14d, r10d
         ror     r13d, 14
-        movaps  xmm8, xmm2
+        movdqa  xmm8, xmm2
         xor     r13d, edi
         ror     r14d, 9
         mov     r15d, esi
@@ -367,11 +367,11 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         pshufd  xmm2, xmm0, 50h
         or      r13d, r15d
         add     r9d, r13d
-        movaps  xmm3, xmm2
+        movdqa  xmm3, xmm2
         mov     r13d, ebx
         ror     r13d, 14
         mov     r14d, r9d
-        movaps  xmm4, xmm2
+        movdqa  xmm4, xmm2
         ror     r14d, 9
         xor     r13d, ebx
         mov     r15d, edi
@@ -407,7 +407,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         movaps  xmm9, [rbp + 10h]
         paddd   xmm9, xmm5
         movaps  [rsp + 10h], xmm9
-        movaps  xmm0, xmm4
+        movdqa  xmm0, xmm4
         mov     r13d, eax
         ror     r13d, 14
         mov     r14d, r8d
@@ -416,7 +416,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         xor     r13d, eax
         mov     r15d, ebx
         ror     r13d, 5
-        movaps  xmm1, xmm6
+        movdqa  xmm1, xmm6
         xor     r14d, r8d
         xor     r15d, edi
         paddd   xmm0, xmm5
@@ -427,11 +427,11 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         xor     r14d, r8d
         ror     r13d, 6
         xor     r15d, edi
-        movaps  xmm2, xmm1
+        movdqa  xmm2, xmm1
         ror     r14d, 2
         add     r15d, r13d
         add     r15d, [rsp + 10h]
-        movaps  xmm3, xmm1
+        movdqa  xmm3, xmm1
         mov     r13d, r8d
         add     esi, r15d
         mov     r15d, r8d
@@ -445,10 +445,10 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         por     xmm1, xmm2
         or      r13d, r15d
         add     esi, r13d
-        movaps  xmm2, xmm3
+        movdqa  xmm2, xmm3
         mov     r13d, r11d
         mov     r14d, esi
-        movaps  xmm8, xmm3
+        movdqa  xmm8, xmm3
         ror     r13d, 14
         xor     r13d, r11d
         mov     r15d, eax
@@ -483,11 +483,11 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         paddd   xmm0, xmm1
         or      r13d, r15d
         add     edi, r13d
-        movaps  xmm3, xmm2
+        movdqa  xmm3, xmm2
         mov     r13d, r10d
         mov     r14d, edi
         ror     r13d, 14
-        movaps  xmm8, xmm2
+        movdqa  xmm8, xmm2
         xor     r13d, r10d
         ror     r14d, 9
         mov     r15d, r11d
@@ -521,11 +521,11 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         pshufd  xmm2, xmm0, 50h
         or      r13d, r15d
         add     ebx, r13d
-        movaps  xmm3, xmm2
+        movdqa  xmm3, xmm2
         mov     r13d, r9d
         ror     r13d, 14
         mov     r14d, ebx
-        movaps  xmm5, xmm2
+        movdqa  xmm5, xmm2
         ror     r14d, 9
         xor     r13d, r9d
         mov     r15d, r10d
@@ -561,7 +561,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         movaps  xmm9, [rbp + 20h]
         paddd   xmm9, xmm6
         movaps  [rsp + 10h], xmm9
-        movaps  xmm0, xmm5
+        movdqa  xmm0, xmm5
         mov     r13d, r8d
         ror     r13d, 14
         mov     r14d, eax
@@ -570,7 +570,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         xor     r13d, r8d
         mov     r15d, r9d
         ror     r13d, 5
-        movaps  xmm1, xmm7
+        movdqa  xmm1, xmm7
         xor     r14d, eax
         xor     r15d, r10d
         paddd   xmm0, xmm6
@@ -581,11 +581,11 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         xor     r14d, eax
         ror     r13d, 6
         xor     r15d, r10d
-        movaps  xmm2, xmm1
+        movdqa  xmm2, xmm1
         ror     r14d, 2
         add     r15d, r13d
         add     r15d, [rsp + 10h]
-        movaps  xmm3, xmm1
+        movdqa  xmm3, xmm1
         mov     r13d, eax
         add     r11d, r15d
         mov     r15d, eax
@@ -599,10 +599,10 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         por     xmm1, xmm2
         or      r13d, r15d
         add     r11d, r13d
-        movaps  xmm2, xmm3
+        movdqa  xmm2, xmm3
         mov     r13d, esi
         mov     r14d, r11d
-        movaps  xmm8, xmm3
+        movdqa  xmm8, xmm3
         ror     r13d, 14
         xor     r13d, esi
         mov     r15d, r8d
@@ -637,11 +637,11 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         paddd   xmm0, xmm1
         or      r13d, r15d
         add     r10d, r13d
-        movaps  xmm3, xmm2
+        movdqa  xmm3, xmm2
         mov     r13d, edi
         mov     r14d, r10d
         ror     r13d, 14
-        movaps  xmm8, xmm2
+        movdqa  xmm8, xmm2
         xor     r13d, edi
         ror     r14d, 9
         mov     r15d, esi
@@ -675,11 +675,11 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         pshufd  xmm2, xmm0, 50h
         or      r13d, r15d
         add     r9d, r13d
-        movaps  xmm3, xmm2
+        movdqa  xmm3, xmm2
         mov     r13d, ebx
         ror     r13d, 14
         mov     r14d, r9d
-        movaps  xmm6, xmm2
+        movdqa  xmm6, xmm2
         ror     r14d, 9
         xor     r13d, ebx
         mov     r15d, edi
@@ -716,7 +716,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         paddd   xmm9, xmm7
         movaps  [rsp + 10h], xmm9
         add     rbp, 64
-        movaps  xmm0, xmm6
+        movdqa  xmm0, xmm6
         mov     r13d, eax
         ror     r13d, 14
         mov     r14d, r8d
@@ -725,7 +725,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         xor     r13d, eax
         mov     r15d, ebx
         ror     r13d, 5
-        movaps  xmm1, xmm4
+        movdqa  xmm1, xmm4
         xor     r14d, r8d
         xor     r15d, edi
         paddd   xmm0, xmm7
@@ -736,11 +736,11 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         xor     r14d, r8d
         ror     r13d, 6
         xor     r15d, edi
-        movaps  xmm2, xmm1
+        movdqa  xmm2, xmm1
         ror     r14d, 2
         add     r15d, r13d
         add     r15d, [rsp + 10h]
-        movaps  xmm3, xmm1
+        movdqa  xmm3, xmm1
         mov     r13d, r8d
         add     esi, r15d
         mov     r15d, r8d
@@ -754,10 +754,10 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         por     xmm1, xmm2
         or      r13d, r15d
         add     esi, r13d
-        movaps  xmm2, xmm3
+        movdqa  xmm2, xmm3
         mov     r13d, r11d
         mov     r14d, esi
-        movaps  xmm8, xmm3
+        movdqa  xmm8, xmm3
         ror     r13d, 14
         xor     r13d, r11d
         mov     r15d, eax
@@ -792,11 +792,11 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         paddd   xmm0, xmm1
         or      r13d, r15d
         add     edi, r13d
-        movaps  xmm3, xmm2
+        movdqa  xmm3, xmm2
         mov     r13d, r10d
         mov     r14d, edi
         ror     r13d, 14
-        movaps  xmm8, xmm2
+        movdqa  xmm8, xmm2
         xor     r13d, r10d
         ror     r14d, 9
         mov     r15d, r11d
@@ -830,11 +830,11 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         pshufd  xmm2, xmm0, 50h
         or      r13d, r15d
         add     ebx, r13d
-        movaps  xmm3, xmm2
+        movdqa  xmm3, xmm2
         mov     r13d, r9d
         ror     r13d, 14
         mov     r14d, ebx
-        movaps  xmm7, xmm2
+        movdqa  xmm7, xmm2
         ror     r14d, 9
         xor     r13d, r9d
         mov     r15d, r10d
@@ -1099,8 +1099,8 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         add     eax, r14d
         or      r13d, r15d
         add     eax, r13d
-        movaps  xmm4, xmm6
-        movaps  xmm5, xmm7
+        movdqa  xmm4, xmm6
+        movdqa  xmm5, xmm7
         dec     rcx
         jne     @loop2
         add     eax, [rdx]
@@ -2814,21 +2814,21 @@ procedure AesNiEncryptCtrNist32(
         sub    rsp, $80
         and    rsp, $fffffffffffffff0
         // precompute the next 8 counters on the stack
-        movdqu xmm2, dqword ptr [r8]
-        movdqu xmm0, dqword ptr [rcx]
+        movups xmm2, dqword ptr [r8]
+        movups xmm0, dqword ptr [rcx]
         mov    r8d, dword ptr [r8 + $c] // get 32-bit counter
         pxor   xmm2, xmm0
         mov    ebp, dword ptr [rcx + $c]
-        movdqa dqword ptr [rsp], xmm2
+        movaps dqword ptr [rsp], xmm2
         bswap  r8d
-        movdqa xmm3, xmm2
-        movdqa xmm4, xmm2
-        movdqa xmm5, xmm2
-        movdqa dqword ptr [rsp + $40], xmm2
-        movdqa dqword ptr [rsp + $50], xmm2
-        movdqa dqword ptr [rsp + $60], xmm2
+        movaps xmm3, xmm2
+        movaps xmm4, xmm2
+        movaps xmm5, xmm2
+        movaps dqword ptr [rsp + $40], xmm2
+        movaps dqword ptr [rsp + $50], xmm2
+        movaps dqword ptr [rsp + $60], xmm2
         mov    r10, rdx
-        movdqa dqword ptr [rsp + $70], xmm2
+        movaps dqword ptr [rsp + $70], xmm2
         lea    rax, [r8 + $1]
         lea    rdx, [r8 + $2]
         bswap  eax
@@ -2837,18 +2837,18 @@ procedure AesNiEncryptCtrNist32(
         xor    edx, ebp
         pinsrd xmm3, eax, $3
         lea    rax, [r8 + $3]
-        movdqa dqword ptr [rsp + $10], xmm3
+        movaps dqword ptr [rsp + $10], xmm3
         pinsrd xmm4, edx, $3
         bswap  eax
         mov    rdx, r10
         lea    r10, [r8 + $4]
-        movdqa dqword ptr [rsp + $20], xmm4
+        movaps dqword ptr [rsp + $20], xmm4
         xor    eax, ebp
         bswap  r10d
         pinsrd xmm5, eax, $3
         movzx  eax, byte ptr [rcx].TAesContext.Rounds
         xor    r10d, ebp
-        movdqa dqword ptr [rsp + $30], xmm5
+        movaps dqword ptr [rsp + $30], xmm5
         lea    r9, [r8 + $5]
         mov    dword ptr [rsp + $4c], r10d
         bswap  r9d
@@ -2865,8 +2865,8 @@ procedure AesNiEncryptCtrNist32(
         mov    dword ptr [rsp + $7c], r9d
         // start interleaved process
         movups xmm1, dqword ptr [rcx + $10]
-        movdqa xmm6, dqword ptr [rsp + $40]
-        movdqa xmm7, dqword ptr [rsp + $50]
+        movaps xmm6, dqword ptr [rsp + $40]
+        movaps xmm7, dqword ptr [rsp + $50]
         cmp    rdx, $8
         jb     @tail
         sub    rdx, $6
@@ -2875,10 +2875,10 @@ procedure AesNiEncryptCtrNist32(
         // main loop, processing 8 interleaved CTR per iteration
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @loop8: add    r8d, $8 // our 32-bit CTR
-        movdqa xmm8, dqword ptr [rsp + $60]
+        movaps xmm8, dqword ptr [rsp + $60]
         aesenc xmm2, xmm1
         mov    r9d, r8d
-        movdqa xmm9, dqword ptr [rsp + $70]
+        movaps xmm9, dqword ptr [rsp + $70]
         aesenc xmm3, xmm1
         bswap  r9d
         movups xmm0, dqword ptr [rcx - $60]
@@ -2975,7 +2975,7 @@ procedure AesNiEncryptCtrNist32(
         aesenc xmm3, xmm0
         aesenc xmm4, xmm0
         xor    r9d, ebp
-        movdqu xmm10, dqword ptr [rdi]
+        movups xmm10, dqword ptr [rdi]
         aesenc xmm5, xmm0
         mov    dword ptr [rsp + $7c], r9d
         aesenc xmm6, xmm0
@@ -3024,15 +3024,15 @@ procedure AesNiEncryptCtrNist32(
         movups xmm0, dqword ptr [rcx + $60] // 256-bit AES
         // encrypt 8 * 128-bit blocks (128 bytes) from src into dest
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@edone: movdqu xmm11, dqword ptr [rdi + $10]
+@edone: movups xmm11, dqword ptr [rdi + $10]
         pxor   xmm10, xmm0
-        movdqu xmm12, dqword ptr [rdi + $20]
+        movups xmm12, dqword ptr [rdi + $20]
         pxor   xmm11, xmm0
-        movdqu xmm13, dqword ptr [rdi + $30]
+        movups xmm13, dqword ptr [rdi + $30]
         pxor   xmm12, xmm0
-        movdqu xmm14, dqword ptr [rdi + $40]
+        movups xmm14, dqword ptr [rdi + $40]
         pxor   xmm13, xmm0
-        movdqu xmm15, dqword ptr [rdi + $50]
+        movups xmm15, dqword ptr [rdi + $50]
         pxor   xmm14, xmm0
         pxor   xmm15, xmm0
         aesenc xmm2, xmm1
@@ -3043,38 +3043,38 @@ procedure AesNiEncryptCtrNist32(
         aesenc xmm7, xmm1
         aesenc xmm8, xmm1
         aesenc xmm9, xmm1
-        movdqu xmm1, dqword ptr [rdi + $60]
+        movups xmm1, dqword ptr [rdi + $60]
         lea    rdi, [rdi + $80]
         aesenclast xmm2, xmm10
         pxor   xmm1, xmm0
-        movdqu xmm10, dqword ptr [rdi - $10]
+        movups xmm10, dqword ptr [rdi - $10]
         aesenclast xmm3, xmm11
         pxor   xmm10, xmm0
-        movdqa xmm11, dqword ptr [rsp]
+        movaps xmm11, dqword ptr [rsp]
         aesenclast xmm4, xmm12
         aesenclast xmm5, xmm13
-        movdqa xmm12, dqword ptr [rsp + $10]
-        movdqa xmm13, dqword ptr [rsp + $20]
+        movaps xmm12, dqword ptr [rsp + $10]
+        movaps xmm13, dqword ptr [rsp + $20]
         aesenclast xmm6, xmm14
         aesenclast xmm7, xmm15
-        movdqa xmm14, dqword ptr [rsp + $30]
-        movdqa xmm15, dqword ptr [rsp + $40]
+        movaps xmm14, dqword ptr [rsp + $30]
+        movaps xmm15, dqword ptr [rsp + $40]
         aesenclast xmm8, xmm1
-        movdqa xmm0, dqword ptr [rsp + $50]
+        movaps xmm0, dqword ptr [rsp + $50]
         movups xmm1, dqword ptr [rcx - $70]
         aesenclast xmm9, xmm10
         movups dqword ptr [rsi], xmm2
-        movdqa xmm2, xmm11
+        movaps xmm2, xmm11
         movups dqword ptr [rsi + $10], xmm3
-        movdqa xmm3, xmm12
+        movaps xmm3, xmm12
         movups dqword ptr [rsi + $20], xmm4
-        movdqa xmm4, xmm13
+        movaps xmm4, xmm13
         movups dqword ptr [rsi + $30], xmm5
-        movdqa xmm5, xmm14
+        movaps xmm5, xmm14
         movups dqword ptr [rsi + $40], xmm6
-        movdqa xmm6, xmm15
+        movaps xmm6, xmm15
         movups dqword ptr [rsi + $50], xmm7
-        movdqa xmm7, xmm0
+        movaps xmm7, xmm0
         movups dqword ptr [rsi + $60], xmm8
         movups dqword ptr [rsi + $70], xmm9
         lea    rsi, [rsi + $80]
@@ -3089,7 +3089,7 @@ procedure AesNiEncryptCtrNist32(
         jb     @loop3
         je     @loop4
         shl    eax, $4
-        movdqa xmm8, dqword ptr [rsp + $60]
+        movaps xmm8, dqword ptr [rsp + $60]
         pxor   xmm9, xmm9
         movups xmm0, dqword ptr [rcx + $10]
         aesenc xmm2, xmm1
@@ -3143,18 +3143,18 @@ procedure AesNiEncryptCtrNist32(
         aesenclast xmm7, xmm0
         aesenclast xmm8, xmm0
         aesenclast xmm9, xmm0
-        movdqu xmm13, dqword ptr [rdi + $30]
+        movups xmm13, dqword ptr [rdi + $30]
         pxor   xmm2, xmm10
-        movdqu xmm10, dqword ptr [rdi + $40]
+        movups xmm10, dqword ptr [rdi + $40]
         pxor   xmm3, xmm11
-        movdqu dqword ptr [rsi], xmm2
+        movups dqword ptr [rsi], xmm2
         pxor   xmm4, xmm12
-        movdqu dqword ptr [rsi + $10], xmm3
+        movups dqword ptr [rsi + $10], xmm3
         pxor   xmm5, xmm13
-        movdqu dqword ptr [rsi + $20], xmm4
+        movups dqword ptr [rsi + $20], xmm4
         pxor   xmm6, xmm10
-        movdqu dqword ptr [rsi + $30], xmm5
-        movdqu dqword ptr [rsi + $40], xmm6
+        movups dqword ptr [rsi + $30], xmm5
+        movups dqword ptr [rsi + $40], xmm6
         cmp    rdx, $6
         jb     @done
         movups xmm11, dqword ptr [rdi + $50]
@@ -3188,9 +3188,9 @@ procedure AesNiEncryptCtrNist32(
         xorps  xmm3, xmm11
         movups dqword ptr [rsi + $10], xmm3
         pxor   xmm4, xmm12
-        movdqu dqword ptr [rsi + $20], xmm4
+        movups dqword ptr [rsi + $20], xmm4
         pxor   xmm5, xmm13
-        movdqu dqword ptr [rsi + $30], xmm5
+        movups dqword ptr [rsi + $30], xmm5
         jmp    @done
         // 1..3 interleaved AES blocks
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
@@ -3344,22 +3344,22 @@ procedure AesNiEncryptCtrCrc32(
         sub    rsp, $80
         and    rsp, $fffffffffffffff0
         // precompute the next 8 counters on the stack
-        movdqu xmm2, dqword ptr [rcx].TAesCtc.fIV
+        movups xmm2, dqword ptr [rcx].TAesCtc.fIV
         mov    r8d, dword ptr [rcx + 12].TAesCtc.fIV // get 32-bit counter
         lea    rcx, [rcx].TAesCtc.fAes
-        movdqu xmm0, dqword ptr [rcx]
+        movups xmm0, dqword ptr [rcx]
         pxor   xmm2, xmm0
         mov    ebp, dword ptr [rcx + $c]
-        movdqa dqword ptr [rsp], xmm2
+        movaps dqword ptr [rsp], xmm2
         bswap  r8d
-        movdqa xmm3, xmm2
-        movdqa xmm4, xmm2
-        movdqa xmm5, xmm2
-        movdqa dqword ptr [rsp + $40], xmm2
-        movdqa dqword ptr [rsp + $50], xmm2
-        movdqa dqword ptr [rsp + $60], xmm2
+        movaps xmm3, xmm2
+        movaps xmm4, xmm2
+        movaps xmm5, xmm2
+        movaps dqword ptr [rsp + $40], xmm2
+        movaps dqword ptr [rsp + $50], xmm2
+        movaps dqword ptr [rsp + $60], xmm2
         mov    r10, rdx
-        movdqa dqword ptr [rsp + $70], xmm2
+        movaps dqword ptr [rsp + $70], xmm2
         lea    rax, [r8 + $1]
         lea    rdx, [r8 + $2]
         bswap  eax
@@ -3368,18 +3368,18 @@ procedure AesNiEncryptCtrCrc32(
         xor    edx, ebp
         pinsrd xmm3, eax, $3
         lea    rax, [r8 + $3]
-        movdqa dqword ptr [rsp + $10], xmm3
+        movaps dqword ptr [rsp + $10], xmm3
         pinsrd xmm4, edx, $3
         bswap  eax
         mov    rdx, r10
         lea    r10, [r8 + $4]
-        movdqa dqword ptr [rsp + $20], xmm4
+        movaps dqword ptr [rsp + $20], xmm4
         xor    eax, ebp
         bswap  r10d
         pinsrd xmm5, eax, $3
         movzx  eax, byte ptr [rcx].TAesContext.Rounds
         xor    r10d, ebp
-        movdqa dqword ptr [rsp + $30], xmm5
+        movaps dqword ptr [rsp + $30], xmm5
         lea    r9, [r8 + $5]
         mov    dword ptr [rsp + $4c], r10d
         bswap  r9d
@@ -3396,8 +3396,8 @@ procedure AesNiEncryptCtrCrc32(
         mov    dword ptr [rsp + $7c], r9d
         // start interleaved process
         movups xmm1, dqword ptr [rcx + $10]
-        movdqa xmm6, dqword ptr [rsp + $40]
-        movdqa xmm7, dqword ptr [rsp + $50]
+        movaps xmm6, dqword ptr [rsp + $40]
+        movaps xmm7, dqword ptr [rsp + $50]
         cmp    rdx, $8
         jb     @tail
         sub    rdx, $6
@@ -3406,10 +3406,10 @@ procedure AesNiEncryptCtrCrc32(
         // main loop, processing 8 interleaved CTR per iteration
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @loop8: add    r8d, $8 // our 32-bit CTR
-        movdqa xmm8, dqword ptr [rsp + $60]
+        movaps xmm8, dqword ptr [rsp + $60]
         aesenc xmm2, xmm1
         mov    r9d, r8d
-        movdqa xmm9, dqword ptr [rsp + $70]
+        movaps xmm9, dqword ptr [rsp + $70]
         aesenc xmm3, xmm1
         bswap  r9d
         movups xmm0, dqword ptr [rcx - $60]
@@ -3506,7 +3506,7 @@ procedure AesNiEncryptCtrCrc32(
         aesenc xmm3, xmm0
         aesenc xmm4, xmm0
         xor    r9d, ebp
-        movdqu xmm10, dqword ptr [rdi]
+        movups xmm10, dqword ptr [rdi]
         aesenc xmm5, xmm0
         mov    dword ptr [rsp + $7c], r9d
         aesenc xmm6, xmm0
@@ -3593,15 +3593,15 @@ procedure AesNiEncryptCtrCrc32(
         crc32  r14d, dword ptr [rdi + $78]
         crc32  r15d, dword ptr [rdi + $7c]
         // encrypt
-        movdqu xmm11, dqword ptr [rdi + $10]
+        movups xmm11, dqword ptr [rdi + $10]
         pxor   xmm10, xmm0
-        movdqu xmm12, dqword ptr [rdi + $20]
+        movups xmm12, dqword ptr [rdi + $20]
         pxor   xmm11, xmm0
-        movdqu xmm13, dqword ptr [rdi + $30]
+        movups xmm13, dqword ptr [rdi + $30]
         pxor   xmm12, xmm0
-        movdqu xmm14, dqword ptr [rdi + $40]
+        movups xmm14, dqword ptr [rdi + $40]
         pxor   xmm13, xmm0
-        movdqu xmm15, dqword ptr [rdi + $50]
+        movups xmm15, dqword ptr [rdi + $50]
         pxor   xmm14, xmm0
         pxor   xmm15, xmm0
         mov    dword ptr [rbx], r12d
@@ -3616,38 +3616,38 @@ procedure AesNiEncryptCtrCrc32(
         aesenc xmm7, xmm1
         aesenc xmm8, xmm1
         aesenc xmm9, xmm1
-        movdqu xmm1, dqword ptr [rdi + $60]
+        movups xmm1, dqword ptr [rdi + $60]
         lea    rdi, [rdi + $80]
         aesenclast xmm2, xmm10
         pxor   xmm1, xmm0
-        movdqu xmm10, dqword ptr [rdi - $10]
+        movups xmm10, dqword ptr [rdi - $10]
         aesenclast xmm3, xmm11
         pxor   xmm10, xmm0
-        movdqa xmm11, dqword ptr [rsp]
+        movaps xmm11, dqword ptr [rsp]
         aesenclast xmm4, xmm12
         aesenclast xmm5, xmm13
-        movdqa xmm12, dqword ptr [rsp + $10]
-        movdqa xmm13, dqword ptr [rsp + $20]
+        movaps xmm12, dqword ptr [rsp + $10]
+        movaps xmm13, dqword ptr [rsp + $20]
         aesenclast xmm6, xmm14
         aesenclast xmm7, xmm15
-        movdqa xmm14, dqword ptr [rsp + $30]
-        movdqa xmm15, dqword ptr [rsp + $40]
+        movaps xmm14, dqword ptr [rsp + $30]
+        movaps xmm15, dqword ptr [rsp + $40]
         aesenclast xmm8, xmm1
-        movdqa xmm0, dqword ptr [rsp + $50]
+        movaps xmm0, dqword ptr [rsp + $50]
         movups xmm1, dqword ptr [rcx - $70]
         aesenclast xmm9, xmm10
         movups dqword ptr [rsi], xmm2
-        movdqa xmm2, xmm11
+        movaps xmm2, xmm11
         movups dqword ptr [rsi + $10], xmm3
-        movdqa xmm3, xmm12
+        movaps xmm3, xmm12
         movups dqword ptr [rsi + $20], xmm4
-        movdqa xmm4, xmm13
+        movaps xmm4, xmm13
         movups dqword ptr [rsi + $30], xmm5
-        movdqa xmm5, xmm14
+        movaps xmm5, xmm14
         movups dqword ptr [rsi + $40], xmm6
-        movdqa xmm6, xmm15
+        movaps xmm6, xmm15
         movups dqword ptr [rsi + $50], xmm7
-        movdqa xmm7, xmm0
+        movaps xmm7, xmm0
         movups dqword ptr [rsi + $60], xmm8
         movups dqword ptr [rsi + $70], xmm9
         // MAC encrypted
@@ -3707,7 +3707,7 @@ procedure AesNiEncryptCtrCrc32(
         je     @loop4
         // trailing 5..7 interleaved AES blocks
         shl    eax, $4
-        movdqa xmm8, dqword ptr [rsp + $60]
+        movaps xmm8, dqword ptr [rsp + $60]
         pxor   xmm9, xmm9
         movups xmm0, dqword ptr [rcx + $10]
         aesenc xmm2, xmm1
@@ -3761,18 +3761,18 @@ procedure AesNiEncryptCtrCrc32(
         aesenclast xmm7, xmm0
         aesenclast xmm8, xmm0
         aesenclast xmm9, xmm0
-        movdqu xmm13, dqword ptr [rdi + $30]
+        movups xmm13, dqword ptr [rdi + $30]
         pxor   xmm2, xmm10
-        movdqu xmm10, dqword ptr [rdi + $40]
+        movups xmm10, dqword ptr [rdi + $40]
         pxor   xmm3, xmm11
-        movdqu dqword ptr [rsi], xmm2
+        movups dqword ptr [rsi], xmm2
         pxor   xmm4, xmm12
-        movdqu dqword ptr [rsi + $10], xmm3
+        movups dqword ptr [rsi + $10], xmm3
         pxor   xmm5, xmm13
-        movdqu dqword ptr [rsi + $20], xmm4
+        movups dqword ptr [rsi + $20], xmm4
         pxor   xmm6, xmm10
-        movdqu dqword ptr [rsi + $30], xmm5
-        movdqu dqword ptr [rsi + $40], xmm6
+        movups dqword ptr [rsi + $30], xmm5
+        movups dqword ptr [rsi + $40], xmm6
         cmp    rdx, $6
         jb     @donec
         movups xmm11, dqword ptr [rdi + $50]
@@ -3806,9 +3806,9 @@ procedure AesNiEncryptCtrCrc32(
         xorps  xmm3, xmm11
         movups dqword ptr [rsi + $10], xmm3
         pxor   xmm4, xmm12
-        movdqu dqword ptr [rsi + $20], xmm4
+        movups dqword ptr [rsi + $20], xmm4
         pxor   xmm5, xmm13
-        movdqu dqword ptr [rsi + $30], xmm5
+        movups dqword ptr [rsi + $30], xmm5
         jmp    @donec
         // 1..3 interleaved AES blocks
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
@@ -4422,46 +4422,46 @@ end;
 procedure GcmAvxInit(ptab, ks: pointer; rounds: cardinal);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=ptab, rdx/rsi=ks, r8/rdx=kslen
-        movdqa  xmm15, dqword ptr [rip + @bswapMask]
-        movdqa  xmm14, dqword ptr [rip + @gcmPoly]
-        movdqu  xmm0, dqword ptr [ks]
-        movdqu  xmm11, dqword ptr [ks + 10H]
+        movaps  xmm15, dqword ptr [rip + @bswapMask]
+        movaps  xmm14, dqword ptr [rip + @gcmPoly]
+        movups  xmm0, dqword ptr [ks]
+        movups  xmm11, dqword ptr [ks + 10H]
         aesenc  xmm0, xmm11
-        movdqu  xmm11, dqword ptr [ks + 20H]
+        movups  xmm11, dqword ptr [ks + 20H]
         aesenc  xmm0, xmm11
-        movdqu  xmm11, dqword ptr [ks + 30H]
+        movups  xmm11, dqword ptr [ks + 30H]
         aesenc  xmm0, xmm11
-        movdqu  xmm11, dqword ptr [ks + 40H]
+        movups  xmm11, dqword ptr [ks + 40H]
         aesenc  xmm0, xmm11
-        movdqu  xmm11, dqword ptr [ks + 50H]
+        movups  xmm11, dqword ptr [ks + 50H]
         aesenc  xmm0, xmm11
-        movdqu  xmm11, dqword ptr [ks + 60H]
+        movups  xmm11, dqword ptr [ks + 60H]
         aesenc  xmm0, xmm11
-        movdqu  xmm11, dqword ptr [ks + 70H]
+        movups  xmm11, dqword ptr [ks + 70H]
         aesenc  xmm0, xmm11
-        movdqu  xmm11, dqword ptr [ks + 80H]
+        movups  xmm11, dqword ptr [ks + 80H]
         aesenc  xmm0, xmm11
-        movdqu  xmm11, dqword ptr [ks + 90H]
+        movups  xmm11, dqword ptr [ks + 90H]
         aesenc  xmm0, xmm11
-        movdqu  xmm11, dqword ptr [ks + 0A0H]
+        movups  xmm11, dqword ptr [ks + 0A0H]
         cmp     rounds, 12
         jc      @last
         // end of AES-128
         aesenc  xmm0, xmm11
-        movdqu  xmm11, dqword ptr [ks + 0B0H]
+        movups  xmm11, dqword ptr [ks + 0B0H]
         aesenc  xmm0, xmm11
-        movdqu  xmm11, dqword ptr [ks + 0C0H]
+        movups  xmm11, dqword ptr [ks + 0C0H]
         jz      @last
         // end of AES-192
         aesenc  xmm0, xmm11
-        movdqu  xmm11, dqword ptr [ks + 0D0H]
+        movups  xmm11, dqword ptr [ks + 0D0H]
         aesenc  xmm0, xmm11
-        movdqu  xmm11, dqword ptr [ks + 0E0H]
+        movups  xmm11, dqword ptr [ks + 0E0H]
         // end of AES-256
 @last:  aesenclast xmm0, xmm11
         pshufb  xmm0, xmm15
         pshufd  xmm11, xmm0, 0FFH
-        movdqu  xmm12, xmm0
+        movups  xmm12, xmm0
         psrad   xmm11, 31
         pand    xmm11, xmm14
         psrld   xmm12, 31
@@ -4469,17 +4469,17 @@ procedure GcmAvxInit(ptab, ks: pointer; rounds: cardinal);
         pslld   xmm0, 1
         pxor    xmm0, xmm11
         pxor    xmm0, xmm12
-        movdqu  dqword ptr [ptab + 0E0H], xmm0
+        movups  dqword ptr [ptab + 0E0H], xmm0
         pshufd  xmm1, xmm0, 4EH
         pxor    xmm1, xmm0
-        movdqu  dqword ptr [ptab + 0F0H], xmm1
-        movdqu  xmm2, xmm0
-        movdqu  xmm3, xmm1
+        movups  dqword ptr [ptab + 0F0H], xmm1
+        movups  xmm2, xmm0
+        movups  xmm3, xmm1
         mov     al, 7
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@init:  movdqu  xmm11, xmm2
-        movdqu  xmm12, xmm2
-        movdqu  xmm13, xmm3
+@init:  movups  xmm11, xmm2
+        movups  xmm12, xmm2
+        movups  xmm13, xmm3
         // pclmulqdq xmm11, xmm0, 00H
         // pclmulqdq xmm12, xmm0, 11H
         // pclmulqdq xmm13, xmm1, 00H
@@ -4488,26 +4488,26 @@ procedure GcmAvxInit(ptab, ks: pointer; rounds: cardinal);
         db $66, $44, $0F, $3A, $44, $E9, $00
         pxor    xmm13, xmm11
         pxor    xmm13, xmm12
-        movdqu  xmm4, xmm13
+        movups  xmm4, xmm13
         pslldq  xmm4, 8
         psrldq  xmm13, 8
         pxor    xmm11, xmm4
         pxor    xmm12, xmm13
-        movdqu  xmm2, xmm14
+        movups  xmm2, xmm14
         // pclmulqdq xmm2, xmm11, 01H
         db $66, $41, $0F, $3A, $44, $D3, $01
         pshufd  xmm11, xmm11, 4EH
         pxor    xmm11, xmm2
-        movdqu  xmm2, xmm14
+        movups  xmm2, xmm14
         // pclmulqdq xmm2, xmm11, 01H
         db $66, $41, $0F, $3A, $44, $D3, $01
         pshufd  xmm11, xmm11, 4EH
         pxor    xmm2, xmm11
         pxor    xmm2, xmm12
-        movdqu  dqword ptr [ptab + 0C0H], xmm2
+        movups  dqword ptr [ptab + 0C0H], xmm2
         pshufd  xmm3, xmm2, 4EH
         pxor    xmm3, xmm2
-        movdqu  dqword ptr [ptab + 0D0H], xmm3
+        movups  dqword ptr [ptab + 0D0H], xmm3
         lea     ptab, [ptab - 20H]
         dec     al
         jne     @init
@@ -4525,23 +4525,23 @@ end;
 procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rdi=ptab, rsi=data, rdx=datalen, rcx=hash
-        movdqu  xmm8, dqword ptr [hash]
-        movdqa  xmm15, dqword ptr [rip + @bswapMask]
-        movdqa  xmm14, dqword ptr [rip + @gcmPoly]
+        movups  xmm8, dqword ptr [hash]
+        movaps  xmm15, dqword ptr [rip + @bswapMask]
+        movaps  xmm14, dqword ptr [rip + @gcmPoly]
         test    datalen, datalen
         jz      @done
         cmp     datalen, 128
         jc      @by1
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @by8:   sub     datalen, 128
-        movdqu  xmm0, dqword ptr [data]
-        movdqu  xmm1, dqword ptr [data + 10H]
-        movdqu  xmm2, dqword ptr [data + 20H]
-        movdqu  xmm3, dqword ptr [data + 30H]
-        movdqu  xmm4, dqword ptr [data + 40H]
-        movdqu  xmm5, dqword ptr [data + 50H]
-        movdqu  xmm6, dqword ptr [data + 60H]
-        movdqu  xmm7, dqword ptr [data + 70H]
+        movups  xmm0, dqword ptr [data]
+        movups  xmm1, dqword ptr [data + 10H]
+        movups  xmm2, dqword ptr [data + 20H]
+        movups  xmm3, dqword ptr [data + 30H]
+        movups  xmm4, dqword ptr [data + 40H]
+        movups  xmm5, dqword ptr [data + 50H]
+        movups  xmm6, dqword ptr [data + 60H]
+        movups  xmm7, dqword ptr [data + 70H]
         lea     data, [data + 80H]
         pshufb  xmm0, xmm15
         pshufb  xmm1, xmm15
@@ -4552,9 +4552,9 @@ procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
         pshufb  xmm6, xmm15
         pshufb  xmm7, xmm15
         pxor    xmm0, xmm8
-        movdqu  xmm8, dqword ptr [ptab]
-        movdqu  xmm10, dqword ptr [ptab + 10H]
-        movdqu  xmm9, xmm8
+        movups  xmm8, dqword ptr [ptab]
+        movups  xmm10, dqword ptr [ptab + 10H]
+        movups  xmm9, xmm8
         pshufd  xmm12, xmm0, 4EH
         pxor    xmm12, xmm0
         // pclmulqdq xmm8, xmm0, 00H
@@ -4563,8 +4563,8 @@ procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
         db $66, $44, $0F, $3A, $44, $C0, $00
         db $66, $44, $0F, $3A, $44, $C8, $11
         db $66, $45, $0F, $3A, $44, $D4, $00
-        movdqu  xmm12, dqword ptr [ptab + 20H]
-        movdqu  xmm13, xmm12
+        movups  xmm12, dqword ptr [ptab + 20H]
+        movups  xmm13, xmm12
         // pclmulqdq xmm12, xmm1, 00H
         db $66, $44, $0F, $3A, $44, $E1, $00
         pxor    xmm8, xmm12
@@ -4573,12 +4573,12 @@ procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
         pxor    xmm9, xmm13
         pshufd  xmm12, xmm1, 4EH
         pxor    xmm1, xmm12
-        movdqu  xmm12, dqword ptr [ptab + 30H]
+        movups  xmm12, dqword ptr [ptab + 30H]
         // pclmulqdq xmm12, xmm1, 00H
         db $66, $44, $0F, $3A, $44, $E1, $00
         pxor    xmm10, xmm12
-        movdqu  xmm12, dqword ptr [ptab + 40H]
-        movdqu  xmm13, xmm12
+        movups  xmm12, dqword ptr [ptab + 40H]
+        movups  xmm13, xmm12
         // pclmulqdq xmm12, xmm2, 00H
         db $66, $44, $0F, $3A, $44, $E2, $00
         pxor    xmm8, xmm12
@@ -4587,12 +4587,12 @@ procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
         pxor    xmm9, xmm13
         pshufd  xmm12, xmm2, 4EH
         pxor    xmm2, xmm12
-        movdqu  xmm12, dqword ptr [ptab + 50H]
+        movups  xmm12, dqword ptr [ptab + 50H]
         // pclmulqdq xmm12, xmm2, 00H
         db $66, $44, $0F, $3A, $44, $E2, $00
         pxor    xmm10, xmm12
-        movdqu  xmm12, dqword ptr [ptab + 60H]
-        movdqu  xmm13, xmm12
+        movups  xmm12, dqword ptr [ptab + 60H]
+        movups  xmm13, xmm12
         // pclmulqdq xmm12, xmm3, 00H
         db $66, $44, $0F, $3A, $44, $E3, $00
         pxor    xmm8, xmm12
@@ -4601,12 +4601,12 @@ procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
         pxor    xmm9, xmm13
         pshufd  xmm12, xmm3, 4EH
         pxor    xmm3, xmm12
-        movdqu  xmm12, dqword ptr [ptab + 70H]
+        movups  xmm12, dqword ptr [ptab + 70H]
         // pclmulqdq xmm12, xmm3, 00H
         db $66, $44, $0F, $3A, $44, $E3, $00
         pxor    xmm10, xmm12
-        movdqu  xmm12, dqword ptr [ptab + 80H]
-        movdqu  xmm13, xmm12
+        movups  xmm12, dqword ptr [ptab + 80H]
+        movups  xmm13, xmm12
         // pclmulqdq xmm12, xmm4, 00H
         db $66, $44, $0F, $3A, $44, $E4, $00
         pxor    xmm8, xmm12
@@ -4615,12 +4615,12 @@ procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
         pxor    xmm9, xmm13
         pshufd  xmm12, xmm4, 4EH
         pxor    xmm4, xmm12
-        movdqu  xmm12, dqword ptr [ptab + 90H]
+        movups  xmm12, dqword ptr [ptab + 90H]
         // pclmulqdq xmm12, xmm4, 00H
         db $66, $44, $0F, $3A, $44, $E4, $00
         pxor    xmm10, xmm12
-        movdqu  xmm12, dqword ptr [ptab + 0A0H]
-        movdqu  xmm13, xmm12
+        movups  xmm12, dqword ptr [ptab + 0A0H]
+        movups  xmm13, xmm12
         // pclmulqdq xmm12, xmm5, 00H
         db $66, $44, $0F, $3A, $44, $E5, $00
         pxor    xmm8, xmm12
@@ -4629,12 +4629,12 @@ procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
         pxor    xmm9, xmm13
         pshufd  xmm12, xmm5, 4EH
         pxor    xmm5, xmm12
-        movdqu  xmm12, dqword ptr [ptab + 0B0H]
+        movups  xmm12, dqword ptr [ptab + 0B0H]
         // pclmulqdq xmm12, xmm5, 00H
         db $66, $44, $0F, $3A, $44, $E5, $00
         pxor    xmm10, xmm12
-        movdqu  xmm12, dqword ptr [ptab + 0C0H]
-        movdqu  xmm13, xmm12
+        movups  xmm12, dqword ptr [ptab + 0C0H]
+        movups  xmm13, xmm12
         // pclmulqdq xmm12, xmm6, 00H
         db $66, $44, $0F, $3A, $44, $E6, $00
         pxor    xmm8, xmm12
@@ -4643,12 +4643,12 @@ procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
         pxor    xmm9, xmm13
         pshufd  xmm12, xmm6, 4EH
         pxor    xmm6, xmm12
-        movdqu  xmm12, dqword ptr [ptab + 0D0H]
+        movups  xmm12, dqword ptr [ptab + 0D0H]
         // pclmulqdq xmm12, xmm6, 00H
         db $66, $44, $0F, $3A, $44, $E6, $00
         pxor    xmm10, xmm12
-        movdqu  xmm12, dqword ptr [ptab + 0E0H]
-        movdqu  xmm13, xmm12
+        movups  xmm12, dqword ptr [ptab + 0E0H]
+        movups  xmm13, xmm12
         // pclmulqdq xmm12, xmm7, 00H
         db $66, $44, $0F, $3A, $44, $E7, $00
         pxor    xmm8, xmm12
@@ -4657,23 +4657,23 @@ procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
         pxor    xmm9, xmm13
         pshufd  xmm12, xmm7, 4EH
         pxor    xmm7, xmm12
-        movdqu  xmm12, dqword ptr [ptab + 0F0H]
+        movups  xmm12, dqword ptr [ptab + 0F0H]
         // pclmulqdq xmm12, xmm7, 00H
         db $66, $44, $0F, $3A, $44, $E7, $00
         pxor    xmm10, xmm12
         pxor    xmm10, xmm8
         pxor    xmm10, xmm9
-        movdqu  xmm11, xmm10
+        movups  xmm11, xmm10
         psrldq  xmm10, 8
         pslldq  xmm11, 8
         pxor    xmm9, xmm10
         pxor    xmm8, xmm11
-        movdqu  xmm11, xmm14
+        movups  xmm11, xmm14
         // pclmulqdq xmm11, xmm8, 01H
         db $66, $45, $0F, $3A, $44, $D8, $01
         pshufd  xmm8, xmm8, 4EH
         pxor    xmm8, xmm11
-        movdqu  xmm11, xmm14
+        movups  xmm11, xmm14
         // pclmulqdq xmm11, xmm8, 01H
         db $66, $45, $0F, $3A, $44, $D8, $01
         pshufd  xmm8, xmm8, 4EH
@@ -4681,18 +4681,18 @@ procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
         pxor    xmm8, xmm9
         cmp     datalen, 128
         jnc     @by8
-@by1:   movdqu  xmm12, dqword ptr [ptab + 0E0H]
-        movdqu  xmm13, dqword ptr [ptab + 0F0H]
+@by1:   movups  xmm12, dqword ptr [ptab + 0E0H]
+        movups  xmm13, dqword ptr [ptab + 0F0H]
         cmp     datalen, 16
         jc      @sml
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @next:  sub     datalen, 16
-        movdqu  xmm0, dqword ptr [data]
+        movups  xmm0, dqword ptr [data]
 @s:     pshufb  xmm0, xmm15
         pxor    xmm0, xmm8
-        movdqu  xmm8, xmm12
-        movdqu  xmm10, xmm13
-        movdqu  xmm9, xmm12
+        movups  xmm8, xmm12
+        movups  xmm10, xmm13
+        movups  xmm9, xmm12
         pshufd  xmm11, xmm0, 4EH
         pxor    xmm11, xmm0
         // pclmulqdq xmm8, xmm0, 00H
@@ -4703,17 +4703,17 @@ procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
         db $66, $45, $0F, $3A, $44, $D3, $00
         pxor    xmm10, xmm8
         pxor    xmm10, xmm9
-        movdqu  xmm11, xmm10
+        movups  xmm11, xmm10
         psrldq  xmm10, 8
         pslldq  xmm11, 8
         pxor    xmm9, xmm10
         pxor    xmm8, xmm11
-        movdqu  xmm11, xmm14
+        movups  xmm11, xmm14
         // pclmulqdq xmm11, xmm8, 01H
         db $66, $45, $0F, $3A, $44, $D8, $01
         pshufd  xmm8, xmm8, 4EH
         pxor    xmm8, xmm11
-        movdqu  xmm11, xmm14
+        movups  xmm11, xmm14
         // pclmulqdq xmm11, xmm8, 01H
         db $66, $45, $0F, $3A, $44, $D8, $01
         pshufd  xmm8, xmm8, 4EH
@@ -4740,7 +4740,7 @@ procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
 @gcmPoly:
         dq $0000000000000001
         dq $C200000000000000
-@done:  movdqu  dqword ptr [hash], xmm8
+@done:  movups  dqword ptr [hash], xmm8
 end;
 
 procedure GcmAvxGetTag(ptab, mask, hash: pointer; plen, dlen: PtrInt);
@@ -4758,17 +4758,17 @@ procedure GcmAvxGetTag(ptab, mask, hash: pointer; plen, dlen: PtrInt);
         mov     rax, r8
         {$endif WIN64ABI}
         shl     rcx, 3
-        movdqu  xmm8, dqword ptr [rdx]
-        movdqu  xmm13, dqword ptr [rsi]
-        movdqa  xmm15, dqword ptr [rip + @bswapMask]
-        movdqa  xmm14, dqword ptr [rip + @gcmPoly]
+        movups  xmm8, dqword ptr [rdx]
+        movups  xmm13, dqword ptr [rsi]
+        movaps  xmm15, dqword ptr [rip + @bswapMask]
+        movaps  xmm14, dqword ptr [rip + @gcmPoly]
         shl     rax, 3
         movq    xmm0, rcx
         pinsrq  xmm0, rax, 1
         pxor    xmm0, xmm8
-        movdqu  xmm8, dqword ptr [rdi + 0E0H]
-        movdqu  xmm10, dqword ptr [rdi + 0F0H]
-        movdqu  xmm9, xmm8
+        movups  xmm8, dqword ptr [rdi + 0E0H]
+        movups  xmm10, dqword ptr [rdi + 0F0H]
+        movups  xmm9, xmm8
         // pclmulqdq xmm8, xmm0, 00H
         // pclmulqdq xmm9, xmm0, 11H
         db $66, $44, $0F, $3A, $44, $C0, $00
@@ -4779,17 +4779,17 @@ procedure GcmAvxGetTag(ptab, mask, hash: pointer; plen, dlen: PtrInt);
         db $66, $45, $0F, $3A, $44, $D3, $00
         pxor    xmm10, xmm8
         pxor    xmm10, xmm9
-        movdqu  xmm11, xmm10
+        movups  xmm11, xmm10
         psrldq  xmm10, 8
         pslldq  xmm11, 8
         pxor    xmm9, xmm10
         pxor    xmm8, xmm11
-        movdqu  xmm11, xmm14
+        movups  xmm11, xmm14
         // pclmulqdq xmm11, xmm8, 01H
         db $66, $45, $0F, $3A, $44, $D8, $01
         pshufd  xmm8, xmm8, 4EH
         pxor    xmm8, xmm11
-        movdqu  xmm11, xmm14
+        movups  xmm11, xmm14
         // pclmulqdq xmm11, xmm8, 01H
         db $66, $45, $0F, $3A, $44, $D8, $01
         pshufd  xmm8, xmm8, 4EH
@@ -4797,7 +4797,7 @@ procedure GcmAvxGetTag(ptab, mask, hash: pointer; plen, dlen: PtrInt);
         pxor    xmm8, xmm9
         pshufb  xmm8, xmm15
         pxor    xmm8, xmm13
-        movdqu  dqword ptr [rdx], xmm8
+        movups  dqword ptr [rdx], xmm8
         {$ifdef WIN64ABI}
         pop    rdi
         pop    rsi
@@ -4820,7 +4820,7 @@ procedure gf_mul_pclmulqdq(a, b: pointer);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         movups  xmm0, dqword ptr [a]
         movups  xmm1, dqword ptr [b]
-        movdqa  xmm10, dqword ptr [rip + @swap]
+        movaps  xmm10, dqword ptr [rip + @swap]
         pshufb  xmm0, xmm10
         pshufb  xmm1, xmm10
         movdqa  xmm5, xmm0
@@ -4923,9 +4923,9 @@ end;
 procedure _AesNiHash128(hash: PHash128; data: pointer; len: PtrUInt);
   {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=seed&result, rdx/rsi=data, r8/rdx=len
-        movdqu  xmm0, dqword ptr [hash]
+        movups  xmm0, dqword ptr [hash]
         call    _AesNiHashXmm0
-        movdqu  dqword ptr [hash], xmm0
+        movups  dqword ptr [hash], xmm0
 end;
 
 function _AesNiHash32(seed: cardinal; data: pointer; len: PtrUInt): cardinal;
@@ -4949,7 +4949,7 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         shl     r10, 4
         movdqa  xmm1, xmm0
         pxor    xmm0, dqword ptr [rax]
-        movdqu  xmm1, dqword ptr [data + len - 16] // no read after end of page
+        movups  xmm1, dqword ptr [data + len - 16] // no read after end of page
         lea     r11, [rip + @shifts] // (heap has header so no read before EOP)
         aesenc  xmm0, xmm0
         cmp     len, 16 // 1..16 bytes have no branch
@@ -4968,8 +4968,8 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         ja      @33up
         pxor    xmm1, dqword ptr [rax + 16] // 17..32 bytes
         aesenc  xmm1, xmm1
-        movdqu  xmm2, dqword ptr [data]
-        movdqu  xmm3, dqword ptr [data + len - 16] // may overlap
+        movups  xmm2, dqword ptr [data]
+        movups  xmm3, dqword ptr [data + len - 16] // may overlap
         aesenc  xmm2, xmm0
         aesenc  xmm3, xmm1
         aesenc  xmm2, xmm2
@@ -4990,10 +4990,10 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         aesenc  xmm1, xmm1
         aesenc  xmm2, xmm2
         aesenc  xmm3, xmm3
-        movdqu  xmm4, dqword ptr [data]
-        movdqu  xmm5, dqword ptr [data + 16]
-        movdqu  xmm6, dqword ptr [data + len - 32] // may overlap
-        movdqu  xmm7, dqword ptr [data + len - 16]
+        movups  xmm4, dqword ptr [data]
+        movups  xmm5, dqword ptr [data + 16]
+        movups  xmm6, dqword ptr [data + len - 32] // may overlap
+        movups  xmm7, dqword ptr [data + len - 16]
         aesenc  xmm4, xmm0
         aesenc  xmm5, xmm1
         aesenc  xmm6, xmm2
@@ -5034,14 +5034,14 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         aesenc  xmm5, xmm5
         aesenc  xmm6, xmm6
         aesenc  xmm7, xmm7
-        movdqu  xmm8, dqword ptr [data]
-        movdqu  xmm9, dqword ptr [data + 16]
-        movdqu  xmm10, dqword ptr [data + 32]
-        movdqu  xmm11, dqword ptr [data + 48]
-        movdqu  xmm12, dqword ptr [data + len - 64] // may overlap
-        movdqu  xmm13, dqword ptr [data + len - 48]
-        movdqu  xmm14, dqword ptr [data + len - 32]
-        movdqu  xmm15, dqword ptr [data + len - 16]
+        movups  xmm8, dqword ptr [data]
+        movups  xmm9, dqword ptr [data + 16]
+        movups  xmm10, dqword ptr [data + 32]
+        movups  xmm11, dqword ptr [data + 48]
+        movups  xmm12, dqword ptr [data + len - 64] // may overlap
+        movups  xmm13, dqword ptr [data + len - 48]
+        movups  xmm14, dqword ptr [data + len - 32]
+        movups  xmm15, dqword ptr [data + len - 16]
         pxor    xmm8, xmm0
         pxor    xmm9, xmm1
         pxor    xmm10, xmm2
@@ -5123,14 +5123,14 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         aesenc  xmm5, xmm5
         aesenc  xmm6, xmm6
         aesenc  xmm7, xmm7
-        movdqu  xmm8, dqword ptr [data + len - 128] // may overlap
-        movdqu  xmm9, dqword ptr [data + len - 112]
-        movdqu  xmm10, dqword ptr [data + len - 96]
-        movdqu  xmm11, dqword ptr [data + len - 80]
-        movdqu  xmm12, dqword ptr [data + len - 64]
-        movdqu  xmm13, dqword ptr [data + len - 48]
-        movdqu  xmm14, dqword ptr [data + len - 32]
-        movdqu  xmm15, dqword ptr [data + len - 16]
+        movups  xmm8, dqword ptr [data + len - 128] // may overlap
+        movups  xmm9, dqword ptr [data + len - 112]
+        movups  xmm10, dqword ptr [data + len - 96]
+        movups  xmm11, dqword ptr [data + len - 80]
+        movups  xmm12, dqword ptr [data + len - 64]
+        movups  xmm13, dqword ptr [data + len - 48]
+        movups  xmm14, dqword ptr [data + len - 32]
+        movups  xmm15, dqword ptr [data + len - 16]
         pxor    xmm8, xmm0
         pxor    xmm9, xmm1
         pxor    xmm10, xmm2
@@ -5151,18 +5151,18 @@ procedure _AesNiHashXmm0(seedfromhash32: cardinal; data: pointer; len: PtrUInt);
         aesenc  xmm13, xmm13
         aesenc  xmm14, xmm14
         aesenc  xmm15, xmm15
-        movdqu  xmm0, dqword ptr [data]
-        movdqu  xmm1, dqword ptr [data + 16]
-        movdqu  xmm2, dqword ptr [data + 32]
-        movdqu  xmm3, dqword ptr [data + 48]
+        movups  xmm0, dqword ptr [data]
+        movups  xmm1, dqword ptr [data + 16]
+        movups  xmm2, dqword ptr [data + 32]
+        movups  xmm3, dqword ptr [data + 48]
         aesenc  xmm8, xmm0
         aesenc  xmm9, xmm1
         aesenc  xmm10, xmm2
         aesenc  xmm11, xmm3
-        movdqu  xmm4, dqword ptr [data + 64]
-        movdqu  xmm5, dqword ptr [data + 80]
-        movdqu  xmm6, dqword ptr [data + 96]
-        movdqu  xmm7, dqword ptr [data + 112]
+        movups  xmm4, dqword ptr [data + 64]
+        movups  xmm5, dqword ptr [data + 80]
+        movups  xmm6, dqword ptr [data + 96]
+        movups  xmm7, dqword ptr [data + 112]
         aesenc  xmm12, xmm4
         aesenc  xmm13, xmm5
         aesenc  xmm14, xmm6

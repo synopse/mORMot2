@@ -129,7 +129,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         movups  [r9], xmm2  // first 16
         ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@fwdnv: movups  xmm0, oword ptr [src + rax]  // non-temporal loop
+@fwdnv: movdqu  xmm0, oword ptr [src + rax]  // non-temporal loop
         movntdq [r10 + rax], xmm0
         add     rax, 16
         jl      @fwdnv
@@ -202,7 +202,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         mov     byte ptr [dst], al
         ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@bwdnv: movups  xmm0, oword ptr [src + rax]  // non-temporal loop
+@bwdnv: movdqu  xmm0, oword ptr [src + rax]  // non-temporal loop
         movntdq oword ptr [dst + rax], xmm0
         sub     rax, 16
         jg      @bwdnv

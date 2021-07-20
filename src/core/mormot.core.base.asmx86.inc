@@ -61,8 +61,8 @@ asm
         mov     ecx, eax
         pshufd  xmm0, xmm0, 0
         and     ecx, 15                 // 16-byte align writes
-        movdqu  dqword ptr [eax], xmm0       // fill first 16 bytes
-        movdqu  dqword ptr [eax + edx], xmm0 // fill last 16 bytes
+        movups  dqword ptr [eax], xmm0       // fill first 16 bytes
+        movups  dqword ptr [eax + edx], xmm0 // fill last 16 bytes
         sub     ecx, 16
         sub     eax, ecx
         add     edx, ecx
@@ -71,7 +71,7 @@ asm
         cmp     edx, - CPUCACHESSE2 * 1024 // assume 512KB of L1 cache
         jl      @nv
 // {$ifdef FPC} align 16 {$endif} natural alignment is actually OK
-@loop:  movdqa  dqword ptr [eax + edx], xmm0 // fill 16 bytes per loop
+@loop:  movaps  dqword ptr [eax + edx], xmm0 // fill 16 bytes per loop
         add     edx, 16
         jl      @loop
         ret
@@ -204,10 +204,10 @@ asm
         ja      @ermsf
         {$endif WITH_ERMS}
         push    edx
-        movdqu  xmm2, dqword ptr [eax]       // first 16
+        movups  xmm2, dqword ptr [eax]       // first 16
         lea     eax, [eax + ecx - 16]
         lea     ecx, [ecx + edx - 16]
-        movdqu  xmm1, dqword ptr [eax]       // last 16
+        movups  xmm1, dqword ptr [eax]       // last 16
         push    ecx
         neg     ecx
         and     edx,  - 16             // 16-byte align writes
@@ -216,13 +216,13 @@ asm
         cmp     ecx, - CPUCACHESSE2 * 1024 // assume 512KB of L1 cache
         jl      @fwnv
         {$ifdef FPC} align 16 {$endif}
-@fwd:   movdqu  xmm0, dqword ptr [eax + ecx] // move by 16 bytes
-        movdqa  dqword ptr [edx + ecx], xmm0
+@fwd:   movups  xmm0, dqword ptr [eax + ecx] // move by 16 bytes
+        movaps   dqword ptr [edx + ecx], xmm0
         add     ecx, 16
         jl      @fwd
-@fwde:  movdqu  dqword ptr [edx], xmm1       // last 16
+@fwde:  movups  dqword ptr [edx], xmm1       // last 16
         pop     edx
-        movdqu  dqword ptr [edx], xmm2       // first 16
+        movups  dqword ptr [edx], xmm2       // first 16
         ret
         {$ifdef FPC} align 16 {$endif}
 @fwnv:  movdqu  xmm0, dqword ptr [eax + ecx]
@@ -245,19 +245,19 @@ asm
         {$endif WITH_ERMS}
         sub     ecx, 16
         push    ecx
-        movdqu  xmm2, dqword ptr [eax + ecx] // last 16
-        movdqu  xmm1, dqword ptr [eax]       // first 16
+        movups  xmm2, dqword ptr [eax + ecx] // last 16
+        movups  xmm1, dqword ptr [eax]       // first 16
         add     ecx, edx
         and     ecx, -16              // 16-byte align writes
         sub     ecx, edx
         {$ifdef FPC} align 16 {$endif}
-@bwd:   movdqu  xmm0, dqword ptr [eax + ecx]
-        movdqa  dqword ptr [edx + ecx], xmm0
+@bwd:   movups  xmm0, dqword ptr [eax + ecx]
+        movaps  dqword ptr [edx + ecx], xmm0
         sub     ecx, 16
         jg      @bwd
         pop     ecx
-        movdqu  dqword ptr [edx], xmm1       // first 16
-        movdqu  dqword ptr [edx + ecx], xmm2 // last 16
+        movups  dqword ptr [edx], xmm1       // first 16
+        movups  dqword ptr [edx + ecx], xmm2 // last 16
         ret
 {$endif HASNOSSE2}
 @m01:   movzx   ecx, byte ptr [eax]
@@ -1758,22 +1758,22 @@ asm
         movq    qword ptr [esi + edx], xmm0
         jmp     @movend
 @large: push    esi
-        movdqu  xmm2, dqword ptr [eax]
+        movups  xmm2, dqword ptr [eax]
         lea     eax, [eax + edx - 16]
         lea     edx, [esi + edx - 16]
-        movdqu  xmm1, dqword ptr [eax]
+        movups  xmm1, dqword ptr [eax]
         push    edx
         neg     edx
         and     esi,  -16
         lea     edx, [edx + esi + 16]
         pop     esi
-@lrgnxt:movdqu  xmm0, dqword ptr [eax + edx]
-        movdqa  dqword ptr [esi + edx], xmm0
+@lrgnxt:movups  xmm0, dqword ptr [eax + edx]
+        movaps  dqword ptr [esi + edx], xmm0
         add     edx, 16
         jl      @lrgnxt
-        movdqu  dqword ptr [esi], xmm1
+        movups  dqword ptr [esi], xmm1
         pop     esi
-        movdqu  dqword ptr [esi], xmm2
+        movups  dqword ptr [esi], xmm2
 {$endif HASNOSSE2}
 @movend:cmp     esi, ebp
         jbe     @@0916
@@ -1874,10 +1874,10 @@ asm
         {$else}
         pxor    xmm0, xmm0
         mov     ecx, 256
-@@089I: movdqu  dqword ptr [ebx], xmm0
-        movdqu  dqword ptr [ebx + 16], xmm0
-        movdqu  dqword ptr [ebx + 32], xmm0
-        movdqu  dqword ptr [ebx + 48], xmm0
+@@089I: movups  dqword ptr [ebx], xmm0
+        movups  dqword ptr [ebx + 16], xmm0
+        movups  dqword ptr [ebx + 32], xmm0
+        movups  dqword ptr [ebx + 48], xmm0
         add     ebx, 64
         {$endif HASNOSSE2}
         dec     ecx

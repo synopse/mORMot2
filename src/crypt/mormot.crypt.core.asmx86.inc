@@ -1469,8 +1469,8 @@ asm
 @s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         movaps  xmm1, xmm0
+        movaps  xmm7, xmm0              // fIV := fIn
         pxor    xmm0, xmm7
-        movaps  xmm7, xmm1              // fIV := fIn
         movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
         add     esi, 16
         add     edi, 16
@@ -1534,8 +1534,8 @@ asm
         call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         movaps  xmm1, xmm0
+        movaps  xmm7, xmm0              // fIV := fIn
         pxor    xmm0, xmm7
-        movaps  xmm7, xmm1              // fIV := fIn
         movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
         lea     eax, [ebx].TAesCfc.fMac.plain
         mov     edx, edi
@@ -1737,7 +1737,7 @@ procedure gf_mul_pclmulqdq(a, b: pointer);
 asm
         movups  xmm0, dqword ptr [a]
         movups  xmm1, dqword ptr [b]
-        movdqu  xmm2, dqword ptr [@swap]
+        movups  xmm2, dqword ptr [@swap]
         pshufb  xmm0, xmm2
         pshufb  xmm1, xmm2
         movdqa  xmm5, xmm0
@@ -1800,7 +1800,7 @@ asm
         psllq   xmm3, 57
         por     xmm4, xmm7
         psrlq   xmm0, 7
-        movdqu  xmm7, dqword ptr [@swap]
+        movups  xmm7, dqword ptr [@swap]
         por     xmm0, xmm3
         psllq   xmm5, 62
         pxor    xmm1, xmm0
@@ -2625,11 +2625,11 @@ procedure _AesNiHash128(hash: PHash128; data: pointer; len: PtrUInt);
   {$ifdef FPC} nostackframe; assembler; {$endif}
 asm
         // eax=@seed&result, edx=data, ecx=len
-        movdqu  xmm0, dqword ptr [eax]
+        movups  xmm0, dqword ptr [eax]
         push    eax
         call    _AesNiHashXmm0
         pop     eax
-        movdqu  dqword ptr [eax], xmm0
+        movups  dqword ptr [eax], xmm0
 end;
 
 function _AesNiHash32(seed: cardinal; data: pointer; len: PtrUInt): cardinal;
@@ -2655,10 +2655,10 @@ asm
         aesenc  xmm0, xmm0
         cmp     ecx, 16 // 1..16 bytes have no branch
         ja      @17up
-        movdqu  xmm1, dqword ptr [edx + ecx - 16] // no read after end of page
+        movups  xmm1, dqword ptr [edx + ecx - 16] // no read after end of page
         je      @16
         shl     ecx, 4          // (and heap has header so no read before EOP)
-        movdqu  xmm2, dqword ptr [@shifts + ecx] // Delphi bug about .align 16
+        movups  xmm2, dqword ptr [@shifts + ecx] // Delphi bug about .align 16
         pshufb  xmm1, xmm2
 @16:    aesenc  xmm1, xmm0
         aesenc  xmm1, xmm1
@@ -2670,8 +2670,8 @@ asm
         ja      @33up
         pxor    xmm1, dqword ptr [eax + 16] // 17..32 bytes
         aesenc  xmm1, xmm1
-        movdqu  xmm2, dqword ptr [edx]
-        movdqu  xmm3, dqword ptr [edx + ecx - 10H] // may overlap
+        movups  xmm2, dqword ptr [edx]
+        movups  xmm3, dqword ptr [edx + ecx - 10H] // may overlap
         aesenc  xmm2, xmm0
         aesenc  xmm3, xmm1
         aesenc  xmm2, xmm2
@@ -2692,10 +2692,10 @@ asm
         aesenc  xmm1, xmm1
         aesenc  xmm2, xmm2
         aesenc  xmm3, xmm3
-        movdqu  xmm4, dqword ptr [edx]
-        movdqu  xmm5, dqword ptr [edx + 10H]
-        movdqu  xmm6, dqword ptr [edx + ecx - 20H] // may overlap
-        movdqu  xmm7, dqword ptr [edx + ecx - 10H]
+        movups  xmm4, dqword ptr [edx]
+        movups  xmm5, dqword ptr [edx + 10H]
+        movups  xmm6, dqword ptr [edx + ecx - 20H] // may overlap
+        movups  xmm7, dqword ptr [edx + ecx - 10H]
         aesenc  xmm4, xmm0
         aesenc  xmm5, xmm1
         aesenc  xmm6, xmm2
@@ -2741,10 +2741,10 @@ asm
         aesenc  xmm1, xmm1
         aesenc  xmm2, xmm2
         aesenc  xmm3, xmm3
-        movdqu  xmm4, dqword ptr [edx + ecx - 40H] // may overlap
-        movdqu  xmm5, dqword ptr [edx + ecx - 30H]
-        movdqu  xmm6, dqword ptr [edx + ecx - 20H]
-        movdqu  xmm7, dqword ptr [edx + ecx - 10H]
+        movups  xmm4, dqword ptr [edx + ecx - 40H] // may overlap
+        movups  xmm5, dqword ptr [edx + ecx - 30H]
+        movups  xmm6, dqword ptr [edx + ecx - 20H]
+        movups  xmm7, dqword ptr [edx + ecx - 10H]
         aesenc  xmm4, xmm0
         aesenc  xmm5, xmm1
         aesenc  xmm6, xmm2
@@ -2753,10 +2753,10 @@ asm
         shr     ecx, 6
         // process 64 bytes per iteration
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@loop:  movdqu  xmm0, dqword ptr [edx]
-        movdqu  xmm1, dqword ptr [edx + 10H]
-        movdqu  xmm2, dqword ptr [edx + 20H]
-        movdqu  xmm3, dqword ptr [edx + 30H]
+@loop:  movups  xmm0, dqword ptr [edx]
+        movups  xmm1, dqword ptr [edx + 10H]
+        movups  xmm2, dqword ptr [edx + 20H]
+        movups  xmm3, dqword ptr [edx + 30H]
         aesenc  xmm4, xmm0
         aesenc  xmm5, xmm1
         aesenc  xmm6, xmm2
