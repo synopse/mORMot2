@@ -605,7 +605,7 @@ const
   SQLITE_MEMORY_DATABASE_NAME = ':memory:';
 
 
-  /// This option sets the threading mode to Single-thread.
+  /// This option sets the threading mode to Single-thread
   // - In other words, it disables all mutexing and puts SQLite into a mode where it
   // can only be used by a single thread. If SQLite is compiled with the
   // SQLITE_THREADSAFE=0 compile-time option then it is not possible to change the
@@ -614,7 +614,7 @@ const
   // configuration option.
   // - There are no arguments to this option.
   SQLITE_CONFIG_SINGLETHREAD = 1;
-  ///This option sets the threading mode to Multi-thread.
+  ///This option sets the threading mode to Multi-thread
   // - In other words, it disables mutexing on database connection and prepared
   // statement objects.
   // - The application is responsible for serializing access to database connections
@@ -628,7 +628,7 @@ const
   // configuration option.
   // - There are no arguments to this option.
   SQLITE_CONFIG_MULTITHREAD = 2;
-  /// This option sets the threading mode to Serialized.
+  /// This option sets the threading mode to Serialized
   // - In other words, this option enables all mutexes including the recursive mutexes
   // on database connection and prepared statement objects.
   // - In this mode (which is the default when SQLite is compiled with SQLITE_THREADSAFE=1)
@@ -642,21 +642,21 @@ const
   // - There are no arguments to this option.
   SQLITE_CONFIG_SERIALIZED = 3;
   /// The argument specifies alternative low-level memory allocation routines to
-  // be used in place of the memory allocation routines built into SQLite.
+  // be used in place of the memory allocation routines built into SQLite
   // - SQLite makes its own private copy of the content of the TSqlite3MemMethods
   // structure before the sqlite3.config() call returns.
   // -  This option takes a single argument which is a pointer to an instance of
   // the TSqlite3MemMethods structure.
   SQLITE_CONFIG_MALLOC = 4;
+  /// This option takes a single argument which is a pointer to an instance of
+  // the TSqlite3MemMethods structure
   // - The TSqlite3MemMethods structure is filled with the currently defined memory
   // allocation routines.
   // - This option can be used to overload the default memory allocation routines
   // with a wrapper that simulations memory allocation failure or tracks memory
   // usage, for example.
-  /// This option takes a single argument which is a pointer to an instance of
-  // the TSqlite3MemMethods structure.
   SQLITE_CONFIG_GETMALLOC = 5;
-  /// This option specifies a static memory buffer that SQLite can use for scratch memory.
+  /// This option specifies a static memory buffer that SQLite can use for scratch memory
   // - There are three arguments: A pointer an 8-byte aligned memory buffer from which
   // the scratch allocations will be drawn, the size of each scratch allocation (sz),
   // and the maximum number of scratch allocations (N).
@@ -671,7 +671,7 @@ const
   // - configuration option, then sqlite3.malloc() will be used to obtain the memory needed.
   SQLITE_CONFIG_SCRATCH = 6;
   /// This option specifies a static memory buffer that SQLite can use for the database
-  // page cache with the default page cache implementation.
+  // page cache with the default page cache implementation
   // - This configuration should not be used if an application-define page cache
   // implementation is loaded using the SQLITE_CONFIG_PCACHE2 option.
   // - There are three arguments to this option: A pointer to 8-byte aligned memory,
@@ -690,7 +690,7 @@ const
   SQLITE_CONFIG_PAGECACHE = 7;
   /// This option specifies a static memory buffer that SQLite will use for all of
   // its dynamic memory allocation needs beyond those provided for by
-  // SQLITE_CONFIG_SCRATCH and SQLITE_CONFIG_PAGECACHE.
+  // SQLITE_CONFIG_SCRATCH and SQLITE_CONFIG_PAGECACHE
   // - There are three arguments: An 8-byte aligned pointer to the memory, the number
   // of bytes in the memory buffer, and the minimum allocation size.
   // - If the first pointer (the memory pointer) is NULL, then SQLite reverts
@@ -705,7 +705,7 @@ const
   // minimum allocation size are 2**5 through 2**8.
   SQLITE_CONFIG_HEAP = 8;
   /// This option takes single argument of type int, interpreted as a boolean,
-  // which enables or disables the collection of memory allocation statistics.
+  // which enables or disables the collection of memory allocation statistics
   // - When memory allocation statistics are disabled, the following SQLite
   // interfaces become non-operational:
   // - sqlite3.memory_used()
@@ -717,7 +717,7 @@ const
   // are disabled by default.
   SQLITE_CONFIG_MEMSTATUS = 9;
   /// This option takes a single argument which is a pointer to an instance of the
-  // sqlite3_mutex_methods structure.
+  // sqlite3_mutex_methods structure
   // - The argument specifies alternative low-level mutex routines to be used in
   // place the mutex routines built into SQLite. SQLite makes a copy of the content
   // of the sqlite3_mutex_methods structure before the call to sqlite3.config() returns.
@@ -727,7 +727,7 @@ const
   // return SQLITE_ERROR.
   SQLITE_CONFIG_MUTEX = 10;
   /// This option takes a single argument which is a pointer to an instance of
-  // the sqlite3_mutex_methods structure.
+  // the sqlite3_mutex_methods structure
   // - The sqlite3_mutex_methods structure is filled with the currently defined
   // mutex routines.
   // - This option can be used to overload the default mutex allocation routines
@@ -739,19 +739,21 @@ const
   // return SQLITE_ERROR.
   SQLITE_CONFIG_GETMUTEX = 11;
   /// This option takes two arguments that determine the default memory allocation
-  // for the lookaside memory allocator on each database connection.
+  // for the lookaside memory allocator on each database connection
   // - The first argument is the size of each lookaside buffer slot and the second
   // is the number of slots allocated to each database connection.
   // - This option sets the default lookaside size.
   // - The SQLITE_DBCONFIG_LOOKASIDE verb to sqlite3.db_config() can be used to
   // change the lookaside configuration on individual connections.
   SQLITE_CONFIG_LOOKASIDE = 13;
-  /// These options are obsolete and should not be used by new code.
+  /// These options are obsolete and should not be used by new code
   // - They are retained for backwards compatibility but are now no-ops.
   SQLITE_CONFIG_PCACHE = 14;
+  /// These options are obsolete and should not be used by new code
+  // - They are retained for backwards compatibility but are now no-ops.
   SQLITE_CONFIG_GETPCACHE = 15;
   /// This option takes two arguments: a pointer to a function with a call
-  // signature of void(*)(void*,int,const char*), and a pointer to void.
+  // signature of void(*)(void*,int,const char*), and a pointer to void
   // - If the function pointer is not NULL, it is invoked by sqlite3.log()
   // - to process each logging event.
   // - If the function pointer is NULL, the sqlite3.log() interface becomes a no-op.
@@ -768,7 +770,7 @@ const
   // - In a multi-threaded application, the application-defined logger function must
   // be threadsafe.
   SQLITE_CONFIG_LOG = 16;
-  /// This option takes a single argument of type int.
+  /// This option takes a single argument of type int
   // - If non-zero, then URI handling is globally enabled.
   // - If the parameter is zero, then URI handling is globally disabled.
   // - If URI handling is globally enabled, all filenames passed to sqlite3_open(),
@@ -782,12 +784,12 @@ const
   // symbol defined.
   SQLITE_CONFIG_URI = 17;
   /// This option takes a single argument which is a pointer to an
-  // sqlite3_pcache_methods2 object.
+  // sqlite3_pcache_methods2 object
   // - This object specifies the interface to a custom page cache implementation.
   // - SQLite makes a copy of the object and uses it for page cache memory allocations.
   SQLITE_CONFIG_PCACHE2 = 18;
   /// This option takes a single argument which is a pointer to an
-  // sqlite3_pcache_methods2 object.
+  // sqlite3_pcache_methods2 object
   // - SQLite copies of the current page cache implementation into that object.
   SQLITE_CONFIG_GETPCACHE2 = 19;
   SQLITE_CONFIG_COVERING_INDEX_SCAN = 20;
@@ -3397,8 +3399,8 @@ type
     soft_heap_limit64: function(N: Int64): Int64; cdecl;
 
     /// Used to make global configuration changes to current database
-    // - May only be invoked prior to library initialization or after shutdown.
-    // - Override and use BeforeInitialization method to call this.
+    // - May only be invoked prior to library initialization or after shutdown, so a
+    // typical way is to override the BeforeInitialization virtual method to call this.
     // - Not threadsafe. The application must ensure that no other SQLite
     // interfaces are invoked by other threads while sqlite3.config() is running.
     // - Operation is an integer code for a specific SQLITE_CONFIG_* that determines
