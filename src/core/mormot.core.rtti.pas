@@ -2016,7 +2016,6 @@ type
     fArrayRtti: TRttiCustom;
     fFinalize: TRttiFinalizer;
     fSetRandom: TRttiCustomRandom;
-    fRandomGenerator: TLecuyer;
     fCopy: TRttiCopier;
     fName: RawUtf8;
     fProps: TRttiCustomProps;
@@ -2091,9 +2090,8 @@ type
     // but in TRttiJson, so that it will use mormot.core.variants process
     function ValueToVariant(Data: pointer; out Dest: TVarData): PtrInt; virtual;
     /// fill a value from random - including strings and nested types
-    // - each TRttiCustom class will maintain its own TLecuyer generator
+    // - this method is thread-safe using Rtti.DoLock/DoUnLock
     procedure ValueRandom(Data: pointer);
-      {$ifdef HASINLINE}inline;{$endif}
     /// create a new TObject instance of this rkClass
     // - not implemented here (raise an ERttiException) but in TRttiJson,
     // so that mormot.core.rtti has no dependency to TSynPersistent and such
@@ -2178,10 +2176,6 @@ type
     // - is owned, as TObject, by this TRttiCustom
     property PrivateSlot: pointer
       read fPrivateSlot write fPrivateSlot;
-    /// low-level access to the associated Lecuyer's random generator
-    // - each type has its own 16-bytes generator to avoid using the main threadvar
-    property RandomGenerator: TLecuyer
-      read fRandomGenerator;
     /// opaque TRttiJsonLoad callback used by mormot.core.json.pas
     property JsonLoad: pointer
       read fJsonLoad write fJsonLoad;
@@ -2238,6 +2232,9 @@ type
     Count: integer;
     /// how many TRttiCustom instances have been registered for a given type
     Counts: array[succ(low(TRttiKind)) .. high(TRttiKind)] of integer;
+    /// main Lecuyer Random generator as used by TRttiCustom.ValueRandom
+    // - this is not thread-safe, but it is much faster and documented as such
+    SharedRandom: TLecuyer;
     /// efficient search of TRttiCustom from a given RTTI TypeInfo()
     // - returns nil if Info is not known
     // - call RegisterType() if you want to initialize the type via its RTTI
@@ -5204,25 +5201,30 @@ end;
 
 { PT_RANDOM[] implementation functions }
 
-procedure _NoRandom(V: PPointer; Rtti: TRttiCustom);
+procedure _NoRandom(V: PPointer; RC: TRttiCustom);
 begin
 end;
 
-procedure _StringRandom(V: PPointer; Rtti: TRttiCustom);
+procedure _FillRandom(V: PByte; RC: TRttiCustom);
+begin
+  Rtti.SharedRandom.Fill(V, RC.Cache.Size);
+end;
+
+procedure _StringRandom(V: PPointer; RC: TRttiCustom);
 var
   tmp: TShort31;
 begin
-  Rtti.fRandomGenerator.FillShort31(tmp);
-  FastSetStringCP(V^, @tmp[1], ord(tmp[0]), Rtti.Cache.CodePage);
+  Rtti.SharedRandom.FillShort31(tmp);
+  FastSetStringCP(V^, @tmp[1], ord(tmp[0]), RC.Cache.CodePage);
 end;
 
-procedure _WStringRandom(V: PWideString; Rtti: TRttiCustom);
+procedure _WStringRandom(V: PWideString; RC: TRttiCustom);
 var
   tmp: TShort31;
   i: PtrInt;
   W: PWordArray;
 begin
-  Rtti.fRandomGenerator.FillShort31(tmp);
+  Rtti.SharedRandom.FillShort31(tmp);
   SetString(V^, PWideChar(nil), ord(tmp[0]));
   W := pointer(V^);
   for i := 1 to ord(tmp[0]) do
@@ -5230,13 +5232,13 @@ begin
 end;
 
 {$ifdef HASVARUSTRING}
-procedure _UStringRandom(V: PUnicodeString; Rtti: TRttiCustom);
+procedure _UStringRandom(V: PUnicodeString; RC: TRttiCustom);
 var
   tmp: TShort31;
   i: PtrInt;
   W: PWordArray;
 begin
-  Rtti.fRandomGenerator.FillShort31(tmp);
+  Rtti.SharedRandom.FillShort31(tmp);
   SetString(V^, PWideChar(nil), ord(tmp[0]));
   W := pointer(V^);
   for i := 1 to ord(tmp[0]) do
@@ -5244,7 +5246,7 @@ begin
 end;
 {$endif HASVARUSTRING}
 
-procedure _VariantRandom(V: PRttiVarData; Rtti: TRttiCustom);
+procedure _VariantRandom(V: PRttiVarData; RC: TRttiCustom);
 begin
   {$ifdef CPUINTEL} // see VarClear: problems reported on ARM + BSD
   if V^.VType and $BFE8 <> 0 then
@@ -5253,7 +5255,7 @@ begin
   {$endif CPUINTEL}
     VarClearProc(V^.Data);
   V^.VType := varInteger;
-  V^.Data.VInt64 := Rtti.fRandomGenerator.Next;
+  V^.Data.VInt64 := Rtti.SharedRandom.Next;
   // generate some 8-bit 32-bit 64-bit integers or a RawUtf8 varString
   case V^.Data.VInteger and 3 of
     0:
@@ -5266,48 +5268,50 @@ begin
       begin
         V^.VType := varString;
         V^.Data.VAny := nil;
-        _StringRandom(@V^.Data.VAny, Rtti);
+        _StringRandom(@V^.Data.VAny, RC);
       end;
   end;
 end;
 
-procedure _DoubleRandom(V: PDouble; Rtti: TRttiCustom);
+procedure _DoubleRandom(V: PDouble; RC: TRttiCustom);
 begin
-  V^ := Rtti.fRandomGenerator.NextDouble;
+  V^ := Rtti.SharedRandom.NextDouble;
 end;
 
-procedure _DateTimeRandom(V: PDouble; Rtti: TRttiCustom);
+procedure _DateTimeRandom(V: PDouble; RC: TRttiCustom);
 begin
-  V^ := 38000 + Int64(Rtti.fRandomGenerator.Next) / (maxInt shr 12);
+  V^ := 38000 + Int64(Rtti.SharedRandom.Next) / (maxInt shr 12);
 end;
 
-procedure _SingleRandom(V: PSingle; Rtti: TRttiCustom);
+procedure _SingleRandom(V: PSingle; RC: TRttiCustom);
 begin
-  V^ := Rtti.fRandomGenerator.NextDouble;
+  V^ := Rtti.SharedRandom.NextDouble;
 end;
 
 var
-  PT_RANDOM: array[TRttiParserType] of pointer = ( // nil = fill random bytes
-    // ptNone, ptArray, ptBoolean, ptByte, ptCardinal,
-    @_NoRandom, @_NoRandom, nil, nil, nil,
-    // ptCurrency, ptDouble, ptExtended, ptInt64, ptInteger, ptQWord,
-    nil, @_DoubleRandom, @_NoRandom, nil, nil, nil,
+  PT_RANDOM: array[TRttiParserType] of pointer = (
+    // ptNone, ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency,
+    @_NoRandom, @_NoRandom, @_FillRandom, @_FillRandom, @_FillRandom, @_FillRandom,
+    // ptDouble, ptExtended, ptInt64, ptInteger, ptQWord,
+    @_DoubleRandom, @_NoRandom, @_FillRandom, @_FillRandom, @_FillRandom,
     // ptRawByteString, ptRawJson, ptRawUtf8, ptRecord, ptSingle,
     @_StringRandom, @_NoRandom, @_StringRandom, @_NoRandom, @_SingleRandom,
     // ptString,
     {$ifdef UNICODE} @_UStringRandom, {$else} @_StringRandom, {$endif}
     // ptSynUnicode,
     {$ifdef HASVARUSTRING} @_UStringRandom {$else} @_WStringRandom {$endif},
-    // ptDateTime, ptDateTimeMS, ptGuid, ptHash128, ptHash256, ptHash512,
-    @_DateTimeRandom, @_DateTimeRandom, nil, nil, nil, nil,
-    // ptOrm, ptTimeLog,
-    @_NoRandom, nil,
+    // ptDateTime, ptDateTimeMS, ptGuid, ptHash128,
+    @_DateTimeRandom, @_DateTimeRandom, @_FillRandom, @_FillRandom,
+    // ptHash256, ptHash512, ptOrm, ptTimeLog,
+    @_FillRandom, @_FillRandom, @_NoRandom, @_FillRandom,
     // ptUnicodeString,
     {$ifdef HASVARUSTRING} @_UStringRandom {$else} @_NoRandom {$endif},
-    // ptUnixTime, ptUnixMSTime, ptVariant, ptWideString, ptWinAnsi,
-    nil,           nil,       @_VariantRandom, @_WStringRandom, @_StringRandom,
-    // ptWord, ptEnumeration, ptSet, ptClass, ptDynArray, ptInterface, ptCustom
-    nil,       nil,           nil, @_NoRandom, @_NoRandom, @_NoRandom, @_NoRandom);
+    // ptUnixTime, ptUnixMSTime, ptVariant, ptWideString,
+    @_FillRandom, @_FillRandom, @_VariantRandom, @_WStringRandom,
+    // ptWinAnsi, ptWord, ptEnumeration, ptSet,
+    @_StringRandom, @_FillRandom, @_FillRandom, @_FillRandom,
+    // ptClass, ptDynArray, ptInterface, ptCustom
+    @_NoRandom, @_NoRandom, @_NoRandom, @_NoRandom);
 
 
 { RTTI_COPY[] implementation functions }
@@ -6809,10 +6813,9 @@ end;
 
 procedure TRttiCustom.ValueRandom(Data: pointer);
 begin
-  if Assigned(fSetRandom) then
-    fSetRandom(Data, self)  // handle complex kinds of value from RTTI
-  else
-    fRandomGenerator.Fill(Data, fCache.Size); // just a bunch of bytes
+  mormot.core.os.EnterCriticalSection(Rtti.Table^.Lock);
+  fSetRandom(Data, self); // handle most simple kind of values from RTTI
+  mormot.core.os.LeaveCriticalSection(Rtti.Table^.Lock);
 end;
 
 function TRttiCustom.ClassNewInstance: pointer;
@@ -7078,13 +7081,24 @@ end;
 
 function TRttiCustom.GetPrivateSlot(aClass: TClass): pointer;
 var
-  i: PtrInt;
+  n: integer;
+  slot: PPointer;
 begin
-  for i := 0 to length(fPrivateSlots) - 1 do
+  slot := pointer(fPrivateSlots);
+  if slot <> nil then
   begin
-    result := fPrivateSlots[i];
+    result := slot^;
     if PClass(result)^ = aClass then
       exit;
+    n := PDALen(PAnsiChar(slot) - _DALEN)^ + (_DAOFF - 1);
+    if n <> 0 then
+      repeat
+        inc(slot);
+        result := slot^;
+        if PClass(result)^ = aClass then
+          exit;
+        dec(n);
+      until n = 0;
   end;
   result := nil;
 end;

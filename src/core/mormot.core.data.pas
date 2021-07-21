@@ -1678,6 +1678,7 @@ type
     procedure ItemClear(Item: pointer);
       {$ifdef HASGETTYPEKIND}inline;{$endif}
     /// will fill the element with some random content
+    // - this method is thread-safe using Rtti.DoLock/DoUnLock
     procedure ItemRandom(Item: pointer);
     /// will copy one element content
     procedure ItemCopy(Source, Dest: pointer);
@@ -6272,7 +6273,11 @@ begin
     if fInfo.ArrayRtti <> nil then
       fInfo.ArrayRtti.ValueRandom(Item)
     else
-      fInfo.RandomGenerator.Fill(Item, fInfo.Cache.ItemSize);
+    begin
+      Rtti.DoLock;
+      Rtti.SharedRandom.Fill(Item, fInfo.Cache.ItemSize);
+      Rtti.DoUnLock;
+    end;
 end;
 
 function TDynArray.ItemEquals(A, B: pointer; CaseInSensitive: boolean): boolean;
