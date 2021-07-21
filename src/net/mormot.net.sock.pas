@@ -2765,13 +2765,19 @@ procedure TCrtSocket.SockSendStream(Stream: TStream; ChunkSize: integer);
 var
   chunk: RawByteString;
   rd: integer;
+  pos: Int64;
 begin
   SetLength(chunk, ChunkSize);
+  pos := 0;
   repeat
     rd := Stream.Read(pointer(chunk)^, ChunkSize);
     if rd = 0 then
       break;
-    SndLow(pointer(chunk), rd);
+    if not TrySndLow(pointer(chunk), rd) then
+      raise ENetSock.Create('%s.SockSendStream(%s,%d) rd=%d pos=%d to %s',
+        [ClassNameShort(self)^, ClassNameShort(Stream)^, ChunkSize,
+         rd, pos, fServer], NetLastError);
+    inc(pos, rd);
   until false;
 end;
 
