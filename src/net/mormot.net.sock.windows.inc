@@ -536,18 +536,18 @@ begin
   rdp := nil;
   wrp := nil;
   sock := TSocket(@self);
-  if neRead in scope then
-  begin
-    rd.fd_array[0] := sock;
-    rd.fd_count := 1;
-    rdp := @rd;
-  end;
-  if (neWrite in scope) or
-     not (neRead in scope) then // a least one is needed
+  if neWrite in scope then
   begin
     wr.fd_array[0] := sock;
     wr.fd_count := 1;
     wrp := @wr;
+  end;
+  if (neRead in scope) or
+     not (neWrite in scope) then // a least one is needed
+  begin
+    rd.fd_array[0] := sock;
+    rd.fd_count := 1;
+    rdp := @rd;
   end;
   SetTimeVal(ms, tv);
   res := select(sock + 1, rdp, wrp, nil, @tv);

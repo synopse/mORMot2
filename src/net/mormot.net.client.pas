@@ -129,19 +129,22 @@ var
   HTTP_DEFAULT_RESOLVETIMEOUT: integer = 0;
   /// THttpRequest timeout default value for remote connection
   // - default is 30 seconds
-  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
+  // - used e.g. by THttpClientSocket, THttpRequest, TRestHttpClientRequest and
+  // TRestHttpClientGeneric
   HTTP_DEFAULT_CONNECTTIMEOUT: integer = 30000;
   /// THttpRequest timeout default value for data sending
   // - default is 30 seconds
-  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
+  // - used e.g. by THttpClientSocket, THttpRequest, TRestHttpClientRequest and
+  // TRestHttpClientGeneric
   // - you can override this value by setting the corresponding parameter in
-  // THttpRequest.Create() constructor
+  // the class constructor
   HTTP_DEFAULT_SENDTIMEOUT: integer = 30000;
   /// THttpRequest timeout default value for data receiving
   // - default is 30 seconds
-  // - used e.g. by THttpRequest, TRestHttpClientRequest and TRestHttpClientGeneric
+  // - used e.g. by THttpClientSocket, THttpRequest, TRestHttpClientRequest and
+  // TRestHttpClientGeneric
   // - you can override this value by setting the corresponding parameter in
-  // THttpRequest.Create() constructor
+  // the class constructor
   HTTP_DEFAULT_RECEIVETIMEOUT: integer = 30000;
 
 const
@@ -1462,7 +1465,7 @@ begin
           SockSendStream(ctxt.InStream);
         end;
         // retrieve HTTP command line response
-        if SockReceivePending(1000) = cspSocketError then
+        if SockReceivePending(Timeout) = cspSocketError then
         begin
           DoRetry(HTTP_NOTFOUND, 'cspSocketError waiting for headers');
           exit;
@@ -1682,7 +1685,7 @@ begin
       if parthash <> '' then
       begin
         parthash := url + parthash; // e.g. 'files/somefile.zip.md5'
-        if Get(parthash, 1000) = 200 then
+        if Get(parthash, 5000) = 200 then
           // handle 'c7d8e61e82a14404169af3fa5a72be85 *file.name' format
           params.Hash := Split(TrimU(Content), ' ');
         if Assigned(OnLog) then
