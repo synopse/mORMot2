@@ -500,6 +500,10 @@ begin
     // rows are identified as RecordRef
     fTrackChangesHistoryTableIndexCount := 64;
   SetLength(fTrackChangesHistoryTableIndex, fTrackChangesHistoryTableIndexCount);
+  
+  if fTrackChangesHistoryTableIndexCount=0 then
+    exit;
+  
   for t := 0 to fTrackChangesHistoryTableIndexCount - 1 do
     fTrackChangesHistoryTableIndex[t] := -1;
   fOrmVersionDeleteTable := TOrmTableDeleted;
