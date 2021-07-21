@@ -18,7 +18,7 @@
 const
   // non-temporal writes should bypass the cache when the size is bigger than
   // half the size of the largest level cache - we assume low 1MB cache here
-  CPUCACHEX64 = 512 * 1024;
+  NONTEMPORALSIZE = 512 * 1024;
 
 {
   regarding benchmark numbers from TTestLowLevelCommon.CustomRTL
@@ -118,8 +118,8 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         neg     rax
         and     dst,  -16  // 16-byte aligned writes
         lea     rax, [rax + dst + 16]
-        cmp     r8, CPUCACHEX64
-        ja      @fwdnv  // bypass cache for cnt>512KB
+        cmp     r8, NONTEMPORALSIZE
+        ja      @fwdnv     // bypass cache for cnt>512KB
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @fwd:   movups  xmm0, oword ptr [src + rax]  // regular loop
         movaps  [r10 + rax], xmm0
@@ -144,8 +144,8 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         neg     rax
         and     dst,  -32  // 32-byte aligned writes
         lea     rax, [rax + dst + 32]
-        cmp     r8, CPUCACHEX64
-        ja      @favxn  // bypass cache for cnt>512KB
+        cmp     r8, NONTEMPORALSIZE
+        ja      @favxn     // bypass cache for cnt>512KB
         align 16
 @favxr: vmovups ymm0, oword ptr [src + rax]  // regular loop
         vmovaps [r10 + rax], ymm0
@@ -188,7 +188,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         add     rax, dst
         and     rax, -16  // 16-byte aligned writes
         sub     rax, dst
-        cmp     r8, CPUCACHEX64
+        cmp     r8, NONTEMPORALSIZE
         ja      @bwdnv    // bypass cache for cnt>512KB
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @bwd:   movups  xmm0, oword ptr [src + rax]  // regular loop
@@ -216,7 +216,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=src rdx/rsi=dst r8/rdx=cnt
         add     rax, dst
         and     rax, -32  // 32-byte aligned writes
         sub     rax, dst
-        cmp     r8, CPUCACHEX64
+        cmp     r8, NONTEMPORALSIZE
         ja      @bavxn    // bypass cache for cnt>512KB
         align 16
 @bavxr: vmovups ymm0, oword ptr [src + rax]  // regular loop
@@ -313,8 +313,8 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         and     dst, -16 // dst is 16-bytes aligned
         sub     dst, rdx
         jnb     @last
-        cmp     r10, CPUCACHEX64
-        ja      @nv  // bypass cache for cnt>512KB
+        cmp     r10, NONTEMPORALSIZE
+        ja      @nv      // bypass cache for cnt>512KB
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @reg:   movaps  oword ptr [rdx + dst], xmm0  // regular loop
         add     dst, 16
@@ -336,7 +336,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         jz      @noerms
         cmp     rdx, 2048  // ERMS is worth it for cnt>2KB
         jb      @noerms
-        cmp     rdx, CPUCACHEX64  // non-temporal moves are still faster
+        cmp     rdx, NONTEMPORALSIZE  // non-temporal moves are still faster
         jae     @noerms
         cld
         {$ifdef WIN64ABI}
@@ -365,7 +365,7 @@ asm {$else} asm .noframe {$endif} // rcx/rdi=dst rdx/rsi=cnt r8b/dl=val
         mov     rdx, r8
         and     rdx, -32
         sub     dst, rdx
-        cmp     r10, CPUCACHEX64
+        cmp     r10, NONTEMPORALSIZE
         ja      @avxnv
         align 16
 @avxreg:vmovaps ymmword ptr [rdx + dst], ymm0  // regular loop
@@ -1042,7 +1042,7 @@ procedure bswap64array(a, b: PQWordArray; n: PtrInt);
         jnz @1
 end;
 
-function StrLenSSE2(S: pointer): PtrInt;
+function StrLen(S: pointer): PtrInt;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
         {$ifdef WIN64ABI}

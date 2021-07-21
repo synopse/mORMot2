@@ -2547,7 +2547,11 @@ function StrLenSafe(S: pointer): PtrInt;
 
 /// our fast version of StrLen(), to be used with PUtf8Char/PAnsiChar
 // - under x86, will detect SSE2 and use it if available
+{$ifdef ASMX64}
+function StrLen(S: pointer): PtrInt;
+{$else}
 var StrLen: function(S: pointer): PtrInt = StrLenSafe;
+{$endif ASMX64}
 
 /// our fast version of StrLen(), to be used with PWideChar
 function StrLenW(S: PWideChar): PtrInt;
@@ -8939,6 +8943,7 @@ var
   c: cardinal;
 begin
   // retrieve CPUID raw flags
+  regs.ebx := 0;
   regs.edx := 0;
   regs.ecx := 0;
   GetCpuid(1, regs);
@@ -8948,23 +8953,41 @@ begin
   PIntegerArray(@CpuFeatures)^[2] := regs.ebx;
   PIntegerArray(@CpuFeatures)^[3] := regs.ecx;
   PIntegerArray(@CpuFeatures)^[4] := regs.edx;
+  // validate accuracy of most used HW opcodes
   {$ifdef DISABLE_SSE42}
   // force fallback on Darwin x64 (as reported by alf) - clang asm bug?
-  CpuFeatures := CpuFeatures - [cfSSE42, cfAESNI, cfCLMUL, cfAVX, cfAVX2, cfFMA];
+  CpuFeatures := CpuFeatures -
+    [cfSSE3, cfSSE42, cfPOPCNT, cfAESNI, cfCLMUL, cfAVX, cfAVX2, cfFMA];
   {$else}
   if not (cfOSXS in CpuFeatures) or
      not IsXmmYmmOSEnabled then
-    // available on the CPU, but not supported at OS level during context switch
+    // AVX is available on the CPU, but not supported at OS context switch
     CpuFeatures := CpuFeatures - [cfAVX, cfAVX2, cfFMA];
   {$endif DISABLE_SSE42}
-  {$ifdef ASMX86}
-  {$ifdef WITH_ERMS}
-  if cfERMS in CpuFeatures then
-    ERMSB_MIN_SIZE := 511;      // ERMSB is less efficient than SSE2 movntdq
-  {$endif WITH_ERMS}
-  {$endif ASMX86}
+  if cfRAND in CpuFeatures then
+    try
+      c := RdRand32;
+      if RdRand32 = c then // most probably a RDRAND bug, e.g. on AMD Rizen 3000
+        exclude(CpuFeatures, cfRAND);
+    except // may trigger an illegal instruction exception on some Ivy Bridge
+      exclude(CpuFeatures, cfRAND);
+    end;
+  if cfSSE42 in CpuFeatures then
+    try
+      if crc32cBy4SSE42(0, 1) <> 3712330424 then
+        exclude(CpuFeatures, cfSSE42);
+    except // disable now on illegal instruction or incorrect result
+      exclude(CpuFeatures, cfSSE42);
+    end;
+  if cfPOPCNT in CpuFeatures then
+    try
+      if GetBitsCountSse42(7) = 3 then
+        GetBitsCountPtrInt := @GetBitsCountSse42;
+    except // clearly invalid opcode
+      exclude(CpuFeatures, cfPOPCNT);
+    end;
   {$ifdef ASMX64}
-  {$ifdef WITH_ERMS} // WITH_ERMS is enabled in mormot.core.base.asmx86.inc :)
+  {$ifdef WITH_ERMS}
   if cfERMS in CpuFeatures then // actually slower than our AVX code -> disabled
     include(CPUIDX64, cpuERMS);
   {$endif WITH_ERMS}
@@ -8975,31 +8998,22 @@ begin
       include(CPUIDX64, cpuAVX2);
   end;
   {$endif ASMX64}
-  // validate accuracy of most used HW opcodes
-  if cfRAND in CpuFeatures then
-  try
-    c := RdRand32;
-    if RdRand32 = c then // most probably a RDRAND bug, e.g. on AMD Rizen 3000
-      exclude(CpuFeatures, cfRAND);
-  except // may trigger an illegal instruction exception on some Ivy Bridge
-    exclude(CpuFeatures, cfRAND);
-  end;
-  if cfSSE42 in CpuFeatures then
-  try
-    if crc32cBy4SSE42(0, 1) <> 3712330424 then
-      exclude(CpuFeatures, cfSSE42);
-  except // disable now on illegal instruction or incorrect result
-    exclude(CpuFeatures, cfSSE42);
-  end;
   // redirect some CPU-aware functions
-  {$ifdef ASMX64}
-  StrLen := @StrLenSSE2;
-  {$endif ASMX64}
-  {$ifdef ASMX86}
+  {$ifdef ASMX86} 
+  {$ifndef HASNOSSE2}
+  {$ifdef WITH_ERMS}
+  if not (cfSSE2 in CpuFeatures) then
+    ERMSB_MIN_SIZE := 0 // FillCharFast will fallback to rep stosb
+    // but MoveFast() is likely to abort -> recompile with HASNOSSE2 conditional
+    // or ensure mormot.core.os is used so that it will redirect to RTL Move()
+  else if cfERMS in CpuFeatures then
+    ERMSB_MIN_SIZE := 511; // slightly more efficient than SSE2 movntdq
+  {$endif WITH_ERMS}
+  {$endif HASNOSSE2}
   if cfSSE2 in CpuFeatures then
     StrLen := @StrLenSSE2;
   {$endif ASMX86}
-  if cfSSE42 in CpuFeatures then
+  if cfSSE42 in CpuFeatures then // for both i386 and x86_64
   begin
     crc32c := @crc32csse42;
     crc32cby4 := @crc32cby4sse42;
@@ -9007,13 +9021,6 @@ begin
     crcblocks := @crcblockssse42;
     DefaultHasher := @crc32csse42;
     InterningHasher := @crc32csse42;
-    if cfPOPCNT in CpuFeatures then
-      try
-        if GetBitsCountSse42(7) = 3 then
-          GetBitsCountPtrInt := @GetBitsCountSse42;
-      except
-        exclude(CpuFeatures, cfPOPCNT);
-      end;
   end;
 end;
 

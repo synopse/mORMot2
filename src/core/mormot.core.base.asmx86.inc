@@ -15,27 +15,28 @@
 
 {$ifdef ASMX86}
 
-{$define WITH_ERMS} // we found out that ERMS is worth it on i386
+{$define WITH_ERMS} // we enable it as fallback on old CPU without SSE2
 
 {$ifdef WITH_ERMS}
 var
   // "rep stosb/movsb" enabled for len >= 512 on ERMSB CPUs
   ERMSB_MIN_SIZE: integer = maxInt; // maxInt = disabled by default
-  {$define WITH_ERMSASM}
+  {$define WITH_ERMSASM} // include "rep movsb" asm blocks 
 {$endif WITH_ERMS}
+
 {$ifdef HASNOSSE2}
-  {$define WITH_ERMSASM} // rep movsb as fallback on oldest CPU
+  {$define WITH_ERMSASM} // "rep movsd" is used on oldest CPU
 {$endif HASNOSSE2}
 
 const
   // non-temporal writes should bypass the cache when the size is bigger than
   // half the size of the largest level cache - we assume low 1MB cache here
-  CPUCACHESSE2 = 512 * 1024;
+  NONTEMPORALSIZE = 512 * 1024;
 
 // fast SSE2 version - force define HASNOSSE2 when run any very old CPU
 // - using FPU fld/fst may trigger unexpected exceptions, as reported by Agner
 // Fog on "Optimizing Assembly" page 118 -> default is SSE2 code
-// - note: Delphi Win32 x87 RTL code by John O'Harrow seems deprecated 
+// - note: Delphi Win32 x87 RTL code by John O'Harrow seems deprecated
 procedure FillcharFast(var dst; cnt: PtrInt; value: byte);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
@@ -60,7 +61,7 @@ asm
         movd    xmm0, ecx
         mov     ecx, eax
         pshufd  xmm0, xmm0, 0
-        and     ecx, 15                 // 16-byte align writes
+        and     ecx, 15                      // 16-byte align writes
         movups  dqword ptr [eax], xmm0       // fill first 16 bytes
         movups  dqword ptr [eax + edx], xmm0 // fill last 16 bytes
         sub     ecx, 16
@@ -68,7 +69,7 @@ asm
         add     edx, ecx
         add     eax, edx
         neg     edx
-        cmp     edx, - CPUCACHESSE2 * 1024 // assume 512KB of L1 cache
+        cmp     edx, -NONTEMPORALSIZE        // assume > 512KB bypass the cache
         jl      @nv
 // {$ifdef FPC} align 16 {$endif} natural alignment is actually OK
 @loop:  movaps  dqword ptr [eax + edx], xmm0 // fill 16 bytes per loop
@@ -83,13 +84,25 @@ asm
 {$endif HASNOSSE2}
 {$ifdef WITH_ERMSASM}
 @ermsb: push    edi
+        cld
+{$ifndef HASNOSSE2}
         mov     edi, eax
         mov     eax, ecx
         mov     ecx, edx
-        cld
+        rep     stosb   // ERMSB favors stosb and will properly align writes
+{$else} 
+@ermsa: test    al, 3   // aligned stosd is better on old CPUs
+        jz      @erms3
+        mov     byte ptr [eax], cl
+        inc     eax
+        dec     edx
+        jmp     @ermsa
+@erms3: mov     edi, eax
+        mov     eax, ecx
+        mov     ecx, edx
         shr     ecx, 2
         jz      @erms2
-        rep     stosd    // ERMSB / no SSE2 version
+        rep     stosd    // no SSE2 version
 @erms2: test    dl, 2
         jz      @erms1
         mov     word ptr [edi], ax
@@ -97,13 +110,14 @@ asm
 @erms1: test    dl, 1
         jz      @erms0
         mov     byte ptr [edi], al
+{$endif HASNOSSE2}
 @erms0: pop     edi
         ret
 {$endif WITH_ERMSASM}
-{$ifdef FPC} align 4 {$endif}
+{$ifdef FPC} align 4 {$else} nop {$ifdef HASNOSSE2} nop; nop {$endif} {$endif}
 @jmptab:dd      @00, @02, @04, @06, @08, @10, @12, @14, @16
         dd      @18, @20, @22, @24, @26, @28, @30, @32
-        // Delphi RTL uses 16-bit moves which are slower
+        // Delphi RTL uses 16-bit "mov [eax + ...], cx" which are slower
 @32:    mov     [eax + 28], ecx
 @28:    mov     [eax + 24], ecx
 @24:    mov     [eax + 20], ecx
@@ -211,10 +225,10 @@ asm
         movups  xmm1, dqword ptr [eax]       // last 16
         push    ecx
         neg     ecx
-        and     edx,  - 16                   // 16-byte align writes
+        and     edx,  -16                    // 16-byte align writes
         lea     ecx, [ecx + edx + 16]
         pop     edx
-        cmp     ecx, - CPUCACHESSE2 * 1024   // assume 512KB of L1 cache
+        cmp     ecx, -NONTEMPORALSIZE        // assume > 512KB bypass the cache
         jl      @fwnv
         {$ifdef FPC} align 16 {$endif}
 @fwd:   movups  xmm0, dqword ptr [eax + ecx] // move by 16 bytes
