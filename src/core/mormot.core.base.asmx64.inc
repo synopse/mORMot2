@@ -399,7 +399,7 @@ function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
         cmp     r8, -8
         jb      @head
 @sml:   mov     cl, byte ptr [buf]
-        inc     buf
+        add     buf, 1
         xor     cl, al
         shr     eax, 8
         xor     eax, dword ptr [rcx * 4 + r9]
@@ -410,7 +410,7 @@ function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 @head:  test    buf, 7
         jz      @align
         mov     cl, byte ptr [buf]
-        inc     buf
+        add     buf, 1
         xor     cl, al
         shr     eax, 8
         xor     eax, dword ptr [rcx * 4 + r9]
@@ -533,7 +533,7 @@ function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
         mov     [rcx], dx
         cmp     rax, 10
         jae     @s
-@1:     dec     rcx
+@1:     sub     rcx, 1
         or      al, '0'
         mov     [rcx], al
 @0:     mov     rax, rcx
@@ -616,7 +616,7 @@ procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: Ptr
         setg    al                  // P[]>deleted -> al=1, 0 otherwise
         sub     dword ptr [rcx], eax // branchless dec(P[])
         add     rcx, 4
-        dec     r8
+        sub     r8, 1
         jmp     @align
 @ok:    {$ifdef ASMX64AVX} // AVX2 asm is not supported by Delphi (even 10.4) :(
         test    byte ptr [rip + CPUIDX64], 1 shl cpuAVX2
@@ -676,7 +676,7 @@ procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: Ptr
         jae     @sse2
         jmp     @2
         // trailing indexes
-@1:     dec     r8
+@1:     sub     r8, 1
         cmp     dword ptr [rcx + r8 * 4], edx
         setg    al
         sub     dword ptr [rcx + r8 * 4], eax
@@ -1435,7 +1435,7 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
         jz      @0
         jmp     @align
 @7:     crc32   eax, byte ptr [buf]
-        inc     buf
+        add     buf, 1
         dec     len
         jz      @0
 @align: test    buf, 7
@@ -1551,24 +1551,24 @@ asm // rcx=src, edx=size, r8=dest
         jc      @09
         mov     edi, 271
         jmp     @09
-@08:    inc     rsi
+@08:    add     rsi, 1
 @09:    mov     edx, dword ptr [r14 + rsi]
         cmp     dl, byte ptr [rbx + rsi]
         jnz     @10
         cmp     rsi, rdi
         jge     @10
-        inc     rsi
+        add     rsi, 1
         cmp     dh, byte ptr [rbx + rsi]
         jnz     @10
         shr     edx, 16
         cmp     rsi, rdi
         jge     @10
-        inc     rsi
+        add     rsi, 1
         cmp     dl, byte ptr [rbx + rsi]
         jnz     @10
         cmp     rsi, rdi
         jge     @10
-        inc     rsi
+        add     rsi, 1
         cmp     dh, byte ptr [rbx + rsi]
         jnz     @10
         cmp     rsi, rdi
@@ -1714,14 +1714,14 @@ asm // rcx=src, edx=size, r8=dest
         jz      @31
 @28:    mov     byte ptr [r8 + rsi], bl
         shr     rbx, 8
-        inc     rsi
+        add     rsi, 1
         dec     r15
         jnz     @28
         jmp     @31
 {$ifdef FPC} align 8 {$else} .align 8 {$endif}
 @29:    mov     bl, byte ptr [r14 + rsi] // overlaping move
         mov     byte ptr [r8 + rsi], bl
-        inc     rsi
+        add     rsi, 1
         dec     r12
         jnz     @29
         cmp     rcx, r9

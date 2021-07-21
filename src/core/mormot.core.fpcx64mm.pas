@@ -1203,13 +1203,13 @@ asm
 @GotLockOnSmallBlockType:
         // set rdx=NextPartiallyFreePool rax=FirstFreeBlock rcx=DropSmallFlagsMask
         mov     rdx, [rbx].TSmallBlockType.NextPartiallyFreePool
-        inc     [rbx].TSmallBlockType.GetmemCount
+        add     [rbx].TSmallBlockType.GetmemCount, 1
         mov     rax, [rdx].TSmallBlockPoolHeader.FirstFreeBlock
         mov     rcx, DropSmallFlagsMask
         // Is there a pool with free blocks?
         cmp     rdx, rbx
         je      @TrySmallSequentialFeed
-        inc     [rdx].TSmallBlockPoolHeader.BlocksInUse
+        add     [rdx].TSmallBlockPoolHeader.BlocksInUse, 1
         // Set the new first free block and the block header
         and     rcx, [rax - BlockHeaderSize]
         mov     [rdx].TSmallBlockPoolHeader.FirstFreeBlock, rcx
@@ -1237,7 +1237,7 @@ asm
         ja      @AllocateSmallBlockPool
         // Adjust number of used blocks and sequential feed pool
         mov     [rbx].TSmallBlockType.NextSequentialFeedBlockAddress, rcx
-        inc     [rdx].TSmallBlockPoolHeader.BlocksInUse
+        add     [rdx].TSmallBlockPoolHeader.BlocksInUse, 1
         // Unlock the block type, set the block header and leave
         mov     byte ptr [rbx].TSmallBlockType.BlockTypeLocked, false
         mov     [rax - BlockHeaderSize], rdx
@@ -1650,7 +1650,7 @@ procedure FreeSmallLocked; nostackframe; assembler;
 // rbx=TSmallBlockType rcx=P rdx=TSmallBlockPoolHeader
 asm
         // Adjust number of blocks in use, set rax = old first free block
-        inc     [rbx].TSmallBlockType.FreememCount
+        add     [rbx].TSmallBlockType.FreememCount, 1
         mov     rax, [rdx].TSmallBlockPoolHeader.FirstFreeBlock
         sub     [rdx].TSmallBlockPoolHeader.BlocksInUse, 1
         jz      @PoolIsNowEmpty
@@ -1823,7 +1823,7 @@ asm
         movzx   eax, byte ptr [rbx].TSmallBlockType.BinCount
         cmp     al, SmallBlockBinCount
         je      @LockBlockType
-        inc     byte ptr [rbx].TSmallBlockType.BinCount
+        add     byte ptr [rbx].TSmallBlockType.BinCount, 1
         mov     [rbx + TSmallBlockType.BinInstance + rax * 8], rcx
         mov     byte ptr [rbx].TSmallBlockType.BinLocked, false
         movzx   eax, word ptr [rbx].TSmallBlockType.BlockSize

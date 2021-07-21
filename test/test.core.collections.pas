@@ -75,7 +75,7 @@ begin
   Check(name <> '');
   for i in li do
   begin
-    Check(false); // should never be executed with a void list
+   TestFailed('void list');
     {%H-}cop[0] := i;  // the compiler needs to use i somewhere
   end;
   timer.Start;

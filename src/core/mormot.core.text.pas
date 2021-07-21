@@ -6552,8 +6552,8 @@ function FastFindPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt; Value: PUtf8Char
         jmp     @nxt
 @eq:    mov     r11, Value // first char equal -> check others
 @sub:   mov     cl, byte ptr [r10]
-        inc     r10
-        inc     r11
+        add     r10, 1
+        add     r11, 1
         test    cl, cl
         jz      @found
         mov     cl, byte ptr [r11]

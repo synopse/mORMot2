@@ -337,7 +337,7 @@ type
     /// internal constructor to create an IList<T> instance from RTTI
     // - you should rather use Collections.NewList or Collections.NewPlainList
     // - used only to circumvent FPC internal error 2010021502 on x86_64/aarch64
-    // - root cause seems to be that if T is coming through a generic method
+    // - root cause seems comes from T through another generic method
     // - direct specialization like Collections.NewList<integer> works fine,
     // but cascaded generics like TTestCoreCollections.TestOne<T> need this:
     // ! {$ifdef FPC_64}
