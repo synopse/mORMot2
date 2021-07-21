@@ -2547,11 +2547,11 @@ function StrLenSafe(S: pointer): PtrInt;
 
 /// our fast version of StrLen(), to be used with PUtf8Char/PAnsiChar
 // - under x86, will detect SSE2 and use it if available
-{$ifdef ASMX64}
+{$ifdef CPUX64}
 function StrLen(S: pointer): PtrInt;
 {$else}
 var StrLen: function(S: pointer): PtrInt = StrLenSafe;
-{$endif ASMX64}
+{$endif CPUX64}
 
 /// our fast version of StrLen(), to be used with PWideChar
 function StrLenW(S: PWideChar): PtrInt;
