@@ -1435,7 +1435,7 @@ end;
 
 function TNetSocketWrap.Send(Buf: pointer; var len: integer): TNetResult;
 var
-  err, tosend: integer;
+  tosend: integer;
 begin
   if @self = nil then
     result := nrNoSocket
@@ -1447,12 +1447,15 @@ begin
     // Otherwise, -1 is returned and errno set to indicate the error. (man send)
     if len < 0 then
     begin
+      {
       err := sockerrno;
       if err <> WSATRY_AGAIN then
       begin
-        if tosend>=0 then PAnsiChar(Buf)[tosend] := #0;
+        if tosend >= 0 then
+          PAnsiChar(Buf)[tosend] := #0;
         writeln('send: sockerrno=',err,' for len=',tosend, ' buf=',PAnsiChar(buf));
       end;
+      }
       result := NetLastError
     end
     else
