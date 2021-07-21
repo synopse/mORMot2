@@ -94,6 +94,7 @@ type
     /// call NetLastError and raise ENetSock if not nrOK nor nrRetry
     class procedure CheckLastError(const Context: shortstring; ForceRaise: boolean = false;
       AnotherNonFatal: integer = 0);
+  published
     property LastError: TNetResult
       read fLastError;
   end;

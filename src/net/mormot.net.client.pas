@@ -50,6 +50,7 @@ uses
   mormot.core.text,
   mormot.core.data,
   mormot.core.datetime,
+  mormot.core.rtti,
   mormot.core.json; // TSynDictionary for THttpRequestCached
 
 
@@ -1403,8 +1404,12 @@ end;
 procedure THttpClientSocket.RequestInternal(
   var ctxt: TTHttpClientSocketRequestParams);
 
-  procedure DoRetry(FatalError: integer; const msg: RawUtf8);
+  procedure DoRetry(FatalError: integer;
+    const Fmt: RawUtf8; const Args: array of const);
+  var
+    msg: RawUtf8;
   begin
+    FormatUtf8(Fmt, Args, msg);
     //writeln('DoRetry ',retry, ' ', Error, ' / ', msg);
     if Assigned(OnLog) then
        OnLog(sllTrace, 'Request(% %): % socket=% DoRetry(%) retry=% on %:%',
@@ -1430,6 +1435,7 @@ procedure THttpClientSocket.RequestInternal(
 
 var
   P: PUtf8Char;
+  pending: TCrtSocketPending;
   dat: RawByteString;
 begin
   if SockIn = nil then // done once
@@ -1437,7 +1443,7 @@ begin
   Content := '';
   if (hfConnectionClose in HeaderFlags) or
      (SockReceivePending(0) = cspSocketError) then
-    DoRetry(HTTP_NOTFOUND, 'connection closed/broken (keepalive or maxrequest)')
+    DoRetry(HTTP_NOTFOUND, 'connection closed/broken (keepalive or maxrequest)', [])
   else
     try
       try
@@ -1465,9 +1471,11 @@ begin
           SockSendStream(ctxt.InStream);
         end;
         // retrieve HTTP command line response
-        if SockReceivePending(Timeout) = cspSocketError then
+        pending := SockReceivePending(Timeout); // wait using select/poll
+        if pending <> cspDataAvailable then
         begin
-          DoRetry(HTTP_NOTFOUND, 'cspSocketError waiting for headers');
+          DoRetry(HTTP_TIMEOUT, '% waiting %ms for headers',
+            [GetEnumName(TypeInfo(TCrtSocketPending), ord(pending))^, TimeOut]);
           exit;
         end;
         SockRecvLn(Command); // will raise ENetSock on any error
@@ -1498,9 +1506,9 @@ begin
         begin
           // error on reading answer -> 505=wrong format
           if Command = '' then
-            DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, 'Broken Link')
+            DoRetry(HTTP_TIMEOUT, 'Broken Link - timeout=%ms', [TimeOut])
           else
-            DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, Command);
+            DoRetry(HTTP_HTTPVERSIONNONSUPPORTED, 'Command=%', [Command]);
           exit;
         end;
         // retrieve all HTTP headers
@@ -1531,7 +1539,8 @@ begin
         on E: Exception do
           if E.InheritsFrom(ENetSock) then
             // network layer problem - typically EHttpSocket
-            DoRetry(HTTP_NOTFOUND, 'ENetSock Exception')
+            DoRetry(HTTP_NOTFOUND, '% raised after % [%]',
+              [E, ToText(ENetSock(E).LastError)^, E.Message])
           else
             // propagate custom exceptions to the caller (e.g. from progression)
             raise;
