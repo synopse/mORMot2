@@ -41,7 +41,7 @@
 // thread name: to be defined if you have issues when debugging your application
 
 {.$define NOEXCEPTIONINTERCEPT}
-// if defined, exceptions shall not be intercepted and logged
+// if defined, exceptions shall not be intercepted nor logged
 
 {.$define NOPATCHRTL}
 // if defined, FPC RTL won't be patched on x86_64 with optimized asm

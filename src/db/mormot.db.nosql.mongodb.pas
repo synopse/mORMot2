@@ -871,7 +871,7 @@ type
     fReadPreference: TMongoClientReplicaSetReadPreference;
     fWriteConcern: TMongoClientWriteConcern;
     fConnectionTimeOut: cardinal;
-    fConnectionTLS: boolean;
+    fConnectionTls: boolean;
     fGracefulReconnect: record
       Enabled, ForcedDBCR: boolean;
       User, Database: RawUtf8;
@@ -893,13 +893,18 @@ type
       ForceMongoDBCR: boolean; ConnectionIndex: PtrInt);
     function ReOpen: boolean;
   public
+    /// the optional low-level Tls parameters
+    // - used when fConnectionTls was set to TRUE
+    ConnectionTlsContext: TNetTlsContext;
+    /// the optional low-level Proxy parameters
+    ConnectionTunnel: TUri;
     /// prepare a connection to a MongoDB server or Replica Set
     // - this constructor won't create the connection until the Open method
     // is called
     // - you can specify multiple hosts, as CSV values, if necessary
-    // - depending on the platform, you may request for a TLS secured connection
+    // - depending on the platform, you may request for a Tls secured connection
     constructor Create(const Host: RawUtf8; Port: integer = MONGODB_DEFAULTPORT;
-      aTLS: boolean = false; const SecondaryHostCsv: RawUtf8 = ''; const
+      aTls: boolean = false; const SecondaryHostCsv: RawUtf8 = ''; const
       SecondaryPortCsv: RawUtf8 = ''); overload;
     /// connect to a database on a remote MongoDB primary server
     // - this method won't use authentication, and will return the corresponding
@@ -982,9 +987,9 @@ type
     // - default value is 30000, i.e. 30 seconds
     property ConnectionTimeOut: cardinal
       read fConnectionTimeOut write fConnectionTimeOut;
-    /// if the socket connection is secured over TLS
-    property ConnectionTLS: boolean
-      read fConnectionTLS;
+    /// if the socket connection is secured over Tls
+    property ConnectionTls: boolean
+      read fConnectionTls;
     /// allow automatic reconnection (with authentication, if applying), if the
     // socket is closed (e.g. was dropped from the server)
     property GracefulReconnect: boolean
@@ -2191,8 +2196,9 @@ begin
   if fSocket <> nil then
     raise EMongoConnectionException.Create('Duplicate Open', self);
   try
-    fSocket := TCrtSocket.Open(fServerAddress, UInt32ToUtf8(fServerPort), nlTcp,
-      Client.ConnectionTimeOut, Client.ConnectionTLS);
+    fSocket := TCrtSocket.Open(fServerAddress, UInt32ToUtf8(fServerPort),
+      nlTcp, Client.ConnectionTimeOut, Client.ConnectionTls,
+      @Client.ConnectionTlsContext, @Client.ConnectionTunnel);
   except
     on E: Exception do
       raise EMongoException.CreateUtf8('%.Open unable to connect to MongoDB server %: % [%]',
@@ -2688,7 +2694,7 @@ end;
 { TMongoClient }
 
 constructor TMongoClient.Create(const Host: RawUtf8; Port: integer;
-  aTLS: boolean; const SecondaryHostCsv, SecondaryPortCsv: RawUtf8);
+  aTls: boolean; const SecondaryHostCsv, SecondaryPortCsv: RawUtf8);
 const
   PROT: array[boolean] of string[1] = (
     '', 's');
@@ -2698,10 +2704,10 @@ var
   nHost, i: PtrInt;
 begin
   fConnectionTimeOut := 30000;
-  fConnectionTLS := aTLS;
+  fConnectionTls := aTls;
   fLogReplyEventMaxSize := 1024;
   fGracefulReconnect.Enabled := true;
-  FormatUtf8('mongodb%://%:%', [PROT[aTLS], Host, Port], fConnectionString);
+  FormatUtf8('mongodb%://%:%', [PROT[aTls], Host, Port], fConnectionString);
   CsvToRawUtf8DynArray(pointer(SecondaryHostCsv), secHost);
   nHost := length(secHost);
   SetLength(fConnections, nHost + 1);
