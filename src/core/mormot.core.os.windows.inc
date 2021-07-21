@@ -2928,6 +2928,22 @@ var
   cpu, manuf, prod, prodver: RawUtf8;
   reg: TWinRegistry;
 begin
+  {$ifndef FPC} // FPC_X86 already redirect to FastCode RTL Move()
+  {$ifdef ASMX86}
+  {$ifndef HASNOSSE2}
+  if not (cfSSE2 in CpuFeatures) then
+  begin
+    // avoid illegal opcode in MoveFast() and SynLZ functions
+    RedirectCode(@MoveFast, @System.Move);
+    RedirectCode(@SynLZcompress1, @SynLZcompress1Pas);
+    RedirectCode(@SynLZdecompress1, @SynLZdecompress1Pas);
+    ConsoleWrite('WARNING: Old not SSE2 CPU detected -> ' +
+      'please recompile with HASNOSSE2', ccLightRed);
+    // note: FillCharFast is handled by mormot.core.base via ERMSB
+  end;
+  {$endif HASNOSSE2}
+  {$endif ASMX86}
+  {$endif FPC}
   // late-binding of newest Windows APIs
   h := GetModuleHandle(kernel32);
   GetTickCount64 := GetProcAddress(h, 'GetTickCount64');

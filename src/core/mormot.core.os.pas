@@ -2888,6 +2888,7 @@ end;
 {$ifdef CPUINTEL}
 procedure RedirectCode(Func, RedirectFunc: Pointer);
 var
+  rel: PtrInt;
   NewJump: packed record
     Code: byte;        // $e9 = jmp {relative}
     Distance: integer; // relative jump is 32-bit even on CPU64
@@ -2897,8 +2898,13 @@ begin
      (RedirectFunc = nil) or
      (Func = RedirectFunc) then
     exit; // nothing to redirect to
-  NewJump.Code := $e9;
-  NewJump.Distance := integer(PtrUInt(RedirectFunc) - PtrUInt(Func) - SizeOf(NewJump));
+  NewJump.Code := $e9; // on both i386 and x86_64
+  rel := PtrInt(PtrUInt(RedirectFunc) - PtrUInt(Func) - SizeOf(NewJump));
+  NewJump.Distance := rel;
+  {$ifdef CPU64}
+  if NewJump.Distance <> rel then
+    exit; // RedirectFunc is too far away from the original code :(
+  {$endif CPU64}
   PatchCode(Func, @NewJump, SizeOf(NewJump));
   assert(PByte(Func)^ = $e9);
 end;
