@@ -206,12 +206,9 @@ type
   // - all Algo* abstract methods should be overriden by inherited classes
   // - don't inherit from TSynPersistent since we don't need any of it
   TAlgoCompress = class
+  protected
+    fAlgoID: byte;
   public
-    /// should return a genuine byte identifier
-    // - 0 is reserved for stored, 1 for TAlgoSynLz, 2/3 for TAlgoDeflate/Fast
-    // (in mormot.core.zip.pas), 4/5/6 for TAlgoLizard/Fast/Huffman
-    // (in mormot.lib.lizard.pas)
-    function AlgoID: byte; virtual; abstract;
     /// computes by default the crc32c() digital signature of the buffer
     function AlgoHash(Previous: cardinal;
       Data: pointer; DataLen: integer): cardinal; overload; virtual;
@@ -233,6 +230,12 @@ type
     // - expects PartialLen <= result < PartialLenMax, depending on the algorithm
     function AlgoDecompressPartial(Comp: pointer; CompLen: integer;
       Partial: pointer; PartialLen, PartialLenMax: integer): integer; virtual; abstract;
+    /// contains a genuine byte identifier for this algorithm
+    // - 0 is reserved for stored, 1 for TAlgoSynLz, 2/3 for TAlgoDeflate/Fast
+    // (in mormot.core.zip.pas), 4/5/6 for TAlgoLizard/Fast/Huffman
+    // (in mormot.lib.lizard.pas)
+    property AlgoID: byte
+      read fAlgoID;
   public
     /// will register AlgoID in the global list, for Algo() class methods
     // - no need to free this instance, since it will be owned by the global list
@@ -404,7 +407,7 @@ type
     /// get the TAlgoCompress instance corresponding to the supplied AlgoID
     // - returns nil if no algorithm was identified
     // - stored content is identified as TAlgoSynLZ
-    class function Algo(AlgoID: byte): TAlgoCompress; overload;
+    class function Algo(aAlgoID: byte): TAlgoCompress; overload;
     /// quickly validate a compressed buffer content, without uncompression
     // - extract the TAlgoCompress, and call DecompressHeader() to check the
     // hash of the compressed data, and return then uncompressed size
@@ -420,8 +423,8 @@ type
   // SynLZCompress/SynLZDecompress wrapper functions
   TAlgoSynLZ = class(TAlgoCompress)
   public
-    /// returns 1 as genuine byte identifier for SynLZ
-    function AlgoID: byte; override;
+    /// set AlgoID = 1 as genuine byte identifier for SynLZ
+    constructor Create; override;
     /// get maximum possible (worse) SynLZ compressed size for the supplied length
     function AlgoCompressDestLen(PlainLen: integer): integer; override;
     /// compress the supplied data using SynLZ
@@ -4472,11 +4475,10 @@ constructor TAlgoCompress.Create;
 var
   existing: TAlgoCompress;
 begin
-  inherited Create;
-  existing := Algo(AlgoID);
+  existing := Algo(fAlgoID);
   if existing <> nil then
     raise EAlgoCompress.CreateUtf8('%.Create: AlgoID=% already registered by %',
-      [self, AlgoID, existing]);
+      [self, fAlgoID, existing]);
   ObjArrayAdd(SynCompressAlgos, self);
 end;
 
@@ -4518,12 +4520,12 @@ begin
   end;
 end;
 
-class function TAlgoCompress.Algo(AlgoID: byte): TAlgoCompress;
+class function TAlgoCompress.Algo(aAlgoID: byte): TAlgoCompress;
 var
   n: integer;
   ptr: ^TAlgoCompress;
 begin
-  if AlgoID <= COMPRESS_SYNLZ then // COMPRESS_STORED is handled as SynLZ
+  if aAlgoID <= COMPRESS_SYNLZ then // COMPRESS_STORED is handled as SynLZ
     result := AlgoSynLZ
   else
   begin
@@ -4535,7 +4537,7 @@ begin
         repeat
           inc(ptr); // ignore List[0] = AlgoSynLZ
           result := ptr^;
-          if result.AlgoID = AlgoID then
+          if result.fAlgoID = aAlgoID then
             exit;
           dec(n);
         until n = 0;
@@ -5291,9 +5293,10 @@ end;
 
 { TAlgoSynLZ }
 
-function TAlgoSynLZ.AlgoID: byte;
+constructor TAlgoSynLZ.Create;
 begin
-  result := COMPRESS_SYNLZ; // =1
+  fAlgoID := COMPRESS_SYNLZ; // =1
+  inherited Create;
 end;
 
 function TAlgoSynLZ.AlgoCompress(Plain: pointer; PlainLen: integer; Comp: pointer): integer;

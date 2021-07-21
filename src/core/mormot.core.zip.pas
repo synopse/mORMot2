@@ -2869,20 +2869,17 @@ type
     function RawProcess(src, dst: pointer; srcLen, dstLen, dstMax: integer;
       process: TAlgoCompressWithNoDestLenProcess): integer; override;
   public
+    /// set AlgoID = 2 as genuine byte identifier for Deflate
     constructor Create; override;
-    function AlgoID: byte; override;
     function AlgoCompressDestLen(PlainLen: integer): integer; override;
   end;
 
 constructor TAlgoDeflate.Create;
 begin
+  if fAlgoID = 0 then
+    fAlgoID := 2;
   inherited Create;
   fDeflateLevel := 6;
-end;
-
-function TAlgoDeflate.AlgoID: byte;
-begin
-  result := 2;
 end;
 
 function TAlgoDeflate.RawProcess(src, dst: pointer; srcLen, dstLen,
@@ -2912,17 +2909,13 @@ type
   // implements the AlgoDeflateFast global variable
   TAlgoDeflateFast = class(TAlgoDeflate)
   public
+    /// set AlgoID = 2 as genuine byte identifier for Deflate Fast
     constructor Create; override;
-    function AlgoID: byte; override;
   end;
-
-function TAlgoDeflateFast.AlgoID: byte;
-begin
-  result := 3;
-end;
 
 constructor TAlgoDeflateFast.Create;
 begin
+  fAlgoID := 3;
   inherited Create;
   fDeflateLevel := 1;
 end;

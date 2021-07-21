@@ -434,32 +434,26 @@ type
       process: TAlgoCompressWithNoDestLenProcess): integer;  override;
   public
     constructor Create; override;
-    function AlgoID: byte; override;
     function AlgoCompressDestLen(PlainLen: integer): integer; override;
   end;
 
   TAlgoLizardFast = class(TAlgoLizard)
   public
     constructor Create; override;
-    function AlgoID: byte; override;
   end;
 
   TAlgoLizardHuffman = class(TAlgoLizard)
   public
     constructor Create; override;
-    function AlgoID: byte; override;
   end;
 
 
 { TAlgoLizard }
 
-function TAlgoLizard.AlgoID: byte;
-begin
-  result := 4;
-end;
-
 constructor TAlgoLizard.Create;
 begin
+  if fAlgoID = 0 then
+    fAlgoID := 4;
   inherited Create;
   fCompressionLevel := LIZARD_DEFAULT_CLEVEL;
 end;
@@ -495,13 +489,9 @@ end;
 
 constructor TAlgoLizardFast.Create;
 begin
+  fAlgoID := 5;
   inherited Create;
   fCompressionLevel := LIZARD_MIN_CLEVEL;
-end;
-
-function TAlgoLizardFast.AlgoID: byte;
-begin
-  result := 5;
 end;
 
 
@@ -509,13 +499,9 @@ end;
 
 constructor TAlgoLizardHuffman.Create;
 begin
+  fAlgoID := 6;
   inherited Create;
   fCompressionLevel := LIZARD_HUFFMAN_CLEVEL;
-end;
-
-function TAlgoLizardHuffman.AlgoID: byte;
-begin
-  result := 6;
 end;
 
 
