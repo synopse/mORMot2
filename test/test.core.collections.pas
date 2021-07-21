@@ -49,7 +49,6 @@ const
   MAX = 100000;
   ONLYLOG = false;
 var
-  da: PDynArray;
   li: IList<T>;
   cop: TArray<T>;
   i, j: T;
@@ -59,11 +58,12 @@ var
   {$ifndef FPC}
   p0, p1: ^T;
   {$endif FPC}
+  da: PDynArray;
   name: RawUtf8;
 begin
   all.Start;
   // circumvent FPC x86_64/aarch64 internal error 2010021502 :(
-  // - root cause seems to be that if T is coming through a generic method
+  // - root cause seems to be that T is coming through a generic method
   // - direct specialization like Collections.NewList<integer> works fine
   {$ifdef FPC_64}
   li := TSynListSpecialized<T>.Create;
