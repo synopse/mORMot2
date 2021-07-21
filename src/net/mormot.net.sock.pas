@@ -3019,7 +3019,7 @@ begin
   repeat
     sent := Len;
     if fSecure <> nil then
-      res := fSecure.Send(P, Len)
+      res := fSecure.Send(P, sent)
     else
       res := fSock.Send(P, sent);
     if sent > 0 then
@@ -3027,7 +3027,7 @@ begin
       inc(fBytesOut, sent);
       dec(Len, sent);
       if Len <= 0 then
-        break;
+        break; // data successfully sent
       inc(PByte(P), sent);
     end
     else if (res <> nrOK) and
