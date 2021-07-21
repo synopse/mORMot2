@@ -3713,18 +3713,22 @@ begin
 end;
 
 {$I-}
-
 procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
   NoLineFeed, NoColor: boolean);
 begin
+  {$ifdef OSWINDOWS}
+  if not HasConsole then
+    exit;
+  {$endif OSWINDOWS}
   if not NoColor then
-    TextColor(Color);
+    TextColor(Color); 
   write(Utf8ToConsole(Text));
   if not NoLineFeed then
     writeln;
+  if not NoColor then
+    TextColor(ccLightGray);
   ioresult;
 end;
-
 {$I+}
 
 

@@ -137,16 +137,12 @@ function  GetDesktopWindow;           external user32;
 function  Unicode_InPlaceUpper;       external user32 name 'CharUpperBuffW';
 function  Unicode_InPlaceLower;       external user32 name 'CharLowerBuffW';
 
-{$I-}
 procedure DisplayFatalError(const title, msg: RawUtf8);
 begin
   // better than a MessageBox() especially for services
   AllocConsole; // will create one black window console if none
-  writeln(title);
-  writeln(msg);
-  ioresult;
+  ConsoleWrite(title + CRLF + msg, ccLightRed);
 end;
-{$I+}
 
 function GetModuleHandle(lpModuleName: PChar): HMODULE;
 begin
@@ -1095,24 +1091,26 @@ begin
   end;
 end;
 
-{$I-}
+function HasConsole: boolean;
+begin
+  if StdOut = 0 then
+  begin
+    StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
+    if StdOut = INVALID_HANDLE_VALUE then
+      StdOut := 0;
+  end;
+  result := StdOut <> 0;
+end;
 
 var
   TextAttr: integer = ord(ccDarkGray);
-
-procedure InitConsole;
-begin
-  StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
-  if StdOut = INVALID_HANDLE_VALUE then
-    StdOut := 0;
-end;
 
 procedure TextColor(Color: TConsoleColor);
 var
   oldAttr: integer;
 begin
-  if StdOut = 0 then
-    InitConsole;
+  if not HasConsole then
+    exit;
   oldAttr := TextAttr;
   TextAttr := (TextAttr and $F0) or ord(Color);
   if TextAttr <> oldAttr then
@@ -1123,8 +1121,8 @@ procedure TextBackground(Color: TConsoleColor);
 var
   oldAttr: integer;
 begin
-  if StdOut = 0 then
-    InitConsole;
+  if not HasConsole then
+    exit;
   oldAttr := TextAttr;
   TextAttr := (TextAttr and $0F) or (ord(Color) shl 4);
   if TextAttr <> oldAttr then
@@ -1158,26 +1156,30 @@ begin
   end;
 end;
 
+{$I-}
 procedure ConsoleWaitForEnterKey;
 var
   msg: TMsg;
 begin
-  while not ConsoleKeyPressed(VK_RETURN) do
-  begin
-    if GetCurrentThreadID = MainThreadID then
-      CheckSynchronize{$ifdef WITHUXTHEME}(1000){$endif}
-    else
-      WaitMessage;
-    while PeekMessage(msg, 0, 0, 0, PM_REMOVE) do
-      if msg.Message = WM_QUIT then
-        exit
-      else
-      begin
-        TranslateMessage(msg);
-        DispatchMessage(msg);
-      end;
-  end;
+  if IsMultiThread and
+     (GetCurrentThreadID = MainThreadID) then
+    while not ConsoleKeyPressed(VK_RETURN) do
+    begin
+      CheckSynchronize{$ifndef DELPHI6OROLDER}(100){$endif};
+      while PeekMessage(msg, 0, 0, 0, PM_REMOVE) do
+        if msg.Message = WM_QUIT then
+          exit
+        else
+        begin
+          TranslateMessage(msg);
+          DispatchMessage(msg);
+        end;
+    end
+  else
+    ReadLn;
+  ioresult;
 end;
+{$I+}
 
 {$ifndef FPC}
 var
@@ -1209,13 +1211,10 @@ begin
       CharToOemBuffW(pointer(utf16), tmp.buf, tmp.len);
       SetString(result, PAnsiChar(tmp.buf), StrLen(tmp.buf));
       tmp.Done;
-      writeln(result);
       exit;
     end;
-  result := S;
+  result := S; // no conversion needed if text is plain ASCII-7 content
 end;
-
-{$I+}
 
 constructor TFileVersion.Create(const aFileName: TFileName;
   aMajor, aMinor, aRelease, aBuild: integer);
@@ -2301,16 +2300,12 @@ var
   param: string;
   i: integer;
 
-  procedure ShowError(const Msg: RawUtf8);
+  procedure ShowError(Msg: string);
   begin
+    Msg := ServiceName + ': "' + Msg + '" failed for ' + param;
     if Assigned(WindowsServiceLog) then
-      WindowsServiceLog(sllLastError, 'During % for %', [Msg, param]);
-    if not IsConsole then
-      exit;
-    {$I-} // ignore if no console has been allocated
-    writeln(ServiceName, ': Error "', Msg, '" for ', param);
-    ioresult;
-    {$I+}
+      WindowsServiceLog(sllLastError, '%', [Msg]);
+    ConsoleWrite(RawUtf8(Msg), ccLightRed);
   end;
 
 begin
@@ -3117,17 +3112,13 @@ begin
   TrimDualSpaces(CpuInfoText);
 end;
 
-{$I-}
 procedure FinalizeSpecificUnit;
 begin
   if CryptoApi.Handle <> 0 then
     Windows.FreeLibrary(CryptoApi.Handle);
   if OleDBCoinitialized <> 0 then
-  begin
-    writeln('Missing ', OleDBCoInitialized, ' TOleDBConnection.Destroy call');
-    ioresult;
-  end;
+    ConsoleWrite('Missing CoUninitialize TOleDBConnection.Destroy call');
 end;
-{$I+}
+
 
 

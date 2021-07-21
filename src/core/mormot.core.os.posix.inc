@@ -1317,8 +1317,8 @@ begin
   result := S; // expect a UTF-8 console under Linux/BSD
 end;
 
-
 {$I+}
+
 
 constructor TFileVersion.Create(const aFileName: TFileName;
   aMajor, aMinor, aRelease, aBuild: integer);
