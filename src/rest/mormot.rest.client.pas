@@ -1171,12 +1171,14 @@ var
   a: integer;
   algo: TRestAuthenticationSignedUriAlgo absolute a;
 begin
-  result := '';
   if (Sender.CallBackGet('auth', aNameValueParameters, resp) <> HTTP_SUCCESS) or
      (JsonDecode(pointer({%H-}resp),
       ['result', 'data', 'server', 'version', 'logonid', 'logonname',
        'logondisplay', 'logongroup', 'timeout', 'algo'], @values) = nil) then
-    Sender.fSession.Data := '' // reset temporary 'data' field
+  begin
+    Sender.fSession.Data := ''; // reset temporary 'data' field
+    result := ''; // error
+  end
   else
   begin
     values[0].ToUtf8(result);

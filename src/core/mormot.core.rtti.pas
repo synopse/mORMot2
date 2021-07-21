@@ -5295,7 +5295,7 @@ var
     // ptRawByteString, ptRawJson, ptRawUtf8, ptRecord, ptSingle,
     @_StringRandom, @_NoRandom, @_StringRandom, @_NoRandom, @_SingleRandom,
     // ptString,
-    {$ifdef UNICODE} @_StringRandom, {$else} @_UStringRandom, {$endif}
+    {$ifdef UNICODE} @_UStringRandom, {$else} @_StringRandom, {$endif}
     // ptSynUnicode,
     {$ifdef HASVARUSTRING} @_UStringRandom {$else} @_WStringRandom {$endif},
     // ptDateTime, ptDateTimeMS, ptGuid, ptHash128, ptHash256, ptHash512,
