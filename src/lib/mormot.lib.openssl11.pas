@@ -3110,7 +3110,7 @@ begin
   result := length(pwd);
   if result <> 0 then
     if size > result  then
-      MoveSmall(buf, pointer(pwd), result + 1) // +1 to include trailing #0
+      MoveSmall(pointer(pwd), buf, result + 1) // +1 to include trailing #0
     else
       result := 0; // buf[0..size-1] is too small for this password -> abort
 end;
