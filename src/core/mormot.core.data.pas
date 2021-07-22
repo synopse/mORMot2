@@ -3964,11 +3964,10 @@ begin
   {$ifdef HASFASTTRYFINALLY} // make a huge performance difference
   try
   {$endif HASFASTTRYFINALLY}
-    bak := fValues.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare;
-    fValues.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare :=
-      @SortDynArrayPUtf8Char; // compare(RawUtf8,RawUtf8) -> (RawUtf8,PUtf8Char)
+    bak := fValues.Hasher.Compare; // (RawUtf8,RawUtf8) -> (RawUtf8,PUtf8Char)
+    PDynArrayHasher(@fValues.Hasher)^.Compare := @SortDynArrayPUtf8Char;
     i := fValues.FindHashedForAdding(aText, added, aTextHash);
-    fValues.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := bak;
+    PDynArrayHasher(@fValues.Hasher)^.Compare := bak;
     if added then
       FastSetString(fValue[i], aText, aTextLen); // new value to the pool
     aResult := fValue[i]; // return unified string instance
@@ -8370,9 +8369,15 @@ var
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
   P: PAnsiChar;
 begin
+  if not Assigned(EventCompare) and
+     not Assigned(Compare) then
+  begin
+    result := -1;
+    exit; // we need a comparison function
+  end;
   if not (canHash in State) then
   begin
-    // e.g. Count<CountTrigger
+    // brute force search is better by now e.g. when Count<CountTrigger
     result := Scan(Item);
     exit;
   end;
@@ -8397,10 +8402,8 @@ begin
       P := PAnsiChar(Value^) + ndx * fInfo.Cache.ItemSize;
     if Assigned(EventCompare) then
       cmp := EventCompare(P^, Item^)
-    else if Assigned(Compare) then
-      cmp := Compare(P^, Item^)
     else
-      cmp := 1;
+      cmp := Compare(P^, Item^);
     if cmp = 0 then
     begin
       // faster than hash e.g. for huge strings
@@ -8597,7 +8600,9 @@ begin
         break;
       end
       else
-        inc(P, siz);
+        inc(P, siz)
+  else
+    exit;
   // enable hashing if Scan() called 2*CountTrigger
   if hasHasher in State then
     if max > CountTrigger then
