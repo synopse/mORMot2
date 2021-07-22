@@ -59,6 +59,8 @@ type
     procedure UrlEncoding;
     /// some low-level JSON encoding/decoding
     procedure EncodeDecodeJSON;
+    /// some performance numbers about JSON parsing and generating
+    procedure JSONBenchmark;
     /// HTML generation from Wiki Or Markdown syntax
     procedure WikiMarkdownToHtml;
     /// some low-level variant process
@@ -2726,6 +2728,71 @@ begin
   finally
     Enemy.Free;
   end;
+end;
+
+procedure TTestCoreProcess.JSONBenchmark;
+const
+  ITER = 50;
+  ONLYLOG = false;
+  COUNT = 8227;
+var
+  people: RawUtf8;
+  P: PUtf8Char;
+  len, i: integer;
+  dv: TDocVariantData;
+  table: TOrmTableJson;
+  timer: TPrecisionTimer;
+begin
+  people := StringFromFile(WorkDir + 'People.json');
+  if people = '' then
+    exit; // need to run at least once the ORM tests
+  len := length(people);
+  check(len > 800000, 'unexpected people.json');
+  len := len * ITER;
+  timer.Start;
+  for i := 1 to ITER do
+    Check(IsValidJson(people));
+  NotifyTestSpeed('IsValidJson(RawUtf8)', 0, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+    Check(IsValidJsonBuffer(pointer(people)));
+  NotifyTestSpeed('IsValidJson(PUtf8Char)', 0, len, @timer, ONLYLOG);
+  P := @people[2]; // point just after initial '[' for JsonArrayCount
+  timer.Start;
+  for i := 1 to ITER do
+    Check(JsonArrayCount(P) = COUNT);
+  NotifyTestSpeed('JsonArrayCount(P)', 0, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+    Check(JsonArrayCount(P, P + length(people) - 1) = COUNT);
+  NotifyTestSpeed('JsonArrayCount(P,PMax)', 0, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+  begin
+    dv.InitJson(people, JSON_OPTIONS_FAST);
+    Check(dv.Count = COUNT);
+    dv.Clear; // to reuse dv
+  end;
+  NotifyTestSpeed('TDocVariant', 0, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+  begin
+    dv.InitJson(people, JSON_OPTIONS_FAST + [dvoInternNames]);
+    Check(dv.Count = COUNT);
+    dv.Clear; // to reuse dv
+  end;
+  NotifyTestSpeed('TDocVariant dvoInternNames', 0, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+  begin
+    table := TOrmTableJson.Create('', people);
+    try
+      Check(table.RowCount = COUNT);
+    finally
+      table.Free;
+    end;
+  end;
+  NotifyTestSpeed('TOrmTableJson', 0, len, @timer, ONLYLOG);
 end;
 
 procedure TTestCoreProcess.WikiMarkdownToHtml;
