@@ -11151,47 +11151,40 @@ begin
   result := StrCompW(PWideChar(A), PWideChar(B));
 end;
 
-function CompareHash128(A, B: PHash128Rec): integer;
+function CompareHash(A, B: PPointer; Len: integer): integer;
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := ord(A.Lo > B.Lo) - ord(A.Lo < B.Lo);
-  if result = 0 then
-    result := ord(A.Hi > B.Hi) - ord(A.Hi < B.Hi);
+  repeat
+    result := ComparePointer(A^, B^); // on FPC inlined is better than explicit
+    if result <> 0 then
+      exit; // trailing register-size memory is seldom equal during sort
+    inc(A);
+    inc(B);
+    dec(Len);
+  until Len = 0;
 end;
 
 function SortDynArray128(const A, B): integer;
 begin
-  result := CompareHash128(@A, @B);
+  {$ifdef CPU64}
+  result := ord(THash128Rec(A).L > THash128Rec(B).L) -
+            ord(THash128Rec(A).L < THash128Rec(B).L);
+  if result = 0 then
+    result := ord(THash128Rec(A).H > THash128Rec(B).H) -
+              ord(THash128Rec(A).H < THash128Rec(B).H);
+  {$else}
+  result := CompareHash(@A, @B, SizeOf(THash128) div SizeOf(pointer));
+  {$endif CPU64}
 end;
 
 function SortDynArray256(const A, B): integer;
 begin
-  {$ifdef CPUX64}
-  result := MemCmpSse2(@A, @B, SizeOf(THash256));
-  {$else}
-  result := CompareHash128(@THash256Rec(A).l, @THash256Rec(B).l);
-  if result = 0 then
-    result := CompareHash128(@THash256Rec(A).h, @THash256Rec(B).h);
-  {$endif CPUX64}
+  result := CompareHash(@A, @B, SizeOf(THash256) div SizeOf(pointer));
 end;
 
 function SortDynArray512(const A, B): integer;
 begin
-  {$ifdef CPUX64}
-  result := MemCmpSse2(@A, @B, SizeOf(THash512));
-  {$else}
-  result := CompareHash128(@THash512Rec(A).l.l, @THash512Rec(B).l.l);
-  if result = 0 then
-  begin
-    result := CompareHash128(@THash512Rec(A).l.h, @THash512Rec(B).l.h);
-    if result = 0 then
-    begin
-      result := CompareHash128(@THash512Rec(A).h.l, @THash512Rec(B).h.l);
-      if result = 0 then
-        result := CompareHash128(@THash512Rec(A).h.h, @THash512Rec(B).h.h);
-    end;
-  end;
-  {$endif CPUX64}
+  result := CompareHash(@A, @B, SizeOf(THash512) div SizeOf(pointer));
 end;
 
 function SortDynArrayRawByteString(const A, B): integer;
