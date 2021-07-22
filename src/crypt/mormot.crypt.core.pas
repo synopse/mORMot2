@@ -9657,7 +9657,7 @@ begin
   begin
     // 128-bit aeshash as implemented in Go runtime, using aesenc opcode
     GetMemAligned(AESNIHASHKEYSCHED_, nil, 16 * 16, AESNIHASHKEYSCHED);
-    FillRandom(AESNIHASHKEYSCHED, 16 * 4); // genuine to avoid hash flooding
+    RandomBytes(AESNIHASHKEYSCHED, 16 * 16); // genuine to avoid hash flooding
     AesNiHash32 := @_AesNiHash32;
     AesNiHash64 := @_AesNiHash64;
     AesNiHash128 := @_AesNiHash128;
