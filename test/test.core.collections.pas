@@ -42,12 +42,21 @@ implementation
 
 {$I-}
 
-{.$define ALLBENCHMARKS}
+{$define TESTHASH128}
+
+{$ifndef TESTHASH128}
+  {$define USEEQUALOP}
+{$endif TESTHASH128}
+
+{$ifndef FPC}
+  // Delphi is sometimes just buggy: equal operator is not allowed in TestOne<T>
+  {$undef USEEQUALOP}
+{$endif FPC}
 
 procedure TTestCoreCollections.TestOne<T>;
 const
   MAX = 100000;
-  ONLYLOG = false;
+  ONLYLOG = true; // set to FALSE for verbose benchmarking console output
 var
   li: IList<T>;
   cop: TArray<T>;
@@ -55,15 +64,16 @@ var
   n: integer;
   timer, all: TPrecisionTimer;
   v: PVariantArray;
-  {$ifndef FPC}
+  {$ifndef USEEQUALOP}
   p0, p1: ^T;
   {$endif FPC}
   da: PDynArray;
   name: RawUtf8;
 begin
+  SetLength(cop, MAX);
   all.Start;
   // circumvent FPC x86_64/aarch64 internal error 2010021502 :(
-  // - root cause seems to be that T is coming through a generic method
+  // - root cause seems to be that T is coming through TestOne<T> generic method
   // - direct specialization like Collections.NewList<integer> works fine
   {$ifdef FPC_64}
   li := TSynListSpecialized<T>.Create;
@@ -79,63 +89,51 @@ begin
     {%H-}cop[0] := i;  // the compiler needs to use i somewhere
   end;
   timer.Start;
-  SetLength(cop, MAX);
   for n := 0 to MAX - 1 do
     da^.ItemRandom(@cop[n]);
-  {$ifdef ALLBENCHMARKS}
   NotifyTestSpeed('random % ', [name], MAX, 0, @timer, ONLYLOG);
-  {$endif ALLBENCHMARKS}
   timer.Start;
   li.Capacity := MAX;
   for n := 0 to MAX - 1 do
     Check(li.Add(cop[n]) = n);
-  {$ifdef ALLBENCHMARKS}
   NotifyTestSpeed('add %    ',  [name], MAX, 0, @timer, ONLYLOG);
-  {$endif ALLBENCHMARKS}
   CheckEqual(li.Count, MAX);
   timer.Start;
   for n := 0 to MAX - 1 do
   begin
-    // Delphi is sometimes just buggy: equal operator is not allowed here!
-    {$ifdef FPC}
+    {$ifdef USEEQUALOP}
     Check(li[n] = cop[n]);
     {$else}
     i := li[n];
     Check(da.ItemCompare(@i, @cop[n]) = 0);
-    {$endif FPC}
+    {$endif USEEQUALOP}
   end;
-  {$ifdef ALLBENCHMARKS}
   NotifyTestSpeed('getitem %', [name], MAX, 0, @timer, ONLYLOG);
-  {$endif ALLBENCHMARKS}
   timer.Start;
   n := 0;
   for i in li do
   begin
-    {$ifdef FPC}
+    {$ifdef USEEQUALOP}
     Check(i = cop[n]);
     {$else}
     Check(da.ItemCompare(@i, @cop[n]) = 0);
-    {$endif FPC}
+    {$endif USEEQUALOP}
     inc(n);
   end;
-  {$ifdef ALLBENCHMARKS}
   NotifyTestSpeed('in %     ', [name], MAX, 0, @timer, ONLYLOG);
-  {$endif ALLBENCHMARKS}
   Check(n = MAX);
   NotifyTestSpeed(' IList<%>', [name], MAX * 4, 0, @all, {onlylog=}false);
   timer.Start; // Sort is excluded of main "all" timer since is misleading
   li.Sort;
-  {$ifdef ALLBENCHMARKS}
   NotifyTestSpeed('sort %   ', [name], MAX, 0, @timer, ONLYLOG);
-  {$endif ALLBENCHMARKS}
   if TypeInfo(T) = TypeInfo(variant) then
   begin
     v := li.First;
     for n := 0 to MAX - 2 do
       Check(VariantCompare(v[n], v[n+1]) <= 0);
-    exit; // Sort+Find do not match with variants
+    exit; // Sort+Find do not match with variants due to duplicates
   end;
-  {$ifdef FPC}
+  {$ifdef USEEQUALOP}
   for n := 0 to MAX - 2 do
     Check(li[n] <= li[n+1]); // internal error on Delphi :(
   {$else}
@@ -148,20 +146,21 @@ begin
     inc(p0);
     inc(p1);
   end;
-  {$endif FPC}
+  {$endif USEEQUALOP}
   timer.Start;
   for n := 0 to MAX - 1 do
-  {$ifdef FPC}
+  {$ifdef USEEQUALOP}
     Check(li[li.Find(cop[n])] = cop[n], 'sorted find');
   {$else}
   begin
     i := li[li.Find(cop[n])];
     Check(da.ItemCompare(@i, @cop[n]) = 0, 'sorted find');
   end;
-  {$endif FPC}
-  {$ifdef ALLBENCHMARKS}
+  {$endif USEEQUALOP}
   NotifyTestSpeed('find %   ', [name], MAX, 0, @timer, ONLYLOG);
-  {$endif ALLBENCHMARKS}
+  Check(li.Count = MAX);
+  li.Clear;
+  Check(li.Count = 0);
 end;
 
 procedure TTestCoreCollections._IList;
@@ -174,6 +173,8 @@ var
   u: RawUtf8;
   pu: PRawUtf8;
   lu: IList<RawUtf8>;
+  lh: IList<THash128>;
+  h: THash128;
 begin
   // manual IList<integer> validation
   li := Collections.NewList<integer>;
@@ -257,10 +258,16 @@ begin
     Check(lu.Find(u) = i);      // O(1) hash table search
     inc(i);
   end;
-  // validate and benchmark all main types
+  // minimal THash128 compilation check
+  lh := Collections.NewList<THash128>;
+  FillZero(h);
+  lh.Add(h);
+  lh.Sort;
+  lh := nil;
+  // validate and benchmark all main types using a generic sub method
   TestOne<byte>();
   TestOne<word>();
-  TestOne<Integer>();
+  TestOne<integer>();
   TestOne<cardinal>();
   TestOne<Int64>();
   TestOne<QWord>();
@@ -277,6 +284,10 @@ begin
   TestOne<UnicodeString>();
   {$endif HASVARUSTRING}
   TestOne<Variant>();
+  {$ifdef TESTHASH128}
+  TestOne<THash128>();
+  TestOne<TGuid>();
+  {$endif TESTHASH128}
 end;
 
 {$else}
