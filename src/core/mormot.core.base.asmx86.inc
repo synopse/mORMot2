@@ -275,13 +275,13 @@ asm
         movups  dqword ptr [edx + ecx], xmm2 // last 16
         ret
 {$endif HASNOSSE2}
-@m01:   movzx   ecx, byte ptr [eax]
-        mov     [edx], cl
+@m01:   mov     al, [eax]
+        mov     [edx], al
         ret
-@m02:   movzx   ecx, word ptr [eax]
-        mov     [edx], cx
+@m02:   movzx   eax, word ptr [eax]
+        mov     [edx], ax
         ret
-@m03:   mov     cx, [eax]
+@m03:   movzx   ecx, word ptr [eax]
         mov     al, [eax + 2]
         mov     [edx], cx
         mov     [edx + 2], al
@@ -295,7 +295,7 @@ asm
         mov     [edx + 4], al
         ret
 @m06:   mov     ecx, [eax]
-        mov     ax, [eax + 4]
+        movzx   eax, word ptr [eax + 4]
         mov     [edx], ecx
         mov     [edx + 4], ax
         ret
