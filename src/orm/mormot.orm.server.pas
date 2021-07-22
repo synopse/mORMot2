@@ -79,7 +79,7 @@ type
     fOrmVersionDeleteTable: TOrmTableDeletedClass;
     // TOrmHistory.ModifiedRecord handles up to 64 (=1 shl 6) tables
     fTrackChangesHistoryTableIndex: TIntegerDynArray;
-    fTrackChangesHistoryTableIndexCount: cardinal;
+    fTrackChangesHistoryTableIndexCount: integer;
     fTrackChangesHistory: array of record
       CurrentRow: integer;
       MaxSentDataJsonRow: integer;
@@ -494,25 +494,24 @@ begin
   // faster direct Static call by default
   fVirtualTableDirect := true;
   // initialize TrackChanges() associated tables
-  fTrackChangesHistoryTableIndexCount := length(fModel.Tables);
-  SetLength(fTrackChangesHistory, fTrackChangesHistoryTableIndexCount);
-  if fTrackChangesHistoryTableIndexCount > 64 then
-    // rows are identified as RecordRef
-    fTrackChangesHistoryTableIndexCount := 64;
-  SetLength(fTrackChangesHistoryTableIndex, fTrackChangesHistoryTableIndexCount);
-  
-  if fTrackChangesHistoryTableIndexCount=0 then
-    exit;
-  
-  for t := 0 to fTrackChangesHistoryTableIndexCount - 1 do
-    fTrackChangesHistoryTableIndex[t] := -1;
-  fOrmVersionDeleteTable := TOrmTableDeleted;
-  for t := 0 to high(fModel.Tables) do
-    if fModel.Tables[t].OrmProps.RecordVersionField <> nil then
-    begin
-      fOrmVersionDeleteTable := fModel.AddTableInherited(TOrmTableDeleted);
-      break;
-    end;
+  if fModel.Tables <> nil then
+  begin
+    fTrackChangesHistoryTableIndexCount := length(fModel.Tables);
+    SetLength(fTrackChangesHistory, fTrackChangesHistoryTableIndexCount);
+    if fTrackChangesHistoryTableIndexCount > 64 then
+      // rows are identified as RecordRef
+      fTrackChangesHistoryTableIndexCount := 64;
+    SetLength(fTrackChangesHistoryTableIndex, fTrackChangesHistoryTableIndexCount);
+    for t := 0 to fTrackChangesHistoryTableIndexCount - 1 do
+      fTrackChangesHistoryTableIndex[t] := -1;
+    fOrmVersionDeleteTable := TOrmTableDeleted;
+    for t := 0 to high(fModel.Tables) do
+      if fModel.Tables[t].OrmProps.RecordVersionField <> nil then
+      begin
+        fOrmVersionDeleteTable := fModel.AddTableInherited(TOrmTableDeleted);
+        break;
+      end;
+  end;
 end;
 
 destructor TRestOrmServer.Destroy;
@@ -1564,7 +1563,7 @@ begin
     if aTable[t].InheritsFrom(TOrmHistory) then
       raise EOrmException.CreateUtf8(
         '%.TrackChanges([%]) not allowed', [self, aTable[t]]);
-    if cardinal(tableIndex) < fTrackChangesHistoryTableIndexCount then
+    if cardinal(tableIndex) < cardinal(fTrackChangesHistoryTableIndexCount) then
     begin
       fTrackChangesHistoryTableIndex[tableIndex] := TableHistoryIndex;
       if TableHistoryIndex >= 0 then
@@ -1737,7 +1736,7 @@ function TRestOrmServer.InternalUpdateEventNeeded(aTableIndex: integer): boolean
 begin
   result := (self <> nil) and
     (Assigned(OnUpdateEvent) or
-     ((cardinal(aTableIndex) < fTrackChangesHistoryTableIndexCount) and
+     ((cardinal(aTableIndex) < cardinal(fTrackChangesHistoryTableIndexCount)) and
       (fTrackChangesHistoryTableIndex[aTableIndex] >= 0)));
 end;
 
@@ -1893,7 +1892,7 @@ begin
   else
   begin
     // track simple fields modification
-    if cardinal(aTableIndex) < fTrackChangesHistoryTableIndexCount then
+    if cardinal(aTableIndex) < cardinal(fTrackChangesHistoryTableIndexCount) then
     begin
       TableHistoryIndex := fTrackChangesHistoryTableIndex[aTableIndex];
       if TableHistoryIndex >= 0 then
