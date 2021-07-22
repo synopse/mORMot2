@@ -3790,7 +3790,7 @@ begin
         if BinaryFile then
           SaveToBinary(F)
         else
-          SaveToJson(F, true);
+          SaveToJson(F, {expandedjson=} true);
       finally
         F.Free;
       end;

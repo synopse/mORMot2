@@ -1056,8 +1056,8 @@ retry:            VData := CurrentAnsiConvert.Utf8ToAnsi(VData);
                 ParameterValue := pointer(VData);
               BufferSize := length(VData);
               if CValueType = SQL_C_CHAR then
-                inc(BufferSize)
-              else // include last #0
+                inc(BufferSize) // include last #0
+              else
               if CValueType = SQL_C_WCHAR then
                 BufferSize := BufferSize shr 1;
             end
