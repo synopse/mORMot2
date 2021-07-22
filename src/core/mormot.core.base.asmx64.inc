@@ -1212,75 +1212,75 @@ function BufferLineLength(Text, TextEnd: PUtf8Char): PtrInt;
         {$endif WIN64ABI}
 end;
 
-function MemCmpSse2(P1, P2: Pointer; Length: PtrInt): integer;
+function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
 {$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
 // from GPL memcmp64.asm by Agner Fog - www.agner.org/optimize
-          add     P1, Length    // use negative index from end of memory block
-          add     P2, Length
-          neg     Length
+          add     P1, L    // use negative index from end of memory block
+          add     P2, L
+          neg     L
           jge     @eq
           mov     r9d, $FFFF             // 16 bits mask = 16 bytes
-          cmp     Length, -16
+          cmp     L, -16
           ja      @sml
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @by16:    // loop comparing 16 bytes
-          movups  xmm1, oword ptr [P1 + Length]
-          movups  xmm2, oword ptr [P2 + Length]
+          movups  xmm1, oword ptr [P1 + L]
+          movups  xmm2, oword ptr [P2 + L]
           pcmpeqb xmm1, xmm2             // compare 16 bytes
           pmovmskb eax, xmm1             // get byte mask
           xor     eax, r9d               // not ax
           jnz     @diff                  // difference found
-          add     Length, 16
+          add     L, 16
           jz      @eq                     // finished, equal
-          cmp     Length, -16
+          cmp     L, -16
           jna     @by16                  // next 16 bytes
 @sml:     // less than 16 bytes left
-          cmp     Length, -8
+          cmp     L, -8
           ja      @less8
           // compare 8 bytes
-          movq    xmm1, qword ptr [P1 + Length]
-          movq    xmm2, qword ptr [P2 + Length]
+          movq    xmm1, qword ptr [P1 + L]
+          movq    xmm2, qword ptr [P2 + L]
           pcmpeqb xmm1, xmm2             // compare 8 bytes
           pmovmskb eax, xmm1             // get byte mask
           xor     eax, r9d               // not ax
           jnz     @diff                  // difference found
-          add     Length, 8
+          add     L, 8
           jz      @eq
 @less8:   // less than 8 bytes left
-          cmp     Length, -4
+          cmp     L, -4
           ja      @less4
           // compare 4 bytes
-          movd    xmm1, dword ptr [P1 + Length]
-          movd    xmm2, dword ptr [P2 + Length]
+          movd    xmm1, dword ptr [P1 + L]
+          movd    xmm2, dword ptr [P2 + L]
           pcmpeqb xmm1, xmm2             // compare 4 bytes
           pmovmskb eax, xmm1             // get byte mask
           xor     eax, r9d               // not ax
           jnz     @diff                  // difference found
-          add     Length, 4
+          add     L, 4
           jz      @eq
 @less4:   // less than 4 bytes left
-          cmp     Length, -2
+          cmp     L, -2
           ja      @less2
-          movzx   eax, word ptr [P1 + Length]
-          movzx   r9d, word ptr [P2 + Length]
+          movzx   eax, word ptr [P1 + L]
+          movzx   r9d, word ptr [P2 + L]
           sub     eax, r9d
           jnz     @last2                 // difference in byte 0 or 1
-          add     Length, 2
+          add     L, 2
           jz      @eq
 @less2:   // less than 2 bytes left
-          test    Length, Length
+          test    L, L
           jz      @eq                     // no bytes left
           jmp     @last                  // one byte left
 @diff:    // difference found: find position
           bsf     eax, eax
-          add     Length, rax
-@last:    movzx   eax, byte ptr [P1 + Length]
-          movzx   r9d, byte ptr [P2 + Length]
+          add     L, rax
+@last:    movzx   eax, byte ptr [P1 + L]
+          movzx   r9d, byte ptr [P2 + L]
           sub     eax, r9d               // return result
           ret
 @last2:   // difference in byte 0 or 1
           neg     al
-          sbb     Length, -1             // add 1 to Length if al == 0
+          sbb     L, -1             // add 1 to L if al == 0
           jmp     @last
 @eq:      // equal
           xor     eax, eax

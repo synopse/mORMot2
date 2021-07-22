@@ -2447,11 +2447,13 @@ procedure FillZero(var dest; count: PtrInt); overload;
 procedure FillZeroSmall(P: pointer; Length: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
-{$ifdef CPUX64}
-/// a fast SSE2 asm version of the C function memcmp()
-// - defined here to properly inline CompareMem()
-function MemCmpSse2(P1, P2: Pointer; Length: PtrInt): integer;
-{$endif CPUX64}
+/// binary comparison of buffers, returning <0, 0 or >0 results
+// - caller should ensure that P1<>nil, P2<>nil and L>0
+// - on x86_64, will use a fast SSE2 asm version of the C function memcmp()
+// (which is also used by CompareMem)
+// - on other platforms, run a simple but efficient per-byte comparison
+function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
+  {$ifndef CPUX64} {$ifdef HASINLINE} inline; {$endif} {$endif}
 
 /// our fast version of CompareMem()
 // - tuned asm for x86, call MemCmpSse2 for x64, or fallback to tuned pascal
@@ -7713,7 +7715,7 @@ function Hash256Index(P: PHash256Rec; Count: integer; h: PHash256Rec): integer;
 var
   _0, _1: PtrInt;
 begin
-  if P<>nil then
+  if P <> nil then
   begin
     _0 := h^.d0;
     _1 := h^.d1;
@@ -9417,6 +9419,24 @@ begin
   result := Str;
 end;
 
+function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
+begin
+  // caller ensured that P1<>nil, P2<>nil and L>0 -> aggressively inlined asm
+  inc(PtrUInt(P1), PtrUInt(L));
+  inc(PtrUInt(P2), PtrUInt(L));
+  L := -L;
+  repeat
+    if P1[L] <> P2[L] then
+      break;
+    inc(L);
+    if L <> 0 then
+      continue;
+    result := 0;
+    exit;
+  until false;
+  result := P1[L] - P2[L];
+end;
+
 {$endif CPUX64}
 
 function SynLZcompressdestlen(in_len: integer): integer;
@@ -10242,7 +10262,7 @@ end;
 {$ifdef CPUX64}
 function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
 begin
-  result := MemCmpSse2(P1, P2, Length) = 0; // use SSE2 optimized asm
+  result := MemCmp(P1, P2, Length) = 0; // use our SSE2 optimized asm
 end;
 {$else}
 function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
