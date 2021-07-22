@@ -400,6 +400,8 @@ type
   protected
     function GetNewDoc(const BsonDoc: TBsonDocument): variant;
   public
+    /// notify the TryJsonToVariant/ToJson abilities
+    constructor Create; override;
     /// customization of JSON conversion into TBsonVariant kind of variants
     function TryJsonToVariant(var Json: PUtf8Char; var Value: variant;
       EndOfObject: PUtf8Char): boolean; override;
@@ -2045,6 +2047,12 @@ end;
 { ************ TBsonVariantData / TBsonVariant Custom Variant Storage }
 
 { TBsonVariant }
+
+constructor TBsonVariant.Create;
+begin
+  fOptions := [sioHasTryJsonToVariant, sioHasToJson];
+  inherited Create;
+end;
 
 procedure TBsonVariant.ToJson(W: TTextWriter; const Value: variant;
   Escape: TTextWriterKind);

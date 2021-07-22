@@ -169,6 +169,12 @@ function VariantEquals(const V: Variant; const Str: RawUtf8;
 { ************** Custom Variant Types with JSON support }
 
 type
+  /// define how our custom variant types behave, i.e. its methods featureset
+  TSynInvokeableVariantTypeOptions = set of (
+    sioHasTryJsonToVariant,
+    sioHasToJson,
+    sioCanIterate);
+
   /// custom variant handler with easier/faster access of variant properties,
   // and JSON serialization support
   // - default GetProperty/SetProperty methods are called via some protected
@@ -179,6 +185,7 @@ type
   // - also feature custom JSON parsing, via TryJsonToVariant() protected method
   TSynInvokeableVariantType = class(TInvokeableVariantType)
   protected
+    fOptions: TSynInvokeableVariantTypeOptions;
     {$ifdef ISDELPHI}
     /// our custom call backs do not want the function names to be uppercased
     function FixupIdent(const AText: string): string; override;
@@ -202,11 +209,14 @@ type
     function IntSet(const Instance, Value: TVarData;
       Name: PAnsiChar; NameLen: PtrInt): boolean; virtual;
   public
+    /// virtual constructor which should set the custom type Options
+    constructor Create; virtual;
     /// search of a registered custom variant type from its low-level VarType
     // - will first compare with its own VarType for efficiency
     function FindSynVariantType(aVarType: Word;
       out CustomType: TSynInvokeableVariantType): boolean;
     /// customization of JSON parsing into variants
+    // - is enabled only if the sioHasTryJsonToVariant option is set
     // - will be called by e.g. by VariantLoadJson() or GetVariantFromJson()
     // with Options: PDocVariantOptions parameter not nil
     // - this default implementation will always returns FALSE,
@@ -254,6 +264,10 @@ type
     /// returns TRUE if the supplied variant is of the exact custom type
     function IsOfType(const V: variant): boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// identify how this custom type behave
+    // - as set by the class constructor, to avoid calling any virtual method
+    property Options: TSynInvokeableVariantTypeOptions
+      read fOptions;
   end;
 
   /// class-reference type (metaclass) of custom variant type definition
@@ -3006,6 +3020,11 @@ end;
 
 
 { TSynInvokeableVariantType }
+
+constructor TSynInvokeableVariantType.Create;
+begin
+  inherited Create; // call RegisterCustomVariantType(self)
+end;
 
 function TSynInvokeableVariantType.IterateCount(const V: TVarData): integer;
 begin
