@@ -2770,7 +2770,7 @@ begin
       vtCurrency:
         begin
           VType := varCurrency;
-          VInt64 := PInt64(@V.VCurrency)^;
+          VInt64 := PInt64(V.VCurrency)^;
         end;
       vtExtended:
         begin
