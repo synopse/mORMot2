@@ -2751,6 +2751,10 @@ begin
   len := len * ITER;
   timer.Start;
   for i := 1 to ITER do
+    Check(IsValidUtf8(people));
+  NotifyTestSpeed('IsValidUtf8()', 0, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
     Check(IsValidJson(people));
   NotifyTestSpeed('IsValidJson(RawUtf8)', 0, len, @timer, ONLYLOG);
   timer.Start;
