@@ -15832,7 +15832,7 @@ end;
 
 function TOrmTableJson.ParseAndConvert(Buffer: PUtf8Char; BufferLen: integer): boolean;
 var
-  i, max, resmax, f: integer;
+  i, max, resmax, f: PtrInt;
   EndOfObject: AnsiChar;
   P: PUtf8Char;
   wasString: boolean;
@@ -15913,7 +15913,7 @@ begin
       exit;
     // 2. get values (assume fields are always the same as in the first object)
     max := fFieldCount; // index to start storing values in fResults[]
-    resmax := max * 2;  // space for field names + 1 data row by default
+    resmax := max * 2;  // field names + 1 data row by default = 1 object
     SetLength(fJsonData, resmax);
     fData := pointer(fJsonData); // needed for SetResults() below
     fRowCount := 0;
@@ -15922,23 +15922,28 @@ begin
       for f := 0 to fFieldCount - 1 do
       begin
         if fRowCount = 0 then
+        begin
           // get field name from 1st Row
-          SetResults(f, GetJsonPropName(P))
+          SetResults(f, GetJsonPropName(P));
+          if P = nil then
+            break;
+        end
         else
-          // ignore field name for later rows
-          P := GotoNextJsonItem(P);
-        // warning: field order if not checked, and should be as expected
+        begin
+          // warning: next field names are not checked, and should be correct
+          P := GotoEndJsonItem(P);
+          if P = nil then
+            break;
+          inc(P); // ignore jcEndOfJsonFieldOr0
+        end;
         if max >= resmax then
         begin // check space inside loop for GPF security
-          resmax := NextGrow(resmax + fFieldCount);
+          resmax := NextGrow(resmax);
           SetLength(fJsonData, resmax);
-          fData := pointer(fJsonData); 
+          fData := pointer(fJsonData);
         end;
-        if P = nil then
-          // normal end: no more field name
-          break;
-        SetResults(max,
-          GetJsonFieldOrObjectOrArray(P, @wasString, @EndOfObject, true));
+        SetResults(max, GetJsonFieldOrObjectOrArray(P, @wasString, @EndOfObject,
+          {handleobjectarray=}true, {normbool=}false{no SetResults overflow}));
         if P = nil then
         begin
           // unexpected end
