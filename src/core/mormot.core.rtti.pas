@@ -2995,7 +2995,7 @@ begin
     result := RecordManagedFieldsCount > 0
   else
     result := Kind in rkManagedTypes;
-  // should rkArray be handled specificically? we guess returning true is fine
+  // note: rkArray should be handled specificically: we return true here by now
 end;
 
 function TRttiInfo.ClassFieldCount(onlyWithoutGetter: boolean): integer;
@@ -4998,10 +4998,12 @@ procedure CopySeveral(Dest, Source: PByte; SourceCount: PtrInt;
 var
   cop: TRttiCopier;
   elemsize: PtrInt;
+label
+  raw;
 begin
   if SourceCount > 0 then
     if ItemInfo = nil then
-      MoveFast(Source^, Dest^, ItemSize * SourceCount)
+raw:  MoveFast(Source^, Dest^, ItemSize * SourceCount)
     else if ItemInfo^.Kind in rkRecordTypes then
       // retrieve record/object RTTI once for all items
       _RecordCopySeveral(pointer(Dest), pointer(Source), SourceCount, ItemInfo)
@@ -5015,7 +5017,9 @@ begin
           inc(Source, elemsize);
           inc(Dest, elemsize);
           dec(SourceCount);
-        until SourceCount = 0;
+        until SourceCount = 0
+      else
+        goto raw;
     end;
 end;
 
@@ -5451,10 +5455,12 @@ function _ArrayCopy(Dest, Source: PByte; Info: PRttiInfo): PtrInt;
 var
   n, itemsize: PtrInt;
   cop: TRttiCopier;
+label
+  raw;
 begin
   Info := Info^.ArrayItemType(n, result);
   if Info = nil then
-    MoveFast(Source^, Dest^, result)
+raw:MoveFast(Source^, Dest^, result)
   else
   begin
     cop := RTTI_COPY[Info^.Kind];
@@ -5464,7 +5470,9 @@ begin
         inc(Source, itemsize);
         inc(Dest, itemsize);
         dec(n);
-      until n = 0;
+      until n = 0
+    else
+      goto raw;
   end;
 end;
 
@@ -6577,6 +6585,9 @@ begin
   end;
   // retrieve RTTI into ready-to-be-consummed cache
   aInfo^.ComputeCache(fCache);
+  if aInfo^.IsManaged then
+    // also check nested record fields
+    include(fFlags, rcfIsManaged);
   case fCache.Kind of
     rkClass:
       SetValueClass(aInfo.RttiClass.RttiClass, aInfo);
@@ -6617,13 +6628,16 @@ begin
             fArrayFirstField := fArrayRtti.Parser;
       end;
     rkArray:
-      fArrayRtti := Rtti.RegisterType(fCache.ItemInfo);
+      begin
+        fArrayRtti := Rtti.RegisterType(fCache.ItemInfo);
+        if (fArrayRtti = nil) or
+           not (rcfIsManaged in fArrayRtti.Flags) then
+          // a static array is as managed as its nested items
+          exclude(fFlags, rcfIsManaged);
+      end;
   end;
   // initialize processing callbacks
   fFinalize := RTTI_FINALIZE[fCache.Kind];
-  if aInfo^.IsManaged then
-    // also check nested record fields
-    include(fFlags, rcfIsManaged);
   fCopy := RTTI_COPY[fCache.Kind];
   pt := TypeInfoToStandardParserType(aInfo, {byname=}true, @pct);
   SetParserType(pt, pct);

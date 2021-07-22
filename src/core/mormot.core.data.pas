@@ -5163,6 +5163,8 @@ procedure DynArraySave(Data: PAnsiChar; ExternalCount: PInteger;
 var
   n, itemsize: PtrInt;
   sav: TRttiBinarySave;
+label
+  raw;
 begin
   Info := Info^.DynArrayItemType(itemsize);
   Dest.WriteVarUInt32(itemsize); // may vary on 32-bit/64-bit compatibility
@@ -5179,7 +5181,7 @@ begin
     Dest.WriteVarUInt32(n);
     Dest.Write4(0); // warning: we don't store any Hash32 checksum any more
     if Info = nil then
-      Dest.Write(Data, itemsize * n)
+raw:  Dest.Write(Data, itemsize * n)
     else
     begin
       sav := RTTI_BINARYSAVE[Info^.Kind];
@@ -5187,7 +5189,9 @@ begin
         repeat
           inc(Data, sav(Data, Dest, Info));
           dec(n);
-        until n = 0;
+        until n = 0
+      else
+        goto raw;
     end;
   end;
 end;
@@ -5229,6 +5233,8 @@ var
   n, itemsize: PtrInt;
   iteminfo: PRttiInfo;
   load: TRttiBinaryLoad;
+label
+  raw;
 begin
   iteminfo := Info^.DynArrayItemType(itemsize);
   n := DynArrayLoadHeader(Source, Info, iteminfo);
@@ -5239,7 +5245,7 @@ begin
     DynArrayNew(pointer(Data), n, itemsize); // allocate zeroed  memory
     Data := PPointer(Data)^; // point to first item
     if iteminfo = nil then
-      Source.Copy(Data, itemsize * n)
+raw:  Source.Copy(Data, itemsize * n)
     else
     begin
       load := RTTI_BINARYLOAD[iteminfo^.Kind];
@@ -5247,37 +5253,13 @@ begin
         repeat
           inc(Data, load(Data, Source, iteminfo));
           dec(n);
-        until n = 0;
+        until n = 0
+      else
+        goto raw;
     end;
   end;
   result := SizeOf(pointer);
 end;
-
-{$ifdef CPUX64}
-function MemCmp(P1, P2: PByteArray; L: PtrInt): PtrInt; inline;
-begin
-  result := MemCmpSse2(P1, P2, L);
-end;
-{$else}
-function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  // caller ensured that P1<>nil, P2<>nil and L>0 -> aggressively inlined asm
-  inc(PtrUInt(P1), PtrUInt(L));
-  inc(PtrUInt(P2), PtrUInt(L));
-  L := -L;
-  repeat
-    if P1[L] <> P2[L] then
-      break;
-    inc(L);
-    if L <> 0 then
-      continue;
-    result := 0;
-    exit;
-  until false;
-  result := P1[L] - P2[L];
-end;
-{$endif CPUX64}
 
 function DynArrayCompare(A, B: PAnsiChar; ExternalCountA, ExternalCountB: PInteger;
   Info: PRttiInfo; CaseInSensitive: boolean): integer;
@@ -5519,10 +5501,12 @@ function _BS_Array(Data: PAnsiChar; Dest: TBufferWriter; Info: PRttiInfo): PtrIn
 var
   n: PtrInt;
   sav: TRttiBinarySave;
+label
+  raw;
 begin
   Info := Info^.ArrayItemType(n, result);
   if Info = nil then
-    Dest.Write(Data, result)
+raw:Dest.Write(Data, result)
   else
   begin
     sav := RTTI_BINARYSAVE[Info^.Kind];
@@ -5530,7 +5514,9 @@ begin
       repeat
         inc(Data, sav(Data, Dest, Info));
         dec(n);
-      until n = 0;
+      until n = 0
+    else
+      goto raw;
   end;
 end;
 
@@ -5538,10 +5524,12 @@ function _BL_Array(Data: PAnsiChar; var Source: TFastReader; Info: PRttiInfo): P
 var
   n: PtrInt;
   load: TRttiBinaryLoad;
+label
+  raw;
 begin
   Info := Info^.ArrayItemType(n, result);
   if Info = nil then
-    Source.Copy(Data, result)
+raw:Source.Copy(Data, result)
   else
   begin
     load := RTTI_BINARYLOAD[Info^.Kind];
@@ -5549,7 +5537,9 @@ begin
       repeat
         inc(Data, load(Data, Source, Info));
         dec(n);
-      until n = 0;
+      until n = 0
+    else
+      goto raw;
   end;
 end;
 
@@ -5558,10 +5548,12 @@ function _ArrayCompare(A, B: PUtf8Char; Info: PRttiInfo; CaseInSensitive: boolea
 var
   n, itemsize: PtrInt;
   cmp: TRttiCompare;
+label
+  raw;
 begin
   Info := Info^.ArrayItemType(n, ArraySize);
   if Info = nil then
-    result := MemCmp(pointer(A), pointer(B), ArraySize) // binary comparison
+raw:result := MemCmp(pointer(A), pointer(B), ArraySize) // binary comparison
   else
   begin
     cmp := RTTI_COMPARE[CaseInSensitive, Info^.Kind];
@@ -5575,7 +5567,7 @@ begin
         dec(n);
       until n = 0
     else
-      result := A - B;
+      goto raw;
   end;
 end;
 
@@ -5799,15 +5791,17 @@ function BinaryCompare(A, B: pointer; Info: PRttiInfo;
 var
   cmp: TRttiCompare;
 begin
-  if (A <> B) and
-     (Info <> nil) then
-  begin
-    cmp := RTTI_COMPARE[CaseInSensitive, Info^.Kind];
-    if Assigned(cmp) then
-      cmp(A, B, Info, result)
+  if A <> B then
+    if Info <> nil then
+    begin
+      cmp := RTTI_COMPARE[CaseInSensitive, Info^.Kind];
+      if Assigned(cmp) then
+        cmp(A, B, Info, result)
+      else
+        result := MemCmp(A, B, Info^.RttiSize);
+    end
     else
-      result := ComparePointer(A, B);
-  end
+      result := ComparePointer(A, B)
   else
     result := 0;
 end;
@@ -9303,6 +9297,8 @@ var
   info: PRttiInfo;
   load: TRttiBinaryLoad;
   p: PAnsiChar;
+label
+  raw;
 begin
   fSafe.Lock;
   try
@@ -9319,13 +9315,16 @@ begin
     if info <> nil then
     begin
       load := RTTI_BINARYLOAD[info^.Kind];
-      repeat
-        inc(p, load(p, fReader, info));
-        dec(n);
-      until n = 0;
+      if Assigned(load) then
+        repeat
+          inc(p, load(p, fReader, info));
+          dec(n);
+        until n = 0
+      else
+        goto raw;
     end
     else
-      fReader.Copy(p, n * fValues.Info.Cache.ItemSize);
+raw:  fReader.Copy(p, n * fValues.Info.Cache.ItemSize);
   finally
     fSafe.UnLock;
   end;
@@ -9344,13 +9343,13 @@ var
     if count = 0 then
       exit;
     p := fValues.ItemPtr(start);
-    if info = nil then
-      aWriter.Write(p, count * fValues.Info.Cache.ItemSize)
-    else
+    if Assigned(sav) then
       repeat
         inc(p, sav(p, aWriter, info));
         dec(count);
-      until count = 0;
+      until count = 0
+    else
+      aWriter.Write(p, count * fValues.Info.Cache.ItemSize);
   end;
 
 begin
