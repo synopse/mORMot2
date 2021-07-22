@@ -2972,6 +2972,9 @@ var
   // TCustomVariantType
   SynVariantTypes: array of TSynInvokeableVariantType;
 
+  /// list of custom types (but not DocVariantVType) supporting TryJsonToVariant
+  SynVariantTryJsonTypes: array of TSynInvokeableVariantType;
+
 function FindSynVariantTypeFromVType(aVarType: word): TSynInvokeableVariantType;
   {$ifdef HASINLINE}inline;{$endif}
 var
@@ -3013,6 +3016,8 @@ begin
     end;
     result := aClass.Create; // register variant type
     ObjArrayAdd(SynVariantTypes, result);
+    if sioHasTryJsonToVariant in result.Options then
+      ObjArrayAdd(SynVariantTryJsonTypes, result);
   finally
     GlobalUnLock;
   end;
@@ -4532,6 +4537,10 @@ begin
   result := nil;
   if Json = nil then
     exit;
+  if dvoInternNames in VOptions then
+    intnames := DocVariantType.InternNames
+  else
+    intnames := nil;
   if dvoInternValues in VOptions then
     intvalues := DocVariantType.InternValues
   else
@@ -4590,21 +4599,26 @@ begin
           if Json^ = #0 then
             exit;
         until Json^ > ' ';
-        cap := JsonObjectPropCount(Json); // slow if object is huge (uncommon)
-        if cap < 0 then
-          exit; // invalid content
         include(VOptions, dvoIsObject);
-        if dvoInternNames in VOptions then
-          intnames := DocVariantType.InternNames // call the function once
-        else
-          intnames := nil;
-        if cap > 0 then
-        begin
-          SetLength(VValue, cap);
-          SetLength(VName, cap);
+        if Json^ = '}' then
+          // void but valid input object
           repeat
-            if VCount >= cap then
-              exit; // unexpected object size means invalid Json
+            inc(Json)
+          until (Json^ = #0) or
+                (Json^ > ' ')
+        else
+        begin
+          cap := 0;
+          repeat
+            if cap = VCount then
+            begin
+              if cap = 0 then
+                cap := 16 // minimum good number of properties
+              else
+                cap := NextGrow(cap);
+              SetLength(VValue, cap);
+              SetLength(VName, cap);
+            end;
             // see http://docs.mongodb.org/manual/reference/mongodb-extended-Json
             Name := GetJsonPropName(Json, @NameLen);
             if Name = nil then
@@ -4624,14 +4638,7 @@ begin
               intvalues.UniqueVariant(VValue[VCount]);
             inc(VCount);
           until EndOfObject = '}';
-        end
-        else if Json^ = '}' then // cap=0
-          repeat
-            inc(Json)
-          until (Json^ = #0) or
-                (Json^ > ' ')
-        else
-          exit;
+        end;
       end;
     'n', 'N':
       begin
@@ -5713,28 +5720,42 @@ begin
             (VCount = 0);
 end;
 
-function FindNonVoidRawUtf8(n: PPtrInt; name: PUtf8Char; len: TStrLen;
+function FindNonVoidRawUtf8(n: PPUtf8Char; name: PUtf8Char; len: TStrLen;
   count: PtrInt): PtrInt;
+var
+  p: PUtf8Char;
 begin
   // FPC does proper inlining in this loop
-  for result := 0 to count - 1 do // all VName[]<>'' so n^<>0
-    if (PStrLen(n^ - _STRLEN)^ = len) and
-       CompareMemFixed(pointer(n^), name, len) then
+  for result := 0 to count - 1 do
+  begin
+    p := n^; // all VName[]<>'' so p=n^<>nil
+    if p = name then // may occur with RawUtf8 ref-counting
+      exit
+    else if (PStrLen(p - _STRLEN)^ = len) and
+       CompareMemFixed(p, name, len) then
       exit
     else
       inc(n);
+  end;
   result := -1;
 end;
 
-function FindNonVoidRawUtf8I(n: PPtrInt; name: PUtf8Char; len: TStrLen;
+function FindNonVoidRawUtf8I(n: PPUtf8Char; name: PUtf8Char; len: TStrLen;
   count: PtrInt): PtrInt;
+var
+  p: PUtf8Char;
 begin
   for result := 0 to count - 1 do
-    if (PStrLen(n^ - _STRLEN)^ = len) and
-       IdemPropNameUSameLenNotNull(pointer(n^), name, len) then
+  begin
+    p := n^; // all VName[]<>'' so p=n^<>nil
+    if p = name then // may occur with RawUtf8 ref-counting
+      exit
+    else if (PStrLen(p - _STRLEN)^ = len) and
+       IdemPropNameUSameLenNotNull(p, name, len) then
       exit
     else
       inc(n);
+  end;
   result := -1;
 end;
 
@@ -7111,9 +7132,7 @@ function GetVariantFromNotStringJson(Json: PUtf8Char; var Value: TVarData;
   AllowDouble: boolean): boolean;
 begin
   if Json <> nil then
-    while (Json^ <= ' ') and
-          (Json^ <> #0) do
-      inc(Json);
+    Json := GotoNextNotSpace(Json);
   if (Json = nil) or
      ((PInteger(Json)^ = NULL_LOW) and
       (jcEndOfJsonValueField in JSON_CHARS[Json[4]])) then
@@ -7172,6 +7191,7 @@ begin
      (PInteger(P)^ = TRUE_LOW) or
      (PInteger(P)^ = FALSE_LOW) then
   begin
+    // handle numerical or true/false/null constants
 s:  P := GetJsonField(P, Json, @wasString, EndOfObject, @Plen);
     // try any numerical value
 w:  if {%H-}wasString or
@@ -7186,6 +7206,7 @@ w:  if {%H-}wasString or
   end;
   wasParsedWithinString := false;
   if P^ = '"' then
+    // handle string
     if dvoJsonObjectParseWithinString in Options^ then
     begin
       P := GetJsonField(P, Json, @wasString, EndOfObject, @Plen);
@@ -7194,17 +7215,14 @@ w:  if {%H-}wasString or
     end
     else
       goto s;
-  t := pointer(SynVariantTypes);
+  // if we reach here, input Json is some complex value
+  t := pointer(SynVariantTryJsonTypes);
   if (t <> nil) and
      not (dvoJsonParseDoNotTryCustomVariants in Options^) then
   begin
     P2 := P;
     n := PDALen(PAnsiChar(t) - _DALEN)^ + _DAOFF;
     repeat
-      inc(t); // SynVariantTypes[0] is always DocVariantVType -> ignore
-      dec(n);
-      if n = 0 then
-        break;
       if t^.TryJsonToVariant(P2, Value, @EndOfObject2) then
       begin
         // currently, only set by BsonVariantType from mormot.db.nosql.bson
@@ -7216,13 +7234,14 @@ w:  if {%H-}wasString or
         end;
         exit;
       end;
-    until false;
+      inc(t);
+      dec(n);
+    until n = 0;
   end;
   if P^ in ['[', '{'] then
   begin
     // default Json parsing and conversion to TDocVariant instance
-    P := TDocVariantData(Value).
-      InitJsonInPlace(P, Options^, EndOfObject);
+    P := TDocVariantData(Value).InitJsonInPlace(P, Options^, EndOfObject);
     if P = nil then
     begin
       TDocVariantData(Value).Clear;
@@ -7392,6 +7411,7 @@ var
   v: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
   d: double;
 begin
+  // parse input text as number
   result := false;
   byte(flags) := 0;
   v := 0;
@@ -7481,6 +7501,7 @@ begin
     exit;
   if fNeg in flags then
     V := -V;
+  // now V, frac, digit, exp contain the parsed number
   if (frac = 0) and
      (digit >= 0) then
   begin
