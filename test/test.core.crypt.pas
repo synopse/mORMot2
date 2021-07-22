@@ -1486,15 +1486,15 @@ begin
           s2 := one.EncryptPkcs7(st, false);
           if aead then
           begin
-            FillRandom(@mac1, 4);
-            Check(one.MacEncryptGetTag(mac1));
             Check(m in [low(TEST_AES_MAC) .. high(TEST_AES_MAC)]);
+            RandomBytes(@mac1, SizeOf(mac1));
+            Check(one.MacEncryptGetTag(mac1));
             //writeln(m,' ',k,' ',Sha256DigestToString(mac1)); writeln(TEST_AES_MAC[m, k]);
             //CheckEqual(Sha256DigestToString(mac1), TEST_AES_MAC[m, k], 'TEST_AES_MAC');
           end
           else if gcm then
           begin
-            FillRandom(@tag1, 4);
+            RandomBytes(@tag1, SizeOf(tag1));
             Check(TAesGcmAbstract(one).AesGcmFinal(tag1));
             // writeln(one.classname, ks, ' ', AesBlockToShortString(tag1));
             CheckEqual(AesBlockToString(tag1), TEST_AES_TAG[k],
@@ -1506,7 +1506,7 @@ begin
           s2 := one.EncryptPkcs7(st, false); // twice to check AES ctxt reuse
           if aead then
           begin
-            FillRandom(@mac2, 4);
+            RandomBytes(@mac2, SizeOf(mac2));
             Check(one.MacEncryptGetTag(mac2));
             Check(IsEqual(mac2, mac1));
           end

@@ -2379,7 +2379,7 @@ begin
   FillCharFast(h, SizeOf(h), 1);
   for pt := ptGuid to ptHash512 do
   begin
-    FillRandom(@h, PT_SIZE[pt] shr 2);
+    RandomBytes(@h, PT_SIZE[pt]);
     s := SaveJson(h, PT_INFO[pt]); // ptHash* are not record types
     CheckUtf8(TextToVariantNumberType(pointer(s)) = varString,
       '%:%', [PT_INFO[pt].RawName, s]);
@@ -3475,7 +3475,7 @@ begin
   SetLength(i32, 100000);
   n := 10;
   repeat
-    FillRandom(pointer(i32), n);
+    RandomBytes(pointer(i32), n * 4);
     timer.Start;
     QuickSortInteger(pointer(i32), 0, n - 1);
     NotifyTestSpeed('QuickSortInteger', n, 0, @timer, {onlylog=}true);
@@ -6054,7 +6054,7 @@ const
 var
   dict: TSynDictionary;
 
-  procedure TestSpeed(Count: integer; SetCapacity, RandomString: boolean;
+  procedure TestSpeed(Count: integer; SetCapacity, DoGuidText: boolean;
     Hasher: THasher; const Msg: RawUtf8);
   var
     timer: TPrecisionTimer;
@@ -6070,8 +6070,10 @@ var
     SetLength(r, Count);
     for i := 0 to High(a) do // pre-computed values and indexes for fairness
     begin
-      r[i] := Random32((Count shr 2) - 1); // realistic 25% coverage
-      if RandomString then
+      v := Random32(Count shr 2) shl 2; // realistic 25% coverage
+      Check(v < Count, 'random32 overflow');
+      r[i] := v;
+      if DoGuidText then
         a[i] := GuidToRawUtf8(RandomGuid)
       else
         a[i] := UInt32ToUtf8(i);
@@ -6087,8 +6089,8 @@ var
       v := i;
       dic.Add(a[i], v);
     end;
-    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-    NotifyTestSpeed('add  %', [Msg], Count, 0, @timer);
+    NotifyTestSpeed('add  %', [Msg], Count, 0, @timer, {onlylog=}
+    {$ifdef DYNARRAYHASHCOLLISIONCOUNT} false);
     write(' ', Msg, ' slots=', KBNoSpace(dic.Keys.Hasher.HashTableSize * 4),
       ' col=', K(dic.Keys.Hasher.CountCollisions), ' curcol=',
       K(dic.Keys.Hasher.CountCollisionsCurrent),
@@ -6097,18 +6099,18 @@ var
     {AddConsole(FormatString('collisions: total=% current=% %%',
       [dic.Keys.Hasher.CountCollisions, dic.Keys.Hasher.CountCollisionsCurrent,
        (dic.Keys.Hasher.CountCollisionsCurrent * 100) div Count, '%']));}
-    {$endif DYNARRAYHASHCOLLISIONCOUNT}
+    {$else} true); {$endif DYNARRAYHASHCOLLISIONCOUNT}
     timer.Start;
     for i := 0 to High(a) do
     begin
-      // FindAndCopy + random index for a more realistic benchmark
+      // FindAndCopy + random index from 25% of the content
       Check(dic.FindAndCopy(a[r[i]], v));
       Check(v = r[i]);
     end;
-    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-    NotifyTestSpeed('find %', [Msg], Count, 0, @timer);
+    NotifyTestSpeed('find %', [Msg], Count, 0, @timer, {onlylog=}
+    {$ifdef DYNARRAYHASHCOLLISIONCOUNT} false);
     writeln(' find ', K(timer.PerSec(count)), '/s');
-    {$endif DYNARRAYHASHCOLLISIONCOUNT}
+    {$else} true); {$endif DYNARRAYHASHCOLLISIONCOUNT}
     dic.Free;
   end;
 

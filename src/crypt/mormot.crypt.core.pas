@@ -1515,8 +1515,8 @@ var
 /// low-level function returning some random binary from then available
 // Operating System pseudorandom source
 // - will call /dev/urandom or /dev/random under POSIX, and CryptGenRandom API
-// on Windows, and fallback to mormot.core.base.FillRandom if the system API
-// failed - also for padding if more than Len>32 from /dev/urandom
+// on Windows, and fallback to mormot.core.base gsl_rng_taus2 generator if the
+// system API failed - also for padding if more than Len>32 from /dev/urandom
 // - you should not have to call this procedure, but faster and safer TAesPrng;
 // also consider the TSystemPrng class
 procedure FillSystemRandom(Buffer: PByteArray; Len: integer;
@@ -5701,14 +5701,12 @@ procedure FillSystemRandom(Buffer: PByteArray; Len: integer;
   AllowBlocking: boolean);
 var
   fromos: boolean;
-  i: integer;
   {$ifdef OSPOSIX}
-  dev: integer;
+  i, dev: integer;
   {$endif OSPOSIX}
   {$ifdef OSWINDOWS}
   prov: HCRYPTPROV;
   {$endif OSWINDOWS}
-  tmp: array[byte] of byte;
 begin
   fromos := false;
   {$ifdef OSPOSIX}
@@ -5737,20 +5735,9 @@ begin
       CryptoApi.ReleaseContext(prov, 0);
     end;
   {$endif OSWINDOWS}
-  if fromos then
-    exit;
-  // Operating System API failed -> fallback to our FillRandom()
-  i := Len;
-  repeat
-    mormot.core.base.FillRandom(@tmp, SizeOf(tmp) shr 2); // RdRand32 + Lecuyer
-    if i <= SizeOf(tmp) then
-    begin
-      XorMemory(@Buffer^[Len - i], @tmp, i);
-      break;
-    end;
-    XorMemoryPtrInt(@Buffer^[Len - i], @tmp, SizeOf(tmp) shr POINTERSHR);
-    dec(i, SizeOf(tmp));
-  until false;
+  if not fromos then
+    // OS API call failed or Posix Len > 32 -> xor from gsl_rng_taus2 generator
+    RandomBytes(pointer(Buffer), Len);
 end;
 
 procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
@@ -6085,7 +6072,7 @@ begin
     end;
     // xor some explicit entropy - it won't hurt
     sha3.Init(SHAKE_256); // used in XOF mode for variable-length output
-    mormot.core.base.FillRandom(@data, SizeOf(data) shr 2); // gsl_rng_taus2
+    RandomBytes(@data, SizeOf(data)); // XOR stack data from gsl_rng_taus2
     aes.EncryptInit(data.h3, 128);
     sha3update;
     sha3.Update(Executable.Host);

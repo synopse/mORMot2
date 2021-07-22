@@ -657,11 +657,10 @@ function IsNullGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: 
 function AddGuid(var guids: TGuidDynArray; const guid: TGUID;
   NoDuplicates: boolean = false): integer;
 
-/// compute a random GUID value from the FillRandom() generator
+/// compute a random UUID value from the RandomBytes() generator and RFC 4122
 procedure RandomGuid(out result: TGUID); overload;
-  {$ifdef HASINLINE}inline;{$endif}
 
-/// compute a random GUID value from the FillRandom() generator
+/// compute a random UUID value from the RandomBytes() generator and RFC 4122
 function RandomGuid: TGUID; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -2604,7 +2603,7 @@ type
   // - cross-compiler and cross-platform efficient randomness generator, very
   // fast with a much better distribution than Delphi system's Random() function
   // see https://www.gnu.org/software/gsl/doc/html/rng.html#c.gsl_rng_taus2
-  // - used by thread-safe Random32/FillRandom, storing 16 bytes per thread - a
+  // - used by thread-safe Random32/RandomBytes, storing 16 bytes per thread - a
   // stronger algorithm like Mersenne Twister (as used by FPC RTL) requires 5KB
   TLecuyer = object
   public
@@ -2627,7 +2626,7 @@ type
     function NextQWord: QWord;
     /// compute a 64-bit floating point value
     function NextDouble: double;
-    /// fill some memory buffer with random bytes
+    /// XOR some memory buffer with random bytes
     procedure Fill(dest: PByte; count: integer);
     /// fill some string[size] with 7-bit ASCII random text
     procedure FillShort(var dest: shortstring; size: PtrUInt);
@@ -2665,11 +2664,17 @@ function Random64: QWord;
 // - thread-safe function: each thread will maintain its own TLecuyer table
 function RandomDouble: double;
 
-/// fill some memory buffer with random values from the gsl_rng_taus2 generator
-// - the destination buffer is expected to be allocated as 32-bit items
+/// fill a memory buffer with random bytes from the gsl_rng_taus2 generator
+// - will actually XOR the Dest buffer with Lecuyer numbers
 // - see the more secure TAesPrng.Main.FillRandom() from mormot.crypt.core unit
 // - thread-safe and non-blocking function using a per-thread TLecuyer engine
-procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
+procedure RandomBytes(Dest: PByte; Count: integer);
+
+{$ifndef PUREMORMOT2}
+/// fill some 32-bit memory buffer with values from the gsl_rng_taus2 generator
+// - the destination buffer is expected to be allocated as 32-bit items
+procedure FillRandom(Dest: PCardinal; CardinalCount: integer);
+{$endif PUREMORMOT2}
 
 /// seed the gsl_rng_taus2 Random32 generator
 // - by default, gsl_rng_taus2 generator is re-seeded every 2^20 values, which
@@ -2811,7 +2816,7 @@ type
     function Init: integer; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize a new temporary buffer of a given number of random bytes
-    // - will fill the buffer via FillRandom() calls
+    // - will fill the buffer via RandomBytes() call
     function InitRandom(RandomLen: integer): pointer;
     /// initialize a new temporary buffer filled with 32-bit integer increasing values
     function InitIncreasing(Count: PtrInt; Start: PtrInt = 0): PIntegerArray;
@@ -4134,12 +4139,15 @@ end;
 
 function RandomGuid: TGUID;
 begin
-  FillRandom(@result, SizeOf(TGUID) shr 2);
+  RandomGuid(result);
 end;
 
 procedure RandomGuid(out result: TGUID);
-begin
-  FillRandom(@result, SizeOf(TGUID) shr 2);
+begin // see https://datatracker.ietf.org/doc/html/rfc4122#section-4.4
+  RandomBytes(@result, SizeOf(TGUID));
+  result.D3 := (result.D3 and $0FFF) + $4000; // version bits 12-15 = 4 (random)
+  result.D4[0] := result.D4[0] and $3F;
+  inc(result.D4[0], $80);                     // reserved bits 6-7 = 0 and 1
 end;
 
 function NextGrow(capacity: integer): integer;
@@ -8641,7 +8649,8 @@ threadvar
   _Lecuyer: TLecuyer; // uses only 16 bytes per thread
 
 var
-  _EntropyGlobal: THash128Rec; // to avoid replay attacks
+  // to avoid replay attacks - shared by all threads for forward security
+  _EntropyGlobal: THash128Rec;
 
 function Lecuyer: PLecuyer;
 begin
@@ -8650,13 +8659,10 @@ end;
 
 procedure XorEntropy(entropy: PBlock128);
 var
-  e: array[0..7] of THash128Rec; // including some garbage bytes from stack
+  e: array[0..7] of THash128Rec;
   lec: PLecuyer;
 begin
-  e[0].c0 := _EntropyGlobal.i0 xor Random(maxInt); // some randomness from RTL
-  e[0].c1 := _EntropyGlobal.i1 xor Random(maxInt);
-  e[0].c2 := _EntropyGlobal.i2 xor Random(maxInt);
-  e[0].c3 := _EntropyGlobal.i3 xor Random(maxInt);
+  e[0].b := _EntropyGlobal.b;
   lec := @_Lecuyer; // contains 0 at thread startup, but won't hurt
   e[1].c0 := e[1].c0 xor lec^.rs1; // perfect forward security
   e[1].c1 := e[1].c1 xor lec^.rs2;
@@ -8666,7 +8672,7 @@ begin
   e[2].c1 := e[2].c1 xor PtrUInt(entropy);
   // no mormot.core.os yet, so we can't use QueryPerformanceMicroSeconds()
   unaligned(PDouble(@e[3].Lo)^) := Now * 2123923447; // cross-platform time
-  {$ifdef CPUINTEL}
+  {$ifdef CPUINTEL} // use low-level Intel/AMD opcodes
   e[3].Hi := e[3].Hi xor Rdtsc;
   if cfRAND in CpuFeatures then
   begin
@@ -8677,25 +8683,14 @@ begin
   end;
   e[5].Lo := e[5].Lo xor Rdtsc; // has changed in-between
   {$else}
-  e[3].Hi := e[3].Hi xor GetTickCount64; // FPC always defines this function
+  e[3].Hi := e[3].Hi xor GetTickCount64;   // always defined in FPC RTL
+  unaligned(PDouble(@e[4].Lo)^) := Random; // from FPC RTL mtwist_u32rand
+  unaligned(PDouble(@e[4].Hi)^) := Random;
   {$endif CPUINTEL}
-  {$ifdef OSWINDOWS}
-  CreateGUID(TGuid(e[6])); // FPC non Windows = Random -> not worth integrating
-  CreateGUID(TGuid(e[7])); // CoCreateGuid() is fast enough on Windows (<1us)
-  {$else}
-  GetLocalTime(TSystemTime(e[6]));
-  {$endif OSWINDOWS}
+  CreateGUID(TGuid(e[6])); // FPC non Windows = Random
+  CreateGUID(TGuid(e[7]));
   DefaultHasher128(pointer(entropy), @e, SizeOf(e)); // may be AesNiHash128()
-  // persist the current entropy state for the next call
-  _EntropyGlobal.c := entropy^;
-  if @DefaultHasher128 = @crc32c128 then
-  begin
-    // final xxHash32() round not to rely on crc32c only
-    entropy[0] := entropy[0] xor xxHash32(e[0].c0, @e[1], SizeOf(e[0]) * 4);
-    entropy[1] := entropy[1] xor xxHash32(e[0].c1, @e[2], SizeOf(e[0]) * 4);
-    entropy[2] := entropy[2] xor xxHash32(e[0].c2, @e[3], SizeOf(e[0]) * 4);
-    entropy[3] := entropy[3] xor xxHash32(e[0].c3, @e[4], SizeOf(e[0]) * 4);
-  end;
+  _EntropyGlobal.c := entropy^; // forward security by reusing for the next call
 end;
 
 procedure TLecuyer.Seed(entropy: PByteArray; entropylen: PtrInt);
@@ -8750,14 +8745,14 @@ end;
 function TLecuyer.NextQWord: QWord;
 begin
   PQWordRec(@result)^.L := Next;
-  PQWordRec(@result)^.H := RawNext;
+  PQWordRec(@result)^.H := RawNext; // no need to check the Seed twice
 end;
 
 function TLecuyer.NextDouble: double;
 const
-  COEFF64: double = (1.0 / $80000000) / $100000000;  // 2^-63
+  COEFF32: double = 1.0 / (Int64(1) shl 32);
 begin
-  result := (Int64(NextQWord) and $7fffffffffffffff) * COEFF64;
+  result := Next * COEFF32; // 32-bit resolution is enough for our purpose
 end;
 
 procedure TLecuyer.Fill(dest: PByte; count: integer);
@@ -8770,15 +8765,15 @@ begin
   repeat
     if count < 4 then
       break;
-    PCardinal(dest)^ := c;
+    PCardinal(dest)^ := PCardinal(dest)^ xor c;
     inc(PCardinal(dest));
     dec(count, 4);
     if count = 0 then
       exit;
-    c := RawNext;
+    c := RawNext; // no need to check the Seed within the loop
   until false;
   repeat
-    dest^ := c;
+    dest^ := dest^ xor c;
     inc(dest);
     c := c shr 8;
     dec(count);
@@ -8804,8 +8799,7 @@ var
   size: PtrUInt;
 begin
   Fill(@dest, 32);
-  size := PByte(@dest)^;
-  size := size and 31;
+  size := PByte(@dest)^ and 31;
   dest[0] := AnsiChar(size);
   if size <> 0 then
     repeat
@@ -8839,12 +8833,19 @@ begin
   result := _Lecuyer.NextDouble;
 end;
 
-procedure FillRandom(Dest: PCardinal; CardinalCount: PtrInt);
+procedure RandomBytes(Dest: PByte; Count: integer);
+begin
+  if Count > 0 then
+    _Lecuyer.Fill(pointer(Dest), Count);
+end;
+
+{$ifndef PUREMORMOT2}
+procedure FillRandom(Dest: PCardinal; CardinalCount: integer);
 begin
   if CardinalCount > 0 then
     _Lecuyer.Fill(pointer(Dest), CardinalCount shl 2);
 end;
-
+{$endif PUREMORMOT2}
 
 { MultiEvent* functions }
 
@@ -9901,9 +9902,8 @@ end;
 
 function TSynTempBuffer.InitRandom(RandomLen: integer): pointer;
 begin
-  Init(RandomLen); // ensured has 16 bytes more than RandomLen so +1 below is ok
-  if RandomLen > 0 then
-    FillRandom(buf, (RandomLen shr 2) + 1);
+  Init(RandomLen);
+  RandomBytes(buf, RandomLen);
   result := buf;
 end;
 
@@ -11762,7 +11762,7 @@ begin
         crc := (crc shr 1) xor $82f63b78
       else
         crc := crc shr 1;
-    crc32ctab[0, i] := crc; // for crc32cfast() and SymmetricEncrypt/FillRandom
+    crc32ctab[0, i] := crc; // for crc32cfast() and SymmetricEncrypt
   end;
   for i := 0 to 255 do
   begin
@@ -11773,6 +11773,8 @@ begin
       crc32ctab[n, i] := crc;
     end;
   end;
+  CreateGUID(TGuid(_EntropyGlobal)); // don't start XorEntropy() from scratch
+  _EntropyGlobal.Lo := _EntropyGlobal.Lo xor DiskFree(0); // why not
   // setup minimalistic global functions - overriden by other core units
   VariantClearSeveral := @_VariantClearSeveral;
   SortDynArrayVariantComp := @_SortDynArrayVariantComp;

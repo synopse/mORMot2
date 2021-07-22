@@ -4452,7 +4452,7 @@ begin
   for i := 0 to MAX_METHOD_COUNT - 1 do
   begin
     _FAKEVMT[i + RESERVED_VTABLE_SLOTS] := P;
-    {$ifdef CPUX64} // on Posix stub-P > 32-bit -> need absolute jmp
+    {$ifdef CPUX64} // note: on Posix, (stub-P) > 32-bit -> need absolute jmp
     P^ := $ba49;        // mov r10, x64FakeStub
     inc(PWord(P));
     PPointer(P)^ := @x64FakeStub;

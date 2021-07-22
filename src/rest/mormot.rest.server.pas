@@ -5450,7 +5450,7 @@ begin
   if ServerNonceHash.Algorithm <> SHA3_256 then
   begin
     // first time used: initialize the private secret for this process lifetime
-    FillRandom(@res, SizeOf(res) shr 2); // good enough as seed
+    RandomBytes(@res, SizeOf(res)); // good enough as seed
     hash.Init(SHA3_256);
     hash.Update(@res, SizeOf(res));
     GlobalLock;
