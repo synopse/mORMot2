@@ -126,11 +126,15 @@ function IsString(P: PUtf8Char): boolean;
 // '0' is excluded at the begining of a number) and '123' is not a string
 function IsStringJson(P: PUtf8Char): boolean;
 
-/// test if the supplied buffer is a correct JSON value
+/// test if the supplied text buffer is a correct JSON value
 function IsValidJson(P: PUtf8Char; len: PtrInt): boolean; overload;
 
-/// test if the supplied buffer is a correct JSON value
+/// test if the supplied text is a correct JSON value
 function IsValidJson(const s: RawUtf8): boolean; overload;
+
+/// test if the supplied buffer is a correct JSON value
+// - won't check the supplied length, so is likely to be faster than overloads
+function IsValidJsonBuffer(P: PUtf8Char): boolean;
 
 /// simple method to go after the next ',' character
 procedure IgnoreComma(var P: PUtf8Char);
@@ -2490,6 +2494,12 @@ begin
             (P - B = len);
 end;
 
+function IsValidJsonBuffer(P: PUtf8Char): boolean;
+begin
+  result := (P <> nil) and
+            (GotoEndJsonItemStrict(P) <> nil);
+end;
+
 procedure IgnoreComma(var P: PUtf8Char);
 begin
   if P <> nil then
@@ -3366,11 +3376,10 @@ begin
        (result <> nil) then
     begin
       if PInteger(result)^ = TRUE_LOW then
-        result := pointer(SmallUInt32Utf8[1])
-      else // normalize true -> 1
-      if PInteger(result)^ = FALSE_LOW then
-        result := pointer(SmallUInt32Utf8[0])
-      else  // normalize false -> 0
+        result := pointer(SmallUInt32Utf8[1]) // normalize true -> 1
+      else if PInteger(result)^ = FALSE_LOW then
+        result := pointer(SmallUInt32Utf8[0]) // normalize false -> 0
+      else
         exit;
       if Len <> nil then
         Len^ := 1;
