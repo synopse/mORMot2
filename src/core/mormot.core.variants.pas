@@ -432,8 +432,8 @@ type
   protected
     /// name and values interning are shared among all TDocVariantData instances
     fInternNames, fInternValues: TRawUtf8Interning;
-    procedure CreateInternNames;
-    procedure CreateInternValues;
+    function CreateInternNames: TRawUtf8Interning;
+    function CreateInternValues: TRawUtf8Interning;
     /// fast getter implementation
     function IntGet(var Dest: TVarData; const Instance: TVarData;
       Name: PAnsiChar; NameLen: PtrInt): boolean; override;
@@ -4128,12 +4128,12 @@ end;
 
 function TDocVariant.InternNames: TRawUtf8Interning;
 begin
-  if fInternNames = nil then
-    CreateInternNames;
   result := fInternNames;
+  if result = nil then
+    result := CreateInternNames;
 end;
 
-procedure TDocVariant.CreateInternNames;
+function TDocVariant.CreateInternNames: TRawUtf8Interning;
 begin
   GlobalLock;
   try
@@ -4142,16 +4142,17 @@ begin
   finally
     GlobalUnLock;
   end;
+  result := fInternNames;
 end;
 
 function TDocVariant.InternValues: TRawUtf8Interning;
 begin
-  if fInternValues = nil then
-    CreateInternValues;
   result := fInternValues;
+  if fInternValues = nil then
+    result := CreateInternValues;
 end;
 
-procedure TDocVariant.CreateInternValues;
+function TDocVariant.CreateInternValues: TRawUtf8Interning;
 begin
   GlobalLock;
   try
@@ -4160,6 +4161,7 @@ begin
   finally
     GlobalUnLock;
   end;
+  result := fInternValues;
 end;
 
 procedure TDocVariantData.SetOptions(const opt: TDocVariantOptions);
