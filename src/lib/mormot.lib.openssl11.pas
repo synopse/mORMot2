@@ -68,6 +68,8 @@ type
   /// exception class raised by this unit
   EOpenSsl = class(Exception)
   protected
+    fLastError: integer;
+    fLastErrorMsg: RawUtf8;
     class procedure CheckFailed(caller: TObject; const method: string;
       res: integer; errormsg: PRawUtf8);
   public
@@ -80,6 +82,12 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// raise the exception if OpenSslIsAvailable if false
     class procedure CheckAvailable(caller: TClass; const method: string);
+    /// the last error code from OpenSSL, after Check() failure
+    property LastError: integer
+      read fLastError;
+    /// the last error message text from OpenSSL, after Check() failure
+    property LastErrorMsg: RawUtf8
+      read fLastErrorMsg;
   end;
 
 
@@ -2271,9 +2279,8 @@ begin
       {$endif OPENSSLUSERTLMM}
       OpenSslVersion := libcrypto.OpenSSL_version_num;
       if OpenSslVersion and $ffffff00 < $10101000 then // paranoid check 1.1.1
-        raise EOpenSsl.CreateFmt(
-          'Incorrect OpenSSL version %x - expected at least 101010xx',
-          [OpenSslVersion]);
+        raise EOpenSsl.CreateFmt('Incorrect OpenSSL version %x in %s - expects' +
+          ' >= 101010xx (1.1.1.x)', [libcrypto.LibraryPath, OpenSslVersion]);
     except
       FreeAndNil(libssl);
       FreeAndNil(libcrypto);
@@ -3029,21 +3036,21 @@ end;
 class procedure EOpenSsl.CheckFailed(caller: TObject; const method: string;
   res: integer; errormsg: PRawUtf8);
 var
-  tmp: array[0..1023] of AnsiChar;
+  msg: RawUtf8;
+  exc: EOpenSsl;
 begin
   res := ERR_get_error;
-  if res = 0 then
-    tmp[0] := #0
-  else
-    ERR_error_string_n(res, @tmp, SizeOf(tmp));
-  if (errormsg <> nil) and
-     (tmp[0] <> #0) then
-    FastSetString(errormsg^, @tmp, StrLen(@tmp));
+  SSL_error(res, msg);
+  if errormsg <> nil then
+    errormsg^ := msg;
   if caller = nil then
-    raise CreateFmt('OpenSSL error %d [%s]', [res, PAnsiChar(@tmp)])
+    exc := CreateFmt('OpenSSL error %d [%s]', [res, msg])
   else
-    raise CreateFmt('%s.%s: OpenSSL error %d [%s]',
-      [ClassNameShort(caller)^, method, res, PAnsiChar(@tmp)]);
+    exc := CreateFmt('%s.%s: OpenSSL error %d [%s]',
+      [ClassNameShort(caller)^, method, res, msg]);
+  exc.fLastError := res;
+  exc.fLastErrorMsg := msg;
+  raise exc;
 end;
 
 class procedure EOpenSsl.CheckAvailable(caller: TClass; const method: string);
