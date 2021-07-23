@@ -2062,8 +2062,9 @@ by1:  c := byte(source^);
         begin
           c := PCardinal(source)^;
           if c and $80808080 = 0 then
-            goto by4;
-          continue;
+            goto by4
+          else
+            continue;
         end;
         if source < endSource then
           continue
@@ -2170,7 +2171,7 @@ end;
 
 function IsValidUtf8(source: PUtf8Char; sourcelen: PtrInt): boolean;
 var
-  c: PtrUInt;
+  c: byte;
   {$ifdef CPUX86NOTPIC}
   utf8: TUtf8Table absolute UTF8_TABLE;
   {$else}

@@ -1181,23 +1181,35 @@ function StrLenSafe(S: pointer): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // slower than StrLenSSE2(), but won't read any byte beyond the string
-        mov     edx, eax
-        test    eax, eax
-        jz      @0
-@s:     cmp     byte ptr [eax], 0
-        je      @0
-        cmp     byte ptr [eax + 1], 0
-        je      @1
-        cmp     byte ptr [eax + 2], 0
-        je      @2
-        cmp     byte ptr [eax + 3], 0
-        je      @3
-        add     eax, 4
-        jmp     @s
-@3:     inc     eax
-@2:     inc     eax
-@1:     inc     eax
-@0:     sub     eax, edx
+        test  eax, eax
+        jz    @z
+        cmp   byte ptr [eax    ], 0; je @0
+        cmp   byte ptr [eax + 1], 0; je @1
+        cmp   byte ptr [eax + 2], 0; je @2
+        cmp   byte ptr [eax + 3], 0; je @3
+        push  eax
+        and   eax,-4               // DWORD Align Reads
+        nop
+@s:     add   eax, 4
+        mov   edx, dword ptr [eax] // 4 Chars per Loop
+        lea   ecx, [edx - $01010101]
+        not   edx
+        and   edx, ecx
+        and   edx, $80808080       // Set Byte to $80 at each #0 Position
+        jz    @s                   // Loop until any #0 Found
+@set:   pop   ecx
+        bsf   edx, edx             // Find First #0 Position
+        shr   edx, 3               // Byte Offset of First #0
+        add   eax, edx             // Address of First #0
+        sub   eax, ecx
+@z:     ret
+@0:     xor   eax, eax
+        ret
+@1:     mov   eax, 1
+        ret
+@2:     mov   eax, 2
+        ret
+@3:     mov   eax, 3
 end;
 
 function PosEx(const SubStr, S: RawUtf8; Offset: PtrUInt): integer;
