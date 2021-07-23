@@ -2661,12 +2661,12 @@ function Random32(max: cardinal): cardinal; overload;
 function Random64: QWord;
 
 /// fast compute of a 64-bit random floating point, using the gsl_rng_taus2 generator
-// - thread-safe function: each thread will maintain its own TLecuyer table
+// - thread-safe and non-blocking function using a per-thread TLecuyer engine
 function RandomDouble: double;
 
 /// fill a memory buffer with random bytes from the gsl_rng_taus2 generator
 // - will actually XOR the Dest buffer with Lecuyer numbers
-// - see the more secure TAesPrng.Main.FillRandom() from mormot.crypt.core unit
+// - consider the cryptographic-level TAesPrng.Main.FillRandom() method
 // - thread-safe and non-blocking function using a per-thread TLecuyer engine
 procedure RandomBytes(Dest: PByte; Count: integer);
 

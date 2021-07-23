@@ -1515,12 +1515,14 @@ var
 /// low-level function returning some random binary from then available
 // Operating System pseudorandom source
 // - will call /dev/urandom or /dev/random under POSIX, and CryptGenRandom API
-// on Windows, and fallback to mormot.core.base gsl_rng_taus2 generator if the
-// system API failed - also for padding if more than Len>32 from /dev/urandom
+// on Windows then return TRUE, or fallback to mormot.core.base gsl_rng_taus2
+// generator and return FALSE if the system API failed
+// - on POSIX, only up to 32 bytes (256 bits) bits are retrieved from /dev/urandom
+// or /dev/random as stated by "man urandom" Usage - then RandomBytes() padded
 // - you should not have to call this procedure, but faster and safer TAesPrng;
 // also consider the TSystemPrng class
-procedure FillSystemRandom(Buffer: PByteArray; Len: integer;
-  AllowBlocking: boolean);
+function FillSystemRandom(Buffer: PByteArray; Len: integer;
+  AllowBlocking: boolean): boolean;
 
 /// low-level anti-forensic diffusion of a memory buffer using SHA-256
 // - as used by TAesPrng.AFSplit and TAesPrng.AFUnSplit
@@ -5697,33 +5699,34 @@ end;
 
 { ************* AES-256 Cryptographic Pseudorandom Number Generator (CSPRNG) }
 
-procedure FillSystemRandom(Buffer: PByteArray; Len: integer;
-  AllowBlocking: boolean);
+function FillSystemRandom(Buffer: PByteArray; Len: integer;
+  AllowBlocking: boolean): boolean;
 var
-  fromos: boolean;
   {$ifdef OSPOSIX}
-  i, dev: integer;
+  rd, dev: integer;
   {$endif OSPOSIX}
   {$ifdef OSWINDOWS}
   prov: HCRYPTPROV;
   {$endif OSWINDOWS}
 begin
-  fromos := false;
+  result := false;
   {$ifdef OSPOSIX}
   dev := FileOpen('/dev/urandom', fmOpenRead);
   if (dev <= 0) and
      AllowBlocking then
     dev := FileOpen('/dev/random', fmOpenRead);
   if dev > 0 then
-  try
-    i := Len;
-    if i > 32 then
-      i := 32; // up to 256 bits - see "man urandom" Usage paragraph
-    fromos := (FileRead(dev, Buffer[0], i) = i) and
-              (Len <= 32);
-  finally
-    FileClose(dev);
-  end;
+    try
+      rd := 32; // read up to 256 bits - see "man urandom" Usage paragraph
+      if Len <= 32 then
+        rd := Len;
+      result := (FileRead(dev, Buffer[0], rd) = rd);
+      if result and
+         (Len > 32) then
+        RandomBytes(@Buffer[32], Len - 32); // simple gsl_rng_taus2 padding
+    finally
+      FileClose(dev);
+    end;
   {$endif OSPOSIX}
   {$ifdef OSWINDOWS}
   // warning: on some Windows versions, this could take up to 30 ms!
@@ -5731,12 +5734,12 @@ begin
     if CryptoApi.AcquireContextA(prov, nil, nil,
       PROV_RSA_FULL, CRYPT_VERIFYCONTEXT) then
     begin
-      fromos := CryptoApi.GenRandom(prov, Len, Buffer);
+      result := CryptoApi.GenRandom(prov, Len, Buffer);
       CryptoApi.ReleaseContext(prov, 0);
     end;
   {$endif OSWINDOWS}
-  if not fromos then
-    // OS API call failed or Posix Len > 32 -> xor from gsl_rng_taus2 generator
+  if not result then
+    // OS API call failed -> fallback to gsl_rng_taus2 generator
     RandomBytes(pointer(Buffer), Len);
 end;
 
