@@ -307,6 +307,8 @@ type
     IgnoreCertificateErrors: boolean;
     /// input: if PeerInfo field should be retrieved once connected
     WithPeerInfo: boolean;
+    /// input: if TLS 1.0 or TLS 1.1 are allowed (default is TLS 1.2+ only)
+    AllowDeprecatedTls: boolean;
     /// input: PEM file name containing a certificate to be loaded
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
     // - on OpenSSL, calls the SSL_CTX_use_certificate_file() API

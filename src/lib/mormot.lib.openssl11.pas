@@ -3143,7 +3143,6 @@ begin
   end;
 end;
 
-//  OnEachPeerVerify:
 const
   // list taken on 2021-02-19 from https://ssl-config.mozilla.org/
   // - prefer CHACHA20-POLY1305 if no AES acceleration is available
@@ -3162,7 +3161,7 @@ const
 procedure TOpenSslClient.AfterConnection(Socket: TNetSocket;
   var Context: TNetTlsContext; const ServerAddress: RawUtf8);
 var
-  res: integer;
+  v, res: integer;
   len: PtrInt;
   ciph: PSSL_CIPHER;
   P: PUtf8Char;
@@ -3212,7 +3211,10 @@ begin
   EOpenSslClient.Check(self, 'AfterConnection setcipherlist',
     SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)),
     @Context.LastError);
-  SSL_CTX_set_min_proto_version(fCtx, TLS1_2_VERSION); // no SSL3 TLS1 TLS1.1
+  v := TLS1_2_VERSION; // no SSL3 TLS1.0 TLS1.1
+  if Context.AllowDeprecatedTls then
+    v := TLS1_VERSION; // allow TLS1.0 TLS1.1
+  SSL_CTX_set_min_proto_version(fCtx, v);
   fSsl := SSL_new(fCtx);
   SSL_set_tlsext_host_name(fSsl, ServerAddress); // SNI field
   if not Context.IgnoreCertificateErrors then
