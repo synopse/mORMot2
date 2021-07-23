@@ -1388,6 +1388,12 @@ type
   /// meta-class for our CSPRNG implementations
   TAesPrngClass = class of TAesPrngAbstract;
 
+  /// which sources uses TAesPrng.GetEntropy() to gather its entropy
+  TAesPrngGetEntropySource = (
+    gesSystemAndUser,
+    gesSystemOnly,
+    gesUserOnly);
+
   /// cryptographic pseudorandom number generator (CSPRNG) based on AES-256
   // - use as a shared instance via TAesPrng.Fill() overloaded class methods
   // - this class is able to generate some random output by encrypting successive
@@ -1415,6 +1421,7 @@ type
     fSeedAfterBytes: PtrUInt;
     fAesKeySize: integer;
     fSeedPbkdf2Round: cardinal;
+    fSeedEntropySource: TAesPrngGetEntropySource;
     fSeeding: boolean;
   public
     /// initialize the internal secret key, using Operating System entropy
@@ -1446,17 +1453,19 @@ type
     // - this method is thread-safe
     procedure Seed; override;
     /// retrieve some entropy bytes from the Operating System
-    // - entropy comes from CryptGenRandom API on Windows, and /dev/urandom or
-    // /dev/random on Linux/POSIX
-    // - this system-supplied entropy is then XORed with the output of a SHA-3
-    // cryptographic SHAKE-256 generator in XOF mode, from several sources
-    // (timestamp, thread and system information, mormot.core.base XorEntropy)
-    // - if SystemOnly=true, returned values come from system only, so may not
-    // always be true randomness on closed systems like Windows
+    // - system entropy comes from CryptGenRandom API on Windows (which may be
+    // very slow), and /dev/urandom or /dev/random on Linux/POSIX (which may be
+    // blocking)
+    // - user entropy comes from the output of a SHA-3 cryptographic SHAKE-256
+    // generator in XOF mode, from several sources (timestamp, thread, hardware
+    // and system information, mormot.core.base XorEntropy)
+    // - Source will mix one or both of those entropy sources - note that
+    // gesSystemAndUser is the default, but gesUserOnly is the fastest, and
+    // also derivated from OS entropy at least once at startup
     // - to gather randomness, use TAesPrng.Main.FillRandom() or TAesPrng.Fill()
     // methods, NOT this class function (which will be much slower, BTW)
     class function GetEntropy(Len: integer;
-      SystemOnly: boolean = false): RawByteString; virtual;
+      Source: TAesPrngGetEntropySource = gesSystemAndUser): RawByteString; virtual;
     /// returns a shared instance of a TAesPrng instance
     // - if you need to generate some random content, just call the
     // TAesPrng.Main.FillRandom() overloaded methods, or directly TAesPrng.Fill()
@@ -1472,6 +1481,9 @@ type
     // since GetEntropy output comes from a SHAKE-256 generator in XOF mode
     property SeedPbkdf2Round: cardinal
       read fSeedPbkdf2Round;
+    /// the source of entropy used during seeding - faster gesUserOnly by default
+    property SeedEntropySource: TAesPrngGetEntropySource
+      read fSeedEntropySource;
     /// how many bits (128 or 256 - which is the default) are used for the AES
     property AesKeySize: integer
       read fAesKeySize;
@@ -4793,7 +4805,7 @@ begin
      (Count and AesBlockMod <> 0) then
     exit;
   crc := fMac.encrypted;
-  crcblocks(@crc, Encrypted, Count shr 4 - 2);
+  crcblocks(@crc, Encrypted, (Count - SizeOf(crc)) shr 4);
   result := IsEqual(crc, PHash128(@PByteArray(Encrypted)[Count - SizeOf(crc)])^);
 end;
 
@@ -6025,6 +6037,7 @@ end;
 
 constructor TAesPrng.Create;
 begin
+  fSeedEntropySource := gesUserOnly; // fastest and safe enough (seeded from OS)
   Create({pbkdf2rounds=}16);
 end;
 
@@ -6043,7 +6056,12 @@ begin
   result := MainAesPrng;
 end;
 
-class function TAesPrng.GetEntropy(Len: integer; SystemOnly: boolean): RawByteString;
+var
+  // some system-derivated reused seed for TAesPrng.GetEntropy
+  GetEntropySeed: THash128;
+
+class function TAesPrng.GetEntropy(
+  Len: integer; Source: TAesPrngGetEntropySource): RawByteString;
 var
   data: THash512Rec;
   fromos: RawByteString;
@@ -6066,17 +6084,21 @@ begin
   try
     // retrieve some initial entropy from OS
     SetLength(fromos, Len);
-    FillSystemRandom(pointer(fromos), Len, {allowblocking=}SystemOnly);
-    if SystemOnly then
+    if Source <> gesUserOnly then
+      FillSystemRandom(pointer(fromos), Len, {blocking=}Source = gesSystemOnly);
+    if Source = gesSystemOnly then
     begin
       result := fromos;
-      fromos := '';
       exit;
     end;
     // xor some explicit entropy - it won't hurt
     sha3.Init(SHAKE_256); // used in XOF mode for variable-length output
     RandomBytes(@data, SizeOf(data)); // XOR stack data from gsl_rng_taus2
     aes.EncryptInit(data.h3, 128);
+    if IsZero(GetEntropySeed) then
+      // retrieve System randomness once - even in gesUserOnly mode
+      FillSystemRandom(@GetEntropySeed, SizeOf(GetEntropySeed), {block=}false);
+    sha3.Update(@GetEntropySeed, SizeOf(GetEntropySeed));
     sha3update;
     sha3.Update(Executable.Host);
     sha3.Update(Executable.User);
@@ -6097,6 +6119,7 @@ begin
     data.i2 := PtrInt(MainThreadID);
     data.i3 := integer(UnixMSTimeUtcFast);
     sha3update;
+    DefaultHasher128(@GetEntropySeed, @data, SizeOf(data));
     result := sha3.Cypher(fromos); // = xor OS entropy using SHA-3 in XOF mode
   finally
     sha3.Done;
@@ -6118,7 +6141,8 @@ begin
   LeaveCriticalSection(fSafe);
   if not alreadyseeding then
     try
-      entropy := GetEntropy(128); // 128 bytes is the HmacSha512 key block size
+      // 128 bytes is the HmacSha512 key block size
+      entropy := GetEntropy(128, fSeedEntropySource);
       Pbkdf2HmacSha512(entropy, Executable.User, fSeedPbkdf2Round, key.b);
       EnterCriticalSection(fSafe);
       try

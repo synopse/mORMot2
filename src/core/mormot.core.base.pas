@@ -9030,6 +9030,7 @@ begin
     DefaultHasher := @crc32csse42;
     InterningHasher := @crc32csse42;
   end;
+  DefaultHasher128(@_EntropyGlobal, @CpuFeatures, SizeOf(CpuFeatures));
 end;
 
 {$else not CPUINTEL}
@@ -11783,7 +11784,6 @@ begin
     end;
   end;
   CreateGUID(TGuid(_EntropyGlobal)); // don't start XorEntropy() from scratch
-  _EntropyGlobal.Lo := _EntropyGlobal.Lo xor DiskFree(0); // why not
   // setup minimalistic global functions - overriden by other core units
   VariantClearSeveral := @_VariantClearSeveral;
   SortDynArrayVariantComp := @_SortDynArrayVariantComp;
