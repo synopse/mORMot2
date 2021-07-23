@@ -8110,7 +8110,7 @@ begin
     end
     else
       inc(result) // Str2=''
-  else
+  else if Str2 <> nil then
     dec(result);  // Str1=''
 end;
 

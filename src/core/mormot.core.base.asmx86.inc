@@ -1180,28 +1180,32 @@ end;
 function StrLenSafe(S: pointer): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
-        // slower than StrLenSSE2(), but won't read any byte beyond the string
+        // slower than StrLenSSE2(), but won't read any byte beyond the page
         test  eax, eax
         jz    @z
-        cmp   byte ptr [eax    ], 0; je @0
-        cmp   byte ptr [eax + 1], 0; je @1
-        cmp   byte ptr [eax + 2], 0; je @2
-        cmp   byte ptr [eax + 3], 0; je @3
+        cmp   byte ptr [eax], 0
+        je @0
+        cmp   byte ptr [eax + 1], 0
+        je @1
+        cmp   byte ptr [eax + 2], 0
+        je @2
+        cmp   byte ptr [eax + 3], 0
+        je @3
         push  eax
-        and   eax,-4               // DWORD Align Reads
-        nop
+        and   eax,-4                 // dword align reads
+        nop                          // @aligned manually s loop code
 @s:     add   eax, 4
-        mov   edx, dword ptr [eax] // 4 Chars per Loop
+        mov   edx, dword ptr [eax]   // 4 chars per loop
         lea   ecx, [edx - $01010101]
         not   edx
         and   edx, ecx
-        and   edx, $80808080       // Set Byte to $80 at each #0 Position
-        jz    @s                   // Loop until any #0 Found
+        and   edx, $80808080         // set byte to $80 at each #0 position
+        jz    @s                     // loop until any #0 found
 @set:   pop   ecx
-        bsf   edx, edx             // Find First #0 Position
-        shr   edx, 3               // Byte Offset of First #0
-        add   eax, edx             // Address of First #0
-        sub   eax, ecx
+        bsf   edx, edx               // find first #0 position
+        shr   edx, 3                 // byte offset of first #0
+        add   eax, edx               // address of first #0
+        sub   eax, ecx               // length
 @z:     ret
 @0:     xor   eax, eax
         ret

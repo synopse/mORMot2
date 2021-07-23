@@ -612,12 +612,12 @@ begin
   CheckEqual(StrIComp(PAnsiChar('abcD'), PAnsiChar('ABcd')), 0);
   Check(StrIComp(PAnsiChar('abcD'), PAnsiChar('ABcF')) =
     StrComp(PAnsiChar('ABCD'), PAnsiChar('ABCF')));
-  CheckEqual(StrComp(PAnsiChar('abcD'), nil), 1);
-  CheckEqual(StrComp(nil, PAnsiChar('ABcd')), -1);
-  CheckEqual(StrComp(nil, nil), 0);
-  CheckEqual(StrComp(PAnsiChar('ABCD'), PAnsiChar('ABCD')), 0);
-  CheckEqual(StrComp(PAnsiChar('ABCD'), PAnsiChar('ABCE')), -1);
-  CheckEqual(StrComp(PAnsiChar('ABCD'), PAnsiChar('ABCC')), 1);
+  CheckEqual(StrComp(PAnsiChar('abcD'), nil), 1, 'abcD');
+  CheckEqual(StrComp(nil, PAnsiChar('ABcd')), -1, 'nil ABCd');
+  CheckEqual(StrComp(nil, nil), 0, 'nil nil');
+  CheckEqual(StrComp(PAnsiChar('ABCD'), PAnsiChar('ABCD')), 0, 'ABCD');
+  CheckEqual(StrComp(PAnsiChar('ABCD'), PAnsiChar('ABCE')), -1, 'ABCDE');
+  CheckEqual(StrComp(PAnsiChar('ABCD'), PAnsiChar('ABCC')), 1, 'ABCC');
   CheckEqual(AnsiIComp(pointer(PAnsiChar('abcD')), pointer(PAnsiChar('ABcd'))), 0);
   Check(AnsiIComp(pointer(PAnsiChar('abcD')), pointer(PAnsiChar('ABcF'))) =
     StrComp(PAnsiChar('ABCD'), PAnsiChar('ABCF')));
