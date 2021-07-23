@@ -2346,7 +2346,6 @@ procedure LockedInc64(int64: PInt64);
 // - returns true if the managed variable should be released (i.e. refcnt was 1)
 // - FPC uses PtrInt/SizeInt for refcnt, Delphi uses longint even on CPU64
 function RefCntDecFree(var refcnt: TRefCnt): boolean;
-  {$ifndef CPUINTEL}inline;{$endif}
 
 // defined here for mormot.test.base only
 function GetBitsCountSSE42(value: PtrInt): PtrInt;
@@ -2972,6 +2971,7 @@ procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
 // - to be used for regression tests only: crcblock will use the fastest
 // implementation available on the current CPU
 procedure crcblockfast(crc128, data128: PBlock128);
+  {$ifndef ASMX86} inline; {$endif}
 
 /// compute a 128-bit CRC of any binary buffers
 // - combine crcblocks() with 4 parallel crc32c() for 1..15 trailing bytes
@@ -3005,7 +3005,8 @@ var
   // - apply four crc32c() calls on the 128-bit input chunks, into a 128-bit crc
   // - its output won't match crc128c() value, which works on 8-bit input
   // - will use SSE 4.2 hardware accelerated instruction, if available
-  // - is used e.g. by mormot.crypt.ecc's TEcdheProtocol.ComputeMAC for macCrc128c
+  // - is used e.g. by mormot.crypt.ecc's TEcdheProtocol.ComputeMAC for
+  // macCrc128c or TAesAbstractAead.MacCheckError
   crcblocks: procedure(crc128, data128: PBlock128; count: integer) = crcblocksfast;
 
 /// compute CRC16-CCITT checkum on the supplied buffer
@@ -10294,20 +10295,7 @@ begin
   result := result xor (result shr 16);
 end;
 
-{$ifdef ASMX86}
-
-procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
-begin
-  // call optimized x86 asm within the loop
-  while count > 0 do
-  begin
-    crcblockfast(crc128, data128);
-    inc(data128);
-    dec(count);
-  end;
-end;
-
-{$else} // those functions have their tuned x86 asm version
+{$ifndef ASMX86} // those functions have their tuned x86 asm version
 
 {$ifdef CPUX64}
 function CompareMem(P1, P2: Pointer; Length: PtrInt): boolean;
@@ -10508,30 +10496,6 @@ begin
                 tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
 end;
 
-procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
-var c: cardinal;
-    tab: PCrc32tab;
-begin
-  tab := @crc32ctab;
-  if count>0 then
-    repeat
-      c := crc128^[0] xor data128^[0];
-      crc128^[0] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
-                    tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
-      c := crc128^[1] xor data128^[1];
-      crc128^[1] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
-                    tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
-      c := crc128^[2] xor data128^[2];
-      crc128^[2] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
-                    tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
-      c := crc128^[3] xor data128^[3];
-      crc128^[3] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
-                    tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
-      inc(data128);
-      dec(count);
-    until count = 0;
-end;
-
 function fnv32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 var
   i: PtrInt;
@@ -10567,6 +10531,16 @@ begin
 end;
 
 {$endif ASMX86}
+
+procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
+begin
+  if count > 0 then
+    repeat
+      crcblockfast(crc128, data128); // optimized x86 asm or good inlined pascal
+      inc(data128);
+      dec(count);
+    until count = 0;
+end;
 
 function SameValue(const A, B: Double; DoublePrec: double): boolean;
 var
