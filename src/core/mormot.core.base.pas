@@ -3380,8 +3380,12 @@ function SortDynArrayAnsiString(const A, B): integer;
 
 /// compare two "array of RawByteString" elements, with case sensitivity
 // - can't use StrComp() or similar functions since RawByteString may contain #0
-// - on Intel/AMD, rather use the more efficient SortDynArrayAnsiString
+// - on Intel/AMD, the more efficient SortDynArrayAnsiString asm is used instead
+{$ifdef CPUINTEL}
+var SortDynArrayRawByteString: TDynArraySortCompare = SortDynArrayAnsiString;
+{$else}
 function SortDynArrayRawByteString(const A, B): integer;
+{$endif CPUINTEL}
 
 /// compare two "array of PUtf8Char/PAnsiChar" elements, with case sensitivity
 function SortDynArrayPUtf8Char(const A, B): integer;
@@ -9182,6 +9186,50 @@ begin
   result := StrComp(pointer(A), pointer(B));
 end;
 
+function SortDynArrayRawByteString(const A, B): integer;
+var
+  p1, p2: PByteArray;
+  l1, l2: PtrInt; // FPC will use very efficiently the CPU registers
+begin
+  // we can't use StrComp() since a RawByteString may contain #0
+  p1 := pointer(A);
+  p2 := pointer(B);
+  if p1 <> p2 then
+    if p1 <> nil then
+      if p2 <> nil then
+      begin
+        l1 := PStrLen(PtrUInt(p1) - _STRLEN)^;
+        l2 := PStrLen(PtrUInt(p2) - _STRLEN)^;
+        result := p1[0] - p2[0]; // compare first char for quicksort
+        if result <> 0 then
+          exit;
+        result := l1;
+        if l1 > l2 then
+          l1 := l2;
+        dec(result, l2);
+        p1 := @p1[l1];
+        p2 := @p2[l1];
+        dec(l1); // we already compared the first char
+        if l1 = 0 then
+          exit;
+        l1 := -l1;
+        repeat
+          if p1[l1] <> p2[l1] then
+            break;
+          inc(l1);
+          if l1 = 0 then
+            exit;
+        until false;
+        result := p1[l1] - p2[l1];
+      end
+      else
+        result := 1  // p2=''
+    else
+      result := -1   // p1=''
+  else
+    result := 0;     // p1=p2
+end;
+
 {  FPC x86_64 Linux:
   1000000 pas in 4.67ms i.e. 213,949,507/s, aver. 0us, 1.5 GB/s
   1000000 asm in 4.14ms i.e. 241,196,333/s, aver. 0us, 1.8 GB/s
@@ -11185,41 +11233,6 @@ end;
 function SortDynArray512(const A, B): integer;
 begin
   result := CompareHash(@A, @B, SizeOf(THash512) div SizeOf(pointer));
-end;
-
-function SortDynArrayRawByteString(const A, B): integer;
-var
-  p1, p2: PByteArray;
-  l1, l2, i, l: PtrInt; // FPC will use very efficiently the CPU registers
-begin
-  // we can't use StrComp() since a RawByteString may contain #0
-  p1 := pointer(A);
-  p2 := pointer(B);
-  if p1 <> p2 then
-    if p1 <> nil then
-      if p2 <> nil then
-      begin
-        l1 := PStrLen(PtrUInt(p1) - _STRLEN)^;
-        l2 := PStrLen(PtrUInt(p2) - _STRLEN)^;
-        l := l1;
-        if l2 < l1 then
-          l := l2;
-        i := 0;
-        repeat
-          result := p1[i];
-          dec(result, p2[i]);
-          if result <> 0 then
-            exit;
-          inc(i);
-        until i >= l;
-        result := l1 - l2;
-      end
-      else
-        result := 1  // p2=''
-    else
-      result := -1   // p1=''
-  else
-    result := 0;     // p1=p2
 end;
 
 function SortDynArrayPUtf8Char(const A, B): integer;
