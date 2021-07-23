@@ -10628,34 +10628,6 @@ begin
 end;
 
 
-{$ifndef CPUX64ASM} // e.g. Delphi XE4 SSE asm is buggy :(
-
-// pure pascal alternative to SSE2 / AVX2 very fast asm
-
-procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
-begin
-  repeat
-    dec(count, 8);
-    dec(P[0], ord(P[0] > deleted)); // branchless code is 10x faster than if :)
-    dec(P[1], ord(P[1] > deleted));
-    dec(P[2], ord(P[2] > deleted));
-    dec(P[3], ord(P[3] > deleted));
-    dec(P[4], ord(P[4] > deleted));
-    dec(P[5], ord(P[5] > deleted));
-    dec(P[6], ord(P[6] > deleted));
-    dec(P[7], ord(P[7] > deleted));
-    P := @P[8];
-  until count < 8;
-  while count > 0 do
-  begin
-    dec(count);
-    dec(P[count], ord(P[count] > deleted));
-  end;
-end;
-
-{$endif CPUX64ASM}
-
-
 { ************ Efficient Variant Values Conversion }
 
 {$ifdef HASINLINE}
@@ -11239,6 +11211,29 @@ function SortDynArrayPUtf8Char(const A, B): integer;
 begin
   result := StrComp(pointer(A), pointer(B));
 end;
+
+{$if not defined(CPUX64ASM) and not defined(CPUX86)} // fallback if no asm
+procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
+begin
+  repeat
+    dec(count, 8);
+    dec(P[0], ord(P[0] > deleted)); // branchless code is 10x faster than if :)
+    dec(P[1], ord(P[1] > deleted));
+    dec(P[2], ord(P[2] > deleted));
+    dec(P[3], ord(P[3] > deleted));
+    dec(P[4], ord(P[4] > deleted));
+    dec(P[5], ord(P[5] > deleted));
+    dec(P[6], ord(P[6] > deleted));
+    dec(P[7], ord(P[7] > deleted));
+    P := @P[8];
+  until count < 8;
+  while count > 0 do
+  begin
+    dec(count);
+    dec(P[count], ord(P[count] > deleted));
+  end;
+end;
+{$ifend}
 
 procedure ExchgPointer(n1, n2: PPointer);
 var

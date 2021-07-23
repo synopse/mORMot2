@@ -1468,6 +1468,52 @@ asm
 @p:     mov     eax, 1
 end;
 
+procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        // eax=P edx=deleted ecx=count
+        push    ebx
+        mov     ebx, eax
+        xor     eax, eax
+@by8:   sub     ecx, 8               // note: align 8/16 is not worth it here
+        cmp     edx, dword ptr [ebx]
+        setl    al
+        sub     dword ptr [ebx], eax
+        cmp     edx, dword ptr [ebx+4H]
+        setl    al
+        sub     dword ptr [ebx+4H], eax
+        cmp     edx, dword ptr [ebx+8H]
+        setl    al
+        sub     dword ptr [ebx+8H], eax
+        cmp     edx, dword ptr [ebx+0CH]
+        setl    al
+        sub     dword ptr [ebx+0CH], eax
+        cmp     edx, dword ptr [ebx+10H]
+        setl    al
+        sub     dword ptr [ebx+10H], eax
+        cmp     edx, dword ptr [ebx+14H]
+        setl    al
+        sub     dword ptr [ebx+14H], eax
+        cmp     edx, dword ptr [ebx+18H]
+        setl    al
+        sub     dword ptr [ebx+18H], eax
+        cmp     edx, dword ptr [ebx+1CH]
+        setl    al
+        sub     dword ptr [ebx+1CH], eax
+        add     ebx, 32
+        cmp     ecx, 8
+        jge     @by8
+        test    ecx, ecx
+        jz      @ok
+@by1:   cmp     edx, dword ptr [ebx]
+        setl    al
+        sub     dword ptr [ebx], eax
+        add     ebx, 4
+        dec     ecx
+        jnz     @by1
+@ok:    pop     ebx
+end;
+
 function GetBitsCountSse42(value: PtrInt): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
