@@ -8087,31 +8087,30 @@ end;
 function StrComp(Str1, Str2: pointer): PtrInt;
 var
   c: byte;
-label
-  eq;
-{%H-}begin
-  if Str1 <> Str2 then
-    if Str1 <> nil then
-      if Str2 <> nil then
-      begin
-        repeat
-          c := PByte(Str1)^;
-          if c <> PByte(Str2)^ then
-            break;
-          if c = 0 then
-            goto eq;
-          inc(PByte(Str1));
-          inc(PByte(Str2));
-        until false;
-        result := c - PByte(Str2)^;
+begin
+  result := 0;
+  if Str1 <> nil then
+    if Str2 <> nil then
+    begin
+      dec(PtrUInt(Str1), PtrUInt(Str2));
+      if Str1 = nil then
         exit;
-      end
-      else
-        result := 1 // Str2=''
+      repeat
+        c := PByteArray(Str1)[PtrUInt(Str2)];
+        if c <> PByte(Str2)^ then
+          break
+        else if c = 0 then
+          exit // Str1 = Str2
+        else
+          inc(PByte(Str2));
+      until false;
+      result := PByteArray(Str1)[PtrUInt(Str2)] - PByte(Str2)^;
+      exit;
+    end
     else
-      result := -1  // Str1=''
+      inc(result) // Str2=''
   else
-eq: result := 0;    // Str1=Str2
+    dec(result);  // Str1=''
 end;
 
 // from A. Sharahov's PosEx_Sha_Pas_2() - refactored for cross-platform/compiler
@@ -8206,34 +8205,36 @@ end;
 
 function PosEx(const SubStr, S: RawUtf8; Offset: PtrUInt): PtrInt;
 begin
-  result := PosExPas(pointer(SubStr), pointer(S), Offset);
+  result := PosExPas(pointer(SubStr), pointer(S), Offset); // inlined call
 end;
 
 {$endif CPUX86}
 
 function StrCompW(Str1, Str2: PWideChar): PtrInt;
+var
+  c: word;
 begin
+  result := 0;
   if Str1 <> Str2 then
     if Str1 <> nil then
       if Str2 <> nil then
       begin
-        if Str1^ = Str2^ then
-          repeat
-            if (Str1^ = #0) or
-               (Str2^ = #0) then
-              break;
-            inc(Str1);
-            inc(Str2);
-          until Str1^ <> Str2^;
+        repeat
+          c := PWord(Str1)^;
+          if c <> PWord(Str2)^ then
+            break
+          else if c = 0 then
+            exit; // Str1 = Str2
+          inc(Str1);
+          inc(Str2);
+        until false;
         result := PWord(Str1)^ - PWord(Str2)^;
         exit;
       end
       else
-        result := 1 // Str2=''
+        inc(result) // Str2=''
     else
-      result := -1  // Str1=''
-  else
-    result := 0;    // Str1=Str2
+      dec(result);  // Str1=''
 end;
 
 function PosExChar(Chr: AnsiChar; const Str: RawUtf8): PtrInt;
