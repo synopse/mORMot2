@@ -88,6 +88,33 @@ var
   // ! if jvJsonIdentifier in JSON_CHARS[P^] then ...
   JSON_CHARS: TJsonCharSet;
 
+type
+  /// kind of first character used from JSON_TOKENS[] for efficient JSON parsing
+  TJsonToken = (
+    jtNone,
+    jtDoubleQuote,
+    jtFirstDigit,
+    jtNullFirstChar,
+    jtTrueFirstChar,
+    jtFalseFirstChar,
+    jtObjectStart,
+    jtArrayStart,
+    jtObjectStop,
+    jtArrayStop,
+    jtAssign,
+    jtComma,
+    jtSingleQuote,
+    jtIdentifierFirstChar,
+    jtSlash);
+  /// defines a lookup table used for branch-less JSON parsing
+  TJsonTokens = array[AnsiChar] of TJsonToken;
+  /// points to a lookup table used for branch-less JSON parsing
+  PJsonTokens = ^TJsonTokens;
+
+var
+  /// 256-byte lookup table for fast branchless initial character JSON parsing
+  JSON_TOKENS: TJsonTokens;
+
 
 /// returns TRUE if the given text buffers would be escaped when written as JSON
 // - e.g. if contains " or \ characters, as defined by
@@ -171,7 +198,7 @@ function GetJsonField(P: PUtf8Char; out PDest: PUtf8Char;
 // - this function will handle strict JSON property name (i.e. a "string"), but
 // also MongoDB extended syntax, e.g. {age:{$gt:18}} or {'people.age':{$gt:18}}
 // see @http://docs.mongodb.org/manual/reference/mongodb-extended-json
-function GetJsonPropName(var P: PUtf8Char; Len: PInteger = nil): PUtf8Char; overload;
+function GetJsonPropName(var Json: PUtf8Char; Len: PInteger = nil): PUtf8Char; overload;
 
 /// decode a JSON field name in an UTF-8 encoded shortstring variable
 // - this function would left the P^ buffer memory untouched, so may be safer
@@ -2537,31 +2564,6 @@ begin
     result := false;
 end;
 
-type
-  TJsonToken = (
-    jtNone,
-    jtDoubleQuote,
-    jtFirstDigit,
-    jtNullFirstChar,
-    jtTrueFirstChar,
-    jtFalseFirstChar,
-    jtObjectStart,
-    jtObjectStop,
-    jtArrayStart,
-    jtArrayStop,
-    jtAssign,
-    jtComma,
-    jtSingleQuote,
-    jtIdentifierFirstChar,
-    jtSlash);
-  TJsonTokens = array[AnsiChar] of TJsonToken;
-  {$ifndef CPUX86NOTPIC}
-  PJsonTokens = ^TJsonTokens;
-  {$endif CPUX86NOTPIC}
-
-var
-  JSON_TOKENS: TJsonTokens;
-
 function GetJsonField(P: PUtf8Char; out PDest: PUtf8Char; WasString: PBoolean;
   EndOfObject: PUtf8Char; Len: PInteger): PUtf8Char;
 var
@@ -2845,37 +2847,38 @@ begin
   result := GotoEndOfJsonString2(P + 1, @JSON_CHARS);
 end;
 
-function GetJsonPropName(var P: PUtf8Char; Len: PInteger): PUtf8Char;
+function GetJsonPropName(var Json: PUtf8Char; Len: PInteger): PUtf8Char;
 var
-  Name: PUtf8Char;
+  P, Name: PUtf8Char;
   WasString: boolean;
-  c, EndOfObject: AnsiChar;
+  EndOfObject: AnsiChar;
   tab: PJsonCharSet;
 begin
   // should match GotoNextJsonObjectOrArray() and JsonPropNameValid()
-  result := nil;
+  result := nil; // returns nil on invalid input
+  P := Json;
   if P = nil then
     exit;
   while P^ <= ' ' do
   begin
     if P^ = #0 then
     begin
-      P := nil;
+      Json := nil; // reached early end of input
       exit;
     end;
     inc(P);
   end;
   Name := P; // put here to please some versions of Delphi compiler
-  c := P^;
-  if c = '"' then
+  if P^ = '"' then
   begin
-    Name := GetJsonField(P, P, @WasString, @EndOfObject, Len);
-    if (Name = nil) or
-       not WasString or
-       (EndOfObject <> ':') then
-      exit;
+    Name := GetJsonField(P, Json, @WasString, @EndOfObject, Len);
+    if (Name <> nil) and
+       WasString and
+       (EndOfObject = ':') then
+      result := Name;
+    exit;
   end
-  else if c = '''' then
+  else if P^ = '''' then
   begin
     // single quotes won't handle nested quote character
     inc(P);
@@ -2887,20 +2890,19 @@ begin
         inc(P);
     if Len <> nil then
       Len^ := P - Name;
-    P^ := #0;
+    P^ := #0; // ensure Name is #0 terminated
     repeat
       inc(P)
     until (P^ > ' ') or
           (P^ = #0);
     if P^ <> ':' then
       exit;
-    inc(P);
   end
   else
   begin
     // e.g. '{age:{$gt:18}}'
     tab := @JSON_CHARS;
-    if not (jcJsonIdentifierFirstChar in tab[c]) then
+    if not (jcJsonIdentifierFirstChar in tab[P^]) then
       exit; // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '$']
     repeat
       inc(P);
@@ -2920,9 +2922,9 @@ begin
     if not (P^ in [':', '=']) then
       // allow both age:18 and age=18 pairs (very relaxed JSON syntax)
       exit;
-    P^ := #0;
-    inc(P);
+    P^ := #0; // ensure Name is #0 terminated
   end;
+  Json := P + 1;
   result := Name;
 end;
 
