@@ -4566,7 +4566,7 @@ begin
         else
         begin
           // guess of the Json array count - will browse up to 256KB of input
-          cap := abs(JsonArrayCount(Json, Json + 256 shl 10));
+          cap := abs(JsonArrayCount(Json, Json + 256 shl 10)); // 900 MB/s
           if cap = 0 then
             exit; // invalid content
           SetLength(VValue, cap);
@@ -7132,19 +7132,19 @@ begin
   if (Json = nil) or
      ((PInteger(Json)^ = NULL_LOW) and
       (jcEndOfJsonValueField in JSON_CHARS[Json[4]])) then
-    Value.VType := varNull
+    TRttiVarData(Value).VType := varNull
   else if (PInteger(Json)^ = FALSE_LOW) and
           (Json[4] = 'e') and
           (jcEndOfJsonValueField in JSON_CHARS[Json[5]]) then
   begin
-    Value.VType := varBoolean;
-    Value.VBoolean := false;
+    TRttiVarData(Value).VType := varBoolean;
+    Value.VInteger := ord(false);
   end
   else if (PInteger(Json)^ = TRUE_LOW) and
           (jcEndOfJsonValueField in JSON_CHARS[Json[4]]) then
   begin
-    Value.VType := varBoolean;
-    Value.VBoolean := true;
+    TRttiVarData(Value).VType := varBoolean;
+    Value.VInteger := ord(true);
   end
   else if not GetNumericVariantFromJson(Json, Value, AllowDouble) then
   begin
@@ -7152,6 +7152,21 @@ begin
     exit;
   end;
   result := true;
+end;
+
+function GotoEndOfJsonNumber(P: PUtf8Char; var PEndNum: PUtf8Char): PUtf8Char;
+  {$ifdef HASINLINE} inline; {$endif} // inlined for better code generation
+var
+  tab: PJsonCharSet;
+begin
+  result := P;
+  tab := @JSON_CHARS;
+  repeat
+    inc(result);
+  until not (jcDigitFloatChar in tab[result^]);
+  PEndNum := result;
+  while not (jcEndOfJsonFieldNotName in tab[result^]) do
+    inc(result); // #0, ',', ']', '}'
 end;
 
 // internal method used by VariantLoadJson(), GetVariantFromJson() and
@@ -7162,66 +7177,87 @@ var
   V: TVarData absolute Value;
   n, Plen: integer;
   t: ^TSynInvokeableVariantType;
-  P, P2: PUtf8Char;
+  P, P2, P3: PUtf8Char;
   EndOfObject2: AnsiChar;
   wasParsedWithinString: boolean;
   wasString: boolean;
 label
-  s, w;
+  parse, parsed, astext;
 begin
   VarClear(Value);
-  if (Options <> nil) and
-     (dvoAllowDoubleValue in Options^) then
-    AllowDouble := true; // for GetVariantFromNotStringJson() below
   if EndOfObject <> nil then
     EndOfObject^ := ' ';
   P := Json;
+  if Options = nil then
+    goto parse; // no complex variant -> direct process
+  if dvoAllowDoubleValue in Options^ then
+    AllowDouble := true; // for GetVariantFromNotStringJson() below
   while (P^ <= ' ') and
         (P^ <> #0) do
     inc(P);
-  if (Options = nil) or
-     (P^ = '-')  or
-     ((P^ >= '0') and
-      (P^ <='9')) or
-     (PInteger(P)^ = NULL_LOW) or
-     (PInteger(P)^ = TRUE_LOW) or
-     (PInteger(P)^ = FALSE_LOW) then
-  begin
-    // handle numerical or true/false/null constants
-s:  P := GetJsonField(P, Json, @wasString, EndOfObject, @Plen);
-    // try any numerical value
-w:  if {%H-}wasString or
-       not GetVariantFromNotStringJson(P, V, AllowDouble) then
-    begin
-      // found no numerical value -> return a string in the expected format
-      V.VType := varString;
-      V.VAny := nil; // avoid GPF below
-      FastSetString(RawUtf8(V.VAny), P, Plen{%H-});
-    end;
-    exit;
-  end;
   wasParsedWithinString := false;
-  if P^ = '"' then
-    // handle string
-    if dvoJsonObjectParseWithinString in Options^ then
-    begin
-      P := GetJsonField(P, Json, @wasString, EndOfObject, @Plen);
-      EndOfObject := nil;
-      wasParsedWithinString := true;
-    end
-    else
-      goto s;
-  // if we reach here, input Json is some complex value
+  case JSON_TOKENS[P^] of // bypass TryJsonToVariant() call if possible
+    jtFirstDigit:  // '-', '0'..'9': numbers are directly processed
+      begin
+        P2 := P;
+        P := GotoEndOfJsonNumber(P, P3{%H-});
+        if EndOfObject <> nil then
+          EndOfObject^ := P^;
+        if P3^ <> #0 then
+          P3^ := #0;
+        if not GetNumericVariantFromJson(P2, V, AllowDouble) then
+        begin
+          P := P2;
+          PLen := P3 - P;
+          goto astext; // too big number is stored as text
+        end;
+        if (P = P3) or
+           (P^ <> #0) then
+          inc(P);
+        Json := P;
+        exit;
+      end;
+    jtDoubleQuote:
+      if dvoJsonObjectParseWithinString in Options^ then
+      begin
+        P := GetJsonField(P, Json, @wasString, EndOfObject, @Plen);
+        EndOfObject := nil;
+        wasParsedWithinString := true;
+      end
+      else
+      begin
+        // parse string/numerical values or true/false/null constants
+parse:  P := GetJsonField(P, Json, @wasString, EndOfObject, @Plen);
+parsed: if {%H-}wasString or
+           not GetVariantFromNotStringJson(P, V, AllowDouble) then
+        begin
+astext:   TRttiVarData(V).VType := varString;
+          V.VAny := nil; // avoid GPF below
+          FastSetString(RawUtf8(V.VAny), P, Plen{%H-});
+        end;
+        exit;
+      end;
+    jtNullFirstChar:
+      if PInteger(P)^ = NULL_LOW then
+        goto parse;
+    jtFalseFirstChar:
+      if PInteger(P)^ = FALSE_LOW then
+        goto parse;
+    jtTrueFirstChar:
+      if PInteger(P)^ = TRUE_LOW then
+        goto parse;
+  end;
+  // if we reach here, input Json may be some complex value
   t := pointer(SynVariantTryJsonTypes);
   if (t <> nil) and
      not (dvoJsonParseDoNotTryCustomVariants in Options^) then
   begin
-    P2 := P;
     n := PDALen(PAnsiChar(t) - _DALEN)^ + _DAOFF;
     repeat
+      P2 := P;
+      // currently, only implemented by mormot.db.nosql.bson BsonVariantType
       if t^.TryJsonToVariant(P2, Value, @EndOfObject2) then
       begin
-        // currently, only set by BsonVariantType from mormot.db.nosql.bson
         if not wasParsedWithinString then
         begin
           if EndOfObject <> nil then
@@ -7234,7 +7270,7 @@ w:  if {%H-}wasString or
       dec(n);
     until n = 0;
   end;
-  if P^ in ['[', '{'] then
+  if P^ in ['{', '['] then
   begin
     // default Json parsing and conversion to TDocVariant instance
     P := TDocVariantData(Value).InitJsonInPlace(P, Options^, EndOfObject);
@@ -7248,9 +7284,9 @@ w:  if {%H-}wasString or
   end
   else // back to simple variant types
     if wasParsedWithinString then
-      goto w
+      goto parsed
     else
-      goto s;
+      goto parse;
 end;
 
 function TextToVariantNumberTypeNoDouble(Json: PUtf8Char): cardinal;
@@ -7404,13 +7440,13 @@ var
   frac, exp: PtrInt;
   c: AnsiChar;
   flags: set of (fNeg, fNegExp, fValid);
-  v: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
+  v64: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
   d: double;
 begin
-  // parse input text as number
+  // parse input text as number into v64, frac, digit, exp
   result := false;
   byte(flags) := 0;
-  v := 0;
+  v64 := 0;
   frac := 0;
   if Json = nil then
     exit;
@@ -7436,11 +7472,11 @@ begin
       begin
         dec(c, ord('0'));
         {$ifdef CPU64}
-        v := v * 10;
+        v64 := v64 * 10;
         {$else}
-        v := v shl 3 + v + v;
+        v64 := v64 shl 3 + v64 + v64;
         {$endif CPU64}
-        inc(v, integer(c));
+        inc(v64, integer(c));
         include(flags, fValid);
         if frac <> 0 then
           dec(frac); // frac<0 for digits after '.'
@@ -7492,51 +7528,51 @@ begin
       inc(frac, exp);
   end;
   if (c <> #0) or
-     not (fValid in flags) and
-     (c = #0) then
+     (not (fValid in flags) and
+      (c = #0)) then
     exit;
   if fNeg in flags then
-    V := -V;
-  // now V, frac, digit, exp contain the parsed number
+    v64 := -v64;
+  // now v64, frac, digit, exp contain the parsed number
   if (frac = 0) and
      (digit >= 0) then
   begin
     // return an integer or Int64 value
-    Value.VInt64 := V;
+    Value.VInt64 := v64;
     if digit <= 9 then
-      Value.VType := varInt64
+      TRttiVarData(Value).VType := varInt64
     else
-      Value.VType := varInteger;
+      TRttiVarData(Value).VType := varInteger;
   end
   else if (frac < 0) and
           (frac >= -4) then
   begin
     // currency as ###.0123
-    Value.VType := varCurrency;
+    TRttiVarData(Value).VType := varCurrency;
     inc(frac, 4);
     if frac <> 0 then // stored as round(CurrValue*10000)
       repeat
         {$ifdef CPU64}
-        v := v * 10;
+        v64 := v64 * 10;
         {$else}
-        v := v shl 3 + v + v;
+        v64 := v64 shl 3 + v64 + v64;
         {$endif CPU64}
         dec(frac);
       until frac = 0;
-    Value.VInt64 := V;
+    Value.VInt64 := v64;
   end
   else if not AllowVarDouble then
     exit
   else
   begin
     // any double value
-    Value.VType := varDouble;
+    TRttiVarData(Value).VType := varDouble;
     if (frac >= -31) and
        (frac <= 31) then
       d := POW10[frac]
     else
       d := HugePower10(frac);
-    Value.VDouble := d * v;
+    Value.VDouble := d * v64;
   end;
   result := true;
 end;
@@ -7630,7 +7666,7 @@ begin
      not GetVariantFromNotStringJson(Json, V, AllowDouble) then
   begin
     // found no numerical value -> return a string in the expected format
-    V.VType := varString;
+    TRttiVarData(Value).VType := varString;
     V.VString := nil; // avoid GPF below
     if JsonLen = 0 then
       JsonLen := StrLen(Json);
