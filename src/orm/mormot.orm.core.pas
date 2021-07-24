@@ -5262,6 +5262,10 @@ type
   // and reduce resource consumption (mainly memory/heap fragmentation)
   // - is used by the ORM for TOrm.FillPrepare/FillOne methods for
   // fast access to individual object values
+  // - some numbers taken from TTestCoreProcess.JSONBenchmark on my laptop:
+  // $   TOrmTableJson expanded in 38.82ms, 505 MB/s
+  // $   TOrmTableJson not expanded in 21.54ms, 400.3 MB/s
+  // $   TOrmTableJson GetJsonValues in 22.94ms, 375.9 MB/s
   TOrmTableJson = class(TOrmTable)
   protected
     /// used if a private copy of the JSON buffer is needed
@@ -9039,10 +9043,10 @@ end;
 function NotExpandedBufferRowCountPos(P, PEnd: PUtf8Char): PUtf8Char;
 var
   i: PtrInt;
-begin
+begin // search for "rowCount": at the end of the JSON buffer
   result := nil;
   if (PEnd <> nil) and (PEnd - P > 24) then
-    for i := 1 to 24 do // search for "rowCount": at the end of the JSON buffer
+    for i := 1 to 24 do
       case PEnd[-i] of
         ']', ',':
           exit;
@@ -9058,18 +9062,18 @@ end;
 function IsNotExpandedBuffer(var P: PUtf8Char; PEnd: PUtf8Char;
   var FieldCount, RowCount: PtrInt): boolean;
 
-  procedure GetRowCountNotExpanded(P: PUtf8Char);
+  procedure GetRowCountNotExpanded(P: PUtf8Char); // full parsing to get RowCount
   begin
     RowCount := 0;
     repeat
-      // get a row
+      // get a row = ignore all fields
       P := GotoNextJsonItem(P, FieldCount);
       if P = nil then
         exit; // unexpected end
       inc(RowCount);
     until P[-1] = ']'; // end of array
     if P^ in ['}', ','] then
-    begin // expected formated JSON stream
+    begin // expected formatted JSON stream
       if RowCount > 0 then
         dec(RowCount); // first Row = field names -> data in rows 1..RowCount
     end
@@ -9087,14 +9091,14 @@ begin
   end;
   FieldCount := GetNextItemCardinal(P, #0);
   if Expect(P, ROWCOUNT_PATTERN, 12) then
-    RowCount := GetNextItemCardinal(P, #0)
+    RowCount := GetNextItemCardinal(P, #0) // initial "rowCount":xxxx
   else
   begin
     RowCountPos := NotExpandedBufferRowCountPos(P, PEnd);
     if RowCountPos = nil then
-      RowCount := -1
-    else // mark "rowCount":.. not available
-      RowCount := GetCardinal(RowCountPos);
+      RowCount := -1                        // no "rowCount":xxxx
+    else
+      RowCount := GetCardinal(RowCountPos); // trailing "rowCount":xxxx
   end;
   result := (FieldCount <> 0) and Expect(P, VALUES_PATTERN, 11);
   if result and (RowCount < 0) then

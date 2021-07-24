@@ -1192,8 +1192,8 @@ asm
         cmp   byte ptr [eax + 3], 0
         je @3
         push  eax
-        and   eax,-4                 // dword align reads
-        nop                          // @aligned manually s loop code
+        and   eax, -4                // dword align reads
+        nop                          // @s loop code alignment
 @s:     add   eax, 4
         mov   edx, dword ptr [eax]   // 4 chars per loop
         lea   ecx, [edx - $01010101]

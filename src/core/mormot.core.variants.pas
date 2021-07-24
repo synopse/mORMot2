@@ -4600,7 +4600,10 @@ begin
             exit;
         until Json^ > ' ';
         include(VOptions, dvoIsObject);
-        if Json^ = '}' then
+        cap := JsonObjectPropCount(Json); // fast 1.2 GB/s parsing
+        if cap < 0 then
+          exit // invalid content
+        else if cap = 0 then
           // void but valid input object
           repeat
             inc(Json)
@@ -4608,20 +4611,13 @@ begin
                 (Json^ > ' ')
         else
         begin
-          cap := 0;
+          SetLength(VValue, cap);
+          SetLength(VName, cap);
           repeat
-            if cap = VCount then
-            begin
-              if cap = 0 then
-                cap := 16 // minimum good number of properties
-              else
-                cap := NextGrow(cap);
-              SetLength(VValue, cap);
-              SetLength(VName, cap);
-            end;
             // see http://docs.mongodb.org/manual/reference/mongodb-extended-Json
             Name := GetJsonPropName(Json, @NameLen);
-            if Name = nil then
+            if (Name = nil) or
+               (VCount = cap) then
               exit;
             if intnames <> nil then
               intnames.Unique(VName[VCount], Name, NameLen)

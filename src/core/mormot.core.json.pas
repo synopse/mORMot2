@@ -50,6 +50,7 @@ type
   // than a regular set of AnsiChar which generates much slower BT [MEM], IMM
   // - the same 256-byte memory will also be reused from L1 CPU cache
   // during the parsing of complex JSON input
+  // - TTestCoreProcess.JSONBenchmark shows around 900MB/s on my i5 notebook
   TJsonChar = set of (
     jcJsonIdentifierFirstChar,
     jcJsonIdentifier,
@@ -218,7 +219,8 @@ function GetJsonItemAsRawUtf8(var P: PUtf8Char; var output: RawUtf8;
 // - this function will handle strict JSON property name (i.e. a "string"), but
 // also MongoDB extended syntax, e.g. {age:{$gt:18}} or {'people.age':{$gt:18}}
 // see @http://docs.mongodb.org/manual/reference/mongodb-extended-json
-function GotoNextJsonPropName(P: PUtf8Char): PUtf8Char;
+function GotoNextJsonPropName(P: PUtf8Char; tab: PJsonCharSet): PUtf8Char;
+  {$ifdef FPC} inline; {$endif}
 
 /// get the next character after a quoted buffer
 // - the first character in P^ must be "
@@ -236,6 +238,10 @@ function GotoEndOfJsonString(P: PUtf8Char): PUtf8Char;
 // and MongoDB extended syntax like {age:{$gt:18}} will be allowed - so you
 // may consider GotoEndJsonItemStrict() if you expect full standard JSON parsing
 function GotoEndJsonItem(P: PUtf8Char; PMax: PUtf8Char = nil): PUtf8Char;
+
+/// fast JSON parsing function - for internal inlined use e.g. by GotoEndJsonItem
+function GotoEndJsonItemFast(P, PMax: PUtf8Char
+  {$ifndef CPUX86NOTPIC}; tab: PJsonCharSet{$endif}): PUtf8Char;
   {$ifdef FPC}inline;{$endif}
 
 /// reach positon just after the current JSON item in the supplied UTF-8 buffer
@@ -266,8 +272,7 @@ function GotoNextJsonObjectOrArray(P: PUtf8Char): PUtf8Char; overload;
 // - specify ']' or '}' as the expected EndChar
 // - will return nil in case of parsing error or unexpected end (#0)
 // - will return the next character after ending ] or } - i.e. may be , } ]
-function GotoNextJsonObjectOrArray(P: PUtf8Char;
-  EndChar: AnsiChar): PUtf8Char; overload;
+function GotoNextJsonObjectOrArray(P: PUtf8Char; EndChar: AnsiChar): PUtf8Char; overload;
   {$ifdef FPC}inline;{$endif}
 
 /// reach the position of the next JSON object of JSON array
@@ -325,10 +330,11 @@ function JsonArrayDecode(P: PUtf8Char;
   out Values: TPUtf8CharDynArray): boolean;
 
 /// compute the number of fields in a JSON object
-// - this will handle any kind of objects, including those with nested
-// JSON objects or arrays
+// - this will handle any kind of objects, including those with nested JSON
+// objects or arrays, and also the MongoDB extended syntax of property names
 // - incoming P^ should point to the first char after the initial '{' (which
 // may be a closing '}')
+// - returns -1 if the input was not a proper JSON object
 function JsonObjectPropCount(P: PUtf8Char): integer;
 
 /// go to a named property of a JSON object
@@ -3009,10 +3015,9 @@ begin
   end;
 end;
 
-function GotoNextJsonPropName(P: PUtf8Char): PUtf8Char;
+function GotoNextJsonPropName(P: PUtf8Char; tab: PJsonCharSet): PUtf8Char;
 var
   c: AnsiChar;
-  tab: PJsonCharSet;
 label
   s;
 begin
@@ -3026,7 +3031,6 @@ begin
       exit;
     inc(P);
   end;
-  tab := @JSON_CHARS;
   c := P^;
   if c = '"' then
   begin
@@ -3666,13 +3670,12 @@ ok4:    inc(P, 4);
   end;
 end;
 
-function GotoEndJsonItem(P, PMax: PUtf8Char): PUtf8Char;
+function GotoEndJsonItemFast(P, PMax: PUtf8Char
+  {$ifndef CPUX86NOTPIC}; tab: PJsonCharSet{$endif}): PUtf8Char;
+{$ifdef CPUX86NOTPIC}
 var
-  {$ifdef CPUX86NOTPIC}
-  jsonset: TJsonCharSet absolute JSON_CHARS; // not enough registers
-  {$else}
-  jsonset: PJsonCharSet;
-  {$endif CPUX86NOTPIC}
+  tab: TJsonCharSet absolute JSON_CHARS; // not enough registers
+{$endif CPUX86NOTPIC}
 label
   pok, ok;
 begin
@@ -3683,13 +3686,10 @@ begin
         (P^ <> #0) do
     inc(P);
   // handle complex JSON string, object or array
-  {$ifndef CPUX86NOTPIC}
-  jsonset := @JSON_CHARS;
-  {$endif CPUX86NOTPIC}
   case P^ of
     '"':
       begin
-        P := GotoEndOfJsonString2(P + 1, {$ifdef CPUX86NOTPIC}@{$endif}jsonset);
+        P := GotoEndOfJsonString2(P + 1, {$ifdef CPUX86NOTPIC}@{$endif}tab);
         if (P^ <> '"') or
            ((PMax <> nil) and
             (P > PMax)) then
@@ -3704,7 +3704,7 @@ begin
         until (P^ > ' ') or
               (P^ = #0);
         P := GotoNextJsonObjectOrArrayInternal(
-               P, PMax, ']' {$ifndef CPUX86NOTPIC}, jsonset{$endif});
+               P, PMax, ']' {$ifndef CPUX86NOTPIC}, tab{$endif});
         goto pok;
       end;
     '{':
@@ -3714,7 +3714,7 @@ begin
         until (P^ > ' ') or
               (P^ = #0);
         P := GotoNextJsonObjectOrArrayInternal(
-               P, PMax, '}' {$ifndef CPUX86NOTPIC}, jsonset{$endif});
+               P, PMax, '}' {$ifndef CPUX86NOTPIC}, tab{$endif});
 pok:    if P = nil then
           exit;
 ok:     while (P^ <= ' ') and
@@ -3725,11 +3725,11 @@ ok:     while (P^ <= ' ') and
       end;
   end;
   // quick ignore numeric or true/false/null or MongoDB extended {age:{$gt:18}}
-  if jcEndOfJsonFieldOr0 in jsonset[P^] then // #0 , ] } :
+  if jcEndOfJsonFieldOr0 in tab[P^] then // #0 , ] } :
     exit; // no value
   repeat
     inc(P);
-  until jcEndOfJsonFieldNotName in jsonset[P^]; // : exists in MongoDB IsoDate()
+  until jcEndOfJsonFieldNotName in tab[P^]; // : exists in MongoDB IsoDate()
   if (P^ = #0) or
      ((PMax <> nil) and
       (P > PMax)) then
@@ -3737,18 +3737,23 @@ ok:     while (P^ <= ' ') and
   result := P;
 end;
 
+function GotoEndJsonItem(P, PMax: PUtf8Char): PUtf8Char;
+begin
+  result := GotoEndJsonItemFast(P, PMax {$ifndef CPUX86NOTPIC}, @JSON_CHARS{$endif});
+end;
+
 function GotoNextJsonItem(P: PUtf8Char; NumberOfItemsToJump: cardinal;
   EndOfObject: PAnsiChar): PUtf8Char;
 begin
   result := nil; // to notify unexpected end
-  while NumberOfItemsToJump <> 0 do
-  begin
-    P := GotoEndJsonItem(P);
+  if NumberOfItemsToJump <> 0 then
+  repeat
+    P := GotoEndJsonItemFast(P, nil {$ifndef CPUX86NOTPIC}, @JSON_CHARS{$endif});
     if P = nil then
       exit;
     inc(P); // ignore jcEndOfJsonFieldOr0
     dec(NumberOfItemsToJump);
-  end;
+  until NumberOfItemsToJump = 0;
   if EndOfObject <> nil then
     EndOfObject^ := P[-1]; // return last jcEndOfJsonFieldOr0
   result := P;
@@ -3797,13 +3802,19 @@ end;
 function JsonArrayCount(P: PUtf8Char): integer;
 var
   n: integer;
+  {$ifndef CPUX86NOTPIC}
+  tab: PJsonCharSet;
+  {$endif CPUX86NOTPIC}
 begin
   result := -1;
   n := 0;
+  {$ifndef CPUX86NOTPIC}
+  tab := @JSON_CHARS;
+  {$endif CPUX86NOTPIC}
   P := GotoNextNotSpace(P);
   if P^ <> ']' then
     repeat
-      P := GotoEndJsonItem(P);
+      P := GotoEndJsonItemFast(P, nil {$ifndef CPUX86NOTPIC}, tab{$endif});
       if P = nil then
         // invalid content, or #0 reached
         exit;
@@ -3817,13 +3828,20 @@ begin
 end;
 
 function JsonArrayCount(P, PMax: PUtf8Char): integer;
+{$ifndef CPUX86NOTPIC}
+var
+  tab: PJsonCharSet;
+{$endif CPUX86NOTPIC}
 begin
   result := 0;
   P := GotoNextNotSpace(P);
+  {$ifndef CPUX86NOTPIC}
+  tab := @JSON_CHARS;
+  {$endif CPUX86NOTPIC}
   if P^ <> ']' then
     while P < PMax do
     begin
-      P := GotoEndJsonItem(P, PMax);
+      P := GotoEndJsonItemFast(P, PMax{$ifndef CPUX86NOTPIC}, tab{$endif});
       if P = nil then
         // invalid content, or #0/PMax reached
         break;
@@ -3903,16 +3921,23 @@ end;
 function JsonObjectPropCount(P: PUtf8Char): integer;
 var
   n: integer;
+  {$ifndef CPUX86NOTPIC}
+  tab: PJsonCharSet;
+  {$endif CPUX86NOTPIC}
 begin
+  {$ifndef CPUX86NOTPIC}
+  tab := @JSON_CHARS;
+  {$endif CPUX86NOTPIC}
   result := -1;
   n := 0;
   P := GotoNextNotSpace(P);
   if P^ <> '}' then
     repeat
-      P := GotoNextJsonPropName(P);
+      P := GotoNextJsonPropName(P,
+            {$ifdef CPUX86NOTPIC} @JSON_CHARS {$else} tab {$endif});
       if P = nil then
         exit; // invalid field name
-      P := GotoEndJsonItem(P);
+      P := GotoEndJsonItemFast(P, nil {$ifndef CPUX86NOTPIC}, tab{$endif});
       if P = nil then
         exit; // invalid content, or #0 reached
       inc(n);
