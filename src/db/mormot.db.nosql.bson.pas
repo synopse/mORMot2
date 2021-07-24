@@ -2689,7 +2689,7 @@ begin
     betObjectID:
       resBSON.VObjectID := PBsonObjectID(Element)^;
     betBoolean:
-      res.VBoolean := PBoolean(Element)^;
+      res.VInteger := PByte(Element)^; // canonical VBoolean
     betDateTime:
       res.VDate := UnixMSTimeToDateTime(PUnixMSTime(Element)^);
     betInt32:

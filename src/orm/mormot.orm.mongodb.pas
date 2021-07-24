@@ -523,9 +523,7 @@ begin
             oftBoolean:
               begin
                 // normalize to boolean BSON
-                if V^.VInteger = 0 then
-                  V^.VBoolean := false
-                else
+                if V^.VInteger <> 0 then
                   V^.VBoolean := true;
                 // doc.InitJson/GetVariantFromJson store 0,1 as varInteger
                 V^.VType := varBoolean;
