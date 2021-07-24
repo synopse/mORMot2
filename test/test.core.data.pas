@@ -2732,13 +2732,12 @@ end;
 
 procedure TTestCoreProcess.JSONBenchmark;
 const
-  ITER = 50;
+  ITER = 20;
   ONLYLOG = false;
-  COUNT = 8227;
 var
-  people: RawUtf8;
+  people, notexpanded: RawUtf8;
   P: PUtf8Char;
-  len, i: integer;
+  count, len, lennexp, i: integer;
   dv: TDocVariantData;
   table: TOrmTableJson;
   timer: TPrecisionTimer;
@@ -2762,19 +2761,25 @@ begin
     Check(IsValidJsonBuffer(pointer(people)));
   NotifyTestSpeed('IsValidJson(PUtf8Char)', 0, len, @timer, ONLYLOG);
   P := @people[2]; // point just after initial '[' for JsonArrayCount
+  count := JsonArrayCount(P);
+  check(count > 8200); // = 8227 in current People.json ORM tests file
   timer.Start;
   for i := 1 to ITER do
-    Check(JsonArrayCount(P) = COUNT);
+    Check(JsonArrayCount(P) = count);
   NotifyTestSpeed('JsonArrayCount(P)', 0, len, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER do
-    Check(JsonArrayCount(P, P + length(people) - 1) = COUNT);
+    Check(JsonArrayCount(P, P + length(people) - 1) = count);
   NotifyTestSpeed('JsonArrayCount(P,PMax)', 0, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER * 5000 do
+    Check(JsonObjectPropCount(P + 3) = 6, 'first TOrmPeople object');
+  NotifyTestSpeed('JsonObjectPropCount()', 0, ITER * 5000 * 119, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER do
   begin
     dv.InitJson(people, JSON_OPTIONS_FAST);
-    Check(dv.Count = COUNT);
+    Check(dv.count = count);
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant', 0, len, @timer, ONLYLOG);
@@ -2782,21 +2787,46 @@ begin
   for i := 1 to ITER do
   begin
     dv.InitJson(people, JSON_OPTIONS_FAST + [dvoInternNames]);
-    Check(dv.Count = COUNT);
+    Check(dv.count = count);
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant dvoInternNames', 0, len, @timer, ONLYLOG);
+  table := TOrmTableJson.Create('', people);
+  try
+    Check(table.RowCount = count);
+    timer.Start;
+    for i := 1 to ITER do
+    begin
+      notexpanded := table.GetJsonValues({expand=}false, 0, 65536);
+      lennexp := length(notexpanded);
+      Check(lennexp < length(people), 'notexpanded');
+    end;
+    NotifyTestSpeed('TOrmTableJson GetJsonValues', 0, lennexp * ITER, @timer, ONLYLOG);
+  finally
+    table.Free;
+  end;
   timer.Start;
   for i := 1 to ITER do
   begin
     table := TOrmTableJson.Create('', people);
     try
-      Check(table.RowCount = COUNT);
+      Check(table.RowCount = count);
     finally
       table.Free;
     end;
   end;
-  NotifyTestSpeed('TOrmTableJson', 0, len, @timer, ONLYLOG);
+  NotifyTestSpeed('TOrmTableJson expanded', 0, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+  begin
+    table := TOrmTableJson.Create('', notexpanded);
+    try
+      Check(table.RowCount = count);
+    finally
+      table.Free;
+    end;
+  end;
+  NotifyTestSpeed('TOrmTableJson not expanded', 0, lennexp * ITER, @timer, ONLYLOG);
 end;
 
 procedure TTestCoreProcess.WikiMarkdownToHtml;
