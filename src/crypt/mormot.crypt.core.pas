@@ -4805,7 +4805,7 @@ begin
      (Count and AesBlockMod <> 0) then
     exit;
   crc := fMac.encrypted;
-  crcblocks(@crc, Encrypted, (Count - SizeOf(crc)) shr 4);
+  crcblocks(@crc, Encrypted, (Count shr 4) - 2);
   result := IsEqual(crc, PHash128(@PByteArray(Encrypted)[Count - SizeOf(crc)])^);
 end;
 
