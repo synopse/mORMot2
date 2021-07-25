@@ -7,11 +7,19 @@ interface
 
 {$I ..\src\mormot.defines.inc}
 
+// if defined, TTestCoreProcess.JSONBenchmark will include some other libraries
+{$define JSONBENCHMARK_FPJSON}
+
 uses
   sysutils,
   classes,
   variants,
-  {$ifndef FPC}
+  {$ifdef FPC}
+  {$ifdef JSONBENCHMARK_FPJSON}
+  fpjson,
+  jsonparser,
+  {$endif JSONBENCHMARK_FPJSON}
+  {$else}
   typinfo, // for proper Delphi inlining
   {$endif FPC}
   mormot.core.base,
@@ -2741,6 +2749,9 @@ var
   dv: TDocVariantData;
   table: TOrmTableJson;
   timer: TPrecisionTimer;
+  {$ifdef JSONBENCHMARK_FPJSON}
+  fpjson: TJSONData;
+  {$endif JSONBENCHMARK_FPJSON}
 begin
   people := StringFromFile(WorkDir + 'People.json');
   if people = '' then
@@ -2827,6 +2838,21 @@ begin
     end;
   end;
   NotifyTestSpeed('TOrmTableJson not expanded', 0, lennexp * ITER, @timer, ONLYLOG);
+  {$ifdef JSONBENCHMARK_FPJSON}
+  timer.Start;
+  for i := 1 to ITER div 10 do // div 10 since fpjson speed is 10 MB/s :(
+  begin
+    fpjson := GetJSON(people, {utf8=}true);
+    if not CheckFailed(fpjson <> nil) then
+      try
+        if not CheckFailed(fpjson.JSONType = jtArray) then
+          Check((fpjson as TJSONArray).Count = count);
+      finally
+        fpjson.Free;
+      end;
+  end;
+  NotifyTestSpeed('fpjson', 0, lennexp * ITER div 10, @timer, ONLYLOG);
+  {$endif JSONBENCHMARK_FPJSON}
 end;
 
 procedure TTestCoreProcess.WikiMarkdownToHtml;
