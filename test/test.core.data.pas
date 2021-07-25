@@ -8,7 +8,8 @@ interface
 {$I ..\src\mormot.defines.inc}
 
 // if defined, TTestCoreProcess.JSONBenchmark will include some other libraries
-{$define JSONBENCHMARK_FPJSON}
+{$define JSONBENCHMARK_FPJSON} // fpjson = 10.8 MB/s vs TOrmTableJson = 530 MB/s
+
 
 uses
   sysutils,
@@ -21,6 +22,7 @@ uses
   {$endif JSONBENCHMARK_FPJSON}
   {$else}
   typinfo, // for proper Delphi inlining
+  {$undef JSONBENCHMARK_FPJSON} // fpjson is not available on Delphi
   {$endif FPC}
   mormot.core.base,
   mormot.core.os,
@@ -2548,19 +2550,22 @@ begin
   TestJSONSerialization;
   {$endif ISDELPHI2010}
   // tests parsing options
-  Parser := Rtti.RegisterFromText(TypeInfo(TTestCustomJsonRecord),
-    copy(__TTestCustomJsonRecord, 1, PosEx('}', __TTestCustomJsonRecord)));
+  Parser := Rtti.RegisterFromText(
+    TypeInfo(TTestCustomJsonRecord), __TTestCustomJsonRecord);
   U := RecordSaveJson(JR2, TypeInfo(TTestCustomJsonRecord));
   Check(IsValidJson(U));
-  CheckEqual(U, '{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0}}');
+  CheckEqual(U, '{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
   U := RecordSaveJson(JR, TypeInfo(TTestCustomJsonRecord));
   Check(IsValidJson(U));
-  CheckEqual(U, '{"A":10,"B":0,"C":0,"D":"**","E":{"E1":0,"E2":0}}');
+  CheckEqual(U, '{"A":10,"B":0,"C":0,"D":"**","E":{"E1":0,"E2":0},"F":"1899-12-31"}');
   U := '{"B":0,"C":0,"A":10,"D":"**","E":{"E1":0,"E2":20}}';
+  JR2.A := 100;
+  JR2.F := 10;
   RecordLoadJson(JR2, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonRecord));
   Check(JR2.A = 10);
   Check(JR2.D = '**');
   Check(JR2.E.E2 = 20);
+  Check(JR2.F = 10);
   TRttiJson(Parser).IncludeReadOptions := JSONPARSER_TOLERANTOPTIONS;
   U := '{ "A" : 1 , "B" : 2 , "C" : 3 , "D" : "A" , "tobeignored":null,"E": '#13#10 +
        '{ "E1" : 4, "E2" : 5 } , "tbi" : { "b" : 0 } }';
@@ -2569,6 +2574,7 @@ begin
   Check(JR2.D = 'A');
   Check(JR2.E.E1 = 4);
   Check(JR2.E.E2 = 5);
+  Check(JR2.F = 10);
   Rtti.RegisterFromText(TypeInfo(TTestCustomJsonRecord), '');
 
   Rtti.RegisterFromText(TypeInfo(TTestCustomJsonArrayWithoutF),
@@ -2745,7 +2751,7 @@ const
 var
   people, notexpanded: RawUtf8;
   P: PUtf8Char;
-  count, len, lennexp, i: integer;
+  count, len, lennexp, i, interned: integer;
   dv: TDocVariantData;
   table: TOrmTableJson;
   timer: TPrecisionTimer;
@@ -2786,6 +2792,7 @@ begin
   for i := 1 to ITER * 5000 do
     Check(JsonObjectPropCount(P + 3) = 6, 'first TOrmPeople object');
   NotifyTestSpeed('JsonObjectPropCount()', 0, ITER * 5000 * 119, @timer, ONLYLOG);
+  interned := DocVariantType.InternNames.Count;
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -2794,6 +2801,8 @@ begin
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant', 0, len, @timer, ONLYLOG);
+  Check(DocVariantType.InternNames.Count = interned, 'no intern');
+  DocVariantType.InternNames.Clean;
   timer.Start;
   for i := 1 to ITER do
   begin
@@ -2802,6 +2811,9 @@ begin
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant dvoInternNames', 0, len, @timer, ONLYLOG);
+  Check(DocVariantType.InternNames.Count - interned = 6, 'intern');
+  Check(DocVariantType.InternNames.Clean = 6, 'clean');
+  Check(DocVariantType.InternNames.Count = interned, 'cleaned');
   table := TOrmTableJson.Create('', people);
   try
     Check(table.RowCount = count);
