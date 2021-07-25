@@ -7598,6 +7598,7 @@ function TRttiCustomList.RegisterFromText(DynArrayOrRecord: PRttiInfo;
   const RttiDefinition: RawUtf8): TRttiCustom;
 var
   P: PUtf8Char;
+  rttisize: integer;
 begin
   if (DynArrayOrRecord = nil) or
      not (DynArrayOrRecord^.Kind in rkRecordOrDynArrayTypes) then
@@ -7618,11 +7619,12 @@ begin
     P := pointer(RttiDefinition);
     if P <> nil then
     begin
+      rttisize := result.Size; // was taken from RTTI
       result.SetPropsFromText(P, eeNothing, {NoRegister=}false);
-      if result.Props.Size <> result.Size then
+      if result.Props.Size <> rttisize then
         raise ERttiException.CreateUtf8('Rtti.RegisterFromText(%): text ' +
           'definition  covers % bytes, but RTTI defined %',
-          [DynArrayOrRecord^.RawName, result.Props.Size, result.Size]);
+          [DynArrayOrRecord^.RawName, result.Props.Size, rttisize]);
     end
     else if result.Kind in rkRecordTypes then
       result.Props.SetFromRecordExtendedRtti(result.Info); // only for Delphi 2010+
