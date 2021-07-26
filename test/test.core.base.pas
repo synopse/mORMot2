@@ -4299,7 +4299,7 @@ procedure TTestCoreBase._UTF8;
   end;
 
 var
-  i, j, k, len, lenup100, CP, L: integer;
+  i, j, k, len, len120, lenup100, CP, L: integer;
   W: WinAnsiString;
   WS: WideString;
   SU: SynUnicode;
@@ -4480,7 +4480,7 @@ begin
     W := WinAnsiString(RandomString(len));
     U := WinAnsiToUtf8(W);
     check(IsValidUtf8(U), 'IsValidUtf8U');
-    P := pointer(U);
+    P := UniqueRawUtf8(U);
     check(IsValidUtf8(P), 'IsValidUtf8');
     check(PosChar(P, #10) = nil);
     if len > 0 then
@@ -4505,6 +4505,11 @@ begin
         end;
       end;
     end;
+    if len > 120 then
+      len120 := Utf8TruncatedLength(P, 120)
+    else
+      len120 := 0;
+    Check(IsValidUtf8(P, len120));
     for j := 1 to lenup100 do
     begin
       check(PosChar(P, U[j])^ = U[j], 'PosCharj');
@@ -4518,6 +4523,12 @@ begin
       check((k > 0) and
             (U[k] = U[j]));
       check(PosExChar(U[j], U) = k);
+      if len120 <> 0 then
+      begin
+        inc(P[j - 1], 128); // always invalidate the UTF-8 content
+        check(not IsValidUtf8(P, len120), 'IsValidUtf8 up100');
+        inc(P[j - 1], 128); // restore
+      end;
     end;
     Unic := Utf8DecodeToRawUnicode(U);
     {$ifndef FPC_HAS_CPSTRING} // buggy FPC
