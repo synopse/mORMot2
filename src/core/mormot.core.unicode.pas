@@ -2115,22 +2115,15 @@ nosource:
 end;
 
 function EndValidUtf8(source: PUtf8Char): PUtf8Char;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifndef FPC_X86} {$ifdef HASINLINE} inline; {$endif} {$endif}
+  // FPC i386 puts c on the stack when inlined :(
 var
   c: byte;
-  {$ifdef CPUX86NOTPIC}
-  utf8: TUtf8Table absolute UTF8_TABLE;
-  {$else}
-  utf8: PUtf8Table;
-  {$endif CPUX86NOTPIC}
+  utf8: PUtf8Table; // is faster even on plain i386
 begin
   // per quad is not faster because we need to check >=#80 but also for #0
-  result := source;
-  if source = nil then
-    exit;
-  {$ifndef CPUX86NOTPIC}
+  result := nil;
   utf8 := @UTF8_TABLE;
-  {$endif CPUX86NOTPIC}
   repeat
     c := utf8.Lookup[ord(source^)];
     inc(source);
@@ -2195,7 +2188,8 @@ end;
 
 function IsValidUtf8(const source: RawUtf8): boolean;
 begin
-  result := IsValidUtf8(pointer(source), Length(source));
+  result := (source = '') or
+            (EndValidUtf8(pointer(source)) - pointer(source) = Length(source));
 end;
 
 {$endif ASMX64AVX}
