@@ -5725,9 +5725,7 @@ begin
   for result := 0 to count - 1 do
   begin
     p := n^; // all VName[]<>'' so p=n^<>nil
-    if p = name then // may occur with RawUtf8 ref-counting
-      exit
-    else if (PStrLen(p - _STRLEN)^ = len) and
+    if (PStrLen(p - _STRLEN)^ = len) and
        CompareMemFixed(p, name, len) then
       exit
     else
@@ -5744,9 +5742,7 @@ begin
   for result := 0 to count - 1 do
   begin
     p := n^; // all VName[]<>'' so p=n^<>nil
-    if p = name then // may occur with RawUtf8 ref-counting
-      exit
-    else if (PStrLen(p - _STRLEN)^ = len) and
+    if (PStrLen(p - _STRLEN)^ = len) and
        IdemPropNameUSameLenNotNull(p, name, len) then
       exit
     else
