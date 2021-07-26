@@ -213,8 +213,6 @@ implementation
 
 { ************ NexusDB Database Engine Connection }
 
-implementation
-
 uses
   {$ifdef SYNDB_FULLNEXUSDB}
   nxreRemoteServerEngine,
