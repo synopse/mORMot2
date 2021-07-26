@@ -2764,11 +2764,19 @@ begin
     exit; // need to run at least once the ORM tests
   len := length(people);
   check(len > 800000, 'unexpected people.json');
+  timer.Start;
+  for i := 1 to ITER do
+    Check(StrLen(pointer(people)) = len);
   len := len * ITER;
+  NotifyTestSpeed('StrLen()', 0, len, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER do
     Check(IsValidUtf8(people));
-  NotifyTestSpeed('IsValidUtf8()', 0, len, @timer, ONLYLOG);
+  NotifyTestSpeed('IsValidUtf8(RawUtf8)', 0, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+    Check(IsValidUtf8(PUtf8Char(pointer(people))));
+  NotifyTestSpeed('IsValidUtf8(PUtf8Char)', 0, len, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER do
     Check(IsValidJson(people));
