@@ -2128,48 +2128,8 @@ nosource:
     dest^ := #0; // always append a WideChar(0) to the end of the buffer
 end;
 
-function IsValidUtf8(source: PUtf8Char): boolean;
-var
-  c: PtrUInt;
-  {$ifdef CPUX86NOTPIC}
-  utf8: TUtf8Table absolute UTF8_TABLE;
-  {$else}
-  utf8: PUtf8Table;
-  {$endif CPUX86NOTPIC}
-begin
-  {$ifndef CPUX86NOTPIC}
-  utf8 := @UTF8_TABLE;
-  {$endif CPUX86NOTPIC}
-  result := false;
-  if source <> nil then
-    repeat
-      c := byte(source^);
-      inc(source);
-      if c = 0 then
-        break;
-      if c <= $7f then
-        continue;
-      c := utf8.Bytes[c]; // extras
-      if c = 0 then
-        // invalid leading byte
-        exit;
-      // check valid UTF-8 content
-      repeat
-        if byte(source^) and $c0 <> $80 then
-          exit;
-        inc(source);
-        dec(c);
-      until c = 0;
-    until false;
-  result := true;
-end;
-
-function IsValidUtf8(const source: RawUtf8): boolean;
-begin
-  result := IsValidUtf8(pointer(source), Length(source));
-end;
-
-function IsValidUtf8(source: PUtf8Char; sourcelen: PtrInt): boolean;
+function EndValidUtf8(source: PUtf8Char): PUtf8Char;
+  {$ifdef HASINLINE} inline; {$endif}
 var
   c: byte;
   {$ifdef CPUX86NOTPIC}
@@ -2178,39 +2138,50 @@ var
   utf8: PUtf8Table;
   {$endif CPUX86NOTPIC}
 begin
+  // per quad is not faster because we need to check >=#80 but also for #0
   {$ifndef CPUX86NOTPIC}
   utf8 := @UTF8_TABLE;
   {$endif CPUX86NOTPIC}
-  result := false;
-  inc(sourcelen, PtrInt(source));
-  if source <> nil then
-    if PtrInt(PtrUInt(source)) < sourcelen then
+  result := nil;
+  if source = nil then
+    exit;
+  repeat
+    c := byte(source^);
+    inc(source);
+    if c <= $7f then
+      if c = 0 then
+        break // reached end of input
+      else
+        continue;
+    c := utf8.Bytes[c]; // extras
+    if c = 0 then
+      // invalid leading byte
+      exit;
+    // check valid UTF-8 content
     repeat
-      c := byte(source^);
-      inc(source);
-      if c <= $7f then
-        if c = 0 then
-          exit
-        else if PtrInt(PtrUInt(source)) < sourcelen then
-          continue
-        else
-          break;
-      c := utf8.Bytes[c]; // extra bytes
-      if (c = 0) or
-         (PtrInt(PtrUInt(source)) + PtrInt(c) > sourcelen) then
-        // invalid leading byte
+      if byte(source^) and $c0 <> $80 then
         exit;
-      // check valid UTF-8 content
-      repeat
-        if byte(source^) and $c0 <> $80 then
-          exit;
-        inc(source);
-        dec(c)
-      until c = 0;
-      if PtrInt(PtrUInt(source)) >= sourcelen then
-        break;
-    until false;
-  result := true;
+      inc(source);
+      dec(c);
+    until c = 0;
+  until false;
+  result := source - 1;
+end;
+
+function IsValidUtf8(source: PUtf8Char): boolean;
+begin
+  result := (Source = nil) or
+            (EndValidUtf8(source) <> nil);
+end;
+
+function IsValidUtf8(const source: RawUtf8): boolean;
+begin
+  result := IsValidUtf8(pointer(source), Length(source));
+end;
+
+function IsValidUtf8(source: PUtf8Char; sourcelen: PtrInt): boolean;
+begin
+  result := EndValidUtF8(source) - source = sourcelen;
 end;
 
 function IsValidUtf8WithoutControlChars(source: PUtf8Char): boolean;
