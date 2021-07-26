@@ -684,6 +684,234 @@ procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: Ptr
         jnz     @1
 end;
 
+{$ifdef ASMX64AVX} // AVX2 asm is not supported by Delphi (even 10.4) :(
+
+// adapted from https://github.com/simdjson/simdjson - Apache License 2.0
+function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
+  {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        push    rbp
+        mov     r8, rdi
+        mov     rdx, rsi
+        mov     rsi, r8
+        mov     ecx, 64
+        mov     rax, rsi
+        mov     rdi, rdx
+        mov     rbp, rsp
+        and     rsp, 0FFFFFFFFFFFFFFE0H
+        sub     rsp, 160
+        cmp     rdx, 64
+        cmovnc  rcx, rdx
+        sub     rcx, 64
+        je      @small
+        vpxor   xmm3, xmm3, xmm3
+        vmovdqu ymm7,  ymmword ptr [rip + @0f]
+        vmovdqu ymm15, ymmword ptr [rip + @_6]
+        xor     esi, esi
+        vmovdqu ymm14, ymmword ptr [rip + @_7]
+        vmovdqu ymm13, ymmword ptr [rip + @_8]
+        vmovdqa ymm5, ymm3
+        vmovdqa ymm2, ymm3
+        // main processing loop
+        align 16
+@loop:  vmovdqu xmm6, xmmword ptr [rax + rsi]
+        vinserti128 ymm0, ymm6, xmmword ptr [rax + rsi + 10H], 01H
+        vmovdqu xmm6, xmmword ptr [rax + rsi + 20H]
+        vinserti128 ymm1, ymm6, xmmword ptr [rax + rsi + 30H], 01H
+        vpor    ymm4, ymm1, ymm0
+        vpmovmskb rdx, ymm4
+        test    edx, edx
+        jne     @check
+        vpor    ymm2, ymm5, ymm2
+        vmovdqa ymm4, ymm2
+        add     rsi, 64
+        cmp     rcx, rsi
+        ja      @loop
+        // process trailing 0..63 bytes
+@trail: vmovdqa ymmword ptr [rsp + 40H], ymm3
+        cmp     rdi, rsi
+        jz      @ended
+        vmovdqa xmm0, xmmword ptr [rip + @20]
+        sub     rdi, rsi
+        lea     r8, qword ptr [rsp + 60H]
+        add     rsi, rax
+        mov     rdx, rdi
+        mov     rdi, r8
+        vmovdqa ymmword ptr [rsp], ymm4
+        vmovdqa ymmword ptr [rsp + 20H], ymm5
+        vmovdqa xmmword ptr [rsp + 60H], xmm0
+        vmovdqa xmmword ptr [rsp + 70H], xmm0
+        vmovdqa xmmword ptr [rsp + 80H], xmm0
+        vmovdqa xmmword ptr [rsp + 90H], xmm0
+        vzeroupper
+        xchg    rsi, rdi
+        call    MoveFast // copy last bytes on [rsp + 60H] stack
+        vmovdqa ymm1, ymmword ptr [rsp + 60H]
+        vmovdqa ymm4, ymmword ptr [rsp]
+        vmovdqa ymm2, ymmword ptr [rsp + 80H]
+        vmovdqa ymm5, ymmword ptr [rsp + 20H]
+        vmovdqa ymm3, ymmword ptr [rsp + 40H]
+        vpor    ymm0, ymm1, ymm2
+        vpmovmskb rax, ymm0
+        test    eax, eax
+        jne     @last
+@ended: vpor    ymm5, ymm5, ymm4
+        vptest  ymm5, ymm5
+        sete    al
+        vzeroupper
+        leave
+        ret
+@small: vpxor   xmm4, xmm4, xmm4
+        xor     esi, esi
+        vmovdqa ymm3, ymm4
+        vmovdqa ymm5, ymm4
+        jmp     @trail
+        align 8
+@check: vpsrlw  ymm9, ymm0, 4
+        vpsrlw  ymm12, ymm1, 4
+        vperm2i128 ymm3, ymm3, ymm0, 21H
+        vpalignr ymm5, ymm0, ymm3, 0FH
+        vpalignr ymm11, ymm0, ymm3, 0EH
+        vpsubusb ymm11, ymm11, ymmword ptr [rip + @_9]
+        vpalignr ymm3, ymm0, ymm3, 0DH
+        vperm2i128 ymm0, ymm0, ymm1, 21H
+        vpsubusb ymm3, ymm3, ymmword ptr [rip + @_10]
+        vpalignr ymm8, ymm1, ymm0, 0FH
+        vpsrlw  ymm10, ymm5, 4
+        vpand   ymm5, ymm7, ymm5
+        vpsrlw  ymm6, ymm8, 4
+        vpalignr ymm4, ymm1, ymm0, 0EH
+        vpsubusb ymm4, ymm4, ymmword ptr [rip + @_9]
+        vpalignr ymm0, ymm1, ymm0, 0DH
+        vpsubusb ymm0, ymm0, ymmword ptr [rip + @_10]
+        vpand   ymm10, ymm10, ymm7
+        vpand   ymm6, ymm6, ymm7
+        vpand   ymm8, ymm7, ymm8
+        vpor    ymm3, ymm3, ymm11
+        vpor    ymm0, ymm4, ymm0
+        vpxor   xmm11, xmm11, xmm11
+        vpshufb ymm10, ymm15, ymm10
+        vpshufb ymm5, ymm14, ymm5
+        vpand   ymm9, ymm9, ymm7
+        vpshufb ymm6, ymm15, ymm6
+        vpshufb ymm8, ymm14, ymm8
+        vpand   ymm12, ymm12, ymm7
+        vpand   ymm5, ymm5, ymm10
+        vpcmpgtb ymm3, ymm3, ymm11
+        vpcmpgtb ymm0, ymm0, ymm11
+        vpshufb ymm9, ymm13, ymm9
+        vpand   ymm3, ymm3, ymmword ptr [rip + @_11]
+        vpand   ymm0, ymm0, ymmword ptr [rip + @_11]
+        vpshufb ymm12, ymm13, ymm12
+        vpand   ymm6, ymm6, ymm8
+        vpand   ymm9, ymm5, ymm9
+        vpsubusb ymm5, ymm1, ymmword ptr [rip + @_12]
+        vpand   ymm12, ymm6, ymm12
+        vpxor   ymm9, ymm3, ymm9
+        vmovdqa ymm3, ymm1
+        vpxor   ymm12, ymm0, ymm12
+        vpor    ymm9, ymm9, ymm12
+        vpor    ymm2, ymm9, ymm2
+        vmovdqa ymm4, ymm2
+        add     rsi, 64
+        cmp     rcx, rsi
+        ja      @loop
+        jmp     @trail
+        align 8
+@last:  vmovdqu ymm5, ymmword ptr [rip + @0f]
+        vperm2i128 ymm3, ymm3, ymm1, 21H
+        vmovdqu ymm9, ymmword ptr [rip + @_7]
+        vpsrlw  ymm11, ymm1, 4
+        vpalignr ymm0, ymm1, ymm3, 0FH
+        vmovdqu ymm13, ymmword ptr [rip + @_10]
+        vmovdqu ymm14, ymmword ptr [rip + @_9]
+        vpsrlw  ymm6, ymm0, 4
+        vpand   ymm0, ymm5, ymm0
+        vpand   ymm11, ymm11, ymm5
+        vmovdqu ymm7, ymmword ptr [rip + @_6]
+        vpshufb ymm10, ymm9, ymm0
+        vpalignr ymm0, ymm1, ymm3, 0EH
+        vpand   ymm6, ymm6, ymm5
+        vmovdqu ymm8, ymmword ptr [rip + @_8]
+        vpalignr ymm3, ymm1, ymm3, 0DH
+        vperm2i128 ymm1, ymm1, ymm2, 21H
+        vpsubusb ymm0, ymm0, ymm14
+        vpsubusb ymm12, ymm3, ymm13
+        vpalignr ymm3, ymm2, ymm1, 0FH
+        vpshufb ymm6, ymm7, ymm6
+        vpsrlw  ymm15, ymm3, 4
+        vpand   ymm3, ymm5, ymm3
+        vpor    ymm0, ymm0, ymm12
+        vpshufb ymm9, ymm9, ymm3
+        vpsrlw  ymm3, ymm2, 4
+        vpand   ymm15, ymm15, ymm5
+        vpand   ymm5, ymm3, ymm5
+        vpalignr ymm3, ymm2, ymm1, 0EH
+        vpxor   xmm12, xmm12, xmm12
+        vpalignr ymm1, ymm2, ymm1, 0DH
+        vpsubusb ymm3, ymm3, ymm14
+        vpshufb ymm11, ymm8, ymm11
+        vpsubusb ymm1, ymm1, ymm13
+        vpcmpgtb ymm0, ymm0, ymm12
+        vpshufb ymm7, ymm7, ymm15
+        vpor    ymm1, ymm3, ymm1
+        vpshufb ymm8, ymm8, ymm5
+        vpsubusb ymm5, ymm2, ymmword ptr [rip + @_12]
+        vmovdqu ymm2, ymmword ptr [rip + @_11]
+        vpcmpgtb ymm1, ymm1, ymm12
+        vpand   ymm6, ymm6, ymm10
+        vpand   ymm7, ymm7, ymm9
+        vpand   ymm0, ymm0, ymm2
+        vpand   ymm11, ymm6, ymm11
+        vpand   ymm8, ymm7, ymm8
+        vpxor   ymm0, ymm0, ymm11
+        vpor    ymm5, ymm4, ymm5
+        vpand   ymm1, ymm1, ymm2
+        vpxor   ymm1, ymm1, ymm8
+        vpor    ymm0, ymm0, ymm1
+        vpor    ymm5, ymm0, ymm5
+        vptest  ymm5, ymm5
+        sete    al
+        vzeroupper
+        leave
+        ret
+        align 16
+@20:    dq 2020202020202020H
+        dq 2020202020202020H
+@0f:    dq 0F0F0F0F0F0F0F0FH
+        dq 0F0F0F0F0F0F0F0FH
+        dq 0F0F0F0F0F0F0F0FH
+        dq 0F0F0F0F0F0F0F0FH
+@_6:    dq 0202020202020202H
+        dq 4915012180808080H
+        dq 0202020202020202H
+        dq 4915012180808080H
+@_7:    dq 0CBCBCB8B8383A3E7H
+        dq 0CBCBDBCBCBCBCBCBH
+        dq 0CBCBCB8B8383A3E7H
+        dq 0CBCBDBCBCBCBCBCBH
+@_8:    dq 0101010101010101H
+        dq 01010101BABAAEE6H
+        dq 0101010101010101H
+        dq 01010101BABAAEE6H
+@_9:    dq 0DFDFDFDFDFDFDFDFH
+        dq 0DFDFDFDFDFDFDFDFH
+        dq 0DFDFDFDFDFDFDFDFH
+        dq 0DFDFDFDFDFDFDFDFH
+@_10:   dq 0EFEFEFEFEFEFEFEFH
+        dq 0EFEFEFEFEFEFEFEFH
+        dq 0EFEFEFEFEFEFEFEFH
+        dq 0EFEFEFEFEFEFEFEFH
+@_11:   dq 8080808080808080H
+        dq 8080808080808080H
+        dq 8080808080808080H
+        dq 8080808080808080H
+@_12:   db 0FFH, 0FFH, 0FFH, 0FFH, 0FFH, 0FFH, 0FFH, 0FFH
+        db 0FFH, 0FFH, 0FFH, 0FFH, 0FFH, 0FFH, 0FFH, 0FFH
+        db 0FFH, 0FFH, 0FFH, 0FFH, 0FFH, 0FFH, 0FFH, 0FFH
+        db 0FFH, 0FFH, 0FFH, 0FFH, 0FFH, 0EFH, 0DFH, 0BFH
+end;
+{$endif ASMX64AVX}
+
 {$endif CPUX64ASM} // SSE2 asm is invalid prior to Delphi XE7 (to be refined)
 
 

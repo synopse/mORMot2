@@ -2389,6 +2389,10 @@ function BSRqword(const q: Qword): cardinal;
 
 {$ifdef ASMX64} // will define its own self-dispatched SSE2/AVX functions
 
+const
+  /// identify Intel/AMD AVX2 support at Haswell level
+  CPUAVX2HASWELL = [cfAVX2, cfSSE42, cfBMI1, cfBMI2, cfCLMUL];
+
 type
   /// most common x86_64 CPU abilities, used e.g. by FillCharFast/MoveFast
   // - cpuERMS is slightly slower than cpuAVX so is not available by default
@@ -2398,6 +2402,11 @@ type
 var
   /// internal flags used by FillCharFast - easier from asm that CpuFeatures
   CPUIDX64: TX64CpuFeatures;
+
+{$ifdef ASMX64AVX} // AVX2 asm is not supported by Delphi (even 10.4) :(
+/// as used by mormot.core.unicode on Haswell AVX2 for IsValidUtf8()
+function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
+{$endif ASMX64AVX}
 
 {$endif ASMX64}
 

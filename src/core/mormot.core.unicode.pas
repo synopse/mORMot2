@@ -195,14 +195,24 @@ function Utf8ToUnicodeLength(source: PUtf8Char): PtrUInt;
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding
 // - will stop when the buffer contains #0
+// - on Haswell AVX2 Intel/AMD CPUs, will call StrLen() before our efficient asm,
+// so overloaded IsValidUtf8() with RawUtf8 or sourcelen are preferred
 function IsValidUtf8(source: PUtf8Char): boolean; overload;
 
-/// returns TRUE if the supplied buffer has valid UTF-8 encoding
-// - will also refuse #0 characters within the buffer
-function IsValidUtf8(source: PUtf8Char; sourcelen: PtrInt): boolean; overload;
+{$ifdef ASMX64AVX}
+var // used to inline IsValidUtf8()
+  IsValidUtf8Impl: function(source: PUtf8Char; sourcelen: PtrInt): boolean;
+{$endif ASMX64AVX}
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding
 // - will also refuse #0 characters within the buffer
+// - on Haswell AVX2 Intel/AMD CPUs, will use very efficient ASM
+function IsValidUtf8(source: PUtf8Char; sourcelen: PtrInt): boolean; overload;
+  {$ifdef ASMX64AVX} inline; {$endif}
+
+/// returns TRUE if the supplied buffer has valid UTF-8 encoding
+// - will also refuse #0 characters within the buffer
+// - on Haswell AVX2 Intel/AMD CPUs, will use very efficient ASM
 function IsValidUtf8(const source: RawUtf8): boolean; overload;
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding with no #1..#31
@@ -2108,7 +2118,7 @@ function EndValidUtf8(source: PUtf8Char): PUtf8Char;
   {$ifdef HASINLINE} inline; {$endif}
 var
   c: byte;
-  {$ifdef CPUX86NOTPIC2}
+  {$ifdef CPUX86NOTPIC}
   utf8: TUtf8Table absolute UTF8_TABLE;
   {$else}
   utf8: PUtf8Table;
@@ -2118,7 +2128,7 @@ begin
   result := source;
   if source = nil then
     exit;
-  {$ifndef CPUX86NOTPIC2}
+  {$ifndef CPUX86NOTPIC}
   utf8 := @UTF8_TABLE;
   {$endif CPUX86NOTPIC}
   repeat
@@ -2141,9 +2151,45 @@ begin
   result := source - 1; // inc(source) done within the loop
 end;
 
+{$ifdef ASMX64AVX} // AVX2 asm is not supported by Delphi (even 10.4) :(
+
+function IsValidUtf8Pas(source: PUtf8Char; sourcelen: PtrInt): boolean;
+begin
+  result := (source = nil) or
+            (sourcelen = 0) or
+            (EndValidUtf8(source) - source >= sourcelen);
+end;
+
+function IsValidUtf8(source: PUtf8Char; sourcelen: PtrInt): boolean;
+begin
+  result := (source = nil) or
+            (sourcelen = 0) or
+            IsValidUtf8Impl(source, sourcelen);
+end;
+
 function IsValidUtf8(source: PUtf8Char): boolean;
 begin
-  result := (Source = nil) or
+  result := (source = nil) or
+            IsValidUtf8Impl(source, StrLen(source));
+end;
+
+function IsValidUtf8(const source: RawUtf8): boolean;
+begin
+  result := IsValidUtf8Impl(pointer(source), Length(source));
+end;
+
+{$else}
+
+function IsValidUtf8(source: PUtf8Char; sourcelen: PtrInt): boolean;
+begin
+  result := (source = nil) or
+            (sourcelen = 0) or
+            (EndValidUtf8(source) - source >= sourcelen);
+end;
+
+function IsValidUtf8(source: PUtf8Char): boolean;
+begin
+  result := (source = nil) or
             (EndValidUtf8(source) <> source);
 end;
 
@@ -2152,10 +2198,7 @@ begin
   result := IsValidUtf8(pointer(source), Length(source));
 end;
 
-function IsValidUtf8(source: PUtf8Char; sourcelen: PtrInt): boolean;
-begin
-  result := EndValidUtF8(source) - source = sourcelen;
-end;
+{$endif ASMX64AVX}
 
 function IsValidUtf8WithoutControlChars(source: PUtf8Char): boolean;
 var
@@ -2347,6 +2390,9 @@ begin
   if PtrUInt(result) < maxBytes then
     exit;
   result := maxBytes;
+  if (result = 0) or
+     (text[result] <= #$7f) then
+    exit; 
   while (result > 0) and
         (ord(text[result]) and $c0 = $80) do
     dec(result);
@@ -6751,6 +6797,13 @@ begin
   WinAnsiConvert := TSynAnsiConvert.Engine(CODEPAGE_US) as TSynAnsiFixedWidth;
   Utf8AnsiConvert := TSynAnsiConvert.Engine(CP_UTF8) as TSynAnsiUtf8;
   RawByteStringConvert := TSynAnsiConvert.Engine(CP_RAWBYTESTRING) as TSynAnsiFixedWidth;
+  IsValidUtf8Impl := @IsValidUtf8Pas;
+  {$ifdef ASMX64AVX}
+  // setup optimized ASM functions
+  if CpuFeatures * CPUAVX2HASWELL = CPUAVX2HASWELL then
+    // Haswell CPUs can use much faster AVX2 asm for IsValidUtf8()
+    IsValidUtf8Impl := @IsValidUtf8Avx2;
+  {$endif ASMX64AVX}
 end;
 
 procedure FinalizeUnit;

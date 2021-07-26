@@ -4525,9 +4525,10 @@ begin
       check(PosExChar(U[j], U) = k);
       if len120 <> 0 then
       begin
-        inc(P[j - 1], 128); // always invalidate the UTF-8 content
+        P[j - 1] := AnsiChar(ord(P[j - 1]) xor 128); // always invalidate the UTF-8 content
         check(not IsValidUtf8(P, len120), 'IsValidUtf8 up100');
-        inc(P[j - 1], 128); // restore
+        P[j - 1] := AnsiChar(ord(P[j - 1]) xor 128); // restore
+        check(IsValidUtf8(P, len120), 'IsValidUtf8 restored');
       end;
     end;
     Unic := Utf8DecodeToRawUnicode(U);
