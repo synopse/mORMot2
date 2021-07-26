@@ -8,7 +8,22 @@ interface
 {$I ..\src\mormot.defines.inc}
 
 // if defined, TTestCoreProcess.JSONBenchmark will include some other libraries
-{$define JSONBENCHMARK_FPJSON} // fpjson = 10.8 MB/s vs TOrmTableJson = 530 MB/s
+
+// as reference, on my Laptop:
+  // TOrmTableJson   = 530 MB/s
+  // TDocVariantData = 142 MB/s
+
+{$define JSONBENCHMARK_FPJSON}
+  // fpjson = 10.8 MB/s
+
+{.$define JSONBENCHMARK_DELPHIJSON}
+  // Delphi system.json < 3 MB/s on XE8
+
+{.$define JSONBENCHMARK_JDO}
+  // JsonDataObjects = 40 MB/s
+
+{.$define JSONBENCHMARK_SO}
+  // SuperObjects = 15 MB/s on Delphi, 4.5 MB/s on FPC
 
 
 uses
@@ -16,6 +31,7 @@ uses
   classes,
   variants,
   {$ifdef FPC}
+  {$undef JSONBENCHMARK_DELPHIJSON} // system.json is not available on FPC
   {$ifdef JSONBENCHMARK_FPJSON}
   fpjson,
   jsonparser,
@@ -23,7 +39,17 @@ uses
   {$else}
   typinfo, // for proper Delphi inlining
   {$undef JSONBENCHMARK_FPJSON} // fpjson is not available on Delphi
+  {$ifdef JSONBENCHMARK_DELPHIJSON}
+  system.json,
+  {$endif JSONBENCHMARK_DELPHIJSON}
+  {$ifdef JSONBENCHMARK_JDO}
+  JsonDataObjects,
+  {$endif JSONBENCHMARK_JDO}
   {$endif FPC}
+  {$ifdef JSONBENCHMARK_SO}
+  SuperObject,
+  SuperTypes,
+  {$endif JSONBENCHMARK_SO}
   mormot.core.base,
   mormot.core.os,
   mormot.core.text,
@@ -2758,6 +2784,16 @@ var
   {$ifdef JSONBENCHMARK_FPJSON}
   fpjson: TJSONData;
   {$endif JSONBENCHMARK_FPJSON}
+  {$ifdef JSONBENCHMARK_DELPHIJSON}
+  djson: system.json.TJSONValue;
+  {$endif JSONBENCHMARK_DELPHIJSON}
+  {$ifdef JSONBENCHMARK_JDO}
+  jdo: JsonDataObjects.TJsonBaseObject;
+  {$endif JSONBENCHMARK_JDO}
+  {$ifdef JSONBENCHMARK_SO}
+  so: superobject.ISuperObject;
+  s: supertypes.SOString;
+  {$endif JSONBENCHMARK_SO}
 begin
   people := StringFromFile(WorkDir + 'People.json');
   if people = '' then
@@ -2873,6 +2909,48 @@ begin
   end;
   NotifyTestSpeed('fpjson', 0, lennexp * ITER div 10, @timer, ONLYLOG);
   {$endif JSONBENCHMARK_FPJSON}
+  {$ifdef JSONBENCHMARK_DELPHIJSON}
+  timer.Start;
+  for i := 1 to ITER div 10 do // div 10 since Delphi json speed is < 3 MB/s :o
+  begin
+    djson := system.json.TJSONObject.ParseJSONValue(people);
+    if not CheckFailed(djson <> nil) then
+      try
+        if not CheckFailed(djson is system.json.TJSONArray) then
+          Check((djson as system.json.TJSONArray).Count = count);
+      finally
+        djson.Free;
+      end;
+  end;
+  NotifyTestSpeed('Delphi JSON', 0, lennexp * (ITER div 10), @timer, ONLYLOG);
+  {$endif JSONBENCHMARK_DELPHIJSON}
+  {$ifdef JSONBENCHMARK_JDO}
+  timer.Start;
+  for i := 1 to ITER do // JsonDataObjects speed is 40 MB/s ;)
+  begin
+    jdo := TJsonBaseObject.ParseUtf8(people);
+    if not CheckFailed(jdo <> nil) then
+      try
+        if not CheckFailed(jdo is JsonDataObjects.TJsonArray) then
+          Check((jdo as JsonDataObjects.TJsonArray).Count = count);
+      finally
+        jdo.Free;
+      end;
+  end;
+  NotifyTestSpeed('JsonDataObjects', 0, lennexp * ITER, @timer, ONLYLOG);
+  {$endif JSONBENCHMARK_JDO}
+  {$ifdef JSONBENCHMARK_SO}
+  s := SOString(people); // convert to UTF-8 once
+  timer.Start;
+  for i := 1 to ITER div 10 do
+  begin
+    so := superobject.SO(s);
+    if not CheckFailed(so <> nil) then
+      if not CheckFailed(so.IsType(stArray)) then
+        Check(so.AsArray.Length = count);
+  end;
+  NotifyTestSpeed('SuperObject', 0, lennexp * (ITER div 10), @timer, ONLYLOG);
+  {$endif JSONBENCHMARK_SO}
 end;
 
 procedure TTestCoreProcess.WikiMarkdownToHtml;
