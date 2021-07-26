@@ -199,16 +199,10 @@ function Utf8ToUnicodeLength(source: PUtf8Char): PtrUInt;
 // so overloaded IsValidUtf8() with RawUtf8 or sourcelen are preferred
 function IsValidUtf8(source: PUtf8Char): boolean; overload;
 
-{$ifdef ASMX64AVX}
-var // used to inline IsValidUtf8()
-  IsValidUtf8Impl: function(source: PUtf8Char; sourcelen: PtrInt): boolean;
-{$endif ASMX64AVX}
-
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding
 // - will also refuse #0 characters within the buffer
 // - on Haswell AVX2 Intel/AMD CPUs, will use very efficient ASM
 function IsValidUtf8(source: PUtf8Char; sourcelen: PtrInt): boolean; overload;
-  {$ifdef ASMX64AVX} inline; {$endif}
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding
 // - will also refuse #0 characters within the buffer
@@ -2144,7 +2138,10 @@ begin
   result := source - 1; // inc(source) done within the loop
 end;
 
-{$ifdef ASMX64AVX} // AVX2 asm is not supported by Delphi (even 10.4) :(
+{$if defined(ASMX64AVX) and defined(SYSVABI)}
+// raw ASM not available on Win64 or Delphi yet
+var
+  IsValidUtf8Impl: function(source: PUtf8Char; sourcelen: PtrInt): boolean;
 
 function IsValidUtf8Pas(source: PUtf8Char; sourcelen: PtrInt): boolean;
 begin
@@ -2192,7 +2189,7 @@ begin
             (EndValidUtf8(pointer(source)) - pointer(source) = Length(source));
 end;
 
-{$endif ASMX64AVX}
+{$ifend}
 
 function IsValidUtf8WithoutControlChars(source: PUtf8Char): boolean;
 var
@@ -6791,13 +6788,13 @@ begin
   WinAnsiConvert := TSynAnsiConvert.Engine(CODEPAGE_US) as TSynAnsiFixedWidth;
   Utf8AnsiConvert := TSynAnsiConvert.Engine(CP_UTF8) as TSynAnsiUtf8;
   RawByteStringConvert := TSynAnsiConvert.Engine(CP_RAWBYTESTRING) as TSynAnsiFixedWidth;
-  {$ifdef ASMX64AVX}
   // setup optimized ASM functions
+  {$if defined(ASMX64AVX) and defined(SYSVABI)}
   IsValidUtf8Impl := @IsValidUtf8Pas;
-  if CpuFeatures * CPUAVX2HASWELL = CPUAVX2HASWELL then
+  if cpuHaswell in CPUIDX64 then
     // Haswell CPUs can use much faster AVX2 asm for IsValidUtf8()
     IsValidUtf8Impl := @IsValidUtf8Avx2;
-  {$endif ASMX64AVX}
+  {$ifend}
 end;
 
 procedure FinalizeUnit;

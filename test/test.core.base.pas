@@ -1981,7 +1981,7 @@ var
     P: PByteArray;
     msg: string;
     {$ifdef ASMX64}
-    cpu: RawUtf8;
+    cputxt: RawUtf8;
     {$endif ASMX64}
     elapsed: Int64;
   begin
@@ -2023,13 +2023,13 @@ var
     until len >= length(buf);
     timer.Stop;
     {$ifdef ASMX64}
-    cpu := GetSetName(TypeInfo(TX64CpuFeatures), CPUIDX64);
+    cputxt := GetSetName(TypeInfo(TX64CpuFeatures), CPUIDX64);
     {$endif ASMX64}
     if rtl then
       msg := 'FillChar'
     else
       {$ifdef ASMX64}
-      FormatString('FillCharFast [%]', [{%H-}cpu], msg);
+      FormatString('FillCharFast [%]', [{%H-}cputxt], msg);
       {$else}
       msg := 'FillCharFast';
       {$endif ASMX64}
@@ -2039,7 +2039,7 @@ var
       msg := 'Move'
     else
       {$ifdef ASMX64}
-      FormatString('MoveFast [%]', [{%H-}cpu], msg);
+      FormatString('MoveFast [%]', [{%H-}cputxt], msg);
       {$else}
       msg := 'MoveFast';
       {$endif ASMX64}
@@ -2118,15 +2118,16 @@ var
       end;
     CheckHash(buf, 1646145792);
   end;
-{$ifdef ASMX64}
 
+{$ifdef ASMX64}
 var
-  cpu: TX64CpuFeatures;
+  bak, cpu: TX64CpuFeatures;
 {$endif ASMX64}
 begin
   SetLength(buf, 16 shl 20); // 16MB
   {$ifdef ASMX64} // activate and validate SSE2 + AVX branches
-  cpu := CPUIDX64;
+  bak := CPUIDX64;
+  cpu := bak - [cpuHaswell, cpuAvx2];
   CPUIDX64 := []; // default SSE2 128-bit process
   Validate({rtl=}false);
   {$ifdef FPC} // Delphi doesn't support AVX asm
@@ -2136,10 +2137,9 @@ begin
     Validate(false);
   end;
   {$endif FPC}
-  CPUIDX64 := cpu; // there is no AVX2 move/fillchar (still 256-bit wide)
+  CPUIDX64 := bak; // there is no AVX2 move/fillchar (still 256-bit wide)
   if (cpu <> []) and
-     (cpu <> [cpuAvx]) and
-     (cpu <> [cpuAvx, cpuAvx2]) then
+     (cpu <> [cpuAvx]) then
     Validate(false);
   // no Validate(true): RedirectCode(@System.FillChar,@FillcharFast)
   {$else}
@@ -4300,6 +4300,7 @@ procedure TTestCoreBase._UTF8;
 
 var
   i, j, k, len, len120, lenup100, CP, L: integer;
+  bak: AnsiChar;
   W: WinAnsiString;
   WS: WideString;
   SU: SynUnicode;
@@ -4525,10 +4526,13 @@ begin
       check(PosExChar(U[j], U) = k);
       if len120 <> 0 then
       begin
+        bak := P[len120];
+        P[len120] := #0; // no need to go any further
         P[j - 1] := AnsiChar(ord(P[j - 1]) xor 128); // always invalidate the UTF-8 content
         check(not IsValidUtf8(P, len120), 'IsValidUtf8 up100');
         P[j - 1] := AnsiChar(ord(P[j - 1]) xor 128); // restore
         check(IsValidUtf8(P, len120), 'IsValidUtf8 restored');
+        P[len120] := bak;
       end;
     end;
     Unic := Utf8DecodeToRawUnicode(U);

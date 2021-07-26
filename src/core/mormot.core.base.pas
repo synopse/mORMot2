@@ -2389,24 +2389,21 @@ function BSRqword(const q: Qword): cardinal;
 
 {$ifdef ASMX64} // will define its own self-dispatched SSE2/AVX functions
 
-const
-  /// identify Intel/AMD AVX2 support at Haswell level
-  CPUAVX2HASWELL = [cfAVX2, cfSSE42, cfBMI1, cfBMI2, cfCLMUL];
-
 type
   /// most common x86_64 CPU abilities, used e.g. by FillCharFast/MoveFast
   // - cpuERMS is slightly slower than cpuAVX so is not available by default
+  // - cpuHaswell identify Intel/AMD AVX2+BMI support at Haswell level
   TX64CpuFeatures = set of(
-    cpuAVX, cpuAVX2 {$ifdef WITH_ERMS}, cpuERMS{$endif});
+    cpuAVX, cpuAVX2 {$ifdef WITH_ERMS}, cpuERMS{$endif}, cpuHaswell);
 
 var
   /// internal flags used by FillCharFast - easier from asm that CpuFeatures
   CPUIDX64: TX64CpuFeatures;
 
-{$ifdef ASMX64AVX} // AVX2 asm is not supported by Delphi (even 10.4) :(
-/// as used by mormot.core.unicode on Haswell AVX2 for IsValidUtf8()
+{$if defined(ASMX64AVX) and defined(SYSVABI)}
+/// as used by mormot.core.unicode on Haswell AVX2 for FPC POSIX IsValidUtf8()
 function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
-{$endif ASMX64AVX}
+{$ifend}
 
 {$endif ASMX64}
 
@@ -9014,6 +9011,8 @@ begin
     include(CPUIDX64, cpuAVX);
     if cfAVX2 in CpuFeatures then
       include(CPUIDX64, cpuAVX2);
+    if CpuFeatures * CPUAVX2HASWELL = CPUAVX2HASWELL then
+      include(CPUIDX64, cpuHaswell);
   end;
   {$endif ASMX64}
   // redirect some CPU-aware functions

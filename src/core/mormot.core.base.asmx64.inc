@@ -20,6 +20,9 @@ const
   // half the size of the largest level cache - we assume low 1MB cache here
   NONTEMPORALSIZE = 512 * 1024;
 
+  // identify Intel/AMD AVX2+BMI support at Haswell level
+  CPUAVX2HASWELL = [cfAVX2, cfSSE42, cfBMI1, cfBMI2, cfCLMUL];
+
 {
   regarding benchmark numbers from TTestLowLevelCommon.CustomRTL
   -> FillCharFast/MoveFast are faster, especially for small lengths (strings)
@@ -684,8 +687,8 @@ procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: Ptr
         jnz     @1
 end;
 
-{$ifdef ASMX64AVX} // AVX2 asm is not supported by Delphi (even 10.4) :(
-
+{$if defined(ASMX64AVX) and defined(SYSVABI)}
+// raw ASM not available on Win64 nor Delphi yet
 // adapted from https://github.com/simdjson/simdjson - Apache License 2.0
 function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
   {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
@@ -697,18 +700,18 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         mov     rax, rsi
         mov     rdi, rdx
         mov     rbp, rsp
-        and     rsp, 0FFFFFFFFFFFFFFE0H
+        and     rsp, 0FFFFFFFFFFFFFFE0H // align stack at 32 bytes
         sub     rsp, 160
         cmp     rdx, 64
         cmovnc  rcx, rdx
         sub     rcx, 64
         je      @small
         vpxor   xmm3, xmm3, xmm3
-        vmovdqu ymm7,  ymmword ptr [rip + @0f]
-        vmovdqu ymm15, ymmword ptr [rip + @_6]
+        vmovdqa ymm7,  ymmword ptr [rip + @0f]
+        vmovdqa ymm15, ymmword ptr [rip + @_6]
         xor     esi, esi
-        vmovdqu ymm14, ymmword ptr [rip + @_7]
-        vmovdqu ymm13, ymmword ptr [rip + @_8]
+        vmovdqa ymm14, ymmword ptr [rip + @_7]
+        vmovdqa ymm13, ymmword ptr [rip + @_8]
         vmovdqa ymm5, ymm3
         vmovdqa ymm2, ymm3
         // main processing loop
@@ -717,39 +720,31 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         vinserti128 ymm0, ymm6, xmmword ptr [rax + rsi + 10H], 01H
         vmovdqu xmm6, xmmword ptr [rax + rsi + 20H]
         vinserti128 ymm1, ymm6, xmmword ptr [rax + rsi + 30H], 01H
+        add     rsi, 64
         vpor    ymm4, ymm1, ymm0
         vpmovmskb rdx, ymm4
         test    edx, edx
         jne     @check
         vpor    ymm2, ymm5, ymm2
         vmovdqa ymm4, ymm2
-        add     rsi, 64
         cmp     rcx, rsi
         ja      @loop
         // process trailing 0..63 bytes
-@trail: vmovdqa ymmword ptr [rsp + 40H], ymm3
-        cmp     rdi, rsi
+@trail: sub     rdi, rsi
         jz      @ended
         vmovdqa xmm0, xmmword ptr [rip + @20]
-        sub     rdi, rsi
-        lea     r8, qword ptr [rsp + 60H]
+        lea     rdx, qword ptr [rsp + 60H] // copy on stack with space padding
         add     rsi, rax
-        mov     rdx, rdi
-        mov     rdi, r8
-        vmovdqa ymmword ptr [rsp], ymm4
-        vmovdqa ymmword ptr [rsp + 20H], ymm5
-        vmovdqa xmmword ptr [rsp + 60H], xmm0
-        vmovdqa xmmword ptr [rsp + 70H], xmm0
-        vmovdqa xmmword ptr [rsp + 80H], xmm0
-        vmovdqa xmmword ptr [rsp + 90H], xmm0
-        vzeroupper
-        xchg    rsi, rdi
-        call    MoveFast // copy last bytes on [rsp + 60H] stack
-        vmovdqa ymm1, ymmword ptr [rsp + 60H]
-        vmovdqa ymm4, ymmword ptr [rsp]
-        vmovdqa ymm2, ymmword ptr [rsp + 80H]
-        vmovdqa ymm5, ymmword ptr [rsp + 20H]
-        vmovdqa ymm3, ymmword ptr [rsp + 40H]
+        vmovdqa xmmword ptr [rdx], xmm0
+        vmovdqa xmmword ptr [rdx + 10H], xmm0
+        vmovdqa xmmword ptr [rdx + 20H], xmm0
+        vmovdqa xmmword ptr [rdx + 30H], xmm0
+@sml:   dec     rdi
+        mov     al, [rsi + rdi]
+        mov     [rdx + rdi], al
+        jnz     @sml
+        vmovdqa ymm1, ymmword ptr [rdx]
+        vmovdqa ymm2, ymmword ptr [rdx + 20H]
         vpor    ymm0, ymm1, ymm2
         vpmovmskb rax, ymm0
         test    eax, eax
@@ -812,26 +807,25 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         vpor    ymm9, ymm9, ymm12
         vpor    ymm2, ymm9, ymm2
         vmovdqa ymm4, ymm2
-        add     rsi, 64
         cmp     rcx, rsi
         ja      @loop
         jmp     @trail
         align 8
-@last:  vmovdqu ymm5, ymmword ptr [rip + @0f]
+@last:  vmovdqa ymm5, ymmword ptr [rip + @0f]
         vperm2i128 ymm3, ymm3, ymm1, 21H
-        vmovdqu ymm9, ymmword ptr [rip + @_7]
+        vmovdqa ymm9, ymmword ptr [rip + @_7]
         vpsrlw  ymm11, ymm1, 4
         vpalignr ymm0, ymm1, ymm3, 0FH
-        vmovdqu ymm13, ymmword ptr [rip + @_10]
-        vmovdqu ymm14, ymmword ptr [rip + @_9]
+        vmovdqa ymm13, ymmword ptr [rip + @_10]
+        vmovdqa ymm14, ymmword ptr [rip + @_9]
         vpsrlw  ymm6, ymm0, 4
         vpand   ymm0, ymm5, ymm0
         vpand   ymm11, ymm11, ymm5
-        vmovdqu ymm7, ymmword ptr [rip + @_6]
+        vmovdqa ymm7, ymmword ptr [rip + @_6]
         vpshufb ymm10, ymm9, ymm0
         vpalignr ymm0, ymm1, ymm3, 0EH
         vpand   ymm6, ymm6, ymm5
-        vmovdqu ymm8, ymmword ptr [rip + @_8]
+        vmovdqa ymm8, ymmword ptr [rip + @_8]
         vpalignr ymm3, ymm1, ymm3, 0DH
         vperm2i128 ymm1, ymm1, ymm2, 21H
         vpsubusb ymm0, ymm0, ymm14
@@ -856,7 +850,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         vpor    ymm1, ymm3, ymm1
         vpshufb ymm8, ymm8, ymm5
         vpsubusb ymm5, ymm2, ymmword ptr [rip + @_12]
-        vmovdqu ymm2, ymmword ptr [rip + @_11]
+        vmovdqa ymm2, ymmword ptr [rip + @_11]
         vpcmpgtb ymm1, ymm1, ymm12
         vpand   ymm6, ymm6, ymm10
         vpand   ymm7, ymm7, ymm9
@@ -877,6 +871,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         align 16
 @20:    dq 2020202020202020H
         dq 2020202020202020H
+        align 32
 @0f:    dq 0F0F0F0F0F0F0F0FH
         dq 0F0F0F0F0F0F0F0FH
         dq 0F0F0F0F0F0F0F0FH
@@ -910,7 +905,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         db 0FFH, 0FFH, 0FFH, 0FFH, 0FFH, 0FFH, 0FFH, 0FFH
         db 0FFH, 0FFH, 0FFH, 0FFH, 0FFH, 0EFH, 0DFH, 0BFH
 end;
-{$endif ASMX64AVX}
+{$ifend}
 
 {$endif CPUX64ASM} // SSE2 asm is invalid prior to Delphi XE7 (to be refined)
 
