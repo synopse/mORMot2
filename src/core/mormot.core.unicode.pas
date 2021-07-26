@@ -6797,9 +6797,9 @@ begin
   WinAnsiConvert := TSynAnsiConvert.Engine(CODEPAGE_US) as TSynAnsiFixedWidth;
   Utf8AnsiConvert := TSynAnsiConvert.Engine(CP_UTF8) as TSynAnsiUtf8;
   RawByteStringConvert := TSynAnsiConvert.Engine(CP_RAWBYTESTRING) as TSynAnsiFixedWidth;
-  IsValidUtf8Impl := @IsValidUtf8Pas;
   {$ifdef ASMX64AVX}
   // setup optimized ASM functions
+  IsValidUtf8Impl := @IsValidUtf8Pas;
   if CpuFeatures * CPUAVX2HASWELL = CPUAVX2HASWELL then
     // Haswell CPUs can use much faster AVX2 asm for IsValidUtf8()
     IsValidUtf8Impl := @IsValidUtf8Avx2;
