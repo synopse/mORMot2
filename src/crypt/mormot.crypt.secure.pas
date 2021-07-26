@@ -869,18 +869,16 @@ type
     /// an increasing counter, to implement unique session ID
     SessionSequence: TBinaryCookieGeneratorSessionID;
     /// secret information, used for HMAC digital signature of cookie content
-    Secret: THmacCrc32c;
+    Secret: cardinal;
     /// random IV used as CTR on Crypt[] secret key
     CryptNonce: cardinal;
     /// used when Generate() has TimeOutMinutes=0
     DefaultTimeOutMinutes: cardinal;
-    /// secret information, used for encryption of the cookie content
+    /// private random secret, used for encryption of the cookie content
     Crypt: array[byte] of byte;
     /// initialize ephemeral temporary cookie generation
     procedure Init(const Name: RawUtf8 = 'mORMot';
       DefaultSessionTimeOutMinutes: cardinal = 0);
-    /// low-level wrapper to cipher/uncipher a cookie binary content
-    procedure Cipher(P: PAnsiChar; bytes: integer);
     /// will initialize a new Base64Uri-encoded session cookie
     // - with an optional record data
     // - will return the 32-bit internal session ID and
@@ -2299,8 +2297,6 @@ end;
 
 procedure TBinaryCookieGenerator.Init(const Name: RawUtf8;
   DefaultSessionTimeOutMinutes: cardinal);
-var
-  rnd: THash512;
 begin
   DefaultTimeOutMinutes := DefaultSessionTimeOutMinutes;
   CookieName := Name;
@@ -2308,22 +2304,16 @@ begin
   // temporary secret for encryption
   CryptNonce := Random32;
   TAesPrng.Main.FillRandom(@Crypt, sizeof(Crypt));
-  // temporary secret for HMAC-CRC32C
-  TAesPrng.Main.FillRandom(@rnd, sizeof(rnd));
-  Secret.Init(@rnd, sizeof(rnd));
-end;
-
-procedure TBinaryCookieGenerator.Cipher(P: PAnsiChar; bytes: integer);
-begin
-  XorMemoryCtr(@P[4], @Crypt, bytes - 4, {ctr=}xxHash32(CryptNonce, P, 4));
+  // temporary secret for checksum
+  Secret := Random32;
 end;
 
 type
   // map the binary layout of our base-64 serialized cookies
   TCookieContent = packed record
     head: packed record
-      cryptnonce: cardinal; // ctr=hash32(cryptnonce) to cipher following bytes
-      hmac: cardinal;       // = signature
+      cryptnonce: cardinal; // ctr to cipher following bytes
+      crc: cardinal;        // = 32-bit digital signature (DefaultHasher)
       session: integer;     // = jti claim
       issued: cardinal;     // = iat claim (from UnixTimeUtc)
       expires: cardinal;    // = exp claim
@@ -2361,8 +2351,9 @@ begin
     if tmp.len > 0 then
       MoveFast(tmp.buf^, cc.data, tmp.len);
     inc(tmp.len, sizeof(cc.head));
-    cc.head.hmac := Secret.Compute(@cc.head.session, tmp.len - 8);
-    Cipher(@cc, tmp.len);
+    cc.head.crc := DefaultHasher(Secret, @cc.head.session, tmp.len - 8);
+    XorMemoryCtr(@cc.head.crc, @Crypt, tmp.len - 4,
+      {ctr=}CryptNonce xor cc.head.cryptnonce);
     Cookie := BinToBase64Uri(@cc, tmp.len);
   finally
     tmp.Done;
@@ -2387,7 +2378,8 @@ begin
      (len <= sizeof(cc)) and
      Base64uriDecode(pointer(Cookie), @cc, clen) then
   begin
-    Cipher(@cc, len);
+    XorMemoryCtr(@cc.head.crc, @Crypt, len - 4,
+      {ctr=}CryptNonce xor cc.head.cryptnonce);
     if (cardinal(cc.head.session) <= cardinal(SessionSequence)) then
     begin
       if PExpires <> nil then
@@ -2397,7 +2389,7 @@ begin
       now := UnixTimeUtc;
       if (cc.head.issued <= now) and
          (cc.head.expires >= now) and
-         (Secret.Compute(@cc.head.session, len - 8) = cc.head.hmac) then
+         (DefaultHasher(Secret, @cc.head.session, len - 8) = cc.head.crc) then
         if (PRecordData = nil) or
            (PRecordTypeInfo = nil) then
           result := cc.head.session
