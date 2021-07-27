@@ -1808,6 +1808,8 @@ type
   // disabled by default not to slow down the serialization process
   // - rcfHasNestedProperties is set e.g. for rkClass or rcfWithoutRtti records,
   // rcfHasNestedManagedProperties if any of the property/field is rcfIsManaged
+  // - rcfHasOffsetSetJsonLoadProperties is set if all nested properties can be
+  // directly written, i.e. have OffsetSet >= 0 and Assigned(JsonLoad)
   // - rcfArrayItemManaged maps rcfIsManaged flag in ArrayRtti.Flags
   // - rcfReadIgnoreUnknownFields will let JSON unserialization ignore unknown
   // fields for this class/record
@@ -1828,6 +1830,7 @@ type
     rcfHookReadProperty,
     rcfHasNestedProperties,
     rcfHasNestedManagedProperties,
+    rcfHasOffsetSetJsonLoadProperties,
     rcfArrayItemManaged,
     rcfReadIgnoreUnknownFields,
     rcfAutoCreateFields,
@@ -1948,8 +1951,8 @@ type
     // - do nothing on FPC or Delphi 2009 and older
     procedure SetFromRecordExtendedRtti(RecordInfo: PRttiInfo);
     /// called once List[] and Size have been defined
-    // - compute the fManaged[] internal list
-    procedure AdjustAfterAdded;
+    // - compute the fManaged[] internal list and return the matching flags
+    function AdjustAfterAdded: TRttiCustomFlags;
     /// retrieve all List[] items as text
     procedure AsText(out Result: RawUtf8; IncludePropType: boolean;
       const Prefix, Suffix: RawUtf8);
@@ -6262,11 +6265,17 @@ begin
   List[result].Name := PropName;
 end;
 
-procedure TRttiCustomProps.AdjustAfterAdded;
+function TRttiCustomProps.AdjustAfterAdded: TRttiCustomFlags;
 var
   i, n: PtrInt;
   p: PRttiCustomProp;
 begin
+  if Count = 0 then
+  begin
+    result := [];
+    exit;
+  end;
+  result := [rcfHasNestedProperties, rcfHasOffsetSetJsonLoadProperties];
   SetLength(fManaged, Count);
   n := 0;
   p := pointer(List);
@@ -6275,9 +6284,13 @@ begin
     if (rcfIsManaged in p^.Value.Flags) and
        (p^.OffsetGet >= 0) then
     begin
+      include(result, rcfHasNestedManagedProperties);
       fManaged[n] := p;
       inc(n);
     end;
+    if (p^.OffsetSet < 0) or
+       not Assigned(p^.Value.fJsonLoad) then
+      exclude(result, rcfHasOffsetSetJsonLoadProperties);
     inc(p);
   end;
   SetLength(fManaged, n);
@@ -6734,13 +6747,7 @@ begin
   fSetRandom := PT_RANDOM[aParser];
   if fCache.Info <> nil then
     ShortStringToAnsi7String(fCache.Info.Name^, fName);
-  if fProps.Count > 0 then
-  begin
-    include(fFlags, rcfHasNestedProperties);
-    fProps.AdjustAfterAdded;
-    if fProps.fManaged <> nil then
-      include(fFlags, rcfHasNestedManagedProperties);
-  end;
+  fFlags := fFlags + fProps.AdjustAfterAdded;
   if (fArrayRtti <> nil) and
      (rcfIsManaged in fArrayRtti.Flags) then
     include(fFlags, rcfArrayItemManaged);
@@ -7088,9 +7095,7 @@ begin
   end;
   // set whole size and managed fields/properties
   fProps.Size := fCache.Size;
-  Props.AdjustAfterAdded;
-  if Props.fManaged <> nil then
-    include(fFlags, rcfHasNestedManagedProperties);
+  fFlags := fFlags + Props.AdjustAfterAdded;
 end;
 
 function TRttiCustom.GetPrivateSlot(aClass: TClass): pointer;

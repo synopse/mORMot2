@@ -743,7 +743,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         jb      @by1
         mov     rax, qword ptr [rsi + rdx]
         mov     qword ptr [rdx], rax
-        add     rdx, 8 // in order copy to preserve UTF-8 encoding
+        add     rdx, 8 // in-order copy to preserve UTF-8 encoding
         jmp     @by8
 @by1:   add     rdi, 8
         jz      @0
