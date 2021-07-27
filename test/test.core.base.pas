@@ -61,6 +61,17 @@ type
 
   TComplexNumberObjArray = array of TComplexNumber;
 
+  /// a record mapping TOrmPeople content
+  TRecordPeople = packed record
+    RowID: TID;
+    FirstName: RawUtf8;
+    LastName: RawUtf8;
+    Data: RawBlob;
+    YearOfBirth: integer;
+    YearOfDeath: word;
+  end;
+  TRecordPeopleDynArray = array of TRecordPeople;
+
   // a record mapping used in the test classes of the framework
   // - this class can be used for debugging purposes, with the database
   // created by TTestFileBased from test.orm.sqlite3
@@ -6608,6 +6619,11 @@ begin
   result := StrIComp(
     pointer(TOrmPeople(A).FirstName), pointer(TOrmPeople(B).FirstName));
 end;
+
+begin
+  Rtti.RegisterFromText([TypeInfo(TRecordPeopleDynArray),
+    'RowID:TID FirstName,LastName:RawUtf8 Data:RawBlob YearOfBirth:integer YearOfDeath:word'
+  ]);
 
 end.
 

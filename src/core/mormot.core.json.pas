@@ -2874,7 +2874,7 @@ begin
   tab := @JSON_CHARS;
   if P^ = '"' then
   begin
-    // handle very efficient the most common case of unescaped double quotes
+    // handle very efficiently the most common case of unescaped double quotes
     repeat
       inc(P);
     until jcJsonStringMarker in tab[P^]; // [#0, '"', '\']
@@ -2913,7 +2913,7 @@ begin
     if Len <> nil then
       Len^ := P - Name;
     EndOfObject := P^;
-    P^ := #0;
+    P^ := #0; // Name should end with #0
     if not (EndOfObject in [':', '=']) then // relaxed {age=10} syntax
       repeat
         inc(P);
@@ -2924,7 +2924,7 @@ begin
   end;
   if Len <> nil then
     Len^ := P - Name;
-  P^ := #0; // ensure Name is 0 terminated
+  P^ := #0; // ensure Name is #0 terminated
   repeat
     inc(P);
     if P^ = #0 then

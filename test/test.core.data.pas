@@ -2799,6 +2799,7 @@ var
   dv: TDocVariantData;
   table: TOrmTableJson;
   timer: TPrecisionTimer;
+  rec: TRecordPeopleDynArray;
   {$ifdef JSONBENCHMARK_FPJSON}
   fpjson: TJSONData;
   {$endif JSONBENCHMARK_FPJSON}
@@ -2921,6 +2922,13 @@ begin
     end;
   end;
   NotifyTestSpeed('TOrmTableJson not expanded', 0, lennexp * ITER, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+  begin
+    Check(DynArrayLoadJson(rec, people, TypeInfo(TRecordPeopleDynArray)));
+    Check(length(rec) = count);
+  end;
+  NotifyTestSpeed('DynArrayLoadJson', 0, lennexp * ITER, @timer, ONLYLOG);
   {$ifdef JSONBENCHMARK_FPJSON}
   timer.Start;
   for i := 1 to ITER div 10 do // div 10 since fpjson speed is 10 MB/s :(
@@ -3530,8 +3538,7 @@ begin
   Check(VariantSaveJson(1.5) = '1.5');
   Check(VariantSaveJson(_Json('{BSON:["awesome",5.05,1986]}')) = BSONAWESOME);
   Check(VariantSaveJson(_JsonFast('{ BSON : ["awesome", 5.05, 1986] }')) = BSONAWESOME);
-  Check(VariantSaveJson(_JsonFast('{ ''BSON'' : ["awesome", 5.05, 1986] } ')) =
-    BSONAWESOME);
+  Check(VariantSaveJson(_JsonFast('{ ''BSON'' : ["awesome", 5.05, 1986] } ')) = BSONAWESOME);
   Check(Bson('{BSON:["awesome",5.05,1986]}', [], []) = BSONAWESOMEBIN);
   Check(Bson('{ BSON : ["awesome", 5.05, 1986] }', [], []) = BSONAWESOMEBIN);
   Check(Bson('{ ''BSON'' : ["awesome", 5.05, 1986] } ', [], []) = BSONAWESOMEBIN);
