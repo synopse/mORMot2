@@ -1060,7 +1060,7 @@ function IdemPropNameU(const P1: RawUtf8; P2: PUtf8Char; P2Len: PtrInt): boolean
 // IdemPropNameU(const P1,P2: RawUtf8), which would be slightly faster by
 // using the length stored before the actual text buffer of each RawUtf8
 function IdemPropNameUSameLenNotNull(P1, P2: PUtf8Char; P1P2Len: PtrInt): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef FPC}inline;{$endif}
 
 /// case insensitive comparison of ASCII 7-bit identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
@@ -4166,15 +4166,33 @@ end;
 { **************** Text Case-(in)sensitive Conversion and Comparison }
 
 function IdemPropNameUSameLenNotNull(P1, P2: PUtf8Char; P1P2Len: PtrInt): boolean;
+label
+  zero;
 begin
-  inc(PtrUInt(P1P2Len), PtrUInt(P1));
+  {$ifndef CPUX86}
+  result := false;
+  {$endif CPUX86}
+  pointer(P1P2Len) := @P1[P1P2Len - SizeOf(cardinal)];
   dec(PtrUInt(P2), PtrUInt(P1));
-  repeat
-    result := (ord(P1^) xor ord(P2[PtrUInt(P1)])) and $df = 0;
-    if not result then
-      exit;
-    inc(P1);
-  until PtrInt(PtrUInt(P1)) >= P1P2Len;
+  if P1P2Len >= PtrInt(PtrUInt(P1)) then
+    repeat // compare 4 Bytes per loop
+      if (PCardinal(P1)^ xor PCardinal(@P2[PtrUInt(P1)])^) and $dfdfdfdf <> 0 then
+        goto zero;
+      inc(PCardinal(P1));
+    until P1P2Len < PtrInt(PtrUInt(P1));
+  inc(P1P2Len, SizeOf(cardinal));
+  if PtrInt(PtrUInt(P1)) < P1P2Len then
+    repeat
+      if (ord(P1^) xor ord(P2[PtrUInt(P1)])) and $df <> 0 then
+        goto zero;
+      inc(PByte(P1));
+    until PtrInt(PtrUInt(P1)) >= P1P2Len;
+  result := true;
+  exit;
+zero:
+  {$ifdef CPUX86}
+  result := false;
+  {$endif CPUX86}
 end;
 
 function PropNameValid(P: PUtf8Char): boolean;
