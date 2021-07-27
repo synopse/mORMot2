@@ -2872,7 +2872,7 @@ type
     // - The subtype information can be used to pass a limited amount of context from
     // one SQL function to another. Use the sqlite3.result_subtype() routine to set
     // the subtype for the return value of an SQL function.
-    value_subtype: function(Value: TSqlite3Value): integer; cdecl;
+    value_subtype: function(Value: TSqlite3Value): cardinal; cdecl;
 
     /// Attempts to apply numeric affinity to the value
     // - This means that an attempt is made to convert the value to an integer or
@@ -3060,8 +3060,7 @@ type
     // - set DestroyPtr to @sqlite3InternalFree if Value must be released via Freemem()
     // or to @sqlite3InternalFreeObject if Value must be released via a Free method
     result_pointer: procedure(Context: TSqlite3FunctionContext;
-      Param: integer; Value: pointer; Typ: PUtf8Char;
-      DestroyPtr: TSqlDestroyPtr); cdecl;
+      Value: pointer; Typ: PUtf8Char; DestroyPtr: TSqlDestroyPtr); cdecl;
 
     /// Sets the return value of the application-defined function to be NULL
     result_null: procedure(Context: TSqlite3FunctionContext); cdecl;
@@ -3116,7 +3115,7 @@ type
     // Context to be the Value.
     // - Only the lower 8 bits of the subtype T are preserved in current versions of SQLite;
     // higher order bits are discarded.
-    result_subtype: procedure(Context: TSqlite3FunctionContext; Value: integer); cdecl;
+    result_subtype: procedure(Context: TSqlite3FunctionContext; Value: cardinal); cdecl;
 
     /// Cause the implemented SQL function to throw an exception
     // - SQLite interprets the error message string from sqlite3.result_error() as UTF-8
@@ -3760,7 +3759,7 @@ type
     // - caller is responsible for freeing the returned value (using free_)
     // to avoid a memory leak
     serialize: function(DB: TSqlite3DB; Schema: PUtf8Char; Size: PInt64;
-      Flags: integer): pointer; cdecl;
+      Flags: cardinal): pointer; cdecl;
 
     /// Deserialize a database
     // - causes the database connection DB to disconnect from database Schema
@@ -3768,7 +3767,7 @@ type
     // contained in Data; the serialized database Data is DBSize bytes in size
     // - BufSize is the size of the buffer Data, which might be larger than DBSize
     deserialize: function(DB: TSqlite3DB; Schema: PUtf8Char; Data: pointer;
-      DBSize, BufSize: Int64; Flags: integer): pointer; cdecl;
+      DBSize, BufSize: Int64; Flags: cardinal): pointer; cdecl;
 
     // Register a callback that is invoked each time data is committed to a database in wal mode.
     //  - The callback is invoked by SQLite after the commit has taken place and the associated
