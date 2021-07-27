@@ -32,7 +32,11 @@ interface
   // Grijjy = 24 MB/s
 
 {.$define JSONBENCHMARK_DWS}
-  // dwsJSON = 41 MB/s
+  // dwsJSON = 43 MB/s
+
+{.$define JSONBENCHMARK_WSFT}
+  // WinSoft JSON = 11 MB/s
+
 
 uses
   sysutils,
@@ -67,6 +71,9 @@ uses
   {$ifdef JSONBENCHMARK_DWS}
   dwsJson,
   {$endif JSONBENCHMARK_DWS}
+  {$ifdef JSONBENCHMARK_WSFT}
+  WinJson,
+  {$endif JSONBENCHMARK_WSFT}
   mormot.core.base,
   mormot.core.os,
   mormot.core.text,
@@ -2822,6 +2829,9 @@ var
   {$ifdef JSONBENCHMARK_DWS}
   dws: TdwsJSONValue;
   {$endif JSONBENCHMARK_DWS}
+  {$ifdef JSONBENCHMARK_WSFT}
+  ws: WinJson.TJson;
+  {$endif JSONBENCHMARK_WSFT}
 begin
   people := StringFromFile(WorkDir + 'People.json');
   if people = '' then
@@ -3019,6 +3029,26 @@ begin
   end;
   NotifyTestSpeed('dwsJSON', 0, lennexp * (ITER div 10), @timer, ONLYLOG);
   {$endif JSONBENCHMARK_DWS}
+  {$ifdef JSONBENCHMARK_WSFT}
+  WinJson.TJsonParser.Create.Free; // run it once for the trial popup to show
+  timer.Start;
+  for i := 1 to ITER div 10 do
+  begin
+    with WinJson.TJsonParser.Create do
+      try
+        ws := Parse(peoples);
+        try
+          if not CheckFailed(ws.IsArray) then
+            Check((ws as WinJson.TJsonArray).ElementCount = Count);
+        finally
+          ws.Free;
+        end;
+      finally
+        Free;
+      end;
+  end;
+  NotifyTestSpeed('WinSoft WinJson', 0, lennexp * (ITER div 10), @timer, ONLYLOG);
+  {$endif JSONBENCHMARK_WSFT}
 end;
 
 procedure TTestCoreProcess.WikiMarkdownToHtml;
