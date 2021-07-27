@@ -854,7 +854,7 @@ type
   /// efficient thread-safe cookie generation
   // - you can see it as a JWT-Of-The-Poor: faster to parse and validate
   // its content, and with very efficiently binary-based serialization
-  // - stores a session ID, cookie name, encryption and HMAC secret keys
+  // - stores a session ID, cookie name, and encryption and signature keys
   // - can optionally store any associated record as efficient binary
   // - it is NOT cryptographic secure, because cookies are not, but it is
   // strong enough to avoid naive attacks, and uses less space than a JWT
@@ -868,7 +868,7 @@ type
     CookieName: RawUtf8;
     /// an increasing counter, to implement unique session ID
     SessionSequence: TBinaryCookieGeneratorSessionID;
-    /// secret information, used for HMAC digital signature of cookie content
+    /// secret information, used for digital signature of the cookie content
     Secret: cardinal;
     /// random IV used as CTR on Crypt[] secret key
     CryptNonce: cardinal;

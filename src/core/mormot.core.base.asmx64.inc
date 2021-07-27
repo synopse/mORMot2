@@ -714,7 +714,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         vmovdqa ymm13, ymmword ptr [rip + @_8]
         vmovdqa ymm5, ymm3
         vmovdqa ymm2, ymm3
-        // main processing loop
+        // main processing loop, 64 bytes per iteration
         align 16
 @loop:  vmovdqu xmm6, xmmword ptr [rax + rsi]
         vinserti128 ymm0, ymm6, xmmword ptr [rax + rsi + 10H], 01H
@@ -722,7 +722,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         vinserti128 ymm1, ymm6, xmmword ptr [rax + rsi + 30H], 01H
         add     rsi, 64
         vpor    ymm4, ymm1, ymm0
-        vpmovmskb rdx, ymm4
+        vpmovmskb rdx, ymm4 // check set MSB of each 64 bytes
         test    edx, edx
         jne     @check
         vpor    ymm2, ymm5, ymm2
@@ -732,21 +732,31 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         // process trailing 0..63 bytes
 @trail: sub     rdi, rsi
         jz      @ended
+        add     rsi, rax
         vmovdqa xmm0, xmmword ptr [rip + @20]
         lea     rdx, qword ptr [rsp + 60H] // copy on stack with space padding
-        add     rsi, rax
+        sub     rsi, rdx
         vmovdqa xmmword ptr [rdx], xmm0
         vmovdqa xmmword ptr [rdx + 10H], xmm0
         vmovdqa xmmword ptr [rdx + 20H], xmm0
         vmovdqa xmmword ptr [rdx + 30H], xmm0
-@sml:   dec     rdi
-        mov     al, [rsi + rdi]
-        mov     [rdx + rdi], al
+@by8:   sub     rdi, 8
+        jb      @by1
+        mov     rax, qword ptr [rsi + rdx]
+        mov     qword ptr [rdx], rax
+        add     rdx, 8 // in order copy to preserve UTF-8 encoding
+        jmp     @by8
+@by1:   add     rdi, 8
+        jz      @0
+@sml:   mov     al, byte ptr [rsi + rdx]
+        mov     byte ptr [rdx], al
+        add     rdx, 1
+        sub     rdi, 1
         jnz     @sml
-        vmovdqa ymm1, ymmword ptr [rdx]
-        vmovdqa ymm2, ymmword ptr [rdx + 20H]
+@0:     vmovdqa ymm1, ymmword ptr [rsp + 60H]
+        vmovdqa ymm2, ymmword ptr [rsp + 80H]
         vpor    ymm0, ymm1, ymm2
-        vpmovmskb rax, ymm0
+        vpmovmskb rax, ymm0 // check any set MSB
         test    eax, eax
         jne     @last
 @ended: vpor    ymm5, ymm5, ymm4
