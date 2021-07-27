@@ -20,13 +20,13 @@ interface
   // Delphi system.json < 3 MB/s on XE8
 
 {.$define JSONBENCHMARK_JDO}
-  // JsonDataObjects = 40 MB/s
+  // JsonDataObjects = 43 MB/s
 
 {.$define JSONBENCHMARK_SO}
-  // SuperObject = 15 MB/s on Delphi, 4.5 MB/s on FPC
+  // SuperObject = 16 MB/s on Delphi, 4.5 MB/s on FPC
 
 {.$define JSONBENCHMARK_XSO}
-  // X-SuperObject = 690 KB/s
+  // X-SuperObject = 700 KB/s
 
 {.$define JSONBENCHMARK_GRIJJY}
   // Grijjy = 24 MB/s
@@ -2793,6 +2793,62 @@ begin
     Enemy.Free;
   end;
 end;
+
+{
+  Some numbers on Delphi XE8 + Windows 7 32-bit - taken with mORMot 2 at 7/27/21
+
+  - JSON benchmark: 100,369 assertions passed  3.99s
+     StrLen() in 878us, 21.8 GB/s
+     IsValidUtf8(RawUtf8) in 8.79ms, 2.1 GB/s
+     IsValidUtf8(PUtf8Char) in 9.27ms, 2 GB/s
+     IsValidJson(RawUtf8) in 24.19ms, 810.5 MB/s
+     IsValidJson(PUtf8Char) in 23.14ms, 846.9 MB/s
+     JsonArrayCount(P) in 23.29ms, 841.7 MB/s
+     JsonArrayCount(P,PMax) in 21.14ms, 0.9 GB/s
+     JsonObjectPropCount() in 9.80ms, 1.1 GB/s
+     TDocVariant in 115.91ms, 169.1 MB/s
+     TDocVariant dvoInternNames in 173.42ms, 113 MB/s
+     TOrmTableJson GetJsonValues in 23.87ms, 361.2 MB/s
+     TOrmTableJson expanded in 38.45ms, 509.9 MB/s
+     TOrmTableJson not expanded in 25.25ms, 341.4 MB/s
+     DynArrayLoadJson in 57.25ms, 150.6 MB/s
+     Delphi JSON in 344.26ms, 2.5 MB/s
+     JsonDataObjects in 196.54ms, 43.8 MB/s
+     SuperObject in 53.69ms, 16 MB/s
+     X-SuperObject in 626.83ms, 704.4 KB/s
+     Grijjy in 35.76ms, 24.1 MB/s
+     dwsJSON in 20.05ms, 43 MB/s
+     WinSoft WinJson in 80.64ms, 10.6 MB/s
+
+  Some numbers on FPC 3.2 + Linux x86_64:
+
+  - JSON benchmark: 100,299 assertions passed  813.66ms
+     StrLen() in 820us, 23.3 GB/s
+     IsValidUtf8(RawUtf8) in 1.45ms, 13.1 GB/s
+     IsValidUtf8(PUtf8Char) in 2.21ms, 8.6 GB/s
+     IsValidJson(RawUtf8) in 25.47ms, 769.5 MB/s
+     IsValidJson(PUtf8Char) in 24.12ms, 812.4 MB/s
+     JsonArrayCount(P) in 23.82ms, 822.8 MB/s
+     JsonArrayCount(P,PMax) in 24.48ms, 800.6 MB/s
+     JsonObjectPropCount() in 9.41ms, 1.1 GB/s
+     TDocVariant in 127.77ms, 153.4 MB/s
+     TDocVariant dvoInternNames in 143.68ms, 136.4 MB/s
+     TOrmTableJson GetJsonValues in 24.64ms, 349.8 MB/s
+     TOrmTableJson expanded in 40.20ms, 487.5 MB/s
+     TOrmTableJson not expanded in 21.10ms, 408.5 MB/s
+     DynArrayLoadJson in 62.35ms, 138.2 MB/s
+     fpjson in 80.36ms, 10.7 MB/s
+     SuperObject in 186.77ms, 4.6 MB/s
+
+  - IsValidUtf8() has very efficient AVX2 asm on FPC + x86_64
+  - TDocVariant dvoInternNames will recognize and intern the nested object
+    field names, so memory consumption is likely to be reduced and unfragmented.
+  - DynArrayLoadJson() parses the JSON directly into a dynamic array of record
+    using our cached RTTI, so memory consumption will be as low as possible.
+  - Most libraries claim they are "fast" but actually they are just faster than
+    Delphi JSON which is (dead) slow. So only JsonDataObject and dwsJSON could
+    claim to be optimized. fpjson is not so bad. And mORMot 2 flies for sure.
+}
 
 procedure TTestCoreProcess.JSONBenchmark;
 const
