@@ -9,9 +9,9 @@ interface
 
 // if defined, TTestCoreProcess.JSONBenchmark will include some other libraries
 
-// as reference, on my Laptop:
+// as reference, on my Laptop, parsing the 1MB People.json array of objects:
   // TOrmTableJson   = 530 MB/s
-  // TDocVariantData = 142 MB/s
+  // TDocVariantData = 150 MB/s
 
 {$define JSONBENCHMARK_FPJSON}
   // fpjson = 10.8 MB/s
@@ -23,13 +23,16 @@ interface
   // JsonDataObjects = 40 MB/s
 
 {.$define JSONBENCHMARK_SO}
-  // SuperObjects = 15 MB/s on Delphi, 4.5 MB/s on FPC
+  // SuperObject = 15 MB/s on Delphi, 4.5 MB/s on FPC
 
 {.$define JSONBENCHMARK_XSO}
-  // X-SuperObjects = 690 KB/s
+  // X-SuperObject = 690 KB/s
 
 {.$define JSONBENCHMARK_GRIJJY}
   // Grijjy = 24 MB/s
+
+{.$define JSONBENCHMARK_DWS}
+  // dwsJSON = 41 MB/s
 
 uses
   sysutils,
@@ -61,6 +64,9 @@ uses
   {$ifdef JSONBENCHMARK_GRIJJY}
   Grijjy.Bson,
   {$endif JSONBENCHMARK_GRIJJY}
+  {$ifdef JSONBENCHMARK_DWS}
+  dwsJson,
+  {$endif JSONBENCHMARK_DWS}
   mormot.core.base,
   mormot.core.os,
   mormot.core.text,
@@ -2787,6 +2793,7 @@ const
   ONLYLOG = false;
 var
   people, notexpanded: RawUtf8;
+  peoples: string;
   P: PUtf8Char;
   count, len, lennexp, i, interned: integer;
   dv: TDocVariantData;
@@ -2807,12 +2814,13 @@ var
   {$endif JSONBENCHMARK_SO}
   {$ifdef JSONBENCHMARK_XSO}
   xso: xsuperobject.ISuperArray;
-  xs: string;
   {$endif JSONBENCHMARK_XSO}
   {$ifdef JSONBENCHMARK_GRIJJY}
   g: TgoBsonArray;
-  gs: string;
   {$endif JSONBENCHMARK_GRIJJY}
+  {$ifdef JSONBENCHMARK_DWS}
+  dws: TdwsJSONValue;
+  {$endif JSONBENCHMARK_DWS}
 begin
   people := StringFromFile(WorkDir + 'People.json');
   if people = '' then
@@ -2970,27 +2978,39 @@ begin
   end;
   NotifyTestSpeed('SuperObject', 0, lennexp * (ITER div 10), @timer, ONLYLOG);
   {$endif JSONBENCHMARK_SO}
+  Utf8ToStringVar(people, peoples); // convert to UTF-8 once
   {$ifdef JSONBENCHMARK_XSO}
-  Utf8ToStringVar(people, xs); // convert to UTF-8 once
   timer.Start;
   for i := 1 to 1 do // X-SuperObject is 600KB/s 8(
   begin
-    xso := xsuperobject.SA(xs);
+    xso := xsuperobject.SA(peoples);
     if not CheckFailed(xso <> nil) then
       Check(xso.Length = count);
   end;
   NotifyTestSpeed('X-SuperObject', 0, lennexp, @timer, ONLYLOG);
   {$endif JSONBENCHMARK_SO}
   {$ifdef JSONBENCHMARK_GRIJJY}
-  Utf8ToStringVar(people, gs); // convert to UTF-8 once
   timer.Start;
   for i := 1 to ITER div 10 do
   begin
-    g := TgoBsonArray.Parse(gs);
+    g := TgoBsonArray.Parse(peoples);
     Check(g.Count = count);
   end;
   NotifyTestSpeed('Grijjy', 0, lennexp * (ITER div 10), @timer, ONLYLOG);
   {$endif JSONBENCHMARK_GRIJJY}
+  {$ifdef JSONBENCHMARK_DWS}
+  timer.Start;
+  for i := 1 to ITER div 10 do
+  begin
+    dws := TdwsJSONValue.ParseString(peoples);
+    try
+      Check((dws as TdwsJSONArray).ElementCount = count);
+    finally
+      dws.Free;
+    end;
+  end;
+  NotifyTestSpeed('dwsJSON', 0, lennexp * (ITER div 10), @timer, ONLYLOG);
+  {$endif JSONBENCHMARK_DWS}
 end;
 
 procedure TTestCoreProcess.WikiMarkdownToHtml;
