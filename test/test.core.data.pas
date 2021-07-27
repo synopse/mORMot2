@@ -25,6 +25,11 @@ interface
 {.$define JSONBENCHMARK_SO}
   // SuperObjects = 15 MB/s on Delphi, 4.5 MB/s on FPC
 
+{.$define JSONBENCHMARK_XSO}
+  // X-SuperObjects = 690 KB/s
+
+{.$define JSONBENCHMARK_GRIJJY}
+  // Grijjy = 24 MB/s
 
 uses
   sysutils,
@@ -50,6 +55,12 @@ uses
   SuperObject,
   SuperTypes,
   {$endif JSONBENCHMARK_SO}
+  {$ifdef JSONBENCHMARK_XSO}
+  XSuperObject,
+  {$endif JSONBENCHMARK_XSO}
+  {$ifdef JSONBENCHMARK_GRIJJY}
+  Grijjy.Bson,
+  {$endif JSONBENCHMARK_GRIJJY}
   mormot.core.base,
   mormot.core.os,
   mormot.core.text,
@@ -2794,6 +2805,14 @@ var
   so: superobject.ISuperObject;
   s: supertypes.SOString;
   {$endif JSONBENCHMARK_SO}
+  {$ifdef JSONBENCHMARK_XSO}
+  xso: xsuperobject.ISuperArray;
+  xs: string;
+  {$endif JSONBENCHMARK_XSO}
+  {$ifdef JSONBENCHMARK_GRIJJY}
+  g: TgoBsonArray;
+  gs: string;
+  {$endif JSONBENCHMARK_GRIJJY}
 begin
   people := StringFromFile(WorkDir + 'People.json');
   if people = '' then
@@ -2940,7 +2959,7 @@ begin
   NotifyTestSpeed('JsonDataObjects', 0, lennexp * ITER, @timer, ONLYLOG);
   {$endif JSONBENCHMARK_JDO}
   {$ifdef JSONBENCHMARK_SO}
-  s := SOString(people); // convert to UTF-8 once
+  s := supertypes.SOString(people); // convert to UTF-8 once
   timer.Start;
   for i := 1 to ITER div 10 do
   begin
@@ -2951,6 +2970,27 @@ begin
   end;
   NotifyTestSpeed('SuperObject', 0, lennexp * (ITER div 10), @timer, ONLYLOG);
   {$endif JSONBENCHMARK_SO}
+  {$ifdef JSONBENCHMARK_XSO}
+  Utf8ToStringVar(people, xs); // convert to UTF-8 once
+  timer.Start;
+  for i := 1 to 1 do // X-SuperObject is 600KB/s 8(
+  begin
+    xso := xsuperobject.SA(xs);
+    if not CheckFailed(xso <> nil) then
+      Check(xso.Length = count);
+  end;
+  NotifyTestSpeed('X-SuperObject', 0, lennexp, @timer, ONLYLOG);
+  {$endif JSONBENCHMARK_SO}
+  {$ifdef JSONBENCHMARK_GRIJJY}
+  Utf8ToStringVar(people, gs); // convert to UTF-8 once
+  timer.Start;
+  for i := 1 to ITER div 10 do
+  begin
+    g := TgoBsonArray.Parse(gs);
+    Check(g.Count = count);
+  end;
+  NotifyTestSpeed('Grijjy', 0, lennexp * (ITER div 10), @timer, ONLYLOG);
+  {$endif JSONBENCHMARK_GRIJJY}
 end;
 
 procedure TTestCoreProcess.WikiMarkdownToHtml;
