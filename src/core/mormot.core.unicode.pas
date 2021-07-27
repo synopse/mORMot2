@@ -2138,8 +2138,7 @@ begin
   result := source - 1; // inc(source) done within the loop
 end;
 
-{$if defined(ASMX64AVX) and defined(SYSVABI)}
-// raw ASM not available on Win64 or Delphi yet
+{$ifdef ASMX64AVX} // AVX2 ASM not available on Delphi yet
 var
   IsValidUtf8Impl: function(source: PUtf8Char; sourcelen: PtrInt): boolean;
 
@@ -2189,7 +2188,7 @@ begin
             (EndValidUtf8(pointer(source)) - pointer(source) = Length(source));
 end;
 
-{$ifend}
+{$endif ASMX64AVX}
 
 function IsValidUtf8WithoutControlChars(source: PUtf8Char): boolean;
 var
@@ -6789,12 +6788,12 @@ begin
   Utf8AnsiConvert := TSynAnsiConvert.Engine(CP_UTF8) as TSynAnsiUtf8;
   RawByteStringConvert := TSynAnsiConvert.Engine(CP_RAWBYTESTRING) as TSynAnsiFixedWidth;
   // setup optimized ASM functions
-  {$if defined(ASMX64AVX) and defined(SYSVABI)}
+  {$ifdef ASMX64AVX}
   IsValidUtf8Impl := @IsValidUtf8Pas;
   if cpuHaswell in CPUIDX64 then
-    // Haswell CPUs can use much faster AVX2 asm for IsValidUtf8()
+    // Haswell CPUs can use simdjson AVX2 asm for IsValidUtf8()
     IsValidUtf8Impl := @IsValidUtf8Avx2;
-  {$ifend}
+  {$endif ASMX64AVX}
 end;
 
 procedure FinalizeUnit;

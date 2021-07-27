@@ -687,14 +687,13 @@ procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: Ptr
         jnz     @1
 end;
 
-{$if defined(ASMX64AVX) and defined(SYSVABI)}
-// raw ASM not available on Win64 nor Delphi yet
+{$ifdef ASMX64AVX} // AVX2 ASM not available on Delphi yet
 // adapted from https://github.com/simdjson/simdjson - Apache License 2.0
 function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
   {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         push    rbp
-        mov     r8, rdi
-        mov     rdx, rsi
+        mov     r8, source
+        mov     rdx, sourcelen
         mov     rsi, r8
         mov     ecx, 64
         mov     rax, rsi
@@ -770,6 +769,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         vmovdqa ymm3, ymm4
         vmovdqa ymm5, ymm4
         jmp     @trail
+        // validate UTF-8 extra bytes from main loop
         align 8
 @check: vpsrlw  ymm9, ymm0, 4
         vpsrlw  ymm12, ymm1, 4
@@ -820,6 +820,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         cmp     rcx, rsi
         ja      @loop
         jmp     @trail
+        // validate UTF-8 extra bytes from input ending
         align 8
 @last:  vmovdqa ymm5, ymmword ptr [rip + @0f]
         vperm2i128 ymm3, ymm3, ymm1, 21H
@@ -915,7 +916,7 @@ function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
         db 0FFH, 0FFH, 0FFH, 0FFH, 0FFH, 0FFH, 0FFH, 0FFH
         db 0FFH, 0FFH, 0FFH, 0FFH, 0FFH, 0EFH, 0DFH, 0BFH
 end;
-{$ifend}
+{$endif ASMX64AVX}
 
 {$endif CPUX64ASM} // SSE2 asm is invalid prior to Delphi XE7 (to be refined)
 

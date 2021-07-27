@@ -2400,10 +2400,10 @@ var
   /// internal flags used by FillCharFast - easier from asm that CpuFeatures
   CPUIDX64: TX64CpuFeatures;
 
-{$if defined(ASMX64AVX) and defined(SYSVABI)}
-/// as used by mormot.core.unicode on Haswell AVX2 for FPC POSIX IsValidUtf8()
-function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt): boolean;
-{$ifend}
+{$ifdef ASMX64AVX}
+/// simdjson asm as used by mormot.core.unicode on Haswell for FPC IsValidUtf8()
+function IsValidUtf8Avx2(source: PUtf8Char; sourcelen: PtrInt):  boolean;
+{$endif ASMX64AVX}
 
 {$endif ASMX64}
 
