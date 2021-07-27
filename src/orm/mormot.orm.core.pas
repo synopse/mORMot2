@@ -15869,22 +15869,25 @@ begin
     fData := pointer(fJsonData);
     // unescape+zeroify JSONData + fill fResults[] to proper place
     dec(max);
-    f := 0;
-    for i := 0 to max do
+    for i := 0 to fFieldCount - 1 do
     begin
-      // get a field
+      SetResults(i, GetJsonField(P, P, @wasString));
+      if not wasString then
+        exit; // should start with field names
+    end;
+    f := 0;
+    for i := fFieldCount to max do
+    begin
+      // get a field value
       SetResults(i, GetJsonFieldOrObjectOrArray(P, @wasString, nil, true));
       if (P = nil) and (i <> max) then
         // failure (GetRowCountNotExpanded should have detected it)
         exit;
-      if i >= fFieldCount then
-      begin
-        if wasString then
-          Include(fFieldParsedAsString, f); // mark column was "string"
-        inc(f);
-        if f = fFieldCount then
-          f := 0; // reached next row
-      end;
+      if wasString then
+        Include(fFieldParsedAsString, f); // mark column was "string"
+      inc(f);
+      if f = fFieldCount then
+        f := 0; // reached next row
     end;
   end
   else

@@ -45,6 +45,29 @@ type
   /// exception raised by this unit, in relation to raw JSON process
   EJsonException = class(ESynException);
 
+  /// kind of first character used from JSON_TOKENS[] for efficient JSON parsing
+  TJsonToken = (
+    jtNone,
+    jtDoubleQuote,
+    jtFirstDigit,
+    jtNullFirstChar,
+    jtTrueFirstChar,
+    jtFalseFirstChar,
+    jtObjectStart,
+    jtArrayStart,
+    jtObjectStop,
+    jtArrayStop,
+    jtAssign,
+    jtComma,
+    jtSingleQuote,
+    jtIdentifierFirstChar,
+    jtSlash);
+
+  /// defines a lookup table used for branch-less first char JSON parsing
+  TJsonTokens = array[AnsiChar] of TJsonToken;
+  /// points to a lookup table used for branch-less first char JSON parsing
+  PJsonTokens = ^TJsonTokens;
+
   /// kind of character used from JSON_CHARS[] for efficient JSON parsing
   // - using such a set compiles into TEST [MEM], IMM so is more efficient
   // than a regular set of AnsiChar which generates much slower BT [MEM], IMM
@@ -66,14 +89,6 @@ type
   /// points to a lookup table used for branch-less JSON parsing
   PJsonCharSet = ^TJsonCharSet;
 
-var
-  /// 256-byte lookup table for fast branchless JSON text escaping
-  // - 0 = JSON_ESCAPE_NONE indicates no escape needed
-  // - 1 = JSON_ESCAPE_ENDINGZERO indicates #0 (end of string)
-  // - 2 = JSON_ESCAPE_UNICODEHEX should be escaped as \u00xx
-  // - b,t,n,f,r,\," as escaped character for #8,#9,#10,#12,#13,\,"
-  JSON_ESCAPE: array[byte] of byte;
-
 const
   /// JSON_ESCAPE[] lookup value: indicates no escape needed
   JSON_ESCAPE_NONE = 0;
@@ -83,38 +98,23 @@ const
   JSON_ESCAPE_UNICODEHEX = 2;
 
 var
+  /// 256-byte lookup table for fast branchless initial character JSON parsing
+  JSON_TOKENS: TJsonTokens;
   /// 256-byte lookup table for fast branchless JSON parsing
   // - to be used e.g. as:
   // ! if jvJsonIdentifier in JSON_CHARS[P^] then ...
   JSON_CHARS: TJsonCharSet;
+  /// 256-byte lookup table for fast branchless JSON text escaping
+  // - 0 = JSON_ESCAPE_NONE indicates no escape needed
+  // - 1 = JSON_ESCAPE_ENDINGZERO indicates #0 (end of string)
+  // - 2 = JSON_ESCAPE_UNICODEHEX should be escaped as \u00xx
+  // - b,t,n,f,r,\," as escaped character for #8,#9,#10,#12,#13,\,"
+  JSON_ESCAPE: array[byte] of byte;
 
-type
-  /// kind of first character used from JSON_TOKENS[] for efficient JSON parsing
-  TJsonToken = (
-    jtNone,
-    jtDoubleQuote,
-    jtFirstDigit,
-    jtNullFirstChar,
-    jtTrueFirstChar,
-    jtFalseFirstChar,
-    jtObjectStart,
-    jtArrayStart,
-    jtObjectStop,
-    jtArrayStop,
-    jtAssign,
-    jtComma,
-    jtSingleQuote,
-    jtIdentifierFirstChar,
-    jtSlash);
-  /// defines a lookup table used for branch-less JSON parsing
-  TJsonTokens = array[AnsiChar] of TJsonToken;
-  /// points to a lookup table used for branch-less JSON parsing
-  PJsonTokens = ^TJsonTokens;
-
-var
-  /// 256-byte lookup table for fast branchless initial character JSON parsing
-  JSON_TOKENS: TJsonTokens;
-
+  /// how many initial chars of a JSON array are parsed for intial capacity
+  // - used e.g. by _JL_DynArray() and TDocVariantData.InitJsonInPlace()
+  // - 64KB was found out empirically as a good value - but you can tune it
+  JSON_ARRAY_PRELOAD: integer = 65536;
 
 /// returns TRUE if the given text buffers would be escaped when written as JSON
 // - e.g. if contains " or \ characters, as defined by
@@ -214,14 +214,14 @@ procedure GetJsonPropName(var P: PUtf8Char; out PropName: shortstring); overload
 // - GetJsonField() will only handle JSON "strings" or numbers - if
 // HandleValuesAsObjectOrArray is TRUE, this function will process JSON {
 // objects } or [ arrays ] and add a #0 at the end of it
-// - this function decodes in the P^ buffer memory itself (no memory allocation
-// or copy), for faster process - so take care that it is an unique string
-// - returns a pointer to the value start, and moved P to the next field to
-// be decoded, or P=nil in case of any unexpected input
+// - decodes in the Json^ buffer memory itself (no memory allocation nor copy)
+// for faster process - so take care that it is an unique string
+// - returns a pointer to the value start, and moved Json to the next field to
+// be decoded, or Json=nil in case of any unexpected input
 // - WasString is set to true if the JSON value was a "string"
 // - EndOfObject (if not nil) is set to the JSON value end char (',' ':' or '}')
 // - if Len is set, it will contain the length of the returned pointer value
-function GetJsonFieldOrObjectOrArray(var P: PUtf8Char;
+function GetJsonFieldOrObjectOrArray(var Json: PUtf8Char;
   WasString: PBoolean = nil; EndOfObject: PUtf8Char = nil;
   HandleValuesAsObjectOrArray: boolean = false;
   NormalizeBoolean: boolean = true; Len: PInteger = nil): PUtf8Char;
@@ -332,7 +332,7 @@ function JsonArrayCount(P: PUtf8Char): integer; overload;
 // - this overloaded method will abort if P reaches a certain position, and
 // return the current counted number of items as negative, which could be used
 // as initial allocation before the loop - typical use in this case is e.g.
-// ! cap := abs(JsonArrayCount(P, P + 256 shl 10));
+// ! cap := abs(JsonArrayCount(P, P + JSON_ARRAY_PRELOAD));
 function JsonArrayCount(P, PMax: PUtf8Char): integer; overload;
 
 /// go to the #nth item of a JSON array
@@ -1738,7 +1738,7 @@ type
       Values: PValuePUtf8CharArray;
       HandleValuesAsObjectOrArray: boolean = false): boolean;
     /// parse a property value, properly calling any setter
-    procedure ParseProp(Data: pointer);
+    procedure ParsePropComplex(Data: pointer);
   end;
 
   PJsonParserContext = ^TJsonParserContext;
@@ -2571,9 +2571,9 @@ var
   c4, surrogate, extra: PtrUInt;
   c: AnsiChar;
   {$ifdef CPUX86NOTPIC}
-  jsonset: TJsonCharSet absolute JSON_CHARS; // not enough registers
+  tab: TJsonCharSet absolute JSON_CHARS; // not enough registers
   {$else}
-  jsonset: PJsonCharSet;
+  tab: PJsonCharSet;
   {$endif CPUX86NOTPIC}
 label
   lit;
@@ -2596,7 +2596,7 @@ begin
     inc(P);
   end;
   {$ifndef CPUX86NOTPIC}
-  jsonset := @JSON_CHARS;
+  tab := @JSON_CHARS;
   {$endif CPUX86NOTPIC}
   case JSON_TOKENS[P^] of
     jtFirstDigit: // '-', '0'..'9'
@@ -2610,7 +2610,7 @@ begin
             exit;
         repeat // loop all '-', '+', '0'..'9', '.', 'E', 'e'
           inc(P);
-        until not (jcDigitFloatChar in jsonset[P^]);
+        until not (jcDigitFloatChar in tab[P^]);
         if P^ = #0 then
           exit; // a JSON number value should be followed by , } or ]
         if Len <> nil then
@@ -2628,7 +2628,7 @@ begin
        result := P; // result points to the unescaped JSON string
         if WasString <> nil then
           WasString^ := true;
-        while not (jcJsonStringMarker in jsonset[P^]) do
+        while not (jcJsonStringMarker in tab[P^]) do
           // not [#0, '"', '\']
           inc(P); // very fast parsing of most UTF-8 chars within "string"
         D := P;
@@ -2636,7 +2636,7 @@ begin
         repeat
           // escape needed -> in-place unescape from P^ into D^
           c := P^;
-          if not (jcJsonStringMarker in jsonset[c]) then
+          if not (jcJsonStringMarker in tab[c]) then
           begin
 lit:        inc(P);
             D^ := c;
@@ -2760,7 +2760,7 @@ lit:        inc(P);
       end;
     jtNullFirstChar: // 'n'
       if (PInteger(P)^ = NULL_LOW) and
-         (jcEndOfJsonValueField in jsonset[P[4]]) then
+         (jcEndOfJsonValueField in tab[P[4]]) then
          // [#0, #9, #10, #13, ' ',  ',', '}', ']']
       begin
         // null -> returns nil and WasString=false
@@ -2773,7 +2773,7 @@ lit:        inc(P);
         exit;
     jtFalseFirstChar: // 'f'
       if (PInteger(P + 1)^ = FALSE_LOW2) and
-         (jcEndOfJsonValueField in jsonset[P[5]]) then
+         (jcEndOfJsonValueField in tab[P[5]]) then
          // [#0, #9, #10, #13, ' ',  ',', '}', ']']
       begin
         // false -> returns 'false' and WasString=false
@@ -2786,7 +2786,7 @@ lit:        inc(P);
         exit;
     jtTrueFirstChar: // 't'
       if (PInteger(P)^ = TRUE_LOW) and
-         (jcEndOfJsonValueField in jsonset[P[4]]) then
+         (jcEndOfJsonValueField in tab[P[4]]) then
          // [#0, #9, #10, #13, ' ',  ',', '}', ']']
       begin
         // true -> returns 'true' and WasString=false
@@ -2801,7 +2801,7 @@ lit:        inc(P);
     // leave PDest=nil to notify error
     exit;
   end;
-  while not (jcEndOfJsonFieldOr0 in jsonset[P^]) do
+  while not (jcEndOfJsonFieldOr0 in tab[P^]) do
     if P^ = #0 then
       // leave PDest=nil for unexpected end
       exit
@@ -2853,6 +2853,8 @@ var
   WasString: boolean;
   EndOfObject: AnsiChar;
   tab: PJsonCharSet;
+label
+  e;
 begin
   // should match GotoNextJsonObjectOrArray() and JsonPropNameValid()
   result := nil; // returns nil on invalid input
@@ -2868,63 +2870,67 @@ begin
     end;
     inc(P);
   end;
-  Name := P; // put here to please some versions of Delphi compiler
+  Name := P + 1;
+  tab := @JSON_CHARS;
   if P^ = '"' then
   begin
-    Name := GetJsonField(P, Json, @WasString, @EndOfObject, Len);
-    if (Name <> nil) and
-       WasString and
-       (EndOfObject = ':') then
-      result := Name;
-    exit;
-  end
-  else if P^ = '''' then
-  begin
-    // single quotes won't handle nested quote character
-    inc(P);
-    Name := P;
-    while P^ <> '''' do
-      if P^ < ' ' then
+    // handle very efficient the most common case of unescaped double quotes
+    repeat
+      inc(P);
+    until jcJsonStringMarker in tab[P^]; // [#0, '"', '\']
+    if P^ <> '"' then
+      if P^ = #0 then
         exit
       else
-        inc(P);
-    if Len <> nil then
-      Len^ := P - Name;
-    P^ := #0; // ensure Name is #0 terminated
-    repeat
-      inc(P)
-    until (P^ > ' ') or
-          (P^ = #0);
-    if P^ <> ':' then
-      exit;
+      begin // we need to unescape the property name (seldom encoutered)
+        Name := GetJsonField(Name - 1, Json, @WasString, @EndOfObject, Len);
+        if (Name <> nil) and
+           WasString and
+           (EndOfObject = ':') then
+          result := Name;
+        exit;
+      end;
   end
+  else if P^ = '''' then
+    // single quotes won't handle nested quote character
+    repeat
+      inc(P);
+      if P^ < ' ' then
+        exit;
+    until P^ = ''''
   else
   begin
     // e.g. '{age:{$gt:18}}'
-    tab := @JSON_CHARS;
     if not (jcJsonIdentifierFirstChar in tab[P^]) then
       exit; // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '$']
     repeat
       inc(P);
     until not (jcJsonIdentifier in tab[P^]);
     // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
+    if P^ = #0 then
+      exit;
+    dec(Name);
     if Len <> nil then
       Len^ := P - Name;
-    if (P^ <= ' ') and
-       (P^ <> #0) then
-    begin
-      P^ := #0;
-      inc(P);
-    end;
-    while (P^ <= ' ') and
-          (P^ <> #0) do
-      inc(P);
-    if not (P^ in [':', '=']) then
-      // allow both age:18 and age=18 pairs (very relaxed JSON syntax)
-      exit;
-    P^ := #0; // ensure Name is #0 terminated
+    EndOfObject := P^;
+    P^ := #0;
+    if not (EndOfObject in [':', '=']) then // relaxed {age=10} syntax
+      repeat
+        inc(P);
+        if P^ = #0 then
+          exit;
+      until P^ in [':', '='];
+    goto e;
   end;
-  Json := P + 1;
+  if Len <> nil then
+    Len^ := P - Name;
+  P^ := #0; // ensure Name is 0 terminated
+  repeat
+    inc(P);
+    if P^ = #0 then
+      exit;
+  until P^ = ':';
+e:Json := P + 1;
   result := Name;
 end;
 
@@ -2933,6 +2939,8 @@ var
   Name: PAnsiChar;
   c: AnsiChar;
   tab: PJsonCharSet;
+label
+  ok;
 begin
   // match GotoNextJsonObjectOrArray() and overloaded GetJsonPropName()
   PropName[0] := #0;
@@ -2958,7 +2966,7 @@ begin
     until jcJsonStringMarker in tab[P^]; // end at [#0, '"', '\']
     if P^ <> '"' then
       exit;
-    SetString(PropName, Name, P - Name); // note: won't unescape JSON strings
+ok: SetString(PropName, Name, P - Name); // note: won't unescape JSON strings
     repeat
       inc(P)
     until (P^ > ' ') or
@@ -2980,17 +2988,7 @@ begin
         exit
       else
         inc(P);
-    SetString(PropName, Name, P - Name);
-    repeat
-      inc(P)
-    until (P^ > ' ') or
-          (P^ = #0);
-    if P^ <> ':' then
-    begin
-      PropName[0] := #0;
-      exit;
-    end;
-    inc(P);
+    goto ok;
   end
   else
   begin
@@ -3336,14 +3334,15 @@ begin
     result := GlobalFindClass(classname, classnamelen);
 end;
 
-function GetJsonFieldOrObjectOrArray(var P: PUtf8Char; WasString: PBoolean;
+function GetJsonFieldOrObjectOrArray(var Json: PUtf8Char; WasString: PBoolean;
   EndOfObject: PUtf8Char; HandleValuesAsObjectOrArray: boolean;
   NormalizeBoolean: boolean; Len: PInteger): PUtf8Char;
 var
-  Value: PUtf8Char;
+  P, Value: PUtf8Char;
   wStr: boolean;
 begin
   result := nil;
+  P := Json;
   if P = nil then
     exit;
   while (P^ <= ' ') and
@@ -3354,42 +3353,44 @@ begin
   begin
     Value := P;
     P := GotoNextJsonObjectOrArrayMax(P, nil);
-    if P = nil then
-      exit; // invalid content
-    if Len <> nil then
-      Len^ := P - Value;
-    if WasString <> nil then
-      WasString^ := false; // was object or array
-    while (P^ <= ' ') and
-          (P^ <> #0) do
-      inc(P);
-    if EndOfObject <> nil then
-      EndOfObject^ := P^;
-    if P^ <> #0 then
+    if P <> nil then
     begin
-      P^ := #0; // make zero-terminated
-      inc(P);
-    end;
-    result := Value;
-  end
-  else
-  begin
-    result := GetJsonField(P, P, @wStr, EndOfObject, Len);
-    if WasString <> nil then
-      WasString^ := wStr;
-    if not wStr and
-       NormalizeBoolean and
-       (result <> nil) then
-    begin
-      if PInteger(result)^ = TRUE_LOW then
-        result := pointer(SmallUInt32Utf8[1]) // normalize true -> 1
-      else if PInteger(result)^ = FALSE_LOW then
-        result := pointer(SmallUInt32Utf8[0]) // normalize false -> 0
-      else
-        exit;
+      // was a valid object or array
       if Len <> nil then
-        Len^ := 1;
+        Len^ := P - Value;
+      if WasString <> nil then
+        WasString^ := false;
+      while (P^ <= ' ') and
+            (P^ <> #0) do
+        inc(P);
+      if EndOfObject <> nil then
+        EndOfObject^ := P^;
+      if P^ <> #0 then
+      begin
+        P^ := #0; // make zero-terminated
+        inc(P);
+      end;
+      Json := P;
+      result := Value;
+      exit;
     end;
+    // will store as string even if stats with { or [
+  end;
+  result := GetJsonField(P, JSON, @wStr, EndOfObject, Len);
+  if WasString <> nil then
+    WasString^ := wStr;
+  if not wStr and
+     NormalizeBoolean and
+     (result <> nil) then
+  begin
+    if PInteger(result)^ = TRUE_LOW then
+      result := pointer(SmallUInt32Utf8[1]) // normalize true -> 1
+    else if PInteger(result)^ = FALSE_LOW then
+      result := pointer(SmallUInt32Utf8[0]) // normalize false -> 0
+    else
+      exit;
+    if Len <> nil then
+      Len^ := 1;
   end;
 end;
 
@@ -7423,6 +7424,168 @@ begin
   MoveSmall(@v, Data, Ctxt.Info.Size);
 end;
 
+function JsonLoadProp(Data: PAnsiChar; const Prop: TRttiCustomProp;
+  var Ctxt: TJsonParserContext): boolean; {$ifdef HASINLINE} inline; {$endif}
+var
+  load: TRttiJsonLoad;
+begin
+  Ctxt.Info := Prop.Value; // caller will restore it afterwards
+  Ctxt.Prop := @Prop;
+  load := Ctxt.Info.JsonLoad;
+  if not Assigned(load) then
+    Ctxt.Valid := false
+  else if Prop.OffsetSet >= 0 then
+    if (rcfHookReadProperty in Ctxt.Info.Flags) and
+       TCCHook(Data).RttiBeforeReadPropertyValue(@Ctxt, @Prop) then
+      // custom parsing method (e.g. TOrm nested TOrm properties)
+    else
+      // default fast parsing into the property/field memory
+      load(Data + Prop.OffsetSet, Ctxt)
+  else
+    // we need to call a setter
+    Ctxt.ParsePropComplex(Data);
+  Ctxt.Prop := nil;
+  result := Ctxt.Valid;
+end;
+
+procedure _JL_RttiCustomProps(Data: PAnsiChar; var Ctxt: TJsonParserContext);
+var
+  root: TRttiJson;
+  p: integer;
+  prop: PRttiCustomProp;
+  propname: PUtf8Char;
+  propnamelen: integer;
+label
+  nxt, any;
+begin
+  // regular JSON unserialization using nested fields/properties
+  Ctxt.Json := GotoNextNotSpace(Ctxt.Json);
+  if Ctxt.Json^ <> '{' then
+  begin
+    Ctxt.Valid := false;
+    exit;
+  end;
+  Ctxt.Json := GotoNextNotSpace(Ctxt.Json + 1);
+  if Ctxt.Json^ <> '}' then
+  begin
+    root := pointer(Ctxt.Info); // Ctxt.Info overriden in JsonLoadProp()
+    prop := pointer(root.Props.List);
+    for p := 1 to root.Props.Count do
+    begin
+nxt:  propname := GetJsonPropName(Ctxt.Json, @propnamelen);
+      Ctxt.Valid := (Ctxt.Json <> nil) and
+                    (propname <> nil);
+      if not Ctxt.Valid then
+        break;
+      // O(1) optimistic process of the property name, following RTTI order
+      if (prop^.Name <> '') and
+         IdemPropNameU(prop^.Name, propname, propnamelen) then
+        if JsonLoadProp(Data, prop^, Ctxt) then
+          if Ctxt.EndOfObject = '}' then
+            break
+          else
+            inc(prop)
+        else
+          break
+      else if (Ctxt.Info.Kind = rkClass) and
+              IdemPropName('ClassName', propname, propnamelen) then
+      begin
+        // woStoreClassName was used -> just ignore the class name
+        Ctxt.Json := GotoNextJsonItem(Ctxt.Json, 1, @Ctxt.EndOfObject);
+        Ctxt.Valid := Ctxt.Json <> nil;
+        if Ctxt.Valid then
+          goto nxt;
+        break;
+      end
+      else
+      begin
+        // we didn't find the property in its natural place -> full lookup
+        repeat
+          prop := root.Props.Find(propname, propnamelen);
+          if prop = nil then
+            // unexpected "prop": value
+            if (rcfReadIgnoreUnknownFields in root.Flags) or
+               (jpoIgnoreUnknownProperty in Ctxt.Options) then
+            begin
+              Ctxt.Json := GotoNextJsonItem(Ctxt.Json, 1, @Ctxt.EndOfObject);
+              Ctxt.Valid := Ctxt.Json <> nil;
+            end
+            else
+              Ctxt.Valid := false
+          else
+            Ctxt.Valid := JsonLoadProp(Data, prop^, Ctxt);
+          if (not Ctxt.Valid) or
+             (Ctxt.EndOfObject = '}') then
+             break;
+any:      propname := GetJsonPropName(Ctxt.Json, @propnamelen);
+          Ctxt.Valid := (Ctxt.Json <> nil) and
+                        (propname <> nil);
+        until not Ctxt.Valid;
+        break;
+      end;
+    end;
+    if Ctxt.Valid and
+       (Ctxt.EndOfObject = ',') and
+       ((rcfReadIgnoreUnknownFields in root.Flags) or
+        (jpoIgnoreUnknownProperty in Ctxt.Options)) then
+      goto any;
+    Ctxt.ParseEndOfObject; // mimics GetJsonField() - set Ctxt.EndOfObject
+    Ctxt.Info := root; // restore
+  end
+  else
+  begin
+    inc(Ctxt.Json);
+    Ctxt.ParseEndOfObject;
+  end
+end;
+
+procedure _JL_RttiCustom(Data: PAnsiChar; var Ctxt: TJsonParserContext);
+begin
+  if Ctxt.Json <> nil then
+    Ctxt.Json := GotoNextNotSpace(Ctxt.Json);
+  if TRttiJson(Ctxt.Info).fJsonReader.Code <> nil then
+  begin
+    // TRttiJson.RegisterCustomSerializer() custom callbacks
+    if Ctxt.Info.Kind = rkClass then
+      Data := PPointer(Data)^; // as expected by the callback
+    TOnRttiJsonRead(TRttiJson(Ctxt.Info).fJsonReader)(Ctxt, Data)
+  end
+  else
+  begin
+    // always finalize and reset the existing values (in case of missing props)
+    if Ctxt.Info.Kind = rkClass then
+    begin
+      if Ctxt.ParseNull then
+      begin
+        if not (jpoNullDontReleaseObjectInstance in Ctxt.Options) then
+          FreeAndNil(PObject(Data)^);
+        exit;
+      end;
+      if PPointer(Data)^ = nil then
+        // e.g. from _JL_DynArray for T*ObjArray
+        PPointer(Data)^ := TRttiJson(Ctxt.Info).fClassNewInstance(Ctxt.Info)
+      else if jpoClearValues in Ctxt.Options then
+        Ctxt.Info.Props.FinalizeAndClearPublishedProperties(PPointer(Data)^);
+      // class instances are accessed by reference, records are stored by value
+      Data := PPointer(Data)^;
+      if (rcfHookRead in Ctxt.Info.Flags) and
+         (TCCHook(Data).RttiBeforeReadObject(@Ctxt)) then
+        exit;
+    end
+    else
+    begin
+      if jpoClearValues in Ctxt.Options then
+        Ctxt.Info.ValueFinalizeAndClear(Data);
+      if Ctxt.ParseNull then
+        exit;
+    end;
+    // regular JSON unserialization using nested fields/properties
+    _JL_RttiCustomProps(Data, Ctxt);
+    if rcfHookRead in Ctxt.Info.Flags then
+      TCCHook(Data).RttiAfterReadObject;
+  end;
+end;
+
 procedure _JL_Array(Data: PAnsiChar; var Ctxt: TJsonParserContext);
 var
   n: integer;
@@ -7508,10 +7671,17 @@ begin
       if Ctxt.Info = nil then
         load := nil
       else
+      begin
         load := Ctxt.Info.JsonLoad;
+        if (@load = @_JL_RttiCustom) and
+           (TRttiJson(Ctxt.Info).fJsonReader.Code = nil) and
+           (Ctxt.Info.Kind <> rkClass) and
+           (not (jpoClearValues in Ctxt.Options)) then
+          load := @_JL_RttiCustomProps; // somewhat faster direct record load
+      end;
     end;
-    // initial guess of the JSON array count - will browse up to 256KB of input
-    cap := abs(JsonArrayCount(Ctxt.Json, Ctxt.Json + 256 shl 10));
+    // initial guess of the JSON array count - will browse up to 64KB of input
+    cap := abs(JsonArrayCount(Ctxt.Json, Ctxt.Json + JSON_ARRAY_PRELOAD));
     if (cap = 0) or
        not Assigned(load) then
     begin
@@ -7561,12 +7731,40 @@ begin
 end;
 
 // defined here to have _JL_RawJson and _JL_Variant known
-procedure TJsonParserContext.ParseProp(Data: pointer);
+procedure TJsonParserContext.ParsePropComplex(Data: pointer);
 var
   v: TRttiVarData;
+  tmp: TObject;
 begin
-  if Info.Parser = ptRawJson then
+  if Info.Kind = rkClass then
   begin
+    // special case of a setter method for a class property: use a temp instance
+    if jpoSetterNoCreate in Options then
+      Valid := false
+    else
+    begin
+      tmp := TRttiJson(Info).fClassNewInstance(Info);
+      try
+        v.Prop := Prop; // JsonLoad() would reset Prop := nil
+        TRttiJsonLoad(Info.JsonLoad)(@tmp, self); // JsonToObject(tmp)
+        if not Valid then
+          FreeAndNil(tmp)
+        else
+        begin
+          v.Prop.Prop.SetOrdProp(Data, PtrInt(tmp));
+          if jpoSetterExpectsToFreeTempInstance in Options then
+            FreeAndNil(tmp);
+        end;
+      except
+        on Exception do
+          tmp.Free;
+      end;
+    end;
+    exit;
+  end
+  else if Info.Parser = ptRawJson then
+  begin
+    // TRttiProp.SetValue() assume RawUtF8 -> dedicated RawJson code
     v.VType := varString;
     v.Data.VAny := nil;
     _JL_RawJson(@v.Data.VAny, self);
@@ -7575,191 +7773,13 @@ begin
   end
   else
   begin
+    // call the getter via TRttiProp.SetValue() of a transient TRttiVarData
     v.VType := 0;
     _JL_Variant(@v, self); // VariantLoadJson() over Ctxt
     if Valid then
       Valid := Prop^.Prop.SetValue(Data, variant(v));
   end;
   VarClearProc(v.Data);
-end;
-
-function JsonLoadProp(Data: PAnsiChar; const Prop: TRttiCustomProp;
-  var Ctxt: TJsonParserContext): boolean;
-var
-  tmp: TObject;
-  load: TRttiJsonLoad;
-begin
-  Ctxt.Info := Prop.Value; // caller will restore it afterwards
-  Ctxt.Prop := @Prop;
-  load := Ctxt.Info.JsonLoad;
-  if not Assigned(load) then
-    Ctxt.Valid := false
-  else if Prop.OffsetSet >= 0 then
-    if (rcfHookReadProperty in Ctxt.Info.Flags) and
-       TCCHook(Data).RttiBeforeReadPropertyValue(@Ctxt, @Prop) then
-      // custom parsing method (e.g. TOrm nested TOrm properties)
-    else
-      // default fast parsing into the property/field memory
-      load(Data + Prop.OffsetSet, Ctxt)
-  else if Prop.Value.Kind = rkClass then
-    // special case of a setter method for a class property: use a temp instance
-    if jpoSetterNoCreate in Ctxt.Options then
-      Ctxt.Valid := false
-    else
-    begin
-      tmp := TRttiJson(Ctxt.Info).fClassNewInstance(Ctxt.Info);
-      try
-        load(@tmp, Ctxt); // JsonToObject(tmp)
-        if not Ctxt.Valid then
-          FreeAndNil(tmp)
-        else
-        begin
-          Prop.Prop.SetOrdProp(pointer(Data), PtrInt(tmp));
-          if jpoSetterExpectsToFreeTempInstance in Ctxt.Options then
-            FreeAndNil(tmp);
-        end;
-      except
-        on Exception do
-          tmp.Free;
-      end;
-    end
-  else
-    // we need to call a setter -> use a temp variant
-    Ctxt.ParseProp(Data);
-  Ctxt.Prop := nil;
-  result := Ctxt.Valid;
-end;
-
-procedure _JL_RttiCustom(Data: PAnsiChar; var Ctxt: TJsonParserContext);
-var
-  root: TRttiJson;
-  p: integer;
-  prop: PRttiCustomProp;
-  propname: PUtf8Char;
-  propnamelen: integer;
-label
-  nxt, any;
-begin
-  if Ctxt.Json <> nil then
-    Ctxt.Json := GotoNextNotSpace(Ctxt.Json);
-  if TRttiJson(Ctxt.Info).fJsonReader.Code <> nil then
-  begin
-    // TRttiJson.RegisterCustomSerializer() custom callbacks
-    if Ctxt.Info.Kind = rkClass then
-      Data := PPointer(Data)^; // as expected by the callback
-    TOnRttiJsonRead(TRttiJson(Ctxt.Info).fJsonReader)(Ctxt, Data)
-  end
-  else
-  begin
-    // always finalize and reset the existing values (in case of missing props)
-    if Ctxt.Info.Kind = rkClass then
-    begin
-      if Ctxt.ParseNull then
-      begin
-        if not (jpoNullDontReleaseObjectInstance in Ctxt.Options) then
-          FreeAndNil(PObject(Data)^);
-        exit;
-      end;
-      if PPointer(Data)^ = nil then
-        // e.g. from _JL_DynArray for T*ObjArray
-        PPointer(Data)^ := TRttiJson(Ctxt.Info).fClassNewInstance(Ctxt.Info)
-      else if jpoClearValues in Ctxt.Options then
-        Ctxt.Info.Props.FinalizeAndClearPublishedProperties(PPointer(Data)^);
-      // class instances are accessed by reference, records are stored by value
-      Data := PPointer(Data)^;
-      if (rcfHookRead in Ctxt.Info.Flags) and
-         (TCCHook(Data).RttiBeforeReadObject(@Ctxt)) then
-        exit;
-    end
-    else
-    begin
-      if jpoClearValues in Ctxt.Options then
-        Ctxt.Info.ValueFinalizeAndClear(Data);
-      if Ctxt.ParseNull then
-        exit;
-    end;
-    // regular JSON unserialization using nested fields/properties
-    Ctxt.Json := GotoNextNotSpace(Ctxt.Json);
-    if Ctxt.Json^ <> '{' then
-    begin
-      Ctxt.Valid := false;
-      exit;
-    end;
-    Ctxt.Json := GotoNextNotSpace(Ctxt.Json + 1);
-    if Ctxt.Json^ = '}' then
-    begin
-      inc(Ctxt.Json);
-      Ctxt.ParseEndOfObject;
-    end
-    else
-    begin
-      root := pointer(Ctxt.Info); // Ctxt.Info overriden in JsonLoadProp()
-      prop := pointer(root.Props.List);
-      for p := 1 to root.Props.Count do
-      begin
-nxt:    propname := GetJsonPropName(Ctxt.Json, @propnamelen);
-        Ctxt.Valid := (Ctxt.Json <> nil) and
-                      (propname <> nil);
-        if not Ctxt.Valid then
-          break;
-        // O(1) optimistic process of the property name, following RTTI order
-        if (prop^.Name <> '') and
-           IdemPropNameU(prop^.Name, propname, propnamelen) then
-          if JsonLoadProp(Data, prop^, Ctxt) then
-            if Ctxt.EndOfObject = '}' then
-              break
-            else
-              inc(prop)
-          else
-            break
-        else if (Ctxt.Info.Kind = rkClass) and
-                IdemPropName('ClassName', propname, propnamelen) then
-        begin
-          // woStoreClassName was used -> just ignore the class name
-          Ctxt.Json := GotoNextJsonItem(Ctxt.Json, 1, @Ctxt.EndOfObject);
-          Ctxt.Valid := Ctxt.Json <> nil;
-          if Ctxt.Valid then
-            goto nxt;
-          break;
-        end
-        else
-        begin
-          // we didn't find the property in its natural place -> full lookup
-          repeat
-            prop := root.Props.Find(propname, propnamelen);
-            if prop = nil then
-              // unexpected "prop": value
-              if (rcfReadIgnoreUnknownFields in root.Flags) or
-                 (jpoIgnoreUnknownProperty in Ctxt.Options) then
-              begin
-                Ctxt.Json := GotoNextJsonItem(Ctxt.Json, 1, @Ctxt.EndOfObject);
-                Ctxt.Valid := Ctxt.Json <> nil;
-              end
-              else
-                Ctxt.Valid := false
-            else
-              Ctxt.Valid := JsonLoadProp(Data, prop^, Ctxt);
-            if (not Ctxt.Valid) or
-               (Ctxt.EndOfObject = '}') then
-               break;
-any:        propname := GetJsonPropName(Ctxt.Json, @propnamelen);
-            Ctxt.Valid := (Ctxt.Json <> nil) and
-                          (propname <> nil);
-          until not Ctxt.Valid;
-          break;
-        end;
-      end;
-      if Ctxt.Valid and
-         (Ctxt.EndOfObject = ',') and
-         ((rcfReadIgnoreUnknownFields in root.Flags) or
-          (jpoIgnoreUnknownProperty in Ctxt.Options)) then
-        goto any;
-      Ctxt.ParseEndOfObject; // mimics GetJsonField() - set Ctxt.EndOfObject
-      Ctxt.Info := root; // restore
-    end;
-    if rcfHookRead in Ctxt.Info.Flags then
-      TCCHook(Data).RttiAfterReadObject;
-  end;
 end;
 
 procedure _JL_TObjectList(Data: PObjectList; var Ctxt: TJsonParserContext);
@@ -10192,8 +10212,8 @@ begin
   JSON_ESCAPE[0] := JSON_ESCAPE_ENDINGZERO;   // 1 for #0 end of input
   for i := 1 to 31 do
     JSON_ESCAPE[i] := JSON_ESCAPE_UNICODEHEX; // 2 should be escaped as \u00xx
-  JSON_ESCAPE[8] := ord('b');  // others contain the escaped character
-  JSON_ESCAPE[9] := ord('t');
+  JSON_ESCAPE[8]  := ord('b');  // others contain the escaped character
+  JSON_ESCAPE[9]  := ord('t');
   JSON_ESCAPE[10] := ord('n');
   JSON_ESCAPE[12] := ord('f');
   JSON_ESCAPE[13] := ord('r');

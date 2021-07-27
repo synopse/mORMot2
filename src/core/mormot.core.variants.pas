@@ -4565,8 +4565,8 @@ begin
                 (Json^ > ' ')
         else
         begin
-          // guess of the Json array count - will browse up to 256KB of input
-          cap := abs(JsonArrayCount(Json, Json + 256 shl 10)); // 900 MB/s
+          // guess of the Json array count - will browse up to 64KB of input
+          cap := abs(JsonArrayCount(Json, Json + JSON_ARRAY_PRELOAD));
           if cap = 0 then
             exit; // invalid content
           SetLength(VValue, cap);
