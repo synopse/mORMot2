@@ -15,6 +15,8 @@ interface
   // DynArrayLoadJson = 332 MB/s    (dynamic array of records via cached RTTI)
 
 {$define JSONBENCHMARK_FPJSON}         // fpjson = 24 MB/s
+{.$define JSONBENCHMARK_JSONTOOLS}     // jsontools = 38 MB /s
+
 {.$define JSONBENCHMARK_DELPHIJSON}    // Delphi system.json = 5.8 MB/s on XE8
 {.$define JSONBENCHMARK_JDO}           // JsonDataObjects = 103 MB/s
 {.$define JSONBENCHMARK_SO} // SuperObject = 35 MB/s on Delphi, 10.5 MB/s on FPC
@@ -34,6 +36,9 @@ uses
   fpjson,
   jsonparser,
   {$endif JSONBENCHMARK_FPJSON}
+  {$ifdef JSONBENCHMARK_JSONTOOLS}
+  jsontools,
+  {$endif JSONBENCHMARK_JSONTOOLS}
   {$else}
   typinfo, // for proper Delphi inlining
   {$undef JSONBENCHMARK_FPJSON} // fpjson is not available on Delphi
@@ -2824,12 +2829,14 @@ end;
      TOrmTableJson not expanded in 21.44ms, 402.2 MB/s
      DynArrayLoadJson in 62.02ms, 316 MB/s
      fpjson in 79.36ms, 24.7 MB/s
+     jsontools in 51.41ms, 38.1 MB/s
      SuperObject in 187.79ms, 10.4 MB/s
 
-  - IsValidUtf8() has very efficient AVX2 asm on FPC + x86_64
+  - Test is to parse our 1 MB People.json array of 8227 TOrmPeople objects.
+  - IsValidUtf8() has very efficient AVX2 asm on FPC + x86_64.
   - TDocVariant dvoInternNames will recognize and intern the nested object
     field names, so memory consumption is likely to be reduced and unfragmented.
-  - DynArrayLoadJson() parses the JSON directly into a dynamic array of record
+  - DynArrayLoadJson() parses the JSON directly into a dynamic array of records
     using our cached RTTI, so memory consumption will be as low as possible,
     and performance is 100 times faster than the Delphi RTL library.
   - Most libraries claim they are "fast" but actually they are just faster than
@@ -2853,6 +2860,9 @@ var
   {$ifdef JSONBENCHMARK_FPJSON}
   fpjson: TJSONData;
   {$endif JSONBENCHMARK_FPJSON}
+  {$ifdef JSONBENCHMARK_JSONTOOLS}
+  jt: TJsonNode;
+  {$endif JSONBENCHMARK_JSONTOOLS}
   {$ifdef JSONBENCHMARK_DELPHIJSON}
   djson: system.json.TJSONValue;
   {$endif JSONBENCHMARK_DELPHIJSON}
@@ -2881,6 +2891,7 @@ begin
     exit; // need to run at least once the ORM tests
   len := length(people);
   check(len > 800000, 'unexpected people.json');
+  Utf8ToStringVar(people, peoples); // convert to UTF-8 once
   timer.Start;
   for i := 1 to ITER do
     Check(StrLen(pointer(people)) = len);
@@ -2984,7 +2995,7 @@ begin
   NotifyTestSpeed('DynArrayLoadJson', 0, len, @timer, ONLYLOG);
   {$ifdef JSONBENCHMARK_FPJSON}
   timer.Start;
-  for i := 1 to ITER div 10 do // div 10 since fpjson speed is 10 MB/s :(
+  for i := 1 to ITER div 10 do // div 10 since fpjson is slower
   begin
     fpjson := GetJSON(people, {utf8=}true);
     if not CheckFailed(fpjson <> nil) then
@@ -2997,9 +3008,27 @@ begin
   end;
   NotifyTestSpeed('fpjson', 0, len div 10, @timer, ONLYLOG);
   {$endif JSONBENCHMARK_FPJSON}
+  {$ifdef JSONBENCHMARK_JSONTOOLS}
+  timer.Start;
+  for i := 1 to ITER div 10 do // div 10 since jsontools is slower
+  begin
+    jt := TJsonNode.Create;
+    try // note: on i386, jsontools raises a parsing EJsonException :(
+      //if not CheckFailed(jt.TryParse('["XS\"\"\"."]')) then
+      begin
+        Check(jt.TryParse(peoples), 'jtparse');
+        Check(jt.Kind = nkArray, 'jtarray');
+        Check(jt.Count = count, 'jtcount');
+      end;
+    finally
+      jt.Free;
+    end;
+  end;
+  NotifyTestSpeed('jsontools', 0, len div 10, @timer, ONLYLOG);
+  {$endif JSONBENCHMARK_JSONTOOLS}
   {$ifdef JSONBENCHMARK_DELPHIJSON}
   timer.Start;
-  for i := 1 to ITER div 10 do // div 10 since Delphi json speed is < 3 MB/s :o
+  for i := 1 to ITER div 10 do // div 10 since Delphi json is dead slow
   begin
     djson := system.json.TJSONObject.ParseJSONValue(people);
     if not CheckFailed(djson <> nil) then
@@ -3039,7 +3068,6 @@ begin
   end;
   NotifyTestSpeed('SuperObject', 0, len div 10, @timer, ONLYLOG);
   {$endif JSONBENCHMARK_SO}
-  Utf8ToStringVar(people, peoples); // convert to UTF-8 once
   {$ifdef JSONBENCHMARK_XSO}
   timer.Start;
   for i := 1 to 1 do // X-SuperObject is 1.5 MB/s 8(

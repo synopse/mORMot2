@@ -8369,8 +8369,8 @@ var
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
   P: PAnsiChar;
 begin
-  if (not Assigned(EventCompare)) and
-     (not Assigned(Compare)) then
+  if (@Compare = nil) and // not Assigned() seems to fail on FPC trunk
+     (@EventCompare = nil) then
   begin
     result := -1;
     exit; // we need a comparison function
