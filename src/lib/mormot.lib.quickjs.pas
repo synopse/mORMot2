@@ -176,7 +176,6 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// detect JS_TAG_INT or JS_TAG_FLOAT64
     function IsNumber: boolean;
-      {$ifdef HASINLINE} inline; {$endif}
     /// detect NaN/+Inf/-Inf special values
     function IsNan: boolean;
       {$ifdef HASINLINE} inline; {$endif}
@@ -198,13 +197,11 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// extract the JS_TAG_INT or JS_TAG_FLOAT64 value as an 53-bit integer
     function Int64: Int64;
-      {$ifdef HASINLINE} inline; {$endif}
     /// extract the JS_TAG_BOOL value
     function Bool: boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// extract the JS_TAG_FLOAT64 value
     function F64: double;
-      {$ifdef HASINLINE} inline; {$endif}
     /// may be JSObject or JSString
     function Ptr: pointer;
       {$ifdef HASINLINE} inline; {$endif}
@@ -392,7 +389,6 @@ type
 
     /// create a JS_TAG_STRING from UTF-8 buffer
     function From(P: PUtf8Char; Len: PtrInt): JSValue; overload;
-       {$ifdef HASINLINE} inline; {$endif}
     /// create a JS_TAG_STRING from UTF-16 buffer
     function FromW(P: PWideChar; Len: PtrInt): JSValue; overload;
     /// create a JS_TAG_STRING from UTF-8 string
@@ -2728,9 +2724,12 @@ begin
 end;
 
 function JSValue.IsNumber: boolean;
+var
+  nt: PtrInt;
 begin
-  result := (NormTag = JS_TAG_FLOAT64) or
-            (NormTag = JS_TAG_INT);
+  nt := NormTag;
+  result := (nt = JS_TAG_FLOAT64) or
+            (nt = JS_TAG_INT);
 end;
 
 function JSValue.IsBigInt: boolean;

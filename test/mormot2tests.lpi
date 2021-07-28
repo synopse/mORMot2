@@ -61,7 +61,6 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
           </Other>
         </CompilerOptions>
       </Item2>
@@ -106,8 +105,7 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123
--dFPC_NO_DEFAULT_MEMORYMANAGER
+            <CustomOptions Value="-dFPC_NO_DEFAULT_MEMORYMANAGER
 -dFPC_X64MM
 -dFPCMM_DEBUG
 -dFPCMM_REPORTMEMORYLEAKS"/>
@@ -164,7 +162,6 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
           </Other>
         </CompilerOptions>
       </Item4>
@@ -213,8 +210,7 @@
             <CompilerMessages>
               <IgnoredMessages idx5089="True"/>
             </CompilerMessages>
-            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123
--dFPC_NO_DEFAULT_MEMORYMANAGER
+            <CustomOptions Value="-dFPC_NO_DEFAULT_MEMORYMANAGER
 -dFPC_X64MM
 -dFPCMM_DEBUG
 -dFPCMM_REPORTMEMORYLEAKS
@@ -275,7 +271,6 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
             <OtherDefines Count="6">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
@@ -330,7 +325,6 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
           </Other>
         </CompilerOptions>
       </Item7>
@@ -377,7 +371,6 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
           </Other>
         </CompilerOptions>
       </Item8>
@@ -424,8 +417,7 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123
--dFPC_NO_DEFAULT_MEMORYMANAGER
+            <CustomOptions Value="-dFPC_NO_DEFAULT_MEMORYMANAGER
 -dFPC_CMEM"/>
             <OtherDefines Count="7">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
@@ -483,7 +475,6 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
             <OtherDefines Count="7">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
@@ -539,7 +530,6 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
           </Other>
         </CompilerOptions>
       </Item11>
@@ -587,7 +577,6 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
             <OtherDefines Count="7">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
@@ -643,7 +632,6 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
             <OtherDefines Count="7">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
@@ -699,7 +687,6 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
             <OtherDefines Count="7">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
@@ -755,7 +742,6 @@
               <ShowNotes Value="False"/>
               <ShowHints Value="False"/>
             </Verbosity>
-            <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
             <OtherDefines Count="7">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
@@ -1218,7 +1204,6 @@
         <ShowNotes Value="False"/>
         <ShowHints Value="False"/>
       </Verbosity>
-      <CustomOptions Value="-vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123"/>
     </Other>
   </CompilerOptions>
   <Debugging>

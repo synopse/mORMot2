@@ -1102,7 +1102,6 @@ function BsonVariantFieldSelector(const FieldNamesCsv: RawUtf8): variant; overlo
 // handle some BSON-like extensions, as with the overloaded Bson() function
 
 function BsonVariant(const Json: RawUtf8): variant; overload;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// store some object content, supplied as (extended) JSON, into a TBsonVariant
 // betDoc type instance

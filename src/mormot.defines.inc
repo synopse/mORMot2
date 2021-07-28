@@ -100,7 +100,11 @@
   // -----------
   // -- global code generation conditionals
 
-  {$WARN 5093 off : function result variable of a managed type does not seem to be initialized }
+  // note: you may remove all unexpexted hints by setting in your project options
+  // -vm11047,6058,5092,5091,5060,5058,5057,5028,5024,5023,4081,4079,4055,3187,3124,3123
+
+  {$WARN 5093 off : function result variable of a managed type does not seem to be initialized}
+  {$WARN 6058 off : Call to subroutine marked as inline is not inlined} // no issue
 
   {$ifndef FPC_DELPHI}
     {$MODE DELPHI} // e.g. for asm syntax - disabled for FPC 2.6 compatibility

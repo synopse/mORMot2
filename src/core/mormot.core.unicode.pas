@@ -43,7 +43,6 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve a >127 UCS4 CodePoint from UTF-8
     function GetHighUtf8Ucs4(var U: PUtf8Char): Ucs4CodePoint;
-      {$ifdef HASINLINE}inline;{$endif}
   end;
   PUtf8Table = ^TUtf8Table;
 
@@ -102,6 +101,7 @@ const
 // !    inc(P) else
 // !    ch := GetHighUtf8Ucs4(P);
 function GetHighUtf8Ucs4(var U: PUtf8Char): Ucs4CodePoint;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// decode UTF-16 WideChar from UTF-8 input buffer
 // - any surrogate (Ucs4>$ffff) is returned as UNICODE_REPLACEMENT_CHARACTER=$fffd
@@ -1126,7 +1126,6 @@ function IdemPCharW(p: PWideChar; up: PUtf8Char): boolean;
 // - ignore case - upText^ must be already Upper
 // - chars are compared as 7-bit Ansi only (no accentuated characters)
 function EndWith(const text, upText: RawUtf8): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns the index of a matching ending of p^ in upArray[]
 // - returns -1 if no item matched

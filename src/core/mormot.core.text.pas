@@ -1468,7 +1468,6 @@ procedure Int64ToUtf8(Value: Int64; var result: RawUtf8); overload;
 
 /// fast RawUtf8 version of 32-bit IntToStr()
 function ToUtf8(Value: PtrInt): RawUtf8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
 
 {$ifdef CPU32}
 /// fast RawUtf8 version of 64-bit IntToStr()
@@ -1482,7 +1481,6 @@ function UInt32ToUtf8(Value: PtrUInt): RawUtf8; overload;
 
 /// optimized conversion of a cardinal into RawUtf8
 procedure UInt32ToUtf8(Value: PtrUInt; var result: RawUtf8); overload;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast RawUtf8 version of 64-bit IntToStr(), with proper QWord support
 procedure UInt64ToUtf8(Value: QWord; var result: RawUtf8);
@@ -2295,25 +2293,21 @@ procedure Int18ToChars3(Value: cardinal; var result: RawUtf8); overload;
 // - consider using UInt3DigitsToShort() to avoid temporary memory allocation,
 // e.g. when used as FormatUtf8() parameter
 function UInt3DigitsToUtf8(Value: cardinal): RawUtf8;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// creates a 4 digits string from a 0..9999 value as '0000'..'9999'
 // - consider using UInt4DigitsToShort() to avoid temporary memory allocation,
 // e.g. when used as FormatUtf8() parameter
 function UInt4DigitsToUtf8(Value: cardinal): RawUtf8;
-  {$ifdef HASINLINE}inline;{$endif}
 
   /// creates a 4 digits short string from a 0..9999 value
 // - using TShort4 as returned string would avoid a string allocation on heap
 // - could be used e.g. as parameter to FormatUtf8()
 function UInt4DigitsToShort(Value: cardinal): TShort4;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// creates a 3 digits short string from a 0..999 value
 // - using TShort4 as returned string would avoid a string allocation on heap
 // - could be used e.g. as parameter to FormatUtf8()
 function UInt3DigitsToShort(Value: cardinal): TShort4;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// creates a 2 digits short string from a 0..99 value
 // - using TShort4 as returned string would avoid a string allocation on heap
@@ -2343,7 +2337,7 @@ procedure IP6Text(ip6: PHash128; result: PShortString); overload;
 // - returns TRUE if the text was a valid IPv4 text, unserialized as 32-bit aValue
 // - returns FALSE on parsing error, also setting aValue=0
 // - '' or '127.0.0.1' will also return false
-function IPToCardinal(P: PUtf8Char; out aValue: cardinal): boolean; overload;
+function IPToCardinal(aIP: PUtf8Char; out aValue: cardinal): boolean; overload;
 
 /// convert an IPv4 'x.x.x.x' text into its 32-bit value
 // - returns TRUE if the text was a valid IPv4 text, unserialized as 32-bit aValue
@@ -10337,21 +10331,21 @@ begin
   IP6Text(ip6, @result);
 end;
 
-function IPToCardinal(P: PUtf8Char; out aValue: cardinal): boolean;
+function IPToCardinal(aIP: PUtf8Char; out aValue: cardinal): boolean;
 var
   i, c: cardinal;
   b: array[0..3] of byte;
 begin
   aValue := 0;
   result := false;
-  if (P = nil) or
-     (IdemPChar(P, '127.0.0.1') and (P[9] = #0)) then
+  if (aIP = nil) or
+     (IdemPChar(aIP, '127.0.0.1') and (aIP[9] = #0)) then
     exit;
   for i := 0 to 3 do
   begin
-    c := GetNextItemCardinal(P, '.');
+    c := GetNextItemCardinal(aIP, '.');
     if (c > 255) or
-       ((P = nil) and (i < 3)) then
+       ((aIP = nil) and (i < 3)) then
       exit;
     b[i] := c;
   end;

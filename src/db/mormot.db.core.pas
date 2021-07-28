@@ -395,12 +395,11 @@ function NullableInteger(const Value: Int64): TNullableInteger;
 // direct transtyping from a TNullableInteger = type variant variable: use this
 // function to circumvent those limitations
 function NullableIntegerIsEmptyOrNull(const V: TNullableInteger): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableInteger is null, or return its value
 // - returns FALSE if V is null or empty, or TRUE and set the integer value
-function NullableIntegerToValue(const V: TNullableInteger; out Value: Int64): boolean;
-  overload; {$ifdef HASINLINE}inline;{$endif}
+function NullableIntegerToValue(const V: TNullableInteger;
+  out Value: Int64): boolean; overload;
 
 /// check if a TNullableInteger is null, or return its value
 // - returns 0 if V is null or empty, or the stored integer value
@@ -423,12 +422,11 @@ function NullableBoolean(Value: boolean): TNullableBoolean;
 // direct transtyping from a TNullableBoolean = type variant variant: use this
 // function to circumvent those limitations
 function NullableBooleanIsEmptyOrNull(const V: TNullableBoolean): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableBoolean is null, or return its value
 // - returns FALSE if V is null or empty, or TRUE and set the boolean value
-function NullableBooleanToValue(const V: TNullableBoolean; out Value: boolean): boolean;
-  overload; {$ifdef HASINLINE}inline;{$endif}
+function NullableBooleanToValue(const V: TNullableBoolean;
+  out Value: boolean): boolean; overload;
 
 /// check if a TNullableBoolean is null, or return its value
 // - returns false if V is null or empty, or the stored boolean value
@@ -451,12 +449,11 @@ function NullableFloat(const Value: double): TNullableFloat;
 // direct transtyping from a TNullableFloat = type variant variable: use this
 // function to circumvent those limitations
 function NullableFloatIsEmptyOrNull(const V: TNullableFloat): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableFloat is null, or return its value
 // - returns FALSE if V is null or empty, or TRUE and set the Float value
-function NullableFloatToValue(const V: TNullableFloat; out Value: double): boolean;
-  overload; {$ifdef HASINLINE}inline;{$endif}
+function NullableFloatToValue(const V: TNullableFloat;
+  out Value: double): boolean; overload;
 
 /// check if a TNullableFloat is null, or return its value
 // - returns 0 if V is null or empty, or the stored Float value
@@ -481,14 +478,13 @@ function NullableCurrency(const Value: currency): TNullableCurrency;
 // direct transtyping from a TNullableCurrency = type variant variable: use this
 // function to circumvent those limitations
 function NullableCurrencyIsEmptyOrNull(const V: TNullableCurrency): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableCurrency is null, or return its value
 // - returns FALSE if V is null or empty, or TRUE and set the Currency value
 // - we defined the currency type to circumvent FPC cross-platform issues
 // with currency values;
-function NullableCurrencyToValue(const V: TNullableCurrency; out Value: currency): boolean;
-  overload; {$ifdef HASINLINE}inline;{$endif}
+function NullableCurrencyToValue(const V: TNullableCurrency;
+  out Value: currency): boolean; overload;
 
 /// check if a TNullableCurrency is null, or return its value
 // - returns 0 if V is null or empty, or the stored Currency value
@@ -513,12 +509,11 @@ function NullableDateTime(const Value: TDateTime): TNullableDateTime;
 // direct transtyping from a TNullableDateTime = type variant variable: use this
 // function to circumvent those limitations
 function NullableDateTimeIsEmptyOrNull(const V: TNullableDateTime): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableDateTime is null, or return its value
 // - returns FALSE if V is null or empty, or TRUE and set the DateTime value
-function NullableDateTimeToValue(const V: TNullableDateTime; out Value: TDateTime): boolean;
-  overload; {$ifdef HASINLINE}inline;{$endif}
+function NullableDateTimeToValue(const V: TNullableDateTime;
+  out Value: TDateTime): boolean; overload;
 
 /// check if a TNullableDateTime is null, or return its value
 // - returns 0 if V is null or empty, or the stored DateTime value
@@ -541,12 +536,11 @@ function NullableTimeLog(const Value: TTimeLog): TNullableTimeLog;
 // direct transtyping from a TNullableTimeLog = type variant variable: use this
 // function to circumvent those limitations
 function NullableTimeLogIsEmptyOrNull(const V: TNullableTimeLog): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableTimeLog is null, or return its value
 // - returns FALSE if V is null or empty, or TRUE and set the TimeLog value
-function NullableTimeLogToValue(const V: TNullableTimeLog; out Value: TTimeLog): boolean;
-  overload; {$ifdef HASINLINE}inline;{$endif}
+function NullableTimeLogToValue(const V: TNullableTimeLog;
+  out Value: TTimeLog): boolean; overload;
 
 /// check if a TNullableTimeLog is null, or return its value
 // - returns 0 if V is null or empty, or the stored TimeLog value
@@ -562,24 +556,21 @@ var
 // - FPC does not allow direct assignment to a TNullableUtf8 = type variant
 // variable: use this function to circumvent it
 function NullableUtf8Text(const Value: RawUtf8): TNullableUtf8Text;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
 // - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
 // direct transtyping from a TNullableUtf8Text = type variant variable: use this
 // function to circumvent those limitations
 function NullableUtf8TextIsEmptyOrNull(const V: TNullableUtf8Text): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// check if a TNullableUtf8Text is null, or return its value
 // - returns FALSE if V is null or empty, or TRUE and set the Utf8Text value
-function NullableUtf8TextToValue(const V: TNullableUtf8Text; out Value: RawUtf8): boolean;
-  overload; {$ifdef HASINLINE}inline;{$endif}
+function NullableUtf8TextToValue(const V: TNullableUtf8Text;
+  out Value: RawUtf8): boolean; overload;
 
 /// check if a TNullableUtf8Text is null, or return its value
 // - returns '' if V is null or empty, or the stored UTF-8 encoded text value
-function NullableUtf8TextToValue(const V: TNullableUtf8Text): RawUtf8;
-  overload; {$ifdef HASINLINE}inline;{$endif}
+function NullableUtf8TextToValue(const V: TNullableUtf8Text): RawUtf8; overload;
 
 
 { ************ Date/Time SQL encoding }

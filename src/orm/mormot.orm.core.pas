@@ -3315,7 +3315,6 @@ type
     // - or the ClassName is returned as is, if no 'TSql' or 'TOrm' at first
     // - is just a wrapper around OrmProps.SqlTableName field value
     class function SqlTableName: RawUtf8;
-      {$ifdef HASINLINE}inline;{$endif}
     /// register a custom filter (transformation) or validate to the
     // TOrm class for a specified field
     // - this will be used by TOrm.Filter and TOrm.Validate
@@ -4570,7 +4569,6 @@ type
     /// read-only access to the ID of a particular row
     // - returns 0 if no RowID field exists (i.e. FieldIndexID < 0)
     function GetID(Row: PtrInt): TID;
-      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as UTF-8 encoded buffer
     // - if Row and Fields are correct, returns a pointer to the UTF-8 buffer,
     // or nil if the corresponding JSON was null or ""
@@ -4625,22 +4623,16 @@ type
     function GetW(Row, Field: PtrInt): RawUnicode;
     /// read-only access to a particular field value, as integer value
     function GetAsInteger(Row, Field: PtrInt): integer; overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as integer value
     function GetAsInteger(Row: PtrInt; const FieldName: RawUtf8): integer; overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as Int64 value
     function GetAsInt64(Row, Field: PtrInt): Int64; overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as Int64 value
     function GetAsInt64(Row: PtrInt; const FieldName: RawUtf8): Int64; overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as extended value
     function GetAsFloat(Row, Field: PtrInt): TSynExtended; overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as extended value
     function GetAsFloat(Row: PtrInt; const FieldName: RawUtf8): TSynExtended; overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as TDateTime value
     // - oftDateTime/oftDateTimeMS will be converted from ISO-8601 text
     // - oftTimeLog, oftModTime, oftCreateTime will expect the content to be
@@ -4658,10 +4650,8 @@ type
     function GetAsDateTime(Row: PtrInt; const FieldName: RawUtf8): TDateTime; overload;
     /// read-only access to a particular field value, as currency value
     function GetAsCurrency(Row, Field: PtrInt): currency; overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as currency value
     function GetAsCurrency(Row: PtrInt; const FieldName: RawUtf8): currency; overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, ready to be displayed
     // - mostly used with Row=0, i.e. to get a display value from a field name
     // - use "string" type, i.e. UnicodeString for Delphi 2009+
@@ -13670,15 +13660,11 @@ function TOrmTable.GetU(Row, Field: PtrInt): RawUtf8;
 var
   P: PUtf8Char;
 begin
-  if (self = nil) or (fData = nil) or
-     (PtrUInt(Row) > PtrUInt(fRowCount)) or
-     (PtrUInt(Field) >= PtrUInt(fFieldCount)) then
-    result := ''
+  P := Get(Row, Field);
+  if P = nil then
+    FastAssignNew(result)
   else
-  begin
-    P := GetResults(Row * fFieldCount + Field);
     FastSetString(result, P, StrLen(P));
-  end;
 end;
 
 function TOrmTable.Get(Row: PtrInt; const FieldName: RawUtf8): PUtf8Char;

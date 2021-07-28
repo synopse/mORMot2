@@ -52,7 +52,6 @@ const
 // - handle 'YYYYMMDDThhmmss' and 'YYYY-MM-DD hh:mm:ss' format
 // - will also recognize '.sss' milliseconds suffix, if any
 function Iso8601ToDateTime(const S: RawByteString): TDateTime; overload;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// Date/Time conversion from ISO-8601
 // - handle 'YYYYMMDDThhmmss' and 'YYYY-MM-DD hh:mm:ss' format
@@ -198,7 +197,6 @@ function DateTimeToIso8601ExpandedPChar(const Value: TDateTime; Dest: PUtf8Char;
 // - used e.g. by TPropInfo.GetValue() and TPropInfo.NormalizeValue() methods
 function DateTimeToIso8601Text(DT: TDateTime; FirstChar: AnsiChar = 'T';
   WithMS: boolean = false): RawUtf8;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// write a TDateTime into strict ISO-8601 date and/or time text
 // - if DT=0, returns ''
@@ -462,7 +460,6 @@ function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): boolean
 
 /// our own faster version of the corresponding RTL function
 function IsLeapYear(Year: cardinal): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// retrieve the current Date, in the ISO 8601 layout, but expanded and
 // ready to be displayed

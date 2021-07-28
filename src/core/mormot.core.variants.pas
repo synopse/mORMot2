@@ -1928,7 +1928,6 @@ procedure _JsonFmt(const Format: RawUtf8; const Args, Params: array of const;
 // will increase the process speed a lot, or use _JsonFast()
 function _Json(const Json: RawUtf8; var Value: variant;
   Options: TDocVariantOptions = [dvoReturnNullForUnknownProperty]): boolean; overload;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// initialize a variant instance to store some document-based object content
 // - this global function is an handy alias to:
@@ -1960,13 +1959,11 @@ function _ArrFast(const Items: array of const): variant; overload;
 // - in addition to the JSON RFC specification strict mode, this method will
 // handle some BSON-like extensions, e.g. unquoted field names or ObjectID()
 function _JsonFast(const Json: RawUtf8): variant;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// initialize a variant instance to store some extended document-based content
 // - this global function is an handy alias to:
 // ! _Json(JSON,JSON_OPTIONS_FAST_EXTENDED);
 function _JsonFastExt(const Json: RawUtf8): variant;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// initialize a variant instance to store some document-based content
 // from a supplied (extended) JSON content, with parameters formating
@@ -2019,7 +2016,6 @@ procedure _UniqueFast(var DocVariant: variant);
 // - will raise an EDocVariant if the supplied variant is not a TDocVariant or
 // a varByRef pointing to a TDocVariant
 function _Copy(const DocVariant: variant): variant;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// return a full nested copy of a document-based variant instance
 // - is just a wrapper around:
@@ -2034,7 +2030,6 @@ function _Copy(const DocVariant: variant): variant;
 // - will raise an EDocVariant if the supplied variant is not a TDocVariant or
 // a varByRef pointing to a TDocVariant
 function _CopyFast(const DocVariant: variant): variant;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// copy a TDocVariant to another variable, changing the options on the fly
 // - note that the content (items or properties) is copied by reference,
@@ -4795,7 +4790,7 @@ end;
 
 procedure TDocVariantData.ClearFast;
 begin
-  PInteger(@VType)^ := 0;
+  PInteger(@VType)^ := 0; // clear VType and VOptions
   RawUtf8DynArrayClear(VName);
   VariantDynArrayClear(VValue);
   VCount := 0;
@@ -6859,7 +6854,7 @@ begin
   VarClear(Value);
   if not TDocVariantData(Value).InitJson(Json, Options) then
   begin
-    VarClear(Value);
+    TDocVariantData(Value).ClearFast;
     result := false;
   end
   else
@@ -7194,7 +7189,7 @@ begin
         (P^ <> #0) do
     inc(P);
   wasParsedWithinString := false;
-  case JSON_TOKENS[P^] of // bypass TryJsonToVariant() call if possible
+  case JSON_TOKENS[P^] of
     jtFirstDigit:  // '-', '0'..'9': numbers are directly processed
       begin
         P2 := P;
@@ -7250,7 +7245,7 @@ astext:   TRttiVarData(V).VType := varString;
   if (t <> nil) and
      not (dvoJsonParseDoNotTryCustomVariants in Options^) then
   begin
-    n := PDALen(PAnsiChar(t) - _DALEN)^ + _DAOFF;
+    n := PDALen(PAnsiChar(t) - _DALEN)^ + _DAOFF; // call all TryJsonToVariant()
     repeat
       P2 := P;
       // currently, only implemented by mormot.db.nosql.bson BsonVariantType
