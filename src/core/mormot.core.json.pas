@@ -3341,7 +3341,7 @@ function GetJsonFieldOrObjectOrArray(var Json: PUtf8Char; WasString: PBoolean;
   EndOfObject: PUtf8Char; HandleValuesAsObjectOrArray: boolean;
   NormalizeBoolean: boolean; Len: PInteger): PUtf8Char;
 var
-  P, Value: PUtf8Char;
+  P: PUtf8Char;
   wStr: boolean;
 begin
   result := nil;
@@ -3354,13 +3354,13 @@ begin
   if HandleValuesAsObjectOrArray and
      (P^ in ['{', '[']) then
   begin
-    Value := P;
+    result := P;
     P := GotoNextJsonObjectOrArrayMax(P, nil);
     if P <> nil then
     begin
       // was a valid object or array
       if Len <> nil then
-        Len^ := P - Value;
+        Len^ := P - result;
       if WasString <> nil then
         WasString^ := false;
       while (P^ <= ' ') and
@@ -3374,26 +3374,28 @@ begin
         inc(P);
       end;
       Json := P;
-      result := Value;
-      exit;
-    end;
-    // will store as string even if stats with { or [
-  end;
-  result := GetJsonField(P, JSON, @wStr, EndOfObject, Len);
-  if WasString <> nil then
-    WasString^ := wStr;
-  if not wStr and
-     NormalizeBoolean and
-     (result <> nil) then
-  begin
-    if PInteger(result)^ = TRUE_LOW then
-      result := pointer(SmallUInt32Utf8[1]) // normalize true -> 1
-    else if PInteger(result)^ = FALSE_LOW then
-      result := pointer(SmallUInt32Utf8[0]) // normalize false -> 0
+    end
     else
-      exit;
-    if Len <> nil then
-      Len^ := 1;
+      result := nil;
+  end
+  else
+  begin
+    result := GetJsonField(P, JSON, @wStr, EndOfObject, Len);
+    if WasString <> nil then
+      WasString^ := wStr;
+    if not wStr and
+       NormalizeBoolean and
+       (result <> nil) then
+    begin
+      if PInteger(result)^ = TRUE_LOW then
+        result := pointer(SmallUInt32Utf8[1]) // normalize true -> 1
+      else if PInteger(result)^ = FALSE_LOW then
+        result := pointer(SmallUInt32Utf8[0]) // normalize false -> 0
+      else
+        exit;
+      if Len <> nil then
+        Len^ := 1;
+    end;
   end;
 end;
 
@@ -3458,8 +3460,8 @@ begin
             inc(P)
           until (P^ > ' ') or
                 (P^ = #0);
-          P := GotoNextJsonObjectOrArrayInternal(
-                 P, PMax, '}' {$ifndef CPUX86NOTPIC}, jsonset{$endif});
+          P := GotoNextJsonObjectOrArrayInternal(P, PMax, '}'
+                 {$ifndef CPUX86NOTPIC}, jsonset{$endif});
           if P = nil then
             exit;
         end;
@@ -3469,8 +3471,8 @@ begin
             inc(P)
           until (P^ > ' ') or
                 (P^ = #0);
-          P := GotoNextJsonObjectOrArrayInternal(
-            P, PMax, ']'{$ifndef CPUX86NOTPIC}, jsonset{$endif});
+          P := GotoNextJsonObjectOrArrayInternal(P, PMax, ']'
+                 {$ifndef CPUX86NOTPIC}, jsonset{$endif});
           if P = nil then
             exit;
         end;
@@ -3709,8 +3711,8 @@ begin
           inc(P)
         until (P^ > ' ') or
               (P^ = #0);
-        P := GotoNextJsonObjectOrArrayInternal(
-               P, PMax, ']' {$ifndef CPUX86NOTPIC}, tab{$endif});
+        P := GotoNextJsonObjectOrArrayInternal(P, PMax, ']'
+               {$ifndef CPUX86NOTPIC}, tab{$endif});
         goto pok;
       end;
     '{':
@@ -3719,8 +3721,8 @@ begin
           inc(P)
         until (P^ > ' ') or
               (P^ = #0);
-        P := GotoNextJsonObjectOrArrayInternal(
-               P, PMax, '}' {$ifndef CPUX86NOTPIC}, tab{$endif});
+        P := GotoNextJsonObjectOrArrayInternal(P, PMax, '}'
+               {$ifndef CPUX86NOTPIC}, tab{$endif});
 pok:    if P = nil then
           exit;
 ok:     while (P^ <= ' ') and
@@ -3731,6 +3733,7 @@ ok:     while (P^ <= ' ') and
       end;
   end;
   // quick ignore numeric or true/false/null or MongoDB extended {age:{$gt:18}}
+  // faster than GotoNextJsonObjectOrArrayInternal()
   if jcEndOfJsonFieldOr0 in tab[P^] then // #0 , ] } :
     exit; // no value
   repeat
@@ -3838,7 +3841,7 @@ function JsonArrayCount(P, PMax: PUtf8Char): integer;
 var
   tab: PJsonCharSet;
 {$endif CPUX86NOTPIC}
-begin
+begin // is very efficiently inlined on FPC
   result := 0;
   P := GotoNextNotSpace(P);
   {$ifndef CPUX86NOTPIC}
@@ -3849,8 +3852,7 @@ begin
     begin
       P := GotoEndJsonItemFast(P, PMax{$ifndef CPUX86NOTPIC}, tab{$endif});
       if P = nil then
-        // invalid content, or #0/PMax reached
-        break;
+        break; // invalid content, or #0/PMax reached
       inc(result);
       if P^ <> ',' then
         break;
