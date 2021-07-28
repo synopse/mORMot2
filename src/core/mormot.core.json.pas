@@ -7487,8 +7487,7 @@ nxt:  propname := GetJsonPropName(Ctxt.Json, @propnamelen);
       if not Ctxt.Valid then
         break;
       // O(1) optimistic process of the property name, following RTTI order
-      if (prop^.Name <> '') and
-         IdemPropNameU(prop^.Name, propname, propnamelen) then
+      if prop^.NameMatch(propname, propnamelen) then
         if JsonLoadProp(Data, prop^, Ctxt) then
           if Ctxt.EndOfObject = '}' then
             break

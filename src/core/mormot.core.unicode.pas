@@ -1060,7 +1060,7 @@ function IdemPropNameU(const P1: RawUtf8; P2: PUtf8Char; P2Len: PtrInt): boolean
 // IdemPropNameU(const P1,P2: RawUtf8), which would be slightly faster by
 // using the length stored before the actual text buffer of each RawUtf8
 function IdemPropNameUSameLenNotNull(P1, P2: PUtf8Char; P1P2Len: PtrInt): boolean;
-  {$ifdef FPC}inline;{$endif}
+  {$ifdef FPC}inline;{$endif} { Delphi is not efficient at inlining this }
 
 /// case insensitive comparison of ASCII 7-bit identifiers
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
@@ -4231,7 +4231,8 @@ function IdemPropName(const P1, P2: shortstring): boolean;
 begin
   result := (P1[0] = P2[0]) and
             ((P1[0] = #0) or
-             IdemPropNameUSameLenNotNull(@P1[1], @P2[1], ord(P2[0])));
+             (((ord(P1[1]) xor ord(P2[1])) and $df = 0) and
+              IdemPropNameUSameLenNotNull(@P1[1], @P2[1], ord(P2[0]))));
 end;
 
 function IdemPropName(const P1: shortstring; P2: PUtf8Char; P2Len: PtrInt): boolean;
@@ -4252,6 +4253,7 @@ function IdemPropNameU(const P1: RawUtf8; P2: PUtf8Char; P2Len: PtrInt): boolean
 begin
   if PtrUInt(P1) <> 0 then
     result := (PStrLen(PAnsiChar(pointer(P1)) - _STRLEN)^ = P2Len) and
+              ((PByte(P1)^ xor PByte(P2)^) and $df = 0) and
               IdemPropNameUSameLenNotNull(pointer(P1), pointer(P2), P2Len)
   else
     result := P2Len = 0;
@@ -4266,7 +4268,8 @@ begin
   begin
     L := PStrLen(PAnsiChar(pointer(P1)) - _STRLEN)^;
     result := (PStrLen(PAnsiChar(pointer(P2)) - _STRLEN)^ = L) and
-      IdemPropNameUSameLenNotNull(pointer(P1), pointer(P2), L);
+              ((PByte(P1)^ xor PByte(P2)^) and $df = 0) and
+              IdemPropNameUSameLenNotNull(pointer(P1), pointer(P2), L);
   end
   else
     result := pointer(P1) = pointer(P2);

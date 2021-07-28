@@ -1870,6 +1870,9 @@ type
     Prop: PRttiProp;
     /// equals NO_DEFAULT or the default value
     OrdinalDefault: integer;
+    /// case-insensitive compare the supplied name/len with the Name property
+    function NameMatch(P: PUtf8Char; Len: PtrInt): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// very fast retrieval of any field value into a TVarData-like
     // - works if Prop is defined or not, calling any getter method if needed
     // - complex TRttiVarData with varAny pointer will be properly handled by
@@ -5903,6 +5906,37 @@ begin
   result := Value.Size;
 end;
 
+function TRttiCustomProp.NameMatch(P: PUtf8Char; Len: PtrInt): boolean;
+var
+  n: PUtf8Char;
+begin
+  result := false;
+  n := pointer(Name);
+  if (n = nil) or
+     (PStrLen(n - _STRLEN)^ <> Len) then
+    exit;
+  {$ifdef FPC} // Delphi is not efficient at inlining this
+  pointer(Len) := @PUtf8Char(n)[Len - SizeOf(cardinal)];
+  dec(PtrUInt(P), PtrUInt(n));
+  if Len >= PtrInt(PtrUInt(n)) then
+    repeat // compare 4 Bytes per loop
+      if (PCardinal(n)^ xor PCardinal(P + PtrUInt(n))^) and $dfdfdfdf <> 0 then
+        exit;
+      inc(PCardinal(n));
+    until Len < PtrInt(PtrUInt(n));
+  inc(Len, SizeOf(cardinal));
+  if PtrInt(PtrUInt(n)) < Len then
+    repeat
+      if (ord(n^) xor ord(P[PtrUInt(n)])) and $df <> 0 then
+        exit;
+      inc(PByte(n));
+    until PtrInt(PtrUInt(n)) >= Len;
+  result := true;
+  {$else}
+  result := IdemPropNameUSameLenNotNull(n, P, Len)
+  {$endif FPC}
+end;
+
 procedure TRttiCustomProp.GetValue(Data: pointer; out RVD: TRttiVarData);
 begin
   if (Prop = nil) or
@@ -6170,7 +6204,7 @@ begin
     begin
       n := Count;
       repeat
-        if IdemPropNameU(result^.Name, PropName, PropNameLen) then
+        if result^.NameMatch(PropName, PropNameLen) then
           exit;
         inc(result);
         dec(n);
