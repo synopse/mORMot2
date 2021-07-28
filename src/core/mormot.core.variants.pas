@@ -4537,10 +4537,6 @@ begin
   result := nil;
   if Json = nil then
     exit;
-  if dvoInternNames in VOptions then
-    intnames := DocVariantType.InternNames
-  else
-    intnames := nil;
   if dvoInternValues in VOptions then
     intvalues := DocVariantType.InternValues
   else
@@ -4559,14 +4555,11 @@ begin
         include(VOptions, dvoIsArray);
         if Json^ = ']' then
           // void but valid input array
-          repeat
-            inc(Json)
-          until (Json^ = #0) or
-                (Json^ > ' ')
+          Json := GotoNextNotSpace(Json + 1)
         else
         begin
-          // guess of the Json array count - will browse up to 64KB of input
-          cap := abs(JsonArrayCount(Json, Json + JSON_ARRAY_PRELOAD));
+          // guess of the Json array items count - prefetch up to 64KB of input
+          cap := abs(JsonArrayCount(Json, Json + JSON_PREFETCH));
           if cap = 0 then
             exit; // invalid content
           SetLength(VValue, cap);
@@ -4600,25 +4593,33 @@ begin
             exit;
         until Json^ > ' ';
         include(VOptions, dvoIsObject);
-        cap := JsonObjectPropCount(Json); // fast 1.2 GB/s parsing
-        if cap < 0 then
-          exit // invalid content
-        else if cap = 0 then
+        if Json^ = '}' then
           // void but valid input object
-          repeat
-            inc(Json)
-          until (Json^ = #0) or
-                (Json^ > ' ')
+          Json := GotoNextNotSpace(Json + 1)
         else
         begin
+          // guess of the Json object properties count - prefetch up to 64KB
+          cap := abs(JsonObjectPropCount(Json, Json + JSON_PREFETCH));
+          if cap = 0 then
+            exit; // invalid content
+          if dvoInternNames in VOptions then
+            intnames := DocVariantType.InternNames
+          else
+            intnames := nil;
           SetLength(VValue, cap);
           SetLength(VName, cap);
           repeat
             // see http://docs.mongodb.org/manual/reference/mongodb-extended-Json
             Name := GetJsonPropName(Json, @NameLen);
-            if (Name = nil) or
-               (VCount = cap) then
+            if Name = nil then
               exit;
+            if VCount = cap then
+            begin
+              // grow if our initial guess was aborted due to huge input
+              cap := NextGrow(cap);
+              SetLength(VValue, cap);
+              SetLength(VName, cap);
+            end;
             if intnames <> nil then
               intnames.Unique(VName[VCount], Name, NameLen)
             else
@@ -4634,6 +4635,7 @@ begin
               intvalues.UniqueVariant(VValue[VCount]);
             inc(VCount);
           until EndOfObject = '}';
+          // no SetLength(VValue/VNAme,VCount) if NextGrow() on huge input
         end;
       end;
     'n', 'N':

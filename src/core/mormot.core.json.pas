@@ -114,7 +114,7 @@ var
   /// how many initial chars of a JSON array are parsed for intial capacity
   // - used e.g. by _JL_DynArray() and TDocVariantData.InitJsonInPlace()
   // - 64KB was found out empirically as a good value - but you can tune it
-  JSON_ARRAY_PRELOAD: integer = 65536;
+  JSON_PREFETCH: integer = 65536;
 
 /// returns TRUE if the given text buffers would be escaped when written as JSON
 // - e.g. if contains " or \ characters, as defined by
@@ -329,10 +329,10 @@ function JsonArrayCount(P: PUtf8Char): integer; overload;
 // JSON objects or arrays
 // - incoming P^ should point to the first char after the initial '[' (which
 // may be a closing ']')
-// - this overloaded method will abort if P reaches a certain position, and
+// - this overloaded function will abort if P reaches a certain position, and
 // return the current counted number of items as negative, which could be used
 // as initial allocation before the loop - typical use in this case is e.g.
-// ! cap := abs(JsonArrayCount(P, P + JSON_ARRAY_PRELOAD));
+// ! cap := abs(JsonArrayCount(P, P + JSON_PREFETCH));
 function JsonArrayCount(P, PMax: PUtf8Char): integer; overload;
 
 /// go to the #nth item of a JSON array
@@ -361,8 +361,11 @@ function JsonArrayDecode(P: PUtf8Char;
 // objects or arrays, and also the MongoDB extended syntax of property names
 // - incoming P^ should point to the first char after the initial '{' (which
 // may be a closing '}')
-// - returns -1 if the input was not a proper JSON object
-function JsonObjectPropCount(P: PUtf8Char): integer;
+// - will abort if P reaches PMax (if not nil), and return the current counted
+// number of items as negative, which could be used as initial allocation before
+// a parsing loop - typical use in this case is e.g.
+// ! cap := abs(JsonObjectPropCount(P, P + JSON_PREFETCH));
+function JsonObjectPropCount(P: PUtf8Char; PMax: PUtf8Char = nil): PtrInt;
 
 /// go to a named property of a JSON object
 // - implemented via a fast SAX-like approach: the input buffer is not changed,
@@ -2798,7 +2801,7 @@ lit:        inc(P);
       else
         exit;
   else
-    // leave PDest=nil to notify error
+    // leave PDest=nil to notify error (e.g. if a {...} or [...] was supplied)
     exit;
   end;
   while not (jcEndOfJsonFieldOr0 in tab[P^]) do
@@ -3921,35 +3924,39 @@ begin
   result := nil;
 end;
 
-function JsonObjectPropCount(P: PUtf8Char): integer;
+function JsonObjectPropCount(P, PMax: PUtf8Char): PtrInt;
 var
-  n: integer;
-  {$ifndef CPUX86NOTPIC}
+  {$ifdef CPUX86NOTPIC}
+  tab: TJsonCharSet absolute JSON_CHARS;
+  {$else}
   tab: PJsonCharSet;
   {$endif CPUX86NOTPIC}
-begin
+begin // is very efficiently inlined on FPC
+  while (P^ <= ' ') and
+        (P^ <> #0) do
+    inc(P);
+  result := 0;
   {$ifndef CPUX86NOTPIC}
   tab := @JSON_CHARS;
   {$endif CPUX86NOTPIC}
-  result := -1;
-  n := 0;
-  P := GotoNextNotSpace(P);
   if P^ <> '}' then
     repeat
-      P := GotoNextJsonPropName(P,
-            {$ifdef CPUX86NOTPIC} @JSON_CHARS {$else} tab {$endif});
+      P := GotoNextJsonPropName(P, {$ifdef CPUX86NOTPIC} @ {$endif} tab);
+      P := GotoEndJsonItemFast(P, PMax {$ifndef CPUX86NOTPIC}, tab{$endif});
       if P = nil then
-        exit; // invalid field name
-      P := GotoEndJsonItemFast(P, nil {$ifndef CPUX86NOTPIC}, tab{$endif});
-      if P = nil then
-        exit; // invalid content, or #0 reached
-      inc(n);
+        break; // invalid content, or #0/PMax reached
+      inc(result);
       if P^ <> ',' then
         break;
       inc(P);
     until false;
-  if P^ = '}' then
-    result := n;
+  if (P = nil) or
+     (P^ <> '}') then
+    // aborted when PMax or #0 was reached or the JSON input was invalid
+    if result = 0 then
+      dec(result) // -1 to ensure the caller tries to get something
+    else
+      result := -result; // return the current count as negative
 end;
 
 function JsonObjectItem(P: PUtf8Char; const PropName: RawUtf8;
@@ -7681,7 +7688,7 @@ begin
       end;
     end;
     // initial guess of the JSON array count - will browse up to 64KB of input
-    cap := abs(JsonArrayCount(Ctxt.Json, Ctxt.Json + JSON_ARRAY_PRELOAD));
+    cap := abs(JsonArrayCount(Ctxt.Json, Ctxt.Json + JSON_PREFETCH));
     if (cap = 0) or
        not Assigned(load) then
     begin
