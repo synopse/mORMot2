@@ -1670,7 +1670,7 @@ var
       raise EHttpSocket.Create('WGet: %s:%s/%s failed with %s',
         [fServer, fPort, url, StatusCodeToErrorMsg(res)]);
     partstream.Ended; // notify finished
-    parthash := partstream.GetHash; // hash updated during each partstream.Write()
+    parthash := partstream.GetHash; // hash updated on each partstream.Write()
     FreeAndNil(partstream);
     lastmod := HeaderGetValue('LAST-MODIFIED');
     if HttpDateToDateTime(lastmod, modif, {local=}true) then
@@ -1770,8 +1770,11 @@ begin
         DoRequestAndFreePartStream;
       end;
       if not IdemPropNameU(parthash, params.Hash) then
+      begin
+        DeleteFile(part); // this .part was clearly incorrect
         raise EHttpSocket.Create('WGet: %s:%s/%s hash failure',
           [fServer, fPort, url]);
+      end;
     end;
     if cached <> '' then
     begin
