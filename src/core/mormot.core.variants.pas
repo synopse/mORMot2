@@ -4553,10 +4553,15 @@ begin
           Json := GotoNextNotSpace(Json + 1)
         else
         begin
-          // guess of the Json array items count - prefetch up to 64KB of input
-          cap := abs(JsonArrayCount(Json, Json + JSON_PREFETCH));
-          if cap = 0 then
-            exit; // invalid content
+          if dvoJsonParseDoNotGuessCount in VOptions then
+            cap := 8 // with a lot of nested objects -> best to ignore
+          else
+          begin
+            // guess of the Json array items count - prefetch up to 64KB of input
+            cap := abs(JsonArrayCount(Json, Json + JSON_PREFETCH));
+            if cap = 0 then
+              exit; // invalid content
+          end;
           SetLength(VValue, cap);
           repeat
             if VCount = cap then
@@ -4593,10 +4598,15 @@ begin
           Json := GotoNextNotSpace(Json + 1)
         else
         begin
-          // guess of the Json object properties count - prefetch up to 64KB
-          cap := abs(JsonObjectPropCount(Json, Json + JSON_PREFETCH));
-          if cap = 0 then
-            exit; // invalid content
+          if dvoJsonParseDoNotGuessCount in VOptions then
+            cap := 4 // with a lot of nested documents -> best to ignore
+          else
+          begin
+            // guess of the Json object properties count - prefetch up to 64KB
+            cap := abs(JsonObjectPropCount(Json, Json + JSON_PREFETCH));
+            if cap = 0 then
+              exit; // invalid content (was <0 if early abort)
+          end;
           if dvoInternNames in VOptions then
             intnames := DocVariantType.InternNames
           else

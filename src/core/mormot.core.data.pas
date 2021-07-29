@@ -722,6 +722,9 @@ type
     // - any registered custom types may have an extended JSON syntax (e.g.
     // TBsonVariant does for MongoDB types), and will be searched during JSON
     // parsing, unless dvoJsonParseDoNotTryCustomVariants is set (slightly faster)
+    // - the parser will try to guess the array or object size by pre-fetching
+    // some content: you can set dvoJsonParseDoNotGuessCount if your input has
+    // a lot of nested documents, and manual resize is preferred
     // - by default, it will only handle direct JSON [array] of {object}: but if
     // you define dvoJsonObjectParseWithinString, it will also try to un-escape
     // a JSON string first, i.e. handle "[array]" or "{object}" content (may be
@@ -748,6 +751,7 @@ type
        dvoReturnNullForUnknownProperty,
        dvoValueCopiedByReference,
        dvoJsonParseDoNotTryCustomVariants,
+       dvoJsonParseDoNotGuessCount,
        dvoJsonObjectParseWithinString,
        dvoSerializeAsExtendedJson,
        dvoAllowDoubleValue,
