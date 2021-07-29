@@ -355,6 +355,8 @@ begin
   GetVariantFromJson('-123', False, v, nil);
   Check(vd.VType = varInteger);
   Check(v = -123);
+  GetVariantFromJson('-0123', False, v, nil);
+  Check(vd.VType = varString);
   GetVariantFromJson('123456789', False, v, nil);
   Check(vd.VType = varInteger);
   Check(v = 123456789);
@@ -377,6 +379,12 @@ begin
   CheckSame(vd.VDouble, 12345678901234567890.0, 0);
   GetVariantFromJson('12345678901234567890', False, v, nil, false);
   Check(vd.VType = varString);
+  GetVariantFromJson('0.123', False, v, nil);
+  Check(vd.VType = varCurrency);
+  Check(v = 0.123);
+  GetVariantFromJson('-0.123', False, v, nil);
+  Check(vd.VType = varCurrency);
+  Check(v = -0.123);
   GetVariantFromJson('-123.1', False, v, nil);
   Check(vd.VType = varCurrency);
   Check(v = -123.1);
@@ -386,12 +394,23 @@ begin
   GetVariantFromJson('-123.123', False, v, nil);
   Check(vd.VType = varCurrency);
   Check(v = -123.123);
-  GetVariantFromJson('123.1234', False, v, nil, false);
+  GetVariantFromJson('123.1234', False, v, nil);
   Check(vd.VType = varCurrency);
   Check(v = 123.1234);
-  GetVariantFromJson('123.1234', False, v, nil, true);
+  GetVariantFromJson('-123.1234', False, v, nil);
   Check(vd.VType = varCurrency);
-  Check(v = 123.1234);
+  Check(v = -123.1234);
+  GetVariantFromJson('0123.1234', False, v, nil);
+  Check(vd.VType = varString);
+  GetVariantFromJson('-0123.1234', False, v, nil);
+  Check(vd.VType = varString);
+  GetVariantFromJson('-123.1234', False, v, nil);
+  Check(vd.VType = varCurrency);
+  GetVariantFromJson('123.12345', False, v, nil);
+  Check(vd.VType = varString);
+  GetVariantFromJson('123.12345', False, v, nil, {double=}true);
+  Check(vd.VType = varDouble);
+  CheckSame(v, 123.12345);
   GetVariantFromJson('-123.12345', False, v, nil, true);
   Check(vd.VType = varDouble);
   CheckSame(v, -123.12345);
@@ -1175,7 +1194,7 @@ var
   Cache: TRestCacheEntryValue;
   peop: TOrmPeople;
   K: RawUtf8;
-  Valid: boolean;
+  strict, Valid: boolean;
   RB: RawBlob;
   Enemy: TEnemy;
   Instance: TRttiCustom;
@@ -2042,6 +2061,8 @@ begin
     U := RandomUtf8(i);
     J := JsonEncode(['a', a, 'r', r, 'u', U]);
     check(IsValidJson(J));
+    check(JsonObjectPropCount(@J[2]) = 3);
+    check(JsonObjectPropCount(@J[2], PUtf8Char(pointer(J)) + length(J)) = 3);
     JsonDecode(J, ['U', 'R', 'A', 'FOO'], @V);
     V[0].ToUtf8(U2);
     Check(U2 = U);
@@ -2102,24 +2123,26 @@ begin
     end;
   end;
   J := GetJsonObjectAsSql('{"ID":  1 ,"Name":"Alice","Role":"User","Last Login":null,'+
-    '"First Login" :   null  ,  "Department"  :  "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]',
-    false, true);
+    '"First Login" :   null  ,  "Department"  :  ' +
+    '"{\"relPath\":\"317\\\\\",\"revision\":1}" } ]', false, true);
   U := ' (ID,Name,Role,Last Login,First Login,Department) VALUES ' +
-    '(:(1):,:(''Alice''):,:(''User''):,:(null):,:(null):,:(''{"relPath":"317\\","revision":1}''):)';
+    '(:(1):,:(''Alice''):,:(''User''):,:(null):,:(null):,' +
+    ':(''{"relPath":"317\\","revision":1}''):)';
   CheckEqual(J, U);
   J := GetJsonObjectAsSql('{ "Name":"Alice","Role":"User","Last Login":null,' +
-    '"First Login" :   null  ,  "Department"  :  "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]',
-    false, true, 1, true);
+    '"First Login" :   null  ,  "Department"  :  ' +
+    '"{\"relPath\":\"317\\\\\",\"revision\":1}" } ]', false, true, 1, true);
   CheckEqual(J, U);
   J := GetJsonObjectAsSql('{ "Name":"Alice","Role":"User","Last Login":null,' +
-    '"First Login" :   null  ,  "Department"  :  "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]',
-    false, true, 1, false);
+    '"First Login" :   null  ,  "Department"  :  ' +
+    '"{\"relPath\":\"317\\\\\",\"revision\":1}" } ]', false, true, 1, false);
   Insert('Row', U, 3);
   CheckEqual(J, U);
   Delete(U, 3, 3);
   J :=
     '{"ID":  1 ,"Name":"Alice","Role":"User","Last Login":null, // comment'#13#10 +
-    '"First Login" : /* to be ignored */  null  ,  "Department"  :  "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
+    '"First Login" : /* to be ignored */  null  ,  "Department"  : ' +
+    ' "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
   check(not IsValidJson(J));
   RemoveCommentsFromJson(UniqueRawUtf8(J));
   check(not IsValidJson(J));
@@ -2129,14 +2152,14 @@ begin
   J := '{'#10'"httpServer": {'#10'"host": "*",'#10'"port": "8881",'#10 +
     '"serverType": "Socket",'#10'/*"reverseProxy": {'#10'"kind": "nginx",'#10 +
     '"sendFileLocationRoot": "snake-ukrpatent-local"'#10'}*/'#10'} //eol'#10'}';
-  check(not IsValidJSON(J));
+  check(IsValidJSON(J)); // false positive
   RemoveCommentsFromJson(UniqueRawUTF8(J));
   CheckUtf8(IsValidJSON(J), J);
   J := JSONReformat(J,jsonCompact);
   CheckEqual(J,'{"httpServer":{"host":"*","port":"8881","serverType":"Socket"}}');
-  J :=
-    '{"RowID":  210 ,"Name":"Alice","Role":"User","Last Login":null, // comment'#13#10 +
-    '"First Login" : /* to be ignored */  null  ,  "Department"  :  "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
+  J := '{"RowID":  210 ,"Name":"Alice","Role":"User","Last Login":null, ' +
+    '// comment'#13#10'"First Login" : /* to be ignored */  null  ,  "Department"' +
+    ' :    "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
   check(not IsValidJson(J));
   RemoveCommentsFromJson(UniqueRawUtf8(J));
   check(not IsValidJson(J));
@@ -2233,17 +2256,51 @@ begin
   P := GotoNextJsonItem(P, 1, @EndOfObject);
   Check(P <> nil);
   Check(EndOfObject = '}');
-  check(IsValidJson('null'));
-  check(IsValidJson('true'));
-  check(IsValidJson('false'));
-  check(IsValidJson(' null'));
-  check(IsValidJson(' true'));
-  check(IsValidJson(' false'));
-  check(IsValidJson('null  '));
-  check(IsValidJson('true  '));
-  check(IsValidJson('false  '));
-  check(not IsValidJson('nulle'));
-  check(not IsValidJson('trye'));
+  for strict := false to true do
+  begin
+    check(IsValidJson('null', strict));
+    check(IsValidJson('true', strict));
+    check(not IsValidJson('true,', strict)); // expects a single value
+    check(IsValidJson('false', strict));
+    check(IsValidJson(' null', strict));
+    check(IsValidJson(' true', strict));
+    check(IsValidJson(' false', strict));
+    check(IsValidJson('null  ', strict));
+    check(IsValidJson('true  ', strict));
+    check(IsValidJson('false  ', strict));
+    check(IsValidJson('[]', strict));
+    check(IsValidJson(' [] ', strict));
+    check(IsValidJson(' []', strict));
+    check(IsValidJson('[1]', strict));
+    check(IsValidJson(' [2] ', strict));
+    check(IsValidJson(' [3]', strict));
+    check(IsValidJson(' [ [ ] ] ', strict));
+    check(IsValidJson('[[]]', strict));
+    check(IsValidJson('{}', strict));
+    check(IsValidJson(' {} ', strict));
+    check(IsValidJson(' {}', strict));
+    check(IsValidJson('{"123":123.4e1}', strict));
+    check(IsValidJson('{"a":1,b:2}', strict) = not strict);
+    check(IsValidJson('{a:[{ }]}', strict) = not strict);
+    check(IsValidJson('{123:123}', strict) = not strict);
+    check(IsValidJson('{true:123}', strict) = not strict);
+    check(not IsValidJson(' { ', strict));
+    check(not IsValidJson(' [ ', strict));
+    check(not IsValidJson(' } ', strict));
+    check(not IsValidJson(' ] ', strict));
+    check(not IsValidJson(' {a:1},{b,2} ', strict));
+    check(not IsValidJson('{ { [}}', strict));
+    check(not IsValidJson('{ { []}', strict));
+    check(not IsValidJson('{ [{ ]}}', strict));
+    check(not IsValidJson('{ { []}}', strict));
+    check(not IsValidJson('{ { }}', strict));
+    check(not IsValidJson('nulle', strict));
+    check(not IsValidJson('trye', strict));
+    check(not IsValidJson(RawUtf8(StringOfChar('[', 2000)), strict));
+    // some false positive content (fast but not perfect)
+    check(IsValidJson('{"123":123.4e1.0}', strict)); 
+    check(IsValidJson('[ -01001, ,- , , ,42.e]', strict));
+  end;
   C2 := TCollTst.Create;
   Coll := TCollTst.Create;
   try
@@ -2825,9 +2882,9 @@ end;
      TDocVariant in 118.81ms, 165 MB/s
      TDocVariant dvoInternNames in 145.08ms, 135.1 MB/s
      TOrmTableJson GetJsonValues in 22.88ms, 376.8 MB/s (write)
-     TOrmTableJson expanded in 41.26ms, 475.1 MB/s
-     TOrmTableJson not expanded in 21.44ms, 402.2 MB/s
-     DynArrayLoadJson in 62.02ms, 316 MB/s
+     TOrmTableJson expanded in 36.56ms, 536.1 MB/s
+     TOrmTableJson not expanded in 19.57ms, 440.4 MB/s
+     DynArrayLoadJson in 59.14ms, 331.4 MB/s
      fpjson in 79.36ms, 24.7 MB/s
      jsontools in 51.41ms, 38.1 MB/s
      SuperObject in 187.79ms, 10.4 MB/s
@@ -2916,13 +2973,16 @@ begin
   P := @people[2]; // point just after initial '[' for JsonArrayCount
   count := JsonArrayCount(P);
   check(count > 8200); // = 8227 in current People.json ORM tests file
+  i := JsonArrayCount(P, P + 10000);
+  check(i < 0);
+  check(abs(i) < count);
   timer.Start;
   for i := 1 to ITER do
     Check(JsonArrayCount(P) = count);
   NotifyTestSpeed('JsonArrayCount(P)', 0, len, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER do
-    Check(JsonArrayCount(P, P + length(people) - 1) = count);
+    Check(JsonArrayCount(P, P + length(people)) = count);
   NotifyTestSpeed('JsonArrayCount(P,PMax)', 0, len, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER * 5000 do
