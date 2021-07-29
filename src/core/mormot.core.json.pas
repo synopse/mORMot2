@@ -60,8 +60,10 @@ type
     jtAssign,
     jtComma,
     jtSingleQuote,
+    jtEqual,
     jtIdentifierFirstChar,
-    jtSlash);
+    jtSlash,
+    jtEndOfBuffer);
 
   /// defines a lookup table used for branch-less first char JSON parsing
   TJsonTokens = array[AnsiChar] of TJsonToken;
@@ -154,15 +156,20 @@ function IsString(P: PUtf8Char): boolean;
 // '0' is excluded at the begining of a number) and '123' is not a string
 function IsStringJson(P: PUtf8Char): boolean;
 
-/// test if the supplied text buffer is a correct JSON value
-function IsValidJson(P: PUtf8Char; len: PtrInt): boolean; overload;
+/// test if the supplied text buffer seems to be a correct (extended) JSON value
+// - will allow extended MongoDB JSON syntax unless Strict=true
+// - numbers, escaped strings and commas are wild guessed, for performance
+function IsValidJson(P: PUtf8Char; len: PtrInt; strict: boolean = false): boolean; overload;
 
-/// test if the supplied text is a correct JSON value
-function IsValidJson(const s: RawUtf8): boolean; overload;
+/// test if the supplied text seems to be a correct (extended) JSON value
+// - will allow extended MongoDB JSON syntax unless Strict=true
+// - numbers, escaped strings and commas are wild guessed, for performance
+function IsValidJson(const s: RawUtf8; strict: boolean = false): boolean; overload;
 
-/// test if the supplied buffer is a correct JSON value
-// - won't check the supplied length, so is likely to be faster than overloads
-function IsValidJsonBuffer(P: PUtf8Char): boolean;
+/// test if the supplied #0 ended buffer is a correct (extended) JSON value
+// - will allow extended MongoDB JSON syntax unless Strict=true
+// - numbers, escaped strings and commas are wild guessed, for performance
+function IsValidJsonBuffer(P: PUtf8Char; strict: boolean = false): boolean;
 
 /// simple method to go after the next ',' character
 procedure IgnoreComma(var P: PUtf8Char);
@@ -261,8 +268,7 @@ function GotoEndOfJsonString(P: PUtf8Char): PUtf8Char;
 // - returns nil if the specified buffer is not valid JSON content
 // - returns the position in buffer just after the item excluding the separator
 // character - i.e. result^ may be ',','}',']'
-// - for speed, numbers and true/false/null constant won't be exactly checked,
-// and MongoDB extended syntax like {age:{$gt:18}} will be allowed - so you
+// - MongoDB extended syntax like {age:{$gt:18}} will be allowed - so you
 // may consider GotoEndJsonItemStrict() if you expect full standard JSON parsing
 function GotoEndJsonItem(P: PUtf8Char; PMax: PUtf8Char = nil): PUtf8Char;
 
@@ -275,7 +281,8 @@ function GotoEndJsonItemFast(P, PMax: PUtf8Char
 // - in respect to GotoEndJsonItem(), this function will validate for strict
 // JSON simple values, i.e. real numbers or only true/false/null constants,
 // and refuse MongoDB extended syntax like {age:{$gt:18}}
-function GotoEndJsonItemStrict(P: PUtf8Char): PUtf8Char;
+// - numbers and escaped strings are not fully validated, just their charset
+function GotoEndJsonItemStrict(P: PUtf8Char; PMax: PUtf8Char = nil): PUtf8Char;
 
 /// reach the positon of the next JSON item in the supplied UTF-8 buffer
 // - buffer can be either any JSON item, i.e. a string, a number or even a
@@ -322,18 +329,12 @@ function ParseEndOfObject(P: PUtf8Char; out EndOfObject: AnsiChar): PUtf8Char;
 // may be a closing ']')
 // - returns -1 if the supplied input is invalid, or the number of identified
 // items in the JSON array buffer
-function JsonArrayCount(P: PUtf8Char): integer; overload;
-
-/// compute the number of elements of a JSON array
-// - this will handle any kind of arrays, including those with nested
-// JSON objects or arrays
-// - incoming P^ should point to the first char after the initial '[' (which
-// may be a closing ']')
-// - this overloaded function will abort if P reaches a certain position, and
-// return the current counted number of items as negative, which could be used
-// as initial allocation before the loop - typical use in this case is e.g.
+// - if PMax is set, will abort after this position, and return the current
+// counted number of items as negative, which could be used as initial allocation
+// before the loop - typical use in this case is e.g.
 // ! cap := abs(JsonArrayCount(P, P + JSON_PREFETCH));
-function JsonArrayCount(P, PMax: PUtf8Char): integer; overload;
+function JsonArrayCount(P: PUtf8Char; PMax: PUtf8Char = nil;
+  Strict: boolean = false): integer;
 
 /// go to the #nth item of a JSON array
 // - implemented via a fast SAX-like approach: the input buffer is not changed,
@@ -358,14 +359,15 @@ function JsonArrayDecode(P: PUtf8Char;
 
 /// compute the number of fields in a JSON object
 // - this will handle any kind of objects, including those with nested JSON
-// objects or arrays, and also the MongoDB extended syntax of property names
+// objects or arrays, and also the MongoDB extended syntax (unless Strict=true)
 // - incoming P^ should point to the first char after the initial '{' (which
 // may be a closing '}')
 // - will abort if P reaches PMax (if not nil), and return the current counted
 // number of items as negative, which could be used as initial allocation before
 // a parsing loop - typical use in this case is e.g.
 // ! cap := abs(JsonObjectPropCount(P, P + JSON_PREFETCH));
-function JsonObjectPropCount(P: PUtf8Char; PMax: PUtf8Char = nil): PtrInt;
+function JsonObjectPropCount(P: PUtf8Char; PMax: PUtf8Char = nil;
+  Strict: boolean = false): PtrInt;
 
 /// go to a named property of a JSON object
 // - implemented via a fast SAX-like approach: the input buffer is not changed,
@@ -2509,31 +2511,321 @@ begin
     result := true; // don't begin with a numerical value -> must be a string
 end;
 
-function IsValidJson(const s: RawUtf8): boolean;
+function GotoEndOfJsonString2(P: PUtf8Char; tab: PJsonCharSet): PUtf8Char;
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  result := IsValidJson(pointer(s), length(s));
+  // P[-1]='"' at function call
+  repeat
+    if not (jcJsonStringMarker in tab[P^]) then
+    begin
+      inc(P);   // not [#0, '"', '\']
+      continue; // very fast parsing of most UTF-8 chars
+    end;
+    if (P^ = '"') or
+       (P^ = #0) or
+       (P[1] = #0) then
+      // end of string/buffer, or buffer overflow detected as \#0
+      break;
+    inc(P, 2); // P^ was '\' -> ignore \# ou \u0123
+  until false;
+  result := P;
+  // P^='"' at function return (if input was correct)
 end;
 
-function IsValidJson(P: PUtf8Char; len: PtrInt): boolean;
+type
+  TJsonQuickParserState = (
+    stObjectName,
+    stObjectValue,
+    stValue);
+  /// state machine for fast parsing of (extended) JSON input
+  TJsonQuickParser = object
+    {$ifdef CPUX86}
+    JsonSet: PJsonCharSet; // not enough registers in i386 mode
+    {$endif CPUX86}
+    State: TJsonQuickParserState;
+    ExpectStandard: boolean;
+    JsonFirst: PJsonTokens;
+    Max: PUtf8Char;
+    StackCount, RootCount: integer;
+    Stack: array[0..1000] of TJsonQuickParserState;
+    procedure Init(Strict: boolean; PMax: PUtf8Char);
+      {$ifdef HASINLINE} inline; {$endif}
+    procedure InitCount(Strict: boolean; PMax: PUtf8Char; First: TJsonQuickParserState);
+    function GotoEnd(P: PUtf8Char): PUtf8Char;
+ end;
+
+procedure TJsonQuickParser.Init(Strict: boolean; PMax: PUtf8Char);
+begin
+  {$ifdef CPUX86}
+  JsonSet := @JSON_CHARS;
+  {$endif CPUX86}
+  State := stValue;
+  ExpectStandard := Strict;
+  JsonFirst := @JSON_TOKENS;
+  Max := PMax;
+  StackCount := 0;
+end;
+
+procedure TJsonQuickParser.InitCount(Strict: boolean; PMax: PUtf8Char;
+  First: TJsonQuickParserState);
+begin
+  Init(Strict, PMax);
+  RootCount := 0;
+  Stack[0] := stValue;
+  inc(StackCount);
+  State := First;
+end;
+
+function TJsonQuickParser.GotoEnd(P: PUtf8Char): PUtf8Char;
+var
+  n: PtrInt;
+{$ifndef CPUX86}
+  JsonSet: PJsonCharSet; // will use a register for this lookup table
+{$endif CPUX86}
+label
+  prop, stop, assign;
+begin
+  result := nil; // to notify unexpected end
+  if P = nil then
+    exit;
+  {$ifndef CPUX86}
+  JsonSet := @JSON_CHARS;
+  {$endif CPUX86}
+  repeat
+    {$ifdef FPC}
+    while (P^ <= ' ') and
+          (P^ <> #0) do
+      inc(P);
+    {$else}
+    if P^ in [#1..' '] then
+      repeat
+        inc(P)
+      until not (P^ in [#1..' ']);
+    {$endif FPC}
+    case JsonFirst[P^] of // FPC and Delphi will use a jump table
+      jtNone:
+        exit;// unexpected character in JSON input
+      jtDoubleQuote: // '"'
+        begin
+          repeat // inlined GotoEndOfJsonString2()
+            inc(P);
+            if not (jcJsonStringMarker in JsonSet[P^]) then // [#0, '"', '\']
+              continue; // very fast parsing of most UTF-8 chars
+            if P^ = '"' then
+              break
+            else if (P^ = #0) or (P[1] = #0) then
+              exit; // end of string/buffer, or buffer overflow detected as \#0
+            inc(P); // P^ was '\' -> ignore \# ou \u0123
+          until false;
+          inc(P);
+          if (StackCount <> 0) or
+             (State = stObjectName) then
+            continue;
+          break;
+        end;
+      jtFirstDigit: // '-', '0'..'9'
+        begin
+          if (State = stObjectName) and
+             ExpectStandard then
+            exit;
+          // '0123' excluded by JSON, but not here
+          repeat
+            inc(P);
+          until not (jcDigitFloatChar in JsonSet[P^]);
+          // not ['-', '+', '0'..'9', '.', 'E', 'e']
+          if (StackCount <> 0) or
+             (State = stObjectName) then
+            continue;
+          break;
+        end;
+      jtNullFirstChar: // 'n'
+        if (PInteger(P)^ = NULL_LOW) and
+           (jcEndOfJsonValueField in JsonSet[P[4]]) then
+          inc(P, 3)
+        else
+          goto prop;
+      jtTrueFirstChar: // 't'
+        if (PInteger(P)^ = TRUE_LOW) and
+           (jcEndOfJsonValueField in JsonSet[P[4]]) then
+          inc(P, 3)
+        else
+          goto prop;
+      jtFalseFirstChar: // 'f'
+        if (PInteger(P + 1)^ = FALSE_LOW2) and
+           (jcEndOfJsonValueField in JsonSet[P[5]]) then
+          inc(P, 4)
+        else
+          goto prop;
+      jtObjectStart: // {
+        begin
+          if (State = stObjectName) or
+             (StackCount > high(Stack)) then
+            exit; // too many nested documents
+          Stack[StackCount] := State;
+          inc(StackCount);
+          State := stObjectName;
+          inc(P);
+          continue;
+        end;
+      jtArrayStart: // [
+        begin
+          if (State = stObjectName) or
+             (StackCount > high(Stack)) then
+            exit; // too many nested documents
+          Stack[StackCount] := State;
+          inc(StackCount);
+          State := stValue;
+          inc(P);
+          continue;
+        end;
+      jtObjectStop: // }
+        begin
+          if State = stValue then
+            exit;
+stop:     n := StackCount;
+          if n = 0 then
+            exit; // invalid input
+          dec(n);
+          inc(RootCount, ord(n = 0));
+          StackCount := n;
+          State := Stack[n];
+        end;
+      jtArrayStop: // ]
+        if State <> stValue then
+          exit
+        else
+          goto stop;
+      jtAssign: // :
+        begin
+assign:   if State <> stObjectName then
+            exit;
+          State := stObjectValue;
+          inc(P);
+          continue;
+        end;
+      jtComma: // ,
+        begin
+          if State = stObjectName then
+            exit;
+          dec(State, ord(State = stObjectValue));
+          inc(P);
+          inc(RootCount, ord(StackCount = 1));
+          if (Max = nil) or
+             (P < Max) then
+            continue;
+          RootCount := -RootCount; // reached end of allowed input  
+          exit;
+        end;
+      jtSingleQuote: // '''' as single-quoted identifier or value
+        if ExpectStandard then
+          exit
+        else
+          repeat
+            inc(P);
+            if P^ <= ' ' then
+              exit;
+          until P^ = '''';
+      jtEqual: // =
+        if ExpectStandard then
+          exit
+        else
+          goto assign;
+      jtIdentifierFirstChar: // ['_', 'a'..'z', 'A'..'Z', '$']
+        begin
+prop:     if (State <> stObjectName) or
+             ExpectStandard then
+            exit;
+          repeat
+            inc(P);
+          until not (jcJsonIdentifier in JsonSet[P^]);
+          // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
+          while (P^ <= ' ') and
+                (P^ <> #0) do
+            inc(P);
+          if P^ = '(' then
+          begin
+            // handle e.g. "born":isodate("1969-12-31")
+            repeat
+              inc(P);
+            until (P^ > ' ') or
+                  (P^ = #0);
+            if P^ = '"' then
+            begin
+              repeat
+                inc(P);
+              until jcJsonStringMarker in JsonSet[P^]; // [#0, '"', '\']
+              if P^ <> '"' then
+                exit;
+            end;
+            inc(P);
+            while (P^ <= ' ') and
+                  (P^ <> #0) do
+              inc(P);
+            if P^ <> ')' then
+              exit;
+            inc(P);
+          end;
+          continue;
+        end;
+      jtSlash: // '/' to allow extended /regex/ syntax
+        begin
+          if ExpectStandard then
+            exit;
+          repeat
+            inc(P);
+            if P^ = #0 then
+              exit;
+          until P^ = '/';
+          while not (jcEndOfJsonFieldNotName in JsonSet[P[1]]) do
+            inc(P);
+        end;
+      jtEndOfBuffer: // #0
+        if StackCount <> 0 then
+          exit // unclosed array or object
+        else
+          break; // return #0
+    else
+      exit; // paranoid (every and each TJsonToken should be handled above)
+    end;
+    // if we are here we know this was an identifier or value
+    inc(P);
+    if (StackCount = 0) and
+       (State <> stObjectName) then
+      break;
+  until false;
+  while (P^ <= ' ') and
+        (P^ <> #0) do
+    inc(P);
+  result := P;
+end;
+
+function IsValidJson(const s: RawUtf8; strict: boolean): boolean;
+begin
+  result := IsValidJson(pointer(s), length(s), strict);
+end;
+
+function IsValidJson(P: PUtf8Char; len: PtrInt; strict: boolean): boolean;
 var
   B: PUtf8Char;
+  validator: TJsonQuickParser;
 begin
   result := false;
   if (P = nil) or
-     (len <= 0) or
-     // ensure there is no unexpected/unsupported #0 in the middle of input
-     (StrLen(P) <> len) then
+     (len <= 0) then
     exit;
   B := P;
-  P :=  GotoEndJsonItemStrict(B);
+  {%H-}validator.Init(strict, P + len);
+  P := validator.GotoEnd(P);
   result := (P <> nil) and
             (P - B = len);
 end;
 
-function IsValidJsonBuffer(P: PUtf8Char): boolean;
+function IsValidJsonBuffer(P: PUtf8Char; strict: boolean): boolean;
+var
+  validator: TJsonQuickParser;
 begin
-  result := (P <> nil) and
-            (GotoEndJsonItemStrict(P) <> nil);
+  {%H-}validator.Init(strict, nil);
+  result := validator.GotoEnd(P) <> nil;
 end;
 
 procedure IgnoreComma(var P: PUtf8Char);
@@ -2821,27 +3113,6 @@ lit:        inc(P);
   end
   else
     PDest := P;
-end;
-
-function GotoEndOfJsonString2(P: PUtf8Char; tab: PJsonCharSet): PUtf8Char;
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  // P[-1]='"' at function call
-  repeat
-    if not (jcJsonStringMarker in tab[P^]) then
-    begin
-      inc(P);   // not [#0, '"', '\']
-      continue; // very fast parsing of most UTF-8 chars
-    end;
-    if (P^ = '"') or
-       (P^ = #0) or
-       (P[1] = #0) then
-      // end of string/buffer, or buffer overflow detected as \#0
-      break;
-    inc(P, 2); // P^ was '\' -> ignore \#
-  until false;
-  result := P;
-  // P^='"' at function return (if input was correct)
 end;
 
 function GotoEndOfJsonString(P: PUtf8Char): PUtf8Char;
@@ -3579,7 +3850,7 @@ prop:     repeat
           end
           else if P^ <> ':' then
             exit;
-        end
+        end;
     else
       // unexpected character in input JSON
       exit;
@@ -3594,88 +3865,12 @@ prop:     repeat
   result := P + 1;
 end;
 
-function GotoEndJsonItemStrict(P: PUtf8Char): PUtf8Char;
+function GotoEndJsonItemStrict(P, PMax: PUtf8Char): PUtf8Char;
 var
-  {$ifdef CPUX86NOTPIC}
-  jsonset: TJsonCharSet absolute JSON_CHARS; // not enough registers
-  {$else}
-  jsonset: PJsonCharSet;
-  {$endif CPUX86NOTPIC}
-label
-  ok, ok4;
+  validator: TJsonQuickParser;
 begin
-  result := nil; // to notify unexpected end
-  if P = nil then
-    exit;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
-  {$ifndef CPUX86NOTPIC}
-  jsonset := @JSON_CHARS;
-  {$endif CPUX86NOTPIC}
-  case JSON_TOKENS[P^] of
-    // complex JSON string, object or array
-    jtDoubleQuote: // '"'
-      begin
-        P := GotoEndOfJsonString2(P + 1, {$ifdef CPUX86NOTPIC}@{$endif}jsonset);
-        if P^ <> '"' then
-          exit;
-        repeat
-          inc(P);
-ok:     until (P^ > ' ') or
-              (P^ = #0);
-        result := P;
-        exit;
-      end;
-    jtArrayStart: // '['
-      begin
-        repeat
-          inc(P)
-        until (P^ > ' ') or
-              (P^ = #0);
-        P := GotoNextJsonObjectOrArrayInternal(
-          P, nil, ']' {$ifndef CPUX86NOTPIC}, jsonset{$endif});
-        if P = nil then
-          exit;
-        goto ok;
-      end;
-    jtObjectStart: // '{'
-      begin
-        repeat
-          inc(P)
-        until (P^ > ' ') or
-              (P^ = #0);
-        P := GotoNextJsonObjectOrArrayInternal(
-          P, nil, '}' {$ifndef CPUX86NOTPIC}, jsonset{$endif});
-        if P = nil then
-          exit;
-        goto ok;
-      end;
-    // strict JSON numbers and constants validation
-    jtTrueFirstChar: // 't'
-      if PInteger(P)^ = TRUE_LOW then
-      begin
-ok4:    inc(P, 4);
-        goto ok;
-      end;
-    jtFalseFirstChar: // 'f'
-      if PInteger(P + 1)^ = FALSE_LOW2 then
-      begin
-        inc(P, 5);
-        goto ok;
-      end;
-    jtNullFirstChar: // 'n'
-      if PInteger(P)^ = NULL_LOW then
-        goto ok4;
-    jtFirstDigit: // '-', '0'..'9'
-      begin
-        repeat
-          inc(P)
-        until not (jcDigitFloatChar in jsonset[P^]);
-        // not ['-', '+', '0'..'9', '.', 'E', 'e']
-        goto ok;
-      end;
-  end;
+  {%H-}validator.Init({strict=}true, PMax);
+  result := validator.GotoEnd(P);
 end;
 
 function GotoEndJsonItemFast(P, PMax: PUtf8Char
@@ -3756,13 +3951,13 @@ function GotoNextJsonItem(P: PUtf8Char; NumberOfItemsToJump: cardinal;
 begin
   result := nil; // to notify unexpected end
   if NumberOfItemsToJump <> 0 then
-  repeat
-    P := GotoEndJsonItemFast(P, nil {$ifndef CPUX86NOTPIC}, @JSON_CHARS{$endif});
-    if P = nil then
-      exit;
-    inc(P); // ignore jcEndOfJsonFieldOr0
-    dec(NumberOfItemsToJump);
-  until NumberOfItemsToJump = 0;
+    repeat
+      P := GotoEndJsonItemFast(P, nil {$ifndef CPUX86NOTPIC}, @JSON_CHARS{$endif});
+      if P = nil then
+        exit;
+      inc(P); // ignore jcEndOfJsonFieldOr0
+      dec(NumberOfItemsToJump);
+    until NumberOfItemsToJump = 0;
   if EndOfObject <> nil then
     EndOfObject^ := P[-1]; // return last jcEndOfJsonFieldOr0
   result := P;
@@ -3808,63 +4003,16 @@ begin
   result := GotoNextJsonObjectOrArrayMax(P, nil);
 end;
 
-function JsonArrayCount(P: PUtf8Char): integer;
+function JsonArrayCount(P, PMax: PUtf8Char; Strict: boolean): integer;
 var
-  n: integer;
-  {$ifndef CPUX86NOTPIC}
-  tab: PJsonCharSet;
-  {$endif CPUX86NOTPIC}
+  validator: TJsonQuickParser;
 begin
-  result := -1;
-  n := 0;
-  {$ifndef CPUX86NOTPIC}
-  tab := @JSON_CHARS;
-  {$endif CPUX86NOTPIC}
-  P := GotoNextNotSpace(P);
-  if P^ <> ']' then
-    repeat
-      P := GotoEndJsonItemFast(P, nil {$ifndef CPUX86NOTPIC}, tab{$endif});
-      if P = nil then
-        // invalid content, or #0 reached
-        exit;
-      inc(n);
-      if P^ <> ',' then
-        break;
-      inc(P);
-    until false;
-  if P^ = ']' then
-    result := n;
-end;
-
-function JsonArrayCount(P, PMax: PUtf8Char): integer;
-{$ifndef CPUX86NOTPIC}
-var
-  tab: PJsonCharSet;
-{$endif CPUX86NOTPIC}
-begin // is very efficiently inlined on FPC
-  result := 0;
-  P := GotoNextNotSpace(P);
-  {$ifndef CPUX86NOTPIC}
-  tab := @JSON_CHARS;
-  {$endif CPUX86NOTPIC}
-  if P^ <> ']' then
-    while P < PMax do
-    begin
-      P := GotoEndJsonItemFast(P, PMax{$ifndef CPUX86NOTPIC}, tab{$endif});
-      if P = nil then
-        break; // invalid content, or #0/PMax reached
-      inc(result);
-      if P^ <> ',' then
-        break;
-      inc(P);
-    end;
-  if (P = nil) or
-     (P^ <> ']') then
-    // aborted when PMax or #0 was reached or the JSON input was invalid
-    if result = 0 then
-      dec(result) // -1 to ensure the caller tries to get something
-    else
-      result := -result; // return the current count as negative
+  {%H-}validator.InitCount(Strict, PMax, stValue);
+  if (validator.GotoEnd(P) = nil) and
+     (validator.RootCount >= 0) then
+    result := 0         
+  else
+    result := validator.RootCount;
 end;
 
 function JsonArrayDecode(P: PUtf8Char; out Values: TPUtf8CharDynArray): boolean;
@@ -3926,34 +4074,14 @@ begin
   result := nil;
 end;
 
-function JsonObjectPropCount(P, PMax: PUtf8Char): PtrInt;
+function JsonObjectPropCount(P, PMax: PUtf8Char; Strict: boolean): PtrInt;
 var
-  {$ifdef CPUX86NOTPIC}
-  tab: TJsonCharSet absolute JSON_CHARS;
-  {$else}
-  tab: PJsonCharSet;
-  {$endif CPUX86NOTPIC}
+  validator: TJsonQuickParser;
 begin // is very efficiently inlined on FPC
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
-  result := 0;
-  {$ifndef CPUX86NOTPIC}
-  tab := @JSON_CHARS;
-  {$endif CPUX86NOTPIC}
-  if P^ <> '}' then
-    repeat
-      P := GotoNextJsonPropName(P, {$ifdef CPUX86NOTPIC} @ {$endif} tab);
-      P := GotoEndJsonItemFast(P, PMax {$ifndef CPUX86NOTPIC}, tab{$endif});
-      if P = nil then
-        break; // invalid content, or #0/PMax reached
-      inc(result);
-      if P^ <> ',' then
-        break;
-      inc(P);
-    until false;
-  if (P = nil) or
-     (P^ <> '}') then
+  {%H-}validator.InitCount(Strict, PMax, stObjectName);
+  P := validator.GotoEnd(P);
+  result := validator.RootCount;
+  if P = nil then
     // aborted when PMax or #0 was reached or the JSON input was invalid
     if result = 0 then
       dec(result) // -1 to ensure the caller tries to get something
@@ -10247,17 +10375,19 @@ begin
       include(JSON_CHARS[c], jcDigitFloatChar);
     if c in ['_', '0'..'9', 'a'..'z', 'A'..'Z', '$'] then
       include(JSON_CHARS[c], jcJsonIdentifierFirstChar);
+    if c in ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']'] then
+      include(JSON_CHARS[c], jcJsonIdentifier);
     if c in ['_', 'a'..'z', 'A'..'Z', '$'] then
       // exclude '0'..'9' as already in jcDigitFirstChar
       JSON_TOKENS[c] := jtIdentifierFirstChar;
-    if c in ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']'] then
-      include(JSON_CHARS[c], jcJsonIdentifier);
   end;
+  JSON_TOKENS[#0 ] := jtEndOfBuffer;
   JSON_TOKENS['{'] := jtObjectStart;
   JSON_TOKENS['}'] := jtObjectStop;
   JSON_TOKENS['['] := jtArrayStart;
   JSON_TOKENS[']'] := jtArrayStop;
   JSON_TOKENS[':'] := jtAssign;
+  JSON_TOKENS['='] := jtEqual;
   JSON_TOKENS[','] := jtComma;
   JSON_TOKENS[''''] := jtSingleQuote;
   JSON_TOKENS['"'] := jtDoubleQuote;
