@@ -3610,6 +3610,8 @@ const
   HTTP_CONFLICT = 409;
   /// HTTP Status Code for "Payload Too Large"
   HTTP_PAYLOADTOOLARGE = 413;
+  /// HTTP Status Code for "Range Not Satisfiable"
+  HTTP_RANGENOTSATISFIABLE = 416;
   /// HTTP Status Code for "Internal Server Error"
   HTTP_SERVERERROR = 500;
   /// HTTP Status Code for "Not Implemented"
@@ -11658,7 +11660,7 @@ begin
       Reason := 'URI Too Long';
     415:
       Reason := 'Unsupported Media Type';
-    416:
+    HTTP_RANGENOTSATISFIABLE:
       Reason := 'Requested Range Not Satisfiable';
     426:
       Reason := 'Upgrade Required';

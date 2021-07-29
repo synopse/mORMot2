@@ -1667,8 +1667,12 @@ var
     res := Request(requrl, 'GET', params.KeepAlive, params.Header, '', '',
       {retry=}false, {instream=}nil, partstream);
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
+    begin
+      if res = HTTP_NOTACCEPTABLE then
+        DeleteFile(part); // maybe the partial file is incorrect
       raise EHttpSocket.Create('WGet: %s:%s/%s failed with %s',
         [fServer, fPort, url, StatusCodeToErrorMsg(res)]);
+    end;
     partstream.Ended; // notify finished
     parthash := partstream.GetHash; // hash updated on each partstream.Write()
     FreeAndNil(partstream);
