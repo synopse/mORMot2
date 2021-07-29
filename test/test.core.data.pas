@@ -3180,6 +3180,19 @@ begin
   end;
   NotifyTestSpeed('WinSoft WinJson', 0, len div 10, @timer, ONLYLOG);
   {$endif JSONBENCHMARK_WSFT}
+  people := StringFromFile(WorkDir + 'sample.json');
+  if people <> '' then
+    begin
+      timer.Start;
+      for i := 1 to ITER div 10 do
+      begin
+        dv.InitJson(people, JSON_OPTIONS_FAST + [dvoAllowDoubleValue]);
+        Check(dv.count = 3);
+        FileFromString(dv.ToJson('', '', jsonHumanReadable), WorkDir + 'sample2.json');
+        dv.Clear; // to reuse dv
+      end;
+      NotifyTestSpeed('TDocVariant sample.json', 0, len div 10, @timer, ONLYLOG);
+    end;
 end;
 
 procedure TTestCoreProcess.WikiMarkdownToHtml;
