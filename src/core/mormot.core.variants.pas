@@ -7270,6 +7270,7 @@ astext:   TRttiVarData(V).VType := varString;
     if P = nil then
     begin
       TDocVariantData(Value).Clear;
+      Json := nil;
       exit; // error parsing
     end;
     if not wasParsedWithinString then

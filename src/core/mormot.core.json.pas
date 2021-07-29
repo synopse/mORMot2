@@ -2564,9 +2564,11 @@ begin
               continue; // very fast parsing of most UTF-8 chars
             if P^ = '"' then
               break
-            else if (P^ = #0) or (P[1] = #0) then
-              exit; // end of string/buffer, or buffer overflow detected as \#0
+            else if P^ = #0 then
+              exit; // unexpected end of string/buffer
             inc(P); // P^ was '\' -> ignore \# ou \u0123
+            if P^ = #0 then
+              exit; // buffer overflow detected as \#0
           until false;
           inc(P);
           if (StackCount <> 0) or
@@ -2687,16 +2689,17 @@ assign:   if State <> stObjectName then
           goto assign;
       jtIdentifierFirstChar: // ['_', 'a'..'z', 'A'..'Z', '$']
         begin
-prop:     if (State <> stObjectName) or
-             ExpectStandard then
+prop:     if ExpectStandard then
             exit;
           repeat
-            inc(P);
-          until not (jcJsonIdentifier in JsonSet[P^]);
-          // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
-          while (P^ <= ' ') and
-                (P^ <> #0) do
-            inc(P);
+            repeat
+              inc(P);
+            until not (jcJsonIdentifier in JsonSet[P^]);
+            // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
+            while (P^ <= ' ') and
+                  (P^ <> #0) do
+              inc(P);
+          until not (jcJsonIdentifierFirstChar in JsonSet[P^]); // new date(...
           if P^ = '(' then
           begin
             // handle e.g. "born":isodate("1969-12-31")
@@ -2711,15 +2714,16 @@ prop:     if (State <> stObjectName) or
               until jcJsonStringMarker in JsonSet[P^]; // [#0, '"', '\']
               if P^ <> '"' then
                 exit;
+              inc(P);
             end;
-            inc(P);
-            while (P^ <= ' ') and
+            while (P^ <> ')') and
                   (P^ <> #0) do
               inc(P);
-            if P^ <> ')' then
-              exit;
-            inc(P);
-          end;
+            if P^ <> #0 then
+              inc(P);
+          end
+          else if State <> stObjectName then
+            exit; // identifier values are functions like isodate() objectid()
           continue;
         end;
       jtSlash: // '/' to allow extended /regex/ syntax
@@ -3755,11 +3759,9 @@ begin // is very efficiently inlined on FPC
   P := parser.GotoEnd(P);
   result := parser.RootCount;
   if P = nil then
-    // aborted when PMax or #0 was reached or the JSON input was invalid
-    if result = 0 then
-      dec(result) // -1 to ensure the caller tries to get something
-    else
-      result := -result; // return the current count as negative
+    // <0 means aborted when PMax or #0 was reached
+    if result >= 0 then
+      result := 0; // the JSON input was invalid
 end;
 
 function JsonObjectItem(P: PUtf8Char; const PropName: RawUtf8;
