@@ -1767,6 +1767,7 @@ begin
           OnLog(sllDebug,
             'WGet %: wrong hash after resume -> reset and retry', [url]);
         partstream := params.Hasher.Create(TFileStream.Create(part, fmCreate));
+        resumed := false; // previous .part was deleted
         DoRequestAndFreePartStream;
       end;
       if not IdemPropNameU(parthash, params.Hash) then
