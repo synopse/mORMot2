@@ -4603,9 +4603,14 @@ begin
           else
           begin
             // guess of the Json object properties count - prefetch up to 64KB
-            cap := abs(JsonObjectPropCount(Json, Json + JSON_PREFETCH));
+            cap := JsonObjectPropCount(Json, Json + JSON_PREFETCH);
             if cap = 0 then
-              exit; // invalid content (was <0 if early abort)
+              exit // invalid content (was <0 if early abort)
+            else if cap < 0 then
+            begin // nested or huge objects are evil -> no more guess
+              cap := -cap;
+              include(VOptions, dvoJsonParseDoNotGuessCount);
+            end;
           end;
           if dvoInternNames in VOptions then
             intnames := DocVariantType.InternNames

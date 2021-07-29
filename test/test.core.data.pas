@@ -2997,6 +2997,14 @@ begin
     dv.Clear; // to reuse dv
   end;
   NotifyTestSpeed('TDocVariant', 0, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+  begin
+    dv.InitJson(people, JSON_OPTIONS_FAST + [dvoJsonParseDoNotGuessCount]);
+    Check(dv.count = count);
+    dv.Clear; // to reuse dv
+  end;
+  NotifyTestSpeed('TDocVariant no guess', 0, len, @timer, ONLYLOG);
   Check(DocVariantType.InternNames.Count = interned, 'no intern');
   DocVariantType.InternNames.Clean;
   timer.Start;
@@ -3053,25 +3061,6 @@ begin
     Check(length(rec) = count);
   end;
   NotifyTestSpeed('DynArrayLoadJson', 0, len, @timer, ONLYLOG);
-  sample := StringFromFile(WorkDir + 'sample.json');
-  if sample <> '' then
-    begin
-      timer.Start;
-      dv.InitJson(sample, JSON_OPTIONS_FAST + [dvoAllowDoubleValue]);
-      Check(dv.count = 3);
-      dv.Clear; // to reuse dv
-      NotifyTestSpeed('TDocVariant sample.json', 0, length(sample), @timer, ONLYLOG);
-      timer.Start;
-      for i := 1 to ITER do
-      begin
-        dv.InitJson(sample, JSON_OPTIONS_FAST +
-          [dvoAllowDoubleValue, dvoJsonParseDoNotGuessCount]);
-        Check(dv.count = 3);
-        dv.Clear; // to reuse dv
-      end;
-      NotifyTestSpeed('TDocVariant sample.json no guess', 0,
-        length(sample) * ITER, @timer, ONLYLOG);
-    end;
   {$ifdef JSONBENCHMARK_FPJSON}
   timer.Start;
   for i := 1 to ITER div 10 do // div 10 since fpjson is slower
@@ -3086,23 +3075,6 @@ begin
       end;
   end;
   NotifyTestSpeed('fpjson', 0, len div 10, @timer, ONLYLOG);
-  if sample <> '' then
-  begin
-    timer.Start;
-    for i := 1 to ITER div 10 do // div 10 since fpjson is slower
-    begin
-      fpjson := GetJSON(sample, {utf8=}true);
-      if not CheckFailed(fpjson <> nil) then
-        try
-          if not CheckFailed(fpjson.JSONType = jtObject) then
-            Check((fpjson as TJSONObject).Count = 3);
-        finally
-          fpjson.Free;
-        end;
-    end;
-    NotifyTestSpeed('fpjson sample.json', 0,
-      length(sample) * (ITER div 10), @timer, ONLYLOG);
-  end;
   {$endif JSONBENCHMARK_FPJSON}
   {$ifdef JSONBENCHMARK_JSONTOOLS}
   timer.Start;
@@ -3216,6 +3188,44 @@ begin
   end;
   NotifyTestSpeed('WinSoft WinJson', 0, len div 10, @timer, ONLYLOG);
   {$endif JSONBENCHMARK_WSFT}
+  sample := StringFromFile(WorkDir + 'sample.json');
+  if sample <> '' then
+    begin
+      timer.Start;
+      dv.InitJson(sample, JSON_OPTIONS_FAST + [dvoAllowDoubleValue]);
+      Check(dv.count = 3);
+      dv.Clear; // to reuse dv
+      NotifyTestSpeed('TDocVariant sample.json', 0, length(sample), @timer, ONLYLOG);
+      timer.Start;
+      for i := 1 to ITER do
+      begin
+        dv.InitJson(sample, JSON_OPTIONS_FAST +
+          [dvoAllowDoubleValue, dvoJsonParseDoNotGuessCount]);
+        Check(dv.count = 3);
+        dv.Clear; // to reuse dv
+      end;
+      NotifyTestSpeed('TDocVariant sample.json no guess', 0,
+        length(sample) * ITER, @timer, ONLYLOG);
+    end;
+  {$ifdef JSONBENCHMARK_FPJSON}
+  if sample <> '' then
+  begin
+    timer.Start;
+    for i := 1 to ITER div 10 do // div 10 since fpjson is slower
+    begin
+      fpjson := GetJSON(sample, {utf8=}true);
+      if not CheckFailed(fpjson <> nil) then
+        try
+          if not CheckFailed(fpjson.JSONType = jtObject) then
+            Check((fpjson as TJSONObject).Count = 3);
+        finally
+          fpjson.Free;
+        end;
+    end;
+    NotifyTestSpeed('fpjson sample.json', 0,
+      length(sample) * (ITER div 10), @timer, ONLYLOG);
+  end;
+  {$endif JSONBENCHMARK_FPJSON}
 end;
 
 procedure TTestCoreProcess.WikiMarkdownToHtml;
