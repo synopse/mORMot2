@@ -2906,7 +2906,7 @@ const
   ITER = 20;
   ONLYLOG = false;
 var
-  people, notexpanded: RawUtf8;
+  people, sample, notexpanded: RawUtf8;
   peoples: string;
   P: PUtf8Char;
   count, len, lennexp, i, interned: integer;
@@ -3053,6 +3053,25 @@ begin
     Check(length(rec) = count);
   end;
   NotifyTestSpeed('DynArrayLoadJson', 0, len, @timer, ONLYLOG);
+  sample := StringFromFile(WorkDir + 'sample.json');
+  if sample <> '' then
+    begin
+      timer.Start;
+      dv.InitJson(sample, JSON_OPTIONS_FAST + [dvoAllowDoubleValue]);
+      Check(dv.count = 3);
+      dv.Clear; // to reuse dv
+      NotifyTestSpeed('TDocVariant sample.json', 0, length(sample), @timer, ONLYLOG);
+      timer.Start;
+      for i := 1 to ITER do
+      begin
+        dv.InitJson(sample, JSON_OPTIONS_FAST +
+          [dvoAllowDoubleValue, dvoJsonParseDoNotGuessCount]);
+        Check(dv.count = 3);
+        dv.Clear; // to reuse dv
+      end;
+      NotifyTestSpeed('TDocVariant sample.json no guess', 0,
+        length(sample) * ITER, @timer, ONLYLOG);
+    end;
   {$ifdef JSONBENCHMARK_FPJSON}
   timer.Start;
   for i := 1 to ITER div 10 do // div 10 since fpjson is slower
@@ -3067,6 +3086,23 @@ begin
       end;
   end;
   NotifyTestSpeed('fpjson', 0, len div 10, @timer, ONLYLOG);
+  if sample <> '' then
+  begin
+    timer.Start;
+    for i := 1 to ITER div 10 do // div 10 since fpjson is slower
+    begin
+      fpjson := GetJSON(sample, {utf8=}true);
+      if not CheckFailed(fpjson <> nil) then
+        try
+          if not CheckFailed(fpjson.JSONType = jtObject) then
+            Check((fpjson as TJSONObject).Count = 3);
+        finally
+          fpjson.Free;
+        end;
+    end;
+    NotifyTestSpeed('fpjson sample.json', 0,
+      length(sample) * (ITER div 10), @timer, ONLYLOG);
+  end;
   {$endif JSONBENCHMARK_FPJSON}
   {$ifdef JSONBENCHMARK_JSONTOOLS}
   timer.Start;
@@ -3180,19 +3216,6 @@ begin
   end;
   NotifyTestSpeed('WinSoft WinJson', 0, len div 10, @timer, ONLYLOG);
   {$endif JSONBENCHMARK_WSFT}
-  people := StringFromFile(WorkDir + 'sample.json');
-  if people <> '' then
-    begin
-      timer.Start;
-      for i := 1 to ITER div 10 do
-      begin
-        dv.InitJson(people, JSON_OPTIONS_FAST + [dvoAllowDoubleValue]);
-        Check(dv.count = 3);
-        FileFromString(dv.ToJson('', '', jsonHumanReadable), WorkDir + 'sample2.json');
-        dv.Clear; // to reuse dv
-      end;
-      NotifyTestSpeed('TDocVariant sample.json', 0, len div 10, @timer, ONLYLOG);
-    end;
 end;
 
 procedure TTestCoreProcess.WikiMarkdownToHtml;
