@@ -1400,7 +1400,7 @@ begin
       exit;
   end;
   txt := P + 1;
-  P := GotoEndOfJsonString(P); // here P^ should be '"'
+  P := GotoEndOfJsonString(P); // here P^ should be '"' and returns ending '"'
   len := length(Head);
   if (P^ <> #0) and
      (P - txt >= len) and

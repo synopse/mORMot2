@@ -902,9 +902,14 @@ begin
     if P^ <> '{' then
       exit;
     P := GotoNextNotSpace(P + 1);
-    cap := JsonObjectPropCount(P); // fast 1.2 GB/s parsing
-    if cap < 0 then
-      exit; // invalid input
+    if P^ = '}' then
+      cap := 0
+    else
+    begin
+      cap := JsonObjectPropCount(P); // fast pre-parsing
+      if cap = 0 then
+        exit; // invalid input
+    end;
     requiredclaims := fClaims - excluded;
     if cap > 0 then
       repeat

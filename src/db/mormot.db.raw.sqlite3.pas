@@ -5511,7 +5511,7 @@ begin
     if start^ in ['[', '{'] then
     begin
       // JSON object or array is returned as plain TEXT
-      json := GotoNextJsonObjectOrArray(start);
+      json := GotoEndJsonItem(start);
       if json = nil then
         sqlite3.result_null(Context)
       else

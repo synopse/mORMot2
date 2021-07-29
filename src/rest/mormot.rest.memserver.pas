@@ -360,8 +360,11 @@ begin
       t := Model.GetTableIndexPtr(TableName);
       if t < 0 then
         exit;
+      if (P^ <> '[') and
+         (P^ <> '{') then
+        break;
       Data := P;
-      P := GotoNextJsonObjectOrArray(P);
+      P := GotoEndJsonItem(P);
       if P = nil then
         break;
       TRestStorageInMemory(fStaticData[t]).LoadFromJson(Data, P - Data);

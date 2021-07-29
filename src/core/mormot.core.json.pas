@@ -249,18 +249,15 @@ procedure GetJsonItemAsRawJson(var P: PUtf8Char; var result: RawJson;
 function GetJsonItemAsRawUtf8(var P: PUtf8Char; var output: RawUtf8;
   WasString: PBoolean = nil; EndOfObject: PUtf8Char = nil): boolean;
 
-/// read the position of the JSON value just after a property identifier
-// - this function will handle strict JSON property name (i.e. a "string"), but
-// also MongoDB extended syntax, e.g. {age:{$gt:18}} or {'people.age':{$gt:18}}
-// see @http://docs.mongodb.org/manual/reference/mongodb-extended-json
-function GotoNextJsonPropName(P: PUtf8Char; tab: PJsonCharSet): PUtf8Char;
-  {$ifdef FPC} inline; {$endif}
-
 /// get the next character after a quoted buffer
 // - the first character in P^ must be "
 // - it will return the latest " position, ignoring \" within
 // - caller should check that return PUtf8Char is indeed a "
 function GotoEndOfJsonString(P: PUtf8Char): PUtf8Char;
+
+/// reach positon just after the current JSON string in the supplied UTF-8 buffer
+// - will first ensure that P^='"' then process like GotoEndJsonItem()
+function GotoEndJsonItemString(P: PUtf8Char): PUtf8Char;
 
 /// reach positon just after the current JSON item in the supplied UTF-8 buffer
 // - buffer can be either any JSON item, i.e. a string, a number or even a
@@ -271,11 +268,6 @@ function GotoEndOfJsonString(P: PUtf8Char): PUtf8Char;
 // - MongoDB extended syntax like {age:{$gt:18}} will be allowed - so you
 // may consider GotoEndJsonItemStrict() if you expect full standard JSON parsing
 function GotoEndJsonItem(P: PUtf8Char; PMax: PUtf8Char = nil): PUtf8Char;
-
-/// fast JSON parsing function - for internal inlined use e.g. by GotoEndJsonItem
-function GotoEndJsonItemFast(P, PMax: PUtf8Char
-  {$ifndef CPUX86NOTPIC}; tab: PJsonCharSet{$endif}): PUtf8Char;
-  {$ifdef FPC}inline;{$endif}
 
 /// reach positon just after the current JSON item in the supplied UTF-8 buffer
 // - in respect to GotoEndJsonItem(), this function will validate for strict
@@ -292,31 +284,7 @@ function GotoEndJsonItemStrict(P: PUtf8Char; PMax: PUtf8Char = nil): PUtf8Char;
 // character (optionally in EndOfObject) - i.e. result will be at the start of
 // the next object, and EndOfObject may be ',','}',']'
 function GotoNextJsonItem(P: PUtf8Char; NumberOfItemsToJump: cardinal = 1;
-  EndOfObject: PAnsiChar = nil): PUtf8Char;
-
-/// reach the position of the next JSON object of JSON array
-// - first char is expected to be either '[' or '{'
-// - will return nil in case of parsing error or unexpected end (#0)
-// - will return the next character after ending ] or } - i.e. may be , } ]
-function GotoNextJsonObjectOrArray(P: PUtf8Char): PUtf8Char; overload;
-  {$ifdef FPC}inline;{$endif}
-
-/// reach the position of the next JSON object of JSON array
-// - first char is expected to be just after the initial '[' or '{'
-// - specify ']' or '}' as the expected EndChar
-// - will return nil in case of parsing error or unexpected end (#0)
-// - will return the next character after ending ] or } - i.e. may be , } ]
-function GotoNextJsonObjectOrArray(P: PUtf8Char; EndChar: AnsiChar): PUtf8Char; overload;
-  {$ifdef FPC}inline;{$endif}
-
-/// reach the position of the next JSON object of JSON array
-// - first char is expected to be either '[' or '{'
-// - this version expects a maximum position in PMax: it may be handy to break
-// the parsing for HUGE content - used e.g. by JsonArrayCount(P,PMax)
-// - will return nil in case of parsing error or if P reached PMax limit
-// - will return the next character after ending ] or { - i.e. may be , } ]
-function GotoNextJsonObjectOrArrayMax(P, PMax: PUtf8Char): PUtf8Char;
-  {$ifdef FPC}inline;{$endif}
+  EndOfObject: PAnsiChar = nil; PMax: PUtf8Char = nil; Strict: boolean = false): PUtf8Char;
 
 /// search the EndOfObject of a JSON buffer, just like GetJsonField() does
 function ParseEndOfObject(P: PUtf8Char; out EndOfObject: AnsiChar): PUtf8Char;
@@ -2511,50 +2479,33 @@ begin
     result := true; // don't begin with a numerical value -> must be a string
 end;
 
-function GotoEndOfJsonString2(P: PUtf8Char; tab: PJsonCharSet): PUtf8Char;
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  // P[-1]='"' at function call
-  repeat
-    if not (jcJsonStringMarker in tab[P^]) then
-    begin
-      inc(P);   // not [#0, '"', '\']
-      continue; // very fast parsing of most UTF-8 chars
-    end;
-    if (P^ = '"') or
-       (P^ = #0) or
-       (P[1] = #0) then
-      // end of string/buffer, or buffer overflow detected as \#0
-      break;
-    inc(P, 2); // P^ was '\' -> ignore \# ou \u0123
-  until false;
-  result := P;
-  // P^='"' at function return (if input was correct)
-end;
-
 type
-  TJsonQuickParserState = (
+  TJsonGotoEndParserState = (
     stObjectName,
     stObjectValue,
     stValue);
-  /// state machine for fast parsing of (extended) JSON input
-  TJsonQuickParser = object
+
+  /// state machine for fast (900MB/s) parsing of (extended) JSON input
+  TJsonGotoEndParser = object
     {$ifdef CPUX86}
     JsonSet: PJsonCharSet; // not enough registers in i386 mode
     {$endif CPUX86}
-    State: TJsonQuickParserState;
+    State: TJsonGotoEndParserState;
     ExpectStandard: boolean;
     JsonFirst: PJsonTokens;
     Max: PUtf8Char;
     StackCount, RootCount: integer;
-    Stack: array[0..1000] of TJsonQuickParserState;
+    // 500 nested documents seem enough in practice
+    Stack: array[0..500] of TJsonGotoEndParserState;
     procedure Init(Strict: boolean; PMax: PUtf8Char);
       {$ifdef HASINLINE} inline; {$endif}
-    procedure InitCount(Strict: boolean; PMax: PUtf8Char; First: TJsonQuickParserState);
+    procedure InitCount(Strict: boolean; PMax: PUtf8Char;
+      First: TJsonGotoEndParserState);
+    // reusable method able to jump over any JSON value (up to Max)
     function GotoEnd(P: PUtf8Char): PUtf8Char;
  end;
 
-procedure TJsonQuickParser.Init(Strict: boolean; PMax: PUtf8Char);
+procedure TJsonGotoEndParser.Init(Strict: boolean; PMax: PUtf8Char);
 begin
   {$ifdef CPUX86}
   JsonSet := @JSON_CHARS;
@@ -2566,8 +2517,8 @@ begin
   StackCount := 0;
 end;
 
-procedure TJsonQuickParser.InitCount(Strict: boolean; PMax: PUtf8Char;
-  First: TJsonQuickParserState);
+procedure TJsonGotoEndParser.InitCount(Strict: boolean; PMax: PUtf8Char;
+  First: TJsonGotoEndParserState);
 begin
   Init(Strict, PMax);
   RootCount := 0;
@@ -2576,7 +2527,7 @@ begin
   State := First;
 end;
 
-function TJsonQuickParser.GotoEnd(P: PUtf8Char): PUtf8Char;
+function TJsonGotoEndParser.GotoEnd(P: PUtf8Char): PUtf8Char;
 var
   n: PtrInt;
 {$ifndef CPUX86}
@@ -2707,13 +2658,17 @@ assign:   if State <> stObjectName then
         begin
           if State = stObjectName then
             exit;
-          dec(State, ord(State = stObjectValue));
+          dec(State, ord(State = stObjectValue)); // branchless update
           inc(P);
           inc(RootCount, ord(StackCount = 1));
-          if (Max = nil) or
+          if (Max = nil) or // checking Max after each comma is good enough
              (P < Max) then
             continue;
-          RootCount := -RootCount; // reached end of allowed input  
+          // reached end of allowed - but valid - input
+          if RootCount = 0 then
+            dec(RootCount) // first item may be huge -> at least -1
+          else
+            RootCount := -RootCount;
           exit;
         end;
       jtSingleQuote: // '''' as single-quoted identifier or value
@@ -2796,7 +2751,7 @@ prop:     if (State <> stObjectName) or
   while (P^ <= ' ') and
         (P^ <> #0) do
     inc(P);
-  result := P;
+  result := P; // points to the next meaningful char
 end;
 
 function IsValidJson(const s: RawUtf8; strict: boolean): boolean;
@@ -2807,25 +2762,25 @@ end;
 function IsValidJson(P: PUtf8Char; len: PtrInt; strict: boolean): boolean;
 var
   B: PUtf8Char;
-  validator: TJsonQuickParser;
+  parser: TJsonGotoEndParser;
 begin
   result := false;
   if (P = nil) or
      (len <= 0) then
     exit;
   B := P;
-  {%H-}validator.Init(strict, P + len);
-  P := validator.GotoEnd(P);
+  {%H-}parser.Init(strict, P + len);
+  P := parser.GotoEnd(P);
   result := (P <> nil) and
             (P - B = len);
 end;
 
 function IsValidJsonBuffer(P: PUtf8Char; strict: boolean): boolean;
 var
-  validator: TJsonQuickParser;
+  parser: TJsonGotoEndParser;
 begin
-  {%H-}validator.Init(strict, nil);
-  result := validator.GotoEnd(P) <> nil;
+  {%H-}parser.Init(strict, nil);
+  result := parser.GotoEnd(P) <> nil;
 end;
 
 procedure IgnoreComma(var P: PUtf8Char);
@@ -3115,10 +3070,44 @@ lit:        inc(P);
     PDest := P;
 end;
 
+function GotoEndOfJsonString2(P: PUtf8Char; tab: PJsonCharSet): PUtf8Char;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  // P[-1]='"' at function call
+  repeat
+    if not (jcJsonStringMarker in tab[P^]) then
+    begin
+      inc(P);   // not [#0, '"', '\']
+      continue; // very fast parsing of most UTF-8 chars
+    end;
+    if (P^ = '"') or
+       (P^ = #0) or
+       (P[1] = #0) then
+      // end of string/buffer, or buffer overflow detected as \#0
+      break;
+    inc(P, 2); // P^ was '\' -> ignore \# ou \u0123
+  until false;
+  result := P;
+  // P^='"' at function return (if input was correct)
+end;
+
 function GotoEndOfJsonString(P: PUtf8Char): PUtf8Char;
 begin
   // P^='"' at function call
   result := GotoEndOfJsonString2(P + 1, @JSON_CHARS);
+end;
+
+function GotoEndJsonItemString(P: PUtf8Char): PUtf8Char;
+begin
+  result := nil;
+  if P = nil then
+    exit;
+  P := GotoNextNotSpace(P);
+  if P^ <> '"' then
+    exit;
+  P := GotoEndOfJsonString2(P + 1, @JSON_CHARS);
+  if P^ = '"' then
+    result := GotoNextNotSpace(P + 1);
 end;
 
 function GetJsonPropName(var Json: PUtf8Char; Len: PInteger): PUtf8Char;
@@ -3287,72 +3276,6 @@ ok: SetString(PropName, Name, P - Name); // note: won't unescape JSON strings
     end;
     inc(P);
   end;
-end;
-
-function GotoNextJsonPropName(P: PUtf8Char; tab: PJsonCharSet): PUtf8Char;
-var
-  c: AnsiChar;
-label
-  s;
-begin
-  // should match GotoNextJsonObjectOrArray()
-  result := nil;
-  if P = nil then
-    exit;
-  while P^ <= ' ' do
-  begin
-    if P^ = #0 then
-      exit;
-    inc(P);
-  end;
-  c := P^;
-  if c = '"' then
-  begin
-    P := GotoEndOfJsonString2(P + 1, tab);
-    if P^ <> '"' then
-      exit;
-s:  repeat
-      inc(P)
-    until (P^ > ' ') or
-          (P^ = #0);
-    if P^ <> ':' then
-      exit;
-  end
-  else if c = '''' then
-  begin
-    // single quotes won't handle nested quote character
-    inc(P);
-    while P^ <> '''' do
-      if P^ < ' ' then
-        exit
-      else
-        inc(P);
-    goto s;
-  end
-  else
-  begin
-    // e.g. '{age:{$gt:18}}'
-    if not (jcJsonIdentifierFirstChar in tab[c]) then
-      exit; // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '$']
-    repeat
-      inc(P);
-    until not (jcJsonIdentifier in tab[P^]);
-    // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
-    if (P^ <= ' ') and
-       (P^ <> #0) then
-      inc(P);
-    while (P^ <= ' ') and
-          (P^ <> #0) do
-      inc(P);
-    if not (P^ in [':', '=']) then
-      // allow both age:18 and age=18 pairs (very relaxed JSON syntax)
-      exit;
-  end;
-  repeat
-    inc(P)
-  until (P^ > ' ') or
-        (P^ = #0);
-  result := P;
 end;
 
 
@@ -3626,7 +3549,7 @@ begin
      (P^ in ['{', '[']) then
   begin
     result := P;
-    P := GotoNextJsonObjectOrArrayMax(P, nil);
+    P := GotoEndJsonItem(P);
     if P <> nil then
     begin
       // was a valid object or array
@@ -3711,317 +3634,64 @@ begin
   end;
 end;
 
-function GotoNextJsonObjectOrArrayInternal(P, PMax: PUtf8Char;
-  EndChar: AnsiChar{$ifndef CPUX86NOTPIC} ; jsonset: PJsonCharSet{$endif}): PUtf8Char;
-{$ifdef CPUX86NOTPIC} // not enough registers
-var
-  jsonset: TJsonCharSet absolute JSON_CHARS;
-{$endif CPUX86NOTPIC}
-label
-  prop;
-begin
-  // should match GetJsonPropName()
-  result := nil;
-  repeat
-    // main loop for quick parsing without full validation
-    case JSON_TOKENS[P^] of
-      jtObjectStart: // '{'
-        begin
-          repeat
-            inc(P)
-          until (P^ > ' ') or
-                (P^ = #0);
-          P := GotoNextJsonObjectOrArrayInternal(P, PMax, '}'
-                 {$ifndef CPUX86NOTPIC}, jsonset{$endif});
-          if P = nil then
-            exit;
-        end;
-      jtArrayStart: // '['
-        begin
-          repeat
-            inc(P)
-          until (P^ > ' ') or
-                (P^ = #0);
-          P := GotoNextJsonObjectOrArrayInternal(P, PMax, ']'
-                 {$ifndef CPUX86NOTPIC}, jsonset{$endif});
-          if P = nil then
-            exit;
-        end;
-      jtAssign: // ':'
-        if EndChar <> '}' then
-          exit
-        else
-          inc(P); // syntax for JSON object only
-      jtComma: // ','
-        inc(P); // comma appears in both JSON objects and arrays
-      jtObjectStop: // '}'
-        if EndChar = '}' then
-          break
-        else
-          exit;
-      jtArrayStop: // ']'
-        if EndChar = ']' then
-          break
-        else
-          exit;
-      jtDoubleQuote: // '"'
-        begin
-          P := GotoEndOfJsonString2(P + 1, {$ifdef CPUX86NOTPIC}@{$endif}jsonset);
-          if P^ <> '"' then
-            exit;
-          inc(P);
-        end;
-      jtFirstDigit: // '-', '0'..'9'
-        // '0123' excluded by JSON, but not here
-        repeat
-          inc(P);
-        until not (jcDigitFloatChar in jsonset[P^]);
-        // not ['-', '+', '0'..'9', '.', 'E', 'e']
-      jtTrueFirstChar: // 't'
-        if PInteger(P)^ = TRUE_LOW then
-          inc(P, 4)
-        else
-          goto prop;
-      jtFalseFirstChar: // 'f'
-        if PInteger(P + 1)^ = FALSE_LOW2 then
-          inc(P, 5)
-        else
-          goto prop;
-      jtNullFirstChar: // 'n'
-        if PInteger(P)^ = NULL_LOW then
-          inc(P, 4)
-        else
-          goto prop;
-      jtSingleQuote: // '''' as single-quoted identifier
-        begin
-          repeat
-            inc(P);
-            if P^ <= ' ' then
-              exit;
-          until P^ = '''';
-          repeat
-            inc(P)
-          until (P^ > ' ') or
-                (P^ = #0);
-          if P^ <> ':' then
-            exit;
-        end;
-      jtSlash: // '/' to allow extended /regex/ syntax
-        begin
-          repeat
-            inc(P);
-            if P^ = #0 then
-              exit;
-          until P^ = '/';
-          repeat
-            inc(P)
-          until (P^ > ' ') or
-                (P^ = #0);
-        end;
-      jtIdentifierFirstChar: // ['_', 'a'..'z', 'A'..'Z', '$']
-        begin
-prop:     repeat
-            inc(P);
-          until not (jcJsonIdentifier in jsonset[P^]);
-          // not ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']
-          while (P^ <= ' ') and
-                (P^ <> #0) do
-            inc(P);
-          if P^ = '(' then
-          begin
-            // handle e.g. "born":isodate("1969-12-31")
-            inc(P);
-            while (P^ <= ' ') and
-                  (P^ <> #0) do
-              inc(P);
-            if P^ = '"' then
-            begin
-              P := GotoEndOfJsonString2(P + 1, {$ifdef CPUX86NOTPIC}@{$endif}jsonset);
-              if P^ <> '"' then
-                exit;
-            end;
-            inc(P);
-            while (P^ <= ' ') and
-                  (P^ <> #0) do
-              inc(P);
-            if P^ <> ')' then
-              exit;
-            inc(P);
-          end
-          else if P^ <> ':' then
-            exit;
-        end;
-    else
-      // unexpected character in input JSON
-      exit;
-    end;
-    while (P^ <= ' ') and
-          (P^ <> #0) do
-      inc(P);
-    if (PMax <> nil) and
-       (P >= PMax) then
-      exit;
-  until P^ = EndChar;
-  result := P + 1;
-end;
-
 function GotoEndJsonItemStrict(P, PMax: PUtf8Char): PUtf8Char;
 var
-  validator: TJsonQuickParser;
+  parser: TJsonGotoEndParser;
 begin
-  {%H-}validator.Init({strict=}true, PMax);
-  result := validator.GotoEnd(P);
-end;
-
-function GotoEndJsonItemFast(P, PMax: PUtf8Char
-  {$ifndef CPUX86NOTPIC}; tab: PJsonCharSet{$endif}): PUtf8Char;
-{$ifdef CPUX86NOTPIC}
-var
-  tab: TJsonCharSet absolute JSON_CHARS; // not enough registers
-{$endif CPUX86NOTPIC}
-label
-  pok, ok;
-begin
-  result := nil; // to notify unexpected end
-  if P = nil then
-    exit;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
-  // handle complex JSON string, object or array
-  case P^ of
-    '"':
-      begin
-        P := GotoEndOfJsonString2(P + 1, {$ifdef CPUX86NOTPIC}@{$endif}tab);
-        if (P^ <> '"') or
-           ((PMax <> nil) and
-            (P > PMax)) then
-          exit;
-        inc(P);
-        goto ok;
-      end;
-    '[':
-      begin
-        repeat
-          inc(P)
-        until (P^ > ' ') or
-              (P^ = #0);
-        P := GotoNextJsonObjectOrArrayInternal(P, PMax, ']'
-               {$ifndef CPUX86NOTPIC}, tab{$endif});
-        goto pok;
-      end;
-    '{':
-      begin
-        repeat
-          inc(P)
-        until (P^ > ' ') or
-              (P^ = #0);
-        P := GotoNextJsonObjectOrArrayInternal(P, PMax, '}'
-               {$ifndef CPUX86NOTPIC}, tab{$endif});
-pok:    if P = nil then
-          exit;
-ok:     while (P^ <= ' ') and
-              (P^ <> #0) do
-          inc(P);
-        result := P;
-        exit;
-      end;
-  end;
-  // quick ignore numeric or true/false/null or MongoDB extended {age:{$gt:18}}
-  // faster than GotoNextJsonObjectOrArrayInternal()
-  if jcEndOfJsonFieldOr0 in tab[P^] then // #0 , ] } :
-    exit; // no value
-  repeat
-    inc(P);
-  until jcEndOfJsonFieldNotName in tab[P^]; // : exists in MongoDB IsoDate()
-  if (P^ = #0) or
-     ((PMax <> nil) and
-      (P > PMax)) then
-    exit; // unexpected end
-  result := P;
+  {%H-}parser.Init({strict=}true, PMax);
+  result := parser.GotoEnd(P);
 end;
 
 function GotoEndJsonItem(P, PMax: PUtf8Char): PUtf8Char;
+var
+  parser: TJsonGotoEndParser;
 begin
-  result := GotoEndJsonItemFast(P, PMax {$ifndef CPUX86NOTPIC}, @JSON_CHARS{$endif});
+  {%H-}parser.Init({strict=}false, PMax);
+  result := parser.GotoEnd(P);
 end;
 
 function GotoNextJsonItem(P: PUtf8Char; NumberOfItemsToJump: cardinal;
-  EndOfObject: PAnsiChar): PUtf8Char;
+  EndOfObject: PAnsiChar; PMax: PUtf8Char; Strict: boolean): PUtf8Char;
+var
+  parser: TJsonGotoEndParser;
 begin
+  {%H-}parser.Init(Strict, PMax);
   result := nil; // to notify unexpected end
   if NumberOfItemsToJump <> 0 then
     repeat
-      P := GotoEndJsonItemFast(P, nil {$ifndef CPUX86NOTPIC}, @JSON_CHARS{$endif});
+      P := parser.GotoEnd(P);
       if P = nil then
         exit;
-      inc(P); // ignore jcEndOfJsonFieldOr0
+      if EndOfObject <> nil then
+        EndOfObject^ := P^; // return last jcEndOfJsonFieldOr0
+      if P^ <> #0 then
+        inc(P);
       dec(NumberOfItemsToJump);
     until NumberOfItemsToJump = 0;
-  if EndOfObject <> nil then
-    EndOfObject^ := P[-1]; // return last jcEndOfJsonFieldOr0
   result := P;
-end;
-
-function GotoNextJsonObjectOrArray(P: PUtf8Char; EndChar: AnsiChar): PUtf8Char;
-begin
-  // should match GetJsonPropName()
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
-  result := GotoNextJsonObjectOrArrayInternal(
-    P, nil, EndChar {$ifndef CPUX86NOTPIC}, @JSON_CHARS{$endif});
-end;
-
-function GotoNextJsonObjectOrArrayMax(P, PMax: PUtf8Char): PUtf8Char;
-var
-  EndChar: AnsiChar;
-begin
-  // should match GetJsonPropName()
-  result := nil; // mark error or unexpected end (#0)
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
-  case P^ of
-    '[':
-      EndChar := ']';
-    '{':
-      EndChar := '}';
-  else
-    exit;
-  end;
-  repeat
-    inc(P)
-  until (P^ > ' ') or
-        (P^ = #0);
-  result := GotoNextJsonObjectOrArrayInternal(
-    P, PMax, EndChar {$ifndef CPUX86NOTPIC}, @JSON_CHARS{$endif});
-end;
-
-function GotoNextJsonObjectOrArray(P: PUtf8Char): PUtf8Char;
-begin
-  result := GotoNextJsonObjectOrArrayMax(P, nil);
 end;
 
 function JsonArrayCount(P, PMax: PUtf8Char; Strict: boolean): integer;
 var
-  validator: TJsonQuickParser;
+  parser: TJsonGotoEndParser;
 begin
-  {%H-}validator.InitCount(Strict, PMax, stValue);
-  if (validator.GotoEnd(P) = nil) and
-     (validator.RootCount >= 0) then
-    result := 0         
+  {%H-}parser.InitCount(Strict, PMax, stValue);
+  if (parser.GotoEnd(P) = nil) and
+     (parser.RootCount >= 0) then
+    result := 0 // invalid input
   else
-    result := validator.RootCount;
+    result := parser.RootCount; // negative if PMax was reached
 end;
 
 function JsonArrayDecode(P: PUtf8Char; out Values: TPUtf8CharDynArray): boolean;
 var
   n, max: integer;
+  parser: TJsonGotoEndParser;
 begin
   result := false;
   max := 0;
   n := 0;
+  {%H-}parser.Init({strict=}false, nil);
   P := GotoNextNotSpace(P);
   if P^ <> ']' then
     repeat
@@ -4031,7 +3701,7 @@ begin
         SetLength(Values, max);
       end;
       Values[n] := P;
-      P := GotoEndJsonItem(P);
+      P := parser.GotoEnd(P);
       if P = nil then
         exit; // invalid content, or #0 reached
       if P^ <> ',' then
@@ -4048,12 +3718,15 @@ begin
 end;
 
 function JsonArrayItem(P: PUtf8Char; Index: integer): PUtf8Char;
+var
+  parser: TJsonGotoEndParser;
 begin
   if P <> nil then
   begin
     P := GotoNextNotSpace(P);
     if P^ = '[' then
     begin
+      {%H-}parser.Init({strict=}false, nil);
       P := GotoNextNotSpace(P + 1);
       if P^ <> ']' then
         repeat
@@ -4062,7 +3735,7 @@ begin
             result := P;
             exit;
           end;
-          P := GotoEndJsonItem(P);
+          P := parser.GotoEnd(P);
           if (P = nil) or
              (P^ <> ',') then
             break; // invalid content or #0 reached
@@ -4076,11 +3749,11 @@ end;
 
 function JsonObjectPropCount(P, PMax: PUtf8Char; Strict: boolean): PtrInt;
 var
-  validator: TJsonQuickParser;
+  parser: TJsonGotoEndParser;
 begin // is very efficiently inlined on FPC
-  {%H-}validator.InitCount(Strict, PMax, stObjectName);
-  P := validator.GotoEnd(P);
-  result := validator.RootCount;
+  {%H-}parser.InitCount(Strict, PMax, stObjectName);
+  P := parser.GotoEnd(P);
+  result := parser.RootCount;
   if P = nil then
     // aborted when PMax or #0 was reached or the JSON input was invalid
     if result = 0 then
@@ -4255,12 +3928,14 @@ var
   wk, wv: TBaseWriter;
   kb, ke, vb, ve: PUtf8Char;
   temp1, temp2: TTextWriterStackBuffer;
+  parser: TJsonGotoEndParser;
   n: integer;
 begin
   result := -1;
   if (Json = nil) or
      (Json^ <> '{') then
     exit;
+  parser.Init({strict=}false, nil);
   n := 0;
   wk := TBaseWriter.CreateOwnedStream(temp1);
   wv := TBaseWriter.CreateOwnedStream(temp2);
@@ -4269,12 +3944,12 @@ begin
     wv.Add('[');
     kb := Json + 1;
     repeat
-      ke := GotoEndJsonItem(kb);
+      ke := parser.GotoEnd(kb);
       if (ke = nil) or
          (ke^ <> ':') then
         exit; // invalid input content
       vb := ke + 1;
-      ve := GotoEndJsonItem(vb);
+      ve := parser.GotoEnd(vb);
       if (ve = nil) or
          not (ve^ in [',', '}']) then
         exit;
@@ -4341,11 +4016,10 @@ begin // replace comments by ' ' characters which will be ignored by parser
       case P^ of
         '"':
           begin
-            P := GotoEndOfJSONString(P + 1);
+            P := GotoEndOfJsonString2(P + 1, @JSON_CHARS);
             if P^ <> '"' then
-              exit
-            else
-              inc(P);
+              exit;
+            inc(P);
           end;
         '/':
           P := TryRemoveComment(P);
@@ -6982,6 +6656,7 @@ end;
 procedure TTextWriter.AddJsonArraysAsJsonObject(keys, values: PUtf8Char);
 var
   k, v: PUtf8Char;
+  parser: TJsonGotoEndParser;
 begin
   if (keys = nil) or
      (keys[0] <> '[') or
@@ -6996,9 +6671,10 @@ begin
   inc(keys); // jump initial [
   inc(values);
   Add('{');
+  {%H-}parser.Init({strict=}false, nil);
   repeat
-    k := GotoEndJsonItem(keys);
-    v := GotoEndJsonItem(values);
+    k := parser.GotoEnd(keys);
+    v := parser.GotoEnd(values);
     if (k = nil) or
        (v = nil) then
       break; // invalid JSON input
@@ -8179,7 +7855,7 @@ begin
     inc(Json)
   until (Json^ = #0) or
         (Json^ > ' ');
-  c := JsonObjectPropCount(Json);
+  c := JsonObjectPropCount(Json); // fast 900MB/s parsing
   if c <= 0 then
     exit;
   DynArray.Capacity := c;

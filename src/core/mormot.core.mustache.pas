@@ -964,7 +964,7 @@ begin
             P := GotoNextNotSpaceSameLine(P + 1);
             if P^ in ['{', '['] then
             begin
-              P := GotoNextJsonObjectOrArray(P);
+              P := GotoEndJsonItem(P);
               if P <> nil then
               begin
                 aEnd := P;

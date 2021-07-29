@@ -8440,7 +8440,7 @@ var
 begin
   PDest := nil;
   Beg := P;
-  P := GotoNextJsonObjectOrArray(P); // quick go to end of array of object
+  P := GotoEndJsonItem(P); // quick go to end of array of object
   if P = nil then
   begin
     result := '';
@@ -8460,7 +8460,7 @@ begin
   result := '';
   PDest := nil;
   Beg := P;
-  P := GotoNextJsonObjectOrArray(P); // quick go to end of array of object
+  P := GotoEndJsonItem(P); // quick go to end of array of object
   if P = nil then
     exit;
   if EndOfObject <> nil then
@@ -9167,7 +9167,7 @@ begin
   if P^ <> '{' then
     exit;
   Beg := P;
-  P := GotoNextJsonObjectOrArray(Beg);
+  P := GotoEndJsonItem(Beg);
   if (P <> nil) and not (P^ in ENDOFJSONFIELD) then
     P := nil;
   if P <> nil then
@@ -12423,12 +12423,18 @@ begin
   Data := GetFieldAddr(Instance);
   if Value <> nil then
   begin // exact JSON string, array of objet ?
-    B := GotoNextJsonObjectOrArray(Value);
-    if (B = nil) and (Value^ = '"') then
-    begin
-      B := GotoEndOfJsonString(Value);
-      if B^ <> '"' then
-        B := nil;
+    Value := GotoNextNotSpace(Value);
+    case Value^ of
+      '{', '[':
+        B := GotoEndJsonItem(Value);
+      '"':
+        begin
+          B := GotoEndOfJsonString(Value);
+          if B^ <> '"' then
+            B := nil;
+        end;
+    else
+      B := nil;
     end;
     len := StrLen(Value);
     if (B = nil) or (B - Value <> len) then
@@ -15865,7 +15871,8 @@ begin
     for i := fFieldCount to max do
     begin
       // get a field value
-      SetResults(i, GetJsonFieldOrObjectOrArray(P, @wasString, nil, true));
+      SetResults(i, GetJsonFieldOrObjectOrArray(P, @wasString, nil, true
+         {$ifndef NOPOINTEROFFSET} , {normalizebool=}false {$endif}));
       if (P = nil) and (i <> max) then
         // failure (GetRowCountNotExpanded should have detected it)
         exit;
@@ -15924,7 +15931,7 @@ begin
         else
         begin
           // warning: next field names are not checked, and should be correct
-          P := GotoEndJsonItem(P);
+          P := GotoEndJsonItemString(P);
           if P = nil then
             break;
           inc(P); // ignore jcEndOfJsonFieldOr0
