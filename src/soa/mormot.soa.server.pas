@@ -999,7 +999,10 @@ begin
                   if vIsSpi in ValueKindAsm then
                     W.AddShorter('"****",')
                   else
+                  begin
                     AddJson(W, Sender.Values[a], SERVICELOG_WRITEOPTIONS);
+                    W.AddComma;
+                  end;
                 end;
             W.CancelLastComma;
           end;
@@ -1930,8 +1933,8 @@ begin
       if (aExcludedMethodNamesCsv <> '') and
          not (byte(i) in {%H-}excluded) then
       begin
-        include(methods, fInterfaceMethod[i].InterfaceMethodIndex
-          - SERVICE_PSEUDO_METHOD_COUNT);
+        include(methods, fInterfaceMethod[i].
+          InterfaceMethodIndex - SERVICE_PSEUDO_METHOD_COUNT);
         somemethods := true;
       end;
       inc(i);

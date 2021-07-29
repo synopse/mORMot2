@@ -196,7 +196,6 @@ type
     function FromJson(const MethodName: RawUtf8; var R: PUtf8Char; V: pointer;
       Error: PShortString; DVO: TDocVariantOptions): boolean;
     /// append the JSON value corresponding to this argument
-    // - includes a pending ','
     procedure AddJson(WR: TTextWriter; V: pointer;
       ObjectOptions: TTextWriterWriteObjectOptions = [woDontStoreDefault]);
     /// append the value corresponding to this argument as within a JSON string
