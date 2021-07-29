@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CONFIG>
-  <Package Version="5">
+  <Package Version="4">
     <Name Value="mormot2"/>
     <Author Value="A. Bouchez, Synopse"/>
     <CompilerOptions>
@@ -18,7 +18,7 @@
       </CodeGeneration>
       <Linking>
         <Debugging>
-          <DebugInfoType Value="dsDwarf2"/>
+          <DebugInfoType Value="dsDwarf3"/>
         </Debugging>
       </Linking>
       <Other>
@@ -413,7 +413,6 @@
         <UnitName Value="mormot.soa.server"/>
       </Item92>
     </Files>
-    <CompatibilityMode Value="True"/>
     <UsageOptions>
       <IncludePath Value="$(PkgIncPath)"/>
       <LibraryPath Value="$(PkgDir)/../../static/$(TargetCPU)-$(TargetOS)"/>
@@ -424,5 +423,8 @@
       <Version Value="2"/>
       <UseFileFilters Value="True"/>
     </PublishOptions>
+    <CustomOptions Items="ExternHelp" Version="2">
+      <_ExternHelp Items="Count"/>
+    </CustomOptions>
   </Package>
 </CONFIG>

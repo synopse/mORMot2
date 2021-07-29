@@ -1768,7 +1768,7 @@ begin
     else
     begin
       resumed := false;
-      DeleteFile(part); // this .part is too bug, was incorrect
+      DeleteFile(part); // this .part is too big, was incorrect
       if Assigned(OnLog) then
         OnLog(sllTrace, 'WGet %: Resumed canceled. Target size is Lower than current part. Start downloading %', [url, part], self);
       partstream := params.Hasher.Create(TFileStream.Create(part, fmCreate));
