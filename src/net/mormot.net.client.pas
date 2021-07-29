@@ -1652,6 +1652,7 @@ var
   res: integer;
   partstream: TStreamRedirect;
   resumed: boolean;
+  ExpectedSize: LongInt;
 
   procedure DoRequestAndFreePartStream;
   var
@@ -1675,6 +1676,19 @@ var
     lastmod := HeaderGetValue('LAST-MODIFIED');
     if HttpDateToDateTime(lastmod, modif, {local=}true) then
       FileSetDate(part, DateTimeToFileDate(modif));
+  end;
+
+  function GetExpectedTargetSize(out Size: LongInt): Boolean;
+  var
+    requrl: RawUtf8;
+  begin
+    requrl := url;
+    res := Head(requrl,params.KeepAlive, params.Header);
+    if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
+      raise EHttpSocket.Create('WGet: %s:%s/%s failed with %s',
+        [fServer, fPort, url, StatusCodeToErrorMsg(res)]);
+    Size := ContentLength;
+    Result := Size>0;
   end;
 
 begin
@@ -1743,9 +1757,22 @@ begin
   begin
     if Assigned(OnLog) then
       OnLog(sllTrace, 'WGet %: resume % (%)', [url, part, KB(size)], self);
-    partstream := params.Hasher.Create(TFileStream.Create(part, fmOpenReadWrite));
-    partstream.Append; // hash partial content
-    fRangeStart := size;
+    // here we should try to get expected target size with a head request
+    // if current part size is same or above expected one... we should restart from scratch
+    if GetExpectedTargetSize(ExpectedSize) and (Size<ExpectedSize) then
+    begin
+      partstream := params.Hasher.Create(TFileStream.Create(part, fmOpenReadWrite));
+      partstream.Append; // hash partial content
+      fRangeStart := size;
+    end
+    else
+    begin
+      resumed := false;
+      DeleteFile(part); // this .part is too bug, was incorrect
+      if Assigned(OnLog) then
+        OnLog(sllTrace, 'WGet %: Resumed canceled. Target size is Lower than current part. Start downloading %', [url, part], self);
+      partstream := params.Hasher.Create(TFileStream.Create(part, fmCreate));
+    end;
   end
   else
   begin
