@@ -706,10 +706,11 @@ type
   public
     /// release all internal structures
     destructor Destroy; override;
-    /// gives access to an internal temporary TTextWriter
+    /// gives access to a temporary TTextWriter
+    // - returned instance is owned by this TTextWriter, and voided
     // - may be used to escape some JSON espaced value (i.e. escape it twice),
     // in conjunction with AddJsonEscape(Source: TTextWriter)
-    function InternalJsonWriter: TTextWriter;
+    function GetTempJsonWriter: TTextWriter;
     /// append '[' or '{' with proper indentation
     procedure BlockBegin(Starter: AnsiChar; Options: TTextWriterWriteObjectOptions);
     /// append ',' with proper indentation
@@ -5340,10 +5341,13 @@ end;
 
 procedure TTextWriter.WriteObjectAsString(Value: TObject;
   Options: TTextWriterWriteObjectOptions);
+var
+  W: TTextWriter;
 begin
   Add('"');
-  InternalJsonWriter.WriteObject(Value, Options);
-  AddJsonEscape(fInternalJsonWriter);
+  W := GetTempJsonWriter;
+  W.WriteObject(Value, Options);
+  AddJsonEscape(W);
   Add('"');
 end;
 
@@ -5351,11 +5355,13 @@ procedure TTextWriter.AddDynArrayJsonAsString(aTypeInfo: PRttiInfo; var aValue;
   WriteOptions: TTextWriterWriteObjectOptions);
 var
   temp: TDynArray;
+  W: TTextWriter;
 begin
   Add('"');
   temp.Init(aTypeInfo, aValue);
-  InternalJsonWriter.AddDynArrayJson(temp, WriteOptions);
-  AddJsonEscape(fInternalJsonWriter);
+  W := GetTempJsonWriter;
+  W.AddDynArrayJson(temp, WriteOptions);
+  AddJsonEscape(W);
   Add('"');
 end;
 
@@ -5507,7 +5513,7 @@ begin
   fInternalJsonWriter.Free;
 end;
 
-function TTextWriter.InternalJsonWriter: TTextWriter;
+function TTextWriter.GetTempJsonWriter: TTextWriter;
 begin
   if fInternalJsonWriter = nil then
     fInternalJsonWriter := TTextWriter.CreateOwnedStream

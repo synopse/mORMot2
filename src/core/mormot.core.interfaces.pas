@@ -2629,7 +2629,7 @@ begin
     AddJson(WR, V)
   else
   begin
-    W := WR.InternalJsonWriter;
+    W := WR.GetTempJsonWriter;
     AddJson(W, V);
     WR.AddJsonEscape(W);
   end;

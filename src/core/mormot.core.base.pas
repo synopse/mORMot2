@@ -531,7 +531,7 @@ type
 
     TDynArrayRec = packed record
       refCnt: TRefCnt; // =SizeInt
-      high: TDALen;   // =SizeInt (differs from Delphi: equals length-1)
+      high: TDALen;    // =SizeInt (differs from Delphi: equals length-1)
       function GetLength: TDALen; inline;
       procedure SetLength(len: TDALen); inline;
       property length: TDALen // Delphi compatibility wrapper
@@ -565,7 +565,7 @@ type
       _Padding: cardinal;
       {$endif}
       /// dynamic array reference count (basic garbage memory mechanism)
-      refCnt: TRefCnt;
+      refCnt: TRefCnt; // 32-bit longint with Delphi
       /// length in element count
       // - size in bytes = length*ElemSize
       length: TDALen;
