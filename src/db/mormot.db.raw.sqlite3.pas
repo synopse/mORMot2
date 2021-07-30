@@ -5516,15 +5516,16 @@ begin
         sqlite3.result_null(Context)
       else
       begin
-        json^ := #0; // truncate to the matching object or array
+        json^ := #0; // truncate to the matching object or array end
         sqlite3.result_text(Context, start, json - start + 1, SQLITE_TRANSIENT);
       end;
     end
-    else      // JSON simple types (text, numbers) would be converted via a variant
-    if VariantLoadJson(tmp, start, nil, nil) = nil then
-      sqlite3.result_null(Context)
     else
-      VariantToSQlite3Context(tmp, Context);
+      // JSON simple types (text, numbers) would be converted via a variant
+      if VariantLoadJson(tmp, start, nil, nil) = nil then
+        sqlite3.result_null(Context)
+      else
+        VariantToSQlite3Context(tmp, Context);
   end;
 end;
 

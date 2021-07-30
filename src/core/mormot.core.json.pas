@@ -2700,6 +2700,9 @@ prop:     if ExpectStandard then
                   (P^ <> #0) do
               inc(P);
           until not (jcJsonIdentifierFirstChar in JsonSet[P^]); // new date(...
+          while (P^ <= ' ') and
+                (P^ <> #0) do
+            inc(P);
           if P^ = '(' then
           begin
             // handle e.g. "born":isodate("1969-12-31")
@@ -3097,7 +3100,7 @@ end;
 
 function GotoEndOfJsonString(P: PUtf8Char): PUtf8Char;
 begin
-  // P^='"' at function call
+  // P^='"' at function call and at sucessfull function return
   result := GotoEndOfJsonString2(P + 1, @JSON_CHARS);
 end;
 

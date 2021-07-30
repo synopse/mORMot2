@@ -7212,7 +7212,7 @@ begin
         if EndOfObject <> nil then
           EndOfObject^ := P^;
         if P3^ <> #0 then
-          P3^ := #0;
+          P3^ := #0; // make asciiz
         if not GetNumericVariantFromJson(P2, V, AllowDouble) then
         begin
           P := P2;

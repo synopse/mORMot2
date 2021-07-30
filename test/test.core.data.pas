@@ -3192,10 +3192,14 @@ begin
   if sample <> '' then
     begin
       timer.Start;
-      dv.InitJson(sample, JSON_OPTIONS_FAST + [dvoAllowDoubleValue]);
-      Check(dv.count = 3);
-      dv.Clear; // to reuse dv
-      NotifyTestSpeed('TDocVariant sample.json', 0, length(sample), @timer, ONLYLOG);
+      for i := 1 to ITER do
+      begin
+        dv.InitJson(sample, JSON_OPTIONS_FAST + [dvoAllowDoubleValue]);
+        Check(dv.count = 3);
+        dv.Clear; // to reuse dv
+      end;
+      NotifyTestSpeed('TDocVariant sample.json', 0,
+        length(sample) * ITER, @timer, ONLYLOG);
       timer.Start;
       for i := 1 to ITER do
       begin
