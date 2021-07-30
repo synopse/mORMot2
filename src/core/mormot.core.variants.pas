@@ -2828,8 +2828,7 @@ var
   // FastVarDataComp() efficient lookup for per-VType comparison function
   _VARDATACMP: array[boolean, 0 .. $102 {varUString}] of TDynArraySortCompare;
 
-function VariantCompAsUtf8(const A, B: variant;
-  caseInsensitive: boolean): integer;
+function VariantCompAsUtf8(const A, B: variant; caseInsensitive: boolean): integer;
 // need to serialize both as UTF-8 text/JSON
 var
   au, bu: RawUtf8;
@@ -5461,7 +5460,7 @@ begin
   if Assigned(aNameSortedCompare) then // just like GetVarData() searches names
     namecomp := aNameSortedCompare
   else
-    namecomp := StrCompByCase[dvoNameCaseSensitive in VOptions];
+    namecomp := StrCompByCase[not (dvoNameCaseSensitive in VOptions)];
   for row := 0 to VCount - 1 do
   begin
     rowdata := _Safe(VValue[row]);
