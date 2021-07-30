@@ -9612,13 +9612,10 @@ begin
   else if Item2 = nil then
     result := 1
   else
-  begin
+  begin // slow, always working implementation
     GetValueVar(Item1, false, tmp1, nil);
     GetValueVar(Item2, false, tmp2, nil);
-    if CaseInsensitive then // slow, always working implementation
-      result := StrIComp(pointer(tmp1), pointer(tmp2))
-    else
-      result := StrComp(pointer(tmp1), pointer(tmp2));
+    result := StrCompByCase[CaseInsensitive](pointer(tmp1), pointer(tmp2));
   end;
 end;
 

@@ -2531,10 +2531,6 @@ procedure TrimCopy(const S: RawUtf8; start, count: PtrInt;
 // - if SepStr is not found, returns Str
 function Split(const Str, SepStr: RawUtf8; StartPos: integer = 1): RawUtf8; overload;
 
-type
-  /// the function prototype of StrComp and StrIComp
-  TStrComp = function(Str1, Str2: pointer): PtrInt;
-
 /// buffer-safe version of StrComp(), to be used with PUtf8Char/PAnsiChar
 function StrComp(Str1, Str2: pointer): PtrInt;
   {$ifndef CPUX86}{$ifdef HASINLINE}inline;{$endif}{$endif}

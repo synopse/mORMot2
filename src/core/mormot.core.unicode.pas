@@ -1198,6 +1198,15 @@ function StrCompIL(P1, P2: pointer; L: PtrInt; Default: PtrInt = 0): PtrInt;
 function StrIComp(Str1, Str2: pointer): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
+type
+  /// function prototype used internally for UTF-8 buffer comparison
+  // - also used e.g. in mormot.core.variants unit
+  TUtf8Compare = function(P1, P2: PUtf8Char): PtrInt;
+
+var
+  /// a quick wrapper to StrComp or StrIComp comparison functions
+  StrCompByCase: array[{CaseInsensitive=}boolean] of TUtf8Compare;
+
 /// retrieve the next UCS4 CodePoint stored in U, then update the U pointer
 // - this function will decode the UTF-8 content before using NormToUpper[]
 // - will return '?' if the UCS4 CodePoint is higher than #255: so use this function
@@ -6801,6 +6810,8 @@ begin
     if c in [#1..' ', ';'] then
       include(TEXT_CHARS[c], tcCtrlNot0Comma);
   end;
+  StrCompByCase[false] := @StrComp;
+  StrCompByCase[true] := @StrIComp;
   // setup basic Unicode conversion engines
   SetLength(SynAnsiConvertListCodePage, 16); // no resize -> more thread safe
   CurrentAnsiConvert := TSynAnsiConvert.Engine(Unicode_CodePage);

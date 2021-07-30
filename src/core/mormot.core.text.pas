@@ -1278,11 +1278,6 @@ type
 
 { ************ TRawUtf8DynArray Processing Functions }
 
-type
-  /// function prototype used internally for UTF-8 buffer comparison
-  // - also used e.g. in mormot.core.variants unit
-  TUtf8Compare = function(P1, P2: PUtf8Char): PtrInt;
-
 /// returns TRUE if Value is nil or all supplied Values[] equal ''
 function IsZero(const Values: TRawUtf8DynArray): boolean; overload;
 
@@ -6782,10 +6777,7 @@ procedure QuickSortRawUtf8(Values: PRawUtf8Array; L, R: PtrInt;
 var
   QS: TQuickSortRawUtf8;
 begin
-  if caseInsensitive then
-    QS.Compare := @StrIComp
-  else
-    QS.Compare := @StrComp;
+  QS.Compare := StrCompByCase[caseInsensitive];
   QS.CoValues := nil;
   QS.Sort(pointer(Values), L, R);
 end;
