@@ -2144,27 +2144,43 @@ begin
     '{"ID":  1 ,"Name":"Alice","Role":"User","Last Login":null, // comment'#13#10 +
     '"First Login" : /* to be ignored */  null  ,  "Department"  : ' +
     ' "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
-  check(not IsValidJson(J));
+  check(not IsValidJson(J, {strict=}false));
+  check(not IsValidJson(J, {strict=}true));
+  J2 := '[' + J;
+  check(IsValidJson(J2, {strict=}false));
+  check(not IsValidJson(J2, {strict=}true));
   RemoveCommentsFromJson(UniqueRawUtf8(J));
-  check(not IsValidJson(J));
-  check(IsValidJson('[' + J));
+  check(not IsValidJson(J, {strict=}false));
+  check(not IsValidJson(J, {strict=}true));
+  J2 := '[' + J;
+  check(IsValidJson(J2, {strict=}false));
+  check(IsValidJson(J2, {strict=}true));
   J := GetJsonObjectAsSql(J, false, true);
   CheckEqual(J, U);
   J := '{'#10'"httpServer": {'#10'"host": "*",'#10'"port": "8881",'#10 +
     '"serverType": "Socket",'#10'/*"reverseProxy": {'#10'"kind": "nginx",'#10 +
     '"sendFileLocationRoot": "snake-ukrpatent-local"'#10'}*/'#10'} //eol'#10'}';
-  check(IsValidJSON(J)); // false positive
+  check(IsValidJson(J, {strict=}false));
+  check(not IsValidJson(J, {strict=}true));
   RemoveCommentsFromJson(UniqueRawUTF8(J));
-  CheckUtf8(IsValidJSON(J), J);
+  check(IsValidJson(J, {strict=}false));
+  check(IsValidJson(J, {strict=}true));
   J := JSONReformat(J,jsonCompact);
   CheckEqual(J,'{"httpServer":{"host":"*","port":"8881","serverType":"Socket"}}');
   J := '{"RowID":  210 ,"Name":"Alice","Role":"User","Last Login":null, ' +
     '// comment'#13#10'"First Login" : /* to be ignored */  null  ,  "Department"' +
     ' :    "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
-  check(not IsValidJson(J));
+  check(not IsValidJson(J, {strict=}false));
+  check(not IsValidJson(J, {strict=}true));
+  J2 := '[' + J;
+  check(IsValidJson(J2, {strict=}false));
+  check(not IsValidJson(J2, {strict=}true));
   RemoveCommentsFromJson(UniqueRawUtf8(J));
-  check(not IsValidJson(J));
-  check(IsValidJson('[' + J));
+  check(not IsValidJson(J, {strict=}false));
+  check(not IsValidJson(J, {strict=}true));
+  J2 := '[' + J;
+  check(IsValidJson(J2, {strict=}false));
+  check(IsValidJson(J2, {strict=}true));
   J := GetJsonObjectAsSql(J, false, true, 1, True);
   CheckEqual(J, U);
   O := TPersistentToJson.Create;
@@ -2228,9 +2244,11 @@ begin
     O2.fName := '';
     O2.fEnum := low(E);
     O2.fSets := [];
-    check(not IsValidJson(J));
+    check(IsValidJson(J, {strict=}false));
+    check(not IsValidJson(J, {strict=}true));
     RemoveCommentsFromJson(UniqueRawUtf8(J));
-    check(IsValidJson(J));
+    check(IsValidJson(J, {strict=}false));
+    check(IsValidJson(J, {strict=}true));
     JsonToObject(O2, pointer(J), Valid);
     Check(Valid);
     Check(O.Name = O2.Name);

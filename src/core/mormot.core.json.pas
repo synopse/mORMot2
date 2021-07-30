@@ -157,17 +157,17 @@ function IsString(P: PUtf8Char): boolean;
 function IsStringJson(P: PUtf8Char): boolean;
 
 /// test if the supplied text buffer seems to be a correct (extended) JSON value
-// - will allow extended MongoDB JSON syntax unless Strict=true
+// - will allow comments and extended MongoDB JSON syntax unless Strict=true
 // - numbers, escaped strings and commas are wild guessed, for performance
 function IsValidJson(P: PUtf8Char; len: PtrInt; strict: boolean = false): boolean; overload;
 
 /// test if the supplied text seems to be a correct (extended) JSON value
-// - will allow extended MongoDB JSON syntax unless Strict=true
+// - will allow comments and extended MongoDB JSON syntax unless Strict=true
 // - numbers, escaped strings and commas are wild guessed, for performance
 function IsValidJson(const s: RawUtf8; strict: boolean = false): boolean; overload;
 
 /// test if the supplied #0 ended buffer is a correct (extended) JSON value
-// - will allow extended MongoDB JSON syntax unless Strict=true
+// - will allow comments and extended MongoDB JSON syntax unless Strict=true
 // - numbers, escaped strings and commas are wild guessed, for performance
 function IsValidJsonBuffer(P: PUtf8Char; strict: boolean = false): boolean;
 
@@ -265,14 +265,14 @@ function GotoEndJsonItemString(P: PUtf8Char): PUtf8Char;
 // - returns nil if the specified buffer is not valid JSON content
 // - returns the position in buffer just after the item excluding the separator
 // character - i.e. result^ may be ',','}',']'
-// - MongoDB extended syntax like {age:{$gt:18}} will be allowed - so you
-// may consider GotoEndJsonItemStrict() if you expect full standard JSON parsing
+// - will allow comments and extended MongoDB JSON syntax - use
+// GotoEndJsonItemStrict() if you expect a more standard JSON parsing
 function GotoEndJsonItem(P: PUtf8Char; PMax: PUtf8Char = nil): PUtf8Char;
 
 /// reach positon just after the current JSON item in the supplied UTF-8 buffer
 // - in respect to GotoEndJsonItem(), this function will validate for strict
 // JSON simple values, i.e. real numbers or only true/false/null constants,
-// and refuse MongoDB extended syntax like {age:{$gt:18}}
+// and refuse commens or MongoDB extended syntax like {age:{$gt:18}}
 // - numbers and escaped strings are not fully validated, just their charset
 function GotoEndJsonItemStrict(P: PUtf8Char; PMax: PUtf8Char = nil): PUtf8Char;
 
@@ -327,7 +327,7 @@ function JsonArrayDecode(P: PUtf8Char;
 
 /// compute the number of fields in a JSON object
 // - this will handle any kind of objects, including those with nested JSON
-// objects or arrays, and also the MongoDB extended syntax (unless Strict=true)
+// documents, and also comments or MongoDB extended syntax (unless Strict=true)
 // - incoming P^ should point to the first char after the initial '{' (which
 // may be a closing '}')
 // - will abort if P reaches PMax (if not nil), and return the current counted
@@ -2739,17 +2739,40 @@ prop:     if ExpectStandard then
             exit; // identifier values are functions like isodate() objectid()
           continue;
         end;
-      jtSlash: // '/' to allow extended /regex/ syntax
+      jtSlash: // '/' extended /regex/i or /*comment*/ or //comment
         begin
           if ExpectStandard then
             exit;
-          repeat
-            inc(P);
-            if P^ = #0 then
+          inc(P);
+          if P^ = #0 then
+            exit
+          else if P^ = '*' then // ignore /* comment */
+          begin
+            repeat
+              inc(P);
+              if P^ = #0 then
+                exit;
+            until PWord(P)^ = ord('*') + ord('/') shl 8;
+            inc(P, 2);
+            continue;
+          end
+          else if P^ = '/' then // ignore // comment
+          begin
+            P := GotoNextLine(P + 1);
+            if P = nil then
               exit;
-          until P^ = '/';
-          while not (jcEndOfJsonFieldNotName in JsonSet[P[1]]) do
-            inc(P);
+            continue;
+          end
+          else
+          begin
+            repeat // extended /regex/i syntax
+              inc(P);
+              if P^ = #0 then
+                exit;
+            until P^ = '/';
+            while not (jcEndOfJsonFieldNotName in JsonSet[P[1]]) do
+              inc(P);
+          end;
         end;
       jtEndOfBuffer: // #0
         if StackCount <> 0 then
@@ -4266,13 +4289,14 @@ end;
 
 { ********** Low-Level JSON Serialization for all TRttiParserType }
 
+// defined here for proper inlining
 procedure TTextWriter.BlockAfterItem(Options: TTextWriterWriteObjectOptions);
 begin
-  // defined here for proper inlining
   AddComma;
   if woHumanReadable in Options then
     AddCRAndIndent;
 end;
+
 
 { TJsonSaveContext }
 
@@ -4647,9 +4671,8 @@ begin
   begin
     if TRttiJson(Ctxt.Info).fJsonWriter.Code <> nil then
     begin
-      // TRttiJson.RegisterCustomSerializer() custom callbacks
       c.Info := Ctxt.Info;
-      jsonsave := @_JS_DynArray_Custom;
+      jsonsave := @_JS_DynArray_Custom; // redirect to custom callback
     end
     else if c.Info = nil then
       jsonsave := nil
@@ -4735,7 +4758,7 @@ begin
     // append 'null' for nil class instance
     c.W.AddNull
   else if nfo.fJsonWriter.Code <> nil then
-    // TRttiJson.RegisterCustomSerializer() custom callbacks
+    // TRttiJson.RegisterCustomSerializer() callback - e.g. TOrm.RttiJsonWrite
     TOnRttiJsonWrite(nfo.fJsonWriter)(c.W, Data, c.Options)
   else if not (rcfHookWrite in nfo.Flags) or
           not TCCHook(Data).RttiBeforeWriteObject(c.W, c.Options) then
@@ -7079,8 +7102,7 @@ begin
   if Ctxt.Json <> nil then
     Ctxt.Json := GotoNextNotSpace(Ctxt.Json);
   if TRttiJson(Ctxt.Info).fJsonReader.Code <> nil then
-  begin
-    // TRttiJson.RegisterCustomSerializer() custom callbacks
+  begin // TRttiJson.RegisterCustomSerializer() - e.g. TOrm.RttiJsonRead
     if Ctxt.Info.Kind = rkClass then
     begin
       if PPointer(Data)^ = nil then // e.g. from _JL_DynArray for T*ObjArray
@@ -7201,8 +7223,7 @@ begin
     // efficient load of all JSON items
     arrinfo := Ctxt.Info;
     if TRttiJson(arrinfo).fJsonReader.Code <> nil then
-      // TRttiJson.RegisterCustomSerializer() custom callbacks
-      load := @_JL_DynArray_Custom
+      load := @_JL_DynArray_Custom // custom callback
     else
     begin
       Ctxt.Info := arrinfo.ArrayRtti;
