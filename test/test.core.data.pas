@@ -2915,6 +2915,7 @@ var
   table: TOrmTableJson;
   timer: TPrecisionTimer;
   rec: TRecordPeopleDynArray;
+  objarr: TOrmPeopleObjArray;
   {$ifdef JSONBENCHMARK_FPJSON}
   fpjson: TJSONData;
   {$endif JSONBENCHMARK_FPJSON}
@@ -3058,10 +3059,20 @@ begin
   timer.Start;
   for i := 1 to ITER do
   begin
+    // default serialization (with ID=0) TOrmPeopleObjArray in 79.14ms, 247.6 MB/s
     Check(DynArrayLoadJson(rec, people, TypeInfo(TRecordPeopleDynArray)));
     Check(length(rec) = count);
   end;
   NotifyTestSpeed('DynArrayLoadJson', 0, len, @timer, ONLYLOG);
+  timer.Start;
+  for i := 1 to ITER do
+  begin
+    Check(DynArrayLoadJson(objarr, people, TypeInfo(TOrmPeopleObjArray)));
+    Check(length(objarr) = count);
+    //FileFromString(DynArraySaveJson(objarr, TypeInfo(TOrmPeopleObjArray)), WorkDir + 'objarray.json');
+    ObjArrayClear(objarr);
+  end;
+  NotifyTestSpeed('TOrmPeopleObjArray', 0, len, @timer, ONLYLOG);
   {$ifdef JSONBENCHMARK_FPJSON}
   timer.Start;
   for i := 1 to ITER div 10 do // div 10 since fpjson is slower

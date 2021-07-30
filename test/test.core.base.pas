@@ -113,6 +113,7 @@ type
     // but it won't make any difference)
     class function Sum(aClient: TRestClientUri; a, b: double; Method2: boolean): double;
   end;
+  TOrmPeopleObjArray = array of TOrmPeople;
 
   /// a record used to test dynamic array serialization
   TFV = packed record
@@ -159,7 +160,7 @@ type
   /// regression tests for most basic mormot.core.* features
   TTestCoreBase = class(TSynTestCase)
   protected
-    a: array of TOrmPeople;
+    a: TOrmPeopleObjArray;
     fAdd, fDel: RawUtf8;
     fQuickSelectValues: TIntegerDynArray;
     function QuickSelectGT(IndexA, IndexB: PtrInt): boolean;
@@ -6621,6 +6622,9 @@ begin
 end;
 
 begin
+  {$ifndef HASDYNARRAYTYPE}
+  Rtti.RegisterObjArray(TypeInfo(TOrmPeopleObjArray), TOrmPeople);
+  {$endif HASDYNARRAYTYPE}
   Rtti.RegisterFromText([TypeInfo(TRecordPeopleDynArray),
     'RowID:TID FirstName,LastName:RawUtf8 Data:RawBlob YearOfBirth:integer YearOfDeath:word'
   ]);
