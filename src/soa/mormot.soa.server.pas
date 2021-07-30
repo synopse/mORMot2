@@ -1045,7 +1045,10 @@ begin
                     if vIsSpi in ValueKindAsm then
                       W.AddShorter('"****",')
                     else
+                    begin
                       AddJson(W, Sender.Values[a], SERVICELOG_WRITEOPTIONS);
+                      W.AddComma;
+                    end;
                   end;
               W.CancelLastComma;
             end;
