@@ -3150,6 +3150,32 @@ begin
     result := GotoNextNotSpace(P + 1);
 end;
 
+function TryGotoEndOfComment(P: PUtf8Char): PUtf8Char;
+begin
+  repeat
+    result := P; // return input P^ = '/' if no comment was found
+    inc(P);
+    if P^ = '*' then // ignore /* comment */
+    begin
+      repeat
+        inc(P);
+        if P^ = #0 then
+          exit;
+      until PWord(P)^ = ord('*') + ord('/') shl 8;
+      result := GotoNextNotSpace(P + 2);
+    end
+    else if P^ = '/' then // ignore // comment
+    begin
+      P := GotoNextLine(P + 1);
+      if P = nil then
+        exit;
+      result := GotoNextNotSpace(P);
+    end
+    else
+      exit;
+  until P^ <> '/'; // there may be other subsequent comments ;)
+end;
+
 function GetJsonPropName(var Json: PUtf8Char; Len: PInteger): PUtf8Char;
 var
   P, Name: PUtf8Char;
@@ -3173,6 +3199,8 @@ begin
     end;
     inc(P);
   end;
+  if P^ = '/' then
+    P := TryGotoEndOfComment(P);
   Name := P + 1;
   tab := @JSON_CHARS;
   if P^ = '"' then
@@ -3260,6 +3288,11 @@ begin
   end;
   Name := pointer(P);
   c := P^;
+  if c = '/' then
+  begin
+    P := TryGotoEndOfComment(P);
+    c := P^;
+  end;
   if c = '"' then
   begin
     inc(Name);
@@ -3410,6 +3443,8 @@ begin
   while (P^ <= ' ') and
         (P^ <> #0) do
     inc(P);
+  if P^ = '/' then
+    P := TryGotoEndOfComment(P);
   if HandleValuesAsObjectOrArray and
      (P^ in ['{', '[']) then
   begin
@@ -5999,6 +6034,8 @@ begin
   while (Json^ <= ' ') and
         (Json^ <> #0) do
     inc(Json);
+  if Json^ = '/' then
+    Json := TryGotoEndOfComment(Json);
   case Json^ of
   '[':
     begin
@@ -6064,8 +6101,8 @@ begin
       end;
     end;
   else
-    begin
-      Value := GetJsonField(Json, result, nil, EndOfObject); // let wasString=nil
+    begin // unescape the JSON content and write as UTF-8 escaped XML
+      Value := GetJsonField(Json, result, nil, EndOfObject);
       if Value = nil then
         AddNull
       else
@@ -9114,7 +9151,7 @@ begin
     fCompare[true] := RTTI_COMPARE[true][Kind];
     fCompare[false] := RTTI_COMPARE[false][Kind];
     if Kind = rkLString then
-      // RTTI_COMPARE[rkLString] is StrCmp/StrICmp which is mostly fine
+      // RTTI_COMPARE[rkLString] is StrComp/StrIComp which is mostly fine
       if Cache.CodePage >= CP_RAWBLOB then
       begin
         // should use RawByteString length, and ignore any #0
