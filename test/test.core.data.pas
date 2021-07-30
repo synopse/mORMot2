@@ -1177,7 +1177,7 @@ const
 
 procedure TTestCoreProcess.EncodeDecodeJSON;
 var
-  J, U, U2: RawUtf8;
+  J, J2, U, U2: RawUtf8;
   P: PUtf8Char;
   binary, zendframeworkJson, discogsJson: RawByteString;
   V: array[0..4] of TValuePUtf8Char;
@@ -1874,6 +1874,8 @@ begin
   Check(IsStringJson('TRUE'));
   Check(not IsStringJson('123'));
   Check(IsStringJson('0123'));
+  Check(not IsStringJson('-123'));
+  Check(IsStringJson('-0123'));
   Check(not IsStringJson('0.123'));
   Check(not IsStringJson('1E19'));
   Check(not IsStringJson('1.23E1'));
@@ -2022,34 +2024,33 @@ begin
     peop.Data := #1#2#3#4;
     J := ObjectToJson(peop, [woRawBlobAsBase64]);
     check(IsValidJson(J));
-    check(J[53] = #$EF);
-    check(J[54] = #$BF);
-    check(J[55] = #$B0);
-    J[53] := '1';
-    J[54] := '2';
-    J[55] := '3';
+    check(J[56] = #$EF);
+    check(J[57] = #$BF);
+    check(J[58] = #$B0);
+    J2 := ObjectToJson(peop); // TOrm.RttiJsonWrite always include RawBlob
+    check(IsValidJson(J2));
+    CheckEqual(J, J2);
+    J[56] := '1';
+    J[57] := '2';
+    J[58] := '3';
     check(IsValidJson(J));
-    CheckEqual(J, '{"ID":1234,"FirstName":"FN","LastName":"LN",' +
+    CheckEqual(J, '{"RowID":1234,"FirstName":"FN","LastName":"LN",' +
       '"Data":"123AQIDBA==","YearOfBirth":1000,"YearOfDeath":0}');
-    J := ObjectToJson(peop);
-    check(IsValidJson(J));
-    CheckEqual(J, '{"ID":1234,"FirstName":"FN","LastName":"LN",' +
-      '"Data":null,"YearOfBirth":1000,"YearOfDeath":0}');
     ClearObject(peop);
     J := ObjectToJson(peop);
     check(IsValidJson(J));
-    CheckEqual(J, '{"ID":0,"FirstName":"","LastName":"",' +
+    CheckEqual(J, '{"RowID":0,"FirstName":"","LastName":"",' +
       '"Data":null,"YearOfBirth":0,"YearOfDeath":0}');
     peop.IDValue := -1234;
     J := ObjectToJson(peop);
     check(IsValidJson(J));
-    CheckEqual(J, '{"ID":-1234,"FirstName":"","LastName":"",' +
+    CheckEqual(J, '{"RowID":-1234,"FirstName":"","LastName":"",' +
       '"Data":null,"YearOfBirth":0,"YearOfDeath":0}');
     peop.YearOfDeath := 10;
     peop.LastName := 'john';
     J := ObjectToJson(peop);
     check(IsValidJson(J));
-    CheckEqual(J, '{"ID":-1234,"FirstName":"","LastName":"john","Data":null,' +
+    CheckEqual(J, '{"RowID":-1234,"FirstName":"","LastName":"john","Data":null,' +
       '"YearOfBirth":0,"YearOfDeath":10}');
   finally
     peop.Free;

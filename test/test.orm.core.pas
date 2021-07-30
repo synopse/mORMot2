@@ -530,7 +530,7 @@ begin
       'VALUES (0,'''','''','''',0,0,'''',0,null)');
     s := ObjectToJson(T);
     CheckEqual(s,
-      '{"ID":0,"Int":0,"Test":"","Unicode":"","Ansi":"","ValFloat":0,' +
+      '{"RowID":0,"Int":0,"Test":"","Unicode":"","Ansi":"","ValFloat":0,' +
       '"ValWord":0,"ValDate":"","Next":0,"Data":null,"ValVariant":null}');
     T.ValDate := 39882.888612; // a fixed date and time
     wa := 'abcde6ef90';
@@ -579,8 +579,8 @@ begin
     s3 := VariantSaveJson(obj);
     Check(s3 = s);
     s := ObjectToJson(T);
-    CheckEqual(s, '{"ID":10,"Int":0,"Test":"' + T.Test + '","Unicode":"' + T.Test
-      + '","Ansi":"' + T.Test + '","ValFloat":3.141592653,"ValWord":1203,' +
+    CheckEqual(s, '{"RowID":10,"Int":0,"Test":"' + T.Test + '","Unicode":"' +
+      T.Test + '","Ansi":"' + T.Test + '","ValFloat":3.141592653,"ValWord":1203,' +
       '"ValDate":"2009-03-10T21:19:36","Next":0,"Data":null,"ValVariant":3.1416}');
     T2.ClearProperties;
     Check(not T.SameValues(T2));
@@ -629,7 +629,6 @@ begin
     CheckEqual(s, StringReplaceAll(s2, ', ', ',') +
       ',ValVariant=''{"name":"John","int":1234}''');
     s := ObjectToJson(T);
-    delete(s1, 3, 3); // "RowID":10 -> "ID":10
     s := StringReplaceAll(s, 'null', '0');
     CheckEqual(s, s1 + ',"Data":0,"ValVariant":{"name":"John","int":1234}}');
     bin := T.GetBinary;

@@ -949,7 +949,7 @@ type
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; virtual;
     /// add the JSON content corresponding to the given property
     // - this default implementation will call safe but slow GetValueVar() method
-    procedure GetJsonValues(Instance: TObject; W: TJsonSerializer); virtual;
+    procedure GetJsonValues(Instance: TObject; W: TTextWriter); virtual;
     /// returns an untyped pointer to the field property memory in a given instance
     function GetFieldAddr(Instance: TObject): pointer; virtual; abstract;
   end;
@@ -1051,7 +1051,7 @@ type
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetJsonValues(Instance: TObject; W: TJsonSerializer); override;
+    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
   end;
 
   /// information about a set published property
@@ -1076,7 +1076,7 @@ type
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
     procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetJsonValues(Instance: TObject; W: TJsonSerializer); override;
+    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     function GetCaption(Value: RawUtf8; out IntValue: integer): string;
     property EnumType: PRttiEnumType read fEnumType;
   end;
@@ -1110,7 +1110,7 @@ type
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetJsonValues(Instance: TObject; W: TJsonSerializer); override;
+    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
   end;
 
   /// information about a PtrInt published property, according to the native CPU
@@ -1148,7 +1148,7 @@ type
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
     procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetJsonValues(Instance: TObject; W: TJsonSerializer); override;
+    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
   end;
@@ -1168,7 +1168,7 @@ type
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
     procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetJsonValues(Instance: TObject; W: TJsonSerializer); override;
+    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
   end;
@@ -1182,7 +1182,7 @@ type
     procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar; var temp:
       RawByteString); override;
     procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetJsonValues(Instance: TObject; W: TJsonSerializer); override;
+    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean):
       PtrInt; override;
   end;
@@ -1203,7 +1203,7 @@ type
     procedure CopyValue(Source, Dest: TObject); override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    procedure GetJsonValues(Instance: TObject; W: TJsonSerializer); override;
+    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar; var temp:
       RawByteString); override;
     function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
@@ -1230,7 +1230,7 @@ type
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
-    procedure GetJsonValues(Instance: TObject; W: TJsonSerializer); override;
+    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
   end;
 
   /// information about a RawUnicode published property
@@ -1264,7 +1264,7 @@ type
     function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
-    procedure GetJsonValues(Instance: TObject; W: TJsonSerializer); override;
+    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     procedure GetBlob(Instance: TObject; var Blob: RawByteString);
     procedure SetBlob(Instance: TObject; const Blob: RawByteString);
     function IsNull(Instance: TObject): boolean;
@@ -1282,7 +1282,7 @@ type
     procedure CopyValue(Source, Dest: TObject); override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    procedure GetJsonValues(Instance: TObject; W: TJsonSerializer); override;
+    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
   end;
@@ -1302,7 +1302,7 @@ type
     procedure CopyValue(Source, Dest: TObject); override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
-    procedure GetJsonValues(Instance: TObject; W: TJsonSerializer); override;
+    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     procedure GetFieldSqlVar(Instance: TObject; var aValue: TSqlVar;
       var temp: RawByteString); override;
     function SetFieldSqlVar(Instance: TObject; const aValue: TSqlVar): boolean; override;
@@ -1341,7 +1341,7 @@ type
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetJsonValues(Instance: TObject; W: TJsonSerializer); override;
+    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     procedure GetVariant(Instance: TObject; var Dest: Variant); override;
     procedure SetVariant(Instance: TObject; const Source: Variant); override;
     /// optional index of the dynamic array published property
@@ -1382,7 +1382,7 @@ type
     function CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetJsonValues(Instance: TObject; W: TJsonSerializer); override;
+    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     procedure GetVariant(Instance: TObject; var Dest: Variant); override;
     procedure SetVariant(Instance: TObject; const Source: Variant); override;
     /// how this property will deal with its instances (including TDocVariant)
@@ -1597,7 +1597,7 @@ type
     property CustomParser: TRttiJson read fCustomParser;
   public
     procedure SetValue(Instance: TObject; Value: PUtf8Char; wasString: boolean); override;
-    procedure GetJsonValues(Instance: TObject; W: TJsonSerializer); override;
+    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
     procedure GetValueVar(Instance: TObject; ToSql: boolean; var result: RawUtf8;
       wasSqlString: PBoolean); override;
     procedure GetBinary(Instance: TObject; W: TBufferWriter); override;
@@ -1733,7 +1733,7 @@ type
     /// this method will recognize if the TOrm was allocated by
     // a Create*Joined() constructor: in this case, it will write the ID
     // of the nested property, and not the PtrInt() transtyped value
-    procedure GetJsonValues(Instance: TObject; W: TJsonSerializer); override;
+    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
   end;
 
   TOrmPropInfoRttiIDObjArray = array of TOrmPropInfoRttiID;
@@ -1755,7 +1755,7 @@ type
     procedure SetBinary(Instance: TObject; var Read: TFastReader); override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
     procedure NormalizeValue(var Value: RawUtf8); override;
-    procedure GetJsonValues(Instance: TObject; W: TJsonSerializer); override;
+    procedure GetJsonValues(Instance: TObject; W: TTextWriter); override;
   end;
 
   /// information about a TOrm class TOrmMany property
@@ -3270,6 +3270,9 @@ type
       Options: TTextWriterWriteObjectOptions): boolean; override;
     function RttiBeforeReadPropertyValue(Ctxt: pointer;
       Prop: PRttiCustomProp): boolean; override;
+    class procedure RttiJsonRead(var Context: TJsonParserContext; Instance: TObject);
+    class procedure RttiJsonWrite(W: TTextWriter; Instance: TObject;
+      Options: TTextWriterWriteObjectOptions);
   protected
     fInternalState: cardinal;
     /// defined as a protected class function for OrmProps method inlining
@@ -9394,7 +9397,7 @@ begin
   result := DefaultHasher(0, pointer(tmp), length(tmp));
 end;
 
-procedure TOrmPropInfo.GetJsonValues(Instance: TObject; W: TJsonSerializer);
+procedure TOrmPropInfo.GetJsonValues(Instance: TObject; W: TTextWriter);
 var
   wasString: boolean;
   tmp: RawUtf8;
@@ -10066,7 +10069,7 @@ begin
   fEnumType := fPropType^.EnumBaseType;
 end;
 
-procedure TOrmPropInfoRttiEnum.GetJsonValues(Instance: TObject; W: TJsonSerializer);
+procedure TOrmPropInfoRttiEnum.GetJsonValues(Instance: TObject; W: TTextWriter);
 var
   i: PtrInt;
 begin
@@ -10229,7 +10232,7 @@ begin
   result := DefaultHasher(0, @V64, SizeOf(V64));
 end;
 
-procedure TOrmPropInfoRttiInt64.GetJsonValues(Instance: TObject; W: TJsonSerializer);
+procedure TOrmPropInfoRttiInt64.GetJsonValues(Instance: TObject; W: TTextWriter);
 var
   V64: Int64;
 begin
@@ -10496,7 +10499,7 @@ begin
   TOrmPropInfoRttiCurrency(DestInfo).fPropInfo.SetCurrencyProp(Dest, curr);
 end;
 
-procedure TOrmPropInfoRttiCurrency.GetJsonValues(Instance: TObject; W: TJsonSerializer);
+procedure TOrmPropInfoRttiCurrency.GetJsonValues(Instance: TObject; W: TTextWriter);
 var
   curr: currency;
 begin
@@ -10609,7 +10612,7 @@ end;
 
 { TOrmPropInfoRttiDateTime }
 
-procedure TOrmPropInfoRttiDateTime.GetJsonValues(Instance: TObject; W: TJsonSerializer);
+procedure TOrmPropInfoRttiDateTime.GetJsonValues(Instance: TObject; W: TTextWriter);
 begin
   W.Add('"');
   W.AddDateTime(fPropInfo.GetDoubleProp(Instance), fOrmFieldType = oftDateTimeMS);
@@ -10781,7 +10784,7 @@ begin
   inherited SetValue(Instance, Value, wasString);
 end;
 
-procedure TOrmPropInfoRttiID.GetJsonValues(Instance: TObject; W: TJsonSerializer);
+procedure TOrmPropInfoRttiID.GetJsonValues(Instance: TObject; W: TTextWriter);
 var
   ID: PtrUInt;
 begin
@@ -10874,9 +10877,10 @@ procedure TOrmPropInfoRttiObject.NormalizeValue(var Value: RawUtf8);
 begin // do nothing: should already be normalized
 end;
 
-procedure TOrmPropInfoRttiObject.GetJsonValues(Instance: TObject; W: TJsonSerializer);
+procedure TOrmPropInfoRttiObject.GetJsonValues(Instance: TObject; W: TTextWriter);
 begin
-  if jwoAsJsonNotAsString in W.fOrmOptions then
+  if W.InheritsFrom(TJsonSerializer) and
+     (jwoAsJsonNotAsString in TJsonSerializer(W).fOrmOptions) then
     W.WriteObject(GetInstance(Instance))
   else
     W.WriteObjectAsString(GetInstance(Instance));
@@ -10993,7 +10997,7 @@ begin
   fPropInfo.SetLongStrProp(Instance, fEngine.Utf8ToAnsi(Value));
 end;
 
-procedure TOrmPropInfoRttiAnsi.GetJsonValues(Instance: TObject; W: TJsonSerializer);
+procedure TOrmPropInfoRttiAnsi.GetJsonValues(Instance: TObject; W: TTextWriter);
 var
   tmp: RawByteString;
 begin
@@ -11068,7 +11072,7 @@ begin
     result := DefaultHasher(0, pointer(Value), length(Value));
 end;
 
-procedure TOrmPropInfoRttiRawUtf8.GetJsonValues(Instance: TObject; W: TJsonSerializer);
+procedure TOrmPropInfoRttiRawUtf8.GetJsonValues(Instance: TObject; W: TTextWriter);
 var
   tmp: RawByteString;
 begin
@@ -11295,7 +11299,7 @@ begin
   result := DefaultHasher(0, pointer(Value), length(Value)); // binary -> case sensitive
 end;
 
-procedure TOrmPropInfoRttiRawBlob.GetJsonValues(Instance: TObject; W: TJsonSerializer);
+procedure TOrmPropInfoRttiRawBlob.GetJsonValues(Instance: TObject; W: TTextWriter);
 var
   tmp: RawByteString;
 begin
@@ -11431,7 +11435,7 @@ begin
     result := DefaultHasher(0, pointer(Value), length(Value) * 2);
 end;
 
-procedure TOrmPropInfoRttiWide.GetJsonValues(Instance: TObject; W: TJsonSerializer);
+procedure TOrmPropInfoRttiWide.GetJsonValues(Instance: TObject; W: TTextWriter);
 var
   Value: WideString;
 begin
@@ -11555,7 +11559,7 @@ begin
     wasSqlString^ := true;
 end;
 
-procedure TOrmPropInfoRttiUnicode.GetJsonValues(Instance: TObject; W: TJsonSerializer);
+procedure TOrmPropInfoRttiUnicode.GetJsonValues(Instance: TObject; W: TTextWriter);
 var
   tmp: UnicodeString;
 begin
@@ -11854,11 +11858,12 @@ begin
     result := inherited SetFieldSqlVar(Instance, aValue);
 end;
 
-procedure TOrmPropInfoRttiDynArray.GetJsonValues(Instance: TObject; W: TJsonSerializer);
+procedure TOrmPropInfoRttiDynArray.GetJsonValues(Instance: TObject; W: TTextWriter);
 var
   tmp: RawByteString;
 begin
-  if jwoAsJsonNotAsString in W.fOrmOptions then
+  if W.InheritsFrom(TJsonSerializer) and
+     (jwoAsJsonNotAsString in TJsonSerializer(W).fOrmOptions) then
     W.AddDynArrayJson(GetFieldAddr(Instance), fPropRtti)
   else if fObjArray <> nil then
     W.AddDynArrayJsonAsString(fPropType, GetFieldAddr(Instance)^)
@@ -11928,14 +11933,15 @@ begin
   result := VariantHash(value, CaseInsensitive);
 end;
 
-procedure TOrmPropInfoRttiVariant.GetJsonValues(Instance: TObject; W: TJsonSerializer);
+procedure TOrmPropInfoRttiVariant.GetJsonValues(Instance: TObject; W: TTextWriter);
 var
   value: Variant;
   backup: TTextWriterOptions;
 begin
   fPropInfo.GetVariantProp(Instance, value, {byref=}true);
   backup := W.CustomOptions;
-  if jwoAsJsonNotAsString in W.fOrmOptions then
+  if W.InheritsFrom(TJsonSerializer) and
+     (jwoAsJsonNotAsString in TJsonSerializer(W).fOrmOptions) then
     W.CustomOptions := backup + [twoForceJsonStandard] - [twoForceJsonExtended];
   W.AddVariant(value, twJsonEscape); // even oftNullable should escape strings
   W.CustomOptions := backup;
@@ -12044,16 +12050,16 @@ begin
           wasString := false; // allow to create a TDocVariant stored as DB text
         GetVariantFromJson(tmp.buf, wasString, V, @DocVariantOptions,false, ValueLen);
       end;
-      fPropInfo.SetVariantProp(Instance, V);
     finally
       tmp.Done;
     end;
   end
   else
-  begin
     TVarData(V).VType := varNull; // TEXT or NULL: see GetValueVar()
+  if fSetterIsFieldPropOffset <> 0 then
+    PVariant(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := V
+  else
     fPropInfo.SetVariantProp(Instance, V);
-  end;
 end;
 
 procedure TOrmPropInfoRttiVariant.SetVariant(Instance: TObject; const Source: Variant);
@@ -12436,7 +12442,7 @@ procedure TOrmPropInfoCustomJson.NormalizeValue(var Value: RawUtf8);
 begin // do nothing: should already be normalized
 end;
 
-procedure TOrmPropInfoCustomJson.GetJsonValues(Instance: TObject; W: TJsonSerializer);
+procedure TOrmPropInfoCustomJson.GetJsonValues(Instance: TObject; W: TTextWriter);
 var
   Data: PByte;
 begin
@@ -12700,7 +12706,7 @@ begin
         inc(s);
       until (C1 = 0) or
             (C1 <> C2);
-      if C1 = C2 then
+      if C1 = C2 then // reached ending #0 on both names
       begin
         result := fOrderedByName[result];
         exit;
@@ -17868,9 +17874,16 @@ begin
 end;
 
 class procedure TOrm.RttiCustomSetParser(Rtti: TRttiCustom);
+var
+  read: TOnClassJsonRead;
+  write: TOnClassJsonWrite;
 begin
   Rtti.Props.Add(
     TypeInfo(TID), PtrInt(@TOrm(nil).fID), 'ID', {first=}true);
+  read := RttiJsonRead; // enhanced parsing using Fields.SetValue/GetJsonValues
+  Rtti.JsonReader := TMethod(read);
+  write := RttiJsonWrite;
+  Rtti.JsonWriter := TMethod(write);
 end;
 
 function TOrm.IsPropClassInstance(Prop: PRttiCustomProp): boolean;
@@ -17906,6 +17919,77 @@ begin
       PJsonParserContext(Ctxt)^.ParseInteger;
     result := true; // abort default serialization
   end;
+end;
+
+class procedure TOrm.RttiJsonRead(var Context: TJsonParserContext; Instance: TObject);
+var
+  cur: ^TOrmPropInfo;
+  f: TOrmPropInfo;
+  props: TOrmPropInfoList;
+  name: PUtf8Char;
+  namelen: integer;
+  orm: TOrm absolute Instance;
+begin
+  // manually parse incoming JSON object using Orm.Fields.SetValue()
+  if not Context.ParseObject then
+    exit; // invalid or {} or null
+  props := OrmProps.Fields;
+  cur := pointer(props.List);
+  repeat
+     name := GetJsonPropName(Context.Json, @namelen);
+     if name = nil then
+       Context.Valid := false;
+     if not Context.ParseNext then // GetJsonField() into Context.Value
+       exit;
+     if IsRowID(name, namelen) then // handle both ID and RowID names
+       SetID(Context.Value, orm.fID)
+     else
+     begin
+       if (cur <> nil) and
+          IdemPropNameU(cur^.Name, name, namelen) then
+       begin
+         f := cur^; // optimistic O(1) property lookup
+         inc(cur);
+       end
+       else
+       begin
+         f := props.ByName(name); // O(log(n)) binary search
+         cur := nil;
+       end;
+       if f <> nil then // just ignore unknown property names
+         f.SetValue(orm, Context.Value, Context.WasString);
+     end;
+  until Context.EndOfObject = '}';
+  Context.ParseEndOfObject;
+end;
+
+class procedure TOrm.RttiJsonWrite(W: TTextWriter; Instance: TObject;
+  Options: TTextWriterWriteObjectOptions);
+var
+  cur: ^TOrmPropInfo;
+  props: TOrmPropInfoList;
+  n: integer;
+begin
+  if Instance = nil then
+  begin
+    W.AddNull;
+    exit;
+  end;
+  W.BlockBegin('{', Options);
+  W.AddPropJSONInt64('RowID', TOrm(Instance).fID);
+  props := OrmProps.Fields;
+  cur := pointer(props.List);
+  n := props.Count;
+  repeat
+    W.WriteObjectPropName(pointer(cur^.Name), length(cur^.Name), Options);
+    cur^.GetJsonValues(Instance, W);
+    inc(cur);
+    dec(n);
+    if n = 0 then
+      break;
+    W.BlockAfterItem(Options);
+  until false;
+  W.BlockEnd('}', Options);
 end;
 
 function TOrm.GetID: TID;
