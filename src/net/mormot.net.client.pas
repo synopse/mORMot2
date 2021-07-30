@@ -1669,7 +1669,8 @@ var
       {retry=}false, {instream=}nil, partstream);
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
     begin
-      if res = HTTP_NOTACCEPTABLE then
+      if (res = HTTP_NOTACCEPTABLE) or
+         (res =  HTTP_RANGENOTSATISFIABLE) then
         DeleteFile(part); // force delete (maybe) incorrect partial file
       raise EHttpSocket.Create('WGet: %s:%s/%s failed with %s',
         [fServer, fPort, url, StatusCodeToErrorMsg(res)]);
