@@ -1191,10 +1191,11 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// find an item in this document, and returns its value as TVarData pointer
     // - return nil if aName is not found, or if the instance is not a TDocVariant
-    // - return a pointer to the value if the name has been found
+    // - return a pointer to the value if the name has been found, and optionally
+    // fill aFoundIndex^ with its index in Values[]
     // - after a SortByName(aSortedCompare), could use faster binary search
-    function GetVarData(const aName: RawUtf8;
-      aSortedCompare: TUtf8Compare = nil): PVarData; overload;
+    function GetVarData(const aName: RawUtf8; aSortedCompare: TUtf8Compare = nil;
+      aFoundIndex: PInteger = nil): PVarData; overload;
     /// find an item in this document, and returns its value as boolean
     // - return false if aName is not found, or if the instance is not a TDocVariant
     // - return true if the name has been found, and aValue stores the value
@@ -5439,8 +5440,11 @@ procedure TDocVariantData.SortArrayByField(const aItemPropName: RawUtf8;
   aNameSortedCompare: TUtf8Compare);
 var
   QS: TQuickSortDocVariantValuesByField;
+  namecomp: TUtf8Compare;
   p: pointer;
+  ndx: integer;
   row: PtrInt;
+  rowdata: PDocVariantData;
 begin
   if (VCount <= 0) or
      (aItemPropName = '') or
@@ -5451,15 +5455,28 @@ begin
   else
     QS.Compare := aValueCompare;
   QS.Reverse := aValueCompareReverse;
+  // resolve GetPVariantByName(aIdemPropName) once into QS.Lookup[]
   SetLength(QS.Lookup, VCount);
+  ndx := -1;
+  if Assigned(aNameSortedCompare) then // just like GetVarData() searches names
+    namecomp := aNameSortedCompare
+  else
+    namecomp := StrCompByCase[dvoNameCaseSensitive in VOptions];
   for row := 0 to VCount - 1 do
   begin
-    // resolve GetPVariantByName(aIdemPropName) once
-    p := _Safe(VValue[row])^.GetVarData(aItemPropName, aNameSortedCompare);
-    if p = nil then
-      p := @NullVarData;
+    rowdata := _Safe(VValue[row]);
+    if (cardinal(ndx) < cardinal(rowdata^.VCount)) and
+       (namecomp(pointer(rowdata^.VName[ndx]), pointer(aItemPropName)) = 0) then
+      p := @rowdata^.VValue[ndx] // get the value at the (likely) same position
+    else
+    begin
+      p := rowdata^.GetVarData(aItemPropName, aNameSortedCompare, @ndx);
+      if p = nil then
+        p := @NullVarData;
+    end;
     QS.Lookup[row] := p;
   end;
+  // sort the content
   QS.Doc := @self;
   QS.Sort(0, VCount - 1);
 end;
@@ -5987,7 +6004,7 @@ begin
 end;
 
 function TDocVariantData.GetVarData(const aName: RawUtf8;
-  aSortedCompare: TUtf8Compare): PVarData;
+  aSortedCompare: TUtf8Compare; aFoundIndex: PInteger): PVarData;
 var
   ndx: PtrInt;
 begin
@@ -5995,7 +6012,11 @@ begin
      not (dvoIsObject in VOptions) or
      (VCount = 0) or
      (aName = '') then
-    result := nil
+  begin
+    result := nil;
+    if aFoundIndex <> nil then
+      aFoundIndex^ := -1;
+  end
   else
   begin
     if Assigned(aSortedCompare) then
@@ -6012,6 +6033,8 @@ begin
     else
       ndx := FindNonVoidRawUtf8I(
         pointer(VName), pointer(aName), length(aName), VCount);
+    if aFoundIndex <> nil then
+      aFoundIndex^ := ndx;
     if ndx >= 0 then
       result := @VValue[ndx]
     else
