@@ -9057,26 +9057,6 @@ end;
 
 function IsNotExpandedBuffer(var P: PUtf8Char; PEnd: PUtf8Char;
   var FieldCount, RowCount: PtrInt): boolean;
-
-  procedure GetRowCountNotExpanded(P: PUtf8Char); // full parsing to get RowCount
-  begin
-    RowCount := 0;
-    repeat
-      // get a row = ignore all fields
-      P := GotoNextJsonItem(P, FieldCount);
-      if P = nil then
-        exit; // unexpected end
-      inc(RowCount);
-    until P[-1] = ']'; // end of array
-    if P^ in ['}', ','] then
-    begin // expected formatted JSON stream
-      if RowCount > 0 then
-        dec(RowCount); // first Row = field names -> data in rows 1..RowCount
-    end
-    else
-      RowCount := -1; // bad format -> no data
-  end;
-
 var
   RowCountPos: PUtf8Char;
 begin
@@ -9098,7 +9078,11 @@ begin
   end;
   result := (FieldCount <> 0) and Expect(P, VALUES_PATTERN, 11);
   if result and (RowCount < 0) then
-    GetRowCountNotExpanded(P); // returns RowCount=-1 if P^ is invalid
+  begin
+    RowCount := JsonArrayCount(P, PEnd) div FieldCount; // 900MB/s browse
+    if RowCount <= 0 then
+      RowCount := -1; // bad format -> no data
+  end;
 end;
 
 function StartWithQuotedID(P: PUtf8Char; out ID: TID): boolean;

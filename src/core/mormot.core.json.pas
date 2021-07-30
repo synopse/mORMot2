@@ -2532,7 +2532,7 @@ procedure TJsonGotoEndParser.InitCount(Strict: boolean; PMax: PUtf8Char;
 begin
   Init(Strict, PMax);
   RootCount := 0;
-  Stack[0] := stValue;
+  Stack[0] := stValue; // emulate the opening [ or { parsing
   inc(StackCount);
   State := First;
 end;
