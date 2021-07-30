@@ -5968,18 +5968,13 @@ begin
   Add(Quote);
 end;
 
-const
-  HTML_ESC: array[hfAnyWhere..high(TTextWriterHtmlFormat)] of TSynAnsicharSet = (
-    [#0, '&', '"', '<', '>'],
-    [#0, '&', '<', '>'],
-    [#0, '&', '"']);
-  XML_ESC: TSynByteSet =
-    [0..31, ord('<'), ord('>'), ord('&'), ord('"'), ord('''')];
+var
+  HTML_ESC: array[hfAnyWhere..hfWithinAttributes] of TAnsiCharToByte;
 
 procedure TBaseWriter.AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat);
 var
   B: PUtf8Char;
-  esc: ^TSynAnsicharSet;
+  esc: ^TAnsiCharToByte;
 begin
   if Text = nil then
     exit;
@@ -5991,7 +5986,7 @@ begin
   esc := @HTML_ESC[Fmt];
   repeat
     B := Text;
-    while not (Text^ in esc^) do
+    while esc[Text^] = 0 do
       inc(Text);
     AddNoJsonEscape(B, Text - B);
     case Text^ of
@@ -6042,7 +6037,7 @@ procedure TBaseWriter.AddHtmlEscape(Text: PUtf8Char; TextLen: PtrInt;
   Fmt: TTextWriterHtmlFormat);
 var
   B: PUtf8Char;
-  esc: ^TSynAnsicharSet;
+  esc: ^TAnsiCharToByte;
 begin
   if (Text = nil) or
      (TextLen <= 0) then
@@ -6057,7 +6052,7 @@ begin
   repeat
     B := Text;
     while (PtrUInt(Text) < PtrUInt(TextLen)) and
-          not (Text^ in esc^) do
+          (esc[Text^] = 0) do
       inc(Text);
     AddNoJsonEscape(B, Text - B);
     if PtrUInt(Text) = PtrUInt(TextLen) then
@@ -6093,10 +6088,13 @@ begin
   AddHtmlEscape(pointer(Text), length(Text), Fmt);
 end;
 
+var
+  XML_ESC: TAnsiCharToByte;
+
 procedure TBaseWriter.AddXmlEscape(Text: PUtf8Char);
 var
   i, beg: PtrInt;
-  esc: ^TSynByteSet;
+  esc: ^TAnsiCharToByte;
 begin
   if Text = nil then
     exit;
@@ -6104,11 +6102,11 @@ begin
   i := 0;
   repeat
     beg := i;
-    if not (ord(Text[i]) in esc^) then
+    if esc[Text[i]] = 0 then
     begin
       repeat // it is faster to handle all not-escaped chars at once
         inc(i);
-      until ord(Text[i]) in esc^;
+      until esc[Text[i]] <> 0;
       AddNoJsonEscape(Text + beg, i - beg);
     end;
     repeat
@@ -6135,7 +6133,7 @@ begin
         '''':
           AddShorter('&apos;');
       else
-        break; // should match XML_ESC[] constant above
+        break; // should match XML_ESC[] lookup table
       end;
       inc(i);
     until false;
@@ -10602,6 +10600,7 @@ procedure InitializeUnit;
 var
   i: PtrInt;
   v: byte;
+  c: AnsiChar;
   P: PAnsiChar;
   B: PByteArray;
   tmp: array[0..15] of AnsiChar;
@@ -10651,6 +10650,13 @@ begin
   begin
     P := StrUInt32(@tmp[15], i);
     FastSetString(SmallUInt32Utf8[i], P, @tmp[15] - P);
+  end;
+  for c := #0 to #127 do
+  begin
+    XML_ESC[c] := ord(c in [#0..#31, '<', '>', '&', '"', '''']);
+    HTML_ESC[hfAnyWhere, c] := ord(c in [#0, '&', '"', '<', '>']);
+    HTML_ESC[hfOutsideAttributes, c] := ord(c in [#0, '&', '<', '>']);
+    HTML_ESC[hfWithinAttributes, c] := ord(c in [#0, '&', '"']);
   end;
 end;
 
