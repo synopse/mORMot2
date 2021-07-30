@@ -2188,6 +2188,12 @@ type
     /// opaque TRttiJsonSave callback used by mormot.core.json.pas
     property JsonSave: pointer
       read fJsonSave write fJsonSave;
+    /// opaque TOnRttiJsonRead callback used by mormot.core.json.pas
+    property JsonReader: TMethod
+      read fJsonReader write fJsonReader;
+    /// opaque TOnRttiJsonWrite callback used by mormot.core.json.pas
+    property JsonWriter: TMethod
+      read fJsonWriter write fJsonWriter;
   end;
 
   PRttiCustom = ^TRttiCustom;
@@ -7235,19 +7241,21 @@ function FindNameInPairs(Pairs, PEnd: PPointerArray;
   Name: PUtf8Char; NameLen: PtrInt): TRttiCustom;
 var
   s: PRttiInfo;
-label
-  nxt;
 begin
   repeat
     s := Pairs[0];
     if ord(s^.RawName[0]) <> NameLen then
     begin
-nxt:  Pairs := @Pairs[2]; // PRttiInfo/TRttiCustom pairs
+      Pairs := @Pairs[2]; // PRttiInfo/TRttiCustom pairs
       if PAnsiChar(Pairs) >= PAnsiChar(PEnd) then
         break;
     end
     else if not IdemPropNameUSameLenNotNull(Name, @s^.RawName[1], NameLen) then
-      goto nxt
+    begin
+      Pairs := @Pairs[2];
+      if PAnsiChar(Pairs) >= PAnsiChar(PEnd) then
+        break;
+    end
     else
     begin
       result := Pairs[1];  // found
