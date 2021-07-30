@@ -975,7 +975,7 @@ type
     fPropType: PRttiInfo;
     fPropRtti: TRttiJson;
     fFlattenedProps: PRttiPropDynArray;
-    fGetterIsFieldPropOffset: PtrUInt;
+    fGetterIsFieldPropOffset, fSetterIsFieldPropOffset: PtrUInt;
     fInPlaceCopySameClassPropOffset: PtrUInt;
     fRttiCustomProp: PRttiCustomProp;
     function GetSqlFieldRttiTypeName: RawUtf8; override;
@@ -1006,9 +1006,12 @@ type
     procedure GetVariant(Instance: TObject; var Dest: Variant); override;
     /// retrieve the property field offset from RTTI
     function GetFieldAddr(Instance: TObject): pointer; override;
-    /// get the absolute property field offset from RTTI
+    /// get the absolute reading property field offset from RTTI
     property GetterIsFieldPropOffset: PtrUInt
       read fGetterIsFieldPropOffset;
+    /// get the absolute writing property field offset from RTTI
+    property SetterIsFieldPropOffset: PtrUInt
+      read fSetterIsFieldPropOffset;
     /// for pilSubClassesFlattening properties, compute the actual instance
     // containing the property value
     // - if the property was not flattened, return the instance
@@ -1031,7 +1034,7 @@ type
   /// information about an ordinal Int32 published property
   TOrmPropInfoRttiInt32 = class(TOrmPropInfoRtti)
   protected
-    fUnsigned, fIntegerPropOffset: boolean;
+    fUnsigned, fIntegerGetPropOffset, fIntegerSetPropOffset: boolean;
     procedure CopySameClassProp(Source: TObject; DestInfo: TOrmPropInfo;
       Dest: TObject); override;
   public
@@ -1627,19 +1630,19 @@ type
     destructor Destroy; override;
     /// add a TOrmPropInfo to the list
     function Add(aItem: TOrmPropInfo): integer;
-    /// find an item in the list
+    /// find an item in the list using O(log(n)) binary search
     // - returns nil if not found
     function ByRawUtf8Name(const aName: RawUtf8): TOrmPropInfo; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// find an item in the list
+    /// find an item in the list using O(log(n)) binary search
     // - returns nil if not found
     function ByName(aName: PUtf8Char): TOrmPropInfo; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// find an item in the list
+    /// find an item in the list using O(log(n)) binary search
     // - returns -1 if not found
     function IndexByName(const aName: RawUtf8): integer; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// find an item in the list
+    /// find an item in the list using O(log(n)) binary search
     // - returns -1 if not found
     function IndexByName(aName: PUtf8Char): PtrInt; overload;
     /// find an item by name in the list, including RowID/ID
@@ -1676,7 +1679,7 @@ type
     property Items[aIndex: PtrInt]: TOrmPropInfo read GetItem;
   end;
 
-  /// information about a TOrm class property
+  /// abstract information about a TOrm class property
   // - oftID for TOrm properties, which are pointer(RecordID), not
   // any true class instance
   // - oftMany for TOrmMany properties, for which no data is
@@ -9870,6 +9873,7 @@ constructor TOrmPropInfoRtti.Create(aPropInfo: PRttiProp; aPropIndex: integer;
   aOrmFieldType: TOrmFieldType; aOptions: TOrmPropInfoListOptions);
 var
   attrib: TOrmPropInfoAttributes;
+  call: TMethod;
 begin
   byte(attrib) := 0;
   if aPropInfo^.IsStored(nil) = AS_UNIQUE then
@@ -9883,10 +9887,12 @@ begin
   fPropRtti := Rtti.RegisterType(fPropType) as TRttiJson;
   if fPropRtti = nil then
     raise EModelException.CreateUtf8('%.Create(%): unknown type', [self, aPropInfo^.Name^]);
+  if aPropInfo.Setter(nil, @call) = rpcField then
+    fSetterIsFieldPropOffset := PtrInt(call.Data);
   if aPropInfo.GetterIsField then
   begin
     fGetterIsFieldPropOffset := PtrUInt(fPropInfo.GetterAddr(nil));
-    if aPropInfo.SetterCall = rpcField then
+    if fGetterIsFieldPropOffset = fSetterIsFieldPropOffset then
       fInPlaceCopySameClassPropOffset := fGetterIsFieldPropOffset;
   end;
   fFromRtti := true;
@@ -9900,7 +9906,10 @@ constructor TOrmPropInfoRttiInt32.Create(aPropInfo: PRttiProp;
 begin
   inherited Create(aPropInfo, aPropIndex, aOrmFieldType, aOptions);
   fUnsigned := fPropType^.RttiOrd in [roUByte, roUWord, roULong];
-  fIntegerPropOffset := (fGetterIsFieldPropOffset <> 0) and (fPropType^.RttiOrd = roSLong);
+  if fPropType^.RttiOrd = roSLong then
+    fIntegerGetPropOffset := fGetterIsFieldPropOffset <> 0;
+  if fPropType^.RttiOrd in [roSLong, roULong] then
+    fIntegerSetPropOffset := fSetterIsFieldPropOffset <> 0;
 end;
 
 procedure TOrmPropInfoRttiInt32.CopySameClassProp(Source: TObject;
@@ -9924,11 +9933,11 @@ begin
   result := DefaultHasher(0, @v, 4);
 end;
 
-procedure TOrmPropInfoRttiInt32.GetJsonValues(Instance: TObject; W: TJsonSerializer);
+procedure TOrmPropInfoRttiInt32.GetJsonValues(Instance: TObject; W: TTextWriter);
 var
   v: integer;
 begin
-  if fIntegerPropOffset then
+  if fIntegerGetPropOffset then
     W.Add(PInteger(PtrUInt(Instance) + fGetterIsFieldPropOffset)^)
   else
   begin
@@ -9980,7 +9989,7 @@ begin
     result := 1
   else
   begin
-    if fIntegerPropOffset then
+    if fIntegerGetPropOffset then
     begin
       A := PInteger(PtrUInt(Item1) + fGetterIsFieldPropOffset)^;
       B := PInteger(PtrUInt(Item2) + fGetterIsFieldPropOffset)^;
@@ -10001,8 +10010,14 @@ end;
 
 procedure TOrmPropInfoRttiInt32.SetValue(Instance: TObject; Value: PUtf8Char;
   wasString: boolean);
+var
+  i32: integer;
 begin
-  fPropInfo.SetOrdProp(Instance, GetInteger(Value));
+  i32 := GetInteger(Value);
+  if fIntegerSetPropOffset then
+    PInteger(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := i32
+  else
+    fPropInfo.SetOrdProp(Instance, i32);
 end;
 
 function TOrmPropInfoRttiInt32.SetFieldSqlVar(Instance: TObject;
@@ -10312,7 +10327,10 @@ begin
     SetQWord(Value, PQword(@V64)^)
   else
     SetInt64(Value, V64{%H-});
-  fPropInfo.SetInt64Prop(Instance, V64);
+  if fSetterIsFieldPropOffset <> 0 then
+    PInt64(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := V64
+  else
+    fPropInfo.SetInt64Prop(Instance, V64);
 end;
 
 function TOrmPropInfoRttiInt64.SetFieldSqlVar(Instance: TObject;
@@ -10345,9 +10363,15 @@ begin
     Dest, fPropInfo.GetDoubleProp(Source));
 end;
 
-procedure TOrmPropInfoRttiDouble.GetJsonValues(Instance: TObject; W: TJsonSerializer);
+procedure TOrmPropInfoRttiDouble.GetJsonValues(Instance: TObject; W: TTextWriter);
+var
+  V: double;
 begin
-  W.AddDouble(fPropInfo.GetDoubleProp(Instance));
+  if fGetterIsFieldPropOffset <> 0 then
+    V := unaligned(PDouble(PtrUInt(Instance) + fGetterIsFieldPropOffset)^)
+  else
+    V := fPropInfo.GetDoubleProp(Instance);
+  W.AddDouble(V);
 end;
 
 procedure TOrmPropInfoRttiDouble.GetValueVar(Instance: TObject; ToSql: boolean;
@@ -10385,7 +10409,10 @@ begin
     if err <> 0 then
       V := 0;
   end;
-  fPropInfo.SetDoubleProp(Instance, V);
+  if fSetterIsFieldPropOffset <> 0 then
+    unaligned(PDouble(PtrUInt(Instance) + fSetterIsFieldPropOffset)^) := V
+  else
+    fPropInfo.SetDoubleProp(Instance, V);
 end;
 
 function TOrmPropInfoRttiDouble.CompareValue(Item1, Item2: TObject;
@@ -10499,7 +10526,10 @@ var
   tmp: Int64;
 begin
   tmp := StrToCurr64(Value, nil);
-  fPropInfo.SetCurrencyProp(Instance, PCurrency(@tmp)^);
+  if fSetterIsFieldPropOffset <> 0 then
+    PInt64(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := tmp
+  else
+    fPropInfo.SetCurrencyProp(Instance, PCurrency(@tmp)^);
 end;
 
 function TOrmPropInfoRttiCurrency.CompareValue(Item1, Item2: TObject;
@@ -10633,7 +10663,10 @@ var
   V: TDateTime;
 begin
   Iso8601ToDateTimePUtf8CharVar(Value, 0, V);
-  fPropInfo.SetDoubleProp(Instance, V);
+  if fSetterIsFieldPropOffset <> 0 then
+    unaligned(PDouble(PtrUInt(Instance) + fSetterIsFieldPropOffset)^) := V
+  else
+    fPropInfo.SetDoubleProp(Instance, V);
 end;
 
 procedure TOrmPropInfoRttiDateTime.GetFieldSqlVar(Instance: TObject;
@@ -10683,12 +10716,18 @@ end;
 
 function TOrmPropInfoRttiInstance.GetInstance(Instance: TObject): TObject;
 begin
-  result := fPropInfo.GetObjProp(Instance);
+  if fGetterIsFieldPropOffset <> 0 then
+    result := PObject(PtrUInt(Instance) + fGetterIsFieldPropOffset)^
+  else
+    result := fPropInfo.GetObjProp(Instance);
 end;
 
 procedure TOrmPropInfoRttiInstance.SetInstance(Instance, Value: TObject);
 begin
-  fPropInfo.SetOrdProp(Instance, PtrInt(Value));
+  if fSetterIsFieldPropOffset <> 0 then
+    PObject(PtrUInt(Instance) + fSetterIsFieldPropOffset)^ := Value
+  else
+    fPropInfo.SetOrdProp(Instance, PtrInt(Value));
 end;
 
 
@@ -10746,7 +10785,7 @@ procedure TOrmPropInfoRttiID.GetJsonValues(Instance: TObject; W: TJsonSerializer
 var
   ID: PtrUInt;
 begin
-  ID := fPropInfo.GetOrdProp(Instance);
+  ID := PtrUInt(GetInstance(Instance));
   if TOrm(Instance).fFill.JoinedFields then
     ID := TOrm(ID).fID;
   W.AddU(ID);
@@ -11136,12 +11175,22 @@ end;
 
 procedure TOrmPropInfoRttiRawUtf8.SetValue(Instance: TObject; Value: PUtf8Char;
   wasString: boolean);
-var
-  tmp: RawUtf8;
+
+  procedure NeedSub;
+  var
+    tmp: RawUtf8;
+  begin
+    if Value <> nil then
+      FastSetString(tmp, Value, StrLen(Value));
+    fPropInfo.SetLongStrProp(Instance, tmp);
+  end;
+
 begin
-  if Value <> nil then
-    FastSetString(tmp, Value, StrLen(Value));
-  fPropInfo.SetLongStrProp(Instance, tmp);
+  if fSetterIsFieldPropOffset <> 0 then
+    FastSetString(PRawUtf8(PtrUInt(Instance) + fSetterIsFieldPropOffset)^,
+      Value, StrLen(Value))
+  else
+    NeedSub;
 end;
 
 procedure TOrmPropInfoRttiRawUtf8.SetValueVar(Instance: TObject;
