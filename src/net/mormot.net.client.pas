@@ -1594,6 +1594,8 @@ function THttpClientSocket.Request(const url, method: RawUtf8;
   const DataType: RawUtf8; retry: boolean; InStream, OutStream: TStream): integer;
 var
   ctxt: TTHttpClientSocketRequestParams;
+  location: RawUtf8;
+  newuri: TUri;
 begin
   ctxt.url := url;
   ctxt.method := method;
@@ -1611,14 +1613,28 @@ begin
   begin
     repeat
       RequestInternal(ctxt);
+      // handle redirection from returned headers
       if (ctxt.redirected >= fRedirectMax) or
          (ctxt.status < 300) or
          (ctxt.status = HTTP_NOTMODIFIED) or // 304 is no redirect
          (ctxt.status > 399) then
         break;
-      ctxt.url := HeaderGetValue('LOCATION'); // internal redirection only
+      location := HeaderGetValue('LOCATION');
       if assigned(OnLog) then
-        OnLog(sllTrace, 'Request % % redirected to %', [method, url, ctxt.url], self);
+        OnLog(sllTrace, 'Request % % redirected to %', [method, url, location], self);
+      ctxt.url := location;
+      if IdemPChar(pointer(location), 'HTTP') and
+         newuri.From(location) then
+        if (hfConnectionClose in HeaderFlags) or
+           (newuri.Server <> Server) or
+           (newuri.Port <> Port) or
+           (newuri.Https <> TLS.Enabled) then
+      begin
+        Close; // relocated to another server -> reset the TCP connection
+        HttpStateReset;
+        OpenBind(newuri.Server, newuri.Port, false, newuri.Https);
+        ctxt.url := newuri.Address;
+      end;
       inc(ctxt.redirected);
     until false;
     if Assigned(fOnAfterRequest) then
@@ -1955,6 +1971,7 @@ begin
   Http := OpenHttp(server, port, aTLS, aLayer);
   if Http <> nil then
   try
+    Http.RedirectMax := 5;
     status := Http.Get(url, 0, inHeaders);
     if outStatus <> nil then
       outStatus^ := status;
