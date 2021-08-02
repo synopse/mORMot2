@@ -8389,9 +8389,9 @@ begin
   if fMode = mRead then
     raise ESynException.CreateUtf8('%.Append(%) after Read()', [self, fContext]);
   fMode := mWrite;
-  if GetHashFileExt = '' then
+  if GetHashFileExt = '' then // DoHash() does nothing
   begin
-    fCurrentSize := Seek(0, soEnd); // DoHash() does nothing
+    fCurrentSize := fRedirected.Seek(0, soEnd);
     fPosition := fCurrentSize;
   end
   else
