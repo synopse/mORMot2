@@ -252,6 +252,7 @@ type
     fReferer: RawUtf8;
     fAccept: RawUtf8;
     fProcessName: RawUtf8;
+    fRedirected: RawUtf8;
     fRangeStart, fRangeEnd: Int64;
     fBasicAuthUserPassword, fAuthBearer: RawUtf8;
     fOnAuthorize, fOnProxyAuthorize: TOnHttpClientSocketAuthorize;
@@ -354,7 +355,7 @@ type
     /// the optional 'Referer: ' header value
     property Referer: RawUtf8
       read fReferer write fReferer;
-    /// the associated process name
+    /// the associated process name, to be set and used by the external context
     property ProcessName: RawUtf8
       read fProcessName write fProcessName;
     /// optional begining position of a request
@@ -369,6 +370,9 @@ type
     // - default is 0 - i.e. no redirection
     property RedirectMax: integer
       read fRedirectMax write fRedirectMax;
+    /// the effective 'Location:' URI after 3xx redirection(s) of Request()
+    property Redirected: RawUtf8
+      read fRedirected;
     /// optional Authorization: Basic header, encoded as 'User:Password' text
     property BasicAuthUserPassword: RawUtf8
       read fBasicAuthUserPassword write fBasicAuthUserPassword;
@@ -1522,11 +1526,19 @@ begin
            (IdemPCharArray(pointer(ctxt.method), ['HEAD', 'OPTIONS']) < 0) then
            // HEAD or status 100..109,204,304 -> no body (RFC 2616 section 4.3)
         begin
-          if (ContentLength > 0) and
-             (ctxt.OutStream <> nil) and
-             ctxt.OutStream.InheritsFrom(TStreamRedirect) then
-            TStreamRedirect(ctxt.OutStream).ExpectedSize := fRangeStart + ContentLength;
-          GetBody(ctxt.OutStream);
+          if ctxt.OutStream <> nil then
+          begin
+            if (ContentLength > 0) and
+               (ctxt.Status in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
+            begin
+              if ctxt.OutStream.InheritsFrom(TStreamRedirect) then
+                TStreamRedirect(ctxt.OutStream).ExpectedSize :=
+                  fRangeStart + ContentLength;
+              GetBody(ctxt.OutStream)
+            end;
+          end
+          else
+            GetBody(nil);
         end;
         // handle optional (proxy) authentication callbacks
         if (ctxt.status = HTTP_UNAUTHORIZED) and
@@ -1536,7 +1548,8 @@ begin
             Assigned(fOnProxyAuthorize) then
           fOnProxyAuthorize(self, ctxt, HeaderGetValue('PROXY-AUTHENTICATE'));
         // successfully sent -> reset some fields for the next request
-        RequestClear;
+        if ctxt.Status in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then
+          RequestClear;
       except
         on E: Exception do
           if E.InheritsFrom(ENetSock) then
@@ -1614,6 +1627,7 @@ begin
   if not Assigned(fOnBeforeRequest) or
      fOnBeforeRequest(self, ctxt) then
   begin
+    fRedirected := '';
     repeat
       // this will handle the actual request, with proper retrial
       RequestInternal(ctxt);
@@ -1636,6 +1650,7 @@ begin
         Close; // relocated to another server -> reset the TCP connection
         try
           OpenBind(newuri.Server, newuri.Port, false, newuri.Https);
+          fRedirected := newuri.Address;
         except
           ctxt.status := HTTP_NOTFOUND;
         end;
@@ -1677,7 +1692,7 @@ function THttpClientSocket.WGet(const url: RawUtf8; const destfile: TFileName;
 var
   size: Int64;
   cached, part: TFileName;
-  parthash, urlfile: RawUtf8;
+  requrl, parthash, urlfile: RawUtf8;
   res: integer;
   partstream: TStreamRedirect;
   resumed: boolean;
@@ -1686,14 +1701,13 @@ var
   procedure DoRequestAndFreePartStream;
   var
     modif: TDateTime;
-    requrl, lastmod: RawUtf8;
+    lastmod: RawUtf8;
   begin
     partstream.Context := urlfile;
     partstream.OnProgress := params.OnProgress;
     partstream.OnLog := OnLog;
     partstream.TimeOut := params.TimeOutSec * 1000;
     partstream.LimitPerSecond := params.LimitBandwith;
-    requrl := url;
     res := Request(requrl, 'GET', params.KeepAlive, params.Header, '', '',
       {retry=}false, {instream=}nil, partstream);
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
@@ -1702,7 +1716,7 @@ var
          (res =  HTTP_RANGENOTSATISFIABLE) then
         DeleteFile(part); // force delete (maybe) incorrect partial file
       raise EHttpSocket.Create('WGet: %s:%s/%s failed with %s',
-        [fServer, fPort, url, StatusCodeToErrorMsg(res)]);
+        [fServer, fPort, requrl, StatusCodeToErrorMsg(res)]);
     end;
     partstream.Ended; // notify finished
     parthash := partstream.GetHash; // hash updated on each partstream.Write()
@@ -1713,20 +1727,22 @@ var
   end;
 
   function GetExpectedTargetSize(out Size: Int64): boolean;
-  var
-    requrl: RawUtf8;
   begin
-    requrl := url;
     res := Head(requrl, params.KeepAlive, params.Header);
     if not (res in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then
       raise EHttpSocket.Create('WGet: %s:%s/%s failed with %s',
-        [fServer, fPort, url, StatusCodeToErrorMsg(res)]);
+        [fServer, fPort, requrl, StatusCodeToErrorMsg(res)]);
     Size := ContentLength;
     result := Size > 0;
+    if result and
+       (fRedirected <> '') and
+       (fRedirected <> requrl) then
+      requrl := fRedirected; // don't perform 302 twice
   end;
 
 begin
   result := destfile;
+  requrl := url;
   urlfile := SplitRight(url, '/');
   if urlfile = '' then
     urlfile := 'index';
@@ -1829,6 +1845,7 @@ begin
           OnLog(sllDebug,
             'WGet %: wrong hash after resume -> reset and retry', [url]);
         partstream := params.Hasher.Create(TFileStream.Create(part, fmCreate));
+        requrl := url; // try again with full redirection steps
         DoRequestAndFreePartStream;
       end;
       if not IdemPropNameU(parthash, params.Hash) then
