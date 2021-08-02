@@ -208,11 +208,12 @@ type
   /// THttpClientSocket.Request low-level execution context
   TTHttpClientSocketRequestParams = record
     url, method, header: RawUtf8;
-    KeepAlive: cardinal;
     Data: RawByteString;
     DataType: RawUtf8;
-    InStream, OutStream: TStream;
     status, redirected: integer;
+    InStream, OutStream: TStream;
+    KeepAlive: cardinal;
+    OutStreamInitialPos: Int64;
     retry: boolean;
   end;
 
@@ -1415,13 +1416,14 @@ procedure THttpClientSocket.RequestInternal(
        OnLog(sllTrace, 'Request(% %): % socket=% DoRetry(%) retry=% on %:%',
          [ctxt.method, ctxt.url, msg, fSock.Socket, FatalError,
           BOOL_STR[ctxt.retry], fServer, fPort], self);
-    if ctxt.retry then // retry once -> return error only if failed twice
+    if ctxt.retry then
+      // we should retry once -> return error only if failed twice
       ctxt.status := FatalError
     else
     begin
-      Close; // close this connection
+      // recreate the connection and try again
+      Close;
       try
-        // retry with a new socket
         OpenBind(fServer, fPort, {bind=}false, TLS.Enabled);
         HttpStateReset;
         ctxt.retry := true;
@@ -1594,7 +1596,6 @@ function THttpClientSocket.Request(const url, method: RawUtf8;
   const DataType: RawUtf8; retry: boolean; InStream, OutStream: TStream): integer;
 var
   ctxt: TTHttpClientSocketRequestParams;
-  location: RawUtf8;
   newuri: TUri;
 begin
   ctxt.url := url;
@@ -1605,6 +1606,8 @@ begin
   ctxt.DataType := DataType;
   ctxt.InStream := InStream;
   ctxt.OutStream := OutStream;
+  if OutStream <> nil then
+    ctxt.OutStreamInitialPos := OutStream.Position;
   ctxt.status := 0;
   ctxt.redirected := 0;
   ctxt.retry := retry;
@@ -1612,28 +1615,38 @@ begin
      fOnBeforeRequest(self, ctxt) then
   begin
     repeat
+      // this will handle the actual request, with proper retrial
       RequestInternal(ctxt);
       // handle redirection from returned headers
       if (ctxt.redirected >= fRedirectMax) or
-         (ctxt.status < 300) or
-         (ctxt.status = HTTP_NOTMODIFIED) or // 304 is no redirect
+         (ctxt.status < 300) or              // 300..399 are redirections
+         (ctxt.status = HTTP_NOTMODIFIED) or // but 304 is not
          (ctxt.status > 399) then
         break;
-      location := HeaderGetValue('LOCATION');
+      ctxt.url := HeaderGetValue('LOCATION');
       if assigned(OnLog) then
-        OnLog(sllTrace, 'Request % % redirected to %', [method, url, location], self);
-      ctxt.url := location;
-      if IdemPChar(pointer(location), 'HTTP') and
-         newuri.From(location) then
+        OnLog(sllTrace, 'Request % % redirected to %', [method, url, ctxt.url], self);
+      if IdemPChar(pointer(ctxt.url), 'HTTP') and
+         newuri.From(ctxt.url) then
         if (hfConnectionClose in HeaderFlags) or
            (newuri.Server <> Server) or
            (newuri.Port <> Port) or
            (newuri.Https <> TLS.Enabled) then
       begin
         Close; // relocated to another server -> reset the TCP connection
+        try
+          OpenBind(newuri.Server, newuri.Port, false, newuri.Https);
+        except
+          ctxt.status := HTTP_NOTFOUND;
+        end;
         HttpStateReset;
-        OpenBind(newuri.Server, newuri.Port, false, newuri.Https);
         ctxt.url := newuri.Address;
+        if (OutStream <> nil) and
+           (OutStream.Position <> ctxt.OutStreamInitialPos) then
+        begin
+          OutStream.Size := ctxt.OutStreamInitialPos; // truncate
+          OutStream.Position := ctxt.OutStreamInitialPos; // reset position
+        end;
       end;
       inc(ctxt.redirected);
     until false;

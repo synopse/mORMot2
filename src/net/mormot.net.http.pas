@@ -774,10 +774,10 @@ var
 begin
   fBodyRetrieved := true;
   Content := '';
-  if (DestStream <> nil) and
-     (cardinal(fContentCompress) < cardinal(length(fCompress))) then
-    raise EHttpSocket.Create('%s.GetBody(%s) does not support compression',
-      [ClassNameShort(self)^, ClassNameShort(DestStream)^]);
+  if DestStream <> nil then
+    if (cardinal(fContentCompress) < cardinal(length(fCompress))) then
+      raise EHttpSocket.Create('%s.GetBody(%s) does not support compression',
+        [ClassNameShort(self)^, ClassNameShort(DestStream)^]);
   {$I-}
   // direct read bytes, as indicated by Content-Length or Chunked
   if hfTransferChuked in HeaderFlags then
@@ -823,7 +823,7 @@ begin
     // read Content-Length header bytes
     if DestStream <> nil then
     begin
-      LChunk := 128 shl 10;
+      LChunk := 256 shl 10; // not chunked: use a 256 KB temp buffer
       if ContentLength < LChunk then
         LChunk := ContentLength;
       SetLength(chunk, LChunk);
