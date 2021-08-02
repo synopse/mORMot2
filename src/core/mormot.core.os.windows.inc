@@ -297,7 +297,10 @@ end;
 
 function DeleteFile(const aFileName: TFileName): boolean;
 begin
-  result := SysUtils.DeleteFile(aFileName);
+  if aFileName = '' then
+    result := false
+  else
+    result := SysUtils.DeleteFile(aFileName);
 end;
 
 function FileCreate(const aFileName: TFileName): THandle;
@@ -310,42 +313,56 @@ var
   FileTime: TFileTime;
   D: THandle;
 begin
-  D := FileOpen(Dest, fmOpenWrite);
-  if ValidHandle(D) then
-  begin
-    result := GetFileTime(SourceHandle, nil, nil, @FileTime) and
-              SetFileTime(D, nil, nil, @FileTime);
-    FileClose(D);
-  end
+  if Dest = '' then
+    result := false
   else
-    result := false;
+  begin
+    D := FileOpen(Dest, fmOpenWrite);
+    if ValidHandle(D) then
+    begin
+      result := GetFileTime(SourceHandle, nil, nil, @FileTime) and
+                SetFileTime(D, nil, nil, @FileTime);
+      FileClose(D);
+    end
+    else
+      result := false;
+  end;
 end;
 
 procedure FileSetAttributes(const FileName: TFileName; Secret: boolean);
 begin
-  if Secret then
-    SetFileAttributes(pointer(FileName),
-      FILE_ATTRIBUTE_HIDDEN or FILE_ATTRIBUTE_READONLY)
-  else
-    SetFileAttributes(pointer(FileName), FILE_ATTRIBUTE_NORMAL);
+  if FileName <> '' then
+    if Secret then
+      SetFileAttributes(pointer(FileName),
+        FILE_ATTRIBUTE_HIDDEN or FILE_ATTRIBUTE_READONLY)
+    else
+      SetFileAttributes(pointer(FileName), FILE_ATTRIBUTE_NORMAL);
 end;
 
 function RenameFile(const OldName, NewName: TFileName): boolean;
 begin
-  result := SysUtils.RenameFile(OldName,NewName);
+  if (OldName = '') or
+     (NewName = '') then
+    result := false
+  else
+    result := SysUtils.RenameFile(OldName,NewName);
 end;
 
 function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;
 begin
-  result := Windows.CopyFile(pointer(Source), pointer(Target), FailIfExists);
+  if (Source = '') or
+     (Target = '') then
+    result := false
+  else
+    result := Windows.CopyFile(pointer(Source), pointer(Target), FailIfExists);
 end;
 
 function FileOpenSequentialRead(const FileName: string): integer;
 begin
-  if OSVersion >= wVista then // don't use the flag on XP
+  if OSVersion >= wVista then // XP has troubles with the "sequential" flag
     result := CreateFile(pointer(FileName), GENERIC_READ,
       FILE_SHARE_READ or FILE_SHARE_WRITE, nil, // same as fmShareDenyNone
-      OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN, 0)
+      OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, 0)
   else
     result := FileOpen(FileName, fmOpenRead or fmShareDenyNone);
 end;
