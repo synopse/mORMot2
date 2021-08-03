@@ -1751,6 +1751,9 @@ type
   // - see e.g. TStreamRedirect.ProgressToConsole
   TOnStreamProgress = procedure(Sender: TStreamRedirect) of object;
 
+  /// optional callback as used e.g. by THttpClientSocketWGet.OnStreamCreate
+  TOnStreamCreate = function(const FileName: string; Mode: cardinal): TStream of object;
+
   /// an abstract pipeline stream able to redirect and hash read/written content
   // - can be used either Read() or Write() calls during its livetime
   // - hashing is performed on the fly during the Read/Write process

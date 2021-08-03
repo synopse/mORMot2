@@ -170,6 +170,8 @@ type
     // - typical usage is to assign e.g. TStreamRedirect.ProgressToConsole
     // - note that by default, THttpClientSocket.OnLog will always be called
     OnProgress: TOnStreamProgress;
+    /// optional callback if TFileStream.Create(FileName, Mode) is not good enough
+    OnStreamCreate: TOnStreamCreate;
     /// allow to continue an existing .part file download
     // - during the download phase, url + '.part' is used locally to avoid
     // confusion in case of process shutdown - you can use this parameter to
@@ -1740,6 +1742,17 @@ var
       requrl := fRedirected; // don't perform 302 twice
   end;
 
+  procedure NewPartStream(Mode: cardinal);
+  var
+    redirected: TStream;
+  begin
+    if Assigned(params.OnStreamCreate) then
+      redirected := params.OnStreamCreate(part, Mode)
+    else
+      redirected := TFileStream.Create(part, Mode);
+    partstream := params.Hasher.Create(redirected);
+  end;
+
 begin
   result := destfile;
   requrl := url;
@@ -1811,7 +1824,7 @@ begin
     if GetExpectedTargetSize(ExpectedSize) and
        (Size < ExpectedSize) then
     begin // seems good enough
-      partstream := params.Hasher.Create(TFileStream.Create(part, fmOpenReadWrite));
+      NewPartStream(fmOpenReadWrite);
       partstream.Append; // hash partial content
       fRangeStart := size;
     end
@@ -1822,7 +1835,7 @@ begin
       if Assigned(OnLog) then
         OnLog(sllTrace, 'WGet %: got Size=% Expected=% -> reset %',
           [url, Size, ExpectedSize, part], self);
-      partstream := params.Hasher.Create(TFileStream.Create(part, fmCreate));
+      NewPartStream(fmCreate);
     end;
   end
   else
@@ -1830,7 +1843,7 @@ begin
     resumed := false;
     if Assigned(OnLog) then
       OnLog(sllTrace, 'WGet %: start downloading %', [url, part], self);
-    partstream := params.Hasher.Create(TFileStream.Create(part, fmCreate));
+    NewPartStream(fmCreate);
   end;
   try
     DoRequestAndFreePartStream;
@@ -1844,8 +1857,8 @@ begin
         if Assigned(OnLog) then
           OnLog(sllDebug,
             'WGet %: wrong hash after resume -> reset and retry', [url]);
-        partstream := params.Hasher.Create(TFileStream.Create(part, fmCreate));
-        requrl := url; // try again with full redirection steps
+        NewPartStream(fmCreate);
+        requrl := url; // try again including initial redirection steps
         DoRequestAndFreePartStream;
       end;
       if not IdemPropNameU(parthash, params.Hash) then
