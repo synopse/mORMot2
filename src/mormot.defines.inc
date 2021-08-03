@@ -572,8 +572,9 @@
       {.$define LIBQUICKJSSTATIC} // compiles, but untested
     {$endif CPUARM}
     {$ifdef CPUAARCH64}
-      {.$define LIBDEFLATESTATIC} // compiles, but untested
-      {.$define LIBQUICKJSSTATIC} // compiles, but untested
+      {$define LIBDEFLATESTATIC}
+      {.$define LIBQUICKJSSTATIC} // compiles, but access violations
+      {$define NOSQLITE3STATIC} // our static linked version fails
     {$endif CPUAARCH64}
   {$endif OSLINUX}
   {$ifdef OSWINDOWS}
