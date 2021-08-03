@@ -3873,7 +3873,15 @@ begin
                   'parameter [%] not allowed with TServiceCustomAnswer result',
                   [self, InterfaceDotMethodName, Args[a].ParamName^]);
             ArgsResultIsServiceCustomAnswer := true;
-          end;
+          end
+        else
+        {$ifdef CPUAARCH64} // we didn't fix this (alignment?) issue yet :(
+        if ArgRtti.Size and 7 <> 0 then
+          raise EInterfaceFactory.CreateUtf8(
+            '%.Create: I% result type % is unsupported record of size %' +
+            'on Aarch64: use an OUT parameter instead',
+            [self, InterfaceDotMethodName, ArgTypeName^, ArgRtti.Size]);
+        {$endif CPUAARCH64}
       end;
     if (ArgsInputValuesCount = 1) and
        (Args[1].ValueType = imvRawByteString) then
@@ -7084,7 +7092,7 @@ begin
              begin
             call.ParamRegs[RegisterIdent] := PPtrInt(Value)^;
             {$ifdef CPUARM}
-            // for e.g. INT64 on 32-bit ARM systems; these are also passed in the normal registers
+            // for e.g. INT64 on 32-bit ARM systems; these are also passed in registers
             if SizeInStack > POINTERBYTES then
               call.ParamRegs[RegisterIdent + 1] := PPtrInt(Value + POINTERBYTES)^;
             {$endif CPUARM}

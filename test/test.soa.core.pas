@@ -139,7 +139,9 @@ type
     /// validate simple record transmission
     // - older Delphi versions (e.g. 6-7-2009) do not allow records without
     // nested reference-counted types
-    function EchoRecord(const Nav: TConsultaNav): TConsultaNav;
+    // - CPUAARCH64 has troubles with TConsultNav size and trigger GPF when
+    // returned as function result -> Echo is an "out" parameter here
+    procedure EchoRecord(const Nav: TConsultaNav; out Echo: TConsultaNav);
     {$endif HASNOSTATICRTTI}
   end;
 
@@ -345,7 +347,7 @@ type
       out Copy: TCollTestsI);
     destructor Destroy; override;
     function GetCurrentThreadID: PtrUInt;
-    function EchoRecord(const Nav: TConsultaNav): TConsultaNav;
+    procedure EchoRecord(const Nav: TConsultaNav; out Echo: TConsultaNav);
     function GetCustomer(CustomerId: Integer;
       out CustomerData: TCustomerData): Boolean;
     procedure FillPeople(var People: TOrmPeople);
@@ -544,9 +546,10 @@ begin
   result.Imaginary := n1.Imaginary - n2.Imaginary;
 end;
 
-function TServiceComplexCalculator.EchoRecord(const Nav: TConsultaNav): TConsultaNav;
+procedure TServiceComplexCalculator.EchoRecord(const Nav: TConsultaNav;
+  out Echo: TConsultaNav);
 begin
-  Result := Nav;
+  Echo := Nav;
 end;
 
 function GetThreadID: PtrUInt;
@@ -854,7 +857,7 @@ var
   x, y: PtrUInt; // TThreadID  = ^TThreadRec under BSD
   V1, V2, V3: variant;
   {$ifndef HASNOSTATICRTTI}
-  Nav: TConsultaNav;
+  Nav, Nav2: TConsultaNav;
   {$endif HASNOSTATICRTTI}
 begin
   Check(Inst.I.Add(1, 2) = 3);
@@ -930,14 +933,12 @@ begin
       Nav.RowCount := c * 3;
       Nav.IsSQLUpdateBack := c and 1 = 0;
       Nav.EOF := c and 1 = 1;
-      with Inst.CC.EchoRecord(Nav) do
-      begin
-        Check(MaxRows = c);
-        Check(Row0 = c * 2);
-        Check(RowCount = c * 3);
-        Check(IsSQLUpdateBack = (c and 1 = 0));
-        Check(EOF = (c and 1 = 1));
-      end;
+      Inst.CC.EchoRecord(Nav, Nav2);
+      Check(Nav2.MaxRows = c);
+      Check(Nav2.Row0 = c * 2);
+      Check(Nav2.RowCount = c * 3);
+      Check(Nav2.IsSQLUpdateBack = (c and 1 = 0));
+      Check(Nav2.EOF = (c and 1 = 1));
       {$endif HASNOSTATICRTTI}
       if c mod 10 = 1 then
       begin
