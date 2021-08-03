@@ -102,8 +102,10 @@ type
     // arrays published properties handling
     // - test dynamic tables
     procedure _TRestClientDB;
+    {$ifndef NOSQLITE3STATIC}
     /// check SQlite3 internal regex.c function
     procedure RegexpFunction;
+    {$endif NOSQLITE3STATIC}
     /// test Master/Slave replication using TRecordVersion field
     procedure _TRecordVersion;
   end;
@@ -557,6 +559,7 @@ begin
   CheckEqual(n, 0);
 end;
 
+{$ifndef NOSQLITE3STATIC}
 procedure TTestSQLite3Engine.RegexpFunction;
 const
   EXPRESSIONS: array[0..2] of RawUtf8 = (
@@ -595,6 +598,7 @@ begin
     Model.Free;
   end;
 end;
+{$endif NOSQLITE3STATIC}
 
 type
   TOrmPeopleVersioned = class(TOrmPeople)
