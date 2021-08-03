@@ -74,7 +74,11 @@ The mORMOt 2 repository content is split into the following sub-folders:
 
 3.1. On Lazarus, just install the `/packages/lazarus/mormot2.lpk` package.
 
-3.2. On Delphi, add the *mORMot 2* `/src/*` sub-folders to your IDE library paths, e.g. if you clone the repository in `d:\dev\lib2`, add `D:\dev\lib2\src\core;D:\dev\lib2\src\db;D:\dev\lib2\src\rest;D:\dev\lib2\src\crypt;D:\dev\lib2\src\script;D:\dev\lib2\src\app;D:\dev\lib2\src\net;D:\dev\lib2\src\orm;D:\dev\lib2\src\soa;D:\dev\lib2\src\lib` folders to the list.
+3.2. On Delphi: 
+* create new environment variable `mormot2` with full path to the *mORMot 2* sources (Tools - Options - IDE - Evironment Variables); 
+* add the following string to your IDE library paths (for all target platforms):
+
+    `$(mormot2)\src\core;$(mormot2)\src\db;$(mormot2)\src\rest;$(mormot2)\src\crypt;$(mormot2)\src\script;$(mormot2)\src\app;$(mormot2)\src\net;$(mormot2)\src\orm;$(mormot2)\src\soa;$(mormot2)\src\lib`
 
 4. Open and compile `/test/mormot2tests.dpr` in the IDE, and run the regression tests on your machine.
 
