@@ -3064,7 +3064,7 @@ const
 
 {$ifdef FPC}
 var
-  DispInvokeArgOrderInverted: boolean; // circumvent FPC 3.2+ issue
+  DispInvokeArgOrderInverted: boolean; // circumvent FPC 3.2+ breaking change
 {$endif FPC}
 
 procedure TSynInvokeableVariantType.DispInvoke(

@@ -2206,6 +2206,8 @@ begin
   result := gettimeofday(tp, tzp);
 end;
 
+function libc_strlen(s: PAnsiChar): SizeInt; cdecl external clib name 'strlen';
+
 {$endif OSLINUX}
 
 
@@ -2402,6 +2404,9 @@ begin
       'clock_gettime() not supported by %s kernel - errno=%d',
       [PAnsiChar(@uts.release), fpgeterrno]);
   // redirect some syscall FPC RTL functions to faster vDSO libc variant
+  {$ifdef CPUARM3264}
+  StrLen := @libc_strlen; // libc version is very likely to be faster than ours
+  {$endif CPUARM3264}
   {$ifdef CPUX64}
   {$ifdef OSLINUX}
   {$ifndef NOPATCHRTL}
